@@ -130,14 +130,28 @@ public final class TransactionState {
      */
     private final Deque<Long> reservedSequence = new ArrayDeque<>();
 
-    /** Adds operation numbers drawn ahead, in the order they are to be used. */
+    /**
+     * The operation numbers drawn ahead by a root operation that starts in this transaction, in the order they are to
+     * be used; whatever an earlier root of the same transaction left is dropped, so that a sub-process never takes a
+     * number drawn before its own root's (number order is execution order).
+     */
     public synchronized void reserveSequence(Collection<Long> numbers) {
+        reservedSequence.clear();
         reservedSequence.addAll(numbers);
     }
 
-    /** The next operation number drawn ahead, if one is left. */
-    public synchronized Optional<Long> takeReservedSequence() {
-        return Optional.ofNullable(reservedSequence.pollFirst());
+    /**
+     * The next operation number drawn ahead that is greater than {@code parent} (the number of the operation that starts
+     * the sub-process), if one is left; smaller ones are dropped.
+     */
+    public synchronized Optional<Long> takeReservedSequence(long parent) {
+        Long next;
+        while ((next = reservedSequence.pollFirst()) != null) {
+            if (next > parent) {
+                return Optional.of(next);
+            }
+        }
+        return Optional.empty();
     }
 
     public synchronized void countStatement() {

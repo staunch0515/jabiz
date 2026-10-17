@@ -72,12 +72,12 @@ public class MetaModelConsistencyChecker implements PlatformCheck {
         this.datasets = datasets;
     }
 
-    /**
-     * Tables every combined commit writes besides the entities' own (decision D46 rule 1), and those whose rows a
-     * transaction holds besides (phase 16p-2: a sub-process's operation record, a result).
-     */
+    /** Tables every combined commit writes besides the entities' own (decision D46 rule 1). */
     static final List<String> BATCH_TABLES = List.of("entity_registry", "op_process_item", "sys_audit_record",
-        "sys_outbox_event", "op_process", "op_process_result");
+        "sys_outbox_event");
+
+    /** Tables whose rows only a transaction's buffer holds (phase 16p-2: a sub-process's operation record, a result). */
+    static final List<String> HELD_TABLES = List.of("op_process", "op_process_result");
 
     /** Operation tables, append-only like every temporal table (decision D4). */
     static final List<String> OPERATION_TABLES = List.of("op_process", "op_process_item", "op_process_result",
@@ -252,6 +252,15 @@ public class MetaModelConsistencyChecker implements PlatformCheck {
                 return Flux.just(WARNING + "Table " + table + ": has triggers " + names + " besides the platform's; "
                     + "no commit is written as one statement, and no transaction relies on what it read (decision D46)");
             }));
+        Flux<String> held = Flux.fromIterable(HELD_TABLES).concatMap(table -> otherTriggers(table)
+            .flatMapMany(names -> {
+                if (names.isEmpty()) {
+                    return Flux.<String>empty();
+                }
+                batching.stopHoldingShared();
+                return Flux.just(WARNING + "Table " + table + ": has triggers " + names + " besides the platform's; "
+                    + "operation records and results are written as they come, not held (decision D46)");
+            }));
         Flux<String> elsewhere = db.sql("""
                 select c.relname as table_name, t.tgname as tgname
                 from pg_trigger t
@@ -273,7 +282,7 @@ public class MetaModelConsistencyChecker implements PlatformCheck {
                 return Flux.just(WARNING + "Schema: triggers " + found + " besides the platform's; no transaction "
                     + "relies on what it read, as such a trigger may write what the platform does not see (decision D46)");
             });
-        return overrides.concatWith(shared).concatWith(elsewhere).concatWith(views());
+        return overrides.concatWith(shared).concatWith(held).concatWith(elsewhere).concatWith(views());
     }
 
     /**

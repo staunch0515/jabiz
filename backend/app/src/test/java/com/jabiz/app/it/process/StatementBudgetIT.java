@@ -95,11 +95,11 @@ class StatementBudgetIT extends PostgresIntegrationTest {
      */
     static final Budget LEDGER_POST_CHILD = new Budget(5, 7);
     /**
-     * [30]: operation, the three reads, the reversal's uniqueness (lock, then look), one lookup of both accounts (not
-     * read by this process) carrying the held transaction, the held entries, {@code COMMIT} [16p-1: 10, the
-     * transaction its own statement].
+     * [30]: operation, the three reads, the reversal's uniqueness (lock, then look), the held transaction written on
+     * its own before the lookup of both accounts (a dataset's read, bound by its timeout, never carries held writes),
+     * the lookup, the held entries, {@code COMMIT} [16p-1: the same 10].
      */
-    static final Budget LEDGER_REVERSE = new Budget(9, 10);
+    static final Budget LEDGER_REVERSE = new Budget(10, 10);
     /**
      * One line [29]: operation, three reads, the order's uniqueness (lock, look), the line's (the lock carrying the held
      * order, look), the stock's versions (carrying the held line), the held stock update, {@code COMMIT} [16p-1: 13,
@@ -107,12 +107,12 @@ class StatementBudgetIT extends PostgresIntegrationTest {
      */
     static final Budget ORDER_PLACE = new Budget(11, 13);
     /**
-     * One line [47]: operation, the order lock, three reads, {@code LEDGER_POST} 2 (as above), the customer carrying
-     * the ledger's held writes (the user query of no customer is not sent), the stock's versions, the order's versions
-     * carrying the held stock update, the held order update, {@code COMMIT} [16p-1: 16, with {@code LEDGER_POST} 5 and
-     * each update its own statement].
+     * One line [47]: operation, the order lock, three reads, {@code LEDGER_POST} 2 (as above), the ledger's held
+     * writes on their own before the customer (a timed read never carries them), the customer (the user query of no
+     * customer is not sent), the stock's versions, the order's versions carrying the held stock update, the held order
+     * update, {@code COMMIT} [16p-1: 16, with {@code LEDGER_POST} 5 and each update its own statement].
      */
-    static final Budget ORDER_SHIP = new Budget(12, 16);
+    static final Budget ORDER_SHIP = new Budget(13, 16);
     /**
      * A plain entity read and updated at the version read [8]: operation, read, the held update with its audit record
      * written before {@code COMMIT} [16p-1: the same 4].

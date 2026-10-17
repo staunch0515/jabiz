@@ -94,27 +94,42 @@ class ArchitectureTest {
     }
 
     /**
-     * Statements of a transaction go through the storage engine (decision D46 rule 1): it writes the rows the
-     * transaction holds before any statement that may read them, which a statement sent past it on the same
-     * connection would not see. Besides the engine's own package, only code that runs outside every transaction
-     * talks to the database itself: the startup check of the metamodel, the sequence an application may replace
-     * (with its configuration), and the connections of their own of the job lock, the dictionary notifications and
-     * the schema migrations.
+     * Statements of a transaction go through the storage engine (decision D46 rule 1), checked on every class of the
+     * platform and of this application with the shared rule (application branches call it on all of theirs).
      */
     @Test
     void transactionsReachTheDatabaseOnlyThroughTheStorageEngine() {
-        noClasses().that().resideInAPackage("com.jabiz..")
-            .and().resideOutsideOfPackage("com.jabiz.runtime.storage..")
-            .and().doNotHaveFullyQualifiedName("com.jabiz.runtime.entity.MetaModelConsistencyChecker")
-            .and().doNotHaveFullyQualifiedName("com.jabiz.runtime.process.DatabaseProcessSequence")
-            .and().doNotHaveFullyQualifiedName("com.jabiz.runtime.process.ProcessConfig")
-            .and().doNotHaveFullyQualifiedName("com.jabiz.runtime.job.JobConfig")
-            .and().doNotHaveFullyQualifiedName("com.jabiz.runtime.dictionary.DictionaryChangeListener")
-            .and().doNotHaveFullyQualifiedName("com.jabiz.runtime.config.PlatformSchemaMigration")
-            .should().dependOnClassesThat().haveFullyQualifiedName("org.springframework.r2dbc.core.DatabaseClient")
-            .orShould().dependOnClassesThat().haveFullyQualifiedName("io.r2dbc.spi.ConnectionFactory")
-            .orShould().dependOnClassesThat().haveFullyQualifiedName("io.r2dbc.spi.Connection")
-            .check(CLASSES);
+        PlatformArchRules.transactionsReachTheDatabaseOnlyThroughTheStorageEngine().check(CLASSES);
+    }
+
+    /** The rule sees a class that sends a statement past the engine, through a subtype too. */
+    @Test
+    void theStorageRuleCatchesADirectStatement() {
+        JavaClasses offenders = new ClassFileImporter().importClasses(DirectStatements.WithClient.class);
+        assertThat(PlatformArchRules.transactionsReachTheDatabaseOnlyThroughTheStorageEngine().evaluate(offenders)
+            .hasViolation()).isTrue();
+        JavaClasses subtype = new ClassFileImporter().importClasses(DirectStatements.WithConnection.class,
+            DirectStatements.DriverConnection.class);
+        assertThat(PlatformArchRules.transactionsReachTheDatabaseOnlyThroughTheStorageEngine(
+            DirectStatements.DriverConnection.class.getName()).evaluate(subtype).hasViolation()).isTrue();
+    }
+
+    /** Classes that talk to the database past the storage engine: offenders of the rule above. */
+    static final class DirectStatements {
+        static final class WithClient {
+            Object run(org.springframework.r2dbc.core.DatabaseClient db) {
+                return db.sql("SELECT 1");
+            }
+        }
+
+        /** A connection type of a driver: a subtype of the SPI's. */
+        interface DriverConnection extends io.r2dbc.spi.Connection {}
+
+        static final class WithConnection {
+            Object run(DriverConnection connection) {
+                return connection.createStatement("SELECT 1");
+            }
+        }
     }
 
     /** Extension points (RulePredicate, StepImplementation, and every later one in core) are synchronous. */

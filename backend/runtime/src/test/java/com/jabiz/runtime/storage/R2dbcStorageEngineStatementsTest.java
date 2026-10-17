@@ -85,13 +85,6 @@ class R2dbcStorageEngineStatementsTest {
     }
 
     @Test
-    void aCarryingQueryWaitsAlsoAsLongAsTheTransactionsLocks() {
-        assertThat(R2dbcStorageEngine.lockTimeout(new TransactionLockTimeout("30000ms")))
-            .contains(java.time.Duration.ofSeconds(30));
-        assertThat(R2dbcStorageEngine.lockTimeout(new TransactionLockTimeout("30s"))).isEmpty();
-    }
-
-    @Test
     void aConflictOfAHeldRowIsItsWritesAndOtherErrorsStayAsTheyAre() {
         UUID key = UUID.randomUUID();
         List<WriteBatch.Row> rows = List.of(row("entity_registry", "entity_id", key, "held"));

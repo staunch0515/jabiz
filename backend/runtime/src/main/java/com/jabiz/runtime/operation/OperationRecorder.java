@@ -107,7 +107,8 @@ public class OperationRecorder {
                 + (reserve == 0 ? "" : ", ARRAY(SELECT nextval('op_process_seq') FROM generate_series(1, " + reserve
                     + ") ORDER BY 1) AS jabiz_reserved");
             return Mono.deferContextual(view -> engine.select(sql, params).next().map(inserted -> {
-                if (reserve > 0) {
+                if (reserve > 0 || lockTimeout != null) {
+                    // A root (it sets the timeout): its numbers replace any an earlier root of the transaction left.
                     List<Long> reserved = reservedNumbers(inserted.get("jabiz_reserved"));
                     engine.transactionState(view).ifPresent(state -> state.reserveSequence(reserved));
                 }

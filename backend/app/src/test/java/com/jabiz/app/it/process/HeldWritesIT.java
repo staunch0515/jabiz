@@ -336,6 +336,238 @@ class HeldWritesIT extends PostgresIntegrationTest {
         assertThat(count("SELECT count(*) AS n FROM sys_audit_record WHERE entity_id = ?", kept)).isEqualTo(1);
     }
 
+    // ---- review of 16p-2 ------------------------------------------------------------------------------------------
+
+    private String ticketAt(String title) {
+        String id = "held-" + UUID.randomUUID();
+        run(ItProcessFixtures.CREATE_TICKET.name(), new ItProcessFixtures.TicketInput(id, title, 1L));
+        return id;
+    }
+
+    /** An update of the ticket at {@code version}, held; changing no row, it fails with 409 "not applied". */
+    private Mono<Boolean> heldUpdate(String id, long version, String title) {
+        // As DatasetEntityManager answers an update that changed no row, whether it was held (16p-2) or not (16p-1).
+        java.util.function.Supplier<Mono<Throwable>> notApplied =
+            () -> Mono.just(ConcurrentUpdateException.stale("not applied: " + id));
+        return engine().withWriteBatch(engine().casUpdate("it_ticket", "f_id", id, version, "f_version",
+                Map.of("f_title", title), List.of(), notApplied))
+            .flatMap(applied -> applied ? Mono.just(true) : notApplied.get().flatMap(Mono::<Boolean>error));
+    }
+
+    private static String title(String id) {
+        return String.valueOf(query("SELECT f_title FROM it_ticket WHERE f_id = ?", id).getFirst().get("f_title"));
+    }
+
+    @Test
+    void aHeldUpdateIsNeverLostToAQueryThePlannerKnowsIsEmpty() {
+        // PostgreSQL drops a condition on no row with a sub-select it proves empty: an update is never carried.
+        String stale = ticketAt("stale");
+        Throwable error = catchThrowable(() -> asRequest(ADMIN, engine().inTransaction(heldUpdate(stale, 7L, "lost")
+            .thenMany(engine().select("SELECT * FROM it_unique WHERE 1 = 0", Map.of())).then())).block());
+        assertThat(error).isInstanceOf(ConcurrentUpdateException.class).hasMessageContaining("not applied: " + stale);
+        assertThat(ProblemStatuses.status(error)).isEqualTo(409);
+
+        String applied = ticketAt("before");
+        asRequest(ADMIN, engine().inTransaction(heldUpdate(applied, 1L, "after")
+            .thenMany(engine().select("SELECT * FROM it_unique WHERE 1 = 0", Map.of())).then())).block();
+        assertThat(title(applied)).isEqualTo("after");
+    }
+
+    @Test
+    void aReadBoundByItsTimeoutWritesWhatIsHeldOnItsOwnFirst() {
+        String id = "held-" + UUID.randomUUID();
+        SqlStatementLog.clear();
+        long seen = asRequest(ADMIN, engine().inTransaction(heldTicket(id).then(engine().executeQuery(
+                new com.jabiz.query.PhysicalQueryPlan("it_unique", null, Map.of(), List.of(), 0, 1,
+                    Duration.ofSeconds(5))).count()))).block();
+
+        assertThat(seen).isNotNegative();
+        assertThat(SqlStatementLog.STATEMENTS).anySatisfy(sql -> assertThat(sql)
+            .startsWith("INSERT INTO it_ticket"));
+        // The read's own bound is not stretched by a write's lock wait: never carried.
+        assertThat(SqlStatementLog.STATEMENTS).noneSatisfy(sql -> assertThat(sql).contains("jabiz_m"));
+        assertThat(count("SELECT count(*) AS n FROM it_ticket WHERE f_id = ?", id)).isEqualTo(1);
+    }
+
+    @Test
+    void aHeldUpdateThatChangesNoRowBehindASavepointIsAnsweredThereAndTheTransactionGoesOn() {
+        String stale = ticketAt("stale");
+        String kept = "held-" + UUID.randomUUID();
+        List<Throwable> answered = new java.util.ArrayList<>();
+        asRequest(ADMIN, engine().inTransaction(engine().inSavepoint(heldUpdate(stale, 7L, "lost"))
+            .onErrorResume(error -> {
+                answered.add(error);
+                return Mono.empty();
+            })
+            .then(heldTicket(kept)))).block();
+
+        assertThat(answered).singleElement().isInstanceOf(ConcurrentUpdateException.class);
+        assertThat(title(stale)).isEqualTo("stale");
+        assertThat(count("SELECT count(*) AS n FROM it_ticket WHERE f_id = ?", kept)).isEqualTo(1);
+    }
+
+    @Test
+    void aHeldUpdateThatChangesNoRowInATransactionOfItsOwnFailsItAloneAndTheSuspendedOneGoesOn() {
+        String stale = ticketAt("stale");
+        String kept = "held-" + UUID.randomUUID();
+        List<Throwable> answered = new java.util.ArrayList<>();
+        asRequest(ADMIN, engine().inTransaction(heldTicket(kept).then(engine().inNewTransaction(
+                heldUpdate(stale, 7L, "lost"))
+            .onErrorResume(error -> {
+                answered.add(error);
+                return Mono.empty();
+            })).then())).block();
+
+        assertThat(answered).singleElement().isInstanceOf(ConcurrentUpdateException.class);
+        assertThat(title(stale)).isEqualTo("stale");
+        assertThat(count("SELECT count(*) AS n FROM it_ticket WHERE f_id = ?", kept)).isEqualTo(1);
+    }
+
+    @Test
+    void aConflictOfAHeldWriteSurfacingLaterIsReportedAloneNotWithViolationsCollectedAfterIt() {
+        String code = "C" + UUID.randomUUID().toString().substring(0, 8);
+        asRequest(ADMIN, engine().inTransaction(engine().insert("it_unique", Map.of("f_id", "other-" + code,
+            "f_code", code)))).block();
+
+        Throwable error = failing("IT_HELD_UNIQUE_THEN_REJECT", new ItHeldWriteFixtures.TouchThenInsert(null, code));
+
+        // Written as it came, the insert failed at its save, before the later step collected IT_HELD_LATER.
+        assertThat(error).isInstanceOf(com.jabiz.entity.ValidationException.class);
+        assertThat(((com.jabiz.entity.ValidationException) error).violations())
+            .extracting(com.jabiz.entity.Violation::ruleCode).containsExactly("UNIQUE_VIOLATION");
+    }
+
+    // ---- real concurrency ---------------------------------------------------------------------------------------
+
+    private static Connection openTransaction() throws java.sql.SQLException {
+        Connection other = DB.connect(schema());
+        other.setAutoCommit(false);
+        return other;
+    }
+
+    private static void sql(Connection connection, String sql, Object... params) throws java.sql.SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            for (int i = 0; i < params.length; i++) {
+                statement.setObject(i + 1, params[i]);
+            }
+            statement.execute();
+        }
+    }
+
+    private static java.util.concurrent.CompletableFuture<Throwable> inBackground(Runnable work) {
+        return java.util.concurrent.CompletableFuture.supplyAsync(() -> catchThrowable(work::run));
+    }
+
+    @Test
+    void aHeldInsertWaitsForAnotherTransactionsSameKeyAndConflictsWhenItCommits() throws Exception {
+        String id = "held-" + UUID.randomUUID();
+        try (Connection other = openTransaction()) {
+            sql(other, "INSERT INTO it_ticket (f_id, f_title, f_created_at) VALUES (?, 'other', now())", id);
+            var process = inBackground(() -> run(ItProcessFixtures.CREATE_TICKET.name(),
+                new ItProcessFixtures.TicketInput(id, "mine", 1L)));
+            Thread.sleep(700);
+            assertThat(process).isNotDone();
+            other.commit();
+
+            Throwable error = process.get(30, java.util.concurrent.TimeUnit.SECONDS);
+            assertThat(ProblemStatuses.status(error)).isEqualTo(409);
+        }
+        assertThat(title(id)).isEqualTo("other");
+    }
+
+    @Test
+    void aHeldInsertGivesUpAtTheTransactionsLockTimeout() throws Exception {
+        String id = "held-" + UUID.randomUUID();
+        @SuppressWarnings("unchecked")
+        ProcessDefinition<ItProcessFixtures.TicketInput, Object, ProcessContext> create =
+            (ProcessDefinition<ItProcessFixtures.TicketInput, Object, ProcessContext>)
+                processes.find(ItProcessFixtures.CREATE_TICKET.name(), 1).orElseThrow();
+        try (Connection other = openTransaction()) {
+            sql(other, "INSERT INTO it_ticket (f_id, f_title, f_created_at) VALUES (?, 'other', now())", id);
+
+            Throwable error = catchThrowable(() -> asRequest(ADMIN, executor.run(create,
+                new ItProcessFixtures.TicketInput(id, "mine", 1L),
+                com.jabiz.runtime.process.ExecutionOptions.NONE.withLockWait(Duration.ofMillis(400)))).block());
+
+            assertThat(error).isInstanceOf(LockNotAvailableException.class);
+            assertThat(ProblemStatuses.status(error)).isEqualTo(409);
+            other.rollback();
+        }
+        assertThat(count("SELECT count(*) AS n FROM it_ticket WHERE f_id = ?", id)).isZero();
+    }
+
+    @Test
+    void aHeldUpdateWaitsForAnotherTransactionsChangeAndIsAConflictWhenItCommits() throws Exception {
+        String id = ticketAt("first");
+        try (Connection other = openTransaction()) {
+            sql(other, "UPDATE it_ticket SET f_title = 'other', f_version = f_version + 1 WHERE f_id = ?", id);
+            var process = inBackground(() -> run("IT_BUDGET_TOUCH", new com.jabiz.app.it.fixture.ItBudgetFixtures
+                .TouchInput(id, Map.of("title", "mine"))));
+            Thread.sleep(700);
+            assertThat(process).isNotDone();
+            other.commit();
+
+            Throwable error = process.get(30, java.util.concurrent.TimeUnit.SECONDS);
+            assertThat(error).isInstanceOf(ConcurrentUpdateException.class)
+                .hasMessageContaining("Optimistic lock conflict on ItTicket [ID: " + id + "]");
+            assertThat(ProblemStatuses.status(error)).isEqualTo(409);
+        }
+        assertThat(title(id)).isEqualTo("other");
+    }
+
+    // ---- sealing, numbering, the driver -------------------------------------------------------------------------
+
+    @Test
+    void whatIsHeldIsSealedBySealingInTheSameTransactionAndVerifies() {
+        run(com.jabiz.runtime.integrity.IntegrityProcesses.SEAL,
+            new com.jabiz.runtime.integrity.IntegrityProcesses.SealInput(null));
+
+        ItHeldWriteFixtures.SealedOutput sealed = run("IT_HELD_THEN_SEAL",
+            new ItHeldWriteFixtures.HeldInput(UUID.randomUUID(), sku(), null, null));
+
+        // Its operation, and the price's registry entry, version, item and audit record, all written before sealing.
+        assertThat(sealed.rowCount()).isGreaterThanOrEqualTo(5);
+        com.jabiz.runtime.integrity.IntegrityProcesses.VerifyOutput verified = run(
+            com.jabiz.runtime.integrity.IntegrityProcesses.VERIFY,
+            new com.jabiz.runtime.integrity.IntegrityProcesses.VerifyInput(null, null));
+        assertThat(verified.intact()).isTrue();
+        assertThat(verified.problemCount()).isZero();
+    }
+
+    @Test
+    void subProcessesAreNumberedInTheOrderTheyRunAForEachAndALaterCallAlike() {
+        String prefix = "M-" + UUID.randomUUID().toString().substring(0, 8) + "-";
+        List<String> skus = List.of(prefix + "a", prefix + "b", prefix + "c", prefix + "d");
+        run("IT_HELD_MANY", new ItHeldWriteFixtures.ManyInput(skus));
+
+        List<Map<String, Object>> children = query("SELECT p.process_seq_id, v.sku FROM op_process p"
+            + " JOIN it_price v ON v.process_seq_id = p.process_seq_id WHERE v.sku LIKE ? ORDER BY p.process_seq_id",
+            prefix + "%");
+        assertThat(children).extracting(row -> row.get("sku")).containsExactlyElementsOf(skus);
+        long parent = ((Number) query("SELECT parent_seq_id FROM op_process WHERE process_seq_id = ?",
+            children.getFirst().get("process_seq_id")).getFirst().get("parent_seq_id")).longValue();
+        assertThat(((Number) children.getFirst().get("process_seq_id")).longValue()).isGreaterThan(parent);
+    }
+
+    @Autowired
+    io.r2dbc.spi.ConnectionFactory connections;
+
+    @Test
+    void theDriversStatementCacheIsBounded() throws Exception {
+        Object factory = connections;
+        while (factory instanceof io.r2dbc.spi.Wrapped<?> wrapped && wrapped.unwrap() != null
+            && wrapped.unwrap() != factory) {
+            factory = wrapped.unwrap();
+        }
+        assertThat(factory.getClass().getName()).isEqualTo("io.r2dbc.postgresql.PostgresqlConnectionFactory");
+        java.lang.reflect.Method configuration = factory.getClass().getDeclaredMethod("getConfiguration");
+        configuration.setAccessible(true);
+        Object config = configuration.invoke(factory);
+        java.lang.reflect.Method cache = config.getClass().getDeclaredMethod("getPreparedStatementCacheQueries");
+        cache.setAccessible(true);
+        assertThat(cache.invoke(config)).isEqualTo(256);
+    }
+
     @Test
     void aTicketCreatedAfterAHeldInsertIsThere() {
         // The plain path end to end: insert, held, written before COMMIT.

@@ -66,12 +66,23 @@ public class WriteBatching {
         reusesReads = false;
     }
 
+    private volatile boolean holdsShared = true;
+
     /**
-     * Whether rows the platform writes besides the entities' own (operation records, audit records, events, results)
-     * may be combined: none of the tables they go to has a trigger of its own.
+     * The rows held only across a transaction (phase 16p-2: a sub-process's operation record, a result) are written as
+     * they come: a table they go to has a trigger of its own. Unlike {@link #combineNone}, the commits of phase 16p-1
+     * are combined as before.
      */
-    public boolean combinesShared() {
-        return combinesAny;
+    public void stopHoldingShared() {
+        holdsShared = false;
+    }
+
+    /**
+     * Whether the rows a transaction holds besides its commits' (a sub-process's operation record, an event of
+     * {@code PublishEvent}, a result; phase 16p-2) may be held: none of the tables they go to has a trigger of its own.
+     */
+    public boolean holdsShared() {
+        return combinesAny && holdsShared;
     }
 
     /** Whether a transaction may rely on what it read and inserted (references, updates at a known version). */

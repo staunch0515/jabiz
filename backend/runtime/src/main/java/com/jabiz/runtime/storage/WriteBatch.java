@@ -36,11 +36,18 @@ import java.util.function.Supplier;
  * where it is read, before any later part runs: its term casts {@code 'jabiz_stale_<part>'} to an integer, which the
  * engine recognizes and reports as the update would have been reported ({@link Update#notApplied}).
  *
- * <p>The parts can also be <em>carried</em> by a statement that has to be sent anyway and touches none of their tables
- * (a lock, a read of other tables): {@code WITH <parts> SELECT * FROM (<statement>) jabiz_m WHERE (<terms>) >= 0}.
- * The condition depends on no row, so PostgreSQL evaluates it once, as a gate before the statement runs at all (a
- * one-time filter): the held writes happen first, as they would have, and the statement's own snapshot, taken when it
- * starts, is the same as a statement sent after them would have had for the tables it reads.
+ * <p>Rows to insert (never an update) can also be <em>carried</em> by a query that has to be sent anyway and touches
+ * none of their tables (a lock, a read of other tables, never one bound by a timeout):
+ * {@code WITH <parts> SELECT * FROM (<statement>) jabiz_m WHERE (<terms>) >= 0}. The condition depends on no row, so in
+ * the usual plan PostgreSQL evaluates it once, as a gate before the query runs (a one-time filter), and the held rows
+ * are inserted first. That is the plan's choice, not a guarantee: when the planner proves the query empty (a sub-select
+ * {@code WHERE 1 = 0}, a custom plan with a null parameter) it drops the condition, and the parts are run at the end
+ * of the statement instead - a data-modifying {@code WITH} part always runs to completion, so the rows are inserted
+ * and their conflicts raised all the same; only an update's term, which must be read to be checked, would be lost,
+ * which is why an update is never carried (review of 16p-2, M1). The statement's snapshot is taken when it starts, so
+ * the query does not see the rows it carries (it reads none of their tables); the foreign keys of the held rows are
+ * checked at the end of the statement. Neither weakens anything: a read that a lock protects is a statement of its own,
+ * after the lock's.
  */
 final class WriteBatch {
 

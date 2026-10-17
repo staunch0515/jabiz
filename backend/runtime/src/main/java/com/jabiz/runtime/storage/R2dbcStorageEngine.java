@@ -64,8 +64,9 @@ import java.util.regex.Pattern;
  *       (a template, a statement of the platform that is not a {@code SELECT}), before a savepoint is set and released,
  *       before {@link #flushWrites}, at the end of the transaction and before it fails for a reason not the
  *       database's;</li>
- *   <li>otherwise, held for the transaction, together with the next query that has to be sent anyway (a lock, a read
- *       of other tables), ahead of it in the same statement ({@link WriteBatch.Parts#carriedBy}).</li>
+ *   <li>otherwise, held for the transaction, rows to insert together with the next query that has to be sent anyway (a
+ *       lock, a platform read of other tables), ahead of it in the same statement ({@link WriteBatch.Parts#carriedBy});
+ *       a held update, or a read bound by a timeout (a dataset's), has them written on their own first.</li>
  * </ul>
  * Every read therefore sees what statement by statement execution would have shown it, and every write that fails
  * fails before anything the transaction does next.
@@ -476,9 +477,18 @@ public final class R2dbcStorageEngine implements StorageEngine {
     /**
      * A query, with what is held: written on its own first when the query reads one of its tables; carried ahead of
      * the query in the same statement when held for the transaction; otherwise (within one commit, phase 16p-1) left
-     * held. A query bounded by {@code timeout} carries held writes only with the transaction's lock timeout added to
-     * its bound, since a held write may wait for a lock as long as it would have on its own; without a known lock
-     * timeout it does not carry them.
+     * held. Never carried, but written on its own first (review of 16p-2):
+     * <ul>
+     *   <li>by a query bounded by {@code timeout} (a dataset's read, docs/design/03-dataset.md section 1): the held
+     *       writes may wait for locks as long as the transaction's {@code lock_timeout}, which the query's own bound is
+     *       not to be stretched by, nor its 503 to be given for a write's wait;</li>
+     *   <li>when an update is held: whether the gate that reads it runs depends on the plan (PostgreSQL drops a
+     *       condition on no row together with a sub-select it can prove empty, {@code WHERE 1 = 0}), and an update that
+     *       changed no row would then pass unnoticed; written on its own, its term is in the select list and always
+     *       evaluated. Rows to insert are written whatever the plan (a data-modifying {@code WITH} part always runs to
+     *       completion), so carrying them is safe even then: only their order against a query that reads and locks
+     *       nothing could change.</li>
+     * </ul>
      *
      * @param timeout the query's bound, null for none (the platform's own statements)
      */
@@ -499,22 +509,12 @@ public final class R2dbcStorageEngine implements StorageEngine {
         if (!buffer.transactional) {
             return run(view, sql, params, Map.of(), timeout, List.of(), Map.of());
         }
-        Duration carrying = timeout == null ? null : view.<TransactionLockTimeout>getOrEmpty(TransactionLockTimeout.class)
-            .flatMap(R2dbcStorageEngine::lockTimeout).map(timeout::plus).orElse(null);
-        if (timeout != null && carrying == null) {
+        if (timeout != null || buffer.holdsUpdates()) {
             return flush(buffer).thenMany(Flux.defer(() -> run(view, sql, params, Map.of(), timeout, List.of(),
                 Map.of())));
         }
-        return carry(view, buffer, sql, params, carrying);
+        return carry(view, buffer, sql, params, null);
     }
-
-    /** The transaction's lock timeout as set ({@code 30000ms}); empty when it is not in milliseconds. */
-    static Optional<Duration> lockTimeout(TransactionLockTimeout lock) {
-        Matcher ms = MILLIS.matcher(lock.setting());
-        return ms.matches() ? Optional.of(Duration.ofMillis(Long.parseLong(ms.group(1)))) : Optional.empty();
-    }
-
-    private static final Pattern MILLIS = Pattern.compile("(\\d+)ms");
 
     /** The query with everything held carried ahead of it (more than one statement binds: the rest first, alone). */
     private Flux<Map<String, Object>> carry(ContextView view, WriteBuffer buffer, String sql,
@@ -738,6 +738,10 @@ public final class R2dbcStorageEngine implements StorageEngine {
             return entries.isEmpty();
         }
 
+        synchronized boolean holdsUpdates() {
+            return !updated.isEmpty();
+        }
+
         synchronized boolean updates(String table) {
             return updated.contains(table.toLowerCase(Locale.ROOT));
         }
@@ -900,13 +904,16 @@ public final class R2dbcStorageEngine implements StorageEngine {
                         culprit(conflict, candidates).origin(), conflict.table(), conflict.getMessage());
                 }
             }
-            return mapped(conflict, rows);
+            Throwable mapped = mapped(conflict, rows);
+            return held ? HeldWriteErrors.mark(mapped) : mapped;
         }
         if (!updates.isEmpty()) {
             for (Throwable cause = error; cause != null; cause = cause.getCause()) {
                 if (cause instanceof PostgresqlException pg && INVALID_TEXT.equals(pg.getErrorDetails().getCode())) {
+                    // Exactly the cast of the term, of nothing else the statement may have converted.
                     Matcher stale = STALE_TERM.matcher(String.valueOf(pg.getErrorDetails().getMessage()));
-                    if (stale.find()) {
+                    if (stale.matches() && pg.getErrorDetails().getRoutine().map(STALE_ROUTINES::contains)
+                        .orElse(true)) {
                         WriteBatch.Update update = updates.get(Integer.parseInt(stale.group(1)));
                         if (update != null) {
                             if (update.origin() != null) {
@@ -922,7 +929,12 @@ public final class R2dbcStorageEngine implements StorageEngine {
         return error;
     }
 
-    private static final Pattern STALE_TERM = Pattern.compile(Pattern.quote(WriteBatch.STALE) + "(\\d+)");
+    private static final Pattern STALE_TERM = Pattern.compile("invalid input syntax for type bigint: \""
+        + Pattern.quote(WriteBatch.STALE) + "(\\d+)\"");
+
+    /** Where PostgreSQL 16 reports a text that is no {@code bigint} ({@code int8in}); other versions may differ. */
+    private static final Set<String> STALE_ROUTINES = Set.of("pg_strtoint64_safe", "pg_strtoint64", "scanint8",
+        "int8in");
 
     /** An update held back changed no row when it was written: the transaction is aborted and is to be answered. */
     static final class HeldUpdateNotApplied extends RuntimeException {
@@ -954,7 +966,7 @@ public final class R2dbcStorageEngine implements StorageEngine {
             if (cause instanceof HeldUpdateNotApplied held) {
                 return held.update().notApplied().get()
                     .switchIfEmpty(Mono.error(error))
-                    .flatMap(Mono::error);
+                    .flatMap(answer -> Mono.error(HeldWriteErrors.mark(answer)));
             }
         }
         return Mono.error(error);

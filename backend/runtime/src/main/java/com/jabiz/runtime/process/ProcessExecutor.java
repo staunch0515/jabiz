@@ -352,7 +352,7 @@ public class ProcessExecutor implements SmartInitializingSingleton {
                         // A number drawn ahead by the root: the record is held with the transaction's writes (16p-2,
                         // T9) and written with the next statement, typically the sub-process's first lock.
                         java.util.Optional<Long> reserved = holdsSubProcesses()
-                            ? engine.transactionState(view).flatMap(state -> state.takeReservedSequence())
+                            ? engine.transactionState(view).flatMap(state -> state.takeReservedSequence(parent.processSeqId()))
                             : java.util.Optional.empty();
                         Mono<Operation> begin = reserved.isPresent()
                             ? engine.withWriteBatch(operations.begin(engine, new OperationRequest(definition.name(),
@@ -422,7 +422,7 @@ public class ProcessExecutor implements SmartInitializingSingleton {
      * they go to having triggers of their own.
      */
     private boolean holdsSubProcesses() {
-        return batching.acrossTransaction() && batching.combinesShared() && numberedByInsert();
+        return batching.acrossTransaction() && batching.holdsShared() && numberedByInsert();
     }
 
     /**
@@ -504,7 +504,9 @@ public class ProcessExecutor implements SmartInitializingSingleton {
      * refuses to go on because of the collected violations (such as {@code SaveChanges}) reports those very ones.
      */
     private static BusinessRuleViolationException withCollected(ProcessContext ctx, BusinessRuleViolationException e) {
-        if (!ctx.hasViolations()) {
+        // A held write's conflict that surfaced in a later step is the write's alone, as its own step reported it
+        // (16p-2): the violations collected since came after it.
+        if (!ctx.hasViolations() || com.jabiz.runtime.storage.HeldWriteErrors.isHeldWriteError(e)) {
             return e;
         }
         List<Violation> all = new ArrayList<>(ctx.violations());

@@ -134,6 +134,77 @@ public final class ItHeldWriteFixtures {
                         ctx.get("code")));
                 }));
 
+    /** The output of {@link #SEALED}: what the seal in the same transaction sealed. */
+    public record SealedOutput(String priceId, long rowCount) {}
+
+    /** Inserts a price (held), then seals the append-only tables in the same transaction. */
+    public static final ProcessDefinition<HeldInput, SealedOutput, ProcessContext> SEALED =
+        ProcessDefinition.define("IT_HELD_THEN_SEAL", 1, HeldInput.class, SealedOutput.class, ProcessContext.class,
+            pb -> pb
+                .permissions(PERMISSION)
+                .contextFactory((start, input) -> {
+                    ProcessContext ctx = new ProcessContext(start);
+                    ctx.put("input", input);
+                    return ctx;
+                })
+                .outputMapper(ctx -> new SealedOutput(String.valueOf(ctx.get("input", HeldInput.class).priceId()),
+                    ctx.get("sealed", com.jabiz.runtime.integrity.IntegrityProcesses.SealOutput.class).rowCount()))
+                .compute("Insert the price", (metadata, ctx) -> {
+                    HeldInput input = ctx.get("input", HeldInput.class);
+                    ctx.changes().insert("ItPrice", price(input.priceId(), input.sku()));
+                })
+                .step("Save", SaveChanges.now())
+                .step("Seal", CallProcess.of(com.jabiz.runtime.integrity.IntegrityProcesses.SEAL, 1,
+                    ctx -> new com.jabiz.runtime.integrity.IntegrityProcesses.SealInput(null), "sealed")));
+
+    /** @param skus the prices the sub-processes insert: all but the last through a {@code forEach}, the last alone */
+    public record ManyInput(java.util.List<String> skus) {}
+
+    /** Calls {@link #INSERT} once per SKU but the last through a {@code forEach}, then once more for the last. */
+    public static final ProcessDefinition<ManyInput, HeldOutput, ProcessContext> MANY =
+        ProcessDefinition.define("IT_HELD_MANY", 1, ManyInput.class, HeldOutput.class, ProcessContext.class, pb -> pb
+            .permissions(PERMISSION)
+            .contextFactory((start, input) -> {
+                ProcessContext ctx = new ProcessContext(start);
+                ctx.put("input", input);
+                return ctx;
+            })
+            .outputMapper(ctx -> new HeldOutput("many"))
+            .step("Each", CallProcess.<ProcessContext>forEach("IT_HELD_INSERT", 1, ctx -> {
+                java.util.List<String> skus = ctx.get("input", ManyInput.class).skus();
+                return skus.subList(0, skus.size() - 1).stream().map(ItHeldWriteFixtures::insertOf).toList();
+            }, null))
+            .step("Last", CallProcess.of("IT_HELD_INSERT", 1,
+                ctx -> insertOf(ctx.get("input", ManyInput.class).skus().getLast()), null)));
+
+    private static HeldInput insertOf(String sku) {
+        return new HeldInput(UUID.nameUUIDFromBytes(sku.getBytes(java.nio.charset.StandardCharsets.UTF_8)), sku, null,
+            null);
+    }
+
+    /**
+     * Inserts an {@code ItUnique} of {@code code} (held; its index may refuse it), then collects a violation, then reads
+     * the uniques of the code, which writes what is held first: a conflict there is the insert's alone.
+     */
+    public static final ProcessDefinition<TouchThenInsert, HeldOutput, ProcessContext> UNIQUE_THEN_REJECT =
+        ProcessDefinition.define("IT_HELD_UNIQUE_THEN_REJECT", 1, TouchThenInsert.class, HeldOutput.class,
+            ProcessContext.class, pb -> pb
+                .permissions(PERMISSION)
+                .contextFactory((start, input) -> {
+                    ProcessContext ctx = new ProcessContext(start);
+                    ctx.put("code", input.code());
+                    return ctx;
+                })
+                .outputMapper(ctx -> new HeldOutput(String.valueOf(ctx.get("code"))))
+                .compute("Insert", (metadata, ctx) -> ctx.changes().insert("ItUnique", Map.of("uniqueId",
+                    "held-" + ctx.get("code"), "code", ctx.get("code"))))
+                .step("Save", SaveChanges.now())
+                .compute("Reject", (metadata, ctx) -> ctx.reject(new com.jabiz.entity.Violation(null,
+                    "IT_HELD_LATER", "collected after the insert")))
+                .step("Read", com.jabiz.runtime.process.steps.QueryEntities.of(ItFixtures.UNIQUE_DATASET,
+                    ctx -> com.jabiz.query.EntityQuery.builder().where(new com.jabiz.query.QueryPredicate.Eq("code",
+                        ctx.get("code"))).limit(5).build(), "found")));
+
     /** Counts its runs when the input asks for {@code blocking}; nothing otherwise. */
     @Component
     public static class Blocking implements BlockingStep<NoMetadata, ProcessContext> {
@@ -157,6 +228,21 @@ public final class ItHeldWriteFixtures {
         @Bean
         ProcessDefinition<TouchThenInsert, HeldOutput, ProcessContext> itHeldTouchThenInsert() {
             return TOUCH_THEN_INSERT;
+        }
+
+        @Bean
+        ProcessDefinition<HeldInput, SealedOutput, ProcessContext> itHeldThenSeal() {
+            return SEALED;
+        }
+
+        @Bean
+        ProcessDefinition<TouchThenInsert, HeldOutput, ProcessContext> itHeldUniqueThenReject() {
+            return UNIQUE_THEN_REJECT;
+        }
+
+        @Bean
+        ProcessDefinition<ManyInput, HeldOutput, ProcessContext> itHeldMany() {
+            return MANY;
         }
 
         @Bean

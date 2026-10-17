@@ -3574,17 +3574,22 @@ r2dbc-pool 自己的指标（`r2dbc.pool.acquired`、`.pending`）在文档中�
 QuizBuks 重测后先做了锁拆分（#167），再做 16p-2。**16p-2 ✅ 已实施**（分支 `1.2/phase-16p2-write-buffer`，待合并；2026-10-16 确认 P-2、P-8）。
 
 **16p-2 实施说明**（详见 D46 的"实现说明（16p-2）"与 `docs/perf/phase-16p-statements.md`）：
-- 实测（`StatementBudgetIT`，开 / 关）：`LEDGER_POST` 子流程自身 5 → 2（含根流程的事务 7 → 5）、根流程 6 → 5、`LEDGER_REVERSE` 10 → 9、`ORDER_PLACE` 13 → 11、`ORDER_SHIP` 16 → 12、
+- 实测（`StatementBudgetIT`，开 / 关）：`LEDGER_POST` 子流程自身 5 → 2（含根流程的事务 7 → 5）、根流程 6 → 5、`LEDGER_REVERSE` 10 → 10、`ORDER_PLACE` 13 → 11、`ORDER_SHIP` 16 → 13（评审前 12，见下）、
   带幂等键的根流程 4 → 3、按已知版本更新 4 → 4、`HoldLock` 3 → 3；开关关时与 16p-1 逐项相同（`StatementBudgetWithoutHeldWritesIT`）。
-- 做法：缓冲随事务（`R2dbcStorageEngine` 的最外层事务）；携带的写入以 `WITH … SELECT * FROM (<查询>) jabiz_m WHERE (<各部分计数之和>) >= 0` 发出（一次性的门，先于查询执行）；
+- 做法：缓冲随事务（`R2dbcStorageEngine` 的最外层事务）；缓冲中只有插入时随没有时限的平台查询以 `WITH … SELECT * FROM (<查询>) jabiz_m WHERE (<各部分计数之和>) >= 0` 发出（通常的计划中是先于查询的一次性的门）；
   缓冲的更新 0 行时在其位置以 `jabiz_stale_<n>` 的转换失败中止语句，回滚后再读给出原来的 404 / 409；子流程的操作号由根流程的插入预取（至多 8 个，按 `CallProcess` 步骤数）。
 - 与计划不同之处：①应急开关关时回到 16p-1（验收标准），不是 P-8 所写的逐条执行（逐条执行仍是测试钩子）。②子流程的 `op_process` 能缓冲靠根流程预取操作号（计划未写如何在不发语句时取得号码）；
   未调用的子流程留下空号。③时态实体的时间线读取按声明的表判断（明细总与版本同时写出），不按文本中的 `op_process_item`。④阻塞步骤与 `inNewTransaction` 之前也写出（计划未列）：
-  阻塞步骤可能调用外部系统，不应在一个注定失败的写入之后执行。⑤有时限的查询携带缓冲时，时限加上事务的 `lock_timeout`。⑥模板一律先写出（计划只写按表名判断）。
+  阻塞步骤可能调用外部系统，不应在一个注定失败的写入之后执行。⑤有时限的查询（数据视图）从不携带缓冲，先单独写出（评审 M2）。⑥模板一律先写出（计划只写按表名判断）。
   ⑦启动检查记下 schema 中视图读的表，并把 `op_process`、`op_process_result` 加入查找其他触发器的共享表。⑧`DictionaryRegistry.databaseDictionaries` 改经存储引擎，新增 ArchUnit 规则。
-- 示范压测（同一 jar，开关关 / 开交替各两轮）：发货约 67.4 → 71.4 次 / 秒（+6 %）、p50 147 → 139 ms，下单 71.7 → 75.4 次 / 秒（本机 CPU 饱和、发货不在热门锁上）；
+- **独立评审的修正**（中 2、低 7）：M1 一次性的门取决于计划（规划器证明查询为空时丢掉条件），缓冲中有更新时从不携带、单独写出（检查项在选择列表中，总会执行）；
+  M2 有时限的读取不携带（时限与 503 只属于读取），`ORDER_SHIP` 因此 12 → 13、`LEDGER_REVERSE` 9 → 10；L1 只认确切的 `jabiz_stale_N` 消息与函数；L2 更正快照与外键检查的说明；
+  L3 之后的步骤才冲突的缓冲写入单独报告；L4 `op_process`、`op_process_result` 的触发器只停止缓冲（`holdsShared`），不影响 16p-1 的合并；L5 ArchUnit 规则移到 `PlatformArchRules`，检查全部类与子类型、更多入口；
+  L6 驱动的预备语句缓存缺省无上限，现缺省 256（`jabiz.storage.prepared-statement-cache-queries`）；L7 同一事务中再开始的根流程替换剩下的预取号，子流程只取大于父流程的号。
+  新增测试见 D46 ⑫；QuizBuks 的预估不变（提交锁内的读取都在缓冲为空时，7 条）。
+- 示范压测（同一 jar，开关关 / 开交替各两轮；评审之前测得，`ORDER_SHIP` 当时 12 条）：发货约 67.4 → 71.4 次 / 秒（+6 %）、p50 147 → 139 ms，下单 71.7 → 75.4 次 / 秒（本机 CPU 饱和、发货不在热门锁上）；
   QuizBuks 提交的发布锁内 14 → 7 条（预估），每个热门发布约 50 次 / 秒很可能达到、1.3 倍余量不确定，以 Q10 应用分支上的重测为准（`docs/perf/phase-16p-statements.md`）。
-- 测试：`HeldWritesIT`（12）与开关关时的同一组；`WriteCombiningIT`、`IntegrityIT`、`ForeignTriggersIT`、`DictionaryRegistryIT`、`HoldLockIT`、`ProcessEngineIT`、`ImportIT`、`StatementBudgetIT` 各在开关关时再跑一次
+- 测试：`HeldWritesIT`（23，评审后）与开关关时的同一组；`WriteCombiningIT`、`IntegrityIT`、`ForeignTriggersIT`、`DictionaryRegistryIT`、`HoldLockIT`、`ProcessEngineIT`、`ImportIT`、`StatementBudgetIT` 各在开关关时再跑一次
   （`…WithoutHeldWritesIT`）；`ScenarioWithoutHeldWritesTest` 在开关关时回放全部场景并与同一快照比较；runtime 单元测试 `WriteBatchTest`（更新的部分、门、分块）、`R2dbcStorageEngineStatementsTest`、`TransactionStateTest`。
 
 **16p-1 实施说明**（详见 D46 的"实现说明（16p-1）"与 `docs/perf/phase-16p-statements.md`）：
@@ -3831,7 +3836,7 @@ QB 提交锁内 48 → 16（16p-1）的明细：恢复超时 1 → 0（T1）、�
 **验收标准**
 
 - [x] 16p-1：`LEDGER_POST` 子流程（2 条分录、2 个实体维度、来源）≤ 5 条语句，根流程（同上，含设超时与 `COMMIT`）≤ 6 条；`ORDER_SHIP` ≤ 16 条；`HoldLock` 1 条；普通实体按已知版本更新 1 条（`StatementBudgetIT`）。
-- [x] 16p-2：同上分别 ≤ 2、≤ 5、≤ 12；开关关时回到 16p-1 的数字（实测 2、5、12；关时 5、6、16）。
+- [ ] 16p-2：同上分别 ≤ 2、≤ 5、≤ 12；开关关时回到 16p-1 的数字（实测 2、5、**13**；关时 5、6、16）。`ORDER_SHIP` 未达到：评审 M2 要求有时限的读取不携带缓冲，读客户之前过账的写入单独一条（需求方决定是否接受）。
 - [x] （16p-1 部分：1–11；16p-2：12、13 与开关关时的同一组）"测试"中的 1–13 全部通过：借贷平衡、科目与维度与来源的校验、层级竞态、只写一次、只追加、审计内容逐行相同、封存与校验、Outbox、幂等、唯一性、已知版本更新、保存点、场景等价。
 - [x] 错误码、接口、OpenAPI 不变；只有迁移 `V40`；`./gradlew check` 通过（16p-1）。
 - [x] （16p-1 前后）示范压测报告 `docs/perf/phase-16p-statements.md`：`ORDER_SHIP` 每个事务的语句数与吞吐的前后对照。

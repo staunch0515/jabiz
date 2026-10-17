@@ -76,12 +76,25 @@ class TransactionStateTest {
         state.reserveSequence(List.of(11L, 12L));
         TransactionState saved = state.snapshot();
 
-        assertThat(state.takeReservedSequence()).contains(11L);
+        assertThat(state.takeReservedSequence(10L)).contains(11L);
         state.restore(saved);
 
         // A number once taken may have been written and rolled back: it is a gap, never used twice.
-        assertThat(state.takeReservedSequence()).contains(12L);
-        assertThat(state.takeReservedSequence()).isEmpty();
+        assertThat(state.takeReservedSequence(10L)).contains(12L);
+        assertThat(state.takeReservedSequence(10L)).isEmpty();
+    }
+
+    @Test
+    void aSubProcessNeverTakesANumberBelowItsParentsAndANewRootReplacesWhatWasLeft() {
+        TransactionState state = new TransactionState();
+        state.reserveSequence(List.of(11L, 12L, 13L));
+        // A later root of the same transaction (number 20) draws its own: the earlier ones are gone.
+        state.reserveSequence(List.of(21L));
+        assertThat(state.takeReservedSequence(20L)).contains(21L);
+
+        state.reserveSequence(List.of(31L, 32L));
+        assertThat(state.takeReservedSequence(31L)).contains(32L);
+        assertThat(state.takeReservedSequence(31L)).isEmpty();
     }
 
     @Test

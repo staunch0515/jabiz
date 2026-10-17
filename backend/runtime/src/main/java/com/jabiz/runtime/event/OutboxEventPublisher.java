@@ -58,7 +58,7 @@ public class OutboxEventPublisher implements EventPublisher {
             }
             StorageEngine engine = storages.getEngine(poolRef);
             Mono<Void> append = outbox.append(engine, eventType, null, null, payloadJson);
-            return batching.acrossTransaction() && batching.combinesShared() ? engine.withWriteBatch(append) : append;
+            return batching.acrossTransaction() && batching.holdsShared() ? engine.withWriteBatch(append) : append;
         });
     }
 }
