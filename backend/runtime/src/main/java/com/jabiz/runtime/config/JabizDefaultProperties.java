@@ -20,20 +20,25 @@ public class JabizDefaultProperties implements EnvironmentPostProcessor {
 
     @Override
     public void postProcessEnvironment(ConfigurableEnvironment environment, SpringApplication application) {
-        environment.getPropertySources().addLast(new MapPropertySource(SOURCE, Map.of(
-            "springdoc.api-docs.path", "/api/meta/openapi",
-            "springdoc.swagger-ui.enabled", "false",
-            "springdoc.writer-with-order-by-keys", "true",
-            "springdoc.default-produces-media-type", "application/json",
+        environment.getPropertySources().addLast(new MapPropertySource(SOURCE, Map.ofEntries(
+            Map.entry("springdoc.api-docs.path", "/api/meta/openapi"),
+            Map.entry("springdoc.swagger-ui.enabled", "false"),
+            Map.entry("springdoc.writer-with-order-by-keys", "true"),
+            Map.entry("springdoc.default-produces-media-type", "application/json"),
             // The public API's contract is the public templates' catalog, not the admin frontend's document
             // (docs/design/15-public-access.md section 7).
-            "springdoc.paths-to-exclude", "/api/public/**",
+            Map.entry("springdoc.paths-to-exclude", "/api/public/**"),
             // Built once at startup: building it scans the classpath, which must not happen on the event loop.
-            "springdoc.pre-loading-enabled", "true",
-            "management.otlp.metrics.export.enabled", "false",
+            Map.entry("springdoc.pre-loading-enabled", "true"),
+            Map.entry("management.otlp.metrics.export.enabled", "false"),
             // Latency percentiles of the platform's units of work and of requests, computed by the metrics backend.
-            "management.metrics.distribution.percentiles-histogram.jabiz", "true",
-            "management.metrics.distribution.percentiles-histogram.http.server.requests", "true",
-            "management.observations.r2dbc.include-parameter-values", "false")));
+            Map.entry("management.metrics.distribution.percentiles-histogram.jabiz", "true"),
+            Map.entry("management.metrics.distribution.percentiles-histogram.http.server.requests", "true"),
+            Map.entry("management.observations.r2dbc.include-parameter-values", "false"),
+            // The driver caches every distinct statement text it prepared, without bound by default (-1); the held
+            // writes of a transaction (16p-2) make texts vary with the number of rows and parts, so the cache of each
+            // connection is bounded (jabiz.storage.prepared-statement-cache-queries; 0 turns it off).
+            Map.entry("spring.r2dbc.properties.preparedStatementCacheQueries",
+                "${jabiz.storage.prepared-statement-cache-queries:256}"))));
     }
 }

@@ -11,6 +11,7 @@ import reactor.util.context.ContextView;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Reactive contract of a physical storage engine (R2DBC, or other backends that can
@@ -76,6 +77,19 @@ public interface StorageEngine {
                 : Mono.just(false));
     }
 
+    /**
+     * As {@link #casUpdate(String, String, Object, long, String, Map, List)}, but within {@link #withWriteBatch} an
+     * engine that holds the writes of a whole transaction (ROADMAP phase 16p-2, T9) may hold this update too and write
+     * it later, with other writes: it then answers true at once, and should the update change no row when it is written,
+     * the transaction (or the savepoint it runs behind) fails; once that is rolled back, {@code notApplied} gives the
+     * error to report, as the caller would have reported a false answer.
+     */
+    default Mono<Boolean> casUpdate(String table, String pkColumn, Object id, long expectedVersion,
+        String versionColumn, Map<String, Object> updates, List<Insert> dependents,
+        java.util.function.Supplier<Mono<Throwable>> notApplied) {
+        return casUpdate(table, pkColumn, id, expectedVersion, versionColumn, updates, dependents);
+    }
+
     /** A row to insert into a table, as {@link #insert} takes it. */
     record Insert(String table, Map<String, Object> record) {}
 
@@ -110,6 +124,17 @@ public interface StorageEngine {
      */
     Flux<Map<String, Object>> select(String sql, Map<String, BoundValue> params);
 
+    /**
+     * As {@link #select(String, Map)}, for a query that only reads, whose result can depend on rows held back in the
+     * transaction only through {@code tables} (decision D46 rule 1): the engine judges by them, not by the names the
+     * text mentions. The versions of a temporal entity with their operation items are one such query: an item is held
+     * exactly as long as its version is (both are written together), so only held versions of the entity's own table
+     * matter, not held items of other entities.
+     */
+    default Flux<Map<String, Object>> select(String sql, Map<String, BoundValue> params, Set<String> tables) {
+        return select(sql, params);
+    }
+
     /** Executes a fully rendered SQL statement as given; list values are bound as arrays. */
     Flux<Map<String, Object>> executeRawQuery(RawQueryPlan plan);
 
@@ -143,9 +168,23 @@ public interface StorageEngine {
      * read of the work therefore sees what statement by statement execution would have shown it. A conflict a row
      * causes is reported as its {@link InsertConflicts} maps it, when it is written. Engines without this run the work
      * as it is.
+     *
+     * <p>An engine that holds the writes of a whole transaction (ROADMAP phase 16p-2, T9) holds the rows of the work in
+     * the transaction's buffer instead, past the end of the work: they are written with the next statement that has to
+     * be sent and reads none of their tables, or on their own before one that does, before a savepoint, before
+     * {@link #flushWrites} and before the transaction commits, or fails for a reason not the database's.
      */
     default <T> Mono<T> withWriteBatch(Mono<T> work) {
         return work;
+    }
+
+    /**
+     * Writes whatever the current transaction holds back now (ROADMAP phase 16p-2, T9): before work whose effects
+     * reach beyond the database (a blocking step that may call another system), so that a write that is going to fail
+     * fails first, as it would have when it was sent on its own. Nothing for engines that hold nothing.
+     */
+    default Mono<Void> flushWrites() {
+        return Mono.empty();
     }
 
     /**

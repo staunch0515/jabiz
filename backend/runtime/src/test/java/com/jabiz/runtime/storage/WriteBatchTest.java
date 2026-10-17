@@ -108,6 +108,86 @@ class WriteBatchTest {
             .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("no values");
     }
 
+    // ---- held for the whole transaction (16p-2, T9) -----------------------------------------------------------------
+
+    private static WriteBatch.Update update(String table, Object id, long version, Map<String, Object> updates,
+        StorageEngine.Insert... dependents) {
+        return new WriteBatch.Update(table, "f_id", id, version, "f_version", updates, List.of(dependents),
+            () -> reactor.core.publisher.Mono.empty(), "TEST step 'x'");
+    }
+
+    @Test
+    void anUpdateDividesTheRowsSoThatEveryTableKeepsItsOrder() {
+        Map<String, Object> changes = new LinkedHashMap<>();
+        changes.put("f_title", "new");
+        changes.put("f_note", null);
+        changes.put("f_version", 99);
+        List<WriteBatch.Entry> entries = List.of(
+            row("sys_audit_record", "entity_id", "a1"),
+            update("it_ticket", "t1", 3L, changes, new StorageEngine.Insert("sys_audit_record",
+                Map.of("entity_id", "t1"))),
+            row("sys_audit_record", "entity_id", "a2"),
+            row("sys_outbox_event", "event_type", "e"));
+
+        WriteBatch.Parts parts = WriteBatch.parts(entries, "v");
+
+        assertThat(parts.parts()).containsExactly(
+            "jabiz_w0 AS (INSERT INTO sys_audit_record (entity_id) VALUES (:v0) RETURNING 1)",
+            // The version is the database's to raise; NULL is set as NULL.
+            "jabiz_w1 AS (UPDATE it_ticket SET f_title = :v1, f_note = NULL, f_version = f_version + 1 WHERE f_id = :v2"
+                + " AND f_version = :v3 RETURNING 1)",
+            "jabiz_w2 AS (INSERT INTO sys_audit_record (entity_id) SELECT r.entity_id FROM jabiz_w1, "
+                + "jsonb_populate_record(NULL::sys_audit_record, CAST(:v4 AS jsonb)) r RETURNING 1)",
+            // The rows after the update: the audit table again, after its earlier rows and the update's own.
+            "jabiz_w3 AS (INSERT INTO sys_audit_record (entity_id) VALUES (:v5) RETURNING 1)",
+            "jabiz_w4 AS (INSERT INTO sys_outbox_event (event_type) VALUES (:v6) RETURNING 1)");
+        assertThat(parts.terms().get(1)).isEqualTo("CAST(CASE WHEN (SELECT count(*) FROM jabiz_w1) > 0 THEN '0'::text"
+            + " ELSE 'jabiz_stale_1'::text END AS bigint)");
+        assertThat(parts.terms().get(0)).isEqualTo("(SELECT count(*) FROM jabiz_w0)");
+        assertThat(parts.values()).containsOnlyKeys("v0", "v1", "v2", "v3", "v4", "v5", "v6");
+        assertThat(parts.values().get("v3")).isEqualTo(3L);
+        assertThat(parts.values().get("v4")).isEqualTo(new JsonText("{\"entity_id\":\"t1\"}"));
+        assertThat(parts.updates()).containsOnlyKeys(1);
+        assertThat(parts.rows()).extracting(WriteBatch.Row::table)
+            .containsExactly("sys_audit_record", "sys_audit_record", "sys_outbox_event");
+    }
+
+    @Test
+    void thePartsAloneAreReadInTurnAndCarriedTheyGateTheStatement() {
+        WriteBatch.Parts parts = WriteBatch.parts(List.of(row("a", "k", 1), row("b", "k", 2)), "jabiz_v");
+
+        assertThat(parts.alone()).isEqualTo("WITH jabiz_w0 AS (INSERT INTO a (k) VALUES (:jabiz_v0) RETURNING 1), "
+            + "jabiz_w1 AS (INSERT INTO b (k) VALUES (:jabiz_v1) RETURNING 1) SELECT (SELECT count(*) FROM jabiz_w0) AS "
+            + "jabiz_n0, (SELECT count(*) FROM jabiz_w1) AS jabiz_n1");
+        // A condition on no row: evaluated once, before the statement runs (a one-time filter).
+        assertThat(parts.carriedBy("SELECT pg_advisory_xact_lock(:key)")).isEqualTo("WITH jabiz_w0 AS (INSERT INTO a"
+            + " (k) VALUES (:jabiz_v0) RETURNING 1), jabiz_w1 AS (INSERT INTO b (k) VALUES (:jabiz_v1) RETURNING 1) "
+            + "SELECT * FROM (SELECT pg_advisory_xact_lock(:key)) jabiz_m WHERE ((SELECT count(*) FROM jabiz_w0) + "
+            + "(SELECT count(*) FROM jabiz_w1)) >= 0");
+    }
+
+    @Test
+    void anUpdateIsNeverSplitFromItsRows() {
+        WriteBatch.Update update = update("t", "id", 1L, Map.of("a", 1, "b", 2),
+            new StorageEngine.Insert("sys_audit_record", Map.of("x", 1)));
+        assertThat(update.binds()).isEqualTo(5);
+
+        List<List<WriteBatch.Entry>> chunks = WriteBatch.chunks(List.of(row("t", "a", 1, "b", 2), update,
+            row("t", "a", 3)), 6);
+
+        assertThat(chunks).hasSize(2);
+        assertThat(chunks.get(0)).hasSize(1);
+        assertThat(chunks.get(1)).containsExactly(update, chunks.get(1).get(1));
+    }
+
+    @Test
+    void anUpdatesNamesAreCheckedToo() {
+        assertThatThrownBy(() -> WriteBatch.parts(List.of(update("t; --", "id", 1L, Map.of("a", 1))), "v"))
+            .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> WriteBatch.parts(List.of(update("t", "id", 1L, Map.of("a = 1; --", 1))), "v"))
+            .isInstanceOf(IllegalArgumentException.class);
+    }
+
     @Test
     void theRowKeepsItsRecordAsGivenNullsIncluded() {
         Map<String, Object> record = new LinkedHashMap<>();
