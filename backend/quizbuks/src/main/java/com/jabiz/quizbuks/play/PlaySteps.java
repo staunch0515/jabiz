@@ -86,17 +86,32 @@ final class PlaySteps {
     /** Loads the card of the publication {@code publicationId} names into {@code key}. */
     static <I, O> void loadCard(ProcessDefinitionBuilder<I, O, ProcessContext> pb, String stepName,
         Function<ProcessContext, Object> publicationId, String key) {
-        pb.step(stepName, QueryEntities.<ProcessContext>of(QbPublications.defaultDataset(QbPublications.CARD),
-            ctx -> EntityQuery.builder().where(new QueryPredicate.In("publicationId", ids(publicationId.apply(ctx))))
-                .limit(1).build(), key));
+        QueryEntities.Metadata<ProcessContext> card = card(publicationId, key);
+        pb.step(stepName, QueryEntities.<ProcessContext>of(card.datasetId(), card.query(), card.targetKey()));
     }
 
-    /** Loads the counters of the publication {@code publicationId} names into {@code key}. */
-    static <I, O> void loadCounter(ProcessDefinitionBuilder<I, O, ProcessContext> pb,
-        Function<ProcessContext, Object> publicationId, String key) {
-        pb.step("Load the counters", QueryEntities.<ProcessContext>of(
-            QbPublications.defaultDataset(QbPublications.COUNTER), ctx -> EntityQuery.builder()
-                .where(new QueryPredicate.In("publicationId", ids(publicationId.apply(ctx)))).limit(1).build(), key));
+    /**
+     * The read of the card of the publication {@code publicationId} names, into {@code key}: one query of a
+     * {@link QueryEntities#all} step (none when it names none).
+     */
+    static QueryEntities.Metadata<ProcessContext> card(Function<ProcessContext, Object> publicationId, String key) {
+        return QueryEntities.query(QbPublications.defaultDataset(QbPublications.CARD), ctx -> byPublication(
+            publicationId.apply(ctx)), key);
+    }
+
+    /**
+     * The read of the counters of the publication {@code publicationId} names, into {@code key}: one query of a
+     * {@link QueryEntities#all} step (none when it names none).
+     */
+    static QueryEntities.Metadata<ProcessContext> counter(Function<ProcessContext, Object> publicationId,
+        String key) {
+        return QueryEntities.query(QbPublications.defaultDataset(QbPublications.COUNTER), ctx -> byPublication(
+            publicationId.apply(ctx)), key);
+    }
+
+    private static EntityQuery byPublication(Object publicationId) {
+        return EntityQuery.builder().where(new QueryPredicate.In("publicationId", ids(publicationId))).limit(1)
+            .build();
     }
 
     static AttemptRules.Counts counts(EntityInstance counter) {
