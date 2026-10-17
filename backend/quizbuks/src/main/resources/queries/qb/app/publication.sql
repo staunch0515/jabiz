@@ -1,10 +1,11 @@
 /*---
 id: qb.app.publication
 description: One publication's page for a taker (U-20 – U-23) with the caller's own attempt; none when they cannot see it
-entities: [QbPublicationCard, QbPublicationCounter, QbPublicationStats, QbStatsRun, QbWallet, QbCountry, QbSponsor, QbQuizVersion, QbAttempt, QbPublicationOwner]
+entities: [QbPublicationCard, QbPublicationCounter, QbPublicationStartCounter, QbPublicationStats, QbStatsRun, QbWallet, QbCountry, QbSponsor, QbQuizVersion, QbAttempt, QbPublicationOwner]
 datasets:
   QbPublicationCard: urn:jabiz:dataset:default:QbPublicationCard
   QbPublicationCounter: urn:jabiz:dataset:default:QbPublicationCounter
+  QbPublicationStartCounter: urn:jabiz:dataset:default:QbPublicationStartCounter
   QbPublicationStats: urn:jabiz:dataset:default:QbPublicationStats
   QbStatsRun: urn:jabiz:dataset:default:QbStatsRun
   QbWallet: urn:jabiz:dataset:default:QbWallet
@@ -56,6 +57,7 @@ permissions: [qb.play]
 -- and budget not used up, a sponsor who can pay), no attempt yet, and not the caller's own publication. The
 -- introduction and the materials come from the version's snapshot, never its questions (design section 9). The
 -- windows' counts and their time are the statistics job's (every ten minutes); the total is the counter's, live.
+-- The counters' two sides (Q10a4: starts s, completions n) are read in this one statement, as in qb.app.feed.
 SELECT
     d.publicationId AS publicationId,
     d.name AS name,
@@ -119,10 +121,10 @@ SELECT
          (SELECT co.{{QbCountry.regions}} FROM {{QbCountry}} co WHERE co.{{QbCountry.code}} = CAST(:country AS text)),
          'GLOBAL'), ',')) AS shown,
     (c.{{QbPublicationCard.budgetCap}} IS NULL
-     OR n.{{QbPublicationCounter.spent}} + n.{{QbPublicationCounter.reserved}} + c.{{QbPublicationCard.maxReward}}
-        <= c.{{QbPublicationCard.budgetCap}})
+     OR n.{{QbPublicationCounter.spent}} + s.{{QbPublicationStartCounter.reservedTotal}}
+        - n.{{QbPublicationCounter.released}} + c.{{QbPublicationCard.maxReward}} <= c.{{QbPublicationCard.budgetCap}})
     AND (c.{{QbPublicationCard.maxWinners}} IS NULL
-         OR n.{{QbPublicationCounter.winners}} + n.{{QbPublicationCounter.starts}}
+         OR n.{{QbPublicationCounter.winners}} + s.{{QbPublicationStartCounter.starts}}
             - n.{{QbPublicationCounter.completions}} < c.{{QbPublicationCard.maxWinners}})
     AND coalesce(w.{{QbWallet.pendingCount}}, 0) = 0
     AND coalesce(w.{{QbWallet.balance}} - w.{{QbWallet.held}}, 0) >= c.{{QbPublicationCard.maxReward}}
@@ -132,6 +134,8 @@ SELECT
     m.{{QbAttempt.deadline}}               AS myDeadline
 FROM {{QbPublicationCard}} c
 JOIN {{QbPublicationCounter}} n ON n.{{QbPublicationCounter.publicationId}} = c.{{QbPublicationCard.publicationId}}
+JOIN {{QbPublicationStartCounter}} s
+    ON s.{{QbPublicationStartCounter.publicationId}} = c.{{QbPublicationCard.publicationId}}
 JOIN {{QbQuizVersion}} v ON v.{{QbQuizVersion.versionId}} = c.{{QbPublicationCard.versionId}}
 LEFT JOIN {{QbPublicationStats}} st ON st.{{QbPublicationStats.publicationId}} = c.{{QbPublicationCard.publicationId}}
 LEFT JOIN {{QbStatsRun}} sr ON sr.{{QbStatsRun.job}} = 'qb.publication-stats'

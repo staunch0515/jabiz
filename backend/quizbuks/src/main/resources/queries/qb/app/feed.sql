@@ -1,10 +1,11 @@
 /*---
 id: qb.app.feed
 description: The publications a taker can answer now (U-10 – U-14), newest first; searched by name and title
-entities: [QbPublicationCard, QbPublicationCounter, QbWallet, QbCountry, QbSponsor, QbPublicationOwner]
+entities: [QbPublicationCard, QbPublicationCounter, QbPublicationStartCounter, QbWallet, QbCountry, QbSponsor, QbPublicationOwner]
 datasets:
   QbPublicationCard: urn:jabiz:dataset:default:QbPublicationCard
   QbPublicationCounter: urn:jabiz:dataset:default:QbPublicationCounter
+  QbPublicationStartCounter: urn:jabiz:dataset:default:QbPublicationStartCounter
   QbWallet: urn:jabiz:dataset:default:QbWallet
   QbCountry: urn:jabiz:dataset:default:QbCountry
   QbSponsor: urn:jabiz:dataset:default:QbSponsor
@@ -43,6 +44,9 @@ permissions: [qb.play]
 -- own (QbPublicationOwner: the cards of the caller's publications). Only ordinary
 -- tables but the countries and the sponsors, both small. The sponsor's name and avatar are an approved onboarding's
 -- only (Q2 review). The text is found as written: strpos takes it literally, so % _ and \ match themselves.
+-- The counters are two rows (Q10a4): the starts' side s and the completions' side n, read here in one statement, so
+-- that they come from one snapshot (never fewer starts than completions): in progress s.starts - n.completions,
+-- reserved s.reservedTotal - n.released.
 SELECT
     c.{{QbPublicationCard.publicationId}}  AS publicationId,
     c.{{QbPublicationCard.name}}           AS name,
@@ -61,6 +65,8 @@ SELECT
     c.{{QbPublicationCard.fullScore}}      AS fullScore
 FROM {{QbPublicationCard}} c
 JOIN {{QbPublicationCounter}} n ON n.{{QbPublicationCounter.publicationId}} = c.{{QbPublicationCard.publicationId}}
+JOIN {{QbPublicationStartCounter}} s
+    ON s.{{QbPublicationStartCounter.publicationId}} = c.{{QbPublicationCard.publicationId}}
 LEFT JOIN {{QbWallet}} w ON w.{{QbWallet.ownerId}} = c.{{QbPublicationCard.sponsorId}}
     AND w.{{QbWallet.kind}} = 'SPONSOR'
 LEFT JOIN {{QbSponsor}} sp ON sp.{{QbSponsor.userId}} = c.{{QbPublicationCard.sponsorId}}
@@ -71,11 +77,11 @@ WHERE c.{{QbPublicationCard.status}} = 'LIVE'
       (SELECT co.{{QbCountry.regions}} FROM {{QbCountry}} co WHERE co.{{QbCountry.code}} = CAST(:country AS text)),
       'GLOBAL'), ',')
   AND (c.{{QbPublicationCard.budgetCap}} IS NULL
-       OR n.{{QbPublicationCounter.spent}} + n.{{QbPublicationCounter.reserved}} + c.{{QbPublicationCard.maxReward}}
-          <= c.{{QbPublicationCard.budgetCap}})
+       OR n.{{QbPublicationCounter.spent}} + s.{{QbPublicationStartCounter.reservedTotal}}
+          - n.{{QbPublicationCounter.released}} + c.{{QbPublicationCard.maxReward}} <= c.{{QbPublicationCard.budgetCap}})
   AND (c.{{QbPublicationCard.maxWinners}} IS NULL
-       OR n.{{QbPublicationCounter.winners}} + n.{{QbPublicationCounter.starts}} - n.{{QbPublicationCounter.completions}}
-          < c.{{QbPublicationCard.maxWinners}})
+       OR n.{{QbPublicationCounter.winners}} + s.{{QbPublicationStartCounter.starts}}
+          - n.{{QbPublicationCounter.completions}} < c.{{QbPublicationCard.maxWinners}})
   AND coalesce(w.{{QbWallet.pendingCount}}, 0) = 0
   AND coalesce(w.{{QbWallet.balance}} - w.{{QbWallet.held}}, 0) >= c.{{QbPublicationCard.maxReward}}
   AND NOT EXISTS (SELECT 1 FROM {{QbPublicationOwner}} own

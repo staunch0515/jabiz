@@ -57,6 +57,10 @@ import static com.jabiz.quizbuks.play.PlaySteps.ids;
  * publication moved ({@link PublicationMoves#MOVE}, which reads it then: Q10a); an event for the messages. Both queue
  * for the publication's lock before their transaction when their input names the publication (platform decision D45),
  * and refuse one that is not the attempt's before the lock.
+ *
+ * <p>Neither takes the publication's start lock nor reads the starts' side of the counters (Q10a4,
+ * docs/quizbuks/plans/Q10-lock-split.md 2.4): ending the publication and leaving it underfunded look at the winners,
+ * the spent Kudos and the wallet only, all exact under the publication's lock, which every completion holds.
  */
 public final class AttemptFinishing {
 
@@ -459,8 +463,10 @@ public final class AttemptFinishing {
         counts.put("completions", BigDecimal.valueOf(PlaySteps.number(counter.get("completions")) + 1));
         counts.put("passes", BigDecimal.valueOf(PlaySteps.number(counter.get("passes")) + (plan.passed() ? 1 : 0)));
         counts.put("winners", BigDecimal.valueOf(winners));
-        counts.put("reserved", PlaySteps.money(counter.get("reserved"))
-            .subtract(PlaySteps.money(plan.card().get("maxReward"))));
+        // What the attempt's start reserved is released (Q10a4: added to the completions' side; the starts' side,
+        // the start lock's, is never written here).
+        counts.put("released", PlaySteps.money(counter.get("released"))
+            .add(PlaySteps.money(plan.card().get("maxReward"))));
         counts.put("spent", spent);
         ctx.changes().update(QbPublications.COUNTER, counter.id(), counter.version(), counts);
         boolean pending = RewardStatus.PENDING.equals(settlement.rewardStatus());

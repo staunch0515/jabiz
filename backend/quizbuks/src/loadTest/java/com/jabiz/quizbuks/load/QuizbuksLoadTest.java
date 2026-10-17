@@ -16,6 +16,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -58,8 +59,9 @@ import java.util.regex.Pattern;
  * It prints and writes completions a second, the latencies (HdrHistogram) and the statuses and error codes of each
  * operation (a 422 for the quota, the budget or the sponsor's funds is expected; anything else is an error), and
  * checks afterwards that the sponsor's wallet went down by exactly the rewards paid. With {@code LOAD_DB_URL} it also
- * resets and reads {@code pg_stat_statements} around the load and samples {@code pg_stat_activity} (JDBC, outside the
- * application).
+ * resets and reads {@code pg_stat_statements} around the load, samples {@code pg_stat_activity} (the waiters of the
+ * publication's two locks apart, Q10a4) and checks afterwards the publication's counters, both sides in one statement,
+ * against its attempts (JDBC, outside the application).
  *
  * <p>Safety: it drives only this machine ({@code LOAD_BASE_URL} must be a loopback address unless
  * {@code LOAD_ALLOW_REMOTE=yes}); it pays only checkouts on the application's own host (the Stripe stub beside it)
@@ -285,7 +287,7 @@ public final class QuizbuksLoadTest {
         Load load = Load.of();
         AtomicInteger next = new AtomicInteger();
         AtomicBoolean playing = new AtomicBoolean(true);
-        Database.Sampler sampler = db == null ? null : db.sample();
+        Database.Sampler sampler = db == null ? null : db.sample(publicationId);
         Map<String, Double> metersBefore = metrics ? meters() : Map.of();
         long[] cpuBefore = cpu();
         long began = System.nanoTime();
@@ -370,15 +372,20 @@ public final class QuizbuksLoadTest {
         if (metrics) {
             double startHold = hold(metersBefore, metersAfter, START);
             double submitHold = hold(metersBefore, metersAfter, SUBMIT);
+            // Since the lock split (Q10a4) each queues in a family of its own (start: qb.pub-start, submit: qb.pub),
+            // 2 permits each: the capacity of the two families side by side is set by the longer hold, and both
+            // capacities are printed (before the split one family held both: 2 / their sum).
             line(String.format(Locale.ROOT, "Admission permit held (an admitted run: the process less its queueing; "
-                + "admitted / successful runs: start %.0f / %.0f, submit %.0f / %.0f): start %.1f ms + submit %.1f ms "
-                + "= **%.1f ms a completion** (2 permits: about %.1f completions/s); statements in the transaction "
+                + "admitted / successful runs: start %.0f / %.0f, submit %.0f / %.0f): start (qb.pub-start) %.1f ms + "
+                + "submit (qb.pub) %.1f ms = **%.1f ms a completion** (2 permits of one family: about %.1f "
+                + "completions/s; 2 permits of each family: about %.1f); statements in the transaction "
                 + "before its commit: start %.1f, submit %.1f a run.",
                 delta(metersBefore, metersAfter, START + ADMITTED_COUNT),
                 delta(metersBefore, metersAfter, START + SUCCESS_COUNT),
                 delta(metersBefore, metersAfter, SUBMIT + ADMITTED_COUNT),
                 delta(metersBefore, metersAfter, SUBMIT + SUCCESS_COUNT), startHold,
                 submitHold, startHold + submitHold, 2_000 / (startHold + submitHold),
+                2_000 / Math.max(startHold, submitHold),
                 delta(metersBefore, metersAfter, START + STATEMENTS_TOTAL) / Math.max(1, delta(metersBefore,
                     metersAfter, START + STATEMENTS_COUNT)), delta(metersBefore, metersAfter, SUBMIT
                     + STATEMENTS_TOTAL) / Math.max(1, delta(metersBefore, metersAfter, SUBMIT + STATEMENTS_COUNT))));
@@ -392,16 +399,18 @@ public final class QuizbuksLoadTest {
             paid, rewards.getOrDefault("PENDING", new LongAdder()).sum(), balanceBefore.toPlainString(),
             balanceAfter.toPlainString(), consistent ? "consistent." : "MISMATCH."));
         line("");
+        boolean countersConsistent = true;
         if (db != null) {
             sampler.print();
             db.statements(done);
+            countersConsistent = db.counters(publicationId);
             db.close();
         }
         String path = System.getenv("LOAD_REPORT");
         if (path != null && !path.isBlank()) {
             Files.writeString(Path.of(path), report.toString());
         }
-        if (!consistent || starts.errors() + submits.errors() > 0) {
+        if (!consistent || !countersConsistent || starts.errors() + submits.errors() > 0) {
             System.exit(1);
         }
     }
@@ -1145,10 +1154,73 @@ public final class QuizbuksLoadTest {
             }
         }
 
-        /** Samples every 100 ms how many of the database's connections are busy, and how many wait for a lock. */
-        Sampler sample() throws SQLException {
+        /**
+         * Samples every 100 ms how many of the database's connections are busy, how many wait for a lock, and of those
+         * how many for the publication's lock ({@code qb.pub:<p>}) and its start lock ({@code qb.pub-start:<p>},
+         * Q10a4).
+         */
+        Sampler sample(String publicationId) throws SQLException {
             return new Sampler(DriverManager.getConnection(System.getenv("LOAD_DB_URL"), env("LOAD_DB_USER",
-                "postgres"), env("LOAD_DB_PASSWORD", "")));
+                "postgres"), env("LOAD_DB_PASSWORD", "")), publicationId);
+        }
+
+        /**
+         * After the load (Q10a4): the publication's counters, both sides read in one statement of the application's
+         * database, against its attempts (starts, completions, winners, spent) and each other (in progress
+         * {@code starts - completions}, reserved {@code reservedTotal - released} = in progress x the highest reward).
+         * Whether they agree; the application's database before the lock split (one counters row) is reported as not
+         * checked.
+         */
+        boolean counters(String publicationId) throws SQLException {
+            String url = System.getenv("LOAD_DB_URL").replaceFirst("/[A-Za-z0-9_]+(\\?|$)", "/" + name + "$1");
+            try (Connection app = DriverManager.getConnection(url, env("LOAD_DB_USER", "postgres"),
+                env("LOAD_DB_PASSWORD", ""));
+                 PreparedStatement split = app.prepareStatement("SELECT to_regclass('qb_publication_start_counter') "
+                     + "IS NOT NULL")) {
+                try (ResultSet rows = split.executeQuery()) {
+                    rows.next();
+                    if (!rows.getBoolean(1)) {
+                        line("Counters check: not checked (no qb_publication_start_counter: before the lock split).");
+                        line("");
+                        return true;
+                    }
+                }
+                try (PreparedStatement statement = app.prepareStatement("SELECT s.starts, n.completions, n.winners, "
+                    + "n.spent, s.reserved_total - n.released AS reserved, k.max_reward, "
+                    + "(SELECT count(*) FROM qb_attempt a WHERE a.publication_id = n.publication_id) AS a_starts, "
+                    + "(SELECT count(*) FROM qb_attempt a WHERE a.publication_id = n.publication_id "
+                    + "AND a.status <> 'IN_PROGRESS') AS a_completions, "
+                    + "(SELECT count(*) FROM qb_attempt a WHERE a.publication_id = n.publication_id AND a.reward > 0) "
+                    + "AS a_winners, (SELECT coalesce(sum(a.reward), 0) FROM qb_attempt a "
+                    + "WHERE a.publication_id = n.publication_id) AS a_spent "
+                    + "FROM qb_publication_counter n JOIN qb_publication_start_counter s "
+                    + "ON s.publication_id = n.publication_id JOIN qb_publication_card k "
+                    + "ON k.publication_id = n.publication_id WHERE n.publication_id = ?::uuid")) {
+                    statement.setString(1, publicationId);
+                    try (ResultSet rows = statement.executeQuery()) {
+                        if (!rows.next()) {
+                            line("Counters check: MISMATCH (no counters for the publication).");
+                            return false;
+                        }
+                        long starts = rows.getLong("starts");
+                        long completions = rows.getLong("completions");
+                        BigDecimal reserved = rows.getBigDecimal("reserved");
+                        boolean agree = starts == rows.getLong("a_starts")
+                            && completions == rows.getLong("a_completions")
+                            && rows.getLong("winners") == rows.getLong("a_winners")
+                            && rows.getBigDecimal("spent").compareTo(rows.getBigDecimal("a_spent")) == 0
+                            && starts >= completions
+                            && reserved.compareTo(rows.getBigDecimal("max_reward")
+                                .multiply(BigDecimal.valueOf(starts - completions))) == 0;
+                        line(String.format(Locale.ROOT, "Counters check (both sides in one statement, against the "
+                            + "attempts): starts %d, completions %d, winners %d, spent %s, reserved %s - %s", starts,
+                            completions, rows.getLong("winners"), rows.getBigDecimal("spent").toPlainString(),
+                            reserved.toPlainString(), agree ? "consistent." : "MISMATCH."));
+                        line("");
+                        return agree;
+                    }
+                }
+            }
         }
 
         /** The statements that took most of the database's time during the load, per completed attempt. */
@@ -1197,20 +1269,31 @@ public final class QuizbuksLoadTest {
             private final List<int[]> samples = new ArrayList<>();
             private final Thread thread;
 
-            Sampler(Connection connection) {
+            private final String publicationId;
+
+            Sampler(Connection connection, String publicationId) {
                 this.connection = connection;
+                this.publicationId = publicationId;
                 this.thread = Thread.ofVirtual().start(this::loop);
             }
 
             private void loop() {
-                try (Statement statement = connection.createStatement()) {
+                // The waiters of each of the publication's two locks, by the key the platform takes them under.
+                String waiters = "(SELECT count(*) FROM pg_locks l WHERE l.locktype = 'advisory' AND NOT l.granted "
+                    + "AND l.database = (SELECT oid FROM pg_database WHERE datname = '" + name + "') "
+                    + "AND ((l.classid::bigint << 32) | l.objid::bigint) = hashtextextended(?, 0))";
+                try (PreparedStatement statement = connection.prepareStatement("SELECT count(*) FILTER (WHERE state "
+                    + "<> 'idle'), count(*) FILTER (WHERE wait_event_type = 'Lock' AND wait_event = 'advisory'), "
+                    + "count(*), " + waiters + ", " + waiters + " FROM pg_stat_activity WHERE datname = '" + name
+                    + "' AND pid <> pg_backend_pid()")) {
+                    statement.setString(1, "jabiz.app-lock:qb.pub:" + publicationId);
+                    statement.setString(2, "jabiz.app-lock:qb.pub-start:" + publicationId);
                     while (running.get()) {
-                        try (ResultSet rows = statement.executeQuery("SELECT count(*) FILTER (WHERE state <> 'idle'), "
-                            + "count(*) FILTER (WHERE wait_event_type = 'Lock' AND wait_event = 'advisory'), count(*) "
-                            + "FROM pg_stat_activity WHERE datname = '" + name + "' AND pid <> pg_backend_pid()")) {
+                        try (ResultSet rows = statement.executeQuery()) {
                             rows.next();
                             synchronized (samples) {
-                                samples.add(new int[] {rows.getInt(1), rows.getInt(2), rows.getInt(3)});
+                                samples.add(new int[] {rows.getInt(1), rows.getInt(2), rows.getInt(3), rows.getInt(4),
+                                    rows.getInt(5)});
                             }
                         }
                         Thread.sleep(100);
@@ -1236,9 +1319,14 @@ public final class QuizbuksLoadTest {
                     double open = samples.stream().mapToInt(s -> s[2]).average().orElse(0);
                     int maxBusy = samples.stream().mapToInt(s -> s[0]).max().orElse(0);
                     int maxLocked = samples.stream().mapToInt(s -> s[1]).max().orElse(0);
+                    double onPublication = samples.stream().mapToInt(s -> s[3]).average().orElse(0);
+                    double onStarts = samples.stream().mapToInt(s -> s[4]).average().orElse(0);
                     line(String.format(Locale.ROOT, "Connections during the load (pg_stat_activity every 100 ms, %d "
                         + "samples): %.1f open, %.1f busy (at most %d), %.1f of them waiting for an advisory lock "
-                        + "(at most %d).", samples.size(), open, busy, maxBusy, locked, maxLocked));
+                        + "(at most %d): %.2f for the publication's lock qb.pub (at most %d), %.2f for its start lock "
+                        + "qb.pub-start (at most %d).", samples.size(), open, busy, maxBusy, locked, maxLocked,
+                        onPublication, samples.stream().mapToInt(s -> s[3]).max().orElse(0), onStarts,
+                        samples.stream().mapToInt(s -> s[4]).max().orElse(0)));
                     line("");
                 }
             }

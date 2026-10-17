@@ -66,6 +66,30 @@ final class PublicationEditing {
         return publicationId == null ? null : LOCK_FAMILY + ":" + publicationId;
     }
 
+    /**
+     * The family of the publication's start lock {@code qb.pub-start:<publicationId>} (Q10a4,
+     * docs/quizbuks/plans/Q10-lock-split.md): held by a start around the starts' counters, and after the publication's
+     * lock by the processes that change the state of a publication that went on. A family of its own, not
+     * {@code qb.pub:start:…}: the platform takes a lock whose name begins with {@code <family>:} for one of that
+     * family, so a start queuing as {@code qb.pub} would queue behind the completions again.
+     */
+    static final String START_LOCK_FAMILY = "qb.pub-start";
+
+    static String startLockName(Object publicationId) {
+        return publicationId == null ? null : START_LOCK_FAMILY + ":" + publicationId;
+    }
+
+    /**
+     * Takes the publication's start lock, after its lock and before the reads (platform decision D46 rule 5): for a
+     * process that changes the state of a publication that went on, so that no start gets in after the change commits
+     * and every start before it is counted. Lock order: {@code qb.pub:<p>} → {@code qb.pub-start:<p>}; nothing is
+     * locked after it but a later publication's locks (design section 4.3).
+     */
+    static <I, O> void lockStarts(ProcessDefinitionBuilder<I, O, ProcessContext> pb) {
+        pb.step("Lock the publication's starts", HoldLock.<ProcessContext>exclusive(
+            ctx -> startLockName(ctx.get(PUB_ID))));
+    }
+
     static ProcessContext start(ProcessStart start, Object input, UUID publicationId) {
         ProcessContext ctx = new ProcessContext(start);
         ctx.put(INPUT, input);
@@ -75,9 +99,24 @@ final class PublicationEditing {
 
     /** Takes the publication's lock and loads it through the sponsor's dataset: 404 unless it is the caller's. */
     static <I, O> void lockAndLoad(ProcessDefinitionBuilder<I, O, ProcessContext> pb) {
-        pb.step("Lock the publication", HoldLock.<ProcessContext>exclusive(ctx -> lockName(ctx.get(PUB_ID))))
-            .step("Load the publication", LoadEntity.by(QbPublications.sponsorDataset(QbPublications.PUBLICATION),
-                PUB_ID, PUBLICATION));
+        lockAndLoad(pb, false);
+    }
+
+    /**
+     * As {@link #lockAndLoad(ProcessDefinitionBuilder)}, for a process that changes the state of a publication that
+     * went on (pause, resume): the start lock too, after the publication's ({@link #lockStarts}).
+     */
+    static <I, O> void lockStatesAndLoad(ProcessDefinitionBuilder<I, O, ProcessContext> pb) {
+        lockAndLoad(pb, true);
+    }
+
+    private static <I, O> void lockAndLoad(ProcessDefinitionBuilder<I, O, ProcessContext> pb, boolean starts) {
+        pb.step("Lock the publication", HoldLock.<ProcessContext>exclusive(ctx -> lockName(ctx.get(PUB_ID))));
+        if (starts) {
+            lockStarts(pb);
+        }
+        pb.step("Load the publication", LoadEntity.by(QbPublications.sponsorDataset(QbPublications.PUBLICATION),
+            PUB_ID, PUBLICATION));
         loadSchedule(pb);
     }
 
@@ -328,9 +367,10 @@ final class PublicationEditing {
 
     /**
      * The values of a publication that goes on (D-Q4-4) at the operation time: scheduled or live by its times, the
-     * time of the approval, and the reasons of an earlier refusal cleared. Inserts its counters, all zero, and its
-     * card (Q5, D-Q5-6) from the publication, its version ({@link #VERSIONS}), tiers ({@link #TIERS}) and sponsor's
-     * profile ({@link #SPONSOR_PROFILE}).
+     * time of the approval, and the reasons of an earlier refusal cleared. Inserts both sides of its counters, all
+     * zero (Q10a4: in the same transaction, so a publication on always has both), and its card (Q5, D-Q5-6) from the
+     * publication, its version ({@link #VERSIONS}), tiers ({@link #TIERS}) and sponsor's profile
+     * ({@link #SPONSOR_PROFILE}).
      */
     static Map<String, Object> goingOn(ProcessContext ctx, EntityInstance publication, String requestId) {
         Map<String, Object> values = new LinkedHashMap<>();
@@ -341,13 +381,20 @@ final class PublicationEditing {
         values.put("approvalRequestId", requestId);
         values.put("rejectReason", null);
         values.put("rejectCode", null);
-        Map<String, Object> counter = new LinkedHashMap<>();
-        counter.put("publicationId", publication.id());
-        for (String count : List.of("starts", "completions", "passes", "winners", "reserved", "spent")) {
-            counter.put(count, BigDecimal.ZERO);
-        }
-        ctx.changes().insert(QbPublications.COUNTER, counter);
+        ctx.changes().insert(QbPublications.COUNTER, zeros(publication, "completions", "passes", "winners",
+            "released", "spent"));
+        ctx.changes().insert(QbPublications.START_COUNTER, zeros(publication, "starts", "reservedTotal"));
         ctx.changes().insert(QbPublications.CARD, cardOf(ctx, publication, status));
+        return values;
+    }
+
+    /** A counters row of the publication with {@code counts} at 0. */
+    private static Map<String, Object> zeros(EntityInstance publication, String... counts) {
+        Map<String, Object> values = new LinkedHashMap<>();
+        values.put("publicationId", publication.id());
+        for (String count : counts) {
+            values.put(count, BigDecimal.ZERO);
+        }
         return values;
     }
 

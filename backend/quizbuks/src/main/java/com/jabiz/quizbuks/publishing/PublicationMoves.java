@@ -32,6 +32,14 @@ import static com.jabiz.quizbuks.publishing.PublicationEditing.first;
  * the card says whether the publication moves. Only then does the completion call {@link #MOVE}, which reads the
  * publication and its schedule row and moves it: the common completion reads two rows fewer under the lock.
  *
+ * <p>The move takes the publication's lock only, never the start lock (Q10a4, docs/quizbuks/plans/Q10-lock-split.md
+ * 2.3, LS-5), although a start may meanwhile read the card as still live. That rests on two things, and a change to
+ * either needs the argument made again: (1) the limits' algebra: once the completions used up the winners or the
+ * budget, every start's check of the limits refuses whatever completions it reads, since a later completion only
+ * lowers what the check adds up; (2) a sponsor short of funds is a soft check (D-Q5-5): a start let in meanwhile ends
+ * pending, as when the balance runs out between a start and its submission. Taking it here would also break the lock
+ * order (the completion holds the sponsor's wallet lock by then: {@code qb.pub-start} comes before {@code qb.wallet}).
+ *
  * <p>The steps use the context keys of {@link PublicationEditing} ({@code publicationId}, {@code found},
  * {@code schedule}, {@code card}, {@code output}); a process using them keeps its own keys apart.
  */
@@ -61,6 +69,19 @@ public final class PublicationMoves {
     /** The name of a publication's lock; null without one. */
     public static String lockName(Object publicationId) {
         return PublicationEditing.lockName(publicationId);
+    }
+
+    /**
+     * The family of a publication's start lock and of the queue before it (Q10a4, docs/quizbuks/plans/
+     * Q10-lock-split.md): {@code QB_ATTEMPT_START} declares {@code .admission(START_LOCK_FAMILY, input ->
+     * publicationId)} and takes {@link #startLockName}, the same text. A family of its own ({@code qb.pub-start}, not
+     * {@code qb.pub:start}): starts and completions queue apart.
+     */
+    public static final String START_LOCK_FAMILY = PublicationEditing.START_LOCK_FAMILY;
+
+    /** The name of a publication's start lock; null without one. */
+    public static String startLockName(Object publicationId) {
+        return PublicationEditing.startLockName(publicationId);
     }
 
     /**

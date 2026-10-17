@@ -91,6 +91,16 @@ public class PublishingConfig {
     }
 
     @Bean
+    EntityDefinition qbPublicationStartCounterEntity() {
+        return QbPublications.START_COUNTER_ENTITY;
+    }
+
+    @Bean
+    DatasetDefinition qbPublicationStartCounterDataset() {
+        return defaultDataset(QbPublications.START_COUNTER, 100);
+    }
+
+    @Bean
     EntityDefinition qbPublicationScheduleEntity() {
         return QbPublications.SCHEDULE_ENTITY;
     }

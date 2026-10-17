@@ -1,6 +1,7 @@
-# Q10a4 锁拆分：开始与完成各一把锁（计划，待确认）
+# Q10a4 锁拆分：开始与完成各一把锁（计划，已确认）
 
 需求方 2026-10-17 决定（P-10）：**先做锁拆分，再做平台 16p-2，每一步之后重测**。本计划只是锁拆分（应用内，不改平台、不改体验）。
+**已确认**（需求方，2026-10-17）：第 10 节的建议全部接受（LS-1 至 LS-8，见该节"决定"列）；实施见文末的实施记录。
 分支 `1.2/quizbuks-10a4-lock-split`，从 `1.2/quizbuks-10a3-ledger-cost` 拉出（后者尚未合并，但带着 16p-1 与最新的 QuizBuks 代码；它合并后本分支随之合并 `1.2/quizbuks`）。
 只改 `.jabiz-app-paths` 中的路径。依据：`perf/Q10a-load-test.md` §6.5（提议与评审补充的条件）与 §9（现在的数字）；设计 `02-design.md` §3.3、§4.3；`Q5-answering.md` D-Q5-3、D-Q5-5、D-Q5-7；`Q4-publishing.md` D-Q4-5。
 
@@ -289,18 +290,18 @@ Q9c 的 `qb.admin.monthly`、`balances`、`finance-summary`、`publication-funds
 | 两行不同时存在（缺陷） | 开始或完成 500（现有的"上架的发布有计数"的断言） | 两行在同一事务插入；`PublicationIT` 断言 |
 | 读者漏改，分两条语句读两侧 | 显示负的进行中 | 第 4 节逐个列出；模板都是一条语句 |
 
-## 10. 待确认问题
+## 10. 待确认问题（已确认）
 
-| 编号 | 问题 | 建议 |
-|---|---|---|
-| LS-1 | 锁名 | 发布锁 `qb.pub:<发布>` 不改名（完成与状态）；新开始锁 `qb.pub-start:<发布>`（连字符，独立的族，2.1） |
-| LS-2 | 两张表还是一张表两行 | 两张表（单一主键、各自的版本 CAS、无复合键） |
-| LS-3 | 预占的表示 | 两列累计（`reservedTotal`、`released`），不由 `n × maxReward` 推出；测试断言两者相等 |
-| LS-4 | 哪些状态流程取开始锁 | 暂停、恢复、定时上下架、预算恢复都取（一句规则，成本可忽略）；最少的做法只有暂停 |
-| LS-5 | 完成移动（结束、预算不足）是否取开始锁（§6.5 原说要取） | **不取**（2.3 的证明；省掉停顿、保持锁序简单） |
-| LS-6 | 迁移一步完成还是先扩后收；旧数据不符合不变式时 | 一步完成（未上线、单实例）；不符即迁移失败，先查清 |
-| LS-7 | 热门发布占 4 个全局许可 | 先用现有配置测（可比），另跑连接池 16 的对照，按结果在报告中给出建议的池与 `max-active`；开始族的 `concurrency` 保持 2 |
-| LS-8 | 接受接近上限时偶尔多拒一个开始 | 接受（从不多放；首页已有同样的时差） |
+| 编号 | 问题 | 建议 | 决定（需求方 2026-10-17） |
+|---|---|---|---|
+| LS-1 | 锁名 | 发布锁 `qb.pub:<发布>` 不改名（完成与状态）；新开始锁 `qb.pub-start:<发布>`（连字符，独立的族，2.1） | 接受 |
+| LS-2 | 两张表还是一张表两行 | 两张表（单一主键、各自的版本 CAS、无复合键） | 接受 |
+| LS-3 | 预占的表示 | 两列累计（`reservedTotal`、`released`），不由 `n × maxReward` 推出；测试断言两者相等 | 接受 |
+| LS-4 | 哪些状态流程取开始锁 | 暂停、恢复、定时上下架、预算恢复都取（一句规则，成本可忽略）；最少的做法只有暂停 | 接受 |
+| LS-5 | 完成移动（结束、预算不足）是否取开始锁（§6.5 原说要取） | **不取**（2.3 的证明；省掉停顿、保持锁序简单） | 接受 |
+| LS-6 | 迁移一步完成还是先扩后收；旧数据不符合不变式时 | 一步完成（未上线、单实例）；不符即迁移失败，先查清 | 接受 |
+| LS-7 | 热门发布占 4 个全局许可 | 先用现有配置测（可比），另跑连接池 16 的对照，按结果在报告中给出建议的池与 `max-active`；开始族的 `concurrency` 保持 2 | 接受 |
+| LS-8 | 接受接近上限时偶尔多拒一个开始 | 接受（从不多放；首页已有同样的时差） | 接受 |
 
 ## 11. 预估
 
@@ -314,3 +315,32 @@ Q9c 的 `qb.admin.monthly`、`balances`、`finance-summary`、`publication-funds
 - `backend/quizbuks/src/main/resources/application.yml`、`db/migration/V10__quizbuks_counter_split.sql`（新）
 - 测试：`it/AttemptStatementBudgetIT.java`、`it/QuotaBudgetIT.java`、`it/PlayConcurrencyIT.java`、`it/PlayAdmissionIT.java`、`it/PlayItSupport.java`、`resources/scenarios/qb/play.yml`、`publishing.yml`
 - 平台参考：`backend/runtime/.../process/admission/ProcessAdmission.java`（`checkLock`）、`AdmissionGate.java`（全局许可）、`.../process/steps/QueryEntities.java`（`all`）、决策 D45、D46
+
+## 实施记录（Q10a4，2026-10-17，分支 `1.2/quizbuks-10a4-lock-split`）
+
+计划已由需求方确认（LS-1 至 LS-8 全部按建议）。先合并 `1.2/quizbuks-10a3-ledger-cost`（评审修正到 `506e1b0`），其 PR #166 合入 `1.2/quizbuks` 后再合并 `origin/1.2/quizbuks`（普通合并提交）。只改 `.jabiz-app-paths` 中的路径。
+
+- **代码**（照第 5 节）：`PublicationMoves.START_LOCK_FAMILY` / `startLockName`（实现在 `PublicationEditing`，与 `lockName` 并列）；`PublicationEditing.lockStarts`（发布锁之后、读取之前）与 `lockStatesAndLoad`（暂停、恢复）；
+  `ADVANCE`、`FUNDED` 在发布锁之后取开始锁；`goingOn` 在同一事务插入两行计数；`QbPublications.START_COUNTER_ENTITY` 与默认数据视图（与完成一侧相同的权限与 `processOnlyWrites`），`COUNTER_ENTITY` 去掉 `starts`、`reserved`，加 `released`；
+  `QB_ATTEMPT_START` 以 `qb.pub-start` 排队、取开始锁、锁内一个 `QueryEntities.all` 读会话、卡片与两侧计数，只更新开始一侧；`AttemptFinishing.record` 写 `released + maxReward`（不再改 `reserved`），不读开始一侧；
+  `AttemptRules.counts(…)`（纯 Java，由两侧算出不变的 `Counts`）；`application.yml` 的 `[qb.pub-start]`；四个模板在一条 SQL 中 JOIN 两表（输出列与类型不变，OpenAPI 与公开模板快照不变）；三语消息。
+  `PublicationMoves` 的 Javadoc 写明完成移动不取开始锁所依赖的两点（2.3）。
+- **迁移** `V10__quizbuks_counter_split.sql`：先以 DO 块核对旧行（有卡片、`starts ≥ completions`、`reserved = (starts − completions) × max_reward`），任一不符即 `RAISE EXCEPTION`、整体回滚；
+  `reserved_total` 写为 `starts × max_reward`、`released` 为 `completions × max_reward`（核对之后与计划中 `reserved + completions × max_reward` 相等，写法更直接）。
+- **测试**（第 6 节全部）：
+  - `AttemptStatementBudgetIT`：开始共 12 / 开始锁内 5、付奖的提交 20 / 发布锁内 14（不变）；新增**使发布结束的完成** 29 / 23（计划预估 14 + 约 7：移动子流程实为 9 条——操作记录、重取发布锁、发布、排程行、卡片、发布的当前版本、新版本与审计、排程行、卡片）与**暂停** 12 / 9（含开始锁 1 条）。
+    `SqlStatementLog` 另记录每条锁语句绑定的锁名，测试断言开始只取 `qb.pub-start:<p>`、提交取 `qb.pub:<p>` 与钱包锁、结束的完成另重取 `qb.pub:<p>`（从不取开始锁）、暂停依次取 `qb.pub:<p>`、`qb.pub-start:<p>`。
+  - `LockSplitIT`（7 个）：两段并行（持发布锁时开始照常、提交等待；持开始锁时提交照常、开始等待；持开始锁时暂停持着发布锁等待，提交排在暂停之后）；名额 20 与预算 20 × 100 恰好用满（64 人，开始与提交交错，被拒的重试到结束），`ENDED` 一次、移动一次；
+    混合奖励（0 / 10 / 100）四轮各 50 人（提交或放弃给超时任务），每轮之后 I1–I5 与账；状态流程在负载下（暂停 / 恢复、`ADVANCE`、`FUNDED`、充值触发补发与预算恢复）没有 409 / 500、`pg_stat_database.deadlocks` 不增，暂停返回之后、下一次恢复开始之前发出并得到回答的开始没有一个被放行；
+    结束时排在开始锁上的开始被拒；以及计划 2.3 的情形本身：最后一个名额的完成持发布锁停在钱包锁上（测试持钱包锁）时，开始读到卡片仍是 `LIVE`，被限额以 `QUOTA_FULL` 拒绝。
+  - `CounterSplitProperties`（jqwik）：单调性（任意一次完成后被拒 ⇒ 完成前也被拒，且 `Q`、`B` 不增）与交错模型（开始读任意旧版本的完成一侧，I1–I4、结束一次、结束后不放行）。
+  - `CounterSplitMigrationIT`：独立 schema 以 Flyway 迁到 V9、插入五种计数行、迁到 V10 后逐列核对；三种坏数据（预占不符、完成多于开始、没有卡片）迁移失败、库仍是 V9（`flyway-core` 只加在测试依赖）。
+  - 原有：`PlayItSupport.counter` 以一条 JOIN 返回合并的一行（含派生的 `reserved`、`in_progress`）；`PlayConcurrencyIT` 的"等锁时余额被花光"改持开始锁；`PlayAdmissionIT` 断言两族的键与配置、按族持锁（2 个提交等发布锁、2 个开始等开始锁、1 个排队），
+    超时被准入拒绝的用例改以提交填满 `qb.pub` 的队列（开始不再与它同队）；`PublicationIT`、`PublicationReviewSettingsIT` 断言两行同时插入 / 都不插入。
+  - 场景快照：`play.yml`、`publishing.yml` 的 `entities` 加 `QbPublicationStartCounter`；差异只在计数——`QbPublicationCounter` 去掉 `starts`、`reserved`，多出 `released`（play：300 = 3 次完成 × 100），`version` 只随完成增加（play：7 → 4）；新增开始一侧的行（play：`starts` 3、`reservedTotal` 300、`version` 4；publishing：全 0、`version` 1）。会话、钱包、账本、事件与编号不变。
+- **压测工具**：等咨询锁的连接按两把锁分开；许可持有按族并给出两族并行时的容量；有 `LOAD_DB_URL` 时压测后核对两侧计数与会话（不符即非 0 退出）。
+- **重测**（报告 `perf/Q10a-load-test.md` §10，同日对照 `506e1b0`，另跑连接池 16 / `max-active` 8）：稳定吞吐约 41–45 次 / 秒（对照 35–39），每秒 40 人时提交 p95 61 ms（对照 271 ms），每秒 50 人仍过载（稳定 44.8）。
+  **与预估 45–50 相比在下端或略低**：提交在发布锁内的一段因与开始并行争 CPU 而变慢（开日志时 22.4 → 24.9 ms）。池 16 没有一致的收益，配置不改（LS-7 的建议见报告 §10.3 第 4 条）。
+- 验证：`./gradlew :quizbuks:check`（含 `platformCheck`）、两个 SPA 的 lint / typecheck / Vitest 与 `pnpm app:check`、`ext:check`、对 jar 的 e2e 全部（41 个）、`tools/check-app-paths.sh origin/1.2/platform`。
+- 与计划不同之处：结束的完成的语句数（见上）；6.2 第 5 条的"暂停之后没有放行的开始"以客户端的时间窗判断（测试时钟固定，`startedAt` 都相同），并直接运行 `FUNDED`（恢复可能先把发布放回 `LIVE`，事件的 `FUNDS_RESTORED` 就不再运行它）；6.2 第 6 条分成两个用例（排在锁上的开始在重读时已看到 `ENDED`，以 `NOT_OPEN` 被拒；看到 `LIVE` 卡片被限额拒绝的情形由持钱包锁的用例确定地复现）。
+- 已知问题：本机未达每秒 50 次（下一步平台 16p-2）；数字来自共用一台 4 vCPU 的测量，上线前在目标规格上重测。

@@ -52,24 +52,29 @@
   新放入内容的文件必须由模版所有者上传（`QuizEditing.requireOwnFile`，经平台文件数据视图读 `uploadedBy`）。子项列表（选项、图片）给出即完整列表，不给（null）即不动。
   版本与版本文件没有商家数据视图（版本含正确答案）：商家只经连接本人未移除模版的模板读取。商家视图的写权限 `qb.content.view.write` 不授予任何角色。
 - **发布**（`publishing`，`docs/quizbuks/plans/Q4-publishing.md`）：写入只经 `QB_PUBLICATION_*` 流程（默认数据视图 `processOnlyWrites`，商家视图只读，
-  写权限同样是不授予任何角色的 `qb.content.view.write`）。**锁的顺序固定**：`qb.quiz:<quizId>`（只有提交时取，共享）→ `qb.pub:<publicationId>`（独占）→ Q5 的 `qb.wallet:<种类>:<所有者>`；
-  写一个发布的流程先取发布锁再读取。**提交即冻结**：只有 `DRAFT` 可改（`QB_PUBLICATION_NOT_DRAFT`），要改就复制。
+  写权限同样是不授予任何角色的 `qb.content.view.write`）。**锁的顺序固定**：`qb.quiz:<quizId>`（只有提交时取，共享）→ 按发布编号升序 [`qb.pub:<publicationId>`（独占）→ `qb.pub-start:<publicationId>`（开始锁，Q10a4）] → Q5 的 `qb.wallet:<种类>:<所有者>`；
+  写一个发布的流程先取发布锁再读取；**改变已上架发布状态的流程**（暂停、恢复、`ADVANCE`、`FUNDED`）在发布锁之后、读取之前再取开始锁（`PublicationEditing.lockStarts` / `lockStatesAndLoad`），其他发布流程不取。**提交即冻结**：只有 `DRAFT` 可改（`QB_PUBLICATION_NOT_DRAFT`），要改就复制。
   **"接受新的答题"只由 `PublicationRules.acceptsNewAttempts` 判断**（`LIVE` 且 `startAt ≤ now < endAt`），模板写同样的条件；状态只表达人与钱的开关，时间由时间字段表达。
   到期上下架只由逐项任务 `qb.publication-tick` 做（模板 `qb.system.publications-due` 按普通表 `qb_publication_schedule` 的 `next_due_at` 选出全部到期的，可补跑；每项 `QB_PUBLICATION_ADVANCE` 一个事务（平台决策 D42）；各流程在发布锁内随状态维护该行）。系统流程（定时任务、审批结果）声明 `internal()`（平台决策 D41：只允许系统身份运行，其他人一律 403 `PROCESS_INTERNAL`），权限 `qb.publication.system` 照常声明、不授予任何角色；审批结果只认发布自己的请求。时态表上只按不可变字段查找（可变字段的条件用不到索引）。档位、提交检查、审批内容是纯 Java 的 `TierCoverage`、`PublicationReadiness`、`PublicationApprovals`；
   上限在 `PublishingLimits`，错误码在 `PublishingCodes`。**审批规则只经 `QB_SETUP` 以受控变更提出**（`setup.QbApprovalRules`，与 `QbParams` 并列），由另一位管理员发布；
   "无规则即放行"由应用挡住（`QB_REVIEW_NOT_CONFIGURED`）。移除模版时，已提交过的发布所用版本的文件保留（`QuizProcesses.filesStillNeeded`）。
-  上架时随计数行插入**卡片** `QbPublicationCard`（普通表：除状态外全部在提交时冻结，含档位的 JSON `CardTiers`），`PublicationEditing.write` 在发布锁内随状态同步它；
+  上架时随计数的两行（完成一侧 `QbPublicationCounter`、开始一侧 `QbPublicationStartCounter`，同一事务）插入**卡片** `QbPublicationCard`（普通表：除状态外全部在提交时冻结，含档位的 JSON `CardTiers`），`PublicationEditing.write` 在发布锁内随状态同步它；
   答题人的首页、详情、档位与答题流程只读卡片，不读时态的发布与档位。答题只经 `publishing.PublicationMoves` 改变发布（结束、预算不足）。
 - **答题**（`play`，`docs/quizbuks/plans/Q5-answering.md`）：会话 `QbAttempt`、首次浏览、完成人数都是普通表，只经 `QB_VIEW` / `QB_ATTEMPT_*` /
   `QB_PENDING_*` / `QB_PUBLICATION_STATS_REFRESH` 写入（默认数据视图 `processOnlyWrites`，答题人视图只读、限本人）。会话带奖励与抽成，而数据视图不能去掉字段：`QbAttempt` 的默认数据视图不给任何角色读取（读权限 `qb.play.system`），财务读只读视图 `finance:QbAttempt`，支持人员只经不含金额的 `qb.admin.attempts`（Q9c，C-2）。**一人一次**由 `(user_id, publication_id)` 唯一约束兜底，
-  开始在发布锁内再读本人会话。**锁的顺序**：`qb.pub:<发布>` → `qb.wallet:<种类>:<所有者>`（如 `qb.wallet:SPONSOR:<用户>`）；持钱包锁的流程（补发、开发入账）从不再取发布锁，
-  恢复预算不足的发布（`QB_PUBLICATION_FUNDS_RESTORED`）只取发布锁、不取钱包锁。**晚取锁**：版本、参数在锁外读，锁内只重读会话、计数、发布与钱包再写入；继续答题与保存进度不取锁。
-  **取锁前排队**（平台决策 D45，Q10a2）：开始、提交与超时的逐项任务以 `.admission(PublicationMoves.LOCK_FAMILY, 输入 -> 发布编号)` 声明准入，族名与键只经 `PublicationMoves`（与 `lockName` 同一段文字，否则平台告警）；
+  开始在开始锁内再读本人会话。**两把锁**（Q10a4，`docs/quizbuks/plans/Q10-lock-split.md`）：开始只取开始锁 `qb.pub-start:<发布>`、只写计数的开始一侧（`starts`、`reservedTotal`）；
+  完成（提交、超时与完成时的移动子流程）只取发布锁 `qb.pub:<发布>`、只写完成一侧（`completions`、`passes`、`winners`、`released`、`spent`），**不取开始锁、不读开始一侧**。
+  进行中 = `starts − completions`、预占 = `reservedTotal − released`，凡是读这两个派生量的地方都**在一条语句中读两侧**（开始的锁内重读、四个模板），不要分两条语句读。
+  完成移动不取开始锁依赖两点（设计 4.3）：限额的代数（读到较旧的完成一侧只会更严格）与"预算不足是软检查"；改变其中任何一点都要重新论证。
+  **锁的顺序**：`qb.pub:<发布>` →（只有状态流程）`qb.pub-start:<发布>` → `qb.wallet:<种类>:<所有者>`（如 `qb.wallet:SPONSOR:<用户>`）；开始锁是叶子；持钱包锁的流程（补发、开发入账）从不再取发布锁或开始锁，
+  恢复预算不足的发布（`QB_PUBLICATION_FUNDS_RESTORED`）只取发布锁与开始锁、不取钱包锁。**晚取锁**：版本、参数在锁外读，锁内只重读会话、计数、发布与钱包再写入；继续答题与保存进度不取锁。
+  **取锁前排队**（平台决策 D45，Q10a2；Q10a4 两族）：开始以 `.admission(PublicationMoves.START_LOCK_FAMILY, 输入 -> 发布编号)`、提交与超时的逐项任务以 `.admission(PublicationMoves.LOCK_FAMILY, …)` 声明准入，
+  族名与键只经 `PublicationMoves`（与 `startLockName` / `lockName` 同一段文字，否则平台告警；新族名不要写成 `qb.pub:…`，平台按 `族名:` 前缀归族）；
   提交的键是输入的 `publicationId`（App 带上），在锁前核对与会话的发布一致（`QB_ATTEMPT_PUBLICATION_MISMATCH`），**必填**（`@NotNull`，缺即 400：没有绕过队列、在连接上等锁的提交）；超时任务的键取自选取模板的发布列。
-  队列的参数在 `application.yml` 的 `jabiz.process.admission.families[qb.pub]`，开始与提交的限流在 `jabiz.process.rate-limits`（每人每分钟 60 次）。新的取发布锁的热门流程照此声明；正确性只靠发布锁。
-  **锁内的语句数**（Q10a3，平台决策 D46）：发布锁内的每次往返约 0.8 ms，热门发布的容量由它决定。锁内互不依赖的重读写成一个 `QueryEntities.all`（一条语句：开始为本人会话、卡片与计数，提交为会话、计数与卡片）；
+  队列的参数在 `application.yml` 的 `jabiz.process.admission.families[qb.pub]` 与 `[qb.pub-start]`，开始与提交的限流在 `jabiz.process.rate-limits`（每人每分钟 60 次）。新的取这两把锁的热门流程照此声明；正确性只靠锁。
+  **锁内的语句数**（Q10a3，平台决策 D46）：锁内的每次往返约 0.8 ms，热门发布的容量由较长的一段（提交在发布锁内）决定。锁内互不依赖的重读写成一个 `QueryEntities.all`（一条语句：开始为本人会话、卡片与计数的两侧，提交为会话、完成一侧与卡片）；
   开始在锁外与会话、卡片同一条语句读发布（默认数据视图），新会话对发布的引用检查因此复用本事务的读取、不在锁内再查；普通实体的更新照平台按已知版本写出（重读即为此）。
-  开始与付奖提交的语句数由 `AttemptStatementBudgetIT` 断言确切值（开始共 12、锁内 5，提交共 20、锁内 14；锁内自取发布锁之后的一条起到 `COMMIT`），改答题流程须同时改预算并在压测报告中说明；不在锁内增加读取。
+  语句数由 `AttemptStatementBudgetIT` 断言确切值与所取的锁（开始共 12、开始锁内 5；付奖的提交共 20、发布锁内 14；使发布结束的完成共 29、锁内 23；暂停共 12、锁内 9；锁内自事务的第一把锁之后的一条起到 `COMMIT`），改答题流程须同时改预算并在压测报告中说明；不在锁内增加读取。
   **超时自动提交**只由逐项任务 `qb.attempt-expire`（每分钟，模板 `qb.system.attempts-due`）对每个会话运行 `QB_ATTEMPT_EXPIRE`。**逐项取锁或可能逐项失败的批量系统工作写成逐项任务**
   （`JobDefinition.forEach`，平台决策 D42），不写成根流程 + `CallProcess.forEach`（一批一个事务会违反锁序、阻塞热门发布、一项失败拖住整批；不取锁的统计任务除外）；每项流程是 `internal()`，先取锁、再读取、已不到期即什么也不做。
   **正确答案只在完成后出现**：开始与继续的输出不含选项的正误，详情只取快照的简介与资料，`result` 列在完成时才写；答题人读不到版本（`AnswerSecrecyIT`）。
@@ -97,7 +102,7 @@
     签名的事件同样逐项核对（`TopUpChecks`、`RefundMath`），不成立的开待办（`TopUpTasks`，给 `qb.reconcile`）、不入账、不让流程失败。浏览器跳回不入账。
   - **只入账一次的四层**：平台按事件号去重；每个（消费者，事件）只处理一次；同一会话的各种报告（通知、核实）走同一套步骤 `TopUpCrediting`，在商家钱包锁内重读，
     只有 `OPENING` / `OPEN` 能变为 `PAID`；数据库兜底（会话、付款、交易号唯一，`PAID` 必有分录）。新的入账来源照此接入，不另写入账步骤。
-  - **锁序**：`qb.account:<用户>` → `qb.quiz:<模版>`（共享）→ `qb.pub:<发布>` → `qb.wallet:SPONSOR:<商家>`；`qb.wallet:TAKER:<用户>` 独立（Q6b：只由同步与转账持有，
+  - **锁序**：`qb.account:<用户>` → `qb.quiz:<模版>`（共享）→ `qb.pub:<发布>` → `qb.pub-start:<发布>`（Q10a4，只有状态流程）→ `qb.wallet:SPONSOR:<商家>`；`qb.wallet:TAKER:<用户>` 独立（Q6b：只由同步与转账持有，
     持有它的流程不取其他锁；重算多人时按用户编号排序依次取）。
     充值、到账、过期、核实、手续费、退款与争议只取商家钱包锁（先在锁外按编号或付款找到充值，锁内重读）；每日核对不取业务锁。
   - **模式**：`quizbuks.stripe.livemode`（缺省 false）、密钥前缀、开发入账由 `StripeModeCheck` 一起检查；事件模式不同即待办。
@@ -189,7 +194,7 @@
 - `./gradlew :quizbuks:check`（测试 + `platformCheck`）；单个类：`./gradlew :quizbuks:test --tests '*SetupIT'`。
 - 集成测试连接真实 PostgreSQL（同平台：Testcontainers 或 `JABIZ_TEST_DB_*`），测试类放在 `com.jabiz.quizbuks.*` 下。
 - 场景回放：`src/test/resources/scenarios/qb/**.yml`，`./gradlew :quizbuks:test --tests '*ScenarioTest'`；确认变化正确后加 `-Dscenario.update-snapshots=true`。
-- 性能（不在 `check` 中）：进程内基线 `./gradlew :quizbuks:perfTest`（`PlayThroughputIT`）；对运行中的 jar 压测单个热门发布 `./gradlew :quizbuks:loadTest`（参数 `LOAD_*`，含客户端时限 `LOAD_TIMEOUT` 与照 App 重试忙的 `LOAD_RETRY_BUSY`；方法与结果见 `docs/quizbuks/perf/Q10a-load-test.md`，准入之后的重测在其 §8）。答题锁内的时间取决于语句条数（每条约 0.8 ms），改答题流程时不要在发布锁内增加读取；语句数的确切值在 `AttemptStatementBudgetIT`。
+- 性能（不在 `check` 中）：进程内基线 `./gradlew :quizbuks:perfTest`（`PlayThroughputIT`）；对运行中的 jar 压测单个热门发布 `./gradlew :quizbuks:loadTest`（参数 `LOAD_*`，含客户端时限 `LOAD_TIMEOUT` 与照 App 重试忙的 `LOAD_RETRY_BUSY`；方法与结果见 `docs/quizbuks/perf/Q10a-load-test.md`，准入之后的重测在其 §8、16p-1 之后 §9、锁拆分之后 §10）。答题锁内的时间取决于语句条数（每条约 0.8 ms），改答题流程时不要在开始锁或发布锁内增加读取；语句数的确切值在 `AttemptStatementBudgetIT`。
   `LOAD_METRICS=yes` 时从只绑定回环地址的独立管理端口读取指标（jar 以 `-Dmanagement.server.address=127.0.0.1 -Dmanagement.server.port=8081 -Dmanagement.endpoints.web.exposure.include=health,info,metrics` 启动，工具读 `LOAD_METRICS_URL`，缺省 `http://127.0.0.1:8081`，不是回环地址即拒绝，`LOAD_ALLOW_REMOTE` 也不放行；指标绝不在应用端口上暴露：那里不要认证，根 CLAUDE.md 与设计 13 不允许匿名的指标端点；也不写进仓库的配置），报告每次完成的许可持有时间与每次运行的语句数（`jabiz.process.statements`），并报告压测期间本机的 CPU；16p-1 之后的重测在报告 §9。
 
 ## 7. 运行

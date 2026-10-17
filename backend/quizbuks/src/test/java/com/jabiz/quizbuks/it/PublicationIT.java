@@ -134,7 +134,11 @@ class PublicationIT extends PublicationItSupport {
         decide(requestId, "APPROVE", null);
         assertThat(row(later)).containsEntry("status", PublicationStatus.SCHEDULED)
             .satisfies(r -> assertThat(r.get("approved_at")).isNotNull());
-        assertThat(query("SELECT starts, completions, passes, winners, reserved, spent FROM qb_publication_counter "
+        // Both sides of the counters (Q10a4), inserted together with zeros.
+        assertThat(query("SELECT completions, passes, winners, released, spent FROM qb_publication_counter "
+            + "WHERE publication_id = ?", UUID.fromString(later))).singleElement().satisfies(counter ->
+            assertThat(counter.values()).allSatisfy(value -> assertThat(value.toString()).isEqualTo("0")));
+        assertThat(query("SELECT starts, reserved_total FROM qb_publication_start_counter "
             + "WHERE publication_id = ?", UUID.fromString(later))).singleElement().satisfies(counter ->
             assertThat(counter.values()).allSatisfy(value -> assertThat(value.toString()).isEqualTo("0")));
 
@@ -207,6 +211,8 @@ class PublicationIT extends PublicationItSupport {
         assertThat(row(id)).containsEntry("status", PublicationStatus.DRAFT)
             .containsEntry("reject_code", PublishingCodes.EXPIRED_IN_REVIEW);
         assertThat(query("SELECT 1 FROM qb_publication_counter WHERE publication_id = ?", UUID.fromString(id)))
+            .isEmpty();
+        assertThat(query("SELECT 1 FROM qb_publication_start_counter WHERE publication_id = ?", UUID.fromString(id)))
             .isEmpty();
     }
 

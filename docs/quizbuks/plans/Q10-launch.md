@@ -163,6 +163,12 @@ R2 的应用部分：合并 `1.2/platform`（平台 16p-1，PR #165，决策 D46
   连续读者（CPU 约 85 %）时约 22 次 / 秒（Q10a2 约 9.5–10）。准入许可 3 个时吞吐不变：瓶颈仍是发布锁（每次完成锁内约 26 ms），不是许可或 CPU。**本机未达到每秒 50 次**；建议见报告 §9.4。
 - 验证：`./gradlew :quizbuks:check`（含 `platformCheck`）、两个 SPA 的 lint / typecheck / Vitest 与 `pnpm app:check`、`ext:check`、对 jar 的 e2e 全部、`tools/check-app-paths.sh origin/1.2/platform`。
 
-## 锁拆分（Q10a4，计划待确认，2026-10-17）
+## 实施记录（Q10a4 锁拆分，2026-10-17，分支 `1.2/quizbuks-10a4-lock-split`）
 
-需求方 2026-10-17 决定先做锁拆分、再做平台 16p-2，每一步之后重测。计划：`plans/Q10-lock-split.md`（分支 `1.2/quizbuks-10a4-lock-split`；开始取新的 `qb.pub-start:<发布>`，完成照旧取 `qb.pub:<发布>`，计数拆成两张表）。
+需求方 2026-10-17 决定先做锁拆分、再做平台 16p-2，每一步之后重测。计划：`plans/Q10-lock-split.md`（开始取新的 `qb.pub-start:<发布>`，完成照旧取 `qb.pub:<发布>`，计数拆成两张表）。
+计划经需求方确认（LS-1 至 LS-8 全部按建议），已实施，详见该计划的实施记录：
+- 开始只取开始锁、只写开始一侧（`QbPublicationStartCounter`：`starts`、`reservedTotal`）；完成只取发布锁、只写完成一侧（`QbPublicationCounter`：`completions`、`passes`、`winners`、`released`、`spent`）；读派生量（进行中、预占）的地方一律一条语句读两侧。
+  暂停、恢复、`ADVANCE`、`FUNDED` 在发布锁之后取开始锁；完成移动不取（限额代数与"预算不足是软检查"，设计 4.3）。两族各自准入（`[qb.pub-start]`、`[qb.pub]`）。迁移 V10 一步完成，旧数据不符即失败。
+- 语句预算不变（开始锁内 5、提交在发布锁内 14），新增结束的完成 29 / 23 与暂停 12 / 9；`LockSplitIT`、`CounterSplitProperties`（jqwik）、`CounterSplitMigrationIT`；场景快照只有计数行变化。
+- 重测（报告 §10）：稳定约 41–45 次 / 秒（同日对照 35–39），每秒 40 人时提交 p95 61 ms（对照 271 ms），**每秒 50 人仍未达到**；与预估 45–50 相比在下端或略低（提交锁内的一段因与开始并行争 CPU 而变慢）。池 16 / `max-active` 8 无一致收益，配置不改。
+  下一步：平台 16p-2，之后以 §10 的设置重测。

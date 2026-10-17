@@ -276,6 +276,6 @@ steps:
   - note: Nothing is due any more.
     runJob: { job: qb.attempt-expire, items: { succeeded: 0 } }
 snapshot:
-  entities: [QbAttempt, QbPublicationCard, QbPublicationCounter, QbPublicationStats, QbPublicationView, QbWallet,
-    LedgerTransaction, LedgerEntry]
+  entities: [QbAttempt, QbPublicationCard, QbPublicationCounter, QbPublicationStartCounter, QbPublicationStats,
+    QbPublicationView, QbWallet, LedgerTransaction, LedgerEntry]
   asOf: end

@@ -100,12 +100,23 @@ final class PlaySteps {
     }
 
     /**
-     * The read of the counters of the publication {@code publicationId} names, into {@code key}: one query of a
-     * {@link QueryEntities#all} step (none when it names none).
+     * The read of the completions' side of the counters of the publication {@code publicationId} names, into
+     * {@code key}: one query of a {@link QueryEntities#all} step (none when it names none).
      */
     static QueryEntities.Metadata<ProcessContext> counter(Function<ProcessContext, Object> publicationId,
         String key) {
         return QueryEntities.query(QbPublications.defaultDataset(QbPublications.COUNTER), ctx -> byPublication(
+            publicationId.apply(ctx)), key);
+    }
+
+    /**
+     * The read of the starts' side of the counters of the publication {@code publicationId} names, into {@code key}:
+     * one query of a {@link QueryEntities#all} step (none when it names none). Read with {@link #counter} in the same
+     * step (docs/quizbuks/plans/Q10-lock-split.md 2.4).
+     */
+    static QueryEntities.Metadata<ProcessContext> startCounter(Function<ProcessContext, Object> publicationId,
+        String key) {
+        return QueryEntities.query(QbPublications.defaultDataset(QbPublications.START_COUNTER), ctx -> byPublication(
             publicationId.apply(ctx)), key);
     }
 
@@ -114,9 +125,16 @@ final class PlaySteps {
             .build();
     }
 
-    static AttemptRules.Counts counts(EntityInstance counter) {
-        return new AttemptRules.Counts(number(counter.get("starts")), number(counter.get("completions")),
-            number(counter.get("winners")), money(counter.get("reserved")), money(counter.get("spent")));
+    /**
+     * The counts a start checks, from the starts' side {@code starts} and the completions' side {@code completions}
+     * (Q10a4): in progress {@code starts - completions}, reserved {@code reservedTotal - released}. The start holds
+     * the start lock, so its starts' side is exact; a completions' side read earlier than now only makes the check
+     * stricter (docs/quizbuks/plans/Q10-lock-split.md 2.3, {@link AttemptRules#counts}).
+     */
+    static AttemptRules.Counts counts(EntityInstance starts, EntityInstance completions) {
+        return AttemptRules.counts(number(starts.get("starts")), money(starts.get("reservedTotal")),
+            number(completions.get("completions")), number(completions.get("winners")),
+            money(completions.get("released")), money(completions.get("spent")));
     }
 
     static AttemptRules.Limits limits(EntityInstance card) {

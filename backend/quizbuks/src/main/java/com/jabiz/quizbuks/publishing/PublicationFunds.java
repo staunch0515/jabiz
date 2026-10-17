@@ -83,6 +83,9 @@ public final class PublicationFunds {
                     : new PublicationOutput(ctx.get(PUB_ID, UUID.class), null, 0, null, null))
                 .step("Lock the publication", HoldLock.<ProcessContext>exclusive(
                     ctx -> PublicationEditing.lockName(ctx.get(PUB_ID))))
+                // It changes the state of a publication that went on: the start lock too (Q10a4, LS-4). Each
+                // publication's pair in turn, by key (the run goes through them in order).
+                .steps(PublicationEditing::lockStarts)
                 .step("Load the publication", QueryEntities.<ProcessContext>of(
                     QbPublications.defaultDataset(QbPublications.PUBLICATION), ctx -> EntityQuery.builder()
                         .where(new QueryPredicate.In("publicationId", PublicationEditing.ids(ctx.get(PUB_ID))))

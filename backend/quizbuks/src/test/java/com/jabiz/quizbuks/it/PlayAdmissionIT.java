@@ -36,18 +36,22 @@ import java.util.function.BooleanSupplier;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * The queue before a publication's lock (platform decision D45; docs/quizbuks/plans/Q10-launch.md, Q10a2):
- * {@code QB_ATTEMPT_START} and {@code QB_ATTEMPT_SUBMIT} with its publication queue for {@code qb.pub:<publication>}
- * before their transaction, so that a hot publication's waiters hold no database connection; a submission naming
+ * The queues before a publication's two locks (platform decision D45; docs/quizbuks/plans/Q10-launch.md, Q10a2;
+ * Q10a4, docs/quizbuks/plans/Q10-lock-split.md): {@code QB_ATTEMPT_START} queues for the start lock
+ * {@code qb.pub-start:<publication>}, {@code QB_ATTEMPT_SUBMIT} with its publication and the expiry for the
+ * publication's lock {@code qb.pub:<publication>}, before their transaction, so that a hot publication's waiters hold
+ * no database connection and starts never queue behind completions (nor these behind starts); a submission naming
  * another publication than its attempt's is refused before the lock, one naming none is 400 (the publication is
  * required: nothing skips the queue); the home feed keeps its connections while a hot publication overflows its queue;
  * a retry with the same key after a refusal runs once, after a commit replays; and an expiry turned away by a full
  * queue does not let a late submission in.
- * Here the queue waits long (20 s) and holds 6, so that what is queued, waiting and refused is exact.
+ * Here each queue waits long (20 s) and holds 6, so that what is queued, waiting and refused is exact.
  */
 @SpringBootTest(properties = {
     "jabiz.process.admission.families[qb.pub].max-queue=6",
-    "jabiz.process.admission.families[qb.pub].max-wait=20s"})
+    "jabiz.process.admission.families[qb.pub].max-wait=20s",
+    "jabiz.process.admission.families[qb.pub-start].max-queue=6",
+    "jabiz.process.admission.families[qb.pub-start].max-wait=20s"})
 class PlayAdmissionIT extends PlayItSupport {
 
     @Autowired
@@ -69,13 +73,20 @@ class PlayAdmissionIT extends PlayItSupport {
 
     @Test
     @SuppressWarnings("unchecked")
-    void theProcessesQueueUnderThePublicationsLockName() {
+    void theProcessesQueueUnderTheirLocksNames() {
         UUID publicationId = UUID.randomUUID();
         String lock = PublicationMoves.lockName(publicationId);
+        String startLock = PublicationMoves.startLockName(publicationId);
         assertThat(PublicationMoves.LOCK_FAMILY).isEqualTo("qb.pub");
+        assertThat(PublicationMoves.START_LOCK_FAMILY).isEqualTo("qb.pub-start");
+        assertThat(startLock).isEqualTo("qb.pub-start:" + publicationId)
+            // Not a lock of the family qb.pub, as the platform tells them apart (ProcessAdmission.checkLock).
+            .doesNotStartWith(PublicationMoves.LOCK_FAMILY + ":");
         // The same text as the lock: no warning from HoldLock (decision D45, implementation note 6).
-        assertThat(AttemptProcesses.start().admission().keyOf(new AttemptProcesses.PublicationRef(publicationId)))
-            .isEqualTo(lock);
+        var start = (ProcessDefinition<AttemptProcesses.PublicationRef, ?, ProcessContext>) processes
+            .findLatest(AttemptProcesses.START).orElseThrow();
+        assertThat(start.admission().family()).isEqualTo(PublicationMoves.START_LOCK_FAMILY);
+        assertThat(start.admission().keyOf(new AttemptProcesses.PublicationRef(publicationId))).isEqualTo(startLock);
         var submit = (ProcessDefinition<AttemptFinishing.SubmitInput, ?, ProcessContext>) processes
             .findLatest(AttemptFinishing.SUBMIT).orElseThrow();
         assertThat(submit.admission().keyOf(new AttemptFinishing.SubmitInput("a", null, null, publicationId)))
@@ -88,6 +99,11 @@ class PlayAdmissionIT extends PlayItSupport {
         assertThat(rateLimits.limits(AttemptFinishing.SUBMIT)).isTrue();
         assertThat(settings.limitsOf(PublicationMoves.LOCK_FAMILY).concurrency()).isEqualTo(2);
         assertThat(settings.limitsOf(PublicationMoves.LOCK_FAMILY).maxQueue()).isEqualTo(6);
+        // Both families are bound from application.yml (their own entries, not the platform's defaults).
+        assertThat(settings.limitsOf(PublicationMoves.START_LOCK_FAMILY).concurrency()).isEqualTo(2);
+        assertThat(settings.limitsOf(PublicationMoves.START_LOCK_FAMILY).maxQueue()).isEqualTo(6);
+        assertThat(settings.families()).containsKeys(PublicationMoves.LOCK_FAMILY,
+            PublicationMoves.START_LOCK_FAMILY);
     }
 
     @Test
@@ -106,23 +122,27 @@ class PlayAdmissionIT extends PlayItSupport {
             attempts.add((String) start(token, hot).get("attemptId"));
         }
         String lock = PublicationMoves.lockName(hot);
+        String startLock = PublicationMoves.startLockName(hot);
         List<CompletableFuture<EntityExchangeResult<Map<String, Object>>>> queued = new ArrayList<>();
         try (Connection holder = DB.connect(schema())) {
             holdLock(holder, lock);
-            // Two submissions and three new starts: two in their transaction (waiting for the lock), three queued.
+            holdLock(holder, startLock);
+            // Two submissions, in their transaction waiting for the publication's lock; three new starts, by their own
+            // family (Q10a4): two in their transaction waiting for the start lock, one queued.
             queued.add(background(() -> submission(tokens.get(0), attempts.get(0), hot)));
             queued.add(background(() -> submission(tokens.get(1), attempts.get(1), hot)));
             for (int i = 0; i < 3; i++) {
                 String token = taker(newTaker("t-admit-start-" + i, null));
                 queued.add(background(() -> startCall(token, hot)));
             }
-            awaitThat(() -> admission.waiting() == 3 && waiters(lock) == 2, "3 queued, 2 waiting for the lock");
+            awaitThat(() -> admission.waiting() == 1 && waiters(lock) == 2 && waiters(startLock) == 2,
+                "1 queued, 2 waiting for each lock");
 
             // Without the publication: 400 at once (required, so that nothing waits for the lock on a connection).
             EntityExchangeResult<Map<String, Object>> missing = submission(tokens.get(2), attempts.get(2), null);
             assertThat(missing.getStatus().value()).isEqualTo(400);
             assertThat(missing.getResponseBody().toString()).contains("publicationId");
-            assertThat(admission.waiting()).isEqualTo(3);
+            assertThat(admission.waiting()).isEqualTo(1);
             assertThat(waiters(lock)).isEqualTo(2);
 
             // Another publication than the attempt's: queued there (free), refused before the hot lock.
@@ -168,7 +188,8 @@ class PlayAdmissionIT extends PlayItSupport {
         for (int i = 0; i < 20; i++) {
             tokens.add(taker(newTaker("t-hot-" + i, null)));
         }
-        String lock = PublicationMoves.lockName(hot);
+        // The starts' lock and queue (Q10a4).
+        String lock = PublicationMoves.startLockName(hot);
         List<CompletableFuture<EntityExchangeResult<Map<String, Object>>>> calls = new ArrayList<>();
         List<EntityExchangeResult<Map<String, Object>>> refused = new ArrayList<>();
         try (Connection holder = DB.connect(schema())) {
@@ -252,7 +273,7 @@ class PlayAdmissionIT extends PlayItSupport {
         String sponsor = newSponsor("s-admit-key");
         String hot = livePublication(sponsor, "Admit key", Map.of("regions", List.of("GLOBAL")));
         credit(sponsor, 10_000);
-        String lock = PublicationMoves.lockName(hot);
+        String lock = PublicationMoves.startLockName(hot);
         String userId = newTaker("t-admit-key", null);
         String token = taker(userId);
         String key = "start-" + UUID.randomUUID();
@@ -305,17 +326,24 @@ class PlayAdmissionIT extends PlayItSupport {
         String token = taker(newTaker("t-admit-late", null));
         String attemptId = (String) start(token, hot).get("attemptId");
         run("QB_ATTEMPT_SAVE", token, body("attemptId", attemptId, "currentIndex", 1, "answers", answers(true, true)));
-        List<String> fillers = new ArrayList<>();
-        for (int i = 0; i < 8; i++) {
-            fillers.add(taker(newTaker("t-admit-late-fill-" + i, null)));
-        }
         clock.advance(Duration.ofMinutes(2));
+        // The expiry queues with the submissions (qb.pub; the starts queue apart since Q10a4): the queue is filled by
+        // submissions of eight attempts of the hot publication started now, in time.
+        List<String> fillers = new ArrayList<>();
+        List<String> fillerAttempts = new ArrayList<>();
+        for (int i = 0; i < 8; i++) {
+            String filler = taker(newTaker("t-admit-late-fill-" + i, null));
+            fillers.add(filler);
+            fillerAttempts.add((String) start(filler, hot).get("attemptId"));
+        }
         String lock = PublicationMoves.lockName(hot);
         List<CompletableFuture<EntityExchangeResult<Map<String, Object>>>> filling = new ArrayList<>();
         try (Connection holder = DB.connect(schema())) {
             holdLock(holder, lock);
-            for (String filler : fillers) {
-                filling.add(background(() -> startCall(filler, hot)));
+            for (int i = 0; i < fillers.size(); i++) {
+                String filler = fillers.get(i);
+                String fillerAttempt = fillerAttempts.get(i);
+                filling.add(background(() -> submission(filler, fillerAttempt, hot)));
             }
             awaitThat(() -> admission.waiting() == 6 && waiters(lock) == 2, "the queue full");
             JobRunner.JobRun run = runExpire(clock.instant());

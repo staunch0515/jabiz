@@ -244,8 +244,18 @@ abstract class PlayItSupport extends AccountItSupport {
         return query("SELECT * FROM qb_attempt WHERE attempt_id = ?", attemptId).getFirst();
     }
 
+    /**
+     * Both sides of a publication's counters (Q10a4) read in one statement, as one row: the starts' side
+     * ({@code starts}, {@code reserved_total}, {@code start_version}), the completions' side ({@code completions},
+     * {@code passes}, {@code winners}, {@code released}, {@code spent}, {@code version}) and what derives from both:
+     * {@code reserved} = reserved_total - released and {@code in_progress} = starts - completions.
+     */
     Map<String, Object> counter(String publicationId) {
-        return query("SELECT * FROM qb_publication_counter WHERE publication_id = ?::uuid", publicationId).getFirst();
+        return query("SELECT n.publication_id, s.starts, n.completions, n.passes, n.winners, "
+            + "s.reserved_total - n.released AS reserved, n.spent, s.reserved_total, n.released, "
+            + "s.starts - n.completions AS in_progress, n.version, s.version AS start_version "
+            + "FROM qb_publication_counter n JOIN qb_publication_start_counter s ON s.publication_id = n.publication_id "
+            + "WHERE n.publication_id = ?::uuid", publicationId).getFirst();
     }
 
     Map<String, Object> card(String publicationId) {
