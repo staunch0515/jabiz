@@ -104,7 +104,8 @@ CREATE TABLE entity_registry (
 );
 ```
 
-- 时态实体第一次插入时登记。
+- 时态实体第一次插入时登记。它的主键（以及只写一次实体的主键唯一索引、`(主键, version_no)` 唯一约束）保证一个实例只插入一次：
+  插入新实例时平台不先读该实例的版本（阶段 16p-1，决策 D46 第 2 条），重复的主键由数据库拒绝，平台报告为同样的 409（"`<实体> [ID: …] already exists`"）。
 - 其他表引用时态实体时，外键指向 `entity_registry(entity_id)`（实体类型由平台检查）；引用值为 UUID。
   删除时态实体前，引用方的当前版本与预定版本都不能再引用它【D9】。
 
@@ -112,7 +113,7 @@ CREATE TABLE entity_registry (
 
 | 操作 | 行为 |
 |---|---|
-| 插入 | `version_no = 1`；`effect_start_time` 默认 = `op_time`；登记 `entity_registry` |
+| 插入 | `version_no = 1`；`effect_start_time` 默认 = `op_time`；登记 `entity_registry`（不先读版本：重复的主键由 `entity_registry` 的主键拒绝，§2.3） |
 | 更新 | 调用方提供读到的 `versionNo = n`（生效时间点上生效的版本）；平台以"截至生效时间的状态 ⊕ 本次变更"构造完整新版本，插入 `version_no = 最大值 + 1`【D9】 |
 | 删除 | 插入墓碑版本（`is_deleted = true`，其余字段沿用上一状态），`version_no = 最大值 + 1` |
 
@@ -122,7 +123,8 @@ CREATE TABLE entity_registry (
 - **同一操作的统一时间**：同一个 `process_seq_id` 下写入的所有行，`created_time` 都等于 `op_process.op_time`。一次操作在时间上是原子的。
 - **只保存真正的变化**：与现有写入流程一致，没有变化的更新不产生新版本。
 - 不可变字段、状态迁移、迁移守卫、字段规则全部照常执行（判断依据是"生效时间点上的当前状态"）。
-- 每写一个版本，同一事务内写入一条 `op_process_item`。
+- 每写一个版本，同一事务内写入一条 `op_process_item`。一次提交的版本、`entity_registry`、`op_process_item`、审计与事件以一条语句写出（决策 D46 第 1 条，06 §3.1），
+  仍只是 `INSERT`；更新、删除与取消预定照旧先读该实例的全部版本（变基需要它们）。
 
 ### 3.1 生效时间
 

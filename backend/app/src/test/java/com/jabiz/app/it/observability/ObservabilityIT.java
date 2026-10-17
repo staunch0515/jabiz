@@ -6,6 +6,7 @@ import com.jabiz.runtime.security.JwtService;
 import com.jabiz.runtime.test.PostgresIntegrationTest;
 import com.jabiz.runtime.test.TestTokens;
 import io.micrometer.common.KeyValue;
+import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import io.micrometer.observation.Observation;
@@ -91,6 +92,14 @@ class ObservabilityIT extends PostgresIntegrationTest {
             .contentType(MediaType.APPLICATION_JSON).bodyValue(body).exchange();
     }
 
+    /** Waits up to 2 seconds for a family's admission gauge to read 0. */
+    private void awaitGaugeZero(String gauge, String family) throws InterruptedException {
+        for (int i = 0; i < 80 && meters.find(gauge).tag("family", family).gauge().value() != 0; i++) {
+            Thread.sleep(25);
+        }
+        assertThat(meters.find(gauge).tag("family", family).gauge().value()).as(gauge).isZero();
+    }
+
     private List<Seen> seen(String name) {
         return SEEN.stream().filter(s -> s.name().equals(name)).toList();
     }
@@ -143,6 +152,15 @@ class ObservabilityIT extends PostgresIntegrationTest {
             .tags("process", "ORDER_PLACE", "outcome", "rejected", "status", "422").timer();
         assertThat(rejected).isNotNull();
         assertThat(rejected.count()).isPositive();
+
+        // The statements of a process's transaction, by the process's name only (ROADMAP phase 16p, decision D46).
+        DistributionSummary statements = meters.find(PlatformObservations.PROCESS_STATEMENTS)
+            .tags("process", "ORDER_PLACE").summary();
+        assertThat(statements).isNotNull();
+        assertThat(statements.getId().getTags()).extracting(io.micrometer.core.instrument.Tag::getKey)
+            .containsExactly("process");
+        assertThat(statements.count()).isPositive();
+        assertThat(statements.max()).isGreaterThanOrEqualTo(5);
     }
 
     /** Public reads (docs/design/15-public-access.md section 8): the template's name and the result, nothing else. */
@@ -164,7 +182,7 @@ class ObservabilityIT extends PostgresIntegrationTest {
     }
 
     @Test
-    void aSubProcessIsObservedInsideItsParent() {
+    void aSubProcessIsObservedInsideItsParent() throws InterruptedException {
         String code = "S" + UUID.randomUUID().toString().substring(0, 6).toUpperCase(Locale.ROOT);
         // The sale posting of ORDER_SHIP needs these accounts; this class's schema is its own.
         for (String[] account : List.of(new String[] {"1130", "ASSET"}, new String[] {"4120", "REVENUE"})) {
@@ -197,16 +215,15 @@ class ObservabilityIT extends PostgresIntegrationTest {
             .allSatisfy(s -> assertThat(s.parent()).isEqualTo(PlatformObservations.PROCESS));
 
         // ORDER_SHIP queued for the order's lock (decision D45): the family, the process and the result only, in the
-        // process's observation; the gauges are back at zero once it is over.
+        // process's observation; the gauges are back at zero once it is over. The permit goes back when the run has
+        // really ended, just after its result has been sent (D45), so the gauges are awaited rather than read at once.
         assertThat(seen(PlatformObservations.PROCESS_ADMISSION)).singleElement().satisfies(s -> {
             assertThat(s.tags()).isEqualTo(Map.of("family", "commerce.order", "process", "ORDER_SHIP",
                 "result", "ADMITTED"));
             assertThat(s.parent()).isEqualTo(PlatformObservations.PROCESS);
         });
-        assertThat(meters.find(PlatformObservations.PROCESS_ADMISSION_WAITING).tag("family", "commerce.order")
-            .gauge().value()).isZero();
-        assertThat(meters.find(PlatformObservations.PROCESS_ADMISSION_ACTIVE).tag("family", "commerce.order")
-            .gauge().value()).isZero();
+        awaitGaugeZero(PlatformObservations.PROCESS_ADMISSION_WAITING, "commerce.order");
+        awaitGaugeZero(PlatformObservations.PROCESS_ADMISSION_ACTIVE, "commerce.order");
         assertThat(SEEN).filteredOn(s -> s.name().startsWith("jabiz."))
             .flatExtracting(s -> List.copyOf(s.tags().values()))
             .doesNotContain(String.valueOf(((Map<?, ?>) placed.get("output")).get("orderId")),

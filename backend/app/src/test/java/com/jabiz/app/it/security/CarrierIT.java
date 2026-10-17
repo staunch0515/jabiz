@@ -44,12 +44,10 @@ class CarrierIT extends SecurityItSupport {
             .expectStatus().isOk().expectBody(LIST).returnResult().getResponseBody();
         assertThat(history).extracting(v -> v.get("action")).containsExactly("INSERT", "UPDATE", "DELETE");
 
-        List<String> writes = SqlStatementLog.STATEMENTS.stream()
-            .map(s -> s.strip().toUpperCase(Locale.ROOT))
-            .filter(s -> s.contains("CARRIER_VERSION"))
-            .filter(s -> s.startsWith("UPDATE") || s.startsWith("DELETE") || s.startsWith("INSERT"))
-            .toList();
-        assertThat(writes).hasSize(3).allSatisfy(s -> assertThat(s).startsWith("INSERT"));
+        // Wherever in a statement (a commit's rows are one statement since phase 16p): only inserts, one per commit.
+        List<String> writes = SqlStatementLog.writing("carrier_version");
+        assertThat(writes).hasSize(3).allSatisfy(s -> assertThat(SqlStatementLog.mutatedTables(s))
+            .doesNotContain("carrier_version"));
     }
 
     @Test

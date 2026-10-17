@@ -34,6 +34,7 @@
 |---|---|
 | `LoadEntity.by(datasetId, idKey, targetKey)` / `LoadEntity.optional(...)` | `EntityInstance`（`by` 找不到时 404） |
 | `QueryEntities.of(datasetId, ctx -> EntityQuery, targetKey)` | `List<EntityInstance>`：查询自己的 `limit` 那么多行，不按数据视图的 `maxQueryBatchSize`（浏览的一页）截断；实际行数超过 `jabiz.process.max-read-rows` 即 422 `PROCESS_READ_TOO_LARGE`（`limit` 大也照常，只读到上限多一行）【D32】 |
+| `QueryEntities.all(QueryEntities.query(datasetId, ctx -> EntityQuery, targetKey), …)` | 多个互不依赖的查询一个步骤（阶段 16p-1，D46）：每个结果如 `of` 放在自己的键下，同一存储引擎上的合成一条语句（03 §3.1）；如取锁之后的几次重读 |
 | `RunTemplate.of(templateId, ctx -> 参数, targetKey)` | `List<Map<列名, 值>>`（不检查模板权限，范围照常施加【D11】）；全部行，不按数据视图的 `maxQueryBatchSize`（那只限浏览的一页）截断，超过 `jabiz.process.max-read-rows`（缺省 100,000）即 422 `PROCESS_READ_TOO_LARGE`，不取一部分【D32】 |
 | `SaveChanges.now()` | 已提交的状态在 `ctx.changes().saved()`；已有违规时拒绝提交 |
 | `CallProcess.of(name, version, ctx -> 输入, outputKey)` / `CallProcess.latest(...)` / `CallProcess.when(条件, name, version, …)` | 子流程输出（`when` 的条件不成立时不调用）【D14】 |
@@ -139,6 +140,13 @@ public class ProcessContext {
 - 计算步骤通过 `ctx.changes().insert/update/delete(...)` 登记变更，不直接写库。
 - 流程最后一步执行完后，平台自动把 `ChangeSet` 交给 `DatasetEntityManager.commitBatch` 提交（时态实体按 04 插入版本）。
 - 任一步骤向 `ctx.violations()` 添加了违规：流程结束时整体失败（422，附全部违规），不提交任何变更。
+- **一次提交的写入合成一条语句**（阶段 16p-1，决策 D46）：同一数据视图的连续变更是一次 `commitBatch`，其中的插入行（时态版本、`entity_registry`、`op_process_item`、审计、事件、普通实体的行）
+  先收集，在读或写这些表的语句之前、保存点之前与提交结束时以多行插入与数据修改的 CTE 写出（"读之前写出"），所以流程中的每次读取看到的与逐条执行时相同。
+  冲突（声明的唯一约束、重复的主键）报告为该行所属变更原来的错误；错误出现的位置可能是写出的那一步。表上有平台之外的触发器的实体逐条写出（启动检查告警）。
+  跨步骤与提交的缓冲（子流程的操作记录、`PublishEvent`、幂等结果随下一条语句写出）是 16p-2。
+- **本事务已知的实例**（决策 D46 第 3、4 条）：流程经数据视图读到的完整实例（`LoadEntity`、`QueryEntities`、引用检查找到的目标）与平台插入的实例记在事务的读集与写集中；
+  引用检查对其中经目标默认视图、同一范围读到的或本事务插入的目标不再查，普通实体的更新以读到的状态为当前（以版本 CAS 兜底，冲突照旧 409、已删除照旧 404）。
+  任何平台写入使该实例的记录失效；`LoadParams`、模板的结果不记。不跨事务保留任何东西。
 
 ## 4. 事务与阶段
 
@@ -168,9 +176,12 @@ public class ProcessContext {
 名称与平台自己的锁键（账本科目层级、审批、导入等）不同，只可能因哈希碰撞而相遇（只影响并发，不影响正确性）。
 
 - 在读取受保护的状态**之前**取锁；一个流程取多个锁时各处按同一顺序，否则可能互相等待。
+- 一条语句（阶段 16p-1，T1）：等待上限与事务的相同（没有步骤与执行选项的更短上限，最常见）时只发取锁语句；更短时调用平台函数
+  `jabiz_xact_lock(key, shared, timeout)`（迁移 `V40`，plpgsql 中依次读当前值、设定、取锁、恢复）。事务的上限由执行器在开始时设定并放进 Reactor 上下文（`TransactionLockTimeout`）。
 - 等待最长 `jabiz.process.lock-timeout`（缺省 30 秒，只对取锁这一条语句生效）；超时或数据库判定死锁时流程失败，回滚，返回 409（可重试）。
   平台把这两种数据库错误（`55P03`、`40P01`）一律译为 `ConcurrentUpdateException`。持有者应短：不要在持锁的流程里做长时间的外部调用。
-- **整个事务的等待上限**（阶段 16k）：每个流程事务开始时以 `SET LOCAL lock_timeout`（`set_config(…, true)`）设为 `jabiz.process.lock-timeout`；
+- **整个事务的等待上限**（阶段 16k）：每个流程事务开始时以 `SET LOCAL lock_timeout`（`set_config(…, true)`）设为 `jabiz.process.lock-timeout`
+  （阶段 16p-1 起与操作号、`op_process` 的插入是同一条语句，T2：`set_config` 在取号的子查询中先执行，所以在这条语句中等待幂等键的并发重复请求同样受它约束）；
   逐项任务的项改用执行选项 `ExecutionOptions.lockWait`（= `itemLockWait`，较短时）。因此行锁、平台自己的锁（审批、账本科目层级、编号等）、
   并发重复请求等待同一幂等键，都不会无限等待；超时同样是 409（`LockNotAvailableException`）。
   风险：以前没有上限的等待（例如长事务持有的行锁）现在在 30 秒后以 409 结束——这是想要的结果（请求可重试，不占住连接）；
@@ -198,7 +209,7 @@ ProcessDefinition.define(ORDER_CANCEL, 1, CancelInput.class, …, pb -> pb
   键函数在事务之前只从输入算出，不读数据。约定：族名与键取得和该流程最外层的 `HoldLock` 名称一致（示范 `commerce.order:<订单>`），由同一个辅助方法生成两者；
   `HoldLock` 取到与准入键同族而不同名的锁时每个流程记一次 warn（只记族名与流程名）。每个流程至多一个准入；同一族可被多个流程声明，它们共用队列。不声明即不排队。
 - **闸门**（每键、每实例）：同时持有许可（在事务中）的至多 `concurrency` 个（缺省 2：第 2 个在持锁者提交前做完锁前的工作并在咨询锁上等，持锁者一提交它就接上，锁不空转）；
-  先进先出，释放的许可直接交给队首；队列至多 `max-queue` 个（缺省 50），队满即**立即** 503 `PROCESS_BUSY`（`reason = QUEUE_FULL`），不借连接；
+  先进先出，释放的许可直接交给队首（先进先出指**发放**许可的顺序：排队者在调度器上收到许可，`concurrency` > 1 时，无人排队时释放的许可立即发给新来者，它可能先于更早取得许可、尚在交付途中的请求开始运行；不保证收到的顺序）；队列至多 `max-queue` 个（缺省 50），队满即**立即** 503 `PROCESS_BUSY`（`reason = QUEUE_FULL`），不借连接；
   在队列中至多等 `max-wait`（缺省 2 秒，不超过 `jabiz.process.lock-timeout`），到时 503 `PROCESS_BUSY`（`WAIT_TIMEOUT`）。之后在咨询锁上的等待照旧由 `lock_timeout` 约束，且至多排在 `concurrency − 1` 个之后。
   `Retry-After` = 该键排队数 × 该族最近 50 次持有时间的平均 ÷ `concurrency`，向上取整，夹在 [`retry-after`（缺省 1 秒）, 30 秒] 之间。
 - **全局上限** `max-active`：所有键合计同时持有的许可，缺省 `spring.r2dbc.pool.max-size` 的一半（至少 1）；排队的流程合计至多用半个池，其余连接总是留给读取与不排队的流程。

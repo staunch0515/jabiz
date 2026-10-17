@@ -146,13 +146,8 @@ public class LedgerProcesses {
                 return ctx;
             })
             .outputMapper(ctx -> ctx.get(OUTPUT, PostOutput.class))
-            .step("Check dimensions and source", CheckPosting.of("input"))
-            .step("Load the accounts", QueryEntities.of(LedgerEntities.ACCOUNT_DATASET, ctx -> {
-                List<Object> codes = ctx.get("input", PostInput.class).entries().stream()
-                    .map(Line::accountCode).distinct().map(Object.class::cast).toList();
-                return EntityQuery.builder().where(new QueryPredicate.In("accountCode", codes))
-                    .limit(LedgerPosting.MAX_LINES).build();
-            }, ACCOUNTS))
+            // The account lock, then the dimensions, the source and the accounts in one read (ROADMAP phase 16p, T5).
+            .step("Check dimensions and source, load the accounts", CheckPosting.of("input", ACCOUNTS))
             .compute("Book the transaction", (metadata, ctx) -> post(ctx, settings)));
     }
 

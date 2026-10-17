@@ -159,8 +159,12 @@ class AppendOnlyGuardIT extends TemporalItSupport {
         commit(delete(price.id(), read(price.id()).version(), null));
 
         List<String> statements = List.copyOf(SqlStatementLog.STATEMENTS);
-        assertThat(statements).anyMatch(sql -> sql.toLowerCase(Locale.ROOT).startsWith("insert into it_price"));
-        assertThat(statements).anyMatch(sql -> sql.toLowerCase(Locale.ROOT).startsWith("insert into op_process_item"));
-        assertThat(statements).noneMatch(sql -> MUTATION.matcher(sql).find());
+        assertThat(statements).anyMatch(sql -> SqlStatementLog.insertedTables(sql).contains("it_price"));
+        assertThat(statements).anyMatch(sql -> SqlStatementLog.insertedTables(sql).contains("op_process_item"));
+        // A commit's rows are one statement since phase 16p (decision D46): not even a part of one mutates a table.
+        assertThat(statements).anyMatch(sql -> SqlStatementLog.insertedTables(sql).containsAll(
+            List.of("entity_registry", "it_price", "op_process_item", "sys_audit_record")));
+        assertThat(statements).noneMatch(sql -> MUTATION.matcher(sql).find()
+            || !SqlStatementLog.mutatedTables(sql).isEmpty());
     }
 }

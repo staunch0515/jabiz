@@ -13,6 +13,7 @@ import reactor.core.publisher.Mono;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -46,26 +47,74 @@ public class OperationRecorder {
             : engine.select("SELECT nextval('op_process_seq') AS seq", Map.of())
                 .next().map(row -> Rows.longValue(row.get("seq")));
         return seq.flatMap(processSeqId -> {
-            Instant opTime = (request.opTime() != null ? request.opTime() : clock.instant())
-                .truncatedTo(ChronoUnit.MICROS);
             Map<String, Object> row = new LinkedHashMap<>();
             row.put("process_seq_id", processSeqId);
-            row.put("parent_seq_id", request.parentSeqId());
-            row.put("reverts_seq_id", request.revertsSeqId());
-            row.put("process_name", request.processName());
-            row.put("process_version", request.processVersion());
-            row.put("actor_id", context.actorId());
-            row.put("tenant_id", context.tenantId());
-            row.put("request_id", context.requestId());
-            row.put("idempotency_key", request.idempotencyKey());
-            row.put("reason", request.reason());
-            row.put("input_summary", request.inputSummary() == null ? null : new JsonText(request.inputSummary()));
-            row.put("op_time", opTime);
-            Operation operation = new Operation(processSeqId, opTime, request.processName(),
-                request.processVersion(), context.actorId(), request.reason(), request.parentSeqId(),
-                request.revertsSeqId());
-            return engine.insert("op_process", row).thenReturn(operation);
+            row.putAll(columns(request, context));
+            return engine.insert("op_process", row).thenReturn(operation(processSeqId, request, context, row));
         });
+    }
+
+    /**
+     * Records the start of an operation as {@link #begin}, numbered from {@code op_process_seq} by the insert itself:
+     * one statement instead of two (ROADMAP phase 16p, T2). With {@code lockTimeout}, the same statement first sets the
+     * transaction's {@code lock_timeout}, so that a concurrent duplicate of an idempotency key, which waits on the
+     * unique key in this very statement, waits at most that long (docs/design/06-process.md section 4.1). For the
+     * default {@code ProcessSequence} only, which draws from that sequence.
+     *
+     * @param lockTimeout the {@code lock_timeout} of the transaction ({@code 30000ms}); null to leave it as it is
+     */
+    public Mono<Operation> beginNumbered(StorageEngine engine, OperationRequest request, RequestContext context,
+        String lockTimeout) {
+        return Mono.defer(() -> {
+            Map<String, Object> row = columns(request, context);
+            List<String> names = new ArrayList<>(List.of("process_seq_id"));
+            // The volatile set_config runs before the row is inserted: in the sub-select that yields the number.
+            List<String> markers = new ArrayList<>(List.of(lockTimeout == null ? "nextval('op_process_seq')"
+                : "(SELECT nextval('op_process_seq') FROM (SELECT set_config('lock_timeout', :lockTimeout, true)) s)"));
+            Map<String, BoundValue> params = new LinkedHashMap<>();
+            if (lockTimeout != null) {
+                params.put("lockTimeout", BoundValue.of(lockTimeout));
+            }
+            int[] next = {0};
+            row.forEach((column, value) -> {
+                if (value != null) {
+                    String name = "c" + next[0]++;
+                    names.add(column);
+                    markers.add(":" + name);
+                    params.put(name, BoundValue.of(value));
+                }
+            });
+            String sql = "INSERT INTO op_process (" + String.join(", ", names) + ") VALUES ("
+                + String.join(", ", markers) + ") RETURNING process_seq_id";
+            return engine.select(sql, params).next()
+                .map(inserted -> operation(Rows.longValue(inserted.get("process_seq_id")), request, context, row));
+        });
+    }
+
+    /** The columns of an operation's row besides its number; null where nothing is recorded. */
+    private Map<String, Object> columns(OperationRequest request, RequestContext context) {
+        Instant opTime = (request.opTime() != null ? request.opTime() : clock.instant())
+            .truncatedTo(ChronoUnit.MICROS);
+        Map<String, Object> row = new LinkedHashMap<>();
+        row.put("parent_seq_id", request.parentSeqId());
+        row.put("reverts_seq_id", request.revertsSeqId());
+        row.put("process_name", request.processName());
+        row.put("process_version", request.processVersion());
+        row.put("actor_id", context.actorId());
+        row.put("tenant_id", context.tenantId());
+        row.put("request_id", context.requestId());
+        row.put("idempotency_key", request.idempotencyKey());
+        row.put("reason", request.reason());
+        row.put("input_summary", request.inputSummary() == null ? null : new JsonText(request.inputSummary()));
+        row.put("op_time", opTime);
+        return row;
+    }
+
+    private static Operation operation(long processSeqId, OperationRequest request, RequestContext context,
+        Map<String, Object> row) {
+        return new Operation(processSeqId, (Instant) row.get("op_time"), request.processName(),
+            request.processVersion(), context.actorId(), request.reason(), request.parentSeqId(),
+            request.revertsSeqId());
     }
 
     /**

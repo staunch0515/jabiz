@@ -5,6 +5,7 @@ import com.jabiz.entity.EntityDefinition;
 import com.jabiz.entity.Violation;
 import com.jabiz.i18n.PlatformErrorCodes;
 import com.jabiz.ledger.LedgerDimension;
+import com.jabiz.ledger.LedgerPosting;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.StepSpec;
 import com.jabiz.query.EntityQuery;
@@ -21,20 +22,28 @@ import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 /**
- * What {@code LEDGER_POST} checks against the database besides the accounts (docs/design/11-ledger-events-jobs.md
- * sections 1.5 and 1.6): every dimension value is in its dimension's list ({@code LEDGER_DIMENSION_INVALID}) and the
- * source document exists ({@code LEDGER_SOURCE_NOT_FOUND}). It also takes the account lock shared, so that no account
- * turns summary while the transaction is booked ({@link LedgerAccountCheck}), and puts the declared dimensions into the
- * context for the booking.
+ * What {@code LEDGER_POST} checks against the database (docs/design/11-ledger-events-jobs.md sections 1.5 and 1.6):
+ * every dimension value is in its dimension's list ({@code LEDGER_DIMENSION_INVALID}) and the source document exists
+ * ({@code LEDGER_SOURCE_NOT_FOUND}); it loads the accounts of the entries into the context ({@code accounts}), which
+ * the booking checks. It first takes the account lock shared, so that no account turns summary while the transaction
+ * is booked ({@link LedgerAccountCheck}), and puts the declared dimensions into the context for the booking.
+ *
+ * <p>The lock is a statement of its own, before the reads: a statement reads what was committed when it started, so
+ * a read that waited for the lock within it would read the accounts as they were before the wait. The reads (the
+ * values of the dimensions taken from entities, the source document, the accounts) are then one statement
+ * ({@link DatasetEntityManager#queryMany}; ROADMAP phase 16p, T5), each as it would be read alone.
  */
 @Component
 class CheckPosting<C extends ProcessContext> implements StepHandler<CheckPosting.Metadata, C> {
@@ -48,14 +57,16 @@ class CheckPosting<C extends ProcessContext> implements StepHandler<CheckPosting
      */
     static final String ID_VALUES = "ledger_id_values";
 
-    record Metadata(String inputKey) {
+    /** @param accountsKey context key receiving the accounts of the entries, a {@code List<EntityInstance>} */
+    record Metadata(String inputKey, String accountsKey) {
         Metadata {
             Objects.requireNonNull(inputKey, "inputKey must not be null");
+            Objects.requireNonNull(accountsKey, "accountsKey must not be null");
         }
     }
 
-    static <C extends ProcessContext> StepSpec<Metadata, C> of(String inputKey) {
-        return StepSpec.of(CheckPosting.class, new Metadata(inputKey));
+    static <C extends ProcessContext> StepSpec<Metadata, C> of(String inputKey, String accountsKey) {
+        return StepSpec.of(CheckPosting.class, new Metadata(inputKey, accountsKey));
     }
 
     private final LedgerDimensionRegistry dimensions;
@@ -91,11 +102,52 @@ class CheckPosting<C extends ProcessContext> implements StepHandler<CheckPosting
                 stored.put(name, values.canonical());
             }
             ctx.put(ID_VALUES, Map.copyOf(stored));
+            // Each check adds what it reads and how it reports; the reports run in this order once everything is read,
+            // as the dimensions and then the source were reported when they were read one by one.
+            Reads reads = new Reads();
+            List<Runnable> reports = new ArrayList<>();
+            for (LedgerDimension dimension : dimensions.all()) {
+                checkDimension(ctx, input, dimension, ids.get(dimension.name()), reads, reports);
+            }
+            checkSource(ctx, input, reads, reports);
+            int accounts = reads.add(new DatasetEntityManager.EntityRead(
+                datasets.findById(LedgerEntities.ACCOUNT_DATASET).orElseThrow(),
+                entities.getOrThrow(LedgerEntities.ACCOUNT), accountsQuery(input)));
             return LedgerAccountCheck.lock(storages.getEngine(poolRef), true)
-                .thenMany(Flux.fromIterable(dimensions.all()).concatMap(dimension -> checkDimension(ctx, input,
-                    dimension, ids.get(dimension.name()))))
-                .then(checkSource(ctx, input));
+                .thenMany(Flux.concat(reads.dictionaries))
+                .then(entityManager.queryMany(reads.reads))
+                .doOnNext(results -> {
+                    reads.results = results;
+                    reports.forEach(Runnable::run);
+                    ctx.put(metadata.accountsKey(), reads.result(accounts));
+                })
+                .then();
         });
+    }
+
+    /** What the checks read: entity reads in one statement, dictionaries from their cache. */
+    private static final class Reads {
+        final List<DatasetEntityManager.EntityRead> reads = new ArrayList<>();
+        final List<Mono<Void>> dictionaries = new ArrayList<>();
+        List<List<EntityInstance>> results = List.of();
+
+        /** Adds a read; returns its index. */
+        int add(DatasetEntityManager.EntityRead read) {
+            reads.add(read);
+            return reads.size() - 1;
+        }
+
+        List<EntityInstance> result(int index) {
+            return results.get(index);
+        }
+    }
+
+    /** The accounts of the entries, by their codes; the booking tells the missing, closed and summary ones. */
+    private static EntityQuery accountsQuery(LedgerProcesses.PostInput input) {
+        List<Object> codes = input.entries().stream().map(LedgerProcesses.Line::accountCode).distinct()
+            .map(Object.class::cast).toList();
+        return EntityQuery.builder().where(new QueryPredicate.In("accountCode", codes))
+            .limit(LedgerPosting.MAX_LINES).build();
     }
 
     /**
@@ -130,9 +182,13 @@ class CheckPosting<C extends ProcessContext> implements StepHandler<CheckPosting
         return values;
     }
 
-    /** {@code ids}: the values of a dimension whose values are ids; null for any other. */
-    private Mono<Void> checkDimension(C ctx, LedgerProcesses.PostInput input, LedgerDimension dimension,
-        IdValues ids) {
+    /**
+     * Checks the values of a dimension: a dictionary's codes now (they are cached), an entity's in the read that
+     * {@code reads} and {@code answers} gain. {@code ids}: the values of a dimension whose values are ids; null for any
+     * other.
+     */
+    private void checkDimension(C ctx, LedgerProcesses.PostInput input, LedgerDimension dimension, IdValues ids,
+        Reads reads, List<Runnable> reports) {
         // Each value as given, and the form it is looked up in; a malformed id is invalid as it stands.
         Map<String, String> lookup = new LinkedHashMap<>();
         Set<String> malformed = ids == null ? Set.of() : ids.malformed();
@@ -142,27 +198,9 @@ class CheckPosting<C extends ProcessContext> implements StepHandler<CheckPosting
             lookup.putAll(ids.canonical());
         }
         if (lookup.isEmpty() && malformed.isEmpty()) {
-            return Mono.empty();
+            return;
         }
-        Mono<Set<String>> valid = switch (dimension.source()) {
-            case LedgerDimension.DictionarySource dictionary -> dictionaries.enabledCodes(dictionary.dictionaryUrn());
-            case LedgerDimension.EntitySource source when lookup.isEmpty() -> Mono.just(Set.of());
-            case LedgerDimension.EntitySource source -> {
-                EntityDefinition def = entities.getOrThrow(source.entity());
-                DatasetDefinition dataset = datasets.findForEntity(source.entity()).orElseThrow();
-                List<Object> wanted = List.copyOf(new LinkedHashSet<>(lookup.values()));
-                EntityQuery query = EntityQuery.builder()
-                    .where(new QueryPredicate.In(source.field(), wanted))
-                    .limit(wanted.size() + 1).build();
-                // Every value of the posting, not a page of the source's dataset (decision D32).
-                yield entityManager.queryAll(dataset, def, query)
-                    .map(found -> String.valueOf(found.<Object>get(source.field())))
-                    .map(found -> ids == null ? found : LedgerDimension.canonicalId(found))
-                    .filter(Objects::nonNull)
-                    .collect(Collectors.toSet());
-            }
-        };
-        return valid.doOnNext(known -> {
+        Consumer<Set<String>> report = known -> {
             for (int i = 0; i < input.entries().size(); i++) {
                 LedgerProcesses.Line line = input.entries().get(i);
                 String value = line.dimensions() == null ? null : line.dimensions().get(dimension.name());
@@ -175,14 +213,38 @@ class CheckPosting<C extends ProcessContext> implements StepHandler<CheckPosting
                         Map.of("line", i + 1, "dimension", dimension.name(), "value", value)));
                 }
             }
-        }).then();
+        };
+        switch (dimension.source()) {
+            case LedgerDimension.DictionarySource dictionary -> {
+                AtomicReference<Set<String>> codes = new AtomicReference<>(Set.of());
+                reads.dictionaries.add(dictionaries.enabledCodes(dictionary.dictionaryUrn()).doOnNext(codes::set)
+                    .then());
+                reports.add(() -> report.accept(codes.get()));
+            }
+            case LedgerDimension.EntitySource source when lookup.isEmpty() -> reports.add(() -> report.accept(Set.of()));
+            case LedgerDimension.EntitySource source -> {
+                EntityDefinition def = entities.getOrThrow(source.entity());
+                DatasetDefinition dataset = datasets.findForEntity(source.entity()).orElseThrow();
+                List<Object> wanted = List.copyOf(new LinkedHashSet<>(lookup.values()));
+                // Every value of the posting, not a page of the source's dataset (decision D32).
+                int read = reads.add(new DatasetEntityManager.EntityRead(dataset, def, EntityQuery.builder()
+                    .where(new QueryPredicate.In(source.field(), wanted))
+                    .limit(wanted.size() + 1).build()));
+                reports.add(() -> report.accept(reads.result(read).stream()
+                    .map(instance -> String.valueOf(instance.<Object>get(source.field())))
+                    .map(value -> ids == null ? value : LedgerDimension.canonicalId(value))
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toSet())));
+            }
+        }
     }
 
-    private Mono<Void> checkSource(C ctx, LedgerProcesses.PostInput input) {
+    /** Checks that the source document exists, in the read that {@code reads} and {@code answers} gain. */
+    private void checkSource(C ctx, LedgerProcesses.PostInput input, Reads reads, List<Runnable> reports) {
         String entity = input.sourceEntity();
         String id = input.sourceId();
         if (entity == null && id == null) {
-            return Mono.empty();
+            return;
         }
         Map<String, Object> params = Map.of("entity", String.valueOf(entity), "id", String.valueOf(id));
         Violation missing = new Violation("sourceId", PlatformErrorCodes.LEDGER_SOURCE_NOT_FOUND,
@@ -190,25 +252,24 @@ class CheckPosting<C extends ProcessContext> implements StepHandler<CheckPosting
         var def = entity == null ? null : entities.find(entity).orElse(null);
         var dataset = def == null ? null : datasets.findForEntity(entity).orElse(null);
         if (dataset == null || id == null || id.isBlank()) {
-            ctx.reject(missing);
-            return Mono.empty();
+            reports.add(() -> ctx.reject(missing));
+            return;
         }
         Object key;
         try {
             key = def.temporal ? def.normalizeId(id) : id;
         } catch (IllegalArgumentException e) {
-            ctx.reject(missing);
-            return Mono.empty();
+            reports.add(() -> ctx.reject(missing));
+            return;
         }
-        return entityManager.findById(dataset, def, key)
-            .map(EntityInstance::id)
-            .hasElement()
-            .doOnNext(found -> {
-                if (!found) {
-                    ctx.reject(missing);
-                }
-            })
-            .then();
+        // As the source's dataset reads it by its key: within its scope, the version in effect now.
+        int read = reads.add(new DatasetEntityManager.EntityRead(dataset, def, EntityQuery.builder()
+            .where(new QueryPredicate.Eq(def.primaryKey, key)).limit(1).build()));
+        reports.add(() -> {
+            if (reads.result(read).isEmpty()) {
+                ctx.reject(missing);
+            }
+        });
     }
 
     /**

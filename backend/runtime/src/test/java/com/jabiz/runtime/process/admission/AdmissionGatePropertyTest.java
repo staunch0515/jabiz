@@ -24,8 +24,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * The admission gates under random arrivals, releases, cancellations and waits (decision D45): permits are never more
- * than {@code concurrency} per key nor {@code maxActive} in all, none is lost or handed out twice, runs of one key are
- * admitted in order of arrival, and once everyone has left nothing is held or remembered.
+ * than {@code concurrency} per key nor {@code maxActive} in all, none is lost or handed out twice, the permits of one
+ * key are given out in order of arrival, and once everyone has left nothing is held or remembered.
+ *
+ * <p>First come first served is an order of giving out ({@link AdmissionGate.Permit#sequence()}, 06 §4.2), not of
+ * receipt. A waiter receives its permit on the scheduler; meanwhile a permit set free with nobody waiting (a run
+ * cancelled while its own permit was on its way) goes to a newcomer at once, who then receives it first. That takes a
+ * second permit of the key, so the order of receipt is asserted only when {@code concurrency} is 1. In production the
+ * hand-overs run on several workers of {@code Schedulers.parallel()}, so even two of them may arrive in either order.
  */
 class AdmissionGatePropertyTest {
 
@@ -94,7 +100,7 @@ class AdmissionGatePropertyTest {
             family -> new AdmissionGate.Limits(concurrency, maxQueue, Duration.ofSeconds(1)),
             () -> time.now(TimeUnit.NANOSECONDS), () -> scheduler);
         List<Run> runs = new ArrayList<>();
-        Map<String, List<Integer>> admittedOrder = new HashMap<>();
+        Map<String, List<Integer>> receivedOrder = new HashMap<>();
         for (Op op : ops) {
             switch (op.kind()) {
                 case 0 -> {
@@ -104,7 +110,7 @@ class AdmissionGatePropertyTest {
                         .subscribe(permit -> {
                             run.signals.incrementAndGet();
                             run.permit = permit;
-                            admittedOrder.computeIfAbsent(run.key, k -> new ArrayList<>()).add(run.arrival);
+                            receivedOrder.computeIfAbsent(run.key, k -> new ArrayList<>()).add(run.arrival);
                         }, error -> {
                             run.signals.incrementAndGet();
                             run.failed = true;
@@ -142,8 +148,13 @@ class AdmissionGatePropertyTest {
             }
             check(gate, runs, concurrency, maxActive);
         }
-        for (List<Integer> order : admittedOrder.values()) {
-            assertThat(order).as("runs of a key in order of arrival").isSorted();
+        for (List<Integer> received : receivedOrder.values()) {
+            List<Long> givenOut = received.stream().sorted().map(arrival -> runs.get(arrival).permit.sequence())
+                .toList();
+            assertThat(givenOut).as("permits of a key given out in order of arrival").isSorted();
+            if (concurrency == 1) {
+                assertThat(received).as("with one permit per key, also received in order of arrival").isSorted();
+            }
         }
 
         // Everyone leaves: nothing is held or remembered afterwards.
