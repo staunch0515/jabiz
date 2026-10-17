@@ -3911,4 +3911,6 @@ QB 提交锁内 48 → 16（16p-1）的明细：恢复超时 1 → 0（T1）、�
 
 **升级（P1）带来的差异**：`./gradlew check`、场景回放与 OpenAPI 快照（`OpenApiSnapshotIT`）、公开模板目录快照在升级后不需要更新，没有行为差异。
 
+**端到端测试的配置**：e2e 的全部登录都来自本机，缺省的按地址限流（突发 10）使其在登录时收到 429（实测 2 个用例失败）；CI 的 `e2e` 作业与 CLAUDE.md §6 因此以 `JABIZ_SECURITY_SIGN_IN_RATE_LIMIT_PER_ADDRESS=6000`、`JABIZ_SECURITY_SIGN_IN_RATE_LIMIT_BURST=1000` 启动应用，之后 44 个用例全部通过。
+
 **未做（登记为平台缺口）**：`sys_generated_file` / `sys_document_run` 的保留期（见阶段 16 的待办）。

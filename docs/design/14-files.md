@@ -137,6 +137,7 @@ FilePolicy.define("qb.content")
   `/content[/{变体}]` 的 `Content-Disposition` 用中性名 `<fileId>[-<变体>].<ext>`（扩展名按判定的类型），与公开文件（15 §4）相同。
 - 没有声明的策略照旧对所有读者显示原名与上传者（兼容已有应用）。公开文件不论策略一律用中性名。
 - 元数据导出（§4）带上 `privateMetadata: true|false`。`SysFile` 数据视图本来只对 `file.read` 开放，不受影响。
+- **已知局限**：`fileId` 是 UUIDv7，其中带着创建时刻（毫秒）；截到日的 `uploadedTime` 只是不在元数据中给出，并不能对读得到编号的人隐藏上传时刻。原名与上传者不受此影响。需要连时刻也隐藏时另提需求（例如这类策略的文件改用随机编号，须新决策调整 CLAUDE.md 的主键约定）。
 
 ## 6. 存储、清扫与删除
 

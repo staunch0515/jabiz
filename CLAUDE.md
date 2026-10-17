@@ -203,7 +203,7 @@ Gradle 9（wrapper）多模块工程，根目录为 `backend/`（模块：`core`
   （写 `frontend/openapi/public-queries.json`，路径由 `jabizApp.publicQueriesSnapshot` 配置），随变更提交
 - 前后端共享校验用例 `spec/validation-cases.json`：core `ValidationCasesTest` 与前端 `validation.cases.test.ts` 都执行；
   字段元数据变化后 `./gradlew :core:test -Dvalidation-cases.update=true` 重写其中的 `fields`
-- 端到端（Playwright）：先运行打包的应用（`./gradlew :app:bootJar`，以 `JABIZ_JWT_SECRET`、`JABIZ_INTEGRITY_KEY`、`JABIZ_MFA_KEY`、`JABIZ_DEMO_AI_KEY`（示范外部服务的密钥，任意值）、`JABIZ_SECURITY_MFA_ADMINISTRATION=false`（共用的管理员没有二次验证）、`JABIZ_ADMIN_ROLES=*` 与 `JABIZ_PORTAL_SELF_REGISTRATION=false`（测试以自己的角色登录后台，示范门户因此不开放注册）、`JABIZ_PORTAL_REQUIRE_VERIFIED_EMAIL=false`（不发邮件，门户的客户无法验证邮箱，仍可登录）、`JABIZ_BOOTSTRAP_ADMIN_USER/PASSWORD`、`JABIZ_FILES_LOCAL_ROOT` 与数据库环境变量
+- 端到端（Playwright）：先运行打包的应用（`./gradlew :app:bootJar`，以 `JABIZ_JWT_SECRET`、`JABIZ_INTEGRITY_KEY`、`JABIZ_MFA_KEY`、`JABIZ_DEMO_AI_KEY`（示范外部服务的密钥，任意值）、`JABIZ_SECURITY_MFA_ADMINISTRATION=false`（共用的管理员没有二次验证）、`JABIZ_ADMIN_ROLES=*` 与 `JABIZ_PORTAL_SELF_REGISTRATION=false`（测试以自己的角色登录后台，示范门户因此不开放注册）、`JABIZ_PORTAL_REQUIRE_VERIFIED_EMAIL=false`（不发邮件，门户的客户无法验证邮箱，仍可登录）、`JABIZ_SECURITY_SIGN_IN_RATE_LIMIT_PER_ADDRESS=6000` 与 `JABIZ_SECURITY_SIGN_IN_RATE_LIMIT_BURST=1000`（测试都从本机登录，D47 的按地址限流放宽）、`JABIZ_BOOTSTRAP_ADMIN_USER/PASSWORD`、`JABIZ_FILES_LOCAL_ROOT` 与数据库环境变量
   `SPRING_R2DBC_*`、`SPRING_FLYWAY_*` 启动 `app/build/libs/*.jar`），再在 `frontend/` 下
   `E2E_ADMIN_USER=… E2E_ADMIN_PASSWORD=… pnpm e2e`（`E2E_BASE_URL` 默认 `http://localhost:8080`；`E2E_CHROMIUM` 可指定已安装的 Chromium）。
   测试只增不删数据，可对同一数据库重复运行；CI 的 `e2e` 作业即如此

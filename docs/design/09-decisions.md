@@ -1433,5 +1433,5 @@ schema 中任何表上有则不复用读到的实例（第 4 条的前提）。�
 事务结束（提交、回滚、失败、取消）即归还；子流程不排队。`PasswordHasher.hash` / `matches` 经 `compute` 取同样大小的公平信号量（在虚拟线程上阻塞等待至多 `max-wait`），
 约束其他途径（子流程、启动时）的计算；经过事务前队列的运行从不在这里等待。`AuthBusyException` → 503 `AUTH_BUSY`（`violations[0].params.retryAfter`，另作顶层属性 `retryAfter`），三种语言的消息；
 观测 `jabiz.auth.hashing.busy`（无标签）。
-③`FileController` 以 `seesPrivateMetadata` 判断（上传者按 `uploadedBy` 与操作人编号比较），`FileContent.neutralName` 与公开文件共用。没有迁移；OpenAPI 不变（`FileMeta` 的三个字段本来就可为空）。
+③`FileController` 以 `seesPrivateMetadata` 判断（上传者按 `uploadedBy` 与操作人编号比较），`FileContent.neutralName` 与公开文件共用。自查发现的局限：`fileId` 是 UUIDv7，带着毫秒级的创建时刻，所以截到日只是元数据不给出、不能真正隐藏上传时刻（原名与上传者不受影响）；记入 14 §5.1，未改主键约定。没有迁移；OpenAPI 不变（`FileMeta` 的三个字段本来就可为空）。
 ④同一阶段把 Spring Boot 从 4.0.1 升到 4.0.8（reactor-netty 1.3.7 修复 CVE-2026-47874），见 ROADMAP 16q。
