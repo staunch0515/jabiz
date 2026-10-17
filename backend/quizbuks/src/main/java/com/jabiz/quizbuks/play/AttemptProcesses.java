@@ -46,8 +46,10 @@ import static com.jabiz.quizbuks.play.PlaySteps.ids;
  *   <li>{@code QB_ATTEMPT_SAVE}: saves the current question and some answers, before the deadline.</li>
  * </ul>
  * Every one is the caller's own (the user is the caller, never the input), needs a verified address and refuses a
- * banned caller first. Only a new start takes a lock: the publication's, around the counters it reserves; every start
- * queues for it before its transaction (platform decision D45).
+ * banned caller first. Only a new start takes a lock: the publication's start lock {@code qb.pub-start:<publication>}
+ * (Q10a4), around the starts' side of the counters it reserves on; every start queues for it before its transaction
+ * (platform decision D45). The completions hold the publication's lock {@code qb.pub:<publication>}, so the two run
+ * side by side (docs/quizbuks/plans/Q10-lock-split.md).
  */
 public final class AttemptProcesses {
 
@@ -94,6 +96,7 @@ public final class AttemptProcesses {
     static final String PUBLICATION = "play.publication";
     static final String CARD = "play.card";
     static final String COUNTER = "play.counter";
+    static final String START_COUNTER = "play.startCounter";
     static final String WALLET = "play.wallet";
     static final String VIEWS = "play.views";
     static final String ATTEMPT = "play.attempt";
@@ -167,10 +170,11 @@ public final class AttemptProcesses {
                 .description("Starts the caller's attempt of a publication, or continues the one in progress.")
                 .permissions(QbPermissions.PLAY)
                 .requiresVerifiedEmail()
-                // Queues for the publication's lock before the transaction (platform decision D45, Q10a): a hot
-                // publication's waiters hold no connection. A continuing start queues too (16o A-7): it learns
-                // only from its reads that it takes no lock.
-                .admission(PublicationMoves.LOCK_FAMILY, PublicationRef::publicationId)
+                // Queues for the publication's start lock before the transaction (platform decision D45, Q10a;
+                // Q10a4: its own family, apart from the completions'): a hot publication's waiters hold no
+                // connection. A continuing start queues too (16o A-7): it learns only from its reads that it takes
+                // no lock.
+                .admission(PublicationMoves.START_LOCK_FAMILY, PublicationRef::publicationId)
                 .steps(CallerChecks::refuseBanned)
                 .contextFactory((start, input) -> {
                     ProcessContext ctx = new ProcessContext(start);
@@ -201,14 +205,18 @@ public final class AttemptProcesses {
                 .step("Read the sponsor's wallet", QueryEntities.<ProcessContext>of(
                     QbWallets.defaultDataset(QbWallets.WALLET), ctx -> QbWallets.query(QbWallets.SPONSOR,
                         starting(ctx) ? sponsorOf(first(ctx, CARD_BEFORE)) : null), WALLET))
-                // A new attempt only: under the publication's lock, the attempt, the state and the counters again.
-                .step("Lock the publication", HoldLock.<ProcessContext>exclusive(
-                    ctx -> starting(ctx) ? PublicationMoves.lockName(ctx.get(PUB_KEY)) : null))
+                // A new attempt only: under the publication's start lock (Q10a4: not the publication's lock, which
+                // the completions hold), the attempt, the state and both sides of the counters again.
+                .step("Lock the publication's starts", HoldLock.<ProcessContext>exclusive(
+                    ctx -> starting(ctx) ? PublicationMoves.startLockName(ctx.get(PUB_KEY)) : null))
                 // One statement (platform decision D46, Q10a3): each round trip under the lock is ~0.8 ms of it.
+                // The starts' side is exact (only starts write it, under this lock); the completions' side is as of
+                // the statement, which only makes the check of the limits stricter (Q10-lock-split.md 2.3).
                 .step("Load the caller's attempt, the card and the counters again", QueryEntities.<ProcessContext>all(
                     QueryEntities.query(QbPlay.TAKER_ATTEMPTS, ctx -> mine(starting(ctx) ? ctx.get(PUB_KEY) : null),
                         MINE_AGAIN),
                     PlaySteps.card(ctx -> starting(ctx) ? ctx.get(PUB_KEY) : null, CARD),
+                    PlaySteps.startCounter(ctx -> starting(ctx) ? ctx.get(PUB_KEY) : null, START_COUNTER),
                     PlaySteps.counter(ctx -> starting(ctx) ? ctx.get(PUB_KEY) : null, COUNTER)))
                 .compute("Start the attempt", (metadata, ctx) -> start(ctx)));
     }
@@ -262,15 +270,17 @@ public final class AttemptProcesses {
             return;
         }
         EntityInstance card = first(ctx, CARD);
+        EntityInstance starts = first(ctx, START_COUNTER);
         EntityInstance counter = first(ctx, COUNTER);
-        if (card == null || counter == null) {
-            throw new IllegalStateException("A publication that went on has a card and counters: "
+        if (card == null || starts == null || counter == null) {
+            throw new IllegalStateException("A publication that went on has a card and both sides of its counters: "
                 + ctx.get(PUB_KEY));
         }
         String userId = ctx.request().actorId();
         EntityInstance wallet = first(ctx, WALLET);
         String refusal = AttemptRules.startRefusal(userId, PlaySteps.userRegions(ctx), PlaySteps.cardOf(card),
-            PlaySteps.counts(counter), QbWallets.available(wallet), QbWallets.pendingCount(wallet), ctx.opTime());
+            PlaySteps.counts(starts, counter), QbWallets.available(wallet), QbWallets.pendingCount(wallet),
+            ctx.opTime());
         if (refusal != null) {
             ctx.reject(new com.jabiz.entity.Violation("publicationId", refusal, "The attempt cannot start: "
                 + refusal, Map.of("publicationId", String.valueOf(ctx.get(PUB_KEY)))));
@@ -294,10 +304,11 @@ public final class AttemptProcesses {
         values.put("answers", Answers.toJson(Answers.none(order.size())));
         Object attemptId = ctx.changes().insert(QbPlay.ATTEMPT, values);
         BigDecimal maxReward = PlaySteps.money(card.get("maxReward"));
+        // Only the starts' side (Q10a4): the completions' side is the publication's lock's.
         Map<String, Object> counts = new LinkedHashMap<>();
-        counts.put("starts", BigDecimal.valueOf(PlaySteps.number(counter.get("starts")) + 1));
-        counts.put("reserved", PlaySteps.money(counter.get("reserved")).add(maxReward));
-        ctx.changes().update(QbPublications.COUNTER, counter.id(), counter.version(), counts);
+        counts.put("starts", BigDecimal.valueOf(PlaySteps.number(starts.get("starts")) + 1));
+        counts.put("reservedTotal", PlaySteps.money(starts.get("reservedTotal")).add(maxReward));
+        ctx.changes().update(QbPublications.START_COUNTER, starts.id(), starts.version(), counts);
         ctx.put(OUTPUT, new StartOutput(String.valueOf(attemptId), PlaySteps.uuid(publicationId),
             AttemptStatus.IN_PROGRESS, ctx.opTime(), deadline, ctx.opTime(),
             PlaySteps.integer(card.get("timeLimitSec")), 0, false, questions(snapshot, order),

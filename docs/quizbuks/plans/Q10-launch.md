@@ -162,3 +162,18 @@ R2 的应用部分：合并 `1.2/platform`（平台 16p-1，PR #165，决策 D46
 - **重测**（报告 `perf/Q10a-load-test.md` §9）：读者每秒 24 次首页时稳定约 37–40 次完成 / 秒（Q10a2 同设置 20–22.5），每秒 30 人时提交 p95 44 ms、40 人时 0.7 秒，每秒 50 人时过载（稳定 36 次 / 秒，答题人看到的提交 p95 8.6 秒）；
   连续读者（CPU 约 85 %）时约 22 次 / 秒（Q10a2 约 9.5–10）。准入许可 3 个时吞吐不变：瓶颈仍是发布锁（每次完成锁内约 26 ms），不是许可或 CPU。**本机未达到每秒 50 次**；建议见报告 §9.4。
 - 验证：`./gradlew :quizbuks:check`（含 `platformCheck`）、两个 SPA 的 lint / typecheck / Vitest 与 `pnpm app:check`、`ext:check`、对 jar 的 e2e 全部、`tools/check-app-paths.sh origin/1.2/platform`。
+
+## 实施记录（Q10a4 锁拆分，2026-10-17，分支 `1.2/quizbuks-10a4-lock-split`）
+
+需求方 2026-10-17 决定先做锁拆分、再做平台 16p-2，每一步之后重测。计划：`plans/Q10-lock-split.md`（开始取新的 `qb.pub-start:<发布>`，完成照旧取 `qb.pub:<发布>`，计数拆成两张表）。
+计划经需求方确认（LS-1 至 LS-8 全部按建议），已实施，详见该计划的实施记录：
+- 开始只取开始锁、只写开始一侧（`QbPublicationStartCounter`：`starts`、`reservedTotal`）；完成只取发布锁、只写完成一侧（`QbPublicationCounter`：`completions`、`passes`、`winners`、`released`、`spent`）；读派生量（进行中、预占）的地方一律一条语句读两侧。
+  暂停、恢复、`ADVANCE`、`FUNDED` 在发布锁之后取开始锁；完成移动不取（限额代数与"预算不足是软检查"，设计 4.3）。两族各自准入（`[qb.pub-start]`、`[qb.pub]`）。迁移 V10 一步完成，旧数据不符即失败。
+- 语句预算不变（开始锁内 5、提交在发布锁内 14），新增结束的完成 29 / 23 与暂停 12 / 9；`LockSplitIT`、`CounterSplitProperties`（jqwik）、`CounterSplitMigrationIT`；场景快照只有计数行变化。
+- 重测（报告 §10）：稳定约 41–45 次 / 秒（同日对照 35–39），每秒 40 人时提交 p95 61 ms（对照 271 ms），**每秒 50 人仍未达到**；与预估 45–50 相比在下端或略低（提交锁内的一段因与开始并行争 CPU 而变慢）。池 16 / `max-active` 8 无一致收益，配置不改。
+  下一步：平台 16p-2，之后以 §10 的设置重测。
+- **已知问题（上线风险）**：过载时 503 从开始移到了提交（报告 §10.3 第 3 条）。开始一侧有余量，人人进入答题，排队与 503 落在提交上：每秒 50–60 人时提交 503 有 150–1345 次，
+  答题人看到的提交 p95 3.3–18.8 秒，截止前不久按下的提交可能排队、重试到截止加宽限之后，以 EXPIRED 结束（超时任务以已保存的答案结束）。上线前在目标规格上确认峰值低于饱和点，或做下面的缓解。
+  可选的后续缓解（现在不改代码）：开始一侧的背压——发布的 `qb.pub` 队列已深时拒绝新的开始，把过载挡在开始而不是提交（需要平台给出准入队列的深度，或应用自己估计）。
+- **评审修正**（同分支）：`ADVANCE` 以 `WithdrawApproval.when` 只在审核过期时取审批锁（锁序中排在发布锁与开始锁之后，文档补上 `jabiz.approval:*`）；jqwik 的"结束一次"改由生产的 `PublicationMoves.moveAfter` 驱动；
+  `LockSplitIT` 每个暂停窗口内都有一个开始并断言它被 `NOT_OPEN` 拒绝，`pg_stat_database.deadlocks` 只作后备（先刷统计）；报告的百分比改为饱和时的 +16–30 %。

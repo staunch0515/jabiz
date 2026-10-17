@@ -232,5 +232,6 @@ steps:
       input: { publicationId: "${pub}" }
       status: 404
 snapshot:
-  entities: [QbPublication, QbRewardTier, QbPublicationCounter, QbPublicationSchedule, SysApprovalRequest, QbSponsor]
+  entities: [QbPublication, QbRewardTier, QbPublicationCounter, QbPublicationStartCounter, QbPublicationSchedule,
+    SysApprovalRequest, QbSponsor]
   asOf: end

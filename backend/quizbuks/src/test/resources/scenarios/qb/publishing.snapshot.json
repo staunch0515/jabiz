@@ -146,12 +146,17 @@
     } ],
     "QbPublicationCounter" : [ {
       "publicationId" : "#uuid:1",
-      "starts" : "0",
       "completions" : "0",
       "passes" : "0",
       "winners" : "0",
-      "reserved" : "0",
+      "released" : "0",
       "spent" : "0",
+      "version" : 1
+    } ],
+    "QbPublicationStartCounter" : [ {
+      "publicationId" : "#uuid:1",
+      "starts" : "0",
+      "reservedTotal" : "0",
       "version" : 1
     } ],
     "QbPublicationSchedule" : [ {

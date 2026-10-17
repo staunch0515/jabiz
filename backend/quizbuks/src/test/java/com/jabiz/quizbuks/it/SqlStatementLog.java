@@ -42,10 +42,25 @@ public class SqlStatementLog {
     public static final String COMMIT = "COMMIT";
     public static final String ROLLBACK = "ROLLBACK";
 
+    /**
+     * The application locks ({@code HoldLock}) taken, by connection, in order: the lock's name without the platform's
+     * namespace (as {@code qb.pub:<publication>}), from the statement's bound key (Q10a4: which of a publication's two
+     * locks a process takes).
+     */
+    public static final List<Entry> LOCKS = new CopyOnWriteArrayList<>();
+
+    private static final String LOCK_NAMESPACE = "jabiz.app-lock:";
+
     /** Forgets everything recorded so far. */
     public static void clear() {
         STATEMENTS.clear();
         ENTRIES.clear();
+        LOCKS.clear();
+    }
+
+    /** The names of the application locks taken since the last {@link #clear()}, in order. */
+    public static List<String> locks() {
+        return LOCKS.stream().map(Entry::sql).toList();
     }
 
     /**
@@ -145,12 +160,15 @@ public class SqlStatementLog {
             public Object postProcessAfterInitialization(Object bean, String beanName) {
                 if (bean instanceof ConnectionFactory factory) {
                     return ProxyConnectionFactory.builder(factory)
-                        .onAfterQuery(execution -> execution.getQueries().stream()
-                            .map(QueryInfo::getQuery)
-                            .forEach(sql -> {
-                                STATEMENTS.add(sql);
-                                ENTRIES.add(new Entry(connection(execution.getConnectionInfo()), sql));
-                            }))
+                        .onAfterQuery(execution -> execution.getQueries().forEach(query -> {
+                            String sql = query.getQuery();
+                            String connection = connection(execution.getConnectionInfo());
+                            STATEMENTS.add(sql);
+                            ENTRIES.add(new Entry(connection, sql));
+                            if (sql.contains("xact_lock")) {
+                                lockNames(query).forEach(name -> LOCKS.add(new Entry(connection, name)));
+                            }
+                        }))
                         .onAfterMethod(method -> {
                             String boundary = switch (method.getMethod().getName()) {
                                 case "beginTransaction" -> BEGIN;
@@ -167,6 +185,25 @@ public class SqlStatementLog {
                 return bean;
             }
         };
+    }
+
+    /** The application lock names a lock statement binds (values in the platform's namespace). */
+    private static List<String> lockNames(QueryInfo query) {
+        List<String> names = new ArrayList<>();
+        for (io.r2dbc.proxy.core.Bindings bindings : query.getBindingsList()) {
+            List<io.r2dbc.proxy.core.Binding> all = new ArrayList<>(bindings.getIndexBindings());
+            all.addAll(bindings.getNamedBindings());
+            for (io.r2dbc.proxy.core.Binding binding : all) {
+                Object value = binding.getBoundValue().isNull() ? null : binding.getBoundValue().getValue();
+                if (value instanceof io.r2dbc.spi.Parameter parameter) {
+                    value = parameter.getValue();
+                }
+                if (value instanceof String text && text.startsWith(LOCK_NAMESPACE)) {
+                    names.add(text.substring(LOCK_NAMESPACE.length()));
+                }
+            }
+        }
+        return names;
     }
 
     private static String connection(io.r2dbc.proxy.core.ConnectionInfo info) {

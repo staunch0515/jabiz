@@ -101,13 +101,18 @@
     } ],
     "QbPublicationCounter" : [ {
       "publicationId" : "#uuid:3",
-      "starts" : "3",
       "completions" : "3",
       "passes" : "2",
       "winners" : "2",
-      "reserved" : "0",
+      "released" : "300",
       "spent" : "200",
-      "version" : 7
+      "version" : 4
+    } ],
+    "QbPublicationStartCounter" : [ {
+      "publicationId" : "#uuid:3",
+      "starts" : "3",
+      "reservedTotal" : "300",
+      "version" : 4
     } ],
     "QbPublicationStats" : [ {
       "publicationId" : "#uuid:3",

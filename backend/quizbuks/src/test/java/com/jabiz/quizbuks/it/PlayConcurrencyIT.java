@@ -74,7 +74,7 @@ class PlayConcurrencyIT extends PlayItSupport {
     }
 
     /**
-     * The start's soft check of the sponsor's wallet comes before the publication's lock (Q10a): a start admitted on
+     * The start's soft check of the sponsor's wallet comes before the start lock (Q10a, Q10a4): a start admitted on
      * a balance that is spent while it waits for the lock still gets in, and its reward ends pending, as when the
      * balance runs out between a start and its submission. The publication is underfunded once, the books balance.
      */
@@ -92,11 +92,12 @@ class PlayConcurrencyIT extends PlayItSupport {
         ExecutorService pool = Executors.newSingleThreadExecutor();
         Future<Map<String, Object>> started;
         try (Connection holder = DB.connect(schema)) {
-            // Another transaction holds the hot publication's lock: the start reads the wallet, then waits.
+            // Another transaction holds the hot publication's start lock (Q10a4: a start's only lock): the start reads
+            // the wallet, then waits.
             holder.setAutoCommit(false);
             try (PreparedStatement lock = holder.prepareStatement(
                 "SELECT pg_advisory_xact_lock(hashtextextended(?, 0))")) {
-                lock.setString(1, "jabiz.app-lock:qb.pub:" + hot);
+                lock.setString(1, "jabiz.app-lock:qb.pub-start:" + hot);
                 lock.execute();
             }
             started = pool.submit(() -> start(token, hot));

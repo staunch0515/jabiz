@@ -21,6 +21,21 @@ public final class AttemptRules {
         }
     }
 
+    /**
+     * The counts from the two sides of a publication's counters (Q10a4, docs/quizbuks/plans/Q10-lock-split.md 2.2):
+     * the starts' side ({@code starts}, {@code reservedTotal}: what every start reserved) and the completions' side
+     * ({@code completions}, {@code winners}, {@code released}: what every completion released, {@code spent}).
+     *
+     * <p>A start reads its own side exactly (under the start lock) and the completions' side as of some moment before;
+     * a completion since then changes {@code winners + inProgress} by {@code (reward > 0 ? 1 : 0) - 1 <= 0} and
+     * {@code spent + reserved} by {@code reward - maxReward <= 0}, so {@link #limitRefusal} on the older side refuses
+     * whatever it would refuse on the newer one: stricter, never looser (the plan's lemma 1).
+     */
+    public static Counts counts(long starts, BigDecimal reservedTotal, long completions, long winners,
+        BigDecimal released, BigDecimal spent) {
+        return new Counts(starts, completions, winners, reservedTotal.subtract(released), spent);
+    }
+
     /** What a new attempt needs of a publication: its limits and its highest reward. */
     public record Limits(BigDecimal budgetCap, Integer maxWinners, BigDecimal maxReward) {}
 

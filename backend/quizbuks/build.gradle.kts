@@ -30,6 +30,8 @@ dependencies {
     testImplementation("com.icegreen:greenmail-junit5:2.1.3")
     // The statement budget of answering (Q10a3) records the statements as the platform's own budget test does.
     testImplementation("io.r2dbc:r2dbc-proxy")
+    // The migration of the lock split (Q10a4) is tested by migrating schemas of its own up to V9 and on.
+    testImplementation("org.flywaydb:flyway-core")
 }
 
 // The throughput baseline (docs/quizbuks/plans/Q5-answering.md, D-Q5-10) is tagged "perf": not part of check, run on

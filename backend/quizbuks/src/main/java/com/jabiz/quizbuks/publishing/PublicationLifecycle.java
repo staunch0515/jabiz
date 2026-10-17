@@ -233,7 +233,8 @@ public final class PublicationLifecycle {
                     a -> a.whenField("status", SCHEDULED, LIVE, FUNDS_SHORT))
                 .contextFactory((start, input) -> PublicationEditing.start(start, input, input.publicationId()))
                 .outputMapper(ctx -> ctx.get(OUTPUT, PublicationOutput.class))
-                .steps(PublicationEditing::lockAndLoad)
+                // The start lock too (Q10a4): no start gets in once the pause commits.
+                .steps(PublicationEditing::lockStatesAndLoad)
                 .compute("Pause", (metadata, ctx) -> {
                     EntityInstance publication = PublicationEditing.publication(ctx);
                     // An underfunded one too (Q5, D-Q5-5): resuming it goes by the time, and the next reward its
@@ -258,7 +259,7 @@ public final class PublicationLifecycle {
                 .actsOn(QbPublications.PUBLICATION, "publicationId", a -> a.whenField("status", PAUSED))
                 .contextFactory((start, input) -> PublicationEditing.start(start, input, input.publicationId()))
                 .outputMapper(ctx -> ctx.get(OUTPUT, PublicationOutput.class))
-                .steps(PublicationEditing::lockAndLoad)
+                .steps(PublicationEditing::lockStatesAndLoad)
                 .compute("Resume", (metadata, ctx) -> {
                     EntityInstance publication = PublicationEditing.publication(ctx);
                     String to = PublicationRules.resumeTo(instant(publication.get("startAt")),
@@ -412,18 +413,19 @@ public final class PublicationLifecycle {
                 .outputMapper(ctx -> ctx.get(OUTPUT, PublicationOutput.class))
                 .step("Lock the publication", HoldLock.<ProcessContext>exclusive(
                     ctx -> PublicationEditing.lockName(ctx.get(PUB_ID))))
+                // It changes the state of a publication that went on: the start lock too (Q10a4, LS-4).
+                .steps(PublicationEditing::lockStarts)
                 .step("Load the publication", LoadEntity.by(
                     QbPublications.defaultDataset(QbPublications.PUBLICATION), PUB_ID, PUBLICATION))
                 .steps(PublicationEditing::loadSchedule)
-                // Only a publication still in review has a pending request: one past its end loses it.
-                .step("Withdraw a review that came too late", WithdrawApproval.<ProcessContext>of(
-                    PublicationApprovals.SUBJECT, ctx -> expiredInReview(ctx)
-                        ? PublicationEditing.publication(ctx).id() : NO_REQUEST))
+                // Only a publication still in review has a pending request: one past its end loses it. Only then is
+                // the approval's case lock (jabiz.approval:<subject>:<publication>) taken: the lock order puts it
+                // after the publication's pair, and every other run of the tick takes no lock after the start lock.
+                .step("Withdraw a review that came too late", WithdrawApproval.<ProcessContext>when(
+                    PublicationLifecycle::expiredInReview, PublicationApprovals.SUBJECT,
+                    ctx -> PublicationEditing.publication(ctx).id()))
                 .compute("Move on", (metadata, ctx) -> advance(ctx)));
     }
-
-    /** An entity id no publication has (WithdrawApproval has no condition): the withdrawal then finds nothing. */
-    private static final String NO_REQUEST = "none";
 
     private static boolean expiredInReview(ProcessContext ctx) {
         EntityInstance publication = PublicationEditing.publication(ctx);

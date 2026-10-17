@@ -26,7 +26,8 @@ import static com.jabiz.quizbuks.publishing.PublicationStatus.SCHEDULED;
 /**
  * The four entities of publishing (docs/quizbuks/02-design.md section 3.3, docs/quizbuks/plans/Q4-publishing.md):
  * the publication and its reward tiers, temporal and without scheduled versions, and the counters of a publication
- * that is on (an ordinary table: Q5 updates it on every attempt, under the publication's lock) and the schedule of a
+ * that is on (two ordinary tables, Q10a4: the starts' side under the start lock, the completions' side under the
+ * publication's lock; every attempt updates each once) and the schedule of a
  * submitted publication (an ordinary table the tick and the removal of a quiz read). Each publication and tier
  * carries the sponsor ({@code sponsorId}), so a sponsor's dataset is limited without a join. Only the processes of
  * {@link PublicationProcesses} and {@link PublicationLifecycle} write them.
@@ -35,7 +36,10 @@ public final class QbPublications {
 
     public static final String PUBLICATION = "QbPublication";
     public static final String TIER = "QbRewardTier";
+    /** The completions' side of a publication's counters (written under {@code qb.pub:<publication>}). */
     public static final String COUNTER = "QbPublicationCounter";
+    /** The starts' side of a publication's counters (written under {@code qb.pub-start:<publication>}, Q10a4). */
+    public static final String START_COUNTER = "QbPublicationStartCounter";
     public static final String SCHEDULE = "QbPublicationSchedule";
     public static final String CARD = "QbPublicationCard";
     public static final String OWNER = "QbPublicationOwner";
@@ -168,26 +172,50 @@ public final class QbPublications {
     });
 
     /**
-     * The counters of a publication that went on: attempts started, completed and passed, winners (a reward above
-     * 0), and the Kudos reserved by attempts in progress and spent. Inserted with zeros when the publication is
-     * approved; Q5 updates it under the publication's lock. Not temporal: each attempt would add a version.
+     * The completions' side of the counters of a publication that went on (docs/quizbuks/plans/Q10-lock-split.md):
+     * attempts completed and passed, winners (a reward above 0), the highest rewards their attempts had reserved and
+     * now released ({@code released}: the card's {@code maxReward} each) and the Kudos spent. Inserted with zeros,
+     * with {@link #START_COUNTER_ENTITY}, when the publication goes on; only a completion updates it, under the
+     * publication's lock {@code qb.pub:<publication>}. Attempts in progress ({@code starts - completions}) and the
+     * Kudos reserved ({@code reservedTotal - released}) need both sides, read in one statement (one snapshot: never
+     * fewer starts than completions). Not temporal: each attempt would add a version.
      */
     public static final EntityDefinition COUNTER_ENTITY = EntityDefinition.define(COUNTER, eb -> {
         eb.physicalTable("qb_publication_counter");
         eb.primaryKey("publicationId");
         eb.field("publicationId", f -> f.physicalColumn("publication_id").immutable(true).required(true)
             .asReference(PUBLICATION));
-        eb.field("starts", f -> f.physicalColumn("starts").required(true).asNumeric(9, 0));
         eb.field("completions", f -> f.physicalColumn("completions").required(true).asNumeric(9, 0));
         eb.field("passes", f -> f.physicalColumn("passes").required(true).asNumeric(9, 0));
         eb.field("winners", f -> f.physicalColumn("winners").required(true).asNumeric(9, 0));
-        eb.field("reserved", f -> f.physicalColumn("reserved").required(true).asMonetary("JPY", 0));
+        eb.field("released", f -> f.physicalColumn("released").required(true).asMonetary("JPY", 0));
         eb.field("spent", f -> f.physicalColumn("spent").required(true).asMonetary("JPY", 0));
         eb.field("version", f -> f.physicalColumn("version").asVersion());
         eb.listView("default", lv -> lv
-            .columns("publicationId", "starts", "completions", "passes", "winners", "reserved", "spent")
+            .columns("publicationId", "completions", "passes", "winners", "released", "spent")
             .filters("publicationId")
-            .sorts("starts", "spent")
+            .sorts("completions", "spent")
+            .defaultSort("completions", false));
+    });
+
+    /**
+     * The starts' side of the counters of a publication that went on (docs/quizbuks/plans/Q10-lock-split.md):
+     * attempts started and the highest rewards they reserved ({@code reservedTotal}: the card's {@code maxReward}
+     * each), ever. Inserted with zeros, with {@link #COUNTER_ENTITY}, when the publication goes on; only a start
+     * updates it, under the start lock {@code qb.pub-start:<publication>}.
+     */
+    public static final EntityDefinition START_COUNTER_ENTITY = EntityDefinition.define(START_COUNTER, eb -> {
+        eb.physicalTable("qb_publication_start_counter");
+        eb.primaryKey("publicationId");
+        eb.field("publicationId", f -> f.physicalColumn("publication_id").immutable(true).required(true)
+            .asReference(PUBLICATION));
+        eb.field("starts", f -> f.physicalColumn("starts").required(true).asNumeric(9, 0));
+        eb.field("reservedTotal", f -> f.physicalColumn("reserved_total").required(true).asMonetary("JPY", 0));
+        eb.field("version", f -> f.physicalColumn("version").asVersion());
+        eb.listView("default", lv -> lv
+            .columns("publicationId", "starts", "reservedTotal")
+            .filters("publicationId")
+            .sorts("starts", "reservedTotal")
             .defaultSort("starts", false));
     });
 

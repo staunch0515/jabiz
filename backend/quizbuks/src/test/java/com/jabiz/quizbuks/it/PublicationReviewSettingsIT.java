@@ -68,6 +68,7 @@ class PublicationReviewSettingsIT extends PublicationItSupport {
         assertThat(query("SELECT facts FROM sys_approval_evaluation WHERE entity_id = ? AND outcome = "
             + "'NOT_REQUIRED'", id).getFirst().get("facts").toString()).contains("\"autoApprove\":true");
         assertThat(query("SELECT 1 FROM qb_publication_counter WHERE publication_id = ?::uuid", id)).hasSize(1);
+        assertThat(query("SELECT 1 FROM qb_publication_start_counter WHERE publication_id = ?::uuid", id)).hasSize(1);
 
         // Directly, nobody turns the switch: it is controlled.
         assertThat(refused("PARAM_SET", admin(), body("key", QbParams.REVIEW_PUBLICATION_AUTO, "value", "false"),

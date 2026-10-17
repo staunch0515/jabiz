@@ -114,7 +114,8 @@ docs/quizbuks/               本文件等
 | `QbPublication` | T | `sponsorId`、`quizId`（随版本冗余存放）、`versionId`、`versionLabel`、`name`、`regions`（多值，`Regions.TARGETS`：非空子集，不强制含 GLOBAL）、`startAt`、`endAt`、`timeLimitSec`、`fullScore`（取自版本）、`passScore`、`budgetCap`（可选）、`maxWinners`（可选）、`maxReward`（档位最高额）、`maxSpend`（预计最大支出）、`tierCount`、`status`（见 5.1）、`rejectReason`、`rejectCode`（如 `QB_PUBLICATION_EXPIRED_IN_REVIEW`）、`approvalRequestId`、`submittedAt`、`approvedAt`、`pausedAt`、`endedAt`、`endReason`（`EXPIRED` / `QUOTA` / `BUDGET`）、`revision`、`editedAt`（以上派生值与状态 `processOnly`）、`copiedFrom`（源的主键，不作引用） | 一次投放（Q4，`plans/Q4-publishing.md`）。只有草稿可改，提交即冻结内容与全部策略；审核用平台审批（`ApprovalSubject` `qb.publication`） |
 | `QbRewardTier` | T | `publicationId`、`sponsorId`、`seq`、`fromScore`、`toScore`、`reward` | 每个发布至多 20 档；区间不重叠、覆盖 0 到满分、至少一档奖励大于 0（提交时 `TierCoverage` 检查）；可从 0 分起 |
 | `QbPublicationSchedule` | P | `publicationId`（主键）、`quizId`、`versionId`、`nextDueAt` | 已提交且未退回草稿的发布：定时任务按 `nextDueAt` 取到期的，移除模版时按 `quizId` 找出要保留文件的版本（都是普通索引；时态表上按可变字段查找要扫全部历史） |
-| `QbPublicationCounter` | P | `publicationId`（主键）、`starts`、`completions`、`passes`、`winners`、`reserved`、`spent` | 高频计数与预算占用，上架时插入全 0 的一行（Q4），只在发布锁内更新（4.3，Q5）；不进时态（否则每次答题都给发布追加一个版本） |
+| `QbPublicationCounter` | P | `publicationId`（主键）、`completions`、`passes`、`winners`、`released`（历来每个完成释放的预占之和）、`spent` | 计数的**完成一侧**（Q10a4 锁拆分，`plans/Q10-lock-split.md`）：上架时与开始一侧在同一事务插入全 0 的一行（Q4），只由完成（提交、超时）在发布锁 `qb.pub` 内更新（4.3）；不进时态（否则每次答题都给发布追加一个版本） |
+| `QbPublicationStartCounter` | P | `publicationId`（主键）、`starts`、`reservedTotal`（历来每个开始预占的最高奖励之和） | 计数的**开始一侧**（Q10a4）：上架时插入全 0 的一行，只由开始在开始锁 `qb.pub-start` 内更新。派生量只由两侧一起算：进行中 = `starts − completions`、预占 = `reservedTotal − released`；读两侧的地方（开始的锁内重读、首页、详情、商家与管理员的发布列表）一律**在一条语句中**读（同一快照：不会出现负的进行中） |
 | `QbPublicationCard` | P | `publicationId`（主键）、`sponsorId`、`status`、`regions`、`startAt`、`endAt`、`name`、`quizTitle`、`cover`、`versionId`、`maxReward`、`fullScore`、`passScore`、`timeLimitSec`、`questionCount`、`budgetCap`、`maxWinners`、`tiers`（档位的规范 JSON）、`sponsorCountry`、`wentOnAt` | 上架时随计数行插入（Q5）。除状态外全部在提交时冻结，状态由发布的流程在发布锁内同步。答题人的首页、详情、档位与答题流程只读它（时态表上按状态、时间、地区筛选要读全部版本） |
 | `QbAttempt` | P → 结束后流程拒绝修改 | `userId`、`publicationId`（二者唯一，一人一次）、`sponsorId`、`versionId`、`startedAt`、`deadline`、`status`（IN_PROGRESS / SUBMITTED / EXPIRED）、`currentIndex`、`optionOrder`、`answers`、`result`（三者都是规范 JSON 文本）、`submittedAt`、`score`、`fullScore`、`passed`、`tierId`、`reward`、`fee`、`rewardStatus`（NONE / PAID / PENDING）、`rewardPaidAt`、`ledgerTransactionId` | 答题会话（Q5）。进行中只有 `answers`、`currentIndex` 会变（保存进度，U-41）；`result`（含每题正确选项）在完成时才写。不建逐题答案表：每次保存只写一行，题目分析（Q9）用 `jsonb_array_elements` 展开。一人一次按发布：版本是模板，发布定义范围，用户可参加满足条件的任何发布，不论是否参加过同一版本的其他发布（需求方 2026-10-11 确认）。数据视图（Q9c，C-2）：缺省视图不给任何角色读取（数据视图不能去掉字段，而会话带奖励与抽成），财务读只读视图 `finance:QbAttempt`，支持人员经不含金额的 `qb.admin.attempts` 读取 |
 | `QbPublicationView` | P | `userId`、`publicationId`（唯一）、`firstViewedAt` | 漏斗的"浏览"：每人每发布只记第一次（`QB_VIEW`） |
@@ -189,7 +190,8 @@ docs/quizbuks/               本文件等
 
 | 锁（`HoldLock.exclusive`） | 谁持有 | 保护什么 |
 |---|---|---|
-| `qb.pub:<发布>` | 开始答题、提交、暂停 / 恢复、到期结束 | `QbPublicationCounter`（名额、预算占用）、发布状态 |
+| `qb.pub:<发布>`（**发布锁**） | 提交、超时自动提交、完成时的移动子流程；发布的全部编辑、审核与状态流程 | `QbPublicationCounter`（完成一侧）、发布、卡片、排程行与状态 |
+| `qb.pub-start:<发布>`（**开始锁**，Q10a4） | 开始答题（新的开始，含被拒绝的）；改变已上架发布状态的流程（暂停、恢复、定时上下架的每项、预算恢复的每个发布），在发布锁之后 | `QbPublicationStartCounter`（开始一侧）；"状态改变提交之后没有新的开始" |
 | `qb.wallet:<种类>:<所有者>`（如 `qb.wallet:SPONSOR:<用户>`） | 结算、补发待支付、开发入账（Q5）、充值到账、转账发出与结果 | `QbWallet` 与该当事人的账本分录 |
 | `qb.account:<用户>` | 资料、入驻、商家资料、审批结果、封禁 / 解封（Q2）；收款账户的开通结果与 Stripe 通知（Q6b） | 该用户的 `QbProfile`、`QbSponsor`、`QbUserBan`、`QbPayoutAccount` |
 | `qb.wallet:TAKER:<用户>` | 用户钱包同步、转账的全部流程（Q6b） | 用户的 `QbWallet`（`TAKER`）、`QbTransfer` 与其 2120 / 2130 分录 |
@@ -198,26 +200,41 @@ docs/quizbuks/               本文件等
   先在锁外按编号找到充值、再取锁、锁内重读；每日核对不取业务锁。所以不会与"发布锁 → 钱包锁"成环。
 - Q6b：用户钱包锁只由同步与转账流程持有，它们不取其他锁（读收款账户与封禁不取账户锁）；结算奖励不取用户钱包锁（缓存由事件跟上）。
   重算多个用户的 `QB_TAKER_WALLET_RESYNC` 按用户编号排序依次取锁，其他流程至多持一把，因此不成环。
-- 加锁顺序固定：**（账户锁 `qb.account:<用户>` →）模版锁 `qb.quiz:<模版>`（提交发布时共享）→ 发布锁 → 钱包锁**（Q4，D-Q4-5；Q2 D-Q2-10）。账户锁目前不与其他锁同时持有（提交发布只读入驻与封禁，不取账户锁）；只有提交发布同时取模版锁与发布锁，移除模版只取模版锁（独占），两者因此不会交错。只持钱包锁的流程（充值、补发、转账）不再取发布锁（补发不改发布计数，计数在提交时已算入），因此不会死锁。
+- **锁拆分**（Q10a4，`plans/Q10-lock-split.md`，需求方 2026-10-17 确认 LS-1 至 LS-8）：开始只取开始锁、完成只取发布锁，两段并行；它们只在计数上相遇，所以计数拆成两张表（3.3），各自只有一个写者。
+  - **代数**（计划 2.3）：记最高奖励 `m`、名额上限 `W`、预算上限 `B̂`，开始检查名额量 `Q = winners + (starts − completions)` 与预算量 `B = spent + (reservedTotal − released)`：`Q < W` 且 `B + m ≤ B̂` 才放行（`AttemptRules.limitRefusal` 不变）。
+    每次完成使 `Q` 变化 `(奖励 > 0 ? 1 : 0) − 1 ≤ 0`、`B` 变化 `奖励 − m ≤ 0`，所以开始读到较旧的完成一侧只会**更严格**；开始一侧在开始锁内是确切的。因此在每个提交点 `Q ≤ W`、`B ≤ B̂`，中奖人数与已花从不超出。
+    代价：接近上限时开始可能看不见正在提交的完成而多拒一次（LS-8，从不多放；首页本来就有同样的时差）。
+  - **结束（`ENDED`）只看完成一侧**：完成在发布锁内读确切的 `winners`、`spent`，`PublicationRules.endsBy` 与 `PublicationMoves.moveAfter` 照旧，状态只从 `RUNNING` 迁到 `ENDED` 一次。
+  - **完成时的移动子流程不取开始锁**（LS-5）：结束之后限额检查对任何开始都拒绝（上一条的代数），预算不足本是软检查（开始在锁外读钱包，同时被放行的人完成后记为待支付）。
+    **这两点是前提**：若改成在开始时硬性预占商家余额，或改变限额的检查，必须重新论证；且不能在持钱包锁时取开始锁（违反下面的锁序）。
+  - **改变已上架发布状态的流程持两把锁**（LS-4）：`QB_PUBLICATION_PAUSE`、`RESUME`、`ADVANCE`（逐项任务的每项）、`FUNDED`（`FUNDS_RESTORED` 在一个事务中按编号升序逐个调用）在发布锁之后、读取之前取开始锁（`PublicationEditing.lockStarts`），
+    所以暂停等提交之后没有新的开始、之前开始的都已计入。编辑、删除、提交审核、撤回、审批结果（草稿与待审核的发布没有卡片，开始一律 404；审批结果插入卡片与两行计数同一事务）、提交、超时与完成移动不取开始锁。
+  - **读计数的地方**：开始的锁内重读是一个 `QueryEntities.all`（本人会话、卡片、开始一侧、完成一侧，一条语句）；提交与超时只读完成一侧（不读开始一侧）；模板 `qb.app.feed`、`qb.app.publication`、`qb.sponsor.publications`、`qb.admin.publications` 在一条 SQL 中 JOIN 两表；
+    通用后台的两个默认数据视图只显示各自的列。
+- 加锁顺序固定：**（账户锁 `qb.account:<用户>` →）模版锁 `qb.quiz:<模版>`（提交发布时共享）→ 按发布编号升序：[发布锁 `qb.pub:<发布>` → 开始锁 `qb.pub-start:<发布>`] → 平台审批的案件锁 `jabiz.approval:*` → 钱包锁 `qb.wallet:SPONSOR:<商家>`**（Q4，D-Q4-5；Q2 D-Q2-10；Q10a4）。
+  开始只持开始锁；状态流程在开始锁之后只可能再取审批锁：`ADVANCE` 撤回过期的审核（`WithdrawApproval.when`，只在审核过期时取；那时发布还在待审核，没有卡片，也没有开始在等），其余不再取锁（`FUNDS_RESTORED` 之后取的是编号更大的发布的一对锁）；
+  持审批锁的流程（提交审核、撤回、审批结果）从不再取开始锁；持钱包锁之后只再取同一发布的发布锁（完成移动，本事务已持有，重入不等待），没有流程持钱包锁去等开始锁。
+  `qb.wallet:TAKER:<用户>`、`qb.journal`、收据与转账的锁照旧独立。账户锁目前不与其他锁同时持有（提交发布只读入驻与封禁，不取账户锁）；只有提交发布同时取模版锁与发布锁，移除模版只取模版锁（独占），两者因此不会交错。只持钱包锁的流程（充值、补发、转账）不再取发布锁（补发不改发布计数，计数在提交时已算入），因此不会死锁。
 - **晚取锁**（Q5）：提交先在锁外读会话、版本与抽成比例，锁内只重读会话、计数与卡片（发布与排程行只在这次完成使它结束或预算不足时才读，子流程 `QB_PUBLICATION_COMPLETION_MOVE`，Q10a），评分后（奖励大于 0 时）再取钱包锁、过账与写入；
-  开始只取发布锁（不取钱包锁：商家余额是软检查，并发多出的人完成后记为待支付）；继续答题与保存进度不取锁（会话行的乐观版本）。
-  **锁内的语句**（Q10a3，平台 16p-1、决策 D46）：锁内互不依赖的重读合成一条（`QueryEntities.all`：开始为本人会话、卡片与计数，提交为会话、计数与卡片）；
+  开始只取开始锁（Q10a4；不取钱包锁：商家余额是软检查，并发多出的人完成后记为待支付）；继续答题与保存进度不取锁（会话行的乐观版本）。
+  **锁内的语句**（Q10a3，平台 16p-1、决策 D46）：锁内互不依赖的重读合成一条（`QueryEntities.all`：开始为本人会话、卡片与计数的两侧，提交为会话、完成一侧与卡片）；
   开始在锁外与会话、卡片同一条语句读发布，新会话对发布与版本的引用检查复用本事务的读取（只有草稿可删，草稿没有卡片）；会话、计数与钱包按本事务读到的版本更新（版本 CAS 兜底），审计随更新同一条语句写出。
-  锁内开始 5 条、付奖的提交 14 条（Q10a 为 12 与 48），由 `AttemptStatementBudgetIT` 断言；实测见 `perf/Q10a-load-test.md` §9。
-  恢复预算不足的发布（`QB_PUBLICATION_FUNDS_RESTORED`）由补发清空后发布的事件在另一事务中进行，只取发布锁，因此锁序不成环。
-- **取锁前排队**（Q10a2，平台 16o、决策 D45）：`QB_ATTEMPT_START`（键为输入的发布）、`QB_ATTEMPT_SUBMIT`（键为 App 带上的 `publicationId`）与逐项任务的
-  `QB_ATTEMPT_EXPIRE`（键为选取模板 `qb.system.attempts-due` 给出的发布）声明准入 `admission("qb.pub", …)`：族名与发布锁同为 `PublicationMoves.LOCK_FAMILY`，
-  准入键与锁名是同一段文字（`qb.pub:<发布>`，平台不告警）。它们在借连接、开事务**之前**按发布在进程内排队：每个发布每个实例同时至多 2 个在事务中（一个持锁、一个在锁上等），
-  队列 50、至多等 2 秒（`application.yml` 的 `jabiz.process.admission.families[qb.pub]`），超出即 503 `PROCESS_BUSY`（带 `Retry-After`），不占连接；
-  所有排队的流程合计至多用半个连接池，首页与详情总有连接可用。继续答题的开始同样排队（16o A-7，每个约 12 ms）。
-  **正确性仍只靠发布锁**：准入只是进程内的准入控制，多实例时各自排队；提交在锁前核对输入的发布与会话的发布一致，否则 422 `QB_ATTEMPT_PUBLICATION_MISMATCH`（排错了队的请求不会取另一把锁）；
+  开始锁内 5 条、付奖的提交在发布锁内 14 条（Q10a 为 12 与 48；锁拆分不变）、使发布结束的那次完成 23 条、暂停在发布锁内 9 条（含开始锁 1 条），由 `AttemptStatementBudgetIT` 断言（并断言各自取哪几把锁）；实测见 `perf/Q10a-load-test.md` §9、§10。
+  恢复预算不足的发布（`QB_PUBLICATION_FUNDS_RESTORED`）由补发清空后发布的事件在另一事务中进行，只取发布锁与开始锁（不取钱包锁），因此锁序不成环。
+- **取锁前排队**（Q10a2，平台 16o、决策 D45；Q10a4 分为两族）：`QB_ATTEMPT_START`（键为输入的发布）声明准入 `admission("qb.pub-start", …)`（`PublicationMoves.START_LOCK_FAMILY`，键 = 开始锁名 `qb.pub-start:<发布>`）；
+  `QB_ATTEMPT_SUBMIT`（键为 App 带上的 `publicationId`）与逐项任务的 `QB_ATTEMPT_EXPIRE`（键为选取模板 `qb.system.attempts-due` 给出的发布）声明 `admission("qb.pub", …)`（`PublicationMoves.LOCK_FAMILY`，键 = 发布锁名）。
+  族名与锁名由同一个方法生成（平台不告警）；开始锁用连字符而不是 `qb.pub:start:…`：平台按"锁名以 `族名:` 开头"归族，那样开始会与提交挤同一个队列。
+  它们在借连接、开事务**之前**按族与发布在进程内排队：每族每个发布每个实例同时至多 2 个在事务中（一个持锁、一个在锁上等），
+  队列 50、至多等 2 秒（`application.yml` 的 `jabiz.process.admission.families[qb.pub]` 与 `[qb.pub-start]`），超出即 503 `PROCESS_BUSY`（带 `Retry-After`），不占连接；
+  所有排队的流程合计至多用 `max-active` 个许可（缺省半个连接池），首页与详情总有连接可用；拆分后一个热门发布至多占 4 个许可（开始 2 + 完成 2），池与 `max-active` 的建议见 `perf/Q10a-load-test.md` §10。继续答题的开始同样排队（16o A-7，每个约 12 ms）。
+  **正确性仍只靠两把锁**：准入只是进程内的准入控制，多实例时各自排队；提交在锁前核对输入的发布与会话的发布一致，否则 422 `QB_ATTEMPT_PUBLICATION_MISMATCH`（排错了队的请求不会取另一把锁）；
   提交的 `publicationId` 必填（缺即 400；QuizBuks 未上线，没有旧客户端要照顾：不排队的提交会在连接上等锁，重新造成池耗尽）。逐项任务的项被准入拒绝记为 `BUSY`，下一分钟的运行再选到它；
   其间迟到的提交照样按截止加宽限判断（EXPIRED），不因任务忙而放行。
   **副作用**：`opTime` 在取得许可之后才取，所以排队（至多 2 秒）与 App 的重试会吃掉提交的 5 秒宽限：截止前不久按下的提交可能以 EXPIRED 结束，由超时任务以**已保存的**答案结束。
   因此 App 提交前先保存未存的答案（保存不取发布锁、不排队），截止前 2 秒再保存一次；过了截止加宽限即停止重试、去结果页。截止前最后不到一秒的改动可能不计入（与原来断线时相同）。发布的状态流程（暂停、恢复、到期上下架、预算恢复）不声明（少而短）。
   App 收到 503 `PROCESS_BUSY` 时显示"人多，正在重试"，按 `Retry-After` 与加倍的退避（1、2、4、8 秒，至多 6 次、等待合计至多 60 秒，离开页面即停）以**同一个** `Idempotency-Key` 重试（`app/src/play/busy.ts`），
   一次提交至多结算一次（会话只结束一次；同键重试得到第一次的回答）。入口限流：开始与提交各每人每分钟 60 次（`jabiz.process.rate-limits`，429 `RATE_LIMITED`），远高于真人的节奏，只限制脚本。
-- 【缺省 Q11】单个发布的提交在发布锁上串行。Q5 的基线（`PlayThroughputIT`，见 `plans/Q5-answering.md` 的实施记录）由 Q10 压测对照；退路依次为降低过账成本、按发布预留预算、分批过账。每次结算是一个短事务（读快照、写答案、两行余额、一笔 2–3 行的分录），预计每秒数十次。
+- 【缺省 Q11】单个发布的提交在发布锁上串行（开始在开始锁上串行，两者并行，Q10a4）。Q5 的基线（`PlayThroughputIT`，见 `plans/Q5-answering.md` 的实施记录）由 Q10 压测对照；退路依次为降低过账成本、按发布预留预算、分批过账。每次结算是一个短事务（读快照、写答案、两行余额、一笔 2–3 行的分录），预计每秒数十次。
   如压测不足，把"商家钱包"拆为按发布预留：发布上架时从商家钱包转入发布预算，结算只取发布锁（以后的优化，不在 MVP）。
 
 ## 5. 状态机与流程
