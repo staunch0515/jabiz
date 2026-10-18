@@ -56,6 +56,10 @@ export const TEMPLATE = {
   consents: 'qb.admin.consents',
   /** The published versions of the legal texts and their withdrawals (Q7b review M1; `qb.admin.content.write`). */
   legalVersions: 'qb.admin.legal-versions',
+  /** AI generation (Q8a; `qb.admin.ai.read`): usage by sponsor and month, the jobs, the parameters in force. */
+  aiUsage: 'qb.admin.ai-usage',
+  aiJobs: 'qb.admin.ai-jobs',
+  aiSettings: 'qb.admin.ai-settings',
   /** Every announcement and sponsor's notice with its statistics (Q7c; `qb.admin.content.write`). */
   broadcasts: 'qb.admin.broadcasts',
 } as const
@@ -161,6 +165,8 @@ export const PERMISSION = {
   controlPublish: 'control.publish',
   /** Taking publications down (Q10b). */
   contentWrite: 'qb.admin.content.write',
+  /** The AI page (Q8a). */
+  aiRead: 'qb.admin.ai.read',
 } as const
 
 /** The administrators' processes on a publication (Q10b, review M2), run from the platform's process page. */
@@ -212,6 +218,8 @@ export const PATH = {
   legal: '/qb/legal',
   /** Announcements and notices: writing, sending and withdrawing them, with their statistics (Q7c). */
   broadcasts: '/qb/broadcasts',
+  /** AI generation (Q8a): usage, failures, the switch and the limits. */
+  ai: '/qb/ai',
   /** The platform's own pages. */
   tasks: '/tasks',
 } as const

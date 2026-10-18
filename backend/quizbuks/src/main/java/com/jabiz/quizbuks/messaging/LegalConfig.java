@@ -155,7 +155,8 @@ public class LegalConfig {
             .item(QbLegal.TERMS_SPONSOR, "en", "Sponsor terms", "zh", "商家条款", "ja", "スポンサー利用規約")
             .item(QbLegal.PRIVACY, "en", "Privacy policy", "zh", "隐私政策", "ja", "プライバシーポリシー")
             .item(QbLegal.COMMERCE_NOTICE, "en", "Specified Commercial Transactions Act notice",
-                "zh", "特定商取引法标示", "ja", "特定商取引法に基づく表記"));
+                "zh", "特定商取引法标示", "ja", "特定商取引法に基づく表記")
+            .item(QbLegal.AI_NOTICE, "en", "AI notice", "zh", "AI 使用说明", "ja", "AI 利用に関する説明"));
     }
 
     @Bean
@@ -183,7 +184,8 @@ public class LegalConfig {
         return StaticDictionary.define(QbLegal.CONSENT_SOURCE_DICTIONARY, d -> d
             .item(QbLegal.SOURCE_WELCOME, "en", "Registration", "zh", "注册", "ja", "登録時")
             .item(QbLegal.SOURCE_ONBOARDING, "en", "Sponsor application", "zh", "商家入驻", "ja", "スポンサー申請")
-            .item(QbLegal.SOURCE_RECONSENT, "en", "After a change", "zh", "变更后重新同意", "ja", "改定後の再同意"));
+            .item(QbLegal.SOURCE_RECONSENT, "en", "After a change", "zh", "变更后重新同意", "ja", "改定後の再同意")
+            .item(QbLegal.SOURCE_AI, "en", "AI request", "zh", "使用 AI 时", "ja", "AI の利用時"));
     }
 
     @Bean

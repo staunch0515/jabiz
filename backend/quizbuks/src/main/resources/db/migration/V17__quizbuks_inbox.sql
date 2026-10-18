@@ -1,6 +1,6 @@
--- Q7c (docs/quizbuks/plans/Q7-messages-legal.md D-Q7-7): the in-app inbox and the announcements. The order agreed is
--- Q7b V12, Q7a V13, Q9e1 V14, Q7c V15, Q8a V16; an installation is migrated in that order (Flyway refuses a lower
--- version after a higher one), so V14 is deployed before this one.
+-- Q7c (docs/quizbuks/plans/Q7-messages-legal.md D-Q7-7): the in-app inbox and the announcements. The order agreed was
+-- Q7b V12, Q7a V13, Q9e1 V14, Q7c V15, Q8a V16, but Q8a merged first, so this is V17 (V15 stays unused): Flyway refuses
+-- a lower version after a higher one, and a database that already ran V16 must still migrate without out-of-order.
 --  * qb_message: personal messages (a reward paid or pending, a transfer, the payout account, a reminder), made by the
 --    event consumers and the daily job, their texts in every language (jsonb, decision D20). Ordinary: many rows that
 --    never change but for when they were read and clicked; one per source_key, so a replayed event makes none again;

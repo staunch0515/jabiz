@@ -49,6 +49,8 @@ class ProcessAccessIT extends QbItSupport {
         Map.entry("QB_PUBLICATION_FUNDED", ProcessAccess.INTERNAL),
         Map.entry("QB_PUBLICATION_STATS_REFRESH", ProcessAccess.INTERNAL),
         Map.entry("QB_PUBLICATION_STATS_CHUNK", ProcessAccess.INTERNAL),
+        // The sponsors' analytics (Q9e): the items of the job (review M3: one transaction each).
+        Map.entry("QB_ANALYTICS_ITEM", ProcessAccess.INTERNAL),
         // Top-ups and reconciliation (Q6a): the results of the jobs that call Stripe, Stripe's events, the items of
         // the stale top-ups' job and the daily reconciliation.
         Map.entry("QB_TOPUP_OPENED", ProcessAccess.INTERNAL),
@@ -80,6 +82,10 @@ class ProcessAccessIT extends QbItSupport {
         Map.entry("QB_TRANSFER_REVERSED", ProcessAccess.INTERNAL),
         Map.entry("QB_STRIPE_PAYOUT_RECORD", ProcessAccess.INTERNAL),
         Map.entry("QB_STRIPE_PAYOUT_FAILED", ProcessAccess.INTERNAL),
+        Map.entry("QB_AI_JOB_COMPLETED", ProcessAccess.INTERNAL),
+        Map.entry("QB_AI_JOB_FAILED", ProcessAccess.INTERNAL),
+        Map.entry("QB_AI_EXPIRE", ProcessAccess.INTERNAL),
+        Map.entry("QB_AI_JOB_STOPPED", ProcessAccess.INTERNAL),
         // Mail (Q7a): the consumers of the transfer, payout account, top-up and publication events, and the items of the
         // hourly job of deferred short-of-funds mail.
         Map.entry("QB_MAIL_TRANSFER", ProcessAccess.INTERNAL),

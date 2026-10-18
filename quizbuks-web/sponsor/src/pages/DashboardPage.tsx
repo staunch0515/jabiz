@@ -1,13 +1,14 @@
 import { Alert, AlertDescription, Button, PageState } from '@jabiz/ui'
 import { useTranslation } from 'react-i18next'
+import { DashboardCharts } from '../analytics/DashboardCharts'
 import { SPONSOR } from '../messages'
 import { QB } from '../qb/messages'
 import { navigate } from '../qb/router'
 import { useMySponsor } from './OnboardingPage'
 
 /**
- * The console's first page. The analytics (M-10, M-11) come with Q9; until then it says where the onboarding stands
- * and leads to it while the sponsor is not approved.
+ * The console's first page: where the onboarding stands, leading to it while the sponsor is not approved; once
+ * approved, the analytics (M-10, M-11; Q9e2).
  */
 export function DashboardPage() {
   const { t } = useTranslation(SPONSOR)
@@ -19,21 +20,23 @@ export function DashboardPage() {
       : status === 'REJECTED' ? t('dashboard.rejected')
         : t('dashboard.none')
   return (
-    <section className="flex max-w-xl flex-col gap-4" aria-labelledby="dashboard-title" data-testid="dashboard">
+    <section className="flex flex-col gap-4" aria-labelledby="dashboard-title" data-testid="dashboard">
       <h1 id="dashboard-title" className="text-xl font-semibold">{t('dashboard.title')}</h1>
       {sponsor.isPending && <PageState kind="loading" />}
       {sponsor.isError && <PageState kind="error" description={tQb('failed')} />}
-      {sponsor.isSuccess && (
-        <Alert variant={status === 'REJECTED' ? 'warning' : 'default'} data-testid="dashboard-status"
-          data-status={status}>
+      {sponsor.isSuccess && status !== 'APPROVED' && (
+        <Alert variant={status === 'REJECTED' ? 'warning' : 'default'} className="max-w-xl"
+          data-testid="dashboard-status" data-status={status}>
           <AlertDescription className="flex flex-col items-start gap-3">
             <span>{message}</span>
-            {status !== 'APPROVED' && (
-              <Button size="sm" onClick={() => navigate('/onboarding')}>{t('dashboard.toOnboarding')}</Button>
-            )}
+            <Button size="sm" onClick={() => navigate('/onboarding')}>{t('dashboard.toOnboarding')}</Button>
           </AlertDescription>
         </Alert>
       )}
+      {sponsor.isSuccess && status === 'APPROVED' && <>
+        <p className="text-muted-foreground text-sm" data-testid="dashboard-status" data-status={status}>{message}</p>
+        <DashboardCharts />
+      </>}
     </section>
   )
 }

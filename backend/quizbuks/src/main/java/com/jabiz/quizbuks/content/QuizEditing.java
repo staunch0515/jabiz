@@ -30,14 +30,14 @@ import java.util.UUID;
  * (another sponsor's quiz, or a removed one, is 404 without saying whether it exists); its parts read whole through
  * the default datasets; the revision check; and the quiz's new version after a change of its content.
  */
-final class QuizEditing {
+public final class QuizEditing {
 
     static final String INPUT = "input";
-    static final String QUIZ_ID = "quizId";
-    static final String QUIZ = "quiz";
-    static final String MATERIALS = "materials";
+    public static final String QUIZ_ID = "quizId";
+    public static final String QUIZ = "quiz";
+    public static final String MATERIALS = "materials";
     static final String IMAGES = "images";
-    static final String QUESTIONS = "questions";
+    public static final String QUESTIONS = "questions";
     static final String OPTIONS = "options";
     static final String VERSIONS = "versions";
     static final String VERSION_FILES = "versionFiles";
@@ -49,18 +49,18 @@ final class QuizEditing {
     }
 
     /** Every row of an entity in the quiz (the platform refuses more than its maximum rather than cut it short). */
-    static EntityQuery ofQuiz(Object quizId) {
+    public static EntityQuery ofQuiz(Object quizId) {
         return EntityQuery.builder().where(new QueryPredicate.Eq("quizId", quizId)).limit(Integer.MAX_VALUE).build();
     }
 
     /** Takes the quiz's lock and loads it through the sponsor's dataset: 404 unless it is the caller's own. */
-    static <I, O> void lockAndLoad(ProcessDefinitionBuilder<I, O, ProcessContext> pb) {
+    public static <I, O> void lockAndLoad(ProcessDefinitionBuilder<I, O, ProcessContext> pb) {
         pb.step("Lock the quiz", HoldLock.<ProcessContext>exclusive(ctx -> lockName(ctx.get(QUIZ_ID))))
             .step("Load the quiz", LoadEntity.by(QbContent.sponsorDataset(QbContent.QUIZ), QUIZ_ID, QUIZ));
     }
 
     /** Loads every row of {@code entity} in the quiz into {@code key}. */
-    static <I, O> void loadAll(ProcessDefinitionBuilder<I, O, ProcessContext> pb, String step, String entity,
+    public static <I, O> void loadAll(ProcessDefinitionBuilder<I, O, ProcessContext> pb, String step, String entity,
         String key) {
         pb.step(step, QueryEntities.<ProcessContext>of(QbContent.defaultDataset(entity),
             ctx -> ofQuiz(ctx.get(QUIZ_ID)), key));
@@ -120,7 +120,7 @@ final class QuizEditing {
         return ctx;
     }
 
-    static EntityInstance quiz(ProcessContext ctx) {
+    public static EntityInstance quiz(ProcessContext ctx) {
         return ctx.get(QUIZ, EntityInstance.class);
     }
 
@@ -128,7 +128,7 @@ final class QuizEditing {
      * Whether the caller saw the quiz as it is: a given {@code baseRevision} other than the current one means
      * another window changed it meanwhile (422 {@code QB_QUIZ_CHANGED}); none means the last writer wins.
      */
-    static boolean current(ProcessContext ctx, EntityInstance quiz, Long baseRevision) {
+    public static boolean current(ProcessContext ctx, EntityInstance quiz, Long baseRevision) {
         long revision = number(quiz.get("revision"));
         if (baseRevision != null && baseRevision != revision) {
             ctx.reject(new Violation("baseRevision", ContentCodes.QUIZ_CHANGED, "The quiz was changed meanwhile: "
@@ -277,7 +277,7 @@ final class QuizEditing {
     }
 
     /** Rows in their order: by {@code seq}, then by key (two rows never share a place for long, D-Q3-4). */
-    static List<EntityInstance> ordered(List<EntityInstance> rows) {
+    public static List<EntityInstance> ordered(List<EntityInstance> rows) {
         return rows.stream().sorted(Comparator.<EntityInstance>comparingLong(row -> number(row.get("seq")))
             .thenComparing(row -> key(row.id()))).toList();
     }
@@ -304,7 +304,7 @@ final class QuizEditing {
     }
 
     @SuppressWarnings("unchecked")
-    static List<EntityInstance> list(ProcessContext ctx, String key) {
+    public static List<EntityInstance> list(ProcessContext ctx, String key) {
         List<EntityInstance> found = (List<EntityInstance>) ctx.get(key);
         return found == null ? List.of() : found;
     }
@@ -323,25 +323,25 @@ final class QuizEditing {
         return String.valueOf(id);
     }
 
-    static UUID uuid(Object value) {
+    public static UUID uuid(Object value) {
         return Values.uuid(value);
     }
 
-    static long number(Object value) {
+    public static long number(Object value) {
         return Values.longValue(value);
     }
 
-    static Instant instant(Object value) {
+    public static Instant instant(Object value) {
         return value == null ? null : value instanceof java.time.OffsetDateTime time ? time.toInstant()
             : (Instant) value;
     }
 
-    static BigDecimal decimal(long value) {
+    public static BigDecimal decimal(long value) {
         return BigDecimal.valueOf(value);
     }
 
     /** Empty text is no text. */
-    static String text(String value) {
+    public static String text(String value) {
         return value == null || value.isBlank() ? null : value;
     }
 

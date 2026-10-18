@@ -8,10 +8,12 @@ import {
   Megaphone,
   Scale,
   ScrollText,
+  Sparkles,
   Users,
   Wallet,
 } from 'lucide-react'
 import BroadcastsPage from './BroadcastsPage'
+import AiPage from './AiPage'
 import FinanceOverviewPage from './FinanceOverviewPage'
 import { PATH, PERMISSION } from './ids'
 import JournalMappingPage from './JournalMappingPage'
@@ -56,6 +58,7 @@ export default defineExtension({
     { path: PATH.journalMapping, element: <JournalMappingPage /> },
     { path: PATH.legal, element: <LegalPage /> },
     { path: PATH.broadcasts, element: <BroadcastsPage /> },
+    { path: PATH.ai, element: <AiPage /> },
   ],
   menu: [
     {
@@ -74,6 +77,7 @@ export default defineExtension({
           permission: PERMISSION.contentWrite },
         { key: 'qb-broadcasts', label: 'menu.broadcasts', path: PATH.broadcasts, icon: Megaphone,
           permission: PERMISSION.contentWrite },
+        { key: 'qb-ai', label: 'menu.ai', path: PATH.ai, icon: Sparkles, permission: PERMISSION.aiRead },
       ],
     },
     {

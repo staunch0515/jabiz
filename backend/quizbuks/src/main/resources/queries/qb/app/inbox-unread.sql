@@ -24,7 +24,7 @@ permissions: [qb.me]
 ---*/
 -- The conditions of qb.app.inbox (D-Q7-9; checked against it by InboxMatchIT), counting the unread only: the pages ask on entering,
 -- when the app comes back to the front and every five minutes, so each count stops at 99 (the badge shows "99+"). The
--- unread messages are found through their partial index (V15). The broadcasts are the live ones only (the expiry job)
+-- unread messages are found through their partial index (V17). The broadcasts are the live ones only (the expiry job)
 -- and of those only the ones sent at or after the reader's read-through mark: the ones before it were all read one by
 -- one, so a reader who read everything costs no lookup per broadcast (review H1; QB_MESSAGE_MARK keeps the mark with
 -- oldestUnread, which only it asks for). A broadcast that becomes visible later with an earlier time (a resumed

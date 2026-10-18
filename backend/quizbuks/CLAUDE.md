@@ -154,6 +154,10 @@
   - **商家持有 `document.archive.read`**（为读自己的收据）：平台按版式的权限与对象决定能读哪些单据，所以以后新增的单据版式必须把对象限定在本商家（如 `subject` 经商家数据视图），
     或者其权限不能是商家权限的子集，否则商家能读到别人的单据。
   - **保留期**（Q10b）：导出（`periodTo`）、明细段与外部凭证号（`createdTime`）、充值（`paidAt`）、收据（`issuedAt`，迁移 V11）与入站 Stripe 事件都以 `RetentionPolicy` 保留 10 年，自会计年度末起算（`RetentionIT`）。
+- **商家分析**（`stats`，`docs/quizbuks/plans/Q9e-analytics.md`）：**答题路径不写任何分析数据**（开始、提交、超时与 `QB_VIEW` 不变，`AttemptStatementBudgetIT` 不变，`qb_attempt` 不加索引），分析只由逐项任务 `qb.analytics`（每 10 分钟，`JobDefinition.forEach`，模板 `qb.system.analytics-items` 给出项：按发布编号的块、结束后的整体重算、最后一项运行记录；每项一个事务的 `QB_ANALYTICS_ITEM` `internal()`，权限 `qb.stats.system` 不授予任何角色；不取业务锁、只写自己的三张表；一项失败不拖住其他项，Q9e1 评审 M3）聚合：
+  每块**一条语句读两侧计数**、游标、新增浏览，把增量加进一个按小时（UTC）的桶（`AnalyticsBuckets`：跨过整点后的第一次运行加进上一次运行的小时，停机的增量记在一个小时并标 `gap`）；已完成的会话按水位线 `(submittedAt, attemptId)`、滞后 5 分钟（`AnalyticsLimits.LAG`）从现有索引读、每块至多 `quizbuks.analytics.max-attempts-per-chunk` 个，结束 30 分钟且没有进行中的会话时整体重算一次并定稿（结束一天后不论是否还有进行中的都定稿；完成多于 `quizbuks.analytics.max-recount` 的不重算，读完即定稿，使重算不超过读取时限）。只写变化了的行（审计照常；游标的题目合计 `auditMasked`）。
+  **最小分组 k**（`qb.stats.min-group`，缺省 5、下限 3，`MinGroup`）：可推出个人作答的数字（每题正确率与难度、平均用时、超时人数）只在至少 k 个完成时给出，且公开值只在**新增至少 k 个完成后**才变化（含结束后的重算），两次查看之差推不出一个人；人数不受 k 约束（E-4）。k 的读法在每个模板中写同一段 SQL（`greatest(3, … 5)`），改规则时全部一起改并由 `AnalyticsIT` 覆盖。
+  商家的模板 `qb.sponsor.dashboard` / `qb.sponsor.analytics.*`（`qb.stats.read`，只授予 `QB_SPONSOR`）一律经限本人的卡片视图 `sponsor:QbPublicationCard` 连接（普通表按 `sponsor_id` 读，不扫时态的发布，评审 M2），只给汇总、不读 `qb_attempt` 与资料；单个发布的概览的人数取任务的快照（游标），不随每次答题变化（评审 M1）；三张分析表没有商家数据视图（游标中有未公开的合计）。按日的日界是部署时区 `jabiz.fiscal-year-zone`（`Asia/Tokyo`），由任务记进 `qb_stats_run.zone` 供模板读取，不在模板中写死时区；它只能是 `UTC` 或地区名（偏移写法在 PostgreSQL 中方向相反，启动检查 `AnalyticsZoneCheck` 拒绝）。
 - **条款、隐私与帮助**（`messaging`，`docs/quizbuks/plans/Q7-messages-legal.md` Q7b）：法律文本的草稿 `QbLegalDoc`（每种一份，`QB_SETUP` 建立明确标注 `[TEST PLACEHOLDER]` 的占位，不发布）与 FAQ `QbFaqEntry` 由内容管理员在通用后台直接编辑；
   **法律文本只经 `QB_LEGAL_PUBLISH` 发布**（每次二次验证，版本 `QbLegalVersion` 只写一次；必须带页面读到的草稿版本 `baseRevision`；生效时间至多 `qb.legal.max-announce-days`（受控参数，未发布时 180）天后），
   **预告错了只经 `QB_LEGAL_WITHDRAW` 撤回**（生效前、带理由，`QbLegalWithdrawal` 只写一次；撤回的版本永不生效、不要求同意，版本号不再使用）；两者先读草稿或版本（种类不可变）再取命名锁 `qb.legal:<种类>`。
@@ -174,7 +178,14 @@
   撤回记录只记谁撤回的种类（`SENDER` / `ADMIN` / `SYSTEM`，评审 L3），是哪位管理员看审计；撤回法律文本的预告版本时同时撤回它的公告（`sourceKey` = `legal:<版本>`，评审 L2，锁序 `qb.legal` → `qb.broadcast`）。
   规则只写在纯 Java 的 `BroadcastRules`（上限、长度、链接、时刻），保存即给出发送会遇到的全部问题；商家通知只给本人进行中的发布、纯文本无链接、条数与间隔是普通参数；不预审，管理员撤回（理由商家可见），封禁商家时 `QB_USER_BAN` 以子流程 `QB_BROADCAST_BAN_WITHDRAW` 撤回。
   锁的顺序：`qb.account:<商家>` → `qb.broadcast:<编号>`；已读另取 `qb.inbox:<用户>`。任何统计都不给出是谁。推广只能退订（`QbInboxState.promoOff`，Q7-11）。
-- **外部密钥**（`STRIPE_*`、`OPENAI_API_KEY`）只来自环境变量（`deploy/quizbuks/README.md`）；测试与 `dev` 用固定的假值，仓库中没有真实密钥。
+- **AI 出题**（`content.ai`，`docs/quizbuks/plans/Q8-ai.md` Q8a）：提供方是 Claude（Anthropic API，A-1），外部服务 `anthropic`，只经平台的 JDK HTTP 与手写的 `ClaudeApi`（不用 SDK）；全部调用都是异步外部作业 `qb.ai.questions`，处理器不访问数据库，作业、流程与页面只认 `QuestionWriter`（换提供方只改它的实现与外部服务）。
+  **候选从不自动入库**：`READY` 的候选只在 `QbAiJob.candidates`，7 天后由 `qb.ai-expire` 从作业中移除、不能再加入（提供方的原始回答仍在平台只追加的作业结果中，`candidates` 列 `auditMasked`）；只有 `QB_AI_ACCEPT` 把商家校对后的内容（每题 `reviewed = true`，缺即 400）按内容规则（`AiCandidates`，与版本的规则与列长相同）写成题目，题目记 `aiJobId`、模版 `aiGenerated = true`。
+  **只发送商家自己的模版内容**（标题、简介、所选资料：文章发正文，其他种类只发标题与描述；已有题干），以 JSON 数据放在 `<quiz_data>` 中（`<` 转义），系统提示固定；不发送答题人的任何数据与商家的身份信息，`metadata.user_id` 是 `AiUserKeys`（HMAC，密钥由 `JABIZ_INTEGRITY_KEY` 以 `qb.ai-user` 派生）。输入 ≤ 60 KiB（`ClaudeApi.MAX_INPUT_BYTES`）：超出即 422 `QB_AI_INPUT_TOO_LARGE`，从不截断。
+  **同意**：新的法律文本种类 `AI_NOTICE`（不在 `SPONSOR_KINDS` 中：登录后的同意门不问它）；请求时没有已生效的版本即 `QB_AI_NOTICE_MISSING`，须同意而请求没带当前版本号即 `QB_AI_NOTICE_REQUIRED`，带了即记同意（来源 `AI_REQUEST`）。
+  **限额在 `qb.ai:<商家>` → `qb.ai:*` 锁内**（`AiLimits`）：同时未结束 ≤ 2（取消的在提供方结束前仍算）、每模版 1 个、每日次数、每月 Token（已记录的用量 + 未结束作业的预估）、全体每月 Token（全体行 + 所有商家未结束作业的预估，`qb.system.ai-open`）。**预估覆盖全部 3 次尝试**，每次是完整的输入与所要的全部输出（`ClaudeApi.maxTokens`：随题数，至多 16 000；effort `high` 时一次至多 10 题，`QB_AI_COUNT_TOO_HIGH`）；**没有得到回答的尝试按预估计入**（`ClaudeApi.unanswered`）。用量 `QbAiUsage` 只由完成、失败与平台停止（`QB_AI_JOB_STOPPED`，订阅 `jabiz.external-job.finished`，按完整预估）的流程在 `qb.ai:<商家>` → `qb.ai:*` 内累加（重试与拒答也计），美元估算 `costUsd` 按各模型的标价（`AiCost`，回退模型的部分按回退模型）。
+  **作业处理器读不到 `qb.ai.enabled`**（不访问数据库）：关闭开关只拦新请求；事故时最快的停止是在 Anthropic Console 吊销密钥，其次平台的 `EXTERNAL_JOB_CANCEL` 与本实例的 `quizbuks.ai.halted`（`operations.md` §7.8）。商家的两个数据视图只供模板限定范围，本身不可读（读权限 `qb.ai.system`）：新的商家可见列写进模板，不开放数据视图。**锁序** `qb.quiz:<模版>` → `qb.ai:<商家>` → `qb.ai:*`，不与发布、开始、钱包锁同时持有；答题路径不受影响。
+  参数 `qb.ai.enabled`（缺省 false）、`qb.ai.model`（只能是 `claude-opus-5-5` / `claude-sonnet-5-5` / `claude-haiku-5-5`：参数的种类与每次请求都查）、`qb.ai.effort`、三个限额都是**受控参数**；任何一个缺少或不合格即 `QB_AI_UNAVAILABLE`。作业的完成、失败与过期流程 `internal()`，权限 `qb.ai.system` 不授予任何角色；后台的 `qb.admin.ai.read` 给内容与超级管理员。`dev`、测试与 e2e 的提供方是本地桩（`tools/quizbuks/claude-stub`、IT 的 `AiItSupport`），从不访问网络。
+- **外部密钥**（`STRIPE_*`、`ANTHROPIC_API_KEY`）只来自环境变量（`deploy/quizbuks/README.md`）；测试与 `dev` 用固定的假值，仓库中没有真实密钥。
 - **部署的安全设置**（Q10b，`deploy/quizbuks/README.md`"密钥与部署"）：镜像入口脚本在平台密钥或首个管理员密码缺少时拒绝启动（只有 `QB_LOCAL_SECRETS=true` 的本机才生成，compose 缺省 `false`，正式模式一律不生成，管理员密码不打印；生成时导出 `QB_SECRETS_GENERATED=true`，评审 L5）；
   启动检查 `wallet.DeploySafetyCheck`（类别 `QUIZBUKS`）：可信代理为空时正式模式报错（除非 `quizbuks.deploy.direct-exposure=true`）、过宽的网段一律报错（IPv4 短于 /8、IPv6 短于 /32、整个 IPv4 的映射，前缀照平台读法，评审 L6），正式模式下关闭管理二次验证或 `QB_SECRETS_GENERATED=true` 报错，`dev` 只在回环地址与本机邮件地址下启动；
   数据库密码没有缺省值。职责分离规则由 `QB_SETUP` 提出（`setup.QbSodRules`），`QbRoles` 的角色不得违反它们（`QbRolesTest`）；超级管理员不做业务审批（不持有 `approval.decide`）。
@@ -205,6 +216,11 @@
   轮询只经 `wallet/poll.ts`（有界、退避、离开即停）；跳往 Checkout 或开通页只经 `wallet/stripePage.ts` 检查过的地址（https，或页面在本机时的本机桩）；
   刚发起的充值只自动跳转一次，其他时候给按钮；开通只跟随本次请求生成的新链接（Stripe 的链接只能用一次）。
 - **收据**（Q9d，`sponsor/src/wallet/`）：钱包页已到账的充值行有"收据"：`QB_TOPUP_RECEIPT_ISSUE`（当前界面语言，只在第一次签发时起作用）后下载存档的 PDF（`GET /api/documents/runs/{id}/pdf`）。
+- **分析页**（Q9e2，`sponsor/src/analytics/`，名字在 `ids.ts`、手写类型与调用在 `api.ts`）：页面只显示模板给出的值（不自己汇总、不判断 k、不算流失最大的一段），不足 k 时照模板的 `suppressed` 注明"至少 k 人作答后显示"；
+  日期与时刻一律按任务记下的部署时区（`qb.sponsor.dashboard` 的 `zone`）显示，不按浏览器；"现在"取 `qb/legal.ts` 的 `minuteNow()`（按服务端时钟）。图表只经 `@jabiz/ui` 的 `ChartContainer`、颜色只用 `--chart-*`，每个图表有 `aria-label` 与合计的文字，并有可展开的数据表（`charts.tsx` 的 `DataDisclosure`）；
+  两种量不共用一张图（上下两个小图）。导出只经平台的 `POST /api/queries/{id}/export`（趋势带页面所示期间的同一组参数）。e2e 以 `QB_ANALYTICS_RUN_CRON` 每分钟运行分析任务。**分析任务的时间是隐私控制**（概览是任务的快照，频率决定能把一个答题人的作答定位到多细，评审 M1）：
+  缺省以外的值只在 e2e 的开关 `quizbuks.e2e.enabled`（`QB_E2E_ENABLED`，正式模式下拒绝）打开时接受，比每分钟更频繁的一律拒绝（`TransferScheduleCheck`）。
+  合计（趋势的总数）由模板给出（`qb.sponsor.analytics.trend-totals`），页面不自己加；时刻只在知道部署时区（模板的 `zone`）之后显示，并注明时区。
 - **交易页**（Q9b，`sponsor/src/transactions/`）：列表、汇总与导出用同一组模板参数（`transactions/api.ts` 的 `paramsOf`；筛选写成模板参数而不是列表筛选，汇总模板才能用同样的条件），
   导出只经平台的 `POST /api/queries/{id}/export`（`sessionFetch`，CSV 与 XLSX）。答题人只以资料的显示名出现，不给邮箱，也不给用户编号："只看此用户"按模板给出的 `userKey` 筛选，页面不显示它。`userKey` = md5(商家编号 : 用户编号)：不是用户编号，同一答题人在每个商家处的键不同；它不是秘密，知道两个编号的人都能算出。
 - **条款、帮助与关于**（Q7b，共用的在 `qb/legal.ts`、`qb/LegalPage.tsx`、`qb/HelpPage.tsx`、`qb/ConsentGate.tsx`、`qb/TermsAgreement.tsx`、`qb/LegalLinks.tsx`）：`/help`、`/legal/<terms|sponsor-terms|privacy|commerce>`（App 另有 `/about`）不需登录，经 `qb/legal.ts` 的 `publicQuery`（无令牌）读公开模板，时刻取整到分钟；
@@ -213,6 +229,7 @@
   任何调用收到 `QB_CONSENT_REQUIRED` 即重读同意状况、提示随之出现：两个 SPA 的 QueryClient 只用 `newQbQueryClient()`（查询与变更出错时都检查），不经 React Query 的调用自己调 `noticeConsentProblem`。
 - **收件箱与消息中心**（Q7c，App `src/inbox/`、商家后台 `src/notices/`）：未读徽标经 `useUnread`（进入、回到前台、每 5 分钟重读，离开即停）；打开即 `QB_MESSAGE_MARK`（已读），按钮另记点击；
   收件箱的模板不收页面的时间（服务端的现在）；徽标的查询不随窗口获得焦点再问一次。商家通知的编辑器只显示保存给出的问题，不重算规则，只有一个可选发布时预先选中它。
+- **AI 出题页**（Q8a，`sponsor/src/ai/`，名字在 `ids.ts`、手写类型与调用在 `api.ts`）：编辑器题目页上方的面板与对话框、候选校对、仪表盘的用量卡（`AiUsageMetric`，在 Q9e2 的卡片位）。候选只以纯文本显示（输入框与文本框，不经 `MarkdownView`）；进行中每 5 秒查询、至多 5 分钟（按服务端时钟），离开即停；对话框只在合计不超过上限时可提交，判断仍在服务端。
 - **认证与账户只用平台的积木**（`@jabiz/ui` 的 `SignInForm`、`SignUpForm`、`MailLinkPage`、`OidcCallback`、`StepUpProvider`、`ChangePasswordForm`、`MfaSettings`、`SessionList`、
   `LinkedIdentities`、横幅），QuizBuks 不写认证代码。邮件链接页在各自的 `auth/verify-email|join|password-reset`。路由是 `qb/router.tsx` 的小路由。
 - **金额只经 `qb/kudos.ts` 的 `formatKudos`**（`1,234 Kudos`），不写 JPY 或其他币种名。服务端的 `QB_*` 文案已按请求的语言翻译，页面直接显示（`qb/problems.ts`）。
@@ -231,6 +248,7 @@
   核对结果与资金待办只给 `qb.reconcile`（模板 `qb.admin.recon-summary`，另要 `task.read`），不放进只要 `qb.admin.finance.read` 的模板。
   **分录导出页**（Q9d，`/qb/finance/journal`、`/qb/finance/journal/mapping`）：名字与读取在 `journal-api.ts`；页面只显示预览给出的行与问题、从不自己汇总或编号，导出只在预览 `ready` 时给出并先确认；
   下载只经 `GET /api/generated-files/{id}`（有 `file.generated.read` 时给出）；科目映射页只读，修改链到平台的受控变更（提出、发布）。
+  **AI 页**（Q8a，`/qb/ai`，`ai-api.ts`、`ai-messages.ts`）：AI 参数的现行值、按商家与月份的用量与估算、最近的请求（不含候选）；开关只经受控变更提出（另一位管理员发布）。
   检查：平台前端目录下 `JABIZ_ADMIN_EXTENSION=../backend/quizbuks/admin-extension pnpm ext:check`（CI `web`）。
 - **端到端**（`quizbuks-web/e2e`，Playwright）：对打包的 jar（`./gradlew :quizbuks:bootJar`），邮件由 Mailpit 接收（`E2E_MAILPIT_URL`），Stripe 由本地桩回答；
   服务端以 `JABIZ_SECURITY_MFA_ADMINISTRATION=false`、放宽的登录限流 `JABIZ_SECURITY_SIGN_IN_RATE_LIMIT_PER_USER_ADDRESS=6000` 与 `JABIZ_SECURITY_SIGN_IN_RATE_LIMIT_USER_BURST=1000`
@@ -248,7 +266,7 @@
 - `./gradlew :quizbuks:check`（测试 + `platformCheck`）；单个类：`./gradlew :quizbuks:test --tests '*SetupIT'`。
 - 集成测试连接真实 PostgreSQL（同平台：Testcontainers 或 `JABIZ_TEST_DB_*`），测试类放在 `com.jabiz.quizbuks.*` 下。
 - 场景回放：`src/test/resources/scenarios/qb/**.yml`，`./gradlew :quizbuks:test --tests '*ScenarioTest'`；确认变化正确后加 `-Dscenario.update-snapshots=true`。
-- 性能（不在 `check` 中）：进程内基线 `./gradlew :quizbuks:perfTest`（`PlayThroughputIT`）；对运行中的 jar 压测单个热门发布 `./gradlew :quizbuks:loadTest`（参数 `LOAD_*`，含客户端时限 `LOAD_TIMEOUT` 与照 App 重试忙的 `LOAD_RETRY_BUSY`；方法与结果见 `docs/quizbuks/perf/Q10a-load-test.md`，准入之后的重测在其 §8、16p-1 之后 §9、锁拆分之后 §10、16p-2 之后 §11）。答题锁内的时间取决于语句条数（每条约 0.8 ms），改答题流程时不要在开始锁或发布锁内增加读取；语句数的确切值在 `AttemptStatementBudgetIT`。
+- 性能（不在 `check` 中）：进程内基线 `./gradlew :quizbuks:perfTest`（`PlayThroughputIT`；分析任务 `--tests '*AnalyticsPerfIT'`，`docs/quizbuks/perf/Q9e-analytics.md`）；对运行中的 jar 压测单个热门发布 `./gradlew :quizbuks:loadTest`（参数 `LOAD_*`，含客户端时限 `LOAD_TIMEOUT` 与照 App 重试忙的 `LOAD_RETRY_BUSY`；方法与结果见 `docs/quizbuks/perf/Q10a-load-test.md`，准入之后的重测在其 §8、16p-1 之后 §9、锁拆分之后 §10、16p-2 之后 §11）。答题锁内的时间取决于语句条数（每条约 0.8 ms），改答题流程时不要在开始锁或发布锁内增加读取；语句数的确切值在 `AttemptStatementBudgetIT`。
   `LOAD_METRICS=yes` 时从只绑定回环地址的独立管理端口读取指标（jar 以 `-Dmanagement.server.address=127.0.0.1 -Dmanagement.server.port=8081 -Dmanagement.endpoints.web.exposure.include=health,info,metrics` 启动，工具读 `LOAD_METRICS_URL`，缺省 `http://127.0.0.1:8081`，不是回环地址即拒绝，`LOAD_ALLOW_REMOTE` 也不放行；指标绝不在应用端口上暴露：那里不要认证，根 CLAUDE.md 与设计 13 不允许匿名的指标端点；也不写进仓库的配置），报告每次完成的许可持有时间与每次运行的语句数（`jabiz.process.statements`），并报告压测期间本机的 CPU；16p-1 之后的重测在报告 §9。
 
 ## 7. 运行

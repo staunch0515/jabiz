@@ -19,7 +19,7 @@ const USER_ROLES = 'urn:jabiz:dataset:platform:SecUserRole'
 export const DRAFTS = 'urn:jabiz:dataset:default:QbLegalDoc'
 export const FAQ = 'urn:jabiz:dataset:default:QbFaqEntry'
 
-export type LegalKind = 'TERMS_APP' | 'TERMS_SPONSOR' | 'PRIVACY' | 'COMMERCE_NOTICE'
+export type LegalKind = 'TERMS_APP' | 'TERMS_SPONSOR' | 'PRIVACY' | 'COMMERCE_NOTICE' | 'AI_NOTICE'
 export const APP_KINDS: LegalKind[] = ['TERMS_APP', 'PRIVACY']
 export const SPONSOR_KINDS: LegalKind[] = ['TERMS_SPONSOR', 'PRIVACY']
 

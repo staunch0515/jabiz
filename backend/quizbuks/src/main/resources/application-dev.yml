@@ -23,6 +23,11 @@ jabiz:
     stripe:
       base-url: ${QB_STRIPE_API_URL:http://localhost:8093}
       allowed-hosts: ${QB_STRIPE_API_HOSTS:localhost}
+    # Claude in development (Q8a): the local stub (java tools/quizbuks/claude-stub/ClaudeStub.java, port 8094), which
+    # answers from the request alone and never calls the network. A fixed fake key.
+    anthropic:
+      base-url: ${QB_ANTHROPIC_API_URL:http://localhost:8094}
+      allowed-hosts: ${QB_ANTHROPIC_API_HOSTS:localhost}
   inbound-webhooks:
     providers:
       stripe:
@@ -35,6 +40,7 @@ jabiz:
         secrets: ["${STRIPE_CONNECT_WEBHOOK_SECRET:whsec_development_only_quizbuks_connect_0000}"]
         event-types: [account.updated, account.application.deauthorized]
 STRIPE_API_KEY: sk_test_development_only_quizbuks_stub
+ANTHROPIC_API_KEY: development-only-quizbuks-claude-stub
 # The development credit is kept for development and tests (docs/quizbuks/plans/Q6-payments.md, D-Q6-9): wallets
 # credited without money, never in production (a startup check refuses it next to live mode or a live key).
 quizbuks:

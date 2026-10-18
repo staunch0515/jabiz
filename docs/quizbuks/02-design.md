@@ -65,13 +65,13 @@ docs/quizbuks/               本文件等
 | 角色 | 权限（应用自定义的权限码，前缀 `qb.`） |
 |---|---|
 | `QB_TAKER` | `qb.play`（浏览发布、答题）、`qb.me`（本人资料、钱包、流水、消息）、`qb.payout.onboard`（开通收款账户）、`qb.account.read`（本人资料与登录记录，Q2）、`qb.sponsor.avatar.read`（发布人头像，Q2） |
-| `QB_SPONSOR` | `qb.sponsor.me`、`qb.content.write`、`qb.content.file.read`（读内容文件，Q3；Q5 再授予答题人）、`qb.ai.use`、`qb.publication.write`、`qb.topup`、`qb.sponsor.finance.read`、`qb.broadcast.write`、`qb.account.read`、`qb.sponsor.avatar.read`、`document.archive.read`（Q9d：下载本人签发的充值收据） |
+| `QB_SPONSOR` | `qb.sponsor.me`、`qb.content.write`、`qb.content.file.read`（读内容文件，Q3；Q5 再授予答题人）、`qb.ai.use`、`qb.publication.write`、`qb.topup`、`qb.sponsor.finance.read`、`qb.broadcast.write`、`qb.account.read`、`qb.sponsor.avatar.read`、`document.archive.read`（Q9d：下载本人签发的充值收据）、`qb.stats.read`（Q9e：本人发布的分析，只有汇总；管理员角色不持有，E-10） |
 | `QB_ADMIN_CONTENT` | `qb.admin.users.read`、`qb.admin.quiz.read`（只读全部模版与版本，Q3）、`qb.content.file.read`、`qb.review.sponsor`、`qb.review.publication`、`qb.admin.content.write`（下架发布：管理员暂停、恢复、结束，Q10b；以后 FAQ、条款、公告）、`qb.sponsor.avatar.read`、`approval.decide`、`task.read` |
 | `QB_ADMIN_FINANCE` | `qb.admin.users.read`、`qb.admin.finance.read`、`qb.payout.review`、`qb.reconcile`、`qb.sponsor.avatar.read`、`ledger.read`、`report.issue`、`report.archive.read`（Q9c：读已签发的月报）、`approval.decide`、`task.read`、`control.publish`（发布受控变更，超级管理员不持有）、`qb.journal.export`、`qb.journal.confirm`、`file.generated.read`（Q9d：分录导出、记录外部凭证号、下载存档的 CSV）|
 | `QB_ADMIN_SUPER` | 上述全部（`control.publish`、`inbound.read` 与 `approval.decide` 除外：Q10b 的职责分离 `QbSodRules`）+ `qb.admin.users.ban`、`platform.param.read`、`control.propose`、平台安全管理权限、`security.protected-change.decide` 与 `approval.read`（平台 16u，D51：两位超级管理员互为受保护授权的四眼，一位申请、另一位审批；不是 `approval.decide`）（不再有 `platform.param.write`，见下） |
 
 - 另有两个公用权限（Q1）：`qb.country.read`（读国家字典，五个角色都有）、`qb.setup`（执行 `QB_SETUP`，超级管理员；平台的 `ADMIN` 角色持有全部权限）。
-- 不授予任何角色的权限：`qb.content.view.write`（数据视图的写权限，Q3、Q4）、`qb.content.system`（`QB_QUIZ_RELEASE_FILES`，只由 `QB_QUIZ_DELETE` 作为子流程运行）、`qb.publication.system`（Q4 的系统流程）、`qb.sponsor.system`（`QB_SPONSOR_APPROVAL_RESULT`，Q2）。
+- 不授予任何角色的权限：`qb.content.view.write`（数据视图的写权限，Q3、Q4）、`qb.content.system`（`QB_QUIZ_RELEASE_FILES`，只由 `QB_QUIZ_DELETE` 作为子流程运行）、`qb.publication.system`（Q4 的系统流程）、`qb.sponsor.system`（`QB_SPONSOR_APPROVAL_RESULT`，Q2）、`qb.stats.system`（Q9e 的逐项分析任务的每项流程 `QB_ANALYTICS_ITEM` 与其模板）。
   平台 D41（16l）已合入：`QB_SPONSOR_APPROVAL_RESULT` 与 Q4 的系统流程声明 `internal()`（只允许系统身份运行），`QB_QUIZ_RELEASE_FILES` 声明 `subProcessOnly()`；这些系统权限随之只起声明作用。
 - 文件策略只能声明一个读取权限，所以商家头像的读取（商家本人、答题人、管理员）共用 `qb.sponsor.avatar.read`（Q2）。
 - 行范围：答题人的数据视图以 `userId = 当前用户` 限定；商家的以 `sponsorId = 当前用户` 限定（平台 `fromContext("…", actorId)`）。
@@ -101,11 +101,12 @@ docs/quizbuks/               本文件等
 |---|---|---|---|
 | `QbQuiz` | T | `ownerId`、`title`、`intro`（Markdown）、`cover`（文件）、`timeLimitSec`、`status`（DRAFT / VERSIONED）、`removed`、`aiGenerated`、`latestVersionNo`、`versionLabel`、`revision`、`editedAt`、`changedSinceVersion`、`questionCount`、`materialCount`（以上状态与计数 `processOnly`）、`clonedFrom` | 模版。只有拥有者可改（商家数据视图以 `ownerId` 限定 + 流程经该视图读取，不是自己的即 404）。"删除"即移除：`removed = true`，商家看不到，版本保留（Q3 D-Q3-6） |
 | `QbMaterial` | T | `quizId`、`ownerId`、`seq`、`kind`（ARTICLE / LINK / VIDEO_LINK / PDF / IMAGES / AUDIO，不可改）、`title`、`description`、`body`（Markdown，ARTICLE）、`url`（LINK / VIDEO_LINK）、`pdf`、`audio` | 参考资料；视频只存链接（已确认）；只填其类型的内容字段；图片组的每张图为子实体 `QbMaterialImage`（`materialId`、`seq`、`image`、`caption`） |
-| `QbQuestion` | T | `quizId`、`ownerId`、`seq`、`stem`、`image`（可选）、`points`（1–1 000） | |
+| `QbQuestion` | T | `quizId`、`ownerId`、`seq`、`stem`、`image`（可选）、`points`（1–1 000）、`aiJobId`（Q8a：来自哪个 AI 作业，可空） | |
 | `QbOption` | T | `questionId`、`quizId`、`ownerId`、`seq`、`text`、`image`（可选）、`correct` | 2–6 个、至少 1 个正确：在"保存版本"时检查（`QuizCompleteness`；草稿允许不完整，M-22），提交审核时（Q4）再查 |
 | `QbQuizVersion` | W | `quizId`、`ownerId`、`versionNumber`（1、2…，`label` 为 v1.0、v1.1…）、`title`、`content`（规范 JSON 文本：题目、选项、资料的完整快照，题与选项按 1 起的序号）、`contentHash`（平台 `ContentHash`）、`questionCount`、`materialCount`、`fullScore`、`versionedAt` | **整体快照**（分析 4.2），由"保存版本"（`QB_QUIZ_PUBLISH_VERSION`）显式生成，草稿的保存不生成版本（Q3 D-Q3-1）。没有文件字段。发布引用版本，答题与结算只读快照。没有商家数据视图（内容含正确答案、版本比模版活得久）：商家只经模板读取，模板只连接本人未移除的模版 |
 | `QbVersionFile` | T | `quizId`、`ownerId`、`firstVersionNo`、`image` / `pdf` / `audio`（各对应一个文件策略，恰好一个非空） | 快照引用的每个文件按"模版 + 文件"一行，使平台的文件引用检查与孤儿清扫看得到 JSON 中的文件；普通时态实体（不是只写一次）：移除模版时写墓碑，被发布引用的版本的文件除外（Q4） |
-| `QbAiJob` | T | `sponsorId`、`quizId`、`kind`（COVER / QUESTIONS）、`input`（资料、题数、难度）、`status`（G7 的状态）、`model`、`promptTokens`、`completionTokens`、`result`（jsonb：候选图片文件或候选题目） | AI 生成请求；候选题目经商家校对后由 `QB_AI_ACCEPT` 写入题目（M-26 "必须人工校对"） |
+| `QbAiJob` | P | `externalJobId`（平台作业号，唯一）、`sponsorId`、`quizId`、`kind`（QUESTIONS / COVER）、`params`（规范 JSON：题数、难度、语言、资料）、`model` 与 `servedModel`（拒答回退时不同，只给管理员）、`status`（QUEUED / READY / FAILED / CANCELLED / ACCEPTED / DISCARDED / EXPIRED）、`candidates`（规范 JSON，只在 READY 时）、候选 / 不合格 / 接受的题数、`inputBytes`、`estimatedTokens`（3 次尝试各自完整的输入与输出）、`inputTokens`、`outputTokens`、`fallbackInputTokens` / `fallbackOutputTokens`（回退模型所用的部分）、`costUsd`（按各模型标价的估算）、`zone`（请求时的部署时区）、`attempts`、`failureCode` / `failureMessage`（系统的说明）、`requestedAt` / `finishedAt` / `expiresAt` / `closedAt` | AI 生成请求（Q8a，`plans/Q8-ai.md` D-Q8-3）：普通表（状态在几分钟内连续变化、按作业号查找，同 `QbTopUp`），历史由平台审计保留；候选从不自动入库，经商家逐题校对后由 `QB_AI_ACCEPT` 写入题目（M-26 "必须人工校对"），7 天后过期，候选从作业中移除（提供方的原始回答仍在平台的作业结果中；`candidates` 不进审计） |
+| `QbAiUsage` | P | `sponsorId`（全体一行为 `*`）、`month`（部署时区的年月）、`jobs`、`failedJobs`、`inputTokens`、`outputTokens` | 用量（M-10）：唯一 `(sponsorId, month)`，只在 `qb.ai:<商家>` → `qb.ai:*` 锁内由完成与失败流程累加；限额按它与未结束作业的预估计 |
 
 ### 3.3 发布与答题
 
@@ -120,6 +121,9 @@ docs/quizbuks/               本文件等
 | `QbAttempt` | P → 结束后流程拒绝修改 | `userId`、`publicationId`（二者唯一，一人一次）、`sponsorId`、`versionId`、`startedAt`、`deadline`、`status`（IN_PROGRESS / SUBMITTED / EXPIRED）、`currentIndex`、`optionOrder`、`answers`、`result`（三者都是规范 JSON 文本）、`submittedAt`、`score`、`fullScore`、`passed`、`tierId`、`reward`、`fee`、`rewardStatus`（NONE / PAID / PENDING）、`rewardPaidAt`、`ledgerTransactionId` | 答题会话（Q5）。进行中只有 `answers`、`currentIndex` 会变（保存进度，U-41）；`result`（含每题正确选项）在完成时才写。不建逐题答案表：每次保存只写一行，题目分析（Q9）用 `jsonb_array_elements` 展开。一人一次按发布：版本是模板，发布定义范围，用户可参加满足条件的任何发布，不论是否参加过同一版本的其他发布（需求方 2026-10-11 确认）。数据视图（Q9c，C-2）：缺省视图不给任何角色读取（数据视图不能去掉字段，而会话带奖励与抽成），财务读只读视图 `finance:QbAttempt`，支持人员经不含金额的 `qb.admin.attempts` 读取 |
 | `QbPublicationView` | P | `userId`、`publicationId`（唯一）、`firstViewedAt` | 漏斗的"浏览"：每人每发布只记第一次（`QB_VIEW`） |
 | `QbPublicationStats` | P | `publicationId`（主键）、`last1h`、`last24h`、`last7d`、`last30d`、`refreshedAt` | 近期完成人数，由任务 `qb.publication-stats` 每 10 分钟分块写入（只写变化的行；运行时间记在 `QbStatsRun`）；已认证的模板没有缓存；累计完成数取计数行，实时 |
+| `QbAnalyticsHour` | P | `publicationId`、`sponsorId`、`hourStart`（UTC 整点）、`views`、`starts`、`completions`、`passes`、`winners`、`spent`、`gap` | 商家分析（Q9e，`plans/Q9e-analytics.md`）的按小时的桶：任务 `qb.analytics` 把计数自上次以来的增量加进一个小时（本次运行的小时；跨过整点后的第一次运行加进上一次运行的小时）；没有增量的小时没有行；`gap` = 含任务停机期间的增量或首次运行之前的历史。唯一 `(publicationId, hourStart)`，保留 400 天（任务删除更早的） |
+| `QbAnalyticsCursor` | P | `publicationId`（主键）、`sponsorId`、上次变化时的六个累计值、`viewsUntil`、水位线 `watermarkAt` / `watermarkId`、已分析的完成数与按时提交 / 超时 / 用时合计、各题合计 `questions`（规范 JSON）、公开的同一组值 `shown*` / `shownAt`、`finalizedAt` | 任务对每个发布的进度。当前的合计只给任务与管理员；商家只经模板看到 `shown*`，它只在新增至少 k 个完成后更新（E-4） |
+| `QbQuestionStat` | P | `publicationId`、`sponsorId`、`questionNo`（唯一二者）、`completions`、`correct`、`shownAt` | 商家看到的每题作答数与答对数（得分 > 0；多选题全对），只在公开值变化时写 |
 | `QbPublicationOwner` | 视图 | `publicationId`、`sponsorId`（卡片的） | 只读，经限本人的数据视图读取：答题人的模板据此排除本人的发布（不能开始） |
 
 ### 3.4 钱包与资金
@@ -307,7 +311,8 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 | `QB_QUIZ_SAVE` / `QB_QUIZ_DELETE` / `QB_QUIZ_CLONE` | `qb.content.write` | 只有拥有者（锁 `qb.quiz:<id>` 后经商家视图读取）；删除即移除（`removed`，子项写墓碑），版本保留，已提交过的发布所用版本的文件保留（Q4）；克隆可取草稿或指定版本 |
 | `QB_QUESTION_SAVE` / `_DELETE` / `_REORDER`、`QB_MATERIAL_SAVE` / `_DELETE` / `_REORDER` | `qb.content.write` | 一道题（连同选项）或一条资料（连同图片组）各自保存，只写改变的行；可带 `baseRevision`（过期即 `QB_QUIZ_CHANGED`）；上限见 `content.ContentLimits` |
 | `QB_QUIZ_PUBLISH_VERSION` | `qb.content.write` | "保存版本"：校验完整性（M-31 中属于内容的部分，一次报告全部）→ 与最新版本哈希相同即拒绝 → 生成 `QbQuizVersion` 快照（只写一次）并补登 `QbVersionFile` |
-| `QB_AI_REQUEST` / `QB_AI_ACCEPT` | `qb.ai.use` | 经 G7 异步调用 OpenAI（模型来自业务参数）；结果为候选，商家选择 / 校对后才写入 |
+| `QB_AI_QUESTIONS_REQUEST` / `QB_AI_ACCEPT` / `QB_AI_DISCARD` / `QB_AI_CANCEL` | `qb.ai.use` | Q8a（`plans/Q8-ai.md` D-Q8-4）：请求先查入驻、封禁、AI 说明（新种类 `AI_NOTICE`，请求时同意）、总开关与参数清单，经商家视图读模版与所选资料、构造并度量输入（≤ 60 KiB，超出即拒绝、不截断），再在 `qb.ai:<商家>` 锁内查限额（同时未结束 2 个、每模版 1 个、每日次数、每月 Token 含未结束作业的预估、全局月上限），之后经异步外部作业 `qb.ai.questions` 调用 Claude；接受取 `qb.quiz:<模版>` → `qb.ai:<商家>`，只写每题 `reviewed = true` 的、商家校对后的内容，模版 `aiGenerated`；丢弃、取消只改作业 |
+| `QB_AI_JOB_COMPLETED` / `QB_AI_JOB_FAILED` / `QB_AI_EXPIRE` / `QB_AI_JOB_STOPPED` | `qb.ai.system`（不授予） | `internal()`：`qb.ai:<商家>` → `qb.ai:*` 内累加每次尝试的用量（商家与全体），候选按内容规则再查后 READY；失败记原因；每日任务 `qb.ai-expire` 逐项清除过期的候选；平台停止的作业（`EXTERNAL_JOB_CANCEL`，平台不调用完成或失败流程）由 `QB_AI_JOB_STOPPED` 经事件 `jabiz.external-job.finished` 关闭并按完整预估计入 |
 | `QB_PUBLICATION_SAVE` / `QB_PUBLICATION_DELETE` / `QB_PUBLICATION_COPY` | `qb.publication.write` | 向导第一、二步保存草稿（可不完整），输出提交时会报告的全部问题与预计最大支出（第三步）；删除只限草稿；复制任意状态的本人发布为新草稿，可换版本或时间（Q4） |
 | `QB_PUBLICATION_SUBMIT` / `QB_PUBLICATION_WITHDRAW` | `qb.publication.write` | 模版锁（共享）→ 发布锁；`PublicationReadiness` 一次报告全部违规（档位、时间、合格分、预算、以快照重查内容、商家已入驻）；`RequireApproval`；撤回待审核的请求 |
 | `QB_PUBLICATION_PAUSE` / `QB_PUBLICATION_RESUME` | `qb.publication.write` | 取发布锁；恢复按时间回到相应状态；管理员暂停的（`pausedBy = ADMIN`）商家不能恢复（422 `QB_PUBLICATION_ADMIN_PAUSED`，Q10b） |
@@ -387,7 +392,9 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 | `qb.admin.broadcasts`（Q7c） | 全部公告与通知，统计为确切的人数（从不给出是谁） | `qb.admin.content.write` |
 | `qb.system.broadcast-audience` / `qb.system.broadcasts-due` / `qb.system.payout-reminders` / `qb.system.broadcasts-expired` / `qb.system.broadcast-stats`（Q7c） | 发送时的到达人数（同收件箱的条件）；到期的定时发送；该提醒的用户；该关掉的行；统计变化了的通知 | `qb.messaging.system` |
 | `qb.sponsor.transactions` / `qb.sponsor.transaction-summary` | 商家交易明细与汇总（M-50 – M-52，Q9b，`plans/Q9b-sponsor-transactions.md`）：本人发布的奖励（已支付 = 已完成、待支付 = 处理中；完成但无奖励的不是交易）∪ 本人的充值（已支付 = 已完成、开立中 = 处理中、过期或失败 = 失败）。答题人只以资料的显示名出现，不读作答与结果、不给邮箱与用户编号（按用户筛选用 `userKey` = md5(商家编号 : 用户编号)：不是用户编号，同一答题人在每个商家处的键不同；它不是秘密，知道两个编号的人都能算出）；筛选全部是参数（类型、状态、发布、用户、期间、关键字），汇总只多一层聚合、条件相同，列表、汇总与导出因此一致。汇总按类型分开：奖励（支出）的已支付与待支付，充值（收入）的已到账（扣除退款）、退款或扣回、处理中与失败；两者的金额从不相加，只有笔数是总计 | `qb.sponsor.finance.read` |
-| `qb.sponsor.dashboard` / `qb.sponsor.publications` / `qb.sponsor.analytics.*` | M-10 – M-11、M-34、M-40 – M-43 | 各自权限 |
+| `qb.sponsor.publications` | M-34 | `qb.publication.write` |
+| `qb.sponsor.dashboard` / `qb.sponsor.analytics.trend` / `.trend-totals` / `.top` / `.overview` / `.questions` | 商家分析（Q9e；`.trend-totals` 是同样参数下趋势的合计（Q9e2 评审 L1，页面不自己加），趋势与概览都带 `zone`（Q9e2 评审 M2）；`plans/Q9e-analytics.md`，口径 D-Q9e-1）：仪表盘一行（各状态的发布数、正在答题、今日支出、可用余额与待支付、有上限的进行中发布的剩余预算；实时取计数，今日 = 部署时区 `jabiz.fiscal-year-zone` 的今天；今日支出 = 任务最近一次运行之后的增量（计数 − 游标）加今天的桶，任务没见过的发布只计今天上架的）；按小时（UTC）或按日（部署时区）的趋势，缺的桶补零、至多 400 个；近 7 天完成数排行；一个发布的概览（累计人数取任务的快照、随任务每 10 分钟变化而不是随每次答题，Q9e1 评审 M1；完成率、漏斗与流失最大的一段、平均用时与超时人数、App 的四个窗口）；每题的正确率与难度（≥ 80 % 易、≥ 50 % 中、其余难）。全部只经限本人的卡片视图 `sponsor:QbPublicationCard`（普通表、按 `sponsor_id` 索引读，不扫时态的发布历史，Q9e1 评审 M2）；可推出个人作答的数字（每题、平均用时、超时）只在至少 k（`qb.stats.min-group`，缺省 5、下限 3，SQL 中 `greatest(3, …)`）个完成时给出、只在新增至少 k 个后变化；人数不受 k 约束（E-4）。导出经平台 `POST /api/queries/{id}/export`（只有汇总） | `qb.stats.read` |
+| `qb.system.analytics-items` / `-state` / `-attempts` / `-question-stats` | 分析任务的取数（Q9e）：逐项任务的项（按发布编号的块、结束后的重算、最后一项运行记录）；每块一条语句读两侧计数、游标、新增浏览与要加的小时桶；水位线之后、滞后 5 分钟的已完成会话按题汇总（每块至多 `quizbuks.analytics.max-attempts-per-chunk` 个；结束 30 分钟且无进行中时整体重算）；公开的题目统计 | `qb.stats.system` |
 | `qb.admin.attempts` / `qb.admin.wallets` | 全部会话（P-01 的答题历史、支持查询，不含金额）；商家钱包的余额与待支付（Q5） | `qb.admin.users.read` / `qb.admin.finance.read` |
 | `qb.admin.attempt-rewards` / `qb.admin.publication-funds` | 会话的奖励、抽成与分录（P-01 的资金部分）；发布的商家资金（预算不足、待支付）。Q9a 从上两个模板中分出，资金只给财务 | `qb.admin.finance.read` |
 | `qb.admin.users` / `qb.admin.transfers` | P-01；P-03（Q9c 加筛选 `transferId`、`stale`（`CHECK`，或 `SENDING` 早于参数 `staleBefore`）与 `held`（被驳回或撤回、尚未放行）） | `qb.admin.users.read` / `qb.admin.finance.read` |
@@ -396,12 +403,17 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 | `qb.admin.journal-exports` / `qb.admin.journal-mapping` | 分录导出的列表（期间、凭证号、行数、借贷合计、文件、外部凭证号）；科目映射（每个可过账科目与现行的外部科目代码，参数是否已发布）（Q9d） | `qb.admin.finance.read` |
 | `qb.system.journal-first` / `qb.system.journal-summary` / `qb.system.journal-parts` / `qb.system.journal-detail` | 导出的取数（Q9d，D-Q9d-3）：最早的过账时间（第一期）；本次所取的分录（过账于期末之前、记录于截止时刻之前、且不在以前的导出中：`bookingTime < to AND createdTime <= knownAt AND (bookingTime >= previousTo OR createdTime > previousKnownAt)`）——凭证行由数据库按科目、借贷（2110 加商家）汇总；明细按交易区间分段（每段在平台读取与文件上限的一半之内），逐段按交易、科目、借贷读取 | `qb.journal.export` |
 | `qb.system.journal-open-transactions` | 导出前检查同一数据库中打开已久的事务（`pg_stat_activity`，评审 M1） | `qb.journal.export` |
+| `qb.sponsor.ai-jobs` / `qb.sponsor.ai-usage` | 本人某模版的 AI 作业与待校对的候选（不含回答的模型）；本月用量（输入 / 输出 Token、次数、今日次数）、未结束作业的预估与剩余额度、是否开启（经 `now:SysParam`；月与日按任务记下的部署时区）（Q8a） | `qb.ai.use` |
+| `qb.admin.ai-usage` / `qb.admin.ai-jobs` / `qb.admin.ai-settings` | 按商家与月份的用量、失败数与按价格参数的美元估算；最近的作业（请求的模型与实际回答的模型、尝试次数、失败原因，不含候选）；AI 参数的现行值（Q8a） | `qb.admin.ai.read` |
+| `qb.system.ai-open` | 所有商家未结束作业的预估合计（请求在 `qb.ai:*` 锁内读，全体月上限计入正在运行的作业）（Q8a 评审） | `qb.ai.system` |
+| `qb.system.ai-expired` | 过期任务的取数：READY 且已过期的作业（Q8a） | `qb.ai.system` |
 | `qb.sponsor.topup-receipt` / `qb.sponsor.receipt-issuer` | 收据（Q9d，F-09）的两个区块：本人一笔已到账的充值（公司、联系人、到账时间、支付号末尾、金额）；开具方（受控参数 `qb.issuer.*`，总是一行） | `qb.topup` |
 
 - **公开模板**（Q7b，平台 15、D17；`jabiz.public.enabled` 由 `JABIZ_PUBLIC_ENABLED` 打开，缺省开）：`qb.public.legal`（某种文本在时刻 `at` 的当前版本与下一个预告）、
   `qb.public.legal-version`、`qb.public.legal-history`、`qb.public.faq`（`audience`、`category`、`q` 在任一语言中字面匹配）。只读公开视图：法律文本的已发布版本（全部，含预告）与已发布的 FAQ；草稿没有公开视图。
   已认证：`qb.me.consents`（本人对各文本的状态）、`qb.me.support`（支持邮箱）、`qb.admin.consents`（P-01 的同意记录）。
-- 完成人数：已认证的模板没有缓存，所以近期窗口由任务 `qb.publication-stats` 每 10 分钟按索引 `QbAttempt (publicationId, submittedAt)` 统计到 `qb_publication_stats`（需求 6.1 允许 10 分钟），累计取计数行；分析（Q9）同样按索引统计。
+- 完成人数：已认证的模板没有缓存，所以近期窗口由任务 `qb.publication-stats` 每 10 分钟按索引 `QbAttempt (publicationId, submittedAt)` 统计到 `qb_publication_stats`（需求 6.1 允许 10 分钟），累计取计数行；分析（Q9e）由任务 `qb.analytics` 每 10 分钟把计数的增量写进按小时的桶，按同一索引从水位线读新完成的会话汇总每题（答题路径不写任何分析数据，D-Q9e-2）。
+  **残余（Q9e1 评审 M1 ④，已知、接受）**：概览的人数是任务的快照，但仪表盘的"正在答题"与今日支出是实时的合计，商家只有一个进行中的发布时，两次查看之差就是该发布在这段时间内的变化；Q4 的 `qb.sponsor.publications` 同样实时给出每个发布的计数。两者都只是人数与金额（E-4 不受 k 约束），推不出逐题作答。
 - 导出（M-52）只经平台导出 `POST /api/queries/qb.sponsor.transactions/export?format=…`（与列表同样的参数与排序，超过平台上限即整体拒绝 `REPORT_TOO_LARGE`）；商家后台提供 CSV 与 XLSX。
 
 ## 7. 前端
@@ -429,8 +441,13 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 - 会话只在标签页中（`persistence: tab`），闲置 30 分钟锁定（缺省 Q12）；不提供 Google 登录（Q2-16）。未入驻通过的商家进入 `/onboarding`。
 - 内容工坊是最重的页面：题目与选项的编辑、排序、图片、版本列表；发布向导三步。
 - 钱包页（Q9d）：已到账的充值行有"收据"：首次以当前界面语言签发（`QB_TOPUP_RECEIPT_ISSUE`），之后下载同一份存档 PDF。
+- 分析（Q9e2，`sponsor/src/analytics/`）：概览（`/dashboard`，入驻通过后）显示指标卡（各状态的发布数、正在答题、今日支出、可用余额与待支付、剩余预算、本月 AI 用量（Q8a））、近 7 天的趋势（完成人数折线与支出柱，上下两个小图，不用双 Y 轴）与近 7 天热门发布前 5；
+  发布分析页 `/publications/<id>/analytics`（发布页的"分析"）显示概览、漏斗（流失最大的一段以徽标、斜纹与文字标出）、过去 24 小时（按小时）/ 过去 7 天（按天）的趋势与 App 的四个窗口、每题正确率与难度（不足 k 时注明"至少 k 人作答后显示"）与导出（趋势、概览、题目的 CSV 与 Excel）。
+  每个图表有名称与合计的文字、下方可展开的数据表；颜色只用 `--chart-1` / `--chart-2`；时刻与日期按任务记下的部署时区显示（不按浏览器）；每 60 秒与回到前台时重读，并注明"每 10 分钟更新，最近更新 …"。
 - 条款与帮助（Q7b）：侧栏"帮助"、页脚的商家条款、隐私政策与特定商取引法表记；入驻页同意所示版本；已申请而须重新同意时整页显示同意提示。
 - 消息中心（Q7c，`/messages`）：平台给商家的公告（收件箱），与本人的通知：编写（发布、纯文本、立即或定时）、保存即见问题、发送、改回草稿、撤销，统计（不足 5 人不显示），被管理员撤回的显示理由。
+- AI 出题（Q8a，`sponsor/src/ai/`）：编辑器题目页上方的面板。对话框选资料（各自大小，非文章只发标题与描述，合计超过 60 KiB 即不能提交）、题数 1–20、难度、语言、是否避免重复，说明发送什么；第一次使用时显示 AI 说明并勾选同意；
+  进行中每 5 秒查询、至多 5 分钟、离开即停；候选是可编辑的卡片（纯文本，不渲染 Markdown），勾选"我已校对"的才能加入；丢弃、取消；失败与过期的说明。仪表盘的 AI 用量卡显示本月 Token、次数与剩余额度。
 
 ### 7.3 管理员后台（`/admin/`）
 
@@ -443,6 +460,7 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
     "规约类"页发布时可勾选"在收件箱中公告"（`QB_LEGAL_PUBLISH` 的 `announce`）。
   - Q9c：财务（`/qb/finance/**`）：总览、转账与大额审批、充值、核对、月报。
   - Q9d：分录导出（`/qb/finance/journal`：预览下一期、导出、下载存档的 CSV、记录外部凭证号）与科目映射（`/qb/finance/journal/mapping`：只读，修改链到平台的受控变更）。
+  - Q8a：AI（`/qb/ai`，`qb.admin.ai.read`）：开关与上限的现行值（开关经受控变更提出，另一位管理员发布）、按商家与月份的用量、失败率与美元估算、最近的请求与失败原因。
 
 ### 7.4 "Kudos"
 
@@ -453,7 +471,7 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 | 系统 | 用途 | 接入方式 | 配置 |
 |---|---|---|---|
 | Stripe | 充值（Checkout）、用户收款账户（Connect Express，Q6b）、转账（Transfers，Q6b） | 出站：外部服务 `stripe`，只经平台的 JDK HTTP（D38：官方 SDK 自带的连接不受主机白名单约束，不用），应用自写 `StripeApi`（表单编码、错误分类、JSON 解析），**全部调用都是异步外部作业**（重试与幂等键由平台持久化），以 `Stripe-Version` 固定 API 版本；入站：平台入站 Webhook（D37）的提供方 `stripe`（账户端点；Q6b 另加 `stripe-connect`），验签、存档、去重后交给 `internal()` 的消费流程 | `STRIPE_API_KEY`、`STRIPE_WEBHOOK_SECRET`（环境变量）；`STRIPE_CONNECT_WEBHOOK_SECRET`（Q6b）；`quizbuks.stripe.*`（模式、API 版本、支付页有效期、结算币种、收款账户国家）、`quizbuks.links.app` |
-| OpenAI | AI 生成题目与封面 | 平台异步外部作业（G7）+ 官方 Java SDK；模型名是业务参数 | `OPENAI_API_KEY` |
+| Claude（Anthropic） | AI 生成题目（Q8a）与封面（Q8b） | 外部服务 `anthropic`，只经平台的 JDK HTTP（D38，不用 SDK），应用自写 `ClaudeApi`（Messages API：JSON Schema 结构化输出、adaptive thinking、显式 effort、服务端拒答回退 `fallbacks: "default"`、输入 ≤ 60 KiB 拒绝不截断、错误分类）；**全部调用都是异步外部作业** `qb.ai.questions`（3 次尝试）；只发送商家自己的模版内容，`metadata.user_id` 为 HMAC 的不透明值；`dev`、测试与 e2e 用本地桩（`tools/quizbuks/claude-stub`） | `ANTHROPIC_API_KEY`（环境变量）；业务参数 `qb.ai.*`（开关、模型清单 `claude-opus-5-5` / `claude-sonnet-5-5` / `claude-haiku-5-5`、effort、限额：受控） |
 | ECB | 参考汇率 | 定时任务中的 `BlockingStep` | — |
 | 邮件 | 激活、欢迎、转账结果 | 平台事务邮件（G3） | `spring.mail.*` |
 
@@ -509,7 +527,7 @@ G1（16b）、G3（16a）、G4（16b-1）已合入并在 Q2 中使用；G2（16f
 | U-40 – U-42、U-50 – U-53 | 6、3.4、5.2 转账（提现改为自动转账，已确认） |
 | U-60 – U-63、U-70 – U-74 | 3.5、6 `qb.app.inbox`、3.1 |
 | M-01 – M-04 | 3.1、5.2 `QB_SPONSOR_APPLY` / `QB_TOPUP_*` |
-| M-10 – M-11、M-40 – M-43、M-50 – M-52 | 6、G11 |
+| M-10 – M-11、M-40 – M-43、M-50 – M-52 | 3.3（分析的三个实体，Q9e）、6、G11 |
 | M-20 – M-28 | 3.2、5.2、G7 |
 | M-30 – M-36 | 3.3、5.1、5.2 |
 | M-60 – M-61、P-04 | 3.5 |

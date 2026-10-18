@@ -35,7 +35,9 @@ public final class QbRoles {
     private static final List<String> CONTENT = List.of(QbPermissions.COUNTRY_READ, QbPermissions.ADMIN_USERS_READ,
         QbPermissions.ADMIN_QUIZ_READ, QbPermissions.CONTENT_FILE_READ, QbPermissions.ADMIN_PUBLICATION_READ,
         QbPermissions.REVIEW_SPONSOR, QbPermissions.REVIEW_PUBLICATION, QbPermissions.ADMIN_CONTENT_WRITE,
-        QbPermissions.SPONSOR_AVATAR_READ, "approval.decide", "task.read");
+        QbPermissions.SPONSOR_AVATAR_READ, "approval.decide", "task.read",
+        // Q8a: the AI page (usage and failures; the switch changes only through controlled changes).
+        QbPermissions.ADMIN_AI_READ);
 
     private static final List<String> FINANCE = List.of(QbPermissions.COUNTRY_READ, QbPermissions.ADMIN_USERS_READ,
         QbPermissions.ADMIN_FINANCE_READ, QbPermissions.ADMIN_PUBLICATION_READ, QbPermissions.PAYOUT_REVIEW,
@@ -50,7 +52,8 @@ public final class QbRoles {
     /**
      * What the super administrator holds beyond the other two: bans, reading parameters, proposing controlled changes,
      * users and roles. No role writes parameters directly: the controlled ones change only through controlled changes
-     * (platform decision D40), and the others are only the AI model and the oldest app version. The super
+     * (platform decision D40), and the others (the oldest app version, the analytics' minimum group, the support
+     * address, the days AI candidates wait and the AI prices of the estimate) are not written by any role. The super
      * administrator proposes controlled changes but does not publish them: see {@link #PUBLISH}.
      */
     private static final List<String> SUPER = List.of(QbPermissions.SETUP, QbPermissions.ADMIN_USERS_BAN,
@@ -90,7 +93,9 @@ public final class QbRoles {
             QbPermissions.SPONSOR_FINANCE_READ, QbPermissions.BROADCAST_WRITE, QbPermissions.ACCOUNT_READ,
             QbPermissions.SPONSOR_AVATAR_READ,
             // Q9d: the receipts of their own top-ups (the platform shows a sponsor only what they issued).
-            "document.archive.read"));
+            "document.archive.read",
+            // Q9e: the analytics of their own publications (aggregates only).
+            QbPermissions.STATS_READ));
         add(ADMIN_CONTENT, labels("Content administrator", "内容管理员", "コンテンツ管理者"), true, CONTENT);
         add(ADMIN_FINANCE, labels("Finance administrator", "财务管理员", "財務管理者"), true, FINANCE, PUBLISH,
             FINANCE_ONLY);

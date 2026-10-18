@@ -15,7 +15,7 @@ list:
   key: [broadcastId]
 permissions: [qb.messaging.system]
 ---*/
--- Through the index on the due time (V15). QB_BROADCAST_DISPATCH reads the broadcast again under its locks and sends
+-- Through the index on the due time (V17). QB_BROADCAST_DISPATCH reads the broadcast again under its locks and sends
 -- it only while it is still scheduled.
 SELECT s.{{QbBroadcastSchedule.broadcastId}} AS broadcastId, s.{{QbBroadcastSchedule.dueAt}} AS dueAt
 FROM {{QbBroadcastSchedule}} s

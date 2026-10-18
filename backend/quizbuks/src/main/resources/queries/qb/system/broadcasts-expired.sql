@@ -15,7 +15,7 @@ list:
   key: [broadcastId]
 permissions: [qb.messaging.system]
 ---*/
--- Both halves through the partial index of the live rows (V15: audience, expires_at WHERE live), which holds only the
+-- Both halves through the partial index of the live rows (V17: audience, expires_at WHERE live), which holds only the
 -- current ones once this job keeps it so (review H1): the expired by their end, and the notices (all to the app) whose
 -- publication's card says it ended. QB_BROADCAST_EXPIRE reads each again under its lock.
 SELECT f.{{QbBroadcastFeed.broadcastId}} AS broadcastId

@@ -1,0 +1,270 @@
+# The sponsors' analytics (docs/quizbuks/plans/Q9e-analytics.md, Q9e1): QB_SETUP and its proposals, the review switch
+# on. Sponsor A publishes a quiz of two questions; three takers view it (one twice), two start, one passes, the other's
+# time runs out. The job qb.analytics runs before, after and across the hour: the hourly bucket holds the counters'
+# increments, the cursor what was counted, and nothing per question is shown below the minimum group. The installer
+# reads none of A's analytics (the templates are the caller's own).
+name: Analytics
+# The jobs run within the replay's few seconds: the cluster lock must not outlast a run.
+properties:
+  jabiz.jobs.lock-at-least-for: 0s
+clock: 2026-10-01T00:00:00Z
+actor: { id: installer, permissions: ["*"] }
+steps:
+  - process: QB_SETUP@latest
+    input: {}
+    save: { p1: "$.proposals[0]", p2: "$.proposals[1]", p3: "$.proposals[2]", p4: "$.proposals[3]",
+      p5: "$.proposals[4]", p6: "$.proposals[5]", p7: "$.proposals[6]", p8: "$.proposals[7]", p9: "$.proposals[8]",
+      p10: "$.proposals[9]", p11: "$.proposals[10]", p12: "$.proposals[11]", p13: "$.proposals[12]",
+      p14: "$.proposals[13]", p15: "$.proposals[14]", p16: "$.proposals[15]", p17: "$.proposals[16]",
+      p18: "$.proposals[17]", p19: "$.proposals[18]", p20: "$.proposals[19]", p21: "$.proposals[20]",
+      p22: "$.proposals[21]", p23: "$.proposals[22]", p24: "$.proposals[23]",
+      p25: "$.proposals[24]", p26: "$.proposals[25]", p27: "$.proposals[26]", p28: "$.proposals[27]",
+      p29: "$.proposals[28]", p30: "$.proposals[29]", p31: "$.proposals[30]",
+      p32: "$.proposals[31]", p33: "$.proposals[32]", p34: "$.proposals[33]" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p1}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p2}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p3}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p4}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p5}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p6}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p7}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p8}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p9}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p10}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p11}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p12}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p13}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p14}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p15}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p16}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p17}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p18}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p19}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p20}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p21}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p22}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p23}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p24}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p25}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p26}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p27}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p28}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p29}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p30}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p31}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p32}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p33}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p34}" }
+  - note: Publications go on without a review (the controlled switch, four eyes).
+    actor: { id: super-admin, permissions: [control.propose] }
+    process: CONTROL_CHANGE_PROPOSE@latest
+    input: { targetEntity: SysParam, values: { paramKey: qb.review.publication.auto, value: "true" },
+      reason: Review switch }
+    save: { auto: $.changeId }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${auto}" }
+
+  - note: The people, created by an administrator.
+    process: SEC_USER_CREATE@latest
+    input: { userName: alice, displayName: Alice, email: alice@example.com }
+    save: { a: $.userId }
+  - process: SEC_USER_CREATE@latest
+    input: { userName: u1, displayName: Ume, email: u1@example.com }
+    save: { u1: $.userId }
+  - process: SEC_USER_CREATE@latest
+    input: { userName: u2, displayName: Ken, email: u2@example.com }
+    save: { u2: $.userId }
+  - process: SEC_USER_CREATE@latest
+    input: { userName: u3, displayName: Mio, email: u3@example.com }
+    save: { u3: $.userId }
+  - actor: { id: "${u1}", permissions: [qb.me] }
+    process: QB_PROFILE_SAVE@latest
+    input: { displayName: Ume, countryCode: JP, preferredCurrency: JPY }
+  - actor: { id: "${u2}", permissions: [qb.me] }
+    process: QB_PROFILE_SAVE@latest
+    input: { displayName: Ken, countryCode: JP, preferredCurrency: JPY }
+  - actor: { id: "${u3}", permissions: [qb.me] }
+    process: QB_PROFILE_SAVE@latest
+    input: { displayName: Mio, countryCode: JP, preferredCurrency: JPY }
+
+  - note: Sponsor A is onboarded (Q2); a content administrator approves.
+    actor: { id: "${a}", permissions: [qb.sponsor.me] }
+    process: QB_SPONSOR_APPLY@latest
+    input: { displayName: Alice, company: Capitals Inc, acceptTerms: true }
+    save: { onboarding: $.approvalRequestId }
+  - actor: { id: content-admin, permissions: [qb.review.sponsor, approval.decide] }
+    process: APPROVAL_DECIDE@latest
+    input: { requestId: "${onboarding}", decision: APPROVE }
+  - deliverEvents: true
+
+  - note: A's quiz (two questions, 2 and 3 points) and a publication, on at once; the development credit.
+    setClock: 2026-10-01T01:00:00Z
+  - actor: { id: "${a}", permissions: [qb.content.write, qb.publication.write] }
+    process: QB_QUIZ_SAVE@latest
+    input: { title: World capitals, timeLimitSec: 300 }
+    save: { quiz: $.quizId }
+  - actor: { id: "${a}", permissions: [qb.content.write] }
+    process: QB_QUESTION_SAVE@latest
+    input: { quizId: "${quiz}", stem: Capital of France?, points: 2,
+      options: [{ text: Paris, correct: true }, { text: Lyon }] }
+  - actor: { id: "${a}", permissions: [qb.content.write] }
+    process: QB_QUESTION_SAVE@latest
+    input: { quizId: "${quiz}", stem: Capital of Japan?, points: 3,
+      options: [{ text: Tokyo, correct: true }, { text: Osaka }] }
+  - actor: { id: "${a}", permissions: [qb.content.write] }
+    process: QB_QUIZ_PUBLISH_VERSION@latest
+    input: { quizId: "${quiz}" }
+    save: { version: $.versionId }
+  - actor: { id: "${a}", permissions: [qb.publication.write] }
+    process: QB_PUBLICATION_SAVE@latest
+    input:
+      versionId: "${version}"
+      name: Capitals week
+      regions: [JP, ASIA]
+      startAt: 2026-10-01T01:00:00Z
+      endAt: 2026-10-08T00:00:00Z
+      passScore: 3
+      budgetCap: 20000
+      maxWinners: 100
+      tiers:
+        - { fromScore: 0, toScore: 2, reward: 0 }
+        - { fromScore: 3, toScore: 4, reward: 10 }
+        - { fromScore: 5, toScore: 5, reward: 100 }
+    expectOutput: { problems: [] }
+    save: { pub: $.publicationId }
+  - actor: { id: "${a}", permissions: [qb.publication.write] }
+    process: QB_PUBLICATION_SUBMIT@latest
+    input: { publicationId: "${pub}" }
+    expectOutput: { status: LIVE, approval: NOT_REQUIRED }
+  - process: QB_WALLET_DEV_CREDIT@latest
+    input: { sponsorId: "${a}", amount: 1000 }
+    expectOutput: { balance: 1000 }
+
+  - note: The job's first run, before anybody took part (Q9e, D-Q9e-2).
+    setClock: 2026-10-01T01:05:00Z
+  - runJob: { job: qb.analytics, at: 2026-10-01T01:05:00Z }
+
+  - note: Three view the publication, two of them start; U1 passes with full marks, U2's time runs out.
+    setClock: 2026-10-01T01:10:00Z
+  - actor: { id: "${u1}", permissions: [qb.play, qb.me] }
+    process: QB_VIEW@latest
+    input: { publicationId: "${pub}" }
+    expectOutput: { firstView: true }
+  - actor: { id: "${u2}", permissions: [qb.play, qb.me] }
+    process: QB_VIEW@latest
+    input: { publicationId: "${pub}" }
+  - actor: { id: "${u3}", permissions: [qb.play, qb.me] }
+    process: QB_VIEW@latest
+    input: { publicationId: "${pub}" }
+  - actor: { id: "${u1}", permissions: [qb.play, qb.me] }
+    process: QB_VIEW@latest
+    input: { publicationId: "${pub}" }
+    expectOutput: { firstView: false }
+  - actor: { id: "${u1}", permissions: [qb.play, qb.me] }
+    process: QB_ATTEMPT_START@latest
+    input: { publicationId: "${pub}" }
+    save: { t1: $.attemptId }
+  - actor: { id: "${u2}", permissions: [qb.play, qb.me] }
+    process: QB_ATTEMPT_START@latest
+    input: { publicationId: "${pub}" }
+    save: { t2: $.attemptId }
+  - advanceClock: PT1M
+  - actor: { id: "${u1}", permissions: [qb.play, qb.me] }
+    process: QB_ATTEMPT_SUBMIT@latest
+    input: { attemptId: "${t1}", publicationId: "${pub}", answers: [{ questionNo: 1, selected: [1] }, { questionNo: 2, selected: [2] }] }
+    expectOutput: { status: SUBMITTED, score: 5, passed: true, reward: 100, rewardStatus: PAID }
+  - setClock: 2026-10-01T01:17:00Z
+  - runJob: { job: qb.attempt-expire, items: { succeeded: 1 } }
+  - expect: { entity: QbAttempt, id: "${t2}", fields: { status: EXPIRED, score: 0 } }
+
+  - note: >-
+      The job adds the hour's increments (five minutes behind: everything up to 01:25) and closes the hour at 02:00
+      with nothing new. Two completions are fewer than the minimum group (5): nothing per question is shown yet.
+    setClock: 2026-10-01T01:30:00Z
+  - runJob: { job: qb.analytics, at: 2026-10-01T01:30:00Z }
+  - setClock: 2026-10-01T02:00:00Z
+  - runJob: { job: qb.analytics, at: 2026-10-01T02:00:00Z }
+  - note: >-
+      The sponsor's templates are scoped to the caller's own publications: the installer (who holds every permission)
+      reads none of A's (A's own figures are covered by AnalyticsIT).
+    expect:
+      query: qb.sponsor.analytics.overview
+      params: { publicationId: "${pub}" }
+      rows: 0
+  - expect:
+      query: qb.sponsor.analytics.questions
+      params: { publicationId: "${pub}" }
+      rows: 0
+snapshot:
+  entities: [QbAnalyticsHour, QbAnalyticsCursor, QbQuestionStat, QbStatsRun, QbPublicationCounter,
+    QbPublicationStartCounter, QbPublicationView]
+  asOf: end

@@ -519,8 +519,8 @@ M-73 API Key（G10）；个人信息的删除与匿名化（平台未开放，GD
 
 ### 13.1 迁移的顺序
 
-迁移是 **V15**（计划写的 V14 已留给 Q9e1，尚未合并）：Q7b V12、Q7a V13、Q9e1 V14、Q7c V15、Q8a V16。V15 与前面的迁移一样自己定义并在结尾删除 `quizbuks_create_temporal_table`。
-合并顺序与编号不一致时（如 Q7c 先于 Q9e1 合入），Flyway 照应用自己的历史表按编号执行，已应用的库须按编号补跑（`outOfOrder` 不开），合并的人照此安排。
+迁移是 **V17**（`V17__quizbuks_inbox.sql`）。原定的顺序是 Q7b V12、Q7a V13、Q9e1 V14、Q7c V15、Q8a V16，计划写的 V14 已留给 Q9e1；但 Q8a（V16）先于本阶段合入 `1.2/quizbuks`，本阶段因此改号为 V17（13.9）：已经执行过 V16 的库照常向上迁移，不需要 `outOfOrder`。V15 不再使用（Flyway 允许空号）。
+V17 与前面的迁移一样自己定义并在结尾删除 `quizbuks_create_temporal_table`。
 
 ### 13.2 做了什么
 
@@ -546,7 +546,7 @@ M-73 API Key（G10）；个人信息的删除与匿名化（平台未开放，GD
 
 | 计划 | 实现与理由 |
 |---|---|
-| 迁移 V14 | V15（13.1） |
+| 迁移 V14 | V17（13.1、13.9） |
 | 立即发送经子流程 `QB_BROADCAST_DISPATCH` | 发送流程自己在锁内运行受众模板并写 `SENT` 与 feed 行：同一套步骤，免去一次子流程的权限与锁的往返；任务的逐项流程仍是 `QB_BROADCAST_DISPATCH` |
 | `QB_BROADCAST_CANCEL`：`SCHEDULED → DRAFT` | 另加 `DRAFT → CANCELLED`（"放弃"草稿，时态表不删除） |
 | 撤回：`SENT → WITHDRAWN` | 已排期的也可撤回（管理员停下一条有问题的定时公告时不必先改回草稿） |
@@ -604,7 +604,7 @@ M-73 API Key（G10）；个人信息的删除与匿名化（平台未开放，GD
 | 缺的测试 | 同时发送两条通知守住每个发布的上限（账户锁使一条通过、另一条在锁内遇到间隔）；另一个商家撤回或取消别人的通知为 404 | `BroadcastIT.twoNoticesSentAtOnceKeepThePublicationsLimit`、`onlySponsors…` |
 
 其他：消息中心的编辑器在只有一个可选发布时预先选中它（并忽略 Radix 选择框在选项挂载前报告的空值，Vitest 复现）；`QB_SETUP` 多建一个参数，场景的 ID 再次后移，答题场景的答案按新的显示位置改写（得分不变）。
-V15 尚未合并、没有部署过，直接修改（新增 `qb_broadcast_stats`、`read_through`、`source_key`，改两个索引与 `withdrawn_by`），合并之前在本地与 e2e 的库上需重建。
+本阶段的迁移（当时为 V15，现为 V17）尚未合并、没有部署过，直接修改（新增 `qb_broadcast_stats`、`read_through`、`source_key`，改两个索引与 `withdrawn_by`），合并之前在本地与 e2e 的库上需重建。
 
 ### 13.8 评审修正的测试与结果
 
@@ -616,3 +616,18 @@ V15 尚未合并、没有部署过，直接修改（新增 `qb_broadcast_stats`�
 - 两个 SPA：lint、typecheck 通过，Vitest App 148 项、商家后台 141 项；两份 `src/qb/` 相同；`app:check` 两者通过；`ext:check` 78 项。
 - e2e（打包的 jar、本机的 Mailpit 与 Stripe 桩、独立的库与端口）：第一次 52 项中 50 项通过，失败的 2 项是 `inbox.spec.ts` 的读取辅助仍传 `at`（修正 L1 之后为 400），改正后该文件 3 项通过，再跑全量 52 项全部通过。
 - 徽标的 `EXPLAIN ANALYZE`（评审探针的规模）：读完了的人 0.73 ms（修正前 32 ms），见 `docs/quizbuks/perf/Q7c-inbox.md`。
+
+### 13.9 合并 Q9e1、Q9e2 与 Q8a 之后（2026-10-18）
+
+`origin/1.2/quizbuks` 前进到 aef5cd0（Q9e1 #179、Q9e2 #181、Q8a #182，各自已合并平台 16u 的 QuizBuks 适配），以合并提交合入本分支。
+
+- **迁移改号为 V17**：Q8a 的 V16 先于本阶段合入，按原定编号的 V15 会落在已执行过 V16 的库之后，Flyway 不开 `outOfOrder` 即拒绝。改为 V17 后版本只增不减，
+  已有的库照常迁移；V15 空着（Flyway 允许空号）。顺序为 Q9e1 V14、Q8a V16、Q7c V17。V16 的注释中的旧编号不改（已执行的迁移改动会改变校验和）。
+- **冲突的处理**：`QbParams` 两边的参数都保留（本阶段的 5 个普通参数在前，Q8a 的参数在后，受控参数的提案顺序不变）；`application.yml` 的限流、
+  后台扩展的 `ids.ts`、`index.tsx`、`messages.ts`（公告与 AI 两页、两组菜单与文案）、`CLAUDE.md`、`02-design.md`、`03-plan.md` 与 `operations.md` 两边合并；
+  场景 `setup.yml` 的 `paramsCreated` 为两边之和（提案仍是 Q8a 之后的 34 个）。
+- **合并后才出现的缺口**：Q8a 新增的法律文本种类 `AI_NOTICE` 没有公告用的名字（`MessagesTest` 要求每个种类都有 `qb.broadcast.legal.kind.<种类>`），三种语言补上；
+  其公告的对象按 `LegalAnnouncements.audiences` 的缺省为商家，与该文本只给商家相符。
+- **场景**：合并后的 `QB_SETUP` 多建行，ID 再次后移，答案按新的显示位置改写，得分与奖励不变：`play.yml`（U1、U2 满分，U3 保存第 1 题答对得 2 分）、
+  `payout.yml`（U1、U3 只答对第 2 题得 10 Kudos，U2 全对得 100）、`topup.yml`（U1、U2 满分）、`analytics.yml`（U1 满分）。快照重新生成，相对两边只有 ID、哈希、新的参数行与显示位置变化。
+- **验证**：本工作树自己的库上 `./gradlew :quizbuks:check` 778 项全部通过（其中场景 10 个），`platformCheck` 0 错误，两个 SPA 的 `spaCheck` 通过；后台扩展 `ext:check` 82 项通过。e2e 未运行。

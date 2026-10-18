@@ -48,6 +48,8 @@ tasks.named<Test>("test") {
 tasks.named<JavaExec>("platformCheck") {
     environment("STRIPE_WEBHOOK_SECRET", "whsec_platform_check_throwaway_00000000000")
     environment("STRIPE_CONNECT_WEBHOOK_SECRET", "whsec_platform_check_throwaway_connect_000")
+    // Q8a: Claude's key, which also comes from the environment only.
+    environment("ANTHROPIC_API_KEY", "platform-check-throwaway-not-a-claude-key")
 }
 
 tasks.register<Test>("perfTest") {

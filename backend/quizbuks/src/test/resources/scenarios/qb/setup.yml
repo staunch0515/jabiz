@@ -14,25 +14,29 @@ steps:
       rolesCreated: [QB_TAKER, QB_SPONSOR, QB_ADMIN_CONTENT, QB_ADMIN_FINANCE, QB_ADMIN_SUPER]
       accountsOpened: ["1110", "1120", "2110", "2120", "2130", "4110", "5110"]
       countriesAdded: 249
-      paramsCreated: [qb.ai.model, qb.app.min-version, qb.support.email, qb.broadcast.sponsor.max-per-publication,
-        qb.broadcast.sponsor.min-interval-hours, qb.broadcast.expires-days, qb.payout.reminder-days,
-        qb.broadcast.stats.min-audience]
+      paramsCreated: [qb.app.min-version, qb.stats.min-group, qb.support.email,
+        qb.broadcast.sponsor.max-per-publication, qb.broadcast.sponsor.min-interval-hours, qb.broadcast.expires-days,
+        qb.payout.reminder-days, qb.broadcast.stats.min-audience, qb.ai.candidates.expire-days,
+        qb.ai.price.input-per-mtok-usd, qb.ai.price.output-per-mtok-usd]
       paramsProposed: [qb.creator-fee-rate, qb.transfer.threshold, qb.transfer.review-above, qb.transfer.enabled,
         qb.review.sponsor.auto, qb.review.publication.auto, qb.topup.min, qb.topup.max, qb.transfer.fee,
         qb.transfer.hold-days, qb.topup.new-sponsor.days, qb.topup.new-sponsor.max-total,
         qb.journal.account.1110, qb.journal.account.1120, qb.journal.account.2110, qb.journal.account.2120,
         qb.journal.account.2130, qb.journal.account.4110, qb.journal.account.5110, qb.issuer.name, qb.issuer.address,
-        qb.issuer.registration-no, qb.legal.max-announce-days]
+        qb.issuer.registration-no, qb.legal.max-announce-days, qb.ai.enabled, qb.ai.model, qb.ai.effort,
+        qb.ai.sponsor.daily-jobs, qb.ai.sponsor.monthly-tokens, qb.ai.global.monthly-tokens]
       rulesProposed: [qb.publication.review, qb.sponsor.review, qb.transfer.review,
         qb.sod.control-changes, qb.sod.security-administration]
-      legalDraftsCreated: [TERMS_APP, TERMS_SPONSOR, PRIVACY, COMMERCE_NOTICE]
+      legalDraftsCreated: [TERMS_APP, TERMS_SPONSOR, PRIVACY, COMMERCE_NOTICE, AI_NOTICE]
     save: { p1: "$.proposals[0]", p2: "$.proposals[1]", p3: "$.proposals[2]", p4: "$.proposals[3]",
       p5: "$.proposals[4]", p6: "$.proposals[5]", p7: "$.proposals[6]", p8: "$.proposals[7]", p9: "$.proposals[8]",
       p10: "$.proposals[9]", p11: "$.proposals[10]", p12: "$.proposals[11]", p13: "$.proposals[12]",
       p14: "$.proposals[13]", p15: "$.proposals[14]", p16: "$.proposals[15]", p17: "$.proposals[16]",
       p18: "$.proposals[17]", p19: "$.proposals[18]", p20: "$.proposals[19]", p21: "$.proposals[20]",
       p22: "$.proposals[21]", p23: "$.proposals[22]", p24: "$.proposals[23]",
-      p25: "$.proposals[24]", p26: "$.proposals[25]", p27: "$.proposals[26]", p28: "$.proposals[27]" }
+      p25: "$.proposals[24]", p26: "$.proposals[25]", p27: "$.proposals[26]", p28: "$.proposals[27]",
+      p29: "$.proposals[28]", p30: "$.proposals[29]", p31: "$.proposals[30]",
+      p32: "$.proposals[31]", p33: "$.proposals[32]", p34: "$.proposals[33]" }
   - note: A second administrator publishes the parameters (the journal mapping and issuer empty) and the review rules.
     process: CONTROL_CHANGE_PUBLISH@latest
     actor: { id: publisher, permissions: [control.publish] }
@@ -118,6 +122,24 @@ steps:
   - process: CONTROL_CHANGE_PUBLISH@latest
     actor: { id: publisher, permissions: [control.publish] }
     input: { changeId: "${p28}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p29}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p30}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p31}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p32}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p33}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p34}" }
   - expect: { param: qb.creator-fee-rate, value: 0 }
   - expect: { param: qb.transfer.threshold, value: 1000 }
   - expect: { param: qb.transfer.enabled, value: false }

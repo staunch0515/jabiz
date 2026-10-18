@@ -43,7 +43,12 @@ public final class QbLegal {
     public static final String PRIVACY = "PRIVACY";
     /** The notice under the Act on Specified Commercial Transactions (特定商取引法に基づく表記), shown to sponsors. */
     public static final String COMMERCE_NOTICE = "COMMERCE_NOTICE";
-    public static final List<String> KINDS = List.of(TERMS_APP, TERMS_SPONSOR, PRIVACY, COMMERCE_NOTICE);
+    /**
+     * The AI notice (Q8a, A-11): what is sent to the AI provider and what happens to it. Sponsors accept it on their
+     * first AI request (not at sign-in); without a version in effect nobody can ask the AI.
+     */
+    public static final String AI_NOTICE = "AI_NOTICE";
+    public static final List<String> KINDS = List.of(TERMS_APP, TERMS_SPONSOR, PRIVACY, COMMERCE_NOTICE, AI_NOTICE);
 
     /** What the app's users accept: the takers' terms and the privacy policy. */
     public static final List<String> APP_KINDS = List.of(TERMS_APP, PRIVACY);
@@ -59,7 +64,10 @@ public final class QbLegal {
     public static final String SOURCE_WELCOME = "WELCOME";
     public static final String SOURCE_ONBOARDING = "ONBOARDING";
     public static final String SOURCE_RECONSENT = "RECONSENT";
-    public static final List<String> SOURCES = List.of(SOURCE_WELCOME, SOURCE_ONBOARDING, SOURCE_RECONSENT);
+    /** The AI notice, accepted with an AI request (Q8a). */
+    public static final String SOURCE_AI = "AI_REQUEST";
+    public static final List<String> SOURCES = List.of(SOURCE_WELCOME, SOURCE_ONBOARDING, SOURCE_RECONSENT,
+        SOURCE_AI);
 
     public static final String AUDIENCE_APP = "APP";
     public static final String AUDIENCE_SPONSOR = "SPONSOR";
