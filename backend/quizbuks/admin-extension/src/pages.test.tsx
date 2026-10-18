@@ -496,6 +496,17 @@ describe('UserSummaryPage', () => {
     expect(await within(screen.getByTestId('user-rewards')).findByText(/7,777/)).toBeInTheDocument()
   })
 
+  it('shows the acceptances of the terms (Q7b)', async () => {
+    server.templates.set(TEMPLATE.consents, [{ consentId: 'c1', kind: 'TERMS_APP', versionNo: 3,
+      acceptedAt: '2026-10-16T00:00:00Z', entry: 'app', source: 'RECONSENT', effectiveAt: '2026-10-15T00:00:00Z' }])
+    renderUser()
+    const consents = await screen.findByTestId('user-consents')
+    expect(await within(consents).findByText('app')).toBeInTheDocument()
+    expect(consents).toHaveTextContent('3')
+    expect(server.runQuery).toHaveBeenCalledWith(TEMPLATE.consents,
+      { params: { userId: SPONSOR_ID }, offset: 0, limit: 20 })
+  })
+
   it('shows the ban with its reason', async () => {
     server.templates.set(TEMPLATE.users, [{ ...USER, banned: true }])
     server.datasets.set(DATASET.ban, [{ userId: SPONSOR_ID, banned: true, reason: 'Shared answers.',

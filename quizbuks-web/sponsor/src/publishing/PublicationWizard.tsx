@@ -19,7 +19,7 @@ import {
   SelectValue,
   Steps,
 } from '@jabiz/ui'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, ArrowRight, CircleCheck, RefreshCw, Save, Send } from 'lucide-react'
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -27,6 +27,7 @@ import { readVersions, searchQuizzes } from '../content/api'
 import { QUIZZES_QUERY, versionsQuery } from '../content/paths'
 import { SPONSOR } from '../messages'
 import { KUDOS } from '../qb/kudos'
+import { noticeConsentProblem } from '../qb/ConsentGate'
 import { fieldProblem, problemText } from '../qb/problems'
 import { navigate } from '../qb/router'
 import {
@@ -121,9 +122,12 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
 
   const [quizSearch, setQuizSearch] = useState('')
   const q = useDebounced(quizSearch, 300)
+  // A new search keeps the previous choices until its answer comes (the list never empties into a spinner while
+  // typing, which also left the open listbox without options); only the first search shows one.
   const quizzes = useQuery({
     queryKey: [...QUIZZES_QUERY, 'choices', q],
     queryFn: () => searchQuizzes({ q, offset: 0, limit: 20 }),
+    placeholderData: keepPreviousData,
   })
   const { versions, version } = useVersionOf(form.quizId, form.versionId)
   const fullScore = version?.fullScore ?? output?.fullScore ?? detail?.publication.fullScore ?? null
@@ -187,6 +191,7 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
       (error: unknown) => {
         if (isStale(error)) onStale()
         else setSubmitError(error)
+        noticeConsentProblem(queryClient, error)
       },
     )
   }
@@ -216,7 +221,7 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
       <Field id={`${id}-quiz`} label={t('publishing.field.quiz')} hint={t('publishing.field.quizHint')}>
         {(aria) => (
           <Combobox {...aria} value={form.quizId} selectedLabel={quizTitle ?? undefined}
-            onChange={(quizId) => void chooseQuiz(quizId)} onSearch={setQuizSearch} loading={quizzes.isFetching}
+            onChange={(quizId) => void chooseQuiz(quizId)} onSearch={setQuizSearch} loading={quizzes.isPending}
             options={(quizzes.data?.items ?? []).map((quiz) => ({
               value: quiz.quizId,
               label: quiz.title,

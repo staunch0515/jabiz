@@ -1,11 +1,10 @@
-import { formatDateTime, uploadFile, useAuth } from '@jabiz/client'
+import { ApiError, formatDateTime, uploadFile, useAuth } from '@jabiz/client'
 import {
   Alert,
   AlertDescription,
   AlertTitle,
   Badge,
   Button,
-  Checkbox,
   FileUpload,
   Input,
   Label,
@@ -20,9 +19,11 @@ import { neutralName } from '../content/api'
 import { SPONSOR } from '../messages'
 import { applyAsSponsor, readMySponsor, saveSponsorProfile, type Sponsor, type SponsorOutput } from '../qb/api'
 import { FileImage } from '../qb/FileImage'
-import { FILE_POLICY } from '../qb/ids'
+import { CONSENTS_QUERY, useMyConsents } from '../qb/ConsentGate'
+import { CODE, FILE_POLICY, LEGAL } from '../qb/ids'
 import { QB } from '../qb/messages'
 import { fieldProblem, generalProblem } from '../qb/problems'
+import { TermsAgreement, acceptedVersions } from '../qb/TermsAgreement'
 
 /** The query of the sponsor's onboarding, which the routes and the dashboard read too. */
 export const SPONSOR_QUERY = ['qb', 'sponsor'] as const
@@ -108,6 +109,8 @@ function OnboardingForm({ sponsor }: { sponsor: Sponsor | null }) {
   const [avatar, setAvatar] = useState<string | null>(() => sponsor?.avatar ?? null)
   const [acceptTerms, setAcceptTerms] = useState(false)
   const [done, setDone] = useState<string | null>(null)
+  // The texts in effect, accepted with the application (Q7b); none in effect: the terms box alone.
+  const terms = useMyConsents(LEGAL.sponsorKinds, !approved)
 
   const save = useMutation({
     mutationFn: () => {
@@ -118,13 +121,23 @@ function OnboardingForm({ sponsor }: { sponsor: Sponsor | null }) {
         avatar,
         baseRevision: sponsor?.revision ?? null,
       }
-      return approved ? saveSponsorProfile(input) : applyAsSponsor({ ...input, acceptTerms })
+      return approved ? saveSponsorProfile(input)
+        : applyAsSponsor({ ...input, acceptTerms, ...acceptedVersions(terms.data) })
     },
     onSuccess: async (output: SponsorOutput) => {
       setDone(approved ? t('onboarding.saved')
         : output.reviewStatus === 'APPROVED' ? t('onboarding.approvedNow') : t('onboarding.applied'))
       setAcceptTerms(false)
+      // The consents first: once the application is there, the prompt reads them, and must not see the old ones.
+      await queryClient.invalidateQueries({ queryKey: CONSENTS_QUERY })
       await queryClient.invalidateQueries({ queryKey: SPONSOR_QUERY })
+    },
+    // A text changed meanwhile: read it again, and the agreement with it.
+    onError: (error) => {
+      if (error instanceof ApiError && error.violations.some((v) => v.ruleCode === CODE.termsOutdated)) {
+        setAcceptTerms(false)
+        void queryClient.invalidateQueries({ queryKey: CONSENTS_QUERY })
+      }
     },
   })
 
@@ -192,12 +205,9 @@ function OnboardingForm({ sponsor }: { sponsor: Sponsor | null }) {
       </div>
       {!approved && (
         <div className="flex flex-col gap-2">
-          <div className="flex items-start gap-2">
-            <Checkbox id={`${id}-terms`} checked={acceptTerms} data-testid="onboarding-terms"
-              aria-invalid={invalid('acceptTerms')} aria-describedby={describedBy('acceptTerms')}
-              onCheckedChange={(checked) => setAcceptTerms(checked === true)} />
-            <Label htmlFor={`${id}-terms`} className="leading-snug">{t('onboarding.terms')}</Label>
-          </div>
+          <TermsAgreement id={`${id}-terms`} kinds={LEGAL.sponsorKinds} rows={terms.data ?? []}
+            checked={acceptTerms} onChange={setAcceptTerms} invalid={invalid('acceptTerms')}
+            describedBy={describedBy('acceptTerms')} testId="onboarding-terms" />
           {errorOf('acceptTerms')}
         </div>
       )}
@@ -212,7 +222,8 @@ function OnboardingForm({ sponsor }: { sponsor: Sponsor | null }) {
           {done}
         </p>
       )}
-      <Button type="submit" className="self-start" disabled={save.isPending} aria-busy={save.isPending || undefined}
+      <Button type="submit" className="self-start" disabled={save.isPending || (!approved && terms.isPending)}
+        aria-busy={save.isPending || undefined}
         data-testid="onboarding-submit">
         {label}
       </Button>

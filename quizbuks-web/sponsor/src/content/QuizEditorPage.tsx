@@ -125,10 +125,19 @@ export function QuizEditorPage({ quizId }: { quizId: string }) {
     else if (revision > known.current) setStale(true)
   }, [draft.data])
 
+  // A refusal as out of date moves the focus to the notice, once it is shown: after React commits it (an effect), not
+  // in the next frame, which may come first.
+  const focusStale = useRef(false)
   const markStale = useCallback(() => {
+    if (staleRef.current) staleRef.current.focus()
+    else focusStale.current = true
     setStale(true)
-    requestAnimationFrame(() => staleRef.current?.focus())
   }, [])
+  useEffect(() => {
+    if (!stale || !focusStale.current) return
+    focusStale.current = false
+    staleRef.current?.focus()
+  }, [stale])
 
   const editing = useMemo<Editing>(() => ({
     quizId,

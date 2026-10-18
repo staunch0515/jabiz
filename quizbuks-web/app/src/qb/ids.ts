@@ -57,6 +57,24 @@ export const PLAY = {
 /** The widths the policy `qb.content.image` keeps of every image (covers, questions, options, materials). */
 export const CONTENT_IMAGE_VARIANTS = ['w320', 'w640', 'w1280'] as const
 
+/**
+ * Terms, privacy and help (`messaging.LegalProcesses`, `messaging.QbLegal`; templates `queries/qb/public`,
+ * `queries/qb/me`; docs/quizbuks/plans/Q7-messages-legal.md, Q7b).
+ */
+export const LEGAL = {
+  accept: 'QB_CONSENT_ACCEPT',
+  /** Anonymous (`GET /api/public/queries/{id}`). */
+  publicLegal: 'qb.public.legal',
+  publicLegalVersion: 'qb.public.legal-version',
+  publicLegalHistory: 'qb.public.legal-history',
+  publicFaq: 'qb.public.faq',
+  myConsents: 'qb.me.consents',
+  mySupport: 'qb.me.support',
+  /** What each front end asks its users to accept. */
+  appKinds: ['TERMS_APP', 'PRIVACY'],
+  sponsorKinds: ['TERMS_SPONSOR', 'PRIVACY'],
+} as const
+
 /** Error codes the pages react to (the server translates every `QB_*` message itself). */
 export const CODE = {
   userBanned: 'QB_USER_BANNED',
@@ -65,6 +83,10 @@ export const CODE = {
   attemptExpired: 'QB_ATTEMPT_EXPIRED',
   attemptNotInProgress: 'QB_ATTEMPT_NOT_IN_PROGRESS',
   attemptFinished: 'QB_ATTEMPT_FINISHED',
+  /** 422: the terms in effect are to be accepted first (the consent prompt shows them). */
+  consentRequired: 'QB_CONSENT_REQUIRED',
+  /** 422: the page showed versions no longer in effect (reload them). */
+  termsOutdated: 'QB_TERMS_OUTDATED',
   /** 503: the queue before a hot quiz's lock is full or its wait ran out (platform decision D45); try again later. */
   processBusy: 'PROCESS_BUSY',
 } as const

@@ -4,6 +4,7 @@ import { ArrowLeft, ExternalLink, Loader2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
+import { noticeConsentProblem } from '../qb/ConsentGate'
 import { problemText } from '../qb/problems'
 import { Link, useLocation } from '../qb/router'
 import {
@@ -123,6 +124,7 @@ export function PayoutPage() {
       goToStripe(safe)
     } catch (error) {
       if (!controller.signal.aborted) setStep({ kind: 'failed', error })
+      noticeConsentProblem(queryClient, error)
     }
   }
 

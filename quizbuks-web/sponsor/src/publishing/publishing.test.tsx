@@ -33,6 +33,8 @@ interface Server {
   processes?: Record<string, Answer[]>
   publication?: Record<string, unknown> | null
   tiers?: Record<string, unknown>[]
+  /** Holds the answers to searches of the quizzes (with `q`) until it resolves. */
+  quizSearch?: Promise<void>
 }
 
 /** The server as the console sees it, for a signed-in, approved sponsor. Records what was posted. */
@@ -83,6 +85,7 @@ function server(options: Server = {}) {
       case '/api/queries/qb.sponsor.publications':
         return json(200, { items: [ROW], offset: 0, limit: 20, total: 1 })
       case '/api/queries/qb.sponsor.quizzes':
+        if ((body as { params?: { q?: string } } | null)?.params?.q) await options.quizSearch
         return json(200, { items: [{ quizId: 'q1', title: 'Coffee basics', versionLabel: 'v1.0', latestVersionNo: 1,
           status: 'VERSIONED' }], offset: 0, limit: 20, total: 1 })
       case '/api/queries/qb.sponsor.quiz-versions':
@@ -154,6 +157,23 @@ describe('the publication wizard', () => {
     await userEvent.click(screen.getByTestId('publication-next'))
     await waitFor(() => expect(processCalls('QB_PUBLICATION_SAVE')).toHaveLength(1))
     expect(processCalls('QB_PUBLICATION_SAVE')[0]).toMatchObject({ versionId: 'v1', name: 'Tea week' })
+  })
+
+  it('keeps the quizzes shown while a search is on its way: the open list never holds anything else', async () => {
+    let answer = () => {}
+    server({ quizSearch: new Promise<void>((resolve) => { answer = resolve }) })
+    window.history.replaceState(null, '', '/publications/new')
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('publication-quiz'))
+    expect(await screen.findByRole('option', { name: /Coffee basics/ })).toBeInTheDocument()
+    await userEvent.type(screen.getByPlaceholderText('Search your quizzes'), 'Coffee')
+    // The search goes out after the pause in typing and is not answered yet.
+    await new Promise((resolve) => setTimeout(resolve, 400))
+    const list = screen.getByRole('listbox')
+    expect(within(list).getByRole('option', { name: /Coffee basics/ })).toBeInTheDocument()
+    expect(list.querySelector('[role="status"], .animate-spin')).toBeNull()
+    answer()
+    expect(await within(list).findByRole('option', { name: /Coffee basics/ })).toBeInTheDocument()
   })
 
   it('saves the audience and tiers, then lists every problem and holds the submission', async () => {

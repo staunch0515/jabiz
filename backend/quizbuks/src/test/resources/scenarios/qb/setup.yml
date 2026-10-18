@@ -1,7 +1,8 @@
 # Setting up QuizBuks (docs/quizbuks/plans/Q1-skeleton.md): QB_SETUP creates the five roles with their permissions,
 # the seven ledger accounts, every ISO 3166-1 country and the business parameters with their first values. The
 # controlled parameters (platform decision D40) and the review rules of publications (Q4) and sponsor onboarding (Q2)
-# are proposed by setup and published by a second administrator. A second run a day later adds nothing; a parameter changed in between (with
+# are proposed by setup and published by a second administrator. The drafts of the legal texts (Q7b) are created as
+# marked test placeholders and nothing is published. A second run a day later adds nothing; a parameter changed in between (with
 # four eyes) keeps its value.
 name: Setting up QuizBuks
 clock: 2026-10-01T00:00:00Z
@@ -13,22 +14,23 @@ steps:
       rolesCreated: [QB_TAKER, QB_SPONSOR, QB_ADMIN_CONTENT, QB_ADMIN_FINANCE, QB_ADMIN_SUPER]
       accountsOpened: ["1110", "1120", "2110", "2120", "2130", "4110", "5110"]
       countriesAdded: 249
-      paramsCreated: [qb.ai.model, qb.app.min-version]
+      paramsCreated: [qb.ai.model, qb.app.min-version, qb.support.email]
       paramsProposed: [qb.creator-fee-rate, qb.transfer.threshold, qb.transfer.review-above, qb.transfer.enabled,
         qb.review.sponsor.auto, qb.review.publication.auto, qb.topup.min, qb.topup.max, qb.transfer.fee,
         qb.transfer.hold-days, qb.topup.new-sponsor.days, qb.topup.new-sponsor.max-total,
         qb.journal.account.1110, qb.journal.account.1120, qb.journal.account.2110, qb.journal.account.2120,
         qb.journal.account.2130, qb.journal.account.4110, qb.journal.account.5110, qb.issuer.name, qb.issuer.address,
-        qb.issuer.registration-no]
+        qb.issuer.registration-no, qb.legal.max-announce-days]
       rulesProposed: [qb.publication.review, qb.sponsor.review, qb.transfer.review,
         qb.sod.control-changes, qb.sod.security-administration]
+      legalDraftsCreated: [TERMS_APP, TERMS_SPONSOR, PRIVACY, COMMERCE_NOTICE]
     save: { p1: "$.proposals[0]", p2: "$.proposals[1]", p3: "$.proposals[2]", p4: "$.proposals[3]",
       p5: "$.proposals[4]", p6: "$.proposals[5]", p7: "$.proposals[6]", p8: "$.proposals[7]", p9: "$.proposals[8]",
       p10: "$.proposals[9]", p11: "$.proposals[10]", p12: "$.proposals[11]", p13: "$.proposals[12]",
       p14: "$.proposals[13]", p15: "$.proposals[14]", p16: "$.proposals[15]", p17: "$.proposals[16]",
       p18: "$.proposals[17]", p19: "$.proposals[18]", p20: "$.proposals[19]", p21: "$.proposals[20]",
       p22: "$.proposals[21]", p23: "$.proposals[22]", p24: "$.proposals[23]",
-      p25: "$.proposals[24]", p26: "$.proposals[25]", p27: "$.proposals[26]" }
+      p25: "$.proposals[24]", p26: "$.proposals[25]", p27: "$.proposals[26]", p28: "$.proposals[27]" }
   - note: A second administrator publishes the parameters (the journal mapping and issuer empty) and the review rules.
     process: CONTROL_CHANGE_PUBLISH@latest
     actor: { id: publisher, permissions: [control.publish] }
@@ -111,6 +113,9 @@ steps:
   - process: CONTROL_CHANGE_PUBLISH@latest
     actor: { id: publisher, permissions: [control.publish] }
     input: { changeId: "${p27}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p28}" }
   - expect: { param: qb.creator-fee-rate, value: 0 }
   - expect: { param: qb.transfer.threshold, value: 1000 }
   - expect: { param: qb.transfer.enabled, value: false }
@@ -145,7 +150,9 @@ steps:
       paramsCreated: []
       paramsProposed: []
       rulesProposed: []
+      legalDraftsCreated: []
   - expect: { param: qb.transfer.threshold, value: 3000 }
 snapshot:
-  entities: [SecRole, SecRolePermission, LedgerAccount, SysParam, SysControlChange, SysApprovalRule, QbCountry]
+  entities: [SecRole, SecRolePermission, LedgerAccount, SysParam, SysControlChange, SysApprovalRule, QbCountry,
+    QbLegalDoc]
   asOf: end

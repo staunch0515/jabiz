@@ -207,6 +207,15 @@ tools/quizbuks/local-demo.sh status | logs | seed
   导入用的凭证 CSV 与明细 CSV 原样存档（`sys_generated_file`，下载记入显示记录）。月份导出后才记录的分录（退款、冲正）进入下一次导出，已导出的凭证不再改变。
 - **收据**：开具方名称未设置时商家开不出收据（`QB_RECEIPT_NO_ISSUER`）。镜像已装中文与日文字体（`JABIZ_REPORTS_PDF_FONTS`），镜像外运行时自行设置。
 
+## 条款、隐私与帮助（Q7b）
+
+- 迁移 V12。**部署后再执行一次 `QB_SETUP`**：它为四种法律文本（答题人条款、商家条款、隐私政策、特定商取引法表记）各建一份标注 `[TEST PLACEHOLDER]` 的草稿（不发布），并建普通参数 `qb.support.email`（空）。
+  正式文本由需求方或律师提供，内容管理员在后台替换草稿后以 `QB_LEGAL_PUBLISH` 发布（每次二次验证；步骤见 `docs/quizbuks/operations.md` §3 第 9 步）。
+  评审修正（Q7b）后的部署：`QB_SETUP` 多提出一个受控参数 `qb.legal.max-announce-days`（180），由财务管理员发布；未发布前按 180 天。
+  "关于"页的构建时间取 `SOURCE_DATE_EPOCH` 或所构建提交的时间（没有 git 的构建中显示"—"）。
+- 帮助中心与条款页不需登录，经公开接口 `/api/public/queries/qb.public.*`：`JABIZ_PUBLIC_ENABLED` 缺省 `true`，设 `false` 时这些页面打不开。
+- 有已生效的条款而用户未同意其须同意的版本时，充值、提交发布、开通收款被拒（`QB_CONSENT_REQUIRED`），页面在登录后要求同意；开始答题不受影响。
+
 ## 环境变量
 
 放在 `deploy/quizbuks/.env`（不提交，已在 `.gitignore` 中）或部署平台的密钥库中。密钥都是 Base64、至少 32 字节（`openssl rand -base64 48`）。

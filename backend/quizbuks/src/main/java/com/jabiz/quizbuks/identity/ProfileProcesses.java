@@ -8,6 +8,9 @@ import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.quizbuks.country.QbCountries;
+import com.jabiz.quizbuks.messaging.ConsentChecks;
+import com.jabiz.quizbuks.messaging.LegalCodes;
+import com.jabiz.quizbuks.messaging.QbLegal;
 import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.mail.SendMail;
 import com.jabiz.runtime.process.steps.QueryEntities;
@@ -17,6 +20,7 @@ import jakarta.validation.constraints.NotNull;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -46,9 +50,23 @@ public final class ProfileProcesses {
      * @param countryCode       a country of the dictionary ({@code QbCountry.code}); the takers' regions follow it
      * @param preferredCurrency for showing amounts only (U-04): one of {@link QbAccounts#CURRENCIES}
      * @param baseRevision      the revision the caller edited; when given and no longer current, 422
+     * @param acceptTerms       registration's second step (the save completing the profile): the takers' terms and
+     *                          the privacy policy are accepted (Q7b, D-Q7-5); asked only while a version is in effect
+     * @param termsVersionNo    the version of the takers' terms the page showed; must be the one in effect
+     * @param privacyVersionNo  the version of the privacy policy the page showed; must be the one in effect
      */
     public record ProfileInput(@NotNull String displayName, @NotBlank String countryCode, String city,
-        @NotBlank String preferredCurrency, Long baseRevision) {}
+        @NotBlank String preferredCurrency, Long baseRevision, Boolean acceptTerms, Integer termsVersionNo,
+        Integer privacyVersionNo) {
+
+        /** The versions the page showed, by kind of text. */
+        Map<String, Integer> shown() {
+            Map<String, Integer> shown = new HashMap<>();
+            shown.put(QbLegal.TERMS_APP, termsVersionNo);
+            shown.put(QbLegal.PRIVACY, privacyVersionNo);
+            return shown;
+        }
+    }
 
     /** @param created whether this save completed the profile (the welcome mail was sent) */
     public record ProfileOutput(String userId, UUID profileId, long revision, Instant editedAt, boolean created) {}
@@ -72,6 +90,7 @@ public final class ProfileProcesses {
                 return EntityQuery.builder().where(new QueryPredicate.In("code", codes)).limit(1).build();
             }, COUNTRIES));
             AccountEditing.loadUser(pb, AccountEditing::userId);
+            ConsentChecks.load(pb, "Load the terms in effect", QbLegal.APP_KINDS, AccountEditing::userId);
             pb.compute("Save the profile", (metadata, ctx) -> save(ctx));
             pb.step("Welcome", SendMail.<ProcessContext>when(ctx -> !ctx.hasViolations()
                     && Boolean.TRUE.equals(ctx.get(WELCOME)) && AccountEditing.hasAddress(ctx), AccountMails.WELCOME,
@@ -100,6 +119,20 @@ public final class ProfileProcesses {
         values.put("preferredCurrency", input.preferredCurrency());
         // Registration's second step is done once a country is known (a sponsor's profile has only a name).
         boolean completes = profile == null || profile.get("countryCode") == null;
+        // Completing the profile is where a taker accepts the terms and the privacy policy (Q7-3), once any is in
+        // effect; who completed it earlier accepts after signing in (QB_CONSENT_ACCEPT).
+        if (completes && ConsentChecks.anyInEffect(ctx)) {
+            if (!Boolean.TRUE.equals(input.acceptTerms())) {
+                ctx.reject(new Violation("acceptTerms", LegalCodes.TERMS_REQUIRED, "Accept the terms and the "
+                    + "privacy policy to continue", Map.of()));
+                return;
+            }
+            List<ConsentChecks.State> accepted = ConsentChecks.accepted(ctx, input.shown());
+            if (ctx.hasViolations()) {
+                return;
+            }
+            ConsentChecks.record(ctx, userId, accepted, QbLegal.SOURCE_WELCOME);
+        }
         ctx.put(WELCOME, completes);
         if (profile == null) {
             values.put("userId", userId);

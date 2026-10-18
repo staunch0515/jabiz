@@ -34,6 +34,8 @@ interface Server {
   receipt?: { status: number; body: unknown }
   /** The row of `qb.sponsor.topup-limit`; none: not found. */
   limit?: Record<string, unknown>
+  /** The rows of `qb.me.consents` once a top-up was refused (a new version took effect meanwhile); none before. */
+  consentsAfterStart?: Record<string, unknown>[]
 }
 
 /** The server as the console sees it, for a signed-in, approved sponsor. Records what was posted. */
@@ -41,6 +43,7 @@ function server(options: Server = {}) {
   const posted: { path: string; body: Record<string, unknown>; key: string | null }[] = []
   const states = options.topUps ?? [topUp('OPEN')]
   let reads = 0
+  let started = false
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
     const request = input instanceof Request ? input : new Request(new URL(String(input), window.location.origin))
     const url = new URL(request.url, window.location.origin)
@@ -72,7 +75,10 @@ function server(options: Server = {}) {
           { topUpId: 't0', amount: '6000', status: 'PAID', createdAt: '2026-10-13T01:00:00Z', expiresAt: LATER,
             checkoutUrl: null, paidAt: '2026-10-13T01:01:00Z', refundedAmount: '0' },
         ], offset: 0, limit: 20, total: 2 })
+      case '/api/queries/qb.me.consents':
+        return json(200, { items: started ? options.consentsAfterStart ?? [] : [], offset: 0, limit: 20 })
       case '/api/processes/QB_TOPUP_START/latest':
+        started = true
         return json(options.start?.status ?? 200, options.start?.body
           ?? { output: { topUpId: 't1', status: 'OPENING', jobId: 'j1' } })
       case '/api/processes/QB_TOPUP_RECEIPT_ISSUE/latest':
@@ -230,6 +236,25 @@ describe('the wallet', () => {
     await user.click(screen.getByTestId('topup-submit'))
     await waitFor(() => expect(processCalls()).toHaveLength(2))
     expect(processCalls()[1].key).not.toBe(processCalls()[0].key)
+  })
+})
+
+describe('the terms', () => {
+  it('refused a top-up until a new version is accepted, the console asks for it at once (Q7b review M3)', async () => {
+    const terms = { kind: 'TERMS_SPONSOR', versionId: 'v2', versionNo: 2, title: { en: 'Sponsor terms' },
+      changeSummary: { en: 'Fees are clearer.' }, requiresConsent: true, effectiveAt: '2026-10-14T00:00:00Z',
+      toAccept: 2, accepted: 1, mustAccept: true }
+    const { posted } = server({ consentsAfterStart: [terms], start: { status: 422, body: { status: 422,
+      code: 'QB_CONSENT_REQUIRED', detail: 'Refused', violations: [{ field: null, ruleCode: 'QB_CONSENT_REQUIRED',
+        message: 'Accept version 2 of TERMS_SPONSOR first.' }] } } })
+    window.history.replaceState(null, '', '/wallet')
+    const user = userEvent.setup()
+    render(<App />)
+    await user.click(await screen.findByTestId('topup-open'))
+    await user.type(screen.getByTestId('topup-amount'), '1500')
+    await user.click(screen.getByTestId('topup-submit'))
+    expect(await screen.findByTestId('consent-gate')).toHaveTextContent('Fees are clearer.')
+    expect(posted.filter((p) => p.path === '/api/queries/qb.me.consents').length).toBeGreaterThan(1)
   })
 })
 

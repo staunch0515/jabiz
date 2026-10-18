@@ -1,0 +1,295 @@
+{
+  "queries" : [ {
+    "cacheSeconds" : 300,
+    "description" : "The help centre's published questions and answers for the app or the sponsor console (U-72, P-05; Q7b D-Q7-6), in their order; searched by text in any language",
+    "id" : "qb.public.faq",
+    "list" : {
+      "defaultSort" : {
+        "asc" : true,
+        "field" : "seq"
+      },
+      "filters" : [ "category" ],
+      "sorts" : [ "seq" ]
+    },
+    "params" : {
+      "audience" : {
+        "kind" : {
+          "allowedValues" : [ "APP", "SPONSOR", "ALL" ],
+          "dictUrn" : "urn:jabiz:dict:quizbuks:faq-audience",
+          "type" : "code"
+        },
+        "list" : false,
+        "required" : true
+      },
+      "category" : {
+        "kind" : {
+          "allowedValues" : [ "ACCOUNT", "QUIZ_RULES", "REWARDS", "OTHER", "ONBOARDING", "PUBLISHING", "BILLING" ],
+          "dictUrn" : "urn:jabiz:dict:quizbuks:faq-category",
+          "type" : "code"
+        },
+        "list" : false,
+        "required" : false
+      },
+      "q" : {
+        "kind" : {
+          "maxLength" : 100,
+          "multiline" : false,
+          "type" : "text"
+        },
+        "list" : false,
+        "required" : false
+      }
+    },
+    "results" : {
+      "answer" : {
+        "format" : "markdown",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 10000,
+        "multiline" : true,
+        "requiredLanguages" : [ "en" ],
+        "type" : "custom"
+      },
+      "category" : {
+        "allowedValues" : [ "ACCOUNT", "QUIZ_RULES", "REWARDS", "OTHER", "ONBOARDING", "PUBLISHING", "BILLING" ],
+        "dictUrn" : "urn:jabiz:dict:quizbuks:faq-category",
+        "type" : "code"
+      },
+      "faqId" : {
+        "type" : "semanticIdentity",
+        "urn" : "urn:jabiz:entity:quizbuks:faq-entry"
+      },
+      "question" : {
+        "format" : "plain",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 300,
+        "multiline" : false,
+        "requiredLanguages" : [ "en" ],
+        "type" : "custom"
+      },
+      "seq" : {
+        "precision" : 6,
+        "scale" : 0,
+        "type" : "numeric"
+      }
+    }
+  }, {
+    "cacheSeconds" : 300,
+    "description" : "A kind of legal text as anybody reads it (U-73, P-05; Q7b D-Q7-6): the version in effect at a time, with the next version announced for later (its number and effective time), if any",
+    "id" : "qb.public.legal",
+    "list" : {
+      "filters" : [ ],
+      "sorts" : [ ]
+    },
+    "params" : {
+      "at" : {
+        "kind" : {
+          "role" : "EVENT_TIME",
+          "type" : "temporal"
+        },
+        "list" : false,
+        "required" : true
+      },
+      "kind" : {
+        "kind" : {
+          "allowedValues" : [ "TERMS_APP", "TERMS_SPONSOR", "PRIVACY", "COMMERCE_NOTICE" ],
+          "dictUrn" : "urn:jabiz:dict:quizbuks:legal-kind",
+          "type" : "code"
+        },
+        "list" : false,
+        "required" : true
+      }
+    },
+    "results" : {
+      "body" : {
+        "format" : "markdown",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 100000,
+        "multiline" : true,
+        "requiredLanguages" : [ "ja", "en" ],
+        "type" : "custom"
+      },
+      "changeSummary" : {
+        "format" : "markdown",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 5000,
+        "multiline" : true,
+        "requiredLanguages" : [ ],
+        "type" : "custom"
+      },
+      "effectiveAt" : {
+        "role" : "EVENT_TIME",
+        "type" : "temporal"
+      },
+      "kind" : {
+        "allowedValues" : [ "TERMS_APP", "TERMS_SPONSOR", "PRIVACY", "COMMERCE_NOTICE" ],
+        "dictUrn" : "urn:jabiz:dict:quizbuks:legal-kind",
+        "type" : "code"
+      },
+      "requiresConsent" : {
+        "type" : "bool"
+      },
+      "title" : {
+        "format" : "plain",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 200,
+        "multiline" : false,
+        "requiredLanguages" : [ "ja", "en" ],
+        "type" : "custom"
+      },
+      "upcomingEffectiveAt" : {
+        "role" : "EVENT_TIME",
+        "type" : "temporal"
+      },
+      "upcomingVersionNo" : {
+        "precision" : 6,
+        "scale" : 0,
+        "type" : "numeric"
+      },
+      "versionNo" : {
+        "precision" : 6,
+        "scale" : 0,
+        "type" : "numeric"
+      }
+    }
+  }, {
+    "cacheSeconds" : 300,
+    "description" : "Every published version of a kind of legal text, newest first - its number, title, effective time, summary of changes and whether it was withdrawn before taking effect",
+    "id" : "qb.public.legal-history",
+    "list" : {
+      "defaultSort" : {
+        "asc" : false,
+        "field" : "versionNo"
+      },
+      "filters" : [ ],
+      "sorts" : [ "versionNo" ]
+    },
+    "params" : {
+      "kind" : {
+        "kind" : {
+          "allowedValues" : [ "TERMS_APP", "TERMS_SPONSOR", "PRIVACY", "COMMERCE_NOTICE" ],
+          "dictUrn" : "urn:jabiz:dict:quizbuks:legal-kind",
+          "type" : "code"
+        },
+        "list" : false,
+        "required" : true
+      }
+    },
+    "results" : {
+      "changeSummary" : {
+        "format" : "markdown",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 5000,
+        "multiline" : true,
+        "requiredLanguages" : [ ],
+        "type" : "custom"
+      },
+      "effectiveAt" : {
+        "role" : "EVENT_TIME",
+        "type" : "temporal"
+      },
+      "requiresConsent" : {
+        "type" : "bool"
+      },
+      "title" : {
+        "format" : "plain",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 200,
+        "multiline" : false,
+        "requiredLanguages" : [ "ja", "en" ],
+        "type" : "custom"
+      },
+      "versionNo" : {
+        "precision" : 6,
+        "scale" : 0,
+        "type" : "numeric"
+      },
+      "withdrawn" : {
+        "type" : "bool"
+      }
+    }
+  }, {
+    "cacheSeconds" : 300,
+    "description" : "One published version of a kind of legal text, in full (the history's \"view\" and an announced version)",
+    "id" : "qb.public.legal-version",
+    "list" : {
+      "filters" : [ ],
+      "sorts" : [ ]
+    },
+    "params" : {
+      "kind" : {
+        "kind" : {
+          "allowedValues" : [ "TERMS_APP", "TERMS_SPONSOR", "PRIVACY", "COMMERCE_NOTICE" ],
+          "dictUrn" : "urn:jabiz:dict:quizbuks:legal-kind",
+          "type" : "code"
+        },
+        "list" : false,
+        "required" : true
+      },
+      "versionNo" : {
+        "kind" : {
+          "precision" : 6,
+          "scale" : 0,
+          "type" : "numeric"
+        },
+        "list" : false,
+        "required" : true
+      }
+    },
+    "results" : {
+      "body" : {
+        "format" : "markdown",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 100000,
+        "multiline" : true,
+        "requiredLanguages" : [ "ja", "en" ],
+        "type" : "custom"
+      },
+      "changeSummary" : {
+        "format" : "markdown",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 5000,
+        "multiline" : true,
+        "requiredLanguages" : [ ],
+        "type" : "custom"
+      },
+      "effectiveAt" : {
+        "role" : "EVENT_TIME",
+        "type" : "temporal"
+      },
+      "kind" : {
+        "allowedValues" : [ "TERMS_APP", "TERMS_SPONSOR", "PRIVACY", "COMMERCE_NOTICE" ],
+        "dictUrn" : "urn:jabiz:dict:quizbuks:legal-kind",
+        "type" : "code"
+      },
+      "requiresConsent" : {
+        "type" : "bool"
+      },
+      "title" : {
+        "format" : "plain",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 200,
+        "multiline" : false,
+        "requiredLanguages" : [ "ja", "en" ],
+        "type" : "custom"
+      },
+      "versionNo" : {
+        "precision" : 6,
+        "scale" : 0,
+        "type" : "numeric"
+      },
+      "withdrawn" : {
+        "type" : "bool"
+      }
+    }
+  } ]
+}

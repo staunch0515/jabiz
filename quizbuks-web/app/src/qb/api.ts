@@ -24,6 +24,13 @@ export interface ProfileInput {
   preferredCurrency: string
   /** The revision edited; a newer one on the server is refused (`QB_PROFILE_CHANGED`). */
   baseRevision?: number | null
+  /**
+   * Registration's second step accepts the takers' terms and the privacy policy in effect (Q7b): the versions the
+   * page showed, refused when no longer in effect (`QB_TERMS_OUTDATED`).
+   */
+  acceptTerms?: boolean
+  termsVersionNo?: number | null
+  privacyVersionNo?: number | null
 }
 
 /** `ProfileProcesses.ProfileOutput`. */
@@ -61,6 +68,9 @@ export interface SponsorInput {
   avatar?: string | null
   acceptTerms?: boolean
   baseRevision?: number | null
+  /** The versions of the sponsors' terms and the privacy policy the page showed (Q7b). */
+  termsVersionNo?: number | null
+  privacyVersionNo?: number | null
 }
 
 /** `SponsorProcesses.SponsorOutput`. */

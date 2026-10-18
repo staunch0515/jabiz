@@ -42,6 +42,10 @@ test('a taker registers, verifies at the app\'s own page, completes the profile 
   await expect(page.getByTestId('profile-name')).toHaveValue('Mei')
   await expect(page.getByTestId('profile-country')).toContainText('United States')
   await page.getByTestId('profile-city').fill('Seattle')
+  // The terms and the privacy policy in effect are accepted here (Q7b), each linked to its text.
+  await expect(page.getByTestId('profile-save')).toBeDisabled()
+  await expect(page.getByTestId('legal-link-TERMS_APP')).toHaveAttribute('href', '/legal/terms')
+  await page.getByTestId('profile-terms').click()
   await page.getByTestId('profile-save').click()
   await expect(page.getByTestId('home')).toContainText('Mei')
   await expect(page).toHaveURL(/\/$/)
