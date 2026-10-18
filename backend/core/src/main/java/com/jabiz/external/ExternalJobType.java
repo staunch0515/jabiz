@@ -43,11 +43,16 @@ import java.util.regex.Pattern;
  *                       time; starting one more is refused with 422 {@code EXTERNAL_JOB_LIMIT}
  * @param oneOpenPerReference whether a reference may have only one open job of this type at a time (the same
  *                       refusal); every start then needs a reference
+ * @param maxInputBytes  the largest input stored, in bytes of JSON (decision D50 item 1):
+ *                       {@value #DEFAULT_MAX_INPUT_BYTES} unless declared, at most {@value #MAX_INPUT_BYTES}
+ * @param inputFiles     the files a job may read (decision D50 item 2), or null when it reads none
+ * @param outputFiles    the files a job may produce (decision D50 item 3), or null when it produces none
  */
 public record ExternalJobType<I, R>(String name, Class<I> inputType, Class<R> resultType,
     Class<? extends ExternalJobHandler<I, R>> handler, Set<String> services, Duration timeout, int maxAttempts,
     Duration initialBackoff, Duration maxBackoff, int maxConcurrency, String onCompleted, String onFailed,
-    int maxOpenPerRequester, boolean oneOpenPerReference) {
+    int maxOpenPerRequester, boolean oneOpenPerReference, int maxInputBytes, InputFiles inputFiles,
+    OutputFiles outputFiles) {
 
     static final String NAME_PATTERN = "[a-z][a-z0-9._-]{0,99}";
     public static final Pattern NAME = Pattern.compile(NAME_PATTERN);
@@ -64,14 +69,65 @@ public record ExternalJobType<I, R>(String name, Class<I> inputType, Class<R> re
     /** A requester's open jobs of one type; what one person can start before the first ones finish. */
     public static final int DEFAULT_MAX_OPEN_PER_REQUESTER = 10;
     public static final int MAX_OPEN_PER_REQUESTER = 10_000;
+    /** The input stored unless the type declares otherwise: 64 KiB of JSON (decision D38). */
+    public static final int DEFAULT_MAX_INPUT_BYTES = 64 * 1024;
+    /** The largest input a type may declare: 1 MiB of JSON, kept forever with the job (decision D50 item 1). */
+    public static final int MAX_INPUT_BYTES = 1024 * 1024;
+    /** The smallest input limit a type may declare. */
+    public static final int MIN_INPUT_BYTES = 1024;
+    /** The most files one job may read, or one attempt produce (decision D50). */
+    public static final int MAX_FILES = 20;
+    /** The largest file a job may read: copied to the executor's disk for the attempt, not held in memory. */
+    public static final long MAX_INPUT_FILE_BYTES = 100L * 1024 * 1024;
+    /** The largest file a job may produce: the handler holds it in memory. */
+    public static final long MAX_OUTPUT_FILE_BYTES = 50L * 1024 * 1024;
 
     private static final int MAX_TYPE_DEPTH = 8;
+
+    /**
+     * The files a job of the type may read (decision D50 item 2): the starting process names them
+     * ({@code StartExternalJob.files}), the requester must be allowed to read each one, and the handler reads them,
+     * and only them, during an attempt ({@link ExternalJobContext#files()}).
+     *
+     * @param policies the file policies the files may be of; a file of any other is refused
+     * @param maxFiles the most files one job reads
+     * @param maxBytes the largest file one job reads
+     */
+    public record InputFiles(Set<String> policies, int maxFiles, long maxBytes) {
+        public InputFiles {
+            policies = policies == null ? Set.of() : Collections.unmodifiableSet(new LinkedHashSet<>(policies));
+        }
+    }
+
+    /**
+     * The files a job of the type may produce (decision D50 item 3): the handler returns them with its result
+     * ({@link ExternalJobResult#file}); the platform stores each as an upload of the requester under {@code policy},
+     * through the same checks and processing as {@code /api/files}, and hands their ids to the completion process.
+     *
+     * @param policy   the file policy they are stored under; the requester must hold its upload permission
+     * @param maxFiles the most files one attempt produces
+     * @param maxBytes the largest file one attempt produces (the policy's own limit applies too)
+     */
+    public record OutputFiles(String policy, int maxFiles, long maxBytes) {}
 
     public ExternalJobType {
         services = services == null ? Set.of() : Collections.unmodifiableSet(new LinkedHashSet<>(services));
         timeout = timeout == null ? DEFAULT_TIMEOUT : timeout;
         initialBackoff = initialBackoff == null ? DEFAULT_INITIAL_BACKOFF : initialBackoff;
         maxBackoff = maxBackoff == null ? DEFAULT_MAX_BACKOFF : maxBackoff;
+    }
+
+    /**
+     * A declaration as decision D38 had it, before a type could declare its input limit and its files: the default
+     * limit, no files. Kept for code of line 1.2 that calls the canonical constructor of then (decision D50 item 6).
+     */
+    public ExternalJobType(String name, Class<I> inputType, Class<R> resultType,
+        Class<? extends ExternalJobHandler<I, R>> handler, Set<String> services, Duration timeout, int maxAttempts,
+        Duration initialBackoff, Duration maxBackoff, int maxConcurrency, String onCompleted, String onFailed,
+        int maxOpenPerRequester, boolean oneOpenPerReference) {
+        this(name, inputType, resultType, handler, services, timeout, maxAttempts, initialBackoff, maxBackoff,
+            maxConcurrency, onCompleted, onFailed, maxOpenPerRequester, oneOpenPerReference, DEFAULT_MAX_INPUT_BYTES,
+            null, null);
     }
 
     public static <I, R> ExternalJobType<I, R> define(String name, Class<I> inputType, Class<R> resultType,
@@ -145,6 +201,37 @@ public record ExternalJobType<I, R>(String name, Class<I> inputType, Class<R> re
         if (maxOpenPerRequester < 1 || maxOpenPerRequester > MAX_OPEN_PER_REQUESTER) {
             problems.add("maxOpenPerRequester: must be between 1 and " + MAX_OPEN_PER_REQUESTER);
         }
+        if (maxInputBytes < MIN_INPUT_BYTES || maxInputBytes > MAX_INPUT_BYTES) {
+            problems.add("maxInputSize: must be between " + MIN_INPUT_BYTES + " and " + MAX_INPUT_BYTES + " bytes");
+        }
+        if (inputFiles != null) {
+            if (inputFiles.policies().isEmpty()) {
+                problems.add("inputFiles: name the file policies the files may be of");
+            }
+            for (String policy : inputFiles.policies()) {
+                if (policy == null || policy.isBlank()) {
+                    problems.add("inputFiles: a policy name is blank");
+                }
+            }
+            if (inputFiles.maxFiles() < 1 || inputFiles.maxFiles() > MAX_FILES) {
+                problems.add("inputFiles: the most files must be between 1 and " + MAX_FILES);
+            }
+            if (inputFiles.maxBytes() < 1 || inputFiles.maxBytes() > MAX_INPUT_FILE_BYTES) {
+                problems.add("inputFiles: the largest file must be between 1 and " + MAX_INPUT_FILE_BYTES + " bytes");
+            }
+        }
+        if (outputFiles != null) {
+            if (outputFiles.policy() == null || outputFiles.policy().isBlank()) {
+                problems.add("outputFiles: name the file policy the files are stored under");
+            }
+            if (outputFiles.maxFiles() < 1 || outputFiles.maxFiles() > MAX_FILES) {
+                problems.add("outputFiles: the most files must be between 1 and " + MAX_FILES);
+            }
+            if (outputFiles.maxBytes() < 1 || outputFiles.maxBytes() > MAX_OUTPUT_FILE_BYTES) {
+                problems.add("outputFiles: the largest file must be between 1 and " + MAX_OUTPUT_FILE_BYTES
+                    + " bytes");
+            }
+        }
         if (onCompleted == null || onCompleted.isBlank()) {
             problems.add("onCompleted: name the process that receives the result");
         }
@@ -190,7 +277,8 @@ public record ExternalJobType<I, R>(String name, Class<I> inputType, Class<R> re
         return "ExternalJobType[name=" + name + ", handler=" + (handler == null ? null : handler.getSimpleName())
             + ", services=" + services + ", timeout=" + timeout + ", maxAttempts=" + maxAttempts + ", maxConcurrency="
             + maxConcurrency + ", maxOpenPerRequester=" + maxOpenPerRequester + ", oneOpenPerReference="
-            + oneOpenPerReference + ", onCompleted=" + onCompleted + ", onFailed=" + onFailed + "]";
+            + oneOpenPerReference + ", maxInputBytes=" + maxInputBytes + ", inputFiles=" + inputFiles
+            + ", outputFiles=" + outputFiles + ", onCompleted=" + onCompleted + ", onFailed=" + onFailed + "]";
     }
 
     public static final class Builder<I, R> {
@@ -207,6 +295,9 @@ public record ExternalJobType<I, R>(String name, Class<I> inputType, Class<R> re
         private int maxConcurrency = DEFAULT_MAX_CONCURRENCY;
         private int maxOpenPerRequester = DEFAULT_MAX_OPEN_PER_REQUESTER;
         private boolean oneOpenPerReference;
+        private int maxInputBytes = DEFAULT_MAX_INPUT_BYTES;
+        private InputFiles inputFiles;
+        private OutputFiles outputFiles;
         private String onCompleted;
         private String onFailed;
 
@@ -264,6 +355,35 @@ public record ExternalJobType<I, R>(String name, Class<I> inputType, Class<R> re
             return this;
         }
 
+        /**
+         * The largest input stored, in bytes of JSON: {@value ExternalJobType#DEFAULT_MAX_INPUT_BYTES} unless declared,
+         * from {@value ExternalJobType#MIN_INPUT_BYTES} to {@value ExternalJobType#MAX_INPUT_BYTES} (decision D50
+         * item 1). The input is kept forever with the job: put nothing in it the job does not need.
+         */
+        public Builder<I, R> maxInputSize(int bytes) {
+            this.maxInputBytes = bytes;
+            return this;
+        }
+
+        /**
+         * Jobs read files (decision D50 item 2): at most {@code maxFiles}, each at most {@code maxBytes}, each of one
+         * of {@code policies}. The starting process names them; the requester must be allowed to read every one.
+         */
+        public Builder<I, R> inputFiles(int maxFiles, long maxBytes, String... policies) {
+            this.inputFiles = new InputFiles(new LinkedHashSet<>(List.of(policies)), maxFiles, maxBytes);
+            return this;
+        }
+
+        /**
+         * Jobs produce files (decision D50 item 3): at most {@code maxFiles} per attempt, each at most
+         * {@code maxBytes}, stored under {@code policy} as uploads of the requester, who must hold its upload
+         * permission when the job starts.
+         */
+        public Builder<I, R> outputFiles(String policy, int maxFiles, long maxBytes) {
+            this.outputFiles = new OutputFiles(policy, maxFiles, maxBytes);
+            return this;
+        }
+
         /** The {@code internal()} process run with an {@link ExternalJobCompletion} once the job has its result. */
         public Builder<I, R> onCompleted(String process) {
             this.onCompleted = process;
@@ -279,7 +399,7 @@ public record ExternalJobType<I, R>(String name, Class<I> inputType, Class<R> re
         public ExternalJobType<I, R> build() {
             return new ExternalJobType<>(name, inputType, resultType, handler, services, timeout, maxAttempts,
                 initialBackoff, maxBackoff, maxConcurrency, onCompleted, onFailed, maxOpenPerRequester,
-                oneOpenPerReference);
+                oneOpenPerReference, maxInputBytes, inputFiles, outputFiles);
         }
     }
 }

@@ -150,6 +150,23 @@ public final class PlatformArchRules {
                 + "(decision D38)");
     }
 
+    /**
+     * External job handlers and blocking steps of the business packages do not reach the platform's files
+     * ({@code com.jabiz.runtime.file}: the reactive storage, the upload pipeline, the file processes) (decision D50):
+     * a handler reads the files its job was given through {@code ExternalJobContext.files()}, which the platform
+     * checked against what the requester may read, and returns the files it makes with its result, which the platform
+     * stores as uploads. Anything else would read files nobody checked, or store files past the upload checks.
+     */
+    public static ArchRule handlersReadFilesThroughTheirContext(String... businessPackages) {
+        DescribedPredicate<JavaClass> handlers = JavaClass.Predicates.resideInAnyPackage(businessPackages)
+            .and(JavaClass.Predicates.assignableTo("com.jabiz.external.ExternalJobHandler")
+                .or(JavaClass.Predicates.assignableTo("com.jabiz.process.BlockingStep")))
+            .as("external job handlers and blocking steps of " + String.join(", ", businessPackages));
+        return noClasses().that(handlers)
+            .should().dependOnClassesThat().resideInAPackage("com.jabiz.runtime.file..")
+            .because("a job's files come through its context and go back with its result (decision D50)");
+    }
+
         /** The platform's own ways of starting processes and of acting as someone, which only the platform uses. */
     static final List<String> PROCESS_MACHINERY = List.of("com.jabiz.runtime.process.ProcessExecutor",
         "com.jabiz.runtime.process.ExecutionOptions", "com.jabiz.runtime.security.ActingUser");

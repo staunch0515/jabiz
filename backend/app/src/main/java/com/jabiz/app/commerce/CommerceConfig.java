@@ -206,6 +206,28 @@ class CommerceConfig {
         return ProductCopy.FAILED_PROCESS;
     }
 
+    /** A product photo redone by the demo AI service: an external job with an input and an output file (D50). */
+    @Bean
+    ExternalJobType<ProductImage.ProductImageInput, ProductImage.ProductImageResult> productImageJob() {
+        return ProductImage.IMAGE_JOB;
+    }
+
+    @Bean
+    ProcessDefinition<ProductImage.RequestInput, ProductImage.RequestOutput, ProcessContext>
+        productImageRequestProcess() {
+        return ProductImage.REQUEST_PROCESS;
+    }
+
+    @Bean
+    ProcessDefinition<ExternalJobCompletion, ProductImage.ApplyOutput, ProcessContext> productImageApplyProcess() {
+        return ProductImage.APPLY_PROCESS;
+    }
+
+    @Bean
+    ProcessDefinition<ExternalJobFailure, ProductImage.ApplyOutput, ProcessContext> productImageFailedProcess() {
+        return ProductImage.FAILED_PROCESS;
+    }
+
     @Bean
     ProcessDefinition<CommerceProcesses.ReceiveInput, CommerceProcesses.ReceiveOutput, ProcessContext>
         stockReceiveProcess() {

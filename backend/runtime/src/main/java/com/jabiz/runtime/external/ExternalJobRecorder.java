@@ -18,6 +18,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
 
 /**
  * The rows of external jobs (decision D38 items 3–5), for the start step, the executor, the cancellation and the
@@ -48,7 +49,7 @@ public class ExternalJobRecorder {
     record Job(String jobId, String jobType, String input, String reference, String requestedBy, Instant createdTime) {}
 
     /** A job due for an attempt: its row and the number of attempts so far. */
-    record Due(String jobId, String input, int attempts) {}
+    record Due(String jobId, String input, int attempts, String requestedBy) {}
 
     /** A claim whose lease ran out without an attempt recorded. */
     record Expired(String jobId, int attemptNo) {}
@@ -96,6 +97,90 @@ public class ExternalJobRecorder {
         row.put("process_seq_id", processSeqId);
         row.put("created_time", micros(createdTime));
         return engine().insert(ExternalJobEntities.JOB_TABLE, row).thenReturn(id);
+    }
+
+    // ------------------------------------------------------------------ files (decision D50)
+
+    /** A stored file as a job reads or produced it. */
+    public record StoredFile(UUID fileId, String policy, String contentType, long sizeBytes, String sha256) {}
+
+    /**
+     * The stored file {@code fileId}, its row locked {@code FOR KEY SHARE} until the transaction ends (as a field's
+     * write check reads it), so that it is not deleted while the job that reads it is being started; empty when
+     * there is none.
+     */
+    public Mono<StoredFile> lockStoredFile(UUID fileId) {
+        return engine().select("SELECT file_id, policy, content_type, size_bytes, sha256 FROM sys_file"
+                + " WHERE file_id = :id FOR KEY SHARE", Map.of("id", BoundValue.of(fileId)))
+            .next().map(row -> new StoredFile(Rows.uuid(row.get("file_id")), Rows.string(row.get("policy")),
+                Rows.string(row.get("content_type")), Rows.longValue(row.get("size_bytes")),
+                Rows.string(row.get("sha256"))));
+    }
+
+    /** Records a file the job reads, in the transaction that starts it. */
+    public Mono<Void> insertInputFile(String jobId, int position, StoredFile file, Instant time) {
+        return engine().insert(ExternalJobEntities.FILE_TABLE, fileRow(jobId, "INPUT", position, null, null, file,
+            time));
+    }
+
+    /** Records a file an attempt produced, in the transaction that records the attempt. */
+    Mono<Void> insertOutputFile(String jobId, int attemptNo, int position, String key, StoredFile file, Instant time) {
+        return engine().insert(ExternalJobEntities.FILE_TABLE, fileRow(jobId, "OUTPUT", position, attemptNo, key,
+            file, time));
+    }
+
+    private Map<String, Object> fileRow(String jobId, String direction, int position, Integer attemptNo, String key,
+        StoredFile file, Instant time) {
+        Map<String, Object> row = new LinkedHashMap<>();
+        row.put("job_file_id", String.valueOf(ids.next(ExternalJobEntities.FILE_ENTITY)));
+        row.put("job_id", jobId);
+        row.put("direction", direction);
+        row.put("position", position);
+        row.put("attempt_no", attemptNo);
+        row.put("output_key", key);
+        row.put("file_id", file.fileId().toString());
+        row.put("policy", file.policy());
+        row.put("size_bytes", file.sizeBytes());
+        row.put("sha256", file.sha256());
+        row.put("recorded_time", micros(time));
+        return row;
+    }
+
+    /**
+     * A file the job reads, as recorded when it started, with what {@code sys_file} has of it now: {@code current}
+     * is null once the file is gone.
+     */
+    record InputFile(UUID fileId, long sizeBytes, String sha256, StoredFile current) {}
+
+    /** The files the job reads, in their order. */
+    Flux<InputFile> inputFiles(String jobId) {
+        return engine().select("""
+                SELECT jf.file_id, jf.size_bytes, jf.sha256, f.file_id AS current_id, f.policy AS current_policy,
+                       f.content_type AS current_type, f.size_bytes AS current_size, f.sha256 AS current_sha256
+                FROM sys_external_job_file jf
+                LEFT JOIN sys_file f ON f.file_id = CAST(jf.file_id AS uuid)
+                WHERE jf.job_id = :id AND jf.direction = 'INPUT'
+                ORDER BY jf.position""", Map.of("id", BoundValue.of(jobId)))
+            .map(row -> new InputFile(UUID.fromString(Rows.string(row.get("file_id"))),
+                Rows.longValue(row.get("size_bytes")), Rows.string(row.get("sha256")),
+                row.get("current_id") == null ? null : new StoredFile(Rows.uuid(row.get("current_id")),
+                    Rows.string(row.get("current_policy")), Rows.string(row.get("current_type")),
+                    Rows.longValue(row.get("current_size")), Rows.string(row.get("current_sha256")))));
+    }
+
+    /**
+     * The files the job's successful attempt produced, by their key, in their order; empty when none did. A job has
+     * at most one successful attempt: once it is recorded the job has its outcome.
+     */
+    Mono<Map<String, UUID>> outputFiles(String jobId) {
+        return engine().select("""
+                SELECT jf.output_key, jf.file_id FROM sys_external_job_file jf
+                JOIN sys_external_job_attempt a ON a.job_id = jf.job_id AND a.attempt_no = jf.attempt_no
+                WHERE jf.job_id = :id AND jf.direction = 'OUTPUT' AND a.outcome = 'SUCCEEDED'
+                ORDER BY jf.position""", Map.of("id", BoundValue.of(jobId)))
+            .collect(LinkedHashMap<String, UUID>::new, (map, row) -> map.put(Rows.string(row.get("output_key")),
+                UUID.fromString(Rows.string(row.get("file_id")))))
+            .map(map -> (Map<String, UUID>) map);
     }
 
     // ------------------------------------------------------------------ start limits
@@ -233,7 +318,7 @@ public class ExternalJobRecorder {
         params.put("limit", BoundValue.of((long) limit));
         params.put("mark", BoundValue.of(mark));
         return engine().select("""
-                SELECT j.job_id, j.input, s.attempts
+                SELECT j.job_id, j.input, j.requested_by, s.attempts
                 FROM sys_external_job j
                 CROSS JOIN LATERAL (SELECT count(*) AS attempts, max(a.finished_time) AS last_finished
                                     FROM sys_external_job_attempt a WHERE a.job_id = j.job_id) s
@@ -250,8 +335,12 @@ public class ExternalJobRecorder {
                 ORDER BY j.job_seq
                 LIMIT :limit
                 FOR UPDATE OF j SKIP LOCKED""", params)
-            .map(row -> new Due(Rows.string(row.get("job_id")), Rows.string(row.get("input")),
-                Math.toIntExact(Rows.longValue(row.get("attempts")))));
+            .map(ExternalJobRecorder::due);
+    }
+
+    private static Due due(Map<String, Object> row) {
+        return new Due(Rows.string(row.get("job_id")), Rows.string(row.get("input")),
+            Math.toIntExact(Rows.longValue(row.get("attempts"))), Rows.string(row.get("requested_by")));
     }
 
 
@@ -265,7 +354,7 @@ public class ExternalJobRecorder {
         params.put("type", BoundValue.of(jobType));
         params.put("reference", reference == null ? BoundValue.nullOf(String.class) : BoundValue.of(reference));
         return engine().select("""
-                SELECT j.job_id, j.input,
+                SELECT j.job_id, j.input, j.requested_by,
                        (SELECT count(*) FROM sys_external_job_attempt a WHERE a.job_id = j.job_id) AS attempts
                 FROM sys_external_job j
                 WHERE j.job_type = :type
@@ -279,8 +368,7 @@ public class ExternalJobRecorder {
                 ORDER BY j.job_seq
                 LIMIT 1
                 FOR UPDATE OF j""", params)
-            .next().map(row -> new Due(Rows.string(row.get("job_id")), Rows.string(row.get("input")),
-                Math.toIntExact(Rows.longValue(row.get("attempts")))));
+            .next().map(ExternalJobRecorder::due);
     }
 
     /**

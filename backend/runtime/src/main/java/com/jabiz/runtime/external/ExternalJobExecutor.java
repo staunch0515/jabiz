@@ -4,10 +4,12 @@ import com.jabiz.external.ExternalCallException;
 import com.jabiz.external.ExternalHttp;
 import com.jabiz.external.ExternalJobContext;
 import com.jabiz.external.ExternalJobException;
+import com.jabiz.external.ExternalJobFile;
 import com.jabiz.external.ExternalJobHandler;
 import com.jabiz.external.ExternalJobResult;
 import com.jabiz.external.ExternalJobType;
 import com.jabiz.external.ExternalServices;
+import com.jabiz.external.GeneratedFile;
 import com.jabiz.runtime.observability.PlatformObservations;
 import io.micrometer.common.KeyValues;
 import io.micrometer.core.instrument.Counter;
@@ -143,18 +145,44 @@ public class ExternalJobExecutor implements SmartLifecycle {
     }
 
     /** One claimed attempt. */
-    record Claimed(ExternalJobType<?, ?> type, String jobId, String input, int attemptNo, Instant deadline) {}
+    record Claimed(ExternalJobType<?, ?> type, String jobId, String input, int attemptNo, Instant deadline,
+        String requestedBy) {}
 
-    /** How an attempt ended, before it is recorded. */
+    /**
+     * How an attempt ended, before it is recorded.
+     *
+     * @param produced the files the handler returned, to be stored (decision D50 item 3)
+     * @param stored   the files stored, recorded with the attempt whatever its outcome
+     */
     record Attempt(ExternalJobRecorder.AttemptOutcome outcome, boolean retryable, String errorCode, String errorDetail,
-        String resultJson) {
+        String resultJson, List<GeneratedFile> produced, List<ExternalJobFiles.Output> stored) {
+
+        Attempt {
+            produced = produced == null ? List.of() : List.copyOf(produced);
+            stored = stored == null ? List.of() : List.copyOf(stored);
+        }
 
         static Attempt succeeded(String resultJson) {
-            return new Attempt(ExternalJobRecorder.AttemptOutcome.SUCCEEDED, false, null, null, resultJson);
+            return new Attempt(ExternalJobRecorder.AttemptOutcome.SUCCEEDED, false, null, null, resultJson, null,
+                null);
         }
 
         static Attempt failed(boolean retryable, String code, String detail) {
-            return new Attempt(ExternalJobRecorder.AttemptOutcome.FAILED, retryable, code, detail, null);
+            return new Attempt(ExternalJobRecorder.AttemptOutcome.FAILED, retryable, code, detail, null, null, null);
+        }
+
+        Attempt producing(List<GeneratedFile> files) {
+            return new Attempt(outcome, retryable, errorCode, errorDetail, resultJson, files, stored);
+        }
+
+        /** This attempt once its files went into storage: as it was, or failed when one did not. */
+        Attempt storing(ExternalJobFiles.Outputs outputs) {
+            if (outputs.failure() == null) {
+                return new Attempt(outcome, retryable, errorCode, errorDetail, resultJson, List.of(), outputs.stored());
+            }
+            ExternalJobException failure = outputs.failure();
+            return new Attempt(ExternalJobRecorder.AttemptOutcome.FAILED, !failure.isPermanent(), failure.code(),
+                failure.getMessage(), null, List.of(), outputs.stored());
         }
 
         boolean success() {
@@ -174,6 +202,8 @@ public class ExternalJobExecutor implements SmartLifecycle {
     private final PlatformObservations observations;
     private final ObjectProvider<MeterRegistry> meters;
     private final Settings settings;
+    /** The jobs' files (decision D50), found when a job has some: they depend on the uploads and their processes. */
+    private final ObjectProvider<ExternalJobFiles> files;
     private final AtomicInteger inFlight = new AtomicInteger();
     /** Where the next poll starts in the list of types: after the one that took the last slot. */
     private final AtomicInteger nextType = new AtomicInteger();
@@ -204,6 +234,7 @@ public class ExternalJobExecutor implements SmartLifecycle {
     public ExternalJobExecutor(ExternalJobRegistry jobs, ExternalJobRecorder recorder, ApplicationContext beans,
         ExternalServices services, JsonMapper json, Clock clock, PlatformObservations observations,
         ObjectProvider<MeterRegistry> meters, Settings settings) {
+        this.files = beans.getBeanProvider(ExternalJobFiles.class);
         this.jobs = jobs;
         this.recorder = recorder;
         this.beans = beans;
@@ -388,15 +419,30 @@ public class ExternalJobExecutor implements SmartLifecycle {
 
     /** Takes up to {@code slots} due jobs of the type. */
     private Mono<List<Claimed>> take(ExternalJobType<?, ?> type, Instant now, int slots, long mark) {
-        Instant lease = now.plus(type.timeout()).plusSeconds(LEASE_MARGIN_SECONDS);
+        Instant lease = leaseUntil(type, now);
         return recorder.dueJobs(type.name(), type.maxAttempts(), waits(type), now, slots, mark)
             .collectList()
             .flatMapMany(Flux::fromIterable)
             .concatMap(due -> recorder.insertClaim(due.jobId(), due.attempts() + 1, instanceId(), now, lease)
                 .filter(Boolean::booleanValue)
                 .map(claimed -> new Claimed(type, due.jobId(), due.input(), due.attempts() + 1,
-                    now.plus(type.timeout()))))
+                    now.plus(type.timeout()), due.requestedBy())))
             .collectList();
+    }
+
+    /**
+     * The end of an attempt's lease: its timeout and a margin for recording it, and for a type with files the time
+     * copying and storing them may take besides (decision D50).
+     */
+    static Instant leaseUntil(ExternalJobType<?, ?> type, Instant now) {
+        Instant lease = now.plus(type.timeout()).plusSeconds(LEASE_MARGIN_SECONDS);
+        if (type.inputFiles() != null) {
+            lease = lease.plus(ExternalJobFiles.FILE_WORK_TIMEOUT);
+        }
+        if (type.outputFiles() != null) {
+            lease = lease.plus(ExternalJobFiles.FILE_WORK_TIMEOUT);
+        }
+        return lease;
     }
 
     /** The wait after 1, 2, … failed attempts, in milliseconds: {@link ExternalJobType#backoffAfter}, for the SQL. */
@@ -463,8 +509,20 @@ public class ExternalJobExecutor implements SmartLifecycle {
         Mono<Outcome> attempt = Mono.defer(() -> {
             JobContext ctx = new JobContext(claimed, services);
             long started = System.nanoTime();
-            return run(claimed, ctx)
+            // The job's input files are copied for the attempt and deleted once it is over, whatever its end
+            // (decision D50 item 2); its output files are stored before it is recorded (item 3).
+            return Mono.usingWhen(inputs(claimed),
+                    inputs -> {
+                        ctx.files(inputs.files());
+                        return run(claimed, ctx);
+                    },
+                    inputs -> inputs.close(files.getObject().storage()).onErrorResume(error -> {
+                        log.warn("The copies of external job {}'s files could not be deleted: {}", claimed.jobId(),
+                            error.toString());
+                        return Mono.empty();
+                    }))
                 .onErrorResume(error -> Mono.just(failure(type, error)))
+                .flatMap(result -> storeOutputs(claimed, result))
                 .flatMap(result -> record(claimed, result,
                     TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started), ctx.usage()));
         });
@@ -480,6 +538,26 @@ public class ExternalJobExecutor implements SmartLifecycle {
             .doOnTerminate(free)
             .doOnCancel(free)
             .doFinally(signal -> free.run());
+    }
+
+    /** Copies of the files the job reads, for this attempt; none for a type that reads none. */
+    private Mono<ExternalJobFiles.Inputs> inputs(Claimed claimed) {
+        return claimed.type().inputFiles() == null ? Mono.just(ExternalJobFiles.Inputs.NONE)
+            : files.getObject().open(claimed.type(), claimed.jobId());
+    }
+
+    /**
+     * Stores the files a successful attempt produced as uploads of the job's requester (decision D50 item 3); the
+     * attempt fails when one is refused. A job cancelled meanwhile stores nothing: its result is dropped anyway.
+     */
+    private Mono<Attempt> storeOutputs(Claimed claimed, Attempt attempt) {
+        if (!attempt.success() || attempt.produced().isEmpty()) {
+            return Mono.just(attempt);
+        }
+        return recorder.isCancelled(claimed.jobId()).flatMap(cancelled -> cancelled
+            ? Mono.just(attempt.producing(List.of()))
+            : files.getObject().store(claimed.type(), claimed.jobId(), claimed.requestedBy(), attempt.produced())
+                .map(attempt::storing));
     }
 
     /**
@@ -523,6 +601,10 @@ public class ExternalJobExecutor implements SmartLifecycle {
                 + ", not " + type.resultType().getName());
         }
         result.usage().forEach(ctx::recordUsage);
+        Attempt refused = refusedFiles(type, result.files());
+        if (refused != null) {
+            return refused;
+        }
         String text;
         try {
             text = json.writeValueAsString(result.value());
@@ -535,7 +617,34 @@ public class ExternalJobExecutor implements SmartLifecycle {
             return Attempt.failed(false, "RESULT_TOO_LARGE", "the result is larger than " + MAX_RESULT_BYTES
                 + " bytes");
         }
-        return Attempt.succeeded(text);
+        return Attempt.succeeded(text).producing(result.files());
+    }
+
+    /**
+     * Why the files a handler returned cannot be stored, before anything is (decision D50 item 3): a type that
+     * produces none ({@code BAD_RESULT}), more files ({@code OUTPUT_FILE_LIMIT}) or a larger one
+     * ({@code OUTPUT_FILE_TOO_LARGE}) than it declares. Each is a permanent failure: trying again gives the same.
+     * Null when they may be stored.
+     */
+    static Attempt refusedFiles(ExternalJobType<?, ?> type, List<GeneratedFile> produced) {
+        if (produced.isEmpty()) {
+            return null;
+        }
+        if (type.outputFiles() == null) {
+            return Attempt.failed(false, "BAD_RESULT", "the handler returned files, but the job type declares no "
+                + "outputFiles");
+        }
+        if (produced.size() > type.outputFiles().maxFiles()) {
+            return Attempt.failed(false, "OUTPUT_FILE_LIMIT", "the handler returned " + produced.size()
+                + " files; the job type allows " + type.outputFiles().maxFiles());
+        }
+        for (GeneratedFile file : produced) {
+            if (file.size() > type.outputFiles().maxBytes()) {
+                return Attempt.failed(false, "OUTPUT_FILE_TOO_LARGE", "file " + file.key() + " has " + file.size()
+                    + " bytes; the job type allows " + type.outputFiles().maxBytes());
+            }
+        }
+        return null;
     }
 
     /**
@@ -545,7 +654,7 @@ public class ExternalJobExecutor implements SmartLifecycle {
     static Attempt failure(ExternalJobType<?, ?> type, Throwable error) {
         if (error instanceof TimeoutException) {
             return new Attempt(ExternalJobRecorder.AttemptOutcome.TIMED_OUT, true, "TIMEOUT",
-                "no result within " + type.timeout(), null);
+                "no result within " + type.timeout(), null, null, null);
         }
         if (error instanceof ExternalJobException job) {
             return Attempt.failed(!job.isPermanent(), job.code(), job.getMessage());
@@ -583,9 +692,16 @@ public class ExternalJobExecutor implements SmartLifecycle {
     private Mono<Recorded> recordAttempt(Claimed claimed, Attempt attempt, Long durationMs, Map<String, Long> usage,
         Instant now) {
         ExternalJobType<?, ?> type = claimed.type();
+        // Whatever becomes of the attempt, the files it stored are recorded as its own (decision D50): which job
+        // produced a file stays known after it is swept.
+        Mono<Void> outputs = Flux.fromIterable(attempt.stored())
+            .concatMap(output -> recorder.insertOutputFile(claimed.jobId(), claimed.attemptNo(), output.position(),
+                output.key(), output.file(), now))
+            .then();
         return recorder.lockJob(claimed.jobId())
             .flatMap(job -> recorder.insertAttempt(claimed.jobId(), claimed.attemptNo(), attempt.outcome(),
                     attempt.retryable(), attempt.errorCode(), attempt.errorDetail(), durationMs, now)
+                .flatMap(inserted -> outputs.thenReturn(inserted))
                 .flatMap(inserted -> {
                     if (!inserted) {
                         log.warn("External job {} attempt {} ({}) ended after its lease had expired; its result "
@@ -657,10 +773,10 @@ public class ExternalJobExecutor implements SmartLifecycle {
                 .then(Mono.fromCallable(() -> ExternalJobRecorder.micros(clock.instant())))
                 .flatMap(now -> recorder.pendingJob(type.name(), reference)
                     .flatMap(due -> recorder.insertClaim(due.jobId(), due.attempts() + 1, instanceId(), now,
-                            now.plus(type.timeout()).plusSeconds(LEASE_MARGIN_SECONDS))
+                            leaseUntil(type, now))
                         .filter(Boolean::booleanValue)
                         .map(claimed -> new Claimed(type, due.jobId(), due.input(), due.attempts() + 1,
-                            now.plus(type.timeout())))))))
+                            now.plus(type.timeout()), due.requestedBy()))))))
             .flatMap(claimed -> record(claimed, attempt, 0L, consumed));
     }
 
@@ -678,10 +794,21 @@ public class ExternalJobExecutor implements SmartLifecycle {
         private final Claimed claimed;
         private final ExternalServices services;
         private final Map<String, Long> usage = new LinkedHashMap<>();
+        private volatile List<ExternalJobFile> files = List.of();
 
         JobContext(Claimed claimed, ExternalServices services) {
             this.claimed = claimed;
             this.services = services;
+        }
+
+        /** The copies of the job's input files for this attempt (decision D50 item 2). */
+        void files(List<ExternalJobFile> copies) {
+            this.files = List.copyOf(copies);
+        }
+
+        @Override
+        public List<ExternalJobFile> files() {
+            return files;
         }
 
         @Override
