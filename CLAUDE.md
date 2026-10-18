@@ -57,7 +57,8 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
   授予受保护的权限（`jabiz.security.protected-grants.permissions`，缺省含 `*`、改权限、审批、记账与改参数的权限）、对其持有人重设密码 / 二次验证 / 关联外部账号，
   须另一位管理员审批（10 §16、决策 D48）：只经 `SEC_USER_ROLE_ASSIGN`、`SEC_ROLE_PERMISSION_ADD`、`SEC_USER_IDENTITY_LINK`、`SEC_USER_SET_PASSWORD`、`SEC_MFA_RESET`，
   平台在 `VersionAppender` 中拒绝其他途径；不在业务流程中自己授予这类权限；建立期（首个管理员之外不足两位 `*` 管理员）内当即生效，之后首个管理员永久退出受保护的操作。
-  审批人须持有变更给出的全部受保护权限；获得者的凭据须是本人设置的（管理员建的账号先由本人改密码）。
+  审批人须持有变更给出的全部受保护权限；获得者的凭据须是本人的（所有权链：管理员知道过的密码及由它改出的都不算，管理员建的账号先由本人经邮件找回密码）。
+  以 `jabiz.` 开头的事件类型只由平台发出，应用的事件用应用自己的名字。
 - **待办与通知**（见 18 §5）：需要人去做的事用步骤 `CreateTask`（指派给用户或权限，带来源键）登记、`CloseTasks` 关闭；不另建待办表。
   邮件只经待办的通知、单据的发送（`DOCUMENT_SEND`，22 §5）与事务邮件（流程步骤 `SendMail`，模板为 `MailTemplate` Bean 与消息 `mail.<名>.subject|body`，
   验证与重置链接用发送时才生成的一次性令牌：模板 `.token(用途, 有效期)`、流程中以 `MailTokens.consume` 使用，18 §5.6、决策 D35）；
