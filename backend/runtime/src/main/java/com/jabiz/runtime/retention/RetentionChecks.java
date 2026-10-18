@@ -34,6 +34,8 @@ public class RetentionChecks implements PlatformCheck {
     @Override
     public List<CheckProblem> check() {
         List<CheckProblem> problems = new ArrayList<>();
+        policies.zoneProblem().ifPresent(problem -> problems.add(CheckProblem.error(CATEGORY,
+            "jabiz.fiscal-year-zone", problem)));
         Set<String> seen = new HashSet<>();
         for (RetentionPolicy policy : policies.all()) {
             String location = "RetentionPolicy " + policy.entity();
