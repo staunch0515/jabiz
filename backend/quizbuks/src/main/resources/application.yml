@@ -14,11 +14,13 @@ spring:
 
 jabiz:
   # The wallets are the ledger, kept in yen without decimals and shown as Kudos (docs/quizbuks/02-design.md
-  # sections 4 and 7.4). The fiscal year is the calendar year.
+  # sections 4 and 7.4). The fiscal year is the calendar year, its days those of Japan (platform decision D48 item 2:
+  # retention counts from the end of the fiscal year a record's date falls in; Q10b review L7).
   ledger:
     currency: JPY
     scale: 0
   fiscal-year-end: 12
+  fiscal-year-zone: Asia/Tokyo
   process:
     # The queues before a publication's two locks (platform decision D45, Q10a; Q10a4 split them): qb.pub-start before
     # the start lock (QB_ATTEMPT_START), qb.pub before the publication's lock (QB_ATTEMPT_SUBMIT with the publication

@@ -38,6 +38,16 @@
 | `QB_OIDC_REDIRECT_APP` | 开 Google 时 | `https://<主机>/login/oidc`（与控制台登记的完全相同） | 换域名时 | Google 拒绝回调 |
 | `JABIZ_SECURITY_MFA_ADMINISTRATION` | **不设** | — | — | 缺省 `true`：管理操作要求二次验证。`false` 只给本机演示、e2e 与 Stripe 测试模式的本机运行 |
 
+**应用的邮件**（Q7a，`plans/Q7-messages-legal.md` D-Q7-1）：除注册、验证、找回密码与入驻结果外，QuizBuks 在以下事件后发信（都由事件的消费者以系统身份发出，不在答题与支付的提交路径上）：
+
+| 收件人 | 邮件（模板） | 可退订 |
+|---|---|---|
+| 答题人 | 转账已发出 `qb.transfer.sent`、转账失败 `qb.transfer.failed`、收款账户需补资料 `qb.payout.action-needed` | 否 |
+| 商家 | 充值到账 `qb.topup.paid`、发布通过 / 驳回 / 被下架 `qb.publication.approved` / `.rejected` / `.taken-down` | 否 |
+| 商家 | 发布预算不足 `qb.publication.funds-short`（每个发布 24 小时内至多一封）、发布已结束 `qb.publication.ended` | 是（邮件中的链接，或商家后台"账户 → 邮件"） |
+
+`JABIZ_MAIL_ENABLED` 未开时这些邮件同样只记为 `SKIPPED`（`sys_mail_message` / `sys_mail_attempt`），不会补发。事件超过 3 天才被消费（投递积压、或新消费者收到历史事件）时不发信（`NotificationMails.MAX_AGE`）。
+
 ### 1.3 Stripe 与资金（`deploy/quizbuks/README.md`"充值与核对""收款账户与自动转账"）
 
 | 变量 | 必需 | 来源 | 轮换 | 缺少时 |
@@ -134,6 +144,19 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
    - `qb.transfer.enabled` **保持 false**，直到取得法务意见（§4）。
 7. 在测试模式下做一次 Stripe 测试模式全流程（`stripe-test-mode.md`），并按 §2.4 做一次恢复演练。
 8. 每次部署新版本后：再执行一次 `QB_SETUP`，发布它的新提案（README 各阶段的"部署后"）。
+
+**受保护的授权（平台 16r，决策 D48；10 §16）**：分配或增加 `security.user-role.write`、`security.role.write`、`approval.decide`、`control.publish`、`ledger.*`、
+`platform.param.write`、`*`，以及对持有它们的用户重设密码、二次验证、邮箱或关联外部账号，平台要求**另一位管理员审批**——但只在建立期结束之后。平台按 `*` 数管理员：
+首个管理员之外有两位持有 `*` 的启用用户时建立期才结束。QuizBuks 的角色都不持有 `*`（`QbRoles`：细分权限），所以按上面 2–6 步建立的安装**一直处于建立期**，
+受保护的变更当即生效（与 16r 之前相同）；`QB_SETUP`、e2e 与本机演示因此照常可用（它们只建持有 `control.publish` 等的角色，从不建第二位 `*` 管理员）。
+平台对这种部署的建议（10 §16.4）是 `jabiz.security.protected-grants.always=true`（环境变量 `JABIZ_SECURITY_PROTECTEDGRANTS_ALWAYS=true`）。**待需求方决定**，原因：
+审批人须持有 `*`，或同时持有 `security.user-role.write` 与 `approval.decide`（以及所给出的受保护权限），而 QuizBuks 的职责分离规则 `qb.sod.security-administration` 正好禁止后者
+（管理角色的人不审批）；所以在 QuizBuks 中只有持有 `*` 的首个管理员能批准受保护的授权，而且在空库上开启 `always` 时首个管理员无法独自建立第二位管理员。
+若要开启：先按 2–6 步建好各位管理员（建立期内当即生效），再以 `always=true` 重启；此后超级管理员提出的角色分配由首个管理员（保留其账号与二次验证）审批。
+在决定之前，四眼由检测性控制补足（季度访问审查 `ACCESS_REVIEW_SIGN_OFF`、审计中逐条复核角色变更，Q10b M-c）。
+
+**会计年度的时区**：保留期自会计年度末起算，日期按日本时间判断（`application.yml` 的 `jabiz.fiscal-year-zone: Asia/Tokyo`，平台 D48 第 2 条；Q10b 评审 L7），不需另设。
+1 月 1 日 00:00–08:59（日本时间）记录的数据因此属于新的会计年度。
 
 ## 4. 切换到正式模式
 
