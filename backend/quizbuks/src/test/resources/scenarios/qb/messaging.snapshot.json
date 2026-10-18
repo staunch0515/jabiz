@@ -1,0 +1,134 @@
+{
+  "scenario" : "Announcements",
+  "asOf" : "2026-10-01T03:00:00Z",
+  "entities" : {
+    "QbBroadcast" : [ {
+      "broadcastId" : "#uuid:1",
+      "senderKind" : "PLATFORM",
+      "senderId" : "content-admin",
+      "audience" : "APP",
+      "type" : "SYSTEM",
+      "title" : {
+        "en" : "Maintenance",
+        "ja" : "メンテナンス"
+      },
+      "body" : {
+        "en" : "The app pauses on **Sunday**.",
+        "ja" : "日曜日に停止します。"
+      },
+      "targetMode" : "REGIONS",
+      "regions" : "JP",
+      "targetCount" : null,
+      "publicationId" : null,
+      "scheduledAt" : null,
+      "expiresAt" : "2026-10-31T00:01:00Z",
+      "status" : "WITHDRAWN",
+      "sentAt" : "2026-10-01T00:01:00Z",
+      "audienceCount" : "1",
+      "cancelReason" : null,
+      "withdrawnAt" : "2026-10-01T03:00:00Z",
+      "withdrawnBy" : "content-admin",
+      "withdrawReason" : "Postponed.",
+      "revision" : "4",
+      "editedAt" : "2026-10-01T03:00:00Z",
+      "versionNo" : 4,
+      "effectStartTime" : "2026-10-01T03:00:00Z",
+      "createdTime" : "2026-10-01T03:00:00Z",
+      "processSeqId" : "#op:2"
+    }, {
+      "broadcastId" : "#uuid:2",
+      "senderKind" : "PLATFORM",
+      "senderId" : "content-admin",
+      "audience" : "APP",
+      "type" : "PROMO",
+      "title" : {
+        "en" : "New quizzes"
+      },
+      "body" : {
+        "en" : "Have a look."
+      },
+      "targetMode" : "ALL",
+      "regions" : null,
+      "targetCount" : null,
+      "publicationId" : null,
+      "scheduledAt" : "2026-10-01T01:00:00Z",
+      "expiresAt" : "2026-10-31T01:00:00Z",
+      "status" : "SENT",
+      "sentAt" : "2026-10-01T01:00:00Z",
+      "audienceCount" : "1",
+      "cancelReason" : null,
+      "withdrawnAt" : null,
+      "withdrawnBy" : null,
+      "withdrawReason" : null,
+      "revision" : "3",
+      "editedAt" : "2026-10-01T01:00:00Z",
+      "versionNo" : 3,
+      "effectStartTime" : "2026-10-01T01:00:00Z",
+      "createdTime" : "2026-10-01T01:00:00Z",
+      "processSeqId" : "#op:1"
+    } ],
+    "QbBroadcastFeed" : [ {
+      "broadcastId" : "#uuid:1",
+      "senderKind" : "PLATFORM",
+      "senderId" : "content-admin",
+      "audience" : "APP",
+      "type" : "SYSTEM",
+      "targetMode" : "REGIONS",
+      "regions" : "JP",
+      "publicationId" : null,
+      "title" : {
+        "en" : "Maintenance",
+        "ja" : "メンテナンス"
+      },
+      "body" : {
+        "en" : "The app pauses on **Sunday**.",
+        "ja" : "日曜日に停止します。"
+      },
+      "sentAt" : "2026-10-01T00:01:00Z",
+      "expiresAt" : "2026-10-31T00:01:00Z",
+      "live" : false,
+      "version" : 2
+    }, {
+      "broadcastId" : "#uuid:2",
+      "senderKind" : "PLATFORM",
+      "senderId" : "content-admin",
+      "audience" : "APP",
+      "type" : "PROMO",
+      "targetMode" : "ALL",
+      "regions" : null,
+      "publicationId" : null,
+      "title" : {
+        "en" : "New quizzes"
+      },
+      "body" : {
+        "en" : "Have a look."
+      },
+      "sentAt" : "2026-10-01T01:00:00Z",
+      "expiresAt" : "2026-10-31T01:00:00Z",
+      "live" : true,
+      "version" : 1
+    } ],
+    "QbBroadcastSchedule" : [ ],
+    "QbBroadcastReceipt" : [ {
+      "receiptId" : "#uuid:3",
+      "userId" : "#uuid:4",
+      "broadcastId" : "#uuid:1",
+      "readAt" : "2026-10-01T03:00:00Z",
+      "clickedAt" : null,
+      "version" : 1
+    }, {
+      "receiptId" : "#uuid:5",
+      "userId" : "#uuid:4",
+      "broadcastId" : "#uuid:2",
+      "readAt" : "2026-10-01T03:00:00Z",
+      "clickedAt" : null,
+      "version" : 1
+    } ],
+    "QbInboxState" : [ {
+      "userId" : "#uuid:6",
+      "readAllBefore" : null,
+      "promoOff" : true,
+      "version" : 1
+    } ]
+  }
+}

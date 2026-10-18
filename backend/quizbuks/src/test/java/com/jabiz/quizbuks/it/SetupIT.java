@@ -212,6 +212,11 @@ class SetupIT extends QbItSupport {
         expected.put(QbParams.SUPPORT_EMAIL, "");
         // Q7b review M1: how far ahead a legal text may be announced.
         expected.put(QbParams.LEGAL_MAX_ANNOUNCE_DAYS, "180");
+        // Q7c: the limits of the sponsors' notices, the announcements' default life and the payout reminders.
+        expected.put(QbParams.BROADCAST_SPONSOR_MAX, "3");
+        expected.put(QbParams.BROADCAST_SPONSOR_INTERVAL, "24");
+        expected.put(QbParams.BROADCAST_EXPIRES_DAYS, "30");
+        expected.put(QbParams.PAYOUT_REMINDER_DAYS, "30");
         assertThat(values).containsExactlyInAnyOrderEntriesOf(expected);
     }
 

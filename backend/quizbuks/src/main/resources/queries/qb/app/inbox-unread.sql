@@ -1,0 +1,66 @@
+/*---
+id: qb.app.inbox-unread
+description: >-
+  How many messages and announcements of the taker's inbox are unread (the navigation's badge, U-61), each counted to
+  at most 99
+entities: [QbMessage, QbBroadcastFeed, QbBroadcastTarget, QbBroadcastReceipt, QbInboxState, QbProfile, QbCountry, QbPublicationCard, QbPublicationOwner]
+datasets:
+  QbMessage: urn:jabiz:dataset:me:QbMessage
+  QbBroadcastFeed: urn:jabiz:dataset:default:QbBroadcastFeed
+  QbBroadcastTarget: urn:jabiz:dataset:me:QbBroadcastTarget
+  QbBroadcastReceipt: urn:jabiz:dataset:me:QbBroadcastReceipt
+  QbInboxState: urn:jabiz:dataset:me:QbInboxState
+  QbProfile: urn:jabiz:dataset:me:QbProfile
+  QbCountry: urn:jabiz:dataset:default:QbCountry
+  QbPublicationCard: urn:jabiz:dataset:default:QbPublicationCard
+  QbPublicationOwner: urn:jabiz:dataset:me:QbPublicationOwner
+params:
+  at: { kind: { type: temporal, role: EVENT_TIME }, required: true, description: "The client's now" }
+results:
+  messages:   { kind: { type: numeric, precision: 3, scale: 0 } }
+  broadcasts: { kind: { type: numeric, precision: 3, scale: 0 } }
+permissions: [qb.me]
+---*/
+-- The conditions of qb.app.inbox (D-Q7-9; checked against it by InboxMatchIT), counting the unread only: the pages ask on entering,
+-- when the app comes back to the front and every five minutes, so each count stops at 99 (the badge shows "99+"). The
+-- unread messages are found through their partial index (V15).
+WITH me AS (
+    SELECT
+        (SELECT p.{{QbProfile.createdAt}} FROM {{QbProfile}} p LIMIT 1) AS registered_at,
+        coalesce((SELECT co.{{QbCountry.regions}} FROM {{QbProfile}} p
+                  JOIN {{QbCountry}} co ON co.{{QbCountry.code}} = p.{{QbProfile.countryCode}} LIMIT 1),
+                 'GLOBAL') AS me_regions,
+        (SELECT s.{{QbInboxState.readAllBefore}} FROM {{QbInboxState}} s LIMIT 1) AS all_read_before,
+        coalesce((SELECT s.{{QbInboxState.promoOff}} FROM {{QbInboxState}} s LIMIT 1), false) AS no_promo
+)
+SELECT
+    (SELECT count(*) FROM (
+        SELECT 1 FROM {{QbMessage}} m CROSS JOIN me
+        WHERE m.{{QbMessage.readAt}} IS NULL AND m.{{QbMessage.createdAt}} <= :at
+          AND (me.all_read_before IS NULL OR m.{{QbMessage.createdAt}} > me.all_read_before)
+        LIMIT 99) x) AS messages,
+    (SELECT count(*) FROM (
+        SELECT 1
+        FROM {{QbBroadcastFeed}} f
+        CROSS JOIN me
+        LEFT JOIN {{QbBroadcastReceipt}} r ON r.{{QbBroadcastReceipt.broadcastId}} = f.{{QbBroadcastFeed.broadcastId}}
+        LEFT JOIN {{QbPublicationCard}} c ON c.{{QbPublicationCard.publicationId}} = f.{{QbBroadcastFeed.publicationId}}
+        WHERE f.{{QbBroadcastFeed.live}} AND f.{{QbBroadcastFeed.audience}} = 'APP'
+          AND f.{{QbBroadcastFeed.sentAt}} <= :at AND :at < f.{{QbBroadcastFeed.expiresAt}}
+          AND r.{{QbBroadcastReceipt.readAt}} IS NULL
+          AND (me.all_read_before IS NULL OR f.{{QbBroadcastFeed.sentAt}} > me.all_read_before)
+          AND (f.{{QbBroadcastFeed.targetMode}} = 'ALL'
+               OR f.{{QbBroadcastFeed.targetMode}} = 'REGIONS'
+                  AND string_to_array(f.{{QbBroadcastFeed.regions}}, ',') && string_to_array(me.me_regions, ',')
+               OR f.{{QbBroadcastFeed.targetMode}} = 'USERS'
+                  AND EXISTS (SELECT 1 FROM {{QbBroadcastTarget}} t
+                              WHERE t.{{QbBroadcastTarget.broadcastId}} = f.{{QbBroadcastFeed.broadcastId}}))
+          AND (f.{{QbBroadcastFeed.type}} <> 'PROMO'
+               OR NOT me.no_promo AND me.registered_at IS NOT NULL
+                  AND me.registered_at <= f.{{QbBroadcastFeed.sentAt}})
+          AND (f.{{QbBroadcastFeed.senderKind}} <> 'SPONSOR'
+               OR c.{{QbPublicationCard.status}} <> 'ENDED' AND :at < c.{{QbPublicationCard.endAt}}
+                  AND string_to_array(c.{{QbPublicationCard.regions}}, ',') && string_to_array(me.me_regions, ',')
+                  AND NOT EXISTS (SELECT 1 FROM {{QbPublicationOwner}} own
+                                  WHERE own.{{QbPublicationOwner.publicationId}} = f.{{QbBroadcastFeed.publicationId}}))
+        LIMIT 99) y) AS broadcasts

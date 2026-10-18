@@ -154,6 +154,12 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
    预告有误时在同一页的版本列表中填理由"撤回"（`QB_LEGAL_WITHDRAW`，只能在生效前；撤回的版本永不生效、不要求同意，版本号不再使用，公开的历史中标为"已撤回"）；
    实质性变更勾选"须重新同意"，措辞修订不勾。已发布的版本不可修改，改错只能发布新版本。正式模式下缺少已生效的答题人条款、商家条款或隐私政策时**启动告警**（`LiveModeDataCheck`）。
    帮助中心的问答在后台"帮助中心问答"中维护（英语必填、`seq` 排序、"公开中"才出现在页面）。支持邮箱 `qb.support.email`（普通参数，空即不显示"仍需帮助"的联系方式）在后台参数中设。
+   发布条款时可勾选"在收件箱中公告"：一分钟内（任务 `qb.broadcast-dispatch`）给相关的人发一条系统公告（答题人条款 → App，隐私政策 → App 与商家后台，其余 → 商家后台），有效 30 天。
+10. **站内信与公告**（Q7c）：个人消息（奖励、转账、收款账户）由事件的消费者写入，不需设置；公告在后台扩展的"QuizBuks → 公告与通知"（`/qb/broadcasts`）编写与发送（发送要求二次验证，撤回每次二次验证并填理由，商家可见）。
+   普通参数（`QB_SETUP` 建立，可在后台参数中直接改）：商家每个发布的通知上限 `qb.broadcast.sponsor.max-per-publication`（3）、两条之间的最短间隔 `qb.broadcast.sponsor.min-interval-hours`（24）、
+   公告的缺省有效期 `qb.broadcast.expires-days`（30）、收款提醒的间隔 `qb.payout.reminder-days`（30）。商家通知不预审（Q7-10）：内容有问题时由内容管理员撤回；封禁商家即撤回其全部通知。
+   任务：`qb.broadcast-dispatch`（每分钟，定时发送；`quizbuks.messaging.dispatch-cron`）、`qb.payout-reminder`（每日 03:17 UTC；`quizbuks.messaging.payout-reminder-cron`）。
+   限流（`application.yml` 的 `jabiz.process.rate-limits`）：已读与点击每人每分钟 120 次、全部已读与推广开关各 30 次、商家保存通知 60 次、发送每小时 10 次。
 
 **受保护的授权（平台 16r，决策 D48；10 §16）**：分配或增加 `security.user-role.write`、`security.role.write`、`approval.decide`、`control.publish`、`ledger.*`、
 `platform.param.write`、`*`，以及对持有它们的用户重设密码、二次验证、邮箱或关联外部账号，平台要求**另一位管理员审批**——但只在建立期结束之后。平台按 `*` 数管理员：
@@ -210,6 +216,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 | 分录导出被拒 | `jabiz.process{process="QB_JOURNAL_EXPORT", outcome="rejected"}` | 每月导出日 > 0（看错误码，§7.3） |
 | 外部调用 | `jabiz.external.call{service="stripe", outcome}` | `5xx`、`timeout`、`refused` 比率 > 5 % |
 | 任务 | `jabiz.job.run{result="FAILED"|"LOCKED"}` | 任一每日任务 `FAILED`；`LOCKED` 持续（另一实例卡住） |
+| 站内信与公告（Q7c） | `jabiz.job.item{job="qb.broadcast-dispatch"|"qb.payout-reminder", result}`；`jabiz.outbox.delivery{result="FAILED"}`（消费者 `qb.msg-*`） | 定时发送的项连续失败（公告迟迟不出）；消费者失败持续 15 分钟 |
 | 邮件 | `jabiz.job.item{job="qb.mail-funds-short-due", result}`；`jabiz.outbox.delivery{result="FAILED"}` | 补发任务的项连续失败；`sys_mail_message` 中 `FAILED` 增多（看发件服务商） |
 | 数据库 | 连接数、复制与 WAL 归档延迟、最近一次基础备份、磁盘、`pg_stat_statements` 的前几名、死锁（`pg_stat_database.deadlocks`） | 归档延迟 > 15 分钟；备份超过 26 小时；磁盘 > 80 %；死锁 > 0 |
 | 主机 | CPU、内存、JVM 堆 | 应用或数据库的 CPU 在业务高峰持续 > 70 %（§6） |

@@ -77,12 +77,16 @@ public final class LegalProcesses {
      * @param requiresConsent whether users must accept it again (a change of substance); a rewording does not ask
      *                        anybody. The first version of a kind always does.
      * @param baseRevision    the draft's version the publisher read (required, review L1); no longer current: 422
+     * @param announce        whether an announcement of the new version goes to the inboxes of those it concerns
+     *                        (Q7c: the app's users for the takers' terms, the sponsors for theirs and the notice, both
+     *                        for the privacy policy), sent by the minute's job
      */
     public record PublishInput(@NotBlank @Pattern(regexp = UUID_PATTERN) String docId, Instant effectiveAt,
-        Boolean requiresConsent, @NotNull Long baseRevision) {}
+        Boolean requiresConsent, @NotNull Long baseRevision, Boolean announce) {}
 
+    /** @param announcements the announcements of the new version, scheduled now (none unless asked) */
     public record PublishOutput(String kind, String versionId, int versionNo, Instant effectiveAt,
-        boolean requiresConsent, String contentHash) {}
+        boolean requiresConsent, String contentHash, List<String> announcements) {}
 
     /**
      * @param legalVersionId the announced version ({@code QbLegalVersion}) to withdraw
@@ -103,7 +107,8 @@ public final class LegalProcesses {
 
     // ---- publish ---------------------------------------------------------------------------------------------------
 
-    public static ProcessDefinition<PublishInput, PublishOutput, ProcessContext> publish() {
+    public static ProcessDefinition<PublishInput, PublishOutput, ProcessContext> publish(MessageTexts texts,
+        MailValues values) {
         return ProcessDefinition.define(PUBLISH, 1, PublishInput.class, PublishOutput.class, ProcessContext.class,
             pb -> pb
                 .description("Publishes the draft of a legal text as its next version, now or from a later time.")
@@ -125,7 +130,7 @@ public final class LegalProcesses {
                 .step("Lock the kind's versions", HoldLock.<ProcessContext>exclusive(
                     ctx -> QbLegal.lockName(ctx.get(DOC, EntityInstance.class).get("kind"))))
                 .step("Load the kind's versions", loadKind(ctx -> ctx.get(DOC, EntityInstance.class).get("kind")))
-                .compute("Publish", (metadata, ctx) -> publish(ctx)));
+                .compute("Publish", (metadata, ctx) -> publish(ctx, texts, values)));
     }
 
     /**
@@ -171,7 +176,7 @@ public final class LegalProcesses {
         return sorted;
     }
 
-    static void publish(ProcessContext ctx) {
+    static void publish(ProcessContext ctx, MessageTexts texts, MailValues times) {
         PublishInput input = ctx.get(INPUT, PublishInput.class);
         EntityInstance doc = ctx.get(DOC, EntityInstance.class);
         if (input.baseRevision() != doc.version()) {
@@ -224,8 +229,10 @@ public final class LegalProcesses {
         draft.put("latestVersionNo", BigDecimal.valueOf(number));
         draft.put("lastPublishedAt", ctx.opTime());
         ctx.changes().update(QbLegal.DOC, doc.id(), doc.version(), draft);
+        List<String> announcements = Boolean.TRUE.equals(input.announce())
+            ? LegalAnnouncements.schedule(ctx, texts, times, kind, number, effectiveAt) : List.of();
         ctx.put(OUTPUT, new PublishOutput(kind, String.valueOf(versionId), number, effectiveAt, requiresConsent,
-            hash));
+            hash, announcements));
     }
 
     private static Violation missing(String field, String language) {

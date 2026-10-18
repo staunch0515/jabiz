@@ -187,8 +187,9 @@ public class LegalConfig {
     }
 
     @Bean
-    ProcessDefinition<LegalProcesses.PublishInput, LegalProcesses.PublishOutput, ProcessContext> qbLegalPublish() {
-        return LegalProcesses.publish();
+    ProcessDefinition<LegalProcesses.PublishInput, LegalProcesses.PublishOutput, ProcessContext> qbLegalPublish(
+        MessageTexts qbMessageTexts, MailValues qbMailValues) {
+        return LegalProcesses.publish(qbMessageTexts, qbMailValues);
     }
 
     @Bean

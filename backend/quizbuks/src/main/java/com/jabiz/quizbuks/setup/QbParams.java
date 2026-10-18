@@ -59,6 +59,14 @@ public final class QbParams {
     public static final String LEGAL_MAX_ANNOUNCE_DAYS = "qb.legal.max-announce-days";
     /** The horizon while {@link #LEGAL_MAX_ANNOUNCE_DAYS} has no published value. */
     public static final int LEGAL_MAX_ANNOUNCE_DAYS_DEFAULT = 180;
+    /** How many notices a sponsor may send for one publication (Q7c, Q7-10; withdrawn ones count). */
+    public static final String BROADCAST_SPONSOR_MAX = "qb.broadcast.sponsor.max-per-publication";
+    /** How many hours apart a publication's notices must go out (Q7c, Q7-10). */
+    public static final String BROADCAST_SPONSOR_INTERVAL = "qb.broadcast.sponsor.min-interval-hours";
+    /** How many days the platform's announcements stay in the inbox unless their writer says otherwise (Q7-9). */
+    public static final String BROADCAST_EXPIRES_DAYS = "qb.broadcast.expires-days";
+    /** How many days apart a taker is reminded to open a payout account (Q7-16). */
+    public static final String PAYOUT_REMINDER_DAYS = "qb.payout.reminder-days";
 
     /*
      * The account mapping of the journal export (Q9d, F-01): for each postable account of the ledger (QbLedger), the
@@ -147,7 +155,16 @@ public final class QbParams {
         new Param(SUPPORT_EMAIL, Map.of("type", "text", "maxLength", 200), "",
             "Support address shown to signed-in users in the help centre (empty: none)"),
         new Param(LEGAL_MAX_ANNOUNCE_DAYS, DAYS, String.valueOf(LEGAL_MAX_ANNOUNCE_DAYS_DEFAULT),
-            "How many days ahead a new version of the terms or the privacy policy may be announced to take effect"));
+            "How many days ahead a new version of the terms or the privacy policy may be announced to take effect"),
+        // Q7c: neither money nor a review switch, so not controlled (docs/quizbuks/plans/Q7-messages-legal.md §8).
+        new Param(BROADCAST_SPONSOR_MAX, Map.of("type", "numeric", "precision", 2, "scale", 0), "3",
+            "How many notices a sponsor may send to the takers of one publication (withdrawn ones count)"),
+        new Param(BROADCAST_SPONSOR_INTERVAL, Map.of("type", "numeric", "precision", 4, "scale", 0), "24",
+            "How many hours apart the notices of one publication must go out"),
+        new Param(BROADCAST_EXPIRES_DAYS, DAYS, "30",
+            "Days the platform's announcements stay in the inbox unless their writer chooses otherwise"),
+        new Param(PAYOUT_REMINDER_DAYS, DAYS, "30",
+            "Days between reminders to open a payout account once the rewards reach the transfer threshold"));
 
     private static Param journal(String key, String account) {
         return new Param(key, ACCOUNT_CODE, "", "Accounting system's account code for " + account

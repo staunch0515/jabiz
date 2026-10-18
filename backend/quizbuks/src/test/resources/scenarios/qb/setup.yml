@@ -14,7 +14,8 @@ steps:
       rolesCreated: [QB_TAKER, QB_SPONSOR, QB_ADMIN_CONTENT, QB_ADMIN_FINANCE, QB_ADMIN_SUPER]
       accountsOpened: ["1110", "1120", "2110", "2120", "2130", "4110", "5110"]
       countriesAdded: 249
-      paramsCreated: [qb.ai.model, qb.app.min-version, qb.support.email]
+      paramsCreated: [qb.ai.model, qb.app.min-version, qb.support.email, qb.broadcast.sponsor.max-per-publication,
+        qb.broadcast.sponsor.min-interval-hours, qb.broadcast.expires-days, qb.payout.reminder-days]
       paramsProposed: [qb.creator-fee-rate, qb.transfer.threshold, qb.transfer.review-above, qb.transfer.enabled,
         qb.review.sponsor.auto, qb.review.publication.auto, qb.topup.min, qb.topup.max, qb.transfer.fee,
         qb.transfer.hold-days, qb.topup.new-sponsor.days, qb.topup.new-sponsor.max-total,
