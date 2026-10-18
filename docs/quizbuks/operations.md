@@ -140,6 +140,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 4. 首个管理员建**财务管理员**（`QB_ADMIN_FINANCE`，持有 `control.publish`）与**内容管理员**（`QB_ADMIN_CONTENT`）：`SEC_USER_CREATE` 并以 `SEC_USER_ROLE_ASSIGN` 分配角色；本人登录、开启两步验证。
    给管理员角色设"要求二次验证"（`SecRole.requireMfa`），使未绑定的管理员无法登录。各自一人一号、各自二次验证；不共用账号。
    这两种角色不持有改权限的权限（`security.user-role.write` / `security.role.write`），平台不把它们算作管理员（D51），建立期内的分配当即生效。
+   **建管理员账号时不设密码**（`SEC_USER_CREATE` 只填用户名与邮箱），由本人经邮件链接（"忘记密码"）设定：建立期结束后，平台不把受保护的权限给一个由别人设过密码的账号（批准后生效时 `TARGET_CREDENTIALS_NOT_OWN`，本人之后自己改过也不算；平台 10 §16.2），以后给这些角色增加受保护的权限也会因此失败。
 5. 财务管理员在后台**发布** `QB_SETUP` 的提案（`CONTROL_CHANGE_PUBLISH`，四眼：提出人不能发布自己的），**包括两条职责分离规则**。发布之前商家入驻与提交发布一律被拒。
    职责分离规则须在建立期结束（下一步）之前发布：之后任命内容或财务管理员要由一位超级管理员审批，而超级管理员不持有、也不能持有 `approval.decide` 与 `control.publish`，
    平台只按**已发布的** `qb.sod.security-administration` 免去对这两项的覆盖要求（D51 修订 H1）。
@@ -168,6 +169,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 （只剩一位时没有人能批准第二位；出路同平台 10 §16.3：运维以 `JABIZ_SECURITY_PROTECTEDGRANTS_ENABLED=false` 启动一次、建好后改回，记录在变更记录中）。
 - **审批**：待审批的变更出现在后台"待办"中（平台的 `ApprovalPanel`，`APPROVAL_DECIDE`），由另一位超级管理员以 `security.protected-change.decide` 决定（要求近期二次验证；申请人与所针对的用户不能批；
   `approval.read` 让超级管理员读到请求的事实）。超级管理员不持有 `approval.decide`，不能决定业务审批（入驻、发布、大额转账），这些仍由内容与财务管理员决定。
+- **新的管理员账号**：建立期结束后任命的人，其账号的密码须由本人设定（建号时不设密码、本人经邮件链接设定），否则批准后不生效（`TARGET_CREDENTIALS_NOT_OWN`）。
 - **任命内容与财务管理员**：给出的 `approval.decide`、`control.publish` 不要求审批人持有，因为已发布的职责分离规则 `qb.sod.security-administration` 禁止超级管理员持有它们（D51 修订 H1）；
   该规则被撤下或停用时这类任命无法批准。
 - **以后的 `QB_SETUP`**：它直接写入角色的权限。建立期结束后，若新版本给已有持有人的角色增加受保护的权限，平台以 422 `PROTECTED_CHANGE_REQUIRES_APPROVAL` 拒绝整个 `QB_SETUP`；
