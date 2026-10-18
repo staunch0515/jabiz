@@ -5,7 +5,7 @@ import { completeQuiz, sponsor } from './content'
 import { approvedSponsor, livePublication } from './publishing'
 import { rewardingPublication, startAttempt, submitRight } from './transactions'
 import { fundedSponsor, takerInJapan } from './wallet'
-import { legalAdmin, publishVersion } from './legal'
+import { contentAdmin, legalAdmin, publishVersion } from './legal'
 import {
   expect,
   expectAccessible,
@@ -403,5 +403,74 @@ for (const appearance of ['light', 'dark'] as const) {
     await page.getByTestId('consent-agree').click()
     await page.getByTestId('consent-accept').click()
     await expect(page.getByTestId('home')).toBeVisible()
+  })
+}
+
+/** The inbox, a message, the message centre and the administration's announcements (Q7c), in both appearances. */
+for (const appearance of ['light', 'dark'] as const) {
+  const at = (name: string) => (appearance === 'light' ? name : `${name} (dark)`)
+
+  test(`the inbox, the message centre and the announcements pass axe (${appearance})`, async ({ page, request }) => {
+    test.setTimeout(180_000)
+    await useAppearance(page, appearance)
+    const sponsor = await fundedSponsor(request, 1000)
+    const taker = await takerInJapan(request, 'Uta')
+    const { publicationId } = await rewardingPublication(request, sponsor.token, 10, taker.token)
+    expect(await submitRight(request, taker.token, await startAttempt(request, taker.token, publicationId)))
+      .toBe('PAID')
+    const saved = await run(request, sponsor.token, 'QB_BROADCAST_SAVE', { publicationId, regions: ['GLOBAL'],
+      title: { en: 'A week left' }, body: { en: 'Only a week left to answer.' } })
+    await run(request, sponsor.token, 'QB_BROADCAST_SEND', { broadcastId: saved.broadcastId,
+      baseRevision: saved.revision })
+
+    await page.setViewportSize({ width: 390, height: 844 })
+    await signIn(page, '/', taker.email)
+    await expect(page.getByTestId('home')).toBeVisible()
+    await page.getByTestId('nav-inbox').click()
+    // The reward's message comes from the event's consumer: wait for both rows (and the network) before checking.
+    await expect(async () => {
+      await page.reload()
+      await expect(page.getByTestId('inbox-row')).toHaveCount(2, { timeout: 2_000 })
+    }).toPass({ timeout: 30_000 })
+    await page.waitForLoadState('networkidle')
+    await expectAccessible(page, at('app inbox'))
+    await page.getByTestId('inbox-row').first().getByRole('link').click()
+    await expect(page.getByTestId('inbox-item')).toBeVisible()
+    await expectAccessible(page, at('app inbox item'))
+    await page.setViewportSize({ width: 1280, height: 844 })
+    await page.getByTestId('inbox-back').click()
+    await expect(page.getByTestId('inbox-row')).toHaveCount(2)
+    await page.waitForLoadState('networkidle')
+    await expectAccessible(page, at('app inbox 1280px'))
+
+    await signIn(page, '/sponsor/', sponsor.email)
+    await expect(page.getByTestId('dashboard-status')).toBeVisible()
+    await page.goto('/sponsor/messages')
+    await expect(page.getByTestId('notice-row')).toHaveCount(1)
+    await page.waitForLoadState('networkidle')
+    await expectAccessible(page, at('sponsor message centre'))
+    await page.getByTestId('notice-new').click()
+    await expect(page.getByTestId('notice-editor')).toBeVisible()
+    await page.waitForLoadState('networkidle')
+    // The editor opens under the pointer: a hovered field is not the page's state.
+    await page.mouse.move(0, 0)
+    await expectAccessible(page, at('sponsor notice editor'))
+    await page.getByTestId('messages-tab-inbox').click()
+    await expect(page.getByTestId('messages-tab-inbox')).toHaveAttribute('aria-selected', 'true')
+    await expect(page.locator('[data-state="loading"]')).toHaveCount(0)
+    await page.waitForLoadState('networkidle')
+    await expectAccessible(page, at('sponsor announcements'))
+
+    await signInAdmin(page, await contentAdmin(request, 'Mio'), PASSWORD)
+    await page.goto('/admin/qb/broadcasts')
+    await expect(page.getByTestId('broadcast-row').first()).toBeVisible()
+    await page.waitForLoadState('networkidle')
+    await expectAccessible(page, at('admin announcements'))
+    await page.getByTestId('broadcast-new').click()
+    await page.getByTestId('broadcast-title-en').fill('Maintenance')
+    await page.getByTestId('broadcast-body-en').fill('On **Sunday**.')
+    await page.getByTestId('broadcast-save').click()
+    await expect(page.getByTestId('broadcast-ready')).toBeVisible()
+    await expectAccessible(page, at('admin announcement editor'))
   })
 }

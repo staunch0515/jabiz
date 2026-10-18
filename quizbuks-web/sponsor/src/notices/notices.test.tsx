@@ -158,6 +158,8 @@ describe('the message centre', () => {
     const user = userEvent.setup()
     render(<App />)
     await user.click(await screen.findByTestId('notice-new'))
+    // The one publication to choose is chosen, with its regions.
+    expect(await screen.findByTestId('notice-region-ASIA')).toHaveAttribute('aria-checked', 'true')
     await user.type(screen.getByTestId('notice-title'), 'Play now')
     await user.type(screen.getByTestId('notice-body'), 'See www.example.com')
     await user.click(screen.getByTestId('notice-publication'))

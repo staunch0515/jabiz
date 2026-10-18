@@ -93,6 +93,12 @@ export function NoticeEditor({ row, onClose }: { row: NoticeRow | null; onClose:
     row ? { broadcastId: row.broadcastId, revision: row.revision } : null)
   const [output, setOutput] = useState<SaveOutput | null>(null)
   const [note, setNote] = useState('')
+  // A new notice of a sponsor with one publication to choose is about that one.
+  const only = !row && publicationId == null && publications.data?.length === 1 ? publications.data[0] : null
+  if (only) {
+    setPublicationId(only.publicationId)
+    setRegions(only.regions)
+  }
   const publication = publications.data?.find((option) => option.publicationId === publicationId) ?? null
 
   const save = useMutation({
@@ -128,6 +134,8 @@ export function NoticeEditor({ row, onClose }: { row: NoticeRow | null; onClose:
   const dirty = savedAs !== current
   const ready = !!output && output.problems.length === 0 && !dirty
   const choose = (next: string) => {
+    // Radix's select reports an empty value when its value is set from outside before its items exist.
+    if (!next) return
     setPublicationId(next)
     const option = publications.data?.find((item) => item.publicationId === next)
     // The publication's regions to start with; the sponsor may leave some out.

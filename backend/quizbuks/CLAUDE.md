@@ -232,6 +232,7 @@
   这个变量只给 e2e：正式模式或正式密钥下设成每日以外的值即启动失败（`wallet.TransferScheduleCheck`，同开发入账）。
   **条款**（Q7b）：`prepareQuizbuks` 在没有已生效的三种文本时发布第一版（同上线前），发布人是测试自己建的、带已验证邮箱与测试角色 `QB_E2E_CONTENT`（`QB_ADMIN_ROLES` 中同样加入）、经 API 绑定 TOTP 并 step-up 的内容管理员（`tests/legal.ts`）；
   `support.ts` 的 `run` 像页面一样替 `QB_PROFILE_SAVE` / `QB_SPONSOR_APPLY` 带上当前版本，并在充值、提交发布、开通收款之前先接受到期的新版本（不测同意的测试因此不受其他测试发布的新版影响）；经页面完成欢迎页的测试勾选 `profile-terms`。
+  **站内信与公告**（Q7c）：后台扩展的写入要已验证的邮箱（首个管理员没有），测试以 `contentAdmin`（`tests/legal.ts`，角色 `QB_E2E_CONTENT`、不绑定二次验证）登录后台；每次要求二次验证的撤回经 API 以 `legalAdmin` 运行。e2e 的公告用推广（只到发送前注册的人），不让以后测试新建的答题人收到。
   启动方式与环境变量照 `.github/workflows/quizbuks.yml` 的 `e2e` 作业；然后 `E2E_BASE_URL=… E2E_ADMIN_USER=… E2E_ADMIN_PASSWORD=… pnpm e2e`。测试只增数据，可重复运行。
 
 ## 6. 测试与命令（在 `backend/` 下）

@@ -511,3 +511,77 @@ M-73 API Key（G10）；个人信息的删除与匿名化（平台未开放，GD
 充值的测试在对话框填好之后才换假时钟（对话框的打开在假时钟下停在 `pointer-events: none`）。
 
 **验证**：`origin/1.2/quizbuks` 没有新的提交（仍为 a063819）。`./gradlew :quizbuks:check` 599 项全部通过，`platformCheck` 通过，场景快照没有变化；两个 SPA 的 lint、typecheck 通过，test 各连续运行两次都全过（App 135 项、商家后台 135 项）；两份 `src/qb/` 相同；`app:check` 两者、`ext:check`（70 项）、工具测试与 `check-app-paths.sh` 通过；e2e（打包的 jar、本机的 Mailpit 与 Stripe 桩、独立的库与端口）47 项全部通过。
+
+## 13. 实施记录（Q7c 站内信与公告，2026-10-18，`1.2/quizbuks-7c-inbox`）
+
+分支自 `origin/1.2/quizbuks-7a-mail`（591a774，PR #178）拉出；期间 `origin/1.2/quizbuks` 与 `origin/1.2/quizbuks-7a-mail` 都没有新的提交，没有合并。
+不需要平台的新能力。
+
+### 13.1 迁移的顺序
+
+迁移是 **V15**（计划写的 V14 已留给 Q9e1，尚未合并）：Q7b V12、Q7a V13、Q9e1 V14、Q7c V15、Q8a V16。V15 与前面的迁移一样自己定义并在结尾删除 `quizbuks_create_temporal_table`。
+合并顺序与编号不一致时（如 Q7c 先于 Q9e1 合入），Flyway 照应用自己的历史表按编号执行，已应用的库须按编号补跑（`outOfOrder` 不开），合并的人照此安排。
+
+### 13.2 做了什么
+
+- **实体**（`messaging.QbInbox`）：`QbMessage`（普通表，`sourceKey` 唯一）、`QbBroadcast`（时态，状态 `DRAFT` / `SCHEDULED` / `SENT` / `CANCELLED` / `WITHDRAWN`）、
+  `QbBroadcastTarget`、`QbBroadcastFeed`（发送时冻结的副本与 `live`）、`QbBroadcastSchedule`、`QbBroadcastReceipt`、`QbInboxState`，以及只含 `userId`、`publicationId`、`startedAt` 的视图 `QbAttemptStart`（转化数，不带金额）。
+- **个人消息**（`MessageProcesses`）：`QB_MESSAGE_FROM_EVENT` 订阅 5 种事件，在一条 `QueryEntities.all` 中读已有消息、会话、卡片、转账与收款账户，记录仍成立才写（奖励仍是 `PAID` / `PENDING`、转账仍是 `SENT` / `FAILED`、收款账户仍受限）；
+  `sourceKey` 去重（收款账户受限按用户与 UTC 日期，一天至多一条）；超过 7 天的事件跳过（重放与新订阅不补发陈旧的消息）。标题与正文以 `MessageTexts` 按三种语言渲染（金额为 Kudos），不含他人的数据。
+  收款提醒 `QB_PAYOUT_REMINDER`：逐项任务 `qb.payout-reminder`（每日 03:17 UTC），余额达到转账门槛、没有可用的收款账户、`qb.payout.reminder-days` 天内没有提醒。
+- **公告与通知**（`BroadcastProcesses`、纯 Java 的 `BroadcastRules`）：保存给出发送会遇到的全部问题（`SaveOutput.problems`），发送只接受未再修改、无问题的已保存草稿（`baseRevision`）。
+  商家：锁序 `qb.account:<商家>` → `qb.broadcast:<编号>`，查封禁与入驻；只能关联本人可接受新答题或已排期的发布（他人的发布与不存在的一样 422）、地区为发布地区的子集、纯文本无链接（`LINK` 正则：网址、`www.`、邮箱）、
+  每个发布至多 `qb.broadcast.sponsor.max-per-publication` 条、两条之间至少 `qb.broadcast.sponsor.min-interval-hours` 小时（撤回的也算），通知在发布结束时过期；商家通知的类型是推广（计划 D-Q7-7），关闭推广的人收不到。管理员：受众 App 或商家后台、全体 / 地区 / 至多 1,000 名指定用户、
+  Markdown、有效期缺省 `qb.broadcast.expires-days` 天；发送 `requiresMfa(ADMINISTRATION)`，撤回 `requiresMfa(ALWAYS)`、必填理由、可撤回任何一条（含已排期的）。
+  定时发送由逐项任务 `qb.broadcast-dispatch`（每分钟）以 `QB_BROADCAST_DISPATCH` 完成：发送方在锁外读，商家已封禁或发布已不在排期 / 上架即 `CANCELLED` 并记原因；`sentAt` 为到期时刻。
+  封禁商家：`QB_USER_BAN` 以子流程 `QB_BROADCAST_BAN_WITHDRAW` 撤回其已发出与已排期的通知（理由 `QB_ACCOUNT_SUSPENDED`）。
+- **收件箱**（`InboxProcesses`）：`QB_MESSAGE_MARK`（锁 `qb.inbox:<用户>`，经 App 与商家后台两个收件箱模板确认这一条在本人的收件箱中，否则 404；只记第一次；点击只对有发布的公告与有按钮的消息记录，其余只记已读）、
+  `QB_INBOX_READ_ALL`（水位线，不写回执、不计入统计）、`QB_INBOX_SETTINGS_SAVE`（推广开关）。限流：已读与点击每人每分钟 120 次，全部已读与推广开关 30 次，商家保存 60 次 / 分、发送 10 次 / 时。
+- **模板**：`qb.app.inbox`（列表与单条，`itemKind` / `itemId`）、`qb.app.inbox-unread`、`qb.sponsor.inbox`、`qb.sponsor.broadcasts`、`qb.sponsor.broadcast-publications`、`qb.admin.broadcasts`、`qb.system.broadcast-audience`、`qb.system.broadcasts-due`、`qb.system.payout-reminders`。
+- **条款**：`QB_LEGAL_PUBLISH` 的输入加 `announce`（缺省不公告），勾选时为相关的人排一条系统公告（`LegalAnnouncements`：答题人条款 → App，隐私政策 → App 与商家后台，其余 → 商家后台；到期即现在，一分钟内由任务发出；有效到生效后 30 天），输出 `announcements`。
+- **前端**：App 底部第五项"收件箱"（`src/inbox/`；未读徽标经 `useUnread`：进入、回到前台、每 5 分钟；`aria-label` 带未读数）、列表（分类、未读、关键字、日期；全部已读；推广开关）与详情（打开即已读，按钮先记点击再前往）；
+  商家后台"消息中心"（`src/notices/`，`/messages`：本人的通知与统计、编辑器与 App 中的预览、改回草稿、放弃、撤回；"来自 QuizBuks"的公告）；后台扩展 `/qb/broadcasts`（菜单"公告与通知"）与规约类页的"在收件箱中公告"。
+
+### 13.3 与计划不同之处（均为实现细节，未改变已确认的结论）
+
+| 计划 | 实现与理由 |
+|---|---|
+| 迁移 V14 | V15（13.1） |
+| 立即发送经子流程 `QB_BROADCAST_DISPATCH` | 发送流程自己在锁内运行受众模板并写 `SENT` 与 feed 行：同一套步骤，免去一次子流程的权限与锁的往返；任务的逐项流程仍是 `QB_BROADCAST_DISPATCH` |
+| `QB_BROADCAST_CANCEL`：`SCHEDULED → DRAFT` | 另加 `DRAFT → CANCELLED`（"放弃"草稿，时态表不删除） |
+| 撤回：`SENT → WITHDRAWN` | 已排期的也可撤回（管理员停下一条有问题的定时公告时不必先改回草稿） |
+| 模板 `qb.app.inbox-item` | 单条由 `qb.app.inbox` 的 `itemKind` / `itemId` 给出：详情与列表用同一组匹配条件，不再多写一处 |
+| 单元测试 `InboxMatchTest` | `InboxMatchIT`：同一张真值表直接在数据库上比较三个模板（列表、未读数、受众）与 Java 的期望，比纯 Java 的复本更能防止三处写法分叉 |
+| 新订阅补上历史事件 | 超过 7 天的事件跳过（任务要求重放不产生陈旧的消息）；7 天之内的照常补上 |
+| 收件箱只在 App | 商家后台也有收件箱（`qb.sponsor.inbox`，受众 `SPONSOR` 的公告），否则发给商家的公告无处可读 |
+| 受众人数 | 发送时匹配的人数：答题人须有资料（国家）且资料建于发送之前（与推广的"注册"同一时刻）；商家为入驻已通过的 |
+| 统计的最小人数 | 商家看到的阅读、点击、转化不足 5 人时显示"不足 5 人"（比率随之不显示）；后台为确切人数，任何地方都不给出是谁 |
+| — | 编辑器在只有一个可选发布时预先选中它（同时绕开深色外观下卡片内选择框占位文字的对比度 4.41，见 13.6） |
+
+### 13.4 测试
+
+- 单元：`BroadcastRulesTest`（时刻、上限、链接、文字与 jqwik 的性质）；`MessagesTest`（三语齐全）。
+- IT：`InboxIT`（13 项：每种事件一条消息、重复与过时的事件、记录已变时不写、未读与全部已读、标记只限本人收件箱、搜索与日期、推广开关、限流）、
+  `BroadcastIT`（8 项：商家的关联、地区、链接、次数与间隔，定时与任务、发布结束即取消，商家与管理员的撤回及理由，封禁即撤回，统计、最小人数与转化，管理员公告的检查、保存与定时（时态表只插入），权限）、
+  `InboxMatchIT`（匹配的真值表对三个模板）、`LegalAnnounceIT`（勾选才公告、受众按种类）；`ProcessAccessIT` 的封闭列表加入 4 个内部流程；`SetupIT` 的参数加 4 个。`AttemptStatementBudgetIT` 不变。
+- 场景：新增 `messaging.yml`（缺英文的草稿保存即见问题、不能发送；按地区立即发送、定时推广由任务发送、关闭推广的人收不到、已读只记一次、无发布的推广只记已读、后台的统计、撤回之后不在收件箱中）。
+  `QB_SETUP` 新增 4 个参数使其后的 ID 后移：`setup.yml` 的期望加上 4 个参数；答题场景（`play`、`payout`、`topup`）的答案按新的显示位置改写，得分与奖励不变；其他快照只有 ID 与哈希的变化。
+- Vitest：App `inbox.test.tsx`（13 项：列表、分类与未读、搜索、徽标与刷新（假时钟）、详情的已读与点击、商家通知不渲染 Markdown、已撤回、全部已读、推广开关）；
+  商家后台 `notices.test.tsx`（6 项）；扩展 `broadcasts.test.tsx`（7 项）与规约类页的"在收件箱中公告"。
+- e2e：`inbox.spec.ts`（奖励消息与徽标；商家通知 → 答题人阅读并前往 → 商家看到"不足 5 人" → 后台确切人数 → 内容管理员撤回、收件箱中消失、商家看到理由；后台撰写推广、保存即见问题、发送后到达）；
+  `a11y.spec.ts` 加收件箱、详情、消息中心、编辑器、公告、后台的列表与编辑器（亮、暗）。后台的写入要已验证的邮箱（首个管理员没有）：测试以 `contentAdmin`（`tests/legal.ts`，同 `QB_E2E_CONTENT`、不绑定二次验证）登录后台；
+  撤回每次要求二次验证，经 API 以 step-up 过的 `legalAdmin` 运行。计划中的"商家定时通知 → 跑任务"由场景与 `BroadcastIT` 覆盖，e2e 立即发送（不等一分钟的任务）。
+
+### 13.5 验证
+
+- `./gradlew :quizbuks:check`：644 项全部通过（本工作树的 JUnit 报告），`platformCheck` 0 错误；收件箱模板中与物理列同名的别名已改名，不再有告警（其余告警是已有的）。
+- 两个 SPA：lint、typecheck 通过，Vitest App 148 项、商家后台 141 项；两份 `src/qb/` 相同；`app:check` 两者通过；`ext:check` 78 项；`tools/check-app-paths.sh` 通过。
+- e2e（打包的 jar、本机的 Mailpit 与 Stripe 桩、独立的库与端口，照 CI 的 `e2e` 作业）：52 项全部通过（新增 `inbox.spec.ts` 3 项与 `a11y.spec.ts` 2 项）。
+- 深色外观的 axe 先报出消息中心编辑器的选择框占位文字对比度 4.41（13.6），以预选唯一的发布解决；Radix 的选择框在值由外部设定、选项尚未挂载时报告空值，`choose` 忽略空值（Vitest 复现）。
+
+### 13.6 已知问题与后续
+
+- 深色外观下，卡片中选择框的占位文字（`text-muted-foreground` 在 `dark:bg-input/30` 叠在 `bg-card` 上）对比度为 4.41，低于 4.5：这是平台 `@jabiz/ui` 的 token 组合，应在平台修（本分支不改平台）；本阶段的编辑器预选唯一的发布而不显示占位，其他有占位的选择框在卡片中时同样会被 axe 报出。
+- 商家通知不预审（Q7-10）：违规内容在撤回之前可被读到；后台列表按发送方与状态筛选以便巡查。
+- 收件箱模板每次读取时匹配公告（不按人复制）：公告数量很大时 `qb_broadcast_feed` 的 `live` 部分索引是关键；上线后观察 `qb.app.inbox-unread` 的耗时（每 5 分钟每个在线用户一次）。
+- 推送通知、邮件摘要不在本阶段（计划 §1）。

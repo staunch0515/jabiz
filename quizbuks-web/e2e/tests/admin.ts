@@ -7,13 +7,16 @@ import { ADMIN, expect, run } from './support'
  * docs/quizbuks/plans/Q9a-admin-extension.md): signing in at /admin/ and a publication submitted for review.
  */
 
-/** Signs the first administrator in at the administration (no second factor in the end-to-end job). */
-export async function signInAdmin(page: Page) {
+/**
+ * Signs the first administrator (or another without a second factor) in at the administration (no second factor in
+ * the end-to-end job).
+ */
+export async function signInAdmin(page: Page, userName = ADMIN.userName, password = ADMIN.password) {
   await page.goto('/admin/login')
-  await page.getByPlaceholder('User name', { exact: true }).fill(ADMIN.userName)
-  await page.getByPlaceholder('Password', { exact: true }).fill(ADMIN.password)
+  await page.getByPlaceholder('User name', { exact: true }).fill(userName)
+  await page.getByPlaceholder('Password', { exact: true }).fill(password)
   await page.getByRole('button', { name: 'Sign in', exact: true }).click()
-  await expect(page).toHaveURL(/\/admin\/data/)
+  await expect(page).not.toHaveURL(/\/admin\/login/)
 }
 
 /**

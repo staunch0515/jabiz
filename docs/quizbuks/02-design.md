@@ -356,7 +356,7 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 
 | `QB_MESSAGE_FROM_EVENT`（Q7c） | `qb.messaging.system`，`internal()` | 订阅 `qb.reward.settled` / `qb.reward.pending` / `qb.transfer.sent` / `qb.transfer.failed` / `qb.payout.restricted`：重读记录、仍成立才写一条三语消息（`sourceKey` 去重），7 天以前的事件跳过（重放不补发） |
 | `QB_PAYOUT_REMINDER`（Q7c，Q7-16） | `qb.messaging.system`，`internal()` | 逐项任务 `qb.payout-reminder`（每日）：余额达到转账门槛而未开通收款的用户，每 `qb.payout.reminder-days`（30）天至多一条 |
-| `QB_BROADCAST_SAVE` / `_SEND` / `_CANCEL` / `_WITHDRAW`（Q7c） | `qb.broadcast.write`，已验证，查封禁 | 商家通知：账户锁 → 通知锁 `qb.broadcast:<编号>`；保存给出发送会遇到的全部问题；只给本人可接受新答题的发布、纯文本无链接、每个发布至多 `qb.broadcast.sponsor.max-per-publication`（3）条、间隔 `qb.broadcast.sponsor.min-interval-hours`（24）小时；不预审（Q7-10），发送即到达该发布地区内的答题人 |
+| `QB_BROADCAST_SAVE` / `_SEND` / `_CANCEL` / `_WITHDRAW`（Q7c） | `qb.broadcast.write`，已验证，查封禁 | 商家通知：账户锁 → 通知锁 `qb.broadcast:<编号>`；保存给出发送会遇到的全部问题；只给本人可接受新答题的发布、纯文本无链接、每个发布至多 `qb.broadcast.sponsor.max-per-publication`（3）条、间隔 `qb.broadcast.sponsor.min-interval-hours`（24）小时；类型是推广（可退订，只给发送前注册的人，Q7-11）；不预审（Q7-10），发送即到达该发布地区内的答题人 |
 | `QB_ADMIN_BROADCAST_SAVE` / `_SEND` / `_CANCEL` / `_WITHDRAW`（Q7c） | `qb.admin.content.write`，已验证；发送 ADMINISTRATION 二次验证，撤回每次二次验证并必填理由 | 平台公告（App 或商家后台；全体、地区或至多 1,000 名指定用户；立即或定时；有效期缺省 `qb.broadcast.expires-days` 天）；撤回可用于任何公告与商家通知 |
 | `QB_BROADCAST_DISPATCH`（Q7c） | `qb.messaging.system`，`internal()` | 逐项任务 `qb.broadcast-dispatch`（每分钟）：到期的定时发送；商家已封禁或发布已不在进行中即取消 |
 | `QB_BROADCAST_BAN_WITHDRAW`（Q7c） | `subProcessOnly()` | `QB_USER_BAN` 在同一事务中撤回该商家已发出与已排期的通知（理由 `QB_ACCOUNT_SUSPENDED`） |
