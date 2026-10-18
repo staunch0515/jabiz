@@ -24,7 +24,8 @@ import java.util.UUID;
  * The processes that write {@code SysFile} (docs/design/14-files.md sections 1 and 6):
  * <ul>
  *   <li>{@code FILE_REGISTER} (internal): records an uploaded file once its content is stored; run by the upload
- *       endpoint only;</li>
+ *       endpoint, and by the external job executor for the files a job produced, as the job's requester (decision
+ *       D50), only;</li>
  *   <li>{@code FILE_DELETE}: deletes a file nothing refers to any more (422 {@code FILE_IN_USE} otherwise); the row
  *       goes with the transaction, the content after it commits. A business process that erases personal data
  *       clears the referring rows, runs {@code SaveChanges.now}, then calls this one as a sub-process;</li>
@@ -50,19 +51,28 @@ public class FileProcesses {
      * A stored upload. Only the file name could hold personal data; it is masked in operation records.
      *
      * @param variants names of the stored image variants, narrowest first
+     * @param jobId    the external job that produced the file (decision D50 item 3), or null for an upload: the
+     *                 operation record says where the file came from
      */
     public record RegisterInput(@NotNull UUID fileId, @NotBlank String policy, @NotBlank String contentType,
         @PositiveOrZero long sizeBytes, @NotBlank String sha256, Integer width, Integer height, List<String> variants,
-        @Sensitive @NotBlank String originalName) {
+        @Sensitive @NotBlank String originalName, String jobId) {
 
         public RegisterInput {
             variants = variants == null ? List.of() : List.copyOf(variants);
         }
 
+        /** An upload, as before decision D50. */
+        public RegisterInput(UUID fileId, String policy, String contentType, long sizeBytes, String sha256,
+            Integer width, Integer height, List<String> variants, String originalName) {
+            this(fileId, policy, contentType, sizeBytes, sha256, width, height, variants, originalName, null);
+        }
+
         @Override
         public String toString() {
             return "RegisterInput[fileId=" + fileId + ", policy=" + policy + ", contentType=" + contentType
-                + ", sizeBytes=" + sizeBytes + ", originalName=***]";
+                + ", sizeBytes=" + sizeBytes + ", originalName=***" + (jobId == null ? "" : ", jobId=" + jobId)
+                + "]";
         }
     }
 

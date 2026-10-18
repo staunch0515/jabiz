@@ -291,6 +291,7 @@ public class AdvancedQueryExecutor {
      */
     private TimeSlice timeSlice(AdvancedQueryDefinition query, Map<String, BoundValue> params, At at,
         Map<String, DatasetDefinition> datasets) {
+        TimeTravel.requireStorable(at.asOf(), at.knownAt());
         At asked = at;
         if (query.timeSlice() != null) {
             if (at.given()) {

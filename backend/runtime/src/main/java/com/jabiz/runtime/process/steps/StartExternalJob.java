@@ -1,27 +1,39 @@
 package com.jabiz.runtime.process.steps;
 
+import com.jabiz.context.RequestContext;
 import com.jabiz.entity.Violation;
 import com.jabiz.external.ExternalJobType;
+import com.jabiz.file.FilePolicy;
 import com.jabiz.i18n.PlatformErrorCodes;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.StepSource;
 import com.jabiz.process.StepSpec;
 import com.jabiz.runtime.BusinessRuleViolationException;
+import com.jabiz.runtime.file.FilePermissions;
+import com.jabiz.runtime.file.FilePolicyRegistry;
 import com.jabiz.runtime.process.StepHandler;
 import com.jabiz.runtime.external.ExternalJobRecorder;
 import com.jabiz.runtime.external.ExternalJobRegistry;
+import com.jabiz.runtime.security.Permissions;
 import com.jabiz.security.Sensitive;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.support.StaticListableBeanFactory;
 import org.springframework.stereotype.Component;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.RecordComponent;
 import java.nio.charset.StandardCharsets;
+import java.util.Collection;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
@@ -34,17 +46,22 @@ import java.util.function.Predicate;
  * idempotency key returns the first job's id, since the output is replayed.
  *
  * <p>The input is stored as JSON: one holding a secret (a value of a {@code @Sensitive} record component, at any depth)
- * is refused with 422 {@code EXTERNAL_JOB_INPUT_SECRET}, and one larger than {@value #MAX_INPUT_BYTES} bytes with
- * {@code EXTERNAL_JOB_INPUT_TOO_LARGE}. Handlers read secrets from their services instead. Starts beyond the type's
- * {@code maxOpenPerRequester}, or a second open job of a reference when the type allows {@code oneOpenPerReference},
- * are refused with 422 {@code EXTERNAL_JOB_LIMIT}.
+ * is refused with 422 {@code EXTERNAL_JOB_INPUT_SECRET}, and one larger than the type's {@code maxInputSize}
+ * ({@value #MAX_INPUT_BYTES} bytes unless declared, decision D50 item 1) with {@code EXTERNAL_JOB_INPUT_TOO_LARGE}.
+ * Handlers read secrets from their services instead. Starts beyond the type's {@code maxOpenPerRequester}, or a second
+ * open job of a reference when the type allows {@code oneOpenPerReference}, are refused with 422
+ * {@code EXTERNAL_JOB_LIMIT}.
+ *
+ * <p>Files (decision D50): the files the job reads ({@link Spec#files}) are checked against what the requester may
+ * read and recorded with the job; a type that produces files may be started only by someone who may upload under its
+ * output policy (403 otherwise), since the files become that person's uploads.
  */
 @Component
 public class StartExternalJob<C extends ProcessContext> implements StepHandler<StartExternalJob.Metadata<C>, C>,
     CheckedStep<StartExternalJob.Metadata<C>> {
 
-    /** The largest input stored, in bytes of JSON. */
-    public static final int MAX_INPUT_BYTES = 64 * 1024;
+    /** The largest input stored unless the type declares otherwise, in bytes of JSON. */
+    public static final int MAX_INPUT_BYTES = ExternalJobType.DEFAULT_MAX_INPUT_BYTES;
     /** The longest reference. */
     public static final int MAX_REFERENCE = 200;
     private static final int MAX_DEPTH = 16;
@@ -56,12 +73,19 @@ public class StartExternalJob<C extends ProcessContext> implements StepHandler<S
      *                  characters); null for none
      * @param outputKey context key receiving the job's id; null to discard it
      * @param when      whether to start a job at all; always when null
+     * @param files     the ids of the files the job reads (decision D50 item 2); none when null
      */
     public record Metadata<C>(String jobType, Function<C, ?> input, Function<C, String> reference, String outputKey,
-        Predicate<C> when) {
+        Predicate<C> when, Function<C, ? extends Collection<UUID>> files) {
         public Metadata {
             Objects.requireNonNull(jobType, "jobType must not be null");
             Objects.requireNonNull(input, "input must not be null");
+        }
+
+        /** A start without files, as decision D38 had it. */
+        public Metadata(String jobType, Function<C, ?> input, Function<C, String> reference, String outputKey,
+            Predicate<C> when) {
+            this(jobType, input, reference, outputKey, when, null);
         }
     }
 
@@ -89,35 +113,61 @@ public class StartExternalJob<C extends ProcessContext> implements StepHandler<S
         /** What the job is about (a product, an order), kept with it: at most 200 characters. */
         public Spec<C> reference(Function<C, String> reference) {
             Metadata<C> m = metadata();
-            return new Spec<>(new Metadata<>(m.jobType(), m.input(), reference, m.outputKey(), m.when()));
+            return new Spec<>(new Metadata<>(m.jobType(), m.input(), reference, m.outputKey(), m.when(), m.files()));
         }
 
         /** Where the job's id goes in the context. */
         public Spec<C> outputKey(String key) {
             Metadata<C> m = metadata();
-            return new Spec<>(new Metadata<>(m.jobType(), m.input(), m.reference(), key, m.when()));
+            return new Spec<>(new Metadata<>(m.jobType(), m.input(), m.reference(), key, m.when(), m.files()));
         }
 
         /** Starts the job only when {@code condition} holds on the context; otherwise the step does nothing. */
         public Spec<C> when(Predicate<C> condition) {
             Metadata<C> m = metadata();
             return new Spec<>(new Metadata<>(m.jobType(), m.input(), m.reference(), m.outputKey(),
-                Objects.requireNonNull(condition, "condition must not be null")));
+                Objects.requireNonNull(condition, "condition must not be null"), m.files()));
+        }
+
+        /**
+         * The files the job reads (decision D50 item 2), in order, for a type that declares {@code inputFiles}: each
+         * must exist, be of one of the type's policies and be readable by the requester ({@code file.read} or the
+         * policy's read permission), or the start is refused with 422 {@code EXTERNAL_JOB_INPUT_FILE}; more files,
+         * or a larger one, than the type reads with {@code EXTERNAL_JOB_INPUT_FILE_LIMIT}. A file named twice is read
+         * once.
+         */
+        public Spec<C> files(Function<C, ? extends Collection<UUID>> fileIds) {
+            Metadata<C> m = metadata();
+            return new Spec<>(new Metadata<>(m.jobType(), m.input(), m.reference(), m.outputKey(), m.when(),
+                Objects.requireNonNull(fileIds, "fileIds must not be null")));
         }
     }
 
     public static <C extends ProcessContext> Spec<C> of(String jobType, Function<C, ?> input) {
-        return new Spec<>(new Metadata<>(jobType, input, null, null, null));
+        return new Spec<>(new Metadata<>(jobType, input, null, null, null, null));
     }
 
     private final ExternalJobRegistry jobs;
     private final ExternalJobRecorder recorder;
     private final JsonMapper json;
+    private final FilePolicyRegistry policies;
 
+    /**
+     * The step as decision D38 built it, without file policies: a type with files cannot be started by it (its
+     * policies are not found). Kept for code of line 1.2 that builds the step itself (decision D50 item 6).
+     */
     public StartExternalJob(ExternalJobRegistry jobs, ExternalJobRecorder recorder, JsonMapper json) {
+        this(jobs, recorder, json, new FilePolicyRegistry(new StaticListableBeanFactory()
+            .getBeanProvider(FilePolicy.class)));
+    }
+
+    @Autowired
+    public StartExternalJob(ExternalJobRegistry jobs, ExternalJobRecorder recorder, JsonMapper json,
+        FilePolicyRegistry policies) {
         this.jobs = jobs;
         this.recorder = recorder;
         this.json = json;
+        this.policies = policies;
     }
 
     @Override
@@ -151,14 +201,33 @@ public class StartExternalJob<C extends ProcessContext> implements StepHandler<S
                     + " holds a secret", Map.of("jobType", type.name(), "field", secret.get()))));
             }
             String text = json.writeValueAsString(input);
-            if (text.getBytes(StandardCharsets.UTF_8).length > MAX_INPUT_BYTES) {
+            if (text.getBytes(StandardCharsets.UTF_8).length > type.maxInputBytes()) {
                 return Mono.error(new BusinessRuleViolationException(new Violation(null,
                     PlatformErrorCodes.EXTERNAL_JOB_INPUT_TOO_LARGE, "The input of external job " + type.name()
-                    + " is too large", Map.of("jobType", type.name(), "max", MAX_INPUT_BYTES))));
+                    + " is too large", Map.of("jobType", type.name(), "max", type.maxInputBytes()))));
             }
-            String requester = ctx.request().actorId();
+            List<UUID> fileIds = fileIds(metadata, type, ctx);
+            RequestContext request = ctx.request();
+            if (type.outputFiles() != null) {
+                // The files it produces become the requester's uploads under the policy (decision D50 item 3): only
+                // someone who may upload there may start it.
+                FilePolicy policy = policies.find(type.outputFiles().policy()).orElseThrow(() ->
+                    new IllegalStateException("External job type " + type.name() + " stores its files under "
+                        + "undeclared file policy " + type.outputFiles().policy()));
+                if (!isSystem(request)) {
+                    Permissions.require(request, policy.uploadPermission(), "Starting external job " + type.name()
+                        + ", whose files are stored under " + policy.name());
+                }
+            }
+            String requester = request.actorId();
             return withinLimits(type, reference, requester)
-                .then(recorder.insertJob(type.name(), text, reference, requester, ctx.processSeqId(), ctx.opTime()))
+                .then(Flux.fromIterable(fileIds).concatMap(fileId -> readable(type, request, fileId)).collectList())
+                .flatMap(files -> recorder.insertJob(type.name(), text, reference, requester, ctx.processSeqId(),
+                        ctx.opTime())
+                    .flatMap(id -> Flux.range(0, files.size())
+                        .concatMap(i -> recorder.insertInputFile(id, i, files.get(i), ctx.opTime(),
+                            policies.find(files.get(i).policy()).map(FilePolicy::privateMetadata).orElse(false)))
+                        .then(Mono.just(id))))
                 .doOnNext(id -> {
                     if (metadata.outputKey() != null) {
                         ctx.put(metadata.outputKey(), id);
@@ -166,6 +235,69 @@ public class StartExternalJob<C extends ProcessContext> implements StepHandler<S
                 })
                 .then();
         });
+    }
+
+    /** The files the job is to read, each once, in order; refused beyond the type's count. */
+    private static <C extends ProcessContext> List<UUID> fileIds(Metadata<C> metadata, ExternalJobType<?, ?> type,
+        C ctx) {
+        if (metadata.files() == null) {
+            return List.of();
+        }
+        if (type.inputFiles() == null) {
+            throw new IllegalStateException("External job type " + type.name() + " reads no files: declare "
+                + "inputFiles to give it some");
+        }
+        Collection<UUID> given = metadata.files().apply(ctx);
+        Set<UUID> ids = new LinkedHashSet<>();
+        if (given != null) {
+            for (UUID id : given) {
+                if (id != null) {
+                    ids.add(id);
+                }
+            }
+        }
+        if (ids.size() > type.inputFiles().maxFiles()) {
+            throw fileLimit(type);
+        }
+        return List.copyOf(ids);
+    }
+
+    /**
+     * The file, if the requester may give it to the job: it exists, is of one of the type's policies, and the
+     * requester holds {@code file.read} or its policy's read permission, as reading it through {@code /api/files}
+     * would require. All three refusals are one answer, so that a start tells nothing about files the requester may
+     * not see; the size is checked only then. The system (an event consumer, a scheduled job) may give any file.
+     */
+    private Mono<ExternalJobRecorder.StoredFile> readable(ExternalJobType<?, ?> type, RequestContext request,
+        UUID fileId) {
+        BusinessRuleViolationException refused = new BusinessRuleViolationException(new Violation(null,
+            PlatformErrorCodes.EXTERNAL_JOB_INPUT_FILE, "File " + fileId + " cannot be given to external job "
+            + type.name(), Map.of("jobType", type.name(), "fileId", fileId.toString())));
+        return recorder.lockStoredFile(fileId)
+            .switchIfEmpty(Mono.error(refused))
+            .flatMap(file -> {
+                boolean mayRead = isSystem(request) || request.hasPermission(FilePermissions.READ)
+                    || policies.find(file.policy()).map(FilePolicy::readPermission).map(request::hasPermission)
+                        .orElse(false);
+                if (!mayRead || !type.inputFiles().policies().contains(file.policy())) {
+                    return Mono.error(refused);
+                }
+                if (file.sizeBytes() > type.inputFiles().maxBytes()) {
+                    return Mono.error(fileLimit(type));
+                }
+                return Mono.just(file);
+            });
+    }
+
+    private static BusinessRuleViolationException fileLimit(ExternalJobType<?, ?> type) {
+        return new BusinessRuleViolationException(new Violation(null,
+            PlatformErrorCodes.EXTERNAL_JOB_INPUT_FILE_LIMIT, "External job " + type.name() + " is given more files, "
+            + "or a larger one, than it reads", Map.of("jobType", type.name(), "maxFiles",
+            type.inputFiles().maxFiles(), "maxBytes", type.inputFiles().maxBytes())));
+    }
+
+    private static boolean isSystem(RequestContext request) {
+        return RequestContext.SYSTEM_ACTOR.equals(request.actorId());
     }
 
     /**
@@ -253,7 +385,14 @@ public class StartExternalJob<C extends ProcessContext> implements StepHandler<S
 
     @Override
     public List<String> problems(Metadata<C> metadata) {
-        return jobs.find(metadata.jobType()).isPresent() ? List.of()
-            : List.of("starts undeclared external job type " + metadata.jobType());
+        Optional<ExternalJobType<?, ?>> type = jobs.find(metadata.jobType());
+        if (type.isEmpty()) {
+            return List.of("starts undeclared external job type " + metadata.jobType());
+        }
+        if (metadata.files() != null && type.get().inputFiles() == null) {
+            return List.of("gives files to external job type " + metadata.jobType() + ", which declares no "
+                + "inputFiles");
+        }
+        return List.of();
     }
 }

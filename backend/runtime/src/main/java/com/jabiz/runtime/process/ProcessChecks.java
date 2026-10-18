@@ -54,6 +54,10 @@ public class ProcessChecks implements PlatformCheck {
         this.development = environment.acceptsProfiles(Profiles.of("dev"));
     }
 
+    /** The platform's processes with alternative permissions, which check both themselves (decision D51). */
+    private static final Set<String> PLATFORM_ALTERNATIVES = Set.of(
+        com.jabiz.runtime.approval.ApprovalProcesses.DECIDE);
+
     @Override
     public List<CheckProblem> check() {
         List<CheckProblem> problems = new ArrayList<>();
@@ -66,6 +70,14 @@ public class ProcessChecks implements PlatformCheck {
                 problems.add(development
                     ? CheckProblem.warning(CATEGORY, process, message + " (allowed in the dev profile only)")
                     : CheckProblem.error(CATEGORY, process, message));
+            }
+            if (!definition.alternativePermissions().isEmpty()
+                && !PLATFORM_ALTERNATIVES.contains(definition.name())) {
+                // Decision D51: the process itself must decide what each set allows, and check segregation of
+                // duties for what it uses - the entry point does neither for it.
+                problems.add(CheckProblem.warning(CATEGORY, process, "declares alternative permissions"
+                    + " (orPermissions): it must check itself what each set lets a caller do, and segregation of"
+                    + " duties for the permissions it uses; declare one set unless that is meant"));
             }
             for (StepDefinition<?, ?> step : definition.steps()) {
                 checkStep(definition, step, problems, calls.get(process));

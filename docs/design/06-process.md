@@ -105,7 +105,8 @@ LoadEntity(order) → LoadEntity(stock) → ComputeStep(扣减库存、计算金
   不得调用 `URL#openConnection` / `openStream` / `getContent`，不得以 XML 解析器的 `parse(String uri)` 从地址读取文档；
   `noPlatformInternals(业务包)`——业务包不得依赖 `com.jabiz.runtime.external`（作业的步骤 `StartExternalJob` 因此在 `com.jabiz.runtime.process.steps`）；
   `handlersStayOutOfTheDatabase(业务包)`——业务包中的 `ExternalJobHandler` 与 `BlockingStep` 不得依赖 JDBC、R2DBC、Spring 的数据访问、
-  平台的 `storage` / `query` 包与 `DatasetEntityManager`。规则是护栏而不是沙箱：反射、方法句柄、把地址交给第三方库等看不见。
+  平台的 `storage` / `query` 包与 `DatasetEntityManager`；`handlersReadFilesThroughTheirContext(业务包)`（D50）——它们也不得依赖 `com.jabiz.runtime.file`：
+  作业的文件只经 `ExternalJobContext.files()` 读、随结果返回（11 §4a）。规则是护栏而不是沙箱：反射、方法句柄、把地址交给第三方库等看不见。
 - 观测：`jabiz.external.call`（标签只有 `service` 与 `outcome`：`2xx` `3xx` `4xx` `5xx` `timeout` `refused` `error`）。
 - 示范：`app` 的 `PRODUCT_RENAME` 以阻塞步骤 `ModerateText`（`POST /v1/moderate`，请求自己的超时 10 s；服务的请求超时 60 s 是给生成文案的作业的）审核新名称，被判为不当即违规 `COMMERCE_TEXT_INAPPROPRIATE`；
   长调用的示范是异步外部作业 `commerce.product-copy`（11 §4a）。

@@ -102,6 +102,6 @@ public class ProtectedChangeEntities {
     ApprovalSubject protectedChangeApprovalSubject() {
         return ApprovalSubject.define(SUBJECT, s -> s.entity(CHANGE).text("kind").text("user").text("role")
             .text("gained").text("affected").text("credentials").text("address").text("history").text("newAddress")
-            .text("permission"));
+            .text("sodExempt").text("permission"));
     }
 }

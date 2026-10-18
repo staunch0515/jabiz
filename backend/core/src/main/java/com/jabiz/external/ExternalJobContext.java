@@ -1,6 +1,8 @@
 package com.jabiz.external;
 
 import java.time.Instant;
+import java.util.List;
+import java.util.UUID;
 
 /** What an {@link ExternalJobHandler} may use during one attempt (decision D38 item 3). */
 public interface ExternalJobContext {
@@ -39,4 +41,24 @@ public interface ExternalJobContext {
      * @param quantity zero or more
      */
     void recordUsage(String metric, long quantity);
+
+    /**
+     * The files the job reads (decision D50 item 2), in the order the starting process gave them; empty when it reads
+     * none. They are readable during this attempt only.
+     */
+    default List<ExternalJobFile> files() {
+        return List.of();
+    }
+
+    /**
+     * One of the files the job reads.
+     *
+     * @throws IllegalArgumentException when the job was not given that file: a handler reads its own job's files
+     *                                  and nothing else
+     */
+    default ExternalJobFile file(UUID fileId) {
+        return files().stream().filter(file -> file.fileId().equals(fileId)).findFirst()
+            .orElseThrow(() -> new IllegalArgumentException("External job " + jobId() + " was not given file "
+                + fileId));
+    }
 }

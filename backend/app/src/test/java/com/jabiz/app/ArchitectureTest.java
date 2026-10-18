@@ -1,8 +1,10 @@
 package com.jabiz.app;
 
 import com.jabiz.app.archfixture.DirectNetworkCalls;
+import com.jabiz.app.archfixture.FileAccess;
 import com.jabiz.app.archfixture.ProcessMachinery;
 import com.jabiz.app.commerce.ProductCopyHandler;
+import com.jabiz.app.commerce.ProductImageHandler;
 import com.jabiz.runtime.process.StepHandler;
 import com.jabiz.runtime.test.PlatformArchRules;
 import com.tngtech.archunit.core.domain.JavaClass;
@@ -199,6 +201,29 @@ class ArchitectureTest {
         }
         assertThat(rule.evaluate(new ClassFileImporter().importClasses(ProductCopyHandler.class)).hasViolation())
             .isFalse();
+    }
+
+    /**
+     * Handlers read the files their job was given through their context, and return the files they make (decision
+     * D50): never the platform's storage or upload pipeline, which knows nothing of the job's checks. The rule is not
+     * vacuous: a handler reading the store and one storing files itself fail it.
+     */
+    @Test
+    void handlersReadFilesOnlyThroughTheirContext() {
+        PlatformArchRules.handlersReadFilesThroughTheirContext(BUSINESS).check(CLASSES);
+        ArchRule rule = PlatformArchRules.handlersReadFilesThroughTheirContext("com.jabiz.app..");
+        for (Class<?> offender : List.of(FileAccess.HandlerReadingTheStore.class,
+            FileAccess.HandlerStoringFiles.class)) {
+            assertThat(rule.evaluate(new ClassFileImporter().importClasses(offender)).hasViolation())
+                .as(offender.getSimpleName()).isTrue();
+        }
+        // Through a helper of the application too.
+        assertThat(rule.evaluate(new ClassFileImporter().importClasses(FileAccess.HandlerWithAHelper.class,
+            FileAccess.StoreHelper.class)).hasViolation()).isTrue();
+        for (Class<?> fine : List.of(FileAccess.HandlerReadingItsFiles.class, ProductImageHandler.class)) {
+            assertThat(rule.evaluate(new ClassFileImporter().importClasses(fine)).hasViolation())
+                .as(fine.getSimpleName()).isFalse();
+        }
     }
 
     /** Business code uses ExternalServices only, never the platform's machinery behind it (decision D38). */

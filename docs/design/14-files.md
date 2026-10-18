@@ -15,6 +15,7 @@ POST /api/files?policy=… ──► FileUploadService（runtime）
                                5. 移入 FileStore
                                6. 流程 FILE_REGISTER（internal）：插入 SysFile（一个操作，op_process）
                              失败时删除已写入的对象；清扫任务兜底（§6）
+外部作业产生的文件 ──► FileUploadService.storeGenerated：上面的第 2–6 步，以作业的请求人登记（§11，D50）
 字段 `jabiz.file`（引用 SysFile）──► 写入时检查文件存在且策略相符
 GET /api/files/{id}/content[/{variant}] ──► 已认证 + 策略的读取权限（后台预览）
 GET /api/public/files/{id}[/{variant}]  ──► 匿名，仅当被公开数据引用（15 §4）
@@ -213,3 +214,24 @@ FilePolicy.define("qb.content")
 - **只追加**：`jabiz_protect_append_only('sys_generated_file')`；由 21 §2 的封存自动覆盖。保留期照常以 `RetentionPolicy` 声明。
 - **示范**：app 的 `ORDER_PICK_LIST_ARCHIVE` 把订单行生成 CSV 拣货单并保存（文本单元格加引号、以 `= + - @` 开头的加 `'`，防止表格软件当作公式）。
 - **测试**：`GeneratedFileIT`（原样下载与哈希、下载记录、`input_summary` 中没有内容、缺权限 404、类型 / 文件名 / 大小 / 权限 / 对象被拒（经业务流程调用也一样）、存档被改不返回、只追加、业务流程经子流程保存）。
+
+## 11. 外部作业的文件【决策 D50，阶段 16t】
+
+异步外部作业（11 §4a）可以读文件、也可以产生文件。它们与上传的文件是同一种文件：同一张 `sys_file`、同样的策略、权限、清扫与删除。
+
+- **读**：作业类型声明 `inputFiles(个数, 大小, 策略…)`，流程以 `StartExternalJob…files(…)` 给出文件编号。登记时请求人须能经 `/api/files/{id}/content` 读到每个文件
+  （`file.read` 或策略的读取权限），文件须属于类型的策略；不符一律 422 `EXTERNAL_JOB_INPUT_FILE`（不区分不存在与无权）。执行器在尝试开始前把这些文件的原件从 `FileStore`
+  复制到上传区（`.uploads`，与上传的临时文件同处，崩溃留下的由清扫第 3 项删除），处理器只能读这些副本，尝试结束即删除。处理器从不接触 `FileStore`（ArchUnit）。
+- **写**：类型声明 `outputFiles(策略, 个数, 大小)`，处理器随结果返回字节。这是 §1 之外进入 `sys_file` 的**第二个入口**，走与上传相同的第 2–6 步
+  （`FileUploadService.storeGenerated`）：策略的大小上限、按魔数判定类型与允许列表、图片解码后重新编码（去掉全部元数据）与变体、`privateMetadata()` 的随机编号、
+  `FILE_REGISTER`（操作人与 `uploadedBy` 为作业的请求人，`input_summary` 带 `jobId`，文件名不进记录）。不同的只是：上传权限在作业开始时检查（请求人须持有，否则 403），
+  上传的按人限流不适用（类型限定了个数与大小）。被策略拒绝的文件使作业永久失败（`OUTPUT_FILE_REJECTED`），不会以任何形式存下。
+- **来历**：`sys_external_job_file` 记下作业读取与产生的每个文件（编号、策略、大小、摘要、尝试号与键），只追加；文件删除后记录仍在。只读实体 `ExternalJobFile`。
+- **清扫**：输出文件在完成流程把它写进字段之前不被引用。失败的尝试已存下的、取消或租约过期后迟到的、完成流程没用上的（例如未选中的候选），都按 §6 在
+  `jabiz.files.orphan-after` 之后由 `FILE_SWEEP` 删除。输入文件被作业读取不算引用：开始后被删除的文件使作业失败（`INPUT_FILE_MISSING`）。
+- **不做**：作业直接读写任意文件；把文件内容放进作业输入（多存一份，且有输入上限）；把生成的文件放进 `sys_generated_file`（§10 是交给外部的原样存档）。
+- **处理器不是沙箱**（D50 修订 L5）：处理器只经上下文读文件，是靠 ArchUnit 规则（处理器与它经应用自己的类所用到的类都不得依赖 `com.jabiz.runtime.file`）守住的约定，
+  不是隔离：应用代码与平台同一进程、同一权限，反射或 `java.nio` 直接读存储根目录都看不见。规则防的是误用。
+- **大小与时限**（修订 M1–M2、L3）：输出另有每次尝试的合计上限与每实例的输出预算（11 §4a）；复制与存储的时限随声明的大小增长；复制前检查上传区的可用空间；
+  副本重算摘要；存储失败先在尝试内以同样的字节重试，仍失败则下一次尝试会再次调用外部服务。
+- **记录的遮蔽**（修订 L1）：`ExternalJobFile` 的文件编号与摘要只对 `file.read` 显示（`reveal`）；`privateMetadata()` 的文件，其记录的编号随机、时间只到日。

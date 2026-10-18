@@ -12,6 +12,9 @@ jabiz:
     demo-ai:
       base-url: http://localhost:8091/v1
       allowed-hosts: localhost
+    demo-ai-images:
+      base-url: http://localhost:8091/v1
+      allowed-hosts: localhost
   # The payment provider of the orders sample (decision D37; CommercePayments), for local development only:
   # tools/demo/inbound-demo.sh signs with the same secret. Never configured in application.yml.
   inbound-webhooks:
