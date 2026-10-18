@@ -59,6 +59,8 @@ public final class LegalDrafts {
                 "Information we collect", "取得する情報", "我们收集的信息");
             case QbLegal.COMMERCE_NOTICE -> draft("Notice under the Act on Specified Commercial Transactions",
                 "特定商取引法に基づく表記", "特定商取引法标示", "Seller", "販売事業者", "销售方");
+            case QbLegal.AI_NOTICE -> draft("AI notice", "AI 利用に関する説明", "AI 使用说明",
+                "What is sent to the AI provider", "AI 提供者に送信される情報", "发送给 AI 提供方的内容");
             default -> throw new IllegalArgumentException("No legal text " + kind);
         };
     }

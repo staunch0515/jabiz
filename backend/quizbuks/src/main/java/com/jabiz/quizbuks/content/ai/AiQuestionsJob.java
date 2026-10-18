@@ -1,0 +1,91 @@
+package com.jabiz.quizbuks.content.ai;
+
+import com.jabiz.external.ExternalJobType;
+
+import java.time.Duration;
+import java.util.List;
+
+/**
+ * The asynchronous external job {@value #TYPE} (platform decision D38; docs/quizbuks/plans/Q8-ai.md, D-Q8-4): one
+ * request of candidate questions, registered by {@code QB_AI_QUESTIONS_REQUEST}, run by the platform outside any
+ * transaction, answered by {@code QB_AI_JOB_COMPLETED} or {@code QB_AI_JOB_FAILED} ({@code internal()}).
+ *
+ * <p>The input holds only the sponsor's own quiz content (D-Q8-2, A-11): no taker's data, no e-mail address, name,
+ * company or user id: the provider's {@code metadata.user_id} is {@link #userKey}, an HMAC it cannot reverse. The
+ * platform stores the input as it is, once ({@code sys_external_job}, append-only, P4): it is the quiz's content, kept
+ * anyway in the quiz's versions.
+ */
+public final class AiQuestionsJob {
+
+    public static final String TYPE = "qb.ai.questions";
+
+    /** Usage metrics (per attempt, failed ones too; the platform adds them up). */
+    public static final String INPUT_TOKENS = "inputTokens";
+    public static final String OUTPUT_TOKENS = "outputTokens";
+
+    /** The most questions asked at once (A-12). */
+    public static final int MAX_COUNT = 20;
+    /** Unfinished jobs per sponsor (A-7). */
+    public static final int MAX_OPEN = 2;
+    public static final int DEFAULT_CONCURRENCY = 4;
+
+    /**
+     * A material as sent: its number in the quiz (1..n), its kind, title and description, and an article's text (only
+     * articles have text: links, videos, images and audio go by their title and description, A-5).
+     */
+    public record Material(int no, String kind, String title, String description, String body) {}
+
+    /**
+     * @param model         one of {@link ClaudeService#MODELS}
+     * @param effort        one of {@link ClaudeService#EFFORTS}
+     * @param language      {@code en}, {@code zh} or {@code ja}
+     * @param count         questions asked, 1 to {@value #MAX_COUNT}
+     * @param difficulty    {@code EASY}, {@code MEDIUM} or {@code HARD}
+     * @param existingStems the quiz's questions, so that the candidates do not repeat them; empty when not sent
+     * @param userKey       the provider's opaque user id: HMAC of the sponsor's id under a key of the server's
+     */
+    public record Input(String model, String effort, String language, int count, String difficulty, String title,
+        String intro, List<Material> materials, List<String> existingStems, String userKey) {
+        public Input {
+            materials = materials == null ? List.of() : List.copyOf(materials);
+            existingStems = existingStems == null ? List.of() : List.copyOf(existingStems);
+        }
+    }
+
+    public record Option(String text, boolean correct) {}
+
+    /** A candidate question; {@code materials} are the numbers of the materials it rests on. */
+    public record Candidate(String stem, List<Option> options, Integer points, List<Integer> materials) {
+        public Candidate {
+            options = options == null ? List.of() : List.copyOf(options);
+            materials = materials == null ? List.of() : List.copyOf(materials);
+        }
+    }
+
+    /**
+     * @param servedModel the model that answered (another one when the provider fell back after a refusal)
+     * @param candidates  the candidates that met the content rules ({@link AiCandidates})
+     * @param invalid     how many did not
+     */
+    public record Result(String servedModel, boolean fellBack, List<Candidate> candidates, int invalid) {
+        public Result {
+            candidates = candidates == null ? List.of() : List.copyOf(candidates);
+        }
+    }
+
+    /**
+     * The job type: five minutes an attempt (the provider's answer within the service's two minutes, with room), three
+     * attempts with back-off from 10 seconds to 2 minutes (429, 5xx, time-outs; a refusal or a bad request ends it at
+     * once), at most {@code maxConcurrency} running across instances, {@value #MAX_OPEN} unfinished per sponsor and one
+     * per quiz (the reference).
+     */
+    public static ExternalJobType<Input, Result> type(int maxConcurrency) {
+        return ExternalJobType.define(TYPE, Input.class, Result.class, t -> t
+            .handler(AiQuestionsHandler.class).services(ClaudeService.SERVICE)
+            .timeout(Duration.ofMinutes(5)).retry(3, Duration.ofSeconds(10), Duration.ofMinutes(2))
+            .maxConcurrency(maxConcurrency).maxOpenPerRequester(MAX_OPEN).oneOpenPerReference()
+            .onCompleted(AiProcesses.COMPLETED).onFailed(AiProcesses.FAILED));
+    }
+
+    private AiQuestionsJob() {}
+}

@@ -35,7 +35,9 @@ public final class QbRoles {
     private static final List<String> CONTENT = List.of(QbPermissions.COUNTRY_READ, QbPermissions.ADMIN_USERS_READ,
         QbPermissions.ADMIN_QUIZ_READ, QbPermissions.CONTENT_FILE_READ, QbPermissions.ADMIN_PUBLICATION_READ,
         QbPermissions.REVIEW_SPONSOR, QbPermissions.REVIEW_PUBLICATION, QbPermissions.ADMIN_CONTENT_WRITE,
-        QbPermissions.SPONSOR_AVATAR_READ, "approval.decide", "task.read");
+        QbPermissions.SPONSOR_AVATAR_READ, "approval.decide", "task.read",
+        // Q8a: the AI page (usage and failures; the switch changes only through controlled changes).
+        QbPermissions.ADMIN_AI_READ);
 
     private static final List<String> FINANCE = List.of(QbPermissions.COUNTRY_READ, QbPermissions.ADMIN_USERS_READ,
         QbPermissions.ADMIN_FINANCE_READ, QbPermissions.ADMIN_PUBLICATION_READ, QbPermissions.PAYOUT_REVIEW,

@@ -49,6 +49,9 @@ services:
       # STRIPE_CONNECT_WEBHOOK_SECRET in .env, the image's entrypoint fills placeholders in test mode (loud warnings;
       # top-ups and payouts do not work). false on a server, so that a missing value fails the startup check.
       QB_STRIPE_PLACEHOLDERS: ${QB_STRIPE_PLACEHOLDERS:-true}
+      # Claude (README.md, "AI 生成题目"): ANTHROPIC_API_KEY from .env; without it a placeholder the provider refuses.
+      # AI stays off until an administrator publishes qb.ai.enabled = true, so nothing is sent or spent before.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-local-placeholder-not-a-claude-key}
       # The platform's keys and the first administrator's password (README.md, "密钥与部署"): false unless set, so a
       # missing one refuses the start (review L5); a local demonstration sets QB_LOCAL_SECRETS=true, and the keys are
       # then made once into the secrets volume (and the startup check refuses them next to live mode).

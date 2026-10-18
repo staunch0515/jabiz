@@ -164,6 +164,8 @@ public final class QbContent {
         eb.field("points", f -> f.physicalColumn("points").required(true).asNumeric(4, 0)
             .apply(Rules.range(ContentCodes.QUESTION_POINTS_RANGE, BigDecimal.valueOf(ContentLimits.MIN_POINTS),
                 BigDecimal.valueOf(ContentLimits.MAX_POINTS))));
+        // The AI job the question was reviewed and accepted from (Q8a, M-20): the review pages mark it.
+        eb.field("aiJobId", f -> f.physicalColumn("ai_job_id").immutable(true).processOnly().asText(36));
         eb.display("stem");
         eb.temporal(t -> t.allowScheduled(false));
         eb.listView("default", lv -> lv

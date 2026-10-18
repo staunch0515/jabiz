@@ -74,6 +74,10 @@ EOF
   SPRING_MAIL_HOST=127.0.0.1
   SPRING_MAIL_PORT=$SMTP_PORT
   STRIPE_API_KEY=sk_test_local_demo
+  # Claude (Q8a): a placeholder key and an address nothing answers; AI stays off (qb.ai.enabled), nothing is sent.
+  ANTHROPIC_API_KEY=local-demo-placeholder-not-a-claude-key
+  QB_ANTHROPIC_API_URL=http://localhost:9
+  QB_ANTHROPIC_API_HOSTS=localhost
   QB_STRIPE_API_URL=http://localhost:$STUB_PORT
   QB_STRIPE_API_HOSTS=localhost
   QB_STRIPE_CHECKOUT_URL_PREFIX=http://localhost:$STUB_PORT/

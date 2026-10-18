@@ -48,6 +48,10 @@ jabiz:
       "[QB_PUBLICATION_SAVE]": { per-user: 60, period: 1m }
       # Q7b: accepting the terms after sign-in (a person does it once per change).
       "[QB_CONSENT_ACCEPT]": { per-user: 10, period: 1m }
+      # Q8a: asking the AI costs money (its limits are counted under the sponsor's lock, A-7); accepting reviewed
+      # candidates writes up to 20 questions.
+      "[QB_AI_QUESTIONS_REQUEST]": { per-user: 5, period: 1m }
+      "[QB_AI_ACCEPT]": { per-user: 30, period: 1m }
   # The key signing the integrity seals (docs/design/21-audit-retention.md section 2), from the environment only:
   # Base64, at least 32 bytes. Startup fails without it. Keep a copy: without it the existing seals cannot be verified.
   integrity:
@@ -123,6 +127,13 @@ jabiz:
     stripe:
       base-url: ${QB_STRIPE_API_URL:https://api.stripe.com}
       allowed-hosts: ${QB_STRIPE_API_HOSTS:api.stripe.com}
+    # Claude (docs/quizbuks/plans/Q8-ai.md, D-Q8-1): Anthropic's Messages API, its key in ANTHROPIC_API_KEY only
+    # (startup fails without it; the image's entrypoint fills a placeholder that the provider refuses, so nothing is
+    # spent before a real key is set). AI stays off until an administrator publishes qb.ai.enabled = true. Development,
+    # the tests and the end-to-end tests point it at the local stub (tools/quizbuks/claude-stub), never the network.
+    anthropic:
+      base-url: ${QB_ANTHROPIC_API_URL:https://api.anthropic.com}
+      allowed-hosts: ${QB_ANTHROPIC_API_HOSTS:api.anthropic.com}
   # Stripe's events (decision D37) at /api/inbound/stripe: the account endpoint's signing secret from the environment
   # only (STRIPE_WEBHOOK_SECRET; to rotate it, deploy/quizbuks/README.md). Startup fails without it.
   # Only the types QuizBuks consumes are stored; others are answered and dropped. The connected accounts' events come

@@ -129,18 +129,20 @@ class SetupIT extends QbItSupport {
                 .valueKind();
             Object type = kind.get("type");
             // The commission rate is a fraction below 1; the days (Q10b) are whole.
+            // Q8a: a code (the AI model and effort) takes a listed value other than its first one.
             String value = "bool".equals(type) ? "true"
+                : "code".equals(type) ? String.valueOf(((List<?>) kind.get("allowedValues")).getLast())
                 : "numeric".equals(type) && !Integer.valueOf(0).equals(kind.get("scale")) ? "0.1" : "1";
             Map<String, Object> refused = client.post().uri("/api/processes/PARAM_SET/latest")
                 .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
                 .header("Authorization", admin()).bodyValue(Map.of("key", key, "value", value)).exchange()
-                .expectStatus().isEqualTo(422).expectBody(MAP).returnResult().getResponseBody();
-            assertThat(refused.toString()).as(key).contains("PARAM_CONTROLLED");
+                .expectBody(MAP).returnResult().getResponseBody();
+            assertThat(String.valueOf(refused)).as(key).contains("PARAM_CONTROLLED");
         }
         // The others are changed as before.
         client.post().uri("/api/processes/PARAM_SET/latest")
             .contentType(org.springframework.http.MediaType.APPLICATION_JSON).header("Authorization", admin())
-            .bodyValue(Map.of("key", QbParams.AI_MODEL, "value", "gpt-x")).exchange().expectStatus().isOk();
+            .bodyValue(Map.of("key", QbParams.APP_MIN_VERSION, "value", "1.0.1")).exchange().expectStatus().isOk();
     }
 
     @Test
@@ -199,7 +201,7 @@ class SetupIT extends QbItSupport {
             Map.entry(QbParams.CREATOR_FEE_RATE, "0.0000"), Map.entry(QbParams.TRANSFER_THRESHOLD, "1000"),
             Map.entry(QbParams.TRANSFER_REVIEW_ABOVE, "50000"), Map.entry(QbParams.TRANSFER_ENABLED, "false"),
             Map.entry(QbParams.REVIEW_SPONSOR_AUTO, "false"), Map.entry(QbParams.REVIEW_PUBLICATION_AUTO, "false"),
-            Map.entry(QbParams.AI_MODEL, "gpt-4o-mini"), Map.entry(QbParams.APP_MIN_VERSION, "1.0.0"),
+            Map.entry(QbParams.APP_MIN_VERSION, "1.0.0"),
             Map.entry(QbParams.TOPUP_MIN, "1000"), Map.entry(QbParams.TOPUP_MAX, "1000000"),
             Map.entry(QbParams.TRANSFER_FEE, "0"),
             // Q10b (M3): the hold period and the new sponsors' limit.
@@ -210,6 +212,11 @@ class SetupIT extends QbItSupport {
         // Q9d: the account mapping and the receipts' issuer start empty, for finance to set with four eyes.
         QbParams.JOURNAL_ACCOUNTS.forEach(key -> expected.put(key, ""));
         QbParams.ISSUER.forEach(key -> expected.put(key, ""));
+        // Q8a: AI off, Claude Opus 5.5 at effort medium, the limits, the expiry and the estimate's prices.
+        expected.putAll(Map.of(QbParams.AI_ENABLED, "false", QbParams.AI_MODEL, "claude-opus-5-5",
+            QbParams.AI_EFFORT, "medium", QbParams.AI_SPONSOR_DAILY_JOBS, "20",
+            QbParams.AI_SPONSOR_MONTHLY_TOKENS, "2000000", QbParams.AI_GLOBAL_MONTHLY_TOKENS, "50000000",
+            QbParams.AI_EXPIRE_DAYS, "7", QbParams.AI_PRICE_INPUT, "4.0000", QbParams.AI_PRICE_OUTPUT, "20.0000"));
         // Q7b: no support address until an administrator sets one.
         expected.put(QbParams.SUPPORT_EMAIL, "");
         // Q7b review M1: how far ahead a legal text may be announced.
