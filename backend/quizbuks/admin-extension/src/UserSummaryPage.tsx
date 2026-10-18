@@ -19,12 +19,14 @@ import {
   readAttemptRewards,
   readAttempts,
   readBan,
+  readConsents,
   readPayoutAccount,
   readTopUps,
   readTransfers,
   readUser,
   type AttemptRewardRow,
   type AttemptRow,
+  type ConsentRow,
   type TopUpRow,
   type TransferRow,
   type UserRow,
@@ -124,6 +126,38 @@ function Attempts({ userId }: { userId: string }) {
 }
 
 /**
+ * The user's acceptances of the terms and the privacy policy (Q7b): which version, when, where (registration, the
+ * sponsor application or the prompt after a change) and in which front end.
+ */
+function Consents({ userId }: { userId: string }) {
+  const { t } = useTranslation(EXTENSION_NAMESPACE)
+  const kind = useLabels(DICTIONARY.legalKind)
+  const source = useLabels(DICTIONARY.consentSource)
+  const { query: consents, table } = usePaged(['qb-ext', 'consents', userId],
+    (offset, limit) => readConsents(userId, offset, limit))
+  const columns = useMemo<ColumnDef<ConsentRow, unknown>[]>(() => [
+    { id: 'kind', header: t('user.consentKind'), cell: ({ row }) => kind(row.original.kind) },
+    {
+      id: 'versionNo',
+      header: t('user.consentVersion'),
+      meta: right,
+      cell: ({ row }) => (row.original.versionNo == null ? '' : String(row.original.versionNo)),
+    },
+    { id: 'acceptedAt', header: t('user.acceptedAt'), cell: ({ row }) => when(row.original.acceptedAt) },
+    { id: 'source', header: t('user.consentSource'), cell: ({ row }) => source(row.original.source) },
+    { id: 'entry', header: t('user.consentEntry'), cell: ({ row }) => row.original.entry ?? '' },
+  ], [t, kind, source])
+  return (
+    <Section title={t('user.consents')} testId="user-consents">
+      {consents.isError ? <LoadFailed error={consents.error} onRetry={() => void consents.refetch()} /> : (
+        <DataTable label={t('user.consentsTable')} columns={columns} {...table}
+          getRowId={(row) => row.consentId} empty={t('user.noConsents')} />
+      )}
+    </Section>
+  )
+}
+
+/**
  * The money of a user: their attempts' rewards, transfers to them, their payout account and (as a sponsor) their
  * top-ups. Finance only: the templates are `qb.admin.finance.read`'s.
  */
@@ -216,7 +250,8 @@ function Finance({ userId, sponsor }: { userId: string; sponsor: boolean }) {
 }
 
 /**
- * One user's summary (P-01): the profile, country, registration, ban and sponsor state, and the attempts; the money
+ * One user's summary (P-01): the profile, country, registration, ban and sponsor state, the attempts and the
+ * acceptances of the terms (Q7b); the money
  * (transfers, payout account, top-ups) only for those who read finance (`qb.admin.finance.read`): it is neither shown
  * nor asked for otherwise, and the server refuses those templates to anyone else.
  */
@@ -243,6 +278,7 @@ export default function UserSummaryPage() {
       <PageHeader title={user.data.displayName ?? user.data.userName} description={user.data.userName} className="pb-0" />
       <Profile user={user.data} />
       <Attempts userId={userId} />
+      <Consents userId={userId} />
       {can(PERMISSION.financeRead) && <Finance userId={userId} sponsor={!!user.data.sponsorStatus} />}
     </div>
   )

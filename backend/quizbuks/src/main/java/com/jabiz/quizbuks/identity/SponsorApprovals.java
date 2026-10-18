@@ -11,9 +11,9 @@ import java.util.UUID;
  * What the review of a sponsor's onboarding looks at and is bound to (docs/quizbuks/plans/Q2-accounts.md, D-Q2-3).
  * The one fact is whether onboarding goes without review (the controlled parameter {@code qb.review.sponsor.auto},
  * read at each application). The content is everything the reviewer approves, all of it on the onboarding itself: the
- * sponsor's name ({@code contactName}), the company, the introduction, the avatar and when the terms were accepted.
- * An approval counts only while the content hashes the same ({@link ContentHash}). The terms stay accepted from the
- * first application (until terms are versioned, Q7), so the same application again is the same request.
+ * sponsor's name ({@code contactName}), the company, the introduction, the avatar, when the terms were first accepted
+ * and which version of the sponsors' terms was accepted (Q7b). An approval counts only while the content hashes the
+ * same ({@link ContentHash}). The same application again under the same terms is the same request.
  */
 public final class SponsorApprovals {
 
@@ -34,13 +34,19 @@ public final class SponsorApprovals {
      * content read back from storage hashes as the content given.
      */
     public static Map<String, Object> content(String contactName, String company, String intro, UUID avatar,
-        Instant termsAcceptedAt) {
+        Instant termsAcceptedAt, Integer termsVersionNo) {
         Map<String, Object> content = new LinkedHashMap<>();
         content.put("contactName", contactName);
         content.put("company", company);
         content.put("intro", intro);
         content.put("avatar", avatar == null ? null : avatar.toString());
         content.put("termsAcceptedAt", termsAcceptedAt == null ? null : termsAcceptedAt.toString());
+        // The version of the sponsors' terms accepted with the application (Q7b). Without one (no version in effect,
+        // or an application of before V12) the key is left out, so that the content hashes as before Q7b and the
+        // requests then pending still bind it (review L2).
+        if (termsVersionNo != null) {
+            content.put("termsVersionNo", termsVersionNo);
+        }
         return content;
     }
 

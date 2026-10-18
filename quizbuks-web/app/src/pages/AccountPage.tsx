@@ -8,7 +8,8 @@ import { AccountSection, AccountSections } from '../qb/AccountSections'
 import { readMyProfile } from '../qb/api'
 import { LanguageSelect } from '../qb/LanguageSelect'
 import { QB } from '../qb/messages'
-import { navigate } from '../qb/router'
+import { legalPath } from '../qb/legal'
+import { Link, navigate } from '../qb/router'
 import { PROFILE_QUERY, ProfileForm } from './ProfileForm'
 
 /** The account page, where a round trip through an identity provider to link an account comes back to. */
@@ -53,6 +54,14 @@ export function AccountPage() {
       </AccountSection>
       <AccountSections returnTo={ACCOUNT_PATH} linked={linked}
         onSignedOut={() => navigate('/login', { replace: true })} />
+      <AccountSection title={tApp('account.info')} testId="account-info">
+        <ul className="flex flex-col gap-2 text-sm">
+          <li><Link to="/help" className="text-primary underline">{t('help.title')}</Link></li>
+          <li><Link to={legalPath('TERMS_APP')} className="text-primary underline">{t('legal.kinds.TERMS_APP')}</Link></li>
+          <li><Link to={legalPath('PRIVACY')} className="text-primary underline">{t('legal.kinds.PRIVACY')}</Link></li>
+          <li><Link to="/about" className="text-primary underline" data-testid="account-about">{tApp('account.about')}</Link></li>
+        </ul>
+      </AccountSection>
     </section>
   )
 }

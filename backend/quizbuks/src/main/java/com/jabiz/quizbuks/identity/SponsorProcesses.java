@@ -9,6 +9,8 @@ import com.jabiz.process.ProcessDefinition;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.messaging.ConsentChecks;
+import com.jabiz.quizbuks.messaging.QbLegal;
 import com.jabiz.quizbuks.setup.QbParams;
 import com.jabiz.quizbuks.setup.ReviewCodes;
 import com.jabiz.runtime.EntityInstance;
@@ -85,9 +87,21 @@ public final class SponsorProcesses {
      * @param avatar       a file of the policy {@code qb.sponsor-avatar} the caller uploaded; none to have none
      * @param acceptTerms  must be true: the terms are accepted with every application
      * @param baseRevision the onboarding's revision the caller edited; when given and no longer current, 422
+     * @param termsVersionNo   the version of the sponsors' terms the page showed; while a version is in effect it must
+     *                         be that one (Q7b, D-Q7-5)
+     * @param privacyVersionNo the version of the privacy policy the page showed, likewise
      */
     public record ApplyInput(@NotNull String displayName, @NotNull String company, String intro, UUID avatar,
-        Boolean acceptTerms, Long baseRevision) {}
+        Boolean acceptTerms, Long baseRevision, Integer termsVersionNo, Integer privacyVersionNo) {
+
+        /** The versions the page showed, by kind of text. */
+        Map<String, Integer> shown() {
+            Map<String, Integer> shown = new HashMap<>();
+            shown.put(QbLegal.TERMS_SPONSOR, termsVersionNo);
+            shown.put(QbLegal.PRIVACY, privacyVersionNo);
+            return shown;
+        }
+    }
 
     public record ProfileInput(@NotNull String displayName, @NotNull String company, String intro, UUID avatar,
         Long baseRevision) {}
@@ -130,6 +144,7 @@ public final class SponsorProcesses {
             pb.step("Load the review switch", LoadParams.<ProcessContext>of(ProcessContext::opTime, PARAMS,
                 QbParams.REVIEW_SPONSOR_AUTO));
             AccountEditing.loadUser(pb, AccountEditing::userId);
+            ConsentChecks.load(pb, "Load the terms in effect", QbLegal.SPONSOR_KINDS, AccountEditing::userId);
             pb.compute("Check the application", (metadata, ctx) -> checkApplication(ctx));
             pb.step("Ask for a review", RequireApproval.<ProcessContext>when(ctx -> ctx.contains(CASE),
                 SponsorApprovals.SUBJECT, ctx -> ctx.get(CASE, ApprovalCase.class), APPROVAL));
@@ -158,6 +173,10 @@ public final class SponsorProcesses {
             ctx.reject(new Violation("acceptTerms", AccountCodes.SPONSOR_TERMS_REQUIRED, "Accept the terms to "
                 + "apply", Map.of()));
         }
+        // Applying accepts the sponsors' terms and the privacy policy in effect (Q7b): the versions the page showed must
+        // be those, and are recorded; the application is the server's check of consent for onboarding (Q7-2).
+        List<ConsentChecks.State> consents = Boolean.TRUE.equals(input.acceptTerms())
+            ? ConsentChecks.accepted(ctx, input.shown()) : List.of();
         AccountEditing.current(ctx, sponsor, input.baseRevision(), AccountCodes.SPONSOR_CHANGED);
         AccountEditing.requireOwnFile(ctx, AccountEditing.userId(ctx), "avatar", input.avatar(),
             sponsor == null ? null : sponsor.get("avatar"));
@@ -165,23 +184,28 @@ public final class SponsorProcesses {
             return;
         }
         Object id = sponsor == null ? ctx.get(NEW_ID) : sponsor.id();
-        // Accepted once, the terms stay accepted (until terms are versioned, Q7): the same application again is the
-        // same content, so it finds the same request (pending) rather than replacing it.
+        // The time of the first acceptance stays (Q2 review 6) and the version accepted is part of the content (Q7b):
+        // the same application under the same terms is the same content, so it finds the same request (pending)
+        // rather than replacing it.
         Instant accepted = sponsor == null ? null : AccountEditing.instant(sponsor.get("termsAcceptedAt"));
         Instant terms = accepted != null ? accepted : ctx.opTime();
+        ConsentChecks.record(ctx, AccountEditing.userId(ctx), consents, QbLegal.SOURCE_ONBOARDING);
+        ConsentChecks.State sponsorTerms = ConsentChecks.states(ctx).get(QbLegal.TERMS_SPONSOR);
+        Integer termsVersionNo = sponsorTerms == null ? null : sponsorTerms.currentVersionNo();
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("contactName", input.displayName());
         values.put("company", input.company());
         values.put("intro", blankToNull(input.intro()));
         values.put("avatar", input.avatar());
         values.put("termsAcceptedAt", terms);
+        values.put("termsVersionNo", termsVersionNo == null ? null : BigDecimal.valueOf(termsVersionNo));
         values.put("submittedAt", ctx.opTime());
         values.put("rejectReason", null);
         values.put("rejectedAt", null);
         ctx.put(VALUES, values);
         oldAvatar(ctx, sponsor, input.avatar());
         ctx.put(CASE, ApprovalCase.of(id, SponsorApprovals.facts(autoApprove(ctx)), SponsorApprovals.content(
-            input.displayName(), input.company(), blankToNull(input.intro()), input.avatar(), terms))
+            input.displayName(), input.company(), blankToNull(input.intro()), input.avatar(), terms, termsVersionNo))
             .reference(reference(input.company())));
     }
 
@@ -460,8 +484,14 @@ public final class SponsorProcesses {
         EntityInstance sponsor = first(ctx, FOUND);
         return ApprovalCase.of(sponsor.id(), SponsorApprovals.facts(false), SponsorApprovals.content(
             sponsor.get("contactName"), sponsor.get("company"), sponsor.get("intro"),
-            AccountEditing.uuid(sponsor.get("avatar")), AccountEditing.instant(sponsor.get("termsAcceptedAt"))))
+            AccountEditing.uuid(sponsor.get("avatar")), AccountEditing.instant(sponsor.get("termsAcceptedAt")),
+            termsVersionNo(sponsor.get("termsVersionNo"))))
             .reference(reference(sponsor.get("company")));
+    }
+
+    /** The stored version of the terms, as the content holds it (a number, or none). */
+    static Integer termsVersionNo(Object stored) {
+        return stored == null ? null : (int) AccountEditing.number(stored);
     }
 
     /** The reviewer's reason for the rejection, from their decision. */

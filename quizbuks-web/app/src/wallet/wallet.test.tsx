@@ -37,6 +37,8 @@ interface Server {
   ledger?: Record<string, unknown>[]
   /** The row of `qb.app.wallet`. */
   wallet?: Record<string, unknown>
+  /** The rows of `qb.me.consents` once onboarding was asked for (a new version took effect meanwhile). */
+  consentsAfterOnboard?: Record<string, unknown>[]
 }
 
 /** The server as the wallet pages see them, for a verified taker in Japan. Records what was posted. */
@@ -44,6 +46,7 @@ function server(options: Server = {}) {
   const posted: { path: string; body: Record<string, unknown>; key: string | null }[] = []
   const accounts = options.accounts ?? [null]
   let accountReads = 0
+  let onboarded = false
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
     const request = input instanceof Request ? input : new Request(new URL(String(input), window.location.origin))
     const url = new URL(request.url, window.location.origin)
@@ -80,7 +83,10 @@ function server(options: Server = {}) {
         const row = accounts[Math.min(accountReads++, accounts.length - 1)]
         return json(200, { items: row ? [row] : [], offset: 0, limit: 1 })
       }
+      case '/api/queries/qb.me.consents':
+        return json(200, { items: onboarded ? options.consentsAfterOnboard ?? [] : [], offset: 0, limit: 20 })
       case '/api/processes/QB_PAYOUT_ONBOARD/latest':
+        onboarded = true
         return json(options.onboard?.status ?? 200, options.onboard?.body
           ?? { output: { jobId: 'j1', accountStatus: null } })
       default:
@@ -219,6 +225,20 @@ describe('the payout account', () => {
     const state = screen.getByTestId('payout-state')
     await waitFor(() => expect(state).toHaveAttribute('data-state', 'failed'))
     expect(state).toHaveTextContent('Payout accounts can only be opened in JP.')
+    expect(goToStripe).not.toHaveBeenCalled()
+  })
+
+  it('refused until the new terms are accepted, asks for them at once (Q7b review M3)', async () => {
+    server({ consentsAfterOnboard: [{ kind: 'TERMS_APP', versionId: 'v2', versionNo: 2, title: { en: 'Terms' },
+      changeSummary: { en: 'Rewards are clearer.' }, requiresConsent: true, effectiveAt: '2026-10-14T00:00:00Z',
+      toAccept: 2, accepted: 1, mustAccept: true }], onboard: { status: 422, body: { status: 422,
+      code: 'QB_CONSENT_REQUIRED', detail: 'Refused', violations: [{ field: null, ruleCode: 'QB_CONSENT_REQUIRED',
+        message: 'Accept version 2 of TERMS_APP first.' }] } } })
+    window.history.replaceState(null, '', '/wallet/payout')
+    const user = userEvent.setup()
+    render(<App />)
+    await user.click(await screen.findByTestId('payout-onboard'))
+    expect(await screen.findByTestId('consent-gate')).toHaveTextContent('Rewards are clearer.')
     expect(goToStripe).not.toHaveBeenCalled()
   })
 

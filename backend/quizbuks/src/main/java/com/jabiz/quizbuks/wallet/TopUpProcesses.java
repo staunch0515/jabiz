@@ -10,6 +10,7 @@ import com.jabiz.process.ProcessDefinition;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.messaging.ConsentChecks;
 import com.jabiz.quizbuks.identity.CallerChecks;
 import com.jabiz.quizbuks.publishing.SponsorChecks;
 import com.jabiz.quizbuks.setup.QbParams;
@@ -103,6 +104,8 @@ public final class TopUpProcesses {
             .permissions(QbPermissions.TOPUP)
             .requiresVerifiedEmail()
             .steps(CallerChecks::refuseBanned)
+            // Money: the sponsors' terms and the privacy policy in effect are accepted (Q7b, Q7-2).
+            .steps(ConsentChecks.sponsor())
             .contextFactory((start, input) -> {
                 ProcessContext ctx = new ProcessContext(start);
                 ctx.put(INPUT, input);
