@@ -87,6 +87,11 @@ describe('linking a provider account (phase 16f)', () => {
           return json(200, { enrolled: false, pending: false })
         case '/api/auth/account/sessions':
           return json(200, { sessions: [], truncated: false, effectiveWithinSeconds: 900 })
+        case '/api/auth/mail/preferences':
+          return json(200, { templates: [{ template: 'commerce.order-shipped', subscribed: true,
+            displayName: 'Shipment notices' }] })
+        case '/api/auth/account/locale':
+          return json(200, { locale: null, effective: 'en', languages: ['zh', 'ja', 'en'] })
         case '/api/auth/entries/portal':
           return json(200, { name: 'portal', selfRegistration: true, requireVerifiedEmail: true, appPath: '/portal/',
             sessionPersistence: 'device' })
@@ -100,6 +105,8 @@ describe('linking a provider account (phase 16f)', () => {
     expect(posted).toContainEqual({ path: '/api/auth/account/identities/callback',
       body: { state: 's1', code: 'c1', binder: 'b1' } })
     expect(await screen.findByTestId('linked-identity')).toHaveTextContent('mei@gmail.com')
+    // The portal's notifications, by their names (phase 16s).
+    expect(await screen.findByRole('switch', { name: 'Shipment notices' })).toBeChecked()
   })
 })
 

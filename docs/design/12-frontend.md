@@ -161,7 +161,7 @@ frontend/                   pnpm 工作区（pnpm-workspace.yaml：packages/*）
 | `/auth/verify-email?entry=&token=` | 验证邮件的链接（10 §15.7）：不需要已登录；点击后才先问 `check`、再提交（可预占的账号要当前密码或新密码），成功后"继续"到入口的 `app-path`；链接无效时可输入邮箱重发（对任何邮箱同样回答），其他失败可重试 |
 | `/auth/join?entry=&token=` | "你已有账号"邮件的链接（10 §15.7）：点击"继续"才提交（邮件扫描器打开链接不改变任何东西）；账号的邮箱从未验证时要求设置新密码 |
 | `/auth/password-reset[?entry=&token=]` | 找回密码（10 §15.7）：无令牌时输入邮箱申请（对任何邮箱同样回答）；有令牌时设置新密码，完成后到入口的 `app-path` 登录。登录页有"忘记密码"链接。三个 `/auth/*` 页读出令牌后即从地址栏去掉它，打开期间不发送 referrer |
-| `/account/security` | 安全设置：由各节组成，节的顺序由页面中的数组 `ACCOUNT_SECTIONS` 声明（每节一个 `<section aria-labelledby>` 加 `Card`，测试 id `account-section-<名>`）：两步验证（`@jabiz/ui` 的 `MfaSettings`，10 §9：状态、剩余恢复码数、未绑定时绑定，二维码用 `qrcode` 绘制在 canvas 上，另显示密钥；示范门户的账户页也用它）、改密码（`ChangePasswordForm`，10 §15.8）、本人当前入口的会话（`SessionList`，10 §15.9）、关联的外部账号（`LinkedIdentities`，10 §12，16f-1；只在后台入口提供了身份提供方时显示——与登录页同一个 `/api/auth/oidc/providers` 查询——节可声明 `shown`；关联完成后 OIDC 回调页经路由状态把结果带回本页）；新的一节（邮件订阅、语言）只需往数组里加一项；从页头用户菜单进入 |
+| `/account/security` | 安全设置：由各节组成，节的顺序由页面中的数组 `ACCOUNT_SECTIONS` 声明（每节一个 `<section aria-labelledby>` 加 `Card`，测试 id `account-section-<名>`）：两步验证（`@jabiz/ui` 的 `MfaSettings`，10 §9：状态、剩余恢复码数、未绑定时绑定，二维码用 `qrcode` 绘制在 canvas 上，另显示密钥；示范门户的账户页也用它）、改密码（`ChangePasswordForm`，10 §15.8）、本人当前入口的会话（`SessionList`，10 §15.9）、关联的外部账号（`LinkedIdentities`，10 §12，16f-1；只在后台入口提供了身份提供方时显示——与登录页同一个 `/api/auth/oidc/providers` 查询——节可声明 `shown`；关联完成后 OIDC 回调页经路由状态把结果带回本页）、邮件（`MailPreferences`，18 §5.6，16s：后台入口的可退订通知与邮件语言）；新的一节只需往数组里加一项；从页头用户菜单进入 |
 | `/processes`、`/processes/:name/:version` | 流程目录与由输入 Schema 生成的表单（嵌套 record → 分组，record 列表 → 可增减的行）；每次打开表单生成一个 `Idempotency-Key`，成功后更换 |
 
 - 布局（`@jabiz/ui` 的侧栏外壳，15a）：服务端菜单（`SecMenu`，已按权限过滤、按语言命名）在前，其后是应用扩展的菜单项（第 9 节），再后是两个目录与"报表"（有报表时）；语言切换记在 `localStorage`（仅本机偏好）。
@@ -263,6 +263,7 @@ jabizApp {
 | 前端 | 以 `VITE_JABIZ_LANGUAGES` / `VITE_JABIZ_REGION` 构建（构建时校验，`scripts/app-settings.ts`）；语言切换只列所选语言，只有一种时不显示；记住的或浏览器的语言不在其中时取第一种（有中文时取中文） |
 | 区域 | `@jabiz/client` 的 `meta/format.ts`：时间 `formatDateTime`（`en-US`：`01/31/2026, 02:05:09 PM`；无区域：`2026-01-31 14:05:09`）、日期 `formatDate`、金额 `formatAmount(value, {scale, currency?, negative: 'minus' | 'parentheses'})`（精确的十进制文本、千分位、固定小数位；财务报表用括号表示负数）；列表与详情中的金额按区域格式化 |
 | 内容语言 | 不变：多语言文本字段仍按平台的三种语言编辑（D20 第 3 条），字段声明自己的必填语言 |
+| 邮件语言 | 界面语言是浏览器的，邮件语言是账号的（`SecUser.locale`，18 §5.6），两者分开保存（D49 第 3 条）。切换界面语言**不**静默修改邮件语言：后台顶栏的语言切换在 `changeLanguage` 之后调用 `@jabiz/ui` 的 `offerMailLanguage(lang)`——已登录且邮件用的是另一种语言时，以带按钮的提示询问"邮件也改用该语言吗？"，用户点按钮才 `setMailLanguage`。应用 SPA 的语言切换照此显式调用；判断本身是 `@jabiz/client` 的 `mailLanguageOffer(lang)`（只读，不修改） |
 
 扩展经 `@jabiz/admin` 使用 `formatAmount`、`formatDate`、`formatDateTime`、`enabledLanguages`。
 
@@ -309,11 +310,13 @@ jabizApp {
   确认后解除；10 §12，16f-1）、`ChangePasswordForm`（`POST /api/auth/account/password`，16m）、
   `SessionList`（本人当前入口的有效会话：设备、地址、最近使用与登录时间，本机标记；确认后结束单个会话（本机即退出登录）或"退出其他全部设备"，
   提示按 `effectiveWithinSeconds` 给出生效时间；16g，10 §15.9；另导出 `SessionDeviceIcon`、`sessionDeviceName`、`effectiveMinutes` 供应用自绘列表）、
+  `MailPreferences`（本人的邮件：当前入口的每个可退订通知一个开关（`Switch` 加 `Label`，名称为服务端给出的显示名），其后"您关闭的其他邮件"（其他入口、用户关闭过的，可重新开启），邮件语言的选择（应用语言多于一种时，含"默认"一项）；每次改动即时保存并以状态提示说明，失败时保持原值；读取失败时有"重试"；界面语言变化时重读显示名；别处设置的邮件语言经 `onMailLanguageChange` 立即显示；默认调用下面的函数，可经属性替换；18 §5.6，16s，D49）、
+  `offerMailLanguage(lang)`（切换界面语言后询问是否把邮件也改为该语言，见 §10；提示一直显示到回答，说明以后在哪里修改；`notify` 为此增加可选的 `action` 与 `cancel` 按钮）、
   `VerifyEmailBanner`、`OfflineBanner`。积木**不依赖路由**：导航经属性 `onNavigate(path)` / `hrefOf(path)` 与回调（`onSignedIn(path)` 等）交出，
   没有时为普通链接与整页跳转；邮件链接的入口与令牌从 `window.location` 读（有路由时传 `search`）。后台的登录页、OIDC 回调页、三个落地页与 step-up
   是这些积木外的 React Router 适配（`src/auth/routerNavigation.ts`），测试 id 与行为不变，后台不显示外观切换。
 - **`@jabiz/client` 的无界面函数**（D43，16c-1）：`configureClient({ entry })`、`entryInfo()`、`register()`、`requestPasswordReset()`、
-  `confirmPasswordReset()`、`resendVerification()`、`changePassword()`、`listSessions()`、`revokeSession(id, current)`（结束本机会话时清空本地令牌）、`revokeOtherSessions()`、`startIdentityLink(provider, {currentPassword?}, returnTo)`、`finishIdentityLink()`、`listIdentities()`、`unlinkIdentity(id)`（16f-1）、`readMailLink()` / `useMailLink()`（读出入口与令牌，以 `replaceState` 去掉令牌，
+  `confirmPasswordReset()`、`resendVerification()`、`changePassword()`、`listSessions()`、`revokeSession(id, current)`（结束本机会话时清空本地令牌）、`revokeOtherSessions()`、`startIdentityLink(provider, {currentPassword?}, returnTo)`、`finishIdentityLink()`、`listIdentities()`、`unlinkIdentity(id)`（16f-1）、`getMailPreferences()` / `setMailPreference(template, subscribed)`、`getMailLanguage()` / `setMailLanguage(locale | null)`、`onMailLanguageChange(listener)`、`mailLanguageOffer(lang)`（16s，D49）、`readMailLink()` / `useMailLink()`（读出入口与令牌，以 `replaceState` 去掉令牌，
   页面打开期间 `<meta name="referrer" content="no-referrer">`）、`isProblem(error, code)`、`useOnline()`；`createApiClient<Paths>()` 以应用自己快照生成的类型
   调用应用的接口，与 `api` 共用令牌、刷新与 step-up（流程与模板仍经 `runProcess` / `runQuery`）。
 - **应用自有 SPA**（D34 第 5 条，D43）：以 `link:` 引用两个包，样式表 `@import '@jabiz/ui/theme.css'`（它 `@source` 了该包的源码）；

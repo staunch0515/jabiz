@@ -159,9 +159,9 @@ public class ApprovalEntities {
         eb.field("status", f -> f.physicalColumn("status").required(true)
             .asCode(REQUEST_STATUSES, PENDING, APPROVED, REJECTED, WITHDRAWN, SUPERSEDED));
         eb.field("preparerId", f -> f.physicalColumn("preparer_id").immutable(true).required(true).asText(100));
-        eb.field("ruleId", f -> f.physicalColumn("rule_id").immutable(true).required(true).asText(36));
-        eb.field("ruleVersionNo", f -> f.physicalColumn("rule_version_no").immutable(true).required(true)
-            .asNumeric(9, 0));
+        // Empty when the platform fixes the levels of the subject instead of a rule (decision D48).
+        eb.field("ruleId", f -> f.physicalColumn("rule_id").immutable(true).asText(36));
+        eb.field("ruleVersionNo", f -> f.physicalColumn("rule_version_no").immutable(true).asNumeric(9, 0));
         eb.field("contentHash", f -> f.physicalColumn("content_hash").immutable(true).required(true).asText(64));
         eb.field("levels", f -> f.physicalColumn("levels").immutable(true).required(true).asText(4000, true));
         eb.field("currentLevel", f -> f.physicalColumn("current_level").required(true).asNumeric(9, 0));

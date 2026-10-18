@@ -19,7 +19,6 @@ import reactor.core.publisher.Mono;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -66,7 +65,7 @@ public class RetentionReport {
     public Mono<RetentionReportResult> report() {
         StorageEngine engine = storages.getEngine(poolRef);
         Instant now = clock.instant();
-        LocalDate today = LocalDate.ofInstant(now, ZoneOffset.UTC);
+        LocalDate today = policies.today(clock);
         return Flux.fromIterable(policies.all())
             .filter(RetentionPolicy::complete)
             .filter(policy -> entities.find(policy.entity()).isPresent())
@@ -80,10 +79,11 @@ public class RetentionReport {
         LocalDate through = policy.expiredThrough(today, policies.fiscalYearEnd());
         return guard.holds(engine, def.name).collectList().flatMap(holds -> {
             Map<String, BoundValue> params = new LinkedHashMap<>();
-            // A date field is compared as a day; a time field by its UTC day, like the deletion guard.
+            // A date field is compared as a day; a time field by its day in the fiscal year's zone, like the
+            // deletion guard.
             boolean dateField = def.fields.get(policy.from()).kind() instanceof SemanticKind.Date;
             params.put("bound", dateField ? BoundValue.of(through.plusDays(1))
-                : BoundValue.of(through.plusDays(1).atStartOfDay().toInstant(ZoneOffset.UTC)));
+                : BoundValue.of(policies.startOf(through.plusDays(1))));
             String pk = "r." + column(def.primaryKeyColumn());
             List<String> covered = new ArrayList<>();
             for (int i = 0; i < holds.size(); i++) {

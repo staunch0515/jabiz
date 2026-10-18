@@ -1,6 +1,7 @@
 package com.jabiz.runtime.approval;
 
 import com.jabiz.approval.ApprovalEvaluation;
+import com.jabiz.approval.ApprovalLevel;
 import com.jabiz.approval.ApprovalSubject;
 import com.jabiz.approval.ContentHash;
 import com.jabiz.process.ProcessContext;
@@ -48,12 +49,21 @@ public class RequireApproval<C extends ProcessContext> implements StepHandler<Re
     /** Published when a request is made; the payload names the request, subject, document and preparer. */
     public static final String REQUESTED = "jabiz.approval.requested";
 
-    /** @param when whether to evaluate at all (null: always) */
-    public record Metadata<C>(String subject, Function<C, ApprovalCase> caseOf, String targetKey, Predicate<C> when) {
+    /**
+     * @param when   whether to evaluate at all (null: always)
+     * @param levels platform use: the levels every case of the subject needs, whatever the rules say (null: the rules
+     *               decide). The protected changes of security (decision D48) need their approval regardless of data
+     */
+    public record Metadata<C>(String subject, Function<C, ApprovalCase> caseOf, String targetKey, Predicate<C> when,
+        Function<C, List<ApprovalLevel>> levels) {
         public Metadata {
             Objects.requireNonNull(subject, "subject must not be null");
             Objects.requireNonNull(caseOf, "caseOf must not be null");
             Objects.requireNonNull(targetKey, "targetKey must not be null");
+        }
+
+        public Metadata(String subject, Function<C, ApprovalCase> caseOf, String targetKey, Predicate<C> when) {
+            this(subject, caseOf, targetKey, when, null);
         }
     }
 
@@ -67,6 +77,16 @@ public class RequireApproval<C extends ProcessContext> implements StepHandler<Re
         Function<C, ApprovalCase> caseOf, String targetKey) {
         return StepSpec.of(RequireApproval.class,
             new Metadata<>(subject, caseOf, targetKey, Objects.requireNonNull(condition)));
+    }
+
+    /**
+     * Platform use: as {@link #when}, except that every case needs the {@code levels} given, whatever the subject's
+     * rules say (none of them is read). The approval binds the content hash as always.
+     */
+    public static <C extends ProcessContext> StepSpec<Metadata<C>, C> fixed(Predicate<C> condition, String subject,
+        Function<C, ApprovalCase> caseOf, Function<C, List<ApprovalLevel>> levels, String targetKey) {
+        return StepSpec.of(RequireApproval.class, new Metadata<>(subject, caseOf, targetKey,
+            Objects.requireNonNull(condition), Objects.requireNonNull(levels)));
     }
 
     /** Payload of {@link #REQUESTED}. */
@@ -136,6 +156,14 @@ public class RequireApproval<C extends ProcessContext> implements StepHandler<Re
             ctx.put(metadata.targetKey(), new ApprovalOutcome(status, requestId));
             return Mono.<Void>empty();
         }
+        if (metadata.levels() != null) {
+            List<ApprovalLevel> fixed = List.copyOf(metadata.levels().apply(ctx));
+            if (fixed.isEmpty()) {
+                throw new IllegalStateException("A case of " + subject.name() + " needs at least one level");
+            }
+            return request(metadata, ctx, subject, approvalCase, facts, hash, businessTime, preparer, fixed, null,
+                null, List.of());
+        }
         return store.rules(subject, businessTime).flatMap(rules -> {
             ApprovalEvaluation evaluation = ApprovalEvaluation.evaluate(rules, facts);
             String matched = evaluation.matched() == null ? null : evaluation.matched().versionKey();
@@ -145,8 +173,18 @@ public class RequireApproval<C extends ProcessContext> implements StepHandler<Re
                 ctx.put(metadata.targetKey(), new ApprovalOutcome(ApprovalOutcome.Status.NOT_REQUIRED, null));
                 return Mono.<Void>empty();
             }
+            return request(metadata, ctx, subject, approvalCase, facts, hash, businessTime, preparer,
+                evaluation.levels(), evaluation.matched(), matched, evaluation.versionKeys());
+        });
+    }
+
+    /** Makes a request needing {@code levelList}, by the rule that matched (null: levels the platform fixed). */
+    private Mono<Void> request(Metadata<C> metadata, C ctx, ApprovalSubject subject, ApprovalCase approvalCase,
+        Map<String, Object> facts, String hash, Instant businessTime, String preparer, List<ApprovalLevel> levelList,
+        com.jabiz.approval.ApprovalRule rule, String matched, List<String> versionKeys) {
+        {
             List<Map<String, Object>> levels = new ArrayList<>();
-            evaluation.levels().forEach(level -> {
+            levelList.forEach(level -> {
                 Map<String, Object> json = new LinkedHashMap<>();
                 json.put("permission", level.permission());
                 if (level.limitFact() != null) {
@@ -159,8 +197,8 @@ public class RequireApproval<C extends ProcessContext> implements StepHandler<Re
             request.put("entityId", approvalCase.entityId());
             request.put("status", ApprovalEntities.PENDING);
             request.put("preparerId", preparer);
-            request.put("ruleId", evaluation.matched().ruleId());
-            request.put("ruleVersionNo", BigDecimal.valueOf(evaluation.matched().versionNo()));
+            request.put("ruleId", rule == null ? null : rule.ruleId());
+            request.put("ruleVersionNo", rule == null ? null : BigDecimal.valueOf(rule.versionNo()));
             request.put("contentHash", hash);
             request.put("levels", ApprovalJson.write(levels));
             request.put("currentLevel", BigDecimal.ONE);
@@ -170,13 +208,13 @@ public class RequireApproval<C extends ProcessContext> implements StepHandler<Re
             }
             String requestId = String.valueOf(ctx.changes().insert(ApprovalEntities.REQUEST, request));
             record(ctx, subject, approvalCase, ApprovalOutcome.Status.PENDING, matched,
-                evaluation.versionKeys(), requestId, hash, facts, businessTime);
+                versionKeys, requestId, hash, facts, businessTime);
             ctx.put(metadata.targetKey(), new ApprovalOutcome(ApprovalOutcome.Status.PENDING, requestId));
             return publisher().publish(REQUESTED, new Requested(requestId, subject.name(),
                     approvalCase.entityId(), preparer, levels.size()), ctx.processSeqId())
                 .then(tasks.create(ctx, ApprovalTasks.task(subject.name(), approvalCase.entityId(), approvalCase.reference(),
-                    requestId, 1, evaluation.levels().getFirst().permission())));
-        });
+                    requestId, 1, levelList.getFirst().permission())));
+        }
     }
 
     private EventPublisher publisher() {

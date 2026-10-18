@@ -84,6 +84,32 @@ class FilePrivateMetadataIT extends FileItSupport {
         assertThat(downloadName("/api/files/" + id + "/content/w64", reader())).isEqualTo(id + "-w64.jpg");
     }
 
+    /**
+     * Decision D48 item 3: a file of a policy with private metadata gets a random id (UUIDv4), which tells neither when
+     * nor in what order it was uploaded; other policies keep time-ordered ids (UUIDv7). Both are stored and served.
+     */
+    @Test
+    void privateFilesHaveRandomIdsAndOtherFilesTimeOrderedOnes() {
+        UUID first = UUID.fromString((String) uploaded(ItFileFixtures.PRIVATE, FileSamples.pdf(), "a.pdf",
+            "application/pdf", uploader()).get("fileId"));
+        UUID second = UUID.fromString((String) uploaded(ItFileFixtures.PRIVATE, FileSamples.jpeg(400, 300), "b.jpg",
+            "image/jpeg", uploader()).get("fileId"));
+        assertThat(first.version()).isEqualTo(4);
+        assertThat(second.version()).isEqualTo(4);
+        assertThat(first).isNotEqualTo(second);
+        assertThat(storedKeys()).contains(com.jabiz.runtime.file.FileKeys.key(first, "original"),
+            com.jabiz.runtime.file.FileKeys.key(second, "original"), com.jabiz.runtime.file.FileKeys.key(second, "w64"));
+        assertThat(storedKeys()).filteredOn(key -> key.contains(first.toString()))
+            .allSatisfy(key -> assertThat(key).startsWith("r/" + first.toString().substring(0, 2) + "/"));
+        get("/api/files/" + second + "/content/w64", reader()).expectStatus().isOk();
+        assertThat(meta(first.toString(), uploader())).containsEntry("originalName", "a.pdf");
+
+        UUID ordinary = UUID.fromString((String) uploaded(CommerceFiles.DOCUMENT, FileSamples.pdf(), "c.pdf",
+            "application/pdf", bearer("it-private-docs", "commerce.document.upload", "commerce.document.read"))
+            .get("fileId"));
+        assertThat(ordinary.version()).isEqualTo(7);
+    }
+
     @Test
     void documentsGetTheirTypesExtension() {
         String id = (String) uploaded(ItFileFixtures.PRIVATE, FileSamples.pdf(), "給与明細 2026-10.pdf",

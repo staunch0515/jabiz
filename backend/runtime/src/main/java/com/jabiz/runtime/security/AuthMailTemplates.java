@@ -24,6 +24,8 @@ import java.time.Duration;
  *       link to the password reset (no token: whoever did not change it asks for one).</li>
  *   <li>{@value #IDENTITY_LINKED}: no token; tells the user that a provider account was linked to theirs (section 12),
  *       naming the provider, with the same link to the password reset.</li>
+ *   <li>{@value #EMAIL_CHANGED}: no token; sent to the address an approved change of address replaced (decision D48,
+ *       review M-b), naming the new one.</li>
  * </ul>
  */
 @Configuration
@@ -34,10 +36,11 @@ public class AuthMailTemplates {
     public static final String PASSWORD_RESET = "jabiz.auth.password-reset";
     public static final String PASSWORD_CHANGED = "jabiz.auth.password-changed";
     public static final String IDENTITY_LINKED = "jabiz.auth.identity-linked";
+    public static final String EMAIL_CHANGED = "jabiz.auth.email-changed";
 
     /** The platform's templates, by name; applications declare none under {@code jabiz.} ({@code MailChecks}). */
     public static final java.util.Set<String> NAMES = java.util.Set.of(VERIFY_EMAIL, ACCOUNT_EXISTS, PASSWORD_RESET,
-        PASSWORD_CHANGED, IDENTITY_LINKED);
+        PASSWORD_CHANGED, IDENTITY_LINKED, EMAIL_CHANGED);
 
     /**
      * Purposes of the tokens, which are also their placeholders: in the platform's namespace, so that no application
@@ -81,6 +84,18 @@ public class AuthMailTemplates {
      */
     public static final MailTemplate IDENTITY_LINKED_MAIL = MailTemplate.define(IDENTITY_LINKED,
         t -> t.category(MailCategory.TRANSACTIONAL).param(ENTRY).param(PROVIDER));
+
+    /** The parameter naming the new address of {@value #EMAIL_CHANGED}. */
+    public static final String ADDRESS = "address";
+
+    /** Tells the old address that the account's address was changed (no token; the new address its parameter). */
+    public static final MailTemplate EMAIL_CHANGED_MAIL = MailTemplate.define(EMAIL_CHANGED,
+        t -> t.category(MailCategory.TRANSACTIONAL).param(ADDRESS));
+
+    @Bean
+    MailTemplate authEmailChangedMail() {
+        return EMAIL_CHANGED_MAIL;
+    }
 
     @Bean
     MailTemplate authPasswordChangedMail() {

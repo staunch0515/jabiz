@@ -3,7 +3,9 @@ package com.jabiz.mail;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -31,6 +33,36 @@ class MailTemplateTest {
 
         assertThat(template.unsubscribable()).isTrue();
         assertThat(template.placeholders()).containsExactly("baseUrl", "unsubscribeUrl");
+    }
+
+    @Test
+    void aTemplateIsForEveryEntryUnlessItNamesSome() {
+        MailTemplate everywhere = MailTemplate.define("shop.news", t -> t.category(MailCategory.NOTIFICATION));
+        MailTemplate app = MailTemplate.define("shop.offers", t -> t.category(MailCategory.NOTIFICATION)
+            .entries("app", "seller"));
+
+        assertThat(everywhere.entries()).isEmpty();
+        assertThat(everywhere.appliesTo("app")).isTrue();
+        assertThat(everywhere.appliesTo(null)).isTrue();
+        assertThat(app.entries()).containsExactly("app", "seller");
+        assertThat(app.appliesTo("seller")).isTrue();
+        assertThat(app.appliesTo("admin")).isFalse();
+        // No entry named is the administration's, as everywhere.
+        assertThat(app.appliesTo(null)).isFalse();
+        assertThat(MailTemplate.define("a.b", t -> t.category(MailCategory.NOTIFICATION).entries("admin"))
+            .appliesTo(" ")).isTrue();
+        assertThat(app.nameKey()).isEqualTo("mail.shop.offers.name");
+        // The constructor of before phase 16s: every entry.
+        assertThat(new MailTemplate("a.b", MailCategory.NOTIFICATION, List.of(), Map.of()).entries()).isEmpty();
+    }
+
+    @Test
+    void refusesMalformedOrNoEntries() {
+        assertThatThrownBy(() -> MailTemplate.define("a.b", t -> t.category(MailCategory.NOTIFICATION)
+            .entries("App")))
+            .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("sign-in entry 'App'");
+        assertThatThrownBy(() -> MailTemplate.define("a.b", t -> t.category(MailCategory.NOTIFICATION).entries()))
+            .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("names no sign-in entry");
     }
 
     @Test

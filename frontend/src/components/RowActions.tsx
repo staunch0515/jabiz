@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router'
 import { actionShown, needsOnlyTheKey } from '../meta/actions'
+import { pendingApproval } from '../meta/approval'
 import type { ProcessEntry } from '../meta/types'
 import { paths } from '../pages/paths'
 
@@ -36,7 +37,7 @@ export default function RowActions({ actions, id, attributes, onDone, returnFocu
   const run = async (process: ProcessEntry) => {
     setRunning(process.name)
     try {
-      await unwrap(
+      const response = await unwrap(
         api.POST('/api/processes/{name}/{version}', {
           params: {
             path: { name: process.name, version: String(process.version) },
@@ -45,7 +46,8 @@ export default function RowActions({ actions, id, attributes, onDone, returnFocu
           body: { [process.actsOn!.input!]: String(id) },
         }),
       )
-      notify.success(t('process.succeeded'))
+      if (pendingApproval(response.output)) notify.info(t('process.pendingApproval'))
+      else notify.success(t('process.succeeded'))
       await onDone()
     } catch (e) {
       notify.error(e instanceof ApiError ? e.display : String(e))
