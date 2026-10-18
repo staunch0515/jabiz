@@ -131,7 +131,8 @@ public final class QbPermissions {
 
     /**
      * The messaging templates only processes run (Q7b: {@code qb.system.consent-state}, the server's check of consent
-     * before money and contract actions). Granted to no role.
+     * before money and contract actions) and the mail processes run for QuizBuks's events (Q7a: {@code internal()}).
+     * Granted to no role.
      */
     public static final String MESSAGING_SYSTEM = "qb.messaging.system";
 

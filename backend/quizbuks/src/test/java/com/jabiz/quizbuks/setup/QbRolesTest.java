@@ -196,7 +196,7 @@ class QbRolesTest {
         // The system's processes, the development credit and the ledger's writes are nobody's.
         assertThat(QbRoles.all()).allSatisfy(role -> assertThat(role.permissions()).doesNotContain(
             QbPermissions.WALLET_SYSTEM, QbPermissions.PAYOUT_SYSTEM, QbPermissions.WALLET_DEV_CREDIT,
-            QbPermissions.PLAY_SYSTEM, "ledger.post",
+            QbPermissions.PLAY_SYSTEM, QbPermissions.MESSAGING_SYSTEM, "ledger.post",
             "ledger.reverse", "inbound.write", "external-job.complete", "external-job.write"));
     }
 }

@@ -38,6 +38,7 @@
 - [ ] **密钥已从任何演示或测试的值轮换**：`JABIZ_JWT_SECRET`、`JABIZ_INTEGRITY_KEY`、`JABIZ_MFA_KEY`、数据库密码、Stripe 密钥与签名密钥、SMTP、Google 客户端密钥都是为生产新生成的，没有在本机演示、e2e、压测或测试服务器上用过；`JABIZ_INTEGRITY_KEY` 与 `JABIZ_MFA_KEY` 的离线副本已保存
 - [ ] `operations.md` §1.4 的测试开关一个都没设；`SPRING_PROFILES_ACTIVE` 不含 `dev`；`JABIZ_SECURITY_MFA_ADMINISTRATION` 未设；`QB_STRIPE_PLACEHOLDERS=false`
 - [ ] 只经 HTTPS 访问（HSTS），`JABIZ_TRUSTED_PROXIES` 已设；数据库与管理端口不对公网开放；指标不在应用端口上暴露
+- [ ] 反向代理让 `/admin/mail/unsubscribe` 对外可达（可退订邮件的退订链接指向它，`operations.md` §1.2"退订链接"），或平台已提供与入口无关的退订页
 - [ ] 正式域名已写进 `tools/quizbuks/stripe-test-mode/production-hosts`
 
 ## 运维

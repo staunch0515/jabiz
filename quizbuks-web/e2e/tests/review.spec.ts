@@ -1,7 +1,7 @@
 import { signInAdmin, submittedPublication } from './admin'
 import { completeQuiz, sponsor } from './content'
 import { publicationOf } from './publishing'
-import { expect, prepareQuizbuks, rows, run, signIn, test, unique } from './support'
+import { expect, linkIn, mailTo, prepareQuizbuks, rows, run, signIn, test, unique } from './support'
 
 /*
  * The administration's review (docs/quizbuks/plans/Q9a-admin-extension.md): the administrator approves a sponsor's
@@ -71,6 +71,11 @@ test('a sponsor and a publication are reviewed in the administration', async ({ 
   await decision.getByTestId('approval-reject').click()
   await expect(review).toHaveAttribute('data-status', 'DRAFT', { timeout: 30_000 })
   await expect(page.getByTestId('publication-not-pending')).toContainText(reason)
+  // The sponsor is mailed the reviewer's reason (Q7a), with a link to the console's publications.
+  const sentBack = await mailTo(request, made.email, /^Your publication ".*" was sent back$/)
+  expect(sentBack.subject).toContain(name)
+  expect(sentBack.text).toContain(reason)
+  expect(linkIn(sentBack.text, '/publications').pathname).toBe('/sponsor/publications')
 
   const sponsorPage = await context.newPage()
   await signIn(sponsorPage, '/sponsor/', made.email)
@@ -87,6 +92,8 @@ test('a sponsor and a publication are reviewed in the administration', async ({ 
   await decision.getByTestId('approval-approve').click()
   await expect(review).toHaveAttribute('data-status', /^(SCHEDULED|LIVE)$/, { timeout: 30_000 })
   expect(['SCHEDULED', 'LIVE']).toContain((await publicationOf(request, made.token, publicationId)).status)
+  const approved = await mailTo(request, made.email, /^Your publication ".*" is approved$/)
+  expect(approved.subject).toBe(`Your publication "${name}" is approved`)
 
   // The sponsor's summary (P-01) shows the account; the administrator holds finance too, so money is shown.
   await page.getByTestId('publication-sponsor').click()

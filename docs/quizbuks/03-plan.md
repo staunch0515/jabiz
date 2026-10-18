@@ -69,6 +69,7 @@ Q2、Q5、Q6 的页面合为下列阶段（另含平台的 PG-1）；各阶段�
 | Q9a | `1.2/quizbuks-9a-admin-extension` | 后台扩展：审核（入驻与发布的完整内容）与用户汇总 P-01（`plans/Q9a-admin-extension.md`） | 2 天 | 已完成（待评审，实施记录见计划） |
 | Q9c | `1.2/quizbuks-9c-admin-finance` | 后台财务页面（总览、转账与大额审批、充值、核对）与月报 F-08（`qb.admin.monthly`、`qb.admin.balances`，`plans/Q9c-admin-finance.md`） | 3.5 天 | 已完成（待评审，实施记录见计划） |
 | Q9d | `1.2/quizbuks-9d-journal-export` | 科目映射 F-01、按月（日本日期）的汇总凭证与 CSV 导出 F-02 – F-03（`QB_JOURNAL_EXPORT`，凭证号不缺不重，CSV 原样存档）、充值收据 F-09（平台单据 `qb.topup_receipt`）（`plans/Q9d-journal-receipts.md`） | 4 天 | 已完成（待评审，实施记录见计划） |
+| Q7a | `1.2/quizbuks-7a-mail` | 邮件通知：转账、收款账户、充值、发布审核 / 下架 / 预算不足 / 结束的 9 个模板，两个 SPA 账户页的"邮件"区块（平台 16s 的 `MailPreferences`）（`plans/Q7-messages-legal.md` §5） | 1.5–2 天 | 已完成（待评审，实施记录见计划 §12） |
 
 **MVP（P0 闭环）= Q1 – Q6（Q6a、Q6b）**（加 Q7 中的邮件通知）：商家充值 → 编辑 → 发布 → 用户答题 → 结算 → 自动转账。
 

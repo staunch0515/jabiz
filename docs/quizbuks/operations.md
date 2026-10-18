@@ -39,6 +39,18 @@
 | `QB_OIDC_REDIRECT_APP` | 开 Google 时 | `https://<主机>/login/oidc`（与控制台登记的完全相同） | 换域名时 | Google 拒绝回调 |
 | `JABIZ_SECURITY_MFA_ADMINISTRATION` | **不设** | — | — | 缺省 `true`：管理操作要求二次验证。`false` 只给本机演示、e2e 与 Stripe 测试模式的本机运行 |
 
+**应用的邮件**（Q7a，`plans/Q7-messages-legal.md` D-Q7-1）：除注册、验证、找回密码与入驻结果外，QuizBuks 在以下事件后发信（都由事件的消费者以系统身份发出，不在答题与支付的提交路径上）：
+
+| 收件人 | 邮件（模板） | 可退订 |
+|---|---|---|
+| 答题人 | 转账已发出 `qb.transfer.sent`、转账失败 `qb.transfer.failed`（只在转账仍是该状态时发）、收款账户需补资料 `qb.payout.action-needed`（每人 24 小时内至多一封） | 否 |
+| 商家 | 充值到账 `qb.topup.paid`、发布通过 / 驳回 / 被下架 `qb.publication.approved` / `.rejected` / `.taken-down` | 否 |
+| 商家 | 发布预算不足 `qb.publication.funds-short`（每个商家 24 小时内至多一封，列出当时全部预算不足的发布；窗口内的再次不足记为待发，由每小时 11 分的任务 `qb.mail-funds-short-due` 在窗口过后仍不足时补发）、发布已结束 `qb.publication.ended`（下架后或商家被封禁时不发） | 是（邮件中的链接，或商家后台"账户 → 邮件"） |
+
+邮件中的时刻按日本时间、标为 `JST`（取自 `jabiz.fiscal-year-zone`）。`JABIZ_MAIL_ENABLED` 未开时这些邮件同样只记为 `SKIPPED`（`sys_mail_message` / `sys_mail_attempt`），不会补发。事件太晚才被消费（投递积压、或新消费者收到历史事件）时不发信：通知（可退订的两种）超过 3 天、事务邮件（转账、收款账户、充值、发布的审核结果与下架）超过 14 天（`NotificationMails.MAX_AGE` / `TRANSACTIONAL_MAX_AGE`）。补发任务的时间可以 `quizbuks.mail.funds-short-due-cron`（Spring 的六段 cron，缺省 `0 11 * * * *`，UTC）改；它只读待发的行（`qb_mail_notice` 的部分索引）。
+
+**退订链接**：可退订邮件中的退订链接由平台生成，指向后台入口的页面 `/admin/mail/unsubscribe`（平台 D49：退订页只在通用后台中）。所以即使只给答题人与商家开放 App 与商家后台，反向代理也必须让 `/admin/` 下的这个路径可达（无需登录：链接中的令牌即凭证）；若要完全不对外开放 `/admin/`，需先由平台的后续阶段提供与入口无关的退订页。
+
 ### 1.3 Stripe 与资金（`deploy/quizbuks/README.md`"充值与核对""收款账户与自动转账"）
 
 | 变量 | 必需 | 来源 | 轮换 | 缺少时 |
@@ -143,6 +155,16 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
    实质性变更勾选"须重新同意"，措辞修订不勾。已发布的版本不可修改，改错只能发布新版本。正式模式下缺少已生效的答题人条款、商家条款或隐私政策时**启动告警**（`LiveModeDataCheck`）。
    帮助中心的问答在后台"帮助中心问答"中维护（英语必填、`seq` 排序、"公开中"才出现在页面）。支持邮箱 `qb.support.email`（普通参数，空即不显示"仍需帮助"的联系方式）在后台参数中设。
 
+**受保护的授权（平台 16r，决策 D48；10 §16）**：分配或增加 `security.user-role.write`、`security.role.write`、`approval.decide`、`control.publish`、`ledger.*`、
+`platform.param.write`、`*`，以及对持有它们的用户重设密码、二次验证、邮箱或关联外部账号，平台要求**另一位管理员审批**——但只在建立期结束之后。平台按 `*` 数管理员：
+首个管理员之外有两位持有 `*` 的启用用户时建立期才结束。QuizBuks 的角色都不持有 `*`（`QbRoles`：细分权限），所以按上面 2–6 步建立的安装**一直处于建立期**，
+受保护的变更当即生效（与 16r 之前相同）；`QB_SETUP`、e2e 与本机演示因此照常可用（它们只建持有 `control.publish` 等的角色，从不建第二位 `*` 管理员）。
+**这一点由平台 16u 解决**（需求方 2026-10-18 决定）：16u 改为按安全管理的权限计管理员，受保护的变更以专门的权限审批；合并 16u 后 QuizBuks 需要两位 `QB_ADMIN_SUPER`，
+首次启动的步骤届时随之修改。在此之前不设 `jabiz.security.protected-grants.always`，四眼由检测性控制补足（季度访问审查 `ACCESS_REVIEW_SIGN_OFF`、审计中逐条复核角色变更，Q10b M-c）。
+
+**会计年度的时区**：保留期自会计年度末起算，日期按日本时间判断（`application.yml` 的 `jabiz.fiscal-year-zone: Asia/Tokyo`，平台 D48 第 2 条；Q10b 评审 L7），不需另设。
+1 月 1 日 00:00–08:59（日本时间）记录的数据因此属于新的会计年度。
+
 ## 4. 切换到正式模式
 
 应用在启动与 `platformCheck` 中检查（类别 `QUIZBUKS`），任何一条不成立即**启动失败**：
@@ -188,6 +210,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 | 分录导出被拒 | `jabiz.process{process="QB_JOURNAL_EXPORT", outcome="rejected"}` | 每月导出日 > 0（看错误码，§7.3） |
 | 外部调用 | `jabiz.external.call{service="stripe", outcome}` | `5xx`、`timeout`、`refused` 比率 > 5 % |
 | 任务 | `jabiz.job.run{result="FAILED"|"LOCKED"}` | 任一每日任务 `FAILED`；`LOCKED` 持续（另一实例卡住） |
+| 邮件 | `jabiz.job.item{job="qb.mail-funds-short-due", result}`；`jabiz.outbox.delivery{result="FAILED"}` | 补发任务的项连续失败；`sys_mail_message` 中 `FAILED` 增多（看发件服务商） |
 | 数据库 | 连接数、复制与 WAL 归档延迟、最近一次基础备份、磁盘、`pg_stat_statements` 的前几名、死锁（`pg_stat_database.deadlocks`） | 归档延迟 > 15 分钟；备份超过 26 小时；磁盘 > 80 %；死锁 > 0 |
 | 主机 | CPU、内存、JVM 堆 | 应用或数据库的 CPU 在业务高峰持续 > 70 %（§6） |
 

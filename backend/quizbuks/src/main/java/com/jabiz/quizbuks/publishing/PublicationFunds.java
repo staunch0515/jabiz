@@ -97,7 +97,8 @@ public final class PublicationFunds {
                         EntityInstance found = first(ctx, FOUND);
                         return QbWallets.query(QbWallets.SPONSOR, found == null ? null : found.get("sponsorId"));
                     }, WALLET))
-                .compute("Put it back on", (metadata, ctx) -> funded(ctx)));
+                .compute("Put it back on", (metadata, ctx) -> funded(ctx))
+                .steps(PublicationNotices::announce));
     }
 
     static void funded(ProcessContext ctx) {
