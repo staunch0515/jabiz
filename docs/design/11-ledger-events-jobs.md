@@ -377,8 +377,29 @@ JobDefinition.forEach("commerce.unpaid-order-expire", "0 10 3 * * *", ZoneId.of(
   带 `Idempotency-Key` 的重放返回同一作业号（重放的是输出）。输入中 `@Sensitive` 组件的非空值（按声明反射查找，含嵌套 record、集合、Map、数组与
   `Object` 类型的值）→ 422 `EXTERNAL_JOB_INPUT_SECRET`（参数为字段路径，不含值）；只看声明、不看名字，`maxTokens` 之类不受影响。
   遮蔽字段（`f.masked`）的值不按名字查找：输入是自己的 record，组件不是实体字段，按名字匹配会误拒；输入不经任何接口返回，个人信息的保留见 21 §3.1。
-  JSON 超过 64 KiB → 422 `EXTERNAL_JOB_INPUT_TOO_LARGE`。
-  启动检查（`CheckedStep`）：引用的类型已声明。
+  JSON 超过类型的 `maxInputSize`（缺省 64 KiB，至多 1 MiB，【D50 第 1 条，16t】）→ 422 `EXTERNAL_JOB_INPUT_TOO_LARGE`（参数 `max` 为类型的上限）。
+  启动检查（`CheckedStep`）：引用的类型已声明；给出文件的步骤，其类型声明了 `inputFiles`。
+- **文件**【D50，阶段 16t】：
+  ```java
+  ExternalJobType.define("commerce.product-image", ProductImageInput.class, ProductImageResult.class, t -> t
+      .handler(ProductImageHandler.class).services("demo-ai").timeout(ofSeconds(90))
+      .inputFiles(1, 10 * MB, "commerce.image")          // 可读的文件：个数、每个的大小、策略
+      .outputFiles("commerce.image", 1, 10 * MB)         // 产生的文件：策略、个数、每个的大小
+      .onCompleted("PRODUCT_IMAGE_APPLY").onFailed("PRODUCT_IMAGE_FAILED"))
+  ```
+  - **输入**：`StartExternalJob.of(…).files(ctx -> 文件编号)`。登记时逐个 `FOR KEY SHARE` 读 `sys_file`：存在、属于类型的策略、请求人持有 `file.read` 或该策略的读取权限
+    （与 `/api/files/{id}/content` 相同），否则同一个 422 `EXTERNAL_JOB_INPUT_FILE`；之后才看个数与大小（`EXTERNAL_JOB_INPUT_FILE_LIMIT`）。系统身份可给任何文件。
+    通过的文件记入 `sys_external_job_file`（`INPUT`）。执行时执行器在处理器开始之前把这些文件从 `FileStore` 复制到上传区（至多 1 分钟），处理器经 `ctx.files()` / `ctx.file(编号)`
+    得到 `ExternalJobFile`（`fileId`、`contentType`、`sizeBytes`、`open()`、`bytes()`，普通的阻塞读）；别的编号 `IllegalArgumentException`；尝试结束即删除副本，之后 `open()` 即 `IllegalStateException`。
+    开始后被删除的文件：永久失败 `INPUT_FILE_MISSING`；存储读不出：可重试 `INPUT_FILE_UNREADABLE`。
+  - **输出**：处理器返回 `ExternalJobResult.of(值).file(键, 名称, 字节)`（键 `[a-zA-Z][A-Za-z0-9._-]{0,63}`，结果内唯一）。开始作业须持有输出策略的上传权限（403）。
+    超过个数或大小、类型不声明输出：存储之前即永久失败（`OUTPUT_FILE_LIMIT`、`OUTPUT_FILE_TOO_LARGE`、`BAD_RESULT`）。否则逐个经上传的流水线（14 §11）以请求人登记，
+    策略拒绝即永久失败 `OUTPUT_FILE_REJECTED`（说明中有拒绝的码），其他存储错误可重试 `OUTPUT_FILE_FAILED`；已取消的作业不存储。
+    存下的文件与尝试同一事务记入 `sys_external_job_file`（`OUTPUT`，尝试号与键），不论尝试的结局；完成流程的 `ExternalJobCompletion.files()`（键 → 编号，`file(键)`）只含成功那次尝试的文件。
+    没有被引用的输出文件由 `FILE_SWEEP` 作为孤儿删除（14 §6）。
+  - 类型有文件时，领取的租约各加 1 分钟（复制、存储各至多 1 分钟，不计入处理器的超时）。启动检查 `EXTERNAL`：个数 1–20、输入文件至多 100 MiB、输出文件至多 50 MiB、
+    策略已声明、输出的大小不超过策略的上限。ArchUnit `handlersReadFilesThroughTheirContext`：业务的处理器与阻塞步骤不依赖 `com.jabiz.runtime.file`。
+  - 只读平台实体 `ExternalJobFile`（`external-job.read`）列出作业读取与产生的文件；`EXTERNAL_JOB_COMPLETE` 只对声明了输出的类型多读一次。
 - **执行器** `ExternalJobExecutor`（`jabiz.external-jobs.executor.enabled`（测试关闭）、`poll-interval` 1 s、每实例 `max-in-flight` 8、`instance-id`
   缺省为主机名加随机串、`shutdown-grace` 30 s、`watermark-refresh` 1 min；测试与场景调用 `runPending()`，领取后执行并等全部记录完）：
   1. **领取**（每个类型一个短事务，**每次轮询对每个类型都做**，实例已满也做前两项）：`pg_advisory_xact_lock(hashtextextended('jabiz.external-job:'||类型))`，
@@ -426,6 +447,7 @@ JobDefinition.forEach("commerce.unpaid-order-expire", "0 10 3 * * *", ZoneId.of(
 - **表**（`db/jabiz/V37__external_jobs.sql`，全部只追加并有主键，D27 封存）：`sys_external_job`（`job_id` 为 `varchar(36)`，与其他平台实体的标识一致）、
   `sys_external_job_claim`、`sys_external_job_attempt`（另有唯一的 `attempt_id` 作实体主键）、`sys_external_job_usage`（另有 `usage_id`）、
   `sys_external_job_cancel`、`sys_external_job_outcome`。`SELECT … FOR UPDATE` 只加行锁，不触发只追加的 UPDATE 触发器。
+  16t 加 `V42__external_job_files.sql`：`sys_external_job_file`（`job_file_id` 为主键，`INPUT` / `OUTPUT`，文件编号不加外键：文件会被删除，记录留下）。
 - **观测**：`jabiz.external.job`（每次尝试，从处理器开始到记录完；标签 `job_type`、`outcome`：`SUCCEEDED` / `WAITING_RETRY` / `FAILED` /
   `CANCELLED` / `DISCARDED` / `error`）；计数器 `jabiz.external.usage`（标签 `job_type`、`metric`，增加记录的数量）。
 - **启动检查 `EXTERNAL`**：类型名唯一且合法、处理器恰好一个 Bean、服务已声明且其请求超时短于作业的超时、完成与失败流程存在且为 `internal()` 并分别以
@@ -437,11 +459,16 @@ JobDefinition.forEach("commerce.unpaid-order-expire", "0 10 3 * * *", ZoneId.of(
   至少一次——执行完、记录前崩溃，会以同一幂等键再调用一次，不支持幂等键的提供方可能计费两次（用量按尝试记录，可统计）；
   迟到实例被丢弃的尝试不记录用量；每次轮询每个类型一个领取事务（查询限于水位线以上，全量扫描每个刷新间隔一次）；
   晚提交的作业最多晚一个刷新间隔；完成流程持续失败时 Outbox 重试用尽后由运维处理。
-  输入与结果可能含个人信息：保留策略与删除见 21 §3.1。
+  输入与结果可能含个人信息：保留策略与删除见 21 §3.1。作业输入永久保存，其中的资料原文在业务数据之外多存一份（D50 第 5 条）：只放作业需要的内容，较大的资料以文件输入传递。
+  文件（D50）：权限只在开始时判断；开始后一天以上才执行、期间被清扫或删除的输入文件使作业失败；完成流程晚于 `jabiz.files.orphan-after` 才运行（Outbox 长时间失败）时，
+  输出文件可能已被当作孤儿清扫，完成流程写入引用时即 400 `FILE_NOT_FOUND`；场景回放的 `completeExternalJob` 不带文件（有文件的作业以集成测试覆盖）。
 - 示范：`app` 的 `PRODUCT_COPY_REQUEST`（`actsOn Product`，`commerce.product.write`）登记 `commerce.product-copy`；`ProductCopyHandler` 调用
   `POST /v1/generate`（`{text, usage:{promptTokens, completionTokens}}`，不绑定提供方；4xx 为永久失败，429 / 5xx 重试）；
   每个商品同时只有一个未结束的作业（`oneOpenPerReference`）；`PRODUCT_COPY_APPLY` 写 `Product.marketingCopy`（`processOnly`）并给请求人待办，`PRODUCT_COPY_FAILED` 告知失败。测试 `ExternalJobIT`，
   场景 `scenarios/commerce/product_copy.yml`。
+  文件的示范（D50）：`PRODUCT_IMAGE_REQUEST`（`actsOn Product`，`commerce.product.write`，另需 `commerce.media.read` 与 `commerce.media.upload`）把商品照片交给
+  `commerce.product-image`；`ProductImageHandler` 把照片发给 `POST /v1/images`，回答的图片作为文件 `image` 返回；`PRODUCT_IMAGE_APPLY` 把新照片写入 `Product.imageFileId`，
+  旧照片不再被引用、随清扫删除。测试 `ExternalJobFilesIT`。
 
 ## 5. 示范（`app` 的 `FreightBilling`）
 

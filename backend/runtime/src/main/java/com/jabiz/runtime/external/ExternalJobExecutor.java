@@ -63,7 +63,9 @@ import java.util.concurrent.atomic.AtomicLong;
  *       two run for every type on every poll, whether the instance has room or not.</li>
  *   <li><b>Run</b>: the handler, on a virtual thread of {@code boundedElastic} within an {@link ExternalCallScope} of
  *       the job (only its type's services), bounded by {@code Mono.timeout} (the thread is interrupted, which is best
- *       effort). No transaction or connection is held meanwhile.</li>
+ *       effort). No transaction or connection is held meanwhile. For a type with files (decision D50) the files the
+ *       job reads are copied for the attempt before it and deleted after it, and the files the handler returned are
+ *       stored as uploads of the requester before the attempt is recorded ({@link ExternalJobFiles}).</li>
  *   <li><b>Record</b>, in a transaction of its own that locks the job's row (as a cancellation does), retried a few
  *       times on a failure of the database: the attempt and its usage, then the job's final outcome when it has one
  *       (succeeded; failed for good; cancelled meanwhile, its result dropped) with the event

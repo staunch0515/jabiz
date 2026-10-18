@@ -38,7 +38,7 @@ public final class FileAccess {
 
         @Override
         public ExternalJobResult<Out> run(In input, ExternalJobContext ctx) {
-            uploads.storeGenerated("any", "x", new byte[] {1}, ctx.jobId());
+            uploads.storeGenerated("any", "x", 1, () -> new java.io.ByteArrayInputStream(new byte[] {1}), ctx.jobId());
             return ExternalJobResult.of(new Out(1));
         }
     }

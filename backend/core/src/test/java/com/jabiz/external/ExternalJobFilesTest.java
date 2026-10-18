@@ -195,4 +195,73 @@ class ExternalJobFilesTest {
         assertThatThrownBy(() -> ctx.file(UUID.randomUUID())).isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("was not given");
     }
+
+    @Test
+    void aContextOfBeforeHasNoFilesAndAFailingReadIsUnchecked() {
+        ExternalJobContext plain = new ExternalJobContext() {
+            @Override
+            public String jobId() {
+                return "j2";
+            }
+
+            @Override
+            public int attempt() {
+                return 1;
+            }
+
+            @Override
+            public String idempotencyKey() {
+                return "k";
+            }
+
+            @Override
+            public Instant deadline() {
+                return Instant.EPOCH;
+            }
+
+            @Override
+            public ExternalHttp http(String service) {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public String secret(String service, String name) {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public void recordUsage(String metric, long quantity) {
+            }
+        };
+        assertThat(plain.files()).isEmpty();
+        assertThatThrownBy(() -> plain.file(UUID.randomUUID())).isInstanceOf(IllegalArgumentException.class);
+        ExternalJobFile broken = new ExternalJobFile() {
+            @Override
+            public UUID fileId() {
+                return UUID.randomUUID();
+            }
+
+            @Override
+            public String contentType() {
+                return "image/png";
+            }
+
+            @Override
+            public long sizeBytes() {
+                return 1;
+            }
+
+            @Override
+            public InputStream open() {
+                return new InputStream() {
+                    @Override
+                    public int read() throws java.io.IOException {
+                        throw new java.io.IOException("gone");
+                    }
+                };
+            }
+        };
+        assertThatThrownBy(broken::bytes).isInstanceOf(java.io.UncheckedIOException.class);
+        assertThat(new GeneratedFile("a", null, new byte[] {5}).open()).hasBinaryContent(new byte[] {5});
+    }
 }

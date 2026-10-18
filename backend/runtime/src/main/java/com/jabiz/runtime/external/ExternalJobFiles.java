@@ -222,7 +222,7 @@ class ExternalJobFiles {
             .concatMap(position -> {
                 GeneratedFile file = files.get(position);
                 current.set(file.key());
-                return uploads.storeGenerated(policy, file.name(), file.content(), jobId)
+                return uploads.storeGenerated(policy, file.name(), file.size(), file::open, jobId)
                     .map(result -> new Output(position, file.key(), new ExternalJobRecorder.StoredFile(
                         result.info().fileId(), result.info().policy(), result.info().contentType(),
                         result.info().sizeBytes(), result.sha256())))

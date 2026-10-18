@@ -35,6 +35,7 @@ import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -49,6 +50,7 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 /**
@@ -133,25 +135,34 @@ public class FileUploadService {
      * type limits its files) is checked here. Refusals are those of an upload: 413 {@code FILE_TOO_LARGE},
      * 400 {@code FILE_TYPE_NOT_ALLOWED} or {@code FILE_INVALID}.
      *
-     * @param name the file's name for downloads, cleaned like an uploaded one
+     * @param name    the file's name for downloads, cleaned like an uploaded one
+     * @param size    the number of bytes {@code content} gives
+     * @param content opens the bytes; read once, on {@code boundedElastic}
      */
-    public Mono<Stored> storeGenerated(String policyName, String name, byte[] content, String jobId) {
+    public Mono<Stored> storeGenerated(String policyName, String name, long size, Supplier<InputStream> content,
+        String jobId) {
         return Mono.defer(() -> {
             FilePolicy policy = policies.find(policyName).orElseThrow(() -> new IllegalStateException(
                 "No file policy " + policyName));
-            if (content.length > policy.maxBytes()) {
+            if (size > policy.maxBytes()) {
                 return Mono.error(tooLarge(policy.maxBytes()));
             }
-            if (content.length == 0) {
+            if (size <= 0) {
                 return Mono.error(invalid("The file is empty"));
             }
             return observations.mono(PlatformObservations.FILE_UPLOAD, "store generated file " + policy.name(),
                 KeyValues.of("policy", policy.name()),
                 Mono.usingWhen(store.newUploadFile(),
-                    upload -> Mono.fromCallable(() -> Files.write(upload, content, StandardOpenOption.WRITE))
+                    upload -> Mono.fromCallable(() -> {
+                            try (InputStream in = content.get()) {
+                                Files.copy(in, upload, StandardCopyOption.REPLACE_EXISTING);
+                            }
+                            return Files.size(upload);
+                        })
                         .subscribeOn(Schedulers.boundedElastic())
-                        .then(Mono.defer(() -> storeFile(policy, new Received(upload, content.length,
-                            FileNames.sanitize(name)), jobId))),
+                        .flatMap(written -> written != size ? Mono.error(invalid("The file is not "
+                            + size + " bytes long")) : storeFile(policy, new Received(upload, written,
+                            FileNames.sanitize(name)), jobId)),
                     upload -> store.discard(upload).then(store.discard(workDirectory(upload)))));
         });
     }

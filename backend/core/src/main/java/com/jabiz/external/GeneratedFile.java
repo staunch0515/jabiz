@@ -1,5 +1,7 @@
 package com.jabiz.external;
 
+import java.io.ByteArrayInputStream;
+import java.io.InputStream;
 import java.util.Arrays;
 import java.util.Objects;
 import java.util.regex.Pattern;
@@ -41,6 +43,11 @@ public record GeneratedFile(String key, String name, byte[] content) {
     /** The number of bytes, without copying them. */
     public int size() {
         return content.length;
+    }
+
+    /** The bytes as a stream, without copying them: the platform stores large files without a second copy. */
+    public InputStream open() {
+        return new ByteArrayInputStream(content);
     }
 
     @Override
