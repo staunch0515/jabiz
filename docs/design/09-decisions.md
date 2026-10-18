@@ -1514,11 +1514,17 @@ P-8 原写"`false` 即逐条执行（16p-1 的局部合并同样受它控制）"
      登记待审批的 `SecProtectedChange` 并以 `RequireApproval` 请求审批（对象 `jabiz.security.protected-change`，层级由平台固定为一层、权限为该种变更的写权限，不读审批规则）；
      待办与后台的待办页面照旧出现；批准事件的消费者 `SEC_PROTECTED_CHANGE_APPLY`（`internal()`）在内容哈希仍相同时以平台生成的许可写入，驳回即记录。
      待审批的变更没有任何效果。
-   - 职责分离：申请人不能审批（`APPROVAL_OWN_REQUEST`）；变更所针对的用户不能批准（`APPROVAL_TARGET_USER`，按审批与生效时的情况判断）；审批需要管理级二次验证；批准绑定内容哈希。
+   - 职责分离：申请人不能审批（`APPROVAL_OWN_REQUEST`）；变更所针对的用户不能批准（`APPROVAL_TARGET_USER`，按审批与生效时的情况判断）；审批需要管理级二次验证；批准绑定内容哈希，
+     内容中含请求时给出的受保护权限与所针对的用户，生效时给出更多或给更多的人即不生效（`CHANGE_GREW`）；待审批的分配与角色权限视同已生效，不能借它们把权限"带进去"。
+   - 审批人须持有 `*`，或持有管理员的权限（`security.user-role.write` / `security.role.write`）并持有变更给出的（重设凭据时为目标持有的）全部受保护权限：
+     谁也不能批准比自己持有的更多的东西；审批时按令牌，生效时按库中实际持有再判断。
+   - 获得受保护权限的用户的凭据（密码、二次验证、外部关联）须是本人设置的（或证明了邮箱的自助流程），否则不生效（`TARGET_CREDENTIALS_NOT_OWN`）；授予生效时吊销获得者的全部会话。
+   - 判断授权的每一处先取职责分离的锁（`jabiz.sod`）；职责分离的写入检查也移到 `VersionAppender`，撤销与取消预定同受约束。
    - 一切时态写入的必经之处（`VersionAppender`，新的异步检查 `TemporalWriteCheck`）拒绝没有许可的受保护授权（422 `PROTECTED_CHANGE_REQUIRES_APPROVAL`）：
      数据视图、实体 API、通用实体流程、导入、业务流程的变更集、撤销与取消预定都不能绕过（同 D40 第 2 条的做法）。
    - **建立期与首个管理员**：管理员 = 经启用的角色持有 `*` 的启用用户；首个管理员 = `SEC_BOOTSTRAP_ADMIN` 建立的用户。首个管理员之外有两位管理员之前，受保护的变更当即生效；
-     首次出现时记入只追加表 `sec_protected_grants_armed`，此后永不回到建立期（停用管理员不能重开）。存在另一位管理员时首个管理员不能提出、写入或审批受保护的变更（403 `BOOTSTRAP_ADMIN_RETIRED`）。
+     首次出现时记入只追加表 `sec_protected_grants_armed`，此后永不回到建立期（停用管理员不能重开）。存在另一位管理员时首个管理员不能提出、写入或审批受保护的变更（403 `BOOTSTRAP_ADMIN_RETIRED`），
+     首次出现时记入 `sec_bootstrap_retired`，永久退役。管理员按现在或之后某个预定版本中有效计。`always=true` 时第一位管理员由 `SEC_BOOTSTRAP_ADMIN` 凭平台许可在空库上建立。
      `jabiz.security.protected-grants.enabled`（缺省 `true`）关闭全部；`.always=true` 不设建立期。
 2. **会计年度的时区** `jabiz.fiscal-year-zone`（缺省 `UTC`，兼容）：保留期中时间字段的日期、"今天"与到期报告的边界都按该时区（21 §3.1）。平台中别处没有会计年度的计算（账本按时刻、报表另有显示时区），不随之改变。
 3. **不公开元数据的文件用随机编号**：`FilePolicy.privateMetadata()` 的策略上传的文件以 UUIDv4 为 `fileId`（其他文件照旧 UUIDv7，CLAUDE.md 的主键约定对此例外），存储键为 `r/<前两位>/<fileId>/…`，
@@ -1542,3 +1548,14 @@ P-8 原写"`false` 即逐条执行（16p-1 的局部合并同样受它控制）"
 ②`RetentionPolicies` 给出 `zone()`、`today(clock)`、`dateOf(值)`、`startOf(日)`，`DeletionGuard` 与 `RetentionReport` 共用；无效的时区为启动错误 `RETENTION`。
 ③`FileUploadService` 对 `privateMetadata()` 的策略取 `UUID.randomUUID()`；`FileKeys` 两种布局；`PurgeStoredContent` 对随机编号用 `LocalFileStore.olderThan`。
 ④前端：流程表单页与行操作在输出带 `approval: PENDING` 时提示"已提交审批"；审批在已有的待办页（`ApprovalPanel`）进行；待审批的变更在 `SecProtectedChange` 的通用列表中可见。
+⑤**独立安全评审之后的修订（2026-10-18，H1、H2、M1–M3、L1、L2）**：
+- H1：批准绑定 `SecProtectedChange.gained` / `affectedUsers`（进入内容哈希与事实）；生效时在锁内重新判断，增长即 `FAILED CHANGE_GREW`；`ProtectedGrants` 把待审批的分配与角色权限计入
+  "角色给出的"与"角色的用户"（减去已持有时不计入）。
+- H2：凭据类变更的审批层级改为 `security.user-role.write`；`ProtectedChangeDecisionCheck.covers`：`*`，或管理员的权限 + 全部给出的受保护权限；生效时以 `effectiveHoldings`（当时生效的版本）再查。
+- M1：`BootstrapGrant`（只在 `SEC_BOOTSTRAP_ADMIN` 自己的系统操作、库中没有别的操作建立的用户时有效）。
+- M2：`ProtectedGrantWriteCheck`、请求流程的判断、审批检查与生效都先取 `jabiz.sod` 锁；`SodWriteCheck` 改为 `TemporalWriteCheck`（撤销、取消预定同样检查）；`VersionAppender` 懒取检查（避免依赖环）。
+- M3：`ProtectedGrants.credentials` 从 `sec_user_version` 的版本、身份关联与二次验证的首个版本及 `op_process` 判断谁设置了凭据（自助流程名单见 10 §16.2）；`RevokeGrantedSessions` 吊销获得者的会话（原因 `PROTECTED_GRANT`）。
+- L1：`admins(now)` 按现在或之后的版本；`sec_bootstrap_retired`。
+- L2：`bootstrapUser()` 按 `row_id` 排序；生效取 `sys_approval_decision` 中的审批人；`MFA_RESET` 绑定 `mfaId`（`MFA_CHANGED`）；`enabled=false` 且已结束建立期时启动警告并记操作 `SEC_PROTECTED_GRANTS_OFF`；
+  注册角色持有受保护权限的启动警告（`ProtectedGrantChecks`）；21 §3.1 说明时区向西改动的影响。
+- `SecProtectedChange.userId` / `roleId` 改为文本编号（不是引用）：已记录的变更不应阻止删除其用户或角色。
