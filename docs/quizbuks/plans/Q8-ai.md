@@ -409,6 +409,7 @@
 - **L-a**：平台停止的作业，若每次尝试的预留输入超过 10 万 Token 且模型有长提示价格，按长提示价格计（`AiProcesses.stoppedUsage`）。**L-b**：`Usage.asLongPrompt` 不再把回退模型的部分也算进长提示部分，`AiCost.of` 另把长提示部分限制在请求模型自己的部分之内，每个 Token 只计价一次。
 - **L-d**：§7.8 写明计数的 429 / 5xx 会用掉 3 次尝试中的一次（不计费）。**L-e**：封面与题目同时请求的测试重复 5 轮、每轮新商家，并断言至少一轮两个调用确实同时在途。**L-f**：IT 的桩与本地桩对带文档的付费调用报告与计数相同的输入用量（本地桩去掉计数不接受的字段再估算）。**L-g**：上线清单加一项：开启 PDF 之前以真实密钥手动调用一次 `count_tokens`。
 - 细节：封面图改为单选按钮的 `<label htmlFor>`（不是 `div` 上的 `onClick`）；`QB_AI_NOTICE_MISSING` 的文案改为通用的"AI 生成"。
+- 验证（复审修改之后）：`./gradlew :quizbuks:check :quizbuks:bootJar` 通过（717 个测试、0 失败；`platformCheck` 0 错误）；商家后台 lint、typecheck、171 个 Vitest，`app:check`，`ext:check`（74 个）；e2e 全部 54 个一次通过。V17 暂不改号（Q7c 正在改为 V17，之后 Q8b 移到 V18）。
 
 ### 待确认（需求方）
 
