@@ -473,3 +473,8 @@ M-73 API Key（G10）；个人信息的删除与匿名化（平台未开放，GD
 - 工具：`tools/quizbuks/test/entrypoint.test.sh`、`stripe-test-mode.test.sh`、`tools/test/check-app-paths.test.sh`、`tools/check-app-paths.sh`（基准 `origin/1.2/platform`）都通过。
 - e2e（打包的 jar、本机的 Mailpit 与 Stripe 桩、独立的库与端口）：41 项中 40 项通过；`content.spec.ts` 的"他处改过的 Quiz 要求重新加载"一次因焦点断言失败，单独重跑该文件 3 项全过（与本阶段无关的偶发）。
 - 本机演示 `tools/quizbuks/local-demo.sh start --seed`（独立的库与端口，复用本机的 Mailpit）：首次设置（5 个角色、27 个提案由演示发布人发布）与演示数据照常完成，然后 `stop`。
+- **需求方的两项决定之后**（2026-10-18：预算不足按商家每天一封、邮件时刻按日本时间标 JST）并**合并 `origin/1.2/quizbuks`（Q7b，#176，V12）之后**再验证一次：
+  合并的冲突在消息资源、商家后台的文案与测试、本计划（两段实施记录都保留）与 `topup` 场景快照；`QbPermissions.MESSAGING_SYSTEM` 两边各加了同值的常量，留一处；
+  场景只有 `topup` 的分录明细 `sha256` 再次变化（编号随 Q7b 与 Q7a 的记录顺延），看过后更新。V12（Q7b）在前、V13（Q7a）在后。
+  `./gradlew :quizbuks:check` 594 项全部通过；两个 SPA 的 lint、typecheck、test（App 135 项、商家后台 134 项；商家后台在本机负载高时有交易页与钱包页的测试偶发超时，单独与重跑全过，与本阶段无关）；
+  `app:check`、`ext:check`（70 项）、工具测试与 `check-app-paths.sh` 通过；e2e 47 项全部通过。
