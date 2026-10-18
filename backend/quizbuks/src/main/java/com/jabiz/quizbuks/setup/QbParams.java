@@ -46,6 +46,11 @@ public final class QbParams {
     public static final String AI_MODEL = "qb.ai.model";
     /** The oldest version of the app that may still be used. */
     public static final String APP_MIN_VERSION = "qb.app.min-version";
+    /**
+     * The address signed-in users write to when the help centre does not answer them (Q7b, Q7-8); empty: the help
+     * pages show no contact.
+     */
+    public static final String SUPPORT_EMAIL = "qb.support.email";
 
     /*
      * The account mapping of the journal export (Q9d, F-01): for each postable account of the ledger (QbLedger), the
@@ -130,7 +135,9 @@ public final class QbParams {
         new Param(ISSUER_ADDRESS, Map.of("type", "text", "maxLength", 500), "",
             "Address of the operator, as the top-up receipts show it"),
         new Param(ISSUER_REGISTRATION_NO, Map.of("type", "text", "maxLength", 50), "",
-            "Registration number of the operator (such as the qualified invoice issuer number), on the receipts"));
+            "Registration number of the operator (such as the qualified invoice issuer number), on the receipts"),
+        new Param(SUPPORT_EMAIL, Map.of("type", "text", "maxLength", 200), "",
+            "Support address shown to signed-in users in the help centre (empty: none)"));
 
     private static Param journal(String key, String account) {
         return new Param(key, ACCOUNT_CODE, "", "Accounting system's account code for " + account

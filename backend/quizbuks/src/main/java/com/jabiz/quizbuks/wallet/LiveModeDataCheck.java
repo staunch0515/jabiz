@@ -3,6 +3,7 @@ package com.jabiz.quizbuks.wallet;
 import com.jabiz.entity.EntityDefinition;
 import com.jabiz.query.SqlIdentifiers;
 import com.jabiz.quizbuks.country.CountryCatalog;
+import com.jabiz.quizbuks.messaging.QbLegal;
 import com.jabiz.runtime.check.CheckProblem;
 import com.jabiz.runtime.check.PlatformCheck;
 import com.jabiz.runtime.entity.EntityDefinitionRegistry;
@@ -17,8 +18,13 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.Clock;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Going live on a database that still holds test mode's money (docs/quizbuks/plans/Q6-payments.md, review addition
@@ -27,6 +33,9 @@ import java.util.List;
  * (the sponsors' wallets) is not 0, since test Kudos would then pay real rewards. Clearing them is a deliberate
  * step: a fresh database, or {@code quizbuks.stripe.allow-live-with-test-data=true} set on purpose (only a warning
  * then).
+ *
+ * <p>Live mode also warns while no version of the takers' terms, the sponsors' terms or the privacy policy is in effect
+ * (Q7b, D-Q7-4): a warning only, since the application must start for an administrator to publish them.
  *
  * <p>The check reads the database itself (JDBC, as the platform's SQL template precompile check does, with Flyway's
  * connection settings): it runs at startup and in {@code platformCheck}, never on the request path. Test mode skips
@@ -42,13 +51,15 @@ public class LiveModeDataCheck implements PlatformCheck {
     private final boolean allow;
     private final Environment environment;
     private final EntityDefinitionRegistry entities;
+    private final Clock clock;
 
     public LiveModeDataCheck(StripeSettings settings, @Value("${" + ALLOW + ":false}") boolean allow,
-        Environment environment, EntityDefinitionRegistry entities) {
+        Environment environment, EntityDefinitionRegistry entities, Clock clock) {
         this.settings = settings;
         this.allow = allow;
         this.environment = environment;
         this.entities = entities;
+        this.clock = clock;
     }
 
     /** What the database holds of test mode: top-ups made in test mode, and the sum of account 2110. */
@@ -71,7 +82,9 @@ public class LiveModeDataCheck implements PlatformCheck {
                 connection.setSchema(schema);
             }
             connection.setReadOnly(true);
-            return problems(true, allow, read(connection));
+            List<CheckProblem> problems = new ArrayList<>(problems(true, allow, read(connection)));
+            problems.addAll(legalProblems(true, legalInEffect(connection)));
+            return List.copyOf(problems);
         } catch (SQLException | RuntimeException e) {
             return List.of(CheckProblem.error(CountryCatalog.CATEGORY, ALLOW, "Live mode cannot check the database "
                 + "for test mode's top-ups: " + e.getMessage()));
@@ -90,6 +103,35 @@ public class LiveModeDataCheck implements PlatformCheck {
             + "=true)") : CheckProblem.error(CountryCatalog.CATEGORY, ALLOW, message + ", or set " + ALLOW
             + "=true on purpose (deploy/quizbuks/README.md)"));
         return List.copyOf(problems);
+    }
+
+    /** The warnings of live mode without the terms or the privacy policy in effect (Q7b). */
+    public static List<CheckProblem> legalProblems(boolean livemode, Set<String> inEffect) {
+        if (!livemode) {
+            return List.of();
+        }
+        return QbLegal.REQUIRED_FOR_LIVE.stream().filter(kind -> !inEffect.contains(kind))
+            .map(kind -> CheckProblem.warning(CountryCatalog.CATEGORY, "legal:" + kind, "Live mode without a version "
+                + "of " + kind + " in effect: publish it (QB_LEGAL_PUBLISH) before taking users "
+                + "(docs/quizbuks/launch-checklist.md)"))
+            .toList();
+    }
+
+    /** The kinds of legal text with a version in effect now (by the application's clock). */
+    private Set<String> legalInEffect(Connection connection) throws SQLException {
+        EntityDefinition version = entities.getOrThrow(QbLegal.VERSION);
+        String sql = "SELECT DISTINCT " + column(version, "kind") + " FROM " + table(version) + " WHERE "
+            + column(version, "effectiveAt") + " <= ?";
+        Set<String> kinds = new HashSet<>();
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setObject(1, OffsetDateTime.ofInstant(clock.instant(), ZoneOffset.UTC));
+            try (ResultSet rows = statement.executeQuery()) {
+                while (rows.next()) {
+                    kinds.add(rows.getString(1));
+                }
+            }
+        }
+        return kinds;
     }
 
     private TestData read(Connection connection) throws SQLException {

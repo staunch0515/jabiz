@@ -17,7 +17,8 @@ import {
   type ShellMenuItem,
 } from '@jabiz/ui'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { FileQuestion, LayoutDashboard, Megaphone, ReceiptText, Store, UserRound, Wallet } from 'lucide-react'
+import { CircleHelp, FileQuestion, LayoutDashboard, Megaphone, ReceiptText, Store, UserRound, Wallet }
+  from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { QuizEditorPage } from './content/QuizEditorPage'
@@ -30,6 +31,12 @@ import { PublicationListPage } from './publishing/PublicationListPage'
 import { PublicationPage } from './publishing/PublicationPage'
 import { publicationIdOf, PUBLICATIONS_PATH } from './publishing/paths'
 import { OnboardingPage, useMySponsor } from './pages/OnboardingPage'
+import { ConsentGate, LegalLink } from './qb/ConsentGate'
+import { HelpPage } from './qb/HelpPage'
+import { LEGAL } from './qb/ids'
+import { legalKindOf, type LegalKind } from './qb/legal'
+import { LegalLinks } from './qb/LegalLinks'
+import { LegalPage } from './qb/LegalPage'
 import { QB } from './qb/messages'
 import { hrefOf, navigate, navigation, Redirect, useLocation } from './qb/router'
 import { useSessionLock } from './qb/session'
@@ -41,6 +48,18 @@ import { WalletPage } from './wallet/WalletPage'
 
 const DASHBOARD = '/dashboard'
 const ONBOARDING = '/onboarding'
+const HELP = '/help'
+
+/** The texts the console links to (the sponsors' terms, the privacy policy and the commerce notice). */
+const LINKED: readonly LegalKind[] = [...LEGAL.sponsorKinds, 'COMMERCE_NOTICE']
+
+/** The help centre and the legal texts (Q7b): anybody reads them, signed in or not. */
+function publicPage(path: string): ReactNode | null {
+  const kind = legalKindOf(path)
+  if (path === HELP) return <HelpPage audience="SPONSOR" />
+  if (kind) return <LegalPage key={kind} kind={kind} />
+  return null
+}
 
 /** The second step of a sign-in through an identity provider, handed from the callback to the sign-in page. */
 let pendingStep: SignInStep | undefined
@@ -83,7 +102,9 @@ function SignedIn({ path }: { path: string }) {
   let page: ReactNode
   const quizId = quizIdOf(path)
   const topUpId = topUpIdOf(path)
-  if (path === DASHBOARD) page = <DashboardPage />
+  const open = publicPage(path)
+  if (open) page = open
+  else if (path === DASHBOARD) page = <DashboardPage />
   else if (path === QUIZZES_PATH) page = <QuizListPage />
   else if (quizId) page = <QuizEditorPage key={quizId} quizId={quizId} />
   else if (path === PUBLICATIONS_PATH) page = <PublicationListPage />
@@ -103,8 +124,9 @@ function SignedIn({ path }: { path: string }) {
     { key: 'wallet', label: t('wallet.nav'), path: WALLET_PATH, icon: Wallet },
     { key: 'transactions', label: t('transactions.nav'), path: TRANSACTIONS_PATH, icon: ReceiptText },
     { key: 'account', label: t('nav.account'), path: ACCOUNT_PATH, icon: UserRound },
+    { key: 'help', label: t('nav.help'), path: HELP, icon: CircleHelp },
   ]
-  return (
+  const shell = (
     <AppShell
       brand={<span className="px-2 py-1 font-semibold">{t('brand')}</span>}
       navigation={
@@ -133,8 +155,41 @@ function SignedIn({ path }: { path: string }) {
       <div className="flex flex-col gap-4">
         <OfflineBanner />
         {page}
+        <LegalLinks kinds={LINKED} className="mt-8 border-t pt-4" />
       </div>
     </AppShell>
+  )
+  // A sponsor who applied before the texts in effect accepts them first (D-Q7-5); applying accepts them with the
+  // application. The texts and the help stay readable (the prompt links to them).
+  return <ConsentGate kinds={LEGAL.sponsorKinds} enabled={!open && !!sponsor.data} onSignOut={toSignIn}>
+    {shell}
+  </ConsentGate>
+}
+
+/** The help centre and the texts before signing in, with the way to sign in. */
+function PublicPage({ page }: { page: ReactNode }) {
+  const { t } = useTranslation(SPONSOR)
+  return (
+    <div className="flex min-h-full flex-col">
+      <header className="bg-background border-b">
+        <div className="mx-auto flex max-w-3xl items-center gap-2 px-4 py-2">
+          <span className="mr-auto font-semibold">{t('brand')}</span>
+          <ThemeToggle />
+          <a href={hrefOf('/login')} className="text-primary text-sm underline" data-testid="public-back"
+            onClick={(event) => {
+              event.preventDefault()
+              navigate('/login')
+            }}>
+            {t('public.signIn')}
+          </a>
+        </div>
+      </header>
+      <main className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-4">
+        <OfflineBanner />
+        {page}
+        <LegalLinks kinds={LINKED} className="border-t pt-4" />
+      </main>
+    </div>
   )
 }
 
@@ -170,6 +225,8 @@ function Routes() {
       onBack={() => navigate('/login', { replace: true })} />)
   }
   if (!ready) return <PageState kind="loading" />
+  const open = signedIn ? null : publicPage(path)
+  if (open) return <PublicPage page={open} />
   // Signed in, the pages of signing up and asking for a new password lead home.
   if (signedIn && (path === '/signup' || path === '/password-reset')) return <Redirect to="/" />
   if (path === '/password-reset') {
@@ -177,7 +234,17 @@ function Routes() {
   }
   // The form, then "look in your mailbox"; the console takes verified addresses only, so the onboarding follows the
   // verification and the first sign-in.
-  if (path === '/signup') return frame(<SignUpForm {...navigation} brand={brand} signInPath="/login" />)
+  // The sponsors' terms are accepted with the application (Q7b); signing up says where to read them.
+  if (path === '/signup') {
+    return frame(<>
+      <SignUpForm {...navigation} brand={brand} signInPath="/login" />
+      <p className="text-muted-foreground mx-auto w-full max-w-md px-4 pb-6 text-center text-sm"
+        data-testid="signup-terms">
+        {t('public.signUpTerms')}{' '}
+        <LegalLink kind="TERMS_SPONSOR" />{' · '}<LegalLink kind="PRIVACY" />
+      </p>
+    </>)
+  }
   if (path === '/login') {
     if (signedIn) return <Redirect to="/" />
     const notice = lockedIdle ? 'idle' : undefined

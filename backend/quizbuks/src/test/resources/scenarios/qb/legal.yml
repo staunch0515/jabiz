@@ -1,0 +1,203 @@
+# Terms and consent (docs/quizbuks/plans/Q7-messages-legal.md, Q7b): QB_SETUP creates the drafts of the legal texts
+# (marked test placeholders) and nothing is published; a content administrator (with a second factor) publishes the
+# takers' terms, the sponsors' terms and the privacy policy. A taker accepts them on the welcome step (refused without),
+# a sponsor with the application. The sponsors' terms change: version 2, which asks for consent again, is published to
+# take effect a week later. Before then the sponsor tops up as before; once it is in effect a top-up is refused until
+# the sponsor accepts it, then goes on.
+name: Terms and consent
+properties:
+  quizbuks.links.sponsor: https://sponsor.quizbuks.test/sponsor/
+clock: 2026-10-01T00:00:00Z
+actor: { id: installer, permissions: ["*"] }
+steps:
+  - process: QB_SETUP@latest
+    input: {}
+    save: { p1: "$.proposals[0]", p2: "$.proposals[1]", p3: "$.proposals[2]", p4: "$.proposals[3]",
+      p5: "$.proposals[4]", p6: "$.proposals[5]", p7: "$.proposals[6]", p8: "$.proposals[7]", p9: "$.proposals[8]",
+      p10: "$.proposals[9]", p11: "$.proposals[10]", p12: "$.proposals[11]", p13: "$.proposals[12]",
+      p14: "$.proposals[13]", p15: "$.proposals[14]", p16: "$.proposals[15]", p17: "$.proposals[16]",
+      p18: "$.proposals[17]", p19: "$.proposals[18]", p20: "$.proposals[19]", p21: "$.proposals[20]",
+      p22: "$.proposals[21]", p23: "$.proposals[22]", p24: "$.proposals[23]",
+      p25: "$.proposals[24]", p26: "$.proposals[25]", p27: "$.proposals[26]",
+      termsApp: "$.legalDraftIds[0]", termsSponsor: "$.legalDraftIds[1]", privacy: "$.legalDraftIds[2]" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p1}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p2}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p3}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p4}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p5}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p6}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p7}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p8}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p9}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p10}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p11}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p12}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p13}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p14}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p15}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p16}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p17}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p18}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p19}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p20}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p21}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p22}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p23}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p24}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p25}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p26}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p27}" }
+
+  - note: Nothing is published yet; the content administrator publishes the three texts, in effect at once.
+    actor: { id: legal-admin, permissions: [qb.admin.content.write], mfa: true }
+    process: QB_LEGAL_PUBLISH@latest
+    input: { docId: "${termsApp}" }
+    expectOutput: { kind: TERMS_APP, versionNo: 1, requiresConsent: true }
+  - actor: { id: legal-admin, permissions: [qb.admin.content.write], mfa: true }
+    process: QB_LEGAL_PUBLISH@latest
+    input: { docId: "${termsSponsor}" }
+    expectOutput: { kind: TERMS_SPONSOR, versionNo: 1 }
+  - actor: { id: legal-admin, permissions: [qb.admin.content.write], mfa: true }
+    process: QB_LEGAL_PUBLISH@latest
+    input: { docId: "${privacy}" }
+    expectOutput: { kind: PRIVACY, versionNo: 1 }
+
+  - note: The people, created by an administrator.
+    process: SEC_USER_CREATE@latest
+    input: { userName: alice, displayName: Alice, email: alice@example.com }
+    save: { a: $.userId }
+  - process: SEC_USER_CREATE@latest
+    input: { userName: u1, displayName: Ume, email: u1@example.com }
+    save: { u1: $.userId }
+  - note: The welcome step needs the terms accepted, at the versions in effect.
+    expectError:
+      actor: { id: "${u1}", permissions: [qb.me] }
+      process: QB_PROFILE_SAVE@latest
+      input: { displayName: Ume, countryCode: JP, preferredCurrency: JPY }
+      status: 422
+      ruleCode: QB_TERMS_REQUIRED
+  - expectError:
+      actor: { id: "${u1}", permissions: [qb.me] }
+      process: QB_PROFILE_SAVE@latest
+      input: { displayName: Ume, countryCode: JP, preferredCurrency: JPY, acceptTerms: true, termsVersionNo: 2,
+        privacyVersionNo: 1 }
+      status: 422
+      ruleCode: QB_TERMS_OUTDATED
+  - actor: { id: "${u1}", permissions: [qb.me] }
+    process: QB_PROFILE_SAVE@latest
+    input: { displayName: Ume, countryCode: JP, preferredCurrency: JPY, acceptTerms: true, termsVersionNo: 1,
+      privacyVersionNo: 1 }
+    expectOutput: { created: true }
+  - note: Sponsor A applies accepting the sponsors' terms; a content administrator approves.
+    actor: { id: "${a}", permissions: [qb.sponsor.me] }
+    process: QB_SPONSOR_APPLY@latest
+    input: { displayName: Alice, company: Capitals Inc, acceptTerms: true, termsVersionNo: 1, privacyVersionNo: 1 }
+    save: { onboarding: $.approvalRequestId }
+  - actor: { id: content-admin, permissions: [qb.review.sponsor, approval.decide] }
+    process: APPROVAL_DECIDE@latest
+    input: { requestId: "${onboarding}", decision: APPROVE }
+  - deliverEvents: true
+
+  - note: The sponsors' terms change; version 2 asks for consent again and takes effect on October 8.
+    advanceClock: PT1H
+  - actor: { id: legal-admin, permissions: [qb.admin.content.write], mfa: true }
+    process: UPDATE_ENTITY@latest
+    input:
+      entityType: QbLegalDoc
+      id: "${termsSponsor}"
+      version: 2
+      attributes:
+        body: { en: "[TEST PLACEHOLDER] Sponsor terms, version 2.", ja: "[TEST PLACEHOLDER] スポンサー利用規約 第 2 版。" }
+        changeSummary: { en: Fees are explained., ja: 手数料を説明しました。 }
+  - actor: { id: legal-admin, permissions: [qb.admin.content.write], mfa: true }
+    process: QB_LEGAL_PUBLISH@latest
+    input: { docId: "${termsSponsor}", effectiveAt: 2026-10-08T00:00:00Z, requiresConsent: true }
+    expectOutput: { kind: TERMS_SPONSOR, versionNo: 2, effectiveAt: 2026-10-08T00:00:00Z }
+  - note: Before it takes effect, A tops up as before.
+    actor: { id: "${a}", permissions: [qb.topup, qb.sponsor.finance.read] }
+    process: QB_TOPUP_START@latest
+    input: { amount: 1000 }
+    expectOutput: { status: OPENING }
+
+  - note: On October 9 version 2 is in effect; A's top-up waits for A's consent.
+    setClock: 2026-10-09T00:00:00Z
+  - expectError:
+      actor: { id: "${a}", permissions: [qb.topup, qb.sponsor.finance.read] }
+      process: QB_TOPUP_START@latest
+      input: { amount: 1000 }
+      status: 422
+      ruleCode: QB_CONSENT_REQUIRED
+  - actor: { id: "${a}", permissions: [qb.account.read, qb.sponsor.me] }
+    process: QB_CONSENT_ACCEPT@latest
+    input: { items: [{ kind: TERMS_SPONSOR, versionNo: 2 }] }
+    expectOutput: { recorded: [TERMS_SPONSOR] }
+  - actor: { id: "${a}", permissions: [qb.topup, qb.sponsor.finance.read] }
+    process: QB_TOPUP_START@latest
+    input: { amount: 1000 }
+    expectOutput: { status: OPENING }
+  - expect:
+      query: qb.admin.consents
+      params: { userId: "${a}" }
+      rows: 3
+      values: [{ kind: TERMS_SPONSOR, versionNo: 2, source: RECONSENT }]
+  - expect:
+      query: qb.public.legal-history
+      params: { kind: TERMS_SPONSOR }
+      rows: 2
+snapshot:
+  entities: [QbLegalDoc, QbLegalVersion, QbConsent, QbSponsor, QbTopUp]
+  asOf: end

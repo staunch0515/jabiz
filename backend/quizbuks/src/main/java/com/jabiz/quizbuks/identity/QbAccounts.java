@@ -113,6 +113,9 @@ public final class QbAccounts {
             .asCode(REVIEW_STATUS_DICTIONARY, SponsorStatus.ALL.toArray(String[]::new)));
         eb.field("termsAcceptedAt", f -> f.physicalColumn("terms_accepted_at").processOnly()
             .asTemporal(TemporalRole.EVENT_TIME));
+        // The version of the sponsors' terms accepted with the latest application (Q7b); none before Q7b or while no
+        // version was in effect. The consents themselves are QbConsent rows.
+        eb.field("termsVersionNo", f -> f.physicalColumn("terms_version_no").processOnly().asNumeric(6, 0));
         eb.field("approvalRequestId", f -> f.physicalColumn("approval_request_id").processOnly().asText(64));
         eb.field("submittedAt", f -> f.physicalColumn("submitted_at").processOnly()
             .asTemporal(TemporalRole.EVENT_TIME));

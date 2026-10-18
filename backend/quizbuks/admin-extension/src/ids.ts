@@ -48,6 +48,8 @@ export const TEMPLATE = {
   journalExportParts: 'qb.admin.journal-export-parts',
   /** The account mapping now in effect (Q9d; `qb.admin.finance.read`). */
   journalMapping: 'qb.admin.journal-mapping',
+  /** A user's acceptances of the terms and the privacy policy (Q7b; `qb.admin.users.read`). */
+  consents: 'qb.admin.consents',
 } as const
 
 /** Processes the finance pages run (Q9c); the server checks each. */
@@ -108,6 +110,8 @@ export const DICTIONARY = {
   topUpStatus: 'urn:jabiz:dict:quizbuks:topup-status',
   payoutAccountStatus: 'urn:jabiz:dict:quizbuks:payout-account-status',
   reconCheck: 'urn:jabiz:dict:quizbuks:recon-check',
+  legalKind: 'urn:jabiz:dict:quizbuks:legal-kind',
+  consentSource: 'urn:jabiz:dict:quizbuks:consent-source',
 } as const
 
 /** Permissions (`QbPermissions`): they only decide what the pages offer; the server checks every call. */
