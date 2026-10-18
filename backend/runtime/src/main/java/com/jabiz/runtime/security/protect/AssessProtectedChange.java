@@ -41,11 +41,40 @@ public class AssessProtectedChange<C extends ProcessContext>
      * For the approvers (review H1, M3, M-a): the names of the users the change is for, who last set their credentials
      * and whether they are the user's own, their current addresses (who entered them, whether a mailed link proved
      * them, whether they lie outside {@code jabiz.security.protected-grants.trusted-email-domains}), and the history
-     * of their credentials - its first line, the account's creation, always kept, the middle left out when long. Read
-     * only for a change that waits for approval.
+     * of their credentials - its first line, the account's creation, always kept, the middle left out when long; and
+     * (decision D51) which gained permissions an approver need not hold because a published SoD rule forbids them
+     * alongside what the approver holds ({@code exemptions}). Read only for a change that waits for approval.
      */
     public record Described(List<String> affected, List<String> credentials, List<String> history,
-        List<String> addresses) {}
+        List<String> addresses, List<String> exemptions) {
+
+        public Described(List<String> affected, List<String> credentials, List<String> history,
+            List<String> addresses) {
+            this(affected, credentials, history, addresses, List.of());
+        }
+    }
+
+    /**
+     * For the approvers (decision D51): each gained permission ({@code *} never) that an approver holding a permission
+     * of the other group of a published SoD rule need not hold - "approver cannot hold X by rule R".
+     */
+    static List<String> exemptions(java.util.Set<String> gained, List<com.jabiz.security.SodRule> rules) {
+        List<String> lines = new java.util.ArrayList<>();
+        for (String permission : new java.util.TreeSet<>(gained)) {
+            if (com.jabiz.context.RequestContext.ALL_PERMISSIONS.equals(permission)) {
+                continue;
+            }
+            for (com.jabiz.security.SodRule rule : rules) {
+                java.util.Set<String> other = rule.left().contains(permission) ? rule.right()
+                    : rule.right().contains(permission) ? rule.left() : java.util.Set.of();
+                if (!other.isEmpty()) {
+                    lines.add("approver holding any of " + String.join(", ", new java.util.TreeSet<>(other))
+                        + " cannot hold " + permission + " by rule " + rule.ruleCode() + ": not required of them");
+                }
+            }
+        }
+        return List.copyOf(lines);
+    }
 
     /** The most characters of the credential histories, all users together. */
     static final int HISTORY = 6000;
@@ -57,7 +86,9 @@ public class AssessProtectedChange<C extends ProcessContext>
         return reactor.core.publisher.Flux.fromIterable(assessment.affected())
             .concatMap(user -> grants.userName(user).zipWith(grants.credentials(user)))
             .collectList()
-            .map(found -> {
+            .zipWith(grants.sodRules())
+            .map(both -> {
+                List<reactor.util.function.Tuple2<String, ProtectedGrants.Credentials>> found = both.getT1();
                 int budget = Math.max(400, HISTORY / Math.max(1, found.size()));
                 List<String> histories = new java.util.ArrayList<>();
                 int used = 0;
@@ -74,7 +105,8 @@ public class AssessProtectedChange<C extends ProcessContext>
                     found.stream().map(f -> f.getT1() + ": " + f.getT2().summary()).toList(), histories,
                     found.stream().map(f -> f.getT1() + ": " + f.getT2().address()
                         + (grants.settings().trustedAddress(f.getT2().email()) ? ""
-                            : " - OUTSIDE THE TRUSTED DOMAINS")).toList());
+                            : " - OUTSIDE THE TRUSTED DOMAINS")).toList(),
+                    exemptions(assessment.gained(), both.getT2()));
             });
     }
 

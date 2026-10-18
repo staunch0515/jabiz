@@ -56,6 +56,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class ProtectedGrantIT extends SecurityItSupport {
 
     private static final String PASSWORD = "password-123";
+    /** Decides protected changes instead of approval.decide (decision D51). */
+    private static final String DECIDE = "security.protected-change.decide";
     private static final String OWN_PASSWORD = "own-password-456";
 
     /** Shared by the tests of the class: one schema, set up once. */
@@ -282,9 +284,9 @@ class ProtectedGrantIT extends SecurityItSupport {
         assertThat(ruleCode(decide(requestId, as(adminOne), "APPROVE", 422))).isEqualTo("APPROVAL_OWN_REQUEST");
         assertThat(ruleCode(decide(requestId, as(user), "APPROVE", 422))).isEqualTo("APPROVAL_TARGET_USER");
         decide(requestId, TestTokens.withoutMfa(tokens, adminTwo, "*"), "APPROVE", 403);
-        decide(requestId, TestTokens.bearer(tokens, adminThree, "approval.decide", "security.user-role.write"),
+        decide(requestId, TestTokens.bearer(tokens, adminThree, DECIDE, "security.user-role.write"),
             "APPROVE", 403);
-        decide(requestId, TestTokens.bearer(tokens, adminThree, "approval.decide", "security.user.password"),
+        decide(requestId, TestTokens.bearer(tokens, adminThree, DECIDE, "security.user.password"),
             "APPROVE", 403);
         deliverer.deliverPending().block();
         assertThat(assignments(user, role)).isEmpty();
@@ -303,7 +305,7 @@ class ProtectedGrantIT extends SecurityItSupport {
         String user = bareUser("clerk");
         String role = createRole(unique("POSTER"), "ledger.post");
         Map<String, Object> asked = assignRole(user, role);
-        decide(asked.get("approvalRequestId"), TestTokens.bearer(tokens, adminThree, "approval.decide",
+        decide(asked.get("approvalRequestId"), TestTokens.bearer(tokens, adminThree, DECIDE,
             "security.user-role.write", "ledger.post"), "APPROVE", 200);
         deliverer.deliverPending().block();
         // adminThree holds * in fact, so the check at apply time agrees.
@@ -503,27 +505,45 @@ class ProtectedGrantIT extends SecurityItSupport {
     }
 
     /**
-     * Review H2 verification: when the change is applied the approver must still hold approval.decide and the level's
-     * permission, not only what the change gives.
+     * Review H2 verification: when the change is applied the approver must still hold the permission deciding
+     * protected changes (security.protected-change.decide, decision D51) and the level's permission, not only what
+     * the change gives.
      */
     @Test
-    void anApproverWhoLostApprovalDecideBeforeTheApplyIsNotEnough() {
+    void anApproverWhoLostThePermissionToDecideBeforeTheApplyIsNotEnough() {
         String approver = bareUser("approver");
-        String approvers = createRole(unique("APPROVERS"), "security.user-role.write", "ledger.post",
-            "approval.decide");
+        String approvers = createRole(unique("APPROVERS"), "security.user-role.write", "ledger.post", DECIDE);
         approve(assignRole(approver, approvers), adminTwo);
-        assertThat(holds(approver, "approval.decide")).isTrue();
+        assertThat(holds(approver, DECIDE)).isTrue();
         Map<String, Object> asked = assignRole(bareUser("clerk"), createRole(unique("POSTER"), "ledger.post"));
-        decide(asked.get("approvalRequestId"), TestTokens.bearer(tokens, approver, "approval.decide",
+        decide(asked.get("approvalRequestId"), TestTokens.bearer(tokens, approver, DECIDE,
             "security.user-role.write", "ledger.post"), "APPROVE", 200);
         String permissionId = String.valueOf(query("SELECT role_permission_id::text AS id FROM"
-            + " sec_role_permission_version WHERE role_id = ?::uuid AND permission = 'approval.decide'", approvers)
+            + " sec_role_permission_version WHERE role_id = ?::uuid AND permission = ?", approvers, DECIDE)
             .getFirst().get("id"));
         post("/api/datasets/" + SecurityEntities.ROLE_PERMISSION_DATASET + "/commit", admin(), Map.of("changes",
             List.of(Map.of("action", "DELETE", "id", permissionId, "version", 1)))).expectStatus().isOk();
         deliverer.deliverPending().block();
         assertThat(change(asked.get("changeId"))).containsEntry("status", "FAILED")
             .containsEntry("failure", "APPROVER_NOT_ALLOWED");
+    }
+
+    /**
+     * Decision D51: approval.decide (which a business approver holds) decides no protected change, even with an
+     * administrator's permission and everything the change gives.
+     */
+    @Test
+    void approvalDecideAloneNoLongerDecidesAProtectedChange() {
+        Map<String, Object> asked = assignRole(bareUser("clerk"), createRole(unique("POSTER"), "ledger.post"));
+        Object requestId = asked.get("approvalRequestId");
+        decide(requestId, TestTokens.bearer(tokens, adminThree, "approval.decide", "security.user-role.write",
+            "ledger.post"), "APPROVE", 403);
+        decide(requestId, TestTokens.bearer(tokens, adminThree, "approval.decide", "security.user-role.write",
+            "ledger.post"), "REJECT", 403);
+        decide(requestId, TestTokens.bearer(tokens, adminThree, DECIDE, "security.user-role.write",
+            "ledger.post"), "APPROVE", 200);
+        deliverer.deliverPending().block();
+        assertThat(change(asked.get("changeId"))).containsEntry("status", "APPLIED");
     }
 
     @Test
@@ -597,9 +617,9 @@ class ProtectedGrantIT extends SecurityItSupport {
         Object requestId = asked.get("approvalRequestId");
         assertThat(ruleCode(decide(requestId, as(holder), "APPROVE", 422))).isEqualTo("APPROVAL_TARGET_USER");
         // Review H2: who may reset passwords does not approve the takeover of an account holding ledger.post.
-        decide(requestId, TestTokens.bearer(tokens, adminThree, "approval.decide", "security.user.password"),
+        decide(requestId, TestTokens.bearer(tokens, adminThree, DECIDE, "security.user.password"),
             "APPROVE", 403);
-        decide(requestId, TestTokens.bearer(tokens, adminThree, "approval.decide", "security.user-role.write",
+        decide(requestId, TestTokens.bearer(tokens, adminThree, DECIDE, "security.user-role.write",
             "security.user.password"), "APPROVE", 403);
         approve(asked, adminTwo);
         login(holderName, PASSWORD).expectStatus().isUnauthorized();
@@ -697,7 +717,7 @@ class ProtectedGrantIT extends SecurityItSupport {
         assertThat(emailOf(user)).isNull();
         assertThat(facts(asked.get("approvalRequestId"))).contains(first).contains("ledger.post");
         // Who may only reset passwords holds less than the holder: no.
-        decide(asked.get("approvalRequestId"), TestTokens.bearer(tokens, adminThree, "approval.decide",
+        decide(asked.get("approvalRequestId"), TestTokens.bearer(tokens, adminThree, DECIDE,
             "security.user-role.write"), "APPROVE", 403);
         approve(asked, adminTwo);
         assertThat(change(asked.get("changeId"))).containsEntry("status", "APPLIED").containsEntry("kind", "EMAIL");

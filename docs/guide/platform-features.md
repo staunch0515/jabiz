@@ -493,7 +493,7 @@
 | 业务参数 | `platform.param.read`、`platform.param.write` |
 | 账本 | `ledger.account.read/.write`、`ledger.read`、`ledger.post`、`ledger.reverse` |
 | 审计与任务 | `audit.read`、`job.read` |
-| 审批与控制 | `approval.decide`、`approval.read`、`control.propose`、`control.publish`、`sod.read` |
+| 审批与控制 | `approval.decide`、`approval.read`、`control.propose`、`control.publish`、`sod.read`；受保护的安全变更的审批 `security.protected-change.decide`（D51） |
 | 待办与编号 | `task.read`、`task.notify`（系统）、`numbering.read` |
 | 邮件 | `mail.read`、`mail.send`（系统）；`auth.account`、`auth.mail-preference`（用户本人，不授予角色） |
 | 文件 | `file.read`、`file.write`、`file.delete`、`file.generated.read`、`file.generated.archive`（不授予角色）；各文件策略自己的上传 / 读取权限 |
