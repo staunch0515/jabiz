@@ -146,8 +146,11 @@ describe('a visitor', () => {
     expect(screen.getByTestId('help-contact')).toHaveTextContent('Sign in to contact us.')
     expect(screen.queryByTestId('help-mail')).toBeNull()
     await userEvent.type(screen.getByTestId('help-search'), 'sign')
-    await waitFor(() => expect(screen.queryByTestId('help-category-REWARDS')).toBeNull())
-    expect(asked).toContain('/api/public/queries/qb.public.faq?p.audience=APP&p.q=sign&limit=100&count=false')
+    // The search is asked once the typing settles; until its answer the old results give way to the loading state.
+    await waitFor(() =>
+      expect(asked).toContain('/api/public/queries/qb.public.faq?p.audience=APP&p.q=sign&limit=100&count=false'))
+    expect(await screen.findByTestId('help-category-ACCOUNT')).toBeInTheDocument()
+    expect(screen.queryByTestId('help-category-REWARDS')).toBeNull()
     expect(screen.getByTestId('public-back')).toHaveAttribute('href', '/login')
   })
 
