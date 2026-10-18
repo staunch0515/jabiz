@@ -374,4 +374,5 @@
 
 - 冲突：`AnalyticsConfig` 的任务定义取 Q9e1 的 `JobDefinition.forEach`（`qb.system.analytics-items` 的项、每项 `QB_ANALYTICS_ITEM`），本分支的 `quizbuks.analytics.run-cron`（`QB_ANALYTICS_RUN_CRON`）照旧作为它的 cron；设计 §6 取 Q9e1 的残余说明（只留一处"完成人数"）；计划把 Q9e1 的"评审修复"一节放在本记录之前。
 - 五个模板的列不变（只有 `minGroup` 的精度 3 → 9 位，页面按数读取，不受影响）；概览的"截至"改为整个概览一处（所有人数都是快照），Vitest 随之改；e2e 本来就先等任务统计再读概览。
-- 合并后重新运行：见下一节。
+- 合并后重新运行（同样的独立数据库与端口）：`:quizbuks:check` 606 个测试全部通过、`platformCheck` 0 个错误 72 个警告；商家后台 149 个、App 133 个 Vitest 测试与 lint、typecheck；`app:check` 两个 SPA；`ext:check` 70 个；
+  e2e 50 个全部通过（`QB_ANALYTICS_RUN_CRON` 每分钟驱动新的逐项任务，`analytics.spec.ts` 与分析页的 axe 亮、暗都通过）。

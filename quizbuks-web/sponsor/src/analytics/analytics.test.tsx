@@ -198,9 +198,9 @@ describe('a publication\'s analytics', () => {
     expect(screen.getByTestId('overview-completions-value')).toHaveTextContent('4')
     expect(screen.getByTestId('overview-completion-rate-value')).toHaveTextContent('50%')
     expect(screen.getByTestId('overview-spent-value')).toHaveTextContent('300 Kudos')
-    // The job's counts hold as of its last run, in Tokyo time.
-    expect(screen.getByTestId('overview-starts')).toHaveTextContent('As of')
-    expect(screen.getByTestId('overview-starts')).toHaveTextContent('10:10')
+    // The figures are the job's snapshot: as of its last run, in Tokyo time.
+    expect(screen.getByTestId('overview-as-of')).toHaveTextContent('As of')
+    expect(screen.getByTestId('overview-as-of')).toHaveTextContent('10:10')
     // Below k: the average time and the timeouts are hidden, and the page says why.
     expect(screen.getByTestId('overview-avg-duration-value')).toHaveTextContent('Hidden')
     expect(screen.getByTestId('overview-timeouts-value')).toHaveTextContent('Hidden')

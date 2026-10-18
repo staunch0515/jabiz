@@ -63,20 +63,22 @@ function OverviewSection({ o, zone }: { o: Overview; zone: string }) {
   const { t, i18n } = useTranslation(SPONSOR)
   const locale = i18n.language
   const n = (value: number) => value.toLocaleString(locale)
-  // The counts the job takes every ten minutes are labelled with the time they hold for; the rest are live.
-  const asOf = o.refreshedAt ? t('analytics.asOf', { time: zoneTime(o.refreshedAt, zone, locale) }) : undefined
+  // Every figure here is the job's snapshot (Q9e1 review M1), labelled once with the run it holds for.
+  const asOf = o.refreshedAt ? t('analytics.asOf', { time: zoneTime(o.refreshedAt, zone, locale) }) : null
   const hidden = <span className="text-muted-foreground text-base font-normal">{t('analytics.publication.hidden')}</span>
   return (
     <section className="flex flex-col gap-3" aria-labelledby="overview-title" data-testid="analytics-overview">
-      <h2 id="overview-title" className="text-base font-semibold">{t('analytics.publication.overview')}</h2>
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <h2 id="overview-title" className="text-base font-semibold">{t('analytics.publication.overview')}</h2>
+        {asOf && <span className="text-muted-foreground text-sm" data-testid="overview-as-of">{asOf}</span>}
+      </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Metric testId="overview-views" label={t('analytics.publication.views')} value={n(o.views)}
-          hint={<>{t('analytics.publication.viewsHint')}{asOf && <> · {asOf}</>}</>} />
-        <Metric testId="overview-starts" label={t('analytics.publication.starts')} value={n(o.starts)} hint={asOf} />
+          hint={t('analytics.publication.viewsHint')} />
+        <Metric testId="overview-starts" label={t('analytics.publication.starts')} value={n(o.starts)} />
         <Metric testId="overview-completions" label={t('analytics.publication.completions')} value={n(o.completions)}
-          hint={<>{t('analytics.publication.completionsHint')}{asOf && <> · {asOf}</>}</>} />
-        <Metric testId="overview-in-progress" label={t('analytics.publication.inProgress')} value={n(o.inProgress)}
-          hint={asOf} />
+          hint={t('analytics.publication.completionsHint')} />
+        <Metric testId="overview-in-progress" label={t('analytics.publication.inProgress')} value={n(o.inProgress)} />
         <Metric testId="overview-passes" label={t('analytics.publication.passes')} value={n(o.passes)} />
         <Metric testId="overview-winners" label={t('analytics.publication.winners')} value={n(o.winners)} />
         <Metric testId="overview-spent" label={t('analytics.publication.spent')} value={formatKudos(o.spent)}
