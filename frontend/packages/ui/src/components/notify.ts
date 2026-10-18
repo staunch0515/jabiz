@@ -6,6 +6,8 @@ export interface NotifyOptions {
   description?: ReactNode
   /** Milliseconds before it goes; sonner's default when absent. */
   duration?: number
+  /** A button in the message, for the one thing it offers to do ("Use for e-mail"); it closes the message. */
+  action?: { label: string; onClick: () => void }
 }
 
 /**
