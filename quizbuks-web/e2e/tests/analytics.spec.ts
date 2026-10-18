@@ -118,9 +118,11 @@ test('a sponsor reads the dashboard and a publication\'s analytics, and exports 
   await expect(page).toHaveURL(/\/sponsor\/login$/)
   await signIn(page, '/sponsor/', other.email)
   await expect(page).toHaveURL(/\/sponsor\/dashboard$/)
+  // Only the reads of this publication: the dashboard's own trend (of all the sponsor's) may still be on its way.
   const asked: string[] = []
   page.on('request', (request) => {
-    if (request.url().includes('/api/queries/qb.sponsor.analytics.')) asked.push(new URL(request.url()).pathname)
+    if (request.url().includes('/api/queries/qb.sponsor.analytics.')
+      && (request.postData() ?? '').includes(publicationId)) asked.push(new URL(request.url()).pathname)
   })
   const overview = page.waitForResponse((response) =>
     response.url().endsWith('/api/queries/qb.sponsor.analytics.overview'))
