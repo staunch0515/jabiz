@@ -1,5 +1,5 @@
 import type { IdentityLinked } from '@jabiz/client'
-import { AUTH_NAMESPACE, ChangePasswordForm, LinkedIdentities, MfaSettings, SessionList } from '@jabiz/ui'
+import { AUTH_NAMESPACE, ChangePasswordForm, LinkedIdentities, MailPreferences, MfaSettings, SessionList } from '@jabiz/ui'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { PORTAL } from '../messages'
@@ -23,8 +23,9 @@ function takeLinked(): IdentityLinked | null {
 /**
  * The customer's own account: their password (`POST /api/auth/account/password`, decision D43 item 3), two-step
  * verification (docs/design/10-security.md section 9; the platform's `MfaSettings`, as on the admin's security page),
- * which step-up asks for, the accounts of identity providers they sign in with (section 12, phase 16f), and their
- * sessions at the portal (section 15.9).
+ * which step-up asks for, the accounts of identity providers they sign in with (section 12, phase 16f), their
+ * sessions at the portal (section 15.9) and their mail: the portal's notifications, such as the shipment notice, and
+ * the language (phase 16s, decision D49).
  */
 export function AccountPage() {
   const { t } = useTranslation(PORTAL)
@@ -50,6 +51,10 @@ export function AccountPage() {
       <div className="flex flex-col gap-4">
         <h2 className="text-lg font-medium">{tAuth('sessions.title')}</h2>
         <SessionList />
+      </div>
+      <div className="flex flex-col gap-4">
+        <h2 className="text-lg font-medium">{tAuth('mailPreferences.title')}</h2>
+        <MailPreferences />
       </div>
     </section>
   )

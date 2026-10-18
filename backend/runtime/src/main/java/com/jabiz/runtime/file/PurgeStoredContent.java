@@ -30,7 +30,8 @@ import java.util.UUID;
  * The storage half of the sweep (after commit; docs/design/14-files.md section 6): deletes the content of the files
  * the purge deleted, then every stored object that has no row and whose {@code fileId} (a UUIDv7, so its creation
  * time) is older than {@code jabiz.files.orphan-object-grace} before the operation time, which leaves uploads in
- * progress alone. Finally removes upload leftovers of crashed requests. Observed as {@code jabiz.file.sweep}.
+ * progress alone; a random (UUIDv4) id has no time, so its object's age on the file system counts instead.
+ * Finally removes upload leftovers of crashed requests. Observed as {@code jabiz.file.sweep}.
  */
 @Component
 public class PurgeStoredContent<C extends ProcessContext> implements StepHandler<PurgeStoredContent.Metadata, C> {
@@ -79,10 +80,14 @@ public class PurgeStoredContent<C extends ProcessContext> implements StepHandler
                 .concatMap(orphan -> store.deleteAll(FileKeys.prefix((UUID) orphan.id())))
                 .then();
             Mono<Integer> orphanObjects = store.list()
-                .flatMapIterable(key -> FileKeys.fileIdOf(key).stream().toList())
-                .filter(id -> FileKeys.timeOf(id).isBefore(cutoff))
+                .flatMapIterable(key -> FileKeys.fileIdOf(key).map(id -> new StoredObject(key, id)).stream().toList())
                 // The walk is depth first: the objects of one file come together.
-                .distinctUntilChanged()
+                .distinctUntilChanged(StoredObject::fileId)
+                // A random id (decision D48 item 3) carries no time: its first object's age on the file system counts.
+                .filterWhen(object -> FileKeys.timed(object.fileId())
+                    ? Mono.just(FileKeys.timeOf(object.fileId()).isBefore(cutoff))
+                    : store.olderThan(object.key(), properties.orphanObjectGrace()))
+                .map(StoredObject::fileId)
                 .buffer(CHECK_BATCH)
                 .concatMap(ids -> withoutRow(ids).flatMapMany(Flux::fromIterable))
                 .concatMap(id -> store.deleteAll(FileKeys.prefix(id)).thenReturn(1))
@@ -95,6 +100,9 @@ public class PurgeStoredContent<C extends ProcessContext> implements StepHandler
                 .then(PlatformObservations.tag(PlatformObservations.RESULT, "swept"));
         }));
     }
+
+    /** One stored object and the file it belongs to. */
+    private record StoredObject(String key, UUID fileId) {}
 
     /** Those of the ids that have no row. */
     private Mono<Set<UUID>> withoutRow(List<UUID> ids) {

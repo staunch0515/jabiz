@@ -169,7 +169,10 @@ public class FileUploadService {
                 return Mono.error(notAllowed(policy));
             }
             MediaTypes type = detected.get();
-            UUID fileId = UUID.fromString(String.valueOf(ids.next(FileEntities.SYS_FILE)));
+            // A policy keeping the upload's metadata from readers gets a random id (decision D48 item 3): a UUIDv7
+            // would tell when, and in what order, the file was uploaded.
+            UUID fileId = policy.privateMetadata() ? UUID.randomUUID()
+                : UUID.fromString(String.valueOf(ids.next(FileEntities.SYS_FILE)));
             return prepare(policy, type, received.path())
                 .flatMap(prepared -> digestAndSize(prepared.original()).flatMap(digest ->
                     write(fileId, prepared)

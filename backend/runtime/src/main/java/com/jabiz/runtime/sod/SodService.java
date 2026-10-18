@@ -121,11 +121,12 @@ public class SodService {
 
     /**
      * Serializes the changes of access in this transaction (until it ends), so that two concurrent assignments
-     * cannot each pass the check alone.
+     * cannot each pass the check alone. Per schema (advisory locks are the database's): the users of one schema are
+     * the platform's, and another schema's changes of access - another installation, a test of its own - do not wait.
      */
-    Mono<Void> lock() {
+    public Mono<Void> lock() {
         return engine().select("SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(hashtextextended("
-            + ":key, 0))) l", Map.of("key", BoundValue.of("jabiz.sod"))).then();
+            + "current_schema() || ':' || :key, 0))) l", Map.of("key", BoundValue.of("jabiz.sod"))).then();
     }
 
     /** The holdings of {@code users} (every user when null), by user id. */

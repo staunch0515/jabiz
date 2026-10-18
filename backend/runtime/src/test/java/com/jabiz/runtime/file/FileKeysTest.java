@@ -22,6 +22,24 @@ class FileKeysTest {
         assertThat(FileKeys.fileIdOf("2026/01/" + ID + "/original")).contains(ID);
     }
 
+    /** Files of a policy with private metadata have random ids (decision D48 item 3): their keys carry no time. */
+    @Test
+    void randomIdsLiveUnderTheirFirstTwoDigits() {
+        UUID random = UUID.fromString("3fa85f64-5717-4562-b3fc-2c963f66afa6");
+        assertThat(FileKeys.timed(random)).isFalse();
+        assertThat(FileKeys.timed(ID)).isTrue();
+        assertThat(FileKeys.prefix(random)).isEqualTo("r/3f/" + random);
+        assertThat(FileKeys.key(random, "original")).isEqualTo("r/3f/" + random + "/original");
+        assertThat(FileKeys.fileIdOf("r/3f/" + random + "/w320")).contains(random);
+        assertThat(FileKeys.fileIdOf("r/40/" + random + "/original")).as("wrong directory").isEmpty();
+        assertThat(FileKeys.fileIdOf("2026/01/" + random + "/original")).as("not dated").isEmpty();
+        assertThat(FileKeys.fileIdOf("r/" + ID.toString().substring(0, 2) + "/" + ID + "/original"))
+            .as("a dated id in the random area").isEmpty();
+        assertThatThrownBy(() -> FileKeys.timeOf(random)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> FileKeys.prefix(UUID.fromString("3fa85f64-5717-1562-b3fc-2c963f66afa6")))
+            .as("neither dated nor random").isInstanceOf(IllegalArgumentException.class);
+    }
+
     @Test
     void acceptsOnlyItsOwnLayout() {
         assertThatThrownBy(() -> FileKeys.key(ID, "../x")).isInstanceOf(IllegalArgumentException.class);

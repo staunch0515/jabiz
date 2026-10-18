@@ -99,6 +99,21 @@ describe('ProcessFormPage', () => {
     await expectAccessible()
   })
 
+  it('says when the change waits for another administrator’s approval', async () => {
+    answers = [json(200, { processSeqId: 78, output: { status: 'PENDING', approval: 'PENDING', changeId: 'c-1' } })]
+    const info = vi.spyOn(notify, 'info')
+    page()
+    await userEvent.type(screen.getByLabelText(/priceId/), 'p-1')
+    await userEvent.type(screen.getByLabelText(/percent/), '1')
+    await userEvent.click(screen.getByRole('button', { name: 'Run' }))
+    expect(await screen.findByTestId('process-pending-approval')).toHaveTextContent(
+      'it takes effect once another administrator approves it',
+    )
+    expect(info).toHaveBeenCalledWith(expect.stringContaining('Submitted for approval'))
+    info.mockRestore()
+    await expectAccessible()
+  })
+
   it('refuses to send without the required inputs or with text not matching the pattern', async () => {
     page()
     await userEvent.type(screen.getByLabelText(/note/), 'lower')

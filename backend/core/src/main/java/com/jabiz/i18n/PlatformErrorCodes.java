@@ -198,6 +198,22 @@ public final class PlatformErrorCodes {
     public static final String CONTROL_TARGET_CHANGED = "CONTROL_TARGET_CHANGED";
     /** 422 where access is given; 403 at the entry of a process. */
     public static final String SOD_CONFLICT = "SOD_CONFLICT";
+    /**
+     * 422: the write gives a user a protected permission, or resets the credentials of a holder of one, and needs a
+     * second administrator's approval (decision D48); params {@code entity}, {@code process} (the one to request it).
+     */
+    public static final String PROTECTED_CHANGE_REQUIRES_APPROVAL = "PROTECTED_CHANGE_REQUIRES_APPROVAL";
+    /** 403: the first administrator may no longer make or decide protected changes once another exists (D48). */
+    public static final String BOOTSTRAP_ADMIN_RETIRED = "BOOTSTRAP_ADMIN_RETIRED";
+    /** 422: the approver is a user the protected change is for (D48). */
+    public static final String APPROVAL_TARGET_USER = "APPROVAL_TARGET_USER";
+    /** 422: the protected change is no longer pending (D48). */
+    public static final String PROTECTED_CHANGE_NOT_PENDING = "PROTECTED_CHANGE_NOT_PENDING";
+    /**
+     * 422: a signed-in user asked to verify an address someone else changed while someone else may know a way into the
+     * account (D48, review M-b): the one asking may not be the user.
+     */
+    public static final String EMAIL_SET_BY_ANOTHER = "EMAIL_SET_BY_ANOTHER";
     /** The second factor code (or recovery code) is wrong, or the account is locked (10 section 9). */
     public static final String MFA_CODE_INVALID = "MFA_CODE_INVALID";
     /** The user has not set up a second factor. */
@@ -298,6 +314,8 @@ public final class PlatformErrorCodes {
         RETENTION_ACTIVE, LEGAL_HOLD, LEGAL_HOLD_NOT_ACTIVE,
         APPROVAL_NOT_PENDING, APPROVAL_OWN_REQUEST, APPROVAL_ALREADY_DECIDED, APPROVAL_LIMIT_EXCEEDED,
         CONTROL_CHANGE_INVALID, CONTROL_CHANGE_NOT_PROPOSED, CONTROL_SAME_PERSON, CONTROL_TARGET_CHANGED, SOD_CONFLICT,
+        PROTECTED_CHANGE_REQUIRES_APPROVAL, BOOTSTRAP_ADMIN_RETIRED, APPROVAL_TARGET_USER, PROTECTED_CHANGE_NOT_PENDING,
+        EMAIL_SET_BY_ANOTHER,
         MFA_CODE_INVALID, MFA_NOT_ENROLLED, MFA_ALREADY_ENROLLED,
         IDEMPOTENCY_KEY_REUSED,
         UNAUTHENTICATED, LOGIN_FAILED, INVALID_REFRESH_TOKEN,

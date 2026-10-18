@@ -26,6 +26,7 @@ import com.jabiz.runtime.security.OidcAccountExistsException;
 import com.jabiz.runtime.security.SessionNotFoundException;
 import com.jabiz.runtime.security.SignInRefusedException;
 import com.jabiz.runtime.sod.SodConflictException;
+import com.jabiz.runtime.security.protect.BootstrapAdminRetiredException;
 
 import org.springframework.dao.QueryTimeoutException;
 
@@ -91,6 +92,8 @@ public final class ProblemStatuses {
                 e.getMessage()));
             case SessionNotFoundException e -> List.of(new Violation(null, PlatformErrorCodes.SESSION_NOT_FOUND,
                 e.getMessage()));
+            case BootstrapAdminRetiredException e -> List.of(new Violation(null,
+                PlatformErrorCodes.BOOTSTRAP_ADMIN_RETIRED, e.getMessage()));
             case PermissionDeniedException e -> List.of(new Violation(null, PlatformErrorCodes.PERMISSION_DENIED,
                 e.getMessage(), Map.of("permission", e.permission())));
             case IdempotencyConflictException e -> List.of(new Violation(null,

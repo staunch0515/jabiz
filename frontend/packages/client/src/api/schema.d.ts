@@ -155,7 +155,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        get: operations["mailLanguage"];
         put?: never;
         post: operations["setLocale"];
         delete?: never;
@@ -2260,6 +2260,12 @@ export interface components {
             id?: unknown;
             label?: unknown;
         };
+        MailLanguage: {
+            defaultLocale?: string;
+            effective?: string;
+            languages?: string[];
+            locale?: string;
+        };
         MailPreferences: {
             templates?: components["schemas"]["TemplatePreference"][];
         };
@@ -2644,6 +2650,8 @@ export interface components {
             type?: string;
         };
         TemplatePreference: {
+            displayName?: string;
+            otherEntry?: boolean;
             subscribed?: boolean;
             template?: string;
         };
@@ -2938,6 +2946,26 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    mailLanguage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MailLanguage"];
+                };
             };
         };
     };

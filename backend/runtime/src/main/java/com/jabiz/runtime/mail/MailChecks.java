@@ -33,7 +33,11 @@ import java.util.function.Predicate;
  *       exactly the placeholders it declares ({@link MailPlaceholders});</li>
  *   <li>no parameter is named like a secret or a masked field: parameters are stored and sent as they are, and a mail
  *       carries no secret but its one-time tokens;</li>
- *   <li>every entry a text names in {@code {entryUrl.<entry>}} is a usable sign-in entry (decision D43 item 4).</li>
+ *   <li>every entry a text names in {@code {entryUrl.<entry>}} is a usable sign-in entry (decision D43 item 4), and
+ *       so is every entry a template declares itself for ({@link MailTemplate#entries}, decision D49);</li>
+ *   <li>a warning for transactional mail declaring entries, which only matter to notifications;</li>
+ *   <li>a warning for a notification without its display name {@code mail.<name>.name} in a language of the
+ *       application: its users see the template's name among their mail preferences instead (decision D49).</li>
  * </ul>
  */
 @Component
@@ -111,7 +115,19 @@ public class MailChecks implements PlatformCheck {
                         + "secret or a masked field; a mail carries no secret but its one-time tokens"));
                 }
             }
+            if (!template.entries().isEmpty() && !template.unsubscribable()) {
+                problems.add(CheckProblem.warning(CATEGORY, location, "declares sign-in entries " + template.entries()
+                    + ", but it is transactional mail, which is in nobody's preferences: the entries change nothing"));
+            }
+            template.entries().stream().filter(entry -> !entryExists.test(entry))
+                .forEach(entry -> problems.add(CheckProblem.error(CATEGORY, location, "is declared for the sign-in "
+                    + "entry " + entry + ", but there is no usable sign-in entry " + entry + " (jabiz.security.entries."
+                    + entry + ")")));
             for (Locale locale : messages.supportedLocales()) {
+                if (template.unsubscribable() && messages.find(template.nameKey(), locale).isEmpty()) {
+                    problems.add(CheckProblem.warning(CATEGORY, location, "has no message " + template.nameKey()
+                        + " [" + locale + "]: its users see the name of the template among their mail preferences"));
+                }
                 Optional<String> subject = messages.find(template.subjectKey(), locale);
                 Optional<String> body = messages.find(template.bodyKey(), locale);
                 if (subject.isEmpty()) {

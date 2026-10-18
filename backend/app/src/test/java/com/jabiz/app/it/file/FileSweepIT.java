@@ -85,6 +85,39 @@ class FileSweepIT extends FileItSupport {
         return storedKeys().stream().anyMatch(key -> key.startsWith(prefix));
     }
 
+    /** A stray object of a file with a random id (decision D48 item 3), last written {@code age} ago. */
+    private static String randomStrayObject(Duration age) throws IOException {
+        String key = FileKeys.key(UUID.randomUUID(), FileKeys.ORIGINAL);
+        Path path = filesRoot().resolve(key);
+        Files.createDirectories(path.getParent());
+        Files.write(path, FileSamples.pdf());
+        Files.setLastModifiedTime(path, java.nio.file.attribute.FileTime.from(Instant.now().minus(age)));
+        return key;
+    }
+
+    /**
+     * Files with random ids (a policy with private metadata, decision D48 item 3): an unused one is swept by its upload
+     * time like any other; a stray object's id has no time, so its age on the file system decides.
+     */
+    @Test
+    void filesWithRandomIdsAreSweptToo() throws IOException {
+        String orphan = (String) uploaded(com.jabiz.app.it.fixture.ItFileFixtures.PRIVATE, FileSamples.pdf(), "p.pdf",
+            "application/pdf", bearer("it-sweep-private", "it.private.upload", "it.private.read")).get("fileId");
+        assertThat(UUID.fromString(orphan).version()).isEqualTo(4);
+        assertThat(hasObjects(orphan)).isTrue();
+        String oldStray = randomStrayObject(Duration.ofHours(3));
+        String freshStray = randomStrayObject(Duration.ofMinutes(5));
+
+        // Another planned time than the other tests' runs (a run is once per planned time).
+        clock.advance(Duration.ofHours(26));
+        assertThat(jobs.run(sweep, clock.instant())).isEqualTo(JobRunner.Outcome.SUCCEEDED);
+
+        assertThat(hasRow(orphan)).isFalse();
+        await().atMost(Duration.ofSeconds(10)).until(() -> !hasObjects(orphan));
+        await().atMost(Duration.ofSeconds(10)).until(() -> !storedKeys().contains(oldStray));
+        assertThat(storedKeys()).contains(freshStray);
+    }
+
     @Test
     void sweepsWhatNothingUsesAndNothingElse() throws IOException {
         String orphan = (String) uploaded(CommerceFiles.IMAGE, FileSamples.jpeg(400, 300), "o.jpg", "image/jpeg",

@@ -10,12 +10,13 @@ import {
   notify,
   PageState,
 } from '@jabiz/ui'
-import { TriangleAlert } from 'lucide-react'
+import { Hourglass, TriangleAlert } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useParams, useSearchParams } from 'react-router'
 import SchemaForm from '../components/SchemaForm'
 import AdminPage from '../layout/AdminPage'
+import { pendingApproval } from '../meta/approval'
 import { useProcesses } from '../meta/hooks'
 import { InvalidJson, inputNodes, toProcessInput, type JsonSchema } from '../meta/processForm'
 import type { Violation } from '../meta/types'
@@ -70,7 +71,8 @@ export default function ProcessFormPage() {
       )
       setResult(response)
       setIdempotencyKey(crypto.randomUUID())
-      notify.success(t('process.succeeded'))
+      if (pendingApproval(response.output)) notify.info(t('process.pendingApproval'))
+      else notify.success(t('process.succeeded'))
     } catch (e) {
       if (e instanceof ApiError) {
         setViolations(
@@ -129,6 +131,12 @@ export default function ProcessFormPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
+            {pendingApproval(result.output) && (
+              <Alert data-testid="process-pending-approval">
+                <Hourglass aria-hidden />
+                <AlertDescription>{t('process.pendingApproval')}</AlertDescription>
+              </Alert>
+            )}
             <DescriptionList
               items={[{ label: t('history.process'), value: t('process.operation', { seq: result.processSeqId }) }]}
             />
