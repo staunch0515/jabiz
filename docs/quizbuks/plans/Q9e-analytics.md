@@ -205,3 +205,87 @@
 | E-10 | 管理员是否也要看分析 | A 不做（管理员已有发布列表的计数）；B 后台扩展加同样的发布分析页（模板另以缺省视图提供，+0.5 天） | **A** |
 | E-11 | 按国家 / 地区细分 | A 不做；B 按地区、k ≥ 10（需要在任务中连接资料，+1 天） | **A** |
 | E-12 | 子阶段与顺序 | Q9e1（数据）→ Q9e2（页面）；整个 Q9e 在 Q8 之前；Q8a 在仪表盘加 AI 用量卡 | **如左** |
+
+## 实施记录（Q9e1，2026-10-18）
+
+分支 `1.2/quizbuks-9e1-analytics-data`（`origin/1.2/quizbuks-7-plan` 之上）。只改 `.jabiz-app-paths` 中的路径；迁移 **V14**（统一的顺序：Q7b V12、Q7a V13、Q9e1 V14、Q7c V15、Q8a V16）。
+
+### 平台合并
+
+- 先以合并提交合入 `origin/1.2/platform`（16q、16r 受保护授权与 `jabiz.fiscal-year-zone`、16s 收件偏好），没有冲突；合并后 `:quizbuks:check` 原样通过。
+- `application.yml` 设 `jabiz.fiscal-year-zone: Asia/Tokyo`（与 Q7a 相同的写法与位置，以后合并只有同一行）：保留期按日本日期（`RetentionIT` 照常通过），分析按它分日。
+- 16r 的建立期：QuizBuks 的 `QB_SETUP`、e2e 与本机演示建的角色（`QB_E2E_PUBLISHER` 的 `control.publish` 等）都在建立期内（首个管理员之外没有两位持有 `*` 的管理员），受保护的授权当即生效；e2e 与本机演示照旧通过（见"验证"）。
+
+### 实现
+
+- **包 `stats`**：`QbAnalytics`（实体 `QbAnalyticsHour`、`QbAnalyticsCursor`、`QbQuestionStat`，都是普通表）、`AnalyticsBuckets`（增量加进哪个小时、`gap`）、`MinGroup`（k 与公开规则）、`QuestionTotals`（游标中各题合计的规范 JSON）、
+  `AnalyticsLimits`、`AnalyticsRefresh`（`QB_ANALYTICS_REFRESH` `internal()`、`QB_ANALYTICS_CHUNK` `subProcessOnly()`，权限 `qb.stats.system`）、`AnalyticsConfig`（数据视图、任务 `qb.analytics`，`0 */10 * * * *`）。
+- **任务**：根流程读上次运行、选出要读的发布（`qb.system.analytics-due`：进行中 / 暂停 / 预算不足，1 天内结束的，结束后游标未定稿的；三段索引范围的 UNION），按编号分块（缺省 100），每块一个子流程；
+  然后删除 400 天前的小时桶（每次至多 2 000 行）并记下运行时刻与部署时区（`qb_stats_run` 新列 `day_zone`）。计划时刻不晚于上次运行的重复运行什么也不做（平台对同一计划时刻本来就重放结果）。
+  每块：一条语句（`qb.system.analytics-state`）读卡片、**两侧计数**、游标、自 `viewsUntil` 以来的浏览（新索引）、要加的小时桶与 k；按计划决定哪些整体重算；
+  `qb.system.analytics-attempts` 读水位线之后、滞后 5 分钟的已完成会话（每块至多 `max-attempts-per-chunk`，按 `(submittedAt, attemptId)` 全块排序后截断，每个发布读到的总是自己顺序的前缀），按题与按发布汇总；
+  同一模板以 `full` 整体重算结束的发布；`qb.system.analytics-question-stats` 读公开的题目统计；然后只写变化了的行。
+- **模板**（`qb.stats.read`，只授予 `QB_SPONSOR`）：`qb.sponsor.dashboard`、`qb.sponsor.analytics.trend` / `.top` / `.overview` / `.questions`，全部经 `sponsor:QbPublication`；k 的读法与公开规则见 D-Q9e-4 与下面的偏离 3、4。
+  消息 `query.<id>[.<列>]` 三语（导出的列名，金额 "Kudos"）；实体、流程、参数的显示名三语。
+- **参数** `qb.stats.min-group`（普通参数，缺省 5，`QB_SETUP` 建立；SQL 与 `MinGroup` 都按 `greatest(3, …)`）。
+- **迁移 V14**：三张表（小时桶唯一 `(publication_id, hour_start)`、整点检查、`(sponsor_id, hour_start)` 与 `(hour_start)` 索引；游标的未定稿部分索引；题目统计唯一 `(publication_id, question_no)`）、
+  `qb_stats_run.day_zone`、`qb_publication_view (publication_id, first_viewed_at)`。`qb_attempt` 不加索引。
+- 任务自己的只读数据视图 `urn:jabiz:dataset:stats:QbAttempt|QbPublicationCard|QbPublicationView`（读权限 `qb.stats.system`，不授予任何角色）：查询时限 2 分钟（整体重算），不放宽其他读取的 5 秒。
+- 文档：`02-design.md`（2、3.3、6、11）、`backend/quizbuks/CLAUDE.md`（"商家分析"一条）、`operations.md`（§5 告警、§7.7）、`launch-checklist.md`（压测中运行任务）、`perf/Q9e-analytics.md`、`03-plan.md`。
+
+### 与计划的偏离（均为实现细节或隐私上的收紧，需求方的决定不变）
+
+1. **桶的写法**：游标记"上次变化时的累计值"，每次把增量**加**进一个小时（本次运行的小时；跨过整点后的第一次运行加进上一次运行的小时），而不是"当前小时 = 现在 − 整点基准、覆盖写"。
+   这样没有变化的发布、没有变化的小时都不写（计划的覆盖写在每个整点要给每个发布写一次）；`closed` 不存，由桶的小时早于最近一次运行的小时推出。
+   `gap` = 桶早于本次运行的小时、且本次运行晚于那之后的整点 5 分钟以上（漏跑了），或发布的第一个桶之前已有历史；同一小时内漏跑不算。
+2. **当前的各题合计放在游标的一行 JSON 中**，`QbQuestionStat` 只存商家看到的值（只在公开值变化时写）：计划的"每题一行、每次更新当前值"会让每次运行每题写一行审计。
+3. **结束后的重算同样遵守"新增至少 k 个"**（计划写"或已结束复核"即公开）：否则最后不足 k 个完成的作答可由定稿前后之差推出。定稿后显示的是最近一次公开的值（`basedOn` 注明人数），重算只保证内部合计精确。
+4. **平均用时只在新增至少 k 个按时提交后变化**（与每题统计的"新增 k 个完成"分开）：k 个新完成中只有一个按时提交时，前后两个平均之差就是那个人的用时。
+5. **按日的日界**：模板不能读配置，由任务把 `jabiz.fiscal-year-zone` 记进 `qb_stats_run.day_zone`，模板以 `AT TIME ZONE` 分日；仪表盘的"今天"以调用方给的 `at` 在该时区的日期计（同 `qb.sponsor.topup-limit` 的 `at`）。
+6. **块上限缺省 5 万**（计划 2 万）：每秒 50 次的热门发布 10 分钟 3 万个，2 万会使它永远积压；实测 3 万个一次约 1.2 秒（`perf/Q9e-analytics.md`）。
+7. **定稿的条件**：结束 30 分钟后、且没有进行中的会话（两侧计数相等）、且重算的会话数等于完成数（滞后 5 分钟内的超时会让重算少一个，下次再算）；结束一天后不一致也定稿并记警告日志。
+8. **删除旧桶**每次运行至多 2 000 行（不是每日一次）：漏跑的那天不会留下。
+9. `qb.sponsor.analytics.top` 没有 `limit` 参数：模板不写外层 `LIMIT`（根 CLAUDE.md），页面以列表的 `limit: 5` 与缺省排序（近 7 天完成数降序）取前 5。
+
+### 测试
+
+- 单元：`AnalyticsBucketsTest`（整点、同一小时多次、停机为 `gap`、首次的历史、增量为负）、`MinGroupTest`（k 的读法与下限、公开规则、题目合计的 JSON 与长度）。漏斗的判断在 SQL 中，由 IT 覆盖（计划的 `FunnelTest`）。
+- `AnalyticsIT`（7 个）：口径（E-1）——浏览只计第一次、开始、完成含超时、合格、获奖与支出含待支付、正在答题、完成率、平均用时只计按时提交、超时人数；**实时与汇总**——任务运行前计数已变而桶与浏览未变、运行后一致，
+  仪表盘的今日支出实时；漏斗与流失最大的一段（含浏览少于开始、没有数据）；**东京的日界**（UTC 14:30 与 15:30 的两个完成落在东京的两天，按小时的日期，仪表盘的今天，至多 400 个桶）；
+  **k 与差分攻击**——不足 k 时每题、平均用时、超时为空，第 k 个完成后公开，再多 1–4 个（含一个全对且很慢的）公开值不变、第 2k 个时一起变，k 个新完成中 4 个超时只 1 个按时提交时平均用时不变，k 调大即隐藏、调到 1 按 3；
+  **只读本人的**——他人以本商家的发布编号读概览、题目、趋势、排行、仪表盘、导出都读不到，持有 `*` 的管理员也读不到；权限矩阵（答题人、内容 / 财务 / 超级管理员 403，未登录 401，`QB_ANALYTICS_REFRESH` 对调用者 403 `PROCESS_INTERNAL`）；
+  **导出**——趋势、概览、题目的 CSV（英、中列名，金额 "Kudos"，只有汇总、没有答题人与选项）、XLSX。
+- `AnalyticsJobIT`（块 2 个发布、每块 3 个会话）：积压分次读完且等于整体重算；重放与不晚于上次的运行不写任何东西（审计数与版本不变）；没有新数据不写；停机 2.5 小时的增量记在停机前的小时并标 `gap`；
+  结束后有进行中的会话时不定稿、超时任务在滞后之内结束时也不定稿、之后定稿且合计等于重算、公开值按 k 不变；定稿后不再读、一天后不再选出；任务不写答题的任何表；400 天前的桶被删除、399 天的保留。
+- 场景 `scenarios/qb/analytics.yml`：浏览、开始、合格、超时，任务跨过整点；快照含三张分析表与运行记录；安装者读不到商家的分析。
+- `QB_SETUP` 多建一个参数，使场景中之后生成的编号顺延、各会话的选项打乱随之改变：`play.yml`、`payout.yml`、`topup.yml` 的作答位置按新的顺序改写（意图不变：同样的人答对同样的题），快照随之更新；`setup.yml` 与 `SetupIT` 加该参数；`ProcessAccessIT` 加两个流程。
+- `AttemptStatementBudgetIT` 与 `AttemptStatementBudgetWithoutHeldWritesIT` **未改动并通过**：答题流程的语句数与所取的锁不变。
+- 性能 `AnalyticsPerfIT`（标签 `perf`）：结果见 `perf/Q9e-analytics.md`（热门发布 10 分钟 3 万个：一次 1.2 秒、13 行审计；1 000 个发布没有新数据：0.42 秒；结束后重算 23 万个：6.0 秒）。
+
+### 自查（隐私与性能）
+
+- **k**：可推出个人作答的四项（每题正确率、难度、平均用时、超时人数）只来自公开值，公开值只在新增 ≥ k（平均用时：按时提交 ≥ k）时变化，模板再按当前 k 隐藏不足 k 的；人数（浏览、开始、完成、合格、获奖、支出、按小时的人数）按 E-4 不受约束。
+  游标中的当前合计没有商家数据视图（缺省视图只给 `qb.admin.publication.read`），任务的 `stats:*` 视图只给不授予任何角色的权限。
+- **残余风险（未处理，记录）**：①商家用自己控制的 k − 1 个已验证账号与一个目标答题人凑成一组新完成，可减去已知的作答得到目标的逐题对错——k-匿名对主动的女巫攻击无效；缓解办法（加噪、提高 k、按不同来源计数）属于新的需求决定。
+  ②按小时的合格人数：某小时只有一个完成时可知那个人是否合格（E-4 接受人数不受约束；获奖者本来就在交易中可见）。③商家本来能在 Q9b 的交易中看到获奖者的得分，两题的 Quiz 由得分即可推出逐题对错，与本阶段无关。
+- **范围**：五个模板都只经限本人的 `sponsor:QbPublication`；小时桶另按 `sponsor_id` 索引筛选再与本人的发布连接；`AnalyticsIT` 以他人的编号与持有 `*` 的管理员验证。
+- **锁与热点**：任务不取命名锁，只以 MVCC 读两侧计数（同一语句），只写自己的三张表与 `qb_stats_run` 中自己的一行（另一统计任务是另一行）；任务由平台的集群锁保证单实例。答题路径的语句、锁与索引维护不变（`QB_VIEW` 多一个索引，不在锁内）。
+- **索引**：选取走卡片的状态索引、结束索引与游标的部分索引；浏览、会话按 `(publication_id, 时间)` 的范围读；模板按 `(sponsor_id, hour_start)` 读桶。
+- **规模**：最坏情况（很多发布同时积压）下，每块的候选在截断前至多为 块大小 × 上限 行（只含编号与时间），再连接结果 JSON；实际只有热门发布接近上限。整体重算一个 23 万的发布约 6 秒，超大发布（几百万）需要分块重算（计划 §7）。
+  任务一次运行是一个事务（与 `qb.publication-stats` 相同），只读与写自己的表，期间不阻塞答题；长事务会推迟清理，热门发布积压时一次约 2–4 秒。
+
+### 验证
+
+- `./gradlew :quizbuks:check`（真实 PostgreSQL 16，本机实例）：566 个测试全部通过，`platformCheck` 0 个错误、59 个警告（与合并前相同，本阶段的模板没有新增警告）。
+- 前端未改（Q9e2 做页面），没有运行 web 检查。
+- e2e（打包的 jar，独立端口与数据库，Mailpit 与 Stripe 桩）：41 个中 40 个通过；`a11y.spec.ts` 的"商家后台发布页 axe（亮）"一次失败——Quiz 选择器在搜索结果刷新的瞬间，Radix 的列表框里有一个
+  `role=status`（axe `aria-required-children`），单独重跑亮、暗两个都通过，与本阶段无关（前端未改；本机负载 7–14 时的时序问题），记为已知的不稳定。
+- 本机演示 `tools/quizbuks/local-demo.sh start --seed`（独立端口与数据库）：首次设置（27 个提案由演示发布者发布）与演示数据全部成功；之后任务 `qb.analytics` 在 :20 照常运行并记下 `Asia/Tokyo`。
+
+### 未完成与已知问题
+
+- Q9e2（页面、Vitest、e2e 的分析页、axe）未开始。
+- 计划 §5 要求的"`loadTest` 热门发布压测期间运行任务、提交 p95 与吞吐不变"未在本机做（共用 4 vCPU 上负载 7–14，不可比），列入 `launch-checklist.md`。
+- 部署之前就已结束一天以上的发布没有游标，不会被分析（QuizBuks 尚未上线，没有这种数据）。
+- e2e 的 `a11y.spec.ts` 发布页（亮）在高负载下偶发失败（见"验证"），属于 QP3b 的选择器，未在本阶段处理。
+- 残余风险①②见"自查"。

@@ -179,6 +179,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 | 分录导出被拒 | `jabiz.process{process="QB_JOURNAL_EXPORT", outcome="rejected"}` | 每月导出日 > 0（看错误码，§7.3） |
 | 外部调用 | `jabiz.external.call{service="stripe", outcome}` | `5xx`、`timeout`、`refused` 比率 > 5 % |
 | 任务 | `jabiz.job.run{result="FAILED"|"LOCKED"}` | 任一每日任务 `FAILED`；`LOCKED` 持续（另一实例卡住） |
+| 商家分析（Q9e，§7.7） | `jabiz.job.run{job="qb.analytics"}`；`jabiz.process{process="QB_ANALYTICS_REFRESH"}` 的时间 | `FAILED` > 0；30 分钟内没有成功的运行；运行时间持续超过 2 分钟（积压） |
 | 数据库 | 连接数、复制与 WAL 归档延迟、最近一次基础备份、磁盘、`pg_stat_statements` 的前几名、死锁（`pg_stat_database.deadlocks`） | 归档延迟 > 15 分钟；备份超过 26 小时；磁盘 > 80 %；死锁 > 0 |
 | 主机 | CPU、内存、JVM 堆 | 应用或数据库的 CPU 在业务高峰持续 > 70 %（§6） |
 
@@ -251,7 +252,17 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
   4. 事后：用户投诉 `EXPIRED` 时按会话的已保存答案与结果解释；评估开始一侧的背压（报告 §10.3 的可选缓解）与报告 §11.4 的其他选项。
 - **上线前**：在目标硬件上确认预期峰值低于饱和点（§6）。
 
-### 7.7 其他
+### 7.7 商家分析的数据（Q9e）
+
+- **任务** `qb.analytics`（每 10 分钟，:00、:10 …；`QB_ANALYTICS_REFRESH`）：读进行中、暂停、预算不足、1 天内结束与结束后尚未定稿的发布，把计数的增量写进按小时的桶，从水位线读已完成的会话（滞后 5 分钟），并删除 400 天前的小时桶（每次至多 2 000 行）。不取业务锁，不影响答题；一次运行是一个事务。
+  商家页面上的"每 10 分钟更新，最近更新 hh:mm"就是这个任务最近一次运行的时刻（`qb_stats_run` 中 `job = 'qb.analytics'` 的行，`zone` 是它按哪个时区分日：`jabiz.fiscal-year-zone`，日本部署 `Asia/Tokyo`）。
+- **参数** `qb.stats.min-group`（普通参数，缺省 5，任何值都至少按 3）：分组小于它时每题正确率、平均用时与超时人数不显示，且这些数字只在新增至少这么多个完成后才变化。调大立即生效（模板按现值隐藏）；调小只在下次新增够数时显示新值。
+- **配置**（`application.yml` 的 `quizbuks.analytics.*`，通常不改）：`chunk-size`（每块的发布数，缺省 100，至多 200）、`max-attempts-per-chunk`（每块每次至多读的已完成会话，缺省 50 000，至多 200 000；热门发布每 10 分钟约 3 万个，`perf/Q9e-analytics.md`）。
+- **停机与补跑**：任务停了之后的第一次运行把期间的增量全部记在停机前最后一次运行的那一小时，并标 `gap`（趋势注明），累计数字始终正确；积压的会话按块上限分几次读完。不需要手工补跑；同一计划时刻重复运行不会重复计数。
+- **告警**：`jabiz.job.run{job="qb.analytics", result="FAILED"}` > 0；最近一次运行早于 30 分钟（商家页面的"最近更新"随之变旧）。运行时间见 `jabiz.process{process="QB_ANALYTICS_REFRESH"}`，热门发布积压时变长。
+- 日志中的 `Analytics: the counters of publication … went down` 表示计数被别的方式改动（计数只增不减），该发布本次不写；`… recounted … finalized anyway` 表示结束一天后整体重算与计数仍不一致，按重算的值定稿：两者都应调查。
+
+### 7.8 其他
 
 - **邮件发不出**：`jabiz.mail` 的失败、发件服务商的退信；用户可在登录页重新请求验证邮件。
 - **启动失败**：日志中的 `Platform check failed` 后列出全部问题（`类别 | 定位 | 描述`），逐项修正环境；`QUIZBUKS` 类别是本应用的检查（§4）。
