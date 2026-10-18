@@ -181,6 +181,7 @@ const en = {
     intro: 'Tell us who you are and where you live: quizzes are offered by country and region.',
     save: 'Continue',
   },
+  mail: { hint: 'Mail about your transfers and your payout account is always sent. You can choose here which other mail you get.' },
   profile: {
     title: 'Profile',
     displayName: 'Name',
@@ -370,6 +371,7 @@ const zh: typeof en = {
     intro: '请告诉我们你的名字和所在地：Quiz 按国家和地区提供。',
     save: '继续',
   },
+  mail: { hint: '关于转账与收款账户的邮件总会发送。其他邮件可以在这里选择是否接收。' },
   profile: {
     title: '资料',
     displayName: '名字',
@@ -559,6 +561,7 @@ const ja: typeof en = {
     intro: 'お名前とお住まいの国を教えてください。クイズは国と地域ごとに提供されます。',
     save: '続ける',
   },
+  mail: { hint: '送金と受取口座に関するメールは必ずお送りします。その他のメールはここで受け取るかどうかを選べます。' },
   profile: {
     title: 'プロフィール',
     displayName: '名前',

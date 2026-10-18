@@ -289,3 +289,64 @@ M-73 API Key（G10）；个人信息的删除与匿名化（平台未开放，GD
 | Q7-15 | 个人消息的生成 | A 三种语言在生成时渲染并保存（可搜索、按界面语言显示，改文案不影响旧消息）；B 只存文案键与参数、显示时渲染（文案改动会改变旧消息，不能在 SQL 中搜索） | **A** |
 | Q7-16 | "提醒"类消息 | A 每日任务：余额达到转账门槛而没有可用的收款账户时提醒开通（30 天一次，只在站内）；B 暂不产生提醒类消息 | **A** |
 | Q7-17 | 子阶段顺序 | Q7a（邮件，MVP）→ Q7b（条款与帮助，上线必需，可并行）→ Q7c（站内信与公告）；平台 16s 与 Q7a 并行 | **如左** |
+
+## 12. 实施记录（Q7a 邮件通知，2026-10-18，`1.2/quizbuks-7a-mail`）
+
+基于 `origin/1.2/quizbuks-7-plan` @ c4a5cf7（`1.2/quizbuks` 没有更新的提交）。
+
+### 12.1 合并平台（16r、16s）
+
+- `origin/1.2/platform` @ bc029b6 以合并提交并入（无冲突）：16s（D49：`MailTemplate.entries(...)`、`mail.<名>.name`、`MailPreferences` 积木与 `@jabiz/client` 的四个函数、`offerMailLanguage`）、
+  16r（D48：受保护授权的四眼与建立期、`jabiz.fiscal-year-zone`、`privateMetadata()` 文件的随机编号）。合并后、改动之前 `./gradlew :quizbuks:check` 通过。
+- **16r 对 QuizBuks 的影响**：
+  - 平台按 `*` 数管理员，QuizBuks 的角色都不持有 `*`，所以安装一直处于建立期，受保护的授权当即生效：`QB_SETUP` 的角色与职责分离提案、e2e（`QB_E2E_PUBLISHER` 持有
+    `control.publish`、`QB_E2E_FINANCE`）与本机演示（`QB_DEMO_PUBLISHER`）都不建第二位 `*` 管理员，**不需改动**；本阶段的 e2e 与本机演示照常通过（12.4）。
+  - 首个管理员不会退役（没有另一位 `*` 管理员）。
+  - 平台建议（10 §16.4）细分权限的部署设 `always=true`，但在 QuizBuks 中审批受保护授权的人只能是 `*` 的持有者：审批人须持有 `*`，或同时持有 `security.user-role.write`
+    与 `approval.decide`，而 `qb.sod.security-administration` 正好禁止后者；空库上开 `always` 时首个管理员也无法独自建立第二位管理员。是否开启、谁做审批**待需求方决定**，
+    记在 `operations.md` §3（做法：先在建立期内建好各位管理员，再以 `JABIZ_SECURITY_PROTECTEDGRANTS_ALWAYS=true` 重启，由首个管理员审批）。未改设置。
+  - 新的启动告警：没有（注册角色 `QB_TAKER`、`QB_SPONSOR` 不含受保护权限；`ProtectedGrantChecks` 不告警）。16s 带来的告警 `mail.qb.welcome.name` 缺失已补。
+- `application.yml`：`jabiz.fiscal-year-zone: Asia/Tokyo`（Q10b 评审 L7）；`operations.md` §3 说明。`RetentionIT` 照常通过（其日期都不在日本与 UTC 的跨日之间）。
+
+### 12.2 实现
+
+| 项 | 做法 |
+|---|---|
+| 事件 `qb.publication.status` | `publishing.PublicationNotices`：`PublicationEditing.write` 写入后按 `kindOf(from, values)` 记下通知（`APPROVED` 审核中 → 定时 / 上架；`REJECTED` 审核中 → 草稿且有审核人的理由；`TAKEN_DOWN` 管理员暂停（含商家已暂停的）或结束，封禁的暂停（`QB_ACCOUNT_SUSPENDED`）不算；`FUNDS_SHORT` 上架 → 预算不足；`ENDED` 因时间、名额或预算结束）。只有审批结果、`ADVANCE`、完成时的移动、`FUNDED` 与管理员的暂停 / 结束 / 恢复在流程末尾 `PublishEvent`；商家自己的提交、撤回、暂停、恢复与封禁的暂停不发布。载荷 `publicationId`、`sponsorId`、`from`、`to`、`kind`、`reason`、`name`、`startAt` |
+| 事件 `qb.payout-account.restricted` | `QB_PAYOUT_ACCOUNT_UPDATED` 在 `ENABLED → RESTRICTED` 时发布（`PENDING → RESTRICTED` 是开通过程，不发） |
+| 模板 | `messaging.NotificationMails` 的 9 个（D-Q7-1）；可退订的只有 `qb.publication.funds-short`、`qb.publication.ended`，声明 `.entries("sponsor")`；`qb.welcome` 改为 `.entries("app")`。事务类不声明入口（D49 第 5 条：对它们无意义且告警）。三语的 `mail.<名>.subject|body|name`（含 `qb.welcome.name`） |
+| 流程 | `messaging.MailProcesses`：`QB_MAIL_TRANSFER`（`qb.transfer.sent` / `.failed` 两个订阅）、`QB_MAIL_PAYOUT_ACCOUNT`、`QB_MAIL_TOPUP`、`QB_PUBLICATION_NOTIFY`；都 `internal()`，权限 `qb.messaging.system` 不授予任何角色。各自读记录本身（转账、收款账户、充值、发布）与收件人（`SecUser` 的邮箱与语言），金额格式化为 "1,234 Kudos"、时间为 UTC（`MailValues`）；转账失败的理由与发布结束的原因按收件人的语言取消息（`qb.mail.transfer-failure.ACCOUNT|OTHER`、`qb.mail.end-reason.*`，收件人以同一语言交给 `SendMail`）。没有邮箱、记录不在、超过 3 天的事件（`NotificationMails.MAX_AGE`：新订阅收到历史事件、投递积压）、充值未到账、收款账户已不再受限、发布已不再预算不足、发布的商家与事件不符：都不发信、不失败 |
+| 节流 | `QbPublicationNotice`（普通表，迁移 **V13**），按（发布，种类）记最近一次；锁 `qb.pub-notice:<发布>`（不取发布锁）；24 小时内第二次什么也不发；退订而跳过的同样记下 |
+| 页面 | 两个 SPA 的账户页（共用的 `qb/AccountSections`）加"邮件"区块：平台积木 `MailPreferences`（只列本入口的可退订模板与邮件语言），下方说明哪些邮件总会发送（App / 商家各一句）；共用的 `qb/LanguageSelect` 改变界面语言后调用 `offerMailLanguage`；App 加 `Toaster`（询问以通知显示） |
+| 文档 | 后端 `CLAUDE.md`（邮件只由事件的消费者发）、`operations.md`（应用的邮件一览、受保护授权、会计年度的时区）、`03-plan.md` |
+
+**与计划的出入**：
+
+- 迁移号 **V13**（不是 V12）：Q7b（`1.2/quizbuks-7b-legal-help`，评审中）用 V12。一个安装不能先跑 V13 再跑 V12（Flyway 拒绝晚到的低版本），所以 **Q7b 须先于 Q7a 合并、部署**；
+  两者都合并后的新库按顺序迁移。现在没有正式安装。
+- "审批通过"只在**审核人**批准时发（审核中 → 上架）；提交时不需审核或沿用旧批准而直接上架的，商家当场就在页面上看到，不发信。
+- 发布的通知读发布本身（收件人与名字取自记录，与事件的商家不符即不发），理由取自事件（管理员恢复时会改写 `adminReason`）。
+- 预算不足的节流按**发布**（计划的 `(publicationId, kind)`）。钱包用尽时同一商家的几个进行中的发布会各自变为预算不足，各发一封；若需求方希望按商家一天一封，改为以商家为键即可。
+- 转账失败的 `reason` 不用 Stripe 的原文，只分两类：收款账户的问题（`STRIPE_DECLINED`、`STRIPE_NOT_FOUND`）与其他。
+
+### 12.3 测试
+
+- `NotificationMailIT`（GreenMail，`jabiz.mail.enabled=true`）：转账发出（日文）与失败（英文、说明与 `{entryUrl.app}wallet/payout`）；收款账户只在 `ENABLED → RESTRICTED` 时、`PENDING → RESTRICTED` 不发；
+  充值到账与 `/sponsor/wallet` 链接、同一事件重投只一封；审核通过（UTC 开始时间）与驳回（理由）、撤回与商家自己的暂停 / 恢复不发布事件；管理员暂停与结束各一封、封禁的暂停不发布；
+  预算不足一封、同日再次不发（事件照常发布）、25 小时后再发一封、通知行只有一行；退订"已结束"后记 `SKIPPED` 而管理员下架照发、事务类不能退订（422）；发布结束（中文：名额、完成数；到期由每分钟任务）；
+  偏好按入口列出（商家后台两项、日文显示名；App 只有 `qb.welcome`；App 设置商家模板 422）；超过 3 天的事件、不存在的记录与用户不发信；四个流程对任何调用者都是 403 `PROCESS_INTERNAL`。
+- 单元：`PublicationNoticesTest`（哪些迁移发布、哪些不）、`MailValuesTest`（金额、时间、9 个模板的类别与入口）；`QbRolesTest`（`qb.messaging.system` 不授予任何角色）；`ProcessAccessIT`（四个内部流程）；`MessagesTest`（三语）。
+- **语句数**：`AttemptStatementBudgetIT` 写缓冲开时不变（开始 10 / 3、付奖的提交 13 / 7、使发布结束的完成 18 / 12：事件随其他写入一起写出）；应急开关关时使发布结束的完成 29 / 23 → **30 / 24**（事件一条）。
+  新增"使发布预算不足的完成"：16 / 10（开关关时 24 / 18），并断言该事务中没有写邮件。
+- 场景：`topup.yml` 的快照只有一处变化——分录明细 CSV 的 `sha256`（明细含交易编号，场景中的编号按顺序生成，充值到账的邮件记录多占了编号）；逐项看过后更新。其他场景不变（快照不含邮件表）。
+- 前端：App 与商家后台的 `App.test.tsx` 各加两项（账户页的邮件区块按入口列出并保存开关；切换界面语言后询问邮件语言，接受才保存 / 拒绝不保存）。
+- e2e：`topup.spec.ts`（Mailpit 收到充值到账、链接到 `/sponsor/wallet`；商家账户页的两项偏好，亮暗两种外观的 axe）、`review.spec.ts`（驳回的邮件含理由与 `/sponsor/publications`，通过的邮件）。
+
+### 12.4 验证
+
+- `./gradlew :quizbuks:check`（PostgreSQL 16，`JABIZ_TEST_DB_*`）：563 项测试全部通过，`platformCheck` 通过（`MAIL` 检查不再告警）。
+- 两个 SPA：`pnpm install --frozen-lockfile && pnpm lint && pnpm typecheck && pnpm test`（App 106 项、商家后台 117 项）；`pnpm app:check` 两者都通过；两份 `src/qb/` 相同（`diff -r`）。
+- 后台扩展：`JABIZ_ADMIN_EXTENSION=../backend/quizbuks/admin-extension pnpm ext:check`（65 项）。
+- 工具：`tools/quizbuks/test/entrypoint.test.sh`、`stripe-test-mode.test.sh`、`tools/test/check-app-paths.test.sh`、`tools/check-app-paths.sh`（基准 `origin/1.2/platform`）都通过。
+- e2e（打包的 jar、本机的 Mailpit 与 Stripe 桩、独立的库与端口）：41 项中 40 项通过；`content.spec.ts` 的"他处改过的 Quiz 要求重新加载"一次因焦点断言失败，单独重跑该文件 3 项全过（与本阶段无关的偶发）。
+- 本机演示 `tools/quizbuks/local-demo.sh start --seed`（独立的库与端口，复用本机的 Mailpit）：首次设置（5 个角色、27 个提案由演示发布人发布）与演示数据照常完成，然后 `stop`。

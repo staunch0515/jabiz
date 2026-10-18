@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test'
-import { expect, expectAccessible, prepareQuizbuks, signIn, test, useAppearance } from './support'
+import { expect, expectAccessible, linkIn, mailTo, prepareQuizbuks, signIn, test, useAppearance } from './support'
 import { approvedSponsor, sponsorBalance } from './wallet'
 
 /**
@@ -62,6 +62,18 @@ for (const appearance of ['light', 'dark'] as const) {
     await expect(page.getByTestId('wallet')).not.toContainText('JPY')
     await expectAccessible(page, at('sponsor wallet with a top-up'))
     expect(await sponsorBalance(request, sponsor.token)).toBe(1500)
+
+    // Mailed (Q7a, transactional), with a link to the console's wallet.
+    const mail = await mailTo(request, sponsor.email, /top-up of 1,500 Kudos has arrived/)
+    expect(linkIn(mail.text, '/wallet').pathname).toBe('/sponsor/wallet')
+
+    // The console's account page lists its two notifications, which the sponsor may turn off (D49).
+    await page.goto('/sponsor/account')
+    const preferences = page.getByTestId('account-mail')
+    await expect(preferences.getByTestId('mail-preference')).toHaveCount(2)
+    await expect(preferences).toContainText('Publication short of funds')
+    await expect(preferences).toContainText('Publication ended')
+    await expectAccessible(page, at('sponsor account with mail preferences'))
   })
 }
 

@@ -1,5 +1,5 @@
-import { configureClient, session } from '@jabiz/client'
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { changeLanguage, configureClient, session } from '@jabiz/client'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
@@ -49,6 +49,16 @@ function server(me?: Me) {
           offset: 0, limit: 1 })
       case '/api/processes/QB_SPONSOR_APPLY/latest':
         return me?.applied ? json(me.applied.status, me.applied.body) : json(404, {})
+      case '/api/auth/mail/preferences':
+        // The console's own notifications only (decision D49): the platform filters by the token's entry.
+        return request.method === 'POST' ? new Response(null, { status: 204 }) : json(200, { templates: [
+          { template: 'qb.publication.funds-short', subscribed: true, displayName: 'Publication short of funds',
+            otherEntry: false },
+          { template: 'qb.publication.ended', subscribed: false, displayName: 'Publication ended',
+            otherEntry: false }] })
+      case '/api/auth/account/locale':
+        return request.method === 'POST' ? new Response(null, { status: 204 }) : json(200, { locale: null,
+          effective: 'en', languages: ['en', 'zh', 'ja'], defaultLocale: 'en' })
       default:
         return json(404, {})
     }
@@ -155,6 +165,35 @@ describe('a signed-in sponsor', () => {
     })
     await waitFor(() => expect(window.location.pathname).toBe('/login'))
     expect(await screen.findByTestId('idle-locked')).toBeInTheDocument()
+  })
+
+  it('turns the console\'s notifications on and off on the account page', async () => {
+    const { posted } = server({ sponsor: { contactName: 'Sara', company: 'Acme', intro: null, avatar: null,
+      reviewStatus: 'APPROVED', revision: 3 } })
+    window.history.replaceState(null, '', '/account')
+    render(<App />)
+    const section = await screen.findByTestId('account-mail')
+    await waitFor(() => expect(within(section).getAllByTestId('mail-preference')).toHaveLength(2))
+    expect(section).toHaveTextContent('Publication short of funds')
+    expect(section).toHaveTextContent('Publication ended')
+    expect(section).toHaveTextContent('Mail about your top-ups, the reviews of your publications')
+    expect(within(section).getByTestId('mail-preference-qb.publication.ended')).not.toBeChecked()
+    await userEvent.click(within(section).getByTestId('mail-preference-qb.publication.ended'))
+    await waitFor(() => expect(posted).toContainEqual({ path: '/api/auth/mail/preferences',
+      body: { template: 'qb.publication.ended', subscribed: true } }))
+  })
+
+  it('offers the new interface language for mail, and changes nothing when declined', async () => {
+    const { asked, posted } = server({ sponsor: { contactName: 'Sara', company: 'Acme', intro: null, avatar: null,
+      reviewStatus: 'APPROVED', revision: 3 } })
+    window.history.replaceState(null, '', '/account')
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('language-switch'))
+    await userEvent.click(await screen.findByRole('option', { name: '中文' }))
+    await userEvent.click(await screen.findByRole('button', { name: '暂不' }))
+    expect(asked).toContain('/api/auth/account/locale')
+    expect(posted.filter((p) => p.path === '/api/auth/account/locale')).toEqual([])
+    await changeLanguage('en')
   })
 
   it('is sent home from the sign-up and password reset pages', async () => {

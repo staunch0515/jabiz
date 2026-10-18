@@ -1,0 +1,153 @@
+package com.jabiz.quizbuks.messaging;
+
+import com.jabiz.dataset.DatasetDefinition;
+import com.jabiz.entity.EntityDefinition;
+import com.jabiz.event.EventSubscription;
+import com.jabiz.i18n.MessageCatalog;
+import com.jabiz.mail.MailTemplate;
+import com.jabiz.process.ProcessContext;
+import com.jabiz.process.ProcessDefinition;
+import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.publishing.PublicationNotices;
+import com.jabiz.quizbuks.wallet.PayoutProcesses;
+import com.jabiz.quizbuks.wallet.QbPayouts;
+import com.jabiz.quizbuks.wallet.QbTopUps;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+/**
+ * Registers the mail of Q7a (docs/quizbuks/plans/Q7-messages-legal.md D-Q7-1, D-Q7-2): the nine templates, the
+ * notices' entity and its dataset (read by the system only), the four mail processes and their five subscriptions.
+ */
+@Configuration
+class MessagingConfig {
+
+    private final String poolRef;
+
+    MessagingConfig(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
+        this.poolRef = poolRef;
+    }
+
+    @Bean
+    EntityDefinition qbPublicationNoticeEntity() {
+        return QbMessaging.NOTICE_ENTITY;
+    }
+
+    /** Read and written by the notice process only: the read permission is one no role holds. */
+    @Bean
+    DatasetDefinition qbPublicationNoticeDataset() {
+        return DatasetDefinition.define(QbMessaging.defaultDataset(QbMessaging.NOTICE), d -> d
+            .targetEntityType(QbMessaging.NOTICE)
+            .asDefault()
+            .permissions(QbPermissions.MESSAGING_SYSTEM, QbPermissions.MESSAGING_SYSTEM)
+            .policy(p -> p.processOnlyWrites().maxWriteBatchSize(10))
+            .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
+    }
+
+    @Bean
+    MailTemplate qbTransferSentMail() {
+        return NotificationMails.TRANSFER_SENT;
+    }
+
+    @Bean
+    MailTemplate qbTransferFailedMail() {
+        return NotificationMails.TRANSFER_FAILED;
+    }
+
+    @Bean
+    MailTemplate qbPayoutActionNeededMail() {
+        return NotificationMails.PAYOUT_ACTION_NEEDED;
+    }
+
+    @Bean
+    MailTemplate qbTopUpPaidMail() {
+        return NotificationMails.TOPUP_PAID;
+    }
+
+    @Bean
+    MailTemplate qbPublicationApprovedMail() {
+        return NotificationMails.PUBLICATION_APPROVED;
+    }
+
+    @Bean
+    MailTemplate qbPublicationRejectedMail() {
+        return NotificationMails.PUBLICATION_REJECTED;
+    }
+
+    @Bean
+    MailTemplate qbPublicationTakenDownMail() {
+        return NotificationMails.PUBLICATION_TAKEN_DOWN;
+    }
+
+    @Bean
+    MailTemplate qbPublicationFundsShortMail() {
+        return NotificationMails.PUBLICATION_FUNDS_SHORT;
+    }
+
+    @Bean
+    MailTemplate qbPublicationEndedMail() {
+        return NotificationMails.PUBLICATION_ENDED;
+    }
+
+    @Bean
+    ProcessDefinition<MailProcesses.TransferMailInput, MailProcesses.MailOutput, ProcessContext> qbMailTransfer(
+        MessageCatalog messages) {
+        return MailProcesses.transfer(messages);
+    }
+
+    @Bean
+    ProcessDefinition<MailProcesses.PayoutMailInput, MailProcesses.MailOutput, ProcessContext> qbMailPayoutAccount(
+        MessageCatalog messages) {
+        return MailProcesses.payoutAccount(messages);
+    }
+
+    @Bean
+    ProcessDefinition<MailProcesses.TopUpMailInput, MailProcesses.MailOutput, ProcessContext> qbMailTopUp(
+        MessageCatalog messages) {
+        return MailProcesses.topUp(messages);
+    }
+
+    @Bean
+    ProcessDefinition<MailProcesses.PublicationMailInput, MailProcesses.MailOutput, ProcessContext>
+        qbPublicationNotify(MessageCatalog messages) {
+        return MailProcesses.publication(messages);
+    }
+
+    @Bean
+    EventSubscription<MailProcesses.TransferMailInput> qbMailTransferSentSubscription(
+        ProcessDefinition<MailProcesses.TransferMailInput, MailProcesses.MailOutput, ProcessContext> qbMailTransfer) {
+        return EventSubscription.of(MailProcesses.TRANSFER_SENT_CONSUMER, QbPayouts.SENT_EVENT, qbMailTransfer,
+            event -> MailProcesses.transferInput(event, MailProcesses.SENT));
+    }
+
+    @Bean
+    EventSubscription<MailProcesses.TransferMailInput> qbMailTransferFailedSubscription(
+        ProcessDefinition<MailProcesses.TransferMailInput, MailProcesses.MailOutput, ProcessContext> qbMailTransfer) {
+        return EventSubscription.of(MailProcesses.TRANSFER_FAILED_CONSUMER, QbPayouts.FAILED_EVENT, qbMailTransfer,
+            event -> MailProcesses.transferInput(event, MailProcesses.FAILED));
+    }
+
+    @Bean
+    EventSubscription<MailProcesses.PayoutMailInput> qbMailPayoutRestrictedSubscription(
+        ProcessDefinition<MailProcesses.PayoutMailInput, MailProcesses.MailOutput, ProcessContext>
+            qbMailPayoutAccount) {
+        return EventSubscription.of(MailProcesses.PAYOUT_RESTRICTED_CONSUMER, PayoutProcesses.RESTRICTED_EVENT,
+            qbMailPayoutAccount, MailProcesses::payoutInput);
+    }
+
+    @Bean
+    EventSubscription<MailProcesses.TopUpMailInput> qbMailTopUpPaidSubscription(
+        ProcessDefinition<MailProcesses.TopUpMailInput, MailProcesses.MailOutput, ProcessContext> qbMailTopUp) {
+        return EventSubscription.of(MailProcesses.TOPUP_PAID_CONSUMER, QbTopUps.PAID_EVENT, qbMailTopUp,
+            MailProcesses::topUpInput);
+    }
+
+    @Bean
+    EventSubscription<MailProcesses.PublicationMailInput> qbPublicationNotifySubscription(
+        ProcessDefinition<MailProcesses.PublicationMailInput, MailProcesses.MailOutput, ProcessContext>
+            qbPublicationNotify) {
+        return EventSubscription.of(MailProcesses.PUBLICATION_CONSUMER, PublicationNotices.EVENT, qbPublicationNotify,
+            MailProcesses::publicationInput);
+    }
+}

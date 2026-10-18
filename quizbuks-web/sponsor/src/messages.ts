@@ -14,6 +14,7 @@ const en = {
   ...publishingEn,
   brand: 'QuizBuks Sponsor',
   nav: { label: 'Sponsor console', dashboard: 'Dashboard', quizzes: 'Quizzes', onboarding: 'Sponsor profile', account: 'Account' },
+  mail: { hint: 'Mail about your top-ups, the reviews of your publications and publications an administrator stops is always sent. You can choose here which other mail you get.' },
   dashboard: {
     title: 'Dashboard',
     none: 'Before you publish quizzes, tell us about your company: we review every sponsor.',
@@ -59,6 +60,7 @@ const zh: typeof en = {
   ...publishingZh,
   brand: 'QuizBuks 商家后台',
   nav: { label: '商家后台', dashboard: '概览', quizzes: 'Quiz', onboarding: '商家资料', account: '账户' },
+  mail: { hint: '关于充值、发布的审核结果以及被管理员停止的发布的邮件总会发送。其他邮件可以在这里选择是否接收。' },
   dashboard: {
     title: '概览',
     none: '发布 Quiz 之前，请先填写公司信息：每个商家都需经过审核。',
@@ -104,6 +106,7 @@ const ja: typeof en = {
   ...publishingJa,
   brand: 'QuizBuks スポンサー',
   nav: { label: 'スポンサー管理画面', dashboard: 'ダッシュボード', quizzes: 'クイズ', onboarding: 'スポンサー情報', account: 'アカウント' },
+  mail: { hint: 'チャージ、公開の審査結果、管理者による公開の停止に関するメールは必ずお送りします。その他のメールはここで受け取るかどうかを選べます。' },
   dashboard: {
     title: 'ダッシュボード',
     none: 'クイズを公開する前に、会社について教えてください。すべてのスポンサーを審査します。',

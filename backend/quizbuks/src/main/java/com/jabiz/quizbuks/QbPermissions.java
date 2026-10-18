@@ -92,6 +92,11 @@ public final class QbPermissions {
     public static final String SPONSOR_FINANCE_READ = "qb.sponsor.finance.read";
     /** Notices to the takers of a sponsor's publications. */
     public static final String BROADCAST_WRITE = "qb.broadcast.write";
+    /**
+     * The mail processes the platform runs for QuizBuks's events (Q7a, docs/quizbuks/plans/Q7-messages-legal.md
+     * D-Q7-1, D-Q7-2): {@code internal()}, granted to no role.
+     */
+    public static final String MESSAGING_SYSTEM = "qb.messaging.system";
 
     /** Read users and their profiles. */
     public static final String ADMIN_USERS_READ = "qb.admin.users.read";

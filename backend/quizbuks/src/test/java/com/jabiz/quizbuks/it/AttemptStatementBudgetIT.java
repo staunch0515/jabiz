@@ -80,11 +80,23 @@ class AttemptStatementBudgetIT extends PlayItSupport {
      * lock again (at once: held; with the writes held it carries the ledger's rows), the publication, its schedule row,
      * the card (three reads), the publication's version written on (its current version read, the new one with its
      * audit record), the schedule row and the card (held: the new version and these with the submission's own writes
-     * in one statement). The move takes no start lock (Q10-lock-split.md 2.3, LS-5).
+     * in one statement). The move takes no start lock (Q10-lock-split.md 2.3, LS-5). Since Q7a the move also publishes
+     * {@code qb.publication.status} for the sponsor's mail (the mail itself is sent by its consumer, outside the lock):
+     * held, the event goes with the other writes; per commit, one statement more [29].
      */
-    static final Budget ENDING_TOTAL = new Budget(18, 29);
-    /** Under the lock: {@link #SUBMIT_LOCKED} and the move's five (per commit: nine). */
-    static final Budget ENDING_LOCKED = new Budget(12, 23);
+    static final Budget ENDING_TOTAL = new Budget(18, 30);
+    /** Under the lock: {@link #SUBMIT_LOCKED} and the move's five (per commit: ten, the event's included [9]). */
+    static final Budget ENDING_LOCKED = new Budget(12, 24);
+    /**
+     * {@code QB_ATTEMPT_SUBMIT} whose reward the sponsor's wallet cannot pay (Q7a, D-Q7-2): the reward is pending, the
+     * publication moves to {@code FUNDS_SHORT} as a sub-process like {@link #ENDING_TOTAL}'s, and the move publishes
+     * {@code qb.publication.status} (held: carried by the read of the publication's current version; per commit: one
+     * statement of its own). No ledger posting: the wallet's pending count and amount, the attempt and the counters
+     * are updated, {@code qb.reward.pending} published.
+     */
+    static final Budget SHORT_TOTAL = new Budget(16, 24);
+    /** Under the lock: the rereads, the wallet's lock and the wallet, the move's (as the ending's), the writes. */
+    static final Budget SHORT_LOCKED = new Budget(10, 18);
     /**
      * {@code QB_PUBLICATION_PAUSE} of a live publication, in its transaction: the operation, banned?, the publication's
      * lock, then under it the start lock (Q10a4: one statement more than before), the publication, the schedule row,
@@ -168,6 +180,35 @@ class AttemptStatementBudgetIT extends PlayItSupport {
             PublicationMoves.startLockName(paused));
         assertThat(status(paused)).isEqualTo("PAUSED");
         assertBooksBalance();
+    }
+
+    /**
+     * A completion whose reward is pending moves the publication to {@code FUNDS_SHORT} under the publication's lock and
+     * announces it for the sponsor's mail in the same transaction; nothing is sent there.
+     */
+    @Test
+    void theUnderfundedCompletion() {
+        warmUp();
+        String sponsor = newSponsor("s-budget-short");
+        credit(sponsor, 100);
+        String shortOf = livePublication(sponsor, "Budget short", Map.of("regions", List.of("GLOBAL")));
+        String first = taker(newTaker("t-budget-" + UUID.randomUUID(), null));
+        String second = taker(newTaker("t-budget-" + UUID.randomUUID(), null));
+        String a = (String) keyed("QB_ATTEMPT_START", first, body("publicationId", shortOf)).get("attemptId");
+        String b = (String) keyed("QB_ATTEMPT_START", second, body("publicationId", shortOf)).get("attemptId");
+        keyed("QB_ATTEMPT_SUBMIT", first, body("attemptId", a, "publicationId", shortOf, "currentIndex", 1,
+            "answers", shown(a, answers(true, true))));
+        SqlStatementLog.clear();
+        Map<String, Object> pending = keyed("QB_ATTEMPT_SUBMIT", second, body("attemptId", b, "publicationId", shortOf,
+            "currentIndex", 1, "answers", shown(b, answers(true, true))));
+        List<List<String>> submit = SqlStatementLog.transactions();
+        assertThat(pending).containsEntry("rewardStatus", "PENDING");
+        assertThat(status(shortOf)).isEqualTo("FUNDS_SHORT");
+        report("QB_ATTEMPT_SUBMIT (pending, underfunds the publication)", submit);
+        assertBudget("QB_ATTEMPT_SUBMIT (underfunds)", submit, budget(SHORT_TOTAL), budget(SHORT_LOCKED));
+        assertThat(submit.stream().flatMap(List::stream)).noneMatch(sql -> sql.contains("sys_mail_message"));
+        assertThat(query("SELECT count(*) AS n FROM sys_outbox_event WHERE event_type = 'qb.publication.status' "
+            + "AND payload::jsonb ->> 'publicationId' = ?", shortOf).getFirst()).containsEntry("n", 1L);
     }
 
     /** The statements of the counted calls. */
