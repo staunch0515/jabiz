@@ -55,7 +55,7 @@
 | `QB_STRIPE_CHECKOUT_TTL` | 否 | 缺省 `PT1H` | — | — |
 | `QB_STRIPE_PLACEHOLDERS` | 服务器上 `false` | compose 缺省 `true`（只在测试模式填占位） | — | 用本仓库 compose 而没设 `false` 时，测试模式缺的密钥被填成占位（告警）而不是启动失败 |
 | `QB_STRIPE_ALLOW_LIVE_WITH_TEST_DATA` | **不设** | — | — | 缺省 `false`：库中有测试数据时正式模式启动失败（§4） |
-| `OPENAI_API_KEY` | Q8 | OpenAI | — | Q8 尚未实施，当前不读取 |
+| `ANTHROPIC_API_KEY` | 是（Q8a） | Anthropic Console → API Keys：为本部署新建的密钥（建议单独的工作区，在 Console 设工作区的月支出上限作为最后一道防线） | Console 新建密钥、改环境变量、重启，再删除旧密钥。泄露时立即删除，并先以受控变更关闭 `qb.ai.enabled` | 启动失败（EXTERNAL）；没有密钥时设占位，AI 保持关闭 |
 
 ### 1.4 只给测试的开关（生产不设）
 
@@ -271,7 +271,16 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 - **告警**：`jabiz.job.run{job="qb.analytics", result="FAILED"}` > 0；最近一次运行早于 30 分钟（商家页面的"最近更新"随之变旧）。运行时间见 `jabiz.process{process="QB_ANALYTICS_REFRESH"}`，热门发布积压时变长。
 - 日志中的 `Analytics: the counters of publication … went down` 表示计数被别的方式改动（计数只增不减），该发布本次不写；`… recounted … finalized anyway` 表示结束一天后整体重算与计数仍不一致，按重算的值定稿：两者都应调查。
 
-### 7.8 其他
+### 7.8 AI 生成题目（Q8a）
+
+- **开关与限额**（后台 `/qb/ai`，受控参数）：`qb.ai.enabled`（缺省 false）、`qb.ai.model`、`qb.ai.effort`、`qb.ai.sponsor.daily-jobs`（20）、`qb.ai.sponsor.monthly-tokens`（200 万）、`qb.ai.global.monthly-tokens`（5 000 万）；普通参数 `qb.ai.candidates.expire-days`（7）与只用于估算的价格 `qb.ai.price.*`。限额在 `qb.ai:<商家>` 锁内按已记录的用量与未结束作业的预估检查，全体上限按已记录的用量（正在运行的作业可能略微越过）。
+- **作业** `qb.ai.questions`：每次尝试至多 5 分钟（请求本身至多 2 分钟）、3 次尝试（429、408、5xx、529 与超时重试，退避 10 秒起、至多 2 分钟；拒答、截断、其他 4xx 立即失败）、全实例并发 `quizbuks.ai.max-concurrency`（缺省 4）。提供方不按幂等键去重：重试可能重复计费，用量按每次尝试记录，也计入限额。
+- **任务** `qb.ai-expire`（每日 18:43 UTC）：清除过期未校对的候选，逐项一个事务。
+- **提供方故障**：后台 `/qb/ai` 的"最近的请求"按失败原因看（`QB_AI_RATE_LIMITED`、`QB_AI_PROVIDER_UNAVAILABLE`、`QB_AI_AUTH`：密钥错或被删）；长时间故障时以受控变更关闭开关（商家页面显示"暂时不可用"，手动编辑不受影响）。不自动切换到其他提供方。
+- **拒答**：请求带服务端回退（`fallbacks: "default"`，Haiku 无），回退后仍拒答即 `QB_AI_REFUSED`；`/qb/ai` 的"实际回答"列显示回退所用的模型。
+- **告警**：`jabiz.external_job` 中 `qb.ai.questions` 的失败率；某商家或全体本月用量接近上限（`qb.admin.ai-usage`）。
+
+### 7.9 其他
 
 - **邮件发不出**：`jabiz.mail` 的失败、发件服务商的退信；用户可在登录页重新请求验证邮件。
 - **启动失败**：日志中的 `Platform check failed` 后列出全部问题（`类别 | 定位 | 描述`），逐项修正环境；`QUIZBUKS` 类别是本应用的检查（§4）。

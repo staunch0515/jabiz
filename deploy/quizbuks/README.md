@@ -216,6 +216,14 @@ tools/quizbuks/local-demo.sh status | logs | seed
 - 帮助中心与条款页不需登录，经公开接口 `/api/public/queries/qb.public.*`：`JABIZ_PUBLIC_ENABLED` 缺省 `true`，设 `false` 时这些页面打不开。
 - 有已生效的条款而用户未同意其须同意的版本时，充值、提交发布、开通收款被拒（`QB_CONSENT_REQUIRED`），页面在登录后要求同意；开始答题不受影响。
 
+## AI 生成题目（Q8a）
+
+- 提供方是 Claude（Anthropic API，`docs/quizbuks/plans/Q8-ai.md` A-1），外部服务 `anthropic`，只经平台的 JDK HTTP；密钥 `ANTHROPIC_API_KEY` 只来自环境变量（密钥库）。
+- **缺省关闭**：`qb.ai.enabled` 是受控参数，`QB_SETUP` 提出 `false`；有了正式密钥、AI 说明（法律文本种类 `AI_NOTICE`）以正式文本发布之后，由一位管理员在后台 `/qb/ai`（或平台的受控变更）提出开启，另一位发布。没有已生效的 AI 说明时，开关打开也不发送任何内容（`QB_AI_NOTICE_MISSING`）。
+- 模型 `qb.ai.model`（只能是 `claude-opus-5-5`（缺省）、`claude-sonnet-5-5`、`claude-haiku-5-5`）、`qb.ai.effort`（`low` / `medium`（缺省）/ `high`）与限额（每商家每日次数、每月 Token、全体每月 Token）都是受控参数；Q8a 之前装过的库中 `qb.ai.model` 是旧的 `gpt-4o-mini`：AI 因此不可用，须以受控变更改为清单中的值（该参数的种类在旧库中仍是文本，改值时只认清单中的三个之一由请求时再查保证）。
+- 本机开发：`java tools/quizbuks/claude-stub/ClaudeStub.java`（端口 8094，`dev` 配置已指向它），它只按请求生成假的题目，从不访问网络；标题含 `[refuse]` 的模版被拒答，含 `[busy]` 的得到 529。
+- 发送给提供方的只有商家自己的模版内容（标题、简介、所选资料、已有题干），`metadata.user_id` 是商家编号的 HMAC（以 `JABIZ_INTEGRITY_KEY` 派生的密钥），不含答题人的任何数据与商家的身份信息。
+
 ## 环境变量
 
 放在 `deploy/quizbuks/.env`（不提交，已在 `.gitignore` 中）或部署平台的密钥库中。密钥都是 Base64、至少 32 字节（`openssl rand -base64 48`）。
@@ -270,6 +278,7 @@ tools/quizbuks/local-demo.sh status | logs | seed
 | `QB_RECONCILE_RUN_CRON` | **不设** | **只给端到端测试**（Q9d）：每日核对的时间（六段 cron，UTC），缺省 `0 37 18 * * *`。CI 的 e2e 设为每分钟，好在测试中等到月末之后的一次核对（分录导出要求它通过）。生产中不要设置：每分钟有差异就每分钟建待办；正式模式或正式密钥下设成其他值即启动失败（`TransferScheduleCheck`） |
 | `QB_ANALYTICS_RUN_CRON` | **不设** | **只给端到端测试**（Q9e2）：商家分析任务 `qb.analytics` 的时间（六段 cron，UTC），缺省 `0 */10 * * * *`（每 10 分钟，页面如此注明）。CI 的 e2e 设为每分钟，好在测试中等到答题被统计。生产中不要设置：读取与审计行多十倍；正式模式或正式密钥下设成其他值即启动失败（`TransferScheduleCheck`） |
 | `JABIZ_REPORTS_PDF_FONTS` | 否 | PDF（充值收据、月报）中中文与日文的 TrueType 字体文件，逗号分隔、按顺序尝试；镜像已装 IPA Gothic 与 Droid Sans Fallback 并设好（`Dockerfile`），镜像外缺省为空（这些字为 `?`）。设了读不到的文件即启动失败 |
-| `OPENAI_API_KEY` | Q8 | AI 生成题目与封面 |
+| `ANTHROPIC_API_KEY` | 是（Q8a） | Claude（Anthropic API）的密钥，AI 生成题目；缺少即启动失败。还没有密钥时可设任意占位（如 `not-configured`）：AI 缺省关闭（`qb.ai.enabled`），关闭时什么也不发送；占位被打开后提供方拒绝（401，作业失败）。本机 compose 未设置时填占位 |
+| `QB_ANTHROPIC_API_URL` / `QB_ANTHROPIC_API_HOSTS` | 否 | Anthropic API 的地址与允许的主机，缺省 `https://api.anthropic.com` / `api.anthropic.com`（只在开发与 e2e 中改指本地桩 `tools/quizbuks/claude-stub`） |
 
 可观测性（OTLP）与单点登录的变量同平台：见 `docs/guide/quickstart.md`。

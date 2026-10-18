@@ -193,3 +193,110 @@
 | A-12 | 生成的语言、题数与题型 | 语言缺省为商家界面语言（可选英 / 中 / 日）；每次 1–20 题；难度易 / 中 / 难；单选与多选都可（与评分规则一致）；2–6 个选项；分值缺省 10（可改） | **如左** |
 | A-13 | 平台缺口 16t 的范围与决策 | A 16t 做文件输入、文件输出与按类型的输入上限，新决策 D50（服务器生成的文件按策略进入 `sys_file`）；B 只做输入上限，不做封面与 PDF（M-25 推迟）| **A** |
 | A-14 | 子阶段与顺序 | Q9e → Q8a（与平台 16t 并行）→ Q8b | **如左** |
+
+## 实施记录（Q8a，2026-10-18）
+
+分支 `1.2/quizbuks-8a-ai-questions`，自 `origin/1.2/quizbuks-9e2-analytics-pages`（6deb05c：含 Q7b、Q9e1、Q9e2 与本计划）。只改 `.jabiz-app-paths` 中的路径。
+
+### 合并与迁移
+
+- 先以合并提交合入 `origin/1.2/platform`（16t，决策 D50，#177）：Q8a 不使用它（只发文字资料，输入在 60 KiB 内），Q8b 的封面与 PDF 资料会用；合并没有冲突。
+- **迁移 V16**（`V16__quizbuks_ai.sql`）：按 2026-10-18 统一的顺序 Q7b V12、Q7a V13、Q9e1 V14、Q7c V15、Q8a V16。本分支上还没有 V13 与 V15（Q7a、Q7c 未合入）：Flyway 只在部署时要求顺序，
+  Q7a 与 Q7c 必须在 Q8a 部署之前合入（否则它们成为"已应用版本之前的新迁移"，须 `outOfOrder` 或改号）；若合并顺序变化，后合并者顺延（第 9 节）。
+  V16 建 `qb_ai_job`、`qb_ai_usage` 两张普通表，并给时态表 `qb_question_version` 加列 `ai_job_id`（只加列，表仍只追加）。
+
+### 实现（`backend/quizbuks`，包 `content.ai`）
+
+- **提供方与客户端**（D-Q8-1）：外部服务 `anthropic`（`ClaudeService`：`https://api.anthropic.com`、主机 `api.anthropic.com`、密钥 `ANTHROPIC_API_KEY`、连接 10 秒、请求 2 分钟、响应 ≤ 1 MiB、不允许试运行）；
+  `ClaudeApi` 只经平台的 `ExternalHttp`：`POST /v1/messages`，`x-api-key`、`anthropic-version: 2023-06-01`；模型与 effort 取自参数；`thinking: {type: adaptive}`；`output_config.effort` 显式；
+  `output_config.format` 为 JSON Schema（`AiPrompt.schema()`：题干、选项（文字、是否正确）、分值、依据的资料号；只用 API 接受的关键字，长度与范围由 `AiCandidates` 查）；`max_tokens` 16 000、不流式；
+  `fallbacks: "default"` 与 beta 头 `server-side-fallback-2026-07-01`（A-10；Haiku 5.5 没有服务端回退，不发）；`metadata.user_id` 为 `AiUserKeys` 的 HMAC。
+  答复：2xx 一律返回（用量先记录，再按 `stop_reason` 判断）：`end_turn` 读文字块中的 JSON；`refusal`（回退后仍拒答）与 `max_tokens` 为永久失败；其他与读不出的 JSON 为可重试的 `QB_AI_BAD_RESPONSE`。
+  用量：有 `usage.iterations`（回退）时把每次迭代相加（顶层只含最后一次），缓存的写与读计入输入。非 2xx 由 `ClaudeErrors` 分类：429、408、5xx、529 重试，401/403 `QB_AI_AUTH`，其他 4xx `QB_AI_REQUEST_INVALID`（永久）；
+  消息只有状态码与错误类型，不含提供方的消息与请求。用户消息超过 60 KiB 在发送前即永久失败（与请求流程的检查双重保证，从不截断）。
+- **隔离**：作业处理器 `AiQuestionsHandler` 只调用接口 `QuestionWriter`（实现 `ClaudeQuestionWriter`）；换提供方只改实现与外部服务。处理器不访问数据库。
+- **提示**（`AiPrompt`）：固定的英文系统提示在前（可被提供方缓存；不加 `cache_control`：前缀短于最小可缓存长度，单次请求也很少命中）；用户消息是请求（语言、难度、题数）与 `<quiz_data>` 中的一个 JSON 文档（标题、简介、编号的资料、已有题干），
+  JSON 中的 `<` 一律写成 `<`，资料无法关闭或伪造标签；系统提示声明资料只是数据。文章发正文，其他种类只发标题与描述（A-5）。
+- **作业** `qb.ai.questions`（`AiQuestionsJob.type`）：每次尝试 5 分钟、3 次尝试（退避 10 秒起、至多 2 分钟）、全实例并发 `quizbuks.ai.max-concurrency`（缺省 4）、每请求人未结束 ≤ 2、同一模版（引用 `quiz:<id>`）只一个；结果只含已按内容规则检查的候选与不合格数。
+- **实体**（D-Q8-3）：`QbAiJob`、`QbAiUsage` 为普通表（默认数据视图 `processOnlyWrites`，读权限 `qb.admin.ai.read`；商家只读本人的行的两个数据视图），数据库约束：候选只在 READY 时、READY 必有候选与过期时刻、`(sponsor_id, month)` 唯一、外部作业号唯一。
+- **流程**（D-Q8-4，`AiProcesses`）：
+  - `QB_AI_QUESTIONS_REQUEST`（`qb.ai.use`、要求已验证、先查封禁）：锁外读入驻与封禁（`SponsorChecks`）、AI 说明的状态（`ConsentChecks.load`，种类 `AI_NOTICE`）、AI 参数（平台参数数据视图：缺少或不合格即 `QB_AI_UNAVAILABLE`，`AiSettings`）、
+    经商家视图读模版（不是自己的或已移除即 404）、资料与题目；构造并度量作业输入（用户消息与存储的 JSON 取较大者 ≤ 60 KiB，否则 422 `QB_AI_INPUT_TOO_LARGE`，附各资料的字节数）；须同意而带了当前版本号即记同意（来源 `AI_REQUEST`），否则 `QB_AI_NOTICE_REQUIRED`；
+    没有已生效的 AI 说明即 `QB_AI_NOTICE_MISSING`。全部问题一次报告。然后取 `qb.ai:<商家>`，一条语句读未结束的作业、今天的请求与本月的两行用量，`AiLimits` 判断，`StartExternalJob`，插入 `QbAiJob`（QUEUED，记输入字节与预估 Token）。
+  - `QB_AI_JOB_COMPLETED` / `QB_AI_JOB_FAILED`（`internal()`，`qb.ai.system`）：取 `qb.ai:<请求人>` → `qb.ai:*`，按外部作业号读作业（不是请求人的或已结束的即什么也不做：重复投递无害）；记每次尝试的用量、尝试次数与回答的模型；
+    QUEUED 的完成：候选按内容规则再查（只保留发送过的资料号），有合格的即 READY（候选 JSON、`expiresAt` = 完成 + `qb.ai.candidates.expire-days`），一个都没有即 FAILED `QB_AI_NO_CANDIDATES`；失败：FAILED 与代码、系统的说明；
+    已取消的只记结束与用量。用量的商家行与全体行（`*`）各加一个作业（失败的另计 `failedJobs`）。
+  - `QB_AI_ACCEPT`（`qb.ai.use`）：`qb.quiz:<模版>` → `qb.ai:<商家>`；作业须是本人的、本模版的（否则 404）、READY 且未过期；每题 `reviewed` 必须为 true（`@AssertTrue`，400）；按商家校对后的内容（题干、选项、分值；依据的资料号取自候选）以 `AiCandidates` 检查，
+    候选号不重复且属于本作业，题数上限照旧；题目接在最后（必要时先重新编号，同 `Reorder.next`），记 `aiJobId`；模版 `revision + 1`、`changedSinceVersion`、`aiGenerated = true`；作业 ACCEPTED、清空候选（可只接受一部分）。
+  - `QB_AI_DISCARD`（READY → DISCARDED，清空候选）、`QB_AI_CANCEL`（QUEUED → CANCELLED）：取 `qb.ai:<商家>`，别人的作业 404。
+  - `QB_AI_EXPIRE`（`internal()`）与逐项任务 `qb.ai-expire`（每日 18:43 UTC，模板 `qb.system.ai-expired`）：每项取 `qb.ai:<商家>`、重读，READY 且已过期的改为 EXPIRED 并清空候选。
+- **参数**（`QbParams`，`QB_SETUP` 补建）：受控的 `qb.ai.enabled`（false）、`qb.ai.model`（种类 code，只允许三个模型，缺省 `claude-opus-5-5`）、`qb.ai.effort`（code：low / medium / high，缺省 medium）、`qb.ai.sponsor.daily-jobs`（20）、
+  `qb.ai.sponsor.monthly-tokens`（2 000 000）、`qb.ai.global.monthly-tokens`（50 000 000）；普通的 `qb.ai.candidates.expire-days`（7）与只用于估算的 `qb.ai.price.input-per-mtok-usd`（4）、`output-per-mtok-usd`（20）。
+- **权限**：新 `qb.ai.system`（不授予）、`qb.admin.ai.read`（内容管理员，超级管理员由此继承）；`qb.ai.use` 照旧（商家）。
+- **限流**：`QB_AI_QUESTIONS_REQUEST` 每人每分钟 5 次、`QB_AI_ACCEPT` 30 次。
+- **模板**：`qb.sponsor.ai-jobs`、`qb.sponsor.ai-usage`、`qb.admin.ai-usage`、`qb.admin.ai-jobs`、`qb.admin.ai-settings`、`qb.system.ai-expired`。
+- **法律文本**：新种类 `AI_NOTICE`（字典、`QB_SETUP` 的 `[TEST PLACEHOLDER]` 草稿、两个 SPA 的 `/legal/ai`、后台规约类页）；不在 `SPONSOR_KINDS` 中，登录后的同意门不问它。
+- **本地桩** `tools/quizbuks/claude-stub/ClaudeStub.java`（JDK 单文件，端口 8094，`dev` 已指向它）：按请求的题数与语言生成题目，`[refuse]` 拒答、`[busy]` 529；只监听本机、从不访问网络。
+  IT 用 `StubHttpServer`（`AiItSupport`），记录每个请求以断言发送的内容。
+- **部署**：`ANTHROPIC_API_KEY` 缺少即启动失败（平台 EXTERNAL 检查）：本机 compose 与 `local-demo.sh` 填占位，CI 的 package / e2e 设一次性的值，`platformCheck` 同 Stripe 的签名密钥；没有密钥的部署可设占位，AI 保持关闭。
+
+### 页面
+
+- 商家后台 `sponsor/src/ai/`：编辑器题目页上方的 AI 面板（本月剩余 Token 与今日次数）、生成对话框（见第 5 节）、进行中的状态与取消、候选校对、失败与过期的说明；仪表盘的 AI 用量卡（Q9e2 的卡片位）。
+- 后台扩展 `/qb/ai`（菜单"AI 生成"，`qb.admin.ai.read`）：开关与上限的现行值，开关以 `CONTROL_CHANGE_PROPOSE` 提出（填理由，另一位管理员发布）；按商家与月份的用量、失败率与估算；最近的请求（可只看失败）。
+
+### 页面上的文字（请需求方确认）
+
+- 面板与对话框：
+  - 英：*AI questions* / *Let the AI write candidate questions from this quiz's materials. Nothing is added until you review it.* / *Generate with AI* /
+    *Sent to the AI provider: this quiz's title, introduction, the chosen materials and, if ticked, its questions. Never your account details or anything about quiz takers.* /
+    *Check every question and its answers against your materials. Change anything you like, then tick "I have reviewed this question". Only reviewed questions are added.*
+  - 中：*AI 出题* / *让 AI 根据本模版的资料生成候选题目。未经你校对，不会加入题库。* / *AI 生成题目* /
+    *发送给 AI 提供方的内容：本模版的标题、简介、所选资料，以及（勾选时）已有题目的题干。不会发送你的账户信息或任何答题人的数据。* / *请对照资料逐题检查题干和答案，可任意修改，然后勾选"我已校对此题"。只有勾选的题目会加入题库。*
+  - 日：*AI による問題作成* / *このクイズの資料から AI に候補問題を作成させます。あなたが確認するまで追加されません。* / *AI で作成* /
+    *AI 提供者に送信される内容：このクイズのタイトル、紹介文、選んだ資料、および（チェック時）既存の問題文。あなたのアカウント情報や回答者のデータは送信しません。* / *問題と答えを資料と照らして 1 問ずつ確認してください。…*
+  - 失败的通用说明：*AI 暂时不可用，请稍后再试或手动编辑。*（另有拒答、过长、无合格候选、过期的说明）
+- **AI 说明的占位**（`QB_SETUP` 建立的草稿，**不是法律文本**，须由需求方或律师替换后发布）：标题 `[TEST PLACEHOLDER] AI 利用に関する説明` / `[TEST PLACEHOLDER] AI notice` / `[TEST PLACEHOLDER] AI 使用说明`，
+  正文为通用的占位说明与一节"第1条 AI 提供者に送信される情報 / 1. What is sent to the AI provider / 第一条 发送给 AI 提供方的内容"，内容为"仮の文章です / Placeholder text / 占位文本"。
+  正式文本至少应说明：发送给 Anthropic 的内容（标题、简介、所选资料、已有题干）与不发送的内容；提供方的数据使用与保留（是否用于训练、保留期、处理地域，按 Anthropic 的商业条款，须法务确认）；生成的题目须商家校对、商家对内容负责。
+
+### 与计划的偏离
+
+1. **请求超时 2 分钟**（计划写 5 分钟）：平台 `ExternalService` 的请求超时上限是 2 分钟（`MAX_REQUEST_TIMEOUT`）。effort `medium` 的非流式回答在其内；超过即该次尝试失败并重试，作业每次尝试的时限仍是 5 分钟。若真实测验中经常超时，可降低题数上限或改用流式（平台的 `ExternalHttp` 目前只有整体读取）。
+2. **"3 次重试"按计划 D-Q8-4 理解为共 3 次尝试**（首次 + 2 次重试）。
+3. **取消不经平台的 `EXTERNAL_JOB_CANCEL`**：它是 `entryOnly()`，不能作子流程；且被取消的作业不调用完成或失败流程，用量就不会进入 `QbAiUsage`（反复"请求 → 运行中取消"可绕开月限额）。所以 `QB_AI_CANCEL` 只把本地状态改为 CANCELLED：
+   提供方照常完成，结果丢弃、用量照记，取消的作业在结束前仍占"未结束"的名额与预估。代价是排队中的作业被取消后仍会调用一次提供方。平台若提供"取消后仍回调用量"或子流程取消，可改为真正的取消（见"未完成"）。
+4. **全体月上限在锁外读**：请求只取 `qb.ai:<商家>`（不让每个请求都等全体锁），全体行可能被同时运行的作业略微越过；新请求在达到后一律拒绝。完成与失败照计划取两把锁。
+5. **AI 参数为受控参数**：计划写"普通参数，超级管理员可改"，但本应用不把 `platform.param.write` 授予任何角色（第 4 节受控参数），超级管理员实际改不了普通参数；开关与限额关系到花费，所以与金额参数一样四眼。
+   后台 `/qb/ai` 的开关因此是"提出变更"。Q8a 之前装过的库中 `qb.ai.model` 是旧的文本参数 `gpt-4o-mini`（`QB_SETUP` 不改已有的）：AI 不可用，须以受控变更改为清单中的值（`deploy/quizbuks/README.md`）。
+6. **模型清单的保证**：参数的种类（code 与允许值）只对新建的参数生效；每次请求都按 `ClaudeService.MODELS` 再查，所以没有另写启动检查。
+7. **审核页的"AI 生成"标在模版上**：版本快照只有模版级的 `aiGenerated`（审核页已显示"Made with AI"）；题目的 `aiJobId` 不进快照（否则改变快照格式与哈希），只在平台通用后台的题目数据与 `/qb/ai` 中可见。
+8. **没有场景回放** `scenarios/qb/ai.yml`：IT 已覆盖全部流程（任务说明的测试清单没有场景），留作后续。
+9. **商家后台加了开发依赖 `vitest-axe` 0.1.0**（与平台前端同版本，`app:check` 通过）：页面测试在 jsdom 中以亮、暗两种外观跑 axe（对比度在 e2e 的真实浏览器中查）。
+
+### 自查（对抗性）
+
+- **成本滥用**：只给入驻通过、已验证、未封禁的商家；入口限流（每分钟 5 次）；锁内的每日次数、每月 Token（含未结束作业的预估，一次最多输入 / 3 + 1 500 + 16 000）与同时未结束 ≤ 2（平台另以每请求人 ≤ 2、每模版 1 个兜底）；取消的作业在结束前仍占名额、结束后用量照记（偏离 3），
+  所以"请求 → 取消"不能绕开限额；模型、effort 与 `max_tokens` 由服务端决定，商家只能选题数（1–20）；输入 ≤ 60 KiB。残余：提供方不按幂等键去重，一个作业至多 3 次尝试，预估只按一次尝试计（实际用量事后记录，越过至多是两个作业的重试）；
+  全体上限可被正在运行的作业略微越过（偏离 4）；多个商家账号仍受入驻审核与全体上限约束。建议在 Anthropic Console 为工作区设月支出上限（`operations.md` §1.3）。
+- **提示注入只影响商家自己**：发送的只有该商家的模版内容，没有任何其他数据可被诱导泄露；资料以转义后的 JSON 数据发送；输出按内容规则检查、只以纯文本显示（输入框与文本框，不渲染 Markdown 或 HTML，`ai.test.tsx` 断言）、必须逐题校对才入库、入库后仍经发布审核；
+  候选的资料号只保留发送过的。输出不能触发任何动作（没有工具、没有链接被打开）。
+- **发送给提供方的数据**：标题、简介、所选资料（文章正文；其他种类的标题与描述）、已有题干（可关闭）、题数、难度、语言与 `metadata.user_id`（HMAC，`AiQuestionsIT` 断言请求中没有商家编号、公司、名字与邮箱样式的文字）；不发送答题人的任何数据。
+  商家可能在资料中写入个人信息：由 AI 说明告知（A-11，须法务确认）。作业输入永久存于平台只追加的 `sys_external_job`（P4）；持有 `external-job.read` 的财务管理员能读到这些作业的输入（与内容管理员能读全部模版相比风险小，记为已知）。
+- **密钥不进日志**：`ANTHROPIC_API_KEY` 只经 `ctx.secret` 放进 `x-api-key` 头（平台从不打印头的值，`ExternalHttp.Request.toString`）；`ClaudeApi`、`AiUserKeys` 的 `toString` 遮蔽；失败消息只有状态码与错误类型（`ClaudeApiTest` 断言不含提供方的消息）；
+  `failureMessage` 只存处理器或平台的说明；测试与 `dev` 的密钥是固定的假值；HMAC 的密钥由完整性密钥派生、不另存。
+
+### 对已有测试的影响
+
+- `QB_SETUP` 多提出 6 个受控参数（AI 参数排在已有参数之后、审批规则之前），所以各场景的提案号顺延（`p29`–`p34`）并多发布 6 个；新的主键使发布号改变，选项的打乱（按答题人与发布号的 HMAC）随之改变，
+  `analytics`、`payout`、`play`、`topup` 四个场景的所选选项按新的正确答案改写（得分与奖励的预期不变），场景快照随之更新。
+- `setup.yml`：`qb.ai.model` 不再是普通参数（改为提出），新建的普通参数多了过期天数与两个价格；法律草稿多了 `AI_NOTICE`。`SetupRemovalsIT` 改以普通参数 `qb.ai.candidates.expire-days` 演示"改过的参数不被重建"。
+- `ProcessAccessIT` 加入三个 `internal()` 流程；公开模板目录快照（`public-queries.json`）中法律种类多了 `AI_NOTICE`。
+- `AttemptStatementBudgetIT` 未改动并通过（答题路径不受影响）。
+
+### 测试结果（2026-10-18，本机 PostgreSQL 16）
+
+- `./gradlew :quizbuks:check :quizbuks:bootJar`：通过（635 个测试、0 失败，含 `platformCheck` 与覆盖率门禁）；其中 `AiQuestionsIT` 11、`AiSwitchedOffIT` 1，单元测试 `ClaudeApiTest`、`AiCandidatesTest`、`AiLimitsTest`、`AiPromptTest`。
+- 商家后台：`pnpm lint && pnpm typecheck && pnpm test`（159 个测试，含 `ai.test.tsx` 亮暗两种外观的 axe）；答题 SPA：133 个测试；`pnpm app:check` 两个 SPA 均通过；后台扩展 `pnpm ext:check`（74 个测试）通过。
+- e2e（打包的 jar、本地 Claude 桩与 Stripe 桩、Mailpit）：全部 52 个通过（14.5 分钟；`ai.spec.ts` 亮暗两种外观：对话框、AI 说明、校对、加入、列表的"AI generated"、仪表盘用量卡、后台 `/qb/ai`，各处跑 axe）。端口、数据库与进程都是本任务自己的（应用 18180、Claude 桩 18194、Stripe 桩 18193、Mailpit 18125/11125，库 `jabiz_e2e_q8a`）。
+
