@@ -608,7 +608,10 @@ V15 尚未合并、没有部署过，直接修改（新增 `qb_broadcast_stats`�
 
 ### 13.8 评审修正的测试与结果
 
-- `origin/1.2/quizbuks` 与 `origin/1.2/quizbuks-7a-mail` 没有新的提交，没有合并。
+- 修正之后 `origin/1.2/quizbuks` 前进到 4fca43d（合并平台 16u 与 Q7a 的 PR #178），以合并提交合入（只有平台、示范应用与平台文档，没有冲突）。
+  合并后 `:quizbuks:check` 689 项中 7 项失败（`BanIT` 2、`BanAdminRolesIT` 1、`TakedownIT` 4，测试直接写入 `QB_ADMIN_SUPER` 的分配得到 422 `PROTECTED_CHANGE_REQUIRES_APPROVAL`）：
+  正是路线图 16u 写明的"QuizBuks 需要的修改"（`QbRoles`、`QB_SETUP` 的顺序与这 7 个 IT），`origin/1.2/quizbuks` 上同样失败，与本阶段无关，留给该项；
+  合并后两个 SPA（148 / 141）、`app:check`、`ext:check`（78）与 e2e（52 项）全部通过。以下是合并之前的结果。
 - `./gradlew :quizbuks:check`（本阶段自己的库）：689 项全部通过（本工作树的 JUnit 报告），`platformCheck` 0 错误；新模板中与物理列同名的别名已改名，没有告警。
 - 两个 SPA：lint、typecheck 通过，Vitest App 148 项、商家后台 141 项；两份 `src/qb/` 相同；`app:check` 两者通过；`ext:check` 78 项。
 - e2e（打包的 jar、本机的 Mailpit 与 Stripe 桩、独立的库与端口）：第一次 52 项中 50 项通过，失败的 2 项是 `inbox.spec.ts` 的读取辅助仍传 `at`（修正 L1 之后为 400），改正后该文件 3 项通过，再跑全量 52 项全部通过。
