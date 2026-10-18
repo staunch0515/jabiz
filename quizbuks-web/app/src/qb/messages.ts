@@ -23,6 +23,7 @@ const en = {
     email: 'E-mail address',
     emailHint: 'Your e-mail address cannot be changed here. Contact us if it needs to change.',
     mfa: 'Two-step verification',
+    mail: 'E-mail',
   },
   legal: {
     kinds: {
@@ -110,6 +111,7 @@ const zh: typeof en = {
     email: '邮箱',
     emailHint: '邮箱不能在这里修改。如需修改，请与我们联系。',
     mfa: '两步验证',
+    mail: '邮件',
   },
   legal: {
     kinds: {
@@ -197,6 +199,7 @@ const ja: typeof en = {
     email: 'メールアドレス',
     emailHint: 'メールアドレスはここでは変更できません。変更が必要な場合はお問い合わせください。',
     mfa: '2 段階認証',
+    mail: 'メール',
   },
   legal: {
     kinds: {

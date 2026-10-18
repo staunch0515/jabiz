@@ -104,7 +104,10 @@ beforeEach(() => {
   session.store('access', 'refresh')
   vi.mocked(goToStripe).mockClear()
 })
-afterEach(() => vi.restoreAllMocks())
+afterEach(() => {
+  vi.useRealTimers()
+  vi.restoreAllMocks()
+})
 
 describe('the wallet helpers', () => {
   it('waits for the link its own request made', () => {
@@ -186,16 +189,21 @@ describe('the wallet', () => {
 
 describe('the payout account', () => {
   it('opens one, waits for Stripe\'s fresh link and goes there', async () => {
+    // The polls wait seconds between reads: time is advanced, not waited for (no real sleeps under load).
+    vi.useFakeTimers({ shouldAdvanceTime: true })
     const old = account('PENDING', { onboardingUrl: LINK, linkExpiresAt: '2026-10-14T01:05:00Z' })
     const { processCalls } = server({ accounts: [old, old, old, { ...old, linkExpiresAt: LATER }] })
     window.history.replaceState(null, '', '/wallet/payout')
-    const user = userEvent.setup()
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
     render(<App />)
     expect(await screen.findByTestId('payout-status')).toHaveTextContent('Being set up')
     expect(screen.getByTestId('nav-wallet')).toHaveAttribute('aria-current', 'page')
     await user.click(screen.getByTestId('payout-onboard'))
     expect(screen.getByTestId('payout-state')).toHaveAttribute('data-state', 'preparing')
-    await waitFor(() => expect(goToStripe).toHaveBeenCalledWith(LINK), { timeout: 4000 })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000)
+    })
+    await waitFor(() => expect(goToStripe).toHaveBeenCalledWith(LINK))
     expect(goToStripe).toHaveBeenCalledTimes(1)
     expect(processCalls()).toHaveLength(1)
     expect(processCalls()[0].body).toEqual({})
@@ -204,14 +212,18 @@ describe('the payout account', () => {
   })
 
   it('never follows a link that is not Stripe\'s', async () => {
+    // The polls wait seconds between reads: time is advanced, not waited for (no real sleeps under load).
+    vi.useFakeTimers({ shouldAdvanceTime: true })
     server({ accounts: [null, null, account('PENDING', { onboardingUrl: 'http://evil.example.com/x',
       linkExpiresAt: LATER })] })
     window.history.replaceState(null, '', '/wallet/payout')
-    const user = userEvent.setup()
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
     render(<App />)
     await user.click(await screen.findByTestId('payout-onboard'))
-    await waitFor(() => expect(screen.getByTestId('payout-state')).toHaveAttribute('data-state', 'unsafe'),
-      { timeout: 4000 })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000)
+    })
+    await waitFor(() => expect(screen.getByTestId('payout-state')).toHaveAttribute('data-state', 'unsafe'))
     expect(goToStripe).not.toHaveBeenCalled()
   })
 
@@ -243,13 +255,18 @@ describe('the payout account', () => {
   })
 
   it('back from Stripe, waits for Stripe\'s report: the return itself enables nothing', async () => {
+    // The polls wait seconds between reads: time is advanced, not waited for (no real sleeps under load).
+    vi.useFakeTimers({ shouldAdvanceTime: true })
     const { processCalls } = server({ accounts: [account('PENDING'), account('PENDING'), account('ENABLED')] })
     window.history.replaceState(null, '', '/wallet/payout?onboarding=done')
     render(<App />)
     const state = await screen.findByTestId('payout-state')
     expect(state).toHaveAttribute('data-state', 'checking')
     expect(screen.queryByTestId('payout-onboard')).not.toBeInTheDocument()
-    await waitFor(() => expect(state).toHaveAttribute('data-state', 'enabled'), { timeout: 5000 })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000)
+    })
+    await waitFor(() => expect(state).toHaveAttribute('data-state', 'enabled'))
     expect(screen.getByTestId('payout-status')).toHaveTextContent('Enabled')
     expect(processCalls()).toHaveLength(0)
   })

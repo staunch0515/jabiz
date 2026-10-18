@@ -81,7 +81,14 @@ class ProcessAccessIT extends QbItSupport {
         Map.entry("QB_TRANSFER_CHECK_FAILED", ProcessAccess.INTERNAL),
         Map.entry("QB_TRANSFER_REVERSED", ProcessAccess.INTERNAL),
         Map.entry("QB_STRIPE_PAYOUT_RECORD", ProcessAccess.INTERNAL),
-        Map.entry("QB_STRIPE_PAYOUT_FAILED", ProcessAccess.INTERNAL));
+        Map.entry("QB_STRIPE_PAYOUT_FAILED", ProcessAccess.INTERNAL),
+        // Mail (Q7a): the consumers of the transfer, payout account, top-up and publication events, and the items of the
+        // hourly job of deferred short-of-funds mail.
+        Map.entry("QB_MAIL_TRANSFER", ProcessAccess.INTERNAL),
+        Map.entry("QB_MAIL_PAYOUT_ACCOUNT", ProcessAccess.INTERNAL),
+        Map.entry("QB_MAIL_TOPUP", ProcessAccess.INTERNAL),
+        Map.entry("QB_MAIL_FUNDS_SHORT_DUE", ProcessAccess.INTERNAL),
+        Map.entry("QB_PUBLICATION_NOTIFY", ProcessAccess.INTERNAL));
 
     @Autowired
     ProcessRegistry registry;

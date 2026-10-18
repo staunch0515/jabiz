@@ -191,7 +191,8 @@ public final class PublicationMoves {
                         + expected + ", its card to " + input.status());
                 }
                 ctx.put(MOVED, afterCompletion(ctx, input.winners(), input.spent(), input.pending()));
-            }));
+            })
+            .steps(PublicationNotices::announce));
     }
 
     private static final String MOVED = "moved";

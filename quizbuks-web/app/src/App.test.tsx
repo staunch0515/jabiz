@@ -1,5 +1,5 @@
-import { configureClient, session } from '@jabiz/client'
-import { render, screen, waitFor } from '@testing-library/react'
+import { changeLanguage, configureClient, session } from '@jabiz/client'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
@@ -29,6 +29,7 @@ function server(me?: Me) {
   const asked: string[] = []
   const posted: { path: string; body: unknown }[] = []
   let profile = me?.profile ?? null
+  let mailLocale: string | null = null
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
     const request = input instanceof Request ? input : new Request(new URL(String(input), window.location.origin))
     const url = new URL(request.url, window.location.origin)
@@ -57,6 +58,17 @@ function server(me?: Me) {
           { code: 'JPY', label: 'Japanese yen' }])
       case '/api/auth/account/identities':
         return json(200, me?.identities ?? [])
+      case '/api/auth/mail/preferences':
+        // The app's own notifications only (decision D49): the platform filters by the token's entry.
+        return request.method === 'POST' ? new Response(null, { status: 204 }) : json(200, { templates: [
+          { template: 'qb.welcome', subscribed: true, displayName: 'Welcome after registration', otherEntry: false }] })
+      case '/api/auth/account/locale':
+        if (request.method === 'POST') {
+          mailLocale = (body as { locale: string }).locale || null
+          return new Response(null, { status: 204 })
+        }
+        return json(200, { locale: mailLocale, effective: mailLocale ?? 'en', languages: ['en', 'zh', 'ja'],
+          defaultLocale: 'en' })
       case '/api/processes/QB_PROFILE_SAVE/latest':
         if (me?.refusal) return json(422, me.refusal)
         profile = { displayName: (body as { displayName: string }).displayName, countryCode: 'JP', city: null,
@@ -77,7 +89,11 @@ beforeEach(() => {
   // The browser's hints for the country: Japanese in Japan.
   vi.spyOn(navigator, 'languages', 'get').mockReturnValue(['ja-JP', 'en'])
 })
-afterEach(() => vi.restoreAllMocks())
+afterEach(async () => {
+  vi.restoreAllMocks()
+  // A test that switches the interface language must not leave it to the next one.
+  await changeLanguage('en')
+})
 
 describe('a visitor', () => {
   it('goes to the sign-in of the app\'s own entry, with sign-up and password reset', async () => {
@@ -194,6 +210,33 @@ describe('a signed-in taker', () => {
     window.history.replaceState(null, '', '/account')
     render(<App />)
     expect(await screen.findByTestId('linked-identity')).toHaveTextContent('mei@gmail.com')
+  })
+
+  it('turns the app\'s notifications on and off on the account page, and says which mail always goes', async () => {
+    const { posted } = server({ profile: { displayName: 'Mei', countryCode: 'JP', city: null,
+      preferredCurrency: 'JPY', revision: 1 } })
+    window.history.replaceState(null, '', '/account')
+    render(<App />)
+    const section = await screen.findByTestId('account-mail')
+    expect(await within(section).findByTestId('mail-preference')).toHaveTextContent('Welcome after registration')
+    expect(section).toHaveTextContent('Mail about your transfers and your payout account is always sent.')
+    await userEvent.click(within(section).getByTestId('mail-preference-qb.welcome'))
+    await waitFor(() => expect(posted).toContainEqual({ path: '/api/auth/mail/preferences',
+      body: { template: 'qb.welcome', subscribed: false } }))
+  })
+
+  it('asks before sending mail in the language the interface was switched to', async () => {
+    const { posted } = server({ profile: { displayName: 'Mei', countryCode: 'JP', city: null,
+      preferredCurrency: 'JPY', revision: 1 } })
+    window.history.replaceState(null, '', '/account')
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('language-switch'))
+    await userEvent.click(await screen.findByRole('option', { name: '日本語' }))
+    // Nothing changes until the taker accepts (decision D49 item 3).
+    const accept = await screen.findByRole('button', { name: 'メールにも使う' })
+    expect(posted.filter((p) => p.path === '/api/auth/account/locale')).toEqual([])
+    await userEvent.click(accept)
+    await waitFor(() => expect(posted).toContainEqual({ path: '/api/auth/account/locale', body: { locale: 'ja' } }))
   })
 
   it('is sent home from the sign-up and password reset pages', async () => {
