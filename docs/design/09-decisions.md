@@ -50,7 +50,10 @@
 | D45 | 热门命名锁的准入与流程入口限流：取锁前在进程内排队（不占连接）、队满或超时 503 `PROCESS_BUSY`、正确性只靠咨询锁、流程接口按配置限流（补充 14o 与 D42 第 3 条，不取代） | 已确认（2026-10-16）；已实施（阶段 16o） | 06 §4.2、§8、03 §1、10 §15.10、11 §4.1、13 |
 | D46 | 流程事务内的写入合并与按已知版本更新：读之前写出、时态插入不先查、引用检查复用本事务的读写、普通实体按已知版本更新、锁在读之前、不跨事务缓存、语句预算（补充 D4、D6、D11、D14、D27，不取代） | 已确认（2026-10-16）；16p-1 已实施（第 1 条限于一次提交之内），16p-2 待做 | 06 §3.1、§4.1、04 §2.2、03 §2、11 §1、21 §1、13 |
 | D47 | 登录类接口按地址限流、口令哈希的并发上限、文件元数据可按策略对非上传者隐藏（补充 D12、D18、D36、D45，不取代） | 已确认（2026-10-17）；已实施（阶段 16q） | 10 §4.1、§4.2、14 §5.1、13 |
-| D48 | 受保护授权的四眼（建立期、首个管理员退役）、会计年度的时区、不公开元数据的文件用随机编号（补充 D12、D18、D23、D27、D28、D40、D47，不取代） | 已确认（2026-10-17）；已实施（阶段 16r） | 10 §16、18 §3.3–§3.4、21 §3.1、14 §5.1 |
+| D48 | 受保护授权的四眼（建立期、首个管理员退役）、会计年度的时区、不公开元数据的文件用随机编号（补充 D12、D18、D23、D27、D28、D40、D47，不取代）；第 1 条的管理员、审批人与缺省清单由 D51 修改 | 已确认（2026-10-17）；已实施（阶段 16r） | 10 §16、18 §3.3–§3.4、21 §3.1、14 §5.1 |
+| D49 | 收件偏好按登录入口列出、邮件模板的显示名、界面语言与邮件语言分开（补充 D35、D36，不取代） | 已确认（2026-10-18）；已实施（阶段 16s） | 18 §5.6、12 §6、§10、§12 |
+| D50 | 外部作业的文件：按类型的输入上限（至多 1 MiB）、文件输入（按请求人的读取权限，只在尝试中可读）、文件输出（经上传流水线以请求人登记，`sys_file` 的第二个入口）（补充 D18、D31、D38、D47、D48，不取代） | 已确认（2026-10-18，QuizBuks Q8 的 A-13）；已实施（阶段 16t） | 11 §4a、14 §11、21 §3.1 |
+| D51 | 受保护变更的审批权限 `security.protected-change.decide`（代替 `approval.decide`，本身总是受保护）、按可配置的管理员权限计管理员、流程的备选权限、时间参数限于 PostgreSQL 的范围、`Combobox` 加载状态（修改 D48 第 1 条的管理员、审批人与缺省清单及实现说明⑥；补充 D7、D34） | 已确认（2026-10-18）；已实施（阶段 16u） | 10 §16、18 §3.4、05 §4、`@jabiz/ui` 的 `Combobox` |
 
 ---
 
@@ -1507,7 +1510,7 @@ P-8 原写"`false` 即逐条执行（16p-1 的局部合并同样受它控制）"
 **决策**
 1. **受保护的授权须另一位管理员审批**（10 §16）：
    - 受保护的权限以配置 `jabiz.security.protected-grants.permissions` 声明，缺省 `*`、`security.user-role.write`、`security.role.write`、`approval.decide`、`control.publish`、
-     `ledger.post`、`ledger.reverse`、`platform.param.write`；`*` 总是受保护。
+     `ledger.post`、`ledger.reverse`、`platform.param.write`；`*` 总是受保护（D51：缺省另加 `security.protected-change.decide`，它与 `*` 一样总是受保护）。
    - 受保护的变更：分配角色、角色增加权限而使某用户获得尚未持有的受保护权限；对持有受保护权限的用户重设密码、重置二次验证、由他人关联外部账号。
      持有按"可能持有"计（最新版本未删除的分配、角色、授权，不论启用与预定），所以启用角色或用户不另查。
    - 用审批（D23，18 §3）而不是受控变更：请求流程 `SEC_USER_ROLE_ASSIGN`、`SEC_ROLE_PERMISSION_ADD`、`SEC_USER_IDENTITY_LINK`（及原有的 `SEC_USER_SET_PASSWORD`、`SEC_MFA_RESET`）
@@ -1517,7 +1520,7 @@ P-8 原写"`false` 即逐条执行（16p-1 的局部合并同样受它控制）"
    - 职责分离：申请人不能审批（`APPROVAL_OWN_REQUEST`）；变更所针对的用户不能批准（`APPROVAL_TARGET_USER`，按审批与生效时的情况判断）；审批需要管理级二次验证；批准绑定内容哈希，
      内容中含请求时给出的受保护权限与所针对的用户，生效时给某个用户超出它与其他已生效变更的批准的受保护权限即不生效（`CHANGE_GREW`；生效时只计在它之前请求的待审批变更）；
      待审批的分配与角色权限视同已生效，不能借它们把权限"带进去"。生效只认这个变更自己的审批请求的事件与其中记录的批准。
-   - 审批人须持有 `*`，或持有管理员的权限（`security.user-role.write` / `security.role.write`）并持有变更给出的（重设凭据时为目标持有的）全部受保护权限：
+   - 审批人须持有 `*`，或持有管理员的权限（`security.user-role.write` / `security.role.write`；D51：可配置，并须 `security.protected-change.decide` 而不是 `approval.decide`）并持有变更给出的（重设凭据时为目标持有的）全部受保护权限：
      谁也不能批准比自己持有的更多的东西；审批时按令牌，生效时按库中实际持有再判断（含 `approval.decide` 与层级的权限）。
    - 获得受保护权限的用户的凭据须是本人的，按账号全部历史的**所有权链**判断：凭据只有在建立时没有别人可能知道一个可用的凭据才是本人的——自助注册、
      干净的账号上本人修改、寄到本人邮箱的一次性链接；管理员设置的密码及由它"本人"改出的密码不是，直到经邮件链接重设；管理员之后改过的邮箱不是本人的；
@@ -1526,7 +1529,7 @@ P-8 原写"`false` 即逐条执行（16p-1 的局部合并同样受它控制）"
    - 判断授权的每一处先取职责分离的锁（`jabiz.sod`）；职责分离的写入检查也移到 `VersionAppender`，撤销与取消预定同受约束。
    - 一切时态写入的必经之处（`VersionAppender`，新的异步检查 `TemporalWriteCheck`）拒绝没有许可的受保护授权（422 `PROTECTED_CHANGE_REQUIRES_APPROVAL`）：
      数据视图、实体 API、通用实体流程、导入、业务流程的变更集、撤销与取消预定都不能绕过（同 D40 第 2 条的做法）。
-   - **建立期与首个管理员**：管理员 = 经启用的角色持有 `*` 的启用用户；首个管理员 = `SEC_BOOTSTRAP_ADMIN` 建立的每一个用户。首个管理员之外有两位管理员之前，受保护的变更当即生效；
+   - **建立期与首个管理员**：管理员 = 经启用的角色持有 `*` 的启用用户（D51：或持有可配置的管理员权限之一，缺省 `security.user-role.write`、`security.role.write`）；首个管理员 = `SEC_BOOTSTRAP_ADMIN` 建立的每一个用户。首个管理员之外有两位管理员之前，受保护的变更当即生效；
      首次出现时记入只追加表 `sec_protected_grants_armed`，此后永不回到建立期（停用管理员不能重开）。存在另一位管理员时首个管理员不能提出、写入或审批受保护的变更（403 `BOOTSTRAP_ADMIN_RETIRED`），
      首次出现时记入 `sec_bootstrap_retired`，永久退役。管理员按现在或之后某个预定版本中有效计。`always=true` 时第一位管理员由 `SEC_BOOTSTRAP_ADMIN` 凭平台许可在空库上建立。
      `jabiz.security.protected-grants.enabled`（缺省 `true`）关闭全部；`.always=true` 不设建立期。
@@ -1566,7 +1569,7 @@ P-8 原写"`false` 即逐条执行（16p-1 的局部合并同样受它控制）"
 ⑥**评审复核之后的修订（2026-10-18）**：
 - M3：`CredentialChain`（所有权链，纯 Java，`CredentialChainTest`）取代"最后一次由谁设置"；`ProtectedGrants.credentials` 读用户、外部关联、二次验证的全部版本与其操作（含操作人名字）；
   事实 `history`（审批对象新增的事实，按最近的部分截断）；二次验证按其第一个版本判断（以恢复码登录写的版本不算，`SPONSOR_MFA_VERIFY`）。
-- 审批人：生效时 `ProtectedChangeDecisionCheck.mayDecide`（`*`，或 `approval.decide` + 层级的权限 + `covers`）。
+- 审批人：生效时 `ProtectedChangeDecisionCheck.mayDecide`（`*`，或 `approval.decide` + 层级的权限 + `covers`；D51 改为 `security.protected-change.decide`）。
 - 事件的绑定：`LoadProtectedChange` 只接受请求编号属于本变更（对象、实体编号）的事件，审批人取自该请求的批准。
   `PublishEvent` 不让平台之外的代码建立的步骤发出 `jabiz.*` 事件（启动检查与运行时都拒绝，按建立步骤的类是否与平台同一代码来源判断；防误用，不是对手动构造 `StepSpec` 的边界）；
   示范应用与 QuizBuks 没有发出 `jabiz.*` 的流程，兼容。
@@ -1629,3 +1632,159 @@ P-8 原写"`false` 即逐条执行（16p-1 的局部合并同样受它控制）"
 `AccountController` 读 `sec_user_version` 的最新版本（同 `SendMail`）；`MailChecks` 增加两项检查。示范的 `commerce.order-shipped` 声明 `.entries("portal")`。
 没有迁移。测试：`MailPreferencesIT`（按入口列出与显示名、其他入口的模板与未知名称同样拒绝、只改本人的偏好、退订链接不看入口、读写本人的邮件语言）、
 `MailIT`（已退订的门户模板不发送）、`MailChecksTest`、`MailTemplateTest`、`mail.test`（client）、`MailPreferences.test`（ui，含亮暗两种外观的 axe）、`AccountSecurityPage.test`、`AppLayout.test`、门户 `App.test`。
+
+## D50 外部作业的文件：按类型的输入上限、文件输入与文件输出
+
+**背景**：QuizBuks Q8 计划（`1.2/quizbuks-7-plan` 的 `docs/quizbuks/plans/Q8-ai.md`，平台缺口 P1–P3，A-13 选 A，2026-10-18 确认）：
+①作业输入固定上限 64 KiB（D38 实现说明），多条长文章不能一次发送；②处理器不访问数据库、也读不到文件，PDF 资料不能作为生成的依据；
+③作业结果只是至多 256 KiB 的 JSON，服务器生成的图片（候选封面）没有进入 `sys_file` 的途径——上传只经 `/api/files?policy=…`（D18）。
+本条补充 D18、D31、D38、D47、D48，不取代任何决策（阶段 16t）。
+
+**决策**
+1. **输入上限按作业类型声明**：`ExternalJobType…maxInputSize(字节)`，缺省 64 KiB（不变），1 KiB 至 1 MiB（启动检查 `EXTERNAL`）。
+   超过即照旧 422 `EXTERNAL_JOB_INPUT_TOO_LARGE`（参数 `max` 为类型的上限）。输入仍原样存于只追加的 `sys_external_job` 并永久保留（见第 5 条）。
+2. **文件输入**：类型以 `inputFiles(个数, 每个的字节数, 策略…)` 声明可读的文件；流程以 `StartExternalJob.of(…).files(ctx -> 文件编号)` 交给作业。
+   - 登记时（流程事务内）逐个检查：文件存在（`FOR KEY SHARE` 读 `sys_file`）、属于类型声明的策略、请求人持有 `file.read` 或该策略的读取权限——与经 `/api/files/{id}/content` 读取所需的完全相同（上传者本人并不因此多得权限）；
+     三种不符**同一个回答** 422 `EXTERNAL_JOB_INPUT_FILE`（不透露别人文件是否存在），之后才看个数与大小（`EXTERNAL_JOB_INPUT_FILE_LIMIT`）。同一文件给两次只读一次。
+     系统身份（事件消费者、定时任务的流程）可以给任何文件。通过的文件记入 `sys_external_job_file`（`INPUT`，含大小与摘要），与作业同一事务。
+   - 执行时，执行器在任何事务之外、在处理器开始之前，把**这些文件、只有这些文件**从 `FileStore`（响应式）复制到上传区，处理器经 `ExternalJobContext.files()` / `file(编号)`
+     得到 `ExternalJobFile`（编号、判定的类型、大小、`open()` / `bytes()`，在处理器的虚拟线程上是普通的阻塞读）；要别的文件即 `IllegalArgumentException`。
+     尝试结束（成功、失败、超时）即删除副本，之前拿到的对象再 `open()` 即 `IllegalStateException`。处理器看不到 `Mono`，也不接触存储。
+   - 开始之后被删除（或内容不符）的文件使作业永久失败 `INPUT_FILE_MISSING`；存储读不出为可重试的 `INPUT_FILE_UNREADABLE`。权限只在开始时判断（作业以分钟计）。
+3. **文件输出**：类型以 `outputFiles(策略, 个数, 每个的字节数)` 声明；处理器以 `ExternalJobResult.of(值).file(键, 名称, 字节)` 返回。这是 `/api/files` 之外进入 `sys_file` 的**第二个入口**，与上传走同一条路：
+   - 开始作业的人必须持有输出策略的**上传权限**（否则 403，没有作业）：文件将是他的上传。
+   - 超过类型的个数或大小、类型不声明输出却返回文件，在存储任何东西之前即永久失败（`OUTPUT_FILE_LIMIT`、`OUTPUT_FILE_TOO_LARGE`、`BAD_RESULT`）。
+   - 每个文件经 `FileUploadService.storeGenerated`：策略的大小上限、**按内容判定类型**并与策略的允许列表比较（SVG、HTML 等永不允许）、图片**重新编码**（去掉 EXIF/GPS 等全部元数据、转正方向、生成变体）、
+     `privateMetadata()` 的策略取随机编号（D48 第 3 条），再以**请求人为操作人**运行 `FILE_REGISTER`（`uploadedBy` 为请求人，`op_process.input_summary` 带作业号 `jobId`，审计记录照常），不直接写表。
+     策略拒绝的文件（`FILE_TYPE_NOT_ALLOWED`、`FILE_INVALID`、`FILE_TOO_LARGE`）使作业永久失败 `OUTPUT_FILE_REJECTED`；其他存储错误可重试 `OUTPUT_FILE_FAILED`。
+     上传的限流不适用（个数由类型限定），上传权限已在开始时检查。
+   - 存储在记录尝试之前；存下的文件与尝试同一事务记入 `sys_external_job_file`（`OUTPUT`，尝试号、键、编号、大小、摘要），不论尝试最后如何——**哪个作业产生了哪个文件**在文件被清扫后仍可查。
+     完成流程的 `ExternalJobCompletion.files()`（键 → 编号，`file(键)`）只给出成功的那次尝试的文件。已取消的作业不存储。
+   - 没有被引用的输出文件（失败的尝试存下的、迟到被丢弃的、完成流程不用的候选）是普通的孤儿，由现有的 `FILE_SWEEP`（`jabiz.files.orphan-after`，缺省 24 小时）删除；平台不另设清理。
+4. 业务的处理器与阻塞步骤不得依赖 `com.jabiz.runtime.file`（共用 ArchUnit 规则 `PlatformArchRules.handlersReadFilesThroughTheirContext`）：文件只经上下文进、经结果出。
+5. **作业输入永久保存**（P4，只写明，不改变）：`sys_external_job.input` 只追加、永久保留（保留期可按 21 §3.1 声明），作业输入中的资料原文因此在业务数据之外**多存一份**；
+   文件输入只记编号与摘要（内容仍只在 `sys_file`，随其删除而删除）。应用只把作业需要的内容放进输入，不放个人数据；较大的资料以文件输入传递。
+6. 线 1.2 内兼容：只新增。`ExternalJobType`（组件 14 → 17）、`ExternalJobResult`（2 → 3）、`ExternalJobCompletion`（8 → 9）、`StartExternalJob.Metadata`（5 → 6）、`FileProcesses.RegisterInput`（9 → 10）是 record，
+   新增组件改变了它们的规范构造器与组件数：以 `define` / `of` 声明的代码不受影响，原构造器都保留（缺省上限、无文件）；直接对这些 record 做解构模式匹配或按组件反射的代码需要改写。
+   `StartExternalJob` 的 Spring 构造器多了文件策略（四参），原三参构造保留。已有作业类型的行为不变（缺省 64 KiB、不读写文件、`EXTERNAL_JOB_COMPLETE` 不多读）；上传接口与 OpenAPI 不变。
+
+**理由**：输入上限因作业而异（一段文案与十篇文章），但仍须有界：输入与作业一同永久保存，1 MiB 足够文字资料，更大的应作为文件。文件输入的检查与读取接口相同，
+作业因此不会让人读到他本来读不到的文件；复制而不是给出存储的句柄，处理器就只能读到交给它的文件，也只在尝试之中，并且不必面对响应式的存储。
+输出走上传的同一流水线并以请求人登记，服务器生成的文件与上传的文件受同样的类型、大小、重新编码与元数据规则约束，第二个入口不成为绕过检查的捷径；
+孤儿由已有的清扫处理，失败、取消与迟到的尝试不需要各自的补偿逻辑。
+
+**放弃的方案**：①处理器经平台的服务读文件（要么给出响应式接口，要么在虚拟线程上阻塞等待存储，且能读任何文件）；②把文件内容放进作业输入（永久多存一份，且受输入上限约束）；
+③输出文件写入 `sys_generated_file`（D31：那是交给外部的原样存档，不能删、不重新编码，不能被字段引用）；④完成流程自己上传（流程中没有字节的去处，且绕过上传流水线）；
+⑤输出文件以系统身份登记（失去"谁的上传"，`privateMetadata()` 的上传者判断与配额都失效）；⑥失败时立即删除已存下的文件（与清扫重复，且删除本身也会失败）。
+
+**实现说明（16t）**：core `ExternalJobType.InputFiles` / `OutputFiles`、`ExternalJobFile`、`GeneratedFile`、`ExternalJobContext.files()` / `file()`（缺省方法）、
+`ExternalJobResult.file(…)`、`ExternalJobCompletion.files()` / `file(键)`；runtime `StartExternalJob.Spec#files`、`ExternalJobFiles`（复制输入、存储输出）、
+`ExternalJobExecutor`（领取时的租约加上复制与存储可用的时间，不计入处理器的超时；见下面的修订）、`ExternalJobRecorder`（`sys_external_job_file` 的读写）、
+`FileUploadService.storeGenerated`、`ExternalJobChecks`（策略存在、输出上限不超过策略的上限）；迁移 `V42__external_job_files.sql`（只追加，`job_file_id` 为主键，D27 封存）；
+只读平台实体 `ExternalJobFile`（`external-job.read`）；错误码 `EXTERNAL_JOB_INPUT_FILE`、`EXTERNAL_JOB_INPUT_FILE_LIMIT`（三语）。
+示范：`app` 的 `commerce.product-image`（`PRODUCT_IMAGE_REQUEST`：把商品照片交给 `demo-ai` 的 `POST /v1/images`，回答的图片以请求人的 `commerce.image` 上传登记，
+`PRODUCT_IMAGE_APPLY` 换上新照片，旧照片随清扫删除）；图片经另一个外部服务 `demo-ai-images`（响应上限 16 MiB；`demo-ai` 保持 64 KiB）。测试 `ExternalJobFilesIT`、`ExternalJobFilesTest`（core）、
+`ExternalJobChecksTest`、`ExternalJobExecutorTest`、`ArchitectureTest.handlersReadFilesOnlyThroughTheirContext`。
+
+**独立评审之后的修订（2026-10-18，M1、M2、L1–L6 与信息项）**：
+- M1 输出的内存：`OutputFiles` 增加 `maxTotalBytes`（`outputFiles(策略, 个数, 每个, 合计)`；缺省 `min(个数 × 每个, 16 MiB)`、不小于每个，至多 200 MiB），超过即永久失败 `OUTPUT_FILES_TOO_LARGE`；
+  `GeneratedFile` 不再复制字节（数组交给结果，处理器之后不得修改，`content()` 返回同一数组）。每个实例的输出预算 `jabiz.external-jobs.files.output-budget`（缺省 256 MB）：
+  有输出的类型每领取一次尝试即预留其合计、尝试结束归还，预算不够的尝试不领取；启动检查要求每个类型的合计不超过预算。处理器在返回之前自己占用的内存不受平台约束。
+- M2 存储失败：一个文件的存储失败（策略的拒绝除外）先以同样的字节重试 `store-retries` 次（缺省 2），仍失败才是可重试的 `OUTPUT_FILE_FAILED`，**下一次尝试再次调用提供方**（说明中写明）。
+  复制与存储的时限随类型声明的大小增长：`work-minimum`（缺省 1 分钟，至少 1 秒）加每 MiB `work-per-mib`（缺省 0.5 秒），存储再乘以 1 + 重试次数；租约照此延长。
+  不做跨尝试的暂存：要在只追加的表中记录暂存文件与其清理，并在领取时区分"只差存储"的尝试，代价与这一少见情形不相称。
+- L1 作业的记录不泄露不公开的元数据：`ExternalJobFile` 的文件编号与摘要（字段名 `linkedFileId`、`linkedFileSha256`：遮蔽字段的名字会在所有操作记录中遮蔽同名的值，所以不用 `fileId`、`sha256`）
+  是遮蔽字段（`file.read`，`MaskStyle.ALL`），没有 `file.read` 看不到、不能筛选或排序，持有者经 `reveal` 逐值查看并留下记录。`privateMetadata()` 策略的文件，记录的编号为 UUIDv4、
+  `recorded_time` 只到日。`ExternalJob` 的 `requestedBy` 与 `createdTime` 不遮蔽：`external-job.read` 是管理员的权限（读到的是全部作业的请求人，与审计同级），
+  而文件到作业的连接已因编号遮蔽而断开；读内容的人（D47 所防的对象）不持有它。
+- L2 示范的图片走另一个外部服务 `demo-ai-images`（同一地址与密钥，响应上限 16 MiB），`demo-ai` 恢复 64 KiB，请求路径上的审核不受影响。
+- L3 复制的副本在写入前即登记，失败、超时、取消都删除；复制前检查可用空间（`min-free-disk`，缺省 256 MB），不够即可重试 `INPUT_FILE_NO_SPACE`。
+- L4 示范 `PRODUCT_IMAGE_APPLY` 只在商品的照片仍是作业所用的那张时才换上（结果带 `sourceFileId`），否则不换、告知请求人（`task.commerce.product-image.stale`）；本地桩输出的图片缩到 2048 像素以内的 JPEG，不超过作业的 10 MB。
+- L5 **处理器不是沙箱**：ArchUnit 规则 `handlersReadFilesThroughTheirContext` 现在也检查处理器经应用自己的类（应用包内，传递地）到达 `com.jabiz.runtime.file`，
+  但看不到反射、方法句柄，也看不到经 `java.nio` 直接读存储根目录；它防的是误用，不是恶意代码（应用代码与平台同权限运行）。
+- L6 测试：`ExternalJobFilesIT` 增加只追加与封存、`FOR KEY SHARE` 挡住开始中的删除、副本摘要不符、`privateMetadata()` 的输入与记录（遮蔽、`reveal`、随机编号、到日）、
+  PDF 的输出策略、登记失败为可重试、租约过期后迟到尝试的文件只记录不交出、示范的照片被他人改过；新的 `ExternalJobFileFailuresIT`（故障存储）：复制超时、
+  存储的内容不见、存储超时、存储失败一次在尝试内重试（处理器只运行一次）、持续失败时下一次尝试再运行处理器。
+- 信息项：处理器的 `deadline()` 从复制之后算起；复制后重算 SHA-256（只比较大小不能发现同长度的改动）；`StartExternalJob` 新增四参构造（文件策略），原三参构造保留（无策略，带文件的类型不能由它开始）。
+  第 6 条补充：`ExternalJobType.OutputFiles` 是本阶段新增的 record（三参构造取缺省合计）。
+
+## D51 受保护变更的审批权限与细分权限的管理员、时间参数的范围、`Combobox` 的加载状态
+
+**背景**：QuizBuks Q7a 的工作发现 D48 的两处缺口（产品负责人 2026-10-18 确认修正，阶段 16u）：①管理员只按持有 `*` 计。用细分权限管理（安全管理员持有
+`security.user-role.write`、`security.role.write`，没有 `*`）的应用永远不离开建立期，受保护的授权从不需要第二位管理员。②审批受保护的变更需要通用的
+`approval.decide` 加上管理员的覆盖；而 QuizBuks 的职责分离规则 `qb.sod.security-administration` 禁止同时持有安全管理的权限与 `approval.decide`——
+于是除 `*` 的持有人外谁也不能审批。另有 QuizBuks 评审中的两项平台小问题：③模板的时间参数超出 PostgreSQL 的范围时是 500（例如公开模板
+`p.at=+300000-01-01T00:00:00Z` 得到 `22008 timestamp out of range`）；④`@jabiz/ui` 的 `Combobox` 把加载中的转圈放在 `role=listbox` 元素里，axe `aria-required-children` 不通过。
+
+本条**修改 D48**（不取代其余部分）：第 1 条"建立期与首个管理员"中管理员的定义；第 1 条"审批人须持有 `*`，或持有管理员的权限……"中管理员的权限（改为可配置）与审批所需的权限
+（`security.protected-change.decide` 代替 `approval.decide`，审批时与生效时都如此）；第 1 条受保护权限的缺省清单（增加 `security.protected-change.decide`，并与 `*` 一样总是受保护）；
+实现说明⑥"审批人：生效时 `ProtectedChangeDecisionCheck.mayDecide`（`*`，或 `approval.decide` + 层级的权限 + `covers`）"中的 `approval.decide`。
+并删去 10 §16.4 已知限制的第一条（"管理员只按 `*` 计……应设 `always=true`"）。第 3、4 条补充 D7 / 05 §4 与 D34，不取代。
+
+**决策**
+1. **谁算管理员**（建立期与首个管理员的退役，10 §16.3）：经启用的角色持有 `*` **或** `jabiz.security.protected-grants.administrator-permissions`（逗号分隔，缺省
+   `security.user-role.write`、`security.role.write`）中任一权限的启用用户；`*` 总是算。其余照 D48（现在或之后某个预定版本中有效、首个管理员不算、记录后永不回退）。
+   配置中的权限码格式错误为启动错误 `SECURITY`；某个管理员的权限不受保护时启动警告（给出它就造出一位不经审批的管理员）。
+2. **审批受保护的变更用专门的权限** `security.protected-change.decide`（对象 `jabiz.security.protected-change`），**代替** `approval.decide`：
+   - `APPROVAL_DECIDE` 的入口接受 `approval.decide` 或 `security.protected-change.decide`（流程的**备选权限**，`ProcessDefinitionBuilder.orPermissions`：缺少声明的权限时，
+     持有备选的全部权限也可以启动；流程自己决定每一组允许什么）。流程在取得请求后按对象判断所需的权限（`ApprovalDecisionCheck.decidePermission`）：
+     受保护的变更要 `security.protected-change.decide`，其他一切审批要 `approval.decide`，不论请求的状态，缺少即 403。因此
+     `security.protected-change.decide` 不能决定业务审批，`approval.decide` 也不再能决定受保护的变更（`*` 两者都能）。
+   - 覆盖照旧：审批人须持有 `*`，或 `security.protected-change.decide` + 一个管理员的权限（第 1 条的集合）+ 变更给出的全部受保护权限（重设凭据、更改邮箱时为目标持有的全部）；
+     审批时按令牌、生效时按库中当时实际持有再判断（`mayDecide`：`*`，或 `security.protected-change.decide` + 层级的权限 + 覆盖）。
+   - 申请人、所针对的用户照旧不能审批；照旧要求近期二次验证（`ADMINISTRATION`）；首个管理员退役照旧。
+   - `security.protected-change.decide` **本身受保护**：加入缺省清单，并且与 `*` 一样**无论怎样配置都受保护**——它是这道四眼自己的第二双眼，
+     给出它（分配角色、角色增加权限）总要另一位管理员审批。
+3. **时间参数的范围**：平台的值转换（`FieldValueCoercer`，模板参数、筛选、实体属性共用）只接受 PostgreSQL 能保存的时刻与日期：`timestamptz`
+   为 ISO 年 -4712-01-01 00:00（UTC）至 294276-12-31 23:59:59.999999（UTC），`date` 为 -4712-01-01 至 5874897-12-31；超出即 400 `INVALID_VALUE`（不是数据库的 500）。
+   下限比 PostgreSQL 的（4714-11-24 BC）晚：驱动把 ISO 年 -4713 的值绑定为 `-infinity`（评审 L4）。
+   查询、数据视图与归档导出请求的 `asOf` / `knownAt` / `reportsFrom` / `reportsTo`，以及一切时态写入的 `effectiveTime`（`TemporalWriter`，含受保护授权的请求）同样检查（`TimeTravel`，评审 M2）。
+4. **`Combobox` 的加载状态**：加载中时列表（`role=listbox`）带 `aria-busy`，已有的选项照常显示直到新的结果到来；转圈（`role=status`）放在列表之外、搜索框之下。
+
+**线 1.2 内的兼容与升级影响**：
+- 以 `*` 管理并以 `*` 审批的部署不受影响（`*` 覆盖一切，`*` 的持有人照旧算管理员）。
+- 用细分权限管理的部署：首个管理员之外有**两位**持有管理员权限的用户时，建立期在下一次写安全实体或检查受保护变更时结束（记入 `sec_protected_grants_armed`，不再回退）；
+  首个管理员在出现**一位**这样的用户时退役（`sec_bootstrap_retired`）。这是本条有意的行为变化。此后受保护的变更需要另一位管理员以 `security.protected-change.decide` 审批：
+  **升级前**（在 16r 的版本上，那时它还只是普通的权限码，直接写入）或由 `*` 管理员把 `security.protected-change.decide` 加入安全管理员的角色——升级后建立期一结束再加就需要审批，
+  而那时可能已无人能审批（出路同 10 §16.3：由运维以 `enabled=false` 启动一次，加好后改回）。职责分离规则不必改动（新权限不是 `approval.decide`）。
+- 以非 `*` 的 `approval.decide` + 管理员权限审批受保护变更的部署：改为 `security.protected-change.decide`。升级前已被这样批准、尚未生效的变更在生效时按新规则判断，
+  为 `APPROVER_NOT_ALLOWED`（申请人重新申请即可）。
+- `ProcessDefinition` 新增 record 组件 `alternativePermissions`（组件数 16 → 17，新组件在最后；原 16 参构造保留为普通构造器）：以 `ProcessDefinition.define` 声明的应用不受影响；
+  直接调用规范构造器或对 record 解构的代码需要改写。`withPermissions` 替换权限时清空备选权限。
+- 超出 PostgreSQL 范围的时间以前就无法保存或查询（500），现在是 400；范围之内的值不受影响。
+- 示范应用、端到端测试、演示数据与快速开始都以 `*` 管理，不受影响。
+
+**理由**：管理员的定义应当与"谁能改权限"一致：能分配角色或给角色加权限的人就能把任何权限给任何人，按 `*` 计会让细分权限的部署永远停在没有四眼的建立期。
+审批受保护变更是安全管理的一部分，而 `approval.decide` 是业务审批的权限；把两者分开，职责分离才能把"安全管理"与"业务审批"真正分开，而不是让受保护的变更无人能批。
+备选权限让同一个审批入口（待办页的 `ApprovalPanel`、`APPROVAL_DECIDE`）同时服务两类审批人，而不必为前端增加第二个流程；按对象的判断在流程中，入口只决定能否启动。
+新权限总是受保护：否则一份不含它的自定义清单会让一位管理员不经审批给另一个自己控制的账号审批权。
+
+**放弃的方案**：①为受保护的变更另设流程 `SEC_PROTECTED_CHANGE_DECIDE`（待办页与审批面板须按对象选择流程，接口与前端都要改；两个流程的判断重复）；
+②让 `approval.decide` 继续有效并要求应用放宽职责分离规则（规则的用意正是把两者分开）；③管理员的权限不可配置（应用可能以自己的权限码管理安全）；
+④为细分权限的部署要求 `always=true`（D48 的已知限制：容易遗漏，遗漏时没有保护）；⑤只在模板参数中检查时间范围（筛选与实体写入同样会 500）。
+
+**修订（16u 安全评审之后，2026-10-18，产品负责人确认）**：
+- **H1 职责分离禁止审批人持有的权限不要求覆盖**：QuizBuks 的 `qb.sod.security-administration` 禁止安全管理员（`QB_ADMIN_SUPER`）同时持有 `approval.decide`、`control.publish`，
+  于是没有人能批准给出这两项的授权（任命内容或财务管理员）。修改第 2 条的覆盖：审批人**不必持有**这样的受保护权限——某条**已发布的**职责分离规则（`SodGuard` 读取的同一来源 `SodService.rules()`，
+  即启用的规则）的一组含这项权限、另一组含审批人已持有的某项权限。其余一律照旧：须持有 `security.protected-change.decide`、一项管理员的权限与**其余**全部给出的受保护权限；
+  申请人与目标不能审批；需要近期二次验证；**`*` 从不豁免**（给出 `*` 须持有 `*`）。审批时按令牌与当时的规则判断，生效时按库中当时的持有与**当时的规则**再判断：
+  批准与生效之间撤下的规则使其豁免失效（`APPROVER_NOT_ALLOWED`）。请求时的事实 `sodExempt` 写明"持有某组任一权限的审批人按规则 R 不能持有 X：不要求其持有"。
+  理由：四眼不变（审批人仍是另一位管理员，且持有改权限的权限与审批权）；系统自己禁止审批人持有它，要求持有就使授权永远无法批准；规则本身只经受控变更的四眼发布（18 §4），
+  一个人不能独自发布规则来为自己豁免。放弃的方案：要求应用为审批放宽职责分离（规则的用意正是分开）；豁免任何规则涉及的权限（只豁免审批人确实因持有的权限而不能持有的）。
+- **M3 职责分离按实际使用的权限检查**：入口对有备选权限的流程不再做职责分离检查（入口所用的那一组未必是实际需要的）；`CheckApprovalDecision` 在取得请求后对按对象所需的权限与当前层级的权限
+  调用 `SodGuard.check`。所以层级的权限（以前入口只检查 `approval.decide`）同样受规则约束，而对受保护的变更不再因 `approval.decide` 上的规则被误拒。
+- **L5**：管理员的权限不受保护为启动**错误**；集合既不含 `security.user-role.write` 也不含 `security.role.write` 时警告（持有它们的人能改权限却不算管理员，重开 D48 的缺口）。
+- **L6**：`APPROVAL_DECIDE` 作为审批请求的行操作（`actsOn`）只按状态显示，按对象隐藏需要新的条件机制，不做：持有 `security.protected-change.decide` 的人会看到业务审批请求上的操作，执行时 403。
+  持有 `approval.read` 的人能读受保护变更的事实（其中有用户的地址与凭据历史，10 §16.2），与能读审批请求的其他事实相同；安全管理员要核对事实也需要它。
+- **L7**：`Combobox` 用一个常驻的提示区（只改文字："加载中…" / "结果：n"），加载中保留的旧选项不能选择。
+- 备选权限只供平台使用：应用的流程声明 `orPermissions` 时启动检查 `PROCESS` 警告。
+
+**实现说明（16u）**：core `ProcessDefinition.alternativePermissions` / `permissionsFor`、`ProcessDefinitionBuilder.orPermissions`（`ProcessController` 的权限与职责分离检查、
+`MetaModelController` 的流程目录按调用者所用的那一组）；`ProtectedPermissions.DECIDE`（`SecurityPermissions.PROTECTED_CHANGE_DECIDE`）；`FieldValueCoercer.storable` 与
+`EARLIEST_/LATEST_TIMESTAMP`、`EARLIEST_/LATEST_DATE`；runtime `ProtectedGrantSettings.administratorPermissions`、`ProtectedGrants.admins`（`= ANY(:all)`）、
+`ProtectedChangeDecisionCheck.decidePermission` / `covers` / `mayDecide`（管理员的权限取自配置）、`ApprovalDecisionCheck.decidePermission`（缺省 null）、`CheckApprovalDecision`
+（按对象要求权限）、`TimeTravel`；`@jabiz/ui` 的 `Combobox`。没有迁移；OpenAPI 不变。测试：`ProtectedGrantFineAdminsIT`（细分权限的管理员使首个管理员退役并结束建立期、
+安全管理员以新权限审批另一位申请的授权、申请人与目标不能、`approval.decide` 不能、无二次验证不能、覆盖照旧（含生效时）、给出新权限本身要审批）、
+`ProtectedGrantIT`（`approval.decide` 单独不能审批、生效前失去新权限时 `APPROVER_NOT_ALLOWED`，其余改用新权限）、`ApprovalIT`（新权限不能决定业务审批）、
+`ApproverCoverageTest`、`ProtectedPermissionsTest`、`ProcessDefinitionBuilderTest`、`FieldValueCoercerTest`、`AdvancedQueryExecutorIT` 与 `ValueBindingIT`（超出范围为 400，边界值可查询）、
+`combobox.test.tsx`（加载中 `aria-busy`、保留选项、转圈在列表外，亮暗两种外观过 axe）。

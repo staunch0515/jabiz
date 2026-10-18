@@ -119,7 +119,8 @@ class MetaModelController {
     Mono<List<ProcessEntry>> processes() {
         return RequestContexts.current().map(context -> processes.all().stream()
             .filter(ProcessDefinition::listed)
-            .filter(definition -> Permissions.allowsAll(context, definition.permissions(), development))
+            .filter(definition -> Permissions.allowsAll(context, definition.permissionsFor(context::hasPermission),
+                development))
             .map(definition -> entry(definition, context))
             .sorted(Comparator.comparing(ProcessEntry::label).thenComparing(ProcessEntry::version))
             .toList());

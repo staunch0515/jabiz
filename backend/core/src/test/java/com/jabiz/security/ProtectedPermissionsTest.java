@@ -14,15 +14,18 @@ class ProtectedPermissionsTest {
         ProtectedPermissions protectedSet = ProtectedPermissions.of(List.of());
         assertThat(protectedSet.permissions()).containsExactlyInAnyOrderElementsOf(ProtectedPermissions.DEFAULT);
         assertThat(protectedSet.isProtected("security.user-role.write")).isTrue();
+        assertThat(protectedSet.isProtected("security.protected-change.decide")).isTrue();
         assertThat(protectedSet.isProtected("ledger.read")).isFalse();
         assertThat(protectedSet.isProtected(null)).isFalse();
         assertThat(ProtectedPermissions.of(null).permissions()).isEqualTo(protectedSet.permissions());
     }
 
     @Test
-    void aConfiguredListReplacesTheDefaultButAlwaysKeepsTheWildcard() {
+    void aConfiguredListReplacesTheDefaultButAlwaysKeepsTheWildcardAndTheDecisionOfProtectedChanges() {
         ProtectedPermissions configured = ProtectedPermissions.of(List.of(" fin.pay ", "", "approval.decide"));
-        assertThat(configured.permissions()).containsExactly("*", "approval.decide", "fin.pay");
+        // Decision D51: the permission deciding protected changes is protected whatever the list says.
+        assertThat(configured.permissions()).containsExactly("*", "approval.decide", "fin.pay",
+            "security.protected-change.decide");
         assertThat(configured.isProtected("ledger.post")).isFalse();
     }
 

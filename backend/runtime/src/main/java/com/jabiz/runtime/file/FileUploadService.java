@@ -35,6 +35,7 @@ import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -49,6 +50,7 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 /**
@@ -56,7 +58,7 @@ import java.util.stream.Collectors;
  * rate, streams the single part {@code file} into the upload area while counting (the request is abandoned as soon
  * as the policy's limit is passed), recognises the type by content, re-encodes images, stores the objects and records
  * the file with {@code FILE_REGISTER}. If recording fails, the stored objects are deleted; the upload area is always
- * cleaned up.
+ * cleaned up. The files external jobs produce take the same way in ({@link #storeGenerated}, decision D50).
  */
 @Component
 public class FileUploadService {
@@ -66,6 +68,9 @@ public class FileUploadService {
 
     private static final int BUFFER_SIZE = 64 * 1024;
     private static final int RATE_LIMITED_ACTORS = 10_000;
+
+    /** A stored and registered file, with the SHA-256 of its (processed) original. */
+    public record Stored(FileProcesses.FileInfo info, String sha256) {}
 
     /** A received upload in the upload area. */
     private record Received(Path path, long size, String originalName) {}
@@ -115,7 +120,49 @@ public class FileUploadService {
             return observations.mono(PlatformObservations.FILE_UPLOAD, "upload " + policy.name(),
                 KeyValues.of("policy", policy.name()),
                 Mono.usingWhen(store.newUploadFile(),
-                    upload -> receive(policy, parts, upload).flatMap(received -> storeFile(policy, received)),
+                    upload -> receive(policy, parts, upload).flatMap(received -> storeFile(policy, received, null))
+                        .map(Stored::info),
+                    upload -> store.discard(upload).then(store.discard(workDirectory(upload)))));
+        });
+    }
+
+    /**
+     * Stores a file an external job produced (decision D50 item 3) exactly as an upload under {@code policyName}:
+     * the policy's size limit, the type recognised from the content and checked against the policy, images
+     * re-encoded without their metadata, a random id for a policy with {@code privateMetadata()}, and
+     * {@code FILE_REGISTER} as the actor of the Reactor context (the job's requester), with the job's id in its
+     * operation record. Neither the upload permission (the start of the job checked it) nor the upload rate (the job
+     * type limits its files) is checked here. Refusals are those of an upload: 413 {@code FILE_TOO_LARGE},
+     * 400 {@code FILE_TYPE_NOT_ALLOWED} or {@code FILE_INVALID}.
+     *
+     * @param name    the file's name for downloads, cleaned like an uploaded one
+     * @param size    the number of bytes {@code content} gives
+     * @param content opens the bytes; read once, on {@code boundedElastic}
+     */
+    public Mono<Stored> storeGenerated(String policyName, String name, long size, Supplier<InputStream> content,
+        String jobId) {
+        return Mono.defer(() -> {
+            FilePolicy policy = policies.find(policyName).orElseThrow(() -> new IllegalStateException(
+                "No file policy " + policyName));
+            if (size > policy.maxBytes()) {
+                return Mono.error(tooLarge(policy.maxBytes()));
+            }
+            if (size <= 0) {
+                return Mono.error(invalid("The file is empty"));
+            }
+            return observations.mono(PlatformObservations.FILE_UPLOAD, "store generated file " + policy.name(),
+                KeyValues.of("policy", policy.name()),
+                Mono.usingWhen(store.newUploadFile(),
+                    upload -> Mono.fromCallable(() -> {
+                            try (InputStream in = content.get()) {
+                                Files.copy(in, upload, StandardCopyOption.REPLACE_EXISTING);
+                            }
+                            return Files.size(upload);
+                        })
+                        .subscribeOn(Schedulers.boundedElastic())
+                        .flatMap(written -> written != size ? Mono.error(invalid("The file is not "
+                            + size + " bytes long")) : storeFile(policy, new Received(upload, written,
+                            FileNames.sanitize(name)), jobId)),
                     upload -> store.discard(upload).then(store.discard(workDirectory(upload)))));
         });
     }
@@ -163,7 +210,7 @@ public class FileUploadService {
             }));
     }
 
-    private Mono<FileProcesses.FileInfo> storeFile(FilePolicy policy, Received received) {
+    private Mono<Stored> storeFile(FilePolicy policy, Received received, String jobId) {
         return detect(received.path()).flatMap(detected -> {
             if (detected.isEmpty() || !policy.allows(detected.get())) {
                 return Mono.error(notAllowed(policy));
@@ -176,7 +223,8 @@ public class FileUploadService {
             return prepare(policy, type, received.path())
                 .flatMap(prepared -> digestAndSize(prepared.original()).flatMap(digest ->
                     write(fileId, prepared)
-                        .then(register(policy, fileId, prepared, digest, received.originalName()))
+                        .then(register(policy, fileId, prepared, digest, received.originalName(), jobId))
+                        .map(info -> new Stored(info, digest.sha256()))
                         .onErrorResume(error -> store.deleteAll(FileKeys.prefix(fileId))
                             .onErrorResume(cleanup -> Mono.empty())
                             .then(Mono.error(error)))));
@@ -207,11 +255,12 @@ public class FileUploadService {
     }
 
     private Mono<FileProcesses.FileInfo> register(FilePolicy policy, UUID fileId, Prepared prepared,
-        Digest digest, String originalName) {
+        Digest digest, String originalName, String jobId) {
         FileProcesses.RegisterInput input = new FileProcesses.RegisterInput(fileId, policy.name(),
             prepared.type().contentType(), digest.size(), digest.sha256(), prepared.width(), prepared.height(),
-            new ArrayList<>(prepared.variants().keySet()), originalName);
-        // The upload API is FILE_REGISTER's entry point: it runs as the uploader (decision D41).
+            new ArrayList<>(prepared.variants().keySet()), originalName, jobId);
+        // The upload API (and the external job executor, for the files of a job) is FILE_REGISTER's entry point: it
+        // runs as the uploader, or the job's requester (decisions D41, D50).
         return executor.run(FileProcesses.REGISTER_PROCESS, input,
                 ExecutionOptions.NONE.atEntryOf(FileProcesses.REGISTER_PROCESS))
             .map(ProcessResult::output);

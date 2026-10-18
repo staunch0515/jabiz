@@ -9,6 +9,7 @@ import com.jabiz.runtime.context.RequestContexts;
 import com.jabiz.runtime.dataset.DatasetRegistry;
 import com.jabiz.runtime.entity.EntityDefinitionRegistry;
 import com.jabiz.runtime.observability.PlatformObservations;
+import com.jabiz.runtime.query.TimeTravel;
 import com.jabiz.runtime.report.ReportPermissions;
 import com.jabiz.runtime.report.ReportScopes;
 import com.jabiz.runtime.retention.RetentionPermissions;
@@ -93,6 +94,11 @@ class ExportController {
                 problems.add(new Violation("datasets", PlatformErrorCodes.INVALID_VALUE,
                     "Name between 1 and " + MAX_DATASETS + " datasets"));
             }
+            // Times PostgreSQL cannot store are the caller's 400 (decision D51 item 3).
+            TimeTravel.check("asOf", body.asOf(), problems);
+            TimeTravel.check("knownAt", body.knownAt(), problems);
+            TimeTravel.check("reportsFrom", body.reportsFrom(), problems);
+            TimeTravel.check("reportsTo", body.reportsTo(), problems);
             if (body.reportsFrom() != null && body.reportsTo() != null
                 && !body.reportsFrom().isBefore(body.reportsTo())) {
                 problems.add(new Violation("reportsTo", PlatformErrorCodes.INVALID_VALUE,

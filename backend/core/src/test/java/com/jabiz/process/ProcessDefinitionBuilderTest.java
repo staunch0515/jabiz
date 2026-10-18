@@ -282,4 +282,35 @@ class ProcessDefinitionBuilderTest {
         assertThat(def.access()).isEqualTo(ProcessAccess.SUB_PROCESS_ONLY);
         assertThat(def.admission().validFamily()).isFalse();
     }
+
+    /** Decision D51: an alternative set of permissions lets a caller lacking the declared ones start, all of it. */
+    @Test
+    void alternativePermissionsLetACallerLackingTheDeclaredOnesStart() {
+        ProcessDefinition<In, Out, ProcessContext> def = define(pb -> complete(pb)
+            .permissions("approval.decide")
+            .orPermissions("security.protected-change.decide")
+            .step("Only", NoopStep.class, NoMetadata.INSTANCE));
+        assertThat(def.alternativePermissions()).containsExactly("security.protected-change.decide");
+        assertThat(def.permissionsFor(java.util.Set.of("approval.decide")::contains))
+            .containsExactly("approval.decide");
+        assertThat(def.permissionsFor(java.util.Set.of("security.protected-change.decide")::contains))
+            .containsExactly("security.protected-change.decide");
+        assertThat(def.permissionsFor(java.util.Set.of("approval.decide", "security.protected-change.decide")
+            ::contains)).containsExactly("approval.decide");
+        assertThat(def.permissionsFor(java.util.Set.<String>of()::contains)).containsExactly("approval.decide");
+        // Replacing the permissions drops the alternative; the other copies keep it.
+        assertThat(def.withPermissions("x").alternativePermissions()).isEmpty();
+        assertThat(def.withMfa(com.jabiz.security.MfaRequirement.ALWAYS).alternativePermissions())
+            .containsExactly("security.protected-change.decide");
+        assertThat(def.asInternal().alternativePermissions()).isNotEmpty();
+        assertThat(def.actsOn("E", "id").withVerifiedEmail(true).withAdmission("f", in -> "k")
+            .alternativePermissions()).isNotEmpty();
+        assertThat(define(pb -> complete(pb).step("Only", NoopStep.class, NoMetadata.INSTANCE))
+            .alternativePermissions()).isEmpty();
+        assertThatThrownBy(() -> define(pb -> complete(pb).orPermissions("a")
+            .step("Only", NoopStep.class, NoMetadata.INSTANCE))).isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("alternative permissions need permissions");
+        assertThatThrownBy(() -> define(pb -> complete(pb).permissions("a").orPermissions(" ")
+            .step("Only", NoopStep.class, NoMetadata.INSTANCE))).isInstanceOf(IllegalArgumentException.class);
+    }
 }
