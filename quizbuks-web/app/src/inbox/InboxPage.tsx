@@ -116,7 +116,8 @@ export function InboxPage() {
   const { t: tQb } = useTranslation(QB)
   const id = useId()
   const queryClient = useQueryClient()
-  const [at] = useState(() => new Date().toISOString())
+  // The list as of opening the page: its pages stay one list until it is opened again or reloaded.
+  const [at] = useState(() => Date.now())
   const [text, setText] = useState('')
   const [filter, setFilter] = useState<InboxFilter>({})
   const [done, setDone] = useState(false)
@@ -125,7 +126,7 @@ export function InboxPage() {
   }, [queryClient])
   const inbox = useInfiniteQuery({
     queryKey: [...INBOX_QUERY, 'list', at, filter, i18n.language],
-    queryFn: ({ pageParam }) => readInbox(at, i18n.language, filter, pageParam, INBOX_PAGE),
+    queryFn: ({ pageParam }) => readInbox(i18n.language, filter, pageParam, INBOX_PAGE),
     initialPageParam: 0,
     getNextPageParam: (last) => (last.items.length < INBOX_PAGE ? undefined : last.offset + INBOX_PAGE),
   })

@@ -146,12 +146,14 @@ function item(row: Row): InboxItem {
   }
 }
 
-/** A page of the inbox, newest first, as of `at` (the device's now). */
-export async function readInbox(at: string, language: string, filter: InboxFilter, offset: number,
+/**
+ * A page of the inbox, newest first, as the server has it now (the device's clock is no parameter: review L1; what
+ * expired is out of the feed).
+ */
+export async function readInbox(language: string, filter: InboxFilter, offset: number,
   limit: number): Promise<QueryPage<InboxItem>> {
   const page = await runQuery<Row>(INBOX_TEMPLATE.inbox, {
     params: {
-      at,
       lang: language.split('-')[0],
       category: filter.category,
       unread: filter.unread || undefined,
@@ -168,15 +170,14 @@ export async function readInbox(at: string, language: string, filter: InboxFilte
 /** One item of the taker's inbox now; null when it is not (or no longer) in it. */
 export async function readInboxItem(kind: ItemKind, id: string): Promise<InboxItem | null> {
   const page = await runQuery<Row>(INBOX_TEMPLATE.inbox, {
-    params: { at: new Date().toISOString(), itemKind: kind, itemId: id },
+    params: { itemKind: kind, itemId: id },
     limit: 1,
   })
   return page.items[0] ? item(page.items[0]) : null
 }
 
 export async function readUnread(): Promise<Unread> {
-  const row = (await runQuery<Row>(INBOX_TEMPLATE.unread, { params: { at: new Date().toISOString() }, limit: 1 }))
-    .items[0] ?? {}
+  const row = (await runQuery<Row>(INBOX_TEMPLATE.unread, { params: {}, limit: 1 })).items[0] ?? {}
   const messages = num(row.messages)
   const broadcasts = num(row.broadcasts)
   return { messages, broadcasts, total: messages + broadcasts }

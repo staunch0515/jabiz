@@ -65,6 +65,13 @@ class BroadcastIT extends InboxItSupport {
             draft.get("revision")), 404);
         refused("QB_BROADCAST_SAVE", console(other), body("broadcastId", draft.get("broadcastId"), "baseRevision",
             draft.get("revision"), "title", body("en", "Taken")), 404);
+        // Nor withdraws or cancels them, sent or not.
+        refused("QB_BROADCAST_CANCEL", console(other), body("broadcastId", draft.get("broadcastId"),
+            "baseRevision", draft.get("revision")), 404);
+        String sentOne = notice(live.sponsor(), live.publicationId(), List.of("JP"));
+        refused("QB_BROADCAST_WITHDRAW", console(other), body("broadcastId", sentOne, "baseRevision",
+            ((Number) broadcast(sentOne).get("revision")).longValue()), 404);
+        assertThat(broadcast(sentOne)).containsEntry("status", "SENT");
         assertThat(items("qb.sponsor.broadcasts", console(other), Map.of())).extracting(row -> row.get("broadcastId"))
             .doesNotContain(draft.get("broadcastId"));
         // Nor do the administrators write a sponsor's notice (they withdraw it).
@@ -148,6 +155,32 @@ class BroadcastIT extends InboxItSupport {
         run("PARAM_SET", admin(), body("key", QbParams.BROADCAST_SPONSOR_INTERVAL, "value", "24"));
     }
 
+    @Test
+    void twoNoticesSentAtOnceKeepThePublicationsLimit() throws Exception {
+        Live live = live("s-race");
+        List<Map<String, Object>> drafts = new ArrayList<>();
+        for (int i = 0; i < 2; i++) {
+            drafts.add(noticeDraft(live.sponsor(), "title", body("en", "Race " + i), "body", body("en", "Play"),
+                "publicationId", live.publicationId(), "regions", List.of("JP")));
+        }
+        // Both drafts are fine alone; sent at once, the sponsor's account lock lets one go and the other meets the
+        // interval under it.
+        List<java.util.concurrent.CompletableFuture<Integer>> sends = new ArrayList<>();
+        for (Map<String, Object> draft : drafts) {
+            assertThat(problemCodes(draft)).isEmpty();
+            sends.add(java.util.concurrent.CompletableFuture.supplyAsync(() -> call("QB_BROADCAST_SEND",
+                console(live.sponsor()), body("broadcastId", draft.get("broadcastId"), "baseRevision",
+                    draft.get("revision"))).returnResult(String.class).getStatus().value()));
+        }
+        List<Integer> statuses = new ArrayList<>();
+        for (java.util.concurrent.CompletableFuture<Integer> send : sends) {
+            statuses.add(send.get(60, java.util.concurrent.TimeUnit.SECONDS));
+        }
+        assertThat(statuses).containsExactlyInAnyOrder(200, 422);
+        assertThat(drafts.stream().map(draft -> broadcast(draft.get("broadcastId")).get("status")).toList())
+            .containsExactlyInAnyOrder("SENT", "DRAFT");
+    }
+
     // ---- scheduling ------------------------------------------------------------------------------------------------
 
     @Test
@@ -224,6 +257,14 @@ class BroadcastIT extends InboxItSupport {
             .expectStatus().isForbidden();
         run("QB_ADMIN_BROADCAST_WITHDRAW", contentAdmin(), body("broadcastId", bad, "reason", "Misleading"));
         assertThat(itemIds(inbox(taker(taker)))).doesNotContain(bad);
+        // Review L3: the sponsor's dataset says an administrator withdrew it, not which one (the audit knows).
+        assertThat(rows("urn:jabiz:dataset:sponsor:QbBroadcast", console(live.sponsor())))
+            .filteredOn(row -> bad.equals(String.valueOf(row.get("broadcastId")))).singleElement()
+            .satisfies(row -> {
+                assertThat(row).containsEntry("withdrawnBy", "ADMIN");
+                assertThat(String.valueOf(row)).doesNotContain("content-admin-q7c");
+            });
+        assertThat(broadcast(own)).containsEntry("withdrawn_by", "SENDER");
         assertThat(sponsorRow(live.sponsor(), bad)).containsEntry("status", "WITHDRAWN")
             .containsEntry("withdrawnByAdmin", true).containsEntry("withdrawReason", "Misleading");
         // Withdrawn ones count against the publication's limit.
@@ -299,11 +340,43 @@ class BroadcastIT extends InboxItSupport {
         assertThat(((Number) admin.get("audienceCount")).longValue()).isEqualTo(audience);
         assertThat(admin).containsEntry("senderKind", "SPONSOR").containsEntry("sponsorCompany",
             "Company of " + live.sponsor());
+
+        // Review M2: the sponsor sees the day's snapshot only, never the live counts beside their reward rows.
+        Map<String, Object> before = sponsorRow(live.sponsor(), id);
+        assertThat(before.get("reads")).isNull();
+        assertThat(before.get("snapshotAt")).isNull();
+        assertThat(runStats().items().succeeded()).isPositive();
         Map<String, Object> sponsor = sponsorRow(live.sponsor(), id);
+        assertThat(Instant.parse(String.valueOf(sponsor.get("snapshotAt")))).isEqualTo(clock.instant());
         assertThat(((Number) sponsor.get("reads")).longValue()).isEqualTo(6);
+        // Fewer than 50 reached (the parameter): no clicks or conversions at all; the reach rounded down to tens.
+        assertThat(sponsor.get("clicks")).isNull();
+        assertThat(sponsor.get("conversions")).isNull();
+        Object reach = sponsor.get("audienceCount");
+        if (audience < 10) {
+            assertThat(reach).isNull();
+        } else {
+            assertThat(((Number) reach).longValue()).isEqualTo(audience / 10 * 10);
+        }
+        run("PARAM_SET", admin(), body("key", QbParams.BROADCAST_STATS_MIN_AUDIENCE, "value", "5"));
+        sponsor = sponsorRow(live.sponsor(), id);
         assertThat(((Number) sponsor.get("clicks")).longValue()).isEqualTo(5);
         // Three conversions: fewer than five, not shown to the sponsor.
         assertThat(sponsor.get("conversions")).isNull();
+        // A click after the snapshot shows the next day only; the administrators' figures are live.
+        String late = takers.get(5);
+        clock.advance(Duration.ofMinutes(1));
+        mark(taker(late), "BROADCAST", id, "CLICK");
+        assertThat(((Number) sponsorRow(live.sponsor(), id).get("clicks")).longValue()).isEqualTo(5);
+        assertThat(((Number) adminRow(id).get("clicks")).longValue()).isEqualTo(6);
+        assertThat(runStats().items().succeeded()).isPositive();
+        assertThat(((Number) sponsorRow(live.sponsor(), id).get("clicks")).longValue()).isEqualTo(6);
+        // Unchanged counts are not written again.
+        assertThat(runStats().items().succeeded()).isZero();
+        run("PARAM_SET", admin(), body("key", QbParams.BROADCAST_STATS_MIN_AUDIENCE, "value", "50"));
+        // The snapshot is the system's.
+        refusedAsInternal(BroadcastProcesses.STATS, admin(), body("broadcastId", id, "reads", 1, "clicks", 1,
+            "conversions", 1));
         // Counts only: nobody's identity in either list.
         for (String taker : takers) {
             assertThat(String.valueOf(admin)).doesNotContain(taker);

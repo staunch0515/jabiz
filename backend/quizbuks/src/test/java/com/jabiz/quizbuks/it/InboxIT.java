@@ -1,5 +1,6 @@
 package com.jabiz.quizbuks.it;
 
+import com.jabiz.quizbuks.messaging.BroadcastProcesses;
 import com.jabiz.quizbuks.messaging.MessageProcesses;
 import com.jabiz.quizbuks.setup.QbParams;
 import com.jabiz.quizbuks.setup.QbRoles;
@@ -50,6 +51,50 @@ class InboxIT extends InboxItSupport {
             submitted.get("attemptId"), "publicationId", publicationId, "occurredAt", clock.instant().toString()));
         assertThat(((MessageProcesses.MessageOutput) again).messageId()).isNull();
         assertThat(messagesOf(taker)).hasSize(1);
+    }
+
+    @Test
+    void aPublicationsNameIsPlainTextInAMessageNeverALinkOrAnImage() {
+        String sponsor = newSponsor(unique("s-inbox-name"));
+        credit(sponsor, 1_000);
+        String name = "Win [Claim](https://e.example/x) ![i](https://e.example/i.png) <https://e.example/a>";
+        String publicationId = livePublication(sponsor, name, Map.of("regions", List.of("GLOBAL"), "name", name));
+        String taker = newTaker(unique("t-inbox-name"), "JP");
+        play(taker, publicationId, true, true);
+        deliverEvents();
+        // Review H2: a personal message is plain text; the name stays as the sponsor wrote it, never rendered.
+        assertThat(inbox(taker(taker))).filteredOn(item -> "MESSAGE".equals(item.get("itemKind"))).singleElement()
+            .satisfies(item -> {
+                assertThat(item).containsEntry("markdown", false);
+                assertThat(String.valueOf(item.get("body"))).contains("[Claim](https://e.example/x)");
+            });
+    }
+
+    @Test
+    void aSponsorsNoticeIsHiddenWhileItsPublicationIsPausedAndGoneWhenItEnds() {
+        String sponsor = newSponsor(unique("s-inbox-pause"));
+        credit(sponsor, 10_000);
+        String publicationId = livePublication(sponsor, "Paused notices", Map.of("regions", List.of("JP")));
+        String taker = newTaker(unique("t-inbox-pause"), "JP");
+        String id = notice(sponsor, publicationId, List.of("JP"));
+        assertThat(itemIds(inbox(taker(taker)))).contains(id);
+        assertThat(count(unread(taker(taker)), "broadcasts")).isPositive();
+
+        // Review M1: paused (by the sponsor, or taken down by an administrator), the notice is hidden, not withdrawn.
+        run("QB_PUBLICATION_PAUSE", sponsorToken(sponsor), body("publicationId", publicationId));
+        assertThat(itemIds(inbox(taker(taker)))).doesNotContain(id);
+        assertThat(inbox(taker(taker), "itemKind", "BROADCAST", "itemId", id)).isEmpty();
+        refused("QB_MESSAGE_MARK", taker(taker), body("kind", "BROADCAST", "id", id, "action", "READ"), 404);
+        run("QB_PUBLICATION_RESUME", sponsorToken(sponsor), body("publicationId", publicationId));
+        assertThat(itemIds(inbox(taker(taker)))).contains(id);
+        run("QB_PUBLICATION_ADMIN_PAUSE", contentAdmin(), body("publicationId", publicationId, "reason",
+            "Checking"));
+        assertThat(itemIds(inbox(taker(taker)))).doesNotContain(id);
+        // Ended, it leaves the feed with the next run of the expiry job.
+        run("QB_PUBLICATION_ADMIN_END", contentAdmin(), body("publicationId", publicationId, "reason", "Spam"));
+        runExpire();
+        assertThat(query("SELECT live FROM qb_broadcast_feed WHERE broadcast_id = ?::uuid", id)).singleElement()
+            .satisfies(row -> assertThat(row).containsEntry("live", false));
     }
 
     @Test
@@ -183,7 +228,20 @@ class InboxIT extends InboxItSupport {
         // The page cannot choose another country: the profile's is used, and there is no such parameter.
         client.post().uri("/api/queries/qb.app.inbox").contentType(org.springframework.http.MediaType.APPLICATION_JSON)
             .header(org.springframework.http.HttpHeaders.AUTHORIZATION, taker(usa))
-            .bodyValue(Map.of("params", Map.of("at", clock.instant().toString(), "country", "JP"))).exchange()
+            .bodyValue(Map.of("params", Map.of("country", "JP"))).exchange()
+            .expectStatus().isBadRequest();
+        // Nor its time (review L1): the inbox is the server's now, an old time shows no expired announcement.
+        for (String template : List.of("qb.app.inbox", "qb.app.inbox-unread")) {
+            client.post().uri("/api/queries/" + template)
+                .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                .header(org.springframework.http.HttpHeaders.AUTHORIZATION, taker(usa))
+                .bodyValue(Map.of("params", Map.of("at", "2000-01-01T00:00:00Z"))).exchange()
+                .expectStatus().isBadRequest();
+        }
+        client.post().uri("/api/queries/qb.sponsor.inbox")
+            .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+            .header(org.springframework.http.HttpHeaders.AUTHORIZATION, console(sponsorA()))
+            .bodyValue(Map.of("params", Map.of("at", "2000-01-01T00:00:00Z"))).exchange()
             .expectStatus().isBadRequest();
         // The sponsor console does not show the app's announcements.
         assertThat(itemIds(consoleInbox(console(sponsorA())))).doesNotContain(toAll);
@@ -235,12 +293,23 @@ class InboxIT extends InboxItSupport {
 
         run("QB_ADMIN_BROADCAST_WITHDRAW", contentAdmin(), body("broadcastId", withdrawn, "reason", "Mistake"));
         assertThat(itemIds(inbox(taker(taker)))).contains(shortLived).doesNotContain(withdrawn);
+        // The minute's job takes the expired ones out of the feed (review H1): the inbox reads only the live rows.
         clock.advance(Duration.ofHours(3));
+        assertThat(runExpire().items().succeeded()).isPositive();
         assertThat(itemIds(inbox(taker(taker)))).contains(defaultLife).doesNotContain(shortLived, withdrawn);
+        assertThat(query("SELECT live FROM qb_broadcast_feed WHERE broadcast_id = ?::uuid", shortLived))
+            .singleElement().satisfies(row -> assertThat(row).containsEntry("live", false));
+        assertThat(broadcast(shortLived)).containsEntry("status", "SENT");
+        // Nothing more to do until the next one expires.
+        assertThat(runExpire().items().succeeded()).isZero();
         // An item that left the inbox is not marked: 404.
         refused("QB_MESSAGE_MARK", taker(taker), body("kind", "BROADCAST", "id", withdrawn, "action", "READ"), 404);
+        refused("QB_MESSAGE_MARK", taker(taker), body("kind", "BROADCAST", "id", shortLived, "action", "READ"), 404);
         clock.advance(Duration.ofDays(31));
+        runExpire();
         assertThat(itemIds(inbox(taker(taker)))).doesNotContain(defaultLife);
+        // The expiry is a system process.
+        refusedAsInternal(BroadcastProcesses.EXPIRE, admin(), body("broadcastId", defaultLife));
     }
 
     // ---- unread, marks and search ----------------------------------------------------------------------------------
@@ -275,6 +344,55 @@ class InboxIT extends InboxItSupport {
         clock.advance(Duration.ofSeconds(1));
         String third = announce(announcement("Unread three", "targetMode", "USERS", "userIds", List.of(taker)));
         assertThat(itemIds(inbox(taker(taker), "unread", true))).containsExactly(third);
+    }
+
+    @Test
+    void theBadgeStartsFromTheReadersReadThroughMarkAndStillCountsWhatIsNewOrLate() {
+        String taker = newTaker(unique("t-through"), "JP");
+        // Other tests' announcements to everyone are out of the way: all read before this one's.
+        run("QB_INBOX_READ_ALL", taker(taker), body());
+        clock.advance(Duration.ofMinutes(1));
+        List<String> read = new java.util.ArrayList<>();
+        for (int i = 0; i < 3; i++) {
+            read.add(announce(announcement("Through " + i)));
+            clock.advance(Duration.ofMinutes(1));
+        }
+        String unreadOne = announce(announcement("Left unread"));
+        clock.advance(Duration.ofMinutes(20));
+        for (String id : read) {
+            mark(taker(taker), "BROADCAST", id, "READ");
+        }
+        // Review H1: the mark stops at the oldest still unread, never past it.
+        assertThat(instant(query("SELECT read_through FROM qb_inbox_state WHERE user_id = ?", taker).getFirst()
+            .get("read_through"))).isEqualTo(instant(broadcast(unreadOne).get("sent_at")));
+        assertThat(count(unread(taker(taker)), "broadcasts")).isEqualTo(unreadCount(taker));
+        mark(taker(taker), "BROADCAST", unreadOne, "READ");
+        Instant mark = instant(query("SELECT read_through FROM qb_inbox_state WHERE user_id = ?", taker).getFirst()
+            .get("read_through"));
+        // Everything read: ten minutes behind the reading, never ahead of a broadcast the job may still bring.
+        assertThat(mark).isEqualTo(clock.instant().minus(Duration.ofMinutes(10)));
+        assertThat(count(unread(taker(taker)), "broadcasts")).isEqualTo(unreadCount(taker));
+
+        // A new one counts; so does a scheduled one sent by the job with its due time a moment before the mark moves.
+        Instant due = clock.instant().plus(Duration.ofMinutes(1));
+        String scheduled = announce(announcement("Due soon", "scheduledAt", due.toString()));
+        clock.advance(Duration.ofMinutes(3));
+        String fresh = announce(announcement("Fresh"));
+        mark(taker(taker), "BROADCAST", fresh, "READ");
+        runDispatch();
+        assertThat(instant(broadcast(scheduled).get("sent_at"))).isEqualTo(due);
+        assertThat(itemIds(inbox(taker(taker), "unread", true))).contains(scheduled);
+        assertThat(count(unread(taker(taker)), "broadcasts")).isEqualTo(unreadCount(taker));
+        assertThat(count(unread(taker(taker)), "broadcasts")).isPositive();
+        // The mark is no reading: the list and the statistics are as before.
+        assertThat(inbox(taker(taker))).filteredOn(item -> read.contains(item.get("itemId")))
+            .allSatisfy(item -> assertThat(item).containsEntry("unread", false));
+    }
+
+    /** The unread broadcasts of the list (the badge must agree). */
+    private long unreadCount(String taker) {
+        return inbox(taker(taker), "unread", true).stream().filter(item -> "BROADCAST".equals(item.get("itemKind")))
+            .count();
     }
 
     @Test

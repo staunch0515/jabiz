@@ -24,9 +24,17 @@ export interface NoticeRow {
   scheduledAt: string | null
   sentAt: string | null
   expiresAt: string | null
-  /** The takers it matched when sent. */
+  /**
+   * About how many takers it matched when sent: rounded down to tens (hundreds from 1,000); null below ten or not sent
+   * (review M2).
+   */
   audienceCount: number | null
-  /** Each null when fewer than five (not shown, `BroadcastRules.MIN_GROUP`) or not sent. */
+  /** When the day's count was taken (the sponsor sees no live counts, review M2); null before the first. */
+  snapshotAt: string | null
+  /**
+   * Each null when fewer than five (not shown, `BroadcastRules.MIN_GROUP`), not counted yet or not sent; clicks and
+   * conversions also while fewer than `qb.broadcast.stats.min-audience` were reached.
+   */
   reads: number | null
   clicks: number | null
   conversions: number | null
@@ -125,6 +133,7 @@ function notice(row: Row): NoticeRow {
     sentAt: str(row.sentAt),
     expiresAt: str(row.expiresAt),
     audienceCount: count(row.audienceCount),
+    snapshotAt: str(row.snapshotAt),
     reads: count(row.reads),
     clicks: count(row.clicks),
     conversions: count(row.conversions),
@@ -158,7 +167,8 @@ export async function readPublicationOptions(): Promise<PublicationOption[]> {
 }
 
 export async function readAnnouncements(): Promise<Announcement[]> {
-  const page = await runQuery<Row>(NOTICE_TEMPLATE.inbox, { params: { at: new Date().toISOString() }, limit: 100 })
+  // The server's now (review L1): the device's clock is no parameter.
+  const page = await runQuery<Row>(NOTICE_TEMPLATE.inbox, { params: {}, limit: 100 })
   return page.items.map((row) => ({
     itemId: String(row.itemId),
     type: String(row.type),

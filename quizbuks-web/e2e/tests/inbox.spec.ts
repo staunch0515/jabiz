@@ -21,7 +21,7 @@ type Item = { itemKind: string; itemId: string; unread: boolean; title?: Record<
 async function inbox(request: APIRequestContext, token: string): Promise<Item[]> {
   const response = await request.post('/api/queries/qb.app.inbox', {
     headers: { Authorization: `Bearer ${token}` },
-    data: { params: { at: new Date().toISOString(), lang: 'en' }, limit: 50 },
+    data: { params: { lang: 'en' }, limit: 50 },
   })
   expect(response.status(), await response.text()).toBe(200)
   return (await response.json()).items ?? []
@@ -91,9 +91,9 @@ test('a sponsor\'s notice reaches its takers and counts readers without naming t
     await app.getByTestId('inbox-item-go').click()
     await expect(app).toHaveURL(new RegExp(`/p/${publication.publicationId}$`))
 
-    // One reader: fewer than five, so the sponsor sees no number (Q7-14).
+    // The sponsor sees the day's count only (review M2): nothing yet, live counts would tell who clicked.
     await page.reload()
-    await expect(notice.getByTestId('notice-reads')).toContainText('fewer than 5')
+    await expect(notice.getByTestId('notice-reads')).toContainText('counted tomorrow')
 
     // The administration sees the exact counts, and the content administrator withdraws it with a reason.
     const adminContext = await browser.newContext({ viewport: { width: 1280, height: 900 } })

@@ -62,9 +62,24 @@ class BroadcastRulesTest {
             LIMITS))).containsExactly("QB_BROADCAST_LINK");
     }
 
+    /** The review's probes (M3): obfuscated, international and contact forms of an address. */
+    @ParameterizedTest
+    @ValueSource(strings = {"hxxp://evil.tld/x", "hxxps[:]//evil[.]com", "evil[.]com", "evil(.)com", "evil . com",
+        "evil dot com", "evil。com", "evil．com", "ｅｖｉｌ.com", "ev​il.c​om", "evil.c​om",
+        "xn--80ak6aa92e.com", "пример.com", "例え.jp", "claim at evil.ai", "evil.live", "evil.page", "bit.ly/abc",
+        "[click](javascript:x)", "<https://x>", "LINE ID: quizfree", "follow @quizfree", "Call 0120-123-456",
+        "w w w.evil.com", "WWW.evil.vip", "evil.com.", "t.me/abc", "evil.co.jp", "Visit evil . c o m",
+        "１２３.45.67.89", "http://1.2.3.4", "1.2.3.4/claim", "evil­site.com", "evil⁠.com"})
+    void obfuscatedAddressesAndContactsAreRefused(String text) {
+        assertThat(BroadcastRules.hasAddress(text)).as(text).isTrue();
+        assertThat(codes(BroadcastRules.sendProblems(sponsor("Hello", text, "JP", null), NOW, LIVE, List.of(),
+            LIMITS))).containsExactly("QB_BROADCAST_LINK");
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {"Win 100 Kudos today!", "e.g. the capital", "クイズに挑戦しよう", "3.14 is pi",
-        "Ends at 9.30", "新しいクイズ：日本の首都"})
+        "Ends at 9.30", "新しいクイズ：日本の首都", "Ends 2026-10-18 10:00 JST", "Top 10. Then more.",
+        "日本の首都。東京です。", "Meet @ 5pm", "Score 5 of 5 (100%)", "Q&A: i.e. the answer"})
     void plainTextIsFine(String text) {
         assertThat(BroadcastRules.sendProblems(sponsor("Hello", text, "JP", null), NOW, LIVE, List.of(), LIMITS))
             .isEmpty();

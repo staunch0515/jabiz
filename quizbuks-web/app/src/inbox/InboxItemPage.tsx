@@ -79,10 +79,11 @@ export function InboxItemPage({ kind, id }: { kind: ItemKind; id: string }) {
           {found.expiresAt && <span>{t('inbox.until', { time: formatDateTime(found.expiresAt) })}</span>}
         </p>
       </header>
-      {found.markdown ? (
+      {/* Markdown only for the platform's announcements; a message or a notice carries others' words (review H2). */}
+      {found.markdown && found.itemKind === 'BROADCAST' && found.sender === 'PLATFORM' ? (
         <MarkdownView text={body.text} lang={body.lang} />
       ) : (
-        // A sponsor's text exactly as written: never Markdown, never a link (Q7-10).
+        // A sponsor's text, or a message with a sponsor's publication name, exactly as written: never a link (Q7-10).
         <p className="whitespace-pre-wrap break-words" lang={body.lang} data-testid="inbox-item-plain">{body.text}</p>
       )}
       {target && (

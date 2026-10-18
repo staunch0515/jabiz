@@ -34,6 +34,14 @@ abstract class InboxItSupport extends PayoutItSupport {
     @Qualifier("qbPayoutReminderJob")
     JobDefinition<MessageProcesses.ReminderInput> reminderJob;
 
+    @Autowired
+    @Qualifier("qbBroadcastExpireJob")
+    JobDefinition<BroadcastProcesses.DispatchInput> expireJob;
+
+    @Autowired
+    @Qualifier("qbBroadcastStatsJob")
+    JobDefinition<BroadcastProcesses.StatsInput> statsJob;
+
     /** A content administrator (with a second factor), as {@code QB_ADMIN_CONTENT} has it. */
     String contentAdmin() {
         return tokenOf("content-admin-q7c", QbRoles.ADMIN_CONTENT);
@@ -93,19 +101,15 @@ abstract class InboxItSupport extends PayoutItSupport {
         return (String) saved.get("broadcastId");
     }
 
-    /** The app's inbox of a taker now: its items. */
+    /** The app's inbox of a taker now: its items (the server's time; the client gives none, review L1). */
     List<Map<String, Object>> inbox(String token, Object... params) {
-        Map<String, Object> values = new LinkedHashMap<>();
-        values.put("at", clock.instant().toString());
-        values.putAll(body(params));
+        Map<String, Object> values = new LinkedHashMap<>(body(params));
         return items("qb.app.inbox", token, Map.of("params", values, "limit", 500));
     }
 
     /** The sponsor console's announcements now. */
     List<Map<String, Object>> consoleInbox(String token, Object... params) {
-        Map<String, Object> values = new LinkedHashMap<>();
-        values.put("at", clock.instant().toString());
-        values.putAll(body(params));
+        Map<String, Object> values = new LinkedHashMap<>(body(params));
         return items("qb.sponsor.inbox", token, Map.of("params", values, "limit", 500));
     }
 
@@ -115,8 +119,7 @@ abstract class InboxItSupport extends PayoutItSupport {
 
     /** The unread counts of a taker's inbox now: messages and broadcasts. */
     Map<String, Object> unread(String token) {
-        return items("qb.app.inbox-unread", token, Map.of("params", Map.of("at", clock.instant().toString())))
-            .getFirst();
+        return items("qb.app.inbox-unread", token, Map.of("params", Map.of())).getFirst();
     }
 
     static long count(Map<String, Object> unread, String key) {
@@ -136,6 +139,18 @@ abstract class InboxItSupport extends PayoutItSupport {
     JobRunner.JobRun runReminders() {
         execute("UPDATE jabiz_shedlock SET lock_until = locked_at");
         return jobRunner.execute(reminderJob, clock.instant());
+    }
+
+    /** Runs the minute's job that takes expired and ended broadcasts out of the inboxes. */
+    JobRunner.JobRun runExpire() {
+        execute("UPDATE jabiz_shedlock SET lock_until = locked_at");
+        return jobRunner.execute(expireJob, clock.instant());
+    }
+
+    /** Runs the daily snapshot of the sponsors' statistics. */
+    JobRunner.JobRun runStats() {
+        execute("UPDATE jabiz_shedlock SET lock_until = locked_at");
+        return jobRunner.execute(statsJob, clock.instant());
     }
 
     /** The messages of a user, oldest first (from the table). */

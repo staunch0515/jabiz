@@ -166,8 +166,14 @@
   从不在答题、支付的锁内写（`AttemptStatementBudgetIT` 不变）；消费者重读记录、仍成立才写，`sourceKey` 唯一使同一事件只成一条，7 天以前的事件跳过（重放不补发）；
   标题与正文创建时按 `qb.msg.<种类>.title|body` 以三种语言渲染（`MessageTexts`，Q7-15），不含他人的数据。新的消息种类：加事件订阅、种类常量、三语文案与 `InboxIT` 的用例。
   公告与商家通知**不按人复制**：发送时写一行冻结的 `QbBroadcastFeed`，收件箱读时匹配。匹配的条件写在 `qb.app.inbox`、`qb.app.inbox-unread` 与 `qb.system.broadcast-audience` 三处（改一处即改三处，`InboxMatchIT` 的真值表检查三者）。
+  **收件箱只读 `live` 的行**（评审 H1）：过期的与发布已结束的通知由每分钟的逐项任务 `qb.broadcast-expire`（`QB_BROADCAST_EXPIRE`）关掉，部分索引 `(audience, expires_at) WHERE live` 因此只有当前的行；模板不收页面的时间（评审 L1，`at` 不是参数）。
+  未读徽标从读者的 `QbInboxState.readThrough` 之后数起（`QB_MESSAGE_MARK` 在写入已读之后以 `qb.app.inbox-unread` 的 `oldestUnread` 推进它，至多落后 10 分钟，从不后退；它不是阅读，列表与统计不用它）。
+  个人消息一律是纯文本（评审 H2：参数中有商家写的发布名）；只有平台的公告按 Markdown 显示。商家通知在其发布暂停或预算不足时隐藏（卡片 `SCHEDULED` / `LIVE` 才显示，评审 M1）。
+  商家的统计只读每日快照 `QbBroadcastStats`（任务 `qb.broadcast-stats`，评审 M2）：到达人数向下取整（不足 10 不显示），阅读不足 5 不显示，到达不足 `qb.broadcast.stats.min-audience`（50）时不显示点击与开始答题；后台为确切的实时人数。
+  链接检查（`BroadcastRules.hasAddress`，评审 M3）先做 NFKC、去掉不可见字符、把 `[.]`、` dot `、`。` 等写法还原为点，再按形式（任意 `label.label` 加两个以上字母的顶级域、IDN、IPv4、`LINE ID`、`@handle`、十位以上的数字）判断，不靠域名清单。
+  撤回记录只记谁撤回的种类（`SENDER` / `ADMIN` / `SYSTEM`，评审 L3），是哪位管理员看审计；撤回法律文本的预告版本时同时撤回它的公告（`sourceKey` = `legal:<版本>`，评审 L2，锁序 `qb.legal` → `qb.broadcast`）。
   规则只写在纯 Java 的 `BroadcastRules`（上限、长度、链接、时刻），保存即给出发送会遇到的全部问题；商家通知只给本人进行中的发布、纯文本无链接、条数与间隔是普通参数；不预审，管理员撤回（理由商家可见），封禁商家时 `QB_USER_BAN` 以子流程 `QB_BROADCAST_BAN_WITHDRAW` 撤回。
-  锁的顺序：`qb.account:<商家>` → `qb.broadcast:<编号>`；已读另取 `qb.inbox:<用户>`。商家看到的统计不足 5 人不显示（Q7-14），后台为确切人数；任何统计都不给出是谁。推广只能退订（`QbInboxState.promoOff`，Q7-11）。
+  锁的顺序：`qb.account:<商家>` → `qb.broadcast:<编号>`；已读另取 `qb.inbox:<用户>`。任何统计都不给出是谁。推广只能退订（`QbInboxState.promoOff`，Q7-11）。
 - **外部密钥**（`STRIPE_*`、`OPENAI_API_KEY`）只来自环境变量（`deploy/quizbuks/README.md`）；测试与 `dev` 用固定的假值，仓库中没有真实密钥。
 - **部署的安全设置**（Q10b，`deploy/quizbuks/README.md`"密钥与部署"）：镜像入口脚本在平台密钥或首个管理员密码缺少时拒绝启动（只有 `QB_LOCAL_SECRETS=true` 的本机才生成，compose 缺省 `false`，正式模式一律不生成，管理员密码不打印；生成时导出 `QB_SECRETS_GENERATED=true`，评审 L5）；
   启动检查 `wallet.DeploySafetyCheck`（类别 `QUIZBUKS`）：可信代理为空时正式模式报错（除非 `quizbuks.deploy.direct-exposure=true`）、过宽的网段一律报错（IPv4 短于 /8、IPv6 短于 /32、整个 IPv4 的映射，前缀照平台读法，评审 L6），正式模式下关闭管理二次验证或 `QB_SECRETS_GENERATED=true` 报错，`dev` 只在回环地址与本机邮件地址下启动；
@@ -204,7 +210,7 @@
   `ConsentGate` 在资料完整（App）或已申请（商家）且有须同意的版本时整页替换页面（未验证邮箱只显示提示条），帮助与条款页不受它拦；它只是页面，服务端照样拦资金与合约类写入。
   任何调用收到 `QB_CONSENT_REQUIRED` 即重读同意状况、提示随之出现：两个 SPA 的 QueryClient 只用 `newQbQueryClient()`（查询与变更出错时都检查），不经 React Query 的调用自己调 `noticeConsentProblem`。
 - **收件箱与消息中心**（Q7c，App `src/inbox/`、商家后台 `src/notices/`）：未读徽标经 `useUnread`（进入、回到前台、每 5 分钟重读，离开即停）；打开即 `QB_MESSAGE_MARK`（已读），按钮另记点击；
-  "现在"（`at`）由页面传给模板。商家通知的编辑器只显示保存给出的问题，不重算规则。
+  收件箱的模板不收页面的时间（服务端的现在）；徽标的查询不随窗口获得焦点再问一次。商家通知的编辑器只显示保存给出的问题，不重算规则，只有一个可选发布时预先选中它。
 - **认证与账户只用平台的积木**（`@jabiz/ui` 的 `SignInForm`、`SignUpForm`、`MailLinkPage`、`OidcCallback`、`StepUpProvider`、`ChangePasswordForm`、`MfaSettings`、`SessionList`、
   `LinkedIdentities`、横幅），QuizBuks 不写认证代码。邮件链接页在各自的 `auth/verify-email|join|password-reset`。路由是 `qb/router.tsx` 的小路由。
 - **金额只经 `qb/kudos.ts` 的 `formatKudos`**（`1,234 Kudos`），不写 JPY 或其他币种名。服务端的 `QB_*` 文案已按请求的语言翻译，页面直接显示（`qb/problems.ts`）。

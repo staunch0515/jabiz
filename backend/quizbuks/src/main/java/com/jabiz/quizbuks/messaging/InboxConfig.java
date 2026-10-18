@@ -77,6 +77,11 @@ public class InboxConfig {
     }
 
     @Bean
+    EntityDefinition qbBroadcastStatsEntity() {
+        return QbInbox.STATS_ENTITY;
+    }
+
+    @Bean
     EntityDefinition qbInboxStateEntity() {
         return QbInbox.STATE_ENTITY;
     }
@@ -135,6 +140,12 @@ public class InboxConfig {
     @Bean
     DatasetDefinition qbBroadcastReceiptDataset() {
         return processWritten(QbInbox.RECEIPT, QbPermissions.MESSAGING_SYSTEM, 10);
+    }
+
+    /** The daily snapshot of the sponsors' statistics: written by its job, read by the sponsors' template. */
+    @Bean
+    DatasetDefinition qbBroadcastStatsDataset() {
+        return processWritten(QbInbox.STATS, QbPermissions.MESSAGING_SYSTEM, 10);
     }
 
     @Bean
@@ -322,6 +333,18 @@ public class InboxConfig {
     }
 
     @Bean
+    ProcessDefinition<BroadcastProcesses.DispatchInput, BroadcastProcesses.JobOutput, ProcessContext>
+        qbBroadcastExpire() {
+        return BroadcastProcesses.expire();
+    }
+
+    @Bean
+    ProcessDefinition<BroadcastProcesses.StatsInput, BroadcastProcesses.JobOutput, ProcessContext>
+        qbBroadcastStats() {
+        return BroadcastProcesses.stats();
+    }
+
+    @Bean
     ProcessDefinition<InboxProcesses.MarkInput, InboxProcesses.MarkOutput, ProcessContext> qbMessageMark() {
         return InboxProcesses.mark();
     }
@@ -353,6 +376,46 @@ public class InboxConfig {
                 qbBroadcastDispatch, (scheduledTime, row) -> new BroadcastProcesses.DispatchInput(
                     UUID.fromString(String.valueOf(row.get("broadcastId")))))
             .maxItems(BroadcastProcesses.DISPATCH_BATCH);
+    }
+
+    /**
+     * Every minute (review H1): each live row of the feed that expired, or whose publication ended, is switched off by
+     * {@value BroadcastProcesses#EXPIRE} in a transaction of its own, so the inbox's partial index holds only the
+     * current ones.
+     */
+    @Bean
+    JobDefinition<BroadcastProcesses.DispatchInput> qbBroadcastExpireJob(
+        @Value("${quizbuks.messaging.expire-cron:30 * * * * *}") String cron,
+        ProcessDefinition<BroadcastProcesses.DispatchInput, BroadcastProcesses.JobOutput, ProcessContext>
+            qbBroadcastExpire) {
+        return JobDefinition.forEach(QbInbox.EXPIRE_JOB, cron, ZoneOffset.UTC,
+                JobItems.template(QbInbox.EXPIRED_TEMPLATE, scheduledTime -> Map.of("at", scheduledTime),
+                    "broadcastId"),
+                qbBroadcastExpire, (scheduledTime, row) -> new BroadcastProcesses.DispatchInput(
+                    UUID.fromString(String.valueOf(row.get("broadcastId")))))
+            .maxItems(BroadcastProcesses.EXPIRE_BATCH);
+    }
+
+    /**
+     * Daily (review M2): the counts of the sponsors' recent notices that changed, each written by
+     * {@value BroadcastProcesses#STATS} in a transaction of its own; the sponsors read only this snapshot.
+     */
+    @Bean
+    JobDefinition<BroadcastProcesses.StatsInput> qbBroadcastStatsJob(
+        @Value("${quizbuks.messaging.stats-cron:0 47 4 * * *}") String cron,
+        ProcessDefinition<BroadcastProcesses.StatsInput, BroadcastProcesses.JobOutput, ProcessContext>
+            qbBroadcastStats) {
+        return JobDefinition.forEach(QbInbox.STATS_JOB, cron, ZoneOffset.UTC,
+                JobItems.template(QbInbox.STATS_TEMPLATE, scheduledTime -> Map.of("at", scheduledTime),
+                    "broadcastId"),
+                qbBroadcastStats, (scheduledTime, row) -> new BroadcastProcesses.StatsInput(
+                    UUID.fromString(String.valueOf(row.get("broadcastId"))), count(row.get("reads")),
+                    count(row.get("clicks")), count(row.get("conversions"))))
+            .maxItems(BroadcastProcesses.STATS_BATCH);
+    }
+
+    private static Long count(Object value) {
+        return value == null ? 0L : new java.math.BigDecimal(String.valueOf(value)).longValue();
     }
 
     /** Daily (Q7-16): the takers to remind of a payout account, each in a transaction of its own. */

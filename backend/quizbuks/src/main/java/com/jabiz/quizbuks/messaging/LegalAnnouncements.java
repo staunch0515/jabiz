@@ -29,9 +29,14 @@ final class LegalAnnouncements {
         };
     }
 
+    /** What the announcements of a version are found by when it is withdrawn (review L2). */
+    static String sourceKey(Object versionId) {
+        return "legal:" + versionId;
+    }
+
     /** Writes the announcements of a version, scheduled now; their ids. */
     static List<String> schedule(ProcessContext ctx, MessageTexts texts, MailValues times, String kind, int number,
-        Instant effectiveAt) {
+        Instant effectiveAt, Object versionId) {
         Map<String, MessageTexts.Value> params = new LinkedHashMap<>();
         params.put("document", texts.message("qb.broadcast.legal.kind." + kind));
         params.put("versionNo", MessageTexts.Value.of(number));
@@ -53,6 +58,7 @@ final class LegalAnnouncements {
             values.put("scheduledAt", ctx.opTime());
             values.put("expiresAt", expiresAt);
             values.put("status", QbInbox.SCHEDULED);
+            values.put("sourceKey", sourceKey(versionId));
             values.put("revision", BigDecimal.ONE);
             values.put("editedAt", ctx.opTime());
             Object id = ctx.changes().insert(QbInbox.BROADCAST, values);

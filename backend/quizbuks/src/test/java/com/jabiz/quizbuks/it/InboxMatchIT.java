@@ -9,7 +9,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -30,9 +29,12 @@ class InboxMatchIT extends InboxItSupport {
     record Feed(String id, String type, String targetMode, String regions, List<String> named, Instant sentAt,
         Instant expiresAt, boolean live) {}
 
-    /** Whether {@code reader} sees {@code feed} at {@code at}: the rules of D-Q7-9. */
-    static boolean visible(Feed feed, Reader reader, Instant at) {
-        if (!feed.live() || feed.sentAt().isAfter(at) || !at.isBefore(feed.expiresAt())) {
+    /**
+     * Whether {@code reader} sees {@code feed} now: the rules of D-Q7-9. Its time is the feed's: a row is live from
+     * its sending until it is withdrawn or the minute's job finds it expired (review H1, L1).
+     */
+    static boolean visible(Feed feed, Reader reader) {
+        if (!feed.live()) {
             return false;
         }
         boolean aimed = switch (feed.targetMode()) {
@@ -54,7 +56,7 @@ class InboxMatchIT extends InboxItSupport {
             return feed.named().contains(reader.userId());
         }
         return reader.complete() && !reader.registeredAt().isAfter(feed.sentAt()) && visible(new Feed(feed.id(), feed.type(), feed.targetMode(), feed.regions(),
-            feed.named(), feed.sentAt(), feed.expiresAt(), true), reader, feed.sentAt());
+            feed.named(), feed.sentAt(), feed.expiresAt(), true), reader);
     }
 
     private Reader reader(String name, String userId) {
@@ -112,12 +114,13 @@ class InboxMatchIT extends InboxItSupport {
         }
         for (Instant at : List.of(clock.instant(), clock.instant().plus(Duration.ofHours(1)))) {
             clock.set(at);
+            runExpire();
             for (Reader reader : readers) {
                 List<Object> shown = itemIds(inbox(taker(reader.userId())));
                 long expectedCount = 0;
                 for (Map.Entry<String, List<String>> entry : sent.entrySet()) {
                     Feed feed = feed(entry.getKey(), entry.getValue());
-                    boolean expected = visible(feed, reader, at);
+                    boolean expected = visible(feed, reader);
                     assertThat(shown.contains(entry.getKey())).as(reader.name() + " sees " + entry.getKey() + " at "
                         + at).isEqualTo(expected);
                     expectedCount += expected ? 1 : 0;
@@ -141,6 +144,7 @@ class InboxMatchIT extends InboxItSupport {
             assertThat(((Number) broadcast(entry.getKey()).get("audience_count")).longValue())
                 .as("audience of " + entry.getKey()).isEqualTo(expected);
         }
-        assertThat(Objects.requireNonNull(expiring)).isNotBlank();
+        // The expiring one left the feed with the job, an hour on.
+        assertThat(feed(expiring, List.of()).live()).isFalse();
     }
 }

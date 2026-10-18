@@ -425,6 +425,9 @@ export default function BroadcastsPage() {
       cell: ({ row }) => (
         <div className="flex max-w-80 flex-col gap-0.5 whitespace-normal">
           <span className="font-medium">{pick(row.original.title, language) || '—'}</span>
+          {/* The text as written (review M3: read what is withdrawn), never rendered. */}
+          <span className="text-muted-foreground line-clamp-4 text-xs whitespace-pre-wrap break-words"
+            data-testid="broadcast-body">{pick(row.original.body, language)}</span>
           {row.original.publicationName && (
             <span className="text-muted-foreground text-xs">
               {t('broadcasts.publication', { name: row.original.publicationName })}
@@ -439,7 +442,7 @@ export default function BroadcastsPage() {
             <span className="text-warning text-xs" data-testid="broadcast-withdrawn">
               {t('broadcasts.withdrawnBy', { reason: row.original.withdrawReason === 'QB_ACCOUNT_SUSPENDED'
                 ? t('broadcasts.suspended') : row.original.withdrawReason ?? '' })}
-              {row.original.withdrawnBy && <> · <UserName id={row.original.withdrawnBy} /></>}
+              {row.original.withdrawnBy && <> · {t(`broadcasts.by.${row.original.withdrawnBy}`)}</>}
             </span>
           )}
         </div>

@@ -15,6 +15,8 @@ export function useUnread(enabled = true) {
     enabled,
     refetchInterval: UNREAD_INTERVAL,
     refetchIntervalInBackground: false,
+    // The return to the front is asked by `visibilitychange` below; a focus would ask a second time (review L4).
+    refetchOnWindowFocus: false,
     staleTime: 30_000,
   })
   const { refetch } = unread

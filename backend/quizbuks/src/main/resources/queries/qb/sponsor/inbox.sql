@@ -11,7 +11,6 @@ datasets:
   QbInboxState: urn:jabiz:dataset:me:QbInboxState
   QbSponsor: urn:jabiz:dataset:sponsor:QbSponsor
 params:
-  at:       { kind: { type: temporal, role: EVENT_TIME }, required: true, description: "The client's now" }
   unread:   { kind: { type: bool }, description: Only the unread ones }
   itemKind: { kind: { type: text, maxLength: 10 }, description: "One item: BROADCAST" }
   itemId:   { kind: { type: text, maxLength: 36 }, description: "One item: its id" }
@@ -33,8 +32,8 @@ list:
   key: [itemId]
 permissions: [qb.sponsor.me]
 ---*/
--- The matching of qb.app.inbox for the sponsor console's audience (InboxMatchIT): live, sent by `at` and not
--- expired, to every sponsor or naming the caller; a promotion only to a sponsor approved when it was sent who did not
+-- The matching of qb.app.inbox for the sponsor console's audience (InboxMatchIT): live (sent, neither withdrawn nor
+-- expired: the minute's job switches the expired off, so no time comes from the client), to every sponsor or naming the caller; a promotion only to a sponsor approved when it was sent who did not
 -- turn promotions off. The caller's own onboarding, names, receipts and state only (their datasets' scope).
 WITH me AS (
     SELECT
@@ -60,7 +59,6 @@ CROSS JOIN me
 LEFT JOIN {{QbBroadcastReceipt}} r ON r.{{QbBroadcastReceipt.broadcastId}} = f.{{QbBroadcastFeed.broadcastId}}
 WHERE coalesce(CAST(:enabled AS boolean), true)
   AND f.{{QbBroadcastFeed.live}} AND f.{{QbBroadcastFeed.audience}} = 'SPONSOR'
-  AND f.{{QbBroadcastFeed.sentAt}} <= :at AND :at < f.{{QbBroadcastFeed.expiresAt}}
   AND (f.{{QbBroadcastFeed.targetMode}} = 'ALL'
        OR f.{{QbBroadcastFeed.targetMode}} = 'USERS'
           AND EXISTS (SELECT 1 FROM {{QbBroadcastTarget}} t

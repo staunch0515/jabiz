@@ -217,6 +217,8 @@ class SetupIT extends QbItSupport {
         expected.put(QbParams.BROADCAST_SPONSOR_INTERVAL, "24");
         expected.put(QbParams.BROADCAST_EXPIRES_DAYS, "30");
         expected.put(QbParams.PAYOUT_REMINDER_DAYS, "30");
+        // Q7c review M2: below this reach a sponsor sees no clicks or conversions.
+        expected.put(QbParams.BROADCAST_STATS_MIN_AUDIENCE, "50");
         assertThat(values).containsExactlyInAnyOrderEntriesOf(expected);
     }
 

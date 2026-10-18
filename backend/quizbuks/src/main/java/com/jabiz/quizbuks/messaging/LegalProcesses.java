@@ -230,7 +230,7 @@ public final class LegalProcesses {
         draft.put("lastPublishedAt", ctx.opTime());
         ctx.changes().update(QbLegal.DOC, doc.id(), doc.version(), draft);
         List<String> announcements = Boolean.TRUE.equals(input.announce())
-            ? LegalAnnouncements.schedule(ctx, texts, times, kind, number, effectiveAt) : List.of();
+            ? LegalAnnouncements.schedule(ctx, texts, times, kind, number, effectiveAt, versionId) : List.of();
         ctx.put(OUTPUT, new PublishOutput(kind, String.valueOf(versionId), number, effectiveAt, requiresConsent,
             hash, announcements));
     }
@@ -290,7 +290,66 @@ public final class LegalProcesses {
                 .step("Lock the kind's versions", HoldLock.<ProcessContext>exclusive(
                     ctx -> QbLegal.lockName(ctx.get(VERSION, EntityInstance.class).get("kind"))))
                 .step("Load the kind's versions", loadKind(ctx -> ctx.get(VERSION, EntityInstance.class).get("kind")))
-                .compute("Withdraw", (metadata, ctx) -> withdraw(ctx)));
+                // Review L2: the version's announcements (at most two; their source never changes) go with it, under
+                // their locks (after the kind's: qb.legal -> qb.broadcast), read again under them.
+                .step("Find its announcements", QueryEntities.<ProcessContext>of(
+                    QbInbox.defaultDataset(QbInbox.BROADCAST), ctx -> EntityQuery.builder()
+                        .where(new QueryPredicate.Eq("sourceKey", LegalAnnouncements.sourceKey(
+                            ctx.get(VERSION, EntityInstance.class).id()))).limit(10).build(), ANNOUNCED))
+                .step("Lock the first", HoldLock.<ProcessContext>exclusive(ctx -> announcementLock(ctx, 0)))
+                .step("Lock the second", HoldLock.<ProcessContext>exclusive(ctx -> announcementLock(ctx, 1)))
+                .step("Load them again", QueryEntities.<ProcessContext>all(
+                    QueryEntities.query(QbInbox.defaultDataset(QbInbox.BROADCAST), ctx -> announcements(ctx),
+                        ANNOUNCED_NOW),
+                    QueryEntities.query(QbInbox.defaultDataset(QbInbox.FEED), ctx -> announcements(ctx),
+                        ANNOUNCED_FEED),
+                    QueryEntities.query(QbInbox.defaultDataset(QbInbox.SCHEDULE), ctx -> announcements(ctx),
+                        ANNOUNCED_DUE)))
+                .compute("Withdraw", (metadata, ctx) -> {
+                    withdraw(ctx);
+                    withdrawAnnouncements(ctx);
+                }));
+    }
+
+    private static final String ANNOUNCED = "legal.announced";
+    private static final String ANNOUNCED_NOW = "legal.announcedNow";
+    private static final String ANNOUNCED_FEED = "legal.announcedFeed";
+    private static final String ANNOUNCED_DUE = "legal.announcedDue";
+
+    @SuppressWarnings("unchecked")
+    private static List<EntityInstance> rowsOf(ProcessContext ctx, String key) {
+        Object rows = ctx.get(key);
+        return rows == null ? List.of() : (List<EntityInstance>) rows;
+    }
+
+    /** The ids of the version's announcements, in order (the locks' order). */
+    private static List<String> announcementIds(ProcessContext ctx) {
+        return rowsOf(ctx, ANNOUNCED).stream().map(row -> String.valueOf(row.id())).sorted().toList();
+    }
+
+    private static String announcementLock(ProcessContext ctx, int index) {
+        List<String> ids = announcementIds(ctx);
+        return ids.size() > index ? QbInbox.broadcastLock(ids.get(index)) : null;
+    }
+
+    private static EntityQuery announcements(ProcessContext ctx) {
+        List<Object> ids = new java.util.ArrayList<>();
+        announcementIds(ctx).forEach(id -> ids.add(java.util.UUID.fromString(id)));
+        return EntityQuery.builder().where(new QueryPredicate.In("broadcastId", ids)).limit(10).build();
+    }
+
+    /** Each scheduled or sent announcement of the withdrawn version withdrawn by the system, with a fixed code. */
+    private static void withdrawAnnouncements(ProcessContext ctx) {
+        Map<String, EntityInstance> feeds = new java.util.HashMap<>();
+        rowsOf(ctx, ANNOUNCED_FEED).forEach(row -> feeds.put(String.valueOf(row.id()), row));
+        Map<String, EntityInstance> dues = new java.util.HashMap<>();
+        rowsOf(ctx, ANNOUNCED_DUE).forEach(row -> dues.put(String.valueOf(row.id()), row));
+        for (EntityInstance row : rowsOf(ctx, ANNOUNCED_NOW)) {
+            if (QbInbox.SCHEDULED.equals(row.get("status")) || QbInbox.SENT.equals(row.get("status"))) {
+                BroadcastProcesses.withdrawn(ctx, row, feeds.get(String.valueOf(row.id())),
+                    dues.get(String.valueOf(row.id())), BroadcastCodes.LEGAL_VERSION_WITHDRAWN, QbInbox.BY_SYSTEM);
+            }
+        }
     }
 
     static void withdraw(ProcessContext ctx) {

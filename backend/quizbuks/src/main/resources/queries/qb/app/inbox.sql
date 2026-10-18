@@ -16,7 +16,6 @@ datasets:
   QbPublicationCard: urn:jabiz:dataset:default:QbPublicationCard
   QbPublicationOwner: urn:jabiz:dataset:me:QbPublicationOwner
 params:
-  at:       { kind: { type: temporal, role: EVENT_TIME }, required: true, description: "The client's now" }
   category: { kind: { type: text, maxLength: 10 }, description: "Only SYSTEM (system messages, announcements and notices), PROMO, REWARD or REMINDER" }
   unread:   { kind: { type: bool }, description: Only the unread ones }
   q:        { kind: { type: text, maxLength: 100 }, description: "Only those whose title or text contains this, in the language lang or English" }
@@ -52,11 +51,14 @@ list:
 permissions: [qb.me]
 ---*/
 -- The matching of D-Q7-9 (Q7-9), written here, in qb.app.inbox-unread and in qb.system.broadcast-audience (the same
--- conditions; the case table of the test InboxMatchIT checks all three): an announcement sent to the app, live (not withdrawn),
--- sent by `at` and not expired, aimed at everyone, at a region of the caller's country (every country is in GLOBAL; no
+-- conditions; the case table of the test InboxMatchIT checks all three): an announcement sent to the app and live (not
+-- withdrawn, not expired: the minute's job qb.broadcast-expire switches those off, so the partial index of the live
+-- rows holds only the current ones and no time comes from the client, review H1 and L1), aimed at everyone, at a region of the caller's country (every country is in GLOBAL; no
 -- country: GLOBAL only) or at the caller by name; a promotion only to someone registered (their profile made) when it
--- was sent and who did not turn promotions off (Q7-11). A sponsor's notice only while its publication is on (not
--- ended, before its end), to takers in the publication's regions, never to the sponsor themselves. The caller's own
+-- was sent and who did not turn promotions off (Q7-11). A sponsor's notice only while its publication is scheduled
+-- or live (hidden while paused or short of funds, review M1; switched off when it ends), to takers in the
+-- publication's regions, never to the sponsor themselves. A personal message is plain text (review H2: its values,
+-- such as a publication's name, are the sponsor's words). The caller's own
 -- rows only (the me datasets: messages, receipts, names, state, profile), the country from their profile, never from
 -- a parameter. Unread: neither opened nor before "all read". The text is found as written in the interface's language
 -- or English: strpos takes it literally, so % _ and \ match themselves.
@@ -80,7 +82,7 @@ items AS (
         CAST(NULL AS varchar(200))                AS sponsor_name,
         m.{{QbMessage.title}}                     AS title,
         m.{{QbMessage.body}}                      AS body,
-        true                                      AS markdown,
+        false                                     AS markdown,
         m.{{QbMessage.publicationId}}             AS pub_id,
         CAST(m.{{QbMessage.action}} AS varchar(20)) AS action,
         CAST(m.{{QbMessage.actionId}} AS varchar(36)) AS act_id,
@@ -91,7 +93,6 @@ items AS (
         (m.{{QbMessage.readAt}} IS NULL
          AND (me.all_read_before IS NULL OR m.{{QbMessage.createdAt}} > me.all_read_before)) AS unread
     FROM {{QbMessage}} m CROSS JOIN me
-    WHERE m.{{QbMessage.createdAt}} <= :at
     UNION ALL
     SELECT
         CAST('BROADCAST' AS varchar(10)),
@@ -120,7 +121,6 @@ items AS (
         AND sp.{{QbSponsor.userId}} = f.{{QbBroadcastFeed.senderId}}
     LEFT JOIN {{QbPublicationCard}} c ON c.{{QbPublicationCard.publicationId}} = f.{{QbBroadcastFeed.publicationId}}
     WHERE f.{{QbBroadcastFeed.live}} AND f.{{QbBroadcastFeed.audience}} = 'APP'
-      AND f.{{QbBroadcastFeed.sentAt}} <= :at AND :at < f.{{QbBroadcastFeed.expiresAt}}
       AND (f.{{QbBroadcastFeed.targetMode}} = 'ALL'
            OR f.{{QbBroadcastFeed.targetMode}} = 'REGIONS'
               AND string_to_array(f.{{QbBroadcastFeed.regions}}, ',') && string_to_array(me.me_regions, ',')
@@ -131,7 +131,7 @@ items AS (
            OR NOT me.no_promo AND me.registered_at IS NOT NULL
               AND me.registered_at <= f.{{QbBroadcastFeed.sentAt}})
       AND (f.{{QbBroadcastFeed.senderKind}} <> 'SPONSOR'
-           OR c.{{QbPublicationCard.status}} <> 'ENDED' AND :at < c.{{QbPublicationCard.endAt}}
+           OR c.{{QbPublicationCard.status}} IN ('SCHEDULED', 'LIVE')
               AND string_to_array(c.{{QbPublicationCard.regions}}, ',') && string_to_array(me.me_regions, ',')
               AND NOT EXISTS (SELECT 1 FROM {{QbPublicationOwner}} own
                               WHERE own.{{QbPublicationOwner.publicationId}} = f.{{QbBroadcastFeed.publicationId}}))

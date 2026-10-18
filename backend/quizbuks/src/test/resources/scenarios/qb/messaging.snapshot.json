@@ -27,8 +27,9 @@
       "audienceCount" : "1",
       "cancelReason" : null,
       "withdrawnAt" : "2026-10-01T03:00:00Z",
-      "withdrawnBy" : "content-admin",
+      "withdrawnBy" : "ADMIN",
       "withdrawReason" : "Postponed.",
+      "sourceKey" : null,
       "revision" : "4",
       "editedAt" : "2026-10-01T03:00:00Z",
       "versionNo" : 4,
@@ -60,6 +61,7 @@
       "withdrawnAt" : null,
       "withdrawnBy" : null,
       "withdrawReason" : null,
+      "sourceKey" : null,
       "revision" : "3",
       "editedAt" : "2026-10-01T01:00:00Z",
       "versionNo" : 3,
@@ -125,8 +127,15 @@
       "version" : 1
     } ],
     "QbInboxState" : [ {
+      "userId" : "#uuid:4",
+      "readAllBefore" : null,
+      "readThrough" : "2026-10-01T02:50:00Z",
+      "promoOff" : false,
+      "version" : 2
+    }, {
       "userId" : "#uuid:6",
       "readAllBefore" : null,
+      "readThrough" : null,
       "promoOff" : true,
       "version" : 1
     } ]

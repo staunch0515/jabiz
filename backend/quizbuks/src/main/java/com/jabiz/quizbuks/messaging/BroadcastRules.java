@@ -55,12 +55,55 @@ public final class BroadcastRules {
     public static final int DEFAULT_EXPIRES_DAYS = 30;
 
     /**
-     * Anything that reads as an address: a scheme, {@code www.}, an e-mail address or a host name ending in a common
-     * top-level domain. Plain text is never turned into a link by the pages either; this keeps phishing text out.
+     * Anything that reads as an address or a way to reach someone off the platform (review M3: matched by form, not
+     * by a list of domains): a scheme (also {@code javascript:} and its kind), {@code www.}, an e-mail address, any
+     * {@code label.label} host whose last label is two or more Latin or Cyrillic letters or an IDN ({@code xn--}), an
+     * IPv4 address, a {@code LINE ID}, an {@code @handle} or a telephone-length string of digits. Matched on the text
+     * {@link #normalized} first. Plain text is never turned into a link by the pages either; this keeps phishing text
+     * out.
      */
-    static final Pattern LINK = Pattern.compile("(?iu)(\\b[a-z][a-z0-9+.-]*://|\\bwww\\.|[\\w.+-]+@[\\w-]+\\.[\\w.-]+"
-        + "|\\b[a-z0-9][a-z0-9-]*(\\.[a-z0-9-]+)*\\.(com|net|org|info|biz|io|co|jp|cn|us|uk|de|fr|app|dev|xyz|top|"
-        + "site|online|shop|store|link|click|ly|gl|me|tv|cc|ru|in|kr|tw|hk|sg|au|ca)\\b)");
+    static final Pattern ADDRESS = Pattern.compile("(?iu)(\\b[a-z][a-z0-9+.-]*://"
+        + "|\\b(?:javascript|vbscript|data|mailto|tel|sms|file):"
+        + "|\\bwww\\d*\\."
+        + "|[\\p{L}\\p{N}._%+-]+@[\\p{L}\\p{N}-]+\\.[\\p{L}\\p{N}.-]+"
+        + "|(?<![\\p{L}\\p{N}_-])(?:[\\p{L}\\p{N}](?:[\\p{L}\\p{N}-]*[\\p{L}\\p{N}])?\\.)+"
+        + "(?:\\p{IsLatin}{2,24}|\\p{IsCyrillic}{2,24})(?![\\p{L}\\p{N}])"
+        + "|\\b\\d{1,3}(?:\\.\\d{1,3}){3}\\b"
+        + "|\\bline\\s*id\\b"
+        + "|(?<![\\p{L}\\p{N}._%+-])@[\\p{L}\\p{N}_.]{3,}"
+        + "|\\d(?:[-\u2010\u2013\u2212]?\\d){9,})");
+
+    /** Invisible characters (zero-width, soft hyphens, joiners, every format character) that split an address. */
+    private static final Pattern INVISIBLE = Pattern.compile("[\\p{Cf}\u00AD\u034F\u115F\u1160\u3164\uFFA0]");
+    /** {@code [.]}, {@code (.)}, {@code [dot]} and {@code [:]}: the usual ways of writing an address unlinked. */
+    private static final Pattern BRACKETED_DOT = Pattern.compile("(?i)\\s*[\\[(]\\s*(?:\\.|dot)\\s*[\\])]\\s*");
+    private static final Pattern BRACKETED_COLON = Pattern.compile("\\s*\\[\\s*:\\s*\\]\\s*");
+    /** An ideographic full stop between Latin letters or digits ({@code evil。com}); not in Japanese sentences. */
+    private static final Pattern WIDE_DOT = Pattern.compile("(?<=[\\p{IsLatin}\\p{N}])\\s*\u3002\\s*(?=[\\p{IsLatin}\\p{N}])");
+    /** {@code evil . com}, {@code evil dot com}: a dot or the word with spaces on both sides. */
+    private static final Pattern SPOKEN_DOT = Pattern.compile(
+        "(?i)(?<=[\\p{L}\\p{N}])\\s+(?:\\.|dot)\\s+(?=[\\p{L}\\p{N}])");
+    /** Letters spaced out after a dot ({@code evil.c o m}). */
+    private static final Pattern SPACED_OUT = Pattern.compile("(?<=\\.)\\p{IsLatin}(?: \\p{IsLatin})+(?![\\p{L}\\p{N}])");
+
+    /** Whether a text reads as an address or a contact ({@link #ADDRESS} on {@link #normalized}). */
+    public static boolean hasAddress(String text) {
+        return text != null && ADDRESS.matcher(normalized(text)).find();
+    }
+
+    /**
+     * The text as an address check reads it: NFKC (full-width letters, digits and dots become ASCII), invisible
+     * characters removed, and the written-out dots and colons made real.
+     */
+    static String normalized(String text) {
+        String s = java.text.Normalizer.normalize(text, java.text.Normalizer.Form.NFKC);
+        s = INVISIBLE.matcher(s).replaceAll("");
+        s = BRACKETED_DOT.matcher(s).replaceAll(".");
+        s = BRACKETED_COLON.matcher(s).replaceAll(":");
+        s = WIDE_DOT.matcher(s).replaceAll(".");
+        s = SPOKEN_DOT.matcher(s).replaceAll(".");
+        return SPACED_OUT.matcher(s).replaceAll(match -> match.group().replace(" ", ""));
+    }
 
     /** The limits of the sponsors' notices and the platform's default expiry, from the parameters. */
     public record Limits(int maxPerPublication, Duration minInterval, Duration defaultExpiry) {
@@ -186,7 +229,7 @@ public final class BroadcastRules {
     private static void sponsorProblems(Draft draft, Instant sendsAt, Publication publication, List<Other> others,
         Limits limits, List<Violation> problems) {
         for (Map.Entry<String, ?> text : texts(draft)) {
-            if (text.getValue() != null && LINK.matcher(String.valueOf(text.getValue())).find()) {
+            if (text.getValue() != null && hasAddress(String.valueOf(text.getValue()))) {
                 problems.add(violation(text.getKey(), BroadcastCodes.LINK,
                     "A notice is plain text without addresses", Map.of()));
                 break;

@@ -142,12 +142,13 @@ docs/quizbuks/               本文件等
 | 实体 | 类型 | 主要字段 | 说明 |
 |---|---|---|---|
 | `QbMessage`（Q7c） | P | `recipientId`、`type`（SYSTEM / REWARD / REMINDER）、`kind`（REWARD_PAID / REWARD_PENDING / TRANSFER_SENT / TRANSFER_FAILED / PAYOUT_ACTION_NEEDED / PAYOUT_REMINDER）、`title`、`body`（三语，创建时按消息资源渲染，Q7-15）、`publicationId`、`action` / `actionId`（RESULT / WALLET / PAYOUT）、`sourceKey`（唯一：同一事件只成一条）、`createdAt`；`processOnly`：`readAt`、`clickedAt` | 个人消息：只由事件的消费者（`QB_MESSAGE_FROM_EVENT`）与提醒任务写入，不在答题与支付的锁内写；普通表（已读要改行），不含他人的数据 |
-| `QbBroadcast`（Q7c） | T | `senderKind`（SPONSOR / PLATFORM）、`senderId`、`audience`（APP / SPONSOR）、`type`（SYSTEM / NOTICE / PROMO）、`title`、`body`（三语，商家通知为纯文本、不得含链接）、`targetMode`（ALL / REGIONS / USERS）、`regions`、`targetCount`、`publicationId`（商家通知必填，须为本人的、可接受新答题或已排期的发布）、`scheduledAt`、`expiresAt`、`status`（DRAFT / SCHEDULED / SENT / CANCELLED / WITHDRAWN）、`sentAt`、`audienceCount`、`cancelReason`、`withdrawnAt` / `withdrawnBy` / `withdrawReason`、`revision` | 公告与商家通知的编辑历史：**不按人复制**（读时匹配） |
+| `QbBroadcast`（Q7c） | T | `senderKind`（SPONSOR / PLATFORM）、`senderId`、`audience`（APP / SPONSOR）、`type`（SYSTEM / NOTICE / PROMO）、`title`、`body`（三语，商家通知为纯文本、不得含链接）、`targetMode`（ALL / REGIONS / USERS）、`regions`、`targetCount`、`publicationId`（商家通知必填，须为本人的、可接受新答题或已排期的发布）、`scheduledAt`、`expiresAt`、`status`（DRAFT / SCHEDULED / SENT / CANCELLED / WITHDRAWN）、`sentAt`、`audienceCount`、`cancelReason`、`withdrawnAt` / `withdrawnBy`（种类：SENDER / ADMIN / SYSTEM，评审 L3）/ `withdrawReason`、`sourceKey`（法律文本的公告为 `legal:<版本>`）、`revision` | 公告与商家通知的编辑历史：**不按人复制**（读时匹配） |
 | `QbBroadcastTarget` | P | `broadcastId`、`userId` | 指定的用户（至多 1,000） |
-| `QbBroadcastFeed` | P | 发送时冻结的副本（发送方、受众、类型、范围、地区、发布、标题、正文、`sentAt`、`expiresAt`）与 `live` | 收件箱只读它（索引 `live, audience, sent_at`），撤回即 `live = false` |
+| `QbBroadcastFeed` | P | 发送时冻结的副本（发送方、受众、类型、范围、地区、发布、标题、正文、`sentAt`、`expiresAt`）与 `live` | 收件箱只读 `live` 的行（部分索引 `(audience, expires_at) WHERE live`）；撤回、过期与发布结束（每分钟的任务 `qb.broadcast-expire`）即 `live = false`（评审 H1） |
+| `QbBroadcastStats` | P | `broadcastId`、`reads`、`clicks`、`conversions`、`snapshotAt` | 商家通知统计的每日快照（任务 `qb.broadcast-stats`）：商家只读它（评审 M2） |
 | `QbBroadcastSchedule` | P | `broadcastId`、`dueAt` | 定时发送的到期表（同 `qb_publication_schedule`），逐项任务 `qb.broadcast-dispatch` 读它 |
 | `QbBroadcastReceipt` | P | `userId`、`broadcastId`（两者唯一）、`readAt`、`clickedAt` | 公告的已读与点击（M-61 统计）；个人消息的在消息行上 |
-| `QbInboxState` | P | `userId`、`readAllBefore`（"全部已读"）、`promoOff`（不收推广） | 一人一行；推广只能退订（Q7-11） |
+| `QbInboxState` | P | `userId`、`readAllBefore`（"全部已读"）、`readThrough`（之前的公告都已逐条读过：徽标从它之后数起，评审 H1）、`promoOff`（不收推广） | 一人一行；推广只能退订（Q7-11） |
 | `QbLegalDoc` | T | `kind`（`TERMS_APP` / `TERMS_SPONSOR` / `PRIVACY` / `COMMERCE_NOTICE`，不可变、唯一）、草稿 `title`、`body`、`changeSummary`（多语言 Markdown）；`processOnly`：`latestVersionNo`、`lastPublishedAt` | 法律文本的草稿（Q7b）：内容管理员在通用后台直接编辑；`QB_SETUP` 建立四份明确标注的测试占位草稿，不发布 |
 | `QbLegalVersion` | W（`writeOnce`） | `kind`、`versionNumber`（与 `kind` 唯一）、`title`、`body`、`changeSummary`、`requiresConsent`、`publishedAt`、`publishedBy`、`effectiveAt`、`contentHash` | 只经 `QB_LEGAL_PUBLISH`（二次验证）写入；当前版本 = `effectiveAt` 已到、未撤回的最大版本号（`messaging.LegalRules`），预定生效不需要任务；公开只读（公开视图不含发布人与哈希） |
 | `QbLegalWithdrawal`（Q7b 评审 M1） | W（`writeOnce`） | `legalVersionId`（唯一）、`kind`、`versionNumber`、`withdrawnAt`、`withdrawnBy`、`reason` | 只经 `QB_LEGAL_WITHDRAW` 写入：撤回尚未生效的预告版本；撤回的版本永不生效、不要求同意，版本号不再使用；公开视图只有种类、版本号与时间 |
@@ -360,7 +361,8 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 | `QB_ADMIN_BROADCAST_SAVE` / `_SEND` / `_CANCEL` / `_WITHDRAW`（Q7c） | `qb.admin.content.write`，已验证；发送 ADMINISTRATION 二次验证，撤回每次二次验证并必填理由 | 平台公告（App 或商家后台；全体、地区或至多 1,000 名指定用户；立即或定时；有效期缺省 `qb.broadcast.expires-days` 天）；撤回可用于任何公告与商家通知 |
 | `QB_BROADCAST_DISPATCH`（Q7c） | `qb.messaging.system`，`internal()` | 逐项任务 `qb.broadcast-dispatch`（每分钟）：到期的定时发送；商家已封禁或发布已不在进行中即取消 |
 | `QB_BROADCAST_BAN_WITHDRAW`（Q7c） | `subProcessOnly()` | `QB_USER_BAN` 在同一事务中撤回该商家已发出与已排期的通知（理由 `QB_ACCOUNT_SUSPENDED`） |
-| `QB_MESSAGE_MARK` / `QB_INBOX_READ_ALL` / `QB_INBOX_SETTINGS_SAVE`（Q7c） | `qb.account.read`，已验证 | 已读与点击（只记第一次；只能标本人收件箱中的）、全部已读、推广开关；锁 `qb.inbox:<用户>` |
+| `QB_MESSAGE_MARK` / `QB_INBOX_READ_ALL` / `QB_INBOX_SETTINGS_SAVE`（Q7c） | `qb.account.read`，已验证 | 已读与点击（只记第一次；只能标本人收件箱中的；读后推进 `readThrough`）、全部已读、推广开关；锁 `qb.inbox:<用户>` |
+| `QB_BROADCAST_EXPIRE` / `QB_BROADCAST_STATS`（Q7c 评审） | `qb.messaging.system`，`internal()` | 每分钟：过期的与发布已结束的通知关掉 `live`；每日：商家通知的统计快照（只写变化的） |
 
 **同意（Q7b）**：答题人在 `/welcome`（`QB_PROFILE_SAVE` 第一次完成资料）、商家在入驻申请（`QB_SPONSOR_APPLY`，审批内容含条款版本）同意页面所示的当前版本；
 充值、提交发布、开通收款在锁外以一条语句（`qb.system.consent-state`）再查，未同意须同意版本即 422 `QB_CONSENT_REQUIRED`；开始答题不查（Q7-2）。没有已生效的版本时什么也不要求。
@@ -379,11 +381,11 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 | `qb.sponsor.topup-limit` | 每笔充值的范围与新商家的累计上限、剩余额度、期限（Q10b，评审 M3；判断仍在 `QB_TOPUP_START`） | `qb.sponsor.finance.read` |
 | `qb.wallet.taker-transferable` | 转账流程在用户钱包锁内读：2120 余额与保留中的奖励（最近 `qb.transfer.hold-days` 天入账的，与有未结争议的商家在被争议付款之后入账的，按 2120 贷方行的发布维度经卡片找到商家；只计尚在余额中的部分，模型见 4.4；Q10b，评审 M3、M-b） | `qb.payout.system` |
 | `qb.admin.topups` / `qb.admin.recon-runs` / `qb.admin.recon-items` | 全部充值（不含支付页地址）；核对结果与差异（F-06，Q6a） | `qb.admin.finance.read` / `qb.reconcile` |
-| `qb.app.inbox` / `qb.app.inbox-unread`（Q7c） | 个人消息 ∪ 匹配的公告（`live`、未过期、受众 APP，范围：全体 / 本人国家的地区 / 指定本人；商家通知只在其发布未结束时、给发布地区内的答题人（不给商家本人）；推广只给发送前注册、未退订的人），带已读；未读数至多 99 | `qb.me` |
+| `qb.app.inbox` / `qb.app.inbox-unread`（Q7c） | 个人消息 ∪ 匹配的公告（`live`、未过期、受众 APP，范围：全体 / 本人国家的地区 / 指定本人；商家通知只在其发布排期中或上架时（暂停与预算不足时隐藏，评审 M1）、给发布地区内的答题人（不给商家本人）；不收页面的时间（评审 L1）；推广只给发送前注册、未退订的人），带已读；未读数至多 99 | `qb.me` |
 | `qb.sponsor.inbox`（Q7c） | 商家后台收件箱：受众 SPONSOR 的公告 | `qb.sponsor.me` |
-| `qb.sponsor.broadcasts` / `qb.sponsor.broadcast-publications`（Q7c） | 本人的通知与统计（到达、已读、点击、开始答题；不足 5 人的数字不显示，Q7-14）；可选的发布 | `qb.broadcast.write` |
+| `qb.sponsor.broadcasts` / `qb.sponsor.broadcast-publications`（Q7c） | 本人的通知与每日快照的统计（到达人数向下取整、不足 10 不显示；阅读不足 5 不显示；到达不足 50 时不显示点击与开始答题，Q7-14、评审 M2）；可选的发布 | `qb.broadcast.write` |
 | `qb.admin.broadcasts`（Q7c） | 全部公告与通知，统计为确切的人数（从不给出是谁） | `qb.admin.content.write` |
-| `qb.system.broadcast-audience` / `qb.system.broadcasts-due` / `qb.system.payout-reminders`（Q7c） | 发送时的到达人数（同收件箱的条件）；到期的定时发送；该提醒的用户 | `qb.messaging.system` |
+| `qb.system.broadcast-audience` / `qb.system.broadcasts-due` / `qb.system.payout-reminders` / `qb.system.broadcasts-expired` / `qb.system.broadcast-stats`（Q7c） | 发送时的到达人数（同收件箱的条件）；到期的定时发送；该提醒的用户；该关掉的行；统计变化了的通知 | `qb.messaging.system` |
 | `qb.sponsor.transactions` / `qb.sponsor.transaction-summary` | 商家交易明细与汇总（M-50 – M-52，Q9b，`plans/Q9b-sponsor-transactions.md`）：本人发布的奖励（已支付 = 已完成、待支付 = 处理中；完成但无奖励的不是交易）∪ 本人的充值（已支付 = 已完成、开立中 = 处理中、过期或失败 = 失败）。答题人只以资料的显示名出现，不读作答与结果、不给邮箱与用户编号（按用户筛选用 `userKey` = md5(商家编号 : 用户编号)：不是用户编号，同一答题人在每个商家处的键不同；它不是秘密，知道两个编号的人都能算出）；筛选全部是参数（类型、状态、发布、用户、期间、关键字），汇总只多一层聚合、条件相同，列表、汇总与导出因此一致。汇总按类型分开：奖励（支出）的已支付与待支付，充值（收入）的已到账（扣除退款）、退款或扣回、处理中与失败；两者的金额从不相加，只有笔数是总计 | `qb.sponsor.finance.read` |
 | `qb.sponsor.dashboard` / `qb.sponsor.publications` / `qb.sponsor.analytics.*` | M-10 – M-11、M-34、M-40 – M-43 | 各自权限 |
 | `qb.admin.attempts` / `qb.admin.wallets` | 全部会话（P-01 的答题历史、支持查询，不含金额）；商家钱包的余额与待支付（Q5） | `qb.admin.users.read` / `qb.admin.finance.read` |

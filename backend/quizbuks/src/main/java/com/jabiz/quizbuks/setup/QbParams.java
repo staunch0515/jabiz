@@ -67,6 +67,11 @@ public final class QbParams {
     public static final String BROADCAST_EXPIRES_DAYS = "qb.broadcast.expires-days";
     /** How many days apart a taker is reminded to open a payout account (Q7-16). */
     public static final String PAYOUT_REMINDER_DAYS = "qb.payout.reminder-days";
+    /**
+     * Below how many people reached a sponsor sees no clicks or conversions of their notice (Q7c review M2: a small
+     * audience and the reward rows would tell who clicked).
+     */
+    public static final String BROADCAST_STATS_MIN_AUDIENCE = "qb.broadcast.stats.min-audience";
 
     /*
      * The account mapping of the journal export (Q9d, F-01): for each postable account of the ledger (QbLedger), the
@@ -164,7 +169,9 @@ public final class QbParams {
         new Param(BROADCAST_EXPIRES_DAYS, DAYS, "30",
             "Days the platform's announcements stay in the inbox unless their writer chooses otherwise"),
         new Param(PAYOUT_REMINDER_DAYS, DAYS, "30",
-            "Days between reminders to open a payout account once the rewards reach the transfer threshold"));
+            "Days between reminders to open a payout account once the rewards reach the transfer threshold"),
+        new Param(BROADCAST_STATS_MIN_AUDIENCE, Map.of("type", "numeric", "precision", 6, "scale", 0), "50",
+            "Below how many people reached a sponsor sees no clicks or conversions of a notice"));
 
     private static Param journal(String key, String account) {
         return new Param(key, ACCOUNT_CODE, "", "Accounting system's account code for " + account

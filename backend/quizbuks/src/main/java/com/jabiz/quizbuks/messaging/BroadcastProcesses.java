@@ -11,6 +11,7 @@ import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.quizbuks.country.Regions;
 import com.jabiz.quizbuks.identity.BanRules;
 import com.jabiz.quizbuks.identity.QbAccounts;
+import com.jabiz.quizbuks.publishing.PublicationStatus;
 import com.jabiz.quizbuks.publishing.QbPublications;
 import com.jabiz.quizbuks.publishing.SponsorChecks;
 import com.jabiz.quizbuks.setup.QbParams;
@@ -73,9 +74,17 @@ public final class BroadcastProcesses {
     public static final String ADMIN_WITHDRAW = "QB_ADMIN_BROADCAST_WITHDRAW";
     public static final String DISPATCH = "QB_BROADCAST_DISPATCH";
     public static final String BAN_WITHDRAW = "QB_BROADCAST_BAN_WITHDRAW";
+    /** The minute's job: a sent one out of the feed once it expired or its publication ended (review H1). */
+    public static final String EXPIRE = "QB_BROADCAST_EXPIRE";
+    /** The daily job: a sponsor's notice's statistics as the sponsor sees them (review M2). */
+    public static final String STATS = "QB_BROADCAST_STATS";
 
     /** At most this many scheduled announcements one run of the job sends. */
     public static final int DISPATCH_BATCH = 500;
+    /** At most this many expired ones a run takes out (the next minute's run takes the rest). */
+    public static final int EXPIRE_BATCH = 2_000;
+    /** At most this many notices' statistics a day's run writes. */
+    public static final int STATS_BATCH = 5_000;
 
     /**
      * A sponsor's notice: a title and plain text (in the language they wrote it in), one of their publications, some
@@ -108,6 +117,13 @@ public final class BroadcastProcesses {
 
     /** The ban's sub-process: the sponsor banned. */
     public record SponsorRef(@NotBlank @Size(max = 128) String sponsorId) {}
+
+    /** The statistics job's item: a notice's counts as the job's template counted them. */
+    public record StatsInput(@NotNull UUID broadcastId, @NotNull Long reads, @NotNull Long clicks,
+        @NotNull Long conversions) {}
+
+    /** @param changed whether the row of the feed was switched off, or the counts written */
+    public record JobOutput(UUID broadcastId, boolean changed) {}
 
     /** One problem sending would meet, the message in the caller's language. */
     public record Problem(String field, String code, String message, Map<String, Object> params) {}
@@ -717,7 +733,7 @@ public final class BroadcastProcesses {
                 .step("Load the notice", withdrawReads(QbInbox.SPONSOR_BROADCASTS))
                 .compute("Withdraw", (metadata, ctx) -> {
                     current(first(ctx, FOUND), ctx.get(INPUT, BroadcastRef.class).baseRevision());
-                    withdraw(ctx, null);
+                    withdraw(ctx, null, QbInbox.BY_SENDER);
                 }));
     }
 
@@ -739,7 +755,7 @@ public final class BroadcastProcesses {
                             throw new BusinessRuleViolationException(List.of(new Violation("reason",
                                 BroadcastCodes.REASON_REQUIRED, "A reason is needed", Map.of())));
                         }
-                        withdraw(ctx, reason.strip());
+                        withdraw(ctx, reason.strip(), QbInbox.BY_ADMIN);
                     });
             });
     }
@@ -756,7 +772,7 @@ public final class BroadcastProcesses {
     }
 
     /** A sent or scheduled broadcast withdrawn: out of every inbox (the feed's row off), its due time removed. */
-    static void withdraw(ProcessContext ctx, String reason) {
+    static void withdraw(ProcessContext ctx, String reason, String by) {
         EntityInstance found = first(ctx, FOUND);
         if (found == null) {
             throw notFound(ctx.get(ID));
@@ -766,16 +782,17 @@ public final class BroadcastProcesses {
             throw new BusinessRuleViolationException(List.of(new Violation(ID, BroadcastCodes.NOT_SENT,
                 "Only a sent or scheduled one is withdrawn", Map.of("status", status))));
         }
-        ctx.put(OUTPUT, withdrawn(ctx, found, first(ctx, FEED), first(ctx, SCHEDULE_ROW), reason));
+        ctx.put(OUTPUT, withdrawn(ctx, found, first(ctx, FEED), first(ctx, SCHEDULE_ROW), reason, by));
     }
 
-    private static BroadcastOutput withdrawn(ProcessContext ctx, EntityInstance broadcast, EntityInstance feed,
-        EntityInstance due, String reason) {
+    /** {@code by}: {@link QbInbox#BY_SENDER}, {@link QbInbox#BY_ADMIN} or {@link QbInbox#BY_SYSTEM} (review L3). */
+    static BroadcastOutput withdrawn(ProcessContext ctx, EntityInstance broadcast, EntityInstance feed,
+        EntityInstance due, String reason, String by) {
         long revision = number(broadcast.get("revision")) + 1;
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("status", QbInbox.WITHDRAWN);
         values.put("withdrawnAt", ctx.opTime());
-        values.put("withdrawnBy", ctx.request().actorId());
+        values.put("withdrawnBy", by);
         values.put("withdrawReason", reason);
         values.put("revision", BigDecimal.valueOf(revision));
         values.put("editedAt", ctx.opTime());
@@ -835,11 +852,94 @@ public final class BroadcastProcesses {
                         if (QbInbox.SENDER_SPONSOR.equals(row.get("senderKind"))
                             && Set.of(QbInbox.SENT, QbInbox.SCHEDULED).contains(row.get("status"))) {
                             withdrawn(ctx, row, feeds.get(String.valueOf(row.id())),
-                                dues.get(String.valueOf(row.id())), BroadcastCodes.CANCEL_SPONSOR_BANNED);
+                                dues.get(String.valueOf(row.id())), BroadcastCodes.CANCEL_SPONSOR_BANNED,
+                                QbInbox.BY_SYSTEM);
                             count++;
                         }
                     }
                     ctx.put(OUTPUT, new BanOutput(count));
+                }));
+    }
+
+    // ---- expiry and statistics (the review's H1 and M2) -------------------------------------------------------------
+
+    static final String STATS_ROW = "statsRow";
+
+    /**
+     * Takes one sent broadcast out of every inbox once it expired, or once its publication ended (a sponsor's notice):
+     * its row of the feed off, under the broadcast's lock, after reading it again. The broadcast stays {@code SENT}
+     * (it was sent and read; its statistics stay). The inbox therefore reads only the live rows, few however many were
+     * ever sent, and no time from the client.
+     */
+    public static ProcessDefinition<DispatchInput, JobOutput, ProcessContext> expire() {
+        return ProcessDefinition.define(EXPIRE, 1, DispatchInput.class, JobOutput.class, ProcessContext.class,
+            pb -> pb
+                .description("Takes an expired announcement, or a notice of an ended publication, out of the inboxes.")
+                .permissions(QbPermissions.MESSAGING_SYSTEM)
+                .internal()
+                .contextFactory((start, input) -> start(start, input, input.broadcastId()))
+                .outputMapper(ctx -> ctx.contains(OUTPUT) ? ctx.get(OUTPUT, JobOutput.class)
+                    : new JobOutput(input(ctx), false))
+                .step("Lock the broadcast", HoldLock.<ProcessContext>exclusive(
+                    ctx -> QbInbox.broadcastLock(ctx.get(ID))))
+                .step("Load its row of the feed", QueryEntities.<ProcessContext>of(
+                    QbInbox.defaultDataset(QbInbox.FEED), ctx -> MessageProcesses.byId(ID, ctx.get(ID)), FEED))
+                .step("Load the publication's card", QueryEntities.<ProcessContext>of(
+                    QbPublications.defaultDataset(QbPublications.CARD), ctx -> {
+                        EntityInstance feed = first(ctx, FEED);
+                        return MessageProcesses.byId("publicationId", feed == null
+                            || !QbInbox.SENDER_SPONSOR.equals(feed.get("senderKind")) ? null
+                            : feed.get("publicationId"));
+                    }, CARD))
+                .compute("Switch it off", (metadata, ctx) -> {
+                    EntityInstance feed = first(ctx, FEED);
+                    if (feed == null || !Boolean.TRUE.equals(feed.get("live"))) {
+                        return;
+                    }
+                    EntityInstance card = first(ctx, CARD);
+                    boolean expired = !MessageProcesses.instant(feed.get("expiresAt")).isAfter(ctx.opTime());
+                    boolean ended = card != null && PublicationStatus.ENDED.equals(card.get("status"));
+                    if (expired || ended) {
+                        ctx.changes().update(QbInbox.FEED, feed.id(), feed.version(), Map.of("live", false));
+                        ctx.put(OUTPUT, new JobOutput(uuid(feed.id()), true));
+                    }
+                }));
+    }
+
+    /**
+     * Writes a sponsor's notice's counts as the day's job counted them (the job only: the sponsor reads this snapshot,
+     * never the live receipts, review M2); a row unchanged is left as it is.
+     */
+    public static ProcessDefinition<StatsInput, JobOutput, ProcessContext> stats() {
+        return ProcessDefinition.define(STATS, 1, StatsInput.class, JobOutput.class, ProcessContext.class,
+            pb -> pb
+                .description("Records the day's statistics of a sponsor's notice.")
+                .permissions(QbPermissions.MESSAGING_SYSTEM)
+                .internal()
+                .contextFactory((start, input) -> start(start, input, input.broadcastId()))
+                .outputMapper(ctx -> ctx.contains(OUTPUT) ? ctx.get(OUTPUT, JobOutput.class)
+                    : new JobOutput(input(ctx), false))
+                .step("Load the snapshot", QueryEntities.<ProcessContext>of(
+                    QbInbox.defaultDataset(QbInbox.STATS), ctx -> MessageProcesses.byId(ID, ctx.get(ID)), STATS_ROW))
+                .compute("Write it", (metadata, ctx) -> {
+                    StatsInput input = ctx.get(INPUT, StatsInput.class);
+                    Map<String, Object> values = new LinkedHashMap<>();
+                    values.put("reads", BigDecimal.valueOf(input.reads()));
+                    values.put("clicks", BigDecimal.valueOf(input.clicks()));
+                    values.put("conversions", BigDecimal.valueOf(input.conversions()));
+                    EntityInstance row = first(ctx, STATS_ROW);
+                    if (row == null) {
+                        values.put(ID, input.broadcastId());
+                        values.put("snapshotAt", ctx.opTime());
+                        ctx.changes().insert(QbInbox.STATS, values);
+                    } else if (values.entrySet().stream().anyMatch(e -> number(row.get(e.getKey()))
+                        != ((BigDecimal) e.getValue()).longValue())) {
+                        values.put("snapshotAt", ctx.opTime());
+                        ctx.changes().update(QbInbox.STATS, row.id(), row.version(), values);
+                    } else {
+                        return;
+                    }
+                    ctx.put(OUTPUT, new JobOutput(input.broadcastId(), true));
                 }));
     }
 

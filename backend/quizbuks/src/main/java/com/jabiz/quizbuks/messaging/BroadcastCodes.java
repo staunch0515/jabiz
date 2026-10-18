@@ -66,12 +66,14 @@ public final class BroadcastCodes {
     public static final String CANCEL_PUBLICATION_ENDED = "QB_BROADCAST_PUBLICATION_ENDED";
     /** Why a notice was cancelled or withdrawn without a person's reason: its sponsor was banned (the publications'). */
     public static final String CANCEL_SPONSOR_BANNED = "QB_ACCOUNT_SUSPENDED";
+    /** Why the announcement of a legal text was withdrawn: the version it announced was withdrawn (review L2). */
+    public static final String LEGAL_VERSION_WITHDRAWN = "QB_LEGAL_VERSION_WITHDRAWN";
 
     public static final List<String> ALL = List.of(REGIONS_FORMAT, INVALID_VALUE, NOT_DRAFT, NOT_SCHEDULED, NOT_SENT,
         CHANGED, TITLE_REQUIRED, BODY_REQUIRED, TRANSLATION_MISSING, BODY_TOO_LONG, LINK, SCHEDULE_PAST,
         SCHEDULE_TOO_LATE, EXPIRY, REGIONS_REQUIRED, TARGET_MODE, USERS_REQUIRED, TOO_MANY_USERS, UNKNOWN_USERS,
         PUBLICATION_REQUIRED, PUBLICATION_NOT_ON, AFTER_END, REGIONS_OUTSIDE, TOO_MANY, TOO_SOON, REASON_REQUIRED,
-        CANCEL_PUBLICATION_ENDED);
+        CANCEL_PUBLICATION_ENDED, LEGAL_VERSION_WITHDRAWN);
 
     private BroadcastCodes() {}
 }

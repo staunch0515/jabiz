@@ -49,6 +49,7 @@ export interface BroadcastRow {
   conversions: number | null
   cancelReason: string | null
   withdrawnAt: string | null
+  /** Who withdrew it, in kind: `SENDER`, `ADMIN` or `SYSTEM` (which administrator is the audit's, review L3). */
   withdrawnBy: string | null
   withdrawReason: string | null
   revision: number

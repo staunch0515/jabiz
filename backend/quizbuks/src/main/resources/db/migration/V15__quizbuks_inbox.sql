@@ -8,10 +8,14 @@
 --    them; platform decision D9);
 --  * qb_broadcast_target: the named users of an announcement;
 --  * qb_broadcast_feed: the sent ones, the only table the inbox matches against (never a row per reader); live is
---    false once withdrawn;
+--    false once withdrawn, expired or its publication ended (the minute's job qb.broadcast-expire), so the inbox reads
+--    only the few current ones through a partial index, however many were ever sent (review H1);
 --  * qb_broadcast_schedule: a scheduled one's due time;
 --  * qb_broadcast_receipt: a user's first reading and click of an announcement (M-61);
---  * qb_inbox_state: a user's "all read" mark and whether they turned promotions off;
+--  * qb_broadcast_stats: the daily snapshot of a sponsor's notice's statistics, all the sponsor sees of them
+--    (review M2: live counts beside the reward rows would tell who clicked);
+--  * qb_inbox_state: a user's "all read" mark, their read-through mark (every broadcast sent before it was read one
+--    by one: the badge looks at the later ones only, review H1) and whether they turned promotions off;
 --  * qb_attempt_start: who started which publication when (a view of qb_attempt without answers or money), for the
 --    conversions of the statistics.
 -- Generated keys of ordinary entities are text (UUIDv7); keys that are a broadcast's or a publication's refer to
@@ -76,14 +80,18 @@ SELECT quizbuks_create_temporal_table('qb_broadcast_version', 'broadcast_id', '
     audience_count  numeric(9, 0),
     cancel_reason   varchar(64),
     withdrawn_at    timestamptz,
-    withdrawn_by    varchar(128),
+    withdrawn_by    varchar(10)   CHECK (withdrawn_by IN (''SENDER'', ''ADMIN'', ''SYSTEM'')),
     withdraw_reason varchar(1000),
+    source_key      varchar(100),
     revision        numeric(9, 0) NOT NULL,
     edited_at       timestamptz   NOT NULL');
 
 DROP FUNCTION quizbuks_create_temporal_table(text, text, text);
--- A sponsor's notices are found by their sender (immutable, decision D29).
+-- A sponsor's notices are found by their sender, an announcement of a legal text by its source (immutable, decision
+-- D29). Who of the administrators withdrew one is the audit's (its actor), not a field a sponsor's dataset shows
+-- (review L3): withdrawn_by says only by whom in kind.
 CREATE INDEX qb_broadcast_version_sender_idx ON qb_broadcast_version (sender_id);
+CREATE INDEX qb_broadcast_version_source_idx ON qb_broadcast_version (source_key) WHERE source_key IS NOT NULL;
 
 CREATE TABLE qb_broadcast_target (
     target_id    varchar(36)  PRIMARY KEY,
@@ -110,9 +118,10 @@ CREATE TABLE qb_broadcast_feed (
     live           boolean      NOT NULL,
     version        bigint       NOT NULL
 );
--- The inbox reads the live ones of its audience, newest first; a ban withdraws a sponsor's.
-CREATE INDEX qb_broadcast_feed_live_idx ON qb_broadcast_feed (audience, live, sent_at DESC);
-CREATE INDEX qb_broadcast_feed_sender_idx ON qb_broadcast_feed (sender_id) WHERE live;
+-- The inbox and the expiry job read the live ones of an audience by their end (review H1: the live ones are only the
+-- current ones); a ban withdraws a sponsor's (live is bound as a parameter there, so the index is not partial).
+CREATE INDEX qb_broadcast_feed_live_idx ON qb_broadcast_feed (audience, expires_at) WHERE live;
+CREATE INDEX qb_broadcast_feed_sender_idx ON qb_broadcast_feed (sender_id, live);
 
 CREATE TABLE qb_broadcast_schedule (
     broadcast_id uuid        PRIMARY KEY REFERENCES entity_registry (entity_id),
@@ -133,9 +142,19 @@ CREATE TABLE qb_broadcast_receipt (
 -- The statistics count a broadcast's receipts.
 CREATE INDEX qb_broadcast_receipt_broadcast_idx ON qb_broadcast_receipt (broadcast_id);
 
+CREATE TABLE qb_broadcast_stats (
+    broadcast_id  uuid          PRIMARY KEY REFERENCES entity_registry (entity_id),
+    reads         numeric(9, 0) NOT NULL,
+    clicks        numeric(9, 0) NOT NULL,
+    conversions   numeric(9, 0) NOT NULL,
+    snapshot_at   timestamptz   NOT NULL,
+    version       bigint        NOT NULL
+);
+
 CREATE TABLE qb_inbox_state (
     user_id         varchar(128) PRIMARY KEY,
     read_all_before timestamptz,
+    read_through    timestamptz,
     promo_off       boolean      NOT NULL,
     version         bigint       NOT NULL
 );

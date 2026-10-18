@@ -585,3 +585,31 @@ M-73 API Key（G10）；个人信息的删除与匿名化（平台未开放，GD
 - 商家通知不预审（Q7-10）：违规内容在撤回之前可被读到；后台列表按发送方与状态筛选以便巡查。
 - 收件箱模板每次读取时匹配公告（不按人复制）：公告数量很大时 `qb_broadcast_feed` 的 `live` 部分索引是关键；上线后观察 `qb.app.inbox-unread` 的耗时（每 5 分钟每个在线用户一次）。
 - 推送通知、邮件摘要不在本阶段（计划 §1）。
+
+### 13.7 评审后的修正（2026-10-18，同一分支，评审 27dc618）
+
+评审结论：核心正确（没有跨用户读取，受众正确）；两项高、三项中、四项低。逐项先写测试再修。
+
+| 项 | 修正 | 测试 |
+|---|---|---|
+| **H1** 徽标与收件箱扫描全部历史 | 部分索引 `(audience, expires_at) WHERE live`；每分钟的逐项任务 `qb.broadcast-expire`（`QB_BROADCAST_EXPIRE`，取通知锁后重读）把过期的与发布已结束的通知关掉，`live` 的行只有当前的；读者的已读水位 `QbInboxState.readThrough` 由 `QB_MESSAGE_MARK` 在写入已读之后推进（`qb.app.inbox-unread` 的 `oldestUnread`，至多落后 10 分钟，从不后退），徽标只看其后的行。探针规模下读完了的人 32 ms → 0.73 ms（`docs/quizbuks/perf/Q7c-inbox.md`）。读者的地区与推广开关不缓存（两次主键查找，不随公告数增长） | `InboxIT`（过期由任务关掉、`live = false` 而广播仍是 `SENT`、无事可做时零项、内部流程）；`theBadgeStartsFromTheReadersReadThroughMarkAndStillCountsWhatIsNewOrLate`（水位停在最早的未读、读完后落后 10 分钟、新的与晚到的定时公告照计、徽标与列表一致、列表的已读不变）；`InboxMatchIT`（任务之后再比三个模板） |
+| **H2** 发布名在个人消息中按 Markdown 渲染 | 个人消息一律纯文本（模板 `markdown = false`）；App 另只对平台的公告渲染 Markdown（纵深防御） | `InboxIT.aPublicationsNameIsPlainTextInAMessageNeverALinkOrAnImage`（链接、图片、自动链接语法的发布名）；Vitest（消息中的链接语法是文字、页面上没有外链） |
+| **M1** 暂停或下架的发布的通知仍可见 | 三个模板只在卡片 `SCHEDULED` / `LIVE` 时显示商家通知（暂停、预算不足时隐藏，恢复即回来）；结束由过期任务关掉 | `InboxIT.aSponsorsNoticeIsHiddenWhileItsPublicationIsPausedAndGoneWhenItEnds`（商家暂停、恢复、管理员暂停、结束；隐藏时不能标记） |
+| **M2** 商家统计的差分与马甲 | 商家只读每日快照 `QbBroadcastStats`（任务 `qb.broadcast-stats`，只写变化的）；到达人数向下取整到十（1,000 起到百），不足 10 不显示；到达不足参数 `qb.broadcast.stats.min-audience`（50，`QB_SETUP` 建立）时不显示点击与开始答题；阅读照旧不足 5 不显示。后台仍是确切的实时人数。剩余风险：商家可以注册若干马甲答题人并让它们点击，再从次日的快照差出别人的点击——到达人数下限与每日一次使这需要至少 50 个可到达的答题人与一天的等待，且只得到计数、不得到身份；平台不能完全排除，靠反作弊（多账号检测，Q10 以后）与条款 | `BroadcastIT.theStatistics…`（快照之前全无、快照之后阅读、下限之下没有点击与开始、取整、调低参数后点击出现、快照之后的点击次日才见、后台实时、未变化不重写、内部流程）；Vitest（"明日集计""不足 10""最终集计"） |
+| **M3** 链接检查是黑名单 | `BroadcastRules.hasAddress`：先 NFKC、去掉不可见与格式字符、把 `[.]` `(.)` `[dot]` `[:]`、空格包围的点与 `dot`、拉丁字母之间的 `。`、点之后逐字母空开的写法还原，再按形式判断：协议（含 `javascript:` 一类）、`www.`、邮箱、任何 `label.label` 加两个以上拉丁或西里尔字母的顶级域（含 IDN 与 `xn--`）、IPv4、`LINE ID`、`@handle`、十位以上的数字（电话）。日文句号在日文之间不算点。后台公告页显示正文（原样文字，不渲染） | `BroadcastRulesTest`：评审探针的 30 个写法全部拒绝，另加软连字符与词连接符；日期时间、`Top 10.`、日文句子、`Meet @ 5pm`、`i.e.` 等照常通过；扩展的 Vitest（正文显示为文字、不是链接） |
+| **L1** 页面的时间 | 三个收件箱模板不再有 `at`（传了即 400）；过期由任务处理 | `InboxIT`（`at` 为 400）；Vitest（请求中没有 `at`） |
+| **L2** 撤回法律文本的预告版本不撤回其公告 | 公告记 `sourceKey = legal:<版本>`；`QB_LEGAL_WITHDRAW` 在种类锁之后取这些公告的锁（`qb.legal` → `qb.broadcast`）、重读并以系统撤回（`QB_LEGAL_VERSION_WITHDRAWN`），已发出的离开收件箱、已排期的不再发出 | `LegalAnnounceIT.withdrawingAnAnnouncedVersionWithdrawsItsAnnouncementsSentOrNot` |
+| **L3** 商家数据视图中可见管理员编号 | `withdrawnBy` 只记种类 `SENDER` / `ADMIN` / `SYSTEM`（检查约束）；是哪位管理员由审计记录（更新的操作人）。后台页显示种类 | `BroadcastIT`（商家视图中是 `ADMIN`、不含管理员编号；本人撤回为 `SENDER`）；场景 `messaging.yml` |
+| **L4** 封禁查询用不到部分索引；商家列表逐行统计；焦点重复请求 | 发送方索引改为 `(sender_id, live)`（`live` 以参数绑定）；商家列表读快照（M2）；徽标查询 `refetchOnWindowFocus: false`（回到前台由 `visibilitychange` 问一次） | Vitest（回到前台只问一次，随后的 `focus` 不再问） |
+| 缺的测试 | 同时发送两条通知守住每个发布的上限（账户锁使一条通过、另一条在锁内遇到间隔）；另一个商家撤回或取消别人的通知为 404 | `BroadcastIT.twoNoticesSentAtOnceKeepThePublicationsLimit`、`onlySponsors…` |
+
+其他：消息中心的编辑器在只有一个可选发布时预先选中它（并忽略 Radix 选择框在选项挂载前报告的空值，Vitest 复现）；`QB_SETUP` 多建一个参数，场景的 ID 再次后移，答题场景的答案按新的显示位置改写（得分不变）。
+V15 尚未合并、没有部署过，直接修改（新增 `qb_broadcast_stats`、`read_through`、`source_key`，改两个索引与 `withdrawn_by`），合并之前在本地与 e2e 的库上需重建。
+
+### 13.8 评审修正的测试与结果
+
+- `origin/1.2/quizbuks` 与 `origin/1.2/quizbuks-7a-mail` 没有新的提交，没有合并。
+- `./gradlew :quizbuks:check`（本阶段自己的库）：689 项全部通过（本工作树的 JUnit 报告），`platformCheck` 0 错误；新模板中与物理列同名的别名已改名，没有告警。
+- 两个 SPA：lint、typecheck 通过，Vitest App 148 项、商家后台 141 项；两份 `src/qb/` 相同；`app:check` 两者通过；`ext:check` 78 项。
+- e2e（打包的 jar、本机的 Mailpit 与 Stripe 桩、独立的库与端口）：第一次 52 项中 50 项通过，失败的 2 项是 `inbox.spec.ts` 的读取辅助仍传 `at`（修正 L1 之后为 400），改正后该文件 3 项通过，再跑全量 52 项全部通过。
+- 徽标的 `EXPLAIN ANALYZE`（评审探针的规模）：读完了的人 0.73 ms（修正前 32 ms），见 `docs/quizbuks/perf/Q7c-inbox.md`。

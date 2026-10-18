@@ -20,8 +20,9 @@ const texts = (en: string) => ({ en, ja: `${en}（日本語）`, zh: `${en}（�
 
 const MESSAGE = {
   itemKind: 'MESSAGE', itemId: 'm1', type: 'REWARD', category: 'REWARD', kind: 'REWARD_PAID', sender: null,
-  sponsorName: null, title: texts('You received 100 Kudos'), body: texts('Your reward for "Capitals" is in your wallet.'),
-  markdown: true, publicationId: 'p1', action: 'RESULT', actionId: 'a1', at: '2026-10-18T01:00:00Z', expiresAt: null,
+  sponsorName: null, title: texts('You received 100 Kudos'),
+  body: texts('Your reward for "Capitals [Claim](https://evil.example/x)" is in your wallet.'),
+  markdown: false, publicationId: 'p1', action: 'RESULT', actionId: 'a1', at: '2026-10-18T01:00:00Z', expiresAt: null,
   readAt: null, clickedAt: null, unread: true,
 }
 const NOTICE = {
@@ -178,6 +179,14 @@ describe('the badge', () => {
       document.dispatchEvent(new Event('visibilitychange'))
     })
     await waitFor(() => expect(queryBodies('qb.app.inbox-unread')).toHaveLength(3))
+    // Once, not again for the window's focus (review L4).
+    act(() => {
+      window.dispatchEvent(new Event('focus'))
+    })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_000)
+    })
+    expect(queryBodies('qb.app.inbox-unread')).toHaveLength(3)
   })
 })
 
@@ -198,7 +207,9 @@ describe('the inbox', () => {
     expect(rows[1].querySelector('[lang="ja"]')).not.toBeNull()
     expect(within(rows[2]).queryByTestId('inbox-unread')).toBeNull()
     expect(screen.getByTestId('nav-inbox')).toHaveAttribute('aria-current', 'page')
-    expect(queryBodies('qb.app.inbox').at(-1)).toMatchObject({ params: { at: expect.any(String), lang: 'en' } })
+    expect(queryBodies('qb.app.inbox').at(-1)).toMatchObject({ params: { lang: 'en' } })
+    // The device's clock is no parameter (review L1).
+    expect(queryBodies('qb.app.inbox').at(-1)?.params).not.toHaveProperty('at')
 
     await user.type(screen.getByTestId('inbox-search'), 'Kudos{Enter}')
     await waitFor(() => expect(queryBodies('qb.app.inbox').at(-1)).toMatchObject({ params: { q: 'Kudos' } }))
@@ -246,7 +257,11 @@ describe('an item', () => {
     const user = userEvent.setup()
     render(<App />)
     expect(await screen.findByRole('heading', { name: 'You received 100 Kudos' })).toBeInTheDocument()
-    expect(screen.getByTestId('markdown-view')).toHaveTextContent('Your reward for "Capitals" is in your wallet.')
+    // Review H2: a message is plain text; a publication's name with link syntax stays text, never a link.
+    expect(screen.getByTestId('inbox-item-plain')).toHaveTextContent(
+      'Your reward for "Capitals [Claim](https://evil.example/x)" is in your wallet.')
+    expect(screen.queryByTestId('markdown-view')).toBeNull()
+    expect(screen.queryAllByRole('link').filter((link) => link.getAttribute('href')?.startsWith('http'))).toEqual([])
     await waitFor(() => expect(processCalls('QB_MESSAGE_MARK')).toHaveLength(1))
     expect(processCalls('QB_MESSAGE_MARK')[0].body).toEqual({ kind: 'MESSAGE', id: 'm1', action: 'READ' })
     expect(screen.getByTestId('nav-inbox')).toHaveAttribute('aria-current', 'page')

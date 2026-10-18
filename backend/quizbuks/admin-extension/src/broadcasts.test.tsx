@@ -55,7 +55,8 @@ beforeEach(() => {
     row('notice', { senderKind: 'SPONSOR', senderId: SPONSOR, sponsorCompany: 'Acme', type: 'NOTICE',
       publicationName: 'Capitals' }),
     row('banned', { senderKind: 'SPONSOR', senderId: SPONSOR, sponsorCompany: 'Acme', type: 'NOTICE',
-      status: 'WITHDRAWN', withdrawReason: 'QB_ACCOUNT_SUSPENDED' }),
+      status: 'WITHDRAWN', withdrawReason: 'QB_ACCOUNT_SUSPENDED', withdrawnBy: 'SYSTEM',
+      body: { en: 'Call 0120-123-456 [now](https://evil.example)' } }),
   ]
   server.datasetQuery.mockReset().mockResolvedValue({ data: { items: [{ attributes: { userId: TAKER } }] } })
   server.runQuery.mockReset().mockImplementation(async (id: string, options: { params: Row }) => ({
@@ -119,8 +120,14 @@ describe('BroadcastsPage', () => {
     // A sponsor's notice is never edited here, only withdrawn.
     expect(within(notice).queryByTestId('broadcast-edit')).not.toBeInTheDocument()
     expect(within(notice).getByTestId('broadcast-withdraw-form')).toBeInTheDocument()
-    expect(within(await rowOf('banned')).getByTestId('broadcast-withdrawn'))
-      .toHaveTextContent('the sponsor was banned')
+    const banned = await rowOf('banned')
+    expect(within(banned).getByTestId('broadcast-withdrawn')).toHaveTextContent('the sponsor was banned')
+    expect(within(banned).getByTestId('broadcast-withdrawn')).toHaveTextContent('by the system')
+    // Review M3: the text is there to read, as written, never a link.
+    expect(within(banned).getByTestId('broadcast-body'))
+      .toHaveTextContent('Call 0120-123-456 [now](https://evil.example)')
+    expect(within(banned).queryAllByRole('link').filter((link) => link.getAttribute('href')?.startsWith('http')))
+      .toEqual([])
   })
 
   it('filters by sender through the template', async () => {

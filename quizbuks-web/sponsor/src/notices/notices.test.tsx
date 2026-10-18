@@ -21,12 +21,14 @@ const ENTRY = { name: 'sponsor', selfRegistration: true, requireVerifiedEmail: t
 const SENT = {
   broadcastId: 'b1', status: 'SENT', title: { en: 'Try our quiz' }, body: { en: 'It is fun' }, publicationId: P1,
   publicationName: 'Big prize', regions: 'JP', scheduledAt: null, sentAt: '2026-10-17T01:00:00Z',
-  expiresAt: '2026-10-25T00:00:00Z', audienceCount: 200, reads: 50, clicks: 10, conversions: null,
+  expiresAt: '2026-10-25T00:00:00Z', audienceCount: 200, snapshotAt: '2026-10-18T04:47:00Z', reads: 50, clicks: 10,
+  conversions: null,
   cancelReason: null, withdrawnAt: null, withdrawnByAdmin: false, withdrawReason: null, revision: 3,
   editedAt: '2026-10-17T01:00:00Z',
 }
 const WITHDRAWN = {
   ...SENT, broadcastId: 'b2', status: 'WITHDRAWN', title: { ja: 'お得なクイズ' }, reads: null, clicks: null,
+  audienceCount: null, snapshotAt: null,
   withdrawnAt: '2026-10-17T02:00:00Z', withdrawnByAdmin: true, withdrawReason: 'Misleading', revision: 4,
 }
 const DRAFT = {
@@ -134,7 +136,11 @@ describe('the message centre', () => {
     render(<App />)
     const rows = await screen.findAllByTestId('notice-row')
     expect(rows).toHaveLength(3)
-    expect(within(rows[0]).getByTestId('notice-reached')).toHaveTextContent('200')
+    // Review M2: about how many (rounded down by the server), as of the day's count.
+    expect(within(rows[0]).getByTestId('notice-reached')).toHaveTextContent('200+')
+    expect(within(rows[1]).getByTestId('notice-reached')).toHaveTextContent('fewer than 10')
+    expect(within(rows[1]).getByTestId('notice-reads')).toHaveTextContent('counted tomorrow')
+    expect(screen.getByTestId('notices-stats-hint')).toHaveTextContent('Last counted')
     expect(within(rows[0]).getByTestId('notice-reads')).toHaveTextContent('50 (25 %)')
     expect(within(rows[0]).getByTestId('notice-clicks')).toHaveTextContent('10 (20 %)')
     expect(within(rows[0]).getByTestId('notice-conversions')).toHaveTextContent('fewer than 5')

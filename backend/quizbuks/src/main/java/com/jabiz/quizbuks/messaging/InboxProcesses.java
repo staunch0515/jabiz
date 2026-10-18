@@ -14,6 +14,7 @@ import com.jabiz.runtime.EntityNotFoundException;
 import com.jabiz.runtime.process.steps.HoldLock;
 import com.jabiz.runtime.process.steps.QueryEntities;
 import com.jabiz.runtime.process.steps.RunTemplate;
+import com.jabiz.runtime.process.steps.SaveChanges;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -101,15 +102,67 @@ public final class InboxProcesses {
                 .step("Load its row", QueryEntities.<ProcessContext>all(
                     QueryEntities.query(QbInbox.defaultDataset(QbInbox.MESSAGE), ctx -> MessageProcesses.byId(
                         "messageId", message(ctx) ? markInput(ctx).id() : null), MESSAGE),
-                    QueryEntities.query(QbInbox.defaultDataset(QbInbox.RECEIPT), ctx -> receiptQuery(ctx), RECEIPT)))
-                .compute("Mark it", (metadata, ctx) -> mark(ctx));
+                    QueryEntities.query(QbInbox.defaultDataset(QbInbox.RECEIPT), ctx -> receiptQuery(ctx), RECEIPT),
+                    QueryEntities.query(QbInbox.defaultDataset(QbInbox.STATE), ctx -> MessageProcesses.byId(
+                        "userId", ctx.request().actorId()), STATE)))
+                .compute("Mark it", (metadata, ctx) -> mark(ctx))
+                // Review H1: what is still unread after this reading (written first: the template reads the table),
+                // for the read-through mark the badge starts from.
+                .step("Write the mark", SaveChanges.<ProcessContext>now())
+                .step("Find the oldest unread", RunTemplate.<ProcessContext>of(QbInbox.APP_UNREAD_TEMPLATE,
+                    ctx -> Map.of("withOldest", readsABroadcast(ctx)), UNREAD))
+                .compute("Keep the read-through mark", (metadata, ctx) -> readThrough(ctx));
         });
+    }
+
+    static final String UNREAD = "unread";
+
+    /**
+     * How far the read-through mark stays behind the time of the reading at least: a scheduled broadcast is sent by
+     * the minute's job with its due time, so one due a moment before a reading may come into the feed after it.
+     */
+    static final java.time.Duration READ_THROUGH_MARGIN = java.time.Duration.ofMinutes(10);
+
+    /** Whether this mark read an announcement in the app (the only ones the badge's mark is about). */
+    private static boolean readsABroadcast(ProcessContext ctx) {
+        return !message(ctx) && !sponsorConsole(ctx.request()) && ctx.get(OUTPUT, MarkOutput.class).changed();
+    }
+
+    /**
+     * Moves the reader's read-through mark up to the oldest broadcast still unread (or to the margin before now when
+     * none is), never back: every broadcast sent before it was read one by one, so the badge looks at none of them.
+     * Not a reading: the inbox's list and the statistics do not use it.
+     */
+    @SuppressWarnings("unchecked")
+    static void readThrough(ProcessContext ctx) {
+        if (!readsABroadcast(ctx)) {
+            return;
+        }
+        List<Map<String, Object>> rows = (List<Map<String, Object>>) ctx.get(UNREAD);
+        Instant oldest = rows == null || rows.isEmpty() ? null
+            : MessageProcesses.instant(rows.getFirst().get("oldestUnread"));
+        Instant mark = ctx.opTime().minus(READ_THROUGH_MARGIN);
+        if (oldest != null && oldest.isBefore(mark)) {
+            mark = oldest;
+        }
+        EntityInstance state = MessageProcesses.first(ctx, STATE);
+        if (state == null) {
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("userId", ctx.request().actorId());
+            row.put("readThrough", mark);
+            row.put("promoOff", false);
+            ctx.changes().insert(QbInbox.STATE, row);
+            return;
+        }
+        Instant current = MessageProcesses.instant(state.get("readThrough"));
+        if (current == null || mark.isAfter(current)) {
+            ctx.changes().update(QbInbox.STATE, state.id(), state.version(), Map.of("readThrough", mark));
+        }
     }
 
     private static Map<String, Object> itemParams(ProcessContext ctx, boolean enabled) {
         MarkInput input = markInput(ctx);
         Map<String, Object> params = new HashMap<>();
-        params.put("at", ctx.opTime());
         params.put("itemKind", input.kind());
         params.put("itemId", input.id());
         params.put("enabled", enabled);

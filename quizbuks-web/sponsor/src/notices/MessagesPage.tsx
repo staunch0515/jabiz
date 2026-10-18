@@ -58,11 +58,15 @@ function useStatusLabel() {
   return (code: string) => items.data?.find((item) => item.code === code)?.label ?? code
 }
 
-/** A count of the statistics with its rate; "fewer than 5" when the server does not tell (M-61, Q7-14). */
+/**
+ * A count of the statistics with its rate, as of the day's count; "not counted yet" before it, "fewer than 5" when
+ * the server does not tell (M-61, Q7-14; review M2).
+ */
 function Stat({ row, value, base, testId }: { row: NoticeRow; value: number | null; base: number | null;
   testId: string }) {
   const { t } = useTranslation(SPONSOR)
   if (row.status !== 'SENT' && row.status !== 'WITHDRAWN') return <span aria-hidden>–</span>
+  if (row.snapshotAt == null) return <span data-testid={testId}>{t('notices.notCounted')}</span>
   if (value == null) return <span data-testid={testId}>{t('notices.fewer')}</span>
   const share = rate(value, base)
   return (
@@ -132,6 +136,8 @@ function Notices() {
   const status = useStatusLabel()
   const regionLabel = useRegionLabel()
   const notices = useQuery({ queryKey: [...NOTICES_QUERY, 'list'], queryFn: readNotices })
+  // The latest of the day's counts (all notices are counted by one run).
+  const counted = (notices.data ?? []).map((row) => row.snapshotAt).filter((at): at is string => !!at).sort().at(-1)
   const [editing, setEditing] = useState<NoticeRow | 'new' | null>(null)
   return (
     <div className="flex flex-col gap-4">
@@ -185,7 +191,11 @@ function Notices() {
                     </TableCell>
                     <TableCell><Badge variant={VARIANT[row.status]}>{status(row.status)}</Badge></TableCell>
                     <TableCell>{when ? formatDateTime(when) : '—'}</TableCell>
-                    <TableCell className="text-right" data-testid="notice-reached">{row.audienceCount ?? '–'}</TableCell>
+                    <TableCell className="text-right" data-testid="notice-reached">
+                      {row.status !== 'SENT' && row.status !== 'WITHDRAWN' ? '–'
+                        : row.audienceCount == null ? t('notices.fewerReach')
+                          : t('notices.reach', { count: row.audienceCount })}
+                    </TableCell>
                     <TableCell className="text-right">
                       <Stat row={row} value={row.reads} base={row.audienceCount} testId="notice-reads" />
                     </TableCell>
@@ -201,7 +211,10 @@ function Notices() {
               })}
             </TableBody>
           </Table>
-          <p className="text-muted-foreground text-xs">{t('notices.statsHint')}</p>
+          <p className="text-muted-foreground text-xs" data-testid="notices-stats-hint">
+            {t('notices.statsHint')}
+            {counted && <> {t('notices.countedAt', { time: formatDateTime(counted) })}</>}
+          </p>
         </>
       )}
     </div>

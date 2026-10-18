@@ -55,4 +55,36 @@ class LegalAnnounceIT extends InboxItSupport {
         String later = newTaker(unique("t-legal-later"), "JP");
         assertThat(itemIds(inbox(taker(later)))).containsAnyElementsOf(ids);
     }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void withdrawingAnAnnouncedVersionWithdrawsItsAnnouncementsSentOrNot() {
+        String taker = newTaker(unique("t-legal-w"), "JP");
+        String sponsor = newSponsor(unique("s-legal-w"));
+        // The sponsors' terms, announced and sent; the notice under the commercial law, announced, not sent yet.
+        Map<String, Object> terms = publish("TERMS_SPONSOR", true);
+        List<Object> sent = (List<Object>) terms.get("announcements");
+        runDispatch();
+        assertThat(itemIds(consoleInbox(console(sponsor)))).containsAll(sent);
+        Map<String, Object> notice = publish("COMMERCE_NOTICE", true);
+        List<Object> scheduled = (List<Object>) notice.get("announcements");
+        assertThat(scheduled).allSatisfy(id -> assertThat(broadcast(id)).containsEntry("status", "SCHEDULED")
+            .containsEntry("source_key", "legal:" + notice.get("versionId")));
+
+        // Review L2: a withdrawn version announces nothing any more.
+        for (Map<String, Object> version : List.of(terms, notice)) {
+            run("QB_LEGAL_WITHDRAW", legalAdmin(), body("legalVersionId", version.get("versionId"), "reason",
+                "Announced by mistake"));
+        }
+        for (Object id : sent) {
+            assertThat(broadcast(id)).containsEntry("status", "WITHDRAWN").containsEntry("withdrawn_by", "SYSTEM")
+                .containsEntry("withdraw_reason", "QB_LEGAL_VERSION_WITHDRAWN");
+        }
+        assertThat(itemIds(consoleInbox(console(sponsor)))).doesNotContainAnyElementsOf(sent);
+        assertThat(scheduled).allSatisfy(id -> assertThat(broadcast(id)).containsEntry("status", "WITHDRAWN"));
+        runDispatch();
+        assertThat(scheduled).allSatisfy(id -> assertThat(broadcast(id)).containsEntry("status", "WITHDRAWN"));
+        assertThat(itemIds(consoleInbox(console(sponsor)))).doesNotContainAnyElementsOf(scheduled);
+        assertThat(itemIds(inbox(taker(taker)))).doesNotContainAnyElementsOf(sent);
+    }
 }

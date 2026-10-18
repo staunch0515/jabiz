@@ -113,7 +113,7 @@ steps:
       query: qb.admin.broadcasts
       params: { broadcastId: "${b1}" }
       rows: 1
-      values: [{ status: WITHDRAWN, withdrawnBy: content-admin, withdrawReason: Postponed. }]
+      values: [{ status: WITHDRAWN, withdrawnBy: ADMIN, withdrawReason: Postponed. }]
   - expectError:
       actor: { id: "${u1}", permissions: [qb.me, qb.account.read] }
       process: QB_MESSAGE_MARK@latest

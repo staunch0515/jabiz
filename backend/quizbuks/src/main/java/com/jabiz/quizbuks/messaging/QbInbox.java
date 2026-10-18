@@ -22,9 +22,12 @@ import java.util.List;
  *   <li>{@code QbBroadcastTarget}: the users an announcement to named users goes to (at most
  *       {@link BroadcastRules#MAX_TARGETS} each);</li>
  *   <li>{@code QbBroadcastFeed}: the sent announcements, written when one is sent and switched off when it is
- *       withdrawn: the inbox reads this ordinary table, not the versions of every broadcast;</li>
+ *       withdrawn, expires or its publication ends (the minute's job {@value #EXPIRE_JOB}): the inbox reads the few
+ *       live rows of this ordinary table, not the versions of every broadcast;</li>
  *   <li>{@code QbBroadcastSchedule}: a scheduled announcement's due time (the minute's job reads it);</li>
  *   <li>{@code QbBroadcastReceipt}: when a user first opened an announcement and clicked through to its quiz (M-61);</li>
+ *   <li>{@code QbBroadcastStats}: the daily snapshot of a sponsor's notice's statistics, all the sponsor sees of them
+ *       (review M2);</li>
  *   <li>{@code QbInboxState}: a user's "all read" mark and whether they turned promotions off (Q7-11);</li>
  *   <li>{@code QbAttemptStart}: who started which publication when, a read-only view of the attempts without their
  *       rewards, for the conversions of the statistics (Q7-14).</li>
@@ -39,6 +42,7 @@ public final class QbInbox {
     public static final String FEED = "QbBroadcastFeed";
     public static final String SCHEDULE = "QbBroadcastSchedule";
     public static final String RECEIPT = "QbBroadcastReceipt";
+    public static final String STATS = "QbBroadcastStats";
     public static final String STATE = "QbInboxState";
     public static final String ATTEMPT_START = "QbAttemptStart";
 
@@ -103,6 +107,14 @@ public final class QbInbox {
     public static final String WITHDRAWN = "WITHDRAWN";
     public static final List<String> STATUSES = List.of(DRAFT, SCHEDULED, SENT, CANCELLED, WITHDRAWN);
 
+    /**
+     * Who withdrew a broadcast, in kind only: its sender, an administrator or the system (a ban, a withdrawn legal
+     * text). Which administrator is the audit's (review L3: a sponsor's dataset shows this field).
+     */
+    public static final String BY_SENDER = "SENDER";
+    public static final String BY_ADMIN = "ADMIN";
+    public static final String BY_SYSTEM = "SYSTEM";
+
     /** The inbox's kinds of item, as the mark process and the templates name them. */
     public static final String ITEM_MESSAGE = "MESSAGE";
     public static final String ITEM_BROADCAST = "BROADCAST";
@@ -138,10 +150,16 @@ public final class QbInbox {
     public static final String DUE_TEMPLATE = "qb.system.broadcasts-due";
     public static final String AUDIENCE_TEMPLATE = "qb.system.broadcast-audience";
     public static final String REMINDERS_TEMPLATE = "qb.system.payout-reminders";
+    public static final String EXPIRED_TEMPLATE = "qb.system.broadcasts-expired";
+    public static final String STATS_TEMPLATE = "qb.system.broadcast-stats";
 
     /** The minute's job sending the scheduled announcements and the daily job of payout reminders. */
     public static final String DISPATCH_JOB = "qb.broadcast-dispatch";
     public static final String REMINDER_JOB = "qb.payout-reminder";
+    /** The minute's job that takes the expired and the ended ones out of the inbox (review H1). */
+    public static final String EXPIRE_JOB = "qb.broadcast-expire";
+    /** The daily job of the sponsors' statistics' snapshot (review M2). */
+    public static final String STATS_JOB = "qb.broadcast-stats";
 
     /**
      * The lock of one broadcast: every process that writes it takes it before reading it again. A sponsor's processes
@@ -227,9 +245,12 @@ public final class QbInbox {
         // Why the job did not send it (a code: the publication no longer on, the sponsor banned).
         eb.field("cancelReason", f -> f.physicalColumn("cancel_reason").asText(64));
         eb.field("withdrawnAt", f -> f.physicalColumn("withdrawn_at").asTemporal(TemporalRole.EVENT_TIME));
-        eb.field("withdrawnBy", f -> f.physicalColumn("withdrawn_by").asText(USER_ID_LENGTH));
+        eb.field("withdrawnBy", f -> f.physicalColumn("withdrawn_by").asText(10)
+            .apply(Rules.pattern(BroadcastCodes.INVALID_VALUE, "SENDER|ADMIN|SYSTEM")));
         // The administrator's reason (the sponsor reads it), or the code of a ban's withdrawal.
         eb.field("withdrawReason", f -> f.physicalColumn("withdraw_reason").asText(REASON_LENGTH, true));
+        // What made it, when not a person: "legal:<version>" for the announcement of a legal text (review L2).
+        eb.field("sourceKey", f -> f.physicalColumn("source_key").immutable(true).asText(100));
         eb.field("revision", f -> f.physicalColumn("revision").required(true).asNumeric(9, 0));
         eb.field("editedAt", f -> f.physicalColumn("edited_at").required(true).asTemporal(TemporalRole.EVENT_TIME));
         // A draft is written, scheduled or sent; a scheduled one goes back to its draft, is sent by the job or
@@ -335,12 +356,34 @@ public final class QbInbox {
             .defaultSort("readAt", false));
     });
 
+    /** A sponsor's notice's statistics as of the day's snapshot (written by the job only). */
+    public static final EntityDefinition STATS_ENTITY = EntityDefinition.define(STATS, eb -> {
+        eb.physicalTable("qb_broadcast_stats");
+        eb.primaryKey("broadcastId");
+        eb.field("broadcastId", f -> f.physicalColumn("broadcast_id").immutable(true).required(true)
+            .asReference(BROADCAST));
+        eb.field("reads", f -> f.physicalColumn("reads").required(true).asNumeric(9, 0));
+        eb.field("clicks", f -> f.physicalColumn("clicks").required(true).asNumeric(9, 0));
+        eb.field("conversions", f -> f.physicalColumn("conversions").required(true).asNumeric(9, 0));
+        eb.field("snapshotAt", f -> f.physicalColumn("snapshot_at").required(true)
+            .asTemporal(TemporalRole.EVENT_TIME));
+        eb.field("version", f -> f.physicalColumn("version").asVersion());
+        eb.listView("default", lv -> lv
+            .columns("broadcastId", "reads", "clicks", "conversions", "snapshotAt")
+            .filters("broadcastId")
+            .sorts("snapshotAt")
+            .defaultSort("snapshotAt", false));
+    });
+
     public static final EntityDefinition STATE_ENTITY = EntityDefinition.define(STATE, eb -> {
         eb.physicalTable("qb_inbox_state");
         eb.primaryKey("userId");
         eb.field("userId", f -> f.physicalColumn("user_id").immutable(true).required(true).asText(USER_ID_LENGTH));
         // "Mark all as read": what came before it is read (not counted as read in the statistics, Q7-14).
         eb.field("readAllBefore", f -> f.physicalColumn("read_all_before").asTemporal(TemporalRole.EVENT_TIME));
+        // Every broadcast the inbox showed sent before this was read one by one (kept by QB_MESSAGE_MARK, at most
+        // READ_THROUGH_MARGIN behind its time): the badge counts only the later ones (review H1). Not a reading.
+        eb.field("readThrough", f -> f.physicalColumn("read_through").asTemporal(TemporalRole.EVENT_TIME));
         eb.field("promoOff", f -> f.physicalColumn("promo_off").required(true).asBool());
         eb.field("version", f -> f.physicalColumn("version").asVersion());
         eb.listView("default", lv -> lv

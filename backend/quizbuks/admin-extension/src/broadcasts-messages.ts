@@ -32,6 +32,7 @@ export const broadcastsMessages = {
     targets: 'Named users: {{count}}',
     withdrawnBy: 'Withdrawn: {{reason}}',
     suspended: 'the sponsor was banned',
+    by: { SENDER: 'by its sender', ADMIN: 'by an administrator', SYSTEM: 'by the system' },
     cancelled: 'Not sent: {{reason}}',
     editor: {
       title: 'Announcement',
@@ -102,6 +103,7 @@ export const broadcastsMessages = {
     targets: '指定用户：{{count}}',
     withdrawnBy: '已撤回：{{reason}}',
     suspended: '商家已被封禁',
+    by: { SENDER: '由发送方', ADMIN: '由管理员', SYSTEM: '由系统' },
     cancelled: '未发送：{{reason}}',
     editor: {
       title: '公告',
@@ -171,6 +173,7 @@ export const broadcastsMessages = {
     targets: '指定ユーザー：{{count}} 人',
     withdrawnBy: '取り下げ：{{reason}}',
     suspended: 'スポンサーが利用停止されました',
+    by: { SENDER: '送信元による', ADMIN: '管理者による', SYSTEM: 'システムによる' },
     cancelled: '未送信：{{reason}}',
     editor: {
       title: 'お知らせ',
