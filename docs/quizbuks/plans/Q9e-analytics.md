@@ -338,9 +338,13 @@
 
 ### 验证
 
-（见下一节的结果）
+- `./gradlew :quizbuks:check`（真实 PostgreSQL 16，本机实例、独立数据库）：597 个测试全部通过（含合并后的九个场景与 `TransferScheduleCheckTest`），`platformCheck` 0 个错误、72 个警告（Q7b 的合并带来的增量，本阶段没有新模板）。
+- 商家后台：`pnpm lint`、`pnpm typecheck`、`pnpm test`（23 个文件 149 个测试）；App：同上（21 个文件 133 个测试）；`pnpm app:check` 两个 SPA；`JABIZ_ADMIN_EXTENSION=../backend/quizbuks/admin-extension pnpm ext:check`（70 个测试）；两份 `src/qb/` 相同。
+- e2e（打包的 jar，独立端口与数据库，Mailpit 与 Stripe 桩，`QB_ANALYTICS_RUN_CRON` 每分钟）：50 个全部通过，含 `analytics.spec.ts` 与 `a11y.spec.ts` 的分析页（亮、暗）。
+  第一次运行时 axe 在 390 px 报 `scrollable-region-focusable`（窄屏上横向滚动的表格），已改为可聚焦的命名区域后通过。
+- 之后合并了 `origin/1.2/quizbuks-9e1-analytics-data` 上新的合并提交（其合并 1.2/quizbuks；`analytics.yml` 多发布一个提案），场景再次全部通过。
 
 ### 未完成与已知问题
 
-- Q9e1 的评审修订推送后合并到本分支（列不变时页面不需改；若"截至"的时刻另有一列，改为读它）。
+- Q9e1 的评审修订（概览改为任务快照、模板为性能改写）在本分支推送时尚未推送到 `1.2/quizbuks-9e1-analytics-data`，未合并；合并后列不变时页面不需改（若"截至"的时刻另有一列，改为读它），e2e 的 `analytics.spec.ts` 已经先等任务统计再读概览。
 - AI 用量卡由 Q8a 加入。
