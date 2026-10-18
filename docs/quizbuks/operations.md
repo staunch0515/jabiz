@@ -67,7 +67,7 @@
 | `QB_STRIPE_CHECKOUT_TTL` | 否 | 缺省 `PT1H` | — | — |
 | `QB_STRIPE_PLACEHOLDERS` | 服务器上 `false` | compose 缺省 `true`（只在测试模式填占位） | — | 用本仓库 compose 而没设 `false` 时，测试模式缺的密钥被填成占位（告警）而不是启动失败 |
 | `QB_STRIPE_ALLOW_LIVE_WITH_TEST_DATA` | **不设** | — | — | 缺省 `false`：库中有测试数据时正式模式启动失败（§4） |
-| `OPENAI_API_KEY` | Q8 | OpenAI | — | Q8 尚未实施，当前不读取 |
+| `ANTHROPIC_API_KEY` | 是（Q8a） | Anthropic Console → API Keys：为本部署新建的密钥（建议单独的工作区，在 Console 设工作区的月支出上限作为最后一道防线） | Console 新建密钥、改环境变量、重启，再删除旧密钥。泄露时立即删除，并先以受控变更关闭 `qb.ai.enabled` | 启动失败（EXTERNAL）；没有密钥时设占位，AI 保持关闭 |
 
 ### 1.4 只给测试的开关（生产不设）
 
@@ -315,7 +315,21 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 - **告警**：`jabiz.job.run{job="qb.analytics", result="PARTIAL"}` 连续出现（某一项一直失败：看任务项的错误，常见为读取超时或约束）；最近一次运行早于 30 分钟（商家页面的"最近更新"随之变旧）。运行时间见 `jabiz.process{process="QB_ANALYTICS_ITEM"}`，热门发布积压时变长。
 - 日志中的 `Analytics: the counters of publication … went down` 表示计数被别的方式改动（计数只增不减），该发布本次不写；`… recounted … finalized anyway` 表示结束一天后整体重算与计数仍不一致，按重算的值定稿：两者都应调查。
 
-### 7.8 其他
+### 7.8 AI 生成题目（Q8a）
+
+- **开关与限额**（后台 `/qb/ai`，受控参数）：`qb.ai.enabled`（缺省 false）、`qb.ai.model`、`qb.ai.effort`、`qb.ai.sponsor.daily-jobs`（20）、`qb.ai.sponsor.monthly-tokens`（200 万）、`qb.ai.global.monthly-tokens`（5 000 万）；普通参数 `qb.ai.candidates.expire-days`（7）与只用于估算的价格 `qb.ai.price.*`。限额在 `qb.ai:<商家>` → `qb.ai:*` 锁内按已记录的用量与未结束作业的预估检查（全体上限也加上所有商家未结束作业的预估）；一个作业的预估是 3 次尝试各自完整的输入与所要的全部输出（`max_tokens` 随题数：4 000 + 600 / 题，至多 16 000；effort `high` 时一次至多 10 题）。
+- **作业** `qb.ai.questions`：每次尝试至多 5 分钟（请求本身至多 `QB_AI_REQUEST_TIMEOUT`，缺省也是上限 2 分钟）、3 次尝试（429、408、5xx、529、超时、断线与回退忙时的拒答重试，退避 10 秒起、至多 2 分钟；其他拒答、截断、其他 4xx 立即失败）、全实例并发 `QB_AI_MAX_CONCURRENCY`（缺省 4）。提供方不按幂等键去重：重试可能重复计费，用量按每次尝试记录，也计入限额；**没有得到回答的尝试**（超时、断线、回答过大）按预估计入（完整输入与所要的全部输出），因为提供方可能已为没人读到的回答计费。
+- **任务** `qb.ai-expire`（每日 18:43 UTC）：把过期未校对的候选从作业中移除（之后不能再加入；提供方的原始回答仍在平台只追加的 `sys_external_job` 结果中），逐项一个事务。
+- **提供方故障**：后台 `/qb/ai` 的"最近的请求"按失败原因看（`QB_AI_RATE_LIMITED`、`QB_AI_PROVIDER_UNAVAILABLE`、`QB_AI_AUTH`：密钥错或被删，`EXTERNAL_CALL_FAILED`：没有回答）；长时间故障时以受控变更关闭开关（商家页面显示"暂时不可用"，手动编辑不受影响）。不自动切换到其他提供方。
+- **事故时的紧急停止**（花费异常、密钥泄露），按快慢：
+  1. **最快：在 Anthropic Console 吊销（删除）密钥**。立即生效、不需要部署或第二个人；之后每次尝试得到 401，作业以 `QB_AI_AUTH` 立即失败、不再重试（排队与重试中的作业都一样），商家看到"暂时不可用"。恢复时新建密钥、改 `ANTHROPIC_API_KEY`、重启。
+  2. **关闭开关 `qb.ai.enabled`**：受控参数，**需要两位管理员**（一位在 `/qb/ai` 提出、另一位发布），所以不是一个人能立刻做到的；它只拦新请求，**不停已排队或正在重试的作业**（作业处理器不访问数据库，读不到开关；平台缺口见计划的实施记录）。
+  3. **停止已排队的作业**：持有 `external-job.cancel` 的管理员（平台的 `ADMIN` 角色）对作业调用 `POST /api/external-jobs/{作业号}/cancel`（作业号在 `/qb/ai` 的"最近的请求"与 `qb.admin.ai-jobs` 中）：没在运行的立即结束、正在运行的在本次尝试后结束、不再重试；QuizBuks 以 `QB_AI_JOB_STOPPED` 关闭本地作业（`QB_AI_STOPPED`）并按完整预估计入用量。
+  4. **停掉本实例的全部调用**：`QB_AI_HALTED=true` 并重启：每次尝试不调用提供方即以 `QB_AI_HALTED` 失败（排队与重试中的也一样）。需要重启，所以比 1 慢。
+- **拒答**：请求带服务端回退（`fallbacks: "default"`，Haiku 无），回退后仍拒答即 `QB_AI_REFUSED`；`/qb/ai` 的"实际回答"列显示回退所用的模型。
+- **告警**：`jabiz.external_job` 中 `qb.ai.questions` 的失败率；某商家或全体本月用量接近上限（`qb.admin.ai-usage`）。
+
+### 7.9 其他
 
 - **邮件发不出**：`jabiz.mail` 的失败、发件服务商的退信；用户可在登录页重新请求验证邮件。
 - **启动失败**：日志中的 `Platform check failed` 后列出全部问题（`类别 | 定位 | 描述`），逐项修正环境；`QUIZBUKS` 类别是本应用的检查（§4）。

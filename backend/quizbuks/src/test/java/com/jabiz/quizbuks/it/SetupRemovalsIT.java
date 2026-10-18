@@ -41,10 +41,10 @@ class SetupRemovalsIT extends QbItSupport {
         Map<String, Object> role = latest("sec_role_version", "role_id", "role_id = '" + taker + "'").getFirst();
         commit(SecurityEntities.ROLE_DATASET, "DELETE", taker, ((Number) role.get("version_no")).longValue(), null,
             null);
-        // The AI model is changed; a parameter is only ever declared once.
+        // A plain parameter is changed; a parameter is only ever declared once.
         client.post().uri("/api/processes/PARAM_SET/latest").header("Authorization", admin())
             .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
-            .bodyValue(Map.of("key", QbParams.AI_MODEL, "value", "gpt-x")).exchange().expectStatus().isOk();
+            .bodyValue(Map.of("key", QbParams.AI_EXPIRE_DAYS, "value", "3")).exchange().expectStatus().isOk();
 
         // Both review rules (publications, Q4; sponsor onboarding, Q2) are disabled, with four eyes.
         for (String code : List.of(PublicationApprovals.RULE, SponsorApprovals.RULE)) {
@@ -79,8 +79,8 @@ class SetupRemovalsIT extends QbItSupport {
             "role_id = '" + content + "' AND permission = 'task.read' AND NOT is_deleted")).isEmpty();
         assertThat(latest("sec_role_permission_version", "role_permission_id",
             "role_id = '" + taker + "' AND NOT is_deleted")).isEmpty();
-        assertThat(latest("sys_param_version", "param_id", "param_key = 'qb.ai.model'")).singleElement()
-            .satisfies(param -> assertThat(param.get("param_value")).isEqualTo("gpt-x"));
+        assertThat(latest("sys_param_version", "param_id", "param_key = '" + QbParams.AI_EXPIRE_DAYS + "'")).singleElement()
+            .satisfies(param -> assertThat(param.get("param_value")).isEqualTo("3"));
     }
 
     private String roleId(String code) {

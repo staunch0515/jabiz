@@ -93,7 +93,7 @@
       },
       "kind" : {
         "kind" : {
-          "allowedValues" : [ "TERMS_APP", "TERMS_SPONSOR", "PRIVACY", "COMMERCE_NOTICE" ],
+          "allowedValues" : [ "TERMS_APP", "TERMS_SPONSOR", "PRIVACY", "COMMERCE_NOTICE", "AI_NOTICE" ],
           "dictUrn" : "urn:jabiz:dict:quizbuks:legal-kind",
           "type" : "code"
         },
@@ -125,7 +125,7 @@
         "type" : "temporal"
       },
       "kind" : {
-        "allowedValues" : [ "TERMS_APP", "TERMS_SPONSOR", "PRIVACY", "COMMERCE_NOTICE" ],
+        "allowedValues" : [ "TERMS_APP", "TERMS_SPONSOR", "PRIVACY", "COMMERCE_NOTICE", "AI_NOTICE" ],
         "dictUrn" : "urn:jabiz:dict:quizbuks:legal-kind",
         "type" : "code"
       },
@@ -171,7 +171,7 @@
     "params" : {
       "kind" : {
         "kind" : {
-          "allowedValues" : [ "TERMS_APP", "TERMS_SPONSOR", "PRIVACY", "COMMERCE_NOTICE" ],
+          "allowedValues" : [ "TERMS_APP", "TERMS_SPONSOR", "PRIVACY", "COMMERCE_NOTICE", "AI_NOTICE" ],
           "dictUrn" : "urn:jabiz:dict:quizbuks:legal-kind",
           "type" : "code"
         },
@@ -225,7 +225,7 @@
     "params" : {
       "kind" : {
         "kind" : {
-          "allowedValues" : [ "TERMS_APP", "TERMS_SPONSOR", "PRIVACY", "COMMERCE_NOTICE" ],
+          "allowedValues" : [ "TERMS_APP", "TERMS_SPONSOR", "PRIVACY", "COMMERCE_NOTICE", "AI_NOTICE" ],
           "dictUrn" : "urn:jabiz:dict:quizbuks:legal-kind",
           "type" : "code"
         },
@@ -266,7 +266,7 @@
         "type" : "temporal"
       },
       "kind" : {
-        "allowedValues" : [ "TERMS_APP", "TERMS_SPONSOR", "PRIVACY", "COMMERCE_NOTICE" ],
+        "allowedValues" : [ "TERMS_APP", "TERMS_SPONSOR", "PRIVACY", "COMMERCE_NOTICE", "AI_NOTICE" ],
         "dictUrn" : "urn:jabiz:dict:quizbuks:legal-kind",
         "type" : "code"
       },

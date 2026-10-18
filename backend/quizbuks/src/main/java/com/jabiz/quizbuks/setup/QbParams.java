@@ -42,8 +42,28 @@ public final class QbParams {
     public static final String REVIEW_SPONSOR_AUTO = "qb.review.sponsor.auto";
     /** Whether publications are approved without a person's review. */
     public static final String REVIEW_PUBLICATION_AUTO = "qb.review.publication.auto";
-    /** The OpenAI model of AI generation. */
+    /**
+     * AI generation (Q8a, docs/quizbuks/plans/Q8-ai.md, A-2, A-7, A-9): the switch (off until the deployment has a key
+     * and the AI notice is published), Claude's model and effort (one of the listed values only: the parameters' kind
+     * allows nothing else, and each request checks again), and the cost limits. They spend money, so they are controlled
+     * (four eyes, D40), as the money settings are.
+     */
+    public static final String AI_ENABLED = "qb.ai.enabled";
+    /** Claude's model: {@code claude-opus-5-5} (A-2), {@code claude-sonnet-5-5} or {@code claude-haiku-5-5}. */
     public static final String AI_MODEL = "qb.ai.model";
+    /** Claude's effort: {@code low}, {@code medium} (A-2) or {@code high}. */
+    public static final String AI_EFFORT = "qb.ai.effort";
+    public static final String AI_SPONSOR_DAILY_JOBS = "qb.ai.sponsor.daily-jobs";
+    public static final String AI_SPONSOR_MONTHLY_TOKENS = "qb.ai.sponsor.monthly-tokens";
+    public static final String AI_GLOBAL_MONTHLY_TOKENS = "qb.ai.global.monthly-tokens";
+    /** Days candidates wait for the sponsor's review before they are cleared (A-6). Not controlled. */
+    public static final String AI_EXPIRE_DAYS = "qb.ai.candidates.expire-days";
+    /** Dollars per million tokens, only for the administrators' estimate (A-8: nothing is billed). Not controlled. */
+    public static final String AI_PRICE_INPUT = "qb.ai.price.input-per-mtok-usd";
+    public static final String AI_PRICE_OUTPUT = "qb.ai.price.output-per-mtok-usd";
+    /** The controlled AI parameters, in the order the administrators' page shows them. */
+    public static final List<String> AI_CONTROLLED = List.of(AI_ENABLED, AI_MODEL, AI_EFFORT, AI_SPONSOR_DAILY_JOBS,
+        AI_SPONSOR_MONTHLY_TOKENS, AI_GLOBAL_MONTHLY_TOKENS);
     /** The oldest version of the app that may still be used. */
     public static final String APP_MIN_VERSION = "qb.app.min-version";
     /**
@@ -99,7 +119,7 @@ public final class QbParams {
     public static final List<String> CONTROLLED = java.util.stream.Stream.of(List.of(CREATOR_FEE_RATE,
         TRANSFER_THRESHOLD, TRANSFER_REVIEW_ABOVE, TRANSFER_ENABLED, REVIEW_SPONSOR_AUTO, REVIEW_PUBLICATION_AUTO,
         TOPUP_MIN, TOPUP_MAX, TRANSFER_FEE, TRANSFER_HOLD_DAYS, TOPUP_NEW_SPONSOR_DAYS, TOPUP_NEW_SPONSOR_MAX_TOTAL),
-        JOURNAL_ACCOUNTS, ISSUER, List.of(LEGAL_MAX_ANNOUNCE_DAYS)).flatMap(List::stream).toList();
+        JOURNAL_ACCOUNTS, ISSUER, List.of(LEGAL_MAX_ANNOUNCE_DAYS), AI_CONTROLLED).flatMap(List::stream).toList();
 
     /** A parameter: its key, kind (as the platform writes kinds) and first value. */
     public record Param(String key, Map<String, Object> valueKind, Object value, String description) {
@@ -111,6 +131,8 @@ public final class QbParams {
     private static final Map<String, Object> KUDOS = Map.of("type", "monetary", "currency", "JPY", "scale", 0);
     private static final Map<String, Object> BOOL = Map.of("type", "bool");
     private static final Map<String, Object> DAYS = Map.of("type", "numeric", "precision", 3, "scale", 0);
+    private static final Map<String, Object> TOKENS = Map.of("type", "numeric", "precision", 12, "scale", 0);
+    private static final Map<String, Object> USD = Map.of("type", "numeric", "precision", 8, "scale", 4);
     /** An account code of the accounting system: at most 20 characters (letters, digits, {@code . _ -}). */
     private static final Map<String, Object> ACCOUNT_CODE = Map.of("type", "text", "maxLength", 20);
 
@@ -125,8 +147,6 @@ public final class QbParams {
         new Param(TRANSFER_ENABLED, BOOL, false, "Whether the daily automatic transfers run"),
         new Param(REVIEW_SPONSOR_AUTO, BOOL, false, "Approve sponsor onboarding without review"),
         new Param(REVIEW_PUBLICATION_AUTO, BOOL, false, "Approve publications without review"),
-        new Param(AI_MODEL, Map.of("type", "text", "maxLength", 100), "gpt-4o-mini",
-            "OpenAI model used to generate questions and covers"),
         new Param(APP_MIN_VERSION, Map.of("type", "text", "maxLength", 20), "1.0.0",
             "Oldest app version that may still be used"),
         new Param(STATS_MIN_GROUP, Map.of("type", "numeric", "precision", 3, "scale", 0), "5",
@@ -156,7 +176,25 @@ public final class QbParams {
         new Param(SUPPORT_EMAIL, Map.of("type", "text", "maxLength", 200), "",
             "Support address shown to signed-in users in the help centre (empty: none)"),
         new Param(LEGAL_MAX_ANNOUNCE_DAYS, DAYS, String.valueOf(LEGAL_MAX_ANNOUNCE_DAYS_DEFAULT),
-            "How many days ahead a new version of the terms or the privacy policy may be announced to take effect"));
+            "How many days ahead a new version of the terms or the privacy policy may be announced to take effect"),
+        // Q8a: AI generation (the controlled ones last, in the order of AI_CONTROLLED).
+        new Param(AI_ENABLED, BOOL, false, "Whether sponsors may ask the AI for questions (Claude)"),
+        new Param(AI_MODEL, Map.of("type", "code", "dictUrn", "urn:jabiz:dict:quizbuks:ai-model", "allowedValues",
+            List.of("claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5")), "claude-opus-5-5",
+            "Claude model that writes the candidate questions"),
+        new Param(AI_EFFORT, Map.of("type", "code", "dictUrn", "urn:jabiz:dict:quizbuks:ai-effort", "allowedValues",
+            List.of("low", "medium", "high")), "medium", "Claude's effort (thinking depth and cost) per request"),
+        new Param(AI_SPONSOR_DAILY_JOBS, Map.of("type", "numeric", "precision", 4, "scale", 0), "20",
+            "AI requests one sponsor may make a day"),
+        new Param(AI_SPONSOR_MONTHLY_TOKENS, TOKENS, "2000000",
+            "AI tokens (input and output) one sponsor may use a month"),
+        new Param(AI_GLOBAL_MONTHLY_TOKENS, TOKENS, "50000000", "AI tokens all sponsors together may use a month"),
+        new Param(AI_EXPIRE_DAYS, DAYS, "7",
+            "Days AI candidates wait for the sponsor's review before they are cleared"),
+        new Param(AI_PRICE_INPUT, USD, "4",
+            "Dollars per million input tokens, for the administrators' estimate only"),
+        new Param(AI_PRICE_OUTPUT, USD, "20",
+            "Dollars per million output tokens, for the administrators' estimate only"));
 
     private static Param journal(String key, String account) {
         return new Param(key, ACCOUNT_CODE, "", "Accounting system's account code for " + account

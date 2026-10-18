@@ -125,4 +125,16 @@ class MessagesTest {
                 "QB_RECEIPT_NO_ISSUER");
         assertThat(en.stringPropertyNames()).allSatisfy(key -> assertThat(en.getProperty(key)).as(key).isNotBlank());
     }
+    @Test
+    void aiGenerationHasItsTexts() throws IOException {
+        // Q8a: the codes, the processes, the parameters, the two entities and the templates.
+        Properties en = load("en");
+        assertThat(en.stringPropertyNames()).containsAll(com.jabiz.quizbuks.content.ai.AiCodes.ALL)
+            .containsAll(com.jabiz.quizbuks.setup.QbParams.AI_CONTROLLED.stream().map(k -> "param." + k).toList())
+            .contains("process.QB_AI_QUESTIONS_REQUEST", "process.QB_AI_JOB_COMPLETED", "process.QB_AI_JOB_FAILED",
+                "process.QB_AI_ACCEPT", "process.QB_AI_DISCARD", "process.QB_AI_CANCEL", "process.QB_AI_EXPIRE",
+                "entity.QbAiJob", "entity.QbAiUsage", "entity.QbQuestion.aiJobId", "query.qb.sponsor.ai-jobs",
+                "query.qb.sponsor.ai-usage", "query.qb.admin.ai-usage", "query.qb.admin.ai-jobs",
+                "query.qb.admin.ai-settings", "query.qb.system.ai-expired", "param.qb.ai.candidates.expire-days");
+    }
 }

@@ -53,6 +53,13 @@ public final class QbPermissions {
     public static final String CONTENT_SYSTEM = "qb.content.system";
     /** Ask the AI for questions and covers. */
     public static final String AI_USE = "qb.ai.use";
+    /**
+     * The results of the AI jobs and the daily expiry of candidates (Q8a): {@code internal()}, run by the platform as
+     * the system. Granted to no role.
+     */
+    public static final String AI_SYSTEM = "qb.ai.system";
+    /** The administrators' AI page (Q8a): usage by sponsor and month, failures, the switch and limits in force. */
+    public static final String ADMIN_AI_READ = "qb.admin.ai.read";
     /** Create, submit, withdraw, pause, resume and copy one's own publications, and read them. */
     public static final String PUBLICATION_WRITE = "qb.publication.write";
     /**

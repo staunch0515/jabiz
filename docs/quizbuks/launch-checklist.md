@@ -13,6 +13,7 @@
 - [ ] 特定商取引法的表示（商家充值是有偿的）已发布
 - [ ] 上面四种文本都是需求方或律师提供的**正式文本**（日文为准据文本、英文一并提供），经 `QB_LEGAL_PUBLISH` 发布且已生效：页面上不再出现 `[TEST PLACEHOLDER]`；
       正式模式启动日志中没有 `legal:TERMS_APP` / `legal:TERMS_SPONSOR` / `legal:PRIVACY` 的告警（`operations.md` §3 第 9 步）
+- [ ] **AI 说明**（法律文本种类 `AI_NOTICE`：发送给 AI 提供方的内容、提供方的数据使用与保留、处理地域）由需求方或律师提供正式文本并发布，Anthropic 的商业条款（是否用于训练、保留期）已由法务确认（`plans/Q8-ai.md` A-11）；未完成时 `qb.ai.enabled` 保持 false 上线
 - [ ] 帮助中心的问答（账号、答题规则、奖励与转账；商家的入驻、发布、充值与费用）已发布，支持邮箱 `qb.support.email` 已设；`JABIZ_PUBLIC_ENABLED` 未设为 `false`
 - [ ] 保留期：导出文件、汇总凭证与收据的保留（L-4：10 年）已实施或已有书面的替代做法（`backend/quizbuks/CLAUDE.md`"导出文件与收据还没有 `RetentionPolicy`"）
 
@@ -22,6 +23,12 @@
 - [ ] 同一次压测中让分析任务 `qb.analytics` 照常每 10 分钟运行（Q9e，`perf/Q9e-analytics.md`）：提交 p95 与吞吐与不运行时相同，任务每次运行 < 1 分钟
 - [ ] 提交过载（503、以 EXPIRED 结束）的风险已向需求方说明并接受，或已做缓解（`operations.md` §7.6）
 - [ ] `max-active` 与连接池按"同时热门的发布数 × 4 + 1"确认
+
+## AI（Q8a）
+
+- [ ] **Opus 与 Sonnet 的比较**（A-2）：以 20 份真实测验分别用 `claude-opus-5-5` 与 `claude-sonnet-5-5`（effort `medium`）生成候选，比较可用题数、需要改动的题数与错误的正确选项，并**记录每次的响应时间**（p50、p95、最长，与超过 90 秒的比例：请求在 2 分钟时被放弃并按预估计费，接近它就降低题数上限，或等平台的流式读取），需求方据此决定 `qb.ai.model`（Sonnet 约为一半成本）；记录写在本项
+- [ ] 正式的 `ANTHROPIC_API_KEY` 只在密钥库，Anthropic Console 的工作区月支出上限已设；`qb.ai.model`、`qb.ai.effort` 与限额按预算以受控变更确认
+- [ ] `qb.ai.enabled` 在上面三项完成后才开启（四眼）；开启后用一个测试商家生成、校对、加入一次，`/qb/ai` 显示用量
 
 ## Stripe
 

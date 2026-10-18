@@ -1,5 +1,6 @@
 import { Button, PageState, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@jabiz/ui'
 import { useTranslation } from 'react-i18next'
+import { AiUsageMetric } from '../ai/AiUsageMetric'
 import { SPONSOR } from '../messages'
 import { StatusBadge } from '../publishing/shared'
 import { formatKudos } from '../qb/kudos'
@@ -53,7 +54,8 @@ function Metrics({ d }: { d: Dashboard }) {
         value={t('analytics.metrics.pendingValue', { amount: formatKudos(d.pendingAmount), n: n(d.pendingCount) })} />
       <Metric testId="metric-budget" label={t('analytics.metrics.budgetRemaining')}
         value={formatKudos(d.budgetRemaining)} hint={t('analytics.metrics.budgetRemainingHint')} />
-      {/* Q8a adds the AI usage (tokens) here (M-10). */}
+      {/* Q8a: the AI usage (tokens) of the month (M-10). */}
+      <AiUsageMetric zone={d.zone} />
     </section>
   )
 }

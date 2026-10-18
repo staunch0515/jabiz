@@ -7,9 +7,11 @@ import {
   Landmark,
   Scale,
   ScrollText,
+  Sparkles,
   Users,
   Wallet,
 } from 'lucide-react'
+import AiPage from './AiPage'
 import FinanceOverviewPage from './FinanceOverviewPage'
 import { PATH, PERMISSION } from './ids'
 import JournalMappingPage from './JournalMappingPage'
@@ -53,6 +55,7 @@ export default defineExtension({
     { path: PATH.journal, element: <JournalPage /> },
     { path: PATH.journalMapping, element: <JournalMappingPage /> },
     { path: PATH.legal, element: <LegalPage /> },
+    { path: PATH.ai, element: <AiPage /> },
   ],
   menu: [
     {
@@ -69,6 +72,7 @@ export default defineExtension({
         { key: 'qb-users', label: 'menu.users', path: PATH.users, icon: Users, permission: PERMISSION.usersRead },
         { key: 'qb-legal', label: 'menu.legal', path: PATH.legal, icon: ScrollText,
           permission: PERMISSION.contentWrite },
+        { key: 'qb-ai', label: 'menu.ai', path: PATH.ai, icon: Sparkles, permission: PERMISSION.aiRead },
       ],
     },
     {

@@ -49,6 +49,10 @@ jabiz:
       "[QB_PUBLICATION_SAVE]": { per-user: 60, period: 1m }
       # Q7b: accepting the terms after sign-in (a person does it once per change).
       "[QB_CONSENT_ACCEPT]": { per-user: 10, period: 1m }
+      # Q8a: asking the AI costs money (its limits are counted under the sponsor's lock, A-7); accepting reviewed
+      # candidates writes up to 20 questions.
+      "[QB_AI_QUESTIONS_REQUEST]": { per-user: 5, period: 1m }
+      "[QB_AI_ACCEPT]": { per-user: 30, period: 1m }
   # The key signing the integrity seals (docs/design/21-audit-retention.md section 2), from the environment only:
   # Base64, at least 32 bytes. Startup fails without it. Keep a copy: without it the existing seals cannot be verified.
   integrity:
@@ -124,6 +128,14 @@ jabiz:
     stripe:
       base-url: ${QB_STRIPE_API_URL:https://api.stripe.com}
       allowed-hosts: ${QB_STRIPE_API_HOSTS:api.stripe.com}
+    # Claude (docs/quizbuks/plans/Q8-ai.md, D-Q8-1): Anthropic's Messages API, its key in ANTHROPIC_API_KEY only
+    # (startup fails without it; the local compose file and local-demo.sh fill a placeholder that the provider refuses,
+    # so nothing is spent before a real key is set). AI stays off until qb.ai.enabled = true is proposed and published
+    # by a second administrator (a controlled change). Development, the tests and the end-to-end tests point it at the
+    # local stub (tools/quizbuks/claude-stub), never the network.
+    anthropic:
+      base-url: ${QB_ANTHROPIC_API_URL:https://api.anthropic.com}
+      allowed-hosts: ${QB_ANTHROPIC_API_HOSTS:api.anthropic.com}
   # Stripe's events (decision D37) at /api/inbound/stripe: the account endpoint's signing secret from the environment
   # only (STRIPE_WEBHOOK_SECRET; to rotate it, deploy/quizbuks/README.md). Startup fails without it.
   # Only the types QuizBuks consumes are stored; others are answered and dropped. The connected accounts' events come
@@ -224,6 +236,15 @@ quizbuks:
   # before the export's cut-off could commit after the export's reads. At most half of JournalPeriods.SETTLE (10 min).
   journal:
     max-open-transaction: PT5M
+  # AI generation (docs/quizbuks/plans/Q8-ai.md, Q8a; operations.md section 7.8). The longest wait for Claude's whole
+  # answer (at most two minutes, the platform's longest); an attempt without an answer is charged its estimate.
+  # halted = true makes every attempt on this instance fail without calling Claude, queued and retrying jobs included
+  # (an incident's stop that needs a restart; revoking the key at Anthropic is faster, switching qb.ai.enabled off
+  # stops new requests only).
+  ai:
+    request-timeout: ${QB_AI_REQUEST_TIMEOUT:PT2M}
+    halted: ${QB_AI_HALTED:false}
+    max-concurrency: ${QB_AI_MAX_CONCURRENCY:4}
   # Q10b (review M6): true when no reverse proxy is in front of the application, so that no trusted proxy is listed on
   # purpose (deploy/quizbuks/README.md, "密钥与部署").
   deploy:

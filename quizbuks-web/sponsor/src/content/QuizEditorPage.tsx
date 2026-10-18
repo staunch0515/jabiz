@@ -26,6 +26,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CircleCheck, Copy, RefreshCw, Save, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
+import { AiQuestionsPanel } from '../ai/AiQuestionsPanel'
 import { SPONSOR } from '../messages'
 import { QB } from '../qb/messages'
 import { fieldProblem } from '../qb/problems'
@@ -280,7 +281,8 @@ export function QuizEditorPage({ quizId }: { quizId: string }) {
           <TabsContent value="quiz" className="pt-4">
             <HeadingForm key={generation} quiz={quiz} />
           </TabsContent>
-          <TabsContent value="questions" className="pt-4">
+          <TabsContent value="questions" className="flex flex-col gap-4 pt-4">
+            <AiQuestionsPanel quiz={quiz} materials={materials} />
             <QuestionsPanel questions={questions} />
           </TabsContent>
           <TabsContent value="materials" className="pt-4">
