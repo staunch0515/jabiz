@@ -51,6 +51,8 @@
 | D46 | 流程事务内的写入合并与按已知版本更新：读之前写出、时态插入不先查、引用检查复用本事务的读写、普通实体按已知版本更新、锁在读之前、不跨事务缓存、语句预算（补充 D4、D6、D11、D14、D27，不取代） | 已确认（2026-10-16）；16p-1 已实施（第 1 条限于一次提交之内），16p-2 待做 | 06 §3.1、§4.1、04 §2.2、03 §2、11 §1、21 §1、13 |
 | D47 | 登录类接口按地址限流、口令哈希的并发上限、文件元数据可按策略对非上传者隐藏（补充 D12、D18、D36、D45，不取代） | 已确认（2026-10-17）；已实施（阶段 16q） | 10 §4.1、§4.2、14 §5.1、13 |
 | D48 | 受保护授权的四眼（建立期、首个管理员退役）、会计年度的时区、不公开元数据的文件用随机编号（补充 D12、D18、D23、D27、D28、D40、D47，不取代） | 已确认（2026-10-17）；已实施（阶段 16r） | 10 §16、18 §3.3–§3.4、21 §3.1、14 §5.1 |
+| D49 | 收件偏好按登录入口列出、邮件模板的显示名、界面语言与邮件语言分开（补充 D35、D36，不取代） | 已确认（2026-10-18）；已实施（阶段 16s） | 18 §5.6、12 §6、§10、§12 |
+| D50 | 外部作业的文件：按类型的输入上限（至多 1 MiB）、文件输入（按请求人的读取权限，只在尝试中可读）、文件输出（经上传流水线以请求人登记，`sys_file` 的第二个入口）（补充 D18、D31、D38、D47、D48，不取代） | 已确认（2026-10-18，QuizBuks Q8 的 A-13）；已实施（阶段 16t） | 11 §4a、14 §11、21 §3.1 |
 
 ---
 
@@ -1629,3 +1631,78 @@ P-8 原写"`false` 即逐条执行（16p-1 的局部合并同样受它控制）"
 `AccountController` 读 `sec_user_version` 的最新版本（同 `SendMail`）；`MailChecks` 增加两项检查。示范的 `commerce.order-shipped` 声明 `.entries("portal")`。
 没有迁移。测试：`MailPreferencesIT`（按入口列出与显示名、其他入口的模板与未知名称同样拒绝、只改本人的偏好、退订链接不看入口、读写本人的邮件语言）、
 `MailIT`（已退订的门户模板不发送）、`MailChecksTest`、`MailTemplateTest`、`mail.test`（client）、`MailPreferences.test`（ui，含亮暗两种外观的 axe）、`AccountSecurityPage.test`、`AppLayout.test`、门户 `App.test`。
+
+## D50 外部作业的文件：按类型的输入上限、文件输入与文件输出
+
+**背景**：QuizBuks Q8 计划（`1.2/quizbuks-7-plan` 的 `docs/quizbuks/plans/Q8-ai.md`，平台缺口 P1–P3，A-13 选 A，2026-10-18 确认）：
+①作业输入固定上限 64 KiB（D38 实现说明），多条长文章不能一次发送；②处理器不访问数据库、也读不到文件，PDF 资料不能作为生成的依据；
+③作业结果只是至多 256 KiB 的 JSON，服务器生成的图片（候选封面）没有进入 `sys_file` 的途径——上传只经 `/api/files?policy=…`（D18）。
+本条补充 D18、D31、D38、D47、D48，不取代任何决策（阶段 16t）。
+
+**决策**
+1. **输入上限按作业类型声明**：`ExternalJobType…maxInputSize(字节)`，缺省 64 KiB（不变），1 KiB 至 1 MiB（启动检查 `EXTERNAL`）。
+   超过即照旧 422 `EXTERNAL_JOB_INPUT_TOO_LARGE`（参数 `max` 为类型的上限）。输入仍原样存于只追加的 `sys_external_job` 并永久保留（见第 5 条）。
+2. **文件输入**：类型以 `inputFiles(个数, 每个的字节数, 策略…)` 声明可读的文件；流程以 `StartExternalJob.of(…).files(ctx -> 文件编号)` 交给作业。
+   - 登记时（流程事务内）逐个检查：文件存在（`FOR KEY SHARE` 读 `sys_file`）、属于类型声明的策略、请求人持有 `file.read` 或该策略的读取权限——与经 `/api/files/{id}/content` 读取所需的完全相同（上传者本人并不因此多得权限）；
+     三种不符**同一个回答** 422 `EXTERNAL_JOB_INPUT_FILE`（不透露别人文件是否存在），之后才看个数与大小（`EXTERNAL_JOB_INPUT_FILE_LIMIT`）。同一文件给两次只读一次。
+     系统身份（事件消费者、定时任务的流程）可以给任何文件。通过的文件记入 `sys_external_job_file`（`INPUT`，含大小与摘要），与作业同一事务。
+   - 执行时，执行器在任何事务之外、在处理器开始之前，把**这些文件、只有这些文件**从 `FileStore`（响应式）复制到上传区，处理器经 `ExternalJobContext.files()` / `file(编号)`
+     得到 `ExternalJobFile`（编号、判定的类型、大小、`open()` / `bytes()`，在处理器的虚拟线程上是普通的阻塞读）；要别的文件即 `IllegalArgumentException`。
+     尝试结束（成功、失败、超时）即删除副本，之前拿到的对象再 `open()` 即 `IllegalStateException`。处理器看不到 `Mono`，也不接触存储。
+   - 开始之后被删除（或内容不符）的文件使作业永久失败 `INPUT_FILE_MISSING`；存储读不出为可重试的 `INPUT_FILE_UNREADABLE`。权限只在开始时判断（作业以分钟计）。
+3. **文件输出**：类型以 `outputFiles(策略, 个数, 每个的字节数)` 声明；处理器以 `ExternalJobResult.of(值).file(键, 名称, 字节)` 返回。这是 `/api/files` 之外进入 `sys_file` 的**第二个入口**，与上传走同一条路：
+   - 开始作业的人必须持有输出策略的**上传权限**（否则 403，没有作业）：文件将是他的上传。
+   - 超过类型的个数或大小、类型不声明输出却返回文件，在存储任何东西之前即永久失败（`OUTPUT_FILE_LIMIT`、`OUTPUT_FILE_TOO_LARGE`、`BAD_RESULT`）。
+   - 每个文件经 `FileUploadService.storeGenerated`：策略的大小上限、**按内容判定类型**并与策略的允许列表比较（SVG、HTML 等永不允许）、图片**重新编码**（去掉 EXIF/GPS 等全部元数据、转正方向、生成变体）、
+     `privateMetadata()` 的策略取随机编号（D48 第 3 条），再以**请求人为操作人**运行 `FILE_REGISTER`（`uploadedBy` 为请求人，`op_process.input_summary` 带作业号 `jobId`，审计记录照常），不直接写表。
+     策略拒绝的文件（`FILE_TYPE_NOT_ALLOWED`、`FILE_INVALID`、`FILE_TOO_LARGE`）使作业永久失败 `OUTPUT_FILE_REJECTED`；其他存储错误可重试 `OUTPUT_FILE_FAILED`。
+     上传的限流不适用（个数由类型限定），上传权限已在开始时检查。
+   - 存储在记录尝试之前；存下的文件与尝试同一事务记入 `sys_external_job_file`（`OUTPUT`，尝试号、键、编号、大小、摘要），不论尝试最后如何——**哪个作业产生了哪个文件**在文件被清扫后仍可查。
+     完成流程的 `ExternalJobCompletion.files()`（键 → 编号，`file(键)`）只给出成功的那次尝试的文件。已取消的作业不存储。
+   - 没有被引用的输出文件（失败的尝试存下的、迟到被丢弃的、完成流程不用的候选）是普通的孤儿，由现有的 `FILE_SWEEP`（`jabiz.files.orphan-after`，缺省 24 小时）删除；平台不另设清理。
+4. 业务的处理器与阻塞步骤不得依赖 `com.jabiz.runtime.file`（共用 ArchUnit 规则 `PlatformArchRules.handlersReadFilesThroughTheirContext`）：文件只经上下文进、经结果出。
+5. **作业输入永久保存**（P4，只写明，不改变）：`sys_external_job.input` 只追加、永久保留（保留期可按 21 §3.1 声明），作业输入中的资料原文因此在业务数据之外**多存一份**；
+   文件输入只记编号与摘要（内容仍只在 `sys_file`，随其删除而删除）。应用只把作业需要的内容放进输入，不放个人数据；较大的资料以文件输入传递。
+6. 线 1.2 内兼容：只新增。`ExternalJobType`（组件 14 → 17）、`ExternalJobResult`（2 → 3）、`ExternalJobCompletion`（8 → 9）、`StartExternalJob.Metadata`（5 → 6）、`FileProcesses.RegisterInput`（9 → 10）是 record，
+   新增组件改变了它们的规范构造器与组件数：以 `define` / `of` 声明的代码不受影响，原构造器都保留（缺省上限、无文件）；直接对这些 record 做解构模式匹配或按组件反射的代码需要改写。
+   `StartExternalJob` 的 Spring 构造器多了文件策略（四参），原三参构造保留。已有作业类型的行为不变（缺省 64 KiB、不读写文件、`EXTERNAL_JOB_COMPLETE` 不多读）；上传接口与 OpenAPI 不变。
+
+**理由**：输入上限因作业而异（一段文案与十篇文章），但仍须有界：输入与作业一同永久保存，1 MiB 足够文字资料，更大的应作为文件。文件输入的检查与读取接口相同，
+作业因此不会让人读到他本来读不到的文件；复制而不是给出存储的句柄，处理器就只能读到交给它的文件，也只在尝试之中，并且不必面对响应式的存储。
+输出走上传的同一流水线并以请求人登记，服务器生成的文件与上传的文件受同样的类型、大小、重新编码与元数据规则约束，第二个入口不成为绕过检查的捷径；
+孤儿由已有的清扫处理，失败、取消与迟到的尝试不需要各自的补偿逻辑。
+
+**放弃的方案**：①处理器经平台的服务读文件（要么给出响应式接口，要么在虚拟线程上阻塞等待存储，且能读任何文件）；②把文件内容放进作业输入（永久多存一份，且受输入上限约束）；
+③输出文件写入 `sys_generated_file`（D31：那是交给外部的原样存档，不能删、不重新编码，不能被字段引用）；④完成流程自己上传（流程中没有字节的去处，且绕过上传流水线）；
+⑤输出文件以系统身份登记（失去"谁的上传"，`privateMetadata()` 的上传者判断与配额都失效）；⑥失败时立即删除已存下的文件（与清扫重复，且删除本身也会失败）。
+
+**实现说明（16t）**：core `ExternalJobType.InputFiles` / `OutputFiles`、`ExternalJobFile`、`GeneratedFile`、`ExternalJobContext.files()` / `file()`（缺省方法）、
+`ExternalJobResult.file(…)`、`ExternalJobCompletion.files()` / `file(键)`；runtime `StartExternalJob.Spec#files`、`ExternalJobFiles`（复制输入、存储输出）、
+`ExternalJobExecutor`（领取时的租约加上复制与存储可用的时间，不计入处理器的超时；见下面的修订）、`ExternalJobRecorder`（`sys_external_job_file` 的读写）、
+`FileUploadService.storeGenerated`、`ExternalJobChecks`（策略存在、输出上限不超过策略的上限）；迁移 `V42__external_job_files.sql`（只追加，`job_file_id` 为主键，D27 封存）；
+只读平台实体 `ExternalJobFile`（`external-job.read`）；错误码 `EXTERNAL_JOB_INPUT_FILE`、`EXTERNAL_JOB_INPUT_FILE_LIMIT`（三语）。
+示范：`app` 的 `commerce.product-image`（`PRODUCT_IMAGE_REQUEST`：把商品照片交给 `demo-ai` 的 `POST /v1/images`，回答的图片以请求人的 `commerce.image` 上传登记，
+`PRODUCT_IMAGE_APPLY` 换上新照片，旧照片随清扫删除）；图片经另一个外部服务 `demo-ai-images`（响应上限 16 MiB；`demo-ai` 保持 64 KiB）。测试 `ExternalJobFilesIT`、`ExternalJobFilesTest`（core）、
+`ExternalJobChecksTest`、`ExternalJobExecutorTest`、`ArchitectureTest.handlersReadFilesOnlyThroughTheirContext`。
+
+**独立评审之后的修订（2026-10-18，M1、M2、L1–L6 与信息项）**：
+- M1 输出的内存：`OutputFiles` 增加 `maxTotalBytes`（`outputFiles(策略, 个数, 每个, 合计)`；缺省 `min(个数 × 每个, 16 MiB)`、不小于每个，至多 200 MiB），超过即永久失败 `OUTPUT_FILES_TOO_LARGE`；
+  `GeneratedFile` 不再复制字节（数组交给结果，处理器之后不得修改，`content()` 返回同一数组）。每个实例的输出预算 `jabiz.external-jobs.files.output-budget`（缺省 256 MB）：
+  有输出的类型每领取一次尝试即预留其合计、尝试结束归还，预算不够的尝试不领取；启动检查要求每个类型的合计不超过预算。处理器在返回之前自己占用的内存不受平台约束。
+- M2 存储失败：一个文件的存储失败（策略的拒绝除外）先以同样的字节重试 `store-retries` 次（缺省 2），仍失败才是可重试的 `OUTPUT_FILE_FAILED`，**下一次尝试再次调用提供方**（说明中写明）。
+  复制与存储的时限随类型声明的大小增长：`work-minimum`（缺省 1 分钟，至少 1 秒）加每 MiB `work-per-mib`（缺省 0.5 秒），存储再乘以 1 + 重试次数；租约照此延长。
+  不做跨尝试的暂存：要在只追加的表中记录暂存文件与其清理，并在领取时区分"只差存储"的尝试，代价与这一少见情形不相称。
+- L1 作业的记录不泄露不公开的元数据：`ExternalJobFile` 的文件编号与摘要（字段名 `linkedFileId`、`linkedFileSha256`：遮蔽字段的名字会在所有操作记录中遮蔽同名的值，所以不用 `fileId`、`sha256`）
+  是遮蔽字段（`file.read`，`MaskStyle.ALL`），没有 `file.read` 看不到、不能筛选或排序，持有者经 `reveal` 逐值查看并留下记录。`privateMetadata()` 策略的文件，记录的编号为 UUIDv4、
+  `recorded_time` 只到日。`ExternalJob` 的 `requestedBy` 与 `createdTime` 不遮蔽：`external-job.read` 是管理员的权限（读到的是全部作业的请求人，与审计同级），
+  而文件到作业的连接已因编号遮蔽而断开；读内容的人（D47 所防的对象）不持有它。
+- L2 示范的图片走另一个外部服务 `demo-ai-images`（同一地址与密钥，响应上限 16 MiB），`demo-ai` 恢复 64 KiB，请求路径上的审核不受影响。
+- L3 复制的副本在写入前即登记，失败、超时、取消都删除；复制前检查可用空间（`min-free-disk`，缺省 256 MB），不够即可重试 `INPUT_FILE_NO_SPACE`。
+- L4 示范 `PRODUCT_IMAGE_APPLY` 只在商品的照片仍是作业所用的那张时才换上（结果带 `sourceFileId`），否则不换、告知请求人（`task.commerce.product-image.stale`）；本地桩输出的图片缩到 2048 像素以内的 JPEG，不超过作业的 10 MB。
+- L5 **处理器不是沙箱**：ArchUnit 规则 `handlersReadFilesThroughTheirContext` 现在也检查处理器经应用自己的类（应用包内，传递地）到达 `com.jabiz.runtime.file`，
+  但看不到反射、方法句柄，也看不到经 `java.nio` 直接读存储根目录；它防的是误用，不是恶意代码（应用代码与平台同权限运行）。
+- L6 测试：`ExternalJobFilesIT` 增加只追加与封存、`FOR KEY SHARE` 挡住开始中的删除、副本摘要不符、`privateMetadata()` 的输入与记录（遮蔽、`reveal`、随机编号、到日）、
+  PDF 的输出策略、登记失败为可重试、租约过期后迟到尝试的文件只记录不交出、示范的照片被他人改过；新的 `ExternalJobFileFailuresIT`（故障存储）：复制超时、
+  存储的内容不见、存储超时、存储失败一次在尝试内重试（处理器只运行一次）、持续失败时下一次尝试再运行处理器。
+- 信息项：处理器的 `deadline()` 从复制之后算起；复制后重算 SHA-256（只比较大小不能发现同长度的改动）；`StartExternalJob` 新增四参构造（文件策略），原三参构造保留（无策略，带文件的类型不能由它开始）。
+  第 6 条补充：`ExternalJobType.OutputFiles` 是本阶段新增的 record（三参构造取缺省合计）。

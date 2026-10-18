@@ -1,7 +1,10 @@
 package com.jabiz.external;
 
 import java.time.Instant;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * The input of a job type's completion process (decision D38 item 3): the platform runs it once, as the system, when
@@ -14,12 +17,22 @@ import java.util.Map;
  * @param usage        the usage of all attempts, by metric
  * @param attempts     how many attempts the job took
  * @param finishedTime when the result was recorded
+ * @param files        the ids of the files the successful attempt produced, by their key (decision D50 item 3); stored
+ *                     as uploads of the requester and referred to by nothing yet: a file the process does not put in
+ *                     a field is swept as an orphan ({@code FILE_SWEEP})
  */
 public record ExternalJobCompletion(String jobId, String jobType, String requestedBy, String reference,
-    Object result, Map<String, Long> usage, int attempts, Instant finishedTime) {
+    Object result, Map<String, Long> usage, int attempts, Instant finishedTime, Map<String, UUID> files) {
 
     public ExternalJobCompletion {
         usage = usage == null ? Map.of() : Map.copyOf(usage);
+        files = files == null ? Map.of() : Collections.unmodifiableMap(new LinkedHashMap<>(files));
+    }
+
+    /** A completion without files, as decision D38 had it. */
+    public ExternalJobCompletion(String jobId, String jobType, String requestedBy, String reference, Object result,
+        Map<String, Long> usage, int attempts, Instant finishedTime) {
+        this(jobId, jobType, requestedBy, reference, result, usage, attempts, finishedTime, Map.of());
     }
 
     /** The result as the job type's result record. */
@@ -27,10 +40,23 @@ public record ExternalJobCompletion(String jobId, String jobType, String request
         return type.cast(result);
     }
 
+    /**
+     * The id of the file the handler returned under {@code key}.
+     *
+     * @throws IllegalArgumentException when it returned none
+     */
+    public UUID file(String key) {
+        UUID id = files.get(key);
+        if (id == null) {
+            throw new IllegalArgumentException("External job " + jobId + " produced no file " + key);
+        }
+        return id;
+    }
+
     /** The job and its outcome only: the result may be personal. */
     @Override
     public String toString() {
         return "ExternalJobCompletion[jobId=" + jobId + ", jobType=" + jobType + ", attempts=" + attempts
-            + ", usage=" + usage + "]";
+            + ", usage=" + usage + ", files=" + files.keySet() + "]";
     }
 }

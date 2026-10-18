@@ -15,12 +15,14 @@ import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 import tools.jackson.databind.json.JsonMapper;
 
+import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
 
 /**
  * The step of {@code EXTERNAL_JOB_COMPLETE} (decision D38 item 3): reads the finished job, its outcome and its usage,
  * and calls the job type's completion process with an {@link ExternalJobCompletion} (the result read back as the
- * type's result record) or its failure process with an {@link ExternalJobFailure}, as a sub-process in the same
+ * type's result record, with the ids of the files the successful attempt produced, decision D50) or its failure process with an {@link ExternalJobFailure}, as a sub-process in the same
  * transaction, which also records that the event was consumed: called once. A cancelled job calls nothing (Q13).
  *
  * <p>Only the platform's event delivery runs it, as the system: anyone else, an administrator holding every
@@ -72,7 +74,10 @@ class RunExternalJobCallback implements StepHandler<RunExternalJobCallback.Metad
                 .flatMap(job -> recorder.outcome(jobId)
                     .switchIfEmpty(Mono.error(() -> new IllegalStateException("External job " + jobId
                         + " has not finished")))
-                    .flatMap(outcome -> recorder.usage(jobId).flatMap(usage -> {
+                    .flatMap(outcome -> Mono.zip(recorder.usage(jobId), producesFiles(job.jobType())
+                        ? recorder.outputFiles(jobId) : Mono.just(Map.<String, UUID>of())).flatMap(found -> {
+                        Map<String, Long> usage = found.getT1();
+                        Map<String, UUID> files = found.getT2();
                         if ("CANCELLED".equals(outcome.status())) {
                             ctx.put(metadata.outputKey(), new ExternalJobProcesses.CompleteOutput(jobId,
                                 outcome.status(), null));
@@ -107,7 +112,7 @@ class RunExternalJobCallback implements StepHandler<RunExternalJobCallback.Metad
                         String target = succeeded ? type.onCompleted() : type.onFailed();
                         Object input = succeeded
                             ? new ExternalJobCompletion(jobId, job.jobType(), job.requestedBy(), job.reference(),
-                                result, usage, outcome.attempts(), outcome.finishedTime())
+                                result, usage, outcome.attempts(), outcome.finishedTime(), files)
                             : new ExternalJobFailure(jobId, job.jobType(), job.requestedBy(), job.reference(), usage,
                                 outcome.attempts(), outcome.finishedTime(), errorCode, errorMessage);
                         ProcessDefinition<?, ?, ?> process = processes.findLatest(target).orElseThrow(() ->
@@ -117,6 +122,10 @@ class RunExternalJobCallback implements StepHandler<RunExternalJobCallback.Metad
                         return call(process, input);
                     })));
         });
+    }
+
+    private boolean producesFiles(String jobType) {
+        return jobs.find(jobType).map(type -> type.outputFiles() != null).orElse(false);
     }
 
     private <I, O, C extends ProcessContext> Mono<Void> call(ProcessDefinition<I, O, C> process, Object input) {
