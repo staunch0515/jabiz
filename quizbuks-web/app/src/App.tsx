@@ -12,6 +12,7 @@ import {
   SignUpForm,
   StepUpProvider,
   ThemeToggle,
+  Toaster,
   VerifyEmailBanner,
   cn,
 } from '@jabiz/ui'
@@ -295,6 +296,8 @@ export default function App() {
           <div className="bg-background text-foreground min-h-full">
             <Routes />
           </div>
+          {/* The account page's offer to send mail in the new interface language (offerMailLanguage). */}
+          <Toaster />
         </AuthProvider>
       </QueryClientProvider>
     </AppearanceProvider>

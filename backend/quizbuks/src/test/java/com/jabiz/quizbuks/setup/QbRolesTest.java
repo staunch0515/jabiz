@@ -40,6 +40,21 @@ class QbRolesTest {
     }
 
     @Test
+    void onlyTheSuperAdministratorDecidesProtectedChanges() {
+        // Platform 16u (D51): the four eyes on protected grants are two super administrators, deciding with the
+        // permission made for it and reading the facts of the request; no other role decides them.
+        assertThat(QbRoles.of(QbRoles.ADMIN_SUPER).permissions()).contains("security.protected-change.decide",
+            "approval.read");
+        assertThat(QbRoles.all()).filteredOn(role -> role.permissions().contains("security.protected-change.decide"))
+            .extracting(QbRoles.Role::code).containsExactly(QbRoles.ADMIN_SUPER);
+        // Neither new permission is on a side of a separation of duties: the super administrator breaks no rule.
+        assertThat(QbSodRules.ALL).allSatisfy(rule -> assertThat(rule.left()).doesNotContain(
+            "security.protected-change.decide", "approval.read"));
+        assertThat(QbSodRules.ALL).allSatisfy(rule -> assertThat(rule.right()).doesNotContain(
+            "security.protected-change.decide", "approval.read"));
+    }
+
+    @Test
     void noRoleWritesParametersAndOnlyFinancePublishesControlledChanges() {
         // Parameters change through controlled changes (platform decision D40): the super administrator proposes,
         // the finance administrator publishes, and no role holds both.
@@ -196,7 +211,7 @@ class QbRolesTest {
         // The system's processes, the development credit and the ledger's writes are nobody's.
         assertThat(QbRoles.all()).allSatisfy(role -> assertThat(role.permissions()).doesNotContain(
             QbPermissions.WALLET_SYSTEM, QbPermissions.PAYOUT_SYSTEM, QbPermissions.WALLET_DEV_CREDIT,
-            QbPermissions.PLAY_SYSTEM, "ledger.post",
+            QbPermissions.PLAY_SYSTEM, QbPermissions.MESSAGING_SYSTEM, "ledger.post",
             "ledger.reverse", "inbound.write", "external-job.complete", "external-job.write"));
     }
 }

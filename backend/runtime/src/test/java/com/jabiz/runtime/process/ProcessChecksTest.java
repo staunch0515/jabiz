@@ -232,4 +232,20 @@ class ProcessChecksTest {
             .isEqualTo("calls HAND_OFF@1, which is internal() and runs as the system only, from a process that is "
                 + "OPEN: declare the callee subProcessOnly() or the caller internal() (decision D41)");
     }
+
+    /** Decision D51: alternative permissions are the platform's; an application process using them is warned of. */
+    @Test
+    void anApplicationProcessWithAlternativePermissionsIsWarnedOf() {
+        ProcessDefinition<String, Out, ProcessContext> app = process("APP_EITHER", 1, pb -> pb
+            .permissions("app.one").orPermissions("app.other")
+            .step("Mark", MarkStep.class, NoMetadata.INSTANCE));
+        ProcessDefinition<String, Out, ProcessContext> platform = process("APPROVAL_DECIDE", 1, pb -> pb
+            .permissions("approval.decide").orPermissions("security.protected-change.decide")
+            .step("Mark", MarkStep.class, NoMetadata.INSTANCE));
+        assertThat(check(false, app, platform)).singleElement().satisfies(problem -> {
+            assertThat(problem.severity()).isEqualTo(CheckProblem.Severity.WARNING);
+            assertThat(problem.location()).contains("APP_EITHER");
+            assertThat(problem.message()).contains("orPermissions");
+        });
+    }
 }

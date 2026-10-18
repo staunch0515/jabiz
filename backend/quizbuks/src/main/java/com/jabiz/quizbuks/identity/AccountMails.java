@@ -14,9 +14,12 @@ import com.jabiz.mail.MailTemplate;
  */
 public final class AccountMails {
 
-    /** To a taker who completed their profile for the first time (registration's second step); unsubscribable. */
+    /**
+     * To a taker who completed their profile for the first time (registration's second step); unsubscribable, among the
+     * app's mail preferences (platform decision D49).
+     */
     public static final MailTemplate WELCOME = MailTemplate.define("qb.welcome", t -> t
-        .category(MailCategory.NOTIFICATION).param("name"));
+        .category(MailCategory.NOTIFICATION).entries("app").param("name"));
 
     /** The sponsor's onboarding was approved, by a reviewer or at once. */
     public static final MailTemplate SPONSOR_APPROVED = MailTemplate.define("qb.sponsor.approved", t -> t

@@ -370,7 +370,8 @@ public final class PublicationLifecycle {
                     PublicationApprovals.SUBJECT, ctx -> PublicationEditing.approvalCase(first(ctx, FOUND),
                         list(ctx, TIERS), first(ctx, VERSIONS), false).preparedBy(input(ctx).preparerId()),
                     APPROVAL))
-                .compute("Move on", (metadata, ctx) -> approvalResult(ctx)));
+                .compute("Move on", (metadata, ctx) -> approvalResult(ctx))
+                .steps(PublicationNotices::announce));
     }
 
     /** Whether the event is about the request the publication, still under review, waits for. */
@@ -475,7 +476,8 @@ public final class PublicationLifecycle {
                 .step("Withdraw a review that came too late", WithdrawApproval.<ProcessContext>when(
                     PublicationLifecycle::expiredInReview, PublicationApprovals.SUBJECT,
                     ctx -> PublicationEditing.publication(ctx).id()))
-                .compute("Move on", (metadata, ctx) -> advance(ctx)));
+                .compute("Move on", (metadata, ctx) -> advance(ctx))
+                .steps(PublicationNotices::announce));
     }
 
     private static boolean expiredInReview(ProcessContext ctx) {

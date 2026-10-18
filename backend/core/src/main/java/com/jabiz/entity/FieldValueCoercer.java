@@ -27,11 +27,46 @@ import java.util.Date;
  * </ul>
  *
  * Working on canonical types makes rules, immutability checks and query binding
- * independent of how a value happened to arrive.
+ * independent of how a value happened to arrive. Moments and dates must lie in what PostgreSQL's {@code timestamptz}
+ * and {@code date} hold, and the driver binds faithfully ({@link #EARLIEST_TIMESTAMP}–{@link #LATEST_TIMESTAMP}, {@link #EARLIEST_DATE}–
+ * {@link #LATEST_DATE}): beyond them a value is invalid input (400), not a database error (decision D51 item 3).
  */
 public final class FieldValueCoercer {
 
     private FieldValueCoercer() {}
+
+    /**
+     * The earliest moment accepted: 4713-01-01 00:00 BC (UTC), ISO year -4712. PostgreSQL holds a little earlier
+     * (4714-11-24 BC), but the driver binds moments of ISO year -4713 as {@code -infinity} (review L4).
+     */
+    public static final Instant EARLIEST_TIMESTAMP = Instant.parse("-4712-01-01T00:00:00Z");
+    /** The latest moment a {@code timestamptz} holds, to the microsecond. */
+    public static final Instant LATEST_TIMESTAMP = Instant.parse("+294276-12-31T23:59:59.999999Z");
+    /** The earliest day accepted: 4713-01-01 BC, ISO year -4712 (as {@link #EARLIEST_TIMESTAMP}). */
+    public static final LocalDate EARLIEST_DATE = LocalDate.of(-4712, 1, 1);
+    /** The latest day a {@code date} holds. */
+    public static final LocalDate LATEST_DATE = LocalDate.of(5874897, 12, 31);
+
+    /**
+     * {@code instant}, when PostgreSQL can store it.
+     *
+     * @throws IllegalArgumentException if it lies outside {@link #EARLIEST_TIMESTAMP}–{@link #LATEST_TIMESTAMP}
+     */
+    public static Instant storable(Instant instant) {
+        if (instant != null && (instant.isBefore(EARLIEST_TIMESTAMP) || instant.isAfter(LATEST_TIMESTAMP))) {
+            throw new IllegalArgumentException("timestamp " + instant + " is outside the supported range "
+                + EARLIEST_TIMESTAMP + " to " + LATEST_TIMESTAMP);
+        }
+        return instant;
+    }
+
+    private static LocalDate storable(LocalDate date) {
+        if (date.isBefore(EARLIEST_DATE) || date.isAfter(LATEST_DATE)) {
+            throw new IllegalArgumentException("date " + date + " is outside the supported range " + EARLIEST_DATE
+                + " to " + LATEST_DATE);
+        }
+        return date;
+    }
 
     public static Object coerce(FieldDefinition field, Object raw, boolean enforceDictionary) {
         try {
@@ -51,8 +86,8 @@ public final class FieldValueCoercer {
             return null;
         }
         return switch (kind) {
-            case SemanticKind.Temporal t -> toInstant(raw);
-            case SemanticKind.Date d -> toDate(raw);
+            case SemanticKind.Temporal t -> storable(toInstant(raw));
+            case SemanticKind.Date d -> storable(toDate(raw));
             case SemanticKind.Monetary m -> toDecimal(raw);
             case SemanticKind.Numeric n -> toDecimal(raw);
             case SemanticKind.Version v -> toLong(raw);

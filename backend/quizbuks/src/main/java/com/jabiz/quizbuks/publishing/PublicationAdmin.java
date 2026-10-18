@@ -107,7 +107,8 @@ public final class PublicationAdmin {
                     }
                 })
                 .compute("Act", (metadata, ctx) -> compute.accept(ctx,
-                    ctx.get(PublicationEditing.INPUT, AdminInput.class))));
+                    ctx.get(PublicationEditing.INPUT, AdminInput.class)))
+                .steps(PublicationNotices::announce));
     }
 
     public static ProcessDefinition<AdminInput, PublicationOutput, ProcessContext> pause() {

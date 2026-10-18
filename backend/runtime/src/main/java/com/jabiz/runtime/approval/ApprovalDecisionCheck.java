@@ -16,6 +16,16 @@ public interface ApprovalDecisionCheck {
     boolean covers(String subject);
 
     /**
+     * The permission deciding requests of the subjects this check covers needs instead of {@code approval.decide}
+     * (decision D51: {@code security.protected-change.decide} for protected changes); null to keep
+     * {@code approval.decide}. Its holders cannot decide other subjects, nor holders of {@code approval.decide} these.
+     * {@code APPROVAL_DECIDE} also lets callers with this permission start ({@code orPermissions}).
+     */
+    default String decidePermission() {
+        return null;
+    }
+
+    /**
      * @param request the request as loaded, pending
      * @param approve whether the decision approves (else it rejects)
      */

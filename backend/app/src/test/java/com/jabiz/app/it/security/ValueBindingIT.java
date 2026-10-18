@@ -63,6 +63,23 @@ class ValueBindingIT extends SecurityItSupport {
         return reasons(template(id, actor).expectStatus().isOk().expectBody(MAP).returnResult().getResponseBody());
     }
 
+    // ---------------------------------------------------------------- Times PostgreSQL cannot store (D51 item 4)
+
+    @Test
+    void aTimeTheDatabaseCannotStoreIsTheCallersBadRequest() {
+        String reader = TestTokens.bearer(tokens, "it-reader", "logistics.report.read");
+        Map<String, Object> problem = post("/api/queries/logistics.tokyo_port_audit", reader, Map.of("params",
+            Map.of("minFreight", 1, "allowedStatuses", List.of("DELIVERED"), "shippedAfter",
+                "+300000-01-01T00:00:00Z"))).expectStatus().isBadRequest().expectBody(MAP).returnResult()
+            .getResponseBody();
+        assertThat(violations(problem)).singleElement().satisfies(v ->
+            assertThat(v).containsEntry("field", "shippedAfter").containsEntry("ruleCode", "INVALID_VALUE"));
+        Map<String, Object> early = post("/api/queries/logistics.tokyo_port_audit", reader, Map.of("params",
+            Map.of("minFreight", 1, "allowedStatuses", List.of("DELIVERED")), "asOf", "-5000-01-01T00:00:00Z"))
+            .expectStatus().isBadRequest().expectBody(MAP).returnResult().getResponseBody();
+        assertThat(violations(early)).extracting(v -> v.get("field")).containsExactly("asOf");
+    }
+
     // ---------------------------------------------------------------- Gap 15: the sign-in guard's loads
 
     @Test

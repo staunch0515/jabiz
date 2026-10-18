@@ -16,6 +16,7 @@ import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.inbound.LoadInboundEvent;
 import com.jabiz.runtime.inbound.ReceivedEvent;
 import com.jabiz.runtime.process.steps.HoldLock;
+import com.jabiz.runtime.process.steps.PublishEvent;
 import com.jabiz.runtime.process.steps.QueryEntities;
 import com.jabiz.runtime.process.steps.StartExternalJob;
 import com.jabiz.runtime.task.CreateTask;
@@ -52,6 +53,11 @@ public final class PayoutProcesses {
     public static final String ACCOUNT_DEAUTHORIZED = "QB_PAYOUT_ACCOUNT_DEAUTHORIZED";
     public static final String UPDATED_CONSUMER = "qb.payout-account";
     public static final String DEAUTHORIZED_CONSUMER = "qb.payout-account-deauth";
+    /**
+     * Published when Stripe holds back an account that was enabled (Q7a, D-Q7-1): its owner is asked by mail to give
+     * what Stripe needs. Payload {@code userId}, {@code payoutAccountId}.
+     */
+    public static final String RESTRICTED_EVENT = "qb.payout-account.restricted";
 
     /** The input of {@value #ONBOARD}: nothing, the taker is the caller. */
     public record OnboardRequest() {}
@@ -74,6 +80,7 @@ public final class PayoutProcesses {
     static final String OUTCOME = "outcome";
     static final String REASON = "reason";
     static final String STATUS_AFTER = "statusAfter";
+    static final String RESTRICTED = "restricted";
 
     // ---- onboarding ------------------------------------------------------------------------------------------------
 
@@ -259,6 +266,12 @@ public final class PayoutProcesses {
                 .step("Read the account again", QueryEntities.<ProcessContext>of(
                     QbPayouts.defaultDataset(QbPayouts.ACCOUNT), ctx -> byExternal(report(ctx).accountId()), ACCOUNT))
                 .compute("Record the state", (metadata, ctx) -> updated(ctx, stripe, deauthorized))
+                .step("Ask the owner for details", PublishEvent.<ProcessContext>when(ctx -> ctx.contains(RESTRICTED),
+                    RESTRICTED_EVENT, ctx -> {
+                        EntityInstance account = first(ctx, ACCOUNT);
+                        return Map.of("userId", String.valueOf((Object) account.get("userId")),
+                            "payoutAccountId", String.valueOf(account.id()));
+                    }))
                 .step("Ask a person", CreateTask.<ProcessContext>when(ctx -> ctx.contains(REASON), ctx -> {
                     EntityInstance account = first(ctx, ACCOUNT);
                     ReceivedEvent event = event(ctx);
@@ -343,6 +356,10 @@ public final class PayoutProcesses {
             values.put("stripeUpdatedAt", happened);
         }
         ctx.put(STATUS_AFTER, values.get("status"));
+        if (PayoutAccountStatus.ENABLED.equals(account.get("status"))
+            && PayoutAccountStatus.RESTRICTED.equals(values.get("status"))) {
+            ctx.put(RESTRICTED, true);
+        }
         ctx.put(OUTCOME, "RECORDED");
         ctx.changes().update(QbPayouts.ACCOUNT, account.id(), account.version(), values);
     }

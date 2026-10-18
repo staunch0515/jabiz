@@ -61,7 +61,12 @@ public final class QbRoles {
         "security.user.read", "security.user.write", "security.user.create", "security.user.password",
         "security.user.unlock", "security.user.mfa-reset", "security.user.identity.write",
         "security.role.read", "security.role.write", "security.user-role.read", "security.user-role.write",
-        "security.menu.read", "security.menu.write", "security.login-record.read", "security.access-review.read");
+        "security.menu.read", "security.menu.write", "security.login-record.read", "security.access-review.read",
+        // Platform 16u (decision D51): super administrators are the administrators of the four eyes on protected
+        // grants (they hold security.user-role.write), so one approves what another requests, with the permission
+        // made for that alone (not approval.decide, which QbSodRules#SECURITY keeps from them). approval.read lets
+        // them check the facts of the request; it is on no side of a separation of duties.
+        "security.protected-change.decide", "approval.read");
 
     /**
      * Publishing controlled changes (money parameters, review switches; platform decision D40) belongs to the finance

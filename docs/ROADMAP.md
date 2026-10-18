@@ -1467,6 +1467,7 @@ e2e 对打包的应用（同 CI 的 `e2e` 作业，新的数据库）44 个用�
 | 16r | 受保护授权的四眼（建立期、首个管理员退役）、会计年度的时区 `jabiz.fiscal-year-zone`、`privateMetadata()` 的文件用随机编号；2026-10-17 确认；✅ 已实施（分支 `1.2/phase-16r-controls`，PR 待建） | D48 | 3–4 天 | 16q |
 | 16s | 收件偏好按登录入口列出、模板显示名、邮件语言的读取与询问、`MailPreferences` 积木（QuizBuks Q7 平台缺口 P1，Q7-13 选 A；2026-10-18 确认）；✅ 已实施（分支 `1.2/phase-16s-mail-preferences`，PR 待建） | D49 | 1–1.5 天 | 16a、16c |
 | 16t | 外部作业的文件与输入上限（QuizBuks Q8 平台缺口 P1–P3，A-13 选 A；2026-10-18 确认）：按类型的输入上限（至多 1 MiB）、文件输入（按请求人的读取权限）、文件输出（经上传流水线以请求人登记）；✅ 已实施（分支 `1.2/phase-16t-external-job-files`，PR 待建） | D50 | 3–4 天 | 16e |
+| 16u | 受保护变更的审批权限 `security.protected-change.decide`、按可配置的管理员权限计管理员（QuizBuks Q7a 发现，2026-10-18 确认）；时间参数限于 PostgreSQL 的范围、`Combobox` 加载状态的无障碍；✅ 已实施（分支 `1.2/phase-16u-protected-grant-roles`，PR 待建） | D51 | 1–1.5 天 | 16r |
 
 **其余工作的顺序**（2026-10-13 确认）：
 - 前端线：15c-1 → 15c-2 → 15d。
@@ -4063,3 +4064,52 @@ QB 提交锁内 48 → 16（16p-1）的明细：恢复超时 1 → 0（T1）、�
 4. L2：示范图片走 `demo-ai-images`（16 MiB），`demo-ai` 恢复 64 KiB。L3：副本写入前登记，取消也删除；可用空间检查 `INPUT_FILE_NO_SPACE`。
 5. L4：示范只在照片未被他人更换时换上新照片（`task.commerce.product-image.stale`）；本地桩输出 ≤ 2048 像素的 JPEG。L5：规则传递地检查应用自己的类，处理器不是沙箱（D50、14 §11）。
 6. L6 与信息项：见 D50 的修订说明中的测试；`deadline()` 从复制之后算起；副本重算摘要；`StartExternalJob` 保留三参构造。
+
+### 16u 受保护变更的审批权限与细分权限的管理员（1–1.5 天）
+
+来源：QuizBuks Q7a 的工作（产品负责人 2026-10-18 确认修正），另含 QuizBuks 评审中的两项平台小问题。
+分支 `1.2/phase-16u-protected-grant-roles`，从 `1.2/platform`（`bc029b6`，16q、16r、16s 已合入）拉出。决策 **D51**（修改 D48 第 1 条的管理员、审批人与缺省清单及实现说明⑥）。没有迁移；OpenAPI 不变。
+
+**16u 状态**：✅ 已实施（PR 待建）。
+
+| # | 内容 | 实施 |
+|---|---|---|
+| 1 | 谁算管理员 | `jabiz.security.protected-grants.administrator-permissions`（缺省 `security.user-role.write`、`security.role.write`；`*` 总是算）；建立期的计数、首个管理员的退役与审批人的覆盖都用它（`ProtectedGrants.admins`、`ProtectedChangeDecisionCheck`）；格式错误为启动错误、不受保护时警告 |
+| 2 | 专门的审批权限 | `security.protected-change.decide` 代替 `approval.decide` 决定受保护的变更（审批时与生效时 `mayDecide`）；`APPROVAL_DECIDE` 入口接受两者之一（core 新增流程的备选权限 `orPermissions` / `permissionsFor`），取得请求后按对象要求其一（`ApprovalDecisionCheck.decidePermission`），所以它不能决定业务审批、`approval.decide` 也不再能决定受保护的变更；覆盖、申请人与目标的限制、二次验证照旧；它本身加入缺省清单并总是受保护 |
+| 3 | 时间参数的范围 | `FieldValueCoercer` 只接受 `timestamptz` / `date` 能保存的值（模板参数、筛选、实体属性），请求的 `asOf` / `knownAt` 同样（`TimeTravel`）；超出即 400 `INVALID_VALUE`，不再是 500 `22008` |
+| 4 | `Combobox` 加载状态 | 列表带 `aria-busy`，加载中保留已有选项，转圈移到 `role=listbox` 之外（axe `aria-required-children`） |
+| 5 | 文档 | D51、10 §5 / §16、18 §3.4、05 §4、`guide/platform-features.md` |
+
+**验收**
+- [x] `./gradlew check` 全部通过（含 `:app:platformCheck`、场景快照、覆盖率门禁）；前端 `pnpm lint`、`typecheck`、`test`、`check:api`；端到端 `pnpm e2e`；演示数据 `tools/demo/seed.sh`。
+- [x] `ProtectedGrantFineAdminsIT`：细分权限的安全管理员使首个管理员退役、两位之后结束建立期；以 `security.protected-change.decide` 审批另一位申请的授权并生效；申请人、目标、只有 `approval.decide`、
+  没有近期二次验证的都不能；覆盖照旧（审批时按令牌、生效时按库中实际持有）；给出 `security.protected-change.decide`（分配只含它的角色、给有用户的角色加上它）本身要审批。
+- [x] `ProtectedGrantIT`：`approval.decide` 单独不能审批（批准与驳回都 403）；生效前失去新权限时 `APPROVER_NOT_ALLOWED`；其余审批改用新权限。`ApprovalIT`：新权限不能决定业务审批（403）。
+- [x] 单元测试：`ApproverCoverageTest`（可配置的管理员权限、`mayDecide` 不认 `approval.decide`、配置检查）、`ProtectedPermissionsTest`（新权限总是受保护）、`ProcessDefinitionBuilderTest`（备选权限）、
+  `FieldValueCoercerTest`（范围与边界）；`AdvancedQueryExecutorIT` 与 `ValueBindingIT`（超出范围为 400，边界值在真实数据库上可查询）；`combobox.test.tsx`（加载中 `aria-busy`、保留选项、转圈在列表外，亮暗两种外观过 axe）。
+
+**升级说明**（线 1.2 内）：
+- 以 `*` 管理与审批的部署（含示范应用、端到端测试、演示数据与快速开始）不受影响。
+- **用细分权限管理的部署行为改变**：首个管理员之外出现一位持有管理员权限（缺省 `security.user-role.write` / `security.role.write`）的用户，首个管理员即退役；出现两位，建立期即结束（下一次写安全实体或检查受保护变更时记录，永不回退）。
+  此后受保护的变更要由另一位持有 `security.protected-change.decide` 与管理员权限并覆盖所给权限的用户审批。**升级前**先把 `security.protected-change.decide` 加入安全管理员的角色
+  （在 16r 上它还不受保护，直接写入）；否则升级后给出它本身需要审批，可能无人能批（出路：以 `jabiz.security.protected-grants.enabled=false` 启动一次，给好后改回）。
+  若应用以自己的权限码管理安全，配置 `administrator-permissions`。把安全管理与 `approval.decide` 分开的职责分离规则不必修改。
+- 以非 `*` 的 `approval.decide` 审批受保护变更的部署：审批人改持 `security.protected-change.decide`；升级前这样批准而尚未生效的变更生效时为 `APPROVER_NOT_ALLOWED`，重新申请即可。
+- `ProcessDefinition` 增加 record 组件（16 → 17）：经 `ProcessDefinition.define` 声明的应用不受影响，原 16 参构造保留。
+- 时间超出 PostgreSQL 范围的请求由 500 变为 400。
+
+**安全评审之后的修订**（2026-10-18）：
+1. H1：职责分离规则禁止审批人持有的受保护权限不要求覆盖（`*` 除外；审批时与生效时各按当时已发布的规则；事实 `sodExempt`）——QuizBuks 的安全管理员因此能任命内容与财务管理员（`ProtectedGrantSodIT`、`ApproverCoverageTest`）。
+2. M2：写入的 `effectiveTime`（数据视图提交、`SEC_USER_ROLE_ASSIGN`、`SEC_ROLE_PERMISSION_ADD`）与导出的 `asOf` / `knownAt` / `reportsFrom` / `reportsTo` 超出范围为 400（`TimeRangeIT`）。
+3. M3：`APPROVAL_DECIDE` 的职责分离按实际使用的权限（对象的审批权限与层级的权限）在流程中检查，入口不再按启动时的那一组检查（`ProtectedGrantSodIT`：层级权限上的规则拦下决定；`approval.decide` 上的规则不再误拒受保护的变更）。
+4. L4：下限改为 ISO 年 -4712-01-01（-4713 年的值被驱动绑定为 `-infinity`），并有写入后读回的测试。
+5. L5：不受保护的管理员权限为启动错误；不含两项改权限的权限时警告。L6：行操作按对象隐藏不做（记入 D51）；`approval.read` 能读事实（记入 D51）。L7：`Combobox` 常驻提示区、加载中旧选项不能选。
+6. 应用流程声明 `orPermissions` 时启动警告；Javadoc 的条目号。
+
+**QuizBuks 需要的修改**（不在本分支；把本阶段合入 `1.2/quizbuks` 时一起做）：
+- `QbRoles`：`QB_ADMIN_SUPER` 增加 `security.protected-change.decide`（审批任命）与 `approval.read`（读审批的事实与受保护变更的列表；不在 `qb.sod.security-administration` 中）。
+- `QB_SETUP` 的顺序：给角色加这两项权限必须在建立期结束之前（或在 16r 的版本上）完成——已有两位 `QB_ADMIN_SUPER` 之后再加，`security.protected-change.decide` 本身要审批而无人能批；
+  已上线的部署先以旧版本运行一次新的 `QB_SETUP`，再升级平台。
+- IT：合入后 `:quizbuks:test` 575 个中 7 个失败（`BanIT` 2、`BanAdminRolesIT` 1、`TakedownIT` 4），都是测试直接写入 `QB_ADMIN_SUPER` 的分配时得到 422 `PROTECTED_CHANGE_REQUIRES_APPROVAL`：
+  两位超级管理员出现后建立期按 D51 结束。测试支持（`AccountItSupport.userWithRole` / `assignRole`）应在第二位超级管理员之后改用 `SEC_USER_ROLE_ASSIGN` + 另一位超级管理员以 `APPROVAL_DECIDE` 批准，
+  或这些测试类以 `jabiz.security.protected-grants.enabled=false` 运行（它们不是在测四眼）；任命内容与财务管理员的批准由职责分离的豁免支持（`ProtectedGrantSodIT` 按 QuizBuks 的规则复现）。
