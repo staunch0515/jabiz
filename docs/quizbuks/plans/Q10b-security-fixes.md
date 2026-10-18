@@ -116,9 +116,46 @@
 **验证**：`./gradlew :quizbuks:check`（509 个测试、场景、`platformCheck`、两个 SPA 的版本检查）通过；`quizbuks-web/app`、`sponsor` 的 lint、typecheck、test 通过，`qb/` 两份相同；
 `JABIZ_ADMIN_EXTENSION=../backend/quizbuks/admin-extension pnpm ext:check` 通过；`tools/quizbuks/test/entrypoint.test.sh` 通过；e2e（打包的 jar、Stripe 桩、Mailpit）41 个全部通过。
 
-**待办与已知问题**：
-- 16q 合并后：内容文件策略声明 `privateMetadata()`，`FileNamesIT` 断言答题人读不到原始名；Boot 4.0.8 之后全量重测。
-- 争议冻结不扣除已转出的部分（见上表），可能多冻结同一用户其他来源的奖励，直到争议结案；需要更精确时按奖励逐笔记账（另立）。
+**待办与已知问题**（2026-10-17 评审修正后更新，见 §7）：
+- ~~16q 合并后补 `privateMetadata()`~~：已完成（§7 第 12 项）。
+- ~~争议冻结不扣除已转出的部分~~：已修正（§7 M-b）。
 - 钱包页的保留说明（"新获得的奖励会先保留几天再转账……""预计 X 起可转"）需求方尚未确认措辞；预计日期是最后一笔按时间保留的奖励到期之时，实际转账在其后的每日运行。
-- 封禁的商家无法登录，审核中被退回草稿的原因（`QB_USER_BANNED`）在商家页显示为代码本身。
+- ~~审核中被退回草稿的原因 `QB_USER_BANNED` 显示为代码~~：已修正（§7 L9）。
 - 既有安装上线前须先从 `QB_ADMIN_SUPER` 收回 `approval.decide` 再发布职责分离规则（部署说明）。
+
+## 7. 独立评审的修正（2026-10-17，`1.2/quizbuks-10b-security`）
+
+先合并了 `origin/1.2/quizbuks`（#169、#170，再 #172 Q10a5）与 `origin/1.2/platform`（16q，#171），均为合并提交。
+
+| 项 | 做法 | 测试 |
+|---|---|---|
+| M-a 打乱可被答题人重算 | `OptionShuffle` 改为实例：种子 = HMAC-SHA256(密钥, `用户\|发布\|题号`) 的前 64 位，密钥 = HMAC(`JABIZ_INTEGRITY_KEY`, `qb.option-shuffle`)（`OptionShuffle.of(IntegrityKey)`，平台已有的 `IntegrityKey` Bean，不加新的环境变量）；顺序照旧随会话保存。测试配置的固定密钥使场景确定 | `OptionShuffleTest`（不同密钥的顺序不同、派生密钥不是完整性密钥本身、短密钥拒绝）；场景的答案按新位置改写，快照只有位置变化 |
+| M-b 争议冻结计入已转出的奖励、冻结其他商家的奖励 | 模型 `wallet.RewardHolds`（设计 4.4）：2120 分录按时刻与流程先后排序，分为争议冻结、按时间保留、自由与借方；每笔借方只取此前入账的，先取自由、再取按时间保留、最后取争议冻结；保留 = 保留类贷方 − 借方取走的部分，限在 0 与余额之间。两个模板以窗口函数算同一个闭式；7 天的时间保留同样只计尚在余额中的部分；`TransferRules.transferable` 本身也把保留与余额限在 0 以上 | `RewardHoldsTest`（jqwik：闭式与逐笔分配一致；可转额在 0 与余额之间）、`TransferHoldIT`（先转出再争议：其他商家的奖励照转；时间保留与争议并存；页面拒绝 `asOf`） |
+| M-c 经用户与角色管理绕过四眼 | 需求方决定由平台 16r（D48）修正；部署说明写入残留风险："平台 16r 修正；在此之前只有检查性控制"（季度访问审查、审计中逐条复核角色变更、最少授予） | — |
+| M-d 下架之后复制或重新提交 | (1) `QB_PUBLICATION_COPY` 拒绝管理员暂停中或管理员结束的源（422 `QB_PUBLICATION_TAKEN_DOWN`，三语），商家页不给"复制"；(2) 提交时读商家的发布，同一 Quiz 有被下架的发布即事实 `autoApprove = false`、`takenDown = true`（主体新增事实 `takenDown`）；规则仍不要求审核（豁免）或会沿用以前的批准时拒绝（422 `QB_PUBLICATION_REVIEW_REQUIRED`）。后台扩展的审核页经新模板 `qb.admin.quiz-takedowns` 显示被下架的发布、时间与理由，读好之前（或读取失败时）不给决定面板 | `TakedownIT`（两种下架都不能复制、商家自己暂停的照常；下架后的发布进入待审核且事实记 `takenDown`、批准后上架、另一 Quiz 不受影响；豁免规则下拒绝）；后台扩展与商家页的组件测试 |
+| L1 封禁与获批竞争 | `QB_PUBLICATION_APPROVAL_RESULT` 先在锁外读发布（商家不可变），取 `qb.account:<商家>` 再取发布锁；锁序（设计 4.3、应用规则）随之更新 | `TakedownIT.aBanAndAnApprovalTakeTurns`（并发的封禁与获批：要么退回草稿 `QB_USER_BANNED`，要么上架后被暂停） |
+| L2 封禁期间发布结束或回到草稿使封禁失败 | 封禁的暂停改为子流程 `QB_PUBLICATION_BAN_PAUSE`（`subProcessOnly`），取锁读到的发布不在运行中即什么也不做 | `TakedownIT`（经测试用的根流程对已结束与草稿的发布运行：不变、不报错；直接调用 403） |
+| L3 内部的封禁理由给了商家 | 暂停记固定代码 `QB_ACCOUNT_SUSPENDED`，商家页与后台扩展按语言显示（"账户已被停用"，三语；后端消息也有） | `TakedownIT`、`AdminPublicationIT`、前端测试 |
+| L4 创建中的充值只计一小时 | 创建中（`OPENING`）一直计入新商家上限与未结数，直到作业的完成或失败流程把它改为开立或失败；页面模板同样 | `TopUpLimitIT`、`TopUpOwnerIT`（两小时后仍计入、失败后不再计入） |
+| L5 compose 缺省生成密钥 | `docker-compose.yml` 缺省 `QB_LOCAL_SECRETS=false`；入口脚本生成（或读回生成的）密钥或密码时导出 `QB_SECRETS_GENERATED=true`，`DeploySafetyCheck` 在正式模式下见到即报错；CI 的 `deploy` 作业设 `QB_LOCAL_SECRETS=true`（`local-demo.sh` 已设，`package` / `e2e` 直接运行 jar、给出全部密钥，不经入口脚本） | `entrypoint.test.sh`（标记的三种情形）、`DeploySafetyCheckTest` |
+| L6 网段解析 | `DeploySafetyCheck.tooWide` 照平台 `ClientAddresses` 的读法（`Integer.parseInt`：`+0`、`00` 是 0）解析，拒绝不是网段的、IPv4 短于 /8、IPv6 短于 /32、整个 IPv4 的映射（`::ffff:0:0/96` 及其 IPv4 写法、`::/96`、`64:ff9b::/96`、`64:ff9b:1::/48`） | `DeploySafetyCheckTest` |
+| L7、L8 | 平台 16r 修正，部署说明中记为残留风险 | — |
+| L9 | `qb.app.wallet` 与 `qb.sponsor.topup-limit` 经新的只读参数视图 `urn:jabiz:dataset:now:SysParam`（不允许时间旅行）读参数：请求不能指定 `asOf` / `knownAt`，参数按服务端的时钟（平台的缺省时点），与流程的 `LoadParams` 一致；规则中的"现在"仍是页面给出的 `at`（只影响本人页面的显示）。封禁期间管理员恢复 422 `QB_PUBLICATION_SPONSOR_BANNED`；子流程的二次验证照旧。商家页把 `QB_USER_BANNED` 显示为文字（三语） | `TopUpLimitIT`、`TransferHoldIT`（`asOf` / `knownAt` 400）、`TakedownIT`、商家页测试 |
+| 第 12 项 | 平台 16q 合并后，三个内容文件策略声明 `privateMetadata()` | `FileNamesIT`（答题人读不到原始名与上传者、下载名为中性名，变体同样；上传的商家与持 `file.read` 的管理员照常可见） |
+
+**语句预算**：`AttemptStatementBudgetIT` 与写缓冲关闭的变体在合并 Q10a5 后照旧通过：打乱的 HMAC 是内存计算，审批结果多出的账户锁与一次读取不在答题的锁内，预算不变。
+
+**新的界面文字（待需求方确认）**：商家页"您的账户已被停用。"（暂停理由）与"审核期间您的账户被停用，因此未能上架。"（退回原因）；
+后台扩展"曾被下架"一节的说明与"账户已停用（商家被封禁）"；后端消息 `QB_PUBLICATION_TAKEN_DOWN`、`QB_PUBLICATION_REVIEW_REQUIRED`、`QB_PUBLICATION_SPONSOR_BANNED`、`QB_ACCOUNT_SUSPENDED`（各三语）。
+
+**残留与说明**：M-d 的拒绝也覆盖"同一发布沿用以前对同样内容的批准"（只在封禁后退回草稿再提交时出现）：商家复制它再提交即进入人工审核。
+被封禁暂停过的发布也算"被下架"，所以解封后同一 Quiz 的新发布同样要人工审核。
+
+**e2e 与登录限流**：16q 合并后 e2e 撞上平台的登录限流（每地址 + 名字每分钟 20 次、突发 10：共用的管理员从本机登录数十次，429 `RATE_LIMITED`），
+所以 CI 的 `e2e` 作业与本机说明（应用规则"端到端"）照平台 e2e 设 `JABIZ_SECURITY_SIGN_IN_RATE_LIMIT_PER_USER_ADDRESS=6000`、`JABIZ_SECURITY_SIGN_IN_RATE_LIMIT_USER_BURST=1000`；
+生产缺省不变（运维手册列为生产不得设置的变量）。
+
+**验证**（合并 Q10a5 之后）：`./gradlew :quizbuks:check`（537 个测试、场景、`platformCheck`、两个 SPA 的版本检查；真实 PostgreSQL）通过；
+`quizbuks-web/app`、`sponsor` 的 lint、typecheck、test 通过（104、115 个），`e2e` 的 typecheck 通过，`qb/` 两份相同；
+`JABIZ_ADMIN_EXTENSION=../backend/quizbuks/admin-extension pnpm ext:check` 通过（68 个）；`tools/quizbuks/test/entrypoint.test.sh` 与 `stripe-test-mode.test.sh` 通过；actionlint 通过；
+e2e（打包的 jar、Stripe 桩、Mailpit，放宽登录限流）41 个中 40 个通过，`content.spec.ts` 的"他处改过的 Quiz 要求先重新加载"一次焦点超时，单独重跑通过（未改动内容页，判断为时序不稳）。

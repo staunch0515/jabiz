@@ -200,7 +200,8 @@
   下载只经 `GET /api/generated-files/{id}`（有 `file.generated.read` 时给出）；科目映射页只读，修改链到平台的受控变更（提出、发布）。
   检查：平台前端目录下 `JABIZ_ADMIN_EXTENSION=../backend/quizbuks/admin-extension pnpm ext:check`（CI `web`）。
 - **端到端**（`quizbuks-web/e2e`，Playwright）：对打包的 jar（`./gradlew :quizbuks:bootJar`），邮件由 Mailpit 接收（`E2E_MAILPIT_URL`），Stripe 由本地桩回答；
-  服务端以 `JABIZ_SECURITY_MFA_ADMINISTRATION=false` 与含 `QB_E2E_PUBLISHER`、`QB_E2E_FINANCE` 的 `QB_ADMIN_ROLES` 启动（测试自己建一个只有 `control.publish` 的角色，发布 `QB_SETUP` 的提案；
+  服务端以 `JABIZ_SECURITY_MFA_ADMINISTRATION=false`、放宽的登录限流 `JABIZ_SECURITY_SIGN_IN_RATE_LIMIT_PER_USER_ADDRESS=6000` 与 `JABIZ_SECURITY_SIGN_IN_RATE_LIMIT_USER_BURST=1000`
+  （平台 16q：共用的管理员从本机登录数十次；只给 e2e，生产保持缺省）与含 `QB_E2E_PUBLISHER`、`QB_E2E_FINANCE` 的 `QB_ADMIN_ROLES` 启动（测试自己建一个只有 `control.publish` 的角色，发布 `QB_SETUP` 的提案；
   Q9d 的导出要已验证的邮箱，首个管理员没有，测试另建一个已验证的用户并给它不要求二次验证的测试角色 `QB_E2E_FINANCE`），并以 `QB_RECONCILE_RUN_CRON='30 * * * * *'` 每分钟核对（导出等月末之后的一次干净的核对），
   并以 `QB_TRANSFER_RUN_CRON='0 * * * * *'` 每分钟运行每日转账（Q9c：财务的测试打开转账、把审核线设为 1,000 并等待大额转账进入审批；其他测试的奖励都低于转账门槛 1,000）。
   这个变量只给 e2e：正式模式或正式密钥下设成每日以外的值即启动失败（`wallet.TransferScheduleCheck`，同开发入账）。
