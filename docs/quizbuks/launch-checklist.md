@@ -19,6 +19,7 @@
 ## 性能
 
 - [ ] 在**上线所用的硬件**上重测（压测程序在另一台主机，读者按预期读取量限速；`./gradlew :quizbuks:loadTest`，`operations.md` §6）：预期峰值低于饱和点并有约 1.3 倍余量，应用与数据库 CPU < 60–70 %，结果写进 `perf/`
+- [ ] 同一次压测中让分析任务 `qb.analytics` 照常每 10 分钟运行（Q9e，`perf/Q9e-analytics.md`）：提交 p95 与吞吐与不运行时相同，任务每次运行 < 1 分钟
 - [ ] 提交过载（503、以 EXPIRED 结束）的风险已向需求方说明并接受，或已做缓解（`operations.md` §7.6）
 - [ ] `max-active` 与连接池按"同时热门的发布数 × 4 + 1"确认
 
@@ -35,6 +36,7 @@
 - [ ] **安全审查（Q10b）**的发现全部关闭（或逐条由需求方接受并记录），含已登记的跟进（题目图片原始文件名、保留期）
 - [ ] 依赖与镜像的已知漏洞已评估（`gradle dependencies`、`pnpm audit`、镜像扫描）
 - [ ] **全部管理员都有二次验证**；管理员角色设了"要求二次验证"；没有共用账号；首个管理员的 `JABIZ_BOOTSTRAP_ADMIN_*` 已从环境中删去
+- [ ] **至少两位超级管理员**（`QB_ADMIN_SUPER`，平台 16u，D51）在职、各自二次验证，按 `operations.md` §3 第 4–5 步的顺序建立（`QB_SETUP` 与职责分离规则的发布在第二位之前）；建立期已结束（`sec_protected_grants_armed` 有一行），试过一次由一位申请、另一位审批的角色分配；`JABIZ_SECURITY_PROTECTEDGRANTS_ENABLED` 未设
 - [ ] **密钥已从任何演示或测试的值轮换**：`JABIZ_JWT_SECRET`、`JABIZ_INTEGRITY_KEY`、`JABIZ_MFA_KEY`、数据库密码、Stripe 密钥与签名密钥、SMTP、Google 客户端密钥都是为生产新生成的，没有在本机演示、e2e、压测或测试服务器上用过；`JABIZ_INTEGRITY_KEY` 与 `JABIZ_MFA_KEY` 的离线副本已保存
 - [ ] `operations.md` §1.4 的测试开关一个都没设；`SPRING_PROFILES_ACTIVE` 不含 `dev`；`JABIZ_SECURITY_MFA_ADMINISTRATION` 未设；`QB_STRIPE_PLACEHOLDERS=false`
 - [ ] 只经 HTTPS 访问（HSTS），`JABIZ_TRUSTED_PROXIES` 已设；数据库与管理端口不对公网开放；指标不在应用端口上暴露

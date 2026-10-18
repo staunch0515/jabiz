@@ -128,6 +128,16 @@ public final class QbPermissions {
      * ({@code QB_JOURNAL_DETAIL_PART}, {@code subProcessOnly()}). Granted to no role.
      */
     public static final String JOURNAL_SYSTEM = "qb.journal.system";
+    /**
+     * A sponsor's analytics of their own publications (Q9e: the dashboard, trends, funnel and question statistics,
+     * aggregates only). Sponsors; no administrator role (E-10).
+     */
+    public static final String STATS_READ = "qb.stats.read";
+    /**
+     * The analytics job's item process ({@code QB_ANALYTICS_ITEM}, {@code internal()}), its templates and its own
+     * datasets. Granted to no role.
+     */
+    public static final String STATS_SYSTEM = "qb.stats.system";
 
     /**
      * The messaging templates only processes run (Q7b: {@code qb.system.consent-state}, the server's check of consent

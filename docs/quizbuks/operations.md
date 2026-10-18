@@ -137,9 +137,16 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 1. 准备 §1 的全部变量（`QB_STRIPE_PLACEHOLDERS=false`）、HTTPS 的反向代理（`JABIZ_TRUSTED_PROXIES`）、邮件。先以**测试模式**启动（§4 之前），确认 `docker compose … logs app` 中没有 `Platform check failed`。
 2. 以 `JABIZ_BOOTSTRAP_ADMIN_USER` 登录 `/admin/`，在"安全设置"中**开启两步验证**（TOTP），保存恢复码。随后从环境中删去 `JABIZ_BOOTSTRAP_ADMIN_*`。
 3. 执行 `QB_SETUP`（流程页面；要求二次验证）：建角色、账本科目、国家、业务参数，并把受控参数与审批规则作为**提案**提出。
-4. 建**第二位管理员**（财务，`QB_ADMIN_FINANCE`，持有 `control.publish`）：`SEC_USER_CREATE` 并分配角色；本人登录、开启两步验证。给管理员角色设"要求二次验证"（`SecRole.requireMfa`），使未绑定的管理员无法登录。
-   超级管理员（`QB_ADMIN_SUPER`）与内容管理员（`QB_ADMIN_CONTENT`）同样各自一人一号、各自二次验证；不共用账号。
-5. 财务管理员在后台**发布** `QB_SETUP` 的提案（`CONTROL_CHANGE_PUBLISH`，四眼：提出人不能发布自己的）。发布之前商家入驻与提交发布一律被拒。
+4. 首个管理员建**财务管理员**（`QB_ADMIN_FINANCE`，持有 `control.publish`）与**内容管理员**（`QB_ADMIN_CONTENT`）：`SEC_USER_CREATE` 并以 `SEC_USER_ROLE_ASSIGN` 分配角色；本人登录、开启两步验证。
+   给管理员角色设"要求二次验证"（`SecRole.requireMfa`），使未绑定的管理员无法登录。各自一人一号、各自二次验证；不共用账号。
+   这两种角色不持有改权限的权限（`security.user-role.write` / `security.role.write`），平台不把它们算作管理员（D51），建立期内的分配当即生效。
+   **建管理员账号时不设密码**（`SEC_USER_CREATE` 只填用户名与邮箱），由本人经邮件链接（"忘记密码"）设定：建立期结束后，平台不把受保护的权限给一个由别人设过密码的账号（批准后生效时 `TARGET_CREDENTIALS_NOT_OWN`，本人之后自己改过也不算；平台 10 §16.2），以后给这些角色增加受保护的权限也会因此失败。
+5. 财务管理员在后台**发布** `QB_SETUP` 的提案（`CONTROL_CHANGE_PUBLISH`，四眼：提出人不能发布自己的），**包括两条职责分离规则**。发布之前商家入驻与提交发布一律被拒。
+   职责分离规则须在建立期结束（下一步）之前发布：之后任命内容或财务管理员要由一位超级管理员审批，而超级管理员不持有、也不能持有 `approval.decide` 与 `control.publish`，
+   平台只按**已发布的** `qb.sod.security-administration` 免去对这两项的覆盖要求（D51 修订 H1）。
+   然后建**两位超级管理员**（`QB_ADMIN_SUPER`，各自一人一号、各自二次验证）：首个管理员建第一位（此后首个管理员退役，不能再做受保护的变更，403 `BOOTSTRAP_ADMIN_RETIRED`），
+   **第一位超级管理员建第二位**（仍在建立期，当即生效）。第二位出现后建立期结束（平台 16u，D51），此后的受保护变更（见本节末"受保护的授权"）由一位超级管理员申请、另一位审批。
+   `QB_SETUP` 必须在第二位超级管理员出现**之前**执行过（第 3 步）：超级管理员的角色由它得到审批受保护变更的 `security.protected-change.decide`，这项权限本身受保护，建立期结束后再给需要审批，而那时无人能批。
 6. 由超级管理员提出、财务管理员发布（`CONTROL_CHANGE_PROPOSE` → `CONTROL_CHANGE_PUBLISH`，目标 `SysParam`）：
    - **收据开具方** `qb.issuer.name`、`qb.issuer.address`、`qb.issuer.registration-no`（登记号与税的措辞须财务、法务确认，上线检查清单）；未设名称时商家开不出收据；
    - **科目映射** `qb.journal.account.1110 … 5110`（会计系统中的科目代码；后台"QuizBuks 财务 → 分录导出 → 科目映射"只读显示，修改走受控变更）；没映射的科目使分录导出被拒；
@@ -155,12 +162,22 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
    实质性变更勾选"须重新同意"，措辞修订不勾。已发布的版本不可修改，改错只能发布新版本。正式模式下缺少已生效的答题人条款、商家条款或隐私政策时**启动告警**（`LiveModeDataCheck`）。
    帮助中心的问答在后台"帮助中心问答"中维护（英语必填、`seq` 排序、"公开中"才出现在页面）。支持邮箱 `qb.support.email`（普通参数，空即不显示"仍需帮助"的联系方式）在后台参数中设。
 
-**受保护的授权（平台 16r，决策 D48；10 §16）**：分配或增加 `security.user-role.write`、`security.role.write`、`approval.decide`、`control.publish`、`ledger.*`、
-`platform.param.write`、`*`，以及对持有它们的用户重设密码、二次验证、邮箱或关联外部账号，平台要求**另一位管理员审批**——但只在建立期结束之后。平台按 `*` 数管理员：
-首个管理员之外有两位持有 `*` 的启用用户时建立期才结束。QuizBuks 的角色都不持有 `*`（`QbRoles`：细分权限），所以按上面 2–6 步建立的安装**一直处于建立期**，
-受保护的变更当即生效（与 16r 之前相同）；`QB_SETUP`、e2e 与本机演示因此照常可用（它们只建持有 `control.publish` 等的角色，从不建第二位 `*` 管理员）。
-**这一点由平台 16u 解决**（需求方 2026-10-18 决定）：16u 改为按安全管理的权限计管理员，受保护的变更以专门的权限审批；合并 16u 后 QuizBuks 需要两位 `QB_ADMIN_SUPER`，
-首次启动的步骤届时随之修改。在此之前不设 `jabiz.security.protected-grants.always`，四眼由检测性控制补足（季度访问审查 `ACCESS_REVIEW_SIGN_OFF`、审计中逐条复核角色变更，Q10b M-c）。
+**受保护的授权（平台 16r / 16u，决策 D48、D51；10 §16）**：分配或增加 `security.user-role.write`、`security.role.write`、`security.protected-change.decide`、`approval.decide`、`control.publish`、`ledger.*`、
+`platform.param.write`、`*`，以及对持有它们的用户重设密码、二次验证、邮箱或关联外部账号，平台要求**另一位管理员审批**——但只在建立期结束之后。
+平台按管理员的权限（`security.user-role.write`、`security.role.write`，`administrator-permissions` 的缺省值）数管理员：QuizBuks 的管理员就是 `QB_ADMIN_SUPER` 的持有人。
+首个管理员之外出现一位，首个管理员即退役；出现**两位**，建立期即结束（永不回退）。所以 QuizBuks 需要**至少两位超级管理员**，按上面第 4–5 步的顺序建立，并始终保持两位在职
+（只剩一位时没有人能批准第二位；出路同平台 10 §16.3：运维以 `JABIZ_SECURITY_PROTECTEDGRANTS_ENABLED=false` 启动一次、建好后改回，记录在变更记录中）。
+- **审批**：待审批的变更出现在后台"待办"中（平台的 `ApprovalPanel`，`APPROVAL_DECIDE`），由另一位超级管理员以 `security.protected-change.decide` 决定（要求近期二次验证；申请人与所针对的用户不能批；
+  `approval.read` 让超级管理员读到请求的事实）。超级管理员不持有 `approval.decide`，不能决定业务审批（入驻、发布、大额转账），这些仍由内容与财务管理员决定。
+- **新的管理员账号**：建立期结束后任命的人，其账号的密码须由本人设定（建号时不设密码、本人经邮件链接设定），否则批准后不生效（`TARGET_CREDENTIALS_NOT_OWN`）。
+- **任命内容与财务管理员**：给出的 `approval.decide`、`control.publish` 不要求审批人持有，因为已发布的职责分离规则 `qb.sod.security-administration` 禁止超级管理员持有它们（D51 修订 H1）；
+  该规则被撤下或停用时这类任命无法批准。
+- **以后的 `QB_SETUP`**：它直接写入角色的权限。建立期结束后，若新版本给已有持有人的角色增加受保护的权限，平台以 422 `PROTECTED_CHANGE_REQUIRES_APPROVAL` 拒绝整个 `QB_SETUP`；
+  这时由一位超级管理员以 `SEC_ROLE_PERMISSION_ADD` 申请、另一位审批，之后再执行 `QB_SETUP`（它把已存在的授权只记下，不再写）。迄今各阶段新增的权限中只有 16u 的 `security.protected-change.decide` 受保护。
+- **已有的安装**（16u 之前建立、已有两位以上超级管理员；16r 按 `*` 计管理员，它们一直处于建立期）：升级之后建立期立刻结束，`QB_SETUP` 给超级管理员的角色加 `security.protected-change.decide` 需要审批而无人能批（整个 `QB_SETUP` 被拒）。
+  所以**升级前**，在旧版本上由超级管理员给角色 `QB_ADMIN_SUPER` 直接加上 `security.protected-change.decide` 与 `approval.read`（`SEC_ROLE_PERMISSION_ADD`：那时仍在建立期、它还只是普通的权限码，当即生效），
+  升级后再执行 `QB_SETUP`（它只记下已有的授权）。来不及时，以 `JABIZ_SECURITY_PROTECTEDGRANTS_ENABLED=false` 启动一次、执行 `QB_SETUP`、再改回（关闭的时间留在操作记录中）。
+  检测性控制照旧：季度访问审查 `ACCESS_REVIEW_SIGN_OFF`、审计中逐条复核角色变更（Q10b M-c）。
 
 **会计年度的时区**：保留期自会计年度末起算，日期按日本时间判断（`application.yml` 的 `jabiz.fiscal-year-zone: Asia/Tokyo`，平台 D48 第 2 条；Q10b 评审 L7），不需另设。
 1 月 1 日 00:00–08:59（日本时间）记录的数据因此属于新的会计年度。
@@ -210,6 +227,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 | 分录导出被拒 | `jabiz.process{process="QB_JOURNAL_EXPORT", outcome="rejected"}` | 每月导出日 > 0（看错误码，§7.3） |
 | 外部调用 | `jabiz.external.call{service="stripe", outcome}` | `5xx`、`timeout`、`refused` 比率 > 5 % |
 | 任务 | `jabiz.job.run{result="FAILED"|"LOCKED"}` | 任一每日任务 `FAILED`；`LOCKED` 持续（另一实例卡住） |
+| 商家分析（Q9e，§7.7） | `jabiz.job.run{job="qb.analytics"}`；`jabiz.process{process="QB_ANALYTICS_ITEM"}` 的时间 | `PARTIAL` 连续 3 次（同一项一直失败）；30 分钟内没有成功的运行；运行时间持续超过 2 分钟（积压） |
 | 邮件 | `jabiz.job.item{job="qb.mail-funds-short-due", result}`；`jabiz.outbox.delivery{result="FAILED"}` | 补发任务的项连续失败；`sys_mail_message` 中 `FAILED` 增多（看发件服务商） |
 | 数据库 | 连接数、复制与 WAL 归档延迟、最近一次基础备份、磁盘、`pg_stat_statements` 的前几名、死锁（`pg_stat_database.deadlocks`） | 归档延迟 > 15 分钟；备份超过 26 小时；磁盘 > 80 %；死锁 > 0 |
 | 主机 | CPU、内存、JVM 堆 | 应用或数据库的 CPU 在业务高峰持续 > 70 %（§6） |
@@ -283,7 +301,19 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
   4. 事后：用户投诉 `EXPIRED` 时按会话的已保存答案与结果解释；评估开始一侧的背压（报告 §10.3 的可选缓解）与报告 §11.4 的其他选项。
 - **上线前**：在目标硬件上确认预期峰值低于饱和点（§6）。
 
-### 7.7 其他
+### 7.7 商家分析的数据（Q9e）
+
+- **任务** `qb.analytics`（每 10 分钟，:00、:10 …；逐项任务，每项一个事务的 `QB_ANALYTICS_ITEM`）：读进行中、暂停、预算不足、1 天内结束与结束后尚未定稿的发布，按发布编号分块（每块一项），把计数的增量写进按小时的桶，从水位线读已完成的会话（滞后 5 分钟）；结束 30 分钟后每个发布一项整体重算并定稿；最后一项写运行记录并删除 400 天前的小时桶（每次至多 2 000 行）。不取业务锁，不影响答题。
+  **一项失败不影响其他项**：其他项照常提交，运行记为 `PARTIAL`，失败的项由平台退避后在以后的运行中重试（平台的任务项记录中有错误），其间该块的发布的数字停在上次。
+  商家页面上的"每 10 分钟更新，最近更新 hh:mm"就是这个任务最近一次运行的时刻（`qb_stats_run` 中 `job = 'qb.analytics'` 的行，`zone` 是它按哪个时区分日：`jabiz.fiscal-year-zone`，日本部署 `Asia/Tokyo`）。
+- **参数** `qb.stats.min-group`（普通参数，缺省 5，任何值都至少按 3）：分组小于它时每题正确率、平均用时与超时人数不显示，且这些数字只在新增至少这么多个完成后才变化。调大立即生效（模板按现值隐藏）；调小只在下次新增够数时显示新值。
+- **配置**（`application.yml` 的 `quizbuks.analytics.*`，通常不改）：`chunk-size`（每块的发布数，缺省 100，至多 200）、`max-attempts-per-chunk`（每块每次至多读的已完成会话，缺省 50 000，至多 200 000；热门发布每 10 分钟约 3 万个，`perf/Q9e-analytics.md`）、`max-recount`（结束后整体重算的发布至多有多少个完成，缺省 1 000 000，使重算在读取时限 2 分钟之内；更大的发布在逐块读完之后不重算即定稿）。
+  部署时区 `jabiz.fiscal-year-zone` 只能是 `UTC` 或地区名（如 `Asia/Tokyo`）：`+09:00`、`GMT+9`、`Etc/GMT-9` 这类偏移写法在 PostgreSQL 中方向相反，启动检查拒绝（类别 `QUIZBUKS`）。
+- **停机与补跑**：任务停了之后的第一次运行把期间的增量全部记在停机前最后一次运行的那一小时，并标 `gap`（趋势注明），累计数字始终正确；积压的会话按块上限分几次读完。不需要手工补跑；同一计划时刻重复运行不会重复计数。
+- **告警**：`jabiz.job.run{job="qb.analytics", result="PARTIAL"}` 连续出现（某一项一直失败：看任务项的错误，常见为读取超时或约束）；最近一次运行早于 30 分钟（商家页面的"最近更新"随之变旧）。运行时间见 `jabiz.process{process="QB_ANALYTICS_ITEM"}`，热门发布积压时变长。
+- 日志中的 `Analytics: the counters of publication … went down` 表示计数被别的方式改动（计数只增不减），该发布本次不写；`… recounted … finalized anyway` 表示结束一天后整体重算与计数仍不一致，按重算的值定稿：两者都应调查。
+
+### 7.8 其他
 
 - **邮件发不出**：`jabiz.mail` 的失败、发件服务商的退信；用户可在登录页重新请求验证邮件。
 - **启动失败**：日志中的 `Platform check failed` 后列出全部问题（`类别 | 定位 | 描述`），逐项修正环境；`QUIZBUKS` 类别是本应用的检查（§4）。

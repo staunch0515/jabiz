@@ -20,6 +20,7 @@ jabiz:
     currency: JPY
     scale: 0
   fiscal-year-end: 12
+  # Japan's dates: retention's fiscal years (decision D48) and the analytics' days (Q9e).
   fiscal-year-zone: Asia/Tokyo
   process:
     # The queues before a publication's two locks (platform decision D45, Q10a; Q10a4 split them): qb.pub-start before

@@ -154,6 +154,10 @@
   - **商家持有 `document.archive.read`**（为读自己的收据）：平台按版式的权限与对象决定能读哪些单据，所以以后新增的单据版式必须把对象限定在本商家（如 `subject` 经商家数据视图），
     或者其权限不能是商家权限的子集，否则商家能读到别人的单据。
   - **保留期**（Q10b）：导出（`periodTo`）、明细段与外部凭证号（`createdTime`）、充值（`paidAt`）、收据（`issuedAt`，迁移 V11）与入站 Stripe 事件都以 `RetentionPolicy` 保留 10 年，自会计年度末起算（`RetentionIT`）。
+- **商家分析**（`stats`，`docs/quizbuks/plans/Q9e-analytics.md`）：**答题路径不写任何分析数据**（开始、提交、超时与 `QB_VIEW` 不变，`AttemptStatementBudgetIT` 不变，`qb_attempt` 不加索引），分析只由逐项任务 `qb.analytics`（每 10 分钟，`JobDefinition.forEach`，模板 `qb.system.analytics-items` 给出项：按发布编号的块、结束后的整体重算、最后一项运行记录；每项一个事务的 `QB_ANALYTICS_ITEM` `internal()`，权限 `qb.stats.system` 不授予任何角色；不取业务锁、只写自己的三张表；一项失败不拖住其他项，Q9e1 评审 M3）聚合：
+  每块**一条语句读两侧计数**、游标、新增浏览，把增量加进一个按小时（UTC）的桶（`AnalyticsBuckets`：跨过整点后的第一次运行加进上一次运行的小时，停机的增量记在一个小时并标 `gap`）；已完成的会话按水位线 `(submittedAt, attemptId)`、滞后 5 分钟（`AnalyticsLimits.LAG`）从现有索引读、每块至多 `quizbuks.analytics.max-attempts-per-chunk` 个，结束 30 分钟且没有进行中的会话时整体重算一次并定稿（结束一天后不论是否还有进行中的都定稿；完成多于 `quizbuks.analytics.max-recount` 的不重算，读完即定稿，使重算不超过读取时限）。只写变化了的行（审计照常；游标的题目合计 `auditMasked`）。
+  **最小分组 k**（`qb.stats.min-group`，缺省 5、下限 3，`MinGroup`）：可推出个人作答的数字（每题正确率与难度、平均用时、超时人数）只在至少 k 个完成时给出，且公开值只在**新增至少 k 个完成后**才变化（含结束后的重算），两次查看之差推不出一个人；人数不受 k 约束（E-4）。k 的读法在每个模板中写同一段 SQL（`greatest(3, … 5)`），改规则时全部一起改并由 `AnalyticsIT` 覆盖。
+  商家的模板 `qb.sponsor.dashboard` / `qb.sponsor.analytics.*`（`qb.stats.read`，只授予 `QB_SPONSOR`）一律经限本人的卡片视图 `sponsor:QbPublicationCard` 连接（普通表按 `sponsor_id` 读，不扫时态的发布，评审 M2），只给汇总、不读 `qb_attempt` 与资料；单个发布的概览的人数取任务的快照（游标），不随每次答题变化（评审 M1）；三张分析表没有商家数据视图（游标中有未公开的合计）。按日的日界是部署时区 `jabiz.fiscal-year-zone`（`Asia/Tokyo`），由任务记进 `qb_stats_run.zone` 供模板读取，不在模板中写死时区；它只能是 `UTC` 或地区名（偏移写法在 PostgreSQL 中方向相反，启动检查 `AnalyticsZoneCheck` 拒绝）。
 - **条款、隐私与帮助**（`messaging`，`docs/quizbuks/plans/Q7-messages-legal.md` Q7b）：法律文本的草稿 `QbLegalDoc`（每种一份，`QB_SETUP` 建立明确标注 `[TEST PLACEHOLDER]` 的占位，不发布）与 FAQ `QbFaqEntry` 由内容管理员在通用后台直接编辑；
   **法律文本只经 `QB_LEGAL_PUBLISH` 发布**（每次二次验证，版本 `QbLegalVersion` 只写一次；必须带页面读到的草稿版本 `baseRevision`；生效时间至多 `qb.legal.max-announce-days`（受控参数，未发布时 180）天后），
   **预告错了只经 `QB_LEGAL_WITHDRAW` 撤回**（生效前、带理由，`QbLegalWithdrawal` 只写一次；撤回的版本永不生效、不要求同意，版本号不再使用）；两者先读草稿或版本（种类不可变）再取命名锁 `qb.legal:<种类>`。
@@ -165,7 +169,9 @@
 - **外部密钥**（`STRIPE_*`、`OPENAI_API_KEY`）只来自环境变量（`deploy/quizbuks/README.md`）；测试与 `dev` 用固定的假值，仓库中没有真实密钥。
 - **部署的安全设置**（Q10b，`deploy/quizbuks/README.md`"密钥与部署"）：镜像入口脚本在平台密钥或首个管理员密码缺少时拒绝启动（只有 `QB_LOCAL_SECRETS=true` 的本机才生成，compose 缺省 `false`，正式模式一律不生成，管理员密码不打印；生成时导出 `QB_SECRETS_GENERATED=true`，评审 L5）；
   启动检查 `wallet.DeploySafetyCheck`（类别 `QUIZBUKS`）：可信代理为空时正式模式报错（除非 `quizbuks.deploy.direct-exposure=true`）、过宽的网段一律报错（IPv4 短于 /8、IPv6 短于 /32、整个 IPv4 的映射，前缀照平台读法，评审 L6），正式模式下关闭管理二次验证或 `QB_SECRETS_GENERATED=true` 报错，`dev` 只在回环地址与本机邮件地址下启动；
-  数据库密码没有缺省值。职责分离规则由 `QB_SETUP` 提出（`setup.QbSodRules`），`QbRoles` 的角色不得违反它们（`QbRolesTest`）；超级管理员不做审批。
+  数据库密码没有缺省值。职责分离规则由 `QB_SETUP` 提出（`setup.QbSodRules`），`QbRoles` 的角色不得违反它们（`QbRolesTest`）；超级管理员不做业务审批（不持有 `approval.decide`）。
+  **受保护的授权**（平台 16u，D51）：管理员按 `security.user-role.write` / `security.role.write` 计，即超级管理员；两位之后建立期结束，受保护的变更由一位超级管理员申请、另一位以 `security.protected-change.decide` 审批（`docs/quizbuks/operations.md` §3）。
+  `QB_SETUP` 直接写入角色的权限，建立期结束后给已有持有人的角色加受保护的权限会被拒（先经 `SEC_ROLE_PERMISSION_ADD` 审批）；测试以 `AccountItSupport.assignRole` 照此分配（第二位超级管理员之后由另一位批准）。
 
 ## 5. 前端（`quizbuks-web/`，`docs/quizbuks/plans/QP-pages.md`）
 
@@ -230,7 +236,7 @@
 - `./gradlew :quizbuks:check`（测试 + `platformCheck`）；单个类：`./gradlew :quizbuks:test --tests '*SetupIT'`。
 - 集成测试连接真实 PostgreSQL（同平台：Testcontainers 或 `JABIZ_TEST_DB_*`），测试类放在 `com.jabiz.quizbuks.*` 下。
 - 场景回放：`src/test/resources/scenarios/qb/**.yml`，`./gradlew :quizbuks:test --tests '*ScenarioTest'`；确认变化正确后加 `-Dscenario.update-snapshots=true`。
-- 性能（不在 `check` 中）：进程内基线 `./gradlew :quizbuks:perfTest`（`PlayThroughputIT`）；对运行中的 jar 压测单个热门发布 `./gradlew :quizbuks:loadTest`（参数 `LOAD_*`，含客户端时限 `LOAD_TIMEOUT` 与照 App 重试忙的 `LOAD_RETRY_BUSY`；方法与结果见 `docs/quizbuks/perf/Q10a-load-test.md`，准入之后的重测在其 §8、16p-1 之后 §9、锁拆分之后 §10、16p-2 之后 §11）。答题锁内的时间取决于语句条数（每条约 0.8 ms），改答题流程时不要在开始锁或发布锁内增加读取；语句数的确切值在 `AttemptStatementBudgetIT`。
+- 性能（不在 `check` 中）：进程内基线 `./gradlew :quizbuks:perfTest`（`PlayThroughputIT`；分析任务 `--tests '*AnalyticsPerfIT'`，`docs/quizbuks/perf/Q9e-analytics.md`）；对运行中的 jar 压测单个热门发布 `./gradlew :quizbuks:loadTest`（参数 `LOAD_*`，含客户端时限 `LOAD_TIMEOUT` 与照 App 重试忙的 `LOAD_RETRY_BUSY`；方法与结果见 `docs/quizbuks/perf/Q10a-load-test.md`，准入之后的重测在其 §8、16p-1 之后 §9、锁拆分之后 §10、16p-2 之后 §11）。答题锁内的时间取决于语句条数（每条约 0.8 ms），改答题流程时不要在开始锁或发布锁内增加读取；语句数的确切值在 `AttemptStatementBudgetIT`。
   `LOAD_METRICS=yes` 时从只绑定回环地址的独立管理端口读取指标（jar 以 `-Dmanagement.server.address=127.0.0.1 -Dmanagement.server.port=8081 -Dmanagement.endpoints.web.exposure.include=health,info,metrics` 启动，工具读 `LOAD_METRICS_URL`，缺省 `http://127.0.0.1:8081`，不是回环地址即拒绝，`LOAD_ALLOW_REMOTE` 也不放行；指标绝不在应用端口上暴露：那里不要认证，根 CLAUDE.md 与设计 13 不允许匿名的指标端点；也不写进仓库的配置），报告每次完成的许可持有时间与每次运行的语句数（`jabiz.process.statements`），并报告压测期间本机的 CPU；16p-1 之后的重测在报告 §9。
 
 ## 7. 运行
