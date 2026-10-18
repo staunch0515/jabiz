@@ -63,7 +63,7 @@
 
 | 开关 | 用途 | 由谁拒绝 |
 |---|---|---|
-| `QB_TRANSFER_RUN_CRON`、`QB_RECONCILE_RUN_CRON` | e2e 与 Stripe 测试模式：每分钟转账、每分钟核对 | `TransferScheduleCheck` |
+| `QB_TRANSFER_RUN_CRON`、`QB_RECONCILE_RUN_CRON`、`QB_ANALYTICS_RUN_CRON` | e2e 与 Stripe 测试模式：每分钟转账、每分钟核对；e2e：每分钟运行商家分析（Q9e2） | `TransferScheduleCheck` |
 | `QB_ADMIN_ROLES` 中的 `QB_E2E_*` | e2e 的无二次验证的测试角色 | `TransferScheduleCheck` |
 | 开发入账 `quizbuks.wallet.dev-credit.enabled`（`dev` 配置开启） | 不付款给商家钱包入账 | `StripeModeCheck` |
 | `QB_STRIPE_CHECKOUT_URL_PREFIX` / `QB_STRIPE_CONNECT_URL_PREFIX` 不是 Stripe 的地址 | 指向本地桩 | `StripeSettings` / `PayoutSettings`（启动检查） |

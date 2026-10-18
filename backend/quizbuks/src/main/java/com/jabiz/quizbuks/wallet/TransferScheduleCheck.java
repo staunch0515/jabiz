@@ -1,6 +1,7 @@
 package com.jabiz.quizbuks.wallet;
 
 import com.jabiz.quizbuks.country.CountryCatalog;
+import com.jabiz.quizbuks.stats.AnalyticsLimits;
 import com.jabiz.runtime.check.CheckProblem;
 import com.jabiz.runtime.check.PlatformCheck;
 import org.springframework.beans.factory.annotation.Value;
@@ -22,7 +23,9 @@ import java.util.List;
  *       and Stripe would be called far more often;</li>
  *   <li>{@code quizbuks.reconcile.run-cron} ({@code QB_RECONCILE_RUN_CRON}, Q9d): the journal export waits for a clean
  *       reconciliation after the month's end; run every minute, each difference would ask a person again every
- *       minute.</li>
+ *       minute;</li>
+ *   <li>{@code quizbuks.analytics.run-cron} ({@code QB_ANALYTICS_RUN_CRON}, Q9e2): the analytics pages show a test's
+ *       attempts within it; run every minute, the job's reads and audit rows would be ten times as many.</li>
  * </ul>
  * Any other schedule than the daily one is refused next to live mode or a live key. So are the end-to-end tests' own
  * roles ({@value #E2E_ROLE_PREFIX}*, such as {@code QB_E2E_FINANCE} without a second factor) among the roles the
@@ -38,17 +41,20 @@ class TransferScheduleCheck implements PlatformCheck {
     private final String cron;
     private final List<String> adminRoles;
     private final String reconcileCron;
+    private final String analyticsCron;
     private final boolean livemode;
     private final String apiKey;
 
     TransferScheduleCheck(StripeSettings settings,
         @Value("${" + TransferProcesses.RUN_CRON_SETTING + ":" + TransferProcesses.RUN_CRON + "}") String cron,
         @Value("${" + Reconciliation.RUN_CRON_SETTING + ":" + Reconciliation.RUN_CRON + "}") String reconcileCron,
+        @Value("${" + AnalyticsLimits.RUN_CRON_SETTING + ":" + AnalyticsLimits.RUN_CRON + "}") String analyticsCron,
         @Value("${" + StripeService.API_KEY + ":}") String apiKey, Environment environment) {
         this.cron = cron;
         this.adminRoles = Binder.get(environment).bind(ADMIN_ROLES_SETTING, Bindable.listOf(String.class))
             .orElse(List.of());
         this.reconcileCron = reconcileCron;
+        this.analyticsCron = analyticsCron;
         this.livemode = settings.livemode();
         this.apiKey = apiKey;
     }
@@ -57,6 +63,7 @@ class TransferScheduleCheck implements PlatformCheck {
     public List<CheckProblem> check() {
         List<CheckProblem> problems = new ArrayList<>(problems(cron, livemode, apiKey));
         problems.addAll(reconcileProblems(reconcileCron, livemode, apiKey));
+        problems.addAll(analyticsProblems(analyticsCron, livemode, apiKey));
         problems.addAll(e2eRoleProblems(adminRoles, livemode, apiKey));
         return problems;
     }
@@ -84,6 +91,11 @@ class TransferScheduleCheck implements PlatformCheck {
     static List<CheckProblem> reconcileProblems(String cron, boolean livemode, String apiKey) {
         return problems(Reconciliation.RUN_CRON_SETTING, "QB_RECONCILE_RUN_CRON", "daily reconciliation",
             Reconciliation.RUN_CRON, cron, livemode, apiKey);
+    }
+
+    static List<CheckProblem> analyticsProblems(String cron, boolean livemode, String apiKey) {
+        return problems(AnalyticsLimits.RUN_CRON_SETTING, "QB_ANALYTICS_RUN_CRON", "sponsors' analytics",
+            AnalyticsLimits.RUN_CRON, cron, livemode, apiKey);
     }
 
     private static List<CheckProblem> problems(String setting, String variable, String what, String daily,

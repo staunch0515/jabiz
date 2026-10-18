@@ -192,6 +192,9 @@
   轮询只经 `wallet/poll.ts`（有界、退避、离开即停）；跳往 Checkout 或开通页只经 `wallet/stripePage.ts` 检查过的地址（https，或页面在本机时的本机桩）；
   刚发起的充值只自动跳转一次，其他时候给按钮；开通只跟随本次请求生成的新链接（Stripe 的链接只能用一次）。
 - **收据**（Q9d，`sponsor/src/wallet/`）：钱包页已到账的充值行有"收据"：`QB_TOPUP_RECEIPT_ISSUE`（当前界面语言，只在第一次签发时起作用）后下载存档的 PDF（`GET /api/documents/runs/{id}/pdf`）。
+- **分析页**（Q9e2，`sponsor/src/analytics/`，名字在 `ids.ts`、手写类型与调用在 `api.ts`）：页面只显示模板给出的值（不自己汇总、不判断 k、不算流失最大的一段），不足 k 时照模板的 `suppressed` 注明"至少 k 人作答后显示"；
+  日期与时刻一律按任务记下的部署时区（`qb.sponsor.dashboard` 的 `zone`）显示，不按浏览器；"现在"取 `qb/legal.ts` 的 `minuteNow()`（按服务端时钟）。图表只经 `@jabiz/ui` 的 `ChartContainer`、颜色只用 `--chart-*`，每个图表有 `aria-label` 与合计的文字，并有可展开的数据表（`charts.tsx` 的 `DataDisclosure`）；
+  两种量不共用一张图（上下两个小图）。导出只经平台的 `POST /api/queries/{id}/export`（趋势带页面所示期间的同一组参数）。e2e 以 `QB_ANALYTICS_RUN_CRON` 每分钟运行分析任务（只给 e2e，正式模式下由 `TransferScheduleCheck` 拒绝）。
 - **交易页**（Q9b，`sponsor/src/transactions/`）：列表、汇总与导出用同一组模板参数（`transactions/api.ts` 的 `paramsOf`；筛选写成模板参数而不是列表筛选，汇总模板才能用同样的条件），
   导出只经平台的 `POST /api/queries/{id}/export`（`sessionFetch`，CSV 与 XLSX）。答题人只以资料的显示名出现，不给邮箱，也不给用户编号："只看此用户"按模板给出的 `userKey` 筛选，页面不显示它。`userKey` = md5(商家编号 : 用户编号)：不是用户编号，同一答题人在每个商家处的键不同；它不是秘密，知道两个编号的人都能算出。
 - **条款、帮助与关于**（Q7b，共用的在 `qb/legal.ts`、`qb/LegalPage.tsx`、`qb/HelpPage.tsx`、`qb/ConsentGate.tsx`、`qb/TermsAgreement.tsx`、`qb/LegalLinks.tsx`）：`/help`、`/legal/<terms|sponsor-terms|privacy|commerce>`（App 另有 `/about`）不需登录，经 `qb/legal.ts` 的 `publicQuery`（无令牌）读公开模板，时刻取整到分钟；

@@ -50,5 +50,13 @@ public final class AnalyticsLimits {
     /** The query time limit of the job's reads (a finished publication is recounted whole once). */
     public static final Duration QUERY_TIMEOUT = Duration.ofMinutes(2);
 
+    /** The job's schedule: every ten minutes (requirement 6.1, the pages say so); a six-field cron in UTC. */
+    public static final String RUN_CRON = "0 */10 * * * *";
+    /**
+     * Its setting ({@code QB_ANALYTICS_RUN_CRON}): only the end-to-end tests change it (every minute: a sponsor's
+     * analytics show the attempts of a test within it, Q9e2); refused next to live mode ({@code TransferScheduleCheck}).
+     */
+    public static final String RUN_CRON_SETTING = "quizbuks.analytics.run-cron";
+
     private AnalyticsLimits() {}
 }

@@ -241,6 +241,52 @@ for (const appearance of ['light', 'dark'] as const) {
     await expectAccessible(page, at('sponsor live publication 390px'))
   })
 
+  test(`the sponsor console's analytics pages pass axe (${appearance})`, async ({ page, request }) => {
+    test.setTimeout(150_000)
+    await useAppearance(page, appearance)
+    await page.setViewportSize({ width: 1280, height: 900 })
+    const funded = await fundedSponsor(request, 1000)
+    const taker = await takerInJapan(request, 'Lena')
+    const { publicationId } = await rewardingPublication(request, funded.token, 10, taker.token)
+    await submitRight(request, taker.token, await startAttempt(request, taker.token, publicationId))
+    const answered = (page: Page, id: string) =>
+      page.waitForResponse((response) => response.url().endsWith(`/api/queries/${id}`) && response.ok())
+
+    // The dashboard, once its three templates answered (charts drawn, tables open).
+    const read = Promise.all(['qb.sponsor.dashboard', 'qb.sponsor.analytics.top', 'qb.sponsor.analytics.trend']
+      .map((id) => answered(page, id)))
+    await signIn(page, '/sponsor/', funded.email)
+    await read
+    await expect(page.getByTestId('dashboard-metrics')).toBeVisible()
+    await expect(page.getByTestId('week')).toHaveAttribute('data-buckets', '7')
+    await expect(page.getByTestId('dashboard-top').getByTestId('top-empty').or(page.getByTestId('top-row')))
+      .toBeVisible()
+    await page.getByTestId('week-table').getByText('Show the data as a table').click()
+    await expectAccessible(page, at('sponsor dashboard analytics'))
+    await page.setViewportSize({ width: 390, height: 844 })
+    await expectAccessible(page, at('sponsor dashboard analytics 390px'))
+
+    // A publication's analytics: the minimum group holds the questions back.
+    await page.setViewportSize({ width: 1280, height: 900 })
+    const readPage = Promise.all(['qb.sponsor.analytics.overview', 'qb.sponsor.analytics.questions',
+      'qb.sponsor.analytics.trend'].map((id) => answered(page, id)))
+    await page.goto(`/sponsor/publications/${publicationId}/analytics`)
+    await readPage
+    await expect(page.getByTestId('analytics-overview')).toBeVisible()
+    await expect(page.getByTestId('questions-suppressed')).toBeVisible()
+    await expect(page.getByTestId('trend')).toHaveAttribute('data-buckets', '24')
+    await page.getByTestId('funnel-table').getByText('Show the data as a table').click()
+    await page.getByTestId('trend-table').getByText('Show the data as a table').click()
+    await expectAccessible(page, at('sponsor publication analytics'))
+    const daily = answered(page, 'qb.sponsor.analytics.trend')
+    await page.getByRole('radio', { name: 'Last 7 days (by the day)' }).click()
+    await daily
+    await expect(page.getByTestId('trend')).toHaveAttribute('data-buckets', '7')
+    await expectAccessible(page, at('sponsor publication analytics by day'))
+    await page.setViewportSize({ width: 390, height: 844 })
+    await expectAccessible(page, at('sponsor publication analytics 390px'))
+  })
+
   test(`the administration's QuizBuks pages pass axe (${appearance})`, async ({ page, request }) => {
     test.setTimeout(150_000)
     await useAppearance(page, appearance)

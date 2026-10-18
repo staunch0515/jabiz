@@ -21,6 +21,8 @@ import { CircleHelp, FileQuestion, LayoutDashboard, Megaphone, ReceiptText, Stor
   from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
+import { analyticsIdOf } from './analytics/api'
+import { PublicationAnalyticsPage } from './analytics/PublicationAnalyticsPage'
 import { QuizEditorPage } from './content/QuizEditorPage'
 import { QuizListPage } from './content/QuizListPage'
 import { quizIdOf, QUIZZES_PATH } from './content/paths'
@@ -108,6 +110,7 @@ function SignedIn({ path }: { path: string }) {
   else if (path === QUIZZES_PATH) page = <QuizListPage />
   else if (quizId) page = <QuizEditorPage key={quizId} quizId={quizId} />
   else if (path === PUBLICATIONS_PATH) page = <PublicationListPage />
+  else if (analyticsIdOf(path)) page = <PublicationAnalyticsPage key={path} publicationId={analyticsIdOf(path)!} />
   else if (publicationIdOf(path)) page = <PublicationPage key={path} publicationId={publicationIdOf(path)!} />
   else if (path === ONBOARDING) page = <OnboardingPage />
   else if (path === WALLET_PATH) page = <WalletPage />

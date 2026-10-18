@@ -24,7 +24,7 @@ const en = {
     none: 'Before you publish quizzes, tell us about your company: we review every sponsor.',
     pending: 'Your sponsor application is in review. We will mail you when it is decided.',
     rejected: 'Your sponsor application was sent back. See why, change it and apply again.',
-    approved: 'Your sponsor account is approved. Your quizzes and publications will appear here.',
+    approved: 'Your sponsor account is approved. Here is how your publications are doing.',
     toOnboarding: 'Open the sponsor profile',
   },
   onboarding: {
@@ -72,7 +72,7 @@ const zh: typeof en = {
     none: '发布 Quiz 之前，请先填写公司信息：每个商家都需经过审核。',
     pending: '你的商家申请正在审核中。审核完成后我们会发邮件通知你。',
     rejected: '你的商家申请已被驳回。请查看原因，修改后重新申请。',
-    approved: '你的商家账户已通过审核。你的 Quiz 与发布会显示在这里。',
+    approved: '你的商家账户已通过审核。以下是你的发布的表现。',
     toOnboarding: '打开商家资料',
   },
   onboarding: {
@@ -121,7 +121,7 @@ const ja: typeof en = {
     none: 'クイズを公開する前に、会社について教えてください。すべてのスポンサーを審査します。',
     pending: 'スポンサー申請は審査中です。結果はメールでお知らせします。',
     rejected: 'スポンサー申請は差し戻されました。理由を確認し、修正して再申請してください。',
-    approved: 'スポンサーアカウントは承認されました。クイズと公開がここに表示されます。',
+    approved: 'スポンサーアカウントは承認されています。公開の状況は以下のとおりです。',
     toOnboarding: 'スポンサー情報を開く',
   },
   onboarding: {

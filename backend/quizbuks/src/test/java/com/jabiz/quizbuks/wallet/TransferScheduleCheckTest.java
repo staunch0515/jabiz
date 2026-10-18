@@ -1,5 +1,6 @@
 package com.jabiz.quizbuks.wallet;
 
+import com.jabiz.quizbuks.stats.AnalyticsLimits;
 import com.jabiz.runtime.check.CheckProblem;
 import org.junit.jupiter.api.Test;
 
@@ -39,6 +40,15 @@ class TransferScheduleCheckTest {
         assertThat(TransferScheduleCheck.reconcileProblems(EVERY_MINUTE, true, null)).singleElement()
             .satisfies(p -> assertThat(p.toString()).contains(Reconciliation.RUN_CRON_SETTING));
         assertThat(TransferScheduleCheck.reconcileProblems(EVERY_MINUTE, false, "sk_live_abc")).hasSize(1);
+    }
+
+    @Test
+    void theAnalyticsRunEveryTenMinutesInLiveMode() {
+        assertThat(TransferScheduleCheck.analyticsProblems(AnalyticsLimits.RUN_CRON, true, "sk_live_abc")).isEmpty();
+        assertThat(TransferScheduleCheck.analyticsProblems(EVERY_MINUTE, false, "sk_test_abc")).isEmpty();
+        assertThat(TransferScheduleCheck.analyticsProblems(EVERY_MINUTE, true, null)).singleElement()
+            .satisfies(p -> assertThat(p.toString()).contains(AnalyticsLimits.RUN_CRON_SETTING));
+        assertThat(TransferScheduleCheck.analyticsProblems(EVERY_MINUTE, false, "sk_live_abc")).hasSize(1);
     }
 
     @Test

@@ -137,11 +137,13 @@ public class AnalyticsConfig {
     /**
      * Every ten minutes at :00, :10, … (requirement 6.1: the analytics page says so). One run is one transaction of
      * reads and the analytics tables' writes, without business locks; a missed run is made up by the next, whose
-     * increments go to the previous run's hour marked as a gap.
+     * increments go to the previous run's hour marked as a gap. Only the end-to-end tests run it more often
+     * ({@link AnalyticsLimits#RUN_CRON_SETTING}).
      */
     @Bean
-    JobDefinition<AnalyticsRefresh.RefreshInput> qbAnalyticsJob() {
-        return JobDefinition.cron(AnalyticsRefresh.JOB, "0 */10 * * * *", ZoneOffset.UTC, refresh,
+    JobDefinition<AnalyticsRefresh.RefreshInput> qbAnalyticsJob(
+        @Value("${" + AnalyticsLimits.RUN_CRON_SETTING + ":" + AnalyticsLimits.RUN_CRON + "}") String cron) {
+        return JobDefinition.cron(AnalyticsRefresh.JOB, cron, ZoneOffset.UTC, refresh,
             AnalyticsRefresh.RefreshInput::new);
     }
 }

@@ -8,6 +8,8 @@ import { QB } from '../qb/messages'
 import { Link, navigate, useLocation } from '../qb/router'
 import { readPublication, type Publication, type PublicationDetail } from './api'
 import { NEW_PUBLICATION, publicationQuery, PUBLICATIONS_PATH, PUBLICATIONS_QUERY } from './paths'
+import { analyticsPath } from '../analytics/api'
+import '../analytics/messages'
 import { transactionsOf } from '../transactions/api'
 import '../transactions/messages'
 import { PublicationActions } from './PublicationActions'
@@ -108,10 +110,16 @@ function PublicationView({ detail, stale, onStale }: {
         {publication.status === 'PENDING_REVIEW' ? t('publishing.detail.inReview') : t('publishing.detail.frozen')}
       </p>
       {publication.status !== 'PENDING_REVIEW' && (
-        <Link to={transactionsOf(publication.publicationId)} className="w-fit text-sm underline underline-offset-4"
-          data-testid="publication-transactions">
-          {t('transactions.publicationLink')}
-        </Link>
+        <span className="flex flex-wrap gap-4 text-sm">
+          <Link to={analyticsPath(publication.publicationId)} className="w-fit underline underline-offset-4"
+            data-testid="publication-analytics-link">
+            {t('analytics.publication.link')}
+          </Link>
+          <Link to={transactionsOf(publication.publicationId)} className="w-fit underline underline-offset-4"
+            data-testid="publication-transactions">
+            {t('transactions.publicationLink')}
+          </Link>
+        </span>
       )}
       {publication.status === 'FUNDS_SHORT' && (
         <Alert variant="warning"><AlertDescription>{t('publishing.detail.fundsShort')}</AlertDescription></Alert>
