@@ -29,6 +29,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class AiQuestionsIT extends AiItSupport {
 
+    @org.springframework.beans.factory.annotation.Autowired
+    com.jabiz.quizbuks.content.ai.AiUserKeys userKeys;
+
     @BeforeEach
     void freshDay() {
         aiOn();
@@ -78,7 +81,8 @@ class AiQuestionsIT extends AiItSupport {
         assertThat(received.header("anthropic-beta")).isEqualTo(ClaudeApi.FALLBACK_BETA);
         // The user id is an opaque HMAC, the same for the sponsor every time, never their id.
         String userKey = body.get("metadata").get("user_id").asString();
-        assertThat(userKey).matches("qb-[0-9a-f]{32}").doesNotContain(SPONSOR_A);
+        assertThat(userKey).matches("qb-[0-9a-f]{32}").doesNotContain(SPONSOR_A)
+            .isEqualTo(userKeys.of(SPONSOR_A)).isNotEqualTo(userKeys.of(SPONSOR_B));
         // The sponsor's content only, as data: the material, the existing question, '<' escaped.
         String text = body.get("messages").get(0).get("content").get(0).get("text").asString();
         assertThat(text).contains("Paris is the capital of France.", "What is the capital of Italy?",
