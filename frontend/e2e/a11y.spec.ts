@@ -160,7 +160,11 @@ async function checkPagesAfterSignIn(page: Page, request: APIRequestContext, app
     await expect(page.locator(ready).first(), `${name} rendered`).toBeVisible()
     await pageRendered(page)
     await expect(page.locator('[data-sonner-toast][data-type="error"]'), `${name}: no error`).toHaveCount(0)
-    if (path === '/account/security') await expect(page.getByTestId('session-item').first()).toBeVisible()
+    if (path === '/account/security') {
+      await expect(page.getByTestId('session-item').first()).toBeVisible()
+      await expect(page.getByTestId('mail-preferences')
+        .locator('[data-testid="mail-preferences-none"], [data-testid="mail-preference"]').first()).toBeVisible()
+    }
     await expectAccessible(page, at(name))
   }
 
