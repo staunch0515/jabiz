@@ -27,8 +27,9 @@ import java.util.regex.Pattern;
  *   <li>a request for covers ("Number of covers: 3", Q8b) gets three designs of the catalogue, which the server
  *       draws; PDF materials (document blocks) are accepted and not read;</li>
  *   <li>{@code POST /v1/messages/count_tokens} (Q8b: requests with PDFs are counted before they are sent) answers
- *       {@code input_tokens}: a token per four characters of the request without its files, and 1,500 a document,
- *       the same number the request's usage then reports;</li>
+ *       {@code input_tokens}: a token per four characters of the request without its files (and without the output
+ *       limit, user id and fallback, which the count does not take), and 1,500 a document; the paid call of the same
+ *       request reports the same number as its input usage;</li>
  *   <li>a quiz whose title contains {@code [refuse]} is declined ({@code stop_reason: refusal}), one with
  *       {@code [busy]} is answered 529 (overloaded), so that the console's failure texts can be seen.</li>
  * </ul>
@@ -41,6 +42,9 @@ public final class ClaudeStub {
     private static final Pattern MODEL = Pattern.compile("^\\{\"model\":\"([a-z0-9-]+)\"");
     private static final Pattern DATA = Pattern.compile("\"data\":\"[A-Za-z0-9+/=]*\"");
     private static final Pattern DOCUMENT = Pattern.compile("\"type\":\"document\"");
+    /** The fields a count does not take: the output limit, the user id and the fallback. */
+    private static final Pattern NOT_COUNTED = Pattern.compile(
+        "\"max_tokens\":\\d+,|,\"metadata\":\\{[^}]*\\}|,\"fallbacks\":\"[a-z]+\"");
 
     public static void main(String[] args) throws IOException {
         int port = args.length > 0 ? Integer.parseInt(args[0]) : 8094;
@@ -109,10 +113,14 @@ public final class ClaudeStub {
         }
     }
 
-    /** About a token per four characters of the request without its files, and 1,500 a document. */
+    /**
+     * About a token per four characters of the request without its files, and 1,500 a document: of what the count
+     * and the call share (not the output limit, the user id or the fallback), so a call is billed what it was counted.
+     */
     private static long tokens(String body) {
         long documents = DOCUMENT.matcher(body).results().count();
-        return Math.max(1, DATA.matcher(body).replaceAll("").length() / 4) + 1_500 * documents;
+        String counted = NOT_COUNTED.matcher(DATA.matcher(body).replaceAll("")).replaceAll("");
+        return Math.max(1, counted.length() / 4) + 1_500 * documents;
     }
 
     private static boolean japanese(String body) {

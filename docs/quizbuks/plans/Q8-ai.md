@@ -401,6 +401,15 @@
 - 新测试：`AiPdfIT` 改为 7 个（计数后以文件原样发送、计数的请求与发送的相同、无 PDF 不计数；谎报 `/Count` 的 PDF 按计数拒绝、没有回答按计数计入；提供方拒绝文档（计数与付费调用两处）、其他 400 不变；计数失败重试不计费；过大 422；停止的 PDF 作业按预留计入与计价；同一商家同时请求封面与题目时共用每日次数）；`AiPdfsTest` 不再用 PDFBox；`AiCoversTest` 加只有拉丁字体时 ja、zh 不调用。
 - 验证（评审修改之后，2026-10-18，同上的库与端口）：`./gradlew :quizbuks:check :quizbuks:bootJar` 通过（713 个测试、0 失败；`platformCheck` 0 错误）；商家后台 lint、typecheck、171 个 Vitest，`app:check`，`ext:check`（74 个）；e2e 全部 54 个一次通过（`ai-cover.spec.ts` 改为先点图片选中）。
 
+### 复审后的修改（2026-10-18）
+
+- **M-a**：提供方的回退（`fallbacks: "default"`）在拒答后会在另一个模型上把输入再算一次，带 PDF 的调用因此可能超过计数与预留，§7.8 原来"计入的输入从不超过预留"不准确。决定：**带文档的请求不带 `fallbacks`**，每次付费的 PDF 调用正好是计过数的请求；带 PDF 的请求被拒答时由已有的"推荐模型"重试在下一次尝试中处理（再计一次数）。只有文字的请求照常带回退、按估计，可能超过预留（日志告警）。§7.8 改为准确的说法。
+- **M-b**：原来凡 400 提到 document 都算 `QB_AI_PDF_UNREADABLE`，会把我们自己的错误（字段校验）藏成"商家的文件坏了"。改为：带文档的请求，400 说请求过长（"prompt is too long"、"maximum of N PDF pages"、"too many pages"）即 `QB_AI_PDF_TOO_LONG`；只有说 PDF 本身无效、有密码、加密、损坏、读不了的才是 `QB_AI_PDF_UNREADABLE`；以字段路径开头的与其他 400 一律 `QB_AI_REQUEST_INVALID`。
+  API 文档写明了限制（每次请求 600 页、1M 上下文时；32 MB）但没有给出这些错误的原文，所以按常见说法宽松匹配，上线前以真实的 API 对照一次（上线清单）。新增启动检查 `AiPdfLimitsCheck`：页数上限 × 5 000 加上最大文字输入与最大输出须放得进三个模型的上下文窗口（`ClaudeService.CONTEXT_WINDOW_TOKENS` = 100 万，约 179 页），且不超过提供方的 600 页。
+- **L-a**：平台停止的作业，若每次尝试的预留输入超过 10 万 Token 且模型有长提示价格，按长提示价格计（`AiProcesses.stoppedUsage`）。**L-b**：`Usage.asLongPrompt` 不再把回退模型的部分也算进长提示部分，`AiCost.of` 另把长提示部分限制在请求模型自己的部分之内，每个 Token 只计价一次。
+- **L-d**：§7.8 写明计数的 429 / 5xx 会用掉 3 次尝试中的一次（不计费）。**L-e**：封面与题目同时请求的测试重复 5 轮、每轮新商家，并断言至少一轮两个调用确实同时在途。**L-f**：IT 的桩与本地桩对带文档的付费调用报告与计数相同的输入用量（本地桩去掉计数不接受的字段再估算）。**L-g**：上线清单加一项：开启 PDF 之前以真实密钥手动调用一次 `count_tokens`。
+- 细节：封面图改为单选按钮的 `<label htmlFor>`（不是 `div` 上的 `onClick`）；`QB_AI_NOTICE_MISSING` 的文案改为通用的"AI 生成"。
+
 ### 待确认（需求方）
 
 - **PDF 的预留与月上限**（偏离 3）：建议上线前以真实 PDF 测出每页实际 Token（`launch-checklist.md`），再选其一：A 提高 `qb.ai.sponsor.monthly-tokens`（例如 500 万）；B 降低 `QB_AI_PDF_MAX_PAGES`（例如 30 页，预留约 45 万）；C 两者都调。缺省值暂按计划（100 页、200 万）。

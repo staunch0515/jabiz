@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.List;
@@ -69,6 +70,80 @@ class AiPdfsTest {
         assertThat(count.has("max_tokens")).isFalse();
         assertThat(count.has("metadata")).isFalse();
         assertThat(count.has("fallbacks")).isFalse();
+        // No provider fallback with documents (re-review M-a): the paid call is the counted request and nothing more.
+        assertThat(body.has("fallbacks")).isFalse();
+        assertThat(JSON.readTree(ClaudeApi.body(request(user, List.of()), JSON)).get("fallbacks").asString())
+            .isEqualTo("default");
+    }
+
+    @Test
+    void theProvidersLimitsAreTooLongAndOnlyItsWordsAboutAPdfAreUnreadable() {
+        for (String tooLong : List.of("prompt is too long: 1204331 tokens > 1000000 maximum",
+            "A maximum of 600 PDF pages may be provided.", "The request has too many PDF pages")) {
+            assertThat(ClaudeErrors.failure(400, "invalid_request_error", tooLong, true).code())
+                .as(tooLong).isEqualTo(AiCodes.PDF_TOO_LONG);
+        }
+        for (String unreadable : List.of("The PDF specified was not valid.", "The PDF specified is password protected.",
+            "Could not process the PDF", "The PDF file appears to be corrupted")) {
+            assertThat(ClaudeErrors.failure(400, "invalid_request_error", unreadable, true).code())
+                .as(unreadable).isEqualTo(AiCodes.PDF_UNREADABLE);
+        }
+        // Our own mistakes stay visible: a field path naming the document, a document mentioned in passing.
+        for (String ours : List.of("messages.0.content.0.document.source.data: invalid base64 in the PDF",
+            "messages.0.content.0.document.title: String should have at most 500 characters",
+            "Each document must have a title", "max_tokens: too large")) {
+            assertThat(ClaudeErrors.failure(400, "invalid_request_error", ours, true).code())
+                .as(ours).isEqualTo(AiCodes.REQUEST_INVALID);
+        }
+        // Without documents nothing is about a PDF.
+        assertThat(ClaudeErrors.failure(400, "invalid_request_error", "prompt is too long: 2 > 1", false).code())
+            .isEqualTo(AiCodes.REQUEST_INVALID);
+    }
+
+    @Test
+    void thePageCapMustFitTheContextWindowAndTheProvidersPages() {
+        assertThat(AiPdfLimitsCheck.problems(AiPdfs.DEFAULT_MAX_PAGES)).isEmpty();
+        assertThat(AiPdfLimitsCheck.problems(1)).isEmpty();
+        // The most pages that fit: the next one does not.
+        int fits = 1;
+        while (AiPdfLimitsCheck.largestRequest(fits + 1) <= ClaudeService.CONTEXT_WINDOW_TOKENS) {
+            fits++;
+        }
+        assertThat(fits).isEqualTo(179);
+        assertThat(AiPdfLimitsCheck.problems(fits)).isEmpty();
+        assertThat(AiPdfLimitsCheck.problems(fits + 1)).singleElement()
+            .satisfies(p -> assertThat(p.toString()).contains("context window"));
+        assertThat(AiPdfLimitsCheck.problems(AiPdfs.MAX_PAGES + 1)).hasSize(2);
+    }
+
+    @Test
+    void aStoppedJobIsPricedPerAttemptAtTheLongPromptRateWhenItsReservationIsLong() {
+        // 150,000 reserved per attempt for the smallest model: every attempt above 100,000, so the long rate.
+        ClaudeApi.Usage long_ = AiProcesses.stoppedUsage(ClaudeService.HAIKU, 500_000, 150_000);
+        assertThat(long_.inputTokens()).isEqualTo(450_000);
+        assertThat(long_.longPromptInputTokens()).isEqualTo(450_000);
+        assertThat(long_.longPromptOutputTokens()).isEqualTo(50_000);
+        assertThat(AiCost.of(ClaudeService.HAIKU, null, long_, null)).isEqualByComparingTo("0.350000");
+        // 90,000 an attempt: the short rate, although the job's total is above 100,000.
+        ClaudeApi.Usage short_ = AiProcesses.stoppedUsage(ClaudeService.HAIKU, 300_000, 90_000);
+        assertThat(short_.longPromptInputTokens()).isZero();
+        // The larger models have one rate.
+        assertThat(AiProcesses.stoppedUsage(ClaudeService.OPUS, 500_000, 150_000).longPromptInputTokens()).isZero();
+    }
+
+    @Test
+    void aFallbacksTokensAreNeverAlsoLongPromptTokens() {
+        // 300,000 in, of which 100,000 by the fallback model; out 1,000, of which 400.
+        ClaudeApi.Usage usage = new ClaudeApi.Usage(300_000, 1_000, 100_000, 400).asLongPrompt();
+        assertThat(usage.longPromptInputTokens()).isEqualTo(200_000);
+        assertThat(usage.longPromptOutputTokens()).isEqualTo(600);
+        // Priced once each: 200,000 x 0.50 + 600 x 2.50 at the long rate, the fallback's part at its own price.
+        BigDecimal expected = new BigDecimal("0.101500").add(AiCost.of(ClaudeService.HAIKU, null,
+            new ClaudeApi.Usage(100_000, 400, 100_000, 400), null));
+        assertThat(AiCost.of(ClaudeService.HAIKU, null, usage, null)).isEqualByComparingTo(expected);
+        // A usage recorded with overlapping parts is still priced once.
+        ClaudeApi.Usage overlapping = new ClaudeApi.Usage(300_000, 1_000, 100_000, 400, 300_000, 1_000);
+        assertThat(AiCost.of(ClaudeService.HAIKU, null, overlapping, null)).isEqualByComparingTo(expected);
     }
 
     @Test

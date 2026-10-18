@@ -25,7 +25,10 @@ import java.util.regex.Pattern;
  *       bounds its cost), the answer constrained to {@link AiPrompt#schema} (structured outputs), not streamed, at most
  *       {@link #maxTokens} output tokens: scaled to the questions asked, never above {@value #MAX_TOKENS};</li>
  *   <li>the provider's own fallback on a refusal ({@code fallbacks: "default"}, A-10), except on Haiku, which has
- *       none; the answer says which model served it;</li>
+ *       none, and except on a request with PDF documents (Q8b re-review M-a): a fallback runs the input again on
+ *       another model, so the paid call would bill more than the count it was checked by; without it every paid PDF
+ *       call is exactly the counted request, and a refusal is tried again on the next attempt (counted again); the
+ *       answer says which model served it;</li>
  *   <li>{@code metadata.user_id} the sponsor's opaque key (A-11), never their id, name or address;</li>
  *   <li>the user message at most {@value #MAX_INPUT_BYTES} bytes: a larger one is refused, never cut
  *       ({@link AiCodes#INPUT_TOO_LARGE}).</li>
@@ -134,10 +137,14 @@ public final class ClaudeApi {
             this(inputTokens, outputTokens, 0, 0);
         }
 
-        /** This usage with all of it priced at the long-prompt rate. */
+        /**
+         * This usage with the requested model's part priced at its long-prompt rate. The fallback model's part keeps
+         * the fallback's price: it is never in the long part too, so no token is priced twice (Q8b re-review L-b;
+         * {@link AiCost#of} prices the three parts apart).
+         */
         public Usage asLongPrompt() {
-            return new Usage(inputTokens, outputTokens, fallbackInputTokens, fallbackOutputTokens, inputTokens,
-                outputTokens);
+            return new Usage(inputTokens, outputTokens, fallbackInputTokens, fallbackOutputTokens,
+                Math.max(0, inputTokens - fallbackInputTokens), Math.max(0, outputTokens - fallbackOutputTokens));
         }
     }
 
@@ -292,7 +299,8 @@ public final class ClaudeApi {
         if (request.userKey() != null) {
             body.put("metadata", Map.of("user_id", request.userKey()));
         }
-        if (fallsBack(request.model())) {
+        // Not with documents: the counted request is exactly what is billed (Q8b re-review M-a).
+        if (fallsBack(request.model()) && request.documents().isEmpty()) {
             body.put("fallbacks", "default");
         }
         return body;

@@ -119,6 +119,10 @@ class AiPdfIT extends AiItSupport {
         assertThat(count.get("output_config")).isEqualTo(body.get("output_config"));
         assertThat(CLAUDE.requests(COUNT_TOKENS).getLast().header("x-api-key")).isEqualTo(
             "test-only-quizbuks-claude-key");
+        // No provider fallback on a request with documents (re-review M-a): the paid call is exactly the counted one,
+        // and billed what it was counted.
+        assertThat(body.has("fallbacks")).isFalse();
+        assertThat(number(job(aiJobId).get("input_tokens"))).isEqualTo(countOf(count));
         List<JsonNode> documents = documents(body);
         assertThat(documents).singleElement().satisfies(document -> {
             assertThat(document.get("title").asString()).isEqualTo("Material 2");
@@ -131,11 +135,12 @@ class AiPdfIT extends AiItSupport {
         assertThat(content.get(content.size() - 1).get("type").asString()).isEqualTo("text");
         assertThat(userText(body)).contains("\"document\":\"Material 2\"", "Paris is in France.");
 
-        // A request without PDFs is not counted (its text's estimate is a bound).
+        // A request without PDFs is not counted (its text's estimate is a bound) and keeps the fallback.
         int counts = CLAUDE.requests(COUNT_TOKENS).size();
         request(token, quiz.get(0), List.of(quiz.get(1)), 1);
         runJobs();
         assertThat(CLAUDE.requests(COUNT_TOKENS)).hasSize(counts);
+        assertThat(sent().getLast().get("fallbacks").asString()).isEqualTo("default");
     }
 
     @Test
@@ -192,19 +197,30 @@ class AiPdfIT extends AiItSupport {
         // The same refusal from the paid call (a count that passed): unreadable, and a 400 is not billed.
         List<String> encrypted = quizWithPdf(token, pdf(1, 1));
         CLAUDE.script(MESSAGES, StubHttpServer.Answer.json(400, "{\"type\":\"error\",\"error\":{\"type\":"
-            + "\"invalid_request_error\",\"message\":\"messages.0.content.0.pdf: the document is encrypted\"}}"));
+            + "\"invalid_request_error\",\"message\":\"The PDF specified is password protected.\"}}"));
         Object locked = request(token, encrypted.get(0), List.of(encrypted.get(2)), 1).get("aiJobId");
         runJobs();
         assertThat(job(locked)).containsEntry("status", QbAi.FAILED).containsEntry("failure_code",
             AiCodes.PDF_UNREADABLE);
         assertThat(number(job(locked).get("input_tokens"))).isZero();
-        // Another 400 of a request with PDFs stays what it was.
-        List<String> other = quizWithPdf(token, pdf(1, 1));
-        CLAUDE.script(MESSAGES, StubHttpServer.Answer.json(400, "{\"type\":\"error\",\"error\":{\"type\":"
-            + "\"invalid_request_error\",\"message\":\"max_tokens: too large\"}}"));
-        Object invalid = request(token, other.get(0), List.of(other.get(2)), 1).get("aiJobId");
+        // The provider's page or length limit (re-review M-b): too long, not unreadable.
+        List<String> pages = quizWithPdf(token, pdf(1, 1));
+        CLAUDE.script(COUNT_TOKENS, StubHttpServer.Answer.json(400, "{\"type\":\"error\",\"error\":{\"type\":"
+            + "\"invalid_request_error\",\"message\":\"A maximum of 600 PDF pages may be provided.\"}}"));
+        Object tooMany = request(token, pages.get(0), List.of(pages.get(2)), 1).get("aiJobId");
         runJobs();
-        assertThat(job(invalid)).containsEntry("failure_code", AiCodes.REQUEST_INVALID);
+        assertThat(job(tooMany)).containsEntry("failure_code", AiCodes.PDF_TOO_LONG);
+        assertThat(number(job(tooMany).get("input_tokens"))).isZero();
+        // A field of our own request that names the document, or any other 400, stays what it was: our mistake.
+        for (String message : List.of("messages.0.content.0.document.source.data: invalid base64 data in the PDF",
+            "max_tokens: too large")) {
+            List<String> other = quizWithPdf(token, pdf(1, 1));
+            CLAUDE.script(MESSAGES, StubHttpServer.Answer.json(400, "{\"type\":\"error\",\"error\":{\"type\":"
+                + "\"invalid_request_error\",\"message\":\"" + message + "\"}}"));
+            Object invalid = request(token, other.get(0), List.of(other.get(2)), 1).get("aiJobId");
+            runJobs();
+            assertThat(job(invalid)).containsEntry("failure_code", AiCodes.REQUEST_INVALID);
+        }
     }
 
     @Test
@@ -222,8 +238,8 @@ class AiPdfIT extends AiItSupport {
         Map<String, Object> done = job(aiJobId);
         assertThat(done).containsEntry("status", QbAi.READY);
         assertThat(number(done.get("attempts"))).isEqualTo(3);
-        // Only the one paid call is charged: the stub's usage of it.
-        assertThat(number(done.get("input_tokens"))).isEqualTo(1200);
+        // Only the one paid call is charged: its usage, which is what it was counted.
+        assertThat(number(done.get("input_tokens"))).isEqualTo(countOf(sent().getLast()));
         assertThat(number(done.get("output_tokens"))).isEqualTo(800);
         assertThat(CLAUDE.requests(MESSAGES)).hasSize(calls + 1);
     }
@@ -272,36 +288,56 @@ class AiPdfIT extends AiItSupport {
 
     @Test
     void coversAndQuestionsAtOnceShareTheSponsorsLimits() throws Exception {
-        String sponsor = newSponsor("ai-both-" + UUID.randomUUID());
-        String token = sponsorFull(sponsor);
-        List<String> forQuestions = quizWithArticle(token, "Questions " + UUID.randomUUID(), "A.");
-        List<String> forCovers = quizWithArticle(token, "Covers " + UUID.randomUUID(), "B.");
-        // One request left today for this sponsor: a cover request and a questions request at once, one passes.
+        // One request left today for each sponsor: a cover request and a questions request sent at once, one passes.
+        // Repeated, each round with its own sponsor, and the two calls must really have been in flight together in at
+        // least one round (re-review L-e): the limits are checked in the sponsor's AI lock, not by luck of timing.
         param(QbParams.AI_SPONSOR_DAILY_JOBS, "1");
+        java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(2);
+        int overlapped = 0;
         try {
-            CountDownLatch go = new CountDownLatch(1);
-            List<CompletableFuture<Integer>> calls = new ArrayList<>();
-            List<Map.Entry<String, Map<String, Object>>> asks = List.of(
-                Map.entry(AiProcesses.REQUEST, requestInput(forQuestions.get(0), List.of(forQuestions.get(1)), 1)),
-                Map.entry(AiProcesses.COVER_REQUEST, body("quizId", forCovers.get(0), "language", "en",
-                    "aiNoticeVersionNo", noticeVersion())));
-            for (Map.Entry<String, Map<String, Object>> ask : asks) {
-                calls.add(CompletableFuture.supplyAsync(() -> {
-                    try {
-                        go.await();
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                    }
-                    return call(ask.getKey(), token, ask.getValue()).expectBody(MAP).returnResult().getStatus().value();
-                }));
+            for (int round = 0; round < 5; round++) {
+                String sponsor = newSponsor("ai-both-" + UUID.randomUUID());
+                String token = sponsorFull(sponsor);
+                List<String> forQuestions = quizWithArticle(token, "Questions " + UUID.randomUUID(), "A.");
+                List<String> forCovers = quizWithArticle(token, "Covers " + UUID.randomUUID(), "B.");
+                List<Map.Entry<String, Map<String, Object>>> asks = List.of(
+                    Map.entry(AiProcesses.REQUEST, requestInput(forQuestions.get(0), List.of(forQuestions.get(1)), 1)),
+                    Map.entry(AiProcesses.COVER_REQUEST, body("quizId", forCovers.get(0), "language", "en",
+                        "aiNoticeVersionNo", noticeVersion())));
+                CountDownLatch go = new CountDownLatch(1);
+                List<CompletableFuture<long[]>> calls = new ArrayList<>();
+                List<Map<String, Object>> answers = java.util.Collections.synchronizedList(new ArrayList<>());
+                for (Map.Entry<String, Map<String, Object>> ask : asks) {
+                    calls.add(CompletableFuture.supplyAsync(() -> {
+                        try {
+                            go.await();
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                        }
+                        long started = System.nanoTime();
+                        var result = call(ask.getKey(), token, ask.getValue()).expectBody(MAP).returnResult();
+                        long ended = System.nanoTime();
+                        if (result.getStatus().value() != 200) {
+                            answers.add(result.getResponseBody());
+                        }
+                        return new long[] {result.getStatus().value(), started, ended};
+                    }, pool));
+                }
+                go.countDown();
+                List<long[]> done = calls.stream().map(CompletableFuture::join).toList();
+                assertThat(done.stream().map(d -> (int) d[0]).toList()).containsExactlyInAnyOrder(200, 422);
+                assertThat(codes(answers.getFirst())).containsExactly(AiCodes.DAILY_LIMIT);
+                assertThat(((Number) query("SELECT count(*) AS n FROM qb_ai_job WHERE sponsor_id = ?", sponsor)
+                    .getFirst().get("n")).intValue()).isEqualTo(1);
+                if (done.get(0)[1] < done.get(1)[2] && done.get(1)[1] < done.get(0)[2]) {
+                    overlapped++;
+                }
             }
-            go.countDown();
-            assertThat(calls.stream().map(CompletableFuture::join).toList()).containsExactlyInAnyOrder(200, 422);
-            assertThat(((Number) query("SELECT count(*) AS n FROM qb_ai_job WHERE sponsor_id = ?", sponsor)
-                .getFirst().get("n")).intValue()).isEqualTo(1);
         } finally {
+            pool.shutdown();
             param(QbParams.AI_SPONSOR_DAILY_JOBS, "20");
         }
+        assertThat(overlapped).isPositive();
         runJobs();
     }
 }

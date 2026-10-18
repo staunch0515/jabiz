@@ -30,6 +30,12 @@ public final class ClaudeService {
     public static final String SONNET = "claude-sonnet-5-5";
     public static final String HAIKU = "claude-haiku-5-5";
     public static final List<String> MODELS = List.of(OPUS, SONNET, HAIKU);
+    /**
+     * The context window of every model of {@link #MODELS} (input and output of one request together): a million
+     * tokens. With it the provider takes up to {@value AiPdfs#MAX_PAGES} PDF pages a request (100 below a million).
+     * A model added to {@link #MODELS} with a smaller window needs this and {@link AiPdfLimitsCheck} changed.
+     */
+    public static final long CONTEXT_WINDOW_TOKENS = 1_000_000;
 
     /** The efforts {@code qb.ai.effort} may name: thinking cannot be switched off on Opus 5.5, only made shallower. */
     public static final List<String> EFFORTS = List.of("low", "medium", "high");

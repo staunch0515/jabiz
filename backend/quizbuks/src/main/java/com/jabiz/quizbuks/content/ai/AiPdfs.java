@@ -5,7 +5,8 @@ package com.jabiz.quizbuks.content.ai;
  * {@code quizbuks.ai.pdf.max-bytes} each ({@value #DEFAULT_MAX_BYTES} bytes unless configured, at most
  * {@link AiQuestionsJob#MAX_PDF_BYTES}; checked by the request, and by the platform against the job type) and
  * {@code quizbuks.ai.pdf.max-pages} pages all together ({@value #DEFAULT_MAX_PAGES} unless configured, at most
- * {@value #MAX_PAGES}, the provider's own limit).
+ * {@value #MAX_PAGES}, the provider's own limit, and only as many as fit the models' context window:
+ * {@link AiPdfLimitsCheck}).
  *
  * <p><b>No PDF is parsed on the server</b> (Q8b review H1, H2): a sponsor's file can be built to expand without bound
  * in a parser's memory, or to claim fewer pages than it has. The pages are not known when the request is made, so the

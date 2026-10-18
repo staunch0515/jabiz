@@ -90,7 +90,9 @@ abstract class AiItSupport extends LegalItSupport {
         }
         Matcher m = COUNT.matcher(user);
         int count = m.find() ? Integer.parseInt(m.group(1)) : 1;
-        return answer(body.get("model").asString(), "end_turn", questions(count), 1200, 800);
+        // A request with documents is billed what it was counted (Q8b re-review L-f), as the provider's would be.
+        long in = documents(body).isEmpty() ? 1200 : countOf(body);
+        return answer(body.get("model").asString(), "end_turn", questions(count), in, 800);
     }
 
     /** The text block of a request's user message (after its documents, when it has any). */

@@ -30,6 +30,7 @@
 - [ ] 正式的 `ANTHROPIC_API_KEY` 只在密钥库，Anthropic Console 的工作区月支出上限已设；`qb.ai.model`、`qb.ai.effort` 与限额按预算以受控变更确认
 - [ ] `qb.ai.enabled` 在上面三项完成后才开启（四眼）；开启后用一个测试商家生成、校对、加入一次，`/qb/ai` 显示用量
 - [ ] **封面（Q8b）**：用一个测试商家以中文、日文、英文标题各生成一次封面，确认三张候选图的文字没有缺字（`JABIZ_REPORTS_PDF_FONTS` 的字体在镜像中）、选定后成为模版封面；需求方确认图库的风格（A-4 选 A：配色、版式、图形；要插画或照片风格须改选 B，另一家提供方与密钥）
+- [ ] **PDF 的计数（Q8b，复审 L-g）**：开启 PDF 资料之前，以正式的密钥手动调用一次真实的 `POST /v1/messages/count_tokens`，请求与作业发送的相同（带 `thinking`、`output_config` 的 effort 与结构化输出的 Schema、一个文档块），确认它接受这些字段并返回 `input_tokens`；再以一个加密的 PDF 与一个超过页数的请求各试一次，把提供方 400 的原文与 `ClaudeErrors` 的匹配对照（对不上即改匹配或记下）
 - [ ] **PDF 资料（Q8b）**：以一份真实的多页 PDF 资料生成一次题目，记录实际的输入 Token 与每页 Token，确认 `QB_AI_PDF_MAX_PAGES` 与 `qb.ai.sponsor.monthly-tokens` 的取值（带 PDF 的请求按页数上限预留月 Token，`operations.md` §7.8）；AI 说明的正式文本写明 PDF 资料的原文件会发送给 AI 提供方
 
 ## Stripe

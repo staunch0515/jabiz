@@ -839,8 +839,7 @@ public final class AiProcesses {
         Object reserved = params(job).get("reservedInputTokens");
         long perAttempt = reserved instanceof Number n ? n.longValue()
             : AiLimits.inputEstimate(QuizEditing.number(job.get("inputBytes")));
-        long in = Math.min(estimate, AiQuestionsJob.ATTEMPTS * perAttempt);
-        ClaudeApi.Usage usage = new ClaudeApi.Usage(in, estimate - in);
+        ClaudeApi.Usage usage = stoppedUsage(job.get("model"), estimate, perAttempt);
         BigDecimal cost = AiCost.of(job.get("model"), null, usage, settings(ctx).price());
         Map<String, Object> values = finished(usage, cost, null, input.at());
         if (QbAi.QUEUED.equals(job.get("status"))) {
@@ -1223,6 +1222,18 @@ public final class AiProcesses {
     }
 
     @SuppressWarnings("unchecked")
+    /**
+     * What a job stopped at the platform is charged: every attempt's reserved input ({@code perAttempt}) within its
+     * estimate, the rest as output. For a model with a long-prompt rate, attempts whose input is above
+     * {@value ClaudeCalls#LONG_PROMPT_FROM} tokens are priced at it, as their calls would have been (Q8b re-review L-a).
+     */
+    static ClaudeApi.Usage stoppedUsage(String model, long estimate, long perAttempt) {
+        long in = Math.min(estimate, AiQuestionsJob.ATTEMPTS * perAttempt);
+        ClaudeApi.Usage usage = new ClaudeApi.Usage(in, estimate - in);
+        return AiCost.hasLongPromptRate(model) && perAttempt > ClaudeCalls.LONG_PROMPT_FROM
+            ? usage.asLongPrompt() : usage;
+    }
+
     static Map<String, Object> params(EntityInstance job) {
         return JSON.readValue(String.valueOf((Object) job.get("params")), Map.class);
     }

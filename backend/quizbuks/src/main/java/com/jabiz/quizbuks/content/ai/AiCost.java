@@ -66,8 +66,9 @@ public final class AiCost {
         Price requested = known(model) != null ? known(model) : fallback;
         long fallbackIn = usage.fallbackInputTokens();
         long fallbackOut = usage.fallbackOutputTokens();
-        long longIn = usage.longPromptInputTokens();
-        long longOut = usage.longPromptOutputTokens();
+        // At most the requested model's own part: a fallback token is never also a long-prompt one (review L-b).
+        long longIn = Math.min(usage.longPromptInputTokens(), Math.max(0, usage.inputTokens() - fallbackIn));
+        long longOut = Math.min(usage.longPromptOutputTokens(), Math.max(0, usage.outputTokens() - fallbackOut));
         Price fellBack = fallbackIn == 0 && fallbackOut == 0 ? requested
             : servedModel != null && !servedModel.equals(model) && known(servedModel) != null ? known(servedModel)
             : FALLBACK;
@@ -75,6 +76,8 @@ public final class AiCost {
         if (requested == null || fellBack == null || longPrompt == null) {
             return null;
         }
+        // Three disjoint parts, each token priced once: the requested model's at its price, the fallback's at the
+        // fallback's, and the requested model's calls at the long-prompt rate.
         BigDecimal total = requested.input().multiply(BigDecimal.valueOf(
                 Math.max(0, usage.inputTokens() - fallbackIn - longIn)))
             .add(requested.output().multiply(BigDecimal.valueOf(Math.max(0, usage.outputTokens() - fallbackOut
