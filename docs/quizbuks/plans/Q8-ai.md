@@ -360,7 +360,7 @@
   - 处理器（`ClaudeQuestionWriter`）经上下文读文件、以 PDFBox（新增依赖 `org.apache.pdfbox:pdfbox:3.0.5`，与平台同版本）数页：合计超过 `quizbuks.ai.pdf.max-pages`（缺省 100，上限 600，`QB_AI_PDF_MAX_PAGES`）即 `QB_AI_PDF_TOO_LONG`，有密码、读不出或没有页即 `QB_AI_PDF_UNREADABLE`，都在发送之前、不计费；
     PDF 以文档块（base64，标题 `Material <no>`）放在请求文字之前，资料的 JSON 带 `"document": "Material <no>"`，系统提示说明文档同样只是数据。
   - **预估**：请求时还不知道页数，带 PDF 的请求按页数上限预留：`AiLimits.estimate(输入字节, max_tokens, 页数)` = 3 × (文字输入 + 页数 × 5 000 + 所要的输出)，每页 5 000 Token（`ClaudeApi.TOKENS_PER_PDF_PAGE`：提供方说明每页文字 1 500–3 000 Token，另加页面图像约 1 600）；没有回答的尝试按实际页数计入（`ClaudeApi.unanswered`）。
-  - `AiCost`：Haiku 5.5 一次请求超过 10 万输入 Token（按尝试平均）时按长提示的价格（0.50 / 2.50 美元）估算。
+  - `AiCost`：最小的模型一次请求超过 10 万输入 Token（按尝试平均）时按长提示的价格（0.50 / 2.50 美元）估算。
 - **ArchUnit**：`ArchitectureTest` 加入平台的 `handlersReadFilesThroughTheirContext`（处理器与它经应用自己的类用到的类都不依赖 `com.jabiz.runtime.file`）。
 - **本地桩**：`tools/quizbuks/claude-stub` 对"Number of covers: 3"回答 3 个图库内的设计，接受文档块（不读），输入用量至多记 5 万；IT 的桩（`AiItSupport`）同样回答封面并能取出请求的文字块与文档块。
 
@@ -390,7 +390,7 @@
 
 ### 测试
 
-- 单元：`AiCoversTest`（图库与设计的检查、提示与 Schema、每种配色 × 版式都画成 1200 × 630 的 PNG 且同一设计同一张图、断词、处理器把保留的设计画成作业文件、停机与画不出的标题不调用）、`AiPdfsTest`（数页、密码、读不出、页数上限、文档块在文字之前且是原样字节、没有回答时按页计入、带 PDF 的预估、Haiku 长提示的价格）。
+- 单元：`AiCoversTest`（图库与设计的检查、提示与 Schema、每种配色 × 版式都画成 1200 × 630 的 PNG 且同一设计同一张图、断词、处理器把保留的设计画成作业文件、停机与画不出的标题不调用）、`AiPdfsTest`（数页、密码、读不出、页数上限、文档块在文字之前且是原样字节、没有回答时按页计入、带 PDF 的预估、最小模型长提示的价格）。
 - IT（真实 PostgreSQL、本地桩）：`AiCoverIT`（5 个：画出的图以商家为上传者按图片策略登记、1200 × 630 的 PNG、平台记下作业产生的文件；发送的只有标题与简介；模板按种类；选定经模版编辑写入、`aiGenerated`、只能选一次；未选的图由清扫删除、选定的保留；别人与别的模版 404、种类不符 422、过时的 revision、候选号越界 400；丢弃与过期清空引用、过期后的图被清扫；失败的作业不存文件、图库外与过长的设计被丢弃、只剩一个也可用；画不出的标题不调用不计费；封面与题目共用限额、AI 说明、权限）、
   `AiPdfIT`（2 个：PDF 作为文件输入登记并以文档块原样发送、预估按页数上限；过大 422 且不登记作业、页数过多 / 有密码 / 读不出的作业不发送不计费）；`AiQuestionsIT` 的输入上限用例改为 5 篇长文章（约 300 KB），2 篇（120 KB）现在可以发送。
 - Vitest：`ai.test.tsx` 加封面面板（对话框与 AI 说明、按种类读、选定为模版编辑、纯文本、失败 / 过期 / 丢弃、读候选）、PDF 资料的说明与大小、亮暗两种外观的 axe；后台扩展的种类。候选图的 `alt` 为"封面 n：文字"（`Thumbnail` 加可选的 `alt`，列表中的封面仍是装饰）。

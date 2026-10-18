@@ -24,7 +24,7 @@ public final class AiCost {
     private static final Map<String, Price> PRICES = Map.of(
         ClaudeService.OPUS, Price.of("4", "20"),
         ClaudeService.SONNET, Price.of("2", "10"),
-        // Up to 100,000 input tokens a request; above (PDF materials, Q8b) HAIKU_LONG.
+        // Up to 100,000 input tokens a request; above (PDF materials, Q8b) the long prompts' price, HAIKU_LONG.
         ClaudeService.HAIKU, Price.of("0.10", "0.50"),
         "claude-opus-5", Price.of("5", "25"),
         "claude-opus-4-8", Price.of("5", "25"));
@@ -37,13 +37,14 @@ public final class AiCost {
 
     private static final BigDecimal MILLION = BigDecimal.valueOf(1_000_000);
 
-    /** Haiku 5.5's price of a request of more than {@value #HAIKU_LONG_FROM} input tokens. */
+    /** The smallest model's price of a request of more than {@value #HAIKU_LONG_FROM} input tokens. */
     private static final Price HAIKU_LONG = Price.of("0.50", "2.50");
     static final long HAIKU_LONG_FROM = 100_000;
 
     /**
-     * As {@link #of(String, String, ClaudeApi.Usage, Price)}, knowing how many attempts the tokens came from: a Haiku
-     * request of more than {@value #HAIKU_LONG_FROM} input tokens on average is priced at the long prompts' price.
+     * As {@link #of(String, String, ClaudeApi.Usage, Price)}, knowing how many attempts the tokens came from: a request
+     * of the smallest model of more than {@value #HAIKU_LONG_FROM} input tokens on average is priced at the long
+     * prompts' price.
      */
     public static BigDecimal of(String model, String servedModel, ClaudeApi.Usage usage, Price fallback,
         Integer attempts) {
