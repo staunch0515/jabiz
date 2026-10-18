@@ -373,7 +373,7 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 | `qb.app.inbox` | 个人消息 ∪ 匹配的公告，带未读 | `qb.me` |
 | `qb.sponsor.transactions` / `qb.sponsor.transaction-summary` | 商家交易明细与汇总（M-50 – M-52，Q9b，`plans/Q9b-sponsor-transactions.md`）：本人发布的奖励（已支付 = 已完成、待支付 = 处理中；完成但无奖励的不是交易）∪ 本人的充值（已支付 = 已完成、开立中 = 处理中、过期或失败 = 失败）。答题人只以资料的显示名出现，不读作答与结果、不给邮箱与用户编号（按用户筛选用 `userKey` = md5(商家编号 : 用户编号)：不是用户编号，同一答题人在每个商家处的键不同；它不是秘密，知道两个编号的人都能算出）；筛选全部是参数（类型、状态、发布、用户、期间、关键字），汇总只多一层聚合、条件相同，列表、汇总与导出因此一致。汇总按类型分开：奖励（支出）的已支付与待支付，充值（收入）的已到账（扣除退款）、退款或扣回、处理中与失败；两者的金额从不相加，只有笔数是总计 | `qb.sponsor.finance.read` |
 | `qb.sponsor.publications` | M-34 | `qb.publication.write` |
-| `qb.sponsor.dashboard` / `qb.sponsor.analytics.trend` / `.top` / `.overview` / `.questions` | 商家分析（Q9e，`plans/Q9e-analytics.md`，口径 D-Q9e-1）：仪表盘一行（各状态的发布数、正在答题、今日支出、可用余额与待支付、有上限的进行中发布的剩余预算；实时取计数，今日 = 部署时区 `jabiz.fiscal-year-zone` 的今天；今日支出 = 任务最近一次运行之后的增量（计数 − 游标）加今天的桶，任务没见过的发布只计今天上架的）；按小时（UTC）或按日（部署时区）的趋势，缺的桶补零、至多 400 个；近 7 天完成数排行；一个发布的概览（累计人数取任务的快照、随任务每 10 分钟变化而不是随每次答题，Q9e1 评审 M1；完成率、漏斗与流失最大的一段、平均用时与超时人数、App 的四个窗口）；每题的正确率与难度（≥ 80 % 易、≥ 50 % 中、其余难）。全部只经限本人的卡片视图 `sponsor:QbPublicationCard`（普通表、按 `sponsor_id` 索引读，不扫时态的发布历史，Q9e1 评审 M2）；可推出个人作答的数字（每题、平均用时、超时）只在至少 k（`qb.stats.min-group`，缺省 5、下限 3，SQL 中 `greatest(3, …)`）个完成时给出、只在新增至少 k 个后变化；人数不受 k 约束（E-4）。导出经平台 `POST /api/queries/{id}/export`（只有汇总） | `qb.stats.read` |
+| `qb.sponsor.dashboard` / `qb.sponsor.analytics.trend` / `.trend-totals` / `.top` / `.overview` / `.questions` | 商家分析（Q9e；`.trend-totals` 是同样参数下趋势的合计（Q9e2 评审 L1，页面不自己加），趋势与概览都带 `zone`（Q9e2 评审 M2）；`plans/Q9e-analytics.md`，口径 D-Q9e-1）：仪表盘一行（各状态的发布数、正在答题、今日支出、可用余额与待支付、有上限的进行中发布的剩余预算；实时取计数，今日 = 部署时区 `jabiz.fiscal-year-zone` 的今天；今日支出 = 任务最近一次运行之后的增量（计数 − 游标）加今天的桶，任务没见过的发布只计今天上架的）；按小时（UTC）或按日（部署时区）的趋势，缺的桶补零、至多 400 个；近 7 天完成数排行；一个发布的概览（累计人数取任务的快照、随任务每 10 分钟变化而不是随每次答题，Q9e1 评审 M1；完成率、漏斗与流失最大的一段、平均用时与超时人数、App 的四个窗口）；每题的正确率与难度（≥ 80 % 易、≥ 50 % 中、其余难）。全部只经限本人的卡片视图 `sponsor:QbPublicationCard`（普通表、按 `sponsor_id` 索引读，不扫时态的发布历史，Q9e1 评审 M2）；可推出个人作答的数字（每题、平均用时、超时）只在至少 k（`qb.stats.min-group`，缺省 5、下限 3，SQL 中 `greatest(3, …)`）个完成时给出、只在新增至少 k 个后变化；人数不受 k 约束（E-4）。导出经平台 `POST /api/queries/{id}/export`（只有汇总） | `qb.stats.read` |
 | `qb.system.analytics-items` / `-state` / `-attempts` / `-question-stats` | 分析任务的取数（Q9e）：逐项任务的项（按发布编号的块、结束后的重算、最后一项运行记录）；每块一条语句读两侧计数、游标、新增浏览与要加的小时桶；水位线之后、滞后 5 分钟的已完成会话按题汇总（每块至多 `quizbuks.analytics.max-attempts-per-chunk` 个；结束 30 分钟且无进行中时整体重算）；公开的题目统计 | `qb.stats.system` |
 | `qb.admin.attempts` / `qb.admin.wallets` | 全部会话（P-01 的答题历史、支持查询，不含金额）；商家钱包的余额与待支付（Q5） | `qb.admin.users.read` / `qb.admin.finance.read` |
 | `qb.admin.attempt-rewards` / `qb.admin.publication-funds` | 会话的奖励、抽成与分录（P-01 的资金部分）；发布的商家资金（预算不足、待支付）。Q9a 从上两个模板中分出，资金只给财务 | `qb.admin.finance.read` |
@@ -415,6 +415,9 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 - 会话只在标签页中（`persistence: tab`），闲置 30 分钟锁定（缺省 Q12）；不提供 Google 登录（Q2-16）。未入驻通过的商家进入 `/onboarding`。
 - 内容工坊是最重的页面：题目与选项的编辑、排序、图片、版本列表；发布向导三步。
 - 钱包页（Q9d）：已到账的充值行有"收据"：首次以当前界面语言签发（`QB_TOPUP_RECEIPT_ISSUE`），之后下载同一份存档 PDF。
+- 分析（Q9e2，`sponsor/src/analytics/`）：概览（`/dashboard`，入驻通过后）显示指标卡（各状态的发布数、正在答题、今日支出、可用余额与待支付、剩余预算；AI 用量卡留给 Q8a）、近 7 天的趋势（完成人数折线与支出柱，上下两个小图，不用双 Y 轴）与近 7 天热门发布前 5；
+  发布分析页 `/publications/<id>/analytics`（发布页的"分析"）显示概览、漏斗（流失最大的一段以徽标、斜纹与文字标出）、过去 24 小时（按小时）/ 过去 7 天（按天）的趋势与 App 的四个窗口、每题正确率与难度（不足 k 时注明"至少 k 人作答后显示"）与导出（趋势、概览、题目的 CSV 与 Excel）。
+  每个图表有名称与合计的文字、下方可展开的数据表；颜色只用 `--chart-1` / `--chart-2`；时刻与日期按任务记下的部署时区显示（不按浏览器）；每 60 秒与回到前台时重读，并注明"每 10 分钟更新，最近更新 …"。
 - 条款与帮助（Q7b）：侧栏"帮助"、页脚的商家条款、隐私政策与特定商取引法表记；入驻页同意所示版本；已申请而须重新同意时整页显示同意提示。
 
 ### 7.3 管理员后台（`/admin/`）

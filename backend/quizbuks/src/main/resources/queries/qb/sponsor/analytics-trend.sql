@@ -23,6 +23,7 @@ results:
   winners:     { kind: { type: numeric, precision: 12, scale: 0 } }
   spent:       { kind: { type: monetary, currency: JPY, scale: 0 } }
   gap:         { kind: { type: bool } }
+  zone:        { from: QbStatsRun.zone }
 list:
   sorts: [bucketStart]
   defaultSort: { field: bucketStart, asc: true }
@@ -35,6 +36,7 @@ permissions: [qb.stats.read]
 -- of "from"; DAY: the days of the deployment's zone (jabiz.fiscal-year-zone, recorded by the job: D-Q9e-3) from the day
 -- of "from". At most 400 buckets; the hours are whole, so a zone of whole hours divides them exactly. day is the
 -- zone's date of the bucket's start (for HOUR as well). gap: a bucket holds increments of a time the job did not run.
+-- zone: the zone the days are of (UTC before the job's first run), for the page to label the hours and days.
 WITH tz AS (
     SELECT coalesce(max(r.{{QbStatsRun.zone}}), 'UTC') AS z
     FROM {{QbStatsRun}} r
@@ -82,7 +84,8 @@ SELECT
     CAST(coalesce(sum(h.v_passes), 0) AS numeric(12, 0))          AS passes,
     CAST(coalesce(sum(h.v_winners), 0) AS numeric(12, 0))         AS winners,
     coalesce(sum(h.v_spent), 0)                                   AS spent,
-    coalesce(bool_or(h.v_gap), false)                             AS gap
+    coalesce(bool_or(h.v_gap), false)                             AS gap,
+    CAST(tz.z AS varchar(64))                                     AS zone
 FROM slots s
 CROSS JOIN tz
 LEFT JOIN hours h ON h.v_hour >= s.slot_start AND h.v_hour < s.slot_end

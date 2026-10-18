@@ -325,10 +325,24 @@ class AnalyticsIT extends AnalyticsItSupport {
         assertThat(count(days.get(1).get("spent"))).isEqualTo(100);
         assertThat(count(days.get(2).get("completions"))).isEqualTo(1);
         assertThat(count(days.get(2).get("spent"))).isEqualTo(10);
+        // The zone the days are of comes with them, and the totals are the server's (Q9e2 review M2, L1).
+        assertThat(days).extracting(row -> row.get("zone")).containsOnly("Asia/Tokyo");
+        Map<String, Object> totals = trendTotals(sponsorToken(sponsor), publication, fourteen.minus(Duration.ofDays(1)),
+            fifteen.plus(Duration.ofDays(1)), "DAY");
+        assertThat(count(totals.get("completions"))).isEqualTo(2);
+        assertThat(count(totals.get("spent"))).isEqualTo(110);
+        assertThat(totals).containsEntry("zone", "Asia/Tokyo");
+        assertThat(instant(totals.get("periodStart"))).isEqualTo(instant(days.get(0).get("bucketStart")));
+        assertThat(instant(totals.get("periodEnd"))).isEqualTo(fifteen.plus(Duration.ofDays(1)));
+        assertThat(overview(sponsorToken(sponsor), publication)).containsEntry("zone", "Asia/Tokyo");
         // By hour: the UTC hours, each with the Tokyo date of its start.
         List<Map<String, Object>> hours = trend(sponsorToken(sponsor), publication, fourteen, fifteen.plus(Duration.ofHours(1)),
             "HOUR");
         assertThat(hours).extracting(row -> count(row.get("completions"))).containsExactly(1L, 1L);
+        assertThat(count(trendTotals(sponsorToken(sponsor), publication, fourteen, fifteen.plus(Duration.ofHours(1)),
+            "HOUR").get("completions"))).isEqualTo(2);
+        assertThat(count(trendTotals(sponsorToken(sponsor), publication, fifteen, fifteen.plus(Duration.ofHours(1)),
+            "HOUR").get("completions"))).isEqualTo(1);
         assertThat(hours).extracting(row -> LocalDate.parse(String.valueOf(row.get("day"))))
             .containsExactly(day, day.plusDays(1));
         // Today starts at midnight in Tokyo: before it the day's spending is 100, after it 10.
@@ -465,6 +479,13 @@ class AnalyticsIT extends AnalyticsItSupport {
             .satisfies(row -> assertThat(counts(row)).containsOnly(0L));
         assertThat(trend(sponsorToken(other), null, h, h.plus(Duration.ofHours(1)), "HOUR")).singleElement()
             .satisfies(row -> assertThat(counts(row)).containsOnly(0L));
+        for (String asked : java.util.Arrays.asList(publication, null)) {
+            Map<String, Object> theirs = trendTotals(sponsorToken(other), asked, h, h.plus(Duration.ofHours(1)), "HOUR");
+            assertThat(List.of(count(theirs.get("views")), count(theirs.get("starts")), count(theirs.get("completions")),
+                count(theirs.get("spent")))).containsOnly(0L);
+        }
+        assertThat(count(trendTotals(sponsorToken(sponsor), publication, h, h.plus(Duration.ofHours(1)), "HOUR")
+            .get("completions"))).isEqualTo(3);
         assertThat(rows(TOP, sponsorToken(other), Map.of("at", h.plus(Duration.ofMinutes(11)).toString()))).isEmpty();
         Map<String, Object> board = dashboard(sponsorToken(other), h.plus(Duration.ofMinutes(11)));
         assertThat(List.of(count(board.get("live")), count(board.get("answering")), count(board.get("spentToday")),

@@ -159,11 +159,13 @@ public class AnalyticsConfig {
      * Every ten minutes at :00, :10, … (requirement 6.1: the analytics page says so), one transaction per item
      * (platform decision D42, review M3): the chunks of the publications to read, the recounts, and the run's record
      * last. A failing item is retried by later runs (the platform's backoff) and holds up nothing else; a missed run is
-     * made up by the next, whose increments go to the previous run's hour marked as a gap.
+     * made up by the next, whose increments go to the previous run's hour marked as a gap. Only the end-to-end tests
+     * run it more often ({@link AnalyticsLimits#RUN_CRON_SETTING}).
      */
     @Bean
-    JobDefinition<AnalyticsJob.ItemInput> qbAnalyticsJob() {
-        return JobDefinition.forEach(AnalyticsJob.JOB, "0 */10 * * * *", ZoneOffset.UTC,
+    JobDefinition<AnalyticsJob.ItemInput> qbAnalyticsJob(
+        @Value("${" + AnalyticsLimits.RUN_CRON_SETTING + ":" + AnalyticsLimits.RUN_CRON + "}") String cron) {
+        return JobDefinition.forEach(AnalyticsJob.JOB, cron, ZoneOffset.UTC,
                 JobItems.template(AnalyticsJob.ITEMS_TEMPLATE, at -> AnalyticsJob.itemParams(at, chunkSize),
                     "itemKey"),
                 item, AnalyticsJob::input)

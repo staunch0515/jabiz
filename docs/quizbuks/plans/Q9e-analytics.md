@@ -310,3 +310,90 @@
 - **水位线在上限处并列**：`AnalyticsJobIT` 断言五个会话的提交时刻相同、上限 3 切在并列之中，按 `(submittedAt, attemptId)` 每个恰读一次。
 - **Info 审计字节**：游标的 `questions` 标为 `auditMasked`；`AnalyticsPerfIT` 打印审计字节：每行约 180–330 字节，最坏的每天约 170 万行约 0.3–0.6 GB / 天（评审按未遮蔽估约 0.7 GB / 天），见 `perf/Q9e-analytics.md` §3。
 - 结果 JSON 的读取加了 `IS JSON ARRAY` 与 `jsonb_typeof` 的防护：一行坏的 `result` 不使整块失败。
+
+## 实施记录（Q9e2，2026-10-18）
+
+分支 `1.2/quizbuks-9e2-analytics-pages`，自 `origin/1.2/quizbuks-9e1-analytics-data`（35d97d3）。只改 `.jabiz-app-paths` 中的路径；没有新迁移。
+
+### 合并
+
+- 先以合并提交合入 `origin/1.2/quizbuks`（Q7b #176）。冲突都是"两边各加一节"：应用规则、设计、参数（`qb.stats.min-group` 与 `qb.support.email` 并列）与三语消息两边都保留。
+  `QB_SETUP` 两边都多建了行，场景中之后生成的编号与各会话的选项打乱再次改变：`play.yml`、`payout.yml`、`topup.yml` 的作答位置按新的顺序改写（意图不变），`setup.yml` 的 `paramsCreated` 含两个参数，快照更新；九个场景全部通过。
+- **迁移编号照统一的顺序**：Q7b V12、Q7a V13、Q9e1 V14。Q7a 尚未合入，所以本分支上 V14 之前没有 V13；这没有问题——Flyway 只在部署时要求顺序（Q7a 必须在 Q9e 部署之前合入，否则 V13 会成为"已应用版本之前的新迁移"，部署时需 `outOfOrder` 或调整），记入此处供合并 Q7a 时检查。
+- Q9e1 的评审修订（48478c4：概览的人数取任务的快照；五个模板改经卡片视图 `sponsor:QbPublicationCard`；任务改为逐项的 `QB_ANALYTICS_ITEM`）以合并提交合入（见下面"评审修订的合并"）。
+
+### 实现（`quizbuks-web/sponsor/src/analytics/`）
+
+- `ids.ts`（五个模板名）、`api.ts`（手写类型与转换、`trendParams`、读取、导出、按部署时区的标签）、`hooks.ts`（TanStack Query：每 60 秒与回到前台时重读，"现在"取 `qb/legal.ts` 的 `minuteNow()`，按服务端时钟）、
+  `charts.tsx`（趋势的两张小图与 `DataDisclosure`）、`Funnel.tsx`、`Metric.tsx`、`DashboardCharts.tsx`、`PublicationAnalyticsPage.tsx`、`ExportButtons.tsx`、`messages.ts`（三语）。
+- **仪表盘**（`pages/DashboardPage.tsx`，入驻通过后；未通过时的提示不变）：发布数（进行中 / 暂停 / 预算不足）、正在答题（实时）、今日支出（"自 00:00（Asia/Tokyo）起"）、可用余额、待支付、剩余预算；AI 用量的位置留空（注释，Q8a 加入）；
+  近 7 天的完成人数折线与支出柱（上下两张图，不用双 Y 轴）；近 7 天热门发布前 5（表格，名称链到分析页）；"每 10 分钟更新，最近更新 …（时区）"或"尚未统计"。
+- **发布分析页** `/publications/<id>/analytics`（发布页在交易链接旁加"分析"）：概览十项、漏斗、趋势（"过去 24 小时（按小时）/ 过去 7 天（按天）"，`SegmentedControl`）与 App 的四个窗口并列、题目表、导出。别人的发布或不存在即"不存在或不是你的"。
+- **k 的显示**：页面不判断 k，只照模板的 `suppressed` 与 `minGroup`：平均用时与超时显示"暂不显示"，并注明"至少 k 人完成后显示（目前 n 人）"；题目全部隐藏时一条说明（含"此后每再新增至少 k 人才更新"），每行"至少 k 人作答后显示"；
+  转换函数对 `suppressed` 的行一律丢弃数字（即使服务端误带了值）。
+- **漏斗**：四段横条（对第一段的比例），每段人数与相对上一段的比率；流失最大的一段（模板的 `largestDrop`）以三种方式标出——带图标的徽标、斜纹的条、"最大的流失是从'开始'到'完成'：50% 没有继续"的句子——不只靠颜色；浏览少于开始时注明。
+- **图表与无障碍**：只经 `@jabiz/ui` 的 `ChartContainer` / `ChartTooltip`（Recharts 3.10.1），颜色只用 `--chart-1`（完成人数、漏斗、正确率条）与 `--chart-2`（支出）；每张图 `role="img"` 与 `aria-label`（名称与合计，如"按天的完成人数：合计 21"），
+  图下是原生 `<details>` 的数据表（键盘与读屏可用）；漏斗的数据表同样；题目的正确率条是表格中的装饰（`aria-hidden`），数值是文字。dataviz 的校验：两色在亮色下全部通过；暗色下 `--chart-2`（#95de64）高于亮度带，
+  但两者各自单独成图（不需区分）、对背景的对比度通过，属于平台主题，未改。
+- **时区**：小时与日期一律按任务记下的 `zone`（`qb.sponsor.dashboard`；任务未运行时为 UTC，与模板一致），以 `Intl.DateTimeFormat` 的 `timeZone` 显示；按天的标签用模板给出的 `day`（部署时区的日期）；浏览器的时区从不使用。
+- **期间**：24 小时 = `from` 为 23 小时前、7 天 = 6 天前，`to` 为现在之后一分钟（使"现在"的桶总是最后一个，含整点时）；导出趋势带图表读到的同一组参数。
+- **导出**：趋势、概览、题目的 CSV 与 Excel，经平台的 `POST /api/queries/{id}/export`（`sessionFetch`），失败显示服务端的原因。
+- **e2e 的任务时刻**：任务原为固定的每 10 分钟；新增 `quizbuks.analytics.run-cron`（`QB_ANALYTICS_RUN_CRON`，缺省不变），CI 的 e2e 设为每分钟（第 15 秒）；正式模式或正式密钥下设成其他值即启动失败（`TransferScheduleCheck`，同 Q9c / Q9d 的两个开关，`TransferScheduleCheckTest`）。
+  `deploy/quizbuks/README.md` 与 `operations.md` §1.4 同步。
+
+### 与计划的偏离
+
+1. 漏斗用 HTML 的横条而不是 Recharts（每段的文字本身就是数据，条只是图形）；趋势用 Recharts。
+2. 概览的全部数字都是任务的快照（Q9e1 评审 M1），在概览标题旁注明一次"截至 {任务最近一次运行}"（模板的 `refreshedAt`）。仪表盘的"正在答题"与今日支出是实时的，标"实时"。
+3. 仪表盘对已通过的商家不再显示入驻的提示框，只留一行说明（`dashboard-status` 照旧，供既有 e2e）。
+4. 两个 SPA 的测试设置都加了 `configure({ asyncUtilTimeout: 5000 })`（App 的 `Play.test.tsx` 在高负载下以缺省的 1 秒超时失败过一次）。
+
+### 测试
+
+- Vitest：`analytics/api.test.ts`（期间参数、整点、东京的时与日、未知时区退回 UTC、补零、`suppressed` 丢弃数字、漏斗、地址）；`analytics/analytics.test.tsx`（仪表盘的指标卡、东京时间、图表名称与合计、数据表的展开与 7 行与暂停标记、
+  热门发布到分析页；尚未统计与什么也没发生；读不到时重试；分析页的概览、"截至"、不足 k 的隐藏与说明、漏斗的最大流失（徽标、句子、表格）、题目的隐藏与正确率和难度、浏览少于开始、24 小时 / 7 天切换与参数、导出三种与参数、导出失败、他人的发布、概览读不到）；
+  `analytics/messages.test.ts`（三语的键与占位符一致、非空、不写其他币种）。
+- e2e `analytics.spec.ts`：两人答对后等任务统计（每分钟），仪表盘的发布数、正在答题、今日支出、余额、时区、7 天、热门发布；分析页的人数、完成率、k 的隐藏、漏斗、题目、24 小时 / 7 天与数据表；导出的 CSV（8 行，完成合计 2，不含答题人）；
+  从发布页进入；另一商家以编号读概览与排行都读不到。
+- e2e `a11y.spec.ts`：仪表盘与发布分析页（含展开的数据表、按天），亮、暗，1280 与 390 px；axe 之前先等各模板的应答。
+
+### 验证
+
+- `./gradlew :quizbuks:check`（真实 PostgreSQL 16，本机实例、独立数据库）：597 个测试全部通过（含合并后的九个场景与 `TransferScheduleCheckTest`），`platformCheck` 0 个错误、72 个警告（Q7b 的合并带来的增量，本阶段没有新模板）。
+- 商家后台：`pnpm lint`、`pnpm typecheck`、`pnpm test`（23 个文件 149 个测试）；App：同上（21 个文件 133 个测试）；`pnpm app:check` 两个 SPA；`JABIZ_ADMIN_EXTENSION=../backend/quizbuks/admin-extension pnpm ext:check`（70 个测试）；两份 `src/qb/` 相同。
+- e2e（打包的 jar，独立端口与数据库，Mailpit 与 Stripe 桩，`QB_ANALYTICS_RUN_CRON` 每分钟）：50 个全部通过，含 `analytics.spec.ts` 与 `a11y.spec.ts` 的分析页（亮、暗）。
+  第一次运行时 axe 在 390 px 报 `scrollable-region-focusable`（窄屏上横向滚动的表格），已改为可聚焦的命名区域后通过。
+- 之后合并了 `origin/1.2/quizbuks-9e1-analytics-data` 上新的合并提交（其合并 1.2/quizbuks；`analytics.yml` 多发布一个提案），场景再次全部通过。
+
+### 未完成与已知问题
+
+- （已解决）Q9e1 的评审修订已合并，见"评审修订的合并"。
+- AI 用量卡由 Q8a 加入。
+
+### 评审修订的合并（Q9e1 48478c4）
+
+- 冲突：`AnalyticsConfig` 的任务定义取 Q9e1 的 `JobDefinition.forEach`（`qb.system.analytics-items` 的项、每项 `QB_ANALYTICS_ITEM`），本分支的 `quizbuks.analytics.run-cron`（`QB_ANALYTICS_RUN_CRON`）照旧作为它的 cron；设计 §6 取 Q9e1 的残余说明（只留一处"完成人数"）；计划把 Q9e1 的"评审修复"一节放在本记录之前。
+- 五个模板的列不变（只有 `minGroup` 的精度 3 → 9 位，页面按数读取，不受影响）；概览的"截至"改为整个概览一处（所有人数都是快照），Vitest 随之改；e2e 本来就先等任务统计再读概览。
+- 合并后重新运行（同样的独立数据库与端口）：`:quizbuks:check` 606 个测试全部通过、`platformCheck` 0 个错误 72 个警告；商家后台 149 个、App 133 个 Vitest 测试与 lint、typecheck；`app:check` 两个 SPA；`ext:check` 70 个；
+  e2e 50 个全部通过（`QB_ANALYTICS_RUN_CRON` 每分钟驱动新的逐项任务，`analytics.spec.ts` 与分析页的 axe 亮、暗都通过）。
+
+### 评审修订（Q9e2，独立评审 dc1c8d9）
+
+评审没有阻塞的问题；以下各项都已改正并有测试。
+
+- **M1 分析任务的时间是隐私控制**（概览是任务的快照，频率决定能把一个答题人的作答定位到多细）：`TransferScheduleCheck` 对 `quizbuks.analytics.run-cron` 的检查改为——缺省（每 10 分钟）以外的值**在任何环境**都要同时打开新的 e2e 开关 `quizbuks.e2e.enabled`（`QB_E2E_ENABLED`，缺省 `false`；正式模式或正式密钥下打开即启动失败），
+  **比每分钟更频繁的一律拒绝**（以 Spring 的 `CronExpression` 在两天内求两次运行的最短间隔），无效的 cron 也报错；正式模式下其他值照旧拒绝。CI 的 e2e 设 `QB_E2E_ENABLED=true`。
+  测试 `TransferScheduleCheckTest`（缺省总接受；每分钟只在开关打开且非正式模式时接受；每秒、每 30 秒、0 与 1 秒、10 与 40 秒都拒绝；最短间隔的计算；开关在正式模式下被拒）。`operations.md` §1.4 与 `deploy/quizbuks/README.md` 同步。
+- **M2 时刻可能按 UTC 显示而不注明**：概览与趋势的模板加 `zone` 列（任务记下的部署时区，任务未运行时为 UTC）；分析页不再读仪表盘取时区（也就不再每分钟重读整个仪表盘），时刻只按模板给出的时区显示，"截至 …""统计于 …""最近更新 …"都注明时区。`AnalyticsIT` 断言趋势、合计与概览的 `zone` 为 `Asia/Tokyo`。
+- **L1 页面自己相加**：新模板 `qb.sponsor.analytics.trend-totals`（同样的参数与同样的桶，写法同趋势、改时一起改）给出合计，图表的名称与数据表的合计行都取它；`AnalyticsIT` 断言它等于各桶之和、他人读到全零、权限矩阵同其他模板。
+  仪表盘的 7 天图（今天与之前 6 天的日历日）与热门发布（近 7 × 24 小时）窗口不同，两处各自注明。漏斗的流失比例 `1 - rate` 是页面唯一自己算的数（取自模板的比率），在 `funnelOf` 注明。
+- **L2** `toOverview` 在 `suppressed` 时丢弃平均用时与超时人数（同 `toQuestion`），`api.test.ts` 覆盖。
+- **L3** 完成数已到 k、但按时提交不足 k 时，平均用时的说明为"至少 k 人按时提交后显示"。
+- **L4** 分析页的"正在答题"改为"进行中"，并注明截至时刻（仪表盘的合计仍为实时的"正在答题"）。
+- **L5 文案**：日文的获奖者一律"当選者"（页面与后端消息）；"予算上限を設定した公開中の公開が対象です"、漏斗句"…「{from}」と「{to}」の間で、…"、App 窗口的说明改写；"预算不足 / Short of funds"与状态徽标一致为"钱包余额不足 / Wallet too low / ウォレット残高不足"（页面与后端消息）；
+  英文的"基于 n 个完成"用 i18next 的复数（`_one` / `_other`，中、日两键同文），数字另以 `n` 传入。`messages.test.ts` 另断言日文没有"受賞"、余额不足与发布页的用词相同。
+- **L6** `TransferScheduleCheck` 的 Javadoc 改为三个开关与分析的缺省。
+- **L7** Vitest 断言他人的发布既不读题目也不读趋势与合计；e2e `analytics.spec.ts` 另以另一商家打开同一地址，页面"不存在"，且除概览外不请求任何分析模板。
+- **小处**：24 小时的数据表中，每天的第一行带日期（跨过午夜的那一行）；趋势的合计行；支出的提示保留系列名（`formatter` 会替换整行，故自己写名称与金额），图例名改为按语言的名称；宽屏布局改为 `xl` 才分栏、App 窗口两列。
+- **验证**（独立数据库 `jabiz_test_q9e2` / `quizbuks_e2e_q9e2`、独立端口）：`:quizbuks:check` 608 个测试全部通过，`platformCheck` 0 个错误、72 个警告（没有新的警告）；商家后台 Vitest 152 个、App 133 个，两者 lint 与 typecheck；`app:check` 两个 SPA；`ext:check` 70 个；
+  e2e 50 个全部通过（`QB_ANALYTICS_RUN_CRON` 每分钟并 `QB_E2E_ENABLED=true`；含另一商家打开分析页的检查）。

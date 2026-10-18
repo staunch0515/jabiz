@@ -43,6 +43,7 @@ results:
   appCountedAt:     { from: QbPublicationStats.refreshedAt }
   shownAt:          { from: QbAnalyticsCursor.shownAt }
   refreshedAt:      { from: QbStatsRun.refreshedAt }
+  zone:             { from: QbStatsRun.zone }
 list:
   key: [publicationId]
 permissions: [qb.stats.read]
@@ -57,14 +58,15 @@ permissions: [qb.stats.read]
 -- the job's shown figures (stats.MinGroup: they change only after at least k new completions, the time after k new
 -- attempts submitted in time) and only over at least k of them: k is qb.stats.min-group if a whole number, else 5,
 -- never below 3, as in every analytics template. The App's four windows are its own counts (qb_publication_stats),
--- shown beside the trend as they are.
+-- shown beside the trend as they are. zone is the deployment's (recorded by the job; UTC before its first run): the
+-- page shows the times in it and says so.
 WITH params AS (
     SELECT greatest(3, coalesce(max(CASE WHEN p.{{SysParam.value}} ~ '^[0-9]{1,9}$'
                                          THEN CAST(p.{{SysParam.value}} AS int) END), 5)) AS k
     FROM {{SysParam}} p
     WHERE p.{{SysParam.paramKey}} = 'qb.stats.min-group'),
 run AS (
-    SELECT max(r.{{QbStatsRun.refreshedAt}}) AS refreshed
+    SELECT max(r.{{QbStatsRun.refreshedAt}}) AS refreshed, coalesce(max(r.{{QbStatsRun.zone}}), 'UTC') AS z
     FROM {{QbStatsRun}} r
     WHERE r.{{QbStatsRun.job}} = 'qb.analytics'),
 base AS (
@@ -129,7 +131,8 @@ SELECT
     w.{{QbPublicationStats.last30d}}                              AS last30d,
     w.{{QbPublicationStats.refreshedAt}}                          AS appCountedAt,
     f.x_at                                                        AS shownAt,
-    r.refreshed                                                   AS refreshedAt
+    r.refreshed                                                   AS refreshedAt,
+    CAST(r.z AS varchar(64))                                      AS zone
 FROM funnel f
 CROSS JOIN run r
 LEFT JOIN {{QbPublicationStats}} w ON w.{{QbPublicationStats.publicationId}} = f.pid

@@ -2,7 +2,7 @@ import '@testing-library/jest-dom/vitest'
 import { cleanup, configure } from '@testing-library/react'
 import { afterEach } from 'vitest'
 
-// The default of one second for findBy / waitFor is too short for the whole App rendered on a loaded machine.
+// A loaded machine renders slowly: the default second for findBy/waitFor made tests flaky.
 configure({ asyncUtilTimeout: 5000 })
 
 afterEach(() => cleanup())
