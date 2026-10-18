@@ -16,6 +16,9 @@ import com.jabiz.runtime.approval.ApprovalOutcome;
 import com.jabiz.runtime.approval.ApprovalProcesses;
 import com.jabiz.runtime.approval.RequireApproval;
 import com.jabiz.runtime.process.steps.LoadEntity;
+import com.jabiz.mail.MailRecipient;
+import com.jabiz.runtime.mail.SendMail;
+import com.jabiz.runtime.security.AuthMailTemplates;
 import com.jabiz.runtime.security.RefreshTokenStore;
 import com.jabiz.runtime.security.RevokeSessionsStep;
 import com.jabiz.runtime.security.SecurityEntities;
@@ -58,6 +61,7 @@ public class ProtectedChangeProcesses {
     public static final String ASSIGN_ROLE = "SEC_USER_ROLE_ASSIGN";
     public static final String ADD_PERMISSION = "SEC_ROLE_PERMISSION_ADD";
     public static final String LINK_IDENTITY = "SEC_USER_IDENTITY_LINK";
+    public static final String SET_EMAIL = "SEC_USER_EMAIL_SET";
     public static final String APPLY = "SEC_PROTECTED_CHANGE_APPLY";
 
     /** Context keys shared with the credential processes. */
@@ -70,6 +74,10 @@ public class ProtectedChangeProcesses {
 
     public record AddPermissionInput(@NotNull UUID roleId, @NotBlank @Size(max = 200) String permission,
         Instant effectiveTime, @NotBlank @Size(max = 500) String reason) {}
+
+    /** The address a user's mail goes to, from which their password can be reset (review M-b). */
+    public record SetEmailInput(@NotNull UUID userId, @NotBlank @Size(max = 320) String email,
+        @NotBlank @Size(max = 500) String reason) {}
 
     public record LinkIdentityInput(@NotNull UUID userId, @NotBlank @Size(max = 40) String provider,
         @NotBlank @Size(max = 255) String subject, @NotBlank @Size(max = 500) String reason) {}
@@ -99,6 +107,10 @@ public class ProtectedChangeProcesses {
     private static final String APPLIED_PASSWORD = "applied_password";
     /** The users an applied grant is for: their sessions end (review M3). */
     private static final String GRANTEES = "grantees";
+    /** The address an applied change of address replaced: told of the change (review M-b). */
+    private static final String OLD_ADDRESS = "old_address";
+    /** Same rule as {@code SecUser.email}. */
+    private static final java.util.regex.Pattern ADDRESS = java.util.regex.Pattern.compile("[^@ ]+@[^@ ]+[.][^@ ]+");
 
     /** The process that requests a change of {@code kind}. */
     public static String requestProcess(String kind) {
@@ -108,6 +120,7 @@ public class ProtectedChangeProcesses {
             case ProtectedChangeEntities.IDENTITY_LINK -> LINK_IDENTITY;
             case ProtectedChangeEntities.PASSWORD -> "SEC_USER_SET_PASSWORD";
             case ProtectedChangeEntities.MFA_RESET -> "SEC_MFA_RESET";
+            case ProtectedChangeEntities.EMAIL -> SET_EMAIL;
             default -> throw new IllegalArgumentException("Unknown protected change kind " + kind);
         };
     }
@@ -123,7 +136,7 @@ public class ProtectedChangeProcesses {
             // Taking over an account is approved by an administrator too (review H2), not by whoever may reset
             // passwords: ProtectedChangeDecisionCheck.covers asks the rest.
             case ProtectedChangeEntities.IDENTITY_LINK, ProtectedChangeEntities.PASSWORD,
-                ProtectedChangeEntities.MFA_RESET -> SecurityPermissions.USER_ROLE_WRITE;
+                ProtectedChangeEntities.MFA_RESET, ProtectedChangeEntities.EMAIL -> SecurityPermissions.USER_ROLE_WRITE;
             default -> throw new IllegalArgumentException("Unknown protected change kind " + kind);
         };
     }
@@ -219,7 +232,7 @@ public class ProtectedChangeProcesses {
         String kind = String.valueOf(change.get("kind"));
         Map<String, Object> content = new LinkedHashMap<>();
         for (String field : List.of("changeId", "kind", "userId", "roleId", "permission", "dataFrom", "dataTo",
-            "effectiveTime", "provider", "subject", "passwordHash", "mfaId", "gained", "affectedUsers",
+            "effectiveTime", "provider", "subject", "email", "passwordHash", "mfaId", "gained", "affectedUsers",
             "requestedBy", "reason")) {
             Object value = change.get(field);
             if (value != null) {
@@ -240,6 +253,9 @@ public class ProtectedChangeProcesses {
         if (change.get("permission") != null) {
             facts.put("permission", change.get("permission"));
         }
+        if (change.get("email") != null) {
+            facts.put("newAddress", change.get("email"));
+        }
         String gained = change.get("gained") == null ? "" : String.valueOf(change.get("gained"));
         if (!gained.isEmpty()) {
             facts.put("gained", fact(gained));
@@ -247,10 +263,11 @@ public class ProtectedChangeProcesses {
         if (described != null && !described.affected().isEmpty()) {
             facts.put("affected", fact(String.join(", ", described.affected())));
             facts.put("credentials", fact(String.join("; ", described.credentials())));
-            // Every change of their credentials, with who made it and when (the latest kept when too long).
-            String history = String.join(" | ", described.history());
-            facts.put("history", history.length() > HISTORY ? "..." + history.substring(history.length() - HISTORY + 3)
-                : history);
+            // Their addresses: who entered each, whether a mailed link proved it (review M-a).
+            facts.put("address", fact(String.join("; ", described.addresses()), ADDRESSES));
+            // Every change of their credentials, with who made it and when: each user's creation always kept, the
+            // middle left out when long (AssessProtectedChange.keepEnds).
+            facts.put("history", String.join(" | ", described.history()));
         }
         String reference = switch (kind) {
             case ProtectedChangeEntities.USER_ROLE -> user + " ← " + role + " (" + gained + ")";
@@ -264,11 +281,15 @@ public class ProtectedChangeProcesses {
             String.valueOf(change.get("requestedBy")), reference);
     }
 
-    /** The longest credential history in the facts (the column holds 20000 characters for all of them). */
-    private static final int HISTORY = 6000;
+    /** The longest addresses fact. */
+    private static final int ADDRESSES = 3000;
 
     private static String fact(String text) {
-        return text.length() > 500 ? text.substring(0, 497) + "..." : text;
+        return fact(text, 500);
+    }
+
+    private static String fact(String text, int limit) {
+        return text.length() > limit ? text.substring(0, limit - 3) + "..." : text;
     }
 
     /** The values of a comma-separated list (the gained permissions, the affected users), sorted. */
@@ -423,6 +444,46 @@ public class ProtectedChangeProcesses {
                 .compute("Answer", (metadata, ctx) -> ctx.put(OUTPUT,
                     output(ctx, ctx.contains(TARGET) ? ctx.get(TARGET) : null))));
 
+    public static final ProcessDefinition<SetEmailInput, ProtectedChangeOutput, ProcessContext> SET_EMAIL_PROCESS =
+        ProcessDefinition.define(SET_EMAIL, 1, SetEmailInput.class, ProtectedChangeOutput.class, ProcessContext.class,
+            pb -> pb
+                .description("Changes a user's address; for a holder of a protected permission (or of one waiting for"
+                    + " approval) it waits for another administrator's approval, and the old address is told.")
+                .permissions(SecurityPermissions.USER_WRITE)
+                .requiresMfa(MfaRequirement.ADMINISTRATION)
+                .actsOn(SecurityEntities.USER, USER_ID)
+                .contextFactory((start, input) -> {
+                    ProcessContext ctx = new ProcessContext(start);
+                    ctx.put(INPUT, input);
+                    ctx.put(USER_ID, input.userId());
+                    return ctx;
+                })
+                .outputMapper(ctx -> ctx.get(OUTPUT, ProtectedChangeOutput.class))
+                .step("Load the user", LoadEntity.by(SecurityEntities.USER_DATASET, USER_ID, USER))
+                .step("Assess the address", assess(ctx -> new ProtectedGrants.Draft(ProtectedChangeEntities.EMAIL,
+                    ctx.get(INPUT, SetEmailInput.class).userId(), null, null)))
+                .compute("Change or ask", (metadata, ctx) -> {
+                    SetEmailInput input = ctx.get(INPUT, SetEmailInput.class);
+                    String email = input.email().strip();
+                    if (!ADDRESS.matcher(email).matches()) {
+                        ctx.reject(new Violation("email", PlatformErrorCodes.INVALID_VALUE, "Not an e-mail address"));
+                        return;
+                    }
+                    EntityInstance user = ctx.get(USER, EntityInstance.class);
+                    Map<String, Object> values = new LinkedHashMap<>();
+                    values.put("kind", ProtectedChangeEntities.EMAIL);
+                    values.put("userId", input.userId());
+                    values.put("email", email);
+                    if (deferred(ctx, values, input.reason(), null, null, null)) {
+                        return;
+                    }
+                    ctx.changes().update(SecurityEntities.USER, user.id(), user.version(), Map.of("email", email));
+                    ctx.put(TARGET, user.id());
+                })
+                .step("Ask for approval", requireApproval())
+                .compute("Answer", (metadata, ctx) -> ctx.put(OUTPUT,
+                    output(ctx, ctx.contains(TARGET) ? ctx.get(TARGET) : null))));
+
     /** {@link #defer} after the checks a pending change needs at once (the written ones are the entity's own). */
     private static boolean deferred(ProcessContext ctx, Map<String, Object> values, String reason,
         Instant effectiveTime, Instant dataFrom, Instant dataTo) {
@@ -467,7 +528,13 @@ public class ProtectedChangeProcesses {
             .compute("Apply", (metadata, ctx) -> apply(ctx))
             .step("End the grantees' sessions", RevokeGrantedSessions.of(GRANTEES))
             .step("End the user's sessions", RevokeSessionsStep.class, new RevokeSessionsStep.Metadata(
-                LoadProtectedChange.USER, RefreshTokenStore.REASON_PASSWORD, ctx -> ctx.contains(APPLIED_PASSWORD))));
+                LoadProtectedChange.USER, RefreshTokenStore.REASON_PASSWORD, ctx -> ctx.contains(APPLIED_PASSWORD)))
+            .step("Tell the old address", SendMail.when(ctx -> ctx.contains(OLD_ADDRESS),
+                AuthMailTemplates.EMAIL_CHANGED_MAIL, ctx -> {
+                    EntityInstance user = ctx.get(LoadProtectedChange.USER, EntityInstance.class);
+                    return MailRecipient.user(user.id(), ctx.get(OLD_ADDRESS, String.class), null);
+                }, Map.of(AuthMailTemplates.ADDRESS, ctx -> ctx.get(LoadProtectedChange.CHANGE, EntityInstance.class)
+                    .get("email")))));
     }
 
     @SuppressWarnings("unchecked")
@@ -497,8 +564,11 @@ public class ProtectedChangeProcesses {
         String contentHash = com.jabiz.approval.ContentHash.of(approvalCase(values(change), names(ctx), null)
             .content());
         if (ApprovalEntities.REJECTED.equals(input.status())) {
-            if (contentHash.equals(input.contentHash())) {
-                finish(ctx, change, ProtectedChangeEntities.REJECTED, input.approverId(), null, null);
+            // As the request records it, not as the event says (review L-d): rejected, for this content, by whom.
+            LoadProtectedChange.Rejected rejected = ctx.contains(LoadProtectedChange.REJECTED)
+                ? ctx.get(LoadProtectedChange.REJECTED, LoadProtectedChange.Rejected.class) : null;
+            if (rejected != null && contentHash.equals(rejected.contentHash())) {
+                finish(ctx, change, ProtectedChangeEntities.REJECTED, rejected.by(), null, null);
             }
             return;
         }
@@ -543,6 +613,16 @@ public class ProtectedChangeProcesses {
                 ctx.changes().update(SecurityEntities.USER, user.id(), user.version(),
                     Map.of("passwordHash", change.get("passwordHash")));
                 ctx.put(APPLIED_PASSWORD, true);
+                target = user.id();
+            }
+            case ProtectedChangeEntities.EMAIL -> {
+                EntityInstance user = ctx.get(LoadProtectedChange.USER, EntityInstance.class);
+                grant = new ProtectedChangeGrant(SecurityEntities.USER, changeId, ctx.processSeqId());
+                ctx.changes().in(SecurityEntities.USER_DATASET).granted(grant).update(SecurityEntities.USER,
+                    user.id(), user.version(), Map.of("email", change.get("email")));
+                if (user.get("email") != null) {
+                    ctx.put(OLD_ADDRESS, user.get("email"));
+                }
                 target = user.id();
             }
             case ProtectedChangeEntities.MFA_RESET -> {
@@ -601,6 +681,11 @@ public class ProtectedChangeProcesses {
     @Bean
     ProcessDefinition<LinkIdentityInput, ProtectedChangeOutput, ProcessContext> secUserIdentityLinkProcess() {
         return LINK_IDENTITY_PROCESS;
+    }
+
+    @Bean
+    ProcessDefinition<SetEmailInput, ProtectedChangeOutput, ProcessContext> secUserEmailSetProcess() {
+        return SET_EMAIL_PROCESS;
     }
 
     @Bean

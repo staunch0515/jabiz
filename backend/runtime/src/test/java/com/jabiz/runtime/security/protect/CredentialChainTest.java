@@ -143,4 +143,103 @@ class CredentialChainTest {
         assertThat(judged().own()).isFalse();
         assertThat(judged().history().getFirst()).contains("created");
     }
+
+    private void versioned(long at, int versionNo, String actor, String process, String hash) {
+        events.add(new Event(at, Source.USER, null, false, hash, "u@example.com", "u@example.com", null, actor, null,
+            process, Instant.ofEpochSecond(at), versionNo, null));
+    }
+
+    private void factorVersion(String key, String actor, String process, String state) {
+        seq++;
+        events.add(new Event(seq, Source.MFA, key, false, null, null, null, null, actor, null, process,
+            Instant.ofEpochSecond(seq), (int) seq, state));
+    }
+
+    /**
+     * Review L-a (probe P3): restarting an enrolment writes a new secret on the same row. The administrator who knows
+     * the password signs in as the user and begins again: that secret is theirs, whatever the first version was.
+     */
+    @Test
+    void aSecondFactorIsJudgedAtItsLatestNewSecretNotItsFirstVersion() {
+        user(ANONYMOUS, "SPONSOR_SIGN_UP", "h1", "u@example.com", null);
+        user(ANONYMOUS, "SPONSOR_EMAIL_VERIFY", "h1", "u@example.com", "u@example.com");
+        factorVersion("m1", USER, "SEC_MFA_ENROLL_BEGIN", "s1|false");
+        user(ADMIN, "SEC_USER_SET_PASSWORD", "hA", "u@example.com", "u@example.com");
+        factorVersion("m1", USER, "SEC_MFA_ENROLL_BEGIN", "s2|false");
+        factorVersion("m1", USER, "SEC_MFA_ENROLL_CONFIRM", "s2|true");
+        user(ANONYMOUS, "SPONSOR_PASSWORD_RESET_CONFIRM", "h3", "u@example.com", "u@example.com");
+        Judgement judged = judged();
+        assertThat(judged.own()).isFalse();
+        assertThat(judged.history()).anySatisfy(line -> assertThat(line).contains("second factor set again, not own"));
+        // A confirmation alone, while clean, does not clean a secret someone else saw.
+        factorVersion("m1", USER, "SEC_MFA_ENROLL_CONFIRM", "s2|false");
+        factorVersion("m1", USER, "SEC_MFA_ENROLL_CONFIRM", "s2|true");
+        assertThat(judged().own()).isFalse();
+        // Begun again by the user while clean: own; a recovery code used later (same secret) changes nothing.
+        factorVersion("m1", USER, "SEC_MFA_ENROLL_BEGIN", "s3|false");
+        factorVersion("m1", USER, "SEC_MFA_ENROLL_CONFIRM", "s3|true");
+        factorVersion("m1", ANONYMOUS, "SPONSOR_MFA_VERIFY", "s3|true");
+        assertThat(judged().own()).isTrue();
+    }
+
+    /**
+     * Review L-b (probe P4): two transactions committed out of the order of their operations - the administrator's
+     * password is the current version though its operation came first. Not judged own.
+     */
+    @Test
+    void versionsOutOfTheOrderOfTheirOperationsAreNotOwn() {
+        versioned(1, 1, ANONYMOUS, "SPONSOR_SIGN_UP", "h1");
+        versioned(2, 2, ANONYMOUS, "SPONSOR_EMAIL_VERIFY", "h1");
+        versioned(6, 3, ANONYMOUS, "SPONSOR_PASSWORD_RESET_CONFIRM", "hB");
+        versioned(5, 4, ADMIN, "SEC_USER_SET_PASSWORD", "hA");
+        Judgement judged = judged();
+        assertThat(judged.own()).isFalse();
+        assertThat(judged.clean()).isFalse();
+        assertThat(judged.history().getLast()).contains("out of the order");
+        // In order, the same history is judged as it reads.
+        events.clear();
+        versioned(1, 1, ANONYMOUS, "SPONSOR_SIGN_UP", "h1");
+        versioned(5, 2, ADMIN, "SEC_USER_SET_PASSWORD", "hA");
+        versioned(6, 3, ANONYMOUS, "SPONSOR_PASSWORD_RESET_CONFIRM", "hB");
+        assertThat(judged().own()).isTrue();
+    }
+
+    /** Review M-a: who entered the current address, and whether a mailed link proved it. */
+    @Test
+    void theAddressIsDescribedWithWhoSetItAndItsProof() {
+        user(ADMIN, "SEC_USER_CREATE", "h1", "u@example.com", null);
+        assertThat(judged().address()).startsWith("u@example.com (entered by it-admin at ")
+            .endsWith(", not proven by mail)");
+        assertThat(judged().addressChangedByOther()).isFalse();
+        user(ANONYMOUS, "SPONSOR_PASSWORD_RESET_CONFIRM", "h2", "u@example.com", "u@example.com");
+        assertThat(judged().address()).contains("entered by it-admin").contains("proven by mail at");
+        assertThat(judged().email()).isEqualTo("u@example.com");
+        // Changed by another later (review P5): noted; the proof of the old address is gone.
+        user(ADMIN, "SEC_USER_UPDATE", "h2", "other@example.org", "u@example.com");
+        assertThat(judged().address()).startsWith("other@example.org (changed by it-admin at ")
+            .endsWith("not proven by mail)");
+        assertThat(judged().addressChangedByOther()).isTrue();
+        assertThat(judged().clean()).as("the password is the user's: only they can sign in").isTrue();
+        events.clear();
+        seq = 0;
+        user(ANONYMOUS, "SPONSOR_SIGN_UP", "h1", "u@example.com", null);
+        assertThat(judged().address()).contains("registered by the user");
+    }
+
+    /** Review M-a (probe P2): the creation line, with its address, is kept however long the history grows. */
+    @Test
+    void aLongHistoryKeepsItsCreationAndItsLatestChanges() {
+        user(ADMIN, "SEC_USER_CREATE", "h1", "bob.mallory@gmail.com", null);
+        for (int i = 0; i < 60; i++) {
+            link("k" + i, USER, "SEC_IDENTITY_LINK_SELF", false);
+            link("k" + i, USER, "SEC_IDENTITY_UNLINK_SELF", true);
+        }
+        List<String> history = judged().history();
+        String kept = AssessProtectedChange.keepEnds(history, 2000);
+        assertThat(kept.length()).isLessThan(2100);
+        assertThat(kept).startsWith(history.getFirst()).contains("bob.mallory@gmail.com")
+            .contains("changes left out").endsWith(history.getLast());
+        assertThat(AssessProtectedChange.keepEnds(history.subList(0, 3), 2000))
+            .isEqualTo(String.join("; ", history.subList(0, 3)));
+    }
 }

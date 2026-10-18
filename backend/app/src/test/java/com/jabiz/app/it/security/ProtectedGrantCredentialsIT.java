@@ -27,7 +27,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK, properties = {
     "jabiz.mail.enabled=true", "jabiz.mail.from=jabiz@example.com", "jabiz.mail.base-url=https://app.example.com",
     "spring.mail.host=localhost", "spring.mail.port=3033", SignUpItSupport.ENTRY_PROPERTIES_REGISTRATION,
-    SignUpItSupport.ENTRY_PROPERTIES_ADMIN, SignUpItSupport.ENTRY_PROPERTIES_LOOSE})
+    SignUpItSupport.ENTRY_PROPERTIES_ADMIN, SignUpItSupport.ENTRY_PROPERTIES_LOOSE,
+    "jabiz.security.protected-grants.trusted-email-domains=example.com"})
 @Import(SignUpItSupport.FixedTimeLimits.class)
 class ProtectedGrantCredentialsIT extends SignUpItSupport {
 
@@ -144,9 +145,11 @@ class ProtectedGrantCredentialsIT extends SignUpItSupport {
         assertThat(facts(first)).contains("(SEC_USER_CREATE): created, password not own, address " + email);
         assertThat(approve(first)).isEqualTo("FAILED TARGET_CREDENTIALS_NOT_OWN");
 
+        assertThat(facts(first)).contains(email + " (entered by it-admin at ").contains("not proven by mail");
         resetBy(email, RESET);
         Map<String, Object> second = grant(user);
-        assertThat(facts(second)).contains("(SPONSOR_PASSWORD_RESET_CONFIRM): password changed, own");
+        assertThat(facts(second)).contains("(SPONSOR_PASSWORD_RESET_CONFIRM): password changed, own")
+            .contains("proven by mail at").doesNotContain("OUTSIDE THE TRUSTED DOMAINS");
         assertThat(approve(second)).isEqualTo("APPLIED");
     }
 
@@ -155,12 +158,13 @@ class ProtectedGrantCredentialsIT extends SignUpItSupport {
     void aResetAtAnAddressAnAdministratorChangedIsNotTheUsers() {
         String email = address("victim");
         String user = registered(email);
-        String taken = address("taken");
+        String taken = unique("taken").toLowerCase() + "@elsewhere.example.org";
         updateUser(user, Map.of("email", taken));
         verifyEmail(user);
         resetBy(taken, RESET);
         Map<String, Object> asked = grant(user);
-        assertThat(facts(asked)).contains("address changed to " + taken).contains("not the user's own");
+        assertThat(facts(asked)).contains("address changed to " + taken).contains("not the user's own")
+            .contains(taken + " (changed by it-admin at ").contains("OUTSIDE THE TRUSTED DOMAINS");
         assertThat(approve(asked)).isEqualTo("FAILED TARGET_CREDENTIALS_NOT_OWN");
     }
 
@@ -188,5 +192,31 @@ class ProtectedGrantCredentialsIT extends SignUpItSupport {
         Map<String, Object> asked = grant(user);
         assertThat(facts(asked)).contains("second factor enrolled, own");
         assertThat(approve(asked)).isEqualTo("APPLIED");
+    }
+
+    /**
+     * Review M-b: a signed-in request to verify an address someone else changed is refused while someone else may know
+     * the password (the one asking may not be the user); an address entered at creation is verified as before, and so
+     * is a changed one when the password is the user's own.
+     */
+    @Test
+    void anAddressSomeoneElseChangedIsNotVerifiedFromAnAccountSomeoneElseCanEnter() {
+        String name = unique("typo");
+        String user = createUserWithEmail(name, address("typo"), PASSWORD);
+        assign(user, roleId(CUSTOMER), null);
+        String bearer = bearerOf(session(name, PASSWORD, LOOSE));
+        post("/api/auth/account/verify-email", bearer, Map.of()).expectStatus().isAccepted();
+        updateUser(user, Map.of("email", address("fixed")));
+        Map<String, Object> problem = post("/api/auth/account/verify-email", bearerOf(session(name, PASSWORD, LOOSE)),
+            Map.of()).expectStatus().isEqualTo(422).expectBody(MAP).returnResult().getResponseBody();
+        assertThat(ruleCode(problem)).isEqualTo("EMAIL_SET_BY_ANOTHER");
+
+        // The registrant's own password: only they sign in, and they may verify what the administrator entered.
+        String email = address("own");
+        String own = registered(email);
+        String ownName = String.valueOf(userOf(email).get("user_name"));
+        updateUser(own, Map.of("email", address("corrected")));
+        post("/api/auth/account/verify-email", bearerOf(session(ownName, PASSWORD, LOOSE)), Map.of()).expectStatus()
+            .isAccepted();
     }
 }

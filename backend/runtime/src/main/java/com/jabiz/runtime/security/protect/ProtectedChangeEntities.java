@@ -33,7 +33,10 @@ public class ProtectedChangeEntities {
     public static final String PASSWORD = "PASSWORD";
     public static final String MFA_RESET = "MFA_RESET";
     public static final String IDENTITY_LINK = "IDENTITY_LINK";
-    public static final List<String> KINDS = List.of(USER_ROLE, ROLE_PERMISSION, PASSWORD, MFA_RESET, IDENTITY_LINK);
+    /** A new address for a holder of a protected permission (review M-b): the address is a way back into the account. */
+    public static final String EMAIL = "EMAIL";
+    public static final List<String> KINDS = List.of(USER_ROLE, ROLE_PERMISSION, PASSWORD, MFA_RESET, IDENTITY_LINK,
+        EMAIL);
 
     /** Statuses. */
     public static final String PENDING = "PENDING";
@@ -58,6 +61,7 @@ public class ProtectedChangeEntities {
             .asTemporal(TemporalRole.EVENT_TIME));
         eb.field("provider", f -> f.physicalColumn("provider").immutable(true).asText(40));
         eb.field("subject", f -> f.physicalColumn("subject").immutable(true).asText(255));
+        eb.field("email", f -> f.physicalColumn("email").immutable(true).asText(320));
         eb.field("passwordHash", f -> f.physicalColumn("password_hash").immutable(true).asText(100).sensitive());
         // The second factor the reset removes: another enrolment made since is not removed by this approval.
         eb.field("mfaId", f -> f.physicalColumn("mfa_id").immutable(true).asText(36));
@@ -97,7 +101,7 @@ public class ProtectedChangeEntities {
     @Bean
     ApprovalSubject protectedChangeApprovalSubject() {
         return ApprovalSubject.define(SUBJECT, s -> s.entity(CHANGE).text("kind").text("user").text("role")
-            .text("gained").text("affected").text("credentials").text("history")
+            .text("gained").text("affected").text("credentials").text("address").text("history").text("newAddress")
             .text("permission"));
     }
 }

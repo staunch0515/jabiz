@@ -49,6 +49,11 @@ class LoadProtectedChange implements StepHandler<LoadProtectedChange.Metadata, P
     static final String DECIDER = "protected_change_decider";
     /** The users the change is for, judged now. */
     static final String AFFECTED = "protected_change_affected";
+    /** The rejection of the change's request as recorded ({@link Rejected}). */
+    static final String REJECTED = "protected_change_rejected";
+
+    /** A rejection as the request records it: for this content, by this approver. */
+    record Rejected(String contentHash, String by) {}
 
     record Metadata(String inputKey, String changeKey) {}
 
@@ -101,14 +106,36 @@ class LoadProtectedChange implements StepHandler<LoadProtectedChange.Metadata, P
                     UUID role = Rows.uuid(change.get("roleId"));
                     return grants.names(user, role).flatMap(names -> {
                         ctx.put(NAMES, List.copyOf(names));
-                        if (!ProtectedChangeEntities.PENDING.equals(change.get("status"))
-                            || !ApprovalEntities.APPROVED.equals(input.status())) {
+                        if (!ProtectedChangeEntities.PENDING.equals(change.get("status"))) {
+                            return Mono.<Void>empty();
+                        }
+                        if (ApprovalEntities.REJECTED.equals(input.status())) {
+                            return rejected(requestId.get(), ctx);
+                        }
+                        if (!ApprovalEntities.APPROVED.equals(input.status())) {
                             return Mono.<Void>empty();
                         }
                         return check(change, requestId.get(), ctx);
                     });
                 });
         });
+    }
+
+    /**
+     * The request's rejection as recorded (review L-d): its content hash and who rejected it, into {@link #REJECTED};
+     * nothing when the request is not rejected, whatever the event says.
+     */
+    private Mono<Void> rejected(UUID requestId, ProcessContext ctx) {
+        return engine().select("SELECT r.status, r.content_hash, (SELECT d.approver_id FROM sys_approval_decision d"
+                + " WHERE d.request_id = r.request_id AND d.decision = 'REJECT' ORDER BY d.level_no DESC LIMIT 1)"
+                + " AS rejecter FROM sys_approval_request_version r WHERE r.request_id = :request"
+                + " ORDER BY r.version_no DESC LIMIT 1", Map.of("request", BoundValue.of(requestId)))
+            .next()
+            .filter(row -> ApprovalEntities.REJECTED.equals(Rows.string(row.get("status")))
+                && row.get("rejecter") != null)
+            .doOnNext(row -> ctx.put(REJECTED, new Rejected(Rows.string(row.get("content_hash")).strip(),
+                Rows.string(row.get("rejecter")))))
+            .then();
     }
 
     private Mono<Boolean> ownRequest(UUID requestId, UUID changeId) {
@@ -151,7 +178,9 @@ class LoadProtectedChange implements StepHandler<LoadProtectedChange.Metadata, P
             ctx.put(AFFECTED, assessment.affected());
             Set<String> users = new TreeSet<>();
             assessment.affected().forEach(id -> users.add(id.toString()));
-            return grown(changeId, grant, assessment, users, approvedGains, approvedUsers).flatMap(grew -> {
+            return grown(changeId, grant, assessment, users, approvedGains, approvedUsers,
+                Rows.instant(change.get("dataFrom")), Rows.instant(change.get("dataTo")),
+                effectiveOf(change, ctx)).flatMap(grew -> {
                 if (grew) {
                     return failed(ctx, "CHANGE_GREW");
                 }
@@ -183,7 +212,8 @@ class LoadProtectedChange implements StepHandler<LoadProtectedChange.Metadata, P
      * pending); for a credential, what its user holds must not have grown at all.
      */
     private Mono<Boolean> grown(String changeId, boolean grant, ProtectedGrants.Assessment assessment,
-        Set<String> users, Set<String> approvedGains, Set<String> approvedUsers) {
+        Set<String> users, Set<String> approvedGains, Set<String> approvedUsers, java.time.Instant dataFrom,
+        java.time.Instant dataTo, java.time.Instant effective) {
         List<String[]> beyond = new ArrayList<>();
         for (String user : users) {
             for (String permission : assessment.gained()) {
@@ -201,7 +231,13 @@ class LoadProtectedChange implements StepHandler<LoadProtectedChange.Metadata, P
         Set<String> concerned = new TreeSet<>();
         beyond.forEach(pair -> concerned.add(pair[0]));
         return grants.approvedFor(changeId, concerned).map(others -> beyond.stream().anyMatch(pair ->
-            others.stream().noneMatch(other -> other.covers(pair[0], pair[1]))));
+            others.stream().noneMatch(other -> other.covers(pair[0], pair[1], dataFrom, dataTo, effective))));
+    }
+
+    /** When the change takes effect: its effective time when still to come, otherwise now. */
+    private static java.time.Instant effectiveOf(EntityInstance change, ProcessContext ctx) {
+        java.time.Instant effective = Rows.instant(change.get("effectiveTime"));
+        return effective != null && effective.isAfter(ctx.opTime()) ? effective : ctx.opTime();
     }
 
     private static Mono<Void> failed(ProcessContext ctx, String code) {
@@ -223,6 +259,11 @@ class LoadProtectedChange implements StepHandler<LoadProtectedChange.Metadata, P
                     new QueryPredicate.Eq("subject", change.get("subject"))), "IDENTITY_IN_USE");
             case ProtectedChangeEntities.PASSWORD -> find(SecurityEntities.USER_DATASET, SecurityEntities.USER, user)
                 .doOnNext(found -> ctx.put(USER, found)).map(found -> "").defaultIfEmpty("USER_NOT_FOUND");
+            case ProtectedChangeEntities.EMAIL -> find(SecurityEntities.USER_DATASET, SecurityEntities.USER, user)
+                .doOnNext(found -> ctx.put(USER, found))
+                .flatMap(found -> addressTaken(change.get("email"), user)
+                    .map(taken -> taken ? "EMAIL_IN_USE" : ""))
+                .defaultIfEmpty("USER_NOT_FOUND");
             // Only the enrolment the reset was approved for (review L2): one made since is the user's own.
             case ProtectedChangeEntities.MFA_RESET -> first(SecurityEntities.USER_MFA_DATASET,
                 SecurityEntities.USER_MFA, List.of(new QueryPredicate.Eq("userId", user)))
@@ -257,6 +298,16 @@ class LoadProtectedChange implements StepHandler<LoadProtectedChange.Metadata, P
         return Mono.defer(() -> entities.findById(datasets.findById(dataset).orElseThrow(),
                 definitions.getOrThrow(entity), id))
             .onErrorResume(EntityNotFoundException.class, e -> Mono.empty());
+    }
+
+    /** Whether another living user has {@code email} (case aside). */
+    private Mono<Boolean> addressTaken(String email, UUID user) {
+        return engine().select("SELECT 1 AS taken FROM (SELECT DISTINCT ON (user_id) user_id, email, is_deleted FROM"
+                + " sec_user_version WHERE user_id IN (SELECT c.user_id FROM sec_user_version c"
+                + " WHERE lower(c.email) = lower(:email)) ORDER BY user_id, version_no DESC) u"
+                + " WHERE NOT u.is_deleted AND lower(u.email) = lower(:email) AND u.user_id <> :user LIMIT 1",
+                Map.of("email", BoundValue.of(email), "user", BoundValue.of(user)))
+            .hasElements();
     }
 
     private static Optional<UUID> uuid(String text) {

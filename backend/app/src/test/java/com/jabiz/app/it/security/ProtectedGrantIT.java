@@ -24,6 +24,7 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.test.web.reactive.server.WebTestClient;
 
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
@@ -661,6 +662,124 @@ class ProtectedGrantIT extends SecurityItSupport {
         approve(asked, adminThree);
         assertThat(change(asked.get("changeId"))).containsEntry("status", "FAILED")
             .containsEntry("failure", "IDENTITY_IN_USE");
+    }
+
+    // ================= addresses (review M-b) =================
+
+    private static String emailOf(String user) {
+        return (String) query("SELECT email FROM sec_user_version WHERE user_id = ?::uuid ORDER BY version_no DESC"
+            + " LIMIT 1", user).getFirst().get("email");
+    }
+
+    private Map<String, Object> updateEmail(String user, String email, int status) {
+        Map<String, Object> current = query("SELECT version_no FROM sec_user_version WHERE user_id = ?::uuid"
+            + " ORDER BY version_no DESC LIMIT 1", user).getFirst();
+        WebTestClient.ResponseSpec response = post("/api/datasets/" + SecurityEntities.USER_DATASET + "/commit",
+            admin(), Map.of("changes", List.of(Map.of("action", "UPDATE", "id", user, "version",
+                current.get("version_no"), "attributes", Map.of("email", email))))).expectStatus().isEqualTo(status);
+        return status == 200 ? Map.of() : response.expectBody(MAP).returnResult().getResponseBody();
+    }
+
+    /**
+     * Review M-b: the address is a way back into the account (a reset link goes there). A holder's address changes
+     * only after another administrator approves, who holds as much as the holder; the old address is told.
+     */
+    @Test
+    void aHoldersAddressChangesOnlyAfterApprovalAndTheOldAddressIsTold() {
+        String user = bareUser("addressed");
+        approve(assignRole(user, createRole(unique("POSTER"), "ledger.post")), adminTwo);
+        assertThat(ruleCode(updateEmail(user, unique("first") + "@example.com", 422)))
+            .isEqualTo("PROTECTED_CHANGE_REQUIRES_APPROVAL");
+        String first = unique("first") + "@example.com";
+        Map<String, Object> asked = run("SEC_USER_EMAIL_SET", as(adminOne), Map.of("userId", user, "email", first,
+            "reason", "new mailbox"));
+        assertThat(asked).containsEntry("status", "PENDING");
+        assertThat(emailOf(user)).isNull();
+        assertThat(facts(asked.get("approvalRequestId"))).contains(first).contains("ledger.post");
+        // Who may only reset passwords holds less than the holder: no.
+        decide(asked.get("approvalRequestId"), TestTokens.bearer(tokens, adminThree, "approval.decide",
+            "security.user-role.write"), "APPROVE", 403);
+        approve(asked, adminTwo);
+        assertThat(change(asked.get("changeId"))).containsEntry("status", "APPLIED").containsEntry("kind", "EMAIL");
+        assertThat(emailOf(user)).isEqualTo(first);
+
+        String second = unique("second") + "@example.com";
+        approve(run("SEC_USER_EMAIL_SET", as(adminOne), Map.of("userId", user, "email", second, "reason", "again")),
+            adminTwo);
+        assertThat(emailOf(user)).isEqualTo(second);
+        assertThat(query("SELECT address, params FROM sys_mail_message WHERE template = 'jabiz.auth.email-changed'"
+            + " AND user_id = ?::uuid", user)).singleElement().satisfies(mail -> {
+                assertThat(mail).containsEntry("address", first);
+                assertThat(String.valueOf(mail.get("params"))).contains(second);
+            });
+
+        // An ordinary user's address changes at once, as before.
+        String plain = bareUser("plain");
+        assertThat(run("SEC_USER_EMAIL_SET", as(adminOne), Map.of("userId", plain, "email",
+            unique("plain") + "@example.com", "reason", "typo"))).containsEntry("status", "APPLIED");
+        updateEmail(plain, unique("again") + "@example.com", 200);
+    }
+
+    /**
+     * Review M-b (probe P5): the address of a user a protected grant waits for is protected too - otherwise it could be
+     * swapped for one the requester reads between the request and the approval.
+     */
+    @Test
+    void theAddressOfAUserAGrantWaitsForIsProtected() {
+        String user = bareUser("waiting");
+        Map<String, Object> asked = assignRole(user, createRole(unique("POSTER"), "ledger.post"));
+        assertThat(asked).containsEntry("status", "PENDING");
+        assertThat(ruleCode(updateEmail(user, unique("swap") + "@example.com", 422)))
+            .isEqualTo("PROTECTED_CHANGE_REQUIRES_APPROVAL");
+        assertThat(run("SEC_USER_EMAIL_SET", as(adminOne), Map.of("userId", user, "email",
+            unique("swap") + "@example.com", "reason", "swap"))).containsEntry("status", "PENDING");
+    }
+
+    /**
+     * Review L-c: a later change's approval covers what an earlier one gives only while what it wrote lives. Here V
+     * holds ledger.post through ROLE2 by an approved assignment, so joining R (whose ledger.post waits) gives nothing
+     * new; that assignment is then revoked, and R's ledger.post would now reach V unapproved.
+     */
+    @Test
+    void anApprovalWhoseGrantWasRevokedCoversNothing() {
+        String role = createRole(unique("CLERKS"), "price.read");
+        assign(bareUser("u"), role, null);
+        Map<String, Object> permission = run("SEC_ROLE_PERMISSION_ADD", as(adminOne),
+            Map.of("roleId", role, "permission", "ledger.post", "reason", "c"));
+        String v = bareUser("v");
+        String other = createRole(unique("ROLE2"), "ledger.post");
+        Map<String, Object> viaOther = assignRole(v, other);
+        approve(viaOther, adminTwo);
+        assertThat(change(viaOther.get("changeId"))).containsEntry("status", "APPLIED");
+        // V holds ledger.post already: R gives nothing protected, and is assigned at once.
+        assertThat(assignRole(v, role)).containsEntry("status", "APPLIED");
+        String assignment = String.valueOf(change(viaOther.get("changeId")).get("result_id"));
+        post("/api/datasets/" + SecurityEntities.USER_ROLE_DATASET + "/commit", admin(), Map.of("changes",
+            List.of(Map.of("action", "DELETE", "id", assignment, "version", 1)))).expectStatus().isOk();
+        approve(permission, adminTwo);
+        assertThat(change(permission.get("changeId"))).containsEntry("status", "FAILED")
+            .containsEntry("failure", "CHANGE_GREW");
+    }
+
+    /**
+     * Review L-d: a rejection is taken from the request's records, not from the event: a forged one, even with the
+     * right content hash, leaves the change pending.
+     */
+    @Test
+    void aForgedRejectionIsNotTheChanges() {
+        Map<String, Object> asked = assignRole(bareUser("clerk"), createRole(unique("POSTER"), "ledger.post"));
+        String hash = String.valueOf(query("SELECT content_hash FROM sys_approval_request_version WHERE request_id ="
+            + " ?::uuid LIMIT 1", asked.get("approvalRequestId")).getFirst().get("content_hash")).strip();
+        executor.execute(ProtectedChangeProcesses.applyProcess(), new ProtectedChangeProcesses.ApplyInput(
+                String.valueOf(asked.get("approvalRequestId")), ProtectedChangeEntities.SUBJECT,
+                String.valueOf(asked.get("changeId")), "REJECTED", hash, adminThree))
+            .contextWrite(view -> RequestContexts.put(view, RequestContext.system(Locale.ENGLISH, "it")))
+            .block();
+        assertThat(change(asked.get("changeId"))).containsEntry("status", "PENDING");
+        decide(asked.get("approvalRequestId"), as(adminTwo), "REJECT", 200);
+        deliverer.deliverPending().block();
+        assertThat(change(asked.get("changeId"))).containsEntry("status", "REJECTED")
+            .containsEntry("decided_by", adminTwo);
     }
 
     // ================= other paths =================

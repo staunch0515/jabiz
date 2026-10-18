@@ -54,7 +54,11 @@ class ProtectedGrantWriteCheck implements TemporalWriteCheck {
             return Mono.just(List.of());
         }
         Optional<Map<String, Object>> alive = TemporalWriteCheck.comesAlive(timeline, versions);
-        ProtectedGrants.Draft draft = alive.map(state -> draft(def.name, state)).orElse(null);
+        // A new address is a way back into the account (review M-b): for a holder of a protected permission it waits
+        // for approval like a password.
+        ProtectedGrants.Draft draft = alive.map(state -> draft(def.name, state)).orElseGet(() ->
+            SecurityEntities.USER.equals(def.name) && addressChanges(timeline, versions)
+                ? new ProtectedGrants.Draft(ProtectedChangeEntities.EMAIL, id, null, null) : null);
         if (draft == null) {
             // Not a grant: only whether the setup window ends, or the first administrator retires, now.
             return grants.record(operation.processSeqId(), operation.opTime()).thenReturn(List.of());
@@ -98,6 +102,27 @@ class ProtectedGrantWriteCheck implements TemporalWriteCheck {
         }
         return engine.select("SELECT 1 AS other FROM sec_user_version WHERE process_seq_id <> :seq LIMIT 1",
             Map.of("seq", BoundValue.of(operation.processSeqId()))).hasElements().map(other -> !other);
+    }
+
+    /** Whether the write gives a living user another address (case aside) than it has at that time. */
+    private static boolean addressChanges(Timeline timeline, List<PlannedVersion> versions) {
+        for (PlannedVersion version : versions) {
+            if (version.deleted()) {
+                continue;
+            }
+            Optional<com.jabiz.temporal.EntityVersion> before = timeline.at(version.effectiveFrom());
+            if (before.isEmpty() || before.get().deleted()) {
+                continue;
+            }
+            Object was = before.get().state().get("email");
+            Object becomes = version.state().get("email");
+            String old = was == null ? "" : String.valueOf(was).strip().toLowerCase(java.util.Locale.ROOT);
+            String now = becomes == null ? "" : String.valueOf(becomes).strip().toLowerCase(java.util.Locale.ROOT);
+            if (!old.equals(now)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static ProtectedGrants.Draft draft(String entity, Map<String, Object> state) {

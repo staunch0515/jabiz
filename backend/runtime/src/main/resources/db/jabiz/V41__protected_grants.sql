@@ -19,6 +19,7 @@ CREATE TABLE sec_protected_change_version (
     effective_time    timestamptz,
     provider          varchar(40),
     subject           varchar(255),
+    email             varchar(320),
     password_hash     varchar(100),
     mfa_id            varchar(36),
     gained            varchar(2000),

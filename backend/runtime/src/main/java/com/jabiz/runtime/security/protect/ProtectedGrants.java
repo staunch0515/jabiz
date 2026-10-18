@@ -92,11 +92,25 @@ public class ProtectedGrants {
      * @param setBy   who made the latest credential that is not the user's own (null when own)
      * @param setAt   when
      * @param summary for the approvers: who last set the password, and when
-     * @param history for the approvers: every change of the credentials, oldest first
+     * @param history for the approvers: every change of the credentials, oldest first (the creation first)
+     * @param email   the current address (null when none)
+     * @param address for the approvers: the current address, who set it and when, and whether a mailed link proved it
+     * @param addressChangedByOther whether someone other than the user changed the address after the account was
+     *                created
+     * @param clean   whether nobody else could sign in as the user now
      */
-    public record Credentials(boolean own, String setBy, Instant setAt, String summary, List<String> history) {
+    public record Credentials(boolean own, String setBy, Instant setAt, String summary, List<String> history,
+        String email, String address, boolean addressChangedByOther, boolean clean) {
         public Credentials {
             history = List.copyOf(history);
+        }
+
+        /**
+         * Whether the user may have their address verified while signed in (review M-b): not when someone else changed
+         * it after the account was created and someone else may know a way in - the one asking may not be the user.
+         */
+        public boolean addressVerifiable() {
+            return !addressChangedByOther || clean;
         }
     }
 
@@ -115,6 +129,10 @@ public class ProtectedGrants {
 
     public boolean enabled() {
         return settings.enabled();
+    }
+
+    public ProtectedGrantSettings settings() {
+        return settings;
     }
 
     public ProtectedPermissions permissions() {
@@ -226,7 +244,7 @@ public class ProtectedGrants {
                 // Linking one's own account: the user proved who they are (D39), nobody else gains a way in.
                 ? Mono.just(new Gain(Set.of(), List.of()))
                 : heldBy(draft.userId(), set, pending);
-            case ProtectedChangeEntities.PASSWORD, ProtectedChangeEntities.MFA_RESET ->
+            case ProtectedChangeEntities.PASSWORD, ProtectedChangeEntities.MFA_RESET, ProtectedChangeEntities.EMAIL ->
                 heldBy(draft.userId(), set, pending);
             default -> Mono.error(new IllegalArgumentException("Unknown protected change kind " + draft.kind()));
         };
@@ -241,15 +259,27 @@ public class ProtectedGrants {
         return holdings.getOrDefault(user, Set.of());
     }
 
-    /** What an applied change was approved for: these permissions for these users. */
-    public record Approved(Set<String> gained, Set<String> users) {
+    /**
+     * What an applied change was approved for: these permissions for these users, over its data period, from when it
+     * took effect; and whether what it wrote still lives (review L-c).
+     */
+    public record Approved(Set<String> gained, Set<String> users, Instant dataFrom, Instant dataTo, Instant effective,
+        boolean alive) {
         public Approved {
             gained = Set.copyOf(gained);
             users = Set.copyOf(users);
         }
 
-        boolean covers(String user, String permission) {
-            return users.contains(user) && gained.contains(permission);
+        /**
+         * Whether this approval covers {@code permission} for {@code user} as another change would give it: what it
+         * wrote still lives, its period is at least as wide as {@code from}–{@code to} (null: unbounded) and it took
+         * effect no later than {@code at}.
+         */
+        boolean covers(String user, String permission, Instant from, Instant to, Instant at) {
+            return alive && users.contains(user) && gained.contains(permission)
+                && (dataFrom == null || from != null && !dataFrom.isAfter(from))
+                && (dataTo == null || to != null && !dataTo.isBefore(to))
+                && effective != null && !effective.isAfter(at);
         }
     }
 
@@ -263,17 +293,25 @@ public class ProtectedGrants {
         if (users.isEmpty()) {
             return Mono.just(List.of());
         }
-        String sql = "SELECT c.gained, c.affected_users FROM (SELECT DISTINCT ON (change_id) change_id,"
-            + " gained, affected_users, status, is_deleted FROM " + CHANGES + " WHERE kind IN ('USER_ROLE',"
+        String result = "CASE WHEN c.kind = 'USER_ROLE' THEN (SELECT %1$s FROM " + UR + " x WHERE x." + UR_ID
+            + " = c.result_id::uuid%2$s) ELSE (SELECT %1$s FROM " + RP + " x WHERE x." + RP_ID
+            + " = c.result_id::uuid%2$s) END";
+        String sql = "SELECT c.gained, c.affected_users, c.data_from, c.data_to,"
+            + " " + result.formatted("NOT x.is_deleted", " ORDER BY x.version_no DESC LIMIT 1") + " AS alive,"
+            + " " + result.formatted("min(x.effect_start_time)", "") + " AS effective"
+            + " FROM (SELECT DISTINCT ON (change_id) change_id, kind, gained, affected_users, data_from, data_to,"
+            + " result_id, status, is_deleted FROM " + CHANGES + " WHERE kind IN ('USER_ROLE',"
             + " 'ROLE_PERMISSION') AND affected_users LIKE ANY(:patterns) ORDER BY change_id, version_no DESC) c"
-            + " WHERE c.status = 'APPLIED' AND NOT c.is_deleted"
+            + " WHERE c.status = 'APPLIED' AND NOT c.is_deleted AND c.result_id IS NOT NULL"
             + " AND (SELECT min(f.process_seq_id) FROM " + CHANGES + " f WHERE f.change_id = c.change_id)"
             + " > (SELECT min(b.process_seq_id) FROM " + CHANGES + " b WHERE b.change_id::text = :change)";
         String[] patterns = users.stream().map(user -> "%" + user + "%").toArray(String[]::new);
         return engine().select(sql, Map.of("patterns", BoundValue.of(patterns), "change",
                 BoundValue.of(change == null ? "" : change)))
             .map(row -> new Approved(ProtectedChangeProcesses.split(row.get("gained")),
-                ProtectedChangeProcesses.split(row.get("affected_users"))))
+                ProtectedChangeProcesses.split(row.get("affected_users")), Rows.instant(row.get("data_from")),
+                Rows.instant(row.get("data_to")), Rows.instant(row.get("effective")),
+                Boolean.TRUE.equals(row.get("alive"))))
             .collectList();
     }
 
@@ -503,11 +541,12 @@ public class ProtectedGrants {
             + " = CASE WHEN p.actor_id ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'"
             + " THEN p.actor_id::uuid END ORDER BY a.version_no DESC LIMIT 1) an ON true"
             + " WHERE v.user_id = :user ORDER BY v.version_no";
-        String versions = "SELECT v.is_deleted, v.password_hash, v.email, v.verified_email,"
+        String versions = "SELECT v.version_no, v.is_deleted, v.password_hash, v.email, v.verified_email,"
             + operation.formatted(USER);
-        String links = "SELECT v.user_identity_id::text AS key, v.is_deleted, v.provider,"
+        String links = "SELECT v.user_identity_id::text AS key, v.version_no, v.is_deleted, v.provider,"
             + operation.formatted("sec_user_identity_version");
-        String factors = "SELECT v.user_mfa_id::text AS key, v.is_deleted," + operation.formatted("sec_user_mfa_version");
+        String factors = "SELECT v.user_mfa_id::text AS key, v.version_no, v.is_deleted,"
+            + " v.secret || '|' || v.confirmed AS factor," + operation.formatted("sec_user_mfa_version");
         Map<String, BoundValue> params = Map.of("user", BoundValue.of(user));
         return Mono.zip(engine().select(versions, params).collectList(), engine().select(links, params).collectList(),
             engine().select(factors, params).collectList()).map(found -> {
@@ -517,7 +556,8 @@ public class ProtectedGrants {
                 found.getT3().forEach(row -> events.add(event(row, CredentialChain.Source.MFA)));
                 CredentialChain.Judgement judged = CredentialChain.judge(user.toString(), events);
                 return new Credentials(judged.own(), judged.setBy(), judged.setAt(), judged.summary(),
-                    judged.history());
+                    judged.history(), judged.email(), judged.address(), judged.addressChangedByOther(),
+                    judged.clean());
             });
     }
 
@@ -526,7 +566,8 @@ public class ProtectedGrants {
             Rows.string(row.get("key")), Boolean.TRUE.equals(row.get("is_deleted")),
             Rows.string(row.get("password_hash")), Rows.string(row.get("email")),
             Rows.string(row.get("verified_email")), Rows.string(row.get("provider")), Rows.string(row.get("actor_id")),
-            Rows.string(row.get("actor_name")), Rows.string(row.get("process_name")), Rows.instant(row.get("op_time")));
+            Rows.string(row.get("actor_name")), Rows.string(row.get("process_name")), Rows.instant(row.get("op_time")),
+            ((Number) row.get("version_no")).intValue(), Rows.string(row.get("factor")));
     }
 
     /** The names people know a user and a role by, for the approvers' task (empty when not found). */
