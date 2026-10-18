@@ -11,8 +11,8 @@ CREATE TABLE sec_protected_change_version (
     process_seq_id    bigint       NOT NULL REFERENCES op_process (process_seq_id),
     is_deleted        boolean      NOT NULL DEFAULT false,
     kind              varchar(20)  NOT NULL,
-    user_id           uuid,
-    role_id           uuid,
+    user_id           varchar(36),
+    role_id           varchar(36),
     permission        varchar(200),
     data_from         timestamptz,
     data_to           timestamptz,
@@ -20,6 +20,9 @@ CREATE TABLE sec_protected_change_version (
     provider          varchar(40),
     subject           varchar(255),
     password_hash     varchar(100),
+    mfa_id            varchar(36),
+    gained            varchar(2000),
+    affected_users    varchar(8000),
     reason            varchar(500) NOT NULL,
     requested_by      varchar(100) NOT NULL,
     status            varchar(20)  NOT NULL,
@@ -32,6 +35,7 @@ CREATE INDEX sec_protected_change_version_current_idx
     ON sec_protected_change_version (change_id, effect_start_time DESC, version_no DESC);
 CREATE INDEX sec_protected_change_version_process_idx ON sec_protected_change_version (process_seq_id);
 CREATE INDEX sec_protected_change_version_user_idx ON sec_protected_change_version (user_id);
+CREATE INDEX sec_protected_change_version_role_idx ON sec_protected_change_version (role_id);
 SELECT jabiz_protect_append_only('sec_protected_change_version');
 
 -- When the setup window ended: the first time two administrators besides the first one existed. One row at most;
@@ -42,6 +46,16 @@ CREATE TABLE sec_protected_grants_armed (
     process_seq_id bigint      NOT NULL REFERENCES op_process (process_seq_id)
 );
 SELECT jabiz_protect_append_only('sec_protected_grants_armed');
+
+-- When the first administrator retired: the first time another administrator existed. One row at most; once it is
+-- there the first administrator makes and decides no protected change again, whoever is disabled later.
+CREATE TABLE sec_bootstrap_retired (
+    retired_id     smallint    PRIMARY KEY CHECK (retired_id = 1),
+    user_id        uuid        NOT NULL,
+    retired_time   timestamptz NOT NULL,
+    process_seq_id bigint      NOT NULL REFERENCES op_process (process_seq_id)
+);
+SELECT jabiz_protect_append_only('sec_bootstrap_retired');
 
 -- Who holds a role, and which roles grant a permission: the checks of every grant look them up by these immutable
 -- columns.

@@ -37,6 +37,23 @@ public class AssessProtectedChange<C extends ProcessContext>
         this.grants = grants;
     }
 
+    /**
+     * For the approvers (review H1, M3): the names of the users the change is for, and who last set their
+     * credentials. Read only for a change that waits for approval.
+     */
+    public record Described(List<String> affected, List<String> credentials) {}
+
+    private Mono<Described> describe(ProtectedGrants.Assessment assessment) {
+        if (!assessment.needsApproval()) {
+            return Mono.just(new Described(List.of(), List.of()));
+        }
+        return reactor.core.publisher.Flux.fromIterable(assessment.affected())
+            .concatMap(user -> grants.userName(user).zipWith(grants.credentials(user)))
+            .collectList()
+            .map(found -> new Described(found.stream().map(f -> f.getT1()).toList(),
+                found.stream().map(f -> f.getT1() + ": " + f.getT2().summary()).toList()));
+    }
+
     @Override
     public Mono<Void> execute(Metadata<C> metadata, C ctx) {
         return Mono.defer(() -> {
@@ -44,12 +61,15 @@ public class AssessProtectedChange<C extends ProcessContext>
             if (draft == null) {
                 return Mono.empty();
             }
-            return grants.assess(draft, ctx.request().actorId(), ctx.processSeqId(), ctx.opTime())
+            // Serialized with every other change of access (review M2): what is read stays true until this commits.
+            return grants.lock().then(grants.assess(draft, ctx.request().actorId(), ctx.processSeqId(), ctx.opTime()))
                 .zipWith(grants.names(draft.userId(), draft.roleId()))
-                .doOnNext(found -> {
+                .flatMap(found -> describe(found.getT1()).map(described -> {
                     ctx.put(metadata.key(), found.getT1());
                     ctx.put(metadata.key() + ".names", List.copyOf(found.getT2()));
-                })
+                    ctx.put(metadata.key() + ".described", described);
+                    return described;
+                }))
                 .then();
         });
     }

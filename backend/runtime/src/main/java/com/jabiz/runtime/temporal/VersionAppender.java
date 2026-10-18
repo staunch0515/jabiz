@@ -45,12 +45,13 @@ public class VersionAppender {
 
     private final AuditRecorder audit;
     private final List<TemporalWriteGuard> guards;
-    private final List<TemporalWriteCheck> checks;
+    /** Lazily: the checks read through the entity manager, which writes through this. */
+    private final org.springframework.beans.factory.ObjectProvider<TemporalWriteCheck> checks;
 
     public VersionAppender(TemporalStore store, Clock clock, Outbox outbox, AuditRecorder audit,
-        List<TemporalWriteGuard> guards, List<TemporalWriteCheck> checks) {
+        List<TemporalWriteGuard> guards, org.springframework.beans.factory.ObjectProvider<TemporalWriteCheck> checks) {
         this.guards = List.copyOf(guards);
-        this.checks = List.copyOf(checks);
+        this.checks = checks;
         this.audit = Objects.requireNonNull(audit, "audit must not be null");
         this.store = Objects.requireNonNull(store, "store must not be null");
         this.clock = Objects.requireNonNull(clock, "clock must not be null");
@@ -79,10 +80,11 @@ public class VersionAppender {
             if (!refused.isEmpty()) {
                 return Mono.error(new BusinessRuleViolationException(List.copyOf(new LinkedHashSet<>(refused))));
             }
-            if (checks.isEmpty()) {
+            List<TemporalWriteCheck> asked = checks.orderedStream().toList();
+            if (asked.isEmpty()) {
                 return write(engine, table, def, id, timeline, write, operation, checkUnique, request, plan);
             }
-            return Flux.fromIterable(checks)
+            return Flux.fromIterable(asked)
                 .concatMap(check -> check.check(engine, def, id, timeline, plan.versions(), operation, grant))
                 .collectList()
                 .flatMap(found -> {

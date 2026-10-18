@@ -8,13 +8,16 @@ import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.EntityNotFoundException;
 import com.jabiz.runtime.approval.ApprovalDecisionCheck;
 import com.jabiz.runtime.dataset.DatasetRegistry;
+import com.jabiz.runtime.PermissionDeniedException;
 import com.jabiz.runtime.security.MfaPolicy;
+import com.jabiz.runtime.security.SecurityPermissions;
 import com.jabiz.runtime.storage.Rows;
 import com.jabiz.security.MfaRequirement;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Who may decide a protected change ({@code APPROVAL_DECIDE} on {@value ProtectedChangeEntities#SUBJECT}; decision D48
@@ -52,23 +55,45 @@ class ProtectedChangeDecisionCheck implements ApprovalDecisionCheck {
         return Mono.defer(() -> {
             mfa.require(ctx.request(), MfaRequirement.ADMINISTRATION, "Deciding a protected change");
             String actor = ctx.request().actorId();
-            return grants.retiredBootstrap(actor).flatMap(retired -> {
+            return grants.retiredBootstrap(actor, ctx.processSeqId(), ctx.opTime()).flatMap(retired -> {
                 if (retired) {
                     return Mono.error(new BootstrapAdminRetiredException(
                         "Other administrators exist: the first administrator may no longer decide protected changes"));
                 }
-                return approve ? load(request.get("entityId")).flatMap(change -> targetCheck(change, actor, ctx))
+                return approve ? load(request.get("entityId")).flatMap(change -> approverCheck(change, actor, ctx))
                     : Mono.empty();
             });
         });
     }
 
-    private Mono<Void> targetCheck(EntityInstance change, String actor, ProcessContext ctx) {
+    /** The administrator's permissions: {@code *}, or one of these with everything the change gives. */
+    static final Set<String> ADMINISTRATION = Set.of(SecurityPermissions.USER_ROLE_WRITE,
+        SecurityPermissions.ROLE_WRITE);
+
+    /**
+     * Whether a holder of {@code held} may approve a change giving (or, for a credential, taking over the holder of)
+     * {@code gained} (review H2): {@code *}; or an administrator's permission ({@link #ADMINISTRATION}) and every
+     * permission of {@code gained}. Nobody approves more than they hold themselves.
+     */
+    static boolean covers(Set<String> held, Set<String> gained) {
+        if (held.contains("*")) {
+            return true;
+        }
+        return held.stream().anyMatch(ADMINISTRATION::contains) && held.containsAll(gained);
+    }
+
+    private Mono<Void> approverCheck(EntityInstance change, String actor, ProcessContext ctx) {
+        Set<String> approved = ProtectedChangeProcesses.split(change.get("gained"));
+        if (!covers(ctx.request().permissions(), approved)) {
+            return Mono.error(new PermissionDeniedException("*", "Approving protected change " + change.id()
+                + " needs an administrator's permission and every permission it gives: " + approved));
+        }
         // Judged as for its requester: who the change is for does not depend on who decides it.
-        return grants.assess(ProtectedChangeProcesses.draftOf(change), change.get("requestedBy"), ctx.processSeqId(),
-                ctx.opTime())
+        return grants.lock().then(grants.assess(ProtectedChangeProcesses.draftOf(change), change.get("requestedBy"),
+                ctx.processSeqId(), ctx.opTime(), String.valueOf(change.id())))
             .doOnNext(assessment -> {
-                if (assessment.affected().stream().anyMatch(user -> user.toString().equals(actor))) {
+                if (assessment.affected().stream().anyMatch(user -> user.toString().equals(actor))
+                    || ProtectedChangeProcesses.split(change.get("affectedUsers")).contains(actor)) {
                     ctx.reject(new Violation("requestId", PlatformErrorCodes.APPROVAL_TARGET_USER,
                         "You are a user protected change " + change.id() + " is for and cannot approve it",
                         Map.of("change", String.valueOf(change.id()))));

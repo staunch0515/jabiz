@@ -123,7 +123,7 @@ public class SodService {
      * Serializes the changes of access in this transaction (until it ends), so that two concurrent assignments
      * cannot each pass the check alone.
      */
-    Mono<Void> lock() {
+    public Mono<Void> lock() {
         return engine().select("SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(hashtextextended("
             + ":key, 0))) l", Map.of("key", BoundValue.of("jabiz.sod"))).then();
     }

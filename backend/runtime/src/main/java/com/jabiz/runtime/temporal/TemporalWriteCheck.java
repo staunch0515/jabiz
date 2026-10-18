@@ -28,4 +28,22 @@ public interface TemporalWriteCheck {
      */
     Mono<List<Violation>> check(StorageEngine engine, EntityDefinition def, UUID id, Timeline timeline,
         List<PlannedVersion> versions, Operation operation, Object grant);
+
+    /**
+     * The state of the first version the write makes live where the instance did not live before - an insertion,
+     * a revert of its deletion, a cancelled (scheduled) deletion -; empty when it makes nothing live.
+     */
+    static java.util.Optional<java.util.Map<String, Object>> comesAlive(Timeline timeline,
+        List<PlannedVersion> versions) {
+        for (PlannedVersion version : versions) {
+            if (version.deleted()) {
+                continue;
+            }
+            java.util.Optional<com.jabiz.temporal.EntityVersion> before = timeline.at(version.effectiveFrom());
+            if (before.isEmpty() || before.get().deleted()) {
+                return java.util.Optional.of(version.state());
+            }
+        }
+        return java.util.Optional.empty();
+    }
 }

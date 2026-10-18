@@ -14,6 +14,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK,
     properties = "jabiz.security.protected-grants.enabled=false")
+@org.junit.jupiter.api.TestMethodOrder(org.junit.jupiter.api.MethodOrderer.MethodName.class)
 class ProtectedGrantsOffIT extends SecurityItSupport {
 
     @Test
@@ -31,5 +32,20 @@ class ProtectedGrantsOffIT extends SecurityItSupport {
             .expectStatus().isOk().expectBody(MAP).returnResult().getResponseBody().get("output");
         assertThat(output).containsEntry("status", "APPLIED");
         assertThat(query("SELECT 1 FROM sec_protected_grants_armed")).isEmpty();
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    @org.springframework.beans.factory.annotation.Qualifier("protectedGrantsOffRecorder")
+    org.springframework.boot.ApplicationRunner offRecorder;
+
+    /** Review L2: switching them off after the setup window has ended is recorded (and logged) at startup. */
+    @Test
+    void switchingThemOffAfterTheWindowEndedIsRecorded() throws Exception {
+        assertThat(query("SELECT 1 FROM op_process WHERE process_name = 'SEC_PROTECTED_GRANTS_OFF'")).isEmpty();
+        execute("INSERT INTO sec_protected_grants_armed (armed_id, armed_time, process_seq_id)"
+            + " SELECT 1, now(), max(process_seq_id) FROM op_process");
+        offRecorder.run(null);
+        assertThat(query("SELECT actor_id FROM op_process WHERE process_name = 'SEC_PROTECTED_GRANTS_OFF'"))
+            .singleElement().satisfies(row -> assertThat(row).containsEntry("actor_id", "system"));
     }
 }

@@ -155,6 +155,7 @@ public class MfaProcesses {
                     Map<String, Object> values = new LinkedHashMap<>();
                     values.put("kind", ProtectedChangeEntities.MFA_RESET);
                     values.put("userId", ctx.get(USER, EntityInstance.class).id());
+                    values.put("mfaId", String.valueOf(mfa.get().id()));
                     if (ProtectedChangeProcesses.defer(ctx, values, ctx.get("reason", String.class))) {
                         return;
                     }

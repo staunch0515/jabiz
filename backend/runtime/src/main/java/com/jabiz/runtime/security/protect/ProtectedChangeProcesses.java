@@ -84,7 +84,9 @@ public class ProtectedChangeProcesses {
     public record ProtectedChangeOutput(String status, String targetId, String changeId, String approval,
         String approvalRequestId) {}
 
-    public record ApplyInput(String subject, String entityId, String status, String contentHash, String approverId) {}
+    /** @param approverId as the event says; the approver applied with is read from the recorded decision */
+    public record ApplyInput(String requestId, String subject, String entityId, String status, String contentHash,
+        String approverId) {}
 
     public record ApplyOutput(String changeId, String status) {}
 
@@ -95,6 +97,8 @@ public class ProtectedChangeProcesses {
     private static final String TARGET = "target";
     private static final String OUTPUT = "output";
     private static final String APPLIED_PASSWORD = "applied_password";
+    /** The users an applied grant is for: their sessions end (review M3). */
+    private static final String GRANTEES = "grantees";
 
     /** The process that requests a change of {@code kind}. */
     public static String requestProcess(String kind) {
@@ -108,14 +112,18 @@ public class ProtectedChangeProcesses {
         };
     }
 
-    /** The permission an approver of a change of {@code kind} holds: the one that would make the change. */
+    /**
+     * The permission of the approval's level for a change of {@code kind}: an administrator's ({@code security.role.write}
+     * for a role's permission, {@code security.user-role.write} otherwise). Its holders see the task.
+     */
     static String levelPermission(String kind) {
         return switch (kind) {
             case ProtectedChangeEntities.USER_ROLE -> SecurityPermissions.USER_ROLE_WRITE;
             case ProtectedChangeEntities.ROLE_PERMISSION -> SecurityPermissions.ROLE_WRITE;
-            case ProtectedChangeEntities.IDENTITY_LINK -> SecurityPermissions.IDENTITY_WRITE;
-            case ProtectedChangeEntities.PASSWORD -> SecurityPermissions.USER_PASSWORD;
-            case ProtectedChangeEntities.MFA_RESET -> SecurityPermissions.MFA_RESET;
+            // Taking over an account is approved by an administrator too (review H2), not by whoever may reset
+            // passwords: ProtectedChangeDecisionCheck.covers asks the rest.
+            case ProtectedChangeEntities.IDENTITY_LINK, ProtectedChangeEntities.PASSWORD,
+                ProtectedChangeEntities.MFA_RESET -> SecurityPermissions.USER_ROLE_WRITE;
             default -> throw new IllegalArgumentException("Unknown protected change kind " + kind);
         };
     }
@@ -153,7 +161,13 @@ public class ProtectedChangeProcesses {
         if (!assessment.needsApproval()) {
             return false;
         }
-        Map<String, Object> record = new LinkedHashMap<>(values);
+        Map<String, Object> record = new LinkedHashMap<>();
+        // Ids as text: the change names its user and role without referring to them (they may be deleted).
+        values.forEach((key, value) -> record.put(key, value instanceof UUID id ? id.toString() : value));
+        // What the approval covers (review H1): applying more is refused.
+        record.put("gained", String.join(",", new java.util.TreeSet<>(assessment.gained())));
+        record.put("affectedUsers", String.join(",", assessment.affected().stream().map(UUID::toString).sorted()
+            .toList()));
         record.put("reason", reason.strip());
         record.put("requestedBy", ctx.request().actorId());
         record.put("status", ProtectedChangeEntities.PENDING);
@@ -172,7 +186,9 @@ public class ProtectedChangeProcesses {
                 @SuppressWarnings("unchecked")
                 List<String> names = ctx.contains(ASSESSMENT + ".names")
                     ? (List<String>) ctx.get(ASSESSMENT + ".names") : List.of("", "");
-                return approvalCase(record, names);
+                AssessProtectedChange.Described described = ctx.contains(ASSESSMENT + ".described")
+                    ? ctx.get(ASSESSMENT + ".described", AssessProtectedChange.Described.class) : null;
+                return approvalCase(record, names, described);
             },
             ctx -> {
                 @SuppressWarnings("unchecked")
@@ -198,11 +214,13 @@ public class ProtectedChangeProcesses {
      * The case of a change: bound to everything the change does (its new hash included), so that the approval stays
      * valid only for exactly that; facts and reference for the approvers.
      */
-    static ApprovalCase approvalCase(Map<String, ?> change, List<String> names) {
+    static ApprovalCase approvalCase(Map<String, ?> change, List<String> names,
+        AssessProtectedChange.Described described) {
         String kind = String.valueOf(change.get("kind"));
         Map<String, Object> content = new LinkedHashMap<>();
         for (String field : List.of("changeId", "kind", "userId", "roleId", "permission", "dataFrom", "dataTo",
-            "effectiveTime", "provider", "subject", "passwordHash", "requestedBy", "reason")) {
+            "effectiveTime", "provider", "subject", "passwordHash", "mfaId", "gained", "affectedUsers",
+            "requestedBy", "reason")) {
             Object value = change.get(field);
             if (value != null) {
                 content.put(field, value instanceof Instant || value instanceof java.time.OffsetDateTime
@@ -222,15 +240,41 @@ public class ProtectedChangeProcesses {
         if (change.get("permission") != null) {
             facts.put("permission", change.get("permission"));
         }
+        String gained = change.get("gained") == null ? "" : String.valueOf(change.get("gained"));
+        if (!gained.isEmpty()) {
+            facts.put("gained", fact(gained));
+        }
+        if (described != null && !described.affected().isEmpty()) {
+            facts.put("affected", fact(String.join(", ", described.affected())));
+            facts.put("credentials", fact(String.join("; ", described.credentials())));
+        }
         String reference = switch (kind) {
-            case ProtectedChangeEntities.USER_ROLE -> user + " ← " + role;
-            case ProtectedChangeEntities.ROLE_PERMISSION -> role + " + " + change.get("permission");
+            case ProtectedChangeEntities.USER_ROLE -> user + " ← " + role + " (" + gained + ")";
+            case ProtectedChangeEntities.ROLE_PERMISSION -> role + " + " + change.get("permission") + " ("
+                + split(change.get("affectedUsers")).size() + ")";
             case ProtectedChangeEntities.IDENTITY_LINK -> user + " ← " + change.get("provider");
             default -> user + ": " + kind;
         };
         reference = reference.length() > 100 ? reference.substring(0, 100) : reference;
         return new ApprovalCase(String.valueOf(change.get("changeId")), facts, content, null,
             String.valueOf(change.get("requestedBy")), reference);
+    }
+
+    private static String fact(String text) {
+        return text.length() > 500 ? text.substring(0, 497) + "..." : text;
+    }
+
+    /** The values of a comma-separated list (the gained permissions, the affected users), sorted. */
+    static java.util.Set<String> split(Object list) {
+        java.util.Set<String> values = new java.util.TreeSet<>();
+        if (list != null) {
+            for (String value : String.valueOf(list).split(",")) {
+                if (!value.isBlank()) {
+                    values.add(value.strip());
+                }
+            }
+        }
+        return values;
     }
 
     /** A recorded change's values, its id included. */
@@ -410,10 +454,11 @@ public class ProtectedChangeProcesses {
             .step("Check the approval", RequireApproval.fixed(ProtectedChangeProcesses::toApply,
                 ProtectedChangeEntities.SUBJECT,
                 ctx -> approvalCase(values(ctx.get(LoadProtectedChange.CHANGE, EntityInstance.class)),
-                    names(ctx)),
+                    names(ctx), null),
                 ctx -> List.of(new ApprovalLevel(levelPermission(
                     ctx.get(LoadProtectedChange.CHANGE, EntityInstance.class).get("kind")), null)), OUTCOME))
             .compute("Apply", (metadata, ctx) -> apply(ctx))
+            .step("End the grantees' sessions", RevokeGrantedSessions.of(GRANTEES))
             .step("End the user's sessions", RevokeSessionsStep.class, new RevokeSessionsStep.Metadata(
                 LoadProtectedChange.USER, RefreshTokenStore.REASON_PASSWORD, ctx -> ctx.contains(APPLIED_PASSWORD))));
     }
@@ -442,7 +487,7 @@ public class ProtectedChangeProcesses {
         if (!ProtectedChangeEntities.PENDING.equals(change.get("status"))) {
             return;
         }
-        String contentHash = com.jabiz.approval.ContentHash.of(approvalCase(values(change), names(ctx))
+        String contentHash = com.jabiz.approval.ContentHash.of(approvalCase(values(change), names(ctx), null)
             .content());
         if (ApprovalEntities.REJECTED.equals(input.status())) {
             if (contentHash.equals(input.contentHash())) {
@@ -454,12 +499,9 @@ public class ProtectedChangeProcesses {
             return;
         }
         LoadProtectedChange.Checked checked = ctx.get(LoadProtectedChange.CHECKED, LoadProtectedChange.Checked.class);
-        if (checked.approverNotAllowed()) {
-            finish(ctx, change, ProtectedChangeEntities.FAILED, input.approverId(), null, "APPROVER_NOT_ALLOWED");
-            return;
-        }
+        String decider = ctx.get(LoadProtectedChange.DECIDER, String.class);
         if (checked.failure() != null) {
-            finish(ctx, change, ProtectedChangeEntities.FAILED, input.approverId(), null, checked.failure());
+            finish(ctx, change, ProtectedChangeEntities.FAILED, decider, null, checked.failure());
             return;
         }
         String kind = change.get("kind");
@@ -503,7 +545,10 @@ public class ProtectedChangeProcesses {
             }
             default -> throw new IllegalStateException("Unknown protected change kind " + kind);
         }
-        finish(ctx, change, ProtectedChangeEntities.APPLIED, input.approverId(), target, null);
+        if (kind.equals(ProtectedChangeEntities.USER_ROLE) || kind.equals(ProtectedChangeEntities.ROLE_PERMISSION)) {
+            ctx.put(GRANTEES, ctx.get(LoadProtectedChange.AFFECTED));
+        }
+        finish(ctx, change, ProtectedChangeEntities.APPLIED, decider, target, null);
     }
 
     /** At the change's effective time when that is still to come; otherwise now. */
@@ -524,7 +569,8 @@ public class ProtectedChangeProcesses {
 
     private static ApplyInput applyInput(DomainEvent event) {
         Map<String, Object> payload = event.payload();
-        return new ApplyInput(text(payload, "subject"), text(payload, "entityId"), text(payload, "status"),
+        return new ApplyInput(text(payload, "requestId"), text(payload, "subject"), text(payload, "entityId"),
+            text(payload, "status"),
             text(payload, "contentHash"), text(payload, "approverId"));
     }
 

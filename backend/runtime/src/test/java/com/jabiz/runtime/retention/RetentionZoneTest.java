@@ -60,6 +60,32 @@ class RetentionZoneTest {
         assertThat(policies("UTC").startOf(LocalDate.of(2026, 1, 1))).isEqualTo(Instant.parse("2026-01-01T00:00:00Z"));
     }
 
+    /** West of UTC (and in summer time) the new year starts hours after it does in UTC. */
+    @Test
+    void aZoneWestOfUtcWithSummerTime() {
+        RetentionPolicies newYork = policies("America/New_York");
+        // 2019-01-01 03:00 UTC is still 2018-12-31 22:00 in New York (UTC-5 in winter).
+        assertThat(newYork.dateOf(Instant.parse("2019-01-01T03:00:00Z"))).isEqualTo(LocalDate.of(2018, 12, 31));
+        assertThat(newYork.dateOf(Instant.parse("2019-01-01T05:00:00Z"))).isEqualTo(LocalDate.of(2019, 1, 1));
+        assertThat(SEVEN_YEARS.expiry(newYork.dateOf(Instant.parse("2019-01-01T03:00:00Z")),
+            newYork.fiscalYearEnd())).isEqualTo(LocalDate.of(2025, 12, 31));
+        // Summer time (UTC-4): the day changes at 04:00 UTC.
+        assertThat(newYork.dateOf(Instant.parse("2019-07-01T03:59:59Z"))).isEqualTo(LocalDate.of(2019, 6, 30));
+        assertThat(newYork.dateOf(Instant.parse("2019-07-01T04:00:00Z"))).isEqualTo(LocalDate.of(2019, 7, 1));
+        assertThat(newYork.startOf(LocalDate.of(2019, 7, 1))).isEqualTo(Instant.parse("2019-07-01T04:00:00Z"));
+        assertThat(newYork.startOf(LocalDate.of(2019, 1, 1))).isEqualTo(Instant.parse("2019-01-01T05:00:00Z"));
+    }
+
+    /** Where summer time starts at midnight, the day begins at 01:00: there was no midnight. */
+    @Test
+    void aDayWithoutAMidnight() {
+        RetentionPolicies saoPaulo = policies("America/Sao_Paulo");
+        // 2018-11-04: clocks went from 00:00 to 01:00 (UTC-3 to UTC-2).
+        assertThat(saoPaulo.startOf(LocalDate.of(2018, 11, 4))).isEqualTo(Instant.parse("2018-11-04T03:00:00Z"));
+        assertThat(saoPaulo.dateOf(Instant.parse("2018-11-04T02:59:59Z"))).isEqualTo(LocalDate.of(2018, 11, 3));
+        assertThat(saoPaulo.dateOf(Instant.parse("2018-11-04T03:00:00Z"))).isEqualTo(LocalDate.of(2018, 11, 4));
+    }
+
     @Test
     void datesStayAsTheyAreAndTextIsReadInTheZone() {
         RetentionPolicies tokyo = policies("Asia/Tokyo");

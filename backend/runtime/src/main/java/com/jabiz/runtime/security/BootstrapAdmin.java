@@ -66,15 +66,20 @@ public class BootstrapAdmin {
                 String userName = ctx.get(USER_NAME, String.class);
                 Object roleId = ctx.changes().insert(SecurityEntities.ROLE, Map.of("roleCode", ADMIN_ROLE,
                     "labels", Map.of("en", "Administrator", "zh", "管理员", "ja", "管理者"), "enabled", true));
-                ctx.changes().insert(SecurityEntities.ROLE_PERMISSION,
-                    Map.of("roleId", roleId, "permission", RequestContext.ALL_PERMISSIONS));
+                // With protected grants always on there is nobody to approve the first administrator (D48, review
+                // M1): the platform's grant, valid in this operation on an empty database only.
+                Object grant = com.jabiz.runtime.security.protect.BootstrapGrant.of(ctx.processSeqId());
+                ctx.changes().in(SecurityEntities.ROLE_PERMISSION_DATASET).granted(grant)
+                    .insert(SecurityEntities.ROLE_PERMISSION,
+                        Map.of("roleId", roleId, "permission", RequestContext.ALL_PERMISSIONS));
                 Map<String, Object> user = new LinkedHashMap<>();
                 user.put("userName", userName);
                 user.put("displayName", userName);
                 user.put("enabled", true);
                 user.put("passwordHash", ctx.get(UserProcesses.HASH, String.class));
                 Object userId = ctx.changes().insert(SecurityEntities.USER, user);
-                ctx.changes().insert(SecurityEntities.USER_ROLE, Map.of("userId", userId, "roleId", roleId));
+                ctx.changes().in(SecurityEntities.USER_ROLE_DATASET).granted(grant)
+                    .insert(SecurityEntities.USER_ROLE, Map.of("userId", userId, "roleId", roleId));
                 ctx.put(UserProcesses.USER_ID, userId);
             }));
 
