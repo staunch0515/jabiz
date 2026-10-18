@@ -1585,6 +1585,26 @@
         },
         "type" : "object"
       },
+      "MailLanguage" : {
+        "properties" : {
+          "defaultLocale" : {
+            "type" : "string"
+          },
+          "effective" : {
+            "type" : "string"
+          },
+          "languages" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "locale" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "MailPreferences" : {
         "properties" : {
           "templates" : {
@@ -2607,6 +2627,12 @@
       },
       "TemplatePreference" : {
         "properties" : {
+          "displayName" : {
+            "type" : "string"
+          },
+          "otherEntry" : {
+            "type" : "boolean"
+          },
           "subscribed" : {
             "type" : "boolean"
           },
@@ -3170,6 +3196,22 @@
       }
     },
     "/api/auth/account/locale" : {
+      "get" : {
+        "operationId" : "mailLanguage",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/MailLanguage"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "account-controller" ]
+      },
       "post" : {
         "operationId" : "setLocale",
         "requestBody" : {

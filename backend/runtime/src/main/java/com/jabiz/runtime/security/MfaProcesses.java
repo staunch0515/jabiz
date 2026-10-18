@@ -1,5 +1,8 @@
 package com.jabiz.runtime.security;
 
+import com.jabiz.runtime.security.protect.ProtectedChangeEntities;
+import com.jabiz.runtime.security.protect.ProtectedChangeProcesses;
+import com.jabiz.runtime.security.protect.ProtectedGrants;
 import com.jabiz.entity.Violation;
 import com.jabiz.i18n.PlatformErrorCodes;
 import com.jabiz.process.ProcessContext;
@@ -121,22 +124,27 @@ public class MfaProcesses {
                     new RandomBytesStep.Metadata(RANDOM, RecoveryCodes.COUNT * RecoveryCodes.BYTES_PER_CODE))
                 .step("Confirm the secret", MfaEnrollStep.class, MfaEnrollStep.Phase.CONFIRM));
 
-    public static final ProcessDefinition<ResetInput, UserIdOutput, ProcessContext> RESET =
-        ProcessDefinition.define("SEC_MFA_RESET", 1, ResetInput.class, UserIdOutput.class, ProcessContext.class,
-            pb -> pb
-                .description("Removes the second factor of a user, who sets up a new one at the next sign-in.")
+    public static final ProcessDefinition<ResetInput, UserProcesses.CredentialResetOutput, ProcessContext> RESET =
+        ProcessDefinition.define("SEC_MFA_RESET", 1, ResetInput.class, UserProcesses.CredentialResetOutput.class,
+            ProcessContext.class, pb -> pb
+                .description("Removes the second factor of a user, who sets up a new one at the next sign-in; for a"
+                    + " holder of a protected permission it waits for another administrator's approval.")
                 .permissions(SecurityPermissions.MFA_RESET)
                 .requiresMfa(MfaRequirement.ADMINISTRATION)
                 .contextFactory((start, input) -> {
                     ProcessContext ctx = new ProcessContext(start);
                     ctx.put(USER_ID, input.userId());
+                    ctx.put("reason", input.reason());
                     return ctx;
                 })
-                .outputMapper(ctx -> new UserIdOutput(String.valueOf(ctx.get(USER_ID))))
+                .outputMapper(ctx -> UserProcesses.CredentialResetOutput.of(ctx, ctx.get(USER_ID)))
                 .step("Load the user", LoadEntity.by(SecurityEntities.USER_DATASET, USER_ID, USER))
                 .step("Load the second factor", QueryEntities.of(SecurityEntities.USER_MFA_DATASET,
                     ctx -> Rbac.all(new QueryPredicate.Eq("userId", ctx.get(USER, EntityInstance.class).id()),
                         "userId"), MFA))
+                .step("Assess the reset", ProtectedChangeProcesses.assess(ctx -> new ProtectedGrants.Draft(
+                    ProtectedChangeEntities.MFA_RESET, java.util.UUID.fromString(String.valueOf(
+                        ctx.get(USER, EntityInstance.class).id())), null, null)))
                 .compute("Remove the second factor", (metadata, ctx) -> {
                     Optional<EntityInstance> mfa = first(ctx);
                     if (mfa.isEmpty()) {
@@ -144,8 +152,16 @@ public class MfaProcesses {
                             "The user has no second factor"));
                         return;
                     }
+                    Map<String, Object> values = new LinkedHashMap<>();
+                    values.put("kind", ProtectedChangeEntities.MFA_RESET);
+                    values.put("userId", ctx.get(USER, EntityInstance.class).id());
+                    values.put("mfaId", String.valueOf(mfa.get().id()));
+                    if (ProtectedChangeProcesses.defer(ctx, values, ctx.get("reason", String.class))) {
+                        return;
+                    }
                     ctx.changes().delete(SecurityEntities.USER_MFA, mfa.get().id(), mfa.get().version());
-                }));
+                })
+                .step("Ask for approval", ProtectedChangeProcesses.requireApproval()));
 
     /** The user's second factor, confirmed or pending, if any. */
     @SuppressWarnings("unchecked")
@@ -181,7 +197,7 @@ public class MfaProcesses {
     }
 
     @Bean
-    ProcessDefinition<ResetInput, UserIdOutput, ProcessContext> secMfaResetProcess() {
+    ProcessDefinition<ResetInput, UserProcesses.CredentialResetOutput, ProcessContext> secMfaResetProcess() {
         return RESET;
     }
 }

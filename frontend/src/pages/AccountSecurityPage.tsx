@@ -7,6 +7,7 @@ import {
   CardTitle,
   ChangePasswordForm,
   LinkedIdentities,
+  MailPreferences,
   MfaSettings,
   SessionList,
   type OidcProvider,
@@ -67,12 +68,19 @@ export const ACCOUNT_SECTIONS: AccountSection[] = [
     ),
     shown: ({ providers }) => providers.length > 0,
   },
+  {
+    // The notifications of the administration's entry and the language of the user's mail (phase 16s, decision D49).
+    name: 'mail',
+    title: (t) => t('mailPreferences.title', { ns: AUTH_NAMESPACE }),
+    Content: () => <MailPreferences className="max-w-2xl" />,
+  },
 ]
 
 /**
  * The signed-in user's own security (docs/design/10-security.md): two-step verification (section 9), the password
- * (section 15.8, decision D43 item 3), the sessions (section 15.9) and the linked provider accounts (section 12, where
- * providers are offered), each a section of {@link ACCOUNT_SECTIONS}.
+ * (section 15.8, decision D43 item 3), the sessions (section 15.9), the linked provider accounts (section 12, where
+ * providers are offered) and their mail (docs/design/18-numbering-approvals-tasks.md section 5.6, decision D49), each
+ * a section of {@link ACCOUNT_SECTIONS}.
  */
 export default function AccountSecurityPage() {
   const { t, i18n } = useTranslation()

@@ -50,6 +50,7 @@
 | D45 | 热门命名锁的准入与流程入口限流：取锁前在进程内排队（不占连接）、队满或超时 503 `PROCESS_BUSY`、正确性只靠咨询锁、流程接口按配置限流（补充 14o 与 D42 第 3 条，不取代） | 已确认（2026-10-16）；已实施（阶段 16o） | 06 §4.2、§8、03 §1、10 §15.10、11 §4.1、13 |
 | D46 | 流程事务内的写入合并与按已知版本更新：读之前写出、时态插入不先查、引用检查复用本事务的读写、普通实体按已知版本更新、锁在读之前、不跨事务缓存、语句预算（补充 D4、D6、D11、D14、D27，不取代） | 已确认（2026-10-16）；16p-1 已实施（第 1 条限于一次提交之内），16p-2 待做 | 06 §3.1、§4.1、04 §2.2、03 §2、11 §1、21 §1、13 |
 | D47 | 登录类接口按地址限流、口令哈希的并发上限、文件元数据可按策略对非上传者隐藏（补充 D12、D18、D36、D45，不取代） | 已确认（2026-10-17）；已实施（阶段 16q） | 10 §4.1、§4.2、14 §5.1、13 |
+| D48 | 受保护授权的四眼（建立期、首个管理员退役）、会计年度的时区、不公开元数据的文件用随机编号（补充 D12、D18、D23、D27、D28、D40、D47，不取代） | 已确认（2026-10-17）；已实施（阶段 16r） | 10 §16、18 §3.3–§3.4、21 §3.1、14 §5.1 |
 
 ---
 
@@ -1484,7 +1485,7 @@ P-8 原写"`false` 即逐条执行（16p-1 的局部合并同样受它控制）"
 事务结束（提交、回滚、失败、取消）即归还；子流程不排队。`PasswordHasher.hash` / `matches` 经 `compute` 取同样大小的公平信号量（在虚拟线程上阻塞等待至多 `max-wait`），
 约束其他途径（子流程、启动时）的计算；经过事务前队列的运行从不在这里等待。`AuthBusyException` → 503 `AUTH_BUSY`（`violations[0].params.retryAfter`，另作顶层属性 `retryAfter`），三种语言的消息；
 观测 `jabiz.auth.hashing.busy`（无标签）。
-③`FileController` 以 `seesPrivateMetadata` 判断（上传者按 `uploadedBy` 与操作人编号比较），`FileContent.neutralName` 与公开文件共用。自查发现的局限：`fileId` 是 UUIDv7，带着毫秒级的创建时刻，所以截到日只是元数据不给出、不能真正隐藏上传时刻（原名与上传者不受影响）；记入 14 §5.1，未改主键约定。没有迁移；OpenAPI 不变（`FileMeta` 的三个字段本来就可为空）。
+③`FileController` 以 `seesPrivateMetadata` 判断（上传者按 `uploadedBy` 与操作人编号比较），`FileContent.neutralName` 与公开文件共用。自查发现的局限：`fileId` 是 UUIDv7，带着毫秒级的创建时刻，所以截到日只是元数据不给出、不能真正隐藏上传时刻（原名与上传者不受影响）；记入 14 §5.1，未改主键约定。（16r：由 D48 第 3 条解决，这类文件改用随机编号。）没有迁移；OpenAPI 不变（`FileMeta` 的三个字段本来就可为空）。
 ④同一阶段把 Spring Boot 从 4.0.1 升到 4.0.8（reactor-netty 1.3.7 修复 CVE-2026-47874），见 ROADMAP 16q。
 ⑤**独立评审之后的修订（2026-10-17）**：
 - M1：`PasswordHashingLimit.around` 取得许可后与调用方分离（`toFuture()` + `Mono.fromFuture(run, true)`，同 `ProcessAdmission`），断开的请求不再在 BCrypt 仍在计算时放回许可（`PasswordHashingLimitTest.aCallerGoingAwayDoesNotFreeThePermitWhileTheHashingStillRuns`）。
@@ -1494,3 +1495,137 @@ P-8 原写"`false` 即逐条执行（16p-1 的局部合并同样受它控制）"
 - L3：`PasswordHashingLimitIT` 直接占住计算的许可，登录 503 `AUTH_BUSY`、不写登录记录、不计失败。L4：见第 3 条与 14 §5.1。
 - L5：链路本地地址去掉作用域后按 /64；没有地址的请求共用键 `unknown`（10 §4.1）。
 - 端到端测试的管理员从本机登录数十次：CI 的 `e2e` 作业只放宽"地址 + 名字"的桶（`JABIZ_SECURITY_SIGN_IN_RATE_LIMIT_PER_USER_ADDRESS`、`_USER_BURST`），地址的桶照缺省。
+
+## D48 受保护授权的四眼、会计年度的时区、不公开元数据的文件用随机编号
+
+**背景**：①授权本身没有四眼：持有 `security.user-role.write` 或 `security.role.write`（或 `*`）的一个人可以独自给任何人（包括自己或另一个自己控制的账号）
+能改权限、能审批、能记账的权限，也可以独自重设另一位管理员的密码、二次验证或关联自己的外部账号，再以对方的身份审批自己的请求——审批规则、职责分离与受控参数的四眼（D23、D40）因此可以绕过；
+首个管理员的凭据来自部署的环境变量（10 §7），有了真正的管理员之后仍然拥有全部能力。②保留期按会计年度末起算（D27），但日期按 UTC 判断：
+在日本，1 月 1 日 00:00–08:59 记账的记录被算进上一会计年度，少保留一年。③D47 第 3 条的局限：`privateMetadata()` 的文件编号是 UUIDv7，编号本身带着上传时刻与先后。
+本条补充 D12、D18、D23、D27、D28、D40、D47，不取代任何决策（2026-10-17 产品负责人确认，阶段 16r）。
+
+**决策**
+1. **受保护的授权须另一位管理员审批**（10 §16）：
+   - 受保护的权限以配置 `jabiz.security.protected-grants.permissions` 声明，缺省 `*`、`security.user-role.write`、`security.role.write`、`approval.decide`、`control.publish`、
+     `ledger.post`、`ledger.reverse`、`platform.param.write`；`*` 总是受保护。
+   - 受保护的变更：分配角色、角色增加权限而使某用户获得尚未持有的受保护权限；对持有受保护权限的用户重设密码、重置二次验证、由他人关联外部账号。
+     持有按"可能持有"计（最新版本未删除的分配、角色、授权，不论启用与预定），所以启用角色或用户不另查。
+   - 用审批（D23，18 §3）而不是受控变更：请求流程 `SEC_USER_ROLE_ASSIGN`、`SEC_ROLE_PERMISSION_ADD`、`SEC_USER_IDENTITY_LINK`（及原有的 `SEC_USER_SET_PASSWORD`、`SEC_MFA_RESET`）
+     登记待审批的 `SecProtectedChange` 并以 `RequireApproval` 请求审批（对象 `jabiz.security.protected-change`，层级由平台固定为一层、权限为该种变更的写权限，不读审批规则）；
+     待办与后台的待办页面照旧出现；批准事件的消费者 `SEC_PROTECTED_CHANGE_APPLY`（`internal()`）在内容哈希仍相同时以平台生成的许可写入，驳回即记录。
+     待审批的变更没有任何效果。
+   - 职责分离：申请人不能审批（`APPROVAL_OWN_REQUEST`）；变更所针对的用户不能批准（`APPROVAL_TARGET_USER`，按审批与生效时的情况判断）；审批需要管理级二次验证；批准绑定内容哈希，
+     内容中含请求时给出的受保护权限与所针对的用户，生效时给某个用户超出它与其他已生效变更的批准的受保护权限即不生效（`CHANGE_GREW`；生效时只计在它之前请求的待审批变更）；
+     待审批的分配与角色权限视同已生效，不能借它们把权限"带进去"。生效只认这个变更自己的审批请求的事件与其中记录的批准。
+   - 审批人须持有 `*`，或持有管理员的权限（`security.user-role.write` / `security.role.write`）并持有变更给出的（重设凭据时为目标持有的）全部受保护权限：
+     谁也不能批准比自己持有的更多的东西；审批时按令牌，生效时按库中实际持有再判断（含 `approval.decide` 与层级的权限）。
+   - 获得受保护权限的用户的凭据须是本人的，按账号全部历史的**所有权链**判断：凭据只有在建立时没有别人可能知道一个可用的凭据才是本人的——自助注册、
+     干净的账号上本人修改、寄到本人邮箱的一次性链接；管理员设置的密码及由它"本人"改出的密码不是，直到经邮件链接重设；管理员之后改过的邮箱不是本人的；
+     在不干净的账号上绑定的二次验证、关联的外部账号也不是。否则不生效（`TARGET_CREDENTIALS_NOT_OWN`）；审批的事实给出凭据的全部历史；授予生效时吊销获得者的全部会话。
+     剩余风险：能控制用户邮箱、设备或提供方账号的管理员仍能冒充用户，以检测性控制应对（审批人核对事实、访问审查、审计、登录记录）。
+   - 判断授权的每一处先取职责分离的锁（`jabiz.sod`）；职责分离的写入检查也移到 `VersionAppender`，撤销与取消预定同受约束。
+   - 一切时态写入的必经之处（`VersionAppender`，新的异步检查 `TemporalWriteCheck`）拒绝没有许可的受保护授权（422 `PROTECTED_CHANGE_REQUIRES_APPROVAL`）：
+     数据视图、实体 API、通用实体流程、导入、业务流程的变更集、撤销与取消预定都不能绕过（同 D40 第 2 条的做法）。
+   - **建立期与首个管理员**：管理员 = 经启用的角色持有 `*` 的启用用户；首个管理员 = `SEC_BOOTSTRAP_ADMIN` 建立的每一个用户。首个管理员之外有两位管理员之前，受保护的变更当即生效；
+     首次出现时记入只追加表 `sec_protected_grants_armed`，此后永不回到建立期（停用管理员不能重开）。存在另一位管理员时首个管理员不能提出、写入或审批受保护的变更（403 `BOOTSTRAP_ADMIN_RETIRED`），
+     首次出现时记入 `sec_bootstrap_retired`，永久退役。管理员按现在或之后某个预定版本中有效计。`always=true` 时第一位管理员由 `SEC_BOOTSTRAP_ADMIN` 凭平台许可在空库上建立。
+     `jabiz.security.protected-grants.enabled`（缺省 `true`）关闭全部；`.always=true` 不设建立期。
+2. **会计年度的时区** `jabiz.fiscal-year-zone`（缺省 `UTC`，兼容）：保留期中时间字段的日期、"今天"与到期报告的边界都按该时区（21 §3.1）。平台中别处没有会计年度的计算（账本按时刻、报表另有显示时区），不随之改变。
+3. **不公开元数据的文件用随机编号**：`FilePolicy.privateMetadata()` 的策略上传的文件以 UUIDv4 为 `fileId`（其他文件照旧 UUIDv7，CLAUDE.md 的主键约定对此例外），存储键为 `r/<前两位>/<fileId>/…`，
+   清扫中这类无行对象的年龄按文件系统时间（14 §5.1、§6）。取代 D47 实现说明③记下的局限。
+
+**理由**：授权是所有其他四眼的根：只要一个人能独自给出审批权，审批规则就只是一道手续。审批（而不是受控变更）已有待办、后台审批面板、内容哈希与"准备人不能审批"，
+而且请求可以带上不能放进受控变更值中的东西（新密码的哈希以敏感字段保存，与用户表相同）。检查放在必经之处，新写入途径无需各自记得。
+缺省开启但有建立期：没有建立期则单管理员的安装永远建不出第二位管理员；缺省关闭则多管理员的生产部署在不知情时没有保护；建立期一旦关上便不随数据变化重开。
+首个管理员的凭据在部署配置中，有了真正的管理员就应当退出受保护的操作。会计年度按业务所在地的日期划分；随机编号是唯一能让编号不带时刻的做法。
+
+**放弃的方案**：①受控变更（`CONTROL_CHANGE_*`）：没有待办与审批面板，新密码只能以可读的 JSON 保存，审批人也无从按对象区分；②只在请求流程中检查（数据视图、导入、撤销可以绕过）；
+③缺省关闭（多管理员部署无保护）；④只有一位管理员时不保护、按当时人数判断（停用其他管理员即可重新独自授权）；⑤以 `JABIZ_BOOTSTRAP_ADMIN_USER` 的名字识别首个管理员（配置可以删、名字可以改）；
+⑥受保护的权限写在数据中（解除标记又需要自己的四眼，同 D40 放弃的方案①）；⑦审批规则决定这类变更是否需要审批（规则是数据，可以被改成"不需要"）；
+⑧会计年度时区复用 `jabiz.reports.zone`（显示与保留的含义不同，改显示不应改变保留期）；⑨所有文件都用随机编号（失去按月的存储布局与按编号的清扫年龄，改变已有应用）。
+
+**实现说明（16r）**：
+①runtime `com.jabiz.runtime.security.protect`：`ProtectedGrantSettings`（`PlatformCheck`：权限码格式）、`ProtectedGrants`（持有、管理员、首个管理员、建立期；按不可变列先筛选，新索引
+`sec_user_role_version (role_id)`、`sec_role_permission_version (permission)`）、`ProtectedGrantWriteCheck`（`TemporalWriteCheck`）、`ProtectedChangeProcesses`、`ProtectedChangeDecisionCheck`
+（approval 包新增的 `ApprovalDecisionCheck`，`APPROVAL_DECIDE` 在取得请求后运行）、`LoadProtectedChange`、`ProtectedChangeGrant`；core `ProtectedPermissions`；迁移 `V41__protected_grants.sql`
+（`sec_protected_change_version`、`sec_protected_grants_armed`、两个索引、`sys_approval_request_version` 的规则列可空）。
+②`RetentionPolicies` 给出 `zone()`、`today(clock)`、`dateOf(值)`、`startOf(日)`，`DeletionGuard` 与 `RetentionReport` 共用；无效的时区为启动错误 `RETENTION`。
+③`FileUploadService` 对 `privateMetadata()` 的策略取 `UUID.randomUUID()`；`FileKeys` 两种布局；`PurgeStoredContent` 对随机编号用 `LocalFileStore.olderThan`。
+④前端：流程表单页与行操作在输出带 `approval: PENDING` 时提示"已提交审批"；审批在已有的待办页（`ApprovalPanel`）进行；待审批的变更在 `SecProtectedChange` 的通用列表中可见。
+⑤**独立安全评审之后的修订（2026-10-18，H1、H2、M1–M3、L1、L2）**：
+- H1：批准绑定 `SecProtectedChange.gained` / `affectedUsers`（进入内容哈希与事实）；生效时在锁内重新判断，增长即 `FAILED CHANGE_GREW`；`ProtectedGrants` 把待审批的分配与角色权限计入
+  "角色给出的"与"角色的用户"（减去已持有时不计入）。
+- H2：凭据类变更的审批层级改为 `security.user-role.write`；`ProtectedChangeDecisionCheck.covers`：`*`，或管理员的权限 + 全部给出的受保护权限；生效时以 `effectiveHoldings`（当时生效的版本）再查。
+- M1：`BootstrapGrant`（只在 `SEC_BOOTSTRAP_ADMIN` 自己的系统操作、库中没有别的操作建立的用户时有效）。
+- M2：`ProtectedGrantWriteCheck`、请求流程的判断、审批检查与生效都先取 `jabiz.sod` 锁；`SodWriteCheck` 改为 `TemporalWriteCheck`（撤销、取消预定同样检查）；`VersionAppender` 懒取检查（避免依赖环）。
+- M3：`ProtectedGrants.credentials` 从 `sec_user_version` 的版本、身份关联与二次验证的首个版本及 `op_process` 判断谁设置了凭据（自助流程名单见 10 §16.2）；`RevokeGrantedSessions` 吊销获得者的会话（原因 `PROTECTED_GRANT`）。
+- L1：`admins(now)` 按现在或之后的版本；`sec_bootstrap_retired`。
+- L2：`bootstrapUser()` 按 `row_id` 排序；生效取 `sys_approval_decision` 中的审批人；`MFA_RESET` 绑定 `mfaId`（`MFA_CHANGED`）；`enabled=false` 且已结束建立期时启动警告并记操作 `SEC_PROTECTED_GRANTS_OFF`；
+  注册角色持有受保护权限的启动警告（`ProtectedGrantChecks`）；21 §3.1 说明时区向西改动的影响。
+- `SecProtectedChange.userId` / `roleId` 改为文本编号（不是引用）：已记录的变更不应阻止删除其用户或角色。
+⑥**评审复核之后的修订（2026-10-18）**：
+- M3：`CredentialChain`（所有权链，纯 Java，`CredentialChainTest`）取代"最后一次由谁设置"；`ProtectedGrants.credentials` 读用户、外部关联、二次验证的全部版本与其操作（含操作人名字）；
+  事实 `history`（审批对象新增的事实，按最近的部分截断）；二次验证按其第一个版本判断（以恢复码登录写的版本不算，`SPONSOR_MFA_VERIFY`）。
+- 审批人：生效时 `ProtectedChangeDecisionCheck.mayDecide`（`*`，或 `approval.decide` + 层级的权限 + `covers`）。
+- 事件的绑定：`LoadProtectedChange` 只接受请求编号属于本变更（对象、实体编号）的事件，审批人取自该请求的批准。
+  `PublishEvent` 不让平台之外的代码建立的步骤发出 `jabiz.*` 事件（启动检查与运行时都拒绝，按建立步骤的类是否与平台同一代码来源判断；防误用，不是对手动构造 `StepSpec` 的边界）；
+  示范应用与 QuizBuks 没有发出 `jabiz.*` 的流程，兼容。
+- H1 活性：`ProtectedGrants.pending` 对已记录的变更只计在它之前请求的待审批变更；超出本次批准的"用户 × 权限"若被另一个已生效变更的批准覆盖（`approvedFor`）不算增长；重设凭据不允许增长。
+- 首个管理员：`bootstrapUsers()` 为 `SEC_BOOTSTRAP_ADMIN` 建立的全部用户（建立期的计数与退役都用它）；建立期结束后（或 `always=true`）再建首个管理员被拒绝时启动记错误日志而不失败。
+⑦**评审复核三之后的修订（2026-10-18，M-a、M-b、L-a–L-d）**：
+- M-a：事实 `address`（当前邮箱、由谁何时填写、是否经邮件证明）、`newAddress`；`history` 总是保留每个用户的第一行（建立账号及其地址），省略中间
+  （`AssessProtectedChange.keepEnds`）；配置 `jabiz.security.protected-grants.trusted-email-domains` 时标出不在可信域中的地址。
+  保留"管理员建立账号时填写的地址经邮件证明后算本人的"（评审确认：地址在审批人面前可见且不能被换掉）。
+- M-b：新的受保护变更种类 `EMAIL`（`SEC_USER_EMAIL_SET`，`SecProtectedChange.email`，层级 `security.user-role.write`，审批人覆盖如重设凭据）；
+  `ProtectedGrantWriteCheck` 拒绝持有人（含待审批的获得者）邮箱的直接写入；生效时以 `jabiz.auth.email-changed` 通知旧地址；
+  已登录用户申请验证别人在建立后改过的地址、而账号不干净时 422 `EMAIL_SET_BY_ANOTHER`（`AddressVerifiable`，用于 `SPONSOR_EMAIL_VERIFY_SEND`）。
+- L-a：二次验证按最近一个改变密钥或确认的版本判断（只确认时保持原判断）；L-b：同一行的版本与操作顺序不一致时不算本人的。
+- L-c：`Approved.covers` 要求其写入仍有效、数据期限至少同样宽、生效不晚于本变更。L-d：驳回按请求记录（状态、内容哈希、驳回人）判断。
+- `PublishEvent`：只记录保留类型的平台步骤（按身份）；代码来源按类只算一次（`ClassValue`）；其局限见 11 §2。
+- 审批事实中的过去地址随审批记录封存而永久留存（21 §3.2）。
+
+## D49 收件偏好按登录入口列出、邮件模板的显示名、界面语言与邮件语言分开
+
+（D48 已由进行中的 `1.2/phase-16r-controls` 使用。）
+
+**背景**：QuizBuks Q7 计划的平台缺口 P1（`1.2/quizbuks-7-plan` 的 `docs/quizbuks/plans/Q7-messages-legal.md`，Q7-13 选 A，2026-10-18 确认）：
+`GET /api/auth/mail/preferences` 把**全部** NOTIFICATION 模板列给每个用户（答题人会看到"发布预算不足"这类商家邮件），只有模板名、没有给人看的名字；
+`@jabiz/client` 没有收件偏好与邮件语言的函数，也没有读取邮件语言的接口；通用后台没有偏好页；切换界面语言不改邮件语言（`POST /api/auth/account/locale` 无人调用）。
+本条补充 D35（第 4、5 条）与 D36（登录入口），不取代任何决策（阶段 16s）。
+
+**决策**
+1. **模板声明适用的登录入口**：`MailTemplate.define(名, t -> t.….entries("app", …))`，不声明即全部入口（与之前相同，兼容）。入口名须为可用的入口（启动检查 `MAIL`，错误）。
+   收件偏好接口列出调用者**令牌所属入口**适用的 NOTIFICATION 模板；设置偏好时，其他入口的模板与不存在、不可退订的名称在**同一个流程**
+   （`SEC_MAIL_PREFERENCE_SET`，以请求的入口判断）中以同样的 422 `INVALID_VALUE` 拒绝，回答、路径与计数都不透露其他入口的模板。
+   入口只决定偏好中列出什么：发送（`SendMail`）与退订链接（无入口）不看入口；偏好仍按用户 × 模板保存。
+   **退订不会看不见**：用户经邮件中的链接（或在另一个入口）关闭的其他入口的模板，照样列在偏好中（`otherEntry: true`，界面上为"您关闭的其他邮件"），
+   可以重新开启；重新开启后它不再列出，也不能再从这个入口设置。列出的只是用户自己关闭过的模板，不透露其他入口还有哪些邮件。
+2. **显示名**是消息 `mail.<名>.name`（应用所选的每种语言）。偏好接口按请求语言给出（缺则缺省语言，再缺则模板名），作为新增字段 `displayName`；
+   NOTIFICATION 模板缺某种语言的显示名时启动检查 `MAIL` 告警（不报错，已有应用照常启动）。
+3. **界面语言与邮件语言分开**：界面语言属于浏览器（`localStorage`），邮件语言属于账号（`SecUser.locale`），切换界面语言**不**静默修改邮件语言。
+   平台提供询问：`@jabiz/client` 的 `mailLanguageOffer(lang)` 判断是否值得询问（已登录、应用有该语言、邮件当前用的是另一种），`@jabiz/ui` 的
+   `offerMailLanguage(lang)` 以带按钮的提示询问，用户接受才 `setMailLanguage`。前端在自己的语言切换中显式调用（通用后台的顶栏已调用）。
+4. 新增 `GET /api/auth/account/locale`（本人的 `locale`、实际使用的 `effective` 与可选的 `languages`）；`@jabiz/client` 增加 `getMailPreferences`、`setMailPreference`、
+   `getMailLanguage`、`setMailLanguage`；`@jabiz/ui` 增加积木 `MailPreferences`（开关列表与邮件语言选择），通用后台安全设置页与示范门户账户页使用它。
+5. 线 1.2 内兼容：接口只新增字段与 GET，原字段与行为不变（只是偏好列表按入口过滤）。`MailTemplate` 与 `TemplatePreference` 是 record，
+   新增组件改变了它们的**规范构造器与组件数**（`MailTemplate` 4 → 5，`TemplatePreference` 2 → 4）：以 `MailTemplate.define` 声明的应用不受影响，
+   原四参 / 两参构造仍保留（全部入口 / 显示名为模板名）；直接调用规范构造器、对 record 做解构模式匹配或按组件反射的代码需要改写。
+   `.entries(...)` 只对 NOTIFICATION 有意义：写在 TRANSACTIONAL 模板上时启动检查 `MAIL` 告警。
+6. 界面语言切换后的询问一直显示到用户回答（"用于邮件" / "暂不"），并说明以后在账户设置的"邮件"中修改；打开着的 `MailPreferences` 经 `onMailLanguageChange` 立即显示新的语言。
+   邮件语言可选"默认"（`locale` 为 null，随应用的缺省语言）。
+
+**理由**：模板属于哪类用户是声明方最清楚的事实，写在模板上与名称、类别放在一起，平台据此过滤，应用不必在前端维护名单（Q7-13 的方案 B 会把名单与名字分散到每个 SPA）；
+显示名走消息资源，与标题、正文同样有三语检查。邮件语言是给离线收件人的设定，界面语言是这台设备上的偏好，二者常常不同（在公司电脑上用英文界面、邮件读中文），
+静默同步会让用户在不知情时改掉账号设置，因此只询问。
+
+**放弃的方案**：①按角色或权限过滤（模板与入口的对应才是"谁会看到这个前端"，同一角色可在多个入口登录；角色是数据，启动时无法检查）；
+②在偏好接口的 POST 中接受其他入口的模板（会让一个入口的用户经接口试探其他入口的模板名）；③界面语言切换时自动改邮件语言（静默修改账号设置）；
+④把显示名写在模板声明中（Java 代码中写死一种语言，不能按应用所选语言检查）。
+
+**实现说明（16s）**：`MailTemplate` 新增组件 `entries`（`Set<String>`，空即全部）、`appliesTo(entry)`（空入口按 `admin`）、`nameKey()`；
+`MailUnsubscribeController` 以令牌的 `entry` 过滤、附上用户关闭过的其他入口的模板，并以 `MessageCatalog` 取显示名；POST 直接运行流程，
+`MailProcesses.setPreference` 以 `ctx.request().entry()` 判断（null 即退订链接，不限入口；其他入口的模板只在用户已关闭时可设）；
+（独立评审后的修订：原先在控制器中预先拒绝其他入口的模板，不经流程，计时与计数可区分两种情况，已移入流程；`MailPreferencesIT` 以流程的观测计数断言两者都经流程拒绝。）
+`AccountController` 读 `sec_user_version` 的最新版本（同 `SendMail`）；`MailChecks` 增加两项检查。示范的 `commerce.order-shipped` 声明 `.entries("portal")`。
+没有迁移。测试：`MailPreferencesIT`（按入口列出与显示名、其他入口的模板与未知名称同样拒绝、只改本人的偏好、退订链接不看入口、读写本人的邮件语言）、
+`MailIT`（已退订的门户模板不发送）、`MailChecksTest`、`MailTemplateTest`、`mail.test`（client）、`MailPreferences.test`（ui，含亮暗两种外观的 axe）、`AccountSecurityPage.test`、`AppLayout.test`、门户 `App.test`。

@@ -7,6 +7,7 @@ import com.jabiz.entity.ValidationException;
 import com.jabiz.i18n.PlatformErrorCodes;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
+import com.jabiz.runtime.BusinessRuleViolationException;
 import com.jabiz.runtime.DatasetEntityManager;
 import com.jabiz.runtime.context.RequestContexts;
 import com.jabiz.runtime.dataset.DatasetRegistry;
@@ -66,15 +67,20 @@ public class BootstrapAdmin {
                 String userName = ctx.get(USER_NAME, String.class);
                 Object roleId = ctx.changes().insert(SecurityEntities.ROLE, Map.of("roleCode", ADMIN_ROLE,
                     "labels", Map.of("en", "Administrator", "zh", "管理员", "ja", "管理者"), "enabled", true));
-                ctx.changes().insert(SecurityEntities.ROLE_PERMISSION,
-                    Map.of("roleId", roleId, "permission", RequestContext.ALL_PERMISSIONS));
+                // With protected grants always on there is nobody to approve the first administrator (D48, review
+                // M1): the platform's grant, valid in this operation on an empty database only.
+                Object grant = com.jabiz.runtime.security.protect.BootstrapGrant.of(ctx.processSeqId());
+                ctx.changes().in(SecurityEntities.ROLE_PERMISSION_DATASET).granted(grant)
+                    .insert(SecurityEntities.ROLE_PERMISSION,
+                        Map.of("roleId", roleId, "permission", RequestContext.ALL_PERMISSIONS));
                 Map<String, Object> user = new LinkedHashMap<>();
                 user.put("userName", userName);
                 user.put("displayName", userName);
                 user.put("enabled", true);
                 user.put("passwordHash", ctx.get(UserProcesses.HASH, String.class));
                 Object userId = ctx.changes().insert(SecurityEntities.USER, user);
-                ctx.changes().insert(SecurityEntities.USER_ROLE, Map.of("userId", userId, "roleId", roleId));
+                ctx.changes().in(SecurityEntities.USER_ROLE_DATASET).granted(grant)
+                    .insert(SecurityEntities.USER_ROLE, Map.of("userId", userId, "roleId", roleId));
                 ctx.put(UserProcesses.USER_ID, userId);
             }));
 
@@ -112,6 +118,18 @@ public class BootstrapAdmin {
                     .contextWrite(view -> RequestContexts.put(view, system))
                     .block();
                 log.info("Created the first administrator {} (user {})", userName.trim(), created.userId());
+            } catch (BusinessRuleViolationException e) {
+                if (e.violations().stream().noneMatch(v ->
+                    PlatformErrorCodes.PROTECTED_CHANGE_REQUIRES_APPROVAL.equals(v.ruleCode()))) {
+                    throw e;
+                }
+                // Every user and the role ADMIN were deleted after the setup window of protected grants ended (or with
+                // it always on): the platform gives * to nobody unapproved again (decision D48, review L2).
+                log.error("Did not create the administrator {} again: every user and the role {} were deleted, and"
+                    + " protected grants (jabiz.security.protected-grants) no longer let the platform give {} without"
+                    + " another administrator's approval. Restore an administrator from a backup, or start once with"
+                    + " jabiz.security.protected-grants.enabled=false to create one.", userName.trim(), ADMIN_ROLE,
+                    RequestContext.ALL_PERMISSIONS);
             } catch (ValidationException e) {
                 // Instances starting together: another one created the administrator first (decision D6 unique keys).
                 if (e.violations().stream().noneMatch(v -> PlatformErrorCodes.UNIQUE_VIOLATION.equals(v.ruleCode()))) {

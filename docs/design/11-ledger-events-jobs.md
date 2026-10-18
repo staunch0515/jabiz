@@ -125,6 +125,9 @@ Spring Modulith 的事件发布注册表只支持 JPA、JDBC、MongoDB、Neo4j�
 ### 2.2 发布
 
 - **`PublishEvent` 步骤**：`PublishEvent.of(类型, ctx -> 载荷)`（或 `PublishEvent.when(条件, 类型, ctx -> 载荷)`），由 `OutboxEventPublisher` 在流程事务内写入 Outbox。
+  以 `jabiz.` 开头的事件类型是平台的（审批的结论、签发的单据与报表等）：应用的流程不能发出（启动检查与运行时都拒绝，D48 实现说明⑥）；应用的事件以应用自己的名字开头。
+  判断依据是建立该步骤的类是否与平台的运行时来自同一代码来源，这是防误用而不是边界：应用与运行时被打进同一个 jar（shade）时放行，类没有代码来源时一律拒绝；
+  平台的订阅者从不只凭事件内容行事，而是按事件所指的记录重新读取。
   载荷必须是对象（record 或 Map），经 `SensitiveDataMasker` 去掉秘密（null）。事务回滚 → 没有事件。
 - **实体变更事件**：实体声明 `eb.publishChanges()`（元模型导出 `publishesChanges`）后，每次提交的写入都在同一事务中追加事件
   `jabiz.entity-changed.<实体>`，载荷 `{entityType, entityId, action, version, effectiveTime?, changedFields}`：

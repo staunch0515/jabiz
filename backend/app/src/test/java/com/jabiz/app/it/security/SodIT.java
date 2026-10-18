@@ -120,4 +120,46 @@ class SodIT extends SecurityItSupport {
             .isNotEmpty().allSatisfy(row -> assertThat(row).containsEntry("wildcard", true));
         get("/api/sod/conflicts", TestTokens.bearer(tokens, "nobody")).expectStatus().isForbidden();
     }
+
+    /**
+     * 16r (decision D48, review M2): a revert that brings an assignment back, and a cancelled scheduled removal, give
+     * access too and are checked like an insertion (they did not pass the check before).
+     */
+    @Test
+    void aRevertOrACancellationThatWouldJoinBothGroupsIsRefused() {
+        String prepare = unique("r.prepare");
+        String review = unique("r.review");
+        String user = userWith(unique("u"), "password-123", prepare);
+        String reviewer = createRole(unique("REVIEW"), review);
+        String removed = createRole(unique("REVIEW2"), review);
+        // Both groups before the rule: one assignment removed, one scheduled to go.
+        assign(user, reviewer, null);
+        assign(user, removed, null);
+        String revertable = assignmentOf(user, removed);
+        post("/api/datasets/" + SecurityEntities.USER_ROLE_DATASET + "/commit", admin(), Map.of("changes",
+            List.of(Map.of("action", "DELETE", "id", revertable, "version", 1)))).expectStatus().isOk();
+        String scheduled = assignmentOf(user, reviewer);
+        String later = clock.instant().plus(java.time.Duration.ofDays(5)).toString();
+        post("/api/datasets/" + SecurityEntities.USER_ROLE_DATASET + "/commit", admin(), Map.of("changes",
+            List.of(Map.of("action", "DELETE", "id", scheduled, "version", 1, "effectiveTime", later))))
+            .expectStatus().isOk();
+        publishRule(prepare, review);
+
+        Object deletion = query("SELECT process_seq_id FROM sec_user_role_version WHERE user_role_id = ?::uuid AND"
+            + " version_no = 2", revertable).getFirst().get("process_seq_id");
+        // Holdings count each assignment's latest version: neither counts now, each would come back.
+        Map<String, Object> cancelled = post("/api/datasets/" + SecurityEntities.USER_ROLE_DATASET + "/commit",
+            admin(), Map.of("changes", List.of(Map.of("action", "CANCEL_SCHEDULED", "id", scheduled, "version", 2,
+                "effectiveTime", later)))).expectStatus().isEqualTo(422).expectBody(MAP).returnResult()
+            .getResponseBody();
+        assertThat(ruleCode(cancelled)).isEqualTo("SOD_CONFLICT");
+        Map<String, Object> reverted = post("/api/processes/executions/" + deletion + "/revert", admin(),
+            Map.of("reason", "undo")).expectStatus().isEqualTo(422).expectBody(MAP).returnResult().getResponseBody();
+        assertThat(ruleCode(reverted)).isEqualTo("SOD_CONFLICT");
+    }
+
+    private static String assignmentOf(String user, String role) {
+        return String.valueOf(query("SELECT user_role_id::text AS id FROM sec_user_role_version WHERE user_id ="
+            + " ?::uuid AND role_id = ?::uuid", user, role).getFirst().get("id"));
+    }
 }

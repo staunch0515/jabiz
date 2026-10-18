@@ -305,6 +305,10 @@ public class SignUpProcesses {
                 .outputMapper(DONE)
                 .step("Find the user", QueryEntities.<AccountContext>of(SecurityEntities.USER_DATASET,
                     ctx -> ctx.userId() != null ? byId(ctx.userId()) : LoadUserByEmail.query(ctx.email()), USERS))
+                // Signed in: not an address someone else changed while someone else may know a way in (D48, review
+                // M-b) - the one asking may not be the user, and the link would go to whoever chose the address.
+                .step("Check the address", com.jabiz.runtime.security.protect.AddressVerifiable.<AccountContext>of(
+                    ctx -> ctx.userId() != null && ctx.user() != null ? ctx.user().id() : null))
                 .step("Send the verification", SendMail.<AccountContext>when(SignUpProcesses::verificationDue,
                     mail.verifyEmail(), ctx -> MailRecipient.user(ctx.user().id()),
                     Map.of(AuthMailTemplates.ENTRY, AccountContext::entryName))));
@@ -385,7 +389,8 @@ public class SignUpProcesses {
      */
     private static boolean verificationDue(AccountContext ctx) {
         EntityInstance user = ctx.user();
-        if (user == null || !Rbac.enabled(user) || user.get("email") == null || SecurityEntities.emailVerified(user)) {
+        if (user == null || !Rbac.enabled(user) || user.get("email") == null || SecurityEntities.emailVerified(user)
+            || ctx.hasViolations()) {
             return false;
         }
         return ctx.userId() != null || preClaimable(user);
