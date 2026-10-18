@@ -289,3 +289,76 @@ M-73 API Key（G10）；个人信息的删除与匿名化（平台未开放，GD
 | Q7-15 | 个人消息的生成 | A 三种语言在生成时渲染并保存（可搜索、按界面语言显示，改文案不影响旧消息）；B 只存文案键与参数、显示时渲染（文案改动会改变旧消息，不能在 SQL 中搜索） | **A** |
 | Q7-16 | "提醒"类消息 | A 每日任务：余额达到转账门槛而没有可用的收款账户时提醒开通（30 天一次，只在站内）；B 暂不产生提醒类消息 | **A** |
 | Q7-17 | 子阶段顺序 | Q7a（邮件，MVP）→ Q7b（条款与帮助，上线必需，可并行）→ Q7c（站内信与公告）；平台 16s 与 Q7a 并行 | **如左** |
+
+## 实施记录（Q7b，2026-10-18，分支 `1.2/quizbuks-7b-legal-help`）
+
+基于 `origin/1.2/quizbuks-7-plan`（`1.2/quizbuks` @ 834d042 + 本计划）。只改 `.jabiz-app-paths` 中的路径。需求方确认（§11）：全部建议（Q7-1 – Q7-17）；法律文本由需求方或律师提供，
+只放明确标注的测试占位文本；日文为准据语言、英文一并提供、中文显示英文并注明；重新同意只拦资金与合约类操作；答题人在 `/welcome` 同意；内容管理员以二次验证发布并留审计。
+
+**迁移号**：计划假定 Q7a 先合并、Q7b 用 V13；实际 Q7b 先做，`1.2/quizbuks` 上下一个空号是 **V12**（`V12__quizbuks_legal_help.sql`）。之后的 Q7a、Q7c 依次取 V13、V14（按合并顺序，§4）。
+
+### 做了什么
+
+- **实体**（`messaging.QbLegal`）：`QbLegalDoc`（时态，每种一份草稿，`kind` 不可变、在当前版本中唯一，`processOnly` 的 `latestVersionNo`、`lastPublishedAt`）、`QbLegalVersion`（`writeOnce`，`(kind, versionNumber)` 唯一）、
+  `QbConsent`（`writeOnce`，索引 `(user_id, kind, legal_version_no DESC)`）、`QbFaqEntry`（时态）；入驻 `QbSponsor` 加 `termsVersionNo`（`processOnly`，审批绑定的内容）。字典 `legal-kind`、`faq-category`、`faq-audience`、`consent-source`。
+- **规则**（`messaging.LegalRules`，纯 Java）：当前版本、预告、须同意版本（已生效的须同意的最大版本号，第一版总是）、是否须重新同意、发布的问题（生效时间不早于现在、已有预告即拒绝、与最新版本内容相同即拒绝）、缺少的语言。
+- **流程**：`QB_LEGAL_PUBLISH`（`qb.admin.content.write`、`requiresMfa(ALWAYS)`、已验证邮箱、`actsOn(QbLegalDoc, docId)`、锁 `qb.legal:<docId>`；标题与正文日英必填，第二版起变更摘要日英必填；内容哈希只覆盖标题与正文；第一版总是须同意）；
+  `QB_CONSENT_ACCEPT`（`qb.account.read`、已验证邮箱、账户锁、查封禁；只接受本入口的种类与当前版本，已同意的不再记）；`QB_PROFILE_SAVE` 完成资料时、`QB_SPONSOR_APPLY` 申请时同意页面所示版本（`QB_TERMS_REQUIRED` / `QB_TERMS_OUTDATED`）；
+  `ConsentChecks.sponsor()` 加在 `QB_TOPUP_START`、`QB_PUBLICATION_SUBMIT` 之前，`ConsentChecks.taker()` 加在 `QB_PAYOUT_ONBOARD` 之前（锁外一条语句 `qb.system.consent-state`，422 `QB_CONSENT_REQUIRED`）；`QB_ATTEMPT_START` 不查。
+- **模板**：公开 `qb.public.legal`、`qb.public.legal-version`、`qb.public.legal-history`、`qb.public.faq`（`cacheSeconds: 300`、`timeoutMs: 2000`）；已认证 `qb.me.consents`、`qb.me.support`、`qb.admin.consents`；系统 `qb.system.consent-state`（权限 `qb.messaging.system`，不授予任何角色）。
+  公开视图 `public:QbLegalVersion`（`allRows`，不含发布人、发布时间与哈希）、`public:QbFaqEntry`（`fixed("published", true)`）。目录快照 `backend/quizbuks/src/test/resources/public-queries.json`。
+- **配置**：`jabiz.public.enabled: ${JABIZ_PUBLIC_ENABLED:true}`；限流 `QB_CONSENT_ACCEPT` 每用户每分钟 10；参数 `qb.support.email`（普通，空）。
+- **`QB_SETUP`**：为四种文本各建一份草稿（`messaging.LegalDrafts`：三语、标题与正文以 `[TEST PLACEHOLDER]` 开头并写明"不是法律文本、上线前由正式文本替换"），不发布；输出加 `legalDraftsCreated`、`legalDraftIds`。
+- **启动检查**：`LiveModeDataCheck` 在正式模式下对没有已生效版本的 `TERMS_APP`、`TERMS_SPONSOR`、`PRIVACY` 各报一条告警（位置 `legal:<kind>`，按应用时钟读）。
+- **App**：`/help`、`/legal/terms|privacy|sponsor-terms|commerce`、`/about`（版本与构建时间由 `vite.config.ts` 的 `define` 写入，`package.json` 版本改为 1.0.0）不需登录，有自己的页框与页脚链接；注册页显示条款与隐私链接；
+  `/welcome` 的同意（链接在新标签页打开，未勾选不能保存）；资料完整后须重新同意时整页的 `ConsentGate`（未验证邮箱只显示提示条）；账户页"帮助与信息"。
+- **商家后台**：侧栏"帮助"、页脚的商家条款、隐私政策与特定商取引法表记；入驻页的同意（发送版本号）；已申请后须重新同意时 `ConsentGate`；未登录也能读帮助与条款。
+- **后台扩展**：用户汇总页的"同意的规约"（`qb.admin.consents`，种类与来源按字典显示）。通用后台：`QbLegalDoc`、`QbFaqEntry` 由元数据生成的表单（多语言标签页与 Markdown 预览），`QbLegalDoc` 行操作"发布"。
+- **文档**：`02-design.md` 3.5、5.2、6、7.1 – 7.3；`03-plan.md` 状态；`backend/quizbuks/CLAUDE.md`（条款与帮助的约定、前端、e2e）；`operations.md`（`JABIZ_PUBLIC_ENABLED`、首次启动第 9 步、正式模式的告警）；`launch-checklist.md`；CI 的 e2e 作业加 `QB_E2E_CONTENT`。
+
+### 与计划不同之处（均为实现细节，未改变已确认的结论）
+
+1. **迁移 V12** 而不是 V13（见上）。
+2. **表名照命名约定**（`qb_<名>_version`）：`qb_legal_version_version`、`qb_consent_version`（计划写作 `qb_legal_version`、`qb_consent`）。实体的版本号字段叫 `versionNumber`（列 `legal_version_no`）：`versionNo` 是平台给每个时态实体的行版本（同 `QbQuizVersion`）；流程输入与页面仍叫 `versionNo` / `termsVersionNo`。
+3. 字段名用计划的 `requiresConsent`（任务说明中的 `requiresReconsent` 即此）。草稿的 `processOnly` 字段是 `latestVersionNo` 与 `lastPublishedAt`（编辑由平台审计记录，不另设 `editedAt`）；`baseRevision` 即草稿的行版本号。
+4. 发布锁按草稿 `qb.legal:<docId>`（与种类一一对应）。
+5. **哪些种类要同意**：App 为答题人条款与隐私政策，商家后台为商家条款与隐私政策；特定商取引法表记只是告知。资金与合约类写入按各自的一组再查。`QB_SPONSOR_APPLY` 的再查就是它自己的同意：版本须为当前版本，否则 `QB_TERMS_OUTDATED`。
+6. `QB_CONSENT_ACCEPT` 的"本入口"取自令牌的入口（`app` / `sponsor`）；不是这两个入口的令牌（测试与工具用的后台令牌）按所持角色的权限（`qb.play` → App 的，`qb.sponsor.me` → 商家的）。`qb.me.consents` 由页面给出种类（只是显示，判断在服务端）。
+7. **预告的版本**自发布起即公开全文（`qb.public.legal-version`、历史与预告条）：预告变更就是公开新文本与生效日（Q7-6）；它在生效之前从不作为当前版本，也不能提前同意。
+8. 第二版起变更摘要日英必填（同意提示与历史要显示）；`QbFaqEntry` 只要求英语（计划如此），页面按界面语言 → 英语 → 日语回退并加 `lang`。
+9. FAQ 分类：答题人 `ACCOUNT`、`QUIZ_RULES`、`REWARDS`、`OTHER`；商家 `ONBOARDING`、`PUBLISHING`、`BILLING`（商家页也显示适用于两者的 `ACCOUNT`、`OTHER`）。未登录的帮助页说"登录后可与我们联系"，不显示地址。
+10. 页面读 `qb.me.consents` 用此刻（不取整到分钟）：刚生效的版本即服务端要求的版本；公开模板仍取整到分钟以便缓存。
+11. **场景**：`QB_SETUP` 多建的行使确定性 ID 后移，选项的显示位置随之改变：`play.yml`、`topup.yml`、`payout.yml` 的答案按新位置改写（得分、奖励不变），`accounts`、`publishing` 的审批内容哈希因 `termsVersionNo` 改变，`setup` 多一个参数与四份草稿；逐项看过后更新快照。新场景 `legal.yml`。
+12. **e2e**：发布需要二次验证，测试建自己的内容管理员（已验证邮箱、测试角色 `QB_E2E_CONTENT`，加入 CI 的 `QB_ADMIN_ROLES`），经 API 绑定 TOTP 并 step-up（`tests/legal.ts`）。`prepareQuizbuks` 在没有已生效的三种文本时发布第一版（同上线前），
+    `support.ts` 的 `run` 像页面一样带上版本号、并在资金与合约类流程之前接受到期的新版本；经页面完成欢迎页的测试勾选同意。
+
+### 测试与结果
+
+- 新增：`LegalRulesTest`（含 jqwik：任意发布序列下的当前版本、须同意版本与预告；入口与角色决定的种类；内容哈希）、`LegalIT`（权限、二次验证、已验证邮箱、日英必填、相同内容、预告与到时生效、草稿被改、只追加与触发器）、
+  `ConsentIT`（按顺序：没有生效版本时不要求；欢迎页无同意 / 版本过时 422、同意记两行；Q7 之前的用户充值、提交发布、开通收款 422 `QB_CONSENT_REQUIRED`、重新同意后通过，**开始答题不拦**；入驻记录同意且入驻行与审批内容含版本；
+  措辞修订不要求、预告不能提前同意、生效后要求；只能同意本入口的种类与当前版本）、`PublicHelpIT`（匿名读取、未发布的 FAQ 与草稿从不出现（参数、筛选、计数）、未生效的不是当前版本、无发布人与哈希、缓存头、只有公开模板匿名、不写操作记录）、
+  `PublicSwitchedOffIT`、`PublicQueriesSnapshotIT`；场景 `legal.yml`。改动：`SetupIT`、`TopUpIT`（正式模式的条款告警）、`SponsorApprovalsTest`、三个答题场景的答案位置与五份快照。
+- `./gradlew :quizbuks:check`（本机 PostgreSQL 16）：568 项测试全部通过，`platformCheck` 0 错误（69 条告警均为测试配置下已知的）。
+- 前端：`quizbuks-web/app` 与 `sponsor` 各自 `pnpm install --frozen-lockfile && pnpm lint && pnpm typecheck && pnpm test`（118 / 123 项通过；新增 `Legal.test.tsx`、`qb/legal.test.ts`、商家后台的同意与帮助测试），两份 `src/qb/` 相同；
+  后台扩展 `JABIZ_ADMIN_EXTENSION=../backend/quizbuks/admin-extension pnpm ext:check`（66 项通过）。
+- e2e（打包的 jar、独立端口与数据库、Mailpit 与 Stripe 桩，照 CI 的 `e2e` 作业）：46 项；新增 `legal.spec.ts` 3 项与 `a11y.spec.ts` 的帮助、条款、关于与同意提示（亮、暗）。
+  第一次全量运行发现入驻页提交后同意提示读到旧的同意状态而一闪替换了表单（先刷新入驻再刷新同意），修正为先刷新同意（App 的欢迎页同样），并加了 Vitest；修正后全量 44 项通过、2 项失败——
+  `a11y` 的发布页（Quiz 选择框的 `aria-required-children`）与 `content.spec` 的"另处修改后要求重新载入"（焦点），都与本阶段无关，单独重跑通过（后者连续 3 次），第一次全量运行中也都通过，记为既有的偶发问题。
+
+### 自查（对抗性审查）
+
+- **匿名的公开接口**：匿名只能执行四个 `access: public` 模板（其余 404，含 `qb.me.*`、`qb.admin.*`、`qb.system.*`；写方法 405），它们只能读两个公开视图：法律文本的已发布版本（不含发布人、发布时间与哈希）与 `published = true` 的 FAQ。
+  草稿是另一实体、没有公开视图；同意记录与用户数据没有公开视图。参数全部绑定，`kind`、`audience`、`category` 是带固定值的代码（未知值 400），`q` 以 `strpos` 字面匹配，`limit` ≤ 100，按地址限流、缓存 5 分钟。
+  `PublicHelpIT` 证明未发布的问答不经参数、外层筛选或计数出现，草稿与其后的编辑从不出现，响应中没有发布人；开关关闭时 404（`PublicSwitchedOffIT`）。剩余：`at` 由调用者给出，传未来时刻可看到预告版本被当作"当前"——预告本已公开，不是泄露。
+- **同意的门能否绕过**：页面的 `ConsentGate` 只是界面；服务端在充值、提交发布、开通收款与入驻申请中再查（读在锁外，生效时刻恰在读与提交之间的毫秒级窗口可接受，计划如此）。
+  只能同意当前版本（不能用旧版本或预告版本满足"须同意版本"）；只能同意本入口的种类（App 的会话不能替商家条款同意；以 App 入口登录的会话本来也没有充值等商家权限）；未验证邮箱与被封禁的不能同意，也不能做被拦的操作。
+  欢迎页：第一次保存必然完成资料（国家必填），因此必然要求同意；在 Q7b 之前已完成资料的人走重新同意。**未拦的**（按需求方的 Q7-2，记为已知）：开始答题；已开通收款账户的人的自动转账照常进行；发布的暂停、恢复、复制不算新合约。
+- **Markdown**：只经平台的 `MarkdownView`（`skipHtml`，无 `rehype-raw`，react-markdown 的 URL 过滤去掉 `javascript:`）；标题、问题、种类名都作纯文本；Vitest 断言条款中的 `<script>` 与 FAQ 答案中带 `onerror` 的 `<img>` 不出现在 DOM 中。法律文本的链接在新标签页打开（`rel="noopener"`，同源）。
+
+### 已知问题与后续
+
+- **正式文本**：仓库中只有标注 `[TEST PLACEHOLDER]` 的草稿；需求方或律师提供日文（准据）与英文正文后，由内容管理员载入并发布（`operations.md` §3 第 9 步、上线检查清单）。正式模式在三种文本生效之前启动告警。
+- 预告一经发布不能撤回或替换（Q7-6 的结论"不改已公布的预告"）：若误设了很远的生效日，同种文本在此之前不能再发布。如需"撤回预告"须另定（一条平台外的应用流程即可）。
+- 民法 548 条之 4 的事前公告期间不强制（Q7-6 A）；需要时只在 `LegalRules.publishProblems` 加一条检查。
+- 删除草稿（通用后台允许）之后，`QB_SETUP` 不会再建（它记得建过）；需要时在后台新建同一种类的草稿即可（唯一性只看当前版本）。
+- 条款变更的站内公告（`announce = true`）属于 Q7c。

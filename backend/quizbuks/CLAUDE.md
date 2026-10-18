@@ -151,6 +151,12 @@
   - **商家持有 `document.archive.read`**（为读自己的收据）：平台按版式的权限与对象决定能读哪些单据，所以以后新增的单据版式必须把对象限定在本商家（如 `subject` 经商家数据视图），
     或者其权限不能是商家权限的子集，否则商家能读到别人的单据。
   - **保留期**（Q10b）：导出（`periodTo`）、明细段与外部凭证号（`createdTime`）、充值（`paidAt`）、收据（`issuedAt`，迁移 V11）与入站 Stripe 事件都以 `RetentionPolicy` 保留 10 年，自会计年度末起算（`RetentionIT`）。
+- **条款、隐私与帮助**（`messaging`，`docs/quizbuks/plans/Q7-messages-legal.md` Q7b）：法律文本的草稿 `QbLegalDoc`（每种一份，`QB_SETUP` 建立明确标注 `[TEST PLACEHOLDER]` 的占位，不发布）与 FAQ `QbFaqEntry` 由内容管理员在通用后台直接编辑；
+  **法律文本只经 `QB_LEGAL_PUBLISH` 发布**（每次二次验证，版本 `QbLegalVersion` 只写一次），规则只写在纯 Java 的 `LegalRules`（当前版本 = 生效时间已到的最大版本号，没有状态与任务；须同意版本 = 已生效版本中须同意的最大版本号，第一版总是），
+  两个模板 `qb.system.consent-state` 与 `qb.me.consents` 写同样的规则（改规则时三处一起改）。**同意按版本记录**（`QbConsent`，只插入，`ConsentChecks.record`）：欢迎页（`QB_PROFILE_SAVE` 第一次完成资料）、入驻申请（`QB_SPONSOR_APPLY`，审批内容含 `termsVersionNo`）
+  与登录后的重新同意（`QB_CONSENT_ACCEPT`，只接受本入口的种类与当前版本）。**资金与合约类写入**（充值、提交发布、开通收款；以后新增的同类流程照此）以 `.steps(ConsentChecks.sponsor())` / `.steps(ConsentChecks.taker())` 在锁外再查（422 `QB_CONSENT_REQUIRED`），开始答题不查（Q7-2）。
+  没有已生效版本时不要求同意（开发、测试与新装）。匿名读取只经公开模板 `qb.public.*`（公开视图：法律文本的已发布版本、已发布的 FAQ；草稿没有公开视图，公开视图不放发布人与哈希），`JABIZ_PUBLIC_ENABLED` 缺省开。
+  QB_SETUP 新建的行使场景的 ID 序列后移：答题场景中的答案按显示位置写，随之按新位置改写（得分不变）。
 - **外部密钥**（`STRIPE_*`、`OPENAI_API_KEY`）只来自环境变量（`deploy/quizbuks/README.md`）；测试与 `dev` 用固定的假值，仓库中没有真实密钥。
 - **部署的安全设置**（Q10b，`deploy/quizbuks/README.md`"密钥与部署"）：镜像入口脚本在平台密钥或首个管理员密码缺少时拒绝启动（只有 `QB_LOCAL_SECRETS=true` 的本机才生成，compose 缺省 `false`，正式模式一律不生成，管理员密码不打印；生成时导出 `QB_SECRETS_GENERATED=true`，评审 L5）；
   启动检查 `wallet.DeploySafetyCheck`（类别 `QUIZBUKS`）：可信代理为空时正式模式报错（除非 `quizbuks.deploy.direct-exposure=true`）、过宽的网段一律报错（IPv4 短于 /8、IPv6 短于 /32、整个 IPv4 的映射，前缀照平台读法，评审 L6），正式模式下关闭管理二次验证或 `QB_SECRETS_GENERATED=true` 报错，`dev` 只在回环地址与本机邮件地址下启动；
@@ -182,6 +188,9 @@
 - **收据**（Q9d，`sponsor/src/wallet/`）：钱包页已到账的充值行有"收据"：`QB_TOPUP_RECEIPT_ISSUE`（当前界面语言，只在第一次签发时起作用）后下载存档的 PDF（`GET /api/documents/runs/{id}/pdf`）。
 - **交易页**（Q9b，`sponsor/src/transactions/`）：列表、汇总与导出用同一组模板参数（`transactions/api.ts` 的 `paramsOf`；筛选写成模板参数而不是列表筛选，汇总模板才能用同样的条件），
   导出只经平台的 `POST /api/queries/{id}/export`（`sessionFetch`，CSV 与 XLSX）。答题人只以资料的显示名出现，不给邮箱，也不给用户编号："只看此用户"按模板给出的 `userKey` 筛选，页面不显示它。`userKey` = md5(商家编号 : 用户编号)：不是用户编号，同一答题人在每个商家处的键不同；它不是秘密，知道两个编号的人都能算出。
+- **条款、帮助与关于**（Q7b，共用的在 `qb/legal.ts`、`qb/LegalPage.tsx`、`qb/HelpPage.tsx`、`qb/ConsentGate.tsx`、`qb/TermsAgreement.tsx`、`qb/LegalLinks.tsx`）：`/help`、`/legal/<terms|sponsor-terms|privacy|commerce>`（App 另有 `/about`）不需登录，经 `qb/legal.ts` 的 `publicQuery`（无令牌）读公开模板，时刻取整到分钟；
+  法律文本按界面语言显示、日文为准（其他语言注明并可切换日文，中文缺失时显示英文并注明，`lang` 属性），Markdown 只经 `MarkdownView`。欢迎页与入驻页以 `TermsAgreement` 同意 `qb.me.consents` 给出的当前版本并发送版本号（`QB_TERMS_OUTDATED` 即重读）；
+  `ConsentGate` 在资料完整（App）或已申请（商家）且有须同意的版本时整页替换页面（未验证邮箱只显示提示条），帮助与条款页不受它拦；它只是页面，服务端照样拦资金与合约类写入。
 - **认证与账户只用平台的积木**（`@jabiz/ui` 的 `SignInForm`、`SignUpForm`、`MailLinkPage`、`OidcCallback`、`StepUpProvider`、`ChangePasswordForm`、`MfaSettings`、`SessionList`、
   `LinkedIdentities`、横幅），QuizBuks 不写认证代码。邮件链接页在各自的 `auth/verify-email|join|password-reset`。路由是 `qb/router.tsx` 的小路由。
 - **金额只经 `qb/kudos.ts` 的 `formatKudos`**（`1,234 Kudos`），不写 JPY 或其他币种名。服务端的 `QB_*` 文案已按请求的语言翻译，页面直接显示（`qb/problems.ts`）。
@@ -205,6 +214,8 @@
   Q9d 的导出要已验证的邮箱，首个管理员没有，测试另建一个已验证的用户并给它不要求二次验证的测试角色 `QB_E2E_FINANCE`），并以 `QB_RECONCILE_RUN_CRON='30 * * * * *'` 每分钟核对（导出等月末之后的一次干净的核对），
   并以 `QB_TRANSFER_RUN_CRON='0 * * * * *'` 每分钟运行每日转账（Q9c：财务的测试打开转账、把审核线设为 1,000 并等待大额转账进入审批；其他测试的奖励都低于转账门槛 1,000）。
   这个变量只给 e2e：正式模式或正式密钥下设成每日以外的值即启动失败（`wallet.TransferScheduleCheck`，同开发入账）。
+  **条款**（Q7b）：`prepareQuizbuks` 在没有已生效的三种文本时发布第一版（同上线前），发布人是测试自己建的、带已验证邮箱与测试角色 `QB_E2E_CONTENT`（`QB_ADMIN_ROLES` 中同样加入）、经 API 绑定 TOTP 并 step-up 的内容管理员（`tests/legal.ts`）；
+  `support.ts` 的 `run` 像页面一样替 `QB_PROFILE_SAVE` / `QB_SPONSOR_APPLY` 带上当前版本，并在充值、提交发布、开通收款之前先接受到期的新版本（不测同意的测试因此不受其他测试发布的新版影响）；经页面完成欢迎页的测试勾选 `profile-terms`。
   启动方式与环境变量照 `.github/workflows/quizbuks.yml` 的 `e2e` 作业；然后 `E2E_BASE_URL=… E2E_ADMIN_USER=… E2E_ADMIN_PASSWORD=… pnpm e2e`。测试只增数据，可重复运行。
 
 ## 6. 测试与命令（在 `backend/` 下）

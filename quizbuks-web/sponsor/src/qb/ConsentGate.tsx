@@ -5,7 +5,7 @@ import { MailWarning } from 'lucide-react'
 import { useId, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { CODE } from './ids'
-import { acceptConsents, legalPath, pickText, readMyConsents, minuteNow, type ConsentState,
+import { acceptConsents, legalPath, pickText, readMyConsents, type ConsentState,
   type LegalKind } from './legal'
 import { QB } from './messages'
 import { problemText } from './problems'
@@ -18,7 +18,7 @@ export const CONSENTS_QUERY = ['qb', 'consents'] as const
 export function useMyConsents(kinds: readonly LegalKind[], enabled = true) {
   return useQuery({
     queryKey: [...CONSENTS_QUERY, ...kinds],
-    queryFn: () => readMyConsents(kinds, minuteNow()),
+    queryFn: () => readMyConsents(kinds),
     enabled,
     refetchInterval: 15 * 60_000,
   })

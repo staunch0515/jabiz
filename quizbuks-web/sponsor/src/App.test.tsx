@@ -36,6 +36,7 @@ function server(me?: Me) {
   const asked: string[] = []
   const posted: { path: string; body: unknown }[] = []
   let consents = me?.consents ?? []
+  let sponsor = me?.sponsor ?? null
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
     const request = input instanceof Request ? input : new Request(new URL(String(input), window.location.origin))
     const url = new URL(request.url, window.location.origin)
@@ -55,9 +56,14 @@ function server(me?: Me) {
       case '/api/auth/logout':
         return json(204, {})
       case '/api/datasets/urn:jabiz:dataset:sponsor:QbSponsor/query':
-        return json(200, { items: me?.sponsor ? [{ id: 's1', version: 1, attributes: me.sponsor }] : [],
+        return json(200, { items: sponsor ? [{ id: 's1', version: 1, attributes: sponsor }] : [],
           offset: 0, limit: 1 })
       case '/api/processes/QB_SPONSOR_APPLY/latest':
+        if (me?.applied?.status === 200) {
+          // Applying records the application and the consents with it.
+          sponsor = { reviewStatus: 'PENDING', contactName: 'Sara', company: 'Acme Quiz', revision: 1 }
+          consents = consents.map((row) => ({ ...row, accepted: row.versionNo, mustAccept: false }))
+        }
         return me?.applied ? json(me.applied.status, me.applied.body) : json(404, {})
       case '/api/queries/qb.me.consents':
         return json(200, { items: consents, offset: 0, limit: 20 })
@@ -147,6 +153,10 @@ describe('a signed-in sponsor', () => {
     await userEvent.click(screen.getByTestId('onboarding-terms'))
     await userEvent.click(screen.getByTestId('onboarding-submit'))
     expect(await screen.findByTestId('onboarding-done')).toBeInTheDocument()
+    // The application is there now: no prompt for what it accepted, and the form says it was sent.
+    await waitFor(() => expect(screen.getByTestId('onboarding-status')).toHaveAttribute('data-status', 'PENDING'))
+    expect(screen.queryByTestId('consent-gate')).toBeNull()
+    expect(screen.getByTestId('onboarding-done')).toBeInTheDocument()
     expect(posted.find((p) => p.path === '/api/processes/QB_SPONSOR_APPLY/latest')?.body).toMatchObject({
       acceptTerms: true, termsVersionNo: 2, privacyVersionNo: 1 })
   })

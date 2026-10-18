@@ -120,8 +120,9 @@ function ProfileFields({ profile, countries, currencies, submitLabel, onSaved, c
     }),
     onSuccess: async (output) => {
       setSaved(true)
-      await queryClient.invalidateQueries({ queryKey: PROFILE_QUERY })
+      // The consents first: once the profile is complete, the prompt reads them, and must not see the old ones.
       await queryClient.invalidateQueries({ queryKey: CONSENTS_QUERY })
+      await queryClient.invalidateQueries({ queryKey: PROFILE_QUERY })
       onSaved?.(output)
     },
     // A text changed meanwhile: read it again, and the agreement with it.

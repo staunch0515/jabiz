@@ -128,8 +128,9 @@ function OnboardingForm({ sponsor }: { sponsor: Sponsor | null }) {
       setDone(approved ? t('onboarding.saved')
         : output.reviewStatus === 'APPROVED' ? t('onboarding.approvedNow') : t('onboarding.applied'))
       setAcceptTerms(false)
-      await queryClient.invalidateQueries({ queryKey: SPONSOR_QUERY })
+      // The consents first: once the application is there, the prompt reads them, and must not see the old ones.
       await queryClient.invalidateQueries({ queryKey: CONSENTS_QUERY })
+      await queryClient.invalidateQueries({ queryKey: SPONSOR_QUERY })
     },
     // A text changed meanwhile: read it again, and the agreement with it.
     onError: (error) => {
@@ -221,7 +222,8 @@ function OnboardingForm({ sponsor }: { sponsor: Sponsor | null }) {
           {done}
         </p>
       )}
-      <Button type="submit" className="self-start" disabled={save.isPending} aria-busy={save.isPending || undefined}
+      <Button type="submit" className="self-start" disabled={save.isPending || (!approved && terms.isPending)}
+        aria-busy={save.isPending || undefined}
         data-testid="onboarding-submit">
         {label}
       </Button>

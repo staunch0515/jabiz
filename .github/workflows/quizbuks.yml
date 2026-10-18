@@ -258,9 +258,10 @@ jobs:
             > ../stripe-stub.log 2>&1 &
           # The tests' administrator has no second factor; the publisher of QB_SETUP's proposals and the accountant of
           # the journal export are roles of the tests' own (QB_E2E_PUBLISHER: control.publish only; QB_E2E_FINANCE:
-          # the export without a second factor, Q9d), which the administration therefore accepts here.
+          # the export without a second factor, Q9d; QB_E2E_CONTENT: publishing the legal texts, with a TOTP set up by
+          # the tests, Q7b), which the administration therefore accepts here.
           export JABIZ_SECURITY_MFA_ADMINISTRATION=false
-          export QB_ADMIN_ROLES=ADMIN,QB_ADMIN_SUPER,QB_ADMIN_CONTENT,QB_ADMIN_FINANCE,QB_E2E_PUBLISHER,QB_E2E_FINANCE
+          export QB_ADMIN_ROLES=ADMIN,QB_ADMIN_SUPER,QB_ADMIN_CONTENT,QB_ADMIN_FINANCE,QB_E2E_PUBLISHER,QB_E2E_FINANCE,QB_E2E_CONTENT
           # Every test registers from the same address.
           export JABIZ_SECURITY_SIGN_UP_RATE_LIMIT_PER_ADDRESS=1000
           # And signs in from it, the shared administrator dozens of times (platform 16q, D47): as the platform's e2e.

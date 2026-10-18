@@ -5,6 +5,7 @@ import { completeQuiz, sponsor } from './content'
 import { approvedSponsor, livePublication } from './publishing'
 import { rewardingPublication, startAttempt, submitRight } from './transactions'
 import { fundedSponsor, takerInJapan } from './wallet'
+import { legalAdmin, publishVersion } from './legal'
 import {
   expect,
   expectAccessible,
@@ -351,5 +352,50 @@ for (const appearance of ['light', 'dark'] as const) {
     await expectAccessible(page, at('sponsor transactions of one user'))
     await page.setViewportSize({ width: 390, height: 844 })
     await expectAccessible(page, at('sponsor transactions 390px'))
+  })
+}
+
+/** The help centre, the legal texts, the About page and the consent prompt (Q7b), in both appearances. */
+for (const appearance of ['light', 'dark'] as const) {
+  const at = (name: string) => (appearance === 'light' ? name : `${name} (dark)`)
+
+  test(`the help, the texts, About and the consent prompt pass axe (${appearance})`, async ({ page, request }) => {
+    await useAppearance(page, appearance)
+    for (const width of [390, 1280]) {
+      await page.setViewportSize({ width, height: 844 })
+      const size = `${width}px`
+      await page.goto('/help')
+      await expect(page.getByTestId('help')).toBeVisible()
+      await expect(page.locator('[data-state="loading"]')).toHaveCount(0)
+      await expectAccessible(page, at(`app help ${size}`))
+      await page.goto('/legal/terms')
+      await expect(page.getByTestId('legal-text')).toBeVisible()
+      await expectAccessible(page, at(`app terms ${size}`))
+      await page.goto('/about')
+      await expect(page.getByTestId('about-version')).toBeVisible()
+      await expectAccessible(page, at(`app about ${size}`))
+    }
+    await page.setViewportSize({ width: 1280, height: 844 })
+    await page.goto('/sponsor/help')
+    await expect(page.getByTestId('help')).toBeVisible()
+    await expect(page.locator('[data-state="loading"]')).toHaveCount(0)
+    await expectAccessible(page, at('sponsor help'))
+    await page.goto('/sponsor/legal/privacy')
+    await expect(page.getByTestId('legal-text')).toBeVisible()
+    await expectAccessible(page, at('sponsor privacy policy'))
+
+    // A taker who accepted, then a change of substance: the prompt after signing in.
+    await page.setViewportSize({ width: 390, height: 844 })
+    const email = await verifiedUser(request, 'app', 'Yui')
+    const token = await tokenOf(request, email, PASSWORD, 'app')
+    await run(request, token, 'QB_PROFILE_SAVE', { displayName: 'Yui', countryCode: 'JP', preferredCurrency: 'JPY' })
+    const { token: content } = await legalAdmin(request)
+    await publishVersion(request, content, 'PRIVACY', true, `a11y ${appearance} ${Date.now()}`)
+    await signIn(page, '/', email)
+    await expect(page.getByTestId('consent-gate')).toBeVisible()
+    await expectAccessible(page, at('app consent prompt'))
+    await page.getByTestId('consent-agree').click()
+    await page.getByTestId('consent-accept').click()
+    await expect(page.getByTestId('home')).toBeVisible()
   })
 }

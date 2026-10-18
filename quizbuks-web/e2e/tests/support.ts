@@ -54,11 +54,60 @@ export async function tokenOf(request: APIRequestContext, userName: string, pass
 
 export const adminToken = (request: APIRequestContext) => tokenOf(request, ADMIN.userName, ADMIN.password)
 
+const APP_KINDS = ['TERMS_APP', 'PRIVACY']
+const SPONSOR_KINDS = ['TERMS_SPONSOR', 'PRIVACY']
+
+/**
+ * What a person accepts with a process (Q7b): registration's second step the takers' terms and the privacy policy,
+ * an application the sponsors' terms and the privacy policy, at the versions in effect (as the pages send them).
+ */
+const ACCEPTED_WITH: Record<string, string[]> = { QB_PROFILE_SAVE: APP_KINDS, QB_SPONSOR_APPLY: SPONSOR_KINDS }
+
+/** The money and contract actions the server refuses until the texts in effect are accepted (Q7b, Q7-2). */
+const GATED: Record<string, string[]> = { QB_TOPUP_START: SPONSOR_KINDS, QB_PUBLICATION_SUBMIT: SPONSOR_KINDS,
+  QB_PAYOUT_ONBOARD: APP_KINDS }
+
+/** The caller's standing with the kinds (`qb.me.consents`): a row per kind in effect. */
+export async function consentsOf(request: APIRequestContext, token: string, kinds: string[]) {
+  const response = await request.post('/api/queries/qb.me.consents', {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { params: { kinds, at: new Date().toISOString() } },
+  })
+  expect(response.status(), await response.text()).toBe(200)
+  return ((await response.json()).items ?? []) as { kind: string; versionNo: number; mustAccept: boolean }[]
+}
+
+/**
+ * Accepts the texts in effect the caller has not accepted yet, as the prompt after signing in does: the tests that
+ * are not about consent act as people who accepted (a run may publish a new version between two tests).
+ */
+export async function acceptDue(request: APIRequestContext, token: string, kinds: string[]) {
+  const due = (await consentsOf(request, token, kinds)).filter((row) => row.mustAccept)
+  if (due.length === 0) return
+  const response = await request.post('/api/processes/QB_CONSENT_ACCEPT/latest', {
+    headers: { Authorization: `Bearer ${token}`, 'Idempotency-Key': crypto.randomUUID() },
+    data: { items: due.map((row) => ({ kind: row.kind, versionNo: row.versionNo })) },
+  })
+  expect(response.status(), await response.text()).toBe(200)
+}
+
+/** The versions in effect a page shows with registration's second step or an application. */
+async function withAcceptance(request: APIRequestContext, token: string, name: string,
+  input: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const kinds = ACCEPTED_WITH[name]
+  if (!kinds || 'termsVersionNo' in input || input.acceptTerms === false) return input
+  const rows = await consentsOf(request, token, kinds)
+  if (rows.length === 0) return input
+  const version = (kind: string) => rows.find((row) => row.kind === kind)?.versionNo ?? null
+  return { ...input, acceptTerms: true, termsVersionNo: version(kinds[0]), privacyVersionNo: version('PRIVACY') }
+}
+
 /** Runs a process; returns its output. */
 export async function run(request: APIRequestContext, token: string, name: string, input: Record<string, unknown>) {
+  if (GATED[name]) await acceptDue(request, token, GATED[name])
   const response = await request.post(`/api/processes/${name}/latest`, {
     headers: { Authorization: `Bearer ${token}`, 'Idempotency-Key': crypto.randomUUID() },
-    data: input,
+    data: await withAcceptance(request, token, name, input),
   })
   expect(response.status(), `${name}: ${await response.text()}`).toBe(200)
   return (await response.json()).output as Record<string, unknown>
@@ -139,6 +188,8 @@ export async function prepareQuizbuks(request: APIRequestContext) {
       await run(request, publisher, 'CONTROL_CHANGE_PUBLISH', { changeId: change.id })
     }
   }
+  // The terms and the privacy policy in effect, as before going live (Q7b); loaded when needed (it uses these helpers).
+  await (await import('./legal')).termsInEffect(request)
   prepared = true
 }
 

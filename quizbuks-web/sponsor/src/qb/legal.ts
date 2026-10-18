@@ -131,8 +131,12 @@ export const readLegalHistory = (kind: LegalKind) =>
 export const readFaq = (audience: FaqAudience, q?: string) =>
   publicQuery<FaqEntry>(LEGAL.publicFaq, { audience, q: q?.trim() || undefined })
 
-/** The caller's standing with the kinds their front end asks for; a kind without a version in effect has no row. */
-export async function readMyConsents(kinds: readonly LegalKind[], at: string = minuteNow()):
+/**
+ * The caller's standing with the kinds their front end asks for; a kind without a version in effect has no row. At
+ * this very time, not to the minute (the answer is the caller's own, not cached): a version that took effect seconds
+ * ago is the one the server asks for.
+ */
+export async function readMyConsents(kinds: readonly LegalKind[], at: string = new Date().toISOString()):
   Promise<ConsentState[]> {
   return (await runQuery<ConsentState>(LEGAL.myConsents, { params: { kinds: [...kinds], at } })).items
 }
