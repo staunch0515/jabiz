@@ -147,6 +147,9 @@ public class AccountsConfig {
             .maxBytes(2 * FilePolicy.MB)
             .image(i -> i.maxPixels(25_000_000).variants(128, 256))
             .permissions(QbPermissions.SPONSOR_ME, QbPermissions.SPONSOR_AVATAR_READ)
+            // Takers and other sponsors read avatars: the file name, the uploader and the time stay the sponsor's
+            // (Q10b, verification review; platform decision D47).
+            .privateMetadata()
             .build();
     }
 

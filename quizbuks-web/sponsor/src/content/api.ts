@@ -471,7 +471,7 @@ export function contentFieldOf(kind: MaterialKind): 'body' | 'url' | 'pdf' | 'au
  * the sponsor's own name. Takers can read a content file's details, so a name like "answers-final.pdf" or a person's
  * name would show (Q10b, a stop-gap until the platform hides such details from all but the uploader).
  */
-export function neutralName(kind: 'image' | 'pdf' | 'audio', fileName: string): string {
+export function neutralName(kind: 'image' | 'pdf' | 'audio' | 'avatar', fileName: string): string {
   const extension = /\.([A-Za-z0-9]{1,8})$/.exec(fileName)?.[1]
   return extension ? `${kind}.${extension.toLowerCase()}` : kind
 }

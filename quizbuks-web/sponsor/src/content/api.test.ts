@@ -7,6 +7,7 @@ describe('the content calls', () => {
   it('upload a file under a neutral name: its kind and extension only (Q10b)', () => {
     expect(neutralName('image', 'Tanaka Hanako passport.JPG')).toBe('image.jpg')
     expect(neutralName('pdf', 'answers-final.v2.pdf')).toBe('pdf.pdf')
+    expect(neutralName('avatar', 'Yamada Hanako.PNG')).toBe('avatar.png')
     expect(neutralName('audio', 'clip.m4a')).toBe('audio.m4a')
     expect(neutralName('image', 'no extension')).toBe('image')
     expect(neutralName('pdf', 'weird.<script>')).toBe('pdf')
