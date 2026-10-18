@@ -1660,8 +1660,9 @@ P-8 原写"`false` 即逐条执行（16p-1 的局部合并同样受它控制）"
    - `security.protected-change.decide` **本身受保护**：加入缺省清单，并且与 `*` 一样**无论怎样配置都受保护**——它是这道四眼自己的第二双眼，
      给出它（分配角色、角色增加权限）总要另一位管理员审批。
 3. **时间参数的范围**：平台的值转换（`FieldValueCoercer`，模板参数、筛选、实体属性共用）只接受 PostgreSQL 能保存的时刻与日期：`timestamptz`
-   为 4714-11-24 00:00 BC（ISO 年 -4713）至 294276-12-31 23:59:59.999999（UTC），`date` 为 4714-11-24 BC 至 5874897-12-31；超出即 400 `INVALID_VALUE`（不是数据库的 500）。
-   查询与数据视图请求的 `asOf` / `knownAt` 同样检查（`TimeTravel`）。
+   为 ISO 年 -4712-01-01 00:00（UTC）至 294276-12-31 23:59:59.999999（UTC），`date` 为 -4712-01-01 至 5874897-12-31；超出即 400 `INVALID_VALUE`（不是数据库的 500）。
+   下限比 PostgreSQL 的（4714-11-24 BC）晚：驱动把 ISO 年 -4713 的值绑定为 `-infinity`（评审 L4）。
+   查询、数据视图与归档导出请求的 `asOf` / `knownAt` / `reportsFrom` / `reportsTo`，以及一切时态写入的 `effectiveTime`（`TemporalWriter`，含受保护授权的请求）同样检查（`TimeTravel`，评审 M2）。
 4. **`Combobox` 的加载状态**：加载中时列表（`role=listbox`）带 `aria-busy`，已有的选项照常显示直到新的结果到来；转圈（`role=status`）放在列表之外、搜索框之下。
 
 **线 1.2 内的兼容与升级影响**：
@@ -1685,6 +1686,22 @@ P-8 原写"`false` 即逐条执行（16p-1 的局部合并同样受它控制）"
 **放弃的方案**：①为受保护的变更另设流程 `SEC_PROTECTED_CHANGE_DECIDE`（待办页与审批面板须按对象选择流程，接口与前端都要改；两个流程的判断重复）；
 ②让 `approval.decide` 继续有效并要求应用放宽职责分离规则（规则的用意正是把两者分开）；③管理员的权限不可配置（应用可能以自己的权限码管理安全）；
 ④为细分权限的部署要求 `always=true`（D48 的已知限制：容易遗漏，遗漏时没有保护）；⑤只在模板参数中检查时间范围（筛选与实体写入同样会 500）。
+
+**修订（16u 安全评审之后，2026-10-18，产品负责人确认）**：
+- **H1 职责分离禁止审批人持有的权限不要求覆盖**：QuizBuks 的 `qb.sod.security-administration` 禁止安全管理员（`QB_ADMIN_SUPER`）同时持有 `approval.decide`、`control.publish`，
+  于是没有人能批准给出这两项的授权（任命内容或财务管理员）。修改第 2 条的覆盖：审批人**不必持有**这样的受保护权限——某条**已发布的**职责分离规则（`SodGuard` 读取的同一来源 `SodService.rules()`，
+  即启用的规则）的一组含这项权限、另一组含审批人已持有的某项权限。其余一律照旧：须持有 `security.protected-change.decide`、一项管理员的权限与**其余**全部给出的受保护权限；
+  申请人与目标不能审批；需要近期二次验证；**`*` 从不豁免**（给出 `*` 须持有 `*`）。审批时按令牌与当时的规则判断，生效时按库中当时的持有与**当时的规则**再判断：
+  批准与生效之间撤下的规则使其豁免失效（`APPROVER_NOT_ALLOWED`）。请求时的事实 `sodExempt` 写明"持有某组任一权限的审批人按规则 R 不能持有 X：不要求其持有"。
+  理由：四眼不变（审批人仍是另一位管理员，且持有改权限的权限与审批权）；系统自己禁止审批人持有它，要求持有就使授权永远无法批准；规则本身只经受控变更的四眼发布（18 §4），
+  一个人不能独自发布规则来为自己豁免。放弃的方案：要求应用为审批放宽职责分离（规则的用意正是分开）；豁免任何规则涉及的权限（只豁免审批人确实因持有的权限而不能持有的）。
+- **M3 职责分离按实际使用的权限检查**：入口对有备选权限的流程不再做职责分离检查（入口所用的那一组未必是实际需要的）；`CheckApprovalDecision` 在取得请求后对按对象所需的权限与当前层级的权限
+  调用 `SodGuard.check`。所以层级的权限（以前入口只检查 `approval.decide`）同样受规则约束，而对受保护的变更不再因 `approval.decide` 上的规则被误拒。
+- **L5**：管理员的权限不受保护为启动**错误**；集合既不含 `security.user-role.write` 也不含 `security.role.write` 时警告（持有它们的人能改权限却不算管理员，重开 D48 的缺口）。
+- **L6**：`APPROVAL_DECIDE` 作为审批请求的行操作（`actsOn`）只按状态显示，按对象隐藏需要新的条件机制，不做：持有 `security.protected-change.decide` 的人会看到业务审批请求上的操作，执行时 403。
+  持有 `approval.read` 的人能读受保护变更的事实（其中有用户的地址与凭据历史，10 §16.2），与能读审批请求的其他事实相同；安全管理员要核对事实也需要它。
+- **L7**：`Combobox` 用一个常驻的提示区（只改文字："加载中…" / "结果：n"），加载中保留的旧选项不能选择。
+- 备选权限只供平台使用：应用的流程声明 `orPermissions` 时启动检查 `PROCESS` 警告。
 
 **实现说明（16u）**：core `ProcessDefinition.alternativePermissions` / `permissionsFor`、`ProcessDefinitionBuilder.orPermissions`（`ProcessController` 的权限与职责分离检查、
 `MetaModelController` 的流程目录按调用者所用的那一组）；`ProtectedPermissions.DECIDE`（`SecurityPermissions.PROTECTED_CHANGE_DECIDE`）；`FieldValueCoercer.storable` 与

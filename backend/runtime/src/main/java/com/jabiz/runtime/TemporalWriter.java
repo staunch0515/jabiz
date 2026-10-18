@@ -89,6 +89,12 @@ final class TemporalWriter {
         Instant effective = change.effectiveTime() == null
             ? opTime
             : change.effectiveTime().truncatedTo(ChronoUnit.MICROS);
+        // What PostgreSQL cannot store is the caller's 400, not a database error (decision D51 item 3).
+        List<Violation> range = new java.util.ArrayList<>();
+        com.jabiz.runtime.query.TimeTravel.check("effectiveTime", effective, range);
+        if (!range.isEmpty()) {
+            throw new ValidationException(range);
+        }
         if (change.action() == EntityAction.CANCEL_SCHEDULED && !effective.isAfter(opTime)) {
             throw new BusinessRuleViolationException(new Violation("effectiveTime", PlatformErrorCodes.NOT_SCHEDULED,
                 "Only versions that take effect after " + opTime + " can be cancelled",

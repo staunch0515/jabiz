@@ -780,6 +780,8 @@ jabiz:
 - **审批的权限**（D51）：`APPROVAL_DECIDE` 对这类变更要求 `security.protected-change.decide`，**代替** `approval.decide`——后者不能审批受保护的变更，前者也不能审批其他任何审批
   （`*` 两者都能）。流程的入口接受两者之一（备选权限 `orPermissions`），取得请求后按对象要求其中之一（`ApprovalDecisionCheck.decidePermission`，不论状态，缺少即 403）。
   所以把安全管理与业务审批分开的职责分离规则（例如禁止同时持有安全管理的权限与 `approval.decide`）不妨碍安全管理员审批受保护的变更。
+- **职责分离禁止的不要求**（D51 修订 H1）：一条已发布的职责分离规则禁止审批人在已持有的权限之外再持有的受保护权限，审批人不必持有（`*` 除外）；
+  审批时与生效时各按当时的规则判断，事实 `sodExempt` 写明。职责分离按审批实际使用的权限检查（对象所需的审批权限与层级的权限，`CheckApprovalDecision`）。
 - **审批人**（评审 H2）：除层级的权限与 `security.protected-change.decide` 外，须持有 `*`，或持有管理员的权限（`jabiz.security.protected-grants.administrator-permissions`，
   缺省 `security.user-role.write` / `security.role.write`，§16.3）**并且**持有这次变更给出的
   全部受保护权限（重设凭据时为目标用户持有的全部受保护权限）：谁也不能批准比自己持有的更多的东西；能重设密码的人（`security.user.password`）不能批准接管管理员的账号。

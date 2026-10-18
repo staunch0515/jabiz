@@ -101,7 +101,10 @@ class ProcessController {
             mfa.require(context, definition.mfa(), "Running process " + definition.name());
             com.jabiz.runtime.security.VerifiedEmailPolicy.require(context, definition.verifiedEmail(),
                 "Running process " + definition.name());
-            return sod.check(context, definition.permissionsFor(context::hasPermission))
+            // A process with alternative permissions checks segregation of duties for those it actually uses
+            // (APPROVAL_DECIDE, decision D51, review M3): the set it was started with may not be them.
+            return (definition.alternativePermissions().isEmpty()
+                    ? sod.check(context, definition.permissionsFor(context::hasPermission)) : Mono.<Void>empty())
                 .then(Mono.defer(() -> run(definition, body == null ? Map.of() : body,
                     new ExecutionOptions(idempotencyKey))))
                 .map(result -> {

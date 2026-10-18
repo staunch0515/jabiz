@@ -149,7 +149,7 @@ class AdvancedQueryExecutorIT extends PostgresIntegrationTest {
         assertThat(run(params("minFreight", 1, "allowedStatuses", List.of("DELIVERED"),
             "shippedAfter", "+294276-12-31T23:59:59.999999Z"))).isEmpty();
         assertThat(run(params("minFreight", 1000, "allowedStatuses", List.of("CUSTOMS_CLEARED", "DELIVERED"),
-            "shippedAfter", "-4713-11-24T00:00:00Z"))).extracting(r -> r.getRaw("waybillSn"))
+            "shippedAfter", "-4712-01-01T00:00:00Z"))).extracting(r -> r.getRaw("waybillSn"))
             .containsExactly("WB-1", "WB-4");
         assertThatThrownBy(() -> asTestRequest(executor.execute(audit, params("minFreight", 1, "allowedStatuses",
             List.of("DELIVERED")), new AdvancedQueryExecutor.At(Instant.parse("+300000-01-01T00:00:00Z"), null))

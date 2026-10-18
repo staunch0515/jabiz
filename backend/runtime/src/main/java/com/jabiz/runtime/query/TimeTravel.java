@@ -11,7 +11,7 @@ import java.util.List;
 
 /**
  * The points in time a caller reads at ({@code asOf}, {@code knownAt}) must lie in what PostgreSQL stores (decision
- * D51 item 4): beyond it they are invalid input (400 {@code INVALID_VALUE}), not a database error.
+ * D51 item 3): beyond it they are invalid input (400 {@code INVALID_VALUE}), not a database error.
  */
 public final class TimeTravel {
 
@@ -27,7 +27,8 @@ public final class TimeTravel {
         }
     }
 
-    private static void check(String field, Instant value, List<Violation> violations) {
+    /** Adds a violation of {@code field} to {@code violations} when {@code value} is outside the range. */
+    public static void check(String field, Instant value, List<Violation> violations) {
         try {
             FieldValueCoercer.storable(value);
         } catch (IllegalArgumentException e) {

@@ -140,6 +140,14 @@ public class ProtectedGrants {
         return settings.permissions();
     }
 
+    /**
+     * The published (enabled) SoD rules, as {@code SodGuard} reads them: what the approver of a protected change need
+     * not hold (decision D51, {@code ProtectedChangeDecisionCheck.exempt}).
+     */
+    public Mono<List<com.jabiz.security.SodRule>> sodRules() {
+        return sod.rules();
+    }
+
     /** Serializes changes of access for the rest of the transaction (the lock segregation of duties takes too). */
     public Mono<Void> lock() {
         return sod.lock();

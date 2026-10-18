@@ -4047,3 +4047,13 @@ QB 提交锁内 48 → 16（16p-1）的明细：恢复超时 1 → 0（T1）、�
 - 以非 `*` 的 `approval.decide` 审批受保护变更的部署：审批人改持 `security.protected-change.decide`；升级前这样批准而尚未生效的变更生效时为 `APPROVER_NOT_ALLOWED`，重新申请即可。
 - `ProcessDefinition` 增加 record 组件（16 → 17）：经 `ProcessDefinition.define` 声明的应用不受影响，原 16 参构造保留。
 - 时间超出 PostgreSQL 范围的请求由 500 变为 400。
+
+**安全评审之后的修订**（2026-10-18）：
+1. H1：职责分离规则禁止审批人持有的受保护权限不要求覆盖（`*` 除外；审批时与生效时各按当时已发布的规则；事实 `sodExempt`）——QuizBuks 的安全管理员因此能任命内容与财务管理员（`ProtectedGrantSodIT`、`ApproverCoverageTest`）。
+2. M2：写入的 `effectiveTime`（数据视图提交、`SEC_USER_ROLE_ASSIGN`、`SEC_ROLE_PERMISSION_ADD`）与导出的 `asOf` / `knownAt` / `reportsFrom` / `reportsTo` 超出范围为 400（`TimeRangeIT`）。
+3. M3：`APPROVAL_DECIDE` 的职责分离按实际使用的权限（对象的审批权限与层级的权限）在流程中检查，入口不再按启动时的那一组检查（`ProtectedGrantSodIT`：层级权限上的规则拦下决定；`approval.decide` 上的规则不再误拒受保护的变更）。
+4. L4：下限改为 ISO 年 -4712-01-01（-4713 年的值被驱动绑定为 `-infinity`），并有写入后读回的测试。
+5. L5：不受保护的管理员权限为启动错误；不含两项改权限的权限时警告。L6：行操作按对象隐藏不做（记入 D51）；`approval.read` 能读事实（记入 D51）。L7：`Combobox` 常驻提示区、加载中旧选项不能选。
+6. 应用流程声明 `orPermissions` 时启动警告；Javadoc 的条目号。
+
+**QuizBuks 需要的修改**（不在本分支）：`QB_ADMIN_SUPER` 增加 `security.protected-change.decide` 与 `approval.read`；`QB_SETUP` 在建立期结束前给好（顺序见报告）；相关 IT 改用新权限。

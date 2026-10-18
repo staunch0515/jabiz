@@ -28,8 +28,9 @@ import java.util.TreeSet;
  *       one of them (or {@code *}) through an enabled role counts as an administrator for the setup window and the
  *       first administrator's retirement, and an approver of a protected change needs one (decision D51).</li>
  * </ul>
- * Malformed permission codes are a startup error ({@code SECURITY}); an administrator permission that is not
- * protected is a warning (granting it would make an administrator without approval).
+ * Malformed permission codes are a startup error ({@code SECURITY}), as is an administrator permission that is not
+ * protected (granting it would make an administrator without approval); a set leaving out both permissions that
+ * change rights is a warning.
  */
 @Component
 public class ProtectedGrantSettings implements PlatformCheck {
@@ -111,8 +112,13 @@ public class ProtectedGrantSettings implements PlatformCheck {
         wrong.forEach(problem -> problems.add(CheckProblem.error("SECURITY", where, problem)));
         if (enabled && wrong.isEmpty()) {
             administration.stream().sorted().filter(code -> !permissions.isProtected(code)).forEach(code -> problems.add(
-                CheckProblem.warning("SECURITY", where, "'" + code + "' is not a protected permission: granting it"
-                    + " makes an administrator without approval")));
+                CheckProblem.error("SECURITY", where, "'" + code + "' is not a protected permission: granting it"
+                    + " would make an administrator without approval")));
+            if (DEFAULT_ADMINISTRATION.stream().noneMatch(administration::contains)) {
+                problems.add(CheckProblem.warning("SECURITY", where, "names neither " + String.join(" nor ",
+                    DEFAULT_ADMINISTRATION) + ": their holders change rights but do not count as administrators,"
+                    + " so the setup window may never end (the gap decision D51 closes)"));
+            }
         }
         return List.copyOf(problems);
     }
