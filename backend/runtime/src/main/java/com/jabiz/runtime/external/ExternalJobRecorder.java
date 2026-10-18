@@ -10,6 +10,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.time.Instant;
@@ -117,22 +118,46 @@ public class ExternalJobRecorder {
                 Rows.string(row.get("sha256"))));
     }
 
-    /** Records a file the job reads, in the transaction that starts it. */
-    public Mono<Void> insertInputFile(String jobId, int position, StoredFile file, Instant time) {
-        return engine().insert(ExternalJobEntities.FILE_TABLE, fileRow(jobId, "INPUT", position, null, null, file,
-            time));
+    /**
+     * Records a file the job reads, in the transaction that starts it.
+     *
+     * @param privateMetadata whether the file's policy keeps its metadata private ({@link #fileRow})
+     */
+    public Mono<Void> insertInputFile(String jobId, int position, StoredFile file, Instant time,
+        boolean privateMetadata) {
+        return rowId(privateMetadata).flatMap(id -> engine().insert(ExternalJobEntities.FILE_TABLE, fileRow(id, jobId,
+            "INPUT", position, null, null, file, time, privateMetadata)));
     }
 
     /** Records a file an attempt produced, in the transaction that records the attempt. */
-    Mono<Void> insertOutputFile(String jobId, int attemptNo, int position, String key, StoredFile file, Instant time) {
-        return engine().insert(ExternalJobEntities.FILE_TABLE, fileRow(jobId, "OUTPUT", position, attemptNo, key,
-            file, time));
+    Mono<Void> insertOutputFile(String jobId, int attemptNo, int position, String key, StoredFile file, Instant time,
+        boolean privateMetadata) {
+        return rowId(privateMetadata).flatMap(id -> engine().insert(ExternalJobEntities.FILE_TABLE, fileRow(id, jobId,
+            "OUTPUT", position, attemptNo, key, file, time, privateMetadata)));
     }
 
-    private Map<String, Object> fileRow(String jobId, String direction, int position, Integer attemptNo, String key,
-        StoredFile file, Instant time) {
+    /**
+     * The id of a job's file record: a UUIDv7 as usual, or for a file with private metadata a random UUIDv4, drawn
+     * on {@code boundedElastic} since {@code SecureRandom} may read the system's entropy.
+     */
+    private Mono<String> rowId(boolean privateMetadata) {
+        return privateMetadata
+            ? Mono.fromCallable(() -> UUID.randomUUID().toString()).subscribeOn(Schedulers.boundedElastic())
+            : Mono.fromSupplier(() -> String.valueOf(ids.next(ExternalJobEntities.FILE_ENTITY)));
+    }
+
+    /**
+     * The row of a job's file. For a file whose policy keeps its metadata private (decisions D47, D48) the row tells
+     * no more than {@code /api/files} does: a random id instead of a UUIDv7 (which carries the moment), and the day
+     * only of when it was recorded.
+     */
+    private static Map<String, Object> fileRow(String id, String jobId, String direction, int position,
+        Integer attemptNo, String key, StoredFile file, Instant time, boolean privateMetadata) {
         Map<String, Object> row = new LinkedHashMap<>();
-        row.put("job_file_id", String.valueOf(ids.next(ExternalJobEntities.FILE_ENTITY)));
+        row.put("job_file_id", id);
+        if (privateMetadata) {
+            time = time.truncatedTo(ChronoUnit.DAYS);
+        }
         row.put("job_id", jobId);
         row.put("direction", direction);
         row.put("position", position);

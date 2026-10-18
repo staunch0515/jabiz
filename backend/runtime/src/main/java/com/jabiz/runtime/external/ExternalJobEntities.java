@@ -2,6 +2,8 @@ package com.jabiz.runtime.external;
 
 import com.jabiz.dataset.DatasetDefinition;
 import com.jabiz.entity.EntityDefinition;
+import com.jabiz.entity.MaskStyle;
+import com.jabiz.runtime.file.FilePermissions;
 import com.jabiz.entity.TemporalRole;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -111,15 +113,22 @@ public class ExternalJobEntities {
         eb.field("position", f -> f.physicalColumn("position").immutable(true).required(true).asNumeric(9, 0));
         eb.field("attemptNo", f -> f.physicalColumn("attempt_no").immutable(true).asNumeric(9, 0));
         eb.field("outputKey", f -> f.physicalColumn("output_key").immutable(true).asText(64));
-        eb.field("fileId", f -> f.physicalColumn("file_id").immutable(true).required(true).asText(36));
+        // Which file a job produced tells, with the job's requester, who uploaded it and when: the readers of jobs
+        // (external-job.read) see the file and its digest only with file.read, like the uploader of a file with
+        // private metadata (decisions D47, D50). Their names are their own: the values of properties named like a
+        // masked field are kept out of every operation record, and "fileId" or "sha256" are in many.
+        eb.field("linkedFileId", f -> f.physicalColumn("file_id").immutable(true).required(true).asText(36)
+            .masked(FilePermissions.READ, MaskStyle.ALL));
         eb.field("policy", f -> f.physicalColumn("policy").immutable(true).required(true).asText(100));
         eb.field("sizeBytes", f -> f.physicalColumn("size_bytes").immutable(true).required(true).asNumeric(19, 0));
-        eb.field("sha256", f -> f.physicalColumn("sha256").immutable(true).required(true).asText(64));
+        eb.field("linkedFileSha256", f -> f.physicalColumn("sha256").immutable(true).required(true).asText(64)
+            .masked(FilePermissions.READ, MaskStyle.ALL));
         eb.field("recordedTime", f -> f.physicalColumn("recorded_time").immutable(true).required(true)
             .asTemporal(TemporalRole.SYSTEM_RECORDED));
         eb.listView("default", lv -> lv
-            .columns("jobId", "direction", "attemptNo", "outputKey", "fileId", "policy", "sizeBytes", "recordedTime")
-            .filters("jobId", "direction", "fileId", "policy", "recordedTime")
+            .columns("jobId", "direction", "attemptNo", "outputKey", "linkedFileId", "policy", "sizeBytes",
+                "recordedTime")
+            .filters("jobId", "direction", "linkedFileId", "policy", "recordedTime")
             .sorts("recordedTime", "position")
             .defaultSort("recordedTime", false));
     });

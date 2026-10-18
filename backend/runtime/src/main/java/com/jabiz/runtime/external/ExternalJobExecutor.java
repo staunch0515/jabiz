@@ -148,7 +148,18 @@ public class ExternalJobExecutor implements SmartLifecycle {
 
     /** One claimed attempt. */
     record Claimed(ExternalJobType<?, ?> type, String jobId, String input, int attemptNo, Instant deadline,
-        String requestedBy) {}
+        String requestedBy, Runnable release) {
+
+        Claimed(ExternalJobType<?, ?> type, String jobId, String input, int attemptNo, Instant deadline,
+            String requestedBy) {
+            this(type, jobId, input, attemptNo, deadline, requestedBy, () -> { });
+        }
+
+        /** This claim, giving back its share of the output budget when its attempt is over. */
+        Claimed releasing(Runnable reservation) {
+            return new Claimed(type, jobId, input, attemptNo, deadline, requestedBy, reservation);
+        }
+    }
 
     /**
      * How an attempt ended, before it is recorded.
@@ -367,12 +378,17 @@ public class ExternalJobExecutor implements SmartLifecycle {
         AtomicInteger left = new AtomicInteger(capacity);
         Mono<Void> removed = sweep ? failRemovedTypes(names) : Mono.empty();
         return removed.thenMany(Flux.fromIterable(order)
-            .concatMap(index -> claim(jobs.find(names.get(index)).orElseThrow(), left.get(), sweep)
-                .doOnNext(claimed -> {
-                    left.decrementAndGet();
-                    inFlight.incrementAndGet();
-                    nextType.set(index + 1);
-                })));
+            .concatMap(index -> {
+                ExternalJobType<?, ?> type = jobs.find(names.get(index)).orElseThrow();
+                // A type with output files takes no more attempts than the output budget holds (decision D50).
+                return claim(type, Math.min(left.get(), outputRoom(type)), sweep)
+                    .map(claimed -> claimed.releasing(reserveOutput(type)))
+                    .doOnNext(claimed -> {
+                        left.decrementAndGet();
+                        inFlight.incrementAndGet();
+                        nextType.set(index + 1);
+                    });
+            }));
     }
 
     private boolean sweepDue() {
@@ -432,19 +448,31 @@ public class ExternalJobExecutor implements SmartLifecycle {
             .collectList();
     }
 
+    /** The end of an attempt's lease, with the time the type's files may take (decision D50). */
+    private Instant leaseUntil(ExternalJobType<?, ?> type, Instant now) {
+        if (type.inputFiles() == null && type.outputFiles() == null) {
+            return leaseUntil(type, now, Duration.ZERO, Duration.ZERO);
+        }
+        ExternalJobFiles jobFiles = files.getObject();
+        return leaseUntil(type, now, jobFiles.inputWork(type), jobFiles.outputWork(type));
+    }
+
     /**
-     * The end of an attempt's lease: its timeout and a margin for recording it, and for a type with files the time
-     * copying and storing them may take besides (decision D50).
+     * The end of an attempt's lease: its timeout and a margin for recording it, and the time copying the type's input
+     * files and storing its output files may take besides.
      */
-    static Instant leaseUntil(ExternalJobType<?, ?> type, Instant now) {
-        Instant lease = now.plus(type.timeout()).plusSeconds(LEASE_MARGIN_SECONDS);
-        if (type.inputFiles() != null) {
-            lease = lease.plus(ExternalJobFiles.FILE_WORK_TIMEOUT);
-        }
-        if (type.outputFiles() != null) {
-            lease = lease.plus(ExternalJobFiles.FILE_WORK_TIMEOUT);
-        }
-        return lease;
+    static Instant leaseUntil(ExternalJobType<?, ?> type, Instant now, Duration inputWork, Duration outputWork) {
+        return now.plus(type.timeout()).plusSeconds(LEASE_MARGIN_SECONDS).plus(inputWork).plus(outputWork);
+    }
+
+    /** How many attempts of the type fit in this instance's output budget (decision D50). */
+    private int outputRoom(ExternalJobType<?, ?> type) {
+        return type.outputFiles() == null ? Integer.MAX_VALUE : files.getObject().roomFor(type);
+    }
+
+    /** Reserves the type's output budget for a claimed attempt (decision D50); what to run when it is over. */
+    private Runnable reserveOutput(ExternalJobType<?, ?> type) {
+        return type.outputFiles() == null ? () -> { } : files.getObject().reserve(type);
     }
 
     /** The wait after 1, 2, … failed attempts, in milliseconds: {@link ExternalJobType#backoffAfter}, for the SQL. */
@@ -516,6 +544,8 @@ public class ExternalJobExecutor implements SmartLifecycle {
             return Mono.usingWhen(inputs(claimed),
                     inputs -> {
                         ctx.files(inputs.files());
+                        // The handler's timeout starts now, after the copying: so does its deadline.
+                        ctx.deadline(clock.instant().plus(type.timeout()));
                         return run(claimed, ctx);
                     },
                     inputs -> inputs.close(files.getObject().storage()).onErrorResume(error -> {
@@ -533,6 +563,7 @@ public class ExternalJobExecutor implements SmartLifecycle {
         Runnable free = () -> {
             if (freed.compareAndSet(false, true)) {
                 inFlight.decrementAndGet();
+                claimed.release().run();
             }
         };
         return observations.monoOutcome(PlatformObservations.EXTERNAL_JOB, "external job " + type.name(),
@@ -624,8 +655,8 @@ public class ExternalJobExecutor implements SmartLifecycle {
 
     /**
      * Why the files a handler returned cannot be stored, before anything is (decision D50 item 3): a type that
-     * produces none ({@code BAD_RESULT}), more files ({@code OUTPUT_FILE_LIMIT}) or a larger one
-     * ({@code OUTPUT_FILE_TOO_LARGE}) than it declares. Each is a permanent failure: trying again gives the same.
+     * produces none ({@code BAD_RESULT}), more files ({@code OUTPUT_FILE_LIMIT}), a larger one
+     * ({@code OUTPUT_FILE_TOO_LARGE}) or more bytes in all ({@code OUTPUT_FILES_TOO_LARGE}) than it declares. Each is a permanent failure: trying again gives the same.
      * Null when they may be stored.
      */
     static Attempt refusedFiles(ExternalJobType<?, ?> type, List<GeneratedFile> produced) {
@@ -645,6 +676,11 @@ public class ExternalJobExecutor implements SmartLifecycle {
                 return Attempt.failed(false, "OUTPUT_FILE_TOO_LARGE", "file " + file.key() + " has " + file.size()
                     + " bytes; the job type allows " + type.outputFiles().maxBytes());
             }
+        }
+        long total = produced.stream().mapToLong(GeneratedFile::size).sum();
+        if (total > type.outputFiles().maxTotalBytes()) {
+            return Attempt.failed(false, "OUTPUT_FILES_TOO_LARGE", "the handler returned " + total + " bytes of files;"
+                + " the job type allows " + type.outputFiles().maxTotalBytes() + " in all");
         }
         return null;
     }
@@ -698,7 +734,7 @@ public class ExternalJobExecutor implements SmartLifecycle {
         // produced a file stays known after it is swept.
         Mono<Void> outputs = Flux.fromIterable(attempt.stored())
             .concatMap(output -> recorder.insertOutputFile(claimed.jobId(), claimed.attemptNo(), output.position(),
-                output.key(), output.file(), now))
+                output.key(), output.file(), now, output.privateMetadata()))
             .then();
         return recorder.lockJob(claimed.jobId())
             .flatMap(job -> recorder.insertAttempt(claimed.jobId(), claimed.attemptNo(), attempt.outcome(),
@@ -797,6 +833,7 @@ public class ExternalJobExecutor implements SmartLifecycle {
         private final ExternalServices services;
         private final Map<String, Long> usage = new LinkedHashMap<>();
         private volatile List<ExternalJobFile> files = List.of();
+        private volatile Instant deadline;
 
         JobContext(Claimed claimed, ExternalServices services) {
             this.claimed = claimed;
@@ -828,9 +865,14 @@ public class ExternalJobExecutor implements SmartLifecycle {
             return "jabiz-job-" + claimed.jobId();
         }
 
+        /** When the handler's timeout runs out: set when it starts, after the job's files were copied. */
+        void deadline(Instant at) {
+            this.deadline = at;
+        }
+
         @Override
         public Instant deadline() {
-            return claimed.deadline();
+            return deadline != null ? deadline : claimed.deadline();
         }
 
         @Override

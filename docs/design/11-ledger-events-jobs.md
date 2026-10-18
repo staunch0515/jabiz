@@ -382,14 +382,14 @@ JobDefinition.forEach("commerce.unpaid-order-expire", "0 10 3 * * *", ZoneId.of(
 - **文件**【D50，阶段 16t】：
   ```java
   ExternalJobType.define("commerce.product-image", ProductImageInput.class, ProductImageResult.class, t -> t
-      .handler(ProductImageHandler.class).services("demo-ai").timeout(ofSeconds(90))
+      .handler(ProductImageHandler.class).services("demo-ai-images").timeout(ofSeconds(90))
       .inputFiles(1, 10 * MB, "commerce.image")          // 可读的文件：个数、每个的大小、策略
       .outputFiles("commerce.image", 1, 10 * MB)         // 产生的文件：策略、个数、每个的大小
       .onCompleted("PRODUCT_IMAGE_APPLY").onFailed("PRODUCT_IMAGE_FAILED"))
   ```
   - **输入**：`StartExternalJob.of(…).files(ctx -> 文件编号)`。登记时逐个 `FOR KEY SHARE` 读 `sys_file`：存在、属于类型的策略、请求人持有 `file.read` 或该策略的读取权限
     （与 `/api/files/{id}/content` 相同），否则同一个 422 `EXTERNAL_JOB_INPUT_FILE`；之后才看个数与大小（`EXTERNAL_JOB_INPUT_FILE_LIMIT`）。系统身份可给任何文件。
-    通过的文件记入 `sys_external_job_file`（`INPUT`）。执行时执行器在处理器开始之前把这些文件从 `FileStore` 复制到上传区（至多 1 分钟），处理器经 `ctx.files()` / `ctx.file(编号)`
+    通过的文件记入 `sys_external_job_file`（`INPUT`）。执行时执行器在处理器开始之前把这些文件从 `FileStore` 复制到上传区（时限见下），处理器经 `ctx.files()` / `ctx.file(编号)`
     得到 `ExternalJobFile`（`fileId`、`contentType`、`sizeBytes`、`open()`、`bytes()`，普通的阻塞读）；别的编号 `IllegalArgumentException`；尝试结束即删除副本，之后 `open()` 即 `IllegalStateException`。
     开始后被删除的文件：永久失败 `INPUT_FILE_MISSING`；存储读不出：可重试 `INPUT_FILE_UNREADABLE`。
   - **输出**：处理器返回 `ExternalJobResult.of(值).file(键, 名称, 字节)`（键 `[a-zA-Z][A-Za-z0-9._-]{0,63}`，结果内唯一）。开始作业须持有输出策略的上传权限（403）。
@@ -397,9 +397,17 @@ JobDefinition.forEach("commerce.unpaid-order-expire", "0 10 3 * * *", ZoneId.of(
     策略拒绝即永久失败 `OUTPUT_FILE_REJECTED`（说明中有拒绝的码），其他存储错误可重试 `OUTPUT_FILE_FAILED`；已取消的作业不存储。
     存下的文件与尝试同一事务记入 `sys_external_job_file`（`OUTPUT`，尝试号与键），不论尝试的结局；完成流程的 `ExternalJobCompletion.files()`（键 → 编号，`file(键)`）只含成功那次尝试的文件。
     没有被引用的输出文件由 `FILE_SWEEP` 作为孤儿删除（14 §6）。
-  - 类型有文件时，领取的租约各加 1 分钟（复制、存储各至多 1 分钟，不计入处理器的超时）。启动检查 `EXTERNAL`：个数 1–20、输入文件至多 100 MiB、输出文件至多 50 MiB、
+  - 类型有文件时，领取的租约加上复制与存储的时限（`jabiz.external-jobs.files.work-minimum`（缺省 1 分钟，至少 1 秒）加每 MiB `work-per-mib`（缺省 0.5 秒），按类型声明的最大量；存储另乘以 1 + `store-retries`），不计入处理器的超时，处理器的 `deadline` 从复制之后算起。启动检查 `EXTERNAL`：个数 1–20、输入文件至多 100 MiB、输出文件至多 50 MiB、
     策略已声明、输出的大小不超过策略的上限。ArchUnit `handlersReadFilesThroughTheirContext`：业务的处理器与阻塞步骤不依赖 `com.jabiz.runtime.file`。
   - 只读平台实体 `ExternalJobFile`（`external-job.read`）列出作业读取与产生的文件；`EXTERNAL_JOB_COMPLETE` 只对声明了输出的类型多读一次。
+    文件编号与摘要（`linkedFileId`、`linkedFileSha256`）是遮蔽字段，只有 `file.read` 经 `reveal` 逐值查看、不能被他人筛选；`privateMetadata()` 策略的文件，其记录用随机编号、记录时间只到日（D50 修订 L1）。
+  - **输出的内存**（D50 修订 M1）：`outputFiles(策略, 个数, 每个, 合计)`，合计缺省 `min(个数 × 每个, 16 MiB)`（不小于每个），至多 200 MiB，超过即永久失败 `OUTPUT_FILES_TOO_LARGE`；
+    处理器交出的字节不再复制。每个实例有输出预算 `jabiz.external-jobs.files.output-budget`（缺省 256 MB）：有输出的类型每领取一次预留其合计，预算不够即不领取，
+    因此一个实例同时持有的输出不超过预算，与 `max-in-flight` 无关（启动检查：合计不超过预算）。处理器返回之前自己占用的内存不在此列。
+  - **存储失败**（M2）：一个文件存储失败（策略的拒绝除外）先以同样的字节重试 `store-retries` 次（缺省 2），仍失败才使尝试失败（可重试 `OUTPUT_FILE_FAILED`）；
+    **下一次尝试会再次运行处理器、再次调用提供方（并付费）**——生成的字节不跨尝试保存（不做暂存文件：要在只追加的表中记下暂存与其清理，代价与收益不相称）。
+  - **复制**（L3、信息项）：副本在写入前即登记，失败、超时与取消都删除它；复制前检查上传区的可用空间（保留 `min-free-disk`，缺省 256 MB），不够即可重试 `INPUT_FILE_NO_SPACE`；
+    复制后重算 SHA-256 与登记时的摘要比较，不符即永久失败 `INPUT_FILE_CHANGED`（对象由编号决定、从不重写，不符只能是存储被外部改动）。
 - **执行器** `ExternalJobExecutor`（`jabiz.external-jobs.executor.enabled`（测试关闭）、`poll-interval` 1 s、每实例 `max-in-flight` 8、`instance-id`
   缺省为主机名加随机串、`shutdown-grace` 30 s、`watermark-refresh` 1 min；测试与场景调用 `runPending()`，领取后执行并等全部记录完）：
   1. **领取**（每个类型一个短事务，**每次轮询对每个类型都做**，实例已满也做前两项）：`pg_advisory_xact_lock(hashtextextended('jabiz.external-job:'||类型))`，

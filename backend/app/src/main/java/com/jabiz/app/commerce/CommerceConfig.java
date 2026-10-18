@@ -206,6 +206,12 @@ class CommerceConfig {
         return ProductCopy.FAILED_PROCESS;
     }
 
+    /** The demo AI service's images, with answers large enough for a photo (decision D50). */
+    @Bean
+    ExternalService demoAiImages() {
+        return ProductImage.DEMO_AI_IMAGES;
+    }
+
     /** A product photo redone by the demo AI service: an external job with an input and an output file (D50). */
     @Bean
     ExternalJobType<ProductImage.ProductImageInput, ProductImage.ProductImageResult> productImageJob() {

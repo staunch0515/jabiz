@@ -15,11 +15,19 @@ import com.jabiz.external.ExternalJobResult;
 import com.jabiz.external.ExternalJobType;
 import com.jabiz.file.FilePolicy;
 import com.jabiz.job.JobDefinition;
+import com.jabiz.process.BlockingStep;
+import com.jabiz.process.NoMetadata;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.runtime.PermissionDeniedException;
 import com.jabiz.runtime.event.OutboxDeliverer;
+import com.jabiz.external.ExternalServices;
 import com.jabiz.runtime.external.ExternalJobExecutor;
+import com.jabiz.runtime.external.ExternalJobRecorder;
+import com.jabiz.runtime.external.ExternalJobRegistry;
+import com.jabiz.runtime.observability.PlatformObservations;
+import io.micrometer.core.instrument.MeterRegistry;
+import tools.jackson.databind.json.JsonMapper;
 import com.jabiz.runtime.file.FileKeys;
 import com.jabiz.runtime.file.FileProcesses;
 import com.jabiz.runtime.job.JobRunner;
@@ -75,6 +83,8 @@ class ExternalJobFilesIT extends FileItSupport {
     static void demoAi(DynamicPropertyRegistry registry) {
         registry.add("jabiz.external-services.demo-ai.base-url", STUB::baseUrl);
         registry.add("jabiz.external-services.demo-ai.allowed-hosts", () -> "127.0.0.1");
+        registry.add("jabiz.external-services.demo-ai-images.base-url", STUB::baseUrl);
+        registry.add("jabiz.external-services.demo-ai-images.allowed-hosts", () -> "127.0.0.1");
     }
 
     @AfterAll
@@ -114,7 +124,8 @@ class ExternalJobFilesIT extends FileItSupport {
             String label = input.label();
             SEEN.put(ctx.jobId(), ctx.files());
             STARTED.computeIfAbsent(label, k -> new CountDownLatch(1)).countDown();
-            CountDownLatch gate = GATES.get(label);
+            // "gate1…" waits on its first attempt only.
+            CountDownLatch gate = label.startsWith("gate1") && ctx.attempt() > 1 ? null : GATES.get(label);
             if (gate != null) {
                 try {
                     gate.await(25, TimeUnit.SECONDS);
@@ -150,6 +161,18 @@ class ExternalJobFilesIT extends FileItSupport {
                     FileSamples.svg());
                 default -> throw new IllegalArgumentException(out);
             };
+        }
+    }
+
+    /** Holds the starting process's transaction open after the job was registered, until the test lets it go. */
+    public static class StartGate implements BlockingStep<NoMetadata, ProcessContext> {
+        static volatile CountDownLatch entered = new CountDownLatch(1);
+        static volatile CountDownLatch release = new CountDownLatch(0);
+
+        @Override
+        public void run(NoMetadata metadata, ProcessContext ctx) throws InterruptedException {
+            entered.countDown();
+            release.await(25, TimeUnit.SECONDS);
         }
     }
 
@@ -251,6 +274,40 @@ class ExternalJobFilesIT extends FileItSupport {
         @Bean
         ProcessDefinition<StartInput, StartOutput, ProcessContext> itFilesStartRead() {
             return starter("IT_FILES_READ", "it.files.read", true);
+        }
+
+        @Bean
+        StartGate itFilesStartGate() {
+            return new StartGate();
+        }
+
+        /** Starts an it.files.read job, then waits in its transaction at the gate. */
+        @Bean
+        ProcessDefinition<StartInput, StartOutput, ProcessContext> itFilesStartReadGated() {
+            return ProcessDefinition.define("IT_FILES_READ_GATED", 1, StartInput.class, StartOutput.class,
+                ProcessContext.class, pb -> pb
+                    .permissions("it.job.start")
+                    .contextFactory((start, input) -> {
+                        ProcessContext ctx = new ProcessContext(start);
+                        ctx.put("in", input);
+                        return ctx;
+                    })
+                    .outputMapper(ctx -> new StartOutput(ctx.get("jobId", String.class)))
+                    .step("Start", StartExternalJob.<ProcessContext>of("it.files.read", ctx -> new FileInput(
+                        ctx.get("in", StartInput.class).label())).files(ctx -> ctx.get("in", StartInput.class)
+                        .files()).outputKey("jobId"))
+                    .step("Wait at the gate", StartGate.class, NoMetadata.INSTANCE));
+        }
+
+        /** Produces one supplier document (PDF only, stored as it is). */
+        @Bean
+        ExternalJobType<FileInput, FileResult> itFilesDocs() {
+            return type("it.files.docs", t -> t.outputFiles(CommerceFiles.DOCUMENT, 1, FilePolicy.MB));
+        }
+
+        @Bean
+        ProcessDefinition<StartInput, StartOutput, ProcessContext> itFilesStartDocs() {
+            return starter("IT_FILES_DOCS", "it.files.docs", false);
         }
 
         @Bean
@@ -584,6 +641,192 @@ class ExternalJobFilesIT extends FileItSupport {
             .containsExactly(Map.of("content_type", "image/png"));
         assertThat(FileSamples.contains(stored(FileKeys.key(files.get("b"), FileKeys.ORIGINAL)),
             FileSamples.SECRET_MARKER.getBytes(StandardCharsets.UTF_8))).isFalse();
+    }
+
+    // ---------------------------------------------------------------- after the review
+
+    /**
+     * A file given to a starting job is locked against deletion until the start commits ({@code FOR KEY SHARE}):
+     * the deletion waits, and the job then finds the file gone.
+     */
+    @Test
+    void aFileIsNotDeletedWhileAJobThatReadsItIsBeingStarted() throws Exception {
+        String photo = photo("it-files-owner");
+        StartGate.entered = new CountDownLatch(1);
+        StartGate.release = new CountDownLatch(1);
+        CompletableFuture<String> starting = CompletableFuture.supplyAsync(() -> start("IT_FILES_READ_GATED",
+            "read", List.of(UUID.fromString(photo)), "it-files-reader", "it.job.start", "commerce.media.read"));
+        assertThat(StartGate.entered.await(20, TimeUnit.SECONDS)).isTrue();
+        CompletableFuture<Integer> deleting = CompletableFuture.supplyAsync(() -> post("/api/processes/"
+            + FileProcesses.DELETE + "/latest", bearer("it-files-admin", "file.delete"), Map.of("fileId", photo))
+            .returnResult(String.class).getStatus().value());
+        Thread.sleep(1000);
+        assertThat(deleting).isNotDone();
+        StartGate.release.countDown();
+        String jobId = starting.get(30, TimeUnit.SECONDS);
+        assertThat(deleting.get(30, TimeUnit.SECONDS)).isEqualTo(200);
+        executor.runPending().block();
+        assertThat(attempts(jobId)).containsExactly("1:FAILED:false:INPUT_FILE_MISSING");
+    }
+
+    /** Content changed behind the platform's back (same size): the copy is hashed, and the job fails for good. */
+    @Test
+    void aCopyThatIsNotTheRecordedContentFailsTheJob() throws Exception {
+        String photo = photo("it-files-owner");
+        String jobId = start("IT_FILES_READ", "read", List.of(UUID.fromString(photo)), "it-files-reader",
+            "it.job.start", "commerce.media.read");
+        java.nio.file.Path original = filesRoot().resolve(FileKeys.key(UUID.fromString(photo), FileKeys.ORIGINAL));
+        byte[] content = java.nio.file.Files.readAllBytes(original);
+        content[content.length / 2] ^= 0x5A;
+        java.nio.file.Files.write(original, content);
+        executor.runPending().block();
+        assertThat(attempts(jobId)).containsExactly("1:FAILED:false:INPUT_FILE_CHANGED");
+        assertThat(uploadLeftovers()).isEmpty();
+    }
+
+    /**
+     * A file of a policy with private metadata: given to a job by a reader, recorded with a random id and the day
+     * only; the readers of jobs see neither the file nor its digest without {@code file.read} (decisions D47, D50).
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void theRecordsOfPrivateFilesTellNoMoreThanTheFilesDo() {
+        String secret = (String) uploaded(ItFileFixtures.PRIVATE, FileSamples.jpeg(80, 60), "me.jpg", "image/jpeg",
+            bearer("it-private-uploader", "it.private.upload", "it.private.read")).get("fileId");
+        clock.advance(Duration.ofMinutes(7).plusSeconds(13));
+        String jobId = start("IT_FILES_READ", "read", List.of(UUID.fromString(secret)), "it-private-reader",
+            "it.job.start", "it.private.read");
+        executor.runPending().block();
+        deliverer.deliverPending().block();
+        assertThat(((ExternalJobCompletion) CALLBACKS.get(jobId)).result(FileResult.class).digests())
+            .containsExactly(digestOf(secret));
+        Map<String, Object> row = query("SELECT job_file_id, recorded_time FROM sys_external_job_file"
+            + " WHERE job_id = ?", jobId).getFirst();
+        assertThat(UUID.fromString((String) row.get("job_file_id")).version()).isEqualTo(4);
+        assertThat(((java.sql.Timestamp) row.get("recorded_time")).toInstant())
+            .isEqualTo(clock.instant().truncatedTo(java.time.temporal.ChronoUnit.DAYS));
+
+        String dataset = "/api/datasets/" + com.jabiz.runtime.external.ExternalJobEntities.FILE_DATASET + "/query";
+        Map<String, Object> filter = Map.of("filters", List.of(Map.of("field", "jobId", "op", "eq", "value",
+            jobId)));
+        Map<String, Object> item = ((List<Map<String, Object>>) post(dataset, bearer("it-job-reader",
+            "external-job.read"), filter).expectStatus().isOk().expectBody(MAP).returnResult().getResponseBody()
+            .get("items")).getFirst();
+        Map<String, Object> seen = (Map<String, Object>) item.get("attributes");
+        assertThat(seen.get("linkedFileId")).isNotEqualTo(secret);
+        assertThat(seen.get("linkedFileSha256")).isNotEqualTo(digestOf(secret));
+        // Only a holder of file.read sees the file, one value at a time and recorded.
+        String reveal = "/api/datasets/" + com.jabiz.runtime.external.ExternalJobEntities.FILE_DATASET + "/reveal";
+        Map<String, Object> request = Map.of("id", item.get("id"), "field", "linkedFileId");
+        post(reveal, bearer("it-job-reader", "external-job.read"), request).expectStatus().isForbidden();
+        assertThat(post(reveal, bearer("it-file-admin", "external-job.read", "file.read"), request).expectStatus()
+            .isOk().expectBody(MAP).returnResult().getResponseBody()).containsValue(secret);
+        // Not filtered by the file without file.read: a match would tell which job read it.
+        post(dataset, bearer("it-job-reader", "external-job.read"), Map.of("filters", List.of(Map.of("field",
+            "linkedFileId", "op", "eq", "value", secret)))).expectStatus().isBadRequest();
+    }
+
+    /** A document policy takes PDFs as they are, and refuses an image. */
+    @Test
+    void aDocumentPolicyStoresPdfsAsTheyAre() {
+        String pdf = start("IT_FILES_DOCS", "out:pdf", List.of(), "it-docs", "it.job.start",
+            "commerce.document.upload");
+        String image = start("IT_FILES_DOCS", "out:jpeg", List.of(), "it-docs", "it.job.start",
+            "commerce.document.upload");
+        executor.runPending().block();
+        deliverer.deliverPending().block();
+        UUID fileId = ((ExternalJobCompletion) CALLBACKS.get(pdf)).file("image");
+        assertThat(query("SELECT content_type, policy FROM sys_file WHERE file_id = ?", fileId))
+            .containsExactly(Map.of("content_type", "application/pdf", "policy", CommerceFiles.DOCUMENT));
+        assertThat(stored(FileKeys.key(fileId, FileKeys.ORIGINAL))).isEqualTo(FileSamples.pdf());
+        assertThat(attempts(image)).containsExactly("1:FAILED:false:OUTPUT_FILE_REJECTED");
+    }
+
+    /** A requester the file records cannot hold (an id too long): a failure of the storage, not a refusal. */
+    @Test
+    void aFailureToRegisterIsRetryableNotARefusal() {
+        String requester = "it-" + "r".repeat(70);
+        String jobId = start("IT_FILES_MAKE", "out:jpeg", List.of(), requester, "it.job.start",
+            "commerce.media.upload");
+        executor.runPending().block();
+        assertThat(attempts(jobId)).containsExactly("1:FAILED:true:OUTPUT_FILE_FAILED");
+    }
+
+    /**
+     * An attempt that outlives its lease: another instance takes the job over and its attempt's file is the one the
+     * completion gets; the late attempt's file is recorded as its own and left to the sweep.
+     */
+    @Test
+    void theFileOfALateAttemptIsRecordedButNotHandedOver() throws Exception {
+        String label = "gate1-" + UUID.randomUUID() + " out:jpeg";
+        GATES.put(label, new CountDownLatch(1));
+        String jobId = start("IT_FILES_MAKE", label, List.of(), "it-late", "it.job.start", "commerce.media.upload");
+        CompletableFuture<Integer> late = executor.runPending().toFuture();
+        assertThat(STARTED.computeIfAbsent(label, k -> new CountDownLatch(1)).await(20, TimeUnit.SECONDS)).isTrue();
+        clock.advance(Duration.ofHours(1));
+        ExternalJobExecutor other = new ExternalJobExecutor(context.getBean(ExternalJobRegistry.class),
+            context.getBean(ExternalJobRecorder.class), context, context.getBean(ExternalServices.class),
+            context.getBean(JsonMapper.class), context.getBean(java.time.Clock.class),
+            context.getBean(PlatformObservations.class), context.getBeanProvider(MeterRegistry.class),
+            executor.settings().withInstanceId("it-other"));
+        // The first poll records the expired lease; after the backoff the next takes the job again.
+        assertThat(other.runPending().block()).isZero();
+        clock.advance(Duration.ofSeconds(11));
+        assertThat(other.runPending().block()).isEqualTo(1);
+        GATES.get(label).countDown();
+        assertThat(late.get(30, TimeUnit.SECONDS)).isEqualTo(1);
+        deliverer.deliverPending().block();
+        assertThat(attempts(jobId)).containsExactly("1:LEASE_EXPIRED:true:LEASE_EXPIRED", "2:SUCCEEDED:false:null");
+        List<Map<String, Object>> outputs = query("SELECT attempt_no, file_id FROM sys_external_job_file"
+            + " WHERE job_id = ? ORDER BY attempt_no", jobId);
+        assertThat(outputs).extracting(row -> row.get("attempt_no")).containsExactly(1, 2);
+        assertThat(((ExternalJobCompletion) CALLBACKS.get(jobId)).file("image").toString())
+            .isEqualTo(outputs.get(1).get("file_id"));
+    }
+
+    /** The records of a job's files are never changed or deleted, and are sealed like every append-only table. */
+    @Test
+    void theFileRecordsAreAppendOnlyAndSealed() {
+        String jobId = start("IT_FILES_MAKE", "out:jpeg", List.of(), "it-sealed", "it.job.start",
+            "commerce.media.upload");
+        executor.runPending().block();
+        String recordId = (String) query("SELECT job_file_id FROM sys_external_job_file WHERE job_id = ?", jobId)
+            .getFirst().get("job_file_id");
+        assertThatThrownBy(() -> execute("DELETE FROM sys_external_job_file")).hasMessageContaining("append-only");
+        assertThatThrownBy(() -> execute("UPDATE sys_external_job_file SET policy = policy"))
+            .hasMessageContaining("append-only");
+        assertThatThrownBy(() -> execute("TRUNCATE sys_external_job_file")).hasMessageContaining("append-only");
+        post("/api/processes/INTEGRITY_SEAL/latest", bearer("it-sealer", "*"), new java.util.HashMap<>(
+            java.util.Collections.singletonMap("scheduledTime", null))).expectStatus().isOk();
+        assertThat(query("SELECT 1 FROM sys_integrity_item WHERE table_name = 'sys_external_job_file'"
+            + " AND row_key LIKE ?", "%" + recordId + "%")).hasSize(1);
+    }
+
+    /** The demo applies the new photo only to the photo it was made from. */
+    @Test
+    void theDemoKeepsAPhotoChangedWhileTheServiceWorked() {
+        String photo = photo("it-photographer");
+        String newer = photo("it-photographer");
+        String sku = "STALE" + UUID.randomUUID().toString().substring(0, 4).toUpperCase(java.util.Locale.ROOT);
+        String productId = product(sku, photo);
+        String editor = bearer("it-image-editor", "commerce.product.write", "commerce.product.read",
+            "commerce.media.read", "commerce.media.upload");
+        Map<String, Object> started = client.post().uri("/api/processes/" + ProductImage.REQUEST + "/latest")
+            .header(HttpHeaders.AUTHORIZATION, editor).contentType(MediaType.APPLICATION_JSON)
+            .bodyValue(Map.of("productId", productId)).exchange().expectStatus().isOk().expectBody(MAP)
+            .returnResult().getResponseBody();
+        @SuppressWarnings("unchecked")
+        String jobId = ((Map<String, Object>) started.get("output")).get("jobId").toString();
+        @SuppressWarnings("unchecked")
+        Map<String, Object> current = products(sku).getFirst();
+        post("/api/datasets/" + CommerceEntities.PRODUCT_DATASET + "/commit", bearer("it-admin", "*"),
+            Map.of("changes", List.of(Map.of("action", "UPDATE", "id", productId, "version", current.get("version"),
+                "attributes", Map.of("imageFileId", newer))))).expectStatus().isOk();
+        executor.runPending().block();
+        deliverer.deliverPending().block();
+        assertThat(productPhoto(sku)).isEqualTo(newer);
+        assertThat(query("SELECT DISTINCT title_key FROM sys_task_version WHERE source_key = ?",
+            "product-image:" + jobId)).containsExactly(Map.of("title_key", "task.commerce.product-image.stale"));
     }
 
     // ---------------------------------------------------------------- the demo: a product photo redone

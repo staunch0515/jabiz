@@ -4029,7 +4029,7 @@ QB 提交锁内 48 → 16（16p-1）的明细：恢复超时 1 → 0（T1）、�
 | P3 | 文件输出 | `outputFiles(策略, 个数, 大小)`、`ExternalJobResult…file(键, 名称, 字节)`：开始须持有输出策略的上传权限；`FileUploadService.storeGenerated` 走上传的流水线（按内容判定、重新编码、策略的上限、随机编号），以请求人运行 `FILE_REGISTER`（带 `jobId`）；`ExternalJobCompletion.files()` / `file(键)`；超限、被拒为永久失败 |
 | P4 | 输入永久保存 | 只写明（D50 第 5 条、21 §3.1、11 §4a） |
 | 记录 | 哪个作业读取、产生了哪个文件 | 只追加的 `sys_external_job_file`（`INPUT` / `OUTPUT`），只读实体 `ExternalJobFile`；输出文件不论尝试结局都记下，未被引用的由 `FILE_SWEEP` 清扫 |
-| 示范 | `commerce.product-image` | `PRODUCT_IMAGE_REQUEST`（`actsOn Product`）把商品照片交给 `demo-ai` 的 `POST /v1/images`，回答的图片以请求人的 `commerce.image` 上传登记，`PRODUCT_IMAGE_APPLY` 换上新照片；`demo-ai` 响应上限 16 MiB；`tools/demo/ai-stub` 增加 `/v1/images` |
+| 示范 | `commerce.product-image` | `PRODUCT_IMAGE_REQUEST`（`actsOn Product`）把商品照片交给 `demo-ai-images`（与 `demo-ai` 同一地址与密钥、响应上限 16 MiB）的 `POST /v1/images`，回答的图片以请求人的 `commerce.image` 上传登记，`PRODUCT_IMAGE_APPLY` 换上新照片；`tools/demo/ai-stub` 增加 `/v1/images` |
 
 **验收**
 - [x] `./gradlew check` 全部通过（含 `:app:platformCheck`、场景快照、覆盖率门禁）；前端 `pnpm lint`、`typecheck`、`test`、`check:api`（接口不变）；端到端 `pnpm e2e`。
@@ -4044,7 +4044,7 @@ QB 提交锁内 48 → 16（16p-1）的明细：恢复超时 1 → 0（T1）、�
 - [x] D50、11 §4a、14 §1 / §11、06 §2.3、21 §3.1、CLAUDE.md、ROADMAP 已更新。
 
 **兼容**（线 1.2 内）：只新增。已有作业类型的上限与行为不变；`ExternalJobType`、`ExternalJobResult`、`ExternalJobCompletion`、`StartExternalJob.Metadata`、`FileProcesses.RegisterInput`
-新增 record 组件，原构造器保留（D50 第 6 条）。上传接口、OpenAPI 不变。示范 `demo-ai` 的响应上限由 64 KiB 提到 16 MiB。
+新增 record 组件，原构造器保留（D50 第 6 条）。上传接口、OpenAPI 不变。`demo-ai` 不变（图片用另一个服务 `demo-ai-images`）。
 
 **未做**：场景回放的 `completeExternalJob` 不带文件（有文件的作业以集成测试覆盖，没有新场景）；权限只在开始时判断；未被完成流程及时引用的输出文件可能在 `jabiz.files.orphan-after` 之后被清扫（Outbox 长时间失败时）；
 开放中的作业所读的文件不阻止清扫（开始后被删除即作业失败）。
@@ -4054,4 +4054,12 @@ QB 提交锁内 48 → 16（16p-1）的明细：恢复超时 1 → 0（T1）、�
    剩余：以系统身份运行的流程（事件消费者、定时任务）可以给任何属于类型策略的文件——这类流程若把用户提供的编号交给作业，须自己判断（与系统身份写数据相同）。
 2. 经输出夹带不安全的文件：类型按内容判定、SVG / HTML / 脚本永不允许、图片解码后重新编码（JPEG + HTML 的多语种文件只剩重新编码的 JPEG，测试覆盖）、PDF 等照旧以附件 + `sandbox` 提供；处理器给的名称只经清洗作下载名，从不决定类型或路径。
 3. 大小与拒绝服务：输入 JSON ≤ 1 MiB；输入文件每个作业 ≤ 20 个、每个 ≤ 100 MiB（磁盘上的副本，不在内存），输出每次尝试 ≤ 20 个、每个 ≤ 50 MiB 且不超过策略的上限（处理器在内存中持有）；
-   图片照旧受 `maxPixels` 与解码并发上限约束；复制与存储各至多 1 分钟；作业数量受 `maxOpenPerRequester`、并发与入口限流约束。最坏情况（每实例 8 个尝试都用满上限）磁盘约 16 GB、内存约 8 GB，应用应按实际需要声明小得多的上限（示范为 1 个、10 MB）。
+   图片照旧受 `maxPixels` 与解码并发上限约束；复制与存储的时限随声明的大小增长；每次尝试的输出合计受 `maxTotalBytes` 与实例的输出预算约束（修订后）；作业数量受 `maxOpenPerRequester`、并发与入口限流约束。最坏情况的输入磁盘约 16 GB（每实例 8 个尝试都用满上限），应用应按实际需要声明小得多的上限（示范为 1 个、10 MB）。
+
+**独立评审之后的修订**（2026-10-18，见 D50 的修订说明）：
+1. M1：每次尝试的输出合计 `maxTotalBytes`（缺省 ≤ 16 MiB，至多 200 MiB，`OUTPUT_FILES_TOO_LARGE`）；每实例的输出预算 `jabiz.external-jobs.files.output-budget`（缺省 256 MB），领取时预留；`GeneratedFile` 不再复制字节。
+2. M2：复制与存储的时限按声明的大小（`work-minimum`、`work-per-mib`）；存储失败在尝试内以同样的字节重试（`store-retries`），之后的新尝试会再次调用提供方（已写明，不做跨尝试暂存）。
+3. L1：`ExternalJobFile` 的文件编号与摘要为遮蔽字段（`file.read`，`reveal`），`privateMetadata()` 的记录用随机编号、时间到日；`requestedBy` 不遮蔽的理由见 D50。
+4. L2：示范图片走 `demo-ai-images`（16 MiB），`demo-ai` 恢复 64 KiB。L3：副本写入前登记，取消也删除；可用空间检查 `INPUT_FILE_NO_SPACE`。
+5. L4：示范只在照片未被他人更换时换上新照片（`task.commerce.product-image.stale`）；本地桩输出 ≤ 2048 像素的 JPEG。L5：规则传递地检查应用自己的类，处理器不是沙箱（D50、14 §11）。
+6. L6 与信息项：见 D50 的修订说明中的测试；`deadline()` 从复制之后算起；副本重算摘要；`StartExternalJob` 保留三参构造。

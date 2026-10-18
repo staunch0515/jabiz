@@ -19,7 +19,7 @@ import java.util.Map;
 /**
  * Redoes a product's photo with the demo AI service (decision D50, an external job with files): reads the photo its
  * job was given ({@link ExternalJobContext#files()}; the platform checked that the requester may read it and copied it
- * for the attempt), sends it to {@code POST /v1/images} of {@value ModerateText#SERVICE} as
+ * for the attempt), sends it to {@code POST /v1/images} of {@value ProductImage#SERVICE} as
  * {@code {"task": "product-image", "style", "sku", "contentType", "image": <base64>}}, and returns the image of the
  * answer {@code {"image": <base64>, "usage": {…}}} as the job's file {@value ProductImage#IMAGE}. It does not check
  * what the service sent: the platform recognises the file's type from its content and stores it only as the output
@@ -48,8 +48,8 @@ public class ProductImageHandler
         request.put("sku", input.sku());
         request.put("contentType", photo.contentType());
         request.put("image", Base64.getEncoder().encodeToString(photo.bytes()));
-        ExternalHttp.Response response = ctx.http(ModerateText.SERVICE).send(ExternalHttp.Request.post("/v1/images")
-            .header("Authorization", "Bearer " + ctx.secret(ModerateText.SERVICE, "apiKey"))
+        ExternalHttp.Response response = ctx.http(ProductImage.SERVICE).send(ExternalHttp.Request.post("/v1/images")
+            .header("Authorization", "Bearer " + ctx.secret(ProductImage.SERVICE, "apiKey"))
             .json(json.writeValueAsString(request))
             .idempotencyKey(ctx.idempotencyKey()));
         JsonNode answer = read(response);
@@ -73,10 +73,10 @@ public class ProductImageHandler
         byte[] image = answer == null || !answer.path("image").isString() ? null : decode(answer.path("image")
             .asString());
         if (image == null || image.length == 0) {
-            throw new ExternalCallException(ModerateText.SERVICE, ExternalCallException.Kind.BAD_RESPONSE,
+            throw new ExternalCallException(ProductImage.SERVICE, ExternalCallException.Kind.BAD_RESPONSE,
                 "answer has no image");
         }
-        return ExternalJobResult.of(new ProductImage.ProductImageResult(input.style()))
+        return ExternalJobResult.of(new ProductImage.ProductImageResult(input.style(), photo.fileId()))
             .file(ProductImage.IMAGE, "product-" + input.sku() + "-" + input.style(), image);
     }
 

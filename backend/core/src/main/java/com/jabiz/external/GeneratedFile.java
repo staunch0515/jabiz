@@ -15,7 +15,9 @@ import java.util.regex.Pattern;
  *
  * @param key     {@value #KEY_PATTERN}, unique within the result: how the completion process finds the file
  * @param name    the file's name for downloads (cleaned like an uploaded one); the key when null
- * @param content the bytes, at least one
+ * @param content the bytes, at least one. Not copied (a file may be tens of megabytes, and two copies of every file
+ *                would double what an attempt holds in memory): the array passes to the result, and the handler
+ *                must not change it afterwards; {@link #content()} returns the same array, for the same reason
  */
 public record GeneratedFile(String key, String name, byte[] content) {
 
@@ -31,13 +33,6 @@ public record GeneratedFile(String key, String name, byte[] content) {
             throw new IllegalArgumentException("Generated file " + key + " is empty");
         }
         name = name == null || name.isBlank() ? key : name;
-        content = content.clone();
-    }
-
-    /** A copy of the bytes. */
-    @Override
-    public byte[] content() {
-        return content.clone();
     }
 
     /** The number of bytes, without copying them. */

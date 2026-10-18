@@ -28,7 +28,7 @@ import java.util.regex.Pattern;
  * {@code commerce.product-copy}) answers after two seconds with a line of copy for the product's name and made-up
  * token usage; a product name containing "refuse" is answered 400, one containing "busy" 503.
  * {@code POST /v1/images} (the external job {@code commerce.product-image}, decision D50) answers with the photo it was
- * sent in grey, framed for the style ("white" or "studio"), as a PNG. It listens on this machine only.
+ * sent in grey, framed for the style ("white" or "studio"), as a JPEG of at most 2048 pixels a side. It listens on this machine only.
  */
 public final class AiStub {
 
@@ -105,20 +105,23 @@ public final class AiStub {
         }
         Matcher style = STYLE.matcher(body);
         boolean white = style.find() && style.group(1).equals("white");
-        int border = Math.max(8, Math.min(photo.getWidth(), photo.getHeight()) / 12);
-        BufferedImage out = new BufferedImage(photo.getWidth() + 2 * border, photo.getHeight() + 2 * border,
-            BufferedImage.TYPE_INT_RGB);
+        // At most 2048 pixels wide or high, as a JPEG: well within the 10 MB the demo's job takes back.
+        double scale = Math.min(1.0, 2048.0 / Math.max(photo.getWidth(), photo.getHeight()));
+        int width = Math.max(1, (int) (photo.getWidth() * scale));
+        int height = Math.max(1, (int) (photo.getHeight() * scale));
+        int border = Math.max(8, Math.min(width, height) / 12);
+        BufferedImage out = new BufferedImage(width + 2 * border, height + 2 * border, BufferedImage.TYPE_INT_RGB);
         Graphics2D g = out.createGraphics();
         g.setColor(white ? Color.WHITE : new Color(40, 40, 48));
         g.fillRect(0, 0, out.getWidth(), out.getHeight());
-        BufferedImage grey = new BufferedImage(photo.getWidth(), photo.getHeight(), BufferedImage.TYPE_BYTE_GRAY);
-        grey.getGraphics().drawImage(photo, 0, 0, null);
+        BufferedImage grey = new BufferedImage(width, height, BufferedImage.TYPE_BYTE_GRAY);
+        grey.getGraphics().drawImage(photo, 0, 0, width, height, null);
         g.drawImage(grey, border, border, null);
         g.dispose();
-        ByteArrayOutputStream png = new ByteArrayOutputStream();
-        ImageIO.write(out, "png", png);
+        ByteArrayOutputStream jpeg = new ByteArrayOutputStream();
+        ImageIO.write(out, "jpeg", jpeg);
         System.out.println("images: " + photo.getWidth() + "x" + photo.getHeight() + (white ? " white" : " studio"));
-        answer(exchange, 200, "{\"image\":\"" + Base64.getEncoder().encodeToString(png.toByteArray())
+        answer(exchange, 200, "{\"image\":\"" + Base64.getEncoder().encodeToString(jpeg.toByteArray())
             + "\",\"usage\":{\"imageTokens\":" + (photo.getWidth() * photo.getHeight() / 750) + "}}");
     }
 

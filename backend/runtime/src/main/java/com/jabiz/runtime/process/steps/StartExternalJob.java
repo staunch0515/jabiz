@@ -16,6 +16,8 @@ import com.jabiz.runtime.external.ExternalJobRecorder;
 import com.jabiz.runtime.external.ExternalJobRegistry;
 import com.jabiz.runtime.security.Permissions;
 import com.jabiz.security.Sensitive;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.support.StaticListableBeanFactory;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -150,6 +152,16 @@ public class StartExternalJob<C extends ProcessContext> implements StepHandler<S
     private final JsonMapper json;
     private final FilePolicyRegistry policies;
 
+    /**
+     * The step as decision D38 built it, without file policies: a type with files cannot be started by it (its
+     * policies are not found). Kept for code of line 1.2 that builds the step itself (decision D50 item 6).
+     */
+    public StartExternalJob(ExternalJobRegistry jobs, ExternalJobRecorder recorder, JsonMapper json) {
+        this(jobs, recorder, json, new FilePolicyRegistry(new StaticListableBeanFactory()
+            .getBeanProvider(FilePolicy.class)));
+    }
+
+    @Autowired
     public StartExternalJob(ExternalJobRegistry jobs, ExternalJobRecorder recorder, JsonMapper json,
         FilePolicyRegistry policies) {
         this.jobs = jobs;
@@ -213,7 +225,8 @@ public class StartExternalJob<C extends ProcessContext> implements StepHandler<S
                 .flatMap(files -> recorder.insertJob(type.name(), text, reference, requester, ctx.processSeqId(),
                         ctx.opTime())
                     .flatMap(id -> Flux.range(0, files.size())
-                        .concatMap(i -> recorder.insertInputFile(id, i, files.get(i), ctx.opTime()))
+                        .concatMap(i -> recorder.insertInputFile(id, i, files.get(i), ctx.opTime(),
+                            policies.find(files.get(i).policy()).map(FilePolicy::privateMetadata).orElse(false)))
                         .then(Mono.just(id))))
                 .doOnNext(id -> {
                     if (metadata.outputKey() != null) {

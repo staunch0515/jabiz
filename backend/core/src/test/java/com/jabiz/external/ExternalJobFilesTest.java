@@ -72,8 +72,21 @@ class ExternalJobFilesTest {
             "inputFiles: the largest file must be between 1 and 104857600 bytes",
             "outputFiles: name the file policy the files are stored under",
             "outputFiles: the most files must be between 1 and 20",
-            "outputFiles: the largest file must be between 1 and 52428800 bytes");
+            "outputFiles: the largest file must be between 1 and 52428800 bytes",
+            "outputFiles: all files together must be between the largest file and 209715200 bytes");
         assertThat(type(t -> t.inputFiles(1, 1, " ")).problems()).containsExactly("inputFiles: a policy name is blank");
+        // All files of an attempt together: at least the largest one, at most 200 MiB; 16 MiB unless declared.
+        assertThat(type(t -> t.outputFiles("p", 20, 10 * 1024 * 1024)).outputFiles().maxTotalBytes())
+            .isEqualTo(ExternalJobType.DEFAULT_MAX_OUTPUT_TOTAL_BYTES);
+        assertThat(type(t -> t.outputFiles("p", 2, 1024)).outputFiles().maxTotalBytes()).isEqualTo(2048);
+        assertThat(type(t -> t.outputFiles("p", 1, 40L * 1024 * 1024)).outputFiles().maxTotalBytes())
+            .isEqualTo(40L * 1024 * 1024);
+        assertThat(type(t -> t.outputFiles("p", 4, 1024, 3000)).problems()).isEmpty();
+        assertThat(type(t -> t.outputFiles("p", 4, 1024, 1000)).problems()).containsExactly(
+            "outputFiles: all files together must be between the largest file and 209715200 bytes");
+        assertThat(type(t -> t.outputFiles("p", 20, 50L * 1024 * 1024, ExternalJobType.MAX_OUTPUT_TOTAL_BYTES + 1))
+            .problems()).containsExactly(
+                "outputFiles: all files together must be between the largest file and 209715200 bytes");
         assertThat(type(t -> t.outputFiles("p", 1, ExternalJobType.MAX_OUTPUT_FILE_BYTES + 1)).problems())
             .containsExactly("outputFiles: the largest file must be between 1 and 52428800 bytes");
     }
@@ -94,9 +107,9 @@ class ExternalJobFilesTest {
         byte[] content = {1, 2, 3};
         ExternalJobResult<Out> result = ExternalJobResult.of(new Out("x")).usage("tokens", 2)
             .file("cover", "Cover.png", content).file("thumb", null, new byte[] {4});
-        content[0] = 9;
         assertThat(result.files()).extracting(GeneratedFile::key).containsExactly("cover", "thumb");
-        assertThat(result.files().getFirst().content()).containsExactly(1, 2, 3);
+        // Handed over, not copied: an attempt holds each file once.
+        assertThat(result.files().getFirst().content()).isSameAs(content).containsExactly(1, 2, 3);
         assertThat(result.files().getFirst().name()).isEqualTo("Cover.png");
         assertThat(result.files().get(1).name()).isEqualTo("thumb");
         assertThat(result.files().getFirst().size()).isEqualTo(3);

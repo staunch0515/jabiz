@@ -81,6 +81,10 @@ public record ExternalJobType<I, R>(String name, Class<I> inputType, Class<R> re
     public static final long MAX_INPUT_FILE_BYTES = 100L * 1024 * 1024;
     /** The largest file a job may produce: the handler holds it in memory. */
     public static final long MAX_OUTPUT_FILE_BYTES = 50L * 1024 * 1024;
+    /** The most all files of one attempt may come to together (decision D50 item 3). */
+    public static final long MAX_OUTPUT_TOTAL_BYTES = 200L * 1024 * 1024;
+    /** What all files of one attempt may come to unless the type declares otherwise. */
+    public static final long DEFAULT_MAX_OUTPUT_TOTAL_BYTES = 16L * 1024 * 1024;
 
     private static final int MAX_TYPE_DEPTH = 8;
 
@@ -107,8 +111,27 @@ public record ExternalJobType<I, R>(String name, Class<I> inputType, Class<R> re
      * @param policy   the file policy they are stored under; the requester must hold its upload permission
      * @param maxFiles the most files one attempt produces
      * @param maxBytes the largest file one attempt produces (the policy's own limit applies too)
+     * @param maxTotalBytes all files of one attempt together: what the handler may hold in memory at the end of an
+     *                 attempt, and what the executor reserves of its output budget while the attempt runs
      */
-    public record OutputFiles(String policy, int maxFiles, long maxBytes) {}
+    public record OutputFiles(String policy, int maxFiles, long maxBytes, long maxTotalBytes) {
+
+        /**
+         * The files with the default total: all of them at their largest, but no more than
+         * {@value ExternalJobType#DEFAULT_MAX_OUTPUT_TOTAL_BYTES} bytes unless one file alone is larger.
+         */
+        public OutputFiles(String policy, int maxFiles, long maxBytes) {
+            this(policy, maxFiles, maxBytes, defaultTotal(maxFiles, maxBytes));
+        }
+
+        static long defaultTotal(int maxFiles, long maxBytes) {
+            if (maxFiles <= 0 || maxBytes <= 0) {
+                return maxBytes;
+            }
+            long all = maxBytes > Long.MAX_VALUE / maxFiles ? Long.MAX_VALUE : maxFiles * maxBytes;
+            return Math.max(maxBytes, Math.min(all, DEFAULT_MAX_OUTPUT_TOTAL_BYTES));
+        }
+    }
 
     public ExternalJobType {
         services = services == null ? Set.of() : Collections.unmodifiableSet(new LinkedHashSet<>(services));
@@ -230,6 +253,11 @@ public record ExternalJobType<I, R>(String name, Class<I> inputType, Class<R> re
             if (outputFiles.maxBytes() < 1 || outputFiles.maxBytes() > MAX_OUTPUT_FILE_BYTES) {
                 problems.add("outputFiles: the largest file must be between 1 and " + MAX_OUTPUT_FILE_BYTES
                     + " bytes");
+            }
+            if (outputFiles.maxTotalBytes() < Math.max(1, outputFiles.maxBytes())
+                || outputFiles.maxTotalBytes() > MAX_OUTPUT_TOTAL_BYTES) {
+                problems.add("outputFiles: all files together must be between the largest file and "
+                    + MAX_OUTPUT_TOTAL_BYTES + " bytes");
             }
         }
         if (onCompleted == null || onCompleted.isBlank()) {
@@ -381,6 +409,16 @@ public record ExternalJobType<I, R>(String name, Class<I> inputType, Class<R> re
          */
         public Builder<I, R> outputFiles(String policy, int maxFiles, long maxBytes) {
             this.outputFiles = new OutputFiles(policy, maxFiles, maxBytes);
+            return this;
+        }
+
+        /**
+         * As {@link #outputFiles(String, int, long)}, with all files of one attempt together at most
+         * {@code maxTotalBytes} (at most {@value ExternalJobType#MAX_OUTPUT_TOTAL_BYTES}): the handler holds them in
+         * memory, and the executor reserves that much of its output budget for each attempt it runs.
+         */
+        public Builder<I, R> outputFiles(String policy, int maxFiles, long maxBytes, long maxTotalBytes) {
+            this.outputFiles = new OutputFiles(policy, maxFiles, maxBytes, maxTotalBytes);
             return this;
         }
 

@@ -114,6 +114,12 @@ public class ExternalJobChecks implements PlatformCheck {
                 problems.add(error(at, "outputFiles: files of up to " + type.outputFiles().maxBytes() + " bytes, "
                     + "but policy " + policy.get().name() + " takes at most " + policy.get().maxBytes()));
             }
+            ExternalJobFiles jobFiles = beans.getBeanProvider(ExternalJobFiles.class).getIfAvailable();
+            if (jobFiles != null && type.outputFiles().maxTotalBytes() > jobFiles.settings().outputBudget()) {
+                // No attempt would ever fit in the instance's budget.
+                problems.add(error(at, "outputFiles: " + type.outputFiles().maxTotalBytes() + " bytes in all, but "
+                    + "jabiz.external-jobs.files.output-budget is " + jobFiles.settings().outputBudget()));
+            }
         }
     }
 

@@ -67,7 +67,8 @@ public record ExternalJobResult<R>(R value, Map<String, Long> usage, List<Genera
      *
      * @param key     {@value GeneratedFile#KEY_PATTERN}, not used by another file of the result
      * @param name    the file's name for downloads; the key when null
-     * @param content the bytes; what they are is recognised from them, not from the name
+     * @param content the bytes, handed over without a copy (do not change them afterwards); what they are is
+     *                recognised from them, not from the name
      */
     public ExternalJobResult<R> file(String key, String name, byte[] content) {
         List<GeneratedFile> more = new ArrayList<>(files);

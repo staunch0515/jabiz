@@ -217,6 +217,9 @@ class ArchitectureTest {
             assertThat(rule.evaluate(new ClassFileImporter().importClasses(offender)).hasViolation())
                 .as(offender.getSimpleName()).isTrue();
         }
+        // Through a helper of the application too.
+        assertThat(rule.evaluate(new ClassFileImporter().importClasses(FileAccess.HandlerWithAHelper.class,
+            FileAccess.StoreHelper.class)).hasViolation()).isTrue();
         for (Class<?> fine : List.of(FileAccess.HandlerReadingItsFiles.class, ProductImageHandler.class)) {
             assertThat(rule.evaluate(new ClassFileImporter().importClasses(fine)).hasViolation())
                 .as(fine.getSimpleName()).isFalse();

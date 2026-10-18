@@ -43,6 +43,26 @@ public final class FileAccess {
         }
     }
 
+    /** An application helper that reads the platform's storage. */
+    public static final class StoreHelper {
+        private FileStore store;
+
+        long size(String fileId) {
+            store.size(FileKeys.key(UUID.fromString(fileId), FileKeys.ORIGINAL));
+            return 0;
+        }
+    }
+
+    /** Reaches the storage through a helper of the application. */
+    public static final class HandlerWithAHelper implements ExternalJobHandler<In, Out> {
+        private final StoreHelper helper = new StoreHelper();
+
+        @Override
+        public ExternalJobResult<Out> run(In input, ExternalJobContext ctx) {
+            return ExternalJobResult.of(new Out((int) helper.size(input.fileId())));
+        }
+    }
+
     /** Reads the files its job was given, as it should. */
     public static final class HandlerReadingItsFiles implements ExternalJobHandler<In, Out> {
         @Override

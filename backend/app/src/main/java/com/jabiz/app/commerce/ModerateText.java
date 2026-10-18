@@ -42,8 +42,7 @@ public class ModerateText implements BlockingStep<ModerateText.Metadata, Process
         .baseUrl("https://ai.example.com/v1").allowedHosts("ai.example.com")
         .secret("apiKey", "JABIZ_DEMO_AI_KEY")
         .connectTimeout(Duration.ofSeconds(5)).requestTimeout(Duration.ofSeconds(60))
-        // Large enough for the photos of commerce.product-image (10 MB, base64 in JSON; decision D50).
-        .idempotencyHeader("Idempotency-Key").maxResponseSize(ExternalService.MAX_RESPONSE_SIZE)
+        .idempotencyHeader("Idempotency-Key").maxResponseSize(64 * 1024)
         .allowInDryRun());
 
     /**
