@@ -8,6 +8,9 @@
 export const AI_PROCESS = {
   request: 'QB_AI_QUESTIONS_REQUEST',
   accept: 'QB_AI_ACCEPT',
+  /** Candidate covers (Q8b, M-25), and the one chosen. */
+  coverRequest: 'QB_AI_COVER_REQUEST',
+  coverAccept: 'QB_AI_COVER_ACCEPT',
   discard: 'QB_AI_DISCARD',
   cancel: 'QB_AI_CANCEL',
 } as const
@@ -27,12 +30,23 @@ export const AI_CODE = {
 /** The limits the page checks before asking (the server checks again). */
 export const AI_LIMITS = {
   maxCount: 20,
-  /** The request's largest size in bytes (`ClaudeApi.MAX_INPUT_BYTES`); larger is refused, never cut. */
-  maxInputBytes: 60 * 1024,
+  /**
+   * The request's largest size in bytes (`ClaudeApi.MAX_INPUT_BYTES`, 250 KiB since Q8b); larger is refused, never
+   * cut. PDF materials are not part of it: they are sent as the files themselves.
+   */
+  maxInputBytes: 250 * 1024,
+  /** A PDF material's largest size and all PDFs' pages as the server sends them by default (`quizbuks.ai.pdf.*`). */
+  maxPdfMb: 10,
+  maxPdfPages: 100,
+  /** Candidate covers of one request (`CoverDesigns.COVERS`). */
+  covers: 3,
   /** How often a running job is looked at, and for how long at most. */
   pollMs: 5_000,
   pollForMs: 5 * 60_000,
 } as const
+
+/** The kinds of AI jobs (`QbAi.KIND_*`): the template is read for one at a time. */
+export const AI_KINDS = { questions: 'QUESTIONS', cover: 'COVER' } as const
 
 export const DIFFICULTIES = ['EASY', 'MEDIUM', 'HARD'] as const
 export const AI_LANGUAGES = ['en', 'zh', 'ja'] as const

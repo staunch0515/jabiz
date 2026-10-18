@@ -1,7 +1,7 @@
 import { runProcess, runQuery } from '@jabiz/client'
-import type { Material } from '../content/api'
+import type { EditOutput, Material } from '../content/api'
 import { minuteNow, serverNow } from '../qb/legal'
-import { AI_LIMITS, AI_PROCESS, AI_TEMPLATE, type AI_LANGUAGES, type DIFFICULTIES } from './ids'
+import { AI_KINDS, AI_LIMITS, AI_PROCESS, AI_TEMPLATE, type AI_LANGUAGES, type DIFFICULTIES } from './ids'
 
 /*
  * The AI questions' calls (Q8a, M-26, M-10), typed by hand after `content.ai.AiProcesses` and the templates
@@ -10,6 +10,7 @@ import { AI_LIMITS, AI_PROCESS, AI_TEMPLATE, type AI_LANGUAGES, type DIFFICULTIE
  */
 
 export type AiJobStatus = 'QUEUED' | 'READY' | 'FAILED' | 'CANCELLED' | 'ACCEPTED' | 'DISCARDED' | 'EXPIRED'
+export type AiJobKind = (typeof AI_KINDS)[keyof typeof AI_KINDS]
 export type Difficulty = (typeof DIFFICULTIES)[number]
 export type AiLanguage = (typeof AI_LANGUAGES)[number]
 
@@ -28,13 +29,29 @@ export interface AiCandidate {
   options: AiOption[]
 }
 
+/**
+ * A candidate cover (Q8b) as the server keeps it: the design Claude chose from the fixed catalogue and the picture the
+ * server drew of it (a file of the sponsor's, `qb.content.image`).
+ */
+export interface AiCover {
+  no: number
+  palette: string
+  layout: string
+  motif: string
+  text: string
+  fileId: string
+}
+
 /** A row of `qb.sponsor.ai-jobs`. */
 export interface AiJob {
   aiJobId: string
   externalJobId: string
+  kind: AiJobKind
   status: AiJobStatus
   count: number | null
   candidates: AiCandidate[]
+  /** A cover job's candidates (none for questions). */
+  covers: AiCover[]
   candidateCount: number
   invalidCount: number
   acceptedCount: number
@@ -72,6 +89,27 @@ export function parseCandidates(text: unknown): AiCandidate[] {
   }
 }
 
+/** The stored candidate covers (`{schema: 1, covers: [...]}`); none when there are none or they cannot be read. */
+export function parseCovers(text: unknown): AiCover[] {
+  if (typeof text !== 'string' || !text) return []
+  try {
+    const document = JSON.parse(text) as { covers?: unknown }
+    if (!Array.isArray(document.covers)) return []
+    return document.covers
+      .map((c: Row, index): AiCover => ({
+        no: num(c.no) || index + 1,
+        palette: String(c.palette ?? ''),
+        layout: String(c.layout ?? ''),
+        motif: String(c.motif ?? ''),
+        text: String(c.text ?? ''),
+        fileId: String(c.fileId ?? ''),
+      }))
+      .filter((c) => c.fileId !== '')
+  } catch {
+    return []
+  }
+}
+
 export function toAiJob(row: Row): AiJob {
   let count: number | null
   try {
@@ -82,9 +120,11 @@ export function toAiJob(row: Row): AiJob {
   return {
     aiJobId: String(row.aiJobId),
     externalJobId: String(row.externalJobId ?? ''),
+    kind: row.kind === AI_KINDS.cover ? AI_KINDS.cover : AI_KINDS.questions,
     status: (row.status as AiJobStatus) ?? 'QUEUED',
     count,
-    candidates: parseCandidates(row.candidates),
+    candidates: row.kind === AI_KINDS.cover ? [] : parseCandidates(row.candidates),
+    covers: row.kind === AI_KINDS.cover ? parseCovers(row.candidates) : [],
     candidateCount: num(row.candidateCount),
     invalidCount: num(row.invalidCount),
     acceptedCount: num(row.acceptedCount),
@@ -95,9 +135,9 @@ export function toAiJob(row: Row): AiJob {
   }
 }
 
-/** The quiz's latest AI job, or null when it has none. */
-export async function readLatestAiJob(quizId: string): Promise<AiJob | null> {
-  const page = await runQuery<Row>(AI_TEMPLATE.jobs, { params: { quizId }, limit: 1 })
+/** The quiz's latest AI job of a kind, or null when it has none. */
+export async function readLatestAiJob(quizId: string, kind: AiJobKind = AI_KINDS.questions): Promise<AiJob | null> {
+  const page = await runQuery<Row>(AI_TEMPLATE.jobs, { params: { quizId, kind }, limit: 1 })
   return page.items[0] ? toAiJob(page.items[0]) : null
 }
 
@@ -169,6 +209,20 @@ export interface AiRequestOutput {
 export const requestAiQuestions = (input: AiRequestInput) =>
   runProcess<AiRequestOutput>(AI_PROCESS.request, { ...input })
 
+/** `AiProcesses.CoverRequestInput` (Q8b): covers from the quiz's title and introduction. */
+export interface AiCoverRequestInput {
+  quizId: string
+  language: AiLanguage
+  aiNoticeVersionNo?: number | null
+}
+
+export const requestAiCovers = (input: AiCoverRequestInput) =>
+  runProcess<AiRequestOutput>(AI_PROCESS.coverRequest, { ...input })
+
+/** `QB_AI_COVER_ACCEPT`: the chosen cover becomes the quiz's, as a quiz edit (`EditOutput`). */
+export const acceptAiCover = (aiJobId: string, quizId: string, candidateNo: number, baseRevision: number) =>
+  runProcess<EditOutput>(AI_PROCESS.coverAccept, { aiJobId, quizId, candidateNo, baseRevision })
+
 /** One reviewed question (`AiProcesses.AcceptedQuestion`): the text as the sponsor left it. */
 export interface AcceptedQuestion {
   candidateNo: number
@@ -194,17 +248,23 @@ export const cancelAiJob = (aiJobId: string) => runProcess<{ status: AiJobStatus
 
 const encoder = new TextEncoder()
 
+/** Whether a material goes to the AI as its file (a PDF with its file, Q8b), not only as its title and description. */
+export const sentAsFile = (material: Pick<Material, 'kind' | 'pdf'>): boolean =>
+  material.kind === 'PDF' && material.pdf != null
+
 /**
- * About how many bytes a material adds to the request, as the server sends it: an article with its text, any other
- * kind by its title and description only (A-5). For the page's guide; the server measures and decides.
+ * About how many bytes a material adds to the request's text, as the server sends it: an article with its text, any
+ * other kind by its title and description only (A-5); a PDF's file goes beside the text and is not counted here.
+ * For the page's guide; the server measures and decides.
  */
-export function materialBytes(material: Pick<Material, 'kind' | 'title' | 'description' | 'body'>): number {
+export function materialBytes(material: Pick<Material, 'kind' | 'title' | 'description' | 'body' | 'pdf'>): number {
   const sent = {
     no: 1,
     kind: material.kind,
     title: material.title,
     description: material.description,
     ...(material.kind === 'ARTICLE' ? { text: material.body } : {}),
+    ...(sentAsFile(material) ? { document: 'Material 1' } : {}),
   }
   return encoder.encode(JSON.stringify(sent)).length
 }

@@ -62,6 +62,8 @@ export const aiMessages = {
     failure: 'Failure',
     requestedAt: 'Requested',
     noJobs: 'No requests.',
+    kind: 'Kind',
+    kinds: { QUESTIONS: 'Questions', COVER: 'Covers' },
     statuses: {
       QUEUED: 'Generating', READY: 'To review', FAILED: 'Failed', CANCELLED: 'Cancelled', ACCEPTED: 'Added',
       DISCARDED: 'Discarded', EXPIRED: 'Expired',
@@ -121,6 +123,8 @@ export const aiMessages = {
     failure: '失败原因',
     requestedAt: '请求时间',
     noJobs: '没有请求。',
+    kind: '种类',
+    kinds: { QUESTIONS: '题目', COVER: '封面' },
     statuses: {
       QUEUED: '生成中', READY: '待校对', FAILED: '失败', CANCELLED: '已取消', ACCEPTED: '已加入', DISCARDED: '已丢弃',
       EXPIRED: '已过期',
@@ -180,6 +184,8 @@ export const aiMessages = {
     failure: '失敗の理由',
     requestedAt: 'リクエスト日時',
     noJobs: 'リクエストはありません。',
+    kind: '種類',
+    kinds: { QUESTIONS: '問題', COVER: 'カバー' },
     statuses: {
       QUEUED: '生成中', READY: '確認待ち', FAILED: '失敗', CANCELLED: '取り消し', ACCEPTED: '追加済み',
       DISCARDED: '破棄', EXPIRED: '期限切れ',
