@@ -402,6 +402,8 @@ M-73 API Key（G10）；个人信息的删除与匿名化（平台未开放，GD
 - 前端：App 133 项、商家后台 132 项 Vitest 通过（lint、typecheck 通过，两份 `src/qb/` 相同，`app:check` 两个都通过）；后台扩展 `ext:check` 70 项通过（新增 `legal.test.tsx` 4 项）。
 - e2e（打包的 jar，独立端口与数据库，`retries: 0`）：第一次全量 45 项通过、2 项失败——是新加的等待写错了（请求体是流，Playwright 的 `postData()` 为空，等不到），改为在首批选项显示后等下一次应答；
   修正后**全量 47 项一次全部通过，没有重跑**（新增撤回一项；`legal.spec` 的重新同意改为在已读过同意状况的页面上点"开通"，由服务端的拒绝带出提示）。
+- 之后 `origin/1.2/quizbuks` 前进（平台 16r 受保护授权、16s 收件偏好，只改平台目录，无冲突），合并后重跑：`:quizbuks:check` 575 项通过、`platformCheck` 0 错误（72 条告警，多出的是平台新检查在测试配置下的告警），
+  两个 SPA 的 lint、typecheck、Vitest（133 / 132）与 `app:check`、`ext:check`（70）通过，e2e 全量 47 项再次一次全部通过。
 
 ### 评审修正后的已知问题
 
