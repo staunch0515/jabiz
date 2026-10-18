@@ -157,5 +157,5 @@
 
 **验证**（合并 Q10a5 之后）：`./gradlew :quizbuks:check`（537 个测试、场景、`platformCheck`、两个 SPA 的版本检查；真实 PostgreSQL）通过；
 `quizbuks-web/app`、`sponsor` 的 lint、typecheck、test 通过（104、115 个），`e2e` 的 typecheck 通过，`qb/` 两份相同；
-`JABIZ_ADMIN_EXTENSION=../backend/quizbuks/admin-extension pnpm ext:check` 通过（68 个）；`tools/quizbuks/test/entrypoint.test.sh` 与 `stripe-test-mode.test.sh` 通过；actionlint 通过；
+`JABIZ_ADMIN_EXTENSION=../backend/quizbuks/admin-extension pnpm ext:check` 通过（65 个）；`tools/quizbuks/test/entrypoint.test.sh` 与 `stripe-test-mode.test.sh` 通过；actionlint 通过；
 e2e（打包的 jar、Stripe 桩、Mailpit，放宽登录限流）41 个中 40 个通过，`content.spec.ts` 的"他处改过的 Quiz 要求先重新加载"一次焦点超时，单独重跑通过（未改动内容页，判断为时序不稳）。
