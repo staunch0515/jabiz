@@ -66,6 +66,7 @@ export function Link({ to, className, children, current, ...rest }: {
   children: ReactNode
   /** Marks the link as the current page (`aria-current="page"`). */
   current?: boolean
+  'aria-label'?: string
   'data-testid'?: string
 }) {
   return (

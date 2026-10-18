@@ -1,0 +1,124 @@
+# Announcements (docs/quizbuks/plans/Q7-messages-legal.md, Q7c): a content administrator (with a second factor) writes
+# a system announcement to the takers in Japan and sends it at once (one person reached), and a promotion to everyone,
+# scheduled for an hour later. The taker in the US turns promotions off; the minute's job sends the promotion when it
+# is due, and it reaches the taker in Japan only. That taker opens the announcement (read once) and the promotion's
+# button (only read: it names no quiz to click through to); the statistics count them. The administrator withdraws the announcement with a reason.
+# A draft that is not ready says why when saved and cannot be sent.
+name: Announcements
+clock: 2026-10-01T00:00:00Z
+actor: { id: installer, permissions: ["*"] }
+steps:
+  - process: QB_SETUP@latest
+    input: {}
+
+  - note: The takers, created by an administrator, complete their profiles (no legal text is in effect yet).
+    process: SEC_USER_CREATE@latest
+    input: { userName: u1, displayName: Ume, email: u1@example.com }
+    save: { u1: $.userId }
+  - process: SEC_USER_CREATE@latest
+    input: { userName: u2, displayName: Una, email: u2@example.com }
+    save: { u2: $.userId }
+  - actor: { id: "${u1}", permissions: [qb.me] }
+    process: QB_PROFILE_SAVE@latest
+    input: { displayName: Ume, countryCode: JP, preferredCurrency: JPY }
+  - actor: { id: "${u2}", permissions: [qb.me] }
+    process: QB_PROFILE_SAVE@latest
+    input: { displayName: Una, countryCode: US, preferredCurrency: USD }
+
+  - advanceClock: PT1M
+  - note: A draft without its English text says so when saved, and is not sent.
+    actor: { id: content-admin, permissions: [qb.admin.content.write] }
+    process: QB_ADMIN_BROADCAST_SAVE@latest
+    input: { audience: APP, type: SYSTEM, targetMode: REGIONS, regions: [JP], title: { ja: メンテナンス },
+      body: { ja: 日曜日に停止します。 } }
+    expectOutput: { status: DRAFT, revision: 1, problems: [{ field: title, code: QB_BROADCAST_TRANSLATION_MISSING },
+      { field: body, code: QB_BROADCAST_TRANSLATION_MISSING }] }
+    save: { b1: $.broadcastId }
+  - expectError:
+      actor: { id: content-admin, permissions: [qb.admin.content.write], mfa: true }
+      process: QB_ADMIN_BROADCAST_SEND@latest
+      input: { broadcastId: "${b1}", baseRevision: 1 }
+      status: 422
+      ruleCode: QB_BROADCAST_TRANSLATION_MISSING
+  - actor: { id: content-admin, permissions: [qb.admin.content.write] }
+    process: QB_ADMIN_BROADCAST_SAVE@latest
+    input: { broadcastId: "${b1}", baseRevision: 1, audience: APP, type: SYSTEM, targetMode: REGIONS, regions: [JP],
+      title: { en: Maintenance, ja: メンテナンス }, body: { en: "The app pauses on **Sunday**.", ja: 日曜日に停止します。 } }
+    expectOutput: { status: DRAFT, revision: 2, problems: [] }
+  - note: Sent at once, it reaches the one taker in Japan.
+    actor: { id: content-admin, permissions: [qb.admin.content.write], mfa: true }
+    process: QB_ADMIN_BROADCAST_SEND@latest
+    input: { broadcastId: "${b1}", baseRevision: 2 }
+    expectOutput: { status: SENT, revision: 3, sentAt: 2026-10-01T00:01:00Z, audienceCount: 1 }
+
+  - note: A promotion to everyone, an hour later; the taker in the US turns promotions off before then.
+    actor: { id: content-admin, permissions: [qb.admin.content.write] }
+    process: QB_ADMIN_BROADCAST_SAVE@latest
+    input: { audience: APP, type: PROMO, targetMode: ALL, title: { en: New quizzes }, body: { en: Have a look. },
+      scheduledAt: 2026-10-01T01:00:00Z }
+    expectOutput: { status: DRAFT, problems: [] }
+    save: { b2: $.broadcastId }
+  - actor: { id: content-admin, permissions: [qb.admin.content.write], mfa: true }
+    process: QB_ADMIN_BROADCAST_SEND@latest
+    input: { broadcastId: "${b2}", baseRevision: 1 }
+    expectOutput: { status: SCHEDULED }
+  - actor: { id: "${u2}", permissions: [qb.me, qb.account.read] }
+    process: QB_INBOX_SETTINGS_SAVE@latest
+    input: { promoOff: true }
+    expectOutput: { promoOff: true }
+  - note: Not due yet; then due.
+    runJob: { job: qb.broadcast-dispatch, at: 2026-10-01T00:30:00Z, items: { succeeded: 0 } }
+  - advanceClock: PT59M
+  - runJob: { job: qb.broadcast-dispatch, at: 2026-10-01T01:00:00Z, items: { succeeded: 1 } }
+  - expect: { entity: QbBroadcast, id: "${b2}", fields: { status: SENT, sentAt: 2026-10-01T01:00:00Z,
+      audienceCount: 1 } }
+
+  - note: The taker in Japan opens the announcement (read once) and the promotion's button (it names no quiz, so it is only read).
+    advanceClock: PT2H
+  - actor: { id: "${u1}", permissions: [qb.me, qb.account.read] }
+    process: QB_MESSAGE_MARK@latest
+    input: { kind: BROADCAST, id: "${b1}", action: READ }
+    expectOutput: { changed: true }
+  - actor: { id: "${u1}", permissions: [qb.me, qb.account.read] }
+    process: QB_MESSAGE_MARK@latest
+    input: { kind: BROADCAST, id: "${b1}", action: READ }
+    expectOutput: { changed: false }
+  - actor: { id: "${u1}", permissions: [qb.me, qb.account.read] }
+    process: QB_MESSAGE_MARK@latest
+    input: { kind: BROADCAST, id: "${b2}", action: CLICK }
+    expectOutput: { changed: true }
+  - note: The taker in the US sees no promotion, so cannot mark it.
+    expectError:
+      actor: { id: "${u2}", permissions: [qb.me, qb.account.read] }
+      process: QB_MESSAGE_MARK@latest
+      input: { kind: BROADCAST, id: "${b2}", action: READ }
+      status: 404
+  - expect:
+      query: qb.admin.broadcasts
+      params: { broadcastId: "${b1}" }
+      rows: 1
+      values: [{ status: SENT, audienceCount: 1, reads: 1, clicks: 0 }]
+  - expect:
+      query: qb.admin.broadcasts
+      params: { broadcastId: "${b2}" }
+      rows: 1
+      values: [{ status: SENT, audienceCount: 1, reads: 1, clicks: 0 }]
+
+  - note: Withdrawn with a reason (a second factor every time); it leaves every inbox.
+    actor: { id: content-admin, permissions: [qb.admin.content.write], mfa: true }
+    process: QB_ADMIN_BROADCAST_WITHDRAW@latest
+    input: { broadcastId: "${b1}", reason: Postponed. }
+    expectOutput: { status: WITHDRAWN }
+  - expect:
+      query: qb.admin.broadcasts
+      params: { broadcastId: "${b1}" }
+      rows: 1
+      values: [{ status: WITHDRAWN, withdrawnBy: ADMIN, withdrawReason: Postponed. }]
+  - expectError:
+      actor: { id: "${u1}", permissions: [qb.me, qb.account.read] }
+      process: QB_MESSAGE_MARK@latest
+      input: { kind: BROADCAST, id: "${b1}", action: READ }
+      status: 404
+snapshot:
+  entities: [QbBroadcast, QbBroadcastFeed, QbBroadcastSchedule, QbBroadcastReceipt, QbInboxState]
+  asOf: end

@@ -17,8 +17,8 @@ import {
   type ShellMenuItem,
 } from '@jabiz/ui'
 import { QueryClientProvider } from '@tanstack/react-query'
-import { CircleHelp, FileQuestion, LayoutDashboard, Megaphone, ReceiptText, Store, UserRound, Wallet }
-  from 'lucide-react'
+import { CircleHelp, FileQuestion, LayoutDashboard, Megaphone, MessagesSquare, ReceiptText, Store, UserRound,
+  Wallet } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { analyticsIdOf } from './analytics/api'
@@ -33,6 +33,8 @@ import { PublicationListPage } from './publishing/PublicationListPage'
 import { PublicationPage } from './publishing/PublicationPage'
 import { publicationIdOf, PUBLICATIONS_PATH } from './publishing/paths'
 import { OnboardingPage, useMySponsor } from './pages/OnboardingPage'
+import { MESSAGES_PATH } from './notices/api'
+import { MessagesPage } from './notices/MessagesPage'
 import { ConsentGate, LegalLink, newQbQueryClient } from './qb/ConsentGate'
 import { HelpPage } from './qb/HelpPage'
 import { LEGAL } from './qb/ids'
@@ -81,8 +83,8 @@ function toSignIn() {
 
 /**
  * The pages of a signed-in sponsor in the console's frame (`AppShell`): the dashboard, the quizzes (editing content
- * needs no approval, publishing does), the publications, the wallet and the transactions, the sponsor profile
- * (onboarding) and the account.
+ * needs no approval, publishing does), the publications, the wallet and the transactions, the message centre (Q7c),
+ * the sponsor profile (onboarding) and the account.
  * The home page leads to the onboarding until the sponsor is approved.
  */
 function SignedIn({ path }: { path: string }) {
@@ -116,6 +118,7 @@ function SignedIn({ path }: { path: string }) {
   else if (path === WALLET_PATH) page = <WalletPage />
   else if (topUpId) page = <TopUpPage key={topUpId} topUpId={topUpId} />
   else if (path === TRANSACTIONS_PATH) page = <TransactionsPage key={search} />
+  else if (path === MESSAGES_PATH) page = <MessagesPage />
   else if (path === ACCOUNT_PATH) page = <AccountPage />
   else page = <PageState kind="notFound" titleAs="h1" description={tQb('notFound')} />
 
@@ -126,6 +129,7 @@ function SignedIn({ path }: { path: string }) {
     { key: 'onboarding', label: t('nav.onboarding'), path: ONBOARDING, icon: Store },
     { key: 'wallet', label: t('wallet.nav'), path: WALLET_PATH, icon: Wallet },
     { key: 'transactions', label: t('transactions.nav'), path: TRANSACTIONS_PATH, icon: ReceiptText },
+    { key: 'messages', label: t('notices.nav'), path: MESSAGES_PATH, icon: MessagesSquare },
     { key: 'account', label: t('nav.account'), path: ACCOUNT_PATH, icon: UserRound },
     { key: 'help', label: t('nav.help'), path: HELP, icon: CircleHelp },
   ]

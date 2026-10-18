@@ -73,6 +73,7 @@ function PublishForm({ draft, kindLabel }: { draft: LegalDraft; kindLabel: strin
   const id = useId()
   const [effectiveAt, setEffectiveAt] = useState('')
   const [requiresConsent, setRequiresConsent] = useState(false)
+  const [announce, setAnnounce] = useState(false)
   const first = draft.latestVersionNo == null
   return (
     <div className="flex flex-col gap-3" data-testid={`legal-publish-${draft.kind}`}>
@@ -87,6 +88,11 @@ function PublishForm({ draft, kindLabel }: { draft: LegalDraft; kindLabel: strin
             onCheckedChange={(checked) => setRequiresConsent(checked === true)} data-testid="legal-requires-consent" />
           <Label htmlFor={`${id}-consent`}>{t('legal.requiresConsent')}</Label>
         </div>
+        <div className="flex items-center gap-2 pb-2">
+          <Checkbox id={`${id}-announce`} checked={announce}
+            onCheckedChange={(checked) => setAnnounce(checked === true)} data-testid="legal-announce" />
+          <Label htmlFor={`${id}-announce`}>{t('legal.announce')}</Label>
+        </div>
       </div>
       <p className="text-muted-foreground text-sm">{t('legal.publishHint')}</p>
       <div>
@@ -98,10 +104,12 @@ function PublishForm({ draft, kindLabel }: { draft: LegalDraft; kindLabel: strin
           onConfirm={async () => {
             try {
               const published = await publishLegal(draft, effectiveAt ? new Date(effectiveAt).toISOString() : null,
-                first || requiresConsent)
+                first || requiresConsent, announce)
               notify.success(t('legal.published', { n: published.versionNo }))
+              if (published.announcements > 0) notify.info(t('legal.announced'))
               setEffectiveAt('')
               setRequiresConsent(false)
+              setAnnounce(false)
             } catch (error) {
               failed(error, t('common.failed'))
             } finally {

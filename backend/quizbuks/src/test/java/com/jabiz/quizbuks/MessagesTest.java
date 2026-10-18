@@ -123,6 +123,20 @@ class MessagesTest {
                 "document.qb.topup_receipt.issuer", "document.qb.topup_receipt.sponsor",
                 "document.qb.topup_receipt.note", "document.qb.topup_receipt.amount", "QB_RECEIPT_NOT_PAID",
                 "QB_RECEIPT_NO_ISSUER");
+        // Q7c: the inbox, announcements and notices; every kind of message has its title and text (Q7-15), every kind of
+        // legal text its name in the notice of a new version.
+        assertThat(en.stringPropertyNames()).containsAll(com.jabiz.quizbuks.messaging.BroadcastCodes.ALL)
+            .containsAll(com.jabiz.quizbuks.messaging.QbInbox.MESSAGE_KINDS.stream()
+                .flatMap(k -> java.util.stream.Stream.of("qb.msg." + k + ".title", "qb.msg." + k + ".body")).toList())
+            .containsAll(com.jabiz.quizbuks.messaging.QbLegal.KINDS.stream()
+                .map(k -> "qb.broadcast.legal.kind." + k).toList())
+            .contains("qb.broadcast.legal.title", "qb.broadcast.legal.body", "entity.QbMessage", "entity.QbBroadcast",
+                "entity.QbBroadcastFeed", "entity.QbBroadcastReceipt", "entity.QbInboxState",
+                "process.QB_MESSAGE_FROM_EVENT", "process.QB_PAYOUT_REMINDER", "process.QB_BROADCAST_SAVE",
+                "process.QB_ADMIN_BROADCAST_WITHDRAW", "process.QB_MESSAGE_MARK", "process.QB_INBOX_SETTINGS_SAVE",
+                "query.qb.app.inbox", "query.qb.app.inbox-unread", "query.qb.sponsor.broadcasts",
+                "query.qb.admin.broadcasts", "param.qb.broadcast.sponsor.max-per-publication",
+                "param.qb.payout.reminder-days");
         assertThat(en.stringPropertyNames()).allSatisfy(key -> assertThat(en.getProperty(key)).as(key).isNotBlank());
     }
     @Test

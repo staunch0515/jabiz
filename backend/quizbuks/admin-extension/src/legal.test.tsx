@@ -114,6 +114,20 @@ describe('LegalPage', () => {
     expect(await screen.findByText('Version 4 published.')).toBeInTheDocument()
   })
 
+  it('announces the new version in the inboxes only when asked (Q7c)', async () => {
+    server.runProcess.mockResolvedValueOnce({ kind: 'TERMS_APP', versionNo: 4, effectiveAt: '2026-10-18T00:00:00Z',
+      announcements: ['b-1'] })
+    renderPage()
+    const terms = await screen.findByTestId('legal-kind-TERMS_APP')
+    await within(terms).findByTestId('legal-draft')
+    await userEvent.click(within(terms).getByTestId('legal-announce'))
+    await userEvent.click(within(terms).getByTestId('legal-publish'))
+    await userEvent.click(await screen.findByRole('button', { name: 'Publish' }))
+    await waitFor(() => expect(server.runProcess).toHaveBeenCalledWith('QB_LEGAL_PUBLISH', { docId: 'doc-TERMS_APP',
+      requiresConsent: false, baseRevision: 4, announce: true }))
+    expect(await screen.findByText('The announcement goes out within a minute.')).toBeInTheDocument()
+  })
+
   it('withdraws an announced version with the reason, after asking (review M1)', async () => {
     renderPage()
     const sponsor = await screen.findByTestId('legal-kind-TERMS_SPONSOR')

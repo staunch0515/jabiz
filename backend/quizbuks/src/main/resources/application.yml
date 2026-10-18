@@ -49,6 +49,13 @@ jabiz:
       "[QB_PUBLICATION_SAVE]": { per-user: 60, period: 1m }
       # Q7b: accepting the terms after sign-in (a person does it once per change).
       "[QB_CONSENT_ACCEPT]": { per-user: 10, period: 1m }
+      # Q7c: marking the inbox (each opening and click) and its settings; a sponsor's notices (sending is also limited
+      # per publication by the parameters, Q7-10).
+      "[QB_MESSAGE_MARK]": { per-user: 120, period: 1m }
+      "[QB_INBOX_READ_ALL]": { per-user: 30, period: 1m }
+      "[QB_INBOX_SETTINGS_SAVE]": { per-user: 30, period: 1m }
+      "[QB_BROADCAST_SAVE]": { per-user: 60, period: 1m }
+      "[QB_BROADCAST_SEND]": { per-user: 10, period: 1h }
       # Q8a: asking the AI costs money (its limits are counted under the sponsor's lock, A-7); accepting reviewed
       # candidates writes up to 20 questions.
       "[QB_AI_QUESTIONS_REQUEST]": { per-user: 5, period: 1m }

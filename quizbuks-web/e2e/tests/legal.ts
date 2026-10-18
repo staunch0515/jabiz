@@ -36,9 +36,12 @@ export function totp(secret: string, time = Date.now()): string {
   return ((hash.readUInt32BE(offset) & 0x7fffffff) % 1_000_000).toString().padStart(6, '0')
 }
 
-/** The tests' content administrator: signed in at the administration, with a second factor just passed. */
-export async function legalAdmin(request: APIRequestContext): Promise<{ email: string; token: string }> {
-  const email = await verifiedUser(request, 'sponsor', 'Lena')
+/**
+ * A content administrator of the tests' own role, with a verified address (QuizBuks's writes ask for one; the first
+ * administrator has none) and no second factor yet: one who signs in at the administration's page (Q7c).
+ */
+export async function contentAdmin(request: APIRequestContext, name = 'Lena'): Promise<string> {
+  const email = await verifiedUser(request, 'sponsor', name)
   const admin = await adminToken(request)
   let roleId = (await rows(request, admin, ROLES, [{ field: 'roleCode', op: 'eq', value: CONTENT_ROLE }], 1))[0]?.id
   if (!roleId) {
@@ -52,6 +55,12 @@ export async function legalAdmin(request: APIRequestContext): Promise<{ email: s
   }
   const userId = (await rows(request, admin, USERS, [{ field: 'userName', op: 'eq', value: email }], 1))[0].id
   await insert(request, admin, USER_ROLES, { userId, roleId })
+  return email
+}
+
+/** The tests' content administrator: signed in at the administration, with a second factor just passed. */
+export async function legalAdmin(request: APIRequestContext): Promise<{ email: string; token: string }> {
+  const email = await contentAdmin(request)
   const signedIn = await tokenOf(request, email, PASSWORD, 'admin')
   const headers = { Authorization: `Bearer ${signedIn}` }
   const enrolled = await request.post('/api/auth/mfa/enroll', { headers })

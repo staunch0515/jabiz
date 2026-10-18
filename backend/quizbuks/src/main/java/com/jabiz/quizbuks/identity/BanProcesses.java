@@ -6,6 +6,7 @@ import com.jabiz.process.ProcessDefinition;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.messaging.BroadcastProcesses;
 import com.jabiz.quizbuks.publishing.PublicationAdmin;
 import com.jabiz.quizbuks.publishing.PublicationStatus;
 import com.jabiz.quizbuks.publishing.QbPublications;
@@ -99,6 +100,11 @@ public final class BanProcesses {
             // Lock order: the account's lock (held) before the publications' pairs, in the order of their ids.
             pb.step("Pause the sponsor's publications", CallProcess.forEach(PublicationAdmin.BAN_PAUSE, 1,
                 BanProcesses::pauses, null));
+            // Q7c (Q7-10): their scheduled and sent notices leave every inbox in the same transaction, under the
+            // account's lock, which every writer of a sponsor's notices takes first.
+            pb.step("Withdraw the sponsor's notices", CallProcess.<ProcessContext>when(
+                ctx -> !ctx.hasViolations() && ctx.contains(OUTPUT), BroadcastProcesses.BAN_WITHDRAW, 1,
+                ctx -> new BroadcastProcesses.SponsorRef(AccountEditing.userId(ctx)), "withdrawnNotices"));
         });
     }
 
