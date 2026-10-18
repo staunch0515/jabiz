@@ -73,6 +73,7 @@ export {
   setMailPreference,
   getMailLanguage,
   setMailLanguage,
+  onMailLanguageChange,
   mailLanguageOffer,
 } from './auth/mail'
 export type { MailPreference, MailLanguage } from './auth/mail'

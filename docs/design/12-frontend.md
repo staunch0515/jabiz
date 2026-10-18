@@ -310,13 +310,13 @@ jabizApp {
   确认后解除；10 §12，16f-1）、`ChangePasswordForm`（`POST /api/auth/account/password`，16m）、
   `SessionList`（本人当前入口的有效会话：设备、地址、最近使用与登录时间，本机标记；确认后结束单个会话（本机即退出登录）或"退出其他全部设备"，
   提示按 `effectiveWithinSeconds` 给出生效时间；16g，10 §15.9；另导出 `SessionDeviceIcon`、`sessionDeviceName`、`effectiveMinutes` 供应用自绘列表）、
-  `MailPreferences`（本人的邮件：当前入口的每个可退订通知一个开关（`Switch` 加 `Label`，名称为服务端给出的显示名），邮件语言的选择（应用语言多于一种时）；每次改动即时保存并以状态提示说明，失败时保持原值；界面语言变化时重读显示名；默认调用下面的四个函数，可经属性替换；18 §5.6，16s，D49）、
-  `offerMailLanguage(lang)`（切换界面语言后询问是否把邮件也改为该语言，见 §10；`notify` 为此增加可选的 `action` 按钮）、
+  `MailPreferences`（本人的邮件：当前入口的每个可退订通知一个开关（`Switch` 加 `Label`，名称为服务端给出的显示名），其后"您关闭的其他邮件"（其他入口、用户关闭过的，可重新开启），邮件语言的选择（应用语言多于一种时，含"默认"一项）；每次改动即时保存并以状态提示说明，失败时保持原值；读取失败时有"重试"；界面语言变化时重读显示名；别处设置的邮件语言经 `onMailLanguageChange` 立即显示；默认调用下面的函数，可经属性替换；18 §5.6，16s，D49）、
+  `offerMailLanguage(lang)`（切换界面语言后询问是否把邮件也改为该语言，见 §10；提示一直显示到回答，说明以后在哪里修改；`notify` 为此增加可选的 `action` 与 `cancel` 按钮）、
   `VerifyEmailBanner`、`OfflineBanner`。积木**不依赖路由**：导航经属性 `onNavigate(path)` / `hrefOf(path)` 与回调（`onSignedIn(path)` 等）交出，
   没有时为普通链接与整页跳转；邮件链接的入口与令牌从 `window.location` 读（有路由时传 `search`）。后台的登录页、OIDC 回调页、三个落地页与 step-up
   是这些积木外的 React Router 适配（`src/auth/routerNavigation.ts`），测试 id 与行为不变，后台不显示外观切换。
 - **`@jabiz/client` 的无界面函数**（D43，16c-1）：`configureClient({ entry })`、`entryInfo()`、`register()`、`requestPasswordReset()`、
-  `confirmPasswordReset()`、`resendVerification()`、`changePassword()`、`listSessions()`、`revokeSession(id, current)`（结束本机会话时清空本地令牌）、`revokeOtherSessions()`、`startIdentityLink(provider, {currentPassword?}, returnTo)`、`finishIdentityLink()`、`listIdentities()`、`unlinkIdentity(id)`（16f-1）、`getMailPreferences()` / `setMailPreference(template, subscribed)`、`getMailLanguage()` / `setMailLanguage(locale | null)`、`mailLanguageOffer(lang)`（16s，D49）、`readMailLink()` / `useMailLink()`（读出入口与令牌，以 `replaceState` 去掉令牌，
+  `confirmPasswordReset()`、`resendVerification()`、`changePassword()`、`listSessions()`、`revokeSession(id, current)`（结束本机会话时清空本地令牌）、`revokeOtherSessions()`、`startIdentityLink(provider, {currentPassword?}, returnTo)`、`finishIdentityLink()`、`listIdentities()`、`unlinkIdentity(id)`（16f-1）、`getMailPreferences()` / `setMailPreference(template, subscribed)`、`getMailLanguage()` / `setMailLanguage(locale | null)`、`onMailLanguageChange(listener)`、`mailLanguageOffer(lang)`（16s，D49）、`readMailLink()` / `useMailLink()`（读出入口与令牌，以 `replaceState` 去掉令牌，
   页面打开期间 `<meta name="referrer" content="no-referrer">`）、`isProblem(error, code)`、`useOnline()`；`createApiClient<Paths>()` 以应用自己快照生成的类型
   调用应用的接口，与 `api` 共用令牌、刷新与 step-up（流程与模板仍经 `runProcess` / `runQuery`）。
 - **应用自有 SPA**（D34 第 5 条，D43）：以 `link:` 引用两个包，样式表 `@import '@jabiz/ui/theme.css'`（它 `@source` 了该包的源码）；

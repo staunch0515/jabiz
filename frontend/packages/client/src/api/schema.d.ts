@@ -2261,6 +2261,7 @@ export interface components {
             label?: unknown;
         };
         MailLanguage: {
+            defaultLocale?: string;
             effective?: string;
             languages?: string[];
             locale?: string;
@@ -2650,6 +2651,7 @@ export interface components {
         };
         TemplatePreference: {
             displayName?: string;
+            otherEntry?: boolean;
             subscribed?: boolean;
             template?: string;
         };

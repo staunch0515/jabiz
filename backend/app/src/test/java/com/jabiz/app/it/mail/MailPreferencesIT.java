@@ -2,7 +2,10 @@ package com.jabiz.app.it.mail;
 
 import com.jabiz.app.it.security.SecurityItSupport;
 import com.jabiz.runtime.context.Actor;
+import com.jabiz.runtime.mail.MailProcesses;
+import com.jabiz.runtime.observability.PlatformObservations;
 import com.jabiz.runtime.security.JwtService;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -28,6 +31,9 @@ class MailPreferencesIT extends SecurityItSupport {
 
     @Autowired
     JwtService jwt;
+
+    @Autowired
+    MeterRegistry meters;
 
     /** A user of the platform, with an address. */
     @SuppressWarnings("unchecked")
@@ -55,11 +61,24 @@ class MailPreferencesIT extends SecurityItSupport {
     }
 
     private static Map<String, Object> preference(String template, boolean subscribed, String displayName) {
+        return preference(template, subscribed, displayName, false);
+    }
+
+    private static Map<String, Object> preference(String template, boolean subscribed, String displayName,
+        boolean otherEntry) {
         Map<String, Object> expected = new LinkedHashMap<>();
         expected.put("template", template);
         expected.put("subscribed", subscribed);
         expected.put("displayName", displayName);
+        expected.put("otherEntry", otherEntry);
         return expected;
+    }
+
+    /** How many runs of the preference process were refused so far. */
+    private long refusedRuns() {
+        io.micrometer.core.instrument.Timer timer = meters.find(PlatformObservations.PROCESS)
+            .tags("process", MailProcesses.PREFERENCE_SET, "outcome", "rejected").timer();
+        return timer == null ? 0 : timer.count();
     }
 
     private Map<String, Object> set(String bearer, Map<String, Object> body, int status) {
@@ -105,9 +124,14 @@ class MailPreferencesIT extends SecurityItSupport {
         String user = user();
         String admin = at("admin", user);
 
+        long refused = refusedRuns();
         Map<String, Object> foreign = set(admin, Map.of("template", "it.offers", "subscribed", false), 422);
+        // The same path: each refusal is a run of the process, refused there (decision D49 item 1).
+        assertThat(refusedRuns()).isEqualTo(refused + 1);
         Map<String, Object> unknown = set(admin, Map.of("template", "it.nothing", "subscribed", false), 422);
+        assertThat(refusedRuns()).isEqualTo(refused + 2);
         Map<String, Object> transactional = set(admin, Map.of("template", "it.verify", "subscribed", false), 422);
+        assertThat(refusedRuns()).isEqualTo(refused + 3);
         // The same answer, but for the name the caller sent: nothing tells whether a portal template of that name exists.
         for (Map<String, Object> problem : List.of(foreign, unknown, transactional)) {
             assertThat(ruleCode(problem)).isEqualTo("INVALID_VALUE");
@@ -118,11 +142,18 @@ class MailPreferencesIT extends SecurityItSupport {
         assertThat(normalized(foreign, "it.offers")).isEqualTo(normalized(unknown, "it.nothing"));
         assertThat(query("SELECT 1 FROM sec_user_mail_preference_version WHERE user_id = ?::uuid", user)).isEmpty();
 
-        // At the portal it is the user's to set; the administration still does not list it.
+        // At the portal it is the user's to set.
         String portal = at("portal", user);
         set(portal, Map.of("template", "it.offers", "subscribed", false), 200);
         assertThat(preferences(portal, "en")).contains(preference("it.offers", false, "Offers for customers"));
-        assertThat(preferences(admin, "en")).extracting(row -> row.get("template")).containsExactly("it.news");
+        // Turned off, it is listed at every entry, so the opt-out never becomes invisible; it can be turned on there.
+        assertThat(preferences(admin, "en")).containsExactly(preference("it.news", true, "News"),
+            preference("it.offers", false, "Offers for customers", true));
+        set(admin, Map.of("template", "it.offers", "subscribed", true), 200);
+        assertThat(preferences(admin, "en")).containsExactly(preference("it.news", true, "News"));
+        assertThat(preferences(portal, "en")).contains(preference("it.offers", true, "Offers for customers"));
+        // Received again, it is another entry's and cannot be set from the administration any more.
+        set(admin, Map.of("template", "it.offers", "subscribed", false), 422);
     }
 
     @Test
@@ -154,6 +185,9 @@ class MailPreferencesIT extends SecurityItSupport {
             .expectStatus().isNoContent();
         assertThat(preferences(at("portal", user), "en")).contains(preference("it.offers", false,
             "Offers for customers"));
+        // Also where the template is not offered: what the user turned off is listed at every entry.
+        assertThat(preferences(at("admin", user), "en")).contains(preference("it.offers", false,
+            "Offers for customers", true));
         // A link of a template that is no notification stays refused.
         assertThat(ruleCode(post("/api/auth/mail/unsubscribe", null,
             Map.of("token", jwt.issueUnsubscribe(user, "it.verify"))).expectStatus().isEqualTo(422)
@@ -168,7 +202,8 @@ class MailPreferencesIT extends SecurityItSupport {
 
         // Not chosen: mail goes in the application's default language.
         Map<String, Object> initial = mailLanguage(self);
-        assertThat(initial).containsEntry("locale", null).containsEntry("effective", "en");
+        assertThat(initial).containsEntry("locale", null).containsEntry("effective", "en")
+            .containsEntry("defaultLocale", "en");
         assertThat(initial.get("languages")).asList().containsExactlyInAnyOrder("zh", "ja", "en");
 
         post("/api/auth/account/locale", self, Map.of("locale", "ja")).expectStatus().isOk();

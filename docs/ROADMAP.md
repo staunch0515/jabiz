@@ -3962,4 +3962,13 @@ QB 提交锁内 48 → 16（16p-1）的明细：恢复超时 1 → 0（T1）、�
 **兼容**（线 1.2 内）：接口只新增字段（`TemplatePreference.displayName`）与 `GET /api/auth/account/locale`；未声明入口的模板照旧对所有入口列出；`MailTemplate` 保留原四参构造；`TemplatePreference` 保留原两参构造。
 唯一的行为变化：示范的 `commerce.order-shipped` 只在门户的偏好中列出。
 
+**独立评审之后的修订**（2026-10-18）：
+1. 其他入口的模板不再在控制器中预先拒绝，改由流程 `SEC_MAIL_PREFERENCE_SET` 以请求的入口判断，与未知名称同一路径（`MailPreferencesIT` 以流程的拒绝计数断言）。
+2. 询问被接受后，打开着的 `MailPreferences` 立即显示新的语言（`@jabiz/client` 的 `onMailLanguageChange`）；e2e 不再重新加载页面。
+3. 用户关闭过的其他入口的模板列在"您关闭的其他邮件"中（`otherEntry`），可重新开启；D49 与 18 §5.6 说明了原先退订会"看不见"的问题。
+4. 询问一直显示到回答（"用于邮件" / "暂不"），并说明以后在哪里修改。
+5. 邮件语言可选"默认"（`locale: null`，接口新增 `defaultLocale`）；选择框总有一项选中（不在界面语言中的选择显示为默认）；读取失败时有"重试"。
+6. `.entries(...)` 写在 TRANSACTIONAL 模板上时启动检查告警；D49 记下 record 组件数的变化。
+7. `MailIT`：已在门户关闭的门户模板不再发送（`SKIPPED` / `UNSUBSCRIBED`，收件箱中没有）。
+
 **未做**：退订页（`MailUnsubscribePage`）仍只在通用后台（Q7 计划 P2，不做）；`AuthFrame` 的语言切换（登录前的页面）不询问邮件语言（无会话）。

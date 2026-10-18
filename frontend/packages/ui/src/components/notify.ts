@@ -8,6 +8,8 @@ export interface NotifyOptions {
   duration?: number
   /** A button in the message, for the one thing it offers to do ("Use for e-mail"); it closes the message. */
   action?: { label: string; onClick: () => void }
+  /** A second button that only closes the message ("Not now"). */
+  cancel?: { label: string; onClick: () => void }
 }
 
 /**

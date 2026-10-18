@@ -2,7 +2,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../api/problem'
 import { configureSession, session } from '../api/session'
 import { json, urlOf } from '../test/locks'
-import { getMailLanguage, getMailPreferences, mailLanguageOffer, setMailLanguage, setMailPreference } from './mail'
+import {
+  getMailLanguage,
+  getMailPreferences,
+  mailLanguageOffer,
+  onMailLanguageChange,
+  setMailLanguage,
+  setMailPreference,
+} from './mail'
 
 type Call = { method: string; path: string; body: unknown; auth: string | null; language: string | null }
 
@@ -65,6 +72,23 @@ describe('mail settings (phase 16s)', () => {
     await setMailLanguage('ja')
     await setMailLanguage(null)
     expect(calls.filter((c) => c.method === 'POST').map((c) => c.body)).toEqual([{ locale: 'ja' }, { locale: '' }])
+  })
+
+  it('tells the listeners of a mail language set on this page, after the server took it', async () => {
+    server({ 'POST /api/auth/account/locale': () => json(200, { userId: 'u' }) })
+    const heard: (string | null)[] = []
+    const stop = onMailLanguageChange((locale) => heard.push(locale))
+    await setMailLanguage('ja')
+    await setMailLanguage(null)
+    stop()
+    await setMailLanguage('en')
+    expect(heard).toEqual(['ja', null])
+    server({ 'POST /api/auth/account/locale': () => json(422, { status: 422, violations: [] }) })
+    const refused: unknown[] = []
+    const stopRefused = onMailLanguageChange((locale) => refused.push(locale))
+    await expect(setMailLanguage('zh')).rejects.toBeInstanceOf(ApiError)
+    stopRefused()
+    expect(refused).toEqual([])
   })
 
   it('a refusal is thrown as an ApiError', async () => {

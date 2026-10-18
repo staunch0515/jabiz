@@ -58,8 +58,9 @@ class AccountController {
      * @param locale    as the user chose it; null when they did not (mail then goes in the default language)
      * @param effective the language their mail goes in: the chosen one when the application has it, else its default
      * @param languages the application's languages, which mail can be in
+     * @param defaultLocale the application's default language, which mail goes in when none is chosen
      */
-    record MailLanguage(String locale, String effective, List<String> languages) {}
+    record MailLanguage(String locale, String effective, List<String> languages, String defaultLocale) {}
 
     /**
      * @param currentPassword the password now; a wrong one counts towards the lock of the account
@@ -124,7 +125,8 @@ class AccountController {
                 .map(stored -> {
                     String chosen = stored.isBlank() ? null : stored;
                     Locale effective = messages.supported(chosen == null ? null : Locale.of(chosen));
-                    return new MailLanguage(chosen, effective.getLanguage(), languages);
+                    return new MailLanguage(chosen, effective.getLanguage(), languages,
+                        messages.defaultLocale().getLanguage());
                 });
         });
     }

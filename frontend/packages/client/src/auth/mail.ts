@@ -11,13 +11,15 @@ import type { Language } from '../i18n/languages'
 
 /**
  * One notification the user may turn off: the template's `name`, its `displayName` in the interface language and
- * whether it is received (`subscribed`).
+ * whether it is received (`subscribed`). `otherEntry`: a notification of another sign-in entry, listed only because the
+ * user turned it off (for example with the link in a mail), so they can turn it on again.
  */
 export type MailPreference = components['schemas']['TemplatePreference']
 
 /**
  * The language of the user's mail: `locale` as they chose it (null or absent: not chosen, mail goes in the application's
- * default), `effective` the one their mail goes in, `languages` those mail can be in.
+ * default), `effective` the one their mail goes in, `languages` those mail can be in, `defaultLocale` the
+ * application's default.
  */
 export type MailLanguage = components['schemas']['MailLanguage']
 
@@ -47,6 +49,21 @@ export async function getMailLanguage(): Promise<MailLanguage> {
  */
 export async function setMailLanguage(locale: Language | null): Promise<void> {
   await unwrap(api.POST('/api/auth/account/locale', { body: { locale: locale ?? '' } }))
+  for (const listener of [...languageListeners]) listener(locale)
+}
+
+const languageListeners = new Set<(locale: Language | null) => void>()
+
+/**
+ * Calls `listener` whenever {@link setMailLanguage} has changed the mail language on this page (for example from the
+ * notice of `offerMailLanguage` while a page with the settings is open), with the new choice (null: the default).
+ * Returns the function that stops listening.
+ */
+export function onMailLanguageChange(listener: (locale: Language | null) => void): () => void {
+  languageListeners.add(listener)
+  return () => {
+    languageListeners.delete(listener)
+  }
 }
 
 /**

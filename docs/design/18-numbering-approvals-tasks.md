@@ -348,13 +348,18 @@ HTML 部分转义全部文本与正文中的原始 HTML，纯文本部分为原�
   退订链接照旧对任何入口有效（邮件是发给该用户的）。
 - 显示名：消息 `mail.<名>.name`（应用所选的每种语言）。NOTIFICATION 模板缺少某种语言的显示名时启动检查 `MAIL` **告警**（不报错：16s 之前的应用照常启动），
   偏好中以模板名代替。TRANSACTIONAL 不在偏好中，不需要显示名。
-- `GET /api/auth/mail/preferences` 只列**调用者令牌所属入口**适用的 NOTIFICATION 模板，每项增加 `displayName`（请求语言 → 应用缺省语言 → 模板名），
-  原有字段 `template`、`subscribed` 不变。`POST` 对其他入口的模板与不存在、非 NOTIFICATION 的名称给出**同样的** 422 `INVALID_VALUE`（只差调用者自己提交的名称），
-  回答不透露其他入口有哪些模板。偏好仍按用户 × 模板保存，与入口无关：在另一个入口登录的同一用户看到的是那个入口的模板及其同样的选择。
-- `GET /api/auth/account/locale`（16s）：本人的邮件语言 `{locale, effective, languages}`——`locale` 为所选（未选为 null），`effective` 为邮件实际使用的语言
-  （所选且在应用语言中，否则缺省语言，同 `SendMail`），`languages` 为应用语言。只读调用者自己的用户；开发请求头的操作人不是用户，403。
+- `GET /api/auth/mail/preferences` 列出**调用者令牌所属入口**适用的 NOTIFICATION 模板，每项增加 `displayName`（请求语言 → 应用缺省语言 → 模板名）
+  与 `otherEntry`，原有字段 `template`、`subscribed` 不变。其后列出用户**自己关闭过**的其他入口的模板（`otherEntry: true`、`subscribed: false`）：
+  经邮件链接退订的模板若不属于当前入口，否则就看不见、无法重新开启。重新开启后它不再列出。
+- `POST` 由流程 `SEC_MAIL_PREFERENCE_SET` 判断：会话的入口适用的模板、或用户已关闭的其他入口的模板可设；其他入口的其余模板与不存在、
+  非 NOTIFICATION 的名称在流程中给出**同样的** 422 `INVALID_VALUE`（只差调用者自己提交的名称），回答与执行路径不透露其他入口有哪些模板。
+  退订链接（无入口）照旧可退订任何 NOTIFICATION。偏好仍按用户 × 模板保存，与入口无关。
+- `.entries(...)` 写在 TRANSACTIONAL 模板上没有作用，启动检查 `MAIL` 告警。
+- `GET /api/auth/account/locale`（16s）：本人的邮件语言 `{locale, effective, languages, defaultLocale}`——`locale` 为所选（未选为 null），`effective` 为邮件实际使用的语言
+  （所选且在应用语言中，否则缺省语言，同 `SendMail`），`languages` 为应用语言，`defaultLocale` 为应用的缺省语言。只读调用者自己的用户；开发请求头的操作人不是用户，403。
+  积木的语言选择含"默认（…）"一项（`locale: null`）。
 - 前端：`@jabiz/client` 的 `getMailPreferences` / `setMailPreference` / `getMailLanguage` / `setMailLanguage` / `mailLanguageOffer`，`@jabiz/ui` 的积木
-  `MailPreferences` 与 `offerMailLanguage`（12 §10、§12）。通用后台的安全设置页有"邮件"一节，示范门户的账户页同样使用它；切换界面语言时只**询问**是否同步邮件语言，从不静默修改。
+  `MailPreferences` 与 `offerMailLanguage`（12 §10、§12），以及 `onMailLanguageChange`（询问被接受时，打开着的积木立即显示新的语言）。通用后台的安全设置页有"邮件"一节，示范门户的账户页同样使用它；切换界面语言时只**询问**是否同步邮件语言，从不静默修改。
 - 示范：`commerce.order-shipped` 声明 `.entries("portal")`（客户在门户登录），后台用户的偏好中没有它。
 
 **查询**：平台实体 `MailMessage`（`sys_mail_message`，`mail.read`，`processOnlyWrites()`，经变更集写入并审计）与 `MailAttempt`

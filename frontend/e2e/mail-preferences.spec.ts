@@ -50,17 +50,16 @@ test('the administration lists no customer mail, and offers the new interface la
   // The shipment notice is the portal's (customers): not among the administration's preferences.
   await expect(mail.getByTestId('mail-preferences-none')).toBeVisible()
   await expect(mail.getByRole('switch')).toHaveCount(0)
-  await expect(mail.getByRole('combobox', { name: '邮件语言' })).toHaveText('English')
+  await expect(mail.getByRole('combobox', { name: '邮件语言' })).toHaveText('默认（English）')
 
   await chooseLanguage(page, '日本語', 'ja')
   const offer = page.locator('[data-sonner-toast]').filter({ hasText: 'メールも日本語で受け取りますか？' })
   await expect(offer).toBeVisible()
-  // Only offered: the mail stays in English until accepted.
-  await expect(mail.getByRole('combobox', { name: 'メールの言語' })).toHaveText('English')
+  // Only offered: the mail stays in the default (English) until accepted.
+  await expect(mail.getByRole('combobox', { name: 'メールの言語' })).toHaveText('既定（English）')
   await offer.getByRole('button', { name: 'メールにも使う' }).click()
   await expect(page.locator('[data-sonner-toast]').filter({ hasText: '今後のメールは日本語でお送りします。' }))
     .toBeVisible()
-  await page.reload()
-  await expect(page.getByTestId('account-section-mail').getByRole('combobox', { name: 'メールの言語' }))
-    .toHaveText('日本語')
+  // The open page shows it at once, without reading the page again.
+  await expect(mail.getByRole('combobox', { name: 'メールの言語' })).toHaveText('日本語')
 })

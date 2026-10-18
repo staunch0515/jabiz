@@ -49,7 +49,7 @@ describe('AccountSecurityPage', () => {
     getMailPreferences.mockReset().mockResolvedValue([
       { template: 'it.news', subscribed: true, displayName: 'News' },
     ])
-    getMailLanguage.mockReset().mockResolvedValue({ locale: null, effective: 'en', languages: ['zh', 'ja', 'en'] })
+    getMailLanguage.mockReset().mockResolvedValue({ effective: 'en', languages: ['zh', 'ja', 'en'], defaultLocale: 'en' })
     setMailPreference.mockReset().mockResolvedValue(undefined)
     await i18n.changeLanguage('en')
   })
@@ -102,7 +102,7 @@ describe('AccountSecurityPage', () => {
     expect(screen.getByRole('region', { name: 'E-mail' })).toBe(screen.getByTestId('account-section-mail'))
     const news = await mail.findByRole('switch', { name: 'News' })
     expect(news).toBeChecked()
-    expect(mail.getByRole('combobox', { name: 'Language of your mail' })).toHaveTextContent('English')
+    expect(mail.getByRole('combobox', { name: 'Language of your mail' })).toHaveTextContent('Default (English)')
     await userEvent.click(news)
     expect(setMailPreference).toHaveBeenCalledWith('it.news', false)
     expect(await mail.findByTestId('mail-preferences-state')).toHaveTextContent('News: off.')

@@ -38,7 +38,7 @@ public final class ItMailFixtures {
         .category(MailCategory.NOTIFICATION).param("item").entries("portal"));
 
     /**
-     * @param template {@code verify}, {@code reset} or {@code news}
+     * @param template {@code verify}, {@code reset}, {@code news} or {@code offers}
      * @param userId   the recipient user, or null for {@code address}
      * @param locale   the language to send in; null: the user's
      * @param value    the template's parameter
@@ -68,6 +68,8 @@ public final class ItMailFixtures {
             .step("Send the reset", SendMail.when(ctx -> "reset".equals(input(ctx).template()), RESET,
                 ItMailFixtures::recipient, Map.of()))
             .step("Send the news", SendMail.when(ctx -> "news".equals(input(ctx).template()), NEWS,
+                ItMailFixtures::recipient, Map.of("item", ctx -> input(ctx).value())))
+            .step("Send the offers", SendMail.when(ctx -> "offers".equals(input(ctx).template()), OFFERS,
                 ItMailFixtures::recipient, Map.of("item", ctx -> input(ctx).value())))
             .compute("Fail on request", (metadata, ctx) -> {
                 if (Boolean.TRUE.equals(input(ctx).fail())) {

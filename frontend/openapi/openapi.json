@@ -1587,6 +1587,9 @@
       },
       "MailLanguage" : {
         "properties" : {
+          "defaultLocale" : {
+            "type" : "string"
+          },
           "effective" : {
             "type" : "string"
           },
@@ -2626,6 +2629,9 @@
         "properties" : {
           "displayName" : {
             "type" : "string"
+          },
+          "otherEntry" : {
+            "type" : "boolean"
           },
           "subscribed" : {
             "type" : "boolean"

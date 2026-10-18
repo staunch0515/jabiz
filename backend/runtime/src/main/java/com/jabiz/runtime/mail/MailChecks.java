@@ -35,6 +35,7 @@ import java.util.function.Predicate;
  *       carries no secret but its one-time tokens;</li>
  *   <li>every entry a text names in {@code {entryUrl.<entry>}} is a usable sign-in entry (decision D43 item 4), and
  *       so is every entry a template declares itself for ({@link MailTemplate#entries}, decision D49);</li>
+ *   <li>a warning for transactional mail declaring entries, which only matter to notifications;</li>
  *   <li>a warning for a notification without its display name {@code mail.<name>.name} in a language of the
  *       application: its users see the template's name among their mail preferences instead (decision D49).</li>
  * </ul>
@@ -113,6 +114,10 @@ public class MailChecks implements PlatformCheck {
                     problems.add(CheckProblem.error(CATEGORY, location, "parameter " + param + " is named like a "
                         + "secret or a masked field; a mail carries no secret but its one-time tokens"));
                 }
+            }
+            if (!template.entries().isEmpty() && !template.unsubscribable()) {
+                problems.add(CheckProblem.warning(CATEGORY, location, "declares sign-in entries " + template.entries()
+                    + ", but it is transactional mail, which is in nobody's preferences: the entries change nothing"));
             }
             template.entries().stream().filter(entry -> !entryExists.test(entry))
                 .forEach(entry -> problems.add(CheckProblem.error(CATEGORY, location, "is declared for the sign-in "

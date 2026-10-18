@@ -26,6 +26,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import reactor.core.publisher.Mono;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -38,11 +39,12 @@ import java.util.UUID;
  * repeating it changes nothing), and for signed-in users the notification templates they receive and turning them on
  * or off. Both run {@code SEC_MAIL_PREFERENCE_SET} as the user concerned.
  * <p>
- * The signed-in user's list holds the notifications of the sign-in entry of their session only
+ * The signed-in user's list holds the notifications of the sign-in entry of their session
  * ({@link MailTemplate#appliesTo}), by their display names in the request's language (phase 16s; decision D49), and
- * only those can be set there: a template of another entry is refused like one that is no notification, so the
- * answers tell nothing about other entries' mail. The unsubscribe link works whatever the entry: it was mailed to the
- * user.
+ * after them those of other entries the user turned off ({@code otherEntry}), so that an opt-out made with a link
+ * never becomes invisible. Only these can be set there: the process refuses any other template of another entry like
+ * one that is no notification, so the answers tell nothing about other entries' mail. The unsubscribe link works
+ * whatever the entry: it was mailed to the user.
  */
 @RestController
 public class MailUnsubscribeController {
@@ -63,12 +65,19 @@ public class MailUnsubscribeController {
      *
      * @param displayName the template's name for people ({@code mail.<template>.name}) in the request's language,
      *                    else the application's default language, else the template's name (phase 16s)
+     * @param otherEntry  a template of another sign-in entry, listed because the user turned it off (then always
+     *                    {@code subscribed=false} when listed), so they can turn it on again
      */
-    public record TemplatePreference(String template, boolean subscribed, String displayName) {
+    public record TemplatePreference(String template, boolean subscribed, String displayName, boolean otherEntry) {
 
         /** Without a display name (as before phase 16s): the template's name. */
         public TemplatePreference(String template, boolean subscribed) {
-            this(template, subscribed, template);
+            this(template, subscribed, template, false);
+        }
+
+        /** A template of the session's own entry. */
+        public TemplatePreference(String template, boolean subscribed, String displayName) {
+            this(template, subscribed, displayName, false);
         }
     }
 
@@ -132,9 +141,13 @@ public class MailUnsubscribeController {
     Mono<MailPreferences> preferences() {
         return RequestContexts.current().flatMap(context -> {
             UUID user = requireUser(context);
-            // The session's entry only: a customer is not shown the mail of the back office, nor its names.
+            // The session's entry: a customer is not shown the mail of the back office, nor its names; of other
+            // entries only what the user turned off themselves.
             List<String> notifications = templates.all().stream().filter(MailTemplate::unsubscribable)
                 .filter(template -> template.appliesTo(context.entry()))
+                .map(MailTemplate::name).distinct().sorted().toList();
+            List<String> others = templates.all().stream().filter(MailTemplate::unsubscribable)
+                .filter(template -> !template.appliesTo(context.entry()))
                 .map(MailTemplate::name).distinct().sorted().toList();
             return storages.getEngine(poolRef).select("""
                     SELECT DISTINCT ON (template) template, subscribed, is_deleted
@@ -145,9 +158,13 @@ public class MailUnsubscribeController {
                     Map<String, Boolean> chosen = new HashMap<>();
                     rows.forEach(row -> chosen.put(Rows.string(row.get("template")),
                         Boolean.TRUE.equals(row.get("is_deleted")) || Boolean.TRUE.equals(row.get("subscribed"))));
-                    return new MailPreferences(notifications.stream()
+                    List<TemplatePreference> listed = new ArrayList<>(notifications.stream()
                         .map(name -> new TemplatePreference(name, chosen.getOrDefault(name, true),
                             displayName(name, context.locale()))).toList());
+                    others.stream().filter(name -> Boolean.FALSE.equals(chosen.get(name)))
+                        .forEach(name -> listed.add(new TemplatePreference(name, false,
+                            displayName(name, context.locale()), true)));
+                    return new MailPreferences(listed);
                 });
         });
     }
@@ -158,12 +175,8 @@ public class MailUnsubscribeController {
             MailProcesses.PreferenceInput input = new MailProcesses.PreferenceInput(requireUser(context).toString(),
                 request == null ? null : request.template(), request == null ? null : request.subscribed());
             inputs.validate(input);
-            // Another entry's notification is refused as the process refuses what is no notification: the answer is
-            // the same whether such a template exists or not.
-            if (templates.find(input.template()).filter(MailTemplate::unsubscribable)
-                .filter(template -> !template.appliesTo(context.entry())).isPresent()) {
-                return Mono.error(new BusinessRuleViolationException(MailProcesses.notANotification(input.template())));
-            }
+            // Which templates the session may set is the process's to decide (its entry is the session's), so that
+            // every refusal takes the same path.
             return processes.executeAtEntry(preferenceSet, input);
         });
     }

@@ -150,6 +150,16 @@ class MailChecksTest {
     }
 
     @Test
+    void warnsOfTransactionalMailDeclaringEntries() {
+        MailTemplate declared = MailTemplate.define("t.ok", t -> t.category(MailCategory.TRANSACTIONAL)
+            .param("userName").token("verify", Duration.ofHours(1)).entries("shop"));
+        assertThat(checks(false, "", "", null, catalog(Locale.ENGLISH), declared).check())
+            .extracting(CheckProblem::severity, CheckProblem::message).containsExactly(
+                org.assertj.core.groups.Tuple.tuple(CheckProblem.Severity.WARNING, "declares sign-in entries [shop], but "
+                    + "it is transactional mail, which is in nobody's preferences: the entries change nothing"));
+    }
+
+    @Test
     void reportsATemplateDeclaredTwice() {
         assertThat(checks(false, "", "", null, catalog(Locale.ENGLISH), OK, OK).check())
             .extracting(CheckProblem::message).containsExactly("is declared more than once");

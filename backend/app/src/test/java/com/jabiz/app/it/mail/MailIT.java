@@ -372,7 +372,7 @@ class MailIT extends SecurityItSupport {
         String self = TestTokens.bearer(jwt, user);
         assertThat(get("/api/auth/mail/preferences", self).expectStatus().isOk().expectBody(MAP).returnResult()
             .getResponseBody()).extractingByKey("templates").asList()
-            .contains(Map.of("template", "it.news", "subscribed", false, "displayName", "News"));
+            .contains(Map.of("template", "it.news", "subscribed", false, "displayName", "News", "otherEntry", false));
         post("/api/auth/mail/preferences", self, Map.of("template", "it.news", "subscribed", true))
             .expectStatus().isOk();
         send("news", user, "plums");
@@ -387,6 +387,27 @@ class MailIT extends SecurityItSupport {
         assertThat(ruleCode(post("/api/auth/mail/preferences", self, Map.of("template", "it.verify",
             "subscribed", false)).expectStatus().isEqualTo(422).expectBody(MAP).returnResult().getResponseBody()))
             .isEqualTo("INVALID_VALUE");
+    }
+
+    @Test
+    void aNotificationForOneEntryIsNotSentToAUserWhoTurnedItOff() throws Exception {
+        // it.offers is the portal's (decision D49); the user turned it off at the portal.
+        String address = address("offers");
+        String user = user(address, "en");
+        send("offers", user, "tea");
+        deliver();
+        assertThat(to(address)).extracting(MailIT::subject).containsExactly("Offers for tea");
+
+        String portal = "Bearer " + jwt.issue(new com.jabiz.runtime.context.Actor(user, null, Set.of(), Set.of(),
+            jwt.clock().instant(), null, "portal", true)).token();
+        post("/api/auth/mail/preferences", portal, Map.of("template", "it.offers", "subscribed", false))
+            .expectStatus().isOk();
+        send("offers", user, "cake");
+        deliver();
+        assertThat(attempts(address)).extracting(row -> row.get("outcome"), row -> row.get("detail"))
+            .containsExactly(org.assertj.core.groups.Tuple.tuple("SENT", null),
+                org.assertj.core.groups.Tuple.tuple("SKIPPED", "UNSUBSCRIBED"));
+        assertThat(to(address)).extracting(MailIT::subject).containsExactly("Offers for tea");
     }
 
     @Test

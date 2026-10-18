@@ -28,7 +28,8 @@ import java.util.Optional;
  * decision D35). The consumer {@value #CONSUMER} runs {@value #SEND} once for every {@value SendMail#QUEUED} event,
  * always (with mail off it records the message as skipped): delivery, retries with backoff and processing once are the
  * outbox's (decision D14). {@value #PREFERENCE_SET} turns a notification template on or off for a user; it runs only
- * as that user, through the account settings or the unsubscribe link.
+ * as that user, through the account settings (the templates of the session's sign-in entry, and those of other entries
+ * the user turned off; decision D49) or the unsubscribe link (any notification).
  */
 @Configuration
 public class MailProcesses {
@@ -98,11 +99,17 @@ public class MailProcesses {
                 "Mail preferences are set by their own user only");
         }
         Optional<MailTemplate> template = templates.find(input.template()).filter(MailTemplate::unsubscribable);
-        if (template.isEmpty()) {
+        List<EntityInstance> existing = (List<EntityInstance>) ctx.get(PREFERENCES);
+        boolean optedOut = existing != null && !existing.isEmpty()
+            && Boolean.FALSE.equals(existing.getFirst().get("subscribed"));
+        // A signed-in session sets the notifications of its own entry, and those of other entries the user turned off
+        // (listed so they can be turned on again); the unsubscribe link (no entry) any notification it names. Anything
+        // else is refused here, in the process, exactly as a name that is no notification: decision D49 item 1.
+        String entry = ctx.request().entry();
+        if (template.isEmpty() || entry != null && !template.get().appliesTo(entry) && !optedOut) {
             ctx.reject(notANotification(input.template()));
             return;
         }
-        List<EntityInstance> existing = (List<EntityInstance>) ctx.get(PREFERENCES);
         if (existing == null || existing.isEmpty()) {
             if (input.subscribed()) {
                 return;
