@@ -177,7 +177,9 @@
 - **外部密钥**（`STRIPE_*`、`OPENAI_API_KEY`）只来自环境变量（`deploy/quizbuks/README.md`）；测试与 `dev` 用固定的假值，仓库中没有真实密钥。
 - **部署的安全设置**（Q10b，`deploy/quizbuks/README.md`"密钥与部署"）：镜像入口脚本在平台密钥或首个管理员密码缺少时拒绝启动（只有 `QB_LOCAL_SECRETS=true` 的本机才生成，compose 缺省 `false`，正式模式一律不生成，管理员密码不打印；生成时导出 `QB_SECRETS_GENERATED=true`，评审 L5）；
   启动检查 `wallet.DeploySafetyCheck`（类别 `QUIZBUKS`）：可信代理为空时正式模式报错（除非 `quizbuks.deploy.direct-exposure=true`）、过宽的网段一律报错（IPv4 短于 /8、IPv6 短于 /32、整个 IPv4 的映射，前缀照平台读法，评审 L6），正式模式下关闭管理二次验证或 `QB_SECRETS_GENERATED=true` 报错，`dev` 只在回环地址与本机邮件地址下启动；
-  数据库密码没有缺省值。职责分离规则由 `QB_SETUP` 提出（`setup.QbSodRules`），`QbRoles` 的角色不得违反它们（`QbRolesTest`）；超级管理员不做审批。
+  数据库密码没有缺省值。职责分离规则由 `QB_SETUP` 提出（`setup.QbSodRules`），`QbRoles` 的角色不得违反它们（`QbRolesTest`）；超级管理员不做业务审批（不持有 `approval.decide`）。
+  **受保护的授权**（平台 16u，D51）：管理员按 `security.user-role.write` / `security.role.write` 计，即超级管理员；两位之后建立期结束，受保护的变更由一位超级管理员申请、另一位以 `security.protected-change.decide` 审批（`docs/quizbuks/operations.md` §3）。
+  `QB_SETUP` 直接写入角色的权限，建立期结束后给已有持有人的角色加受保护的权限会被拒（先经 `SEC_ROLE_PERMISSION_ADD` 审批）；测试以 `AccountItSupport.assignRole` 照此分配（第二位超级管理员之后由另一位批准）。
 
 ## 5. 前端（`quizbuks-web/`，`docs/quizbuks/plans/QP-pages.md`）
 
