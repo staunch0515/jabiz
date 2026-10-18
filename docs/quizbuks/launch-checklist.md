@@ -24,11 +24,13 @@
 - [ ] 提交过载（503、以 EXPIRED 结束）的风险已向需求方说明并接受，或已做缓解（`operations.md` §7.6）
 - [ ] `max-active` 与连接池按"同时热门的发布数 × 4 + 1"确认
 
-## AI（Q8a）
+## AI（Q8a、Q8b）
 
 - [ ] **Opus 与 Sonnet 的比较**（A-2）：以 20 份真实测验分别用 `claude-opus-5-5` 与 `claude-sonnet-5-5`（effort `medium`）生成候选，比较可用题数、需要改动的题数与错误的正确选项，并**记录每次的响应时间**（p50、p95、最长，与超过 90 秒的比例：请求在 2 分钟时被放弃并按预估计费，接近它就降低题数上限，或等平台的流式读取），需求方据此决定 `qb.ai.model`（Sonnet 约为一半成本）；记录写在本项
 - [ ] 正式的 `ANTHROPIC_API_KEY` 只在密钥库，Anthropic Console 的工作区月支出上限已设；`qb.ai.model`、`qb.ai.effort` 与限额按预算以受控变更确认
 - [ ] `qb.ai.enabled` 在上面三项完成后才开启（四眼）；开启后用一个测试商家生成、校对、加入一次，`/qb/ai` 显示用量
+- [ ] **封面（Q8b）**：用一个测试商家以中文、日文、英文标题各生成一次封面，确认三张候选图的文字没有缺字（`JABIZ_REPORTS_PDF_FONTS` 的字体在镜像中）、选定后成为模版封面；需求方确认图库的风格（A-4 选 A：配色、版式、图形；要插画或照片风格须改选 B，另一家提供方与密钥）
+- [ ] **PDF 资料（Q8b）**：以一份真实的多页 PDF 资料生成一次题目，记录实际的输入 Token 与每页 Token，确认 `QB_AI_PDF_MAX_PAGES` 与 `qb.ai.sponsor.monthly-tokens` 的取值（带 PDF 的请求按页数上限预留月 Token，`operations.md` §7.8）；AI 说明的正式文本写明 PDF 资料的原文件会发送给 AI 提供方
 
 ## Stripe
 

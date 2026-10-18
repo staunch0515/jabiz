@@ -223,11 +223,13 @@ tools/quizbuks/local-demo.sh status | logs | seed
 - 帮助中心与条款页不需登录，经公开接口 `/api/public/queries/qb.public.*`：`JABIZ_PUBLIC_ENABLED` 缺省 `true`，设 `false` 时这些页面打不开。
 - 有已生效的条款而用户未同意其须同意的版本时，充值、提交发布、开通收款被拒（`QB_CONSENT_REQUIRED`），页面在登录后要求同意；开始答题不受影响。
 
-## AI 生成题目（Q8a）
+## AI 生成题目与封面（Q8a、Q8b）
 
 - 提供方是 Claude（Anthropic API，`docs/quizbuks/plans/Q8-ai.md` A-1），外部服务 `anthropic`，只经平台的 JDK HTTP；密钥 `ANTHROPIC_API_KEY` 只来自环境变量（密钥库）。
 - **缺省关闭**：`qb.ai.enabled` 是受控参数，`QB_SETUP` 提出 `false`；有了正式密钥、AI 说明（法律文本种类 `AI_NOTICE`）以正式文本发布之后，由一位管理员在后台 `/qb/ai`（或平台的受控变更）提出开启，另一位发布。没有已生效的 AI 说明时，开关打开也不发送任何内容（`QB_AI_NOTICE_MISSING`）。
 - 模型 `qb.ai.model`（只能是 `claude-opus-5-5`（缺省）、`claude-sonnet-5-5`、`claude-haiku-5-5`）、`qb.ai.effort`（`low` / `medium`（缺省）/ `high`）与限额（每商家每日次数、每月 Token、全体每月 Token）都是受控参数；Q8a 之前装过的库中 `qb.ai.model` 是旧的 `gpt-4o-mini`：AI 因此不可用，须以受控变更改为清单中的值（该参数的种类在旧库中仍是文本，改值时只认清单中的三个之一由请求时再查保证）。
+- **封面与 PDF 资料（Q8b）**：同一个外部服务与密钥。封面的中日文字体取 `JABIZ_REPORTS_PDF_FONTS`（镜像已设 IPA Gothic 与 Droid Sans Fallback）；自建镜像缺少时，中日文标题的封面请求在调用之前即失败（`QB_AI_COVER_FONT`）。
+  封面图与上传的图一样存于 `JABIZ_FILES_LOCAL_ROOT`（未选的候选在 24 小时后由清扫删除）；PDF 资料由作业执行器在尝试期间复制到同一卷的上传区（平台检查可用空间，`jabiz.external-jobs.files.min-free-disk`）。每实例的输出预算（`jabiz.external-jobs.files.output-budget`，缺省 256 MB）足够封面作业（每次尝试至多 3 × 4 MiB）。
 - 本机开发：`java tools/quizbuks/claude-stub/ClaudeStub.java`（端口 8094，`dev` 配置已指向它），它只按请求生成假的题目，从不访问网络；标题含 `[refuse]` 的模版被拒答，含 `[busy]` 的得到 529。
 - 发送给提供方的只有商家自己的模版内容（标题、简介、所选资料、已有题干），`metadata.user_id` 是商家编号的 HMAC（以 `JABIZ_INTEGRITY_KEY` 派生的密钥），不含答题人的任何数据与商家的身份信息。
 
@@ -289,6 +291,7 @@ tools/quizbuks/local-demo.sh status | logs | seed
 | `ANTHROPIC_API_KEY` | 是（Q8a） | Claude（Anthropic API）的密钥，AI 生成题目；缺少即启动失败。还没有密钥时可设任意占位（如 `not-configured`）：AI 缺省关闭（`qb.ai.enabled`），关闭时什么也不发送；占位被打开后提供方拒绝（401，作业失败）。本机 compose 未设置时填占位 |
 | `QB_ANTHROPIC_API_URL` / `QB_ANTHROPIC_API_HOSTS` | 否 | Anthropic API 的地址与允许的主机，缺省 `https://api.anthropic.com` / `api.anthropic.com`（只在开发与 e2e 中改指本地桩 `tools/quizbuks/claude-stub`） |
 | `QB_AI_REQUEST_TIMEOUT` / `QB_AI_MAX_CONCURRENCY` | 否 | 等 Claude 整个回答的最长时间（缺省与上限 `PT2M`；没有回答的尝试按预估计入用量）；全实例同时运行的 AI 作业数（缺省 4） |
+| `QB_AI_PDF_MAX_BYTES` / `QB_AI_PDF_MAX_PAGES` | 否 | Q8b：PDF 资料作为文件本身发送给 Claude，每个至多多少字节（缺省 10485760，上限 20 MiB）、一次请求合计至多多少页（缺省 100，上限 600）。请求在作业数完页数之前按页数上限预留月 Token（每页 5 000、3 次尝试），降低页数上限可同时进行更多 PDF 请求（`docs/quizbuks/operations.md` §7.8） |
 | `QB_AI_HALTED` | 否 | `true` 时本实例的每次 AI 尝试不调用提供方即失败（事故时的停止，需重启；更快的是在 Anthropic Console 吊销密钥，`docs/quizbuks/operations.md` §7.8） |
 
 可观测性（OTLP）与单点登录的变量同平台：见 `docs/guide/quickstart.md`。

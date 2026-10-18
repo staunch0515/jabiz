@@ -189,7 +189,6 @@ export default function AiPage() {
             <TableRow>
               <TableHead>{t('ai.requestedAt')}</TableHead>
               <TableHead>{t('ai.sponsor')}</TableHead>
-              <TableHead>{t('ai.kind')}</TableHead>
               <TableHead>{t('ai.status')}</TableHead>
               <TableHead>{t('ai.model')}</TableHead>
               <TableHead>{t('ai.servedModel')}</TableHead>
@@ -204,8 +203,10 @@ export default function AiPage() {
               <TableRow key={row.aiJobId} data-testid="ai-job-row" data-status={row.status}>
                 <TableCell className="whitespace-nowrap">{new Date(row.requestedAt).toLocaleString(i18n.language)}</TableCell>
                 <TableCell><UserName id={row.sponsorId} /></TableCell>
-                <TableCell data-testid="ai-job-kind">{t(`ai.kinds.${row.kind}`, { defaultValue: row.kind })}</TableCell>
                 <TableCell>
+                  {/* The kind (Q8b) under the status, so that the table keeps its width. */}
+                  <span className="text-muted-foreground block text-xs" data-testid="ai-job-kind">
+                    {t(`ai.kinds.${row.kind}`, { defaultValue: row.kind })}</span>
                   <Badge variant={row.status === 'FAILED' ? 'destructive' : 'outline'}>
                     {t(`ai.statuses.${row.status}`, { defaultValue: row.status })}
                   </Badge>

@@ -67,7 +67,7 @@
 | `QB_STRIPE_CHECKOUT_TTL` | 否 | 缺省 `PT1H` | — | — |
 | `QB_STRIPE_PLACEHOLDERS` | 服务器上 `false` | compose 缺省 `true`（只在测试模式填占位） | — | 用本仓库 compose 而没设 `false` 时，测试模式缺的密钥被填成占位（告警）而不是启动失败 |
 | `QB_STRIPE_ALLOW_LIVE_WITH_TEST_DATA` | **不设** | — | — | 缺省 `false`：库中有测试数据时正式模式启动失败（§4） |
-| `ANTHROPIC_API_KEY` | 是（Q8a） | Anthropic Console → API Keys：为本部署新建的密钥（建议单独的工作区，在 Console 设工作区的月支出上限作为最后一道防线） | Console 新建密钥、改环境变量、重启，再删除旧密钥。泄露时立即删除，并先以受控变更关闭 `qb.ai.enabled` | 启动失败（EXTERNAL）；没有密钥时设占位，AI 保持关闭 |
+| `ANTHROPIC_API_KEY` | 是（Q8a；Q8b 的封面与 PDF 资料同一把） | Anthropic Console → API Keys：为本部署新建的密钥（建议单独的工作区，在 Console 设工作区的月支出上限作为最后一道防线） | Console 新建密钥、改环境变量、重启，再删除旧密钥。泄露时立即删除，并先以受控变更关闭 `qb.ai.enabled` | 启动失败（EXTERNAL）；没有密钥时设占位，AI 保持关闭 |
 
 ### 1.4 只给测试的开关（生产不设）
 
@@ -315,7 +315,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 - **告警**：`jabiz.job.run{job="qb.analytics", result="PARTIAL"}` 连续出现（某一项一直失败：看任务项的错误，常见为读取超时或约束）；最近一次运行早于 30 分钟（商家页面的"最近更新"随之变旧）。运行时间见 `jabiz.process{process="QB_ANALYTICS_ITEM"}`，热门发布积压时变长。
 - 日志中的 `Analytics: the counters of publication … went down` 表示计数被别的方式改动（计数只增不减），该发布本次不写；`… recounted … finalized anyway` 表示结束一天后整体重算与计数仍不一致，按重算的值定稿：两者都应调查。
 
-### 7.8 AI 生成题目（Q8a）
+### 7.8 AI 生成题目与封面（Q8a、Q8b）
 
 - **开关与限额**（后台 `/qb/ai`，受控参数）：`qb.ai.enabled`（缺省 false）、`qb.ai.model`、`qb.ai.effort`、`qb.ai.sponsor.daily-jobs`（20）、`qb.ai.sponsor.monthly-tokens`（200 万）、`qb.ai.global.monthly-tokens`（5 000 万）；普通参数 `qb.ai.candidates.expire-days`（7）与只用于估算的价格 `qb.ai.price.*`。限额在 `qb.ai:<商家>` → `qb.ai:*` 锁内按已记录的用量与未结束作业的预估检查（全体上限也加上所有商家未结束作业的预估）；一个作业的预估是 3 次尝试各自完整的输入与所要的全部输出（`max_tokens` 随题数：4 000 + 600 / 题，至多 16 000；effort `high` 时一次至多 10 题）。
 - **作业** `qb.ai.questions`：每次尝试至多 5 分钟（请求本身至多 `QB_AI_REQUEST_TIMEOUT`，缺省也是上限 2 分钟）、3 次尝试（429、408、5xx、529、超时、断线与回退忙时的拒答重试，退避 10 秒起、至多 2 分钟；其他拒答、截断、其他 4xx 立即失败）、全实例并发 `QB_AI_MAX_CONCURRENCY`（缺省 4）。提供方不按幂等键去重：重试可能重复计费，用量按每次尝试记录，也计入限额；**没有得到回答的尝试**（超时、断线、回答过大）按预估计入（完整输入与所要的全部输出），因为提供方可能已为没人读到的回答计费。
@@ -327,7 +327,12 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
   3. **停止已排队的作业**：持有 `external-job.cancel` 的管理员（平台的 `ADMIN` 角色）对作业调用 `POST /api/external-jobs/{作业号}/cancel`（作业号在 `/qb/ai` 的"最近的请求"与 `qb.admin.ai-jobs` 中）：没在运行的立即结束、正在运行的在本次尝试后结束、不再重试；QuizBuks 以 `QB_AI_JOB_STOPPED` 关闭本地作业（`QB_AI_STOPPED`）并按完整预估计入用量。
   4. **停掉本实例的全部调用**：`QB_AI_HALTED=true` 并重启：每次尝试不调用提供方即以 `QB_AI_HALTED` 失败（排队与重试中的也一样）。需要重启，所以比 1 慢。
 - **拒答**：请求带服务端回退（`fallbacks: "default"`，Haiku 无），回退后仍拒答即 `QB_AI_REFUSED`；`/qb/ai` 的"实际回答"列显示回退所用的模型。
-- **告警**：`jabiz.external_job` 中 `qb.ai.questions` 的失败率；某商家或全体本月用量接近上限（`qb.admin.ai-usage`）。
+- **告警**：`jabiz.external_job` 中 `qb.ai.questions` 与 `qb.ai.cover` 的失败率；某商家或全体本月用量接近上限（`qb.admin.ai-usage`）。
+- **封面（Q8b）**：作业 `qb.ai.cover`（与题目同样的尝试、重试、并发配置与限额，`/qb/ai` 的"种类"列区分）：Claude 只从固定的图库（8 种配色、4 种版式、7 种图形）中选出 3 个设计并写封面文字（≤ 40 字），由服务器以 Java2D 画成 1200 × 630 的 PNG，经平台的文件输出（D50）按 `qb.content.image` 策略以商家为上传者登记（按内容判定类型、重新编码）。
+  中日文字体取 `JABIZ_REPORTS_PDF_FONTS`（镜像已设）：缺少时含中日文的标题在调用提供方之前即以 `QB_AI_COVER_FONT` 失败（不计费）。候选图在作业 `READY` 期间由作业的三列引用、不被清扫；商家选定（`QB_AI_COVER_ACCEPT`，经模版编辑写入 `cover`、`aiGenerated`）、丢弃或过期后，未选的图不再被引用，由平台的 `FILE_SWEEP` 在 `jabiz.files.orphan-after`（24 小时）后删除。
+- **PDF 资料（Q8b）**：所选的 PDF 资料作为文件本身发送（平台的文件输入，D50：登记时检查商家能读该文件）：每个至多 `QB_AI_PDF_MAX_BYTES`（缺省 10 MiB，上限 20 MiB），一次请求的全部 PDF 合计至多 20 MiB、至多 `QB_AI_PDF_MAX_PAGES` 页（缺省 100，上限 600）。页数由作业在发送前数（超出 `QB_AI_PDF_TOO_LONG`，有密码或读不出 `QB_AI_PDF_UNREADABLE`，都不发送、不计费）；
+  请求时还不知道页数，所以**按上限预留**：每页按 5 000 Token（文字与页面图像），3 次尝试，即缺省一个带 PDF 的请求预留约 150 万 Token，直到作业结束才按实际用量计。商家的月上限（缺省 200 万）因此只容得下一个进行中的 PDF 请求；常用 PDF 时提高 `qb.ai.sponsor.monthly-tokens` 或降低 `QB_AI_PDF_MAX_PAGES`（预留随之按比例减少）。
+  作业输入上限 256 KiB（文字资料；Q8a 为 60 KiB），作业输入照旧永久存于平台的 `sys_external_job`，PDF 只记文件编号与摘要（内容随 `sys_file` 删除而删除）。
 
 ### 7.9 其他
 
