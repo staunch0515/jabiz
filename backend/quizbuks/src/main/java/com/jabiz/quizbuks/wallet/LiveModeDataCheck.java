@@ -82,12 +82,37 @@ public class LiveModeDataCheck implements PlatformCheck {
                 connection.setSchema(schema);
             }
             connection.setReadOnly(true);
-            List<CheckProblem> problems = new ArrayList<>(problems(true, allow, read(connection)));
-            problems.addAll(legalProblems(true, legalInEffect(connection)));
+            List<CheckProblem> problems = new ArrayList<>();
+            try {
+                problems.addAll(problems(true, allow, read(connection)));
+            } catch (SQLException | RuntimeException e) {
+                problems.add(CheckProblem.error(CountryCatalog.CATEGORY, ALLOW, "Live mode cannot check the "
+                    + "database for test mode's top-ups: " + e.getMessage()));
+            }
+            problems.addAll(legalCheck(() -> legalInEffect(connection)));
             return List.copyOf(problems);
         } catch (SQLException | RuntimeException e) {
             return List.of(CheckProblem.error(CountryCatalog.CATEGORY, ALLOW, "Live mode cannot check the database "
                 + "for test mode's top-ups: " + e.getMessage()));
+        }
+    }
+
+    /** Reads the kinds of legal text in effect. */
+    @FunctionalInterface
+    public interface LegalRead {
+        Set<String> read() throws SQLException;
+    }
+
+    /**
+     * The warnings of the legal texts in live mode, or, when they cannot be read, a warning saying so (review L4:
+     * not the top-ups' message).
+     */
+    public static List<CheckProblem> legalCheck(LegalRead read) {
+        try {
+            return legalProblems(true, read.read());
+        } catch (SQLException | RuntimeException e) {
+            return List.of(CheckProblem.warning(CountryCatalog.CATEGORY, "legal", "Live mode cannot check which "
+                + "legal texts are in effect: " + e.getMessage()));
         }
     }
 
@@ -117,11 +142,13 @@ public class LiveModeDataCheck implements PlatformCheck {
             .toList();
     }
 
-    /** The kinds of legal text with a version in effect now (by the application's clock). */
+    /** The kinds of legal text with a version in effect now (by the application's clock), withdrawn ones left out. */
     private Set<String> legalInEffect(Connection connection) throws SQLException {
         EntityDefinition version = entities.getOrThrow(QbLegal.VERSION);
-        String sql = "SELECT DISTINCT " + column(version, "kind") + " FROM " + table(version) + " WHERE "
-            + column(version, "effectiveAt") + " <= ?";
+        EntityDefinition withdrawal = entities.getOrThrow(QbLegal.WITHDRAWAL);
+        String sql = "SELECT DISTINCT v." + column(version, "kind") + " FROM " + table(version) + " v WHERE v."
+            + column(version, "effectiveAt") + " <= ? AND NOT EXISTS (SELECT 1 FROM " + table(withdrawal)
+            + " w WHERE w." + column(withdrawal, "legalVersionId") + " = v." + column(version, "legalVersionId") + ")";
         Set<String> kinds = new HashSet<>();
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setObject(1, OffsetDateTime.ofInstant(clock.instant(), ZoneOffset.UTC));

@@ -4,9 +4,10 @@ description: >-
   The caller's standing with each kind of legal text their front end asks for (Q7b D-Q7-5): the version in effect,
   its title and summary of changes, the version to accept, the caller's highest accepted and whether they must accept
   again
-entities: [QbLegalVersion, QbConsent]
+entities: [QbLegalVersion, QbLegalWithdrawal, QbConsent]
 datasets:
   QbLegalVersion: urn:jabiz:dataset:default:QbLegalVersion
+  QbLegalWithdrawal: urn:jabiz:dataset:default:QbLegalWithdrawal
   QbConsent: urn:jabiz:dataset:me:QbConsent
 params:
   kinds: { like: QbLegalVersion.kind, list: true, required: true, description: "The kinds of text (the app TERMS_APP and PRIVACY, the sponsor console TERMS_SPONSOR and PRIVACY)" }
@@ -29,7 +30,8 @@ list:
 permissions: [qb.account.read]
 ---*/
 -- The same rules as qb.system.consent-state (messaging.LegalRules), for the pages; the server decides with its own
--- clock. The caller's consents only (the dataset's scope). A kind without a version in effect has no row.
+-- clock. The caller's consents only (the dataset's scope). A kind without a version in effect has no row; a withdrawn
+-- version never counts. :at is the page's clock corrected by the server's (qb/legal.ts).
 WITH effective AS (
     SELECT
         v.{{QbLegalVersion.kind}}            AS kind,
@@ -41,7 +43,9 @@ WITH effective AS (
         v.{{QbLegalVersion.effectiveAt}}     AS effective_at
     FROM {{QbLegalVersion}} v
     WHERE v.{{QbLegalVersion.kind}} = ANY(:kinds)
-      AND v.{{QbLegalVersion.effectiveAt}} <= :at),
+      AND v.{{QbLegalVersion.effectiveAt}} <= :at
+      AND NOT EXISTS (SELECT 1 FROM {{QbLegalWithdrawal}} w
+                      WHERE w.{{QbLegalWithdrawal.legalVersionId}} = v.{{QbLegalVersion.legalVersionId}})),
 by_kind AS (
     SELECT kind, max(no) AS current_no, max(no) FILTER (WHERE rc OR no = 1) AS to_accept
     FROM effective GROUP BY kind),

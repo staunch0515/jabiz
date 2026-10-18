@@ -170,10 +170,17 @@ describe('the quiz editor', () => {
     const changed = { status: 422, body: { detail: 'Refused', violations: [{ field: 'baseRevision',
       ruleCode: 'QB_QUIZ_CHANGED', message: 'The quiz was changed meanwhile.' }] } }
     const { processCalls, quiz } = server({ processes: { QB_QUIZ_SAVE: [changed, edit(10)] } })
+    // A frame may come before React shows the notice (a busy machine): the focus must not depend on it.
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+      callback(0)
+      return 0
+    })
     render(<App />)
     await userEvent.click(await screen.findByTestId('heading-save'))
     const stale = await screen.findByTestId('stale')
     expect(stale).toHaveTextContent('changed elsewhere')
+    // The notice takes the focus, once shown, so that a screen reader reads it.
+    await waitFor(() => expect(stale).toHaveFocus())
     // Held until reloaded; the form does not repeat the refusal.
     expect(screen.getByTestId('heading-save')).toBeDisabled()
     expect(screen.getByTestId('save-version')).toBeDisabled()

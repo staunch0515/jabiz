@@ -24,7 +24,8 @@ export function AboutPage() {
       <p className="text-muted-foreground text-sm">{t('about.intro')}</p>
       <DescriptionList items={[
         { label: t('about.version'), value: <span data-testid="about-version">{APP_VERSION}</span> },
-        { label: t('about.built'), value: <span data-testid="about-built">{formatDateTime(APP_BUILT_AT)}</span> },
+        { label: t('about.built'), value: <span data-testid="about-built">
+          {APP_BUILT_AT ? formatDateTime(APP_BUILT_AT) : '—'}</span> },
       ]} />
       {auth?.signedIn && (
         <Button variant="outline" className="self-start" data-testid="about-sign-out"

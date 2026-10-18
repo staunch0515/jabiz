@@ -24,7 +24,7 @@ abstract class LegalItSupport extends PlayItSupport {
 
     /** The tables of Q7b, only ever inserted into. */
     static final List<String> LEGAL_TABLES = List.of("qb_legal_doc_version", "qb_legal_version_version",
-        "qb_consent_version", "qb_faq_entry_version");
+        "qb_legal_withdrawal_version", "qb_consent_version", "qb_faq_entry_version");
 
     /** A content administrator as {@code QB_ADMIN_CONTENT} has the parts the tests use (with a second factor). */
     String legalAdmin() {
@@ -75,7 +75,9 @@ abstract class LegalItSupport extends PlayItSupport {
     }
 
     Map<String, Object> publishInput(String kind, Instant effectiveAt, boolean requiresConsent) {
-        Map<String, Object> input = body("docId", docId(kind), "requiresConsent", requiresConsent);
+        Map<String, Object> draft = draftOf(kind);
+        Map<String, Object> input = body("docId", String.valueOf(draft.get("doc_id")), "requiresConsent",
+            requiresConsent, "baseRevision", ((Number) draft.get("version_no")).longValue());
         if (effectiveAt != null) {
             input.put("effectiveAt", effectiveAt.toString());
         }
@@ -101,6 +103,21 @@ abstract class LegalItSupport extends PlayItSupport {
         for (String kind : QbLegal.REQUIRED_FOR_LIVE) {
             publishNew(kind, mark, null, true);
         }
+    }
+
+    /** The key of a kind's published version. */
+    static String versionId(String kind, int versionNo) {
+        return String.valueOf(query("SELECT legal_version_id FROM qb_legal_version_version WHERE kind = ? "
+            + "AND legal_version_no = ?", kind, versionNo).getFirst().get("legal_version_id"));
+    }
+
+    Map<String, Object> withdrawInput(String kind, int versionNo, String reason) {
+        return body("legalVersionId", versionId(kind, versionNo), "reason", reason);
+    }
+
+    /** Withdraws an announced version, as the content administrator does in the administration. */
+    Map<String, Object> withdraw(String kind, int versionNo, String reason) {
+        return run("QB_LEGAL_WITHDRAW", legalAdmin(), withdrawInput(kind, versionNo, reason));
     }
 
     /** The caller's standing ({@code qb.me.consents}) with the kinds, by kind. */

@@ -28,6 +28,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 class LegalRulesTest {
 
     static final Instant T0 = Instant.parse("2026-11-01T00:00:00Z");
+    /** A horizon no test reaches. */
+    static final Instant FAR = T0.plus(Duration.ofDays(3650));
 
     static LegalRules.Version v(int number, boolean consent, Instant effectiveAt) {
         return new LegalRules.Version(number, consent, effectiveAt, "hash-" + number);
@@ -62,17 +64,50 @@ class LegalRulesTest {
 
     @Test
     void aPublicationTakesEffectNowOrLaterOnceNothingIsAnnouncedWithANewText() {
-        assertThat(LegalRules.publishProblems(List.of(), "h", T0, T0)).isEmpty();
+        assertThat(LegalRules.publishProblems(List.of(), "h", T0, T0, FAR)).isEmpty();
         assertThat(LegalRules.requiresConsent(List.of(), false)).isTrue();
         assertThat(LegalRules.nextNumber(List.of())).isEqualTo(1);
         List<LegalRules.Version> versions = List.of(v(1, true, T0), v(2, true, T0.plus(Duration.ofDays(7))));
         assertThat(LegalRules.nextNumber(versions)).isEqualTo(3);
         assertThat(LegalRules.requiresConsent(versions, false)).isFalse();
-        assertThat(LegalRules.publishProblems(versions, "hash-2", T0.minusSeconds(1), T0.plusSeconds(5)))
+        assertThat(LegalRules.publishProblems(versions, "hash-2", T0.minusSeconds(1), T0.plusSeconds(5), FAR))
             .extracting(Violation::ruleCode)
             .containsExactly(LegalCodes.EFFECTIVE_PAST, LegalCodes.UPCOMING_EXISTS, LegalCodes.UNCHANGED);
         assertThat(LegalRules.publishProblems(versions, "new", T0.plus(Duration.ofDays(8)),
-            T0.plus(Duration.ofDays(7)))).isEmpty();
+            T0.plus(Duration.ofDays(7)), FAR)).isEmpty();
+    }
+
+    @Test
+    void anEffectiveTimeBeyondTheHorizonIsRefused() {
+        Instant horizon = T0.plus(Duration.ofDays(180));
+        assertThat(LegalRules.publishProblems(List.of(), "h", horizon, T0, horizon)).isEmpty();
+        assertThat(LegalRules.publishProblems(List.of(), "h", horizon.plusSeconds(1), T0, horizon))
+            .extracting(Violation::ruleCode).containsExactly(LegalCodes.EFFECTIVE_TOO_LATE);
+        assertThat(LegalRules.horizon(T0, 180)).isEqualTo(horizon);
+    }
+
+    @Test
+    void aWithdrawnVersionNeverTakesEffectAsksNobodyAndKeepsItsNumber() {
+        LegalRules.Version withdrawn = v(2, true, T0.plus(Duration.ofDays(7))).withdrawn();
+        List<LegalRules.Version> versions = List.of(v(1, true, T0), withdrawn);
+        Instant after = T0.plus(Duration.ofDays(8));
+        assertThat(LegalRules.current(versions, after)).map(LegalRules.Version::number).contains(1);
+        assertThat(LegalRules.upcoming(versions, T0)).isEmpty();
+        assertThat(LegalRules.toAccept(versions, after)).isEqualTo(1);
+        assertThat(LegalRules.nextNumber(versions)).isEqualTo(3);
+        // Nothing is announced: the next may be published, the withdrawn text again too.
+        assertThat(LegalRules.publishProblems(versions, "hash-2", T0.plusSeconds(10), T0.plusSeconds(10), FAR))
+            .isEmpty();
+        assertThat(LegalRules.publishProblems(versions, "hash-1", T0.plusSeconds(10), T0.plusSeconds(10), FAR))
+            .extracting(Violation::ruleCode).containsExactly(LegalCodes.UNCHANGED);
+        // Only the first version that is not withdrawn always asks.
+        assertThat(LegalRules.requiresConsent(List.of(v(1, true, T0.plusSeconds(5)).withdrawn()), false)).isTrue();
+
+        assertThat(LegalRules.withdrawProblems(v(2, true, T0.plusSeconds(5)), T0)).isEmpty();
+        assertThat(LegalRules.withdrawProblems(v(2, true, T0.plusSeconds(5)), T0.plusSeconds(5)))
+            .extracting(Violation::ruleCode).containsExactly(LegalCodes.WITHDRAW_IN_EFFECT);
+        assertThat(LegalRules.withdrawProblems(withdrawn, T0)).extracting(Violation::ruleCode)
+            .containsExactly(LegalCodes.WITHDRAWN);
     }
 
     @Test
@@ -110,19 +145,22 @@ class LegalRulesTest {
 
     // ---- any sequence of publications ------------------------------------------------------------------------------
 
-    /** A publication: seconds after the previous one, whether it asks for consent, and how far ahead it takes effect. */
-    record Step(int gapSeconds, boolean consent, int aheadSeconds) {}
+    /**
+     * A publication: seconds after the previous one, whether it asks for consent, how far ahead it takes effect, and
+     * whether the version announced, if any, is withdrawn first.
+     */
+    record Step(int gapSeconds, boolean consent, int aheadSeconds, boolean withdraw) {}
 
     @Provide
     Arbitrary<List<Step>> publications() {
         return Combinators.combine(Arbitraries.integers().between(0, 1000), Arbitraries.of(true, false),
-            Arbitraries.integers().between(0, 3000)).as(Step::new).list().ofMaxSize(12);
+            Arbitraries.integers().between(0, 3000), Arbitraries.of(true, false)).as(Step::new).list().ofMaxSize(12);
     }
 
     /**
-     * Publishing what the rules allow, in order, keeps numbers and effective times in step; the version in effect at
-     * any time is the latest whose time has come, and the version to accept is the latest in effect asking for
-     * consent (or the first).
+     * Publishing and withdrawing what the rules allow, in order, keeps numbers in step and the effective times of
+     * the versions not withdrawn too; the version in effect at any time is the latest not withdrawn whose time has
+     * come, and the version to accept is the latest such asking for consent (or the first).
      */
     @Property
     void anySequenceOfPublicationsKeepsTheRules(@ForAll("publications") List<Step> steps,
@@ -131,9 +169,16 @@ class LegalRulesTest {
         Instant now = T0;
         for (Step step : steps) {
             now = now.plusSeconds(step.gapSeconds());
+            Instant at = now;
+            if (step.withdraw()) {
+                LegalRules.upcoming(versions, now).ifPresent(announced -> {
+                    assertThat(LegalRules.withdrawProblems(announced, at)).isEmpty();
+                    versions.set(versions.indexOf(announced), announced.withdrawn());
+                });
+            }
             Instant effectiveAt = now.plusSeconds(step.aheadSeconds());
             String hash = "text-" + versions.size();
-            List<Violation> problems = LegalRules.publishProblems(versions, hash, effectiveAt, now);
+            List<Violation> problems = LegalRules.publishProblems(versions, hash, effectiveAt, now, FAR);
             boolean announced = LegalRules.upcoming(versions, now).isPresent();
             assertThat(problems.isEmpty()).isEqualTo(!announced);
             if (problems.isEmpty()) {
@@ -141,14 +186,23 @@ class LegalRulesTest {
                     LegalRules.requiresConsent(versions, step.consent()), effectiveAt, hash));
             }
         }
+        List<LegalRules.Version> standing = versions.stream().filter(v -> !v.isWithdrawn()).toList();
         for (int i = 1; i < versions.size(); i++) {
             assertThat(versions.get(i).number()).isEqualTo(versions.get(i - 1).number() + 1);
-            assertThat(versions.get(i).effectiveAt()).isAfterOrEqualTo(versions.get(i - 1).effectiveAt());
+        }
+        for (int i = 1; i < standing.size(); i++) {
+            assertThat(standing.get(i).effectiveAt()).isAfterOrEqualTo(standing.get(i - 1).effectiveAt());
+        }
+        for (LegalRules.Version version : versions) {
+            if (version.isWithdrawn()) {
+                assertThat(LegalRules.withdrawProblems(version, now)).extracting(Violation::ruleCode)
+                    .containsExactly(LegalCodes.WITHDRAWN);
+            }
         }
         Instant probe = T0.plusSeconds(Math.floorMod(probeSeconds, 20_000));
         int expectedCurrent = 0;
         int expectedToAccept = 0;
-        for (LegalRules.Version version : versions) {
+        for (LegalRules.Version version : standing) {
             if (!version.effectiveAt().isAfter(probe)) {
                 expectedCurrent = version.number();
                 if (version.requiresConsent()) {
@@ -160,8 +214,8 @@ class LegalRulesTest {
             .isEqualTo(expectedCurrent);
         assertThat(LegalRules.toAccept(versions, probe)).isEqualTo(expectedToAccept);
         assertThat(LegalRules.toAccept(versions, probe)).isLessThanOrEqualTo(expectedCurrent);
-        if (!versions.isEmpty()) {
-            assertThat(versions.getFirst().requiresConsent()).isTrue();
+        if (!standing.isEmpty()) {
+            assertThat(standing.getFirst().requiresConsent()).isTrue();
         }
     }
 }

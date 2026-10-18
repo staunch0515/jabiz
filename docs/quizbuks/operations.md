@@ -132,12 +132,14 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
    - **收据开具方** `qb.issuer.name`、`qb.issuer.address`、`qb.issuer.registration-no`（登记号与税的措辞须财务、法务确认，上线检查清单）；未设名称时商家开不出收据；
    - **科目映射** `qb.journal.account.1110 … 5110`（会计系统中的科目代码；后台"QuizBuks 财务 → 分录导出 → 科目映射"只读显示，修改走受控变更）；没映射的科目使分录导出被拒；
    - 金额参数按业务确认：`qb.creator-fee-rate`、`qb.transfer.threshold`、`qb.transfer.review-above`、`qb.transfer.fee`、`qb.topup.min` / `max`；
-   - `qb.transfer.enabled` **保持 false**，直到取得法务意见（§4）。
+   - `qb.transfer.enabled` **保持 false**，直到取得法务意见（§4）；
+   - 法律文本的最长预告期 `qb.legal.max-announce-days`（缺省 180 天；未发布时同样按 180 天）。
 7. 在测试模式下做一次 Stripe 测试模式全流程（`stripe-test-mode.md`），并按 §2.4 做一次恢复演练。
 8. 每次部署新版本后：再执行一次 `QB_SETUP`，发布它的新提案（README 各阶段的"部署后"）。
 9. **条款、隐私政策与帮助**（Q7b）：`QB_SETUP` 为四种法律文本（答题人条款、商家条款、隐私政策、特定商取引法表记）各建一份**明确标注 `[TEST PLACEHOLDER]` 的草稿**，什么也不发布。
    正式文本由需求方或律师提供（日文为准据文本，英文须一并提供；中文可缺，页面显示英文并注明）。内容管理员在后台的"法律文本（草稿）"中把草稿换成正式文本（标题、正文，第二版起还有"改定的概要"，日英必填），
-   再在该行执行"发布"（`QB_LEGAL_PUBLISH`，每次要求二次验证，留审计）：生效时间留空即立即生效，或填以后的时间作预告（预告期间不能再发布同一种文本）；
+   再在后台扩展的"QuizBuks → 规约类"页（`/qb/legal`）预览草稿并"发布"（`QB_LEGAL_PUBLISH`，每次要求二次验证，留审计；发布的是页面读到的草稿版本，期间被改即拒绝）：生效时间留空即立即生效，或填以后的时间作预告（至多 `qb.legal.max-announce-days` 天；预告期间不能再发布同一种文本）；
+   预告有误时在同一页的版本列表中填理由"撤回"（`QB_LEGAL_WITHDRAW`，只能在生效前；撤回的版本永不生效、不要求同意，版本号不再使用，公开的历史中标为"已撤回"）；
    实质性变更勾选"须重新同意"，措辞修订不勾。已发布的版本不可修改，改错只能发布新版本。正式模式下缺少已生效的答题人条款、商家条款或隐私政策时**启动告警**（`LiveModeDataCheck`）。
    帮助中心的问答在后台"帮助中心问答"中维护（英语必填、`seq` 排序、"公开中"才出现在页面）。支持邮箱 `qb.support.email`（普通参数，空即不显示"仍需帮助"的联系方式）在后台参数中设。
 

@@ -18,6 +18,15 @@ public final class LegalCodes {
     public static final String UPCOMING_EXISTS = "QB_LEGAL_UPCOMING_EXISTS";
     /** Publishing: the draft was edited since the publisher read it. */
     public static final String CHANGED = "QB_LEGAL_CHANGED";
+    /**
+     * Publishing: the effective time is further ahead than {@code qb.legal.max-announce-days} (parameter
+     * {@code days}).
+     */
+    public static final String EFFECTIVE_TOO_LATE = "QB_LEGAL_EFFECTIVE_TOO_LATE";
+    /** Withdrawing: the version is in effect already; a new version replaces it (parameter {@code versionNo}). */
+    public static final String WITHDRAW_IN_EFFECT = "QB_LEGAL_WITHDRAW_IN_EFFECT";
+    /** Withdrawing: the version is withdrawn already (parameter {@code versionNo}). */
+    public static final String WITHDRAWN = "QB_LEGAL_WITHDRAWN";
 
     /** Completing the profile or applying as a sponsor without accepting the terms. */
     public static final String TERMS_REQUIRED = "QB_TERMS_REQUIRED";
@@ -29,7 +38,8 @@ public final class LegalCodes {
     public static final String CONSENT_KIND = "QB_CONSENT_KIND";
 
     public static final List<String> ALL = List.of(TRANSLATION_MISSING, UNCHANGED, EFFECTIVE_PAST, UPCOMING_EXISTS,
-        CHANGED, TERMS_REQUIRED, TERMS_OUTDATED, CONSENT_REQUIRED, CONSENT_KIND);
+        CHANGED, EFFECTIVE_TOO_LATE, WITHDRAW_IN_EFFECT, WITHDRAWN, TERMS_REQUIRED, TERMS_OUTDATED, CONSENT_REQUIRED,
+        CONSENT_KIND);
 
     private LegalCodes() {}
 }

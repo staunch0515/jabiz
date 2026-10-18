@@ -123,6 +123,9 @@ class LegalIT extends LegalItSupport {
         long read = ((Number) draftOf(kind).get("version_no")).longValue();
         editDraft(kind, "Terms", "規約", "Text, edited", "本文（編集）", null, null);
         Map<String, Object> input = publishInput(kind, null, true);
+        // The publisher always says which draft they read (review L1).
+        input.remove("baseRevision");
+        refused("QB_LEGAL_PUBLISH", legalAdmin(), input, 400);
         input.put("baseRevision", read);
         assertThat(codes(refused("QB_LEGAL_PUBLISH", legalAdmin(), input, 422))).containsExactly(LegalCodes.CHANGED);
         input.put("baseRevision", ((Number) draftOf(kind).get("version_no")).longValue());

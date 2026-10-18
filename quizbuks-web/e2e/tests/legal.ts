@@ -79,6 +79,41 @@ export async function draftOf(request: APIRequestContext, token: string, kind: L
  */
 export async function publishVersion(request: APIRequestContext, token: string, kind: LegalKind,
   requiresConsent: boolean, mark: string): Promise<number> {
+  return (await publish(request, token, kind, requiresConsent, mark, null)).versionNo as number
+}
+
+/**
+ * Announces a new version of a kind for a later time and returns `QB_LEGAL_PUBLISH`'s output (its `versionId` and
+ * `versionNo`). A version an earlier run announced and left is withdrawn first, so that runs repeat.
+ */
+export async function announceVersion(request: APIRequestContext, token: string, kind: LegalKind, mark: string,
+  effectiveAt: string): Promise<Record<string, unknown>> {
+  const versions = await request.post('/api/queries/qb.admin.legal-versions', {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { filters: [{ field: 'kind', op: 'eq', value: kind }], limit: 100 },
+  })
+  expect(versions.status(), await versions.text()).toBe(200)
+  for (const row of (await versions.json()).items as Record<string, unknown>[]) {
+    if (!row.withdrawn && Date.parse(String(row.effectiveAt)) > Date.now()) {
+      await withdrawVersion(request, token, String(row.legalVersionId), 'Left by an earlier run')
+    }
+  }
+  return publish(request, token, kind, true, mark, effectiveAt)
+}
+
+/** Withdraws an announced version (`QB_LEGAL_WITHDRAW`). */
+export async function withdrawVersion(request: APIRequestContext, token: string, legalVersionId: string,
+  reason: string) {
+  const response = await request.post('/api/processes/QB_LEGAL_WITHDRAW/latest', {
+    headers: { Authorization: `Bearer ${token}`, 'Idempotency-Key': crypto.randomUUID() },
+    data: { legalVersionId, reason },
+  })
+  expect(response.status(), await response.text()).toBe(200)
+  return (await response.json()).output as Record<string, unknown>
+}
+
+async function publish(request: APIRequestContext, token: string, kind: LegalKind, requiresConsent: boolean,
+  mark: string, effectiveAt: string | null): Promise<Record<string, unknown>> {
   const draft = await draftOf(request, token, kind)
   const text = (en: string, ja: string) => ({ en, ja })
   const edited = await request.post(`/api/datasets/${encodeURIComponent(DRAFTS)}/commit`, {
@@ -90,12 +125,14 @@ export async function publishVersion(request: APIRequestContext, token: string, 
     } }] },
   })
   expect(edited.status(), await edited.text()).toBe(200)
+  // The draft as edited: the version the publisher read (required, review L1).
+  const read = await draftOf(request, token, kind)
   const response = await request.post('/api/processes/QB_LEGAL_PUBLISH/latest', {
     headers: { Authorization: `Bearer ${token}`, 'Idempotency-Key': crypto.randomUUID() },
-    data: { docId: draft.id, requiresConsent },
+    data: { docId: draft.id, requiresConsent, baseRevision: read.version, ...(effectiveAt ? { effectiveAt } : {}) },
   })
   expect(response.status(), await response.text()).toBe(200)
-  return (await response.json()).output.versionNo as number
+  return (await response.json()).output as Record<string, unknown>
 }
 
 /** The texts in effect now (the public template, anonymous): the kinds that have one. */

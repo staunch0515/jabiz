@@ -210,6 +210,8 @@ class SetupIT extends QbItSupport {
         QbParams.ISSUER.forEach(key -> expected.put(key, ""));
         // Q7b: no support address until an administrator sets one.
         expected.put(QbParams.SUPPORT_EMAIL, "");
+        // Q7b review M1: how far ahead a legal text may be announced.
+        expected.put(QbParams.LEGAL_MAX_ANNOUNCE_DAYS, "180");
         assertThat(values).containsExactlyInAnyOrderEntriesOf(expected);
     }
 

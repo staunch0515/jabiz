@@ -1,9 +1,11 @@
--- Terms, privacy and help (docs/quizbuks/plans/Q7-messages-legal.md, Q7b, D-Q7-4 – D-Q7-6). All four are temporal and
+-- Terms, privacy and help (docs/quizbuks/plans/Q7-messages-legal.md, Q7b, D-Q7-4 – D-Q7-6). All five are temporal and
 -- only ever inserted into (platform docs/design/04-temporal-append-only.md, decision D9):
 --  * qb_legal_doc_version: the editable draft of each kind of legal text (one instance per kind; the kind is unique
 --    among current versions through the platform's check, decision D6), edited by the content administrators;
 --  * qb_legal_version_version: a published version, written once (t.writeOnce(): one row per key, decision D29), unique per
 --    kind and number. The version in effect at a time is the highest number whose effective_at is not after it;
+--  * qb_legal_withdrawal_version: the withdrawal of a version announced for later, before it takes effect, written
+--    once; a withdrawn version never takes effect and its number is not given again;
 --  * qb_consent_version: a user's acceptance of one version, written once;
 --  * qb_faq_entry_version: the help centre's questions and answers, edited by the content administrators.
 -- Texts in several languages are jsonb ({language: text}, decision D20).
@@ -48,6 +50,14 @@ SELECT quizbuks_create_temporal_table('qb_legal_version_version', 'legal_version
     effective_at     timestamptz   NOT NULL,
     content_hash     varchar(64)   NOT NULL');
 
+SELECT quizbuks_create_temporal_table('qb_legal_withdrawal_version', 'withdrawal_id', '
+    legal_version_id uuid          NOT NULL REFERENCES entity_registry (entity_id),
+    kind             varchar(20)   NOT NULL,
+    legal_version_no numeric(6, 0) NOT NULL,
+    withdrawn_at     timestamptz   NOT NULL,
+    withdrawn_by     varchar(128)  NOT NULL,
+    reason           varchar(1000) NOT NULL');
+
 SELECT quizbuks_create_temporal_table('qb_consent_version', 'consent_id', '
     user_id          varchar(128)  NOT NULL,
     kind             varchar(20)   NOT NULL,
@@ -72,6 +82,10 @@ CREATE INDEX qb_legal_doc_version_kind_idx ON qb_legal_doc_version (kind);
 -- are read by kind (every template and the publication), the consents by user (the gate and the pages).
 CREATE UNIQUE INDEX qb_legal_version_version_once_idx ON qb_legal_version_version (legal_version_id);
 CREATE UNIQUE INDEX qb_legal_version_version_no_idx ON qb_legal_version_version (kind, legal_version_no);
+-- A version is withdrawn at most once; the withdrawals of a kind are read with its versions.
+CREATE UNIQUE INDEX qb_legal_withdrawal_version_once_idx ON qb_legal_withdrawal_version (withdrawal_id);
+CREATE UNIQUE INDEX qb_legal_withdrawal_version_version_idx ON qb_legal_withdrawal_version (legal_version_id);
+CREATE INDEX qb_legal_withdrawal_version_kind_idx ON qb_legal_withdrawal_version (kind, legal_version_no);
 CREATE UNIQUE INDEX qb_consent_version_once_idx ON qb_consent_version (consent_id);
 CREATE INDEX qb_consent_version_user_idx ON qb_consent_version (user_id, kind, legal_version_no DESC);
 

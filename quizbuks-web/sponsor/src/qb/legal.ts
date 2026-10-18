@@ -1,4 +1,4 @@
-import { runProcess, runQuery } from '@jabiz/client'
+import { api, runProcess, runQuery, unwrap } from '@jabiz/client'
 import { LEGAL } from './ids'
 
 /*
@@ -53,6 +53,8 @@ export interface LegalVersion {
   changeSummary: I18nText | null
   requiresConsent: boolean
   effectiveAt: string
+  /** Withdrawn before it took effect (it never did). */
+  withdrawn: boolean
 }
 
 /** A row of `qb.public.legal-history`. */
@@ -62,6 +64,8 @@ export interface LegalHistoryRow {
   changeSummary: I18nText | null
   requiresConsent: boolean
   effectiveAt: string
+  /** Withdrawn before it took effect (it never did). */
+  withdrawn: boolean
 }
 
 export type FaqAudience = 'APP' | 'SPONSOR'
@@ -95,8 +99,47 @@ export interface ConsentState {
   mustAccept: boolean
 }
 
-/** The time the pages read the texts at: now, to the minute (the public answers are cached and tagged by it). */
-export function minuteNow(now: number = Date.now()): string {
+/*
+ * The server's clock as the pages know it (review M2): which version is in effect, and whether one must be accepted,
+ * is the server's to say at its own time, not the device's (whose clock may be minutes or days off). The answers of
+ * `qb.me.consents` carry a `Date` header (whole seconds): from it the pages learn how far the device is off. Only
+ * that template's answers teach it: the public ones may come from a cache, with the date of when they were made.
+ */
+let clockOffset = 0
+/** What the header cannot tell apart: its whole seconds and a little. */
+const CLOCK_TOLERANCE_MS = 2_000
+
+/** Now (epoch milliseconds) by the server's clock, as far as the pages know it. */
+export function serverNow(now: number = Date.now()): number {
+  return now + clockOffset
+}
+
+/**
+ * Learns the server's clock from an answer's `Date` header, sent and received at those device times; whether the
+ * offset changed. Within the header's precision and half the round trip the clocks agree.
+ */
+export function learnServerClock(date: string | null, sentAt: number, receivedAt: number): boolean {
+  const server = date ? Date.parse(date) : Number.NaN
+  if (Number.isNaN(server)) return false
+  // The header is truncated to the second: the server answered within [server, server + 1 s).
+  const estimate = server + 500 - (sentAt + receivedAt) / 2
+  const margin = CLOCK_TOLERANCE_MS + (receivedAt - sentAt) / 2
+  const next = Math.abs(estimate) <= margin ? 0 : Math.round(estimate)
+  if (Math.abs(next - clockOffset) <= margin) return false
+  clockOffset = next
+  return true
+}
+
+/** Forgets the server's clock (tests). */
+export function resetServerClock() {
+  clockOffset = 0
+}
+
+/**
+ * The time the pages read the texts at: the server's now, to the minute (the public answers are cached and tagged
+ * by it).
+ */
+export function minuteNow(now: number = serverNow()): string {
   return new Date(Math.floor(now / 60_000) * 60_000).toISOString()
 }
 
@@ -133,12 +176,21 @@ export const readFaq = (audience: FaqAudience, q?: string) =>
 
 /**
  * The caller's standing with the kinds their front end asks for; a kind without a version in effect has no row. At
- * this very time, not to the minute (the answer is the caller's own, not cached): a version that took effect seconds
- * ago is the one the server asks for.
+ * the server's time, this very second, not to the minute (the answer is the caller's own, not cached): a version that
+ * took effect seconds ago is the one the server asks for. When the answer shows the device's clock is off by more
+ * than the page knew, it is read again at the server's time (review M2).
  */
-export async function readMyConsents(kinds: readonly LegalKind[], at: string = new Date().toISOString()):
-  Promise<ConsentState[]> {
-  return (await runQuery<ConsentState>(LEGAL.myConsents, { params: { kinds: [...kinds], at } })).items
+export async function readMyConsents(kinds: readonly LegalKind[]): Promise<ConsentState[]> {
+  for (let attempt = 0; ; attempt++) {
+    const sentAt = Date.now()
+    const answer = await api.POST('/api/queries/{queryId}', {
+      params: { path: { queryId: LEGAL.myConsents } },
+      body: { params: { kinds: [...kinds], at: new Date(serverNow(sentAt)).toISOString() } },
+    })
+    const corrected = learnServerClock(answer.response.headers.get('Date'), sentAt, Date.now())
+    const page = await unwrap(Promise.resolve(answer))
+    if (!corrected || attempt > 0) return (page.items ?? []) as unknown as ConsentState[]
+  }
 }
 
 /** The support address signed-in users write to, or null when none is set. */

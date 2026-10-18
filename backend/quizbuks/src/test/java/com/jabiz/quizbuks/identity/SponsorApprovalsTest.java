@@ -51,6 +51,21 @@ class SponsorApprovalsTest {
             .allSatisfy(changed -> assertThat(SponsorApprovals.hash(changed)).isNotEqualTo(hash));
     }
 
+    /** Without a version of the terms the content is that of before Q7b, so earlier requests stay bound (L2). */
+    @Test
+    void withoutAVersionOfTheTermsTheContentIsAsBefore() {
+        Map<String, Object> before = new LinkedHashMap<>();
+        before.put("contactName", "Sara");
+        before.put("company", "Acme");
+        before.put("intro", "We make **quizzes**.");
+        before.put("avatar", AVATAR.toString());
+        before.put("termsAcceptedAt", TERMS.toString());
+        Map<String, Object> content = SponsorApprovals.content("Sara", "Acme", "We make **quizzes**.", AVATAR, TERMS,
+            null);
+        assertThat(content).doesNotContainKey("termsVersionNo");
+        assertThat(SponsorApprovals.hash(content)).isEqualTo(SponsorApprovals.hash(before));
+    }
+
     @Test
     void theOnlyFactIsTheReviewSwitch() {
         assertThat(SponsorApprovals.facts(true)).containsExactly(Map.entry("autoApprove", true));

@@ -5,13 +5,16 @@ import com.jabiz.context.RequestContext;
 import com.jabiz.entity.Violation;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
+import com.jabiz.process.StepSpec;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.quizbuks.identity.CallerChecks;
 import com.jabiz.quizbuks.identity.QbAccounts;
+import com.jabiz.quizbuks.setup.QbParams;
 import com.jabiz.runtime.BusinessRuleViolationException;
 import com.jabiz.runtime.EntityInstance;
+import com.jabiz.runtime.param.ParamEntities;
 import com.jabiz.runtime.process.steps.HoldLock;
 import com.jabiz.runtime.process.steps.LoadEntity;
 import com.jabiz.runtime.process.steps.QueryEntities;
@@ -33,6 +36,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 
 /**
  * Publishing legal texts and accepting them (docs/quizbuks/plans/Q7-messages-legal.md, D-Q7-4, D-Q7-5):
@@ -40,6 +44,8 @@ import java.util.Set;
  *   <li>{@code QB_LEGAL_PUBLISH}: a content administrator, with a second factor, publishes a kind's draft as its next
  *       version, now or from a later time (Q7-5, Q7-6). The version is written once; the draft stays editable. The
  *       platform audits both.</li>
+ *   <li>{@code QB_LEGAL_WITHDRAW}: the same, with a second factor and a reason, withdraws a version announced for later
+ *       before it takes effect (review M1); its number is not given again.</li>
  *   <li>{@code QB_CONSENT_ACCEPT}: a signed-in user accepts the versions in effect of the texts their front end asks
  *       for, after signing in (Q7-2): the takers' terms and the privacy policy in the app, the sponsors' terms and the
  *       privacy policy in the sponsor console.</li>
@@ -48,12 +54,17 @@ import java.util.Set;
 public final class LegalProcesses {
 
     public static final String PUBLISH = "QB_LEGAL_PUBLISH";
+    public static final String WITHDRAW = "QB_LEGAL_WITHDRAW";
     public static final String ACCEPT = "QB_CONSENT_ACCEPT";
 
     static final String INPUT = "input";
     static final String DOC_ID = "docId";
     static final String DOC = "doc";
     static final String VERSIONS = "versions";
+    static final String WITHDRAWALS = "withdrawals";
+    static final String HORIZON = "maxAnnounceDays";
+    static final String VERSION_KEY = "legalVersionId";
+    static final String VERSION = "version";
     static final String OUTPUT = "output";
 
     private static final String UUID_PATTERN =
@@ -61,16 +72,26 @@ public final class LegalProcesses {
 
     /**
      * @param docId           the draft ({@code QbLegalDoc}) to publish
-     * @param effectiveAt     when the version takes effect: none for now, or a later time (announced until then)
+     * @param effectiveAt     when the version takes effect: none for now, or a later time (announced until then), at
+     *                        most {@code qb.legal.max-announce-days} ahead
      * @param requiresConsent whether users must accept it again (a change of substance); a rewording does not ask
      *                        anybody. The first version of a kind always does.
-     * @param baseRevision    the draft's version the publisher read; when given and no longer current, 422
+     * @param baseRevision    the draft's version the publisher read (required, review L1); no longer current: 422
      */
     public record PublishInput(@NotBlank @Pattern(regexp = UUID_PATTERN) String docId, Instant effectiveAt,
-        Boolean requiresConsent, Long baseRevision) {}
+        Boolean requiresConsent, @NotNull Long baseRevision) {}
 
-    public record PublishOutput(String kind, int versionNo, Instant effectiveAt, boolean requiresConsent,
-        String contentHash) {}
+    public record PublishOutput(String kind, String versionId, int versionNo, Instant effectiveAt,
+        boolean requiresConsent, String contentHash) {}
+
+    /**
+     * @param legalVersionId the announced version ({@code QbLegalVersion}) to withdraw
+     * @param reason         why (kept with the withdrawal, for the administrators)
+     */
+    public record WithdrawInput(@NotBlank @Pattern(regexp = UUID_PATTERN) String legalVersionId,
+        @NotBlank @Size(max = QbLegal.REASON_LENGTH) String reason) {}
+
+    public record WithdrawOutput(String kind, int versionNo, Instant withdrawnAt) {}
 
     /** One text accepted: its kind and the number of the version in effect the page showed. */
     public record Acceptance(@NotBlank @Size(max = 20) String kind, @NotNull @Positive Integer versionNo) {}
@@ -98,14 +119,40 @@ public final class LegalProcesses {
                     return ctx;
                 })
                 .outputMapper(ctx -> ctx.get(OUTPUT, PublishOutput.class))
-                .step("Lock the kind's publications", HoldLock.<ProcessContext>exclusive(
-                    ctx -> QbLegal.lockName(ctx.get(DOC_ID))))
+                // The draft's kind never changes, so it is read before the kind's lock (review L3); its version is
+                // checked against the publisher's and written back conditionally.
                 .step("Load the draft", LoadEntity.by(QbLegal.defaultDataset(QbLegal.DOC), DOC_ID, DOC))
-                .step("Load the kind's versions", QueryEntities.<ProcessContext>of(
-                    QbLegal.defaultDataset(QbLegal.VERSION), ctx -> EntityQuery.builder()
-                        .where(new QueryPredicate.Eq("kind", ctx.get(DOC, EntityInstance.class).get("kind")))
-                        .limit(Integer.MAX_VALUE).build(), VERSIONS))
+                .step("Lock the kind's versions", HoldLock.<ProcessContext>exclusive(
+                    ctx -> QbLegal.lockName(ctx.get(DOC, EntityInstance.class).get("kind"))))
+                .step("Load the kind's versions", loadKind(ctx -> ctx.get(DOC, EntityInstance.class).get("kind")))
                 .compute("Publish", (metadata, ctx) -> publish(ctx)));
+    }
+
+    /**
+     * Under the kind's lock, in one statement: its versions, its withdrawals and the announcement horizon (read
+     * without failing while it has no published value).
+     */
+    static StepSpec<QueryEntities.AllMetadata<ProcessContext>, ProcessContext> loadKind(
+        Function<ProcessContext, String> kind) {
+        return QueryEntities.<ProcessContext>all(
+            QueryEntities.query(QbLegal.defaultDataset(QbLegal.VERSION), ctx -> EntityQuery.builder()
+                .where(new QueryPredicate.Eq("kind", kind.apply(ctx))).limit(Integer.MAX_VALUE).build(), VERSIONS),
+            QueryEntities.query(QbLegal.defaultDataset(QbLegal.WITHDRAWAL), ctx -> EntityQuery.builder()
+                .where(new QueryPredicate.Eq("kind", kind.apply(ctx))).limit(Integer.MAX_VALUE).build(),
+                WITHDRAWALS),
+            QueryEntities.query(ParamEntities.DATASET, ctx -> EntityQuery.builder()
+                .where(new QueryPredicate.Eq(ParamEntities.KEY, QbParams.LEGAL_MAX_ANNOUNCE_DAYS)).limit(1).build(),
+                HORIZON));
+    }
+
+    /** The announcement horizon in days: the published value, else the default. */
+    @SuppressWarnings("unchecked")
+    static int maxAnnounceDays(ProcessContext ctx) {
+        List<EntityInstance> rows = (List<EntityInstance>) ctx.get(HORIZON);
+        if (rows == null || rows.isEmpty() || rows.getFirst().get(ParamEntities.VALUE) == null) {
+            return QbParams.LEGAL_MAX_ANNOUNCE_DAYS_DEFAULT;
+        }
+        return new BigDecimal(String.valueOf((Object) rows.getFirst().get(ParamEntities.VALUE))).intValueExact();
     }
 
     /** What a version's content hash covers: its title and text in every language. */
@@ -127,7 +174,7 @@ public final class LegalProcesses {
     static void publish(ProcessContext ctx) {
         PublishInput input = ctx.get(INPUT, PublishInput.class);
         EntityInstance doc = ctx.get(DOC, EntityInstance.class);
-        if (input.baseRevision() != null && input.baseRevision() != doc.version()) {
+        if (input.baseRevision() != doc.version()) {
             throw new BusinessRuleViolationException(List.of(new Violation("baseRevision", LegalCodes.CHANGED,
                 "The draft changed meanwhile: version " + doc.version() + ", not " + input.baseRevision(),
                 Map.of("revision", doc.version(), "baseRevision", input.baseRevision()))));
@@ -146,14 +193,15 @@ public final class LegalProcesses {
         }
         // After the first version, the summary of changes is what users read before accepting again (the consent
         // prompt) and what the history lists.
-        if (!versions.isEmpty()) {
+        if (LegalRules.latest(versions).isPresent()) {
             for (String language : LegalRules.missingLanguages(summary, QbLegal.REQUIRED_LANGUAGES)) {
                 problems.add(missing("changeSummary", language));
             }
         }
         Instant effectiveAt = input.effectiveAt() == null ? ctx.opTime() : input.effectiveAt();
         String hash = hash(title, body);
-        problems.addAll(LegalRules.publishProblems(versions, hash, effectiveAt, ctx.opTime()));
+        problems.addAll(LegalRules.publishProblems(versions, hash, effectiveAt, ctx.opTime(),
+            LegalRules.horizon(ctx.opTime(), maxAnnounceDays(ctx))));
         if (!problems.isEmpty()) {
             throw new BusinessRuleViolationException(problems);
         }
@@ -165,18 +213,19 @@ public final class LegalProcesses {
         values.put("versionNumber", BigDecimal.valueOf(number));
         values.put("title", title);
         values.put("body", body);
-        values.put("changeSummary", versions.isEmpty() ? null : summary);
+        values.put("changeSummary", LegalRules.latest(versions).isEmpty() ? null : summary);
         values.put("requiresConsent", requiresConsent);
         values.put("publishedAt", ctx.opTime());
         values.put("publishedBy", ctx.request().actorId());
         values.put("effectiveAt", effectiveAt);
         values.put("contentHash", hash);
-        ctx.changes().insert(QbLegal.VERSION, values);
+        Object versionId = ctx.changes().insert(QbLegal.VERSION, values);
         Map<String, Object> draft = new LinkedHashMap<>();
         draft.put("latestVersionNo", BigDecimal.valueOf(number));
         draft.put("lastPublishedAt", ctx.opTime());
         ctx.changes().update(QbLegal.DOC, doc.id(), doc.version(), draft);
-        ctx.put(OUTPUT, new PublishOutput(kind, number, effectiveAt, requiresConsent, hash));
+        ctx.put(OUTPUT, new PublishOutput(kind, String.valueOf(versionId), number, effectiveAt, requiresConsent,
+            hash));
     }
 
     private static Violation missing(String field, String language) {
@@ -184,21 +233,78 @@ public final class LegalProcesses {
             + " is missing", Map.of("field", field, "lang", language));
     }
 
+    /** The kind's versions as {@link #loadKind} read them, the withdrawn ones marked. */
     @SuppressWarnings("unchecked")
     static List<LegalRules.Version> versions(ProcessContext ctx) {
         List<EntityInstance> rows = (List<EntityInstance>) ctx.get(VERSIONS);
+        List<EntityInstance> withdrawals = (List<EntityInstance>) ctx.get(WITHDRAWALS);
+        Set<String> withdrawn = new java.util.HashSet<>();
+        for (EntityInstance withdrawal : withdrawals == null ? List.<EntityInstance>of() : withdrawals) {
+            withdrawn.add(String.valueOf((Object) withdrawal.get(VERSION_KEY)));
+        }
         List<LegalRules.Version> versions = new ArrayList<>();
         for (EntityInstance row : rows == null ? List.<EntityInstance>of() : rows) {
-            versions.add(new LegalRules.Version(ConsentChecks.number(row.get("versionNumber")),
-                Boolean.TRUE.equals(row.get("requiresConsent")), instant(row.get("effectiveAt")),
-                row.get("contentHash")));
+            versions.add(version(row, withdrawn.contains(String.valueOf(row.id()))));
         }
         return versions;
+    }
+
+    static LegalRules.Version version(EntityInstance row, boolean withdrawn) {
+        return new LegalRules.Version(ConsentChecks.number(row.get("versionNumber")),
+            Boolean.TRUE.equals(row.get("requiresConsent")), instant(row.get("effectiveAt")), row.get("contentHash"),
+            withdrawn);
     }
 
     static Instant instant(Object value) {
         return value instanceof OffsetDateTime time ? time.toInstant()
             : value instanceof Instant time ? time : Instant.parse(String.valueOf(value));
+    }
+
+    // ---- withdraw --------------------------------------------------------------------------------------------------
+
+    public static ProcessDefinition<WithdrawInput, WithdrawOutput, ProcessContext> withdraw() {
+        return ProcessDefinition.define(WITHDRAW, 1, WithdrawInput.class, WithdrawOutput.class,
+            ProcessContext.class, pb -> pb
+                .description("Withdraws a version of a legal text announced for later, before it takes effect.")
+                .permissions(QbPermissions.ADMIN_CONTENT_WRITE)
+                .requiresVerifiedEmail()
+                .requiresMfa(MfaRequirement.ALWAYS)
+                .actsOn(QbLegal.VERSION, VERSION_KEY)
+                .contextFactory((start, input) -> {
+                    ProcessContext ctx = new ProcessContext(start);
+                    ctx.put(INPUT, input);
+                    ctx.put(VERSION_KEY, input.legalVersionId());
+                    return ctx;
+                })
+                .outputMapper(ctx -> ctx.get(OUTPUT, WithdrawOutput.class))
+                // A version is written once: its kind and effective time are read before the kind's lock.
+                .step("Load the version", LoadEntity.by(QbLegal.defaultDataset(QbLegal.VERSION), VERSION_KEY,
+                    VERSION))
+                .step("Lock the kind's versions", HoldLock.<ProcessContext>exclusive(
+                    ctx -> QbLegal.lockName(ctx.get(VERSION, EntityInstance.class).get("kind"))))
+                .step("Load the kind's versions", loadKind(ctx -> ctx.get(VERSION, EntityInstance.class).get("kind")))
+                .compute("Withdraw", (metadata, ctx) -> withdraw(ctx)));
+    }
+
+    static void withdraw(ProcessContext ctx) {
+        WithdrawInput input = ctx.get(INPUT, WithdrawInput.class);
+        EntityInstance row = ctx.get(VERSION, EntityInstance.class);
+        boolean withdrawn = versions(ctx).stream().anyMatch(v -> v.isWithdrawn()
+            && v.number() == ConsentChecks.number(row.get("versionNumber")));
+        LegalRules.Version version = version(row, withdrawn);
+        List<Violation> problems = LegalRules.withdrawProblems(version, ctx.opTime());
+        if (!problems.isEmpty()) {
+            throw new BusinessRuleViolationException(problems);
+        }
+        Map<String, Object> values = new LinkedHashMap<>();
+        values.put(VERSION_KEY, row.id());
+        values.put("kind", row.get("kind"));
+        values.put("versionNumber", BigDecimal.valueOf(version.number()));
+        values.put("withdrawnAt", ctx.opTime());
+        values.put("withdrawnBy", ctx.request().actorId());
+        values.put("reason", input.reason().strip());
+        ctx.changes().insert(QbLegal.WITHDRAWAL, values);
+        ctx.put(OUTPUT, new WithdrawOutput(row.get("kind"), version.number(), ctx.opTime()));
     }
 
     // ---- accept ----------------------------------------------------------------------------------------------------

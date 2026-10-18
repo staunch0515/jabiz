@@ -12,6 +12,8 @@ export const DATASET = {
   version: 'urn:jabiz:dataset:default:QbQuizVersion',
   sponsor: 'urn:jabiz:dataset:default:QbSponsor',
   ban: 'urn:jabiz:dataset:default:QbUserBan',
+  /** The drafts of the legal texts, edited on the platform's generic pages (`qb.admin.content.write`; Q7b). */
+  legalDoc: 'urn:jabiz:dataset:default:QbLegalDoc',
 } as const
 
 /** SQL templates (`queries/qb/admin`). */
@@ -50,6 +52,8 @@ export const TEMPLATE = {
   journalMapping: 'qb.admin.journal-mapping',
   /** A user's acceptances of the terms and the privacy policy (Q7b; `qb.admin.users.read`). */
   consents: 'qb.admin.consents',
+  /** The published versions of the legal texts and their withdrawals (Q7b review M1; `qb.admin.content.write`). */
+  legalVersions: 'qb.admin.legal-versions',
 } as const
 
 /** Processes the finance pages run (Q9c); the server checks each. */
@@ -64,6 +68,10 @@ export const PROCESS = {
   journalExport: 'QB_JOURNAL_EXPORT',
   /** Records the accounting system's voucher number of an export (`qb.journal.confirm`). */
   journalConfirm: 'QB_JOURNAL_EXPORT_CONFIRM',
+  /** Publishes a legal text's draft as its next version (`qb.admin.content.write`, with a second factor; Q7b). */
+  legalPublish: 'QB_LEGAL_PUBLISH',
+  /** Withdraws a version announced for later, before it takes effect (the same; review M1). */
+  legalWithdraw: 'QB_LEGAL_WITHDRAW',
 } as const
 
 /** The platform's controlled changes (four eyes, decision D40): the mapping changes only through them. */
@@ -182,6 +190,8 @@ export const PATH = {
   reportsOf: (month: string) => `/qb/finance/reports?${new URLSearchParams({ month })}`,
   journal: '/qb/finance/journal',
   journalMapping: '/qb/finance/journal/mapping',
+  /** The legal texts: publishing the drafts and withdrawing announced versions (Q7b). */
+  legal: '/qb/legal',
   /** The platform's own pages. */
   tasks: '/tasks',
 } as const

@@ -14,7 +14,10 @@ import java.util.List;
  *       marked test placeholder;</li>
  *   <li>{@code QbLegalVersion}: a published version, written once ({@code QB_LEGAL_PUBLISH}); what users accept and
  *       what the public pages show. The version in effect at a time is the highest number whose {@code effectiveAt}
- *       is not after it ({@link LegalRules}): a version announced for later needs no job to take effect;</li>
+ *       is not after it and that is not withdrawn ({@link LegalRules}): a version announced for later needs no job to
+ *       take effect;</li>
+ *   <li>{@code QbLegalWithdrawal}: the withdrawal of an announced version before it takes effect, written once
+ *       ({@code QB_LEGAL_WITHDRAW});</li>
  *   <li>{@code QbConsent}: a user's acceptance of one version, written once;</li>
  *   <li>{@code QbFaqEntry}: a question and its answer of the help centre, edited by the content administrators.</li>
  * </ul>
@@ -23,6 +26,7 @@ public final class QbLegal {
 
     public static final String DOC = "QbLegalDoc";
     public static final String VERSION = "QbLegalVersion";
+    public static final String WITHDRAWAL = "QbLegalWithdrawal";
     public static final String CONSENT = "QbConsent";
     public static final String FAQ = "QbFaqEntry";
 
@@ -79,6 +83,8 @@ public final class QbLegal {
 
     /** The published versions, readable by anybody: public pages (decision D17). */
     public static final String PUBLIC_VERSIONS = "urn:jabiz:dataset:public:" + VERSION;
+    /** Which versions were withdrawn (their kind, number and time only), readable by anybody. */
+    public static final String PUBLIC_WITHDRAWALS = "urn:jabiz:dataset:public:" + WITHDRAWAL;
     /** The published questions and answers, readable by anybody. */
     public static final String PUBLIC_FAQ = "urn:jabiz:dataset:public:" + FAQ;
     /** One's own consents, read only. */
@@ -94,10 +100,15 @@ public final class QbLegal {
     public static final String ADMIN_CONSENTS_TEMPLATE = "qb.admin.consents";
     public static final String CONSENT_STATE_TEMPLATE = "qb.system.consent-state";
 
-    /** The lock of one kind's publications ({@code HoldLock}): two publications of a kind take turns. */
-    public static String lockName(Object docId) {
-        return "qb.legal:" + docId;
+    /**
+     * The lock of one kind's versions ({@code HoldLock}): publishing and withdrawing versions of a kind take turns
+     * (review L3: by the kind, which both know, not by the draft).
+     */
+    public static String lockName(String kind) {
+        return "qb.legal:" + kind;
     }
+
+    public static final int REASON_LENGTH = 1_000;
 
     public static final EntityDefinition DOC_ENTITY = EntityDefinition.define(DOC, eb -> {
         eb.physicalTable("qb_legal_doc_version");
@@ -159,7 +170,37 @@ public final class QbLegal {
             .defaultSort("publishedAt", false));
     });
 
-    public static final EntityDefinition CONSENT_ENTITY = EntityDefinition.define(CONSENT, eb -> {
+    /**
+     * The withdrawal of an announced version (review M1), written once by {@code QB_LEGAL_WITHDRAW}: the version never
+     * takes effect, and its number is not given again. Who withdrew it and why are kept; the public sees only that it
+     * was withdrawn.
+     */
+    public static final EntityDefinition WITHDRAWAL_ENTITY = EntityDefinition.define(WITHDRAWAL, eb -> {
+        eb.physicalTable("qb_legal_withdrawal_version");
+        eb.primaryKey("withdrawalId");
+        eb.field("withdrawalId", f -> f.physicalColumn("withdrawal_id").immutable(true).required(true)
+            .generated(true).asSemanticIdentity("urn:jabiz:entity:quizbuks:legal-withdrawal"));
+        eb.field("legalVersionId", f -> f.physicalColumn("legal_version_id").immutable(true).required(true)
+            .asReference(VERSION));
+        eb.field("kind", f -> f.physicalColumn("kind").immutable(true).required(true)
+            .asCode(KIND_DICTIONARY, KINDS.toArray(String[]::new)));
+        eb.field("versionNumber", f -> f.physicalColumn("legal_version_no").immutable(true).required(true)
+            .asNumeric(6, 0));
+        eb.field("withdrawnAt", f -> f.physicalColumn("withdrawn_at").immutable(true).required(true)
+            .asTemporal(TemporalRole.EVENT_TIME));
+        eb.field("withdrawnBy", f -> f.physicalColumn("withdrawn_by").immutable(true).required(true)
+            .asText(USER_ID_LENGTH));
+        eb.field("reason", f -> f.physicalColumn("reason").immutable(true).required(true).asText(REASON_LENGTH));
+        eb.unique("uk_qb_legal_withdrawal_version", "legalVersionId");
+        eb.temporal(t -> t.allowScheduled(false).writeOnce());
+        eb.listView("default", lv -> lv
+            .columns("kind", "versionNumber", "withdrawnAt", "withdrawnBy", "reason")
+            .filters("kind", "withdrawnAt")
+            .sorts("kind", "versionNumber", "withdrawnAt")
+            .defaultSort("withdrawnAt", false));
+    });
+
+    public static final EntityDefinition CONSENT_ENTITY =EntityDefinition.define(CONSENT, eb -> {
         eb.physicalTable("qb_consent_version");
         eb.primaryKey("consentId");
         eb.field("consentId", f -> f.physicalColumn("consent_id").immutable(true).required(true).generated(true)

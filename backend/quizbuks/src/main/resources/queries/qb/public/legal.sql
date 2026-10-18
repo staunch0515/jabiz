@@ -6,9 +6,10 @@ description: >-
 access: public
 cacheSeconds: 300
 timeoutMs: 2000
-entities: [QbLegalVersion]
+entities: [QbLegalVersion, QbLegalWithdrawal]
 datasets:
   QbLegalVersion: urn:jabiz:dataset:public:QbLegalVersion
+  QbLegalWithdrawal: urn:jabiz:dataset:public:QbLegalWithdrawal
 params:
   kind: { like: QbLegalVersion.kind, required: true, description: "TERMS_APP, TERMS_SPONSOR, PRIVACY or COMMERCE_NOTICE" }
   at:   { kind: { type: temporal, role: EVENT_TIME }, required: true, description: "The time (the page's now, to the minute)" }
@@ -25,9 +26,9 @@ results:
 list:
   key: [kind]
 ---*/
--- Only published versions exist in the public dataset (the drafts are another entity with no public dataset). In
--- effect is the highest number taking effect at or before :at (messaging.LegalRules); the announced one the lowest
--- number taking effect after it. One row while either exists; the version's fields are null before the first takes
+-- Only published versions exist in the public dataset (the drafts are another entity with no public dataset), and
+-- withdrawn ones are left out. In effect is the highest number taking effect at or before :at
+-- (messaging.LegalRules); the announced one the lowest number taking effect after it. One row while either exists; the version's fields are null before the first takes
 -- effect.
 WITH v AS (
     SELECT
@@ -39,7 +40,10 @@ WITH v AS (
         p.{{QbLegalVersion.requiresConsent}} AS rc,
         p.{{QbLegalVersion.effectiveAt}}     AS effective_at
     FROM {{QbLegalVersion}} p
-    WHERE p.{{QbLegalVersion.kind}} = :kind),
+    WHERE p.{{QbLegalVersion.kind}} = :kind
+      AND NOT EXISTS (SELECT 1 FROM {{QbLegalWithdrawal}} w
+                      WHERE w.{{QbLegalWithdrawal.kind}} = p.{{QbLegalVersion.kind}}
+                        AND w.{{QbLegalWithdrawal.versionNumber}} = p.{{QbLegalVersion.versionNumber}})),
 cur AS (
     SELECT * FROM v WHERE v.effective_at <= :at
     AND v.no = (SELECT max(w.no) FROM v w WHERE w.effective_at <= :at)),

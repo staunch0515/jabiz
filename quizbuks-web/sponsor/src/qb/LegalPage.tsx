@@ -61,7 +61,7 @@ function History({ kind, rows, current, path }: {
       <ul className="flex flex-col gap-3">
         {rows.map((row) => {
           const summary = pickText(row.changeSummary, language)
-          const announced = current === null || row.versionNo > current
+          const announced = !row.withdrawn && (current === null || row.versionNo > current)
           return (
             <li key={row.versionNo} className="flex flex-col gap-1 rounded-md border p-3"
               data-testid={`legal-history-${row.versionNo}`}>
@@ -69,9 +69,12 @@ function History({ kind, rows, current, path }: {
                 <span className="font-medium">{t('legal.version', { n: row.versionNo })}</span>
                 {row.versionNo === current && <Badge variant="success">{t('legal.inEffect')}</Badge>}
                 {announced && <Badge variant="secondary">{t('legal.announced')}</Badge>}
+                {row.withdrawn && (
+                  <Badge variant="outline" data-testid="legal-withdrawn">{t('legal.withdrawn')}</Badge>
+                )}
                 <span className="text-muted-foreground">
-                  {t(announced ? 'legal.effectiveFrom' : 'legal.effectiveSince',
-                    { time: formatDateTime(row.effectiveAt) })}
+                  {t(row.withdrawn ? 'legal.wasToTakeEffect' : announced ? 'legal.effectiveFrom'
+                    : 'legal.effectiveSince', { time: formatDateTime(row.effectiveAt) })}
                 </span>
               </div>
               {summary.text && (
@@ -116,6 +119,7 @@ export function LegalPage({ kind }: { kind: LegalKind }) {
       content = <PageState kind="empty" description={t('legal.none')} />
     } else {
       const title = pickText(shown.title, language)
+      const withdrawn = 'withdrawn' in shown && shown.withdrawn
       const isAnnounced = currentNo === null || shown.versionNo > currentNo
       content = (
         <article className="flex flex-col gap-3" data-testid="legal-text" data-version={shown.versionNo}>
@@ -123,9 +127,14 @@ export function LegalPage({ kind }: { kind: LegalKind }) {
           <p className="text-muted-foreground text-sm" data-testid="legal-version">
             {t('legal.version', { n: shown.versionNo })}
             {' · '}
-            {t(isAnnounced ? 'legal.effectiveFrom' : 'legal.effectiveSince',
+            {t(withdrawn ? 'legal.wasToTakeEffect' : isAnnounced ? 'legal.effectiveFrom' : 'legal.effectiveSince',
               { time: formatDateTime(shown.effectiveAt) })}
           </p>
+          {withdrawn && (
+            <p className="bg-muted rounded-md p-3 text-sm" data-testid="legal-withdrawn-note">
+              {t('legal.withdrawnNote')}
+            </p>
+          )}
           {asked !== null && (
             <Link to={path} className="text-primary self-start text-sm underline">{t('legal.backToCurrent')}</Link>
           )}

@@ -145,7 +145,8 @@ docs/quizbuks/               本文件等
 | `QbBroadcast` | T | `senderKind`（SPONSOR / PLATFORM）、`senderId`、`type`、`title`、`body`、`regions`（多值，可空 = 全体）、`userIds`（可选，指定用户）、`publicationId`（可选，须进行中）、`scheduledAt`、`status`（DRAFT / SCHEDULED / SENT） | 公告与商家通知：**不按人复制**，收件箱查询时按地区与注册时间匹配 |
 | `QbMessageReceipt` | P | `userId`、`messageKind`（MESSAGE / BROADCAST）、`messageId`、`readAt`、`clickedAt` | 已读与点击（M-61 统计） |
 | `QbLegalDoc` | T | `kind`（`TERMS_APP` / `TERMS_SPONSOR` / `PRIVACY` / `COMMERCE_NOTICE`，不可变、唯一）、草稿 `title`、`body`、`changeSummary`（多语言 Markdown）；`processOnly`：`latestVersionNo`、`lastPublishedAt` | 法律文本的草稿（Q7b）：内容管理员在通用后台直接编辑；`QB_SETUP` 建立四份明确标注的测试占位草稿，不发布 |
-| `QbLegalVersion` | W（`writeOnce`） | `kind`、`versionNumber`（与 `kind` 唯一）、`title`、`body`、`changeSummary`、`requiresConsent`、`publishedAt`、`publishedBy`、`effectiveAt`、`contentHash` | 只经 `QB_LEGAL_PUBLISH`（二次验证）写入；当前版本 = `effectiveAt` 已到的最大版本号（`messaging.LegalRules`），预定生效不需要任务；公开只读（公开视图不含发布人与哈希） |
+| `QbLegalVersion` | W（`writeOnce`） | `kind`、`versionNumber`（与 `kind` 唯一）、`title`、`body`、`changeSummary`、`requiresConsent`、`publishedAt`、`publishedBy`、`effectiveAt`、`contentHash` | 只经 `QB_LEGAL_PUBLISH`（二次验证）写入；当前版本 = `effectiveAt` 已到、未撤回的最大版本号（`messaging.LegalRules`），预定生效不需要任务；公开只读（公开视图不含发布人与哈希） |
+| `QbLegalWithdrawal`（Q7b 评审 M1） | W（`writeOnce`） | `legalVersionId`（唯一）、`kind`、`versionNumber`、`withdrawnAt`、`withdrawnBy`、`reason` | 只经 `QB_LEGAL_WITHDRAW` 写入：撤回尚未生效的预告版本；撤回的版本永不生效、不要求同意，版本号不再使用；公开视图只有种类、版本号与时间 |
 | `QbConsent` | W | `userId`、`kind`、`legalVersionId`、`versionNumber`、`acceptedAt`、`entry`、`source`（`WELCOME` / `ONBOARDING` / `RECONSENT`） | 同意记录；须同意版本 = 已生效版本中须同意的最大版本号（第一版总是），已同意的版本不低于它即可 |
 | `QbFaqEntry` | T | `audience`（APP / SPONSOR / ALL）、`category`、`question`、`answer`（多语言，英语必填）、`seq`、`published` | 帮助中心（Q7b）；内容管理员在通用后台直接编辑，公开视图固定为已发布 |
 
@@ -345,7 +346,8 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 | `QB_FX_FETCH`（任务） | 系统 | 每日取 ECB 参考汇率（`BlockingStep`），手动覆盖优先 |
 | （以后，F-05） | 系统 | 与 Stripe 余额交易报告逐笔核对、银行流水导入 |
 
-| `QB_LEGAL_PUBLISH`（Q7b） | `qb.admin.content.write`，每次二次验证，已验证邮箱 | 把一种法律文本的草稿发布为下一版本（只写一次）：日英必填、与最新版本内容相同即拒绝、生效时间不早于现在、已有未生效的预告即拒绝 |
+| `QB_LEGAL_PUBLISH`（Q7b） | `qb.admin.content.write`，每次二次验证，已验证邮箱 | 把一种法律文本的草稿发布为下一版本（只写一次）：必须带页面读到的草稿版本 `baseRevision`、日英必填、与最新（未撤回）版本内容相同即拒绝、生效时间不早于现在且不晚于 `qb.legal.max-announce-days`（受控参数，缺省 180 天）、已有未生效的预告即拒绝；与撤回共用命名锁 `qb.legal:<种类>` |
+| `QB_LEGAL_WITHDRAW`（Q7b 评审 M1） | 同上，必填理由 | 撤回尚未生效的预告版本（已生效即 422 `QB_LEGAL_WITHDRAW_IN_EFFECT`，已撤回即 `QB_LEGAL_WITHDRAWN`）；之后可再发布，版本号接着最大的号 |
 | `QB_CONSENT_ACCEPT`（Q7b） | `qb.account.read`，已验证邮箱 | 登录后的重新同意：只接受本入口的种类（App：答题人条款与隐私政策；商家后台：商家条款与隐私政策）与当前版本 |
 
 **同意（Q7b）**：答题人在 `/welcome`（`QB_PROFILE_SAVE` 第一次完成资料）、商家在入驻申请（`QB_SPONSOR_APPLY`，审批内容含条款版本）同意页面所示的当前版本；
@@ -415,7 +417,7 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 - QuizBuks 扩展页（`backend/quizbuks/admin-extension`，`plans/Q9a-admin-extension.md`）：
   - Q9a：审核（`/qb/reviews`：待审的商家入驻与发布；发布页显示全部设置、档位、商家资金与冻结版本的完整内容（含正确答案、资料、图片），入驻页显示审批绑定的内容与邮箱验证状态；
     决定用平台的 `ApprovalPanel`）与用户汇总（`/qb/users/:userId`，资料 + 答题历史 + 同意记录（Q7b），资金流水只给财务，P-01）。
-  - Q7b：法律文本的草稿与 FAQ 由通用后台编辑（`QbLegalDoc` 的行操作"发布"即 `QB_LEGAL_PUBLISH`）。
+  - Q7b：法律文本的草稿与 FAQ 由通用后台编辑（`QbLegalDoc` 的行操作"发布"即 `QB_LEGAL_PUBLISH`）；后台扩展的"规约类"页（`/qb/legal`）预览草稿、带草稿版本发布，并在版本列表中撤回预告版本（`QB_LEGAL_WITHDRAW`，也是 `QbLegalVersion` 的行操作）。
   - Q9c：财务（`/qb/finance/**`）：总览、转账与大额审批、充值、核对、月报。
   - Q9d：分录导出（`/qb/finance/journal`：预览下一期、导出、下载存档的 CSV、记录外部凭证号）与科目映射（`/qb/finance/journal/mapping`：只读，修改链到平台的受控变更）。
 

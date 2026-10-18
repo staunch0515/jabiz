@@ -1,4 +1,5 @@
 import { ApiError, i18n } from '@jabiz/client'
+import { CODE } from './ids'
 import { QB } from './messages'
 
 /**
@@ -12,6 +13,14 @@ export function problemText(error: unknown): string {
     if (text && !/^HTTP \d+$/.test(text)) return text
   }
   return i18n.t('failed', { ns: QB })
+}
+
+/**
+ * Whether the server refused because the caller must first accept a version of their terms (`QB_CONSENT_REQUIRED`,
+ * Q7b): the pages then read the caller's standing again, and the prompt comes up (review M3).
+ */
+export function consentRequired(error: unknown): boolean {
+  return error instanceof ApiError && error.violations.some((v) => v.ruleCode === CODE.consentRequired)
 }
 
 /** The server's message for one field of a refused form, if any. */

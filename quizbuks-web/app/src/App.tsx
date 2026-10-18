@@ -15,7 +15,7 @@ import {
   VerifyEmailBanner,
   cn,
 } from '@jabiz/ui'
-import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query'
+import { QueryClientProvider, useQuery } from '@tanstack/react-query'
 import { History, House, UserRound, Wallet, type LucideIcon } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -32,7 +32,7 @@ import { AboutPage } from './pages/AboutPage'
 import { forgetAttempts } from './play/storage'
 import { itemPage } from './routes'
 import { readMyProfile } from './qb/api'
-import { ConsentGate, LegalLink } from './qb/ConsentGate'
+import { ConsentGate, LegalLink, newQbQueryClient } from './qb/ConsentGate'
 import { HelpPage } from './qb/HelpPage'
 import { LEGAL } from './qb/ids'
 import { legalKindOf } from './qb/legal'
@@ -285,13 +285,9 @@ function Routes() {
   )
 }
 
-function newQueryClient() {
-  return new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } } })
-}
-
 /** The takers' app (docs/quizbuks/plans/QP-pages.md): an application's own SPA and PWA on the platform's packages. */
 export default function App() {
-  const [queryClient] = useState(newQueryClient)
+  const [queryClient] = useState(newQbQueryClient)
   return (
     <AppearanceProvider>
       <QueryClientProvider client={queryClient}>

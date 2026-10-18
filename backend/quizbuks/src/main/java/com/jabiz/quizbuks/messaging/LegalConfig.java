@@ -12,7 +12,7 @@ import org.springframework.context.annotation.Configuration;
 
 /**
  * Registers terms, privacy and help (docs/quizbuks/plans/Q7-messages-legal.md, Q7b): the four entities and their
- * datasets, the dictionaries and the two processes.
+ * datasets, the dictionaries and the processes.
  *
  * <p>The drafts and the questions are edited directly by the content administrators in the administration (their
  * default datasets, written with {@code qb.admin.content.write}; the platform audits every change). Versions and
@@ -37,6 +37,11 @@ public class LegalConfig {
     @Bean
     EntityDefinition qbLegalVersionEntity() {
         return QbLegal.VERSION_ENTITY;
+    }
+
+    @Bean
+    EntityDefinition qbLegalWithdrawalEntity() {
+        return QbLegal.WITHDRAWAL_ENTITY;
     }
 
     @Bean
@@ -85,6 +90,11 @@ public class LegalConfig {
     }
 
     @Bean
+    DatasetDefinition qbLegalWithdrawalDataset() {
+        return processWritten(QbLegal.WITHDRAWAL);
+    }
+
+    @Bean
     DatasetDefinition qbConsentDataset() {
         return processWritten(QbLegal.CONSENT);
     }
@@ -110,6 +120,19 @@ public class LegalConfig {
             .targetEntityType(QbLegal.VERSION)
             .publicRead(p -> p.allRows().fields("kind", "versionNumber", "title", "body", "changeSummary",
                 "requiresConsent", "effectiveAt"))
+            .permissions(QbPermissions.ADMIN_USERS_READ, QbPermissions.SPONSOR_VIEW_WRITE)
+            .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
+    }
+
+    /**
+     * Which versions were withdrawn, so that the public pages leave them out and the history marks them: not who
+     * withdrew them nor why.
+     */
+    @Bean
+    DatasetDefinition qbPublicLegalWithdrawalDataset() {
+        return DatasetDefinition.define(QbLegal.PUBLIC_WITHDRAWALS, d -> d
+            .targetEntityType(QbLegal.WITHDRAWAL)
+            .publicRead(p -> p.allRows().fields("kind", "versionNumber", "withdrawnAt"))
             .permissions(QbPermissions.ADMIN_USERS_READ, QbPermissions.SPONSOR_VIEW_WRITE)
             .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
     }
@@ -166,6 +189,12 @@ public class LegalConfig {
     @Bean
     ProcessDefinition<LegalProcesses.PublishInput, LegalProcesses.PublishOutput, ProcessContext> qbLegalPublish() {
         return LegalProcesses.publish();
+    }
+
+    @Bean
+    ProcessDefinition<LegalProcesses.WithdrawInput, LegalProcesses.WithdrawOutput, ProcessContext>
+        qbLegalWithdraw() {
+        return LegalProcesses.withdraw();
     }
 
     @Bean

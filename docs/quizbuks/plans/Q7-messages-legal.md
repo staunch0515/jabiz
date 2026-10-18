@@ -358,7 +358,54 @@ M-73 API Key（G10）；个人信息的删除与匿名化（平台未开放，GD
 ### 已知问题与后续
 
 - **正式文本**：仓库中只有标注 `[TEST PLACEHOLDER]` 的草稿；需求方或律师提供日文（准据）与英文正文后，由内容管理员载入并发布（`operations.md` §3 第 9 步、上线检查清单）。正式模式在三种文本生效之前启动告警。
-- 预告一经发布不能撤回或替换（Q7-6 的结论"不改已公布的预告"）：若误设了很远的生效日，同种文本在此之前不能再发布。如需"撤回预告"须另定（一条平台外的应用流程即可）。
+- ~~预告一经发布不能撤回或替换~~：评审后加了撤回与最长预告期（见下节 M1）。
 - 民法 548 条之 4 的事前公告期间不强制（Q7-6 A）；需要时只在 `LegalRules.publishProblems` 加一条检查。
 - 删除草稿（通用后台允许）之后，`QB_SETUP` 不会再建（它记得建过）；需要时在后台新建同一种类的草稿即可（唯一性只看当前版本）。
 - 条款变更的站内公告（`announce = true`）属于 Q7c。
+
+## 评审后的修正（2026-10-18，同一分支）
+
+独立评审（2a708f7）没有发现匿名数据泄露或绕过同意之门的服务端途径；以下各项按"先写会失败的测试、再修"处理。V12 尚未合并，直接在其中补表。
+
+- **M1 预告无法撤回**：新实体 `QbLegalWithdrawal`（只写一次，`legalVersionId` 唯一；V12 中的 `qb_legal_withdrawal_version`）与流程 `QB_LEGAL_WITHDRAW`（`qb.admin.content.write`、每次二次验证、已验证邮箱、必填理由，`actsOn(QbLegalVersion)`；
+  与发布共用锁 `qb.legal:<种类>`；只在 `effectiveAt > opTime` 时允许，否则 422 `QB_LEGAL_WITHDRAW_IN_EFFECT`，重复 422 `QB_LEGAL_WITHDRAWN`）。`LegalRules` 的当前、预告、须同意与"相同内容"都不看撤回的版本，
+  下一个版本号仍是全部版本中最大的号加一（号不再使用）；第一版须同意与第二版起须写变更摘要都按"未撤回的版本"判断。`qb.system.consent-state`、`qb.me.consents`、`qb.public.legal` 排除撤回的版本，
+  `qb.public.legal-history` 与 `qb.public.legal-version` 多一列 `withdrawn`（公开视图 `public:QbLegalWithdrawal` 只有种类、版本号与撤回时间，不含撤回人与理由）；`LiveModeDataCheck` 也不把撤回的版本算作已生效。
+  **最长预告期**：受控参数 `qb.legal.max-announce-days`（`QB_SETUP` 提出 180；未发布时同样按 180，只是收紧），超过即 422 `QB_LEGAL_EFFECTIVE_TOO_LATE`——`9999-01-01` 与 `+300000-01-01` 都在写入之前被拒（后者原来是 500）。
+  读取参数用 `QueryEntities`（与版本、撤回同一条语句），不用 `LoadParams`（它在参数未发布时整个流程失败）。发布的输出加 `versionId`（场景与后台用它撤回）。
+  后台扩展新页"QuizBuks → 规约类"（`/qb/legal`，`qb.admin.content.write`）：每种文本的草稿预览（日、英）、发布（带读到的草稿版本、生效时间、是否须重新同意，先确认）、版本列表（模板 `qb.admin.legal-versions`：状态、发布人、撤回人与理由），
+  未生效的预告行可填理由撤回（先确认）；通用后台 `QbLegalVersion` 的行操作同样有"撤回"。App 与商家后台的条款历史把撤回的版本标为"已撤回"，打开它时注明"施行前已取下、从未适用"。
+- **M2 页面按设备时钟判断**：模板不能引用平台保留的 `:__asOf`（模板检查只认声明的参数），也没有"服务端此刻"的参数种类，所以采用后备方案：`qb/legal.ts` 由 `qb.me.consents` 应答的 `Date` 头（整秒）估计设备时钟的偏差，
+  偏差超过 2 秒加半个往返即改正并立刻按服务端时刻重读一次，之后的读取（含公开页面取整到分钟的时刻）都用改正后的时刻；公开模板的应答可能来自缓存，不用来学时钟。
+  同意提示收到 `QB_TERMS_OUTDATED` 时重读（已有），并且只认用户对**当前显示的版本**的勾选：版本变了即取消勾选、显示"已再次更新"，用户读后再同意新版本，不会循环。测试：设备快一小时、慢一天各读一次，以及收到过时后的再同意。
+- **M3 服务端拒绝后提示不出现**：`qb/problems.ts` 的 `consentRequired`；两个 SPA 的 QueryClient 改用 `qb/ConsentGate.tsx` 的 `newQbQueryClient()`（查询与变更的缓存出错时检查 `QB_CONSENT_REQUIRED` 并使 `CONSENTS_QUERY` 失效），
+  不经 React Query 的开通收款（`PayoutPage`）与提交发布（`PublicationWizard`）自己调 `noticeConsentProblem`。测试：Vitest（App 的开通收款、商家的充值、QueryClient 本身）与 e2e（页面已读过同意状况后点"开通"，提示随即出现）。
+- **L1**：`PublishInput.baseRevision` 必填（`@NotNull`，缺即 400）；后台页带上读到的草稿版本，e2e 与场景同样带上。
+- **L2**：`SponsorApprovals.content` 只在 `termsVersionNo` 不为空时放入该键：没有版本时内容与 V12 之前相同，之前待审的申请仍能批准（单元测试比较旧内容的哈希，IT 比较请求中保存的哈希并批准）。
+- **L3**：锁名改为 `qb.legal:<种类>`；发布先读草稿（种类不可变）再取锁，锁内一条语句读该种类的版本、撤回与参数；草稿在锁前读，按版本的条件写回与必填的 `baseRevision` 保证它没有被改过。
+- **L4**：`LiveModeDataCheck` 把读取法律文本失败单独报告为告警（"Live mode cannot check which legal texts are in effect"），不再借用充值的消息；测试 `LiveModeDataCheckTest`。
+- **L5**："关于"页的构建时间取 `SOURCE_DATE_EPOCH`，否则取所构建提交的时间（`quizbuks-web/app/build-time.ts`，Vitest），都没有时显示"—"；不再是构建机器的此刻。
+- **L6**：同意提示的"阅读全文"链接带 `?v=<版本号>`。
+- **测试缺口**：删除的 FAQ 不再公开（`PublicHelpIT`）；极端日期 422（`LegalWithdrawIT`）；时钟偏差两个方向（`qb/legal.test.ts`）；V12 之前待审的申请仍可批准（`SponsorApprovalsTest`、`SponsorOnboardingIT`）。
+- **偶发的 e2e 的根因**：（1）发布向导的 Quiz 选择框在每次搜索时把列表换成加载圈（`loading={quizzes.isFetching}`），打开的 `listbox` 里暂时没有 `option`，axe 恰在此时运行即报 `aria-required-children`。
+  改为 `placeholderData: keepPreviousData` 且只在第一次加载时显示加载圈（`isPending`），e2e 在运行 axe 之前等待所输入的搜索的应答；Vitest 断言搜索在途时列表仍是原来的选项（旧代码失败）。
+  平台的 `Combobox` 在加载时把加载圈放进 `listbox` 本身也会触发同样的规则：应在平台改为 `aria-busy` 且加载圈放在列表之外——记为平台的后续，不在本分支改。
+  （2）内容工坊"另处修改后要求重新载入"在 `requestAnimationFrame` 中聚焦提示，繁忙时这一帧早于 React 提交提示，焦点落空。改为提交之后在 effect 中聚焦（提示已在时直接聚焦）；Vitest 让下一帧立即执行来复现（旧代码失败）。
+
+### 评审修正的测试与结果
+
+- 新增或扩充：`LegalWithdrawIT`（撤回的权限、二次验证、理由；已生效不能撤回、不能重复；撤回后公开页、历史、`qb.system.consent-state` 与 `qb.me.consents` 都不再算它，时间过后仍不生效、不能同意；
+  同一文本可再发布、得下一个号；后台模板只给内容管理员；超过最长预告期——含 `9999-01-01` 与 `+300000-01-01`——422，恰在 180 天可以）、`LegalRulesTest`（撤回、最长预告期，jqwik 的发布序列中随机撤回）、
+  `LegalIT`（缺 `baseRevision` 即 400）、`PublicHelpIT`（删除的 FAQ）、`SponsorApprovalsTest` 与 `SponsorOnboardingIT`（L2）、`LiveModeDataCheckTest`（L4）、`SetupIT`（新参数）；场景 `legal.yml` 加撤回一段，
+  七个场景多发布一个提案（`p28`：新参数排在受控参数的最后，审批与职责分离规则后移一位），三个答题场景的答案位置再次按新的显示位置改写（得分、奖励不变），更新快照。
+- `./gradlew :quizbuks:check :quizbuks:bootJar`（本机 PostgreSQL 16）：575 项测试全部通过，`platformCheck` 0 错误（69 条告警同前）。
+- 前端：App 133 项、商家后台 132 项 Vitest 通过（lint、typecheck 通过，两份 `src/qb/` 相同，`app:check` 两个都通过）；后台扩展 `ext:check` 70 项通过（新增 `legal.test.tsx` 4 项）。
+- e2e（打包的 jar，独立端口与数据库，`retries: 0`）：第一次全量 45 项通过、2 项失败——是新加的等待写错了（请求体是流，Playwright 的 `postData()` 为空，等不到），改为在首批选项显示后等下一次应答；
+  修正后**全量 47 项一次全部通过，没有重跑**（新增撤回一项；`legal.spec` 的重新同意改为在已读过同意状况的页面上点"开通"，由服务端的拒绝带出提示）。
+
+### 评审修正后的已知问题
+
+- 平台：模板的时间参数超出 PostgreSQL 的范围（如公开的 `qb.public.legal?p.at=+300000-01-01T00:00:00Z`）仍是 500（`22008 timestamp out of range`）。属于平台参数绑定，QuizBuks 自己的写入路径已在写入前拒绝；应在平台的参数校验中限定 `temporal` 的范围。
+- 平台：`Combobox` 加载时 `listbox` 中只有加载圈（见上），应改为 `aria-busy`。
+- 设备时钟的改正以 `Date` 头为准（整秒）：在新版本生效前后约 2 秒内页面与服务端可能不一致，服务端仍以自己的时钟判断，页面在拒绝后重读。
+

@@ -41,8 +41,12 @@ public final class SponsorApprovals {
         content.put("intro", intro);
         content.put("avatar", avatar == null ? null : avatar.toString());
         content.put("termsAcceptedAt", termsAcceptedAt == null ? null : termsAcceptedAt.toString());
-        // The version of the sponsors' terms accepted with the application (Q7b): none while no version is in effect.
-        content.put("termsVersionNo", termsVersionNo);
+        // The version of the sponsors' terms accepted with the application (Q7b). Without one (no version in effect,
+        // or an application of before V12) the key is left out, so that the content hashes as before Q7b and the
+        // requests then pending still bind it (review L2).
+        if (termsVersionNo != null) {
+            content.put("termsVersionNo", termsVersionNo);
+        }
         return content;
     }
 

@@ -84,6 +84,10 @@ class PublicHelpIT extends LegalItSupport {
             hidden).getFirst().get("v")).longValue();
         commit(QbLegal.defaultDataset(QbLegal.FAQ), "UPDATE", hidden, version, Map.of("published", true), null);
         assertThat(publicItems(QbLegal.PUBLIC_FAQ_TEMPLATE, "p.audience=APP&p.category=REWARDS")).hasSize(1);
+        // Deleting it in the administration takes it off the help centre again (a tombstone, not a removed row).
+        commit(QbLegal.defaultDataset(QbLegal.FAQ), "DELETE", hidden, version + 1, null, null);
+        assertThat(publicItems(QbLegal.PUBLIC_FAQ_TEMPLATE, "p.audience=APP&p.category=REWARDS")).isEmpty();
+        assertThat(publicSearch("APP", SECRET)).isEmpty();
         // Only the content administrators write questions.
         client.post().uri("/api/datasets/" + QbLegal.defaultDataset(QbLegal.FAQ) + "/commit")
             .contentType(MediaType.APPLICATION_JSON).header(HttpHeaders.AUTHORIZATION, tokenOf(u1(), QbRoles.TAKER))

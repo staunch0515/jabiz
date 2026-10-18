@@ -1,4 +1,4 @@
-import { FAQ, legalAdmin, publishVersion } from './legal'
+import { announceVersion, FAQ, legalAdmin, publishVersion, withdrawVersion } from './legal'
 import {
   adminToken,
   consentsOf,
@@ -100,7 +100,10 @@ test('after a change of substance a taker accepts again on signing in; a rewordi
   expect(refused.status()).toBe(422)
   expect(await refused.text()).toContain('QB_CONSENT_REQUIRED')
 
-  await page.reload()
+  // The page read the texts before the change: the server's refusal brings the prompt up at once (review M3).
+  await page.getByTestId('nav-wallet').click()
+  await page.getByTestId('wallet-payout-open').click()
+  await page.getByTestId('payout-onboard').click()
   const gate = page.getByTestId('consent-gate')
   await expect(gate).toBeVisible()
   await expect(gate.getByTestId('consent-item-TERMS_APP')).toContainText(`Version ${version}`)
@@ -110,8 +113,27 @@ test('after a change of substance a taker accepts again on signing in; a rewordi
   await page.getByTestId('consent-agree').click()
   await page.getByTestId('consent-accept').click()
   await expect(gate).toHaveCount(0)
-  await expect(page.getByTestId('home')).toBeVisible()
+  await expect(page.getByTestId('payout-onboard')).toBeVisible()
   const after = await request.post('/api/processes/QB_PAYOUT_ONBOARD/latest', {
     headers: { Authorization: `Bearer ${taker}`, 'Idempotency-Key': crypto.randomUUID() }, data: {} })
   expect(await after.text()).not.toContain('QB_CONSENT_REQUIRED')
+})
+
+test('a version announced by mistake is withdrawn before it takes effect, and the pages say so', async ({ page,
+  request }) => {
+  const { token: content } = await legalAdmin(request)
+  // A month ahead: well within the announcement horizon (qb.legal.max-announce-days, 180 by default).
+  const later = new Date(Date.now() + 30 * 24 * 3600_000).toISOString()
+  const announced = await announceVersion(request, content, 'COMMERCE_NOTICE', unique('mistake '), later)
+  const withdrawn = await withdrawVersion(request, content, String(announced.versionId), 'Announced by mistake')
+  expect(withdrawn.versionNo).toBe(announced.versionNo)
+
+  // Read afterwards (the public answers are cached by the browser for a few minutes).
+  await page.goto('/sponsor/legal/commerce')
+  await expect(page.getByTestId('legal-history')).toBeVisible()
+  await expect(page.getByTestId('legal-upcoming')).toHaveCount(0)
+  const row = page.getByTestId(`legal-history-${announced.versionNo}`)
+  await expect(row.getByTestId('legal-withdrawn')).toBeVisible()
+  await row.getByRole('link').click()
+  await expect(page.getByTestId('legal-withdrawn-note')).toBeVisible()
 })

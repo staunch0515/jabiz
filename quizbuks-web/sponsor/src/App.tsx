@@ -16,7 +16,7 @@ import {
   Toaster,
   type ShellMenuItem,
 } from '@jabiz/ui'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClientProvider } from '@tanstack/react-query'
 import { CircleHelp, FileQuestion, LayoutDashboard, Megaphone, ReceiptText, Store, UserRound, Wallet }
   from 'lucide-react'
 import { useState, type ReactNode } from 'react'
@@ -31,7 +31,7 @@ import { PublicationListPage } from './publishing/PublicationListPage'
 import { PublicationPage } from './publishing/PublicationPage'
 import { publicationIdOf, PUBLICATIONS_PATH } from './publishing/paths'
 import { OnboardingPage, useMySponsor } from './pages/OnboardingPage'
-import { ConsentGate, LegalLink } from './qb/ConsentGate'
+import { ConsentGate, LegalLink, newQbQueryClient } from './qb/ConsentGate'
 import { HelpPage } from './qb/HelpPage'
 import { LEGAL } from './qb/ids'
 import { legalKindOf, type LegalKind } from './qb/legal'
@@ -263,13 +263,9 @@ function Routes() {
   )
 }
 
-function newQueryClient() {
-  return new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } } })
-}
-
 /** The sponsor console (docs/quizbuks/plans/QP-pages.md): an application's own SPA on the platform's packages. */
 export default function App() {
-  const [queryClient] = useState(newQueryClient)
+  const [queryClient] = useState(newQbQueryClient)
   return (
     <AppearanceProvider>
       <QueryClientProvider client={queryClient}>

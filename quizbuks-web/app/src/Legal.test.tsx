@@ -35,14 +35,24 @@ interface Me {
   profile?: Record<string, unknown> | null
   consents?: Record<string, unknown>[]
   support?: string | null
+  /** The first acceptance finds a newer version in effect (it took effect meanwhile): refused, then version 4. */
+  outdatedOnce?: boolean
 }
 
-/** The server as the app sees it; `me` absent: nobody is signed in. Records what was asked and posted. */
-function server(me?: Me) {
+/** A version withdrawn before it took effect (review M1). */
+const TERMS_V3_WITHDRAWN = { versionNo: 3, title: { en: 'Terms of use', ja: '利用規約' }, body: { en: 'Never.' },
+  changeSummary: { en: 'A mistake.' }, requiresConsent: true, effectiveAt: '2099-06-01T00:00:00Z', withdrawn: true }
+
+/**
+ * The server as the app sees it; `me` absent: nobody is signed in. Records what was asked and posted. With
+ * `withdrawn`, the history has a withdrawn version 3.
+ */
+function server(me?: Me, withdrawn = false) {
   const asked: string[] = []
   const posted: { path: string; body: Record<string, unknown> }[] = []
   let consents = me?.consents ?? []
   let profile = me?.profile ?? null
+  let outdated = me?.outdatedOnce ?? false
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
     const request = input instanceof Request ? input : new Request(new URL(String(input), window.location.origin))
     const url = new URL(request.url, window.location.origin)
@@ -74,6 +84,12 @@ function server(me?: Me) {
       case '/api/queries/qb.app.feed':
         return json(200, { items: [], offset: 0, limit: 20, total: 0 })
       case '/api/processes/QB_CONSENT_ACCEPT/latest':
+        if (outdated) {
+          outdated = false
+          consents = [consent('TERMS_APP', 4, true)]
+          return json(422, { status: 422, code: 'QB_TERMS_OUTDATED', detail: 'Refused', violations: [{
+            field: 'items', ruleCode: 'QB_TERMS_OUTDATED', message: 'Version 3 of TERMS_APP is not the one in effect' }] })
+        }
         consents = consents.map((row) => ({ ...row, mustAccept: false }))
         return json(200, { output: { recorded: ['TERMS_APP'] } })
       case '/api/processes/QB_PROFILE_SAVE/latest':
@@ -94,9 +110,11 @@ function server(me?: Me) {
         return json(200, { items: [{ kind: url.searchParams.get('p.kind'), ...TERMS_V1, upcomingVersionNo: 2,
           upcomingEffectiveAt: TERMS_V2.effectiveAt }], offset: 0, limit: 100 })
       case '/api/public/queries/qb.public.legal-version':
-        return json(200, { items: [{ kind: 'TERMS_APP', ...TERMS_V2 }], offset: 0, limit: 100 })
+        return json(200, { items: [{ kind: 'TERMS_APP', ...(url.searchParams.get('p.versionNo') === '3'
+          ? TERMS_V3_WITHDRAWN : { ...TERMS_V2, withdrawn: false }) }], offset: 0, limit: 100 })
       case '/api/public/queries/qb.public.legal-history':
-        return json(200, { items: [TERMS_V2, TERMS_V1], offset: 0, limit: 100 })
+        return json(200, { items: [...(withdrawn ? [TERMS_V3_WITHDRAWN] : []), { ...TERMS_V2, withdrawn: false },
+          { ...TERMS_V1, withdrawn: false }], offset: 0, limit: 100 })
       default:
         return json(404, {})
     }
@@ -148,6 +166,18 @@ describe('a visitor', () => {
     await userEvent.click(within(screen.getByTestId('legal-upcoming')).getByRole('link'))
     await waitFor(() => expect(screen.getByTestId('legal-text')).toHaveAttribute('data-version', '2'))
     expect(window.location.search).toBe('?v=2')
+  })
+
+  it('sees a withdrawn version marked in the history and on its page (review M1)', async () => {
+    server(undefined, true)
+    window.history.replaceState(null, '', '/legal/terms')
+    render(<App />)
+    const row = await screen.findByTestId('legal-history-3')
+    expect(within(row).getByTestId('legal-withdrawn')).toBeInTheDocument()
+    expect(within(screen.getByTestId('legal-history-2')).queryByTestId('legal-withdrawn')).toBeNull()
+    await userEvent.click(within(row).getByRole('link'))
+    expect(await screen.findByTestId('legal-text')).toHaveAttribute('data-version', '3')
+    expect(screen.getByTestId('legal-withdrawn-note')).toBeInTheDocument()
   })
 
   it('in Chinese, reads the English text, told so, and may show the Japanese one', async () => {
@@ -221,6 +251,32 @@ describe('a signed-in taker', () => {
     expect(screen.getByRole('navigation', { name: 'App' })).toBeInTheDocument()
     expect(posted.find((p) => p.path === '/api/processes/QB_CONSENT_ACCEPT/latest')?.body).toEqual({
       items: [{ kind: 'TERMS_APP', versionNo: 3 }] })
+  })
+
+  it('reads the very version the prompt names (review L6)', async () => {
+    server({ profile: { displayName: 'Mei', countryCode: 'JP', city: null, preferredCurrency: 'JPY', revision: 1 },
+      consents: [consent('TERMS_APP', 3, true)] })
+    render(<App />)
+    const item = within(await screen.findByTestId('consent-item-TERMS_APP'))
+    expect(item.getByTestId('legal-link-TERMS_APP')).toHaveAttribute('href', '/legal/terms?v=3')
+  })
+
+  it('told a newer version took effect, shows it and accepts that one, once agreed again (review M2)', async () => {
+    const { posted } = server({ profile: { displayName: 'Mei', countryCode: 'JP', city: null,
+      preferredCurrency: 'JPY', revision: 1 }, consents: [consent('TERMS_APP', 3, true)], outdatedOnce: true })
+    render(<App />)
+    expect(await screen.findByTestId('consent-item-TERMS_APP')).toHaveTextContent(/(Version 3|第 3 版)/)
+    await userEvent.click(screen.getByTestId('consent-agree'))
+    await userEvent.click(screen.getByTestId('consent-accept'))
+    await waitFor(() => expect(screen.getByTestId('consent-item-TERMS_APP')).toHaveTextContent(/(Version 4|第 4 版)/))
+    expect(screen.getByTestId('consent-error')).toBeInTheDocument()
+    // What the user agreed to was version 3: they agree again before version 4 is accepted.
+    expect(screen.getByTestId('consent-accept')).toBeDisabled()
+    await userEvent.click(screen.getByTestId('consent-agree'))
+    await userEvent.click(screen.getByTestId('consent-accept'))
+    await waitFor(() => expect(screen.queryByTestId('consent-gate')).toBeNull())
+    expect(posted.filter((p) => p.path === '/api/processes/QB_CONSENT_ACCEPT/latest').map((p) => p.body)).toEqual([
+      { items: [{ kind: 'TERMS_APP', versionNo: 3 }] }, { items: [{ kind: 'TERMS_APP', versionNo: 4 }] }])
   })
 
   it('whose address is not verified is told, not stopped (nothing they do writes)', async () => {

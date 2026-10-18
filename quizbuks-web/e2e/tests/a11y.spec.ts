@@ -191,7 +191,13 @@ for (const appearance of ['light', 'dark'] as const) {
     await expectAccessible(page, at('sponsor new publication'))
     await page.getByTestId('publication-name').fill('Access draft')
     await page.getByTestId('publication-quiz').click()
+    // Checked once the search typed is answered (the choices before it stay until then): the first choices are
+    // shown, so the next answer of the quizzes' template is the search's (the request's body is a stream, which
+    // Playwright does not show).
+    await expect(page.getByRole('option').first()).toBeVisible()
+    const searched = page.waitForResponse((response) => response.url().endsWith('/api/queries/qb.sponsor.quizzes'))
     await page.getByPlaceholder('Search your quizzes').fill(quiz.title)
+    await searched
     await expect(page.getByRole('option', { name: new RegExp(quiz.title) })).toBeVisible()
     await expectAccessible(page, at('sponsor publication quiz chooser'))
     await page.getByRole('option', { name: new RegExp(quiz.title) }).click()
