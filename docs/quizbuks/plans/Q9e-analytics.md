@@ -289,3 +289,24 @@
 - 部署之前就已结束一天以上的发布没有游标，不会被分析（QuizBuks 尚未上线，没有这种数据）。
 - e2e 的 `a11y.spec.ts` 发布页（亮）在高负载下偶发失败（见"验证"），属于 QP3b 的选择器，未在本阶段处理。
 - 残余风险①②见"自查"。
+
+## 评审修复（Q9e1，2026-10-18）
+
+评审没有阻塞的缺陷，k 的设计成立；以下各项先写复现的测试再修复。实施记录中上文的描述以本节为准。
+
+- **M1 概览随每次答题变化**：单个发布的概览（开始、完成、进行中等人数）改为取任务的快照（游标中的合计），只随任务每 10 分钟变化；仪表盘的合计"正在答题"仍是实时的。
+  测试 `AnalyticsIT.aPublicationsFiguresMoveOnlyWithTheJobNotWithEachAttempt`（任务运行前全为 0，答题后、任务运行前不变），首个测试在运行前断言全零。
+  **残余④（已知、接受，记入 02-design §6）**：商家只有一个进行中的发布时，仪表盘的实时"正在答题"与今日支出两次查看之差就是该发布的变化；Q4 的 `qb.sponsor.publications` 也实时给出每个发布的计数。都只是人数与金额（E-4），推不出逐题作答。
+- **M2 商家模板扫描全部发布版本**：新增限本人、只读的卡片视图 `urn:jabiz:dataset:sponsor:QbPublicationCard`（普通表 `qb_publication_card`，范围 `sponsorId` = 调用者，读权限 `qb.stats.system` 与不授予任何角色的 `qb.content.view.write`；模板只认模板的权限），五个模板全部改经它。
+  `AnalyticsPerfIT` 另造 1 000 个商家的 10 万个已结束发布，断言每个模板 < 150 ms（实测 28–54 ms，修复前排行约 365 ms）。
+- **M3 一次运行一个事务**：任务改为逐项任务 `JobDefinition.forEach`（平台决策 D42）：模板 `qb.system.analytics-items` 给出项——按发布编号的块（`c000001` …，`firstId` / `lastId`）、每个到期的整体重算一项（键为发布编号）、最后一项 `zz-run`（运行记录与删除旧桶）；
+  每项一个事务的 `QB_ANALYTICS_ITEM`（`internal()`），取代 `QB_ANALYTICS_REFRESH` / `QB_ANALYTICS_CHUNK`。一项失败时其他项照常提交（运行 `PARTIAL`），失败项由平台退避重试；重算的完成多于 `quizbuks.analytics.max-recount`（缺省 100 万，`AnalyticsLimits.RECOUNT_DEFAULT`）即不重算，逐块读完（分析数 = 完成数）或结束一天后定稿，使重算不超过 `QUERY_TIMEOUT`。
+  改正 `AnalyticsLimits` 中"一块一个子流程、同一事务"的 Javadoc。测试 `AnalyticsRobustnessIT`（毒丸：以检查约束拒绝某个块或某个重算的写入，断言 `PARTIAL`、其他项已提交、去掉约束后下次补上；超过重算上限的发布照样定稿）、`AnalyticsJobIT.overlappingRunsCountEveryIncrementOnce`（两个线程同时运行：一个 `SUCCEEDED`、一个 `LOCKED`，增量只计一次）。
+- **L1 今日支出**：没有游标（任务尚未见过）的发布不再把一生的支出算进今日：有游标时取计数 − 游标，没有时只有今天上架的计入；任务第一次见到时把此前的历史记在上架的那一小时并标 `gap`，不进今天的桶。测试 `todaysSpendingLeavesOutWhatAPublicationTheJobHasNotSeenSpentBefore`。
+- **L2 偏移写法的时区**：`AnalyticsZoneCheck`（`PlatformCheck`，类别 `QUIZBUKS`）只接受 `UTC` 与地区名，拒绝 `+09:00`、`Z`、`UTC+9`、`GMT+9`、`Etc/GMT-9` 等（PostgreSQL 的 `AT TIME ZONE` 把 POSIX 偏移读反）；无效的名字留给平台的保留期检查。测试 `AnalyticsZoneCheckTest`。
+- **L3 开始数从不等于完成数**：结束一天后不论是否还有进行中的会话都重算并定稿（同重算不一致时的兜底）。测试见 `AnalyticsRobustnessIT` 的第二个测试（一个永不完成的会话）。
+- **L4 合并 `origin/1.2/quizbuks`（Q7b）**：合并提交 69256e0；`QB_SETUP` 多建的行使编号顺延，`play.yml`、`payout.yml`、`topup.yml` 与 `analytics.yml` 的作答位置按新顺序改写（得分不变），逐个检查快照差异后更新；`application.yml` 只留一处 `jabiz.fiscal-year-zone: Asia/Tokyo` 并加一行注释；迁移 V12、V13、V14 依次。
+- **`min-group` 的写法**：模板与 `MinGroup` 只认 1–9 位的整数（`numeric(9,0)`），其他（小数、文字、更长的）按缺省 5；参数本身是 `numeric(3,0)`，`PARAM_SET` 拒绝 `abc` / `1000` / `2.5`（422 `PARAM_VALUE_INVALID`），以其他方式存入的 `1000` 按 1000 读、全部隐藏。测试 `MinGroupTest`、`AnalyticsIT.aMinimumGroupThatIsNotAWholeNumberOrTooLargeIsRefusedOrHoldsEverythingBack`。
+- **水位线在上限处并列**：`AnalyticsJobIT` 断言五个会话的提交时刻相同、上限 3 切在并列之中，按 `(submittedAt, attemptId)` 每个恰读一次。
+- **Info 审计字节**：游标的 `questions` 标为 `auditMasked`；`AnalyticsPerfIT` 打印审计字节：每行约 180–330 字节，最坏的每天约 170 万行约 0.3–0.6 GB / 天（评审按未遮蔽估约 0.7 GB / 天），见 `perf/Q9e-analytics.md` §3。
+- 结果 JSON 的读取加了 `IS JSON ARRAY` 与 `jsonb_typeof` 的防护：一行坏的 `result` 不使整块失败。

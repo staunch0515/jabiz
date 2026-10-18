@@ -3,15 +3,15 @@ id: qb.sponsor.analytics.questions
 description: >-
   Each question of one of the sponsor's publications (M-42) - its text and points, how many answered it, the share
   answered right and its difficulty, only over the minimum group of completions
-entities: [QbPublication, QbQuizVersion, QbAnalyticsCursor, QbQuestionStat, SysParam]
+entities: [QbPublicationCard, QbQuizVersion, QbAnalyticsCursor, QbQuestionStat, SysParam]
 datasets:
-  QbPublication: urn:jabiz:dataset:sponsor:QbPublication
+  QbPublicationCard: urn:jabiz:dataset:sponsor:QbPublicationCard
   QbQuizVersion: urn:jabiz:dataset:default:QbQuizVersion
   QbAnalyticsCursor: urn:jabiz:dataset:default:QbAnalyticsCursor
   QbQuestionStat: urn:jabiz:dataset:default:QbQuestionStat
   SysParam: urn:jabiz:dataset:now:SysParam
 params:
-  publicationId: { like: QbPublication.publicationId, required: true, description: The publication }
+  publicationId: { like: QbPublicationCard.publicationId, required: true, description: The publication }
 results:
   questionNo:  { kind: { type: numeric, precision: 4, scale: 0 } }
   stem:        { kind: { type: text, maxLength: 1000 } }
@@ -22,7 +22,7 @@ results:
   difficulty:  { kind: { type: text, maxLength: 10 } }
   suppressed:  { kind: { type: bool } }
   basedOn:     { kind: { type: numeric, precision: 12, scale: 0 } }
-  minGroup:    { kind: { type: numeric, precision: 3, scale: 0 } }
+  minGroup:    { kind: { type: numeric, precision: 9, scale: 0 } }
   shownAt:     { from: QbQuestionStat.shownAt }
 list:
   sorts: [questionNo, correctRate]
@@ -37,14 +37,14 @@ permissions: [qb.stats.read]
 -- analytics template. Right = the question earned points (a multiple choice: all of it right, as scored). Difficulty
 -- (E-5): EASY from 80 % right, MEDIUM from 50 %, HARD below.
 WITH params AS (
-    SELECT greatest(3, coalesce(max(CASE WHEN p.{{SysParam.value}} ~ '^[0-9]{1,3}$'
+    SELECT greatest(3, coalesce(max(CASE WHEN p.{{SysParam.value}} ~ '^[0-9]{1,9}$'
                                          THEN CAST(p.{{SysParam.value}} AS int) END), 5)) AS k
     FROM {{SysParam}} p
     WHERE p.{{SysParam.paramKey}} = 'qb.stats.min-group'),
 pub AS (
-    SELECT p.{{QbPublication.publicationId}} AS pid, p.{{QbPublication.versionId}} AS vid
-    FROM {{QbPublication}} p
-    WHERE p.{{QbPublication.publicationId}} = :publicationId),
+    SELECT p.{{QbPublicationCard.publicationId}} AS pid, p.{{QbPublicationCard.versionId}} AS vid
+    FROM {{QbPublicationCard}} p
+    WHERE p.{{QbPublicationCard.publicationId}} = :publicationId),
 qs AS (
     SELECT b.pid, CAST(q.value ->> 'no' AS int) AS no, q.value ->> 'stem' AS stem,
            CAST(q.value ->> 'points' AS int) AS points
@@ -76,6 +76,6 @@ SELECT
               ELSE 'HARD' END AS varchar(10))                        AS difficulty,
     NOT f.shown                                                   AS suppressed,
     CAST(f.v_based_on AS numeric(12, 0))                          AS basedOn,
-    CAST(f.k AS numeric(3, 0))                                    AS minGroup,
+    CAST(f.k AS numeric(9, 0))                                    AS minGroup,
     CASE WHEN f.shown THEN f.v_shown_at END                       AS shownAt
 FROM figures f

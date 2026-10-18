@@ -33,8 +33,9 @@ public final class AnalyticsLimits {
     public static final int BATCH = 100_000;
 
     /**
-     * Publications per chunk ({@code quizbuks.analytics.chunk-size}): each chunk commits its own writes, at most two
-     * rows per publication and one per question when the shown statistics change.
+     * Publications per chunk ({@code quizbuks.analytics.chunk-size}): a chunk is one item of the per-item job, so one
+     * transaction of its own (review M3), writing at most two rows per publication and one per question when the shown
+     * statistics change. A chunk that fails is retried by later runs and holds up only its own publications.
      */
     public static final int CHUNK_DEFAULT = 100;
     public static final int CHUNK_MAX = 200;
@@ -46,6 +47,14 @@ public final class AnalyticsLimits {
      */
     public static final int ATTEMPTS_DEFAULT = 50_000;
     public static final int ATTEMPTS_MAX = 200_000;
+
+    /**
+     * Most completions a publication is recounted whole for after its end ({@code quizbuks.analytics.max-recount}): a
+     * recount of 230,000 took about 6 seconds (docs/quizbuks/perf/Q9e-analytics.md), so a million stays well within
+     * {@link #QUERY_TIMEOUT}. A larger publication is finalized with the totals read so far once they have caught up
+     * with its completions (they are the same attempts, read in pieces), without the recount's cross-check.
+     */
+    public static final long RECOUNT_DEFAULT = 1_000_000;
 
     /** The query time limit of the job's reads (a finished publication is recounted whole once). */
     public static final Duration QUERY_TIMEOUT = Duration.ofMinutes(2);

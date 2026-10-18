@@ -2,7 +2,8 @@ package com.jabiz.quizbuks.it;
 
 import com.jabiz.job.JobDefinition;
 import com.jabiz.quizbuks.setup.QbParams;
-import com.jabiz.quizbuks.stats.AnalyticsRefresh;
+import com.jabiz.quizbuks.stats.AnalyticsJob;
+import com.jabiz.runtime.job.JobRunner;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.HttpHeaders;
@@ -37,15 +38,21 @@ abstract class AnalyticsItSupport extends PlayItSupport {
 
     @Autowired
     @Qualifier("qbAnalyticsJob")
-    JobDefinition<AnalyticsRefresh.RefreshInput> analyticsJob;
+    JobDefinition<AnalyticsJob.ItemInput> analyticsJob;
 
-    /** Runs the analytics job at {@code at} as the scheduler would; the clock is set there first. */
+    /** Runs the analytics job at {@code at} as the scheduler would; every item must succeed. */
     void runAnalytics(Instant at) {
+        JobRunner.JobRun run = analyticsRun(at);
+        assertThat(run.outcome()).as("qb.analytics at " + at + ": " + run).isEqualTo(JobRunner.Outcome.SUCCEEDED);
+    }
+
+    /** Runs the analytics job at {@code at} (the clock is set there first); its outcome and item counts. */
+    JobRunner.JobRun analyticsRun(Instant at) {
         if (clock.instant().isBefore(at)) {
             clock.set(at);
         }
         execute("UPDATE jabiz_shedlock SET lock_until = locked_at");
-        assertThat(jobRunner.run(analyticsJob, at).toString()).as("qb.analytics at " + at).contains("SUCCEEDED");
+        return jobRunner.execute(analyticsJob, at);
     }
 
     /** The first whole UTC hour at least two hours after the clock: room for a test's own timeline. */

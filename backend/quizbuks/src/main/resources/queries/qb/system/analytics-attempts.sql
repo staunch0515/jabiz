@@ -29,11 +29,12 @@ list:
 permissions: [qb.stats.system]
 ---*/
 -- The finished attempts in (submitted_at, attempt_id) order after each publication's watermark, through the index on
--- (publication, submission time) (no index is added to qb_attempt). "until" lags the run (stats.AnalyticsRefresh.LAG):
+-- (publication, submission time) (no index is added to qb_attempt). "until" lags the run (stats.AnalyticsLimits.LAG):
 -- a submission's time is taken before its transaction commits. Incrementally at most "cap" attempts in all, the
 -- earliest first: each publication keeps a prefix of its own order, so its watermark moves to the last one read and the
 -- rest is read by the next runs. Each result is the canonical JSON of play.Scoring (no, earned, ...): a question is
--- right when it earned points, which for a multiple choice means all of it right. Average times count the submitted
+-- right when it earned points, which for a multiple choice means all of it right; a result that is not such JSON
+-- (it never is) counts as a completion without questions instead of failing the chunk. Average times count the submitted
 -- attempts only (an expired one took the whole time limit, E-6).
 WITH pubs AS (
     SELECT k.{{QbPublicationCard.publicationId}} AS pid,
@@ -78,10 +79,12 @@ last_read AS (
     ORDER BY a.pid, a.sat DESC, a.aid DESC),
 per_question AS (
     SELECT a.pid, CAST(q.value ->> 'no' AS int) AS qno, count(*) AS n,
-           count(*) FILTER (WHERE CAST(q.value ->> 'earned' AS numeric) > 0) AS correct
+           count(*) FILTER (WHERE jsonb_typeof(q.value -> 'earned') = 'number'
+                              AND CAST(q.value ->> 'earned' AS numeric) > 0) AS correct
     FROM attempts a
-    CROSS JOIN LATERAL jsonb_array_elements(CAST(a.v_result AS jsonb)) q
-    WHERE a.v_result IS NOT NULL
+    CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN a.v_result IS JSON ARRAY THEN CAST(a.v_result AS jsonb)
+                                                 ELSE CAST('[]' AS jsonb) END) q
+    WHERE jsonb_typeof(q.value -> 'no') = 'number'
     GROUP BY a.pid, CAST(q.value ->> 'no' AS int))
 SELECT
     p.pid                                      AS publicationId,

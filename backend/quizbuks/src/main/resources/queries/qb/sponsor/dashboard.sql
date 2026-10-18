@@ -4,9 +4,9 @@ description: >-
   The sponsor's key figures (M-10) - publications running, paused and short of funds, takers answering now, Kudos
   spent today, the wallet's available balance and pending rewards, the budget left of the running publications with a
   cap, and when the analytics last ran
-entities: [QbPublication, QbPublicationCounter, QbPublicationStartCounter, QbAnalyticsCursor, QbAnalyticsHour, QbWallet, QbStatsRun]
+entities: [QbPublicationCard, QbPublicationCounter, QbPublicationStartCounter, QbAnalyticsCursor, QbAnalyticsHour, QbWallet, QbStatsRun]
 datasets:
-  QbPublication: urn:jabiz:dataset:sponsor:QbPublication
+  QbPublicationCard: urn:jabiz:dataset:sponsor:QbPublicationCard
   QbPublicationCounter: urn:jabiz:dataset:default:QbPublicationCounter
   QbPublicationStartCounter: urn:jabiz:dataset:default:QbPublicationStartCounter
   QbAnalyticsCursor: urn:jabiz:dataset:default:QbAnalyticsCursor
@@ -32,7 +32,9 @@ permissions: [qb.stats.read]
 ---*/
 -- One row over the sponsor's own publications and wallet (their datasets). Live (E-3): the publications' states, the
 -- takers answering now (starts - completions, both sides of the counters in this one statement), the wallet, and the
--- part of today's spending since the job's last run (the counter's spent less the cursor's). The rest of today's
+-- part of today's spending since the job's last run (the counter's spent less the cursor's; a publication the job has
+-- not seen yet counts only when it went on today, review L1: the rest of its spending is not today's, and the job
+-- puts its history in the hour it went on). The rest of today's
 -- spending is the hourly buckets from the start of today in the deployment's zone (jabiz.fiscal-year-zone, recorded by
 -- the job: D-Q9e-3). The budget left of a running publication with a cap is the cap less what it spent and what its
 -- attempts in progress hold (reservedTotal - released), never below 0.
@@ -44,9 +46,10 @@ today AS (
     SELECT (date_trunc('day', CAST(:at AS timestamptz) AT TIME ZONE run.z) AT TIME ZONE run.z) AS day_start
     FROM run),
 mine AS (
-    SELECT p.{{QbPublication.publicationId}} AS pid, p.{{QbPublication.sponsorId}} AS sponsor,
-           p.{{QbPublication.status}} AS v_status, p.{{QbPublication.budgetCap}} AS cap
-    FROM {{QbPublication}} p),
+    SELECT p.{{QbPublicationCard.publicationId}} AS pid, p.{{QbPublicationCard.sponsorId}} AS sponsor,
+           p.{{QbPublicationCard.status}} AS v_status, p.{{QbPublicationCard.budgetCap}} AS cap,
+           p.{{QbPublicationCard.wentOnAt}} AS went_on
+    FROM {{QbPublicationCard}} p),
 live AS (
     SELECT
         count(*) FILTER (WHERE m.v_status = 'LIVE')        AS live,
@@ -54,8 +57,11 @@ live AS (
         count(*) FILTER (WHERE m.v_status = 'FUNDS_SHORT') AS funds_short,
         coalesce(sum(coalesce(s.{{QbPublicationStartCounter.starts}}, 0)
                      - coalesce(n.{{QbPublicationCounter.completions}}, 0)), 0) AS answering,
-        coalesce(sum(coalesce(n.{{QbPublicationCounter.spent}}, 0) - coalesce(c.{{QbAnalyticsCursor.spent}}, 0)), 0)
-            AS since_run,
+        coalesce(sum(CASE
+            WHEN c.{{QbAnalyticsCursor.publicationId}} IS NOT NULL
+                THEN coalesce(n.{{QbPublicationCounter.spent}}, 0) - c.{{QbAnalyticsCursor.spent}}
+            WHEN m.went_on >= t.day_start THEN coalesce(n.{{QbPublicationCounter.spent}}, 0)
+            ELSE 0 END), 0) AS since_run,
         coalesce(sum(greatest(m.cap - coalesce(n.{{QbPublicationCounter.spent}}, 0)
                      - (coalesce(s.{{QbPublicationStartCounter.reservedTotal}}, 0)
                         - coalesce(n.{{QbPublicationCounter.released}}, 0)), 0))
@@ -63,7 +69,8 @@ live AS (
     FROM mine m
     LEFT JOIN {{QbPublicationCounter}} n ON n.{{QbPublicationCounter.publicationId}} = m.pid
     LEFT JOIN {{QbPublicationStartCounter}} s ON s.{{QbPublicationStartCounter.publicationId}} = m.pid
-    LEFT JOIN {{QbAnalyticsCursor}} c ON c.{{QbAnalyticsCursor.publicationId}} = m.pid),
+    LEFT JOIN {{QbAnalyticsCursor}} c ON c.{{QbAnalyticsCursor.publicationId}} = m.pid
+    CROSS JOIN today t),
 bucketed AS (
     SELECT coalesce(sum(h.{{QbAnalyticsHour.spent}}), 0) AS v_spent
     FROM {{QbAnalyticsHour}} h

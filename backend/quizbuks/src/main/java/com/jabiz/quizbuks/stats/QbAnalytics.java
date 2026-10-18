@@ -91,7 +91,9 @@ public final class QbAnalytics {
         count(eb, "submitted", "submitted");
         count(eb, "expired", "expired");
         eb.field("durationSec", f -> f.physicalColumn("duration_sec").required(true).asNumeric(15, 3));
-        eb.field("questions", f -> f.physicalColumn("questions").required(true)
+        // Derived from the attempts and rewritten whenever new ones are read: the audit keeps that it changed, not the
+        // up to 4,000 characters each time (review Info; docs/quizbuks/perf/Q9e-analytics.md).
+        eb.field("questions", f -> f.physicalColumn("questions").required(true).auditMasked()
             .asText(QuestionTotals.MAX_LENGTH));
         count(eb, "shownAnalysed", "shown_analysed");
         count(eb, "shownSubmitted", "shown_submitted");
