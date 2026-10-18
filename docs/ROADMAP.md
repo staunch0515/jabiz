@@ -1466,6 +1466,7 @@ e2e 对打包的应用（同 CI 的 `e2e` 作业，新的数据库）44 个用�
 | 16q | Q10b 安全审查的平台修正：Spring Boot 4.0.8（reactor-netty 1.3.7，CVE-2026-47874）、登录类接口按地址限流、口令哈希并发上限、`FilePolicy.privateMetadata()`；2026-10-17 确认（S-1、S-2 按建议）；✅ 已实施（分支 `1.2/phase-16q-security`，PR 待建） | D47 | 2.5–3.5 天 | 16o |
 | 16r | 受保护授权的四眼（建立期、首个管理员退役）、会计年度的时区 `jabiz.fiscal-year-zone`、`privateMetadata()` 的文件用随机编号；2026-10-17 确认；✅ 已实施（分支 `1.2/phase-16r-controls`，PR 待建） | D48 | 3–4 天 | 16q |
 | 16s | 收件偏好按登录入口列出、模板显示名、邮件语言的读取与询问、`MailPreferences` 积木（QuizBuks Q7 平台缺口 P1，Q7-13 选 A；2026-10-18 确认）；✅ 已实施（分支 `1.2/phase-16s-mail-preferences`，PR 待建） | D49 | 1–1.5 天 | 16a、16c |
+| 16u | 受保护变更的审批权限 `security.protected-change.decide`、按可配置的管理员权限计管理员（QuizBuks Q7a 发现，2026-10-18 确认）；时间参数限于 PostgreSQL 的范围、`Combobox` 加载状态的无障碍；✅ 已实施（分支 `1.2/phase-16u-protected-grant-roles`，PR 待建） | D51 | 1–1.5 天 | 16r |
 
 **其余工作的顺序**（2026-10-13 确认）：
 - 前端线：15c-1 → 15c-2 → 15d。
@@ -4013,3 +4014,36 @@ QB 提交锁内 48 → 16（16p-1）的明细：恢复超时 1 → 0（T1）、�
 7. `MailIT`：已在门户关闭的门户模板不再发送（`SKIPPED` / `UNSUBSCRIBED`，收件箱中没有）。
 
 **未做**：退订页（`MailUnsubscribePage`）仍只在通用后台（Q7 计划 P2，不做）；`AuthFrame` 的语言切换（登录前的页面）不询问邮件语言（无会话）。
+
+### 16u 受保护变更的审批权限与细分权限的管理员（1–1.5 天）
+
+来源：QuizBuks Q7a 的工作（产品负责人 2026-10-18 确认修正），另含 QuizBuks 评审中的两项平台小问题。
+分支 `1.2/phase-16u-protected-grant-roles`，从 `1.2/platform`（`bc029b6`，16q、16r、16s 已合入）拉出。决策 **D51**（修改 D48 第 1 条的管理员、审批人与缺省清单及实现说明⑥）。没有迁移；OpenAPI 不变。
+
+**16u 状态**：✅ 已实施（PR 待建）。
+
+| # | 内容 | 实施 |
+|---|---|---|
+| 1 | 谁算管理员 | `jabiz.security.protected-grants.administrator-permissions`（缺省 `security.user-role.write`、`security.role.write`；`*` 总是算）；建立期的计数、首个管理员的退役与审批人的覆盖都用它（`ProtectedGrants.admins`、`ProtectedChangeDecisionCheck`）；格式错误为启动错误、不受保护时警告 |
+| 2 | 专门的审批权限 | `security.protected-change.decide` 代替 `approval.decide` 决定受保护的变更（审批时与生效时 `mayDecide`）；`APPROVAL_DECIDE` 入口接受两者之一（core 新增流程的备选权限 `orPermissions` / `permissionsFor`），取得请求后按对象要求其一（`ApprovalDecisionCheck.decidePermission`），所以它不能决定业务审批、`approval.decide` 也不再能决定受保护的变更；覆盖、申请人与目标的限制、二次验证照旧；它本身加入缺省清单并总是受保护 |
+| 3 | 时间参数的范围 | `FieldValueCoercer` 只接受 `timestamptz` / `date` 能保存的值（模板参数、筛选、实体属性），请求的 `asOf` / `knownAt` 同样（`TimeTravel`）；超出即 400 `INVALID_VALUE`，不再是 500 `22008` |
+| 4 | `Combobox` 加载状态 | 列表带 `aria-busy`，加载中保留已有选项，转圈移到 `role=listbox` 之外（axe `aria-required-children`） |
+| 5 | 文档 | D51、10 §5 / §16、18 §3.4、05 §4、`guide/platform-features.md` |
+
+**验收**
+- [x] `./gradlew check` 全部通过（含 `:app:platformCheck`、场景快照、覆盖率门禁）；前端 `pnpm lint`、`typecheck`、`test`、`check:api`；端到端 `pnpm e2e`；演示数据 `tools/demo/seed.sh`。
+- [x] `ProtectedGrantFineAdminsIT`：细分权限的安全管理员使首个管理员退役、两位之后结束建立期；以 `security.protected-change.decide` 审批另一位申请的授权并生效；申请人、目标、只有 `approval.decide`、
+  没有近期二次验证的都不能；覆盖照旧（审批时按令牌、生效时按库中实际持有）；给出 `security.protected-change.decide`（分配只含它的角色、给有用户的角色加上它）本身要审批。
+- [x] `ProtectedGrantIT`：`approval.decide` 单独不能审批（批准与驳回都 403）；生效前失去新权限时 `APPROVER_NOT_ALLOWED`；其余审批改用新权限。`ApprovalIT`：新权限不能决定业务审批（403）。
+- [x] 单元测试：`ApproverCoverageTest`（可配置的管理员权限、`mayDecide` 不认 `approval.decide`、配置检查）、`ProtectedPermissionsTest`（新权限总是受保护）、`ProcessDefinitionBuilderTest`（备选权限）、
+  `FieldValueCoercerTest`（范围与边界）；`AdvancedQueryExecutorIT` 与 `ValueBindingIT`（超出范围为 400，边界值在真实数据库上可查询）；`combobox.test.tsx`（加载中 `aria-busy`、保留选项、转圈在列表外，亮暗两种外观过 axe）。
+
+**升级说明**（线 1.2 内）：
+- 以 `*` 管理与审批的部署（含示范应用、端到端测试、演示数据与快速开始）不受影响。
+- **用细分权限管理的部署行为改变**：首个管理员之外出现一位持有管理员权限（缺省 `security.user-role.write` / `security.role.write`）的用户，首个管理员即退役；出现两位，建立期即结束（下一次写安全实体或检查受保护变更时记录，永不回退）。
+  此后受保护的变更要由另一位持有 `security.protected-change.decide` 与管理员权限并覆盖所给权限的用户审批。**升级前**先把 `security.protected-change.decide` 加入安全管理员的角色
+  （在 16r 上它还不受保护，直接写入）；否则升级后给出它本身需要审批，可能无人能批（出路：以 `jabiz.security.protected-grants.enabled=false` 启动一次，给好后改回）。
+  若应用以自己的权限码管理安全，配置 `administrator-permissions`。把安全管理与 `approval.decide` 分开的职责分离规则不必修改。
+- 以非 `*` 的 `approval.decide` 审批受保护变更的部署：审批人改持 `security.protected-change.decide`；升级前这样批准而尚未生效的变更生效时为 `APPROVER_NOT_ALLOWED`，重新申请即可。
+- `ProcessDefinition` 增加 record 组件（16 → 17）：经 `ProcessDefinition.define` 声明的应用不受影响，原 16 参构造保留。
+- 时间超出 PostgreSQL 范围的请求由 500 变为 400。

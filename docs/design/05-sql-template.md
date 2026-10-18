@@ -104,6 +104,8 @@ WHERE w.{{WaybillTracking.freightCharge}} >= :minFreight
   其他用法（如可选列表的 `CAST(:ids AS uuid[]) IS NULL`）另外允许。空数组时 `= ANY` 为假、`<> ALL` 为真，平台不做特殊处理。
 - 时态实体的主键、以及指向时态实体的引用，按 UUID 绑定（`like` 该主键或 `reference` 类型的参数）；其他标识按文本绑定。
 - 缺少必填参数 → 400 `REQUIRED`；值不符合语义类型（含字典）→ 400 `INVALID_VALUE`；传入未声明的参数 → 400 `UNKNOWN_FIELD`；全部一起返回。
+- 时间与日期须在 PostgreSQL 能保存的范围内（`timestamptz`：4714-11-24 BC 至 294276-12-31 23:59:59.999999 UTC；`date`：4714-11-24 BC 至 5874897-12-31），
+  超出即 400 `INVALID_VALUE`，不是数据库的 500（`FieldValueCoercer.storable`，筛选、实体属性与请求的 `asOf` / `knownAt` 同样，D51 第 3 条）。
 - 平台保留的参数：`scope_` 前缀（数据视图范围）、`__` 前缀（时态：`__asOf`、`__knownAt`；分页 `__limit`、`__offset`；外层筛选 `__f*`）。业务参数不得使用。
 
 ## 5. 外层分页、筛选、排序
