@@ -22,6 +22,7 @@ describe('the legal texts', () => {
     expect(legalKindOf('/legal/sponsor-terms')).toBe('TERMS_SPONSOR')
     expect(legalKindOf('/legal/privacy')).toBe('PRIVACY')
     expect(legalKindOf('/legal/commerce')).toBe('COMMERCE_NOTICE')
+    expect(legalKindOf('/legal/ai')).toBe('AI_NOTICE')
     expect(legalKindOf('/legal/drafts')).toBeNull()
     expect(legalKindOf('/legal/terms/1')).toBeNull()
     expect(legalPath('PRIVACY')).toBe('/legal/privacy')

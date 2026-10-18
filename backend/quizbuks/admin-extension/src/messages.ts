@@ -1,11 +1,13 @@
 import { financeMenu, financeMessages } from './finance-messages'
+import { aiMenu, aiMessages } from './ai-messages'
 import { legalMenu, legalMessages } from './legal-messages'
 
 /** Texts of the QuizBuks admin extension, in every platform language (namespace EXTENSION_NAMESPACE, `app`). */
 export const messages = {
   en: {
-    menu: { group: 'QuizBuks', reviews: 'Reviews', users: 'Users', ...legalMenu.en, ...financeMenu.en },
+    menu: { group: 'QuizBuks', reviews: 'Reviews', users: 'Users', ...legalMenu.en, ...aiMenu.en, ...financeMenu.en },
     legal: legalMessages.en,
+    ai: aiMessages.en,
     finance: financeMessages.en,
     common: {
       notSet: 'Not set',
@@ -216,8 +218,9 @@ export const messages = {
     },
   },
   zh: {
-    menu: { group: 'QuizBuks', reviews: '审核', users: '用户', ...legalMenu.zh, ...financeMenu.zh },
+    menu: { group: 'QuizBuks', reviews: '审核', users: '用户', ...legalMenu.zh, ...aiMenu.zh, ...financeMenu.zh },
     legal: legalMessages.zh,
+    ai: aiMessages.zh,
     finance: financeMessages.zh,
     common: {
       notSet: '未设置',
@@ -428,8 +431,9 @@ export const messages = {
     },
   },
   ja: {
-    menu: { group: 'QuizBuks', reviews: '審査', users: 'ユーザー', ...legalMenu.ja, ...financeMenu.ja },
+    menu: { group: 'QuizBuks', reviews: '審査', users: 'ユーザー', ...legalMenu.ja, ...aiMenu.ja, ...financeMenu.ja },
     legal: legalMessages.ja,
+    ai: aiMessages.ja,
     finance: financeMessages.ja,
     common: {
       notSet: '未設定',

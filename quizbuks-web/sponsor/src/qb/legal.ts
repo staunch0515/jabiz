@@ -10,7 +10,8 @@ import { LEGAL } from './ids'
 /** A text in several languages, as the server keeps it (`{en: …, ja: …}`). */
 export type I18nText = Record<string, string>
 
-export type LegalKind = 'TERMS_APP' | 'TERMS_SPONSOR' | 'PRIVACY' | 'COMMERCE_NOTICE'
+/** `AI_NOTICE` (Q8a): what the AI provider is sent; sponsors accept it on their first AI request. */
+export type LegalKind = 'TERMS_APP' | 'TERMS_SPONSOR' | 'PRIVACY' | 'COMMERCE_NOTICE' | 'AI_NOTICE'
 
 /** The pages' addresses of the texts (`/legal/<slug>`), and back. */
 export const LEGAL_SLUGS: Record<string, LegalKind> = {
@@ -18,6 +19,7 @@ export const LEGAL_SLUGS: Record<string, LegalKind> = {
   'sponsor-terms': 'TERMS_SPONSOR',
   privacy: 'PRIVACY',
   commerce: 'COMMERCE_NOTICE',
+  ai: 'AI_NOTICE',
 }
 
 export function legalPath(kind: LegalKind): string {
