@@ -25,6 +25,12 @@ vi.mock('@jabiz/client', async (importOriginal) => ({
   },
 }))
 
+const offer = vi.hoisted(() => vi.fn<(lang: string) => Promise<void>>(async () => {}))
+vi.mock('@jabiz/ui', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@jabiz/ui')>()),
+  offerMailLanguage: (lang: string) => offer(lang),
+}))
+
 const idle = vi.hoisted(() => ({ onIdle: null as null | (() => void), seconds: null as number | null }))
 
 vi.mock('../meta/hooks', () => ({
@@ -107,6 +113,8 @@ describe('AppLayout (the shell, decision D34)', () => {
     await userEvent.click(screen.getByRole('menuitemradio', { name: '日本語' }))
     await waitFor(() => expect(i18n.language).toBe('ja'))
     expect(screen.getByRole('link', { name: 'データ' })).toBeInTheDocument()
+    // The mail language is only offered, after the interface changed (decision D49).
+    await waitFor(() => expect(offer).toHaveBeenCalledWith('ja'))
     await act(() => i18n.changeLanguage('en'))
   })
 

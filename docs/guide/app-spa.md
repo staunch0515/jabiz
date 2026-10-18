@@ -124,8 +124,10 @@ export default defineConfig({
 - **页面积木**（`@jabiz/ui`，不依赖路由，导航经 `onNavigate` / `hrefOf`）：`SignInForm`（`signUpPath`、`passwordResetPath`）、`SignUpForm`、
   `MailLinkPage`（路径 `auth/verify-email`、`auth/join`、`auth/password-reset`；不要传 `search`，它自己读一次地址并立即去掉令牌）、`PasswordResetRequest`、
   `OidcCallback`（路径 `login/oidc`；登录与本人关联共用，关联完成后调用 `onLinked`）、`LinkedIdentities`（本人的外部账号：列表、关联、解除，16f-1）、`StepUpProvider`、`MfaEnrollment`、`ChangePasswordForm`、`SessionList`（本人在该入口的会话，结束本机会话后调用 `onSignedOut`，10 §15.9）、
+  `MailPreferences`（本人的邮件：该入口的可退订通知与邮件语言，16s；应用的模板以 `.entries("app")` 声明给该入口、显示名写在 `mail.<名>.name`）、
   `VerifyEmailBanner`、`OfflineBanner`、`PwaUpdatePrompt`。
   示范门户用一个几十行的小路由（`src/router.ts`）；也可以用任何版本的 react-router。
+  自己的语言切换在 `changeLanguage(lang)` 之后调用 `offerMailLanguage(lang)`：邮件用的是另一种语言时询问是否一起改，用户接受才修改（决策 D49 第 3 条）。
 - **内容显示积木**（`@jabiz/ui`，16n）：`MarkdownView`（`text`、可选 `lang`；原始 HTML 一律不渲染，`javascript:` 等链接被去掉，样式随 `theme.css`）、
   `FilePreview`（`fileId`、`field`（`{ image, variants }`）、`width`：以会话取文件，图片为缩略图、可放大，其余为下载按钮），以及自己画图片时用的
   `useFileUrl(fileId, variant)`（对象 URL，卸载时释放；变体用 `@jabiz/client` 的 `previewVariant`）与 `downloadFile(fileId)`。不要从 `@jabiz/admin` 引用（它只给后台扩展）。

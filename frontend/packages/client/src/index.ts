@@ -68,6 +68,15 @@ export type {
   LinkedIdentity,
   IdentityLinked,
 } from './auth/account'
+export {
+  getMailPreferences,
+  setMailPreference,
+  getMailLanguage,
+  setMailLanguage,
+  onMailLanguageChange,
+  mailLanguageOffer,
+} from './auth/mail'
+export type { MailPreference, MailLanguage } from './auth/mail'
 export { readMailLink, parseMailLink, useMailLink, useNoReferrer, sitePath } from './auth/mailLink'
 export type { MailLink } from './auth/mailLink'
 export { default as UserName, useUserName } from './components/UserName'

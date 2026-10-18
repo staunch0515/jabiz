@@ -11,6 +11,7 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  offerMailLanguage,
   ShellNav,
   ThemeToggle,
   Tooltip,
@@ -46,6 +47,15 @@ import { extensionMenu } from '../extension/registry'
 import { changeLanguage, languages, type Language } from '../i18n'
 import { useImportCatalog, useMenus, useMyTasks, useQueryCatalog } from '../meta/hooks'
 import type { MenuItem } from '../meta/types'
+
+/**
+ * Switches the interface language, then offers (never makes) the same change for the user's mail, which is the
+ * account's and goes on in its own language until the user accepts (decision D49 item 3).
+ */
+async function switchLanguage(lang: Language) {
+  await changeLanguage(lang)
+  await offerMailLanguage(lang)
+}
 
 /** Menu items from the server (SecMenu, already filtered by permission) as entries of the shell's menu. */
 function serverMenu(items: MenuItem[] | undefined): ShellMenuItem[] {
@@ -158,7 +168,7 @@ export default function AppLayout() {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuLabel>{t('app.language')}</DropdownMenuLabel>
-            <DropdownMenuRadioGroup value={i18n.language} onValueChange={(lang) => void changeLanguage(lang as Language)}>
+            <DropdownMenuRadioGroup value={i18n.language} onValueChange={(lang) => void switchLanguage(lang as Language)}>
               {languages.map((lang) => (
                 <DropdownMenuRadioItem key={lang} value={lang} lang={lang}>
                   {LANGUAGE_NAMES[lang]}

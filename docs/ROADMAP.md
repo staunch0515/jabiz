@@ -1465,6 +1465,7 @@ e2e 对打包的应用（同 CI 的 `e2e` 作业，新的数据库）44 个用�
 | 16p | 降低 `LEDGER_POST` 与每个流程的平台开销（QuizBuks Q10a 的 R2，Q5 平台缺口 14 与"平台通用开销"）：同样的保证、更少的语句（`HoldLock` 一条语句、合并校验读取、时态插入不先读、引用检查复用本事务的读写、一次提交的写入合成一条、按已知版本更新、事务内写缓冲）；分 16p-1 / 16p-2；16p-1 ✅ 已合并（#165），16p-2 ✅ 已实施（待合并，`1.2/phase-16p2-write-buffer`） | D46（已确认 2026-10-16） | 10–12 天（16p-1 6.5–7.5、16p-2 3.5–4.5） | 16o |
 | 16q | Q10b 安全审查的平台修正：Spring Boot 4.0.8（reactor-netty 1.3.7，CVE-2026-47874）、登录类接口按地址限流、口令哈希并发上限、`FilePolicy.privateMetadata()`；2026-10-17 确认（S-1、S-2 按建议）；✅ 已实施（分支 `1.2/phase-16q-security`，PR 待建） | D47 | 2.5–3.5 天 | 16o |
 | 16r | 受保护授权的四眼（建立期、首个管理员退役）、会计年度的时区 `jabiz.fiscal-year-zone`、`privateMetadata()` 的文件用随机编号；2026-10-17 确认；✅ 已实施（分支 `1.2/phase-16r-controls`，PR 待建） | D48 | 3–4 天 | 16q |
+| 16s | 收件偏好按登录入口列出、模板显示名、邮件语言的读取与询问、`MailPreferences` 积木（QuizBuks Q7 平台缺口 P1，Q7-13 选 A；2026-10-18 确认）；✅ 已实施（分支 `1.2/phase-16s-mail-preferences`，PR 待建） | D49 | 1–1.5 天 | 16a、16c |
 
 **其余工作的顺序**（2026-10-13 确认）：
 - 前端线：15c-1 → 15c-2 → 15d。
@@ -3978,3 +3979,37 @@ QB 提交锁内 48 → 16（16p-1）的明细：恢复超时 1 → 0（T1）、�
 
 **未做**：申请人撤回请求；按细分权限（而不是 `*`）判断管理员（这类部署设 `always=true`）。
 
+### 16s 收件偏好按登录入口、模板显示名与邮件语言（1–1.5 天）
+
+来源：QuizBuks Q7 计划（`1.2/quizbuks-7-plan` 的 `docs/quizbuks/plans/Q7-messages-legal.md`）平台缺口 P1 与 Q7-13（选 A），2026-10-18 确认。
+分支 `1.2/phase-16s-mail-preferences`，从 `1.2/platform`（`1d92bbc`，16q 已合入）拉出。决策 **D49**（D48 由进行中的 16r 使用）。没有迁移。
+
+**16s 状态**：✅ 已实施（PR 待建）。
+
+| # | 内容 | 实施 |
+|---|---|---|
+| P1 | 模板声明适用的入口 | `MailTemplate…entries("app", …)`，缺省全部入口；`GET /api/auth/mail/preferences` 只列令牌入口的 NOTIFICATION 模板；POST 对其他入口的模板与未知名称同样 422 `INVALID_VALUE`；启动检查 `MAIL`：入口须可用 |
+| P2 | 显示名 | 消息 `mail.<名>.name`（三语）；偏好每项新增 `displayName`（请求语言 → 缺省语言 → 模板名）；NOTIFICATION 缺显示名时启动检查告警 |
+| P3 | 邮件语言 | 新增 `GET /api/auth/account/locale`（`locale`、`effective`、`languages`）；`@jabiz/client` 的 `getMailPreferences` / `setMailPreference` / `getMailLanguage` / `setMailLanguage` / `mailLanguageOffer`；切换界面语言只**询问**（`@jabiz/ui` 的 `offerMailLanguage`，带按钮的提示，接受才修改），通用后台顶栏已调用 |
+| P4 | 积木 | `@jabiz/ui` 的 `MailPreferences`（每个通知一个开关、邮件语言选择、即时保存，主题 token，亮暗两种外观过 axe）；通用后台安全设置页的"邮件"一节，示范门户账户页；`notify` 增加可选的 `action` |
+| P5 | 文档与接口 | D49、18 §5.6、12 §6 / §10 / §12、CLAUDE.md（待办与通知一条）；OpenAPI 快照与 `pnpm gen:api` |
+
+**验收**
+- [x] `./gradlew check` 全部通过（含 `:app:platformCheck`、场景快照、覆盖率门禁）；前端 `pnpm lint`、`typecheck`、`test`、`check:api`；示范门户 `app:check`、`lint`、`typecheck`、`test`；端到端 `pnpm e2e`。
+- [x] `MailPreferencesIT`：后台入口只看到全部入口的模板、门户看到自己的与全部入口的；显示名按请求语言，未知语言取缺省；其他入口的模板与未知名称、TRANSACTIONAL 同样拒绝且不写记录；请求体中的 `userId` 不被读取，只改本人的；退订链接不看入口；读写本人的邮件语言，空为缺省，非平台语言 400，非用户 403、匿名 401。`MailIT` 的退订流程不变（偏好多一个字段）。
+- [x] `MailChecksTest`：缺显示名的告警（只对 NOTIFICATION）、不可用的入口报错；`MailTemplateTest`：入口的声明与校验、`appliesTo`、原四参构造。
+- [x] 前端：`mail.test`（client 的五个函数与询问的判断）、`MailPreferences.test`（开关与保存、失败保持原值、语言选择、无通知、换界面语言重读、axe；`offerMailLanguage` 接受才修改）、`AccountSecurityPage.test`（"邮件"一节）、`AppLayout.test`（切换语言后询问）、门户 `App.test`。
+
+**兼容**（线 1.2 内）：接口只新增字段（`TemplatePreference.displayName`）与 `GET /api/auth/account/locale`；未声明入口的模板照旧对所有入口列出；`MailTemplate` 保留原四参构造；`TemplatePreference` 保留原两参构造。
+唯一的行为变化：示范的 `commerce.order-shipped` 只在门户的偏好中列出。
+
+**独立评审之后的修订**（2026-10-18）：
+1. 其他入口的模板不再在控制器中预先拒绝，改由流程 `SEC_MAIL_PREFERENCE_SET` 以请求的入口判断，与未知名称同一路径（`MailPreferencesIT` 以流程的拒绝计数断言）。
+2. 询问被接受后，打开着的 `MailPreferences` 立即显示新的语言（`@jabiz/client` 的 `onMailLanguageChange`）；e2e 不再重新加载页面。
+3. 用户关闭过的其他入口的模板列在"您关闭的其他邮件"中（`otherEntry`），可重新开启；D49 与 18 §5.6 说明了原先退订会"看不见"的问题。
+4. 询问一直显示到回答（"用于邮件" / "暂不"），并说明以后在哪里修改。
+5. 邮件语言可选"默认"（`locale: null`，接口新增 `defaultLocale`）；选择框总有一项选中（不在界面语言中的选择显示为默认）；读取失败时有"重试"。
+6. `.entries(...)` 写在 TRANSACTIONAL 模板上时启动检查告警；D49 记下 record 组件数的变化。
+7. `MailIT`：已在门户关闭的门户模板不再发送（`SKIPPED` / `UNSUBSCRIBED`，收件箱中没有）。
+
+**未做**：退订页（`MailUnsubscribePage`）仍只在通用后台（Q7 计划 P2，不做）；`AuthFrame` 的语言切换（登录前的页面）不询问邮件语言（无会话）。
