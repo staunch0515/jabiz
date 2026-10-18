@@ -38,20 +38,22 @@ public class AssessProtectedChange<C extends ProcessContext>
     }
 
     /**
-     * For the approvers (review H1, M3): the names of the users the change is for, and who last set their
-     * credentials. Read only for a change that waits for approval.
+     * For the approvers (review H1, M3): the names of the users the change is for, who last set their credentials
+     * and whether they are the user's own, and the whole history of those credentials. Read only for a change that
+     * waits for approval.
      */
-    public record Described(List<String> affected, List<String> credentials) {}
+    public record Described(List<String> affected, List<String> credentials, List<String> history) {}
 
     private Mono<Described> describe(ProtectedGrants.Assessment assessment) {
         if (!assessment.needsApproval()) {
-            return Mono.just(new Described(List.of(), List.of()));
+            return Mono.just(new Described(List.of(), List.of(), List.of()));
         }
         return reactor.core.publisher.Flux.fromIterable(assessment.affected())
             .concatMap(user -> grants.userName(user).zipWith(grants.credentials(user)))
             .collectList()
             .map(found -> new Described(found.stream().map(f -> f.getT1()).toList(),
-                found.stream().map(f -> f.getT1() + ": " + f.getT2().summary()).toList()));
+                found.stream().map(f -> f.getT1() + ": " + f.getT2().summary()).toList(),
+                found.stream().map(f -> f.getT1() + ": " + String.join("; ", f.getT2().history())).toList()));
     }
 
     @Override

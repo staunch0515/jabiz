@@ -247,6 +247,10 @@ public class ProtectedChangeProcesses {
         if (described != null && !described.affected().isEmpty()) {
             facts.put("affected", fact(String.join(", ", described.affected())));
             facts.put("credentials", fact(String.join("; ", described.credentials())));
+            // Every change of their credentials, with who made it and when (the latest kept when too long).
+            String history = String.join(" | ", described.history());
+            facts.put("history", history.length() > HISTORY ? "..." + history.substring(history.length() - HISTORY + 3)
+                : history);
         }
         String reference = switch (kind) {
             case ProtectedChangeEntities.USER_ROLE -> user + " ← " + role + " (" + gained + ")";
@@ -259,6 +263,9 @@ public class ProtectedChangeProcesses {
         return new ApprovalCase(String.valueOf(change.get("changeId")), facts, content, null,
             String.valueOf(change.get("requestedBy")), reference);
     }
+
+    /** The longest credential history in the facts (the column holds 20000 characters for all of them). */
+    private static final int HISTORY = 6000;
 
     private static String fact(String text) {
         return text.length() > 500 ? text.substring(0, 497) + "..." : text;

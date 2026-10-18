@@ -7,7 +7,12 @@ import com.jabiz.process.BlockingStep;
 import com.jabiz.process.NoMetadata;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
+import com.jabiz.context.RequestContext;
+import com.jabiz.runtime.context.RequestContexts;
 import com.jabiz.runtime.event.OutboxDeliverer;
+import com.jabiz.runtime.process.ProcessExecutor;
+import com.jabiz.runtime.security.protect.ProtectedChangeEntities;
+import com.jabiz.runtime.security.protect.ProtectedChangeProcesses;
 import com.jabiz.runtime.process.steps.SaveChanges;
 import com.jabiz.runtime.security.SecurityEntities;
 import com.jabiz.runtime.test.TestTokens;
@@ -26,6 +31,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
@@ -63,6 +69,8 @@ class ProtectedGrantIT extends SecurityItSupport {
 
     @Autowired
     OutboxDeliverer deliverer;
+    @Autowired
+    ProcessExecutor executor;
 
     public record GrantBothInput(UUID userId, UUID roleId, boolean permissionFirst) {}
 
@@ -333,25 +341,75 @@ class ProtectedGrantIT extends SecurityItSupport {
             "reason", "later"))).containsEntry("status", "APPLIED");
     }
 
-    /** Review H1: what the approval covers is what the role gave when it was requested, not the role's id. */
+    /**
+     * Review H1: what the approval covers is what the role gave when it was requested, not the role's id. A growth of
+     * the role after the request waits for its own approval, which names the pending assignment's user (so that what
+     * it gives that user is approved there): in either order both apply, each as approved.
+     */
     @Test
-    void aRoleThatGrowsAfterTheRequestIsNotAppliedAsApproved() {
+    void aRoleThatGrowsAfterTheRequestIsAppliedOnlyAsTheApprovalsCover() {
+        for (boolean growthFirst : List.of(true, false)) {
+            String sock = bareUser("sock");
+            String role = createRole(unique("POSTER"), "ledger.post");
+            Map<String, Object> assignment = assignRole(sock, role);
+            assertThat(assignment).containsEntry("status", "PENDING");
+            // The role is empty, but the pending assignment counts: giving it * needs an approval naming the sock.
+            Map<String, Object> growth = run("SEC_ROLE_PERMISSION_ADD", as(adminOne), Map.of("roleId", role,
+                "permission", "*", "reason", "x"));
+            assertThat(growth).containsEntry("status", "PENDING");
+            assertThat(change(growth.get("changeId"))).containsEntry("affected_users", sock)
+                .containsEntry("gained", "*");
+            approve(growthFirst ? growth : assignment, adminTwo);
+            approve(growthFirst ? assignment : growth, adminTwo);
+            assertThat(change(growth.get("changeId"))).as("growth first: " + growthFirst)
+                .containsEntry("status", "APPLIED");
+            assertThat(change(assignment.get("changeId"))).as("growth first: " + growthFirst)
+                .containsEntry("status", "APPLIED");
+            assertThat(holds(sock, "*")).isTrue();
+        }
+    }
+
+    /** Review H1: a role that grew beyond every approval (written outside them) is not assigned as approved. */
+    @Test
+    void aRoleThatGrewOutsideTheApprovalsIsNotAppliedAsApproved() {
         String sock = bareUser("sock");
         String role = createRole(unique("POSTER"), "ledger.post");
         Map<String, Object> assignment = assignRole(sock, role);
-        assertThat(assignment).containsEntry("status", "PENDING");
-        // The role is empty, but the pending assignment counts: giving it * needs an approval too.
-        Map<String, Object> growth = run("SEC_ROLE_PERMISSION_ADD", as(adminOne), Map.of("roleId", role,
-            "permission", "*", "reason", "x"));
-        assertThat(growth).containsEntry("status", "PENDING");
-        assertThat(change(growth.get("changeId"))).containsEntry("affected_users", sock);
-        // The growth is approved and applied first; then the assignment, approved for ledger.post, would give *.
-        approve(growth, adminTwo);
-        assertThat(change(growth.get("changeId"))).containsEntry("status", "APPLIED");
+        // As the database's operator could, or as happened while the four eyes were off: no approval names the sock.
+        execute("INSERT INTO entity_registry (entity_id, entity_type, created_seq_id)"
+            + " SELECT ?::uuid, 'SecRolePermission', max(process_seq_id) FROM op_process", OUT_OF_BAND);
+        execute("INSERT INTO sec_role_permission_version (role_permission_id, version_no, effect_start_time,"
+            + " created_time, process_seq_id, role_id, permission) SELECT ?::uuid, 1, now(), now(),"
+            + " max(process_seq_id), ?::uuid, '*' FROM op_process", OUT_OF_BAND, role);
         approve(assignment, adminTwo);
         assertThat(change(assignment.get("changeId"))).containsEntry("status", "FAILED")
             .containsEntry("failure", "CHANGE_GREW");
         assertThat(assignments(sock, role)).isEmpty();
+    }
+
+    private static final String OUT_OF_BAND = UUID.randomUUID().toString();
+
+    /**
+     * Review H1 liveness (verification probe): an assignment requested after a pending permission does not make that
+     * permission give more than approved; the assignment's own approval covered it.
+     */
+    @Test
+    void aLaterPendingAssignmentDoesNotMakeAnEarlierPendingPermissionFail() {
+        String role = createRole(unique("CLERKS"), "price.read");
+        String u = bareUser("u");
+        assign(u, role, null);
+        Map<String, Object> permission = run("SEC_ROLE_PERMISSION_ADD", as(adminOne),
+            Map.of("roleId", role, "permission", "ledger.post", "reason", "a"));
+        String v = bareUser("v");
+        Map<String, Object> assignment = run("SEC_USER_ROLE_ASSIGN", as(adminOne),
+            Map.of("userId", v, "roleId", role, "reason", "b"));
+        assertThat(change(assignment.get("changeId"))).containsEntry("gained", "ledger.post");
+        approve(permission, adminTwo);
+        assertThat(change(permission.get("changeId"))).containsEntry("status", "APPLIED");
+        approve(assignment, adminTwo);
+        assertThat(change(assignment.get("changeId"))).containsEntry("status", "APPLIED");
+        assertThat(holds(u, "ledger.post")).isTrue();
+        assertThat(holds(v, "ledger.post")).isTrue();
     }
 
     /** Review H1, the other way round: a pending permission makes the role give it already. */
@@ -386,26 +444,85 @@ class ProtectedGrantIT extends SecurityItSupport {
         assertThat(assignments(user, role)).isEmpty();
     }
 
-    /** Review M3: once the user set their own password, the grant applies and ends the user's sessions. */
+    /**
+     * Review M3 verification: the administrator who set a user's password signs in as the user and "changes their own
+     * password". What the user derives from a password someone else knew is not theirs: the grant is not applied, and
+     * the approvers saw the whole history.
+     */
     @Test
-    void aGrantToAUserWithTheirOwnPasswordAppliesAndEndsTheirSessions() {
-        String name = unique("own");
+    void aPasswordChangedFromOneAnAdministratorSetIsNotTheUsers() {
+        String name = unique("puppet");
         String user = userWith(name, PASSWORD, "price.read");
         Map<String, Object> session = signIn(name, PASSWORD);
         post("/api/auth/account/password", bearerOf(session), Map.of("currentPassword", PASSWORD,
             "newPassword", OWN_PASSWORD, "refreshToken", session.get("refreshToken"))).expectStatus().isNoContent();
         String role = createRole(unique("POSTER"), "ledger.post");
         Map<String, Object> asked = assignRole(user, role);
-        assertThat(facts(asked.get("approvalRequestId"))).contains("password set by " + user);
+        assertThat(facts(asked.get("approvalRequestId"))).contains("password set by " + name)
+            .contains("not the user's own").contains("(SEC_USER_CREATE): created, password not own")
+            .contains("(SEC_ACCOUNT_PASSWORD_CHANGE): password changed, not own");
         approve(asked, adminTwo);
-        assertThat(change(asked.get("changeId"))).containsEntry("status", "APPLIED");
-        // The session from before the grant ends: the user signs in again.
-        post("/api/auth/refresh", null, Map.of("refreshToken", session.get("refreshToken"))).expectStatus()
-            .isUnauthorized();
-        assertThat(query("SELECT DISTINCT r.reason FROM sec_refresh_family_revocation r JOIN sec_refresh_token t"
-            + " ON t.family_id = r.family_id WHERE t.user_id = ?::uuid", user)).extracting(row -> row.get("reason"))
-            .contains("PROTECTED_GRANT");
-        signIn(name, OWN_PASSWORD);
+        assertThat(change(asked.get("changeId"))).containsEntry("status", "FAILED")
+            .containsEntry("failure", "TARGET_CREDENTIALS_NOT_OWN");
+        assertThat(assignments(user, role)).isEmpty();
+        assertThat(holds(user, "ledger.post")).isFalse();
+    }
+
+    /**
+     * Review L2 verification: the apply takes the approver from a decision on the change's own request. An event that
+     * names another request (any process could publish one) is not this change's, whatever it says.
+     */
+    @Test
+    void anEventNamingAnotherRequestIsNotTheChanges() {
+        Map<String, Object> other = assignRole(bareUser("x"), createRole(unique("POSTER"), "ledger.post"));
+        approve(other, adminTwo);
+        // A fourth administrator approves change C, then loses *.
+        String fourth = bareUser("admin4");
+        String solo = createRole(unique("SOLO"));
+        assign(fourth, solo, null);
+        approve(run("SEC_ROLE_PERMISSION_ADD", as(adminOne), Map.of("roleId", solo, "permission", "*",
+            "reason", "fourth")), adminTwo);
+        Map<String, Object> c = assignRole(bareUser("y"), createRole(unique("POSTER"), "ledger.post"));
+        decide(c.get("approvalRequestId"), as(fourth), "APPROVE", 200);
+        String permissionId = String.valueOf(query("SELECT role_permission_id::text AS id FROM"
+            + " sec_role_permission_version WHERE role_id = ?::uuid", solo).getFirst().get("id"));
+        post("/api/datasets/" + SecurityEntities.ROLE_PERMISSION_DATASET + "/commit", admin(), Map.of("changes",
+            List.of(Map.of("action", "DELETE", "id", permissionId, "version", 1)))).expectStatus().isOk();
+        // The forged event: C's change, the other request (decided by adminTwo, who holds *).
+        executor.execute(ProtectedChangeProcesses.applyProcess(), new ProtectedChangeProcesses.ApplyInput(
+                String.valueOf(other.get("approvalRequestId")), ProtectedChangeEntities.SUBJECT,
+                String.valueOf(c.get("changeId")), "APPROVED", null, adminTwo))
+            .contextWrite(view -> RequestContexts.put(view, RequestContext.system(Locale.ENGLISH, "it")))
+            .block();
+        assertThat(change(c.get("changeId"))).containsEntry("status", "PENDING");
+        // The genuine event: the approver as the change's request records it, who no longer holds enough.
+        deliverer.deliverPending().block();
+        assertThat(change(c.get("changeId"))).containsEntry("status", "FAILED")
+            .containsEntry("failure", "APPROVER_NOT_ALLOWED").containsEntry("decided_by", fourth);
+    }
+
+    /**
+     * Review H2 verification: when the change is applied the approver must still hold approval.decide and the level's
+     * permission, not only what the change gives.
+     */
+    @Test
+    void anApproverWhoLostApprovalDecideBeforeTheApplyIsNotEnough() {
+        String approver = bareUser("approver");
+        String approvers = createRole(unique("APPROVERS"), "security.user-role.write", "ledger.post",
+            "approval.decide");
+        approve(assignRole(approver, approvers), adminTwo);
+        assertThat(holds(approver, "approval.decide")).isTrue();
+        Map<String, Object> asked = assignRole(bareUser("clerk"), createRole(unique("POSTER"), "ledger.post"));
+        decide(asked.get("approvalRequestId"), TestTokens.bearer(tokens, approver, "approval.decide",
+            "security.user-role.write", "ledger.post"), "APPROVE", 200);
+        String permissionId = String.valueOf(query("SELECT role_permission_id::text AS id FROM"
+            + " sec_role_permission_version WHERE role_id = ?::uuid AND permission = 'approval.decide'", approvers)
+            .getFirst().get("id"));
+        post("/api/datasets/" + SecurityEntities.ROLE_PERMISSION_DATASET + "/commit", admin(), Map.of("changes",
+            List.of(Map.of("action", "DELETE", "id", permissionId, "version", 1)))).expectStatus().isOk();
+        deliverer.deliverPending().block();
+        assertThat(change(asked.get("changeId"))).containsEntry("status", "FAILED")
+            .containsEntry("failure", "APPROVER_NOT_ALLOWED");
     }
 
     @Test

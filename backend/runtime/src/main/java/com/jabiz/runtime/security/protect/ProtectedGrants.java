@@ -18,6 +18,7 @@ import reactor.core.publisher.Mono;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -36,8 +37,8 @@ import java.util.UUID;
  *       and grant still waiting for approval (a pending {@code SecProtectedChange}, review H1): a grant made while
  *       another is pending is judged as if that one were in effect, so that neither can grow the other unseen.</li>
  *   <li><b>Administrators</b> are enabled users holding {@code *} through an enabled role, now or at any later time a
- *       version is scheduled for (review L1). The <b>first administrator</b> is the user {@code SEC_BOOTSTRAP_ADMIN}
- *       created (with the role {@code ADMIN}).</li>
+ *       version is scheduled for (review L1). The <b>first administrators</b> are the users {@code SEC_BOOTSTRAP_ADMIN}
+ *       created - normally one.</li>
  *   <li>The <b>setup window</b> ends ("armed") the first time two administrators besides the first one exist; the
  *       first administrator <b>retires</b> the first time another one exists. Both are recorded and never undone
  *       ({@code sec_protected_grants_armed}, {@code sec_bootstrap_retired}); with {@code .always} there is no
@@ -84,23 +85,20 @@ public class ProtectedGrants {
     }
 
     /**
-     * Who set a user's credentials (review M3): the password (the last version that changed it), the second factor
-     * and the links to identity providers.
+     * Whether a user's credentials are theirs alone ({@link CredentialChain}: the password, the address, the links to
+     * identity providers and the second factors).
      *
-     * @param own     whether the user set all of them themselves (or proved the address, as in self-service)
-     * @param setBy   who last set a credential someone else set (null when own)
+     * @param own     whether nobody else could have known a working credential when each was made
+     * @param setBy   who made the latest credential that is not the user's own (null when own)
      * @param setAt   when
      * @param summary for the approvers: who last set the password, and when
+     * @param history for the approvers: every change of the credentials, oldest first
      */
-    public record Credentials(boolean own, String setBy, Instant setAt, String summary) {}
-
-    /** Processes in which a user sets their own password (or proves the address the account belongs to). */
-    static final Set<String> SELF_PASSWORD = Set.of("SEC_ACCOUNT_PASSWORD_CHANGE", "SPONSOR_SIGN_UP",
-        "SPONSOR_SIGN_UP_JOIN", "SPONSOR_EMAIL_VERIFY", "SPONSOR_PASSWORD_RESET_CONFIRM");
-    /** Processes in which a user links their own account at a provider. */
-    static final Set<String> SELF_IDENTITY = Set.of("SEC_IDENTITY_LINK_SELF", "SPONSOR_OIDC_SIGN_UP");
-    /** Processes in which a user enrols their own second factor. */
-    static final Set<String> SELF_MFA = Set.of("SEC_MFA_ENROLL_BEGIN", "SEC_MFA_ENROLL_CONFIRM");
+    public record Credentials(boolean own, String setBy, Instant setAt, String summary, List<String> history) {
+        public Credentials {
+            history = List.copyOf(history);
+        }
+    }
 
     private final ProtectedGrantSettings settings;
     private final StorageAdapterRegistry storages;
@@ -133,13 +131,15 @@ public class ProtectedGrants {
         return assess(draft, actorId, processSeqId, now, null);
     }
 
-    /** As {@link #assess(Draft, String, long, Instant)}, not counting the pending change {@code excludedChange}. */
-    public Mono<Assessment> assess(Draft draft, String actorId, long processSeqId, Instant now,
-        String excludedChange) {
+    /**
+     * As {@link #assess(Draft, String, long, Instant)} for the recorded change {@code change}: counting only the
+     * changes pending since before it was requested.
+     */
+    public Mono<Assessment> assess(Draft draft, String actorId, long processSeqId, Instant now, String change) {
         if (!settings.enabled()) {
             return Mono.just(new Assessment(draft.kind(), Set.of(), List.of(), false, false));
         }
-        return pending(excludedChange).flatMap(pending -> gained(draft, actorId, pending)).flatMap(found -> {
+        return pending(change).flatMap(pending -> gained(draft, actorId, pending)).flatMap(found -> {
             if (found.gained().isEmpty()) {
                 return Mono.just(new Assessment(draft.kind(), found.gained(), found.affected(), false, false));
             }
@@ -175,12 +175,20 @@ public class ProtectedGrants {
         }
     }
 
-    private Mono<Pending> pending(String excludedChange) {
+    /**
+     * The pending assignments and grants requested before the change {@code change} (all of them when null): a change
+     * requested later counted this one as pending when it was assessed, so its own approval covers what this one
+     * gives its users (review H1 liveness).
+     */
+    private Mono<Pending> pending(String change) {
         String sql = "SELECT c.kind, c.user_id, c.role_id, c.permission FROM (SELECT DISTINCT ON (change_id)"
-            + " change_id::text AS cid, kind, user_id, role_id, permission, status, is_deleted FROM " + CHANGES
+            + " change_id, kind, user_id, role_id, permission, status, is_deleted FROM " + CHANGES
             + " WHERE kind IN ('USER_ROLE', 'ROLE_PERMISSION') ORDER BY change_id, version_no DESC) c"
-            + " WHERE c.status = 'PENDING' AND NOT c.is_deleted AND c.cid <> :excluded";
-        return engine().select(sql, Map.of("excluded", BoundValue.of(excludedChange == null ? "" : excludedChange)))
+            + " WHERE c.status = 'PENDING' AND NOT c.is_deleted"
+            + " AND (SELECT min(f.process_seq_id) FROM " + CHANGES + " f WHERE f.change_id = c.change_id)"
+            + " < COALESCE((SELECT min(b.process_seq_id) FROM " + CHANGES + " b WHERE b.change_id::text = :change),"
+            + " 9223372036854775807)";
+        return engine().select(sql, Map.of("change", BoundValue.of(change == null ? "" : change)))
             .collectList().map(rows -> {
                 List<UUID[]> assignments = new ArrayList<>();
                 List<Object[]> grants = new ArrayList<>();
@@ -233,14 +241,50 @@ public class ProtectedGrants {
         return holdings.getOrDefault(user, Set.of());
     }
 
+    /** What an applied change was approved for: these permissions for these users. */
+    public record Approved(Set<String> gained, Set<String> users) {
+        public Approved {
+            gained = Set.copyOf(gained);
+            users = Set.copyOf(users);
+        }
+
+        boolean covers(String user, String permission) {
+            return users.contains(user) && gained.contains(permission);
+        }
+    }
+
+    /**
+     * The applied assignments and grants requested after {@code change} and approved for any of {@code users}: such a
+     * change counted {@code change} as pending when it was assessed, so what {@code change} gives a user beyond its
+     * own approval was approved there (review H1 liveness). Changes requested before it do not count: their approvals
+     * did not see it.
+     */
+    public Mono<List<Approved>> approvedFor(String change, Collection<String> users) {
+        if (users.isEmpty()) {
+            return Mono.just(List.of());
+        }
+        String sql = "SELECT c.gained, c.affected_users FROM (SELECT DISTINCT ON (change_id) change_id,"
+            + " gained, affected_users, status, is_deleted FROM " + CHANGES + " WHERE kind IN ('USER_ROLE',"
+            + " 'ROLE_PERMISSION') AND affected_users LIKE ANY(:patterns) ORDER BY change_id, version_no DESC) c"
+            + " WHERE c.status = 'APPLIED' AND NOT c.is_deleted"
+            + " AND (SELECT min(f.process_seq_id) FROM " + CHANGES + " f WHERE f.change_id = c.change_id)"
+            + " > (SELECT min(b.process_seq_id) FROM " + CHANGES + " b WHERE b.change_id::text = :change)";
+        String[] patterns = users.stream().map(user -> "%" + user + "%").toArray(String[]::new);
+        return engine().select(sql, Map.of("patterns", BoundValue.of(patterns), "change",
+                BoundValue.of(change == null ? "" : change)))
+            .map(row -> new Approved(ProtectedChangeProcesses.split(row.get("gained")),
+                ProtectedChangeProcesses.split(row.get("affected_users"))))
+            .collectList();
+    }
+
     /**
      * Records what has happened for good, in operation {@code processSeqId}: the end of the setup window, the first
      * administrator's retirement. Asked on every write of the security entities, so that taking administrators away
      * cannot undo either.
      */
     public Mono<Void> record(long processSeqId, Instant now) {
-        return armed(processSeqId, now).then(bootstrapUser().flatMap(bootstrap ->
-            retiredBootstrap(bootstrap, processSeqId, now)).then());
+        return armed(processSeqId, now).then(bootstrapUsers().flatMap(bootstrap -> bootstrap.isEmpty() ? Mono.empty()
+            : retiredBootstrap(List.copyOf(bootstrap).getLast(), processSeqId, now)).then());
     }
 
     /**
@@ -252,10 +296,10 @@ public class ProtectedGrants {
             return Mono.just(true);
         }
         return engine().select("SELECT 1 AS armed FROM " + ARMED + " WHERE armed_id = 1", Map.of()).hasElements()
-            .flatMap(armed -> armed ? Mono.just(true) : admins(now).zipWith(bootstrapUser().defaultIfEmpty(""))
+            .flatMap(armed -> armed ? Mono.just(true) : admins(now).zipWith(bootstrapUsers())
                 .flatMap(found -> {
                     Set<String> others = new LinkedHashSet<>(found.getT1());
-                    others.remove(found.getT2());
+                    others.removeAll(found.getT2());
                     if (others.size() < 2) {
                         return Mono.just(false);
                     }
@@ -272,22 +316,23 @@ public class ProtectedGrants {
     }
 
     /**
-     * Whether {@code actorId} is the first administrator and retired: recorded already, or another administrator
-     * exists now (which this records in operation {@code processSeqId}).
+     * Whether {@code actorId} is a first administrator (any user {@code SEC_BOOTSTRAP_ADMIN} made, review L2) and
+     * retired: recorded already, or an administrator who is none of them exists now (which this records in operation
+     * {@code processSeqId}). The record retires every first administrator, a later one included.
      */
     public Mono<Boolean> retiredBootstrap(String actorId, long processSeqId, Instant now) {
         if (actorId == null || RequestContext.SYSTEM_ACTOR.equals(actorId)) {
             return Mono.just(false);
         }
-        return bootstrapUser().filter(actorId::equals).flatMap(bootstrap -> engine().select(
+        return bootstrapUsers().filter(bootstrap -> bootstrap.contains(actorId)).flatMap(bootstrap -> engine().select(
                 "SELECT 1 AS retired FROM " + RETIRED + " WHERE retired_id = 1", Map.of()).hasElements()
             .flatMap(retired -> retired ? Mono.just(true) : admins(now).flatMap(admins -> {
-                if (admins.stream().noneMatch(admin -> !admin.equals(bootstrap))) {
+                if (bootstrap.containsAll(admins)) {
                     return Mono.just(false);
                 }
                 return engine().select("INSERT INTO " + RETIRED + " (retired_id, user_id, retired_time,"
                         + " process_seq_id) VALUES (1, :user, :now, :seq) ON CONFLICT (retired_id) DO NOTHING"
-                        + " RETURNING retired_id", Map.of("user", BoundValue.of(UUID.fromString(bootstrap)),
+                        + " RETURNING retired_id", Map.of("user", BoundValue.of(UUID.fromString(actorId)),
                         "now", BoundValue.of(now), "seq", BoundValue.of(processSeqId)))
                     .then(Mono.just(true));
             })))
@@ -340,16 +385,17 @@ public class ProtectedGrants {
     }
 
     /**
-     * The first administrator: the user created in the same operation as the role {@code ADMIN} by
-     * {@code SEC_BOOTSTRAP_ADMIN} (docs/design/10-security.md section 7); empty when the platform made none.
+     * The first administrators: every user {@code SEC_BOOTSTRAP_ADMIN} created (docs/design/10-security.md section 7)
+     * - normally one; another when every user and the role {@code ADMIN} were deleted and startup made one again
+     * (review L2: the later one is no ordinary administrator either). Empty when the platform made none.
      */
-    public Mono<String> bootstrapUser() {
-        String sql = "SELECT u." + USER_ID + "::text AS user_id FROM " + ROLE + " r"
-            + " JOIN op_process p ON p.process_seq_id = r.process_seq_id AND p.process_name = :process"
-            + " JOIN " + USER + " u ON u.process_seq_id = r.process_seq_id AND u.version_no = 1"
-            + " WHERE r." + ROLE_CODE + " = :role AND r.version_no = 1 ORDER BY u.row_id LIMIT 1";
-        return engine().select(sql, Map.of("process", BoundValue.of(BootstrapAdmin.PROCESS.name()),
-            "role", BoundValue.of(BootstrapAdmin.ADMIN_ROLE))).next().map(row -> Rows.string(row.get("user_id")));
+    public Mono<Set<String>> bootstrapUsers() {
+        String sql = "SELECT u." + USER_ID + "::text AS user_id FROM " + USER + " u"
+            + " JOIN op_process p ON p.process_seq_id = u.process_seq_id AND p.process_name = :process"
+            + " WHERE u.version_no = 1 ORDER BY u.row_id";
+        return engine().select(sql, Map.of("process", BoundValue.of(BootstrapAdmin.PROCESS.name())))
+            .map(row -> Rows.string(row.get("user_id"))).collect(LinkedHashSet<String>::new, Set::add)
+            .map(Collections::unmodifiableSet);
     }
 
     /** The permissions a role grants (latest versions not deleted) and those waiting for approval. */
@@ -446,60 +492,41 @@ public class ProtectedGrants {
             + " AND effect_start_time <= :now ORDER BY " + key + ", effect_start_time DESC, version_no DESC)";
     }
 
-    /** Who set {@code user}'s credentials (review M3). */
+    /**
+     * Whether {@code user}'s credentials are theirs alone, and their history for the approvers ({@link CredentialChain},
+     * review M3 and its verification).
+     */
     public Mono<Credentials> credentials(UUID user) {
-        String passwords = "SELECT v.version_no, v.password_hash IS NOT NULL AS has_password, v.password_hash,"
-            + " p.actor_id, p.process_name, p.op_time FROM " + USER + " v JOIN op_process p"
-            + " ON p.process_seq_id = v.process_seq_id WHERE v." + USER_ID + " = :user ORDER BY v.version_no";
-        String links = "SELECT f.actor_id, f.process_name, f.op_time FROM (SELECT DISTINCT ON (user_identity_id)"
-            + " user_identity_id, is_deleted FROM sec_user_identity_version WHERE user_id = :user"
-            + " ORDER BY user_identity_id, version_no DESC) i"
-            + " JOIN (SELECT DISTINCT ON (v.user_identity_id) v.user_identity_id, p.actor_id, p.process_name,"
-            + " p.op_time FROM sec_user_identity_version v JOIN op_process p ON p.process_seq_id = v.process_seq_id"
-            + " WHERE v.user_id = :user ORDER BY v.user_identity_id, v.version_no) f"
-            + " ON f.user_identity_id = i.user_identity_id WHERE NOT i.is_deleted";
-        String factors = "SELECT p.actor_id, p.process_name, p.op_time FROM (SELECT DISTINCT ON (user_mfa_id)"
-            + " user_mfa_id, is_deleted, process_seq_id FROM sec_user_mfa_version WHERE user_id = :user"
-            + " ORDER BY user_mfa_id, version_no DESC) m JOIN op_process p ON p.process_seq_id = m.process_seq_id"
-            + " WHERE NOT m.is_deleted";
+        String operation = " p.process_seq_id, p.actor_id, p.process_name, p.op_time, an.user_name AS actor_name"
+            + " FROM %s v JOIN op_process p ON p.process_seq_id = v.process_seq_id"
+            + " LEFT JOIN LATERAL (SELECT a." + USER_NAME + " AS user_name FROM " + USER + " a WHERE a." + USER_ID
+            + " = CASE WHEN p.actor_id ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'"
+            + " THEN p.actor_id::uuid END ORDER BY a.version_no DESC LIMIT 1) an ON true"
+            + " WHERE v.user_id = :user ORDER BY v.version_no";
+        String versions = "SELECT v.is_deleted, v.password_hash, v.email, v.verified_email,"
+            + operation.formatted(USER);
+        String links = "SELECT v.user_identity_id::text AS key, v.is_deleted, v.provider,"
+            + operation.formatted("sec_user_identity_version");
+        String factors = "SELECT v.user_mfa_id::text AS key, v.is_deleted," + operation.formatted("sec_user_mfa_version");
         Map<String, BoundValue> params = Map.of("user", BoundValue.of(user));
-        String self = user.toString();
-        return Mono.zip(engine().select(passwords, params).collectList(), engine().select(links, params).collectList(),
+        return Mono.zip(engine().select(versions, params).collectList(), engine().select(links, params).collectList(),
             engine().select(factors, params).collectList()).map(found -> {
-                // The version that last changed the password, when the user has one now.
-                Map<String, Object> setter = null;
-                Object previous = null;
-                boolean first = true;
-                for (Map<String, Object> version : found.getT1()) {
-                    Object hash = version.get("password_hash");
-                    if (hash != null && (first || !hash.equals(previous))) {
-                        setter = version;
-                    } else if (hash == null) {
-                        setter = null;
-                    }
-                    previous = hash;
-                    first = false;
-                }
-                String summary = setter == null ? "no password"
-                    : "password set by " + setter.get("actor_id") + " at " + Rows.instant(setter.get("op_time"));
-                List<Map<String, Object>> foreign = new ArrayList<>();
-                if (setter != null && !own(setter, self, SELF_PASSWORD)) {
-                    foreign.add(setter);
-                }
-                found.getT2().stream().filter(link -> !own(link, self, SELF_IDENTITY)).forEach(foreign::add);
-                found.getT3().stream().filter(factor -> !own(factor, self, SELF_MFA)).forEach(foreign::add);
-                if (foreign.isEmpty()) {
-                    return new Credentials(true, null, null, summary);
-                }
-                Map<String, Object> last = foreign.getLast();
-                return new Credentials(false, Rows.string(last.get("actor_id")), Rows.instant(last.get("op_time")),
-                    summary);
+                List<CredentialChain.Event> events = new ArrayList<>();
+                found.getT1().forEach(row -> events.add(event(row, CredentialChain.Source.USER)));
+                found.getT2().forEach(row -> events.add(event(row, CredentialChain.Source.IDENTITY)));
+                found.getT3().forEach(row -> events.add(event(row, CredentialChain.Source.MFA)));
+                CredentialChain.Judgement judged = CredentialChain.judge(user.toString(), events);
+                return new Credentials(judged.own(), judged.setBy(), judged.setAt(), judged.summary(),
+                    judged.history());
             });
     }
 
-    private static boolean own(Map<String, Object> operation, String user, Set<String> selfProcesses) {
-        return user.equals(Rows.string(operation.get("actor_id")))
-            || selfProcesses.contains(Rows.string(operation.get("process_name")));
+    private static CredentialChain.Event event(Map<String, Object> row, CredentialChain.Source source) {
+        return new CredentialChain.Event(((Number) row.get("process_seq_id")).longValue(), source,
+            Rows.string(row.get("key")), Boolean.TRUE.equals(row.get("is_deleted")),
+            Rows.string(row.get("password_hash")), Rows.string(row.get("email")),
+            Rows.string(row.get("verified_email")), Rows.string(row.get("provider")), Rows.string(row.get("actor_id")),
+            Rows.string(row.get("actor_name")), Rows.string(row.get("process_name")), Rows.instant(row.get("op_time")));
     }
 
     /** The names people know a user and a role by, for the approvers' task (empty when not found). */

@@ -7,6 +7,7 @@ import com.jabiz.entity.ValidationException;
 import com.jabiz.i18n.PlatformErrorCodes;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
+import com.jabiz.runtime.BusinessRuleViolationException;
 import com.jabiz.runtime.DatasetEntityManager;
 import com.jabiz.runtime.context.RequestContexts;
 import com.jabiz.runtime.dataset.DatasetRegistry;
@@ -117,6 +118,18 @@ public class BootstrapAdmin {
                     .contextWrite(view -> RequestContexts.put(view, system))
                     .block();
                 log.info("Created the first administrator {} (user {})", userName.trim(), created.userId());
+            } catch (BusinessRuleViolationException e) {
+                if (e.violations().stream().noneMatch(v ->
+                    PlatformErrorCodes.PROTECTED_CHANGE_REQUIRES_APPROVAL.equals(v.ruleCode()))) {
+                    throw e;
+                }
+                // Every user and the role ADMIN were deleted after the setup window of protected grants ended (or with
+                // it always on): the platform gives * to nobody unapproved again (decision D48, review L2).
+                log.error("Did not create the administrator {} again: every user and the role {} were deleted, and"
+                    + " protected grants (jabiz.security.protected-grants) no longer let the platform give {} without"
+                    + " another administrator's approval. Restore an administrator from a backup, or start once with"
+                    + " jabiz.security.protected-grants.enabled=false to create one.", userName.trim(), ADMIN_ROLE,
+                    RequestContext.ALL_PERMISSIONS);
             } catch (ValidationException e) {
                 // Instances starting together: another one created the administrator first (decision D6 unique keys).
                 if (e.violations().stream().noneMatch(v -> PlatformErrorCodes.UNIQUE_VIOLATION.equals(v.ruleCode()))) {

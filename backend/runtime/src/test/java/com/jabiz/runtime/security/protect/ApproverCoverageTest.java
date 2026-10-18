@@ -28,4 +28,18 @@ class ApproverCoverageTest {
             "ledger.post"), Set.of("ledger.post"))).isFalse();
         assertThat(ProtectedChangeDecisionCheck.covers(Set.of(), Set.of())).isFalse();
     }
+
+    /** At apply time, deciding itself is judged again too: approval.decide and the level's permission. */
+    @Test
+    void whenAppliedTheApproverMustStillBeAbleToDecideAtThatLevel() {
+        Set<String> full = Set.of("approval.decide", "security.user-role.write", "ledger.post");
+        assertThat(ProtectedChangeDecisionCheck.mayDecide(full, "USER_ROLE", Set.of("ledger.post"))).isTrue();
+        assertThat(ProtectedChangeDecisionCheck.mayDecide(Set.of("*"), "ROLE_PERMISSION", Set.of("*"))).isTrue();
+        assertThat(ProtectedChangeDecisionCheck.mayDecide(Set.of("security.user-role.write", "ledger.post"),
+            "USER_ROLE", Set.of("ledger.post"))).as("without approval.decide").isFalse();
+        assertThat(ProtectedChangeDecisionCheck.mayDecide(full, "ROLE_PERMISSION", Set.of("ledger.post")))
+            .as("the level of a role's permission is security.role.write").isFalse();
+        assertThat(ProtectedChangeDecisionCheck.mayDecide(Set.of("approval.decide", "security.user-role.write"),
+            "PASSWORD", Set.of())).isTrue();
+    }
 }

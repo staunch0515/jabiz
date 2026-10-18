@@ -97,7 +97,7 @@ public class ProtectedChangeEntities {
     @Bean
     ApprovalSubject protectedChangeApprovalSubject() {
         return ApprovalSubject.define(SUBJECT, s -> s.entity(CHANGE).text("kind").text("user").text("role")
-            .text("gained").text("affected").text("credentials")
+            .text("gained").text("affected").text("credentials").text("history")
             .text("permission"));
     }
 }

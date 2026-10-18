@@ -7,6 +7,7 @@ import com.jabiz.runtime.DatasetEntityManager;
 import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.EntityNotFoundException;
 import com.jabiz.runtime.approval.ApprovalDecisionCheck;
+import com.jabiz.runtime.approval.ApprovalPermissions;
 import com.jabiz.runtime.dataset.DatasetRegistry;
 import com.jabiz.runtime.PermissionDeniedException;
 import com.jabiz.runtime.security.MfaPolicy;
@@ -80,6 +81,19 @@ class ProtectedChangeDecisionCheck implements ApprovalDecisionCheck {
             return true;
         }
         return held.stream().anyMatch(ADMINISTRATION::contains) && held.containsAll(gained);
+    }
+
+    /**
+     * Whether a holder of {@code held} may still decide a change of {@code kind} giving {@code gained} when it is
+     * applied (review H2 verification): {@code *}; or {@code approval.decide}, the permission of the approval's level
+     * and {@link #covers} - what deciding needed in the first place, judged on what the approver holds now.
+     */
+    static boolean mayDecide(Set<String> held, String kind, Set<String> gained) {
+        if (held.contains("*")) {
+            return true;
+        }
+        return held.contains(ApprovalPermissions.DECIDE)
+            && held.contains(ProtectedChangeProcesses.levelPermission(kind)) && covers(held, gained);
     }
 
     private Mono<Void> approverCheck(EntityInstance change, String actor, ProcessContext ctx) {

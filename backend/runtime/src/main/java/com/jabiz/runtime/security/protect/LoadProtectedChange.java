@@ -23,6 +23,7 @@ import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -85,10 +86,15 @@ class LoadProtectedChange implements StepHandler<LoadProtectedChange.Metadata, P
                 return Mono.empty();
             }
             Optional<UUID> changeId = uuid(input.entityId());
-            if (changeId.isEmpty()) {
+            Optional<UUID> requestId = uuid(input.requestId());
+            if (changeId.isEmpty() || requestId.isEmpty()) {
                 return Mono.empty();
             }
-            return find(ProtectedChangeEntities.CHANGE_DATASET, ProtectedChangeEntities.CHANGE, changeId.get())
+            // Only an event of this change's own request (review L2 verification): one naming another request - which
+            // any process could publish - is not ours, whatever else it says.
+            return ownRequest(requestId.get(), changeId.get()).filter(Boolean::booleanValue)
+                .flatMap(own -> find(ProtectedChangeEntities.CHANGE_DATASET, ProtectedChangeEntities.CHANGE,
+                    changeId.get()))
                 .flatMap(change -> {
                     ctx.put(metadata.changeKey(), change);
                     UUID user = Rows.uuid(change.get("userId"));
@@ -99,34 +105,45 @@ class LoadProtectedChange implements StepHandler<LoadProtectedChange.Metadata, P
                             || !ApprovalEntities.APPROVED.equals(input.status())) {
                             return Mono.<Void>empty();
                         }
-                        return check(change, input.requestId(), ctx);
+                        return check(change, requestId.get(), ctx);
                     });
                 });
         });
     }
 
+    private Mono<Boolean> ownRequest(UUID requestId, UUID changeId) {
+        return engine().select("SELECT 1 AS own FROM sys_approval_request_version WHERE request_id = :request"
+                + " AND subject = :subject AND entity_id = :entity LIMIT 1", Map.of("request", BoundValue.of(requestId),
+                "subject", BoundValue.of(ProtectedChangeEntities.SUBJECT), "entity", BoundValue.of(changeId.toString())))
+            .hasElements();
+    }
+
     /**
      * Whether the approved change can be made as approved, judged now (review H1, H2, M3, L2), in this order:
-     * {@code CHANGE_GREW} (it would give more protected permissions, or to more users, than were approved);
-     * {@code APPROVER_NOT_ALLOWED} (the approver, read from the recorded decision, is the requester, a user it is for,
-     * the retired first administrator, or does not hold an administrator's permission and everything the change gives);
-     * {@code TARGET_CREDENTIALS_NOT_OWN} (a user gaining a protected permission has a password, second factor or
-     * provider link someone else set); then the target already exists or is gone.
+     * {@code CHANGE_GREW} (it would give a protected permission to a user that neither its approval nor that of another
+     * applied change covers); {@code APPROVER_NOT_ALLOWED} (the approver, read from the recorded decision on this
+     * change's request, is the requester, a user it is for, a retired first administrator, or no longer holds
+     * {@code approval.decide}, the level's permission and everything the change gives); {@code TARGET_CREDENTIALS_NOT_OWN}
+     * (a user gaining a protected permission has a credential that is not theirs alone, {@link CredentialChain}); then
+     * the target already exists or is gone.
      */
-    private Mono<Void> check(EntityInstance change, String requestId, ProcessContext ctx) {
+    private Mono<Void> check(EntityInstance change, UUID requestId, ProcessContext ctx) {
         String kind = change.get("kind");
         UUID user = Rows.uuid(change.get("userId"));
         UUID role = Rows.uuid(change.get("roleId"));
         String requester = change.get("requestedBy");
+        String changeId = String.valueOf(change.id());
+        boolean grant = kind.equals(ProtectedChangeEntities.USER_ROLE)
+            || kind.equals(ProtectedChangeEntities.ROLE_PERMISSION);
         Set<String> approvedGains = ProtectedChangeProcesses.split(change.get("gained"));
         Set<String> approvedUsers = ProtectedChangeProcesses.split(change.get("affectedUsers"));
-        Mono<String> decider = uuid(requestId).map(request -> engine().select("SELECT approver_id FROM"
-                + " sys_approval_decision WHERE request_id = :request AND decision = 'APPROVE'"
-                + " ORDER BY level_no DESC LIMIT 1", Map.of("request", BoundValue.of(request)))
-            .next().map(row -> Rows.string(row.get("approver_id"))).defaultIfEmpty("")).orElse(Mono.just(""));
+        Mono<String> decider = engine().select("SELECT approver_id FROM sys_approval_decision WHERE request_id ="
+                + " :request AND decision = 'APPROVE' ORDER BY level_no DESC LIMIT 1",
+                Map.of("request", BoundValue.of(requestId)))
+            .next().map(row -> Rows.string(row.get("approver_id"))).defaultIfEmpty("");
+        // Changes requested later are left out: their own approvals cover what this one gives (review H1 liveness).
         Mono<ProtectedGrants.Assessment> now = grants.lock().then(grants.assess(
-            ProtectedChangeProcesses.draftOf(change), requester, ctx.processSeqId(), ctx.opTime(),
-            String.valueOf(change.id())));
+            ProtectedChangeProcesses.draftOf(change), requester, ctx.processSeqId(), ctx.opTime(), changeId));
         return Mono.zip(decider, now).flatMap(found -> {
             String approver = found.getT1();
             ProtectedGrants.Assessment assessment = found.getT2();
@@ -134,28 +151,57 @@ class LoadProtectedChange implements StepHandler<LoadProtectedChange.Metadata, P
             ctx.put(AFFECTED, assessment.affected());
             Set<String> users = new TreeSet<>();
             assessment.affected().forEach(id -> users.add(id.toString()));
-            if (!approvedGains.containsAll(assessment.gained()) || !approvedUsers.containsAll(users)) {
-                return failed(ctx, "CHANGE_GREW");
-            }
-            Mono<Boolean> allowed = approver.isEmpty() || approver.equals(requester) || users.contains(approver)
-                ? Mono.just(false)
-                : grants.retiredBootstrap(approver, ctx.processSeqId(), ctx.opTime()).flatMap(retired -> retired
-                    ? Mono.just(false)
-                    : uuid(approver).map(id -> grants.effectiveHoldings(id, ctx.opTime()).map(held ->
-                        ProtectedChangeDecisionCheck.covers(held, approvedGains))).orElse(Mono.just(false)));
-            return allowed.flatMap(ok -> {
-                if (!ok) {
-                    return failed(ctx, "APPROVER_NOT_ALLOWED");
+            return grown(changeId, grant, assessment, users, approvedGains, approvedUsers).flatMap(grew -> {
+                if (grew) {
+                    return failed(ctx, "CHANGE_GREW");
                 }
-                boolean grant = kind.equals(ProtectedChangeEntities.USER_ROLE)
-                    || kind.equals(ProtectedChangeEntities.ROLE_PERMISSION);
-                Mono<Boolean> own = !grant ? Mono.just(true)
-                    : Flux.fromIterable(assessment.affected()).concatMap(grants::credentials)
-                        .all(ProtectedGrants.Credentials::own);
-                return own.flatMap(owned -> owned ? target(change, kind, user, role, ctx)
-                    : failed(ctx, "TARGET_CREDENTIALS_NOT_OWN"));
+                Mono<Boolean> allowed = approver.isEmpty() || approver.equals(requester) || users.contains(approver)
+                    || approvedUsers.contains(approver)
+                    ? Mono.just(false)
+                    : grants.retiredBootstrap(approver, ctx.processSeqId(), ctx.opTime()).flatMap(retired -> retired
+                        ? Mono.just(false)
+                        : uuid(approver).map(id -> grants.effectiveHoldings(id, ctx.opTime()).map(held ->
+                            ProtectedChangeDecisionCheck.mayDecide(held, kind, approvedGains)))
+                            .orElse(Mono.just(false)));
+                return allowed.flatMap(ok -> {
+                    if (!ok) {
+                        return failed(ctx, "APPROVER_NOT_ALLOWED");
+                    }
+                    Mono<Boolean> own = !grant ? Mono.just(true)
+                        : Flux.fromIterable(assessment.affected()).concatMap(grants::credentials)
+                            .all(ProtectedGrants.Credentials::own);
+                    return own.flatMap(owned -> owned ? target(change, kind, user, role, ctx)
+                        : failed(ctx, "TARGET_CREDENTIALS_NOT_OWN"));
+                });
             });
         });
+    }
+
+    /**
+     * Whether the change now gives a protected permission to a user beyond its approval: for a grant, each such pair
+     * of user and permission must have been approved by another change applied since (which counted this one as
+     * pending); for a credential, what its user holds must not have grown at all.
+     */
+    private Mono<Boolean> grown(String changeId, boolean grant, ProtectedGrants.Assessment assessment,
+        Set<String> users, Set<String> approvedGains, Set<String> approvedUsers) {
+        List<String[]> beyond = new ArrayList<>();
+        for (String user : users) {
+            for (String permission : assessment.gained()) {
+                if (!approvedUsers.contains(user) || !approvedGains.contains(permission)) {
+                    beyond.add(new String[] {user, permission});
+                }
+            }
+        }
+        if (beyond.isEmpty()) {
+            return Mono.just(false);
+        }
+        if (!grant) {
+            return Mono.just(true);
+        }
+        Set<String> concerned = new TreeSet<>();
+        beyond.forEach(pair -> concerned.add(pair[0]));
+        return grants.approvedFor(changeId, concerned).map(others -> beyond.stream().anyMatch(pair ->
+            others.stream().noneMatch(other -> other.covers(pair[0], pair[1]))));
     }
 
     private static Mono<Void> failed(ProcessContext ctx, String code) {
