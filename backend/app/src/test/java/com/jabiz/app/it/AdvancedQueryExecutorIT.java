@@ -135,6 +135,30 @@ class AdvancedQueryExecutorIT extends PostgresIntegrationTest {
                 .containsExactlyInAnyOrder("minFreight:INVALID_VALUE", "allowedStatuses:INVALID_VALUE"));
     }
 
+    /**
+     * Decision D51 item 4: a time PostgreSQL cannot store is invalid input (400), not a database error (22008); the
+     * bounds themselves run.
+     */
+    @Test
+    void timesOutsideWhatTheDatabaseStoresAreInvalidValues() {
+        assertThatThrownBy(() -> run(params("minFreight", 1, "allowedStatuses", List.of("DELIVERED"),
+            "shippedAfter", "+300000-01-01T00:00:00Z")))
+            .isInstanceOf(ValidationException.class)
+            .satisfies(e -> assertThat(((ValidationException) e).violations())
+                .extracting(v -> v.field() + ":" + v.ruleCode()).containsExactly("shippedAfter:INVALID_VALUE"));
+        assertThat(run(params("minFreight", 1, "allowedStatuses", List.of("DELIVERED"),
+            "shippedAfter", "+294276-12-31T23:59:59.999999Z"))).isEmpty();
+        assertThat(run(params("minFreight", 1000, "allowedStatuses", List.of("CUSTOMS_CLEARED", "DELIVERED"),
+            "shippedAfter", "-4713-11-24T00:00:00Z"))).extracting(r -> r.getRaw("waybillSn"))
+            .containsExactly("WB-1", "WB-4");
+        assertThatThrownBy(() -> asTestRequest(executor.execute(audit, params("minFreight", 1, "allowedStatuses",
+            List.of("DELIVERED")), new AdvancedQueryExecutor.At(Instant.parse("+300000-01-01T00:00:00Z"), null))
+            .collectList()).block())
+            .isInstanceOf(ValidationException.class)
+            .satisfies(e -> assertThat(((ValidationException) e).violations())
+                .extracting(v -> v.field() + ":" + v.ruleCode()).containsExactly("asOf:INVALID_VALUE"));
+    }
+
     @Test
     void unknownParametersAreRejected() {
         assertThatThrownBy(() -> run(params("minFreight", 1, "allowedStatuses", List.of("DELIVERED"), "extra", 1)))

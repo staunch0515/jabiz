@@ -10,24 +10,47 @@ import static org.assertj.core.api.Assertions.assertThat;
 /** Review H2: nobody approves a protected change giving (or taking over) more than they hold themselves. */
 class ApproverCoverageTest {
 
+    private static final Set<String> ADMIN = new ProtectedGrantSettings(true, false, List.of(), List.of())
+        .administratorPermissions();
+
     @Test
     void anAdministratorHoldingEverythingItGivesMayApprove() {
-        assertThat(ProtectedChangeDecisionCheck.covers(Set.of("*"), Set.of("*", "ledger.post"))).isTrue();
+        assertThat(ProtectedChangeDecisionCheck.covers(Set.of("*"), Set.of("*", "ledger.post"), ADMIN)).isTrue();
         assertThat(ProtectedChangeDecisionCheck.covers(Set.of("security.user-role.write", "ledger.post"),
-            Set.of("ledger.post"))).isTrue();
+            Set.of("ledger.post"), ADMIN)).isTrue();
         assertThat(ProtectedChangeDecisionCheck.covers(Set.of("security.role.write", "ledger.post",
-            "approval.decide"), Set.of("ledger.post", "approval.decide"))).isTrue();
+            "approval.decide"), Set.of("ledger.post", "approval.decide"), ADMIN)).isTrue();
     }
 
     @Test
     void lessThanItGivesOrNoAdministratorsPermissionIsNotEnough() {
-        assertThat(ProtectedChangeDecisionCheck.covers(Set.of("security.user-role.write"), Set.of("ledger.post")))
-            .isFalse();
+        assertThat(ProtectedChangeDecisionCheck.covers(Set.of("security.user-role.write"), Set.of("ledger.post"),
+            ADMIN)).isFalse();
         assertThat(ProtectedChangeDecisionCheck.covers(Set.of("security.user-role.write", "ledger.post"),
-            Set.of("*"))).isFalse();
+            Set.of("*"), ADMIN)).isFalse();
         assertThat(ProtectedChangeDecisionCheck.covers(Set.of("security.user.password", "approval.decide",
-            "ledger.post"), Set.of("ledger.post"))).isFalse();
-        assertThat(ProtectedChangeDecisionCheck.covers(Set.of(), Set.of())).isFalse();
+            "ledger.post"), Set.of("ledger.post"), ADMIN)).isFalse();
+        assertThat(ProtectedChangeDecisionCheck.covers(Set.of("security.protected-change.decide", "ledger.post"),
+            Set.of("ledger.post"), ADMIN)).as("deciding is no administrator's permission").isFalse();
+        assertThat(ProtectedChangeDecisionCheck.covers(Set.of(), Set.of(), ADMIN)).isFalse();
+    }
+
+    /** Decision D51: the administrators' permissions are configurable; * always is one. */
+    @Test
+    void theAdministratorsPermissionsAreConfigurable() {
+        assertThat(ADMIN).containsExactlyInAnyOrder("*", "security.user-role.write", "security.role.write");
+        ProtectedGrantSettings own = new ProtectedGrantSettings(true, false, List.of(), List.of(),
+            List.of(" qb.security.admin ", ""));
+        assertThat(own.administratorPermissions()).containsExactlyInAnyOrder("*", "qb.security.admin");
+        assertThat(ProtectedChangeDecisionCheck.covers(Set.of("qb.security.admin", "ledger.post"),
+            Set.of("ledger.post"), own.administratorPermissions())).isTrue();
+        assertThat(ProtectedChangeDecisionCheck.covers(Set.of("security.user-role.write", "ledger.post"),
+            Set.of("ledger.post"), own.administratorPermissions())).isFalse();
+        assertThat(own.check()).singleElement().satisfies(problem ->
+            assertThat(problem.toString()).contains("qb.security.admin").contains("not a protected permission"));
+        assertThat(new ProtectedGrantSettings(true, false, List.of(), List.of()).check()).isEmpty();
+        assertThat(new ProtectedGrantSettings(true, false, List.of(), List.of(), List.of("bad code")).check())
+            .singleElement().satisfies(problem -> assertThat(problem.toString()).contains("bad code"));
     }
 
     /**
@@ -68,17 +91,23 @@ class ApproverCoverageTest {
         assertThat(corp.trustedAddress(null)).isTrue();
     }
 
-    /** At apply time, deciding itself is judged again too: approval.decide and the level's permission. */
+    /**
+     * At apply time, deciding itself is judged again too: security.protected-change.decide (decision D51; not
+     * approval.decide) and the level's permission.
+     */
     @Test
     void whenAppliedTheApproverMustStillBeAbleToDecideAtThatLevel() {
-        Set<String> full = Set.of("approval.decide", "security.user-role.write", "ledger.post");
-        assertThat(ProtectedChangeDecisionCheck.mayDecide(full, "USER_ROLE", Set.of("ledger.post"))).isTrue();
-        assertThat(ProtectedChangeDecisionCheck.mayDecide(Set.of("*"), "ROLE_PERMISSION", Set.of("*"))).isTrue();
+        Set<String> full = Set.of("security.protected-change.decide", "security.user-role.write", "ledger.post");
+        assertThat(ProtectedChangeDecisionCheck.mayDecide(full, "USER_ROLE", Set.of("ledger.post"), ADMIN)).isTrue();
+        assertThat(ProtectedChangeDecisionCheck.mayDecide(Set.of("*"), "ROLE_PERMISSION", Set.of("*"), ADMIN))
+            .isTrue();
         assertThat(ProtectedChangeDecisionCheck.mayDecide(Set.of("security.user-role.write", "ledger.post"),
-            "USER_ROLE", Set.of("ledger.post"))).as("without approval.decide").isFalse();
-        assertThat(ProtectedChangeDecisionCheck.mayDecide(full, "ROLE_PERMISSION", Set.of("ledger.post")))
+            "USER_ROLE", Set.of("ledger.post"), ADMIN)).as("without the permission to decide").isFalse();
+        assertThat(ProtectedChangeDecisionCheck.mayDecide(Set.of("approval.decide", "security.user-role.write",
+            "ledger.post"), "USER_ROLE", Set.of("ledger.post"), ADMIN)).as("approval.decide is not it").isFalse();
+        assertThat(ProtectedChangeDecisionCheck.mayDecide(full, "ROLE_PERMISSION", Set.of("ledger.post"), ADMIN))
             .as("the level of a role's permission is security.role.write").isFalse();
-        assertThat(ProtectedChangeDecisionCheck.mayDecide(Set.of("approval.decide", "security.user-role.write"),
-            "PASSWORD", Set.of())).isTrue();
+        assertThat(ProtectedChangeDecisionCheck.mayDecide(Set.of("security.protected-change.decide",
+            "security.user-role.write"), "PASSWORD", Set.of(), ADMIN)).isTrue();
     }
 }

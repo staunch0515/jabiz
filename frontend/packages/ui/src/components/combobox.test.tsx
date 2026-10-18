@@ -92,8 +92,38 @@ describe('Combobox', () => {
       />,
     )
     expect(screen.getByRole('option', { name: 'Bravo Lines' })).toBeInTheDocument()
+    expect(screen.getByRole('listbox')).toHaveAttribute('aria-busy', 'false')
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
     await userEvent.keyboard('{Escape}')
     // Closing forgets the search.
     expect(onSearch).toHaveBeenLastCalledWith('')
+  })
+
+  it('while loading, marks the list busy, keeps its options and shows the spinner outside the listbox', async () => {
+    const remote = (options: ComboboxOption[], loading: boolean) => (
+      <Combobox aria-label="Carrier" value={null} onChange={() => {}} options={options} onSearch={() => {}} loading={loading} />
+    )
+    const { rerender } = render(remote([], true))
+    await userEvent.click(screen.getByRole('combobox', { name: 'Carrier' }))
+    const list = screen.getByRole('listbox')
+    expect(list).toHaveAttribute('aria-busy', 'true')
+    const status = screen.getByRole('status')
+    expect(status).toHaveTextContent('Loading…')
+    expect(list).not.toContainElement(status)
+    expect(screen.queryByText('No matches')).not.toBeInTheDocument()
+    await expectAccessible()
+
+    // Searching again: the options already there stay until the new answer replaces them.
+    const shown = [{ value: 'c-1', label: 'Bravo Lines' }]
+    rerender(remote(shown, true))
+    expect(screen.getByRole('option', { name: 'Bravo Lines' })).toBeInTheDocument()
+    expect(screen.getByRole('listbox')).toHaveAttribute('aria-busy', 'true')
+    expect(screen.getByRole('listbox')).not.toContainElement(screen.getByRole('status'))
+    await expectAccessible()
+
+    rerender(remote(shown, false))
+    expect(screen.getByRole('listbox')).toHaveAttribute('aria-busy', 'false')
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    await expectAccessible()
   })
 })

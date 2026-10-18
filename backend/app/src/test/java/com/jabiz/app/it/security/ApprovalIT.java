@@ -5,6 +5,7 @@ import com.jabiz.app.it.fixture.ItFixtures;
 import com.jabiz.app.it.fixture.SqlStatementLog;
 import com.jabiz.runtime.approval.ApprovalEntities;
 import com.jabiz.runtime.approval.ApprovalPermissions;
+import com.jabiz.runtime.security.SecurityPermissions;
 import com.jabiz.runtime.test.TestTokens;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -188,6 +189,9 @@ class ApprovalIT extends ApprovalItSupport {
         String paymentId = unique("P");
         String requestId = (String) pay(preparer(), paymentId, channel, 10, null).get("requestId");
         String approver = as("it-approver", ApprovalPermissions.DECIDE, "it.approve");
+        // Decision D51: the permission deciding protected changes of security decides nothing else.
+        refused("APPROVAL_DECIDE", as("it-security", SecurityPermissions.PROTECTED_CHANGE_DECIDE, "it.approve"),
+            Map.of("requestId", requestId, "decision", "REJECT", "reason", "no"), 403);
         assertThat(ruleCode(refused("APPROVAL_DECIDE", approver, Map.of("requestId", requestId, "decision",
             "REJECT"), 422))).isEqualTo("REASON_REQUIRED");
         assertThat(decide(approver, requestId, "REJECT", "no invoice")).containsEntry("status", "REJECTED");

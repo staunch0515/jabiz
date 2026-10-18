@@ -128,15 +128,16 @@ export function Combobox({
               placeholder={searchPlaceholder ?? t('combobox.search')}
               aria-label={searchPlaceholder ?? t('combobox.search')}
             />
-            <CommandList id={listId}>
-              {loading ? (
-                <div className="flex justify-center py-6">
-                  <Spinner />
-                </div>
-              ) : (
-                <CommandEmpty>{emptyText ?? t('combobox.empty')}</CommandEmpty>
-              )}
-              {!loading && options.length > 0 && (
+            {/* Outside the listbox, whose children may only be options and groups (axe aria-required-children);
+                the list says it is busy, and keeps the options it has until the new ones arrive. */}
+            {loading && (
+              <div className={cn('flex justify-center', options.length > 0 ? 'py-2' : 'py-6')}>
+                <Spinner />
+              </div>
+            )}
+            <CommandList id={listId} aria-busy={loading}>
+              {!loading && <CommandEmpty>{emptyText ?? t('combobox.empty')}</CommandEmpty>}
+              {options.length > 0 && (
                 <CommandGroup>
                   {options.map((option) => (
                     <CommandItem

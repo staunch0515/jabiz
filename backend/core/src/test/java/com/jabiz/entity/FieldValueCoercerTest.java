@@ -327,4 +327,44 @@ class FieldValueCoercerTest {
             assertThat(new SemanticKind.Code("urn:x", null).allowedValues()).isEmpty();
         }
     }
+
+    /** Decision D51 item 4: what PostgreSQL cannot store is invalid input, not a database error. */
+    @Nested
+    class StorableRange {
+
+        private final SemanticKind date = new SemanticKind.Date();
+
+        @Test
+        void momentsOutsideTimestamptzAreRefused() {
+            assertThatThrownBy(() -> FieldValueCoercer.coerce(TEMPORAL, "+300000-01-01T00:00:00Z", true))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("outside the supported range");
+            assertThatThrownBy(() -> FieldValueCoercer.coerce(TEMPORAL, "-4713-11-23T23:59:59Z", true))
+                .isInstanceOf(IllegalArgumentException.class);
+            assertThatThrownBy(() -> FieldValueCoercer.coerce(TEMPORAL, Instant.MAX, false))
+                .isInstanceOf(IllegalArgumentException.class);
+            assertThatThrownBy(() -> FieldValueCoercer.coerce(TEMPORAL, "+294276-12-31T23:59:59.9999995Z", true))
+                .as("beyond the microsecond").isInstanceOf(IllegalArgumentException.class);
+            assertThatThrownBy(() -> FieldValueCoercer.storable(Instant.MIN)).isInstanceOf(
+                IllegalArgumentException.class);
+        }
+
+        @Test
+        void theBoundsThemselvesAreAccepted() {
+            assertThat(FieldValueCoercer.coerce(TEMPORAL, "-4713-11-24T00:00:00Z", true))
+                .isEqualTo(FieldValueCoercer.EARLIEST_TIMESTAMP);
+            assertThat(FieldValueCoercer.coerce(TEMPORAL, "+294276-12-31T23:59:59.999999Z", true))
+                .isEqualTo(FieldValueCoercer.LATEST_TIMESTAMP);
+            assertThat(FieldValueCoercer.storable(null)).isNull();
+            assertThat(FieldValueCoercer.coerce(date, "+5874897-12-31", true)).isEqualTo(FieldValueCoercer.LATEST_DATE);
+            assertThat(FieldValueCoercer.coerce(date, "-4713-11-24", true)).isEqualTo(FieldValueCoercer.EARLIEST_DATE);
+        }
+
+        @Test
+        void datesOutsideDateAreRefused() {
+            assertThatThrownBy(() -> FieldValueCoercer.coerce(date, "+5874898-01-01", true))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("outside the supported range");
+            assertThatThrownBy(() -> FieldValueCoercer.coerce(date, LocalDate.of(-4713, 11, 23), true))
+                .isInstanceOf(IllegalArgumentException.class);
+        }
+    }
 }

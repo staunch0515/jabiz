@@ -63,6 +63,12 @@ public final class SecurityPermissions {
     public static final String ACCESS_REVIEW_READ = "security.access-review.read";
     /** Signing an access review (ACCESS_REVIEW_SIGN_OFF), which always needs a recent second factor. */
     public static final String ACCESS_REVIEW_SIGN = "security.access-review.sign";
+    /**
+     * Deciding a protected change ({@code APPROVAL_DECIDE} on {@code jabiz.security.protected-change}), instead of
+     * {@code approval.decide}, which decides every other approval but not these (decision D51). Always protected:
+     * granting it needs approval too.
+     */
+    public static final String PROTECTED_CHANGE_DECIDE = com.jabiz.security.ProtectedPermissions.DECIDE;
     /** Declared by the bootstrap process, which only the platform runs at startup. */
     public static final String BOOTSTRAP = "security.bootstrap";
 

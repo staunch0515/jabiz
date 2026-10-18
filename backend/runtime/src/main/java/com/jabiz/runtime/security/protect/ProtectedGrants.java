@@ -36,8 +36,9 @@ import java.util.UUID;
  *       deleted, enabled or not, scheduled or not (as segregation of duties does, 18 section 4.2), and every assignment
  *       and grant still waiting for approval (a pending {@code SecProtectedChange}, review H1): a grant made while
  *       another is pending is judged as if that one were in effect, so that neither can grow the other unseen.</li>
- *   <li><b>Administrators</b> are enabled users holding {@code *} through an enabled role, now or at any later time a
- *       version is scheduled for (review L1). The <b>first administrators</b> are the users {@code SEC_BOOTSTRAP_ADMIN}
+ *   <li><b>Administrators</b> are enabled users holding {@code *} or an administrator's permission (by default
+ *       {@code security.user-role.write}, {@code security.role.write}; decision D51) through an enabled role, now or
+ *       at any later time a version is scheduled for (review L1). The <b>first administrators</b> are the users {@code SEC_BOOTSTRAP_ADMIN}
  *       created - normally one.</li>
  *   <li>The <b>setup window</b> ends ("armed") the first time two administrators besides the first one exist; the
  *       first administrator <b>retires</b> the first time another one exists. Both are recorded and never undone
@@ -378,22 +379,24 @@ public class ProtectedGrants {
     }
 
     /**
-     * The administrators: users holding {@code *} through a role, where the user (enabled), the assignment, the role
-     * (enabled) and the grant each live now or at a later time a version is scheduled for (ids as text). Counting a
-     * later time keeps a deletion scheduled far ahead from dropping an administrator early (review L1).
+     * The administrators: users holding {@code *} or an administrator's permission
+     * ({@link ProtectedGrantSettings#administratorPermissions}, decision D51) through a role, where the user (enabled),
+     * the assignment, the role (enabled) and the grant each live now or at a later time a version is scheduled for
+     * (ids as text). Counting a later time keeps a deletion scheduled far ahead from dropping an administrator early
+     * (review L1).
      */
     public Mono<Set<String>> admins(Instant now) {
-        String starRoles = "(SELECT " + RP_ROLE + " FROM " + RP + " WHERE " + RP_PERMISSION + " = :all)";
+        String starRoles = "(SELECT " + RP_ROLE + " FROM " + RP + " WHERE " + RP_PERMISSION + " = ANY(:all))";
         String sql = "SELECT DISTINCT ur.k::text AS user_id"
-            + " FROM " + alive(RP, RP_ID, RP_ROLE + " AS role_id", RP_PERMISSION + " = :all", null) + " rp"
+            + " FROM " + alive(RP, RP_ID, RP_ROLE + " AS role_id", RP_PERMISSION + " = ANY(:all)", null) + " rp"
             + " JOIN " + alive(ROLE, ROLE_ID, ROLE_ID + " AS role_id", ROLE_ID + " IN " + starRoles, ROLE_ENABLED)
             + " r ON r.role_id = rp.role_id"
             + " JOIN " + alive(UR, UR_ID, UR_ROLE + " AS role_id, " + UR_USER + " AS uid", UR_ROLE + " IN "
                 + starRoles, null) + " urr ON urr.role_id = rp.role_id"
             + " JOIN " + alive(USER, USER_ID, USER_ID + " AS uid", USER_ID + " IN (SELECT " + UR_USER + " FROM " + UR
                 + " WHERE " + UR_ROLE + " IN " + starRoles + ")", USER_ENABLED) + " ur ON ur.uid = urr.uid";
-        return engine().select(sql, Map.of("all", BoundValue.of(RequestContext.ALL_PERMISSIONS),
-                "now", BoundValue.of(now)))
+        return engine().select(sql, Map.of("all", BoundValue.of(settings.administratorPermissions()
+                    .toArray(String[]::new)), "now", BoundValue.of(now)))
             .map(row -> Rows.string(row.get("user_id"))).collect(TreeSet<String>::new, Set::add)
             .map(Set::copyOf);
     }

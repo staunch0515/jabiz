@@ -101,7 +101,7 @@ class ProcessController {
             mfa.require(context, definition.mfa(), "Running process " + definition.name());
             com.jabiz.runtime.security.VerifiedEmailPolicy.require(context, definition.verifiedEmail(),
                 "Running process " + definition.name());
-            return sod.check(context, definition.permissions())
+            return sod.check(context, definition.permissionsFor(context::hasPermission))
                 .then(Mono.defer(() -> run(definition, body == null ? Map.of() : body,
                     new ExecutionOptions(idempotencyKey))))
                 .map(result -> {
@@ -140,11 +140,13 @@ class ProcessController {
     }
 
     /**
-     * The caller needs every permission the process declares. Default deny: a process without permissions runs only
-     * in the dev profile (the startup check rejects it elsewhere, but can be turned off).
+     * The caller needs every permission the process declares (or every one of its alternative set, decision D51).
+     * Default deny: a process without permissions runs only in the dev profile (the startup check rejects it
+     * elsewhere, but can be turned off).
      */
     static void requirePermissions(ProcessDefinition<?, ?, ?> definition, RequestContext context,
         boolean development) {
-        Permissions.requireAll(context, definition.permissions(), development, "Running process " + definition.name());
+        Permissions.requireAll(context, definition.permissionsFor(context::hasPermission), development,
+            "Running process " + definition.name());
     }
 }

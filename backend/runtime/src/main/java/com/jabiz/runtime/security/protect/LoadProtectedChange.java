@@ -190,7 +190,8 @@ class LoadProtectedChange implements StepHandler<LoadProtectedChange.Metadata, P
                     : grants.retiredBootstrap(approver, ctx.processSeqId(), ctx.opTime()).flatMap(retired -> retired
                         ? Mono.just(false)
                         : uuid(approver).map(id -> grants.effectiveHoldings(id, ctx.opTime()).map(held ->
-                            ProtectedChangeDecisionCheck.mayDecide(held, kind, approvedGains)))
+                            ProtectedChangeDecisionCheck.mayDecide(held, kind, approvedGains,
+                                grants.settings().administratorPermissions())))
                             .orElse(Mono.just(false)));
                 return allowed.flatMap(ok -> {
                     if (!ok) {
