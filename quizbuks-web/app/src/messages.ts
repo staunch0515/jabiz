@@ -7,6 +7,18 @@ export const APP = 'app'
 // Counts are written so that one form reads right for every number ("Completed: 3"): the key test needs the same
 // keys in every language, and Chinese and Japanese have no plural forms.
 const en = {
+  public: {
+    back: 'Back to the app',
+    signIn: 'Sign in',
+    signUpTerms: 'You accept these after signing up, when you complete your profile:',
+  },
+  about: {
+    title: 'About {{name}}',
+    intro: 'Answer quizzes from sponsors and earn Kudos.',
+    version: 'Version',
+    built: 'Updated',
+  },
+  account: { info: 'Help and information', about: 'About the app' },
   nav: { label: 'App', home: 'Home', history: 'History', account: 'Account' },
   home: {
     title: 'Home',
@@ -197,6 +209,18 @@ const en = {
 }
 
 const zh: typeof en = {
+  public: {
+    back: '返回 App',
+    signIn: '登录',
+    signUpTerms: '注册后完善资料时，您将同意以下文本：',
+  },
+  about: {
+    title: '关于 {{name}}',
+    intro: '回答商家的 Quiz，赚取 Kudos。',
+    version: '版本',
+    built: '更新日期',
+  },
+  account: { info: '帮助与信息', about: '关于本 App' },
   nav: { label: 'App', home: '首页', history: '记录', account: '账户' },
   home: {
     title: '首页',
@@ -387,6 +411,18 @@ const zh: typeof en = {
 }
 
 const ja: typeof en = {
+  public: {
+    back: 'アプリに戻る',
+    signIn: 'ログイン',
+    signUpTerms: '登録後、プロフィールの入力時に以下へ同意していただきます：',
+  },
+  about: {
+    title: '{{name}} について',
+    intro: 'スポンサーのクイズに答えて Kudos を獲得しましょう。',
+    version: 'バージョン',
+    built: '更新日',
+  },
+  account: { info: 'ヘルプと情報', about: 'このアプリについて' },
   nav: { label: 'アプリ', home: 'ホーム', history: '履歴', account: 'アカウント' },
   home: {
     title: 'ホーム',

@@ -46,6 +46,19 @@ public final class QbParams {
     public static final String AI_MODEL = "qb.ai.model";
     /** The oldest version of the app that may still be used. */
     public static final String APP_MIN_VERSION = "qb.app.min-version";
+    /**
+     * The address signed-in users write to when the help centre does not answer them (Q7b, Q7-8); empty: the help
+     * pages show no contact.
+     */
+    public static final String SUPPORT_EMAIL = "qb.support.email";
+    /**
+     * How many days ahead a legal text may be announced to take effect (Q7b review M1): an announcement holds the
+     * kind's next version back until it takes effect or is withdrawn. Controlled: a longer horizon lets one person
+     * hold the terms back longer. 180 while no value is published.
+     */
+    public static final String LEGAL_MAX_ANNOUNCE_DAYS = "qb.legal.max-announce-days";
+    /** The horizon while {@link #LEGAL_MAX_ANNOUNCE_DAYS} has no published value. */
+    public static final int LEGAL_MAX_ANNOUNCE_DAYS_DEFAULT = 180;
 
     /*
      * The account mapping of the journal export (Q9d, F-01): for each postable account of the ledger (QbLedger), the
@@ -80,7 +93,7 @@ public final class QbParams {
     public static final List<String> CONTROLLED = java.util.stream.Stream.of(List.of(CREATOR_FEE_RATE,
         TRANSFER_THRESHOLD, TRANSFER_REVIEW_ABOVE, TRANSFER_ENABLED, REVIEW_SPONSOR_AUTO, REVIEW_PUBLICATION_AUTO,
         TOPUP_MIN, TOPUP_MAX, TRANSFER_FEE, TRANSFER_HOLD_DAYS, TOPUP_NEW_SPONSOR_DAYS, TOPUP_NEW_SPONSOR_MAX_TOTAL),
-        JOURNAL_ACCOUNTS, ISSUER).flatMap(List::stream).toList();
+        JOURNAL_ACCOUNTS, ISSUER, List.of(LEGAL_MAX_ANNOUNCE_DAYS)).flatMap(List::stream).toList();
 
     /** A parameter: its key, kind (as the platform writes kinds) and first value. */
     public record Param(String key, Map<String, Object> valueKind, Object value, String description) {
@@ -130,7 +143,11 @@ public final class QbParams {
         new Param(ISSUER_ADDRESS, Map.of("type", "text", "maxLength", 500), "",
             "Address of the operator, as the top-up receipts show it"),
         new Param(ISSUER_REGISTRATION_NO, Map.of("type", "text", "maxLength", 50), "",
-            "Registration number of the operator (such as the qualified invoice issuer number), on the receipts"));
+            "Registration number of the operator (such as the qualified invoice issuer number), on the receipts"),
+        new Param(SUPPORT_EMAIL, Map.of("type", "text", "maxLength", 200), "",
+            "Support address shown to signed-in users in the help centre (empty: none)"),
+        new Param(LEGAL_MAX_ANNOUNCE_DAYS, DAYS, String.valueOf(LEGAL_MAX_ANNOUNCE_DAYS_DEFAULT),
+            "How many days ahead a new version of the terms or the privacy policy may be announced to take effect"));
 
     private static Param journal(String key, String account) {
         return new Param(key, ACCOUNT_CODE, "", "Accounting system's account code for " + account

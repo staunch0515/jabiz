@@ -1,6 +1,8 @@
 package com.jabiz.quizbuks.it;
 
 import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.messaging.LegalDrafts;
+import com.jabiz.quizbuks.messaging.QbLegal;
 import com.jabiz.quizbuks.identity.SponsorApprovals;
 import com.jabiz.quizbuks.publishing.PublicationApprovals;
 import com.jabiz.quizbuks.setup.QbApprovalRules;
@@ -47,6 +49,12 @@ class SetupIT extends QbItSupport {
             com.jabiz.quizbuks.wallet.QbPayouts.REVIEW_RULE, QbSodRules.CONTROL.code(), QbSodRules.SECURITY.code()));
         assertThat((List<?>) first.get("proposals")).hasSize(QbParams.CONTROLLED.size() + QbApprovalRules.ALL.size()
             + QbSodRules.ALL.size());
+        // Q7b: a draft of each legal text, a marked test placeholder; nothing published.
+        assertThat(first.get("legalDraftsCreated")).isEqualTo(QbLegal.KINDS);
+        assertThat(query("SELECT kind, title->>'en' AS title FROM qb_legal_doc_version ORDER BY kind"))
+            .hasSize(QbLegal.KINDS.size())
+            .allSatisfy(row -> assertThat(row.get("title").toString()).startsWith(LegalDrafts.MARKER));
+        assertThat(query("SELECT count(*) AS n FROM qb_legal_version_version").getFirst()).containsEntry("n", 0L);
         assertThat(query("SELECT count(*) AS n FROM sys_sod_rule_version").getFirst()).containsEntry("n", 0L);
         assertThat(query("SELECT count(*) AS n FROM sys_approval_rule_version").getFirst()).containsEntry("n", 0L);
         assertThat(query("SELECT count(*) AS n FROM sys_param_version WHERE param_key = ?",
@@ -56,7 +64,8 @@ class SetupIT extends QbItSupport {
         Map<String, Long> before = rowCounts();
         // One record of each item setup made: it never adds the same item again.
         assertThat(before.get("qb_setup_record_version")).isEqualTo((long) QbRoles.all().size() + granted
-            + QbLedger.ACCOUNTS.size() + QbParams.ALL.size() + 249 + QbApprovalRules.ALL.size() + QbSodRules.ALL.size());
+            + QbLedger.ACCOUNTS.size() + QbParams.ALL.size() + 249 + QbApprovalRules.ALL.size() + QbSodRules.ALL.size()
+            + QbLegal.KINDS.size());
         assertThat(query("SELECT rule_code, left_permissions, right_permissions, enabled FROM sys_sod_rule_version "
             + "ORDER BY rule_code")).satisfiesExactly(
                 rule -> assertThat(rule).containsEntry("rule_code", QbSodRules.CONTROL.code())
@@ -95,12 +104,14 @@ class SetupIT extends QbItSupport {
         assertThat(second).containsEntry("rolesCreated", List.of()).containsEntry("permissionsAdded", 0)
             .containsEntry("accountsOpened", List.of()).containsEntry("countriesAdded", 0)
             .containsEntry("paramsCreated", List.of()).containsEntry("paramsProposed", List.of())
-            .containsEntry("rulesProposed", List.of()).containsEntry("proposals", List.of());
+            .containsEntry("rulesProposed", List.of()).containsEntry("proposals", List.of())
+            .containsEntry("legalDraftsCreated", List.of());
         assertThat(rowCounts()).isEqualTo(before);
         assertCountries();
 
         assertOnlyInserted("qb_country_version");
         assertOnlyInserted("qb_setup_record_version");
+        assertOnlyInserted("qb_legal_doc_version");
     }
 
     @Test
@@ -197,6 +208,10 @@ class SetupIT extends QbItSupport {
         // Q9d: the account mapping and the receipts' issuer start empty, for finance to set with four eyes.
         QbParams.JOURNAL_ACCOUNTS.forEach(key -> expected.put(key, ""));
         QbParams.ISSUER.forEach(key -> expected.put(key, ""));
+        // Q7b: no support address until an administrator sets one.
+        expected.put(QbParams.SUPPORT_EMAIL, "");
+        // Q7b review M1: how far ahead a legal text may be announced.
+        expected.put(QbParams.LEGAL_MAX_ANNOUNCE_DAYS, "180");
         assertThat(values).containsExactlyInAnyOrderEntriesOf(expected);
     }
 
@@ -205,7 +220,7 @@ class SetupIT extends QbItSupport {
         Map<String, Long> counts = new TreeMap<>();
         for (String table : List.of("sec_role_version", "sec_role_permission_version", "ledger_account_version",
             "sys_param_version", "qb_country_version", "qb_setup_record_version", "sys_approval_rule_version",
-            "sys_control_change_version")) {
+            "sys_control_change_version", "qb_legal_doc_version")) {
             counts.put(table, ((Number) query("SELECT count(*) AS n FROM " + table).getFirst().get("n")).longValue());
         }
         return counts;

@@ -25,6 +25,23 @@ class LiveModeDataCheckTest {
             .satisfies(p -> assertThat(p.severity()).isEqualTo(CheckProblem.Severity.WARNING));
     }
 
+    /** Q7b review L4: failing to read the legal texts says so, not that the top-ups could not be checked. */
+    @Test
+    void theLegalTextsAreCheckedOnTheirOwn() {
+        assertThat(LiveModeDataCheck.legalCheck(() -> java.util.Set.of("TERMS_APP", "TERMS_SPONSOR", "PRIVACY")))
+            .isEmpty();
+        assertThat(LiveModeDataCheck.legalCheck(() -> java.util.Set.of("PRIVACY")))
+            .extracting(CheckProblem::toString).hasSize(2)
+            .allSatisfy(text -> assertThat(text).contains("Live mode without a version"));
+        assertThat(LiveModeDataCheck.legalCheck(() -> {
+            throw new java.sql.SQLException("relation does not exist");
+        })).singleElement().satisfies(p -> {
+            assertThat(p.severity()).isEqualTo(CheckProblem.Severity.WARNING);
+            assertThat(p.toString()).contains("cannot check which legal texts are in effect")
+                .contains("relation does not exist").doesNotContain("top-ups");
+        });
+    }
+
     @Test
     void aFreshDatabaseOrTestModeIsFine() {
         assertThat(LiveModeDataCheck.problems(true, false, NONE)).isEmpty();

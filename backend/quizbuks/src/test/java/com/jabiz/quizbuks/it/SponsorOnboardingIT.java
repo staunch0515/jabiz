@@ -92,6 +92,34 @@ class SponsorOnboardingIT extends AccountItSupport {
                     "SELECT email FROM sec_user_version WHERE user_id = ?::uuid", sara).getFirst().get("email")));
     }
 
+    /**
+     * An application made before the terms were versioned (Q7b review L2): its request is bound to the content
+     * without the terms' version. The same application under no version in effect hashes the same, so the pending
+     * requests of before V12 are still approved.
+     */
+    @Test
+    void anApplicationWithoutAVersionOfTheTermsIsBoundAsBeforeAndApproved() {
+        String sara = newSponsor("legacy");
+        Map<String, Object> applied = run("QB_SPONSOR_APPLY", tokenOf(sara, QbRoles.SPONSOR),
+            application("Sara", "Acme"));
+        Object requestId = applied.get("approvalRequestId");
+        Map<String, Object> onboarding = onboardingOf(sara);
+        assertThat(onboarding).containsEntry("terms_version_no", null);
+        Map<String, Object> before = new java.util.LinkedHashMap<>();
+        before.put("contactName", "Sara");
+        before.put("company", "Acme");
+        before.put("intro", "We make **quizzes**.");
+        before.put("avatar", null);
+        before.put("termsAcceptedAt", ((java.sql.Timestamp) onboarding.get("terms_accepted_at")).toInstant()
+            .toString());
+        assertThat(query("SELECT content_hash FROM sys_approval_request_version WHERE request_id = ?::uuid "
+            + "ORDER BY version_no DESC LIMIT 1", requestId).getFirst().get("content_hash"))
+            .isEqualTo(com.jabiz.approval.ContentHash.of(before));
+
+        decideSponsor(requestId, "APPROVE", null);
+        assertThat(onboardingOf(sara)).containsEntry("review_status", SponsorStatus.APPROVED);
+    }
+
     @Test
     void aRejectedApplicationGetsTheReasonAndATaskToSubmitAgain() {
         String sara = newSponsor("sara");

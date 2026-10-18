@@ -134,5 +134,11 @@ public final class QbPermissions {
      */
     public static final String JOURNAL_SYSTEM = "qb.journal.system";
 
+    /**
+     * The messaging templates only processes run (Q7b: {@code qb.system.consent-state}, the server's check of consent
+     * before money and contract actions). Granted to no role.
+     */
+    public static final String MESSAGING_SYSTEM = "qb.messaging.system";
+
     private QbPermissions() {}
 }

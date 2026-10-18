@@ -16,7 +16,7 @@ import {
   VerifyEmailBanner,
   cn,
 } from '@jabiz/ui'
-import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query'
+import { QueryClientProvider, useQuery } from '@tanstack/react-query'
 import { History, House, UserRound, Wallet, type LucideIcon } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -29,9 +29,16 @@ import { PublicationPage } from './pages/PublicationPage'
 import { PROFILE_QUERY } from './pages/ProfileForm'
 import { ResultPage } from './pages/ResultPage'
 import { WelcomePage } from './pages/WelcomePage'
+import { AboutPage } from './pages/AboutPage'
 import { forgetAttempts } from './play/storage'
 import { itemPage } from './routes'
 import { readMyProfile } from './qb/api'
+import { ConsentGate, LegalLink, newQbQueryClient } from './qb/ConsentGate'
+import { HelpPage } from './qb/HelpPage'
+import { LEGAL } from './qb/ids'
+import { legalKindOf } from './qb/legal'
+import { LegalLinks } from './qb/LegalLinks'
+import { LegalPage } from './qb/LegalPage'
 import { QB } from './qb/messages'
 import { Link, navigate, navigation, Redirect, useLocation } from './qb/router'
 import { useSessionLock } from './qb/session'
@@ -43,6 +50,8 @@ import { WalletPage } from './wallet/WalletPage'
 const HOME = '/'
 const WELCOME = '/welcome'
 const HISTORY = '/history'
+const HELP = '/help'
+const ABOUT = '/about'
 
 /** The second step of a sign-in through an identity provider, handed from the callback to the sign-in page. */
 let pendingStep: SignInStep | undefined
@@ -149,7 +158,7 @@ function SignedIn({ path }: { path: string }) {
   else page = <PageState kind="notFound" titleAs="h1" description={t('notFound')} />
   // The navigation is the app's; the welcome step stands alone, and answering keeps the screen to the question.
   const nav = path !== WELCOME && item?.page !== 'play'
-  return (
+  const pages = (
     <div className="flex min-h-full flex-col">
       <Header />
       <main className={cn('mx-auto flex w-full max-w-md flex-col gap-4 px-4 py-4', nav && 'pb-24')}>
@@ -161,11 +170,55 @@ function SignedIn({ path }: { path: string }) {
       {nav && <BottomNav path={path} />}
     </div>
   )
+  // Whoever completed the profile before the texts in effect accepts them first (D-Q7-5); registration's second
+  // step accepts them with the profile.
+  return <ConsentGate kinds={LEGAL.appKinds} enabled={!!complete} onSignOut={() => {
+    forgetAttempts()
+    toSignIn()
+  }}>{pages}</ConsentGate>
+}
+
+/**
+ * The help centre, the legal texts and the About page (Q7b): readable without signing in, in a frame of their own
+ * with the way back (to the app, or to signing in).
+ */
+function PublicPage({ path, signedIn }: { path: string; signedIn: boolean }) {
+  const { t } = useTranslation(QB)
+  const { t: tApp } = useTranslation(APP)
+  const kind = legalKindOf(path)
+  const page = path === HELP ? <HelpPage audience="APP" />
+    : path === ABOUT ? <AboutPage />
+    : kind ? <LegalPage key={kind} kind={kind} />
+    : null
+  return (
+    <div className="flex min-h-full flex-col">
+      <header className="bg-background sticky top-0 z-10 border-b">
+        <div className="mx-auto flex max-w-md items-center gap-2 px-4 py-2">
+          <span className="mr-auto font-semibold">{t('brand')}</span>
+          <ThemeToggle />
+          <Link to={signedIn ? HOME : '/login'} className="text-primary text-sm underline" data-testid="public-back">
+            {signedIn ? tApp('public.back') : tApp('public.signIn')}
+          </Link>
+        </div>
+      </header>
+      <main className="mx-auto flex w-full max-w-md flex-col gap-6 px-4 py-4">
+        <OfflineBanner />
+        {page}
+        <LegalLinks kinds={LEGAL.appKinds} className="border-t pt-4" />
+      </main>
+    </div>
+  )
+}
+
+/** Whether a path is one of the pages anybody may read. */
+function isPublic(path: string): boolean {
+  return path === HELP || path === ABOUT || legalKindOf(path) !== null
 }
 
 /** The app's pages by path: the sign-in pages for everyone, the rest for a signed-in taker only. */
 function Routes() {
   const { t } = useTranslation(QB)
+  const { t: tApp } = useTranslation(APP)
   const { ready, signedIn } = useAuth()
   const { path } = useLocation()
   const brand = t('brand')
@@ -199,13 +252,24 @@ function Routes() {
       onBack={() => navigate('/login', { replace: true })} />)
   }
   if (!ready) return <PageState kind="loading" />
+  if (isPublic(path)) return <PublicPage path={path} signedIn={signedIn} />
   // Signed in, the pages of signing up and asking for a new password lead home.
   if (signedIn && (path === '/signup' || path === '/password-reset')) return <Redirect to={HOME} />
   if (path === '/password-reset') {
     return frame(<PasswordResetRequest {...navigation} brand={brand} signInPath="/login" />)
   }
   // The form, then "look in your mailbox" with a new mail on request; the profile follows the first sign-in.
-  if (path === '/signup') return frame(<SignUpForm {...navigation} brand={brand} signInPath="/login" />)
+  // The texts are accepted on the welcome step (Q7-3); signing up says where to read them.
+  if (path === '/signup') {
+    return frame(<>
+      <SignUpForm {...navigation} brand={brand} signInPath="/login" />
+      <p className="text-muted-foreground mx-auto w-full max-w-md px-4 pb-6 text-center text-sm"
+        data-testid="signup-terms">
+        {tApp('public.signUpTerms')}{' '}
+        <LegalLink kind="TERMS_APP" />{' · '}<LegalLink kind="PRIVACY" />
+      </p>
+    </>)
+  }
   if (path === '/login') {
     if (signedIn) return <Redirect to={HOME} />
     return frame(<SignInForm {...navigation} brand={brand} returnTo={HOME} initialStep={pendingStep}
@@ -222,13 +286,9 @@ function Routes() {
   )
 }
 
-function newQueryClient() {
-  return new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } } })
-}
-
 /** The takers' app (docs/quizbuks/plans/QP-pages.md): an application's own SPA and PWA on the platform's packages. */
 export default function App() {
-  const [queryClient] = useState(newQueryClient)
+  const [queryClient] = useState(newQbQueryClient)
   return (
     <AppearanceProvider>
       <QueryClientProvider client={queryClient}>

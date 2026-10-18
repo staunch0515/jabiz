@@ -1,0 +1,412 @@
+{
+  "scenario" : "Terms and consent",
+  "asOf" : "2026-12-02T00:00:00Z",
+  "entities" : {
+    "QbLegalDoc" : [ {
+      "docId" : "#uuid:1",
+      "kind" : "TERMS_APP",
+      "title" : {
+        "en" : "[TEST PLACEHOLDER] Terms of use",
+        "ja" : "[TEST PLACEHOLDER] 利用規約",
+        "zh" : "[TEST PLACEHOLDER] 用户条款"
+      },
+      "body" : {
+        "en" : "> **[TEST PLACEHOLDER] This is not a legal text.** It exists so that development and tests have something to publish. The operator's counsel supplies the real text, in Japanese (which governs) and in English; an administrator replaces this draft with it before going live.\n\n## 1. Scope\n\nPlaceholder text.\n",
+        "ja" : "> **[TEST PLACEHOLDER] これは法的な文書ではありません。** 開発とテストのための仮の文章です。正式な文章は運営者（または弁護士）が日本語（正文）と英語で用意し、公開前に管理者がこの下書きと差し替えます。\n\n## 第1条 適用範囲\n\n仮の文章です。\n",
+        "zh" : "> **[TEST PLACEHOLDER] 这不是法律文本。** 仅供开发与测试发布使用。正式文本由运营方（或律师）以日文（准据文本）和英文提供，上线前由管理员替换此草稿。\n\n## 第一条 适用范围\n\n占位文本。\n"
+      },
+      "changeSummary" : null,
+      "latestVersionNo" : "1",
+      "lastPublishedAt" : "2026-10-01T00:00:00Z",
+      "versionNo" : 2,
+      "effectStartTime" : "2026-10-01T00:00:00Z",
+      "createdTime" : "2026-10-01T00:00:00Z",
+      "processSeqId" : "#op:2"
+    }, {
+      "docId" : "#uuid:2",
+      "kind" : "TERMS_SPONSOR",
+      "title" : {
+        "en" : "[TEST PLACEHOLDER] Sponsor terms",
+        "ja" : "[TEST PLACEHOLDER] スポンサー利用規約",
+        "zh" : "[TEST PLACEHOLDER] 商家条款"
+      },
+      "body" : {
+        "en" : "[TEST PLACEHOLDER] Sponsor terms, version 2.",
+        "ja" : "[TEST PLACEHOLDER] スポンサー利用規約 第 2 版。"
+      },
+      "changeSummary" : {
+        "en" : "Fees are explained.",
+        "ja" : "手数料を説明しました。"
+      },
+      "latestVersionNo" : "2",
+      "lastPublishedAt" : "2026-10-01T01:00:00Z",
+      "versionNo" : 4,
+      "effectStartTime" : "2026-10-01T01:00:00Z",
+      "createdTime" : "2026-10-01T01:00:00Z",
+      "processSeqId" : "#op:8"
+    }, {
+      "docId" : "#uuid:3",
+      "kind" : "PRIVACY",
+      "title" : {
+        "en" : "[TEST PLACEHOLDER] Privacy policy",
+        "ja" : "[TEST PLACEHOLDER] プライバシーポリシー",
+        "zh" : "[TEST PLACEHOLDER] 隐私政策"
+      },
+      "body" : {
+        "en" : "[TEST PLACEHOLDER] Privacy policy, version 2.",
+        "ja" : "[TEST PLACEHOLDER] プライバシーポリシー 第 2 版。"
+      },
+      "changeSummary" : {
+        "en" : "Retention is explained.",
+        "ja" : "保存期間を説明しました。"
+      },
+      "latestVersionNo" : "3",
+      "lastPublishedAt" : "2026-12-02T00:00:00Z",
+      "versionNo" : 5,
+      "effectStartTime" : "2026-12-02T00:00:00Z",
+      "createdTime" : "2026-12-02T00:00:00Z",
+      "processSeqId" : "#op:12"
+    }, {
+      "docId" : "#uuid:4",
+      "kind" : "COMMERCE_NOTICE",
+      "title" : {
+        "en" : "[TEST PLACEHOLDER] Notice under the Act on Specified Commercial Transactions",
+        "ja" : "[TEST PLACEHOLDER] 特定商取引法に基づく表記",
+        "zh" : "[TEST PLACEHOLDER] 特定商取引法标示"
+      },
+      "body" : {
+        "en" : "> **[TEST PLACEHOLDER] This is not a legal text.** It exists so that development and tests have something to publish. The operator's counsel supplies the real text, in Japanese (which governs) and in English; an administrator replaces this draft with it before going live.\n\n## 1. Seller\n\nPlaceholder text.\n",
+        "ja" : "> **[TEST PLACEHOLDER] これは法的な文書ではありません。** 開発とテストのための仮の文章です。正式な文章は運営者（または弁護士）が日本語（正文）と英語で用意し、公開前に管理者がこの下書きと差し替えます。\n\n## 第1条 販売事業者\n\n仮の文章です。\n",
+        "zh" : "> **[TEST PLACEHOLDER] 这不是法律文本。** 仅供开发与测试发布使用。正式文本由运营方（或律师）以日文（准据文本）和英文提供，上线前由管理员替换此草稿。\n\n## 第一条 销售方\n\n占位文本。\n"
+      },
+      "changeSummary" : null,
+      "latestVersionNo" : null,
+      "lastPublishedAt" : null,
+      "versionNo" : 1,
+      "effectStartTime" : "2026-10-01T00:00:00Z",
+      "createdTime" : "2026-10-01T00:00:00Z",
+      "processSeqId" : "#op:1"
+    } ],
+    "QbLegalVersion" : [ {
+      "legalVersionId" : "#uuid:5",
+      "kind" : "TERMS_APP",
+      "versionNumber" : "1",
+      "title" : {
+        "en" : "[TEST PLACEHOLDER] Terms of use",
+        "ja" : "[TEST PLACEHOLDER] 利用規約",
+        "zh" : "[TEST PLACEHOLDER] 用户条款"
+      },
+      "body" : {
+        "en" : "> **[TEST PLACEHOLDER] This is not a legal text.** It exists so that development and tests have something to publish. The operator's counsel supplies the real text, in Japanese (which governs) and in English; an administrator replaces this draft with it before going live.\n\n## 1. Scope\n\nPlaceholder text.\n",
+        "ja" : "> **[TEST PLACEHOLDER] これは法的な文書ではありません。** 開発とテストのための仮の文章です。正式な文章は運営者（または弁護士）が日本語（正文）と英語で用意し、公開前に管理者がこの下書きと差し替えます。\n\n## 第1条 適用範囲\n\n仮の文章です。\n",
+        "zh" : "> **[TEST PLACEHOLDER] 这不是法律文本。** 仅供开发与测试发布使用。正式文本由运营方（或律师）以日文（准据文本）和英文提供，上线前由管理员替换此草稿。\n\n## 第一条 适用范围\n\n占位文本。\n"
+      },
+      "changeSummary" : null,
+      "requiresConsent" : true,
+      "publishedAt" : "2026-10-01T00:00:00Z",
+      "publishedBy" : "legal-admin",
+      "effectiveAt" : "2026-10-01T00:00:00Z",
+      "contentHash" : "e97be38e6a882e25e18a90f67dea4fd42dc2b2e65655246bc8a4956b979cd43f",
+      "versionNo" : 1,
+      "effectStartTime" : "2026-10-01T00:00:00Z",
+      "createdTime" : "2026-10-01T00:00:00Z",
+      "processSeqId" : "#op:2"
+    }, {
+      "legalVersionId" : "#uuid:6",
+      "kind" : "TERMS_SPONSOR",
+      "versionNumber" : "1",
+      "title" : {
+        "en" : "[TEST PLACEHOLDER] Sponsor terms",
+        "ja" : "[TEST PLACEHOLDER] スポンサー利用規約",
+        "zh" : "[TEST PLACEHOLDER] 商家条款"
+      },
+      "body" : {
+        "en" : "> **[TEST PLACEHOLDER] This is not a legal text.** It exists so that development and tests have something to publish. The operator's counsel supplies the real text, in Japanese (which governs) and in English; an administrator replaces this draft with it before going live.\n\n## 1. Scope\n\nPlaceholder text.\n",
+        "ja" : "> **[TEST PLACEHOLDER] これは法的な文書ではありません。** 開発とテストのための仮の文章です。正式な文章は運営者（または弁護士）が日本語（正文）と英語で用意し、公開前に管理者がこの下書きと差し替えます。\n\n## 第1条 適用範囲\n\n仮の文章です。\n",
+        "zh" : "> **[TEST PLACEHOLDER] 这不是法律文本。** 仅供开发与测试发布使用。正式文本由运营方（或律师）以日文（准据文本）和英文提供，上线前由管理员替换此草稿。\n\n## 第一条 适用范围\n\n占位文本。\n"
+      },
+      "changeSummary" : null,
+      "requiresConsent" : true,
+      "publishedAt" : "2026-10-01T00:00:00Z",
+      "publishedBy" : "legal-admin",
+      "effectiveAt" : "2026-10-01T00:00:00Z",
+      "contentHash" : "7c5ab30bcd706dfa6275e9d4c1605c9b1602316952cf9b5215d0e21a33777b84",
+      "versionNo" : 1,
+      "effectStartTime" : "2026-10-01T00:00:00Z",
+      "createdTime" : "2026-10-01T00:00:00Z",
+      "processSeqId" : "#op:3"
+    }, {
+      "legalVersionId" : "#uuid:7",
+      "kind" : "PRIVACY",
+      "versionNumber" : "1",
+      "title" : {
+        "en" : "[TEST PLACEHOLDER] Privacy policy",
+        "ja" : "[TEST PLACEHOLDER] プライバシーポリシー",
+        "zh" : "[TEST PLACEHOLDER] 隐私政策"
+      },
+      "body" : {
+        "en" : "> **[TEST PLACEHOLDER] This is not a legal text.** It exists so that development and tests have something to publish. The operator's counsel supplies the real text, in Japanese (which governs) and in English; an administrator replaces this draft with it before going live.\n\n## 1. Information we collect\n\nPlaceholder text.\n",
+        "ja" : "> **[TEST PLACEHOLDER] これは法的な文書ではありません。** 開発とテストのための仮の文章です。正式な文章は運営者（または弁護士）が日本語（正文）と英語で用意し、公開前に管理者がこの下書きと差し替えます。\n\n## 第1条 取得する情報\n\n仮の文章です。\n",
+        "zh" : "> **[TEST PLACEHOLDER] 这不是法律文本。** 仅供开发与测试发布使用。正式文本由运营方（或律师）以日文（准据文本）和英文提供，上线前由管理员替换此草稿。\n\n## 第一条 我们收集的信息\n\n占位文本。\n"
+      },
+      "changeSummary" : null,
+      "requiresConsent" : true,
+      "publishedAt" : "2026-10-01T00:00:00Z",
+      "publishedBy" : "legal-admin",
+      "effectiveAt" : "2026-10-01T00:00:00Z",
+      "contentHash" : "c8e2614fb3b25f6b54f4dbdba057348f787501ca9bae47e9f145980c8590995a",
+      "versionNo" : 1,
+      "effectStartTime" : "2026-10-01T00:00:00Z",
+      "createdTime" : "2026-10-01T00:00:00Z",
+      "processSeqId" : "#op:4"
+    }, {
+      "legalVersionId" : "#uuid:8",
+      "kind" : "TERMS_SPONSOR",
+      "versionNumber" : "2",
+      "title" : {
+        "en" : "[TEST PLACEHOLDER] Sponsor terms",
+        "ja" : "[TEST PLACEHOLDER] スポンサー利用規約",
+        "zh" : "[TEST PLACEHOLDER] 商家条款"
+      },
+      "body" : {
+        "en" : "[TEST PLACEHOLDER] Sponsor terms, version 2.",
+        "ja" : "[TEST PLACEHOLDER] スポンサー利用規約 第 2 版。"
+      },
+      "changeSummary" : {
+        "en" : "Fees are explained.",
+        "ja" : "手数料を説明しました。"
+      },
+      "requiresConsent" : true,
+      "publishedAt" : "2026-10-01T01:00:00Z",
+      "publishedBy" : "legal-admin",
+      "effectiveAt" : "2026-10-08T00:00:00Z",
+      "contentHash" : "7cb10db06c4005f4cfb80ce61ff770cf846aac4eb08c5527f2f9acd4ec5b0034",
+      "versionNo" : 1,
+      "effectStartTime" : "2026-10-01T01:00:00Z",
+      "createdTime" : "2026-10-01T01:00:00Z",
+      "processSeqId" : "#op:8"
+    }, {
+      "legalVersionId" : "#uuid:9",
+      "kind" : "PRIVACY",
+      "versionNumber" : "2",
+      "title" : {
+        "en" : "[TEST PLACEHOLDER] Privacy policy",
+        "ja" : "[TEST PLACEHOLDER] プライバシーポリシー",
+        "zh" : "[TEST PLACEHOLDER] 隐私政策"
+      },
+      "body" : {
+        "en" : "[TEST PLACEHOLDER] Privacy policy, version 2.",
+        "ja" : "[TEST PLACEHOLDER] プライバシーポリシー 第 2 版。"
+      },
+      "changeSummary" : {
+        "en" : "Retention is explained.",
+        "ja" : "保存期間を説明しました。"
+      },
+      "requiresConsent" : true,
+      "publishedAt" : "2026-10-09T00:00:00Z",
+      "publishedBy" : "legal-admin",
+      "effectiveAt" : "2026-12-01T00:00:00Z",
+      "contentHash" : "de269715b17f41822c52cdce8e69890efd416c24ef31d02ed9d702b184635ca9",
+      "versionNo" : 1,
+      "effectStartTime" : "2026-10-09T00:00:00Z",
+      "createdTime" : "2026-10-09T00:00:00Z",
+      "processSeqId" : "#op:10"
+    }, {
+      "legalVersionId" : "#uuid:10",
+      "kind" : "PRIVACY",
+      "versionNumber" : "3",
+      "title" : {
+        "en" : "[TEST PLACEHOLDER] Privacy policy",
+        "ja" : "[TEST PLACEHOLDER] プライバシーポリシー",
+        "zh" : "[TEST PLACEHOLDER] 隐私政策"
+      },
+      "body" : {
+        "en" : "[TEST PLACEHOLDER] Privacy policy, version 2.",
+        "ja" : "[TEST PLACEHOLDER] プライバシーポリシー 第 2 版。"
+      },
+      "changeSummary" : {
+        "en" : "Retention is explained.",
+        "ja" : "保存期間を説明しました。"
+      },
+      "requiresConsent" : false,
+      "publishedAt" : "2026-12-02T00:00:00Z",
+      "publishedBy" : "legal-admin",
+      "effectiveAt" : "2026-12-02T00:00:00Z",
+      "contentHash" : "de269715b17f41822c52cdce8e69890efd416c24ef31d02ed9d702b184635ca9",
+      "versionNo" : 1,
+      "effectStartTime" : "2026-12-02T00:00:00Z",
+      "createdTime" : "2026-12-02T00:00:00Z",
+      "processSeqId" : "#op:12"
+    } ],
+    "QbLegalWithdrawal" : [ {
+      "withdrawalId" : "#uuid:11",
+      "legalVersionId" : "#uuid:9",
+      "kind" : "PRIVACY",
+      "versionNumber" : "2",
+      "withdrawnAt" : "2026-10-09T00:00:00Z",
+      "withdrawnBy" : "legal-admin",
+      "reason" : "Announced by mistake",
+      "versionNo" : 1,
+      "effectStartTime" : "2026-10-09T00:00:00Z",
+      "createdTime" : "2026-10-09T00:00:00Z",
+      "processSeqId" : "#op:11"
+    } ],
+    "QbConsent" : [ {
+      "consentId" : "#uuid:12",
+      "userId" : "#uuid:13",
+      "kind" : "PRIVACY",
+      "legalVersionId" : "#uuid:7",
+      "versionNumber" : "1",
+      "acceptedAt" : "2026-10-01T00:00:00Z",
+      "entry" : null,
+      "source" : "WELCOME",
+      "versionNo" : 1,
+      "effectStartTime" : "2026-10-01T00:00:00Z",
+      "createdTime" : "2026-10-01T00:00:00Z",
+      "processSeqId" : "#op:5"
+    }, {
+      "consentId" : "#uuid:14",
+      "userId" : "#uuid:13",
+      "kind" : "TERMS_APP",
+      "legalVersionId" : "#uuid:5",
+      "versionNumber" : "1",
+      "acceptedAt" : "2026-10-01T00:00:00Z",
+      "entry" : null,
+      "source" : "WELCOME",
+      "versionNo" : 1,
+      "effectStartTime" : "2026-10-01T00:00:00Z",
+      "createdTime" : "2026-10-01T00:00:00Z",
+      "processSeqId" : "#op:5"
+    }, {
+      "consentId" : "#uuid:15",
+      "userId" : "#uuid:16",
+      "kind" : "PRIVACY",
+      "legalVersionId" : "#uuid:7",
+      "versionNumber" : "1",
+      "acceptedAt" : "2026-10-01T00:00:00Z",
+      "entry" : null,
+      "source" : "ONBOARDING",
+      "versionNo" : 1,
+      "effectStartTime" : "2026-10-01T00:00:00Z",
+      "createdTime" : "2026-10-01T00:00:00Z",
+      "processSeqId" : "#op:6"
+    }, {
+      "consentId" : "#uuid:17",
+      "userId" : "#uuid:16",
+      "kind" : "TERMS_SPONSOR",
+      "legalVersionId" : "#uuid:6",
+      "versionNumber" : "1",
+      "acceptedAt" : "2026-10-01T00:00:00Z",
+      "entry" : null,
+      "source" : "ONBOARDING",
+      "versionNo" : 1,
+      "effectStartTime" : "2026-10-01T00:00:00Z",
+      "createdTime" : "2026-10-01T00:00:00Z",
+      "processSeqId" : "#op:6"
+    }, {
+      "consentId" : "#uuid:18",
+      "userId" : "#uuid:16",
+      "kind" : "TERMS_SPONSOR",
+      "legalVersionId" : "#uuid:8",
+      "versionNumber" : "2",
+      "acceptedAt" : "2026-10-09T00:00:00Z",
+      "entry" : null,
+      "source" : "RECONSENT",
+      "versionNo" : 1,
+      "effectStartTime" : "2026-10-09T00:00:00Z",
+      "createdTime" : "2026-10-09T00:00:00Z",
+      "processSeqId" : "#op:9"
+    } ],
+    "QbSponsor" : [ {
+      "onboardingId" : "#uuid:19",
+      "userId" : "#uuid:16",
+      "contactName" : "Alice",
+      "company" : "Capitals Inc",
+      "intro" : null,
+      "avatar" : null,
+      "reviewStatus" : "APPROVED",
+      "termsAcceptedAt" : "2026-10-01T00:00:00Z",
+      "termsVersionNo" : "1",
+      "approvalRequestId" : "#uuid:20",
+      "submittedAt" : "2026-10-01T00:00:00Z",
+      "approvedAt" : "2026-10-01T00:00:00Z",
+      "rejectReason" : null,
+      "rejectedAt" : null,
+      "revision" : "2",
+      "editedAt" : "2026-10-01T00:00:00Z",
+      "versionNo" : 2,
+      "effectStartTime" : "2026-10-01T00:00:00Z",
+      "createdTime" : "2026-10-01T00:00:00Z",
+      "processSeqId" : "#op:7"
+    } ],
+    "QbTopUp" : [ {
+      "topUpId" : "#uuid:21",
+      "sponsorId" : "#uuid:16",
+      "amount" : "1000",
+      "status" : "OPENING",
+      "createdAt" : "2026-10-01T01:00:00Z",
+      "checkoutSessionId" : null,
+      "checkoutUrl" : null,
+      "expiresAt" : null,
+      "failureCode" : null,
+      "paymentIntentId" : null,
+      "chargeId" : null,
+      "balanceTransactionId" : null,
+      "livemode" : null,
+      "paidAt" : null,
+      "confirmedBy" : null,
+      "ledgerTransactionId" : null,
+      "stripeFee" : null,
+      "netAmount" : null,
+      "feeTransactionId" : null,
+      "presentmentCurrency" : null,
+      "presentmentAmount" : null,
+      "fxRate" : null,
+      "refundedAmount" : "0",
+      "refundShortfall" : "0",
+      "disputeId" : null,
+      "disputeStatus" : null,
+      "disputeAmount" : null,
+      "disputeClawback" : "0",
+      "disputeShortfall" : "0",
+      "disputeHeld" : "0",
+      "checkReason" : null,
+      "checkRequestedAt" : null,
+      "version" : 1
+    }, {
+      "topUpId" : "#uuid:22",
+      "sponsorId" : "#uuid:16",
+      "amount" : "1000",
+      "status" : "OPENING",
+      "createdAt" : "2026-10-09T00:00:00Z",
+      "checkoutSessionId" : null,
+      "checkoutUrl" : null,
+      "expiresAt" : null,
+      "failureCode" : null,
+      "paymentIntentId" : null,
+      "chargeId" : null,
+      "balanceTransactionId" : null,
+      "livemode" : null,
+      "paidAt" : null,
+      "confirmedBy" : null,
+      "ledgerTransactionId" : null,
+      "stripeFee" : null,
+      "netAmount" : null,
+      "feeTransactionId" : null,
+      "presentmentCurrency" : null,
+      "presentmentAmount" : null,
+      "fxRate" : null,
+      "refundedAmount" : "0",
+      "refundShortfall" : "0",
+      "disputeId" : null,
+      "disputeStatus" : null,
+      "disputeAmount" : null,
+      "disputeClawback" : "0",
+      "disputeShortfall" : "0",
+      "disputeHeld" : "0",
+      "checkReason" : null,
+      "checkRequestedAt" : null,
+      "version" : 1
+    } ]
+  }
+}

@@ -8,6 +8,7 @@ import com.jabiz.process.ProcessDefinition;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.messaging.ConsentChecks;
 import com.jabiz.quizbuks.identity.CallerChecks;
 import com.jabiz.quizbuks.identity.QbAccounts;
 import com.jabiz.runtime.BusinessRuleViolationException;
@@ -91,6 +92,9 @@ public final class PayoutProcesses {
                 .permissions(QbPermissions.PAYOUT_ONBOARD)
                 .requiresVerifiedEmail()
                 .steps(CallerChecks::refuseBanned)
+                // A contract with the payout provider: the takers' terms and the privacy policy in effect are
+                // accepted (Q7b, Q7-2).
+                .steps(ConsentChecks.taker())
                 .contextFactory(PayoutProcesses::context)
                 .outputMapper(ctx -> {
                     EntityInstance account = first(ctx, ACCOUNT);

@@ -7,7 +7,8 @@ import { ProfileForm } from './ProfileForm'
 /**
  * Registration's second step (U-02; D-Q2-2): a signed-in taker without a complete profile comes here first. Saving it
  * (`QB_PROFILE_SAVE`, which needs a verified address) completes registration and sends the welcome mail; then home.
- * A profile may exist already with the name only (a sponsor's, when the same person signs up for the app).
+ * A profile may exist already with the name only (a sponsor's, when the same person signs up for the app). The
+ * takers' terms and the privacy policy in effect are accepted here (Q7-3; with Google sign-up too).
  */
 export function WelcomePage({ profile }: { profile: Profile | null }) {
   const { t } = useTranslation(APP)
@@ -15,7 +16,7 @@ export function WelcomePage({ profile }: { profile: Profile | null }) {
     <section className="flex flex-col gap-4" aria-labelledby="welcome-title" data-testid="welcome">
       <h1 id="welcome-title" className="text-xl font-semibold">{t('welcome.title')}</h1>
       <p className="text-muted-foreground text-sm">{t('welcome.intro')}</p>
-      <ProfileForm profile={profile} submitLabel={t('welcome.save')}
+      <ProfileForm profile={profile} submitLabel={t('welcome.save')} consent
         onSaved={() => navigate('/', { replace: true })} />
     </section>
   )

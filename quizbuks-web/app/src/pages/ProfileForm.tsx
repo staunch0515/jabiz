@@ -1,4 +1,4 @@
-import { i18n, useAuth } from '@jabiz/client'
+import { ApiError, i18n, useAuth } from '@jabiz/client'
 import {
   Alert,
   AlertDescription,
@@ -21,13 +21,16 @@ import { browserHints, currencyOf, guessCountry } from '../country'
 import { APP } from '../messages'
 import { readCountries, readCurrencies, saveProfile, type Country, type DictionaryItem, type Profile,
   type ProfileOutput } from '../qb/api'
+import { CONSENTS_QUERY, useMyConsents } from '../qb/ConsentGate'
+import { CODE, LEGAL } from '../qb/ids'
 import { QB } from '../qb/messages'
 import { fieldProblem, generalProblem } from '../qb/problems'
+import { TermsAgreement, acceptedVersions } from '../qb/TermsAgreement'
 
 /** The query of the caller's profile, which the routes read too. */
 export const PROFILE_QUERY = ['qb', 'profile'] as const
 
-const FIELDS = ['displayName', 'countryCode', 'city', 'preferredCurrency'] as const
+const FIELDS = ['displayName', 'countryCode', 'city', 'preferredCurrency', 'acceptTerms'] as const
 
 /** A country's name in the interface language, else in English, else its code. */
 function countryName(country: Country, language: string): string {
@@ -62,10 +65,12 @@ function VerifyFirst() {
  * in. The first save completes registration (the welcome page); later ones edit it (the account page), refused when
  * somebody changed it meanwhile. A new profile starts from the name given at sign-up and the browser's country.
  */
-export function ProfileForm({ profile, submitLabel, onSaved }: {
+export function ProfileForm({ profile, submitLabel, onSaved, consent = false }: {
   profile: Profile | null
   submitLabel: string
   onSaved?: (output: ProfileOutput) => void
+  /** Registration's second step: the terms and the privacy policy in effect are accepted with it (Q7-3). */
+  consent?: boolean
 }) {
   const countries = useQuery({ queryKey: ['qb', 'countries'], queryFn: readCountries, staleTime: Infinity })
   const currencies = useQuery({ queryKey: ['qb', 'currencies', i18n.language], queryFn: readCurrencies })
@@ -73,15 +78,16 @@ export function ProfileForm({ profile, submitLabel, onSaved }: {
   if (countries.isError || currencies.isError) return <PageState kind="error" description={t('failed')} />
   if (!countries.data || !currencies.data) return <PageState kind="loading" />
   return <ProfileFields profile={profile} countries={countries.data} currencies={currencies.data}
-    submitLabel={submitLabel} onSaved={onSaved} />
+    submitLabel={submitLabel} onSaved={onSaved} consent={consent} />
 }
 
-function ProfileFields({ profile, countries, currencies, submitLabel, onSaved }: {
+function ProfileFields({ profile, countries, currencies, submitLabel, onSaved, consent }: {
   profile: Profile | null
   countries: Country[]
   currencies: DictionaryItem[]
   submitLabel: string
   onSaved?: (output: ProfileOutput) => void
+  consent: boolean
 }) {
   const { t, i18n: { language } } = useTranslation(APP)
   const { t: tQb } = useTranslation(QB)
@@ -98,6 +104,10 @@ function ProfileFields({ profile, countries, currencies, submitLabel, onSaved }:
   const [currency, setCurrency] = useState(() => profile?.preferredCurrency
     ?? currencyOf(countryCode, currencies.map((c) => c.code)))
   const [saved, setSaved] = useState(false)
+  const [acceptTerms, setAcceptTerms] = useState(false)
+  // The texts in effect, accepted with the first save (none in effect: nothing to accept).
+  const terms = useMyConsents(LEGAL.appKinds, consent && emailVerified)
+  const asksTerms = consent && (terms.data?.length ?? 0) > 0
 
   const save = useMutation({
     mutationFn: () => saveProfile({
@@ -106,11 +116,21 @@ function ProfileFields({ profile, countries, currencies, submitLabel, onSaved }:
       city: city.trim() === '' ? null : city.trim(),
       preferredCurrency: currency,
       baseRevision: profile?.revision ?? null,
+      ...(asksTerms ? { acceptTerms, ...acceptedVersions(terms.data) } : {}),
     }),
     onSuccess: async (output) => {
       setSaved(true)
+      // The consents first: once the profile is complete, the prompt reads them, and must not see the old ones.
+      await queryClient.invalidateQueries({ queryKey: CONSENTS_QUERY })
       await queryClient.invalidateQueries({ queryKey: PROFILE_QUERY })
       onSaved?.(output)
+    },
+    // A text changed meanwhile: read it again, and the agreement with it.
+    onError: (error) => {
+      if (error instanceof ApiError && error.violations.some((v) => v.ruleCode === CODE.termsOutdated)) {
+        setAcceptTerms(false)
+        void queryClient.invalidateQueries({ queryKey: CONSENTS_QUERY })
+      }
     },
   })
 
@@ -176,6 +196,16 @@ function ProfileFields({ profile, countries, currencies, submitLabel, onSaved }:
           <p id={`${id}-currency-error`} className="text-destructive text-sm">{problem('preferredCurrency')}</p>
         )}
       </div>
+      {asksTerms && (
+        <div className="flex flex-col gap-2">
+          <TermsAgreement id={`${id}-terms`} kinds={LEGAL.appKinds} rows={terms.data ?? []} checked={acceptTerms}
+            onChange={setAcceptTerms} invalid={problem('acceptTerms') ? true : undefined}
+            describedBy={problem('acceptTerms') ? `${id}-terms-error` : undefined} testId="profile-terms" />
+          {problem('acceptTerms') && (
+            <p id={`${id}-terms-error`} className="text-destructive text-sm">{problem('acceptTerms')}</p>
+          )}
+        </div>
+      )}
       {general && (
         <Alert variant="destructive" data-testid="profile-error">
           <AlertDescription>{general}</AlertDescription>
@@ -187,7 +217,8 @@ function ProfileFields({ profile, countries, currencies, submitLabel, onSaved }:
           {tQb('saved')}
         </p>
       )}
-      <Button type="submit" disabled={save.isPending || !emailVerified || !countryCode}
+      <Button type="submit" disabled={save.isPending || !emailVerified || !countryCode
+        || (consent && terms.isPending && emailVerified) || (asksTerms && !acceptTerms)}
         aria-busy={save.isPending || undefined} data-testid="profile-save">
         {submitLabel}
       </Button>

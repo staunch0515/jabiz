@@ -8,6 +8,7 @@ import com.jabiz.process.ProcessDefinition;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.messaging.ConsentChecks;
 import com.jabiz.quizbuks.identity.CallerChecks;
 import com.jabiz.quizbuks.content.QbContent;
 import com.jabiz.quizbuks.setup.QbParams;
@@ -121,6 +122,8 @@ public final class PublicationLifecycle {
                 .actsOn(QbPublications.PUBLICATION, "publicationId", a -> a.whenField("status", DRAFT))
                 .contextFactory((start, input) -> PublicationEditing.start(start, input, input.publicationId()))
                 .outputMapper(ctx -> ctx.get(OUTPUT, PublicationOutput.class))
+                // A contract action: the sponsors' terms and the privacy policy in effect are accepted (Q7b, Q7-2).
+                .steps(ConsentChecks.sponsor())
                 // The quiz's lock comes first (D-Q4-5), and only the publication tells which quiz: read it, lock
                 // both, read it again. Only a save under the publication's lock changes its quiz.
                 .step("Find the publication's quiz", LoadEntity.by(

@@ -1,7 +1,7 @@
 {
   "name": "quizbuks-app",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "description": "QuizBuks: the takers' app at /, a PWA on the platform's packages (docs/quizbuks/plans/QP-pages.md).",
   "packageManager": "pnpm@10.18.0",
