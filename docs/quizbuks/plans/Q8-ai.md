@@ -399,6 +399,7 @@
 - **L1**：平台停止的 PDF 作业按预留（含页数上限）计入输入。**L2**：长提示价格按每次调用计（只有最小的模型有两档；较大的两个模型没有长提示加价）。**L3**：`completeCover` 再查版式与图形。**L4**：§7.8 写明提供方并发是两种作业之和（4 + 4）。**L5**：§7.8 写明完成迟于 `orphan-after` 时候选图可能已被清扫。
 - 细节：`QB_AI_HALTED` 的文案不再只说题目；两个 Claude 调用方的超时取自同一个 Bean（`ClaudeCalls.Settings`）；`AiCoversTest` 用固定时刻；封面 Schema 的数量与长度写在说明中（结构化输出拒绝 `maxItems`、`maxLength`）；点击封面图即选中；两个接受流程另要 `qb.content.write`（现在只有 `QB_SPONSOR` 持有 `qb.ai.use`，它也有内容写权限，加上是为了以后的角色）。
 - 新测试：`AiPdfIT` 改为 7 个（计数后以文件原样发送、计数的请求与发送的相同、无 PDF 不计数；谎报 `/Count` 的 PDF 按计数拒绝、没有回答按计数计入；提供方拒绝文档（计数与付费调用两处）、其他 400 不变；计数失败重试不计费；过大 422；停止的 PDF 作业按预留计入与计价；同一商家同时请求封面与题目时共用每日次数）；`AiPdfsTest` 不再用 PDFBox；`AiCoversTest` 加只有拉丁字体时 ja、zh 不调用。
+- 验证（评审修改之后，2026-10-18，同上的库与端口）：`./gradlew :quizbuks:check :quizbuks:bootJar` 通过（713 个测试、0 失败；`platformCheck` 0 错误）；商家后台 lint、typecheck、171 个 Vitest，`app:check`，`ext:check`（74 个）；e2e 全部 54 个一次通过（`ai-cover.spec.ts` 改为先点图片选中）。
 
 ### 待确认（需求方）
 
