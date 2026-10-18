@@ -26,7 +26,7 @@
 
 ## AI（Q8a）
 
-- [ ] **Opus 与 Sonnet 的比较**（A-2）：以 20 份真实测验分别用 `claude-opus-5-5` 与 `claude-sonnet-5-5`（effort `medium`）生成候选，比较可用题数、需要改动的题数与错误的正确选项，需求方据此决定 `qb.ai.model`（Sonnet 约为一半成本）；记录写在本项
+- [ ] **Opus 与 Sonnet 的比较**（A-2）：以 20 份真实测验分别用 `claude-opus-5-5` 与 `claude-sonnet-5-5`（effort `medium`）生成候选，比较可用题数、需要改动的题数与错误的正确选项，并**记录每次的响应时间**（p50、p95、最长，与超过 90 秒的比例：请求在 2 分钟时被放弃并按预估计费，接近它就降低题数上限，或等平台的流式读取），需求方据此决定 `qb.ai.model`（Sonnet 约为一半成本）；记录写在本项
 - [ ] 正式的 `ANTHROPIC_API_KEY` 只在密钥库，Anthropic Console 的工作区月支出上限已设；`qb.ai.model`、`qb.ai.effort` 与限额按预算以受控变更确认
 - [ ] `qb.ai.enabled` 在上面三项完成后才开启（四眼）；开启后用一个测试商家生成、校对、加入一次，`/qb/ai` 显示用量
 

@@ -15,12 +15,20 @@ import java.util.regex.Pattern;
  * guess. So does the switch while it is off.
  */
 public record AiSettings(boolean enabled, String model, String effort, Integer dailyJobs, Long monthlyTokens,
-    Long globalMonthlyTokens, int expireDays) {
+    Long globalMonthlyTokens, int expireDays, AiCost.Price price) {
+
+    /**
+     * @param price the price of a model {@link AiCost} does not know (the parameters {@code qb.ai.price.*}), or null
+     *              while either is not a number
+     */
+    public AiSettings {}
 
     /** The keys a request reads. */
     public static final List<String> KEYS = List.of(QbParams.AI_ENABLED, QbParams.AI_MODEL, QbParams.AI_EFFORT,
         QbParams.AI_SPONSOR_DAILY_JOBS, QbParams.AI_SPONSOR_MONTHLY_TOKENS, QbParams.AI_GLOBAL_MONTHLY_TOKENS,
-        QbParams.AI_EXPIRE_DAYS);
+        QbParams.AI_EXPIRE_DAYS, QbParams.AI_PRICE_INPUT, QbParams.AI_PRICE_OUTPUT);
+
+    private static final Pattern PRICE = Pattern.compile("[0-9]{1,4}(\\.[0-9]{1,4})?");
 
     /** Candidates wait this many days when the parameter has no usable value. */
     public static final int DEFAULT_EXPIRE_DAYS = 7;
@@ -35,7 +43,16 @@ public record AiSettings(boolean enabled, String model, String effort, Integer d
         return new AiSettings("true".equals(values.get(QbParams.AI_ENABLED)), values.get(QbParams.AI_MODEL),
             values.get(QbParams.AI_EFFORT), daily == null ? null : (int) Math.min(10_000, daily),
             whole(values.get(QbParams.AI_SPONSOR_MONTHLY_TOKENS)), whole(values.get(QbParams.AI_GLOBAL_MONTHLY_TOKENS)),
-            days == null || days < 1 ? DEFAULT_EXPIRE_DAYS : days);
+            days == null || days < 1 ? DEFAULT_EXPIRE_DAYS : days,
+            price(values.get(QbParams.AI_PRICE_INPUT), values.get(QbParams.AI_PRICE_OUTPUT)));
+    }
+
+    private static AiCost.Price price(String input, String output) {
+        if (input == null || output == null || !PRICE.matcher(input.strip()).matches()
+            || !PRICE.matcher(output.strip()).matches()) {
+            return null;
+        }
+        return new AiCost.Price(new java.math.BigDecimal(input.strip()), new java.math.BigDecimal(output.strip()));
     }
 
     /** Why a request cannot be made with these settings; none when it can. */

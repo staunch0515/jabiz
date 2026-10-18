@@ -1,13 +1,13 @@
 /*---
 id: qb.admin.ai-usage
 description: >-
-  AI usage by sponsor and month (Q8a, M-10): jobs, failed jobs, tokens in and out, and a dollar estimate at the price
-  parameters (for reference only: nothing is billed, A-8); the row of everybody's is the sponsor "*"
-entities: [QbAiUsage, QbSponsor, SysParam]
+  AI usage by sponsor and month (Q8a, M-10): jobs, failed jobs, tokens in and out, and a dollar estimate with each
+  token priced at the model that used it (for reference only: nothing is billed, A-8); the row of everybody's is the
+  sponsor "*"
+entities: [QbAiUsage, QbSponsor]
 datasets:
   QbAiUsage: urn:jabiz:dataset:default:QbAiUsage
   QbSponsor: urn:jabiz:dataset:default:QbSponsor
-  SysParam: urn:jabiz:dataset:now:SysParam
 params:
   month: { like: QbAiUsage.month, description: "If given, only this month (YYYY-MM, the deployment's zone)" }
 results:
@@ -27,20 +27,9 @@ list:
   key: [usageId]
 permissions: [qb.admin.ai.read]
 ---*/
--- The estimate is tokens / 10^6 times the price parameters (qb.ai.price.*); null while either is not a number.
-WITH price AS (
-    SELECT
-        max(CASE WHEN p.{{SysParam.paramKey}} = 'qb.ai.price.input-per-mtok-usd' THEN p.{{SysParam.value}} END)
-            AS p_in,
-        max(CASE WHEN p.{{SysParam.paramKey}} = 'qb.ai.price.output-per-mtok-usd' THEN p.{{SysParam.value}} END)
-            AS p_out
-    FROM {{SysParam}} p
-    WHERE p.{{SysParam.paramKey}} IN ('qb.ai.price.input-per-mtok-usd', 'qb.ai.price.output-per-mtok-usd')),
-checked AS (
-    SELECT
-        CASE WHEN p_in ~ '^[0-9]{1,4}(\.[0-9]{1,4})?$' THEN CAST(p_in AS numeric) END AS v_in,
-        CASE WHEN p_out ~ '^[0-9]{1,4}(\.[0-9]{1,4})?$' THEN CAST(p_out AS numeric) END AS v_out
-    FROM price)
+-- The estimate is what the finished jobs added up (content.ai.AiCost, at their completion): the requested model's
+-- tokens at its price, the provider's fallback model's at that model's, a model QuizBuks does not know at the price
+-- parameters (qb.ai.price.*). An attempt that got no answer is in it at its estimate, as the limits count it.
 SELECT
     u.{{QbAiUsage.usageId}}      AS usageId,
     u.{{QbAiUsage.sponsorId}}    AS sponsorId,
@@ -50,9 +39,7 @@ SELECT
     u.{{QbAiUsage.failedJobs}}   AS failedJobs,
     u.{{QbAiUsage.inputTokens}}  AS inputTokens,
     u.{{QbAiUsage.outputTokens}} AS outputTokens,
-    round((u.{{QbAiUsage.inputTokens}} * c.v_in + u.{{QbAiUsage.outputTokens}} * c.v_out) / 1000000, 2)
-        AS estimatedUsd
+    CAST(round(u.{{QbAiUsage.costUsd}}, 2) AS numeric(14, 2)) AS estimatedUsd
 FROM {{QbAiUsage}} u
-CROSS JOIN checked c
 LEFT JOIN {{QbSponsor}} s ON s.{{QbSponsor.userId}} = u.{{QbAiUsage.sponsorId}}
 WHERE (CAST(:month AS varchar) IS NULL OR u.{{QbAiUsage.month}} = :month)

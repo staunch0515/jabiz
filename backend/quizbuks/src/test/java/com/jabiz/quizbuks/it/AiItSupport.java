@@ -45,6 +45,8 @@ abstract class AiItSupport extends LegalItSupport {
         registry.add("jabiz.external-services.anthropic.allowed-hosts", () -> "127.0.0.1");
         // The tests make many requests a minute; the limit itself is the platform's (and configuration).
         registry.add("jabiz.process.rate-limits[QB_AI_QUESTIONS_REQUEST].per-user", () -> "10000");
+        // A provider that does not answer is found out in two seconds, not the two minutes of production.
+        registry.add("quizbuks.ai.request-timeout", () -> "PT2S");
     }
 
     @Autowired

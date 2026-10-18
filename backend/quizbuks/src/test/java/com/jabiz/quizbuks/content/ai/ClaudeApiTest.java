@@ -19,14 +19,16 @@ class ClaudeApiTest {
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
     private static ClaudeApi.Request request(String model) {
-        return new ClaudeApi.Request(model, "medium", AiPrompt.SYSTEM, "Number of questions: 2", "qb-0123");
+        return new ClaudeApi.Request(model, "medium", ClaudeApi.maxTokens(2), AiPrompt.SYSTEM,
+            "Number of questions: 2", "qb-0123");
     }
 
     @Test
     void theRequestNamesTheModelEffortThinkingAndSchema() {
         JsonNode body = JSON.readTree(ClaudeApi.body(request(ClaudeService.OPUS), JSON));
         assertThat(body.get("model").asString()).isEqualTo("claude-opus-5-5");
-        assertThat(body.get("max_tokens").asInt()).isEqualTo(16_000);
+        // Scaled to the questions asked: 4,000 and 600 a question.
+        assertThat(body.get("max_tokens").asInt()).isEqualTo(5_200);
         assertThat(body.get("thinking").get("type").asString()).isEqualTo("adaptive");
         assertThat(body.get("output_config").get("effort").asString()).isEqualTo("medium");
         JsonNode format = body.get("output_config").get("format");
@@ -48,7 +50,7 @@ class ClaudeApiTest {
 
     @Test
     void haikuHasNoFallbackAndNoUserIdIsSentWhenNoneIsGiven() {
-        JsonNode body = JSON.readTree(ClaudeApi.body(new ClaudeApi.Request(ClaudeService.HAIKU, "low",
+        JsonNode body = JSON.readTree(ClaudeApi.body(new ClaudeApi.Request(ClaudeService.HAIKU, "low", 4_600,
             AiPrompt.SYSTEM, "x", null), JSON));
         assertThat(body.has("fallbacks")).isFalse();
         assertThat(body.has("metadata")).isFalse();
@@ -82,7 +84,7 @@ class ClaudeApiTest {
         };
         String large = "a".repeat(ClaudeApi.MAX_INPUT_BYTES + 1);
         assertThatThrownBy(() -> new ClaudeApi(http, "k", JSON).send(new ClaudeApi.Request(ClaudeService.OPUS,
-            "medium", AiPrompt.SYSTEM, large, null)))
+            "medium", 4_600, AiPrompt.SYSTEM, large, null)))
             .isInstanceOfSatisfying(ExternalJobException.class, e -> {
                 assertThat(e.code()).isEqualTo(AiCodes.INPUT_TOO_LARGE);
                 assertThat(e.isPermanent()).isTrue();
@@ -91,7 +93,7 @@ class ClaudeApiTest {
         String cap = "あ".repeat(ClaudeApi.MAX_INPUT_BYTES / 3);
         ExternalHttp answering = call -> new ExternalHttp.Response(200, Map.of(),
             answer("end_turn", "{}", "").getBytes(java.nio.charset.StandardCharsets.UTF_8));
-        new ClaudeApi(answering, "k", JSON).send(new ClaudeApi.Request(ClaudeService.OPUS, "medium",
+        new ClaudeApi(answering, "k", JSON).send(new ClaudeApi.Request(ClaudeService.OPUS, "medium", 4_600,
             AiPrompt.SYSTEM, cap, null));
     }
 
@@ -124,7 +126,50 @@ class ClaudeApiTest {
         ClaudeApi.Answer answer = ClaudeApi.answer(200, body, JSON);
         assertThat(answer.fellBack()).isTrue();
         assertThat(answer.servedModel()).isEqualTo("claude-opus-5");
-        assertThat(answer.usage()).isEqualTo(new ClaudeApi.Usage(210, 30));
+        // The fallback model's part, priced at that model.
+        assertThat(answer.usage()).isEqualTo(new ClaudeApi.Usage(210, 30, 110, 30));
+    }
+
+    @Test
+    void theOutputAskedForFollowsTheCountWithinTheCeiling() {
+        assertThat(ClaudeApi.maxTokens(1)).isEqualTo(4_600);
+        assertThat(ClaudeApi.maxTokens(10)).isEqualTo(10_000);
+        assertThat(ClaudeApi.maxTokens(20)).isEqualTo(ClaudeApi.MAX_TOKENS);
+        assertThat(ClaudeApi.maxTokens(1_000)).isEqualTo(ClaudeApi.MAX_TOKENS);
+        assertThat(ClaudeApi.maxTokens(0)).isEqualTo(4_600);
+    }
+
+    @Test
+    void aCallWithoutAnAnswerIsChargedItsEstimateUnlessItWasNeverSent() {
+        ClaudeApi.Request request = new ClaudeApi.Request(ClaudeService.OPUS, "medium", ClaudeApi.maxTokens(5),
+            "s".repeat(300), "u".repeat(3_000), null);
+        // The input at a token per three bytes and the framing; all the output asked for.
+        assertThat(ClaudeApi.unanswered(request)).isEqualTo(new ClaudeApi.Usage(1_100 + AiLimits.FRAMING_TOKENS,
+            7_000));
+        String service = ClaudeService.SERVICE;
+        assertThat(ClaudeApi.mayHaveBeenBilled(new com.jabiz.external.ExternalCallException(service,
+            com.jabiz.external.ExternalCallException.Kind.TIMEOUT, "no answer within PT2M"))).isTrue();
+        assertThat(ClaudeApi.mayHaveBeenBilled(new com.jabiz.external.ExternalCallException(service,
+            com.jabiz.external.ExternalCallException.Kind.TOO_LARGE, "answer larger than 1048576 bytes"))).isTrue();
+        assertThat(ClaudeApi.mayHaveBeenBilled(new com.jabiz.external.ExternalCallException(service,
+            com.jabiz.external.ExternalCallException.Kind.UNAVAILABLE, "connection failed (IOException)"))).isTrue();
+        assertThat(ClaudeApi.mayHaveBeenBilled(new com.jabiz.external.ExternalCallException(service,
+            com.jabiz.external.ExternalCallException.Kind.UNAVAILABLE, "connection failed (ConnectException)")))
+            .isFalse();
+        assertThat(ClaudeApi.mayHaveBeenBilled(new com.jabiz.external.ExternalCallException(service,
+            com.jabiz.external.ExternalCallException.Kind.REFUSED, "host not allowed"))).isFalse();
+    }
+
+    @Test
+    void theRequestsOwnTimeoutIsPassedOn() {
+        List<ExternalHttp.Request> sent = new ArrayList<>();
+        ExternalHttp http = call -> {
+            sent.add(call);
+            return new ExternalHttp.Response(200, Map.of(), answer("end_turn", "{}", "")
+                .getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        };
+        new ClaudeApi(http, "k", JSON).send(request(ClaudeService.OPUS), java.time.Duration.ofSeconds(30));
+        assertThat(sent.getFirst().timeout()).isEqualTo(java.time.Duration.ofSeconds(30));
     }
 
     @Test
@@ -135,9 +180,18 @@ class ClaudeApiTest {
         assertThat(refusal.refusalCategory()).isEqualTo("cyber");
         assertThat(refusal.text()).isEmpty();
         assertThat(refusal.usage().inputTokens()).isEqualTo(125);
+        assertThat(refusal.recommendedModel()).isNull();
         ClaudeApi.Answer odd = ClaudeApi.answer(200, answer("refusal", null,
-            ",\"stop_details\":{\"category\":\"<script>\"}"), JSON);
+            ",\"stop_details\":{\"category\":\"<script>\",\"recommended_model\":\"<b>x\"}"), JSON);
         assertThat(odd.refusalCategory()).isNull();
+        assertThat(odd.recommendedModel()).isNull();
+        // The fallback could not run: the provider names a model to try directly.
+        ClaudeApi.Answer busy = ClaudeApi.answer(200, answer("refusal", null,
+            ",\"stop_details\":{\"category\":\"cyber\",\"recommended_model\":\"claude-opus-4-8\"}"), JSON);
+        assertThat(busy.recommendedModel()).isEqualTo("claude-opus-4-8");
+        ClaudeApi.Answer none = ClaudeApi.answer(200, answer("refusal", null,
+            ",\"stop_details\":{\"category\":null}"), JSON);
+        assertThat(none.refusalCategory()).isNull();
         assertThat(ClaudeApi.answer(200, answer("max_tokens", "{\"questions\":[{", ""), JSON).stopReason())
             .isEqualTo("max_tokens");
     }

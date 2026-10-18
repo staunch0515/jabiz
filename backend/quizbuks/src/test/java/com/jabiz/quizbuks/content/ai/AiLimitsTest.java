@@ -29,40 +29,59 @@ class AiLimitsTest {
 
     @Test
     void withinEveryLimitNothingIsSaid() {
-        assertThat(codes(new AiLimits.Standing(1, false, 19, 1_000_000, 100_000, 10_000_000), 20_000)).isEmpty();
+        assertThat(codes(new AiLimits.Standing(1, false, 19, 1_000_000, 100_000, 10_000_000, 0), 20_000)).isEmpty();
     }
 
     @Test
     void eachLimitHasItsOwnRefusalAndWhenItPasses() {
-        assertThat(codes(new AiLimits.Standing(1, true, 0, 0, 0, 0), 1)).containsExactly(AiCodes.QUIZ_BUSY);
-        assertThat(codes(new AiLimits.Standing(2, false, 0, 0, 0, 0), 1)).containsExactly(AiCodes.TOO_MANY_OPEN);
-        List<Violation> day = AiLimits.problems(SETTINGS, new AiLimits.Standing(0, false, 20, 0, 0, 0), 1, NOW,
+        assertThat(codes(new AiLimits.Standing(1, true, 0, 0, 0, 0, 0), 1)).containsExactly(AiCodes.QUIZ_BUSY);
+        assertThat(codes(new AiLimits.Standing(2, false, 0, 0, 0, 0, 0), 1)).containsExactly(AiCodes.TOO_MANY_OPEN);
+        List<Violation> day = AiLimits.problems(SETTINGS, new AiLimits.Standing(0, false, 20, 0, 0, 0, 0), 1, NOW,
             TOKYO);
         assertThat(day).extracting(Violation::ruleCode).containsExactly(AiCodes.DAILY_LIMIT);
         // Midnight in Tokyo, not in UTC.
         assertThat(day.getFirst().params()).containsEntry("resetsAt", "2026-10-31T15:00:00Z");
-        List<Violation> month = AiLimits.problems(SETTINGS, new AiLimits.Standing(0, false, 0, 1_990_000, 0, 0),
+        List<Violation> month = AiLimits.problems(SETTINGS, new AiLimits.Standing(0, false, 0, 1_990_000, 0, 0, 0),
             10_001, NOW, TOKYO);
         assertThat(month).extracting(Violation::ruleCode).containsExactly(AiCodes.MONTHLY_LIMIT);
         assertThat(month.getFirst().params()).containsEntry("resetsAt", "2026-10-31T15:00:00Z");
-        assertThat(codes(new AiLimits.Standing(0, false, 0, 0, 0, 49_999_999), 2)).containsExactly(
+        assertThat(codes(new AiLimits.Standing(0, false, 0, 0, 0, 49_999_999, 0), 2)).containsExactly(
             AiCodes.GLOBAL_LIMIT);
     }
 
     @Test
     void unfinishedJobsCountAtTheirEstimate() {
         // 1.9 M used and two jobs that may still use 60 k: a third of 50 k does not fit.
-        assertThat(codes(new AiLimits.Standing(1, false, 0, 1_900_000, 60_000, 0), 50_000))
+        assertThat(codes(new AiLimits.Standing(1, false, 0, 1_900_000, 60_000, 0, 0), 50_000))
             .containsExactly(AiCodes.MONTHLY_LIMIT);
-        assertThat(codes(new AiLimits.Standing(1, false, 0, 1_900_000, 50_000, 0), 50_000)).isEmpty();
+        assertThat(codes(new AiLimits.Standing(1, false, 0, 1_900_000, 50_000, 0, 0), 50_000)).isEmpty();
     }
 
     @Test
-    void theEstimateErrsHigh() {
-        // An empty request still may write every output token.
-        assertThat(AiLimits.estimate(0)).isEqualTo(AiLimits.FRAMING_TOKENS + ClaudeApi.MAX_TOKENS);
+    void theEstimateErrsHighAndCoversEveryAttempt() {
+        // An empty request still may write every output token it asks for, in each of its attempts.
+        assertThat(AiLimits.attemptEstimate(0, 20)).isEqualTo(AiLimits.FRAMING_TOKENS + ClaudeApi.MAX_TOKENS);
+        assertThat(AiLimits.estimate(0, 20)).isEqualTo(AiQuestionsJob.ATTEMPTS
+            * (AiLimits.FRAMING_TOKENS + ClaudeApi.MAX_TOKENS));
         long japanese = "あ".repeat(20_000).getBytes(StandardCharsets.UTF_8).length;
-        assertThat(AiLimits.estimate(japanese)).isGreaterThanOrEqualTo(20_000 + ClaudeApi.MAX_TOKENS);
+        assertThat(AiLimits.attemptEstimate(japanese, 1)).isGreaterThanOrEqualTo(20_000 + ClaudeApi.maxTokens(1));
+        // Fewer questions, less reserved.
+        assertThat(AiLimits.estimate(3_000, 1)).isLessThan(AiLimits.estimate(3_000, 20));
+    }
+
+    @Test
+    void theGlobalLimitCountsEverybodysUnfinishedJobs() {
+        // 49 M recorded and 900 k reserved by other sponsors' running jobs: a job of 200 k does not fit.
+        assertThat(codes(new AiLimits.Standing(0, false, 0, 0, 0, 49_000_000, 900_000), 200_000))
+            .containsExactly(AiCodes.GLOBAL_LIMIT);
+        assertThat(codes(new AiLimits.Standing(0, false, 0, 0, 0, 49_000_000, 800_000), 200_000)).isEmpty();
+    }
+
+    @Test
+    void highEffortAsksForFewerQuestions() {
+        assertThat(AiQuestionsJob.maxCount("high")).isEqualTo(AiQuestionsJob.MAX_COUNT_HIGH_EFFORT);
+        assertThat(AiQuestionsJob.maxCount("medium")).isEqualTo(AiQuestionsJob.MAX_COUNT);
+        assertThat(AiQuestionsJob.maxCount(null)).isEqualTo(AiQuestionsJob.MAX_COUNT);
     }
 
     @Test

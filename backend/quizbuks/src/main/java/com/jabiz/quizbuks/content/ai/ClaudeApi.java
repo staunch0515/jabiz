@@ -23,7 +23,7 @@ import java.util.regex.Pattern;
  *       pinned;</li>
  *   <li>adaptive thinking with the effort named explicitly (Opus 5.5 cannot switch thinking off; effort is what
  *       bounds its cost), the answer constrained to {@link AiPrompt#schema} (structured outputs), not streamed, at most
- *       {@value #MAX_TOKENS} output tokens;</li>
+ *       {@link #maxTokens} output tokens: scaled to the questions asked, never above {@value #MAX_TOKENS};</li>
  *   <li>the provider's own fallback on a refusal ({@code fallbacks: "default"}, A-10), except on Haiku, which has
  *       none; the answer says which model served it;</li>
  *   <li>{@code metadata.user_id} the sponsor's opaque key (A-11), never their id, name or address;</li>
@@ -31,27 +31,41 @@ import java.util.regex.Pattern;
  *       ({@link AiCodes#INPUT_TOO_LARGE}).</li>
  * </ul>
  * An answer other than 2xx fails the attempt as {@link ClaudeErrors} classifies it; a 2xx answer is returned whatever
- * its stop reason, so that its usage is recorded before the caller decides.
+ * its stop reason, so that its usage is recorded before the caller decides. No answer at all (a time-out, a connection
+ * lost) is the platform's {@link com.jabiz.external.ExternalCallException}: the caller charges the attempt's estimate
+ * ({@link #unanswered}), since the provider may have billed a whole answer nobody read.
  */
 public final class ClaudeApi {
 
+    /** The most output tokens a request may ask for (thinking included), whatever the count. */
     public static final int MAX_TOKENS = 16_000;
+    /** Output tokens asked for: this much for thinking and framing, and {@link #TOKENS_PER_QUESTION} per question. */
+    public static final int BASE_TOKENS = 4_000;
+    public static final int TOKENS_PER_QUESTION = 600;
     /** The largest user message, in UTF-8 bytes: below the platform's 64 KiB job input, with room for the framing. */
     public static final int MAX_INPUT_BYTES = 60 * 1024;
     /** The beta of the provider's fallback on a refusal, by refusal category. */
     public static final String FALLBACK_BETA = "server-side-fallback-2026-07-01";
 
     private static final Pattern WORD = Pattern.compile("[a-z_]{1,40}");
+    private static final Pattern MODEL = Pattern.compile("[a-z0-9][a-z0-9.-]{0,59}");
 
     /**
      * What to ask.
      *
      * @param userKey the provider's opaque user id, or null to send none
      */
-    public record Request(String model, String effort, String system, String user, String userKey) {}
+    public record Request(String model, String effort, int maxTokens, String system, String user, String userKey) {}
 
-    /** Tokens of one call, over every model that ran it (a fallback's included). */
-    public record Usage(long inputTokens, long outputTokens) {}
+    /**
+     * Tokens of one call, over every model that ran it; the {@code fallback} ones are those of the provider's fallback
+     * model (part of the totals, billed at that model's price).
+     */
+    public record Usage(long inputTokens, long outputTokens, long fallbackInputTokens, long fallbackOutputTokens) {
+        public Usage(long inputTokens, long outputTokens) {
+            this(inputTokens, outputTokens, 0, 0);
+        }
+    }
 
     /**
      * A successful answer.
@@ -60,10 +74,40 @@ public final class ClaudeApi {
      * @param fellBack        whether the provider ran a fallback model
      * @param stopReason      {@code end_turn}, {@code refusal}, {@code max_tokens}, …
      * @param refusalCategory the refusal's category when it names one in plain words; null otherwise
+     * @param recommendedModel on a refusal, the model the provider suggests trying directly: present only when its
+     *                         fallback could not run (rate-limited or overloaded), so the refusal is transient
      * @param text            the text of the answer (the JSON document), empty when there is none
      */
     public record Answer(String servedModel, boolean fellBack, Usage usage, String stopReason,
-        String refusalCategory, String text) {}
+        String refusalCategory, String recommendedModel, String text) {}
+
+    /** The output tokens asked for {@code count} questions. */
+    public static int maxTokens(int count) {
+        return (int) Math.min(MAX_TOKENS, BASE_TOKENS + (long) TOKENS_PER_QUESTION * Math.max(1, count));
+    }
+
+    /**
+     * What an attempt that got no answer may have cost: its input at one token per three bytes, the framing, and all
+     * the output it asked for. Charged by the caller, since the provider bills an answer that was cut off on the way.
+     */
+    public static Usage unanswered(Request request) {
+        long bytes = request.user().getBytes(StandardCharsets.UTF_8).length
+            + request.system().getBytes(StandardCharsets.UTF_8).length;
+        return new Usage(AiLimits.inputEstimate(bytes), request.maxTokens());
+    }
+
+    /**
+     * Whether a call that got no usable answer may still have been billed: a time-out, a lost connection or an answer
+     * too large to read may have been answered in full. A call the platform refused to send, or a connection that was
+     * never made, was not.
+     */
+    public static boolean mayHaveBeenBilled(com.jabiz.external.ExternalCallException e) {
+        return switch (e.kind()) {
+            case TIMEOUT, TOO_LARGE -> true;
+            case UNAVAILABLE -> e.getMessage() == null || !e.getMessage().contains("(ConnectException)");
+            case REFUSED, BAD_RESPONSE -> false;
+        };
+    }
 
     private final ExternalHttp http;
     private final String apiKey;
@@ -81,6 +125,13 @@ public final class ClaudeApi {
 
     /** Sends the request; refused before sending when the user message is too large. */
     public Answer send(Request request) {
+        return send(request, null);
+    }
+
+    /**
+     * Sends the request, waiting at most {@code timeout} (null: the service's own, two minutes) for the whole answer.
+     */
+    public Answer send(Request request, java.time.Duration timeout) {
         int size = request.user().getBytes(StandardCharsets.UTF_8).length;
         if (size > MAX_INPUT_BYTES) {
             throw ExternalJobException.permanent(AiCodes.INPUT_TOO_LARGE, "The request is " + size
@@ -90,6 +141,9 @@ public final class ClaudeApi {
             .header("x-api-key", apiKey)
             .header("anthropic-version", ClaudeService.API_VERSION)
             .json(body(request, json));
+        if (timeout != null) {
+            call = call.timeout(timeout);
+        }
         if (fallsBack(request.model())) {
             call = call.header("anthropic-beta", FALLBACK_BETA);
         }
@@ -106,7 +160,7 @@ public final class ClaudeApi {
     public static String body(Request request, JsonMapper json) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("model", request.model());
-        body.put("max_tokens", MAX_TOKENS);
+        body.put("max_tokens", request.maxTokens());
         body.put("thinking", Map.of("type", "adaptive"));
         Map<String, Object> output = new LinkedHashMap<>();
         output.put("effort", request.effort());
@@ -161,12 +215,17 @@ public final class ClaudeApi {
             }
         }
         String category = null;
+        String recommended = null;
         JsonNode details = root.get("stop_details");
         if (details != null && details.get("category") != null) {
             String value = textOf(details.get("category"));
-            category = WORD.matcher(value).matches() ? value : null;
+            category = value != null && WORD.matcher(value).matches() ? value : null;
         }
-        return new Answer(model, fellBack, usage, stop, category, answer.toString());
+        if (details != null && details.get("recommended_model") != null) {
+            String value = textOf(details.get("recommended_model"));
+            recommended = value != null && MODEL.matcher(value).matches() ? value : null;
+        }
+        return new Answer(model, fellBack, usage, stop, category, recommended, answer.toString());
     }
 
     /**
@@ -181,11 +240,17 @@ public final class ClaudeApi {
         if (iterations != null && iterations.isArray() && !iterations.isEmpty()) {
             long in = 0;
             long out = 0;
+            long fallbackIn = 0;
+            long fallbackOut = 0;
             for (JsonNode iteration : iterations) {
                 in += input(iteration);
                 out += count(iteration.get("output_tokens"));
+                if ("fallback_message".equals(textOf(iteration.get("type")))) {
+                    fallbackIn += input(iteration);
+                    fallbackOut += count(iteration.get("output_tokens"));
+                }
             }
-            return new Usage(in, out);
+            return new Usage(in, out, fallbackIn, fallbackOut);
         }
         return new Usage(input(usage), count(usage.get("output_tokens")));
     }

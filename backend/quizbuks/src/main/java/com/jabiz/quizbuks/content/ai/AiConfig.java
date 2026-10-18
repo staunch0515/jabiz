@@ -4,6 +4,7 @@ import com.jabiz.context.RequestContext;
 import com.jabiz.dataset.DatasetDefinition;
 import com.jabiz.dictionary.StaticDictionary;
 import com.jabiz.entity.EntityDefinition;
+import com.jabiz.event.EventSubscription;
 import com.jabiz.external.ExternalJobCompletion;
 import com.jabiz.external.ExternalJobFailure;
 import com.jabiz.external.ExternalJobType;
@@ -14,6 +15,7 @@ import com.jabiz.job.JobItems;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.runtime.external.ExternalJobRecorder;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -28,8 +30,10 @@ import java.util.UUID;
  * the two tables with their datasets and dictionaries, the seven processes and the daily expiry of candidates.
  *
  * <p>The administrators' (default) datasets are read with {@code qb.admin.ai.read} and written by the processes only;
- * a sponsor reads their own jobs and usage through read-only datasets ({@code sponsorId} = the caller), and nobody
- * writes through a dataset. Days and months are the deployment's zone's ({@code jabiz.fiscal-year-zone}).
+ * a sponsor reads their own jobs and usage only through the templates {@code qb.sponsor.ai-*}, which go through
+ * read-only datasets scoped to the caller ({@code sponsorId}). Those datasets are not readable themselves (their read
+ * permission is {@code qb.ai.system}, held by nobody): a dataset gives every column, and the sponsor is not shown the
+ * model that answered, the estimate or the input's size. Nobody writes through a dataset. Days and months are the deployment's zone's ({@code jabiz.fiscal-year-zone}).
  */
 @Configuration
 public class AiConfig {
@@ -106,11 +110,14 @@ public class AiConfig {
             .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
     }
 
-    /** Read only: the write permission is one no role holds, so making it writable later grants nothing. */
+    /**
+     * The scope of the sponsor's templates. Neither read nor write permission is held by any role: the templates pick
+     * the columns a sponsor sees.
+     */
     private DatasetDefinition sponsorDataset(String entity) {
         return DatasetDefinition.define(QbAi.sponsorDataset(entity), d -> d
             .targetEntityType(entity)
-            .permissions(QbPermissions.AI_USE, QbPermissions.SPONSOR_VIEW_WRITE)
+            .permissions(QbPermissions.AI_SYSTEM, QbPermissions.SPONSOR_VIEW_WRITE)
             .policy(p -> p.readOnly(true).allowTimeTravel(false))
             .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef))
             .scope(s -> s.fromContext("sponsorId", "actorId", RequestContext::actorId)));
@@ -187,6 +194,28 @@ public class AiConfig {
     @Bean
     ProcessDefinition<AiProcesses.ExpireInput, AiProcesses.JobOutput, ProcessContext> qbAiExpire() {
         return AiProcesses.expire();
+    }
+
+    @Bean
+    ProcessDefinition<AiProcesses.StoppedInput, AiProcesses.JobOutput, ProcessContext> qbAiJobStopped() {
+        return AiProcesses.stopped(zone);
+    }
+
+    /**
+     * Every external job's end, as the platform announces it: a job of {@value AiQuestionsJob#TYPE} cancelled at the
+     * platform ({@code EXTERNAL_JOB_CANCEL}, an operator's stop, operations.md section 7.8) calls neither outcome
+     * process, so this one closes it. The others are ignored.
+     */
+    @Bean
+    EventSubscription<AiProcesses.StoppedInput> qbAiJobStoppedSubscription(
+        ProcessDefinition<AiProcesses.StoppedInput, AiProcesses.JobOutput, ProcessContext> qbAiJobStopped) {
+        return EventSubscription.of("qb.ai-job-stopped", ExternalJobRecorder.FINISHED_EVENT, qbAiJobStopped,
+            event -> new AiProcesses.StoppedInput(text(event.payload().get("jobId")),
+                text(event.payload().get("jobType")), text(event.payload().get("status")), event.createdTime()));
+    }
+
+    private static String text(Object value) {
+        return value == null ? null : String.valueOf(value);
     }
 
     /**

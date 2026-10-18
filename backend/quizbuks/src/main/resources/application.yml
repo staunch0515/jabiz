@@ -128,9 +128,10 @@ jabiz:
       base-url: ${QB_STRIPE_API_URL:https://api.stripe.com}
       allowed-hosts: ${QB_STRIPE_API_HOSTS:api.stripe.com}
     # Claude (docs/quizbuks/plans/Q8-ai.md, D-Q8-1): Anthropic's Messages API, its key in ANTHROPIC_API_KEY only
-    # (startup fails without it; the image's entrypoint fills a placeholder that the provider refuses, so nothing is
-    # spent before a real key is set). AI stays off until an administrator publishes qb.ai.enabled = true. Development,
-    # the tests and the end-to-end tests point it at the local stub (tools/quizbuks/claude-stub), never the network.
+    # (startup fails without it; the local compose file and local-demo.sh fill a placeholder that the provider refuses,
+    # so nothing is spent before a real key is set). AI stays off until qb.ai.enabled = true is proposed and published
+    # by a second administrator (a controlled change). Development, the tests and the end-to-end tests point it at the
+    # local stub (tools/quizbuks/claude-stub), never the network.
     anthropic:
       base-url: ${QB_ANTHROPIC_API_URL:https://api.anthropic.com}
       allowed-hosts: ${QB_ANTHROPIC_API_HOSTS:api.anthropic.com}
@@ -234,6 +235,15 @@ quizbuks:
   # before the export's cut-off could commit after the export's reads. At most half of JournalPeriods.SETTLE (10 min).
   journal:
     max-open-transaction: PT5M
+  # AI generation (docs/quizbuks/plans/Q8-ai.md, Q8a; operations.md section 7.8). The longest wait for Claude's whole
+  # answer (at most two minutes, the platform's longest); an attempt without an answer is charged its estimate.
+  # halted = true makes every attempt on this instance fail without calling Claude, queued and retrying jobs included
+  # (an incident's stop that needs a restart; revoking the key at Anthropic is faster, switching qb.ai.enabled off
+  # stops new requests only).
+  ai:
+    request-timeout: ${QB_AI_REQUEST_TIMEOUT:PT2M}
+    halted: ${QB_AI_HALTED:false}
+    max-concurrency: ${QB_AI_MAX_CONCURRENCY:4}
   # Q10b (review M6): true when no reverse proxy is in front of the application, so that no trusted proxy is listed on
   # purpose (deploy/quizbuks/README.md, "密钥与部署").
   deploy:

@@ -281,5 +281,7 @@ tools/quizbuks/local-demo.sh status | logs | seed
 | `JABIZ_REPORTS_PDF_FONTS` | 否 | PDF（充值收据、月报）中中文与日文的 TrueType 字体文件，逗号分隔、按顺序尝试；镜像已装 IPA Gothic 与 Droid Sans Fallback 并设好（`Dockerfile`），镜像外缺省为空（这些字为 `?`）。设了读不到的文件即启动失败 |
 | `ANTHROPIC_API_KEY` | 是（Q8a） | Claude（Anthropic API）的密钥，AI 生成题目；缺少即启动失败。还没有密钥时可设任意占位（如 `not-configured`）：AI 缺省关闭（`qb.ai.enabled`），关闭时什么也不发送；占位被打开后提供方拒绝（401，作业失败）。本机 compose 未设置时填占位 |
 | `QB_ANTHROPIC_API_URL` / `QB_ANTHROPIC_API_HOSTS` | 否 | Anthropic API 的地址与允许的主机，缺省 `https://api.anthropic.com` / `api.anthropic.com`（只在开发与 e2e 中改指本地桩 `tools/quizbuks/claude-stub`） |
+| `QB_AI_REQUEST_TIMEOUT` / `QB_AI_MAX_CONCURRENCY` | 否 | 等 Claude 整个回答的最长时间（缺省与上限 `PT2M`；没有回答的尝试按预估计入用量）；全实例同时运行的 AI 作业数（缺省 4） |
+| `QB_AI_HALTED` | 否 | `true` 时本实例的每次 AI 尝试不调用提供方即失败（事故时的停止，需重启；更快的是在 Anthropic Console 吊销密钥，`docs/quizbuks/operations.md` §7.8） |
 
 可观测性（OTLP）与单点登录的变量同平台：见 `docs/guide/quickstart.md`。

@@ -24,6 +24,7 @@ import com.jabiz.runtime.param.ParamEntities;
 import com.jabiz.runtime.process.steps.HoldLock;
 import com.jabiz.runtime.process.steps.LoadEntity;
 import com.jabiz.runtime.process.steps.QueryEntities;
+import com.jabiz.runtime.process.steps.RunTemplate;
 import com.jabiz.runtime.process.steps.StartExternalJob;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.AssertTrue;
@@ -57,7 +58,8 @@ import java.util.UUID;
  *       and ban, the AI notice (accepted now when the request names the version in effect, A-11), the settings, the
  *       quiz through their own dataset (another's is 404) and the chosen materials, the input built and measured
  *       (at most {@value ClaudeApi#MAX_INPUT_BYTES} bytes, refused rather than cut, A-5). Under
- *       {@code qb.ai:<sponsor>}: the limits ({@link AiLimits}); then the job and its record.</li>
+ *       {@code qb.ai:<sponsor>} then {@code qb.ai:*}: the limits ({@link AiLimits}), everybody's unfinished jobs
+ *       counted; then the job and its record.</li>
  *   <li>{@value #COMPLETED} / {@value #FAILED} ({@code internal()}): under {@code qb.ai:<sponsor>} then
  *       {@code qb.ai:*}, the usage of every attempt is added to the sponsor's month and everybody's; the candidates are
  *       checked against the content rules again and wait for review ({@code READY}, for
@@ -68,6 +70,9 @@ import java.util.UUID;
  *       the job's id; the quiz becomes {@code aiGenerated}. No candidate is ever saved without this.</li>
  *   <li>{@value #DISCARD} and {@value #CANCEL}: the sponsor drops the candidates, or stops waiting for a job.</li>
  *   <li>{@value #EXPIRE} ({@code internal()}): the daily job clears candidates not reviewed in time.</li>
+ *   <li>{@value #STOPPED_JOB} ({@code internal()}): a job an operator stopped at the platform
+ *       ({@code EXTERNAL_JOB_CANCEL}, which calls neither outcome process) is closed and charged its whole estimate,
+ *       since nobody knows what its attempts used.</li>
  * </ul>
  * Lock order: {@code qb.quiz:<quiz>} → {@code qb.ai:<sponsor>} → {@code qb.ai:*}; none of them is held with the
  * publication, start or wallet locks, so answering is not affected.
@@ -81,6 +86,9 @@ public final class AiProcesses {
     public static final String DISCARD = "QB_AI_DISCARD";
     public static final String CANCEL = "QB_AI_CANCEL";
     public static final String EXPIRE = "QB_AI_EXPIRE";
+    public static final String STOPPED_JOB = "QB_AI_JOB_STOPPED";
+    /** Everybody's unfinished jobs, for the global limit. */
+    public static final String OPEN_TEMPLATE = "qb.system.ai-open";
 
     /** The daily job clearing expired candidates, and its selection. */
     public static final String EXPIRE_JOB = "qb.ai-expire";
@@ -126,6 +134,12 @@ public final class AiProcesses {
     /** @param questionIds the questions added, in their order */
     public record AcceptOutput(String quizId, long revision, String aiJobId, List<String> questionIds) {}
 
+    /**
+     * A job the platform finished without an outcome process (the platform's event {@code jabiz.external-job.finished}
+     * of every job: only a cancelled job of {@value AiQuestionsJob#TYPE} is acted on).
+     */
+    public record StoppedInput(String jobId, String jobType, String status, Instant at) {}
+
     /** An item of the daily expiry (its selection's row). */
     public record ExpireInput(@NotNull UUID aiJobId, @NotBlank @Size(max = 128) String sponsorId) {}
 
@@ -143,6 +157,8 @@ public final class AiProcesses {
     static final String OUTPUT = "output";
     static final String MATERIAL_ROWS = "materialRows";
     static final String QUESTION_ROWS = "questionRows";
+    static final String GLOBAL_OPEN = "globalOpen";
+    static final String FIRST_READ = "firstRead";
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
@@ -177,6 +193,9 @@ public final class AiProcesses {
                 .compute("Prepare the request", (metadata, ctx) -> prepare(ctx, userKeys))
                 .step("Lock the sponsor's AI requests", HoldLock.<ProcessContext>exclusive(
                     ctx -> QbAi.lockName(ctx.request().actorId())))
+                .step("Lock everybody's usage", HoldLock.<ProcessContext>exclusive(ctx -> QbAi.GLOBAL_LOCK))
+                .step("Load everybody's unfinished jobs", RunTemplate.<ProcessContext>of(OPEN_TEMPLATE,
+                    ctx -> Map.of(), GLOBAL_OPEN))
                 .step("Load where the sponsor stands", QueryEntities.<ProcessContext>all(
                     QueryEntities.query(QbAi.defaultDataset(QbAi.JOB), ctx -> EntityQuery.builder()
                         .where(and(new QueryPredicate.Eq("sponsorId", ctx.request().actorId()),
@@ -194,7 +213,7 @@ public final class AiProcesses {
                         ctx -> ctx.get(JOB_INPUT))
                     .reference(ctx -> "quiz:" + ctx.get(QuizEditing.QUIZ_ID))
                     .outputKey(EXTERNAL_JOB_ID))
-                .compute("Record the job", (metadata, ctx) -> record(ctx)));
+                .compute("Record the job", (metadata, ctx) -> record(ctx, zone)));
     }
 
     /** The AI parameters as stored (a controlled one not yet published is simply absent). */
@@ -225,6 +244,11 @@ public final class AiProcesses {
         List<Violation> problems = new ArrayList<>(SponsorChecks.problems(ctx));
         AiSettings settings = settings(ctx);
         problems.addAll(settings.problems());
+        int maxCount = AiQuestionsJob.maxCount(settings.effort());
+        if (input.count() > maxCount) {
+            problems.add(new Violation("count", AiCodes.COUNT_TOO_HIGH, "At most " + maxCount + " questions at a time "
+                + "at effort " + settings.effort(), Map.of("max", maxCount)));
+        }
 
         ConsentChecks.State notice = ConsentChecks.states(ctx).get(QbLegal.AI_NOTICE);
         List<ConsentChecks.State> accept = List.of();
@@ -322,8 +346,9 @@ public final class AiProcesses {
         EntityInstance mine = usageRow(ctx, sponsorId);
         EntityInstance everybody = usageRow(ctx, QbAi.EVERYBODY);
         AiLimits.Standing standing = new AiLimits.Standing(open.size(), quizBusy, rows(ctx, TODAY).size(),
-            tokens(mine), openEstimate, tokens(everybody));
-        long estimate = AiLimits.estimate((int) ctx.get(INPUT_BYTES));
+            tokens(mine), openEstimate, tokens(everybody), globalOpenEstimate(ctx));
+        long estimate = AiLimits.estimate((int) ctx.get(INPUT_BYTES),
+            ctx.get(JOB_INPUT, AiQuestionsJob.Input.class).count());
         List<Violation> problems = AiLimits.problems(ctx.get(SETTINGS, AiSettings.class).limits(), standing,
             estimate, ctx.opTime(), zone);
         if (!problems.isEmpty()) {
@@ -331,10 +356,17 @@ public final class AiProcesses {
         }
     }
 
-    static void record(ProcessContext ctx) {
+    /** What everybody's unfinished jobs may still use ({@value #OPEN_TEMPLATE}'s one row). */
+    @SuppressWarnings("unchecked")
+    static long globalOpenEstimate(ProcessContext ctx) {
+        List<Map<String, Object>> found = (List<Map<String, Object>>) ctx.get(GLOBAL_OPEN);
+        return found == null || found.isEmpty() ? 0 : QuizEditing.number(found.getFirst().get("openEstimate"));
+    }
+
+    static void record(ProcessContext ctx, ZoneId zone) {
         AiQuestionsJob.Input job = ctx.get(JOB_INPUT, AiQuestionsJob.Input.class);
         int size = (int) ctx.get(INPUT_BYTES);
-        long estimate = AiLimits.estimate(size);
+        long estimate = AiLimits.estimate(size, job.count());
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("externalJobId", String.valueOf((Object) ctx.get(EXTERNAL_JOB_ID)));
         values.put("sponsorId", ctx.request().actorId());
@@ -348,6 +380,7 @@ public final class AiProcesses {
         values.put("inputTokens", BigDecimal.ZERO);
         values.put("outputTokens", BigDecimal.ZERO);
         values.put("requestedAt", ctx.opTime());
+        values.put("zone", zone.getId());
         Object id = ctx.changes().insert(QbAi.JOB, values);
         ctx.put(OUTPUT, new RequestOutput(String.valueOf(id), String.valueOf((Object) ctx.get(EXTERNAL_JOB_ID)), QbAi.QUEUED,
             estimate));
@@ -429,13 +462,13 @@ public final class AiProcesses {
         if (job == null) {
             return;
         }
-        long in = completion.usage().getOrDefault(AiQuestionsJob.INPUT_TOKENS, 0L);
-        long out = completion.usage().getOrDefault(AiQuestionsJob.OUTPUT_TOKENS, 0L);
+        ClaudeApi.Usage usage = usage(completion.usage());
         String month = AiLimits.month(completion.finishedTime(), zone);
-        Map<String, Object> values = finished(in, out, completion.attempts(), completion.finishedTime());
+        AiQuestionsJob.Result result = completion.result(AiQuestionsJob.Result.class);
+        java.math.BigDecimal cost = AiCost.of(job.get("model"), result.servedModel(), usage, settings(ctx).price());
+        Map<String, Object> values = finished(usage, cost, completion.attempts(), completion.finishedTime());
         boolean failed = false;
         if (QbAi.QUEUED.equals(job.get("status"))) {
-            AiQuestionsJob.Result result = completion.result(AiQuestionsJob.Result.class);
             values.put("servedModel", result.servedModel());
             Map<String, Object> params = params(job);
             int count = ((Number) params.getOrDefault("count", AiQuestionsJob.MAX_COUNT)).intValue();
@@ -458,7 +491,7 @@ public final class AiProcesses {
             }
         }
         ctx.changes().update(QbAi.JOB, job.id(), job.version(), values);
-        addUsage(ctx, completion.requestedBy(), month, in, out, failed);
+        addUsage(ctx, completion.requestedBy(), month, usage, cost, failed);
         ctx.put(OUTPUT, new JobOutput(String.valueOf(job.id()), (String) values.getOrDefault("status",
             job.get("status"))));
     }
@@ -469,32 +502,46 @@ public final class AiProcesses {
         if (job == null) {
             return;
         }
-        long in = failure.usage().getOrDefault(AiQuestionsJob.INPUT_TOKENS, 0L);
-        long out = failure.usage().getOrDefault(AiQuestionsJob.OUTPUT_TOKENS, 0L);
-        Map<String, Object> values = finished(in, out, failure.attempts(), failure.finishedTime());
+        ClaudeApi.Usage usage = usage(failure.usage());
+        java.math.BigDecimal cost = AiCost.of(job.get("model"), null, usage, settings(ctx).price());
+        Map<String, Object> values = finished(usage, cost, failure.attempts(), failure.finishedTime());
         if (QbAi.QUEUED.equals(job.get("status"))) {
             values.put("status", QbAi.FAILED);
             values.put("failureCode", clip(failure.errorCode(), 100));
             values.put("failureMessage", clip(failure.errorMessage(), QbAi.FAILURE_MESSAGE_LENGTH));
         }
         ctx.changes().update(QbAi.JOB, job.id(), job.version(), values);
-        addUsage(ctx, failure.requestedBy(), AiLimits.month(failure.finishedTime(), zone), in, out, true);
+        addUsage(ctx, failure.requestedBy(), AiLimits.month(failure.finishedTime(), zone), usage, cost, true);
         ctx.put(OUTPUT, new JobOutput(String.valueOf(job.id()), (String) values.getOrDefault("status",
             job.get("status"))));
     }
 
-    private static Map<String, Object> finished(long in, long out, int attempts, Instant at) {
+    /** The usage of every attempt, by metric, as the platform added it up. */
+    static ClaudeApi.Usage usage(Map<String, Long> metrics) {
+        return new ClaudeApi.Usage(metrics.getOrDefault(AiQuestionsJob.INPUT_TOKENS, 0L),
+            metrics.getOrDefault(AiQuestionsJob.OUTPUT_TOKENS, 0L),
+            metrics.getOrDefault(AiQuestionsJob.FALLBACK_INPUT_TOKENS, 0L),
+            metrics.getOrDefault(AiQuestionsJob.FALLBACK_OUTPUT_TOKENS, 0L));
+    }
+
+    private static Map<String, Object> finished(ClaudeApi.Usage usage, BigDecimal cost, Integer attempts,
+        Instant at) {
         Map<String, Object> values = new LinkedHashMap<>();
-        values.put("inputTokens", BigDecimal.valueOf(in));
-        values.put("outputTokens", BigDecimal.valueOf(out));
-        values.put("attempts", BigDecimal.valueOf(attempts));
+        values.put("inputTokens", BigDecimal.valueOf(usage.inputTokens()));
+        values.put("outputTokens", BigDecimal.valueOf(usage.outputTokens()));
+        values.put("fallbackInputTokens", BigDecimal.valueOf(usage.fallbackInputTokens()));
+        values.put("fallbackOutputTokens", BigDecimal.valueOf(usage.fallbackOutputTokens()));
+        values.put("costUsd", cost);
+        values.put("attempts", attempts == null ? null : BigDecimal.valueOf(attempts));
         values.put("finishedAt", at);
         return values;
     }
 
     /** Adds a finished job to the sponsor's month and to everybody's (under both locks). */
-    private static void addUsage(ProcessContext ctx, String sponsorId, String month, long in, long out,
-        boolean failed) {
+    private static void addUsage(ProcessContext ctx, String sponsorId, String month, ClaudeApi.Usage usage,
+        BigDecimal cost, boolean failed) {
+        long in = usage.inputTokens();
+        long out = usage.outputTokens();
         for (String who : List.of(sponsorId, QbAi.EVERYBODY)) {
             EntityInstance row = usageRow(ctx, who);
             if (row == null) {
@@ -505,6 +552,7 @@ public final class AiProcesses {
                 values.put("failedJobs", failed ? BigDecimal.ONE : BigDecimal.ZERO);
                 values.put("inputTokens", BigDecimal.valueOf(in));
                 values.put("outputTokens", BigDecimal.valueOf(out));
+                values.put("costUsd", cost);
                 ctx.changes().insert(QbAi.USAGE, values);
             } else {
                 Map<String, Object> values = new LinkedHashMap<>();
@@ -514,9 +562,79 @@ public final class AiProcesses {
                 }
                 values.put("inputTokens", BigDecimal.valueOf(QuizEditing.number(row.get("inputTokens")) + in));
                 values.put("outputTokens", BigDecimal.valueOf(QuizEditing.number(row.get("outputTokens")) + out));
+                if (cost != null) {
+                    Object before = row.get("costUsd");
+                    values.put("costUsd", (before == null ? BigDecimal.ZERO : new BigDecimal(before.toString()))
+                        .add(cost));
+                }
                 ctx.changes().update(QbAi.USAGE, row.id(), row.version(), values);
             }
         }
+    }
+
+    // ---- a job stopped at the platform ------------------------------------------------------------------------------
+
+    public static ProcessDefinition<StoppedInput, JobOutput, ProcessContext> stopped(ZoneId zone) {
+        return ProcessDefinition.define(STOPPED_JOB, 1, StoppedInput.class, JobOutput.class, ProcessContext.class,
+            pb -> pb
+                .description("Closes an AI job an operator stopped at the platform and charges its estimate.")
+                .permissions(QbPermissions.AI_SYSTEM)
+                .internal()
+                .contextFactory(AiProcesses::context)
+                .outputMapper(AiProcesses::jobOutput)
+                // Found first, to know whose locks to take; read again under them.
+                .step("Find the job", QueryEntities.<ProcessContext>of(QbAi.defaultDataset(QbAi.JOB),
+                    ctx -> EntityQuery.builder().where(new QueryPredicate.Eq("externalJobId",
+                        stoppedJobId(ctx))).limit(1).build(), FIRST_READ))
+                .step("Lock the sponsor's AI requests", HoldLock.<ProcessContext>exclusive(
+                    ctx -> QbAi.lockName(stoppedSponsor(ctx))))
+                .step("Lock everybody's usage", HoldLock.<ProcessContext>exclusive(ctx -> QbAi.GLOBAL_LOCK))
+                .step("Load the job and the usage", outcomeReads(zone, AiProcesses::stoppedJobId,
+                    AiProcesses::stoppedSponsor, ctx -> ctx.get(INPUT, StoppedInput.class).at()))
+                .compute("Close the job", (metadata, ctx) -> closeStopped(ctx, zone)));
+    }
+
+    /** The platform's job, when the event is about a cancelled job of this type; a key matching nothing otherwise. */
+    private static String stoppedJobId(ProcessContext ctx) {
+        StoppedInput input = ctx.get(INPUT, StoppedInput.class);
+        return AiQuestionsJob.TYPE.equals(input.jobType()) && "CANCELLED".equals(input.status())
+            && input.jobId() != null ? input.jobId() : "-";
+    }
+
+    /** The sponsor of the job found; a lock nobody else takes when there is none. */
+    private static String stoppedSponsor(ProcessContext ctx) {
+        EntityInstance job = first(ctx, FIRST_READ);
+        return job == null ? "-" : String.valueOf((Object) job.get("sponsorId"));
+    }
+
+    static void closeStopped(ProcessContext ctx, ZoneId zone) {
+        StoppedInput input = ctx.get(INPUT, StoppedInput.class);
+        EntityInstance found = first(ctx, FIRST_READ);
+        if (found == null) {
+            return;
+        }
+        EntityInstance job = unfinished(ctx, String.valueOf((Object) found.get("sponsorId")));
+        if (job == null) {
+            return;
+        }
+        // Nobody knows what its attempts used: the whole estimate, as the limits reserved it.
+        long estimate = QuizEditing.number(job.get("estimatedTokens"));
+        long in = Math.min(estimate, AiQuestionsJob.ATTEMPTS
+            * AiLimits.inputEstimate(QuizEditing.number(job.get("inputBytes"))));
+        ClaudeApi.Usage usage = new ClaudeApi.Usage(in, estimate - in);
+        BigDecimal cost = AiCost.of(job.get("model"), null, usage, settings(ctx).price());
+        Map<String, Object> values = finished(usage, cost, null, input.at());
+        if (QbAi.QUEUED.equals(job.get("status"))) {
+            values.put("status", QbAi.CANCELLED);
+            values.put("failureCode", AiCodes.STOPPED);
+            values.put("failureMessage", "Stopped at the platform; charged its estimate");
+            values.put("closedAt", input.at());
+        }
+        ctx.changes().update(QbAi.JOB, job.id(), job.version(), values);
+        addUsage(ctx, String.valueOf((Object) job.get("sponsorId")), AiLimits.month(input.at(), zone), usage, cost,
+            true);
+        ctx.put(OUTPUT, new JobOutput(String.valueOf(job.id()), (String) values.getOrDefault("status",
+            job.get("status"))));
     }
 
     // ---- accept ----------------------------------------------------------------------------------------------------

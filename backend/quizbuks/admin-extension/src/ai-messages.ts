@@ -9,7 +9,7 @@ export const aiMessages = {
   en: {
     title: 'AI generation',
     description: 'What the sponsors\' AI requests used and how they ended, and the settings in force. Nothing is '
-      + 'billed to sponsors: the dollars are an estimate at the price parameters.',
+      + 'billed to sponsors: the dollars are an estimate, each model\'s tokens at its list price.',
     switch: 'Switch and limits',
     on: 'On',
     off: 'Off',
@@ -69,7 +69,7 @@ export const aiMessages = {
   },
   zh: {
     title: 'AI 生成',
-    description: '商家 AI 请求的用量与结果，以及当前设置。不向商家收费：美元金额只是按价格参数的估算。',
+    description: '商家 AI 请求的用量与结果，以及当前设置。不向商家收费：美元金额只是估算，各模型的 Token 按其标价计。',
     switch: '开关与上限',
     on: '开启',
     off: '关闭',
@@ -128,7 +128,7 @@ export const aiMessages = {
   },
   ja: {
     title: 'AI 生成',
-    description: 'スポンサーの AI リクエストの使用量と結果、および現在の設定です。スポンサーには請求しません。ドルの金額は価格パラメータによる概算です。',
+    description: 'スポンサーの AI リクエストの使用量と結果、および現在の設定です。スポンサーには請求しません。ドルの金額は概算で、各モデルのトークンをその定価で計算しています。',
     switch: 'スイッチと上限',
     on: 'オン',
     off: 'オフ',

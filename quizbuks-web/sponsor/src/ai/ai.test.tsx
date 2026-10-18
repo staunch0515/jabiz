@@ -172,6 +172,21 @@ describe('the AI questions panel', () => {
     expect(within(dialog).getByTestId('ai-size')).not.toHaveAttribute('data-too-large')
   })
 
+  it('asks for no more questions than the effort in force allows', async () => {
+    const calls = server({ mustAccept: false, usage: { ...USAGE, maxCount: 10 } })
+    const user = userEvent.setup()
+    wrap(<AiQuestionsPanel quiz={QUIZ} materials={MATERIALS} />)
+    await user.click(await screen.findByTestId('ai-generate'))
+    const dialog = await screen.findByTestId('ai-dialog')
+    const count = within(dialog).getByTestId('ai-count')
+    expect(count).toHaveAttribute('max', '10')
+    await user.clear(count)
+    await user.type(count, '11')
+    await user.click(within(dialog).getByTestId('ai-submit'))
+    expect(await within(dialog).findByTestId('ai-local-problem')).toHaveTextContent('10')
+    expect(calls.of('/api/processes/QB_AI_QUESTIONS_REQUEST/latest')).toEqual([])
+  })
+
   it('looks at a running job every five seconds, for five minutes at most', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     const calls = server({ jobs: [[job('QUEUED', { requestedAt: new Date().toISOString() })]] })

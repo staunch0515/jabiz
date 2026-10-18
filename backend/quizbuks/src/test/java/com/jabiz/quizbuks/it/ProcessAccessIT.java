@@ -84,7 +84,8 @@ class ProcessAccessIT extends QbItSupport {
         Map.entry("QB_STRIPE_PAYOUT_FAILED", ProcessAccess.INTERNAL),
         Map.entry("QB_AI_JOB_COMPLETED", ProcessAccess.INTERNAL),
         Map.entry("QB_AI_JOB_FAILED", ProcessAccess.INTERNAL),
-        Map.entry("QB_AI_EXPIRE", ProcessAccess.INTERNAL));
+        Map.entry("QB_AI_EXPIRE", ProcessAccess.INTERNAL),
+        Map.entry("QB_AI_JOB_STOPPED", ProcessAccess.INTERNAL));
 
     @Autowired
     ProcessRegistry registry;

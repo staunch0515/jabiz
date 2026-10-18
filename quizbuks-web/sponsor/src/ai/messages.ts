@@ -73,7 +73,7 @@ const en = {
       QB_AI_TRUNCATED: 'The AI\'s answer was too long. Ask for fewer questions.',
       QB_AI_NO_CANDIDATES: 'None of the AI\'s questions met the content rules. Try again, or write them by hand.',
       QB_AI_INPUT_TOO_LARGE: 'The request was too large. Choose fewer materials.',
-      expired: 'The AI\'s questions were not reviewed in time and were cleared. Ask again if you still need them.',
+      expired: 'The AI\'s questions were not reviewed in time and can no longer be added. Ask again if you still need them.',
     },
     usage: {
       label: 'AI usage this month',
@@ -153,7 +153,7 @@ const zh: typeof en = {
       QB_AI_TRUNCATED: 'AI 的回答过长，请减少题数。',
       QB_AI_NO_CANDIDATES: 'AI 生成的题目均不符合内容规则，请重试或手动编辑。',
       QB_AI_INPUT_TOO_LARGE: '请求过大，请少选资料。',
-      expired: 'AI 生成的题目未在期限内校对，已清除。如仍需要请重新生成。',
+      expired: 'AI 生成的题目未在期限内校对，已不能加入题库。如仍需要请重新生成。',
     },
     usage: {
       label: '本月 AI 用量',
@@ -233,7 +233,7 @@ const ja: typeof en = {
       QB_AI_TRUNCATED: 'AI の回答が長すぎました。問題数を減らしてください。',
       QB_AI_NO_CANDIDATES: 'AI の問題はいずれも内容のルールを満たしませんでした。再度お試しいただくか、手動で作成してください。',
       QB_AI_INPUT_TOO_LARGE: 'リクエストが大きすぎました。資料を減らしてください。',
-      expired: 'AI の問題は期限内に確認されなかったため消去しました。必要ならもう一度作成してください。',
+      expired: 'AI の問題は期限内に確認されなかったため、追加できなくなりました。必要ならもう一度作成してください。',
     },
     usage: {
       label: '今月の AI 使用量',

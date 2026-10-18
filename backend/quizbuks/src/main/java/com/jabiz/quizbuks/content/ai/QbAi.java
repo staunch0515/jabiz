@@ -93,8 +93,9 @@ public final class QbAi {
         eb.field("servedModel", f -> f.physicalColumn("served_model").processOnly().asText(100));
         eb.field("status", f -> f.physicalColumn("status").required(true).processOnly()
             .asCode(STATUS_DICTIONARY, STATUSES.toArray(String[]::new)));
-        // The candidates as canonical JSON, while READY only.
-        eb.field("candidates", f -> f.physicalColumn("candidates").processOnly().asText(null, true));
+        // The candidates as canonical JSON, while READY only. Not repeated in the audit (the provider's output; the
+        // platform keeps the job's result as it came, and the audit records that the column changed).
+        eb.field("candidates", f -> f.physicalColumn("candidates").processOnly().auditMasked().asText(null, true));
         eb.field("candidateCount", f -> f.physicalColumn("candidate_count").processOnly().asNumeric(4, 0));
         eb.field("invalidCount", f -> f.physicalColumn("invalid_count").processOnly().asNumeric(4, 0));
         eb.field("acceptedCount", f -> f.physicalColumn("accepted_count").processOnly().asNumeric(4, 0));
@@ -105,6 +106,16 @@ public final class QbAi {
         eb.field("inputTokens", f -> f.physicalColumn("input_tokens").required(true).processOnly().asNumeric(12, 0));
         eb.field("outputTokens", f -> f.physicalColumn("output_tokens").required(true).processOnly()
             .asNumeric(12, 0));
+        // The part of the tokens the provider's fallback model used (A-10), priced at that model.
+        eb.field("fallbackInputTokens", f -> f.physicalColumn("fallback_input_tokens").processOnly()
+            .asNumeric(12, 0));
+        eb.field("fallbackOutputTokens", f -> f.physicalColumn("fallback_output_tokens").processOnly()
+            .asNumeric(12, 0));
+        // Dollars at the models' prices (AiCost; an estimate, A-8), once the job finished.
+        eb.field("costUsd", f -> f.physicalColumn("cost_usd").processOnly().asNumeric(14, 6));
+        // The deployment's zone when the job was asked for (jabiz.fiscal-year-zone): its day and month, which the
+        // sponsor's usage card reads as the limits count them.
+        eb.field("zone", f -> f.physicalColumn("zone").immutable(true).required(true).processOnly().asText(64));
         eb.field("attempts", f -> f.physicalColumn("attempts").processOnly().asNumeric(4, 0));
         eb.field("failureCode", f -> f.physicalColumn("failure_code").processOnly().asText(100));
         // The system's explanation only, never the provider's answer.
@@ -144,6 +155,8 @@ public final class QbAi {
             .asNumeric(15, 0));
         eb.field("outputTokens", f -> f.physicalColumn("output_tokens").required(true).processOnly()
             .asNumeric(15, 0));
+        // Dollars at the models' prices (AiCost; null while a job's could not be priced).
+        eb.field("costUsd", f -> f.physicalColumn("cost_usd").processOnly().asNumeric(16, 6));
         eb.field("version", f -> f.physicalColumn("version").asVersion());
         eb.unique("uk_qb_ai_usage_month", "sponsorId", "month");
         eb.listView("default", lv -> lv

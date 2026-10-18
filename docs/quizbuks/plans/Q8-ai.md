@@ -260,14 +260,14 @@
   正文为通用的占位说明与一节"第1条 AI 提供者に送信される情報 / 1. What is sent to the AI provider / 第一条 发送给 AI 提供方的内容"，内容为"仮の文章です / Placeholder text / 占位文本"。
   正式文本至少应说明：发送给 Anthropic 的内容（标题、简介、所选资料、已有题干）与不发送的内容；提供方的数据使用与保留（是否用于训练、保留期、处理地域，按 Anthropic 的商业条款，须法务确认）；生成的题目须商家校对、商家对内容负责。
 
-### 与计划的偏离
+### 与计划的偏离（共 9 项；第 1、3、4 项经评审修订，见下"评审修订"）
 
-1. **请求超时 2 分钟**（计划写 5 分钟）：平台 `ExternalService` 的请求超时上限是 2 分钟（`MAX_REQUEST_TIMEOUT`）。effort `medium` 的非流式回答在其内；超过即该次尝试失败并重试，作业每次尝试的时限仍是 5 分钟。若真实测验中经常超时，可降低题数上限或改用流式（平台的 `ExternalHttp` 目前只有整体读取）。
+1. **请求超时 2 分钟**（计划写 5 分钟）：平台 `ExternalService` 的请求超时上限是 2 分钟（`MAX_REQUEST_TIMEOUT`）。effort `medium` 的非流式回答在其内；超过即该次尝试失败并重试，作业每次尝试的时限仍是 5 分钟。若真实测验中经常超时，可降低题数上限或改用流式（平台的 `ExternalHttp` 目前只有整体读取）。（评审后：超时的尝试按预估计入，`max_tokens` 随题数，effort `high` 至多 10 题。）
 2. **"3 次重试"按计划 D-Q8-4 理解为共 3 次尝试**（首次 + 2 次重试）。
 3. **取消不经平台的 `EXTERNAL_JOB_CANCEL`**：它是 `entryOnly()`，不能作子流程；且被取消的作业不调用完成或失败流程，用量就不会进入 `QbAiUsage`（反复"请求 → 运行中取消"可绕开月限额）。所以 `QB_AI_CANCEL` 只把本地状态改为 CANCELLED：
-   提供方照常完成，结果丢弃、用量照记，取消的作业在结束前仍占"未结束"的名额与预估。代价是排队中的作业被取消后仍会调用一次提供方。平台若提供"取消后仍回调用量"或子流程取消，可改为真正的取消（见"未完成"）。
-4. **全体月上限在锁外读**：请求只取 `qb.ai:<商家>`（不让每个请求都等全体锁），全体行可能被同时运行的作业略微越过；新请求在达到后一律拒绝。完成与失败照计划取两把锁。
-5. **AI 参数为受控参数**：计划写"普通参数，超级管理员可改"，但本应用不把 `platform.param.write` 授予任何角色（第 4 节受控参数），超级管理员实际改不了普通参数；开关与限额关系到花费，所以与金额参数一样四眼。
+   提供方照常完成，结果丢弃、用量照记，取消的作业在结束前仍占"未结束"的名额与预估。代价是排队中的作业被取消后仍会调用一次提供方。平台若提供"取消后仍回调用量"或子流程取消，可改为真正的取消（见"未完成"）。（评审后：运维以平台的 `EXTERNAL_JOB_CANCEL` 停止的作业由 `QB_AI_JOB_STOPPED` 关闭并按完整预估计入。）
+4. ~~**全体月上限在锁外读**~~（评审后撤销，评审 M2）：请求在 `qb.ai:<商家>` 之后也取 `qb.ai:*`，全体上限计入所有商家未结束作业的预估（`qb.system.ai-open`，部分索引 `qb_ai_job_open_idx`），与计划一致。
+5. **AI 参数为受控参数**：计划写"普通参数，超级管理员可改"，但本应用不把 `platform.param.write` 授予任何角色（应用 `CLAUDE.md` 第 4 节"受控参数"），超级管理员实际改不了普通参数；开关与限额关系到花费，所以与金额参数一样四眼。
    后台 `/qb/ai` 的开关因此是"提出变更"。Q8a 之前装过的库中 `qb.ai.model` 是旧的文本参数 `gpt-4o-mini`（`QB_SETUP` 不改已有的）：AI 不可用，须以受控变更改为清单中的值（`deploy/quizbuks/README.md`）。
 6. **模型清单的保证**：参数的种类（code 与允许值）只对新建的参数生效；每次请求都按 `ClaudeService.MODELS` 再查，所以没有另写启动检查。
 7. **审核页的"AI 生成"标在模版上**：版本快照只有模版级的 `aiGenerated`（审核页已显示"Made with AI"）；题目的 `aiJobId` 不进快照（否则改变快照格式与哈希），只在平台通用后台的题目数据与 `/qb/ai` 中可见。
@@ -277,8 +277,7 @@
 ### 自查（对抗性）
 
 - **成本滥用**：只给入驻通过、已验证、未封禁的商家；入口限流（每分钟 5 次）；锁内的每日次数、每月 Token（含未结束作业的预估，一次最多输入 / 3 + 1 500 + 16 000）与同时未结束 ≤ 2（平台另以每请求人 ≤ 2、每模版 1 个兜底）；取消的作业在结束前仍占名额、结束后用量照记（偏离 3），
-  所以"请求 → 取消"不能绕开限额；模型、effort 与 `max_tokens` 由服务端决定，商家只能选题数（1–20）；输入 ≤ 60 KiB。残余：提供方不按幂等键去重，一个作业至多 3 次尝试，预估只按一次尝试计（实际用量事后记录，越过至多是两个作业的重试）；
-  全体上限可被正在运行的作业略微越过（偏离 4）；多个商家账号仍受入驻审核与全体上限约束。建议在 Anthropic Console 为工作区设月支出上限（`operations.md` §1.3）。
+  所以"请求 → 取消"不能绕开限额；模型、effort 与 `max_tokens` 由服务端决定，商家只能选题数（1–20）；输入 ≤ 60 KiB。（评审后：预估覆盖 3 次尝试，没有回答的尝试按预估计入，全体上限计入正在运行的作业，见"评审修订"。）多个商家账号仍受入驻审核与全体上限约束。建议在 Anthropic Console 为工作区设月支出上限（`operations.md` §1.3）。
 - **提示注入只影响商家自己**：发送的只有该商家的模版内容，没有任何其他数据可被诱导泄露；资料以转义后的 JSON 数据发送；输出按内容规则检查、只以纯文本显示（输入框与文本框，不渲染 Markdown 或 HTML，`ai.test.tsx` 断言）、必须逐题校对才入库、入库后仍经发布审核；
   候选的资料号只保留发送过的。输出不能触发任何动作（没有工具、没有链接被打开）。
 - **发送给提供方的数据**：标题、简介、所选资料（文章正文；其他种类的标题与描述）、已有题干（可关闭）、题数、难度、语言与 `metadata.user_id`（HMAC，`AiQuestionsIT` 断言请求中没有商家编号、公司、名字与邮箱样式的文字）；不发送答题人的任何数据。
@@ -300,3 +299,36 @@
 - 商家后台：`pnpm lint && pnpm typecheck && pnpm test`（159 个测试，含 `ai.test.tsx` 亮暗两种外观的 axe）；答题 SPA：133 个测试；`pnpm app:check` 两个 SPA 均通过；后台扩展 `pnpm ext:check`（74 个测试）通过。
 - e2e（打包的 jar、本地 Claude 桩与 Stripe 桩、Mailpit）：全部 52 个通过（14.5 分钟；`ai.spec.ts` 亮暗两种外观：对话框、AI 说明、校对、加入、列表的"AI generated"、仪表盘用量卡、后台 `/qb/ai`，各处跑 axe）。端口、数据库与进程都是本任务自己的（应用 18180、Claude 桩 18194、Stripe 桩 18193、Mailpit 18125/11125，库 `jabiz_e2e_q8a`）。
 
+### 评审修订（2026-10-18，独立评审：设计与 Messages API 的用法无误，成本控制有缺口）
+
+先合并 `origin/1.2/quizbuks-9e2-analytics-pages`（f5572b2：Q9e2 评审修复与 `PlayAdmissionIT` 的竞态修复），再逐项先写测试后修复。
+
+- **H1 超时的尝试从不计费**：非流式、2 分钟的请求超时，而提供方可能已为整个回答计费。
+  - 没有得到回答的尝试（平台的 `ExternalCallException`：超时、断线、回答过大；平台拒发与没建立的连接 `ConnectException` 除外）在失败前**按预估记入用量**：完整的输入（系统提示与用户消息，按 3 字节 1 Token）与所要的全部输出（`ClaudeApi.unanswered`），商家与全体都计。
+  - 单个作业的最坏情况降低：`max_tokens` = 4 000 + 600 × 题数、至多 16 000（`ClaudeApi.maxTokens`）；effort `high` 时一次至多 10 题（`QB_AI_COUNT_TOO_HIGH`，商家用量模板给出 `maxCount`，对话框照它）。
+  - 请求超时可配（`quizbuks.ai.request-timeout`，`QB_AI_REQUEST_TIMEOUT`，缺省也是上限 2 分钟；IT 用 2 秒）。
+  - 测试：`AiCostControlIT.attemptsWithoutAnAnswerAreChargedTheirEstimateAndHitTheLimit`（桩在客户端放弃之后才回答，3 次尝试都按预估计入，下一请求即 `QB_AI_MONTHLY_LIMIT`）、`AiPromptTest`、`ClaudeApiTest`。
+- **M2 全体上限不计他人正在运行的作业**：请求在 `qb.ai:<商家>` 之后取 `qb.ai:*`，以一条语句（模板 `qb.system.ai-open`，部分索引 `qb_ai_job_open_idx … WHERE finished_at IS NULL`）读所有未结束作业的预估，加进全体检查。锁序不变（商家 → 全体，完成与失败相同）。测试：`theGlobalLimitCountsOtherSponsorsRunningJobs`、`AiLimitsTest`。
+- **M3 关闭开关不停已排队或重试中的作业**：**没有照评审建议让处理器在执行时重读 `qb.ai.enabled`**：平台决策 D38 规定外部作业处理器不访问数据库（ArchUnit `handlersStayOutOfTheDatabase`，应用不能放宽），平台也没有给处理器看业务参数的接口。改为：
+  - 本实例的配置开关 `quizbuks.ai.halted`（`QB_AI_HALTED`，需重启）：为 true 时每次尝试不调用提供方即永久失败（`QB_AI_HALTED`），排队与重试中的也一样（`AiPromptTest.aHaltedServerSendsNothingAndEndsTheJob`）；
+  - 运维以平台的 `EXTERNAL_JOB_CANCEL`（`external-job.cancel`）停止已排队的作业：平台对被取消的作业不调用完成或失败流程，所以新增 `QB_AI_JOB_STOPPED`（`internal()`，订阅平台事件 `jabiz.external-job.finished`，只处理本类型的 `CANCELLED`）关闭本地作业（`QB_AI_STOPPED`）并**按完整预估**计入（没人知道它用了多少）；测试 `switchingOffStopsNewRequestsAndAnOperatorStopsTheQueuedOnes`（关闭后新请求 `QB_AI_UNAVAILABLE`、取消后提供方没有被调用、用量为预估）；
+  - `operations.md` §7.8 写明：最快的停止是在 Anthropic Console 吊销密钥（之后每次尝试 401 即永久失败），受控开关需要两位管理员且只拦新请求。
+  - **平台后续**（需在 `1.2/platform` 上做）：让执行器按作业类型暂停或在每次尝试前问一个同步的闸门（如 `ExternalJobType.pausedWhen(参数)`），或让内部流程能取消外部作业并照常回调用量；之后处理器才能"执行时看开关"。
+- **M4 预估覆盖全部尝试**：`AiLimits.estimate(输入字节, 题数)` = 3 × 每次尝试（完整输入 + `maxTokens`），作业记录的 `estimatedTokens` 即此；未结束作业的预留因此不会被它们自己的重试越过。`AiLimitsTest.theEstimateErrsHighAndCoversEveryAttempt`。
+- **L5**：`QbAiJob.candidates` 标 `auditMasked`（审计只记该列变了，`theSponsorsOwnChecksHold` 断言审计中没有候选的文字）。文档与界面不再说"清除"：过期、丢弃、接受后候选从 `QbAiJob` 移除、不能再加入题库，但**提供方的原始回答仍在平台只追加的作业结果中**（`sys_external_job`，P4）。不存进作业结果在平台上做不到（结果就是完成流程收到候选的途径）。
+- **L6**：商家的两个数据视图只供模板限定范围，本身不可读（读权限改为不授予任何角色的 `qb.ai.system`；直接查询 403，模板照常），商家看不到 `servedModel`、`model`、`estimatedTokens`、`inputBytes`。
+- **L7**：拒答而 `stop_details.recommended_model` 存在（回退因限流或过载没能运行）时可重试；没有它的拒答照旧永久失败（`aRefusalWhoseFallbackWasBusyIsTriedAgainAndAuthIsNot`）。
+- **L8**：
+  - 美元估算按使用 Token 的模型计价（`AiCost`：Opus 5.5 4 / 20、Sonnet 5.5 2 / 10、Haiku 5.5 0.10 / 0.50、Opus 5 与 Opus 4.8 5 / 25 美元每百万 Token；不认识的模型按 `qb.ai.price.*`）。回退模型所用的部分单独记录（`fallbackInputTokens` / `fallbackOutputTokens`，来自 `usage.iterations` 的 `fallback_message`），失败的作业不知道回退到哪个模型时按 Opus 5 / 4.8 的价。作业与用量行记 `costUsd`，`qb.admin.ai-usage` 只读它。
+  - `qb.sponsor.ai-usage` 的时区改为请求时记在作业上的 `jabiz.fiscal-year-zone`（`QbAiJob.zone`，与 `AiLimits` 相同），商家第一次请求之前才退回分析任务记下的时区。
+  - 缺省分值不一致（记下，不改）：AI 候选没有分值时为 10（A-12），手动新建题目的缺省是 1（`QuestionsPanel`）。
+  - `application.yml` 的注释（占位密钥由本机 compose 与 `local-demo.sh` 填，开关是受控变更）与 `QbRoles.SUPER` 的 Javadoc（`qb.ai.model` 已是受控参数）已改正；偏离项数写明（共 9 项）。
+- **L9 测试**：`AiCostControlIT`（8 个）补上封禁与未验证的商家、接受到本人的另一个模版（404）、超过 `MAX_QUESTIONS`、过时的 `baseRevision`（422 `QB_QUIZ_CHANGED`）、接受排队中的作业（`QB_AI_JOB_NOT_READY`）、商家 B 取消 A 的作业（404）、401 归为 `QB_AI_AUTH`（一次尝试）、超时、排队中关闭开关；`AiQuestionsIT` 的并发测试断言被拒的一个是 `QB_AI_DAILY_LIMIT`。场景 `scenarios/qb/ai.yml` 仍未写（IT 覆盖全部流程）。
+
+**剩余风险**（应记入平台决策 D38 的实施说明；`docs/design/` 是平台目录，应用分支不能改，须在 `1.2/platform` 上补记）：
+
+1. 非流式请求最长 2 分钟（`ExternalService.MAX_REQUEST_TIMEOUT`）：慢的回答被放弃、按预估计费，重试可能再次被放弃。每个作业的花费仍以 3 × 预估为上限、计入限额，但可能为没人读到的回答付费。**平台后续：`ExternalHttp` 的流式读取**（边读边记用量，超时只取消剩余部分）。
+2. 处理器读不到业务参数，关闭开关不停已排队与重试中的作业（见 M3 的平台后续）。
+3. 提供方不按幂等键去重：同一尝试的重发可能被计费两次；按预估计入使限额保守，但实际账单可能高于记录（Console 的工作区月支出上限是最后一道防线）。
+
+**验证**（本机 PostgreSQL 16，自己的库与端口）：`./gradlew :quizbuks:check :quizbuks:bootJar` 通过（663 个测试、0 失败，含 `platformCheck`；`AttemptStatementBudgetIT` 未改动并通过）；商家后台 163 个测试、答题 SPA 133 个，两个 SPA 的 lint、typecheck 与 `app:check` 通过，后台扩展 `ext:check` 74 个；e2e 全部 52 个通过（15.3 分钟，打包的 jar、本地 Claude 与 Stripe 桩、Mailpit，库 `jabiz_e2e_q8a`）。

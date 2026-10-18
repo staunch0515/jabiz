@@ -25,17 +25,21 @@ results:
   jobsToday:       { kind: { type: numeric, precision: 9, scale: 0 } }
   monthEnds:       { kind: { type: temporal, role: EVENT_TIME } }
   dayEnds:         { kind: { type: temporal, role: EVENT_TIME } }
+  maxCount:        { kind: { type: numeric, precision: 4, scale: 0 } }
 permissions: [qb.ai.use]
 ---*/
 -- One row. The rules are QB_AI_QUESTIONS_REQUEST's (content.ai.AiLimits decides; this is for the page): the month's
--- tokens of finished jobs, plus what the unfinished ones may still use (their estimate; cancelled ones until the
--- provider is done with them), within qb.ai.sponsor.monthly-tokens; today's requests within qb.ai.sponsor.daily-jobs.
+-- tokens of finished jobs, plus what the unfinished ones may still use (their estimate of every attempt; cancelled
+-- ones until the provider is done with them), within qb.ai.sponsor.monthly-tokens; today's requests within qb.ai.sponsor.daily-jobs.
 -- A parameter not set (or not a whole number) leaves its figures null, and AI is then off whatever the switch says.
--- The zone is the one the analytics job recorded (jabiz.fiscal-year-zone, D-Q9e-3), not written here.
+-- maxCount is AiQuestionsJob.maxCount: 10 questions at effort high, 20 otherwise.
+-- The zone is the one the limits count in (jabiz.fiscal-year-zone), as the sponsor's newest job recorded it; before
+-- their first job (no figures to show) the one the analytics job recorded, else UTC. Not written here.
 WITH run AS (
-    SELECT coalesce(max(r.{{QbStatsRun.zone}}), 'UTC') AS z
-    FROM {{QbStatsRun}} r
-    WHERE r.{{QbStatsRun.job}} = 'qb.analytics'),
+    SELECT coalesce(
+        (SELECT j.{{QbAiJob.zone}} FROM {{QbAiJob}} j ORDER BY j.{{QbAiJob.requestedAt}} DESC LIMIT 1),
+        (SELECT max(r.{{QbStatsRun.zone}}) FROM {{QbStatsRun}} r WHERE r.{{QbStatsRun.job}} = 'qb.analytics'),
+        'UTC') AS z),
 clock AS (
     SELECT
         to_char(CAST(:at AS timestamptz) AT TIME ZONE run.z, 'YYYY-MM') AS v_month,
@@ -50,14 +54,17 @@ params AS (
         max(CASE WHEN p.{{SysParam.paramKey}} = 'qb.ai.enabled' THEN p.{{SysParam.value}} END) AS p_enabled,
         max(CASE WHEN p.{{SysParam.paramKey}} = 'qb.ai.sponsor.monthly-tokens' THEN p.{{SysParam.value}} END)
             AS p_monthly,
-        max(CASE WHEN p.{{SysParam.paramKey}} = 'qb.ai.sponsor.daily-jobs' THEN p.{{SysParam.value}} END) AS p_daily
+        max(CASE WHEN p.{{SysParam.paramKey}} = 'qb.ai.sponsor.daily-jobs' THEN p.{{SysParam.value}} END) AS p_daily,
+        max(CASE WHEN p.{{SysParam.paramKey}} = 'qb.ai.effort' THEN p.{{SysParam.value}} END) AS p_effort
     FROM {{SysParam}} p
-    WHERE p.{{SysParam.paramKey}} IN ('qb.ai.enabled', 'qb.ai.sponsor.monthly-tokens', 'qb.ai.sponsor.daily-jobs')),
+    WHERE p.{{SysParam.paramKey}} IN ('qb.ai.enabled', 'qb.ai.sponsor.monthly-tokens', 'qb.ai.sponsor.daily-jobs',
+        'qb.ai.effort')),
 checked AS (
     SELECT
         p_enabled = 'true' AS v_enabled,
         CASE WHEN p_monthly ~ '^[0-9]{1,15}$' THEN CAST(p_monthly AS numeric) END AS v_monthly,
-        CASE WHEN p_daily ~ '^[0-9]{1,9}$' THEN CAST(p_daily AS numeric) END AS v_daily
+        CASE WHEN p_daily ~ '^[0-9]{1,9}$' THEN CAST(p_daily AS numeric) END AS v_daily,
+        CASE WHEN p_effort = 'high' THEN 10 ELSE 20 END AS v_max_count
     FROM params),
 used AS (
     SELECT
@@ -70,13 +77,13 @@ used AS (
     WHERE u.{{QbAiUsage.month}} = c.v_month),
 jobs AS (
     SELECT
-        coalesce(sum(j.{{QbAiJob.estimatedTokens}}) FILTER (WHERE j.{{QbAiJob.status}} = 'QUEUED'
-            OR (j.{{QbAiJob.status}} = 'CANCELLED' AND j.{{QbAiJob.finishedAt}} IS NULL)), 0) AS v_reserved,
+        coalesce(sum(j.{{QbAiJob.estimatedTokens}}) FILTER (WHERE j.{{QbAiJob.finishedAt}} IS NULL), 0)
+            AS v_reserved,
         count(*) FILTER (WHERE j.{{QbAiJob.requestedAt}} >= c.day_start) AS v_today
     FROM {{QbAiJob}} j
     CROSS JOIN clock c
     WHERE j.{{QbAiJob.requestedAt}} >= c.day_start
-       OR j.{{QbAiJob.status}} IN ('QUEUED', 'CANCELLED'))
+       OR j.{{QbAiJob.finishedAt}} IS NULL)
 SELECT
     CAST(c.v_month AS varchar(7)) AS month,
     coalesce(k.v_enabled, false) AND k.v_monthly IS NOT NULL AND k.v_daily IS NOT NULL AS enabled,
@@ -91,7 +98,8 @@ SELECT
     k.v_daily AS dailyJobs,
     j.v_today AS jobsToday,
     c.month_end AS monthEnds,
-    c.day_end AS dayEnds
+    c.day_end AS dayEnds,
+    CAST(k.v_max_count AS numeric(4, 0)) AS maxCount
 FROM clock c
 CROSS JOIN checked k
 CROSS JOIN used u

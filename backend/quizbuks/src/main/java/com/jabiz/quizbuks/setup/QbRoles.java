@@ -52,7 +52,8 @@ public final class QbRoles {
     /**
      * What the super administrator holds beyond the other two: bans, reading parameters, proposing controlled changes,
      * users and roles. No role writes parameters directly: the controlled ones change only through controlled changes
-     * (platform decision D40), and the others are only the AI model and the oldest app version. The super
+     * (platform decision D40), and the others (the oldest app version, the analytics' minimum group, the support
+     * address, the days AI candidates wait and the AI prices of the estimate) are not written by any role. The super
      * administrator proposes controlled changes but does not publish them: see {@link #PUBLISH}.
      */
     private static final List<String> SUPER = List.of(QbPermissions.SETUP, QbPermissions.ADMIN_USERS_BAN,

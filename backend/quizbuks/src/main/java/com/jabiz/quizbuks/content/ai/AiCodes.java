@@ -38,6 +38,8 @@ public final class AiCodes {
     public static final String NOT_REVIEWED = "QB_AI_NOT_REVIEWED";
     /** A text longer than the content limits allow. */
     public static final String TEXT_TOO_LONG = "QB_AI_TEXT_TOO_LONG";
+    /** More questions than the effort in force allows at once ({@link AiQuestionsJob#maxCount}). */
+    public static final String COUNT_TOO_HIGH = "QB_AI_COUNT_TOO_HIGH";
 
     // ---- a job's failures --------------------------------------------------------------------------------------
     public static final String RATE_LIMITED = "QB_AI_RATE_LIMITED";
@@ -51,11 +53,15 @@ public final class AiCodes {
     public static final String TRUNCATED = "QB_AI_TRUNCATED";
     /** None of the candidates met the content rules. */
     public static final String NO_CANDIDATES = "QB_AI_NO_CANDIDATES";
+    /** The server's configuration halts AI generation ({@code quizbuks.ai.halted}): nothing was sent. */
+    public static final String HALTED = "QB_AI_HALTED";
+    /** An operator stopped the job at the platform ({@code EXTERNAL_JOB_CANCEL}); it was charged its estimate. */
+    public static final String STOPPED = "QB_AI_STOPPED";
 
     public static final List<String> ALL = List.of(UNAVAILABLE, NOTICE_MISSING, NOTICE_REQUIRED, INPUT_TOO_LARGE, NO_SOURCE,
         MATERIAL_NOT_IN_QUIZ, QUIZ_BUSY, TOO_MANY_OPEN, DAILY_LIMIT, MONTHLY_LIMIT, GLOBAL_LIMIT, JOB_NOT_READY,
         JOB_EXPIRED, CANDIDATE_UNKNOWN, NOT_REVIEWED, TEXT_TOO_LONG, RATE_LIMITED, PROVIDER_UNAVAILABLE, AUTH,
-        REQUEST_INVALID, BAD_RESPONSE, REFUSED, TRUNCATED, NO_CANDIDATES);
+        REQUEST_INVALID, BAD_RESPONSE, REFUSED, TRUNCATED, NO_CANDIDATES, COUNT_TOO_HIGH, HALTED, STOPPED);
 
     private AiCodes() {}
 }

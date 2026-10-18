@@ -24,6 +24,10 @@ CREATE TABLE qb_ai_job (
     estimated_tokens numeric(12, 0) NOT NULL CHECK (estimated_tokens >= 0),
     input_tokens     numeric(12, 0) NOT NULL DEFAULT 0 CHECK (input_tokens >= 0),
     output_tokens    numeric(12, 0) NOT NULL DEFAULT 0 CHECK (output_tokens >= 0),
+    fallback_input_tokens  numeric(12, 0) CHECK (fallback_input_tokens >= 0),
+    fallback_output_tokens numeric(12, 0) CHECK (fallback_output_tokens >= 0),
+    cost_usd         numeric(14, 6) CHECK (cost_usd >= 0),
+    zone             varchar(64)    NOT NULL,
     attempts         numeric(4, 0),
     failure_code     varchar(100),
     failure_message  varchar(500),
@@ -38,10 +42,12 @@ CREATE TABLE qb_ai_job (
     CONSTRAINT qb_ai_job_ready CHECK (status <> 'READY' OR (candidates IS NOT NULL AND expires_at IS NOT NULL))
 );
 -- A sponsor's jobs, newest first (the limits: the day's jobs and the open ones); a quiz's (the editor's panel); the
--- daily expiry of the ready ones.
+-- daily expiry of the ready ones; everybody's unfinished ones.
 CREATE INDEX qb_ai_job_sponsor_idx ON qb_ai_job (sponsor_id, requested_at DESC);
 CREATE INDEX qb_ai_job_quiz_idx ON qb_ai_job (quiz_id, requested_at DESC);
 CREATE INDEX qb_ai_job_ready_idx ON qb_ai_job (expires_at) WHERE status = 'READY';
+-- The unfinished jobs of everybody (the global limit adds what they may still use, under qb.ai:*): few, and only these.
+CREATE INDEX qb_ai_job_open_idx ON qb_ai_job (sponsor_id) INCLUDE (estimated_tokens) WHERE finished_at IS NULL;
 
 -- What a sponsor's jobs used in a month of the deployment's zone (YYYY-MM), and one row per month for everybody
 -- (sponsor_id = '*'). Added to under the locks qb.ai:<sponsor> and qb.ai:* only.
@@ -53,6 +59,7 @@ CREATE TABLE qb_ai_usage (
     failed_jobs   numeric(9, 0)  NOT NULL CHECK (failed_jobs >= 0 AND failed_jobs <= jobs),
     input_tokens  numeric(15, 0) NOT NULL CHECK (input_tokens >= 0),
     output_tokens numeric(15, 0) NOT NULL CHECK (output_tokens >= 0),
+    cost_usd      numeric(16, 6) CHECK (cost_usd >= 0),
     version       bigint         NOT NULL,
     CONSTRAINT uk_qb_ai_usage_month UNIQUE (sponsor_id, month)
 );

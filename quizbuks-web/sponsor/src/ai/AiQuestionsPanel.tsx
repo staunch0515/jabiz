@@ -89,9 +89,11 @@ function useAiNotice(open: boolean) {
 }
 
 /** "Generate with AI": what to send and what to ask for, the notice on first use, the request. */
-function RequestDialog({ quiz, materials, open, onOpenChange }: {
+function RequestDialog({ quiz, materials, maxCount, open, onOpenChange }: {
   quiz: Quiz
   materials: Material[]
+  /** The most questions a request may ask for now (the usage card's; the server decides). */
+  maxCount: number
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
@@ -100,7 +102,7 @@ function RequestDialog({ quiz, materials, open, onOpenChange }: {
   const editing = useEditing()
   const id = useId()
   const [chosen, setChosen] = useState<string[]>(() => materials.map((m) => m.materialId))
-  const [count, setCount] = useState('5')
+  const [count, setCount] = useState(() => String(Math.min(5, maxCount)))
   const [difficulty, setDifficulty] = useState<Difficulty>('MEDIUM')
   const [language, setLanguage] = useState<AiLanguage>(() => consoleLanguage(i18n.language))
   const [avoidExisting, setAvoidExisting] = useState(true)
@@ -140,8 +142,8 @@ function RequestDialog({ quiz, materials, open, onOpenChange }: {
   const submit = (event: FormEvent) => {
     event.preventDefault()
     const n = Number(count)
-    if (!Number.isInteger(n) || n < 1 || n > AI_LIMITS.maxCount) {
-      setLocal(t('ai.dialog.countRange', { max: AI_LIMITS.maxCount }))
+    if (!Number.isInteger(n) || n < 1 || n > maxCount) {
+      setLocal(t('ai.dialog.countRange', { max: maxCount }))
       return
     }
     if (notice.data?.mustAccept && !agreed) {
@@ -193,7 +195,7 @@ function RequestDialog({ quiz, materials, open, onOpenChange }: {
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="flex flex-col gap-2">
               <Label htmlFor={`${id}-count`}>{t('ai.dialog.count')}</Label>
-              <Input id={`${id}-count`} type="number" inputMode="numeric" min={1} max={AI_LIMITS.maxCount} step={1}
+              <Input id={`${id}-count`} type="number" inputMode="numeric" min={1} max={maxCount} step={1}
                 value={count} data-testid="ai-count" onChange={(event) => setCount(event.target.value)} />
             </div>
             <div className="flex flex-col gap-2">
@@ -487,7 +489,8 @@ export function AiQuestionsPanel({ quiz, materials }: { quiz: Quiz; materials: M
         )}
         {latest?.status === 'READY' && <Review key={latest.aiJobId} job={latest} />}
       </CardContent>
-      {asking && <RequestDialog quiz={quiz} materials={materials} open onOpenChange={setAsking} />}
+      {asking && <RequestDialog quiz={quiz} materials={materials}
+        maxCount={usage.data?.maxCount ?? AI_LIMITS.maxCount} open onOpenChange={setAsking} />}
     </Card>
   )
 }

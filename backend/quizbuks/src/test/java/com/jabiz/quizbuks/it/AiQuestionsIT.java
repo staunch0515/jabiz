@@ -73,7 +73,7 @@ class AiQuestionsIT extends AiItSupport {
         assertThat(body.get("thinking").get("type").asString()).isEqualTo("adaptive");
         assertThat(body.get("output_config").get("effort").asString()).isEqualTo("medium");
         assertThat(body.get("output_config").get("format").get("type").asString()).isEqualTo("json_schema");
-        assertThat(body.get("max_tokens").asInt()).isEqualTo(ClaudeApi.MAX_TOKENS);
+        assertThat(body.get("max_tokens").asInt()).isEqualTo(ClaudeApi.maxTokens(3));
         assertThat(body.get("fallbacks").asString()).isEqualTo("default");
         StubHttpServer.Received received = CLAUDE.requests(MESSAGES).getLast();
         assertThat(received.header("x-api-key")).isEqualTo("test-only-quizbuks-claude-key");
@@ -305,7 +305,7 @@ class AiQuestionsIT extends AiItSupport {
         param(QbParams.AI_SPONSOR_DAILY_JOBS, String.valueOf(today + 1));
         try {
             CountDownLatch go = new CountDownLatch(1);
-            List<CompletableFuture<Integer>> calls = new ArrayList<>();
+            List<CompletableFuture<Map<String, Object>>> calls = new ArrayList<>();
             for (List<String> quiz : List.of(b, c)) {
                 calls.add(CompletableFuture.supplyAsync(() -> {
                     try {
@@ -313,13 +313,22 @@ class AiQuestionsIT extends AiItSupport {
                     } catch (InterruptedException e) {
                         Thread.currentThread().interrupt();
                     }
-                    return call(AiProcesses.REQUEST, token, requestInput(quiz.get(0), List.of(quiz.get(1)), 1))
-                        .expectBody(MAP).returnResult().getStatus().value();
+                    var result = call(AiProcesses.REQUEST, token, requestInput(quiz.get(0), List.of(quiz.get(1)), 1))
+                        .expectBody(MAP).returnResult();
+                    Map<String, Object> outcome = new java.util.HashMap<>();
+                    outcome.put("status", result.getStatus().value());
+                    outcome.put("body", result.getResponseBody());
+                    return outcome;
                 }));
             }
             go.countDown();
-            List<Integer> statuses = calls.stream().map(CompletableFuture::join).sorted().toList();
-            assertThat(statuses).containsExactly(200, 422);
+            List<Map<String, Object>> outcomes = calls.stream().map(CompletableFuture::join).toList();
+            assertThat(outcomes).extracting(o -> (Integer) o.get("status")).containsExactlyInAnyOrder(200, 422);
+            // The one refused is refused for the day's limit, nothing else.
+            @SuppressWarnings("unchecked")
+            Map<String, Object> problem = (Map<String, Object>) outcomes.stream()
+                .filter(o -> Integer.valueOf(422).equals(o.get("status"))).findFirst().orElseThrow().get("body");
+            assertThat(codes(problem)).containsExactly(AiCodes.DAILY_LIMIT);
             runJobs();
             assertThat(codes(refused(AiProcesses.REQUEST, token, requestInput(a.get(0), List.of(a.get(1)), 1),
                 422))).contains(AiCodes.DAILY_LIMIT);

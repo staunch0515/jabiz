@@ -22,9 +22,19 @@ public final class AiQuestionsJob {
     /** Usage metrics (per attempt, failed ones too; the platform adds them up). */
     public static final String INPUT_TOKENS = "inputTokens";
     public static final String OUTPUT_TOKENS = "outputTokens";
+    /** The part of them used by the provider's fallback model (A-10), billed at its price. */
+    public static final String FALLBACK_INPUT_TOKENS = "fallbackInputTokens";
+    public static final String FALLBACK_OUTPUT_TOKENS = "fallbackOutputTokens";
 
     /** The most questions asked at once (A-12). */
     public static final int MAX_COUNT = 20;
+    /**
+     * The most at effort {@code high}, which thinks longer for each: so that the answer fits the output asked for
+     * ({@link ClaudeApi#maxTokens}) and the two-minute request.
+     */
+    public static final int MAX_COUNT_HIGH_EFFORT = 10;
+    /** Attempts of a job: the first and two more after a time-out, 429, 5xx or 529. */
+    public static final int ATTEMPTS = 3;
     /** Unfinished jobs per sponsor (A-7). */
     public static final int MAX_OPEN = 2;
     public static final int DEFAULT_CONCURRENCY = 4;
@@ -73,6 +83,11 @@ public final class AiQuestionsJob {
         }
     }
 
+    /** The most questions a request may ask for at {@code effort}. */
+    public static int maxCount(String effort) {
+        return "high".equals(effort) ? MAX_COUNT_HIGH_EFFORT : MAX_COUNT;
+    }
+
     /**
      * The job type: five minutes an attempt (the provider's answer within the service's two minutes, with room), three
      * attempts with back-off from 10 seconds to 2 minutes (429, 5xx, time-outs; a refusal or a bad request ends it at
@@ -82,7 +97,7 @@ public final class AiQuestionsJob {
     public static ExternalJobType<Input, Result> type(int maxConcurrency) {
         return ExternalJobType.define(TYPE, Input.class, Result.class, t -> t
             .handler(AiQuestionsHandler.class).services(ClaudeService.SERVICE)
-            .timeout(Duration.ofMinutes(5)).retry(3, Duration.ofSeconds(10), Duration.ofMinutes(2))
+            .timeout(Duration.ofMinutes(5)).retry(ATTEMPTS, Duration.ofSeconds(10), Duration.ofMinutes(2))
             .maxConcurrency(maxConcurrency).maxOpenPerRequester(MAX_OPEN).oneOpenPerReference()
             .onCompleted(AiProcesses.COMPLETED).onFailed(AiProcesses.FAILED));
     }
