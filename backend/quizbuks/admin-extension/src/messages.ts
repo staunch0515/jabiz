@@ -1,9 +1,11 @@
 import { financeMenu, financeMessages } from './finance-messages'
+import { legalMenu, legalMessages } from './legal-messages'
 
 /** Texts of the QuizBuks admin extension, in every platform language (namespace EXTENSION_NAMESPACE, `app`). */
 export const messages = {
   en: {
-    menu: { group: 'QuizBuks', reviews: 'Reviews', users: 'Users', ...financeMenu.en },
+    menu: { group: 'QuizBuks', reviews: 'Reviews', users: 'Users', ...legalMenu.en, ...financeMenu.en },
+    legal: legalMessages.en,
     finance: financeMessages.en,
     common: {
       notSet: 'Not set',
@@ -172,6 +174,14 @@ export const messages = {
       attempts: 'Attempts',
       attemptsTable: 'Attempts of the user',
       noAttempts: 'No attempts.',
+      consents: 'Terms accepted',
+      consentsTable: 'Acceptances of the terms and the privacy policy',
+      noConsents: 'No acceptance recorded.',
+      consentKind: 'Text',
+      consentVersion: 'Version',
+      acceptedAt: 'Accepted',
+      consentSource: 'Where',
+      consentEntry: 'Front end',
       rewards: 'Rewards',
       rewardsTable: 'Rewards of the user’s attempts',
       noRewards: 'No rewards.',
@@ -206,7 +216,8 @@ export const messages = {
     },
   },
   zh: {
-    menu: { group: 'QuizBuks', reviews: '审核', users: '用户', ...financeMenu.zh },
+    menu: { group: 'QuizBuks', reviews: '审核', users: '用户', ...legalMenu.zh, ...financeMenu.zh },
+    legal: legalMessages.zh,
     finance: financeMessages.zh,
     common: {
       notSet: '未设置',
@@ -375,6 +386,14 @@ export const messages = {
       attempts: '答题',
       attemptsTable: '用户的答题',
       noAttempts: '没有答题。',
+      consents: '已同意的条款',
+      consentsTable: '对条款与隐私政策的同意',
+      noConsents: '没有同意记录。',
+      consentKind: '文本',
+      consentVersion: '版本',
+      acceptedAt: '同意时间',
+      consentSource: '同意场景',
+      consentEntry: '前端',
       rewards: '奖励',
       rewardsTable: '用户答题的奖励',
       noRewards: '没有奖励。',
@@ -409,7 +428,8 @@ export const messages = {
     },
   },
   ja: {
-    menu: { group: 'QuizBuks', reviews: '審査', users: 'ユーザー', ...financeMenu.ja },
+    menu: { group: 'QuizBuks', reviews: '審査', users: 'ユーザー', ...legalMenu.ja, ...financeMenu.ja },
+    legal: legalMessages.ja,
     finance: financeMessages.ja,
     common: {
       notSet: '未設定',
@@ -578,6 +598,14 @@ export const messages = {
       attempts: '回答',
       attemptsTable: 'ユーザーの回答',
       noAttempts: '回答はありません。',
+      consents: '同意した規約',
+      consentsTable: '利用規約とプライバシーポリシーへの同意',
+      noConsents: '同意の記録はありません。',
+      consentKind: '文書',
+      consentVersion: '版',
+      acceptedAt: '同意日時',
+      consentSource: '同意した場面',
+      consentEntry: 'フロントエンド',
       rewards: '報酬',
       rewardsTable: 'ユーザーの回答の報酬',
       noRewards: '報酬はありません。',

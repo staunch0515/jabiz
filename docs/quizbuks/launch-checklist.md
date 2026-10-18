@@ -11,6 +11,9 @@
 - [ ] **隐私政策**（个人信息的取得与利用目的、第三方提供：Stripe、邮件服务商、Google 登录；保存期间；海外传输）已发布，App 与商家后台可达
 - [ ] **利用条款**（答题人、商家各自的条款；商家入驻时同意的版本）已发布
 - [ ] 特定商取引法的表示（商家充值是有偿的）已发布
+- [ ] 上面四种文本都是需求方或律师提供的**正式文本**（日文为准据文本、英文一并提供），经 `QB_LEGAL_PUBLISH` 发布且已生效：页面上不再出现 `[TEST PLACEHOLDER]`；
+      正式模式启动日志中没有 `legal:TERMS_APP` / `legal:TERMS_SPONSOR` / `legal:PRIVACY` 的告警（`operations.md` §3 第 9 步）
+- [ ] 帮助中心的问答（账号、答题规则、奖励与转账；商家的入驻、发布、充值与费用）已发布，支持邮箱 `qb.support.email` 已设；`JABIZ_PUBLIC_ENABLED` 未设为 `false`
 - [ ] 保留期：导出文件、汇总凭证与收据的保留（L-4：10 年）已实施或已有书面的替代做法（`backend/quizbuks/CLAUDE.md`"导出文件与收据还没有 `RetentionPolicy`"）
 
 ## 性能

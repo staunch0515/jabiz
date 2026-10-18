@@ -31,6 +31,7 @@ export interface Page<Row> {
 
 /** One page of a template's rows, mapped, counting all of them when `count`. */
 async function page<T>(template: string, map: (row: Row) => T, options: {
+  params?: Record<string, unknown>
   filters?: Filter[]
   sorts?: { field: string; asc: boolean }[]
   offset: number
@@ -392,6 +393,30 @@ export async function searchUsers(q: string, offset: number, limit: number): Pro
   const answer = await runQuery<Row>(TEMPLATE.users, { params: { q: q.trim() || null }, offset, limit })
   return answer.items.map(toUserRow)
 }
+
+/** A row of `qb.admin.consents`: one acceptance of a version of the terms or the privacy policy (Q7b). */
+export interface ConsentRow {
+  consentId: string
+  kind: string
+  versionNo: number | null
+  acceptedAt: string | null
+  /** The front end it was given in (`app`, `sponsor`), if known. */
+  entry: string | null
+  source: string
+  effectiveAt: string | null
+}
+
+/** A page of the user's acceptances, newest first. */
+export const readConsents = (userId: string, offset: number, limit: number) =>
+  page(TEMPLATE.consents, (row): ConsentRow => ({
+    consentId: String(row.consentId),
+    kind: String(row.kind ?? ''),
+    versionNo: num(row.versionNo),
+    acceptedAt: str(row.acceptedAt),
+    entry: str(row.entry),
+    source: String(row.source ?? ''),
+    effectiveAt: str(row.effectiveAt),
+  }), { params: { userId }, offset, limit })
 
 /** A row of `qb.admin.attempts`. */
 export interface AttemptRow {

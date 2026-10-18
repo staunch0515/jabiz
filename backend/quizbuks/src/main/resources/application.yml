@@ -47,6 +47,8 @@ jabiz:
       "[QB_ATTEMPT_SAVE]": { per-user: 120, period: 1m }
       "[QB_VIEW]": { per-user: 300, period: 1m }
       "[QB_PUBLICATION_SAVE]": { per-user: 60, period: 1m }
+      # Q7b: accepting the terms after sign-in (a person does it once per change).
+      "[QB_CONSENT_ACCEPT]": { per-user: 10, period: 1m }
   # The key signing the integrity seals (docs/design/21-audit-retention.md section 2), from the environment only:
   # Base64, at least 32 bytes. Startup fails without it. Keep a copy: without it the existing seals cannot be verified.
   integrity:
@@ -146,6 +148,12 @@ jabiz:
   reports:
     pdf:
       fonts: ${JABIZ_REPORTS_PDF_FONTS:}
+  # Anonymous reading (docs/design/15-public-access.md, decision D17; Q7b D-Q7-6): the help centre and the published
+  # terms, privacy policy and notice, through the public templates qb.public.* only (GET /api/public/queries/{id}).
+  # No public file field exists, so no file is public. JABIZ_PUBLIC_ENABLED=false turns every /api/public/** off (404);
+  # the App's and the sponsor console's help and legal pages then show their error.
+  public:
+    enabled: ${JABIZ_PUBLIC_ENABLED:true}
   i18n:
     # Error messages in English when Accept-Language names none of the application's languages.
     default-locale: en

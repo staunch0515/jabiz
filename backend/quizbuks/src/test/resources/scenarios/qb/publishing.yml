@@ -23,7 +23,7 @@ steps:
       p14: "$.proposals[13]", p15: "$.proposals[14]", p16: "$.proposals[15]", p17: "$.proposals[16]",
       p18: "$.proposals[17]", p19: "$.proposals[18]", p20: "$.proposals[19]", p21: "$.proposals[20]",
       p22: "$.proposals[21]", p23: "$.proposals[22]", p24: "$.proposals[23]",
-      p25: "$.proposals[24]", p26: "$.proposals[25]", p27: "$.proposals[26]" }
+      p25: "$.proposals[24]", p26: "$.proposals[25]", p27: "$.proposals[26]", p28: "$.proposals[27]" }
   - note: A second administrator publishes the parameters and the review rule.
     process: CONTROL_CHANGE_PUBLISH@latest
     actor: { id: publisher, permissions: [control.publish] }
@@ -106,6 +106,9 @@ steps:
   - process: CONTROL_CHANGE_PUBLISH@latest
     actor: { id: publisher, permissions: [control.publish] }
     input: { changeId: "${p27}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p28}" }
 
   - note: Sponsor A is onboarded (Q2); a content administrator approves.
     actor: { id: sponsor-a, permissions: [qb.sponsor.me] }

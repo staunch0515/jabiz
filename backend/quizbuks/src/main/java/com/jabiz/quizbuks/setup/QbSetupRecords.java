@@ -63,6 +63,10 @@ public class QbSetupRecords {
         return "sod-rule:" + code;
     }
 
+    static String legalDraft(String kind) {
+        return "legal-draft:" + kind;
+    }
+
     @Bean
     EntityDefinition qbSetupRecordEntity() {
         return RECORD_ENTITY;

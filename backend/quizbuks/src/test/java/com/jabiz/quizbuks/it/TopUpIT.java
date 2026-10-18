@@ -177,18 +177,32 @@ class TopUpIT extends TopUpItSupport {
         deliver(event(eventId(), "checkout.session.completed", completed(openTopUp(sponsor, 1000))));
         StripeSettings live = new StripeSettings(true,
             "2025-03-31.basil", Duration.ofHours(1), null, "https://q.example.com/sponsor/");
-        var refused = new LiveModeDataCheck(live, false, environment, entityDefinitions)
-            .check();
+        var refused = moneyProblems(new LiveModeDataCheck(live, false, environment, entityDefinitions, clock)
+            .check());
         assertThat(refused).singleElement().satisfies(problem -> {
             assertThat(problem.severity()).isEqualTo(CheckProblem.Severity.ERROR);
             assertThat(problem.message()).contains("test-mode top-up").doesNotContain(" 0 test-mode");
         });
-        assertThat(new LiveModeDataCheck(live, true, environment, entityDefinitions)
-            .check()).singleElement().satisfies(problem -> assertThat(problem.severity())
+        assertThat(moneyProblems(new LiveModeDataCheck(live, true, environment, entityDefinitions, clock)
+            .check())).singleElement().satisfies(problem -> assertThat(problem.severity())
                 .isEqualTo(CheckProblem.Severity.WARNING));
+        // Q7b: nothing is published in this schema, so live mode warns of the three texts as well.
+        assertThat(new LiveModeDataCheck(live, true, environment, entityDefinitions, clock).check())
+            .filteredOn(problem -> problem.location().startsWith("legal:"))
+            .extracting(CheckProblem::location, CheckProblem::severity)
+            .containsExactly(org.assertj.core.groups.Tuple.tuple("legal:TERMS_APP", CheckProblem.Severity.WARNING),
+                org.assertj.core.groups.Tuple.tuple("legal:TERMS_SPONSOR", CheckProblem.Severity.WARNING),
+                org.assertj.core.groups.Tuple.tuple("legal:PRIVACY", CheckProblem.Severity.WARNING));
         // Test mode does not look.
         assertThat(new LiveModeDataCheck(new StripeSettings(
             false, "2025-03-31.basil", Duration.ofHours(1), null, "x"), false, environment,
-            entityDefinitions).check()).isEmpty();
+            entityDefinitions, clock).check()).isEmpty();
+    }
+
+    @Autowired
+    java.time.Clock clock;
+
+    private static java.util.List<CheckProblem> moneyProblems(java.util.List<CheckProblem> problems) {
+        return problems.stream().filter(problem -> !problem.location().startsWith("legal:")).toList();
     }
 }

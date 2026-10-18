@@ -8,6 +8,8 @@ import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.quizbuks.country.CountryCatalog;
 import com.jabiz.quizbuks.country.CountryData;
 import com.jabiz.quizbuks.country.QbCountries;
+import com.jabiz.quizbuks.messaging.LegalDrafts;
+import com.jabiz.quizbuks.messaging.QbLegal;
 import com.jabiz.quizbuks.wallet.QbLedger;
 import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.approval.ApprovalEntities;
@@ -36,7 +38,8 @@ import java.util.function.Function;
  * {@code QB_SETUP} prepares a QuizBuks installation (docs/quizbuks/plans/Q1-skeleton.md): the roles of
  * {@link QbRoles} with their permissions, the ledger accounts of {@link QbLedger}, the countries of
  * {@link CountryCatalog}, the business parameters of {@link QbParams} and the approval rules of
- * {@link QbApprovalRules} (Q4) and the separation of duties of {@link QbSodRules} (Q10b).
+ * {@link QbApprovalRules} (Q4), the separation of duties of {@link QbSodRules} (Q10b) and the drafts of the legal
+ * texts, marked test placeholders ({@link LegalDrafts}, Q7b).
  *
  * <p>It adds only what has never existed. Every item it makes or finds is written to {@link QbSetupRecords}, and an
  * item with a record is never added again: a role an administrator deleted or a permission revoked stays gone, and
@@ -69,10 +72,13 @@ public final class QbSetupProcesses {
      *                         proposed, for another administrator to publish
      * @param proposals        the controlled changes proposed ({@code CONTROL_CHANGE_PUBLISH} takes their ids), in
      *                         the order of {@code paramsProposed}, then of {@code rulesProposed}
+     * @param legalDraftsCreated the kinds of legal text whose draft was created (Q7b: marked test placeholders,
+     *                         {@link LegalDrafts}); nothing is published
+     * @param legalDraftIds    the keys of those drafts, in the same order ({@code QB_LEGAL_PUBLISH} takes them)
      */
     public record SetupOutput(List<String> rolesCreated, int permissionsAdded, List<String> accountsOpened,
         int countriesAdded, List<String> paramsCreated, List<String> paramsProposed, List<String> rulesProposed,
-        List<String> proposals) {}
+        List<String> proposals, List<String> legalDraftsCreated, List<String> legalDraftIds) {}
 
     static final String RECORDS = "records";
     static final String ROLES = "roles";
@@ -84,6 +90,7 @@ public final class QbSetupProcesses {
     static final String COUNTRIES = "countries";
     static final String RULES = "rules";
     static final String SOD_RULES = "sodRules";
+    static final String LEGAL_DOCS = "legalDocs";
     static final String OPEN = "open";
     static final String CREATE = "create";
     static final String PROPOSE = "propose";
@@ -137,6 +144,8 @@ public final class QbSetupProcesses {
             .step("Load the separation of duties", QueryEntities.of(ApprovalEntities.SOD_RULE_DATASET, ctx -> all(
                 new QueryPredicate.In("ruleCode", codes(QbSodRules.ALL, r -> ((QbSodRules.Rule) r).code()))),
                 SOD_RULES))
+            .step("Load the drafts of the legal texts", QueryEntities.of(QbLegal.defaultDataset(QbLegal.DOC),
+                ctx -> all(new QueryPredicate.In("kind", new ArrayList<>(QbLegal.KINDS))), LEGAL_DOCS))
             .compute("Add what has never existed", (metadata, ctx) -> setup(ctx, catalog.countries()))
             .step("Open the ledger accounts", CallProcess.forEach(LedgerProcesses.OPEN_ACCOUNT, 1,
                 ctx -> listOf(ctx, OPEN), null))
@@ -151,7 +160,8 @@ public final class QbSetupProcesses {
         List<String> proposals = listOf(ctx, PROPOSED).stream()
             .map(change -> ((ControlChanges.ChangeOutput) change).changeId()).toList();
         return new SetupOutput(made.rolesCreated(), made.permissionsAdded(), made.accountsOpened(),
-            made.countriesAdded(), made.paramsCreated(), made.paramsProposed(), made.rulesProposed(), proposals);
+            made.countriesAdded(), made.paramsCreated(), made.paramsProposed(), made.rulesProposed(), proposals,
+            made.legalDraftsCreated(), made.legalDraftIds());
     }
 
     static void setup(ProcessContext ctx, List<CountryData.Country> catalog) {
@@ -177,6 +187,7 @@ public final class QbSetupProcesses {
         list(ctx, COUNTRIES).forEach(country -> found.add(QbSetupRecords.country(country.get("code"))));
         list(ctx, RULES).forEach(rule -> found.add(QbSetupRecords.approvalRule(rule.get("ruleCode"))));
         list(ctx, SOD_RULES).forEach(rule -> found.add(QbSetupRecords.sodRule(rule.get("ruleCode"))));
+        list(ctx, LEGAL_DOCS).forEach(doc -> found.add(QbSetupRecords.legalDraft(doc.get("kind"))));
 
         Recorder recorder = new Recorder(ctx, seen, found);
         List<String> created = new ArrayList<>();
@@ -270,13 +281,28 @@ public final class QbSetupProcesses {
             }
         }
 
+        // Q7b: one draft per kind of legal text, a marked test placeholder (the real texts come from the owner).
+        List<String> drafts = new ArrayList<>();
+        List<String> draftIds = new ArrayList<>();
+        for (String kind : QbLegal.KINDS) {
+            if (recorder.isNew(QbSetupRecords.legalDraft(kind))) {
+                LegalDrafts.Draft draft = LegalDrafts.of(kind);
+                Map<String, Object> row = new LinkedHashMap<>();
+                row.put("kind", kind);
+                row.put("title", draft.title());
+                row.put("body", draft.body());
+                draftIds.add(String.valueOf(ctx.changes().insert(QbLegal.DOC, row)));
+                drafts.add(kind);
+            }
+        }
+
         ctx.put(OPEN, List.copyOf(open));
         ctx.put(CREATE, List.copyOf(create));
         ctx.put(PROPOSE, List.copyOf(propose));
         ctx.put(OUTPUT, new SetupOutput(List.copyOf(created), added,
             open.stream().map(LedgerProcesses.OpenAccountInput::accountCode).toList(), countriesAdded,
             create.stream().map(ParamProcesses.CreateInput::key).toList(), List.copyOf(proposed), List.copyOf(rules),
-            List.of()));
+            List.of(), List.copyOf(drafts), List.copyOf(draftIds)));
     }
 
     /**
