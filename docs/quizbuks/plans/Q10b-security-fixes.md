@@ -174,3 +174,5 @@ e2e（打包的 jar、Stripe 桩、Mailpit，放宽登录限流）41 个中 40 �
 
 **语句预算**：管理员恢复多一次读取与一把锁，不在答题的锁内；`AttemptStatementBudgetIT` 不变。
 
+
+**验证**（核查修正之后）：`:quizbuks:check` 545 个测试全部通过；`app` / `sponsor` 的 lint、typecheck、test（104、115 个）、`e2e` 的 typecheck、`qb/` 两份相同；后台扩展 `ext:check`（65 个）；`tools/quizbuks/test/*.sh`；e2e 41 个全部通过。
