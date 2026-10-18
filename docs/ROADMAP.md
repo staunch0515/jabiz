@@ -4106,4 +4106,10 @@ QB 提交锁内 48 → 16（16p-1）的明细：恢复超时 1 → 0（T1）、�
 5. L5：不受保护的管理员权限为启动错误；不含两项改权限的权限时警告。L6：行操作按对象隐藏不做（记入 D51）；`approval.read` 能读事实（记入 D51）。L7：`Combobox` 常驻提示区、加载中旧选项不能选。
 6. 应用流程声明 `orPermissions` 时启动警告；Javadoc 的条目号。
 
-**QuizBuks 需要的修改**（不在本分支）：`QB_ADMIN_SUPER` 增加 `security.protected-change.decide` 与 `approval.read`；`QB_SETUP` 在建立期结束前给好（顺序见报告）；相关 IT 改用新权限。
+**QuizBuks 需要的修改**（不在本分支；把本阶段合入 `1.2/quizbuks` 时一起做）：
+- `QbRoles`：`QB_ADMIN_SUPER` 增加 `security.protected-change.decide`（审批任命）与 `approval.read`（读审批的事实与受保护变更的列表；不在 `qb.sod.security-administration` 中）。
+- `QB_SETUP` 的顺序：给角色加这两项权限必须在建立期结束之前（或在 16r 的版本上）完成——已有两位 `QB_ADMIN_SUPER` 之后再加，`security.protected-change.decide` 本身要审批而无人能批；
+  已上线的部署先以旧版本运行一次新的 `QB_SETUP`，再升级平台。
+- IT：合入后 `:quizbuks:test` 575 个中 7 个失败（`BanIT` 2、`BanAdminRolesIT` 1、`TakedownIT` 4），都是测试直接写入 `QB_ADMIN_SUPER` 的分配时得到 422 `PROTECTED_CHANGE_REQUIRES_APPROVAL`：
+  两位超级管理员出现后建立期按 D51 结束。测试支持（`AccountItSupport.userWithRole` / `assignRole`）应在第二位超级管理员之后改用 `SEC_USER_ROLE_ASSIGN` + 另一位超级管理员以 `APPROVAL_DECIDE` 批准，
+  或这些测试类以 `jabiz.security.protected-grants.enabled=false` 运行（它们不是在测四眼）；任命内容与财务管理员的批准由职责分离的豁免支持（`ProtectedGrantSodIT` 按 QuizBuks 的规则复现）。
