@@ -72,6 +72,13 @@ class MailPreferencesIT extends SecurityItSupport {
             .getResponseBody();
     }
 
+    /** The problem as text with the template's name replaced and the per-request identifiers left out. */
+    private static String normalized(Map<String, Object> problem, String template) {
+        Map<String, Object> copy = new java.util.TreeMap<>(problem);
+        copy.keySet().removeAll(Set.of("instance", "requestId", "timestamp", "traceId"));
+        return copy.toString().replace(template, "X");
+    }
+
     @Test
     void eachEntryListsItsOwnNotificationsByTheirNames() {
         String user = user();
@@ -107,9 +114,8 @@ class MailPreferencesIT extends SecurityItSupport {
             assertThat(violations(problem)).singleElement().satisfies(v -> assertThat(v.get("field"))
                 .isEqualTo("template"));
         }
-        assertThat(String.valueOf(violations(foreign).getFirst().get("message"))
-            .replace("it.offers", "X")).isEqualTo(String.valueOf(violations(unknown).getFirst().get("message"))
-            .replace("it.nothing", "X"));
+        // The whole answer, but for the name and what differs per request.
+        assertThat(normalized(foreign, "it.offers")).isEqualTo(normalized(unknown, "it.nothing"));
         assertThat(query("SELECT 1 FROM sec_user_mail_preference_version WHERE user_id = ?::uuid", user)).isEmpty();
 
         // At the portal it is the user's to set; the administration still does not list it.

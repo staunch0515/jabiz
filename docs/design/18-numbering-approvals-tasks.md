@@ -339,12 +339,28 @@ HTML 部分转义全部文本与正文中的原始 HTML，纯文本部分为原�
 - `{unsubscribeUrl}` = `jabiz.mail.base-url` + `jabiz.mail.unsubscribe-path`（缺省 `/mail/unsubscribe`，通用后台的 `MailUnsubscribePage`，无需登录）+ `?token=`；令牌为 `JwtService` 的
   `jabiz-unsub+jwt`（用户 + 模板，签名，无过期；轮换 `JABIZ_JWT_SECRET` 使旧链接失效），不能代替访问令牌或挑战令牌，反之亦然。
 - `POST /api/auth/mail/unsubscribe {token}`：匿名（令牌即凭证）、幂等，204；篡改或其他类型的令牌、非 NOTIFICATION 模板 → 422 `TOKEN_INVALID`。
-- 登录用户：`GET /api/auth/mail/preferences`（NOTIFICATION 模板及是否接收）、`POST /api/auth/mail/preferences {template, subscribed}`。后台页面在 15c 或 16c 加入。
+- 登录用户：`GET /api/auth/mail/preferences`（NOTIFICATION 模板及是否接收）、`POST /api/auth/mail/preferences {template, subscribed}`。
+
+**按入口的收件偏好与显示名**（16s，决策 D49）：
+
+- 模板可声明适用的登录入口：`MailTemplate.define(名, t -> t.category(NOTIFICATION).entries("app", …))`；不声明即全部入口（16s 之前的行为）。
+  入口名同 `jabiz.security.entries.<名>`，须为可用的入口（启动检查 `MAIL`，错误）。入口只决定**谁在偏好中看到它**，不限制发送：`SendMail` 照旧发给流程给出的用户，
+  退订链接照旧对任何入口有效（邮件是发给该用户的）。
+- 显示名：消息 `mail.<名>.name`（应用所选的每种语言）。NOTIFICATION 模板缺少某种语言的显示名时启动检查 `MAIL` **告警**（不报错：16s 之前的应用照常启动），
+  偏好中以模板名代替。TRANSACTIONAL 不在偏好中，不需要显示名。
+- `GET /api/auth/mail/preferences` 只列**调用者令牌所属入口**适用的 NOTIFICATION 模板，每项增加 `displayName`（请求语言 → 应用缺省语言 → 模板名），
+  原有字段 `template`、`subscribed` 不变。`POST` 对其他入口的模板与不存在、非 NOTIFICATION 的名称给出**同样的** 422 `INVALID_VALUE`（只差调用者自己提交的名称），
+  回答不透露其他入口有哪些模板。偏好仍按用户 × 模板保存，与入口无关：在另一个入口登录的同一用户看到的是那个入口的模板及其同样的选择。
+- `GET /api/auth/account/locale`（16s）：本人的邮件语言 `{locale, effective, languages}`——`locale` 为所选（未选为 null），`effective` 为邮件实际使用的语言
+  （所选且在应用语言中，否则缺省语言，同 `SendMail`），`languages` 为应用语言。只读调用者自己的用户；开发请求头的操作人不是用户，403。
+- 前端：`@jabiz/client` 的 `getMailPreferences` / `setMailPreference` / `getMailLanguage` / `setMailLanguage` / `mailLanguageOffer`，`@jabiz/ui` 的积木
+  `MailPreferences` 与 `offerMailLanguage`（12 §10、§12）。通用后台的安全设置页有"邮件"一节，示范门户的账户页同样使用它；切换界面语言时只**询问**是否同步邮件语言，从不静默修改。
+- 示范：`commerce.order-shipped` 声明 `.entries("portal")`（客户在门户登录），后台用户的偏好中没有它。
 
 **查询**：平台实体 `MailMessage`（`sys_mail_message`，`mail.read`，`processOnlyWrites()`，经变更集写入并审计）与 `MailAttempt`
 （`sys_mail_attempt`，每次尝试一条；最新一条即消息的状态；数据视图 `readOnly`）。尝试与令牌是投递日志，由平台直接插入，不进审计（21 §1），靠封存防篡改。实体不能连接其他表，所以"最近一次尝试的结果"是 `MailAttempt` 中按 `messageId` 筛选的最新一行；场景回放把两者列入快照即可看到。
 
-**启动检查 `MAIL`**（`com.jabiz.runtime.mail.MailChecks`，含 §5.4 的检查）：模板名唯一；每种语言都有标题与正文；占位符与声明一致（未声明的占位符、未使用的参数或令牌、
+**启动检查 `MAIL`**（`com.jabiz.runtime.mail.MailChecks`，含 §5.4 的检查）：模板名唯一；每种语言都有标题与正文（NOTIFICATION 缺显示名 `mail.<名>.name` 为告警，16s）；模板声明的入口须为可用入口（16s）；占位符与声明一致（未声明的占位符、未使用的参数或令牌、
 NOTIFICATION 缺 `{unsubscribeUrl}`；`{entryUrl}` 而模板没有参数 `entry`）；`{entryUrl.<入口>}` 的入口不是可用的登录入口；开启邮件时需 `jabiz.mail.from`、
 邮件服务器，以及有模板链接到应用（`{baseUrl}`、`{entryUrl…}`、NOTIFICATION）时的 `jabiz.mail.base-url`。
 
@@ -360,4 +376,4 @@ NOTIFICATION 缺 `{unsubscribeUrl}`；`{entryUrl}` 而模板没有参数 `entry`
 | `sec_user_mail_preference_version` | 时态，平台实体 `SecUserMailPreference`，唯一（用户, 模板） |
 
 示范：`backend/app` 的 `ORDER_SHIP` 给客户主数据 `Customer`（管理员维护，可选 `userId`）中有账号且有地址的客户发 NOTIFICATION `commerce.order-shipped`（三语）——收件人来自主数据，不来自下单输入；场景
-`commerce/order_shipped_mail`。测试：core `MailTemplateTest`、`MailRendererTest`；runtime `MailChecksTest`、`MailSenderTimeoutsTest`、`JwtServiceTest`；app `MailIT`、`MailDisabledIT`；前端 `MailUnsubscribePage.test`。
+`commerce/order_shipped_mail`。测试：core `MailTemplateTest`、`MailRendererTest`；runtime `MailChecksTest`、`MailSenderTimeoutsTest`、`JwtServiceTest`；app `MailIT`、`MailDisabledIT`、`MailPreferencesIT`（16s）；前端 `MailUnsubscribePage.test`、`mail.test`（client）、`MailPreferences.test`（ui，含 axe）、`AccountSecurityPage.test`。

@@ -1494,3 +1494,39 @@ P-8 原写"`false` 即逐条执行（16p-1 的局部合并同样受它控制）"
 - L3：`PasswordHashingLimitIT` 直接占住计算的许可，登录 503 `AUTH_BUSY`、不写登录记录、不计失败。L4：见第 3 条与 14 §5.1。
 - L5：链路本地地址去掉作用域后按 /64；没有地址的请求共用键 `unknown`（10 §4.1）。
 - 端到端测试的管理员从本机登录数十次：CI 的 `e2e` 作业只放宽"地址 + 名字"的桶（`JABIZ_SECURITY_SIGN_IN_RATE_LIMIT_PER_USER_ADDRESS`、`_USER_BURST`），地址的桶照缺省。
+
+## D49 收件偏好按登录入口列出、邮件模板的显示名、界面语言与邮件语言分开
+
+（D48 已由进行中的 `1.2/phase-16r-controls` 使用。）
+
+**背景**：QuizBuks Q7 计划的平台缺口 P1（`1.2/quizbuks-7-plan` 的 `docs/quizbuks/plans/Q7-messages-legal.md`，Q7-13 选 A，2026-10-18 确认）：
+`GET /api/auth/mail/preferences` 把**全部** NOTIFICATION 模板列给每个用户（答题人会看到"发布预算不足"这类商家邮件），只有模板名、没有给人看的名字；
+`@jabiz/client` 没有收件偏好与邮件语言的函数，也没有读取邮件语言的接口；通用后台没有偏好页；切换界面语言不改邮件语言（`POST /api/auth/account/locale` 无人调用）。
+本条补充 D35（第 4、5 条）与 D36（登录入口），不取代任何决策（阶段 16s）。
+
+**决策**
+1. **模板声明适用的登录入口**：`MailTemplate.define(名, t -> t.….entries("app", …))`，不声明即全部入口（与之前相同，兼容）。入口名须为可用的入口（启动检查 `MAIL`，错误）。
+   收件偏好接口只列调用者**令牌所属入口**适用的 NOTIFICATION 模板；设置偏好时，其他入口的模板与不存在、不可退订的名称得到同样的 422 `INVALID_VALUE`，
+   回答不透露其他入口的模板。入口只决定偏好中列出什么：发送（`SendMail`）与退订链接不看入口；偏好仍按用户 × 模板保存。
+2. **显示名**是消息 `mail.<名>.name`（应用所选的每种语言）。偏好接口按请求语言给出（缺则缺省语言，再缺则模板名），作为新增字段 `displayName`；
+   NOTIFICATION 模板缺某种语言的显示名时启动检查 `MAIL` 告警（不报错，已有应用照常启动）。
+3. **界面语言与邮件语言分开**：界面语言属于浏览器（`localStorage`），邮件语言属于账号（`SecUser.locale`），切换界面语言**不**静默修改邮件语言。
+   平台提供询问：`@jabiz/client` 的 `mailLanguageOffer(lang)` 判断是否值得询问（已登录、应用有该语言、邮件当前用的是另一种），`@jabiz/ui` 的
+   `offerMailLanguage(lang)` 以带按钮的提示询问，用户接受才 `setMailLanguage`。前端在自己的语言切换中显式调用（通用后台的顶栏已调用）。
+4. 新增 `GET /api/auth/account/locale`（本人的 `locale`、实际使用的 `effective` 与可选的 `languages`）；`@jabiz/client` 增加 `getMailPreferences`、`setMailPreference`、
+   `getMailLanguage`、`setMailLanguage`；`@jabiz/ui` 增加积木 `MailPreferences`（开关列表与邮件语言选择），通用后台安全设置页与示范门户账户页使用它。
+5. 线 1.2 内兼容：接口只新增字段与 GET，原字段与行为不变（只是偏好列表按入口过滤）；`MailTemplate` 保留原四参构造（全部入口）。
+
+**理由**：模板属于哪类用户是声明方最清楚的事实，写在模板上与名称、类别放在一起，平台据此过滤，应用不必在前端维护名单（Q7-13 的方案 B 会把名单与名字分散到每个 SPA）；
+显示名走消息资源，与标题、正文同样有三语检查。邮件语言是给离线收件人的设定，界面语言是这台设备上的偏好，二者常常不同（在公司电脑上用英文界面、邮件读中文），
+静默同步会让用户在不知情时改掉账号设置，因此只询问。
+
+**放弃的方案**：①按角色或权限过滤（模板与入口的对应才是"谁会看到这个前端"，同一角色可在多个入口登录；角色是数据，启动时无法检查）；
+②在偏好接口的 POST 中接受其他入口的模板（会让一个入口的用户经接口试探其他入口的模板名）；③界面语言切换时自动改邮件语言（静默修改账号设置）；
+④把显示名写在模板声明中（Java 代码中写死一种语言，不能按应用所选语言检查）。
+
+**实现说明（16s）**：`MailTemplate` 新增组件 `entries`（`Set<String>`，空即全部）、`appliesTo(entry)`（空入口按 `admin`）、`nameKey()`；
+`MailUnsubscribeController` 以令牌的 `entry` 过滤并以 `MessageCatalog` 取显示名，POST 中其他入口的模板在运行流程前以与流程相同的违规（`MailProcesses.notANotification`）拒绝；
+`AccountController` 读 `sec_user_version` 的最新版本（同 `SendMail`）；`MailChecks` 增加两项检查。示范的 `commerce.order-shipped` 声明 `.entries("portal")`。
+没有迁移。测试：`MailPreferencesIT`（按入口列出与显示名、其他入口的模板与未知名称同样拒绝、只改本人的偏好、退订链接不看入口、读写本人的邮件语言）、
+`MailChecksTest`、`MailTemplateTest`、`mail.test`（client）、`MailPreferences.test`（ui，含亮暗两种外观的 axe）、`AccountSecurityPage.test`、`AppLayout.test`、门户 `App.test`。

@@ -57,7 +57,8 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
 - **待办与通知**（见 18 §5）：需要人去做的事用步骤 `CreateTask`（指派给用户或权限，带来源键）登记、`CloseTasks` 关闭；不另建待办表。
   邮件只经待办的通知、单据的发送（`DOCUMENT_SEND`，22 §5）与事务邮件（流程步骤 `SendMail`，模板为 `MailTemplate` Bean 与消息 `mail.<名>.subject|body`，
   验证与重置链接用发送时才生成的一次性令牌：模板 `.token(用途, 有效期)`、流程中以 `MailTokens.consume` 使用，18 §5.6、决策 D35）；
-  `jabiz.mail.enabled` 缺省关闭；不在流程中直接发邮件。
+  `jabiz.mail.enabled` 缺省关闭；不在流程中直接发邮件。可退订的模板（`NOTIFICATION`）以 `.entries(入口…)` 声明给哪些登录入口的用户（缺省全部，偏好只列令牌入口的），
+  显示名写在消息 `mail.<名>.name`；收件偏好与邮件语言只经平台接口与积木 `MailPreferences`，切换界面语言只询问、不静默改邮件语言（`offerMailLanguage`，18 §5.6、决策 D49）。
 - **不可变数据**：优先使用 `record` 和不可变集合（`List.copyOf` / `Map.copyOf`）。
 - **错误**：领域错误使用现有异常体系，经 `GlobalExceptionHandler` 转为 `ProblemDetail`：
   400 校验失败（附 `violations`）、404 不存在、409 并发冲突、422 业务规则拒绝、503 查询超时（`QUERY_TIMEOUT`，由数据库按时限中止，03 §1）、503 热门锁的队列已满或排队超时（`PROCESS_BUSY` 带 `Retry-After`，06 §4.2）、429 限流（`RATE_LIMITED`）。错误码可多语言（见设计文档）。
