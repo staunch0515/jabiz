@@ -1,6 +1,10 @@
 package com.jabiz.runtime.test;
 
 import com.tngtech.archunit.base.DescribedPredicate;
+import com.tngtech.archunit.core.domain.Dependency;
+import com.tngtech.archunit.lang.ArchCondition;
+import com.tngtech.archunit.lang.ConditionEvents;
+import com.tngtech.archunit.lang.SimpleConditionEvent;
 import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.domain.JavaMethodCall;
 import com.tngtech.archunit.lang.ArchRule;
@@ -11,9 +15,13 @@ import java.net.Socket;
 import java.net.URL;
 import java.net.URLConnection;
 import java.nio.channels.NetworkChannel;
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 
 /**
@@ -148,6 +156,50 @@ public final class PlatformArchRules {
             .orShould().dependOnClassesThat().haveFullyQualifiedName("com.jabiz.runtime.DatasetEntityManager")
             .because("handlers and blocking steps make external calls only; data goes in and out through processes "
                 + "(decision D38)");
+    }
+
+    /**
+     * External job handlers and blocking steps of the business packages do not reach the platform's files
+     * ({@code com.jabiz.runtime.file}: the reactive storage, the upload pipeline, the file processes) (decision D50):
+     * a handler reads the files its job was given through {@code ExternalJobContext.files()}, which the platform
+     * checked against what the requester may read, and returns the files it makes with its result, which the platform
+     * stores as uploads. Anything else would read files nobody checked, or store files past the upload checks.
+     */
+    public static ArchRule handlersReadFilesThroughTheirContext(String... businessPackages) {
+        DescribedPredicate<JavaClass> handlers = JavaClass.Predicates.resideInAnyPackage(businessPackages)
+            .and(JavaClass.Predicates.assignableTo("com.jabiz.external.ExternalJobHandler")
+                .or(JavaClass.Predicates.assignableTo("com.jabiz.process.BlockingStep")))
+            .as("external job handlers and blocking steps of " + String.join(", ", businessPackages));
+        return classes().that(handlers)
+            .should(new ArchCondition<JavaClass>("not reach com.jabiz.runtime.file, directly or through classes of "
+                + String.join(", ", businessPackages)) {
+                @Override
+                public void check(JavaClass handler, ConditionEvents events) {
+                    // The handler and the business classes it uses, and theirs, transitively: a helper of the
+                    // application does not hide the platform's storage from the rule.
+                    DescribedPredicate<JavaClass> business = JavaClass.Predicates.resideInAnyPackage(businessPackages);
+                    Deque<JavaClass> open = new ArrayDeque<>(List.of(handler));
+                    Set<String> seen = new HashSet<>();
+                    while (!open.isEmpty()) {
+                        JavaClass current = open.pop();
+                        if (!seen.add(current.getName())) {
+                            continue;
+                        }
+                        for (Dependency dependency : current.getDirectDependenciesFromSelf()) {
+                            JavaClass target = dependency.getTargetClass();
+                            if (target.getPackageName().startsWith("com.jabiz.runtime.file")) {
+                                events.add(SimpleConditionEvent.violated(handler, handler.getName() + " reaches "
+                                    + target.getName() + (current.equals(handler) ? "" : " through "
+                                    + current.getName())));
+                            } else if (business.test(target)) {
+                                open.push(target);
+                            }
+                        }
+                    }
+                }
+            })
+            .because("a job's files come through its context and go back with its result (decision D50); the rule "
+                + "is a guard rail, not a sandbox: reflection or java.nio on the storage directory are not seen");
     }
 
         /** The platform's own ways of starting processes and of acting as someone, which only the platform uses. */

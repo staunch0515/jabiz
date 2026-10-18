@@ -137,6 +137,8 @@
 ### 3.4 审批：流程 `APPROVAL_DECIDE`
 
 输入 `{requestId, decision: APPROVE | REJECT, reason}`，流程权限 `approval.decide`，作为请求的行操作显示（`actsOn`，待审批时）。
+受保护的安全变更（对象 `jabiz.security.protected-change`，10 §16）改用 `security.protected-change.decide`：入口接受两者之一（备选权限），取得请求后按对象要求其中之一，
+`approval.decide` 不能决定这类请求，`security.protected-change.decide` 也不能决定其他请求（D51；`ApprovalDecisionCheck.decidePermission`）。
 
 | 检查 | 不满足时 |
 |---|---|

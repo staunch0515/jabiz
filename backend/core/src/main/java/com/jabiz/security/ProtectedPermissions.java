@@ -10,8 +10,8 @@ import java.util.regex.Pattern;
 /**
  * The protected permissions (decision D48 item 1; docs/design/10-security.md section 16): giving a user one of them
  * (through a role assignment or a role's new permission), and resetting the credentials of a user who holds one,
- * takes effect only after a second administrator approves. {@code *} holds every permission and is always protected,
- * whatever the configuration says.
+ * takes effect only after a second administrator approves. {@code *} holds every permission and, like
+ * {@link #DECIDE}, is always protected, whatever the configuration says (decision D51).
  */
 public final class ProtectedPermissions {
 
@@ -19,12 +19,19 @@ public final class ProtectedPermissions {
     public static final Pattern PERMISSION = Pattern.compile("[A-Za-z0-9._:*-]{1,200}");
 
     /**
+     * The permission that decides protected changes (decision D51): the second pair of eyes of this very check, so
+     * always protected.
+     */
+    public static final String DECIDE = "security.protected-change.decide";
+
+    /**
      * The default: who holds them changes rights ({@code security.user-role.write}, {@code security.role.write}),
-     * decides the four eyes of everything else ({@code approval.decide}, {@code control.publish}), or writes the books
-     * and the business parameters alone ({@code ledger.post}, {@code ledger.reverse}, {@code platform.param.write}).
+     * decides the four eyes of everything else ({@code approval.decide}, {@code control.publish}) and of this
+     * ({@link #DECIDE}), or writes the books and the business parameters alone ({@code ledger.post},
+     * {@code ledger.reverse}, {@code platform.param.write}).
      */
     public static final List<String> DEFAULT = List.of("*", "security.user-role.write", "security.role.write",
-        "approval.decide", "control.publish", "ledger.post", "ledger.reverse", "platform.param.write");
+        "approval.decide", DECIDE, "control.publish", "ledger.post", "ledger.reverse", "platform.param.write");
 
     private final Set<String> permissions;
 
@@ -32,7 +39,7 @@ public final class ProtectedPermissions {
         this.permissions = permissions;
     }
 
-    /** The permissions configured; empty for {@link #DEFAULT}. {@code *} is always added. */
+    /** The permissions configured; empty for {@link #DEFAULT}. {@code *} and {@link #DECIDE} are always added. */
     public static ProtectedPermissions of(Collection<String> configured) {
         Set<String> set = new TreeSet<>();
         if (configured == null || configured.stream().allMatch(p -> p == null || p.isBlank())) {
@@ -41,6 +48,7 @@ public final class ProtectedPermissions {
             configured.stream().filter(p -> p != null && !p.isBlank()).map(String::strip).forEach(set::add);
         }
         set.add(ALL);
+        set.add(DECIDE);
         return new ProtectedPermissions(Set.copyOf(set));
     }
 

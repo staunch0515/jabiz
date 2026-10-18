@@ -60,6 +60,13 @@ docker compose -f deploy/quizbuks/docker-compose.yml exec app cat /var/lib/jabiz
   理由商家可见；封禁商家时其进行中的发布在同一事务中被暂停，解封不恢复。
 - **保留期**（第 13 项）：分录导出、明细段、外部凭证号、充值、收据与入站 Stripe 事件保留 10 年，自会计年度末起算（平台的保留期报表 `GET /api/retention`）。
 
+## 受保护的授权（平台 16u）
+
+- 平台 16u（决策 D51）按改权限的权限（`security.user-role.write`、`security.role.write`）数管理员：QuizBuks 的管理员即超级管理员。首个管理员之外有两位超级管理员时建立期结束，
+  此后分配管理员角色等受保护的变更由一位超级管理员申请、另一位以 `security.protected-change.decide` 审批。**部署后再执行一次 `QB_SETUP`**：超级管理员角色新增
+  `security.protected-change.decide` 与 `approval.read`。已有两位以上超级管理员的安装须在升级**之前**给角色加上这两项（或以 `JABIZ_SECURITY_PROTECTEDGRANTS_ENABLED=false` 启动一次执行 `QB_SETUP`），
+  步骤与新装系统的顺序见 `docs/quizbuks/operations.md` §3。
+
 ## 本机演示（一条命令）
 
 只为在本机试用：`tools/quizbuks/local-demo.sh` 构建并启动打包的 jar（三个前端在其中），附 Stripe 桩与 Mailpit（不连 Stripe，邮件不出本机），

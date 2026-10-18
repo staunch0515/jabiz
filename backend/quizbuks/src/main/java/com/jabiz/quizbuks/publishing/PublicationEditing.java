@@ -387,6 +387,7 @@ final class PublicationEditing {
         next.put("revision", BigDecimal.valueOf(revision));
         next.put("editedAt", ctx.opTime());
         ctx.changes().update(QbPublications.PUBLICATION, publication.id(), publication.version(), next);
+        PublicationNotices.note(ctx, publication, values);
         if (status != null) {
             schedule(ctx, publication, status.toString());
             card(ctx, status.toString());

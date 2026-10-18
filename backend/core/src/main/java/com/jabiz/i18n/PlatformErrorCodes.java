@@ -99,8 +99,18 @@ public final class PlatformErrorCodes {
     public static final String EXTERNAL_CALL_FAILED = "EXTERNAL_CALL_FAILED";
     /** 422: an external job's input holds a secret, which would be stored with the job (decision D38). */
     public static final String EXTERNAL_JOB_INPUT_SECRET = "EXTERNAL_JOB_INPUT_SECRET";
-    /** 422: an external job's input is larger than the platform stores (64 KiB of JSON; decision D38). */
+    /**
+     * 422: an external job's input is larger than its type stores (64 KiB of JSON unless declared, at most 1 MiB;
+     * decisions D38, D50).
+     */
     public static final String EXTERNAL_JOB_INPUT_TOO_LARGE = "EXTERNAL_JOB_INPUT_TOO_LARGE";
+    /**
+     * 422: a file given to an external job does not exist, is of a policy the job does not read, or the requester may
+     * not read it; one answer for all three, so that it tells nothing of other people's files (decision D50).
+     */
+    public static final String EXTERNAL_JOB_INPUT_FILE = "EXTERNAL_JOB_INPUT_FILE";
+    /** 422: an external job is given more files, or a larger one, than its type reads (decision D50). */
+    public static final String EXTERNAL_JOB_INPUT_FILE_LIMIT = "EXTERNAL_JOB_INPUT_FILE_LIMIT";
     /** 422: the external job to cancel has finished, or was cancelled already (decision D38 item 5). */
     public static final String EXTERNAL_JOB_FINISHED = "EXTERNAL_JOB_FINISHED";
     /**
@@ -307,6 +317,7 @@ public final class PlatformErrorCodes {
         LEDGER_ACCOUNT_HAS_CHILDREN, LEDGER_CURRENCY_INVALID, LEDGER_RATE_INVALID, LEDGER_FX_AMOUNT_MISMATCH,
         LEDGER_UNBALANCED_IN_CURRENCY, REPORT_TOO_LARGE, PROCESS_READ_TOO_LARGE, QUERY_TIMEOUT, REPORT_SUPERSEDE_MISMATCH,
         EXTERNAL_JOB_INPUT_SECRET, EXTERNAL_JOB_INPUT_TOO_LARGE, EXTERNAL_JOB_FINISHED, EXTERNAL_JOB_LIMIT,
+        EXTERNAL_JOB_INPUT_FILE, EXTERNAL_JOB_INPUT_FILE_LIMIT,
         REPORT_ALREADY_SUPERSEDED, DOCUMENT_NOT_SINGLE, DOCUMENT_TOO_LARGE,
         DOCUMENT_RECIPIENT_NOT_ALLOWED, DOCUMENT_NO_RECIPIENT, MAIL_DISABLED, MAIL_NO_ADDRESS, TOKEN_INVALID, PASSWORD_INCORRECT, PASSWORD_NOT_SET, SESSION_NOT_FOUND, SESSION_UNKNOWN,
         OIDC_ACCOUNT_EXISTS, REAUTHENTICATION_REQUIRED, REAUTHENTICATION_UNAVAILABLE, IDENTITY_IN_USE, IDENTITY_PROVIDER_LINKED, IDENTITY_LINK_UNAVAILABLE,

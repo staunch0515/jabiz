@@ -103,7 +103,10 @@
   **只能由子流程运行的流程**（如 `QB_QUIZ_RELEASE_FILES`）声明 `subProcessOnly()`（D41），权限不授予任何角色（`qb.content.system`），流程内照样再查自己的前提。
   **谁能启动流程**（D41）：QuizBuks 的事件消费者、定时任务、回调接续点与审批结果（发布与入驻）一律 `internal()`，只作子流程的用 `subProcessOnly()`，由人发起的照常开放；
   事件与定时任务只运行 `internal()` 流程（启动检查），不用 `.manualToo()`，除非该开放流程确实也由人手工运行。测试中以系统身份运行内部流程用 `ContentItSupport.runAsSystem`，场景中用 `actor: {id: system}`。
-  事务邮件模板在 `identity.AccountMails`（文案 `mail.<名>.subject|body`）；链接到某个前端用平台的 `{entryUrl.<入口>}`（商家邮件为 `[…]({entryUrl.sponsor})`，D43 第 4 条），不用参数传地址。`quizbuks.links.sponsor` / `quizbuks.links.app` 只给 Stripe 的返回地址。
+  事务邮件模板在 `identity.AccountMails`（账户）与 `messaging.NotificationMails`（Q7a：转账、收款账户、充值、发布）（文案 `mail.<名>.subject|body|name`，`name` 是偏好中显示的名字，平台 D49）；链接到某个前端用平台的 `{entryUrl.<入口>}`（商家邮件为 `[…]({entryUrl.sponsor})`，D43 第 4 条），不用参数传地址。`quizbuks.links.sponsor` / `quizbuks.links.app` 只给 Stripe 的返回地址。
+  **邮件只由事件的消费者发**（`messaging.MailProcesses`，`internal()`，权限 `qb.messaging.system` 不授予任何角色）：业务流程只在自己的事务中发布事件（发布的状态变化为 `qb.publication.status`，由 `publishing.PublicationNotices` 判定哪些迁移值得通知），
+  消费者再读记录本身（不信事件中的数字；如转账邮件只在转账仍是 `SENT` / `FAILED` 时发，结束邮件在下架后或商家被封禁时不发）、跳过没有邮箱的用户与过时的事件（通知 3 天、事务邮件 14 天，`NotificationMails.MAX_AGE` / `TRANSACTIONAL_MAX_AGE`），以平台的 `SendMail` 记下邮件；答题与支付的锁内不发信。可退订的（`NOTIFICATION`）只有商家的两种，声明 `.entries("sponsor")`（欢迎邮件 `.entries("app")`）；新增可退订的模板时同样声明入口与三语的 `mail.<名>.name`。
+  会被反复触发的通知按收件人与种类在 `QbMailNotice` 中节流（每 24 小时至多一封，锁 `qb.mail-notice:<收件人>`，不取发布锁或钱包锁）：预算不足一封列出全部预算不足的发布，窗口内的再次不足只记 `pending`、不丢弃，由逐项任务 `qb.mail-funds-short-due`（每小时，模板 `qb.system.mail-funds-short-due`，每项 `QB_MAIL_FUNDS_SHORT_DUE`）在窗口过后重读卡片、仍不足才发；收款账户受限的邮件同样每人每 24 小时至多一封。邮件中的时刻一律按 `jabiz.fiscal-year-zone`（日本时间）并标时区简称（`messaging.MailValues`），不写死时区。
 - **支付**（`wallet`，`docs/quizbuks/plans/Q6-payments.md`）：
   - **全部 Stripe 调用都是异步外部作业**（`wallet.TopUpJobs`，处理器只经外部服务 `stripe` 与 `StripeApi`：自写表单编码与解析，不用 SDK；以 `Stripe-Version` 固定版本），
     不在事务中等外部调用，不放在提交后步骤（其重试不持久化）。作业的完成与失败流程、入站事件的消费流程一律 `internal()`，权限 `qb.wallet.system` 不授予任何角色。
@@ -166,7 +169,9 @@
 - **外部密钥**（`STRIPE_*`、`OPENAI_API_KEY`）只来自环境变量（`deploy/quizbuks/README.md`）；测试与 `dev` 用固定的假值，仓库中没有真实密钥。
 - **部署的安全设置**（Q10b，`deploy/quizbuks/README.md`"密钥与部署"）：镜像入口脚本在平台密钥或首个管理员密码缺少时拒绝启动（只有 `QB_LOCAL_SECRETS=true` 的本机才生成，compose 缺省 `false`，正式模式一律不生成，管理员密码不打印；生成时导出 `QB_SECRETS_GENERATED=true`，评审 L5）；
   启动检查 `wallet.DeploySafetyCheck`（类别 `QUIZBUKS`）：可信代理为空时正式模式报错（除非 `quizbuks.deploy.direct-exposure=true`）、过宽的网段一律报错（IPv4 短于 /8、IPv6 短于 /32、整个 IPv4 的映射，前缀照平台读法，评审 L6），正式模式下关闭管理二次验证或 `QB_SECRETS_GENERATED=true` 报错，`dev` 只在回环地址与本机邮件地址下启动；
-  数据库密码没有缺省值。职责分离规则由 `QB_SETUP` 提出（`setup.QbSodRules`），`QbRoles` 的角色不得违反它们（`QbRolesTest`）；超级管理员不做审批。
+  数据库密码没有缺省值。职责分离规则由 `QB_SETUP` 提出（`setup.QbSodRules`），`QbRoles` 的角色不得违反它们（`QbRolesTest`）；超级管理员不做业务审批（不持有 `approval.decide`）。
+  **受保护的授权**（平台 16u，D51）：管理员按 `security.user-role.write` / `security.role.write` 计，即超级管理员；两位之后建立期结束，受保护的变更由一位超级管理员申请、另一位以 `security.protected-change.decide` 审批（`docs/quizbuks/operations.md` §3）。
+  `QB_SETUP` 直接写入角色的权限，建立期结束后给已有持有人的角色加受保护的权限会被拒（先经 `SEC_ROLE_PERMISSION_ADD` 审批）；测试以 `AccountItSupport.assignRole` 照此分配（第二位超级管理员之后由另一位批准）。
 
 ## 5. 前端（`quizbuks-web/`，`docs/quizbuks/plans/QP-pages.md`）
 

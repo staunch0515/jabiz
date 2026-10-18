@@ -7,6 +7,8 @@ import com.jabiz.external.ExternalJobHandler;
 import com.jabiz.external.ExternalJobResult;
 import com.jabiz.external.ExternalJobType;
 import com.jabiz.external.ExternalService;
+import com.jabiz.file.FilePolicy;
+import com.jabiz.file.MediaTypes;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.runtime.check.CheckProblem;
@@ -69,6 +71,8 @@ class ExternalJobChecksTest {
         beans.registerBean("public", ProcessDefinition.class, () -> process("PUBLIC", ExternalJobCompletion.class,
             false));
         beans.registerBean("wrong", ProcessDefinition.class, () -> process("WRONG", In.class, true));
+        beans.registerBean("image", FilePolicy.class, () -> FilePolicy.define("it.image").allow(MediaTypes.PNG)
+            .maxBytes(FilePolicy.MB).permissions("it.upload", "it.read").build());
         beans.refresh();
         ProcessRegistry processes = new ProcessRegistry((ObjectProvider) beans.getBeanProvider(ProcessDefinition.class));
         ExternalServiceRegistry services = new ExternalServiceRegistry(List.of(ExternalService.define("demo-ai",
@@ -111,6 +115,26 @@ class ExternalJobChecksTest {
             .onCompleted("DONE").onFailed("FAILED"));
         assertThat(problems(quick)).containsExactly("EXTERNAL | job it.quick | timeout: PT30S must be longer than the "
             + "request timeout PT30S of service demo-ai");
+    }
+
+    /** The files of a job are of declared policies, and the output policy takes files of the promised size (D50). */
+    @Test
+    void filePoliciesAreDeclaredAndTakeTheOutputFiles() {
+        ExternalJobType<In, Out> good = ExternalJobType.define("it.files", In.class, Out.class, t -> t
+            .handler(Handler.class).inputFiles(2, 5 * FilePolicy.MB, "it.image").outputFiles("it.image", 1,
+                FilePolicy.MB).onCompleted("DONE").onFailed("FAILED"));
+        assertThat(problems(good)).isEmpty();
+        ExternalJobType<In, Out> bad = ExternalJobType.define("it.badfiles", In.class, Out.class, t -> t
+            .handler(Handler.class).inputFiles(1, 10, "it.image", "it.ghost").outputFiles("it.none", 1, 10)
+            .onCompleted("DONE").onFailed("FAILED"));
+        ExternalJobType<In, Out> tooLarge = ExternalJobType.define("it.large", In.class, Out.class, t -> t
+            .handler(Handler.class).outputFiles("it.image", 1, 2 * FilePolicy.MB)
+            .onCompleted("DONE").onFailed("FAILED"));
+        assertThat(problems(bad, tooLarge)).containsExactly(
+            "EXTERNAL | job it.badfiles | inputFiles: no file policy it.ghost is declared",
+            "EXTERNAL | job it.badfiles | outputFiles: no file policy it.none is declared",
+            "EXTERNAL | job it.large | outputFiles: files of up to 2097152 bytes, but policy it.image takes at most "
+                + "1048576");
     }
 
     @Test

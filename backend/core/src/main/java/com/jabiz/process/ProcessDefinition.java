@@ -40,6 +40,9 @@ import java.util.function.Function;
  * @param verifiedEmail whether callers need a verified e-mail address (docs/design/10-security.md section 15;
  *                    decision D36 item 3); checked at the entry points like the permissions
  * @param admission   where top-level runs queue before their transaction (decision D45); null for no queue
+ * @param alternativePermissions another set of permission codes that also lets a caller start the process, all of
+ *                    them, for callers lacking {@code permissions}; empty for none. The process itself decides what
+ *                    each set lets it do (decision D51: {@code APPROVAL_DECIDE} for protected changes)
  */
 public record ProcessDefinition<I, O, C extends ProcessContext>(
     String name,
@@ -57,8 +60,18 @@ public record ProcessDefinition<I, O, C extends ProcessContext>(
     ActsOn actsOn,
     MfaRequirement mfa,
     boolean verifiedEmail,
-    Admission<I> admission
+    Admission<I> admission,
+    Set<String> alternativePermissions
 ) {
+
+    /** A definition without alternative permissions. */
+    public ProcessDefinition(String name, int version, String description, Class<I> inputType, Class<O> outputType,
+        Class<C> contextType, ContextFactory<I, C> contextFactory, Function<C, O> outputMapper,
+        List<StepDefinition<?, C>> steps, Set<String> permissions, boolean deprecated, ProcessAccess access,
+        ActsOn actsOn, MfaRequirement mfa, boolean verifiedEmail, Admission<I> admission) {
+        this(name, version, description, inputType, outputType, contextType, contextFactory, outputMapper, steps,
+            permissions, deprecated, access, actsOn, mfa, verifiedEmail, admission, Set.of());
+    }
 
     /** A definition that does not queue before its transaction. */
     public ProcessDefinition(String name, int version, String description, Class<I> inputType, Class<O> outputType,
@@ -105,11 +118,33 @@ public record ProcessDefinition<I, O, C extends ProcessContext>(
         mfa = mfa == null ? MfaRequirement.NONE : mfa;
         access = access == null ? ProcessAccess.OPEN : access;
         permissions = permissions == null ? Set.of() : Set.copyOf(permissions);
+        alternativePermissions = alternativePermissions == null ? Set.of() : Set.copyOf(alternativePermissions);
         for (String permission : permissions) {
             if (permission.isBlank()) {
                 throw new IllegalArgumentException("Process " + name + ": permission codes must not be blank");
             }
         }
+        for (String permission : alternativePermissions) {
+            if (permission.isBlank()) {
+                throw new IllegalArgumentException("Process " + name + ": permission codes must not be blank");
+            }
+        }
+        if (!alternativePermissions.isEmpty() && permissions.isEmpty()) {
+            throw new IllegalArgumentException("Process " + name + ": alternative permissions need permissions");
+        }
+    }
+
+    /**
+     * The permissions a caller holding what {@code holds} says starts the process with: {@link #permissions} when it
+     * holds them all; otherwise {@link #alternativePermissions} when declared and all held; otherwise
+     * {@link #permissions} (which the caller then lacks).
+     */
+    public Set<String> permissionsFor(java.util.function.Predicate<String> holds) {
+        if (permissions.stream().allMatch(holds) || alternativePermissions.isEmpty()
+            || !alternativePermissions.stream().allMatch(holds)) {
+            return permissions;
+        }
+        return alternativePermissions;
     }
 
     public static <I, O, C extends ProcessContext> ProcessDefinition<I, O, C> define(
@@ -158,7 +193,7 @@ public record ProcessDefinition<I, O, C extends ProcessContext>(
     public ProcessDefinition<I, O, C> withPermissions(String... codes) {
         return new ProcessDefinition<>(name, version, description, inputType, outputType, contextType,
             contextFactory, outputMapper, steps, new LinkedHashSet<>(Arrays.asList(codes)), deprecated, access,
-            actsOn, mfa, verifiedEmail, admission);
+            actsOn, mfa, verifiedEmail, admission, Set.of());
     }
 
     /** This definition acting on {@code entity}, whose primary key is the input component {@code input}. */
@@ -173,7 +208,7 @@ public record ProcessDefinition<I, O, C extends ProcessContext>(
     public ProcessDefinition<I, O, C> actsOn(String entity, String input, Consumer<ActsOn.Builder> condition) {
         return new ProcessDefinition<>(name, version, description, inputType, outputType, contextType,
             contextFactory, outputMapper, steps, permissions, deprecated, access,
-            ActsOn.of(entity, input, condition), mfa, verifiedEmail, admission);
+            ActsOn.of(entity, input, condition), mfa, verifiedEmail, admission, alternativePermissions);
     }
 
     /** This definition run as the system only (decision D41; {@link ProcessAccess#INTERNAL}). */
@@ -185,7 +220,7 @@ public record ProcessDefinition<I, O, C extends ProcessContext>(
     public ProcessDefinition<I, O, C> withAccess(ProcessAccess kind) {
         return new ProcessDefinition<>(name, version, description, inputType, outputType, contextType,
             contextFactory, outputMapper, steps, permissions, deprecated, kind, actsOn, mfa, verifiedEmail,
-            admission);
+            admission, alternativePermissions);
     }
 
     /** Whether the process runs as the system only ({@link ProcessAccess#INTERNAL}, decision D41). */
@@ -202,13 +237,14 @@ public record ProcessDefinition<I, O, C extends ProcessContext>(
     public ProcessDefinition<I, O, C> withMfa(MfaRequirement requirement) {
         return new ProcessDefinition<>(name, version, description, inputType, outputType, contextType,
             contextFactory, outputMapper, steps, permissions, deprecated, access, actsOn, requirement, verifiedEmail,
-            admission);
+            admission, alternativePermissions);
     }
 
     /** This definition requiring (or not) a verified e-mail address of its callers (decision D36 item 3). */
     public ProcessDefinition<I, O, C> withVerifiedEmail(boolean required) {
         return new ProcessDefinition<>(name, version, description, inputType, outputType, contextType,
-            contextFactory, outputMapper, steps, permissions, deprecated, access, actsOn, mfa, required, admission);
+            contextFactory, outputMapper, steps, permissions, deprecated, access, actsOn, mfa, required, admission,
+            alternativePermissions);
     }
 
     /**
@@ -218,6 +254,6 @@ public record ProcessDefinition<I, O, C extends ProcessContext>(
     public ProcessDefinition<I, O, C> withAdmission(String family, Function<I, ?> key) {
         return new ProcessDefinition<>(name, version, description, inputType, outputType, contextType,
             contextFactory, outputMapper, steps, permissions, deprecated, access, actsOn, mfa, verifiedEmail,
-            new Admission<>(family, key));
+            new Admission<>(family, key), alternativePermissions);
     }
 }

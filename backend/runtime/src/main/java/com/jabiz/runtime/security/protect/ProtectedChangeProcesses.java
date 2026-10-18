@@ -268,6 +268,9 @@ public class ProtectedChangeProcesses {
             // Every change of their credentials, with who made it and when: each user's creation always kept, the
             // middle left out when long (AssessProtectedChange.keepEnds).
             facts.put("history", String.join(" | ", described.history()));
+            if (!described.exemptions().isEmpty()) {
+                facts.put("sodExempt", fact(String.join("; ", described.exemptions())));
+            }
         }
         String reference = switch (kind) {
             case ProtectedChangeEntities.USER_ROLE -> user + " ← " + role + " (" + gained + ")";

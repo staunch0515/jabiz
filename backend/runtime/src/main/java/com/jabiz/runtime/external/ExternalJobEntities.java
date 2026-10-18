@@ -2,6 +2,8 @@ package com.jabiz.runtime.external;
 
 import com.jabiz.dataset.DatasetDefinition;
 import com.jabiz.entity.EntityDefinition;
+import com.jabiz.entity.MaskStyle;
+import com.jabiz.runtime.file.FilePermissions;
 import com.jabiz.entity.TemporalRole;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -9,8 +11,8 @@ import org.springframework.context.annotation.Configuration;
 
 /**
  * Asynchronous external jobs as platform entities (docs/design/11-ledger-events-jobs.md section 4a; decision D38):
- * {@code ExternalJob} (one row of {@code sys_external_job}, without its input), {@code ExternalJobAttempt} and
- * {@code ExternalJobUsage}. The platform inserts these rows itself, as a log of what the executor did (like the mail
+ * {@code ExternalJob} (one row of {@code sys_external_job}, without its input), {@code ExternalJobAttempt},
+ * {@code ExternalJobUsage} and {@code ExternalJobFile} (the files a job read and produced, decision D50). The platform inserts these rows itself, as a log of what the executor did (like the mail
  * attempts: not entity data, so no audit record); their datasets are read-only and need {@code external-job.read}.
  * The input and the result are not fields: they may be personal and are read by the job's processes only. A job's
  * status, which several tables make up, is read through {@code GET /api/external-jobs/{id}}.
@@ -31,8 +33,14 @@ public class ExternalJobEntities {
     static final String USAGE_TABLE = "sys_external_job_usage";
     static final String CANCEL_TABLE = "sys_external_job_cancel";
     static final String OUTCOME_TABLE = "sys_external_job_outcome";
+    static final String FILE_TABLE = "sys_external_job_file";
+
+    /** The files a job read and produced (decision D50): which job produced a file stays known after it is gone. */
+    public static final String FILE = "ExternalJobFile";
+    public static final String FILE_DATASET = "urn:jabiz:dataset:platform:ExternalJobFile";
 
     static final String ATTEMPT_OUTCOMES = "urn:jabiz:dict:external-job:attempt-outcome";
+    static final String FILE_DIRECTIONS = "urn:jabiz:dict:external-job:file-direction";
 
     static final int MAX_ROWS = 1000;
 
@@ -93,6 +101,47 @@ public class ExternalJobEntities {
             .sorts("attemptNo", "metric")
             .defaultSort("attemptNo", false));
     });
+
+    public static final EntityDefinition FILE_ENTITY = EntityDefinition.define(FILE, eb -> {
+        eb.physicalTable(FILE_TABLE);
+        eb.primaryKey("jobFileId");
+        eb.field("jobFileId", f -> f.physicalColumn("job_file_id").immutable(true).required(true).generated(true)
+            .asSemanticIdentity("urn:jabiz:entity:platform:external-job-file"));
+        eb.field("jobId", f -> f.physicalColumn("job_id").immutable(true).required(true).asReference(JOB));
+        eb.field("direction", f -> f.physicalColumn("direction").immutable(true).required(true)
+            .asCode(FILE_DIRECTIONS, "INPUT", "OUTPUT"));
+        eb.field("position", f -> f.physicalColumn("position").immutable(true).required(true).asNumeric(9, 0));
+        eb.field("attemptNo", f -> f.physicalColumn("attempt_no").immutable(true).asNumeric(9, 0));
+        eb.field("outputKey", f -> f.physicalColumn("output_key").immutable(true).asText(64));
+        // Which file a job produced tells, with the job's requester, who uploaded it and when: the readers of jobs
+        // (external-job.read) see the file and its digest only with file.read, like the uploader of a file with
+        // private metadata (decisions D47, D50). Their names are their own: the values of properties named like a
+        // masked field are kept out of every operation record, and "fileId" or "sha256" are in many.
+        eb.field("linkedFileId", f -> f.physicalColumn("file_id").immutable(true).required(true).asText(36)
+            .masked(FilePermissions.READ, MaskStyle.ALL));
+        eb.field("policy", f -> f.physicalColumn("policy").immutable(true).required(true).asText(100));
+        eb.field("sizeBytes", f -> f.physicalColumn("size_bytes").immutable(true).required(true).asNumeric(19, 0));
+        eb.field("linkedFileSha256", f -> f.physicalColumn("sha256").immutable(true).required(true).asText(64)
+            .masked(FilePermissions.READ, MaskStyle.ALL));
+        eb.field("recordedTime", f -> f.physicalColumn("recorded_time").immutable(true).required(true)
+            .asTemporal(TemporalRole.SYSTEM_RECORDED));
+        eb.listView("default", lv -> lv
+            .columns("jobId", "direction", "attemptNo", "outputKey", "linkedFileId", "policy", "sizeBytes",
+                "recordedTime")
+            .filters("jobId", "direction", "linkedFileId", "policy", "recordedTime")
+            .sorts("recordedTime", "position")
+            .defaultSort("recordedTime", false));
+    });
+
+    @Bean
+    EntityDefinition externalJobFileEntity() {
+        return FILE_ENTITY;
+    }
+
+    @Bean
+    DatasetDefinition externalJobFileDataset(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
+        return dataset(FILE_DATASET, FILE, poolRef);
+    }
 
     @Bean
     EntityDefinition externalJobEntity() {
