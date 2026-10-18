@@ -14,13 +14,14 @@ import java.util.List;
  * <ul>
  *   <li>Transactional (always sent): to takers, a transfer sent or failed and a payout account Stripe holds back; to
  *       sponsors, a top-up received and a publication approved, sent back or taken down.</li>
- *   <li>Notifications (each sponsor may turn them off): a publication short of funds (at most one per publication in
- *       {@link #FUNDS_SHORT_INTERVAL}) and a publication ended. They are the sponsor console's
+ *   <li>Notifications (each sponsor may turn them off): publications short of funds (at most one per sponsor in
+ *       {@link #FUNDS_SHORT_INTERVAL}, naming all of them) and a publication ended. They are the sponsor console's
  *       ({@code entries("sponsor")}): a taker's mail preferences never list them.</li>
  * </ul>
  * No mail for rewards, announcements or changed terms: those are in the app only (Q7-12). Links go to each entry's
- * front end by {@code {entryUrl.app}} / {@code {entryUrl.sponsor}} (decision D43 item 4); amounts are formatted by the
- * process ("1,234 Kudos"), the parameters being stored as text.
+ * front end by {@code {entryUrl.app}} / {@code {entryUrl.sponsor}} (decision D43 item 4); amounts ("1,234 Kudos") and
+ * times (in {@code jabiz.fiscal-year-zone}, labelled with the zone's short name, "JST") are formatted by the process,
+ * the parameters being stored as text ({@link MailValues}).
  */
 public final class NotificationMails {
 
@@ -52,9 +53,13 @@ public final class NotificationMails {
     public static final MailTemplate PUBLICATION_TAKEN_DOWN = MailTemplate.define("qb.publication.taken-down", t -> t
         .category(MailCategory.TRANSACTIONAL).param("name", "reason"));
 
-    /** A sponsor's wallet could not pay a reward of a publication, which takes no new attempts until topped up. */
+    /**
+     * A sponsor's wallet could not pay a reward: their publications short of funds take no new attempts until topped
+     * up. One mail names them all ({@code publications}).
+     */
     public static final MailTemplate PUBLICATION_FUNDS_SHORT = MailTemplate.define("qb.publication.funds-short",
-        t -> t.category(MailCategory.NOTIFICATION).entries("sponsor").param("name", "pendingCount", "pendingAmount"));
+        t -> t.category(MailCategory.NOTIFICATION).entries("sponsor")
+            .param("publications", "pendingCount", "pendingAmount"));
 
     /** A sponsor's publication ended by its time, its winners or its budget. */
     public static final MailTemplate PUBLICATION_ENDED = MailTemplate.define("qb.publication.ended", t -> t
@@ -64,7 +69,10 @@ public final class NotificationMails {
         TOPUP_PAID, PUBLICATION_APPROVED, PUBLICATION_REJECTED, PUBLICATION_TAKEN_DOWN, PUBLICATION_FUNDS_SHORT,
         PUBLICATION_ENDED);
 
-    /** At most one "short of funds" mail per publication in this time: a wallet may run dry and be topped up often. */
+    /**
+     * At most one "short of funds" mail per sponsor in this time: a wallet may run dry and be topped up often, and a dry
+     * wallet leaves every live publication of the sponsor short.
+     */
     public static final Duration FUNDS_SHORT_INTERVAL = Duration.ofHours(24);
 
     /**

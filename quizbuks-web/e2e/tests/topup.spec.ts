@@ -71,7 +71,7 @@ for (const appearance of ['light', 'dark'] as const) {
     await page.goto('/sponsor/account')
     const preferences = page.getByTestId('account-mail')
     await expect(preferences.getByTestId('mail-preference')).toHaveCount(2)
-    await expect(preferences).toContainText('Publication short of funds')
+    await expect(preferences).toContainText('Publications short of funds')
     await expect(preferences).toContainText('Publication ended')
     await expectAccessible(page, at('sponsor account with mail preferences'))
   })

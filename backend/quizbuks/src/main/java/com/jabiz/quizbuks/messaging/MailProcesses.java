@@ -51,9 +51,9 @@ import java.util.function.Function;
  *   <li>{@value #PAYOUT_ACCOUNT}: {@code qb.payout-account.restricted}, to the taker while the account is still held
  *       back;</li>
  *   <li>{@value #TOPUP}: {@code qb.topup.paid}, to the sponsor;</li>
- *   <li>{@value #PUBLICATION}: {@code qb.publication.status}, to the sponsor, the template by the kind of move; a
- *       publication short of funds only while it still is, and at most once per
- *       {@link NotificationMails#FUNDS_SHORT_INTERVAL} (under {@link QbMessaging#noticeLock}).</li>
+ *   <li>{@value #PUBLICATION}: {@code qb.publication.status}, to the sponsor, the template by the kind of move; short
+ *       of funds at most once per sponsor per {@link NotificationMails#FUNDS_SHORT_INTERVAL} (under the sponsor's
+ *       {@link QbMessaging#noticeLock}, never a publication's lock), naming every publication still short.</li>
  * </ul>
  * Nothing is sent to a user without an address, for an event older than {@link NotificationMails#MAX_AGE}, or for a
  * record that is not there: the process ends without a mail and without failing (a failing consumer would be retried
@@ -191,31 +191,40 @@ public final class MailProcesses {
     // ---- publications ----------------------------------------------------------------------------------------------
 
     public static ProcessDefinition<PublicationMailInput, MailOutput, ProcessContext> publication(
-        MessageCatalog messages) {
+        MessageCatalog messages, MailValues values) {
         return define(PUBLICATION, "Mails a sponsor that their publication was approved, sent back, taken down, is "
                 + "short of funds or ended.", PublicationMailInput.class, PublicationMailInput::occurredAt, pb -> pb
-                // Only the throttled kind needs the lock and its row: the others are mailed once per event.
-                .step("Lock the publication's notices", HoldLock.<ProcessContext>exclusive(ctx -> fundsShort(ctx)
-                    ? QbMessaging.noticeLock(input(ctx, PublicationMailInput.class).publicationId()) : null))
+                // Only the throttled kind needs the lock and its row, both the sponsor's (one mail a day for all their
+                // publications): the others are mailed once per event. Never a publication's lock.
+                .step("Lock the sponsor's notices", HoldLock.<ProcessContext>exclusive(ctx -> fundsShort(ctx)
+                    ? QbMessaging.noticeLock(input(ctx, PublicationMailInput.class).sponsorId()) : null))
                 .step("Load the last notice", QueryEntities.<ProcessContext>of(
                     QbMessaging.defaultDataset(QbMessaging.NOTICE), ctx -> {
                         PublicationMailInput input = input(ctx, PublicationMailInput.class);
                         List<Object> ids = new ArrayList<>();
                         if (fundsShort(ctx)) {
-                            ids.add(input.publicationId());
+                            ids.add(input.sponsorId());
                         }
                         return EntityQuery.builder().where(new QueryPredicate.And(List.of(
-                            new QueryPredicate.In("publicationId", ids),
+                            new QueryPredicate.In("sponsorId", ids),
                             new QueryPredicate.Eq("kind", input.kind())))).limit(1).build();
                     }, NOTICE))
                 // The recipient and the name come from the publication itself, not from the event.
                 .step("Load the publication", QueryEntities.<ProcessContext>of(
                     QbPublications.defaultDataset(QbPublications.PUBLICATION), ctx -> byId("publicationId",
                         uuid(input(ctx, PublicationMailInput.class).publicationId())), RECORD))
-                .step("Load the card", QueryEntities.<ProcessContext>of(
-                    QbPublications.defaultDataset(QbPublications.CARD), ctx -> byId("publicationId",
-                        fundsShort(ctx) ? uuid(input(ctx, PublicationMailInput.class).publicationId()) : null),
-                    CARD))
+                // Every publication of the sponsor still short of funds now (the one of the event may be on again).
+                .step("Load the short publications", QueryEntities.<ProcessContext>of(
+                    QbPublications.defaultDataset(QbPublications.CARD), ctx -> {
+                        List<Object> sponsors = new ArrayList<>();
+                        if (fundsShort(ctx)) {
+                            sponsors.add(input(ctx, PublicationMailInput.class).sponsorId());
+                        }
+                        return EntityQuery.builder().where(new QueryPredicate.And(List.of(
+                                new QueryPredicate.In("sponsorId", sponsors),
+                                new QueryPredicate.Eq("status", PublicationStatus.FUNDS_SHORT))))
+                            .orderBy("name", true).limit(MAX_LISTED + 1).build();
+                    }, CARD))
                 .step("Load the wallet", QueryEntities.<ProcessContext>of(
                     QbWallets.defaultDataset(QbWallets.WALLET), ctx -> fundsShort(ctx) && record(ctx) != null
                         ? QbWallets.query(QbWallets.SPONSOR, record(ctx).get("sponsorId"))
@@ -226,7 +235,7 @@ public final class MailProcesses {
                             ? uuid(input(ctx, PublicationMailInput.class).publicationId()) : null), COUNTER))
                 .step("Load the sponsor", loadUser(ctx -> record(ctx) == null ? null
                     : record(ctx).get("sponsorId"))),
-            ctx -> publicationMail(ctx, messages), messages, NotificationMails.PUBLICATION_APPROVED,
+            ctx -> publicationMail(ctx, messages, values), messages, NotificationMails.PUBLICATION_APPROVED,
             NotificationMails.PUBLICATION_REJECTED, NotificationMails.PUBLICATION_TAKEN_DOWN,
             NotificationMails.PUBLICATION_FUNDS_SHORT, NotificationMails.PUBLICATION_ENDED);
     }
@@ -235,7 +244,10 @@ public final class MailProcesses {
         return PublicationNotices.FUNDS_SHORT.equals(input(ctx, PublicationMailInput.class).kind());
     }
 
-    static void publicationMail(ProcessContext ctx, MessageCatalog messages) {
+    /** At most this many publications are named in one short-of-funds mail; more are counted. */
+    static final int MAX_LISTED = 10;
+
+    static void publicationMail(ProcessContext ctx, MessageCatalog messages, MailValues values) {
         PublicationMailInput input = input(ctx, PublicationMailInput.class);
         EntityInstance publication = record(ctx);
         if (publication == null || !String.valueOf((Object) publication.get("sponsorId")).equals(input.sponsorId())) {
@@ -245,7 +257,7 @@ public final class MailProcesses {
         params.put("name", publication.get("name"));
         switch (input.kind()) {
             case PublicationNotices.APPROVED -> {
-                params.put("startAt", MailValues.time(input.startAt()));
+                params.put("startAt", values.time(input.startAt()));
                 decide(ctx, NotificationMails.PUBLICATION_APPROVED, params);
             }
             case PublicationNotices.REJECTED -> {
@@ -268,13 +280,13 @@ public final class MailProcesses {
     }
 
     /**
-     * Only while the publication is still short of funds (its sponsor may have topped up before the mail went), and at
-     * most once per {@link NotificationMails#FUNDS_SHORT_INTERVAL} per publication: the row of the last one is kept
-     * under the notices' lock, whether the mail is then sent or skipped as unsubscribed.
+     * At most once per {@link NotificationMails#FUNDS_SHORT_INTERVAL} per sponsor, naming every publication of theirs
+     * that is short of funds when it is sent (none left, for a sponsor who topped up before: no mail); the row of the
+     * last one is kept under the sponsor's notices' lock, whether the mail is then sent or skipped as unsubscribed.
      */
     private static void fundsShortMail(ProcessContext ctx, Map<String, Object> params) {
-        EntityInstance card = first(ctx, CARD);
-        if (card == null || !PublicationStatus.FUNDS_SHORT.equals(card.get("status"))) {
+        List<EntityInstance> shortOnes = list(ctx, CARD);
+        if (shortOnes.isEmpty()) {
             return;
         }
         EntityInstance notice = first(ctx, NOTICE);
@@ -287,7 +299,7 @@ public final class MailProcesses {
         }
         if (notice == null) {
             Map<String, Object> row = new LinkedHashMap<>();
-            row.put("publicationId", input(ctx, PublicationMailInput.class).publicationId());
+            row.put("sponsorId", input(ctx, PublicationMailInput.class).sponsorId());
             row.put("kind", PublicationNotices.FUNDS_SHORT);
             row.put("lastSentAt", ctx.opTime());
             ctx.changes().insert(QbMessaging.NOTICE, row);
@@ -296,6 +308,8 @@ public final class MailProcesses {
                 Map.of("lastSentAt", ctx.opTime()));
         }
         EntityInstance wallet = first(ctx, WALLET);
+        params.put("publications", MailValues.names(shortOnes.stream().map(card -> (Object) card.get("name"))
+            .toList(), MAX_LISTED));
         params.put("pendingCount", MailValues.count(wallet == null ? null : wallet.get("pendingCount")));
         params.put("pendingAmount", MailValues.kudos(wallet == null ? null : wallet.get("pendingAmount")));
         decide(ctx, NotificationMails.PUBLICATION_FUNDS_SHORT, params);
@@ -429,6 +443,12 @@ public final class MailProcesses {
 
     private static EntityInstance record(ProcessContext ctx) {
         return first(ctx, RECORD);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<EntityInstance> list(ProcessContext ctx, String key) {
+        List<EntityInstance> rows = ctx.contains(key) ? (List<EntityInstance>) ctx.get(key) : null;
+        return rows == null ? List.of() : rows;
     }
 
     @SuppressWarnings("unchecked")

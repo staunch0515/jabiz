@@ -52,7 +52,7 @@ function server(me?: Me) {
       case '/api/auth/mail/preferences':
         // The console's own notifications only (decision D49): the platform filters by the token's entry.
         return request.method === 'POST' ? new Response(null, { status: 204 }) : json(200, { templates: [
-          { template: 'qb.publication.funds-short', subscribed: true, displayName: 'Publication short of funds',
+          { template: 'qb.publication.funds-short', subscribed: true, displayName: 'Publications short of funds',
             otherEntry: false },
           { template: 'qb.publication.ended', subscribed: false, displayName: 'Publication ended',
             otherEntry: false }] })
@@ -174,7 +174,7 @@ describe('a signed-in sponsor', () => {
     render(<App />)
     const section = await screen.findByTestId('account-mail')
     await waitFor(() => expect(within(section).getAllByTestId('mail-preference')).toHaveLength(2))
-    expect(section).toHaveTextContent('Publication short of funds')
+    expect(section).toHaveTextContent('Publications short of funds')
     expect(section).toHaveTextContent('Publication ended')
     expect(section).toHaveTextContent('Mail about your top-ups, the reviews of your publications')
     expect(within(section).getByTestId('mail-preference-qb.publication.ended')).not.toBeChecked()

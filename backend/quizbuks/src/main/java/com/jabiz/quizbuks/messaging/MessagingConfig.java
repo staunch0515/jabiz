@@ -29,14 +29,23 @@ class MessagingConfig {
         this.poolRef = poolRef;
     }
 
+    /**
+     * How the mail shows values: times in the zone of the business's dates ({@code jabiz.fiscal-year-zone}, Asia/Tokyo
+     * for QuizBuks), not a zone of its own.
+     */
     @Bean
-    EntityDefinition qbPublicationNoticeEntity() {
+    MailValues qbMailValues(@Value("${jabiz.fiscal-year-zone:UTC}") String zone) {
+        return new MailValues(java.time.ZoneId.of(zone));
+    }
+
+    @Bean
+    EntityDefinition qbSponsorNoticeEntity() {
         return QbMessaging.NOTICE_ENTITY;
     }
 
     /** Read and written by the notice process only: the read permission is one no role holds. */
     @Bean
-    DatasetDefinition qbPublicationNoticeDataset() {
+    DatasetDefinition qbSponsorNoticeDataset() {
         return DatasetDefinition.define(QbMessaging.defaultDataset(QbMessaging.NOTICE), d -> d
             .targetEntityType(QbMessaging.NOTICE)
             .asDefault()
@@ -110,8 +119,8 @@ class MessagingConfig {
 
     @Bean
     ProcessDefinition<MailProcesses.PublicationMailInput, MailProcesses.MailOutput, ProcessContext>
-        qbPublicationNotify(MessageCatalog messages) {
-        return MailProcesses.publication(messages);
+        qbPublicationNotify(MessageCatalog messages, MailValues qbMailValues) {
+        return MailProcesses.publication(messages, qbMailValues);
     }
 
     @Bean

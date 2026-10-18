@@ -44,9 +44,9 @@
 |---|---|---|
 | 答题人 | 转账已发出 `qb.transfer.sent`、转账失败 `qb.transfer.failed`、收款账户需补资料 `qb.payout.action-needed` | 否 |
 | 商家 | 充值到账 `qb.topup.paid`、发布通过 / 驳回 / 被下架 `qb.publication.approved` / `.rejected` / `.taken-down` | 否 |
-| 商家 | 发布预算不足 `qb.publication.funds-short`（每个发布 24 小时内至多一封）、发布已结束 `qb.publication.ended` | 是（邮件中的链接，或商家后台"账户 → 邮件"） |
+| 商家 | 发布预算不足 `qb.publication.funds-short`（每个商家 24 小时内至多一封，列出当时全部预算不足的发布）、发布已结束 `qb.publication.ended` | 是（邮件中的链接，或商家后台"账户 → 邮件"） |
 
-`JABIZ_MAIL_ENABLED` 未开时这些邮件同样只记为 `SKIPPED`（`sys_mail_message` / `sys_mail_attempt`），不会补发。事件超过 3 天才被消费（投递积压、或新消费者收到历史事件）时不发信（`NotificationMails.MAX_AGE`）。
+邮件中的时刻按日本时间、标为 `JST`（取自 `jabiz.fiscal-year-zone`）。`JABIZ_MAIL_ENABLED` 未开时这些邮件同样只记为 `SKIPPED`（`sys_mail_message` / `sys_mail_attempt`），不会补发。事件超过 3 天才被消费（投递积压、或新消费者收到历史事件）时不发信（`NotificationMails.MAX_AGE`）。
 
 ### 1.3 Stripe 与资金（`deploy/quizbuks/README.md`"充值与核对""收款账户与自动转账"）
 
@@ -149,11 +149,8 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 `platform.param.write`、`*`，以及对持有它们的用户重设密码、二次验证、邮箱或关联外部账号，平台要求**另一位管理员审批**——但只在建立期结束之后。平台按 `*` 数管理员：
 首个管理员之外有两位持有 `*` 的启用用户时建立期才结束。QuizBuks 的角色都不持有 `*`（`QbRoles`：细分权限），所以按上面 2–6 步建立的安装**一直处于建立期**，
 受保护的变更当即生效（与 16r 之前相同）；`QB_SETUP`、e2e 与本机演示因此照常可用（它们只建持有 `control.publish` 等的角色，从不建第二位 `*` 管理员）。
-平台对这种部署的建议（10 §16.4）是 `jabiz.security.protected-grants.always=true`（环境变量 `JABIZ_SECURITY_PROTECTEDGRANTS_ALWAYS=true`）。**待需求方决定**，原因：
-审批人须持有 `*`，或同时持有 `security.user-role.write` 与 `approval.decide`（以及所给出的受保护权限），而 QuizBuks 的职责分离规则 `qb.sod.security-administration` 正好禁止后者
-（管理角色的人不审批）；所以在 QuizBuks 中只有持有 `*` 的首个管理员能批准受保护的授权，而且在空库上开启 `always` 时首个管理员无法独自建立第二位管理员。
-若要开启：先按 2–6 步建好各位管理员（建立期内当即生效），再以 `always=true` 重启；此后超级管理员提出的角色分配由首个管理员（保留其账号与二次验证）审批。
-在决定之前，四眼由检测性控制补足（季度访问审查 `ACCESS_REVIEW_SIGN_OFF`、审计中逐条复核角色变更，Q10b M-c）。
+**这一点由平台 16u 解决**（需求方 2026-10-18 决定）：16u 改为按安全管理的权限计管理员，受保护的变更以专门的权限审批；合并 16u 后 QuizBuks 需要两位 `QB_ADMIN_SUPER`，
+首次启动的步骤届时随之修改。在此之前不设 `jabiz.security.protected-grants.always`，四眼由检测性控制补足（季度访问审查 `ACCESS_REVIEW_SIGN_OFF`、审计中逐条复核角色变更，Q10b M-c）。
 
 **会计年度的时区**：保留期自会计年度末起算，日期按日本时间判断（`application.yml` 的 `jabiz.fiscal-year-zone: Asia/Tokyo`，平台 D48 第 2 条；Q10b 评审 L7），不需另设。
 1 月 1 日 00:00–08:59（日本时间）记录的数据因此属于新的会计年度。

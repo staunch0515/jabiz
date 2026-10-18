@@ -106,7 +106,7 @@
   事务邮件模板在 `identity.AccountMails`（账户）与 `messaging.NotificationMails`（Q7a：转账、收款账户、充值、发布）（文案 `mail.<名>.subject|body|name`，`name` 是偏好中显示的名字，平台 D49）；链接到某个前端用平台的 `{entryUrl.<入口>}`（商家邮件为 `[…]({entryUrl.sponsor})`，D43 第 4 条），不用参数传地址。`quizbuks.links.sponsor` / `quizbuks.links.app` 只给 Stripe 的返回地址。
   **邮件只由事件的消费者发**（`messaging.MailProcesses`，`internal()`，权限 `qb.messaging.system` 不授予任何角色）：业务流程只在自己的事务中发布事件（发布的状态变化为 `qb.publication.status`，由 `publishing.PublicationNotices` 判定哪些迁移值得通知），
   消费者再读记录本身（不信事件中的数字）、跳过没有邮箱的用户与超过 3 天的事件，以平台的 `SendMail` 记下邮件；答题与支付的锁内不发信。可退订的（`NOTIFICATION`）只有商家的两种，声明 `.entries("sponsor")`（欢迎邮件 `.entries("app")`）；新增可退订的模板时同样声明入口与三语的 `mail.<名>.name`。
-  会被反复触发的通知（预算不足）按发布在 `QbPublicationNotice` 中节流（锁 `qb.pub-notice:<发布>`，不取发布锁）。
+  会被反复触发的通知（预算不足）按商家在 `QbSponsorNotice` 中节流，一封列出全部预算不足的发布（锁 `qb.sponsor-notice:<商家>`，不取发布锁）。邮件中的时刻一律按 `jabiz.fiscal-year-zone`（日本时间）并标时区简称（`messaging.MailValues`），不写死时区。
 - **支付**（`wallet`，`docs/quizbuks/plans/Q6-payments.md`）：
   - **全部 Stripe 调用都是异步外部作业**（`wallet.TopUpJobs`，处理器只经外部服务 `stripe` 与 `StripeApi`：自写表单编码与解析，不用 SDK；以 `Stripe-Version` 固定版本），
     不在事务中等外部调用，不放在提交后步骤（其重试不持久化）。作业的完成与失败流程、入站事件的消费流程一律 `internal()`，权限 `qb.wallet.system` 不授予任何角色。

@@ -33,8 +33,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * The mail of Q7a against a local SMTP server (docs/quizbuks/plans/Q7-messages-legal.md D-Q7-1 – D-Q7-3, Q7-12):
  * each template is sent once on the move that triggers it, in the recipient's language, with links to the right front
  * end ({@code {entryUrl.app}} at {@code /}, {@code {entryUrl.sponsor}} at {@code /sponsor/}); the short-of-funds mail
- * at most once a day per publication; a notification the sponsor turned off is recorded as skipped while the
- * transactional mail is always sent; each front end lists only its own notifications; moves the sponsor made
+ * at most once a day per sponsor, naming every publication short of funds; times in Japan time (JST); a notification
+ * the sponsor turned off is recorded as skipped while the transactional mail is always sent; each front end lists only its own notifications; moves the sponsor made
  * themselves, a ban's pause and an account that was never enabled send nothing; old events send nothing.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK, properties = {
@@ -250,9 +250,10 @@ class NotificationMailIT extends PayoutItSupport {
         String sponsor = newSponsor(name);
         String token = sponsorToken(sponsor);
         autoApprove(false);
+        String approved;
         try {
             String versionId = version(token, "Mail review quiz");
-            String approved = draft(token, versionId, "Approved one");
+            approved = draft(token, versionId, "Approved one");
             decide((String) submit(token, approved).get("approvalRequestId"), "APPROVE", null);
             assertThat(status(approved)).isEqualTo("SCHEDULED");
             String rejected = draft(token, versionId, "Rejected one");
@@ -271,9 +272,12 @@ class NotificationMailIT extends PayoutItSupport {
             .sorted(java.util.Comparator.comparing(message -> subject(message).contains("sent back"))).toList();
         assertThat(mail).extracting(NotificationMailIT::subject).containsExactly(
             "Your publication \"Approved one\" is approved", "Your publication \"Rejected one\" was sent back");
-        // The start in UTC (the sponsor's zone is not known), the reviewer's reason, the console's publications.
-        assertThat(text(mail.get(0))).containsPattern("from \\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2} UTC")
+        // The start in Japan time, labelled (jabiz.fiscal-year-zone), whatever the server's own zone.
+        String startAt = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
+            .withZone(java.time.ZoneId.of("Asia/Tokyo")).format(instant(row(approved).get("start_at"))) + " JST";
+        assertThat(text(mail.get(0))).contains("from " + startAt)
             .contains(SPONSOR + "publications");
+        // The reviewer's reason and the console's publications.
         assertThat(text(mail.get(1))).contains("Rewards too high.", SPONSOR + "publications");
 
         // Paused and resumed by the sponsor: nothing.
@@ -312,40 +316,62 @@ class NotificationMailIT extends PayoutItSupport {
     }
 
     @Test
-    void shortOfFundsIsMailedAtMostOnceADayPerPublication() {
+    void shortOfFundsIsMailedAtMostOnceADayPerSponsorNamingEveryShortPublication() {
         String name = fresh("s-mail-short");
         String sponsor = newSponsor(name);
-        String publicationId = livePublication(sponsor, "Short", Map.of("regions", List.of("GLOBAL")));
+        String first = livePublication(sponsor, "Short A", Map.of("regions", List.of("GLOBAL")));
+        String second = livePublication(sponsor, "Short B", Map.of("regions", List.of("GLOBAL")));
+        String untouched = livePublication(sponsor, "Still live", Map.of("regions", List.of("GLOBAL")));
         credit(sponsor, 100);
-        // Two attempts on a wallet that pays one reward: the second is pending, the publication short of funds.
-        twoCompletions(publicationId);
-        assertThat(status(publicationId)).isEqualTo("FUNDS_SHORT");
+        // Three attempts on a wallet that pays one reward: the first is paid, the other two pending, and both their
+        // publications short of funds; the events are delivered after both moves.
+        String a1 = taker(newTaker(fresh("t-short"), null));
+        String a2 = taker(newTaker(fresh("t-short"), null));
+        String b1 = taker(newTaker(fresh("t-short"), null));
+        String attemptA1 = (String) start(a1, first).get("attemptId");
+        String attemptA2 = (String) start(a2, first).get("attemptId");
+        String attemptB1 = (String) start(b1, second).get("attemptId");
+        clock.advance(Duration.ofSeconds(1));
+        submit(a1, attemptA1, answers(true, true));
+        clock.advance(Duration.ofSeconds(1));
+        submit(a2, attemptA2, answers(true, true));
+        clock.advance(Duration.ofSeconds(1));
+        submit(b1, attemptB1, answers(true, true));
+        assertThat(status(first)).isEqualTo("FUNDS_SHORT");
+        assertThat(status(second)).isEqualTo("FUNDS_SHORT");
         deliverEvents();
+        // Two moves, two events, one mail naming both (not the live one).
+        assertThat(statusEvents(first) + statusEvents(second)).isEqualTo(2);
         assertThat(sent(sponsor, "qb.publication.funds-short")).containsExactly("SENT");
         MimeMessage mail = received(addressOf(name)).getLast();
-        assertThat(subject(mail)).isEqualTo("Top up to keep \"Short\" running");
+        assertThat(subject(mail)).isEqualTo("Top up to keep your publications running");
         // What is waiting, where to top up, and how to stop these mails (a notification).
-        assertThat(text(mail)).contains("Rewards waiting for payment: 1, together 100 Kudos", SPONSOR + "wallet",
-            SPONSOR + "account", "/admin/mail/unsubscribe?token=");
+        assertThat(text(mail)).contains("\"Short A\", \"Short B\"",
+                "Rewards waiting for payment: 2, together 200 Kudos", SPONSOR + "wallet", SPONSOR + "account",
+                "/admin/mail/unsubscribe?token=")
+            .doesNotContain("Still live");
+        assertThat(status(untouched)).isEqualTo("LIVE");
 
-        // Topped up (the pending reward and one more) and short again within the day: no second mail.
-        credit(sponsor, 200);
-        assertThat(status(publicationId)).isEqualTo("LIVE");
-        twoCompletions(publicationId);
-        assertThat(status(publicationId)).isEqualTo("FUNDS_SHORT");
+        // Topped up (the pending rewards and one more) and short again within the day: no second mail.
+        credit(sponsor, 300);
+        assertThat(status(first)).isEqualTo("LIVE");
+        assertThat(status(second)).isEqualTo("LIVE");
+        twoCompletions(first);
+        assertThat(status(first)).isEqualTo("FUNDS_SHORT");
         deliverEvents();
-        assertThat(statusEvents(publicationId)).isEqualTo(2);
+        assertThat(statusEvents(first)).isEqualTo(2);
         assertThat(sent(sponsor, "qb.publication.funds-short")).hasSize(1);
 
-        // A day later it is mailed again.
+        // A day later it is mailed again, naming only what is short now.
         advance(Duration.ofHours(25));
         credit(sponsor, 200);
-        assertThat(status(publicationId)).isEqualTo("LIVE");
-        twoCompletions(publicationId);
-        assertThat(status(publicationId)).isEqualTo("FUNDS_SHORT");
+        assertThat(status(first)).isEqualTo("LIVE");
+        twoCompletions(second);
+        assertThat(status(second)).isEqualTo("FUNDS_SHORT");
         deliverEvents();
         assertThat(sent(sponsor, "qb.publication.funds-short")).containsExactly("SENT", "SENT");
-        assertThat(query("SELECT count(*) AS n FROM qb_publication_notice WHERE publication_id = ?", publicationId)
+        assertThat(text(received(addressOf(name)).getLast())).contains("\"Short B\"").doesNotContain("Short A");
+        assertThat(query("SELECT count(*) AS n FROM qb_sponsor_notice WHERE sponsor_id = ?", sponsor)
             .getFirst()).containsEntry("n", 1L);
     }
 

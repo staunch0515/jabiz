@@ -6,6 +6,8 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.ZoneId;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -22,11 +24,22 @@ class MailValuesTest {
     }
 
     @Test
-    void timesAreInUtcWithTheZoneWrittenOut() {
-        assertThat(MailValues.time(Instant.parse("2026-10-20T00:30:00Z"))).isEqualTo("2026-10-20 00:30 UTC");
-        assertThat(MailValues.time("2026-10-20T09:05:00Z")).isEqualTo("2026-10-20 09:05 UTC");
-        assertThat(MailValues.time(null)).isEmpty();
-        assertThat(MailValues.time("not a time")).isEmpty();
+    void timesAreInTheGivenZoneLabelledByIt() {
+        MailValues japan = new MailValues(ZoneId.of("Asia/Tokyo"));
+        assertThat(japan.time(Instant.parse("2026-10-20T00:30:00Z"))).isEqualTo("2026-10-20 09:30 JST");
+        // Across the date line of UTC: Japan's date.
+        assertThat(japan.time("2026-12-31T15:05:00Z")).isEqualTo("2027-01-01 00:05 JST");
+        assertThat(japan.time(null)).isEmpty();
+        assertThat(japan.time("not a time")).isEmpty();
+        // The label is the zone's, not written in the code.
+        assertThat(new MailValues(ZoneId.of("UTC")).time("2026-10-20T09:05:00Z")).isEqualTo("2026-10-20 09:05 UTC");
+    }
+
+    @Test
+    void namesAreQuotedAndCutAtTheLimit() {
+        assertThat(MailValues.names(List.of("Quiz A"), 10)).isEqualTo("\"Quiz A\"");
+        assertThat(MailValues.names(List.of("A", "B", "C"), 2)).isEqualTo("\"A\", \"B\", …");
+        assertThat(MailValues.names(List.of(), 10)).isEmpty();
     }
 
     @Test
