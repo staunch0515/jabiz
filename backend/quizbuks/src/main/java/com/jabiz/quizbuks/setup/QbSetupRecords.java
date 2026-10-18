@@ -59,6 +59,10 @@ public class QbSetupRecords {
         return "approval-rule:" + code;
     }
 
+    static String sodRule(String code) {
+        return "sod-rule:" + code;
+    }
+
     @Bean
     EntityDefinition qbSetupRecordEntity() {
         return RECORD_ENTITY;

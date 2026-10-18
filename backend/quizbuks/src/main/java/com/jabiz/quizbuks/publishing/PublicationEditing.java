@@ -112,13 +112,25 @@ final class PublicationEditing {
         lockAndLoad(pb, true);
     }
 
+    /**
+     * As {@link #lockStatesAndLoad}, for an administrator's process (Q10b, M2): the publication is read through the
+     * default dataset, whoever's it is (404 when there is none).
+     */
+    static <I, O> void lockStatesAndLoadAny(ProcessDefinitionBuilder<I, O, ProcessContext> pb) {
+        lockAndLoad(pb, true, QbPublications.defaultDataset(QbPublications.PUBLICATION));
+    }
+
     private static <I, O> void lockAndLoad(ProcessDefinitionBuilder<I, O, ProcessContext> pb, boolean starts) {
+        lockAndLoad(pb, starts, QbPublications.sponsorDataset(QbPublications.PUBLICATION));
+    }
+
+    private static <I, O> void lockAndLoad(ProcessDefinitionBuilder<I, O, ProcessContext> pb, boolean starts,
+        String dataset) {
         pb.step("Lock the publication", HoldLock.<ProcessContext>exclusive(ctx -> lockName(ctx.get(PUB_ID))));
         if (starts) {
             lockStarts(pb);
         }
-        pb.step("Load the publication", LoadEntity.by(QbPublications.sponsorDataset(QbPublications.PUBLICATION),
-            PUB_ID, PUBLICATION));
+        pb.step("Load the publication", LoadEntity.by(dataset, PUB_ID, PUBLICATION));
         loadSchedule(pb);
     }
 
@@ -164,7 +176,84 @@ final class PublicationEditing {
                 BAN_ROWS));
     }
 
+    /** The publication named by {@link #PUB_ID} as read before the locks, for its (immutable) sponsor (Q10b). */
+    static final String BEFORE = "before";
+
+    /**
+     * Takes the account lock of the sponsor of the publication named by {@link #PUB_ID}, before the publication's
+     * lock (Q10b, reviews L1 and its verification): a ban reads the sponsor's publications under that lock and pauses
+     * the running ones, so a process that may put a publication on (the approval result, an administrator's resume)
+     * and a ban take turns: the one sees the ban, or the ban sees the publication on. The sponsor never changes, so it
+     * is read before the locks (through the default dataset; none for an unknown publication: no lock).
+     */
+    static <I, O> void lockSponsorAccount(ProcessDefinitionBuilder<I, O, ProcessContext> pb) {
+        pb.step("Find the sponsor", QueryEntities.<ProcessContext>of(
+                QbPublications.defaultDataset(QbPublications.PUBLICATION), ctx -> EntityQuery.builder()
+                    .where(new QueryPredicate.In("publicationId", ids(ctx.get(PUB_ID)))).limit(1).build(), BEFORE))
+            .step("Lock the sponsor's account", HoldLock.<ProcessContext>exclusive(ctx -> {
+                EntityInstance before = first(ctx, BEFORE);
+                return before == null ? null : com.jabiz.quizbuks.identity.QbAccounts.lockName(
+                    before.get("sponsorId"));
+            }));
+    }
+
+    /** The sponsor's publications, for the publications of a quiz an administrator took down (Q10b, M-d). */
+    static final String SPONSOR_PUBLICATIONS = "sponsorPublications";
+
+    /**
+     * Loads the publications of the publication's sponsor (by the immutable sponsor, through the default dataset) into
+     * {@link #SPONSOR_PUBLICATIONS}, for {@link #takenDownOfQuiz}.
+     */
+    static <I, O> void loadSponsorPublications(ProcessDefinitionBuilder<I, O, ProcessContext> pb,
+        Function<ProcessContext, EntityInstance> publication) {
+        pb.step("Load the sponsor's publications", QueryEntities.<ProcessContext>of(
+            QbPublications.defaultDataset(QbPublications.PUBLICATION), ctx -> {
+                EntityInstance found = publication.apply(ctx);
+                Object sponsor = found == null ? null : found.get("sponsorId");
+                return EntityQuery.builder().where(new QueryPredicate.Eq("sponsorId", sponsor == null ? ""
+                    : String.valueOf(sponsor))).limit(Integer.MAX_VALUE).build();
+            }, SPONSOR_PUBLICATIONS));
+    }
+
+    /**
+     * The other publications of the publication's quiz that an administrator took down
+     * ({@link PublicationAdmin#takenDown}), from {@link #SPONSOR_PUBLICATIONS}: a quiz's publications are its owner's,
+     * the publication's sponsor.
+     */
+    static List<EntityInstance> takenDownOfQuiz(ProcessContext ctx, EntityInstance publication) {
+        Object quizId = publication.get("quizId");
+        return list(ctx, SPONSOR_PUBLICATIONS).stream()
+            .filter(other -> !String.valueOf(other.id()).equals(String.valueOf(publication.id())))
+            .filter(other -> quizId != null
+                && String.valueOf(quizId).equals(String.valueOf((Object) other.get("quizId"))))
+            .filter(PublicationAdmin::takenDown)
+            .toList();
+    }
+
+    /**
+     * Loads the ban of the publication's sponsor (none when they have none) into {@link #BAN_ROWS}: an approval that
+     * comes after a ban does not put the publication on (Q10b, review M2).
+     */
+    static <I, O> void loadSponsorBan(ProcessDefinitionBuilder<I, O, ProcessContext> pb,
+        Function<ProcessContext, EntityInstance> publication) {
+        pb.step("Load the sponsor's ban", QueryEntities.<ProcessContext>of(
+            QbAccounts.defaultDataset(QbAccounts.BAN), ctx -> {
+                EntityInstance found = publication.apply(ctx);
+                return EntityQuery.builder().where(new QueryPredicate.In("userId",
+                    userIds(found == null ? null : found.get("sponsorId")))).limit(1).build();
+            }, BAN_ROWS));
+    }
+
+    /** Whether the sponsor read by {@link #loadSponsorBan} is banned. */
+    static boolean sponsorBanned(ProcessContext ctx) {
+        EntityInstance ban = first(ctx, BAN_ROWS);
+        return ban != null && com.jabiz.quizbuks.identity.BanRules.banned(ban.attributes());
+    }
+
     private static List<Object> userIds(String actorId) {
+        if (actorId == null) {
+            return new ArrayList<>();
+        }
         List<Object> ids = new ArrayList<>();
         try {
             UUID id = UUID.fromString(actorId);
@@ -462,9 +551,19 @@ final class PublicationEditing {
      */
     static ApprovalCase approvalCase(EntityInstance publication, List<EntityInstance> tiers, EntityInstance version,
         boolean autoApprove) {
+        return approvalCase(publication, tiers, version, autoApprove, false);
+    }
+
+    /**
+     * @param takenDown whether an administrator took down another publication of its quiz (Q10b, review M-d): then
+     *                  the fact {@code autoApprove} is false whatever the parameter says, and {@code takenDown} true
+     */
+    static ApprovalCase approvalCase(EntityInstance publication, List<EntityInstance> tiers, EntityInstance version,
+        boolean autoApprove, boolean takenDown) {
         List<TierCoverage.Tier> ranges = tiersOf(tiers);
-        Map<String, Object> facts = PublicationApprovals.facts(autoApprove, money(publication.get("maxReward")),
-            money(publication.get("maxSpend")), publication.get("sponsorId"), publication.get("regions"));
+        Map<String, Object> facts = PublicationApprovals.facts(autoApprove && !takenDown,
+            money(publication.get("maxReward")), money(publication.get("maxSpend")), publication.get("sponsorId"),
+            publication.get("regions"), takenDown);
         Map<String, Object> content = PublicationApprovals.content(draftOf(publication),
             version == null ? null : version.get("contentHash"), ranges);
         return ApprovalCase.of(publication.id(), facts, content).reference(publication.get("name"));

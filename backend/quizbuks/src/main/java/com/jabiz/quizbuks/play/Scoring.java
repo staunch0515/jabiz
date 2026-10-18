@@ -30,7 +30,10 @@ public final class Scoring {
         }
     }
 
-    /** @param answers per question in the snapshot's order, the options chosen (fewer lists: the rest unanswered) */
+    /**
+     * @param answers per question in the snapshot's order, the options chosen by their numbers in the version (fewer
+     *                lists: the rest unanswered)
+     */
     public static Result score(QuizSnapshot snapshot, List<List<Integer>> answers) {
         List<QuestionResult> results = new ArrayList<>();
         int score = 0;
@@ -47,6 +50,26 @@ public final class Scoring {
             results.add(new QuestionResult(question.no(), selected, correct, question.points(), earned));
         }
         return new Result(score, full, results);
+    }
+
+    /**
+     * Scores an attempt's answers given by position (Q10b, review M1; {@link Answers}): mapped to the version's numbers
+     * through the attempt's option order for scoring, and the result names the options chosen and the correct ones
+     * by their positions again, as the taker saw them.
+     *
+     * @param order   per question, the version's option numbers in the order shown
+     * @param answers per question, the positions chosen
+     */
+    public static Result scoreShown(QuizSnapshot snapshot, List<List<Integer>> order, List<List<Integer>> answers) {
+        Result scored = score(snapshot, Answers.inVersion(order, answers));
+        List<QuestionResult> shown = new ArrayList<>();
+        for (int i = 0; i < scored.questions().size(); i++) {
+            QuestionResult question = scored.questions().get(i);
+            List<Integer> positions = i < order.size() ? order.get(i) : List.of();
+            shown.add(new QuestionResult(question.no(), Answers.positions(positions, question.selected()),
+                Answers.positions(positions, question.correct()), question.points(), question.earned()));
+        }
+        return new Result(scored.score(), scored.fullScore(), shown);
     }
 
     /** The canonical JSON the attempt keeps as its result (written only when it is finished). */

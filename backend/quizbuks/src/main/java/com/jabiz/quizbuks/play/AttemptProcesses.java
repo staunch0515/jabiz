@@ -62,6 +62,7 @@ public final class AttemptProcesses {
     /** @param firstView whether this view was the caller's first of the publication (and was recorded) */
     public record ViewOutput(UUID publicationId, boolean firstView) {}
 
+    /** @param no the option's position in this attempt, 1..k in the order shown (Q10b, M1): what answers name */
     public record OptionView(int no, String text, UUID image) {}
 
     public record QuestionView(int no, String stem, UUID image, int points, List<OptionView> options) {}
@@ -164,7 +165,8 @@ public final class AttemptProcesses {
 
     // ---- start -----------------------------------------------------------------------------------------------------
 
-    public static ProcessDefinition<PublicationRef, StartOutput, ProcessContext> start() {
+    /** @param shuffle the order of each attempt's options, keyed by the server (Q10b, review M-a) */
+    public static ProcessDefinition<PublicationRef, StartOutput, ProcessContext> start(OptionShuffle shuffle) {
         return ProcessDefinition.define(START, 1, PublicationRef.class, StartOutput.class, ProcessContext.class,
             pb -> pb
                 .description("Starts the caller's attempt of a publication, or continues the one in progress.")
@@ -218,7 +220,7 @@ public final class AttemptProcesses {
                     PlaySteps.card(ctx -> starting(ctx) ? ctx.get(PUB_KEY) : null, CARD),
                     PlaySteps.startCounter(ctx -> starting(ctx) ? ctx.get(PUB_KEY) : null, START_COUNTER),
                     PlaySteps.counter(ctx -> starting(ctx) ? ctx.get(PUB_KEY) : null, COUNTER)))
-                .compute("Start the attempt", (metadata, ctx) -> start(ctx)));
+                .compute("Start the attempt", (metadata, ctx) -> start(ctx, shuffle)));
     }
 
     private static EntityQuery mine(Object publicationId) {
@@ -259,7 +261,7 @@ public final class AttemptProcesses {
         ctx.put(OUTPUT, output(ctx, attempt, PlaySteps.snapshot(ctx), true));
     }
 
-    static void start(ProcessContext ctx) {
+    static void start(ProcessContext ctx, OptionShuffle shuffle) {
         if (!starting(ctx)) {
             return;
         }
@@ -289,8 +291,7 @@ public final class AttemptProcesses {
         QuizSnapshot snapshot = PlaySteps.snapshot(ctx);
         Object publicationId = ctx.get(PUB_KEY);
         Instant deadline = AttemptRules.deadline(ctx.opTime(), PlaySteps.integer(card.get("timeLimitSec")));
-        List<List<Integer>> order = OptionShuffle.order(OptionShuffle.seedOf(userId, publicationId),
-            snapshot.questions());
+        List<List<Integer>> order = shuffle.order(userId, publicationId, snapshot.questions());
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("userId", userId);
         values.put("publicationId", publicationId);
@@ -329,7 +330,8 @@ public final class AttemptProcesses {
     }
 
     /**
-     * The questions as the taker sees them: every question in order with its options in {@code order}, without the
+     * The questions as the taker sees them: every question in order with its options in {@code order}, numbered by
+     * their position (Q10b, M1: never by the version's number, which follows the author's order), without the
      * options' correctness (design section 9: the correct answers appear only once the attempt is finished).
      */
     static List<QuestionView> questions(QuizSnapshot snapshot, List<List<Integer>> order) {
@@ -339,10 +341,13 @@ public final class AttemptProcesses {
             Map<Integer, QuizSnapshot.Option> byNo = new LinkedHashMap<>();
             question.options().forEach(option -> byNo.put(option.no(), option));
             List<Integer> shown = i < order.size() ? order.get(i) : List.copyOf(byNo.keySet());
-            List<OptionView> options = shown.stream().map(byNo::get)
-                .map(option -> new OptionView(option.no(), option.text(), option.image())).toList();
+            List<OptionView> options = new ArrayList<>();
+            for (Integer no : shown) {
+                QuizSnapshot.Option option = byNo.get(no);
+                options.add(new OptionView(options.size() + 1, option.text(), option.image()));
+            }
             questions.add(new QuestionView(question.no(), question.stem(), question.image(), question.points(),
-                options));
+                List.copyOf(options)));
         }
         return List.copyOf(questions);
     }

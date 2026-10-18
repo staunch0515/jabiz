@@ -146,8 +146,8 @@ public class PlayConfig {
 
     @Bean
     ProcessDefinition<AttemptProcesses.PublicationRef, AttemptProcesses.StartOutput, ProcessContext>
-        qbAttemptStart() {
-        return AttemptProcesses.start();
+        qbAttemptStart(com.jabiz.integrity.IntegrityKey integrityKey) {
+        return AttemptProcesses.start(OptionShuffle.of(integrityKey));
     }
 
     @Bean

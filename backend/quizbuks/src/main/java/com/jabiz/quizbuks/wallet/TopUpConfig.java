@@ -170,10 +170,28 @@ class TopUpConfig {
             .item(ReconChecks.TRANSFER_IN_TRANSIT, "en", "Transfer in transit", "zh", "转账在途", "ja", "送金の未達"));
     }
 
-    /** The bodies of Stripe's events may hold payers' names and addresses: kept as accounting evidence is. */
+    /** Accounting evidence is kept ten years from the end of its fiscal year (Q10b, item 13; L-4). */
+    static final Period RETENTION = Period.ofYears(10);
+
+    /**
+     * The bodies of Stripe's events may hold payers' names and addresses: kept as accounting evidence is (ten years
+     * from the end of the fiscal year received; seven before Q10b).
+     */
     @Bean
     RetentionPolicy qbInboundEventRetention() {
-        return RetentionPolicy.of(InboundEntities.EVENT).keep(Period.ofYears(7)).from("receivedTime");
+        return RetentionPolicy.of(InboundEntities.EVENT).keep(RETENTION).from("receivedTime").afterFiscalYearEnd();
+    }
+
+    /** A top-up is a receipt of money: kept from the end of the fiscal year it was paid in (unpaid ones always). */
+    @Bean
+    RetentionPolicy qbTopUpRetention() {
+        return RetentionPolicy.of(QbTopUps.TOPUP).keep(RETENTION).from("paidAt").afterFiscalYearEnd();
+    }
+
+    /** A receipt from the end of the fiscal year it was issued in (those issued before Q10b have no date: kept). */
+    @Bean
+    RetentionPolicy qbTopUpReceiptRetention() {
+        return RetentionPolicy.of(TopUpReceipts.RECEIPT).keep(RETENTION).from("issuedAt").afterFiscalYearEnd();
     }
 
     // ---- jobs of Stripe --------------------------------------------------------------------------------------------

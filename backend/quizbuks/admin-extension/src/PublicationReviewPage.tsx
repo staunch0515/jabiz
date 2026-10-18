@@ -3,6 +3,8 @@ import { ArrowLeft } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Link, useParams } from 'react-router'
 import {
+  Alert,
+  AlertDescription,
   ApprovalPanel,
   Badge,
   Button,
@@ -17,6 +19,7 @@ import {
   TableHeader,
   TableRow,
   UserName,
+  paths,
   useAuth,
   type DescriptionItem,
 } from '@jabiz/admin'
@@ -25,15 +28,62 @@ import {
   readPublicationFunds,
   readPublicationRow,
   readSponsor,
+  readTakedowns,
   readTiers,
   readVersion,
   type Publication,
+  type Takedown,
   type Tier,
   type Version,
 } from './api'
 import { AfterDecision, LoadFailed, Section } from './components'
 import { forbidden, money, QUEUE, useAfterDecision, useLabels, when } from './hooks'
-import { DICTIONARY, PATH, PENDING_REVIEW, PERMISSION } from './ids'
+import { ACCOUNT_SUSPENDED, DICTIONARY, PATH, PENDING_REVIEW, PERMISSION, PUBLICATION_ADMIN } from './ids'
+
+/** An administrator's reason as the reader reads it: a ban's pause records a code (Q10b, review L3). */
+function useAdminReason() {
+  const { t } = useTranslation(EXTENSION_NAMESPACE)
+  return (reason: string | null) => (reason === ACCOUNT_SUSPENDED ? t('publication.accountSuspended') : reason)
+}
+
+/**
+ * The publications of the same quiz an administrator took down, with their reasons (Q10b, review M-d): such a
+ * publication goes to a person's review whatever the switch says, and the reviewer reads why before deciding.
+ */
+function Takedowns({ takedowns }: { takedowns: UseQueryResult<Takedown[]> }) {
+  const { t } = useTranslation(EXTENSION_NAMESPACE)
+  const reasonOf = useAdminReason()
+  if (takedowns.isError) {
+    return (
+      <Alert variant="warning" data-testid="publication-takedowns-failed">
+        <AlertDescription>{t('publication.takedownsFailed')}</AlertDescription>
+      </Alert>
+    )
+  }
+  if (!takedowns.data || takedowns.data.length === 0) return null
+  return (
+    <Section title={t('publication.takedowns')} testId="publication-takedowns">
+      <Alert variant="warning">
+        <AlertDescription>{t('publication.takedownsHint')}</AlertDescription>
+      </Alert>
+      <ul className="flex flex-col gap-2">
+        {takedowns.data.map((takedown) => (
+          <li key={takedown.publicationId} className="text-sm" data-testid="publication-takedown">
+            <Link to={PATH.publication(takedown.publicationId)} className={linkClass}>{takedown.name}</Link>
+            {' · '}
+            {takedown.endReason === 'ADMIN' ? t('publication.takedownEnded') : t('publication.takedownPaused')}
+            {takedown.at && <> · {when(takedown.at)}</>}
+            {takedown.adminReason && (
+              <p className="text-muted-foreground" data-testid="publication-takedown-reason">
+                {t('publication.adminReason')}: {reasonOf(takedown.adminReason)}
+              </p>
+            )}
+          </li>
+        ))}
+      </ul>
+    </Section>
+  )
+}
 import { VersionPreview } from './VersionPreview'
 
 const linkClass = 'text-primary font-medium underline-offset-4 hover:underline'
@@ -215,6 +265,14 @@ export default function PublicationReviewPage() {
     retry: (count, error) => !forbidden(error) && count < 2,
   })
   const sponsorId = publication.data?.sponsorId
+  const quizId = publication.data?.quizId ?? null
+  const takedowns = useQuery({
+    queryKey: ['qb-ext', 'takedowns', sponsorId, quizId],
+    queryFn: () => readTakedowns(sponsorId!, quizId!),
+    enabled: !!sponsorId && !!quizId,
+    refetchOnWindowFocus: false,
+  })
+  const reasonOf = useAdminReason()
   const sponsor = useQuery({
     queryKey: ['qb-ext', 'sponsor', sponsorId],
     queryFn: () => readSponsor(sponsorId!),
@@ -243,6 +301,8 @@ export default function PublicationReviewPage() {
     && tiers.isSuccess && !tiers.isFetching && tiers.data.requestId === p.approvalRequestId
     && version.isSuccess && !version.isFetching && version.data.requestId === p.approvalRequestId
     && !!shownVersion?.content
+    // And whether the quiz was taken down before (Q10b, M-d): nothing is decided without it.
+    && (!p.quizId || (takedowns.isSuccess && !takedowns.isFetching))
 
   const decided = (status: string) => {
     after.decide(status)
@@ -262,6 +322,13 @@ export default function PublicationReviewPage() {
         <p>{t('publication.notPending', { status: statusLabel(p.status) })}</p>
         {p.rejectReason && (
           <DescriptionList items={[{ key: 'reason', label: t('publication.rejectReason'), value: p.rejectReason }]} />
+        )}
+        {p.status === 'PAUSED' && p.pausedBy === 'ADMIN' && (
+          <p data-testid="publication-admin-paused">{t('publication.adminPaused')}</p>
+        )}
+        {p.adminReason && (
+          <DescriptionList items={[{ key: 'adminReason', label: t('publication.adminReason'),
+            value: reasonOf(p.adminReason) }]} />
         )}
       </div>
     )
@@ -300,9 +367,46 @@ export default function PublicationReviewPage() {
           </span>
         }
       />
+      <Takedowns takedowns={takedowns} />
       <Settings publication={p} tiers={tiers} quiz={quiz} finance={finance} />
       <Content versionId={versionId} version={version} />
       <Section title={t('publication.decision')} testId="publication-decision">{decision}</Section>
+      {can(PERMISSION.contentWrite) && <AdminActions publication={p} />}
     </div>
+  )
+}
+
+/** The running states an administrator may act on (the processes' `actsOn`; the server decides all the same). */
+const RUNNING = ['SCHEDULED', 'LIVE', 'FUNDS_SHORT', 'PAUSED']
+
+/**
+ * Taking a publication down (Q10b, review M2): links to the platform's process pages with the publication filled in,
+ * where the administrator gives the reason (the sponsor reads it) and passes a second factor.
+ */
+function AdminActions({ publication }: { publication: Publication }) {
+  const { t } = useTranslation(EXTENSION_NAMESPACE)
+  if (!RUNNING.includes(publication.status)) return null
+  const adminPaused = publication.status === 'PAUSED' && publication.pausedBy === 'ADMIN'
+  const link = (name: string) =>
+    `${paths.process(name, PUBLICATION_ADMIN.version)}?${new URLSearchParams({ publicationId: publication.publicationId })}`
+  return (
+    <Section title={t('publication.admin')} testId="publication-admin">
+      <p className="text-muted-foreground text-sm">{t('publication.adminHint')}</p>
+      <div className="flex flex-wrap gap-4">
+        {!adminPaused && (
+          <Link to={link(PUBLICATION_ADMIN.pause)} className={linkClass} data-testid="publication-admin-pause">
+            {t('publication.adminPause')}
+          </Link>
+        )}
+        {adminPaused && (
+          <Link to={link(PUBLICATION_ADMIN.resume)} className={linkClass} data-testid="publication-admin-resume">
+            {t('publication.adminResume')}
+          </Link>
+        )}
+        <Link to={link(PUBLICATION_ADMIN.end)} className={linkClass} data-testid="publication-admin-end">
+          {t('publication.adminEnd')}
+        </Link>
+      </div>
+    </Section>
   )
 }

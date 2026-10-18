@@ -1,9 +1,18 @@
 import { ApiError } from '@jabiz/client'
 import { describe, expect, it } from 'vitest'
-import { assembleDraft, contentFieldOf, isStale, MATERIAL_KINDS, moved, safeHttpUrl } from './api'
+import { assembleDraft, contentFieldOf, isStale, MATERIAL_KINDS, moved, neutralName, safeHttpUrl } from './api'
 import { quizIdOf } from './paths'
 
 describe('the content calls', () => {
+  it('upload a file under a neutral name: its kind and extension only (Q10b)', () => {
+    expect(neutralName('image', 'Tanaka Hanako passport.JPG')).toBe('image.jpg')
+    expect(neutralName('pdf', 'answers-final.v2.pdf')).toBe('pdf.pdf')
+    expect(neutralName('avatar', 'Yamada Hanako.PNG')).toBe('avatar.png')
+    expect(neutralName('audio', 'clip.m4a')).toBe('audio.m4a')
+    expect(neutralName('image', 'no extension')).toBe('image')
+    expect(neutralName('pdf', 'weird.<script>')).toBe('pdf')
+  })
+
   it('put a draft together in its order, each part with its own options and images', () => {
     const draft = assembleDraft(
       { quizId: 'q', title: 'T', revision: '3', timeLimitSec: null, changedSinceVersion: 'true' },

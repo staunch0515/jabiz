@@ -25,6 +25,15 @@ public final class QbParams {
     public static final String TRANSFER_ENABLED = "qb.transfer.enabled";
     /** The platform's fee on each transfer, in Kudos; 0 switches it off (Q6b, requirement 5.3-14). */
     public static final String TRANSFER_FEE = "qb.transfer.fee";
+    /**
+     * How long, in days, a reward is held back from transfers after it is posted (Q10b, review M3): a disputed payment
+     * comes to light within it, before the money left.
+     */
+    public static final String TRANSFER_HOLD_DAYS = "qb.transfer.hold-days";
+    /** How long, in days, from a sponsor's first paid top-up, the new sponsors' limit applies (Q10b, M3). */
+    public static final String TOPUP_NEW_SPONSOR_DAYS = "qb.topup.new-sponsor.days";
+    /** What a new sponsor may top up in all within that time, in Kudos (Q10b, M3). */
+    public static final String TOPUP_NEW_SPONSOR_MAX_TOTAL = "qb.topup.new-sponsor.max-total";
     /** The smallest top-up, in Kudos (Q6a). */
     public static final String TOPUP_MIN = "qb.topup.min";
     /** The largest top-up, in Kudos (Q6a). */
@@ -70,7 +79,8 @@ public final class QbParams {
      */
     public static final List<String> CONTROLLED = java.util.stream.Stream.of(List.of(CREATOR_FEE_RATE,
         TRANSFER_THRESHOLD, TRANSFER_REVIEW_ABOVE, TRANSFER_ENABLED, REVIEW_SPONSOR_AUTO, REVIEW_PUBLICATION_AUTO,
-        TOPUP_MIN, TOPUP_MAX, TRANSFER_FEE), JOURNAL_ACCOUNTS, ISSUER).flatMap(List::stream).toList();
+        TOPUP_MIN, TOPUP_MAX, TRANSFER_FEE, TRANSFER_HOLD_DAYS, TOPUP_NEW_SPONSOR_DAYS, TOPUP_NEW_SPONSOR_MAX_TOTAL),
+        JOURNAL_ACCOUNTS, ISSUER).flatMap(List::stream).toList();
 
     /** A parameter: its key, kind (as the platform writes kinds) and first value. */
     public record Param(String key, Map<String, Object> valueKind, Object value, String description) {
@@ -81,6 +91,7 @@ public final class QbParams {
 
     private static final Map<String, Object> KUDOS = Map.of("type", "monetary", "currency", "JPY", "scale", 0);
     private static final Map<String, Object> BOOL = Map.of("type", "bool");
+    private static final Map<String, Object> DAYS = Map.of("type", "numeric", "precision", 3, "scale", 0);
     /** An account code of the accounting system: at most 20 characters (letters, digits, {@code . _ -}). */
     private static final Map<String, Object> ACCOUNT_CODE = Map.of("type", "text", "maxLength", 20);
 
@@ -102,6 +113,11 @@ public final class QbParams {
         new Param(TOPUP_MIN, KUDOS, "1000", "The smallest top-up a sponsor may make, in Kudos"),
         new Param(TOPUP_MAX, KUDOS, "1000000", "The largest top-up a sponsor may make, in Kudos"),
         new Param(TRANSFER_FEE, KUDOS, "0", "The platform's fee on each transfer, in Kudos (0: none)"),
+        new Param(TRANSFER_HOLD_DAYS, DAYS, "7", "Days a reward is held back from transfers after it is paid"),
+        new Param(TOPUP_NEW_SPONSOR_DAYS, DAYS, "30",
+            "Days from a sponsor's first paid top-up during which the new sponsors' limit applies"),
+        new Param(TOPUP_NEW_SPONSOR_MAX_TOTAL, KUDOS, "100000",
+            "What a new sponsor may top up in all during that time, in Kudos"),
         journal(JOURNAL_ACCOUNT_1110, "1110 Stripe balance"),
         journal(JOURNAL_ACCOUNT_1120, "1120 Bank deposits"),
         journal(JOURNAL_ACCOUNT_2110, "2110 Sponsor prepayments"),

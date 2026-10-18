@@ -36,7 +36,7 @@ import java.util.function.Function;
  * {@code QB_SETUP} prepares a QuizBuks installation (docs/quizbuks/plans/Q1-skeleton.md): the roles of
  * {@link QbRoles} with their permissions, the ledger accounts of {@link QbLedger}, the countries of
  * {@link CountryCatalog}, the business parameters of {@link QbParams} and the approval rules of
- * {@link QbApprovalRules} (Q4).
+ * {@link QbApprovalRules} (Q4) and the separation of duties of {@link QbSodRules} (Q10b).
  *
  * <p>It adds only what has never existed. Every item it makes or finds is written to {@link QbSetupRecords}, and an
  * item with a record is never added again: a role an administrator deleted or a permission revoked stays gone, and
@@ -65,7 +65,8 @@ public final class QbSetupProcesses {
      * @param countriesAdded   countries that did not exist
      * @param paramsCreated    keys of the business parameters declared
      * @param paramsProposed   keys of the controlled parameters proposed, for another administrator to publish
-     * @param rulesProposed    codes of the approval rules proposed, for another administrator to publish
+     * @param rulesProposed    codes of the approval rules, then of the separation-of-duties rules ({@link QbSodRules}, Q10b)
+     *                         proposed, for another administrator to publish
      * @param proposals        the controlled changes proposed ({@code CONTROL_CHANGE_PUBLISH} takes their ids), in
      *                         the order of {@code paramsProposed}, then of {@code rulesProposed}
      */
@@ -82,6 +83,7 @@ public final class QbSetupProcesses {
     static final String PARAMS = "params";
     static final String COUNTRIES = "countries";
     static final String RULES = "rules";
+    static final String SOD_RULES = "sodRules";
     static final String OPEN = "open";
     static final String CREATE = "create";
     static final String PROPOSE = "propose";
@@ -132,6 +134,9 @@ public final class QbSetupProcesses {
             .step("Load the approval rules", QueryEntities.of(ApprovalEntities.RULE_DATASET, ctx -> all(
                 new QueryPredicate.In("ruleCode", codes(QbApprovalRules.ALL, r -> ((QbApprovalRules.Rule) r).code()))),
                 RULES))
+            .step("Load the separation of duties", QueryEntities.of(ApprovalEntities.SOD_RULE_DATASET, ctx -> all(
+                new QueryPredicate.In("ruleCode", codes(QbSodRules.ALL, r -> ((QbSodRules.Rule) r).code()))),
+                SOD_RULES))
             .compute("Add what has never existed", (metadata, ctx) -> setup(ctx, catalog.countries()))
             .step("Open the ledger accounts", CallProcess.forEach(LedgerProcesses.OPEN_ACCOUNT, 1,
                 ctx -> listOf(ctx, OPEN), null))
@@ -171,6 +176,7 @@ public final class QbSetupProcesses {
         list(ctx, PARAMS).forEach(param -> found.add(QbSetupRecords.param(param.get(ParamEntities.KEY))));
         list(ctx, COUNTRIES).forEach(country -> found.add(QbSetupRecords.country(country.get("code"))));
         list(ctx, RULES).forEach(rule -> found.add(QbSetupRecords.approvalRule(rule.get("ruleCode"))));
+        list(ctx, SOD_RULES).forEach(rule -> found.add(QbSetupRecords.sodRule(rule.get("ruleCode"))));
 
         Recorder recorder = new Recorder(ctx, seen, found);
         List<String> created = new ArrayList<>();
@@ -247,6 +253,19 @@ public final class QbSetupProcesses {
                 values.put("description", rule.description());
                 propose.add(new ControlChanges.ProposeInput(ApprovalEntities.RULE, null, false, values, null,
                     "QuizBuks approval rule, proposed by " + SETUP));
+                rules.add(rule.code());
+            }
+        }
+        for (QbSodRules.Rule rule : QbSodRules.ALL) {
+            if (recorder.isNew(QbSetupRecords.sodRule(rule.code()))) {
+                Map<String, Object> values = new LinkedHashMap<>();
+                values.put("ruleCode", rule.code());
+                values.put("leftPermissions", String.join(",", rule.left()));
+                values.put("rightPermissions", String.join(",", rule.right()));
+                values.put("enabled", true);
+                values.put("description", rule.description());
+                propose.add(new ControlChanges.ProposeInput(ApprovalEntities.SOD_RULE, null, false, values, null,
+                    "QuizBuks separation of duties, proposed by " + SETUP));
                 rules.add(rule.code());
             }
         }

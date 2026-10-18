@@ -62,6 +62,21 @@ class WalletConfig {
             .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
     }
 
+    /**
+     * The business parameters as in effect now, read only, for the pages' templates that apply the processes' rules
+     * ({@code qb.app.wallet}, {@code qb.sponsor.topup-limit}; Q10b, review L9): without time travel a request cannot
+     * ask for another point in time, so they read the parameters at the server's clock, as the processes do
+     * ({@code LoadParams} at the operation time). Its permissions are the platform's own dataset's.
+     */
+    @Bean
+    DatasetDefinition qbParamsNowDataset() {
+        return DatasetDefinition.define(QbWallets.PARAMS_NOW, d -> d
+            .targetEntityType(com.jabiz.runtime.param.ParamEntities.ENTITY)
+            .permissions(com.jabiz.runtime.param.ParamPermissions.READ, com.jabiz.runtime.param.ParamPermissions.WRITE)
+            .policy(p -> p.readOnly(true).allowTimeTravel(false))
+            .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
+    }
+
     /** A sponsor's own wallet, read only, for the wallet's template (Q6a). */
     @Bean
     DatasetDefinition qbSponsorWalletDataset() {

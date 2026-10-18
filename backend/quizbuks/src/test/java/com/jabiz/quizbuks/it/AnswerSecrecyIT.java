@@ -54,15 +54,13 @@ class AnswerSecrecyIT extends PlayItSupport {
                 List<Map<String, Object>> options = (List<Map<String, Object>>) shown.get("options");
                 // Every option, each with its number, text and image only: the same for right and wrong ones.
                 assertThat(options).allSatisfy(option -> assertThat(option).containsOnlyKeys("no", "text", "image"));
-                List<Map<String, Object>> expected = new ArrayList<>();
-                for (QuizSnapshot.Option option : question.options()) {
-                    Map<String, Object> plain = new LinkedHashMap<>();
-                    plain.put("no", option.no());
-                    plain.put("text", option.text());
-                    plain.put("image", null);
-                    expected.add(plain);
-                }
-                assertThat(options).containsExactlyInAnyOrderElementsOf(expected);
+                // Numbered by position, 1..k as shown (Q10b, M1): nothing of the author's order.
+                assertThat(options).extracting(option -> option.get("no"))
+                    .containsExactlyElementsOf(java.util.stream.IntStream.rangeClosed(1, options.size()).boxed()
+                        .toList());
+                assertThat(options).extracting(option -> option.get("text")).containsExactlyInAnyOrderElementsOf(
+                    question.options().stream().map(QuizSnapshot.Option::text).toList());
+                assertThat(options).allSatisfy(option -> assertThat(option.get("image")).isNull());
             }
         }
         assertThat(saved).containsOnlyKeys("attemptId", "currentIndex", "answers", "deadline", "serverTime");
@@ -87,6 +85,8 @@ class AnswerSecrecyIT extends PlayItSupport {
             assertThat(row.get("result")).isNull();
             assertThat(row.get("score")).isNull();
             assertThat(row).containsEntry("answers", "[[2],[]]");
+            // The option order maps positions back to the author's order: never read (a sensitive field).
+            assertThat(row).doesNotContainKey("optionOrder");
         });
         // The version itself is not the taker's to read, through its dataset or the sponsors' templates.
         queryDataset(QbContent.defaultDataset(QbContent.VERSION), token).expectStatus().isForbidden();
@@ -98,8 +98,10 @@ class AnswerSecrecyIT extends PlayItSupport {
         // Finished, the result names them.
         Map<String, Object> result = submit(token, attemptId, answers(true, true));
         List<Map<String, Object>> questions = (List<Map<String, Object>>) result.get("questions");
-        assertThat(questions).extracting(q -> q.get("correct")).containsExactly(List.of(1), List.of(1));
+        int paris = position(attemptId, 1, 1);
+        assertThat(questions).extracting(q -> q.get("correct")).containsExactly(List.of(paris),
+            List.of(position(attemptId, 2, 1)));
         assertThat(rows(QbPlay.TAKER_ATTEMPTS, token)).singleElement()
-            .satisfies(row -> assertThat((String) row.get("result")).contains("\"correct\":[1]"));
+            .satisfies(row -> assertThat((String) row.get("result")).contains("\"correct\":[" + paris + "]"));
     }
 }

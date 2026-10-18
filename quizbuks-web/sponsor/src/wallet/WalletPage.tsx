@@ -35,6 +35,7 @@ import {
   available,
   downloadReceipt,
   parseKudos,
+  readTopUpLimit,
   readTopUpStatuses,
   readWallet,
   rememberJustStarted,
@@ -60,6 +61,33 @@ export const STATUS_BADGES: Record<TopUpStatus, 'success' | 'secondary' | 'outli
   PAID: 'success',
   EXPIRED: 'secondary',
   FAILED: 'destructive',
+}
+
+/**
+ * What the sponsor may top up (Q10b): each top-up's range and, for a new sponsor, the limit in all and what remains
+ * (`qb.sponsor.topup-limit`). Only said beforehand: the server decides, and words a refusal itself.
+ */
+function TopUpLimitNote() {
+  const { t } = useTranslation(SPONSOR)
+  const limit = useQuery({ queryKey: [...WALLET_QUERY, 'limit'], queryFn: readTopUpLimit })
+  const data = limit.data
+  if (!data) return null
+  return (
+    <div className="text-muted-foreground flex flex-col gap-1 text-sm" data-testid="topup-limit">
+      {data.min !== null && data.max !== null && (
+        <p>{t('wallet.dialog.range', { min: formatKudos(data.min), max: formatKudos(data.max) })}</p>
+      )}
+      {data.limited && data.maxTotal !== null && data.remaining !== null && (
+        <p data-testid="topup-new-sponsor">
+          {data.until
+            ? t('wallet.dialog.newSponsor', { maxTotal: formatKudos(data.maxTotal),
+              remaining: formatKudos(data.remaining), until: formatDateTime(data.until) })
+            : t('wallet.dialog.newSponsorFirst', { maxTotal: formatKudos(data.maxTotal),
+              remaining: formatKudos(data.remaining) })}
+        </p>
+      )}
+    </div>
+  )
 }
 
 /**
@@ -118,6 +146,7 @@ function TopUpDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (ope
                 start.reset()
               }} />
             <p id={`${id}-amount-hint`} className="text-muted-foreground text-sm">{t('wallet.dialog.amountHint')}</p>
+            {open && <TopUpLimitNote />}
             {problem && <p id={`${id}-amount-error`} className="text-destructive text-sm">{problem}</p>}
           </div>
           {general && (

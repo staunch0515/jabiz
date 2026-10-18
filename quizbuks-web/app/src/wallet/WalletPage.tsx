@@ -1,4 +1,4 @@
-import { formatDateTime, i18n } from '@jabiz/client'
+import { formatDate, formatDateTime, i18n } from '@jabiz/client'
 import { Badge, Button, Input, Label, PageState, SegmentedControl, Spinner } from '@jabiz/ui'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { ChevronRight, Search } from 'lucide-react'
@@ -15,6 +15,7 @@ import {
   readLedger,
   readPayoutAccount,
   readWallet,
+  transferable,
   WALLET_QUERY,
   type EntryStatus,
   type EntryType,
@@ -145,6 +146,31 @@ export function WalletPage() {
                 <dd className="text-muted-foreground col-span-2 text-xs">{t('wallet.pendingHint')}</dd>
               )}
             </div>
+            {data.held !== null && data.held > 0 && (
+              <>
+                <div className="col-span-2 grid grid-cols-subgrid">
+                  <dt className="text-muted-foreground">{t('wallet.transferable')}</dt>
+                  <dd className="text-right tabular-nums" data-testid="wallet-transferable">
+                    {formatKudos(transferable(data))}
+                  </dd>
+                </div>
+                <div className="col-span-2 grid grid-cols-subgrid gap-y-0.5">
+                  <dt className="text-muted-foreground">{t('wallet.held')}</dt>
+                  <dd className="text-right tabular-nums" data-testid="wallet-held">{formatKudos(data.held)}</dd>
+                  {data.heldUntil && (
+                    <dd className="text-muted-foreground col-span-2 text-xs" data-testid="wallet-held-until">
+                      {t('wallet.heldUntil', { date: formatDate(data.heldUntil) })}
+                    </dd>
+                  )}
+                  <dd className="text-muted-foreground col-span-2 text-xs">{t('wallet.heldHint')}</dd>
+                  {data.heldOpen > 0 && (
+                    <dd className="text-muted-foreground col-span-2 text-xs" data-testid="wallet-held-open">
+                      {t('wallet.heldOpen')}
+                    </dd>
+                  )}
+                </div>
+              </>
+            )}
             {data.inTransfer > 0 && (
               <div className="col-span-2 grid grid-cols-subgrid">
                 <dt className="text-muted-foreground">{t('wallet.inTransfer')}</dt>

@@ -34,11 +34,43 @@ function SentBack({ publication }: { publication: Publication }) {
     ? t('publishing.detail.sentBackReason', { reason: publication.rejectReason })
     : publication.rejectCode === 'QB_PUBLICATION_EXPIRED_IN_REVIEW'
       ? t('publishing.detail.expiredInReview')
-      : publication.rejectCode
+      : publication.rejectCode === 'QB_USER_BANNED'
+        ? t('publishing.detail.sentBackBanned')
+        : publication.rejectCode
   return (
     <Alert variant="warning" data-testid="publication-sent-back-reason">
       <AlertTitle>{t('publishing.detail.sentBack')}</AlertTitle>
       <AlertDescription>{text}</AlertDescription>
+    </Alert>
+  )
+}
+
+/**
+ * What an administrator did to the publication (Q10b, review M2): paused it (the sponsor cannot resume it) or ended
+ * it, with the reason they gave.
+ */
+function AdminNotice({ publication }: { publication: Publication }) {
+  const { t } = useTranslation(SPONSOR)
+  const paused = publication.status === 'PAUSED' && publication.pausedBy === 'ADMIN'
+  const ended = publication.status === 'ENDED' && publication.endReason === 'ADMIN'
+  if (!paused && !ended) return null
+  const key = paused ? 'adminPaused' : 'adminEnded'
+  return (
+    <Alert variant="warning" data-testid="publication-admin-notice">
+      <AlertTitle>{t(`publishing.detail.${key}`)}</AlertTitle>
+      <AlertDescription>
+        <p>{t(`publishing.detail.${key}Text`)}</p>
+        {publication.adminReason && (
+          <p data-testid="publication-admin-reason">
+            {t('publishing.detail.adminReason', {
+              // A ban's pause records a code, not the ban's own reason (Q10b, review L3).
+              reason: publication.adminReason === 'QB_ACCOUNT_SUSPENDED'
+                ? t('publishing.detail.accountSuspended')
+                : publication.adminReason,
+            })}
+          </p>
+        )}
+      </AlertDescription>
     </Alert>
   )
 }
@@ -84,6 +116,7 @@ function PublicationView({ detail, stale, onStale }: {
       {publication.status === 'FUNDS_SHORT' && (
         <Alert variant="warning"><AlertDescription>{t('publishing.detail.fundsShort')}</AlertDescription></Alert>
       )}
+      <AdminNotice publication={publication} />
       <PublicationSummary values={{
         ...publication,
         quizTitle: version?.title ?? null,

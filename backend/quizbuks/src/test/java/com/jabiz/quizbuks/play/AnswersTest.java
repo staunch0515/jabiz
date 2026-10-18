@@ -47,6 +47,25 @@ class AnswersTest {
     }
 
     @Test
+    void positionsAreTheOnlyNumbersAccepted() {
+        // Question 1 shows two options: positions 1 and 2, whatever the version numbers them.
+        List<List<Integer>> order = List.of(List.of(7, 5));
+        assertThat(Answers.check(order, List.of(new Answers.Given(1, List.of(1, 2))), null)).isEmpty();
+        assertThat(Answers.check(order, List.of(new Answers.Given(1, List.of(5, 0, 3))), null))
+            .extracting(Violation::field)
+            .containsExactly("answers[0].selected[0]", "answers[0].selected[1]", "answers[0].selected[2]");
+    }
+
+    @Test
+    void positionsMapToTheVersionAndBack() {
+        assertThat(Answers.inVersion(ORDER, List.of(List.of(1), List.of(1, 3)))).containsExactly(List.of(2),
+            List.of(2, 3));
+        assertThat(Answers.inVersion(ORDER, List.of(List.of(), List.of(9)))).containsExactly(List.of(), List.of());
+        assertThat(Answers.positions(List.of(3, 1, 2), List.of(2, 3))).containsExactly(1, 3);
+        assertThat(Answers.positions(List.of(3, 1, 2), List.of(4))).isEmpty();
+    }
+
+    @Test
     void canonicalJsonRoundTrips() {
         assertThat(Answers.toJson(ORDER)).isEqualTo("[[2,1],[3,1,2]]");
         assertThat(Answers.fromJson("[[2,1],[3,1,2]]")).isEqualTo(ORDER);

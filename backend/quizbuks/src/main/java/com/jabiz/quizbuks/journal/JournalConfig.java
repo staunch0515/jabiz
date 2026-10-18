@@ -2,15 +2,18 @@ package com.jabiz.quizbuks.journal;
 
 import com.jabiz.dataset.DatasetDefinition;
 import com.jabiz.entity.EntityDefinition;
+import com.jabiz.entity.TemporalSpec;
 import com.jabiz.numbering.NumberSequence;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.retention.RetentionPolicy;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import java.time.Duration;
+import java.time.Period;
 
 /**
  * Registers the journal export (docs/quizbuks/plans/Q9d-journal-receipts.md): its two entities, read by finance and
@@ -19,6 +22,9 @@ import java.time.Duration;
  */
 @Configuration
 class JournalConfig {
+
+    /** How long accounting records are kept (Q10b): ten years, from the end of their fiscal year. */
+    static final Period RETENTION = Period.ofYears(10);
 
     private final String poolRef;
     private final JournalLimits limits;
@@ -35,6 +41,29 @@ class JournalConfig {
     EntityDefinition qbJournalExportEntity() {
         return QbJournal.EXPORT_ENTITY;
     }
+
+    /**
+     * Accounting records are kept ten years from the end of their fiscal year (Q10b, item 13; L-4): an export from the
+     * end of the month it covers, its parts and its confirmation from when they were recorded. They are written once
+     * and never deleted; the policies put them in the platform's retention report (docs/design/21 section 3).
+     */
+    @Bean
+    RetentionPolicy qbJournalExportRetention() {
+        return RetentionPolicy.of(QbJournal.EXPORT).keep(RETENTION).from("periodTo").afterFiscalYearEnd();
+    }
+
+    @Bean
+    RetentionPolicy qbJournalExportPartRetention() {
+        return RetentionPolicy.of(QbJournal.PART).keep(RETENTION).from(TemporalSpec.CREATED_TIME)
+            .afterFiscalYearEnd();
+    }
+
+    @Bean
+    RetentionPolicy qbJournalExportConfirmationRetention() {
+        return RetentionPolicy.of(QbJournal.CONFIRMATION).keep(RETENTION).from(TemporalSpec.CREATED_TIME)
+            .afterFiscalYearEnd();
+    }
+
 
     @Bean
     EntityDefinition qbJournalExportConfirmationEntity() {

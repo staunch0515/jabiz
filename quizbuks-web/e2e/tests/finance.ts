@@ -17,10 +17,14 @@ export const REVIEW_ABOVE = 1000
 
 let configured = false
 
-/** Transfers on, large ones (above {@link REVIEW_ABOVE}) waiting for review. Once per run. */
+/**
+ * Transfers on, large ones (above {@link REVIEW_ABOVE}) waiting for review, and rewards not held back (Q10b: a reward
+ * is held `qb.transfer.hold-days`, 7 by default, which a test cannot wait for). Once per run.
+ */
 export async function transfersWithReview(request: APIRequestContext) {
   if (configured) return
   await setControlledParam(request, 'qb.transfer.review-above', String(REVIEW_ABOVE))
+  await setControlledParam(request, 'qb.transfer.hold-days', '0')
   await setControlledParam(request, 'qb.transfer.enabled', 'true')
   configured = true
 }

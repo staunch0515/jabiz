@@ -44,7 +44,7 @@ class AttemptExpireIT extends PlayItSupport {
         String attemptId = (String) start(token, publicationId).get("attemptId");
         if (right) {
             run("QB_ATTEMPT_SAVE", token, body("attemptId", attemptId, "currentIndex", 1, "answers",
-                answers(true, true)));
+                shown(attemptId, answers(true, true))));
         }
         return attemptId;
     }
@@ -283,7 +283,7 @@ class AttemptExpireIT extends PlayItSupport {
         credit(sponsor, 1_000);
         String token = taker(newTaker("t-once", null));
         String attemptId = (String) start(token, publicationId).get("attemptId");
-        run("QB_ATTEMPT_SAVE", token, body("attemptId", attemptId, "answers", answers(true, true)));
+        run("QB_ATTEMPT_SAVE", token, body("attemptId", attemptId, "answers", shown(attemptId, answers(true, true))));
         pastTheTime(Duration.ZERO);
 
         List<Object> results = atOnce(List.of(

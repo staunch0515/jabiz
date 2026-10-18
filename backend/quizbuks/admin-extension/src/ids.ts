@@ -18,6 +18,8 @@ export const DATASET = {
 export const TEMPLATE = {
   /** The review queue: no money (the content administrators read it). */
   publications: 'qb.admin.publications',
+  /** The publications of a quiz an administrator took down, with the reasons (Q10b, review M-d). */
+  quizTakedowns: 'qb.admin.quiz-takedowns',
   /** A publication's sponsor's funds; `qb.admin.finance.read`. */
   publicationFunds: 'qb.admin.publication-funds',
   sponsors: 'qb.admin.sponsors',
@@ -73,6 +75,9 @@ export const CONTROL = {
 
 /** The reports of the monthly page (F-08), in the order shown. */
 export const REPORTS = [TEMPLATE.monthly, TEMPLATE.balances] as const
+
+/** The reason a ban's pause records instead of the ban's own (Q10b, review L3): shown in the reader's language. */
+export const ACCOUNT_SUSPENDED = 'QB_ACCOUNT_SUSPENDED'
 export type ReportId = (typeof REPORTS)[number]
 
 /** The ledger's accounts (backend `QbLedger`), in the order the overview shows them. */
@@ -124,6 +129,16 @@ export const PERMISSION = {
   generatedFileRead: 'file.generated.read',
   controlPropose: 'control.propose',
   controlPublish: 'control.publish',
+  /** Taking publications down (Q10b). */
+  contentWrite: 'qb.admin.content.write',
+} as const
+
+/** The administrators' processes on a publication (Q10b, review M2), run from the platform's process page. */
+export const PUBLICATION_ADMIN = {
+  pause: 'QB_PUBLICATION_ADMIN_PAUSE',
+  resume: 'QB_PUBLICATION_ADMIN_RESUME',
+  end: 'QB_PUBLICATION_ADMIN_END',
+  version: 1,
 } as const
 
 /** The widths the policy `qb.content.image` keeps (a smaller image is answered with the original). */

@@ -78,6 +78,35 @@ export async function readWallet(): Promise<SponsorWallet> {
   }
 }
 
+/**
+ * What the sponsor may top up now (`qb.sponsor.topup-limit`, Q10b): each top-up's range and, while the new sponsors'
+ * limit applies, the limit in all, what remains of it and until when (null before the first paid top-up). The server
+ * decides when the top-up starts; the page only says it beforehand.
+ */
+export interface TopUpLimit {
+  min: number | null
+  max: number | null
+  limited: boolean
+  maxTotal: number | null
+  remaining: number | null
+  until: string | null
+}
+
+const numOrNull = (value: unknown): number | null => (value == null || value === '' ? null : num(value))
+
+export async function readTopUpLimit(): Promise<TopUpLimit> {
+  const row = (await runQuery<Row>(WALLET_TEMPLATE.topUpLimit, { params: { at: new Date().toISOString() }, limit: 1 }))
+    .items[0] ?? {}
+  return {
+    min: numOrNull(row.min),
+    max: numOrNull(row.max),
+    limited: row.limited === true || row.limited === 'true',
+    maxTotal: numOrNull(row.maxTotal),
+    remaining: numOrNull(row.remaining),
+    until: str(row.until),
+  }
+}
+
 /** What the wallet can pay rewards from: the balance less what open disputes hold (`QbWallets.available`). */
 export const available = (wallet: SponsorWallet): number => Math.max(0, wallet.balance - wallet.held)
 

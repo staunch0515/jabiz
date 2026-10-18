@@ -2,6 +2,7 @@ package com.jabiz.quizbuks.wallet;
 
 import com.jabiz.document.DocumentLayout;
 import com.jabiz.entity.EntityDefinition;
+import com.jabiz.entity.TemporalRole;
 import com.jabiz.entity.Violation;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
@@ -65,6 +66,9 @@ public final class TopUpReceipts {
         eb.field("runId", f -> f.physicalColumn("run_id").immutable(true).required(true).asText(36));
         eb.field("documentNo", f -> f.physicalColumn("document_no").immutable(true).required(true).asText(100));
         eb.field("language", f -> f.physicalColumn("language").immutable(true).required(true).asText(10));
+        // When it was issued (Q10b, migration V11): the start of its retention. Receipts issued before have none.
+        eb.field("issuedAt", f -> f.physicalColumn("issued_at").immutable(true)
+            .asTemporal(TemporalRole.EVENT_TIME));
         eb.unique("uk_qb_topup_receipt_topup", "topUpId");
         eb.temporal(t -> t.allowScheduled(false).writeOnce());
         eb.listView("default", lv -> lv
@@ -179,6 +183,7 @@ public final class TopUpReceipts {
         values.put("runId", issued.runId());
         values.put("documentNo", issued.documentNo());
         values.put("language", input.language());
+        values.put("issuedAt", ctx.opTime());
         ctx.changes().insert(RECEIPT, values);
     }
 

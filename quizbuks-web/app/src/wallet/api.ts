@@ -18,7 +18,18 @@ export interface TakerWallet {
   pendingAmount: number
   /** On the way to the taker's Stripe account. */
   inTransfer: number
+  /**
+   * Of `available`, the rewards held back from transfers (Q10b): new ones for some days, and those of a sponsor whose
+   * payment is being checked (`heldOpen`, no date); null when the server says nothing about holds.
+   */
+  held: number | null
+  heldOpen: number
+  /** When the last reward held for its age only is free; null without one. */
+  heldUntil: string | null
 }
+
+/** What may be transferred: what the taker has less what is held back. */
+export const transferable = (wallet: TakerWallet): number => Math.max(0, wallet.available - (wallet.held ?? 0))
 
 export type EntryType = 'REWARD' | 'TRANSFER'
 export type EntryStatus = 'COMPLETED' | 'PROCESSING' | 'FAILED' | 'REVERSED'
@@ -63,13 +74,18 @@ const num = (value: unknown): number => {
 const str = (value: unknown): string | null => (value == null || value === '' ? null : String(value))
 
 export async function readWallet(): Promise<TakerWallet> {
-  const row = (await runQuery<Row>(WALLET_TEMPLATE.wallet, { limit: 1 })).items[0] ?? {}
+  // `at` is now: what was paid within the hold period before it is held.
+  const row = (await runQuery<Row>(WALLET_TEMPLATE.wallet, { params: { at: new Date().toISOString() }, limit: 1 }))
+    .items[0] ?? {}
   return {
     available: num(row.available),
     totalEarned: num(row.totalEarned),
     pendingCount: num(row.pendingCount),
     pendingAmount: num(row.pendingAmount),
     inTransfer: num(row.inTransfer),
+    held: row.held == null ? null : num(row.held),
+    heldOpen: num(row.heldOpen),
+    heldUntil: str(row.heldUntil),
   }
 }
 

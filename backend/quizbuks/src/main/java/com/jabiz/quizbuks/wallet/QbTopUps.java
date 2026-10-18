@@ -111,5 +111,10 @@ public final class QbTopUps {
         return value == null ? BigDecimal.ZERO : new BigDecimal(value.toString());
     }
 
+    static java.time.Instant instant(Object value) {
+        return value == null ? null : value instanceof java.time.OffsetDateTime time ? time.toInstant()
+            : value instanceof java.time.Instant time ? time : java.time.Instant.parse(value.toString());
+    }
+
     private QbTopUps() {}
 }

@@ -37,9 +37,11 @@ class PublicationReviewSettingsIT extends PublicationItSupport {
         @SuppressWarnings("unchecked")
         List<Object> proposals = (List<Object>) installed.get("proposals");
         assertThat(installed.get("rulesProposed")).isEqualTo(List.of(PublicationApprovals.RULE,
-            SponsorApprovals.RULE, com.jabiz.quizbuks.wallet.QbPayouts.REVIEW_RULE));
+            SponsorApprovals.RULE, com.jabiz.quizbuks.wallet.QbPayouts.REVIEW_RULE,
+            com.jabiz.quizbuks.setup.QbSodRules.CONTROL.code(), com.jabiz.quizbuks.setup.QbSodRules.SECURITY.code()));
         String id = draft(sponsorA(), version(sponsorA(), "Settings"), "Configured?");
-        int count = proposals.size();
+        // The separation of duties (Q10b) comes last and is left unpublished: the rules are counted before it.
+        int count = proposals.size() - com.jabiz.quizbuks.setup.QbSodRules.ALL.size();
 
         // Nothing published yet: the switch has no value, which refuses.
         assertThat(codes(refused("QB_PUBLICATION_SUBMIT", sponsorA(), body("publicationId", id), 422)))

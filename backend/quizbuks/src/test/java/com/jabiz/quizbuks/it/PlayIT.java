@@ -46,27 +46,30 @@ class PlayIT extends PlayItSupport {
 
         // A save, then the attempt is continued with the same answers and question.
         clock.advance(Duration.ofSeconds(30));
+        // Options are named by where this attempt shows them (Q10b, M1): Paris (1 in the version) and Tokyo.
+        int paris = position(attemptId, 1, 1);
+        int tokyo = position(attemptId, 2, 1);
         Map<String, Object> saved = run("QB_ATTEMPT_SAVE", token, body("attemptId", attemptId, "currentIndex", 1,
-            "answers", List.of(body("questionNo", 1, "selected", List.of(1)))));
+            "answers", List.of(body("questionNo", 1, "selected", List.of(paris)))));
         assertThat(saved).containsEntry("currentIndex", 1);
         Map<String, Object> again = start(token, publicationId);
         assertThat(again).containsEntry("attemptId", attemptId).containsEntry("resumed", true)
             .containsEntry("currentIndex", 1).containsEntry("deadline", started.get("deadline"));
         assertThat((List<Object>) again.get("answers")).containsExactly(Map.of("questionNo", 1, "selected",
-            List.of(1)));
+            List.of(paris)));
         assertThat(again.get("questions")).isEqualTo(started.get("questions"));
         assertThat(counter(publicationId).get("starts")).isEqualTo(new java.math.BigDecimal("1"));
 
         // Submit with the second answer: full marks, the top tier, paid.
-        Map<String, Object> result = submit(token, attemptId, List.of(body("questionNo", 2, "selected",
-            List.of(1))));
+        Map<String, Object> result = run("QB_ATTEMPT_SUBMIT", token, body("attemptId", attemptId, "publicationId",
+            publicationId, "answers", List.of(body("questionNo", 2, "selected", List.of(tokyo)))));
         assertThat(result).containsEntry("status", "SUBMITTED").containsEntry("score", 5)
             .containsEntry("fullScore", 5).containsEntry("passScore", 3).containsEntry("passed", true)
             .containsEntry("rewardStatus", "PAID").containsEntry("message", null);
         assertThat(((Number) result.get("reward")).intValue()).isEqualTo(100);
         assertThat((List<Map<String, Object>>) result.get("questions")).containsExactly(
-            Map.of("no", 1, "selected", List.of(1), "correct", List.of(1), "points", 2, "earned", 2),
-            Map.of("no", 2, "selected", List.of(1), "correct", List.of(1), "points", 3, "earned", 3));
+            Map.of("no", 1, "selected", List.of(paris), "correct", List.of(paris), "points", 2, "earned", 2),
+            Map.of("no", 2, "selected", List.of(tokyo), "correct", List.of(tokyo), "points", 3, "earned", 3));
 
         // One attempt each (5.3-6): started again it is refused, saved again too.
         assertThat(codes(refused("QB_ATTEMPT_START", token, body("publicationId", publicationId), 422)))
@@ -103,7 +106,7 @@ class PlayIT extends PlayItSupport {
         String inTime = (String) start(token, publicationId).get("attemptId");
         String lateAttempt = (String) start(taker(late), publicationId).get("attemptId");
         run("QB_ATTEMPT_SAVE", taker(late), body("attemptId", lateAttempt, "answers",
-            List.of(body("questionNo", 1, "selected", List.of(1)))));
+            shown(lateAttempt, List.of(body("questionNo", 1, "selected", List.of(1))))));
 
         clock.advance(Duration.ofSeconds(60).plus(PlayLimits.SUBMIT_GRACE));
         // Saving is over at the deadline; submitting within the grace still counts.
@@ -116,7 +119,7 @@ class PlayIT extends PlayItSupport {
             "answers", answers(true, true)), 422);
         assertThat(codes(refused)).containsExactly(PlayCodes.EXPIRED);
         assertThat(attempt(lateAttempt)).containsEntry("status", "IN_PROGRESS")
-            .containsEntry("answers", "[[1],[]]");
+            .containsEntry("answers", "[[" + position(lateAttempt, 1, 1) + "],[]]");
         // Continuing it is refused too; the system finishes it with what was saved.
         assertThat(codes(refused("QB_ATTEMPT_START", taker(late), body("publicationId", publicationId), 422)))
             .containsExactly(PlayCodes.EXPIRED);

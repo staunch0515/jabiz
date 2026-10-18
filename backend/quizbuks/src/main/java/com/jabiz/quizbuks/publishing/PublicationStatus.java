@@ -31,7 +31,17 @@ public final class PublicationStatus {
     /** Its budget is spent (Q5). */
     public static final String BUDGET = "BUDGET";
 
-    public static final List<String> END_REASONS = List.of(EXPIRED, QUOTA, BUDGET);
+    /** An administrator ended it (Q10b, review M2). */
+    public static final String ADMIN = "ADMIN";
+
+    public static final List<String> END_REASONS = List.of(EXPIRED, QUOTA, BUDGET, ADMIN);
+
+    /**
+     * Who paused a paused publication ({@code pausedBy}, Q10b, review M2): its sponsor, who may resume it, or an
+     * administrator, whom alone may resume it.
+     */
+    public static final String BY_SPONSOR = "SPONSOR";
+    public static final String BY_ADMIN = "ADMIN";
 
     private PublicationStatus() {}
 }

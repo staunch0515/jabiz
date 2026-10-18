@@ -18,9 +18,15 @@ import java.util.TreeSet;
 
 /**
  * An attempt's answers (docs/quizbuks/plans/Q5-answering.md, D-Q5-1): for each question, in the version's order, the
- * numbers of the options chosen, sorted and each once; stored as canonical JSON ({@code [[1],[2,3],[]]}) on the attempt,
- * like its option order. A save or a submission gives the answers of some questions ({@link Given}), which replace
- * theirs; {@link #check} reports every question or option that is not the attempt's at once.
+ * options chosen, sorted and each once; stored as canonical JSON ({@code [[1],[2,3],[]]}) on the attempt, like its
+ * option order. A save or a submission gives the answers of some questions ({@link Given}), which replace theirs;
+ * {@link #check} reports every question or option that is not the attempt's at once.
+ *
+ * <p>Options are named by their <em>position in this attempt</em>, 1..k in the order shown (Q10b, review M1), never by
+ * their number in the version: the author's order says nothing to a taker, and numbers cannot be shared between
+ * attempts that show the options in different orders. The attempt's option order ({@code order.get(i)}: the version's
+ * numbers in the order shown) maps a position back only for scoring ({@link #inVersion}); it is never shown to the
+ * taker (the field is sensitive).
  */
 public final class Answers {
 
@@ -59,10 +65,10 @@ public final class Answers {
     }
 
     /**
-     * Every problem of {@code given} against the attempt's option order (question {@code i + 1} has the options
-     * {@code order.get(i)}): a question that is not one, a question given twice, an option that is not the question's,
-     * an option chosen twice; and a current question outside the quiz. Each violation has the code
-     * {@link PlayCodes#ANSWER_INVALID} and names the field.
+     * Every problem of {@code given} against the attempt's option order (question {@code i + 1} shows
+     * {@code order.get(i).size()} options, at positions 1..k): a question that is not one, a question given twice, a
+     * position that is not one of the question's, a position chosen twice; and a current question outside the quiz.
+     * Each violation has the code {@link PlayCodes#ANSWER_INVALID} and names the field.
      */
     public static List<Violation> check(List<List<Integer>> order, List<Given> given, Integer currentIndex) {
         List<Violation> problems = new ArrayList<>();
@@ -87,12 +93,12 @@ public final class Answers {
                     "Question " + answer.questionNo() + " is answered twice"));
                 continue;
             }
-            List<Integer> options = order.get(answer.questionNo() - 1);
+            int shown = order.get(answer.questionNo() - 1).size();
             List<Integer> selected = answer.selected() == null ? List.of() : answer.selected();
             Set<Integer> chosen = new HashSet<>();
             for (int j = 0; j < selected.size(); j++) {
                 Integer option = selected.get(j);
-                if (option == null || !options.contains(option) || !chosen.add(option)) {
+                if (option == null || option < 1 || option > shown || !chosen.add(option)) {
                     problems.add(invalid(field + ".selected[" + j + "]", answer.questionNo(), option,
                         "Question " + answer.questionNo() + " has no option " + option + " to choose"));
                 }
@@ -114,6 +120,37 @@ public final class Answers {
             }
         }
         return List.copyOf(answers);
+    }
+
+    /**
+     * The answers in the version's numbering, for scoring: position {@code p} of question {@code i} is the option
+     * {@code order.get(i).get(p - 1)}. Positions outside the question (never stored: {@link #check}) are dropped.
+     */
+    public static List<List<Integer>> inVersion(List<List<Integer>> order, List<List<Integer>> answers) {
+        List<List<Integer>> mapped = new ArrayList<>();
+        for (int i = 0; i < answers.size(); i++) {
+            List<Integer> shown = i < order.size() ? order.get(i) : List.of();
+            TreeSet<Integer> numbers = new TreeSet<>();
+            for (Integer position : answers.get(i)) {
+                if (position != null && position >= 1 && position <= shown.size()) {
+                    numbers.add(shown.get(position - 1));
+                }
+            }
+            mapped.add(List.copyOf(numbers));
+        }
+        return List.copyOf(mapped);
+    }
+
+    /** The positions (1..k, sorted) at which the options numbered {@code numbers} in the version are shown. */
+    public static List<Integer> positions(List<Integer> shown, List<Integer> numbers) {
+        TreeSet<Integer> positions = new TreeSet<>();
+        for (Integer number : numbers) {
+            int index = shown.indexOf(number);
+            if (index >= 0) {
+                positions.add(index + 1);
+            }
+        }
+        return List.copyOf(positions);
     }
 
     /** The answers as a caller reads them: one per question that has any. */

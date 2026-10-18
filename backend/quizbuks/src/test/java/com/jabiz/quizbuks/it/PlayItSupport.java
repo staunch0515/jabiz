@@ -206,19 +206,58 @@ abstract class PlayItSupport extends AccountItSupport {
 
     /**
      * A submission's input as the App sends it: the attempt and its publication (the queue's key, required; platform
-     * decision D45), then {@code more} pairs.
+     * decision D45), then {@code more} pairs; {@code answers} among them are written by the version's numbers and
+     * sent by this attempt's positions ({@link #shown}).
      */
     static Map<String, Object> submission(String attemptId, Object... more) {
         Map<String, Object> input = body("attemptId", attemptId, "publicationId", String.valueOf(query(
             "SELECT publication_id FROM qb_attempt WHERE attempt_id = ?", attemptId).getFirst().get("publication_id")));
         input.putAll(body(more));
+        if (input.get("answers") instanceof List<?> answers) {
+            input.put("answers", shown(attemptId, answers));
+        }
         return input;
+    }
+
+    /**
+     * Answers written by the version's option numbers (as the tests name options: Paris is 1) turned into the
+     * positions the attempt shows them at, which is what the App sends (Q10b, M1: options are named by position).
+     * A question or number the attempt does not have is kept as given, so invalid answers stay invalid.
+     */
+    /** Where the attempt shows the option numbered {@code versionNo} of question {@code questionNo}: 1..k. */
+    static int position(String attemptId, int questionNo, int versionNo) {
+        List<List<Integer>> order = com.jabiz.quizbuks.play.Answers.fromJson((String) query(
+            "SELECT option_order FROM qb_attempt WHERE attempt_id = ?", attemptId).getFirst().get("option_order"));
+        return order.get(questionNo - 1).indexOf(versionNo) + 1;
+    }
+
+    @SuppressWarnings("unchecked")
+    static List<Object> shown(String attemptId, List<?> answers) {
+        List<List<Integer>> order = com.jabiz.quizbuks.play.Answers.fromJson((String) query(
+            "SELECT option_order FROM qb_attempt WHERE attempt_id = ?", attemptId).getFirst().get("option_order"));
+        List<Object> mapped = new java.util.ArrayList<>();
+        for (Object item : answers) {
+            Map<String, Object> answer = new LinkedHashMap<>((Map<String, Object>) item);
+            Object questionNo = answer.get("questionNo");
+            if (questionNo instanceof Integer q && q >= 1 && q <= order.size()
+                && answer.get("selected") instanceof List<?> selected) {
+                List<Integer> positions = order.get(q - 1);
+                List<Object> shownAt = new java.util.ArrayList<>();
+                for (Object number : selected) {
+                    int index = positions.indexOf(number);
+                    shownAt.add(index >= 0 ? (Object) (index + 1) : number);
+                }
+                answer.put("selected", shownAt);
+            }
+            mapped.add(answer);
+        }
+        return mapped;
     }
 
     Map<String, Object> submit(String token, String attemptId, List<Object> answers) {
         Map<String, Object> input = submission(attemptId);
         if (answers != null) {
-            input.put("answers", answers);
+            input.put("answers", shown(attemptId, answers));
         }
         return run("QB_ATTEMPT_SUBMIT", token, input);
     }

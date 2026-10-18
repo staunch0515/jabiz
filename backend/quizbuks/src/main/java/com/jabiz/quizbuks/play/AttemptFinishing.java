@@ -379,7 +379,7 @@ public final class AttemptFinishing {
             throw new IllegalStateException("A publication that went on has a card and counters");
         }
         QuizSnapshot snapshot = PlaySteps.snapshot(ctx);
-        Scoring.Result result = Scoring.score(snapshot, answers);
+        Scoring.Result result = Scoring.scoreShown(snapshot, order, answers);
         int passScore = PlaySteps.integer(card.get("passScore"));
         CardTiers.Tier tier = TierPick.of(CardTiers.fromJson(card.get("tiers")), result.score())
             .orElseThrow(() -> new IllegalStateException("No tier holds the score " + result.score()
