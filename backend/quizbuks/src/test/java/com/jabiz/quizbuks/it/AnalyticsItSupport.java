@@ -34,7 +34,8 @@ abstract class AnalyticsItSupport extends PlayItSupport {
     static final String TOP = "qb.sponsor.analytics.top";
     static final String OVERVIEW = "qb.sponsor.analytics.overview";
     static final String QUESTIONS = "qb.sponsor.analytics.questions";
-    static final List<String> TEMPLATES = List.of(DASHBOARD, TREND, TOP, OVERVIEW, QUESTIONS);
+    static final String TREND_TOTALS = "qb.sponsor.analytics.trend-totals";
+    static final List<String> TEMPLATES = List.of(DASHBOARD, TREND, TOP, OVERVIEW, QUESTIONS, TREND_TOTALS);
 
     @Autowired
     @Qualifier("qbAnalyticsJob")
@@ -108,6 +109,20 @@ abstract class AnalyticsItSupport extends PlayItSupport {
 
     List<Map<String, Object>> questions(String token, String publicationId) {
         return rows(QUESTIONS, token, Map.of("publicationId", publicationId));
+    }
+
+    /** The one row of the trend's totals for the same parameters (Q9e2 review L1). */
+    Map<String, Object> trendTotals(String token, String publicationId, Instant from, Instant to, String bucket) {
+        Map<String, Object> params = new HashMap<>();
+        if (publicationId != null) {
+            params.put("publicationId", publicationId);
+        }
+        params.put("from", from.toString());
+        params.put("to", to.toString());
+        params.put("bucket", bucket);
+        List<Map<String, Object>> found = rows(TREND_TOTALS, token, params);
+        assertThat(found).hasSize(1);
+        return found.get(0);
     }
 
     List<Map<String, Object>> trend(String token, String publicationId, Instant from, Instant to, String bucket) {

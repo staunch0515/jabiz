@@ -272,7 +272,9 @@ jobs:
           # The daily reconciliation every minute (Q9d): the journal export waits for a clean run after its month.
           export QB_RECONCILE_RUN_CRON='30 * * * * *'
           # The sponsors' analytics every minute (Q9e2): the analytics test waits for its attempts to be counted.
+          # (a privacy control: another schedule needs the end-to-end switch, which live mode refuses).
           export QB_ANALYTICS_RUN_CRON='15 * * * * *'
+          export QB_E2E_ENABLED=true
           export JABIZ_REPORTS_PDF_FONTS=/usr/share/fonts/opentype/ipafont-gothic/ipag.ttf,/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf
           nohup java -Dreactor.schedulers.defaultBoundedElasticOnVirtualThreads=true \
             -jar quizbuks/build/libs/quizbuks-0.0.1-SNAPSHOT.jar > ../quizbuks.log 2>&1 &

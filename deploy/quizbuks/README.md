@@ -268,7 +268,8 @@ tools/quizbuks/local-demo.sh status | logs | seed
 | `QB_STRIPE_CONNECT_URL_PREFIX` | 否 | 开通链接必须的前缀，缺省 `https://connect.stripe.com/`（只在开发与端到端测试中改指桩服务；正式模式只接受缺省值）；格式同上 |
 | `QB_TRANSFER_RUN_CRON` | **不设** | **只给端到端测试**：每日自动转账的时间（六段 cron，UTC），缺省 `0 7 1 * * *`。CI 的 e2e 设为每分钟，好在测试中等到大额转账进入审批。生产中不要设置：每分钟运行会每次收手续费、几分钟内就达到“连续 3 次失败”（本意是 3 天）并多次调用 Stripe；正式模式或正式密钥下设成其他值即启动失败（`TransferScheduleCheck`） |
 | `QB_RECONCILE_RUN_CRON` | **不设** | **只给端到端测试**（Q9d）：每日核对的时间（六段 cron，UTC），缺省 `0 37 18 * * *`。CI 的 e2e 设为每分钟，好在测试中等到月末之后的一次核对（分录导出要求它通过）。生产中不要设置：每分钟有差异就每分钟建待办；正式模式或正式密钥下设成其他值即启动失败（`TransferScheduleCheck`） |
-| `QB_ANALYTICS_RUN_CRON` | **不设** | **只给端到端测试**（Q9e2）：商家分析任务 `qb.analytics` 的时间（六段 cron，UTC），缺省 `0 */10 * * * *`（每 10 分钟，页面如此注明）。CI 的 e2e 设为每分钟，好在测试中等到答题被统计。生产中不要设置：读取与审计行多十倍；正式模式或正式密钥下设成其他值即启动失败（`TransferScheduleCheck`） |
+| `QB_ANALYTICS_RUN_CRON` | **不设** | **只给端到端测试**（Q9e2）：商家分析任务 `qb.analytics` 的时间（六段 cron，UTC），缺省 `0 */10 * * * *`（每 10 分钟，页面如此注明）。CI 的 e2e 设为每分钟（同时设 `QB_E2E_ENABLED=true`），好在测试中等到答题被统计。这是**隐私控制**（概览是任务的快照，频率决定能把一个答题人的作答定位到多细）：缺省以外的值没有 `QB_E2E_ENABLED=true` 即启动失败，比每分钟更频繁的值一律启动失败，正式模式或正式密钥下设成其他值也启动失败（`TransferScheduleCheck`） |
+| `QB_E2E_ENABLED` | **不设** | **只给端到端测试**（Q9e2 评审 M1）：允许改分析任务的时间；缺省 `false`；正式模式或正式密钥下设为 `true` 即启动失败（`TransferScheduleCheck`） |
 | `JABIZ_REPORTS_PDF_FONTS` | 否 | PDF（充值收据、月报）中中文与日文的 TrueType 字体文件，逗号分隔、按顺序尝试；镜像已装 IPA Gothic 与 Droid Sans Fallback 并设好（`Dockerfile`），镜像外缺省为空（这些字为 `?`）。设了读不到的文件即启动失败 |
 | `OPENAI_API_KEY` | Q8 | AI 生成题目与封面 |
 

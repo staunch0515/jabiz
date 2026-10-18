@@ -212,8 +212,13 @@ quizbuks:
     run-cron: ${QB_RECONCILE_RUN_CRON:0 37 18 * * *}
   # The sponsors' analytics (Q9e): every ten minutes, a six-field cron in UTC. Only the end-to-end tests change it
   # (every minute: the analytics pages show a test's attempts within it, Q9e2); refused next to live mode.
+  # The schedule is a privacy control (a publication's figures are the job's snapshot; Q9e2 review M1): another value
+  # also needs quizbuks.e2e.enabled, and none may run more than once a minute (TransferScheduleCheck).
   analytics:
     run-cron: ${QB_ANALYTICS_RUN_CRON:0 */10 * * * *}
+  # The end-to-end tests' switch (Q9e2 review M1): only their deployment sets it; refused next to live mode.
+  e2e:
+    enabled: ${QB_E2E_ENABLED:false}
   # The journal export (Q9d review M1): another database transaction open this long stops it, since a posting it began
   # before the export's cut-off could commit after the export's reads. At most half of JournalPeriods.SETTLE (10 min).
   journal:

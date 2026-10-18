@@ -376,3 +376,24 @@
 - 五个模板的列不变（只有 `minGroup` 的精度 3 → 9 位，页面按数读取，不受影响）；概览的"截至"改为整个概览一处（所有人数都是快照），Vitest 随之改；e2e 本来就先等任务统计再读概览。
 - 合并后重新运行（同样的独立数据库与端口）：`:quizbuks:check` 606 个测试全部通过、`platformCheck` 0 个错误 72 个警告；商家后台 149 个、App 133 个 Vitest 测试与 lint、typecheck；`app:check` 两个 SPA；`ext:check` 70 个；
   e2e 50 个全部通过（`QB_ANALYTICS_RUN_CRON` 每分钟驱动新的逐项任务，`analytics.spec.ts` 与分析页的 axe 亮、暗都通过）。
+
+### 评审修订（Q9e2，独立评审 dc1c8d9）
+
+评审没有阻塞的问题；以下各项都已改正并有测试。
+
+- **M1 分析任务的时间是隐私控制**（概览是任务的快照，频率决定能把一个答题人的作答定位到多细）：`TransferScheduleCheck` 对 `quizbuks.analytics.run-cron` 的检查改为——缺省（每 10 分钟）以外的值**在任何环境**都要同时打开新的 e2e 开关 `quizbuks.e2e.enabled`（`QB_E2E_ENABLED`，缺省 `false`；正式模式或正式密钥下打开即启动失败），
+  **比每分钟更频繁的一律拒绝**（以 Spring 的 `CronExpression` 在两天内求两次运行的最短间隔），无效的 cron 也报错；正式模式下其他值照旧拒绝。CI 的 e2e 设 `QB_E2E_ENABLED=true`。
+  测试 `TransferScheduleCheckTest`（缺省总接受；每分钟只在开关打开且非正式模式时接受；每秒、每 30 秒、0 与 1 秒、10 与 40 秒都拒绝；最短间隔的计算；开关在正式模式下被拒）。`operations.md` §1.4 与 `deploy/quizbuks/README.md` 同步。
+- **M2 时刻可能按 UTC 显示而不注明**：概览与趋势的模板加 `zone` 列（任务记下的部署时区，任务未运行时为 UTC）；分析页不再读仪表盘取时区（也就不再每分钟重读整个仪表盘），时刻只按模板给出的时区显示，"截至 …""统计于 …""最近更新 …"都注明时区。`AnalyticsIT` 断言趋势、合计与概览的 `zone` 为 `Asia/Tokyo`。
+- **L1 页面自己相加**：新模板 `qb.sponsor.analytics.trend-totals`（同样的参数与同样的桶，写法同趋势、改时一起改）给出合计，图表的名称与数据表的合计行都取它；`AnalyticsIT` 断言它等于各桶之和、他人读到全零、权限矩阵同其他模板。
+  仪表盘的 7 天图（今天与之前 6 天的日历日）与热门发布（近 7 × 24 小时）窗口不同，两处各自注明。漏斗的流失比例 `1 - rate` 是页面唯一自己算的数（取自模板的比率），在 `funnelOf` 注明。
+- **L2** `toOverview` 在 `suppressed` 时丢弃平均用时与超时人数（同 `toQuestion`），`api.test.ts` 覆盖。
+- **L3** 完成数已到 k、但按时提交不足 k 时，平均用时的说明为"至少 k 人按时提交后显示"。
+- **L4** 分析页的"正在答题"改为"进行中"，并注明截至时刻（仪表盘的合计仍为实时的"正在答题"）。
+- **L5 文案**：日文的获奖者一律"当選者"（页面与后端消息）；"予算上限を設定した公開中の公開が対象です"、漏斗句"…「{from}」と「{to}」の間で、…"、App 窗口的说明改写；"预算不足 / Short of funds"与状态徽标一致为"钱包余额不足 / Wallet too low / ウォレット残高不足"（页面与后端消息）；
+  英文的"基于 n 个完成"用 i18next 的复数（`_one` / `_other`，中、日两键同文），数字另以 `n` 传入。`messages.test.ts` 另断言日文没有"受賞"、余额不足与发布页的用词相同。
+- **L6** `TransferScheduleCheck` 的 Javadoc 改为三个开关与分析的缺省。
+- **L7** Vitest 断言他人的发布既不读题目也不读趋势与合计；e2e `analytics.spec.ts` 另以另一商家打开同一地址，页面"不存在"，且除概览外不请求任何分析模板。
+- **小处**：24 小时的数据表中，每天的第一行带日期（跨过午夜的那一行）；趋势的合计行；支出的提示保留系列名（`formatter` 会替换整行，故自己写名称与金额），图例名改为按语言的名称；宽屏布局改为 `xl` 才分栏、App 窗口两列。
+- **验证**（独立数据库 `jabiz_test_q9e2` / `quizbuks_e2e_q9e2`、独立端口）：`:quizbuks:check` 608 个测试全部通过，`platformCheck` 0 个错误、72 个警告（没有新的警告）；商家后台 Vitest 152 个、App 133 个，两者 lint 与 typecheck；`app:check` 两个 SPA；`ext:check` 70 个；
+  e2e 50 个全部通过（`QB_ANALYTICS_RUN_CRON` 每分钟并 `QB_E2E_ENABLED=true`；含另一商家打开分析页的检查）。

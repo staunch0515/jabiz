@@ -26,12 +26,10 @@ import { Link, navigate } from '../qb/router'
 import { PUBLICATIONS_PATH } from '../publishing/paths'
 import {
   ANALYTICS_QUERY,
-  DEFAULT_ZONE,
   percent,
   readOverview,
   readQuestions,
   REFRESH_MS,
-  toDashboard,
   TREND_RANGES,
   zoneTime,
   type Difficulty,
@@ -43,12 +41,9 @@ import { ScrollRegion, TrendCharts } from './charts'
 import { UpdatedNote } from './DashboardCharts'
 import { ExportButtons } from './ExportButtons'
 import { Funnel } from './Funnel'
-import { useDashboard, useTrend } from './hooks'
+import { useTrend } from './hooks'
 import { Metric } from './Metric'
 import './messages'
-
-/** Only the zone and the last run of the dashboard's row are shown here (before it is read: UTC, as the server). */
-const EMPTY_DASHBOARD = toDashboard(undefined)
 
 const live = { refetchInterval: REFRESH_MS, refetchOnWindowFocus: true } as const
 
@@ -58,27 +53,34 @@ const DIFFICULTY_BADGE: Record<Difficulty, 'success' | 'secondary' | 'warning'> 
   HARD: 'warning',
 }
 
-/** The publication's figures (M-40): counts, the completion rate, and the average time and timeouts over k. */
-function OverviewSection({ o, zone }: { o: Overview; zone: string }) {
+/**
+ * The publication's figures (M-40): counts, the completion rate, and the average time and timeouts over k. Every
+ * figure is the job's snapshot (Q9e1 review M1), labelled with the run it holds for, in the zone the template gives.
+ */
+function OverviewSection({ o }: { o: Overview }) {
   const { t, i18n } = useTranslation(SPONSOR)
   const locale = i18n.language
   const n = (value: number) => value.toLocaleString(locale)
-  // Every figure here is the job's snapshot (Q9e1 review M1), labelled once with the run it holds for.
-  const asOf = o.refreshedAt ? t('analytics.asOf', { time: zoneTime(o.refreshedAt, zone, locale) }) : null
+  const asOf = o.refreshedAt
+    ? t('analytics.asOf', { time: zoneTime(o.refreshedAt, o.zone, locale), zone: o.zone }) : null
   const hidden = <span className="text-muted-foreground text-base font-normal">{t('analytics.publication.hidden')}</span>
+  // Over k completions the average time may still wait for k submitted in time (Q9e1: it moves only in steps of k).
+  const timeHint = !o.suppressed && o.avgDurationSec === null
+    ? t('analytics.publication.avgDurationWaiting', { k: o.minGroup }) : t('analytics.publication.avgDurationHint')
   return (
     <section className="flex flex-col gap-3" aria-labelledby="overview-title" data-testid="analytics-overview">
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <h2 id="overview-title" className="text-base font-semibold">{t('analytics.publication.overview')}</h2>
         {asOf && <span className="text-muted-foreground text-sm" data-testid="overview-as-of">{asOf}</span>}
       </div>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <Metric testId="overview-views" label={t('analytics.publication.views')} value={n(o.views)}
           hint={t('analytics.publication.viewsHint')} />
         <Metric testId="overview-starts" label={t('analytics.publication.starts')} value={n(o.starts)} />
         <Metric testId="overview-completions" label={t('analytics.publication.completions')} value={n(o.completions)}
           hint={t('analytics.publication.completionsHint')} />
-        <Metric testId="overview-in-progress" label={t('analytics.publication.inProgress')} value={n(o.inProgress)} />
+        <Metric testId="overview-in-progress" label={t('analytics.publication.inProgress')} value={n(o.inProgress)}
+          hint={asOf ?? undefined} />
         <Metric testId="overview-passes" label={t('analytics.publication.passes')} value={n(o.passes)} />
         <Metric testId="overview-winners" label={t('analytics.publication.winners')} value={n(o.winners)} />
         <Metric testId="overview-spent" label={t('analytics.publication.spent')} value={formatKudos(o.spent)}
@@ -88,44 +90,44 @@ function OverviewSection({ o, zone }: { o: Overview; zone: string }) {
         <Metric testId="overview-avg-duration" label={t('analytics.publication.avgDuration')}
           value={o.avgDurationSec === null ? hidden
             : t('analytics.publication.seconds', { value: o.avgDurationSec.toLocaleString(locale) })}
-          hint={t('analytics.publication.avgDurationHint')} />
+          hint={timeHint} />
         <Metric testId="overview-timeouts" label={t('analytics.publication.timeouts')}
           value={o.timeouts === null ? hidden : n(o.timeouts)} />
       </div>
       <p className="text-muted-foreground text-sm" data-testid="overview-k" data-suppressed={o.suppressed}>
         {o.suppressed
-          ? t('analytics.publication.suppressed', { k: o.minGroup, count: n(o.basedOn) })
-          : t('analytics.publication.basedOn', { count: n(o.basedOn) })}
+          ? t('analytics.publication.suppressed', { k: o.minGroup, n: n(o.basedOn), count: o.basedOn })
+          : t('analytics.publication.basedOn', { n: n(o.basedOn), count: o.basedOn })}
       </p>
     </section>
   )
 }
 
 /** The App's own rolling counts (U-22), shown as they are beside the trend (M-43). */
-function AppWindows({ o, zone }: { o: Overview; zone: string }) {
+function AppWindows({ o }: { o: Overview }) {
   const { t, i18n } = useTranslation(SPONSOR)
   const locale = i18n.language
   const n = (value: number | null) => (value === null ? '—' : value.toLocaleString(locale))
   return (
     <div className="flex flex-col gap-2" data-testid="app-windows">
       <h3 className="text-sm font-medium">{t('analytics.app.title')}</h3>
-      <DescriptionList columns={4} items={(['last1h', 'last24h', 'last7d', 'last30d'] as const).map((key) => ({
+      <DescriptionList columns={2} items={(['last1h', 'last24h', 'last7d', 'last30d'] as const).map((key) => ({
         key,
         label: t(`analytics.app.${key}`),
         value: <span data-testid={`app-${key}`}>{n(o[key])}</span>,
       }))} />
-      <p className="text-muted-foreground text-xs">
+      <p className="text-muted-foreground text-xs" data-testid="app-counted">
         {t('analytics.app.hint')}
-        {o.appCountedAt && <> {t('analytics.app.countedAt', { time: zoneTime(o.appCountedAt, zone, locale) })}</>}
+        {o.appCountedAt && <> {t('analytics.app.countedAt', { time: zoneTime(o.appCountedAt, o.zone, locale),
+          zone: o.zone })}</>}
       </p>
     </div>
   )
 }
 
 /** The trend of the last 24 hours by the hour or the last 7 days by the day, with the App's windows beside it. */
-function TrendSection({ o, zone, range, onRange, trend }: {
+function TrendSection({ o, range, onRange, trend }: {
   o: Overview
-  zone: string
   range: TrendRange
   onRange: (range: TrendRange) => void
   trend: ReturnType<typeof useTrend>
@@ -140,14 +142,15 @@ function TrendSection({ o, zone, range, onRange, trend }: {
           data-testid="trend-range"
           options={TREND_RANGES.map((value) => ({ value, label: t(`analytics.trend.${value}`) }))} />
       </div>
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[2fr_1fr]">
-        <div>
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(16rem,1fr)]">
+        <div className="min-w-0">
           {trend.isPending && <PageState kind="loading" />}
           {trend.isError && <PageState kind="error" description={t('analytics.failed')}
             action={<Button variant="outline" onClick={() => void trend.refetch()}>{tQb('retry')}</Button>} />}
-          {trend.isSuccess && <TrendCharts points={trend.data.points} range={range} zone={zone} />}
+          {trend.isSuccess && <TrendCharts points={trend.data.points} totals={trend.data.totals} range={range}
+            zone={trend.data.zone} />}
         </div>
-        <AppWindows o={o} zone={zone} />
+        <AppWindows o={o} />
       </div>
     </section>
   )
@@ -179,13 +182,13 @@ function QuestionsSection({ questions, o }: { questions: QuestionFigures[]; o: O
       {allSuppressed && (
         <Alert data-testid="questions-suppressed">
           <AlertDescription>
-            {t('analytics.questions.suppressedAll', { k, count: basedOn.toLocaleString(locale) })}
+            {t('analytics.questions.suppressedAll', { k, n: basedOn.toLocaleString(locale), count: basedOn })}
           </AlertDescription>
         </Alert>
       )}
       {questions.length > 0 && !allSuppressed && (
         <p className="text-muted-foreground text-sm" data-testid="questions-based-on">
-          {t('analytics.questions.basedOn', { count: basedOn.toLocaleString(locale), k })}
+          {t('analytics.questions.basedOn', { n: basedOn.toLocaleString(locale), count: basedOn, k })}
         </p>
       )}
       {questions.length > 0 && (
@@ -249,8 +252,6 @@ export function PublicationAnalyticsPage({ publicationId }: { publicationId: str
   const { t } = useTranslation(SPONSOR)
   const { t: tQb } = useTranslation(QB)
   const [range, setRange] = useState<TrendRange>('HOURS_24')
-  const dashboard = useDashboard()
-  const zone = dashboard.data?.zone ?? DEFAULT_ZONE
   const overview = useQuery({
     queryKey: [...ANALYTICS_QUERY, 'overview', publicationId],
     queryFn: () => readOverview(publicationId),
@@ -289,13 +290,13 @@ export function PublicationAnalyticsPage({ publicationId }: { publicationId: str
         title={<span data-testid="analytics-title">{t('analytics.publication.title', { name: o.name })}</span>}
         description={<StatusBadge status={o.status} startAt={null} endAt={null} />}
         className="pb-0" />
-      <UpdatedNote dashboard={{ ...(dashboard.data ?? EMPTY_DASHBOARD), zone, refreshedAt: o.refreshedAt }} />
-      <OverviewSection o={o} zone={zone} />
+      <UpdatedNote refreshedAt={o.refreshedAt} zone={o.zone} />
+      <OverviewSection o={o} />
       <section className="flex flex-col gap-3" aria-labelledby="funnel-title">
         <h2 id="funnel-title" className="text-base font-semibold">{t('analytics.funnel.title')}</h2>
         <Funnel overview={o} />
       </section>
-      <TrendSection o={o} zone={zone} range={range} onRange={setRange} trend={trend} />
+      <TrendSection o={o} range={range} onRange={setRange} trend={trend} />
       {questions.isPending && <PageState kind="loading" />}
       {questions.isError && <PageState kind="error" description={t('analytics.failed')}
         action={<Button variant="outline" onClick={() => void questions.refetch()}>{tQb('retry')}</Button>} />}

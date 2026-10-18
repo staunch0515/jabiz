@@ -4,18 +4,19 @@ import {
   ChartTooltipContent,
   Table,
   TableBody,
+  TableFooter,
   TableCell,
   TableHead,
   TableHeader,
   TableRow,
   type ChartConfig,
 } from '@jabiz/ui'
-import { useId, type ReactNode } from 'react'
+import { useId, useMemo, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Bar, BarChart, CartesianGrid, Line, LineChart, XAxis, YAxis } from 'recharts'
 import { SPONSOR } from '../messages'
 import { formatKudos } from '../qb/kudos'
-import { bucketLabel, type TrendPoint, type TrendRange } from './api'
+import { bucketLabel, type TrendPoint, type TrendRange, type TrendTotals } from './api'
 import './messages'
 
 /*
@@ -50,9 +51,6 @@ export function DataDisclosure({ label, children, testId }: { label: string; chi
   )
 }
 
-const COMPLETIONS: ChartConfig = { completions: { label: 'completions', color: 'var(--chart-1)' } }
-const SPENT: ChartConfig = { spent: { label: 'spent', color: 'var(--chart-2)' } }
-
 interface Plotted {
   label: string
   completions: number
@@ -67,11 +65,13 @@ const kudosNumber = (value: string) => {
 }
 
 /**
- * The trend's charts and their table. `range` picks the buckets' labels: the hour or the day in the deployment's
- * `zone` (D-Q9e-3), never the browser's.
+ * The trend's charts and their table. `range` picks the buckets' labels: the hour or the day in the trend's own
+ * `zone` (the deployment's, D-Q9e-3), never the browser's. The totals are the server's (`trend-totals`), not added up
+ * here.
  */
-export function TrendCharts({ points, range, zone, testId = 'trend' }: {
+export function TrendCharts({ points, totals, range, zone, testId = 'trend' }: {
   points: TrendPoint[]
+  totals: TrendTotals
   range: TrendRange
   zone: string
   testId?: string
@@ -79,6 +79,12 @@ export function TrendCharts({ points, range, zone, testId = 'trend' }: {
   const { t, i18n } = useTranslation(SPONSOR)
   const captionId = useId()
   const locale = i18n.language
+  const completionsLabel = t('analytics.trend.completions')
+  const spentLabel = t('analytics.trend.spent')
+  const completionsConfig = useMemo<ChartConfig>(
+    () => ({ completions: { label: completionsLabel, color: 'var(--chart-1)' } }), [completionsLabel])
+  const spentConfig = useMemo<ChartConfig>(() => ({ spent: { label: spentLabel, color: 'var(--chart-2)' } }),
+    [spentLabel])
   const data: Plotted[] = points.map((p) => ({
     label: bucketLabel(p, range, zone, locale),
     completions: p.completions,
@@ -86,13 +92,14 @@ export function TrendCharts({ points, range, zone, testId = 'trend' }: {
     gap: p.gap,
   }))
   const unit = range === 'HOURS_24' ? t('analytics.trend.unitHour') : t('analytics.trend.unitDay')
-  const totalCompletions = points.reduce((sum, p) => sum + p.completions, 0)
-  const totalSpent = points.reduce((sum, p) => sum + kudosNumber(p.spent), 0)
-  const completionsName = t('analytics.trend.completionsChart', { unit, total: totalCompletions.toLocaleString(locale) })
-  const spentName = t('analytics.trend.spentChart', { unit, total: formatKudos(totalSpent) })
+  const completionsName = t('analytics.trend.completionsChart', { unit, total: totals.completions.toLocaleString(locale) })
+  const spentName = t('analytics.trend.spentChart', { unit, total: formatKudos(totals.spent) })
   const anyGap = points.some((p) => p.gap)
-  const empty = points.every((p) => p.completions === 0 && p.views === 0 && p.starts === 0 && Number(p.spent) === 0)
+  const empty = totals.views === 0 && totals.starts === 0 && totals.completions === 0 && Number(totals.spent) === 0
   const interval = range === 'HOURS_24' ? 2 : 0
+  // In the table, the hours that start a day (the first row, and after midnight) carry their date.
+  const rowLabel = (p: TrendPoint, i: number) => range === 'HOURS_24' && (i === 0 || points[i - 1].day !== p.day)
+    ? `${bucketLabel(p, 'DAYS_7', zone, locale)} ${data[i].label}` : data[i].label
 
   return (
     <div className="flex flex-col gap-3" data-testid={testId} data-range={range} data-buckets={points.length}>
@@ -104,14 +111,14 @@ export function TrendCharts({ points, range, zone, testId = 'trend' }: {
         <figcaption className="text-sm font-medium" data-testid={`${testId}-completions-caption`}>
           {completionsName}
         </figcaption>
-        <ChartContainer config={COMPLETIONS} className="aspect-auto h-36 w-full" role="img"
+        <ChartContainer config={completionsConfig} className="aspect-auto h-36 w-full" role="img"
           aria-label={completionsName}>
           <LineChart data={data} margin={{ left: 4, right: 12, top: 8, bottom: 0 }} accessibilityLayer={false}>
             <CartesianGrid vertical={false} />
             <XAxis dataKey="label" tickLine={false} axisLine={false} interval={interval} minTickGap={8} />
             <YAxis allowDecimals={false} tickLine={false} axisLine={false} width={36} />
             <ChartTooltip content={<ChartTooltipContent />} />
-            <Line dataKey="completions" name={t('analytics.trend.completions')} type="monotone"
+            <Line dataKey="completions" name={completionsLabel} type="monotone"
               stroke="var(--color-completions)" strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }}
               isAnimationActive={false} />
           </LineChart>
@@ -119,13 +126,19 @@ export function TrendCharts({ points, range, zone, testId = 'trend' }: {
       </figure>
       <figure className="flex flex-col gap-1" aria-describedby={captionId}>
         <figcaption className="text-sm font-medium" data-testid={`${testId}-spent-caption`}>{spentName}</figcaption>
-        <ChartContainer config={SPENT} className="aspect-auto h-28 w-full" role="img" aria-label={spentName}>
+        <ChartContainer config={spentConfig} className="aspect-auto h-28 w-full" role="img" aria-label={spentName}>
           <BarChart data={data} margin={{ left: 4, right: 12, top: 8, bottom: 0 }} accessibilityLayer={false}>
             <CartesianGrid vertical={false} />
             <XAxis dataKey="label" tickLine={false} axisLine={false} interval={interval} minTickGap={8} />
             <YAxis allowDecimals={false} tickLine={false} axisLine={false} width={48} />
-            <ChartTooltip content={<ChartTooltipContent formatter={(value) => formatKudos(value)} />} />
-            <Bar dataKey="spent" name={t('analytics.trend.spent')} fill="var(--color-spent)" radius={[4, 4, 0, 0]}
+            {/* The series' name stays beside the amount (a formatter replaces the whole line). */}
+            <ChartTooltip content={<ChartTooltipContent formatter={(value) => (
+              <span className="flex flex-1 items-center justify-between gap-3 leading-none">
+                <span className="text-muted-foreground">{spentLabel}</span>
+                <span className="text-foreground font-mono font-medium tabular-nums">{formatKudos(value)}</span>
+              </span>
+            )} />} />
+            <Bar dataKey="spent" name={spentLabel} fill="var(--color-spent)" radius={[4, 4, 0, 0]}
               isAnimationActive={false} />
           </BarChart>
         </ChartContainer>
@@ -139,17 +152,17 @@ export function TrendCharts({ points, range, zone, testId = 'trend' }: {
               <TableHead scope="col">{t('analytics.trend.time')}</TableHead>
               <TableHead scope="col" className="text-right">{t('analytics.trend.views')}</TableHead>
               <TableHead scope="col" className="text-right">{t('analytics.trend.starts')}</TableHead>
-              <TableHead scope="col" className="text-right">{t('analytics.trend.completions')}</TableHead>
+              <TableHead scope="col" className="text-right">{completionsLabel}</TableHead>
               <TableHead scope="col" className="text-right">{t('analytics.trend.passes')}</TableHead>
               <TableHead scope="col" className="text-right">{t('analytics.trend.winners')}</TableHead>
-              <TableHead scope="col" className="text-right">{t('analytics.trend.spent')}</TableHead>
+              <TableHead scope="col" className="text-right">{spentLabel}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {points.map((p, i) => (
               <TableRow key={p.bucketStart} data-testid={`${testId}-row`}>
                 <TableHead scope="row" className="font-normal">
-                  {data[i].label}
+                  {rowLabel(p, i)}
                   {p.gap && <span className="text-muted-foreground"> ({t('analytics.trend.gap')})</span>}
                 </TableHead>
                 <TableCell className="text-right">{p.views.toLocaleString(locale)}</TableCell>
@@ -163,6 +176,17 @@ export function TrendCharts({ points, range, zone, testId = 'trend' }: {
               </TableRow>
             ))}
           </TableBody>
+          <TableFooter>
+            <TableRow data-testid={`${testId}-totals`}>
+              <TableHead scope="row">{t('analytics.trend.total')}</TableHead>
+              <TableCell className="text-right">{totals.views.toLocaleString(locale)}</TableCell>
+              <TableCell className="text-right">{totals.starts.toLocaleString(locale)}</TableCell>
+              <TableCell className="text-right">{totals.completions.toLocaleString(locale)}</TableCell>
+              <TableCell className="text-right">{totals.passes.toLocaleString(locale)}</TableCell>
+              <TableCell className="text-right">{totals.winners.toLocaleString(locale)}</TableCell>
+              <TableCell className="text-right">{formatKudos(totals.spent)}</TableCell>
+            </TableRow>
+          </TableFooter>
         </Table>
       </DataDisclosure>
     </div>

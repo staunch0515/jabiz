@@ -43,12 +43,43 @@ class TransferScheduleCheckTest {
     }
 
     @Test
-    void theAnalyticsRunEveryTenMinutesInLiveMode() {
-        assertThat(TransferScheduleCheck.analyticsProblems(AnalyticsLimits.RUN_CRON, true, "sk_live_abc")).isEmpty();
-        assertThat(TransferScheduleCheck.analyticsProblems(EVERY_MINUTE, false, "sk_test_abc")).isEmpty();
-        assertThat(TransferScheduleCheck.analyticsProblems(EVERY_MINUTE, true, null)).singleElement()
-            .satisfies(p -> assertThat(p.toString()).contains(AnalyticsLimits.RUN_CRON_SETTING));
-        assertThat(TransferScheduleCheck.analyticsProblems(EVERY_MINUTE, false, "sk_live_abc")).hasSize(1);
+    void theAnalyticsRunEveryTenMinutesUnlessTheEndToEndTestsSayOtherwise() {
+        // The default is always accepted, with or without the switch, in live mode too.
+        assertThat(TransferScheduleCheck.analyticsProblems(AnalyticsLimits.RUN_CRON, false, true, "sk_live_abc"))
+            .isEmpty();
+        assertThat(TransferScheduleCheck.analyticsProblems(" " + AnalyticsLimits.RUN_CRON, true, false, null)).isEmpty();
+        // Every minute: only with the end-to-end switch, and never in live mode.
+        assertThat(TransferScheduleCheck.analyticsProblems(EVERY_MINUTE, true, false, "sk_test_abc")).isEmpty();
+        assertThat(TransferScheduleCheck.analyticsProblems("15 * * * * *", true, false, "sk_test_abc")).isEmpty();
+        assertThat(TransferScheduleCheck.analyticsProblems(EVERY_MINUTE, false, false, "sk_test_abc")).singleElement()
+            .satisfies(p -> assertThat(p.toString()).contains(AnalyticsLimits.RUN_CRON_SETTING)
+                .contains(TransferScheduleCheck.E2E_SETTING));
+        assertThat(TransferScheduleCheck.analyticsProblems(EVERY_MINUTE, true, true, null)).hasSize(1);
+        assertThat(TransferScheduleCheck.analyticsProblems(EVERY_MINUTE, true, false, "sk_live_abc")).hasSize(1);
+        // A slower schedule is a change too.
+        assertThat(TransferScheduleCheck.analyticsProblems("0 0 * * * *", false, false, null)).hasSize(1);
+    }
+
+    @Test
+    void theAnalyticsNeverRunMoreThanOnceAMinute() {
+        for (String often : List.of("* * * * * *", "*/30 * * * * *", "0,1 * * * * *", "10,40 * * * * *")) {
+            assertThat(TransferScheduleCheck.analyticsProblems(often, true, false, "sk_test_abc")).as(often)
+                .singleElement().satisfies(p -> assertThat(p.toString()).contains("more than once a minute"));
+        }
+        assertThat(TransferScheduleCheck.analyticsProblems("not a cron", true, false, null)).singleElement()
+            .satisfies(p -> assertThat(p.toString()).contains("no valid schedule"));
+        assertThat(TransferScheduleCheck.shortestInterval("15 * * * * *")).hasMinutes(1);
+        assertThat(TransferScheduleCheck.shortestInterval(AnalyticsLimits.RUN_CRON)).hasMinutes(10);
+        assertThat(TransferScheduleCheck.shortestInterval("0 59,0 * * * *")).hasMinutes(1);
+    }
+
+    @Test
+    void theEndToEndSwitchIsRefusedInLiveMode() {
+        assertThat(TransferScheduleCheck.e2eSwitchProblems(false, true, "sk_live_abc")).isEmpty();
+        assertThat(TransferScheduleCheck.e2eSwitchProblems(true, false, "sk_test_abc")).isEmpty();
+        assertThat(TransferScheduleCheck.e2eSwitchProblems(true, true, null)).singleElement()
+            .satisfies(p -> assertThat(p.toString()).contains(TransferScheduleCheck.E2E_SETTING));
+        assertThat(TransferScheduleCheck.e2eSwitchProblems(true, false, "rk_live_abc")).hasSize(1);
     }
 
     @Test

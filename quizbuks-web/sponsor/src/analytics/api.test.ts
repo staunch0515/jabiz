@@ -9,6 +9,7 @@ import {
   toDashboard,
   toOverview,
   toQuestion,
+  toTrendTotals,
   toTrendPoint,
   trendParams,
   zoneTime,
@@ -55,6 +56,20 @@ describe('the analytics calls', () => {
     const shown = toQuestion({ questionNo: '2', stem: 'Q2', points: '3', completions: '10', correct: '4',
       correctRate: '0.4', difficulty: 'HARD', suppressed: false, basedOn: '10', minGroup: '5' })
     expect(shown).toMatchObject({ questionNo: 2, completions: 10, correctRate: 0.4, difficulty: 'HARD' })
+  })
+
+  it('give no average time or timeouts below the minimum group, whatever came with them', () => {
+    const hidden = toOverview({ publicationId: P1, suppressed: true, avgDurationSec: '41.5', timeouts: 2, zone: 'Asia/Tokyo' })
+    expect(hidden).toMatchObject({ suppressed: true, avgDurationSec: null, timeouts: null, zone: 'Asia/Tokyo' })
+    expect(toOverview({ publicationId: P1, suppressed: false, avgDurationSec: '41.5', timeouts: 2 }))
+      .toMatchObject({ avgDurationSec: 41.5, timeouts: 2, zone: 'UTC' })
+  })
+
+  it('read the trend\'s totals as the server gives them', () => {
+    expect(toTrendTotals({ completions: '21', spent: '2100', zone: 'Asia/Tokyo', periodStart: 'a', periodEnd: 'b' }))
+      .toEqual({ periodStart: 'a', periodEnd: 'b', views: 0, starts: 0, completions: 21, passes: 0, winners: 0,
+        spent: '2100', zone: 'Asia/Tokyo' })
+    expect(toTrendTotals(undefined)).toMatchObject({ completions: 0, spent: '0', zone: 'UTC' })
   })
 
   it('build the funnel from the template, marking its largest drop', () => {
