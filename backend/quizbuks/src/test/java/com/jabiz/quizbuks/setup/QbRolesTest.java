@@ -25,11 +25,15 @@ class QbRolesTest {
 
     @Test
     void theSuperAdministratorHoldsWhatTheOtherAdministratorsHold() {
+        // But publishing controlled changes, Stripe's events and deciding approvals (Q10b, L3: QbSodRules).
         assertThat(QbRoles.of(QbRoles.ADMIN_SUPER).permissions())
-            .containsAll(QbRoles.of(QbRoles.ADMIN_CONTENT).permissions())
+            .containsAll(QbRoles.of(QbRoles.ADMIN_CONTENT).permissions().stream()
+                .filter(permission -> !permission.equals("approval.decide")).toList())
             .containsAll(QbRoles.of(QbRoles.ADMIN_FINANCE).permissions().stream()
-                .filter(permission -> !permission.equals("control.publish") && !permission.equals("inbound.read"))
+                .filter(permission -> !permission.equals("control.publish") && !permission.equals("inbound.read")
+                    && !permission.equals("approval.decide"))
                 .toList())
+            .doesNotContain("approval.decide", "control.publish")
             .contains(QbPermissions.SETUP, QbPermissions.ADMIN_USERS_BAN, "platform.param.read", "control.propose",
                 "security.user-role.write")
             .doesNotHaveDuplicates();
@@ -48,6 +52,19 @@ class QbRolesTest {
         // The sponsors' content datasets are read only; their write permission is held by nobody.
         assertThat(QbRoles.all()).allSatisfy(role -> assertThat(role.permissions())
             .doesNotContain(QbPermissions.SPONSOR_VIEW_WRITE));
+    }
+
+    @Test
+    void noRoleHoldsBothSidesOfASeparationOfDuties() {
+        // Q10b (L3): QB_SETUP proposes these rules; once published, the platform refuses a role that breaks one.
+        for (QbSodRules.Rule rule : QbSodRules.ALL) {
+            assertThat(rule.left()).doesNotContainAnyElementsOf(rule.right()).doesNotContain("*");
+            assertThat(QbRoles.all()).as(rule.code()).noneSatisfy(role -> {
+                assertThat(role.permissions()).containsAnyElementsOf(rule.left());
+                assertThat(role.permissions()).containsAnyElementsOf(rule.right());
+            });
+        }
+        assertThat(QbSodRules.ALL).extracting(QbSodRules.Rule::code).doesNotHaveDuplicates();
     }
 
     @Test

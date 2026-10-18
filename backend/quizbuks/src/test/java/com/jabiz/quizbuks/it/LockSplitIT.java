@@ -634,7 +634,7 @@ class LockSplitIT extends PlayItSupport {
     private EntityExchangeResult<Map<String, Object>> submitCall(String token, String attemptId, String publication,
         List<Object> answers, String key) {
         return post("QB_ATTEMPT_SUBMIT", token, body("attemptId", attemptId, "publicationId", publication,
-            "currentIndex", 1, "answers", answers), key);
+            "currentIndex", 1, "answers", shown(attemptId, answers)), key);
     }
 
     /**

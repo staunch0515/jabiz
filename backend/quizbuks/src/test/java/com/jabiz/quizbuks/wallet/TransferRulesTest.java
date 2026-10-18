@@ -16,14 +16,14 @@ class TransferRulesTest {
         return BigDecimal.valueOf(value);
     }
 
-    static final TransferRules.Params ON = new TransferRules.Params(true, d(1000), d(50000), d(0));
+    static final TransferRules.Params ON = new TransferRules.Params(true, d(1000), d(50000), d(0), d(7));
 
     static TransferRules.Facts facts(long balance) {
         return facts(false, PayoutAccountStatus.ENABLED, false, 0, d(balance));
     }
 
     static TransferRules.Facts facts(boolean banned, String account, boolean open, int streak, BigDecimal balance) {
-        return new TransferRules.Facts(banned, account, open, streak, false, true, balance);
+        return new TransferRules.Facts(banned, account, open, streak, false, true, balance, d(0));
     }
 
     static TransferRules.Past failed(String code) {
@@ -43,18 +43,18 @@ class TransferRulesTest {
         assertThat(plan.fee()).isEqualByComparingTo("0");
         assertThat(plan.review()).isFalse();
         assertThat(TransferRules.plan(ON, facts(999)).skip()).isEqualTo(TransferRules.BELOW_THRESHOLD);
-        assertThat(TransferRules.plan(new TransferRules.Params(true, d(0), d(50000), d(0)), facts(0)).skip())
+        assertThat(TransferRules.plan(new TransferRules.Params(true, d(0), d(50000), d(0), d(7)), facts(0)).skip())
             .isEqualTo(TransferRules.BELOW_THRESHOLD);
     }
 
     @Test
     void aFeeIsTakenFromTheAmount() {
-        TransferRules.Params fee = new TransferRules.Params(true, d(1000), d(50000), d(100));
+        TransferRules.Params fee = new TransferRules.Params(true, d(1000), d(50000), d(100), d(7));
         TransferRules.Plan plan = TransferRules.plan(fee, facts(1500));
         assertThat(plan.amount()).isEqualByComparingTo("1500");
         assertThat(plan.fee()).isEqualByComparingTo("100");
         assertThat(plan.net()).isEqualByComparingTo("1400");
-        assertThat(TransferRules.plan(new TransferRules.Params(true, d(10), d(50000), d(100)), facts(100)).skip())
+        assertThat(TransferRules.plan(new TransferRules.Params(true, d(10), d(50000), d(100), d(7)), facts(100)).skip())
             .isEqualTo(TransferRules.FEE_TOO_HIGH);
     }
 
@@ -66,13 +66,13 @@ class TransferRulesTest {
 
     @Test
     void everyReasonToSkip() {
-        assertThat(TransferRules.plan(new TransferRules.Params(false, d(1000), d(50000), d(0)), facts(5000)).skip())
+        assertThat(TransferRules.plan(new TransferRules.Params(false, d(1000), d(50000), d(0), d(7)), facts(5000)).skip())
             .isEqualTo(TransferRules.DISABLED);
-        assertThat(TransferRules.plan(new TransferRules.Params(null, d(1000), d(50000), d(0)), facts(5000)).skip())
+        assertThat(TransferRules.plan(new TransferRules.Params(null, d(1000), d(50000), d(0), d(7)), facts(5000)).skip())
             .isEqualTo(TransferRules.DISABLED);
-        assertThat(TransferRules.plan(new TransferRules.Params(true, null, d(50000), d(0)), facts(5000)).skip())
+        assertThat(TransferRules.plan(new TransferRules.Params(true, null, d(50000), d(0), d(7)), facts(5000)).skip())
             .isEqualTo(TransferRules.INVALID_PARAMS);
-        assertThat(TransferRules.plan(new TransferRules.Params(true, d(1000), d(50000), d(-1)), facts(5000)).skip())
+        assertThat(TransferRules.plan(new TransferRules.Params(true, d(1000), d(50000), d(-1), d(7)), facts(5000)).skip())
             .isEqualTo(TransferRules.INVALID_PARAMS);
         assertThat(TransferRules.plan(ON, facts(true, PayoutAccountStatus.ENABLED, false, 0,
             d(5000))).skip()).isEqualTo(TransferRules.BANNED);
@@ -91,12 +91,39 @@ class TransferRulesTest {
             d(5000))).transfers()).isTrue();
         // Held after a rejected or reversed transfer, until finance releases the taker.
         assertThat(TransferRules.plan(ON, new TransferRules.Facts(false, PayoutAccountStatus.ENABLED, false, 0, true,
-            true, d(5000))).skip()).isEqualTo(TransferRules.HELD);
+            true, d(5000), d(0))).skip()).isEqualTo(TransferRules.HELD);
         // Above the review limit without a review rule: skipped (nothing written), not rejected.
         assertThat(TransferRules.plan(ON, new TransferRules.Facts(false, PayoutAccountStatus.ENABLED, false, 0, false,
-            false, d(50001))).skip()).isEqualTo(TransferRules.REVIEW_NOT_CONFIGURED);
+            false, d(50001), d(0))).skip()).isEqualTo(TransferRules.REVIEW_NOT_CONFIGURED);
         assertThat(TransferRules.plan(ON, new TransferRules.Facts(false, PayoutAccountStatus.ENABLED, false, 0, false,
-            false, d(50000))).transfers()).isTrue();
+            false, d(50000), d(0))).transfers()).isTrue();
+    }
+
+    static TransferRules.Facts withHeld(long balance, long held) {
+        return new TransferRules.Facts(false, PayoutAccountStatus.ENABLED, false, 0, false, true, d(balance), d(held));
+    }
+
+    @Test
+    void rewardsHeldBackStayUntilFree() {
+        // Q10b (M3): only the balance less the rewards held back leaves, once that reaches the threshold.
+        TransferRules.Plan plan = TransferRules.plan(ON, withHeld(5000, 1500));
+        assertThat(plan.amount()).isEqualByComparingTo("3500");
+        assertThat(plan.net()).isEqualByComparingTo("3500");
+        assertThat(TransferRules.plan(ON, withHeld(5000, 4500)).skip()).isEqualTo(TransferRules.REWARDS_HELD);
+        assertThat(TransferRules.plan(ON, withHeld(5000, 5000)).skip()).isEqualTo(TransferRules.REWARDS_HELD);
+        // Held more than the balance (rewards of a disputed sponsor already sent): nothing, never below 0.
+        assertThat(TransferRules.plan(ON, withHeld(5000, 9000)).skip()).isEqualTo(TransferRules.REWARDS_HELD);
+        assertThat(TransferRules.transferable(d(5000), d(9000))).isEqualByComparingTo("0");
+        assertThat(TransferRules.transferable(d(5000), null)).isEqualByComparingTo("5000");
+        assertThat(TransferRules.plan(ON, withHeld(900, 0)).skip()).isEqualTo(TransferRules.BELOW_THRESHOLD);
+        // The review limit looks at what leaves.
+        assertThat(TransferRules.plan(ON, withHeld(60000, 20000)).review()).isFalse();
+        assertThat(TransferRules.plan(ON, withHeld(60000, 5000)).review()).isTrue();
+        // A hold period that cannot be used stops transfers.
+        assertThat(TransferRules.plan(new TransferRules.Params(true, d(1000), d(50000), d(0), null), withHeld(5000, 0))
+            .skip()).isEqualTo(TransferRules.INVALID_PARAMS);
+        assertThat(TransferRules.plan(new TransferRules.Params(true, d(1000), d(50000), d(0), d(-1)), withHeld(5000, 0))
+            .skip()).isEqualTo(TransferRules.INVALID_PARAMS);
     }
 
     @Test
@@ -157,14 +184,19 @@ class TransferRulesTest {
         assertThat(TransferRules.reversalPart(d(1000), d(0), null)).isNull();
     }
 
-    /** Whatever the balance, a transfer never takes more than it, and amount = fee + net with net > 0. */
+    /**
+     * Whatever the balance and the rewards held back, a transfer never takes more than what is not held, and amount =
+     * fee + net with net > 0.
+     */
     @Property
     void neverMoreThanTheBalance(@ForAll @IntRange(min = 0, max = 2_000_000) int balance,
-        @ForAll @IntRange(min = 0, max = 5000) int fee, @ForAll @IntRange(min = 0, max = 100_000) int threshold) {
-        TransferRules.Plan plan = TransferRules.plan(new TransferRules.Params(true, d(threshold), d(50000), d(fee)),
-            facts(balance));
+        @ForAll @IntRange(min = 0, max = 5000) int fee, @ForAll @IntRange(min = 0, max = 100_000) int threshold,
+        @ForAll @IntRange(min = 0, max = 2_000_000) int held) {
+        TransferRules.Plan plan = TransferRules.plan(new TransferRules.Params(true, d(threshold), d(50000), d(fee), d(7)),
+            withHeld(balance, held));
         if (plan.transfers()) {
-            assertThat(plan.amount()).isEqualByComparingTo(d(balance));
+            assertThat(plan.amount()).isEqualByComparingTo(d(Math.max(0, balance - held)));
+            assertThat(plan.amount()).isLessThanOrEqualTo(d(balance));
             assertThat(plan.fee().add(plan.net())).isEqualByComparingTo(plan.amount());
             assertThat(plan.net().signum()).isPositive();
             assertThat(plan.amount()).isGreaterThanOrEqualTo(d(threshold));

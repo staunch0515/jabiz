@@ -5,7 +5,7 @@ import { createContext, useContext, useId, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { SPONSOR } from '../messages'
 import { problemText } from '../qb/problems'
-import { isStale, type EditOutput } from './api'
+import { isStale, neutralName, type EditOutput } from './api'
 import { CONTENT_FILE_POLICY } from './ids'
 import { ContentImage } from './ContentImage'
 import { DOCUMENT_FIELD, UPLOADS } from './limits'
@@ -102,7 +102,7 @@ export function FileField({ kind, label, uploadLabel, value, onChange, error, te
         label={uploadLabel} hint={hint} disabled={disabled} aria-invalid={error ? true : undefined}
         aria-describedby={error ? `${id}-error` : undefined} data-testid={`${testId}-upload`}
         onUpload={async (file) => {
-          const uploaded = await uploadFile(POLICY[kind], file, file.name)
+          const uploaded = await uploadFile(POLICY[kind], file, neutralName(kind, file.name))
           onChange(uploaded.fileId ?? null)
         }} />
       {error && <p id={`${id}-error`} className="text-destructive text-sm">{error}</p>}

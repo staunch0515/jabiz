@@ -38,7 +38,8 @@ class SponsorReviewSettingsIT extends AccountItSupport {
         Map<String, Object> installed = setup();
         @SuppressWarnings("unchecked")
         List<Object> proposals = (List<Object>) installed.get("proposals");
-        int count = proposals.size();
+        // The separation of duties (Q10b) comes last and is left unpublished: the rules are counted before it.
+        int count = proposals.size() - com.jabiz.quizbuks.setup.QbSodRules.ALL.size();
         String sara = userWithRole(unique("sara"), QbRoles.SPONSOR);
         String token = tokenOf(sara, QbRoles.SPONSOR);
 

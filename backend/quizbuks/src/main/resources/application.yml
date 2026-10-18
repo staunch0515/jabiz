@@ -4,11 +4,13 @@ spring:
   r2dbc:
     url: ${SPRING_R2DBC_URL:r2dbc:postgresql://localhost:5440/quizbuks}
     username: ${SPRING_R2DBC_USERNAME:quizbuks}
-    password: ${DB_PASSWORD:quizbuks}
+    # No fallback (Q10b): without SPRING_R2DBC_PASSWORD or DB_PASSWORD the start fails. The compose files and
+    # tools/quizbuks/local-demo.sh set it; the dev profile has the local database's.
+    password: ${DB_PASSWORD}
   flyway:
     url: ${SPRING_FLYWAY_URL:jdbc:postgresql://localhost:5440/quizbuks}
     user: ${SPRING_FLYWAY_USER:quizbuks}
-    password: ${DB_PASSWORD:quizbuks}
+    password: ${DB_PASSWORD}
 
 jabiz:
   # The wallets are the ledger, kept in yen without decimals and shown as Kudos (docs/quizbuks/02-design.md
@@ -33,6 +35,15 @@ jabiz:
     rate-limits:
       "[QB_ATTEMPT_START]": { per-user: 60, period: 1m }
       "[QB_ATTEMPT_SUBMIT]": { per-user: 60, period: 1m }
+      # Q10b (review L2, S-5): the other entries a script could hammer, each far above a person's use. Opening a
+      # payout account and starting a top-up call Stripe; the journal's preview reads a month of the ledger; saving
+      # answers (the App debounces), first views and a publication's draft are cheap but unbounded otherwise.
+      "[QB_PAYOUT_ONBOARD]": { per-user: 5, period: 1h }
+      "[QB_TOPUP_START]": { per-user: 20, period: 1h }
+      "[QB_JOURNAL_PREVIEW]": { per-user: 10, period: 1m }
+      "[QB_ATTEMPT_SAVE]": { per-user: 120, period: 1m }
+      "[QB_VIEW]": { per-user: 300, period: 1m }
+      "[QB_PUBLICATION_SAVE]": { per-user: 60, period: 1m }
   # The key signing the integrity seals (docs/design/21-audit-retention.md section 2), from the environment only:
   # Base64, at least 32 bytes. Startup fails without it. Keep a copy: without it the existing seals cannot be verified.
   integrity:
@@ -81,7 +92,9 @@ jabiz:
         session:
           persistence: tab
           idle-timeout: PT30M
-    # Behind a reverse proxy, its addresses (or CIDR ranges), so that sign-in records keep the client's address.
+    # Behind a reverse proxy, its addresses (or CIDR ranges), so that sign-in records keep the client's address. None
+    # is an error in live mode unless quizbuks.deploy.direct-exposure says no proxy is in front; a range of every
+    # address (0.0.0.0/0, ::/0) always is (Q10b, review M6; wallet.DeploySafetyCheck).
     trusted-proxies: ${JABIZ_TRUSTED_PROXIES:}
     # The first administrator, created at startup when both are set and no user exists yet.
     bootstrap-admin:
@@ -191,3 +204,7 @@ quizbuks:
   # before the export's cut-off could commit after the export's reads. At most half of JournalPeriods.SETTLE (10 min).
   journal:
     max-open-transaction: PT5M
+  # Q10b (review M6): true when no reverse proxy is in front of the application, so that no trusted proxy is listed on
+  # purpose (deploy/quizbuks/README.md, "密钥与部署").
+  deploy:
+    direct-exposure: ${QB_DIRECT_EXPOSURE:false}

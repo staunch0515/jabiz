@@ -39,6 +39,8 @@ public final class QbPlay {
      * An attempt: who answers which publication (once: the pair is unique), until when, the order its options are
      * shown in and the answers so far; once finished, the result (with the correct answers, written only then), the
      * reward and how it was settled. Only {@code currentIndex} and {@code answers} change while it is in progress.
+     * Answers and the result name options by their position in the attempt (Q10b), which only the option order maps
+     * back to the version's numbers; the order is sensitive (no read interface returns it).
      */
     public static final EntityDefinition ATTEMPT_ENTITY = EntityDefinition.define(ATTEMPT, eb -> {
         eb.physicalTable("qb_attempt");
@@ -59,8 +61,10 @@ public final class QbPlay {
         eb.field("status", f -> f.physicalColumn("status").required(true).processOnly()
             .asCode(ATTEMPT_STATUS_DICTIONARY, AttemptStatus.ALL.toArray(String[]::new)));
         eb.field("currentIndex", f -> f.physicalColumn("current_index").required(true).asNumeric(4, 0));
-        eb.field("optionOrder", f -> f.physicalColumn("option_order").immutable(true).required(true).processOnly()
-            .asText(PlayLimits.ANSWERS_LENGTH));
+        // Sensitive (Q10b, M1): it maps the positions a taker answers by back to the author's order, so no read
+        // interface returns it, not even the taker's own dataset; only the processes read it.
+        eb.field("optionOrder", f -> f.physicalColumn("option_order").immutable(true).required(true)
+            .sensitive().asText(PlayLimits.ANSWERS_LENGTH));
         eb.field("answers", f -> f.physicalColumn("answers").required(true).asText(PlayLimits.ANSWERS_LENGTH));
         eb.field("result", f -> f.physicalColumn("result").processOnly().asText(PlayLimits.RESULT_LENGTH));
         eb.field("submittedAt", f -> f.physicalColumn("submitted_at").processOnly()

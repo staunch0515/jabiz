@@ -7,6 +7,11 @@ public final class WalletLimits {
 
     /** Unfinished (opening, or open and not expired) top-ups a sponsor may have. */
     public static final int MAX_OPEN_TOPUPS = 3;
+    /**
+     * The paid top-ups a start reads for the new sponsors' limit (Q10b): within the limit a sponsor has fewer (it over
+     * the smallest top-up), and a sponsor with more is taken as at the limit; past the period only the first counts.
+     */
+    public static final int NEW_SPONSOR_TOPUPS = 500;
     /** How long an opening top-up (its checkout not created yet) counts as unfinished. */
     public static final Duration OPENING_COUNTS = Duration.ofHours(1);
     /**

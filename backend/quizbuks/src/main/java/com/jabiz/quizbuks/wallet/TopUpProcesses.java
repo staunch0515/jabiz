@@ -17,6 +17,7 @@ import com.jabiz.runtime.BusinessRuleViolationException;
 import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.ledger.LedgerProcesses;
 import com.jabiz.runtime.process.steps.CallProcess;
+import com.jabiz.runtime.process.steps.HoldLock;
 import com.jabiz.runtime.process.steps.LoadParams;
 import com.jabiz.runtime.process.steps.QueryEntities;
 import com.jabiz.runtime.process.steps.StartExternalJob;
@@ -85,6 +86,7 @@ public final class TopUpProcesses {
     static final String INPUT = "input";
     static final String PARAMS = "params";
     static final String UNFINISHED = "unfinished";
+    static final String PAID = "paid";
     static final String TOPUP_ID = "topUpId";
     static final String JOB_ID = "jobId";
     static final String CHECKING = "checking";
@@ -110,17 +112,28 @@ public final class TopUpProcesses {
                 (String) ctx.get(JOB_ID)))
             .steps(SponsorChecks::load)
             .step("Load the limits", LoadParams.<ProcessContext>of(ProcessContext::opTime, PARAMS,
-                QbParams.TOPUP_MIN, QbParams.TOPUP_MAX))
-            // A soft limit, without a lock: a top-up or two more from concurrent starts do no harm, and the job type
-            // allows the sponsor three open jobs at most besides. An opening one counts for an hour only: one whose
-            // checkout never opened (its job's result lost) does not hold a place for ever.
+                QbParams.TOPUP_MIN, QbParams.TOPUP_MAX, QbParams.TOPUP_NEW_SPONSOR_DAYS,
+                QbParams.TOPUP_NEW_SPONSOR_MAX_TOTAL))
+            // The new sponsors' limit (Q10b, M3) counts the unfinished top-ups too, so two starts at once must not
+            // both fit in it: a sponsor's starts take turns. Nothing else takes this lock, and nothing is locked
+            // after it.
+            .step("Lock the sponsor's top-ups", HoldLock.<ProcessContext>exclusive(
+                ctx -> lockName(ctx.request().actorId())))
+            .step("Load the paid top-ups", QueryEntities.<ProcessContext>of(
+                QbTopUps.defaultDataset(QbTopUps.TOPUP), ctx -> EntityQuery.builder()
+                    .where(new QueryPredicate.And(List.of(
+                        new QueryPredicate.Eq("sponsorId", ctx.request().actorId()),
+                        new QueryPredicate.IsNotNull("paidAt"))))
+                    .orderBy("paidAt", true).limit(WalletLimits.NEW_SPONSOR_TOPUPS).build(), PAID))
+            // An opening one counts until its checkout job has finished or failed (review L4): the job's completion
+            // or failure process (both delivered by the platform until they run) is what moves it on, to open or
+            // failed. One that stays opening keeps counting: refused rather than let through.
             .step("Load the unfinished top-ups", QueryEntities.<ProcessContext>of(
                 QbTopUps.defaultDataset(QbTopUps.TOPUP), ctx -> EntityQuery.builder()
                     .where(new QueryPredicate.And(List.of(
                         new QueryPredicate.Eq("sponsorId", ctx.request().actorId()),
                         new QueryPredicate.Or(List.of(
-                            new QueryPredicate.And(List.of(new QueryPredicate.Eq("status", TopUpStatus.OPENING),
-                                new QueryPredicate.Gt("createdAt", ctx.opTime().minus(WalletLimits.OPENING_COUNTS)))),
+                            new QueryPredicate.Eq("status", TopUpStatus.OPENING),
                             new QueryPredicate.And(List.of(new QueryPredicate.Eq("status", TopUpStatus.OPEN),
                                 new QueryPredicate.Gt("expiresAt", ctx.opTime()))))))))
                     .limit(WalletLimits.MAX_OPEN_TOPUPS).build(), UNFINISHED))
@@ -141,6 +154,16 @@ public final class TopUpProcesses {
         if (amount.compareTo(min) < 0 || amount.compareTo(max) > 0) {
             problems.add(new Violation("amount", WalletCodes.TOPUP_AMOUNT_RANGE, "A top-up is between " + min
                 + " and " + max + " Kudos", Map.of("min", min.toPlainString(), "max", max.toPlainString())));
+        }
+        NewSponsorLimit.Standing standing = newSponsor(ctx, params);
+        if (standing == null) {
+            problems.add(new Violation(null, WalletCodes.TOPUP_UNAVAILABLE, "The new sponsors' limit is not set",
+                Map.of()));
+        } else {
+            Violation refusal = NewSponsorLimit.refusal(standing, amount);
+            if (refusal != null) {
+                problems.add(refusal);
+            }
         }
         if (TopUpCrediting.list(ctx, UNFINISHED).size() >= WalletLimits.MAX_OPEN_TOPUPS) {
             problems.add(new Violation(null, WalletCodes.TOPUP_TOO_MANY_OPEN, "Finish or let expire the unfinished "
@@ -164,6 +187,34 @@ public final class TopUpProcesses {
         values.put("disputeShortfall", BigDecimal.ZERO);
         values.put("disputeHeld", BigDecimal.ZERO);
         ctx.put(TOPUP_ID, String.valueOf(ctx.changes().insert(QbTopUps.TOPUP, values)));
+    }
+
+    /** The lock of a sponsor's top-up starts (Q10b): held alone, by {@value #START} only. */
+    static String lockName(String sponsorId) {
+        return "qb.topup:" + sponsorId;
+    }
+
+    /**
+     * Where the caller stands against the new sponsors' limit: their paid top-ups (the first one starts it) and the
+     * unfinished ones; null when its parameters cannot be used.
+     */
+    static NewSponsorLimit.Standing newSponsor(ProcessContext ctx, ParamValues params) {
+        List<EntityInstance> paid = TopUpCrediting.list(ctx, PAID);
+        BigDecimal used = BigDecimal.ZERO;
+        for (EntityInstance topUp : paid) {
+            used = used.add(QbTopUps.money(topUp.get("amount")));
+        }
+        for (EntityInstance topUp : TopUpCrediting.list(ctx, UNFINISHED)) {
+            used = used.add(QbTopUps.money(topUp.get("amount")));
+        }
+        BigDecimal maxTotal = params.get(QbParams.TOPUP_NEW_SPONSOR_MAX_TOTAL, BigDecimal.class);
+        if (paid.size() >= WalletLimits.NEW_SPONSOR_TOPUPS && maxTotal != null) {
+            // More than were read: not counted, so taken as the whole limit (only past the period does it pass).
+            used = used.max(maxTotal);
+        }
+        Instant firstPaidAt = paid.isEmpty() ? null : QbTopUps.instant(paid.getFirst().get("paidAt"));
+        return NewSponsorLimit.standing(params.get(QbParams.TOPUP_NEW_SPONSOR_DAYS, BigDecimal.class), maxTotal,
+            firstPaidAt, used, ctx.opTime());
     }
 
     // ---- the checkout's job ----------------------------------------------------------------------------------------

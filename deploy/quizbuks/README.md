@@ -8,21 +8,57 @@
 **Stripe 测试模式的全流程**（真实测试密钥：充值、答题、开户、转账、退款、争议、打款）：[`docs/quizbuks/stripe-test-mode.md`](../../docs/quizbuks/stripe-test-mode.md)（`tools/quizbuks/stripe-test-mode/run.sh`）。
 
 ```sh
-docker compose -f deploy/quizbuks/docker-compose.yml up -d --build      # 数据库 127.0.0.1:5440，应用 127.0.0.1:8080
-docker compose -f deploy/quizbuks/docker-compose.yml logs app           # 首次启动打印管理员密码
+QB_LOCAL_SECRETS=true docker compose -f deploy/quizbuks/docker-compose.yml up -d --build      # 数据库 127.0.0.1:5440，应用 127.0.0.1:8080
+docker compose -f deploy/quizbuks/docker-compose.yml exec app cat /var/lib/jabiz/secrets/admin-password   # 首个管理员的密码
 ```
 
 - 没有 `deploy/quizbuks/.env` 也能在本机启动，但 Stripe 未配置（占位，日志中有 `quizbuks: WARNING`），充值与转账不能使用；邮件缺省关闭，注册的用户不能验证邮箱
   （见下文"充值与核对"中"本机的 compose"与"前端"中"本机注册"）。服务器上设 `QB_STRIPE_PLACEHOLDERS=false`。
-- 管理员密码只在首次启动时打印一次；之后在仓库根目录用
-  `docker compose -f deploy/quizbuks/docker-compose.yml exec app cat /var/lib/jabiz/secrets/admin-password` 读取
-  （入口脚本提示中的 `docker compose exec app …` 省略了 `-f`；应用服务因此命名为 `app`）。
+- 管理员密码**不打印**（Q10b，评审 M5）：首次启动时写入 secrets 卷中的只读文件，日志只给出路径；在仓库根目录用
+  `docker compose -f deploy/quizbuks/docker-compose.yml exec app cat /var/lib/jabiz/secrets/admin-password` 读取（应用服务因此命名为 `app`）。
+  本机以 `QB_LOCAL_SECRETS=true`（命令前或写进 `.env`）生成平台密钥与这个密码；compose 缺省 `false`（评审 L5）：不设时缺少任一密钥即拒绝启动，
+  **服务器上不设它**并给出全部密钥，见下节"密钥与部署"。
 - 三个前端（见下节"前端"）：答题 App <http://localhost:8080/>、商家后台 <http://localhost:8080/sponsor/>、管理员后台 <http://localhost:8080/admin/>。
 - 首次登录后执行一次流程 `QB_SETUP`（建角色、账本科目、国家、业务参数；可重复执行，只补从未存在过的，不加回已删除的）。它要求二次验证：
   先在后台的"安全设置"中开启两步验证（TOTP）；只在本机演示时可设 `JABIZ_SECURITY_MFA_ADMINISTRATION=false` 跳过。
 - `QB_SETUP` 把受控参数（金额、免审核开关）与审批规则（发布审核 `qb.publication.review`，Q4 起；商家入驻审核 `qb.sponsor.review`，Q2 起）
   作为受控变更**提出**，须由另一位持有 `control.publish` 的管理员（财务管理员）在后台发布（`CONTROL_CHANGE_PUBLISH`）。**发布之前，商家的入驻申请与提交发布一律被拒**
   （`PARAM_NOT_FOUND` 或 `QB_REVIEW_NOT_CONFIGURED`），不会未经审核通过。新版本部署后再执行一次 `QB_SETUP`，并发布新的提案（Q2 部署后：新权限、第二条规则）。
+
+## 密钥与部署（Q10b）
+
+安全审查（`docs/quizbuks/plans/Q10b-security-fixes.md`）之后，镜像与启动检查拒绝不安全的部署。运维手册（另一分支）合并后，本节移入其中。
+
+- **密钥**（M5）：入口脚本 `deploy/quizbuks/entrypoint.sh` 在 `JABIZ_JWT_SECRET`、`JABIZ_INTEGRITY_KEY`、`JABIZ_MFA_KEY` 任一缺少时拒绝启动，
+  首个管理员的密码 `JABIZ_BOOTSTRAP_ADMIN_PASSWORD` 缺少时也拒绝，除非已设 `QB_BOOTSTRAP_ADMIN_DONE=true`（首个管理员已存在：平台只在空库时建它，
+  脚本给一个谁也看不到的随机值，不让平台脚本生成并打印）。只有 `QB_LOCAL_SECRETS=true`（本机演示自己设置：compose 缺省 `false`，`tools/quizbuks/local-demo.sh`
+  与 CI 的 `deploy` 作业设置它）才让平台脚本把缺少的密钥生成到 secrets 卷；**正式模式**（`QB_STRIPE_LIVEMODE` 或 `QUIZBUKS_STRIPE_LIVEMODE` 不是 `false`，
+  或 `sk_live_` / `rk_live_` 密钥）下一律不生成。生成的管理员密码只写入卷内只读文件 `admin-password`，日志只提示路径。脚本生成（或从卷中读回生成的）密钥或密码时
+  导出 `QB_SECRETS_GENERATED=true`，启动检查 `DeploySafetyCheck` 在正式模式下见到它即失败（评审 L5：无论正式模式从哪里打开）。测试：`tools/quizbuks/test/entrypoint.test.sh`。
+- **可信代理**（M6）：在反向代理之后必须设置 `JABIZ_TRUSTED_PROXIES`（代理自己的地址或网段），否则登录限流与登录记录看到的都是代理的地址；
+  没有代理、应用直接对外时设 `QB_DIRECT_EXPOSURE=true`（`quizbuks.deploy.direct-exposure`）。两者都没有时，测试模式启动告警、正式模式启动失败；
+  含过宽的网段时一律启动失败——任何人都可以自称任意地址（评审 L6）：IPv4 前缀短于 /8、IPv6 前缀短于 /32、整个 IPv4 的 IPv6 映射（`::ffff:0:0/96`、`::/96`、
+  `64:ff9b::/96`、`64:ff9b:1::/48`），前缀照平台的读法（`+0`、`00` 都是 0），不是数字或超出范围的同样拒绝。检查：`wallet.DeploySafetyCheck`（类别 `QUIZBUKS`）。
+- **二次验证**（L1）：正式模式下 `JABIZ_SECURITY_MFA_ADMINISTRATION=false` 即启动失败（只给本机演示与 e2e）。
+- **`dev` profile**（L5）：只在监听回环地址（`server.address`，`application-dev.yml` 缺省 `127.0.0.1`）且邮件基础地址为本机时允许启动。
+- **数据库密码**（第 11 项）：`application.yml` 不再回退到 `quizbuks`，缺少 `SPRING_R2DBC_PASSWORD` / `SPRING_FLYWAY_PASSWORD`（或 `DB_PASSWORD`）即启动失败；compose 照常显式设置，`dev` profile 保留本机库的密码。
+- **职责分离**（L3）：部署后再执行一次 `QB_SETUP`，它提出两条职责分离规则（`qb.sod.control-changes`：提出受控变更者不发布；`qb.sod.security-administration`：
+  管理角色与角色分配者不发布受控变更、不做审批），由财务管理员发布。超级管理员角色因此不再含 `approval.decide`；**已有安装**在发布之前先从 `QB_ADMIN_SUPER`
+  收回 `approval.decide`（`QB_SETUP` 不收回已授予的权限），否则发布后超级管理员的角色管理与审批都被平台以 `SOD_CONFLICT` 拒绝。
+- **残留风险：经用户与角色管理绕过四眼**（评审 M-c）：持有用户与角色管理权限的人可以给自己或同伙分配角色，绕过受控变更与审批的四眼。
+  需求方决定由平台 16r（决策 D48）修正；在此之前只有**检查性控制**：按季度的访问审查（下一条）、审计记录 `GET /api/audit/records` 中对
+  `SecUserRole` / `SecRole` 的变更逐条复核、只给最少的人用户与角色管理权限。
+- **残留风险：保留期按 UTC 计、选项图片的文件编号**（评审 L7、L8）：由平台 16r 修正，本应用不另做处理。
+- **上线清单**：首个管理员（`ADMIN`，全部权限）只用于建立各管理员账户，之后在后台用户页**停用**（`SecUser.enabled = false`）；访问审查按季度签发
+  （模板 `jabiz.security.access_review`，`REPORT_ISSUE`，签核 `ACCESS_REVIEW_SIGN_OFF`）。
+- **限流**（L2）：每用户每实例：开通收款 `QB_PAYOUT_ONBOARD` 每小时 5 次、充值 `QB_TOPUP_START` 每小时 20 次、分录预览每分钟 10 次、保存答案每分钟 120 次、
+  首次浏览每分钟 300 次、保存发布每分钟 60 次（`application.yml` 的 `jabiz.process.rate-limits`），超出 429 `RATE_LIMITED`。
+- **资金**（M3）：奖励入账后保留 `qb.transfer.hold-days`（7）天才转账，商家有未结争议时其被争议付款之后入账的奖励冻结到结案；新商家首次充值成功前与之后
+  `qb.topup.new-sponsor.days`（30）天内累计充值不超过 `qb.topup.new-sponsor.max-total`（100 000 Kudos）。三者都是受控参数：部署后执行 `QB_SETUP` 并发布提案，
+  **发布之前每日转账与充值一律不进行**（转账 `INVALID_PARAMS`，充值 `QB_TOPUP_UNAVAILABLE`）。
+- **管理员下架**（M2）：内容管理员（`qb.admin.content.write`，总是要求二次验证）在后台发布页以 `QB_PUBLICATION_ADMIN_PAUSE` / `_RESUME` / `_END` 暂停、恢复、结束发布，
+  理由商家可见；封禁商家时其进行中的发布在同一事务中被暂停，解封不恢复。
+- **保留期**（第 13 项）：分录导出、明细段、外部凭证号、充值、收据与入站 Stripe 事件保留 10 年，自会计年度末起算（平台的保留期报表 `GET /api/retention`）。
 
 ## 本机演示（一条命令）
 
@@ -178,11 +214,14 @@ tools/quizbuks/local-demo.sh status | logs | seed
 
 | 变量 | 必需 | 说明 |
 |---|---|---|
-| `DB_PASSWORD` | 服务器上必需 | 数据库用户 `quizbuks` 的密码（缺省 `quizbuks` 只用于本机） |
+| `DB_PASSWORD` | 是 | 数据库用户 `quizbuks` 的密码；没有缺省值（Q10b），缺少即启动失败。compose 缺省 `quizbuks` 只用于本机 |
 | `JABIZ_JWT_SECRET` | 是 | 访问令牌签名密钥。本机首次启动时入口脚本自动生成到 secrets 卷 |
 | `JABIZ_INTEGRITY_KEY` | 是 | 只追加表的封存密钥（平台 21 §2）。**保留副本**：没有它无法核验已有封存 |
 | `JABIZ_MFA_KEY` | 是 | TOTP 密钥的加密密钥（平台 10 §9）。**保留副本**：没有它已绑定的用户无法二次验证 |
-| `JABIZ_BOOTSTRAP_ADMIN_USER` / `JABIZ_BOOTSTRAP_ADMIN_PASSWORD` | 首次启动 | 第一个管理员（拥有全部权限）；本机未给密码时自动生成并打印 |
+| `JABIZ_BOOTSTRAP_ADMIN_USER` / `JABIZ_BOOTSTRAP_ADMIN_PASSWORD` | 首次启动 | 第一个管理员（拥有全部权限）；本机（`QB_LOCAL_SECRETS=true`）未给密码时生成到卷内只读文件，不打印 |
+| `QB_LOCAL_SECRETS` | 否 | 缺省 `false`（Q10b 评审 L5）：缺少任一平台密钥即拒绝启动。只在本机演示设 `true`：缺少的平台密钥与管理员密码生成到 secrets 卷（并导出 `QB_SECRETS_GENERATED=true`）；正式模式下无效 |
+| `QB_BOOTSTRAP_ADMIN_DONE` | 首个管理员建好后 | `true`：首个管理员已存在，不再需要 `JABIZ_BOOTSTRAP_ADMIN_PASSWORD` |
+| `QB_DIRECT_EXPOSURE` | 没有反向代理时 | `true`：应用直接对外，不列可信代理（否则正式模式下缺少 `JABIZ_TRUSTED_PROXIES` 即启动失败） |
 | `JABIZ_FILES_LOCAL_ROOT` | 是 | 上传文件目录；镜像中已设为卷 `/var/lib/jabiz/files` |
 | `SPRING_R2DBC_URL` / `SPRING_R2DBC_USERNAME` / `SPRING_R2DBC_PASSWORD`、`SPRING_FLYWAY_URL` / `SPRING_FLYWAY_USER` / `SPRING_FLYWAY_PASSWORD` | compose 已给 | 数据库连接（请求路径用 R2DBC，迁移用 JDBC） |
 | `JABIZ_SECURITY_MFA_ADMINISTRATION` | 否 | `false` 时平台管理操作（含 `QB_SETUP`）不要求二次验证；只用于本机演示与 e2e |
@@ -198,7 +237,7 @@ tools/quizbuks/local-demo.sh status | logs | seed
 | `SPRING_PROFILES_ACTIVE` | 否 | `google` 开启 App 的 Google 登录（`application-google.yml`，见"前端"） |
 | `JABIZ_OIDC_GOOGLE_CLIENT_ID` / `JABIZ_OIDC_GOOGLE_CLIENT_SECRET` | 开启 Google 时 | Google OAuth 客户端（Web 应用）；密钥只放在环境变量中 |
 | `QB_OIDC_REDIRECT_APP` | 开启 Google 时 | App 的回调地址 `https://<主机>/login/oidc`，与 Google 控制台中登记的完全相同 |
-| `JABIZ_TRUSTED_PROXIES` | 在代理之后 | 可信代理的地址或网段（逗号分隔），登录记录据此取客户端地址 |
+| `JABIZ_TRUSTED_PROXIES` | 在代理之后 | 可信代理的地址或网段（逗号分隔），登录记录与限流据此取客户端地址；不得含 `0.0.0.0/0`、`::/0`（启动错误），见"密钥与部署" |
 
 外部服务（Q6a 起 Stripe 为必需；见上节"充值与核对"）：
 

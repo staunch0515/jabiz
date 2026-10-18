@@ -62,6 +62,10 @@ EOF
   SPRING_FLYWAY_USER=$DB_USER
   SPRING_FLYWAY_PASSWORD=$DB_PASSWORD
   SERVER_PORT=$PORT
+  # Administration without a second factor (below): reachable from this machine only (Q10b, review L4).
+  SERVER_ADDRESS=127.0.0.1
+  # The secrets above are this demonstration's own (Q10b, M5: only a local demonstration may have them made).
+  QB_LOCAL_SECRETS=true
   JABIZ_SECURITY_MFA_ADMINISTRATION=false
   QB_ADMIN_ROLES=ADMIN,QB_ADMIN_SUPER,QB_ADMIN_CONTENT,QB_ADMIN_FINANCE,QB_DEMO_PUBLISHER
   JABIZ_MAIL_ENABLED=true

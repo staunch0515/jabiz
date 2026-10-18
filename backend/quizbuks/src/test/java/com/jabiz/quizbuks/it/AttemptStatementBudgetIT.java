@@ -193,7 +193,7 @@ class AttemptStatementBudgetIT extends PlayItSupport {
             counted.startLocks = SqlStatementLog.locks();
         }
         Map<String, Object> input = body("attemptId", started.get("attemptId"), "publicationId", publicationId,
-            "currentIndex", 1, "answers", answers(true, true));
+            "currentIndex", 1, "answers", shown((String) started.get("attemptId"), answers(true, true)));
         SqlStatementLog.clear();
         Map<String, Object> submitted = keyed("QB_ATTEMPT_SUBMIT", token, input);
         if (counted != null) {

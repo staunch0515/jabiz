@@ -33,6 +33,7 @@ class ProcessAccessIT extends QbItSupport {
     private static final Map<String, ProcessAccess> CLOSED = Map.ofEntries(
         Map.entry("QB_SPONSOR_APPROVAL_RESULT", ProcessAccess.INTERNAL),
         Map.entry("QB_PUBLICATION_APPROVAL_RESULT", ProcessAccess.INTERNAL),
+        Map.entry("QB_PUBLICATION_BAN_PAUSE", ProcessAccess.SUB_PROCESS_ONLY),
         Map.entry("QB_PUBLICATION_COMPLETION_MOVE", ProcessAccess.SUB_PROCESS_ONLY),
         Map.entry("QB_PUBLICATION_ADVANCE", ProcessAccess.INTERNAL),
         Map.entry("QB_QUIZ_RELEASE_FILES", ProcessAccess.SUB_PROCESS_ONLY),

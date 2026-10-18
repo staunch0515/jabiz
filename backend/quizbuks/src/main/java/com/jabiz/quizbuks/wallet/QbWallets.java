@@ -31,6 +31,8 @@ public final class QbWallets {
     /** The caller's own ledger lines by party, read only: a taker's, a sponsor's (Q6a). */
     public static final String TAKER_LEDGER = "urn:jabiz:dataset:taker:LedgerEntry";
     public static final String SPONSOR_LEDGER = "urn:jabiz:dataset:sponsor:LedgerEntry";
+    /** The business parameters as in effect at the server's clock, for the pages' templates (Q10b, L9). */
+    public static final String PARAMS_NOW = "urn:jabiz:dataset:now:SysParam";
     public static final String KIND_DICTIONARY = "urn:jabiz:dict:quizbuks:wallet-kind";
     public static final String SPONSOR = "SPONSOR";
     public static final String TAKER = "TAKER";

@@ -172,6 +172,8 @@ async function readRows(dataset: string, filters: Filter[]): Promise<Row[]> {
 export interface Publication {
   publicationId: string
   sponsorId: string
+  /** Its quiz: a publication of a quiz taken down goes to a person's review (Q10b, M-d). */
+  quizId: string | null
   versionId: string | null
   versionLabel: string | null
   name: string
@@ -189,6 +191,9 @@ export interface Publication {
   approvalRequestId: string | null
   submittedAt: string | null
   rejectReason: string | null
+  /** Q10b: who paused it (SPONSOR or ADMIN) and the reason an administrator gave. */
+  pausedBy: string | null
+  adminReason: string | null
 }
 
 export async function readPublication(publicationId: string): Promise<Publication | null> {
@@ -197,6 +202,7 @@ export async function readPublication(publicationId: string): Promise<Publicatio
   return {
     publicationId: String(row.publicationId ?? publicationId),
     sponsorId: String(row.sponsorId ?? ''),
+    quizId: str(row.quizId),
     versionId: str(row.versionId),
     versionLabel: str(row.versionLabel),
     name: String(row.name ?? ''),
@@ -214,7 +220,34 @@ export async function readPublication(publicationId: string): Promise<Publicatio
     approvalRequestId: str(row.approvalRequestId),
     submittedAt: str(row.submittedAt),
     rejectReason: str(row.rejectReason),
+    pausedBy: str(row.pausedBy),
+    adminReason: str(row.adminReason),
   }
+}
+
+/** A publication of the same quiz an administrator took down (`qb.admin.quiz-takedowns`, Q10b review M-d). */
+export interface Takedown {
+  publicationId: string
+  name: string
+  status: string
+  pausedBy: string | null
+  endReason: string | null
+  adminReason: string | null
+  /** When it was paused or ended. */
+  at: string | null
+}
+
+export async function readTakedowns(sponsorId: string, quizId: string): Promise<Takedown[]> {
+  const answer = await runQuery<Row>(TEMPLATE.quizTakedowns, { params: { sponsorId, quizId }, limit: 100 })
+  return answer.items.map((row) => ({
+    publicationId: String(row.publicationId ?? ''),
+    name: String(row.name ?? ''),
+    status: String(row.status ?? ''),
+    pausedBy: str(row.pausedBy),
+    endReason: str(row.endReason),
+    adminReason: str(row.adminReason),
+    at: str(row.endReason === 'ADMIN' ? row.endedAt : row.pausedAt),
+  }))
 }
 
 export interface Tier {

@@ -88,10 +88,10 @@ class PublicationApprovalsTest {
 
     @Test
     void theFactsAreThoseOfTheSubject() {
-        assertThat(PublicationApprovals.facts(true, BigDecimal.TEN, null, "sponsor-a", "GLOBAL"))
+        assertThat(PublicationApprovals.facts(true, BigDecimal.TEN, null, "sponsor-a", "GLOBAL", false))
             .containsEntry("autoApprove", true).containsEntry("maxReward", BigDecimal.TEN)
             .containsEntry("sponsorId", "sponsor-a").containsEntry("regions", "GLOBAL").containsKey("maxSpend");
         assertThat(QbPublications.approvalSubject().normalizeFacts(PublicationApprovals.facts(false, BigDecimal.TEN,
-            BigDecimal.ONE, "s", "JP"))).containsEntry("autoApprove", false);
+            BigDecimal.ONE, "s", "JP", true))).containsEntry("autoApprove", false).containsEntry("takenDown", true);
     }
 }

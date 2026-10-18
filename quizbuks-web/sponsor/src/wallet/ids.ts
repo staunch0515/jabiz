@@ -15,6 +15,8 @@ export const WALLET_PROCESS = {
 export const WALLET_TEMPLATE = {
   wallet: 'qb.sponsor.wallet',
   topUps: 'qb.sponsor.topups',
+  /** Q10b: the top-up's range and the new sponsors' limit. */
+  topUpLimit: 'qb.sponsor.topup-limit',
 } as const
 
 /** The sponsor's own top-ups, read only (the checkout's address included: it is theirs). */

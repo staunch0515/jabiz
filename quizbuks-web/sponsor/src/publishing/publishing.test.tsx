@@ -266,6 +266,15 @@ describe('the publication wizard', () => {
     render(<App />)
     expect(await screen.findByTestId('publication-sent-back-reason')).toHaveTextContent('The rewards are too high.')
   })
+
+  it('words a draft sent back by a ban, not its code', async () => {
+    server({ publication: { ...DRAFT, rejectCode: 'QB_USER_BANNED' } })
+    window.history.replaceState(null, '', '/publications/p1')
+    render(<App />)
+    const reason = await screen.findByTestId('publication-sent-back-reason')
+    expect(reason).toHaveTextContent('Your account was suspended while it was in review')
+    expect(reason).not.toHaveTextContent('QB_USER_BANNED')
+  })
 })
 
 describe('a submitted publication', () => {
@@ -287,6 +296,37 @@ describe('a submitted publication', () => {
     await waitFor(() => expect(screen.getByTestId('publication-view')).toHaveAttribute('data-status', 'PAUSED'))
     expect(processCalls('QB_PUBLICATION_PAUSE')).toEqual([{ publicationId: 'p1' }])
     expect(screen.getByTestId('publication-resume')).toBeInTheDocument()
+  })
+
+  it('says an administrator paused it, with the reason, and offers no resume (Q10b)', async () => {
+    server({ publication: { ...DRAFT, status: 'PAUSED', revision: 8, pausedAt: '2026-10-14T03:00:00Z',
+      pausedBy: 'ADMIN', adminReason: 'Reported as misleading' } })
+    window.history.replaceState(null, '', '/publications/p1')
+    render(<App />)
+    expect(await screen.findByTestId('publication-admin-notice')).toHaveTextContent('Paused by QuizBuks')
+    expect(screen.getByTestId('publication-admin-reason')).toHaveTextContent('Reason: Reported as misleading')
+    expect(screen.queryByTestId('publication-resume')).toBeNull()
+    expect(screen.queryByTestId('publication-pause')).toBeNull()
+    // Taken down: not copied either (review M-d).
+    expect(screen.queryByTestId('publication-copy')).toBeNull()
+  })
+
+  it('words the pause of a ban without the ban\'s reason (Q10b, review L3)', async () => {
+    server({ publication: { ...DRAFT, status: 'PAUSED', revision: 8, pausedAt: '2026-10-14T03:00:00Z',
+      pausedBy: 'ADMIN', adminReason: 'QB_ACCOUNT_SUSPENDED' } })
+    window.history.replaceState(null, '', '/publications/p1')
+    render(<App />)
+    expect(await screen.findByTestId('publication-admin-reason'))
+      .toHaveTextContent('Reason: Your account was suspended.')
+  })
+
+  it('says an administrator ended it', async () => {
+    server({ publication: { ...DRAFT, status: 'ENDED', revision: 8, endedAt: '2026-10-14T03:00:00Z',
+      endReason: 'ADMIN', adminReason: 'Fraudulent' } })
+    window.history.replaceState(null, '', '/publications/p1')
+    render(<App />)
+    expect(await screen.findByTestId('publication-admin-notice')).toHaveTextContent('Ended by QuizBuks')
+    expect(screen.getByTestId('publication-admin-reason')).toHaveTextContent('Fraudulent')
   })
 
   it('says so when the publication is not the sponsor\'s', async () => {

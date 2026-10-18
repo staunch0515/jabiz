@@ -191,7 +191,7 @@ public final class TransferProcesses {
                     ctx -> QbWallets.lockName(QbWallets.TAKER, userOf(ctx))))
                 .step("Load the parameters", LoadParams.<ProcessContext>of(ProcessContext::opTime, PARAMS,
                     QbParams.TRANSFER_ENABLED, QbParams.TRANSFER_THRESHOLD, QbParams.TRANSFER_REVIEW_ABOVE,
-                    QbParams.TRANSFER_FEE))
+                    QbParams.TRANSFER_FEE, QbParams.TRANSFER_HOLD_DAYS))
                 .steps(b -> loadTaker(b, TransferProcesses::userOf))
                 .step("Load the latest transfers", QueryEntities.<ProcessContext>of(
                     QbPayouts.defaultDataset(QbPayouts.TRANSFER), ctx -> latest(userOf(ctx)), LATEST))
@@ -232,12 +232,13 @@ public final class TransferProcesses {
             new TransferRules.Params(params.get(QbParams.TRANSFER_ENABLED, Boolean.class),
                 params.get(QbParams.TRANSFER_THRESHOLD, BigDecimal.class),
                 params.get(QbParams.TRANSFER_REVIEW_ABOVE, BigDecimal.class),
-                params.get(QbParams.TRANSFER_FEE, BigDecimal.class)),
+                params.get(QbParams.TRANSFER_FEE, BigDecimal.class),
+                params.get(QbParams.TRANSFER_HOLD_DAYS, BigDecimal.class)),
             new TransferRules.Facts(BanRules.banned(ban == null ? null : ban.attributes()),
                 account == null ? null : account.get("status"),
                 latest.stream().anyMatch(t -> TransferStatus.UNFINISHED.contains(t.status())),
                 TransferRules.failureStreak(latest), TransferRules.held(past(list(ctx, HOLDS))),
-                first(ctx, RULES) != null, ledgerBalance(ctx)));
+                first(ctx, RULES) != null, ledgerBalance(ctx), rewardsHeld(ctx)));
         ctx.put(PLAN, plan);
         if (!plan.transfers()) {
             ctx.put(SKIP, plan.skip());
@@ -300,7 +301,7 @@ public final class TransferProcesses {
                     return QbPayouts.APPROVAL_SUBJECT.equals(input.subject()) ? input.entityId() : null;
                 }))
                 .step("Load the parameters", LoadParams.<ProcessContext>of(ProcessContext::opTime, PARAMS,
-                    QbParams.TRANSFER_ENABLED))
+                    QbParams.TRANSFER_ENABLED, QbParams.TRANSFER_HOLD_DAYS))
                 .steps(b -> loadTaker(b, TransferProcesses::transferUser))
                 .step("Load the request", QueryEntities.<ProcessContext>of(ApprovalEntities.REQUEST_DATASET,
                     ctx -> EntityQuery.builder().where(new QueryPredicate.In("requestId", ownRequest(ctx)
@@ -333,16 +334,18 @@ public final class TransferProcesses {
                 || !input.requestId().equals(approval.requestId())) {
                 return;
             }
-            // Approved: sent only if it still can be, as it was when created (D-Q6-12).
+            // Approved: sent only if it still can be, as it was when created (D-Q6-12): what is not held back
+            // (Q10b, M3: a dispute opened during the review holds its sponsor's rewards) still covers it.
             EntityInstance account = first(ctx, ACCOUNT);
             EntityInstance ban = first(ctx, BAN);
             BigDecimal amount = QbPayouts.money(transfer.get("amount"));
-            boolean sendable = Boolean.TRUE.equals(ctx.get(PARAMS, ParamValues.class)
-                    .get(QbParams.TRANSFER_ENABLED, Boolean.class))
+            ParamValues params = ctx.get(PARAMS, ParamValues.class);
+            boolean sendable = Boolean.TRUE.equals(params.get(QbParams.TRANSFER_ENABLED, Boolean.class))
+                && TransferRules.wholeAndNotNegative(params.get(QbParams.TRANSFER_HOLD_DAYS, BigDecimal.class))
                 && !BanRules.banned(ban == null ? null : ban.attributes())
                 && account != null && PayoutAccountStatus.ENABLED.equals(account.get("status"))
                 && transfer.get("externalAccountId").equals(account.get("externalAccountId"))
-                && ledgerBalance(ctx).compareTo(amount) >= 0;
+                && TransferRules.transferable(ledgerBalance(ctx), rewardsHeld(ctx)).compareTo(amount) >= 0;
             if (sendable) {
                 ctx.put(SEND, true);
             } else {
@@ -885,7 +888,10 @@ public final class TransferProcesses {
             .steps(b -> TakerWallets.load(b, TransferProcesses::transferUser));
     }
 
-    /** The taker's ban, payout account and ledger balance (under their wallet lock). */
+    /**
+     * The taker's ban, payout account, ledger balance and the rewards held back (under their wallet lock; Q10b, M3:
+     * {@value TakerWallets#TRANSFERABLE_TEMPLATE}, after the parameters are loaded).
+     */
     private static <I, O> void loadTaker(ProcessDefinitionBuilder<I, O, ProcessContext> pb,
         Function<ProcessContext, Object> userId) {
         pb.step("Load the taker's ban", QueryEntities.<ProcessContext>of(QbAccounts.defaultDataset(QbAccounts.BAN),
@@ -894,8 +900,17 @@ public final class TransferProcesses {
             .step("Load the payout account", QueryEntities.<ProcessContext>of(
                 QbPayouts.defaultDataset(QbPayouts.ACCOUNT), ctx -> PayoutProcesses.byUser(userId.apply(ctx)),
                 ACCOUNT))
-            .step("Read the taker's balance", RunTemplate.<ProcessContext>of(TakerWallets.BALANCE_TEMPLATE,
-                ctx -> Map.of("userId", String.valueOf(userId.apply(ctx))), LEDGER));
+            .step("Read the taker's balance", RunTemplate.<ProcessContext>of(TakerWallets.TRANSFERABLE_TEMPLATE,
+                ctx -> {
+                    BigDecimal days = ctx.get(PARAMS, ParamValues.class).get(QbParams.TRANSFER_HOLD_DAYS,
+                        BigDecimal.class);
+                    Map<String, Object> params = new LinkedHashMap<>();
+                    params.put("userId", String.valueOf(userId.apply(ctx)));
+                    params.put("at", ctx.opTime());
+                    // A missing or unusable period refuses the transfer (TransferRules); the read still needs one.
+                    params.put("holdDays", TransferRules.wholeAndNotNegative(days) ? days : BigDecimal.ZERO);
+                    return params;
+                }, LEDGER));
     }
 
     /**
@@ -1032,9 +1047,18 @@ public final class TransferProcesses {
     }
 
     private static BigDecimal ledgerBalance(ProcessContext ctx) {
+        return ledger(ctx, "available");
+    }
+
+    /** The rewards held back from transfers (Q10b, M3). */
+    private static BigDecimal rewardsHeld(ProcessContext ctx) {
+        return ledger(ctx, "held");
+    }
+
+    private static BigDecimal ledger(ProcessContext ctx, String column) {
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> rows = (List<Map<String, Object>>) ctx.get(LEDGER);
-        return rows == null || rows.isEmpty() ? BigDecimal.ZERO : TakerWallets.money(rows.getFirst().get("available"));
+        return rows == null || rows.isEmpty() ? BigDecimal.ZERO : TakerWallets.money(rows.getFirst().get(column));
     }
 
     private static String userOf(ProcessContext ctx) {

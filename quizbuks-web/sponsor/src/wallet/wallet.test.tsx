@@ -32,6 +32,8 @@ interface Server {
   topUps?: (Record<string, unknown> | null)[]
   start?: { status: number; body: unknown }
   receipt?: { status: number; body: unknown }
+  /** The row of `qb.sponsor.topup-limit`; none: not found. */
+  limit?: Record<string, unknown>
 }
 
 /** The server as the console sees it, for a signed-in, approved sponsor. Records what was posted. */
@@ -61,6 +63,8 @@ function server(options: Server = {}) {
       case '/api/queries/qb.sponsor.wallet':
         return json(200, { items: [{ balance: '5000', held: '1000', pendingCount: 2, pendingAmount: '700',
           toppedUp: '6000', takenBack: '0', topUpCount: 2, spent: '1000' }], offset: 0, limit: 1 })
+      case '/api/queries/qb.sponsor.topup-limit':
+        return options.limit ? json(200, { items: [options.limit], offset: 0, limit: 1 }) : json(404, {})
       case '/api/queries/qb.sponsor.topups':
         return json(200, { items: [
           { topUpId: 't1', amount: '1500', status: 'OPEN', createdAt: '2026-10-14T01:00:00Z', expiresAt: LATER,
@@ -118,6 +122,29 @@ describe('the wallet', () => {
     expect(within(rows[1]).getByRole('link', { name: /Details/ })).toBeInTheDocument()
     expect(document.body).not.toHaveTextContent('JPY')
     expect(screen.getByRole('link', { name: 'Wallet' })).toHaveAttribute('aria-current', 'page')
+  })
+
+  it('says the range of a top-up and what a new sponsor may still top up (Q10b)', async () => {
+    server({ limit: { min: '1000', max: '1000000', limited: true, maxTotal: '100000', remaining: '40000',
+      until: '2026-11-12T01:01:00Z' } })
+    window.history.replaceState(null, '', '/wallet')
+    const user = userEvent.setup()
+    render(<App />)
+    await user.click(await screen.findByTestId('topup-open'))
+    const note = await screen.findByTestId('topup-limit')
+    expect(note).toHaveTextContent('Each top-up: 1,000 Kudos to 1,000,000 Kudos.')
+    expect(screen.getByTestId('topup-new-sponsor')).toHaveTextContent('100,000 Kudos in all until')
+    expect(screen.getByTestId('topup-new-sponsor')).toHaveTextContent('Remaining: 40,000 Kudos.')
+  })
+
+  it('says nothing of a new sponsor\'s limit once it no longer applies', async () => {
+    server({ limit: { min: '1000', max: '1000000', limited: false, maxTotal: null, remaining: null, until: null } })
+    window.history.replaceState(null, '', '/wallet')
+    const user = userEvent.setup()
+    render(<App />)
+    await user.click(await screen.findByTestId('topup-open'))
+    expect(await screen.findByTestId('topup-limit')).toHaveTextContent('Each top-up')
+    expect(screen.queryByTestId('topup-new-sponsor')).toBeNull()
   })
 
   it('starts a top-up, waits for its checkout and goes there once', async () => {

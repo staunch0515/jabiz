@@ -16,6 +16,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CircleCheck } from 'lucide-react'
 import { useId, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
+import { neutralName } from '../content/api'
 import { SPONSOR } from '../messages'
 import { applyAsSponsor, readMySponsor, saveSponsorProfile, type Sponsor, type SponsorOutput } from '../qb/api'
 import { FileImage } from '../qb/FileImage'
@@ -183,7 +184,8 @@ function OnboardingForm({ sponsor }: { sponsor: Sponsor | null }) {
           label={t('onboarding.uploadAvatar')} hint={t('onboarding.avatarHint')}
           aria-invalid={invalid('avatar')} aria-describedby={describedBy('avatar')} data-testid="onboarding-avatar"
           onUpload={async (file) => {
-            const uploaded = await uploadFile(FILE_POLICY.sponsorAvatar, file, file.name)
+            // A neutral name: takers and other sponsors read the avatar (its metadata is private, Q10b).
+            const uploaded = await uploadFile(FILE_POLICY.sponsorAvatar, file, neutralName('avatar', file.name))
             setAvatar(uploaded.fileId ?? null)
           }} />
         {errorOf('avatar')}

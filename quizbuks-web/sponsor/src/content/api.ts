@@ -466,6 +466,16 @@ export function contentFieldOf(kind: MaterialKind): 'body' | 'url' | 'pdf' | 'au
   }
 }
 
+/**
+ * The name a content file is uploaded under: its kind and the extension of the sponsor's file (`image.png`), never
+ * the sponsor's own name. Takers can read a content file's details, so a name like "answers-final.pdf" or a person's
+ * name would show (Q10b, a stop-gap until the platform hides such details from all but the uploader).
+ */
+export function neutralName(kind: 'image' | 'pdf' | 'audio' | 'avatar', fileName: string): string {
+  const extension = /\.([A-Za-z0-9]{1,8})$/.exec(fileName)?.[1]
+  return extension ? `${kind}.${extension.toLowerCase()}` : kind
+}
+
 /** Whether a link may be opened: the server accepts http(s) only; anything else is never made a link. */
 export function safeHttpUrl(url: string | null | undefined): string | null {
   if (!url) return null

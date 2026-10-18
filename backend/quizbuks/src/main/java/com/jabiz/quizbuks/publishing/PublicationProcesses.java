@@ -352,6 +352,13 @@ public final class PublicationProcesses {
     static void copy(ProcessContext ctx, MessageCatalog messages) {
         CopyInput input = ctx.get(INPUT, CopyInput.class);
         EntityInstance source = PublicationEditing.publication(ctx);
+        if (PublicationAdmin.takenDown(source)) {
+            // Review M-d: what an administrator took down is not put up again as a copy; a new publication of the
+            // quiz goes to a person's review (PublicationLifecycle.submit).
+            ctx.reject(new Violation("publicationId", PublishingCodes.TAKEN_DOWN, "An administrator took this "
+                + "publication down: it cannot be copied", Map.of()));
+            return;
+        }
         Object versionId = input.versionId() != null ? input.versionId() : source.get("versionId");
         EntityInstance version = versionId == null ? null : PublicationEditing.requireVersion(ctx, versionId);
         if (ctx.hasViolations()) {

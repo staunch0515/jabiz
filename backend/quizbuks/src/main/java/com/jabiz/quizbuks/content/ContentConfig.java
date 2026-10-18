@@ -184,6 +184,9 @@ public class ContentConfig {
             .maxBytes(10 * FilePolicy.MB)
             .image(i -> i.maxPixels(40_000_000).variants(320, 640, 1280))
             .permissions(QbPermissions.CONTENT_WRITE, QbPermissions.CONTENT_FILE_READ)
+            // Takers read content files: the sponsor's file name, their id and the upload time stay theirs
+            // (Q10b item 12, platform decision D47).
+            .privateMetadata()
             .build();
     }
 
@@ -193,6 +196,9 @@ public class ContentConfig {
             .allow(MediaTypes.PDF)
             .maxBytes(20 * FilePolicy.MB)
             .permissions(QbPermissions.CONTENT_WRITE, QbPermissions.CONTENT_FILE_READ)
+            // Takers read content files: the sponsor's file name, their id and the upload time stay theirs
+            // (Q10b item 12, platform decision D47).
+            .privateMetadata()
             .build();
     }
 
@@ -202,6 +208,9 @@ public class ContentConfig {
             .allow(MediaTypes.MP3, MediaTypes.M4A, MediaTypes.OGG)
             .maxBytes(50 * FilePolicy.MB)
             .permissions(QbPermissions.CONTENT_WRITE, QbPermissions.CONTENT_FILE_READ)
+            // Takers read content files: the sponsor's file name, their id and the upload time stay theirs
+            // (Q10b item 12, platform decision D47).
+            .privateMetadata()
             .build();
     }
 

@@ -89,9 +89,19 @@ public final class QbRoles {
         add(ADMIN_CONTENT, labels("Content administrator", "内容管理员", "コンテンツ管理者"), true, CONTENT);
         add(ADMIN_FINANCE, labels("Finance administrator", "财务管理员", "財務管理者"), true, FINANCE, PUBLISH,
             FINANCE_ONLY);
-        add(ADMIN_SUPER, labels("Super administrator", "超级管理员", "スーパー管理者"), true, CONTENT, FINANCE,
-            SUPER);
+        add(ADMIN_SUPER, labels("Super administrator", "超级管理员", "スーパー管理者"), true,
+            withoutApprovals(CONTENT), withoutApprovals(FINANCE), SUPER);
     }
+
+    /**
+     * The super administrator manages roles and their holders, so they do not decide approvals (Q10b, review L3:
+     * {@link QbSodRules#SECURITY}); the content and finance administrators do.
+     */
+    private static List<String> withoutApprovals(List<String> permissions) {
+        return permissions.stream().filter(permission -> !APPROVAL_DECIDE.equals(permission)).toList();
+    }
+
+    private static final String APPROVAL_DECIDE = "approval.decide";
 
     private static Map<String, String> labels(String en, String zh, String ja) {
         return Map.of("en", en, "zh", zh, "ja", ja);

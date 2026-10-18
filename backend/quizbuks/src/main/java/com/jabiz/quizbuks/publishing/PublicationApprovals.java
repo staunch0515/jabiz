@@ -12,8 +12,9 @@ import java.util.Map;
 /**
  * What the review of a publication looks at and is bound to (docs/quizbuks/plans/Q4-publishing.md, D-Q4-2, D-Q4-4).
  * The facts are what the approval rules test: whether publications go without review (the controlled parameter
- * {@code qb.review.publication.auto}, read at each submission), the highest reward, the most it can pay out, the
- * sponsor and the regions. The content is everything the reviewer approves: the version (by its content hash) and
+ * {@code qb.review.publication.auto}, read at each submission; false whatever it says when an administrator took
+ * down a publication of the same quiz), whether that is so ({@code takenDown}, Q10b review M-d), the highest reward,
+ * the most it can pay out, the sponsor and the regions. The content is everything the reviewer approves: the version (by its content hash) and
  * every part of the policy. An approval stays valid while the content hashes the same ({@link ContentHash}: key order
  * and number scale do not count), and a policy is frozen once submitted, so what goes live is what was approved.
  */
@@ -26,9 +27,10 @@ public final class PublicationApprovals {
 
     /** The facts of a submission, as the subject declares them. */
     public static Map<String, Object> facts(boolean autoApprove, BigDecimal maxReward, BigDecimal maxSpend,
-        String sponsorId, String regions) {
+        String sponsorId, String regions, boolean takenDown) {
         Map<String, Object> facts = new LinkedHashMap<>();
         facts.put("autoApprove", autoApprove);
+        facts.put("takenDown", takenDown);
         facts.put("maxReward", maxReward);
         facts.put("maxSpend", maxSpend);
         facts.put("sponsorId", sponsorId);
