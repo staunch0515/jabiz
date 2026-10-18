@@ -1466,6 +1466,7 @@ e2e 对打包的应用（同 CI 的 `e2e` 作业，新的数据库）44 个用�
 | 16q | Q10b 安全审查的平台修正：Spring Boot 4.0.8（reactor-netty 1.3.7，CVE-2026-47874）、登录类接口按地址限流、口令哈希并发上限、`FilePolicy.privateMetadata()`；2026-10-17 确认（S-1、S-2 按建议）；✅ 已实施（分支 `1.2/phase-16q-security`，PR 待建） | D47 | 2.5–3.5 天 | 16o |
 | 16r | 受保护授权的四眼（建立期、首个管理员退役）、会计年度的时区 `jabiz.fiscal-year-zone`、`privateMetadata()` 的文件用随机编号；2026-10-17 确认；✅ 已实施（分支 `1.2/phase-16r-controls`，PR 待建） | D48 | 3–4 天 | 16q |
 | 16s | 收件偏好按登录入口列出、模板显示名、邮件语言的读取与询问、`MailPreferences` 积木（QuizBuks Q7 平台缺口 P1，Q7-13 选 A；2026-10-18 确认）；✅ 已实施（分支 `1.2/phase-16s-mail-preferences`，PR 待建） | D49 | 1–1.5 天 | 16a、16c |
+| 16t | 外部作业的文件与输入上限（QuizBuks Q8 平台缺口 P1–P3，A-13 选 A；2026-10-18 确认）：按类型的输入上限（至多 1 MiB）、文件输入（按请求人的读取权限）、文件输出（经上传流水线以请求人登记）；✅ 已实施（分支 `1.2/phase-16t-external-job-files`，PR 待建） | D50 | 3–4 天 | 16e |
 | 16u | 受保护变更的审批权限 `security.protected-change.decide`、按可配置的管理员权限计管理员（QuizBuks Q7a 发现，2026-10-18 确认）；时间参数限于 PostgreSQL 的范围、`Combobox` 加载状态的无障碍；✅ 已实施（分支 `1.2/phase-16u-protected-grant-roles`，PR 待建） | D51 | 1–1.5 天 | 16r |
 
 **其余工作的顺序**（2026-10-13 确认）：
@@ -4014,6 +4015,55 @@ QB 提交锁内 48 → 16（16p-1）的明细：恢复超时 1 → 0（T1）、�
 7. `MailIT`：已在门户关闭的门户模板不再发送（`SKIPPED` / `UNSUBSCRIBED`，收件箱中没有）。
 
 **未做**：退订页（`MailUnsubscribePage`）仍只在通用后台（Q7 计划 P2，不做）；`AuthFrame` 的语言切换（登录前的页面）不询问邮件语言（无会话）。
+
+### 16t 外部作业的文件与输入上限（3–4 天）
+
+来源：QuizBuks Q8 计划（`1.2/quizbuks-7-plan` 的 `docs/quizbuks/plans/Q8-ai.md`）平台缺口 P1–P3（P4 只写明），A-13 选 A，2026-10-18 确认。
+分支 `1.2/phase-16t-external-job-files`，从 `1.2/platform`（`bc029b6`，16r、16s 已合入）拉出。决策 **D50**。迁移 `V42__external_job_files.sql`。
+
+**16t 状态**：✅ 已实施（PR 待建）。
+
+| # | 内容 | 实施 |
+|---|---|---|
+| P1 | 按类型的输入上限 | `ExternalJobType…maxInputSize(字节)`：缺省 64 KiB（不变），1 KiB – 1 MiB（启动检查 `EXTERNAL`）；`EXTERNAL_JOB_INPUT_TOO_LARGE` 的 `max` 为类型的上限 |
+| P2 | 文件输入 | `inputFiles(个数, 大小, 策略…)`、`StartExternalJob…files(ctx -> 编号)`：登记时按请求人的读取权限（`file.read` 或策略的读取权限）、策略与大小检查，不符同一个 422 `EXTERNAL_JOB_INPUT_FILE`（个数、大小 `EXTERNAL_JOB_INPUT_FILE_LIMIT`）；执行器在尝试前把这些文件从 `FileStore` 复制到上传区，处理器经 `ExternalJobContext.files()` 同步读取，尝试结束即删除副本 |
+| P3 | 文件输出 | `outputFiles(策略, 个数, 大小)`、`ExternalJobResult…file(键, 名称, 字节)`：开始须持有输出策略的上传权限；`FileUploadService.storeGenerated` 走上传的流水线（按内容判定、重新编码、策略的上限、随机编号），以请求人运行 `FILE_REGISTER`（带 `jobId`）；`ExternalJobCompletion.files()` / `file(键)`；超限、被拒为永久失败 |
+| P4 | 输入永久保存 | 只写明（D50 第 5 条、21 §3.1、11 §4a） |
+| 记录 | 哪个作业读取、产生了哪个文件 | 只追加的 `sys_external_job_file`（`INPUT` / `OUTPUT`），只读实体 `ExternalJobFile`；输出文件不论尝试结局都记下，未被引用的由 `FILE_SWEEP` 清扫 |
+| 示范 | `commerce.product-image` | `PRODUCT_IMAGE_REQUEST`（`actsOn Product`）把商品照片交给 `demo-ai-images`（与 `demo-ai` 同一地址与密钥、响应上限 16 MiB）的 `POST /v1/images`，回答的图片以请求人的 `commerce.image` 上传登记，`PRODUCT_IMAGE_APPLY` 换上新照片；`tools/demo/ai-stub` 增加 `/v1/images` |
+
+**验收**
+- [x] `./gradlew check` 全部通过（含 `:app:platformCheck`、场景快照、覆盖率门禁）；前端 `pnpm lint`、`typecheck`、`test`、`check:api`（接口不变）；端到端 `pnpm e2e`。
+- [x] `ExternalJobFilesIT`：按类型的输入上限（100 KiB 通过、超过 200 KiB 与缺省 64 KiB 被拒）；可读者能给出文件、无权 / 不存在 / 其他策略同一个拒绝、`file.read` 可以、个数与大小上限；
+  处理器读到的内容与 `sys_file` 的摘要相同，要别的文件即失败，尝试后副本已删、留下的对象不能再读；开始后删除的文件使作业永久失败；
+  输出经流水线（类型、重新编码后无 EXIF/GPS、变体、请求人为上传者与操作人、`input_summary` 带作业号、审计记录、`sys_external_job_file`）；`privateMetadata()` 的策略为 UUIDv4 且对他人隐藏原名；
+  无上传权限 403；SVG、HTML、PDF（不在策略中）、坏图片、超过个数与大小、类型不声明输出时永久失败且什么也没存下；JPEG 与 HTML 的多语种文件只以重新编码的 JPEG 存下；
+  失败前存下的文件 24 小时后被清扫、来历记录仍在；运行中取消不存储；示范的照片作业（服务收到完整照片、商品换上请求人的新照片、回答 SVG 时不换）。
+- [x] core `ExternalJobFilesTest`（声明与边界、旧构造器、结果的文件、完成的 `file(键)`、上下文只给自己的文件）；runtime `ExternalJobChecksTest`（策略存在、输出上限不超过策略）、
+  `ExternalJobExecutorTest`（存储前的拒绝、租约、存储失败带回已存的文件）；`ArchitectureTest.handlersReadFilesOnlyThroughTheirContext`（读存储、自行存储的处理器被规则抓住）。
+- [x] BlockHound（测试始终开启）：复制、存储、重新编码都不在事件循环上；业务代码不见响应式类型（`businessModuleDoesNotUseReactor`、`coreAndBusinessMethodsNeverReturnReactiveTypes`）。
+- [x] D50、11 §4a、14 §1 / §11、06 §2.3、21 §3.1、CLAUDE.md、ROADMAP 已更新。
+
+**兼容**（线 1.2 内）：只新增。已有作业类型的上限与行为不变；`ExternalJobType`、`ExternalJobResult`、`ExternalJobCompletion`、`StartExternalJob.Metadata`、`FileProcesses.RegisterInput`
+新增 record 组件，原构造器保留（D50 第 6 条）。上传接口、OpenAPI 不变。`demo-ai` 不变（图片用另一个服务 `demo-ai-images`）。
+
+**未做**：场景回放的 `completeExternalJob` 不带文件（有文件的作业以集成测试覆盖，没有新场景）；权限只在开始时判断；未被完成流程及时引用的输出文件可能在 `jabiz.files.orphan-after` 之后被清扫（Outbox 长时间失败时）；
+开放中的作业所读的文件不阻止清扫（开始后被删除即作业失败）。
+
+**安全自查**（2026-10-18）：
+1. 借作业读别人的文件：登记时的判断与 `/api/files/{id}/content` 相同（`file.read` 或策略的读取权限，且须属于类型声明的策略），不存在、无权与其他策略同一个回答；处理器只拿到这些文件的副本，没有存储的句柄，尝试后副本删除、对象失效。
+   剩余：以系统身份运行的流程（事件消费者、定时任务）可以给任何属于类型策略的文件——这类流程若把用户提供的编号交给作业，须自己判断（与系统身份写数据相同）。
+2. 经输出夹带不安全的文件：类型按内容判定、SVG / HTML / 脚本永不允许、图片解码后重新编码（JPEG + HTML 的多语种文件只剩重新编码的 JPEG，测试覆盖）、PDF 等照旧以附件 + `sandbox` 提供；处理器给的名称只经清洗作下载名，从不决定类型或路径。
+3. 大小与拒绝服务：输入 JSON ≤ 1 MiB；输入文件每个作业 ≤ 20 个、每个 ≤ 100 MiB（磁盘上的副本，不在内存），输出每次尝试 ≤ 20 个、每个 ≤ 50 MiB 且不超过策略的上限（处理器在内存中持有）；
+   图片照旧受 `maxPixels` 与解码并发上限约束；复制与存储的时限随声明的大小增长；每次尝试的输出合计受 `maxTotalBytes` 与实例的输出预算约束（修订后）；作业数量受 `maxOpenPerRequester`、并发与入口限流约束。最坏情况的输入磁盘约 16 GB（每实例 8 个尝试都用满上限），应用应按实际需要声明小得多的上限（示范为 1 个、10 MB）。
+
+**独立评审之后的修订**（2026-10-18，见 D50 的修订说明）：
+1. M1：每次尝试的输出合计 `maxTotalBytes`（缺省 ≤ 16 MiB，至多 200 MiB，`OUTPUT_FILES_TOO_LARGE`）；每实例的输出预算 `jabiz.external-jobs.files.output-budget`（缺省 256 MB），领取时预留；`GeneratedFile` 不再复制字节。
+2. M2：复制与存储的时限按声明的大小（`work-minimum`、`work-per-mib`）；存储失败在尝试内以同样的字节重试（`store-retries`），之后的新尝试会再次调用提供方（已写明，不做跨尝试暂存）。
+3. L1：`ExternalJobFile` 的文件编号与摘要为遮蔽字段（`file.read`，`reveal`），`privateMetadata()` 的记录用随机编号、时间到日；`requestedBy` 不遮蔽的理由见 D50。
+4. L2：示范图片走 `demo-ai-images`（16 MiB），`demo-ai` 恢复 64 KiB。L3：副本写入前登记，取消也删除；可用空间检查 `INPUT_FILE_NO_SPACE`。
+5. L4：示范只在照片未被他人更换时换上新照片（`task.commerce.product-image.stale`）；本地桩输出 ≤ 2048 像素的 JPEG。L5：规则传递地检查应用自己的类，处理器不是沙箱（D50、14 §11）。
+6. L6 与信息项：见 D50 的修订说明中的测试；`deadline()` 从复制之后算起；副本重算摘要；`StartExternalJob` 保留三参构造。
 
 ### 16u 受保护变更的审批权限与细分权限的管理员（1–1.5 天）
 

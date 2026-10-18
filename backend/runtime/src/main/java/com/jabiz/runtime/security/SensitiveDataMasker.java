@@ -137,6 +137,10 @@ public class SensitiveDataMasker {
             summary.put("usage", c.usage());
             summary.put("attempts", c.attempts());
             summary.put("finishedTime", c.finishedTime());
+            if (!c.files().isEmpty()) {
+                // The ids only, like the rest of the platform's file operations (decision D50).
+                summary.put("files", c.files());
+            }
             return summary;
         }
         if (value instanceof com.jabiz.external.ExternalJobFailure f) {
