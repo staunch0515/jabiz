@@ -141,8 +141,8 @@ public final class QbPermissions {
      */
     public static final String STATS_READ = "qb.stats.read";
     /**
-     * The analytics job's processes ({@code QB_ANALYTICS_REFRESH}, {@code internal()}; {@code QB_ANALYTICS_CHUNK},
-     * {@code subProcessOnly()}) and their templates. Granted to no role.
+     * The analytics job's item process ({@code QB_ANALYTICS_ITEM}, {@code internal()}), its templates and its own
+     * datasets. Granted to no role.
      */
     public static final String STATS_SYSTEM = "qb.stats.system";
 

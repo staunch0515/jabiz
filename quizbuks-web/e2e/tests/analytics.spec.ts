@@ -111,4 +111,23 @@ test('a sponsor reads the dashboard and a publication\'s analytics, and exports 
   await page.goto(`/sponsor/publications/${publicationId}`)
   await page.getByTestId('publication-analytics-link').click()
   await expect(page).toHaveURL(new RegExp(`/sponsor/publications/${publicationId}/analytics$`))
+  await expect(page.getByTestId('overview-as-of')).toContainText('(Asia/Tokyo)')
+
+  // Another sponsor opening the same address finds nothing, and the page asks for nothing more of it.
+  await page.getByTestId('sign-out').click()
+  await expect(page).toHaveURL(/\/sponsor\/login$/)
+  await signIn(page, '/sponsor/', other.email)
+  await expect(page).toHaveURL(/\/sponsor\/dashboard$/)
+  const asked: string[] = []
+  page.on('request', (request) => {
+    if (request.url().includes('/api/queries/qb.sponsor.analytics.')) asked.push(new URL(request.url()).pathname)
+  })
+  const overview = page.waitForResponse((response) =>
+    response.url().endsWith('/api/queries/qb.sponsor.analytics.overview'))
+  await page.goto(`/sponsor/publications/${publicationId}/analytics`)
+  await overview
+  await expect(page.getByText('This publication does not exist, or it is not yours.')).toBeVisible()
+  await expect(page.getByTestId('analytics-overview')).toHaveCount(0)
+  await expect(page.getByTestId('analytics-export')).toHaveCount(0)
+  expect(asked.filter((path) => !path.endsWith('.overview'))).toEqual([])
 })

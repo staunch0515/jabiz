@@ -23,6 +23,11 @@ class MinGroupTest {
         assertThat(MinGroup.of("10")).isEqualTo(10);
         assertThat(MinGroup.of(new BigDecimal("7"))).isEqualTo(7);
         assertThat(MinGroup.of(2)).isEqualTo(3);
+        // Larger whole numbers are read as they are (holding more back), never as the default; others are 5.
+        assertThat(MinGroup.of("1000")).isEqualTo(1000);
+        assertThat(MinGroup.of("999999999")).isEqualTo(999_999_999);
+        assertThat(MinGroup.of("1000000000")).isEqualTo(5);
+        assertThat(MinGroup.of("2.5")).isEqualTo(5);
     }
 
     @Test

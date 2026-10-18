@@ -3,13 +3,13 @@ id: qb.sponsor.analytics.trend
 description: >-
   The sponsor's figures by hour or by day (M-11, M-43) - first views, starts, completions, passes, winners and Kudos
   spent of one of their publications or of all of them, every bucket of the period present (zeros included)
-entities: [QbPublication, QbAnalyticsHour, QbStatsRun]
+entities: [QbPublicationCard, QbAnalyticsHour, QbStatsRun]
 datasets:
-  QbPublication: urn:jabiz:dataset:sponsor:QbPublication
+  QbPublicationCard: urn:jabiz:dataset:sponsor:QbPublicationCard
   QbAnalyticsHour: urn:jabiz:dataset:default:QbAnalyticsHour
   QbStatsRun: urn:jabiz:dataset:default:QbStatsRun
 params:
-  publicationId: { like: QbPublication.publicationId, description: "Only this publication (none: all of the sponsor's)" }
+  publicationId: { like: QbPublicationCard.publicationId, description: "Only this publication (none: all of the sponsor's)" }
   from:          { kind: { type: temporal, role: EVENT_TIME }, required: true, description: The first bucket holds this time }
   to:            { kind: { type: temporal, role: EVENT_TIME }, required: true, description: The last bucket holds the time just before this }
   bucket:        { kind: { type: text, maxLength: 4 }, required: true, description: "HOUR (UTC hours) or DAY (the deployment's days)" }
@@ -23,18 +23,20 @@ results:
   winners:     { kind: { type: numeric, precision: 12, scale: 0 } }
   spent:       { kind: { type: monetary, currency: JPY, scale: 0 } }
   gap:         { kind: { type: bool } }
+  zone:        { from: QbStatsRun.zone }
 list:
   sorts: [bucketStart]
   defaultSort: { field: bucketStart, asc: true }
   key: [bucketStart]
 permissions: [qb.stats.read]
 ---*/
--- Only the sponsor's own publications (the sponsor's dataset of publications): another sponsor's publicationId finds
+-- Only the sponsor's own publications (the sponsor's dataset of publication cards): another sponsor's publicationId finds
 -- nothing. The buckets are found by the sponsor's index and joined to those publications. Aggregates only, no person (D-Q9e-4): counts are not held back by the minimum group (E-4). The hourly
 -- buckets are the job's (every ten minutes; the hour now is filled as the job runs). HOUR: the UTC hours from the hour
 -- of "from"; DAY: the days of the deployment's zone (jabiz.fiscal-year-zone, recorded by the job: D-Q9e-3) from the day
 -- of "from". At most 400 buckets; the hours are whole, so a zone of whole hours divides them exactly. day is the
 -- zone's date of the bucket's start (for HOUR as well). gap: a bucket holds increments of a time the job did not run.
+-- zone: the zone the days are of (UTC before the job's first run), for the page to label the hours and days.
 WITH tz AS (
     SELECT coalesce(max(r.{{QbStatsRun.zone}}), 'UTC') AS z
     FROM {{QbStatsRun}} r
@@ -60,9 +62,9 @@ slots AS (
 bounds AS (
     SELECT min(slot_start) AS lo, max(slot_end) AS hi FROM slots),
 mine AS (
-    SELECT p.{{QbPublication.publicationId}} AS pid, p.{{QbPublication.sponsorId}} AS sponsor
-    FROM {{QbPublication}} p
-    WHERE CAST(:publicationId AS uuid) IS NULL OR p.{{QbPublication.publicationId}} = CAST(:publicationId AS uuid)),
+    SELECT p.{{QbPublicationCard.publicationId}} AS pid, p.{{QbPublicationCard.sponsorId}} AS sponsor
+    FROM {{QbPublicationCard}} p
+    WHERE CAST(:publicationId AS uuid) IS NULL OR p.{{QbPublicationCard.publicationId}} = CAST(:publicationId AS uuid)),
 hours AS (
     SELECT h.{{QbAnalyticsHour.hourStart}} AS v_hour, h.{{QbAnalyticsHour.views}} AS v_views,
            h.{{QbAnalyticsHour.starts}} AS v_starts, h.{{QbAnalyticsHour.completions}} AS v_completions,
@@ -82,7 +84,8 @@ SELECT
     CAST(coalesce(sum(h.v_passes), 0) AS numeric(12, 0))          AS passes,
     CAST(coalesce(sum(h.v_winners), 0) AS numeric(12, 0))         AS winners,
     coalesce(sum(h.v_spent), 0)                                   AS spent,
-    coalesce(bool_or(h.v_gap), false)                             AS gap
+    coalesce(bool_or(h.v_gap), false)                             AS gap,
+    CAST(tz.z AS varchar(64))                                     AS zone
 FROM slots s
 CROSS JOIN tz
 LEFT JOIN hours h ON h.v_hour >= s.slot_start AND h.v_hour < s.slot_end

@@ -86,13 +86,13 @@ class AnalyticsIT extends AnalyticsItSupport {
         assertThat(runExpire(clock.instant()).items().succeeded()).isPositive();
         assertThat(attempt(a4)).containsEntry("status", "EXPIRED");
 
-        // Live (E-3): the counters at once, before any run; first views and the buckets wait for the job.
-        Map<String, Object> live = overview(sponsorToken(sponsor), publication);
-        assertThat(List.of(count(live.get("starts")), count(live.get("completions")), count(live.get("passes")),
-            count(live.get("winners")), count(live.get("spent")), count(live.get("inProgress"))))
-            .containsExactly(5L, 4L, 2L, 2L, 110L, 1L);
-        assertThat(count(live.get("views"))).isZero();
-        assertThat(decimal(live.get("completionRate"))).isEqualByComparingTo("0.8");
+        // Before any run (review M1): the publication's figures are the job's snapshot, none yet; the buckets too.
+        // Only the dashboard's sums over the sponsor's publications are live (E-3).
+        Map<String, Object> before = overview(sponsorToken(sponsor), publication);
+        assertThat(List.of(count(before.get("views")), count(before.get("starts")), count(before.get("completions")),
+            count(before.get("passes")), count(before.get("winners")), count(before.get("spent")),
+            count(before.get("inProgress")))).containsOnly(0L);
+        assertThat(before.get("completionRate")).isNull();
         assertThat(trend(sponsorToken(sponsor), publication, h, h.plus(Duration.ofHours(1)), "HOUR"))
             .singleElement().satisfies(row -> assertThat(counts(row)).containsOnly(0L));
         Map<String, Object> board = dashboard(sponsorToken(sponsor), clock.instant());
@@ -107,6 +107,10 @@ class AnalyticsIT extends AnalyticsItSupport {
         // The job (five minutes behind: everything up to h + 10 min).
         runAnalytics(h.plus(Duration.ofMinutes(15)));
         Map<String, Object> after = overview(sponsorToken(sponsor), publication);
+        assertThat(List.of(count(after.get("starts")), count(after.get("completions")), count(after.get("passes")),
+            count(after.get("winners")), count(after.get("spent")), count(after.get("inProgress"))))
+            .containsExactly(5L, 4L, 2L, 2L, 110L, 1L);
+        assertThat(decimal(after.get("completionRate"))).isEqualByComparingTo("0.8");
         assertThat(count(after.get("views"))).isEqualTo(4);
         assertThat(after).containsEntry("viewsBelowStarts", true);
         assertThat(count(after.get("funnelViews"))).isEqualTo(5);
@@ -154,6 +158,105 @@ class AnalyticsIT extends AnalyticsItSupport {
             });
         assertThat(query("SELECT day_zone AS zone FROM qb_stats_run WHERE job = 'qb.analytics'")).singleElement()
             .satisfies(row -> assertThat(row).containsEntry("zone", "Asia/Tokyo"));
+    }
+
+    @Test
+    void aPublicationsFiguresMoveOnlyWithTheJobNotWithEachAttempt() {
+        // Review M1: on a quiet publication, live starts and completions polled a minute apart would time one taker.
+        String run = run();
+        String sponsor = newSponsor("s-an-snap-" + run);
+        credit(sponsor, 10_000);
+        Instant h = nextHour();
+        at(h.plus(Duration.ofMinutes(1)));
+        String publication = analysedPublication(sponsor, "Snapshot " + run);
+        complete("t-an-snap-1-" + run, publication, true, true);
+        runAnalytics(h.plus(Duration.ofMinutes(10)));
+        Map<String, Object> first = overview(sponsorToken(sponsor), publication);
+        assertThat(count(first.get("completions"))).isEqualTo(1);
+        // One taker starts, a minute later finishes: the publication's figures do not move until the next run.
+        at(h.plus(Duration.ofMinutes(11)));
+        String taker = newTaker("t-an-snap-2-" + run, null);
+        String attempt = startAttempt(taker, publication);
+        Map<String, Object> started = overview(sponsorToken(sponsor), publication);
+        at(h.plus(Duration.ofMinutes(12)));
+        submitAttempt(taker, attempt, true, false);
+        Map<String, Object> finished = overview(sponsorToken(sponsor), publication);
+        for (String column : List.of("starts", "completions", "inProgress", "passes", "winners", "spent")) {
+            assertThat(started.get(column)).as(column).isEqualTo(first.get(column));
+            assertThat(finished.get(column)).as(column).isEqualTo(first.get(column));
+        }
+        // The dashboard's sums are live (E-3; residual 4 when the sponsor has only this one publication).
+        assertThat(count(dashboard(sponsorToken(sponsor), clock.instant()).get("spentToday"))).isEqualTo(100);
+        runAnalytics(h.plus(Duration.ofMinutes(20)));
+        Map<String, Object> next = overview(sponsorToken(sponsor), publication);
+        assertThat(count(next.get("starts"))).isEqualTo(2);
+        assertThat(count(next.get("completions"))).isEqualTo(2);
+    }
+
+    @Test
+    void todaysSpendingLeavesOutWhatAPublicationTheJobHasNotSeenSpentBefore() {
+        // Review L1: a publication the job has not seen yet spent 100 yesterday (Tokyo); today it spent nothing.
+        String run = run();
+        String sponsor = newSponsor("s-an-old-" + run);
+        credit(sponsor, 10_000);
+        Instant midnight = clock.instant().atZone(TOKYO).toLocalDate().plusDays(2).atStartOfDay(TOKYO).toInstant();
+        at(midnight.minus(Duration.ofHours(2)));
+        String publication = analysedPublication(sponsor, "Old " + run);
+        complete("t-an-old-1-" + run, publication, true, true);
+        Instant today = midnight.plus(Duration.ofHours(1));
+        at(today);
+        assertThat(count(dashboard(sponsorToken(sponsor), today).get("spentToday"))).isZero();
+        // The job's first sight puts the history in the hour it went on (yesterday, a gap), not in today's hour.
+        runAnalytics(today.plus(Duration.ofMinutes(10)));
+        assertThat(count(dashboard(sponsorToken(sponsor), today.plus(Duration.ofMinutes(11))).get("spentToday")))
+            .isZero();
+        assertThat(hours(publication)).singleElement().satisfies(row -> {
+            assertThat(instant(row.get("hour_start"))).isEqualTo(midnight.minus(Duration.ofHours(2)));
+            assertThat(row).containsEntry("gap", true);
+            assertThat(count(row.get("spent"))).isEqualTo(100);
+        });
+        // Spending today counts at once, before the job sees it.
+        complete("t-an-old-2-" + run, publication, true, true);
+        assertThat(count(dashboard(sponsorToken(sponsor), clock.instant()).get("spentToday"))).isEqualTo(100);
+    }
+
+    @Test
+    void aMinimumGroupThatIsNotAWholeNumberOrTooLargeIsRefusedOrHoldsEverythingBack() {
+        // The parameter is numeric(3, 0): other values are refused when set.
+        for (String value : List.of("abc", "1000", "2.5")) {
+            assertThat(codes(refused("PARAM_SET", admin(), body("key", "qb.stats.min-group", "value", value), 422)))
+                .as(value).contains("PARAM_VALUE_INVALID");
+        }
+        // A larger value stored some other way is read as it is, never as the default: everything is held back.
+        String run = run();
+        String sponsor = newSponsor("s-an-group-" + run);
+        credit(sponsor, 10_000);
+        Instant h = nextHour();
+        at(h.plus(Duration.ofMinutes(1)));
+        String publication = analysedPublication(sponsor, "Groups " + run);
+        for (int i = 0; i < 5; i++) {
+            complete("t-an-group-" + i + "-" + run, publication, true, true);
+        }
+        minGroup("5");
+        runAnalytics(h.plus(Duration.ofMinutes(10)));
+        assertThat(questions(sponsorToken(sponsor), publication)).allSatisfy(row -> assertThat(row)
+            .containsEntry("suppressed", false));
+        List<String> columns = query("SELECT column_name FROM information_schema.columns WHERE table_schema = "
+            + "current_schema() AND table_name = 'sys_param_version' AND column_name NOT IN ('row_id') "
+            + "ORDER BY ordinal_position").stream().map(row -> String.valueOf(row.get("column_name"))).toList();
+        String select = String.join(", ", columns.stream().map(c -> switch (c) {
+            case "param_value" -> "'1000'";
+            case "version_no" -> "v.version_no + 1";
+            default -> "v." + c;
+        }).toList());
+        execute("INSERT INTO sys_param_version (" + String.join(", ", columns) + ") SELECT " + select
+            + " FROM sys_param_version v WHERE v.param_key = 'qb.stats.min-group' ORDER BY v.version_no DESC LIMIT 1");
+        assertThat(count(overview(sponsorToken(sponsor), publication).get("minGroup"))).isEqualTo(1000);
+        assertThat(questions(sponsorToken(sponsor), publication)).allSatisfy(row -> assertThat(row)
+            .containsEntry("suppressed", true).containsEntry("correctRate", null));
+        minGroup("5");
+        assertThat(questions(sponsorToken(sponsor), publication)).allSatisfy(row -> assertThat(row)
+            .containsEntry("suppressed", false));
     }
 
     @Test
@@ -222,10 +325,24 @@ class AnalyticsIT extends AnalyticsItSupport {
         assertThat(count(days.get(1).get("spent"))).isEqualTo(100);
         assertThat(count(days.get(2).get("completions"))).isEqualTo(1);
         assertThat(count(days.get(2).get("spent"))).isEqualTo(10);
+        // The zone the days are of comes with them, and the totals are the server's (Q9e2 review M2, L1).
+        assertThat(days).extracting(row -> row.get("zone")).containsOnly("Asia/Tokyo");
+        Map<String, Object> totals = trendTotals(sponsorToken(sponsor), publication, fourteen.minus(Duration.ofDays(1)),
+            fifteen.plus(Duration.ofDays(1)), "DAY");
+        assertThat(count(totals.get("completions"))).isEqualTo(2);
+        assertThat(count(totals.get("spent"))).isEqualTo(110);
+        assertThat(totals).containsEntry("zone", "Asia/Tokyo");
+        assertThat(instant(totals.get("periodStart"))).isEqualTo(instant(days.get(0).get("bucketStart")));
+        assertThat(instant(totals.get("periodEnd"))).isEqualTo(fifteen.plus(Duration.ofDays(1)));
+        assertThat(overview(sponsorToken(sponsor), publication)).containsEntry("zone", "Asia/Tokyo");
         // By hour: the UTC hours, each with the Tokyo date of its start.
         List<Map<String, Object>> hours = trend(sponsorToken(sponsor), publication, fourteen, fifteen.plus(Duration.ofHours(1)),
             "HOUR");
         assertThat(hours).extracting(row -> count(row.get("completions"))).containsExactly(1L, 1L);
+        assertThat(count(trendTotals(sponsorToken(sponsor), publication, fourteen, fifteen.plus(Duration.ofHours(1)),
+            "HOUR").get("completions"))).isEqualTo(2);
+        assertThat(count(trendTotals(sponsorToken(sponsor), publication, fifteen, fifteen.plus(Duration.ofHours(1)),
+            "HOUR").get("completions"))).isEqualTo(1);
         assertThat(hours).extracting(row -> LocalDate.parse(String.valueOf(row.get("day"))))
             .containsExactly(day, day.plusDays(1));
         // Today starts at midnight in Tokyo: before it the day's spending is 100, after it 10.
@@ -362,6 +479,13 @@ class AnalyticsIT extends AnalyticsItSupport {
             .satisfies(row -> assertThat(counts(row)).containsOnly(0L));
         assertThat(trend(sponsorToken(other), null, h, h.plus(Duration.ofHours(1)), "HOUR")).singleElement()
             .satisfies(row -> assertThat(counts(row)).containsOnly(0L));
+        for (String asked : java.util.Arrays.asList(publication, null)) {
+            Map<String, Object> theirs = trendTotals(sponsorToken(other), asked, h, h.plus(Duration.ofHours(1)), "HOUR");
+            assertThat(List.of(count(theirs.get("views")), count(theirs.get("starts")), count(theirs.get("completions")),
+                count(theirs.get("spent")))).containsOnly(0L);
+        }
+        assertThat(count(trendTotals(sponsorToken(sponsor), publication, h, h.plus(Duration.ofHours(1)), "HOUR")
+            .get("completions"))).isEqualTo(3);
         assertThat(rows(TOP, sponsorToken(other), Map.of("at", h.plus(Duration.ofMinutes(11)).toString()))).isEmpty();
         Map<String, Object> board = dashboard(sponsorToken(other), h.plus(Duration.ofMinutes(11)));
         assertThat(List.of(count(board.get("live")), count(board.get("answering")), count(board.get("spentToday")),
@@ -401,7 +525,7 @@ class AnalyticsIT extends AnalyticsItSupport {
         assertThat(QbRoles.all()).filteredOn(role -> role.permissions().contains("qb.stats.read"))
             .extracting(QbRoles.Role::code).containsExactly(QbRoles.SPONSOR);
         assertThat(QbRoles.all()).noneMatch(role -> role.permissions().contains("qb.stats.system"));
-        refusedAsInternal("QB_ANALYTICS_REFRESH", admin(), body("scheduledTime", clock.instant().toString()));
+        refusedAsInternal("QB_ANALYTICS_ITEM", admin(), body("at", clock.instant().toString(), "kind", "RUN"));
     }
 
     @Test

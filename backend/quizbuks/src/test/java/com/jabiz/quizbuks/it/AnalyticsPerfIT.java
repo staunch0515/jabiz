@@ -24,6 +24,10 @@ class AnalyticsPerfIT extends AnalyticsItSupport {
 
     static final int OTHERS = 999;
     static final int QUESTIONS = 10;
+    /** Publications of other sponsors on the platform (review M2's probe: the templates read 100,000 before). */
+    static final int PLATFORM = 100_000;
+    /** What a sponsor template may take here (the probe took 365 ms before review M2's fix). */
+    static final long TEMPLATE_MAX_MS = 150;
 
     long audits() {
         return count(query("SELECT count(*) AS n FROM sys_audit_record").getFirst().get("n"));
@@ -54,12 +58,19 @@ class AnalyticsPerfIT extends AnalyticsItSupport {
     }
 
     /** Runs the job; prints and returns what it took. */
+    long auditBytes() {
+        return count(query("SELECT coalesce(sum(octet_length(changes)), 0) AS n FROM sys_audit_record").getFirst()
+            .get("n"));
+    }
+
     long timed(String label, Instant at) {
         long audits = audits();
+        long bytes = auditBytes();
         long began = System.nanoTime();
         runAnalytics(at);
         long millis = (System.nanoTime() - began) / 1_000_000;
-        System.out.printf("AnalyticsPerfIT: %-46s %6d ms, %6d audit records%n", label, millis, audits() - audits);
+        System.out.printf("AnalyticsPerfIT: %-46s %6d ms, %6d audit records, %8d bytes%n", label, millis,
+            audits() - audits, auditBytes() - bytes);
         return millis;
     }
 
@@ -107,6 +118,26 @@ class AnalyticsPerfIT extends AnalyticsItSupport {
         for (Map<String, Object> row : query("SELECT id FROM perf_ids")) {
             others.add(String.valueOf(row.get("id")));
         }
+        // The platform's other sponsors (review M2): 100,000 publications of 1,000 sponsors, ended long ago (cards
+        // and versions copied from the hot one), which the sponsor templates must not read.
+        execute("CREATE TABLE perf_others AS SELECT gen_random_uuid() AS id, 'perf-sponsor-' || (n % 1000) AS sponsor "
+            + "FROM generate_series(1, ?) n", PLATFORM);
+        execute("INSERT INTO entity_registry (entity_id, entity_type, created_seq_id) SELECT id, 'QbPublication', ? "
+            + "FROM perf_others", seq);
+        execute("INSERT INTO qb_publication_card SELECT p.id, p.sponsor, 'ENDED', c.regions, c.start_at, c.end_at, "
+            + "c.name, c.quiz_title, c.cover, c.version_id, c.max_reward, c.full_score, c.pass_score, c.time_limit_sec, "
+            + "c.question_count, c.budget_cap, c.max_winners, c.tiers, c.sponsor_country, c.went_on_at, "
+            + "c.went_on_at - interval '400 days', 1 "
+            + "FROM perf_others p CROSS JOIN qb_publication_card c WHERE c.publication_id = ?::uuid", hot);
+        execute("INSERT INTO qb_publication_version (" + String.join(", ", columns) + ") SELECT "
+            + String.join(", ", columns.stream().map(c -> switch (c) {
+                case "publication_id" -> "p.id";
+                case "sponsor_id" -> "p.sponsor";
+                default -> "v." + c;
+            }).toList())
+            + " FROM perf_others p CROSS JOIN qb_publication_version v WHERE v.publication_id = ?::uuid", hot);
+        execute("ANALYZE qb_publication_version");
+        execute("ANALYZE qb_publication_card");
         runAnalytics(h.plus(Duration.ofMinutes(2)));
 
         // Before the job sees the hot one: 200,000 finished within the hour; each other has ten.
@@ -134,14 +165,17 @@ class AnalyticsPerfIT extends AnalyticsItSupport {
 
         // The sponsor's templates over a thousand publications.
         Instant now = at.plus(Duration.ofMinutes(26));
-        template("dashboard", () -> dashboard(sponsorToken(sponsor), now));
-        template("trend, all, 7 days by day", () -> trend(sponsorToken(sponsor), null,
-            now.minus(Duration.ofDays(7)), now, "DAY"));
-        template("trend, hot, 24 hours by hour", () -> trend(sponsorToken(sponsor), hot,
-            now.minus(Duration.ofDays(1)), now, "HOUR"));
-        template("top", () -> rows(TOP, sponsorToken(sponsor), Map.of("at", now.toString())));
-        template("overview", () -> overview(sponsorToken(sponsor), hot));
-        template("questions", () -> questions(sponsorToken(sponsor), hot));
+        List<Long> times = List.of(
+            template("dashboard", () -> dashboard(sponsorToken(sponsor), now)),
+            template("trend, all, 7 days by day", () -> trend(sponsorToken(sponsor), null,
+                now.minus(Duration.ofDays(7)), now, "DAY")),
+            template("trend, hot, 24 hours by hour", () -> trend(sponsorToken(sponsor), hot,
+                now.minus(Duration.ofDays(1)), now, "HOUR")),
+            template("top", () -> rows(TOP, sponsorToken(sponsor), Map.of("at", now.toString()))),
+            template("overview", () -> overview(sponsorToken(sponsor), hot)),
+            template("questions", () -> questions(sponsorToken(sponsor), hot)));
+        // Each reads the sponsor's own cards by its index, not the platform's 100,000 publications.
+        assertThat(times).allSatisfy(ms -> assertThat(ms).isLessThan(TEMPLATE_MAX_MS));
 
         // The end and its recount of all 230,000.
         execute("UPDATE qb_publication_card SET status = 'ENDED', ended_at = ? WHERE publication_id = ?::uuid",

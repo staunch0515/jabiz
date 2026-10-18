@@ -2,7 +2,8 @@ package com.jabiz.quizbuks.it;
 
 import com.jabiz.job.JobDefinition;
 import com.jabiz.quizbuks.setup.QbParams;
-import com.jabiz.quizbuks.stats.AnalyticsRefresh;
+import com.jabiz.quizbuks.stats.AnalyticsJob;
+import com.jabiz.runtime.job.JobRunner;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.HttpHeaders;
@@ -33,19 +34,26 @@ abstract class AnalyticsItSupport extends PlayItSupport {
     static final String TOP = "qb.sponsor.analytics.top";
     static final String OVERVIEW = "qb.sponsor.analytics.overview";
     static final String QUESTIONS = "qb.sponsor.analytics.questions";
-    static final List<String> TEMPLATES = List.of(DASHBOARD, TREND, TOP, OVERVIEW, QUESTIONS);
+    static final String TREND_TOTALS = "qb.sponsor.analytics.trend-totals";
+    static final List<String> TEMPLATES = List.of(DASHBOARD, TREND, TOP, OVERVIEW, QUESTIONS, TREND_TOTALS);
 
     @Autowired
     @Qualifier("qbAnalyticsJob")
-    JobDefinition<AnalyticsRefresh.RefreshInput> analyticsJob;
+    JobDefinition<AnalyticsJob.ItemInput> analyticsJob;
 
-    /** Runs the analytics job at {@code at} as the scheduler would; the clock is set there first. */
+    /** Runs the analytics job at {@code at} as the scheduler would; every item must succeed. */
     void runAnalytics(Instant at) {
+        JobRunner.JobRun run = analyticsRun(at);
+        assertThat(run.outcome()).as("qb.analytics at " + at + ": " + run).isEqualTo(JobRunner.Outcome.SUCCEEDED);
+    }
+
+    /** Runs the analytics job at {@code at} (the clock is set there first); its outcome and item counts. */
+    JobRunner.JobRun analyticsRun(Instant at) {
         if (clock.instant().isBefore(at)) {
             clock.set(at);
         }
         execute("UPDATE jabiz_shedlock SET lock_until = locked_at");
-        assertThat(jobRunner.run(analyticsJob, at).toString()).as("qb.analytics at " + at).contains("SUCCEEDED");
+        return jobRunner.execute(analyticsJob, at);
     }
 
     /** The first whole UTC hour at least two hours after the clock: room for a test's own timeline. */
@@ -101,6 +109,20 @@ abstract class AnalyticsItSupport extends PlayItSupport {
 
     List<Map<String, Object>> questions(String token, String publicationId) {
         return rows(QUESTIONS, token, Map.of("publicationId", publicationId));
+    }
+
+    /** The one row of the trend's totals for the same parameters (Q9e2 review L1). */
+    Map<String, Object> trendTotals(String token, String publicationId, Instant from, Instant to, String bucket) {
+        Map<String, Object> params = new HashMap<>();
+        if (publicationId != null) {
+            params.put("publicationId", publicationId);
+        }
+        params.put("from", from.toString());
+        params.put("to", to.toString());
+        params.put("bucket", bucket);
+        List<Map<String, Object>> found = rows(TREND_TOTALS, token, params);
+        assertThat(found).hasSize(1);
+        return found.get(0);
     }
 
     List<Map<String, Object>> trend(String token, String publicationId, Instant from, Instant to, String bucket) {

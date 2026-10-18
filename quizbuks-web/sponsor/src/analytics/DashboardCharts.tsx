@@ -12,15 +12,16 @@ import { useDashboard, useTop, useTrend } from './hooks'
 import { Metric } from './Metric'
 import './messages'
 
-/** "Updated every 10 minutes", with the job's last run in the deployment's zone. */
-export function UpdatedNote({ dashboard }: { dashboard: Dashboard | undefined }) {
+/**
+ * "Updated every 10 minutes", with the job's last run in the deployment's zone, named; shown only once a template
+ * has said what the zone is.
+ */
+export function UpdatedNote({ refreshedAt, zone }: { refreshedAt: string | null; zone: string }) {
   const { t, i18n } = useTranslation(SPONSOR)
-  if (!dashboard) return null
   return (
-    <p className="text-muted-foreground text-sm" data-testid="analytics-updated" data-refreshed={dashboard.refreshedAt ?? ''}>
-      {dashboard.refreshedAt
-        ? t('analytics.updated', { time: zoneTime(dashboard.refreshedAt, dashboard.zone, i18n.language),
-          zone: dashboard.zone })
+    <p className="text-muted-foreground text-sm" data-testid="analytics-updated" data-refreshed={refreshedAt ?? ''}>
+      {refreshedAt
+        ? t('analytics.updated', { time: zoneTime(refreshedAt, zone, i18n.language), zone })
         : t('analytics.notYet')}
     </p>
   )
@@ -50,7 +51,7 @@ function Metrics({ d }: { d: Dashboard }) {
           zone: d.zone }) : undefined} />
       <Metric testId="metric-available" label={t('analytics.metrics.available')} value={formatKudos(d.available)} />
       <Metric testId="metric-pending" label={t('analytics.metrics.pending')}
-        value={t('analytics.metrics.pendingValue', { amount: formatKudos(d.pendingAmount), count: n(d.pendingCount) })} />
+        value={t('analytics.metrics.pendingValue', { amount: formatKudos(d.pendingAmount), n: n(d.pendingCount) })} />
       <Metric testId="metric-budget" label={t('analytics.metrics.budgetRemaining')}
         value={formatKudos(d.budgetRemaining)} hint={t('analytics.metrics.budgetRemainingHint')} />
       {/* Q8a: the AI usage (tokens) of the month (M-10). */}
@@ -68,6 +69,7 @@ function TopPublications() {
   return (
     <section className="flex flex-col gap-2" aria-labelledby="top-title" data-testid="dashboard-top">
       <h2 id="top-title" className="text-base font-semibold">{t('analytics.top.title')}</h2>
+      <p className="text-muted-foreground text-xs">{t('analytics.top.window')}</p>
       {top.isPending && <PageState kind="loading" />}
       {top.isError && <PageState kind="error" description={t('analytics.failed')}
         action={<Button variant="outline" onClick={() => void top.refetch()}>{tQb('retry')}</Button>} />}
@@ -112,17 +114,19 @@ function TopPublications() {
 }
 
 /** The trend of the sponsor's publications over the last seven days (M-11). */
-function WeekTrend({ zone }: { zone: string }) {
+function WeekTrend() {
   const { t } = useTranslation(SPONSOR)
   const { t: tQb } = useTranslation(QB)
   const trend = useTrend('DAYS_7', null)
   return (
     <section className="flex flex-col gap-2" aria-labelledby="week-title" data-testid="dashboard-trend">
       <h2 id="week-title" className="text-base font-semibold">{t('analytics.trend.week')}</h2>
+      <p className="text-muted-foreground text-xs">{t('analytics.trend.weekWindow')}</p>
       {trend.isPending && <PageState kind="loading" />}
       {trend.isError && <PageState kind="error" description={t('analytics.failed')}
         action={<Button variant="outline" onClick={() => void trend.refetch()}>{tQb('retry')}</Button>} />}
-      {trend.isSuccess && <TrendCharts points={trend.data.points} range="DAYS_7" zone={zone} testId="week" />}
+      {trend.isSuccess && <TrendCharts points={trend.data.points} totals={trend.data.totals} range="DAYS_7"
+        zone={trend.data.zone} testId="week" />}
     </section>
   )
 }
@@ -137,13 +141,13 @@ export function DashboardCharts() {
   const dashboard = useDashboard()
   return (
     <div className="flex flex-col gap-6" data-testid="dashboard-analytics">
-      <UpdatedNote dashboard={dashboard.data} />
+      {dashboard.data && <UpdatedNote refreshedAt={dashboard.data.refreshedAt} zone={dashboard.data.zone} />}
       {dashboard.isPending && <PageState kind="loading" />}
       {dashboard.isError && <PageState kind="error" description={t('analytics.failed')}
         action={<Button variant="outline" onClick={() => void dashboard.refetch()}>{tQb('retry')}</Button>} />}
       {dashboard.isSuccess && <>
         <Metrics d={dashboard.data} />
-        <WeekTrend zone={dashboard.data.zone} />
+        <WeekTrend />
       </>}
       <TopPublications />
     </div>

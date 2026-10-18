@@ -8,6 +8,7 @@
 export const ANALYTICS_TEMPLATE = {
   dashboard: 'qb.sponsor.dashboard',
   trend: 'qb.sponsor.analytics.trend',
+  trendTotals: 'qb.sponsor.analytics.trend-totals',
   top: 'qb.sponsor.analytics.top',
   overview: 'qb.sponsor.analytics.overview',
   questions: 'qb.sponsor.analytics.questions',

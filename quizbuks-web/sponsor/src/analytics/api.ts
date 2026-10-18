@@ -84,6 +84,8 @@ export interface TrendPoint {
   spent: string
   /** The bucket holds increments of a time the job did not run (shown with a note). */
   gap: boolean
+  /** The zone of `day` and of the hours' labels. */
+  zone: string
 }
 
 export function toTrendPoint(row: Row): TrendPoint {
@@ -97,6 +99,7 @@ export function toTrendPoint(row: Row): TrendPoint {
     winners: num(row.winners),
     spent: amount(row.spent),
     gap: bool(row.gap),
+    zone: str(row.zone) ?? DEFAULT_ZONE,
   }
 }
 
@@ -116,6 +119,41 @@ export function trendParams(range: TrendRange, at: string, publicationId?: strin
   params.to = new Date(now + 60_000).toISOString()
   if (publicationId) params.publicationId = publicationId
   return params
+}
+
+/** The totals of the trend's buckets for the same parameters, from the template (the page adds nothing up). */
+export interface TrendTotals {
+  periodStart: string | null
+  periodEnd: string | null
+  views: number
+  starts: number
+  completions: number
+  passes: number
+  winners: number
+  spent: string
+  /** The zone the trend's days and hours are shown in. */
+  zone: string
+}
+
+export function toTrendTotals(row: Row | undefined): TrendTotals {
+  const r = row ?? {}
+  return {
+    periodStart: str(r.periodStart),
+    periodEnd: str(r.periodEnd),
+    views: num(r.views),
+    starts: num(r.starts),
+    completions: num(r.completions),
+    passes: num(r.passes),
+    winners: num(r.winners),
+    spent: amount(r.spent),
+    zone: str(r.zone) ?? DEFAULT_ZONE,
+  }
+}
+
+/** The trend's totals for the parameters the trend was read with. */
+export async function readTrendTotals(params: Record<string, string>): Promise<TrendTotals> {
+  const page = await runQuery<Row>(ANALYTICS_TEMPLATE.trendTotals, { params, limit: 1 })
+  return toTrendTotals(page.items[0])
 }
 
 /** The buckets of the period, oldest first, every one present (the template fills in zeros). */
@@ -202,10 +240,13 @@ export interface Overview {
   shownAt: string | null
   /** When the analytics last ran. */
   refreshedAt: string | null
+  /** The deployment's zone, the times above are shown in (the job's; UTC before its first run). */
+  zone: string
 }
 
 export function toOverview(row: Row): Overview {
   const drop = str(row.largestDrop)
+  const suppressed = bool(row.suppressed)
   return {
     publicationId: String(row.publicationId),
     name: String(row.name ?? ''),
@@ -225,9 +266,10 @@ export function toOverview(row: Row): Overview {
     completeToPass: numOrNull(row.completeToPass),
     largestDrop: drop && (DROPS as readonly string[]).includes(drop) ? (drop as FunnelDrop) : null,
     basedOn: num(row.basedOn),
-    avgDurationSec: numOrNull(row.avgDurationSec),
-    timeouts: numOrNull(row.timeouts),
-    suppressed: bool(row.suppressed),
+    // Below the minimum group the time and the timeouts are never shown, whatever came with them (as toQuestion).
+    avgDurationSec: suppressed ? null : numOrNull(row.avgDurationSec),
+    timeouts: suppressed ? null : numOrNull(row.timeouts),
+    suppressed,
     minGroup: num(row.minGroup),
     last1h: numOrNull(row.last1h),
     last24h: numOrNull(row.last24h),
@@ -236,6 +278,7 @@ export function toOverview(row: Row): Overview {
     appCountedAt: str(row.appCountedAt),
     shownAt: str(row.shownAt),
     refreshedAt: str(row.refreshedAt),
+    zone: str(row.zone) ?? DEFAULT_ZONE,
   }
 }
 
@@ -245,7 +288,10 @@ export async function readOverview(publicationId: string): Promise<Overview | nu
   return page.items[0] ? toOverview(page.items[0]) : null
 }
 
-/** A stage of the funnel: its count and its rate against the stage before (null for the first one). */
+/**
+ * A stage of the funnel: its count and its rate against the stage before (null for the first one). The share lost
+ * at a stage is `1 - rate`: the only figure the page works out itself, from the template's own rate.
+ */
 export interface FunnelStage {
   key: 'views' | 'starts' | 'completions' | 'passes'
   count: number

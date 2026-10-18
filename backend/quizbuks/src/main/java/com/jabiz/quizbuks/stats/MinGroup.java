@@ -20,12 +20,12 @@ public final class MinGroup {
     /** {@code k} when the parameter is not set or not a whole number. */
     public static final int DEFAULT = 5;
 
-    /** {@code k} for the parameter's value (null or not a number of 1 to 3 digits: the default). */
+    /** {@code k} for the parameter's value (null or not a whole number of up to 9 digits: the default). */
     public static int of(Object configured) {
         Integer value = null;
         if (configured instanceof Number number) {
             value = number.intValue();
-        } else if (configured != null && String.valueOf(configured).matches("[0-9]{1,3}")) {
+        } else if (configured != null && String.valueOf(configured).matches("[0-9]{1,9}")) {
             value = Integer.parseInt(String.valueOf(configured));
         }
         return Math.max(FLOOR, value == null ? DEFAULT : value);

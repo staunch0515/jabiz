@@ -151,10 +151,10 @@
   - **商家持有 `document.archive.read`**（为读自己的收据）：平台按版式的权限与对象决定能读哪些单据，所以以后新增的单据版式必须把对象限定在本商家（如 `subject` 经商家数据视图），
     或者其权限不能是商家权限的子集，否则商家能读到别人的单据。
   - **保留期**（Q10b）：导出（`periodTo`）、明细段与外部凭证号（`createdTime`）、充值（`paidAt`）、收据（`issuedAt`，迁移 V11）与入站 Stripe 事件都以 `RetentionPolicy` 保留 10 年，自会计年度末起算（`RetentionIT`）。
-- **商家分析**（`stats`，`docs/quizbuks/plans/Q9e-analytics.md`）：**答题路径不写任何分析数据**（开始、提交、超时与 `QB_VIEW` 不变，`AttemptStatementBudgetIT` 不变，`qb_attempt` 不加索引），分析只由任务 `qb.analytics`（每 10 分钟，根流程 `QB_ANALYTICS_REFRESH` `internal()` + 分块子流程 `QB_ANALYTICS_CHUNK` `subProcessOnly()`，权限 `qb.stats.system` 不授予任何角色；不取业务锁、只写自己的三张表，属于"不取锁的统计任务"的例外）聚合：
-  每块**一条语句读两侧计数**、游标、新增浏览，把增量加进一个按小时（UTC）的桶（`AnalyticsBuckets`：跨过整点后的第一次运行加进上一次运行的小时，停机的增量记在一个小时并标 `gap`）；已完成的会话按水位线 `(submittedAt, attemptId)`、滞后 5 分钟（`AnalyticsLimits.LAG`）从现有索引读、每块至多 `quizbuks.analytics.max-attempts-per-chunk` 个，结束 30 分钟且没有进行中的会话时整体重算一次并定稿。只写变化了的行（审计照常）。
+- **商家分析**（`stats`，`docs/quizbuks/plans/Q9e-analytics.md`）：**答题路径不写任何分析数据**（开始、提交、超时与 `QB_VIEW` 不变，`AttemptStatementBudgetIT` 不变，`qb_attempt` 不加索引），分析只由逐项任务 `qb.analytics`（每 10 分钟，`JobDefinition.forEach`，模板 `qb.system.analytics-items` 给出项：按发布编号的块、结束后的整体重算、最后一项运行记录；每项一个事务的 `QB_ANALYTICS_ITEM` `internal()`，权限 `qb.stats.system` 不授予任何角色；不取业务锁、只写自己的三张表；一项失败不拖住其他项，Q9e1 评审 M3）聚合：
+  每块**一条语句读两侧计数**、游标、新增浏览，把增量加进一个按小时（UTC）的桶（`AnalyticsBuckets`：跨过整点后的第一次运行加进上一次运行的小时，停机的增量记在一个小时并标 `gap`）；已完成的会话按水位线 `(submittedAt, attemptId)`、滞后 5 分钟（`AnalyticsLimits.LAG`）从现有索引读、每块至多 `quizbuks.analytics.max-attempts-per-chunk` 个，结束 30 分钟且没有进行中的会话时整体重算一次并定稿（结束一天后不论是否还有进行中的都定稿；完成多于 `quizbuks.analytics.max-recount` 的不重算，读完即定稿，使重算不超过读取时限）。只写变化了的行（审计照常；游标的题目合计 `auditMasked`）。
   **最小分组 k**（`qb.stats.min-group`，缺省 5、下限 3，`MinGroup`）：可推出个人作答的数字（每题正确率与难度、平均用时、超时人数）只在至少 k 个完成时给出，且公开值只在**新增至少 k 个完成后**才变化（含结束后的重算），两次查看之差推不出一个人；人数不受 k 约束（E-4）。k 的读法在每个模板中写同一段 SQL（`greatest(3, … 5)`），改规则时全部一起改并由 `AnalyticsIT` 覆盖。
-  商家的模板 `qb.sponsor.dashboard` / `qb.sponsor.analytics.*`（`qb.stats.read`，只授予 `QB_SPONSOR`）一律经限本人的 `sponsor:QbPublication` 连接，只给汇总、不读 `qb_attempt` 与资料；三张分析表没有商家数据视图（游标中有未公开的合计）。按日的日界是部署时区 `jabiz.fiscal-year-zone`（`Asia/Tokyo`），由任务记进 `qb_stats_run.zone` 供模板读取，不在模板中写死时区。
+  商家的模板 `qb.sponsor.dashboard` / `qb.sponsor.analytics.*`（`qb.stats.read`，只授予 `QB_SPONSOR`）一律经限本人的卡片视图 `sponsor:QbPublicationCard` 连接（普通表按 `sponsor_id` 读，不扫时态的发布，评审 M2），只给汇总、不读 `qb_attempt` 与资料；单个发布的概览的人数取任务的快照（游标），不随每次答题变化（评审 M1）；三张分析表没有商家数据视图（游标中有未公开的合计）。按日的日界是部署时区 `jabiz.fiscal-year-zone`（`Asia/Tokyo`），由任务记进 `qb_stats_run.zone` 供模板读取，不在模板中写死时区；它只能是 `UTC` 或地区名（偏移写法在 PostgreSQL 中方向相反，启动检查 `AnalyticsZoneCheck` 拒绝）。
 - **条款、隐私与帮助**（`messaging`，`docs/quizbuks/plans/Q7-messages-legal.md` Q7b）：法律文本的草稿 `QbLegalDoc`（每种一份，`QB_SETUP` 建立明确标注 `[TEST PLACEHOLDER]` 的占位，不发布）与 FAQ `QbFaqEntry` 由内容管理员在通用后台直接编辑；
   **法律文本只经 `QB_LEGAL_PUBLISH` 发布**（每次二次验证，版本 `QbLegalVersion` 只写一次；必须带页面读到的草稿版本 `baseRevision`；生效时间至多 `qb.legal.max-announce-days`（受控参数，未发布时 180）天后），
   **预告错了只经 `QB_LEGAL_WITHDRAW` 撤回**（生效前、带理由，`QbLegalWithdrawal` 只写一次；撤回的版本永不生效、不要求同意，版本号不再使用）；两者先读草稿或版本（种类不可变）再取命名锁 `qb.legal:<种类>`。
@@ -200,7 +200,9 @@
 - **收据**（Q9d，`sponsor/src/wallet/`）：钱包页已到账的充值行有"收据"：`QB_TOPUP_RECEIPT_ISSUE`（当前界面语言，只在第一次签发时起作用）后下载存档的 PDF（`GET /api/documents/runs/{id}/pdf`）。
 - **分析页**（Q9e2，`sponsor/src/analytics/`，名字在 `ids.ts`、手写类型与调用在 `api.ts`）：页面只显示模板给出的值（不自己汇总、不判断 k、不算流失最大的一段），不足 k 时照模板的 `suppressed` 注明"至少 k 人作答后显示"；
   日期与时刻一律按任务记下的部署时区（`qb.sponsor.dashboard` 的 `zone`）显示，不按浏览器；"现在"取 `qb/legal.ts` 的 `minuteNow()`（按服务端时钟）。图表只经 `@jabiz/ui` 的 `ChartContainer`、颜色只用 `--chart-*`，每个图表有 `aria-label` 与合计的文字，并有可展开的数据表（`charts.tsx` 的 `DataDisclosure`）；
-  两种量不共用一张图（上下两个小图）。导出只经平台的 `POST /api/queries/{id}/export`（趋势带页面所示期间的同一组参数）。e2e 以 `QB_ANALYTICS_RUN_CRON` 每分钟运行分析任务（只给 e2e，正式模式下由 `TransferScheduleCheck` 拒绝）。
+  两种量不共用一张图（上下两个小图）。导出只经平台的 `POST /api/queries/{id}/export`（趋势带页面所示期间的同一组参数）。e2e 以 `QB_ANALYTICS_RUN_CRON` 每分钟运行分析任务。**分析任务的时间是隐私控制**（概览是任务的快照，频率决定能把一个答题人的作答定位到多细，评审 M1）：
+  缺省以外的值只在 e2e 的开关 `quizbuks.e2e.enabled`（`QB_E2E_ENABLED`，正式模式下拒绝）打开时接受，比每分钟更频繁的一律拒绝（`TransferScheduleCheck`）。
+  合计（趋势的总数）由模板给出（`qb.sponsor.analytics.trend-totals`），页面不自己加；时刻只在知道部署时区（模板的 `zone`）之后显示，并注明时区。
 - **交易页**（Q9b，`sponsor/src/transactions/`）：列表、汇总与导出用同一组模板参数（`transactions/api.ts` 的 `paramsOf`；筛选写成模板参数而不是列表筛选，汇总模板才能用同样的条件），
   导出只经平台的 `POST /api/queries/{id}/export`（`sessionFetch`，CSV 与 XLSX）。答题人只以资料的显示名出现，不给邮箱，也不给用户编号："只看此用户"按模板给出的 `userKey` 筛选，页面不显示它。`userKey` = md5(商家编号 : 用户编号)：不是用户编号，同一答题人在每个商家处的键不同；它不是秘密，知道两个编号的人都能算出。
 - **条款、帮助与关于**（Q7b，共用的在 `qb/legal.ts`、`qb/LegalPage.tsx`、`qb/HelpPage.tsx`、`qb/ConsentGate.tsx`、`qb/TermsAgreement.tsx`、`qb/LegalLinks.tsx`）：`/help`、`/legal/<terms|sponsor-terms|privacy|commerce>`（App 另有 `/about`）不需登录，经 `qb/legal.ts` 的 `publicQuery`（无令牌）读公开模板，时刻取整到分钟；

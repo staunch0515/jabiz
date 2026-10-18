@@ -5,6 +5,7 @@ import {
   readDashboard,
   readTop,
   readTrend,
+  readTrendTotals,
   REFRESH_MS,
   trendParams,
   type TrendRange,
@@ -16,7 +17,7 @@ import {
  */
 const live = { refetchInterval: REFRESH_MS, refetchOnWindowFocus: true } as const
 
-/** The dashboard's row: the key figures, and the deployment's zone and the job's last run for every page. */
+/** The dashboard's row: the key figures, the deployment's zone and the job's last run. */
 export function useDashboard(enabled = true) {
   return useQuery({
     queryKey: [...ANALYTICS_QUERY, 'dashboard'],
@@ -32,15 +33,17 @@ export function useTop(enabled = true) {
 }
 
 /**
- * The trend of one publication, or of all the sponsor's (`publicationId` null), for a period ending now, with the
- * parameters it was read with (the export asks for the same period).
+ * The trend of one publication, or of all the sponsor's (`publicationId` null), for a period ending now: its
+ * buckets and their totals (both the server's, for the same parameters), the zone they are of, and the parameters
+ * (the export asks for the same period).
  */
 export function useTrend(range: TrendRange, publicationId: string | null, enabled = true) {
   return useQuery({
     queryKey: [...ANALYTICS_QUERY, 'trend', publicationId, range],
     queryFn: async () => {
       const params = trendParams(range, minuteNow(), publicationId)
-      return { params, points: await readTrend(params) }
+      const [points, totals] = await Promise.all([readTrend(params), readTrendTotals(params)])
+      return { params, points, totals, zone: totals.zone }
     },
     enabled,
     ...live,

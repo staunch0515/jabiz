@@ -4,21 +4,19 @@ description: >-
   One of the sponsor's publications in figures (M-40, M-41, M-43) - first views, starts, completions, passes, winners,
   Kudos spent, the completion rate, the average time and the timeouts (only over the minimum group), the funnel with
   its largest drop, and the App's recent completion counts
-entities: [QbPublication, QbPublicationCounter, QbPublicationStartCounter, QbAnalyticsCursor, QbPublicationStats, QbStatsRun, SysParam]
+entities: [QbPublicationCard, QbAnalyticsCursor, QbPublicationStats, QbStatsRun, SysParam]
 datasets:
-  QbPublication: urn:jabiz:dataset:sponsor:QbPublication
-  QbPublicationCounter: urn:jabiz:dataset:default:QbPublicationCounter
-  QbPublicationStartCounter: urn:jabiz:dataset:default:QbPublicationStartCounter
+  QbPublicationCard: urn:jabiz:dataset:sponsor:QbPublicationCard
   QbAnalyticsCursor: urn:jabiz:dataset:default:QbAnalyticsCursor
   QbPublicationStats: urn:jabiz:dataset:default:QbPublicationStats
   QbStatsRun: urn:jabiz:dataset:default:QbStatsRun
   SysParam: urn:jabiz:dataset:now:SysParam
 params:
-  publicationId: { like: QbPublication.publicationId, required: true, description: The publication }
+  publicationId: { like: QbPublicationCard.publicationId, required: true, description: The publication }
 results:
-  publicationId:    { from: QbPublication.publicationId }
-  name:             { from: QbPublication.name }
-  status:           { from: QbPublication.status }
+  publicationId:    { from: QbPublicationCard.publicationId }
+  name:             { from: QbPublicationCard.name }
+  status:           { from: QbPublicationCard.status }
   views:            { kind: { type: numeric, precision: 12, scale: 0 } }
   starts:           { kind: { type: numeric, precision: 12, scale: 0 } }
   completions:      { kind: { type: numeric, precision: 12, scale: 0 } }
@@ -37,7 +35,7 @@ results:
   avgDurationSec:   { kind: { type: numeric, precision: 9, scale: 1 } }
   timeouts:         { kind: { type: numeric, precision: 12, scale: 0 } }
   suppressed:       { kind: { type: bool } }
-  minGroup:         { kind: { type: numeric, precision: 3, scale: 0 } }
+  minGroup:         { kind: { type: numeric, precision: 9, scale: 0 } }
   last1h:           { from: QbPublicationStats.last1h }
   last24h:          { from: QbPublicationStats.last24h }
   last7d:           { from: QbPublicationStats.last7d }
@@ -45,51 +43,52 @@ results:
   appCountedAt:     { from: QbPublicationStats.refreshedAt }
   shownAt:          { from: QbAnalyticsCursor.shownAt }
   refreshedAt:      { from: QbStatsRun.refreshedAt }
+  zone:             { from: QbStatsRun.zone }
 list:
   key: [publicationId]
 permissions: [qb.stats.read]
 ---*/
--- One row for a publication of the sponsor's own, none for anybody else's (the sponsor's dataset of publications).
--- The counts are the counters' (both sides in this one statement, live; E-3); first views the job's (every ten
--- minutes, five minutes behind). Counts are not held back (E-4). The funnel is first views -> starts -> completions ->
+-- One row for a publication of the sponsor's own, none for anybody else's (the sponsor's dataset of publication cards).
+-- The counts are the job's snapshot (the cursor: the counters as the last run read them, every ten minutes; first views
+-- five minutes behind), not the live counters (review M1): polling a quiet publication's live starts and completions
+-- would time one taker's attempt. Counts are not held back by the minimum group (E-4). The funnel is first views -> starts -> completions ->
 -- passes, each rate against the stage before; first views below starts (a link opened without the detail page, a view
 -- not recorded) are shown as starts and flagged. The largest drop is the stage losing the largest share, the earlier
 -- on a tie, none when nothing is lost. The average time (of the attempts submitted in time, E-6) and the timeouts are
 -- the job's shown figures (stats.MinGroup: they change only after at least k new completions, the time after k new
--- attempts submitted in time) and only over at least k of them: k is qb.stats.min-group if a whole number, else 5, never below 3, as in every analytics template. The
--- App's four windows are its own counts (qb_publication_stats), shown beside the trend as they are.
+-- attempts submitted in time) and only over at least k of them: k is qb.stats.min-group if a whole number, else 5,
+-- never below 3, as in every analytics template. The App's four windows are its own counts (qb_publication_stats),
+-- shown beside the trend as they are. zone is the deployment's (recorded by the job; UTC before its first run): the
+-- page shows the times in it and says so.
 WITH params AS (
-    SELECT greatest(3, coalesce(max(CASE WHEN p.{{SysParam.value}} ~ '^[0-9]{1,3}$'
+    SELECT greatest(3, coalesce(max(CASE WHEN p.{{SysParam.value}} ~ '^[0-9]{1,9}$'
                                          THEN CAST(p.{{SysParam.value}} AS int) END), 5)) AS k
     FROM {{SysParam}} p
     WHERE p.{{SysParam.paramKey}} = 'qb.stats.min-group'),
 run AS (
-    SELECT max(r.{{QbStatsRun.refreshedAt}}) AS refreshed
+    SELECT max(r.{{QbStatsRun.refreshedAt}}) AS refreshed, coalesce(max(r.{{QbStatsRun.zone}}), 'UTC') AS z
     FROM {{QbStatsRun}} r
     WHERE r.{{QbStatsRun.job}} = 'qb.analytics'),
 base AS (
     SELECT
-        p.{{QbPublication.publicationId}} AS pid, p.{{QbPublication.name}} AS v_name,
-        p.{{QbPublication.status}} AS v_status,
+        p.{{QbPublicationCard.publicationId}} AS pid, p.{{QbPublicationCard.name}} AS v_name,
+        p.{{QbPublicationCard.status}} AS v_status,
         coalesce(c.{{QbAnalyticsCursor.views}}, 0) AS v_views,
-        coalesce(s.{{QbPublicationStartCounter.starts}}, 0) AS v_starts,
-        coalesce(n.{{QbPublicationCounter.completions}}, 0) AS v_completions,
-        coalesce(n.{{QbPublicationCounter.passes}}, 0) AS v_passes,
-        coalesce(n.{{QbPublicationCounter.winners}}, 0) AS v_winners,
-        coalesce(n.{{QbPublicationCounter.spent}}, 0) AS v_spent,
+        coalesce(c.{{QbAnalyticsCursor.starts}}, 0) AS v_starts,
+        coalesce(c.{{QbAnalyticsCursor.completions}}, 0) AS v_completions,
+        coalesce(c.{{QbAnalyticsCursor.passes}}, 0) AS v_passes,
+        coalesce(c.{{QbAnalyticsCursor.winners}}, 0) AS v_winners,
+        coalesce(c.{{QbAnalyticsCursor.spent}}, 0) AS v_spent,
         coalesce(c.{{QbAnalyticsCursor.shownAnalysed}}, 0) AS x_analysed,
         coalesce(c.{{QbAnalyticsCursor.shownSubmitted}}, 0) AS x_submitted,
         coalesce(c.{{QbAnalyticsCursor.shownExpired}}, 0) AS x_expired,
         coalesce(c.{{QbAnalyticsCursor.shownDurationSec}}, 0) AS x_duration,
         c.{{QbAnalyticsCursor.shownAt}} AS x_at,
         m.k
-    FROM {{QbPublication}} p
+    FROM {{QbPublicationCard}} p
     CROSS JOIN params m
-    LEFT JOIN {{QbPublicationCounter}} n ON n.{{QbPublicationCounter.publicationId}} = p.{{QbPublication.publicationId}}
-    LEFT JOIN {{QbPublicationStartCounter}} s
-        ON s.{{QbPublicationStartCounter.publicationId}} = p.{{QbPublication.publicationId}}
-    LEFT JOIN {{QbAnalyticsCursor}} c ON c.{{QbAnalyticsCursor.publicationId}} = p.{{QbPublication.publicationId}}
-    WHERE p.{{QbPublication.publicationId}} = :publicationId),
+    LEFT JOIN {{QbAnalyticsCursor}} c ON c.{{QbAnalyticsCursor.publicationId}} = p.{{QbPublicationCard.publicationId}}
+    WHERE p.{{QbPublicationCard.publicationId}} = :publicationId),
 funnel AS (
     SELECT b.*,
            greatest(b.v_views, b.v_starts) AS fv,
@@ -125,14 +124,15 @@ SELECT
          THEN CAST(round(f.x_duration / f.x_submitted, 1) AS numeric(9, 1)) END AS avgDurationSec,
     CASE WHEN f.x_analysed >= f.k THEN CAST(f.x_expired AS numeric(12, 0)) END AS timeouts,
     f.x_analysed < f.k                                            AS suppressed,
-    CAST(f.k AS numeric(3, 0))                                    AS minGroup,
+    CAST(f.k AS numeric(9, 0))                                    AS minGroup,
     w.{{QbPublicationStats.last1h}}                               AS last1h,
     w.{{QbPublicationStats.last24h}}                              AS last24h,
     w.{{QbPublicationStats.last7d}}                               AS last7d,
     w.{{QbPublicationStats.last30d}}                              AS last30d,
     w.{{QbPublicationStats.refreshedAt}}                          AS appCountedAt,
     f.x_at                                                        AS shownAt,
-    r.refreshed                                                   AS refreshedAt
+    r.refreshed                                                   AS refreshedAt,
+    CAST(r.z AS varchar(64))                                      AS zone
 FROM funnel f
 CROSS JOIN run r
 LEFT JOIN {{QbPublicationStats}} w ON w.{{QbPublicationStats.publicationId}} = f.pid

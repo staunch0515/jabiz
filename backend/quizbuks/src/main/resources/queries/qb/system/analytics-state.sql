@@ -13,7 +13,9 @@ datasets:
   QbPublicationView: urn:jabiz:dataset:stats:QbPublicationView
   SysParam: urn:jabiz:dataset:now:SysParam
 params:
-  ids:     { like: QbPublicationCard.publicationId, list: true, required: true, description: The publications of one chunk }
+  firstId: { like: QbPublicationCard.publicationId, description: "The chunk's first publication (none: no rows)" }
+  lastId:  { like: QbPublicationCard.publicationId, description: "The chunk's last publication" }
+  recent:  { kind: { type: temporal, role: EVENT_TIME }, required: true, description: Publications ended after this time are read }
   bucket:  { kind: { type: temporal, role: EVENT_TIME }, required: true, description: "The hour the run adds to (before a publication's start)" }
   viewsTo: { kind: { type: temporal, role: EVENT_TIME }, required: true, description: First views up to this time are counted }
 results:
@@ -53,7 +55,7 @@ results:
   hourWinners:     { from: QbAnalyticsHour.winners }
   hourSpent:       { from: QbAnalyticsHour.spent }
   hourGap:         { from: QbAnalyticsHour.gap }
-  minGroup:        { kind: { type: numeric, precision: 3, scale: 0 } }
+  minGroup:        { kind: { type: numeric, precision: 9, scale: 0 } }
 list:
   key: [publicationId]
 permissions: [qb.stats.system]
@@ -64,7 +66,7 @@ permissions: [qb.stats.system]
 -- through the index on (publication, first view). The minimum group as every analytics template reads it: the
 -- parameter qb.stats.min-group if a whole number, else 5, never below 3 (stats.MinGroup).
 WITH params AS (
-    SELECT greatest(3, coalesce(max(CASE WHEN p.{{SysParam.value}} ~ '^[0-9]{1,3}$'
+    SELECT greatest(3, coalesce(max(CASE WHEN p.{{SysParam.value}} ~ '^[0-9]{1,9}$'
                                          THEN CAST(p.{{SysParam.value}} AS int) END), 5)) AS k
     FROM {{SysParam}} p
     WHERE p.{{SysParam.paramKey}} = 'qb.stats.min-group'),
@@ -75,7 +77,13 @@ chunk AS (
            greatest(CAST(:bucket AS timestamptz),
                     to_timestamp(floor(extract(epoch FROM k.{{QbPublicationCard.wentOnAt}}) / 3600) * 3600)) AS bucket
     FROM {{QbPublicationCard}} k
-    WHERE k.{{QbPublicationCard.publicationId}} = ANY(:ids))
+    LEFT JOIN {{QbAnalyticsCursor}} f ON f.{{QbAnalyticsCursor.publicationId}} = k.{{QbPublicationCard.publicationId}}
+    WHERE k.{{QbPublicationCard.publicationId}} BETWEEN CAST(:firstId AS uuid) AND CAST(:lastId AS uuid)
+      AND (k.{{QbPublicationCard.status}} IN ('LIVE', 'PAUSED', 'FUNDS_SHORT')
+           OR (k.{{QbPublicationCard.status}} = 'ENDED'
+               AND (k.{{QbPublicationCard.endedAt}} > CAST(:recent AS timestamptz)
+                    OR (f.{{QbAnalyticsCursor.publicationId}} IS NOT NULL
+                        AND f.{{QbAnalyticsCursor.finalizedAt}} IS NULL)))))
 SELECT
     x.pid                                   AS publicationId,
     x.sponsor                               AS sponsorId,
@@ -117,7 +125,7 @@ SELECT
     h.{{QbAnalyticsHour.winners}}           AS hourWinners,
     h.{{QbAnalyticsHour.spent}}             AS hourSpent,
     h.{{QbAnalyticsHour.gap}}               AS hourGap,
-    CAST(m.k AS numeric(3, 0))              AS minGroup
+    CAST(m.k AS numeric(9, 0))              AS minGroup
 FROM chunk x
 CROSS JOIN params m
 LEFT JOIN {{QbPublicationCounter}} n ON n.{{QbPublicationCounter.publicationId}} = x.pid

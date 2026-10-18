@@ -51,6 +51,10 @@ class AnalyticsJobIT extends AnalyticsItSupport {
         for (int i = 1; i <= 5; i++) {
             complete("t-an-job-" + i + "-" + run, publication, i % 2 == 0, false);
         }
+        // The five finished at the same instant (the clock stood still): the cap of three cuts between equal
+        // submission times, and the watermark's tie-break by attempt key reads each exactly once.
+        assertThat(query("SELECT count(DISTINCT submitted_at) AS n FROM qb_attempt WHERE publication_id = ?::uuid",
+            publication).getFirst().get("n")).satisfies(n -> assertThat(count(n)).isEqualTo(1));
         // At most three attempts a run: two runs read the five.
         runAnalytics(h.plus(Duration.ofMinutes(10)));
         assertThat(count(cursor(publication).get("analysed"))).isEqualTo(3);
@@ -133,6 +137,42 @@ class AnalyticsJobIT extends AnalyticsItSupport {
             + "'QbPublicationCounter', 'QbPublicationStartCounter', 'QbPublicationView', 'QbPublicationCard') "
             + "AND process_seq_id IN (SELECT process_seq_id FROM op_process WHERE process_name LIKE "
             + "'QB_ANALYTICS%')").getFirst().get("n"))).isZero();
+    }
+
+    @Test
+    void overlappingRunsCountEveryIncrementOnce() throws Exception {
+        String run = UUID.randomUUID().toString().substring(0, 8);
+        String sponsor = newSponsor("s-an-overlap-" + run);
+        credit(sponsor, 100_000);
+        Instant h = nextHour();
+        at(h.plus(Duration.ofMinutes(1)));
+        String publication = analysedPublication(sponsor, "Overlap " + run);
+        runAnalytics(h.plus(Duration.ofMinutes(2)));
+        for (int i = 0; i < 4; i++) {
+            complete("t-an-overlap-" + i + "-" + run, publication, true, i > 1);
+        }
+        // Two runs asked for at once (two instances, or a slow run and the next): the cluster lock lets one run, the
+        // other does nothing; then a run catches up whatever is left.
+        at(h.plus(Duration.ofMinutes(20)));
+        execute("UPDATE jabiz_shedlock SET lock_until = locked_at");
+        java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(2);
+        try {
+            var first = pool.submit(() -> jobRunner.execute(analyticsJob, h.plus(Duration.ofMinutes(10))));
+            var second = pool.submit(() -> jobRunner.execute(analyticsJob, h.plus(Duration.ofMinutes(20))));
+            List<JobRunner.Outcome> outcomes = List.of(first.get().outcome(), second.get().outcome());
+            assertThat(outcomes).as(outcomes.toString()).contains(JobRunner.Outcome.SUCCEEDED)
+                .allMatch(outcome -> outcome == JobRunner.Outcome.SUCCEEDED || outcome == JobRunner.Outcome.LOCKED);
+        } finally {
+            pool.shutdown();
+        }
+        runAnalytics(h.plus(Duration.ofMinutes(30)));
+        long completions = count(counter(publication).get("completions"));
+        assertThat(completions).isEqualTo(4);
+        assertThat(hours(publication).stream().mapToLong(row -> count(row.get("completions"))).sum())
+            .isEqualTo(completions);
+        assertThat(hours(publication).stream().mapToLong(row -> count(row.get("starts"))).sum()).isEqualTo(4);
+        assertThat(count(cursor(publication).get("analysed"))).isEqualTo(completions);
+        assertThat(String.valueOf(cursor(publication).get("questions"))).isEqualTo(recount(publication));
     }
 
     @Test

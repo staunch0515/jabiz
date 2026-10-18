@@ -3,17 +3,17 @@ id: qb.sponsor.analytics.top
 description: >-
   The sponsor's publications by their completions of the last seven days (M-11), with their Kudos spent then and their
   completions in all; the page asks for the first five
-entities: [QbPublication, QbPublicationCounter, QbAnalyticsHour]
+entities: [QbPublicationCard, QbPublicationCounter, QbAnalyticsHour]
 datasets:
-  QbPublication: urn:jabiz:dataset:sponsor:QbPublication
+  QbPublicationCard: urn:jabiz:dataset:sponsor:QbPublicationCard
   QbPublicationCounter: urn:jabiz:dataset:default:QbPublicationCounter
   QbAnalyticsHour: urn:jabiz:dataset:default:QbAnalyticsHour
 params:
   at: { kind: { type: temporal, role: EVENT_TIME }, required: true, description: "The client's now: the seven days end then" }
 results:
-  publicationId:    { from: QbPublication.publicationId }
-  name:             { from: QbPublication.name }
-  status:           { from: QbPublication.status }
+  publicationId:    { from: QbPublicationCard.publicationId }
+  name:             { from: QbPublicationCard.name }
+  status:           { from: QbPublicationCard.status }
   completions7d:    { kind: { type: numeric, precision: 12, scale: 0 } }
   spent7d:          { kind: { type: monetary, currency: JPY, scale: 0 } }
   completionsTotal: { from: QbPublicationCounter.completions }
@@ -27,9 +27,9 @@ permissions: [qb.stats.read]
 -- job's, every ten minutes); the total is the counter's, live. Aggregates only. The buckets are found by the
 -- sponsor's index (their publications all carry the caller as sponsor), and joined to their publications.
 WITH mine AS (
-    SELECT p.{{QbPublication.publicationId}} AS pid, p.{{QbPublication.sponsorId}} AS sponsor,
-           p.{{QbPublication.name}} AS v_name, p.{{QbPublication.status}} AS v_status
-    FROM {{QbPublication}} p),
+    SELECT p.{{QbPublicationCard.publicationId}} AS pid, p.{{QbPublicationCard.sponsorId}} AS sponsor,
+           p.{{QbPublicationCard.name}} AS v_name, p.{{QbPublicationCard.status}} AS v_status
+    FROM {{QbPublicationCard}} p),
 recent AS (
     SELECT h.{{QbAnalyticsHour.publicationId}} AS pid, sum(h.{{QbAnalyticsHour.completions}}) AS v_completions,
            sum(h.{{QbAnalyticsHour.spent}}) AS v_spent

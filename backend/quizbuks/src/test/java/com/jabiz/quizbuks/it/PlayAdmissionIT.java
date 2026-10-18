@@ -204,8 +204,8 @@ class PlayAdmissionIT extends PlayItSupport {
                     refused.add(call.get());
                 }
             }
-            assertThat(admission.waiting()).isEqualTo(6);
-            assertThat(waiters(lock)).isEqualTo(2);
+            // The two admitted runs may still be on their way to the lock when the twelfth refusal returns.
+            awaitThat(() -> admission.waiting() == 6 && waiters(lock) == 2, "the queue full");
             for (int i = 0; i < 10; i++) {
                 long began = System.nanoTime();
                 assertThat(feed(reader).getStatus().value()).isEqualTo(200);

@@ -21,12 +21,17 @@ const DASHBOARD = { live: 2, paused: 1, fundsShort: 0, answering: 3, spentToday:
 const WEEK = Array.from({ length: 7 }, (_, i) => ({
   bucketStart: new Date(Date.UTC(2026, 9, 11 + i, 15)).toISOString(),
   day: `2026-10-${String(12 + i).padStart(2, '0')}`,
-  views: 4, starts: 3, completions: i, passes: 1, winners: 1, spent: String(i * 100), gap: i === 2,
+  views: 4, starts: 3, completions: i, passes: 1, winners: 1, spent: String(i * 100), gap: i === 2, zone: 'Asia/Tokyo',
 }))
+/** The last 24 hours from 02:00 UTC (11:00 in Tokyo): Tokyo's midnight is the 14th bucket. */
 const HOURS = Array.from({ length: 24 }, (_, i) => ({
   bucketStart: new Date(Date.UTC(2026, 9, 17, 2 + i)).toISOString(),
-  day: '2026-10-18', views: 0, starts: 0, completions: i === 23 ? 2 : 0, passes: 0, winners: 0, spent: '0', gap: false,
+  day: i < 13 ? '2026-10-17' : '2026-10-18', views: 0, starts: 0, completions: i === 23 ? 2 : 0, passes: 0, winners: 0,
+  spent: '0', gap: false, zone: 'Asia/Tokyo',
 }))
+/** The server's totals of those buckets (the page adds nothing up). */
+const WEEK_TOTALS = { views: 28, starts: 21, completions: 21, passes: 7, winners: 7, spent: '2100', zone: 'Asia/Tokyo' }
+const HOURS_TOTALS = { views: 0, starts: 0, completions: 2, passes: 0, winners: 0, spent: '0', zone: 'Asia/Tokyo' }
 const TOP = [{ publicationId: P1, name: 'Big prize', status: 'LIVE', completions7d: 21, spent7d: '2100',
   completionsTotal: 40 }]
 
@@ -36,7 +41,7 @@ const OVERVIEW_SMALL = { publicationId: P1, name: 'Big prize', status: 'LIVE', v
   viewsBelowStarts: false, viewToStart: '0.8', startToComplete: '0.5', completeToPass: '0.75',
   largestDrop: 'START_COMPLETE', basedOn: 4, avgDurationSec: null, timeouts: null, suppressed: true, minGroup: 5,
   last1h: 1, last24h: 4, last7d: 4, last30d: 4, appCountedAt: '2026-10-18T01:10:00Z', shownAt: null,
-  refreshedAt: '2026-10-18T01:10:00Z' }
+  refreshedAt: '2026-10-18T01:10:00Z', zone: 'Asia/Tokyo' }
 const OVERVIEW_BIG = { ...OVERVIEW_SMALL, completions: 12, basedOn: 10, avgDurationSec: '42.5', timeouts: 2,
   suppressed: false, largestDrop: 'VIEW_START', viewsBelowStarts: true }
 
@@ -54,6 +59,7 @@ interface Server {
   dashboard?: { status: number; body: unknown }
   top?: unknown[]
   week?: unknown[]
+  weekTotals?: Record<string, unknown>
   overview?: unknown[]
   overviewError?: boolean
   questions?: unknown[]
@@ -89,6 +95,10 @@ function server(options: Server = {}) {
         const params = (body?.params ?? {}) as Record<string, string>
         return page(params.bucket === 'HOUR' ? HOURS : (options.week ?? WEEK))
       }
+      case '/api/queries/qb.sponsor.analytics.trend-totals': {
+        const params = (body?.params ?? {}) as Record<string, string>
+        return page([params.bucket === 'HOUR' ? HOURS_TOTALS : (options.weekTotals ?? WEEK_TOTALS)])
+      }
       case '/api/queries/qb.sponsor.analytics.overview':
         if (options.overviewError) return json(500, { title: 'Internal error' })
         return page(options.overview ?? [OVERVIEW_SMALL])
@@ -106,6 +116,8 @@ function server(options: Server = {}) {
   const of = (path: string) => asked.filter((a) => a.path === path).map((a) => a.body)
   return {
     trend: () => of('/api/queries/qb.sponsor.analytics.trend'),
+    totals: () => of('/api/queries/qb.sponsor.analytics.trend-totals'),
+    questions: () => of('/api/queries/qb.sponsor.analytics.questions'),
     dashboard: () => of('/api/queries/qb.sponsor.dashboard'),
     top: () => of('/api/queries/qb.sponsor.analytics.top'),
     exports: () => asked.filter((a) => a.path.includes('/export')),
@@ -123,14 +135,14 @@ afterEach(() => {
 
 describe('the dashboard', () => {
   it('shows the key figures, the week by the server\'s days and the top publications', async () => {
-    const { trend, dashboard, top } = server()
+    const { trend, totals, dashboard, top } = server()
     window.history.replaceState(null, '', '/dashboard')
     const user = userEvent.setup()
     render(<App />)
     expect(await screen.findByTestId('metric-answering-value')).toHaveTextContent('3')
     expect(screen.getByTestId('metric-live')).toHaveTextContent('2 Running')
     expect(screen.getByTestId('metric-paused')).toHaveTextContent('1 Paused')
-    expect(screen.getByTestId('metric-funds-short')).toHaveTextContent('0 Short of funds')
+    expect(screen.getByTestId('metric-funds-short')).toHaveTextContent('0 Wallet too low')
     expect(screen.getByTestId('metric-spent-today-value')).toHaveTextContent('1,200 Kudos')
     expect(screen.getByTestId('metric-available-value')).toHaveTextContent('48,800 Kudos')
     expect(screen.getByTestId('metric-pending-value')).toHaveTextContent('600 Kudos (1)')
@@ -155,9 +167,15 @@ describe('the dashboard', () => {
     expect(rows[6]).toHaveTextContent('10/18')
     expect(rows[2]).toHaveTextContent('Includes a pause')
     expect(screen.getByTestId('week-gap-note')).toBeInTheDocument()
+    // The totals row and the captions are the server's totals, not added up on the page.
+    expect(within(table).getByTestId('week-totals')).toHaveTextContent('2,100 Kudos')
+    // The chart and the top table say which seven days they mean.
+    expect(screen.getByTestId('dashboard-trend')).toHaveTextContent('Today and the 6 days before it')
+    expect(screen.getByTestId('dashboard-top')).toHaveTextContent('last 7 × 24 hours')
 
-    // The week by the day, of every publication; the top five; "now" given.
+    // The week by the day, of every publication; its totals with the same parameters; the top five; "now" given.
     expect(trend()[0]).toMatchObject({ params: { bucket: 'DAY' } })
+    expect(totals()[0]).toEqual({ params: trend()[0]?.params, limit: 1 })
     expect(trend()[0]?.params).not.toHaveProperty('publicationId')
     expect(dashboard()[0]).toMatchObject({ params: { at: expect.any(String) }, limit: 1 })
     expect(top()[0]).toMatchObject({ limit: 5, sorts: [{ field: 'completions7d', asc: false }] })
@@ -170,7 +188,8 @@ describe('the dashboard', () => {
 
   it('says when nothing was counted yet and nothing happened', async () => {
     server({ dashboard: { status: 200, body: { items: [{ ...DASHBOARD, refreshedAt: null, zone: null }] } },
-      top: [], week: WEEK.map((w) => ({ ...w, completions: 0, views: 0, starts: 0, spent: '0', gap: false })) })
+      top: [], week: WEEK.map((w) => ({ ...w, completions: 0, views: 0, starts: 0, spent: '0', gap: false, zone: null })),
+      weekTotals: { views: 0, starts: 0, completions: 0, passes: 0, winners: 0, spent: '0', zone: null } })
     window.history.replaceState(null, '', '/dashboard')
     render(<App />)
     expect(await screen.findByTestId('analytics-updated')).toHaveTextContent('have not been counted yet')
@@ -198,9 +217,14 @@ describe('a publication\'s analytics', () => {
     expect(screen.getByTestId('overview-completions-value')).toHaveTextContent('4')
     expect(screen.getByTestId('overview-completion-rate-value')).toHaveTextContent('50%')
     expect(screen.getByTestId('overview-spent-value')).toHaveTextContent('300 Kudos')
-    // The job's counts hold as of its last run, in Tokyo time.
-    expect(screen.getByTestId('overview-starts')).toHaveTextContent('As of')
-    expect(screen.getByTestId('overview-starts')).toHaveTextContent('10:10')
+    // The figures are the job's snapshot: as of its last run, in Tokyo time.
+    expect(screen.getByTestId('overview-as-of')).toHaveTextContent('As of')
+    expect(screen.getByTestId('overview-as-of')).toHaveTextContent('10:10 (Asia/Tokyo)')
+    expect(screen.getByTestId('overview-in-progress')).toHaveTextContent('In progress')
+    expect(screen.getByTestId('overview-in-progress')).toHaveTextContent('10:10 (Asia/Tokyo)')
+    expect(screen.getByTestId('app-counted')).toHaveTextContent('Counted at')
+    expect(screen.getByTestId('app-counted')).toHaveTextContent('10:10 (Asia/Tokyo)')
+    expect(screen.getByTestId('analytics-updated')).toHaveTextContent('10:10 (Asia/Tokyo)')
     // Below k: the average time and the timeouts are hidden, and the page says why.
     expect(screen.getByTestId('overview-avg-duration-value')).toHaveTextContent('Hidden')
     expect(screen.getByTestId('overview-timeouts-value')).toHaveTextContent('Hidden')
@@ -256,9 +280,13 @@ describe('a publication\'s analytics', () => {
     expect(chart).toHaveAttribute('data-buckets', '24')
     expect(trend().at(-1)).toMatchObject({ params: { bucket: 'HOUR', publicationId: P1 } })
     expect(screen.getByTestId('trend-completions-caption')).toHaveTextContent('Completions by hour: 2 in all')
-    // The hours are Tokyo's: the first bucket (02:00 UTC) is 11:00.
+    // The hours are Tokyo's: the first bucket (02:00 UTC) is 11:00; the rows that start a day carry its date.
     await user.click(within(screen.getByTestId('trend-table')).getByText('Show the data as a table'))
-    expect(within(screen.getByTestId('trend-table')).getAllByTestId('trend-row')[0]).toHaveTextContent('11:00')
+    const hours = within(screen.getByTestId('trend-table')).getAllByTestId('trend-row')
+    expect(hours[0]).toHaveTextContent('10/17 11:00')
+    expect(hours[1].querySelector('th')).toHaveTextContent(/^12:00$/)
+    expect(hours[13]).toHaveTextContent('10/18 00:00')
+    expect(within(screen.getByTestId('trend-table')).getByTestId('trend-totals')).toHaveTextContent('2')
 
     await user.click(screen.getByRole('radio', { name: 'Last 7 days (by the day)' }))
     await waitFor(() => expect(screen.getByTestId('trend')).toHaveAttribute('data-range', 'DAYS_7'))
@@ -304,12 +332,29 @@ describe('a publication\'s analytics', () => {
     expect(await screen.findByTestId('export-error')).toHaveTextContent('Too many rows.')
   })
 
-  it('does not exist for another sponsor\'s publication', async () => {
-    server({ overview: [] })
+  it('does not exist for another sponsor\'s publication, and asks for nothing else of it', async () => {
+    const { trend, totals, questions } = server({ overview: [] })
     window.history.replaceState(null, '', `/publications/${P1}/analytics`)
     render(<App />)
     expect(await screen.findByText('This publication does not exist, or it is not yours.')).toBeInTheDocument()
     expect(screen.queryByTestId('analytics-overview')).toBeNull()
+    expect(screen.queryByTestId('analytics-export')).toBeNull()
+    // Neither the questions nor the trend of a publication that is not the sponsor's are ever asked for.
+    expect(questions()).toEqual([])
+    expect(trend()).toEqual([])
+    expect(totals()).toEqual([])
+  })
+
+  it('says why the average time waits although the completions are over the minimum group', async () => {
+    server({ overview: [{ ...OVERVIEW_BIG, basedOn: 1, completions: 6, avgDurationSec: null, suppressed: false }],
+      questions: QUESTIONS_BIG })
+    window.history.replaceState(null, '', `/publications/${P1}/analytics`)
+    render(<App />)
+    expect(await screen.findByTestId('overview-avg-duration-value')).toHaveTextContent('Hidden')
+    expect(screen.getByTestId('overview-avg-duration'))
+      .toHaveTextContent('Shown once at least 5 people have submitted in time.')
+    // One completion: the singular.
+    expect(screen.getByTestId('overview-k')).toHaveTextContent(/^Based on 1 completion\.$/)
   })
 
   it('offers to try again when the overview cannot be read', async () => {

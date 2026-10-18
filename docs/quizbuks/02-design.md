@@ -71,7 +71,7 @@ docs/quizbuks/               本文件等
 | `QB_ADMIN_SUPER` | 上述全部（`control.publish`、`inbound.read` 与 `approval.decide` 除外：Q10b 的职责分离 `QbSodRules`）+ `qb.admin.users.ban`、`platform.param.read`、`control.propose`、平台安全管理权限（不再有 `platform.param.write`，见下） |
 
 - 另有两个公用权限（Q1）：`qb.country.read`（读国家字典，五个角色都有）、`qb.setup`（执行 `QB_SETUP`，超级管理员；平台的 `ADMIN` 角色持有全部权限）。
-- 不授予任何角色的权限：`qb.content.view.write`（数据视图的写权限，Q3、Q4）、`qb.content.system`（`QB_QUIZ_RELEASE_FILES`，只由 `QB_QUIZ_DELETE` 作为子流程运行）、`qb.publication.system`（Q4 的系统流程）、`qb.sponsor.system`（`QB_SPONSOR_APPROVAL_RESULT`，Q2）、`qb.stats.system`（Q9e 的分析任务 `QB_ANALYTICS_REFRESH` / `QB_ANALYTICS_CHUNK` 与其模板）。
+- 不授予任何角色的权限：`qb.content.view.write`（数据视图的写权限，Q3、Q4）、`qb.content.system`（`QB_QUIZ_RELEASE_FILES`，只由 `QB_QUIZ_DELETE` 作为子流程运行）、`qb.publication.system`（Q4 的系统流程）、`qb.sponsor.system`（`QB_SPONSOR_APPROVAL_RESULT`，Q2）、`qb.stats.system`（Q9e 的逐项分析任务的每项流程 `QB_ANALYTICS_ITEM` 与其模板）。
   平台 D41（16l）已合入：`QB_SPONSOR_APPROVAL_RESULT` 与 Q4 的系统流程声明 `internal()`（只允许系统身份运行），`QB_QUIZ_RELEASE_FILES` 声明 `subProcessOnly()`；这些系统权限随之只起声明作用。
 - 文件策略只能声明一个读取权限，所以商家头像的读取（商家本人、答题人、管理员）共用 `qb.sponsor.avatar.read`（Q2）。
 - 行范围：答题人的数据视图以 `userId = 当前用户` 限定；商家的以 `sponsorId = 当前用户` 限定（平台 `fromContext("…", actorId)`）。
@@ -375,8 +375,8 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 | `qb.app.inbox` | 个人消息 ∪ 匹配的公告，带未读 | `qb.me` |
 | `qb.sponsor.transactions` / `qb.sponsor.transaction-summary` | 商家交易明细与汇总（M-50 – M-52，Q9b，`plans/Q9b-sponsor-transactions.md`）：本人发布的奖励（已支付 = 已完成、待支付 = 处理中；完成但无奖励的不是交易）∪ 本人的充值（已支付 = 已完成、开立中 = 处理中、过期或失败 = 失败）。答题人只以资料的显示名出现，不读作答与结果、不给邮箱与用户编号（按用户筛选用 `userKey` = md5(商家编号 : 用户编号)：不是用户编号，同一答题人在每个商家处的键不同；它不是秘密，知道两个编号的人都能算出）；筛选全部是参数（类型、状态、发布、用户、期间、关键字），汇总只多一层聚合、条件相同，列表、汇总与导出因此一致。汇总按类型分开：奖励（支出）的已支付与待支付，充值（收入）的已到账（扣除退款）、退款或扣回、处理中与失败；两者的金额从不相加，只有笔数是总计 | `qb.sponsor.finance.read` |
 | `qb.sponsor.publications` | M-34 | `qb.publication.write` |
-| `qb.sponsor.dashboard` / `qb.sponsor.analytics.trend` / `.top` / `.overview` / `.questions` | 商家分析（Q9e，`plans/Q9e-analytics.md`，口径 D-Q9e-1）：仪表盘一行（各状态的发布数、正在答题、今日支出、可用余额与待支付、有上限的进行中发布的剩余预算；实时取计数，今日 = 部署时区 `jabiz.fiscal-year-zone` 的今天）；按小时（UTC）或按日（部署时区）的趋势，缺的桶补零、至多 400 个；近 7 天完成数排行；一个发布的概览（累计人数、完成率、漏斗与流失最大的一段、平均用时与超时人数、App 的四个窗口）；每题的正确率与难度（≥ 80 % 易、≥ 50 % 中、其余难）。全部只经限本人的 `sponsor:QbPublication`；可推出个人作答的数字（每题、平均用时、超时）只在至少 k（`qb.stats.min-group`，缺省 5、下限 3，SQL 中 `greatest(3, …)`）个完成时给出、只在新增至少 k 个后变化；人数不受 k 约束（E-4）。导出经平台 `POST /api/queries/{id}/export`（只有汇总） | `qb.stats.read` |
-| `qb.system.analytics-due` / `-state` / `-attempts` / `-question-stats` | 分析任务的取数（Q9e）：要读的发布；每块一条语句读两侧计数、游标、新增浏览与要加的小时桶；水位线之后、滞后 5 分钟的已完成会话按题汇总（每块至多 `quizbuks.analytics.max-attempts-per-chunk` 个；结束 30 分钟且无进行中时整体重算）；公开的题目统计 | `qb.stats.system` |
+| `qb.sponsor.dashboard` / `qb.sponsor.analytics.trend` / `.trend-totals` / `.top` / `.overview` / `.questions` | 商家分析（Q9e；`.trend-totals` 是同样参数下趋势的合计（Q9e2 评审 L1，页面不自己加），趋势与概览都带 `zone`（Q9e2 评审 M2）；`plans/Q9e-analytics.md`，口径 D-Q9e-1）：仪表盘一行（各状态的发布数、正在答题、今日支出、可用余额与待支付、有上限的进行中发布的剩余预算；实时取计数，今日 = 部署时区 `jabiz.fiscal-year-zone` 的今天；今日支出 = 任务最近一次运行之后的增量（计数 − 游标）加今天的桶，任务没见过的发布只计今天上架的）；按小时（UTC）或按日（部署时区）的趋势，缺的桶补零、至多 400 个；近 7 天完成数排行；一个发布的概览（累计人数取任务的快照、随任务每 10 分钟变化而不是随每次答题，Q9e1 评审 M1；完成率、漏斗与流失最大的一段、平均用时与超时人数、App 的四个窗口）；每题的正确率与难度（≥ 80 % 易、≥ 50 % 中、其余难）。全部只经限本人的卡片视图 `sponsor:QbPublicationCard`（普通表、按 `sponsor_id` 索引读，不扫时态的发布历史，Q9e1 评审 M2）；可推出个人作答的数字（每题、平均用时、超时）只在至少 k（`qb.stats.min-group`，缺省 5、下限 3，SQL 中 `greatest(3, …)`）个完成时给出、只在新增至少 k 个后变化；人数不受 k 约束（E-4）。导出经平台 `POST /api/queries/{id}/export`（只有汇总） | `qb.stats.read` |
+| `qb.system.analytics-items` / `-state` / `-attempts` / `-question-stats` | 分析任务的取数（Q9e）：逐项任务的项（按发布编号的块、结束后的重算、最后一项运行记录）；每块一条语句读两侧计数、游标、新增浏览与要加的小时桶；水位线之后、滞后 5 分钟的已完成会话按题汇总（每块至多 `quizbuks.analytics.max-attempts-per-chunk` 个；结束 30 分钟且无进行中时整体重算）；公开的题目统计 | `qb.stats.system` |
 | `qb.admin.attempts` / `qb.admin.wallets` | 全部会话（P-01 的答题历史、支持查询，不含金额）；商家钱包的余额与待支付（Q5） | `qb.admin.users.read` / `qb.admin.finance.read` |
 | `qb.admin.attempt-rewards` / `qb.admin.publication-funds` | 会话的奖励、抽成与分录（P-01 的资金部分）；发布的商家资金（预算不足、待支付）。Q9a 从上两个模板中分出，资金只给财务 | `qb.admin.finance.read` |
 | `qb.admin.users` / `qb.admin.transfers` | P-01；P-03（Q9c 加筛选 `transferId`、`stale`（`CHECK`，或 `SENDING` 早于参数 `staleBefore`）与 `held`（被驳回或撤回、尚未放行）） | `qb.admin.users.read` / `qb.admin.finance.read` |
@@ -390,10 +390,11 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 | `qb.system.ai-expired` | 过期任务的取数：READY 且已过期的作业（Q8a） | `qb.ai.system` |
 | `qb.sponsor.topup-receipt` / `qb.sponsor.receipt-issuer` | 收据（Q9d，F-09）的两个区块：本人一笔已到账的充值（公司、联系人、到账时间、支付号末尾、金额）；开具方（受控参数 `qb.issuer.*`，总是一行） | `qb.topup` |
 
-- 完成人数：已认证的模板没有缓存，所以近期窗口由任务 `qb.publication-stats` 每 10 分钟按索引 `QbAttempt (publicationId, submittedAt)` 统计到 `qb_publication_stats`（需求 6.1 允许 10 分钟），累计取计数行；分析（Q9e）由任务 `qb.analytics` 每 10 分钟把计数的增量写进按小时的桶，按同一索引从水位线读新完成的会话汇总每题（答题路径不写任何分析数据，D-Q9e-2）。
 - **公开模板**（Q7b，平台 15、D17；`jabiz.public.enabled` 由 `JABIZ_PUBLIC_ENABLED` 打开，缺省开）：`qb.public.legal`（某种文本在时刻 `at` 的当前版本与下一个预告）、
   `qb.public.legal-version`、`qb.public.legal-history`、`qb.public.faq`（`audience`、`category`、`q` 在任一语言中字面匹配）。只读公开视图：法律文本的已发布版本（全部，含预告）与已发布的 FAQ；草稿没有公开视图。
   已认证：`qb.me.consents`（本人对各文本的状态）、`qb.me.support`（支持邮箱）、`qb.admin.consents`（P-01 的同意记录）。
+- 完成人数：已认证的模板没有缓存，所以近期窗口由任务 `qb.publication-stats` 每 10 分钟按索引 `QbAttempt (publicationId, submittedAt)` 统计到 `qb_publication_stats`（需求 6.1 允许 10 分钟），累计取计数行；分析（Q9e）由任务 `qb.analytics` 每 10 分钟把计数的增量写进按小时的桶，按同一索引从水位线读新完成的会话汇总每题（答题路径不写任何分析数据，D-Q9e-2）。
+  **残余（Q9e1 评审 M1 ④，已知、接受）**：概览的人数是任务的快照，但仪表盘的"正在答题"与今日支出是实时的合计，商家只有一个进行中的发布时，两次查看之差就是该发布在这段时间内的变化；Q4 的 `qb.sponsor.publications` 同样实时给出每个发布的计数。两者都只是人数与金额（E-4 不受 k 约束），推不出逐题作答。
 - 导出（M-52）只经平台导出 `POST /api/queries/qb.sponsor.transactions/export?format=…`（与列表同样的参数与排序，超过平台上限即整体拒绝 `REPORT_TOO_LARGE`）；商家后台提供 CSV 与 XLSX。
 
 ## 7. 前端

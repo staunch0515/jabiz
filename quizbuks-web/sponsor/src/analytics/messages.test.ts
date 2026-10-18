@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { SPONSOR } from '../messages'
 import { bundle, emptyTexts, keyPaths, LANGUAGES } from '../qb/messageKeys'
+import { publishingEn, publishingJa } from '../publishing/messages'
 import { analyticsMessages } from './messages'
 
 describe('the analytics texts', () => {
@@ -19,5 +20,10 @@ describe('the analytics texts', () => {
       expect(emptyTexts(SPONSOR, lng), lng).toEqual([])
       expect(JSON.stringify(analyticsMessages[lng]), lng).not.toMatch(/JPY|yen|円|日元|USD|\$/i)
     }
+    // The publishing pages' words: winners are 当選者 in Japanese, a wallet too low as on the status badge.
+    expect(JSON.stringify(analyticsMessages.ja)).not.toContain('受賞')
+    expect(analyticsMessages.ja.analytics.publication.winners).toBe('当選者')
+    expect(analyticsMessages.en.analytics.metrics.fundsShort).toBe(publishingEn.publishing.list.fundsShort)
+    expect(analyticsMessages.ja.analytics.metrics.fundsShort).toBe(publishingJa.publishing.list.fundsShort)
   })
 })
