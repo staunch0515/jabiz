@@ -32,6 +32,8 @@ class ArchitectureTest {
         PlatformArchRules.noDirectNetworkAccess("com.jabiz.quizbuks..").check(CLASSES);
         PlatformArchRules.noPlatformInternals("com.jabiz.quizbuks..").check(CLASSES);
         PlatformArchRules.handlersStayOutOfTheDatabase("com.jabiz.quizbuks..").check(CLASSES);
+        // Q8b: the AI jobs read PDFs and produce covers only through their context (decision D50).
+        PlatformArchRules.handlersReadFilesThroughTheirContext("com.jabiz.quizbuks..").check(CLASSES);
     }
 
     /**

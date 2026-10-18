@@ -35,6 +35,9 @@ abstract class AiItSupport extends LegalItSupport {
     static final String MESSAGES = "/v1/messages";
     static final JsonMapper JSON = JsonMapper.builder().build();
     static final Pattern COUNT = Pattern.compile("Number of questions: (\\d+)");
+    /** PDF materials in these tests (Q8b): at most this many pages a request, and bytes each. */
+    static final int TEST_PDF_MAX_PAGES = 5;
+    static final long TEST_PDF_MAX_BYTES = 200_000;
 
     /** One stub for every AI class: they share a cached application context, and so its address. */
     static final StubHttpServer CLAUDE = StubHttpServer.start(AiItSupport::claude);
@@ -45,8 +48,11 @@ abstract class AiItSupport extends LegalItSupport {
         registry.add("jabiz.external-services.anthropic.allowed-hosts", () -> "127.0.0.1");
         // The tests make many requests a minute; the limit itself is the platform's (and configuration).
         registry.add("jabiz.process.rate-limits[QB_AI_QUESTIONS_REQUEST].per-user", () -> "10000");
+        registry.add("jabiz.process.rate-limits[QB_AI_COVER_REQUEST].per-user", () -> "10000");
         // A provider that does not answer is found out in two seconds, not the two minutes of production.
         registry.add("quizbuks.ai.request-timeout", () -> "PT2S");
+        registry.add("quizbuks.ai.pdf.max-pages", () -> String.valueOf(TEST_PDF_MAX_PAGES));
+        registry.add("quizbuks.ai.pdf.max-bytes", () -> String.valueOf(TEST_PDF_MAX_BYTES));
     }
 
     @Autowired
@@ -65,17 +71,51 @@ abstract class AiItSupport extends LegalItSupport {
 
     /**
      * The stub's own answer: {@code n} questions (as the request's "Number of questions: n" says), each resting on
-     * material 1, with the provider's usage, as a normal end of turn.
+     * material 1, or (Q8b) three cover designs when the request asks for covers, with the provider's usage, as a
+     * normal end of turn.
      */
     static StubHttpServer.Answer claude(StubHttpServer.Received request) {
         if (!"POST".equals(request.method()) || !MESSAGES.equals(request.path())) {
             return StubHttpServer.Answer.json(404, "{\"type\":\"error\",\"error\":{\"type\":\"not_found_error\"}}");
         }
         JsonNode body = JSON.readTree(request.body());
-        String user = body.get("messages").get(0).get("content").get(0).get("text").asString();
+        String user = userText(body);
+        if (user.contains("Number of covers:")) {
+            return answer(body.get("model").asString(), "end_turn", covers("Cover"), 300, 200);
+        }
         Matcher m = COUNT.matcher(user);
         int count = m.find() ? Integer.parseInt(m.group(1)) : 1;
         return answer(body.get("model").asString(), "end_turn", questions(count), 1200, 800);
+    }
+
+    /** The text block of a request's user message (after its documents, when it has any). */
+    static String userText(JsonNode body) {
+        String text = "";
+        for (JsonNode block : body.get("messages").get(0).get("content")) {
+            if ("text".equals(block.get("type").asString())) {
+                text = block.get("text").asString();
+            }
+        }
+        return text;
+    }
+
+    /** The document blocks of a request's user message (Q8b: PDF materials). */
+    static List<JsonNode> documents(JsonNode body) {
+        List<JsonNode> documents = new ArrayList<>();
+        for (JsonNode block : body.get("messages").get(0).get("content")) {
+            if ("document".equals(block.get("type").asString())) {
+                documents.add(block);
+            }
+        }
+        return documents;
+    }
+
+    /** Three cover designs as the answer's text, their texts {@code <prefix> 1..3}. */
+    static String covers(String prefix) {
+        return JSON.writeValueAsString(Map.of("covers", List.of(
+            Map.of("palette", "ocean", "layout", "center", "motif", "circles", "text", prefix + " 1"),
+            Map.of("palette", "sunset", "layout", "band", "motif", "waves", "text", prefix + " 2"),
+            Map.of("palette", "citrus", "layout", "corner", "motif", "rays", "text", prefix + " 3"))));
     }
 
     /** {@code n} questions as the answer's text. */
@@ -169,6 +209,12 @@ abstract class AiItSupport extends LegalItSupport {
 
     Map<String, Object> request(String token, String quizId, List<String> materialIds, int count) {
         return run(AiProcesses.REQUEST, token, requestInput(quizId, materialIds, count));
+    }
+
+    /** Asks for covers of the quiz, in English, the notice accepted (Q8b). */
+    Map<String, Object> requestCovers(String token, String quizId) {
+        return run(AiProcesses.COVER_REQUEST, token, body("quizId", quizId, "language", "en", "aiNoticeVersionNo",
+            noticeVersion()));
     }
 
     static Map<String, Object> job(Object aiJobId) {

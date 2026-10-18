@@ -14,7 +14,7 @@ import java.util.regex.Pattern;
 
 /**
  * A stand-in for Anthropic's Messages API for local development and the end-to-end tests of QuizBuks's AI questions
- * (docs/quizbuks/plans/Q8-ai.md, Q8a), matching the dev profile (application-dev.yml): {@code POST /v1/messages} on
+ * (docs/quizbuks/plans/Q8-ai.md, Q8a and Q8b), matching the dev profile (application-dev.yml): {@code POST /v1/messages} on
  * http://localhost:8094. Nothing is called: the answer is made from the request alone. Run it with the JDK alone:
  *
  * <pre>java tools/quizbuks/claude-stub/ClaudeStub.java [port]</pre>
@@ -24,6 +24,8 @@ import java.util.regex.Pattern;
  *   <li>otherwise as many questions as the request's "Number of questions: n" asks, each with one correct and two
  *       wrong options, 10 points and the first material sent, in Japanese when the request asks for Japanese and in
  *       English otherwise, with a made-up usage (about a token per four characters of the request);</li>
+ *   <li>a request for covers ("Number of covers: 3", Q8b) gets three designs of the catalogue, which the server
+ *       draws; PDF materials (document blocks) are accepted and not read;</li>
  *   <li>a quiz whose title contains {@code [refuse]} is declined ({@code stop_reason: refusal}), one with
  *       {@code [busy]} is answered 529 (overloaded), so that the console's failure texts can be seen.</li>
  * </ul>
@@ -62,16 +64,27 @@ public final class ClaudeStub {
             }
             Matcher modelMatch = MODEL.matcher(body);
             String model = modelMatch.find() ? modelMatch.group(1) : "claude-opus-5-5";
-            long in = Math.max(1, body.length() / 4);
+            // About a token per four characters, PDF documents counted as at most 50,000 tokens in all.
+            long in = Math.min(50_000, Math.max(1, body.length() / 4));
             if (body.contains("[refuse]")) {
                 send(exchange, 200, message(model, "refusal", null, in, 0));
+                return;
+            }
+            if (body.contains("Number of covers: ")) {
+                // Q8b: three designs of the catalogue; the server draws them.
+                String text = japanese(body) ? "資料のクイズ" : "Quiz cover";
+                String covers = "{\"covers\":["
+                    + "{\"palette\":\"ocean\",\"layout\":\"center\",\"motif\":\"circles\",\"text\":\"" + text + " 1\"},"
+                    + "{\"palette\":\"sunset\",\"layout\":\"band\",\"motif\":\"waves\",\"text\":\"" + text + " 2\"},"
+                    + "{\"palette\":\"mint\",\"layout\":\"left\",\"motif\":\"grid\",\"text\":\"" + text + " 3\"}]}";
+                send(exchange, 200, message(model, "end_turn", covers, in, 150));
                 return;
             }
             Matcher countMatch = COUNT.matcher(body);
             int count = countMatch.find() ? Math.min(20, Integer.parseInt(countMatch.group(1))) : 1;
             Matcher materialMatch = MATERIAL.matcher(body);
             String material = materialMatch.find() ? materialMatch.group(1) : null;
-            boolean japanese = body.contains("Language: Japanese");
+            boolean japanese = japanese(body);
             List<String> questions = new ArrayList<>();
             for (int i = 1; i <= count; i++) {
                 String stem = japanese ? "資料に基づく問題 " + i + "：正しいものはどれですか？"
@@ -86,6 +99,10 @@ public final class ClaudeStub {
             String text = "{\"questions\":[" + String.join(",", questions) + "]}";
             send(exchange, 200, message(model, "end_turn", text, in, 200L * count));
         }
+    }
+
+    private static boolean japanese(String body) {
+        return body.contains("Language: Japanese");
     }
 
     private static String message(String model, String stop, String text, long in, long out) {

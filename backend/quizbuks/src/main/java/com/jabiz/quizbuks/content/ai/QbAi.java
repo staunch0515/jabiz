@@ -2,6 +2,7 @@ package com.jabiz.quizbuks.content.ai;
 
 import com.jabiz.entity.EntityDefinition;
 import com.jabiz.entity.TemporalRole;
+import com.jabiz.file.FileKind;
 import com.jabiz.quizbuks.content.QbContent;
 
 import java.util.List;
@@ -43,8 +44,15 @@ public final class QbAi {
         EXPIRED);
 
     public static final String KIND_QUESTIONS = "QUESTIONS";
-    /** Covers come with Q8b (platform 16t). */
+    /** Candidate covers (Q8b, M-25; platform 16t): pictures drawn from Claude's designs. */
     public static final String KIND_COVER = "COVER";
+
+    /**
+     * The fields holding a cover job's candidate pictures while they wait for the sponsor's choice: files of
+     * {@code qb.content.image}, so that the platform's sweep keeps them until the job is closed (then they are referred
+     * to by nothing, and the ones not chosen go).
+     */
+    public static final java.util.List<String> COVER_FIELDS = List.of("cover1", "cover2", "cover3");
 
     /** The row of {@code QbAiUsage} that counts every sponsor. */
     public static final String EVERYBODY = "*";
@@ -96,6 +104,11 @@ public final class QbAi {
         // The candidates as canonical JSON, while READY only. Not repeated in the audit (the provider's output; the
         // platform keeps the job's result as it came, and the audit records that the column changed).
         eb.field("candidates", f -> f.physicalColumn("candidates").processOnly().auditMasked().asText(null, true));
+        for (int i = 0; i < COVER_FIELDS.size(); i++) {
+            String column = "cover_" + (i + 1);
+            eb.field(COVER_FIELDS.get(i), f -> f.physicalColumn(column).processOnly()
+                .kind(FileKind.of(QbContent.IMAGE_POLICY)));
+        }
         eb.field("candidateCount", f -> f.physicalColumn("candidate_count").processOnly().asNumeric(4, 0));
         eb.field("invalidCount", f -> f.physicalColumn("invalid_count").processOnly().asNumeric(4, 0));
         eb.field("acceptedCount", f -> f.physicalColumn("accepted_count").processOnly().asNumeric(4, 0));

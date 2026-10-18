@@ -42,8 +42,17 @@ public final class ClaudeApi {
     /** Output tokens asked for: this much for thinking and framing, and {@link #TOKENS_PER_QUESTION} per question. */
     public static final int BASE_TOKENS = 4_000;
     public static final int TOKENS_PER_QUESTION = 600;
-    /** The largest user message, in UTF-8 bytes: below the platform's 64 KiB job input, with room for the framing. */
-    public static final int MAX_INPUT_BYTES = 60 * 1024;
+    /**
+     * The largest user message, in UTF-8 bytes: below the job's input limit ({@link AiQuestionsJob#MAX_JOB_INPUT_BYTES},
+     * 256 KiB since Q8b, platform decision D50), with room for the framing. PDF materials are not part of it: they go
+     * as documents ({@link Document}).
+     */
+    public static final int MAX_INPUT_BYTES = 250 * 1024;
+    /**
+     * Input tokens one PDF page may come to: Anthropic counts each page's text (1,500 to 3,000 tokens for a dense page)
+     * and the page as an image (about 1,600 tokens at the size it is read). Errs high, for the limits.
+     */
+    public static final int TOKENS_PER_PDF_PAGE = 5_000;
     /** The beta of the provider's fallback on a refusal, by refusal category. */
     public static final String FALLBACK_BETA = "server-side-fallback-2026-07-01";
 
@@ -51,11 +60,42 @@ public final class ClaudeApi {
     private static final Pattern MODEL = Pattern.compile("[a-z0-9][a-z0-9.-]{0,59}");
 
     /**
+     * A PDF sent with the request as a document block (Q8b), before the request's text, titled so that the text can
+     * name it ({@code Material 3}).
+     *
+     * @param pages its pages, counted before sending (each costs about {@value #TOKENS_PER_PDF_PAGE} tokens at most)
+     */
+    public record Document(String title, byte[] pdf, int pages) {
+        @Override
+        public String toString() {
+            return "Document[title=" + title + ", bytes=" + (pdf == null ? 0 : pdf.length) + ", pages=" + pages + "]";
+        }
+    }
+
+    /**
      * What to ask.
      *
-     * @param userKey the provider's opaque user id, or null to send none
+     * @param userKey   the provider's opaque user id, or null to send none
+     * @param schema    the JSON schema the answer must meet (structured outputs)
+     * @param documents PDFs sent with the request, in order; none when empty
      */
-    public record Request(String model, String effort, int maxTokens, String system, String user, String userKey) {}
+    public record Request(String model, String effort, int maxTokens, String system, String user, String userKey,
+        Map<String, Object> schema, List<Document> documents) {
+
+        public Request {
+            documents = documents == null ? List.of() : List.copyOf(documents);
+        }
+
+        /** A request for candidate questions without documents (Q8a). */
+        public Request(String model, String effort, int maxTokens, String system, String user, String userKey) {
+            this(model, effort, maxTokens, system, user, userKey, AiPrompt.schema(), List.of());
+        }
+
+        /** The pages of every document. */
+        public int pages() {
+            return documents.stream().mapToInt(Document::pages).sum();
+        }
+    }
 
     /**
      * Tokens of one call, over every model that ran it; the {@code fallback} ones are those of the provider's fallback
@@ -93,7 +133,8 @@ public final class ClaudeApi {
     public static Usage unanswered(Request request) {
         long bytes = request.user().getBytes(StandardCharsets.UTF_8).length
             + request.system().getBytes(StandardCharsets.UTF_8).length;
-        return new Usage(AiLimits.inputEstimate(bytes), request.maxTokens());
+        return new Usage(AiLimits.inputEstimate(bytes) + (long) TOKENS_PER_PDF_PAGE * request.pages(),
+            request.maxTokens());
     }
 
     /**
@@ -164,11 +205,22 @@ public final class ClaudeApi {
         body.put("thinking", Map.of("type", "adaptive"));
         Map<String, Object> output = new LinkedHashMap<>();
         output.put("effort", request.effort());
-        output.put("format", Map.of("type", "json_schema", "schema", AiPrompt.schema()));
+        output.put("format", Map.of("type", "json_schema", "schema",
+            request.schema() == null ? AiPrompt.schema() : request.schema()));
         body.put("output_config", output);
         body.put("system", request.system());
-        body.put("messages", List.of(Map.of("role", "user", "content",
-            List.of(Map.of("type", "text", "text", request.user())))));
+        // The documents first, then the request's text that names them (as the provider advises).
+        List<Map<String, Object>> content = new ArrayList<>();
+        for (Document document : request.documents()) {
+            Map<String, Object> block = new LinkedHashMap<>();
+            block.put("type", "document");
+            block.put("source", Map.of("type", "base64", "media_type", "application/pdf", "data",
+                java.util.Base64.getEncoder().encodeToString(document.pdf())));
+            block.put("title", document.title());
+            content.add(block);
+        }
+        content.add(Map.of("type", "text", "text", request.user()));
+        body.put("messages", List.of(Map.of("role", "user", "content", content)));
         if (request.userKey() != null) {
             body.put("metadata", Map.of("user_id", request.userKey()));
         }

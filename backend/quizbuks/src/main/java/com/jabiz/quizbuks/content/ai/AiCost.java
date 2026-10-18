@@ -24,7 +24,7 @@ public final class AiCost {
     private static final Map<String, Price> PRICES = Map.of(
         ClaudeService.OPUS, Price.of("4", "20"),
         ClaudeService.SONNET, Price.of("2", "10"),
-        // Below 100,000 input tokens, which every request is (ClaudeApi.MAX_INPUT_BYTES).
+        // Up to 100,000 input tokens a request; above (PDF materials, Q8b) HAIKU_LONG.
         ClaudeService.HAIKU, Price.of("0.10", "0.50"),
         "claude-opus-5", Price.of("5", "25"),
         "claude-opus-4-8", Price.of("5", "25"));
@@ -36,6 +36,23 @@ public final class AiCost {
     private static final Price FALLBACK = Price.of("5", "25");
 
     private static final BigDecimal MILLION = BigDecimal.valueOf(1_000_000);
+
+    /** Haiku 5.5's price of a request of more than {@value #HAIKU_LONG_FROM} input tokens. */
+    private static final Price HAIKU_LONG = Price.of("0.50", "2.50");
+    static final long HAIKU_LONG_FROM = 100_000;
+
+    /**
+     * As {@link #of(String, String, ClaudeApi.Usage, Price)}, knowing how many attempts the tokens came from: a Haiku
+     * request of more than {@value #HAIKU_LONG_FROM} input tokens on average is priced at the long prompts' price.
+     */
+    public static BigDecimal of(String model, String servedModel, ClaudeApi.Usage usage, Price fallback,
+        Integer attempts) {
+        int calls = attempts == null || attempts < 1 ? 1 : attempts;
+        if (ClaudeService.HAIKU.equals(model) && usage.inputTokens() / calls > HAIKU_LONG_FROM) {
+            return of(model, servedModel, usage, fallback, HAIKU_LONG);
+        }
+        return of(model, servedModel, usage, fallback);
+    }
 
     /** The price of a model QuizBuks knows; null otherwise. */
     public static Price known(String model) {
@@ -51,7 +68,11 @@ public final class AiCost {
      * @param fallback    the price of a model QuizBuks does not know (the parameters), or null
      */
     public static BigDecimal of(String model, String servedModel, ClaudeApi.Usage usage, Price fallback) {
-        Price requested = known(model) != null ? known(model) : fallback;
+        return of(model, servedModel, usage, fallback, known(model) != null ? known(model) : fallback);
+    }
+
+    private static BigDecimal of(String model, String servedModel, ClaudeApi.Usage usage, Price fallback,
+        Price requested) {
         long fallbackIn = usage.fallbackInputTokens();
         long fallbackOut = usage.fallbackOutputTokens();
         Price fellBack = fallbackIn == 0 && fallbackOut == 0 ? requested

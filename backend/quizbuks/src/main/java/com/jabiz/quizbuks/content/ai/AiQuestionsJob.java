@@ -1,9 +1,12 @@
 package com.jabiz.quizbuks.content.ai;
 
 import com.jabiz.external.ExternalJobType;
+import com.jabiz.quizbuks.content.ContentLimits;
+import com.jabiz.quizbuks.content.QbContent;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * The asynchronous external job {@value #TYPE} (platform decision D38; docs/quizbuks/plans/Q8-ai.md, D-Q8-4): one
@@ -38,12 +41,29 @@ public final class AiQuestionsJob {
     /** Unfinished jobs per sponsor (A-7). */
     public static final int MAX_OPEN = 2;
     public static final int DEFAULT_CONCURRENCY = 4;
+    /**
+     * The largest input the platform stores for a job (Q8b, platform decision D50): the user message is at most
+     * {@link ClaudeApi#MAX_INPUT_BYTES}; PDFs are not in it, they are the job's files.
+     */
+    public static final int MAX_JOB_INPUT_BYTES = 256 * 1024;
+    /** The largest PDF one job reads, whatever {@code quizbuks.ai.pdf.max-bytes} says (the policy's own is 20 MB). */
+    public static final long MAX_PDF_BYTES = 20L * 1024 * 1024;
+    /**
+     * All PDFs of one request together: sent as base64 (a third larger) in a request the provider takes up to 32 MB.
+     */
+    public static final long MAX_PDF_TOTAL_BYTES = 20L * 1024 * 1024;
 
     /**
      * A material as sent: its number in the quiz (1..n), its kind, title and description, and an article's text (only
-     * articles have text: links, videos, images and audio go by their title and description, A-5).
+     * articles have text: links, videos, images and audio go by their title and description, A-5). A PDF goes as the
+     * file itself (Q8b): {@code fileId} is the job's input file the handler sends as a document.
      */
-    public record Material(int no, String kind, String title, String description, String body) {}
+    public record Material(int no, String kind, String title, String description, String body, UUID fileId) {
+        /** A material without a file (Q8a). */
+        public Material(int no, String kind, String title, String description, String body) {
+            this(no, kind, title, description, body, null);
+        }
+    }
 
     /**
      * @param model         one of {@link ClaudeService#MODELS}
@@ -92,13 +112,17 @@ public final class AiQuestionsJob {
      * The job type: five minutes an attempt (the provider's answer within the service's two minutes, with room), three
      * attempts with back-off from 10 seconds to 2 minutes (429, 5xx, time-outs; a refusal or a bad request ends it at
      * once), at most {@code maxConcurrency} running across instances, {@value #MAX_OPEN} unfinished per sponsor and one
-     * per quiz (the reference).
+     * per quiz (the reference). The input is at most {@value #MAX_JOB_INPUT_BYTES} bytes; the PDF materials chosen are
+     * the job's files (at most one per material, each at most {@code maxPdfBytes}, of the policy
+     * {@value QbContent#PDF_POLICY}: the platform checks that the sponsor may read each one, decision D50).
      */
-    public static ExternalJobType<Input, Result> type(int maxConcurrency) {
+    public static ExternalJobType<Input, Result> type(int maxConcurrency, long maxPdfBytes) {
         return ExternalJobType.define(TYPE, Input.class, Result.class, t -> t
             .handler(AiQuestionsHandler.class).services(ClaudeService.SERVICE)
             .timeout(Duration.ofMinutes(5)).retry(ATTEMPTS, Duration.ofSeconds(10), Duration.ofMinutes(2))
             .maxConcurrency(maxConcurrency).maxOpenPerRequester(MAX_OPEN).oneOpenPerReference()
+            .maxInputSize(MAX_JOB_INPUT_BYTES)
+            .inputFiles(ContentLimits.MAX_MATERIALS, maxPdfBytes, QbContent.PDF_POLICY)
             .onCompleted(AiProcesses.COMPLETED).onFailed(AiProcesses.FAILED));
     }
 
