@@ -31,17 +31,39 @@ permissions: [qb.payout.system]
 -- (c_held) and from the disputed (c_open); held is never below 0 nor above the balance. heldOpen is the part held by
 -- disputes (no date), heldUntil when the last reward held only by its age is free (none when nothing is so held).
 -- The same rule is written in qb.app.wallet for the taker's page.
-WITH lines AS (
+-- Money that comes back from a transfer (its sending reversed after a failure, a part Stripe reversed; source QbTransfer,
+-- the same sourceId as the sending) is the transfer's own, not free money (verification of review M-b): it is netted
+-- against the transfer's debit at the debit's place, as if the transfer had sent only what stayed out
+-- (RewardHolds.netted; a transfer has one 2120 debit).
+WITH raw AS (
     SELECT e.{{LedgerEntry.direction}} AS l_direction, e.{{LedgerEntry.amount}} AS l_amount,
            e.{{LedgerEntry.dimension2}} AS publication, t.{{LedgerTransaction.bookingTime}} AS booked,
            t.{{LedgerTransaction.sourceEntity}} AS source, t.{{LedgerTransaction.processSeqId}} AS seq,
-           t.{{LedgerTransaction.transactionId}} AS tx,
+           t.{{LedgerTransaction.transactionId}} AS tx, t.{{LedgerTransaction.sourceId}} AS source_id,
            e.{{LedgerEntry.lineNo}} AS line_no
     FROM {{LedgerEntry}} e
     JOIN {{LedgerAccount}} a ON a.{{LedgerAccount.accountId}} = e.{{LedgerEntry.accountId}}
     JOIN {{LedgerTransaction}} t ON t.{{LedgerTransaction.transactionId}} = e.{{LedgerEntry.transactionId}}
     WHERE e.{{LedgerEntry.dimension1}} = CAST(:userId AS text)
       AND a.{{LedgerAccount.accountCode}} = '2120'),
+returned AS (
+    SELECT r.source_id, sum(r.l_amount) AS back
+    FROM raw r
+    WHERE r.source = 'QbTransfer' AND r.l_direction = 'CREDIT'
+    GROUP BY r.source_id),
+sends AS (
+    SELECT r.source_id, r.tx, r.line_no,
+           row_number() OVER (PARTITION BY r.source_id ORDER BY r.booked, r.seq, r.tx, r.line_no) AS n
+    FROM raw r
+    WHERE r.source = 'QbTransfer' AND r.l_direction <> 'CREDIT'),
+lines AS (
+    SELECT r.l_direction, r.publication, r.booked, r.source, r.seq, r.tx, r.line_no,
+           CASE WHEN s.n = 1 THEN greatest(r.l_amount - coalesce(b.back, 0), 0) ELSE r.l_amount END AS l_amount
+    FROM raw r
+    LEFT JOIN sends s ON s.tx = r.tx AND s.line_no = r.line_no
+    LEFT JOIN returned b ON s.n = 1 AND b.source_id = r.source_id
+    WHERE NOT (r.source = 'QbTransfer' AND r.l_direction = 'CREDIT'
+               AND EXISTS (SELECT 1 FROM sends x WHERE x.source_id = r.source_id))),
 disputed AS (
     SELECT u.{{QbTopUp.sponsorId}} AS sponsor, min(u.{{QbTopUp.paidAt}}) AS since
     FROM {{QbTopUp}} u

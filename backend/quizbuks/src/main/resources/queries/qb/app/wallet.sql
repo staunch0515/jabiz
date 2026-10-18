@@ -22,7 +22,8 @@ results:
 permissions: [qb.me]
 ---*/
 -- The caller's own ledger lines (party = the caller, indexed) and attempts: one row. Available is account 2120 for
--- them (credit less debit), earned in all its credits, on the way out account 2130 (transfers, Q6b). Pending rewards
+-- them (credit less debit), earned in all its credits but the money that came back from transfers (a failed sending
+-- reversed, a part Stripe reversed: not earned again), on the way out account 2130 (transfers, Q6b). Pending rewards
 -- are not in the ledger (requirement 7.1): the rewards of the caller's attempts waiting for their sponsor, before the
 -- commission (an estimate).
 -- Held back from transfers (Q10b, reviews M3 and M-b) by the rule of qb.wallet.taker-transferable, which the transfers
@@ -32,17 +33,39 @@ permissions: [qb.me]
 -- part disputes hold (no date; the taker is not told which sponsor), heldUntil when the last reward held by its age
 -- only is free. Without `at`, or without the parameter, held is null. The parameter is read at the server's clock
 -- (the dataset without time travel, review L9), as the transfers read it.
-WITH lines AS (
+-- Money that comes back from a transfer (its sending reversed after a failure, a part Stripe reversed; source QbTransfer,
+-- the same sourceId as the sending) is the transfer's own, not free money (verification of review M-b): it is netted
+-- against the transfer's debit at the debit's place, as if the transfer had sent only what stayed out
+-- (RewardHolds.netted; a transfer has one 2120 debit).
+WITH raw AS (
     SELECT e.{{LedgerEntry.direction}} AS l_direction, e.{{LedgerEntry.amount}} AS l_amount,
            e.{{LedgerEntry.dimension2}} AS publication, t.{{LedgerTransaction.bookingTime}} AS booked,
            t.{{LedgerTransaction.sourceEntity}} AS source, t.{{LedgerTransaction.processSeqId}} AS seq,
-           t.{{LedgerTransaction.transactionId}} AS tx,
+           t.{{LedgerTransaction.transactionId}} AS tx, t.{{LedgerTransaction.sourceId}} AS source_id,
            e.{{LedgerEntry.lineNo}} AS line_no
     FROM {{LedgerEntry}} e
     JOIN {{LedgerAccount}} a ON a.{{LedgerAccount.accountId}} = e.{{LedgerEntry.accountId}}
     JOIN {{LedgerTransaction}} t ON t.{{LedgerTransaction.transactionId}} = e.{{LedgerEntry.transactionId}}
     WHERE a.{{LedgerAccount.accountCode}} = '2120'
       AND CAST(:at AS timestamptz) IS NOT NULL),
+returned AS (
+    SELECT r.source_id, sum(r.l_amount) AS back
+    FROM raw r
+    WHERE r.source = 'QbTransfer' AND r.l_direction = 'CREDIT'
+    GROUP BY r.source_id),
+sends AS (
+    SELECT r.source_id, r.tx, r.line_no,
+           row_number() OVER (PARTITION BY r.source_id ORDER BY r.booked, r.seq, r.tx, r.line_no) AS n
+    FROM raw r
+    WHERE r.source = 'QbTransfer' AND r.l_direction <> 'CREDIT'),
+lines AS (
+    SELECT r.l_direction, r.publication, r.booked, r.source, r.seq, r.tx, r.line_no,
+           CASE WHEN s.n = 1 THEN greatest(r.l_amount - coalesce(b.back, 0), 0) ELSE r.l_amount END AS l_amount
+    FROM raw r
+    LEFT JOIN sends s ON s.tx = r.tx AND s.line_no = r.line_no
+    LEFT JOIN returned b ON s.n = 1 AND b.source_id = r.source_id
+    WHERE NOT (r.source = 'QbTransfer' AND r.l_direction = 'CREDIT'
+               AND EXISTS (SELECT 1 FROM sends x WHERE x.source_id = r.source_id))),
 hold AS (
     SELECT CAST(max(p.{{SysParam.value}}) AS int) AS days
     FROM {{SysParam}} p
@@ -106,11 +129,13 @@ FROM (
         sum(CASE WHEN a.{{LedgerAccount.accountCode}} = '2120' THEN CASE WHEN e.{{LedgerEntry.direction}} = 'CREDIT'
             THEN e.{{LedgerEntry.amount}} ELSE -e.{{LedgerEntry.amount}} END END) AS l_available,
         sum(CASE WHEN a.{{LedgerAccount.accountCode}} = '2120' AND e.{{LedgerEntry.direction}} = 'CREDIT'
+                  AND t.{{LedgerTransaction.sourceEntity}} IS DISTINCT FROM 'QbTransfer'
             THEN e.{{LedgerEntry.amount}} END) AS l_earned,
         sum(CASE WHEN a.{{LedgerAccount.accountCode}} = '2130' THEN CASE WHEN e.{{LedgerEntry.direction}} = 'CREDIT'
             THEN e.{{LedgerEntry.amount}} ELSE -e.{{LedgerEntry.amount}} END END) AS l_transfer
     FROM {{LedgerEntry}} e
     JOIN {{LedgerAccount}} a ON a.{{LedgerAccount.accountId}} = e.{{LedgerEntry.accountId}}
+    JOIN {{LedgerTransaction}} t ON t.{{LedgerTransaction.transactionId}} = e.{{LedgerEntry.transactionId}}
     WHERE a.{{LedgerAccount.accountCode}} IN ('2120', '2130')) l
 CROSS JOIN (
     SELECT count(*) AS p_count, sum(m.{{QbAttempt.reward}}) AS p_amount

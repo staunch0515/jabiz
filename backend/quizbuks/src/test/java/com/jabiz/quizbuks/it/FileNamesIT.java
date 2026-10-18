@@ -1,6 +1,8 @@
 package com.jabiz.quizbuks.it;
 
+import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.quizbuks.content.QbContent;
+import com.jabiz.quizbuks.identity.QbAccounts;
 import com.jabiz.quizbuks.setup.QbRoles;
 import com.jabiz.runtime.test.FileSamples;
 import com.jabiz.runtime.test.TestTokens;
@@ -8,6 +10,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -57,7 +62,7 @@ class FileNamesIT extends PublicationItSupport {
             assertThat(seen.get("uploadedBy")).as(name).isNull();
             assertThat(downloadName("/api/files/" + id + "/content", takerToken())).isEqualTo(id + extensions.get(id));
 
-            for (String sees : java.util.List.of(sponsorA(), fileAdmin())) {
+            for (String sees : List.of(sponsorA(), fileAdmin())) {
                 Map<String, Object> full = meta(id, sees);
                 assertThat(full).containsEntry("originalName", name).containsEntry("uploadedBy", "sponsor-a");
                 assertThat(downloadName("/api/files/" + id + "/content", sees)).isEqualTo(name);
@@ -65,5 +70,33 @@ class FileNamesIT extends PublicationItSupport {
         });
         // An image's variants too.
         assertThat(downloadName("/api/files/" + image + "/content/w320", takerToken())).isEqualTo(image + "-w320.jpg");
+    }
+
+    /**
+     * Verification review: sponsors' avatars too. Takers and other sponsors read them; they get neither the name nor
+     * the uploader, and the upload time only to the day; the sponsor who uploaded it and file administrators see all.
+     */
+    @Test
+    void avatarsKeepTheirMetadataPrivateToo() {
+        String owner = TestTokens.bearer(tokens, "sponsor-avatar-owner", QbPermissions.SPONSOR_ME,
+            QbPermissions.SPONSOR_AVATAR_READ);
+        String otherSponsor = TestTokens.bearer(tokens, "sponsor-avatar-other", QbPermissions.SPONSOR_ME,
+            QbPermissions.SPONSOR_AVATAR_READ);
+        String avatar = (String) upload(QbAccounts.AVATAR_POLICY, FileSamples.jpeg(400, 300), "Hanako Yamada.jpg",
+            "image/jpeg", owner).expectStatus().isCreated().expectBody(MAP).returnResult().getResponseBody()
+            .get("fileId");
+
+        Map<String, Object> full = meta(avatar, owner);
+        assertThat(full).containsEntry("originalName", "Hanako Yamada.jpg")
+            .containsEntry("uploadedBy", "sponsor-avatar-owner");
+        Instant exact = Instant.parse((String) full.get("uploadedTime"));
+        assertThat(meta(avatar, fileAdmin())).containsEntry("originalName", "Hanako Yamada.jpg");
+        for (String reader : List.of(takerToken(), otherSponsor)) {
+            Map<String, Object> seen = meta(avatar, reader);
+            assertThat(seen.get("originalName")).isNull();
+            assertThat(seen.get("uploadedBy")).isNull();
+            assertThat(Instant.parse((String) seen.get("uploadedTime"))).isEqualTo(exact.truncatedTo(ChronoUnit.DAYS));
+            assertThat(downloadName("/api/files/" + avatar + "/content", reader)).isEqualTo(avatar + ".jpg");
+        }
     }
 }

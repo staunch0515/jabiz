@@ -71,7 +71,7 @@ class RewardHoldsTest {
     /** A sequence of lines whose running balance never goes below 0, as a ledger's. */
     @Provide
     Arbitrary<List<RewardHolds.Line>> ledgers() {
-        Arbitrary<RewardHolds.Kind> kinds = Arbitraries.of(RewardHolds.Kind.values());
+        Arbitrary<RewardHolds.Kind> kinds = Arbitraries.of(FREE, RECENT, DISPUTED, DEBIT);
         Arbitrary<Long> amounts = Arbitraries.longs().between(1, 1_000);
         return Combinators.combine(kinds, amounts).as(Pair::new).list().ofMaxSize(40)
             .map(pairs -> {
@@ -95,6 +95,94 @@ class RewardHoldsTest {
     }
 
     record Pair(RewardHolds.Kind kind, long amount) {}
+
+    /** A send that comes back, wholly or in part, at some later line. */
+    record Back(int send, int after, long percent) {}
+
+    /**
+     * A ledger as {@link #ledgers()}, its debits transfers (each its own group), some of which come back later, in full
+     * or in part (a failed sending reversed, a part Stripe reversed).
+     */
+    @Provide
+    Arbitrary<Returned> returned() {
+        Arbitrary<Back> backs = Combinators.combine(Arbitraries.integers().between(0, 39),
+            Arbitraries.integers().between(0, 40), Arbitraries.of(100L, 100L, 50L, 1L, 99L)).as(Back::new);
+        return Combinators.combine(ledgers(), backs.list().ofMaxSize(5)).as((lines, chosen) -> {
+            List<RewardHolds.Line> sent = new ArrayList<>();
+            int group = 0;
+            for (RewardHolds.Line line : lines) {
+                sent.add(line.kind() == DEBIT ? new RewardHolds.Line(DEBIT, line.amount(), "t" + group++) : line);
+            }
+            List<RewardHolds.Line> withReturns = new ArrayList<>(sent);
+            java.util.Map<String, Long> returnedOf = new java.util.HashMap<>();
+            for (Back back : chosen) {
+                List<RewardHolds.Line> debits = sent.stream().filter(l -> l.kind() == DEBIT).toList();
+                if (debits.isEmpty()) {
+                    break;
+                }
+                RewardHolds.Line debit = debits.get(back.send() % debits.size());
+                if (returnedOf.containsKey(debit.group())) {
+                    continue;
+                }
+                long amount = Math.max(1, debit.amount().longValueExact() * back.percent() / 100);
+                returnedOf.put(debit.group(), amount);
+                int at = withReturns.indexOf(debit) + 1;
+                int place = Math.min(withReturns.size(), at + back.after() % (withReturns.size() - at + 1));
+                withReturns.add(place, new RewardHolds.Line(RewardHolds.Kind.RETURN, BigDecimal.valueOf(amount),
+                    debit.group()));
+            }
+            // The same ledger as if each transfer had only ever taken what stayed out.
+            List<RewardHolds.Line> smaller = new ArrayList<>();
+            for (RewardHolds.Line line : sent) {
+                if (line.kind() == DEBIT && returnedOf.containsKey(line.group())) {
+                    long left = line.amount().longValueExact() - returnedOf.get(line.group());
+                    if (left > 0) {
+                        smaller.add(new RewardHolds.Line(DEBIT, BigDecimal.valueOf(left), line.group()));
+                    }
+                } else {
+                    smaller.add(line);
+                }
+            }
+            return new Returned(withReturns, smaller);
+        });
+    }
+
+    record Returned(List<RewardHolds.Line> lines, List<RewardHolds.Line> asIfSmaller) {}
+
+    /**
+     * Verification of review M-b: what comes back from a transfer is the transfer's own money. A ledger with returns
+     * holds what the same ledger holds had each transfer sent only what stayed out; a full return is as if never sent.
+     */
+    @Property(tries = 1000)
+    void moneyThatComesBackIsNettedAgainstItsTransfer(@ForAll("returned") Returned ledger) {
+        RewardHolds.Held held = RewardHolds.of(ledger.lines());
+        RewardHolds.Held expected = RewardHolds.of(ledger.asIfSmaller());
+        assertThat(held.balance()).isEqualByComparingTo(expected.balance());
+        assertThat(held.held()).isEqualByComparingTo(expected.held());
+        assertThat(held.disputed()).isEqualByComparingTo(expected.disputed());
+        BigDecimal top = held.balance().max(BigDecimal.ZERO);
+        assertThat(held.transferable()).isBetween(BigDecimal.ZERO, top);
+    }
+
+    @Test
+    void aFailedTransferBringsTheDisputedRewardBackHeld() {
+        // The probe of the verification review: the disputed reward left with a transfer that then failed.
+        RewardHolds.Held held = RewardHolds.of(List.of(line(DISPUTED, 100),
+            new RewardHolds.Line(DEBIT, BigDecimal.valueOf(100), "t1"),
+            new RewardHolds.Line(RewardHolds.Kind.RETURN, BigDecimal.valueOf(100), "t1")));
+        assertThat(held.balance()).isEqualByComparingTo("100");
+        assertThat(held.disputed()).isEqualByComparingTo("100");
+        assertThat(held.transferable()).isEqualByComparingTo("0");
+        // A part Stripe reversed: the transfer took the free reward first, so the disputed one is back.
+        held = RewardHolds.of(List.of(line(DISPUTED, 100), line(FREE, 100),
+            new RewardHolds.Line(DEBIT, BigDecimal.valueOf(200), "t2"),
+            new RewardHolds.Line(RewardHolds.Kind.RETURN, BigDecimal.valueOf(100), "t2")));
+        assertThat(held.held()).isEqualByComparingTo("100");
+        assertThat(held.transferable()).isEqualByComparingTo("0");
+        // A return of nothing known is free money.
+        held = RewardHolds.of(List.of(new RewardHolds.Line(RewardHolds.Kind.RETURN, BigDecimal.TEN, "t9")));
+        assertThat(held.transferable()).isEqualByComparingTo("10");
+    }
 
     /**
      * The closed form is the allocation it describes: each debit, in order, takes free money first, then money held

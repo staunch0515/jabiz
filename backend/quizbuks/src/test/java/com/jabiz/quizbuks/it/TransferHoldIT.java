@@ -164,6 +164,88 @@ class TransferHoldIT extends PayoutItSupport {
     }
 
     /**
+     * Verification of review M-b: a transfer sent before the dispute and then failed (its posting reversed) brings the
+     * disputed sponsor's reward back to the balance, and it is held again: the money that came back is the transfer's
+     * own, netted against its debit, not free money.
+     */
+    @Test
+    void aFailedTransferBringsBackADisputedRewardHeld() {
+        param(QbParams.TRANSFER_FEE, "0");
+        param(QbParams.TRANSFER_REVIEW_ABOVE, "50000");
+        param(QbParams.TRANSFER_THRESHOLD, "100");
+        param(QbParams.TRANSFER_HOLD_DAYS, "7");
+        transfersOn();
+        String sponsor = newSponsor("s-hold-failed");
+        String topUpId = paidTopUp(sponsor, 5000);
+        String taker = payee("t-hold-failed");
+        enabledPayee(taker);
+        assertThat(play(taker, livePublication(sponsor, "Hold failed"), true, true))
+            .containsEntry("rewardStatus", "PAID");
+        deliverEvents();
+        advance(Duration.ofDays(8));
+        runTransfers();
+        String transferId = (String) transfersOf(taker).getFirst().get("transfer_id");
+        // The sponsor's payment (made before the reward) is disputed while the transfer is on its way.
+        deliver(event(eventId(), "charge.dispute.created", dispute(topUpId, "dp_holdfailed", "needs_response")));
+        assertThat(topUp(topUpId)).containsEntry("dispute_status", "OPEN");
+        // Stripe refuses: the money is back on 2120, and it is the disputed sponsor's reward.
+        StripeSim.target = "qb-" + transferId;
+        StripeSim.REFUSE.set(1);
+        runJobs();
+        assertThat(transfer(transferId)).containsEntry("status", "FAILED");
+        assertThat(ledger("2120", taker)).isEqualByComparingTo("100");
+        Map<String, Object> shown = shownWallet(taker);
+        assertThat(money(shown.get("held"))).isEqualByComparingTo("100");
+        assertThat(money(shown.get("heldOpen"))).isEqualByComparingTo("100");
+        // What came back is not earned again.
+        assertThat(money(shown.get("totalEarned"))).isEqualByComparingTo("100");
+        runTransfers();
+        assertThat(transfersOf(taker)).as("no second transfer of disputed money").hasSize(1);
+        assertTakerCacheIsTheLedger(taker);
+        assertBooksBalance();
+    }
+
+    /**
+     * The same for a part Stripe reverses: the transfer took both sponsors' rewards, the part that comes back is netted
+     * against the transfer, so what is left in the balance is held while the dispute is open.
+     */
+    @Test
+    void aReversedPartOfATransferIsNettedAgainstIt() {
+        param(QbParams.TRANSFER_FEE, "0");
+        param(QbParams.TRANSFER_REVIEW_ABOVE, "50000");
+        param(QbParams.TRANSFER_THRESHOLD, "100");
+        param(QbParams.TRANSFER_HOLD_DAYS, "7");
+        transfersOn();
+        String disputed = newSponsor("s-hold-rev-disputed");
+        String clean = newSponsor("s-hold-rev-clean");
+        String topUpId = paidTopUp(disputed, 5000);
+        paidTopUp(clean, 5000);
+        String taker = payee("t-hold-rev");
+        enabledPayee(taker);
+        assertThat(play(taker, livePublication(disputed, "Hold rev disputed"), true, true))
+            .containsEntry("rewardStatus", "PAID");
+        assertThat(play(taker, livePublication(clean, "Hold rev clean"), true, true))
+            .containsEntry("rewardStatus", "PAID");
+        deliverEvents();
+        advance(Duration.ofDays(8));
+        runTransfers();
+        String transferId = (String) transfersOf(taker).getFirst().get("transfer_id");
+        runJobs();
+        assertThat(transfer(transferId)).containsEntry("status", "SENT");
+        deliver(event(eventId(), "charge.dispute.created", dispute(topUpId, "dp_holdrev", "needs_response")));
+        assertThat(topUp(topUpId)).containsEntry("dispute_status", "OPEN");
+        Map<String, Object> reversed = new LinkedHashMap<>(StripeSim.TRANSFERS.get("qb-" + transferId));
+        reversed.put("amount_reversed", 100);
+        reversed.put("reversed", true);
+        deliver(event(eventId(), "transfer.reversed", reversed));
+        assertThat(ledger("2120", taker)).isEqualByComparingTo("100");
+        Map<String, Object> shown = shownWallet(taker);
+        assertThat(money(shown.get("held"))).isEqualByComparingTo("100");
+        assertThat(money(shown.get("heldOpen"))).isEqualByComparingTo("100");
+        assertThat(money(shown.get("totalEarned"))).isEqualByComparingTo("200");
+    }
+
+    /**
      * Rewards held by their age and by a dispute together: each is held once, the rest leaves, and what is held is
      * never more than the balance.
      */

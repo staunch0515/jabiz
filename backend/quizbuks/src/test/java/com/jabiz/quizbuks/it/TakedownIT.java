@@ -132,6 +132,57 @@ class TakedownIT extends PlayItSupport {
             .containsEntry("status", "SCHEDULED");
     }
 
+    /**
+     * Verification of review M-d: an administrator's pause stays a takedown when the publication later ends with its
+     * time (the tick ends a paused publication, keeping {@code pausedBy}).
+     */
+    @Test
+    void anAdminPauseThatRunsIntoItsEndStaysATakedown() {
+        String sponsor = newSponsor("s-takedown-expiry");
+        credit(sponsor, 1_000);
+        String token = sponsorToken(sponsor);
+        String first = livePublication(sponsor, "Takedown expiry");
+        String versionId = versionOf(first);
+        run(PublicationAdmin.PAUSE, takedownAdmin(), body("publicationId", first, "reason", "Fraudulent"));
+        clock.set(clock.instant().plus(java.time.Duration.ofDays(8)));
+        runTick();
+        assertThat(publication(first)).containsEntry("status", "ENDED").containsEntry("end_reason", "EXPIRED")
+            .containsEntry("paused_by", "ADMIN");
+        token = sponsorToken(sponsor);
+        assertThat(codes(refused("QB_PUBLICATION_COPY", token, body("publicationId", first), 422)))
+            .containsExactly(PublishingCodes.TAKEN_DOWN);
+        assertThat(submit(token, draft(token, versionId, "After expiry"))).containsEntry("status", "PENDING_REVIEW");
+        Map<String, Object> row = publication(first);
+        assertThat(items("qb.admin.quiz-takedowns", takedownAdmin(), Map.of("params", Map.of("sponsorId",
+            row.get("sponsor_id"), "quizId", String.valueOf(row.get("quiz_id")))))).singleElement()
+            .satisfies(takedown -> assertThat(takedown).containsEntry("publicationId", first)
+                .containsEntry("pausedBy", "ADMIN").containsEntry("adminReason", "Fraudulent"));
+    }
+
+    /** The same for a ban's pause that a completion then ends (its last winner: QUOTA). */
+    @Test
+    void aBansPauseThatEndsByItsQuotaStaysATakedown() {
+        String sponsor = newSponsor("s-takedown-quota");
+        credit(sponsor, 1_000);
+        String first = livePublication(sponsor, "Takedown quota", Map.of("maxWinners", 1,
+            "regions", List.of("GLOBAL")));
+        String versionId = versionOf(first);
+        String takerToken = taker(newTaker("t-takedown-quota-" + UUID.randomUUID(), null));
+        String attemptId = (String) start(takerToken, first).get("attemptId");
+        String boss = boss();
+        run("QB_USER_BAN", boss, body("userId", sponsor, "reason", "Internal"));
+        assertThat(publication(first)).containsEntry("status", "PAUSED").containsEntry("paused_by", "ADMIN");
+        // The attempt in progress completes and takes the last place: the publication ends by its quota.
+        assertThat(submit(takerToken, attemptId, answers(true, true))).containsEntry("passed", true);
+        assertThat(publication(first)).containsEntry("status", "ENDED").containsEntry("end_reason", "QUOTA")
+            .containsEntry("paused_by", "ADMIN");
+        run("QB_USER_UNBAN", boss, body("userId", sponsor));
+        String token = sponsorToken(sponsor);
+        assertThat(codes(refused("QB_PUBLICATION_COPY", token, body("publicationId", first), 422)))
+            .containsExactly(PublishingCodes.TAKEN_DOWN);
+        assertThat(submit(token, draft(token, versionId, "After the ban"))).containsEntry("status", "PENDING_REVIEW");
+    }
+
     @Test
     void anExemptingRuleDoesNotLetAPublicationOfAQuizTakenDownThrough() {
         String sponsor = newSponsor("s-takedown-exempt");
@@ -191,6 +242,46 @@ class TakedownIT extends PlayItSupport {
         run("QB_USER_UNBAN", boss, body("userId", sponsor));
         assertThat(run(PublicationAdmin.RESUME, takedownAdmin(), body("publicationId", live, "reason", "Cleared")))
             .containsEntry("status", "LIVE");
+    }
+
+    /**
+     * Verification review: a ban and an administrator's resume take turns on the sponsor's account lock: either the
+     * resume comes first and the ban pauses the publication again, or the ban comes first and the resume is refused.
+     * Never live with its sponsor banned.
+     */
+    @Test
+    void aBanAndAnAdminResumeTakeTurns() throws Exception {
+        warmUp();
+        for (int i = 0; i < 3; i++) {
+            String sponsor = newSponsor("s-takedown-resume-race-" + i);
+            credit(sponsor, 1_000);
+            String publicationId = livePublication(sponsor, "Takedown resume race " + i);
+            run(PublicationAdmin.PAUSE, takedownAdmin(), body("publicationId", publicationId, "reason", "Check"));
+            String boss = boss();
+            ExecutorService pool = Executors.newFixedThreadPool(2);
+            List<Integer> statuses = new ArrayList<>();
+            try {
+                List<Callable<Integer>> calls = new ArrayList<>();
+                calls.add(() -> call(PublicationAdmin.RESUME, takedownAdmin(), body("publicationId", publicationId,
+                    "reason", "Cleared")).expectBody(MAP).returnResult().getStatus().value());
+                calls.add(() -> call("QB_USER_BAN", boss, body("userId", sponsor, "reason", "Race"))
+                    .expectBody(MAP).returnResult().getStatus().value());
+                for (Future<Integer> done : pool.invokeAll(calls)) {
+                    statuses.add(done.get());
+                }
+            } finally {
+                pool.shutdown();
+            }
+            assertThat(statuses.get(1)).as("the ban").isEqualTo(200);
+            Map<String, Object> row = publication(publicationId);
+            assertThat(row).as("resume " + statuses.get(0)).containsEntry("status", "PAUSED")
+                .containsEntry("paused_by", "ADMIN");
+            if (statuses.get(0) == 200) {
+                assertThat(row).containsEntry("admin_reason", PublicationAdmin.ACCOUNT_SUSPENDED);
+            } else {
+                assertThat(statuses.get(0)).isEqualTo(422);
+            }
+        }
     }
 
     /**
