@@ -26,6 +26,8 @@ import java.util.UUID;
  * {@code APPROVAL_DECIDE} (docs/design/18-numbering-approvals-tasks.md section 3.4): approves or rejects the current
  * level of a pending request. The approver
  * <ul>
+ *   <li>holds {@code approval.decide}, or for a protected change of security
+ *       {@code security.protected-change.decide} instead (decision D51; 403 otherwise);</li>
  *   <li>holds the level's permission (403 otherwise);</li>
  *   <li>is not the preparer ({@code APPROVAL_OWN_REQUEST}) and has not decided another level of the request
  *       ({@code APPROVAL_ALREADY_DECIDED});</li>
@@ -74,6 +76,9 @@ public class ApprovalProcesses {
             pb -> pb
                 .description("Approves or rejects the current level of a pending approval request.")
                 .permissions(ApprovalPermissions.DECIDE)
+                // Protected changes are decided with their own permission instead (decision D51); "Check the
+                // decider" asks, by subject, for the one the request needs.
+                .orPermissions(com.jabiz.runtime.security.SecurityPermissions.PROTECTED_CHANGE_DECIDE)
                 .actsOn(ApprovalEntities.REQUEST, REQUEST_ID, a -> a.whenField("status", ApprovalEntities.PENDING))
                 .contextFactory((start, input) -> {
                     ProcessContext ctx = new ProcessContext(start);

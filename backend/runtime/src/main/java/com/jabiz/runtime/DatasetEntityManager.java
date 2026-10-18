@@ -899,6 +899,7 @@ public class DatasetEntityManager {
      * section 2.5).
      */
     private TimeSlice timeSlice(DatasetDefinition dataset, EntityDefinition def, Instant asOf, Instant knownAt) {
+        com.jabiz.runtime.query.TimeTravel.requireStorable(asOf, knownAt);
         if (asOf != null || knownAt != null) {
             if (!def.temporal) {
                 throw notTemporal(def);

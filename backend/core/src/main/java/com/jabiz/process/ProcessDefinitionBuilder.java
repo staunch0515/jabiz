@@ -23,6 +23,7 @@ public final class ProcessDefinitionBuilder<I, O, C extends ProcessContext> {
     private final List<StepDefinition<?, C>> steps = new ArrayList<>();
     private final Set<String> stepNames = new HashSet<>();
     private final Set<String> permissions = new LinkedHashSet<>();
+    private final Set<String> alternativePermissions = new LinkedHashSet<>();
     private boolean deprecated;
     private ProcessAccess access = ProcessAccess.OPEN;
     private com.jabiz.security.MfaRequirement mfa = com.jabiz.security.MfaRequirement.NONE;
@@ -68,6 +69,17 @@ public final class ProcessDefinitionBuilder<I, O, C extends ProcessContext> {
     /** Permission codes the caller needs, all of them. A process without any fails startup outside development. */
     public ProcessDefinitionBuilder<I, O, C> permissions(String... codes) {
         Collections.addAll(permissions, codes);
+        return this;
+    }
+
+    /**
+     * Another set of permission codes that also lets a caller start the process, all of them, when it lacks
+     * {@link #permissions}. The process itself must then decide what each set allows: the platform uses it for
+     * {@code APPROVAL_DECIDE}, whose protected changes are decided with their own permission (decision D51). Not
+     * for business processes, which declare one set.
+     */
+    public ProcessDefinitionBuilder<I, O, C> orPermissions(String... codes) {
+        Collections.addAll(alternativePermissions, codes);
         return this;
     }
 
@@ -211,6 +223,6 @@ public final class ProcessDefinitionBuilder<I, O, C extends ProcessContext> {
         return new ProcessDefinition<>(
             name, version, description, inputType, outputType, contextType,
             contextFactory, outputMapper, steps, permissions, deprecated, access, actsOn, mfa, verifiedEmail,
-            admission);
+            admission, alternativePermissions);
     }
 }

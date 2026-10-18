@@ -83,6 +83,10 @@ jabiz:
     demo-ai:
       base-url: ${JABIZ_DEMO_AI_URL:https://ai.example.com/v1}
       allowed-hosts: ${JABIZ_DEMO_AI_HOSTS:ai.example.com}
+    # The same service's images (commerce.product-image, decision D50): answers of up to 16 MiB, for that job only.
+    demo-ai-images:
+      base-url: ${JABIZ_DEMO_AI_URL:https://ai.example.com/v1}
+      allowed-hosts: ${JABIZ_DEMO_AI_HOSTS:ai.example.com}
   process:
     # The queue before the order lock (decision D45; ORDER_CANCEL and ORDER_SHIP declare it): the defaults are
     # 2 per order at once, 50 waiting, 2 s. Process names as map keys in brackets keep their case.
