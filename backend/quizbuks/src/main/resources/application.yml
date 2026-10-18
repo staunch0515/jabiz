@@ -19,6 +19,9 @@ jabiz:
     currency: JPY
     scale: 0
   fiscal-year-end: 12
+  # The zone of the business's dates (platform decision D48 item 2): the retention periods' fiscal years, and the days
+  # of the sponsors' analytics (docs/quizbuks/plans/Q9e-analytics.md, D-Q9e-3; the job records it for the templates).
+  fiscal-year-zone: Asia/Tokyo
   process:
     # The queues before a publication's two locks (platform decision D45, Q10a; Q10a4 split them): qb.pub-start before
     # the start lock (QB_ATTEMPT_START), qb.pub before the publication's lock (QB_ATTEMPT_SUBMIT with the publication

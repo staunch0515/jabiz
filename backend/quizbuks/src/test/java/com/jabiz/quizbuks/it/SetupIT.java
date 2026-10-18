@@ -193,7 +193,9 @@ class SetupIT extends QbItSupport {
             Map.entry(QbParams.TRANSFER_FEE, "0"),
             // Q10b (M3): the hold period and the new sponsors' limit.
             Map.entry(QbParams.TRANSFER_HOLD_DAYS, "7"), Map.entry(QbParams.TOPUP_NEW_SPONSOR_DAYS, "30"),
-            Map.entry(QbParams.TOPUP_NEW_SPONSOR_MAX_TOTAL, "100000")));
+            Map.entry(QbParams.TOPUP_NEW_SPONSOR_MAX_TOTAL, "100000"),
+            // Q9e: the analytics' minimum group (an ordinary parameter).
+            Map.entry(QbParams.STATS_MIN_GROUP, "5")));
         // Q9d: the account mapping and the receipts' issuer start empty, for finance to set with four eyes.
         QbParams.JOURNAL_ACCOUNTS.forEach(key -> expected.put(key, ""));
         QbParams.ISSUER.forEach(key -> expected.put(key, ""));

@@ -137,7 +137,8 @@ public final class QbPlay {
 
     /**
      * The last run of a statistics job: when its counts were taken. One row per job; the detail page shows it as the
-     * time of the completion counts, which change only when the counts do.
+     * time of the completion counts, which change only when the counts do. The analytics job (Q9e) also records the
+     * zone the sponsors' days are counted in.
      */
     public static final EntityDefinition STATS_RUN_ENTITY = EntityDefinition.define(STATS_RUN, eb -> {
         eb.physicalTable("qb_stats_run");
@@ -145,9 +146,11 @@ public final class QbPlay {
         eb.field("job", f -> f.physicalColumn("job").immutable(true).required(true).asText(64));
         eb.field("refreshedAt", f -> f.physicalColumn("refreshed_at").required(true)
             .asTemporal(TemporalRole.EVENT_TIME));
+        // The analytics job's (Q9e, D-Q9e-3): the zone it grouped days by, jabiz.fiscal-year-zone.
+        eb.field("zone", f -> f.physicalColumn("day_zone").asText(64));
         eb.field("version", f -> f.physicalColumn("version").asVersion());
         eb.listView("default", lv -> lv
-            .columns("job", "refreshedAt")
+            .columns("job", "refreshedAt", "zone")
             .filters("job")
             .sorts("job", "refreshedAt")
             .defaultSort("job", true));

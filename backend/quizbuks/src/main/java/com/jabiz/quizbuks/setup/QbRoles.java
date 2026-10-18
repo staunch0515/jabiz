@@ -85,7 +85,9 @@ public final class QbRoles {
             QbPermissions.SPONSOR_FINANCE_READ, QbPermissions.BROADCAST_WRITE, QbPermissions.ACCOUNT_READ,
             QbPermissions.SPONSOR_AVATAR_READ,
             // Q9d: the receipts of their own top-ups (the platform shows a sponsor only what they issued).
-            "document.archive.read"));
+            "document.archive.read",
+            // Q9e: the analytics of their own publications (aggregates only).
+            QbPermissions.STATS_READ));
         add(ADMIN_CONTENT, labels("Content administrator", "内容管理员", "コンテンツ管理者"), true, CONTENT);
         add(ADMIN_FINANCE, labels("Finance administrator", "财务管理员", "財務管理者"), true, FINANCE, PUBLISH,
             FINANCE_ONLY);

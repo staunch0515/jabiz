@@ -46,6 +46,12 @@ public final class QbParams {
     public static final String AI_MODEL = "qb.ai.model";
     /** The oldest version of the app that may still be used. */
     public static final String APP_MIN_VERSION = "qb.app.min-version";
+    /**
+     * The smallest group the sponsors' analytics show figures a person's answers could be read from (Q9e, E-4): each
+     * question's rate, the average time and the timeouts. At least {@code stats.MinGroup#FLOOR} whatever it is set
+     * to; not controlled (the super administrator may raise it).
+     */
+    public static final String STATS_MIN_GROUP = "qb.stats.min-group";
 
     /*
      * The account mapping of the journal export (Q9d, F-01): for each postable account of the ledger (QbLedger), the
@@ -110,6 +116,9 @@ public final class QbParams {
             "OpenAI model used to generate questions and covers"),
         new Param(APP_MIN_VERSION, Map.of("type", "text", "maxLength", 20), "1.0.0",
             "Oldest app version that may still be used"),
+        new Param(STATS_MIN_GROUP, Map.of("type", "numeric", "precision", 3, "scale", 0), "5",
+            "Fewest completions the sponsors' analytics show per-question rates, average time and timeouts for "
+                + "(at least 3), and the fewest new completions before they change"),
         new Param(TOPUP_MIN, KUDOS, "1000", "The smallest top-up a sponsor may make, in Kudos"),
         new Param(TOPUP_MAX, KUDOS, "1000000", "The largest top-up a sponsor may make, in Kudos"),
         new Param(TRANSFER_FEE, KUDOS, "0", "The platform's fee on each transfer, in Kudos (0: none)"),
