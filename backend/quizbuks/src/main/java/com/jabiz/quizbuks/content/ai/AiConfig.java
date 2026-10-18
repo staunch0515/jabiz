@@ -60,6 +60,12 @@ public class AiConfig {
         return ClaudeService.DEFINITION;
     }
 
+    /** How long a call waits for Claude's answer ({@code quizbuks.ai.request-timeout}), for both writers. */
+    @Bean
+    ClaudeCalls.Settings qbAiCallSettings(@Value("${quizbuks.ai.request-timeout:PT2M}") java.time.Duration timeout) {
+        return new ClaudeCalls.Settings(timeout);
+    }
+
     /**
      * The PDF materials a request may send (Q8b): {@code quizbuks.ai.pdf.max-bytes} each (10 MiB unless configured,
      * at most 20 MiB) and {@code quizbuks.ai.pdf.max-pages} pages together (100, at most 600).

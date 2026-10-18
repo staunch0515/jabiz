@@ -37,6 +37,16 @@ class ArchitectureTest {
     }
 
     /**
+     * No sponsor's PDF is parsed on the server (Q8b review H1/H2: a file can be built to expand without bound in a
+     * parser's memory, or to claim fewer pages than it has): the provider's token count decides.
+     */
+    @Test
+    void quizbuksParsesNoPdf() {
+        noClasses().that().resideInAPackage("com.jabiz.quizbuks..").should().dependOnClassesThat()
+            .resideInAPackage("org.apache.pdfbox..").check(CLASSES);
+    }
+
+    /**
      * Statements of a transaction go through the platform's storage engine, which writes the rows the transaction holds
      * before any statement that may read them (decision D46, implementation note ⑧ of 16p-2: application branches
      * check all of their classes with the shared rule).

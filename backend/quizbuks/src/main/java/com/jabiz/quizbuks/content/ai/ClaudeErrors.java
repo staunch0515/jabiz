@@ -40,6 +40,22 @@ public final class ClaudeErrors {
     }
 
     public static ExternalJobException failure(int status, String errorType) {
+        return failure(status, errorType, null, false);
+    }
+
+    /** The provider's words for a document it cannot read (looked at here only, never kept or shown). */
+    private static final Pattern DOCUMENT = Pattern.compile("(?i)\\b(pdf|document)s?\\b");
+
+    /**
+     * As {@link #failure(int, String)}; a 400 of a request with PDFs whose message names the PDF or document is the
+     * provider refusing a sponsor's file (unreadable, encrypted, malformed): permanent, {@link AiCodes#PDF_UNREADABLE}.
+     * The provider's message is only matched, never kept.
+     */
+    public static ExternalJobException failure(int status, String errorType, String providerMessage,
+        boolean documents) {
+        if (documents && status == 400 && providerMessage != null && DOCUMENT.matcher(providerMessage).find()) {
+            return ExternalJobException.permanent(AiCodes.PDF_UNREADABLE, "Claude could not read a PDF material (400)");
+        }
         Classification c = classify(status, errorType);
         String type = errorType != null && TYPE.matcher(errorType).matches() ? errorType : null;
         String message = "Claude answered " + status + (type == null ? "" : " (" + type + ")");

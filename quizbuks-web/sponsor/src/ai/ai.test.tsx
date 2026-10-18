@@ -346,7 +346,11 @@ describe('the AI cover panel', () => {
     expect(choice.querySelector('b')).toBeNull()
     expect(within(choice).getByTestId('ai-cover-apply')).toBeDisabled()
     await noAxeViolations()
+    // A click on the picture picks it, as its radio does.
+    await user.click(within(candidates[2]).getByTestId('ai-cover-picture'))
+    expect(within(candidates[2]).getByTestId('ai-cover-pick')).toBeChecked()
     await user.click(within(candidates[1]).getByTestId('ai-cover-pick'))
+    expect(within(candidates[2]).getByTestId('ai-cover-pick')).not.toBeChecked()
     await user.click(within(choice).getByTestId('ai-cover-apply'))
     await waitFor(() => expect(calls.of('/api/processes/QB_AI_COVER_ACCEPT/latest')).toEqual([
       { aiJobId: 'c1', quizId: 'q1', candidateNo: 2, baseRevision: 7 }]))

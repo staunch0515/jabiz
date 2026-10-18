@@ -14,11 +14,18 @@ import org.springframework.stereotype.Component;
  * sponsor's uploads. None kept: the result has no designs, and the completion records that none met the rules.
  *
  * <p>Before anything is sent: halted servers fail at once ({@link AiCodes#HALTED}, as {@link AiQuestionsHandler}), and
- * a quiz title the server's fonts cannot draw fails with {@link AiCodes#COVER_FONT} (the covers would show the title,
- * nothing charged). It reads no database.
+ * a server whose fonts cannot draw the requested language's script (or the quiz's title) fails with
+ * {@link AiCodes#COVER_FONT}, nothing charged: a server without Chinese and Japanese fonts would otherwise pay for
+ * designs it cannot draw. It reads no database.
  */
 @Component
 public class AiCoverHandler implements ExternalJobHandler<AiCoverJob.Input, AiCoverJob.Result> {
+
+    /** A sample of each language's script the covers may be written in: the fonts must draw all of it. */
+    static final java.util.Map<String, String> SAMPLES = java.util.Map.of(
+        "en", "Quiz: The Rivers of Europe 2026",
+        "ja", "日本の歴史クイズ：ひらがなとカタカナ",
+        "zh", "中国历史知识测验：长江与黄河");
 
     private final CoverDesigner designer;
     private final CoverRenderer renderer;
@@ -36,8 +43,11 @@ public class AiCoverHandler implements ExternalJobHandler<AiCoverJob.Input, AiCo
         if (halted) {
             throw ExternalJobException.permanent(AiCodes.HALTED, "AI generation is halted on this server");
         }
-        if (!renderer.drawable(input.title())) {
-            throw ExternalJobException.permanent(AiCodes.COVER_FONT, "The server has no font for the quiz's title");
+        // Before anything is paid for (review M1): the requested language's script, and the title, which the cover
+        // text usually is or shortens.
+        if (!renderer.drawable(SAMPLES.getOrDefault(input.language(), SAMPLES.get("en")))
+            || !renderer.drawable(input.title())) {
+            throw ExternalJobException.permanent(AiCodes.COVER_FONT, "The server has no font for the covers' text");
         }
         CoverDesigner.Designed designed = designer.design(input, ctx);
         CoverDesigns.Checked checked = CoverDesigns.check(designed.designs(), renderer::drawable);

@@ -29,6 +29,8 @@ class AiCoversTest {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
     private static final CoverRenderer RENDERER = CoverRenderer.withoutFallbacks();
+    /** The tests' fixed time (no clock is read). */
+    private static final Instant NOW = Instant.parse("2026-10-01T00:00:00Z");
 
     private static CoverDesigns.Design design(String palette, String layout, String motif, String text) {
         return new CoverDesigns.Design(palette, layout, motif, text);
@@ -134,8 +136,35 @@ class AiCoversTest {
                 e -> assertThat(e.code()).isEqualTo(AiCodes.COVER_FONT));
     }
 
+    @Test
+    void aServerWithoutTheLanguagesFontIsFoundOutBeforeAsking() {
+        CoverDesigner never = (input, ctx) -> {
+            throw new AssertionError("asked");
+        };
+        CoverRenderer latin = CoverRenderer.latinOnly();
+        // A Latin title in a Japanese or Chinese request: the covers' words would be in that language.
+        for (String language : List.of("ja", "zh")) {
+            assertThat(latin.drawable(AiCoverHandler.SAMPLES.get(language))).isFalse();
+            assertThatThrownBy(() -> new AiCoverHandler(never, latin, false).run(input("Rivers", language),
+                context())).isInstanceOfSatisfying(ExternalJobException.class,
+                    e -> assertThat(e.code()).isEqualTo(AiCodes.COVER_FONT));
+        }
+        // English is drawn by the platform's own font.
+        assertThat(latin.drawable(AiCoverHandler.SAMPLES.get("en"))).isTrue();
+        CoverDesigner designer = (input, ctx) -> new CoverDesigner.Designed("claude-opus-5-5", false,
+            List.of(design("ocean", "center", "circles", "One")));
+        assertThat(new AiCoverHandler(designer, latin, false).run(input("Rivers", "en"), context()).files())
+            .hasSize(1);
+        // With the JVM's fonts as the last resort, the samples of every language are checked the same way.
+        assertThat(AiCoverHandler.SAMPLES).containsOnlyKeys("en", "ja", "zh");
+    }
+
     private static AiCoverJob.Input input(String title) {
-        return new AiCoverJob.Input(ClaudeService.OPUS, "medium", "en", title, null, "qb-key");
+        return input(title, "en");
+    }
+
+    private static AiCoverJob.Input input(String title, String language) {
+        return new AiCoverJob.Input(ClaudeService.OPUS, "medium", language, title, null, "qb-key");
     }
 
     private static ExternalJobContext context() {
@@ -157,7 +186,7 @@ class AiCoversTest {
 
             @Override
             public Instant deadline() {
-                return Instant.now().plusSeconds(60);
+                return NOW.plusSeconds(60);
             }
 
             @Override
@@ -183,6 +212,10 @@ class AiCoversTest {
         JsonNode body = JSON.readTree(ClaudeApi.body(request, JSON));
         assertThat(body.get("output_config").get("format").get("schema").get("properties").has("covers")).isTrue();
         assertThat(body.get("messages").get(0).get("content")).hasSize(1);
-        assertThat(Map.of("pages", request.pages())).containsEntry("pages", 0);
+        assertThat(request.documents()).isEmpty();
+        // The schema's bounds are in its descriptions (structured outputs refuse maxItems and maxLength).
+        JsonNode schema = body.get("output_config").get("format").get("schema");
+        assertThat(schema.toString()).doesNotContain("maxItems", "maxLength");
+        assertThat(schema.get("properties").get("covers").get("description").asString()).contains("3");
     }
 }

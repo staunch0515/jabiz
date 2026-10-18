@@ -290,8 +290,8 @@ tools/quizbuks/local-demo.sh status | logs | seed
 | `JABIZ_REPORTS_PDF_FONTS` | 否 | PDF（充值收据、月报）中中文与日文的 TrueType 字体文件，逗号分隔、按顺序尝试；镜像已装 IPA Gothic 与 Droid Sans Fallback 并设好（`Dockerfile`），镜像外缺省为空（这些字为 `?`）。设了读不到的文件即启动失败 |
 | `ANTHROPIC_API_KEY` | 是（Q8a） | Claude（Anthropic API）的密钥，AI 生成题目；缺少即启动失败。还没有密钥时可设任意占位（如 `not-configured`）：AI 缺省关闭（`qb.ai.enabled`），关闭时什么也不发送；占位被打开后提供方拒绝（401，作业失败）。本机 compose 未设置时填占位 |
 | `QB_ANTHROPIC_API_URL` / `QB_ANTHROPIC_API_HOSTS` | 否 | Anthropic API 的地址与允许的主机，缺省 `https://api.anthropic.com` / `api.anthropic.com`（只在开发与 e2e 中改指本地桩 `tools/quizbuks/claude-stub`） |
-| `QB_AI_REQUEST_TIMEOUT` / `QB_AI_MAX_CONCURRENCY` | 否 | 等 Claude 整个回答的最长时间（缺省与上限 `PT2M`；没有回答的尝试按预估计入用量）；全实例同时运行的 AI 作业数（缺省 4） |
-| `QB_AI_PDF_MAX_BYTES` / `QB_AI_PDF_MAX_PAGES` | 否 | Q8b：PDF 资料作为文件本身发送给 Claude，每个至多多少字节（缺省 10485760，上限 20 MiB）、一次请求合计至多多少页（缺省 100，上限 600）。请求在作业数完页数之前按页数上限预留月 Token（每页 5 000、3 次尝试），降低页数上限可同时进行更多 PDF 请求（`docs/quizbuks/operations.md` §7.8） |
+| `QB_AI_REQUEST_TIMEOUT` / `QB_AI_MAX_CONCURRENCY` | 否 | 等 Claude 整个回答的最长时间（缺省与上限 `PT2M`；没有回答的尝试按预估计入用量）；全实例同时运行的 AI 作业数，**每种作业各自计**（缺省 4：题目与封面合计至多 8 个同时的调用）。带 PDF 的题目作业每个约占 PDF 合计的 5–6 倍堆（20 MiB 时约 120 MiB）：JVM 堆至少给"512 MiB + 120 MiB × 并发"（缺省约 1 GiB 以上），内存紧张时降低并发或 `QB_AI_PDF_MAX_BYTES` |
+| `QB_AI_PDF_MAX_BYTES` / `QB_AI_PDF_MAX_PAGES` | 否 | Q8b：PDF 资料作为文件本身发送给 Claude，每个至多多少字节（缺省 10485760，上限 20 MiB，一次请求合计也至多 20 MiB）、一次请求按至多多少页预留（缺省 100，上限 600）。服务器不解析 PDF：作业在付费调用前以提供方免费的 `count_tokens` 数同一请求的输入，超过预留（页数上限 × 每页 5 000 加文字）即 `QB_AI_PDF_TOO_LONG`、不发送不计费；请求按页数上限预留月 Token（3 次尝试），降低页数上限可同时进行更多 PDF 请求（`docs/quizbuks/operations.md` §7.8） |
 | `QB_AI_HALTED` | 否 | `true` 时本实例的每次 AI 尝试不调用提供方即失败（事故时的停止，需重启；更快的是在 Anthropic Console 吊销密钥，`docs/quizbuks/operations.md` §7.8） |
 
 可观测性（OTLP）与单点登录的变量同平台：见 `docs/guide/quickstart.md`。

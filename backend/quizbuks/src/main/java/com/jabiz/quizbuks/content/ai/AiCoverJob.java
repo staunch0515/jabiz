@@ -35,8 +35,16 @@ public final class AiCoverJob {
      * @param effort   one of {@link ClaudeService#EFFORTS}
      * @param language {@code en}, {@code zh} or {@code ja}: the covers' text
      * @param userKey  the provider's opaque user id: HMAC of the sponsor's id under a key of the server's
+     * @param reservedInputTokens what the request reserved for one attempt's input (for the warning when the usage
+     *                 goes above it); null when not given
      */
-    public record Input(String model, String effort, String language, String title, String intro, String userKey) {}
+    public record Input(String model, String effort, String language, String title, String intro, String userKey,
+        Long reservedInputTokens) {
+
+        public Input(String model, String effort, String language, String title, String intro, String userKey) {
+            this(model, effort, language, title, intro, userKey, null);
+        }
+    }
 
     /**
      * @param servedModel the model that answered (another one when the provider fell back after a refusal)

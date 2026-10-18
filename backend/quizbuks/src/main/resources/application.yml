@@ -248,9 +248,10 @@ quizbuks:
     request-timeout: ${QB_AI_REQUEST_TIMEOUT:PT2M}
     halted: ${QB_AI_HALTED:false}
     max-concurrency: ${QB_AI_MAX_CONCURRENCY:4}
-    # Q8b: PDF materials go to Claude as the files themselves: each at most max-bytes (at most 20 MiB), all of one
-    # request at most max-pages pages (at most 600). A request reserves max-pages pages of its sponsor's monthly tokens
-    # until its job ends (the pages are counted by the job), so a lower max-pages lets more PDF requests run.
+    # Q8b: PDF materials go to Claude as the files themselves: each at most max-bytes (at most 20 MiB). A request
+    # reserves max-pages pages (at most 600) of its sponsor's monthly tokens until its job ends; no PDF is parsed here:
+    # the provider's token count of the request may not exceed that reservation. A lower max-pages lets more PDF
+    # requests run.
     pdf:
       max-bytes: ${QB_AI_PDF_MAX_BYTES:10485760}
       max-pages: ${QB_AI_PDF_MAX_PAGES:100}

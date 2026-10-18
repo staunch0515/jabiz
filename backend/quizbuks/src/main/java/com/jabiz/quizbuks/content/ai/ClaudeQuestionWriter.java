@@ -2,7 +2,6 @@ package com.jabiz.quizbuks.content.ai;
 
 import com.jabiz.external.ExternalJobContext;
 import com.jabiz.external.ExternalJobFile;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -24,14 +23,10 @@ class ClaudeQuestionWriter implements QuestionWriter {
 
     private final JsonMapper json;
     private final Duration requestTimeout;
-    private final int maxPdfPages;
 
-    ClaudeQuestionWriter(JsonMapper json,
-        @Value("${quizbuks.ai.request-timeout:PT2M}") Duration requestTimeout,
-        @Value("${quizbuks.ai.pdf.max-pages:" + AiPdfs.DEFAULT_MAX_PAGES + "}") int maxPdfPages) {
+    ClaudeQuestionWriter(JsonMapper json, ClaudeCalls.Settings settings) {
         this.json = json;
-        this.requestTimeout = ClaudeCalls.requestTimeout(requestTimeout);
-        this.maxPdfPages = AiPdfs.maxPages(maxPdfPages);
+        this.requestTimeout = settings.requestTimeout();
     }
 
     @Override
@@ -39,16 +34,18 @@ class ClaudeQuestionWriter implements QuestionWriter {
         List<ClaudeApi.Document> documents = new ArrayList<>();
         for (AiQuestionsJob.Material material : input.materials()) {
             if (material.fileId() != null) {
+                // Encoded once (the count and the call send the same text); the bytes are not kept.
                 ExternalJobFile file = ctx.file(material.fileId());
-                byte[] pdf = file.bytes();
-                documents.add(new ClaudeApi.Document(AiPrompt.documentTitle(material.no()), pdf, AiPdfs.pages(pdf)));
+                documents.add(ClaudeApi.Document.of(AiPrompt.documentTitle(material.no()), file.bytes()));
             }
         }
-        AiPdfs.requireWithin(documents, maxPdfPages);
-        ClaudeApi.Request request = new ClaudeApi.Request(input.model(), input.effort(),
-            ClaudeApi.maxTokens(input.count()), AiPrompt.SYSTEM, AiPrompt.user(input, json), input.userKey(),
-            AiPrompt.schema(), documents);
-        ClaudeApi.Answer answer = ClaudeCalls.ask(ctx, json, request, requestTimeout);
+        int maxTokens = ClaudeApi.maxTokens(input.count());
+        ClaudeCalls.Reserved reserved = new ClaudeCalls.Reserved(AiQuestionsJob.TYPE, input.reservedInputTokens(),
+            input.reservedInputTokens() == null ? Long.MAX_VALUE : input.reservedInputTokens() + maxTokens);
+        ClaudeApi.Request request = ClaudeCalls.counted(ctx, json, new ClaudeApi.Request(input.model(),
+            input.effort(), maxTokens, AiPrompt.SYSTEM, AiPrompt.user(input, json), input.userKey(),
+            AiPrompt.schema(), documents), requestTimeout, reserved);
+        ClaudeApi.Answer answer = ClaudeCalls.ask(ctx, json, request, requestTimeout, reserved);
         List<AiQuestionsJob.Candidate> candidates = ClaudeApi.candidates(answer.text(), json);
         if (candidates == null) {
             throw ClaudeErrors.badResponse("is not the questions' document");

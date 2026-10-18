@@ -26,6 +26,9 @@ import java.util.regex.Pattern;
  *       English otherwise, with a made-up usage (about a token per four characters of the request);</li>
  *   <li>a request for covers ("Number of covers: 3", Q8b) gets three designs of the catalogue, which the server
  *       draws; PDF materials (document blocks) are accepted and not read;</li>
+ *   <li>{@code POST /v1/messages/count_tokens} (Q8b: requests with PDFs are counted before they are sent) answers
+ *       {@code input_tokens}: a token per four characters of the request without its files, and 1,500 a document,
+ *       the same number the request's usage then reports;</li>
  *   <li>a quiz whose title contains {@code [refuse]} is declined ({@code stop_reason: refusal}), one with
  *       {@code [busy]} is answered 529 (overloaded), so that the console's failure texts can be seen.</li>
  * </ul>
@@ -36,6 +39,8 @@ public final class ClaudeStub {
     private static final Pattern COUNT = Pattern.compile("Number of questions: (\\d+)");
     private static final Pattern MATERIAL = Pattern.compile("\\\\\"no\\\\\":(\\d+)");
     private static final Pattern MODEL = Pattern.compile("^\\{\"model\":\"([a-z0-9-]+)\"");
+    private static final Pattern DATA = Pattern.compile("\"data\":\"[A-Za-z0-9+/=]*\"");
+    private static final Pattern DOCUMENT = Pattern.compile("\"type\":\"document\"");
 
     public static void main(String[] args) throws IOException {
         int port = args.length > 0 ? Integer.parseInt(args[0]) : 8094;
@@ -62,10 +67,13 @@ public final class ClaudeStub {
                 send(exchange, 529, "{\"type\":\"error\",\"error\":{\"type\":\"overloaded_error\"}}");
                 return;
             }
+            long in = tokens(body);
+            if (exchange.getRequestURI().getPath().endsWith("/count_tokens")) {
+                send(exchange, 200, "{\"input_tokens\":" + in + "}");
+                return;
+            }
             Matcher modelMatch = MODEL.matcher(body);
             String model = modelMatch.find() ? modelMatch.group(1) : "claude-opus-5-5";
-            // About a token per four characters, PDF documents counted as at most 50,000 tokens in all.
-            long in = Math.min(50_000, Math.max(1, body.length() / 4));
             if (body.contains("[refuse]")) {
                 send(exchange, 200, message(model, "refusal", null, in, 0));
                 return;
@@ -99,6 +107,12 @@ public final class ClaudeStub {
             String text = "{\"questions\":[" + String.join(",", questions) + "]}";
             send(exchange, 200, message(model, "end_turn", text, in, 200L * count));
         }
+    }
+
+    /** About a token per four characters of the request without its files, and 1,500 a document. */
+    private static long tokens(String body) {
+        long documents = DOCUMENT.matcher(body).results().count();
+        return Math.max(1, DATA.matcher(body).replaceAll("").length() / 4) + 1_500 * documents;
     }
 
     private static boolean japanese(String body) {

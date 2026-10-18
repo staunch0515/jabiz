@@ -33,6 +33,8 @@ import java.util.regex.Pattern;
 abstract class AiItSupport extends LegalItSupport {
 
     static final String MESSAGES = "/v1/messages";
+    /** The provider's free token count (Q8b review H1/H2: requests with PDFs are counted before they are sent). */
+    static final String COUNT_TOKENS = "/v1/messages/count_tokens";
     static final JsonMapper JSON = JsonMapper.builder().build();
     static final Pattern COUNT = Pattern.compile("Number of questions: (\\d+)");
     /** PDF materials in these tests (Q8b): at most this many pages a request, and bytes each. */
@@ -75,6 +77,9 @@ abstract class AiItSupport extends LegalItSupport {
      * normal end of turn.
      */
     static StubHttpServer.Answer claude(StubHttpServer.Received request) {
+        if ("POST".equals(request.method()) && COUNT_TOKENS.equals(request.path())) {
+            return StubHttpServer.Answer.json(200, "{\"input_tokens\":" + countOf(JSON.readTree(request.body())) + "}");
+        }
         if (!"POST".equals(request.method()) || !MESSAGES.equals(request.path())) {
             return StubHttpServer.Answer.json(404, "{\"type\":\"error\",\"error\":{\"type\":\"not_found_error\"}}");
         }
@@ -97,6 +102,21 @@ abstract class AiItSupport extends LegalItSupport {
             }
         }
         return text;
+    }
+
+    /**
+     * The stub's own token count (Q8b): a token per four characters of the text, and for each document 2,000 tokens a
+     * page object it really has ({@code /Type /Page}, whatever its {@code /Pages /Count} claims) and at least one.
+     */
+    static long countOf(JsonNode body) {
+        long tokens = userText(body).length() / 4 + 1_000;
+        for (JsonNode document : documents(body)) {
+            String pdf = new String(java.util.Base64.getDecoder().decode(document.get("source").get("data").asString()),
+                java.nio.charset.StandardCharsets.ISO_8859_1);
+            long pages = Pattern.compile("/Type\\s*/Page(?!s)").matcher(pdf).results().count();
+            tokens += 2_000 * Math.max(1, pages);
+        }
+        return tokens;
     }
 
     /** The document blocks of a request's user message (Q8b: PDF materials). */

@@ -1,16 +1,10 @@
 package com.jabiz.quizbuks.content.ai;
 
 import com.jabiz.external.ExternalJobException;
-import org.apache.pdfbox.pdmodel.PDDocument;
-import org.apache.pdfbox.pdmodel.PDPage;
-import org.apache.pdfbox.pdmodel.encryption.AccessPermission;
-import org.apache.pdfbox.pdmodel.encryption.StandardProtectionPolicy;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.List;
@@ -19,49 +13,19 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-/** PDF materials as the job sends them (Q8b, A-5): counted, checked, sent as documents, charged when unanswered. */
+/**
+ * PDF materials as the job sends them (Q8b, A-5; review H1/H2): never parsed on the server, sent as documents, counted
+ * by the provider with exactly what is sent, and charged by that count when unanswered.
+ */
 class AiPdfsTest {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
+    /** Any bytes: nothing here reads them. */
+    private static final byte[] PDF = "%PDF-1.4\n/Type /Pages /Count 1\n%%EOF\n".getBytes(StandardCharsets.US_ASCII);
 
-    static byte[] pdf(int pages, boolean encrypted) throws IOException {
-        try (PDDocument document = new PDDocument(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
-            for (int i = 0; i < pages; i++) {
-                document.addPage(new PDPage());
-            }
-            if (encrypted) {
-                StandardProtectionPolicy policy = new StandardProtectionPolicy("owner", "user",
-                    new AccessPermission());
-                policy.setEncryptionKeyLength(128);
-                document.protect(policy);
-            }
-            document.save(out);
-            return out.toByteArray();
-        }
-    }
-
-    private static String code(Runnable run) {
-        try {
-            run.run();
-            return null;
-        } catch (ExternalJobException e) {
-            return e.code();
-        }
-    }
-
-    @Test
-    void pagesAreCountedAndUnreadableOrLockedPdfsRefused() throws IOException {
-        assertThat(AiPdfs.pages(pdf(3, false))).isEqualTo(3);
-        assertThat(code(() -> AiPdfs.pages(new byte[0]))).isEqualTo(AiCodes.PDF_UNREADABLE);
-        assertThat(code(() -> AiPdfs.pages("not a pdf".getBytes(StandardCharsets.US_ASCII))))
-            .isEqualTo(AiCodes.PDF_UNREADABLE);
-        byte[] locked = pdf(1, true);
-        assertThat(code(() -> AiPdfs.pages(locked))).isEqualTo(AiCodes.PDF_UNREADABLE);
-        // More pages than allowed, all documents together.
-        List<ClaudeApi.Document> documents = List.of(new ClaudeApi.Document("Material 1", new byte[1], 3),
-            new ClaudeApi.Document("Material 2", new byte[1], 3));
-        assertThat(code(() -> AiPdfs.requireWithin(documents, 6))).isNull();
-        assertThat(code(() -> AiPdfs.requireWithin(documents, 5))).isEqualTo(AiCodes.PDF_TOO_LONG);
+    private static ClaudeApi.Request request(String user, List<ClaudeApi.Document> documents) {
+        return new ClaudeApi.Request(ClaudeService.OPUS, "medium", ClaudeApi.maxTokens(1), AiPrompt.SYSTEM, user,
+            "qb-key", AiPrompt.schema(), documents);
     }
 
     @Test
@@ -75,43 +39,81 @@ class AiPdfsTest {
     }
 
     @Test
-    void documentsGoFirstAndAreChargedByThePageWhenUnanswered() throws IOException {
-        byte[] pdf = pdf(2, false);
+    void documentsGoFirstAndTheCountTakesExactlyWhatIsSent() {
         AiQuestionsJob.Input input = new AiQuestionsJob.Input(ClaudeService.OPUS, "medium", "en", 1, "EASY", "T", null,
             List.of(new AiQuestionsJob.Material(1, "PDF", "Paper", "About", null, UUID.randomUUID())), List.of(),
             "qb-key");
         String user = AiPrompt.user(input, JSON);
         assertThat(user).contains("\"document\":\"Material 1\"");
         assertThat(AiPrompt.SYSTEM).contains("titled \"Material <no>\"");
-        ClaudeApi.Request request = new ClaudeApi.Request(ClaudeService.OPUS, "medium", ClaudeApi.maxTokens(1),
-            AiPrompt.SYSTEM, user, "qb-key", AiPrompt.schema(), List.of(new ClaudeApi.Document("Material 1", pdf, 2)));
-        JsonNode content = JSON.readTree(ClaudeApi.body(request, JSON)).get("messages").get(0).get("content");
+        ClaudeApi.Document document = ClaudeApi.Document.of("Material 1", PDF);
+        // Encoded once; the record does not print the file.
+        assertThat(document.base64()).isEqualTo(Base64.getEncoder().encodeToString(PDF));
+        assertThat(document.toString()).doesNotContain(document.base64());
+        ClaudeApi.Request request = request(user, List.of(document));
+        JsonNode body = JSON.readTree(ClaudeApi.body(request, JSON));
+        JsonNode content = body.get("messages").get(0).get("content");
         assertThat(content).hasSize(2);
         assertThat(content.get(0).get("type").asString()).isEqualTo("document");
         assertThat(content.get(0).get("title").asString()).isEqualTo("Material 1");
-        assertThat(Base64.getDecoder().decode(content.get(0).get("source").get("data").asString())).isEqualTo(pdf);
+        assertThat(Base64.getDecoder().decode(content.get(0).get("source").get("data").asString())).isEqualTo(PDF);
         assertThat(content.get(1).get("text").asString()).isEqualTo(user);
-        // The PDF's bytes are not the user message's: the cap is on the text only.
-        assertThat(request.toString()).doesNotContain(Base64.getEncoder().encodeToString(pdf));
+        assertThat(request.toString()).doesNotContain(document.base64()).doesNotContain(user);
 
-        ClaudeApi.Usage unanswered = ClaudeApi.unanswered(request);
-        ClaudeApi.Usage withoutPages = ClaudeApi.unanswered(new ClaudeApi.Request(ClaudeService.OPUS, "medium",
-            ClaudeApi.maxTokens(1), AiPrompt.SYSTEM, user, "qb-key"));
-        assertThat(unanswered.inputTokens() - withoutPages.inputTokens())
-            .isEqualTo(2L * ClaudeApi.TOKENS_PER_PDF_PAGE);
-        // The estimate of a request with PDFs reserves the most pages a request may send, for every attempt.
-        assertThat(AiLimits.estimate(3_000, ClaudeApi.maxTokens(1), 100) - AiLimits.estimate(3_000, 1))
-            .isEqualTo(AiQuestionsJob.ATTEMPTS * 100L * ClaudeApi.TOKENS_PER_PDF_PAGE);
+        // The count: the same content, without what count_tokens does not take.
+        JsonNode count = JSON.readTree(ClaudeApi.countBody(request, JSON));
+        assertThat(count.get("messages")).isEqualTo(body.get("messages"));
+        assertThat(count.get("system")).isEqualTo(body.get("system"));
+        assertThat(count.get("output_config")).isEqualTo(body.get("output_config"));
+        assertThat(count.get("model")).isEqualTo(body.get("model"));
+        assertThat(count.has("max_tokens")).isFalse();
+        assertThat(count.has("metadata")).isFalse();
+        assertThat(count.has("fallbacks")).isFalse();
     }
 
     @Test
-    void haikuLongPromptsArePricedAtTheirOwnPrice() {
-        ClaudeApi.Usage usage = new ClaudeApi.Usage(300_000, 1_000);
-        // 300,000 tokens in one attempt: above 100,000, so 0.50 / 2.50 per million.
-        assertThat(AiCost.of(ClaudeService.HAIKU, null, usage, null, 1)).isEqualByComparingTo("0.152500");
-        // The same over three attempts: 100,000 each, the short price.
-        assertThat(AiCost.of(ClaudeService.HAIKU, null, usage, null, 3)).isEqualByComparingTo("0.030500");
-        assertThat(AiCost.of(ClaudeService.OPUS, null, usage, null, 1)).isEqualByComparingTo(
-            AiCost.of(ClaudeService.OPUS, null, usage, null));
+    void anUnansweredAttemptIsChargedTheProvidersCount() {
+        ClaudeApi.Request request = request("Some text", List.of(ClaudeApi.Document.of("Material 1", PDF)));
+        // Not counted (a request without documents): the text's estimate.
+        assertThat(ClaudeApi.unanswered(request).inputTokens()).isEqualTo(AiLimits.inputEstimate(
+            "Some text".getBytes(StandardCharsets.UTF_8).length
+                + AiPrompt.SYSTEM.getBytes(StandardCharsets.UTF_8).length));
+        ClaudeApi.Usage counted = ClaudeApi.unanswered(request.counted(41_234));
+        assertThat(counted.inputTokens()).isEqualTo(41_234);
+        assertThat(counted.outputTokens()).isEqualTo(ClaudeApi.maxTokens(1));
+        // The reservation: the most pages a request may send, for every attempt.
+        assertThat(AiLimits.estimate(3_000, ClaudeApi.maxTokens(1), 100) - AiLimits.estimate(3_000, 1))
+            .isEqualTo(AiQuestionsJob.ATTEMPTS * 100L * ClaudeApi.TOKENS_PER_PDF_PAGE);
+        assertThat(AiLimits.reservedInput(3_000, 100)).isEqualTo(AiLimits.inputEstimate(3_000)
+            + 100L * ClaudeApi.TOKENS_PER_PDF_PAGE);
+    }
+
+    @Test
+    void aProviderRefusingADocumentIsUnreadableOnlyWhenItSaysSo() {
+        assertThat(ClaudeErrors.failure(400, "invalid_request_error", "The PDF specified was not valid.", true)
+            .code()).isEqualTo(AiCodes.PDF_UNREADABLE);
+        assertThat(ClaudeErrors.failure(400, "invalid_request_error", "Could not process document", true).code())
+            .isEqualTo(AiCodes.PDF_UNREADABLE);
+        // Without documents, or another error of a request with them: what it was.
+        assertThat(ClaudeErrors.failure(400, "invalid_request_error", "The PDF specified was not valid.", false)
+            .code()).isEqualTo(AiCodes.REQUEST_INVALID);
+        assertThat(ClaudeErrors.failure(400, "invalid_request_error", "max_tokens: too large", true).code())
+            .isEqualTo(AiCodes.REQUEST_INVALID);
+        ExternalJobException busy = ClaudeErrors.failure(529, "overloaded_error", "Overloaded", true);
+        assertThat(busy.isPermanent()).isFalse();
+    }
+
+    @Test
+    void longPromptsArePricedPerCall() {
+        // One call of 300,000 tokens in: above 100,000, so the whole call at 0.50 / 2.50 per million.
+        ClaudeApi.Usage one = new ClaudeApi.Usage(300_000, 1_000).asLongPrompt();
+        assertThat(AiCost.of(ClaudeService.HAIKU, null, one, null)).isEqualByComparingTo("0.152500");
+        // Three calls of 100,000 each: the short price.
+        assertThat(AiCost.of(ClaudeService.HAIKU, null, new ClaudeApi.Usage(300_000, 1_000), null))
+            .isEqualByComparingTo("0.030500");
+        // The larger models have one rate however long the prompt.
+        assertThat(AiCost.hasLongPromptRate(ClaudeService.OPUS)).isFalse();
+        assertThat(AiCost.hasLongPromptRate(ClaudeService.SONNET)).isFalse();
+        assertThat(AiCost.hasLongPromptRate(ClaudeService.HAIKU)).isTrue();
     }
 }

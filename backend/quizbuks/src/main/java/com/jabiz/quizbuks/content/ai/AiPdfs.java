@@ -1,12 +1,5 @@
 package com.jabiz.quizbuks.content.ai;
 
-import com.jabiz.external.ExternalJobException;
-import org.apache.pdfbox.Loader;
-import org.apache.pdfbox.pdmodel.PDDocument;
-
-import java.io.IOException;
-import java.util.List;
-
 /**
  * PDF materials sent to Claude (docs/quizbuks/plans/Q8-ai.md, Q8b, A-5): the file itself, as a document block, at most
  * {@code quizbuks.ai.pdf.max-bytes} each ({@value #DEFAULT_MAX_BYTES} bytes unless configured, at most
@@ -14,9 +7,13 @@ import java.util.List;
  * {@code quizbuks.ai.pdf.max-pages} pages all together ({@value #DEFAULT_MAX_PAGES} unless configured, at most
  * {@value #MAX_PAGES}, the provider's own limit).
  *
- * <p>The pages are not known when the request is made (a process does not read files): the request reserves the most
- * pages a request may have ({@link AiLimits#estimate}), and the handler counts them before anything is sent. Too many,
- * a password or a file that is no readable PDF end the job at once, nothing sent and nothing charged.
+ * <p><b>No PDF is parsed on the server</b> (Q8b review H1, H2): a sponsor's file can be built to expand without bound
+ * in a parser's memory, or to claim fewer pages than it has. The pages are not known when the request is made, so the
+ * request reserves the most a request may send (the page cap at {@value ClaudeApi#TOKENS_PER_PDF_PAGE} tokens a page,
+ * {@link AiLimits#estimate}); before the paid call the handler asks the provider's free token count for exactly the
+ * request it is about to send ({@link ClaudeCalls#counted}). More than the reservation ends the job, nothing sent or
+ * charged ({@link AiCodes#PDF_TOO_LONG}); a file the provider cannot read ends it too ({@link AiCodes#PDF_UNREADABLE}).
+ * Only the byte caps are checked locally (the stored file's size).
  */
 public final class AiPdfs {
 
@@ -47,34 +44,6 @@ public final class AiPdfs {
             throw new IllegalArgumentException("quizbuks.ai.pdf.max-pages: from 1 to " + MAX_PAGES);
         }
         return configured;
-    }
-
-    /** The pages of a PDF; the job's permanent failure when it cannot be read or has a password. */
-    static int pages(byte[] pdf) {
-        try (PDDocument document = Loader.loadPDF(pdf)) {
-            if (document.isEncrypted()) {
-                throw ExternalJobException.permanent(AiCodes.PDF_UNREADABLE, "A PDF material is encrypted");
-            }
-            int pages = document.getNumberOfPages();
-            if (pages < 1) {
-                throw ExternalJobException.permanent(AiCodes.PDF_UNREADABLE, "A PDF material has no pages");
-            }
-            return pages;
-        } catch (IOException | RuntimeException e) {
-            if (e instanceof ExternalJobException failure) {
-                throw failure;
-            }
-            throw ExternalJobException.permanent(AiCodes.PDF_UNREADABLE, "A PDF material cannot be read");
-        }
-    }
-
-    /** Refuses, before sending, documents of more pages than a request may have. */
-    static void requireWithin(List<ClaudeApi.Document> documents, int maxPages) {
-        int pages = documents.stream().mapToInt(ClaudeApi.Document::pages).sum();
-        if (pages > maxPages) {
-            throw ExternalJobException.permanent(AiCodes.PDF_TOO_LONG, "The PDF materials have " + pages
-                + " pages, more than " + maxPages);
-        }
     }
 
     private AiPdfs() {}

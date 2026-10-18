@@ -23,8 +23,6 @@ jabizApp {
 
 dependencies {
     implementation(project(":runtime"))
-    // Q8b: the pages of a PDF material are counted before it is sent to the AI (the platform's own PDF library).
-    implementation("org.apache.pdfbox:pdfbox:3.0.5")
     testImplementation(testFixtures(project(":runtime")))
     testImplementation("com.tngtech.archunit:archunit-junit5:1.5.0")
     testImplementation("net.jqwik:jqwik:1.9.3")

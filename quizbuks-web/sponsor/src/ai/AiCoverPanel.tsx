@@ -181,8 +181,13 @@ function Choice({ job, onApplied }: { job: AiJob; onApplied?: () => void }) {
         className="grid gap-3 sm:grid-cols-3">
         {job.covers.map((cover) => (
           <div key={cover.no} className="flex flex-col gap-2 rounded-md border p-2" data-testid="ai-cover-candidate">
-            <Thumbnail fileId={cover.fileId} width={640} className="aspect-[40/21] w-full rounded-sm"
-              alt={t('ai.cover.picture', { n: cover.no, text: cover.text })} />
+            {/* A click on the picture picks it too (a mouse's convenience: the radio is the control, and keyboards
+                and screen readers use it). */}
+            <div className="cursor-pointer" data-testid="ai-cover-picture"
+              onClick={() => setChosen(String(cover.no))}>
+              <Thumbnail fileId={cover.fileId} width={640} className="aspect-[40/21] w-full rounded-sm"
+                alt={t('ai.cover.picture', { n: cover.no, text: cover.text })} />
+            </div>
             <div className="flex items-start gap-2">
               <RadioGroupItem id={`${id}-${cover.no}`} value={String(cover.no)} data-testid="ai-cover-pick" />
               <Label htmlFor={`${id}-${cover.no}`} className="flex flex-col items-start gap-0.5 leading-snug">

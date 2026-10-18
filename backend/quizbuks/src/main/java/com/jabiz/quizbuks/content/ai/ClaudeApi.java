@@ -61,14 +61,21 @@ public final class ClaudeApi {
 
     /**
      * A PDF sent with the request as a document block (Q8b), before the request's text, titled so that the text can
-     * name it ({@code Material 3}).
+     * name it ({@code Material 3}). Nothing reads the PDF here (Q8b review H1, H2: the sponsor's file is never parsed
+     * on the server); the provider counts its tokens ({@link #countTokens}) and reads it.
      *
-     * @param pages its pages, counted before sending (each costs about {@value #TOKENS_PER_PDF_PAGE} tokens at most)
+     * @param base64 the file, encoded once and used as it is by the count and the call
      */
-    public record Document(String title, byte[] pdf, int pages) {
+    public record Document(String title, String base64) {
+
+        /** The document of a file's bytes. */
+        public static Document of(String title, byte[] pdf) {
+            return new Document(title, java.util.Base64.getEncoder().encodeToString(pdf));
+        }
+
         @Override
         public String toString() {
-            return "Document[title=" + title + ", bytes=" + (pdf == null ? 0 : pdf.length) + ", pages=" + pages + "]";
+            return "Document[title=" + title + ", base64=" + (base64 == null ? 0 : base64.length()) + " chars]";
         }
     }
 
@@ -78,32 +85,59 @@ public final class ClaudeApi {
      * @param userKey   the provider's opaque user id, or null to send none
      * @param schema    the JSON schema the answer must meet (structured outputs)
      * @param documents PDFs sent with the request, in order; none when empty
+     * @param countedInputTokens the provider's count of the request's input ({@link #countTokens}); null when not
+     *                  counted (a request without documents, whose text is estimated from its size)
      */
     public record Request(String model, String effort, int maxTokens, String system, String user, String userKey,
-        Map<String, Object> schema, List<Document> documents) {
+        Map<String, Object> schema, List<Document> documents, Long countedInputTokens) {
 
         public Request {
             documents = documents == null ? List.of() : List.copyOf(documents);
         }
 
-        /** A request for candidate questions without documents (Q8a). */
-        public Request(String model, String effort, int maxTokens, String system, String user, String userKey) {
-            this(model, effort, maxTokens, system, user, userKey, AiPrompt.schema(), List.of());
+        public Request(String model, String effort, int maxTokens, String system, String user, String userKey,
+            Map<String, Object> schema, List<Document> documents) {
+            this(model, effort, maxTokens, system, user, userKey, schema, documents, null);
         }
 
-        /** The pages of every document. */
-        public int pages() {
-            return documents.stream().mapToInt(Document::pages).sum();
+        /** A request for candidate questions without documents (Q8a). */
+        public Request(String model, String effort, int maxTokens, String system, String user, String userKey) {
+            this(model, effort, maxTokens, system, user, userKey, AiPrompt.schema(), List.of(), null);
+        }
+
+        /** This request with the provider's count of its input. */
+        public Request counted(long inputTokens) {
+            return new Request(model, effort, maxTokens, system, user, userKey, schema, documents, inputTokens);
+        }
+
+        /** The documents' sizes only: the request's text and files may be personal. */
+        @Override
+        public String toString() {
+            return "Request[model=" + model + ", effort=" + effort + ", maxTokens=" + maxTokens + ", user="
+                + user.length() + " chars, documents=" + documents + ", countedInputTokens=" + countedInputTokens + "]";
         }
     }
 
     /**
      * Tokens of one call, over every model that ran it; the {@code fallback} ones are those of the provider's fallback
-     * model (part of the totals, billed at that model's price).
+     * model (part of the totals, billed at that model's price); the {@code longPrompt} ones those of calls the provider
+     * prices at its long-prompt rate (part of the totals; {@link AiCost}).
      */
-    public record Usage(long inputTokens, long outputTokens, long fallbackInputTokens, long fallbackOutputTokens) {
+    public record Usage(long inputTokens, long outputTokens, long fallbackInputTokens, long fallbackOutputTokens,
+        long longPromptInputTokens, long longPromptOutputTokens) {
+
+        public Usage(long inputTokens, long outputTokens, long fallbackInputTokens, long fallbackOutputTokens) {
+            this(inputTokens, outputTokens, fallbackInputTokens, fallbackOutputTokens, 0, 0);
+        }
+
         public Usage(long inputTokens, long outputTokens) {
             this(inputTokens, outputTokens, 0, 0);
+        }
+
+        /** This usage with all of it priced at the long-prompt rate. */
+        public Usage asLongPrompt() {
+            return new Usage(inputTokens, outputTokens, fallbackInputTokens, fallbackOutputTokens, inputTokens,
+                outputTokens);
         }
     }
 
@@ -127,14 +161,20 @@ public final class ClaudeApi {
     }
 
     /**
-     * What an attempt that got no answer may have cost: its input at one token per three bytes, the framing, and all
-     * the output it asked for. Charged by the caller, since the provider bills an answer that was cut off on the way.
+     * What an attempt that got no answer may have cost: its input (the provider's count when the request was counted,
+     * otherwise one token per three bytes and the framing), and all the output it asked for. Charged by the caller,
+     * since the provider bills an answer that was cut off on the way.
      */
     public static Usage unanswered(Request request) {
-        long bytes = request.user().getBytes(StandardCharsets.UTF_8).length
-            + request.system().getBytes(StandardCharsets.UTF_8).length;
-        return new Usage(AiLimits.inputEstimate(bytes) + (long) TOKENS_PER_PDF_PAGE * request.pages(),
-            request.maxTokens());
+        long input;
+        if (request.countedInputTokens() != null) {
+            input = request.countedInputTokens();
+        } else {
+            long bytes = request.user().getBytes(StandardCharsets.UTF_8).length
+                + request.system().getBytes(StandardCharsets.UTF_8).length;
+            input = AiLimits.inputEstimate(bytes);
+        }
+        return new Usage(input, request.maxTokens());
     }
 
     /**
@@ -164,6 +204,42 @@ public final class ClaudeApi {
         return new ClaudeApi(ctx.http(ClaudeService.SERVICE), ctx.secret(ClaudeService.SERVICE, "apiKey"), json);
     }
 
+    /**
+     * The provider's count of the request's input tokens ({@code POST /v1/messages/count_tokens}: free, its own rate
+     * limit), with exactly what {@link #send} sends but the output limit, the user id and the fallback, which the
+     * count does not take. A document the provider cannot read is refused here, before anything is billed
+     * ({@link ClaudeErrors}).
+     */
+    public long countTokens(Request request, java.time.Duration timeout) {
+        requireSmallEnough(request);
+        ExternalHttp.Request call = ExternalHttp.Request.post("/v1/messages/count_tokens")
+            .header("x-api-key", apiKey)
+            .header("anthropic-version", ClaudeService.API_VERSION)
+            .body("application/json", json.writeValueAsBytes(content(request, json)));
+        if (timeout != null) {
+            call = call.timeout(timeout);
+        }
+        ExternalHttp.Response response = http.send(call);
+        String text = response.text();
+        JsonNode root = parse(json, text);
+        if (response.status() < 200 || response.status() >= 300) {
+            throw failure(response.status(), root, !request.documents().isEmpty());
+        }
+        JsonNode count = root == null ? null : root.get("input_tokens");
+        if (count == null || !count.isIntegralNumber() || count.asLong() < 0) {
+            throw ClaudeErrors.badResponse("count has no input_tokens");
+        }
+        return count.asLong();
+    }
+
+    private static void requireSmallEnough(Request request) {
+        int size = request.user().getBytes(StandardCharsets.UTF_8).length;
+        if (size > MAX_INPUT_BYTES) {
+            throw ExternalJobException.permanent(AiCodes.INPUT_TOO_LARGE, "The request is " + size
+                + " bytes, more than " + MAX_INPUT_BYTES);
+        }
+    }
+
     /** Sends the request; refused before sending when the user message is too large. */
     public Answer send(Request request) {
         return send(request, null);
@@ -173,15 +249,11 @@ public final class ClaudeApi {
      * Sends the request, waiting at most {@code timeout} (null: the service's own, two minutes) for the whole answer.
      */
     public Answer send(Request request, java.time.Duration timeout) {
-        int size = request.user().getBytes(StandardCharsets.UTF_8).length;
-        if (size > MAX_INPUT_BYTES) {
-            throw ExternalJobException.permanent(AiCodes.INPUT_TOO_LARGE, "The request is " + size
-                + " bytes, more than " + MAX_INPUT_BYTES);
-        }
+        requireSmallEnough(request);
         ExternalHttp.Request call = ExternalHttp.Request.post("/v1/messages")
             .header("x-api-key", apiKey)
             .header("anthropic-version", ClaudeService.API_VERSION)
-            .json(body(request, json));
+            .body("application/json", json.writeValueAsBytes(message(request, json)));
         if (timeout != null) {
             call = call.timeout(timeout);
         }
@@ -189,7 +261,7 @@ public final class ClaudeApi {
             call = call.header("anthropic-beta", FALLBACK_BETA);
         }
         ExternalHttp.Response response = http.send(call);
-        return answer(response.status(), response.text(), json);
+        return answer(response.status(), response.text(), json, !request.documents().isEmpty());
     }
 
     /** Whether the model has the provider's fallback on a refusal (Haiku 5.5 has none). */
@@ -197,11 +269,39 @@ public final class ClaudeApi {
         return !ClaudeService.HAIKU.equals(model);
     }
 
-    /** The request's body. */
+    /** The request's body, as text (for tests and logs of shapes; {@link #send} writes the bytes directly). */
     public static String body(Request request, JsonMapper json) {
+        return json.writeValueAsString(message(request, json));
+    }
+
+    /** The body of the token count: the request as sent, without what the count does not take. */
+    public static String countBody(Request request, JsonMapper json) {
+        return json.writeValueAsString(content(request, json));
+    }
+
+    /** The message's body: the content the count takes, and the output limit, the user id and the fallback. */
+    private static Map<String, Object> message(Request request, JsonMapper json) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("model", request.model());
         body.put("max_tokens", request.maxTokens());
+        content(request, json).forEach((key, value) -> {
+            if (!"model".equals(key)) {
+                body.put(key, value);
+            }
+        });
+        if (request.userKey() != null) {
+            body.put("metadata", Map.of("user_id", request.userKey()));
+        }
+        if (fallsBack(request.model())) {
+            body.put("fallbacks", "default");
+        }
+        return body;
+    }
+
+    /** What the count and the message share: the model, thinking, output, system prompt and the user's content. */
+    private static Map<String, Object> content(Request request, JsonMapper json) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("model", request.model());
         body.put("thinking", Map.of("type", "adaptive"));
         Map<String, Object> output = new LinkedHashMap<>();
         output.put("effort", request.effort());
@@ -215,28 +315,28 @@ public final class ClaudeApi {
             Map<String, Object> block = new LinkedHashMap<>();
             block.put("type", "document");
             block.put("source", Map.of("type", "base64", "media_type", "application/pdf", "data",
-                java.util.Base64.getEncoder().encodeToString(document.pdf())));
+                document.base64()));
             block.put("title", document.title());
             content.add(block);
         }
         content.add(Map.of("type", "text", "text", request.user()));
         body.put("messages", List.of(Map.of("role", "user", "content", content)));
-        if (request.userKey() != null) {
-            body.put("metadata", Map.of("user_id", request.userKey()));
-        }
-        if (fallsBack(request.model())) {
-            body.put("fallbacks", "default");
-        }
-        return json.writeValueAsString(body);
+        return body;
     }
 
     /** A response read: a 2xx one as an {@link Answer}, any other as the failure it is. */
     public static Answer answer(int status, String text, JsonMapper json) {
+        return answer(status, text, json, false);
+    }
+
+    /**
+     * A response read; {@code documents}: whether the request sent PDFs, so that the provider's refusal of one is
+     * told apart from other refusals ({@link ClaudeErrors#failure(int, String, String, boolean)}).
+     */
+    public static Answer answer(int status, String text, JsonMapper json, boolean documents) {
         JsonNode root = parse(json, text);
         if (status < 200 || status >= 300) {
-            JsonNode error = root == null ? null : root.get("error");
-            String type = error != null && error.get("type") != null ? error.get("type").asString() : null;
-            throw ClaudeErrors.failure(status, type);
+            throw failure(status, root, documents);
         }
         if (root == null || !root.isObject()) {
             throw ClaudeErrors.badResponse("is not a JSON object");
@@ -355,6 +455,13 @@ public final class ClaudeApi {
                 materials));
         }
         return candidates;
+    }
+
+    private static ExternalJobException failure(int status, JsonNode root, boolean documents) {
+        JsonNode error = root == null ? null : root.get("error");
+        String type = error != null && error.get("type") != null ? error.get("type").asString() : null;
+        String message = error != null && error.get("message") != null ? error.get("message").asString() : null;
+        return ClaudeErrors.failure(status, type, message, documents);
     }
 
     private static String textOf(JsonNode node) {

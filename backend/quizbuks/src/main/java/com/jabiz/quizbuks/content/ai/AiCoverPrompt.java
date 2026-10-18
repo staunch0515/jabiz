@@ -54,7 +54,10 @@ public final class AiCoverPrompt {
             CoverDesigns.LAYOUTS.stream().map(CoverDesigns.Layout::name).toList()));
         properties.put("motif", Map.of("type", "string", "enum",
             CoverDesigns.MOTIFS.stream().map(CoverDesigns.Motif::name).toList()));
-        properties.put("text", Map.of("type", "string"));
+        // Length and count bounds are not part of what structured outputs accept (a 400): said in the descriptions,
+        // and checked on the answer (CoverDesigns.check).
+        properties.put("text", Map.of("type", "string", "description",
+            "At most " + CoverDesigns.MAX_TEXT + " characters, plain words"));
         Map<String, Object> cover = new LinkedHashMap<>();
         cover.put("type", "object");
         cover.put("properties", properties);
@@ -62,7 +65,8 @@ public final class AiCoverPrompt {
         cover.put("additionalProperties", false);
         Map<String, Object> root = new LinkedHashMap<>();
         root.put("type", "object");
-        root.put("properties", Map.of("covers", Map.of("type", "array", "items", cover)));
+        root.put("properties", Map.of("covers", Map.of("type", "array", "items", cover, "description",
+            "Exactly " + CoverDesigns.COVERS + " covers")));
         root.put("required", List.of("covers"));
         root.put("additionalProperties", false);
         return root;

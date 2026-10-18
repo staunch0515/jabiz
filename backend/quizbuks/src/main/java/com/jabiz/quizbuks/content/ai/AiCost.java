@@ -24,7 +24,7 @@ public final class AiCost {
     private static final Map<String, Price> PRICES = Map.of(
         ClaudeService.OPUS, Price.of("4", "20"),
         ClaudeService.SONNET, Price.of("2", "10"),
-        // Up to 100,000 input tokens a request; above (PDF materials, Q8b) the long prompts' price, HAIKU_LONG.
+        // Up to 100,000 input tokens a request; above, LONG_PROMPT_PRICES.
         ClaudeService.HAIKU, Price.of("0.10", "0.50"),
         "claude-opus-5", Price.of("5", "25"),
         "claude-opus-4-8", Price.of("5", "25"));
@@ -37,22 +37,16 @@ public final class AiCost {
 
     private static final BigDecimal MILLION = BigDecimal.valueOf(1_000_000);
 
-    /** The smallest model's price of a request of more than {@value #HAIKU_LONG_FROM} input tokens. */
-    private static final Price HAIKU_LONG = Price.of("0.50", "2.50");
-    static final long HAIKU_LONG_FROM = 100_000;
-
     /**
-     * As {@link #of(String, String, ClaudeApi.Usage, Price)}, knowing how many attempts the tokens came from: a request
-     * of the smallest model of more than {@value #HAIKU_LONG_FROM} input tokens on average is priced at the long
-     * prompts' price.
+     * The long prompts' prices (Q8b review L2): Anthropic prices each request of the smallest model above
+     * {@value ClaudeCalls#LONG_PROMPT_FROM} input tokens at this rate; the other models have one rate over their whole
+     * context window. The calls above the line are recorded apart, per call ({@code ClaudeCalls.record}).
      */
-    public static BigDecimal of(String model, String servedModel, ClaudeApi.Usage usage, Price fallback,
-        Integer attempts) {
-        int calls = attempts == null || attempts < 1 ? 1 : attempts;
-        if (ClaudeService.HAIKU.equals(model) && usage.inputTokens() / calls > HAIKU_LONG_FROM) {
-            return of(model, servedModel, usage, fallback, HAIKU_LONG);
-        }
-        return of(model, servedModel, usage, fallback);
+    private static final Map<String, Price> LONG_PROMPT_PRICES = Map.of(ClaudeService.HAIKU, Price.of("0.50", "2.50"));
+
+    /** Whether the model has a second rate for long prompts. */
+    public static boolean hasLongPromptRate(String model) {
+        return model != null && LONG_PROMPT_PRICES.containsKey(model);
     }
 
     /** The price of a model QuizBuks knows; null otherwise. */
@@ -65,27 +59,30 @@ public final class AiCost {
      *
      * @param model       the model requested
      * @param servedModel the model that answered, when it is known (a completed job)
-     * @param usage       the tokens of every attempt, with the fallback model's part
+     * @param usage       the tokens of every attempt, with the fallback model's and the long prompts' parts
      * @param fallback    the price of a model QuizBuks does not know (the parameters), or null
      */
     public static BigDecimal of(String model, String servedModel, ClaudeApi.Usage usage, Price fallback) {
-        return of(model, servedModel, usage, fallback, known(model) != null ? known(model) : fallback);
-    }
-
-    private static BigDecimal of(String model, String servedModel, ClaudeApi.Usage usage, Price fallback,
-        Price requested) {
+        Price requested = known(model) != null ? known(model) : fallback;
         long fallbackIn = usage.fallbackInputTokens();
         long fallbackOut = usage.fallbackOutputTokens();
+        long longIn = usage.longPromptInputTokens();
+        long longOut = usage.longPromptOutputTokens();
         Price fellBack = fallbackIn == 0 && fallbackOut == 0 ? requested
             : servedModel != null && !servedModel.equals(model) && known(servedModel) != null ? known(servedModel)
             : FALLBACK;
-        if (requested == null || fellBack == null) {
+        Price longPrompt = LONG_PROMPT_PRICES.getOrDefault(model, requested);
+        if (requested == null || fellBack == null || longPrompt == null) {
             return null;
         }
-        BigDecimal total = requested.input().multiply(BigDecimal.valueOf(usage.inputTokens() - fallbackIn))
-            .add(requested.output().multiply(BigDecimal.valueOf(usage.outputTokens() - fallbackOut)))
+        BigDecimal total = requested.input().multiply(BigDecimal.valueOf(
+                Math.max(0, usage.inputTokens() - fallbackIn - longIn)))
+            .add(requested.output().multiply(BigDecimal.valueOf(Math.max(0, usage.outputTokens() - fallbackOut
+                - longOut))))
             .add(fellBack.input().multiply(BigDecimal.valueOf(fallbackIn)))
-            .add(fellBack.output().multiply(BigDecimal.valueOf(fallbackOut)));
+            .add(fellBack.output().multiply(BigDecimal.valueOf(fallbackOut)))
+            .add(longPrompt.input().multiply(BigDecimal.valueOf(longIn)))
+            .add(longPrompt.output().multiply(BigDecimal.valueOf(longOut)));
         return total.divide(MILLION, 6, RoundingMode.HALF_UP);
     }
 

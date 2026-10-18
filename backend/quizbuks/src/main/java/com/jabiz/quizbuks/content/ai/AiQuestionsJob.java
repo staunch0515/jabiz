@@ -28,6 +28,9 @@ public final class AiQuestionsJob {
     /** The part of them used by the provider's fallback model (A-10), billed at its price. */
     public static final String FALLBACK_INPUT_TOKENS = "fallbackInputTokens";
     public static final String FALLBACK_OUTPUT_TOKENS = "fallbackOutputTokens";
+    /** The part of them of calls the provider prices at its long-prompt rate (Q8b review L2), priced per call. */
+    public static final String LONG_INPUT_TOKENS = "longPromptInputTokens";
+    public static final String LONG_OUTPUT_TOKENS = "longPromptOutputTokens";
 
     /** The most questions asked at once (A-12). */
     public static final int MAX_COUNT = 20;
@@ -73,12 +76,22 @@ public final class AiQuestionsJob {
      * @param difficulty    {@code EASY}, {@code MEDIUM} or {@code HARD}
      * @param existingStems the quiz's questions, so that the candidates do not repeat them; empty when not sent
      * @param userKey       the provider's opaque user id: HMAC of the sponsor's id under a key of the server's
+     * @param reservedInputTokens what the request reserved for one attempt's input (the text's estimate and, with
+     *                      PDFs, the page cap at {@value ClaudeApi#TOKENS_PER_PDF_PAGE} a page): the provider's count
+     *                      of a request with documents may not be above it ({@link AiCodes#PDF_TOO_LONG}); null for
+     *                      jobs of before Q8b
      */
     public record Input(String model, String effort, String language, int count, String difficulty, String title,
-        String intro, List<Material> materials, List<String> existingStems, String userKey) {
+        String intro, List<Material> materials, List<String> existingStems, String userKey, Long reservedInputTokens) {
         public Input {
             materials = materials == null ? List.of() : List.copyOf(materials);
             existingStems = existingStems == null ? List.of() : List.copyOf(existingStems);
+        }
+
+        /** An input without a reservation (Q8a). */
+        public Input(String model, String effort, String language, int count, String difficulty, String title,
+            String intro, List<Material> materials, List<String> existingStems, String userKey) {
+            this(model, effort, language, count, difficulty, title, intro, materials, existingStems, userKey, null);
         }
     }
 

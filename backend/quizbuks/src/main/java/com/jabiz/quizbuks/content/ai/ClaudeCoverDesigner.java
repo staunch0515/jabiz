@@ -1,7 +1,6 @@
 package com.jabiz.quizbuks.content.ai;
 
 import com.jabiz.external.ExternalJobContext;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -18,16 +17,18 @@ class ClaudeCoverDesigner implements CoverDesigner {
     private final JsonMapper json;
     private final Duration requestTimeout;
 
-    ClaudeCoverDesigner(JsonMapper json, @Value("${quizbuks.ai.request-timeout:PT2M}") Duration requestTimeout) {
+    ClaudeCoverDesigner(JsonMapper json, ClaudeCalls.Settings settings) {
         this.json = json;
-        this.requestTimeout = ClaudeCalls.requestTimeout(requestTimeout);
+        this.requestTimeout = settings.requestTimeout();
     }
 
     @Override
     public Designed design(AiCoverJob.Input input, ExternalJobContext ctx) {
         ClaudeApi.Request request = new ClaudeApi.Request(input.model(), input.effort(), AiCoverJob.MAX_TOKENS,
             AiCoverPrompt.SYSTEM, AiCoverPrompt.user(input, json), input.userKey(), AiCoverPrompt.schema(), List.of());
-        ClaudeApi.Answer answer = ClaudeCalls.ask(ctx, json, request, requestTimeout);
+        ClaudeCalls.Reserved reserved = new ClaudeCalls.Reserved(AiCoverJob.TYPE, input.reservedInputTokens(),
+            input.reservedInputTokens() == null ? Long.MAX_VALUE : input.reservedInputTokens() + AiCoverJob.MAX_TOKENS);
+        ClaudeApi.Answer answer = ClaudeCalls.ask(ctx, json, request, requestTimeout, reserved);
         List<CoverDesigns.Design> designs = AiCoverPrompt.designs(answer.text(), json);
         if (designs == null) {
             throw ClaudeErrors.badResponse("is not the covers' document");

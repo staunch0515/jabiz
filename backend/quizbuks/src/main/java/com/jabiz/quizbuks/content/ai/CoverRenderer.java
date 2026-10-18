@@ -59,7 +59,13 @@ public class CoverRenderer {
 
     private final List<Font> fonts;
 
+    @org.springframework.beans.factory.annotation.Autowired
     CoverRenderer(@Value("${jabiz.reports.pdf.fonts:}") List<String> fallbackPaths) {
+        this(fallbackPaths, true);
+    }
+
+    /** @param jvmFonts whether the JVM's own sans serif is the last resort (tests turn it off) */
+    CoverRenderer(List<String> fallbackPaths, boolean jvmFonts) {
         List<Font> loaded = new ArrayList<>();
         loaded.add(platformFont());
         for (String path : fallbackPaths == null ? List.<String>of() : fallbackPaths) {
@@ -73,13 +79,20 @@ public class CoverRenderer {
                 log.warn("The cover renderer cannot read the font {}: {}", path, e.getClass().getSimpleName());
             }
         }
-        loaded.add(new Font(Font.SANS_SERIF, Font.BOLD, 1));
+        if (jvmFonts) {
+            loaded.add(new Font(Font.SANS_SERIF, Font.BOLD, 1));
+        }
         this.fonts = List.copyOf(loaded);
     }
 
     /** A renderer with the platform's font and the JVM's only, for tests. */
     static CoverRenderer withoutFallbacks() {
-        return new CoverRenderer(List.of());
+        return new CoverRenderer(List.of(), true);
+    }
+
+    /** A renderer with the platform's Latin font only, as a server without Chinese or Japanese fonts, for tests. */
+    static CoverRenderer latinOnly() {
+        return new CoverRenderer(List.of(), false);
     }
 
     private static Font platformFont() {

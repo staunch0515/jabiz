@@ -50,6 +50,9 @@ for (const appearance of ['light', 'dark'] as const) {
     await expect(candidates.nth(0).getByRole('img')).toBeVisible()
     await expect(choice.getByTestId('ai-cover-apply')).toBeDisabled()
     await expectAccessible(page, at('sponsor AI cover choice'))
+    // A click on the picture picks it, as its radio does.
+    await candidates.nth(2).getByTestId('ai-cover-picture').click()
+    await expect(candidates.nth(2).getByTestId('ai-cover-pick')).toBeChecked()
     await candidates.nth(1).getByTestId('ai-cover-pick').click()
     await choice.getByTestId('ai-cover-apply').click()
     await expect(choice).toBeHidden()

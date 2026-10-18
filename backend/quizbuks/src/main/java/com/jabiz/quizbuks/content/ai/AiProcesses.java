@@ -457,10 +457,16 @@ public final class AiProcesses {
         params.put("materialNos", sent.stream().map(AiQuestionsJob.Material::no).toList());
         params.put("pdfMaterialNos", sent.stream().filter(m -> m.fileId() != null)
             .map(AiQuestionsJob.Material::no).toList());
-        // The pages are counted by the job: until it ends, the most a request may send is reserved.
-        long estimate = AiLimits.estimate(size, ClaudeApi.maxTokens(input.count()),
-            pdfs.isEmpty() ? 0 : pdfLimits.maxPages());
-        prepared(ctx, common, QbAi.KIND_QUESTIONS, job, params, size, estimate, pdfs);
+        // The pages are not known here (nothing reads the PDFs, review H1/H2): the most a request may send is reserved,
+        // and the job's provider count of what it sends may not be above it.
+        int pages = pdfs.isEmpty() ? 0 : pdfLimits.maxPages();
+        long reservedInput = AiLimits.reservedInput(size, pages);
+        params.put("reservedInputTokens", reservedInput);
+        long estimate = AiLimits.estimate(size, ClaudeApi.maxTokens(input.count()), pages);
+        AiQuestionsJob.Input reserved = new AiQuestionsJob.Input(job.model(), job.effort(), job.language(),
+            job.count(), job.difficulty(), job.title(), job.intro(), job.materials(), job.existingStems(),
+            job.userKey(), reservedInput);
+        prepared(ctx, common, QbAi.KIND_QUESTIONS, reserved, params, size, estimate, pdfs);
     }
 
     static void prepareCover(ProcessContext ctx, AiUserKeys userKeys) {
@@ -479,7 +485,10 @@ public final class AiProcesses {
         Map<String, Object> params = new LinkedHashMap<>();
         params.put("count", CoverDesigns.COVERS);
         params.put("language", input.language());
-        prepared(ctx, common, QbAi.KIND_COVER, job, params, size,
+        long reservedInput = AiLimits.reservedInput(size, 0);
+        params.put("reservedInputTokens", reservedInput);
+        prepared(ctx, common, QbAi.KIND_COVER, new AiCoverJob.Input(job.model(), job.effort(), job.language(),
+            job.title(), job.intro(), job.userKey(), reservedInput), params, size,
             AiLimits.estimate(size, AiCoverJob.MAX_TOKENS, 0), List.of());
     }
 
@@ -619,8 +628,7 @@ public final class AiProcesses {
             return;
         }
         AiQuestionsJob.Result result = completion.result(AiQuestionsJob.Result.class);
-        java.math.BigDecimal cost = AiCost.of(job.get("model"), result.servedModel(), usage, settings(ctx).price(),
-            completion.attempts());
+        java.math.BigDecimal cost = AiCost.of(job.get("model"), result.servedModel(), usage, settings(ctx).price());
         Map<String, Object> values = finished(usage, cost, completion.attempts(), completion.finishedTime());
         boolean failed = false;
         if (QbAi.QUEUED.equals(job.get("status"))) {
@@ -659,8 +667,7 @@ public final class AiProcesses {
     private static void completeCover(ProcessContext ctx, ExternalJobCompletion completion, EntityInstance job,
         ClaudeApi.Usage usage, String month) {
         AiCoverJob.Result result = completion.result(AiCoverJob.Result.class);
-        BigDecimal cost = AiCost.of(job.get("model"), result.servedModel(), usage, settings(ctx).price(),
-            completion.attempts());
+        BigDecimal cost = AiCost.of(job.get("model"), result.servedModel(), usage, settings(ctx).price());
         Map<String, Object> values = finished(usage, cost, completion.attempts(), completion.finishedTime());
         boolean failed = false;
         if (QbAi.QUEUED.equals(job.get("status"))) {
@@ -670,8 +677,10 @@ public final class AiProcesses {
             for (int i = 0; i < result.designs().size(); i++) {
                 UUID file = completion.files().get(AiCoverJob.fileKey(i + 1));
                 CoverDesigns.Design design = result.designs().get(i);
-                if (file == null || covers.size() >= CoverDesigns.COVERS || CoverDesigns.palette(design.palette()) == null
-                    || !CoverDesigns.text(design.text())) {
+                // Checked again as stored: the handler's check is not the last word (review L3).
+                if (file == null || covers.size() >= CoverDesigns.COVERS || design == null
+                    || CoverDesigns.palette(design.palette()) == null || !CoverDesigns.layout(design.layout())
+                    || !CoverDesigns.motif(design.motif()) || !CoverDesigns.text(design.text())) {
                     invalid++;
                     continue;
                 }
@@ -707,8 +716,7 @@ public final class AiProcesses {
             return;
         }
         ClaudeApi.Usage usage = usage(failure.usage());
-        java.math.BigDecimal cost = AiCost.of(job.get("model"), null, usage, settings(ctx).price(),
-            failure.attempts());
+        java.math.BigDecimal cost = AiCost.of(job.get("model"), null, usage, settings(ctx).price());
         Map<String, Object> values = finished(usage, cost, failure.attempts(), failure.finishedTime());
         if (QbAi.QUEUED.equals(job.get("status"))) {
             values.put("status", QbAi.FAILED);
@@ -726,7 +734,9 @@ public final class AiProcesses {
         return new ClaudeApi.Usage(metrics.getOrDefault(AiQuestionsJob.INPUT_TOKENS, 0L),
             metrics.getOrDefault(AiQuestionsJob.OUTPUT_TOKENS, 0L),
             metrics.getOrDefault(AiQuestionsJob.FALLBACK_INPUT_TOKENS, 0L),
-            metrics.getOrDefault(AiQuestionsJob.FALLBACK_OUTPUT_TOKENS, 0L));
+            metrics.getOrDefault(AiQuestionsJob.FALLBACK_OUTPUT_TOKENS, 0L),
+            metrics.getOrDefault(AiQuestionsJob.LONG_INPUT_TOKENS, 0L),
+            metrics.getOrDefault(AiQuestionsJob.LONG_OUTPUT_TOKENS, 0L));
     }
 
     private static Map<String, Object> finished(ClaudeApi.Usage usage, BigDecimal cost, Integer attempts,
@@ -825,10 +835,13 @@ public final class AiProcesses {
         }
         // Nobody knows what its attempts used: the whole estimate, as the limits reserved it.
         long estimate = QuizEditing.number(job.get("estimatedTokens"));
-        long in = Math.min(estimate, AiQuestionsJob.ATTEMPTS
-            * AiLimits.inputEstimate(QuizEditing.number(job.get("inputBytes"))));
+        // The input as the request reserved it (with PDFs, the page cap's documents: review L1), every attempt.
+        Object reserved = params(job).get("reservedInputTokens");
+        long perAttempt = reserved instanceof Number n ? n.longValue()
+            : AiLimits.inputEstimate(QuizEditing.number(job.get("inputBytes")));
+        long in = Math.min(estimate, AiQuestionsJob.ATTEMPTS * perAttempt);
         ClaudeApi.Usage usage = new ClaudeApi.Usage(in, estimate - in);
-        BigDecimal cost = AiCost.of(job.get("model"), null, usage, settings(ctx).price(), AiQuestionsJob.ATTEMPTS);
+        BigDecimal cost = AiCost.of(job.get("model"), null, usage, settings(ctx).price());
         Map<String, Object> values = finished(usage, cost, null, input.at());
         if (QbAi.QUEUED.equals(job.get("status"))) {
             values.put("status", QbAi.CANCELLED);
@@ -849,7 +862,7 @@ public final class AiProcesses {
         return ProcessDefinition.define(ACCEPT, 1, AcceptInput.class, AcceptOutput.class, ProcessContext.class,
             pb -> pb
                 .description("Adds the AI candidates the sponsor reviewed to the quiz, as the sponsor left them.")
-                .permissions(QbPermissions.AI_USE)
+                .permissions(QbPermissions.AI_USE, QbPermissions.CONTENT_WRITE)
                 .requiresVerifiedEmail()
                 .steps(CallerChecks::refuseBanned)
                 .contextFactory((start, input) -> {
@@ -1064,7 +1077,7 @@ public final class AiProcesses {
         return ProcessDefinition.define(COVER_ACCEPT, 1, CoverAcceptInput.class, EditOutput.class,
             ProcessContext.class, pb -> pb
                 .description("Makes the AI cover the sponsor chose the quiz's cover.")
-                .permissions(QbPermissions.AI_USE)
+                .permissions(QbPermissions.AI_USE, QbPermissions.CONTENT_WRITE)
                 .requiresVerifiedEmail()
                 .steps(CallerChecks::refuseBanned)
                 .contextFactory((start, input) -> {
