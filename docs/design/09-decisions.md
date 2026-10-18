@@ -1572,3 +1572,14 @@ P-8 原写"`false` 即逐条执行（16p-1 的局部合并同样受它控制）"
   示范应用与 QuizBuks 没有发出 `jabiz.*` 的流程，兼容。
 - H1 活性：`ProtectedGrants.pending` 对已记录的变更只计在它之前请求的待审批变更；超出本次批准的"用户 × 权限"若被另一个已生效变更的批准覆盖（`approvedFor`）不算增长；重设凭据不允许增长。
 - 首个管理员：`bootstrapUsers()` 为 `SEC_BOOTSTRAP_ADMIN` 建立的全部用户（建立期的计数与退役都用它）；建立期结束后（或 `always=true`）再建首个管理员被拒绝时启动记错误日志而不失败。
+⑦**评审复核三之后的修订（2026-10-18，M-a、M-b、L-a–L-d）**：
+- M-a：事实 `address`（当前邮箱、由谁何时填写、是否经邮件证明）、`newAddress`；`history` 总是保留每个用户的第一行（建立账号及其地址），省略中间
+  （`AssessProtectedChange.keepEnds`）；配置 `jabiz.security.protected-grants.trusted-email-domains` 时标出不在可信域中的地址。
+  保留"管理员建立账号时填写的地址经邮件证明后算本人的"（评审确认：地址在审批人面前可见且不能被换掉）。
+- M-b：新的受保护变更种类 `EMAIL`（`SEC_USER_EMAIL_SET`，`SecProtectedChange.email`，层级 `security.user-role.write`，审批人覆盖如重设凭据）；
+  `ProtectedGrantWriteCheck` 拒绝持有人（含待审批的获得者）邮箱的直接写入；生效时以 `jabiz.auth.email-changed` 通知旧地址；
+  已登录用户申请验证别人在建立后改过的地址、而账号不干净时 422 `EMAIL_SET_BY_ANOTHER`（`AddressVerifiable`，用于 `SPONSOR_EMAIL_VERIFY_SEND`）。
+- L-a：二次验证按最近一个改变密钥或确认的版本判断（只确认时保持原判断）；L-b：同一行的版本与操作顺序不一致时不算本人的。
+- L-c：`Approved.covers` 要求其写入仍有效、数据期限至少同样宽、生效不晚于本变更。L-d：驳回按请求记录（状态、内容哈希、驳回人）判断。
+- `PublishEvent`：只记录保留类型的平台步骤（按身份）；代码来源按类只算一次（`ClassValue`）；其局限见 11 §2。
+- 审批事实中的过去地址随审批记录封存而永久留存（21 §3.2）。

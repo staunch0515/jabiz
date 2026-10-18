@@ -55,7 +55,7 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
   以订阅 `jabiz.approval.approved` / `rejected` 继续；不自己写审批状态机或"准备人不能审批"之类的检查。审批对象的显示名写在消息 `approval.subject.<名>`，`ApprovalCase.reference(…)` 给出人认得的单据标识（待办标题用它，18 §5.2）。审批规则、限额、职责分离规则与受控的业务参数（`ControlledParams` Bean，04 §9.1、决策 D40）只经
   `CONTROL_CHANGE_PROPOSE` / `CONTROL_CHANGE_PUBLISH`（四眼）修改。
   授予受保护的权限（`jabiz.security.protected-grants.permissions`，缺省含 `*`、改权限、审批、记账与改参数的权限）、对其持有人重设密码 / 二次验证 / 关联外部账号，
-  须另一位管理员审批（10 §16、决策 D48）：只经 `SEC_USER_ROLE_ASSIGN`、`SEC_ROLE_PERMISSION_ADD`、`SEC_USER_IDENTITY_LINK`、`SEC_USER_SET_PASSWORD`、`SEC_MFA_RESET`，
+  须另一位管理员审批（10 §16、决策 D48）：只经 `SEC_USER_ROLE_ASSIGN`、`SEC_ROLE_PERMISSION_ADD`、`SEC_USER_IDENTITY_LINK`、`SEC_USER_SET_PASSWORD`、`SEC_MFA_RESET`、`SEC_USER_EMAIL_SET`（持有人的邮箱），
   平台在 `VersionAppender` 中拒绝其他途径；不在业务流程中自己授予这类权限；建立期（首个管理员之外不足两位 `*` 管理员）内当即生效，之后首个管理员永久退出受保护的操作。
   审批人须持有变更给出的全部受保护权限；获得者的凭据须是本人的（所有权链：管理员知道过的密码及由它改出的都不算，管理员建的账号先由本人经邮件找回密码）。
   以 `jabiz.` 开头的事件类型只由平台发出，应用的事件用应用自己的名字。

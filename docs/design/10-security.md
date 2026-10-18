@@ -774,6 +774,7 @@ jabiz:
 | `PASSWORD` 重设密码 | 用户持有受保护权限 | `SEC_USER_SET_PASSWORD`（不变） | `security.user-role.write` |
 | `MFA_RESET` 重置二次验证 | 同上 | `SEC_MFA_RESET`（不变） | `security.user-role.write` |
 | `IDENTITY_LINK` 关联外部账号 | 同上，且不是用户本人关联（§12 的本人关联不受影响） | `SEC_USER_IDENTITY_LINK {userId, provider, subject, reason}` | `security.user-role.write` |
+| `EMAIL` 更改邮箱 | 用户持有（或有待审批的变更将给他）受保护权限（评审 M-b：找回密码的链接寄往邮箱） | `SEC_USER_EMAIL_SET {userId, email, reason}` | `security.user-role.write` |
 
 - **审批人**（评审 H2）：除层级的权限与 `approval.decide` 外，须持有 `*`，或持有管理员的权限（`security.user-role.write` / `security.role.write`）**并且**持有这次变更给出的
   全部受保护权限（重设凭据时为目标用户持有的全部受保护权限）：谁也不能批准比自己持有的更多的东西；能重设密码的人（`security.user.password`）不能批准接管管理员的账号。
@@ -800,8 +801,10 @@ SEC_PROTECTED_CHANGE_APPLY（internal，事件消费者）──► 再经 Requi
   与 `SecUser.passwordHash` 同等保存，读接口不返回）、原因、申请人；状态（`PENDING` → `APPLIED` / `REJECTED` / `FAILED`）、审批人、结果编号、失败原因只由流程写。
   数据视图 `processOnlyWrites`，读权限 `approval.read`。
 - **审批对象** `jabiz.security.protected-change`（实体 `SecProtectedChange`，事实 `kind`、`user`、`role`、`permission`、`gained`（给出的受保护权限）、`affected`（所针对的用户名）、
-  `credentials`（他们的密码最后由谁、何时设置，以及凭据是否本人的）、`history`（他们凭据的**全部历史**：谁建立了账号，每一次密码、邮箱、二次验证与外部关联的变更，
-  各带操作人、时间、流程与是否本人的判断；过长时保留最近的部分））：**层级由平台固定**（`RequireApproval.fixed`，18 §3.3），一层，权限见上表，不读任何审批规则——规则是数据，不能让这类变更"不需要审批"。
+  `credentials`（他们的密码最后由谁、何时设置，以及凭据是否本人的）、`address`（当前邮箱：谁、何时填写或更改，是否经邮件链接证明；
+  配置了 `jabiz.security.protected-grants.trusted-email-domains` 时标出不在这些域（及其子域）中的地址）、`newAddress`（更改邮箱时的新地址）、
+  `history`（他们凭据的**全部历史**：谁建立了账号，每一次密码、邮箱、二次验证与外部关联的变更，各带操作人、时间、流程与是否本人的判断；
+  过长时**总是保留第一行（建立账号及其地址）**，省略中间、保留最近的部分，评审 M-a））：**层级由平台固定**（`RequireApproval.fixed`，18 §3.3），一层，权限见上表，不读任何审批规则——规则是数据，不能让这类变更"不需要审批"。
   审批内容（`ContentHash`）是变更的全部内容（含新密码的哈希、要删除的二次验证的编号），**并包括请求时给出的受保护权限与所针对的用户**（评审 H1），
   单据标识（待办标题）如 `alice ← POSTER (ledger.post)`、`POSTER + ledger.post (3)`、`alice: PASSWORD`。
 - **职责分离**（`APPROVAL_DECIDE`，18 §3.4）：申请人不能审批（`APPROVAL_OWN_REQUEST`）；**变更所针对的用户**不能批准（422 `APPROVAL_TARGET_USER`，按审批时的情况判断：
@@ -815,7 +818,10 @@ SEC_PROTECTED_CHANGE_APPLY（internal，事件消费者）──► 再经 Requi
   不是本人的（`TARGET_CREDENTIALS_NOT_OWN`，评审 M3，见下）；目标已存在或已不在（`ALREADY_ASSIGNED`、`ALREADY_GRANTED`、`IDENTITY_IN_USE`、`USER_NOT_FOUND`；
   二次验证已不是批准时的那一个 `MFA_CHANGED`，未绑定 `MFA_NOT_ENROLLED`）——任何一项都记 `FAILED`（失败原因），不写入。
   都满足且 `RequireApproval` 对同一内容答 `APPROVED` 才以 `ProtectedChangeGrant`（只有本包能生成，绑定实体与操作）写入。生效时间已过的按批准时生效。
-  授予（分配、角色权限）同时**吊销获得者的全部会话**（原因 `PROTECTED_GRANT`），重设密码同时吊销该用户的全部会话（同 §2）。驳回（内容哈希相同）记 `REJECTED`。事件重复投递时第二次什么也不做。
+  授予（分配、角色权限）同时**吊销获得者的全部会话**（原因 `PROTECTED_GRANT`），重设密码同时吊销该用户的全部会话（同 §2），更改邮箱同时向**旧地址**发一封通知
+  （`jabiz.auth.email-changed`）。驳回按请求的记录判断（请求状态为驳回、内容哈希相同、驳回人取自 `sys_approval_decision`，不取事件中的值，评审 L-d）后记 `REJECTED`。
+  事件重复投递时第二次什么也不做。
+  另一个已生效变更的批准只在它写入的分配或授权**仍然有效**、数据期限**至少同样宽**、且生效**不晚于**本变更时才算覆盖（评审 L-c）。
 - **获得者的凭据须是自己的**（评审 M3 及其复核）：否则管理员甲可以先建（或重设）用户 U、知道 U 的密码，再申请给 U 管理员的权限，管理员乙批准后甲就控制了第二个管理员；
   只看"最后一次是谁改的"不够——甲以 U 的身份登录、"本人"改一次密码即可。平台按账号的全部历史、按操作顺序判断一条**所有权链**（`CredentialChain`，不另存）：
   一个凭据只有在建立时**没有别人可能知道一个可用的凭据**才是本人的。
@@ -824,11 +830,18 @@ SEC_PROTECTED_CHANGE_APPLY（internal，事件消费者）──► 再经 Requi
     以及由这样的密码"本人"改出来的密码——知道旧密码的管理员同样能改它——直到经邮件链接重设为止。
   - **邮箱**是本人的：注册时的地址；或账号干净时由本人设置。管理员建立账号时填写的地址在一次邮件链接证明它之后算本人的——此后的一切取决于谁读那个邮箱，
     审批人在事实中看得见这个地址，与自助注册的账号相同；管理员**之后改过**的地址不是（这正是接管账号的方式），它被验证（因而能收到找回密码的链接）时账号不干净。
-  - **外部关联**本人的：经提供方开户，或账号干净时本人关联；**二次验证**本人的：账号干净时本人绑定（按该绑定的第一个版本判断：之后的版本是平台写的，例如以恢复码登录时，评审 M3 复核）。
+  - **外部关联**本人的：经提供方开户，或账号干净时本人关联；**二次验证**本人的：账号干净时本人设置其密钥——按最近一个改变密钥或确认状态的版本判断
+    （重新开始绑定会在同一行写入新的密钥，评审 L-a；只确认不能使别人看见过的密钥变成本人的），只消耗恢复码的版本（`SPONSOR_MFA_VERIFY`）不算。
+  - 同一行的版本须与其操作的先后一致；两个事务提交顺序与操作顺序相反时，什么也不算本人的（评审 L-b）。
   - **干净**：密码不是别人的、每个外部关联都是本人的、没有已验证的别人设置的邮箱；凭据是本人的 = 干净且每个二次验证都是本人的。没有任何凭据的账号（没有人能以它登录）是本人的。
   - 因此管理员建立的账号要得到受保护的权限，须先由本人经邮件找回密码（或在没有任何凭据时授权，之后的重设密码本身要审批，§16.1）；自助注册与经提供方开户的账号照常。
+  - **邮箱不能被换掉**（评审 M-b）：持有受保护权限、或有待审批的变更将给他受保护权限的用户，其邮箱只经 `EMAIL` 变更（审批人须覆盖他持有的受保护权限）；
+    直接写入（数据视图、实体 API 等）一律 422 `PROTECTED_CHANGE_REQUIRES_APPROVAL`。其他用户的邮箱照旧直接修改（`SEC_USER_EMAIL_SET` 当即生效）。
+    别人在建立账号**之后**改过的地址，在别人可能知道该账号的登录方式（账号不干净）时不能由已登录的用户申请验证（422 `EMAIL_SET_BY_ANOTHER`）：
+    申请的人可能不是用户，验证链接会寄到改地址的人选的邮箱；建立账号时填写的地址照旧由本人登录后验证。
   - **剩余风险**：平台判断不了谁读一个邮箱、谁拿着一部手机或提供方的账号——能控制用户邮箱（邮件服务器的管理员）、设备或提供方账号的管理员仍能冒充用户。
     这一点只能靠检测性控制：审批人核对事实中的地址与历史，访问审查（§13.3）、审计（21 §1）与登录记录（§3）事后发现。
+  - 审批的事实随请求写入审批记录并逐行封存（21 §2）：其中用户过去的地址与历史因此**永久留存**，不随用户的删除或保留期而去（21 §3）。
 - **并发**（评审 M2）：判断授权的每一处（请求流程、写入检查、审批、生效）先取职责分离的锁（`jabiz.sod`，事务级咨询锁），再读数据：
   两个同时进行的权限变更——包括撤销与取消预定，它们不经过引用检查——不能各自通过检查。职责分离的写入检查同样移到这个必经之处，撤销与取消预定也受它约束（以前不受）。
 - **其他写入途径一律拒绝**（`ProtectedGrantWriteCheck`，在 `VersionAppender` 中，即一切时态写入的必经之处，18 §3.5 的受控参数同理）：使 `SecUserRole`、`SecRolePermission`、
@@ -880,8 +893,9 @@ SEC_PROTECTED_CHANGE_APPLY（internal，事件消费者）──► 再经 Requi
 同一授权请求两次时第二次 `ALREADY_ASSIGNED`；数据期限与生效时间的往返；审批人在生效前失去权限时 `APPROVER_NOT_ALLOWED`；外部账号被抢先关联时 `IDENTITY_IN_USE`；
 数据视图、实体 API、`ADD_ENTITY`（只经实体 API）、业务流程的同一变更集（两种顺序）、预定的分配、导入、撤销删除、取消预定的删除都被拒绝；
 请求与撤销在另一个权限变更未提交时等待并看到它；建立期记录不能删除；变更只经流程；应用流程是内部的；不受保护的授权与之前相同；已持有不算获得）、
-`ProtectedGrantCredentialsIT`（自助注册并本人改过的密码生效并结束会话；管理员填写的邮箱经找回密码证明后生效、之前不生效；管理员改过的邮箱上的找回密码不生效；
-以恢复码登录后二次验证仍是本人的）、`ProtectedGrantRebootstrapIT`（再建的首个管理员同样退役）、`ProtectedGrantAlwaysRebootstrapIT`（`always=true` 时不再建首个管理员并记错误日志）、
+`ProtectedGrantIT` 另有（评审 verify3）：持有人的邮箱只经审批更改并通知旧地址、待审批授权的用户的邮箱同样受保护、所覆盖的授权已撤销时 `CHANGE_GREW`、
+伪造的驳回事件不生效；`ProtectedGrantCredentialsIT`（自助注册并本人改过的密码生效并结束会话；管理员填写的邮箱经找回密码证明后生效、之前不生效；管理员改过的邮箱上的找回密码不生效；
+以恢复码登录后二次验证仍是本人的；别人改过的地址在账号不干净时不能申请验证；事实中的地址与可信域标记）、`ProtectedGrantRebootstrapIT`（再建的首个管理员同样退役）、`ProtectedGrantAlwaysRebootstrapIT`（`always=true` 时不再建首个管理员并记错误日志）、
 `ProtectedGrantSetupIT`（首个管理员在建立期内直接授权、有了另一位管理员后永久退役而其他操作照旧、预定一年后删除的管理员现在仍算、第三位之后需要审批、
 停用管理员不重开建立期也不让首个管理员复职）、`ProtectedGrantAlwaysIT`（`always=true` 的首次启动与之后的审批）、`ProtectedGrantsOffIT`（关闭时与之前相同；
 建立期结束后关闭留有操作记录）；`SodIT`（撤销与取消预定同样受职责分离约束）；core `ProtectedPermissionsTest`、runtime `ApproverCoverageTest`（含生效时的 `mayDecide`）、`CredentialChainTest`（所有权链）、`PublishEventReservedTest`（`jabiz.*` 事件只由平台发出）。
