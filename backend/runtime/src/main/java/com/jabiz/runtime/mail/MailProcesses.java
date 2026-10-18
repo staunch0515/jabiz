@@ -99,8 +99,7 @@ public class MailProcesses {
         }
         Optional<MailTemplate> template = templates.find(input.template()).filter(MailTemplate::unsubscribable);
         if (template.isEmpty()) {
-            ctx.reject(new Violation("template", PlatformErrorCodes.INVALID_VALUE,
-                input.template() + " is not a notification template", Map.of("field", "template")));
+            ctx.reject(notANotification(input.template()));
             return;
         }
         List<EntityInstance> existing = (List<EntityInstance>) ctx.get(PREFERENCES);
@@ -120,6 +119,12 @@ public class MailProcesses {
             ctx.changes().update(SecurityEntities.USER_MAIL_PREFERENCE, current.id(), current.version(),
                 Map.of("subscribed", input.subscribed()));
         }
+    }
+
+    /** The refusal of a template the user cannot choose: none of that name, or no notification. */
+    static Violation notANotification(String template) {
+        return new Violation("template", PlatformErrorCodes.INVALID_VALUE, template + " is not a notification template",
+            Map.of("field", "template"));
     }
 
     @Bean

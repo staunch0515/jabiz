@@ -33,6 +33,9 @@ public final class ItMailFixtures {
         .category(MailCategory.TRANSACTIONAL).token("reset", Duration.ofHours(1)));
     public static final MailTemplate NEWS = MailTemplate.define("it.news", t -> t
         .category(MailCategory.NOTIFICATION).param("item"));
+    /** A notification for the users of the portal only (decision D49): not among the administration's preferences. */
+    public static final MailTemplate OFFERS = MailTemplate.define("it.offers", t -> t
+        .category(MailCategory.NOTIFICATION).param("item").entries("portal"));
 
     /**
      * @param template {@code verify}, {@code reset} or {@code news}
@@ -135,6 +138,11 @@ public final class ItMailFixtures {
         @Bean
         MailTemplate itNewsMail() {
             return NEWS;
+        }
+
+        @Bean
+        MailTemplate itOffersMail() {
+            return OFFERS;
         }
 
         @Bean

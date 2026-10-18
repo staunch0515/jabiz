@@ -24,13 +24,20 @@ import java.util.regex.Pattern;
  * a sign-in entry's frontend ({@value #ENTRY_URL} for the entry the parameter {@value #ENTRY_PARAM} names,
  * {@code {entryUrl.<entry>}} for a named one; decision D43 item 4) and, for {@link MailCategory#NOTIFICATION},
  * {@value #UNSUBSCRIBE_URL}.
+ * <p>
+ * A notification's recipients choose whether they receive it, among the templates of the sign-in entry they are
+ * signed in at ({@link #entries}; all when none is named), under its display name, the message
+ * {@code mail.<name>.name} (phase 16s; decision D49).
  *
  * @param name     unique; letters, digits and {@code . _ : -} like event names, at most 100 characters
  * @param category whether recipients may unsubscribe
  * @param params   names of the values the sending process gives, in declaration order
  * @param tokens   one-time tokens by purpose (also their placeholder), with how long each is valid
+ * @param entries  the sign-in entries whose users the template is for, which list it among their mail preferences;
+ *                 empty: every entry (decision D49 item 1)
  */
-public record MailTemplate(String name, MailCategory category, List<String> params, Map<String, Duration> tokens) {
+public record MailTemplate(String name, MailCategory category, List<String> params, Map<String, Duration> tokens,
+    Set<String> entries) {
 
     /** Names of templates: as event names. */
     public static final Pattern NAME = Pattern.compile("[A-Za-z0-9._:-]{1,100}");
@@ -67,6 +74,13 @@ public record MailTemplate(String name, MailCategory category, List<String> para
         Objects.requireNonNull(category, "Mail template " + name + " needs a category");
         params = List.copyOf(params);
         tokens = Collections.unmodifiableMap(new LinkedHashMap<>(tokens));
+        entries = Collections.unmodifiableSet(new LinkedHashSet<>(entries == null ? Set.of() : entries));
+        for (String entry : entries) {
+            if (entry == null || !ENTRY_NAME.matcher(entry).matches()) {
+                throw new IllegalArgumentException("The sign-in entry '" + entry + "' of mail template " + name
+                    + " must match " + ENTRY_NAME.pattern());
+            }
+        }
         Set<String> seen = new LinkedHashSet<>();
         for (String param : params) {
             requireName(name, "parameter", param, PARAM);
@@ -88,6 +102,11 @@ public record MailTemplate(String name, MailCategory category, List<String> para
         }
     }
 
+    /** A template for the users of every sign-in entry (as before phase 16s). */
+    public MailTemplate(String name, MailCategory category, List<String> params, Map<String, Duration> tokens) {
+        this(name, category, params, tokens, Set.of());
+    }
+
     private static void requireName(String template, String what, String value, Pattern pattern) {
         if (value == null || !pattern.matcher(value).matches()) {
             throw new IllegalArgumentException("The " + what + " '" + value + "' of mail template " + template
@@ -102,7 +121,7 @@ public record MailTemplate(String name, MailCategory category, List<String> para
     public static MailTemplate define(String name, Consumer<Builder> spec) {
         Builder builder = new Builder();
         Objects.requireNonNull(spec, "spec must not be null").accept(builder);
-        return new MailTemplate(name, builder.category, builder.params, builder.tokens);
+        return new MailTemplate(name, builder.category, builder.params, builder.tokens, builder.entries);
     }
 
     /** Message code of the subject. */
@@ -113,6 +132,20 @@ public record MailTemplate(String name, MailCategory category, List<String> para
     /** Message code of the Markdown body. */
     public String bodyKey() {
         return "mail." + name + ".body";
+    }
+
+    /** Message code of the name recipients know it by among their mail preferences (decision D49 item 2). */
+    public String nameKey() {
+        return "mail." + name + ".name";
+    }
+
+    /**
+     * Whether the template is for users signed in at {@code entry} (null or blank: the administration's, as
+     * everywhere entries are named): every entry when it names none.
+     */
+    public boolean appliesTo(String entry) {
+        return entries.isEmpty() || entries.contains(entry == null || entry.isBlank()
+            ? com.jabiz.context.RequestContext.DEFAULT_ENTRY : entry);
     }
 
     /** Whether the recipient may turn it off. */
@@ -171,8 +204,22 @@ public record MailTemplate(String name, MailCategory category, List<String> para
         private MailCategory category;
         private final List<String> params = new ArrayList<>();
         private final Map<String, Duration> tokens = new LinkedHashMap<>();
+        private final Set<String> entries = new LinkedHashSet<>();
 
         private Builder() {}
+
+        /**
+         * The sign-in entries ({@code jabiz.security.entries.<name>}) whose users the template is for: a notification
+         * is listed among the mail preferences of users signed in there only. Not declared: every entry. The entries
+         * must exist (startup check {@code MAIL}).
+         */
+        public Builder entries(String... names) {
+            if (names.length == 0) {
+                throw new IllegalArgumentException("entries() names no sign-in entry; leave it out for every entry");
+            }
+            entries.addAll(List.of(names));
+            return this;
+        }
 
         public Builder category(MailCategory category) {
             this.category = category;

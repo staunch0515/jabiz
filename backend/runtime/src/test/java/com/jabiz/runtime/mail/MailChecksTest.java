@@ -118,6 +118,38 @@ class MailChecksTest {
     }
 
     @Test
+    void warnsOfANotificationWithoutItsDisplayNameInALanguage() {
+        MailTemplate unnamed = MailTemplate.define("t.partial", t -> t.category(MailCategory.NOTIFICATION));
+        // t.news is named in both languages; t.partial (here a notification) in neither, and its texts are English
+        // only and lack the unsubscribe link: the errors stay as they were.
+        List<CheckProblem> problems = checks(false, "", "", null, catalog(Locale.ENGLISH, Locale.CHINESE), NEWS,
+            unnamed).check();
+        assertThat(problems).filteredOn(problem -> problem.severity() == CheckProblem.Severity.WARNING)
+            .extracting(CheckProblem::location, CheckProblem::message).containsExactly(
+                org.assertj.core.groups.Tuple.tuple("mail template t.partial", "has no message mail.t.partial.name "
+                    + "[en]: its users see the name of the template among their mail preferences"),
+                org.assertj.core.groups.Tuple.tuple("mail template t.partial", "has no message mail.t.partial.name "
+                    + "[zh]: its users see the name of the template among their mail preferences"));
+        // Transactional mail is not among the preferences and needs no name.
+        assertThat(checks(false, "", "", null, catalog(Locale.ENGLISH), OK).check()).isEmpty();
+    }
+
+    @Test
+    void theEntriesATemplateIsDeclaredForMustExist() {
+        MailTemplate shop = MailTemplate.define("t.news", t -> t.category(MailCategory.NOTIFICATION).param("name")
+            .entries("shop", "gone-away"));
+        StaticListableBeanFactory beans = new StaticListableBeanFactory();
+        beans.addBean("template", shop);
+        List<CheckProblem> problems = new MailChecks(false, "", "", beans.getBeanProvider(JavaMailSender.class),
+            beans.getBeanProvider(MailTemplate.class), catalog(Locale.ENGLISH), name -> false,
+            name -> name.equals("shop")).check();
+        assertThat(problems).extracting(CheckProblem::severity, CheckProblem::location, CheckProblem::message)
+            .containsExactly(org.assertj.core.groups.Tuple.tuple(CheckProblem.Severity.ERROR, "mail template t.news",
+                "is declared for the sign-in entry gone-away, but there is no usable sign-in entry gone-away "
+                    + "(jabiz.security.entries.gone-away)"));
+    }
+
+    @Test
     void reportsATemplateDeclaredTwice() {
         assertThat(checks(false, "", "", null, catalog(Locale.ENGLISH), OK, OK).check())
             .extracting(CheckProblem::message).containsExactly("is declared more than once");

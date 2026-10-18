@@ -372,7 +372,7 @@ class MailIT extends SecurityItSupport {
         String self = TestTokens.bearer(jwt, user);
         assertThat(get("/api/auth/mail/preferences", self).expectStatus().isOk().expectBody(MAP).returnResult()
             .getResponseBody()).extractingByKey("templates").asList()
-            .contains(Map.of("template", "it.news", "subscribed", false));
+            .contains(Map.of("template", "it.news", "subscribed", false, "displayName", "News"));
         post("/api/auth/mail/preferences", self, Map.of("template", "it.news", "subscribed", true))
             .expectStatus().isOk();
         send("news", user, "plums");
