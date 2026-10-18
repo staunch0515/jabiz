@@ -39,7 +39,7 @@ import {
   type QuestionFigures,
   type TrendRange,
 } from './api'
-import { TrendCharts } from './charts'
+import { ScrollRegion, TrendCharts } from './charts'
 import { UpdatedNote } from './DashboardCharts'
 import { ExportButtons } from './ExportButtons'
 import { Funnel } from './Funnel'
@@ -187,7 +187,7 @@ function QuestionsSection({ questions, o }: { questions: QuestionFigures[]; o: O
         </p>
       )}
       {questions.length > 0 && (
-        <div className="overflow-x-auto">
+        <ScrollRegion label={t('analytics.questions.label')}>
           <Table aria-label={t('analytics.questions.label')}>
             <TableHeader>
               <TableRow>
@@ -231,7 +231,7 @@ function QuestionsSection({ questions, o }: { questions: QuestionFigures[]; o: O
               ))}
             </TableBody>
           </Table>
-        </div>
+        </ScrollRegion>
       )}
       <p className="text-muted-foreground text-xs">{t('analytics.questions.difficultyHint')}</p>
     </section>

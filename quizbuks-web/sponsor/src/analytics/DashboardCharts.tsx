@@ -6,7 +6,7 @@ import { formatKudos } from '../qb/kudos'
 import { QB } from '../qb/messages'
 import { Link } from '../qb/router'
 import { analyticsPath, zoneTime, type Dashboard } from './api'
-import { TrendCharts } from './charts'
+import { ScrollRegion, TrendCharts } from './charts'
 import { useDashboard, useTop, useTrend } from './hooks'
 import { Metric } from './Metric'
 import './messages'
@@ -73,7 +73,7 @@ function TopPublications() {
         <p className="text-muted-foreground text-sm" data-testid="top-empty">{t('analytics.top.empty')}</p>
       )}
       {top.isSuccess && top.data.length > 0 && (
-        <div className="overflow-x-auto">
+        <ScrollRegion label={t('analytics.top.title')}>
           <Table>
             <TableHeader>
               <TableRow>
@@ -103,7 +103,7 @@ function TopPublications() {
               ))}
             </TableBody>
           </Table>
-        </div>
+        </ScrollRegion>
       )}
     </section>
   )

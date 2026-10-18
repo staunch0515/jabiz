@@ -25,12 +25,27 @@ import './messages'
  * Colours are the theme's chart tokens only (`--chart-1`, `--chart-2`), defined for light and dark.
  */
 
+/**
+ * A wide table that scrolls sideways on a narrow screen: the scrolling container is a named region that takes the
+ * focus (keyboard users scroll it with the arrow keys), as the platform's `DataTable` does; the table's own container
+ * then does not scroll.
+ */
+export function ScrollRegion({ label, children, className }: { label: string; children: ReactNode;
+  className?: string }) {
+  return (
+    <div role="region" aria-label={label} tabIndex={0}
+      className={`focus-visible:ring-ring/50 overflow-x-auto rounded-md outline-none focus-visible:ring-[3px] [&>[data-slot=table-container]]:overflow-visible ${className ?? ''}`}>
+      {children}
+    </div>
+  )
+}
+
 /** A table behind a native disclosure: the data of a chart for those who cannot read the chart. */
 export function DataDisclosure({ label, children, testId }: { label: string; children: ReactNode; testId?: string }) {
   return (
     <details className="group text-sm" data-testid={testId}>
       <summary className="text-primary w-fit cursor-pointer underline-offset-4 hover:underline">{label}</summary>
-      <div className="mt-2 overflow-x-auto">{children}</div>
+      <ScrollRegion label={label} className="mt-2">{children}</ScrollRegion>
     </details>
   )
 }

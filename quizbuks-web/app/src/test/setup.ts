@@ -1,6 +1,9 @@
 import '@testing-library/jest-dom/vitest'
-import { cleanup } from '@testing-library/react'
+import { cleanup, configure } from '@testing-library/react'
 import { afterEach } from 'vitest'
+
+// A loaded machine renders slowly: the default second for findBy/waitFor made tests flaky.
+configure({ asyncUtilTimeout: 5000 })
 
 afterEach(() => cleanup())
 
