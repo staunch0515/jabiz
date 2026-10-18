@@ -16,12 +16,7 @@ import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.time.Clock;
-import java.time.Instant;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
-import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Map;
 
@@ -81,8 +76,8 @@ public class DeletionGuard {
         if (policy == null || !policy.complete()) {
             return null;
         }
-        LocalDate today = LocalDate.ofInstant(clock.instant(), ZoneOffset.UTC);
-        LocalDate start = date(attributes == null ? null : attributes.get(policy.from()));
+        LocalDate today = policies.today(clock);
+        LocalDate start = policies.dateOf(attributes == null ? null : attributes.get(policy.from()));
         if (!policy.keeps(start, today, policies.fiscalYearEnd())) {
             return null;
         }
@@ -101,29 +96,5 @@ public class DeletionGuard {
                     list.isEmpty() ? Rows.string(row.get("match_field")) : null,
                     Rows.string(row.get("match_value"))), Rows.string(row.get("hold_name")));
             });
-    }
-
-    /** The date of a time field's value, in UTC; null when there is none. */
-    static LocalDate date(Object value) {
-        return switch (value) {
-            case null -> null;
-            case LocalDate date -> date;
-            case Instant instant -> LocalDate.ofInstant(instant, ZoneOffset.UTC);
-            case OffsetDateTime time -> LocalDate.ofInstant(time.toInstant(), ZoneOffset.UTC);
-            case LocalDateTime time -> time.toLocalDate();
-            default -> parse(String.valueOf(value));
-        };
-    }
-
-    private static LocalDate parse(String text) {
-        try {
-            return LocalDate.ofInstant(Instant.parse(text), ZoneOffset.UTC);
-        } catch (DateTimeParseException e) {
-            try {
-                return LocalDate.parse(text);
-            } catch (DateTimeParseException ignored) {
-                return null;
-            }
-        }
     }
 }

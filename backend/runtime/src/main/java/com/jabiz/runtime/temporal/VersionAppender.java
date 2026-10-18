@@ -45,10 +45,13 @@ public class VersionAppender {
 
     private final AuditRecorder audit;
     private final List<TemporalWriteGuard> guards;
+    /** Lazily: the checks read through the entity manager, which writes through this. */
+    private final org.springframework.beans.factory.ObjectProvider<TemporalWriteCheck> checks;
 
     public VersionAppender(TemporalStore store, Clock clock, Outbox outbox, AuditRecorder audit,
-        List<TemporalWriteGuard> guards) {
+        List<TemporalWriteGuard> guards, org.springframework.beans.factory.ObjectProvider<TemporalWriteCheck> checks) {
         this.guards = List.copyOf(guards);
+        this.checks = checks;
         this.audit = Objects.requireNonNull(audit, "audit must not be null");
         this.store = Objects.requireNonNull(store, "store must not be null");
         this.clock = Objects.requireNonNull(clock, "clock must not be null");
@@ -77,6 +80,26 @@ public class VersionAppender {
             if (!refused.isEmpty()) {
                 return Mono.error(new BusinessRuleViolationException(List.copyOf(new LinkedHashSet<>(refused))));
             }
+            List<TemporalWriteCheck> asked = checks.orderedStream().toList();
+            if (asked.isEmpty()) {
+                return write(engine, table, def, id, timeline, write, operation, checkUnique, request, plan);
+            }
+            return Flux.fromIterable(asked)
+                .concatMap(check -> check.check(engine, def, id, timeline, plan.versions(), operation, grant))
+                .collectList()
+                .flatMap(found -> {
+                    List<Violation> all = found.stream().flatMap(List::stream).toList();
+                    return all.isEmpty()
+                        ? write(engine, table, def, id, timeline, write, operation, checkUnique, request, plan)
+                        : Mono.error(new BusinessRuleViolationException(List.copyOf(new LinkedHashSet<>(all))));
+                });
+        }));
+    }
+
+    private Mono<List<PlannedVersion>> write(StorageEngine engine, String table, EntityDefinition def, UUID id,
+        Timeline timeline, VersionPlanner.Write write, Operation operation, boolean checkUnique,
+        com.jabiz.context.RequestContext request, VersionPlanner.Plan plan) {
+        {
             if (plan.hasConflicts()) {
                 return Mono.error(conflict(def, id, write, plan));
             }
@@ -106,7 +129,7 @@ public class VersionAppender {
                     ? Mono.<Void>empty()
                     : published(engine, def, id, plan.versions().getFirst())))
                 .then(Mono.just(plan.versions()));
-        }));
+        }
     }
 
     /**

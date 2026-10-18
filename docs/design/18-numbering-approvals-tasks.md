@@ -129,6 +129,8 @@
 - 请求记录准备人、规则与其版本、内容哈希、层级、事实、当前层级。每次评估写一行只追加的 `ApprovalEvaluation`（结论、所评估的全部规则版本 `规则ID:版本号`、
   成立的规则、事实、内容哈希、业务时间、操作）。
 - 同一单据的评估以事务级 advisory lock 串行，一个单据不会出现两个待审批请求。
+- **平台固定的层级**（平台用，【决策 D48】）：`RequireApproval.fixed(条件, 对象, 案件, ctx -> 层级列表, 键)` 不读规则，每个案件都需要给出的层级；请求不记规则
+  （`ruleId` / `ruleVersionNo` 为空，`V41`），评估记录的成立规则为空。受保护的授权（10 §16，对象 `jabiz.security.protected-change`）用它：是否需要审批不能取决于可改的数据。
 - `WithdrawApproval.of(对象, ctx -> 单据标识)`：撤回单据的待审批请求（`WITHDRAWN`，如单据作废）；已批准的请求保留（它绑定内容）。
 - 引用未声明的审批对象，启动时报告（`CheckedStep`）。
 
@@ -144,6 +146,9 @@
 | 操作人未判断过本请求的其他层级（`sys_approval_decision` 上 `UNIQUE(request_id, approver_id)` 兜底） | 422 `APPROVAL_ALREADY_DECIDED` |
 | 批准有 `limitFact` 的层级：操作人对该审批对象的限额 ≥ 事实值（没有限额即不满足） | 422 `APPROVAL_LIMIT_EXCEEDED` |
 | 驳回写明理由 | 422 `REASON_REQUIRED` |
+
+平台另可按审批对象加检查（`ApprovalDecisionCheck`，runtime，平台用；判断之前、取得请求之后运行）：受保护的授权要求近期二次验证、拒绝首个管理员（403 `BOOTSTRAP_ADMIN_RETIRED`）
+与变更所针对的用户（422 `APPROVAL_TARGET_USER`，只拦批准），10 §16.2。
 
 每个判断写一行只追加的 `ApprovalDecision`（`UNIQUE(request_id, level_no)`：同一层级的并发判断只有一个成功）。批准最后一层：请求 `APPROVED`，发布
 `jabiz.approval.approved`；驳回：请求 `REJECTED`，发布 `jabiz.approval.rejected`；负载含请求、审批对象、单据、准备人、内容哈希、状态、判断人、理由。
@@ -204,7 +209,8 @@
 - 新的用户角色（`SecUserRole`）：用户现有权限 + 新角色的权限；
 - 新的角色权限（`SecRolePermission`）：持有该角色的每个用户的现有权限 + 新权限；
 
-违反任一启用的规则即拒绝（422 `SOD_CONFLICT`，附规则与用户）。"现有权限"按每行最新版本计算（预定生效的角色分配已算在内），只计启用的角色。
+违反任一启用的规则即拒绝（422 `SOD_CONFLICT`，附规则与用户）。检查在一切时态写入的必经之处（`TemporalWriteCheck`，16r），所以撤销一次删除、取消一次预定的删除
+同样受约束（使分配或授权"活过来"的写入都算）。"现有权限"按每行最新版本计算（预定生效的角色分配已算在内），只计启用的角色。
 检查前取事务级 advisory lock，两个并发的授权不会各自通过。`*` 不参与检查。启用一个停用的角色不在此检查（由 4.3 与 4.4 覆盖）。
 
 ### 4.3 运行时兜底

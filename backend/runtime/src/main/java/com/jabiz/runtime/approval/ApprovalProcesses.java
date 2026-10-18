@@ -83,6 +83,7 @@ public class ApprovalProcesses {
                 })
                 .outputMapper(ctx -> ctx.get(OUTPUT, DecideOutput.class))
                 .step("Load the request", LoadEntity.by(ApprovalEntities.REQUEST_DATASET, REQUEST_ID, REQUEST))
+                .step("Check the decider", CheckApprovalDecision.of(REQUEST, "input"))
                 .step("Load its decisions", QueryEntities.of(ApprovalEntities.DECISION_DATASET,
                     ctx -> EntityQuery.builder().where(new QueryPredicate.Eq("requestId", ctx.get(REQUEST_ID)))
                         .limit(ApprovalEntities.MAX_ROWS).build(), DECISIONS))

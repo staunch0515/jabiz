@@ -1464,6 +1464,7 @@ e2e 对打包的应用（同 CI 的 `e2e` 作业，新的数据库）44 个用�
 | 16o | 取锁前在进程内排队（准入）与流程入口限流（QuizBuks Q10a 的 R3；Q5 平台缺口 13、15）：热门命名锁的等待者不占数据库连接，过载时快速失败；2026-10-16 确认（A-1–A-12 全按建议）；✅ 已完成（PR 待建） | D45 | 3.5–4.5 天 | 14o、16k |
 | 16p | 降低 `LEDGER_POST` 与每个流程的平台开销（QuizBuks Q10a 的 R2，Q5 平台缺口 14 与"平台通用开销"）：同样的保证、更少的语句（`HoldLock` 一条语句、合并校验读取、时态插入不先读、引用检查复用本事务的读写、一次提交的写入合成一条、按已知版本更新、事务内写缓冲）；分 16p-1 / 16p-2；16p-1 ✅ 已合并（#165），16p-2 ✅ 已实施（待合并，`1.2/phase-16p2-write-buffer`） | D46（已确认 2026-10-16） | 10–12 天（16p-1 6.5–7.5、16p-2 3.5–4.5） | 16o |
 | 16q | Q10b 安全审查的平台修正：Spring Boot 4.0.8（reactor-netty 1.3.7，CVE-2026-47874）、登录类接口按地址限流、口令哈希并发上限、`FilePolicy.privateMetadata()`；2026-10-17 确认（S-1、S-2 按建议）；✅ 已实施（分支 `1.2/phase-16q-security`，PR 待建） | D47 | 2.5–3.5 天 | 16o |
+| 16r | 受保护授权的四眼（建立期、首个管理员退役）、会计年度的时区 `jabiz.fiscal-year-zone`、`privateMetadata()` 的文件用随机编号；2026-10-17 确认；✅ 已实施（分支 `1.2/phase-16r-controls`，PR 待建） | D48 | 3–4 天 | 16q |
 | 16s | 收件偏好按登录入口列出、模板显示名、邮件语言的读取与询问、`MailPreferences` 积木（QuizBuks Q7 平台缺口 P1，Q7-13 选 A；2026-10-18 确认）；✅ 已实施（分支 `1.2/phase-16s-mail-preferences`，PR 待建） | D49 | 1–1.5 天 | 16a、16c |
 
 **其余工作的顺序**（2026-10-13 确认）：
@@ -3937,6 +3938,46 @@ QB 提交锁内 48 → 16（16p-1）的明细：恢复超时 1 → 0（T1）、�
 **独立评审之后的修订**（2026-10-17，M1–M3、L1–L5，见 D47 实现说明⑤）：哈希许可在运行真正结束时才归还；限流改为地址 + 名字与宽松的地址桶，另有 IPv6 /48 与实例上限，表满时新键无突发；只配置 `server.forward-headers-strategy` 即启动失败（`dev` 下警告）；经 `CallProcess` 的口令流程同样在事务前排队；PDF / Office 内部元数据不在 `privateMetadata()` 之列。
 
 **未做（登记为平台缺口）**：`sys_generated_file` / `sys_document_run` 的保留期（见阶段 16 的待办）。
+
+### 16r 受保护授权的四眼、会计年度的时区、随机文件编号（3–4 天）
+
+来源：16q 之后的安全审查跟进（授权本身没有四眼、首个管理员的凭据在部署配置中、保留期按 UTC 划分会计年度、D47 记下的文件编号局限）。2026-10-17 产品负责人确认范围。
+分支 `1.2/phase-16r-controls`，从 `1.2/phase-16q-security`（`4618c31`）拉出，#171 合入 `1.2/platform` 后并入。决策 **D48**。
+
+**16r 状态**：✅ 已实施（PR 待建）。
+
+| # | 内容 | 实施 |
+|---|---|---|
+| R1 | 受保护授权的四眼 | 10 §16：受保护的权限（缺省 `*`、`security.user-role.write`、`security.role.write`、`approval.decide`、`control.publish`、`ledger.post`、`ledger.reverse`、`platform.param.write`）；分配角色、角色增加权限、对持有人重设密码 / 二次验证 / 关联外部账号经 `SEC_USER_ROLE_ASSIGN`、`SEC_ROLE_PERMISSION_ADD`、`SEC_USER_IDENTITY_LINK`、`SEC_USER_SET_PASSWORD`、`SEC_MFA_RESET` 登记为待审批（`SecProtectedChange`，对象 `jabiz.security.protected-change`，层级由平台固定），批准后由 `SEC_PROTECTED_CHANGE_APPLY` 带许可写入；申请人与所针对的用户不能批准，审批要二次验证；其他途径在 `VersionAppender` 中 422 |
+| R2 | 建立期与首个管理员 | 首个管理员之外有两位 `*` 管理员之前当即生效，之后永久需要审批（`sec_protected_grants_armed`）；有另一位管理员后首个管理员 403 `BOOTSTRAP_ADMIN_RETIRED`；`jabiz.security.protected-grants.enabled`（缺省开）、`.always` |
+| R3 | 会计年度的时区 | 21 §3.1：`jabiz.fiscal-year-zone`（缺省 UTC），保留期的日期、今天与报告边界按它；其他使用处核对过（账本、报表、单据号不涉及会计年度） |
+| R4 | 随机文件编号 | 14 §5.1：`privateMetadata()` 的文件为 UUIDv4，存储键 `r/<前两位>/<fileId>/…`，清扫按文件系统时间判断这类无行对象的年龄 |
+| R5 | 前端 | 流程表单页与行操作对 `approval: PENDING` 的输出提示"已提交审批"；审批在已有的待办页进行 |
+
+**验收**
+- [x] `./gradlew check` 全部通过（含 `:app:platformCheck`、场景快照、覆盖率门禁）；前端 `pnpm lint`、`typecheck`、`test`、`check:api`；端到端 `pnpm e2e`。
+- [x] `ProtectedGrantIT`、`ProtectedGrantSetupIT`、`ProtectedGrantsOffIT`（见 10 §16.5）；core `ProtectedPermissionsTest`。
+- [x] `RetentionZoneTest`（东京 1 月 1 日 00:00–08:59 的边界、今天、无效时区）、`FiscalYearZoneIT`（删除拦截、到期报告、今天）。
+- [x] `FileKeysTest`（随机编号的键）、`FilePrivateMetadataIT`（这类文件为 UUIDv4，其他为 UUIDv7）、`FileSweepIT`（随机编号的孤儿与无行对象）。
+- [x] D48、10 §16、18 §3.3–§3.4、21 §3.1、14 §5.1、CLAUDE.md、ROADMAP 已更新。
+
+**兼容（线内）**：现有应用、示范流程、e2e 与演示数据脚本不需要改动：它们只有首个管理员（建立期）或不授予受保护的权限。`SEC_USER_SET_PASSWORD` 与 `SEC_MFA_RESET` 的输出增加字段（`status`、`changeId`、`approval`、`approvalRequestId`）。
+已有两位以上 `*` 管理员的部署升级后，下一次写安全实体即结束建立期：之后受保护的授权须审批，首个管理员退出受保护的操作。
+应用流程若以 `ChangeSet` 授予受保护的权限（例如注册角色含这类权限），建立期结束后会被拒绝。
+
+**独立安全评审之后的修订**（2026-10-18，H1、H2、M1–M3、L1、L2，见 D48 实现说明⑤）：批准绑定给出的受保护权限与所针对的用户，生效时增长即失败，待审批的变更视同已生效；
+审批人须持有给出的全部受保护权限（凭据类改由管理员审批）；`always=true` 的首次启动；判断授权先取职责分离的锁，职责分离也检查撤销与取消预定；
+获得者的凭据须是本人设置的，授予生效时结束其会话；管理员按现在或之后计，首个管理员永久退役；审批人取自判断记录，二次验证重置绑定其编号，关闭时留操作记录，注册角色持有受保护权限时警告。
+
+**评审复核之后的修订**（2026-10-18，见 D48 实现说明⑥）：凭据按所有权链判断（管理员以用户身份"本人"改出的密码不算本人的，邮件证明、本人注册才算），事实给出凭据的全部历史；
+以恢复码登录不使二次验证变成别人的；生效只认本变更自己的审批请求，审批人在生效时还须持有 `approval.decide` 与层级的权限；`jabiz.*` 事件只由平台的步骤发出；
+之后请求的待审批变更不再使之前的变更 `CHANGE_GREW`；`SEC_BOOTSTRAP_ADMIN` 再建的管理员同样是首个管理员，不能再建时记错误日志。
+
+**评审复核三之后的修订**（2026-10-18，见 D48 实现说明⑦）：持有人的邮箱改为受保护的变更并通知旧地址，别人改过的地址在账号不干净时不能申请验证；
+事实给出当前地址的来历与可信域标记，历史总是保留建立账号的一行；二次验证按最近的新密钥判断，版本与操作顺序不一致时从严；
+覆盖只认仍然有效、期限不窄的批准；驳回按请求记录判断。
+
+**未做**：申请人撤回请求；按细分权限（而不是 `*`）判断管理员（这类部署设 `always=true`）。
 
 ### 16s 收件偏好按登录入口、模板显示名与邮件语言（1–1.5 天）
 

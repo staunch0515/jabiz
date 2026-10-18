@@ -173,6 +173,16 @@ public class LocalFileStore implements FileStore {
         }).subscribeOn(Schedulers.boundedElastic());
     }
 
+    /**
+     * Whether the object was last written more than {@code age} ago, by the file system's clock (as for
+     * {@link #deleteStaleParts}); false when it is gone or cannot be read. For objects whose key carries no time: the
+     * files with random ids (decision D48 item 3).
+     */
+    public Mono<Boolean> olderThan(String key, Duration age) {
+        return Mono.fromCallable(() -> modifiedBefore(resolve(key), System.currentTimeMillis() - age.toMillis()))
+            .subscribeOn(Schedulers.boundedElastic());
+    }
+
     private static boolean modifiedBefore(Path path, long limit) {
         try {
             return Files.getLastModifiedTime(path).toMillis() < limit;
