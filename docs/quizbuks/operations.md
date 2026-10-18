@@ -43,11 +43,13 @@
 
 | 收件人 | 邮件（模板） | 可退订 |
 |---|---|---|
-| 答题人 | 转账已发出 `qb.transfer.sent`、转账失败 `qb.transfer.failed`、收款账户需补资料 `qb.payout.action-needed` | 否 |
+| 答题人 | 转账已发出 `qb.transfer.sent`、转账失败 `qb.transfer.failed`（只在转账仍是该状态时发）、收款账户需补资料 `qb.payout.action-needed`（每人 24 小时内至多一封） | 否 |
 | 商家 | 充值到账 `qb.topup.paid`、发布通过 / 驳回 / 被下架 `qb.publication.approved` / `.rejected` / `.taken-down` | 否 |
-| 商家 | 发布预算不足 `qb.publication.funds-short`（每个商家 24 小时内至多一封，列出当时全部预算不足的发布）、发布已结束 `qb.publication.ended` | 是（邮件中的链接，或商家后台"账户 → 邮件"） |
+| 商家 | 发布预算不足 `qb.publication.funds-short`（每个商家 24 小时内至多一封，列出当时全部预算不足的发布；窗口内的再次不足记为待发，由每小时 11 分的任务 `qb.mail-funds-short-due` 在窗口过后仍不足时补发）、发布已结束 `qb.publication.ended`（下架后或商家被封禁时不发） | 是（邮件中的链接，或商家后台"账户 → 邮件"） |
 
-邮件中的时刻按日本时间、标为 `JST`（取自 `jabiz.fiscal-year-zone`）。`JABIZ_MAIL_ENABLED` 未开时这些邮件同样只记为 `SKIPPED`（`sys_mail_message` / `sys_mail_attempt`），不会补发。事件超过 3 天才被消费（投递积压、或新消费者收到历史事件）时不发信（`NotificationMails.MAX_AGE`）。
+邮件中的时刻按日本时间、标为 `JST`（取自 `jabiz.fiscal-year-zone`）。`JABIZ_MAIL_ENABLED` 未开时这些邮件同样只记为 `SKIPPED`（`sys_mail_message` / `sys_mail_attempt`），不会补发。事件太晚才被消费（投递积压、或新消费者收到历史事件）时不发信：通知（可退订的两种）超过 3 天、事务邮件（转账、收款账户、充值、发布的审核结果与下架）超过 14 天（`NotificationMails.MAX_AGE` / `TRANSACTIONAL_MAX_AGE`）。补发任务的时间可以 `quizbuks.mail.funds-short-due-cron`（Spring 的六段 cron，缺省 `0 11 * * * *`，UTC）改；它只读待发的行（`qb_mail_notice` 的部分索引）。
+
+**退订链接**：可退订邮件中的退订链接由平台生成，指向后台入口的页面 `/admin/mail/unsubscribe`（平台 D49：退订页只在通用后台中）。所以即使只给答题人与商家开放 App 与商家后台，反向代理也必须让 `/admin/` 下的这个路径可达（无需登录：链接中的令牌即凭证）；若要完全不对外开放 `/admin/`，需先由平台的后续阶段提供与入口无关的退订页。
 
 ### 1.3 Stripe 与资金（`deploy/quizbuks/README.md`"充值与核对""收款账户与自动转账"）
 
@@ -208,6 +210,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 | 分录导出被拒 | `jabiz.process{process="QB_JOURNAL_EXPORT", outcome="rejected"}` | 每月导出日 > 0（看错误码，§7.3） |
 | 外部调用 | `jabiz.external.call{service="stripe", outcome}` | `5xx`、`timeout`、`refused` 比率 > 5 % |
 | 任务 | `jabiz.job.run{result="FAILED"|"LOCKED"}` | 任一每日任务 `FAILED`；`LOCKED` 持续（另一实例卡住） |
+| 邮件 | `jabiz.job.item{job="qb.mail-funds-short-due", result}`；`jabiz.outbox.delivery{result="FAILED"}` | 补发任务的项连续失败；`sys_mail_message` 中 `FAILED` 增多（看发件服务商） |
 | 数据库 | 连接数、复制与 WAL 归档延迟、最近一次基础备份、磁盘、`pg_stat_statements` 的前几名、死锁（`pg_stat_database.deadlocks`） | 归档延迟 > 15 分钟；备份超过 26 小时；磁盘 > 80 %；死锁 > 0 |
 | 主机 | CPU、内存、JVM 堆 | 应用或数据库的 CPU 在业务高峰持续 > 70 %（§6） |
 

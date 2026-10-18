@@ -166,13 +166,19 @@ describe('the wallet', () => {
     expect(processCalls()).toHaveLength(0)
     await user.clear(amount)
     await user.type(amount, '1,500')
+    // The poll waits seconds between reads: from here time is advanced, not waited for (no real sleeps under load;
+    // not earlier, where the dialog's opening runs on timers of its own).
+    vi.useFakeTimers({ shouldAdvanceTime: true })
     await user.click(screen.getByTestId('topup-submit'))
     await waitFor(() => expect(window.location.pathname).toBe('/wallet/topups/t1'))
     expect(processCalls()).toHaveLength(1)
     expect(processCalls()[0].body).toEqual({ amount: 1500 })
     expect(processCalls()[0].key).toBeTruthy()
     // Opening first, then open: the page leaves for Stripe's address by itself.
-    await waitFor(() => expect(goToStripe).toHaveBeenCalledWith(CHECKOUT), { timeout: 4000 })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000)
+    })
+    await waitFor(() => expect(goToStripe).toHaveBeenCalledWith(CHECKOUT))
     expect(goToStripe).toHaveBeenCalledTimes(1)
     expect(screen.getByTestId('topup-state')).toHaveAttribute('data-state', 'leaving')
     expect(window.sessionStorage.length).toBe(0)
@@ -322,6 +328,8 @@ describe('a top-up\'s page', () => {
   })
 
   it('back from paying, waits for the server\'s record and starts nothing', async () => {
+    // The polls wait seconds between reads: time is advanced, not waited for (no real sleeps under load).
+    vi.useFakeTimers({ shouldAdvanceTime: true })
     const { processCalls } = server({ topUps: [topUp('OPEN'), topUp('OPEN'), topUp('PAID')] })
     window.history.replaceState(null, '', '/wallet/topups/t1?checkout=paid')
     render(<App />)
@@ -329,7 +337,10 @@ describe('a top-up\'s page', () => {
     expect(state).toHaveAttribute('data-state', 'confirming')
     // The browser's return is no proof of payment: no button to pay again, nothing posted.
     expect(screen.queryByTestId('topup-pay')).not.toBeInTheDocument()
-    await waitFor(() => expect(state).toHaveAttribute('data-state', 'paid'), { timeout: 5000 })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000)
+    })
+    await waitFor(() => expect(state).toHaveAttribute('data-state', 'paid'))
     expect(state).toHaveTextContent('1,500 Kudos were added')
     expect(processCalls()).toHaveLength(0)
     expect(goToStripe).not.toHaveBeenCalled()

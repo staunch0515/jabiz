@@ -9,7 +9,12 @@ import com.jabiz.quizbuks.setup.QbParams;
 import com.jabiz.quizbuks.setup.QbRoles;
 import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.runtime.context.Actor;
+import com.jabiz.runtime.job.JobRunner;
+import com.jabiz.runtime.security.SecurityEntities;
 import com.jabiz.runtime.test.TestTokens;
+import com.jabiz.job.JobDefinition;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import jakarta.mail.BodyPart;
 import jakarta.mail.Multipart;
 import jakarta.mail.Part;
@@ -21,11 +26,14 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -56,6 +64,56 @@ class NotificationMailIT extends PayoutItSupport {
     private String entryToken(String userId, String entry) {
         return "Bearer " + tokens.issue(new Actor(userId, null, Set.of(), Set.of(), clock.instant(), null, entry,
             true)).token();
+    }
+
+    @Autowired
+    @Qualifier("qbMailFundsShortDueJob")
+    JobDefinition<MailProcesses.SponsorRef> fundsShortDueJob;
+
+    /** Runs the hourly job of deferred short-of-funds mail at the clock's time, and delivers the mail it records. */
+    private JobRunner.JobRun runFundsShortDue() {
+        execute("UPDATE jabiz_shedlock SET lock_until = locked_at");
+        JobRunner.JobRun run = jobs.execute(fundsShortDueJob, clock.instant());
+        deliverEvents();
+        return run;
+    }
+
+    /** The sponsor's (or taker's) throttled notice of a kind: its last mail and whether one is deferred. */
+    private static Map<String, Object> notice(String recipientId, String kind) {
+        List<Map<String, Object>> rows = query("SELECT last_sent_at, pending FROM qb_mail_notice WHERE recipient_id = ? "
+            + "AND kind = ?", recipientId, kind);
+        return rows.isEmpty() ? null : rows.getFirst();
+    }
+
+    /** Three takers start on {@code first}, {@code first} and {@code second}, then all submit: the wallet must hold one
+     * reward, so the last two are pending and both publications short of funds. Events are not delivered. */
+    private void bothShort(String first, String second) {
+        String a1 = taker(newTaker(fresh("t-short"), null));
+        String a2 = taker(newTaker(fresh("t-short"), null));
+        String b1 = taker(newTaker(fresh("t-short"), null));
+        String attemptA1 = (String) start(a1, first).get("attemptId");
+        String attemptA2 = (String) start(a2, first).get("attemptId");
+        String attemptB1 = (String) start(b1, second).get("attemptId");
+        clock.advance(Duration.ofSeconds(1));
+        submit(a1, attemptA1, answers(true, true));
+        clock.advance(Duration.ofSeconds(1));
+        submit(a2, attemptA2, answers(true, true));
+        clock.advance(Duration.ofSeconds(1));
+        submit(b1, attemptB1, answers(true, true));
+        assertThat(status(first)).isEqualTo("FUNDS_SHORT");
+        assertThat(status(second)).isEqualTo("FUNDS_SHORT");
+    }
+
+    private Object notify(String publicationId, String sponsorId, String kind, String reason, Instant occurredAt) {
+        Map<String, Object> input = new HashMap<>();
+        input.put("publicationId", publicationId);
+        input.put("sponsorId", sponsorId);
+        input.put("kind", kind);
+        if (reason != null) {
+            input.put("reason", reason);
+        }
+        input.put("occurredAt", occurredAt.toString());
+        return ((MailProcesses.MailOutput) systemRun(MailProcesses.PUBLICATION, input)).template();
     }
 
     /** The content administrator's token (passed a second factor, as the takedown processes ask). */
@@ -199,6 +257,10 @@ class NotificationMailIT extends PayoutItSupport {
         // Why, in the taker's terms (Stripe's own words never), and where to look.
         assertThat(text(failed)).contains("Stripe declined the transfer to your payout account",
             APP + "wallet/payout").doesNotContain(SPONSOR);
+        // An event saying "sent" for a transfer that failed (a replay, a backlog): nothing, the record decides.
+        assertThat(((MailProcesses.MailOutput) systemRun(MailProcesses.TRANSFER, body("transferId", transferId,
+            "kind", "SENT", "occurredAt", clock.instant().toString()))).template()).isNull();
+        assertThat(sent(other, "qb.transfer.sent")).isEmpty();
     }
 
     @Test
@@ -224,6 +286,22 @@ class NotificationMailIT extends PayoutItSupport {
         assertThat(subject(mail)).isEqualTo("Your payout account needs more information");
         assertThat(text(mail)).contains(APP + "wallet/payout");
         assertThat(outboxEvents("qb.payout-account.restricted", "userId", taker)).isEqualTo(1);
+
+        // Flipping back and forth within the day: one mail says it all.
+        advance(Duration.ofSeconds(5));
+        deliverConnect(connectEvent("account.updated", accountId, account(accountId, taker, true)));
+        advance(Duration.ofSeconds(5));
+        deliverConnect(connectEvent("account.updated", accountId, account(accountId, taker, false)));
+        assertThat(outboxEvents("qb.payout-account.restricted", "userId", taker)).isEqualTo(2);
+        assertThat(sent(taker, "qb.payout.action-needed")).hasSize(1);
+        // A day later, held back again: mailed again.
+        advance(Duration.ofHours(24));
+        deliverConnect(connectEvent("account.updated", accountId, account(accountId, taker, true)));
+        advance(Duration.ofSeconds(5));
+        deliverConnect(connectEvent("account.updated", accountId, account(accountId, taker, false)));
+        assertThat(sent(taker, "qb.payout.action-needed")).containsExactly("SENT", "SENT");
+        assertThat(query("SELECT count(*) AS n FROM qb_mail_notice WHERE recipient_id = ?", taker).getFirst())
+            .containsEntry("n", 1L);
     }
 
     // ---- sponsors --------------------------------------------------------------------------------------------------
@@ -258,6 +336,11 @@ class NotificationMailIT extends PayoutItSupport {
             assertThat(status(approved)).isEqualTo("SCHEDULED");
             String rejected = draft(token, versionId, "Rejected one");
             decide((String) submit(token, rejected).get("approvalRequestId"), "REJECT", "Rewards too high.");
+            Instant now = clock.instant();
+            String started = (String) run("QB_PUBLICATION_SAVE", token, complete(versionId, "Started one",
+                now.minus(Duration.ofHours(1)), now.plus(Duration.ofDays(2)))).get("publicationId");
+            decide((String) submit(token, started).get("approvalRequestId"), "APPROVE", null);
+            assertThat(status(started)).isEqualTo("LIVE");
             String withdrawn = draft(token, versionId, "Withdrawn one");
             submit(token, withdrawn);
             run("QB_PUBLICATION_WITHDRAW", token, body("publicationId", withdrawn));
@@ -267,8 +350,13 @@ class NotificationMailIT extends PayoutItSupport {
             autoApprove(true);
         }
         assertThat(publicationTemplates(sponsor)).containsExactlyInAnyOrder("qb.publication.approved",
-            "qb.publication.rejected");
+            "qb.publication.approved", "qb.publication.rejected");
+        // Its start had come by the approval: live now, no start time already past.
+        assertThat(publicationMail(addressOf(name))).filteredOn(message -> subject(message).contains("Started one"))
+            .singleElement().satisfies(message -> assertThat(text(message)).contains("It is now live and takes attempts.")
+                .doesNotContain("takes attempts from"));
         List<MimeMessage> mail = publicationMail(addressOf(name)).stream()
+            .filter(message -> !subject(message).contains("Started one"))
             .sorted(java.util.Comparator.comparing(message -> subject(message).contains("sent back"))).toList();
         assertThat(mail).extracting(NotificationMailIT::subject).containsExactly(
             "Your publication \"Approved one\" is approved", "Your publication \"Rejected one\" was sent back");
@@ -361,6 +449,7 @@ class NotificationMailIT extends PayoutItSupport {
         deliverEvents();
         assertThat(statusEvents(first)).isEqualTo(2);
         assertThat(sent(sponsor, "qb.publication.funds-short")).hasSize(1);
+        assertThat(notice(sponsor, MailProcesses.FUNDS_SHORT_NOTICE)).containsEntry("pending", true);
 
         // A day later it is mailed again, naming only what is short now.
         advance(Duration.ofHours(25));
@@ -371,8 +460,80 @@ class NotificationMailIT extends PayoutItSupport {
         deliverEvents();
         assertThat(sent(sponsor, "qb.publication.funds-short")).containsExactly("SENT", "SENT");
         assertThat(text(received(addressOf(name)).getLast())).contains("\"Short B\"").doesNotContain("Short A");
-        assertThat(query("SELECT count(*) AS n FROM qb_sponsor_notice WHERE sponsor_id = ?", sponsor)
+        assertThat(query("SELECT count(*) AS n FROM qb_mail_notice WHERE recipient_id = ?", sponsor)
             .getFirst()).containsEntry("n", 1L);
+        assertThat(notice(sponsor, MailProcesses.FUNDS_SHORT_NOTICE)).containsEntry("pending", false);
+    }
+
+    @Test
+    void aShortageWithinTheDayIsMailedOnceTheDayHasPassedWhileStillShort() {
+        String name = fresh("s-mail-deferred");
+        String sponsor = newSponsor(name);
+        String first = livePublication(sponsor, "Deferred A", Map.of("regions", List.of("GLOBAL")));
+        String second = livePublication(sponsor, "Deferred B", Map.of("regions", List.of("GLOBAL")));
+        credit(sponsor, 100);
+        twoCompletions(first);
+        deliverEvents();
+        assertThat(sent(sponsor, "qb.publication.funds-short")).containsExactly("SENT");
+        Instant last = TopUpItSupport.instant(notice(sponsor, MailProcesses.FUNDS_SHORT_NOTICE).get("last_sent_at"));
+
+        // Topped up, and two hours later both short; no move after that, so no event will come again.
+        credit(sponsor, 200);
+        assertThat(status(first)).isEqualTo("LIVE");
+        advance(Duration.ofHours(2));
+        bothShort(first, second);
+        deliverEvents();
+        assertThat(sent(sponsor, "qb.publication.funds-short")).hasSize(1);
+        assertThat(notice(sponsor, MailProcesses.FUNDS_SHORT_NOTICE)).containsEntry("pending", true);
+
+        // A minute before the day has passed: the job finds nothing due.
+        clock.set(last.plus(Duration.ofHours(23)).plus(Duration.ofMinutes(59)));
+        runFundsShortDue();
+        assertThat(sent(sponsor, "qb.publication.funds-short")).hasSize(1);
+        // At the day's end: the deferred mail, naming both, and the window starts again.
+        clock.set(last.plus(Duration.ofHours(24)));
+        assertThat(runFundsShortDue().items().succeeded()).isPositive();
+        assertThat(sent(sponsor, "qb.publication.funds-short")).containsExactly("SENT", "SENT");
+        assertThat(text(received(addressOf(name)).getLast())).contains("\"Deferred A\", \"Deferred B\"",
+            "Rewards waiting for payment: 2, together 200 Kudos");
+        assertThat(notice(sponsor, MailProcesses.FUNDS_SHORT_NOTICE)).containsEntry("pending", false);
+        runFundsShortDue();
+        assertThat(sent(sponsor, "qb.publication.funds-short")).hasSize(2);
+
+        // Short again within the new day, but topped up before it ends: the mark is cleared, nothing sent.
+        credit(sponsor, 300);
+        twoCompletions(first);
+        deliverEvents();
+        assertThat(notice(sponsor, MailProcesses.FUNDS_SHORT_NOTICE)).containsEntry("pending", true);
+        credit(sponsor, 200);
+        assertThat(status(first)).isEqualTo("LIVE");
+        advance(Duration.ofHours(25));
+        runFundsShortDue();
+        assertThat(sent(sponsor, "qb.publication.funds-short")).hasSize(2);
+        assertThat(notice(sponsor, MailProcesses.FUNDS_SHORT_NOTICE)).containsEntry("pending", false);
+    }
+
+    @Test
+    void twoConsumersAtOnceForOneSponsorMailOnce() throws Exception {
+        String sponsor = newSponsor(fresh("s-mail-race"));
+        String first = livePublication(sponsor, "Race A", Map.of("regions", List.of("GLOBAL")));
+        String second = livePublication(sponsor, "Race B", Map.of("regions", List.of("GLOBAL")));
+        credit(sponsor, 100);
+        bothShort(first, second);
+        Instant at = clock.instant();
+        // The two events' consumers at the same time (the outbox may deliver them in parallel).
+        CompletableFuture<Object> a = CompletableFuture.supplyAsync(() -> notify(first, sponsor,
+            PublicationNotices.FUNDS_SHORT, null, at));
+        CompletableFuture<Object> b = CompletableFuture.supplyAsync(() -> notify(second, sponsor,
+            PublicationNotices.FUNDS_SHORT, null, at));
+        assertThat(java.util.stream.Stream.of(a.get(), b.get())).containsExactlyInAnyOrder(
+            "qb.publication.funds-short", null);
+        assertThat(query("SELECT count(*) AS n FROM qb_mail_notice WHERE recipient_id = ?", sponsor).getFirst())
+            .containsEntry("n", 1L);
+        assertThat(notice(sponsor, MailProcesses.FUNDS_SHORT_NOTICE)).containsEntry("pending", true);
+        // The real events afterwards: still one mail.
+        deliverEvents();
+        assertThat(sent(sponsor, "qb.publication.funds-short")).hasSize(1);
     }
 
     @Test
@@ -433,6 +594,59 @@ class NotificationMailIT extends PayoutItSupport {
         assertThat(text(received(addressOf(name)).getLast())).contains("已到结束时间。", "完成的答题：0 次");
     }
 
+    @Test
+    void noEndedMailAfterATakedownOrForABannedSponsorButAfterAnAdministratorsResume() {
+        String name = fresh("s-mail-no-end");
+        String sponsor = newSponsor(name);
+        String admin = contentAdminToken();
+        // Taken down, then its end time comes: the takedown said it.
+        String paused = livePublication(sponsor, "Paused then expired", Map.of("regions", List.of("GLOBAL")));
+        run(PublicationAdmin.PAUSE, admin, body("publicationId", paused, "reason", "Checking."));
+        // Resumed by an administrator, then ended by its time: an ordinary end, mailed.
+        String resumed = livePublication(sponsor, "Resumed then expired", Map.of("regions", List.of("GLOBAL")));
+        run(PublicationAdmin.PAUSE, admin, body("publicationId", resumed, "reason", "Checking."));
+        deliverEvents();
+        run(PublicationAdmin.RESUME, admin, body("publicationId", resumed, "reason", "Fine."));
+        advance(Duration.ofDays(8));
+        runTick();
+        assertThat(status(paused)).isEqualTo("ENDED");
+        assertThat(status(resumed)).isEqualTo("ENDED");
+        deliverEvents();
+        assertThat(statusEvents(paused)).isEqualTo(2);
+        assertThat(publicationMail(addressOf(name))).extracting(NotificationMailIT::subject)
+            .contains("Your publication \"Resumed then expired\" has ended")
+            .doesNotContain("Your publication \"Paused then expired\" has ended");
+
+        // A sponsor banned by the time the end is mailed: nothing (it ended by its winners, then the ban came).
+        String bannedName = fresh("s-mail-banned-end");
+        String banned = newSponsor(bannedName);
+        credit(banned, 1000);
+        String quota = livePublication(banned, "Quota then ban", Map.of("regions", List.of("GLOBAL"), "maxWinners", 1));
+        play(newTaker(fresh("t-ban-end"), null), quota, true, true);
+        assertThat(status(quota)).isEqualTo("ENDED");
+        String boss = userWithRole(fresh("mail-boss"), QbRoles.ADMIN_SUPER);
+        run("QB_USER_BAN", tokenOf(boss, QbRoles.ADMIN_SUPER), body("userId", banned, "reason", "Fraud"));
+        deliverEvents();
+        assertThat(statusEvents(quota)).isEqualTo(1);
+        assertThat(sent(banned, "qb.publication.ended")).isEmpty();
+    }
+
+    @Test
+    void aSponsorWithoutAnAddressIsMailedNothingAndNothingFails() {
+        String sponsor = newSponsor(fresh("s-mail-no-address"));
+        String publicationId = livePublication(sponsor, "No address");
+        long version = ((Number) query("SELECT max(version_no) AS v FROM sec_user_version WHERE user_id = ?::uuid",
+            sponsor).getFirst().get("v")).longValue();
+        Map<String, Object> noAddress = new HashMap<>();
+        noAddress.put("email", null);
+        commit(SecurityEntities.USER_DATASET, "UPDATE", sponsor, version, noAddress, null);
+        run(PublicationAdmin.PAUSE, contentAdminToken(), body("publicationId", publicationId, "reason", "Checking."));
+        deliverEvents();
+        assertThat(statusEvents(publicationId)).isEqualTo(1);
+        assertThat(templatesTo(sponsor)).doesNotContain("qb.publication.taken-down");
+        assertThat(notify(publicationId, sponsor, PublicationNotices.TAKEN_DOWN, "Checking.", clock.instant())).isNull();
+    }
+
     // ---- preferences, old events, who may run the processes --------------------------------------------------------
 
     @Test
@@ -465,11 +679,25 @@ class NotificationMailIT extends PayoutItSupport {
         String topUpId = openTopUp(sponsor, 2000);
         deliver(event(eventId(), "checkout.session.completed", completed(topUpId)));
         int before = sent(sponsor, "qb.topup.paid").size();
-        // An event of four days ago (a consumer subscribed later receives the old ones too).
-        Object output = systemRun(MailProcesses.TOPUP, body("topUpId", topUpId, "occurredAt",
-            clock.instant().minus(Duration.ofDays(4)).toString()));
-        assertThat(((MailProcesses.MailOutput) output).template()).isNull();
-        assertThat(sent(sponsor, "qb.topup.paid")).hasSize(before);
+        // Transactional mail waits through a backlog of days (four days old: mailed), not for ever (fifteen: not).
+        assertThat(((MailProcesses.MailOutput) systemRun(MailProcesses.TOPUP, body("topUpId", topUpId, "occurredAt",
+            clock.instant().minus(Duration.ofDays(4)).toString()))).template()).isEqualTo("qb.topup.paid");
+        assertThat(((MailProcesses.MailOutput) systemRun(MailProcesses.TOPUP, body("topUpId", topUpId, "occurredAt",
+            clock.instant().minus(Duration.ofDays(15)).toString()))).template()).isNull();
+        assertThat(sent(sponsor, "qb.topup.paid")).hasSize(before + 1);
+        // A notification goes stale sooner: an "ended" of four days ago is not mailed.
+        credit(sponsor, 1000);
+        String ended = livePublication(sponsor, "Old end", Map.of("regions", List.of("GLOBAL"), "maxWinners", 1));
+        play(newTaker(fresh("t-old"), null), ended, true, true);
+        assertThat(status(ended)).isEqualTo("ENDED");
+        assertThat(notify(ended, sponsor, PublicationNotices.ENDED, "QUOTA", clock.instant().minus(Duration.ofDays(4))))
+            .isNull();
+        assertThat(notify(ended, sponsor, PublicationNotices.ENDED, "QUOTA", clock.instant()))
+            .isEqualTo("qb.publication.ended");
+        // An event naming another sponsor than the publication's: nothing, to nobody.
+        String other = newSponsor(fresh("s-mail-other"));
+        assertThat(notify(ended, other, PublicationNotices.TAKEN_DOWN, "Forged", clock.instant())).isNull();
+        assertThat(templatesTo(other)).doesNotContain("qb.publication.taken-down");
         // A record that is not there, a user that is not there: nothing, and no failure to retry.
         assertThat(((MailProcesses.MailOutput) systemRun(MailProcesses.TOPUP, body("topUpId",
             UUID.randomUUID().toString(), "occurredAt", clock.instant().toString()))).template()).isNull();
@@ -482,5 +710,6 @@ class NotificationMailIT extends PayoutItSupport {
         refusedAsInternal(MailProcesses.TOPUP, admin(), body("topUpId", topUpId, "occurredAt", now));
         refusedAsInternal(MailProcesses.PUBLICATION, admin(), body("publicationId", "x", "sponsorId", sponsor,
             "kind", "APPROVED", "occurredAt", now));
+        refusedAsInternal(MailProcesses.FUNDS_SHORT_DUE, admin(), body("sponsorId", sponsor));
     }
 }

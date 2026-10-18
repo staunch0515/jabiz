@@ -478,3 +478,36 @@ M-73 API Key（G10）；个人信息的删除与匿名化（平台未开放，GD
   场景只有 `topup` 的分录明细 `sha256` 再次变化（编号随 Q7b 与 Q7a 的记录顺延），看过后更新。V12（Q7b）在前、V13（Q7a）在后。
   `./gradlew :quizbuks:check` 594 项全部通过；两个 SPA 的 lint、typecheck、test（App 135 项、商家后台 134 项；商家后台在本机负载高时有交易页与钱包页的测试偶发超时，单独与重跑全过，与本阶段无关）；
   `app:check`、`ext:check`（70 项）、工具测试与 `check-app-paths.sh` 通过；e2e 47 项全部通过。
+
+### 12.5 评审后的修正（2026-10-18，同一分支，评审 60e25d6）
+
+先写失败的测试，再改实现。
+
+| 评审项 | 修正 |
+|---|---|
+| 中 1：窗口内的预算不足被丢弃 | 通知行（改名为 `QbMailNotice`，表 `qb_mail_notice`，按（收件人，种类）唯一，加 `pending`）在 24 小时内再次预算不足时只记 `pending = true`、不发；逐项任务 `qb.mail-funds-short-due`（每小时 11 分，`quizbuks.mail.funds-short-due-cron`；模板 `qb.system.mail-funds-short-due` 经部分索引选出 `pending` 且上次已满 24 小时的商家）每项运行 `QB_MAIL_FUNDS_SHORT_DUE`（`internal()`）：取 `qb.mail-notice:<商家>`，重读通知行与卡片，仍有预算不足的发布即发一封（列出当时全部的）并重新开始窗口，没有了即清除 `pending`、不发。V13 尚未合并、没有任何安装运行过，所以直接改 V13 而不另加迁移 |
+| 中 2：下架或封禁之后的"已结束"邮件 | `QB_PUBLICATION_NOTIFY` 在 `ENDED` 时重读：`PublicationAdmin.takenDown(发布)`（管理员结束，或管理员暂停之后因时间或名额结束）或商家被封禁（`BanRules.banned`）即不发；管理员恢复之后再结束的照发 |
+| 低 3：已上架时"将自 … 起" | `APPROVED` 的开始时刻取自发布记录：不晚于事件时刻即用 `qb.mail.approved.live`（"现已上架"），否则 `qb.mail.approved.from`（日本时间、标 JST）；正文参数改为整句 `{start}` |
+| 低 4：事务邮件的时限 | 事务邮件（转账、收款账户、充值、审核结果与下架）的时限 14 天（`TRANSACTIONAL_MAX_AGE`），可退订的两种仍为 3 天；转账邮件在发信前再查转账仍是 `SENT` / `FAILED`；`operations.md` §1.2 已写 |
+| 低 5：退订链接指向 `/admin/` | 平台的退订页只在通用后台（`/admin/mail/unsubscribe`）。本分支不改平台；`operations.md` §1.2 与上线检查清单要求该路径对外可达，否则须先由平台的后续阶段提供与入口无关的退订页（**跟进**） |
+| 低 6：收款账户受限的邮件 | 同一张通知表，种类 `PAYOUT_ACTION_NEEDED`、收件人为用户：每人 24 小时内至多一封（锁 `qb.mail-notice:<用户>`），窗口内的不记待发（下一次受限的报告照常触发） |
+| 可选：`QB_PUBLICATION_NOTIFY` 的读取合并为 `QueryEntities.all` | 未做：收件人与封禁取决于先读到的发布的商家（事件中的商家与记录不符即不发），卡片与钱包只在 `FUNDS_SHORT` 时读；这是事件消费者、不在热门锁内，合并省下的往返不值得把这些依赖拆开 |
+
+**补上的测试**（`NotificationMailIT` 除另注外）：
+
+- 窗口内的再次预算不足记为待发：23 小时 59 分时任务什么也不发，满 24 小时发一封、列出两个发布，充值之后待发被清除、不再发；
+- 两个消费者同时为同一商家处理预算不足：只有一行、一封；
+- 下架之后结束、封禁商家的发布结束都不发"已结束"，管理员恢复之后再结束的照发；
+- 没有邮箱的商家：什么也不发、不失败；
+- 事件中的 `sponsorId` 与发布的商家不符：不发；
+- 已上架的通过邮件写"现已上架"；
+- 4 天前的事务事件照发、4 天前的通知不发、15 天前的事务事件不发；
+- 转账已不是 `SENT` 时不发；收款账户受限的邮件 24 小时内只一封；
+- `QB_MAIL_FUNDS_SHORT_DUE` 对任何调用者都是 403 `PROCESS_INTERNAL`（`ProcessAccessIT` 的封闭列表同时加入）；
+- `NotificationRollbackIT`：测试用流程结束发布、发布事件后失败，事务回滚后发件箱中没有事件、发布仍上架、商家没有邮件。
+
+**前端**：商家后台加"接受邮件语言"的测试（日文，`POST /api/auth/account/locale`）；两个 SPA 的 `changeLanguage('en')` 移到 `afterEach`；
+两个 SPA 的 `src/test/setup.ts` 设 `configure({ asyncUtilTimeout: 5000 })`；钱包的轮询测试（商家后台两项、App 三项）改为假时钟（`vi.useFakeTimers({ shouldAdvanceTime: true })` 与 `advanceTimersByTimeAsync`），不再真的等几秒。
+充值的测试在对话框填好之后才换假时钟（对话框的打开在假时钟下停在 `pointer-events: none`）。
+
+**验证**：`origin/1.2/quizbuks` 没有新的提交（仍为 a063819）。`./gradlew :quizbuks:check` 599 项全部通过，`platformCheck` 通过，场景快照没有变化；两个 SPA 的 lint、typecheck 通过，test 各连续运行两次都全过（App 135 项、商家后台 135 项）；两份 `src/qb/` 相同；`app:check` 两者、`ext:check`（70 项）、工具测试与 `check-app-paths.sh` 通过；e2e（打包的 jar、本机的 Mailpit 与 Stripe 桩、独立的库与端口）47 项全部通过。

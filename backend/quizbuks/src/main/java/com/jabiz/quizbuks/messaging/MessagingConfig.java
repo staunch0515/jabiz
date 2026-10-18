@@ -4,6 +4,8 @@ import com.jabiz.dataset.DatasetDefinition;
 import com.jabiz.entity.EntityDefinition;
 import com.jabiz.event.EventSubscription;
 import com.jabiz.i18n.MessageCatalog;
+import com.jabiz.job.JobDefinition;
+import com.jabiz.job.JobItems;
 import com.jabiz.mail.MailTemplate;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
@@ -16,9 +18,13 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import java.time.ZoneOffset;
+import java.util.Map;
+
 /**
  * Registers the mail of Q7a (docs/quizbuks/plans/Q7-messages-legal.md D-Q7-1, D-Q7-2): the nine templates, the
- * notices' entity and its dataset (read by the system only), the four mail processes and their five subscriptions.
+ * notices' entity and its dataset (read by the system only), the five mail processes, their five subscriptions and the
+ * hourly job of deferred short-of-funds mail.
  */
 @Configuration
 class MessagingConfig {
@@ -121,6 +127,27 @@ class MessagingConfig {
     ProcessDefinition<MailProcesses.PublicationMailInput, MailProcesses.MailOutput, ProcessContext>
         qbPublicationNotify(MessageCatalog messages, MailValues qbMailValues) {
         return MailProcesses.publication(messages, qbMailValues);
+    }
+
+    @Bean
+    ProcessDefinition<MailProcesses.SponsorRef, MailProcesses.MailOutput, ProcessContext> qbMailFundsShortDue(
+        MessageCatalog messages) {
+        return MailProcesses.fundsShortDue(messages);
+    }
+
+    /**
+     * Hourly, each sponsor whose short-of-funds mail was deferred within the day and whose day has passed, in a
+     * transaction of its own (platform decision D42): the mail goes when a publication is still short.
+     */
+    @Bean
+    JobDefinition<MailProcesses.SponsorRef> qbMailFundsShortDueJob(
+        @Value("${quizbuks.mail.funds-short-due-cron:0 11 * * * *}") String cron,
+        ProcessDefinition<MailProcesses.SponsorRef, MailProcesses.MailOutput, ProcessContext> qbMailFundsShortDue) {
+        return JobDefinition.forEach(MailProcesses.FUNDS_SHORT_JOB, cron, ZoneOffset.UTC,
+            JobItems.template(MailProcesses.FUNDS_SHORT_DUE_TEMPLATE, scheduledTime -> Map.of("before",
+                scheduledTime.minus(NotificationMails.NOTICE_INTERVAL)), "sponsorId"),
+            qbMailFundsShortDue, (scheduledTime, row) -> new MailProcesses.SponsorRef(
+                String.valueOf(row.get("sponsorId"))));
     }
 
     @Bean

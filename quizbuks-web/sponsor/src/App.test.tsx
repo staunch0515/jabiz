@@ -95,9 +95,11 @@ beforeEach(() => {
   session.clear()
   window.history.replaceState(null, '', '/')
 })
-afterEach(() => {
+afterEach(async () => {
   vi.useRealTimers()
   vi.restoreAllMocks()
+  // A test that switches the interface language must not leave it to the next one.
+  await changeLanguage('en')
 })
 
 describe('a visitor', () => {
@@ -279,7 +281,20 @@ describe('a signed-in sponsor', () => {
     await userEvent.click(await screen.findByRole('button', { name: '暂不' }))
     expect(asked).toContain('/api/auth/account/locale')
     expect(posted.filter((p) => p.path === '/api/auth/account/locale')).toEqual([])
-    await changeLanguage('en')
+  })
+
+  it('sends mail in the new interface language once the sponsor accepts', async () => {
+    const { posted } = server({ sponsor: { contactName: 'Sara', company: 'Acme', intro: null, avatar: null,
+      reviewStatus: 'APPROVED', revision: 3 } })
+    window.history.replaceState(null, '', '/account')
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('language-switch'))
+    await userEvent.click(await screen.findByRole('option', { name: '日本語' }))
+    // Nothing changes until the sponsor accepts (decision D49 item 3).
+    const accept = await screen.findByRole('button', { name: 'メールにも使う' })
+    expect(posted.filter((p) => p.path === '/api/auth/account/locale')).toEqual([])
+    await userEvent.click(accept)
+    await waitFor(() => expect(posted).toContainEqual({ path: '/api/auth/account/locale', body: { locale: 'ja' } }))
   })
 
   it('is sent home from the sign-up and password reset pages', async () => {

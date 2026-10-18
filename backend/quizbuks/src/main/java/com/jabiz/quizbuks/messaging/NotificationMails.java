@@ -15,7 +15,7 @@ import java.util.List;
  *   <li>Transactional (always sent): to takers, a transfer sent or failed and a payout account Stripe holds back; to
  *       sponsors, a top-up received and a publication approved, sent back or taken down.</li>
  *   <li>Notifications (each sponsor may turn them off): publications short of funds (at most one per sponsor in
- *       {@link #FUNDS_SHORT_INTERVAL}, naming all of them) and a publication ended. They are the sponsor console's
+ *       {@link #NOTICE_INTERVAL}, naming all of them; one within the window is deferred to its end) and a publication ended. They are the sponsor console's
  *       ({@code entries("sponsor")}): a taker's mail preferences never list them.</li>
  * </ul>
  * No mail for rewards, announcements or changed terms: those are in the app only (Q7-12). Links go to each entry's
@@ -43,7 +43,7 @@ public final class NotificationMails {
 
     /** A sponsor's publication passed its review. */
     public static final MailTemplate PUBLICATION_APPROVED = MailTemplate.define("qb.publication.approved", t -> t
-        .category(MailCategory.TRANSACTIONAL).param("name", "startAt"));
+        .category(MailCategory.TRANSACTIONAL).param("name", "start"));
 
     /** A sponsor's publication was sent back by its reviewer. */
     public static final MailTemplate PUBLICATION_REJECTED = MailTemplate.define("qb.publication.rejected", t -> t
@@ -70,16 +70,24 @@ public final class NotificationMails {
         PUBLICATION_ENDED);
 
     /**
-     * At most one "short of funds" mail per sponsor in this time: a wallet may run dry and be topped up often, and a dry
-     * wallet leaves every live publication of the sponsor short.
+     * At most one throttled notice per user and kind in this time: a sponsor's "short of funds" (a wallet may run dry
+     * and be topped up often, and a dry wallet leaves every live publication short; one within the window is deferred
+     * to its end) and a taker's "payout account needs information" (an account may flip between enabled and held back).
      */
-    public static final Duration FUNDS_SHORT_INTERVAL = Duration.ofHours(24);
+    public static final Duration NOTICE_INTERVAL = Duration.ofHours(24);
 
     /**
-     * Events older than this are not mailed: a consumer subscribed later receives every earlier event (platform 11
-     * §2.3), and a mail about a transfer of last month would only confuse; so would a delivery stalled for days.
+     * Notifications for events older than this are not mailed: a consumer subscribed later receives every earlier
+     * event (platform 11 §2.3), and a stale "short of funds" or "ended" would only confuse.
      */
     public static final Duration MAX_AGE = Duration.ofDays(3);
+
+    /**
+     * Transactional mail (money, reviews, takedowns) waits longer, as through a delivery backlog of days: each process
+     * mails only what still holds (a transfer still sent or failed, an account still held back), and only older events
+     * are dropped (a consumer subscribed later receives every earlier one).
+     */
+    public static final Duration TRANSACTIONAL_MAX_AGE = Duration.ofDays(14);
 
     private NotificationMails() {}
 }

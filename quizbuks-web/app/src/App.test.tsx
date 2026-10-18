@@ -89,7 +89,11 @@ beforeEach(() => {
   // The browser's hints for the country: Japanese in Japan.
   vi.spyOn(navigator, 'languages', 'get').mockReturnValue(['ja-JP', 'en'])
 })
-afterEach(() => vi.restoreAllMocks())
+afterEach(async () => {
+  vi.restoreAllMocks()
+  // A test that switches the interface language must not leave it to the next one.
+  await changeLanguage('en')
+})
 
 describe('a visitor', () => {
   it('goes to the sign-in of the app\'s own entry, with sign-up and password reset', async () => {
@@ -233,7 +237,6 @@ describe('a signed-in taker', () => {
     expect(posted.filter((p) => p.path === '/api/auth/account/locale')).toEqual([])
     await userEvent.click(accept)
     await waitFor(() => expect(posted).toContainEqual({ path: '/api/auth/account/locale', body: { locale: 'ja' } }))
-    await changeLanguage('en')
   })
 
   it('is sent home from the sign-up and password reset pages', async () => {
