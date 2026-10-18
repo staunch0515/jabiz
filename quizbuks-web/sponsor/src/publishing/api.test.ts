@@ -96,6 +96,8 @@ describe('what the pages say about a publication', () => {
     expect(actionsOf('PAUSED', 'ADMIN')).toMatchObject({ pause: false, resume: false, copy: false })
     expect(actionsOf('ENDED', null, 'ADMIN')).toMatchObject({ copy: false })
     expect(actionsOf('ENDED', null, 'EXPIRED')).toMatchObject({ copy: true })
+    expect(actionsOf('ENDED', 'ADMIN', 'EXPIRED')).toMatchObject({ copy: false })
+    expect(actionsOf('ENDED', 'SPONSOR', 'EXPIRED')).toMatchObject({ copy: true })
     expect(actionsOf('ENDED')).toMatchObject({ pause: false, resume: false, withdraw: false, copy: true })
   })
 

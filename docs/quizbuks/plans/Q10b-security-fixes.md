@@ -159,3 +159,18 @@
 `quizbuks-web/app`、`sponsor` 的 lint、typecheck、test 通过（104、115 个），`e2e` 的 typecheck 通过，`qb/` 两份相同；
 `JABIZ_ADMIN_EXTENSION=../backend/quizbuks/admin-extension pnpm ext:check` 通过（65 个）；`tools/quizbuks/test/entrypoint.test.sh` 与 `stripe-test-mode.test.sh` 通过；actionlint 通过；
 e2e（打包的 jar、Stripe 桩、Mailpit，放宽登录限流）41 个中 40 个通过，`content.spec.ts` 的"他处改过的 Quiz 要求先重新加载"一次焦点超时，单独重跑通过（未改动内容页，判断为时序不稳）。
+
+## 8. 修正的核查（2026-10-18，PR #173）
+
+核查评审对 6347cb9..72ae222 以探针确认两个中危与三个低危；探针先改成真实的测试（修正前失败），再修正。先合并了 `origin/1.2/quizbuks`。
+
+| 项 | 做法 | 测试（修正前失败） |
+|---|---|---|
+| 中危：转账退回的钱被当作自由的钱 | 发送失败的冲正（`LEDGER_REVERSE`）与 Stripe 撤回的部分把钱记回 2120（来源 `QbTransfer`，`sourceId` 同原转账），原先归为自由的贷方，原借方仍"取走"争议冻结的奖励：发送失败后冻结的 100 显示为未保留并再被转出。现在同一转账的退回在其借方处与之相抵（借方减去退回之和，不低于 0；退回行不再单独计入），如同转账只发出了没有退回的部分：`RewardHolds.netted` 与两个模板（`returned` / `sends` / `lines` 三个 CTE）一致；App 的累计收入不计退回 | `TransferHoldIT.aFailedTransferBringsBackADisputedRewardHeld`（探针：发送中被争议、发送失败后保留 100、不再转出、累计收入仍 100）与 `aReversedPartOfATransferIsNettedAgainstIt`（转出两家的奖励后撤回一半：被争议商家的仍保留）；`RewardHoldsTest`（jqwik：随机的转账在其后全部或部分退回，结果等于转账只发出未退回部分的账；探针的三个例子） |
+| 中危：管理员暂停在发布结束后不再算下架 | 定时任务把暂停的发布按时间结束（`EXPIRED`）、完成按名额结束（`QUOTA`）时保留 `pausedBy = ADMIN`。`PublicationAdmin.takenDown` 与 `qb.admin.quiz-takedowns` 改为：`pausedBy = ADMIN`（不论此后的状态）或 `endReason = ADMIN`；只有管理员恢复清除 `pausedBy`。封禁的暂停同样（它也记 `ADMIN`）。商家页的"复制"照同一条件隐藏 | `TakedownIT.anAdminPauseThatRunsIntoItsEndStaysATakedown`（探针）与 `aBansPauseThatEndsByItsQuotaStaysATakedown`（封禁暂停后进行中的答题拿走最后一个名额） |
+| 低危：封禁与管理员恢复竞争 | `QB_PUBLICATION_ADMIN_RESUME` 照审批结果先在锁外读发布、取商家的账户锁、再取发布锁（共用 `PublicationEditing.lockSponsorAccount`）；锁序文字随之更新 | `TakedownIT.aBanAndAnAdminResumeTakeTurns`（修正前：恢复先读到无封禁、封禁跳过"已由管理员暂停"的发布，结果是封禁中仍在上架） |
+| 低危：残留的下架绕过 | 写入设计第 9 节：以同样内容另建新 Quiz（新的 `quizId`）照普通规则处理；下架时同一 Quiz 已在进行中或商家自己暂停的其他发布照常进行。**可选的加强**（未实施，待需求方决定）：管理员下架一个发布时一并暂停同一 Quiz 的其他进行中的发布（像封禁那样以子流程逐个暂停，理由取同一下架理由） | — |
+| 低危：商家头像的元数据 | 头像策略 `qb.sponsor-avatar` 声明 `privateMetadata()`（答题人与其他商家持 `qb.sponsor.avatar.read`）；入驻页以中性名 `avatar.<扩展名>` 上传（`neutralName`） | `FileNamesIT.avatarsKeepTheirMetadataPrivateToo`（答题人与另一商家：无原名与上传者、上传时间只到日、下载名中性；本人与 `file.read` 照常可见）；`content/api.test.ts` |
+
+**语句预算**：管理员恢复多一次读取与一把锁，不在答题的锁内；`AttemptStatementBudgetIT` 不变。
+

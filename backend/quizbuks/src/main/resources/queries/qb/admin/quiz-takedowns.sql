@@ -1,6 +1,6 @@
 /*---
 id: qb.admin.quiz-takedowns
-description: The publications of a quiz an administrator took down (paused, still so, or ended), with the reasons, for the review of another publication of it
+description: The publications of a quiz an administrator took down (paused and not resumed, whatever became of them since, or ended), with the reasons, for the review of another publication of it
 entities: [QbPublication]
 datasets:
   QbPublication: urn:jabiz:dataset:default:QbPublication
@@ -19,8 +19,9 @@ results:
 permissions: [qb.admin.publication.read]
 ---*/
 -- Q10b, review M-d: a publication of a quiz like this goes on only after a person's review, and the reviewer reads why
--- the others were taken down (PublicationAdmin.takenDown is the same condition). By the immutable sponsor (indexed),
--- then the quiz.
+-- the others were taken down (PublicationAdmin.takenDown is the same condition: an administrator's pause stays one when
+-- the publication then ends by its time or quota, only an administrator's resume clears it). By the immutable sponsor
+-- (indexed), then the quiz.
 SELECT
     p.{{QbPublication.publicationId}} AS publicationId,
     p.{{QbPublication.name}}          AS name,
@@ -33,5 +34,4 @@ SELECT
 FROM {{QbPublication}} p
 WHERE p.{{QbPublication.sponsorId}} = :sponsorId
   AND p.{{QbPublication.quizId}} = :quizId
-  AND ((p.{{QbPublication.status}} = 'PAUSED' AND p.{{QbPublication.pausedBy}} = 'ADMIN')
-       OR p.{{QbPublication.endReason}} = 'ADMIN')
+  AND (p.{{QbPublication.pausedBy}} = 'ADMIN' OR p.{{QbPublication.endReason}} = 'ADMIN')

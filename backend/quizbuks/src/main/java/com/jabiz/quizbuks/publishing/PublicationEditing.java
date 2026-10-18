@@ -176,6 +176,27 @@ final class PublicationEditing {
                 BAN_ROWS));
     }
 
+    /** The publication named by {@link #PUB_ID} as read before the locks, for its (immutable) sponsor (Q10b). */
+    static final String BEFORE = "before";
+
+    /**
+     * Takes the account lock of the sponsor of the publication named by {@link #PUB_ID}, before the publication's
+     * lock (Q10b, reviews L1 and its verification): a ban reads the sponsor's publications under that lock and pauses
+     * the running ones, so a process that may put a publication on (the approval result, an administrator's resume)
+     * and a ban take turns: the one sees the ban, or the ban sees the publication on. The sponsor never changes, so it
+     * is read before the locks (through the default dataset; none for an unknown publication: no lock).
+     */
+    static <I, O> void lockSponsorAccount(ProcessDefinitionBuilder<I, O, ProcessContext> pb) {
+        pb.step("Find the sponsor", QueryEntities.<ProcessContext>of(
+                QbPublications.defaultDataset(QbPublications.PUBLICATION), ctx -> EntityQuery.builder()
+                    .where(new QueryPredicate.In("publicationId", ids(ctx.get(PUB_ID)))).limit(1).build(), BEFORE))
+            .step("Lock the sponsor's account", HoldLock.<ProcessContext>exclusive(ctx -> {
+                EntityInstance before = first(ctx, BEFORE);
+                return before == null ? null : com.jabiz.quizbuks.identity.QbAccounts.lockName(
+                    before.get("sponsorId"));
+            }));
+    }
+
     /** The sponsor's publications, for the publications of a quiz an administrator took down (Q10b, M-d). */
     static final String SPONSOR_PUBLICATIONS = "sponsorPublications";
 

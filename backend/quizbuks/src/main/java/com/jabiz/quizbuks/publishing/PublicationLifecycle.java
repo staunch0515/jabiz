@@ -107,8 +107,6 @@ public final class PublicationLifecycle {
     static final String FIRST = "first";
     /** Whether an administrator took down another publication of the submitted one's quiz (Q10b, M-d). */
     static final String TAKEN_DOWN = "takenDown";
-    /** The publication as read before the locks, for its (immutable) sponsor (Q10b, L1). */
-    static final String BEFORE = "before";
     static final String PARAMS = "params";
     static final String REQUEST = "request";
 
@@ -345,15 +343,7 @@ public final class PublicationLifecycle {
                 // Events of other subjects lock and find nothing. The sponsor's account first (review L1): a ban
                 // reads the sponsor's publications under it, so a ban and an approval take turns, and the approval
                 // sees the ban or the ban the publication on. The sponsor never changes: read before the locks.
-                .step("Find the sponsor", QueryEntities.<ProcessContext>of(
-                    QbPublications.defaultDataset(QbPublications.PUBLICATION), ctx -> EntityQuery.builder()
-                        .where(new QueryPredicate.In("publicationId", PublicationEditing.ids(ctx.get(PUB_ID))))
-                        .limit(1).build(), BEFORE))
-                .step("Lock the sponsor's account", HoldLock.<ProcessContext>exclusive(ctx -> {
-                    EntityInstance before = first(ctx, BEFORE);
-                    return before == null ? null : com.jabiz.quizbuks.identity.QbAccounts.lockName(
-                        before.get("sponsorId"));
-                }))
+                .steps(PublicationEditing::lockSponsorAccount)
                 .step("Lock the publication", HoldLock.<ProcessContext>exclusive(
                     ctx -> PublicationEditing.lockName(ctx.get(PUB_ID))))
                 .step("Find the publication", QueryEntities.<ProcessContext>of(

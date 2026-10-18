@@ -52,12 +52,12 @@
   新放入内容的文件必须由模版所有者上传（`QuizEditing.requireOwnFile`，经平台文件数据视图读 `uploadedBy`）。子项列表（选项、图片）给出即完整列表，不给（null）即不动。
   版本与版本文件没有商家数据视图（版本含正确答案）：商家只经连接本人未移除模版的模板读取。商家视图的写权限 `qb.content.view.write` 不授予任何角色。
 - **发布**（`publishing`，`docs/quizbuks/plans/Q4-publishing.md`）：写入只经 `QB_PUBLICATION_*` 流程（默认数据视图 `processOnlyWrites`，商家视图只读，
-  写权限同样是不授予任何角色的 `qb.content.view.write`）。**锁的顺序固定**：（`qb.account:<商家>`，封禁与发布的审批结果取，Q10b 评审 L1）→ `qb.quiz:<quizId>`（只有提交时取，共享）→ 按发布编号升序 [`qb.pub:<publicationId>`（独占）→ `qb.pub-start:<publicationId>`（开始锁，Q10a4）] → 平台审批的 `jabiz.approval:*` → Q5 的 `qb.wallet:<种类>:<所有者>`；
+  写权限同样是不授予任何角色的 `qb.content.view.write`）。**锁的顺序固定**：（`qb.account:<商家>`，封禁、发布的审批结果与管理员恢复取，Q10b 评审 L1）→ `qb.quiz:<quizId>`（只有提交时取，共享）→ 按发布编号升序 [`qb.pub:<publicationId>`（独占）→ `qb.pub-start:<publicationId>`（开始锁，Q10a4）] → 平台审批的 `jabiz.approval:*` → Q5 的 `qb.wallet:<种类>:<所有者>`；
   写一个发布的流程先取发布锁再读取；**改变已上架发布状态的流程**（暂停、恢复、`ADVANCE`、`FUNDED`）在发布锁之后、读取之前再取开始锁（`PublicationEditing.lockStarts` / `lockStatesAndLoad`），其他发布流程不取。**提交即冻结**：只有 `DRAFT` 可改（`QB_PUBLICATION_NOT_DRAFT`），要改就复制。
   **管理员下架**（Q10b，评审 M2）：`QB_PUBLICATION_ADMIN_PAUSE` / `_RESUME` / `_END`（`publishing.PublicationAdmin`，`qb.admin.content.write`，总是要求二次验证，必填理由 `adminReason`，商家可见）照状态流程取发布锁与开始锁、经缺省数据视图读取；
   暂停记 `pausedBy`（`SPONSOR` / `ADMIN`），管理员暂停的商家不能恢复（`QB_PUBLICATION_ADMIN_PAUSED`）。封禁商家时 `QB_USER_BAN` 在同一事务中按发布编号升序以子流程 `QB_PUBLICATION_BAN_PAUSE`（`subProcessOnly`）逐个暂停其进行中的发布（账户锁在前），
   理由记固定的代码 `QB_ACCOUNT_SUSPENDED`（前端按语言显示；封禁的理由是内部的，评审 L3），其间已结束或回到草稿的什么也不做（评审 L2）；解封不恢复，封禁期间管理员也不能恢复（`QB_PUBLICATION_SPONSOR_BANNED`，评审 L9）。
-  发布的审批结果先在锁外读发布、取商家的账户锁再取发布锁，封禁与获批因此依次进行。**下架之后**（评审 M-d，`PublicationAdmin.takenDown`：管理员暂停中或管理员结束）：
+  发布的审批结果与管理员恢复先在锁外读发布、取商家的账户锁再取发布锁（`PublicationEditing.lockSponsorAccount`），封禁与获批、恢复因此依次进行。**下架之后**（评审 M-d，`PublicationAdmin.takenDown`：管理员结束，或 `pausedBy = ADMIN`，含此后因时间或名额结束的；只有管理员恢复清除它）：
   不能复制（`QB_PUBLICATION_TAKEN_DOWN`）；同一 Quiz 以后的发布一律人工审核（案件事实 `autoApprove = false`、`takenDown = true`，不要求审核或沿用旧批准时拒绝 `QB_PUBLICATION_REVIEW_REQUIRED`），
   后台扩展的审核页经 `qb.admin.quiz-takedowns` 显示下架与理由，读好之前不给出决定面板。
   **"接受新的答题"只由 `PublicationRules.acceptsNewAttempts` 判断**（`LIVE` 且 `startAt ≤ now < endAt`），模板写同样的条件；状态只表达人与钱的开关，时间由时间字段表达。
@@ -128,7 +128,7 @@
     用户钱包缓存（`QbWallet` 的 `TAKER` 行）只经 `TakerWallets`（`QB_TAKER_WALLET_SYNC` 与转账流程）**按账本重算后覆盖**，不做加减；结算奖励不取用户钱包锁。
     转账的一切流程只持 `qb.wallet:TAKER:<用户>`，锁内从账本读余额；金额只取自账本与记录。**只转未保留的部分**（Q10b，评审 M3）：模板 `qb.wallet.taker-transferable` 给出保留中的奖励
     （最近 `qb.transfer.hold-days` 天入账的，与有未结争议的商家在被争议付款之后入账的，奖励即来源为 `QbAttempt` 的 2120 贷方行，商家经发布维度与卡片找到；
-    只计尚在余额中的部分：转出先取自由的、再取按时间保留的、最后取争议冻结的，只取此前入账的，保留不超过余额，模型 `wallet.RewardHolds`、设计 4.4，评审 M-b），`TransferRules` 按 `余额 − 保留` 判断门槛与金额，
+    只计尚在余额中的部分：转出先取自由的、再取按时间保留的、最后取争议冻结的，只取此前入账的，保留不超过余额；转账退回的钱（冲正、撤回）与该转账的借方相抵；模型 `wallet.RewardHolds`、设计 4.4，评审 M-b），`TransferRules` 按 `余额 − 保留` 判断门槛与金额，
     审核通过后同样再查；App 的 `qb.app.wallet` 按同一规则给出保留中与预计可转时刻（改规则时两处一起改，`TransferHoldIT` 比较两者）。每人至多一笔未结束的转账（部分唯一索引）；
     发出作业先按 `transfer_group` 查询再以转账自己的幂等键创建；**只有 Stripe 拒绝创建（`TransferRules.certainFailure`）才冲正**，其他结果进入 `CHECK`、
     向 Stripe 核实后定论：查询"没有"只有在晚于发送结束（`sendEndedAt`）至少 10 分钟时才是定论。Stripe 把执行过的请求的回答（含错误）保存在幂等键下，
@@ -165,7 +165,7 @@
   流程的输入输出对照 Java record 手写在 `qb/api.ts`（答题的在 `qb/play.ts`；QuizBuks 没有自己的接口，因此没有 OpenAPI 类型），改了 record 就改这里并由 e2e 覆盖。
   **只有一个 SPA 用到的功能**（商家后台的内容工坊）在该 SPA 自己的功能目录中照此各写一份：名字在 `<功能>/ids.ts`、手写类型与调用在 `<功能>/api.ts`（如 `sponsor/src/content/`），不进 `qb/`。
 - **内容工坊**（`sponsor/src/content/`，QP3a）：每次编辑带上页面所见的 `revision` 作 `baseRevision`；`QB_QUIZ_CHANGED` / `QB_ORDER_MISMATCH` 或读到别人的新 revision 即提示重新加载，
-  重新加载之前不再提交。上传只经 `uploadFile(内容策略)`（`qb.content.image|pdf|audio`），文件名用中性的 `<种类>.<扩展名>`（`content/api.ts` 的 `neutralName`，Q10b：答题人能读内容文件的元数据），页面的类型与大小检查只为省一次往返；图片按文件自己的变体显示（小图没有变体，`ContentImage`）。
+  重新加载之前不再提交。上传只经 `uploadFile(内容策略)`（`qb.content.image|pdf|audio`），文件名用中性的 `<种类>.<扩展名>`（`content/api.ts` 的 `neutralName`，Q10b：答题人能读内容文件的元数据；商家头像同样以 `avatar.<扩展名>` 上传，内容与头像的策略都声明 `privateMetadata()`），页面的类型与大小检查只为省一次往返；图片按文件自己的变体显示（小图没有变体，`ContentImage`）。
   Markdown 只经 `MarkdownView`，外链只放 http(s) 并在新标签页打开。e2e 的数据准备（文件、完整的 Quiz 与版本）在 `e2e/tests/content.ts`，发布的测试从它开始。
 - **发布页**（`sponsor/src/publishing/`，QP3b）：向导每一步都以 `QB_PUBLICATION_SAVE` 保存**整个**草稿（档位给出即完整列表，带上次保存得到的 `tierId`；带 `baseRevision`），
   提交前的问题与预计最大支出**只取保存的输出**（`problems`、`maxSpend`），页面不重算规则；`QB_PUBLICATION_CHANGED` / `QB_PUBLICATION_NOT_DRAFT` 即提示重新加载。
@@ -217,7 +217,7 @@
 
 ## 7. 运行
 
-- 本地：`docker compose -f deploy/quizbuks/docker-compose.yml up -d --build`（数据库端口 5440、应用 8080：App 在 `/`、商家后台在 `/sponsor/`、后台在 `/admin/`）；
+- 本地：`QB_LOCAL_SECRETS=true docker compose -f deploy/quizbuks/docker-compose.yml up -d --build`（compose 缺省不生成密钥，Q10b L5；数据库端口 5440、应用 8080：App 在 `/`、商家后台在 `/sponsor/`、后台在 `/admin/`）；
   或只起数据库（`… up -d db`）后在 `backend/` 下 `./gradlew :quizbuks:bootRun --args='--spring.profiles.active=dev'`，前端开发时在 `quizbuks-web/app` 或 `sponsor` 下 `pnpm dev`
   （端口 5175 / 5176，`/api` 代理到 8080）。
   compose 没有 `.env` 时 Stripe 未配置：镜像的入口脚本 `deploy/quizbuks/entrypoint.sh`（再交给平台的 `docker/app-entrypoint.sh`，不改平台脚本）只在测试模式、

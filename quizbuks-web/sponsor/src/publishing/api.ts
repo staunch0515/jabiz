@@ -351,7 +351,8 @@ export function isStale(error: unknown): boolean {
  */
 export function actionsOf(status: PublicationStatus, pausedBy: string | null = null,
   endReason: string | null = null) {
-  const takenDown = (status === 'PAUSED' && pausedBy === 'ADMIN') || endReason === 'ADMIN'
+  // Paused by an administrator stays so when it ends afterwards (verification of review M-d).
+  const takenDown = pausedBy === 'ADMIN' || endReason === 'ADMIN'
   return {
     edit: status === 'DRAFT',
     submit: status === 'DRAFT',

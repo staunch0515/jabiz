@@ -35,8 +35,8 @@ import static com.jabiz.quizbuks.publishing.PublicationStatus.SCHEDULED;
  *       own reason is internal, review L3); one that ended or went back to its draft since the ban read it is left
  *       as it is (review L2).</li>
  * </ul>
- * A publication an administrator paused or ended is taken down ({@link #takenDown}): it is not copied, and every later
- * publication of its quiz is reviewed by a person (review M-d).
+ * A publication an administrator paused (and did not resume) or ended is taken down ({@link #takenDown}), also once it
+ * ended otherwise: it is not copied, and every later publication of its quiz is reviewed by a person (review M-d).
  * Each needs {@code qb.admin.content.write} and a recent second factor (always, whatever
  * {@code jabiz.security.mfa.administration} says), and a reason, which the sponsor reads with the publication. The
  * attempts in progress complete as they would after the end time. Locks as every process that changes the state of a
@@ -55,10 +55,13 @@ public final class PublicationAdmin {
      */
     public static final String ACCOUNT_SUSPENDED = "QB_ACCOUNT_SUSPENDED";
 
-    /** Whether an administrator took the publication down: paused it (and it is still so) or ended it. */
+    /**
+     * Whether an administrator took the publication down: ended it, or paused it (a ban's pause included) and did not
+     * resume it, whatever became of it since: a pause that runs into its end time or its quota ends with
+     * {@code pausedBy} kept (verification of review M-d). Only an administrator's resume clears {@code pausedBy}.
+     */
     public static boolean takenDown(EntityInstance publication) {
-        return publication != null && ((PAUSED.equals(publication.get("status"))
-            && PublicationStatus.BY_ADMIN.equals(publication.get("pausedBy")))
+        return publication != null && (PublicationStatus.BY_ADMIN.equals(publication.get("pausedBy"))
             || PublicationStatus.ADMIN.equals(publication.get("endReason")));
     }
 
@@ -76,7 +79,10 @@ public final class PublicationAdmin {
         return define(name, description, from, false, compute);
     }
 
-    /** @param readBan whether to read the sponsor's ban too ({@link PublicationEditing#sponsorBanned}) */
+    /**
+     * @param readBan whether to read the sponsor's ban too ({@link PublicationEditing#sponsorBanned}), under the
+     *                sponsor's account lock taken before the publication's (a resume and a ban take turns)
+     */
     private static ProcessDefinition<AdminInput, PublicationOutput, ProcessContext> define(String name,
         String description, String[] from, boolean readBan,
         java.util.function.BiConsumer<ProcessContext, AdminInput> compute) {
@@ -89,6 +95,11 @@ public final class PublicationAdmin {
                 .actsOn(QbPublications.PUBLICATION, "publicationId", a -> a.whenField("status", from))
                 .contextFactory((start, input) -> PublicationEditing.start(start, input, input.publicationId()))
                 .outputMapper(ctx -> ctx.get(OUTPUT, PublicationOutput.class))
+                .steps(b -> {
+                    if (readBan) {
+                        PublicationEditing.lockSponsorAccount(b);
+                    }
+                })
                 .steps(PublicationEditing::lockStatesAndLoadAny)
                 .steps(b -> {
                     if (readBan) {
