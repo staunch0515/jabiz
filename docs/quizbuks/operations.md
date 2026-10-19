@@ -49,7 +49,7 @@
 
 邮件中的时刻按日本时间、标为 `JST`（取自 `jabiz.fiscal-year-zone`）。`JABIZ_MAIL_ENABLED` 未开时这些邮件同样只记为 `SKIPPED`（`sys_mail_message` / `sys_mail_attempt`），不会补发。事件太晚才被消费（投递积压、或新消费者收到历史事件）时不发信：通知（可退订的两种）超过 3 天、事务邮件（转账、收款账户、充值、发布的审核结果与下架）超过 14 天（`NotificationMails.MAX_AGE` / `TRANSACTIONAL_MAX_AGE`）。补发任务的时间可以 `quizbuks.mail.funds-short-due-cron`（Spring 的六段 cron，缺省 `0 11 * * * *`，UTC）改；它只读待发的行（`qb_mail_notice` 的部分索引）。
 
-**退订链接**：可退订邮件中的退订链接由平台生成，指向后台入口的页面 `/admin/mail/unsubscribe`（平台 D49：退订页只在通用后台中）。所以即使只给答题人与商家开放 App 与商家后台，反向代理也必须让 `/admin/` 下的这个路径可达（无需登录：链接中的令牌即凭证）；若要完全不对外开放 `/admin/`，需先由平台的后续阶段提供与入口无关的退订页。
+**退订链接**：可退订邮件中的退订链接由平台生成，指向邮件所属入口自己的前端（平台 D52 第 3 条，`jabiz.mail.unsubscribe-paths`）：商家的两种通知（`.entries("sponsor")`）指向 `/sponsor/mail/unsubscribe`，欢迎邮件（`.entries("app")`）指向 `/mail/unsubscribe`，两个 SPA 都挂载平台的退订页（无需登录：链接中的令牌即凭证）。答题人与商家因此不需要打开 `/admin/`；后台的旧页 `/admin/mail/unsubscribe` 保留，此前发出的链接照常有效（`/admin/` 是否对外开放只取决于管理员从哪里登录）。
 
 ### 1.3 Stripe 与资金（`deploy/quizbuks/README.md`"充值与核对""收款账户与自动转账"）
 
@@ -337,9 +337,11 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 - **事故时的紧急停止**（花费异常、密钥泄露），按快慢：
   1. **最快：在 Anthropic Console 吊销（删除）密钥**。立即生效、不需要部署或第二个人；之后每次尝试得到 401，作业以 `QB_AI_AUTH` 立即失败、不再重试（排队与重试中的作业都一样），商家看到"暂时不可用"。恢复时新建密钥、改 `ANTHROPIC_API_KEY`、重启。
   2. **关闭开关 `qb.ai.enabled`**：受控参数，**需要两位管理员**（一位在 `/qb/ai` 提出、另一位发布），所以不是一个人能立刻做到的；它只拦新请求，**不停已排队或正在重试的作业**（作业处理器不访问数据库，读不到开关；平台缺口见计划的实施记录）。
-  3. **停止已排队的作业**：持有 `external-job.cancel` 的管理员（平台的 `ADMIN` 角色）对作业调用 `POST /api/external-jobs/{作业号}/cancel`（作业号在 `/qb/ai` 的"最近的请求"与 `qb.admin.ai-jobs` 中）：没在运行的立即结束、正在运行的在本次尝试后结束、不再重试；QuizBuks 以 `QB_AI_JOB_STOPPED` 关闭本地作业（`QB_AI_STOPPED`）并按完整预估计入用量。
+  3. **停止已排队的作业**：持有 `external-job.cancel` 的管理员（平台的 `ADMIN` 角色）对作业调用 `POST /api/external-jobs/{作业号}/cancel`（作业号在 `/qb/ai` 的"最近的请求"与 `qb.admin.ai-jobs` 中）：没在运行的立即结束、正在运行的在本次尝试后结束、不再重试；作业结束后平台调用两种作业类型的取消结局 `QB_AI_JOB_CANCELLED`（平台 D52 第 2 条），它关闭本地作业（`QB_AI_STOPPED`）。
   4. **停掉本实例的全部调用**：`QB_AI_HALTED=true` 并重启：每次尝试不调用提供方即以 `QB_AI_HALTED` 失败（排队与重试中的也一样）。需要重启，所以比 1 慢。
 - **拒答**：请求带服务端回退（`fallbacks: "default"`，Haiku 无），回退后仍拒答即 `QB_AI_REFUSED`；`/qb/ai` 的"实际回答"列显示回退所用的模型。
+- **取消怎样计费**（平台 16v-1 之后）：商家取消（`QB_AI_CANCEL`）与运维停止（上面第 3 条）都取消平台的作业：排队中的不再调用提供方；正在运行的尝试照常进行到结束，回答被丢弃。作业结束后 `QB_AI_JOB_CANCELLED` 只运行一次，按平台记下的**实际用量**（全部尝试，含被取消的那次：处理器在每次调用后记下的输入、输出、回退模型与长提示的部分，没有得到回答的调用按预估）计入作业与月用量，美元估算同失败的作业（`AiCost`，不知道回答的模型时回退部分按回退模型的价格）；**没有任何尝试运行过的作业不计费**（不计入用量行）。
+  此前的做法：商家取消只改本地状态，平台的作业照常运行到完成（排队中的也会调用一次提供方），由完成或失败流程按实际用量计入；运维停止由 `QB_AI_JOB_STOPPED`（订阅 `jabiz.external-job.finished`）按**完整预估**计入。两者都已删去，同一作业只经取消结局计费一次。剩余风险：实例在尝试中途停机而没记下用量时（租约过期），那次尝试计为零（与失败的作业相同）；提供方的支出上限仍是最后的防线。
 - **告警**：`jabiz.external_job` 中 `qb.ai.questions` 与 `qb.ai.cover` 的失败率；某商家或全体本月用量接近上限（`qb.admin.ai-usage`）。
 - **封面（Q8b）**：作业 `qb.ai.cover`（与题目同样的尝试、重试、并发配置与限额，`/qb/ai` 的"种类"列区分）：Claude 只从固定的图库（8 种配色、4 种版式、7 种图形）中选出 3 个设计并写封面文字（≤ 40 字），由服务器以 Java2D 画成 1200 × 630 的 PNG，经平台的文件输出（D50）按 `qb.content.image` 策略以商家为上传者登记（按内容判定类型、重新编码）。
   中日文字体取 `JABIZ_REPORTS_PDF_FONTS`（镜像已设）：缺少时含中日文的标题在调用提供方之前即以 `QB_AI_COVER_FONT` 失败（不计费）。候选图在作业 `READY` 期间由作业的三列引用、不被清扫；商家选定（`QB_AI_COVER_ACCEPT`，经模版编辑写入 `cover`、`aiGenerated`）、丢弃或过期后，未选的图不再被引用，由平台的 `FILE_SWEEP` 在 `jabiz.files.orphan-after`（24 小时）后删除。
@@ -350,7 +352,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
   超过请求为一次尝试预留的输入即 `QB_AI_PDF_TOO_LONG`（永久、不发送、不计费）；提供方以 400 说请求过长（超过上下文窗口或每次请求的 PDF 页数）同样是 `QB_AI_PDF_TOO_LONG`；提供方说某个 PDF 读不了（无效、有密码、加密、损坏）即 `QB_AI_PDF_UNREADABLE`（都永久，400 不计费）。
   这些文字 API 文档没有给出，按常见的说法宽松匹配（`ClaudeErrors`）；其他 400，尤其是以字段路径开头的校验错误（如 `messages.0.content.0.document…`），一律是 `QB_AI_REQUEST_INVALID`：那是我们自己的请求有错，运维应当看到并调查。
   计数本身断线、超时、429 或 5xx 照常重试、不计费，但**会用掉作业 3 次尝试中的一次**（复审 L-d）：计数接连失败的作业可能在发送之前就用完尝试而失败（不计费，商家可重新请求）。之后的付费调用没有回答时按这个数计入。本地只查字节上限（存储的文件大小）。
-  请求时还不知道页数，所以**按上限预留**：每页按 5 000 Token（文字与页面图像），3 次尝试，即缺省一个带 PDF 的请求预留约 150 万 Token，直到作业结束才按实际用量计；计数超过预留的作业在发送前即失败，带 PDF 的调用又不带回退，所以带 PDF 的调用计入的输入不超过预留。平台停止的 PDF 作业按预留（含 PDF 的页数上限）计入。商家的月上限（缺省 200 万）因此只容得下一个进行中的 PDF 请求；常用 PDF 时提高 `qb.ai.sponsor.monthly-tokens` 或降低 `QB_AI_PDF_MAX_PAGES`（预留随之按比例减少）。
+  请求时还不知道页数，所以**按上限预留**：每页按 5 000 Token（文字与页面图像），3 次尝试，即缺省一个带 PDF 的请求预留约 150 万 Token，直到作业结束才按实际用量计；计数超过预留的作业在发送前即失败，带 PDF 的调用又不带回退，所以带 PDF 的调用计入的输入不超过预留。取消的 PDF 作业按实际用量计入（排队中被取消的不计费，预留随之释放）。商家的月上限（缺省 200 万）因此只容得下一个进行中的 PDF 请求；常用 PDF 时提高 `qb.ai.sponsor.monthly-tokens` 或降低 `QB_AI_PDF_MAX_PAGES`（预留随之按比例减少）。
   作业输入上限 256 KiB（文字资料；Q8a 为 60 KiB），作业输入照旧永久存于平台的 `sys_external_job`，PDF 只记文件编号与摘要（内容随 `sys_file` 删除而删除）。
   **堆**：一次带 PDF 的尝试在内存中同时持有文件的字节、Base64 一份（只编码一次，计数与调用共用）、请求体的字节与平台发送时的副本，约为该请求 PDF 合计的 5–6 倍，即 20 MiB 的上限下每个运行中的题目作业约 120 MiB（封面作业不带 PDF）。JVM 堆至少按"基础 512 MiB + 120 MiB × `QB_AI_MAX_CONCURRENCY`"给出（缺省并发 4 时约 1 GiB 以上）；容器内存紧张时降低 `QB_AI_MAX_CONCURRENCY` 或 `QB_AI_PDF_MAX_BYTES`。
 

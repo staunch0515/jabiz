@@ -265,7 +265,7 @@
 1. **请求超时 2 分钟**（计划写 5 分钟）：平台 `ExternalService` 的请求超时上限是 2 分钟（`MAX_REQUEST_TIMEOUT`）。effort `medium` 的非流式回答在其内；超过即该次尝试失败并重试，作业每次尝试的时限仍是 5 分钟。若真实测验中经常超时，可降低题数上限或改用流式（平台的 `ExternalHttp` 目前只有整体读取）。（评审后：超时的尝试按预估计入，`max_tokens` 随题数，effort `high` 至多 10 题。）
 2. **"3 次重试"按计划 D-Q8-4 理解为共 3 次尝试**（首次 + 2 次重试）。
 3. **取消不经平台的 `EXTERNAL_JOB_CANCEL`**：它是 `entryOnly()`，不能作子流程；且被取消的作业不调用完成或失败流程，用量就不会进入 `QbAiUsage`（反复"请求 → 运行中取消"可绕开月限额）。所以 `QB_AI_CANCEL` 只把本地状态改为 CANCELLED：
-   提供方照常完成，结果丢弃、用量照记，取消的作业在结束前仍占"未结束"的名额与预估。代价是排队中的作业被取消后仍会调用一次提供方。平台若提供"取消后仍回调用量"或子流程取消，可改为真正的取消（见"未完成"）。（评审后：运维以平台的 `EXTERNAL_JOB_CANCEL` 停止的作业由 `QB_AI_JOB_STOPPED` 关闭并按完整预估计入。）
+   提供方照常完成，结果丢弃、用量照记，取消的作业在结束前仍占"未结束"的名额与预估。代价是排队中的作业被取消后仍会调用一次提供方。平台若提供"取消后仍回调用量"或子流程取消，可改为真正的取消（见"未完成"）。（评审后：运维以平台的 `EXTERNAL_JOB_CANCEL` 停止的作业由 `QB_AI_JOB_STOPPED` 关闭并按完整预估计入。）（平台 16v-1 之后改为真正的取消：见文末"平台 16v-1 之后"。）
 4. ~~**全体月上限在锁外读**~~（评审后撤销，评审 M2）：请求在 `qb.ai:<商家>` 之后也取 `qb.ai:*`，全体上限计入所有商家未结束作业的预估（`qb.system.ai-open`，部分索引 `qb_ai_job_open_idx`），与计划一致。
 5. **AI 参数为受控参数**：计划写"普通参数，超级管理员可改"，但本应用不把 `platform.param.write` 授予任何角色（应用 `CLAUDE.md` 第 4 节"受控参数"），超级管理员实际改不了普通参数；开关与限额关系到花费，所以与金额参数一样四眼。
    后台 `/qb/ai` 的开关因此是"提出变更"。Q8a 之前装过的库中 `qb.ai.model` 是旧的文本参数 `gpt-4o-mini`（`QB_SETUP` 不改已有的）：AI 不可用，须以受控变更改为清单中的值（`deploy/quizbuks/README.md`）。
@@ -411,6 +411,25 @@
 - 细节：封面图改为单选按钮的 `<label htmlFor>`（不是 `div` 上的 `onClick`）；`QB_AI_NOTICE_MISSING` 的文案改为通用的"AI 生成"。
 - 验证（复审修改之后）：`./gradlew :quizbuks:check :quizbuks:bootJar` 通过（717 个测试、0 失败；`platformCheck` 0 错误）；商家后台 lint、typecheck、171 个 Vitest，`app:check`，`ext:check`（74 个）；e2e 全部 54 个一次通过。（之后合并 Q7c 时改为 V18，见"迁移"。）
 - 验证（合并 Q7c、迁移改为 V18 之后，2026-10-19）：`./gradlew :quizbuks:check :quizbuks:bootJar` 通过（807 个测试、0 失败，场景与快照无需改动；`platformCheck` 0 错误）；商家后台 177 个、App 148 个 Vitest，两个 SPA 的 lint、typecheck 与 `app:check`，`ext:check`（82 个）；e2e 全部 59 个一次通过。
+
+### 平台 16v-1 之后（2026-10-19，分支 `1.2/quizbuks-sync-platform-16v1`）
+
+平台 16v-1（PR #186，决策 D52 第 2 条）给了上面"偏离 3"与 M3"平台后续"所要的两项：作业类型的取消结局 `onCancelled`（含全部尝试的用量与"是否有尝试运行过"）与流程中的取消步骤 `CancelExternalJob`。改为：
+- `qb.ai.questions` 与 `qb.ai.cover` 声明 `.onCancelled(QB_AI_JOB_CANCELLED)`（`internal()`，输入 `ExternalJobCancellation`）：在 `qb.ai:<商家>` → `qb.ai:*` 内关闭本地作业（`finishedAt`、用量、尝试次数；仍是 QUEUED 的即运维停止，记 `CANCELLED` / `QB_AI_STOPPED` 与 `closedAt`），
+  按平台记下的**实际用量**计入作业与月用量（`AiProcesses.usage`：输入、输出、回退与长提示的部分照 `ClaudeCalls.record` 记下的，美元按 `AiCost`，回答的模型未知，同失败）；`attemptRan == false` 的不计费、不计入用量行。
+- 删去 `QB_AI_JOB_STOPPED` 与订阅 `qb.ai-job-stopped`（`jabiz.external-job.finished`）与 `AiProcesses.stoppedUsage`：两者并存会对运维停止的作业计两次。
+- `QB_AI_CANCEL` 在本地改为 CANCELLED 之后，按作业种类调用 `QB_AI_CANCEL_QUESTIONS_JOB` / `QB_AI_CANCEL_COVER_JOB`（`subProcessOnly()`，`qb.ai.use`），其中是平台步骤 `CancelExternalJob.of(类型, 作业号).ifOpen()`：
+  步骤只认一种声明的类型（没有按条件执行），所以一种类型一个子流程；缺省的请求人检查保留（商家即请求人），QuizBuks 自己的本人检查（别人的作业 404）在前；本地作业的 `externalJobId` 即平台作业号（唯一约束 `uk_qb_ai_job_external`）。
+  平台作业恰在此前结束时 `.ifOpen()` 不报错，由完成或失败流程照旧计入（本地已是 CANCELLED，不改状态）。
+- **计费前后对比**：此前商家取消只改本地状态，排队中的作业照样调用一次提供方，完成或失败时按实际用量计入；运维停止按**完整预估**（3 次尝试的全部输入与输出）计入。之后排队中被取消的不调用提供方、不计费；运行中被取消的在本次尝试后结束，按实际用量计入；两种取消同一流程、只计一次。
+- 测试：新增 `AiCancelIT`（商家取消排队的题目作业：平台作业由商家取消、提供方没有被调用、不计费、可再请求；封面作业经封面的子流程取消；运行中取消：回答丢弃、按尝试记下的用量计入一次、再运行与再投递不变、再取消 422；运维取消运行中的作业经同一流程计入）；
+  改 `AiCostControlIT.switchingOffStopsNewRequestsAndAnOperatorStopsTheQueuedOnes`（运维停止排队的作业不计费）、`AiPdfIT.anOperatorsStopOfAQueuedPdfJobIsChargedNothing`（不计数、不计费、预留释放）、`AiQuestionsIT.discardAndCancelEndTheJob`（提供方不被调用、用量不变）；
+  `AiPdfsTest.aCancelledJobIsPricedFromWhatItsAttemptsRecorded` 代替 `stoppedUsage` 的单元测试；`ProcessAccessIT` 与 `MessagesTest` 加新流程。
+- 剩余：实例在尝试中途停机而没记下用量时，那次尝试计为零（失败的作业同样如此）。
+- 同一同步分支的其他采用：退订页按入口（`jabiz.mail.unsubscribe-paths.sponsor` / `.app`，两个 SPA 挂载 `MailUnsubscribe`）、`@jabiz/ui/testing(/playwright)` 代替复制的 axe 辅助函数（后台扩展的测试暂留副本：平台的 `tsconfig.extension.json` 没有映射 `@jabiz/ui/testing`）、导出存档的 `GeneratedFile` 保留 10 年。
+  合并平台后场景回放的设置编号没有变化，快照不需更新。
+- 验证（2026-10-19，本机 PostgreSQL 16，自己的库与端口）：`./gradlew :quizbuks:check :quizbuks:bootJar` 通过（811 个测试、0 失败，场景 10 个；`platformCheck` 0 错误）；
+  商家后台 lint、typecheck、178 个 Vitest；App lint、typecheck、149 个 Vitest；两个 SPA `app:check` 通过；后台扩展 `ext:check`（82 个测试）；e2e 全部 59 个通过（应用 18480，Claude 桩 18494、Stripe 桩 18493、Mailpit 18425/18426）。
 
 ### 待确认（需求方）
 
