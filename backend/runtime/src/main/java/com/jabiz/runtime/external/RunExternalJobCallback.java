@@ -1,6 +1,7 @@
 package com.jabiz.runtime.external;
 
 import com.jabiz.context.RequestContext;
+import com.jabiz.external.ExternalJobCancellation;
 import com.jabiz.external.ExternalJobCompletion;
 import com.jabiz.external.ExternalJobFailure;
 import com.jabiz.external.ExternalJobType;
@@ -23,7 +24,9 @@ import java.util.UUID;
  * The step of {@code EXTERNAL_JOB_COMPLETE} (decision D38 item 3): reads the finished job, its outcome and its usage,
  * and calls the job type's completion process with an {@link ExternalJobCompletion} (the result read back as the
  * type's result record, with the ids of the files the successful attempt produced, decision D50) or its failure process with an {@link ExternalJobFailure}, as a sub-process in the same
- * transaction, which also records that the event was consumed: called once. A cancelled job calls nothing (Q13).
+ * transaction, which also records that the event was consumed: called once. A cancelled job calls its type's
+ * {@code onCancelled} process with an {@link ExternalJobCancellation}, or nothing when it declares none (Q13; decision
+ * D52 item 2).
  *
  * <p>Only the platform's event delivery runs it, as the system: anyone else, an administrator holding every
  * permission included, is refused, so that no caller can hand a made-up result to a completion process. (Until
@@ -79,9 +82,7 @@ class RunExternalJobCallback implements StepHandler<RunExternalJobCallback.Metad
                         Map<String, Long> usage = found.getT1();
                         Map<String, UUID> files = found.getT2();
                         if ("CANCELLED".equals(outcome.status())) {
-                            ctx.put(metadata.outputKey(), new ExternalJobProcesses.CompleteOutput(jobId,
-                                outcome.status(), null));
-                            return Mono.empty();
+                            return cancelled(metadata, ctx, job, outcome, usage);
                         }
                         ExternalJobType<?, ?> type = jobs.find(job.jobType()).orElse(null);
                         if (type == null) {
@@ -122,6 +123,33 @@ class RunExternalJobCallback implements StepHandler<RunExternalJobCallback.Metad
                         return call(process, input);
                     })));
         });
+    }
+
+    /**
+     * A cancelled job (decision D52 item 2): its type's {@code onCancelled} process, with who cancelled it and the
+     * usage of every attempt, the cancelled one included; nothing when the type declares none (or no longer exists).
+     */
+    private Mono<Void> cancelled(Metadata metadata, ProcessContext ctx, ExternalJobRecorder.Job job,
+        ExternalJobRecorder.Outcome outcome, Map<String, Long> usage) {
+        String jobId = job.jobId();
+        String target = jobs.find(job.jobType()).map(ExternalJobType::onCancelled).orElse(null);
+        if (target == null) {
+            ctx.put(metadata.outputKey(), new ExternalJobProcesses.CompleteOutput(jobId, outcome.status(), null));
+            return Mono.empty();
+        }
+        // One statement after the other: they share the transaction's connection.
+        return recorder.cancellation(jobId)
+            .switchIfEmpty(Mono.error(() -> new IllegalStateException("External job " + jobId
+                + " is cancelled without a cancellation")))
+            .flatMap(cancel -> recorder.anyClaim(jobId).flatMap(ran -> {
+                ProcessDefinition<?, ?, ?> process = processes.findLatest(target).orElseThrow(() ->
+                    new IllegalStateException("Unknown process " + target));
+                ctx.put(metadata.outputKey(), new ExternalJobProcesses.CompleteOutput(jobId, outcome.status(),
+                    process.name()));
+                return call(process, new ExternalJobCancellation(jobId, job.jobType(), job.requestedBy(),
+                    job.reference(), usage, outcome.attempts(), outcome.finishedTime(), cancel.cancelledBy(),
+                    cancel.cancelledTime(), ran));
+            }));
     }
 
     private boolean producesFiles(String jobType) {

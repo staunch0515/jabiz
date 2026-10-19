@@ -22,7 +22,9 @@ import java.util.regex.Pattern;
  * transaction, at most {@link #maxConcurrency} at a time across all instances, each attempt bounded by
  * {@link #timeout} and failed attempts retried after a backoff; once the job has a result, the platform runs the
  * {@link #onCompleted} process with an {@link ExternalJobCompletion} as the system, or once it has failed for good the
- * {@link #onFailed} process with an {@link ExternalJobFailure}. Both must be {@code internal()}.
+ * {@link #onFailed} process with an {@link ExternalJobFailure}; a type that declares {@link #onCancelled} has that
+ * process run with an {@link ExternalJobCancellation} once a cancelled job has ended (decision D52 item 2). All must be
+ * {@code internal()}.
  *
  * <p>The declaration is not validated when built: the startup check {@code EXTERNAL} reports every problem at once
  * ({@link #problems()} and the references the runtime resolves).
@@ -47,12 +49,14 @@ import java.util.regex.Pattern;
  *                       {@value #DEFAULT_MAX_INPUT_BYTES} unless declared, at most {@value #MAX_INPUT_BYTES}
  * @param inputFiles     the files a job may read (decision D50 item 2), or null when it reads none
  * @param outputFiles    the files a job may produce (decision D50 item 3), or null when it produces none
+ * @param onCancelled    the process run once a cancelled job has ended (decision D52 item 2), or null to run none (as
+ *                       before)
  */
 public record ExternalJobType<I, R>(String name, Class<I> inputType, Class<R> resultType,
     Class<? extends ExternalJobHandler<I, R>> handler, Set<String> services, Duration timeout, int maxAttempts,
     Duration initialBackoff, Duration maxBackoff, int maxConcurrency, String onCompleted, String onFailed,
     int maxOpenPerRequester, boolean oneOpenPerReference, int maxInputBytes, InputFiles inputFiles,
-    OutputFiles outputFiles) {
+    OutputFiles outputFiles, String onCancelled) {
 
     static final String NAME_PATTERN = "[a-z][a-z0-9._-]{0,99}";
     public static final Pattern NAME = Pattern.compile(NAME_PATTERN);
@@ -150,7 +154,21 @@ public record ExternalJobType<I, R>(String name, Class<I> inputType, Class<R> re
         int maxOpenPerRequester, boolean oneOpenPerReference) {
         this(name, inputType, resultType, handler, services, timeout, maxAttempts, initialBackoff, maxBackoff,
             maxConcurrency, onCompleted, onFailed, maxOpenPerRequester, oneOpenPerReference, DEFAULT_MAX_INPUT_BYTES,
-            null, null);
+            null, null, null);
+    }
+
+    /**
+     * A declaration as decision D50 had it, before a type could declare a cancellation process: none is run. Kept for
+     * code of line 1.2 that calls the canonical constructor of then (decision D52 item 2).
+     */
+    public ExternalJobType(String name, Class<I> inputType, Class<R> resultType,
+        Class<? extends ExternalJobHandler<I, R>> handler, Set<String> services, Duration timeout, int maxAttempts,
+        Duration initialBackoff, Duration maxBackoff, int maxConcurrency, String onCompleted, String onFailed,
+        int maxOpenPerRequester, boolean oneOpenPerReference, int maxInputBytes, InputFiles inputFiles,
+        OutputFiles outputFiles) {
+        this(name, inputType, resultType, handler, services, timeout, maxAttempts, initialBackoff, maxBackoff,
+            maxConcurrency, onCompleted, onFailed, maxOpenPerRequester, oneOpenPerReference, maxInputBytes, inputFiles,
+            outputFiles, null);
     }
 
     public static <I, R> ExternalJobType<I, R> define(String name, Class<I> inputType, Class<R> resultType,
@@ -266,6 +284,9 @@ public record ExternalJobType<I, R>(String name, Class<I> inputType, Class<R> re
         if (onFailed == null || onFailed.isBlank()) {
             problems.add("onFailed: name the process that hears of a failure");
         }
+        if (onCancelled != null && onCancelled.isBlank()) {
+            problems.add("onCancelled: name the process that hears of a cancellation, or declare none");
+        }
         return List.copyOf(problems);
     }
 
@@ -306,7 +327,8 @@ public record ExternalJobType<I, R>(String name, Class<I> inputType, Class<R> re
             + ", services=" + services + ", timeout=" + timeout + ", maxAttempts=" + maxAttempts + ", maxConcurrency="
             + maxConcurrency + ", maxOpenPerRequester=" + maxOpenPerRequester + ", oneOpenPerReference="
             + oneOpenPerReference + ", maxInputBytes=" + maxInputBytes + ", inputFiles=" + inputFiles
-            + ", outputFiles=" + outputFiles + ", onCompleted=" + onCompleted + ", onFailed=" + onFailed + "]";
+            + ", outputFiles=" + outputFiles + ", onCompleted=" + onCompleted + ", onFailed=" + onFailed
+            + ", onCancelled=" + onCancelled + "]";
     }
 
     public static final class Builder<I, R> {
@@ -328,6 +350,7 @@ public record ExternalJobType<I, R>(String name, Class<I> inputType, Class<R> re
         private OutputFiles outputFiles;
         private String onCompleted;
         private String onFailed;
+        private String onCancelled;
 
         private Builder(String name, Class<I> inputType, Class<R> resultType) {
             this.name = name;
@@ -434,10 +457,20 @@ public record ExternalJobType<I, R>(String name, Class<I> inputType, Class<R> re
             return this;
         }
 
+        /**
+         * The {@code internal()} process run once with an {@link ExternalJobCancellation} when a cancelled job has
+         * ended (decision D52 item 2): at once for a job no attempt of which was running, otherwise once the running
+         * attempt is recorded, with the usage of every attempt. Without it nothing is run for a cancelled job.
+         */
+        public Builder<I, R> onCancelled(String process) {
+            this.onCancelled = process;
+            return this;
+        }
+
         public ExternalJobType<I, R> build() {
             return new ExternalJobType<>(name, inputType, resultType, handler, services, timeout, maxAttempts,
                 initialBackoff, maxBackoff, maxConcurrency, onCompleted, onFailed, maxOpenPerRequester,
-                oneOpenPerReference, maxInputBytes, inputFiles, outputFiles);
+                oneOpenPerReference, maxInputBytes, inputFiles, outputFiles, onCancelled);
         }
     }
 }

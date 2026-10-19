@@ -1,6 +1,10 @@
 package com.jabiz.runtime.external;
 
+import com.jabiz.entity.Violation;
+import com.jabiz.i18n.PlatformErrorCodes;
 import com.jabiz.query.BoundValue;
+import com.jabiz.runtime.BusinessRuleViolationException;
+import com.jabiz.runtime.EntityNotFoundException;
 import com.jabiz.runtime.event.Outbox;
 import com.jabiz.runtime.process.entity.EntityIdGenerator;
 import com.jabiz.runtime.storage.Rows;
@@ -20,6 +24,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.function.Predicate;
 
 /**
  * The rows of external jobs (decision D38 items 3–5), for the start step, the executor, the cancellation and the
@@ -538,6 +543,68 @@ public class ExternalJobRecorder {
     }
 
     // ------------------------------------------------------------------ cancel
+
+    /** Of a job, what decides who may cancel it: its type and its requester. */
+    public record JobOwner(String jobId, String jobType, String requestedBy) {}
+
+    /**
+     * Cancels a job in the caller's transaction (decision D38 item 5, decision D52 item 2): the endpoint's
+     * {@code EXTERNAL_JOB_CANCEL} and the platform step {@code CancelExternalJob} both come here.
+     *
+     * <p>Whether the caller may cancel is decided on the unlocked row first, so that someone who may not never takes
+     * (or waits for) its lock; a job that does not exist and one {@code mayCancel} refuses are the same 404. Then the
+     * row is locked, as the executor locks it to record an attempt, so the two happen one after the other. A job that
+     * has its outcome, or was cancelled before, is 422 {@code EXTERNAL_JOB_FINISHED}, or nothing when
+     * {@code ifOpen}. Otherwise the cancellation is recorded; a job with no attempt running gets its outcome
+     * {@code CANCELLED} at once (with the event that leads to the type's {@code onCancelled}), a running one when its
+     * attempt ends, its result dropped. A rollback of the transaction leaves the job open.
+     *
+     * @return true when the job was cancelled now; false when {@code ifOpen} and it was over already
+     */
+    public Mono<Boolean> cancel(String jobId, Predicate<JobOwner> mayCancel, boolean ifOpen, String cancelledBy,
+        Instant time, long processSeqId) {
+        return Mono.defer(() -> {
+            if (jobId == null || jobId.isBlank()) {
+                return Mono.error(new EntityNotFoundException("External job not found"));
+            }
+            return findJob(jobId)
+                .filter(job -> mayCancel.test(new JobOwner(job.jobId(), job.jobType(), job.requestedBy())))
+                .switchIfEmpty(Mono.error(() -> new EntityNotFoundException("External job not found")))
+                .flatMap(found -> lockJob(jobId))
+                // One statement after the other: they share the transaction's connection.
+                .flatMap(job -> outcome(jobId).hasElement()
+                    .flatMap(finished -> finished ? Mono.just(true) : isCancelled(jobId))
+                    .flatMap(over -> {
+                        if (over) {
+                            return ifOpen ? Mono.just(false) : Mono.error(new BusinessRuleViolationException(
+                                new Violation("jobId", PlatformErrorCodes.EXTERNAL_JOB_FINISHED,
+                                    "The external job has finished already", Map.of())));
+                        }
+                        return insertCancel(jobId, cancelledBy, time, processSeqId)
+                            .then(isRunning(jobId, time))
+                            .flatMap(running -> running ? Mono.just(false)
+                                : finish(job, "CANCELLED", null, null, null, time))
+                            .thenReturn(true);
+                    }));
+        });
+    }
+
+    /** Who cancelled a job, and when. */
+    record Cancel(String cancelledBy, Instant cancelledTime) {}
+
+    /** The job's cancellation, if it was cancelled. */
+    Mono<Cancel> cancellation(String jobId) {
+        return engine().select("SELECT cancelled_by, cancelled_time FROM sys_external_job_cancel WHERE job_id = :id",
+                Map.of("id", BoundValue.of(jobId)))
+            .next().map(row -> new Cancel(Rows.string(row.get("cancelled_by")),
+                Rows.instant(row.get("cancelled_time"))));
+    }
+
+    /** Whether any attempt of the job was ever claimed (started), whatever became of it. */
+    Mono<Boolean> anyClaim(String jobId) {
+        return engine().select("SELECT 1 AS found FROM sys_external_job_claim WHERE job_id = :id LIMIT 1",
+            Map.of("id", BoundValue.of(jobId))).hasElements();
+    }
 
     /** Records a cancellation; the job's row must be locked. */
     Mono<Void> insertCancel(String jobId, String cancelledBy, Instant time, long processSeqId) {
