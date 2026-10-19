@@ -3,7 +3,6 @@ package com.jabiz.quizbuks.it;
 import com.jabiz.quizbuks.content.ai.AiCodes;
 import com.jabiz.quizbuks.content.ai.AiLimits;
 import com.jabiz.quizbuks.content.ai.AiProcesses;
-import com.jabiz.quizbuks.content.ai.AiPrompt;
 import com.jabiz.quizbuks.content.ai.ClaudeApi;
 import com.jabiz.quizbuks.content.ai.QbAi;
 import com.jabiz.runtime.test.TestTokens;
@@ -11,10 +10,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
 
-import tools.jackson.databind.JsonNode;
 
 import java.math.BigDecimal;
-import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
@@ -60,18 +57,6 @@ class AiCancelIT extends AiItSupport {
     private static List<Object> cancelledBy(Object externalJobId) {
         return query("SELECT cancelled_by FROM sys_external_job_cancel WHERE job_id = ?", String.valueOf(externalJobId))
             .stream().map(row -> row.get("cancelled_by")).toList();
-    }
-
-    /** Runs the due jobs in the background until the provider has been asked once more: an attempt is running. */
-    private CompletableFuture<Integer> runningAttempt() throws InterruptedException {
-        int calls = CLAUDE.requests(MESSAGES).size();
-        CompletableFuture<Integer> running = jobExecutor.runPending().toFuture();
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(20);
-        while (CLAUDE.requests(MESSAGES).size() == calls) {
-            assertThat(System.nanoTime()).as("the attempt calls the provider").isLessThan(deadline);
-            Thread.sleep(10);
-        }
-        return running;
     }
 
     @Test
@@ -219,21 +204,19 @@ class AiCancelIT extends AiItSupport {
         advance(Duration.ofMinutes(3));
         runJobs();
 
-        // No retry, and attempt 1's estimate charged: its whole input and all the output it asked for.
+        // No retry, and attempt 1's estimate charged: the input the job reserved for it and all the output it asked for.
         assertThat(CLAUDE.requests(MESSAGES)).hasSize(calls);
-        JsonNode body = sent().getLast();
-        long bytes = body.get("messages").get(0).get("content").get(0).get("text").asString()
-            .getBytes(StandardCharsets.UTF_8).length + AiPrompt.SYSTEM.getBytes(StandardCharsets.UTF_8).length;
         Map<String, Object> job = job(queued.get("aiJobId"));
+        long reserved = AiLimits.reservedInput(number(job.get("input_bytes")), 0);
         assertThat(job).containsEntry("status", QbAi.CANCELLED).containsEntry("candidates", null);
         assertThat(number(job.get("attempts"))).isEqualTo(1);
-        assertThat(number(job.get("input_tokens"))).isEqualTo(AiLimits.inputEstimate(bytes));
+        assertThat(number(job.get("input_tokens"))).isEqualTo(reserved);
         assertThat(number(job.get("output_tokens"))).isEqualTo(ClaudeApi.maxTokens(1));
         List<Map<String, Object>> rows = usageRows(sponsor);
         assertThat(rows).hasSize(1);
         assertThat(number(rows.getFirst().get("jobs"))).isEqualTo(1);
         assertThat(number(rows.getFirst().get("input_tokens")) + number(rows.getFirst().get("output_tokens")))
-            .isEqualTo(AiLimits.inputEstimate(bytes) + ClaudeApi.maxTokens(1));
+            .isEqualTo(reserved + ClaudeApi.maxTokens(1));
     }
 
     @Test

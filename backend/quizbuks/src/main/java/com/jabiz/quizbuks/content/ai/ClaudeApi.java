@@ -169,19 +169,38 @@ public final class ClaudeApi {
 
     /**
      * What an attempt that got no answer may have cost: its input (the provider's count when the request was counted,
-     * otherwise one token per three bytes and the framing), and all the output it asked for. Charged by the caller,
-     * since the provider bills an answer that was cut off on the way.
+     * otherwise what the job reserved for an attempt's input, or, for a job that reserved nothing, one token per three
+     * bytes and the framing), and all the output it asked for. Charged by the caller, since the provider bills an
+     * answer that was cut off on the way. An attempt whose instance died before it could record anything is charged
+     * on the same basis, from the job's stored parameters (the reservation and {@code maxTokens}; {@link #unrecorded}),
+     * so that both ways of losing an answer cost the same.
      */
-    public static Usage unanswered(Request request) {
+    public static Usage unanswered(Request request, Long reservedInputTokens) {
         long input;
         if (request.countedInputTokens() != null) {
             input = request.countedInputTokens();
+        } else if (reservedInputTokens != null) {
+            input = reservedInputTokens;
         } else {
             long bytes = request.user().getBytes(StandardCharsets.UTF_8).length
                 + request.system().getBytes(StandardCharsets.UTF_8).length;
             input = AiLimits.inputEstimate(bytes);
         }
         return new Usage(input, request.maxTokens());
+    }
+
+    /** {@link #unanswered(Request, Long)} of a job that reserved nothing (one token per three bytes and the framing). */
+    public static Usage unanswered(Request request) {
+        return unanswered(request, null);
+    }
+
+    /**
+     * What one attempt that ended without recording its usage is charged (platform decision D52 item 5, W-6): as
+     * {@link #unanswered}, the input reserved for an attempt and all the output it asked for. Its count by the provider
+     * (a request with documents) is not known, so the reservation, which no count may exceed, stands for it.
+     */
+    public static Usage unrecorded(long reservedInputTokens, int maxTokens) {
+        return new Usage(reservedInputTokens, maxTokens);
     }
 
     /**

@@ -80,7 +80,8 @@ final class ClaudeCalls {
             answer = ClaudeApi.of(ctx, json).send(request, timeout);
         } catch (ExternalCallException e) {
             if (ClaudeApi.mayHaveBeenBilled(e)) {
-                record(ctx, request.model(), ClaudeApi.unanswered(request), reserved);
+                record(ctx, request.model(), ClaudeApi.unanswered(request,
+                    reserved == null ? null : reserved.inputTokens()), reserved);
             }
             throw e;
         }
@@ -107,8 +108,7 @@ final class ClaudeCalls {
      * part of a call above {@value #LONG_PROMPT_FROM} input tokens, priced per call ({@link AiCost}).
      */
     static void record(ExternalJobContext ctx, String model, ClaudeApi.Usage usage, Reserved reserved) {
-        ClaudeApi.Usage priced = AiCost.hasLongPromptRate(model) && usage.inputTokens() > LONG_PROMPT_FROM
-            ? usage.asLongPrompt() : usage;
+        ClaudeApi.Usage priced = priced(model, usage);
         ctx.recordUsage(AiQuestionsJob.INPUT_TOKENS, priced.inputTokens());
         ctx.recordUsage(AiQuestionsJob.OUTPUT_TOKENS, priced.outputTokens());
         if (priced.fallbackInputTokens() > 0 || priced.fallbackOutputTokens() > 0) {
@@ -123,6 +123,14 @@ final class ClaudeCalls {
             // The limits counted on the reservation (a provider's fallback runs the input again): worth a look.
             log.warn("AI usage of one attempt above its reservation (job type {})", reserved.jobType());
         }
+    }
+
+    /**
+     * One call's usage with the part the provider prices at the long-prompt rate: the whole of a call above
+     * {@value #LONG_PROMPT_FROM} input tokens of a model that has that rate ({@link AiCost}).
+     */
+    static ClaudeApi.Usage priced(String model, ClaudeApi.Usage usage) {
+        return AiCost.hasLongPromptRate(model) && usage.inputTokens() > LONG_PROMPT_FROM ? usage.asLongPrompt() : usage;
     }
 
     private ClaudeCalls() {}

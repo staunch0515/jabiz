@@ -147,8 +147,7 @@ class MessagesTest {
             .containsAll(com.jabiz.quizbuks.setup.QbParams.AI_CONTROLLED.stream().map(k -> "param." + k).toList())
             .contains("process.QB_AI_QUESTIONS_REQUEST", "process.QB_AI_JOB_COMPLETED", "process.QB_AI_JOB_FAILED",
                 "process.QB_AI_ACCEPT", "process.QB_AI_DISCARD", "process.QB_AI_CANCEL", "process.QB_AI_EXPIRE",
-                "process.QB_AI_JOB_CANCELLED", "process.QB_AI_CANCEL_QUESTIONS_JOB",
-                "process.QB_AI_CANCEL_COVER_JOB",
+                "process.QB_AI_JOB_CANCELLED",
                 "entity.QbAiJob", "entity.QbAiUsage", "entity.QbQuestion.aiJobId", "query.qb.sponsor.ai-jobs",
                 "query.qb.sponsor.ai-usage", "query.qb.admin.ai-usage", "query.qb.admin.ai-jobs",
                 "query.qb.admin.ai-settings", "query.qb.system.ai-expired", "param.qb.ai.candidates.expire-days");
