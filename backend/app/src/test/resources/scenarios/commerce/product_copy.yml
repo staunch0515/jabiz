@@ -65,7 +65,7 @@ steps:
     expectError:
       process: PRODUCT_COPY_APPLY@latest
       input: { jobId: "${mugJob}", jobType: commerce.product-copy, requestedBy: shop-admin, reference: "${mug}",
-               result: { text: forged }, attempts: 1 }
+               result: { text: forged }, attempts: 1, unrecordedAttempts: 0 }
       status: 403
   - note: A finished job cannot be cancelled.
     expectError:
