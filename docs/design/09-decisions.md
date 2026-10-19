@@ -1833,7 +1833,9 @@ P-8 原写"`false` 即逐条执行（16p-1 的局部合并同样受它控制）"
    暂停与恢复记 INFO 日志，指标只带类型名（D16）。启动检查 `EXTERNAL`：键格式错误为错误，不在任何 `ControlledParams` 中为警告。场景回放的 `runExternalJobs` 与 `completeExternalJob` 同样服从暂停
    （暂停中的 `completeExternalJob` 是场景的错误，说明暂停的原因）。
 5. **没有用量的尝试**（16w 计划 W-3 至 W-5，2026-10-19 确认）：
-   - 结局为 `LEASE_EXPIRED` 或 `TIMED_OUT` 而**没有任何用量行**的尝试是"没有用量的尝试"（W-4）：处理器没来得及报告，提供方却可能已计费。`FAILED` 的不算（处理器回答了）。
+   - 结局为 `LEASE_EXPIRED` 或 `TIMED_OUT` 而**没有任何用量行**的尝试是"没有用量的尝试"（W-4）：处理器没来得及报告，提供方却可能已计费。`FAILED` 的不算：那是处理器自己给出的结局，它有机会先记下用量。
+     因此调用计费的提供方的处理器，在调用没有回答（`ExternalCallException`，如 `TIMEOUT`）时要先 `recordUsage(估计)` 再重新抛出——
+     否则这次尝试是 `FAILED` / `EXTERNAL_CALL_FAILED` 而没有用量，既不计入用量也不计入个数（16w-1 评审 M1；QuizBuks 的 `ClaudeApi.unanswered` 即如此）。
    - 完成、失败与取消的输入（`ExternalJobCompletion`、`ExternalJobFailure`、`ExternalJobCancellation`）的最后一个组件 `unrecordedAttempts` 给出其**个数**，
      `hasUnrecordedAttempts()` 为是否有；只给个数，不给逐次的清单（W-3）。原来的构造器保留，个数为 0。用量合计与个数在一条语句中读出（同一个快照）。
    - **迟到实例的用量照记**（W-5）：租约过期后才回来的实例，其尝试号已被记为 `LEASE_EXPIRED`；该尝试没有用量行时，它的用量记到那次尝试上（只一次，同一事务持有作业行锁），
@@ -1914,6 +1916,8 @@ P-8 原写"`false` 即逐条执行（16p-1 的局部合并同样受它控制）"
   `INSERT … ON CONFLICT (job_id, attempt_no, metric) DO NOTHING`（`ExternalJobRecorder.insertLateUsage`）；结果与输出文件的交接、结局与观测的 `DISCARDED` 不变；
   提交后照常计入 `jabiz.external.usage`（只计插入的），记 WARN `… ended after its lease had expired; its usage is recorded, its result discarded`。没有迁移（主键本来就是 (作业, 尝试, 用量名)）。
 - D38 实现说明第 5 条相应改为"迟到的尝试也记录用量，结果仍丢弃"。
+- 评审之后：已记的尝试不是 `LEASE_EXPIRED`（本实例已提交的记录在回答丢失后重试）时不当作迟到，回答作业的结局；`Metadata` 只要求 `jobType` 是 `jobTypes` 之一且没有 null；
+  用量合计溢出时停在 `Long.MAX_VALUE`；扩展的 lint 也管 `import()`、`require()` 与 JavaScript 文件，通用后台的构建与 `ext:check` 检查生产包中没有测试代码。
 - 线 1.2 内兼容：只新增；没有迁移，OpenAPI 不变，`StatementBudgetIT` 的预算不变。只有对这四个 record 解构的模式匹配与按组件的反射需要改写。
   有意的可见变化：迟到实例的用量出现在 `sys_external_job_usage`、报表 `jabiz.external_job_usage` 与计数器中。
   测试 `ExternalJobUnrecordedIT`、`ExternalJobCancelIT`、`ExternalJobIT`、`CancelExternalJobTest`、`ExternalJobAttemptUsageTest`、`ExternalJobOutcomesTest`、`ExternalJobCancellationTest`。

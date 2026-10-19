@@ -729,8 +729,9 @@ public class ExternalJobRecorder {
      * item 5).
      *
      * @param unrecordedAttempts the attempts whose outcome is {@code LEASE_EXPIRED} or {@code TIMED_OUT} and that have
-     *                           no usage rows; a {@code FAILED} attempt without usage is not counted: its handler
-     *                           answered, and reported what it consumed
+     *                           no usage rows; a {@code FAILED} attempt without usage is not counted: it is the
+     *                           handler's own outcome, and the handler had the chance to record usage first (an
+     *                           unanswered call: {@code recordUsage(estimate)}, then rethrow)
      */
     record AttemptUsage(Map<String, Long> usage, int unrecordedAttempts) {}
 

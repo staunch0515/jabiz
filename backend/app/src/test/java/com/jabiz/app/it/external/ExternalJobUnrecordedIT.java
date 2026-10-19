@@ -404,7 +404,7 @@ class ExternalJobUnrecordedIT extends PostgresIntegrationTest {
         deliver();
         assertThat(callbacks(jobId)).singleElement().satisfies(callback -> {
             ExternalJobFailure in = (ExternalJobFailure) callback.input();
-            // The handler answered: what it reported (nothing) is what it consumed.
+            // FAILED is the handler's own outcome: it had the chance to record usage, and recorded none.
             assertThat(in.unrecordedAttempts()).isZero();
             assertThat(in.hasUnrecordedAttempts()).isFalse();
             assertThat(in.usage()).isEmpty();

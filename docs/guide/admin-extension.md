@@ -117,7 +117,9 @@ export default function StockOverviewPage() {
   `MfaEnrollment`、`VerifyEmailBanner`、`OfflineBanner`；登录、注册、邮件链接页与 step-up 由后台自己提供，扩展不要另写。
   文案在平台的命名空间 `auth`（三语）。`useAuth()` 另有 `entry`、`email`、`emailVerified` 与
   `refreshSession({ force: true })`（验证邮箱后取新令牌）。
-- 不要 import `frontend/src/...`，也不要直接 import `@jabiz/ui`、`@jabiz/client`（16w-1 起 lint 都会拒绝，并提示改用 `@jabiz/admin`；它们的内容都由 `@jabiz/admin` 导出），
+- 不要 import `frontend/src/...`，也不要直接 import `@jabiz/ui`、`@jabiz/client`（16w-1 起 lint 都会拒绝，`import()` 与 `require()` 也一样，并提示改用 `@jabiz/admin`）。
+  `@jabiz/admin` 导出 `@jabiz/ui` 的全部，但 `@jabiz/client` 只导出其中给扩展用的部分（接口与流程的调用、`useAuth`、格式化函数、`UserName` 等，见 `frontend/src/lib/index.ts`）；
+  缺的先加进 `@jabiz/admin`（第 6 节）；
   不要自己存令牌，不要访问后端以外的地址。
 
 ## 4. 测试
@@ -137,8 +139,10 @@ it('passes axe in the light and the dark appearance', async () => {
 })
 ```
 
-`@jabiz/admin/testing` 只能在 `*.test.ts(x)` / `*.spec.ts(x)` 中引用（它带入 Vitest 与 vitest-axe，lint 在页面中拒绝它）；`@jabiz/ui/testing` 不直接引用（lint 提示改用它）。
-没有 Playwright 的版本。
+`@jabiz/admin/testing` 只能在测试中引用：`*.test.*`、`*.spec.*`，以及 **`test/` 目录下的共用辅助文件**（如 `src/test/render.tsx`）——
+几个测试共用的辅助函数放在那里，不要命名为 `*.test-utils.*` 或放在页面旁边（那些算生产代码，lint 拒绝其中的 `@jabiz/admin/testing`；`*.stories.*` 也是）。
+它带入 Vitest 与 vitest-axe：`pnpm ext:check` 的 `bundle` 步骤（`pnpm ext:bundle`）带扩展构建一次并检查产出的 JavaScript 中没有它们，通用后台的每次构建也如此检查。
+`@jabiz/ui/testing` 不直接引用（lint 提示改用 `@jabiz/admin/testing`）。没有 Playwright 的版本。
 
 e2e 按角色、名称或稳定的 `data-*` 找元素（平台的辅助函数在 `frontend/e2e/support.ts`）；平台的 e2e 由 lint 拒绝 `.ant-*` 选择器。
 按钮名称写精确的文字（`{ name: '查询', exact: true }`），不再写为 antd 两字按钮准备的 `/查\s*询/`。从 antd 时期的写法改过来的对照：
@@ -153,7 +157,7 @@ e2e 按角色、名称或稳定的 `data-*` 找元素（平台的辅助函数在
 在 `frontend/` 下：
 
 ```sh
-JABIZ_ADMIN_EXTENSION=../finance-web pnpm ext:check        # 类型、lint、测试
+JABIZ_ADMIN_EXTENSION=../finance-web pnpm ext:check        # 类型、lint、测试、生产包中没有测试代码
 JABIZ_ADMIN_EXTENSION=../finance-web pnpm dev              # 开发服务器（5173），扩展的页面随改随刷新
 ```
 

@@ -471,17 +471,24 @@ JobDefinition.forEach("commerce.unpaid-order-expire", "0 10 3 * * *", ZoneId.of(
   - 被取消的那次尝试若产生了输出文件，它们不交给任何流程（已取消的作业不存储；存储后才取消的成为没有引用的孤儿），由 `FILE_SWEEP` 清扫（D50 第 3 条）。
 - **没有用量的尝试与迟到的用量**【D52 第 5 条，阶段 16w-1】：
   - **没有用量的尝试**：结局为 `LEASE_EXPIRED`（实例死了、或迟到）或 `TIMED_OUT`（超时）而没有任何用量行的尝试。处理器没来得及 `recordUsage`，提供方却可能已计费；
-    `FAILED` 不算（处理器回答了，报告的就是它用掉的）。`ExternalJobCompletion`、`ExternalJobFailure` 与 `ExternalJobCancellation` 的最后一个组件
+    `FAILED` 不算：那是处理器自己给出的结局，它有机会先记下用量。所以**调用计费的提供方的处理器**捕获 `ExternalCallException`（`TIMEOUT` 等没有回答的），
+    先 `recordUsage(估计)` 再重新抛出；不这样做，这次尝试是 `FAILED` / `EXTERNAL_CALL_FAILED` 而没有用量，平台既不计入用量也不计入下面的个数
+    （QuizBuks 的 `ClaudeApi.unanswered` 即如此）。`ExternalJobCompletion`、`ExternalJobFailure` 与 `ExternalJobCancellation` 的最后一个组件
     `unrecordedAttempts` 给出其**个数**（不给逐次的清单，W-3），`hasUnrecordedAttempts()` 为是否有。按用量计费的应用对这些尝试按自己的估计计费（如预留的输入与输出上限）。
     原来的构造器保留，个数为 0。
   - 平台以**一条语句**（尝试 `LEFT JOIN` 用量）读出用量合计与这一个数（`ExternalJobRecorder.attemptUsage`，代替原来的用量合计查询，`EXTERNAL_JOB_COMPLETE` 的语句数不变）：
-    同一个快照，迟到的用量要么同时在合计与个数中、要么都不在，不会既计入用量又被当作没有用量。
+    同一个快照，迟到的用量要么同时在合计与个数中、要么都不在，不会既计入用量又被当作没有用量。用量合计超过 `Long.MAX_VALUE` 时停在那里（记 WARN），不使完成无法投递。
+  - **超时的尝试的用量可能偏少**：`TIMED_OUT` 记下的是超时那一刻处理器已报告的用量；处理器的线程在超时之后可能还在运行（中断只是尽力而为），
+    之后再报告的不会被记下。有用量行的超时尝试因此不算"没有用量"，即使提供方实际计费更多。
   - **迟到的用量**（W-5）：执行器记录尝试时发现该尝试号已被记为 `LEASE_EXPIRED`（租约过期后另一实例或取消补记的），而该尝试还没有用量行，
     就在同一事务（持有作业行锁）中把这次迟到实例的用量记到那次尝试上（`INSERT … ON CONFLICT (job_id, attempt_no, metric) DO NOTHING`；表只追加，外键指向那次尝试）。
     已有用量行（比如本实例的记录在数据库故障后重试）或该尝试不是 `LEASE_EXPIRED` 时什么也不写：只记一次。
     结果、输出文件与作业的结局都不变（`DISCARDED`）；提交后照常计入 `jabiz.external.usage`，并记 WARN "usage recorded, result discarded"。
+  - **重复的记录不是迟到**：已记的尝试不是 `LEASE_EXPIRED`（本实例的记录已经提交，只是回答丢失，记录被重试）时，什么也不再写，
+    回答作业的结局（观测不是 `DISCARDED`，也不记迟到的 WARN），并补计那次已提交的用量。
   - **与结局流程的先后**：迟到的用量在结局流程（完成、失败或 `onCancelled`）运行**之前**记下，那次尝试就不再算"没有用量"，应用按实际用量计费；
     在**之后**记下，只有用量报表（`sys_external_job_usage`、`jabiz.external_job_usage`、计数器）变化，**不再调用任何流程**——应用已按估计计费，两者的差只在报表中可见。
+    迟到的用量记在那次 `LEASE_EXPIRED` 尝试的结束月份，因此可能改变报表中已经结束（已对过账）的月份。
 - **按业务参数暂停**【D52 第 4 条，阶段 16v-2】：类型可声明 `.enabledBy("参数键")`（布尔业务参数，04 §9；应同时列入某个 `ControlledParams`，D40）。
   - 执行器只在该参数**此刻生效的值**（取注入的 `Clock`）为布尔 `true` 时领取该类型的作业；参数缺失、为 `false`、不是布尔值或读不出来，类型即**暂停**（缺省拒绝，V-4）。
   - 每次轮询（以及 `runPending()`）在任何领取事务之前，对每个声明了 `enabledBy` 的键以系统身份经 `ParamService` 读一次（`ExternalJobGate`；几个类型共用一个键也只读一次）。
