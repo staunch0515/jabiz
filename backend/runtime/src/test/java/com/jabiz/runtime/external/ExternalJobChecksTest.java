@@ -10,6 +10,7 @@ import com.jabiz.external.ExternalJobType;
 import com.jabiz.external.ExternalService;
 import com.jabiz.file.FilePolicy;
 import com.jabiz.file.MediaTypes;
+import com.jabiz.param.ControlledParams;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.runtime.check.CheckProblem;
@@ -76,6 +77,7 @@ class ExternalJobChecksTest {
             true));
         beans.registerBean("publicStopped", ProcessDefinition.class, () -> process("PUBLIC_STOPPED",
             ExternalJobCancellation.class, false));
+        beans.registerBean("controlled", ControlledParams.class, () -> ControlledParams.of("it.gate.controlled"));
         beans.registerBean("image", FilePolicy.class, () -> FilePolicy.define("it.image").allow(MediaTypes.PNG)
             .maxBytes(FilePolicy.MB).permissions("it.upload", "it.read").build());
         beans.refresh();
@@ -173,5 +175,23 @@ class ExternalJobChecksTest {
             "EXTERNAL | job it.wrong | onCancelled: process FAILED must take ExternalJobCancellation, not "
                 + ExternalJobFailure.class.getName(),
             "EXTERNAL | job it.ghost | onCancelled: no process GHOST is registered");
+    }
+
+    /** Decision D52 item 4: a malformed key is an error, a key no ControlledParams declares a warning. */
+    @Test
+    void theParameterThatHoldsATypeIsWellFormedAndShouldBeControlled() {
+        ExternalJobType<In, Out> controlled = ExternalJobType.define("it.controlled", In.class, Out.class, t -> t
+            .handler(Handler.class).onCompleted("DONE").onFailed("FAILED").enabledBy("it.gate.controlled"));
+        ExternalJobType<In, Out> loose = ExternalJobType.define("it.loose", In.class, Out.class, t -> t
+            .handler(Handler.class).onCompleted("DONE").onFailed("FAILED").enabledBy("it.gate.loose"));
+        ExternalJobType<In, Out> malformed = ExternalJobType.define("it.malformed", In.class, Out.class, t -> t
+            .handler(Handler.class).onCompleted("DONE").onFailed("FAILED").enabledBy("It Gate"));
+        assertThat(problems(controlled)).isEmpty();
+        assertThat(problems(loose)).containsExactly("WARNING EXTERNAL | job it.loose | enabledBy: parameter "
+            + "it.gate.loose is not declared in any ControlledParams bean; one person holding platform.param.write "
+            + "can pause or resume the type alone");
+        assertThat(problems(malformed)).containsExactly("EXTERNAL | job it.malformed | enabledBy: 'It Gate' is not "
+            + "a parameter key (lower case words of letters and digits joined by '.', '-' or '_', at most 200 "
+            + "characters)");
     }
 }

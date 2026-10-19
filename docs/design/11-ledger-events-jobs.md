@@ -464,6 +464,16 @@ JobDefinition.forEach("commerce.unpaid-order-expire", "0 10 3 * * *", ZoneId.of(
   - **作业行锁到流程事务结束**：在长流程中取消，这段时间里执行器记录该作业的尝试要等待；领取时补记过期租约用 `SKIP LOCKED`，不等待也不死锁，下一次轮询再补记（评审 Low 1）。
   - 取消时先把该作业租约已过而未记录的领取补记为 `LEASE_EXPIRED`（与执行器相同），立即结束的作业的尝试次数与用量因此完整，`onCancelled` 只运行一次（Low 2）。
   - 被取消的那次尝试若产生了输出文件，它们不交给任何流程（已取消的作业不存储；存储后才取消的成为没有引用的孤儿），由 `FILE_SWEEP` 清扫（D50 第 3 条）。
+- **按业务参数暂停**【D52 第 4 条，阶段 16v-2】：类型可声明 `.enabledBy("参数键")`（布尔业务参数，04 §9；应同时列入某个 `ControlledParams`，D40）。
+  - 执行器只在该参数**此刻生效的值**（取注入的 `Clock`）为布尔 `true` 时领取该类型的作业；参数缺失、为 `false`、不是布尔值或读不出来，类型即**暂停**（缺省拒绝，V-4）。
+  - 每次轮询（以及 `runPending()`）在任何领取事务之前，对每个声明了 `enabledBy` 的键以系统身份经 `ParamService` 读一次（`ExternalJobGate`；几个类型共用一个键也只读一次）。
+    暂停的类型照常有自己的领取事务，只是名额为 0：租约过期照常补记为 `LEASE_EXPIRED`（次数用尽即 `FAILED`），已取消的照常给出 `CANCELLED` 与 `onCancelled` 的结局，
+    但不插入任何领取——排队的与等待重试的作业**等待**，不用掉尝试次数、不失败（V-2）。正在执行的尝试不中断，照常记录（处理器看不到参数）。
+  - `StartExternalJob` 照常登记（V-3），开始的限制照常计算；暂停中的作业可以经接口或 `CancelExternalJob` 取消，并得到 `onCancelled` 的结局。
+  - 打开参数后的下一次轮询即恢复；预定的修改（`PARAM_SCHEDULE` 或受控变更的生效时间）到时生效，不需要任何任务。
+  - 暂停、恢复与暂停原因的变化（缺失 → `false`）各记一条 INFO 日志（每个实例、只在变化时，不是每次轮询）；量规 `jabiz.external.job.held`（标签只有 `job_type`）暂停时为 1。
+  - 风险：参数不受控时，持有 `platform.param.write` 的一个人就能暂停或恢复类型（启动检查警告）；暂停期间作业照常累积，恢复时按 `maxConcurrency` 与退避逐步执行；
+    参数读不出来（数据库故障）时类型暂停，下一次轮询再读。
 - **查看**：`GET /api/external-jobs/{id}`（请求人本人或 `external-job.read`，其他人 404，`Cache-Control: no-store`）：作业号、类型、引用、请求人、
   状态（`QUEUED` 从未领取 / `RUNNING` 有效领取中 / `WAITING_RETRY` 等待重试（含租约过期待补记）/ `SUCCEEDED` / `FAILED` / `CANCELLED`
   （已取消而尝试仍在执行的也是，其结果必被丢弃））、尝试次数、请求 / 首次领取 / 结束时间、最近的错误码、用量合计；不含输入与结果（Q14）。
@@ -474,12 +484,15 @@ JobDefinition.forEach("commerce.unpaid-order-expire", "0 10 3 * * *", ZoneId.of(
   `sys_external_job_cancel`、`sys_external_job_outcome`。`SELECT … FOR UPDATE` 只加行锁，不触发只追加的 UPDATE 触发器。
   16t 加 `V42__external_job_files.sql`：`sys_external_job_file`（`job_file_id` 为主键，`INPUT` / `OUTPUT`，文件编号不加外键：文件会被删除，记录留下）。
 - **观测**：`jabiz.external.job`（每次尝试，从处理器开始到记录完；标签 `job_type`、`outcome`：`SUCCEEDED` / `WAITING_RETRY` / `FAILED` /
-  `CANCELLED` / `DISCARDED` / `error`）；计数器 `jabiz.external.usage`（标签 `job_type`、`metric`，增加记录的数量）。
+  `CANCELLED` / `DISCARDED` / `error`）；计数器 `jabiz.external.usage`（标签 `job_type`、`metric`，增加记录的数量）；
+  量规 `jabiz.external.job.held`（声明了 `enabledBy` 的类型，暂停时为 1，标签只有 `job_type`，D52 第 4 条）。
 - **启动检查 `EXTERNAL`**：类型名唯一且合法、处理器恰好一个 Bean、服务已声明且其请求超时短于作业的超时、完成与失败流程（以及声明了的取消流程，D52）存在且为 `internal()` 并分别以
-  `ExternalJobCompletion` / `ExternalJobFailure` / `ExternalJobCancellation` 为输入、超时 / 重试 / 并发 / 开始限制在范围内、输入与结果是 record、两者都无 `@Sensitive` 组件（含嵌套 record）。
+  `ExternalJobCompletion` / `ExternalJobFailure` / `ExternalJobCancellation` 为输入、超时 / 重试 / 并发 / 开始限制在范围内、输入与结果是 record、两者都无 `@Sensitive` 组件（含嵌套 record）；
+  `enabledBy` 的键格式错误（同 `ControlledParams` 的键）为错误，不在任何 `ControlledParams` 中为**警告**（D52 第 4 条）。
 - **场景回放**：`runExternalJobs: true`；`completeExternalJob: {jobType, reference?, result, usage?, status?, errorCode?, errorMessage?}`
   不调用处理器，经同一领取与记录路径写入结果（`ExternalJobExecutor.completeWithoutHandler`，Q17），07 §3.1。
   `completeWithoutHandler` 只在 `jabiz.external-jobs.simulated-results=true`（只有测试配置设置）时可用，否则 `IllegalStateException`。
+  两者都服从 `enabledBy` 的暂停：`runExternalJobs` 不领取暂停的类型，暂停中的 `completeExternalJob` 是场景的错误并说明原因（`ExternalJobTypeHeldException`，如"parameter … is false"）。
 - **风险与限制**：超时不能强行停止卡住的处理器（中断只是尽力而为，靠请求超时与租约兜底；超时后旧线程若仍在运行，同一类型可能短暂超出并发上限）；
   至少一次——执行完、记录前崩溃，会以同一幂等键再调用一次，不支持幂等键的提供方可能计费两次（用量按尝试记录，可统计）；
   迟到实例被丢弃的尝试不记录用量；每次轮询每个类型一个领取事务（查询限于水位线以上，全量扫描每个刷新间隔一次）；
@@ -490,7 +503,7 @@ JobDefinition.forEach("commerce.unpaid-order-expire", "0 10 3 * * *", ZoneId.of(
 - **剩余风险**【D52 第 1 条，16v-1 写明】：
   1. **慢回答**：不流式的请求最长可达 2 分钟（`ExternalService.MAX_REQUEST_TIMEOUT`）。超过请求超时的回答被放弃，提供方可能照样计费，重试也可能再被放弃。
      流式结果推送暂不做（V-1）：QuizBuks 20 题试运行中超过约 5% 的 AI 尝试超时再考虑。
-  2. **业务开关**：处理器看不到业务参数。16v-2 的 `enabledBy(参数)` 在领取之前检查；已经开始的尝试照常运行到结束。
+  2. **业务开关**：处理器看不到业务参数。`enabledBy(参数)`（16v-2，见上面"按业务参数暂停"）在领取之前检查；已经开始的尝试照常运行到结束。
   3. **重复计费**：提供方不按幂等键去重时，重试可能计费两次，平台无法解决。应用应在尝试中调用 `recordUsage`、把没有回答的尝试按估计计费，
      并在提供方设置支出上限。
 - 示范：`app` 的 `PRODUCT_COPY_REQUEST`（`actsOn Product`，`commerce.product.write`）登记 `commerce.product-copy`；`ProductCopyHandler` 调用

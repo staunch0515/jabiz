@@ -170,4 +170,35 @@ class ExternalJobTypeTest {
         assertThat(d38.problems()).isEmpty();
         assertThat(d50.problems()).isEmpty();
     }
+
+    @Test
+    void aTypeIsHeldByTheParameterItNamesOrByNone() {
+        assertThat(copy().enabledBy()).isNull();
+        ExternalJobType<CopyInput, CopyResult> gated = ExternalJobType.define("x", CopyInput.class, CopyResult.class,
+            t -> t.handler(CopyHandler.class).onCompleted("A").onFailed("B").enabledBy("demo.ai.enabled"));
+        assertThat(gated.enabledBy()).isEqualTo("demo.ai.enabled");
+        assertThat(gated.problems()).isEmpty();
+        assertThat(gated.toString()).contains("enabledBy=demo.ai.enabled");
+        for (String bad : new String[] {"", " ", "Demo.AI", "demo..ai", "demo.ai.", "1demo", "a".repeat(201)}) {
+            ExternalJobType<CopyInput, CopyResult> malformed = ExternalJobType.define("x", CopyInput.class,
+                CopyResult.class, t -> t.handler(CopyHandler.class).onCompleted("A").onFailed("B").enabledBy(bad));
+            assertThat(malformed.problems()).as(bad).singleElement().asString()
+                .startsWith("enabledBy: '" + bad + "' is not a parameter key");
+        }
+    }
+
+    @Test
+    void theConstructorOfTheCancellationDeclarationIsNeverHeld() {
+        ExternalJobType<CopyInput, CopyResult> d52 = new ExternalJobType<>("x", CopyInput.class, CopyResult.class,
+            CopyHandler.class, java.util.Set.of(), null, 3, null, null, 4, "A", "B", 10, false, 2048, null, null, "C");
+        ExternalJobType<CopyInput, CopyResult> d38 = new ExternalJobType<>("x", CopyInput.class, CopyResult.class,
+            CopyHandler.class, java.util.Set.of(), null, 3, null, null, 4, "A", "B", 10, false);
+        ExternalJobType<CopyInput, CopyResult> d50 = new ExternalJobType<>("x", CopyInput.class, CopyResult.class,
+            CopyHandler.class, java.util.Set.of(), null, 3, null, null, 4, "A", "B", 10, false, 2048, null, null);
+        assertThat(d52.onCancelled()).isEqualTo("C");
+        assertThat(d52.enabledBy()).isNull();
+        assertThat(d38.enabledBy()).isNull();
+        assertThat(d50.enabledBy()).isNull();
+        assertThat(d52.problems()).isEmpty();
+    }
 }

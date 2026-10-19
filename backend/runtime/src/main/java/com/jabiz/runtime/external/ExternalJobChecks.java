@@ -5,10 +5,12 @@ import com.jabiz.external.ExternalJobCompletion;
 import com.jabiz.external.ExternalJobFailure;
 import com.jabiz.external.ExternalJobType;
 import com.jabiz.file.FilePolicy;
+import com.jabiz.param.ControlledParams;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.runtime.check.CheckProblem;
 import com.jabiz.runtime.check.PlatformCheck;
 import com.jabiz.runtime.file.FilePolicyRegistry;
+import com.jabiz.runtime.param.ControlledParamRegistry;
 import com.jabiz.runtime.process.ProcessRegistry;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationContext;
@@ -26,8 +28,11 @@ import java.util.Set;
  * declared services whose request timeout is shorter than the attempt's, file policies that exist and take the
  * output files' size (decision D50), and completion, failure and (when declared, decision D52 item 2) cancellation
  * processes that exist, are {@code internal()} (anyone could fake a result otherwise) and take
- * {@link ExternalJobCompletion}, {@link ExternalJobFailure} and {@link ExternalJobCancellation}. That a step starts a
- * declared type is the process check's ({@code StartExternalJob} is a checked step).
+ * {@link ExternalJobCompletion}, {@link ExternalJobFailure} and {@link ExternalJobCancellation}. A type held by a
+ * business parameter (decision D52 item 4) names a well-formed key (an error otherwise, from
+ * {@link ExternalJobType#problems()}); a key no {@link ControlledParams} bean declares is a warning: one person holding
+ * {@code platform.param.write} could then pause or resume the type alone. That a step starts a declared type is the
+ * process check's ({@code StartExternalJob} is a checked step).
  */
 @Component
 public class ExternalJobChecks implements PlatformCheck {
@@ -38,15 +43,24 @@ public class ExternalJobChecks implements PlatformCheck {
     private final ApplicationContext beans;
 
     private final FilePolicyRegistry policies;
+    private final ControlledParamRegistry controlled;
 
     @Autowired
     public ExternalJobChecks(ExternalJobRegistry jobs, ExternalServiceRegistry services, ProcessRegistry processes,
-        ApplicationContext beans, FilePolicyRegistry policies) {
+        ApplicationContext beans, FilePolicyRegistry policies, ControlledParamRegistry controlled) {
         this.jobs = jobs;
         this.services = services;
         this.processes = processes;
         this.beans = beans;
         this.policies = policies;
+        this.controlled = controlled;
+    }
+
+    /** The checks with the controlled parameters the application context declares. */
+    public ExternalJobChecks(ExternalJobRegistry jobs, ExternalServiceRegistry services, ProcessRegistry processes,
+        ApplicationContext beans, FilePolicyRegistry policies) {
+        this(jobs, services, processes, beans, policies, beans.getBeanProvider(ControlledParamRegistry.class)
+            .getIfAvailable(() -> new ControlledParamRegistry(beans.getBeanProvider(ControlledParams.class))));
     }
 
     /** The checks with the file policies the application context declares (none when it has no registry of them). */
@@ -90,6 +104,12 @@ public class ExternalJobChecks implements PlatformCheck {
             callback(type.onCompleted(), ExternalJobCompletion.class, "onCompleted", at, problems);
             callback(type.onFailed(), ExternalJobFailure.class, "onFailed", at, problems);
             callback(type.onCancelled(), ExternalJobCancellation.class, "onCancelled", at, problems);
+            if (type.enabledBy() != null && ControlledParams.validKey(type.enabledBy())
+                && !controlled.controls(type.enabledBy())) {
+                problems.add(CheckProblem.warning(ExternalChecks.CATEGORY, at, "enabledBy: parameter "
+                    + type.enabledBy() + " is not declared in any ControlledParams bean; one person holding "
+                    + "platform.param.write can pause or resume the type alone"));
+            }
         }
         return problems;
     }

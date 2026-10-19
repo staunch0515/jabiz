@@ -30,6 +30,7 @@ import com.jabiz.runtime.imports.ImportService;
 import com.jabiz.inbound.InboundHeaders;
 import com.jabiz.inbound.InboundSchemes;
 import com.jabiz.runtime.external.ExternalJobExecutor;
+import com.jabiz.runtime.external.ExternalJobTypeHeldException;
 import com.jabiz.runtime.inbound.InboundReceiver;
 import com.jabiz.runtime.inbound.InboundRejectedException;
 import com.jabiz.runtime.inbound.InboundWebhookProperties;
@@ -247,8 +248,16 @@ public final class ScenarioRunner {
                 Object result = ScenarioValues.resolve(c.result(), variables);
                 String reference = c.reference() == null ? null
                     : String.valueOf(ScenarioValues.resolve(c.reference(), variables));
-                if (externalJobs.completeWithoutHandler(c.jobType(), reference, c.status(), result, usage,
-                    c.errorCode(), c.errorMessage()).block() == null) {
+                ExternalJobExecutor.Outcome outcome;
+                try {
+                    outcome = externalJobs.completeWithoutHandler(c.jobType(), reference, c.status(), result, usage,
+                        c.errorCode(), c.errorMessage()).block();
+                } catch (ExternalJobTypeHeldException held) {
+                    // The executor would not claim the job either (decision D52 item 4).
+                    throw failure(scenario, step, "external job type " + c.jobType() + " is paused: "
+                        + held.reason(), null);
+                }
+                if (outcome == null) {
                     throw failure(scenario, step, "no open external job of type " + c.jobType()
                         + (reference == null ? "" : " with reference " + reference), null);
                 }

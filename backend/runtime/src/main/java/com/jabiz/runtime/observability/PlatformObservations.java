@@ -71,6 +71,11 @@ public class PlatformObservations {
      */
     public static final String EXTERNAL_USAGE = "jabiz.external.usage";
     /**
+     * A gauge per external job type that declares {@code enabledBy} (decision D52 item 4): 1 while its parameter holds
+     * it, 0 otherwise; tagged with {@code job_type} only.
+     */
+    public static final String EXTERNAL_JOB_HELD = "jabiz.external.job.held";
+    /**
      * One inbound webhook request of a served provider (decision D37): tags {@code provider}, {@code result}
      * ({@code ACCEPTED}, {@code DUPLICATE}, {@code IGNORED}, {@code REJECTED}, {@code FAILED}) and {@code reason}
      * ({@code none}, the rejection's, or {@code error}) only.

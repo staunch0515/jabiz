@@ -33,6 +33,7 @@ runtime `com.jabiz.runtime.observability.PlatformObservations` 把平台的工�
 | `jabiz.external.call` | `JdkExternalHttp.send`（阻塞步骤的外部调用，06 §2.3；阻塞式观测） | `service` `outcome`（`2xx` `3xx` `4xx` `5xx` `timeout` `refused` `error`），没有 `status` |
 | `jabiz.external.job` | `ExternalJobExecutor` 的一次尝试（处理器开始到记录完，11 §4a；其中的外部调用即 `jabiz.external.call`） | `job_type` `outcome`（`SUCCEEDED` `WAITING_RETRY` `FAILED` `CANCELLED` `DISCARDED` `error`），没有 `status` |
 | `jabiz.external.usage`（计数器，不是观测） | 记录的尝试的用量，按数量增加（11 §4a；用量名由应用声明，低基数） | `job_type` `metric` |
+| `jabiz.external.job.held`（仪表，不是观测） | 声明了 `enabledBy` 的作业类型被其业务参数暂停时为 1，否则为 0（每次轮询更新，11 §4a、D52 第 4 条） | `job_type` |
 | `jabiz.inbound.receive` | 入站 Webhook 的一次请求（11 §2.5；未知提供方不观测，嵌套其中的 `INBOUND_RECEIVE` 即 `jabiz.process`） | `provider` `result`（`ACCEPTED` / `DUPLICATE` / `IGNORED` / `REJECTED` / `FAILED`）`reason`（`none`、拒绝原因如 `no_match`、`too_old`、`too_large`，或意外错误的 `error`） |
 | `jabiz.inbound.rate_limited` | 入站 Webhook 的限流拒绝（只计数，不记客户端地址） | 无 |
 | `jabiz.file.sweep` | 清扫的存储部分（`FILE_PURGE_ORPHANS` 提交后，14 §6；删除数量记入日志） | `result` |
@@ -45,7 +46,7 @@ runtime `com.jabiz.runtime.observability.PlatformObservations` 把平台的工�
 
 另外每个都有 `outcome`（`success`、`rejected`＝映射为 4xx 的领域异常、`error`＝其他、`cancelled`）与 `status`（映射的 HTTP 状态，成功为 `none`），
 以下除外：`jabiz.external.call`、`jabiz.external.job`（只有 `outcome`，见上表）、`jabiz.process.admission`（只有 `family` `process` `result`）、
-计数用的 `jabiz.process.rate_limited`、`jabiz.public.rate_limited`、`jabiz.inbound.rate_limited`、`jabiz.auth.rate_limited`、`jabiz.auth.hashing.busy`（只有表中的标签），以及不是观测的 `jabiz.external.usage` 与准入的两个仪表。
+计数用的 `jabiz.process.rate_limited`、`jabiz.public.rate_limited`、`jabiz.inbound.rate_limited`、`jabiz.auth.rate_limited`、`jabiz.auth.hashing.busy`（只有表中的标签），以及不是观测的 `jabiz.external.usage`、`jabiz.external.job.held` 与准入的两个仪表。
 同一观测名的标签键集合固定（指标后端的要求）。映射沿用 `ProblemStatuses`，与 API 响应一致。
 
 Spring Boot 自动提供：WebFlux 服务端请求（`http.server.requests`）、R2DBC 语句（加入 `r2dbc-proxy` 后）、R2DBC 连接池、JVM 指标。
