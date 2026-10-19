@@ -4227,3 +4227,87 @@ L4 共享仪表的注释；L5 13 写明每个键每次轮询多一个查询观�
   改用 `@jabiz/ui/testing(/playwright)` 并删去复制的辅助函数；可选为日记导出声明 `RetentionPolicy.of("GeneratedFile")`。
 - 16v-2 之后：两个 AI 类型声明 `.enabledBy("qb.ai.enabled")`，并把 `qb.ai.enabled` 列入 `ControlledParams`；删去 `quizbuks.ai.halted` / `QB_AI_HALTED`，相应修改测试。
   **先建 `qb.ai.enabled`**（布尔，经受控变更或应用自己的迁移写入 `true`），再部署声明了 `enabledBy` 的版本：参数缺失即暂停，否则部署后**所有 AI 作业都暂停**（启动检查对此警告）。
+
+### 16w 外部作业的采用缺口：几种类型的取消、没有用量的尝试、扩展的测试出口（16w-1：1.5–2 天；16w-2 流式推后）
+
+来源：QuizBuks 采用 16v 之后发现的平台缺口，16w 计划（产品负责人 2026-10-19 确认，W-1 至 W-11 全部按建议）。决策 **D52** 的补充（第 2 条可声明几种类型、第 5 条没有用量的尝试、
+第 1 条报告没有用量的尝试数）、D38 实现说明第 5 条的修改；12 §9 / §11 的 `@jabiz/admin/testing` 是 D22、D34 的实现说明。没有迁移；OpenAPI 不变；`StatementBudgetIT` 不变。
+
+**确认的问题与回答**（W-1 至 W-11，全部已确认）：
+
+| # | 问题 | 回答 |
+|---|---|---|
+| W-1 | 是否做流式结果（16w-2） | **推后**：QuizBuks 20 题试运行中超过约 5% 的 AI 尝试超时时才做；做时另立决策 D53 |
+| W-2 | 几种类型怎样给出 | `CancelExternalJob.of(List<String>, …)`，不用可变参数 |
+| W-3 | 没有用量的尝试给到什么程度 | 只给个数 `unrecordedAttempts`，不给逐次的清单 |
+| W-4 | 什么算没有用量的尝试 | 结局为 `LEASE_EXPIRED` 或 `TIMED_OUT` 且没有用量行；`FAILED` 不算（处理器自己的结局，它有机会先记下用量：没有回答的调用先 `recordUsage(估计)` 再重新抛出，评审 M1） |
+| W-5 | 迟到实例的用量 | 照记到那次 `LEASE_EXPIRED` 的尝试上（只一次）；结果、输出文件与结局仍不变 |
+| W-6 | QuizBuks 怎样为没有用量的尝试计费 | 每次按预留的输入加 `maxTokens` 的输出，与 `ClaudeApi.unanswered` 同一依据（在 QuizBuks 的同步 PR 中） |
+| W-7 | 扩展的 lint 是否收紧 | 拒绝 `@jabiz/ui(/*)`、`@jabiz/client(/*)`（提示经 `@jabiz/admin`）与 `@jabiz/ui/testing`（提示 `@jabiz/admin/testing`），`@jabiz/admin/testing` 只在测试中 |
+| W-8 | 决策的形式 | 现在只补充 D52 与 D38 的实现说明；D53 只在做 16w-2 时才立 |
+| W-9 | 流式请求的上限（只用于 16w-2） | 最长 15 分钟，闲置缺省 30 秒 |
+| W-10 | 示范（只用于 16w-2） | 示范应用改用流式 |
+| W-11 | PR | 16w-1 一个 PR |
+
+#### 16w-1 几种类型的取消、没有用量的尝试与迟到的用量、扩展的测试出口
+
+分支 `1.2/phase-16w1-adoption-gaps`，从 `1.2/platform`（`1d347de`，16v-2 已合入）拉出。
+
+**16w-1 状态**：✅ 已实施（PR 待建）。
+
+| # | 内容 | 实施 |
+|---|---|---|
+| 1 | 一个取消步骤可声明几种类型 | runtime `CancelExternalJob.of(List<String>, ctx -> 作业号)`（列表不得为空或重复，保持顺序）；`Metadata` 增加 `jobTypes`（6 → 7，原六参构造保留，`jobType` 为第一个）；判断为 `jobTypes.contains(…)`，缺省拒绝、`.requestedBy` / `.anyRequester()`、同一个 404、`.ifOpen()` 与 422 都不变；`execute` 与 `problems()` 一次报告全部未声明的类型 |
+| 2 | 扩展的测试出口 | `frontend/src/lib/testing.ts` 即 `@jabiz/admin/testing`（转出 `@jabiz/ui/testing` 的 `expectAccessible`、`WCAG_TAGS`；只有 Vitest 的，不做 Playwright 版本）；`tsconfig.extension.json` 的 `paths` 与 `vite.config.ts` 的别名（在 `@jabiz/admin` 之前）；扩展的 lint（W-7）分页面与测试两份配置；`src/lib/testing.test.ts` 保证 `@jabiz/admin` 与生产源码不引用测试出口（生产包没有 Vitest 与 vitest-axe）；示范扩展的页面测试以它在亮暗两种外观下过 axe |
+| 3a | 没有用量的尝试数 | core `ExternalJobCancellation`（10 → 11）、`ExternalJobFailure`（9 → 10）、`ExternalJobCompletion`（9 → 10）在最后增加 `unrecordedAttempts` 与 `hasUnrecordedAttempts()`，原构造保留（为 0）；runtime `ExternalJobRecorder.attemptUsage` 一条语句（尝试 `LEFT JOIN` 用量）读出合计与个数，代替 `RunExternalJobCallback` 中的 `usage()`，语句数不变；操作记录的摘要带上个数 |
+| 3b | 迟到实例的用量 | `ExternalJobExecutor.recordAttempt` 插入尝试冲突时，已记的尝试为 `LEASE_EXPIRED` 且没有用量行即在同一事务（持有作业行锁）中补记用量（`ExternalJobRecorder.insertLateUsage`，`ON CONFLICT (job_id, attempt_no, metric) DO NOTHING`）；结果、输出文件与结局不变（`DISCARDED`）；提交后计入 `jabiz.external.usage` 并记 WARN；结局流程之前到的使那次尝试不再算没有用量，之后到的只改变用量报表、不再调用流程（11 §4a） |
+| 文档 | | D52（第 1 条的一点、第 2 条的补充、第 5 条、理由、放弃的方案、16w-1 实现说明）、D38 实现说明第 5 条、11 §4a、06 §2.3、12 §8 / §9 / §11、CLAUDE.md §4、`guide/admin-extension.md`、`guide/platform-features.md`、用量报表模板的说明 |
+
+**验收**
+- [x] `./gradlew check` 全部通过（含 `:app:platformCheck`、场景快照、覆盖率门禁）；前端 `pnpm lint`、`typecheck`、`test`、`check:api`（接口不变）；
+  `JABIZ_ADMIN_EXTENSION=../backend/app/admin-extension pnpm ext:check`；示范门户 `app:check`；端到端 `pnpm e2e`。
+  （2026-10-19，评审修订后：core 873、ext-geo 5、runtime 540、app 1235 个测试；前端 Vitest 769 个；扩展 8 个与 bundle 步骤；e2e 46 个（修订前；修订不改界面），全部通过。）
+- [x] `CancelExternalJobTest`：列出的任何类型都取消（操作人、时间、操作）、列表外的类型与不存在相同、空与重复的列表被拒、全部未声明的类型一次报告、单一类型的形式不变、
+  `requestedBy` 与 `anyRequester` 对几种类型同样适用。
+- [x] `ExternalJobCancelIT`：两种类型的步骤各取消一个；第三种类型的作业与不存在同一个 404（`ifOpen` 也一样）；别人的作业仍 404。
+- [x] `ExternalJobUnrecordedIT`（新）：失败计入租约过期的尝试；完成计入之前过期的尝试；取消计入实例死掉的执行中尝试；排队中取消的为 0；超时而没有用量的计入、有用量的不计；
+  `FAILED` 而没有用量的不计；结局流程之前到的迟到用量照记并使个数为 0（计数器增加）；之后到的只进报表、不再调用流程；重复的迟到记录只写一次；迟到的结果与文件仍不交出；
+  各测试之后断言 `sys_external_job*` 上没有 UPDATE / DELETE / TRUNCATE。`ExternalJobIT.aLateInstanceDropsItsResultAndTheCompletionRunsOnce` 另断言迟到的用量照记、完成流程得到合计且个数为 0。
+- [x] 单元测试：core `ExternalJobCancellationTest`、`ExternalJobOutcomesTest`（新：原构造器、`hasUnrecordedAttempts`、`toString` 不含结果与消息）；runtime `ExternalJobAttemptUsageTest`（新：只有过期与超时而没有用量的计入）。
+- [x] 前端：`extension-lint.test.ts`（`@jabiz/admin/testing` 在测试中允许、在页面中拒绝；`@jabiz/ui`、`@jabiz/client`、`@jabiz/ui/testing` 被拒并提示替代；测试中其他规则照旧）、
+  `src/lib/testing.test.ts`（即 `@jabiz/ui/testing` 的辅助函数；`@jabiz/admin` 与生产源码不引用它）、示范扩展 `StockOverviewPage.test.tsx` 的 axe 测试。
+
+**兼容**（线 1.2 内）：只新增。四个 record 增加组件（`CancelExternalJob.Metadata` 6 → 7、`ExternalJobCancellation` 10 → 11、`ExternalJobFailure` 9 → 10、`ExternalJobCompletion` 9 → 10），原构造器全部保留；
+只有 record 解构与按组件的反射需要改写，字面量 `CancelExternalJob.of(null, …)` 有了歧义；把这三种输入写成 JSON 交给流程接口的测试（伪造的完成，期望 403）要带上
+`unrecordedAttempts`，否则在权限检查之前即因缺少原始类型的值而 400（示范场景 `product_copy.yml` 相应加上）。不用 `unrecordedAttempts` 的应用没有变化。
+有意的可见变化：迟到实例的用量出现在 `sys_external_job_usage`、报表 `jabiz.external_job_usage` 与计数器中。扩展的 lint 只拒绝 D22 本来就不允许的引用
+（示范扩展与 QuizBuks 的扩展都只引用 `@jabiz/admin`，不受影响）。
+
+**未做**：尝试中报告的用量立即写入；平台自己估计没有用量的尝试的用量；逐次的清单；`@jabiz/admin/testing` 的 Playwright 版本；报表中没有用量的尝试一列；流式结果（16w-2）；
+迟到的用量与结局流程的事务恰好同时提交的并发测试（一条语句一个快照，由设计保证；结局流程的步骤中不能阻塞地等待）。
+
+**独立评审之后的修订**（2026-10-19，没有 High）：
+1. M1：`FAILED` / `EXTERNAL_CALL_FAILED` 而没有用量的尝试照 W-4 不计入个数；D52 第 5 条、11 §4a 与 CLAUDE.md 写明调用计费的提供方的处理器捕获 `ExternalCallException`、
+   先 `recordUsage(估计)` 再重新抛出，去掉"处理器回答了"的错误说法；测试 `aFailedAttemptWhoseCallGotNoAnswerIsNotUnrecorded`。
+2. M2：扩展的 lint 以 `no-restricted-syntax` 拒绝 `import()` / `require()` 引用 `@jabiz/ui*`、`@jabiz/client*` 与（非测试中）`@jabiz/admin/testing`，`files` 扩大到全部 JS / TS 扩展名；
+   测试的范围加上 `test/` 目录（共用辅助文件放在那里，`guide/admin-extension.md`）；构建后的检查：Vite 插件 `noTestCodeInBundle` 在通用后台的每次构建中、`ext:check` 的 `bundle` 步骤
+   在带扩展构建后读回 `assets/*.js`，有 Vitest、`@vitest/*`、vitest-axe 或 axe-core 即失败（以页面中引用 `@jabiz/admin/testing` 手工验证过会失败）；`testing.test.ts` 的模式认出副作用
+   import、`import()`、`require()` 与 `export … from`。
+3. M3：上面 W 表的 W-8 至 W-11 改正（原表把不做 Playwright 版本当作 W-8，移到第 2 项）。
+4. Low：`CancelExternalJob.Metadata` 只要求 `jobType` 是 `jobTypes` 之一、没有 null（L1）；11 §4a 写明超时尝试的部分用量可能偏少（L2）与迟到的用量可能改变已结束的月份（L5）；
+   重复的记录（已记的尝试不是 `LEASE_EXPIRED`）回答作业的结局而不是 `DISCARDED`、不记迟到的 WARN（L3，`ExternalJobIT.aRecordRepeatedAfterItsCommitReportsTheJobsOutcome`）；
+   `guide/admin-extension.md` 改正 `@jabiz/admin` 导出的内容、12 §11 加上"经 `@jabiz/admin`"（L4）；用量合计溢出时停在 `Long.MAX_VALUE` 并记 WARN。
+5. 新增测试：租约先被记为 `LEASE_EXPIRED` 的超时尝试（有用量与没有用量）、取消时补记过期租约之后迟到的用量（`ExternalJobUnrecordedIT`）。
+   `unrecordedAttempts` 在 JSON 中保持严格（缺少即转换失败，拒绝而不是放行）。
+
+**QuizBuks 需要的修改**（不在平台分支；合入后在 `1.2/quizbuks` 以同步 PR 做）：
+- 取消：`QB_AI_CANCEL` 用一个步骤 `CancelExternalJob.of(List.of(AiQuestionsJob.TYPE, AiCoverJob.TYPE), ctx -> externalJobId).ifOpen()`；删去 `QB_AI_CANCEL_QUESTIONS_JOB`、
+  `QB_AI_CANCEL_COVER_JOB`、`cancelPlatformJob`、两处 `CallProcess.when` 及其消息、`MessagesTest` 与 `ProcessAccessIT` 中的条目，并修改文档。
+- axe：`admin-extension/src/ai.test.tsx` 改用 `@jabiz/admin/testing` 的 `expectAccessible()`，删去复制的辅助函数。
+- 计费（W-6）：`QB_AI_JOB_CANCELLED`、`QB_AI_JOB_FAILED`、`QB_AI_JOB_COMPLETED` 对每次没有用量的尝试计 `reservedInputTokens` 的输入加 `maxTokens` 的输出
+  （题目 `ClaudeApi.maxTokens(count)`，封面 `AiCoverJob.MAX_TOKENS`；取自作业保存的参数，费用经 `AiCost`），测试 `anAttemptWhoseInstanceDiedIsChargedItsEstimate`
+  （失败、取消、完成各一）与 `aLateAttemptsRecordedUsageIsChargedNotTheEstimate`；运维 §7.8 删去"实例崩溃的尝试计零"。
+
+#### 16w-2 流式结果（推后）
+
+**16w-2 状态**：⏸ 计划中、推后（W-1）。只在 QuizBuks 20 题试运行中超过约 5% 的 AI 尝试超时时才做；做时另立决策 **D53**（W-8），W-9（最长 15 分钟、闲置缺省 30 秒）、W-10（示范改用流式）只适用于那时。

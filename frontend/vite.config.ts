@@ -7,6 +7,7 @@ import tailwindcss from '@tailwindcss/vite'
 import { viteBase } from './src/base.ts'
 import { appSettingsProblems } from './scripts/app-settings.ts'
 import { extensionDir, extensionEntry } from './scripts/extension.ts'
+import { noTestCodeInBundle } from './scripts/bundle-check.mjs'
 
 const root = import.meta.dirname
 const packageJson = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8')) as {
@@ -37,10 +38,13 @@ function extensionStyles(dir: string | null): Plugin {
 export default defineConfig({
   // Served under a sub-path when an application puts its public website at the root (VITE_BASE=/admin/).
   base: viteBase(process.env.VITE_BASE),
-  plugins: [extensionStyles(extension), tailwindcss(), react()],
+  // A production bundle never holds test code (@jabiz/admin/testing in an extension's page, say; phase 16w-1).
+  plugins: [extensionStyles(extension), tailwindcss(), react(), noTestCodeInBundle()],
   resolve: {
     alias: [
       { find: 'virtual:jabiz-extension', replacement: extensionEntry(extension, root) },
+      // Before @jabiz/admin: an extension's tests import the accessibility check from here (decision D22).
+      { find: /^@jabiz\/admin\/testing$/, replacement: resolve(root, 'src/lib/testing.ts') },
       { find: /^@jabiz\/admin$/, replacement: resolve(root, 'src/lib/index.ts') },
     ],
     // The extension lies outside this project and has no node_modules of its own: its imports of React and the rest

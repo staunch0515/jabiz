@@ -425,7 +425,8 @@ JobDefinition.forEach("commerce.unpaid-order-expire", "0 10 3 * * *", ZoneId.of(
   2. **执行**：处理器在 `boundedElastic`（虚拟线程）上、作业的 `ExternalCallScope` 中运行，`Mono.timeout(超时)`（中断线程，尽力而为）；
      此时没有任何事务或连接被占用。
   3. **记录**（独立事务，先 `FOR UPDATE` 锁作业行，与取消串行；数据库失败时退避重试 3 次）：插入尝试（`SUCCEEDED` / `FAILED` / `TIMED_OUT`、是否可重试、码、说明（至多 2000 字）、耗时）
-     ——`ON CONFLICT DO NOTHING`：租约过期后迟到的实例发现尝试已被记为 `LEASE_EXPIRED`，丢弃自己的结果（`DISCARDED`）；再插入用量。
+     ——`ON CONFLICT DO NOTHING`：租约过期后迟到的实例发现尝试已被记为 `LEASE_EXPIRED`，丢弃自己的结果与输出文件（`DISCARDED`），
+     但照记它的用量（见下面"没有用量的尝试与迟到的用量"）；否则再插入用量。
      已取消 → 最终结果 `CANCELLED`（丢弃结果）；成功 → `SUCCEEDED` 与结果 JSON；不可重试或次数用尽 → `FAILED` 与最后的码和说明；否则等待重试。
      最终结果 `sys_external_job_outcome`（主键 `job_id`，`ON CONFLICT DO NOTHING`：只有一个）与 Outbox 事件
      `jabiz.external-job.finished`（`{jobId, jobType, status}`，不含结果）同一事务。用量计数器在提交之后才增加。
@@ -434,10 +435,10 @@ JobDefinition.forEach("commerce.unpaid-order-expire", "0 10 3 * * *", ZoneId.of(
   - 锁的顺序：领取先取类型的 advisory 锁再取作业行；记录与取消只取作业行。持有作业行的事务从不等待 advisory 锁，所以不会死锁。
 - **完成**：平台的消费者 `jabiz.external-jobs` 接收 `jabiz.external-job.finished`，以系统身份运行内部流程 `EXTERNAL_JOB_COMPLETE`。
   其步骤 `RunExternalJobCallback` 读取作业、结果与用量合计，以 `executeChild` 调用类型声明的流程：成功为 `ExternalJobCompletion(jobId, jobType,
-  requestedBy, reference, result（按声明的结果类型反序列化，`result(类型)` 取出）, usage, attempts, finishedTime)`，失败为
-  `ExternalJobFailure(…, errorCode, errorMessage)`；`CANCELLED` 调用类型声明的 `onCancelled`（见下面"取消的结局"），不声明即不调用（Q13，与之前相同）。保存的结果读不回声明的类型（类型改了）时，
+  requestedBy, reference, result（按声明的结果类型反序列化，`result(类型)` 取出）, usage, attempts, finishedTime, files, unrecordedAttempts)`，失败为
+  `ExternalJobFailure(…, errorCode, errorMessage, unrecordedAttempts)`（`unrecordedAttempts` 见下面"没有用量的尝试与迟到的用量"，16w-1）；`CANCELLED` 调用类型声明的 `onCancelled`（见下面"取消的结局"），不声明即不调用（Q13，与之前相同）。保存的结果读不回声明的类型（类型改了）时，
   改为以 `RESULT_UNREADABLE` 调用失败流程，而不是让事件反复重试；类型已不再声明的作业不调用任何流程。
-  两个流程的操作记录（`op_process.input_summary`）不含结果与处理器的消息：结果只记字节数 `resultBytes`，消息只记长度 `errorMessageLength`
+  两个流程的操作记录（`op_process.input_summary`）不含结果与处理器的消息（`unrecordedAttempts` 照记）：结果只记字节数 `resultBytes`，消息只记长度 `errorMessageLength`
   （`SensitiveDataMasker` 对这两种输入的特例）；`ExternalJobFailure.toString` 同样遮蔽消息。消费记录与子流程同一事务：只调用一次；失败按 Outbox 重试（D14）。
   完成与失败流程必须是 `internal()`（启动检查），并由它们以 `CreateTask` / `SendMail` 通知请求人。
   **在 D41 决定之前**，`internal()` 只是不进目录，持有权限的人仍能经 `/api/processes` 调用：`EXTERNAL_JOB_COMPLETE` 的步骤与示范的
@@ -451,19 +452,43 @@ JobDefinition.forEach("commerce.unpaid-order-expire", "0 10 3 * * *", ZoneId.of(
 - **取消的结局**【D52 第 2 条，阶段 16v-1】：类型可声明 `.onCancelled("流程")`（必须 `internal()`，以 `ExternalJobCancellation` 为输入；启动检查 `EXTERNAL`）。
   取消的作业结束时（没有正在执行的尝试即在取消的事务中，否则在执行器记下那次尝试之后）`EXTERNAL_JOB_COMPLETE` 以子流程调用它**一次**，
   输入为 `ExternalJobCancellation(jobId, jobType, requestedBy, reference, usage（全部尝试的合计，含被取消的那次）, attempts, finishedTime,
-  cancelledBy, cancelledTime, attemptRan（是否有尝试被领取过）)`。三种取消——请求人、持有 `external-job.cancel` 的操作员（接口）与业务流程（下面的步骤）——都一样。
+  cancelledBy, cancelledTime, attemptRan（是否有尝试被领取过）, unrecordedAttempts（16w-1）)`。三种取消——请求人、持有 `external-job.cancel` 的操作员（接口）与业务流程（下面的步骤）——都一样。
   应用据此按实际用量结算被取消的作业，而不必自己订阅 `jabiz.external-job.finished`。不声明的类型照旧什么也不调用。
 - **从流程中取消**【D52 第 2 条】：平台步骤 `CancelExternalJob.of(作业类型, ctx -> 作业号)[.ifOpen()][.outputKey(键)]`（`com.jabiz.runtime.process.steps`）。
+  - **几种类型**（16w-1）：`CancelExternalJob.of(List.of(类型甲, 类型乙), ctx -> 作业号)`——一个"停止"操作结束几种作业中正在执行的那一个，不必为每种类型各写一个子流程。
+    列表（`List`，不是可变参数）不得为空、不得重复（`IllegalArgumentException`），保持给出的顺序；元数据的 `jobTypes`（`Set`），`jobType` 为第一个（日志与只有一种类型的调用方）。
+    其余全部不变：缺省拒绝、`.requestedBy` / `.anyRequester()`、列表以外的类型与别人的作业与不存在的作业同一个 404、`.ifOpen()` 与 422。
+    启动检查一次报告列表中**全部**未声明的类型。没有新的错误码。
   - 能否运行是**流程自己的权限**（像每个流程一样声明）；步骤本身不检查权限，而以**缺省拒绝**限定能取消哪些作业：声明的类型、**由流程的操作人开始的**作业。
     其他类型的作业、别人开始的作业与不存在的作业**同一个 404**，流程不能被用来探测或取消别人的作业（评审 M1）。
     代表已知所有人行事的流程（如系统身份的封禁流程）以 `.requestedBy(ctx -> 用户编号)` 指明所有人（未知的所有人不匹配任何作业）；
     运维的流程要取消任何人的作业，须显式写 `.anyRequester()`，从不是缺省。
   - 已结束（有最终结果或已取消）→ 422 `EXTERNAL_JOB_FINISHED`；`.ifOpen()` 时什么也不做（输出 `false`）。
   - 取消人记为流程的操作人；与流程同一事务——流程回滚，作业仍未取消。之后与接口的取消相同：未执行的立即为 `CANCELLED`，执行中的在尝试记录后为 `CANCELLED`，
-    然后运行 `onCancelled`。启动检查（`CheckedStep`）：类型已声明。
+    然后运行 `onCancelled`。启动检查（`CheckedStep`）：类型（几种类型时每一种）已声明。
   - **作业行锁到流程事务结束**：在长流程中取消，这段时间里执行器记录该作业的尝试要等待；领取时补记过期租约用 `SKIP LOCKED`，不等待也不死锁，下一次轮询再补记（评审 Low 1）。
   - 取消时先把该作业租约已过而未记录的领取补记为 `LEASE_EXPIRED`（与执行器相同），立即结束的作业的尝试次数与用量因此完整，`onCancelled` 只运行一次（Low 2）。
   - 被取消的那次尝试若产生了输出文件，它们不交给任何流程（已取消的作业不存储；存储后才取消的成为没有引用的孤儿），由 `FILE_SWEEP` 清扫（D50 第 3 条）。
+- **没有用量的尝试与迟到的用量**【D52 第 5 条，阶段 16w-1】：
+  - **没有用量的尝试**：结局为 `LEASE_EXPIRED`（实例死了、或迟到）或 `TIMED_OUT`（超时）而没有任何用量行的尝试。处理器没来得及 `recordUsage`，提供方却可能已计费；
+    `FAILED` 不算：那是处理器自己给出的结局，它有机会先记下用量。所以**调用计费的提供方的处理器**捕获 `ExternalCallException`（`TIMEOUT` 等没有回答的），
+    先 `recordUsage(估计)` 再重新抛出；不这样做，这次尝试是 `FAILED` / `EXTERNAL_CALL_FAILED` 而没有用量，平台既不计入用量也不计入下面的个数
+    （QuizBuks 的 `ClaudeApi.unanswered` 即如此）。`ExternalJobCompletion`、`ExternalJobFailure` 与 `ExternalJobCancellation` 的最后一个组件
+    `unrecordedAttempts` 给出其**个数**（不给逐次的清单，W-3），`hasUnrecordedAttempts()` 为是否有。按用量计费的应用对这些尝试按自己的估计计费（如预留的输入与输出上限）。
+    原来的构造器保留，个数为 0。
+  - 平台以**一条语句**（尝试 `LEFT JOIN` 用量）读出用量合计与这一个数（`ExternalJobRecorder.attemptUsage`，代替原来的用量合计查询，`EXTERNAL_JOB_COMPLETE` 的语句数不变）：
+    同一个快照，迟到的用量要么同时在合计与个数中、要么都不在，不会既计入用量又被当作没有用量。用量合计超过 `Long.MAX_VALUE` 时停在那里（记 WARN），不使完成无法投递。
+  - **超时的尝试的用量可能偏少**：`TIMED_OUT` 记下的是超时那一刻处理器已报告的用量；处理器的线程在超时之后可能还在运行（中断只是尽力而为），
+    之后再报告的不会被记下。有用量行的超时尝试因此不算"没有用量"，即使提供方实际计费更多。
+  - **迟到的用量**（W-5）：执行器记录尝试时发现该尝试号已被记为 `LEASE_EXPIRED`（租约过期后另一实例或取消补记的），而该尝试还没有用量行，
+    就在同一事务（持有作业行锁）中把这次迟到实例的用量记到那次尝试上（`INSERT … ON CONFLICT (job_id, attempt_no, metric) DO NOTHING`；表只追加，外键指向那次尝试）。
+    已有用量行（比如本实例的记录在数据库故障后重试）或该尝试不是 `LEASE_EXPIRED` 时什么也不写：只记一次。
+    结果、输出文件与作业的结局都不变（`DISCARDED`）；提交后照常计入 `jabiz.external.usage`，并记 WARN "usage recorded, result discarded"。
+  - **重复的记录不是迟到**：已记的尝试不是 `LEASE_EXPIRED`（本实例的记录已经提交，只是回答丢失，记录被重试）时，什么也不再写，
+    回答作业的结局（观测不是 `DISCARDED`，也不记迟到的 WARN），并补计那次已提交的用量。
+  - **与结局流程的先后**：迟到的用量在结局流程（完成、失败或 `onCancelled`）运行**之前**记下，那次尝试就不再算"没有用量"，应用按实际用量计费；
+    在**之后**记下，只有用量报表（`sys_external_job_usage`、`jabiz.external_job_usage`、计数器）变化，**不再调用任何流程**——应用已按估计计费，两者的差只在报表中可见。
+    迟到的用量记在那次 `LEASE_EXPIRED` 尝试的结束月份，因此可能改变报表中已经结束（已对过账）的月份。
 - **按业务参数暂停**【D52 第 4 条，阶段 16v-2】：类型可声明 `.enabledBy("参数键")`（布尔业务参数，04 §9；应同时列入某个 `ControlledParams`，D40）。
   - 执行器只在该参数**此刻生效的值**（取注入的 `Clock`）为布尔 `true` 时领取该类型的作业；参数缺失、为 `false`、不是布尔值或读不出来，类型即**暂停**（缺省拒绝，V-4）。
   - 每次轮询（以及 `runPending()`）在任何领取事务之前，对每个声明了 `enabledBy` 的键以系统身份经 `ParamService` 读一次（`ExternalJobGate`；几个类型共用一个键也只读一次）。
@@ -482,7 +507,7 @@ JobDefinition.forEach("commerce.unpaid-order-expire", "0 10 3 * * *", ZoneId.of(
   状态（`QUEUED` 从未领取 / `RUNNING` 有效领取中 / `WAITING_RETRY` 等待重试（含租约过期待补记）/ `SUCCEEDED` / `FAILED` / `CANCELLED`
   （已取消而尝试仍在执行的也是，其结果必被丢弃））、尝试次数、请求 / 首次领取 / 结束时间、最近的错误码、用量合计；不含输入与结果（Q14）。
   只读平台实体 `ExternalJob`（不含输入）、`ExternalJobAttempt`、`ExternalJobUsage` 的数据视图（`external-job.read`）供后台查看；
-  报表模板 `jabiz.external_job_usage`：按类型、用量名、尝试结束的月份（UTC）汇总数量与尝试数（参数 `from` / `to` / `jobType`）。平台不计费。
+  报表模板 `jabiz.external_job_usage`：按类型、用量名、尝试结束的月份（UTC）汇总数量与尝试数（参数 `from` / `to` / `jobType`；迟到的用量按那次 `LEASE_EXPIRED` 尝试的结束时间计）。平台不计费。
 - **表**（`db/jabiz/V37__external_jobs.sql`，全部只追加并有主键，D27 封存）：`sys_external_job`（`job_id` 为 `varchar(36)`，与其他平台实体的标识一致）、
   `sys_external_job_claim`、`sys_external_job_attempt`（另有唯一的 `attempt_id` 作实体主键）、`sys_external_job_usage`（另有 `usage_id`）、
   `sys_external_job_cancel`、`sys_external_job_outcome`。`SELECT … FOR UPDATE` 只加行锁，不触发只追加的 UPDATE 触发器。
@@ -499,7 +524,7 @@ JobDefinition.forEach("commerce.unpaid-order-expire", "0 10 3 * * *", ZoneId.of(
   两者都服从 `enabledBy` 的暂停：`runExternalJobs` 不领取暂停的类型，暂停中的 `completeExternalJob` 是场景的错误并说明原因（`ExternalJobTypeHeldException`，如"parameter … is false"）。
 - **风险与限制**：超时不能强行停止卡住的处理器（中断只是尽力而为，靠请求超时与租约兜底；超时后旧线程若仍在运行，同一类型可能短暂超出并发上限）；
   至少一次——执行完、记录前崩溃，会以同一幂等键再调用一次，不支持幂等键的提供方可能计费两次（用量按尝试记录，可统计）；
-  迟到实例被丢弃的尝试不记录用量；每次轮询每个类型一个领取事务（查询限于水位线以上，全量扫描每个刷新间隔一次）；
+  迟到实例的结果被丢弃，用量照记（16w-1；在结局流程之后才到的只进报表）；每次轮询每个类型一个领取事务（查询限于水位线以上，全量扫描每个刷新间隔一次）；
   晚提交的作业最多晚一个刷新间隔；完成流程持续失败时 Outbox 重试用尽后由运维处理。
   输入与结果可能含个人信息：保留策略与删除见 21 §3.1。作业输入永久保存，其中的资料原文在业务数据之外多存一份（D50 第 5 条）：只放作业需要的内容，较大的资料以文件输入传递。
   文件（D50）：权限只在开始时判断；开始后一天以上才执行、期间被清扫或删除的输入文件使作业失败；完成流程晚于 `jabiz.files.orphan-after` 才运行（Outbox 长时间失败）时，
@@ -508,8 +533,8 @@ JobDefinition.forEach("commerce.unpaid-order-expire", "0 10 3 * * *", ZoneId.of(
   1. **慢回答**：不流式的请求最长可达 2 分钟（`ExternalService.MAX_REQUEST_TIMEOUT`）。超过请求超时的回答被放弃，提供方可能照样计费，重试也可能再被放弃。
      流式结果推送暂不做（V-1）：QuizBuks 20 题试运行中超过约 5% 的 AI 尝试超时再考虑。
   2. **业务开关**：处理器看不到业务参数。`enabledBy(参数)`（16v-2，见上面"按业务参数暂停"）在领取之前检查；已经开始的尝试照常运行到结束。
-  3. **重复计费**：提供方不按幂等键去重时，重试可能计费两次，平台无法解决。应用应在尝试中调用 `recordUsage`、把没有回答的尝试按估计计费，
-     并在提供方设置支出上限。
+  3. **重复计费**：提供方不按幂等键去重时，重试可能计费两次，平台无法解决。应用应在尝试中调用 `recordUsage`、把没有回答的尝试按估计计费
+     （平台报告其个数 `unrecordedAttempts`，16w-1），并在提供方设置支出上限。
 - 示范：`app` 的 `PRODUCT_COPY_REQUEST`（`actsOn Product`，`commerce.product.write`）登记 `commerce.product-copy`；`ProductCopyHandler` 调用
   `POST /v1/generate`（`{text, usage:{promptTokens, completionTokens}}`，不绑定提供方；4xx 为永久失败，429 / 5xx 重试）；
   每个商品同时只有一个未结束的作业（`oneOpenPerReference`）；`PRODUCT_COPY_APPLY` 写 `Product.marketingCopy`（`processOnly`）并给请求人待办，`PRODUCT_COPY_FAILED` 告知失败。测试 `ExternalJobIT`，

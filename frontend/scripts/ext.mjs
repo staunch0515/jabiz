@@ -1,12 +1,14 @@
 // Checks of an application's admin extension (decision D22) with this project's tools and configuration:
-//   JABIZ_ADMIN_EXTENSION=<dir> node scripts/ext.mjs typecheck|lint|test|check [--if-set]
+//   JABIZ_ADMIN_EXTENSION=<dir> node scripts/ext.mjs typecheck|lint|test|bundle|check [--if-set]
 // The extension has no node_modules or tool configuration of its own; everything comes from here.
 import { spawnSync } from 'node:child_process'
-import { existsSync } from 'node:fs'
-import { isAbsolute, resolve } from 'node:path'
+import { existsSync, mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { isAbsolute, join, resolve } from 'node:path'
 import { ESLint } from 'eslint'
 import platformConfig from '../eslint.config.js'
 import { extensionRulesFor } from './extension-lint.mjs'
+import { builtProblems, BUNDLE_ADVICE } from './bundle-check.mjs'
 
 const root = resolve(import.meta.dirname, '..')
 const value = process.env.JABIZ_ADMIN_EXTENSION
@@ -25,7 +27,7 @@ const bin = (name) => resolve(root, 'node_modules/.bin', name)
 const run = (command, args) => spawnSync(command, args, { cwd: root, stdio: 'inherit', env: process.env }).status ?? 1
 
 async function lint() {
-  const eslint = new ESLint({ cwd: dir, overrideConfigFile: true, overrideConfig: [...platformConfig, extensionRulesFor(dir)] })
+  const eslint = new ESLint({ cwd: dir, overrideConfigFile: true, overrideConfig: [...platformConfig, ...extensionRulesFor(dir)] })
   const results = await eslint.lintFiles(['src'])
   const formatter = await eslint.loadFormatter('stylish')
   const output = await formatter.format(results)
@@ -33,17 +35,38 @@ async function lint() {
   return results.some((r) => r.errorCount > 0) ? 1 : 0
 }
 
+/**
+ * Builds the admin with the extension into a directory of its own and reads the built JavaScript back: no test code
+ * (Vitest, vitest-axe, axe-core) may be in it (phase 16w-1). The build's own plugin fails first; this reads the files.
+ */
+function bundle() {
+  const outDir = mkdtempSync(join(tmpdir(), 'jabiz-ext-bundle-'))
+  try {
+    const code = run(bin('vite'), ['build', '--outDir', outDir, '--emptyOutDir', '--logLevel', 'warn'])
+    if (code !== 0) return code
+    const problems = builtProblems(outDir)
+    if (problems.length > 0) {
+      console.error(`ext: ${BUNDLE_ADVICE}\n${problems.join('\n')}`)
+      return 1
+    }
+    return 0
+  } finally {
+    rmSync(outDir, { recursive: true, force: true })
+  }
+}
+
 const steps = {
   typecheck: () => run(bin('tsc'), ['-p', resolve(dir, 'tsconfig.json'), '--noEmit']),
   lint,
   test: () => run(bin('vitest'), ['run', resolve(dir, 'src')]),
+  bundle,
 }
 
 const wanted = process.argv[2] === 'check' ? Object.keys(steps) : [process.argv[2]]
 let status = 0
 for (const step of wanted) {
   if (!steps[step]) {
-    console.error(`ext: unknown step '${step}' (typecheck, lint, test, check)`)
+    console.error(`ext: unknown step '${step}' (typecheck, lint, test, bundle, check)`)
     process.exit(2)
   }
   const code = await steps[step]()

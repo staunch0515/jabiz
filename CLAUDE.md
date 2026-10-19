@@ -133,19 +133,23 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
   处理器只经 `ExternalJobContext.files()` 读；要产生文件，类型声明 `outputFiles(策略, …)`、处理器以 `ExternalJobResult…file(键, 名称, 字节)` 返回，完成流程以 `ExternalJobCompletion.file(键)` 取得编号（D50）。处理器不接触 `com.jabiz.runtime.file`。
   被取消的作业要结算或通知时，类型声明 `onCancelled(流程)`（`internal()`，输入 `ExternalJobCancellation`，含全部尝试的用量与取消人），不自己订阅 `jabiz.external-job.finished`；
   流程中取消作业只用平台步骤 `CancelExternalJob.of(类型, ctx -> 作业号)[.ifOpen()]`（流程自己的权限；缺省只取消该类型、由操作人开始的作业，别人的与不存在同一个 404；
-  代表已知所有人用 `.requestedBy(ctx -> 用户)`，运维流程取消任何人的作业须显式 `.anyRequester()`，D52 第 2 条）。
+  代表已知所有人用 `.requestedBy(ctx -> 用户)`，运维流程取消任何人的作业须显式 `.anyRequester()`，D52 第 2 条）；一个操作可能结束几种作业时用一个步骤
+  `CancelExternalJob.of(List.of(类型…), ctx -> 作业号)`，不按类型拆成子流程。
   以业务开关停下某类作业只在类型上声明 `enabledBy(参数键)`（布尔业务参数，列入 `ControlledParams`，否则启动检查警告；D52 第 4 条）：参数此刻不是 `true` 即暂停，
   作业等待而不用掉尝试、照常登记与取消；不在处理器或流程中自己判断开关。
   提供方不按幂等键去重时重试可能重复计费：在尝试中 `recordUsage`、没有回答的尝试按估计计费、在提供方设置支出上限（D52 第 1 条）。
+  没有回答的尝试的个数只取结局输入的 `unrecordedAttempts`（`LEASE_EXPIRED` / `TIMED_OUT` 而没有用量；D52 第 5 条），不自己读平台的尝试表推算；迟到实例的用量由平台照记。
+  `FAILED` 的尝试不计入个数：调用计费的提供方的处理器捕获 `ExternalCallException`（`TIMEOUT` 等没有回答的），先 `recordUsage(估计)` 再重新抛出。
 - **内容编辑**（见 16 与决策 D20）：多语言内容用 `f.apply(I18nText.of(...))`（值为 `{语言: 文本}`，存 `jsonb`，语言即平台支持的语言）；
   被引用的实体用 `eb.display(字段)` 声明显示字段；状态、审核意见等只由流程改变的字段用 `f.processOnly()`（照常可读，数据视图 API 与通用实体流程不能写）；
   以某实体为对象的流程用 `actsOn(实体, 输入组件[, when])` 声明，后台据此显示行操作（`when` 只是显示提示）。Markdown 只在前端渲染，不允许原始 HTML。
 - **规则**（见 02 §3 与决策 D15）：导出给前端的字段规则只用 `Rules` 工厂（`RANGE` `SCALE` `LENGTH` `PATTERN` `NOT_FUTURE` `REQUIRED`）；
   依赖服务端状态的判断写成仅服务端规则。新增规则种类或语义约束时，先在 `spec/validation-cases.json` 加用例，前后端都要通过。
 - **前端**（见 12）：业务对象不写前端代码，页面由元数据生成；界面按目录与权限隐藏操作，但权限只由服务端判断。
-  元数据表达不了的工作流，由应用在自己目录中的**扩展**写页面（12 §9、决策 D22）：只经 `@jabiz/admin` 引用平台、不自带依赖，路由不占平台路径。
+  元数据表达不了的工作流，由应用在自己目录中的**扩展**写页面（12 §9、决策 D22）：只经 `@jabiz/admin` 引用平台（测试另有 `@jabiz/admin/testing`，只在测试中）、不自带依赖，路由不占平台路径；
+  扩展的 lint 拒绝直接引用 `@jabiz/ui`、`@jabiz/client`。
   界面组件只用 `@jabiz/ui`（shadcn 组件源码只在平台一处，应用与扩展不自行生成或复制；需要新组件先加到平台）；颜色只用主题 token（第三方品牌标志按其指南用自己的颜色，D44），亮暗两种外观都过 axe（决策 D34）。
-  axe 的检查只用 `@jabiz/ui/testing`（Vitest 的 `expectAccessible`）与 `@jabiz/ui/testing/playwright`（`expectAccessible(page, 名称, { expect })`、`accessibilityViolations`、`animationsSettled`、`setAppearance`），不复制辅助函数（12 §11）。
+  axe 的检查只用 `@jabiz/ui/testing`（Vitest 的 `expectAccessible`；扩展经 `@jabiz/admin/testing`）与 `@jabiz/ui/testing/playwright`（`expectAccessible(page, 名称, { expect })`、`accessibilityViolations`、`animationsSettled`、`setAppearance`），不复制辅助函数（12 §11）。
   手写页面与扩展中的用户编号（准备人、审批人等）以 `UserName`（`@jabiz/admin`，10 §14）显示为名字，不显示编号。
   实体与字段的显示名写在消息资源（`entity.<实体>`、`entity.<实体>.<字段>`，三种语言；应用以 `jabizApp { languages(…) }` 只选部分语言时只写所选的，12 §10）。改动 Web 接口后更新 OpenAPI 快照并 `pnpm gen:api`。
 - **可观测性**（见 13 与决策 D16）：平台新的工作单元用 `PlatformObservations` 包装；观测标签只放名称与结果（流程、视图、模板、任务名），

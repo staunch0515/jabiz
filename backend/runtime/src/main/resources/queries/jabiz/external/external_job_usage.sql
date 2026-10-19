@@ -1,9 +1,10 @@
 /*---
 id: jabiz.external_job_usage
 description: >-
-  What external jobs consumed (decision D38 item 4): the usage their attempts recorded, failed attempts included,
-  summed by job type, metric and the month (UTC) the attempts ended in, with the number of attempts that reported the
-  metric. For the application's own statistics; the platform does no billing.
+  What external jobs consumed (decision D38 item 4): the usage their attempts recorded, failed attempts included and
+  late ones too (an attempt whose instance came back after its lease expired, decision D52 item 5), summed by job type,
+  metric and the month (UTC) the attempts ended in, with the number of attempts that reported the metric. For the
+  application's own statistics; the platform does no billing.
 entities: [ExternalJob, ExternalJobAttempt, ExternalJobUsage]
 params:
   from:    { like: ExternalJobAttempt.finishedTime, description: "if given, only attempts that ended at or after this time count" }

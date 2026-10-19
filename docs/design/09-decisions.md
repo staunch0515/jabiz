@@ -54,7 +54,7 @@
 | D49 | 收件偏好按登录入口列出、邮件模板的显示名、界面语言与邮件语言分开（补充 D35、D36，不取代） | 已确认（2026-10-18）；已实施（阶段 16s） | 18 §5.6、12 §6、§10、§12 |
 | D50 | 外部作业的文件：按类型的输入上限（至多 1 MiB）、文件输入（按请求人的读取权限，只在尝试中可读）、文件输出（经上传流水线以请求人登记，`sys_file` 的第二个入口）（补充 D18、D31、D38、D47、D48，不取代） | 已确认（2026-10-18，QuizBuks Q8 的 A-13）；已实施（阶段 16t） | 11 §4a、14 §11、21 §3.1 |
 | D51 | 受保护变更的审批权限 `security.protected-change.decide`（代替 `approval.decide`，本身总是受保护）、按可配置的管理员权限计管理员、流程的备选权限、时间参数限于 PostgreSQL 的范围、`Combobox` 加载状态（修改 D48 第 1 条的管理员、审批人与缺省清单及实现说明⑥；补充 D7、D34） | 已确认（2026-10-18）；已实施（阶段 16u） | 10 §16、18 §3.4、05 §4、`@jabiz/ui` 的 `Combobox` |
-| D52 | 外部作业的剩余风险写明（流式结果暂不做）、取消的结局 `onCancelled` 与平台步骤 `CancelExternalJob`、按入口的退订页 `jabiz.mail.unsubscribe-paths` 与积木 `MailUnsubscribe`、按业务参数暂停作业类型 `enabledBy`（补充 D35、D38、D49，不取代） | 已确认（2026-10-19，16v 计划 V-1 至 V-10）；第 1–3 条已实施（阶段 16v-1），第 4 条已实施（阶段 16v-2） | 11 §4a、06 §2.3、18 §5.6、12 §11 / §12、21 §3.1 |
+| D52 | 外部作业的剩余风险写明（流式结果暂不做）、取消的结局 `onCancelled` 与平台步骤 `CancelExternalJob`（可声明几种类型）、按入口的退订页 `jabiz.mail.unsubscribe-paths` 与积木 `MailUnsubscribe`、按业务参数暂停作业类型 `enabledBy`、没有用量的尝试数与迟到实例的用量（补充 D35、D38、D49，不取代） | 已确认（2026-10-19，16v 计划 V-1 至 V-10；第 2 条的补充与第 5 条为 16w 计划 W-1 至 W-11）；第 1–3 条已实施（阶段 16v-1），第 4 条已实施（阶段 16v-2），第 2 条的补充与第 5 条已实施（阶段 16w-1） | 11 §4a、06 §2.3、18 §5.6、12 §9 / §11 / §12、21 §3.1 |
 
 ---
 
@@ -1139,7 +1139,7 @@ OIDC 的入口以 `start` 的查询参数 `entry` 给出；数据视图的声明
    （`ExternalJobCompletion`，结果按声明的类型反序列化）或失败流程（`ExternalJobFailure`），各只一次；取消的作业不调用（Q13）。
    **`internal()` 目前只是不进目录（D41 待定）**：完成与失败流程，以及 `EXTERNAL_JOB_COMPLETE` 本身，在步骤中拒绝系统以外的操作人
    （同 16d 的 `RecordInboundEvent`），D41 决定后改为平台统一的做法。
-5. 用量按尝试记录（失败的尝试也记录；迟到被丢弃的不记录），报表模板 `jabiz.external_job_usage` 按类型、用量名、月份汇总；观测 `jabiz.external.job`、
+5. 用量按尝试记录（失败的尝试也记录；迟到的尝试也记录用量，结果仍丢弃——16w-1 起，D52 第 5 条），报表模板 `jabiz.external_job_usage` 按类型、用量名、月份汇总；观测 `jabiz.external.job`、
    计数器 `jabiz.external.usage`。取消与状态：`POST /api/external-jobs/{id}/cancel`（`EXTERNAL_JOB_CANCEL`）、`GET /api/external-jobs/{id}`，
    请求人本人或持有 `external-job.cancel` / `external-job.read` 的人，其他人 404；状态不含输入与结果（Q14）。
 
@@ -1809,6 +1809,7 @@ P-8 原写"`false` 即逐条执行（16p-1 的局部合并同样受它控制）"
    - 不流式的请求最长 2 分钟（`ExternalService.MAX_REQUEST_TIMEOUT`）；超过请求超时的回答被放弃，提供方可能照样计费，重试也可能再被放弃。
    - 处理器看不到业务开关：第 4 条在领取之前检查，已开始的尝试运行到结束。
    - 提供方不按幂等键去重时，重试可能重复计费，平台无法解决：应用在尝试中调用 `recordUsage`，没有回答的尝试按估计计费，并在提供方设置支出上限。
+     平台报告这样的尝试有几次（第 5 条，16w-1），应用不必自己从尝试记录中推算。
 2. **取消的结局与从流程中取消**：
    - 作业类型可声明 `onCancelled("流程")`（`internal()`，以 core `ExternalJobCancellation` 为输入：作业号、类型、请求人、引用、全部尝试的用量合计、尝试次数、结束时间、
      取消人、取消时间、是否有尝试被领取过）。取消的作业结束时（没有正在执行的尝试即在取消的事务中，否则在那次尝试记录之后），`EXTERNAL_JOB_COMPLETE` 以子流程调用它一次；
@@ -1819,6 +1820,9 @@ P-8 原写"`false` 即逐条执行（16p-1 的局部合并同样受它控制）"
      取消人是流程的操作人；与流程同一事务（回滚即作业仍开放；作业行锁到流程事务结束）。
      （独立评审 M1，2026-10-19：原先只按类型限定，持有流程权限的人能取消任何请求人的作业，并能由 422 与 200 的不同得知别人有未结束的作业；改为上面的缺省拒绝，V-5 相应细化。）
      原来接口所用的步骤 `runtime.external.CancelExternalJob` 改名为包内的 `CancelRequestedJob`，接口的行为不变。
+   - **一个步骤可声明几种类型**（16w 计划 W-2，2026-10-19 确认）：`CancelExternalJob.of(List.of(类型…), ctx -> 作业号)`——一个"停止"操作可能结束几种作业中的任何一个，
+     不必为每种类型各写一个子流程。列表（不是可变参数）不得为空或重复；每种类型都须声明（启动检查一次报告全部未声明的类型）。缺省拒绝、`.requestedBy` / `.anyRequester()`、
+     列表以外的类型与别人的、不存在的作业同一个 404、`.ifOpen()` 与 422 都与一种类型时相同。
 3. **按入口的退订页**：`jabiz.mail.unsubscribe-paths.<入口>` 是相对该入口 `app-path` 的路径（如 `mail/unsubscribe`）。声明了 `.entries(...)` 的模板，链接指向其中**第一个配置了路径**的入口的页
    （`entryUrl(入口) + 路径`）；其他模板仍用 `jabiz.mail.unsubscribe-path`。令牌与接口不变，退订不看入口（D49 第 1 条）；通用后台的页保留，之前发出的链接照常有效。
    页面是 `@jabiz/ui` 的积木 `MailUnsubscribe`（主题 token、三语，只 POST 一次，状态 `working` / `done` / `invalid` / `failed`），通用后台的页只是它的包装。
@@ -1828,15 +1832,29 @@ P-8 原写"`false` 即逐条执行（16p-1 的局部合并同样受它控制）"
    暂停中的作业可以取消并得到第 2 条的结局。`StartExternalJob` 照常登记（V-3）。参数每次轮询以系统身份经 `ParamService` 读一次（在领取事务之外）；
    暂停与恢复记 INFO 日志，指标只带类型名（D16）。启动检查 `EXTERNAL`：键格式错误为错误，不在任何 `ControlledParams` 中为警告。场景回放的 `runExternalJobs` 与 `completeExternalJob` 同样服从暂停
    （暂停中的 `completeExternalJob` 是场景的错误，说明暂停的原因）。
+5. **没有用量的尝试**（16w 计划 W-3 至 W-5，2026-10-19 确认）：
+   - 结局为 `LEASE_EXPIRED` 或 `TIMED_OUT` 而**没有任何用量行**的尝试是"没有用量的尝试"（W-4）：处理器没来得及报告，提供方却可能已计费。`FAILED` 的不算：那是处理器自己给出的结局，它有机会先记下用量。
+     因此调用计费的提供方的处理器，在调用没有回答（`ExternalCallException`，如 `TIMEOUT`）时要先 `recordUsage(估计)` 再重新抛出——
+     否则这次尝试是 `FAILED` / `EXTERNAL_CALL_FAILED` 而没有用量，既不计入用量也不计入个数（16w-1 评审 M1；QuizBuks 的 `ClaudeApi.unanswered` 即如此）。
+   - 完成、失败与取消的输入（`ExternalJobCompletion`、`ExternalJobFailure`、`ExternalJobCancellation`）的最后一个组件 `unrecordedAttempts` 给出其**个数**，
+     `hasUnrecordedAttempts()` 为是否有；只给个数，不给逐次的清单（W-3）。原来的构造器保留，个数为 0。用量合计与个数在一条语句中读出（同一个快照）。
+   - **迟到实例的用量照记**（W-5）：租约过期后才回来的实例，其尝试号已被记为 `LEASE_EXPIRED`；该尝试没有用量行时，它的用量记到那次尝试上（只一次，同一事务持有作业行锁），
+     结果与输出文件仍丢弃，作业的结局不变。结局流程还没运行时，那次尝试因此不再算"没有用量"，应用按实际用量计费；已运行过的，只有用量报表变化，不再调用任何流程。
 
 **理由**：风险写明，应用才会按估计计费、设上限，而不是以为平台能防重复计费。取消的结局交给声明的流程，与完成、失败对称：应用不必自己订阅平台的事件、分辨状态，
 用量（被取消的尝试也已付费）照样到达；流程中的取消以流程的权限授权，与"谁能做这件业务"一致，限定类型并以 404 回答其他作业，流程就不能成为取消任意作业的后门。
 退订页属于用户所在的前端：应用的用户不必能打开管理后台，链接仍只由配置组成；令牌与接口不变，旧链接与 D49 的"退订不看入口"都不受影响。
 暂停用业务参数（受控、四眼、按时生效，D40），而不是让处理器自己判断：处理器看不到数据库，领取之前检查才不会用掉尝试次数。
+（16w）几种类型一个步骤：应用的一个"停止"不必拆成按类型的子流程，授权与 404 的规则不变。没有用量的尝试由平台计数：只有平台知道哪些尝试是租约过期或超时而没有报告用量的，
+应用自己数要读平台的表；只给个数，因为应用的估计按作业的参数（每次尝试相同），不需要逐次的细节。迟到实例的用量是提供方实际计费的，记下它报表才与账单一致；
+结果仍丢弃，因为另一个尝试可能已给出结果，结局只有一个。
 
 **放弃的方案**：①流式结果推送（V-1，暂不做）；②取消时调用失败流程（失败与取消的处理不同：取消不通知请求人"失败了"）；③步骤按 `external-job.cancel` 授权
 （业务角色不应持有取消任何人作业的运维权限）；④按请求的入口或令牌选择退订页（链接在发送时生成，没有请求；按令牌中的入口会把链接交给请求中的值）；
 ⑤退订页只在通用后台（应用用户要能进后台）；⑥暂停时让作业失败或中断执行中的尝试（失败会通知请求人、浪费已付费的尝试）。
+（16w）⑦取消步骤的类型用可变参数（W-2 选用 `List`）；⑧尝试中报告的用量立即写入数据库（尝试在事务之外，
+每次报告一个事务；租约过期补记时再合并更复杂，不做）；⑨平台自己估计没有用量的尝试的用量（估计取决于应用的参数，平台只计数）；⑩逐次的清单（W-3，只给个数）；
+⑪丢弃迟到实例的用量（16e-2 原来的做法：报表与提供方的账单不一致）。
 
 **实现说明（16v-1：第 1–3 条，及第 6–8 项）**：
 - 第 2 条：core `ExternalJobType.onCancelled`（record 组件 17 → 18，新组件在最后；原 14 参与 17 参构造保留，不声明取消流程）、`ExternalJobCancellation`；
@@ -1884,3 +1902,24 @@ P-8 原写"`false` 即逐条执行（16p-1 的局部合并同样受它控制）"
   QuizBuks 在同步 PR 中为两个 AI 类型声明 `.enabledBy("qb.ai.enabled")`。
 - 线 1.2 内兼容：只新增；没有迁移，OpenAPI 不变，`StatementBudgetIT` 的预算不变（没有声明 `enabledBy` 的类型不读参数，领取路径的语句数不变）。
   只有对 `ExternalJobType` 解构的模式匹配与按组件的反射需要改写（组件数 18 → 19）。测试 `ExternalJobGateIT`、`ExternalJobGateTest`、`ExternalJobChecksTest`、`ExternalJobTypeTest`。
+
+**实现说明（16w-1：第 2 条的补充与第 5 条）**（16w 计划，产品负责人 2026-10-19 确认 W-1 至 W-11；16w-2 流式结果仍推后，见 W-1）：
+- 第 2 条的补充：runtime `CancelExternalJob.of(List<String>, …)`；`Metadata` 增加组件 `jobTypes`（`Set`，保持顺序；6 → 7），原六参构造保留（等于 `Set.of(jobType)`），
+  `jobType` 是第一个类型。判断为 `jobTypes.contains(作业类型)`；`execute` 与 `problems()` 一次列出全部未声明的类型。没有新的错误码。
+  源码上唯一的不兼容：字面量 `CancelExternalJob.of(null, …)` 因两个重载而有歧义（需写 `(String) null`）。
+  以 JSON 伪造这三种输入的测试须带上 `unrecordedAttempts`（Jackson 对缺少的原始类型组件拒绝转换，400 而不是期望的 403）。
+- 第 5 条：core `ExternalJobCancellation`（10 → 11）、`ExternalJobFailure`（9 → 10）、`ExternalJobCompletion`（9 → 10）在最后增加 `int unrecordedAttempts`（不得为负）与
+  `hasUnrecordedAttempts()`，原构造保留（为 0）；`toString` 仍不含结果与消息，操作记录的摘要带上个数。
+  runtime `ExternalJobRecorder.attemptUsage(作业)`：一条语句（`sys_external_job_attempt LEFT JOIN sys_external_job_usage`）读出合计与个数，代替 `RunExternalJobCallback`
+  中原来的用量合计查询，`EXTERNAL_JOB_COMPLETE` 的语句数不变；两次读之间迟到的用量落下的竞争因此不存在。
+  `ExternalJobExecutor.recordAttempt`：插入尝试遇到冲突时，若已记的尝试是 `LEASE_EXPIRED` 且没有用量行，在同一事务（已持有作业行锁）中逐个用量
+  `INSERT … ON CONFLICT (job_id, attempt_no, metric) DO NOTHING`（`ExternalJobRecorder.insertLateUsage`）；结果与输出文件的交接、结局与观测的 `DISCARDED` 不变；
+  提交后照常计入 `jabiz.external.usage`（只计插入的），记 WARN `… ended after its lease had expired; its usage is recorded, its result discarded`。没有迁移（主键本来就是 (作业, 尝试, 用量名)）。
+- D38 实现说明第 5 条相应改为"迟到的尝试也记录用量，结果仍丢弃"。
+- 评审之后：已记的尝试不是 `LEASE_EXPIRED`（本实例已提交的记录在回答丢失后重试）时不当作迟到，回答作业的结局；`Metadata` 只要求 `jobType` 是 `jobTypes` 之一且没有 null；
+  用量合计溢出时停在 `Long.MAX_VALUE`；扩展的 lint 也管 `import()`、`require()` 与 JavaScript 文件，通用后台的构建与 `ext:check` 检查生产包中没有测试代码。
+- 线 1.2 内兼容：只新增；没有迁移，OpenAPI 不变，`StatementBudgetIT` 的预算不变。只有对这四个 record 解构的模式匹配与按组件的反射需要改写。
+  有意的可见变化：迟到实例的用量出现在 `sys_external_job_usage`、报表 `jabiz.external_job_usage` 与计数器中。
+  测试 `ExternalJobUnrecordedIT`、`ExternalJobCancelIT`、`ExternalJobIT`、`CancelExternalJobTest`、`ExternalJobAttemptUsageTest`、`ExternalJobOutcomesTest`、`ExternalJobCancellationTest`。
+- 12 §9 / §11（D22、D34 的实现说明）：管理后台扩展的测试出口 `@jabiz/admin/testing`（`expectAccessible`、`WCAG_TAGS`，即 `@jabiz/ui/testing` 的）；
+  扩展的 lint 拒绝 `@jabiz/ui(/*)`、`@jabiz/client(/*)` 与 `@jabiz/ui/testing`（W-7，只拒绝 D22 本来就不允许的），`@jabiz/admin/testing` 只在测试中。

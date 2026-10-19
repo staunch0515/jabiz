@@ -36,4 +36,24 @@ class ExternalJobCancellationTest {
         assertThat(cancellation.usage()).isEmpty();
         assertThat(cancellation.attemptRan()).isFalse();
     }
+
+    @Test
+    void theOldConstructorCountsNoUnrecordedAttempts() {
+        ExternalJobCancellation old = new ExternalJobCancellation("job-1", "it.type", "alice", null, Map.of(), 1,
+            Instant.EPOCH, "alice", Instant.EPOCH, true);
+        assertThat(old.unrecordedAttempts()).isZero();
+        assertThat(old.hasUnrecordedAttempts()).isFalse();
+        assertThat(old).isEqualTo(new ExternalJobCancellation("job-1", "it.type", "alice", null, Map.of(), 1,
+            Instant.EPOCH, "alice", Instant.EPOCH, true, 0));
+    }
+
+    @Test
+    void itTellsWhetherAnAttemptEndedWithoutUsage() {
+        ExternalJobCancellation died = new ExternalJobCancellation("job-1", "it.type", "alice", null, null, 2,
+            Instant.EPOCH, "bob", Instant.EPOCH, true, 1);
+        assertThat(died.unrecordedAttempts()).isEqualTo(1);
+        assertThat(died.hasUnrecordedAttempts()).isTrue();
+        assertThatThrownBy(() -> new ExternalJobCancellation("job-1", "it.type", "alice", null, null, 2,
+            Instant.EPOCH, "bob", Instant.EPOCH, true, -1)).isInstanceOf(IllegalArgumentException.class);
+    }
 }
