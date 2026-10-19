@@ -39,6 +39,8 @@ class RetentionIT extends PayoutItSupport {
             "QbJournalExport periodTo P10Y true",
             "QbJournalExportPart createdTime P10Y true",
             "QbJournalExportConfirmation createdTime P10Y true",
+            // The export's archived files (FILE_ARCHIVE), QuizBuks's only generated files (platform 16v-1).
+            "GeneratedFile createdTime P10Y true",
             "QbTopUp paidAt P10Y true",
             "QbTopUpReceipt issuedAt P10Y true",
             "InboundEvent receivedTime P10Y true");

@@ -64,6 +64,16 @@ class JournalConfig {
             .afterFiscalYearEnd();
     }
 
+    /**
+     * The files the exports archived ({@code FILE_ARCHIVE}: the voucher and the detail's parts), as long as the
+     * exports themselves (platform ROADMAP 16v-1 item 8). They are QuizBuks's only generated files, so the platform's
+     * {@code GeneratedFile} as a whole is kept so, counted from when each was archived.
+     */
+    @Bean
+    RetentionPolicy qbJournalFileRetention() {
+        return RetentionPolicy.of("GeneratedFile").keep(RETENTION).from("createdTime").afterFiscalYearEnd();
+    }
+
 
     @Bean
     EntityDefinition qbJournalExportConfirmationEntity() {
