@@ -7,6 +7,8 @@ export interface PlatformVersions {
   shared: Map<string, string | undefined>
   client: Map<string, string | undefined>
   ui: Map<string, string | undefined>
+  /** The optional test tools of @jabiz/ui's helpers (ROADMAP 16v-1). */
+  testing: Map<string, string | undefined>
 }
 
 export declare const SHARED: string[]

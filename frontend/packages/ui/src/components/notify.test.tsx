@@ -1,7 +1,7 @@
 import { act, render, screen } from '@testing-library/react'
 import { i18n } from '@jabiz/client'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { expectAccessible } from '../test/axe'
+import { expectAccessible } from '@jabiz/ui/testing'
 import { AppearanceProvider } from './appearance'
 import { notify } from './notify'
 import { Toaster } from './ui/sonner'

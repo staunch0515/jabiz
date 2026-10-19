@@ -486,13 +486,16 @@ public class ExternalJobExecutor implements SmartLifecycle {
 
     /**
      * Records the claims of the type whose lease ran out without a result as {@code LEASE_EXPIRED}; a job that was
-     * cancelled, or has no attempts left, gets its outcome.
+     * cancelled, or has no attempts left, gets its outcome. A job whose row another transaction holds is left for the
+     * next poll.
      */
     private Mono<Void> expire(ExternalJobType<?, ?> type, Instant now, long mark) {
         return recorder.expiredClaims(type.name(), now, mark)
             .collectList()
             .flatMapMany(Flux::fromIterable)
-            .concatMap(expired -> recorder.lockJob(expired.jobId()).flatMap(job -> recorder.insertAttempt(
+            // SKIP LOCKED: a business process cancelling the job holds its row to the end of its transaction; the claim
+            // does not wait for it (holding the type's lock), and the next poll records the expiry.
+            .concatMap(expired -> recorder.lockJobIfFree(expired.jobId()).flatMap(job -> recorder.insertAttempt(
                     expired.jobId(), expired.attemptNo(), ExternalJobRecorder.AttemptOutcome.LEASE_EXPIRED, true,
                     "LEASE_EXPIRED", "no result before the lease expired", null, now)
                 .flatMap(inserted -> {

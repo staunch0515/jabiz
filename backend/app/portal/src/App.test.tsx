@@ -52,6 +52,29 @@ describe('the portal', () => {
     expect(window.location.search).not.toContain('token')
   })
 
+  it('opens its unsubscribe page without signing in and posts the token of the link once', async () => {
+    const posted: unknown[] = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
+      const request = input instanceof Request ? input : new Request(new URL(String(input), window.location.origin))
+      const url = new URL(request.url, window.location.origin)
+      if (url.pathname === '/api/auth/mail/unsubscribe') {
+        posted.push(await request.json())
+        return new Response(null, { status: 204 })
+      }
+      if (url.pathname === '/api/auth/entries/portal') {
+        return json(200, { name: 'portal', selfRegistration: true, requireVerifiedEmail: true, appPath: '/portal/',
+          sessionPersistence: 'device' })
+      }
+      return json(404, {})
+    })
+    window.history.replaceState(null, '', '/mail/unsubscribe?token=t1')
+    render(<App />)
+    await waitFor(() => expect(screen.getByTestId('unsubscribe-state').dataset.state).toBe('done'))
+    expect(posted).toEqual([{ token: 't1' }])
+    expect(window.location.pathname).toBe('/mail/unsubscribe')
+    expect(window.location.search).not.toContain('token')
+  })
+
   it('keeps its pages to itself: a signed-out visitor of a page goes to the sign-in', async () => {
     server()
     window.history.replaceState(null, '', '/orders')

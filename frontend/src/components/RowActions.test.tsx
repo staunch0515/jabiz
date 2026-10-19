@@ -4,7 +4,7 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import i18n from '../i18n'
 import type { ProcessEntry } from '../meta/types'
-import { expectAccessible } from '../test/axe'
+import { expectAccessible } from '@jabiz/ui/testing'
 import RowActions from './RowActions'
 
 const post = vi.hoisted(() => vi.fn())

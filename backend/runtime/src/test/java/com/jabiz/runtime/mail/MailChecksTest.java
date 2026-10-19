@@ -159,6 +159,49 @@ class MailChecksTest {
                     + "it is transactional mail, which is in nobody's preferences: the entries change nothing"));
     }
 
+    /** The unsubscribe page of an entry (decision D52 item 3) is a relative path of a usable entry, under an SPA. */
+    @Test
+    void theUnsubscribePagesOfEntriesAreRelativePathsOfUsableEntriesUnderAnSpa() {
+        StaticListableBeanFactory beans = new StaticListableBeanFactory();
+        java.util.Map<String, String> paths = new java.util.LinkedHashMap<>();
+        paths.put("portal", "mail/unsubscribe");
+        paths.put("app", "/mail/unsubscribe");
+        paths.put("shop", "mail/unsubscribe");
+        paths.put("gone-away", "mail/unsubscribe");
+        paths.put("admin", "../admin/mail");
+        paths.put("blank", " ");
+        java.util.Map<String, String> roots = java.util.Map.of("portal", "/portal/", "app", "/app", "shop", "/shop/",
+            "admin", "/", "blank", "/");
+        List<CheckProblem> problems = new MailChecks(false, "", "", beans.getBeanProvider(JavaMailSender.class),
+            beans.getBeanProvider(MailTemplate.class), catalog(Locale.ENGLISH), name -> false, name -> true, paths,
+            name -> java.util.Optional.ofNullable(roots.get(name)),
+            path -> path.startsWith("/portal/") || path.startsWith("/app/")).check();
+        assertThat(problems).extracting(CheckProblem::severity, CheckProblem::location, CheckProblem::message)
+            .containsExactly(
+                org.assertj.core.groups.Tuple.tuple(CheckProblem.Severity.ERROR, "jabiz.mail.unsubscribe-paths.admin",
+                    "'../admin/mail' is not a path relative to the entry's app-path (segments of letters, digits and "
+                        + ". _ ~ -)"),
+                org.assertj.core.groups.Tuple.tuple(CheckProblem.Severity.ERROR, "jabiz.mail.unsubscribe-paths.blank",
+                    "' ' is not a path relative to the entry's app-path (segments of letters, digits and . _ ~ -)"),
+                org.assertj.core.groups.Tuple.tuple(CheckProblem.Severity.ERROR,
+                    "jabiz.mail.unsubscribe-paths.gone-away", "there is no usable sign-in entry gone-away "
+                        + "(jabiz.security.entries.gone-away)"),
+                org.assertj.core.groups.Tuple.tuple(CheckProblem.Severity.ERROR, "jabiz.mail.unsubscribe-paths.shop",
+                    "'/shop/mail/unsubscribe' is under none of the SPAs served (jabiz.web.spa): the unsubscribe links "
+                        + "of entry shop would lead nowhere"));
+    }
+
+    @Test
+    void relativePathsAreSegmentsWithoutDotSegmentsOrSchemes() {
+        assertThat(MailTemplates.validRelativePath("mail/unsubscribe")).isTrue();
+        assertThat(MailTemplates.validRelativePath("/mail/unsubscribe/")).isTrue();
+        assertThat(MailTemplates.validRelativePath("a.b/c~d_e-f")).isTrue();
+        for (String bad : List.of("", " ", "/", "..", "a/../b", "./a", "//evil.example.com/x",
+            "https://evil.example.com", "a?b=c", "a#b", "a b", "a//b", "a\\b")) {
+            assertThat(MailTemplates.validRelativePath(bad)).as(bad).isFalse();
+        }
+    }
+
     @Test
     void reportsATemplateDeclaredTwice() {
         assertThat(checks(false, "", "", null, catalog(Locale.ENGLISH), OK, OK).check())

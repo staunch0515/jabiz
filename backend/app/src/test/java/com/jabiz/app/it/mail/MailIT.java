@@ -389,6 +389,44 @@ class MailIT extends SecurityItSupport {
             .isEqualTo("INVALID_VALUE");
     }
 
+    /** A notification declared for one entry links to that entry's unsubscribe page (decision D52 item 3). */
+    @Test
+    void aTemplateOfOneEntryLinksToThatEntrysPage() throws Exception {
+        String address = address("portal-link");
+        String user = user(address, "en");
+        send("offers", user, "jam");
+        deliver();
+        MimeMessage offers = to(address).getFirst();
+        assertThat(part(offers, "text/html"))
+            .contains("href=\"https://app.example.com/portal/mail/unsubscribe?token=");
+        assertThat(part(offers, "text/plain")).contains("https://app.example.com/portal/mail/unsubscribe?token=");
+        // The same token and the same endpoint as every unsubscribe link: the page only posts it.
+        post("/api/auth/mail/unsubscribe", null, Map.of("token", link(UNSUBSCRIBE_LINK, offers)))
+            .expectStatus().isNoContent();
+        assertThat(query("SELECT template, subscribed FROM sec_user_mail_preference_version WHERE user_id = ?::uuid",
+            user)).singleElement().satisfies(row -> assertThat(row).containsEntry("template", "it.offers")
+                .containsEntry("subscribed", false));
+    }
+
+    @Test
+    void templatesOfAllEntriesKeepTheGlobalPath() throws Exception {
+        String address = address("global-link");
+        send("news", user(address, "en"), "figs");
+        deliver();
+        String html = part(to(address).getFirst(), "text/html");
+        assertThat(html).contains("href=\"https://app.example.com/mail/unsubscribe?token=").doesNotContain("/portal/");
+    }
+
+    /** Links mailed before the entry had its page lead to the application's page, which still unsubscribes. */
+    @Test
+    void anOldLinkStillUnsubscribes() {
+        String user = user(address("old-link"), "en");
+        post("/api/auth/mail/unsubscribe", null, Map.of("token", jwt.issueUnsubscribe(user, "it.offers")))
+            .expectStatus().isNoContent();
+        assertThat(query("SELECT subscribed FROM sec_user_mail_preference_version WHERE user_id = ?::uuid"
+            + " AND template = 'it.offers'", user)).extracting(row -> row.get("subscribed")).containsExactly(false);
+    }
+
     @Test
     void aNotificationForOneEntryIsNotSentToAUserWhoTurnedItOff() throws Exception {
         // it.offers is the portal's (decision D49); the user turned it off at the portal.

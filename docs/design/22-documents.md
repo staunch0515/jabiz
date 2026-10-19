@@ -106,6 +106,10 @@ DocumentLayout orderConfirmation() {
 
 单据从不修改；更正是另一张单据（例如贷项通知单），同一对象可以签发多次，全部保留。
 
+保留期（16v-1，D52 实现说明第 8 项）：只读平台实体 `DocumentRun` 让应用声明 `RetentionPolicy.of("DocumentRun").keep(…).from("issuedTime")`（可加 `afterFiscalYearEnd()`）；
+它只有 `runId`、`layoutId`、`pdfSize`、`pdfHash`、`subjectEntity` / `subjectId`、`issuedBy`、`issuedTime` 与 `processSeqId`——没有内容、PDF、单号、标题、参数与范围，
+读取需要 `audit.read`。到期的单据进入到期报告，可按编号或对象（如某个订单的全部单据）放置法律保全（21 §3.1）；表只追加，不删除。
+
 ### 4.3 接口
 
 读取都需要 `document.archive.read`、签发时的全部权限，以及与签发人**相同的数据范围**（同 19 §5.3）；不可读的一律 404，列表中也不出现。

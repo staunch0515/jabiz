@@ -29,6 +29,8 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
+    // The Playwright example in e2e/ is type-checked, not run by Vitest.
+    include: ['src/**/*.test.{ts,tsx}'],
     testTimeout: 15_000,
     server: { deps: { inline: [/\/frontend\/node_modules\//] } },
     css: false,

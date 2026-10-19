@@ -98,8 +98,20 @@ function packageVersions(lock, frontendRoot, name) {
 }
 
 /**
- * The versions the platform's frontend resolves: the shared packages, and the runtime dependencies of @jabiz/client
- * (dayjs, whose locale it sets, and the API client) and of @jabiz/ui.
+ * The optional peers of @jabiz/ui that its test helpers import (`@jabiz/ui/testing` and `/testing/playwright`,
+ * ROADMAP 16v-1): vitest, vitest-axe, @playwright/test and @axe-core/playwright, as the lockfile resolves them for it.
+ */
+function testingVersions(lock, frontendRoot) {
+  const resolved = pnpmImporterVersions(lock, 'packages/ui')
+  const manifest = readJson(resolve(frontendRoot, 'packages/ui/package.json'))
+  const optional = Object.entries(manifest.peerDependenciesMeta ?? {}).filter(([, meta]) => meta?.optional)
+    .map(([name]) => name).filter((name) => !SHARED.includes(name))
+  return new Map(optional.map((name) => [name, resolved.get(name)]))
+}
+
+/**
+ * The versions the platform's frontend resolves: the shared packages, the runtime dependencies of @jabiz/client
+ * (dayjs, whose locale it sets, and the API client) and of @jabiz/ui, and the test tools of @jabiz/ui's helpers.
  */
 export function platformVersions(frontendRoot) {
   const lock = readFileSync(resolve(frontendRoot, 'pnpm-lock.yaml'), 'utf8')
@@ -108,6 +120,7 @@ export function platformVersions(frontendRoot) {
     shared: new Map(SHARED.map((name) => [name, admin.get(name)])),
     client: packageVersions(lock, frontendRoot, 'client'),
     ui: packageVersions(lock, frontendRoot, 'ui'),
+    testing: testingVersions(lock, frontendRoot),
   }
 }
 
@@ -130,6 +143,17 @@ export function appCheckProblems(app, platform) {
       problems.push(`${name}: version not resolved (no lockfile entry, and "${app.declared[name]}" is not exact); use "${version}"`)
     } else if (own !== version) {
       problems.push(`${name}: ${own}, the platform has ${version}`)
+    }
+  }
+  // The test tools of @jabiz/ui's helpers are optional: an SPA that has one must have the platform's version, since
+  // the helpers are written against it (two Vitests or Playwrights in one run do not work together).
+  for (const [name, version] of usesUi ? platform.testing : []) {
+    if (!(name in app.declared) || !version) continue
+    const own = app.resolved.get(name)
+    if (own === undefined) {
+      problems.push(`${name}: version not resolved (no lockfile entry, and "${app.declared[name]}" is not exact); use "${version}"`)
+    } else if (own !== version) {
+      problems.push(`${name}: ${own}, the platform has ${version} (the test helpers of @jabiz/ui use it)`)
     }
   }
   return problems

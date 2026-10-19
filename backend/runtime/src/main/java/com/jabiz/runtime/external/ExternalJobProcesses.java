@@ -13,10 +13,11 @@ import org.springframework.context.annotation.Configuration;
  * <ul>
  *   <li>{@value #COMPLETE}: run by the platform's consumer {@value #CONSUMER} for each
  *       {@value ExternalJobRecorder#FINISHED_EVENT}, as the system, once per job: it calls the job type's completion
- *       or failure process as a sub-process ({@link RunExternalJobCallback}); a cancelled job calls nothing. Its
+ *       or failure process as a sub-process ({@link RunExternalJobCallback}); a cancelled job calls its type's
+ *       {@code onCancelled} process, or nothing when the type declares none (decision D52 item 2). Its
  *       failures are retried as every consumer's are (D14).</li>
  *   <li>{@value #CANCEL}: cancels a job, for the requester or a holder of {@code external-job.cancel}
- *       ({@link CancelExternalJob}); {@code POST /api/external-jobs/{id}/cancel} runs it.</li>
+ *       ({@link CancelRequestedJob}); {@code POST /api/external-jobs/{id}/cancel} runs it.</li>
  * </ul>
  * {@value #COMPLETE} is {@code internal()}; {@value #CANCEL} is {@code entryOnly()}: only its endpoint runs it, as the
  * real caller, and its step checks who may cancel (decision D41).
@@ -35,7 +36,7 @@ public class ExternalJobProcesses {
     /** @param jobId the finished job; the step reads everything else itself */
     public record CompleteInput(@NotBlank String jobId) {}
 
-    /** @param called the process called, or null for a cancelled job */
+    /** @param called the process called, or null when none was (a cancelled job of a type without onCancelled) */
     public record CompleteOutput(String jobId, String status, String called) {}
 
     public record CancelInput(@NotBlank String jobId) {}
@@ -69,7 +70,7 @@ public class ExternalJobProcesses {
                 return ctx;
             })
             .outputMapper(ctx -> ctx.get(OUTPUT, CancelOutput.class))
-            .step("Cancel the job", CancelExternalJob.of(INPUT, OUTPUT)));
+            .step("Cancel the job", CancelRequestedJob.of(INPUT, OUTPUT)));
 
     @Bean
     ProcessDefinition<CompleteInput, CompleteOutput, ProcessContext> externalJobCompleteProcess() {

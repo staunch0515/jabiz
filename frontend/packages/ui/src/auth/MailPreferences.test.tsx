@@ -13,7 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AppearanceProvider } from '../components/appearance'
 import { notify } from '../components/notify'
 import { Toaster } from '../components/ui/sonner'
-import { expectAccessible } from '../test/axe'
+import { expectAccessible } from '@jabiz/ui/testing'
 import { MailPreferences, offerMailLanguage } from './index'
 
 const shipped: MailPreference = { template: 'shop.shipped', subscribed: true, displayName: 'Shipment notices' }

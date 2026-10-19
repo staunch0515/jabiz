@@ -5,7 +5,7 @@ import { MemoryRouter, Route, Routes } from 'react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import i18n from '../i18n'
 import LoginPage from './LoginPage'
-import { expectAccessible } from '../test/axe'
+import { expectAccessible } from '@jabiz/ui/testing'
 
 const signIn = vi.fn()
 const verify = vi.fn()
