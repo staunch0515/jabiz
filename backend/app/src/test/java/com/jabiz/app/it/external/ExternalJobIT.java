@@ -745,10 +745,18 @@ class ExternalJobIT extends PostgresIntegrationTest {
         assertThat(query("SELECT result FROM sys_external_job_outcome WHERE job_id = ?", jobId)).singleElement()
             .satisfies(row -> assertThat(row.get("result").toString()).contains("\"attempt\":2"));
         assertThat(OBSERVED).contains(Map.of("job_type", "it.gate", "outcome", "DISCARDED"));
+        // Its result is dropped, but what it consumed is recorded against its attempt (decision D52 item 5).
+        assertThat(query("SELECT attempt_no, metric, quantity FROM sys_external_job_usage WHERE job_id = ?"
+            + " ORDER BY attempt_no", jobId)).extracting(row -> row.get("attempt_no") + ":" + row.get("metric") + ":"
+                + row.get("quantity")).containsExactly("1:units:3", "2:units:3");
         deliverer.deliverPending().block();
         deliverer.deliverPending().block();
-        assertThat(callbacks(jobId)).singleElement().satisfies(callback ->
-            assertThat(((ExternalJobCompletion) callback.payload()).result(ItResult.class).attempt()).isEqualTo(2));
+        assertThat(callbacks(jobId)).singleElement().satisfies(callback -> {
+            ExternalJobCompletion completion = (ExternalJobCompletion) callback.payload();
+            assertThat(completion.result(ItResult.class).attempt()).isEqualTo(2);
+            assertThat(completion.usage()).containsEntry("units", 6L);
+            assertThat(completion.unrecordedAttempts()).isZero();
+        });
     }
 
     /**

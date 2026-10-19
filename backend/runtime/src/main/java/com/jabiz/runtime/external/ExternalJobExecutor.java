@@ -71,7 +71,8 @@ import java.util.concurrent.atomic.AtomicLong;
  *       times on a failure of the database: the attempt and its usage, then the job's final outcome when it has one
  *       (succeeded; failed for good; cancelled meanwhile, its result dropped) with the event
  *       {@value ExternalJobRecorder#FINISHED_EVENT}. An instance that comes back after its lease expired finds its
- *       attempt recorded and drops what it has.</li>
+ *       attempt recorded ({@code LEASE_EXPIRED}) and drops its result and files; what it consumed is still recorded
+ *       against that attempt, once (decision D52 item 5).</li>
  * </ol>
  * A type that declares {@code enabledBy} (decision D52 item 4) is held while its business parameter is not {@code true}
  * now: each poll reads the parameter once, as the system and before any claim transaction ({@link ExternalJobGate}),
@@ -209,8 +210,11 @@ public class ExternalJobExecutor implements SmartLifecycle {
         }
     }
 
-    /** What recording an attempt did: the job's outcome, and whether the attempt (and its usage) went in. */
-    private record Recorded(Outcome outcome, boolean attemptRecorded) {}
+    /**
+     * What recording an attempt did: the job's outcome, the usage that went in (counted once the transaction has
+     * committed), and whether the attempt came too late, its number recorded already as {@code LEASE_EXPIRED}.
+     */
+    private record Recorded(Outcome outcome, Map<String, Long> usageRecorded, boolean late) {}
 
     private final ExternalJobRegistry jobs;
     private final ExternalJobRecorder recorder;
@@ -738,8 +742,13 @@ public class ExternalJobExecutor implements SmartLifecycle {
                 .doBeforeRetry(signal -> log.warn("Recording external job {} attempt {} failed; trying again: {}",
                     claimed.jobId(), claimed.attemptNo(), signal.failure().toString())))
             .doOnNext(recorded -> {
-                if (recorded.attemptRecorded()) {
-                    count(type, usage);
+                count(type, recorded.usageRecorded());
+                if (recorded.late() && !recorded.usageRecorded().isEmpty()) {
+                    log.warn("External job {} attempt {} ({}) ended after its lease had expired; its usage is "
+                        + "recorded, its result discarded", claimed.jobId(), claimed.attemptNo(), type.name());
+                } else if (recorded.late()) {
+                    log.warn("External job {} attempt {} ({}) ended after its lease had expired; its result is "
+                        + "dropped", claimed.jobId(), claimed.attemptNo(), type.name());
                 }
             })
             .map(Recorded::outcome);
@@ -760,9 +769,11 @@ public class ExternalJobExecutor implements SmartLifecycle {
                 .flatMap(inserted -> outputs.thenReturn(inserted))
                 .flatMap(inserted -> {
                     if (!inserted) {
-                        log.warn("External job {} attempt {} ({}) ended after its lease had expired; its result "
-                            + "is dropped", claimed.jobId(), claimed.attemptNo(), type.name());
-                        return Mono.just(new Recorded(Outcome.DISCARDED, false));
+                        // Too late: the attempt is recorded LEASE_EXPIRED, and another may have run since. Its result
+                        // and files are not handed over, and the job's outcome is not touched; but the provider bills
+                        // what it consumed, so its usage is recorded against that attempt (decision D52 item 5).
+                        return recorder.insertLateUsage(claimed.jobId(), claimed.attemptNo(), usage)
+                            .map(late -> new Recorded(Outcome.DISCARDED, late, true));
                     }
                     return recorder.insertUsage(claimed.jobId(), claimed.attemptNo(), usage)
                         .then(recorder.isCancelled(claimed.jobId()))
@@ -782,7 +793,7 @@ public class ExternalJobExecutor implements SmartLifecycle {
                             }
                             return Mono.just(Outcome.WAITING_RETRY);
                         })
-                        .map(outcome -> new Recorded(outcome, true));
+                        .map(outcome -> new Recorded(outcome, usage, false));
                 }));
     }
 

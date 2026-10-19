@@ -77,9 +77,10 @@ class RunExternalJobCallback implements StepHandler<RunExternalJobCallback.Metad
                 .flatMap(job -> recorder.outcome(jobId)
                     .switchIfEmpty(Mono.error(() -> new IllegalStateException("External job " + jobId
                         + " has not finished")))
-                    .flatMap(outcome -> Mono.zip(recorder.usage(jobId), producesFiles(job.jobType())
+                    .flatMap(outcome -> Mono.zip(recorder.attemptUsage(jobId), producesFiles(job.jobType())
                         ? recorder.outputFiles(jobId) : Mono.just(Map.<String, UUID>of())).flatMap(found -> {
-                        Map<String, Long> usage = found.getT1();
+                        // The totals and the count of attempts without usage from one statement: one snapshot.
+                        ExternalJobRecorder.AttemptUsage usage = found.getT1();
                         Map<String, UUID> files = found.getT2();
                         if ("CANCELLED".equals(outcome.status())) {
                             return cancelled(metadata, ctx, job, outcome, usage);
@@ -113,9 +114,11 @@ class RunExternalJobCallback implements StepHandler<RunExternalJobCallback.Metad
                         String target = succeeded ? type.onCompleted() : type.onFailed();
                         Object input = succeeded
                             ? new ExternalJobCompletion(jobId, job.jobType(), job.requestedBy(), job.reference(),
-                                result, usage, outcome.attempts(), outcome.finishedTime(), files)
-                            : new ExternalJobFailure(jobId, job.jobType(), job.requestedBy(), job.reference(), usage,
-                                outcome.attempts(), outcome.finishedTime(), errorCode, errorMessage);
+                                result, usage.usage(), outcome.attempts(), outcome.finishedTime(), files,
+                                usage.unrecordedAttempts())
+                            : new ExternalJobFailure(jobId, job.jobType(), job.requestedBy(), job.reference(),
+                                usage.usage(), outcome.attempts(), outcome.finishedTime(), errorCode, errorMessage,
+                                usage.unrecordedAttempts());
                         ProcessDefinition<?, ?, ?> process = processes.findLatest(target).orElseThrow(() ->
                             new IllegalStateException("Unknown process " + target));
                         ctx.put(metadata.outputKey(), new ExternalJobProcesses.CompleteOutput(jobId,
@@ -130,7 +133,7 @@ class RunExternalJobCallback implements StepHandler<RunExternalJobCallback.Metad
      * usage of every attempt, the cancelled one included; nothing when the type declares none (or no longer exists).
      */
     private Mono<Void> cancelled(Metadata metadata, ProcessContext ctx, ExternalJobRecorder.Job job,
-        ExternalJobRecorder.Outcome outcome, Map<String, Long> usage) {
+        ExternalJobRecorder.Outcome outcome, ExternalJobRecorder.AttemptUsage usage) {
         String jobId = job.jobId();
         String target = jobs.find(job.jobType()).map(ExternalJobType::onCancelled).orElse(null);
         if (target == null) {
@@ -147,8 +150,8 @@ class RunExternalJobCallback implements StepHandler<RunExternalJobCallback.Metad
                 ctx.put(metadata.outputKey(), new ExternalJobProcesses.CompleteOutput(jobId, outcome.status(),
                     process.name()));
                 return call(process, new ExternalJobCancellation(jobId, job.jobType(), job.requestedBy(),
-                    job.reference(), usage, outcome.attempts(), outcome.finishedTime(), cancel.cancelledBy(),
-                    cancel.cancelledTime(), ran));
+                    job.reference(), usage.usage(), outcome.attempts(), outcome.finishedTime(), cancel.cancelledBy(),
+                    cancel.cancelledTime(), ran, usage.unrecordedAttempts()));
             }));
     }
 
