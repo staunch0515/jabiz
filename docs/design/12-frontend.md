@@ -215,7 +215,8 @@ frontend/                   pnpm 工作区（pnpm-workspace.yaml：packages/*）
   `src/meta/entityForm.test.ts`（没有权限时只读）、`src/components/MaskedValue.test.tsx`、`src/pages/AccessReviewPage.test.tsx`、`src/pages/AuditPage.test.tsx`（明文显示页签）。
 - 语言与区域（第 10 节）：`packages/client/src/i18n/languages.test.ts`、`packages/client/src/meta/format.test.ts`、`scripts/app-settings.test.ts`；后端 `LanguageSubsetTest`、`LanguageSubsetIT`。
 - 应用扩展（第 9 节）：`src/extension/registry.test.ts`（问题一次报告全部、平台路径、相对路径、菜单按权限过滤与空组、首页）；
-  `scripts/extension-lint.test.ts`（深层引用与 antd 被拒绝；平台前端拒绝 antd，e2e 拒绝 `.ant-*` 选择器）；示范扩展的页面测试（`backend/app/admin-extension/src/*.test.tsx`，经 `pnpm ext:test`）；
+  `scripts/extension-lint.test.ts`（深层引用、antd、`@jabiz/ui` / `@jabiz/client` 被拒绝，`@jabiz/admin/testing` 只在测试中；平台前端拒绝 antd，e2e 拒绝 `.ant-*` 选择器）；
+  `src/lib/testing.test.ts`（`@jabiz/admin/testing` 即 `@jabiz/ui/testing` 的辅助函数，生产源码不引用它）；示范扩展的页面测试（`backend/app/admin-extension/src/*.test.tsx`，含亮暗两种外观的 axe，经 `pnpm ext:test`）；
   端到端 `e2e/extension.spec.ts`（从菜单进入、读模板、执行流程；无权限用户看不到菜单项，直接打开时服务端返回 403）。
 
 ## 9. 应用扩展：应用自己的后台页面【D22】
@@ -226,7 +227,7 @@ frontend/                   pnpm 工作区（pnpm-workspace.yaml：packages/*）
 <应用目录>/admin-extension/            （例：backend/app/admin-extension/、finance-web/）
   tsconfig.json                        {"extends": "<相对路径>/frontend/tsconfig.extension.json", "include": ["src"]}
   src/index.tsx                        export default defineExtension({ routes, menu, messages, home })
-  src/…Page.tsx、src/…test.tsx          页面与测试；只 import '@jabiz/admin' 与平台前端已有的第三方包
+  src/…Page.tsx、src/…test.tsx          页面与测试；只 import '@jabiz/admin'（测试另可 '@jabiz/admin/testing'）与平台前端已有的第三方包
 ```
 
 | 项 | 规定 |
@@ -236,12 +237,13 @@ frontend/                   pnpm 工作区（pnpm-workspace.yaml：packages/*）
 | `menu` | 排在服务端菜单之后；`label` 是扩展文案的键；`permission` 只决定是否显示；子项全部不可见的分组不显示 |
 | `messages` | 每种界面语言一份，放在 i18next 命名空间 `app`（`useTranslation(EXTENSION_NAMESPACE)`），不覆盖平台文案 |
 | `home` | 登录后（没有要返回的页面时）、根路径与未知路径的落点；缺省 `/data` |
-| 可用的平台内容 | 只有 `@jabiz/admin`（`frontend/src/lib/index.ts`）：`api` / `unwrap` / `ApiError`、`runQuery`（SQL 模板）、`runProcess`（流程，自动带幂等键）、`useAuth`、元数据 hooks、`EntityFormDrawer` 等通用组件、`UserName`（用户编号显示为名字，10 §14）、格式化函数 |
-| 检查 | 启动时 `checkedExtension` 一次报告全部问题并停止；`pnpm build` 先对扩展做类型检查；`pnpm ext:typecheck / ext:lint / ext:test / ext:check`（lint 另加规则：拒绝引用 `frontend/` 下的路径、`virtual:jabiz-extension` 与 antd / `@ant-design/*`（平台前端自己的 lint 用同一条，15d））。菜单项的 `icon` 是 lucide 图标组件（`icon: Boxes`），菜单类型是平台的 `ShellMenuItem` |
+| 可用的平台内容 | 只有 `@jabiz/admin`（`frontend/src/lib/index.ts`）：`api` / `unwrap` / `ApiError`、`runQuery`（SQL 模板）、`runProcess`（流程，自动带幂等键）、`useAuth`、元数据 hooks、`EntityFormDrawer` 等通用组件、`UserName`（用户编号显示为名字，10 §14）、格式化函数；测试另有 `@jabiz/admin/testing`（`frontend/src/lib/testing.ts`，16w-1）：`expectAccessible(root?)` 与 `WCAG_TAGS`，即 `@jabiz/ui/testing` 的，亮暗两种外观过 axe（§11）。它同属 D22 的契约，只用于测试：带入 Vitest 与 vitest-axe，`@jabiz/admin` 与平台前端的生产源码都不引用它（`src/lib/testing.test.ts`），生产包里没有 |
+| 检查 | 启动时 `checkedExtension` 一次报告全部问题并停止；`pnpm build` 先对扩展做类型检查；`pnpm ext:typecheck / ext:lint / ext:test / ext:check`（lint 另加规则：拒绝引用 `frontend/` 下的路径、`virtual:jabiz-extension` 与 antd / `@ant-design/*`（平台前端自己的 lint 用同一条，15d）；16w-1 起（W-7）拒绝 `@jabiz/ui`、`@jabiz/ui/*`、`@jabiz/client`、`@jabiz/client/*`（提示经 `@jabiz/admin`）与 `@jabiz/ui/testing`（提示 `@jabiz/admin/testing`），`@jabiz/admin/testing` 只许在 `*.test.*` / `*.spec.*` 中——只拒绝 D22 本来就不允许的）。菜单项的 `icon` 是 lucide 图标组件（`icon: Boxes`），菜单类型是平台的 `ShellMenuItem` |
 
 - 扩展页面调用的仍是 `/api/**`：权限、数据视图范围与校验都在服务端，页面上的隐藏只是导航。
 - 扩展不能自带依赖（没有自己的 `package.json`）；需要新的通用依赖时先加到平台前端。平台前端的依赖（含只在 `exports` 中声明类型的 `react-router`）
-  由 `tsconfig.extension.json` 的 `paths` 解析，扩展的 `tsconfig.json` 只需 `extends` 与 `include`。
+  由 `tsconfig.extension.json` 的 `paths` 解析，扩展的 `tsconfig.json` 只需 `extends` 与 `include`。`@jabiz/admin/testing` 也在其中（另有 `@jabiz/ui/testing`，
+  只为它的传递引用）；`vite.config.ts` 的别名把 `@jabiz/admin/testing` 排在 `@jabiz/admin` 之前，Vitest 已由 `resolve.dedupe` 保证一份。
 - 示范：`backend/app/admin-extension/`（"库存概览"：模板 `commerce.stock_availability` 与流程 `STOCK_RECEIVE`，菜单项需 `commerce.stock.read`；以 `react-router` 的 `Link` 链到入库记录的生成页面；
   15c-2 起全用 `@jabiz/ui`：`PageHeader`、入库表单为 react-hook-form 加 `Input` / `DecimalInput`（整数）、提示用 `notify`、表格为 `DataTable`）。
   操作步骤见 `docs/guide/admin-extension.md`。
@@ -276,7 +278,7 @@ jabizApp {
 | 自动检查 | `e2e/a11y.spec.ts`：`@axe-core/playwright` 以 `wcag2a`、`wcag2aa`、`wcag21a`、`wcag21aa`、`wcag22aa` 规则检查登录页（含必填提示与身份提供方的拒绝）、数据目录、列表（含删除确认与时间点的日历）、新建表单（含字典的选项、生效时间的日历）、引用的选择（展开的选项）、历史（含日历、操作详情、撤销对话框）、流程目录、流程表单（含必填的选择及其展开的选项）、待办、报表目录、报表（含导出菜单与签发确认）、报表存档、导入目录、导入向导（含映射步骤与展开的来源列选项）、导入记录（含详情 `Sheet`）、待办、审计、单据（含展开的发送记录与发送对话框）、访问审查（含签发确认与签核对话框）、封存（含校验详情的 `Sheet`）、保留、安全设置、会话；每页先等到其内容出现（不是加载或错误状态）再检查；任何违规即失败（列出规则与元素），不设排除项 |
 | 对比度 | `@jabiz/ui` 的 `theme.css` 的语义 token：文字 token 在其所用的背景上 ≥ 4.5:1，输入框边框与焦点环 ≥ 3:1，亮、暗两种外观都如此（主色 `#0958d9` / `#69a7ff`、错误色 `#cf1322` / `#ff7875`、成功色 `#237804` / `#95de64`、警告色 `#874d00` / `#ffc53d`）；`theme.test.ts` 逐对检查。暗色控件的背景是半透明的输入色（输入框、文本框、选择框、标签输入为 `dark:bg-input/20`，选择框悬停 `/30`）：占位文字（暗色 `--muted-foreground` `#a8a8b0`，16v-1 由 `#a1a1aa` 调亮）在它混合到 background、card、popover 之上的颜色上，静止与悬停都 ≥ 4.5:1，`theme.test.ts` 按组件源码中的透明度计算（原来的 `#a1a1aa` 与 `/30`、`/50` 不通过） |
 | 名称与属性 | 有展开行的表格（审计、单据）用 `DataTable` 的 `renderExpanded`：展开按钮带"展开行 / 收起行"的名称与 `aria-expanded`；选择用 `Combobox`（`role="combobox"`，以 `<Label htmlFor>` 或 `aria-label` 命名，`aria-required` / `aria-invalid` 在触发按钮上）。e2e 按角色、名称或 `data-*` 找元素（`e2e/support.ts` 的 `dialog`、`dataRows`、`option`、`confirm`），按钮名称写精确的文字 |
-| 扩展与应用 | 扩展的页面用 `@jabiz/ui`，主题 token、外观与全局的 preflight 自动适用。检查的辅助函数由 `@jabiz/ui` 导出（16v-1）：组件与页面测试用 `@jabiz/ui/testing` 的 `expectAccessible(root?)`（Vitest，亮暗两种外观，jsdom 不算样式所以不查颜色对比度），e2e 用 `@jabiz/ui/testing/playwright` 的 `expectAccessible(page, 名称, { expect })`（含颜色对比度，等动画结束后检查；`expect` 是调用方自己的，辅助函数不加载 `@playwright/test`）、`accessibilityViolations(page)`、`animationsSettled(page)` 与 `setAppearance(page, 外观)`；规则集（`WCAG_TAGS`）与上表相同，平台自己的测试也用它们；`@jabiz/client/vite` 的预设在 Vitest 中让 `vitest`、`vitest-axe` 都是 SPA 自己的副本 |
+| 扩展与应用 | 扩展的页面用 `@jabiz/ui`，主题 token、外观与全局的 preflight 自动适用；扩展的测试经 `@jabiz/admin/testing` 用同一个 `expectAccessible`（16w-1，§9；不另做 Playwright 的版本）。检查的辅助函数由 `@jabiz/ui` 导出（16v-1）：组件与页面测试用 `@jabiz/ui/testing` 的 `expectAccessible(root?)`（Vitest，亮暗两种外观，jsdom 不算样式所以不查颜色对比度），e2e 用 `@jabiz/ui/testing/playwright` 的 `expectAccessible(page, 名称, { expect })`（含颜色对比度，等动画结束后检查；`expect` 是调用方自己的，辅助函数不加载 `@playwright/test`）、`accessibilityViolations(page)`、`animationsSettled(page)` 与 `setAppearance(page, 外观)`；规则集（`WCAG_TAGS`）与上表相同，平台自己的测试也用它们；`@jabiz/client/vite` 的预设在 Vitest 中让 `vitest`、`vitest-axe` 都是 SPA 自己的副本 |
 
 新增或修改页面时：在 `a11y.spec.ts` 中加上该页面；颜色用主题 token，不写死色值。
 

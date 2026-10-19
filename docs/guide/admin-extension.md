@@ -117,12 +117,28 @@ export default function StockOverviewPage() {
   `MfaEnrollment`、`VerifyEmailBanner`、`OfflineBanner`；登录、注册、邮件链接页与 step-up 由后台自己提供，扩展不要另写。
   文案在平台的命名空间 `auth`（三语）。`useAuth()` 另有 `entry`、`email`、`emailVerified` 与
   `refreshSession({ force: true })`（验证邮箱后取新令牌）。
-- 不要 import `frontend/src/...`（lint 会拒绝），不要自己存令牌，不要访问后端以外的地址。
+- 不要 import `frontend/src/...`，也不要直接 import `@jabiz/ui`、`@jabiz/client`（16w-1 起 lint 都会拒绝，并提示改用 `@jabiz/admin`；它们的内容都由 `@jabiz/admin` 导出），
+  不要自己存令牌，不要访问后端以外的地址。
 
 ## 4. 测试
 
 页面测试与平台前端相同（Vitest + Testing Library）；调用可用 `vi.mock('@jabiz/admin', …)` 替换，示范见
 `backend/app/admin-extension/src/StockOverviewPage.test.tsx`。端到端测试放在应用自己的 Playwright 目录，或（平台示范）`frontend/e2e/`。
+
+无障碍检查（16w-1）：测试从 `@jabiz/admin/testing` 取 `expectAccessible`（即 `@jabiz/ui/testing` 的，亮暗两种外观各过一次 axe，jsdom 中不查颜色对比度），不复制辅助函数：
+
+```tsx
+import { expectAccessible } from '@jabiz/admin/testing'
+
+it('passes axe in the light and the dark appearance', async () => {
+  renderPage()
+  await screen.findByText('Bolt')
+  await expectAccessible()
+})
+```
+
+`@jabiz/admin/testing` 只能在 `*.test.ts(x)` / `*.spec.ts(x)` 中引用（它带入 Vitest 与 vitest-axe，lint 在页面中拒绝它）；`@jabiz/ui/testing` 不直接引用（lint 提示改用它）。
+没有 Playwright 的版本。
 
 e2e 按角色、名称或稳定的 `data-*` 找元素（平台的辅助函数在 `frontend/e2e/support.ts`）；平台的 e2e 由 lint 拒绝 `.ant-*` 选择器。
 按钮名称写精确的文字（`{ name: '查询', exact: true }`），不再写为 antd 两字按钮准备的 `/查\s*询/`。从 antd 时期的写法改过来的对照：
