@@ -2,7 +2,7 @@ import { signInAdmin } from './admin'
 import { aiReady, quizForAi } from './ai'
 import { query } from './content'
 import { approvedSponsor } from './publishing'
-import { expect, expectAccessible, prepareQuizbuks, signIn, test, unique, useAppearance } from './support'
+import { expect, expectAccessible, prepareQuizbuks, signIn, test, unique, setAppearance } from './support'
 
 /**
  * AI questions (docs/quizbuks/plans/Q8-ai.md, Q8a; M-26, M-20, M-10) with the provider answered by the local stub: an
@@ -20,7 +20,7 @@ for (const appearance of ['light', 'dark'] as const) {
 
   test(`a sponsor reviews the AI's questions and adds them (${appearance})`, async ({ page, request }) => {
     test.setTimeout(180_000)
-    await useAppearance(page, appearance)
+    await setAppearance(page, appearance)
     const sponsor = await approvedSponsor(request, 'Ada')
     const title = unique('AI quiz ')
     const quizId = await quizForAi(request, sponsor.token, title)
