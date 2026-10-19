@@ -433,10 +433,11 @@ class NotificationMailIT extends PayoutItSupport {
         assertThat(sent(sponsor, "qb.publication.funds-short")).containsExactly("SENT");
         MimeMessage mail = received(addressOf(name)).getLast();
         assertThat(subject(mail)).isEqualTo("Top up to keep your publications running");
-        // What is waiting, where to top up, and how to stop these mails (a notification).
+        // What is waiting, where to top up, and how to stop these mails (a notification): on the console's own page
+        // (jabiz.mail.unsubscribe-paths.sponsor, platform decision D52), not the administration's.
         assertThat(text(mail)).contains("\"Short A\", \"Short B\"",
                 "Rewards waiting for payment: 2, together 200 Kudos", SPONSOR + "wallet", SPONSOR + "account",
-                "/admin/mail/unsubscribe?token=")
+                SPONSOR + "mail/unsubscribe?token=")
             .doesNotContain("Still live");
         assertThat(status(untouched)).isEqualTo("LIVE");
 

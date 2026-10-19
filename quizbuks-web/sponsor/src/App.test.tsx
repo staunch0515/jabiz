@@ -75,6 +75,8 @@ function server(me?: Me) {
       case '/api/auth/account/locale':
         return request.method === 'POST' ? new Response(null, { status: 204 }) : json(200, { locale: null,
           effective: 'en', languages: ['en', 'zh', 'ja'], defaultLocale: 'en' })
+      case '/api/auth/mail/unsubscribe':
+        return new Response(null, { status: 204 })
       case '/api/queries/qb.me.consents':
         return json(200, { items: consents, offset: 0, limit: 20 })
       case '/api/processes/QB_CONSENT_ACCEPT/latest':
@@ -127,6 +129,17 @@ describe('a visitor', () => {
     window.history.replaceState(null, '', '/auth/password-reset?entry=sponsor&token=abc')
     render(<App />)
     expect(await screen.findByTestId('password-reset')).toBeInTheDocument()
+    expect(window.location.search).not.toContain('token')
+  })
+
+  it('unsubscribes on its own page without signing in, posting the link\'s token once (D52)', async () => {
+    const { posted } = server()
+    window.history.replaceState(null, '', '/mail/unsubscribe?token=t1')
+    render(<App />)
+    await waitFor(() => expect(screen.getByTestId('unsubscribe-state').dataset.state).toBe('done'))
+    expect(posted.filter((p) => p.path === '/api/auth/mail/unsubscribe')).toEqual([
+      { path: '/api/auth/mail/unsubscribe', body: { token: 't1' } }])
+    expect(window.location.pathname).toBe('/mail/unsubscribe')
     expect(window.location.search).not.toContain('token')
   })
 })

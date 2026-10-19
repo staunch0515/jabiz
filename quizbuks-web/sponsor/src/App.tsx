@@ -4,6 +4,7 @@ import {
   AppShell,
   Button,
   MailLinkPage,
+  MailUnsubscribe,
   OfflineBanner,
   OidcCallback,
   PageState,
@@ -71,6 +72,14 @@ let pendingStep: SignInStep | undefined
 let lockedIdle = false
 
 const MAIL_PAGES = new Set(['/auth/verify-email', '/auth/join', '/auth/password-reset'])
+
+/**
+ * The unsubscribe page of the console's notification mail (platform decision D52 item 3):
+ * `jabiz.mail.unsubscribe-paths.sponsor` is `mail/unsubscribe`, under the entry's app-path, so the links of the
+ * mails declared for this entry lead here and sponsors never need the administration. Open without signing in:
+ * the link's token is the credential.
+ */
+const UNSUBSCRIBE_PATH = '/mail/unsubscribe'
 
 /** Locked after the entry's idle time (30 minutes): about to be signed out; the sign-in page says why. */
 function lockIdle() {
@@ -204,7 +213,7 @@ function PublicPage({ page }: { page: ReactNode }) {
 function Routes() {
   const { t } = useTranslation(SPONSOR)
   const { ready, signedIn } = useAuth()
-  const { path } = useLocation()
+  const { path, search } = useLocation()
   const brand = t('brand')
   const frame = (content: ReactNode) => (
     <div className="flex min-h-full flex-col">
@@ -216,6 +225,7 @@ function Routes() {
   )
 
   // The blocks of mailed links read the address themselves, once: the token is removed from it right away.
+  if (path === UNSUBSCRIBE_PATH) return frame(<MailUnsubscribe brand={brand} search={search} />)
   if (MAIL_PAGES.has(path)) {
     return frame(<MailLinkPage {...navigation} page={path.slice('/auth/'.length)} brand={brand}
       signInPath="/login" passwordResetPath="/password-reset" />)

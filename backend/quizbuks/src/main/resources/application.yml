@@ -122,12 +122,18 @@ jabiz:
   # Mail (decision D35): verification, password reset, welcome and onboarding mail. Off unless switched on; the
   # server is spring.mail.* (SPRING_MAIL_HOST, SPRING_MAIL_PORT, SPRING_MAIL_USERNAME, SPRING_MAIL_PASSWORD). The
   # base address is the host's root: the platform's links go to each entry's own frontend (its app-path, decision
-  # D43 item 4), and the unsubscribe page is the administration's.
+  # D43 item 4). So do the unsubscribe links (decision D52 item 3): the notifications declared for the sponsor console
+  # (NotificationMails) lead to /sponsor/mail/unsubscribe, those for the app (the welcome mail) to /mail/unsubscribe,
+  # where each SPA mounts @jabiz/ui's MailUnsubscribe; takers and sponsors never need the administration. Any other
+  # notification keeps the administration's page (unsubscribe-path), which also keeps the links mailed before working.
   mail:
     enabled: ${JABIZ_MAIL_ENABLED:false}
     from: ${JABIZ_MAIL_FROM:}
     base-url: ${JABIZ_MAIL_BASE_URL:}
     unsubscribe-path: /admin/mail/unsubscribe
+    unsubscribe-paths:
+      sponsor: mail/unsubscribe
+      app: mail/unsubscribe
   files:
     # Uploaded files (docs/design/14-files.md section 6): a directory of this host, a volume in containers.
     local:

@@ -62,6 +62,8 @@ function server(me?: Me) {
         // The app's own notifications only (decision D49): the platform filters by the token's entry.
         return request.method === 'POST' ? new Response(null, { status: 204 }) : json(200, { templates: [
           { template: 'qb.welcome', subscribed: true, displayName: 'Welcome after registration', otherEntry: false }] })
+      case '/api/auth/mail/unsubscribe':
+        return new Response(null, { status: 204 })
       case '/api/auth/account/locale':
         if (request.method === 'POST') {
           mailLocale = (body as { locale: string }).locale || null
@@ -110,6 +112,17 @@ describe('a visitor', () => {
     window.history.replaceState(null, '', '/auth/verify-email?entry=app&token=abc')
     render(<App />)
     expect(await screen.findByTestId('verify-email')).toBeInTheDocument()
+    expect(window.location.search).not.toContain('token')
+  })
+
+  it('unsubscribes on its own page without signing in, posting the link\'s token once (D52)', async () => {
+    const { posted } = server()
+    window.history.replaceState(null, '', '/mail/unsubscribe?token=t1')
+    render(<App />)
+    await waitFor(() => expect(screen.getByTestId('unsubscribe-state').dataset.state).toBe('done'))
+    expect(posted.filter((p) => p.path === '/api/auth/mail/unsubscribe')).toEqual([
+      { path: '/api/auth/mail/unsubscribe', body: { token: 't1' } }])
+    expect(window.location.pathname).toBe('/mail/unsubscribe')
     expect(window.location.search).not.toContain('token')
   })
 
