@@ -242,16 +242,6 @@ public class AiConfig {
         return AiProcesses.cancelled(zone);
     }
 
-    @Bean
-    ProcessDefinition<AiProcesses.PlatformJobRef, AiProcesses.JobOutput, ProcessContext> qbAiCancelQuestionsJob() {
-        return AiProcesses.cancelPlatformJob(AiProcesses.CANCEL_QUESTIONS_JOB, AiQuestionsJob.TYPE);
-    }
-
-    @Bean
-    ProcessDefinition<AiProcesses.PlatformJobRef, AiProcesses.JobOutput, ProcessContext> qbAiCancelCoverJob() {
-        return AiProcesses.cancelPlatformJob(AiProcesses.CANCEL_COVER_JOB, AiCoverJob.TYPE);
-    }
-
     /**
      * Every day at 18:43 UTC (03:43 in Tokyo): each candidate set past its expiry is cleared, one item a transaction
      * under the sponsor's lock (platform decision D42); a missed day is made up by the next.

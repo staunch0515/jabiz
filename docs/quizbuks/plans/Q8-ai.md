@@ -425,7 +425,7 @@
 - 测试：新增 `AiCancelIT`（商家取消排队的题目作业：平台作业由商家取消、提供方没有被调用、不计费、可再请求；封面作业经封面的子流程取消；运行中取消：回答丢弃、按尝试记下的用量计入一次、再运行与再投递不变、再取消 422；运维取消运行中的作业经同一流程计入）；
   改 `AiCostControlIT.switchingOffStopsNewRequestsAndAnOperatorStopsTheQueuedOnes`（运维停止排队的作业不计费）、`AiPdfIT.anOperatorsStopOfAQueuedPdfJobIsChargedNothing`（不计数、不计费、预留释放）、`AiQuestionsIT.discardAndCancelEndTheJob`（提供方不被调用、用量不变）；
   `AiPdfsTest.aCancelledJobIsPricedFromWhatItsAttemptsRecorded` 代替 `stoppedUsage` 的单元测试；`ProcessAccessIT` 与 `MessagesTest` 加新流程。
-- 剩余：实例在尝试中途停机而没记下用量时，那次尝试计为零（失败的作业同样如此）。
+- 剩余：实例在尝试中途停机而没记下用量时，那次尝试计为零（失败的作业同样如此）。（平台 16w-1 之后按估计计入，见"平台 16w-1 之后"。）
 - 评审之后（同一分支）：
   - M1：收据的 PDF 存档（平台的 `DocumentRun`，`DOCUMENT_ISSUE`）同样保留 10 年，自 `issuedTime` 的会计年度末起算（`TopUpConfig`，`RetentionIT`）。
   - M2：`AiCancelIT` 加两条资金路径：第一次尝试没有回答（按 `ClaudeApi.unanswered` 计入）后在等待重试时取消（只计那一次、不再调用提供方、一行用量）；平台作业已成功而完成流程尚未投递时取消（本地仍为 CANCELLED、只计一次、没有候选，封面作业的文件从不被引用）。
@@ -462,6 +462,39 @@
 - 评审之后（同一分支）：L1 `AiPromptTest` 的注释指向实际的 IT；L2 `operations.md` §7.8 加只有基础设施权限时的退路（`ANTHROPIC_API_KEY` 改为占位并重启，每次尝试 401 `QB_AI_AUTH`），并警告不要关掉外部作业执行器（会停住 Stripe 的作业）；
   L3 两个面板随作业一起重读商家用量（作业仍在每 5 秒查询时），"AI 暂停"的说明不需切换焦点即可消失（`ai.test.tsx` 新增一条）；L4 封面面板的暂停测试加 axe，IT 断言最终计入的用量正好是各次尝试记下的合计、只计一次。
   重新验证：`./gradlew :quizbuks:check` 通过（815 个测试、0 失败；`platformCheck` 0 错误）；商家后台 lint、typecheck、181 个 Vitest。
+
+### 平台 16w-1 之后（2026-10-19，分支 `1.2/quizbuks-sync-platform-16w1`）
+
+平台 16w-1（PR #190，决策 D52 第 2 条的补充与第 5 条）给了上面"平台 16v-1 之后"留下的两项：一个取消步骤可声明几种作业类型，以及完成、失败与取消的输入中没有记下用量的尝试数 `unrecordedAttempts`（与迟到实例的用量照记）。合并平台没有冲突。改为：
+- **取消**：`QB_AI_CANCEL` 在本地改为 CANCELLED 之后只有一个步骤 `CancelExternalJob.of(List.of(AiQuestionsJob.TYPE, AiCoverJob.TYPE), ctx -> externalJobId).ifOpen()`；缺省的请求人检查保留（商家即请求人），QuizBuks 自己的本人检查仍在前。
+  删去子流程 `QB_AI_CANCEL_QUESTIONS_JOB` / `QB_AI_CANCEL_COVER_JOB`、`AiProcesses.cancelPlatformJob`、`PlatformJobRef`、两处 `CallProcess.when`、三语流程名，以及 `MessagesTest` 与 `ProcessAccessIT` 中的条目。`AiCancelIT` 原有的测试照旧通过（题目与封面作业都由商家取消平台的作业）。
+- **计费（W-6）**：`QB_AI_JOB_COMPLETED`、`QB_AI_JOB_FAILED` 与 `QB_AI_JOB_CANCELLED`（`closeCancelled`）对每次没有记下用量的尝试，在平台记下的用量之外计入一次尝试的估计（`AiProcesses.charged` / `unrecordedAttempt`）：
+  作业参数中的 `reservedInputTokens`（文字的估计 `AiLimits.reservedInput(输入字节, 0)`，带 PDF 的再加页数上限 × 每页 Token；两种作业的请求都存它，缺少时按 `inputBytes` 重算）加所要的全部输出（题目 `ClaudeApi.maxTokens(count)`，封面 `AiCoverJob.MAX_TOKENS`），
+  长提示的规则同记下的调用（`ClaudeCalls.priced`，从 `record` 中提出），美元经 `AiCost`（回退部分只来自记下的用量）。取消时没有尝试运行过的照旧不计费。
+- **同一依据**：此前 `ClaudeApi.unanswered` 对没有文档的请求按发送的用户消息与系统提示的字节估计输入，与作业预留的 `reservedInputTokens`（按 `max(用户消息, 作业输入 JSON)` 的字节，系统提示算在 `FRAMING_TOKENS` 内）不同，
+  多出系统提示的约 600 Token，使没有回答的尝试高于预留、每次都记"高于预留"的 WARN。改为 `unanswered(请求, 预留的输入)`：请求经提供方计数（带 PDF）的仍按计数，否则按作业预留的输入；只有没有预留的旧作业才按字节估计。
+  没有回答的尝试与没有记下用量的尝试因此按同一依据（`ClaudeApi.unrecorded`）计入；后者不知道提供方的计数，所以带 PDF 的作业按预留（计数不会超过它）。
+- **计费前后对比**（实例在尝试中途死掉、租约过期而什么也没记下的那次尝试）：此前计为零（失败、完成与取消都如此），只有提供方的支出上限兜底；之后按上面的估计计入作业与月用量（例如一题、文字输入的作业：预留的输入约 1 500 + 输入字节 / 3 Token，加 4 600 输出 Token）。
+  迟到的实例在结局流程之前回来的，平台把它的用量记到那次尝试上，那次尝试不再算作没有记下，按实际用量计入；之后回来的只进平台的用量报表。
+  没有回答的尝试（超时等）对没有文档的请求少计约 600 Token（不再重复计算系统提示），与预留一致。
+- 测试：`AiCostControlIT.anAttemptWhoseInstanceDiedIsChargedItsEstimate`（完成、失败、取消各一：第 1 次尝试由死掉的实例领取、租约过期；完成与失败为第 2 次尝试成功或 401，取消为商家在租约中取消；作业与月用量各多出一次估计，美元一致，再运行不变；并断言文字作业保存了 `reservedInputTokens`）、
+  `aLateAttemptsRecordedUsageIsChargedNotTheEstimate`（第 1 次尝试等待提供方时租约过期、由另一个实例记为 `LEASE_EXPIRED`，迟到的实例回来后用量记到第 1 次尝试，第 2 次成功：按 700 + 1 200 / 300 + 800 计入，不是估计）；
+  `attemptsWithoutAnAnswerAreChargedTheirEstimateAndHitTheLimit` 与 `AiCancelIT.cancellingWhileAnUnansweredAttemptWaitsForItsRetryChargesThatAttemptsEstimateOnly` 改为按预留的输入（三次超时的作业正好计入它的预估）；
+  `ClaudeApiTest.anUnansweredAndAnUnrecordedAttemptAreChargedOnTheSameBasis`。`AiItSupport` 增加 `runningAttempt`（从 `AiCancelIT` 移来）、`claimedByADeadInstance`、`otherInstance` 与 `platformAttempts`（测试依赖加 `micrometer-core`，构造第二个执行器用）。
+- 伪造的完成、失败、取消：QuizBuks 的测试没有把这三种输入写成 JSON 交给流程接口（`ProcessAccessIT` 以空的输入、`AiQuestionsIT` 以只有作业号与类型的输入，都在权限检查时即 403），不需要加 `unrecordedAttempts`；以 Java 构造的（`TopUpFeeIT`、`PayoutItSupport`）用平台保留的原构造器。
+- 后台扩展：`admin-extension/src/ai.test.tsx` 改用 `@jabiz/admin/testing` 的 `expectAccessible()`，删去复制的 `noAxeViolations` 与 `vitest-axe` 的引用（扩展没有 `package.json`，没有依赖可删）。收紧的 lint 与新的 bundle 步骤没有发现问题。
+- 文档：`backend/quizbuks/CLAUDE.md`（取消步骤、没有记下用量的尝试、后台扩展的 axe）、`02-design.md`（流程表）、`operations.md` §7.8（删去"实例崩溃的尝试计为零"，写明新的计费与迟到的用量）。
+- 场景回放：合并平台后设置编号没有变化，10 个场景的快照不变（不需要重新推导答题位置）。
+- 验证（2026-10-19，本机 PostgreSQL 16，自己的库与端口）：`./gradlew :quizbuks:check :quizbuks:bootJar` 通过（820 个测试、0 失败，场景 10 个；`platformCheck` 0 错误）；后台扩展 `ext:check`（82 个测试，含 lint 与 bundle 步骤）；两个 SPA 没有改动（`spaCheck` 在 `check` 中通过）；e2e 全部 59 个通过（应用 18680，Claude 桩 18694、Stripe 桩 18693、Mailpit 18625/18626）。
+- 评审之后（同一分支，没有 High；评审同意 `unanswered` 改按预留）：
+  - M1：operations §7.8 的封面输出改为 `AiCoverJob.MAX_TOKENS`（8 000），原写 16 000。
+  - M2：单元测试 `AiChargingTest`（以构造的作业实例测 `charged` / `unrecordedAttempt`：封面 8 000 输出；带 PDF 的预留含页数上限；缺少预留时按 `inputBytes` 重算；3 次尝试都没有记下（文字与带 PDF）正好等于作业的预估；最小模型高于长提示线的按长提示价）；
+    `anAttemptWhoseInstanceDiedIsChargedItsEstimate` 另断言全体（`EVERYBODY`）的月用量增加同样的数。
+  - L1：`AiChargingTest.theFramingCoversTheSystemPromptsAndSchemasWithAMargin`：`FRAMING_TOKENS` 不小于题目与封面各自的系统提示加输出 Schema 的字节 / 3 再加 200，提示或图库变长时失败而不是悄悄吃掉余量。
+  - L2、L3：operations §7.8 写明在到达提供方之前死掉的尝试（计数、读文件、画图时）同样按完整估计计入（带 PDF 的即页数上限，缺省约 50 万 Token，有意偏高，D52 第 5 条），
+    以及有回退模型的文字请求没有回答时只计一次输入、提供方可能计两次（已知并接受的缺口）。
+  - L4：`AiQuestionsJob` 的 Javadoc 改为 `{@code userKey}`，`:quizbuks:javadoc` 通过。
+  - 重新验证：`./gradlew :quizbuks:javadoc :quizbuks:check` 通过（827 个测试、0 失败；`platformCheck` 0 错误）；`ext:check`（82 个测试）。界面没有变化，没有重跑 e2e。
 
 ### 待确认（需求方）
 

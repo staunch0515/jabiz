@@ -3,23 +3,32 @@ package com.jabiz.quizbuks.it;
 import com.jabiz.quizbuks.content.ai.AiProcesses;
 import com.jabiz.quizbuks.messaging.QbLegal;
 import com.jabiz.quizbuks.setup.QbParams;
+import com.jabiz.external.ExternalServices;
 import com.jabiz.runtime.external.ExternalJobExecutor;
+import com.jabiz.runtime.external.ExternalJobRecorder;
+import com.jabiz.runtime.external.ExternalJobRegistry;
+import com.jabiz.runtime.observability.PlatformObservations;
 import com.jabiz.runtime.job.JobRunner;
 import com.jabiz.runtime.test.StubHttpServer;
 import com.jabiz.runtime.test.TestTokens;
 import com.jabiz.job.JobDefinition;
 import org.junit.jupiter.api.BeforeEach;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
+import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -183,6 +192,46 @@ abstract class AiItSupport extends LegalItSupport {
                 return;
             }
         }
+    }
+
+    /** Runs the due jobs in the background until the provider has been asked once more: an attempt is running. */
+    CompletableFuture<Integer> runningAttempt() throws InterruptedException {
+        int calls = CLAUDE.requests(MESSAGES).size();
+        CompletableFuture<Integer> running = jobExecutor.runPending().toFuture();
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(20);
+        while (CLAUDE.requests(MESSAGES).size() == calls) {
+            org.assertj.core.api.Assertions.assertThat(System.nanoTime()).as("the attempt calls the provider")
+                .isLessThan(deadline);
+            Thread.sleep(10);
+        }
+        return running;
+    }
+
+    /**
+     * An instance that claimed the platform job's attempt and died (as the platform's own tests have it): its claim,
+     * with a lease until {@code leaseUntil}, and nothing else; once the lease is over another instance records the
+     * attempt {@code LEASE_EXPIRED}, without usage.
+     */
+    static void claimedByADeadInstance(Object externalJobId, int attempt, Instant leaseUntil) {
+        execute("INSERT INTO sys_external_job_claim (job_id, attempt_no, instance_id, claimed_time, lease_until)"
+            + " VALUES (?, ?, 'it-crashed', ?, ?)", String.valueOf(externalJobId), attempt,
+            java.sql.Timestamp.from(leaseUntil.minusSeconds(60)), java.sql.Timestamp.from(leaseUntil));
+    }
+
+    /** Another instance of the platform's executor, on the same database and clock. */
+    ExternalJobExecutor otherInstance() {
+        return new ExternalJobExecutor(context.getBean(ExternalJobRegistry.class),
+            context.getBean(ExternalJobRecorder.class), context, context.getBean(ExternalServices.class),
+            context.getBean(JsonMapper.class), context.getBean(Clock.class),
+            context.getBean(PlatformObservations.class), context.getBeanProvider(MeterRegistry.class),
+            jobExecutor.settings().withInstanceId("it-takeover"));
+    }
+
+    /** The platform's attempts of a job, as {@code number:outcome}. */
+    static List<String> platformAttempts(Object externalJobId) {
+        return query("SELECT attempt_no, outcome FROM sys_external_job_attempt WHERE job_id = ? ORDER BY attempt_no",
+            String.valueOf(externalJobId)).stream().map(row -> row.get("attempt_no") + ":" + row.get("outcome"))
+            .toList();
     }
 
     /** Sets a controlled parameter, with four eyes. */

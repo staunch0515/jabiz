@@ -161,6 +161,26 @@ class ClaudeApiTest {
     }
 
     @Test
+    void anUnansweredAndAnUnrecordedAttemptAreChargedOnTheSameBasis() {
+        ClaudeApi.Request request = new ClaudeApi.Request(ClaudeService.OPUS, "medium", ClaudeApi.maxTokens(5),
+            "s".repeat(300), "u".repeat(3_000), null);
+        // A job that reserved an attempt's input is charged the reservation, as an attempt that recorded nothing is
+        // (W-6); the provider's count of a counted request stands for itself.
+        long reserved = AiLimits.reservedInput(3_000, 0);
+        assertThat(ClaudeApi.unanswered(request, reserved)).isEqualTo(new ClaudeApi.Usage(reserved, 7_000))
+            .isEqualTo(ClaudeApi.unrecorded(reserved, ClaudeApi.maxTokens(5)));
+        assertThat(ClaudeApi.unanswered(request.counted(2_345), reserved)).isEqualTo(new ClaudeApi.Usage(2_345,
+            7_000));
+        assertThat(ClaudeApi.unanswered(request, null)).isEqualTo(ClaudeApi.unanswered(request));
+        // Priced as a recorded call: above the long-prompt line at the smallest model's long rate.
+        ClaudeApi.Usage longPrompt = ClaudeCalls.priced(ClaudeService.HAIKU, ClaudeApi.unrecorded(150_000, 4_600));
+        assertThat(longPrompt.longPromptInputTokens()).isEqualTo(150_000);
+        assertThat(longPrompt.longPromptOutputTokens()).isEqualTo(4_600);
+        assertThat(ClaudeCalls.priced(ClaudeService.OPUS, ClaudeApi.unrecorded(150_000, 4_600))
+            .longPromptInputTokens()).isZero();
+    }
+
+    @Test
     void theRequestsOwnTimeoutIsPassedOn() {
         List<ExternalHttp.Request> sent = new ArrayList<>();
         ExternalHttp http = call -> {

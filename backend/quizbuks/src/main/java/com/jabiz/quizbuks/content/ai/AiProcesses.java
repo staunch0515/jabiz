@@ -24,7 +24,6 @@ import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.EntityNotFoundException;
 import com.jabiz.runtime.file.FileEntities;
 import com.jabiz.runtime.param.ParamEntities;
-import com.jabiz.runtime.process.steps.CallProcess;
 import com.jabiz.runtime.process.steps.CancelExternalJob;
 import com.jabiz.runtime.process.steps.HoldLock;
 import com.jabiz.runtime.process.steps.LoadEntity;
@@ -66,7 +65,8 @@ import java.util.UUID;
  *       {@code qb.ai:<sponsor>} then {@code qb.ai:*}: the limits ({@link AiLimits}), everybody's unfinished jobs
  *       counted; then the job and its record.</li>
  *   <li>{@value #COMPLETED} / {@value #FAILED} ({@code internal()}): under {@code qb.ai:<sponsor>} then
- *       {@code qb.ai:*}, the usage of every attempt is added to the sponsor's month and everybody's; the candidates are
+ *       {@code qb.ai:*}, the usage of every attempt (an estimate for one that recorded nothing, {@link #charged}) is
+ *       added to the sponsor's month and everybody's; the candidates are
  *       checked against the content rules again and wait for review ({@code READY}, for
  *       {@code qb.ai.candidates.expire-days}), or the failure is recorded. A cancelled job keeps its state; its usage
  *       still counts.</li>
@@ -74,9 +74,8 @@ import java.util.UUID;
  *       (each marked {@code reviewed}, A-6; their text as the sponsor left it) are added at the end of the quiz with
  *       the job's id; the quiz becomes {@code aiGenerated}. No candidate is ever saved without this.</li>
  *   <li>{@value #DISCARD} and {@value #CANCEL}: the sponsor drops the candidates, or stops a job: {@value #CANCEL}
- *       also cancels the platform's job (through {@value #CANCEL_QUESTIONS_JOB} or {@value #CANCEL_COVER_JOB},
- *       platform decision D52 item 2), so a queued job never calls the provider and a running one ends after its
- *       attempt.</li>
+ *       also cancels the platform's job (one step for both job types, platform decision D52 item 2), so a queued
+ *       job never calls the provider and a running one ends after its attempt.</li>
  *   <li>{@value #EXPIRE} ({@code internal()}): the daily job clears candidates not reviewed in time.</li>
  *   <li>{@value #CANCELLED_JOB} ({@code internal()}, both job types' {@code onCancelled}): a cancelled job, whoever
  *       cancelled it (the sponsor, or an operator through {@code EXTERNAL_JOB_CANCEL}), is closed once it has ended
@@ -100,12 +99,6 @@ public final class AiProcesses {
     public static final String EXPIRE = "QB_AI_EXPIRE";
     /** Both job types' {@code onCancelled} (platform decision D52 item 2). */
     public static final String CANCELLED_JOB = "QB_AI_JOB_CANCELLED";
-    /**
-     * The platform's step {@code CancelExternalJob} cancels jobs of one declared type: {@value #CANCEL} calls the one
-     * of its job's kind ({@code subProcessOnly()}).
-     */
-    public static final String CANCEL_QUESTIONS_JOB = "QB_AI_CANCEL_QUESTIONS_JOB";
-    public static final String CANCEL_COVER_JOB = "QB_AI_CANCEL_COVER_JOB";
     /** Everybody's unfinished jobs, for the global limit. */
     public static final String OPEN_TEMPLATE = "qb.system.ai-open";
 
@@ -172,9 +165,6 @@ public final class AiProcesses {
 
     /** @param questionIds the questions added, in their order */
     public record AcceptOutput(String quizId, long revision, String aiJobId, List<String> questionIds) {}
-
-    /** The platform's job of a sponsor's AI job ({@value #CANCEL_QUESTIONS_JOB}, {@value #CANCEL_COVER_JOB}). */
-    public record PlatformJobRef(@NotBlank @Size(max = 64) String externalJobId) {}
 
     /** An item of the daily expiry (its selection's row). */
     public record ExpireInput(@NotNull UUID aiJobId, @NotBlank @Size(max = 128) String sponsorId) {}
@@ -631,7 +621,7 @@ public final class AiProcesses {
         if (job == null) {
             return;
         }
-        ClaudeApi.Usage usage = usage(completion.usage());
+        ClaudeApi.Usage usage = charged(completion.usage(), completion.unrecordedAttempts(), job);
         String month = AiLimits.month(completion.finishedTime(), zone);
         if (QbAi.KIND_COVER.equals(job.get("kind"))) {
             completeCover(ctx, completion, job, usage, month);
@@ -725,7 +715,7 @@ public final class AiProcesses {
         if (job == null) {
             return;
         }
-        ClaudeApi.Usage usage = usage(failure.usage());
+        ClaudeApi.Usage usage = charged(failure.usage(), failure.unrecordedAttempts(), job);
         java.math.BigDecimal cost = AiCost.of(job.get("model"), null, usage, settings(ctx).price());
         Map<String, Object> values = finished(usage, cost, failure.attempts(), failure.finishedTime());
         if (QbAi.QUEUED.equals(job.get("status"))) {
@@ -747,6 +737,41 @@ public final class AiProcesses {
             metrics.getOrDefault(AiQuestionsJob.FALLBACK_OUTPUT_TOKENS, 0L),
             metrics.getOrDefault(AiQuestionsJob.LONG_INPUT_TOKENS, 0L),
             metrics.getOrDefault(AiQuestionsJob.LONG_OUTPUT_TOKENS, 0L));
+    }
+
+    /**
+     * What a finished job is charged: the usage its attempts recorded, and for each attempt that ended without
+     * recording any ({@code unrecordedAttempts}, platform decision D52 item 5: its instance died, or it timed out,
+     * before it could report) what {@link ClaudeApi#unanswered} charges an attempt that got no answer, since the
+     * provider may have billed it all the same (W-6). A late instance's own usage, recorded before the outcome ran,
+     * is in {@code metrics} and that attempt is no longer counted, so nothing is charged twice.
+     */
+    static ClaudeApi.Usage charged(Map<String, Long> metrics, int unrecordedAttempts, EntityInstance job) {
+        ClaudeApi.Usage recorded = usage(metrics);
+        if (unrecordedAttempts <= 0) {
+            return recorded;
+        }
+        ClaudeApi.Usage each = unrecordedAttempt(job);
+        long n = unrecordedAttempts;
+        return new ClaudeApi.Usage(recorded.inputTokens() + n * each.inputTokens(),
+            recorded.outputTokens() + n * each.outputTokens(), recorded.fallbackInputTokens(),
+            recorded.fallbackOutputTokens(), recorded.longPromptInputTokens() + n * each.longPromptInputTokens(),
+            recorded.longPromptOutputTokens() + n * each.longPromptOutputTokens());
+    }
+
+    /**
+     * One unrecorded attempt of the job, from its stored parameters: the input it reserved for an attempt
+     * ({@code reservedInputTokens}: the text's estimate, and the pages of a request with PDF documents) and all the
+     * output it asked for ({@link ClaudeApi#maxTokens} of its count; {@link AiCoverJob#MAX_TOKENS} for covers),
+     * at the requested model's long-prompt rate when the input is above that line, as a recorded call would be.
+     */
+    static ClaudeApi.Usage unrecordedAttempt(EntityInstance job) {
+        Map<String, Object> params = params(job);
+        long input = params.get("reservedInputTokens") instanceof Number reserved ? reserved.longValue()
+            : AiLimits.reservedInput(QuizEditing.number(job.get("inputBytes")), 0);
+        int maxTokens = QbAi.KIND_COVER.equals(job.get("kind")) ? AiCoverJob.MAX_TOKENS
+            : ClaudeApi.maxTokens(((Number) params.getOrDefault("count", AiQuestionsJob.MAX_COUNT)).intValue());
+        return ClaudeCalls.priced(job.get("model"), ClaudeApi.unrecorded(input, maxTokens));
     }
 
     private static Map<String, Object> finished(ClaudeApi.Usage usage, BigDecimal cost, Integer attempts,
@@ -804,7 +829,8 @@ public final class AiProcesses {
      * ended (at once when no attempt was running, otherwise after the running one), whoever cancelled it. Under the
      * sponsor's lock and everybody's, the job is closed and charged what its attempts used, as a failure is: the
      * platform's usage of every attempt (the cancelled one included), which the attempts recorded as they went
-     * ({@code ClaudeCalls}: an unanswered call its estimate, the fallback model's and the long prompts' parts apart).
+     * ({@code ClaudeCalls}: an unanswered call its estimate, the fallback model's and the long prompts' parts apart),
+     * and the same estimate for each attempt that recorded nothing ({@link #charged}: one whose instance died).
      * A job cancelled before any attempt ran cost nothing and is charged nothing. A job an operator stopped while it
      * was still queued here is {@code CANCELLED} with {@link AiCodes#STOPPED}; the sponsor's own cancellation closed
      * it already ({@value #CANCEL}).
@@ -834,7 +860,8 @@ public final class AiProcesses {
             return;
         }
         // Cancelled while it waited: no attempt ran, nothing was sent or billed.
-        ClaudeApi.Usage usage = cancellation.attemptRan() ? usage(cancellation.usage()) : new ClaudeApi.Usage(0, 0);
+        ClaudeApi.Usage usage = cancellation.attemptRan()
+            ? charged(cancellation.usage(), cancellation.unrecordedAttempts(), job) : new ClaudeApi.Usage(0, 0);
         BigDecimal cost = AiCost.of(job.get("model"), null, usage, settings(ctx).price());
         Map<String, Object> values = finished(usage, cost, cancellation.attempts(), cancellation.finishedTime());
         if (QbAi.QUEUED.equals(job.get("status"))) {
@@ -1014,36 +1041,20 @@ public final class AiProcesses {
                 return values;
             },
             pb -> pb
-                .step("Cancel the questions' platform job", CallProcess.<ProcessContext>when(
-                    ctx -> !QbAi.KIND_COVER.equals(first(ctx, JOB).get("kind")), CANCEL_QUESTIONS_JOB, 1,
-                    AiProcesses::platformJob, null))
-                .step("Cancel the covers' platform job", CallProcess.<ProcessContext>when(
-                    ctx -> QbAi.KIND_COVER.equals(first(ctx, JOB).get("kind")), CANCEL_COVER_JOB, 1,
-                    AiProcesses::platformJob, null)));
-    }
-
-    private static PlatformJobRef platformJob(ProcessContext ctx) {
-        Object externalJobId = first(ctx, JOB).get("externalJobId");
-        return new PlatformJobRef(String.valueOf(Objects.requireNonNull(externalJobId,
-            "The AI job has no platform job (externalJobId is required)")));
+                .step("Cancel the platform's job", CancelExternalJob.<ProcessContext>of(
+                    List.of(AiQuestionsJob.TYPE, AiCoverJob.TYPE), AiProcesses::platformJobId).ifOpen()));
     }
 
     /**
-     * Cancels the platform's job of {@code jobType} for {@value #CANCEL}, as its caller, the sponsor: the platform's
-     * step cancels only jobs of the declared type that the process's actor started (anyone else's is 404, under
+     * The platform's job of the sponsor's job (its {@code externalJobId}, unique). The platform's step cancels only a
+     * job of the two AI types that the process's actor, the sponsor, started (anyone else's is 404, under
      * {@value #CANCEL}'s own check of the sponsor's job); one that ended meanwhile is left to its outcome process
      * ({@code ifOpen}).
      */
-    public static ProcessDefinition<PlatformJobRef, JobOutput, ProcessContext> cancelPlatformJob(String name,
-        String jobType) {
-        return ProcessDefinition.define(name, 1, PlatformJobRef.class, JobOutput.class, ProcessContext.class, pb -> pb
-            .description("Cancels the platform's job of a sponsor's AI job, for " + CANCEL + ".")
-            .permissions(QbPermissions.AI_USE)
-            .subProcessOnly()
-            .contextFactory(AiProcesses::context)
-            .outputMapper(ctx -> new JobOutput(null, null))
-            .step("Cancel the platform's job", CancelExternalJob.<ProcessContext>of(jobType,
-                ctx -> ctx.get(INPUT, PlatformJobRef.class).externalJobId()).ifOpen()));
+    private static String platformJobId(ProcessContext ctx) {
+        Object externalJobId = first(ctx, JOB).get("externalJobId");
+        return String.valueOf(Objects.requireNonNull(externalJobId,
+            "The AI job has no platform job (externalJobId is required)"));
     }
 
     private static ProcessDefinition<JobRef, JobOutput, ProcessContext> own(String name, String description,

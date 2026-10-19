@@ -2,8 +2,8 @@ package com.jabiz.quizbuks.it;
 
 import com.jabiz.quizbuks.content.ContentCodes;
 import com.jabiz.quizbuks.content.ai.AiCodes;
+import com.jabiz.quizbuks.content.ai.AiCost;
 import com.jabiz.quizbuks.content.ai.AiLimits;
-import com.jabiz.quizbuks.content.ai.AiPrompt;
 import com.jabiz.quizbuks.content.ai.AiProcesses;
 import com.jabiz.quizbuks.content.ai.AiQuestionsJob;
 import com.jabiz.quizbuks.content.ai.ClaudeApi;
@@ -14,14 +14,17 @@ import com.jabiz.runtime.test.StubHttpServer;
 import com.jabiz.runtime.test.TestTokens;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.http.MediaType;
 import tools.jackson.databind.JsonNode;
 
-import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -29,8 +32,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  * What AI generation may cost, and how it is stopped (docs/quizbuks/plans/Q8-ai.md, Q8a, after the independent
  * review): attempts that got no answer are charged, the estimate covers every attempt, the global limit counts
  * everybody's running jobs, high effort asks for fewer questions, switching off (which holds the jobs not yet
- * running, platform decision D52 item 4) and an operator's stop, and the
- * refusals and checks of the sponsor's own processes.
+ * running, platform decision D52 item 4) and an operator's stop, attempts that recorded nothing because their instance
+ * died (charged the same estimate, platform decision D52 item 5, W-6), and the refusals and checks of the sponsor's own
+ * processes.
  */
 class AiCostControlIT extends AiItSupport {
 
@@ -89,15 +93,16 @@ class AiCostControlIT extends AiItSupport {
         Map<String, Object> failed = job(aiJobId);
         assertThat(failed).containsEntry("status", QbAi.FAILED).containsEntry("failure_code", "EXTERNAL_CALL_FAILED");
         assertThat(number(failed.get("attempts"))).isEqualTo(AiQuestionsJob.ATTEMPTS);
-        // Every attempt charged what it may have cost: its whole input, and all the output it asked for.
+        // Every attempt charged what it may have cost: the input the job reserved for an attempt, and all the output
+        // it asked for, so that the job is charged exactly its estimate.
         JsonNode body = sent().getLast();
-        long bytes = body.get("messages").get(0).get("content").get(0).get("text").asString()
-            .getBytes(StandardCharsets.UTF_8).length + AiPrompt.SYSTEM.getBytes(StandardCharsets.UTF_8).length;
         assertThat(body.get("max_tokens").asInt()).isEqualTo(ClaudeApi.maxTokens(1));
-        assertThat(number(failed.get("input_tokens"))).isEqualTo(AiQuestionsJob.ATTEMPTS * AiLimits.inputEstimate(bytes));
+        assertThat(number(failed.get("input_tokens"))).isEqualTo(AiQuestionsJob.ATTEMPTS
+            * AiLimits.reservedInput(number(asked.get("input_bytes")), 0));
         assertThat(number(failed.get("output_tokens"))).isEqualTo(AiQuestionsJob.ATTEMPTS * ClaudeApi.maxTokens(1));
         Map<String, Object> usage = usage(sponsor);
-        assertThat(tokens(usage)).isEqualTo(number(failed.get("input_tokens")) + number(failed.get("output_tokens")));
+        assertThat(tokens(usage)).isEqualTo(number(failed.get("input_tokens")) + number(failed.get("output_tokens")))
+            .isEqualTo(estimate);
         assertThat((java.math.BigDecimal) failed.get("cost_usd")).isPositive();
 
         // With a month's limit that one job fits in, the charged time-outs leave no room for the next.
@@ -376,6 +381,135 @@ class AiCostControlIT extends AiItSupport {
         assertThat((java.math.BigDecimal) job.get("cost_usd")).isEqualByComparingTo("0.059");
         assertThat(items("qb.admin.ai-usage", aiAdmin(), body())).anySatisfy(row -> assertThat(row.get("estimatedUsd"))
             .isNotNull());
+    }
+
+    /**
+     * W-6: an attempt the platform reports as unrecorded (its instance claimed it and died, so its lease ran out with
+     * nothing recorded) is charged what an unanswered one is: the input the job reserved for an attempt and all the
+     * output it asked for, from the job's stored parameters, whichever way the job ends. Attempt 1 is the dead one;
+     * attempt 2 then succeeds or is refused, or the sponsor's cancellation ends the job while attempt 1 still holds
+     * its lease.
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {"COMPLETED", "FAILED", "CANCELLED"})
+    void anAttemptWhoseInstanceDiedIsChargedItsEstimate(String outcome) {
+        String sponsor = newSponsor("ai-died-" + outcome.toLowerCase() + "-" + UUID.randomUUID());
+        String token = sponsorFull(sponsor);
+        List<String> quiz = quizWithArticle(token, title(), "Material for an instance that dies.");
+        Map<String, Object> requested = request(token, quiz.get(0), List.of(quiz.get(1)), 2);
+        Object aiJobId = requested.get("aiJobId");
+        Object externalJobId = requested.get("externalJobId");
+        Map<String, Object> asked = job(aiJobId);
+        // A text-only job reserves the text's estimate for an attempt's input, and stores it with its parameters.
+        long reserved = JSON.readTree(String.valueOf(asked.get("params"))).get("reservedInputTokens").asLong();
+        assertThat(reserved).isEqualTo(AiLimits.reservedInput(number(asked.get("input_bytes")), 0));
+        long estimateIn = reserved;
+        long estimateOut = ClaudeApi.maxTokens(2);
+        long everybodyBefore = monthTokens(QbAi.EVERYBODY);
+
+        long recordedIn;
+        long recordedOut;
+        String servedModel;
+        if ("CANCELLED".equals(outcome)) {
+            // Running on the dead instance when the sponsor cancels: the job ends once its lease is over.
+            claimedByADeadInstance(externalJobId, 1, clock.instant().plusSeconds(60));
+            assertThat(run(AiProcesses.CANCEL, token, body("aiJobId", aiJobId))).containsEntry("status",
+                QbAi.CANCELLED);
+            runJobs();
+            assertThat(job(aiJobId).get("finished_at")).isNull();
+            advance(Duration.ofMinutes(2));
+            runJobs();
+            assertThat(platformAttempts(externalJobId)).containsExactly("1:LEASE_EXPIRED");
+            recordedIn = 0;
+            recordedOut = 0;
+            servedModel = null;
+        } else {
+            claimedByADeadInstance(externalJobId, 1, clock.instant().minusSeconds(1));
+            if ("FAILED".equals(outcome)) {
+                // Attempt 2: a key the provider refuses, unbilled and recorded as nothing.
+                CLAUDE.script(MESSAGES, StubHttpServer.Answer.json(401, "{\"type\":\"error\",\"error\":"
+                    + "{\"type\":\"authentication_error\",\"message\":\"invalid x-api-key\"}}"));
+            }
+            runUntilDone(aiJobId);
+            assertThat(platformAttempts(externalJobId)).containsExactly("1:LEASE_EXPIRED",
+                "COMPLETED".equals(outcome) ? "2:SUCCEEDED" : "2:FAILED");
+            // The stub's own answer bills 1,200 in and 800 out.
+            recordedIn = "COMPLETED".equals(outcome) ? 1200 : 0;
+            recordedOut = "COMPLETED".equals(outcome) ? 800 : 0;
+            servedModel = "COMPLETED".equals(outcome) ? (String) asked.get("model") : null;
+        }
+
+        Map<String, Object> job = job(aiJobId);
+        assertThat(job).containsEntry("status", switch (outcome) {
+            case "COMPLETED" -> QbAi.READY;
+            case "FAILED" -> QbAi.FAILED;
+            default -> QbAi.CANCELLED;
+        });
+        assertThat(number(job.get("attempts"))).isEqualTo("CANCELLED".equals(outcome) ? 1 : 2);
+        assertThat(number(job.get("input_tokens"))).isEqualTo(recordedIn + estimateIn);
+        assertThat(number(job.get("output_tokens"))).isEqualTo(recordedOut + estimateOut);
+        assertThat((java.math.BigDecimal) job.get("cost_usd")).isEqualByComparingTo(AiCost.of(
+            (String) asked.get("model"), servedModel, new ClaudeApi.Usage(recordedIn + estimateIn,
+                recordedOut + estimateOut), null));
+        Map<String, Object> month = usage(sponsor);
+        assertThat(number(month.get("jobs"))).isEqualTo(1);
+        assertThat(number(month.get("failed_jobs"))).isEqualTo("FAILED".equals(outcome) ? 1 : 0);
+        assertThat(tokens(month)).isEqualTo(recordedIn + estimateIn + recordedOut + estimateOut);
+        // Everybody's month too (the global limit): the same charge, once.
+        assertThat(monthTokens(QbAi.EVERYBODY) - everybodyBefore)
+            .isEqualTo(recordedIn + estimateIn + recordedOut + estimateOut);
+        assertThat((java.math.BigDecimal) month.get("cost_usd")).isEqualByComparingTo(
+            (java.math.BigDecimal) job.get("cost_usd"));
+        // Once: delivering again charges nothing more.
+        runJobs();
+        assertThat(usage(sponsor)).isEqualTo(month);
+    }
+
+    /**
+     * W-6 with the platform's late usage (D52 item 5): an instance whose lease ran out while it waited for the
+     * provider comes back with the provider's answer; its usage is recorded on that attempt, which is then no longer
+     * unrecorded, so the job is charged what the provider reported for it, not the estimate.
+     */
+    @Test
+    void aLateAttemptsRecordedUsageIsChargedNotTheEstimate() throws Exception {
+        String sponsor = newSponsor("ai-late-" + UUID.randomUUID());
+        String token = sponsorFull(sponsor);
+        List<String> quiz = quizWithArticle(token, title(), "Material for a late instance.");
+        // Attempt 1's answer comes after a while (within the tests' two-second request timeout).
+        CLAUDE.script(MESSAGES, answer("claude-opus-5-5", "end_turn", questions(1), 700, 300)
+            .after(Duration.ofMillis(1500)));
+        Map<String, Object> requested = request(token, quiz.get(0), List.of(quiz.get(1)), 1);
+        Object aiJobId = requested.get("aiJobId");
+        Object externalJobId = requested.get("externalJobId");
+        CompletableFuture<Integer> late = runningAttempt();
+
+        // Its lease (the timeout, the margin and the time its files may take) runs out on the clock: another instance
+        // records it LEASE_EXPIRED.
+        long leaseUntil = number(query("SELECT (extract(epoch FROM lease_until) * 1000)::bigint AS ms"
+            + " FROM sys_external_job_claim WHERE job_id = ? AND attempt_no = 1", String.valueOf(externalJobId))
+            .getFirst().get("ms"));
+        clock.set(java.time.Instant.ofEpochMilli(leaseUntil).plusSeconds(1));
+        assertThat(otherInstance().runPending().block()).isZero();
+        assertThat(platformAttempts(externalJobId)).containsExactly("1:LEASE_EXPIRED");
+        // The late instance comes back: its result is dropped, its usage recorded on attempt 1.
+        assertThat(late.get(30, TimeUnit.SECONDS)).isEqualTo(1);
+        assertThat(query("SELECT metric, quantity FROM sys_external_job_usage WHERE job_id = ? AND attempt_no = 1"
+            + " ORDER BY metric", String.valueOf(externalJobId)).stream()
+            .map(row -> row.get("metric") + "=" + row.get("quantity")).toList())
+            .containsExactly(AiQuestionsJob.INPUT_TOKENS + "=700", AiQuestionsJob.OUTPUT_TOKENS + "=300");
+        deliverEvents();
+        assertThat(job(aiJobId)).containsEntry("status", QbAi.QUEUED);
+
+        // Attempt 2 answers (the stub's own: 1,200 in and 800 out).
+        runUntilDone(aiJobId);
+        assertThat(platformAttempts(externalJobId)).containsExactly("1:LEASE_EXPIRED", "2:SUCCEEDED");
+        Map<String, Object> job = job(aiJobId);
+        assertThat(job).containsEntry("status", QbAi.READY);
+        assertThat(number(job.get("input_tokens"))).isEqualTo(700 + 1200);
+        assertThat(number(job.get("output_tokens"))).isEqualTo(300 + 800);
+        assertThat((java.math.BigDecimal) job.get("cost_usd")).isEqualByComparingTo(AiCost.of(
+            (String) job.get("model"), (String) job.get("served_model"), new ClaudeApi.Usage(1900, 1100), null));
+        assertThat(tokens(usage(sponsor))).isEqualTo(3000);
     }
 
     private static Map<String, Object> reviewed(int candidateNo) {

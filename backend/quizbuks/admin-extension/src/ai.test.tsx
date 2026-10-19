@@ -5,8 +5,8 @@ import i18next from 'i18next'
 import { initReactI18next } from 'react-i18next'
 import { MemoryRouter } from 'react-router'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import { axe } from 'vitest-axe'
 import { AppearanceProvider, EXTENSION_NAMESPACE } from '@jabiz/admin'
+import { expectAccessible } from '@jabiz/admin/testing'
 import AiPage from './AiPage'
 import { failureRate } from './ai-api'
 import { TEMPLATE } from './ids'
@@ -85,18 +85,6 @@ function renderPage() {
   )
 }
 
-async function noAxeViolations() {
-  for (const dark of [false, true]) {
-    document.documentElement.classList.toggle('dark', dark)
-    const results = await axe(document.body, {
-      runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'] },
-      rules: { 'color-contrast': { enabled: false } },
-    })
-    expect(results.violations.map((v) => v.id), dark ? 'dark' : 'light').toEqual([])
-  }
-  document.documentElement.classList.remove('dark')
-}
-
 describe('AiPage', () => {
   it('shows the switch, the parameters, the usage with failures and the requests', async () => {
     renderPage()
@@ -118,7 +106,7 @@ describe('AiPage', () => {
     expect(within(jobs).getAllByTestId('ai-job-row')[1]).toHaveTextContent('claude-opus-5')
     // Q8b: the kind of each request; a row without one is of questions.
     expect(within(jobs).getAllByTestId('ai-job-kind').map((cell) => cell.textContent)).toEqual(['Questions', 'Covers'])
-    await noAxeViolations()
+    await expectAccessible()
   })
 
   it('proposes switching AI off with a reason, for another administrator to publish', async () => {
