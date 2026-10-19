@@ -1872,11 +1872,14 @@ P-8 原写"`false` 即逐条执行（16p-1 的局部合并同样受它控制）"
   （`ParamService.get(键, clock.instant())`，以 `RequestContext.system` 为上下文，不在事务中）；值不是 `Boolean.TRUE` 即暂停——缺失（`PARAM_NOT_FOUND`）、`false`、其他类型的值，
   以及**读不出来**（数据库故障等，记 WARN；缺省拒绝，下一次轮询再读）。暂停的类型照常进入自己的领取事务，名额为 0：只补记过期租约与给出已取消、次数用尽的结局，
   与实例已满时相同，不插入领取，因此不用掉尝试、不改变退避。领取 SQL、锁的顺序与事务都不变；读参数不持有类型的 advisory 锁或任何连接上的事务。
-- 日志：每个执行器实例在类型由开放变为暂停、暂停原因改变（如缺失 → `false`）时记 INFO `External job type … is paused: parameter … is false; its jobs wait`，
-  恢复时记 `… resumes: parameter … is true`；不在每次轮询记。量规 `jabiz.external.job.held`（`PlatformObservations.EXTERNAL_JOB_HELD`，标签只有 `job_type`）暂停时为 1。
+- 日志：每个执行器实例只在变化时记（暂停、恢复、暂停原因改变如缺失 → `false`），不在每次轮询记：`false` 或非布尔是有意的暂停，记 INFO
+  `External job type … is paused: parameter … is false; its jobs wait`；缺失或读不出来是意外，记 WARN（数据库持续故障也只记一次，独立评审 L1、L2）；
+  恢复记 INFO `… resumes: parameter … is true`。量规 `jabiz.external.job.held`（`PlatformObservations.EXTERNAL_JOB_HELD`，标签只有 `job_type`）暂停时为 1。
+  暂停在每个实例约一个轮询间隔内生效，读过参数之后正在进行的那次领取仍可能照常（L3）。
 - `completeWithoutHandler` 先经同一 `ExternalJobGate` 判断，暂停时以 `ExternalJobTypeHeldException`（`jobType()`、`reason()`）结束而不领取；`ScenarioRunner` 把它报告为该步骤的失败
   `external job type … is paused: parameter … is false`。
-- `ExternalJobChecks` 新增六参构造器（`ControlledParamRegistry`），原五参与四参构造保留（从上下文找 `ControlledParams`）：键格式正确而不受控为警告。
+- `ExternalJobChecks` 新增六参构造器（`ControlledParamRegistry`），原五参与四参构造保留（从上下文找 `ControlledParams`）：键格式正确而不受控为警告
+  （警告写明取舍：受控的键暂停与恢复都要四眼）；上下文有 `ParamService` 与 `Clock` 时，启动时经同一 `ExternalJobGate` 读一次，键此刻没有生效的值或读不出来也是警告（L1）。
 - 示范应用不声明 `enabledBy`：受控参数要先存在（新建也须经受控变更，或经迁移写入），否则示范的作业、场景与 e2e 全部暂停；没有自然的用法，不为示范而加迁移。
   QuizBuks 在同步 PR 中为两个 AI 类型声明 `.enabledBy("qb.ai.enabled")`。
 - 线 1.2 内兼容：只新增；没有迁移，OpenAPI 不变，`StatementBudgetIT` 的预算不变（没有声明 `enabledBy` 的类型不读参数，领取路径的语句数不变）。

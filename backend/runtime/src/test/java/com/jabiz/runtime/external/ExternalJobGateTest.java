@@ -10,7 +10,14 @@ import com.jabiz.runtime.observability.PlatformObservations;
 import com.jabiz.runtime.param.ParamService;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.support.GenericApplicationContext;
 import reactor.core.publisher.Mono;
@@ -140,5 +147,67 @@ class ExternalJobGateTest {
         params.values.put("it.on", true);
         assertThat(gate.held(List.of(type("it.a", "it.on"))).block()).isEmpty();
         assertThat(gauge.value()).isZero();
+    }
+
+    private final ListAppender<ILoggingEvent> logs = new ListAppender<>();
+
+    @BeforeEach
+    void watchTheLog() {
+        logs.start();
+        Logger logger = (Logger) LoggerFactory.getLogger(ExternalJobGate.class);
+        logger.setLevel(Level.INFO);
+        logger.addAppender(logs);
+    }
+
+    @AfterEach
+    void stopWatching() {
+        ((Logger) LoggerFactory.getLogger(ExternalJobGate.class)).detachAppender(logs);
+    }
+
+    private List<String> logged() {
+        return logs.list.stream().map(event -> event.getLevel() + " " + event.getFormattedMessage()).toList();
+    }
+
+    /** A decision to pause is INFO; a missing or unreadable parameter is unexpected and WARN (review L1). */
+    @Test
+    void anUnexpectedHoldIsAWarningAndADecisionIsInformation() {
+        List<ExternalJobType<?, ?>> types = List.of(type("it.a", "it.on"));
+        gate.held(types).block();
+        params.values.put("it.on", false);
+        gate.held(types).block();
+        params.values.put("it.on", true);
+        gate.held(types).block();
+        params.failure = new IllegalStateException("database down");
+        gate.held(types).block();
+        assertThat(logged()).containsExactly(
+            "WARN External job type it.a is paused: parameter it.on has no value in effect; its jobs wait",
+            "INFO External job type it.a is paused: parameter it.on is false; its jobs wait",
+            "INFO External job type it.a resumes: parameter it.on is true",
+            "WARN External job type it.a is paused: parameter it.on cannot be read (IllegalStateException); its jobs "
+                + "wait (java.lang.IllegalStateException: database down)");
+    }
+
+    /** However long the database stays down, its failure is logged once, not at every poll (review L2). */
+    @Test
+    void aReadErrorIsLoggedOnceNotAtEveryPoll() {
+        params.failure = new IllegalStateException("database down");
+        List<ExternalJobType<?, ?>> types = List.of(type("it.a", "it.on"), type("it.b", "it.on"));
+        for (int poll = 0; poll < 5; poll++) {
+            assertThat(gate.held(types).block()).containsOnlyKeys("it.a", "it.b");
+        }
+        assertThat(logged()).hasSize(2).allMatch(line -> line.startsWith("WARN "));
+        // Each poll still reads the key once for both types.
+        assertThat(params.reads).hasSize(5);
+    }
+
+    @Test
+    void lookingLogsNothing() {
+        params.values.put("it.on", false);
+        assertThat(gate.look(List.of(type("it.a", "it.on"), type("it.plain", null))).block())
+            .containsOnlyKeys("it.a").satisfies(looks -> {
+                assertThat(looks.get("it.a").held()).isTrue();
+                assertThat(looks.get("it.a").unexpected()).isFalse();
+            });
+        assertThat(logged()).isEmpty();
     }
 }

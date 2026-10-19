@@ -11,14 +11,19 @@ import com.jabiz.runtime.check.CheckProblem;
 import com.jabiz.runtime.check.PlatformCheck;
 import com.jabiz.runtime.file.FilePolicyRegistry;
 import com.jabiz.runtime.param.ControlledParamRegistry;
+import com.jabiz.runtime.param.ParamService;
 import com.jabiz.runtime.process.ProcessRegistry;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Component;
 
+import java.time.Clock;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -36,6 +41,9 @@ import java.util.Set;
  */
 @Component
 public class ExternalJobChecks implements PlatformCheck {
+
+    /** How long the startup check waits for the parameters of held types. */
+    private static final Duration PARAMETER_READ_TIMEOUT = Duration.ofSeconds(30);
 
     private final ExternalJobRegistry jobs;
     private final ExternalServiceRegistry services;
@@ -108,7 +116,36 @@ public class ExternalJobChecks implements PlatformCheck {
                 && !controlled.controls(type.enabledBy())) {
                 problems.add(CheckProblem.warning(ExternalChecks.CATEGORY, at, "enabledBy: parameter "
                     + type.enabledBy() + " is not declared in any ControlledParams bean; one person holding "
-                    + "platform.param.write can pause or resume the type alone"));
+                    + "platform.param.write can pause or resume the type alone (declared, both pausing and "
+                    + "resuming take four eyes)"));
+            }
+        }
+        problems.addAll(unsetParameters());
+        return problems;
+    }
+
+    /**
+     * A warning for each held type whose parameter has no value in effect now, or cannot be read (decision D52 item 4):
+     * its jobs would wait from the first poll on, typically because the parameter was not created before the
+     * deployment that declared it. A {@code false} is a decision and not reported. Needs the parameters (and so the
+     * database); skipped where the context has none.
+     */
+    private List<CheckProblem> unsetParameters() {
+        List<ExternalJobType<?, ?>> gated = jobs.declared().stream()
+            .filter(type -> type.enabledBy() != null && ControlledParams.validKey(type.enabledBy())).toList();
+        ObjectProvider<ParamService> params = beans.getBeanProvider(ParamService.class);
+        Clock clock = beans.getBeanProvider(Clock.class).getIfAvailable();
+        if (gated.isEmpty() || params.getIfAvailable() == null || clock == null) {
+            return List.of();
+        }
+        Map<String, ExternalJobGate.Look> looks = new ExternalJobGate(params, null, clock).look(gated)
+            .block(PARAMETER_READ_TIMEOUT);
+        List<CheckProblem> problems = new ArrayList<>();
+        for (ExternalJobType<?, ?> type : gated) {
+            ExternalJobGate.Look look = looks == null ? null : looks.get(type.name());
+            if (look != null && look.held() && look.unexpected()) {
+                problems.add(CheckProblem.warning(ExternalChecks.CATEGORY, "job " + type.name(), "enabledBy: "
+                    + look.reason() + " now; the type is paused and its jobs wait until it is true"));
             }
         }
         return problems;

@@ -16,7 +16,17 @@ import com.jabiz.external.ExternalJobType;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.runtime.event.OutboxDeliverer;
+import com.jabiz.external.ExternalServices;
+import com.jabiz.runtime.DatasetEntityManager;
+import com.jabiz.runtime.dataset.DatasetRegistry;
 import com.jabiz.runtime.external.ExternalJobExecutor;
+import com.jabiz.runtime.external.ExternalJobRecorder;
+import com.jabiz.runtime.external.ExternalJobRegistry;
+import com.jabiz.runtime.observability.PlatformObservations;
+import com.jabiz.runtime.param.ParamService;
+import io.micrometer.core.instrument.MeterRegistry;
+import reactor.core.publisher.Mono;
+import tools.jackson.databind.json.JsonMapper;
 import com.jabiz.runtime.external.ExternalJobTypeHeldException;
 import com.jabiz.runtime.param.ParamProcesses;
 import com.jabiz.runtime.process.ProcessExecutor;
@@ -37,11 +47,13 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Primary;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.reactive.server.WebTestClient;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -54,6 +66,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -97,8 +110,10 @@ class ExternalJobGateIT extends PostgresIntegrationTest {
     /** The types of the tests, each held by a parameter of its own (by the type's name), and one never held. */
     static final List<String> GATED = List.of("it.held.queued", "it.held.retry", "it.held.running", "it.held.resume",
         "it.held.missing", "it.held.text", "it.held.scheduled", "it.held.cancel", "it.held.other", "it.held.lease",
-        "it.held.simulated", "it.held.scenario");
+        "it.held.simulated", "it.held.scenario", "it.held.broken", "it.held.slot", "it.held.exhausted");
     static final String FREE = "it.free";
+    /** Whether reading it.held.broken's parameter fails. */
+    static final AtomicBoolean BROKEN = new AtomicBoolean();
 
     /** Records its run, waits at its gate if it has one; a "retry-" job fails its first attempt. */
     public static class Handler implements ExternalJobHandler<JobInput, JobResult> {
@@ -233,6 +248,36 @@ class ExternalJobGateIT extends PostgresIntegrationTest {
         }
 
         @Bean
+        ExternalJobType<JobInput, JobResult> heldBroken() {
+            return type("it.held.broken", true);
+        }
+
+        @Bean
+        ExternalJobType<JobInput, JobResult> heldSlot() {
+            return type("it.held.slot", true);
+        }
+
+        @Bean
+        ExternalJobType<JobInput, JobResult> heldExhausted() {
+            return type("it.held.exhausted", true);
+        }
+
+        /** The parameters as the platform reads them, except that {@link #BROKEN} cannot be read while it is set. */
+        @Bean
+        @Primary
+        ParamService failingParams(DatasetRegistry datasets, DatasetEntityManager entities) {
+            return new ParamService(datasets, entities) {
+                @Override
+                public Mono<Object> get(String key, Instant asOf) {
+                    if (BROKEN.get() && key.equals(param("it.held.broken"))) {
+                        return Mono.error(new IllegalStateException("the database is down for the test"));
+                    }
+                    return super.get(key, asOf);
+                }
+            };
+        }
+
+        @Bean
         ExternalJobType<JobInput, JobResult> freeType() {
             return type(FREE, false);
         }
@@ -324,6 +369,12 @@ class ExternalJobGateIT extends PostgresIntegrationTest {
     @AfterEach
     void tearDown() {
         GATES.values().forEach(CountDownLatch::countDown);
+        BROKEN.set(false);
+    }
+
+    /** One poll of the shared executor; tests look at their own jobs, not at how many it ran. */
+    private void poll() {
+        executor.runPending().block();
     }
 
     private static Logger gateLogger() {
@@ -338,7 +389,7 @@ class ExternalJobGateIT extends PostgresIntegrationTest {
         String label = unique("queued");
         String jobId = start(type, label, "it-req");
         for (int poll = 0; poll < 3; poll++) {
-            assertThat(executor.runPending().block()).isZero();
+            poll();
             clock.advance(Duration.ofMinutes(10));
         }
         assertThat(attempts(jobId)).isEmpty();
@@ -356,7 +407,7 @@ class ExternalJobGateIT extends PostgresIntegrationTest {
         String type = "it.held.retry";
         create(type, true);
         String jobId = start(type, "retry-" + unique("r"), "it-req");
-        assertThat(executor.runPending().block()).isEqualTo(1);
+        poll();
         assertThat(attempts(jobId)).containsExactly("1:FAILED");
         set(type, false);
         clock.advance(Duration.ofMinutes(5));
@@ -385,11 +436,11 @@ class ExternalJobGateIT extends PostgresIntegrationTest {
         String next = start(type, unique("next"), "it-req");
         set(type, false);
         // Held now: the next job is not claimed, while the running attempt goes on.
-        assertThat(executor.runPending().block()).isZero();
+        poll();
         GATES.get(label + ":1").countDown();
-        assertThat(running.get(30, TimeUnit.SECONDS)).isEqualTo(1);
+        running.get(30, TimeUnit.SECONDS);
         assertThat(outcome(jobId)).containsEntry("status", "SUCCEEDED").containsEntry("attempts", 1);
-        assertThat(executor.runPending().block()).isZero();
+        poll();
         assertThat(attempts(next)).isEmpty();
     }
 
@@ -398,9 +449,9 @@ class ExternalJobGateIT extends PostgresIntegrationTest {
         String type = "it.held.resume";
         create(type, false);
         String jobId = start(type, unique("resume"), "it-req");
-        assertThat(executor.runPending().block()).isZero();
+        poll();
         set(type, true);
-        assertThat(executor.runPending().block()).isEqualTo(1);
+        poll();
         assertThat(outcome(jobId)).containsEntry("status", "SUCCEEDED").containsEntry("attempts", 1);
         assertThat(messages()).filteredOn(message -> message.contains(type)).containsSubsequence(
             "External job type it.held.resume is paused: parameter " + param(type) + " is false; its jobs wait",
@@ -415,7 +466,7 @@ class ExternalJobGateIT extends PostgresIntegrationTest {
             Map.of("type", "text", "maxLength", 10), "true", null));
         String missingJob = start(missing, unique("missing"), "it-req");
         String textJob = start(text, unique("text"), "it-req");
-        assertThat(executor.runPending().block()).isZero();
+        poll();
         assertThat(attempts(missingJob)).isEmpty();
         assertThat(attempts(textJob)).isEmpty();
         assertThat(messages()).contains(
@@ -423,7 +474,7 @@ class ExternalJobGateIT extends PostgresIntegrationTest {
                 + " has no value in effect; its jobs wait",
             "External job type it.held.text is paused: parameter " + param(text) + " is not a boolean; its jobs wait");
         create(missing, true);
-        assertThat(executor.runPending().block()).isEqualTo(1);
+        poll();
         assertThat(outcome(missingJob)).containsEntry("status", "SUCCEEDED");
         assertThat(attempts(textJob)).isEmpty();
     }
@@ -435,18 +486,19 @@ class ExternalJobGateIT extends PostgresIntegrationTest {
         Instant at = clock.instant().plus(Duration.ofHours(1));
         run(ParamProcesses.SCHEDULE, new ParamProcesses.ScheduleInput(param(type), true, at));
         String jobId = start(type, unique("scheduled"), "it-req");
-        assertThat(executor.runPending().block()).isZero();
+        poll();
         clock.advance(Duration.ofMinutes(59));
-        assertThat(executor.runPending().block()).isZero();
+        poll();
+        assertThat(attempts(jobId)).isEmpty();
         clock.advance(Duration.ofMinutes(1));
-        assertThat(executor.runPending().block()).isEqualTo(1);
+        poll();
         assertThat(outcome(jobId)).containsEntry("status", "SUCCEEDED");
         // And the switch back off, scheduled as well.
         run(ParamProcesses.SCHEDULE, new ParamProcesses.ScheduleInput(param(type), false,
             clock.instant().plus(Duration.ofHours(1))));
         String later = start(type, unique("later"), "it-req-s");
         clock.advance(Duration.ofHours(1));
-        assertThat(executor.runPending().block()).isZero();
+        poll();
         assertThat(attempts(later)).isEmpty();
         // Not left for a test whose clock passes the hour this type was open.
         client.post().uri("/api/external-jobs/" + later + "/cancel")
@@ -458,7 +510,7 @@ class ExternalJobGateIT extends PostgresIntegrationTest {
         String type = "it.held.cancel";
         create(type, false);
         String jobId = start(type, unique("cancel"), "it-req-c");
-        assertThat(executor.runPending().block()).isZero();
+        poll();
         client.post().uri("/api/external-jobs/" + jobId + "/cancel")
             .header(HttpHeaders.AUTHORIZATION, bearer("it-req-c")).exchange().expectStatus().isOk();
         assertThat(outcome(jobId)).containsEntry("status", "CANCELLED").containsEntry("attempts", 0);
@@ -480,7 +532,7 @@ class ExternalJobGateIT extends PostgresIntegrationTest {
         create(type, false);
         String held = start(type, unique("held"), "it-req");
         String free = start(FREE, unique("free"), "it-req");
-        assertThat(executor.runPending().block()).isEqualTo(1);
+        poll();
         assertThat(outcome(free)).containsEntry("status", "SUCCEEDED");
         assertThat(attempts(held)).isEmpty();
     }
@@ -496,16 +548,24 @@ class ExternalJobGateIT extends PostgresIntegrationTest {
         insertAttempt(last, 1);
         insertAttempt(last, 2);
         insertClaim(last, 3, START.minusSeconds(1));
-        assertThat(executor.runPending().block()).isZero();
+        poll();
         assertThat(attempts(jobId)).containsExactly("1:LEASE_EXPIRED");
         assertThat(query("SELECT 1 FROM sys_external_job_outcome WHERE job_id = ?", jobId)).isEmpty();
         assertThat(query("SELECT attempt_no FROM sys_external_job_claim WHERE job_id = ?", jobId)).hasSize(1);
         assertThat(outcome(last)).containsEntry("status", "FAILED");
+        // The failure process hears of the last expiry, held or not.
+        deliverer.deliverPending().block();
+        deliverer.deliverPending().block();
+        assertThat(callbacks(last)).singleElement().satisfies(callback -> {
+            assertThat(callback.process()).isEqualTo("IT_HELD_FAILED");
+            assertThat(((ExternalJobFailure) callback.input()).errorCode()).isEqualTo("LEASE_EXPIRED");
+        });
         // Past the backoff of the expired attempt: only the parameter holds the job now.
         clock.advance(Duration.ofSeconds(11));
-        assertThat(executor.runPending().block()).isZero();
+        poll();
+        assertThat(attempts(jobId)).containsExactly("1:LEASE_EXPIRED");
         set(type, true);
-        assertThat(executor.runPending().block()).isEqualTo(1);
+        poll();
         assertThat(attempts(jobId)).containsExactly("1:LEASE_EXPIRED", "2:SUCCEEDED");
     }
 
@@ -553,6 +613,69 @@ class ExternalJobGateIT extends PostgresIntegrationTest {
         assertThat(RUNS).noneMatch(run -> run.startsWith("from-a-scenario:"));
     }
 
+    /** A parameter that cannot be read holds the type, with one WARN, and the type resumes once it can (L1, L2). */
+    @Test
+    void aParameterThatCannotBeReadHolds() {
+        String type = "it.held.broken";
+        create(type, true);
+        BROKEN.set(true);
+        String jobId = start(type, unique("broken"), "it-req");
+        for (int round = 0; round < 3; round++) {
+            poll();
+        }
+        assertThat(attempts(jobId)).isEmpty();
+        assertThat(LOGS.list).filteredOn(event -> event.getFormattedMessage().contains(param(type) + " cannot be read"))
+            .singleElement().satisfies(event -> {
+                assertThat(event.getLevel()).isEqualTo(Level.WARN);
+                assertThat(event.getFormattedMessage()).contains("parameter " + param(type)
+                    + " cannot be read (IllegalStateException)");
+            });
+        BROKEN.set(false);
+        poll();
+        assertThat(outcome(jobId)).containsEntry("status", "SUCCEEDED");
+    }
+
+    /**
+     * An instance with one slot: a held type takes none of it, whichever comes first in the turn, so an open type's
+     * job is claimed at the first poll.
+     */
+    @Test
+    void aHeldTypeTakesNoSlotFromAnOpenOne() {
+        String type = "it.held.slot";
+        create(type, false);
+        String held = start(type, unique("slot"), "it-req");
+        String free = start(FREE, unique("free-slot"), "it-req");
+        ExternalJobExecutor single = new ExternalJobExecutor(context.getBean(ExternalJobRegistry.class),
+            context.getBean(ExternalJobRecorder.class), context, context.getBean(ExternalServices.class),
+            context.getBean(JsonMapper.class), context.getBean(Clock.class),
+            context.getBean(PlatformObservations.class), context.getBeanProvider(MeterRegistry.class),
+            executor.settings().withInstanceId("it-single").withMaxInFlight(1));
+        for (int round = 0; round < allTypes().size(); round++) {
+            single.runPending().block();
+            assertThat(outcome(free)).as("claimed at the first poll").containsEntry("status", "SUCCEEDED");
+            assertThat(attempts(held)).isEmpty();
+        }
+    }
+
+    /** A job whose attempts are used up gets its outcome while held: the settling is not a claim. */
+    @Test
+    void aJobWithItsAttemptsUsedUpIsSettledWhileHeld() {
+        String type = "it.held.exhausted";
+        create(type, false);
+        String jobId = start(type, unique("exhausted"), "it-req");
+        insertAttempt(jobId, 1);
+        insertAttempt(jobId, 2);
+        insertAttempt(jobId, 3);
+        poll();
+        assertThat(query("SELECT status, error_code FROM sys_external_job_outcome WHERE job_id = ?", jobId))
+            .singleElement().satisfies(row -> assertThat(row).containsEntry("status", "FAILED")
+                .containsEntry("error_code", "ATTEMPTS_EXHAUSTED"));
+        deliverer.deliverPending().block();
+        deliverer.deliverPending().block();
+        assertThat(callbacks(jobId)).singleElement().satisfies(callback ->
+            assertThat(callback.process()).isEqualTo("IT_HELD_FAILED"));
+    }
+
     // ---------------------------------------------------------------- helpers
 
     private void create(String type, boolean value) {
@@ -568,8 +691,7 @@ class ExternalJobGateIT extends PostgresIntegrationTest {
     }
 
     private List<String> messages() {
-        return LOGS.list.stream().filter(event -> event.getLevel() == Level.INFO)
-            .map(ILoggingEvent::getFormattedMessage).toList();
+        return LOGS.list.stream().map(ILoggingEvent::getFormattedMessage).toList();
     }
 
     private static void insertClaim(String jobId, int attempt, Instant leaseUntil) {
