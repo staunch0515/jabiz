@@ -254,12 +254,10 @@ quizbuks:
     max-open-transaction: PT5M
   # AI generation (docs/quizbuks/plans/Q8-ai.md, Q8a; operations.md section 7.8). The longest wait for Claude's whole
   # answer (at most two minutes, the platform's longest); an attempt without an answer is charged its estimate.
-  # halted = true makes every attempt on this instance fail without calling Claude, queued and retrying jobs included
-  # (an incident's stop that needs a restart; revoking the key at Anthropic is faster, switching qb.ai.enabled off
-  # stops new requests only).
+  # To stop AI in an incident, revoke the key at Anthropic, then switch qb.ai.enabled off (four eyes): that refuses new
+  # requests and, through the job types' enabledBy (platform D52 item 4), holds queued and retrying jobs everywhere.
   ai:
     request-timeout: ${QB_AI_REQUEST_TIMEOUT:PT2M}
-    halted: ${QB_AI_HALTED:false}
     max-concurrency: ${QB_AI_MAX_CONCURRENCY:4}
     # Q8b: PDF materials go to Claude as the files themselves: each at most max-bytes (at most 20 MiB). A request
     # reserves max-pages pages (at most 600) of its sponsor's monthly tokens until its job ends; no PDF is parsed here:

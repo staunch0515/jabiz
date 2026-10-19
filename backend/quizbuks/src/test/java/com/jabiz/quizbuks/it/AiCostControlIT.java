@@ -28,7 +28,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * What AI generation may cost, and how it is stopped (docs/quizbuks/plans/Q8-ai.md, Q8a, after the independent
  * review): attempts that got no answer are charged, the estimate covers every attempt, the global limit counts
- * everybody's running jobs, high effort asks for fewer questions, switching off and an operator's stop, and the
+ * everybody's running jobs, high effort asks for fewer questions, switching off (which holds the jobs not yet
+ * running, platform decision D52 item 4) and an operator's stop, and the
  * refusals and checks of the sponsor's own processes.
  */
 class AiCostControlIT extends AiItSupport {
@@ -171,7 +172,8 @@ class AiCostControlIT extends AiItSupport {
             // Off: no new request, whoever asks.
             assertThat(codes(refused(AiProcesses.REQUEST, token, requestInput(second.get(0),
                 List.of(second.get(1)), 1), 422))).containsExactly(AiCodes.UNAVAILABLE);
-            // The job already queued is the operator's to stop, at the platform (operations.md section 7.8).
+            // The job already queued is held (enabledBy, platform D52 item 4); cancelling it still works and, since no
+            // attempt ran, charges nothing (operations.md section 7.8).
             String operator = TestTokens.bearer(tokens, "ai-operator", "external-job.cancel");
             client.post().uri("/api/external-jobs/" + queued.get("externalJobId") + "/cancel")
                 .header("Authorization", operator).contentType(MediaType.APPLICATION_JSON).bodyValue(Map.of())
@@ -191,6 +193,81 @@ class AiCostControlIT extends AiItSupport {
         // The sponsor can ask again: the stopped job is finished.
         request(sponsorFull(sponsor), first.get(0), List.of(first.get(1)), 1);
         runJobs();
+    }
+
+    @Test
+    void switchingOffHoldsQueuedAndRetryingJobsUntilItIsOnAgain() {
+        String sponsor = newSponsor("ai-held-" + UUID.randomUUID());
+        String token = sponsorFull(sponsor);
+        List<String> questions = quizWithArticle(token, title(), "Material.");
+        List<String> covers = quizWithArticle(token, title(), "Material.");
+        // A question job whose first attempt met a busy provider: waiting for its retry.
+        CLAUDE.script(MESSAGES, StubHttpServer.Answer.json(529,
+            "{\"type\":\"error\",\"error\":{\"type\":\"overloaded_error\"}}"));
+        Map<String, Object> retrying = request(token, questions.get(0), List.of(questions.get(1)), 1);
+        runJobs();
+        assertThat(attempts(retrying)).isEqualTo(1);
+        // And a cover job, queued: both job types are held by the same switch.
+        Map<String, Object> queued = requestCovers(token, covers.get(0));
+        param(QbParams.AI_ENABLED, "false");
+        try {
+            int calls = CLAUDE.requests(MESSAGES).size() + CLAUDE.requests(COUNT_TOKENS).size();
+            for (int round = 0; round < 3; round++) {
+                advance(Duration.ofMinutes(3));
+                runJobs();
+            }
+            // Nothing is sent, no attempt is used, and neither job fails: they wait, as the sponsor sees them.
+            assertThat(CLAUDE.requests(MESSAGES).size() + CLAUDE.requests(COUNT_TOKENS).size()).isEqualTo(calls);
+            assertThat(attempts(retrying)).isEqualTo(1);
+            assertThat(attempts(queued)).isZero();
+            assertThat(countOf("SELECT count(*) AS n FROM sys_external_job_claim WHERE job_id = ?",
+                queued.get("externalJobId"))).isZero();
+            for (Map<String, Object> held : List.of(retrying, queued)) {
+                assertThat(job(held.get("aiJobId"))).containsEntry("status", QbAi.QUEUED)
+                    .containsEntry("finished_at", null);
+            }
+        } finally {
+            param(QbParams.AI_ENABLED, "true");
+        }
+        // On again: both are claimed at the next poll and complete, the retrying one with its second attempt.
+        runUntilDone(retrying.get("aiJobId"));
+        runUntilDone(queued.get("aiJobId"));
+        assertThat(job(retrying.get("aiJobId"))).containsEntry("status", QbAi.READY);
+        assertThat(job(queued.get("aiJobId"))).containsEntry("status", QbAi.READY);
+        assertThat(attempts(retrying)).isEqualTo(2);
+        assertThat(attempts(queued)).isEqualTo(1);
+        // Charged once, exactly what the attempts recorded: the wait added nothing.
+        long in = 0;
+        long out = 0;
+        for (Map<String, Object> done : List.of(retrying, queued)) {
+            long jobIn = recorded(done, AiQuestionsJob.INPUT_TOKENS);
+            long jobOut = recorded(done, AiQuestionsJob.OUTPUT_TOKENS);
+            assertThat(number(job(done.get("aiJobId")).get("input_tokens"))).isEqualTo(jobIn);
+            assertThat(number(job(done.get("aiJobId")).get("output_tokens"))).isEqualTo(jobOut);
+            in += jobIn;
+            out += jobOut;
+        }
+        assertThat(in + out).isPositive();
+        Map<String, Object> charged = usage(sponsor);
+        assertThat(number(charged.get("jobs"))).isEqualTo(2);
+        assertThat(number(charged.get("input_tokens"))).isEqualTo(in);
+        assertThat(number(charged.get("output_tokens"))).isEqualTo(out);
+    }
+
+    /** What the platform recorded for the request's job under the metric, over all its attempts. */
+    private static long recorded(Map<String, Object> requested, String metric) {
+        return number(query("SELECT coalesce(sum(quantity), 0) AS n FROM sys_external_job_usage WHERE job_id = ? "
+            + "AND metric = ?", requested.get("externalJobId"), metric).getFirst().get("n"));
+    }
+
+    private static long countOf(String sql, Object... args) {
+        return number(query(sql, args).getFirst().get("n"));
+    }
+
+    /** The platform's attempts of the request's job. */
+    private static long attempts(Map<String, Object> requested) {
+        return countOf("SELECT count(*) AS n FROM sys_external_job_attempt WHERE job_id = ?",
+            requested.get("externalJobId"));
     }
 
     @Test

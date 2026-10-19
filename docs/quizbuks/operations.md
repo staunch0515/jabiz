@@ -155,6 +155,9 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
    - 金额参数按业务确认：`qb.creator-fee-rate`、`qb.transfer.threshold`、`qb.transfer.review-above`、`qb.transfer.fee`、`qb.topup.min` / `max`；
    - `qb.transfer.enabled` **保持 false**，直到取得法务意见（§4）；
    - 法律文本的最长预告期 `qb.legal.max-announce-days`（缺省 180 天；未发布时同样按 180 天）。
+   - `qb.ai.enabled` 由 `QB_SETUP` 提出 `false`，**照样发布**（AI 在上线检查清单的条件满足后才开启）。发布之前参数不存在：启动检查 `EXTERNAL` 对 `job qb.ai.questions` 与 `job qb.ai.cover` 各报一条**警告**
+     `enabledBy: parameter qb.ai.enabled has no value in effect now; the type is paused …`，执行器第一次轮询时也记一条 WARN。这在新安装上是预期的（参数缺失与 `false` 一样：请求被拒、没有作业），
+     发布 `false` 之后不再出现；已发布之后仍出现即参数被删或读不出来，应调查（§5"AI 作业暂停"）。
 7. 在测试模式下做一次 Stripe 测试模式全流程（`stripe-test-mode.md`），并按 §2.4 做一次恢复演练。
 8. 每次部署新版本后：再执行一次 `QB_SETUP`，发布它的新提案（README 各阶段的"部署后"）。
 9. **条款、隐私政策与帮助**（Q7b）：`QB_SETUP` 为四种法律文本（答题人条款、商家条款、隐私政策、特定商取引法表记）各建一份**明确标注 `[TEST PLACEHOLDER]` 的草稿**，什么也不发布。
@@ -237,6 +240,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 | 事件消费 | `jabiz.outbox.delivery{result="FAILED"}` | > 0 持续 15 分钟 |
 | 分录导出被拒 | `jabiz.process{process="QB_JOURNAL_EXPORT", outcome="rejected"}` | 每月导出日 > 0（看错误码，§7.3） |
 | 外部调用 | `jabiz.external.call{service="stripe", outcome}` | `5xx`、`timeout`、`refused` 比率 > 5 % |
+| AI 作业暂停（§7.8） | 量规 `jabiz.external.job.held{job_type="qb.ai.questions"|"qb.ai.cover"}`（`qb.ai.enabled` 不是 `true` 时为 1） | 不是有意关闭时（变更记录中没有关闭）为 1 超过 5 分钟：参数被删或读不出来，作业都在等待 |
 | 任务 | `jabiz.job.run{result="FAILED"|"LOCKED"}` | 任一每日任务 `FAILED`；`LOCKED` 持续（另一实例卡住） |
 | 站内信与公告（Q7c） | `jabiz.job.item{job="qb.broadcast-dispatch"|"qb.broadcast-expire"|"qb.broadcast-stats"|"qb.payout-reminder", result}`；`jabiz.query.template{template="qb.app.inbox-unread"}` 的耗时（徽标，每个在线用户每 5 分钟一次；目标 < 5 ms，`docs/quizbuks/perf/Q7c-inbox.md`）；`jabiz.outbox.delivery{result="FAILED"}`（消费者 `qb.msg-*`） | 定时发送的项连续失败（公告迟迟不出）；消费者失败持续 15 分钟 |
 | 商家分析（Q9e，§7.7） | `jabiz.job.run{job="qb.analytics"}`；`jabiz.process{process="QB_ANALYTICS_ITEM"}` 的时间 | `PARTIAL` 连续 3 次（同一项一直失败）；30 分钟内没有成功的运行；运行时间持续超过 2 分钟（积压） |
@@ -333,12 +337,19 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
   只有文字的请求不计数、只按文字估计，并照常带回退：它的实际输入可能超过预留（回退时约为两倍）。某次尝试的实际用量超过请求为它预留的会记一条告警日志 `AI usage of one attempt above its reservation (job type …)`（只有作业种类，不含编号，D16）：偶尔出现可以接受，经常出现时调高预估或月上限。
   **价格**：`costUsd` 按每次调用计价。较大的两个模型不论提示多长都是同一价格；最小的模型在一次调用的输入超过 10 万 Token 时整个调用按较高的长提示价格计（`AiCost`），所以按每次尝试分别计入，不按作业平均。
 - **任务** `qb.ai-expire`（每日 18:43 UTC）：把过期未校对的候选从作业中移除（之后不能再加入；提供方的原始回答仍在平台只追加的 `sys_external_job` 结果中），逐项一个事务。
-- **提供方故障**：后台 `/qb/ai` 的"最近的请求"按失败原因看（`QB_AI_RATE_LIMITED`、`QB_AI_PROVIDER_UNAVAILABLE`、`QB_AI_AUTH`：密钥错或被删，`EXTERNAL_CALL_FAILED`：没有回答）；长时间故障时以受控变更关闭开关（商家页面显示"暂时不可用"，手动编辑不受影响）。不自动切换到其他提供方。
+- **提供方故障**：后台 `/qb/ai` 的"最近的请求"按失败原因看（`QB_AI_RATE_LIMITED`、`QB_AI_PROVIDER_UNAVAILABLE`、`QB_AI_AUTH`：密钥错或被删，`EXTERNAL_CALL_FAILED`：没有回答）；长时间故障时以受控变更关闭开关（商家页面显示"暂时不可用"，手动编辑不受影响；排队与重试中的作业随之暂停、不再用掉尝试次数，见下面第 2 步）。不自动切换到其他提供方。
 - **事故时的紧急停止**（花费异常、密钥泄露），按快慢：
   1. **最快：在 Anthropic Console 吊销（删除）密钥**。立即生效、不需要部署或第二个人；之后每次尝试得到 401，作业以 `QB_AI_AUTH` 立即失败、不再重试（排队与重试中的作业都一样），商家看到"暂时不可用"。恢复时新建密钥、改 `ANTHROPIC_API_KEY`、重启。
-  2. **关闭开关 `qb.ai.enabled`**：受控参数，**需要两位管理员**（一位在 `/qb/ai` 提出、另一位发布），所以不是一个人能立刻做到的；它只拦新请求，**不停已排队或正在重试的作业**（作业处理器不访问数据库，读不到开关；平台缺口见计划的实施记录）。
-  3. **停止已排队的作业**：持有 `external-job.cancel` 的管理员（平台的 `ADMIN` 角色）对作业调用 `POST /api/external-jobs/{作业号}/cancel`（作业号在 `/qb/ai` 的"最近的请求"与 `qb.admin.ai-jobs` 中）：没在运行的立即结束、正在运行的在本次尝试后结束、不再重试；作业结束后平台调用两种作业类型的取消结局 `QB_AI_JOB_CANCELLED`（平台 D52 第 2 条），它关闭本地作业（`QB_AI_STOPPED`）。
-  4. **停掉本实例的全部调用**：`QB_AI_HALTED=true` 并重启：每次尝试不调用提供方即以 `QB_AI_HALTED` 失败（排队与重试中的也一样）。需要重启，所以比 1 慢。
+  2. **以四眼关闭开关 `qb.ai.enabled`**：受控参数，**需要两位管理员**（一位在 `/qb/ai` 提出、另一位发布），所以不是一个人能立刻做到的。发布之后：新的请求一律 `QB_AI_UNAVAILABLE`；
+     两种作业类型声明了 `enabledBy("qb.ai.enabled")`（平台 16v-2，D52 第 4 条），**每个实例在约一个轮询间隔（`poll-interval`，缺省 1 秒）之内**不再领取 `qb.ai.questions` 与 `qb.ai.cover` 的作业：
+     排队的与等待重试的作业**原地等待**，不调用提供方、不用掉尝试次数、不失败；**正在运行的尝试照常进行到结束**（处理器看不到开关），其用量照常计入。参数读过之后才关闭时，那一次轮询仍可能多领取一轮。
+  3. **逐个取消作业**：持有 `external-job.cancel` 的管理员（平台的 `ADMIN` 角色）对作业调用 `POST /api/external-jobs/{作业号}/cancel`（作业号在 `/qb/ai` 的"最近的请求"与 `qb.admin.ai-jobs` 中）：没在运行的（包括第 2 步暂停中等待的）立即结束、正在运行的在本次尝试后结束、不再重试；作业结束后平台调用两种作业类型的取消结局 `QB_AI_JOB_CANCELLED`（平台 D52 第 2 条），它关闭本地作业（`QB_AI_STOPPED`），没有尝试运行过的不计费。
+  **没有 Console 权限、也找不到第二位管理员时**（只有基础设施的权限）：把 `ANTHROPIC_API_KEY` 改为占位值（如 `revoked-placeholder`）并重启全部实例。之后每次尝试得到 401，作业以 `QB_AI_AUTH` 立即失败、不再重试（排队与重试中的也一样，与第 1 步相同；正在运行的尝试照常结束），
+  新的请求仍会被接受并随即失败。能联系上 Console 的负责人或第二位管理员后，按第 1、2 步处理，再换回真实密钥并重启。
+  **不要**为此设 `JABIZ_EXTERNALJOBS_EXECUTOR_ENABLED=false`（`jabiz.external-jobs.executor.enabled`）：它停掉本实例的**全部**外部作业，包括 Stripe 的转账与核对（`qb.stripe.*`），资金流程随之停住。
+  **暂停期间的作业**（第 2 步之后）：仍是未结束的作业，所以**照常计入商家同时未结束的上限**（每商家 2 个、每模版每种类 1 个）与月 Token 的预留；商家在编辑器中看到它仍在排队（`QUEUED`，面板注明 AI 暂停、请求会等待、可以取消），可以自己取消（不计费）。
+  重新打开（同样四眼）后的下一次轮询即恢复，积压的作业按并发上限与退避逐步执行；长时间暂停后，不再需要的作业由商家或第 3 步取消。日志在每个实例上只在变化时记一条 `External job type qb.ai.… is paused: parameter qb.ai.enabled …`（INFO）与恢复时的一条；量规 `jabiz.external.job.held{job_type}` 暂停时为 1。
+  此前的本实例开关 `QB_AI_HALTED`（需要重启、让排队与重试中的作业以 `QB_AI_HALTED` 永久失败）已删去：第 2 步做到了它的事而不需要重启、也不让作业失败。
 - **拒答**：请求带服务端回退（`fallbacks: "default"`，Haiku 无），回退后仍拒答即 `QB_AI_REFUSED`；`/qb/ai` 的"实际回答"列显示回退所用的模型。
 - **取消怎样计费**（平台 16v-1 之后）：商家取消（`QB_AI_CANCEL`）与运维停止（上面第 3 条）都取消平台的作业：排队中的不再调用提供方；正在运行的尝试照常进行到结束，回答被丢弃。作业结束后 `QB_AI_JOB_CANCELLED` 只运行一次，按平台记下的**实际用量**（全部尝试，含被取消的那次：处理器在每次调用后记下的输入、输出、回退模型与长提示的部分，没有得到回答的调用按预估）计入作业与月用量，美元估算同失败的作业（`AiCost`，不知道回答的模型时回退部分按回退模型的价格）；**没有任何尝试运行过的作业不计费**（不计入用量行）。
   此前的做法：商家取消只改本地状态，平台的作业照常运行到完成（排队中的也会调用一次提供方），由完成或失败流程按实际用量计入；运维停止由 `QB_AI_JOB_STOPPED`（订阅 `jabiz.external-job.finished`）按**完整预估**计入。两者都已删去，同一作业只经取消结局计费一次。取消的作业计入用量行的作业数，但**不计为失败**（`failedJobs` 与后台 `/qb/ai` 的失败率只算失败的作业）。

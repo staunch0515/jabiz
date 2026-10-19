@@ -447,13 +447,15 @@ export function AiQuestionsPanel({ quiz, materials }: { quiz: Quiz; materials: M
   const queryClient = useQueryClient()
   const editing = useEditing()
   const [asking, setAsking] = useState(false)
-  const usage = useQuery({ queryKey: AI_USAGE_QUERY, queryFn: () => readAiUsage() })
   const job = useQuery({
     queryKey: aiJobQuery(quiz.quizId),
     queryFn: () => readLatestAiJob(quiz.quizId, AI_KINDS.questions),
     refetchInterval: (query) => (stillPolling(query.state.data ?? null) ? AI_LIMITS.pollMs : false),
   })
   const latest = job.data ?? null
+  // Looked at with the job (16v-2): whether AI is paused can change while the job waits.
+  const usage = useQuery({ queryKey: AI_USAGE_QUERY, queryFn: () => readAiUsage(),
+    refetchInterval: stillPolling(latest) ? AI_LIMITS.pollMs : false })
   const cancel = useMutation({
     mutationFn: () => cancelAiJob(latest!.aiJobId),
     onSettled: () => queryClient.invalidateQueries({ queryKey: AI_QUERY }),
@@ -492,7 +494,8 @@ export function AiQuestionsPanel({ quiz, materials }: { quiz: Quiz; materials: M
         {running && (
           <div role="status" className="flex flex-wrap items-center gap-3 text-sm" data-testid="ai-running">
             <Spinner />
-            <span>{stillPolling(latest) ? t('ai.running', { n: latest.count ?? 0 }) : t('ai.runningLong')}</span>
+            <span>{!enabled && usage.isSuccess ? t('ai.held')
+              : stillPolling(latest) ? t('ai.running', { n: latest.count ?? 0 }) : t('ai.runningLong')}</span>
             <Button size="sm" variant="outline" disabled={cancel.isPending} data-testid="ai-cancel"
               onClick={() => cancel.mutate()}>{t('ai.cancel')}</Button>
           </div>

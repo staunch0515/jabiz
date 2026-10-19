@@ -439,6 +439,30 @@
 - 验证（2026-10-19，本机 PostgreSQL 16，自己的库与端口）：`./gradlew :quizbuks:check :quizbuks:bootJar` 通过（811 个测试、0 失败，场景 10 个；`platformCheck` 0 错误）；
   商家后台 lint、typecheck、178 个 Vitest；App lint、typecheck、149 个 Vitest；两个 SPA `app:check` 通过；后台扩展 `ext:check`（82 个测试）；e2e 全部 59 个通过（应用 18480，Claude 桩 18494、Stripe 桩 18493、Mailpit 18425/18426）。
 
+### 平台 16v-2 之后（2026-10-19，分支 `1.2/quizbuks-sync-platform-16v2`）
+
+平台 16v-2（PR #187，决策 D52 第 4 条）给了 M3"平台后续"所要的第一项：作业类型按业务参数暂停（`ExternalJobType…enabledBy(参数键)`）。合并平台没有冲突（`1.2/quizbuks` 已含该合并）。改为：
+- `qb.ai.questions` 与 `qb.ai.cover` 声明 `.enabledBy(QbParams.AI_ENABLED)`。`qb.ai.enabled` 早已在 `QbParams.CONTROLLED`（`ControlledParams` Bean）中，所以启动检查没有"不受控"的警告。
+  开关不是布尔 `true`（`false`、缺失、读不出来）时，平台在每个实例约一个轮询间隔内不再领取两种类型的作业：排队与等待重试的作业等待、不用掉尝试、不失败；正在运行的尝试照常结束并计入用量。请求流程照旧以 `QB_AI_UNAVAILABLE` 拒绝新请求。
+- **参数怎样保证存在且为 `true`**：不需要迁移。作业只能由请求流程开始，而请求流程在 `qb.ai.enabled` 此刻不是 `true` 时拒绝（`AiSettings`，与 16v-2 之前相同），所以任何作业开始时该参数必定存在且为 `true`；已开启 AI 的安装升级后作业照常。
+  参数由 `QB_SETUP` 以受控变更提出 `false`，另一位管理员发布；开启只经四眼（`/qb/ai`）。各环境：IT 由 `AiItSupport.aiOn()` 经四眼打开（关闭的测试在 `finally` 中再打开）；e2e 由 `tests/ai.ts` 在 AI 测试之前经四眼打开；
+  dev、本机演示（`local-demo.sh`）与本机 compose 中 AI 本来就关闭（占位密钥，需要时由两位管理员在 `/qb/ai` 打开），不需要改；场景回放不使用 AI 作业（`completeExternalJob` 只用于 Stripe 的作业类型）。
+  新库上（`platformCheck`、新安装在发布 `QB_SETUP` 的提案之前）参数不存在，启动检查 `EXTERNAL` 对两种类型各报一条警告、执行器第一次轮询记一条 WARN：这是如实的（参数缺失即暂停，而那时请求也被拒），发布 `false` 之后消失；写进 `operations.md` §3 第 6 步与部署 README，不为消除它加迁移（初始数据只经 `QB_SETUP`）。
+- 删去本实例的开关 `quizbuks.ai.halted`（`QB_AI_HALTED`）：配置、两个处理器中的检查、代码 `AiCodes.HALTED` 与三语文案、部署 README 的环境变量；处理器不再读任何配置。
+- **前后对比**：此前关闭 `qb.ai.enabled` 只拦新请求，已排队与重试中的作业照常调用提供方；要停住它们只能逐个取消，或设 `QB_AI_HALTED=true` 并重启（每次尝试即以 `QB_AI_HALTED` 永久失败）。
+  之后关闭开关（四眼）即在所有实例上暂停两种作业，不需要重启，作业也不失败：重新打开后从剩下的尝试继续；暂停期间仍计入商家同时未结束的上限与月 Token 的预留，可以由商家或运维取消（没有尝试运行过的不计费，16v-1）。
+- 商家后台：AI 关闭时排队的作业原来显示"正在生成"（5 分钟后"比平时更久"）。数据现成（`qb.sponsor.ai-usage` 的 `enabled`），所以两个面板在 `enabled` 为假时改为说明"AI 暂停，请求会等待、恢复后继续、仍计入未完成的请求、可以取消"（三语 `ai.held`）。
+  `enabled` 在限额参数缺失时也为假，那时作业其实照常运行，说明会偏保守；可以接受。
+- 测试：`AiCostControlIT.switchingOffHoldsQueuedAndRetryingJobsUntilItIsOnAgain`（代替 `AiPromptTest.aHaltedServerSendsNothingAndEndsTheJob`：第一次尝试遇到 529 而等待重试的题目作业与排队的封面作业，四眼关闭后推进时钟运行三轮，提供方没有收到调用、尝试次数不变、没有领取、本地仍是 QUEUED；四眼打开后两者完成，题目作业以第 2 次尝试）；
+  `switchingOffStopsNewRequestsAndAnOperatorStopsTheQueuedOnes` 照旧（暂停中取消、不计费）；`AiPromptTest.bothJobTypesAreHeldByTheAiSwitch`；`AiCoversTest` 去掉 halted；商家后台 `ai.test.tsx` 两条（题目与封面面板在 AI 暂停时的说明与可取消）。
+- 场景回放：合并平台后设置编号没有变化，10 个场景的快照不变。
+- 验证（2026-10-19，本机 PostgreSQL 16，自己的库与端口）：`./gradlew :quizbuks:check :quizbuks:bootJar` 通过（815 个测试、0 失败，场景 10 个；`platformCheck` 0 错误，新的警告只有上面两条 `EXTERNAL`）；
+  商家后台 lint、typecheck、180 个 Vitest，`spaCheck`（`check` 中）通过；后台扩展 `ext:check`（82 个测试）；e2e 全部 59 个通过（应用 18580，Claude 桩 18594、Stripe 桩 18593、Mailpit 18525/18526；应用日志中两种类型依次为参数缺失的 WARN、发布 `false` 后的暂停 INFO、AI 测试打开后的恢复 INFO）。
+
+- 评审之后（同一分支）：L1 `AiPromptTest` 的注释指向实际的 IT；L2 `operations.md` §7.8 加只有基础设施权限时的退路（`ANTHROPIC_API_KEY` 改为占位并重启，每次尝试 401 `QB_AI_AUTH`），并警告不要关掉外部作业执行器（会停住 Stripe 的作业）；
+  L3 两个面板随作业一起重读商家用量（作业仍在每 5 秒查询时），"AI 暂停"的说明不需切换焦点即可消失（`ai.test.tsx` 新增一条）；L4 封面面板的暂停测试加 axe，IT 断言最终计入的用量正好是各次尝试记下的合计、只计一次。
+  重新验证：`./gradlew :quizbuks:check` 通过（815 个测试、0 失败；`platformCheck` 0 错误）；商家后台 lint、typecheck、181 个 Vitest。
+
 ### 待确认（需求方）
 
 - **PDF 的预留与月上限**（偏离 3）：建议上线前以真实 PDF 测出每页实际 Token（`launch-checklist.md`），再选其一：A 提高 `qb.ai.sponsor.monthly-tokens`（例如 500 万）；B 降低 `QB_AI_PDF_MAX_PAGES`（例如 30 页，预留约 45 万）；C 两者都调。缺省值暂按计划（100 页、200 万）。

@@ -449,7 +449,7 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 - 条款与帮助（Q7b）：侧栏"帮助"、页脚的商家条款、隐私政策与特定商取引法表记；入驻页同意所示版本；已申请而须重新同意时整页显示同意提示。
 - 消息中心（Q7c，`/messages`）：平台给商家的公告（收件箱），与本人的通知：编写（发布、纯文本、立即或定时）、保存即见问题、发送、改回草稿、撤销，统计（不足 5 人不显示），被管理员撤回的显示理由。
 - AI 出题（Q8a，`sponsor/src/ai/`）：编辑器题目页上方的面板。对话框选资料（各自大小，非文章只发标题与描述，合计超过 60 KiB 即不能提交）、题数 1–20、难度、语言、是否避免重复，说明发送什么；第一次使用时显示 AI 说明并勾选同意；
-  进行中每 5 秒查询、至多 5 分钟、离开即停；候选是可编辑的卡片（纯文本，不渲染 Markdown），勾选"我已校对"的才能加入；丢弃、取消；失败与过期的说明。仪表盘的 AI 用量卡显示本月 Token、次数与剩余额度。
+  进行中每 5 秒查询、至多 5 分钟、离开即停；候选是可编辑的卡片（纯文本，不渲染 Markdown），勾选"我已校对"的才能加入；丢弃、取消；失败与过期的说明；AI 关闭时排队的作业注明它在等待、恢复后继续、可以取消（平台 16v-2）。仪表盘的 AI 用量卡显示本月 Token、次数与剩余额度。
 - AI 封面与 PDF 资料（Q8b，`sponsor/src/ai/AiCoverPanel.tsx`）：编辑器"模版"页基本信息下的面板：选封面文字的语言（第一次使用时同意 AI 说明）后生成 3 张候选图，以单选选一张"使用此封面"（经模版编辑写入，基本信息随即显示新封面），或全部丢弃；进行中每 5 秒查询、至多 5 分钟。生成题目的对话框中 PDF 资料注明"发送 PDF 文件本身"（不计入文字的大小）。
 
 ### 7.3 管理员后台（`/admin/`）
@@ -474,7 +474,7 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 | 系统 | 用途 | 接入方式 | 配置 |
 |---|---|---|---|
 | Stripe | 充值（Checkout）、用户收款账户（Connect Express，Q6b）、转账（Transfers，Q6b） | 出站：外部服务 `stripe`，只经平台的 JDK HTTP（D38：官方 SDK 自带的连接不受主机白名单约束，不用），应用自写 `StripeApi`（表单编码、错误分类、JSON 解析），**全部调用都是异步外部作业**（重试与幂等键由平台持久化），以 `Stripe-Version` 固定 API 版本；入站：平台入站 Webhook（D37）的提供方 `stripe`（账户端点；Q6b 另加 `stripe-connect`），验签、存档、去重后交给 `internal()` 的消费流程 | `STRIPE_API_KEY`、`STRIPE_WEBHOOK_SECRET`（环境变量）；`STRIPE_CONNECT_WEBHOOK_SECRET`（Q6b）；`quizbuks.stripe.*`（模式、API 版本、支付页有效期、结算币种、收款账户国家）、`quizbuks.links.app` |
-| Claude（Anthropic） | AI 生成题目（Q8a）与封面（Q8b） | 外部服务 `anthropic`，只经平台的 JDK HTTP（D38，不用 SDK），应用自写 `ClaudeApi`（Messages API：JSON Schema 结构化输出、adaptive thinking、显式 effort、服务端拒答回退 `fallbacks: "default"`、输入 ≤ 250 KiB（Q8a 为 60 KiB）拒绝不截断、PDF 资料以文档块发送原文件、错误分类）；**全部调用都是异步外部作业** `qb.ai.questions` 与 `qb.ai.cover`（3 次尝试；封面图由服务器绘制，经平台的文件输出登记，D50）；只发送商家自己的模版内容，`metadata.user_id` 为 HMAC 的不透明值；`dev`、测试与 e2e 用本地桩（`tools/quizbuks/claude-stub`） | `ANTHROPIC_API_KEY`（环境变量）；业务参数 `qb.ai.*`（开关、模型清单 `claude-opus-5-5` / `claude-sonnet-5-5` / `claude-haiku-5-5`、effort、限额：受控） |
+| Claude（Anthropic） | AI 生成题目（Q8a）与封面（Q8b） | 外部服务 `anthropic`，只经平台的 JDK HTTP（D38，不用 SDK），应用自写 `ClaudeApi`（Messages API：JSON Schema 结构化输出、adaptive thinking、显式 effort、服务端拒答回退 `fallbacks: "default"`、输入 ≤ 250 KiB（Q8a 为 60 KiB）拒绝不截断、PDF 资料以文档块发送原文件、错误分类）；**全部调用都是异步外部作业** `qb.ai.questions` 与 `qb.ai.cover`（3 次尝试；封面图由服务器绘制，经平台的文件输出登记，D50；两种类型都声明 `enabledBy("qb.ai.enabled")`（平台 16v-2，D52 第 4 条）：开关不是 `true` 时平台在每个实例上不再领取，排队与等待重试的作业等待、不用掉尝试，正在运行的尝试照常结束）；只发送商家自己的模版内容，`metadata.user_id` 为 HMAC 的不透明值；`dev`、测试与 e2e 用本地桩（`tools/quizbuks/claude-stub`） | `ANTHROPIC_API_KEY`（环境变量）；业务参数 `qb.ai.*`（开关、模型清单 `claude-opus-5-5` / `claude-sonnet-5-5` / `claude-haiku-5-5`、effort、限额：受控） |
 | ECB | 参考汇率 | 定时任务中的 `BlockingStep` | — |
 | 邮件 | 激活、欢迎、转账结果 | 平台事务邮件（G3） | `spring.mail.*` |
 
