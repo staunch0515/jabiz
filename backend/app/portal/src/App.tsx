@@ -3,6 +3,7 @@ import {
   AppearanceProvider,
   Button,
   MailLinkPage,
+  MailUnsubscribe,
   OfflineBanner,
   OidcCallback,
   PageState,
@@ -31,6 +32,12 @@ const HOME = '/orders'
 let pendingStep: SignInStep | undefined
 
 const MAIL_PAGES = new Set(['/auth/verify-email', '/auth/join', '/auth/password-reset'])
+
+/**
+ * The unsubscribe page of the portal's notifications (decision D52): `jabiz.mail.unsubscribe-paths.portal` is
+ * `mail/unsubscribe`, so the links of `commerce.order-shipped` lead here, not into the administration.
+ */
+export const UNSUBSCRIBE_PATH = '/mail/unsubscribe'
 
 /** Goes to `path` once rendered (a redirect). */
 function Redirect({ to }: { to: string }) {
@@ -102,7 +109,7 @@ function Routes() {
   const { ready, signedIn } = useAuth()
   // The blocks of mailed links and of the identity provider's return read the address themselves, once: the token
   // and the code are removed from it right away.
-  const { path } = useLocation()
+  const { path, search } = useLocation()
   const brand = t('brand')
   const frame = (content: ReactNode) => (
     <div className="flex min-h-full flex-col">
@@ -114,6 +121,7 @@ function Routes() {
     </div>
   )
 
+  if (path === UNSUBSCRIBE_PATH) return frame(<MailUnsubscribe brand={brand} search={search} />)
   if (MAIL_PAGES.has(path)) {
     return frame(<MailLinkPage {...navigation} page={path.slice('/auth/'.length)} brand={brand}
       signInPath="/login" passwordResetPath="/password-reset" />)

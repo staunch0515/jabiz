@@ -1,5 +1,5 @@
-import AxeBuilder from '@axe-core/playwright'
 import { expect, type APIRequestContext, type Page } from '@playwright/test'
+import { expectAccessible, useAppearance } from '@jabiz/ui/testing/playwright'
 import { ADMIN, adminToken, CARRIERS, dataRows, datasetPath, dialog, entityForm, insert, pageRendered, signIn, test, unique } from './support'
 
 const PRODUCTS = 'urn:jabiz:dataset:default:Product'
@@ -8,38 +8,11 @@ const WAREHOUSES = 'urn:jabiz:dataset:default:Warehouse'
 const SUPPLIERS = 'urn:jabiz:dataset:default:Supplier'
 const CERTIFICATIONS = 'urn:jabiz:dataset:default:SupplierCertification'
 
-/**
+/*
  * WCAG 2.2 level A and AA, checked automatically with axe on the admin frontend's pages (ROADMAP phase 14m;
- * docs/design/12-frontend.md section 11). Automatic checks find about a third of the failures an audit finds: they
- * do not replace one, they keep what they can see from coming back. Each page is checked once it has rendered.
+ * docs/design/12-frontend.md section 11), with the helpers @jabiz/ui exports for every SPA's end-to-end tests
+ * (`@jabiz/ui/testing/playwright`, ROADMAP 16v-1). Each page is checked once it has rendered.
  */
-const TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']
-
-/**
- * Waits until every animation that ends (menus and dialogs fading and sliding in) has ended: checked mid fade-in, a
- * half-transparent menu has blended colours whose contrast is not the one the user reads. Endless animations (a
- * spinner) are left alone.
- */
-async function animationsSettled(page: Page) {
-  await page.waitForFunction(() =>
-    document
-      .getAnimations()
-      .filter((a) => a.effect?.getComputedTiming().iterations !== Infinity)
-      .every((a) => a.playState === 'finished' || a.playState === 'idle'),
-  )
-}
-
-async function expectAccessible(page: Page, name: string) {
-  await animationsSettled(page)
-  const results = await new AxeBuilder({ page }).withTags(TAGS).analyze()
-  const found = results.violations.map((v) => ({
-    rule: v.id,
-    impact: v.impact,
-    help: v.help,
-    nodes: v.nodes.slice(0, 5).map((n) => `${n.target.join(' ')}: ${n.failureSummary?.split('\n').slice(1).join(' ') ?? ''}`),
-  }))
-  expect.soft(found, `${name}: WCAG A/AA violations`).toEqual([])
-}
 
 /**
  * The same pages in each appearance (decision D34 item 3). In the dark appearance the shell, menus, dialogs and every
@@ -316,7 +289,7 @@ async function rejectedImport(request: APIRequestContext, token: string): Promis
 test.describe('accessibility', () => {
   for (const appearance of ['light', 'dark'] as const) {
     test(`the sign-in pages, ${appearance}`, async ({ page }) => {
-      await page.addInitScript((value) => window.localStorage.setItem('jabiz.appearance', value), appearance)
+      await useAppearance(page, appearance)
       await page.goto('/login')
       await expect(page.getByPlaceholder('用户名')).toBeVisible()
       await expect(page.locator('html')).toHaveClass(appearance === 'dark' ? /dark/ : /^(?!.*dark)/)
@@ -335,7 +308,7 @@ test.describe('accessibility', () => {
   // The demo's customer portal (phase 16c-2): an application's own SPA built from the platform's blocks.
   for (const appearance of ['light', 'dark'] as const) {
     test(`the portal's sign-in, sign-up and mailed-link pages, ${appearance}`, async ({ page }) => {
-      await page.addInitScript((value) => window.localStorage.setItem('jabiz.appearance', value), appearance)
+      await useAppearance(page, appearance)
       await page.goto('/portal/login')
       await expect(page.getByPlaceholder('用户名')).toBeVisible()
       await expect(page.locator('html')).toHaveClass(appearance === 'dark' ? /dark/ : /^(?!.*dark)/)
@@ -349,6 +322,10 @@ test.describe('accessibility', () => {
       await page.goto('/portal/auth/verify-email?entry=portal&token=not-a-token')
       await expect(page.getByTestId('verify-state')).toBeVisible()
       await expectAccessible(page, `portal mailed link (${appearance})`)
+      // The portal's unsubscribe page (decision D52): a link that is no good says so.
+      await page.goto('/portal/mail/unsubscribe?token=not-a-token')
+      await expect(page.getByTestId('unsubscribe-state')).toHaveAttribute('data-state', 'invalid')
+      await expectAccessible(page, `portal unsubscribe (${appearance})`)
     })
   }
 
@@ -361,7 +338,7 @@ test.describe('accessibility', () => {
 
   test('the pages after signing in, in the dark appearance', async ({ page, request }) => {
     test.slow()
-    await page.addInitScript(() => window.localStorage.setItem('jabiz.appearance', 'dark'))
+    await useAppearance(page, 'dark')
     await checkPagesAfterSignIn(page, request, 'dark')
     await expect(page.locator('html')).toHaveClass(/dark/)
   })
