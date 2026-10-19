@@ -2,6 +2,7 @@ package com.jabiz.quizbuks.content.ai;
 
 import com.jabiz.external.ExternalJobType;
 import com.jabiz.quizbuks.content.QbContent;
+import com.jabiz.quizbuks.setup.QbParams;
 
 import java.time.Duration;
 import java.util.List;
@@ -60,7 +61,8 @@ public final class AiCoverJob {
     /**
      * The job type: as {@link AiQuestionsJob#type} (five minutes an attempt, three attempts, the concurrency shared by
      * configuration, {@value AiQuestionsJob#MAX_OPEN} unfinished per sponsor, one per quiz), producing at most
-     * {@value CoverDesigns#COVERS} files of at most {@value #MAX_FILE_BYTES} bytes each.
+     * {@value CoverDesigns#COVERS} files of at most {@value #MAX_FILE_BYTES} bytes each, and held while
+     * {@code qb.ai.enabled} is not {@code true} as that type is.
      */
     public static ExternalJobType<Input, Result> type(int maxConcurrency) {
         return ExternalJobType.define(TYPE, Input.class, Result.class, t -> t
@@ -69,7 +71,7 @@ public final class AiCoverJob {
             .maxConcurrency(maxConcurrency).maxOpenPerRequester(AiQuestionsJob.MAX_OPEN).oneOpenPerReference()
             .outputFiles(QbContent.IMAGE_POLICY, CoverDesigns.COVERS, MAX_FILE_BYTES)
             .onCompleted(AiProcesses.COMPLETED).onFailed(AiProcesses.FAILED)
-            .onCancelled(AiProcesses.CANCELLED_JOB));
+            .onCancelled(AiProcesses.CANCELLED_JOB).enabledBy(QbParams.AI_ENABLED));
     }
 
     private AiCoverJob() {}

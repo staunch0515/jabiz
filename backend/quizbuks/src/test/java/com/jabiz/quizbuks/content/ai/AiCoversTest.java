@@ -119,19 +119,17 @@ class AiCoversTest {
         CoverDesigner designer = (input, ctx) -> new CoverDesigner.Designed("claude-opus-5-5", false, List.of(
             design("ocean", "center", "circles", "One"), design("neon", "center", "plain", "Bad"),
             design("forest", "left", "waves", "Two")));
-        AiCoverHandler handler = new AiCoverHandler(designer, RENDERER, false);
+        AiCoverHandler handler = new AiCoverHandler(designer, RENDERER);
         ExternalJobResult<AiCoverJob.Result> result = handler.run(input("Rivers"), context());
         assertThat(result.value().designs()).extracting(CoverDesigns.Design::text).containsExactly("One", "Two");
         assertThat(result.value().invalid()).isEqualTo(1);
         assertThat(result.files()).extracting(file -> file.key()).containsExactly("cover-1", "cover-2");
 
-        // Halted, or a title no font draws: nothing asked.
+        // A title no font draws: nothing asked.
         CoverDesigner never = (input, ctx) -> {
             throw new AssertionError("asked");
         };
-        assertThatThrownBy(() -> new AiCoverHandler(never, RENDERER, true).run(input("Rivers"), context()))
-            .isInstanceOfSatisfying(ExternalJobException.class, e -> assertThat(e.code()).isEqualTo(AiCodes.HALTED));
-        assertThatThrownBy(() -> new AiCoverHandler(never, RENDERER, false).run(input("\u0378"), context()))
+        assertThatThrownBy(() -> new AiCoverHandler(never, RENDERER).run(input("\u0378"), context()))
             .isInstanceOfSatisfying(ExternalJobException.class,
                 e -> assertThat(e.code()).isEqualTo(AiCodes.COVER_FONT));
     }
@@ -145,7 +143,7 @@ class AiCoversTest {
         // A Latin title in a Japanese or Chinese request: the covers' words would be in that language.
         for (String language : List.of("ja", "zh")) {
             assertThat(latin.drawable(AiCoverHandler.SAMPLES.get(language))).isFalse();
-            assertThatThrownBy(() -> new AiCoverHandler(never, latin, false).run(input("Rivers", language),
+            assertThatThrownBy(() -> new AiCoverHandler(never, latin).run(input("Rivers", language),
                 context())).isInstanceOfSatisfying(ExternalJobException.class,
                     e -> assertThat(e.code()).isEqualTo(AiCodes.COVER_FONT));
         }
@@ -153,7 +151,7 @@ class AiCoversTest {
         assertThat(latin.drawable(AiCoverHandler.SAMPLES.get("en"))).isTrue();
         CoverDesigner designer = (input, ctx) -> new CoverDesigner.Designed("claude-opus-5-5", false,
             List.of(design("ocean", "center", "circles", "One")));
-        assertThat(new AiCoverHandler(designer, latin, false).run(input("Rivers", "en"), context()).files())
+        assertThat(new AiCoverHandler(designer, latin).run(input("Rivers", "en"), context()).files())
             .hasSize(1);
         // With the JVM's fonts as the last resort, the samples of every language are checked the same way.
         assertThat(AiCoverHandler.SAMPLES).containsOnlyKeys("en", "ja", "zh");

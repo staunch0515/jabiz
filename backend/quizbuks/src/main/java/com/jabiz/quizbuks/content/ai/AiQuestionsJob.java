@@ -3,6 +3,7 @@ package com.jabiz.quizbuks.content.ai;
 import com.jabiz.external.ExternalJobType;
 import com.jabiz.quizbuks.content.ContentLimits;
 import com.jabiz.quizbuks.content.QbContent;
+import com.jabiz.quizbuks.setup.QbParams;
 
 import java.time.Duration;
 import java.util.List;
@@ -128,6 +129,10 @@ public final class AiQuestionsJob {
      * per quiz (the reference). The input is at most {@value #MAX_JOB_INPUT_BYTES} bytes; the PDF materials chosen are
      * the job's files (at most one per material, each at most {@code maxPdfBytes}, of the policy
      * {@value QbContent#PDF_POLICY}: the platform checks that the sponsor may read each one, decision D50).
+     *
+     * <p>Held while {@code qb.ai.enabled} is not {@code true} (platform decision D52 item 4, phase 16v-2): the platform
+     * then claims none of its jobs on any instance; queued and retrying jobs wait without using an attempt, running
+     * attempts finish. The handler reads no database, so this is the only way the switch reaches jobs already started.
      */
     public static ExternalJobType<Input, Result> type(int maxConcurrency, long maxPdfBytes) {
         return ExternalJobType.define(TYPE, Input.class, Result.class, t -> t
@@ -137,7 +142,7 @@ public final class AiQuestionsJob {
             .maxInputSize(MAX_JOB_INPUT_BYTES)
             .inputFiles(ContentLimits.MAX_MATERIALS, maxPdfBytes, QbContent.PDF_POLICY)
             .onCompleted(AiProcesses.COMPLETED).onFailed(AiProcesses.FAILED)
-            .onCancelled(AiProcesses.CANCELLED_JOB));
+            .onCancelled(AiProcesses.CANCELLED_JOB).enabledBy(QbParams.AI_ENABLED));
     }
 
     private AiQuestionsJob() {}

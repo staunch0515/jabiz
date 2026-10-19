@@ -271,7 +271,8 @@ export function AiCoverPanel({ quiz, onApplied }: { quiz: Quiz; onApplied?: () =
         {running && (
           <div role="status" className="flex flex-wrap items-center gap-3 text-sm" data-testid="ai-cover-running">
             <Spinner />
-            <span>{stillPolling(latest) ? t('ai.cover.running') : t('ai.runningLong')}</span>
+            <span>{!enabled && usage.isSuccess ? t('ai.held')
+              : stillPolling(latest) ? t('ai.cover.running') : t('ai.runningLong')}</span>
             <Button size="sm" variant="outline" disabled={cancel.isPending} data-testid="ai-cover-cancel"
               onClick={() => cancel.mutate()}>{t('ai.cancel')}</Button>
           </div>

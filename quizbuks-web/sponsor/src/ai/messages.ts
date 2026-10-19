@@ -44,6 +44,7 @@ const en = {
     },
     running: 'The AI is writing {{n}} questions. This can take a few minutes; you can keep editing meanwhile.',
     runningLong: 'This is taking longer than usual. Look again later: the result is kept for you.',
+    held: 'AI is paused at the moment. This request waits and continues when AI is back; it still counts as one of your open requests. You can cancel it.',
     cancel: 'Cancel',
     cancelled: 'Cancelled. If the AI had already started, what it used is counted when it stops; otherwise nothing is charged.',
     review: {
@@ -151,6 +152,7 @@ const zh: typeof en = {
     },
     running: 'AI 正在生成 {{n}} 道题，可能需要几分钟；你可以继续编辑。',
     runningLong: '比平时用时更长。请稍后再来查看，结果会为你保留。',
+    held: 'AI 暂时停用。此请求会等待，恢复后继续；它仍计入你未完成的请求。你可以取消它。',
     cancel: '取消',
     cancelled: '已取消。若 AI 已经开始，它已用的量在停止时计入；否则不计费。',
     review: {
@@ -258,6 +260,7 @@ const ja: typeof en = {
     },
     running: 'AI が {{n}} 問を作成しています。数分かかることがあります。その間も編集を続けられます。',
     runningLong: 'いつもより時間がかかっています。後でもう一度ご確認ください。結果は保管されます。',
+    held: 'AI は現在一時停止しています。このリクエストは待機し、再開後に続行されます。未完了のリクエストとして数えられます。キャンセルもできます。',
     cancel: '取り消す',
     cancelled: '取り消しました。AI がすでに始めていた場合は、止まった時点までの使用量が計上されます。始めていなければ計上されません。',
     review: {

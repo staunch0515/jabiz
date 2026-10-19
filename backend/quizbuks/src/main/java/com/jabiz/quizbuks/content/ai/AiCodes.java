@@ -57,8 +57,6 @@ public final class AiCodes {
     public static final String TRUNCATED = "QB_AI_TRUNCATED";
     /** None of the candidates met the content rules. */
     public static final String NO_CANDIDATES = "QB_AI_NO_CANDIDATES";
-    /** The server's configuration halts AI generation ({@code quizbuks.ai.halted}): nothing was sent. */
-    public static final String HALTED = "QB_AI_HALTED";
     /**
      * An operator stopped the job at the platform ({@code EXTERNAL_JOB_CANCEL}); it was charged what its attempts used
      * ({@code QB_AI_JOB_CANCELLED}, platform decision D52 item 2).
@@ -74,7 +72,7 @@ public final class AiCodes {
     public static final List<String> ALL = List.of(UNAVAILABLE, NOTICE_MISSING, NOTICE_REQUIRED, INPUT_TOO_LARGE, NO_SOURCE,
         MATERIAL_NOT_IN_QUIZ, QUIZ_BUSY, TOO_MANY_OPEN, DAILY_LIMIT, MONTHLY_LIMIT, GLOBAL_LIMIT, JOB_NOT_READY,
         JOB_EXPIRED, CANDIDATE_UNKNOWN, NOT_REVIEWED, TEXT_TOO_LONG, RATE_LIMITED, PROVIDER_UNAVAILABLE, AUTH,
-        REQUEST_INVALID, BAD_RESPONSE, REFUSED, TRUNCATED, NO_CANDIDATES, COUNT_TOO_HIGH, HALTED, STOPPED,
+        REQUEST_INVALID, BAD_RESPONSE, REFUSED, TRUNCATED, NO_CANDIDATES, COUNT_TOO_HIGH, STOPPED,
         PDF_TOO_LARGE, WRONG_KIND, PDF_TOO_LONG, PDF_UNREADABLE, COVER_FONT);
 
     private AiCodes() {}

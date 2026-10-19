@@ -4,7 +4,6 @@ import com.jabiz.external.ExternalJobContext;
 import com.jabiz.external.ExternalJobException;
 import com.jabiz.external.ExternalJobHandler;
 import com.jabiz.external.ExternalJobResult;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 /**
@@ -13,10 +12,10 @@ import org.springframework.stereotype.Component;
  * ({@link CoverRenderer}) and returns the pictures as the job's files {@code cover-1..n}, which the platform stores as the
  * sponsor's uploads. None kept: the result has no designs, and the completion records that none met the rules.
  *
- * <p>Before anything is sent: halted servers fail at once ({@link AiCodes#HALTED}, as {@link AiQuestionsHandler}), and
- * a server whose fonts cannot draw the requested language's script (or the quiz's title) fails with
- * {@link AiCodes#COVER_FONT}, nothing charged: a server without Chinese and Japanese fonts would otherwise pay for
- * designs it cannot draw. It reads no database.
+ * <p>Before anything is sent, a server whose fonts cannot draw the requested language's script (or the quiz's title)
+ * fails with {@link AiCodes#COVER_FONT}, nothing charged: a server without Chinese and Japanese fonts would otherwise pay
+ * for designs it cannot draw. It reads no database: {@code qb.ai.enabled} holds its jobs before they are claimed
+ * ({@link AiCoverJob#type}).
  */
 @Component
 public class AiCoverHandler implements ExternalJobHandler<AiCoverJob.Input, AiCoverJob.Result> {
@@ -29,20 +28,14 @@ public class AiCoverHandler implements ExternalJobHandler<AiCoverJob.Input, AiCo
 
     private final CoverDesigner designer;
     private final CoverRenderer renderer;
-    private final boolean halted;
 
-    AiCoverHandler(CoverDesigner designer, CoverRenderer renderer,
-        @Value("${quizbuks.ai.halted:false}") boolean halted) {
+    AiCoverHandler(CoverDesigner designer, CoverRenderer renderer) {
         this.designer = designer;
         this.renderer = renderer;
-        this.halted = halted;
     }
 
     @Override
     public ExternalJobResult<AiCoverJob.Result> run(AiCoverJob.Input input, ExternalJobContext ctx) {
-        if (halted) {
-            throw ExternalJobException.permanent(AiCodes.HALTED, "AI generation is halted on this server");
-        }
         // Before anything is paid for (review M1): the requested language's script, and the title, which the cover
         // text usually is or shortens.
         if (!renderer.drawable(SAMPLES.getOrDefault(input.language(), SAMPLES.get("en")))

@@ -4,6 +4,7 @@ import com.jabiz.external.ExternalCallException;
 import com.jabiz.external.ExternalHttp;
 import com.jabiz.external.ExternalJobContext;
 import com.jabiz.external.ExternalJobException;
+import com.jabiz.quizbuks.setup.QbParams;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -142,20 +143,17 @@ class AiPromptTest {
     @Test
     void theHandlerPassesTheWritersResult() {
         AiQuestionsJob.Result result = new AiQuestionsJob.Result("m", false, List.of(), 0);
-        assertThat(new AiQuestionsHandler((in, ctx) -> result, false).run(input("x"), context(200, "", Map.of()))
+        assertThat(new AiQuestionsHandler((in, ctx) -> result).run(input("x"), context(200, "", Map.of()))
             .value()).isSameAs(result);
     }
 
     @Test
-    void aHaltedServerSendsNothingAndEndsTheJob() {
-        QuestionWriter never = (in, ctx) -> {
-            throw new AssertionError("nothing is sent while halted");
-        };
-        assertThatThrownBy(() -> new AiQuestionsHandler(never, true).run(input("x"), context(200, "", Map.of())))
-            .isInstanceOfSatisfying(ExternalJobException.class, e -> {
-                assertThat(e.code()).isEqualTo(AiCodes.HALTED);
-                assertThat(e.isPermanent()).isTrue();
-            });
+    void bothJobTypesAreHeldByTheAiSwitch() {
+        // Platform decision D52 item 4: the handlers read no database, so qb.ai.enabled reaches started jobs only
+        // through the platform's gate (AiSwitchedOffJobsIT runs it).
+        assertThat(AiQuestionsJob.type(4, 1_000_000).enabledBy()).isEqualTo(QbParams.AI_ENABLED);
+        assertThat(AiCoverJob.type(4).enabledBy()).isEqualTo(QbParams.AI_ENABLED);
+        assertThat(QbParams.CONTROLLED).contains(QbParams.AI_ENABLED);
     }
 
     @Test

@@ -278,6 +278,14 @@ describe('the AI questions panel', () => {
     await expectAccessible()
   })
 
+  it('says that a queued job waits while AI is paused, and can still be cancelled', async () => {
+    server({ jobs: [[job('QUEUED', { requestedAt: new Date().toISOString() })]], usage: { ...USAGE, enabled: false } })
+    wrap(<AiQuestionsPanel quiz={QUIZ} materials={MATERIALS} />)
+    expect(await screen.findByTestId('ai-running')).toHaveTextContent('AI is paused')
+    expect(screen.getByTestId('ai-cancel')).toBeEnabled()
+    await expectAccessible()
+  })
+
   it('reads the stored candidates defensively', () => {
     expect(parseCandidates(CANDIDATES)).toHaveLength(2)
     expect(parseCandidates('not json')).toEqual([])
@@ -344,6 +352,14 @@ describe('the AI cover panel', () => {
       { aiJobId: 'c1', quizId: 'q1', candidateNo: 2, baseRevision: 7 }]))
     await waitFor(() => expect(edit.edited).toHaveBeenCalledWith(expect.objectContaining({ revision: 8 })))
     await waitFor(() => expect(applied).toHaveBeenCalled())
+  })
+
+  it('says that a queued cover job waits while AI is paused', async () => {
+    server({ coverJobs: [[coverJob('QUEUED', { requestedAt: new Date().toISOString() })]],
+      usage: { ...USAGE, enabled: false } })
+    wrap(<AiCoverPanel quiz={QUIZ} />)
+    expect(await screen.findByTestId('ai-cover-running')).toHaveTextContent('AI is paused')
+    expect(screen.getByTestId('ai-cover-cancel')).toBeEnabled()
   })
 
   it('says why a cover job failed or expired, and discards', async () => {

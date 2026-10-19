@@ -492,7 +492,8 @@ export function AiQuestionsPanel({ quiz, materials }: { quiz: Quiz; materials: M
         {running && (
           <div role="status" className="flex flex-wrap items-center gap-3 text-sm" data-testid="ai-running">
             <Spinner />
-            <span>{stillPolling(latest) ? t('ai.running', { n: latest.count ?? 0 }) : t('ai.runningLong')}</span>
+            <span>{!enabled && usage.isSuccess ? t('ai.held')
+              : stillPolling(latest) ? t('ai.running', { n: latest.count ?? 0 }) : t('ai.runningLong')}</span>
             <Button size="sm" variant="outline" disabled={cancel.isPending} data-testid="ai-cancel"
               onClick={() => cancel.mutate()}>{t('ai.cancel')}</Button>
           </div>
