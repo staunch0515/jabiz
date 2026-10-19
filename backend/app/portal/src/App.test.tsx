@@ -72,6 +72,7 @@ describe('the portal', () => {
     await waitFor(() => expect(screen.getByTestId('unsubscribe-state').dataset.state).toBe('done'))
     expect(posted).toEqual([{ token: 't1' }])
     expect(window.location.pathname).toBe('/mail/unsubscribe')
+    expect(window.location.search).not.toContain('token')
   })
 
   it('keeps its pages to itself: a signed-out visitor of a page goes to the sign-in', async () => {

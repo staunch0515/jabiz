@@ -1,5 +1,5 @@
 import { expect, type APIRequestContext, type Page } from '@playwright/test'
-import { expectAccessible, useAppearance } from '@jabiz/ui/testing/playwright'
+import { expectAccessible, setAppearance } from '@jabiz/ui/testing/playwright'
 import { ADMIN, adminToken, CARRIERS, dataRows, datasetPath, dialog, entityForm, insert, pageRendered, signIn, test, unique } from './support'
 
 const PRODUCTS = 'urn:jabiz:dataset:default:Product'
@@ -33,22 +33,22 @@ async function checkPagesAfterSignIn(page: Page, request: APIRequestContext, app
   await expect(page.getByTestId('dataset-Carrier')).toBeVisible()
   // Every page follows the appearance: nothing is pinned to the light tokens any more (phase 15d).
   await expect(page.locator('.light')).toHaveCount(0)
-  await expectAccessible(page, at('dataset catalog'))
+  await expectAccessible(page, at('dataset catalog'), { expect })
 
   await page.goto(datasetPath(CARRIERS))
   await expect(dataRows(page).first()).toBeVisible()
   await pageRendered(page)
-  await expectAccessible(page, at('dataset list'))
+  await expectAccessible(page, at('dataset list'), { expect })
 
   // The pop-ups of the list: the delete confirmation, the calendar of the point in time.
   await dataRows(page).first().getByTestId('row-delete').click()
   await expect(page.getByRole('alertdialog')).toBeVisible()
-  await expectAccessible(page, at('delete confirmation'))
+  await expectAccessible(page, at('delete confirmation'), { expect })
   await page.keyboard.press('Escape')
   await expect(page.getByRole('alertdialog')).toHaveCount(0)
   await page.getByRole('button', { name: '打开日历' }).first().click()
   await expect(page.getByRole('grid')).toBeVisible()
-  await expectAccessible(page, at('list date picker'))
+  await expectAccessible(page, at('list date picker'), { expect })
   await page.keyboard.press('Escape')
   await expect(page.getByRole('grid')).toHaveCount(0)
 
@@ -56,15 +56,15 @@ async function checkPagesAfterSignIn(page: Page, request: APIRequestContext, app
   await page.getByTestId('create').click()
   const form = entityForm(page)
   await expect(form.getByLabel('代码')).toBeVisible()
-  await expectAccessible(page, at('create form'))
+  await expectAccessible(page, at('create form'), { expect })
   await form.getByRole('combobox', { name: /国家/ }).click()
   await expect(page.getByRole('option').first()).toBeVisible()
-  await expectAccessible(page, at('create form choice'))
+  await expectAccessible(page, at('create form choice'), { expect })
   await page.keyboard.press('Escape')
   await expect(page.getByRole('option')).toHaveCount(0)
   await form.getByRole('button', { name: '打开日历' }).first().click()
   await expect(page.getByRole('grid')).toBeVisible()
-  await expectAccessible(page, at('create form date picker'))
+  await expectAccessible(page, at('create form date picker'), { expect })
   await page.keyboard.press('Escape')
   await expect(page.getByRole('grid')).toHaveCount(0)
   await expect(form).toBeVisible()
@@ -77,7 +77,7 @@ async function checkPagesAfterSignIn(page: Page, request: APIRequestContext, app
   await page.getByTestId('create').click()
   await entityForm(page).getByTestId('reference-select').click()
   await expect(page.getByRole('listbox').getByRole('option').first()).toBeVisible()
-  await expectAccessible(page, at('reference picker'))
+  await expectAccessible(page, at('reference picker'), { expect })
   await page.keyboard.press('Escape')
   await expect(page.getByRole('listbox')).toHaveCount(0)
   await page.keyboard.press('Escape')
@@ -85,22 +85,22 @@ async function checkPagesAfterSignIn(page: Page, request: APIRequestContext, app
 
   await page.goto(`${datasetPath(CARRIERS)}/${encodeURIComponent(carrier.id)}/history`)
   await expect(page.getByText('Alpha Access').first()).toBeVisible()
-  await expectAccessible(page, at('history'))
+  await expectAccessible(page, at('history'), { expect })
 
   // The pop-ups of the history page: the calendar of a date field, the operation's sheet, the revert dialog.
   await page.getByRole('button', { name: '打开日历' }).first().click()
   await expect(page.getByRole('grid')).toBeVisible()
-  await expectAccessible(page, at('history date picker'))
+  await expectAccessible(page, at('history date picker'), { expect })
   await page.keyboard.press('Escape')
   await expect(page.getByRole('grid')).toHaveCount(0)
   await page.getByTestId('version-1').getByRole('button', { name: /操作详情/ }).click()
   await expect(dialog(page, /操作详情/).getByTestId('operation-detail')).toBeVisible()
-  await expectAccessible(page, at('operation details'))
+  await expectAccessible(page, at('operation details'), { expect })
   await page.keyboard.press('Escape')
   await expect(dialog(page, /操作详情/)).toHaveCount(0)
   await page.getByTestId('version-1').getByTestId('revert').click()
   await expect(dialog(page, /撤销操作/)).toBeVisible()
-  await expectAccessible(page, at('revert dialog'))
+  await expectAccessible(page, at('revert dialog'), { expect })
   await page.keyboard.press('Escape')
   await expect(dialog(page, /撤销操作/)).toHaveCount(0)
 
@@ -138,7 +138,7 @@ async function checkPagesAfterSignIn(page: Page, request: APIRequestContext, app
       await expect(page.getByTestId('mail-preferences')
         .locator('[data-testid="mail-preferences-none"], [data-testid="mail-preference"]').first()).toBeVisible()
     }
-    await expectAccessible(page, at(name))
+    await expectAccessible(page, at(name), { expect })
   }
 
   // The issued document: its deliveries opened under the row, and the dialog that sends it.
@@ -146,10 +146,10 @@ async function checkPagesAfterSignIn(page: Page, request: APIRequestContext, app
   await expect(dataRows(page.getByTestId('documents'))).toHaveCount(1)
   await page.getByRole('button', { name: '展开行' }).first().click()
   await expect(page.locator('[data-testid^="document-deliveries-"]')).toBeVisible()
-  await expectAccessible(page, at('document deliveries'))
+  await expectAccessible(page, at('document deliveries'), { expect })
   await page.locator('[data-testid^="document-send-"]').first().click()
   await expect(dialog(page, '以邮件发送')).toBeVisible()
-  await expectAccessible(page, at('send document dialog'))
+  await expectAccessible(page, at('send document dialog'), { expect })
   await page.keyboard.press('Escape')
   await expect(dialog(page, '以邮件发送')).toHaveCount(0)
 
@@ -158,13 +158,13 @@ async function checkPagesAfterSignIn(page: Page, request: APIRequestContext, app
   await pageRendered(page)
   await page.getByTestId('access-review-issue').click()
   await expect(page.getByRole('alertdialog')).toBeVisible()
-  await expectAccessible(page, at('access report issue confirmation'))
+  await expectAccessible(page, at('access report issue confirmation'), { expect })
   await page.getByRole('alertdialog').getByRole('button', { name: '签发', exact: true }).click()
   await expect(page.getByRole('alertdialog')).toHaveCount(0)
   await expect(page.getByTestId('access-review-report')).toBeVisible()
   await page.getByTestId('access-review-sign').click()
   await expect(dialog(page, '签核审查')).toBeVisible()
-  await expectAccessible(page, at('access review sign-off dialog'))
+  await expectAccessible(page, at('access review sign-off dialog'), { expect })
   await page.keyboard.press('Escape')
   await expect(dialog(page, '签核审查')).toHaveCount(0)
 
@@ -172,7 +172,7 @@ async function checkPagesAfterSignIn(page: Page, request: APIRequestContext, app
   await page.goto('/integrity')
   await page.getByTestId('integrity-verify').click()
   await expect(dialog(page, /#\d+/)).toBeVisible()
-  await expectAccessible(page, at('verification details'))
+  await expectAccessible(page, at('verification details'), { expect })
   await page.keyboard.press('Escape')
   await expect(dialog(page, /#\d+/)).toHaveCount(0)
 
@@ -181,7 +181,7 @@ async function checkPagesAfterSignIn(page: Page, request: APIRequestContext, app
   await page.goto('/imports/runs?import=commerce.stock')
   await page.getByTestId(`run-open-${runId}`).click()
   await expect(page.getByTestId('import-run-detail')).toBeVisible()
-  await expectAccessible(page, at('import run details'))
+  await expectAccessible(page, at('import run details'), { expect })
   await page.keyboard.press('Escape')
   await expect(page.getByTestId('import-run-detail')).toHaveCount(0)
 
@@ -191,10 +191,10 @@ async function checkPagesAfterSignIn(page: Page, request: APIRequestContext, app
   await page.keyboard.type(ADMIN.userName)
   await page.getByRole('listbox').getByRole('option', { name: new RegExp(`^${ADMIN.userName}\\b`) }).first().click()
   await expect(dataRows(page).first()).toBeVisible()
-  await expectAccessible(page, at('sessions of a user'))
+  await expectAccessible(page, at('sessions of a user'), { expect })
   await page.getByTestId('admin-session-revoke-all').click()
   await expect(page.getByTestId('admin-session-reason')).toBeVisible()
-  await expectAccessible(page, at('end sessions dialog'))
+  await expectAccessible(page, at('end sessions dialog'), { expect })
   await page.keyboard.press('Escape')
   await expect(page.getByTestId('admin-session-reason')).toHaveCount(0)
 
@@ -204,27 +204,27 @@ async function checkPagesAfterSignIn(page: Page, request: APIRequestContext, app
   await pageRendered(page)
   await page.getByTestId('report-export').click()
   await expect(page.getByRole('menuitem').first()).toBeVisible()
-  await expectAccessible(page, at('report export menu'))
+  await expectAccessible(page, at('report export menu'), { expect })
   await page.keyboard.press('Escape')
   await expect(page.getByRole('menuitem')).toHaveCount(0)
   await page.getByTestId('report-issue').click()
   await expect(page.getByRole('alertdialog')).toBeVisible()
-  await expectAccessible(page, at('report issue confirmation'))
+  await expectAccessible(page, at('report issue confirmation'), { expect })
   await page.keyboard.press('Escape')
   await expect(page.getByRole('alertdialog')).toHaveCount(0)
 
   // The import wizard at its mapping step (a file uploaded, nothing imported), with a column's choices open.
   await page.goto('/imports/run?id=commerce.stock')
   await expect(page.getByTestId('import-upload')).toBeAttached()
-  await expectAccessible(page, at('import wizard'))
+  await expectAccessible(page, at('import wizard'), { expect })
   await page.getByTestId('import-upload').setInputFiles({
     name: 'a11y.csv', mimeType: 'text/csv', buffer: Buffer.from('Ref,Store,Item,Count\nA11Y-1,W,S,1\n'),
   })
   await expect(page.getByTestId('import-sample')).toBeVisible()
-  await expectAccessible(page, at('import mapping'))
+  await expectAccessible(page, at('import mapping'), { expect })
   await page.getByRole('combobox', { name: /的来源列/ }).first().click()
   await expect(page.getByRole('option').first()).toBeVisible()
-  await expectAccessible(page, at('import mapping choice'))
+  await expectAccessible(page, at('import mapping choice'), { expect })
   await page.keyboard.press('Escape')
   await expect(page.getByRole('option')).toHaveCount(0)
 
@@ -232,19 +232,19 @@ async function checkPagesAfterSignIn(page: Page, request: APIRequestContext, app
   await page.goto('/processes/APPROVAL_DECIDE/1')
   await page.locator('form').getByRole('combobox').first().click()
   await expect(page.getByRole('option').first()).toBeVisible()
-  await expectAccessible(page, at('process form choice'))
+  await expectAccessible(page, at('process form choice'), { expect })
   await page.keyboard.press('Escape')
   await expect(page.getByRole('option')).toHaveCount(0)
 
   // The shell's menus, which open in portals of their own.
   await page.getByTestId('current-user').click()
   await expect(page.getByRole('menuitem').first()).toBeVisible()
-  await expectAccessible(page, at('account menu'))
+  await expectAccessible(page, at('account menu'), { expect })
   await page.keyboard.press('Escape')
   await expect(page.getByRole('menuitem')).toHaveCount(0)
   await page.getByTestId('appearance-switch').click()
   await expect(page.getByRole('menuitemradio').first()).toBeVisible()
-  await expectAccessible(page, at('appearance menu'))
+  await expectAccessible(page, at('appearance menu'), { expect })
   await page.keyboard.press('Escape')
 }
 
@@ -289,43 +289,43 @@ async function rejectedImport(request: APIRequestContext, token: string): Promis
 test.describe('accessibility', () => {
   for (const appearance of ['light', 'dark'] as const) {
     test(`the sign-in pages, ${appearance}`, async ({ page }) => {
-      await useAppearance(page, appearance)
+      await setAppearance(page, appearance)
       await page.goto('/login')
       await expect(page.getByPlaceholder('用户名')).toBeVisible()
       await expect(page.locator('html')).toHaveClass(appearance === 'dark' ? /dark/ : /^(?!.*dark)/)
-      await expectAccessible(page, `sign-in (${appearance})`)
+      await expectAccessible(page, `sign-in (${appearance})`, { expect })
       // With the requirements shown after an empty submission.
       await page.getByRole('button', { name: '登录', exact: true }).click()
       await expect(page.getByText('请输入用户名。')).toBeVisible()
-      await expectAccessible(page, `sign-in with errors (${appearance})`)
+      await expectAccessible(page, `sign-in with errors (${appearance})`, { expect })
       // A refusal from an identity provider.
       await page.goto('/login/oidc?error=access_denied')
       await expect(page.getByTestId('oidc-error')).toBeVisible()
-      await expectAccessible(page, `identity provider refusal (${appearance})`)
+      await expectAccessible(page, `identity provider refusal (${appearance})`, { expect })
     })
   }
 
   // The demo's customer portal (phase 16c-2): an application's own SPA built from the platform's blocks.
   for (const appearance of ['light', 'dark'] as const) {
     test(`the portal's sign-in, sign-up and mailed-link pages, ${appearance}`, async ({ page }) => {
-      await useAppearance(page, appearance)
+      await setAppearance(page, appearance)
       await page.goto('/portal/login')
       await expect(page.getByPlaceholder('用户名')).toBeVisible()
       await expect(page.locator('html')).toHaveClass(appearance === 'dark' ? /dark/ : /^(?!.*dark)/)
-      await expectAccessible(page, `portal sign-in (${appearance})`)
+      await expectAccessible(page, `portal sign-in (${appearance})`, { expect })
       await page.goto('/portal/signup')
       await expect(page.getByTestId('sign-up')).toBeVisible()
-      await expectAccessible(page, `portal sign-up (${appearance})`)
+      await expectAccessible(page, `portal sign-up (${appearance})`, { expect })
       await page.goto('/portal/password-reset')
       await expect(page.getByTestId('password-reset')).toBeVisible()
-      await expectAccessible(page, `portal password reset (${appearance})`)
+      await expectAccessible(page, `portal password reset (${appearance})`, { expect })
       await page.goto('/portal/auth/verify-email?entry=portal&token=not-a-token')
       await expect(page.getByTestId('verify-state')).toBeVisible()
-      await expectAccessible(page, `portal mailed link (${appearance})`)
+      await expectAccessible(page, `portal mailed link (${appearance})`, { expect })
       // The portal's unsubscribe page (decision D52): a link that is no good says so.
       await page.goto('/portal/mail/unsubscribe?token=not-a-token')
       await expect(page.getByTestId('unsubscribe-state')).toHaveAttribute('data-state', 'invalid')
-      await expectAccessible(page, `portal unsubscribe (${appearance})`)
+      await expectAccessible(page, `portal unsubscribe (${appearance})`, { expect })
     })
   }
 
@@ -338,7 +338,7 @@ test.describe('accessibility', () => {
 
   test('the pages after signing in, in the dark appearance', async ({ page, request }) => {
     test.slow()
-    await useAppearance(page, 'dark')
+    await setAppearance(page, 'dark')
     await checkPagesAfterSignIn(page, request, 'dark')
     await expect(page.locator('html')).toHaveClass(/dark/)
   })

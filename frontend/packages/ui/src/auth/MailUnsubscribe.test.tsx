@@ -1,5 +1,6 @@
 import { i18n } from '@jabiz/client'
 import { act, render, screen, waitFor } from '@testing-library/react'
+import { StrictMode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { expectAccessible } from '@jabiz/ui/testing'
 import { MailUnsubscribe } from './index'
@@ -47,7 +48,10 @@ describe('MailUnsubscribe', () => {
     respond(204, true)
     render(<MailUnsubscribe search="?token=t" />)
     expect(state()).toBe('working')
-    expect(screen.getByRole('status')).toHaveTextContent('Turning these notifications off')
+    expect(screen.getByTestId('unsubscribe-state')).toHaveTextContent('Turning these notifications off')
+    // One live region whose content changes; no node with a role of its own is inserted.
+    expect(screen.getByTestId('unsubscribe-state')).toHaveAttribute('aria-live', 'polite')
+    expect(screen.queryByRole('alert')).toBeNull()
     await expectAccessible()
   })
 
@@ -55,7 +59,8 @@ describe('MailUnsubscribe', () => {
     respond(422)
     render(<MailUnsubscribe search="?token=forged" />)
     await waitFor(() => expect(state()).toBe('invalid'))
-    expect(screen.getByRole('alert')).toHaveTextContent('This unsubscribe link is invalid.')
+    expect(screen.getByTestId('unsubscribe-state')).toHaveTextContent('This unsubscribe link is invalid.')
+    expect(screen.queryByRole('alert')).toBeNull()
     await expectAccessible()
   })
 
@@ -71,17 +76,26 @@ describe('MailUnsubscribe', () => {
     await act(() => i18n.changeLanguage('ja'))
     render(<MailUnsubscribe search="?token=t" />)
     await waitFor(() => expect(state()).toBe('failed'))
-    expect(screen.getByRole('alert')).toHaveTextContent('問題が発生しました')
+    expect(screen.getByTestId('unsubscribe-state')).toHaveTextContent('問題が発生しました')
     await expectAccessible()
   })
 
-  it('reads the address bar when given no search', async () => {
+  it('reads the address bar when given no search, and takes the token out of it', async () => {
     const fetchMock = respond(204)
-    window.history.replaceState(null, '', '/portal/mail/unsubscribe?token=from-bar')
+    window.history.replaceState(null, '', '/portal/mail/unsubscribe?lang=en&token=from-bar#top')
     render(<MailUnsubscribe />)
+    expect(window.location.pathname + window.location.search + window.location.hash)
+      .toBe('/portal/mail/unsubscribe?lang=en#top')
     await waitFor(() => expect(state()).toBe('done'))
     const request = (fetchMock.mock.calls[0] as unknown[])[0] as Request
     expect(await request.json()).toEqual({ token: 'from-bar' })
     window.history.replaceState(null, '', '/')
+  })
+
+  it('posts once in StrictMode, which runs effects twice', async () => {
+    const fetchMock = respond(204)
+    render(<StrictMode><MailUnsubscribe search="?token=strict" /></StrictMode>)
+    await waitFor(() => expect(state()).toBe('done'))
+    expect(fetchMock).toHaveBeenCalledOnce()
   })
 })

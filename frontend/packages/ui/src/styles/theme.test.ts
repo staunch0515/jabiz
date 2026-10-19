@@ -100,11 +100,19 @@ const SURFACES = ['background', 'card', 'popover']
  * Placeholder text (muted) on a control whose dark background is the input token at `alpha` over each surface, at
  * rest and on hover: the controls whose ratios fall below 4.5:1.
  */
-function lowPlaceholderContrast(values: Record<string, string>, alphas: Record<string, number>) {
+function lowPlaceholderContrast(values: Record<string, string>, alphas: Record<string, number>,
+  text = 'muted-foreground') {
   return Object.entries(alphas).flatMap(([control, alpha]) => SURFACES.map((surface) => {
-    const ratio = contrast(values['muted-foreground'], blend(values.input, alpha, values[surface]))
-    return [`${control} on ${surface}`, Number(ratio.toFixed(2))] as const
+    // The raw ratio is compared: rounding could pass 4.495.
+    const ratio = contrast(values[text], blend(values.input, alpha, values[surface]))
+    return [`${control} on ${surface}`, ratio] as const
   })).filter(([, ratio]) => !(ratio >= 4.5))
+}
+
+/** Whether a component's source has a class. */
+function hasClass(file: string, name: string): boolean {
+  const source = readFileSync(resolve(import.meta.dirname, '../components', file), 'utf8')
+  return new RegExp(`(^|[\\s'"\`])${name.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}($|[\\s'"\`])`).test(source)
 }
 
 /** The alpha of the `dark:bg-input/NN` (or `dark:hover:bg-input/NN`) class in a component's source. */
@@ -127,6 +135,17 @@ describe('placeholders on dark controls (ROADMAP 16v-1)', () => {
       'tags input': inputAlpha('tags-input.tsx'),
     }
     expect(lowPlaceholderContrast(dark, alphas)).toEqual([])
+  })
+
+  it('keep 4.5:1 on the Combobox trigger, an outline button: transparent at rest, its hover text the accent text', () => {
+    // At rest the trigger drops the outline button's tint and shows the muted placeholder on the surface itself.
+    expect(hasClass('combobox.tsx', 'dark:bg-transparent')).toBe(true)
+    expect(hasClass('combobox.tsx', 'text-muted-foreground')).toBe(true)
+    expect(lowPlaceholderContrast(dark, { 'combobox trigger': 0 })).toEqual([])
+    // On hover the outline button's tint returns, and its text is the accent text, placeholder or not.
+    expect(hasClass('ui/button.tsx', 'hover:text-accent-foreground')).toBe(true)
+    expect(lowPlaceholderContrast(dark, { 'combobox trigger (hover)': inputAlpha('ui/button.tsx', true) },
+      'accent-foreground')).toEqual([])
   })
 
   it('use the lighter control backgrounds', () => {

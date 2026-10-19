@@ -30,8 +30,6 @@ export default defineConfig([
   {
     files: ['e2e/**/*.ts'],
     rules: {
-      // Not React: useAppearance of @jabiz/ui/testing/playwright sets up a page, it is no hook.
-      'react-hooks/rules-of-hooks': 'off',
       'no-restricted-syntax': [
         'error',
         { selector: 'Literal[value=/\\.ant-/]', message: ANT_CLASS },

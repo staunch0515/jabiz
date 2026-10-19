@@ -151,9 +151,8 @@ public class MailTemplates {
     /** Whether {@code path} is a path relative to an entry's {@code app-path}, a leading slash allowed. */
     static boolean validRelativePath(String path) {
         String relative = relative(path);
-        return !relative.isEmpty() && RELATIVE_PATH.matcher(relative).matches()
-            && java.util.Arrays.stream(relative.split("/")).noneMatch(segment -> segment.equals(".")
-                || segment.equals(".."));
+        // Every segment starts with a character other than a dot: no "." or "..", no scheme, host or empty segment.
+        return !relative.isEmpty() && RELATIVE_PATH.matcher(relative).matches();
     }
 
     /** The path without its one leading slash, if any: it continues the entry's root, which ends in one. */
