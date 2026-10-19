@@ -9,8 +9,11 @@ import com.jabiz.runtime.process.StepHandler;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 
+import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.Function;
 
 /**
@@ -18,7 +21,9 @@ import java.util.function.Function;
  * generation", CancelExternalJob.of("qb.ai.questions", ctx -> ctx.get("jobId", String.class)).ifOpen())}.
  *
  * <p>Who may run it is the process's own permission, declared as every process's is; which jobs it may cancel is
- * narrowed by the step, deny by default: jobs of the type it declares, <b>started by the process's actor</b>. A job of
+ * narrowed by the step, deny by default: jobs of the type it declares, <b>started by the process's actor</b>. A step
+ * may declare several types ({@link #of(List, Function)}: an application whose one "stop" action ends jobs of a few
+ * types), each of which must be declared; a job of any other type is still refused. A job of
  * another type, a job someone else started and a job that does not exist are the same 404, so that a process cannot
  * be used to probe or cancel other people's jobs. A process that acts for a known owner names them
  * ({@link Spec#requestedBy}); an operator's or the system's process that may cancel anyone's job of the type says so
@@ -35,21 +40,35 @@ public class CancelExternalJob<C extends ProcessContext> implements StepHandler<
     CheckedStep<CancelExternalJob.Metadata<C>> {
 
     /**
-     * @param jobType      the declared job type; only its jobs are cancelled
+     * @param jobType      the first of {@code jobTypes}, for logs and the callers of a single type
      * @param jobId        reads the id of the job to cancel from the context
      * @param ifOpen       whether a finished job is no error (the step then does nothing)
      * @param outputKey    context key receiving whether the job was cancelled now ({@code Boolean}); null to discard it
      * @param requestedBy  reads whose job may be cancelled; null for the process's actor (the default)
      * @param anyRequester whether a job of the type may be cancelled whoever started it
+     * @param jobTypes     the declared job types, in the order given, {@code jobType} first; only their jobs are
+     *                     cancelled
      */
     public record Metadata<C>(String jobType, Function<C, String> jobId, boolean ifOpen, String outputKey,
-        Function<C, String> requestedBy, boolean anyRequester) {
+        Function<C, String> requestedBy, boolean anyRequester, Set<String> jobTypes) {
         public Metadata {
             Objects.requireNonNull(jobType, "jobType must not be null");
             Objects.requireNonNull(jobId, "jobId must not be null");
+            Objects.requireNonNull(jobTypes, "jobTypes must not be null");
+            if (jobTypes.isEmpty() || !jobType.equals(jobTypes.iterator().next())) {
+                throw new IllegalArgumentException("jobType must be the first of jobTypes");
+            }
+            jobTypes = Collections.unmodifiableSet(new LinkedHashSet<>(jobTypes));
             if (anyRequester && requestedBy != null) {
                 throw new IllegalArgumentException("A cancel step names an owner or allows any requester, not both");
             }
+        }
+
+        /** A step of one type, as decision D52 item 2 had it. */
+        public Metadata(String jobType, Function<C, String> jobId, boolean ifOpen, String outputKey,
+            Function<C, String> requestedBy, boolean anyRequester) {
+            this(jobType, jobId, ifOpen, outputKey, requestedBy, anyRequester,
+                Set.of(Objects.requireNonNull(jobType, "jobType must not be null")));
         }
     }
 
@@ -75,14 +94,14 @@ public class CancelExternalJob<C extends ProcessContext> implements StepHandler<
         public Spec<C> ifOpen() {
             Metadata<C> m = metadata;
             return new Spec<>(new Metadata<>(m.jobType(), m.jobId(), true, m.outputKey(), m.requestedBy(),
-                m.anyRequester()));
+                m.anyRequester(), m.jobTypes()));
         }
 
         /** Where whether the job was cancelled now ({@code Boolean}) goes in the context. */
         public Spec<C> outputKey(String key) {
             Metadata<C> m = metadata;
             return new Spec<>(new Metadata<>(m.jobType(), m.jobId(), m.ifOpen(), key, m.requestedBy(),
-                m.anyRequester()));
+                m.anyRequester(), m.jobTypes()));
         }
 
         /**
@@ -92,7 +111,7 @@ public class CancelExternalJob<C extends ProcessContext> implements StepHandler<
         public Spec<C> requestedBy(Function<C, String> owner) {
             Metadata<C> m = metadata;
             return new Spec<>(new Metadata<>(m.jobType(), m.jobId(), m.ifOpen(), m.outputKey(),
-                Objects.requireNonNull(owner, "owner must not be null"), false));
+                Objects.requireNonNull(owner, "owner must not be null"), false, m.jobTypes()));
         }
 
         /**
@@ -101,12 +120,35 @@ public class CancelExternalJob<C extends ProcessContext> implements StepHandler<
          */
         public Spec<C> anyRequester() {
             Metadata<C> m = metadata;
-            return new Spec<>(new Metadata<>(m.jobType(), m.jobId(), m.ifOpen(), m.outputKey(), null, true));
+            return new Spec<>(new Metadata<>(m.jobType(), m.jobId(), m.ifOpen(), m.outputKey(), null, true,
+                m.jobTypes()));
         }
     }
 
+    /** Cancels a job of the type {@code jobType}. */
     public static <C extends ProcessContext> Spec<C> of(String jobType, Function<C, String> jobId) {
         return new Spec<>(new Metadata<>(jobType, jobId, false, null, null, false));
+    }
+
+    /**
+     * Cancels a job of any of the types {@code jobTypes} (decision D52 item 2): one step for an action that stops
+     * whichever of a few kinds of job is running. Every type must be declared; a job of any other type is the same 404
+     * as a missing one.
+     *
+     * @throws IllegalArgumentException when the list is empty or names a type twice
+     */
+    public static <C extends ProcessContext> Spec<C> of(List<String> jobTypes, Function<C, String> jobId) {
+        Objects.requireNonNull(jobTypes, "jobTypes must not be null");
+        if (jobTypes.isEmpty()) {
+            throw new IllegalArgumentException("A cancel step names at least one job type");
+        }
+        Set<String> types = new LinkedHashSet<>();
+        for (String type : jobTypes) {
+            if (!types.add(Objects.requireNonNull(type, "a job type must not be null"))) {
+                throw new IllegalArgumentException("A cancel step names the job type " + type + " twice");
+            }
+        }
+        return new Spec<>(new Metadata<>(jobTypes.getFirst(), jobId, false, null, null, false, types));
     }
 
     private final ExternalJobRegistry jobs;
@@ -120,8 +162,9 @@ public class CancelExternalJob<C extends ProcessContext> implements StepHandler<
     @Override
     public Mono<Void> execute(Metadata<C> metadata, C ctx) {
         return Mono.defer(() -> {
-            if (jobs.find(metadata.jobType()).isEmpty()) {
-                return Mono.error(new IllegalStateException("No external job type " + metadata.jobType()
+            List<String> undeclared = undeclared(metadata);
+            if (!undeclared.isEmpty()) {
+                return Mono.error(new IllegalStateException("No external job type " + String.join(", ", undeclared)
                     + " is declared"));
             }
             String jobId = metadata.jobId().apply(ctx);
@@ -129,7 +172,7 @@ public class CancelExternalJob<C extends ProcessContext> implements StepHandler<
             String owner = metadata.anyRequester() ? null
                 : metadata.requestedBy() == null ? ctx.request().actorId() : metadata.requestedBy().apply(ctx);
             // An unknown owner matches no job: 404, as for anyone else's.
-            return recorder.cancel(jobId, job -> metadata.jobType().equals(job.jobType())
+            return recorder.cancel(jobId, job -> metadata.jobTypes().contains(job.jobType())
                         && (metadata.anyRequester() || owner != null && owner.equals(job.requestedBy())),
                     metadata.ifOpen(),
                     ctx.request().actorId(), ctx.opTime(), ctx.processSeqId())
@@ -142,9 +185,13 @@ public class CancelExternalJob<C extends ProcessContext> implements StepHandler<
         });
     }
 
+    /** Every undeclared type, at once. */
     @Override
     public List<String> problems(Metadata<C> metadata) {
-        return jobs.find(metadata.jobType()).isPresent() ? List.of()
-            : List.of("cancels undeclared external job type " + metadata.jobType());
+        return undeclared(metadata).stream().map(type -> "cancels undeclared external job type " + type).toList();
+    }
+
+    private List<String> undeclared(Metadata<C> metadata) {
+        return metadata.jobTypes().stream().filter(type -> jobs.find(type).isEmpty()).toList();
     }
 }

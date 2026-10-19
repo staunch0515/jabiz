@@ -65,8 +65,11 @@ class CancelExternalJobTest {
         }
     }
 
-    private static final ExternalJobRegistry JOBS = new ExternalJobRegistry(List.of(ExternalJobType.define(
-        "it.cancel", In.class, Out.class, t -> t.handler(Handler.class).onCompleted("A").onFailed("B"))));
+    private static final ExternalJobRegistry JOBS = new ExternalJobRegistry(List.of(
+        ExternalJobType.define("it.cancel", In.class, Out.class, t -> t.handler(Handler.class).onCompleted("A")
+            .onFailed("B")),
+        ExternalJobType.define("it.second", In.class, Out.class, t -> t.handler(Handler.class).onCompleted("A")
+            .onFailed("B"))));
 
     private static ProcessContext context(String actor) {
         ProcessContext ctx = new ProcessContext(new ProcessStart(42L, NOW, new RequestContext(actor, null,
@@ -144,7 +147,7 @@ class CancelExternalJobTest {
         assertThat(open.metadata().ifOpen()).isTrue();
         assertThat(open.metadata().outputKey()).isEqualTo("k");
         assertThat(open.toStepSpec().handlerClass()).isEqualTo(CancelExternalJob.class);
-        assertThatThrownBy(() -> CancelExternalJob.of(null, c -> "x")).isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> CancelExternalJob.of((String) null, c -> "x")).isInstanceOf(NullPointerException.class);
     }
 
     @Test
@@ -181,5 +184,123 @@ class CancelExternalJobTest {
         // The last of requestedBy and anyRequester wins.
         assertThat(CancelExternalJob.<ProcessContext>of("it.cancel", c -> "x").requestedBy(c -> "bob").anyRequester()
             .metadata().requestedBy()).isNull();
+    }
+
+    // ---------------------------------------------------------------- several types (phase 16w-1)
+
+    private static ExternalJobRecorder.JobOwner job(String type, String requester) {
+        return new ExternalJobRecorder.JobOwner("job-7", type, requester);
+    }
+
+    @Test
+    void itCancelsJobsOfAnyListedTypeAsTheProcesssActor() {
+        FakeRecorder recorder = new FakeRecorder(Mono.just(true));
+        CancelExternalJob<ProcessContext> step = new CancelExternalJob<>(JOBS, recorder);
+        ProcessContext ctx = context("alice");
+        CancelExternalJob.Spec<ProcessContext> spec = CancelExternalJob.<ProcessContext>of(
+            List.of("it.second", "it.cancel"), c -> c.get("jobId", String.class)).outputKey("cancelled");
+        assertThat(spec.metadata().jobType()).isEqualTo("it.second");
+        assertThat(spec.metadata().jobTypes()).containsExactly("it.second", "it.cancel");
+        assertThat(step.problems(spec.metadata())).isEmpty();
+        step.execute(spec.metadata(), ctx).block();
+        assertThat(recorder.calls).singleElement().satisfies(call -> {
+            assertThat(call.jobId()).isEqualTo("job-7");
+            assertThat(call.cancelledBy()).isEqualTo("alice");
+            assertThat(call.time()).isEqualTo(NOW);
+            assertThat(call.processSeqId()).isEqualTo(42L);
+            assertThat(call.mayCancel().test(job("it.cancel", "alice"))).isTrue();
+            assertThat(call.mayCancel().test(job("it.second", "alice"))).isTrue();
+        });
+        assertThat(ctx.get("cancelled", Boolean.class)).isTrue();
+    }
+
+    @Test
+    void aTypeOutsideTheListIsAnsweredLikeAMissingJob() {
+        FakeRecorder recorder = new FakeRecorder(Mono.just(true));
+        CancelExternalJob<ProcessContext> step = new CancelExternalJob<>(JOBS, recorder);
+        step.execute(CancelExternalJob.<ProcessContext>of(List.of("it.cancel", "it.second"), c -> "job-7").ifOpen()
+            .metadata(), context("alice")).block();
+        Predicate<ExternalJobRecorder.JobOwner> may = recorder.calls.getFirst().mayCancel();
+        // The recorder answers every job the check refuses with the same 404 as a missing one.
+        assertThat(may.test(job("it.other", "alice"))).isFalse();
+        assertThat(may.test(job(null, "alice"))).isFalse();
+        assertThat(recorder.calls.getFirst().ifOpen()).isTrue();
+    }
+
+    @Test
+    void anEmptyOrRepeatedListIsRefused() {
+        assertThatThrownBy(() -> CancelExternalJob.<ProcessContext>of(List.of(), c -> "x"))
+            .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("at least one");
+        assertThatThrownBy(() -> CancelExternalJob.<ProcessContext>of(List.of("it.cancel", "it.second", "it.cancel"),
+            c -> "x")).isInstanceOf(IllegalArgumentException.class).hasMessageContaining("it.cancel twice");
+        assertThatThrownBy(() -> CancelExternalJob.<ProcessContext>of((List<String>) null, c -> "x"))
+            .isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> CancelExternalJob.<ProcessContext>of(java.util.Arrays.asList("it.cancel", null),
+            c -> "x")).isInstanceOf(NullPointerException.class);
+        // The metadata keeps jobType the first of jobTypes.
+        assertThatThrownBy(() -> new CancelExternalJob.Metadata<ProcessContext>("it.cancel", c -> "x", false, null,
+            null, false, Set.of("it.second"))).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new CancelExternalJob.Metadata<ProcessContext>("it.cancel", c -> "x", false, null,
+            null, false, Set.of())).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void everyUndeclaredTypeIsAStartupProblem() {
+        FakeRecorder recorder = new FakeRecorder(Mono.just(true));
+        CancelExternalJob<ProcessContext> step = new CancelExternalJob<>(JOBS, recorder);
+        CancelExternalJob.Metadata<ProcessContext> ghosts = CancelExternalJob.<ProcessContext>of(
+            List.of("it.ghost", "it.cancel", "it.phantom"), c -> "job-7").metadata();
+        assertThat(step.problems(ghosts)).containsExactly("cancels undeclared external job type it.ghost",
+            "cancels undeclared external job type it.phantom");
+        assertThatThrownBy(() -> step.execute(ghosts, context("alice")).block())
+            .isInstanceOf(IllegalStateException.class).hasMessageContaining("it.ghost, it.phantom");
+        assertThat(recorder.calls).isEmpty();
+    }
+
+    @Test
+    void theSingleTypeFormIsUnchanged() {
+        CancelExternalJob.Metadata<ProcessContext> single = CancelExternalJob.<ProcessContext>of("it.cancel",
+            c -> "job-7").metadata();
+        assertThat(single.jobType()).isEqualTo("it.cancel");
+        assertThat(single.jobTypes()).containsExactly("it.cancel");
+        // The six-argument metadata is one type, equal to the step's own.
+        CancelExternalJob.Metadata<ProcessContext> six = new CancelExternalJob.Metadata<>("it.cancel",
+            single.jobId(), false, null, null, false);
+        assertThat(six).isEqualTo(single);
+        assertThat(six.jobTypes()).isEqualTo(Set.of("it.cancel"));
+        assertThat(CancelExternalJob.<ProcessContext>of(List.of("it.cancel"), single.jobId()).metadata())
+            .isEqualTo(single);
+        assertThatThrownBy(() -> single.jobTypes().add("it.second")).isInstanceOf(UnsupportedOperationException.class);
+        assertThatThrownBy(() -> new CancelExternalJob.Metadata<ProcessContext>(null, c -> "x", false, null, null,
+            false)).isInstanceOf(NullPointerException.class);
+    }
+
+    @Test
+    void requestedByAndAnyRequesterWorkWithSeveralTypes() {
+        FakeRecorder recorder = new FakeRecorder(Mono.just(true));
+        CancelExternalJob<ProcessContext> step = new CancelExternalJob<>(JOBS, recorder);
+        ProcessContext ctx = context("operator");
+        ctx.put("owner", "bob");
+        CancelExternalJob.Spec<ProcessContext> both = CancelExternalJob.of(List.of("it.cancel", "it.second"),
+            c -> "job-7");
+        step.execute(both.anyRequester().metadata(), ctx).block();
+        step.execute(both.requestedBy(c -> c.get("owner", String.class)).metadata(), ctx).block();
+        step.execute(both.metadata(), ctx).block();
+        assertThat(recorder.calls).hasSize(3);
+        Predicate<ExternalJobRecorder.JobOwner> any = recorder.calls.get(0).mayCancel();
+        Predicate<ExternalJobRecorder.JobOwner> bobs = recorder.calls.get(1).mayCancel();
+        Predicate<ExternalJobRecorder.JobOwner> own = recorder.calls.get(2).mayCancel();
+        assertThat(any.test(job("it.cancel", "carol"))).isTrue();
+        assertThat(any.test(job("it.second", "carol"))).isTrue();
+        assertThat(any.test(job("it.other", "carol"))).isFalse();
+        assertThat(bobs.test(job("it.second", "bob"))).isTrue();
+        assertThat(bobs.test(job("it.second", "carol"))).isFalse();
+        assertThat(bobs.test(job("it.other", "bob"))).isFalse();
+        assertThat(own.test(job("it.second", "operator"))).isTrue();
+        assertThat(own.test(job("it.second", "bob"))).isFalse();
+        assertThat(recorder.calls).allSatisfy(call -> assertThat(call.cancelledBy()).isEqualTo("operator"));
+        // The types stay through every copy.
+        assertThat(both.ifOpen().outputKey("k").anyRequester().requestedBy(c -> "x").metadata().jobTypes())
+            .containsExactly("it.cancel", "it.second");
     }
 }

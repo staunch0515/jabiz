@@ -127,18 +127,26 @@ class ExternalJobCancelIT extends PostgresIntegrationTest {
                 .outputKey("jobId")));
     }
 
-    /** Whose jobs a cancelling process may cancel: the actor's own (the default), anyone's, or a named owner's. */
-    enum Scope { OWN, OWN_IF_OPEN, ANY, FOR_OWNER }
+    /**
+     * Whose jobs a cancelling process may cancel: the actor's own (the default), anyone's, or a named owner's; and of
+     * it.stoppable only, or of it.stoppable and it.other ({@code EITHER…}, phase 16w-1).
+     */
+    enum Scope { OWN, OWN_IF_OPEN, ANY, FOR_OWNER, EITHER, EITHER_IF_OPEN }
 
     static ProcessDefinition<CancelInput, CancelOutput, ProcessContext> canceller(String name, Scope scope) {
         return ProcessDefinition.define(name, 1, CancelInput.class, CancelOutput.class, ProcessContext.class, pb -> {
             CancelExternalJob.Spec<ProcessContext> own = CancelExternalJob.<ProcessContext>of("it.stoppable",
                 ctx -> ctx.get("in", CancelInput.class).jobId()).outputKey("cancelled");
+            CancelExternalJob.Spec<ProcessContext> either = CancelExternalJob.<ProcessContext>of(
+                List.of("it.stoppable", "it.other"), ctx -> ctx.get("in", CancelInput.class).jobId())
+                .outputKey("cancelled");
             CancelExternalJob.Spec<ProcessContext> cancel = switch (scope) {
                 case OWN -> own;
                 case OWN_IF_OPEN -> own.ifOpen();
                 case ANY -> own.anyRequester();
                 case FOR_OWNER -> own.requestedBy(ctx -> ctx.get("in", CancelInput.class).owner());
+                case EITHER -> either;
+                case EITHER_IF_OPEN -> either.ifOpen();
             };
             pb.permissions("it.job.cancel")
                 .contextFactory((start, input) -> {
@@ -250,6 +258,16 @@ class ExternalJobCancelIT extends PostgresIntegrationTest {
         @Bean
         ProcessDefinition<CancelInput, CancelOutput, ProcessContext> cancelStoppableIfOpen() {
             return canceller("IT_CANCEL_STOPPABLE_IF_OPEN", Scope.OWN_IF_OPEN);
+        }
+
+        @Bean
+        ProcessDefinition<CancelInput, CancelOutput, ProcessContext> cancelEither() {
+            return canceller("IT_CANCEL_EITHER", Scope.EITHER);
+        }
+
+        @Bean
+        ProcessDefinition<CancelInput, CancelOutput, ProcessContext> cancelEitherIfOpen() {
+            return canceller("IT_CANCEL_EITHER_IF_OPEN", Scope.EITHER_IF_OPEN);
         }
 
         @Bean
@@ -634,6 +652,64 @@ class ExternalJobCancelIT extends PostgresIntegrationTest {
         }
         executor.runPending().block();
         assertThat(attempts(jobId)).contains("1:LEASE_EXPIRED");
+    }
+
+    // ---------------------------------------------------------------- several types (phase 16w-1)
+
+    @Test
+    void aStepOfTwoTypesCancelsAJobOfEach() {
+        String stoppable = start("IT_START_STOPPABLE", unique("either-a"), "it-req-e");
+        String other = start("IT_START_OTHER", unique("either-b"), "it-req-e");
+        for (String jobId : List.of(stoppable, other)) {
+            assertThat(output(cancelByProcess("IT_CANCEL_EITHER", jobId, "it-req-e", false).expectStatus().isOk()
+                .expectBody(MAP).returnResult().getResponseBody())).containsEntry("cancelled", true);
+            assertThat(outcome(jobId)).containsEntry("status", "CANCELLED");
+            assertThat(query("SELECT cancelled_by FROM sys_external_job_cancel WHERE job_id = ?", jobId).getFirst())
+                .containsEntry("cancelled_by", "it-req-e");
+        }
+        // Finished: 422, or nothing with ifOpen, for either type.
+        cancelByProcess("IT_CANCEL_EITHER", other, "it-req-e", false).expectStatus().isEqualTo(422);
+        assertThat(output(cancelByProcess("IT_CANCEL_EITHER_IF_OPEN", other, "it-req-e", false).expectStatus().isOk()
+            .expectBody(MAP).returnResult().getResponseBody())).containsEntry("cancelled", false);
+        deliverer.deliverPending().block();
+        assertThat(callbacks(stoppable)).singleElement().satisfies(callback ->
+            assertThat(((ExternalJobCancellation) callback.input()).jobType()).isEqualTo("it.stoppable"));
+        assertThat(callbacks(other)).singleElement().satisfies(callback ->
+            assertThat(((ExternalJobCancellation) callback.input()).jobType()).isEqualTo("it.other"));
+    }
+
+    @Test
+    void aStepOfTwoTypesAnswersAThirdTypesJobLikeAMissingOne() {
+        String plain = start("IT_START_PLAIN", unique("third"), "it-req-t");
+        Map<String, Object> ofThirdType = cancelByProcess("IT_CANCEL_EITHER", plain, "it-req-t", false)
+            .expectStatus().isNotFound().expectBody(MAP).returnResult().getResponseBody();
+        Map<String, Object> missing = cancelByProcess("IT_CANCEL_EITHER", UUID.randomUUID().toString(), "it-req-t",
+            false).expectStatus().isNotFound().expectBody(MAP).returnResult().getResponseBody();
+        assertThat(withoutInstance(ofThirdType)).isEqualTo(withoutInstance(missing));
+        Map<String, Object> ifOpen = cancelByProcess("IT_CANCEL_EITHER_IF_OPEN", plain, "it-req-t", false)
+            .expectStatus().isNotFound().expectBody(MAP).returnResult().getResponseBody();
+        assertThat(withoutInstance(ifOpen)).isEqualTo(withoutInstance(missing));
+        assertThat(query("SELECT 1 FROM sys_external_job_cancel WHERE job_id = ?", plain)).isEmpty();
+        assertThat(executor.runPending().block()).isEqualTo(1);
+        assertThat(outcome(plain)).containsEntry("status", "SUCCEEDED");
+    }
+
+    @Test
+    void aStepOfTwoTypesStillRefusesAnotherRequestersJob() {
+        String stoppable = start("IT_START_STOPPABLE", unique("theirs-a"), "it-req-owner2");
+        String other = start("IT_START_OTHER", unique("theirs-b"), "it-req-owner2");
+        Map<String, Object> missing = cancelByProcess("IT_CANCEL_EITHER", UUID.randomUUID().toString(),
+            "it-req-intruder", false).expectStatus().isNotFound().expectBody(MAP).returnResult().getResponseBody();
+        for (String jobId : List.of(stoppable, other)) {
+            Map<String, Object> refused = cancelByProcess("IT_CANCEL_EITHER", jobId, "it-req-intruder", false)
+                .expectStatus().isNotFound().expectBody(MAP).returnResult().getResponseBody();
+            assertThat(withoutInstance(refused)).isEqualTo(withoutInstance(missing));
+            cancelByProcess("IT_CANCEL_EITHER_IF_OPEN", jobId, "it-req-intruder", false).expectStatus().isNotFound();
+            assertThat(query("SELECT 1 FROM sys_external_job_cancel WHERE job_id = ?", jobId)).isEmpty();
+        }
+        assertThat(executor.runPending().block()).isEqualTo(2);
+        assertThat(outcome(stoppable)).containsEntry("status", "SUCCEEDED");
+        assertThat(outcome(other)).containsEntry("status", "SUCCEEDED");
     }
 
     // ---------------------------------------------------------------- helpers
