@@ -410,6 +410,7 @@
 - **L-d**：§7.8 写明计数的 429 / 5xx 会用掉 3 次尝试中的一次（不计费）。**L-e**：封面与题目同时请求的测试重复 5 轮、每轮新商家，并断言至少一轮两个调用确实同时在途。**L-f**：IT 的桩与本地桩对带文档的付费调用报告与计数相同的输入用量（本地桩去掉计数不接受的字段再估算）。**L-g**：上线清单加一项：开启 PDF 之前以真实密钥手动调用一次 `count_tokens`。
 - 细节：封面图改为单选按钮的 `<label htmlFor>`（不是 `div` 上的 `onClick`）；`QB_AI_NOTICE_MISSING` 的文案改为通用的"AI 生成"。
 - 验证（复审修改之后）：`./gradlew :quizbuks:check :quizbuks:bootJar` 通过（717 个测试、0 失败；`platformCheck` 0 错误）；商家后台 lint、typecheck、171 个 Vitest，`app:check`，`ext:check`（74 个）；e2e 全部 54 个一次通过。（之后合并 Q7c 时改为 V18，见"迁移"。）
+- 验证（合并 Q7c、迁移改为 V18 之后，2026-10-19）：`./gradlew :quizbuks:check :quizbuks:bootJar` 通过（807 个测试、0 失败，场景与快照无需改动；`platformCheck` 0 错误）；商家后台 177 个、App 148 个 Vitest，两个 SPA 的 lint、typecheck 与 `app:check`，`ext:check`（82 个）；e2e 全部 59 个一次通过。
 
 ### 待确认（需求方）
 
