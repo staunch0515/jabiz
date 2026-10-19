@@ -15,6 +15,7 @@
     "ext:typecheck": "node scripts/ext.mjs typecheck",
     "ext:lint": "node scripts/ext.mjs lint",
     "ext:test": "node scripts/ext.mjs test",
+    "ext:bundle": "node scripts/ext.mjs bundle",
     "ext:check": "node scripts/ext.mjs check",
     "app:check": "node scripts/app-check.mjs",
     "e2e": "playwright test",

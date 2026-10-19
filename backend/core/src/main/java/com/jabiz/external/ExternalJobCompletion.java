@@ -20,19 +20,37 @@ import java.util.UUID;
  * @param files        the ids of the files the successful attempt produced, by their key (decision D50 item 3); stored
  *                     as uploads of the requester and referred to by nothing yet: a file the process does not put in
  *                     a field is swept as an orphan ({@code FILE_SWEEP})
+ * @param unrecordedAttempts how many of the earlier attempts ended without recording what they consumed (decision D52
+ *                     item 5): {@code LEASE_EXPIRED} or {@code TIMED_OUT} without usage; {@link #usage} does not
+ *                     include them
  */
 public record ExternalJobCompletion(String jobId, String jobType, String requestedBy, String reference,
-    Object result, Map<String, Long> usage, int attempts, Instant finishedTime, Map<String, UUID> files) {
+    Object result, Map<String, Long> usage, int attempts, Instant finishedTime, Map<String, UUID> files,
+    int unrecordedAttempts) {
 
     public ExternalJobCompletion {
         usage = usage == null ? Map.of() : Map.copyOf(usage);
         files = files == null ? Map.of() : Collections.unmodifiableMap(new LinkedHashMap<>(files));
+        if (unrecordedAttempts < 0) {
+            throw new IllegalArgumentException("unrecordedAttempts must not be negative");
+        }
+    }
+
+    /** A completion without the count of unrecorded attempts, as decision D50 had it: none. */
+    public ExternalJobCompletion(String jobId, String jobType, String requestedBy, String reference, Object result,
+        Map<String, Long> usage, int attempts, Instant finishedTime, Map<String, UUID> files) {
+        this(jobId, jobType, requestedBy, reference, result, usage, attempts, finishedTime, files, 0);
     }
 
     /** A completion without files, as decision D38 had it. */
     public ExternalJobCompletion(String jobId, String jobType, String requestedBy, String reference, Object result,
         Map<String, Long> usage, int attempts, Instant finishedTime) {
-        this(jobId, jobType, requestedBy, reference, result, usage, attempts, finishedTime, Map.of());
+        this(jobId, jobType, requestedBy, reference, result, usage, attempts, finishedTime, Map.of(), 0);
+    }
+
+    /** Whether an attempt ended without recording its usage, so that {@link #usage} may be less than was billed. */
+    public boolean hasUnrecordedAttempts() {
+        return unrecordedAttempts > 0;
     }
 
     /** The result as the job type's result record. */
@@ -57,6 +75,6 @@ public record ExternalJobCompletion(String jobId, String jobType, String request
     @Override
     public String toString() {
         return "ExternalJobCompletion[jobId=" + jobId + ", jobType=" + jobType + ", attempts=" + attempts
-            + ", usage=" + usage + ", files=" + files.keySet() + "]";
+            + ", unrecordedAttempts=" + unrecordedAttempts + ", usage=" + usage + ", files=" + files.keySet() + "]";
     }
 }

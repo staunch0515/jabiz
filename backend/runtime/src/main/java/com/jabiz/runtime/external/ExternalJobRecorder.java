@@ -23,6 +23,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.function.Predicate;
 
@@ -493,6 +494,60 @@ public class ExternalJobRecorder {
             .then();
     }
 
+    /** How an attempt of the job is recorded; empty when it is not. */
+    Mono<AttemptOutcome> recordedOutcome(String jobId, int attemptNo) {
+        return engine().select("SELECT outcome FROM sys_external_job_attempt"
+                + " WHERE job_id = :job AND attempt_no = :attempt",
+                Map.of("job", BoundValue.of(jobId), "attempt", BoundValue.of(attemptNo)))
+            .next().map(row -> AttemptOutcome.valueOf(Rows.string(row.get("outcome"))));
+    }
+
+    /**
+     * Records what a late attempt consumed (decision D52 item 5): an attempt that ended after its lease had expired,
+     * whose number is recorded already as {@code LEASE_EXPIRED}. Its result is dropped, but the provider bills what it
+     * consumed, so its usage is recorded against that attempt, once: only when the recorded attempt is
+     * {@code LEASE_EXPIRED} and has no usage rows yet, each row {@code ON CONFLICT DO NOTHING}. The job's row must be
+     * locked (as the executor locks it to record an attempt), so that nothing else records this attempt's usage
+     * meanwhile. An attempt recorded otherwise (this instance's own record, committed before a retry) is left as it is.
+     *
+     * @return what was recorded now, by metric; empty when nothing was
+     */
+    Mono<Map<String, Long>> insertLateUsage(String jobId, int attemptNo, Map<String, Long> usage) {
+        if (usage.isEmpty()) {
+            return Mono.just(Map.of());
+        }
+        return engine().select("""
+                SELECT a.outcome,
+                       EXISTS (SELECT 1 FROM sys_external_job_usage u
+                                WHERE u.job_id = a.job_id AND u.attempt_no = a.attempt_no) AS has_usage
+                FROM sys_external_job_attempt a
+                WHERE a.job_id = :job AND a.attempt_no = :attempt""",
+                Map.of("job", BoundValue.of(jobId), "attempt", BoundValue.of(attemptNo)))
+            .next()
+            .filter(row -> AttemptOutcome.LEASE_EXPIRED.name().equals(Rows.string(row.get("outcome")))
+                && !Boolean.TRUE.equals(row.get("has_usage")))
+            .flatMap(late -> Flux.fromIterable(usage.entrySet())
+                .concatMap(entry -> {
+                    Map<String, BoundValue> params = new LinkedHashMap<>();
+                    params.put("job", BoundValue.of(jobId));
+                    params.put("attempt", BoundValue.of(attemptNo));
+                    params.put("metric", BoundValue.of(entry.getKey()));
+                    params.put("id", BoundValue.of(String.valueOf(ids.next(ExternalJobEntities.USAGE_ENTITY))));
+                    params.put("quantity", BoundValue.of(entry.getValue()));
+                    return engine().select("""
+                            INSERT INTO sys_external_job_usage (job_id, attempt_no, metric, usage_id, quantity)
+                            VALUES (:job, :attempt, :metric, :id, :quantity)
+                            ON CONFLICT (job_id, attempt_no, metric) DO NOTHING
+                            RETURNING metric""", params)
+                        .hasElements()
+                        .filter(Boolean::booleanValue)
+                        .map(inserted -> entry);
+                })
+                .collect(LinkedHashMap<String, Long>::new, (map, entry) -> map.put(entry.getKey(), entry.getValue()))
+                .map(Map::copyOf))
+            .defaultIfEmpty(Map.of());
+    }
+
     /** Whether the job was cancelled. */
     Mono<Boolean> isCancelled(String jobId) {
         return engine().select("SELECT 1 AS found FROM sys_external_job_cancel WHERE job_id = :id",
@@ -668,6 +723,66 @@ public class ExternalJobRecorder {
                 (map, row) -> map.put(Rows.string(row.get("metric")), Rows.longValue(row.get("total"))))
             .map(Map::copyOf);
     }
+
+    /**
+     * The usage of all the job's attempts, by metric, and how many attempts ended without recording any (decision D52
+     * item 5).
+     *
+     * @param unrecordedAttempts the attempts whose outcome is {@code LEASE_EXPIRED} or {@code TIMED_OUT} and that have
+     *                           no usage rows; a {@code FAILED} attempt without usage is not counted: it is the
+     *                           handler's own outcome, and the handler had the chance to record usage first (an
+     *                           unanswered call: {@code recordUsage(estimate)}, then rethrow)
+     */
+    record AttemptUsage(Map<String, Long> usage, int unrecordedAttempts) {}
+
+    /**
+     * {@link AttemptUsage} of the job, read in one statement (its attempts, joined to their usage rows): one snapshot,
+     * so that the late usage of an attempt whose lease had expired ({@link #insertLateUsage}) is in both the totals
+     * and the count, or in neither.
+     */
+    Mono<AttemptUsage> attemptUsage(String jobId) {
+        return engine().select("""
+                SELECT a.attempt_no, a.outcome, u.metric, u.quantity
+                FROM sys_external_job_attempt a
+                LEFT JOIN sys_external_job_usage u ON u.job_id = a.job_id AND u.attempt_no = a.attempt_no
+                WHERE a.job_id = :id
+                ORDER BY a.attempt_no, u.metric""", Map.of("id", BoundValue.of(jobId)))
+            .collectList()
+            .map(ExternalJobRecorder::attemptUsage);
+    }
+
+    static AttemptUsage attemptUsage(List<Map<String, Object>> rows) {
+        Map<String, Long> totals = new TreeMap<>();
+        int unrecorded = 0;
+        for (Map<String, Object> row : rows) {
+            String metric = Rows.string(row.get("metric"));
+            if (metric != null) {
+                totals.merge(metric, Rows.longValue(row.get("quantity")), ExternalJobRecorder::saturatedSum);
+                continue;
+            }
+            // The join's one row for an attempt without usage rows.
+            AttemptOutcome outcome = AttemptOutcome.valueOf(Rows.string(row.get("outcome")));
+            if (outcome == AttemptOutcome.LEASE_EXPIRED || outcome == AttemptOutcome.TIMED_OUT) {
+                unrecorded++;
+            }
+        }
+        return new AttemptUsage(Map.copyOf(totals), unrecorded);
+    }
+
+    /**
+     * A total that stops at {@link Long#MAX_VALUE} rather than failing: an absurd quantity reported by a handler must
+     * not keep the job's completion from ever being delivered. It is logged, since the total is then a floor.
+     */
+    static long saturatedSum(long a, long b) {
+        try {
+            return Math.addExact(a, b);
+        } catch (ArithmeticException e) {
+            LOG.warn("An external job's usage total exceeds {}; it is reported as that", Long.MAX_VALUE);
+            return Long.MAX_VALUE;
+        }
+    }
+
+    private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(ExternalJobRecorder.class);
 
     /** What the status endpoint shows of a job, besides the job's own row. */
     record Progress(int attempts, boolean running, boolean cancelled, Instant firstClaimed, Instant lastFinished,
