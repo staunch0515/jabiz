@@ -40,13 +40,14 @@ public class CancelExternalJob<C extends ProcessContext> implements StepHandler<
     CheckedStep<CancelExternalJob.Metadata<C>> {
 
     /**
-     * @param jobType      the first of {@code jobTypes}, for logs and the callers of a single type
+     * @param jobType      one of {@code jobTypes} (the first, from {@code of(List, …)}), for logs and the callers of
+     *                     a single type
      * @param jobId        reads the id of the job to cancel from the context
      * @param ifOpen       whether a finished job is no error (the step then does nothing)
      * @param outputKey    context key receiving whether the job was cancelled now ({@code Boolean}); null to discard it
      * @param requestedBy  reads whose job may be cancelled; null for the process's actor (the default)
      * @param anyRequester whether a job of the type may be cancelled whoever started it
-     * @param jobTypes     the declared job types, in the order given, {@code jobType} first; only their jobs are
+     * @param jobTypes     the declared job types (one of them {@code jobType}), in the order given; only their jobs are
      *                     cancelled
      */
     public record Metadata<C>(String jobType, Function<C, String> jobId, boolean ifOpen, String outputKey,
@@ -55,9 +56,13 @@ public class CancelExternalJob<C extends ProcessContext> implements StepHandler<
             Objects.requireNonNull(jobType, "jobType must not be null");
             Objects.requireNonNull(jobId, "jobId must not be null");
             Objects.requireNonNull(jobTypes, "jobTypes must not be null");
-            if (jobTypes.isEmpty() || !jobType.equals(jobTypes.iterator().next())) {
-                throw new IllegalArgumentException("jobType must be the first of jobTypes");
+            for (String type : jobTypes) {
+                Objects.requireNonNull(type, "a job type must not be null");
             }
+            if (!jobTypes.contains(jobType)) {
+                throw new IllegalArgumentException("jobType must be one of jobTypes");
+            }
+            // In the order given (of(List) passes them in the list's order).
             jobTypes = Collections.unmodifiableSet(new LinkedHashSet<>(jobTypes));
             if (anyRequester && requestedBy != null) {
                 throw new IllegalArgumentException("A cancel step names an owner or allows any requester, not both");

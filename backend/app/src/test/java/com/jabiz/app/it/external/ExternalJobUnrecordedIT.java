@@ -1,6 +1,7 @@
 package com.jabiz.app.it.external;
 
 import com.jabiz.app.it.fixture.SqlStatementLog;
+import com.jabiz.external.ExternalCallException;
 import com.jabiz.external.ExternalJobCancellation;
 import com.jabiz.external.ExternalJobCompletion;
 import com.jabiz.external.ExternalJobContext;
@@ -90,8 +91,10 @@ class ExternalJobUnrecordedIT extends PostgresIntegrationTest {
     static final long UNITS = 5;
 
     /**
-     * Records {@value #UNITS} units unless its label says {@code silent}; waits at its gate ({@code label:attempt}) if
-     * it has one; fails for good when the label starts with {@code fail}, and succeeds otherwise.
+     * Records {@value #UNITS} units unless its label says {@code silent} (as a handler records its estimate before the
+     * call); waits at its gate ({@code label:attempt}) if it has one; fails for good when the label starts with
+     * {@code fail}, throws an {@link ExternalCallException} (no answer) when it starts with {@code callfail}, and
+     * succeeds otherwise.
      */
     public static class Handler implements ExternalJobHandler<JobInput, JobResult> {
         @Override
@@ -112,6 +115,10 @@ class ExternalJobUnrecordedIT extends PostgresIntegrationTest {
             }
             if (input.label().startsWith("fail")) {
                 throw ExternalJobException.permanent("IT_REFUSED", "refused for the test");
+            }
+            if (input.label().startsWith("callfail")) {
+                // The provider did not answer in time: an EXTERNAL_CALL_FAILED attempt.
+                throw new ExternalCallException("it-provider", ExternalCallException.Kind.TIMEOUT, "no answer");
             }
             return ExternalJobResult.of(new JobResult(input.label(), ctx.attempt()));
         }
@@ -187,6 +194,17 @@ class ExternalJobUnrecordedIT extends PostgresIntegrationTest {
         @Bean
         ExternalJobType<JobInput, JobResult> itQuickJob() {
             return type("it.u.quick", 1, Duration.ofSeconds(1));
+        }
+
+        /** One attempt with a timeout of five seconds: long enough to expire its lease on the test's clock first. */
+        @Bean
+        ExternalJobType<JobInput, JobResult> itSlowJob() {
+            return type("it.u.slow", 1, Duration.ofSeconds(5));
+        }
+
+        @Bean
+        ProcessDefinition<StartInput, StartOutput, ProcessContext> startSlow() {
+            return starter("IT_U_START_SLOW", "it.u.slow");
         }
 
         /** One attempt; only the test of the usage report starts jobs of it, so that the report's totals are its own. */
@@ -393,7 +411,99 @@ class ExternalJobUnrecordedIT extends PostgresIntegrationTest {
         });
     }
 
+    /**
+     * W-4 as confirmed: a {@code FAILED} attempt is the handler's own outcome, and it had the chance to record usage.
+     * One whose provider gave no answer ({@code EXTERNAL_CALL_FAILED}) and that recorded nothing is therefore not
+     * counted; a handler that calls a billing provider records its estimate before it rethrows (16w-1 review M1).
+     */
+    @Test
+    void aFailedAttemptWhoseCallGotNoAnswerIsNotUnrecorded() {
+        String silent = start("IT_U_START_ONCE", "callfail-silent-" + unique("noanswer"), "it-req-m");
+        String estimating = start("IT_U_START_ONCE", "callfail-" + unique("estimate"), "it-req-m");
+        executor.runPending().block();
+        assertThat(attempts(silent)).containsExactly("1:FAILED");
+        assertThat(attempts(estimating)).containsExactly("1:FAILED");
+        deliver();
+        assertThat(callbacks(silent)).singleElement().satisfies(callback -> {
+            ExternalJobFailure in = (ExternalJobFailure) callback.input();
+            assertThat(in.errorCode()).isEqualTo("EXTERNAL_CALL_FAILED");
+            assertThat(in.unrecordedAttempts()).isZero();
+            assertThat(in.usage()).isEmpty();
+        });
+        assertThat(callbacks(estimating)).singleElement().satisfies(callback -> {
+            ExternalJobFailure in = (ExternalJobFailure) callback.input();
+            assertThat(in.errorCode()).isEqualTo("EXTERNAL_CALL_FAILED");
+            assertThat(in.unrecordedAttempts()).isZero();
+            assertThat(in.usage()).containsExactly(Map.entry("units", UNITS));
+        });
+    }
+
     // ---------------------------------------------------------------- late attempts
+
+    /**
+     * A timed-out attempt whose lease was recorded {@code LEASE_EXPIRED} first is a late one: what it reported before
+     * running out of time is recorded against it; one that reported nothing stays unrecorded.
+     */
+    @Test
+    void aLateTimedOutAttemptRecordsWhatItReported() throws Exception {
+        String silent = unique("silent-late-timeout");
+        String reporting = unique("late-timeout");
+        GATES.put(silent + ":1", new CountDownLatch(1));
+        GATES.put(reporting + ":1", new CountDownLatch(1));
+        String silentJob = start("IT_U_START_SLOW", silent, "it-req-s");
+        String reportingJob = start("IT_U_START_SLOW", reporting, "it-req-s");
+        CompletableFuture<Integer> late = executor.runPending().toFuture();
+        for (String label : List.of(silent, reporting)) {
+            assertThat(STARTED.computeIfAbsent(label + ":1", k -> new CountDownLatch(1)).await(20, TimeUnit.SECONDS))
+                .isTrue();
+        }
+        // The lease (5 s and 30 s of margin) runs out on the test's clock before the timeout does in real time.
+        ExternalJobExecutor other = otherInstance();
+        clock.advance(Duration.ofSeconds(40));
+        assertThat(other.runPending().block()).isZero();
+        assertThat(attempts(silentJob)).containsExactly("1:LEASE_EXPIRED");
+        assertThat(attempts(reportingJob)).containsExactly("1:LEASE_EXPIRED");
+
+        // Both time out, after their leases were recorded.
+        assertThat(late.get(30, TimeUnit.SECONDS)).isEqualTo(2);
+        assertThat(attempts(silentJob)).containsExactly("1:LEASE_EXPIRED");
+        assertThat(usageRows(silentJob)).isEmpty();
+        assertThat(usageRows(reportingJob)).containsExactly("1:units:" + UNITS);
+        deliver();
+        assertThat(callbacks(silentJob)).singleElement().satisfies(callback ->
+            assertThat(((ExternalJobFailure) callback.input()).unrecordedAttempts()).isEqualTo(1));
+        assertThat(callbacks(reportingJob)).singleElement().satisfies(callback -> {
+            ExternalJobFailure in = (ExternalJobFailure) callback.input();
+            assertThat(in.unrecordedAttempts()).isZero();
+            assertThat(in.usage()).containsExactly(Map.entry("units", UNITS));
+        });
+    }
+
+    /** A cancel records the expired lease and ends the job; the instance that comes back later still has its usage. */
+    @Test
+    void aLateAttemptExpiredByACancelRecordsItsUsageAfterTheCancelledProcess() throws Exception {
+        String label = unique("late-cancel");
+        GATES.put(label + ":1", new CountDownLatch(1));
+        String jobId = start("IT_U_START_ONCE", label, "it-req-k");
+        CompletableFuture<Integer> late = runUntilStarted(label);
+        clock.advance(Duration.ofSeconds(121));
+        cancel(jobId, "it-req-k");
+        assertThat(attempts(jobId)).containsExactly("1:LEASE_EXPIRED");
+        assertThat(outcome(jobId)).containsEntry("status", "CANCELLED");
+        deliver();
+        assertThat(callbacks(jobId)).singleElement().satisfies(callback -> {
+            ExternalJobCancellation in = (ExternalJobCancellation) callback.input();
+            assertThat(in.unrecordedAttempts()).isEqualTo(1);
+            assertThat(in.usage()).isEmpty();
+        });
+
+        GATES.get(label + ":1").countDown();
+        assertThat(late.get(30, TimeUnit.SECONDS)).isEqualTo(1);
+        assertThat(usageRows(jobId)).containsExactly("1:units:" + UNITS);
+        assertThat(outcome(jobId)).containsEntry("status", "CANCELLED");
+        deliver();
+        assertThat(callbacks(jobId)).hasSize(1);
+    }
 
     @Test
     void aLateAttemptsUsageIsRecordedAndCountsBeforeTheOutcome() throws Exception {
@@ -460,8 +570,9 @@ class ExternalJobUnrecordedIT extends PostgresIntegrationTest {
     }
 
     /**
-     * Recording a late attempt's usage again (a retry of the executor's record after the database failed, say) writes
-     * nothing: only an attempt recorded {@code LEASE_EXPIRED} without usage takes it, and only once.
+     * {@code insertLateUsage}, called directly (a repeat cannot be brought about through the executor without
+     * injecting a database failure): it writes only for an attempt recorded {@code LEASE_EXPIRED} that has no usage
+     * yet, so a second call, or a call for an attempt recorded otherwise or not at all, writes nothing.
      */
     @Test
     void aRepeatedLateRecordingWritesTheUsageOnce() throws Exception {
@@ -525,12 +636,16 @@ class ExternalJobUnrecordedIT extends PostgresIntegrationTest {
         return running;
     }
 
-    /** Lets the lease (90 s and 30 s of margin) run out and has another instance record it. */
-    private ExternalJobExecutor expireOnAnotherInstance() {
-        ExternalJobExecutor other = new ExternalJobExecutor(context.getBean(ExternalJobRegistry.class), recorder,
+    private ExternalJobExecutor otherInstance() {
+        return new ExternalJobExecutor(context.getBean(ExternalJobRegistry.class), recorder,
             context, context.getBean(ExternalServices.class), context.getBean(JsonMapper.class),
             context.getBean(Clock.class), context.getBean(PlatformObservations.class),
             context.getBeanProvider(MeterRegistry.class), executor.settings().withInstanceId("it-takeover"));
+    }
+
+    /** Lets the lease (90 s and 30 s of margin) run out and has another instance record it. */
+    private ExternalJobExecutor expireOnAnotherInstance() {
+        ExternalJobExecutor other = otherInstance();
         clock.advance(Duration.ofSeconds(121));
         assertThat(other.runPending().block()).isZero();
         return other;

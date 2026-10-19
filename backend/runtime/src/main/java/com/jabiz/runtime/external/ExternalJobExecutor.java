@@ -769,11 +769,21 @@ public class ExternalJobExecutor implements SmartLifecycle {
                 .flatMap(inserted -> outputs.thenReturn(inserted))
                 .flatMap(inserted -> {
                     if (!inserted) {
-                        // Too late: the attempt is recorded LEASE_EXPIRED, and another may have run since. Its result
-                        // and files are not handed over, and the job's outcome is not touched; but the provider bills
-                        // what it consumed, so its usage is recorded against that attempt (decision D52 item 5).
-                        return recorder.insertLateUsage(claimed.jobId(), claimed.attemptNo(), usage)
-                            .map(late -> new Recorded(Outcome.DISCARDED, late, true));
+                        return recorder.recordedOutcome(claimed.jobId(), claimed.attemptNo())
+                            .flatMap(recorded -> recorded != ExternalJobRecorder.AttemptOutcome.LEASE_EXPIRED
+                                // This instance's own record: a retry after the commit went through but its answer
+                                // was lost. Nothing is written again; the outcome is the job's, and the usage the
+                                // committed record wrote is counted now, once.
+                                ? recorder.outcome(claimed.jobId())
+                                    .map(outcome -> Outcome.valueOf(outcome.status()))
+                                    .defaultIfEmpty(Outcome.WAITING_RETRY)
+                                    .map(outcome -> new Recorded(outcome, usage, false))
+                                // Too late: the attempt is recorded LEASE_EXPIRED, and another may have run since.
+                                // Its result and files are not handed over, and the job's outcome is not touched;
+                                // but the provider bills what it consumed, so its usage is recorded against that
+                                // attempt (decision D52 item 5).
+                                : recorder.insertLateUsage(claimed.jobId(), claimed.attemptNo(), usage)
+                                    .map(late -> new Recorded(Outcome.DISCARDED, late, true)));
                     }
                     return recorder.insertUsage(claimed.jobId(), claimed.attemptNo(), usage)
                         .then(recorder.isCancelled(claimed.jobId()))

@@ -38,6 +38,15 @@ class ExternalJobAttemptUsageTest {
     }
 
     @Test
+    void aTotalPastTheLargestLongStopsThereRatherThanFailing() {
+        ExternalJobRecorder.AttemptUsage usage = ExternalJobRecorder.attemptUsage(List.of(
+            row(1, "SUCCEEDED", "units", Long.MAX_VALUE - 1),
+            row(2, "SUCCEEDED", "units", 5L)));
+        assertThat(usage.usage()).containsEntry("units", Long.MAX_VALUE);
+        assertThat(ExternalJobRecorder.saturatedSum(2, 3)).isEqualTo(5);
+    }
+
+    @Test
     void noAttemptsIsNothing() {
         ExternalJobRecorder.AttemptUsage usage = ExternalJobRecorder.attemptUsage(List.of());
         assertThat(usage.unrecordedAttempts()).isZero();

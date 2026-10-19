@@ -237,11 +237,22 @@ class CancelExternalJobTest {
             .isInstanceOf(NullPointerException.class);
         assertThatThrownBy(() -> CancelExternalJob.<ProcessContext>of(java.util.Arrays.asList("it.cancel", null),
             c -> "x")).isInstanceOf(NullPointerException.class);
-        // The metadata keeps jobType the first of jobTypes.
+        // The metadata's jobType is one of its jobTypes, none of which is null.
         assertThatThrownBy(() -> new CancelExternalJob.Metadata<ProcessContext>("it.cancel", c -> "x", false, null,
             null, false, Set.of("it.second"))).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> new CancelExternalJob.Metadata<ProcessContext>("it.cancel", c -> "x", false, null,
             null, false, Set.of())).isInstanceOf(IllegalArgumentException.class);
+        java.util.Set<String> withNull = new java.util.LinkedHashSet<>(java.util.Arrays.asList("it.cancel", null));
+        assertThatThrownBy(() -> new CancelExternalJob.Metadata<ProcessContext>("it.cancel", c -> "x", false, null,
+            null, false, withNull)).isInstanceOf(NullPointerException.class);
+    }
+
+    @Test
+    void theMetadataAcceptsJobTypeAnywhereInItsTypesAndKeepsTheirOrder() {
+        CancelExternalJob.Metadata<ProcessContext> second = new CancelExternalJob.Metadata<>("it.cancel", c -> "x",
+            false, null, null, false, new java.util.LinkedHashSet<>(List.of("it.second", "it.cancel")));
+        assertThat(second.jobType()).isEqualTo("it.cancel");
+        assertThat(second.jobTypes()).containsExactly("it.second", "it.cancel");
     }
 
     @Test

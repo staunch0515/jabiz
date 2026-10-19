@@ -760,6 +760,35 @@ class ExternalJobIT extends PostgresIntegrationTest {
     }
 
     /**
+     * A record that finds its own attempt recorded already (it committed, but the answer was lost, and the record was
+     * tried again) is not a late one: it writes nothing more, reports the job's outcome rather than DISCARDED, and
+     * is not taken for a late instance (16w-1 review L3). The committed record is simulated with SQL.
+     */
+    @Test
+    void aRecordRepeatedAfterItsCommitReportsTheJobsOutcome() throws Exception {
+        String label = unique("lost-ack");
+        GATES.put(label + ":1", new CountDownLatch(1));
+        String jobId = start("IT_START_GATE", label, unique("ref"), "it-req");
+        CompletableFuture<Integer> running = executor.runPending().toFuture();
+        assertThat(STARTED.computeIfAbsent(label + ":1", k -> new CountDownLatch(1)).await(20, TimeUnit.SECONDS))
+            .isTrue();
+        // What this instance's first record committed: the attempt, its usage and the outcome.
+        insertAttempt(jobId, 1, "SUCCEEDED", false, null);
+        execute("INSERT INTO sys_external_job_usage (job_id, attempt_no, metric, usage_id, quantity)"
+            + " VALUES (?, 1, 'units', ?, 3)", jobId, UUID.randomUUID().toString());
+        execute("INSERT INTO sys_external_job_outcome (job_id, status, result, attempts, finished_time)"
+            + " VALUES (?, 'SUCCEEDED', '{\"label\":\"x\",\"attempt\":1}', 1, ?)", jobId,
+            java.sql.Timestamp.from(START));
+        GATES.get(label + ":1").countDown();
+        assertThat(running.get(30, TimeUnit.SECONDS)).isEqualTo(1);
+        assertThat(OBSERVED).contains(Map.of("job_type", "it.gate", "outcome", "SUCCEEDED"))
+            .doesNotContain(Map.of("job_type", "it.gate", "outcome", "DISCARDED"));
+        assertThat(attempts(jobId)).containsExactly("1:SUCCEEDED:false:null");
+        assertThat(query("SELECT metric, quantity FROM sys_external_job_usage WHERE job_id = ?", jobId))
+            .singleElement().satisfies(row -> assertThat(row).containsEntry("quantity", 3L));
+    }
+
+    /**
      * While a handler runs, the application holds no transaction open: no connection of it is idle in a transaction
      * that touched the jobs' tables.
      */

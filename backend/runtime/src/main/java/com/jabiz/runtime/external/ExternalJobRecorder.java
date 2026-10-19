@@ -494,6 +494,14 @@ public class ExternalJobRecorder {
             .then();
     }
 
+    /** How an attempt of the job is recorded; empty when it is not. */
+    Mono<AttemptOutcome> recordedOutcome(String jobId, int attemptNo) {
+        return engine().select("SELECT outcome FROM sys_external_job_attempt"
+                + " WHERE job_id = :job AND attempt_no = :attempt",
+                Map.of("job", BoundValue.of(jobId), "attempt", BoundValue.of(attemptNo)))
+            .next().map(row -> AttemptOutcome.valueOf(Rows.string(row.get("outcome"))));
+    }
+
     /**
      * Records what a late attempt consumed (decision D52 item 5): an attempt that ended after its lease had expired,
      * whose number is recorded already as {@code LEASE_EXPIRED}. Its result is dropped, but the provider bills what it
@@ -748,7 +756,7 @@ public class ExternalJobRecorder {
         for (Map<String, Object> row : rows) {
             String metric = Rows.string(row.get("metric"));
             if (metric != null) {
-                totals.merge(metric, Rows.longValue(row.get("quantity")), Math::addExact);
+                totals.merge(metric, Rows.longValue(row.get("quantity")), ExternalJobRecorder::saturatedSum);
                 continue;
             }
             // The join's one row for an attempt without usage rows.
@@ -759,6 +767,21 @@ public class ExternalJobRecorder {
         }
         return new AttemptUsage(Map.copyOf(totals), unrecorded);
     }
+
+    /**
+     * A total that stops at {@link Long#MAX_VALUE} rather than failing: an absurd quantity reported by a handler must
+     * not keep the job's completion from ever being delivered. It is logged, since the total is then a floor.
+     */
+    static long saturatedSum(long a, long b) {
+        try {
+            return Math.addExact(a, b);
+        } catch (ArithmeticException e) {
+            LOG.warn("An external job's usage total exceeds {}; it is reported as that", Long.MAX_VALUE);
+            return Long.MAX_VALUE;
+        }
+    }
+
+    private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(ExternalJobRecorder.class);
 
     /** What the status endpoint shows of a job, besides the job's own row. */
     record Progress(int attempts, boolean running, boolean cancelled, Instant firstClaimed, Instant lastFinished,
