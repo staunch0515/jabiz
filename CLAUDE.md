@@ -64,6 +64,8 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
   验证与重置链接用发送时才生成的一次性令牌：模板 `.token(用途, 有效期)`、流程中以 `MailTokens.consume` 使用，18 §5.6、决策 D35）；
   `jabiz.mail.enabled` 缺省关闭；不在流程中直接发邮件。可退订的模板（`NOTIFICATION`）以 `.entries(入口…)` 声明给哪些登录入口的用户（缺省全部，偏好只列令牌入口的），
   显示名写在消息 `mail.<名>.name`；收件偏好与邮件语言只经平台接口与积木 `MailPreferences`，切换界面语言只询问、不静默改邮件语言（`offerMailLanguage`，18 §5.6、决策 D49）。
+  应用的前端要有自己的退订页时，挂载积木 `MailUnsubscribe` 并配置 `jabiz.mail.unsubscribe-paths.<入口>`（相对该入口 `app-path`；声明了该入口的通知链接到它，D52 第 3 条），
+  不自写退订页或拼退订链接。
 - **不可变数据**：优先使用 `record` 和不可变集合（`List.copyOf` / `Map.copyOf`）。
 - **错误**：领域错误使用现有异常体系，经 `GlobalExceptionHandler` 转为 `ProblemDetail`：
   400 校验失败（附 `violations`）、404 不存在、409 并发冲突、422 业务规则拒绝、503 查询超时（`QUERY_TIMEOUT`，由数据库按时限中止，03 §1）、503 热门锁的队列已满或排队超时（`PROCESS_BUSY` 带 `Retry-After`，06 §4.2）、429 限流（`RATE_LIMITED`）。错误码可多语言（见设计文档）。
@@ -129,6 +131,9 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
   业务的出站调用只在 `BlockingStep` 中经声明的 `ExternalService` 进行（有副作用的放提交后或带幂等键）；耗时的调用用异步外部作业 `StartExternalJob`（决策 D38）。
   作业的输入上限按类型 `maxInputSize`（缺省 64 KiB，至多 1 MiB；输入永久保存，只放需要的内容）；作业要读文件，类型声明 `inputFiles`、流程以 `StartExternalJob…files(…)` 给出（按请求人的读取权限检查），
   处理器只经 `ExternalJobContext.files()` 读；要产生文件，类型声明 `outputFiles(策略, …)`、处理器以 `ExternalJobResult…file(键, 名称, 字节)` 返回，完成流程以 `ExternalJobCompletion.file(键)` 取得编号（D50）。处理器不接触 `com.jabiz.runtime.file`。
+  被取消的作业要结算或通知时，类型声明 `onCancelled(流程)`（`internal()`，输入 `ExternalJobCancellation`，含全部尝试的用量与取消人），不自己订阅 `jabiz.external-job.finished`；
+  流程中取消作业只用平台步骤 `CancelExternalJob.of(类型, ctx -> 作业号)[.ifOpen()]`（流程自己的权限，只取消该类型的作业，D52 第 2 条）。
+  提供方不按幂等键去重时重试可能重复计费：在尝试中 `recordUsage`、没有回答的尝试按估计计费、在提供方设置支出上限（D52 第 1 条）。
 - **内容编辑**（见 16 与决策 D20）：多语言内容用 `f.apply(I18nText.of(...))`（值为 `{语言: 文本}`，存 `jsonb`，语言即平台支持的语言）；
   被引用的实体用 `eb.display(字段)` 声明显示字段；状态、审核意见等只由流程改变的字段用 `f.processOnly()`（照常可读，数据视图 API 与通用实体流程不能写）；
   以某实体为对象的流程用 `actsOn(实体, 输入组件[, when])` 声明，后台据此显示行操作（`when` 只是显示提示）。Markdown 只在前端渲染，不允许原始 HTML。
@@ -137,6 +142,7 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
 - **前端**（见 12）：业务对象不写前端代码，页面由元数据生成；界面按目录与权限隐藏操作，但权限只由服务端判断。
   元数据表达不了的工作流，由应用在自己目录中的**扩展**写页面（12 §9、决策 D22）：只经 `@jabiz/admin` 引用平台、不自带依赖，路由不占平台路径。
   界面组件只用 `@jabiz/ui`（shadcn 组件源码只在平台一处，应用与扩展不自行生成或复制；需要新组件先加到平台）；颜色只用主题 token（第三方品牌标志按其指南用自己的颜色，D44），亮暗两种外观都过 axe（决策 D34）。
+  axe 的检查只用 `@jabiz/ui/testing`（Vitest 的 `expectAccessible`）与 `@jabiz/ui/testing/playwright`（`expectAccessible`、`animationsSettled`、`useAppearance`），不复制辅助函数（12 §11）。
   手写页面与扩展中的用户编号（准备人、审批人等）以 `UserName`（`@jabiz/admin`，10 §14）显示为名字，不显示编号。
   实体与字段的显示名写在消息资源（`entity.<实体>`、`entity.<实体>.<字段>`，三种语言；应用以 `jabizApp { languages(…) }` 只选部分语言时只写所选的，12 §10）。改动 Web 接口后更新 OpenAPI 快照并 `pnpm gen:api`。
 - **可观测性**（见 13 与决策 D16）：平台新的工作单元用 `PlatformObservations` 包装；观测标签只放名称与结果（流程、视图、模板、任务名），
@@ -154,6 +160,7 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
 - **保留、保全与导出**（见 21 §3–§4 与决策 D27）：保留期只以 `RetentionPolicy` Bean 声明（自时间字段或会计年度末 `jabiz.fiscal-year-end` 起算，日期按 `jabiz.fiscal-year-zone`，缺省 UTC，D48），法律保全只经
   `LEGAL_HOLD_PLACE` / `LEGAL_HOLD_RELEASE`；删除拦截由平台在删除路径中做（422 `RETENTION_ACTIVE` / `LEGAL_HOLD`），业务代码不自己判断。
   归档导出只经 `POST /api/exports/data`（CSV + `schema.json` + `manifest.json` + 报表 PDF），不另写导出。
+  生成的文件与签发的单据的保留期同样以 `RetentionPolicy.of("GeneratedFile" | "DocumentRun")` 声明（只读平台实体，`audit.read`，不含内容与名称，21 §3.1）。
 - **语句数**（见 06 §3.1、03 §3.1 与决策 D46）：平台在事务中缓冲写入（插入、按版本的更新、子流程的操作记录、事件、幂等结果），插入随下一条平台查询（取锁等）或在读写其表的语句、有时限的读取、模板、
   保存点、阻塞步骤与提交之前写出（读之前写出；应急开关 `jabiz.storage.write-batching.enabled`，缺省开）；引用检查复用本事务的读写，普通实体按本事务读到的版本更新；
   这些都在平台的写入路径中，业务代码不自己合并语句或缓存读到的实例，也不跨事务缓存科目、维度取值等可变数据。事务中的语句只经存储引擎发出（不直接用 `DatabaseClient`，ArchUnit 检查）。平台的标准写入路径（账本过账与冲正、示范的下单与发货、按已知版本更新、
@@ -205,7 +212,7 @@ Gradle 9（wrapper）多模块工程，根目录为 `backend/`（模块：`core`
   每次回放使用新的 schema 与应用上下文（数据库同集成测试）
 - 前端（`frontend/` 下，见 12）：`pnpm lint`、`pnpm typecheck`、`pnpm test`（Vitest）、`pnpm build`；`pnpm check:api` 确认生成的类型与快照一致。
   应用扩展（12 §9）：`JABIZ_ADMIN_EXTENSION=<目录> pnpm ext:check`（类型、lint、测试；`app` 的示范为 `../backend/app/admin-extension`）
-  应用自有 SPA（12 §12）：`pnpm app:check <目录>`（共用依赖的版本须与平台前端一致，不一致即失败；Gradle 构建中为 `spaCheck<名>`，在 `check` 中）。
+  应用自有 SPA（12 §12）：`pnpm app:check <目录>`（共用依赖的版本须与平台前端一致，不一致即失败；有 `@jabiz/ui/testing` 所用的测试工具时它们也须一致；Gradle 构建中为 `spaCheck<名>`，在 `check` 中）。
   示范门户 `backend/app/portal/`（`/portal/`，PWA）：`pnpm app:check ../backend/app/portal`，以及在该目录下 `pnpm install --frozen-lockfile && pnpm lint && pnpm typecheck && pnpm test`
   挂在子路径下构建：`VITE_BASE=/admin/ pnpm build`；后端按 `jabiz.web.spa[i].path` / `.index` / `.content-security-policy` 提供多个 SPA（见 17 §3.2）
   接口变化后：`./gradlew :app:test --tests '*OpenApiSnapshotIT' -Dopenapi.update-snapshot=true`（写 `frontend/openapi/openapi.json`）→ `pnpm gen:api`，一起提交

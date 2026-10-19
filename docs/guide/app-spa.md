@@ -101,6 +101,23 @@ export default defineConfig({
   15d 之前写的应用页面若依赖浏览器的默认样式（未写工具类的标题、列表、链接），合并后请自查；`UI_SCOPE` 已不需要。
 - 测试：Vitest + Testing Library，`setup.ts` 补上 jsdom 缺少的 `matchMedia`、`ResizeObserver` 与指针捕获（示范门户的 `src/test/setup.ts`）。
   示范门户的 CI：`pnpm install --frozen-lockfile && pnpm lint && pnpm typecheck && pnpm test`，以及 `pnpm app:check ../backend/app/portal`。
+- 无障碍检查（16v-1）：不要复制平台的 axe 辅助函数，从 `@jabiz/ui` 引用。组件与页面测试：
+
+  ```ts
+  import { expectAccessible } from '@jabiz/ui/testing'
+  // render(…)；然后检查亮、暗两种外观（jsdom 不算样式，不查颜色对比度）
+  await expectAccessible()
+  ```
+  端到端（Playwright）：
+
+  ```ts
+  import { expectAccessible, useAppearance } from '@jabiz/ui/testing/playwright'
+  await useAppearance(page, 'dark')          // 在第一次导航之前
+  await page.goto('/app/login')
+  await expectAccessible(page, 'sign-in (dark)')   // 等动画结束，含颜色对比度；违规为 soft 失败
+  ```
+  它们分别需要 `vitest` + `vitest-axe` 与 `@playwright/test` + `@axe-core/playwright`（`@jabiz/ui` 的可选 peer）：作为 SPA 自己的 devDependencies，
+  版本与平台前端相同（`app:check` 检查）。e2e 目录的 ESLint 关闭 `react-hooks/rules-of-hooks`（`useAppearance` 不是 React 的 hook）。
 
 ## 5. 入口、会话与页面
 
@@ -133,6 +150,14 @@ export default defineConfig({
   `useFileUrl(fileId, variant)`（对象 URL，卸载时释放；变体用 `@jabiz/client` 的 `previewVariant`）与 `downloadFile(fileId)`。不要从 `@jabiz/admin` 引用（它只给后台扩展）。
   示范门户的下单页以 `MarkdownView` 显示文案中的下单说明。
 - **邮件链接**：平台的邮件链接是 `{entryUrl}auth/<页>?entry=…&token=…`，即入口自己的前端；应用自己的邮件模板可以写 `{entryUrl.<入口>}`（18 §5.6）。
+- **退订页**（16v-1，D52 第 3 条）：在 SPA 中挂载 `@jabiz/ui` 的 `MailUnsubscribe`（`brand`，有路由时传 `search`），并把它的路径配置给入口：
+
+  ```yaml
+  jabiz.mail.unsubscribe-paths:
+    app: mail/unsubscribe        # 相对该入口的 app-path：链接为 {entryUrl.app}mail/unsubscribe?token=…
+  ```
+  以 `.entries("app")` 声明给该入口的通知，退订链接就指向这一页，用户不必能打开管理后台；没有声明入口的通知仍用后台的 `/mail/unsubscribe`
+  （`jabiz.mail.unsubscribe-path`），之前发出的链接照常有效。路径不在本应用提供的 SPA 之下、入口不可用即启动错误（`MAIL`）。
   升级说明：曾把 `jabiz.mail.base-url` 设为后台子路径（如 `https://<主机>/admin`）以绕行的应用，改回 `https://<主机>`；已发出的旧链接经后台的 `/auth/*` 照常可用。
 - **单点登录**：提供方配置 `redirect-uris.<入口>`（该前端的 `login/oidc` 的绝对地址，在身份提供方登记）；没有的提供方不对该入口提供（10 §12）。
   本人关联的往返也回到这个地址（`OidcCallback` 按 `startIdentityLink` 记下的用途完成关联），不需要另外登记。
