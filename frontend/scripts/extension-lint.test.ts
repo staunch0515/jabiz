@@ -5,10 +5,14 @@ import { describe, expect, it } from 'vitest'
 import platformConfig from '../eslint.config.js'
 import { extensionRules, extensionRulesFor } from './extension-lint.mjs'
 
-async function lint(code: string, rules: Linter.Config = extensionRules) {
-  const eslint = new ESLint({ overrideConfigFile: true, overrideConfig: [...platformConfig, rules] })
-  const [result] = await eslint.lintText(code, { filePath: 'src/page.ts' })
-  return result.messages.filter((m) => m.ruleId === 'no-restricted-imports').length
+async function restricted(code: string, rules: Linter.Config[] = extensionRules, filePath = 'src/page.ts') {
+  const eslint = new ESLint({ overrideConfigFile: true, overrideConfig: [...platformConfig, ...rules] })
+  const [result] = await eslint.lintText(code, { filePath })
+  return result.messages.filter((m) => m.ruleId === 'no-restricted-imports')
+}
+
+async function lint(code: string, rules: Linter.Config[] = extensionRules, filePath = 'src/page.ts') {
+  return (await restricted(code, rules, filePath)).length
 }
 
 describe('extension lint rules (decisions D22, D34)', () => {
@@ -33,6 +37,45 @@ describe('extension lint rules (decisions D22, D34)', () => {
     expect(await lint("import e from 'virtual:jabiz-extension'\nexport const x = e\n", demo)).toBe(1)
     const other = extensionRulesFor(resolve(import.meta.dirname, '../../backend/quizbuks/admin-extension'))
     expect(await lint("import { Button } from 'antd'\nexport const x = Button\n", other)).toBe(1)
+  })
+
+  it('refuses @jabiz/ui and @jabiz/client, pointing to @jabiz/admin (phase 16w-1)', async () => {
+    for (const source of ['@jabiz/ui', '@jabiz/ui/styles', '@jabiz/client', '@jabiz/client/vite', '@jabiz/client/testing']) {
+      for (const filePath of ['src/page.tsx', 'src/page.test.tsx']) {
+        const messages = await restricted(`import { x } from '${source}'\nexport const y = x\n`, extensionRules, filePath)
+        expect(messages, `${source} in ${filePath}`).toHaveLength(1)
+        expect(messages[0].message).toContain('only through @jabiz/admin')
+      }
+    }
+  })
+
+  it('refuses @jabiz/ui/testing, pointing to @jabiz/admin/testing', async () => {
+    for (const source of ['@jabiz/ui/testing', '@jabiz/ui/testing/playwright']) {
+      const messages = await restricted(`import { x } from '${source}'\nexport const y = x\n`, extensionRules,
+        'src/page.test.tsx')
+      expect(messages, source).toHaveLength(1)
+      expect(messages[0].message).toContain('@jabiz/admin/testing')
+    }
+  })
+
+  it('allows @jabiz/admin/testing in tests only', async () => {
+    const code = "import { expectAccessible } from '@jabiz/admin/testing'\nexport const x = expectAccessible\n"
+    expect(await lint(code, extensionRules, 'src/page.test.tsx')).toBe(0)
+    expect(await lint(code, extensionRules, 'src/nested/a.test.ts')).toBe(0)
+    expect(await lint(code, extensionRules, 'src/flow.spec.ts')).toBe(0)
+    const inPage = await restricted(code, extensionRules, 'src/page.tsx')
+    expect(inPage).toHaveLength(1)
+    expect(inPage[0].message).toContain('for tests only')
+    expect(await lint(code, extensionRules, 'src/testing.ts')).toBe(1)
+  })
+
+  it('keeps the other rules in tests', async () => {
+    expect(await lint("import { Button } from 'antd'\nexport const x = Button\n", extensionRules, 'src/a.test.tsx'))
+      .toBe(1)
+    expect(await lint("import e from 'virtual:jabiz-extension'\nexport const x = e\n", extensionRules,
+      'src/a.test.tsx')).toBe(1)
+    expect(await lint("import { api } from '@jabiz/admin'\nimport { it } from 'vitest'\nexport const x = [api, it]\n",
+      extensionRules, 'src/a.test.tsx')).toBe(0)
   })
 })
 

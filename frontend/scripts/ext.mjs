@@ -25,7 +25,7 @@ const bin = (name) => resolve(root, 'node_modules/.bin', name)
 const run = (command, args) => spawnSync(command, args, { cwd: root, stdio: 'inherit', env: process.env }).status ?? 1
 
 async function lint() {
-  const eslint = new ESLint({ cwd: dir, overrideConfigFile: true, overrideConfig: [...platformConfig, extensionRulesFor(dir)] })
+  const eslint = new ESLint({ cwd: dir, overrideConfigFile: true, overrideConfig: [...platformConfig, ...extensionRulesFor(dir)] })
   const results = await eslint.lintFiles(['src'])
   const formatter = await eslint.loadFormatter('stylish')
   const output = await formatter.format(results)

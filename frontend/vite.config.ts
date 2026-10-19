@@ -41,6 +41,8 @@ export default defineConfig({
   resolve: {
     alias: [
       { find: 'virtual:jabiz-extension', replacement: extensionEntry(extension, root) },
+      // Before @jabiz/admin: an extension's tests import the accessibility check from here (decision D22).
+      { find: /^@jabiz\/admin\/testing$/, replacement: resolve(root, 'src/lib/testing.ts') },
       { find: /^@jabiz\/admin$/, replacement: resolve(root, 'src/lib/index.ts') },
     ],
     // The extension lies outside this project and has no node_modules of its own: its imports of React and the rest

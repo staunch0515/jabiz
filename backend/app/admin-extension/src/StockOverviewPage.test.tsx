@@ -6,6 +6,7 @@ import { initReactI18next } from 'react-i18next'
 import { MemoryRouter } from 'react-router'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, AppearanceProvider, EXTENSION_NAMESPACE, Toaster } from '@jabiz/admin'
+import { expectAccessible } from '@jabiz/admin/testing'
 import { messages } from './messages'
 import StockOverviewPage, { type StockRow } from './StockOverviewPage'
 
@@ -132,6 +133,14 @@ describe('StockOverviewPage', () => {
     await userEvent.type(screen.getByLabelText('Quantity'), '1')
     await userEvent.click(screen.getByRole('button', { name: 'Receive' }))
     expect(await screen.findByText('Unknown SKU.')).toBeInTheDocument()
+  })
+
+  it('passes axe in the light and the dark appearance, with the receipt form shown', async () => {
+    calls.permissions.add('commerce.stock.receive')
+    renderPage()
+    await screen.findByText('Bolt')
+    expect(screen.getByTestId('receive-form')).toBeInTheDocument()
+    await expectAccessible()
   })
 
   it('shows the refusal of the template instead of the rows', async () => {
