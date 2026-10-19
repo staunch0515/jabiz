@@ -84,11 +84,15 @@ export async function readLegalVersions(): Promise<LegalVersionRow[]> {
 }
 
 /** Publishes a draft as read (`QB_LEGAL_PUBLISH`, with a second factor); none for now, else when it takes effect. */
-export async function publishLegal(draft: LegalDraft, effectiveAt: string | null, requiresConsent: boolean) {
+export async function publishLegal(draft: LegalDraft, effectiveAt: string | null, requiresConsent: boolean,
+  announce = false) {
   const input: Row = { docId: draft.docId, requiresConsent, baseRevision: draft.revision }
   if (effectiveAt) input.effectiveAt = effectiveAt
+  // Asked for only: an announcement in the inboxes of those the text concerns (Q7c).
+  if (announce) input.announce = true
   const output = await runProcess<Row>(PROCESS.legalPublish, input)
-  return { versionNo: Number(output.versionNo ?? 0), effectiveAt: String(output.effectiveAt ?? '') }
+  return { versionNo: Number(output.versionNo ?? 0), effectiveAt: String(output.effectiveAt ?? ''),
+    announcements: Array.isArray(output.announcements) ? output.announcements.length : 0 }
 }
 
 /** Withdraws a version announced for later (`QB_LEGAL_WITHDRAW`, with a second factor and a reason). */

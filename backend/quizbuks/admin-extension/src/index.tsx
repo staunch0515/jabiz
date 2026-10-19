@@ -5,12 +5,14 @@ import {
   ClipboardCheck,
   FileSpreadsheet,
   Landmark,
+  Megaphone,
   Scale,
   ScrollText,
   Sparkles,
   Users,
   Wallet,
 } from 'lucide-react'
+import BroadcastsPage from './BroadcastsPage'
 import AiPage from './AiPage'
 import FinanceOverviewPage from './FinanceOverviewPage'
 import { PATH, PERMISSION } from './ids'
@@ -33,7 +35,7 @@ import UsersPage from './UsersPage'
  * QuizBuks's own pages in the platform's admin frontend (docs/quizbuks/02-design.md section 7.3,
  * docs/quizbuks/plans/Q9a-admin-extension.md and Q9c-admin-finance.md; platform decision D22): the review of sponsor
  * applications and submitted publications with everything the decision is about, the user summary (P-01), and
- * the legal texts (publishing the drafts and withdrawing announced versions, Q7b), finance's pages (the overview, transfers and their review, top-ups, the reconciliation, the monthly reports and the
+ * the legal texts (publishing the drafts and withdrawing announced versions, Q7b), the announcements and notices (Q7c), finance's pages (the overview, transfers and their review, top-ups, the reconciliation, the monthly reports and the
  * journal export with its account mapping, Q9d).
  * The generated pages still list and show the entities; these are what the metadata cannot express. Every page reads
  * through the platform's generic endpoints, where the server checks each call; the menu's permissions only decide
@@ -55,6 +57,7 @@ export default defineExtension({
     { path: PATH.journal, element: <JournalPage /> },
     { path: PATH.journalMapping, element: <JournalMappingPage /> },
     { path: PATH.legal, element: <LegalPage /> },
+    { path: PATH.broadcasts, element: <BroadcastsPage /> },
     { path: PATH.ai, element: <AiPage /> },
   ],
   menu: [
@@ -71,6 +74,8 @@ export default defineExtension({
         },
         { key: 'qb-users', label: 'menu.users', path: PATH.users, icon: Users, permission: PERMISSION.usersRead },
         { key: 'qb-legal', label: 'menu.legal', path: PATH.legal, icon: ScrollText,
+          permission: PERMISSION.contentWrite },
+        { key: 'qb-broadcasts', label: 'menu.broadcasts', path: PATH.broadcasts, icon: Megaphone,
           permission: PERMISSION.contentWrite },
         { key: 'qb-ai', label: 'menu.ai', path: PATH.ai, icon: Sparkles, permission: PERMISSION.aiRead },
       ],

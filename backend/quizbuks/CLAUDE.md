@@ -166,6 +166,18 @@
   与登录后的重新同意（`QB_CONSENT_ACCEPT`，只接受本入口的种类与当前版本）。**资金与合约类写入**（充值、提交发布、开通收款；以后新增的同类流程照此）以 `.steps(ConsentChecks.sponsor())` / `.steps(ConsentChecks.taker())` 在锁外再查（422 `QB_CONSENT_REQUIRED`），开始答题不查（Q7-2）。
   没有已生效版本时不要求同意（开发、测试与新装）。匿名读取只经公开模板 `qb.public.*`（公开视图：法律文本的已发布版本、已发布的 FAQ；草稿没有公开视图，公开视图不放发布人与哈希），`JABIZ_PUBLIC_ENABLED` 缺省开。
   QB_SETUP 新建的行使场景的 ID 序列后移：答题场景中的答案按显示位置写，随之按新位置改写（得分不变）。
+- **站内信与公告**（`messaging`，`docs/quizbuks/plans/Q7-messages-legal.md` Q7c）：**个人消息 `QbMessage` 只由事件的消费者写**（`QB_MESSAGE_FROM_EVENT`，`internal()`；收款提醒为逐项任务 `qb.payout-reminder`），
+  从不在答题、支付的锁内写（`AttemptStatementBudgetIT` 不变）；消费者重读记录、仍成立才写，`sourceKey` 唯一使同一事件只成一条，7 天以前的事件跳过（重放不补发）；
+  标题与正文创建时按 `qb.msg.<种类>.title|body` 以三种语言渲染（`MessageTexts`，Q7-15），不含他人的数据。新的消息种类：加事件订阅、种类常量、三语文案与 `InboxIT` 的用例。
+  公告与商家通知**不按人复制**：发送时写一行冻结的 `QbBroadcastFeed`，收件箱读时匹配。匹配的条件写在 `qb.app.inbox`、`qb.app.inbox-unread` 与 `qb.system.broadcast-audience` 三处（改一处即改三处，`InboxMatchIT` 的真值表检查三者）。
+  **收件箱只读 `live` 的行**（评审 H1）：过期的与发布已结束的通知由每分钟的逐项任务 `qb.broadcast-expire`（`QB_BROADCAST_EXPIRE`）关掉，部分索引 `(audience, expires_at) WHERE live` 因此只有当前的行；模板不收页面的时间（评审 L1，`at` 不是参数）。
+  未读徽标从读者的 `QbInboxState.readThrough` 之后数起（`QB_MESSAGE_MARK` 在写入已读之后以 `qb.app.inbox-unread` 的 `oldestUnread` 推进它，至多落后 10 分钟，从不后退；它不是阅读，列表与统计不用它）。
+  个人消息一律是纯文本（评审 H2：参数中有商家写的发布名）；只有平台的公告按 Markdown 显示。商家通知在其发布暂停或预算不足时隐藏（卡片 `SCHEDULED` / `LIVE` 才显示，评审 M1）。
+  商家的统计只读每日快照 `QbBroadcastStats`（任务 `qb.broadcast-stats`，评审 M2）：到达人数向下取整（不足 10 不显示），阅读不足 5 不显示，到达不足 `qb.broadcast.stats.min-audience`（50）时不显示点击与开始答题；后台为确切的实时人数。
+  链接检查（`BroadcastRules.hasAddress`，评审 M3）先做 NFKC、去掉不可见字符、把 `[.]`、` dot `、`。` 等写法还原为点，再按形式（任意 `label.label` 加两个以上字母的顶级域、IDN、IPv4、`LINE ID`、`@handle`、十位以上的数字）判断，不靠域名清单。
+  撤回记录只记谁撤回的种类（`SENDER` / `ADMIN` / `SYSTEM`，评审 L3），是哪位管理员看审计；撤回法律文本的预告版本时同时撤回它的公告（`sourceKey` = `legal:<版本>`，评审 L2，锁序 `qb.legal` → `qb.broadcast`）。
+  规则只写在纯 Java 的 `BroadcastRules`（上限、长度、链接、时刻），保存即给出发送会遇到的全部问题；商家通知只给本人进行中的发布、纯文本无链接、条数与间隔是普通参数；不预审，管理员撤回（理由商家可见），封禁商家时 `QB_USER_BAN` 以子流程 `QB_BROADCAST_BAN_WITHDRAW` 撤回。
+  锁的顺序：`qb.account:<商家>` → `qb.broadcast:<编号>`；已读另取 `qb.inbox:<用户>`。任何统计都不给出是谁。推广只能退订（`QbInboxState.promoOff`，Q7-11）。
 - **AI 出题**（`content.ai`，`docs/quizbuks/plans/Q8-ai.md` Q8a）：提供方是 Claude（Anthropic API，A-1），外部服务 `anthropic`，只经平台的 JDK HTTP 与手写的 `ClaudeApi`（不用 SDK）；全部调用都是异步外部作业 `qb.ai.questions`，处理器不访问数据库，作业、流程与页面只认 `QuestionWriter`（换提供方只改它的实现与外部服务）。
   **候选从不自动入库**：`READY` 的候选只在 `QbAiJob.candidates`，7 天后由 `qb.ai-expire` 从作业中移除、不能再加入（提供方的原始回答仍在平台只追加的作业结果中，`candidates` 列 `auditMasked`）；只有 `QB_AI_ACCEPT` 把商家校对后的内容（每题 `reviewed = true`，缺即 400）按内容规则（`AiCandidates`，与版本的规则与列长相同）写成题目，题目记 `aiJobId`、模版 `aiGenerated = true`。
   **只发送商家自己的模版内容**（标题、简介、所选资料：文章发正文，其他种类只发标题与描述；已有题干），以 JSON 数据放在 `<quiz_data>` 中（`<` 转义），系统提示固定；不发送答题人的任何数据与商家的身份信息，`metadata.user_id` 是 `AiUserKeys`（HMAC，密钥由 `JABIZ_INTEGRITY_KEY` 以 `qb.ai-user` 派生）。输入 ≤ 60 KiB（`ClaudeApi.MAX_INPUT_BYTES`）：超出即 422 `QB_AI_INPUT_TOO_LARGE`，从不截断。
@@ -215,6 +227,8 @@
   法律文本按界面语言显示、日文为准（其他语言注明并可切换日文，中文缺失时显示英文并注明，`lang` 属性），Markdown 只经 `MarkdownView`。`qb.me.consents` 按服务端的时间读（`qb/legal.ts` 由其应答的 `Date` 头得知设备时钟的偏差并改正，不按设备时钟判断是否已生效）；欢迎页与入驻页以 `TermsAgreement` 同意它给出的当前版本并发送版本号（`QB_TERMS_OUTDATED` 即重读）；
   `ConsentGate` 在资料完整（App）或已申请（商家）且有须同意的版本时整页替换页面（未验证邮箱只显示提示条），帮助与条款页不受它拦；它只是页面，服务端照样拦资金与合约类写入。
   任何调用收到 `QB_CONSENT_REQUIRED` 即重读同意状况、提示随之出现：两个 SPA 的 QueryClient 只用 `newQbQueryClient()`（查询与变更出错时都检查），不经 React Query 的调用自己调 `noticeConsentProblem`。
+- **收件箱与消息中心**（Q7c，App `src/inbox/`、商家后台 `src/notices/`）：未读徽标经 `useUnread`（进入、回到前台、每 5 分钟重读，离开即停）；打开即 `QB_MESSAGE_MARK`（已读），按钮另记点击；
+  收件箱的模板不收页面的时间（服务端的现在）；徽标的查询不随窗口获得焦点再问一次。商家通知的编辑器只显示保存给出的问题，不重算规则，只有一个可选发布时预先选中它。
 - **AI 出题页**（Q8a，`sponsor/src/ai/`，名字在 `ids.ts`、手写类型与调用在 `api.ts`）：编辑器题目页上方的面板与对话框、候选校对、仪表盘的用量卡（`AiUsageMetric`，在 Q9e2 的卡片位）。候选只以纯文本显示（输入框与文本框，不经 `MarkdownView`）；进行中每 5 秒查询、至多 5 分钟（按服务端时钟），离开即停；对话框只在合计不超过上限时可提交，判断仍在服务端。
 - **认证与账户只用平台的积木**（`@jabiz/ui` 的 `SignInForm`、`SignUpForm`、`MailLinkPage`、`OidcCallback`、`StepUpProvider`、`ChangePasswordForm`、`MfaSettings`、`SessionList`、
   `LinkedIdentities`、横幅），QuizBuks 不写认证代码。邮件链接页在各自的 `auth/verify-email|join|password-reset`。路由是 `qb/router.tsx` 的小路由。
@@ -224,6 +238,7 @@
 - **检查**（每个 SPA 目录下）：`pnpm install --frozen-lockfile && pnpm lint && pnpm typecheck && pnpm test`；平台前端目录下 `pnpm app:check ../quizbuks-web/app`（`sponsor` 同）。
 - **后台扩展**（`backend/quizbuks/admin-extension`，Q9a，平台 12 §9 与决策 D22）：只经 `@jabiz/admin` 引用平台，没有 `package.json`；路由在 `/qb/**`；名字在 `ids.ts`，
   手写类型与读取在 `api.ts`（快照类型 `snapshot.ts` 抄自商家后台，随 `QuizSnapshots` 一起改）。只读默认数据视图与 `qb.admin.*` 模板，决定只经平台的 `ApprovalPanel`；
+  **公告与通知页**（Q7c，`/qb/broadcasts`，`broadcasts-api.ts`、`broadcasts-messages.ts`）：保存后才可发送且只发送未再修改的已保存草稿；撤回填理由；
   **规约类页**（Q7b，`/qb/legal`，`legal-api.ts`）预览各种法律文本的草稿，以读到的草稿版本运行 `QB_LEGAL_PUBLISH`，并在版本列表（`qb.admin.legal-versions`）中对未生效的预告版本填理由运行 `QB_LEGAL_WITHDRAW`；页面上的状态只是显示，生效与否由服务端判断；
   发布的决定面板只在发布、档位与版本（审批绑定的三者）都为当前 `approvalRequestId` 读好、无错误、不在重读时给出。资金部分只在 `qb.admin.finance.read` 时显示与请求，
   内容管理员读的模板也不带金额（金额在 `qb.admin.publication-funds`、`qb.admin.attempt-rewards` 等财务模板中）；列表按页读取；金额按 JPY（`formatAmount`），用户编号用 `UserName`。
@@ -243,6 +258,7 @@
   这个变量只给 e2e：正式模式或正式密钥下设成每日以外的值即启动失败（`wallet.TransferScheduleCheck`，同开发入账）。
   **条款**（Q7b）：`prepareQuizbuks` 在没有已生效的三种文本时发布第一版（同上线前），发布人是测试自己建的、带已验证邮箱与测试角色 `QB_E2E_CONTENT`（`QB_ADMIN_ROLES` 中同样加入）、经 API 绑定 TOTP 并 step-up 的内容管理员（`tests/legal.ts`）；
   `support.ts` 的 `run` 像页面一样替 `QB_PROFILE_SAVE` / `QB_SPONSOR_APPLY` 带上当前版本，并在充值、提交发布、开通收款之前先接受到期的新版本（不测同意的测试因此不受其他测试发布的新版影响）；经页面完成欢迎页的测试勾选 `profile-terms`。
+  **站内信与公告**（Q7c）：后台扩展的写入要已验证的邮箱（首个管理员没有），测试以 `contentAdmin`（`tests/legal.ts`，角色 `QB_E2E_CONTENT`、不绑定二次验证）登录后台；每次要求二次验证的撤回经 API 以 `legalAdmin` 运行。e2e 的公告用推广（只到发送前注册的人），不让以后测试新建的答题人收到。
   启动方式与环境变量照 `.github/workflows/quizbuks.yml` 的 `e2e` 作业；然后 `E2E_BASE_URL=… E2E_ADMIN_USER=… E2E_ADMIN_PASSWORD=… pnpm e2e`。测试只增数据，可重复运行。
 
 ## 6. 测试与命令（在 `backend/` 下）

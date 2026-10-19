@@ -92,7 +92,15 @@ class ProcessAccessIT extends QbItSupport {
         Map.entry("QB_MAIL_PAYOUT_ACCOUNT", ProcessAccess.INTERNAL),
         Map.entry("QB_MAIL_TOPUP", ProcessAccess.INTERNAL),
         Map.entry("QB_MAIL_FUNDS_SHORT_DUE", ProcessAccess.INTERNAL),
-        Map.entry("QB_PUBLICATION_NOTIFY", ProcessAccess.INTERNAL));
+        Map.entry("QB_PUBLICATION_NOTIFY", ProcessAccess.INTERNAL),
+        // Q7c: the messages made from events, the reminders, the scheduled sending and a ban's withdrawal.
+        Map.entry("QB_MESSAGE_FROM_EVENT", ProcessAccess.INTERNAL),
+        Map.entry("QB_PAYOUT_REMINDER", ProcessAccess.INTERNAL),
+        Map.entry("QB_BROADCAST_DISPATCH", ProcessAccess.INTERNAL),
+        Map.entry("QB_BROADCAST_BAN_WITHDRAW", ProcessAccess.SUB_PROCESS_ONLY),
+        // Q7c review: the expiry and the daily statistics.
+        Map.entry("QB_BROADCAST_EXPIRE", ProcessAccess.INTERNAL),
+        Map.entry("QB_BROADCAST_STATS", ProcessAccess.INTERNAL));
 
     @Autowired
     ProcessRegistry registry;

@@ -17,7 +17,7 @@ import {
   cn,
 } from '@jabiz/ui'
 import { QueryClientProvider, useQuery } from '@tanstack/react-query'
-import { History, House, UserRound, Wallet, type LucideIcon } from 'lucide-react'
+import { History, House, Inbox, UserRound, Wallet, type LucideIcon } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from './messages'
@@ -30,6 +30,10 @@ import { PROFILE_QUERY } from './pages/ProfileForm'
 import { ResultPage } from './pages/ResultPage'
 import { WelcomePage } from './pages/WelcomePage'
 import { AboutPage } from './pages/AboutPage'
+import { badgeText, inboxItemOf, INBOX_PATH } from './inbox/api'
+import { InboxItemPage } from './inbox/InboxItemPage'
+import { InboxPage } from './inbox/InboxPage'
+import { useUnread } from './inbox/useUnread'
 import { forgetAttempts } from './play/storage'
 import { itemPage } from './routes'
 import { readMyProfile } from './qb/api'
@@ -58,11 +62,12 @@ let pendingStep: SignInStep | undefined
 
 const MAIL_PAGES = new Set(['/auth/verify-email', '/auth/join', '/auth/password-reset'])
 
-/** The bottom navigation's entries (docs/quizbuks/02-design.md section 7.1). */
+/** The bottom navigation's entries (docs/quizbuks/02-design.md section 7.1; the inbox fifth, Q7c, QP Q-8). */
 const NAV: { path: string; key: string; icon: LucideIcon }[] = [
   { path: HOME, key: 'nav.home', icon: House },
   { path: HISTORY, key: 'nav.history', icon: History },
   { path: WALLET_PATH, key: 'wallet.nav', icon: Wallet },
+  { path: INBOX_PATH, key: 'inbox.nav', icon: Inbox },
   { path: ACCOUNT_PATH, key: 'nav.account', icon: UserRound },
 ]
 
@@ -92,12 +97,18 @@ function Header() {
   )
 }
 
-/** The bottom navigation of a phone app, kept on screen; the current page is marked for assistive technology. */
+/**
+ * The bottom navigation of a phone app, kept on screen; the current page is marked for assistive technology. The
+ * inbox's entry carries the unread count (its name says it too), refreshed as `useUnread` says.
+ */
 function BottomNav({ path }: { path: string }) {
   const { t } = useTranslation(APP)
-  // A publication's page belongs to home, an attempt's to the history, the payout account to the wallet.
+  const unread = useUnread()
+  // A publication's page belongs to home, an attempt's to the history, the payout account to the wallet, a message
+  // to the inbox.
   const item = itemPage(path)
-  const section = item ? (item.page === 'p' ? HOME : HISTORY) : path === PAYOUT_PATH ? WALLET_PATH : path
+  const section = item ? (item.page === 'p' ? HOME : HISTORY) : path === PAYOUT_PATH ? WALLET_PATH
+    : inboxItemOf(path) ? INBOX_PATH : path
   return (
     <nav aria-label={t('nav.label')}
       className="bg-background fixed inset-x-0 bottom-0 z-10 border-t pb-[env(safe-area-inset-bottom)]">
@@ -105,12 +116,23 @@ function BottomNav({ path }: { path: string }) {
         {NAV.map((item) => {
           const Icon = item.icon
           const current = section === item.path
+          const badge = item.path === INBOX_PATH && unread > 0 ? badgeText(unread) : null
           return (
             <li key={item.path} className="flex-1">
               <Link to={item.path} current={current} data-testid={`nav-${item.path.replace('/', '') || 'home'}`}
+                aria-label={badge ? t('inbox.navUnread', { count: badge }) : undefined}
                 className={cn('flex flex-col items-center gap-0.5 py-2 text-xs',
                   current ? 'text-primary font-medium' : 'text-muted-foreground hover:text-foreground')}>
-                <Icon aria-hidden className="size-5" />
+                <span className="relative">
+                  <Icon aria-hidden className="size-5" />
+                  {badge && (
+                    <span aria-hidden data-testid="nav-inbox-badge"
+                      className={cn('bg-destructive text-destructive-foreground absolute -top-1.5 left-3 min-w-4',
+                        'rounded-full px-1 text-center text-[10px] leading-4 font-semibold')}>
+                      {badge}
+                    </span>
+                  )}
+                </span>
                 {t(item.key)}
               </Link>
             </li>
@@ -152,6 +174,11 @@ function SignedIn({ path }: { path: string }) {
   else if (path === WALLET_PATH) page = <WalletPage />
   else if (path === PAYOUT_PATH) page = <PayoutPage />
   else if (path === ACCOUNT_PATH) page = <AccountPage />
+  else if (path === INBOX_PATH) page = <InboxPage />
+  else if (inboxItemOf(path)) {
+    const message = inboxItemOf(path)!
+    page = <InboxItemPage key={`${message.kind}:${message.id}`} kind={message.kind} id={message.id} />
+  }
   else if (item?.page === 'p') page = <PublicationPage key={item.id} publicationId={item.id} country={country} />
   else if (item?.page === 'play') page = <PlayPage key={item.id} attemptId={item.id} />
   else if (item?.page === 'result') page = <ResultPage key={item.id} attemptId={item.id} country={country} />

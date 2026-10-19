@@ -14,6 +14,8 @@ export const DATASET = {
   ban: 'urn:jabiz:dataset:default:QbUserBan',
   /** The drafts of the legal texts, edited on the platform's generic pages (`qb.admin.content.write`; Q7b). */
   legalDoc: 'urn:jabiz:dataset:default:QbLegalDoc',
+  /** The named users of an announcement (`qb.admin.content.write`; Q7c). */
+  broadcastTarget: 'urn:jabiz:dataset:default:QbBroadcastTarget',
 } as const
 
 /** SQL templates (`queries/qb/admin`). */
@@ -58,6 +60,18 @@ export const TEMPLATE = {
   aiUsage: 'qb.admin.ai-usage',
   aiJobs: 'qb.admin.ai-jobs',
   aiSettings: 'qb.admin.ai-settings',
+  /** Every announcement and sponsor's notice with its statistics (Q7c; `qb.admin.content.write`). */
+  broadcasts: 'qb.admin.broadcasts',
+} as const
+
+/** The announcements' processes (`messaging.BroadcastProcesses`, Q7c); the server checks each. */
+export const BROADCAST = {
+  save: 'QB_ADMIN_BROADCAST_SAVE',
+  /** Sends now or schedules (a second factor, as other administration). */
+  send: 'QB_ADMIN_BROADCAST_SEND',
+  cancel: 'QB_ADMIN_BROADCAST_CANCEL',
+  /** Any announcement or sponsor's notice, with a reason and a second factor every time. */
+  withdraw: 'QB_ADMIN_BROADCAST_WITHDRAW',
 } as const
 
 /** Processes the finance pages run (Q9c); the server checks each. */
@@ -123,6 +137,10 @@ export const DICTIONARY = {
   payoutAccountStatus: 'urn:jabiz:dict:quizbuks:payout-account-status',
   reconCheck: 'urn:jabiz:dict:quizbuks:recon-check',
   legalKind: 'urn:jabiz:dict:quizbuks:legal-kind',
+  broadcastStatus: 'urn:jabiz:dict:quizbuks:broadcast-status',
+  broadcastType: 'urn:jabiz:dict:quizbuks:broadcast-type',
+  broadcastAudience: 'urn:jabiz:dict:quizbuks:broadcast-audience',
+  broadcastTarget: 'urn:jabiz:dict:quizbuks:broadcast-target',
   consentSource: 'urn:jabiz:dict:quizbuks:consent-source',
 } as const
 
@@ -198,6 +216,8 @@ export const PATH = {
   journalMapping: '/qb/finance/journal/mapping',
   /** The legal texts: publishing the drafts and withdrawing announced versions (Q7b). */
   legal: '/qb/legal',
+  /** Announcements and notices: writing, sending and withdrawing them, with their statistics (Q7c). */
+  broadcasts: '/qb/broadcasts',
   /** AI generation (Q8a): usage, failures, the switch and the limits. */
   ai: '/qb/ai',
   /** The platform's own pages. */
