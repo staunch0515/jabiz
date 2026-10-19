@@ -11,6 +11,7 @@ import com.jabiz.external.ExternalJobType;
 import com.jabiz.external.ExternalServices;
 import com.jabiz.external.GeneratedFile;
 import com.jabiz.runtime.observability.PlatformObservations;
+import com.jabiz.runtime.param.ParamService;
 import io.micrometer.common.KeyValues;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -72,7 +73,12 @@ import java.util.concurrent.atomic.AtomicLong;
  *       {@value ExternalJobRecorder#FINISHED_EVENT}. An instance that comes back after its lease expired finds its
  *       attempt recorded and drops what it has.</li>
  * </ol>
- * The types take turns: each poll starts with the next one, so that one busy type cannot take a full instance's every
+ * A type that declares {@code enabledBy} (decision D52 item 4) is held while its business parameter is not {@code true}
+ * now: each poll reads the parameter once, as the system and before any claim transaction ({@link ExternalJobGate}),
+ * and a held type's claim transaction has no capacity, so it only records expired leases and settles jobs (cancelled
+ * ones included); its queued and retry-waiting jobs wait, and attempts already running run to their end.
+ *
+ * <p>The types take turns: each poll starts with the next one, so that one busy type cannot take a full instance's every
  * slot. The queries look at the jobs of a type from its watermark on (the lowest one without an outcome); every
  * {@code watermark-refresh} a sweep looks at all of them, refreshes the watermarks and fails the open jobs of types no
  * longer declared ({@code TYPE_REMOVED}).
@@ -217,6 +223,8 @@ public class ExternalJobExecutor implements SmartLifecycle {
     private final Settings settings;
     /** The jobs' files (decision D50), found when a job has some: they depend on the uploads and their processes. */
     private final ObjectProvider<ExternalJobFiles> files;
+    /** Which types their business parameter holds now (decision D52 item 4). */
+    private final ExternalJobGate gate;
     private final AtomicInteger inFlight = new AtomicInteger();
     /** Where the next poll starts in the list of types: after the one that took the last slot. */
     private final AtomicInteger nextType = new AtomicInteger();
@@ -257,6 +265,7 @@ public class ExternalJobExecutor implements SmartLifecycle {
         this.observations = observations;
         this.meters = meters;
         this.settings = Objects.requireNonNull(settings, "settings must not be null");
+        this.gate = new ExternalJobGate(beans.getBeanProvider(ParamService.class), meters, clock);
     }
 
     /** {@code <host>-<random>}: tells instances apart in the claims, nothing more. */
@@ -345,7 +354,8 @@ public class ExternalJobExecutor implements SmartLifecycle {
     /**
      * Claims what is due now within this instance's free capacity, runs it and records it; completes when every
      * attempt it started is recorded, with their number. Without room it still records expired leases and settles
-     * jobs that can have no further attempt. For tests and scenario replay; the poller does the same without waiting.
+     * jobs that can have no further attempt; so it does for the types their parameter holds (decision D52 item 4).
+     * For tests and scenario replay; the poller does the same without waiting.
      */
     public Mono<Integer> runPending() {
         return claimAll(Math.max(0, settings.maxInFlight() - inFlight.get()))
@@ -358,7 +368,8 @@ public class ExternalJobExecutor implements SmartLifecycle {
 
     /**
      * One claim transaction per type, at most {@code capacity} attempts in all, starting with the next type in turn;
-     * a sweep first fails the jobs of undeclared types.
+     * a sweep first fails the jobs of undeclared types. The parameters of the types that declare one are read first,
+     * outside every transaction; a held type's transaction has no capacity.
      */
     private Flux<Claimed> claimAll(int capacity) {
         if (stopping) {
@@ -377,11 +388,15 @@ public class ExternalJobExecutor implements SmartLifecycle {
         }
         AtomicInteger left = new AtomicInteger(capacity);
         Mono<Void> removed = sweep ? failRemovedTypes(names) : Mono.empty();
-        return removed.thenMany(Flux.fromIterable(order)
+        List<ExternalJobType<?, ?>> types = names.stream().<ExternalJobType<?, ?>>map(name -> jobs.find(name)
+            .orElseThrow()).toList();
+        return removed.then(gate.held(types)).flatMapMany(held -> Flux.fromIterable(order)
             .concatMap(index -> {
-                ExternalJobType<?, ?> type = jobs.find(names.get(index)).orElseThrow();
-                // A type with output files takes no more attempts than the output budget holds (decision D50).
-                return claim(type, Math.min(left.get(), outputRoom(type)), sweep)
+                ExternalJobType<?, ?> type = types.get(index);
+                // A held type takes nothing (decision D52 item 4); a type with output files no more attempts than
+                // the output budget holds (decision D50).
+                int room = held.containsKey(type.name()) ? 0 : Math.min(left.get(), outputRoom(type));
+                return claim(type, room, sweep)
                     .map(claimed -> claimed.releasing(reserveOutput(type)))
                     .doOnNext(claimed -> {
                         left.decrementAndGet();
@@ -789,7 +804,8 @@ public class ExternalJobExecutor implements SmartLifecycle {
      *
      * @param status {@code SUCCEEDED} with {@code result} (converted to the type's result record), or {@code FAILED}:
      *               a permanent failure with {@code errorCode} and {@code errorMessage}
-     * @return the outcome, or empty when no such job is open
+     * @return the outcome, or empty when no such job is open; an {@link ExternalJobTypeHeldException} when the type's
+     *         parameter holds it (decision D52 item 4), as the executor would not claim the job either
      * @throws IllegalStateException when simulated results are not allowed
      */
     public Mono<Outcome> completeWithoutHandler(String jobType, String reference, String status, Object result,
@@ -810,7 +826,10 @@ public class ExternalJobExecutor implements SmartLifecycle {
                 errorMessage == null ? "failed" : errorMessage);
             default -> throw new IllegalArgumentException("status must be SUCCEEDED or FAILED");
         };
-        return Mono.defer(() -> recorder.engine().inTransaction(recorder.lockType(type.name())
+        return gate.held(List.<ExternalJobType<?, ?>>of(type)).flatMap(held -> held.containsKey(type.name())
+                ? Mono.error(new ExternalJobTypeHeldException(type.name(), held.get(type.name())))
+                : Mono.just(type))
+            .flatMap(open -> recorder.engine().inTransaction(recorder.lockType(type.name())
                 .then(Mono.fromCallable(() -> ExternalJobRecorder.micros(clock.instant())))
                 .flatMap(now -> recorder.pendingJob(type.name(), reference)
                     .flatMap(due -> recorder.insertClaim(due.jobId(), due.attempts() + 1, instanceId(), now,
