@@ -236,6 +236,28 @@ class AiCostControlIT extends AiItSupport {
         assertThat(job(queued.get("aiJobId"))).containsEntry("status", QbAi.READY);
         assertThat(attempts(retrying)).isEqualTo(2);
         assertThat(attempts(queued)).isEqualTo(1);
+        // Charged once, exactly what the attempts recorded: the wait added nothing.
+        long in = 0;
+        long out = 0;
+        for (Map<String, Object> done : List.of(retrying, queued)) {
+            long jobIn = recorded(done, AiQuestionsJob.INPUT_TOKENS);
+            long jobOut = recorded(done, AiQuestionsJob.OUTPUT_TOKENS);
+            assertThat(number(job(done.get("aiJobId")).get("input_tokens"))).isEqualTo(jobIn);
+            assertThat(number(job(done.get("aiJobId")).get("output_tokens"))).isEqualTo(jobOut);
+            in += jobIn;
+            out += jobOut;
+        }
+        assertThat(in + out).isPositive();
+        Map<String, Object> charged = usage(sponsor);
+        assertThat(number(charged.get("jobs"))).isEqualTo(2);
+        assertThat(number(charged.get("input_tokens"))).isEqualTo(in);
+        assertThat(number(charged.get("output_tokens"))).isEqualTo(out);
+    }
+
+    /** What the platform recorded for the request's job under the metric, over all its attempts. */
+    private static long recorded(Map<String, Object> requested, String metric) {
+        return number(query("SELECT coalesce(sum(quantity), 0) AS n FROM sys_external_job_usage WHERE job_id = ? "
+            + "AND metric = ?", requested.get("externalJobId"), metric).getFirst().get("n"));
     }
 
     private static long countOf(String sql, Object... args) {

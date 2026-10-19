@@ -229,13 +229,15 @@ export function AiCoverPanel({ quiz, onApplied }: { quiz: Quiz; onApplied?: () =
   const queryClient = useQueryClient()
   const editing = useEditing()
   const [asking, setAsking] = useState(false)
-  const usage = useQuery({ queryKey: AI_USAGE_QUERY, queryFn: () => readAiUsage() })
   const job = useQuery({
     queryKey: aiCoverJobQuery(quiz.quizId),
     queryFn: () => readLatestAiJob(quiz.quizId, AI_KINDS.cover),
     refetchInterval: (query) => (stillPolling(query.state.data ?? null) ? AI_LIMITS.pollMs : false),
   })
   const latest = job.data ?? null
+  // Looked at with the job (16v-2): whether AI is paused can change while the job waits.
+  const usage = useQuery({ queryKey: AI_USAGE_QUERY, queryFn: () => readAiUsage(),
+    refetchInterval: stillPolling(latest) ? AI_LIMITS.pollMs : false })
   const cancel = useMutation({
     mutationFn: () => cancelAiJob(latest!.aiJobId),
     onSettled: () => queryClient.invalidateQueries({ queryKey: AI_QUERY }),

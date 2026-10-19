@@ -459,6 +459,10 @@
 - 验证（2026-10-19，本机 PostgreSQL 16，自己的库与端口）：`./gradlew :quizbuks:check :quizbuks:bootJar` 通过（815 个测试、0 失败，场景 10 个；`platformCheck` 0 错误，新的警告只有上面两条 `EXTERNAL`）；
   商家后台 lint、typecheck、180 个 Vitest，`spaCheck`（`check` 中）通过；后台扩展 `ext:check`（82 个测试）；e2e 全部 59 个通过（应用 18580，Claude 桩 18594、Stripe 桩 18593、Mailpit 18525/18526；应用日志中两种类型依次为参数缺失的 WARN、发布 `false` 后的暂停 INFO、AI 测试打开后的恢复 INFO）。
 
+- 评审之后（同一分支）：L1 `AiPromptTest` 的注释指向实际的 IT；L2 `operations.md` §7.8 加只有基础设施权限时的退路（`ANTHROPIC_API_KEY` 改为占位并重启，每次尝试 401 `QB_AI_AUTH`），并警告不要关掉外部作业执行器（会停住 Stripe 的作业）；
+  L3 两个面板随作业一起重读商家用量（作业仍在每 5 秒查询时），"AI 暂停"的说明不需切换焦点即可消失（`ai.test.tsx` 新增一条）；L4 封面面板的暂停测试加 axe，IT 断言最终计入的用量正好是各次尝试记下的合计、只计一次。
+  重新验证：`./gradlew :quizbuks:check` 通过（815 个测试、0 失败；`platformCheck` 0 错误）；商家后台 lint、typecheck、181 个 Vitest。
+
 ### 待确认（需求方）
 
 - **PDF 的预留与月上限**（偏离 3）：建议上线前以真实 PDF 测出每页实际 Token（`launch-checklist.md`），再选其一：A 提高 `qb.ai.sponsor.monthly-tokens`（例如 500 万）；B 降低 `QB_AI_PDF_MAX_PAGES`（例如 30 页，预留约 45 万）；C 两者都调。缺省值暂按计划（100 页、200 万）。

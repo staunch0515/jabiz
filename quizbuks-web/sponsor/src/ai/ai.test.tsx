@@ -50,6 +50,8 @@ const job = (status: string, extra: Record<string, unknown> = {}) => ({
 
 interface Server {
   usage?: Record<string, unknown>
+  /** The usage rows in turn (the last repeats), in place of `usage`. */
+  usages?: Record<string, unknown>[]
   jobs?: Record<string, unknown>[][]
   /** The cover jobs (Q8b), read with `kind: COVER`. */
   coverJobs?: Record<string, unknown>[][]
@@ -61,6 +63,7 @@ function server(options: Server = {}) {
   const asked: { path: string; body: Record<string, unknown> }[] = []
   let jobCalls = 0
   let coverCalls = 0
+  let usageCalls = 0
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = input instanceof Request ? input : new Request(new URL(String(input), window.location.origin), init)
     const url = new URL(request.url, window.location.origin)
@@ -70,7 +73,8 @@ function server(options: Server = {}) {
     const page = (items: unknown[]) => json(200, { items, offset: 0, limit: items.length })
     switch (path) {
       case '/api/queries/qb.sponsor.ai-usage':
-        return page([options.usage ?? USAGE])
+        return page([options.usages ? options.usages[Math.min(usageCalls++, options.usages.length - 1)]
+          : options.usage ?? USAGE])
       case '/api/queries/qb.sponsor.ai-jobs': {
         if ((body as { params?: { kind?: string } } | null)?.params?.kind === 'COVER') {
           const covers = options.coverJobs ?? [[]]
@@ -286,6 +290,18 @@ describe('the AI questions panel', () => {
     await expectAccessible()
   })
 
+  it('looks at whether AI is paused again while the job waits', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    server({ jobs: [[job('QUEUED', { requestedAt: new Date().toISOString() })]],
+      usages: [{ ...USAGE, enabled: false }, USAGE] })
+    wrap(<AiQuestionsPanel quiz={QUIZ} materials={MATERIALS} />)
+    expect(await screen.findByTestId('ai-running')).toHaveTextContent('AI is paused')
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_100)
+    })
+    await waitFor(() => expect(screen.getByTestId('ai-running')).toHaveTextContent('writing'))
+  })
+
   it('reads the stored candidates defensively', () => {
     expect(parseCandidates(CANDIDATES)).toHaveLength(2)
     expect(parseCandidates('not json')).toEqual([])
@@ -360,6 +376,7 @@ describe('the AI cover panel', () => {
     wrap(<AiCoverPanel quiz={QUIZ} />)
     expect(await screen.findByTestId('ai-cover-running')).toHaveTextContent('AI is paused')
     expect(screen.getByTestId('ai-cover-cancel')).toBeEnabled()
+    await expectAccessible()
   })
 
   it('says why a cover job failed or expired, and discards', async () => {

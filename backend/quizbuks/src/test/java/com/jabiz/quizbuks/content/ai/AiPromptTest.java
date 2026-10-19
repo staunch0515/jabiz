@@ -150,7 +150,7 @@ class AiPromptTest {
     @Test
     void bothJobTypesAreHeldByTheAiSwitch() {
         // Platform decision D52 item 4: the handlers read no database, so qb.ai.enabled reaches started jobs only
-        // through the platform's gate (AiSwitchedOffJobsIT runs it).
+        // through the platform's gate (AiCostControlIT.switchingOffHoldsQueuedAndRetryingJobsUntilItIsOnAgain).
         assertThat(AiQuestionsJob.type(4, 1_000_000).enabledBy()).isEqualTo(QbParams.AI_ENABLED);
         assertThat(AiCoverJob.type(4).enabledBy()).isEqualTo(QbParams.AI_ENABLED);
         assertThat(QbParams.CONTROLLED).contains(QbParams.AI_ENABLED);

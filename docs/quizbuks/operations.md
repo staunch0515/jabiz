@@ -344,6 +344,9 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
      两种作业类型声明了 `enabledBy("qb.ai.enabled")`（平台 16v-2，D52 第 4 条），**每个实例在约一个轮询间隔（`poll-interval`，缺省 1 秒）之内**不再领取 `qb.ai.questions` 与 `qb.ai.cover` 的作业：
      排队的与等待重试的作业**原地等待**，不调用提供方、不用掉尝试次数、不失败；**正在运行的尝试照常进行到结束**（处理器看不到开关），其用量照常计入。参数读过之后才关闭时，那一次轮询仍可能多领取一轮。
   3. **逐个取消作业**：持有 `external-job.cancel` 的管理员（平台的 `ADMIN` 角色）对作业调用 `POST /api/external-jobs/{作业号}/cancel`（作业号在 `/qb/ai` 的"最近的请求"与 `qb.admin.ai-jobs` 中）：没在运行的（包括第 2 步暂停中等待的）立即结束、正在运行的在本次尝试后结束、不再重试；作业结束后平台调用两种作业类型的取消结局 `QB_AI_JOB_CANCELLED`（平台 D52 第 2 条），它关闭本地作业（`QB_AI_STOPPED`），没有尝试运行过的不计费。
+  **没有 Console 权限、也找不到第二位管理员时**（只有基础设施的权限）：把 `ANTHROPIC_API_KEY` 改为占位值（如 `revoked-placeholder`）并重启全部实例。之后每次尝试得到 401，作业以 `QB_AI_AUTH` 立即失败、不再重试（排队与重试中的也一样，与第 1 步相同；正在运行的尝试照常结束），
+  新的请求仍会被接受并随即失败。能联系上 Console 的负责人或第二位管理员后，按第 1、2 步处理，再换回真实密钥并重启。
+  **不要**为此设 `JABIZ_EXTERNALJOBS_EXECUTOR_ENABLED=false`（`jabiz.external-jobs.executor.enabled`）：它停掉本实例的**全部**外部作业，包括 Stripe 的转账与核对（`qb.stripe.*`），资金流程随之停住。
   **暂停期间的作业**（第 2 步之后）：仍是未结束的作业，所以**照常计入商家同时未结束的上限**（每商家 2 个、每模版每种类 1 个）与月 Token 的预留；商家在编辑器中看到它仍在排队（`QUEUED`，面板注明 AI 暂停、请求会等待、可以取消），可以自己取消（不计费）。
   重新打开（同样四眼）后的下一次轮询即恢复，积压的作业按并发上限与退避逐步执行；长时间暂停后，不再需要的作业由商家或第 3 步取消。日志在每个实例上只在变化时记一条 `External job type qb.ai.… is paused: parameter qb.ai.enabled …`（INFO）与恢复时的一条；量规 `jabiz.external.job.held{job_type}` 暂停时为 1。
   此前的本实例开关 `QB_AI_HALTED`（需要重启、让排队与重试中的作业以 `QB_AI_HALTED` 永久失败）已删去：第 2 步做到了它的事而不需要重启、也不让作业失败。
