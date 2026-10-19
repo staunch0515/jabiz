@@ -1,7 +1,7 @@
 import { ApiError, i18n } from '@jabiz/client'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { expectAccessible } from '../test/axe'
+import { expectAccessible } from '@jabiz/ui/testing'
 import { MfaSettings } from './index'
 
 vi.mock('qrcode', () => ({ default: { toCanvas: vi.fn(async () => undefined) } }))

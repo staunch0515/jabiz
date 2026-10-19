@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { i18n } from '@jabiz/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { expectAccessible } from '../test/axe'
+import { expectAccessible } from '@jabiz/ui/testing'
 import { FilePreview, type FilePreviewField } from './file-preview'
 
 const photo: FilePreviewField = { image: true, variants: ['w160', 'w640'] }

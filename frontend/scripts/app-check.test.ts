@@ -126,6 +126,24 @@ describe('app:check (decision D34 item 5)', () => {
     ])
   })
 
+  it("checks the test tools of @jabiz/ui's helpers only where the SPA has them (ROADMAP 16v-1)", () => {
+    expect([...platform.testing.keys()].sort()).toEqual(['@axe-core/playwright', '@playwright/test', 'vitest', 'vitest-axe'])
+    expect(platform.testing.get('vitest')).toMatch(/^\d+\.\d+\.\d+$/)
+    const ui = { ...platformDeps(true), '@jabiz/ui': 'link:x' }
+    // None of them: nothing to check.
+    expect(checkApp(spa(ui, { pnpm: platformDeps(true) }), frontend)).toEqual([])
+    // The platform's versions pass; another fails, naming the tool.
+    const same = { ...platformDeps(true), vitest: platform.testing.get('vitest')!, 'vitest-axe': platform.testing.get('vitest-axe')! }
+    expect(checkApp(spa({ ...same, '@jabiz/ui': 'link:x' }, { pnpm: same }), frontend)).toEqual([])
+    const other = { ...platformDeps(true), '@playwright/test': '1.40.0' }
+    expect(checkApp(spa({ ...other, '@jabiz/ui': 'link:x' }, { pnpm: other }), frontend)).toEqual([
+      `@playwright/test: 1.40.0, the platform has ${platform.testing.get('@playwright/test')} (the test helpers of @jabiz/ui use it)`,
+    ])
+    // Without @jabiz/ui an SPA's own test tools are its own.
+    const alone = { ...platformDeps(false), vitest: '3.0.0' }
+    expect(checkApp(spa(alone, { pnpm: alone }), frontend)).toEqual([])
+  })
+
   it('names what is missing', () => {
     const { react: _react, ...rest } = platformDeps(false)
     void _react

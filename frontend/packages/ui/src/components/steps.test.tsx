@@ -1,7 +1,7 @@
 import { act, render, screen, within } from '@testing-library/react'
 import { i18n } from '@jabiz/client'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { expectAccessible } from '../test/axe'
+import { expectAccessible } from '@jabiz/ui/testing'
 import { Steps } from './steps'
 
 describe('Steps', () => {
