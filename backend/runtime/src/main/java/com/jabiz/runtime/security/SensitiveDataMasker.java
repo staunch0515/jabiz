@@ -136,6 +136,7 @@ public class SensitiveDataMasker {
             summary.put("resultBytes", c.result() == null ? 0 : json.writeValueAsBytes(c.result()).length);
             summary.put("usage", c.usage());
             summary.put("attempts", c.attempts());
+            summary.put("unrecordedAttempts", c.unrecordedAttempts());
             summary.put("finishedTime", c.finishedTime());
             if (!c.files().isEmpty()) {
                 // The ids only, like the rest of the platform's file operations (decision D50).
@@ -151,6 +152,7 @@ public class SensitiveDataMasker {
             summary.put("reference", f.reference());
             summary.put("usage", f.usage());
             summary.put("attempts", f.attempts());
+            summary.put("unrecordedAttempts", f.unrecordedAttempts());
             summary.put("finishedTime", f.finishedTime());
             summary.put("errorCode", f.errorCode());
             summary.put("errorMessageLength", f.errorMessage() == null ? 0 : f.errorMessage().length());
