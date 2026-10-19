@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import i18n from '../i18n'
-import { expectAccessible } from '../test/axe'
+import { expectAccessible } from '@jabiz/ui/testing'
 import I18nTextInput from './I18nTextInput'
 
 const params = { format: 'markdown' as const, multiline: true, maxLength: 100, required: ['en'], locales: ['zh', 'ja', 'en'] }

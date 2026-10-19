@@ -211,7 +211,9 @@ FilePolicy.define("qb.content")
 - **读取**：`GET /api/generated-files/{fileId}` 需要 `file.generated.read` **与**文件保存时声明的全部权限；缺任何一项即 404（与单据相同，不透露存在）。
   没有权限保存下来的文件谁也读不到（dev 中也一样）。返回前以存档的哈希核对内容（不符则 500，不返回），并在 `sys_reveal_record` 写一条 `kind = FILE` 的记录（文件名不进记录，只记对象与 `fileId`）——
   这类文件含明文账号，下载就是一次"显示明文"（10 §13.1）。响应为附件，带 `X-Jabiz-Sha256` 与 `nosniff`。
-- **只追加**：`jabiz_protect_append_only('sys_generated_file')`；由 21 §2 的封存自动覆盖。保留期照常以 `RetentionPolicy` 声明。
+- **只追加**：`jabiz_protect_append_only('sys_generated_file')`；由 21 §2 的封存自动覆盖。保留期以 `RetentionPolicy.of("GeneratedFile")` 声明（自 `createdTime`；16v-1）：
+  只读平台实体 `GeneratedFile` 只有编号、`mediaType`、大小、摘要、对象、创建人、时间与 `processSeqId`，没有内容与文件名，读取需要 `audit.read`；
+  到期的文件进入到期报告，可按编号或对象放置法律保全（21 §3.1）。
 - **示范**：app 的 `ORDER_PICK_LIST_ARCHIVE` 把订单行生成 CSV 拣货单并保存（文本单元格加引号、以 `= + - @` 开头的加 `'`，防止表格软件当作公式）。
 - **测试**：`GeneratedFileIT`（原样下载与哈希、下载记录、`input_summary` 中没有内容、缺权限 404、类型 / 文件名 / 大小 / 权限 / 对象被拒（经业务流程调用也一样）、存档被改不返回、只追加、业务流程经子流程保存）。
 

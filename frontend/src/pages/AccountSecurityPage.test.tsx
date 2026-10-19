@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import i18n from '../i18n'
-import { expectAccessible } from '../test/axe'
+import { expectAccessible } from '@jabiz/ui/testing'
 import AccountSecurityPage, { ACCOUNT_SECTIONS } from './AccountSecurityPage'
 
 const get = vi.fn()

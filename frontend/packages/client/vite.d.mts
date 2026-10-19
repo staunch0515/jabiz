@@ -3,6 +3,7 @@
 import type { Plugin } from 'vite'
 /** The packages an SPA shares with `@jabiz/client` and `@jabiz/ui`: one copy each (two Reacts break hooks). */
 export declare const SHARED_PACKAGES: string[]
+export declare const TEST_PACKAGES: string[]
 export type PwaMode = 'on' | 'off' | 'remove'
 /** An icon of the manifest: a PNG file in the SPA's `public/` directory. */
 export interface PwaIcon {

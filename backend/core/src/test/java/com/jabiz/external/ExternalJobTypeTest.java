@@ -143,4 +143,31 @@ class ExternalJobTypeTest {
         assertThat(type.backoffAfter(7)).isEqualTo(ofMinutes(10));
         assertThat(type.backoffAfter(Integer.MAX_VALUE)).isEqualTo(ofMinutes(10));
     }
+
+    @Test
+    void aCancellationProcessIsDeclaredOrNone() {
+        assertThat(copy().onCancelled()).isNull();
+        ExternalJobType<CopyInput, CopyResult> type = ExternalJobType.define("x", CopyInput.class, CopyResult.class,
+            t -> t.handler(CopyHandler.class).onCompleted("A").onFailed("B").onCancelled("C"));
+        assertThat(type.onCancelled()).isEqualTo("C");
+        assertThat(type.problems()).isEmpty();
+        assertThat(type.toString()).contains("onCancelled=C");
+        ExternalJobType<CopyInput, CopyResult> blank = ExternalJobType.define("x", CopyInput.class, CopyResult.class,
+            t -> t.handler(CopyHandler.class).onCompleted("A").onFailed("B").onCancelled(" "));
+        assertThat(blank.problems()).containsExactly(
+            "onCancelled: name the process that hears of a cancellation, or declare none");
+    }
+
+    @Test
+    void theConstructorsOfEarlierDeclarationsDeclareNoCancellationProcess() {
+        ExternalJobType<CopyInput, CopyResult> d38 = new ExternalJobType<>("x", CopyInput.class, CopyResult.class,
+            CopyHandler.class, java.util.Set.of(), null, 3, null, null, 4, "A", "B", 10, false);
+        ExternalJobType<CopyInput, CopyResult> d50 = new ExternalJobType<>("x", CopyInput.class, CopyResult.class,
+            CopyHandler.class, java.util.Set.of(), null, 3, null, null, 4, "A", "B", 10, false, 2048, null, null);
+        assertThat(d38.onCancelled()).isNull();
+        assertThat(d50.onCancelled()).isNull();
+        assertThat(d50.maxInputBytes()).isEqualTo(2048);
+        assertThat(d38.problems()).isEmpty();
+        assertThat(d50.problems()).isEmpty();
+    }
 }

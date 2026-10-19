@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { i18n } from '@jabiz/client'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { expectAccessible } from '../test/axe'
+import { expectAccessible } from '@jabiz/ui/testing'
 import { FileUpload, fileMatchesAccept } from './file-upload'
 
 const png = () => new File(['png'], 'logo.png', { type: 'image/png' })

@@ -6,7 +6,7 @@ import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import i18n from '../i18n'
 import type { JsonSchema } from '../meta/processForm'
-import { expectAccessible } from '../test/axe'
+import { expectAccessible } from '@jabiz/ui/testing'
 import ProcessFormPage from './ProcessFormPage'
 
 const input: JsonSchema = {

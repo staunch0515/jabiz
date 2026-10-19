@@ -86,6 +86,88 @@ describe('theme tokens (WCAG 2.2 AA, docs/design/12-frontend.md section 11)', ()
   })
 })
 
+/** `#rrggbb` of `fg` at `alpha` over `bg`, as the browser composites a translucent background. */
+function blend(fg: string, alpha: number, bg: string): string {
+  const channel = (hex: string, i: number) => Number.parseInt(hex.slice(i, i + 2), 16)
+  return '#' + [1, 3, 5].map((i) => Math.round(channel(fg, i) * alpha + channel(bg, i) * (1 - alpha))
+    .toString(16).padStart(2, '0')).join('')
+}
+
+/** The surfaces a control sits on. */
+const SURFACES = ['background', 'card', 'popover']
+
+/**
+ * Placeholder text (muted) on a control whose dark background is the input token at `alpha` over each surface, at
+ * rest and on hover: the controls whose ratios fall below 4.5:1.
+ */
+function lowPlaceholderContrast(values: Record<string, string>, alphas: Record<string, number>,
+  text = 'muted-foreground') {
+  return Object.entries(alphas).flatMap(([control, alpha]) => SURFACES.map((surface) => {
+    // The raw ratio is compared: rounding could pass 4.495.
+    const ratio = contrast(values[text], blend(values.input, alpha, values[surface]))
+    return [`${control} on ${surface}`, ratio] as const
+  })).filter(([, ratio]) => !(ratio >= 4.5))
+}
+
+/** Whether a component's source has a class. */
+function hasClass(file: string, name: string): boolean {
+  const source = readFileSync(resolve(import.meta.dirname, '../components', file), 'utf8')
+  return new RegExp(`(^|[\\s'"\`])${name.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}($|[\\s'"\`])`).test(source)
+}
+
+/** The alpha of the `dark:bg-input/NN` (or `dark:hover:bg-input/NN`) class in a component's source. */
+function inputAlpha(file: string, hover = false): number {
+  const source = readFileSync(resolve(import.meta.dirname, '../components', file), 'utf8')
+  const match = (hover ? /dark:hover:bg-input\/(\d+)/ : /dark:bg-input\/(\d+)/).exec(source)
+  if (!match) throw new Error(`${file} has no ${hover ? 'dark:hover:' : 'dark:'}bg-input class`)
+  return Number(match[1]) / 100
+}
+
+describe('placeholders on dark controls (ROADMAP 16v-1)', () => {
+  const dark = tokens('.dark')
+
+  it('keep 4.5:1 on the translucent background of inputs, text areas and selects, at rest and on hover', () => {
+    const alphas = {
+      input: inputAlpha('ui/input.tsx'),
+      textarea: inputAlpha('ui/textarea.tsx'),
+      select: inputAlpha('ui/select.tsx'),
+      'select (hover)': inputAlpha('ui/select.tsx', true),
+      'tags input': inputAlpha('tags-input.tsx'),
+    }
+    expect(lowPlaceholderContrast(dark, alphas)).toEqual([])
+  })
+
+  it('keep 4.5:1 on the Combobox trigger, an outline button: transparent at rest, its hover text the accent text', () => {
+    // At rest the trigger drops the outline button's tint and shows the muted placeholder on the surface itself.
+    expect(hasClass('combobox.tsx', 'dark:bg-transparent')).toBe(true)
+    expect(hasClass('combobox.tsx', 'text-muted-foreground')).toBe(true)
+    expect(lowPlaceholderContrast(dark, { 'combobox trigger': 0 })).toEqual([])
+    // On hover the outline button's tint returns, and its text is the accent text, placeholder or not.
+    expect(hasClass('ui/button.tsx', 'hover:text-accent-foreground')).toBe(true)
+    expect(lowPlaceholderContrast(dark, { 'combobox trigger (hover)': inputAlpha('ui/button.tsx', true) },
+      'accent-foreground')).toEqual([])
+  })
+
+  it('use the lighter control backgrounds', () => {
+    expect(inputAlpha('ui/input.tsx')).toBe(0.2)
+    expect(inputAlpha('ui/textarea.tsx')).toBe(0.2)
+    expect(inputAlpha('ui/select.tsx')).toBe(0.2)
+    expect(inputAlpha('ui/select.tsx', true)).toBe(0.3)
+    expect(inputAlpha('tags-input.tsx')).toBe(0.2)
+  })
+
+  it('would fail with the values of before: muted #a1a1aa on input/30, select hover on input/50', () => {
+    const before = { ...dark, 'muted-foreground': '#a1a1aa' }
+    expect(lowPlaceholderContrast(before, { input: 0.3, 'select (hover)': 0.5 }).map(([name]) => name)).toEqual([
+      'input on card',
+      'input on popover',
+      'select (hover) on background',
+      'select (hover) on card',
+      'select (hover) on popover',
+    ])
+  })
+})
+
 describe('the dark variant', () => {
   it('reaches everything under .dark: no area is pinned to the light tokens any more (phase 15d)', async () => {
     const variant = /@custom-variant dark [^;]+;/.exec(css)![0]

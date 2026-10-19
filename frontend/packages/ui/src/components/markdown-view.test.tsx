@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { render } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
-import { expectAccessible } from '../test/axe'
+import { expectAccessible } from '@jabiz/ui/testing'
 import { MarkdownView } from './markdown-view'
 
 // Read from disk: with css: false, Vite hands tests an empty string for style sheets, even with ?raw.

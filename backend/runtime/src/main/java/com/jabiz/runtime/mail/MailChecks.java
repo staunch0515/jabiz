@@ -7,6 +7,7 @@ import com.jabiz.runtime.check.CheckProblem;
 import com.jabiz.runtime.check.PlatformCheck;
 import com.jabiz.runtime.security.SensitiveDataMasker;
 import com.jabiz.runtime.security.SignInEntries;
+import com.jabiz.runtime.web.JabizWebProperties;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -17,8 +18,11 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeMap;
+import java.util.function.Function;
 import java.util.function.Predicate;
 
 /**
@@ -36,6 +40,8 @@ import java.util.function.Predicate;
  *   <li>every entry a text names in {@code {entryUrl.<entry>}} is a usable sign-in entry (decision D43 item 4), and
  *       so is every entry a template declares itself for ({@link MailTemplate#entries}, decision D49);</li>
  *   <li>a warning for transactional mail declaring entries, which only matter to notifications;</li>
+ *   <li>every unsubscribe page of an entry ({@code jabiz.mail.unsubscribe-paths.<entry>}, decision D52 item 3) is a
+ *       relative path of a usable entry and lies under an SPA served here;</li>
  *   <li>a warning for a notification without its display name {@code mail.<name>.name} in a language of the
  *       application: its users see the template's name among their mail preferences instead (decision D49).</li>
  * </ul>
@@ -53,14 +59,35 @@ public class MailChecks implements PlatformCheck {
     private final MessageCatalog messages;
     private final Predicate<String> hidden;
     private final Predicate<String> entryExists;
+    private final Map<String, String> unsubscribePaths;
+    private final Function<String, Optional<String>> appPathOf;
+    private final Predicate<String> served;
 
-    @Autowired
-    public MailChecks(@Value("${jabiz.mail.enabled:false}") boolean enabled, @Value("${jabiz.mail.from:}") String from,
-        @Value("${jabiz.mail.base-url:}") String baseUrl, ObjectProvider<JavaMailSender> mail,
+    /** The checks as before decision D52, without the entries' unsubscribe pages. */
+    public MailChecks(boolean enabled, String from, String baseUrl, ObjectProvider<JavaMailSender> mail,
         ObjectProvider<MailTemplate> templates, MessageCatalog messages, SensitiveDataMasker masker,
         SignInEntries entries) {
         this(enabled, from, baseUrl, mail, templates, messages, masker::hidesByName,
             name -> entries.find(name).filter(entry -> entry.name().equals(name)).isPresent());
+    }
+
+    /**
+     * @param settings the templates' settings, of which the entries' unsubscribe pages are checked (decision D52)
+     * @param web      the SPAs served, under one of which each unsubscribe page must lie; none known when absent
+     */
+    @Autowired
+    public MailChecks(@Value("${jabiz.mail.enabled:false}") boolean enabled, @Value("${jabiz.mail.from:}") String from,
+        @Value("${jabiz.mail.base-url:}") String baseUrl, ObjectProvider<JavaMailSender> mail,
+        ObjectProvider<MailTemplate> templates, MessageCatalog messages, SensitiveDataMasker masker,
+        SignInEntries entries, MailTemplates settings, ObjectProvider<JabizWebProperties> web) {
+        this(enabled, from, baseUrl, mail, templates, messages, masker::hidesByName,
+            name -> entries.find(name).filter(entry -> entry.name().equals(name)).isPresent(),
+            settings.unsubscribePaths(),
+            name -> entries.find(name).filter(entry -> entry.name().equals(name)).map(SignInEntries.Entry::appPath),
+            path -> {
+                JabizWebProperties spas = web.getIfAvailable();
+                return spas == null || spas.spaFor(path).isPresent();
+            });
     }
 
     /** @param hidden whether values under a name are hidden (secrets, masked fields) */
@@ -76,6 +103,22 @@ public class MailChecks implements PlatformCheck {
     MailChecks(boolean enabled, String from, String baseUrl, ObjectProvider<JavaMailSender> mail,
         ObjectProvider<MailTemplate> templates, MessageCatalog messages, Predicate<String> hidden,
         Predicate<String> entryExists) {
+        this(enabled, from, baseUrl, mail, templates, messages, hidden, entryExists, Map.of(), name -> Optional.empty(),
+            path -> true);
+    }
+
+    /**
+     * @param unsubscribePaths {@code jabiz.mail.unsubscribe-paths}, by entry
+     * @param appPathOf        the {@code app-path} of a usable entry; empty for an entry that is not usable
+     * @param served           whether a path lies under an SPA this application serves
+     */
+    MailChecks(boolean enabled, String from, String baseUrl, ObjectProvider<JavaMailSender> mail,
+        ObjectProvider<MailTemplate> templates, MessageCatalog messages, Predicate<String> hidden,
+        Predicate<String> entryExists, Map<String, String> unsubscribePaths,
+        Function<String, Optional<String>> appPathOf, Predicate<String> served) {
+        this.unsubscribePaths = Map.copyOf(unsubscribePaths);
+        this.appPathOf = appPathOf;
+        this.served = served;
         this.hidden = hidden;
         this.entryExists = entryExists;
         this.enabled = enabled;
@@ -153,6 +196,7 @@ public class MailChecks implements PlatformCheck {
                 }
             }
         }
+        problems.addAll(unsubscribePageProblems());
         if (!enabled) {
             return problems;
         }
@@ -167,6 +211,35 @@ public class MailChecks implements PlatformCheck {
             problems.add(CheckProblem.error(CATEGORY, "jabiz.mail.base-url", "mail is enabled and templates link to "
                 + "the application, but its address is not configured"));
         }
+        return problems;
+    }
+
+    /**
+     * Each entry's unsubscribe page (decision D52 item 3) is a relative path, of a usable entry, and lies under an SPA
+     * served here, as an entry's own pages should ({@code SignInEntries}): otherwise the mailed links lead nowhere.
+     */
+    private List<CheckProblem> unsubscribePageProblems() {
+        List<CheckProblem> problems = new ArrayList<>();
+        new TreeMap<>(unsubscribePaths).forEach((entry, path) -> {
+            String location = MailTemplates.UNSUBSCRIBE_PATHS + "." + entry;
+            if (!MailTemplates.validRelativePath(path)) {
+                problems.add(CheckProblem.error(CATEGORY, location, "'" + path + "' is not a path relative to the "
+                    + "entry's app-path (segments of letters, digits and . _ ~ -)"));
+                return;
+            }
+            Optional<String> appPath = appPathOf.apply(entry);
+            if (appPath.isEmpty()) {
+                problems.add(CheckProblem.error(CATEGORY, location, "there is no usable sign-in entry " + entry
+                    + " (jabiz.security.entries." + entry + ")"));
+                return;
+            }
+            String root = appPath.get().endsWith("/") ? appPath.get() : appPath.get() + "/";
+            String page = root + MailTemplates.relative(path);
+            if (!served.test(page)) {
+                problems.add(CheckProblem.error(CATEGORY, location, "'" + page + "' is under none of the SPAs served "
+                    + "(jabiz.web.spa): the unsubscribe links of entry " + entry + " would lead nowhere"));
+            }
+        });
         return problems;
     }
 }

@@ -2,7 +2,7 @@ import { act, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { i18n } from '@jabiz/client'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { expectAccessible } from '../test/axe'
+import { expectAccessible } from '@jabiz/ui/testing'
 import { FilterBar, filledFilters, type FilterField } from './filter-bar'
 
 const fields: FilterField[] = [

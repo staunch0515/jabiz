@@ -52,7 +52,7 @@ export function TagsInput({
     <div
       data-slot="tags-input"
       className={cn(
-        'border-input dark:bg-input/30 flex min-h-9 w-full flex-wrap items-center gap-1 rounded-md border bg-transparent px-2 py-1 shadow-xs',
+        'border-input dark:bg-input/20 flex min-h-9 w-full flex-wrap items-center gap-1 rounded-md border bg-transparent px-2 py-1 shadow-xs',
         'focus-within:border-ring focus-within:ring-ring/50 focus-within:ring-[3px]',
         'has-aria-invalid:border-destructive',
         disabled && 'opacity-50',

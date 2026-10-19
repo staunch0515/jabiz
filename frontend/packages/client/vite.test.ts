@@ -180,5 +180,12 @@ describe('jabizSpa', () => {
     const react = config.resolve.alias!.find((a) => a.find.test('react/jsx-runtime'))!
     expect('react/jsx-runtime'.replace(react.find, react.replacement)).toBe('/spa/node_modules/react/jsx-runtime')
     expect(config.resolve.alias!.some((a) => a.find.test('react-domx'))).toBe(false)
+    // And the test tools of @jabiz/ui/testing (16v-1): the SPA's own Vitest asserts.
+    for (const name of ['vitest', 'vitest-axe']) {
+      const alias = config.resolve.alias!.find((a) => a.find.test(name))!
+      expect(name.replace(alias.find, alias.replacement)).toBe(`/spa/node_modules/${name}`)
+    }
+    expect('vitest-axe/matchers'.replace(config.resolve.alias!.find((a) => a.find.test('vitest-axe/matchers'))!.find,
+      '/x$1')).toBe('/x/matchers')
   })
 })

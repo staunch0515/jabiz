@@ -1468,6 +1468,7 @@ e2e 对打包的应用（同 CI 的 `e2e` 作业，新的数据库）44 个用�
 | 16s | 收件偏好按登录入口列出、模板显示名、邮件语言的读取与询问、`MailPreferences` 积木（QuizBuks Q7 平台缺口 P1，Q7-13 选 A；2026-10-18 确认）；✅ 已实施（分支 `1.2/phase-16s-mail-preferences`，PR 待建） | D49 | 1–1.5 天 | 16a、16c |
 | 16t | 外部作业的文件与输入上限（QuizBuks Q8 平台缺口 P1–P3，A-13 选 A；2026-10-18 确认）：按类型的输入上限（至多 1 MiB）、文件输入（按请求人的读取权限）、文件输出（经上传流水线以请求人登记）；✅ 已实施（分支 `1.2/phase-16t-external-job-files`，PR 待建） | D50 | 3–4 天 | 16e |
 | 16u | 受保护变更的审批权限 `security.protected-change.decide`、按可配置的管理员权限计管理员（QuizBuks Q7a 发现，2026-10-18 确认）；时间参数限于 PostgreSQL 的范围、`Combobox` 加载状态的无障碍；✅ 已实施（分支 `1.2/phase-16u-protected-grant-roles`，PR 待建） | D51 | 1–1.5 天 | 16r |
+| 16v | 外部作业的剩余风险写明、取消的结局 `onCancelled` 与平台步骤 `CancelExternalJob`、按入口的退订页（积木 `MailUnsubscribe`）、暗色占位文字的对比度、`@jabiz/ui/testing(/playwright)`、存档 `GeneratedFile` / `DocumentRun` 的保留（16v-1，✅ 已实施，分支 `1.2/phase-16v1-job-outcomes`，PR 待建）；按业务参数暂停作业类型 `enabledBy`（16v-2，计划中）；流式结果暂不做（V-1）；2026-10-19 确认 | D52 | 4–5.5 天 | 16t、16u |
 
 **其余工作的顺序**（2026-10-13 确认）：
 - 前端线：15c-1 → 15c-2 → 15d。
@@ -4113,3 +4114,92 @@ QB 提交锁内 48 → 16（16p-1）的明细：恢复超时 1 → 0（T1）、�
 - IT：合入后 `:quizbuks:test` 575 个中 7 个失败（`BanIT` 2、`BanAdminRolesIT` 1、`TakedownIT` 4），都是测试直接写入 `QB_ADMIN_SUPER` 的分配时得到 422 `PROTECTED_CHANGE_REQUIRES_APPROVAL`：
   两位超级管理员出现后建立期按 D51 结束。测试支持（`AccountItSupport.userWithRole` / `assignRole`）应在第二位超级管理员之后改用 `SEC_USER_ROLE_ASSIGN` + 另一位超级管理员以 `APPROVAL_DECIDE` 批准，
   或这些测试类以 `jabiz.security.protected-grants.enabled=false` 运行（它们不是在测四眼）；任命内容与财务管理员的批准由职责分离的豁免支持（`ProtectedGrantSodIT` 按 QuizBuks 的规则复现）。
+
+### 16v 外部作业的结局与暂停、按入口的退订页、无障碍辅助函数、存档的保留（4–5.5 天，分 16v-1 / 16v-2 两个 PR）
+
+来源：QuizBuks 的 AI 出题（Q8）与上线检查提出的平台缺口，16v 计划（产品负责人 2026-10-19 确认）。决策 **D52**（第 1–4 条；第 6–8 项是实现说明）。
+没有迁移；OpenAPI 不变。
+
+**确认的问题与回答**（V-1 至 V-10，全部已确认）：
+
+| # | 问题 | 回答 |
+|---|---|---|
+| V-1 | 是否做流式结果推送（第 2 项） | **暂不做**。记为"未做；QuizBuks 20 题试运行中超过约 5% 的 AI 尝试超时时再考虑" |
+| V-2 | 类型暂停时排队的作业怎样 | 等待（不用掉尝试、不失败） |
+| V-3 | 暂停时 `StartExternalJob` 是否照常登记 | 照常登记 |
+| V-4 | 参数缺失或不是布尔值 | 按暂停处理 |
+| V-5 | 取消步骤的授权 | 流程自己的权限，加上步骤声明的作业类型（其他类型与不存在同一个 404）；**独立评审后细化**（M1）：缺省只取消请求人（流程的操作人）自己的作业，别人的同样 404；`.requestedBy(…)` 指明所有人，`anyRequester()` 必须显式 |
+| V-6 | 退订页的形式 | `@jabiz/ui` 的积木，配置 `jabiz.mail.unsubscribe-paths.<入口>` |
+| V-7 | 暗色占位文字对比度的修法 | 调亮 token，并调浅控件背景 |
+| V-8 | 是否做存档的保留（第 8 项） | 做；`audit.read` 可读，不含内容、文件名与标题 |
+| V-9 | 分几个 PR | 两个（16v-1、16v-2） |
+| V-10 | 决策 | 一条新决策 D52，含第 1、3、4、5 项（不含流式）；第 6–8 项为实现说明 |
+
+#### 16v-1 外部作业的取消结局、按入口的退订页、对比度、axe 辅助函数、存档的保留（3–4 天）
+
+分支 `1.2/phase-16v1-job-outcomes`，从 `1.2/platform`（`651a44e`，16u 已合入）拉出。
+
+**16v-1 状态**：✅ 已实施（PR 待建）。
+
+| # | 内容 | 实施 |
+|---|---|---|
+| 1 | D38 的剩余风险写明 | D52 第 1 条、D38 的"剩余风险"、11 §4a、06 §2.3：不流式的请求最长 2 分钟、慢回答被放弃而可能照样计费；处理器看不到业务开关（16v-2 的 `enabledBy`）；提供方不按幂等键去重时可能重复计费（`recordUsage`、按估计计费、提供方的支出上限） |
+| 4 | 取消的结局与从流程中取消 | core `ExternalJobType…onCancelled(流程)`（`internal()`）、`ExternalJobCancellation`（含全部尝试的用量、取消人与时间、是否有尝试运行过）；取消的作业结束时 `EXTERNAL_JOB_COMPLETE` 以子流程调用它一次，接口的取消也一样；不声明即照旧不调用。平台步骤 `CancelExternalJob.of(类型, ctx -> 作业号)[.ifOpen()]`：流程自己的权限，缺省只取消该类型、由操作人开始的作业（其他类型、别人的与不存在同一个 404；`.requestedBy(…)` 指明所有人，`.anyRequester()` 须显式，评审 M1），已结束 422 `EXTERNAL_JOB_FINISHED`（`.ifOpen()` 不报错），取消人为流程的操作人，与流程同一事务。原 `runtime.external.CancelExternalJob` 改名为包内的 `CancelRequestedJob`，两者共用 `ExternalJobRecorder.cancel`。启动检查 `EXTERNAL` 检查 `onCancelled` |
+| 5 | 按入口的退订页 | `@jabiz/ui` 的积木 `MailUnsubscribe`（`api`、主题 token、三语，只 POST 一次，`working` / `done` / `invalid` / `failed`），通用后台的 `MailUnsubscribePage` 只是包装；`jabiz.mail.unsubscribe-paths.<入口>`（相对 `app-path`）：声明了 `.entries(...)` 的模板链接到其中第一个配置了路径的入口的页，其他照旧用 `jabiz.mail.unsubscribe-path`；令牌与接口不变。启动检查 `MAIL`（错误）：相对路径、入口可用、位于某个 SPA 之下。示范门户在 `/portal/mail/unsubscribe` 挂载它，`commerce.order-shipped` 的链接指向门户 |
+| 6 | 暗色占位文字的对比度 | 暗色 `--muted-foreground` `#a1a1aa` → `#a8a8b0`；输入框、文本框、选择框（与标签输入）的暗色背景 `dark:bg-input/30` → `/20`，选择框悬停 `/50` → `/30`；`theme.test.ts` 按组件源码中的透明度计算混合后的背景（background、card、popover），静止与悬停都 ≥ 4.5:1，原来的值不通过（12 §11） |
+| 7 | axe 辅助函数的导出 | `@jabiz/ui/testing`（Vitest 的 `expectAccessible(root?)`，亮暗两种外观）与 `@jabiz/ui/testing/playwright`（`expectAccessible(page, 名称, { expect })`、`accessibilityViolations(page)`、`animationsSettled(page)`、`setAppearance(page, 外观)`（修订后））；`vitest`、`vitest-axe`、`@playwright/test`、`@axe-core/playwright` 为可选 peer，`app:check` 在 SPA 有它们时要求平台的版本；平台的测试改用这两个出口（12 §11 / §12、`guide/app-spa.md`） |
+| 8 | 存档的保留 | 只读平台实体 `GeneratedFile`（`sys_generated_file`，自 `createdTime`）与 `DocumentRun`（`sys_document_run`，自 `issuedTime`）：只有编号、类型或版式、大小、摘要、对象、创建人或签发人、时间与 `processSeqId`；数据视图只读、需要 `audit.read`。应用可声明 `RetentionPolicy.of("GeneratedFile" | "DocumentRun")`，进入到期报告，可按编号或对象放置法律保全（21 §3.1、14 §10、22 §4.2） |
+| 文档 | | D52、D38 的剩余风险、11 §4a、06 §2.3、18 §5.6、12 §11 / §12、21 §3.1、14 §10、22 §4.2、`guide/app-spa.md`、CLAUDE.md |
+
+**验收**
+- [x] `./gradlew check` 全部通过（含 `:app:platformCheck`、场景快照、覆盖率门禁）；前端 `pnpm lint`、`typecheck`、`test`、`check:api`（接口不变）；示范门户 `app:check`、`lint`、`typecheck`、`test`；
+  `JABIZ_ADMIN_EXTENSION=../backend/app/admin-extension pnpm ext:check`；端到端 `pnpm e2e`。
+  （2026-10-19，评审修订后：core 865、ext-geo 5、runtime 520、app 1204 个测试；前端 Vitest 754 个；门户 10 个；扩展 7 个；e2e 46 个，全部通过。）
+- [x] `ExternalJobCancelIT`：排队中的作业经流程取消即不执行、取消流程只运行一次（系统身份、取消人、没有尝试与用量）；执行中的作业经流程取消，尝试结束后取消流程得到它记下的全部用量；
+  操作员与请求人经接口取消同样调用取消流程并带上取消人；没有 `onCancelled` 的类型照旧不调用；步骤对其他类型的作业与不存在的作业回答相同的 404（`.ifOpen()` 也一样）；
+  已结束的作业 422、`.ifOpen()` 为不报错且不再记录；流程回滚后作业仍开放并照常完成；取消流程不能经 `/api/processes` 调用（`*` 也 403 `PROCESS_INTERNAL`）。`ExternalJobIT` 的取消测试不变。
+- [x] 单元测试：core `ExternalJobTypeTest`（`onCancelled` 与原构造器）、`ExternalJobCancellationTest`；runtime `ExternalJobChecksTest`（取消流程须存在、`internal()`、输入类型）、`CancelExternalJobTest`
+  （只认声明的类型、操作人与时间、`ifOpen`、未声明的类型）。
+- [x] 邮件：`MailIT`（只声明门户的模板链接到门户的页、全部入口的模板仍用全局路径、旧链接照常退订）；`MailChecksTest`（不在 SPA 之下、未知入口、非相对路径都是错误；相对路径的判断）。
+- [x] 前端：`MailUnsubscribe.test`（四种状态、只 POST 一次、读地址栏、亮暗两种外观过 axe）、后台 `MailUnsubscribePage.test`（不变，仍通过）、门户 `App.test`（退订页无需登录、只 POST 一次）；
+  `theme.test.ts`（混合背景的对比度、原来的值不通过、各组件的类名）；`testing.test.tsx`（违规即失败并说出规则、检查两种外观、失败后不留暗色、可限定根元素）；`app-check.test.ts`（测试工具的版本）；
+  `a11y.spec.ts` 改用 `@jabiz/ui/testing/playwright` 并加上门户的退订页。
+- [x] `RetentionIT`：两种存档可声明保留期并进入到期报告；按对象与按编号的法律保全计为保全；数据视图只读、需要 `audit.read`、不含内容、文件名与标题。`RetentionChecksTest`：两种实体从时间字段起算可通过。
+
+**兼容**（线 1.2 内）：只新增。`ExternalJobType` 增加 record 组件 `onCancelled`（17 → 18），原 14 参与 17 参构造保留；`MailTemplates`、`MailChecks` 原构造保留。
+没有 `onCancelled` 的类型、没有配置 `unsubscribe-paths` 的部署行为不变；`StatementBudgetIT` 的预算不变。有意的可见变化：暗色的次要文字稍亮、暗色控件背景稍亮；示范门户的退订链接指向门户。
+
+**独立评审之后的修订**（2026-10-19）：
+1. M1 缺省拒绝：`CancelExternalJob` 缺省只取消该类型、由流程的操作人开始的作业，别人的与不存在同一个 404；`.requestedBy(ctx -> 用户)` 代表已知所有人，`.anyRequester()` 须显式（D52 第 2 条、11 §4a、CLAUDE.md）。
+2. M2 从应用 SPA 证明测试辅助函数：`@jabiz/client/vite` 在 Vitest 中把 `vitest`、`vitest-axe` 指向 SPA 自己的副本（`TEST_PACKAGES`）；Playwright 的辅助函数只用 `@playwright/test` 的类型，
+   由调用方交出 `expect`（`expectAccessible(page, 名称, { expect })`，另有 `accessibilityViolations(page)`）；`useAppearance` 改名 `setAppearance`，去掉 e2e 的 `rules-of-hooks` 例外；
+   示范门户新增 Vitest 测试 `src/a11y.test.tsx` 与以 `tsconfig.e2e.json` 做类型检查的 Playwright 示例 `e2e/a11y.spec.ts`（门户没有自己的 Playwright 配置：它的页面在平台的 e2e 中检查），
+   devDependencies 增加 `vitest-axe`、`@playwright/test`、`@axe-core/playwright`（平台的版本，`app:check` 检查）。
+3. Low：执行器补记过期租约时以 `SKIP LOCKED` 取作业行（业务流程在长事务中取消不会使领取等待）；取消时先补记该作业的过期租约；`MailUnsubscribe` 读出令牌后即从地址栏去掉，
+   状态在一个常驻的 live region 中变化；`theme.test.ts` 比较原始比值并检查 `Combobox` 的触发按钮；`WCAG_TAGS` 冻结且只定义一处；`validRelativePath` 去掉多余的判断；
+   11 §4a 写明被取消的尝试的输出文件成为孤儿被清扫；D52 的兼容说明写明 17 参构造保留。
+4. 新增测试：`ExternalJobCancelIT`（别人的作业 404 且与不存在相同、`requestedBy` 与 `anyRequester`、结果记录后再取消为 422、取消前租约已过与取消后租约才过时 `onCancelled` 都只一次、
+   多次尝试的用量合计、取消后执行中的尝试永久失败仍为 `CANCELLED`、另一事务持有作业行时领取不等待）、`CancelExternalJobTest`、`MailTemplatesTest`（第一个入口没有路径、无效路径在运行时回落）、
+   `MailUnsubscribe.test`（`StrictMode` 中只 POST 一次、地址栏去掉令牌）、`vite.test.ts`（测试工具的别名）、门户 `a11y.test.tsx`。
+5. CLAUDE.md §6 的 e2e 环境变量加上 `JABIZ_SECURITY_SIGN_IN_RATE_LIMIT_PER_USER_ADDRESS` 与 `..._USER_BURST`（与 CI 相同）。
+
+**未做**：流式结果推送（V-1）；暂停中断正在执行的尝试；长时间暂停后自动失败；`GET /api/external-jobs/{id}` 显示"已暂停"；提供方侧的幂等；RFC 8058 一键退订；到期存档的物理删除；官方 SDK 客户端。
+
+#### 16v-2 按业务参数暂停作业类型（1–1.5 天）
+
+分支 `1.2/phase-16v2-job-gate`，16v-1 合入后从 `1.2/platform` 拉出。实施 D52 第 4 条。
+
+**16v-2 状态**：计划中。
+
+- `ExternalJobType…enabledBy("参数键")`：执行器只在参数此刻生效的值（`Clock`）为布尔 `true` 时领取该类型的作业；缺失、`false` 或非布尔即暂停（V-4）：
+  排队与等待重试的作业等待（不用掉尝试、不失败，V-2），执行中的尝试不中断，租约过期照常补记、已取消的照常给出结局，暂停中的作业可以取消并得到 16v-1 的结局。
+- 每次轮询对声明了 `enabledBy` 的类型以系统身份经 `ParamService` 读一次（领取事务之外）；暂停与恢复记 INFO 日志，指标只带类型名（D16）。`StartExternalJob` 照常登记（V-3）。
+- 启动检查 `EXTERNAL`：键格式错误为错误，不在任何 `ControlledParams` 中为警告。场景回放的 `runExternalJobs` 与 `completeExternalJob` 服从暂停，暂停中的 `completeExternalJob` 报错并说明原因。
+- 测试 `ExternalJobGateIT`：参数关闭时排队的作业等待且不用掉尝试、重试同样等待、执行中的尝试不中断、打开后下一次轮询恢复、缺失或非布尔即暂停、预定的修改到时生效、
+  暂停中的作业可取消并得到结局、其他类型不受影响、暂停时租约过期照常补记；`ExternalJobChecksTest`：键的格式、不受控时的警告。
+
+**QuizBuks 需要的修改**（不在平台分支；每个平台 PR 合入后在 `1.2/quizbuks` 以同步 PR 做）：
+- 16v-1 之后：`qb.ai.questions` 与 `qb.ai.cover` 声明 `.onCancelled(QB_AI_JOB_CANCELLED)` 按实际用量结算，删去 `QB_AI_JOB_STOPPED` 及其 `jabiz.external-job.finished` 订阅；
+  `QB_AI_CANCEL` 改用步骤 `CancelExternalJob`；配置 `jabiz.mail.unsubscribe-paths.sponsor` 与 `.app` 并在两个 SPA 中挂载 `<MailUnsubscribe/>`，从运维 §1.2 与上线检查表中去掉"能打开 `/admin/`"的要求；
+  改用 `@jabiz/ui/testing(/playwright)` 并删去复制的辅助函数；可选为日记导出声明 `RetentionPolicy.of("GeneratedFile")`。
+- 16v-2 之后：两个 AI 类型声明 `.enabledBy(qb.ai.enabled)`；删去 `quizbuks.ai.halted` / `QB_AI_HALTED`，相应修改测试。

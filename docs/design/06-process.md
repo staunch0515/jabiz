@@ -114,6 +114,11 @@ LoadEntity(order) → LoadEntity(stock) → ComputeStep(扣减库存、计算金
   新建也走审核的流程）。桩服务 `tools/demo/ai-stub/AiStub.java`：手工演示 `java tools/demo/ai-stub/AiStub.java`（`dev` 指向 `http://localhost:8091/v1`）；
   Docker Compose 中是服务 `ai-stub`，与 `app` 共用网络（`http://localhost:8091/v1`）。
 - 测试：runtime 测试夹具 `StubHttpServer`（JDK `HttpServer`，按路径编排应答——状态、请求头、延迟、分块——并记录请求），应用分支可直接复用。
+- **剩余风险**（D52 第 1 条，16v-1 写明；作业侧的说明见 11 §4a）：①不流式的请求最长 2 分钟（`ExternalService.MAX_REQUEST_TIMEOUT`），超时的回答被放弃而提供方可能照样计费，
+  重试也可能再被放弃——流式结果暂不做（V-1）；②处理器与阻塞步骤看不到业务开关，作业类型的 `enabledBy`（16v-2）在领取前检查，已开始的尝试照常结束；
+  ③提供方不按幂等键去重时重试可能重复计费，平台无法解决：在尝试中 `recordUsage`、没有回答的尝试按估计计费、在提供方设置支出上限。
+- **取消作业**：业务流程以平台步骤 `CancelExternalJob.of(作业类型, ctx -> 作业号)[.ifOpen()]` 取消自己类型、由操作人开始的作业（流程自己的权限；其他类型、别人的与不存在同一个 404；
+  `.requestedBy(…)` 指明所有人，`.anyRequester()` 须显式；与流程同一事务），类型的 `onCancelled` 流程在作业结束后收到 `ExternalJobCancellation`（D52 第 2 条，11 §4a）。
 
 ## 3. 上下文与变更集
 
