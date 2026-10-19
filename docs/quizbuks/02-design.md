@@ -105,7 +105,7 @@ docs/quizbuks/               本文件等
 | `QbOption` | T | `questionId`、`quizId`、`ownerId`、`seq`、`text`、`image`（可选）、`correct` | 2–6 个、至少 1 个正确：在"保存版本"时检查（`QuizCompleteness`；草稿允许不完整，M-22），提交审核时（Q4）再查 |
 | `QbQuizVersion` | W | `quizId`、`ownerId`、`versionNumber`（1、2…，`label` 为 v1.0、v1.1…）、`title`、`content`（规范 JSON 文本：题目、选项、资料的完整快照，题与选项按 1 起的序号）、`contentHash`（平台 `ContentHash`）、`questionCount`、`materialCount`、`fullScore`、`versionedAt` | **整体快照**（分析 4.2），由"保存版本"（`QB_QUIZ_PUBLISH_VERSION`）显式生成，草稿的保存不生成版本（Q3 D-Q3-1）。没有文件字段。发布引用版本，答题与结算只读快照。没有商家数据视图（内容含正确答案、版本比模版活得久）：商家只经模板读取，模板只连接本人未移除的模版 |
 | `QbVersionFile` | T | `quizId`、`ownerId`、`firstVersionNo`、`image` / `pdf` / `audio`（各对应一个文件策略，恰好一个非空） | 快照引用的每个文件按"模版 + 文件"一行，使平台的文件引用检查与孤儿清扫看得到 JSON 中的文件；普通时态实体（不是只写一次）：移除模版时写墓碑，被发布引用的版本的文件除外（Q4） |
-| `QbAiJob` | P | `externalJobId`（平台作业号，唯一）、`sponsorId`、`quizId`、`kind`（QUESTIONS / COVER）、`params`（规范 JSON：题数、难度、语言、资料）、`model` 与 `servedModel`（拒答回退时不同，只给管理员）、`status`（QUEUED / READY / FAILED / CANCELLED / ACCEPTED / DISCARDED / EXPIRED）、`candidates`（规范 JSON，只在 READY 时）、候选 / 不合格 / 接受的题数、`inputBytes`、`estimatedTokens`（3 次尝试各自完整的输入与输出）、`inputTokens`、`outputTokens`、`fallbackInputTokens` / `fallbackOutputTokens`（回退模型所用的部分）、`costUsd`（按各模型标价的估算）、`zone`（请求时的部署时区）、`attempts`、`failureCode` / `failureMessage`（系统的说明）、`requestedAt` / `finishedAt` / `expiresAt` / `closedAt` | AI 生成请求（Q8a，`plans/Q8-ai.md` D-Q8-3）：普通表（状态在几分钟内连续变化、按作业号查找，同 `QbTopUp`），历史由平台审计保留；候选从不自动入库，经商家逐题校对后由 `QB_AI_ACCEPT` 写入题目（M-26 "必须人工校对"），7 天后过期，候选从作业中移除（提供方的原始回答仍在平台的作业结果中；`candidates` 不进审计） |
+| `QbAiJob` | P | `externalJobId`（平台作业号，唯一）、`sponsorId`、`quizId`、`kind`（QUESTIONS / COVER）、`params`（规范 JSON：题数、难度、语言、资料）、`model` 与 `servedModel`（拒答回退时不同，只给管理员）、`status`（QUEUED / READY / FAILED / CANCELLED / ACCEPTED / DISCARDED / EXPIRED）、`candidates`（规范 JSON，只在 READY 时）、候选 / 不合格 / 接受的题数、`inputBytes`、`estimatedTokens`（3 次尝试各自完整的输入与输出）、`inputTokens`、`outputTokens`、`fallbackInputTokens` / `fallbackOutputTokens`（回退模型所用的部分）、`costUsd`（按各模型标价的估算）、`zone`（请求时的部署时区）、`attempts`、`failureCode` / `failureMessage`（系统的说明）、`requestedAt` / `finishedAt` / `expiresAt` / `closedAt`；Q8b（V18）`cover1` – `cover3`（封面作业的候选图，`qb.content.image` 的文件，只在 READY 时，使清扫保留它们） | AI 生成请求（Q8a，`plans/Q8-ai.md` D-Q8-3）：普通表（状态在几分钟内连续变化、按作业号查找，同 `QbTopUp`），历史由平台审计保留；候选从不自动入库，经商家逐题校对后由 `QB_AI_ACCEPT` 写入题目（M-26 "必须人工校对"），7 天后过期，候选从作业中移除（提供方的原始回答仍在平台的作业结果中；`candidates` 不进审计） |
 | `QbAiUsage` | P | `sponsorId`（全体一行为 `*`）、`month`（部署时区的年月）、`jobs`、`failedJobs`、`inputTokens`、`outputTokens` | 用量（M-10）：唯一 `(sponsorId, month)`，只在 `qb.ai:<商家>` → `qb.ai:*` 锁内由完成与失败流程累加；限额按它与未结束作业的预估计 |
 
 ### 3.3 发布与答题
@@ -312,6 +312,7 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 | `QB_QUESTION_SAVE` / `_DELETE` / `_REORDER`、`QB_MATERIAL_SAVE` / `_DELETE` / `_REORDER` | `qb.content.write` | 一道题（连同选项）或一条资料（连同图片组）各自保存，只写改变的行；可带 `baseRevision`（过期即 `QB_QUIZ_CHANGED`）；上限见 `content.ContentLimits` |
 | `QB_QUIZ_PUBLISH_VERSION` | `qb.content.write` | "保存版本"：校验完整性（M-31 中属于内容的部分，一次报告全部）→ 与最新版本哈希相同即拒绝 → 生成 `QbQuizVersion` 快照（只写一次）并补登 `QbVersionFile` |
 | `QB_AI_QUESTIONS_REQUEST` / `QB_AI_ACCEPT` / `QB_AI_DISCARD` / `QB_AI_CANCEL` | `qb.ai.use` | Q8a（`plans/Q8-ai.md` D-Q8-4）：请求先查入驻、封禁、AI 说明（新种类 `AI_NOTICE`，请求时同意）、总开关与参数清单，经商家视图读模版与所选资料、构造并度量输入（≤ 60 KiB，超出即拒绝、不截断），再在 `qb.ai:<商家>` 锁内查限额（同时未结束 2 个、每模版 1 个、每日次数、每月 Token 含未结束作业的预估、全局月上限），之后经异步外部作业 `qb.ai.questions` 调用 Claude；接受取 `qb.quiz:<模版>` → `qb.ai:<商家>`，只写每题 `reviewed = true` 的、商家校对后的内容，模版 `aiGenerated`；丢弃、取消只改作业 |
+| `QB_AI_COVER_REQUEST` / `QB_AI_COVER_ACCEPT` | `qb.ai.use` | Q8b（M-25，`plans/Q8-ai.md` 第 6 节与实施记录）：请求与题目同样的检查、锁与限额（每模版每种类 1 个），只发送标题与简介，作业 `qb.ai.cover` 由 Claude 从固定图库设计 3 个封面、服务器画成 PNG、经平台的文件输出以商家为上传者登记；选定取 `qb.quiz:<模版>` → `qb.ai:<商家>`，经模版编辑把所选图写入 `cover`、`aiGenerated`，作业关闭后未选的图由清扫删除。PDF 资料（Q8b）作为作业的文件输入发送原文件（每个与合计的大小在请求时查；服务器不解析 PDF，作业在付费调用前以提供方免费的 `count_tokens` 数输入，超过按页数上限的预留即失败、不计费），作业输入上限 256 KiB |
 | `QB_AI_JOB_COMPLETED` / `QB_AI_JOB_FAILED` / `QB_AI_EXPIRE` / `QB_AI_JOB_STOPPED` | `qb.ai.system`（不授予） | `internal()`：`qb.ai:<商家>` → `qb.ai:*` 内累加每次尝试的用量（商家与全体），候选按内容规则再查后 READY；失败记原因；每日任务 `qb.ai-expire` 逐项清除过期的候选；平台停止的作业（`EXTERNAL_JOB_CANCEL`，平台不调用完成或失败流程）由 `QB_AI_JOB_STOPPED` 经事件 `jabiz.external-job.finished` 关闭并按完整预估计入 |
 | `QB_PUBLICATION_SAVE` / `QB_PUBLICATION_DELETE` / `QB_PUBLICATION_COPY` | `qb.publication.write` | 向导第一、二步保存草稿（可不完整），输出提交时会报告的全部问题与预计最大支出（第三步）；删除只限草稿；复制任意状态的本人发布为新草稿，可换版本或时间（Q4） |
 | `QB_PUBLICATION_SUBMIT` / `QB_PUBLICATION_WITHDRAW` | `qb.publication.write` | 模版锁（共享）→ 发布锁；`PublicationReadiness` 一次报告全部违规（档位、时间、合格分、预算、以快照重查内容、商家已入驻）；`RequireApproval`；撤回待审核的请求 |
@@ -403,7 +404,7 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 | `qb.admin.journal-exports` / `qb.admin.journal-mapping` | 分录导出的列表（期间、凭证号、行数、借贷合计、文件、外部凭证号）；科目映射（每个可过账科目与现行的外部科目代码，参数是否已发布）（Q9d） | `qb.admin.finance.read` |
 | `qb.system.journal-first` / `qb.system.journal-summary` / `qb.system.journal-parts` / `qb.system.journal-detail` | 导出的取数（Q9d，D-Q9d-3）：最早的过账时间（第一期）；本次所取的分录（过账于期末之前、记录于截止时刻之前、且不在以前的导出中：`bookingTime < to AND createdTime <= knownAt AND (bookingTime >= previousTo OR createdTime > previousKnownAt)`）——凭证行由数据库按科目、借贷（2110 加商家）汇总；明细按交易区间分段（每段在平台读取与文件上限的一半之内），逐段按交易、科目、借贷读取 | `qb.journal.export` |
 | `qb.system.journal-open-transactions` | 导出前检查同一数据库中打开已久的事务（`pg_stat_activity`，评审 M1） | `qb.journal.export` |
-| `qb.sponsor.ai-jobs` / `qb.sponsor.ai-usage` | 本人某模版的 AI 作业与待校对的候选（不含回答的模型）；本月用量（输入 / 输出 Token、次数、今日次数）、未结束作业的预估与剩余额度、是否开启（经 `now:SysParam`；月与日按任务记下的部署时区）（Q8a） | `qb.ai.use` |
+| `qb.sponsor.ai-jobs` / `qb.sponsor.ai-usage` | 本人某模版的 AI 作业与待校对的候选（不含回答的模型；Q8b 可按种类 `kind` 读，封面的候选含图的文件编号）；本月用量（输入 / 输出 Token、次数、今日次数）、未结束作业的预估与剩余额度、是否开启（经 `now:SysParam`；月与日按任务记下的部署时区）（Q8a） | `qb.ai.use` |
 | `qb.admin.ai-usage` / `qb.admin.ai-jobs` / `qb.admin.ai-settings` | 按商家与月份的用量、失败数与按价格参数的美元估算；最近的作业（请求的模型与实际回答的模型、尝试次数、失败原因，不含候选）；AI 参数的现行值（Q8a） | `qb.admin.ai.read` |
 | `qb.system.ai-open` | 所有商家未结束作业的预估合计（请求在 `qb.ai:*` 锁内读，全体月上限计入正在运行的作业）（Q8a 评审） | `qb.ai.system` |
 | `qb.system.ai-expired` | 过期任务的取数：READY 且已过期的作业（Q8a） | `qb.ai.system` |
@@ -448,6 +449,7 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 - 消息中心（Q7c，`/messages`）：平台给商家的公告（收件箱），与本人的通知：编写（发布、纯文本、立即或定时）、保存即见问题、发送、改回草稿、撤销，统计（不足 5 人不显示），被管理员撤回的显示理由。
 - AI 出题（Q8a，`sponsor/src/ai/`）：编辑器题目页上方的面板。对话框选资料（各自大小，非文章只发标题与描述，合计超过 60 KiB 即不能提交）、题数 1–20、难度、语言、是否避免重复，说明发送什么；第一次使用时显示 AI 说明并勾选同意；
   进行中每 5 秒查询、至多 5 分钟、离开即停；候选是可编辑的卡片（纯文本，不渲染 Markdown），勾选"我已校对"的才能加入；丢弃、取消；失败与过期的说明。仪表盘的 AI 用量卡显示本月 Token、次数与剩余额度。
+- AI 封面与 PDF 资料（Q8b，`sponsor/src/ai/AiCoverPanel.tsx`）：编辑器"模版"页基本信息下的面板：选封面文字的语言（第一次使用时同意 AI 说明）后生成 3 张候选图，以单选选一张"使用此封面"（经模版编辑写入，基本信息随即显示新封面），或全部丢弃；进行中每 5 秒查询、至多 5 分钟。生成题目的对话框中 PDF 资料注明"发送 PDF 文件本身"（不计入文字的大小）。
 
 ### 7.3 管理员后台（`/admin/`）
 
@@ -471,7 +473,7 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 | 系统 | 用途 | 接入方式 | 配置 |
 |---|---|---|---|
 | Stripe | 充值（Checkout）、用户收款账户（Connect Express，Q6b）、转账（Transfers，Q6b） | 出站：外部服务 `stripe`，只经平台的 JDK HTTP（D38：官方 SDK 自带的连接不受主机白名单约束，不用），应用自写 `StripeApi`（表单编码、错误分类、JSON 解析），**全部调用都是异步外部作业**（重试与幂等键由平台持久化），以 `Stripe-Version` 固定 API 版本；入站：平台入站 Webhook（D37）的提供方 `stripe`（账户端点；Q6b 另加 `stripe-connect`），验签、存档、去重后交给 `internal()` 的消费流程 | `STRIPE_API_KEY`、`STRIPE_WEBHOOK_SECRET`（环境变量）；`STRIPE_CONNECT_WEBHOOK_SECRET`（Q6b）；`quizbuks.stripe.*`（模式、API 版本、支付页有效期、结算币种、收款账户国家）、`quizbuks.links.app` |
-| Claude（Anthropic） | AI 生成题目（Q8a）与封面（Q8b） | 外部服务 `anthropic`，只经平台的 JDK HTTP（D38，不用 SDK），应用自写 `ClaudeApi`（Messages API：JSON Schema 结构化输出、adaptive thinking、显式 effort、服务端拒答回退 `fallbacks: "default"`、输入 ≤ 60 KiB 拒绝不截断、错误分类）；**全部调用都是异步外部作业** `qb.ai.questions`（3 次尝试）；只发送商家自己的模版内容，`metadata.user_id` 为 HMAC 的不透明值；`dev`、测试与 e2e 用本地桩（`tools/quizbuks/claude-stub`） | `ANTHROPIC_API_KEY`（环境变量）；业务参数 `qb.ai.*`（开关、模型清单 `claude-opus-5-5` / `claude-sonnet-5-5` / `claude-haiku-5-5`、effort、限额：受控） |
+| Claude（Anthropic） | AI 生成题目（Q8a）与封面（Q8b） | 外部服务 `anthropic`，只经平台的 JDK HTTP（D38，不用 SDK），应用自写 `ClaudeApi`（Messages API：JSON Schema 结构化输出、adaptive thinking、显式 effort、服务端拒答回退 `fallbacks: "default"`、输入 ≤ 250 KiB（Q8a 为 60 KiB）拒绝不截断、PDF 资料以文档块发送原文件、错误分类）；**全部调用都是异步外部作业** `qb.ai.questions` 与 `qb.ai.cover`（3 次尝试；封面图由服务器绘制，经平台的文件输出登记，D50）；只发送商家自己的模版内容，`metadata.user_id` 为 HMAC 的不透明值；`dev`、测试与 e2e 用本地桩（`tools/quizbuks/claude-stub`） | `ANTHROPIC_API_KEY`（环境变量）；业务参数 `qb.ai.*`（开关、模型清单 `claude-opus-5-5` / `claude-sonnet-5-5` / `claude-haiku-5-5`、effort、限额：受控） |
 | ECB | 参考汇率 | 定时任务中的 `BlockingStep` | — |
 | 邮件 | 激活、欢迎、转账结果 | 平台事务邮件（G3） | `spring.mail.*` |
 

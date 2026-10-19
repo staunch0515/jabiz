@@ -104,7 +104,7 @@ class AiPromptTest {
                 "options", List.of(Map.of("text", "a", "correct", true), Map.of("text", "b", "correct", false))),
             Map.of("stem", "Q2?", "points", 10, "materials", List.of(),
                 "options", List.of(Map.of("text", "a", "correct", false))))));
-        AiQuestionsJob.Result result = new ClaudeQuestionWriter(JSON, Duration.ofMinutes(2)).write(input("x"),
+        AiQuestionsJob.Result result = new ClaudeQuestionWriter(JSON, new ClaudeCalls.Settings(Duration.ofMinutes(2))).write(input("x"),
             context(200, message("end_turn", text), usage));
         assertThat(result.candidates()).extracting(AiQuestionsJob.Candidate::stem).containsExactly("Q1?");
         // Material 3 was not sent.
@@ -117,7 +117,7 @@ class AiPromptTest {
     @Test
     void refusalsAndCutAnswersEndTheJobAfterTheirUsageIsRecorded() {
         Map<String, Long> usage = new LinkedHashMap<>();
-        ClaudeQuestionWriter writer = new ClaudeQuestionWriter(JSON, Duration.ofMinutes(2));
+        ClaudeQuestionWriter writer = new ClaudeQuestionWriter(JSON, new ClaudeCalls.Settings(Duration.ofMinutes(2)));
         assertThatThrownBy(() -> writer.write(input("x"), context(200, message("refusal", null), usage)))
             .isInstanceOfSatisfying(ExternalJobException.class, e -> {
                 assertThat(e.code()).isEqualTo(AiCodes.REFUSED);
@@ -167,7 +167,7 @@ class AiPromptTest {
             throw new ExternalCallException(ClaudeService.SERVICE, ExternalCallException.Kind.TIMEOUT,
                 "no answer within PT45S");
         };
-        ClaudeQuestionWriter writer = new ClaudeQuestionWriter(JSON, Duration.ofSeconds(45));
+        ClaudeQuestionWriter writer = new ClaudeQuestionWriter(JSON, new ClaudeCalls.Settings(Duration.ofSeconds(45)));
         AiQuestionsJob.Input input = input("x");
         assertThatThrownBy(() -> writer.write(input, context(silent, usage)))
             .isInstanceOf(ExternalCallException.class);
@@ -185,7 +185,7 @@ class AiPromptTest {
         assertThatThrownBy(() -> writer.write(input, context(refused, none)))
             .isInstanceOf(ExternalCallException.class);
         assertThat(none).isEmpty();
-        assertThatThrownBy(() -> new ClaudeQuestionWriter(JSON, Duration.ofMinutes(3)))
+        assertThatThrownBy(() -> new ClaudeQuestionWriter(JSON, new ClaudeCalls.Settings(Duration.ofMinutes(3))))
             .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -195,7 +195,7 @@ class AiPromptTest {
         String body = JSON.writeValueAsString(Map.of("model", ClaudeService.OPUS, "stop_reason", "refusal",
             "stop_details", Map.of("type", "refusal", "category", "cyber", "recommended_model", "claude-opus-4-8"),
             "content", List.of(), "usage", Map.of("input_tokens", 70, "output_tokens", 0)));
-        assertThatThrownBy(() -> new ClaudeQuestionWriter(JSON, Duration.ofMinutes(2)).write(input("x"),
+        assertThatThrownBy(() -> new ClaudeQuestionWriter(JSON, new ClaudeCalls.Settings(Duration.ofMinutes(2))).write(input("x"),
             context(200, body, usage)))
             .isInstanceOfSatisfying(ExternalJobException.class, e -> {
                 assertThat(e.code()).isEqualTo(AiCodes.REFUSED);
@@ -212,7 +212,7 @@ class AiPromptTest {
             "usage", Map.of("input_tokens", 10, "output_tokens", 5, "iterations", List.of(
                 Map.of("type", "message", "input_tokens", 1_000, "output_tokens", 0),
                 Map.of("type", "fallback_message", "input_tokens", 1_000, "output_tokens", 2_000)))));
-        new ClaudeQuestionWriter(JSON, Duration.ofMinutes(2)).write(input("x"), context(200, body, usage));
+        new ClaudeQuestionWriter(JSON, new ClaudeCalls.Settings(Duration.ofMinutes(2))).write(input("x"), context(200, body, usage));
         assertThat(usage).containsEntry(AiQuestionsJob.INPUT_TOKENS, 2_000L)
             .containsEntry(AiQuestionsJob.FALLBACK_INPUT_TOKENS, 1_000L)
             .containsEntry(AiQuestionsJob.FALLBACK_OUTPUT_TOKENS, 2_000L);

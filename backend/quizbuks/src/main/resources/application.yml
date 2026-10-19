@@ -60,6 +60,9 @@ jabiz:
       # candidates writes up to 20 questions.
       "[QB_AI_QUESTIONS_REQUEST]": { per-user: 5, period: 1m }
       "[QB_AI_ACCEPT]": { per-user: 30, period: 1m }
+      # Q8b: covers are asked for as questions are, and a sponsor picks one of three.
+      "[QB_AI_COVER_REQUEST]": { per-user: 5, period: 1m }
+      "[QB_AI_COVER_ACCEPT]": { per-user: 30, period: 1m }
   # The key signing the integrity seals (docs/design/21-audit-retention.md section 2), from the environment only:
   # Base64, at least 32 bytes. Startup fails without it. Keep a copy: without it the existing seals cannot be verified.
   integrity:
@@ -252,6 +255,13 @@ quizbuks:
     request-timeout: ${QB_AI_REQUEST_TIMEOUT:PT2M}
     halted: ${QB_AI_HALTED:false}
     max-concurrency: ${QB_AI_MAX_CONCURRENCY:4}
+    # Q8b: PDF materials go to Claude as the files themselves: each at most max-bytes (at most 20 MiB). A request
+    # reserves max-pages pages (at most 600) of its sponsor's monthly tokens until its job ends; no PDF is parsed here:
+    # the provider's token count of the request may not exceed that reservation. A lower max-pages lets more PDF
+    # requests run.
+    pdf:
+      max-bytes: ${QB_AI_PDF_MAX_BYTES:10485760}
+      max-pages: ${QB_AI_PDF_MAX_PAGES:100}
   # Q10b (review M6): true when no reverse proxy is in front of the application, so that no trusted proxy is listed on
   # purpose (deploy/quizbuks/README.md, "密钥与部署").
   deploy:

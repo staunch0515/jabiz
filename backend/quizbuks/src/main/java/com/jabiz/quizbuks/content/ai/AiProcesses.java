@@ -9,6 +9,7 @@ import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.quizbuks.content.ContentCodes;
+import com.jabiz.quizbuks.content.EditOutput;
 import com.jabiz.quizbuks.content.ContentLimits;
 import com.jabiz.quizbuks.content.MaterialKind;
 import com.jabiz.quizbuks.content.QbContent;
@@ -20,6 +21,7 @@ import com.jabiz.quizbuks.publishing.SponsorChecks;
 import com.jabiz.runtime.BusinessRuleViolationException;
 import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.EntityNotFoundException;
+import com.jabiz.runtime.file.FileEntities;
 import com.jabiz.runtime.param.ParamEntities;
 import com.jabiz.runtime.process.steps.HoldLock;
 import com.jabiz.runtime.process.steps.LoadEntity;
@@ -80,6 +82,10 @@ import java.util.UUID;
 public final class AiProcesses {
 
     public static final String REQUEST = "QB_AI_QUESTIONS_REQUEST";
+    /** Candidate covers of a quiz (Q8b, M-25): as {@value #REQUEST}, from the quiz's title and introduction. */
+    public static final String COVER_REQUEST = "QB_AI_COVER_REQUEST";
+    /** The sponsor's choice of one candidate cover, written into the quiz's {@code cover} (Q8b). */
+    public static final String COVER_ACCEPT = "QB_AI_COVER_ACCEPT";
     public static final String COMPLETED = "QB_AI_JOB_COMPLETED";
     public static final String FAILED = "QB_AI_JOB_FAILED";
     public static final String ACCEPT = "QB_AI_ACCEPT";
@@ -105,7 +111,27 @@ public final class AiProcesses {
         @NotNull @Min(1) @Max(AiQuestionsJob.MAX_COUNT) Integer count,
         @NotNull @Pattern(regexp = "EASY|MEDIUM|HARD") String difficulty,
         @NotNull @Pattern(regexp = "en|zh|ja") String language, Boolean avoidExisting,
-        @Positive Integer aiNoticeVersionNo) {}
+        @Positive Integer aiNoticeVersionNo) implements Requested {}
+
+    /**
+     * Candidate covers of a quiz (Q8b): drawn from its title and introduction.
+     *
+     * @param language          the covers' text's: {@code en}, {@code zh} or {@code ja}
+     * @param aiNoticeVersionNo the version of the AI notice the page showed, when the sponsor accepts it now
+     */
+    public record CoverRequestInput(@NotNull UUID quizId, @NotNull @Pattern(regexp = "en|zh|ja") String language,
+        @Positive Integer aiNoticeVersionNo) implements Requested {}
+
+    /** What every request of the AI names: the quiz, and the notice accepted with it. */
+    public interface Requested {
+        UUID quizId();
+
+        Integer aiNoticeVersionNo();
+    }
+
+    /** The chosen candidate cover ({@code 1..3}) of a ready cover job of the quiz. */
+    public record CoverAcceptInput(@NotNull UUID aiJobId, @NotNull UUID quizId,
+        @NotNull @Min(1) @Max(CoverDesigns.COVERS) Integer candidateNo, Long baseRevision) {}
 
     /** @param estimatedTokens what the job may use at most, counted against the month until it finishes */
     public record RequestOutput(String aiJobId, String externalJobId, String status, long estimatedTokens) {}
@@ -159,16 +185,40 @@ public final class AiProcesses {
     static final String QUESTION_ROWS = "questionRows";
     static final String GLOBAL_OPEN = "globalOpen";
     static final String FIRST_READ = "firstRead";
+    static final String ESTIMATE = "estimate";
+    static final String KIND = "kind";
+    static final String MODEL = "model";
+    static final String PDF_FILES = "pdfFiles";
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
     // ---- request ---------------------------------------------------------------------------------------------------
 
     public static ProcessDefinition<RequestInput, RequestOutput, ProcessContext> request(ZoneId zone,
+        AiUserKeys userKeys, AiPdfs.Limits pdfs) {
+        return requestProcess(REQUEST, RequestInput.class,
+            "Asks the AI for candidate questions of one of the sponsor's quizzes, to review.", AiQuestionsJob.TYPE,
+            true, zone, ctx -> prepare(ctx, userKeys, pdfs));
+    }
+
+    /** Candidate covers (Q8b): the same checks, locks and limits as questions, of the job {@value AiCoverJob#TYPE}. */
+    public static ProcessDefinition<CoverRequestInput, RequestOutput, ProcessContext> coverRequest(ZoneId zone,
         AiUserKeys userKeys) {
-        return ProcessDefinition.define(REQUEST, 1, RequestInput.class, RequestOutput.class, ProcessContext.class,
-            pb -> pb
-                .description("Asks the AI for candidate questions of one of the sponsor's quizzes, to review.")
+        return requestProcess(COVER_REQUEST, CoverRequestInput.class,
+            "Asks the AI for candidate covers of one of the sponsor's quizzes, to choose from.", AiCoverJob.TYPE,
+            false, zone, ctx -> prepareCover(ctx, userKeys));
+    }
+
+    /**
+     * A request of the AI: before any lock the sponsor's standing, the notice, the settings and the quiz (with its
+     * materials, questions and chosen PDFs when {@code questions}), then {@code prepare}; under the sponsor's lock and
+     * everybody's, the limits; then the job (with the PDFs as its files) and its record.
+     */
+    private static <I extends Requested> ProcessDefinition<I, RequestOutput, ProcessContext> requestProcess(
+        String name, Class<I> type, String description, String jobType, boolean questions, ZoneId zone,
+        java.util.function.Consumer<ProcessContext> prepare) {
+        return ProcessDefinition.define(name, 1, type, RequestOutput.class, ProcessContext.class, pb -> {
+            pb.description(description)
                 .permissions(QbPermissions.AI_USE)
                 .requiresVerifiedEmail()
                 .steps(CallerChecks::refuseBanned)
@@ -184,13 +234,16 @@ public final class AiProcesses {
                     ctx -> ctx.request().actorId()))
                 .step("Load the settings", loadSettings())
                 .step("Load the quiz", LoadEntity.by(QbContent.sponsorDataset(QbContent.QUIZ),
-                    QuizEditing.QUIZ_ID, QuizEditing.QUIZ))
-                .step("Load its materials and questions", QueryEntities.<ProcessContext>all(
-                    QueryEntities.query(QbContent.sponsorDataset(QbContent.MATERIAL),
-                        ctx -> QuizEditing.ofQuiz(ctx.get(QuizEditing.QUIZ_ID)), MATERIAL_ROWS),
-                    QueryEntities.query(QbContent.sponsorDataset(QbContent.QUESTION),
-                        ctx -> QuizEditing.ofQuiz(ctx.get(QuizEditing.QUIZ_ID)), QUESTION_ROWS)))
-                .compute("Prepare the request", (metadata, ctx) -> prepare(ctx, userKeys))
+                    QuizEditing.QUIZ_ID, QuizEditing.QUIZ));
+            if (questions) {
+                pb.step("Load its materials and questions", QueryEntities.<ProcessContext>all(
+                        QueryEntities.query(QbContent.sponsorDataset(QbContent.MATERIAL),
+                            ctx -> QuizEditing.ofQuiz(ctx.get(QuizEditing.QUIZ_ID)), MATERIAL_ROWS),
+                        QueryEntities.query(QbContent.sponsorDataset(QbContent.QUESTION),
+                            ctx -> QuizEditing.ofQuiz(ctx.get(QuizEditing.QUIZ_ID)), QUESTION_ROWS)))
+                    .steps(b -> QuizEditing.loadFiles(b, AiProcesses::chosenPdfs));
+            }
+            pb.compute("Prepare the request", (metadata, ctx) -> prepare.accept(ctx))
                 .step("Lock the sponsor's AI requests", HoldLock.<ProcessContext>exclusive(
                     ctx -> QbAi.lockName(ctx.request().actorId())))
                 .step("Lock everybody's usage", HoldLock.<ProcessContext>exclusive(ctx -> QbAi.GLOBAL_LOCK))
@@ -208,12 +261,39 @@ public final class AiProcesses {
                         .limit(ctx.get(SETTINGS, AiSettings.class).dailyJobs() + 1).build(), TODAY),
                     QueryEntities.query(QbAi.defaultDataset(QbAi.USAGE), ctx -> usageOf(ctx.request().actorId(),
                         AiLimits.month(ctx.opTime(), zone)), USAGE)))
-                .compute("Check the limits", (metadata, ctx) -> checkLimits(ctx, zone))
-                .step("Start the job", StartExternalJob.<ProcessContext>of(AiQuestionsJob.TYPE,
-                        ctx -> ctx.get(JOB_INPUT))
-                    .reference(ctx -> "quiz:" + ctx.get(QuizEditing.QUIZ_ID))
-                    .outputKey(EXTERNAL_JOB_ID))
-                .compute("Record the job", (metadata, ctx) -> record(ctx, zone)));
+                .compute("Check the limits", (metadata, ctx) -> checkLimits(ctx, zone));
+            StartExternalJob.Spec<ProcessContext> start = StartExternalJob.<ProcessContext>of(jobType,
+                    ctx -> ctx.get(JOB_INPUT))
+                .reference(ctx -> "quiz:" + ctx.get(QuizEditing.QUIZ_ID))
+                .outputKey(EXTERNAL_JOB_ID);
+            if (questions) {
+                start = start.files(AiProcesses::pdfFiles);
+            }
+            pb.step("Start the job", start)
+                .compute("Record the job", (metadata, ctx) -> record(ctx, zone));
+        });
+    }
+
+    /** The PDF files of the chosen materials, as the request found them (for the file reads before it). */
+    static List<UUID> chosenPdfs(ProcessContext ctx) {
+        RequestInput input = ctx.get(INPUT, RequestInput.class);
+        Set<String> chosen = new HashSet<>();
+        input.materialIds().forEach(id -> chosen.add(id.toString()));
+        List<UUID> files = new ArrayList<>();
+        for (EntityInstance material : rows(ctx, MATERIAL_ROWS)) {
+            Object pdf = material.get("pdf");
+            if (chosen.contains(String.valueOf(material.id())) && MaterialKind.PDF.name().equals(material.get("kind"))
+                && pdf != null) {
+                files.add(QuizEditing.uuid(pdf));
+            }
+        }
+        return files;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<UUID> pdfFiles(ProcessContext ctx) {
+        List<UUID> files = (List<UUID>) ctx.get(PDF_FILES);
+        return files == null ? List.of() : files;
     }
 
     /** The AI parameters as stored (a controlled one not yet published is simply absent). */
@@ -238,18 +318,14 @@ public final class AiProcesses {
         return AiSettings.of(values);
     }
 
-    static void prepare(ProcessContext ctx, AiUserKeys userKeys) {
-        RequestInput input = ctx.get(INPUT, RequestInput.class);
-        String sponsorId = ctx.request().actorId();
+    /** What every request checks before the kind's own: standing, settings, the notice. */
+    private record Common(List<Violation> problems, AiSettings settings, List<ConsentChecks.State> accept) {}
+
+    private static Common common(ProcessContext ctx) {
+        Requested input = ctx.get(INPUT, Requested.class);
         List<Violation> problems = new ArrayList<>(SponsorChecks.problems(ctx));
         AiSettings settings = settings(ctx);
         problems.addAll(settings.problems());
-        int maxCount = AiQuestionsJob.maxCount(settings.effort());
-        if (input.count() > maxCount) {
-            problems.add(new Violation("count", AiCodes.COUNT_TOO_HIGH, "At most " + maxCount + " questions at a time "
-                + "at effort " + settings.effort(), Map.of("max", maxCount)));
-        }
-
         ConsentChecks.State notice = ConsentChecks.states(ctx).get(QbLegal.AI_NOTICE);
         List<ConsentChecks.State> accept = List.of();
         if (notice == null) {
@@ -262,6 +338,37 @@ public final class AiProcesses {
                     + notice.currentVersionNo() + " of the AI notice first", Map.of("kind", QbLegal.AI_NOTICE,
                     "versionNo", notice.currentVersionNo())));
             }
+        }
+        return new Common(problems, settings, accept);
+    }
+
+    /** Refuses the request with every problem found; otherwise records the notice and what the next steps need. */
+    private static void prepared(ProcessContext ctx, Common common, String kind, Object job,
+        Map<String, Object> params, int size, long estimate, List<UUID> pdfs) {
+        if (!common.problems().isEmpty()) {
+            throw new BusinessRuleViolationException(common.problems());
+        }
+        ConsentChecks.record(ctx, ctx.request().actorId(), common.accept(), QbLegal.SOURCE_AI);
+        ctx.put(JOB_INPUT, job);
+        ctx.put(JOB_PARAMS, JSON.writeValueAsString(params));
+        ctx.put(INPUT_BYTES, size);
+        ctx.put(SETTINGS, common.settings());
+        ctx.put(KIND, kind);
+        ctx.put(MODEL, common.settings().model());
+        ctx.put(ESTIMATE, estimate);
+        ctx.put(PDF_FILES, List.copyOf(pdfs));
+    }
+
+    static void prepare(ProcessContext ctx, AiUserKeys userKeys, AiPdfs.Limits pdfLimits) {
+        RequestInput input = ctx.get(INPUT, RequestInput.class);
+        String sponsorId = ctx.request().actorId();
+        Common common = common(ctx);
+        List<Violation> problems = common.problems();
+        AiSettings settings = common.settings();
+        int maxCount = AiQuestionsJob.maxCount(settings.effort());
+        if (input.count() > maxCount) {
+            problems.add(new Violation("count", AiCodes.COUNT_TOO_HIGH, "At most " + maxCount + " questions at a time "
+                + "at effort " + settings.effort(), Map.of("max", maxCount)));
         }
 
         EntityInstance quiz = QuizEditing.quiz(ctx);
@@ -280,6 +387,9 @@ public final class AiProcesses {
         }
         List<AiQuestionsJob.Material> sent = new ArrayList<>();
         List<Map<String, Object>> sizes = new ArrayList<>();
+        List<UUID> pdfs = new ArrayList<>();
+        List<Map<String, Object>> pdfSizes = new ArrayList<>();
+        long pdfBytes = 0;
         for (EntityInstance material : materials) {
             String id = String.valueOf(material.id());
             if (!chosen.contains(id)) {
@@ -287,10 +397,31 @@ public final class AiProcesses {
             }
             String kind = material.get("kind");
             String body = MaterialKind.ARTICLE.name().equals(kind) ? material.get("body") : null;
+            // A PDF goes as the file itself (Q8b), read by the job; its size is the stored file's.
+            EntityInstance file = MaterialKind.PDF.name().equals(kind) && material.get("pdf") != null
+                ? QuizEditing.list(ctx, QuizEditing.FILES).stream().filter(row -> String.valueOf(row.id())
+                    .equals(String.valueOf((Object) material.get("pdf")))).findFirst().orElse(null) : null;
+            UUID fileId = file == null ? null : QuizEditing.uuid(file.id());
             AiQuestionsJob.Material item = new AiQuestionsJob.Material(numbers.get(id), kind, material.get("title"),
-                material.get("description"), body);
+                material.get("description"), body, fileId);
             sent.add(item);
             sizes.add(Map.of("materialId", id, "no", item.no(), "bytes", bytes(JSON.writeValueAsString(item))));
+            if (file != null) {
+                long size = QuizEditing.number(file.get(FileEntities.SIZE_BYTES));
+                pdfs.add(fileId);
+                pdfBytes += size;
+                pdfSizes.add(Map.of("materialId", id, "no", item.no(), "bytes", size));
+                if (size > pdfLimits.maxBytes()) {
+                    problems.add(new Violation("materialIds", AiCodes.PDF_TOO_LARGE, "The PDF of material "
+                        + item.no() + " is " + size + " bytes, more than " + pdfLimits.maxBytes(), Map.of("no",
+                        item.no(), "size", size, "max", pdfLimits.maxBytes())));
+                }
+            }
+        }
+        if (pdfBytes > AiQuestionsJob.MAX_PDF_TOTAL_BYTES) {
+            problems.add(new Violation("materialIds", AiCodes.PDF_TOO_LARGE, "The PDFs are " + pdfBytes
+                + " bytes together, more than " + AiQuestionsJob.MAX_PDF_TOTAL_BYTES + ": choose fewer",
+                Map.of("size", pdfBytes, "max", AiQuestionsJob.MAX_PDF_TOTAL_BYTES, "materials", pdfSizes)));
         }
         String intro = quiz.get("intro");
         if (sent.isEmpty() && (intro == null || intro.isBlank())) {
@@ -315,10 +446,6 @@ public final class AiProcesses {
                 + " bytes, more than " + ClaudeApi.MAX_INPUT_BYTES + ": choose fewer materials",
                 Map.of("size", size, "max", ClaudeApi.MAX_INPUT_BYTES, "materials", sizes)));
         }
-        if (!problems.isEmpty()) {
-            throw new BusinessRuleViolationException(problems);
-        }
-        ConsentChecks.record(ctx, sponsorId, accept, QbLegal.SOURCE_AI);
         Map<String, Object> params = new LinkedHashMap<>();
         params.put("count", input.count());
         params.put("difficulty", input.difficulty());
@@ -328,16 +455,50 @@ public final class AiProcesses {
             .filter(row -> numbers.get(String.valueOf(row.id())) == m.no()).findFirst().orElseThrow().id()
             .toString()).toList());
         params.put("materialNos", sent.stream().map(AiQuestionsJob.Material::no).toList());
-        ctx.put(JOB_INPUT, job);
-        ctx.put(JOB_PARAMS, JSON.writeValueAsString(params));
-        ctx.put(INPUT_BYTES, size);
-        ctx.put(SETTINGS, settings);
+        params.put("pdfMaterialNos", sent.stream().filter(m -> m.fileId() != null)
+            .map(AiQuestionsJob.Material::no).toList());
+        // The pages are not known here (nothing reads the PDFs, review H1/H2): the most a request may send is reserved,
+        // and the job's provider count of what it sends may not be above it.
+        int pages = pdfs.isEmpty() ? 0 : pdfLimits.maxPages();
+        long reservedInput = AiLimits.reservedInput(size, pages);
+        params.put("reservedInputTokens", reservedInput);
+        long estimate = AiLimits.estimate(size, ClaudeApi.maxTokens(input.count()), pages);
+        AiQuestionsJob.Input reserved = new AiQuestionsJob.Input(job.model(), job.effort(), job.language(),
+            job.count(), job.difficulty(), job.title(), job.intro(), job.materials(), job.existingStems(),
+            job.userKey(), reservedInput);
+        prepared(ctx, common, QbAi.KIND_QUESTIONS, reserved, params, size, estimate, pdfs);
+    }
+
+    static void prepareCover(ProcessContext ctx, AiUserKeys userKeys) {
+        CoverRequestInput input = ctx.get(INPUT, CoverRequestInput.class);
+        Common common = common(ctx);
+        EntityInstance quiz = QuizEditing.quiz(ctx);
+        AiSettings settings = common.settings();
+        AiCoverJob.Input job = new AiCoverJob.Input(settings.model(), settings.effort(), input.language(),
+            quiz.get("title"), quiz.get("intro"), userKeys.of(ctx.request().actorId()));
+        int size = Math.max(bytes(AiCoverPrompt.user(job, JSON)), bytes(JSON.writeValueAsString(job)));
+        if (size > ClaudeApi.MAX_INPUT_BYTES) {
+            common.problems().add(new Violation(null, AiCodes.INPUT_TOO_LARGE, "The request is " + size
+                + " bytes, more than " + ClaudeApi.MAX_INPUT_BYTES, Map.of("size", size, "max",
+                ClaudeApi.MAX_INPUT_BYTES)));
+        }
+        Map<String, Object> params = new LinkedHashMap<>();
+        params.put("count", CoverDesigns.COVERS);
+        params.put("language", input.language());
+        long reservedInput = AiLimits.reservedInput(size, 0);
+        params.put("reservedInputTokens", reservedInput);
+        prepared(ctx, common, QbAi.KIND_COVER, new AiCoverJob.Input(job.model(), job.effort(), job.language(),
+            job.title(), job.intro(), job.userKey(), reservedInput), params, size,
+            AiLimits.estimate(size, AiCoverJob.MAX_TOKENS, 0), List.of());
     }
 
     static void checkLimits(ProcessContext ctx, ZoneId zone) {
         String quizId = String.valueOf((Object) ctx.get(QuizEditing.QUIZ_ID));
         List<EntityInstance> open = rows(ctx, OPEN);
-        boolean quizBusy = open.stream().anyMatch(job -> quizId.equals(String.valueOf((Object) job.get("quizId"))));
+        // One job of each kind a quiz at a time: covers may be drawn while questions are written.
+        String kind = (String) ctx.get(KIND);
+        boolean quizBusy = open.stream().anyMatch(job -> quizId.equals(String.valueOf((Object) job.get("quizId")))
+            && kind.equals(job.get("kind")));
         long openEstimate = 0;
         for (EntityInstance job : open) {
             openEstimate += QuizEditing.number(job.get("estimatedTokens"));
@@ -347,8 +508,7 @@ public final class AiProcesses {
         EntityInstance everybody = usageRow(ctx, QbAi.EVERYBODY);
         AiLimits.Standing standing = new AiLimits.Standing(open.size(), quizBusy, rows(ctx, TODAY).size(),
             tokens(mine), openEstimate, tokens(everybody), globalOpenEstimate(ctx));
-        long estimate = AiLimits.estimate((int) ctx.get(INPUT_BYTES),
-            ctx.get(JOB_INPUT, AiQuestionsJob.Input.class).count());
+        long estimate = (long) ctx.get(ESTIMATE);
         List<Violation> problems = AiLimits.problems(ctx.get(SETTINGS, AiSettings.class).limits(), standing,
             estimate, ctx.opTime(), zone);
         if (!problems.isEmpty()) {
@@ -364,16 +524,15 @@ public final class AiProcesses {
     }
 
     static void record(ProcessContext ctx, ZoneId zone) {
-        AiQuestionsJob.Input job = ctx.get(JOB_INPUT, AiQuestionsJob.Input.class);
         int size = (int) ctx.get(INPUT_BYTES);
-        long estimate = AiLimits.estimate(size, job.count());
+        long estimate = (long) ctx.get(ESTIMATE);
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("externalJobId", String.valueOf((Object) ctx.get(EXTERNAL_JOB_ID)));
         values.put("sponsorId", ctx.request().actorId());
         values.put("quizId", ctx.get(QuizEditing.QUIZ_ID));
-        values.put("kind", QbAi.KIND_QUESTIONS);
+        values.put("kind", ctx.get(KIND));
         values.put("params", ctx.get(JOB_PARAMS));
-        values.put("model", job.model());
+        values.put("model", ctx.get(MODEL));
         values.put("status", QbAi.QUEUED);
         values.put("inputBytes", BigDecimal.valueOf(size));
         values.put("estimatedTokens", BigDecimal.valueOf(estimate));
@@ -464,6 +623,10 @@ public final class AiProcesses {
         }
         ClaudeApi.Usage usage = usage(completion.usage());
         String month = AiLimits.month(completion.finishedTime(), zone);
+        if (QbAi.KIND_COVER.equals(job.get("kind"))) {
+            completeCover(ctx, completion, job, usage, month);
+            return;
+        }
         AiQuestionsJob.Result result = completion.result(AiQuestionsJob.Result.class);
         java.math.BigDecimal cost = AiCost.of(job.get("model"), result.servedModel(), usage, settings(ctx).price());
         Map<String, Object> values = finished(usage, cost, completion.attempts(), completion.finishedTime());
@@ -487,6 +650,56 @@ public final class AiProcesses {
                 values.put("status", QbAi.READY);
                 values.put("candidates", candidatesJson(checked.valid()));
                 values.put("candidateCount", BigDecimal.valueOf(checked.valid().size()));
+                values.put("expiresAt", completion.finishedTime().plus(Duration.ofDays(settings(ctx).expireDays())));
+            }
+        }
+        ctx.changes().update(QbAi.JOB, job.id(), job.version(), values);
+        addUsage(ctx, completion.requestedBy(), month, usage, cost, failed);
+        ctx.put(OUTPUT, new JobOutput(String.valueOf(job.id()), (String) values.getOrDefault("status",
+            job.get("status"))));
+    }
+
+    /**
+     * A cover job's result: the designs drawn and the files the platform stored for them ({@code cover-1..n}). Kept for
+     * the sponsor's choice ({@code READY}, the pictures referred to from the job so that the sweep keeps them), or none
+     * drawn ({@code FAILED}, {@link AiCodes#NO_CANDIDATES}).
+     */
+    private static void completeCover(ProcessContext ctx, ExternalJobCompletion completion, EntityInstance job,
+        ClaudeApi.Usage usage, String month) {
+        AiCoverJob.Result result = completion.result(AiCoverJob.Result.class);
+        BigDecimal cost = AiCost.of(job.get("model"), result.servedModel(), usage, settings(ctx).price());
+        Map<String, Object> values = finished(usage, cost, completion.attempts(), completion.finishedTime());
+        boolean failed = false;
+        if (QbAi.QUEUED.equals(job.get("status"))) {
+            values.put("servedModel", result.servedModel());
+            List<Map<String, Object>> covers = new ArrayList<>();
+            int invalid = result.invalid();
+            for (int i = 0; i < result.designs().size(); i++) {
+                UUID file = completion.files().get(AiCoverJob.fileKey(i + 1));
+                CoverDesigns.Design design = result.designs().get(i);
+                // Checked again as stored: the handler's check is not the last word (review L3).
+                if (file == null || covers.size() >= CoverDesigns.COVERS || design == null
+                    || CoverDesigns.palette(design.palette()) == null || !CoverDesigns.layout(design.layout())
+                    || !CoverDesigns.motif(design.motif()) || !CoverDesigns.text(design.text())) {
+                    invalid++;
+                    continue;
+                }
+                values.put(QbAi.COVER_FIELDS.get(covers.size()), file);
+                covers.add(CoverDesigns.stored(covers.size() + 1, design, file.toString()));
+            }
+            values.put("invalidCount", BigDecimal.valueOf(invalid));
+            values.put("candidateCount", BigDecimal.valueOf(covers.size()));
+            if (covers.isEmpty()) {
+                failed = true;
+                values.put("status", QbAi.FAILED);
+                values.put("failureCode", AiCodes.NO_CANDIDATES);
+                values.put("failureMessage", "None of the " + invalid + " cover designs could be drawn");
+            } else {
+                Map<String, Object> document = new LinkedHashMap<>();
+                document.put("schema", 1);
+                document.put("covers", covers);
+                values.put("status", QbAi.READY);
+                values.put("candidates", JSON.writeValueAsString(document));
                 values.put("expiresAt", completion.finishedTime().plus(Duration.ofDays(settings(ctx).expireDays())));
             }
         }
@@ -521,7 +734,9 @@ public final class AiProcesses {
         return new ClaudeApi.Usage(metrics.getOrDefault(AiQuestionsJob.INPUT_TOKENS, 0L),
             metrics.getOrDefault(AiQuestionsJob.OUTPUT_TOKENS, 0L),
             metrics.getOrDefault(AiQuestionsJob.FALLBACK_INPUT_TOKENS, 0L),
-            metrics.getOrDefault(AiQuestionsJob.FALLBACK_OUTPUT_TOKENS, 0L));
+            metrics.getOrDefault(AiQuestionsJob.FALLBACK_OUTPUT_TOKENS, 0L),
+            metrics.getOrDefault(AiQuestionsJob.LONG_INPUT_TOKENS, 0L),
+            metrics.getOrDefault(AiQuestionsJob.LONG_OUTPUT_TOKENS, 0L));
     }
 
     private static Map<String, Object> finished(ClaudeApi.Usage usage, BigDecimal cost, Integer attempts,
@@ -597,7 +812,8 @@ public final class AiProcesses {
     /** The platform's job, when the event is about a cancelled job of this type; a key matching nothing otherwise. */
     private static String stoppedJobId(ProcessContext ctx) {
         StoppedInput input = ctx.get(INPUT, StoppedInput.class);
-        return AiQuestionsJob.TYPE.equals(input.jobType()) && "CANCELLED".equals(input.status())
+        return Set.of(AiQuestionsJob.TYPE, AiCoverJob.TYPE).contains(input.jobType())
+            && "CANCELLED".equals(input.status())
             && input.jobId() != null ? input.jobId() : "-";
     }
 
@@ -619,9 +835,11 @@ public final class AiProcesses {
         }
         // Nobody knows what its attempts used: the whole estimate, as the limits reserved it.
         long estimate = QuizEditing.number(job.get("estimatedTokens"));
-        long in = Math.min(estimate, AiQuestionsJob.ATTEMPTS
-            * AiLimits.inputEstimate(QuizEditing.number(job.get("inputBytes"))));
-        ClaudeApi.Usage usage = new ClaudeApi.Usage(in, estimate - in);
+        // The input as the request reserved it (with PDFs, the page cap's documents: review L1), every attempt.
+        Object reserved = params(job).get("reservedInputTokens");
+        long perAttempt = reserved instanceof Number n ? n.longValue()
+            : AiLimits.inputEstimate(QuizEditing.number(job.get("inputBytes")));
+        ClaudeApi.Usage usage = stoppedUsage(job.get("model"), estimate, perAttempt);
         BigDecimal cost = AiCost.of(job.get("model"), null, usage, settings(ctx).price());
         Map<String, Object> values = finished(usage, cost, null, input.at());
         if (QbAi.QUEUED.equals(job.get("status"))) {
@@ -643,7 +861,7 @@ public final class AiProcesses {
         return ProcessDefinition.define(ACCEPT, 1, AcceptInput.class, AcceptOutput.class, ProcessContext.class,
             pb -> pb
                 .description("Adds the AI candidates the sponsor reviewed to the quiz, as the sponsor left them.")
-                .permissions(QbPermissions.AI_USE)
+                .permissions(QbPermissions.AI_USE, QbPermissions.CONTENT_WRITE)
                 .requiresVerifiedEmail()
                 .steps(CallerChecks::refuseBanned)
                 .contextFactory((start, input) -> {
@@ -670,6 +888,7 @@ public final class AiProcesses {
         if (!input.quizId().toString().equals(String.valueOf((Object) job.get("quizId")))) {
             throw new EntityNotFoundException("AI job not found");
         }
+        requireKind(job, QbAi.KIND_QUESTIONS);
         if (!QuizEditing.current(ctx, quiz, input.baseRevision())) {
             return;
         }
@@ -775,6 +994,7 @@ public final class AiProcesses {
                 values.put("status", QbAi.DISCARDED);
                 values.put("candidates", null);
                 values.put("closedAt", ctx.opTime());
+                clearCovers(values, job);
                 return values;
             });
     }
@@ -838,9 +1058,103 @@ public final class AiProcesses {
                 values.put("status", QbAi.EXPIRED);
                 values.put("candidates", null);
                 values.put("closedAt", ctx.opTime());
+                clearCovers(values, job);
                 ctx.changes().update(QbAi.JOB, job.id(), job.version(), values);
                 ctx.put(OUTPUT, new JobOutput(String.valueOf(job.id()), QbAi.EXPIRED));
             }));
+    }
+
+    // ---- a cover chosen ---------------------------------------------------------------------------------------------
+
+    /**
+     * {@value #COVER_ACCEPT}: under {@code qb.quiz:<quiz>} then {@code qb.ai:<sponsor>}, the chosen candidate of the
+     * sponsor's ready cover job becomes the quiz's cover through the quiz's own editing (the next revision, unversioned
+     * changes, the file the quiz owner's upload), and the quiz {@code aiGenerated}; the job is closed and its pictures
+     * no longer referred to, so the ones not chosen go with the file sweep.
+     */
+    public static ProcessDefinition<CoverAcceptInput, EditOutput, ProcessContext> coverAccept() {
+        return ProcessDefinition.define(COVER_ACCEPT, 1, CoverAcceptInput.class, EditOutput.class,
+            ProcessContext.class, pb -> pb
+                .description("Makes the AI cover the sponsor chose the quiz's cover.")
+                .permissions(QbPermissions.AI_USE, QbPermissions.CONTENT_WRITE)
+                .requiresVerifiedEmail()
+                .steps(CallerChecks::refuseBanned)
+                .contextFactory((start, input) -> {
+                    ProcessContext ctx = new ProcessContext(start);
+                    ctx.put(INPUT, input);
+                    ctx.put(QuizEditing.QUIZ_ID, input.quizId());
+                    return ctx;
+                })
+                .outputMapper(ctx -> ctx.get(OUTPUT, EditOutput.class))
+                .steps(QuizEditing::lockAndLoad)
+                .step("Lock the sponsor's AI requests", HoldLock.<ProcessContext>exclusive(
+                    ctx -> QbAi.lockName(ctx.request().actorId())))
+                .step("Load the job", loadJob(ctx -> ctx.get(INPUT, CoverAcceptInput.class).aiJobId()))
+                .steps(b -> QuizEditing.loadFiles(b, ctx -> {
+                    EntityInstance job = first(ctx, JOB);
+                    List<UUID> files = new ArrayList<>();
+                    if (job != null) {
+                        QbAi.COVER_FIELDS.forEach(field -> {
+                            if (job.get(field) != null) {
+                                files.add(QuizEditing.uuid(job.get(field)));
+                            }
+                        });
+                    }
+                    return files;
+                }))
+                .compute("Use the cover", (metadata, ctx) -> acceptCover(ctx)));
+    }
+
+    static void acceptCover(ProcessContext ctx) {
+        CoverAcceptInput input = ctx.get(INPUT, CoverAcceptInput.class);
+        EntityInstance quiz = QuizEditing.quiz(ctx);
+        EntityInstance job = own(ctx);
+        if (!input.quizId().toString().equals(String.valueOf((Object) job.get("quizId")))) {
+            throw new EntityNotFoundException("AI job not found");
+        }
+        requireKind(job, QbAi.KIND_COVER);
+        if (!QuizEditing.current(ctx, quiz, input.baseRevision())) {
+            return;
+        }
+        requireReady(ctx, job);
+        int no = input.candidateNo();
+        Object chosen = no <= QbAi.COVER_FIELDS.size() ? job.get(QbAi.COVER_FIELDS.get(no - 1)) : null;
+        if (chosen == null) {
+            throw new BusinessRuleViolationException(List.of(new Violation("candidateNo", AiCodes.CANDIDATE_UNKNOWN,
+                "Candidate " + no + " is not one of the job's", Map.of("candidateNo", no))));
+        }
+        UUID file = QuizEditing.uuid(chosen);
+        // The platform stored the pictures as the requester's uploads (decision D50): the owner's, as for any cover.
+        QuizEditing.requireOwnFile(ctx, quiz.get("ownerId"), "candidateNo", file, quiz.get("cover"));
+        if (ctx.hasViolations()) {
+            return;
+        }
+        Map<String, Object> heading = new LinkedHashMap<>();
+        heading.put("cover", file);
+        heading.put("aiGenerated", true);
+        QuizEditing.touch(ctx, quiz, heading, null, List.of());
+
+        Map<String, Object> jobValues = new LinkedHashMap<>();
+        jobValues.put("status", QbAi.ACCEPTED);
+        jobValues.put("candidates", null);
+        jobValues.put("acceptedCount", BigDecimal.ONE);
+        jobValues.put("closedAt", ctx.opTime());
+        clearCovers(jobValues, job);
+        ctx.changes().update(QbAi.JOB, job.id(), job.version(), jobValues);
+    }
+
+    /** A closed cover job refers to its pictures no more: the sweep takes the ones not chosen. */
+    private static void clearCovers(Map<String, Object> values, EntityInstance job) {
+        if (QbAi.KIND_COVER.equals(job.get("kind"))) {
+            QbAi.COVER_FIELDS.forEach(field -> values.put(field, null));
+        }
+    }
+
+    private static void requireKind(EntityInstance job, String kind) {
+        if (!kind.equals(job.get("kind"))) {
+            throw new BusinessRuleViolationException(List.of(new Violation("aiJobId", AiCodes.WRONG_KIND,
+                "The AI job is of kind " + job.get("kind"), Map.of("kind", String.valueOf((Object) job.get("kind"))))));
+        }
     }
 
     // ---- shared ----------------------------------------------------------------------------------------------------
@@ -908,6 +1222,18 @@ public final class AiProcesses {
     }
 
     @SuppressWarnings("unchecked")
+    /**
+     * What a job stopped at the platform is charged: every attempt's reserved input ({@code perAttempt}) within its
+     * estimate, the rest as output. For a model with a long-prompt rate, attempts whose input is above
+     * {@value ClaudeCalls#LONG_PROMPT_FROM} tokens are priced at it, as their calls would have been (Q8b re-review L-a).
+     */
+    static ClaudeApi.Usage stoppedUsage(String model, long estimate, long perAttempt) {
+        long in = Math.min(estimate, AiQuestionsJob.ATTEMPTS * perAttempt);
+        ClaudeApi.Usage usage = new ClaudeApi.Usage(in, estimate - in);
+        return AiCost.hasLongPromptRate(model) && perAttempt > ClaudeCalls.LONG_PROMPT_FROM
+            ? usage.asLongPrompt() : usage;
+    }
+
     static Map<String, Object> params(EntityInstance job) {
         return JSON.readValue(String.valueOf((Object) job.get("params")), Map.class);
     }

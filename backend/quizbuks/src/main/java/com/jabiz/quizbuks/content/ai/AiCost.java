@@ -24,7 +24,7 @@ public final class AiCost {
     private static final Map<String, Price> PRICES = Map.of(
         ClaudeService.OPUS, Price.of("4", "20"),
         ClaudeService.SONNET, Price.of("2", "10"),
-        // Below 100,000 input tokens, which every request is (ClaudeApi.MAX_INPUT_BYTES).
+        // Up to 100,000 input tokens a request; above, LONG_PROMPT_PRICES.
         ClaudeService.HAIKU, Price.of("0.10", "0.50"),
         "claude-opus-5", Price.of("5", "25"),
         "claude-opus-4-8", Price.of("5", "25"));
@@ -37,6 +37,18 @@ public final class AiCost {
 
     private static final BigDecimal MILLION = BigDecimal.valueOf(1_000_000);
 
+    /**
+     * The long prompts' prices (Q8b review L2): Anthropic prices each request of the smallest model above
+     * {@value ClaudeCalls#LONG_PROMPT_FROM} input tokens at this rate; the other models have one rate over their whole
+     * context window. The calls above the line are recorded apart, per call ({@code ClaudeCalls.record}).
+     */
+    private static final Map<String, Price> LONG_PROMPT_PRICES = Map.of(ClaudeService.HAIKU, Price.of("0.50", "2.50"));
+
+    /** Whether the model has a second rate for long prompts. */
+    public static boolean hasLongPromptRate(String model) {
+        return model != null && LONG_PROMPT_PRICES.containsKey(model);
+    }
+
     /** The price of a model QuizBuks knows; null otherwise. */
     public static Price known(String model) {
         return model == null ? null : PRICES.get(model);
@@ -47,23 +59,33 @@ public final class AiCost {
      *
      * @param model       the model requested
      * @param servedModel the model that answered, when it is known (a completed job)
-     * @param usage       the tokens of every attempt, with the fallback model's part
+     * @param usage       the tokens of every attempt, with the fallback model's and the long prompts' parts
      * @param fallback    the price of a model QuizBuks does not know (the parameters), or null
      */
     public static BigDecimal of(String model, String servedModel, ClaudeApi.Usage usage, Price fallback) {
         Price requested = known(model) != null ? known(model) : fallback;
         long fallbackIn = usage.fallbackInputTokens();
         long fallbackOut = usage.fallbackOutputTokens();
+        // At most the requested model's own part: a fallback token is never also a long-prompt one (review L-b).
+        long longIn = Math.min(usage.longPromptInputTokens(), Math.max(0, usage.inputTokens() - fallbackIn));
+        long longOut = Math.min(usage.longPromptOutputTokens(), Math.max(0, usage.outputTokens() - fallbackOut));
         Price fellBack = fallbackIn == 0 && fallbackOut == 0 ? requested
             : servedModel != null && !servedModel.equals(model) && known(servedModel) != null ? known(servedModel)
             : FALLBACK;
-        if (requested == null || fellBack == null) {
+        Price longPrompt = LONG_PROMPT_PRICES.getOrDefault(model, requested);
+        if (requested == null || fellBack == null || longPrompt == null) {
             return null;
         }
-        BigDecimal total = requested.input().multiply(BigDecimal.valueOf(usage.inputTokens() - fallbackIn))
-            .add(requested.output().multiply(BigDecimal.valueOf(usage.outputTokens() - fallbackOut)))
+        // Three disjoint parts, each token priced once: the requested model's at its price, the fallback's at the
+        // fallback's, and the requested model's calls at the long-prompt rate.
+        BigDecimal total = requested.input().multiply(BigDecimal.valueOf(
+                Math.max(0, usage.inputTokens() - fallbackIn - longIn)))
+            .add(requested.output().multiply(BigDecimal.valueOf(Math.max(0, usage.outputTokens() - fallbackOut
+                - longOut))))
             .add(fellBack.input().multiply(BigDecimal.valueOf(fallbackIn)))
-            .add(fellBack.output().multiply(BigDecimal.valueOf(fallbackOut)));
+            .add(fellBack.output().multiply(BigDecimal.valueOf(fallbackOut)))
+            .add(longPrompt.input().multiply(BigDecimal.valueOf(longIn)))
+            .add(longPrompt.output().multiply(BigDecimal.valueOf(longOut)));
         return total.divide(MILLION, 6, RoundingMode.HALF_UP);
     }
 

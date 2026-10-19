@@ -32,6 +32,18 @@ class ArchitectureTest {
         PlatformArchRules.noDirectNetworkAccess("com.jabiz.quizbuks..").check(CLASSES);
         PlatformArchRules.noPlatformInternals("com.jabiz.quizbuks..").check(CLASSES);
         PlatformArchRules.handlersStayOutOfTheDatabase("com.jabiz.quizbuks..").check(CLASSES);
+        // Q8b: the AI jobs read PDFs and produce covers only through their context (decision D50).
+        PlatformArchRules.handlersReadFilesThroughTheirContext("com.jabiz.quizbuks..").check(CLASSES);
+    }
+
+    /**
+     * No sponsor's PDF is parsed on the server (Q8b review H1/H2: a file can be built to expand without bound in a
+     * parser's memory, or to claim fewer pages than it has): the provider's token count decides.
+     */
+    @Test
+    void quizbuksParsesNoPdf() {
+        noClasses().that().resideInAPackage("com.jabiz.quizbuks..").should().dependOnClassesThat()
+            .resideInAPackage("org.apache.pdfbox..").check(CLASSES);
     }
 
     /**

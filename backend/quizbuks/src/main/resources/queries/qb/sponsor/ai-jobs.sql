@@ -1,17 +1,20 @@
 /*---
 id: qb.sponsor.ai-jobs
 description: >-
-  The sponsor's AI jobs of one of their quizzes (Q8a, M-26), newest first, with the candidates while they wait for
-  review; not the model that answered (administrators only, A-10)
+  The sponsor's AI jobs of one of their quizzes (Q8a, M-26; Q8b, M-25), newest first, of one kind when asked
+  (QUESTIONS or COVER), with the candidates while they wait for review (a cover's with the file of its picture); not
+  the model that answered (administrators only, A-10)
 entities: [QbAiJob]
 datasets:
   QbAiJob: urn:jabiz:dataset:sponsor:QbAiJob
 params:
   quizId: { like: QbAiJob.quizId, required: true, description: The quiz }
+  kind:   { like: QbAiJob.kind, description: "If given, only jobs of this kind (QUESTIONS or COVER)" }
 results:
   aiJobId:        { from: QbAiJob.aiJobId }
   externalJobId:  { from: QbAiJob.externalJobId }
   quizId:         { from: QbAiJob.quizId }
+  kind:           { from: QbAiJob.kind }
   status:         { from: QbAiJob.status }
   params:         { from: QbAiJob.params }
   candidates:     { from: QbAiJob.candidates }
@@ -33,6 +36,7 @@ SELECT
     j.{{QbAiJob.aiJobId}}        AS aiJobId,
     j.{{QbAiJob.externalJobId}}  AS externalJobId,
     j.{{QbAiJob.quizId}}         AS quizId,
+    j.{{QbAiJob.kind}}           AS kind,
     j.{{QbAiJob.status}}         AS status,
     j.{{QbAiJob.params}}         AS params,
     j.{{QbAiJob.candidates}}     AS candidates,
@@ -45,3 +49,4 @@ SELECT
     j.{{QbAiJob.expiresAt}}      AS expiresAt
 FROM {{QbAiJob}} j
 WHERE j.{{QbAiJob.quizId}} = :quizId
+  AND (CAST(:kind AS varchar) IS NULL OR j.{{QbAiJob.kind}} = :kind)

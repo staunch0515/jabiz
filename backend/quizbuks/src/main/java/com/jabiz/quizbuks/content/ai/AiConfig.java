@@ -15,6 +15,7 @@ import com.jabiz.job.JobItems;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.content.EditOutput;
 import com.jabiz.runtime.external.ExternalJobRecorder;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -59,11 +60,36 @@ public class AiConfig {
         return ClaudeService.DEFINITION;
     }
 
+    /** How long a call waits for Claude's answer ({@code quizbuks.ai.request-timeout}), for both writers. */
+    @Bean
+    ClaudeCalls.Settings qbAiCallSettings(@Value("${quizbuks.ai.request-timeout:PT2M}") java.time.Duration timeout) {
+        return new ClaudeCalls.Settings(timeout);
+    }
+
+    /**
+     * The PDF materials a request may send (Q8b): {@code quizbuks.ai.pdf.max-bytes} each (10 MiB unless configured,
+     * at most 20 MiB) and {@code quizbuks.ai.pdf.max-pages} pages together (100, at most 600).
+     */
+    @Bean
+    AiPdfs.Limits qbAiPdfLimits(
+        @Value("${quizbuks.ai.pdf.max-bytes:" + AiPdfs.DEFAULT_MAX_BYTES + "}") long maxBytes,
+        @Value("${quizbuks.ai.pdf.max-pages:" + AiPdfs.DEFAULT_MAX_PAGES + "}") int maxPages) {
+        return new AiPdfs.Limits(maxBytes, maxPages);
+    }
+
     /** @param maxConcurrency jobs running at a time across instances ({@code quizbuks.ai.max-concurrency}) */
     @Bean
     ExternalJobType<AiQuestionsJob.Input, AiQuestionsJob.Result> qbAiQuestionsJob(
+        @Value("${quizbuks.ai.max-concurrency:" + AiQuestionsJob.DEFAULT_CONCURRENCY + "}") int maxConcurrency,
+        AiPdfs.Limits pdfs) {
+        return AiQuestionsJob.type(maxConcurrency, pdfs.maxBytes());
+    }
+
+    /** Candidate covers (Q8b): the same concurrency setting, counted for this type of its own. */
+    @Bean
+    ExternalJobType<AiCoverJob.Input, AiCoverJob.Result> qbAiCoverJob(
         @Value("${quizbuks.ai.max-concurrency:" + AiQuestionsJob.DEFAULT_CONCURRENCY + "}") int maxConcurrency) {
-        return AiQuestionsJob.type(maxConcurrency);
+        return AiCoverJob.type(maxConcurrency);
     }
 
     @Bean
@@ -162,8 +188,19 @@ public class AiConfig {
 
     @Bean
     ProcessDefinition<AiProcesses.RequestInput, AiProcesses.RequestOutput, ProcessContext> qbAiQuestionsRequest(
+        AiUserKeys userKeys, AiPdfs.Limits pdfs) {
+        return AiProcesses.request(zone, userKeys, pdfs);
+    }
+
+    @Bean
+    ProcessDefinition<AiProcesses.CoverRequestInput, AiProcesses.RequestOutput, ProcessContext> qbAiCoverRequest(
         AiUserKeys userKeys) {
-        return AiProcesses.request(zone, userKeys);
+        return AiProcesses.coverRequest(zone, userKeys);
+    }
+
+    @Bean
+    ProcessDefinition<AiProcesses.CoverAcceptInput, EditOutput, ProcessContext> qbAiCoverAccept() {
+        return AiProcesses.coverAccept();
     }
 
     @Bean
@@ -202,7 +239,8 @@ public class AiConfig {
     }
 
     /**
-     * Every external job's end, as the platform announces it: a job of {@value AiQuestionsJob#TYPE} cancelled at the
+     * Every external job's end, as the platform announces it: a job of {@value AiQuestionsJob#TYPE} or
+     * {@value AiCoverJob#TYPE} cancelled at the
      * platform ({@code EXTERNAL_JOB_CANCEL}, an operator's stop, operations.md section 7.8) calls neither outcome
      * process, so this one closes it. The others are ignored.
      */

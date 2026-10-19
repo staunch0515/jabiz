@@ -22,6 +22,12 @@ export function HeadingForm({ quiz }: { quiz: Quiz }) {
   const [title, setTitle] = useState(quiz.title)
   const [intro, setIntro] = useState(quiz.intro ?? '')
   const [cover, setCover] = useState<string | null>(quiz.cover)
+  // A cover set elsewhere on the page (an AI cover chosen, Q8b) is shown here; the other fields keep their edits.
+  const [readCover, setReadCover] = useState<string | null>(quiz.cover)
+  if (quiz.cover !== readCover) {
+    setReadCover(quiz.cover)
+    setCover(quiz.cover)
+  }
   const [timeLimit, setTimeLimit] = useState(quiz.timeLimitSec == null ? '' : String(quiz.timeLimitSec))
   const [local, setLocal] = useState<string | null>(null)
   const [done, setDone] = useState(false)

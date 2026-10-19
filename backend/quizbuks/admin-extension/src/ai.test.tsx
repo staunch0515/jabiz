@@ -58,7 +58,7 @@ beforeEach(() => {
     { aiJobId: 'j1', sponsorId: SPONSOR, status: 'FAILED', model: 'claude-opus-5-5', servedModel: null, attempts: 1,
       candidateCount: null, failureCode: 'QB_AI_REFUSED', failureMessage: 'Claude declined the request',
       inputTokens: 500, outputTokens: 0, requestedAt: '2026-10-18T01:00:00Z' },
-    { aiJobId: 'j2', sponsorId: SPONSOR, status: 'READY', model: 'claude-opus-5-5', servedModel: 'claude-opus-5',
+    { aiJobId: 'j2', sponsorId: SPONSOR, kind: 'COVER', status: 'READY', model: 'claude-opus-5-5', servedModel: 'claude-opus-5',
       attempts: 2, candidateCount: 5, failureCode: null, failureMessage: null, inputTokens: 1200, outputTokens: 800,
       requestedAt: '2026-10-18T00:00:00Z' },
   ]
@@ -116,6 +116,8 @@ describe('AiPage', () => {
     expect(within(jobs).getAllByTestId('ai-job-row')[0]).toHaveTextContent('QB_AI_REFUSED')
     // The fallback model that answered is marked.
     expect(within(jobs).getAllByTestId('ai-job-row')[1]).toHaveTextContent('claude-opus-5')
+    // Q8b: the kind of each request; a row without one is of questions.
+    expect(within(jobs).getAllByTestId('ai-job-kind').map((cell) => cell.textContent)).toEqual(['Questions', 'Covers'])
     await noAxeViolations()
   })
 

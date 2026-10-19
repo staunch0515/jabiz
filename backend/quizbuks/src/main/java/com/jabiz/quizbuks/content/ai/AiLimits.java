@@ -66,7 +66,25 @@ public final class AiLimits {
 
     /** The most a job may use: every one of its attempts in full. */
     public static long estimate(long inputBytes, int count) {
-        return AiQuestionsJob.ATTEMPTS * attemptEstimate(inputBytes, count);
+        return estimate(inputBytes, ClaudeApi.maxTokens(count), 0);
+    }
+
+    /**
+     * What one attempt's input may come to, as a request reserves it: the text's estimate and {@code pdfPages} pages of
+     * PDF documents at {@value ClaudeApi#TOKENS_PER_PDF_PAGE} tokens a page. The provider's count of a request with
+     * documents may not be above it (the job fails before sending), so no attempt uses more than was reserved.
+     */
+    public static long reservedInput(long inputBytes, int pdfPages) {
+        return inputEstimate(inputBytes) + (long) ClaudeApi.TOKENS_PER_PDF_PAGE * pdfPages;
+    }
+
+    /**
+     * The most a job may use: every one of its attempts with its whole input ({@code inputBytes} of text and
+     * {@code pdfPages} pages of PDF documents, at {@value ClaudeApi#TOKENS_PER_PDF_PAGE} tokens a page) and all the
+     * {@code maxTokens} output it asks for.
+     */
+    public static long estimate(long inputBytes, int maxTokens, int pdfPages) {
+        return AiQuestionsJob.ATTEMPTS * (reservedInput(inputBytes, pdfPages) + maxTokens);
     }
 
     /** Every limit the request would pass, with when each passes. */

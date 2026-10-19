@@ -264,19 +264,25 @@ class AiQuestionsIT extends AiItSupport {
     @Test
     void theInputIsRefusedWhenTooLargeNeverCut() {
         String token = sponsorFull(SPONSOR_A);
-        // Two articles of 20,000 three-byte characters: 120,000 bytes, twice the cap.
+        // Five articles of 20,000 three-byte characters: 300,000 bytes, more than the cap of 250 KiB (Q8b; Q8a's was
+        // 60 KiB, which two of them passed).
         String article = "あ".repeat(20_000);
         List<String> quiz = quizWithArticle(token, title(), article);
-        String second = (String) run("QB_MATERIAL_SAVE", token, body("quizId", quiz.get(0), "kind", "ARTICLE",
-            "title", "Second", "body", article)).get("itemId");
+        List<String> chosen = new ArrayList<>(List.of(quiz.get(1)));
+        String second = null;
+        for (int i = 0; i < 4; i++) {
+            second = (String) run("QB_MATERIAL_SAVE", token, body("quizId", quiz.get(0), "kind", "ARTICLE",
+                "title", "More " + i, "body", article)).get("itemId");
+            chosen.add(second);
+        }
         long jobs = count("sys_external_job");
         Map<String, Object> problem = refused(AiProcesses.REQUEST, token,
-            requestInput(quiz.get(0), List.of(quiz.get(1), second), 5), 422);
+            requestInput(quiz.get(0), chosen, 5), 422);
         assertThat(codes(problem)).contains(AiCodes.INPUT_TOO_LARGE);
         assertThat(count("sys_external_job")).isEqualTo(jobs);
         assertThat(sent()).isEmpty();
-        // One of them alone fits.
-        run(AiProcesses.REQUEST, token, requestInput(quiz.get(0), List.of(second), 1));
+        // Two of them fit now (120,000 bytes, twice what Q8a sent).
+        run(AiProcesses.REQUEST, token, requestInput(quiz.get(0), List.of(quiz.get(1), second), 1));
         runJobs();
         assertThat(sent().getLast().get("messages").get(0).get("content").get(0).get("text").asString())
             .contains(article);

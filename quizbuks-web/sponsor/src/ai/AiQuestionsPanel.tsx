@@ -49,6 +49,7 @@ import {
   readAiUsage,
   readLatestAiJob,
   requestAiQuestions,
+  sentAsFile,
   stillPolling,
   type AiCandidate,
   type AiJob,
@@ -56,18 +57,18 @@ import {
   type AiOption,
   type Difficulty,
 } from './api'
-import { AI_CODE, AI_LANGUAGES, AI_LIMITS, DIFFICULTIES } from './ids'
+import { AI_CODE, AI_KINDS, AI_LANGUAGES, AI_LIMITS, DIFFICULTIES } from './ids'
 import './messages'
 
 export const AI_QUERY = ['qb', 'ai'] as const
 export const aiJobQuery = (quizId: string) => [...AI_QUERY, 'job', quizId] as const
 export const AI_USAGE_QUERY = [...AI_QUERY, 'usage'] as const
-const AI_NOTICE_QUERY = [...AI_QUERY, 'notice'] as const
+export const AI_NOTICE_QUERY = [...AI_QUERY, 'notice'] as const
 
 const kb = (bytes: number) => (Math.ceil(bytes / 102.4) / 10).toLocaleString()
 
 /** The language of the console as one the AI writes in. */
-function consoleLanguage(language: string): AiLanguage {
+export function consoleLanguage(language: string): AiLanguage {
   const base = language.split('-')[0]
   return (AI_LANGUAGES as readonly string[]).includes(base) ? (base as AiLanguage) : 'en'
 }
@@ -76,7 +77,7 @@ function consoleLanguage(language: string): AiLanguage {
  * The AI notice in effect and whether the sponsor must accept it before asking (A-11): read only when the dialog is
  * open. Shown as Markdown in the console's language (Japanese governs).
  */
-function useAiNotice(open: boolean) {
+export function useAiNotice(open: boolean) {
   return useQuery({
     queryKey: AI_NOTICE_QUERY,
     enabled: open,
@@ -86,6 +87,48 @@ function useAiNotice(open: boolean) {
       return { mustAccept: standing?.mustAccept ?? false, versionNo: standing?.versionNo ?? null, text }
     },
   })
+}
+
+/**
+ * The AI notice as the dialogs show it on first use (A-11): its text in the console's language and the sponsor's
+ * agreement. The request sends the version only when it was agreed to.
+ */
+export function AiNoticeSection({ notice, agreed, onAgreed }: {
+  notice: ReturnType<typeof useAiNotice>
+  agreed: boolean
+  onAgreed: (agreed: boolean) => void
+}) {
+  const { t, i18n } = useTranslation(SPONSOR)
+  const id = useId()
+  const noticeText = notice.data?.text
+  const body = pickText(noticeText?.body, i18n.language)
+  const title = pickText(noticeText?.title, i18n.language)
+  return (
+    <>
+      {notice.isPending && <p className="text-muted-foreground text-sm">{t('ai.notice.loading')}</p>}
+      {notice.isError && <p role="alert" className="text-destructive text-sm">{t('ai.notice.failed')}</p>}
+      {notice.data?.mustAccept && (
+        <section className="flex flex-col gap-3 rounded-md border p-4" aria-labelledby={`${id}-notice`}
+          data-testid="ai-notice">
+          <h3 id={`${id}-notice`} className="font-medium">{t('ai.notice.title')}</h3>
+          {title.text && <p className="text-sm font-medium" lang={title.lang}>{title.text}
+            {notice.data.versionNo && <span className="text-muted-foreground font-normal">
+              {' '}({t('ai.notice.version', { n: notice.data.versionNo })})</span>}</p>}
+          {body.text && (
+            <div className="max-h-60 overflow-y-auto rounded-sm border p-3 text-sm" tabIndex={0}
+              aria-label={t('ai.notice.title')} lang={body.lang}>
+              <MarkdownView text={body.text} lang={body.lang} />
+            </div>
+          )}
+          <div className="flex items-start gap-2">
+            <Checkbox id={`${id}-agree`} checked={agreed} data-testid="ai-notice-agree"
+              onCheckedChange={(checked) => onAgreed(checked === true)} />
+            <Label htmlFor={`${id}-agree`} className="leading-snug">{t('ai.notice.agree')}</Label>
+          </div>
+        </section>
+      )}
+    </>
+  )
 }
 
 /** "Generate with AI": what to send and what to ask for, the notice on first use, the request. */
@@ -154,9 +197,6 @@ function RequestDialog({ quiz, materials, maxCount, open, onOpenChange }: {
     request.mutate()
   }
 
-  const noticeText = notice.data?.text
-  const body = pickText(noticeText?.body, i18n.language)
-  const title = pickText(noticeText?.title, i18n.language)
   return (
     <Dialog open={open} onOpenChange={(next) => {
       if (!request.isPending) onOpenChange(next)
@@ -180,7 +220,9 @@ function RequestDialog({ quiz, materials, maxCount, open, onOpenChange }: {
                     <span>{t('ai.review.material', { n: index + 1 })}: {material.title ?? '—'}</span>
                     <span className="text-muted-foreground text-xs font-normal">
                       {t('ai.dialog.materialSize', { size: kb(sizes.get(material.materialId) ?? 0) })}
-                      {material.kind !== 'ARTICLE' && ` · ${t('ai.dialog.titleOnly')}`}
+                      {sentAsFile(material)
+                        ? ` · ${t('ai.dialog.asFile', { mb: AI_LIMITS.maxPdfMb, pages: AI_LIMITS.maxPdfPages })}`
+                        : material.kind !== 'ARTICLE' && ` · ${t('ai.dialog.titleOnly')}`}
                     </span>
                   </Label>
                 </li>
@@ -227,28 +269,7 @@ function RequestDialog({ quiz, materials, maxCount, open, onOpenChange }: {
             <Label htmlFor={`${id}-avoid`} className="leading-snug">{t('ai.dialog.avoidExisting')}</Label>
           </div>
           <p className="text-muted-foreground text-sm" data-testid="ai-sent">{t('ai.dialog.sent')}</p>
-          {notice.isPending && <p className="text-muted-foreground text-sm">{t('ai.notice.loading')}</p>}
-          {notice.isError && <p role="alert" className="text-destructive text-sm">{t('ai.notice.failed')}</p>}
-          {notice.data?.mustAccept && (
-            <section className="flex flex-col gap-3 rounded-md border p-4" aria-labelledby={`${id}-notice`}
-              data-testid="ai-notice">
-              <h3 id={`${id}-notice`} className="font-medium">{t('ai.notice.title')}</h3>
-              {title.text && <p className="text-sm font-medium" lang={title.lang}>{title.text}
-                {notice.data.versionNo && <span className="text-muted-foreground font-normal">
-                  {' '}({t('ai.notice.version', { n: notice.data.versionNo })})</span>}</p>}
-              {body.text && (
-                <div className="max-h-60 overflow-y-auto rounded-sm border p-3 text-sm" tabIndex={0}
-                  aria-label={t('ai.notice.title')} lang={body.lang}>
-                  <MarkdownView text={body.text} lang={body.lang} />
-                </div>
-              )}
-              <div className="flex items-start gap-2">
-                <Checkbox id={`${id}-agree`} checked={agreed} data-testid="ai-notice-agree"
-                  onCheckedChange={(checked) => setAgreed(checked === true)} />
-                <Label htmlFor={`${id}-agree`} className="leading-snug">{t('ai.notice.agree')}</Label>
-              </div>
-            </section>
-          )}
+          <AiNoticeSection notice={notice} agreed={agreed} onAgreed={setAgreed} />
           {local && <p role="alert" className="text-destructive text-sm" data-testid="ai-local-problem">{local}</p>}
           <ProblemList problems={formProblem(request.error, [])} testId="ai-request-error" />
           <DialogFooter>
@@ -409,8 +430,9 @@ function Review({ job }: { job: AiJob }) {
 }
 
 /** The text of a failed job, in the console's language. */
-function failureText(t: (key: string) => string, code: string | null): string {
-  const known = ['QB_AI_REFUSED', 'QB_AI_TRUNCATED', 'QB_AI_NO_CANDIDATES', 'QB_AI_INPUT_TOO_LARGE']
+export function failureText(t: (key: string) => string, code: string | null): string {
+  const known = ['QB_AI_REFUSED', 'QB_AI_TRUNCATED', 'QB_AI_NO_CANDIDATES', 'QB_AI_INPUT_TOO_LARGE',
+    'QB_AI_PDF_TOO_LONG', 'QB_AI_PDF_UNREADABLE', 'QB_AI_COVER_FONT']
   return code && known.includes(code) ? t(`ai.failure.${code}`) : t('ai.failure.generic')
 }
 
@@ -428,7 +450,7 @@ export function AiQuestionsPanel({ quiz, materials }: { quiz: Quiz; materials: M
   const usage = useQuery({ queryKey: AI_USAGE_QUERY, queryFn: () => readAiUsage() })
   const job = useQuery({
     queryKey: aiJobQuery(quiz.quizId),
-    queryFn: () => readLatestAiJob(quiz.quizId),
+    queryFn: () => readLatestAiJob(quiz.quizId, AI_KINDS.questions),
     refetchInterval: (query) => (stillPolling(query.state.data ?? null) ? AI_LIMITS.pollMs : false),
   })
   const latest = job.data ?? null

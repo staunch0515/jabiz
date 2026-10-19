@@ -40,6 +40,48 @@ public final class ClaudeErrors {
     }
 
     public static ExternalJobException failure(int status, String errorType) {
+        return failure(status, errorType, null, false);
+    }
+
+    /**
+     * The provider's words for a request too long for it (Q8b re-review M-b): the context window ("prompt is too
+     * long: … tokens > … maximum") or the pages of PDF documents in one request ("A maximum of 600 PDF pages may be
+     * provided", "too many pages"). The API documents the limits but not these texts: they are matched loosely, and
+     * anything else stays {@link AiCodes#REQUEST_INVALID}.
+     */
+    private static final Pattern TOO_LONG = Pattern.compile(
+        "(?i)prompt is too long|maximum of \\d+ (pdf )?pages|too many (pdf )?pages|(pdf )?pages? limit");
+    /**
+     * The provider's words for a PDF it cannot read: "The PDF specified was not valid", "… is password protected",
+     * "could not process the PDF/document", encrypted, corrupt or damaged. Only a message about the PDF itself counts.
+     */
+    private static final Pattern UNREADABLE = Pattern.compile("(?i)\\bpdf\\b[^.]{0,80}?\\b(not valid|invalid|"
+        + "password|encrypted|corrupt(ed)?|damaged|malformed|could not be (read|processed|parsed)|unreadable)"
+        + "|(could not|unable to|failed to) (process|read|parse|load) (the )?(pdf|document)");
+    /**
+     * A validation error of a field of our own request ({@code messages.0.content.0.document.source.data: …}): our
+     * mistake, never the sponsor's file, so it stays {@link AiCodes#REQUEST_INVALID} and visible to operations.
+     */
+    private static final Pattern FIELD_PATH = Pattern.compile("^\\s*[a-z_]+(\\.[a-z0-9_]+)+\\s*:");
+
+    /**
+     * As {@link #failure(int, String)}, for a request with PDF documents also: a 400 saying the request is too long for
+     * the provider is {@link AiCodes#PDF_TOO_LONG}, one saying a PDF cannot be read {@link AiCodes#PDF_UNREADABLE}
+     * (both permanent; a 400 is not billed). Any other 400, a field's validation error above all, stays
+     * {@link AiCodes#REQUEST_INVALID}. The provider's message is only matched, never kept.
+     */
+    public static ExternalJobException failure(int status, String errorType, String providerMessage,
+        boolean documents) {
+        if (documents && status == 400 && providerMessage != null) {
+            if (TOO_LONG.matcher(providerMessage).find()) {
+                return ExternalJobException.permanent(AiCodes.PDF_TOO_LONG,
+                    "Claude refused the request as too long for it (400)");
+            }
+            if (!FIELD_PATH.matcher(providerMessage).find() && UNREADABLE.matcher(providerMessage).find()) {
+                return ExternalJobException.permanent(AiCodes.PDF_UNREADABLE,
+                    "Claude could not read a PDF material (400)");
+            }
+        }
         Classification c = classify(status, errorType);
         String type = errorType != null && TYPE.matcher(errorType).matches() ? errorType : null;
         String message = "Claude answered " + status + (type == null ? "" : " (" + type + ")");

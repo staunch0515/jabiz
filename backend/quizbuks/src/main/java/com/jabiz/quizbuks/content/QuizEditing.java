@@ -41,7 +41,7 @@ public final class QuizEditing {
     static final String OPTIONS = "options";
     static final String VERSIONS = "versions";
     static final String VERSION_FILES = "versionFiles";
-    static final String FILES = "files";
+    public static final String FILES = "files";
     static final String OUTPUT = "output";
 
     static String lockName(Object quizId) {
@@ -85,7 +85,7 @@ public final class QuizEditing {
      * Loads into {@link #FILES} the platform's records of the files the input names, to see who uploaded them
      * ({@code SysFile.uploadedBy}, read through the platform's file dataset).
      */
-    static <I, O> void loadFiles(ProcessDefinitionBuilder<I, O, ProcessContext> pb,
+    public static <I, O> void loadFiles(ProcessDefinitionBuilder<I, O, ProcessContext> pb,
         java.util.function.Function<ProcessContext, List<UUID>> files) {
         pb.step("Load the files", QueryEntities.<ProcessContext>of(FileEntities.DATASET, ctx -> {
             List<Object> ids = new ArrayList<>();
@@ -102,7 +102,7 @@ public final class QuizEditing {
      *
      * @param stored the field's present value; null for a new row
      */
-    static void requireOwnFile(ProcessContext ctx, Object owner, String field, UUID given, Object stored) {
+    public static void requireOwnFile(ProcessContext ctx, Object owner, String field, UUID given, Object stored) {
         if (given == null || same(stored, given)) {
             return;
         }
@@ -143,7 +143,7 @@ public final class QuizEditing {
      * Registers the quiz's new version after a change of its content: the next revision, the time, unversioned
      * changes, and {@code more} (counts and the like). Puts the output.
      */
-    static void touch(ProcessContext ctx, EntityInstance quiz, Map<String, Object> more, UUID itemId,
+    public static void touch(ProcessContext ctx, EntityInstance quiz, Map<String, Object> more, UUID itemId,
         List<UUID> partIds) {
         long revision = number(quiz.get("revision")) + 1;
         Map<String, Object> values = new LinkedHashMap<>(more);

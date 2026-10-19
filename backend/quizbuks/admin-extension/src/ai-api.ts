@@ -80,6 +80,8 @@ export async function readAiUsage(month: string | null): Promise<AiUsageRow[]> {
 export interface AiJobRow {
   aiJobId: string
   sponsorId: string
+  /** `QUESTIONS` or (Q8b) `COVER`. */
+  kind: string
   status: string
   model: string
   servedModel: string | null
@@ -97,6 +99,7 @@ export async function readAiJobs(failedOnly: boolean): Promise<AiJobRow[]> {
   return page.items.map((row) => ({
     aiJobId: String(row.aiJobId),
     sponsorId: String(row.sponsorId),
+    kind: String(row.kind ?? 'QUESTIONS'),
     status: String(row.status),
     model: String(row.model ?? ''),
     servedModel: str(row.servedModel),

@@ -25,10 +25,14 @@ export function ContentImage({ fileId, width }: { fileId: string; width: number 
   return <FilePreview fileId={fileId} field={{ image: true, variants }} width={width} />
 }
 
-/** A small decorative picture (a cover in a list): nothing while loading or when it cannot be read. */
-export function Thumbnail({ fileId, width, className }: { fileId: string; width: number; className?: string }) {
+/**
+ * A small picture (a cover in a list): nothing while loading or when it cannot be read. Decorative unless given an
+ * `alt` (an AI cover to choose from, Q8b).
+ */
+export function Thumbnail({ fileId, width, className, alt }: { fileId: string; width: number; className?: string;
+  alt?: string }) {
   const { pending, variants } = useVariants(fileId)
   const { url } = useFileUrl(pending ? undefined : fileId, previewVariant(variants, width))
   if (!url) return <span aria-hidden className={cn('bg-muted inline-block', className)} />
-  return <img src={url} alt="" className={cn('object-cover', className)} />
+  return <img src={url} alt={alt ?? ''} className={cn('object-cover', className)} />
 }

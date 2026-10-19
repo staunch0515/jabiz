@@ -332,3 +332,101 @@
 3. 提供方不按幂等键去重：同一尝试的重发可能被计费两次；按预估计入使限额保守，但实际账单可能高于记录（Console 的工作区月支出上限是最后一道防线）。
 
 **验证**（本机 PostgreSQL 16，自己的库与端口）：`./gradlew :quizbuks:check :quizbuks:bootJar` 通过（663 个测试、0 失败，含 `platformCheck`；`AttemptStatementBudgetIT` 未改动并通过）；商家后台 163 个测试、答题 SPA 133 个，两个 SPA 的 lint、typecheck 与 `app:check` 通过，后台扩展 `ext:check` 74 个；e2e 全部 52 个通过（15.3 分钟，打包的 jar、本地 Claude 与 Stripe 桩、Mailpit，库 `jabiz_e2e_q8a`）。
+
+## 实施记录（Q8b，2026-10-18）
+
+分支 `1.2/quizbuks-8b-ai-covers-pdf`，自 `origin/1.2/quizbuks-8a-ai-questions`（1bd12d7：含 Q8a、平台 16t 与 16u）。只改 `.jabiz-app-paths` 中的路径；平台没有需要补的能力（16t 的文件输入、文件输出与按类型的输入上限已足够）。
+
+### 迁移
+
+- **V18**（`V18__quizbuks_ai_covers.sql`）：原为 V17。Q7c 的站内信迁移在 Q8a 的 V16 之后合入，不能再用 V15（Flyway 不开 `outOfOrder` 时拒绝落在已执行的 V16 之后的版本），改号为 V17（`V17__quizbuks_inbox.sql`），Q8b 因此顺延为 V18（2026-10-18，合并 `1.2/quizbuks-7c-inbox` 时以 `git mv` 改号；已合入的 V16 等不动，改动会改变其校验和）。现在的顺序：Q7b V12、Q7a V13、Q9e1 V14、Q8a V16、Q7c V17、Q8b V18（没有 V15）。
+  给普通表 `qb_ai_job` 加三列 `cover_1` – `cover_3`（`uuid`，封面作业的候选图）与约束"三列只在封面作业 READY 时非空"。计划第 4 节写"可能无迁移"：候选图必须被某个字段引用，否则平台的清扫（`jabiz.files.orphan-after`，24 小时）会在 7 天的选择期内删掉它们（偏离 1）。
+
+### 实现（`backend/quizbuks`，包 `content.ai`）
+
+- **封面**（M-25，A-4 做法 A）：
+  - `CoverDesigns`：固定图库（8 种配色、4 种版式、7 种图形）与设计的检查（名称在图库中、文字去首尾空白后 1–40 字、无控制 / 格式 / 私用字符、服务器画得出）；`CoverRenderer`（Java2D，无头）画成 1200 × 630 的 PNG：配色的渐变、强调色的图形、粗体文字按宽度换行至多 3 行（拉丁按词、中日文按字），字号从 92 降到 36；
+    字体为平台自带的 Noto Sans Bold、部署为 PDF 配置的 `jabiz.reports.pdf.fonts`（镜像中的 IPA Gothic 与 Droid Sans Fallback）与 JVM 的无衬线字体，逐字取第一种有该字的字体；字体在建 Bean 时读一次（处理器运行时不读文件）。
+  - 作业 `qb.ai.cover`（`AiCoverJob`）：与题目同样的超时、3 次尝试、并发设置、每请求人未结束 ≤ 2、每模版 1 个；文件输出 `qb.content.image`、至多 3 个、每个 ≤ 4 MiB（合计取平台缺省 12 MiB）。处理器 `AiCoverHandler`：停机开关、**标题画不出即 `QB_AI_COVER_FONT`（不调用提供方、不计费）**，再经 `CoverDesigner`（实现 `ClaudeCoverDesigner`）请 Claude 设计、检查、画图，以 `cover-1..n` 返回文件；
+    平台按策略登记（按内容判定类型、重新编码、以商家为上传者）。提示 `AiCoverPrompt`：固定的系统提示列出图库，用户消息是语言与 `<quiz_data>` 中的标题与简介（`<` 转义），JSON Schema 以枚举列出图库的名字；`max_tokens` 8 000。
+  - 调用 Claude 的共同部分移到 `ClaudeCalls`（用量即时记录、没有回答的尝试按预估计入、拒答 / 截断 / 其他结束原因的处理，与 Q8a 相同），题目与封面都经它；`ClaudeApi.Request` 加了 JSON Schema 与文档两项（原 6 参构造保留）。
+  - 流程：`QB_AI_COVER_REQUEST`（`qb.ai.use`，与题目请求同一套步骤：入驻、封禁、AI 说明、参数、经商家视图读模版，`qb.ai:<商家>` → `qb.ai:*` 内查限额；**每模版每种类**同时一个：封面与题目可同时进行，`QB_AI_QUIZ_BUSY` 只看同种类）；
+    完成流程 `QB_AI_JOB_COMPLETED` 按作业种类分支：画出的设计与平台给出的文件编号写入 `candidates`（`{schema: 1, covers: [{no, palette, layout, motif, text, fileId}]}`）与 `cover1..3`，READY 与过期时刻；一个都没有即 FAILED `QB_AI_NO_CANDIDATES`。
+    `QB_AI_COVER_ACCEPT`（`qb.ai.use`，限流每人每分钟 30 次）：`qb.quiz:<模版>` → `qb.ai:<商家>`；作业须是本人的、本模版的（否则 404）、封面种类（否则 422 `QB_AI_WRONG_KIND`，题目的接受同样拒绝封面作业）、READY 且未过期；带 `baseRevision`；所选文件经 `QuizEditing.requireOwnFile` 与 **`QuizEditing.touch`（现有的模版编辑）** 写入 `cover` 与 `aiGenerated = true`；作业 ACCEPTED、清空候选与三列。
+    丢弃与过期同样清空三列；平台停止（`QB_AI_JOB_STOPPED`）也处理封面类型。用量、美元估算、商家与全体的月行、每日次数都与题目共用。
+- **PDF 资料**（A-5）：
+  - 作业 `qb.ai.questions` 改为 `maxInputSize(256 KiB)`（`MAX_JOB_INPUT_BYTES`）并声明文件输入（至多 10 个、每个 ≤ `quizbuks.ai.pdf.max-bytes`、策略 `qb.content.pdf`）；用户消息上限 `ClaudeApi.MAX_INPUT_BYTES` 由 60 KiB 提到 250 KiB。
+  - 请求流程读所选 PDF 资料的文件（平台文件数据视图），每个 ≤ `quizbuks.ai.pdf.max-bytes`（缺省 10 MiB，上限 20 MiB，`QB_AI_PDF_MAX_BYTES`）、合计 ≤ 20 MiB（base64 后仍在提供方 32 MB 的请求上限内），否则 422 `QB_AI_PDF_TOO_LARGE`（列出各 PDF 的大小）；以 `StartExternalJob…files` 交给作业（平台检查商家能读、记入 `sys_external_job_file`）。资料在输入中只记文件编号与"document"名，不放内容。
+  - 处理器（`ClaudeQuestionWriter`）经上下文读文件，**不解析**（评审 H1/H2 之后，见下"评审后的修改"）：以提供方免费的 `count_tokens` 数完全相同的请求，超过请求按 `quizbuks.ai.pdf.max-pages`（缺省 100，上限 600，`QB_AI_PDF_MAX_PAGES`）预留的输入即 `QB_AI_PDF_TOO_LONG`，提供方拒绝文档即 `QB_AI_PDF_UNREADABLE`，都在付费调用之前、不计费；
+    PDF 以文档块（base64，标题 `Material <no>`）放在请求文字之前，资料的 JSON 带 `"document": "Material <no>"`，系统提示说明文档同样只是数据。
+  - **预估**：请求时还不知道页数，带 PDF 的请求按页数上限预留：`AiLimits.estimate(输入字节, max_tokens, 页数)` = 3 × (文字输入 + 页数 × 5 000 + 所要的输出)，每页 5 000 Token（`ClaudeApi.TOKENS_PER_PDF_PAGE`：提供方说明每页文字 1 500–3 000 Token，另加页面图像约 1 600）；没有回答的尝试按提供方数出的输入计入（`ClaudeApi.unanswered`）。
+  - `AiCost`：最小的模型一次调用超过 10 万输入 Token 时整个调用按长提示的价格（0.50 / 2.50 美元）估算，按每次调用分别记（评审 L2）。
+- **ArchUnit**：`ArchitectureTest` 加入平台的 `handlersReadFilesThroughTheirContext`（处理器与它经应用自己的类用到的类都不依赖 `com.jabiz.runtime.file`）。
+- **本地桩**：`tools/quizbuks/claude-stub` 对"Number of covers: 3"回答 3 个图库内的设计，接受文档块（不读），并回答 `count_tokens`（评审后：文字每 4 字符 1 Token、每个文档 1 500，用量报同一个数）；IT 的桩（`AiItSupport`）同样回答封面并能取出请求的文字块与文档块。
+
+### 页面
+
+- 商家后台 `sponsor/src/ai/AiCoverPanel.tsx`：编辑器"模版"页基本信息下的"AI 封面"面板：对话框选封面文字的语言（缺省为界面语言）、说明发送的内容（标题与简介）、第一次使用时的 AI 说明（与题目对话框共用 `AiNoticeSection`）；进行中每 5 秒查询、至多 5 分钟；3 张候选图（`Thumbnail`）以单选选择、"使用此封面"、全部丢弃；失败与过期的说明（`QB_AI_COVER_FONT`、无可画的设计）。
+  选定后 `editing.edited` 记下新的 revision，`HeadingForm` 随读到的 `cover` 更新（其他未保存的字段保留）。作业模板按种类读（`qb.sponsor.ai-jobs` 新参数 `kind`），题目面板只读题目作业。
+- 生成题目的对话框：有文件的 PDF 资料注明"发送 PDF 文件本身（至多 10 MB；全部 PDF 合计至多 100 页）"，不计入文字大小；文字上限的提示改为 250 KB；失败说明加 PDF 的两种。
+- 后台扩展 `/qb/ai`：最近的请求在状态之上注明种类（题目 / 封面；不另加一列：表格变宽后其滚动区域不能以键盘到达，axe `scrollable-region-focusable`）；`qb.admin.ai-jobs` 给出 `kind` 并可按它筛选。
+- 页面上的文字（请需求方确认）：英 *AI cover* / *Let the AI design three covers from this quiz's title and introduction. Choose one, or none.* / *The chosen cover replaces the quiz's cover. The others are deleted later.*；
+  中 *AI 封面* / *让 AI 根据本模版的标题和简介设计三个封面。可以选一个，也可以都不用。*；日 *AI カバー* / *このクイズのタイトルと紹介文から AI に 3 つのカバーをデザインさせます。…*。AI 说明的正式文本应补上"PDF 资料的原文件会发送给 AI 提供方"。
+
+### 与计划的偏离（共 6 项）
+
+1. **有迁移 V18**（原为 V17；计划写"可能无"）：见上"迁移"。
+2. **每模版每种类同时一个作业**（计划 Q8a 写"同一模版同时只一个"）：封面与题目互不相关、可同时进行；平台的"同一引用只一个"本来就按作业类型。每商家同时未结束 ≤ 2 不变（两种合计）。
+3. **不数页、以提供方的计数为准，请求按上限预留**：计划写"每个至多 10 MB 与 100 页，多于即请少选"。流程不读文件（平台的约束），所以请求时只能查大小；服务器也不解析 PDF（评审 H1/H2），作业在付费调用前以 `count_tokens` 数输入，超过按页数上限的预留即作业失败（不发送、不计费），页面显示"请少选或选较短的 PDF"。100 页按"一次请求的全部 PDF 合计"计（按每个 100 页时 10 个 PDF 可达 1 000 页，超过提供方的 600 页，预留也会大到不可用）。
+   **代价**：带 PDF 的请求在结束前预留约 150 万 Token（缺省 100 页），缺省的每商家每月 200 万 Token 只容一个进行中的 PDF 请求，本月已用超过约 50 万后再不能带 PDF 请求（直到月末）。见"待确认"。
+4. **合计 20 MiB 的 PDF 上限**（计划未写）：提供方的请求上限是 32 MB，base64 使 PDF 大约三分之一。
+5. **封面文字的语言由商家选**（计划只写"根据标题和简介"）：缺省为界面语言，同题目。
+6. **封面候选与题目候选同一过期天数**（`qb.ai.candidates.expire-days`），过期任务同一个；没有为封面另设参数。
+
+### 评审后的修改（独立评审，2026-10-18）
+
+- **H1、H2 决定：服务器不解析 PDF，删去 PDFBox**。本地数页有两个问题：PDFBox 的 `Loader.loadPDF` 会把商家构造的对象流（压缩的对象嵌套展开）全部读进内存，一个小文件即可使 JVM 内存耗尽（处理器在请求路径之外，但与整个实例共用堆）；页树的 `/Pages /Count` 可以谎报，数出的页数不可信，预留因此可被绕过。
+  所以改为：处理器在付费调用之前，以完全相同的请求（同一外部服务 `anthropic` 与请求头；去掉计数不接受的 `max_tokens`、`metadata` 与 `fallbacks`）调用提供方免费的 `POST /v1/messages/count_tokens`（`ClaudeCalls.counted`、`ClaudeApi.countTokens`），以它的数为准：
+  - 超过请求为一次尝试预留的输入（`AiLimits.reservedInput` = 文字的估计 + 页数上限 × 5 000，记在作业输入与参数 `reservedInputTokens` 中）即永久失败 `QB_AI_PDF_TOO_LONG`，不发送、不计费；因此计入的输入从不超过预留；
+  - 提供方以 400 拒绝文档（消息说是 PDF 或文档）即 `QB_AI_PDF_UNREADABLE`，永久；计数的 400 不计费，付费调用的 400 同样不计费；
+  - 计数本身断线、超时或 5xx 照常重试，不计费；
+  - 付费调用没有回答时按这个数计入（不再按估计的页数）；
+  - 只有带 PDF 的请求先计数（文字的估计本来就是上界）。
+  字节上限不变（每个 10 MiB、合计 20 MiB）；`AiPdfs` 只剩上限；依赖 `org.apache.pdfbox` 删除，ArchUnit `quizbuksParsesNoPdf` 防止再引入。本地桩（dev、e2e）与 IT 的桩都实现 `count_tokens`（IT 的桩按真实的 `/Type /Page` 对象数，谎报 `/Count` 的文件因此仍被拒绝）。
+  `ClaudeCalls.record` 在某次尝试的用量超过预留时记告警日志（只有作业种类，D16）。
+- **M1**：封面处理器在调用提供方之前检查所请求语言的样例文字（`AiCoverHandler.SAMPLES`：en、ja、zh）与标题都画得出，否则 `QB_AI_COVER_FONT`（只有拉丁字体的服务器不再为中日文封面付费）。
+- **M2**：堆的需要写进 `operations.md` §7.8 与部署 README（约 PDF 合计的 5–6 倍 / 运行中的题目作业，"512 MiB + 120 MiB × 并发"）；PDF 只做一次 Base64（计数与调用共用），请求体直接写成字节，不同时持有 JSON 字符串与字节。
+- **L1**：平台停止的 PDF 作业按预留（含页数上限）计入输入。**L2**：长提示价格按每次调用计（只有最小的模型有两档；较大的两个模型没有长提示加价）。**L3**：`completeCover` 再查版式与图形。**L4**：§7.8 写明提供方并发是两种作业之和（4 + 4）。**L5**：§7.8 写明完成迟于 `orphan-after` 时候选图可能已被清扫。
+- 细节：`QB_AI_HALTED` 的文案不再只说题目；两个 Claude 调用方的超时取自同一个 Bean（`ClaudeCalls.Settings`）；`AiCoversTest` 用固定时刻；封面 Schema 的数量与长度写在说明中（结构化输出拒绝 `maxItems`、`maxLength`）；点击封面图即选中；两个接受流程另要 `qb.content.write`（现在只有 `QB_SPONSOR` 持有 `qb.ai.use`，它也有内容写权限，加上是为了以后的角色）。
+- 新测试：`AiPdfIT` 改为 7 个（计数后以文件原样发送、计数的请求与发送的相同、无 PDF 不计数；谎报 `/Count` 的 PDF 按计数拒绝、没有回答按计数计入；提供方拒绝文档（计数与付费调用两处）、其他 400 不变；计数失败重试不计费；过大 422；停止的 PDF 作业按预留计入与计价；同一商家同时请求封面与题目时共用每日次数）；`AiPdfsTest` 不再用 PDFBox；`AiCoversTest` 加只有拉丁字体时 ja、zh 不调用。
+- 验证（评审修改之后，2026-10-18，同上的库与端口）：`./gradlew :quizbuks:check :quizbuks:bootJar` 通过（713 个测试、0 失败；`platformCheck` 0 错误）；商家后台 lint、typecheck、171 个 Vitest，`app:check`，`ext:check`（74 个）；e2e 全部 54 个一次通过（`ai-cover.spec.ts` 改为先点图片选中）。
+
+### 复审后的修改（2026-10-18）
+
+- **M-a**：提供方的回退（`fallbacks: "default"`）在拒答后会在另一个模型上把输入再算一次，带 PDF 的调用因此可能超过计数与预留，§7.8 原来"计入的输入从不超过预留"不准确。决定：**带文档的请求不带 `fallbacks`**，每次付费的 PDF 调用正好是计过数的请求；带 PDF 的请求被拒答时由已有的"推荐模型"重试在下一次尝试中处理（再计一次数）。只有文字的请求照常带回退、按估计，可能超过预留（日志告警）。§7.8 改为准确的说法。
+- **M-b**：原来凡 400 提到 document 都算 `QB_AI_PDF_UNREADABLE`，会把我们自己的错误（字段校验）藏成"商家的文件坏了"。改为：带文档的请求，400 说请求过长（"prompt is too long"、"maximum of N PDF pages"、"too many pages"）即 `QB_AI_PDF_TOO_LONG`；只有说 PDF 本身无效、有密码、加密、损坏、读不了的才是 `QB_AI_PDF_UNREADABLE`；以字段路径开头的与其他 400 一律 `QB_AI_REQUEST_INVALID`。
+  API 文档写明了限制（每次请求 600 页、1M 上下文时；32 MB）但没有给出这些错误的原文，所以按常见说法宽松匹配，上线前以真实的 API 对照一次（上线清单）。新增启动检查 `AiPdfLimitsCheck`：页数上限 × 5 000 加上最大文字输入与最大输出须放得进三个模型的上下文窗口（`ClaudeService.CONTEXT_WINDOW_TOKENS` = 100 万，约 179 页），且不超过提供方的 600 页。
+- **L-a**：平台停止的作业，若每次尝试的预留输入超过 10 万 Token 且模型有长提示价格，按长提示价格计（`AiProcesses.stoppedUsage`）。**L-b**：`Usage.asLongPrompt` 不再把回退模型的部分也算进长提示部分，`AiCost.of` 另把长提示部分限制在请求模型自己的部分之内，每个 Token 只计价一次。
+- **L-d**：§7.8 写明计数的 429 / 5xx 会用掉 3 次尝试中的一次（不计费）。**L-e**：封面与题目同时请求的测试重复 5 轮、每轮新商家，并断言至少一轮两个调用确实同时在途。**L-f**：IT 的桩与本地桩对带文档的付费调用报告与计数相同的输入用量（本地桩去掉计数不接受的字段再估算）。**L-g**：上线清单加一项：开启 PDF 之前以真实密钥手动调用一次 `count_tokens`。
+- 细节：封面图改为单选按钮的 `<label htmlFor>`（不是 `div` 上的 `onClick`）；`QB_AI_NOTICE_MISSING` 的文案改为通用的"AI 生成"。
+- 验证（复审修改之后）：`./gradlew :quizbuks:check :quizbuks:bootJar` 通过（717 个测试、0 失败；`platformCheck` 0 错误）；商家后台 lint、typecheck、171 个 Vitest，`app:check`，`ext:check`（74 个）；e2e 全部 54 个一次通过。（之后合并 Q7c 时改为 V18，见"迁移"。）
+- 验证（合并 Q7c、迁移改为 V18 之后，2026-10-19）：`./gradlew :quizbuks:check :quizbuks:bootJar` 通过（807 个测试、0 失败，场景与快照无需改动；`platformCheck` 0 错误）；商家后台 177 个、App 148 个 Vitest，两个 SPA 的 lint、typecheck 与 `app:check`，`ext:check`（82 个）；e2e 全部 59 个一次通过。
+
+### 待确认（需求方）
+
+- **PDF 的预留与月上限**（偏离 3）：建议上线前以真实 PDF 测出每页实际 Token（`launch-checklist.md`），再选其一：A 提高 `qb.ai.sponsor.monthly-tokens`（例如 500 万）；B 降低 `QB_AI_PDF_MAX_PAGES`（例如 30 页，预留约 45 万）；C 两者都调。缺省值暂按计划（100 页、200 万）。
+- **封面的风格**：图库的配色、版式与图形（`CoverDesigns`）请需求方过目；要插画或照片风格须改选 A-4 的 B（另一家图片模型与密钥）。
+
+### 测试
+
+- 单元：`AiCoversTest`（图库与设计的检查、提示与 Schema、每种配色 × 版式都画成 1200 × 630 的 PNG 且同一设计同一张图、断词、处理器把保留的设计画成作业文件、停机与画不出的标题不调用）、`AiPdfsTest`（评审后：上限、文档块在文字之前且是原样字节、计数的请求与发送的相同、没有回答时按计数计入、带 PDF 的预估与预留、提供方拒绝文档的分类、最小模型长提示按调用计价）。
+- IT（真实 PostgreSQL、本地桩）：`AiCoverIT`（5 个：画出的图以商家为上传者按图片策略登记、1200 × 630 的 PNG、平台记下作业产生的文件；发送的只有标题与简介；模板按种类；选定经模版编辑写入、`aiGenerated`、只能选一次；未选的图由清扫删除、选定的保留；别人与别的模版 404、种类不符 422、过时的 revision、候选号越界 400；丢弃与过期清空引用、过期后的图被清扫；失败的作业不存文件、图库外与过长的设计被丢弃、只剩一个也可用；画不出的标题不调用不计费；封面与题目共用限额、AI 说明、权限）、
+  `AiPdfIT`（2 个：PDF 作为文件输入登记并以文档块原样发送、预估按页数上限；过大 422 且不登记作业、页数过多 / 有密码 / 读不出的作业不发送不计费）；`AiQuestionsIT` 的输入上限用例改为 5 篇长文章（约 300 KB），2 篇（120 KB）现在可以发送。
+- Vitest：`ai.test.tsx` 加封面面板（对话框与 AI 说明、按种类读、选定为模版编辑、纯文本、失败 / 过期 / 丢弃、读候选）、PDF 资料的说明与大小、亮暗两种外观的 axe；后台扩展的种类。候选图的 `alt` 为"封面 n：文字"（`Thumbnail` 加可选的 `alt`，列表中的封面仍是装饰）。
+- e2e：`ai-cover.spec.ts`（亮、暗：AI 说明、生成封面、选第二张、基本信息显示新封面、列表 `aiGenerated`；再以文章与 PDF 生成题目，PDF 注明以文件发送；各处 axe）。
+
+### 验证（2026-10-18，本机 PostgreSQL 16，自己的库与端口）
+
+- `./gradlew :quizbuks:test`：704 个测试、0 失败（Q8a 之后为 663；新增 `AiCoverIT` 5、`AiPdfIT` 2、`AiCoversTest` 6、`AiPdfsTest` 4 等）；`./gradlew :quizbuks:check :quizbuks:bootJar` 通过（含 `platformCheck`：0 错误，警告与 Q8a 相同；`AttemptStatementBudgetIT` 未改动并通过）。
+- 商家后台：`pnpm lint && pnpm typecheck && pnpm test`（171 个测试）；`pnpm app:check` 两个 SPA 均通过（答题 SPA 未改动）；后台扩展 `pnpm ext:check`（74 个测试）。
+- e2e（打包的 jar、本地 Claude 与 Stripe 桩、Mailpit，库 `jabiz_e2e_q8b`，应用 18280、Claude 桩 18294、Stripe 桩 18293、Mailpit 18225/18226）：全部 54 个中 52 个第一次即通过；`ai.spec.ts` 的两个因后台 AI 页加了一列后 axe 报滚动区域不可聚焦而失败，改为在状态之上注明种类后，`ai.spec.ts`、`ai-cover.spec.ts` 与 `a11y.spec.ts`（22 个）重跑全部通过。

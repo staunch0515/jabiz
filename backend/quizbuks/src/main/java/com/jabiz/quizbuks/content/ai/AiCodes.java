@@ -40,6 +40,10 @@ public final class AiCodes {
     public static final String TEXT_TOO_LONG = "QB_AI_TEXT_TOO_LONG";
     /** More questions than the effort in force allows at once ({@link AiQuestionsJob#maxCount}). */
     public static final String COUNT_TOO_HIGH = "QB_AI_COUNT_TOO_HIGH";
+    /** A chosen PDF is larger than one request may send, or all of them together are (Q8b). */
+    public static final String PDF_TOO_LARGE = "QB_AI_PDF_TOO_LARGE";
+    /** The job is of the other kind (questions where a cover is chosen, or the other way round): 422. */
+    public static final String WRONG_KIND = "QB_AI_WRONG_KIND";
 
     // ---- a job's failures --------------------------------------------------------------------------------------
     public static final String RATE_LIMITED = "QB_AI_RATE_LIMITED";
@@ -57,11 +61,18 @@ public final class AiCodes {
     public static final String HALTED = "QB_AI_HALTED";
     /** An operator stopped the job at the platform ({@code EXTERNAL_JOB_CANCEL}); it was charged its estimate. */
     public static final String STOPPED = "QB_AI_STOPPED";
+    /** The PDF materials have more pages than a request may send: nothing was sent (Q8b). */
+    public static final String PDF_TOO_LONG = "QB_AI_PDF_TOO_LONG";
+    /** A PDF material has a password or is no readable PDF: nothing was sent (Q8b). */
+    public static final String PDF_UNREADABLE = "QB_AI_PDF_UNREADABLE";
+    /** The quiz's title has characters no font of the server can draw: nothing was sent (Q8b covers). */
+    public static final String COVER_FONT = "QB_AI_COVER_FONT";
 
     public static final List<String> ALL = List.of(UNAVAILABLE, NOTICE_MISSING, NOTICE_REQUIRED, INPUT_TOO_LARGE, NO_SOURCE,
         MATERIAL_NOT_IN_QUIZ, QUIZ_BUSY, TOO_MANY_OPEN, DAILY_LIMIT, MONTHLY_LIMIT, GLOBAL_LIMIT, JOB_NOT_READY,
         JOB_EXPIRED, CANDIDATE_UNKNOWN, NOT_REVIEWED, TEXT_TOO_LONG, RATE_LIMITED, PROVIDER_UNAVAILABLE, AUTH,
-        REQUEST_INVALID, BAD_RESPONSE, REFUSED, TRUNCATED, NO_CANDIDATES, COUNT_TOO_HIGH, HALTED, STOPPED);
+        REQUEST_INVALID, BAD_RESPONSE, REFUSED, TRUNCATED, NO_CANDIDATES, COUNT_TOO_HIGH, HALTED, STOPPED,
+        PDF_TOO_LARGE, WRONG_KIND, PDF_TOO_LONG, PDF_UNREADABLE, COVER_FONT);
 
     private AiCodes() {}
 }
