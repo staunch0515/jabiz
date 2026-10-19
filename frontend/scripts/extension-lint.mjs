@@ -1,3 +1,5 @@
+import tseslint from 'typescript-eslint'
+
 const PLATFORM_ONLY_THROUGH_ADMIN = {
   group: ['**/frontend/**', 'virtual:jabiz-extension'],
   message: 'An extension uses the platform only through @jabiz/admin (decision D22).',
@@ -19,10 +21,10 @@ const UI_TESTING_THROUGH_ADMIN = {
   message: "An extension's tests take the accessibility check from @jabiz/admin/testing (decision D22).",
 }
 
-/** @jabiz/admin/testing brings in Vitest and vitest-axe: never in a page, only in a test. */
+/** @jabiz/admin/testing brings in Vitest and vitest-axe: never in production code, only in tests. */
 const TESTING_ONLY_IN_TESTS = {
   group: ['@jabiz/admin/testing'],
-  message: '@jabiz/admin/testing is for tests only (*.test.ts, *.test.tsx): it brings in Vitest (decision D22).',
+  message: '@jabiz/admin/testing is for tests only (*.test.*, *.spec.*, test/**): it brings in Vitest (decision D22).',
 }
 
 /**
@@ -34,25 +36,64 @@ export const NO_ANT_DESIGN = {
   message: 'Ant Design left the platform (decision D34): use @jabiz/ui (in an extension, through @jabiz/admin).',
 }
 
-/** An extension's tests: where @jabiz/admin/testing may be imported. */
-export const TEST_FILES = ['**/*.test.{ts,tsx}', '**/*.spec.{ts,tsx}']
+const EXTENSIONS = '{js,jsx,mjs,cjs,ts,tsx,mts,cts}'
+
+/** Every source file of an extension: TypeScript and JavaScript alike, so that a .js file is no way around the rules. */
+export const SOURCE_FILES = [`**/*.${EXTENSIONS}`]
+
+/**
+ * An extension's tests, where @jabiz/admin/testing may be imported: `*.test.*`, `*.spec.*`, and shared test helpers,
+ * which live under a `test/` directory (`src/test/render.tsx`). Anything else (pages, stories) is production code.
+ */
+export const TEST_FILES = [`**/*.test.${EXTENSIONS}`, `**/*.spec.${EXTENSIONS}`, `**/test/**/*.${EXTENSIONS}`]
 
 const COMMON = [PLATFORM_ONLY_THROUGH_ADMIN, NO_ANT_DESIGN, PACKAGES_THROUGH_ADMIN, UI_TESTING_THROUGH_ADMIN]
 
 /**
+ * What `no-restricted-imports` does not see: `import('…')` and `require('…')`. esquery's regular expressions cannot
+ * hold a slash, hence the `.` in `@jabiz.ui`.
+ */
+function dynamic(pattern, message) {
+  return [
+    { selector: `ImportExpression > Literal.source[value=${pattern}]`, message },
+    { selector: `ImportExpression > TemplateLiteral.source > TemplateElement[value.raw=${pattern}]`, message },
+    { selector: `CallExpression[callee.name='require'] > Literal.arguments[value=${pattern}]`, message },
+  ]
+}
+
+const DYNAMIC_PACKAGES = dynamic('/^@jabiz.(ui|client)([^a-z-]|$)/',
+  'An extension uses @jabiz/ui and @jabiz/client only through @jabiz/admin, and its tests take the accessibility '
+    + 'check from @jabiz/admin/testing (decision D22).')
+const DYNAMIC_TESTING = dynamic('/^@jabiz.admin.testing$/', TESTING_ONLY_IN_TESTS.message)
+
+/** JavaScript files are parsed as the TypeScript ones are (JSX included), so that the same rules run on them. */
+const JAVASCRIPT = {
+  files: ['**/*.{js,jsx,mjs,cjs}'],
+  languageOptions: { parser: tseslint.parser, parserOptions: { ecmaFeatures: { jsx: true } } },
+}
+
+/**
  * Lint rules an admin extension gets on top of the platform's (decisions D22, D34): the platform only via
- * @jabiz/admin (its tests also via @jabiz/admin/testing, which pages may not import), and no Ant Design. Two configs:
- * a later `no-restricted-imports` replaces an earlier one, so each set of files gets its own complete list.
+ * @jabiz/admin (its tests also via @jabiz/admin/testing, which production code may not import, statically or with
+ * `import()`), and no Ant Design. Two configs: a later `no-restricted-imports` replaces an earlier one, so each set of
+ * files gets its own complete list.
  */
 export const extensionRules = [
+  JAVASCRIPT,
   {
-    files: ['**/*.{ts,tsx}'],
+    files: SOURCE_FILES,
     ignores: TEST_FILES,
-    rules: { 'no-restricted-imports': ['error', { patterns: [...COMMON, TESTING_ONLY_IN_TESTS] }] },
+    rules: {
+      'no-restricted-imports': ['error', { patterns: [...COMMON, TESTING_ONLY_IN_TESTS] }],
+      'no-restricted-syntax': ['error', ...DYNAMIC_PACKAGES, ...DYNAMIC_TESTING],
+    },
   },
   {
     files: TEST_FILES,
-    rules: { 'no-restricted-imports': ['error', { patterns: COMMON }] },
+    rules: {
+      'no-restricted-imports': ['error', { patterns: COMMON }],
+      'no-restricted-syntax': ['error', ...DYNAMIC_PACKAGES],
+    },
   },
 ]
 

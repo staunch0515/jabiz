@@ -8,7 +8,8 @@ import { extensionRules, extensionRulesFor } from './extension-lint.mjs'
 async function restricted(code: string, rules: Linter.Config[] = extensionRules, filePath = 'src/page.ts') {
   const eslint = new ESLint({ overrideConfigFile: true, overrideConfig: [...platformConfig, ...rules] })
   const [result] = await eslint.lintText(code, { filePath })
-  return result.messages.filter((m) => m.ruleId === 'no-restricted-imports')
+  expect(result.messages.filter((m) => m.fatal), `parse errors in ${filePath}`).toEqual([])
+  return result.messages.filter((m) => m.ruleId === 'no-restricted-imports' || m.ruleId === 'no-restricted-syntax')
 }
 
 async function lint(code: string, rules: Linter.Config[] = extensionRules, filePath = 'src/page.ts') {
@@ -67,6 +68,50 @@ describe('extension lint rules (decisions D22, D34)', () => {
     expect(inPage).toHaveLength(1)
     expect(inPage[0].message).toContain('for tests only')
     expect(await lint(code, extensionRules, 'src/testing.ts')).toBe(1)
+  })
+
+  it('refuses the packages and the test exports through import(), require() and re-exports (16w-1 review)', async () => {
+    const page = 'src/page.tsx'
+    for (const code of [
+      "export const load = () => import('@jabiz/ui')\n",
+      'export const load = () => import(`@jabiz/client/vite`)\n',
+      "export const load = () => import('@jabiz/admin/testing')\n",
+      "export * from '@jabiz/ui'\n",
+      "export { Button } from '@jabiz/ui'\n",
+      "export * from '@jabiz/admin/testing'\n",
+      "import type { ButtonProps } from '@jabiz/ui'\nexport type P = ButtonProps\n",
+      "import '@jabiz/admin/testing'\n",
+    ]) {
+      expect(await lint(code, extensionRules, page), code).toBe(1)
+    }
+    expect(await lint("export const load = () => import('@jabiz/admin')\n", extensionRules, page)).toBe(0)
+    expect(await lint("export const load = () => import('./other')\n", extensionRules, page)).toBe(0)
+    // In tests, import() of the packages is refused as well; of @jabiz/admin/testing it is allowed.
+    expect(await lint("export const load = () => import('@jabiz/ui/testing')\n", extensionRules, 'src/a.test.ts'))
+      .toBe(1)
+    expect(await lint("export const load = () => import('@jabiz/admin/testing')\n", extensionRules,
+      'src/a.test.ts')).toBe(0)
+  })
+
+  it('applies to JavaScript files and stories as to the pages', async () => {
+    const testing = "import { expectAccessible } from '@jabiz/admin/testing'\nexport const x = expectAccessible\n"
+    expect(await lint(testing, extensionRules, 'src/page.js')).toBe(1)
+    expect(await lint(`${testing}export const el = <div />\n`, extensionRules, 'src/page.jsx')).toBe(1)
+    expect(await lint("const ui = require('@jabiz/ui')\nmodule.exports = ui\n", extensionRules, 'src/old.cjs')).toBe(1)
+    expect(await lint("import { Button } from '@jabiz/ui'\nexport const x = Button\n", extensionRules, 'src/a.mjs'))
+      .toBe(1)
+    // A story is production code, not a test.
+    expect(await lint(testing, extensionRules, 'src/Page.stories.tsx')).toBe(1)
+    // JavaScript tests are tests.
+    expect(await lint(testing, extensionRules, 'src/page.test.jsx')).toBe(0)
+  })
+
+  it('lets shared test helpers under test/ import @jabiz/admin/testing', async () => {
+    const testing = "import { expectAccessible } from '@jabiz/admin/testing'\nexport const x = expectAccessible\n"
+    expect(await lint(testing, extensionRules, 'src/test/render.tsx')).toBe(0)
+    expect(await lint(testing, extensionRules, 'src/pages/test/helpers.ts')).toBe(0)
+    expect(await lint(testing, extensionRules, 'src/testing.ts')).toBe(1)
+    expect(await lint(testing, extensionRules, 'src/render.test-utils.tsx')).toBe(1)
   })
 
   it('keeps the other rules in tests', async () => {
