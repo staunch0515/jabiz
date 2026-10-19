@@ -85,7 +85,10 @@ class ProcessAccessIT extends QbItSupport {
         Map.entry("QB_AI_JOB_COMPLETED", ProcessAccess.INTERNAL),
         Map.entry("QB_AI_JOB_FAILED", ProcessAccess.INTERNAL),
         Map.entry("QB_AI_EXPIRE", ProcessAccess.INTERNAL),
-        Map.entry("QB_AI_JOB_STOPPED", ProcessAccess.INTERNAL),
+        Map.entry("QB_AI_JOB_CANCELLED", ProcessAccess.INTERNAL),
+        // The platform's job of a sponsor's cancellation, one per job type (platform decision D52 item 2).
+        Map.entry("QB_AI_CANCEL_QUESTIONS_JOB", ProcessAccess.SUB_PROCESS_ONLY),
+        Map.entry("QB_AI_CANCEL_COVER_JOB", ProcessAccess.SUB_PROCESS_ONLY),
         // Mail (Q7a): the consumers of the transfer, payout account, top-up and publication events, and the items of the
         // hourly job of deferred short-of-funds mail.
         Map.entry("QB_MAIL_TRANSFER", ProcessAccess.INTERNAL),

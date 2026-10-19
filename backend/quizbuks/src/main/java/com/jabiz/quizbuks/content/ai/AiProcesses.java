@@ -1,6 +1,7 @@
 package com.jabiz.quizbuks.content.ai;
 
 import com.jabiz.entity.Violation;
+import com.jabiz.external.ExternalJobCancellation;
 import com.jabiz.external.ExternalJobCompletion;
 import com.jabiz.external.ExternalJobFailure;
 import com.jabiz.process.ProcessContext;
@@ -23,6 +24,8 @@ import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.EntityNotFoundException;
 import com.jabiz.runtime.file.FileEntities;
 import com.jabiz.runtime.param.ParamEntities;
+import com.jabiz.runtime.process.steps.CallProcess;
+import com.jabiz.runtime.process.steps.CancelExternalJob;
 import com.jabiz.runtime.process.steps.HoldLock;
 import com.jabiz.runtime.process.steps.LoadEntity;
 import com.jabiz.runtime.process.steps.QueryEntities;
@@ -70,11 +73,14 @@ import java.util.UUID;
  *   <li>{@value #ACCEPT}: under {@code qb.quiz:<quiz>} then {@code qb.ai:<sponsor>}, the questions the sponsor reviewed
  *       (each marked {@code reviewed}, A-6; their text as the sponsor left it) are added at the end of the quiz with
  *       the job's id; the quiz becomes {@code aiGenerated}. No candidate is ever saved without this.</li>
- *   <li>{@value #DISCARD} and {@value #CANCEL}: the sponsor drops the candidates, or stops waiting for a job.</li>
+ *   <li>{@value #DISCARD} and {@value #CANCEL}: the sponsor drops the candidates, or stops a job: {@value #CANCEL}
+ *       also cancels the platform's job (through {@value #CANCEL_QUESTIONS_JOB} or {@value #CANCEL_COVER_JOB},
+ *       platform decision D52 item 2), so a queued job never calls the provider and a running one ends after its
+ *       attempt.</li>
  *   <li>{@value #EXPIRE} ({@code internal()}): the daily job clears candidates not reviewed in time.</li>
- *   <li>{@value #STOPPED_JOB} ({@code internal()}): a job an operator stopped at the platform
- *       ({@code EXTERNAL_JOB_CANCEL}, which calls neither outcome process) is closed and charged its whole estimate,
- *       since nobody knows what its attempts used.</li>
+ *   <li>{@value #CANCELLED_JOB} ({@code internal()}, both job types' {@code onCancelled}): a cancelled job, whoever
+ *       cancelled it (the sponsor, or an operator through {@code EXTERNAL_JOB_CANCEL}), is closed once it has ended
+ *       and charged what its attempts used; a job cancelled before any attempt ran is charged nothing.</li>
  * </ul>
  * Lock order: {@code qb.quiz:<quiz>} → {@code qb.ai:<sponsor>} → {@code qb.ai:*}; none of them is held with the
  * publication, start or wallet locks, so answering is not affected.
@@ -92,7 +98,14 @@ public final class AiProcesses {
     public static final String DISCARD = "QB_AI_DISCARD";
     public static final String CANCEL = "QB_AI_CANCEL";
     public static final String EXPIRE = "QB_AI_EXPIRE";
-    public static final String STOPPED_JOB = "QB_AI_JOB_STOPPED";
+    /** Both job types' {@code onCancelled} (platform decision D52 item 2). */
+    public static final String CANCELLED_JOB = "QB_AI_JOB_CANCELLED";
+    /**
+     * The platform's step {@code CancelExternalJob} cancels jobs of one declared type: {@value #CANCEL} calls the one
+     * of its job's kind ({@code subProcessOnly()}).
+     */
+    public static final String CANCEL_QUESTIONS_JOB = "QB_AI_CANCEL_QUESTIONS_JOB";
+    public static final String CANCEL_COVER_JOB = "QB_AI_CANCEL_COVER_JOB";
     /** Everybody's unfinished jobs, for the global limit. */
     public static final String OPEN_TEMPLATE = "qb.system.ai-open";
 
@@ -160,11 +173,8 @@ public final class AiProcesses {
     /** @param questionIds the questions added, in their order */
     public record AcceptOutput(String quizId, long revision, String aiJobId, List<String> questionIds) {}
 
-    /**
-     * A job the platform finished without an outcome process (the platform's event {@code jabiz.external-job.finished}
-     * of every job: only a cancelled job of {@value AiQuestionsJob#TYPE} is acted on).
-     */
-    public record StoppedInput(String jobId, String jobType, String status, Instant at) {}
+    /** The platform's job of a sponsor's AI job ({@value #CANCEL_QUESTIONS_JOB}, {@value #CANCEL_COVER_JOB}). */
+    public record PlatformJobRef(@NotBlank @Size(max = 64) String externalJobId) {}
 
     /** An item of the daily expiry (its selection's row). */
     public record ExpireInput(@NotNull UUID aiJobId, @NotBlank @Size(max = 128) String sponsorId) {}
@@ -787,70 +797,58 @@ public final class AiProcesses {
         }
     }
 
-    // ---- a job stopped at the platform ------------------------------------------------------------------------------
+    // ---- a cancelled job ---------------------------------------------------------------------------------------------
 
-    public static ProcessDefinition<StoppedInput, JobOutput, ProcessContext> stopped(ZoneId zone) {
-        return ProcessDefinition.define(STOPPED_JOB, 1, StoppedInput.class, JobOutput.class, ProcessContext.class,
-            pb -> pb
-                .description("Closes an AI job an operator stopped at the platform and charges its estimate.")
+    /**
+     * {@value #CANCELLED_JOB}: both job types' {@code onCancelled}, run once by the platform when a cancelled job has
+     * ended (at once when no attempt was running, otherwise after the running one), whoever cancelled it. Under the
+     * sponsor's lock and everybody's, the job is closed and charged what its attempts used, as a failure is: the
+     * platform's usage of every attempt (the cancelled one included), which the attempts recorded as they went
+     * ({@code ClaudeCalls}: an unanswered call its estimate, the fallback model's and the long prompts' parts apart).
+     * A job cancelled before any attempt ran cost nothing and is charged nothing. A job an operator stopped while it
+     * was still queued here is {@code CANCELLED} with {@link AiCodes#STOPPED}; the sponsor's own cancellation closed
+     * it already ({@value #CANCEL}).
+     */
+    public static ProcessDefinition<ExternalJobCancellation, JobOutput, ProcessContext> cancelled(ZoneId zone) {
+        return ProcessDefinition.define(CANCELLED_JOB, 1, ExternalJobCancellation.class, JobOutput.class,
+            ProcessContext.class, pb -> pb
+                .description("Closes a cancelled AI job and charges what its attempts used.")
                 .permissions(QbPermissions.AI_SYSTEM)
                 .internal()
                 .contextFactory(AiProcesses::context)
                 .outputMapper(AiProcesses::jobOutput)
-                // Found first, to know whose locks to take; read again under them.
-                .step("Find the job", QueryEntities.<ProcessContext>of(QbAi.defaultDataset(QbAi.JOB),
-                    ctx -> EntityQuery.builder().where(new QueryPredicate.Eq("externalJobId",
-                        stoppedJobId(ctx))).limit(1).build(), FIRST_READ))
                 .step("Lock the sponsor's AI requests", HoldLock.<ProcessContext>exclusive(
-                    ctx -> QbAi.lockName(stoppedSponsor(ctx))))
+                    ctx -> QbAi.lockName(ctx.get(INPUT, ExternalJobCancellation.class).requestedBy())))
                 .step("Lock everybody's usage", HoldLock.<ProcessContext>exclusive(ctx -> QbAi.GLOBAL_LOCK))
-                .step("Load the job and the usage", outcomeReads(zone, AiProcesses::stoppedJobId,
-                    AiProcesses::stoppedSponsor, ctx -> ctx.get(INPUT, StoppedInput.class).at()))
-                .compute("Close the job", (metadata, ctx) -> closeStopped(ctx, zone)));
+                .step("Load the job and the usage", outcomeReads(zone,
+                    ctx -> ctx.get(INPUT, ExternalJobCancellation.class).jobId(),
+                    ctx -> ctx.get(INPUT, ExternalJobCancellation.class).requestedBy(),
+                    ctx -> ctx.get(INPUT, ExternalJobCancellation.class).finishedTime()))
+                .compute("Close the job", (metadata, ctx) -> closeCancelled(ctx, zone)));
     }
 
-    /** The platform's job, when the event is about a cancelled job of this type; a key matching nothing otherwise. */
-    private static String stoppedJobId(ProcessContext ctx) {
-        StoppedInput input = ctx.get(INPUT, StoppedInput.class);
-        return Set.of(AiQuestionsJob.TYPE, AiCoverJob.TYPE).contains(input.jobType())
-            && "CANCELLED".equals(input.status())
-            && input.jobId() != null ? input.jobId() : "-";
-    }
-
-    /** The sponsor of the job found; a lock nobody else takes when there is none. */
-    private static String stoppedSponsor(ProcessContext ctx) {
-        EntityInstance job = first(ctx, FIRST_READ);
-        return job == null ? "-" : String.valueOf((Object) job.get("sponsorId"));
-    }
-
-    static void closeStopped(ProcessContext ctx, ZoneId zone) {
-        StoppedInput input = ctx.get(INPUT, StoppedInput.class);
-        EntityInstance found = first(ctx, FIRST_READ);
-        if (found == null) {
-            return;
-        }
-        EntityInstance job = unfinished(ctx, String.valueOf((Object) found.get("sponsorId")));
+    static void closeCancelled(ProcessContext ctx, ZoneId zone) {
+        ExternalJobCancellation cancellation = ctx.get(INPUT, ExternalJobCancellation.class);
+        EntityInstance job = unfinished(ctx, cancellation.requestedBy());
         if (job == null) {
             return;
         }
-        // Nobody knows what its attempts used: the whole estimate, as the limits reserved it.
-        long estimate = QuizEditing.number(job.get("estimatedTokens"));
-        // The input as the request reserved it (with PDFs, the page cap's documents: review L1), every attempt.
-        Object reserved = params(job).get("reservedInputTokens");
-        long perAttempt = reserved instanceof Number n ? n.longValue()
-            : AiLimits.inputEstimate(QuizEditing.number(job.get("inputBytes")));
-        ClaudeApi.Usage usage = stoppedUsage(job.get("model"), estimate, perAttempt);
+        // Cancelled while it waited: no attempt ran, nothing was sent or billed.
+        ClaudeApi.Usage usage = cancellation.attemptRan() ? usage(cancellation.usage()) : new ClaudeApi.Usage(0, 0);
         BigDecimal cost = AiCost.of(job.get("model"), null, usage, settings(ctx).price());
-        Map<String, Object> values = finished(usage, cost, null, input.at());
+        Map<String, Object> values = finished(usage, cost, cancellation.attempts(), cancellation.finishedTime());
         if (QbAi.QUEUED.equals(job.get("status"))) {
+            // Not the sponsor's own cancellation (that closed the job already): an operator's.
             values.put("status", QbAi.CANCELLED);
             values.put("failureCode", AiCodes.STOPPED);
-            values.put("failureMessage", "Stopped at the platform; charged its estimate");
-            values.put("closedAt", input.at());
+            values.put("failureMessage", "Stopped at the platform");
+            values.put("closedAt", cancellation.cancelledTime());
         }
         ctx.changes().update(QbAi.JOB, job.id(), job.version(), values);
-        addUsage(ctx, String.valueOf((Object) job.get("sponsorId")), AiLimits.month(input.at(), zone), usage, cost,
-            true);
+        if (cancellation.attemptRan()) {
+            addUsage(ctx, cancellation.requestedBy(), AiLimits.month(cancellation.finishedTime(), zone), usage, cost,
+                true);
+        }
         ctx.put(OUTPUT, new JobOutput(String.valueOf(job.id()), (String) values.getOrDefault("status",
             job.get("status"))));
     }
@@ -999,19 +997,63 @@ public final class AiProcesses {
             });
     }
 
+    /**
+     * The sponsor stops a queued job of their own: closed here at once, and its platform job (the one of the same id,
+     * {@code externalJobId}) cancelled in the same transaction, so that a job still waiting never calls the provider
+     * and a running one ends after its attempt. What it used is charged once it has ended ({@value #CANCELLED_JOB}).
+     * A platform job that ended meanwhile is no error: its outcome process charges it, as before.
+     */
     public static ProcessDefinition<JobRef, JobOutput, ProcessContext> cancel() {
-        return own(CANCEL, "Stops waiting for an AI job; its usage still counts when it ends.", job -> QbAi.QUEUED,
+        return own(CANCEL, "Stops an AI job; what its attempts used is charged once it has ended.",
+            job -> QbAi.QUEUED,
             (ctx, job) -> {
                 Map<String, Object> values = new LinkedHashMap<>();
                 values.put("status", QbAi.CANCELLED);
                 values.put("closedAt", ctx.opTime());
                 return values;
-            });
+            },
+            pb -> pb
+                .step("Cancel the questions' platform job", CallProcess.<ProcessContext>when(
+                    ctx -> !QbAi.KIND_COVER.equals(first(ctx, JOB).get("kind")), CANCEL_QUESTIONS_JOB, 1,
+                    AiProcesses::platformJob, null))
+                .step("Cancel the covers' platform job", CallProcess.<ProcessContext>when(
+                    ctx -> QbAi.KIND_COVER.equals(first(ctx, JOB).get("kind")), CANCEL_COVER_JOB, 1,
+                    AiProcesses::platformJob, null)));
+    }
+
+    private static PlatformJobRef platformJob(ProcessContext ctx) {
+        return new PlatformJobRef(String.valueOf((Object) first(ctx, JOB).get("externalJobId")));
+    }
+
+    /**
+     * Cancels the platform's job of {@code jobType} for {@value #CANCEL}, as its caller, the sponsor: the platform's
+     * step cancels only jobs of the declared type that the process's actor started (anyone else's is 404, under
+     * {@value #CANCEL}'s own check of the sponsor's job); one that ended meanwhile is left to its outcome process
+     * ({@code ifOpen}).
+     */
+    public static ProcessDefinition<PlatformJobRef, JobOutput, ProcessContext> cancelPlatformJob(String name,
+        String jobType) {
+        return ProcessDefinition.define(name, 1, PlatformJobRef.class, JobOutput.class, ProcessContext.class, pb -> pb
+            .description("Cancels the platform's job of a sponsor's AI job, for " + CANCEL + ".")
+            .permissions(QbPermissions.AI_USE)
+            .subProcessOnly()
+            .contextFactory(AiProcesses::context)
+            .outputMapper(ctx -> new JobOutput(null, null))
+            .step("Cancel the platform's job", CancelExternalJob.<ProcessContext>of(jobType,
+                ctx -> ctx.get(INPUT, PlatformJobRef.class).externalJobId()).ifOpen()));
     }
 
     private static ProcessDefinition<JobRef, JobOutput, ProcessContext> own(String name, String description,
         java.util.function.Function<EntityInstance, String> from,
         java.util.function.BiFunction<ProcessContext, EntityInstance, Map<String, Object>> change) {
+        return own(name, description, from, change, pb -> { });
+    }
+
+    private static ProcessDefinition<JobRef, JobOutput, ProcessContext> own(String name, String description,
+        java.util.function.Function<EntityInstance, String> from,
+        java.util.function.BiFunction<ProcessContext, EntityInstance, Map<String, Object>> change,
+        java.util.function.Consumer<com.jabiz.process.ProcessDefinitionBuilder<JobRef, JobOutput, ProcessContext>>
+            after) {
         return ProcessDefinition.define(name, 1, JobRef.class, JobOutput.class, ProcessContext.class, pb -> pb
             .description(description)
             .permissions(QbPermissions.AI_USE)
@@ -1032,7 +1074,8 @@ public final class AiProcesses {
                 Map<String, Object> values = change.apply(ctx, job);
                 ctx.changes().update(QbAi.JOB, job.id(), job.version(), values);
                 ctx.put(OUTPUT, new JobOutput(String.valueOf(job.id()), (String) values.get("status")));
-            }));
+            })
+            .steps(after));
     }
 
     public static ProcessDefinition<ExpireInput, JobOutput, ProcessContext> expire() {
@@ -1227,13 +1270,6 @@ public final class AiProcesses {
      * estimate, the rest as output. For a model with a long-prompt rate, attempts whose input is above
      * {@value ClaudeCalls#LONG_PROMPT_FROM} tokens are priced at it, as their calls would have been (Q8b re-review L-a).
      */
-    static ClaudeApi.Usage stoppedUsage(String model, long estimate, long perAttempt) {
-        long in = Math.min(estimate, AiQuestionsJob.ATTEMPTS * perAttempt);
-        ClaudeApi.Usage usage = new ClaudeApi.Usage(in, estimate - in);
-        return AiCost.hasLongPromptRate(model) && perAttempt > ClaudeCalls.LONG_PROMPT_FROM
-            ? usage.asLongPrompt() : usage;
-    }
-
     static Map<String, Object> params(EntityInstance job) {
         return JSON.readValue(String.valueOf((Object) job.get("params")), Map.class);
     }

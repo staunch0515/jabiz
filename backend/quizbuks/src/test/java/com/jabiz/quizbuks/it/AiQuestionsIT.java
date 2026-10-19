@@ -197,7 +197,7 @@ class AiQuestionsIT extends AiItSupport {
     }
 
     @Test
-    void discardAndCancelEndTheJobButNotItsUsage() {
+    void discardAndCancelEndTheJob() {
         String token = sponsorFull(SPONSOR_A);
         List<String> first = quizWithArticle(token, title(), "Material.");
         Object ready = request(token, first.get(0), List.of(first.get(1)), 1).get("aiJobId");
@@ -210,13 +210,16 @@ class AiQuestionsIT extends AiItSupport {
         List<String> second = quizWithArticle(token, title(), "Material.");
         Object queued = request(token, second.get(0), List.of(second.get(1)), 1).get("aiJobId");
         long before = ((Number) usage(SPONSOR_A).get("jobs")).longValue();
+        int calls = CLAUDE.requests(MESSAGES).size();
         assertThat(run(AiProcesses.CANCEL, token, body("aiJobId", queued))).containsEntry("status", QbAi.CANCELLED);
-        // The provider still answers; the result is not kept, its usage counts.
+        // The platform's job is cancelled with it (platform decision D52): a queued job never reaches the provider,
+        // and costs nothing (what a running one used is charged: AiCancelIT).
         runJobs();
+        assertThat(CLAUDE.requests(MESSAGES)).hasSize(calls);
         Map<String, Object> job = job(queued);
         assertThat(job).containsEntry("status", QbAi.CANCELLED).containsEntry("candidates", null);
         assertThat(job.get("finished_at")).isNotNull();
-        assertThat(((Number) usage(SPONSOR_A).get("jobs")).longValue()).isEqualTo(before + 1);
+        assertThat(((Number) usage(SPONSOR_A).get("jobs")).longValue()).isEqualTo(before);
     }
 
     @Test
