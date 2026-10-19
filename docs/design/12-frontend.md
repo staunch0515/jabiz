@@ -274,9 +274,9 @@ jabizApp {
 | 方面 | 做法 |
 |---|---|
 | 自动检查 | `e2e/a11y.spec.ts`：`@axe-core/playwright` 以 `wcag2a`、`wcag2aa`、`wcag21a`、`wcag21aa`、`wcag22aa` 规则检查登录页（含必填提示与身份提供方的拒绝）、数据目录、列表（含删除确认与时间点的日历）、新建表单（含字典的选项、生效时间的日历）、引用的选择（展开的选项）、历史（含日历、操作详情、撤销对话框）、流程目录、流程表单（含必填的选择及其展开的选项）、待办、报表目录、报表（含导出菜单与签发确认）、报表存档、导入目录、导入向导（含映射步骤与展开的来源列选项）、导入记录（含详情 `Sheet`）、待办、审计、单据（含展开的发送记录与发送对话框）、访问审查（含签发确认与签核对话框）、封存（含校验详情的 `Sheet`）、保留、安全设置、会话；每页先等到其内容出现（不是加载或错误状态）再检查；任何违规即失败（列出规则与元素），不设排除项 |
-| 对比度 | `@jabiz/ui` 的 `theme.css` 的语义 token：文字 token 在其所用的背景上 ≥ 4.5:1，输入框边框与焦点环 ≥ 3:1，亮、暗两种外观都如此（主色 `#0958d9` / `#69a7ff`、错误色 `#cf1322` / `#ff7875`、成功色 `#237804` / `#95de64`、警告色 `#874d00` / `#ffc53d`）；`theme.test.ts` 逐对检查 |
+| 对比度 | `@jabiz/ui` 的 `theme.css` 的语义 token：文字 token 在其所用的背景上 ≥ 4.5:1，输入框边框与焦点环 ≥ 3:1，亮、暗两种外观都如此（主色 `#0958d9` / `#69a7ff`、错误色 `#cf1322` / `#ff7875`、成功色 `#237804` / `#95de64`、警告色 `#874d00` / `#ffc53d`）；`theme.test.ts` 逐对检查。暗色控件的背景是半透明的输入色（输入框、文本框、选择框、标签输入为 `dark:bg-input/20`，选择框悬停 `/30`）：占位文字（暗色 `--muted-foreground` `#a8a8b0`，16v-1 由 `#a1a1aa` 调亮）在它混合到 background、card、popover 之上的颜色上，静止与悬停都 ≥ 4.5:1，`theme.test.ts` 按组件源码中的透明度计算（原来的 `#a1a1aa` 与 `/30`、`/50` 不通过） |
 | 名称与属性 | 有展开行的表格（审计、单据）用 `DataTable` 的 `renderExpanded`：展开按钮带"展开行 / 收起行"的名称与 `aria-expanded`；选择用 `Combobox`（`role="combobox"`，以 `<Label htmlFor>` 或 `aria-label` 命名，`aria-required` / `aria-invalid` 在触发按钮上）。e2e 按角色、名称或 `data-*` 找元素（`e2e/support.ts` 的 `dialog`、`dataRows`、`option`、`confirm`），按钮名称写精确的文字 |
-| 扩展 | 扩展的页面用 `@jabiz/ui`，主题 token、外观与全局的 preflight 自动适用；扩展的 e2e 以平台前端的依赖运行时可直接引用 `@axe-core/playwright`，规则集与上表相同 |
+| 扩展与应用 | 扩展的页面用 `@jabiz/ui`，主题 token、外观与全局的 preflight 自动适用。检查的辅助函数由 `@jabiz/ui` 导出（16v-1）：组件与页面测试用 `@jabiz/ui/testing` 的 `expectAccessible(root?)`（Vitest，亮暗两种外观，jsdom 不算样式所以不查颜色对比度），e2e 用 `@jabiz/ui/testing/playwright` 的 `expectAccessible(page, 名称, { expect })`（含颜色对比度，等动画结束后检查；`expect` 是调用方自己的，辅助函数不加载 `@playwright/test`）、`accessibilityViolations(page)`、`animationsSettled(page)` 与 `setAppearance(page, 外观)`；规则集（`WCAG_TAGS`）与上表相同，平台自己的测试也用它们；`@jabiz/client/vite` 的预设在 Vitest 中让 `vitest`、`vitest-axe` 都是 SPA 自己的副本 |
 
 新增或修改页面时：在 `a11y.spec.ts` 中加上该页面；颜色用主题 token，不写死色值。
 
@@ -312,6 +312,7 @@ jabizApp {
   提示按 `effectiveWithinSeconds` 给出生效时间；16g，10 §15.9；另导出 `SessionDeviceIcon`、`sessionDeviceName`、`effectiveMinutes` 供应用自绘列表）、
   `MailPreferences`（本人的邮件：当前入口的每个可退订通知一个开关（`Switch` 加 `Label`，名称为服务端给出的显示名），其后"您关闭的其他邮件"（其他入口、用户关闭过的，可重新开启），邮件语言的选择（应用语言多于一种时，含"默认"一项）；每次改动即时保存并以状态提示说明，失败时保持原值；读取失败时有"重试"；界面语言变化时重读显示名；别处设置的邮件语言经 `onMailLanguageChange` 立即显示；默认调用下面的函数，可经属性替换；18 §5.6，16s，D49）、
   `offerMailLanguage(lang)`（切换界面语言后询问是否把邮件也改为该语言，见 §10；提示一直显示到回答，说明以后在哪里修改；`notify` 为此增加可选的 `action` 与 `cancel` 按钮）、
+  `MailUnsubscribe`（退订链接的落地页：读出令牌，只 POST 一次 `/api/auth/mail/unsubscribe`，状态 `working` / `done` / `invalid` / `failed`（`data-testid="unsubscribe-state"` 的 `data-state`）；`brand`、`appearance`、`search` 同其他落地页；通用后台的 `/mail/unsubscribe` 与示范门户的 `/portal/mail/unsubscribe` 都是它；18 §5.6，16v-1，D52 第 3 条）、
   `VerifyEmailBanner`、`OfflineBanner`。积木**不依赖路由**：导航经属性 `onNavigate(path)` / `hrefOf(path)` 与回调（`onSignedIn(path)` 等）交出，
   没有时为普通链接与整页跳转；邮件链接的入口与令牌从 `window.location` 读（有路由时传 `search`）。后台的登录页、OIDC 回调页、三个落地页与 step-up
   是这些积木外的 React Router 适配（`src/auth/routerNavigation.ts`），测试 id 与行为不变，后台不显示外观切换。
@@ -321,7 +322,7 @@ jabizApp {
   调用应用的接口，与 `api` 共用令牌、刷新与 step-up（流程与模板仍经 `runProcess` / `runQuery`）。
 - **应用自有 SPA**（D34 第 5 条，D43）：以 `link:` 引用两个包，样式表 `@import '@jabiz/ui/theme.css'`（它 `@source` 了该包的源码）；
   `pnpm app:check <目录>` 比对 `react`、`react-dom`、`tailwindcss`、`@tanstack/react-query`、`i18next`、`react-i18next`、`vite`（以及使用两个包时其运行时依赖，
-  逐项读自包的 `package.json`，16n 起含 `react-markdown`）的版本与平台前端一致，不一致即失败。应用 SPA 不引用 `@jabiz/admin`，后台与 SPA 共用的显示积木都在 `@jabiz/ui`。写法见指南 `docs/guide/app-spa.md`。
+  逐项读自包的 `package.json`，16n 起含 `react-markdown`）的版本与平台前端一致，不一致即失败；16v-1 起 SPA 有 `@jabiz/ui` 的可选 peer `vitest`、`vitest-axe`、`@playwright/test`、`@axe-core/playwright`（测试辅助函数 `@jabiz/ui/testing`、`@jabiz/ui/testing/playwright` 所用）之一时，也须是平台的版本。应用 SPA 不引用 `@jabiz/admin`，后台与 SPA 共用的显示积木都在 `@jabiz/ui`。写法见指南 `docs/guide/app-spa.md`。
 - **构建预设 `@jabiz/client/vite`**（16c-2，只在 Node 中运行，纯 JavaScript `vite.mjs` 加类型 `vite.d.mts`，任何 Node 版本都能从应用的 `vite.config.ts` 加载）：
   `jabizSpa({ pwa })` 取并校验构建变量（`VITE_BASE`、`VITE_JABIZ_ENTRY`、`VITE_JABIZ_PWA`、`VITE_JABIZ_SPA_PREFIXES`），设 `base`，以 `resolve.dedupe`
   统一 React、i18next、TanStack Query 的副本（Vitest 中另把平台前端的依赖交给 Vite、取其 ES 模块版本并指向 SPA 自己的副本：否则经 `link:` 的包会带来第二个 React）；

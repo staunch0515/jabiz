@@ -174,7 +174,7 @@ class DeliverMail implements StepHandler<DeliverMail.Metadata, ProcessContext> {
             }
             if (template.unsubscribable() && pending.userId() != null) {
                 values.put(MailTemplate.UNSUBSCRIBE_URL, templates.unsubscribeUrl(
-                    tokens.issueUnsubscribe(pending.userId().toString(), template.name())));
+                    tokens.issueUnsubscribe(pending.userId().toString(), template.name()), template));
             }
             Base64.Encoder base64 = Base64.getUrlEncoder().withoutPadding();
             Flux<Void> stored = Flux.empty();

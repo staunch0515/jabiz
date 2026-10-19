@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import i18n from '../i18n'
 import { inputNodes, toProcessInput, type JsonSchema } from '../meta/processForm'
-import { expectAccessible } from '../test/axe'
+import { expectAccessible } from '@jabiz/ui/testing'
 import SchemaForm from './SchemaForm'
 
 const schema: JsonSchema = {

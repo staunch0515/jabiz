@@ -25,6 +25,11 @@ import { build } from 'vite'
 
 /** The packages an SPA shares with `@jabiz/client` and `@jabiz/ui`: one copy each (two Reacts break hooks). */
 export const SHARED_PACKAGES = ['react', 'react-dom', 'i18next', 'react-i18next', '@tanstack/react-query']
+/**
+ * The test tools `@jabiz/ui/testing` imports (ROADMAP 16v-1): under Vitest they are the SPA's own copies too, so that
+ * the helper asserts with the very Vitest that runs the test, never one of the platform frontend's.
+ */
+export const TEST_PACKAGES = ['vitest', 'vitest-axe']
 const BASE = /^\/(?:[a-z0-9][a-z0-9-]*\/)*$/
 const ENTRY = /^[a-z][a-z0-9-]{0,39}$/
 const MODES = ['on', 'off', 'remove']
@@ -222,8 +227,8 @@ export function jabizSpa(options = {}) {
           // Vite, where the deduplication holds by itself.
           ...(process.env.VITEST
             ? {
-              alias: SHARED_PACKAGES.map((name) => ({ find: new RegExp(`^${escaped(name)}(/.*)?$`),
-                replacement: `${join(root, 'node_modules', name)}$1` })),
+              alias: [...SHARED_PACKAGES, ...TEST_PACKAGES].map((name) => ({
+                find: new RegExp(`^${escaped(name)}(/.*)?$`), replacement: `${join(root, 'node_modules', name)}$1` })),
               mainFields: ['module', 'jsnext:main', 'jsnext', 'main'],
             }
             : {}),

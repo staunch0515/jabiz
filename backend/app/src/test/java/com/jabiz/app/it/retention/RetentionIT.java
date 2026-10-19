@@ -169,6 +169,120 @@ class RetentionIT extends SecurityItSupport {
         assertThat(violations(refused).getFirst().get("message").toString()).contains("2026-02-01");
     }
 
+    // ================= the platform's archives (ROADMAP 16v-1 item 8) =================
+
+    @Test
+    void generatedFilesAndDocumentRunsCanBeDeclaredAndAreReported() {
+        Map<String, Object> filesBefore = status("GeneratedFile");
+        Map<String, Object> runsBefore = status("DocumentRun");
+        generatedFile("2010-03-01T00:00:00Z", unique("S"));
+        generatedFile("2025-03-01T00:00:00Z", unique("S"));
+        documentRun("2010-03-01T00:00:00Z", unique("S"));
+        documentRun("2025-03-01T00:00:00Z", unique("S"));
+
+        Map<String, Object> files = status("GeneratedFile");
+        assertThat(files).containsEntry("keep", "P7Y").containsEntry("from", "createdTime")
+            .containsEntry("expiredThrough", "2019-01-31");
+        assertThat(count(files, "entries") - count(filesBefore, "entries")).isEqualTo(2);
+        assertThat(count(files, "expired") - count(filesBefore, "expired")).isEqualTo(1);
+        Map<String, Object> runs = status("DocumentRun");
+        // Ten years after the end of the fiscal year of issue: 2015 and before are past it on 2026-01-31.
+        assertThat(runs).containsEntry("keep", "P10Y").containsEntry("from", "issuedTime")
+            .containsEntry("expiredThrough", "2015-12-31").containsEntry("fromFiscalYearEnd", true);
+        assertThat(count(runs, "entries") - count(runsBefore, "entries")).isEqualTo(2);
+        assertThat(count(runs, "expired") - count(runsBefore, "expired")).isEqualTo(1);
+    }
+
+    @Test
+    void aLegalHoldOnADocumentRunCountsAsHeld() {
+        Map<String, Object> runsBefore = status("DocumentRun");
+        Map<String, Object> filesBefore = status("GeneratedFile");
+        String subject = unique("ORDER");
+        documentRun("2011-06-01T00:00:00Z", subject);
+        documentRun("2011-07-01T00:00:00Z", subject);
+        documentRun("2011-08-01T00:00:00Z", unique("S"));
+        String file = generatedFile("2011-06-01T00:00:00Z", unique("S"));
+        // By subject, and by id.
+        place(Map.of("name", "order dispute", "reason", "claim", "entityType", "DocumentRun", "field", "subjectId",
+            "value", subject));
+        place(Map.of("name", "bank file", "reason", "audit", "entityType", "GeneratedFile", "ids", List.of(file)));
+
+        Map<String, Object> runs = status("DocumentRun");
+        assertThat(count(runs, "expired") - count(runsBefore, "expired")).isEqualTo(3);
+        assertThat(count(runs, "held") - count(runsBefore, "held")).isEqualTo(2);
+        Map<String, Object> files = status("GeneratedFile");
+        assertThat(count(files, "held") - count(filesBefore, "held")).isEqualTo(1);
+        // A hold names fields the archive has, and no others.
+        assertThat(violations(post("/api/processes/LEGAL_HOLD_PLACE/latest", bearer("legal.hold.write"),
+            Map.of("name", "x", "reason", "y", "entityType", "DocumentRun", "field", "title", "value", "v"))
+            .expectStatus().isBadRequest().expectBody(MAP).returnResult().getResponseBody()))
+            .extracting(p -> p.get("field")).contains("field");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void theirDatasetsAreReadOnlyAndCarryNoContentNameOrTitle() {
+        String subject = unique("SUBJ");
+        String file = generatedFile("2025-03-01T00:00:00Z", subject);
+        String run = documentRun("2025-03-01T00:00:00Z", subject);
+        for (var archive : List.of(
+                Map.entry("urn:jabiz:dataset:platform:GeneratedFile", file),
+                Map.entry("urn:jabiz:dataset:platform:DocumentRun", run))) {
+            String path = "/api/datasets/" + archive.getKey();
+            Map<String, Object> page = post(path + "/query", bearer("audit.read"), Map.of("filters", List.of(
+                Map.of("field", "subjectId", "op", "eq", "value", subject)))).expectStatus().isOk().expectBody(MAP)
+                .returnResult().getResponseBody();
+            List<Map<String, Object>> items = (List<Map<String, Object>>) page.get("items");
+            assertThat(items).singleElement().satisfies(item -> {
+                assertThat(String.valueOf(item.get("id"))).isEqualTo(archive.getValue());
+                Map<String, Object> attributes = (Map<String, Object>) item.get("attributes");
+                assertThat(attributes).containsEntry("subjectId", subject)
+                    .doesNotContainKeys("content", "pdf", "fileName", "title", "params", "scope", "documentNo",
+                        "permissions", "layoutSource");
+                assertThat(String.valueOf(attributes)).doesNotContain("secret-name.csv", "Secret title",
+                    "secret-param");
+            });
+            // audit.read, and nothing less.
+            post(path + "/query", bearer("retention.read"), Map.of("filters", List.of())).expectStatus().isForbidden();
+            // Nothing writes through them, not even an administrator.
+            post(path + "/commit", admin(), Map.of("changes", List.of(Map.of("action", "INSERT", "attributes",
+                Map.of("subjectId", "forged"))))).expectStatus().is4xxClientError();
+        }
+        assertThat(query("SELECT 1 FROM sys_generated_file WHERE subject_id = 'forged'")).isEmpty();
+        assertThat(query("SELECT 1 FROM sys_document_run WHERE subject_id = 'forged'")).isEmpty();
+    }
+
+    /** A kept file, written as {@code FILE_ARCHIVE} writes it; its name and content are what must not show. */
+    private String generatedFile(String createdTime, String subjectId) {
+        String id = java.util.UUID.randomUUID().toString();
+        execute("INSERT INTO sys_generated_file (file_id, file_name, media_type, content, sha256, size, permissions,"
+            + " subject_entity, subject_id, created_by, created_time, process_seq_id, version)"
+            + " VALUES (?::uuid, 'secret-name.csv', 'text/csv', ?, ?, 3, 'it.read', 'ItOrder', ?, 'it-user',"
+            + " ?::timestamptz, ?, 1)", id, new byte[] {1, 2, 3}, "a".repeat(64), subjectId, createdTime, anyOperation());
+        return id;
+    }
+
+    /** An issued document, written as {@code DOCUMENT_ISSUE} writes it; its title, parameters and PDF must not show. */
+    private String documentRun(String issuedTime, String subjectId) {
+        String id = java.util.UUID.randomUUID().toString();
+        execute("INSERT INTO sys_document_run (run_id, layout_id, layout_version, layout_source, template_versions,"
+            + " permissions, scope, subject_entity, subject_id, document_no, title, language, page_size, params, as_of,"
+            + " read_at, known_at, content, content_hash, recomputable, pdf, pdf_hash, pdf_size, page_count, issued_by,"
+            + " issued_time, process_seq_id, version) VALUES (?::uuid, 'it.invoice', ?, 'source', '{}', 'it.read',"
+            + " '{}', 'ItOrder', ?, 'INV-1', 'Secret title', 'en', 'A4', '{\"p\":\"secret-param\"}', NULL,"
+            + " ?::timestamptz, ?::timestamptz, '{}', ?, true, ?, ?, 3, 1, 'it-user', ?::timestamptz, ?, 1)",
+            id, "b".repeat(64), subjectId, issuedTime, issuedTime, "c".repeat(64), new byte[] {4, 5, 6},
+            "d".repeat(64), issuedTime, anyOperation());
+        return id;
+    }
+
+    /** An operation the archived rows belong to, as every row of an archive does. */
+    private Object anyOperation() {
+        record("ARCHIVE", "2026-01-01T00:00:00Z");
+        return query("SELECT process_seq_id FROM op_process ORDER BY process_seq_id DESC LIMIT 1").getFirst()
+            .get("process_seq_id");
+    }
+
     // ================= helpers =================
 
     private String voucher(String voucherDate) {

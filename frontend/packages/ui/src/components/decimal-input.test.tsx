@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
-import { expectAccessible } from '../test/axe'
+import { expectAccessible } from '@jabiz/ui/testing'
 import { acceptsDecimalText, DecimalInput, MoneyInput, normalizeDecimalText } from './decimal-input'
 
 describe('decimal text', () => {

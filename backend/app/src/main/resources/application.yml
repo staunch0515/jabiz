@@ -67,6 +67,12 @@ jabiz:
     bootstrap-admin:
       user-name: ${JABIZ_BOOTSTRAP_ADMIN_USER:}
       password: ${JABIZ_BOOTSTRAP_ADMIN_PASSWORD:}
+  mail:
+    # The unsubscribe page of notifications declared for the portal (commerce.order-shipped), under its app-path: the
+    # portal mounts @jabiz/ui's MailUnsubscribe there, so customers never land in the administration (decision D52).
+    # Notifications for every entry keep the application's page, jabiz.mail.unsubscribe-path (/mail/unsubscribe).
+    unsubscribe-paths:
+      portal: mail/unsubscribe
   files:
     # Where uploaded files are kept (docs/design/14-files.md section 6). No default: startup fails without it, since the
     # application declares file policies. A directory of this host (a volume in containers); single instance only.

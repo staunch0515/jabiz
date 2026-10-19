@@ -1,5 +1,6 @@
 package com.jabiz.runtime.external;
 
+import com.jabiz.external.ExternalJobCancellation;
 import com.jabiz.external.ExternalJobCompletion;
 import com.jabiz.external.ExternalJobContext;
 import com.jabiz.external.ExternalJobFailure;
@@ -71,6 +72,10 @@ class ExternalJobChecksTest {
         beans.registerBean("public", ProcessDefinition.class, () -> process("PUBLIC", ExternalJobCompletion.class,
             false));
         beans.registerBean("wrong", ProcessDefinition.class, () -> process("WRONG", In.class, true));
+        beans.registerBean("stopped", ProcessDefinition.class, () -> process("STOPPED", ExternalJobCancellation.class,
+            true));
+        beans.registerBean("publicStopped", ProcessDefinition.class, () -> process("PUBLIC_STOPPED",
+            ExternalJobCancellation.class, false));
         beans.registerBean("image", FilePolicy.class, () -> FilePolicy.define("it.image").allow(MediaTypes.PNG)
             .maxBytes(FilePolicy.MB).permissions("it.upload", "it.read").build());
         beans.refresh();
@@ -148,5 +153,25 @@ class ExternalJobChecksTest {
         assertThat(registry.names()).containsExactly("it.good");
         assertThat(registry.declared()).hasSize(2);
         assertThat(registry.toString()).contains("it.good");
+    }
+
+    /** A cancellation process (decision D52 item 2) exists, is internal() and takes ExternalJobCancellation. */
+    @Test
+    void aCancellationProcessIsCheckedLikeTheOthers() {
+        ExternalJobType<In, Out> good = ExternalJobType.define("it.stops", In.class, Out.class, t -> t
+            .handler(Handler.class).onCompleted("DONE").onFailed("FAILED").onCancelled("STOPPED"));
+        assertThat(problems(good)).isEmpty();
+        ExternalJobType<In, Out> open = ExternalJobType.define("it.open", In.class, Out.class, t -> t
+            .handler(Handler.class).onCompleted("DONE").onFailed("FAILED").onCancelled("PUBLIC_STOPPED"));
+        ExternalJobType<In, Out> wrong = ExternalJobType.define("it.wrong", In.class, Out.class, t -> t
+            .handler(Handler.class).onCompleted("DONE").onFailed("FAILED").onCancelled("FAILED"));
+        ExternalJobType<In, Out> ghost = ExternalJobType.define("it.ghost", In.class, Out.class, t -> t
+            .handler(Handler.class).onCompleted("DONE").onFailed("FAILED").onCancelled("GHOST"));
+        assertThat(problems(open, wrong, ghost)).containsExactly(
+            "EXTERNAL | job it.open | onCancelled: process PUBLIC_STOPPED must be internal(); anyone could run it "
+                + "with a made-up result otherwise",
+            "EXTERNAL | job it.wrong | onCancelled: process FAILED must take ExternalJobCancellation, not "
+                + ExternalJobFailure.class.getName(),
+            "EXTERNAL | job it.ghost | onCancelled: no process GHOST is registered");
     }
 }

@@ -163,6 +163,13 @@ const en = {
       OTHER: 'an unknown system',
     },
   },
+  unsubscribe: {
+    title: 'Unsubscribe',
+    working: 'Turning these notifications off…',
+    done: 'You will no longer receive these notifications. You can turn them on again in your account settings.',
+    invalid: 'This unsubscribe link is invalid.',
+    failed: 'Something went wrong. Please try the link again later.',
+  },
   mailPreferences: {
     title: 'E-mail',
     hint: 'Choose which notifications you receive by e-mail, and in which language. Mail about your account itself, such as verifying your address or resetting your password, is always sent.',
@@ -361,6 +368,13 @@ const zh: Messages = {
       OTHER: '未知系统',
     },
   },
+  unsubscribe: {
+    title: '退订',
+    working: '正在退订这类通知…',
+    done: '您将不再收到这类通知。可以在账户设置中重新开启。',
+    invalid: '此退订链接无效。',
+    failed: '出现问题，请稍后再次打开链接。',
+  },
   mailPreferences: {
     title: '邮件',
     hint: '选择要通过邮件接收的通知以及邮件的语言。与账号本身有关的邮件（如验证邮箱、重置密码）总会发送。',
@@ -556,6 +570,13 @@ const ja: Messages = {
       LINUX: 'Linux',
       OTHER: '不明なシステム',
     },
+  },
+  unsubscribe: {
+    title: '配信停止',
+    working: 'このお知らせの配信を停止しています…',
+    done: 'このお知らせは今後届きません。アカウント設定から再開できます。',
+    invalid: 'この配信停止リンクは無効です。',
+    failed: '問題が発生しました。しばらくしてからもう一度リンクを開いてください。',
   },
   mailPreferences: {
     title: 'メール',

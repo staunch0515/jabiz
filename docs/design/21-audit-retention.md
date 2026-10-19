@@ -172,6 +172,12 @@
   建议输入只放编号与必要的文字，由处理器自己需要的数据从输入得来，而不是把整条记录放进去。
   输入上限可按类型提到 1 MiB（D50 第 1 条）：放进输入的资料原文（文章正文等）因此在业务数据之外**永久多存一份**，业务数据删除后它仍在作业中（D50 第 5 条）。
   文件输入（D50 第 2 条）只在 `sys_external_job_file` 记编号、策略、大小与摘要，内容只在 `sys_file`，随文件的删除而删除；较大或含个人信息的资料宜以文件传递。
+- **平台的存档**（16v-1，D52 实现说明第 8 项）：只读平台实体 `GeneratedFile`（`sys_generated_file`，14 §10）与 `DocumentRun`（`sys_document_run`，22 §4.2）
+  使应用能为它们声明保留期：`RetentionPolicy.of("GeneratedFile").keep(…).from("createdTime")`、`RetentionPolicy.of("DocumentRun").keep(…).from("issuedTime")`。
+  它们的字段只有编号、类型（`mediaType`）或版式（`layoutId`）、大小、摘要、`subjectEntity` / `subjectId`、创建人或签发人、时间与 `processSeqId`——
+  **没有内容、PDF、文件名、标题、参数与范围**（文件名与标题可能含个人信息，内容只经下载与重印接口读取，它们检查存档自己的权限并留下记录）。
+  数据视图只读，读取需要 `audit.read`（谁签发或存档了什么、何时，与审计同级；写权限 `audit.archive.write` 无人持有）。到期的行进入到期报告，
+  可按编号或按对象（`field: subjectId`）放置法律保全。两张表本来就只追加，删除拦截不变；到期后的物理删除不做（与入站事件、外部作业相同）。
 
 ### 3.2 删除拦截
 

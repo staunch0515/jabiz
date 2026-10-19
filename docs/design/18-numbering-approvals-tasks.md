@@ -346,6 +346,11 @@ HTML 部分转义全部文本与正文中的原始 HTML，纯文本部分为原�
   只能由该用户本人运行；只接受 NOTIFICATION 模板）。
 - `{unsubscribeUrl}` = `jabiz.mail.base-url` + `jabiz.mail.unsubscribe-path`（缺省 `/mail/unsubscribe`，通用后台的 `MailUnsubscribePage`，无需登录）+ `?token=`；令牌为 `JwtService` 的
   `jabiz-unsub+jwt`（用户 + 模板，签名，无过期；轮换 `JABIZ_JWT_SECRET` 使旧链接失效），不能代替访问令牌或挑战令牌，反之亦然。
+- **按入口的退订页**（16v-1，决策 D52 第 3 条）：`jabiz.mail.unsubscribe-paths.<入口>` 是相对该入口 `app-path` 的路径（如 `portal: mail/unsubscribe`）。
+  声明了 `.entries(...)` 的模板，`{unsubscribeUrl}` 指向其中第一个配置了路径的入口的页（`{entryUrl.<入口>}` + 路径 + `?token=`）；未声明入口的模板与没有配置的入口照旧用
+  `jabiz.mail.unsubscribe-path`。令牌与接口不变，退订不看入口；通用后台的页保留，之前发出的链接照常有效。页面是 `@jabiz/ui` 的 `MailUnsubscribe`（12 §12），
+  应用在配置的路径挂载它（示范门户：`/portal/mail/unsubscribe`）。启动检查 `MAIL`（错误）：路径是相对路径（字母、数字与 `. _ ~ -` 组成的段，不含 `..`、协议与主机）、
+  入口可用、`app-path` 加路径位于本应用提供的某个 SPA（`jabiz.web.spa`）之下。链接只由配置组成，从不取请求中的值。
 - `POST /api/auth/mail/unsubscribe {token}`：匿名（令牌即凭证）、幂等，204；篡改或其他类型的令牌、非 NOTIFICATION 模板 → 422 `TOKEN_INVALID`。
 - 登录用户：`GET /api/auth/mail/preferences`（NOTIFICATION 模板及是否接收）、`POST /api/auth/mail/preferences {template, subscribed}`。
 

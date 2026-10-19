@@ -1,5 +1,6 @@
 package com.jabiz.runtime.external;
 
+import com.jabiz.external.ExternalJobCancellation;
 import com.jabiz.external.ExternalJobCompletion;
 import com.jabiz.external.ExternalJobFailure;
 import com.jabiz.external.ExternalJobType;
@@ -23,9 +24,9 @@ import java.util.Set;
  * Startup self-check {@code EXTERNAL} for external job types (decision D38 item 3), every problem at once: each type
  * has a valid, unique name and sound limits ({@link ExternalJobType#problems()}), exactly one bean of its handler, only
  * declared services whose request timeout is shorter than the attempt's, file policies that exist and take the
- * output files' size (decision D50), and completion and failure processes that
- * exist, are {@code internal()} (anyone could fake a
- * result otherwise) and take {@link ExternalJobCompletion} and {@link ExternalJobFailure}. That a step starts a
+ * output files' size (decision D50), and completion, failure and (when declared, decision D52 item 2) cancellation
+ * processes that exist, are {@code internal()} (anyone could fake a result otherwise) and take
+ * {@link ExternalJobCompletion}, {@link ExternalJobFailure} and {@link ExternalJobCancellation}. That a step starts a
  * declared type is the process check's ({@code StartExternalJob} is a checked step).
  */
 @Component
@@ -88,6 +89,7 @@ public class ExternalJobChecks implements PlatformCheck {
             files(type, at, problems);
             callback(type.onCompleted(), ExternalJobCompletion.class, "onCompleted", at, problems);
             callback(type.onFailed(), ExternalJobFailure.class, "onFailed", at, problems);
+            callback(type.onCancelled(), ExternalJobCancellation.class, "onCancelled", at, problems);
         }
         return problems;
     }

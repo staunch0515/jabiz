@@ -2,7 +2,7 @@ import { ApiError, configureClient, i18n, session, type SessionInfo, type Sessio
 import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { expectAccessible } from '../test/axe'
+import { expectAccessible } from '@jabiz/ui/testing'
 import { effectiveMinutes, SessionList, sessionDeviceName } from './index'
 
 const laptop: SessionInfo = {

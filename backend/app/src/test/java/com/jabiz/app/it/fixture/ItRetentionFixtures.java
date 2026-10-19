@@ -115,5 +115,16 @@ public final class ItRetentionFixtures extends BaseEntityDefinitions {
         RetentionPolicy itDocumentRetention() {
             return RetentionPolicy.of("ItDocument").keep(Period.ofYears(1)).from("issuedTime");
         }
+
+        /** The platform's archives (ROADMAP 16v-1 item 8): generated files kept 7 years, issued documents 10. */
+        @Bean
+        RetentionPolicy generatedFileRetention() {
+            return RetentionPolicy.of("GeneratedFile").keep(Period.ofYears(7)).from("createdTime");
+        }
+
+        @Bean
+        RetentionPolicy documentRunRetention() {
+            return RetentionPolicy.of("DocumentRun").keep(Period.ofYears(10)).from("issuedTime").afterFiscalYearEnd();
+        }
     }
 }

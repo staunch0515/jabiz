@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import i18n from '../i18n'
 import type { FieldMeta, Violation } from '../meta/types'
-import { expectAccessible } from '../test/axe'
+import { expectAccessible } from '@jabiz/ui/testing'
 import { countries, field } from '../test/fixtures'
 import EntityField from './EntityField'
 
