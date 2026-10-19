@@ -232,6 +232,11 @@ tools/quizbuks/local-demo.sh status | logs | seed
   封面图与上传的图一样存于 `JABIZ_FILES_LOCAL_ROOT`（未选的候选在 24 小时后由清扫删除）；PDF 资料由作业执行器在尝试期间复制到同一卷的上传区（平台检查可用空间，`jabiz.external-jobs.files.min-free-disk`）。每实例的输出预算（`jabiz.external-jobs.files.output-budget`，缺省 256 MB）足够封面作业（每次尝试至多 3 × 4 MiB）。
 - 本机开发：`java tools/quizbuks/claude-stub/ClaudeStub.java`（端口 8094，`dev` 配置已指向它），它只按请求生成假的题目，从不访问网络；标题含 `[refuse]` 的模版被拒答，含 `[busy]` 的得到 529。
 - 发送给提供方的只有商家自己的模版内容（标题、简介、所选资料、已有题干），`metadata.user_id` 是商家编号的 HMAC（以 `JABIZ_INTEGRITY_KEY` 派生的密钥），不含答题人的任何数据与商家的身份信息。
+- **暂停与紧急停止（平台 16v-2 之后）**：两种作业类型声明 `enabledBy("qb.ai.enabled")`（平台 D52 第 4 条）。以四眼关闭开关不但拒绝新请求，还使每个实例在约一个轮询间隔（缺省 1 秒）内
+  不再领取 AI 作业：排队与等待重试的作业原地等待（不调用提供方、不用掉尝试、仍计入商家的未结束上限，商家看到它在排队并可取消），正在运行的尝试照常结束；重新打开即恢复。
+  事故时按快慢：Anthropic Console 吊销密钥 → 四眼关闭 `qb.ai.enabled` → 逐个取消作业（`docs/quizbuks/operations.md` §7.8）。此前的本实例开关 `QB_AI_HALTED` 已删去，部署时从环境中去掉（留着也不再起作用）。
+  **升级**：不需要迁移或新的 `QB_SETUP` 提案。已开启 AI 的安装中参数已是 `true`，作业照常；还没有发布 `QB_SETUP` 的 `qb.ai.enabled` 提案的安装没有该参数，
+  启动检查 `EXTERNAL` 对两种作业类型各报一条警告（参数缺失即暂停；那时请求本来也被拒），发布提案（`false`）后消失。
 
 ## 环境变量
 
@@ -292,6 +297,5 @@ tools/quizbuks/local-demo.sh status | logs | seed
 | `QB_ANTHROPIC_API_URL` / `QB_ANTHROPIC_API_HOSTS` | 否 | Anthropic API 的地址与允许的主机，缺省 `https://api.anthropic.com` / `api.anthropic.com`（只在开发与 e2e 中改指本地桩 `tools/quizbuks/claude-stub`） |
 | `QB_AI_REQUEST_TIMEOUT` / `QB_AI_MAX_CONCURRENCY` | 否 | 等 Claude 整个回答的最长时间（缺省与上限 `PT2M`；没有回答的尝试按预估计入用量）；全实例同时运行的 AI 作业数，**每种作业各自计**（缺省 4：题目与封面合计至多 8 个同时的调用）。带 PDF 的题目作业每个约占 PDF 合计的 5–6 倍堆（20 MiB 时约 120 MiB）：JVM 堆至少给"512 MiB + 120 MiB × 并发"（缺省约 1 GiB 以上），内存紧张时降低并发或 `QB_AI_PDF_MAX_BYTES` |
 | `QB_AI_PDF_MAX_BYTES` / `QB_AI_PDF_MAX_PAGES` | 否 | Q8b：PDF 资料作为文件本身发送给 Claude，每个至多多少字节（缺省 10485760，上限 20 MiB，一次请求合计也至多 20 MiB）、一次请求按至多多少页预留（缺省 100；须放得进模型的上下文窗口，至多约 179 页，否则启动检查 `AiPdfLimitsCheck` 拒绝启动）。服务器不解析 PDF：作业在付费调用前以提供方免费的 `count_tokens` 数同一请求的输入，超过预留（页数上限 × 每页 5 000 加文字）即 `QB_AI_PDF_TOO_LONG`、不发送不计费；请求按页数上限预留月 Token（3 次尝试），降低页数上限可同时进行更多 PDF 请求（`docs/quizbuks/operations.md` §7.8） |
-| `QB_AI_HALTED` | 否 | `true` 时本实例的每次 AI 尝试不调用提供方即失败（事故时的停止，需重启；更快的是在 Anthropic Console 吊销密钥，`docs/quizbuks/operations.md` §7.8） |
 
 可观测性（OTLP）与单点登录的变量同平台：见 `docs/guide/quickstart.md`。
