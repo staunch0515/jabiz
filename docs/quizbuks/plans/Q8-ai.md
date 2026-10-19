@@ -426,6 +426,14 @@
   改 `AiCostControlIT.switchingOffStopsNewRequestsAndAnOperatorStopsTheQueuedOnes`（运维停止排队的作业不计费）、`AiPdfIT.anOperatorsStopOfAQueuedPdfJobIsChargedNothing`（不计数、不计费、预留释放）、`AiQuestionsIT.discardAndCancelEndTheJob`（提供方不被调用、用量不变）；
   `AiPdfsTest.aCancelledJobIsPricedFromWhatItsAttemptsRecorded` 代替 `stoppedUsage` 的单元测试；`ProcessAccessIT` 与 `MessagesTest` 加新流程。
 - 剩余：实例在尝试中途停机而没记下用量时，那次尝试计为零（失败的作业同样如此）。
+- 评审之后（同一分支）：
+  - M1：收据的 PDF 存档（平台的 `DocumentRun`，`DOCUMENT_ISSUE`）同样保留 10 年，自 `issuedTime` 的会计年度末起算（`TopUpConfig`，`RetentionIT`）。
+  - M2：`AiCancelIT` 加两条资金路径：第一次尝试没有回答（按 `ClaudeApi.unanswered` 计入）后在等待重试时取消（只计那一次、不再调用提供方、一行用量）；平台作业已成功而完成流程尚未投递时取消（本地仍为 CANCELLED、只计一次、没有候选，封面作业的文件从不被引用）。
+  - L1：商家后台取消后的提示改为"已开始的按停止时用掉的计入，否则不计费"（三语）。
+  - L3：取消的作业不再计为失败（`addUsage(…, failed = false)`；后台的失败率 = 失败数 / 作业数，不需改表）。
+  - L2：operations §7.8 写明只有崩溃或卡住的实例（租约过期、未记用量）那次尝试计为零，提供方的支出上限是最后的防线。
+  - 细节：删去 `params()` 之上残留的 `stoppedUsage` 注释；`platformJob` 对缺少的 `externalJobId` 明确报错。
+    `FILE_ARCHIVE` 的 `subjectEntity` / `subjectId` 没有加：存档时导出记录还没有编号（导出在最后一步才写入），以凭证号代替编号会使"按对象保全"的含义不一致。
 - 同一同步分支的其他采用：退订页按入口（`jabiz.mail.unsubscribe-paths.sponsor` / `.app`，两个 SPA 挂载 `MailUnsubscribe`）、`@jabiz/ui/testing(/playwright)` 代替复制的 axe 辅助函数（后台扩展的测试暂留副本：平台的 `tsconfig.extension.json` 没有映射 `@jabiz/ui/testing`）、导出存档的 `GeneratedFile` 保留 10 年。
   合并平台后场景回放的设置编号没有变化，快照不需更新。
 - 验证（2026-10-19，本机 PostgreSQL 16，自己的库与端口）：`./gradlew :quizbuks:check :quizbuks:bootJar` 通过（811 个测试、0 失败，场景 10 个；`platformCheck` 0 错误）；
