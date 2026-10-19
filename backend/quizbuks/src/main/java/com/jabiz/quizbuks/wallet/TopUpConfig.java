@@ -194,6 +194,15 @@ class TopUpConfig {
         return RetentionPolicy.of(TopUpReceipts.RECEIPT).keep(RETENTION).from("issuedAt").afterFiscalYearEnd();
     }
 
+    /**
+     * The receipts' PDFs as issued (DOCUMENT_ISSUE keeps them in the platform's DocumentRun, platform 16v-1 item 8),
+     * as long as the receipts: QuizBuks issues no other document, so the platform's entity as a whole is kept so.
+     */
+    @Bean
+    RetentionPolicy qbDocumentRunRetention() {
+        return RetentionPolicy.of("DocumentRun").keep(RETENTION).from("issuedTime").afterFiscalYearEnd();
+    }
+
     // ---- jobs of Stripe --------------------------------------------------------------------------------------------
 
     @Bean

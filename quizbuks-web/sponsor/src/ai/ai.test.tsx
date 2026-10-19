@@ -1,10 +1,10 @@
 import { configureClient, session } from '@jabiz/client'
+import { expectAccessible } from '@jabiz/ui/testing'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ReactNode } from 'react'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import { axe } from 'vitest-axe'
 import type { Material, Quiz } from '../content/api'
 import { EditingProvider, type Editing } from '../content/editing'
 import '../messages'
@@ -117,18 +117,6 @@ function wrap(node: ReactNode, edit: Editing = editing()) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(<QueryClientProvider client={client}><EditingProvider value={edit}>{node}</EditingProvider>
   </QueryClientProvider>)
-}
-
-async function noAxeViolations() {
-  for (const dark of [false, true]) {
-    document.documentElement.classList.toggle('dark', dark)
-    const results = await axe(document.body, {
-      runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'] },
-      rules: { 'color-contrast': { enabled: false } },
-    })
-    expect(results.violations.map((v) => v.id), dark ? 'dark' : 'light').toEqual([])
-  }
-  document.documentElement.classList.remove('dark')
 }
 
 beforeAll(() => configureClient({ entry: 'sponsor' }))
@@ -248,7 +236,7 @@ describe('the AI questions panel', () => {
     expect(within(cards[1]).getByTestId('ai-candidate-stem')).toHaveValue('<b>Bold</b> question?')
     expect(review.querySelector('b')).toBeNull()
     expect(within(review).getByTestId('ai-accept')).toBeDisabled()
-    await noAxeViolations()
+    await expectAccessible()
     const stem = within(cards[0]).getByTestId('ai-candidate-stem')
     await user.clear(stem)
     await user.type(stem, 'Which city is the capital of France?')
@@ -287,7 +275,7 @@ describe('the AI questions panel', () => {
     expect(await screen.findByTestId('ai-expired')).toHaveTextContent('not reviewed in time')
     expect(await screen.findByTestId('ai-off')).toBeInTheDocument()
     expect(screen.queryByTestId('ai-generate')).toBeNull()
-    await noAxeViolations()
+    await expectAccessible()
   })
 
   it('reads the stored candidates defensively', () => {
@@ -317,7 +305,7 @@ describe('the AI cover panel', () => {
     const dialog = await screen.findByTestId('ai-cover-dialog')
     expect(within(dialog).getByTestId('ai-cover-sent')).toHaveTextContent('title and introduction')
     await within(dialog).findByTestId('ai-notice')
-    await noAxeViolations()
+    await expectAccessible()
     await user.click(within(dialog).getByTestId('ai-cover-submit'))
     expect(await within(dialog).findByTestId('ai-cover-local-problem')).toHaveTextContent('Agree to the AI notice')
     expect(calls.of('/api/processes/QB_AI_COVER_REQUEST/latest')).toEqual([])
@@ -345,7 +333,7 @@ describe('the AI cover panel', () => {
     expect(candidates[0]).toHaveTextContent('Rivers <b>1</b>')
     expect(choice.querySelector('b')).toBeNull()
     expect(within(choice).getByTestId('ai-cover-apply')).toBeDisabled()
-    await noAxeViolations()
+    await expectAccessible()
     // A click on the picture picks it, as its radio does.
     await user.click(within(candidates[2]).getByTestId('ai-cover-picture'))
     expect(within(candidates[2]).getByTestId('ai-cover-pick')).toBeChecked()
@@ -399,7 +387,7 @@ describe('the dashboard\'s AI usage', () => {
     expect(metric).toHaveTextContent('15,400 tokens')
     expect(screen.getByTestId('metric-ai-detail')).toHaveTextContent('12,000 in, 3,400 out · 3 requests')
     expect(metric).toHaveTextContent('1,984,600 left until')
-    await noAxeViolations()
+    await expectAccessible()
   })
 
   it('says when AI is off', async () => {

@@ -4,7 +4,7 @@ import com.jabiz.context.RequestContext;
 import com.jabiz.dataset.DatasetDefinition;
 import com.jabiz.dictionary.StaticDictionary;
 import com.jabiz.entity.EntityDefinition;
-import com.jabiz.event.EventSubscription;
+import com.jabiz.external.ExternalJobCancellation;
 import com.jabiz.external.ExternalJobCompletion;
 import com.jabiz.external.ExternalJobFailure;
 import com.jabiz.external.ExternalJobType;
@@ -16,7 +16,6 @@ import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.quizbuks.content.EditOutput;
-import com.jabiz.runtime.external.ExternalJobRecorder;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -233,27 +232,24 @@ public class AiConfig {
         return AiProcesses.expire();
     }
 
-    @Bean
-    ProcessDefinition<AiProcesses.StoppedInput, AiProcesses.JobOutput, ProcessContext> qbAiJobStopped() {
-        return AiProcesses.stopped(zone);
-    }
-
     /**
-     * Every external job's end, as the platform announces it: a job of {@value AiQuestionsJob#TYPE} or
-     * {@value AiCoverJob#TYPE} cancelled at the
-     * platform ({@code EXTERNAL_JOB_CANCEL}, an operator's stop, operations.md section 7.8) calls neither outcome
-     * process, so this one closes it. The others are ignored.
+     * Both job types' {@code onCancelled} (platform decision D52 item 2): a job cancelled by its sponsor
+     * ({@value AiProcesses#CANCEL}) or by an operator at the platform ({@code EXTERNAL_JOB_CANCEL}, operations.md
+     * section 7.8) is closed and charged what its attempts used, once it has ended.
      */
     @Bean
-    EventSubscription<AiProcesses.StoppedInput> qbAiJobStoppedSubscription(
-        ProcessDefinition<AiProcesses.StoppedInput, AiProcesses.JobOutput, ProcessContext> qbAiJobStopped) {
-        return EventSubscription.of("qb.ai-job-stopped", ExternalJobRecorder.FINISHED_EVENT, qbAiJobStopped,
-            event -> new AiProcesses.StoppedInput(text(event.payload().get("jobId")),
-                text(event.payload().get("jobType")), text(event.payload().get("status")), event.createdTime()));
+    ProcessDefinition<ExternalJobCancellation, AiProcesses.JobOutput, ProcessContext> qbAiJobCancelled() {
+        return AiProcesses.cancelled(zone);
     }
 
-    private static String text(Object value) {
-        return value == null ? null : String.valueOf(value);
+    @Bean
+    ProcessDefinition<AiProcesses.PlatformJobRef, AiProcesses.JobOutput, ProcessContext> qbAiCancelQuestionsJob() {
+        return AiProcesses.cancelPlatformJob(AiProcesses.CANCEL_QUESTIONS_JOB, AiQuestionsJob.TYPE);
+    }
+
+    @Bean
+    ProcessDefinition<AiProcesses.PlatformJobRef, AiProcesses.JobOutput, ProcessContext> qbAiCancelCoverJob() {
+        return AiProcesses.cancelPlatformJob(AiProcesses.CANCEL_COVER_JOB, AiCoverJob.TYPE);
     }
 
     /**

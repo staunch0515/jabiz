@@ -262,13 +262,12 @@ class AiPdfIT extends AiItSupport {
     }
 
     @Test
-    void anOperatorsStopOfAPdfJobIsChargedItsReservedDocuments() {
+    void anOperatorsStopOfAQueuedPdfJobIsChargedNothing() {
         String sponsor = newSponsor("ai-pdf-stop-" + UUID.randomUUID());
         String token = sponsorFull(sponsor);
         List<String> quiz = quizWithPdf(token, pdf(1, 1));
         Map<String, Object> queued = request(token, quiz.get(0), List.of(quiz.get(2)), 1);
-        Map<String, Object> asked = job(queued.get("aiJobId"));
-        long reserved = AiLimits.reservedInput(number(asked.get("input_bytes")), MAX_PAGES);
+        int counts = CLAUDE.requests(COUNT_TOKENS).size();
         String operator = TestTokens.bearer(tokens, "ai-operator", "external-job.cancel");
         client.post().uri("/api/external-jobs/" + queued.get("externalJobId") + "/cancel")
             .header("Authorization", operator).contentType(MediaType.APPLICATION_JSON).bodyValue(Map.of())
@@ -276,14 +275,12 @@ class AiPdfIT extends AiItSupport {
         runJobs();
         Map<String, Object> stopped = job(queued.get("aiJobId"));
         assertThat(stopped).containsEntry("failure_code", AiCodes.STOPPED);
-        // The input as reserved, documents included, every attempt; the rest is the output asked for.
-        assertThat(number(stopped.get("input_tokens"))).isEqualTo(AiQuestionsJob.ATTEMPTS * reserved);
-        assertThat(number(stopped.get("output_tokens"))).isEqualTo(AiQuestionsJob.ATTEMPTS
-            * (long) ClaudeApi.maxTokens(1));
-        // Priced as input at the input price, not at the output's.
-        java.math.BigDecimal expected = java.math.BigDecimal.valueOf(4L * AiQuestionsJob.ATTEMPTS * reserved
-            + 20L * AiQuestionsJob.ATTEMPTS * ClaudeApi.maxTokens(1)).divide(java.math.BigDecimal.valueOf(1_000_000));
-        assertThat((java.math.BigDecimal) stopped.get("cost_usd")).isEqualByComparingTo(expected);
+        assertThat(stopped.get("finished_at")).isNotNull();
+        // No attempt ran (not even the free count): its reservation of the documents is released, nothing charged.
+        assertThat(CLAUDE.requests(COUNT_TOKENS)).hasSize(counts);
+        assertThat(number(stopped.get("input_tokens")) + number(stopped.get("output_tokens"))).isZero();
+        assertThat((java.math.BigDecimal) stopped.get("cost_usd")).isEqualByComparingTo(java.math.BigDecimal.ZERO);
+        assertThat(usage(sponsor)).isEmpty();
     }
 
     @Test

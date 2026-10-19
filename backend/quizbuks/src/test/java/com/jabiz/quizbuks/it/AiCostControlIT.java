@@ -182,11 +182,9 @@ class AiCostControlIT extends AiItSupport {
             Map<String, Object> stopped = job(queued.get("aiJobId"));
             assertThat(stopped).containsEntry("status", QbAi.CANCELLED).containsEntry("failure_code", AiCodes.STOPPED);
             assertThat(stopped.get("finished_at")).isNotNull();
-            // Nobody knows what it used: charged its whole estimate, and no longer reserved.
-            long estimate = number(stopped.get("estimated_tokens"));
-            assertThat(number(stopped.get("input_tokens")) + number(stopped.get("output_tokens"))).isEqualTo(estimate);
-            assertThat(tokens(usage(sponsor))).isEqualTo(estimate);
-            assertThat(number(usage(sponsor).get("failed_jobs"))).isEqualTo(1);
+            // Closed through the job types' onCancelled: no attempt ran, so nothing was used, charged or reserved.
+            assertThat(number(stopped.get("input_tokens")) + number(stopped.get("output_tokens"))).isZero();
+            assertThat(usage(sponsor)).isEmpty();
         } finally {
             param(QbParams.AI_ENABLED, "true");
         }

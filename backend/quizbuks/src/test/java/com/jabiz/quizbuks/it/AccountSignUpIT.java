@@ -207,8 +207,9 @@ class AccountSignUpIT extends AccountItSupport {
             "preferredCurrency", "JPY"))).containsEntry("created", true);
         deliverEvents();
         assertThat(received(email)).extracting(AccountSignUpIT::subject).contains("Welcome, Tom");
+        // The welcome mail is the app's (entries("app")): it unsubscribes on the app's own page (decision D52).
         assertThat(received(email).getLast()).satisfies(mail -> assertThat(text(mail))
-            .contains("https://quizbuks.example.com/admin/mail/unsubscribe"));
+            .contains("https://quizbuks.example.com/mail/unsubscribe?token=").doesNotContain("/admin/"));
         // By the verified address as well as by the user name.
         sessionAt(email.toUpperCase(), "app");
     }

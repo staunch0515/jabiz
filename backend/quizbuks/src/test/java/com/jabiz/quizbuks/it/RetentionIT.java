@@ -39,6 +39,10 @@ class RetentionIT extends PayoutItSupport {
             "QbJournalExport periodTo P10Y true",
             "QbJournalExportPart createdTime P10Y true",
             "QbJournalExportConfirmation createdTime P10Y true",
+            // The export's archived files (FILE_ARCHIVE), QuizBuks's only generated files (platform 16v-1).
+            "GeneratedFile createdTime P10Y true",
+            // The receipts' archived PDFs (DOCUMENT_ISSUE), QuizBuks's only documents (platform 16v-1).
+            "DocumentRun issuedTime P10Y true",
             "QbTopUp paidAt P10Y true",
             "QbTopUpReceipt issuedAt P10Y true",
             "InboundEvent receivedTime P10Y true");
@@ -63,12 +67,14 @@ class RetentionIT extends PayoutItSupport {
             assertThat(kept.get("expiredThrough")).isEqualTo(LocalDate.of(paidOn.getYear() - 1, 12, 31).toString());
             assertThat(((Number) kept.get("expired")).longValue()).isZero();
             assertThat(((Number) policy("QbTopUpReceipt").get("expired")).longValue()).isZero();
+            assertThat(((Number) policy("DocumentRun").get("expired")).longValue()).isZero();
 
             clock.set(due.atTime(0, 0).toInstant(ZoneOffset.UTC));
             Map<String, Object> past = policy("QbTopUp");
             assertThat(past.get("expiredThrough")).isEqualTo(LocalDate.of(paidOn.getYear(), 12, 31).toString());
             assertThat(((Number) past.get("expired")).longValue()).isPositive();
             assertThat(((Number) policy("QbTopUpReceipt").get("expired")).longValue()).isPositive();
+            assertThat(((Number) policy("DocumentRun").get("expired")).longValue()).isPositive();
             assertThat(((Number) policy("InboundEvent").get("expired")).longValue()).isPositive();
         } finally {
             clock.set(before);

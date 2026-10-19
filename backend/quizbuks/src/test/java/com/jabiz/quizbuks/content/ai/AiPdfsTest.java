@@ -117,18 +117,19 @@ class AiPdfsTest {
     }
 
     @Test
-    void aStoppedJobIsPricedPerAttemptAtTheLongPromptRateWhenItsReservationIsLong() {
-        // 150,000 reserved per attempt for the smallest model: every attempt above 100,000, so the long rate.
-        ClaudeApi.Usage long_ = AiProcesses.stoppedUsage(ClaudeService.HAIKU, 500_000, 150_000);
-        assertThat(long_.inputTokens()).isEqualTo(450_000);
-        assertThat(long_.longPromptInputTokens()).isEqualTo(450_000);
-        assertThat(long_.longPromptOutputTokens()).isEqualTo(50_000);
-        assertThat(AiCost.of(ClaudeService.HAIKU, null, long_, null)).isEqualByComparingTo("0.350000");
-        // 90,000 an attempt: the short rate, although the job's total is above 100,000.
-        ClaudeApi.Usage short_ = AiProcesses.stoppedUsage(ClaudeService.HAIKU, 300_000, 90_000);
-        assertThat(short_.longPromptInputTokens()).isZero();
-        // The larger models have one rate.
-        assertThat(AiProcesses.stoppedUsage(ClaudeService.OPUS, 500_000, 150_000).longPromptInputTokens()).isZero();
+    void aCancelledJobIsPricedFromWhatItsAttemptsRecorded() {
+        // As ClaudeCalls.record writes a call of the smallest model above 100,000 input tokens: all at the long rate.
+        ClaudeApi.Usage long_ = AiProcesses.usage(java.util.Map.of(AiQuestionsJob.INPUT_TOKENS, 150_000L,
+            AiQuestionsJob.OUTPUT_TOKENS, 10_000L, AiQuestionsJob.LONG_INPUT_TOKENS, 150_000L,
+            AiQuestionsJob.LONG_OUTPUT_TOKENS, 10_000L));
+        assertThat(AiCost.of(ClaudeService.HAIKU, null, long_, null)).isEqualByComparingTo("0.100000");
+        // The provider's fallback (the answer that would name it was dropped): at the fallback models' price.
+        ClaudeApi.Usage fellBack = AiProcesses.usage(java.util.Map.of(AiQuestionsJob.INPUT_TOKENS, 2_000L,
+            AiQuestionsJob.OUTPUT_TOKENS, 2_000L, AiQuestionsJob.FALLBACK_INPUT_TOKENS, 1_000L,
+            AiQuestionsJob.FALLBACK_OUTPUT_TOKENS, 1_000L));
+        assertThat(AiCost.of(ClaudeService.OPUS, null, fellBack, null)).isEqualByComparingTo("0.054000");
+        // Nothing recorded (cancelled before an attempt ran): nothing.
+        assertThat(AiCost.of(ClaudeService.OPUS, null, AiProcesses.usage(java.util.Map.of()), null)).isZero();
     }
 
     @Test

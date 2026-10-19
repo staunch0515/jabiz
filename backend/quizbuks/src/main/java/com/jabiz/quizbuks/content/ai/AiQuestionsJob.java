@@ -136,7 +136,8 @@ public final class AiQuestionsJob {
             .maxConcurrency(maxConcurrency).maxOpenPerRequester(MAX_OPEN).oneOpenPerReference()
             .maxInputSize(MAX_JOB_INPUT_BYTES)
             .inputFiles(ContentLimits.MAX_MATERIALS, maxPdfBytes, QbContent.PDF_POLICY)
-            .onCompleted(AiProcesses.COMPLETED).onFailed(AiProcesses.FAILED));
+            .onCompleted(AiProcesses.COMPLETED).onFailed(AiProcesses.FAILED)
+            .onCancelled(AiProcesses.CANCELLED_JOB));
     }
 
     private AiQuestionsJob() {}

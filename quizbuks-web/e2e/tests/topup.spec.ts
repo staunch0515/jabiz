@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test'
-import { expect, expectAccessible, linkIn, mailTo, prepareQuizbuks, signIn, test, useAppearance } from './support'
+import { expect, expectAccessible, linkIn, mailTo, prepareQuizbuks, signIn, test, setAppearance } from './support'
 import { approvedSponsor, sponsorBalance } from './wallet'
 
 /**
@@ -34,7 +34,7 @@ for (const appearance of ['light', 'dark'] as const) {
 
   test(`a sponsor tops up through Stripe's checkout and sees it paid (${appearance})`, async ({ page, request }) => {
     test.setTimeout(120_000)
-    await useAppearance(page, appearance)
+    await setAppearance(page, appearance)
     const sponsor = await approvedSponsor(request)
     await signIn(page, '/sponsor/', sponsor.email)
     await page.getByRole('link', { name: 'Wallet' }).click()

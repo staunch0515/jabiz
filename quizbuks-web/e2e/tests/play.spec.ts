@@ -11,7 +11,7 @@ import {
   test,
   tokenOf,
   unique,
-  useAppearance,
+  setAppearance,
   verifiedUser,
 } from './support'
 
@@ -149,7 +149,7 @@ for (const appearance of ['light', 'dark'] as const) {
     request,
   }) => {
     test.setTimeout(180_000)
-    await useAppearance(page, appearance)
+    await setAppearance(page, appearance)
     await page.setViewportSize({ width: 390, height: 844 })
     const seeded = await seedPublication(request, 300)
     const me = await taker(request, 'Aki')

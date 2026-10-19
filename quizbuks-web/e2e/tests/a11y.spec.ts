@@ -13,10 +13,10 @@ import {
   prepareQuizbuks,
   rows,
   run,
+  setAppearance,
   signIn,
   test,
   tokenOf,
-  useAppearance,
   verifiedUser,
 } from './support'
 
@@ -41,7 +41,7 @@ for (const appearance of ['light', 'dark'] as const) {
   const at = (name: string) => (appearance === 'light' ? name : `${name} (dark)`)
 
   test(`the app's pages pass axe (${appearance})`, async ({ page, request }) => {
-    await useAppearance(page, appearance)
+    await setAppearance(page, appearance)
     for (const width of [390, 1280]) {
       await page.setViewportSize({ width, height: 844 })
       const size = `${width}px`
@@ -59,6 +59,10 @@ for (const appearance of ['light', 'dark'] as const) {
       await page.goto('/auth/verify-email?entry=app&token=not-a-real-token')
       await expect(page.getByTestId('verify-start')).toBeVisible()
       await expectAccessible(page, at(`app verification link ${size}`))
+      // The app's own unsubscribe page (platform decision D52); without a token it says the link is no good.
+      await page.goto('/mail/unsubscribe')
+      await expect(page.getByTestId('unsubscribe-state')).toHaveAttribute('data-state', 'invalid')
+      await expectAccessible(page, at(`app unsubscribe ${size}`))
     }
 
     // Signed in without a profile: the welcome page (the address is verified, so the form is open).
@@ -85,7 +89,7 @@ for (const appearance of ['light', 'dark'] as const) {
   })
 
   test(`the sponsor console's pages pass axe (${appearance})`, async ({ page, request }) => {
-    await useAppearance(page, appearance)
+    await setAppearance(page, appearance)
     await page.setViewportSize({ width: 1280, height: 900 })
     await page.goto('/sponsor/login')
     await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeVisible()
@@ -96,6 +100,9 @@ for (const appearance of ['light', 'dark'] as const) {
     await page.goto('/sponsor/auth/password-reset?entry=sponsor')
     await expect(page.getByPlaceholder('E-mail address', { exact: true })).toBeVisible()
     await expectAccessible(page, at('sponsor password reset'))
+    await page.goto('/sponsor/mail/unsubscribe')
+    await expect(page.getByTestId('unsubscribe-state')).toHaveAttribute('data-state', 'invalid')
+    await expectAccessible(page, at('sponsor unsubscribe'))
 
     const email = await verifiedUser(request, 'sponsor', 'Sam')
     await signIn(page, '/sponsor/', email)
@@ -118,7 +125,7 @@ for (const appearance of ['light', 'dark'] as const) {
   })
 
   test(`the sponsor console's quiz pages pass axe (${appearance})`, async ({ page, request }) => {
-    await useAppearance(page, appearance)
+    await setAppearance(page, appearance)
     await page.setViewportSize({ width: 1280, height: 900 })
     const { email, token } = await sponsor(request, 'Cleo')
     const quiz = await completeQuiz(request, token)
@@ -172,7 +179,7 @@ for (const appearance of ['light', 'dark'] as const) {
   })
 
   test(`the sponsor console's publishing pages pass axe (${appearance})`, async ({ page, request }) => {
-    await useAppearance(page, appearance)
+    await setAppearance(page, appearance)
     await page.setViewportSize({ width: 1280, height: 900 })
     const { email, token } = await approvedSponsor(request, 'Ada')
     const quiz = await completeQuiz(request, token)
@@ -243,7 +250,7 @@ for (const appearance of ['light', 'dark'] as const) {
 
   test(`the sponsor console's analytics pages pass axe (${appearance})`, async ({ page, request }) => {
     test.setTimeout(150_000)
-    await useAppearance(page, appearance)
+    await setAppearance(page, appearance)
     await page.setViewportSize({ width: 1280, height: 900 })
     const funded = await fundedSponsor(request, 1000)
     const taker = await takerInJapan(request, 'Lena')
@@ -289,7 +296,7 @@ for (const appearance of ['light', 'dark'] as const) {
 
   test(`the administration's QuizBuks pages pass axe (${appearance})`, async ({ page, request }) => {
     test.setTimeout(150_000)
-    await useAppearance(page, appearance)
+    await setAppearance(page, appearance)
     await page.setViewportSize({ width: 1280, height: 900 })
     const { token } = await approvedSponsor(request, 'Ines')
     const quiz = await completeQuiz(request, token)
@@ -334,7 +341,7 @@ for (const appearance of ['light', 'dark'] as const) {
 
   test(`the administration's finance pages pass axe (${appearance})`, async ({ page, request }) => {
     test.setTimeout(150_000)
-    await useAppearance(page, appearance)
+    await setAppearance(page, appearance)
     await page.setViewportSize({ width: 1280, height: 900 })
     const sponsor = await fundedSponsor(request, 1000)
     const taker = await takerInJapan(request, 'Ida')
@@ -380,7 +387,7 @@ for (const appearance of ['light', 'dark'] as const) {
 
   test(`the sponsor console's transactions page passes axe (${appearance})`, async ({ page, request }) => {
     test.setTimeout(180_000)
-    await useAppearance(page, appearance)
+    await setAppearance(page, appearance)
     await page.setViewportSize({ width: 1280, height: 900 })
     const sponsor = await fundedSponsor(request, 1000)
     const taker = await takerInJapan(request, 'Iris')
@@ -412,7 +419,7 @@ for (const appearance of ['light', 'dark'] as const) {
   const at = (name: string) => (appearance === 'light' ? name : `${name} (dark)`)
 
   test(`the help, the texts, About and the consent prompt pass axe (${appearance})`, async ({ page, request }) => {
-    await useAppearance(page, appearance)
+    await setAppearance(page, appearance)
     for (const width of [390, 1280]) {
       await page.setViewportSize({ width, height: 844 })
       const size = `${width}px`
@@ -458,7 +465,7 @@ for (const appearance of ['light', 'dark'] as const) {
 
   test(`the inbox, the message centre and the announcements pass axe (${appearance})`, async ({ page, request }) => {
     test.setTimeout(180_000)
-    await useAppearance(page, appearance)
+    await setAppearance(page, appearance)
     const sponsor = await fundedSponsor(request, 1000)
     const taker = await takerInJapan(request, 'Uta')
     const { publicationId } = await rewardingPublication(request, sponsor.token, 10, taker.token)

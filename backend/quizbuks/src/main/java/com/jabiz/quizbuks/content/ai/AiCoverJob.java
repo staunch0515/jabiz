@@ -68,7 +68,8 @@ public final class AiCoverJob {
             .timeout(Duration.ofMinutes(5)).retry(AiQuestionsJob.ATTEMPTS, Duration.ofSeconds(10), Duration.ofMinutes(2))
             .maxConcurrency(maxConcurrency).maxOpenPerRequester(AiQuestionsJob.MAX_OPEN).oneOpenPerReference()
             .outputFiles(QbContent.IMAGE_POLICY, CoverDesigns.COVERS, MAX_FILE_BYTES)
-            .onCompleted(AiProcesses.COMPLETED).onFailed(AiProcesses.FAILED));
+            .onCompleted(AiProcesses.COMPLETED).onFailed(AiProcesses.FAILED)
+            .onCancelled(AiProcesses.CANCELLED_JOB));
     }
 
     private AiCoverJob() {}

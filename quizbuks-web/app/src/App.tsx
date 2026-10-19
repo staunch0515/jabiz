@@ -3,6 +3,7 @@ import {
   AppearanceProvider,
   Button,
   MailLinkPage,
+  MailUnsubscribe,
   OfflineBanner,
   OidcCallback,
   PageState,
@@ -61,6 +62,14 @@ const ABOUT = '/about'
 let pendingStep: SignInStep | undefined
 
 const MAIL_PAGES = new Set(['/auth/verify-email', '/auth/join', '/auth/password-reset'])
+
+/**
+ * The unsubscribe page of the app's notification mail (platform decision D52 item 3):
+ * `jabiz.mail.unsubscribe-paths.app` is `mail/unsubscribe`, under the entry's app-path, so the links of the
+ * mails declared for this entry lead here and takers never need the administration. Open without signing in:
+ * the link's token is the credential.
+ */
+const UNSUBSCRIBE_PATH = '/mail/unsubscribe'
 
 /** The bottom navigation's entries (docs/quizbuks/02-design.md section 7.1; the inbox fifth, Q7c, QP Q-8). */
 const NAV: { path: string; key: string; icon: LucideIcon }[] = [
@@ -247,7 +256,7 @@ function Routes() {
   const { t } = useTranslation(QB)
   const { t: tApp } = useTranslation(APP)
   const { ready, signedIn } = useAuth()
-  const { path } = useLocation()
+  const { path, search } = useLocation()
   const brand = t('brand')
   const frame = (content: ReactNode) => (
     <div className="flex min-h-full flex-col">
@@ -261,6 +270,7 @@ function Routes() {
 
   // The blocks of mailed links and of the identity provider's return read the address themselves, once: the token
   // and the code are removed from it right away.
+  if (path === UNSUBSCRIBE_PATH) return frame(<MailUnsubscribe brand={brand} search={search} />)
   if (MAIL_PAGES.has(path)) {
     return frame(<MailLinkPage {...navigation} page={path.slice('/auth/'.length)} brand={brand}
       signInPath="/login" passwordResetPath="/password-reset" />)

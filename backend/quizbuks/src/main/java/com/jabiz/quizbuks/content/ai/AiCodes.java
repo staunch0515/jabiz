@@ -59,7 +59,10 @@ public final class AiCodes {
     public static final String NO_CANDIDATES = "QB_AI_NO_CANDIDATES";
     /** The server's configuration halts AI generation ({@code quizbuks.ai.halted}): nothing was sent. */
     public static final String HALTED = "QB_AI_HALTED";
-    /** An operator stopped the job at the platform ({@code EXTERNAL_JOB_CANCEL}); it was charged its estimate. */
+    /**
+     * An operator stopped the job at the platform ({@code EXTERNAL_JOB_CANCEL}); it was charged what its attempts used
+     * ({@code QB_AI_JOB_CANCELLED}, platform decision D52 item 2).
+     */
     public static final String STOPPED = "QB_AI_STOPPED";
     /** The PDF materials have more pages than a request may send: nothing was sent (Q8b). */
     public static final String PDF_TOO_LONG = "QB_AI_PDF_TOO_LONG";

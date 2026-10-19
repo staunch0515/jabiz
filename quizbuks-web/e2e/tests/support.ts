@@ -1,4 +1,4 @@
-import AxeBuilder from '@axe-core/playwright'
+import { expectAccessible as expectAccessibleWith, setAppearance } from '@jabiz/ui/testing/playwright'
 import { test as base, expect, type APIRequestContext, type Page } from '@playwright/test'
 
 /**
@@ -278,31 +278,14 @@ export async function signIn(page: Page, base: string, email: string) {
   await page.getByRole('button', { name: 'Sign in', exact: true }).click()
 }
 
-/** WCAG 2.2 A and AA, as the platform's own end-to-end tests check them. */
-const TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']
-
-/** Waits until every finite animation has finished: checked mid fade-in, colours blend and contrast is wrong. */
-async function animationsSettled(page: Page) {
-  await page.waitForFunction(() =>
-    document.getAnimations()
-      .filter((a) => a.effect?.getComputedTiming().iterations !== Infinity)
-      .every((a) => a.playState === 'finished' || a.playState === 'idle'))
-}
-
-/** No axe violations on the page as it is now (soft: every page of a test is checked). */
+/**
+ * No WCAG 2.2 A/AA violations on the page as it is now, once its animations have settled (soft: every page of a test
+ * is checked): the platform's check (`@jabiz/ui/testing/playwright`, ROADMAP 16v-1), asserted with this run's
+ * `expect`.
+ */
 export async function expectAccessible(page: Page, name: string) {
-  await animationsSettled(page)
-  const results = await new AxeBuilder({ page }).withTags(TAGS).analyze()
-  const found = results.violations.map((v) => ({
-    rule: v.id,
-    impact: v.impact,
-    help: v.help,
-    nodes: v.nodes.slice(0, 5).map((n) => `${n.target.join(' ')}: ${n.failureSummary?.split('\n').slice(1).join(' ') ?? ''}`),
-  }))
-  expect.soft(found, `${name}: WCAG A/AA violations`).toEqual([])
+  await expectAccessibleWith(page, name, { expect })
 }
 
 /** Chooses the appearance before any page loads (the platform keeps it in localStorage as `jabiz.appearance`). */
-export async function useAppearance(page: Page, appearance: 'light' | 'dark') {
-  await page.addInitScript((value) => window.localStorage.setItem('jabiz.appearance', value), appearance)
-}
+export { setAppearance }

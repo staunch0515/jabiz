@@ -1,4 +1,4 @@
-import { expect, expectAccessible, prepareQuizbuks, rows, signIn, test, useAppearance } from './support'
+import { expect, expectAccessible, prepareQuizbuks, rows, signIn, test, setAppearance } from './support'
 import { earnReward, takerInJapan } from './wallet'
 
 /**
@@ -20,7 +20,7 @@ for (const appearance of ['light', 'dark'] as const) {
     request,
   }) => {
     test.setTimeout(180_000)
-    await useAppearance(page, appearance)
+    await setAppearance(page, appearance)
     await page.setViewportSize({ width: 390, height: 844 })
     const me = await takerInJapan(request)
     const reward = 500

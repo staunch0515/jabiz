@@ -113,7 +113,7 @@ tools/quizbuks/local-demo.sh status | logs | seed
 - **邮件必须开启**才能激活：`JABIZ_MAIL_ENABLED=true` 并配置发件人与邮件服务器（`JABIZ_MAIL_FROM`、`SPRING_MAIL_*`）；
   否则注册的用户收不到验证邮件，永远"待激活"（启动告警）。`JABIZ_MAIL_BASE_URL` 是**主机的根地址**（如 `https://quizbuks.example.com`，不带 `/admin`）：
   平台 16c 之后，验证、找回密码等链接指向各入口自己的前端（App `/auth/…`、商家后台 `/sponsor/auth/…`、后台 `/admin/auth/…`，D43），
-  退订页在后台（`/admin/mail/unsubscribe`）；此前发出的 `/admin/auth/…` 旧链接仍可用。升级说明：把 `JABIZ_MAIL_BASE_URL` 从 `…/admin` 改为主机的根地址。
+  退订链接同样指向邮件所属入口的前端（平台 16v-1：商家通知 `/sponsor/mail/unsubscribe`、欢迎邮件 `/mail/unsubscribe`，答题人与商家不需要打开 `/admin/`）；此前发出的 `/admin/auth/…` 与 `/admin/mail/unsubscribe` 旧链接仍可用。升级说明：把 `JABIZ_MAIL_BASE_URL` 从 `…/admin` 改为主机的根地址。
   商家邮件（入驻通过、驳回）中的商家后台链接同样取自它（`{entryUrl.sponsor}`，即该主机上的 `/sponsor/`），不再取 `QB_SPONSOR_LINK`。
 - **在反向代理之后**运行时设置 `JABIZ_TRUSTED_PROXIES`（代理的地址或网段），否则登录记录中的 IP 都是代理的地址。不要同时设置 `server.forward-headers-strategy`（启动错误）。
 - **商家入驻**：商家注册、验证邮箱后在商家后台申请入驻，由内容管理员在 `/tasks` 的审批面板中审核；通过后才能提交发布。
@@ -257,7 +257,7 @@ tools/quizbuks/local-demo.sh status | logs | seed
 | `QB_APP_SELF_REGISTRATION` / `QB_SPONSOR_SELF_REGISTRATION` | 否 | 答题 App、商家后台是否允许自助注册，缺省 `true` |
 | `JABIZ_MAIL_ENABLED` | 注册时必需 | `true` 开启邮件（缺省关闭：消息只记录为 `SKIPPED`） |
 | `JABIZ_MAIL_FROM` | 开启邮件时 | 发件人地址 |
-| `JABIZ_MAIL_BASE_URL` | 开启邮件时 | 主机的根地址，如 `https://quizbuks.example.com`（链接按入口指向各自的前端，退订页在 `/admin/`） |
+| `JABIZ_MAIL_BASE_URL` | 开启邮件时 | 主机的根地址，如 `https://quizbuks.example.com`（链接按入口指向各自的前端，退订页也是） |
 | `SPRING_MAIL_HOST` / `SPRING_MAIL_PORT` / `SPRING_MAIL_USERNAME` / `SPRING_MAIL_PASSWORD` | 开启邮件时 | 邮件服务器（SMTP） |
 | `QB_SPONSOR_LINK` | 否 | 商家后台的绝对地址，Stripe 支付后跳回（`…/wallet/topups/…`）；缺省为 `JABIZ_MAIL_BASE_URL` 主机上的 `/sponsor/` |
 | `SPRING_PROFILES_ACTIVE` | 否 | `google` 开启 App 的 Google 登录（`application-google.yml`，见"前端"） |

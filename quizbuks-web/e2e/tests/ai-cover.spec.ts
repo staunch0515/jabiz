@@ -1,7 +1,7 @@
 import { aiReady, quizForAi } from './ai'
 import { PDF, POLICY, query, upload } from './content'
 import { approvedSponsor } from './publishing'
-import { expect, expectAccessible, prepareQuizbuks, run, signIn, test, unique, useAppearance } from './support'
+import { expect, expectAccessible, prepareQuizbuks, run, signIn, test, unique, setAppearance } from './support'
 
 /**
  * AI covers and PDF materials (docs/quizbuks/plans/Q8-ai.md, Q8b; M-25, M-26) with the provider answered by the local
@@ -19,7 +19,7 @@ for (const appearance of ['light', 'dark'] as const) {
 
   test(`a sponsor chooses an AI cover and asks from a PDF (${appearance})`, async ({ page, request }) => {
     test.setTimeout(240_000)
-    await useAppearance(page, appearance)
+    await setAppearance(page, appearance)
     const sponsor = await approvedSponsor(request, 'Cora')
     const title = unique('Cover quiz ')
     const quizId = await quizForAi(request, sponsor.token, title)
