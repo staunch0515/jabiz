@@ -5,6 +5,7 @@ import com.jabiz.entity.Violation;
 import com.jabiz.external.ExternalJobCancellation;
 import com.jabiz.external.ExternalJobCompletion;
 import com.jabiz.external.ExternalJobContext;
+import com.jabiz.external.ExternalJobException;
 import com.jabiz.external.ExternalJobFailure;
 import com.jabiz.external.ExternalJobHandler;
 import com.jabiz.external.ExternalJobResult;
@@ -31,6 +32,8 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.reactive.server.WebTestClient;
 
+import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
@@ -66,8 +69,11 @@ class ExternalJobCancelIT extends PostgresIntegrationTest {
 
     public record StartOutput(String jobId) {}
 
-    /** @param failAfter whether the process rejects after the step, so that its transaction rolls back */
-    public record CancelInput(String jobId, Boolean failAfter) {}
+    /**
+     * @param failAfter whether the process rejects after the step, so that its transaction rolls back
+     * @param owner     whose job the {@code requestedBy} process cancels
+     */
+    public record CancelInput(String jobId, Boolean failAfter, String owner) {}
 
     public record CancelOutput(Boolean cancelled) {}
 
@@ -88,6 +94,9 @@ class ExternalJobCancelIT extends PostgresIntegrationTest {
             RUNS.add(key);
             ctx.recordUsage("promptTokens", 7);
             STARTED.computeIfAbsent(key, k -> new CountDownLatch(1)).countDown();
+            if (input.label().startsWith("retry-") && ctx.attempt() == 1) {
+                throw ExternalJobException.retryable("IT_BUSY", "busy for the test");
+            }
             CountDownLatch gate = GATES.get(key);
             if (gate != null) {
                 try {
@@ -96,6 +105,9 @@ class ExternalJobCancelIT extends PostgresIntegrationTest {
                     Thread.currentThread().interrupt();
                     throw new IllegalStateException("interrupted");
                 }
+            }
+            if (input.label().startsWith("fail-")) {
+                throw ExternalJobException.permanent("IT_REFUSED", "refused for the test");
             }
             return ExternalJobResult.of(new JobResult(input.label())).usage("completionTokens", 11);
         }
@@ -115,10 +127,19 @@ class ExternalJobCancelIT extends PostgresIntegrationTest {
                 .outputKey("jobId")));
     }
 
-    static ProcessDefinition<CancelInput, CancelOutput, ProcessContext> canceller(String name, boolean ifOpen) {
+    /** Whose jobs a cancelling process may cancel: the actor's own (the default), anyone's, or a named owner's. */
+    enum Scope { OWN, OWN_IF_OPEN, ANY, FOR_OWNER }
+
+    static ProcessDefinition<CancelInput, CancelOutput, ProcessContext> canceller(String name, Scope scope) {
         return ProcessDefinition.define(name, 1, CancelInput.class, CancelOutput.class, ProcessContext.class, pb -> {
-            CancelExternalJob.Spec<ProcessContext> cancel = CancelExternalJob.<ProcessContext>of("it.stoppable",
+            CancelExternalJob.Spec<ProcessContext> own = CancelExternalJob.<ProcessContext>of("it.stoppable",
                 ctx -> ctx.get("in", CancelInput.class).jobId()).outputKey("cancelled");
+            CancelExternalJob.Spec<ProcessContext> cancel = switch (scope) {
+                case OWN -> own;
+                case OWN_IF_OPEN -> own.ifOpen();
+                case ANY -> own.anyRequester();
+                case FOR_OWNER -> own.requestedBy(ctx -> ctx.get("in", CancelInput.class).owner());
+            };
             pb.permissions("it.job.cancel")
                 .contextFactory((start, input) -> {
                     ProcessContext ctx = new ProcessContext(start);
@@ -126,7 +147,7 @@ class ExternalJobCancelIT extends PostgresIntegrationTest {
                     return ctx;
                 })
                 .outputMapper(ctx -> new CancelOutput(ctx.get("cancelled", Boolean.class)))
-                .step("Cancel", ifOpen ? cancel.ifOpen() : cancel)
+                .step("Cancel", cancel)
                 .compute("Maybe fail", (metadata, ctx) -> {
                     if (Boolean.TRUE.equals(ctx.get("in", CancelInput.class).failAfter())) {
                         ctx.reject(new Violation("jobId", "IT_FAIL_AFTER", "fails after the job was cancelled"));
@@ -213,12 +234,22 @@ class ExternalJobCancelIT extends PostgresIntegrationTest {
 
         @Bean
         ProcessDefinition<CancelInput, CancelOutput, ProcessContext> cancelStoppable() {
-            return canceller("IT_CANCEL_STOPPABLE", false);
+            return canceller("IT_CANCEL_STOPPABLE", Scope.OWN);
+        }
+
+        @Bean
+        ProcessDefinition<CancelInput, CancelOutput, ProcessContext> cancelAnyStoppable() {
+            return canceller("IT_CANCEL_ANY_STOPPABLE", Scope.ANY);
+        }
+
+        @Bean
+        ProcessDefinition<CancelInput, CancelOutput, ProcessContext> cancelStoppableFor() {
+            return canceller("IT_CANCEL_STOPPABLE_FOR", Scope.FOR_OWNER);
         }
 
         @Bean
         ProcessDefinition<CancelInput, CancelOutput, ProcessContext> cancelStoppableIfOpen() {
-            return canceller("IT_CANCEL_STOPPABLE_IF_OPEN", true);
+            return canceller("IT_CANCEL_STOPPABLE_IF_OPEN", Scope.OWN_IF_OPEN);
         }
 
         @Bean
@@ -273,7 +304,7 @@ class ExternalJobCancelIT extends PostgresIntegrationTest {
     void aQueuedJobCancelledByAProcessIsNeverRunAndItsCancelledProcessRunsOnce() {
         String label = unique("queued");
         String jobId = start("IT_START_STOPPABLE", label, "it-req-q");
-        Map<String, Object> output = cancelByProcess("IT_CANCEL_STOPPABLE", jobId, "it-canceller", false)
+        Map<String, Object> output = cancelByProcess("IT_CANCEL_ANY_STOPPABLE", jobId, "it-canceller", false)
             .expectStatus().isOk().expectBody(MAP).returnResult().getResponseBody();
         assertThat(output(output)).containsEntry("cancelled", true);
         assertThat(query("SELECT cancelled_by FROM sys_external_job_cancel WHERE job_id = ?", jobId).getFirst())
@@ -311,7 +342,7 @@ class ExternalJobCancelIT extends PostgresIntegrationTest {
         CompletableFuture<Integer> running = executor.runPending().toFuture();
         assertThat(STARTED.computeIfAbsent(label + ":1", k -> new CountDownLatch(1)).await(20, TimeUnit.SECONDS))
             .isTrue();
-        assertThat(output(cancelByProcess("IT_CANCEL_STOPPABLE", jobId, "it-canceller", false).expectStatus().isOk()
+        assertThat(output(cancelByProcess("IT_CANCEL_ANY_STOPPABLE", jobId, "it-canceller", false).expectStatus().isOk()
             .expectBody(MAP).returnResult().getResponseBody())).containsEntry("cancelled", true);
         // Not ended yet: the attempt runs on, and nothing is called.
         assertThat(query("SELECT 1 FROM sys_external_job_outcome WHERE job_id = ?", jobId)).isEmpty();
@@ -449,7 +480,174 @@ class ExternalJobCancelIT extends PostgresIntegrationTest {
         assertThat(query("SELECT 1 FROM sys_external_job_cancel WHERE job_id = ?", jobId)).isEmpty();
     }
 
+    /** Deny by default (D52 item 2): the step cancels the actor's own jobs; anyone else's is a missing one. */
+    @Test
+    void anotherRequestersJobIsAnsweredLikeAMissingOneUnlessTheStepSaysOtherwise() {
+        String theirs = start("IT_START_STOPPABLE", unique("theirs"), "it-req-owner");
+        Map<String, Object> notOwn = cancelByProcess("IT_CANCEL_STOPPABLE", theirs, "it-req-other", false)
+            .expectStatus().isNotFound().expectBody(MAP).returnResult().getResponseBody();
+        Map<String, Object> missing = cancelByProcess("IT_CANCEL_STOPPABLE", UUID.randomUUID().toString(),
+            "it-req-other", false).expectStatus().isNotFound().expectBody(MAP).returnResult().getResponseBody();
+        assertThat(withoutInstance(notOwn)).isEqualTo(withoutInstance(missing));
+        // Neither ifOpen nor a finished job tells the other requester anything.
+        cancelByProcess("IT_CANCEL_STOPPABLE_IF_OPEN", theirs, "it-req-other", false).expectStatus().isNotFound();
+        // A process acting for another owner cancels only that owner's jobs.
+        cancelByProcess("IT_CANCEL_STOPPABLE_FOR", theirs, "it-req-other", false, "it-req-someone-else")
+            .expectStatus().isNotFound();
+        assertThat(query("SELECT 1 FROM sys_external_job_cancel WHERE job_id = ?", theirs)).isEmpty();
+        assertThat(output(cancelByProcess("IT_CANCEL_STOPPABLE_FOR", theirs, "it-support", false, "it-req-owner")
+            .expectStatus().isOk().expectBody(MAP).returnResult().getResponseBody())).containsEntry("cancelled", true);
+        assertThat(query("SELECT cancelled_by FROM sys_external_job_cancel WHERE job_id = ?", theirs).getFirst())
+            .containsEntry("cancelled_by", "it-support");
+        // anyRequester() is explicit, for an operator's process.
+        String another = start("IT_START_STOPPABLE", unique("another"), "it-req-owner");
+        assertThat(output(cancelByProcess("IT_CANCEL_ANY_STOPPABLE", another, "it-operator", false)
+            .expectStatus().isOk().expectBody(MAP).returnResult().getResponseBody())).containsEntry("cancelled", true);
+        deliverer.deliverPending().block();
+        assertThat(callbacks(theirs)).singleElement().satisfies(callback ->
+            assertThat(((ExternalJobCancellation) callback.input()).cancelledBy()).isEqualTo("it-support"));
+        assertThat(callbacks(another)).singleElement().satisfies(callback ->
+            assertThat(((ExternalJobCancellation) callback.input()).cancelledBy()).isEqualTo("it-operator"));
+    }
+
+    /** A cancel that comes after the result was recorded is too late: 422, and the completion stands. */
+    @Test
+    void aCancelAfterTheResultIsRecordedIs422() throws Exception {
+        String label = unique("race");
+        GATES.put(label + ":1", new CountDownLatch(1));
+        String jobId = start("IT_START_STOPPABLE", label, "it-req-race");
+        CompletableFuture<Integer> running = executor.runPending().toFuture();
+        assertThat(STARTED.computeIfAbsent(label + ":1", k -> new CountDownLatch(1)).await(20, TimeUnit.SECONDS))
+            .isTrue();
+        GATES.get(label + ":1").countDown();
+        assertThat(running.get(30, TimeUnit.SECONDS)).isEqualTo(1);
+        Map<String, Object> late = cancelByProcess("IT_CANCEL_STOPPABLE", jobId, "it-req-race", false)
+            .expectStatus().isEqualTo(422).expectBody(MAP).returnResult().getResponseBody();
+        assertThat(violations(late)).singleElement().satisfies(v ->
+            assertThat(v).containsEntry("ruleCode", "EXTERNAL_JOB_FINISHED"));
+        assertThat(outcome(jobId)).containsEntry("status", "SUCCEEDED");
+        deliverer.deliverPending().block();
+        assertThat(callbacks(jobId)).singleElement().satisfies(callback ->
+            assertThat(callback.process()).isEqualTo("IT_CANCEL_DONE"));
+    }
+
+    /** A lease that ran out before the cancel: the cancel records it first, and the job ends at once (Low 2). */
+    @Test
+    void aCancelRecordsAnExpiredLeaseAndTheCancelledProcessRunsOnce() {
+        String jobId = start("IT_START_STOPPABLE", unique("expired"), "it-req-lease");
+        insertClaim(jobId, 1, START.minusSeconds(1));
+        cancelByProcess("IT_CANCEL_STOPPABLE", jobId, "it-req-lease", false).expectStatus().isOk();
+        assertThat(attempts(jobId)).containsExactly("1:LEASE_EXPIRED");
+        assertThat(outcome(jobId)).containsEntry("status", "CANCELLED").containsEntry("attempts", 1);
+        executor.runPending().block();
+        deliverer.deliverPending().block();
+        assertThat(attempts(jobId)).containsExactly("1:LEASE_EXPIRED");
+        assertThat(callbacks(jobId)).singleElement().satisfies(callback -> {
+            ExternalJobCancellation in = (ExternalJobCancellation) callback.input();
+            assertThat(in.attempts()).isEqualTo(1);
+            assertThat(in.attemptRan()).isTrue();
+        });
+    }
+
+    /** A lease that runs out after the cancel: the executor records it and ends the job; the process runs once. */
+    @Test
+    void aLeaseExpiringAfterTheCancelEndsTheJobOnceThroughTheExecutor() {
+        String jobId = start("IT_START_STOPPABLE", unique("expiring"), "it-req-lease2");
+        insertClaim(jobId, 1, START.plusSeconds(60));
+        cancelByProcess("IT_CANCEL_STOPPABLE", jobId, "it-req-lease2", false).expectStatus().isOk();
+        // Still "running" by its lease: no outcome yet.
+        assertThat(query("SELECT 1 FROM sys_external_job_outcome WHERE job_id = ?", jobId)).isEmpty();
+        clock.advance(Duration.ofMinutes(2));
+        executor.runPending().block();
+        assertThat(attempts(jobId)).containsExactly("1:LEASE_EXPIRED");
+        assertThat(outcome(jobId)).containsEntry("status", "CANCELLED").containsEntry("attempts", 1);
+        executor.runPending().block();
+        deliverer.deliverPending().block();
+        deliverer.deliverPending().block();
+        assertThat(callbacks(jobId)).singleElement().satisfies(callback ->
+            assertThat(callback.process()).isEqualTo("IT_JOB_STOPPED"));
+    }
+
+    /** The usage of every attempt reaches the cancellation process: a failed retry's and the cancelled one's. */
+    @Test
+    void theUsageOfEveryAttemptIsSummed() throws Exception {
+        String label = unique("retry-sum");
+        GATES.put(label + ":2", new CountDownLatch(1));
+        String jobId = start("IT_START_STOPPABLE", label, "it-req-sum");
+        assertThat(executor.runPending().block()).isEqualTo(1);
+        assertThat(attempts(jobId)).containsExactly("1:FAILED");
+        clock.advance(Duration.ofSeconds(11));
+        CompletableFuture<Integer> second = executor.runPending().toFuture();
+        assertThat(STARTED.computeIfAbsent(label + ":2", k -> new CountDownLatch(1)).await(20, TimeUnit.SECONDS))
+            .isTrue();
+        cancelByProcess("IT_CANCEL_STOPPABLE", jobId, "it-req-sum", false).expectStatus().isOk();
+        GATES.get(label + ":2").countDown();
+        assertThat(second.get(30, TimeUnit.SECONDS)).isEqualTo(1);
+        assertThat(outcome(jobId)).containsEntry("status", "CANCELLED").containsEntry("attempts", 2);
+        deliverer.deliverPending().block();
+        assertThat(callbacks(jobId)).singleElement().satisfies(callback -> {
+            ExternalJobCancellation in = (ExternalJobCancellation) callback.input();
+            assertThat(in.attempts()).isEqualTo(2);
+            assertThat(in.usage()).containsEntry("promptTokens", 14L).containsEntry("completionTokens", 11L)
+                .isEqualTo(recordedUsage(jobId));
+        });
+    }
+
+    /** A running attempt that then fails for good does not turn the cancelled job into a failed one. */
+    @Test
+    void aRunningAttemptFailingAfterTheCancelLeavesItCancelled() throws Exception {
+        String label = unique("fail-after");
+        GATES.put(label + ":1", new CountDownLatch(1));
+        String jobId = start("IT_START_STOPPABLE", label, "it-req-fail");
+        CompletableFuture<Integer> running = executor.runPending().toFuture();
+        assertThat(STARTED.computeIfAbsent(label + ":1", k -> new CountDownLatch(1)).await(20, TimeUnit.SECONDS))
+            .isTrue();
+        cancelByProcess("IT_CANCEL_STOPPABLE", jobId, "it-req-fail", false).expectStatus().isOk();
+        GATES.get(label + ":1").countDown();
+        assertThat(running.get(30, TimeUnit.SECONDS)).isEqualTo(1);
+        assertThat(attempts(jobId)).containsExactly("1:FAILED");
+        assertThat(outcome(jobId)).containsEntry("status", "CANCELLED");
+        deliverer.deliverPending().block();
+        assertThat(callbacks(jobId)).singleElement().satisfies(callback ->
+            assertThat(callback.process()).isEqualTo("IT_JOB_STOPPED"));
+    }
+
+    /**
+     * A process that cancels inside a long transaction holds the job's row: the executor's claim does not wait for it
+     * (SKIP LOCKED, Low 1) and records the expired lease at the next poll.
+     */
+    @Test
+    void theClaimDoesNotWaitForAJobRowAnotherTransactionHolds() throws Exception {
+        String jobId = start("IT_START_STOPPABLE", unique("held"), "it-req-held");
+        insertClaim(jobId, 1, START.minusSeconds(1));
+        try (Connection holder = DB.connect(schema())) {
+            holder.setAutoCommit(false);
+            try (PreparedStatement lock = holder.prepareStatement(
+                "SELECT job_id FROM sys_external_job WHERE job_id = ? FOR UPDATE")) {
+                lock.setString(1, jobId);
+                lock.executeQuery().close();
+            }
+            CompletableFuture<Integer> poll = executor.runPending().toFuture();
+            poll.get(20, TimeUnit.SECONDS);
+            assertThat(attempts(jobId)).isEmpty();
+            holder.rollback();
+        }
+        executor.runPending().block();
+        assertThat(attempts(jobId)).contains("1:LEASE_EXPIRED");
+    }
+
     // ---------------------------------------------------------------- helpers
+
+    private static void insertClaim(String jobId, int attempt, java.time.Instant leaseUntil) {
+        execute("INSERT INTO sys_external_job_claim (job_id, attempt_no, instance_id, claimed_time, lease_until)"
+            + " VALUES (?, ?, 'it-crashed', ?, ?)", jobId, attempt,
+            java.sql.Timestamp.from(leaseUntil.minusSeconds(60)), java.sql.Timestamp.from(leaseUntil));
+    }
+
+    private static List<String> attempts(String jobId) {
+        return query("SELECT attempt_no, outcome FROM sys_external_job_attempt WHERE job_id = ? ORDER BY attempt_no",
+            jobId).stream().map(row -> row.get("attempt_no") + ":" + row.get("outcome")).toList();
+    }
 
     private static final AtomicInteger SEQ = new AtomicInteger();
 
@@ -470,10 +668,18 @@ class ExternalJobCancelIT extends PostgresIntegrationTest {
     }
 
     private WebTestClient.ResponseSpec cancelByProcess(String process, String jobId, String actor, boolean failAfter) {
+        return cancelByProcess(process, jobId, actor, failAfter, null);
+    }
+
+    private WebTestClient.ResponseSpec cancelByProcess(String process, String jobId, String actor, boolean failAfter,
+        String owner) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("jobId", jobId);
+        body.put("failAfter", failAfter);
+        body.put("owner", owner);
         return client.post().uri("/api/processes/" + process + "/latest")
             .header(HttpHeaders.AUTHORIZATION, bearer(actor, "it.job.cancel"))
-            .contentType(MediaType.APPLICATION_JSON).bodyValue(Map.of("jobId", jobId, "failAfter", failAfter))
-            .exchange();
+            .contentType(MediaType.APPLICATION_JSON).bodyValue(body).exchange();
     }
 
     private static Map<String, Object> outcome(String jobId) {

@@ -430,6 +430,18 @@ public class ExternalJobRecorder {
             .next().map(ExternalJobRecorder::job);
     }
 
+    /**
+     * The job's row, locked until the transaction ends, or empty when another transaction holds it ({@code SKIP
+     * LOCKED}): for the claim's transaction, which holds the type's lock and must not wait for a business process
+     * that cancels inside a long transaction. What it skips is taken at the next poll.
+     */
+    Mono<Job> lockJobIfFree(String jobId) {
+        return engine().select("SELECT job_id, job_type, input, reference, requested_by, created_time"
+                + " FROM sys_external_job WHERE job_id = :id FOR UPDATE SKIP LOCKED",
+                Map.of("id", BoundValue.of(jobId)))
+            .next().map(ExternalJobRecorder::job);
+    }
+
     /** The job's row, unlocked. */
     Mono<Job> findJob(String jobId) {
         return engine().select("SELECT job_id, job_type, input, reference, requested_by, created_time"
@@ -580,13 +592,34 @@ public class ExternalJobRecorder {
                                 new Violation("jobId", PlatformErrorCodes.EXTERNAL_JOB_FINISHED,
                                     "The external job has finished already", Map.of())));
                         }
-                        return insertCancel(jobId, cancelledBy, time, processSeqId)
+                        return recordExpiredClaims(jobId, time)
+                            .then(insertCancel(jobId, cancelledBy, time, processSeqId))
                             .then(isRunning(jobId, time))
                             .flatMap(running -> running ? Mono.just(false)
                                 : finish(job, "CANCELLED", null, null, null, time))
                             .thenReturn(true);
                     }));
         });
+    }
+
+    /**
+     * Records the job's claims whose lease ran out without an attempt as {@code LEASE_EXPIRED}, as the executor does
+     * at its next poll; the job's row must be locked. A cancellation does it first, so that a job it ends at once has
+     * every attempt counted in its outcome and its cancellation process.
+     */
+    private Mono<Void> recordExpiredClaims(String jobId, Instant now) {
+        return engine().select("""
+                SELECT c.attempt_no FROM sys_external_job_claim c
+                WHERE c.job_id = :id AND c.lease_until <= :now
+                  AND NOT EXISTS (SELECT 1 FROM sys_external_job_attempt a
+                                   WHERE a.job_id = c.job_id AND a.attempt_no = c.attempt_no)
+                ORDER BY c.attempt_no""", Map.of("id", BoundValue.of(jobId), "now", BoundValue.of(now)))
+            .map(row -> Rows.intValue(row.get("attempt_no")))
+            .collectList()
+            .flatMapMany(Flux::fromIterable)
+            .concatMap(attemptNo -> insertAttempt(jobId, attemptNo, AttemptOutcome.LEASE_EXPIRED, true,
+                "LEASE_EXPIRED", "no result before the lease expired", null, now))
+            .then();
     }
 
     /** Who cancelled a job, and when. */
