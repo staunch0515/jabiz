@@ -1468,7 +1468,7 @@ e2e 对打包的应用（同 CI 的 `e2e` 作业，新的数据库）44 个用�
 | 16s | 收件偏好按登录入口列出、模板显示名、邮件语言的读取与询问、`MailPreferences` 积木（QuizBuks Q7 平台缺口 P1，Q7-13 选 A；2026-10-18 确认）；✅ 已实施（分支 `1.2/phase-16s-mail-preferences`，PR 待建） | D49 | 1–1.5 天 | 16a、16c |
 | 16t | 外部作业的文件与输入上限（QuizBuks Q8 平台缺口 P1–P3，A-13 选 A；2026-10-18 确认）：按类型的输入上限（至多 1 MiB）、文件输入（按请求人的读取权限）、文件输出（经上传流水线以请求人登记）；✅ 已实施（分支 `1.2/phase-16t-external-job-files`，PR 待建） | D50 | 3–4 天 | 16e |
 | 16u | 受保护变更的审批权限 `security.protected-change.decide`、按可配置的管理员权限计管理员（QuizBuks Q7a 发现，2026-10-18 确认）；时间参数限于 PostgreSQL 的范围、`Combobox` 加载状态的无障碍；✅ 已实施（分支 `1.2/phase-16u-protected-grant-roles`，PR 待建） | D51 | 1–1.5 天 | 16r |
-| 16v | 外部作业的剩余风险写明、取消的结局 `onCancelled` 与平台步骤 `CancelExternalJob`、按入口的退订页（积木 `MailUnsubscribe`）、暗色占位文字的对比度、`@jabiz/ui/testing(/playwright)`、存档 `GeneratedFile` / `DocumentRun` 的保留（16v-1，✅ 已实施，分支 `1.2/phase-16v1-job-outcomes`，PR 待建）；按业务参数暂停作业类型 `enabledBy`（16v-2，计划中）；流式结果暂不做（V-1）；2026-10-19 确认 | D52 | 4–5.5 天 | 16t、16u |
+| 16v | 外部作业的剩余风险写明、取消的结局 `onCancelled` 与平台步骤 `CancelExternalJob`、按入口的退订页（积木 `MailUnsubscribe`）、暗色占位文字的对比度、`@jabiz/ui/testing(/playwright)`、存档 `GeneratedFile` / `DocumentRun` 的保留（16v-1，✅ 已实施，分支 `1.2/phase-16v1-job-outcomes`，PR 待建）；按业务参数暂停作业类型 `enabledBy`（16v-2，✅ 已实施，分支 `1.2/phase-16v2-job-gate`，PR 待建）；流式结果暂不做（V-1）；2026-10-19 确认 | D52 | 4–5.5 天 | 16t、16u |
 
 **其余工作的顺序**（2026-10-13 确认）：
 - 前端线：15c-1 → 15c-2 → 15d。
@@ -4189,17 +4189,41 @@ QB 提交锁内 48 → 16（16p-1）的明细：恢复超时 1 → 0（T1）、�
 
 分支 `1.2/phase-16v2-job-gate`，16v-1 合入后从 `1.2/platform` 拉出。实施 D52 第 4 条。
 
-**16v-2 状态**：计划中。
+**16v-2 状态**：✅ 已实施（PR 待建）。
 
-- `ExternalJobType…enabledBy("参数键")`：执行器只在参数此刻生效的值（`Clock`）为布尔 `true` 时领取该类型的作业；缺失、`false` 或非布尔即暂停（V-4）：
-  排队与等待重试的作业等待（不用掉尝试、不失败，V-2），执行中的尝试不中断，租约过期照常补记、已取消的照常给出结局，暂停中的作业可以取消并得到 16v-1 的结局。
-- 每次轮询对声明了 `enabledBy` 的类型以系统身份经 `ParamService` 读一次（领取事务之外）；暂停与恢复记 INFO 日志，指标只带类型名（D16）。`StartExternalJob` 照常登记（V-3）。
-- 启动检查 `EXTERNAL`：键格式错误为错误，不在任何 `ControlledParams` 中为警告。场景回放的 `runExternalJobs` 与 `completeExternalJob` 服从暂停，暂停中的 `completeExternalJob` 报错并说明原因。
-- 测试 `ExternalJobGateIT`：参数关闭时排队的作业等待且不用掉尝试、重试同样等待、执行中的尝试不中断、打开后下一次轮询恢复、缺失或非布尔即暂停、预定的修改到时生效、
-  暂停中的作业可取消并得到结局、其他类型不受影响、暂停时租约过期照常补记；`ExternalJobChecksTest`：键的格式、不受控时的警告。
+| # | 内容 | 实施 |
+|---|---|---|
+| 3 | 按业务参数暂停作业类型 | core `ExternalJobType…enabledBy(参数键)`（record 组件 18 → 19；键格式错误由 `problems()` 报告）。runtime `ExternalJobGate`：每次轮询（与 `runPending()`）在任何领取事务之前，对声明了 `enabledBy` 的每个键以系统身份经 `ParamService` 读一次此刻（`Clock`）生效的值；不是布尔 `true`（缺失、`false`、其他类型、读不出来）即暂停。暂停的类型的领取事务名额为 0：照常补记过期租约、给出已取消与次数用尽的结局，不插入领取——排队与等待重试的作业等待、不用掉尝试；执行中的尝试照常结束。`StartExternalJob` 与取消照常（V-3）。暂停、恢复与原因的变化记 INFO，量规 `jabiz.external.job.held`（只有 `job_type`）。`completeWithoutHandler` 暂停时为 `ExternalJobTypeHeldException`，`ScenarioRunner` 报告为该步骤的失败并说明原因。启动检查 `EXTERNAL`：键不在任何 `ControlledParams` 中为警告 |
+| 文档 | | D52 第 4 条与 16v-2 的实现说明、11 §4a（"按业务参数暂停"、观测、启动检查、场景回放）、06 §2.3（"暂停作业类型"）、07 §3.1、13（仪表）、CLAUDE.md、`guide/platform-features.md` |
+
+示范应用不声明 `enabledBy`：受控参数要先存在（新建也经受控变更或迁移），否则示范的作业、场景与 e2e 全部暂停；没有自然的用法，不为示范而加迁移（D52 实现说明）。
+
+**验收**
+- [x] `./gradlew check` 全部通过（含 `:app:platformCheck`、场景快照、覆盖率门禁）；前端 `pnpm check:api` 不变（接口不变，前端未改动）。
+  （2026-10-19，评审修订后：core 867、ext-geo 5、runtime 530、app 1218 个测试，全部通过；`pnpm check:api` 一致。）
+- [x] `ExternalJobGateIT`：参数为 `false` 时排队的作业等待、不插入领取、不用掉尝试，开始照常登记，暂停只记一次日志；等待重试的作业同样等待，打开后以第 2 次尝试成功；
+  执行中的尝试在参数关闭后照常成功，而下一个作业不被领取；打开后下一次轮询即恢复（暂停与恢复各一条 INFO）；参数缺失或为文本 `"true"` 即暂停；
+  预定的修改（`PARAM_SCHEDULE`）到时生效，打开与关闭都一样；暂停中的作业经接口取消，`onCancelled` 得到没有尝试的结局；其他类型不受影响；
+  暂停时过期租约照常补记为 `LEASE_EXPIRED`、最后一次的过期使作业 `FAILED`，而不再领取；暂停中的 `completeWithoutHandler` 以 `ExternalJobTypeHeldException` 说明原因；
+  场景中 `runExternalJobs` 不领取、`completeExternalJob` 是第 3 步的失败并说明参数为 `false`；
+  （独立评审之后）参数读不出来即暂停、只记一条 WARN，恢复后照常；只有一个空位的实例中暂停的类型不占空位；暂停时最后一次租约过期调用失败流程；
+  暂停时次数用尽的作业照常 `FAILED` `ATTEMPTS_EXHAUSTED`；各测试只看自己的作业，不看全局的执行数。
+- [x] 单元测试：core `ExternalJobTypeTest`（`enabledBy` 的声明与格式、18 参构造器不暂停）；runtime `ExternalJobGateTest`（只有布尔 `true` 放行、每个键只读一次且以系统身份、
+  没有参数的类型不读、读不出来即暂停、量规只带类型名、缺失与读不出来记 WARN 而 `false` 记 INFO、读错误不在每次轮询记）、`ExternalJobChecksTest`（键格式错误为错误、不受控为警告、受控的通过、
+  启动时没有生效的值或读不出来为警告）。
+
+**独立评审之后的修订**（2026-10-19）：M1 路线图中 16v 一节重复（旧的一份与错放的 16u 的 QuizBuks 块）已删去，QuizBuks 的后续修改写明先建 `qb.ai.enabled`；
+L1 缺失或读不出来的参数记 WARN，启动检查对没有生效的值警告；L2 读错误只在变化时记；L3 11 §4a 写明暂停在约一个轮询间隔内生效、正在进行的领取仍可能照常；
+L4 共享仪表的注释；L5 13 写明每个键每次轮询多一个查询观测与一条 SELECT；不受控键的警告写明四眼的取舍。
+
+**兼容**（线 1.2 内）：只新增。`ExternalJobType` 增加 record 组件 `enabledBy`（18 → 19），原 14 参、17 参与 18 参构造器保留，都不暂停；`ExternalJobChecks` 原四参与五参构造保留。
+不声明 `enabledBy` 的类型行为不变，也不读参数；没有迁移，OpenAPI 不变，`StatementBudgetIT` 的预算不变。
+
+**未做**：暂停中断正在执行的尝试；长时间暂停后自动失败；`GET /api/external-jobs/{id}` 显示"已暂停"（D52 的"未做"）。
 
 **QuizBuks 需要的修改**（不在平台分支；每个平台 PR 合入后在 `1.2/quizbuks` 以同步 PR 做）：
 - 16v-1 之后：`qb.ai.questions` 与 `qb.ai.cover` 声明 `.onCancelled(QB_AI_JOB_CANCELLED)` 按实际用量结算，删去 `QB_AI_JOB_STOPPED` 及其 `jabiz.external-job.finished` 订阅；
   `QB_AI_CANCEL` 改用步骤 `CancelExternalJob`；配置 `jabiz.mail.unsubscribe-paths.sponsor` 与 `.app` 并在两个 SPA 中挂载 `<MailUnsubscribe/>`，从运维 §1.2 与上线检查表中去掉"能打开 `/admin/`"的要求；
   改用 `@jabiz/ui/testing(/playwright)` 并删去复制的辅助函数；可选为日记导出声明 `RetentionPolicy.of("GeneratedFile")`。
-- 16v-2 之后：两个 AI 类型声明 `.enabledBy(qb.ai.enabled)`；删去 `quizbuks.ai.halted` / `QB_AI_HALTED`，相应修改测试。
+- 16v-2 之后：两个 AI 类型声明 `.enabledBy("qb.ai.enabled")`，并把 `qb.ai.enabled` 列入 `ControlledParams`；删去 `quizbuks.ai.halted` / `QB_AI_HALTED`，相应修改测试。
+  **先建 `qb.ai.enabled`**（布尔，经受控变更或应用自己的迁移写入 `true`），再部署声明了 `enabledBy` 的版本：参数缺失即暂停，否则部署后**所有 AI 作业都暂停**（启动检查对此警告）。

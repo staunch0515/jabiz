@@ -1,5 +1,6 @@
 package com.jabiz.external;
 
+import com.jabiz.param.ControlledParams;
 import com.jabiz.security.Sensitive;
 
 import java.lang.reflect.ParameterizedType;
@@ -24,7 +25,8 @@ import java.util.regex.Pattern;
  * {@link #onCompleted} process with an {@link ExternalJobCompletion} as the system, or once it has failed for good the
  * {@link #onFailed} process with an {@link ExternalJobFailure}; a type that declares {@link #onCancelled} has that
  * process run with an {@link ExternalJobCancellation} once a cancelled job has ended (decision D52 item 2). All must be
- * {@code internal()}.
+ * {@code internal()}. A type that declares {@link #enabledBy} is held while that business parameter is not
+ * {@code true} (decision D52 item 4): its jobs wait without using attempts.
  *
  * <p>The declaration is not validated when built: the startup check {@code EXTERNAL} reports every problem at once
  * ({@link #problems()} and the references the runtime resolves).
@@ -51,12 +53,14 @@ import java.util.regex.Pattern;
  * @param outputFiles    the files a job may produce (decision D50 item 3), or null when it produces none
  * @param onCancelled    the process run once a cancelled job has ended (decision D52 item 2), or null to run none (as
  *                       before)
+ * @param enabledBy      the key of the boolean business parameter that must be {@code true} now for jobs of the type to
+ *                       be claimed (decision D52 item 4), or null when the type is never held (as before)
  */
 public record ExternalJobType<I, R>(String name, Class<I> inputType, Class<R> resultType,
     Class<? extends ExternalJobHandler<I, R>> handler, Set<String> services, Duration timeout, int maxAttempts,
     Duration initialBackoff, Duration maxBackoff, int maxConcurrency, String onCompleted, String onFailed,
     int maxOpenPerRequester, boolean oneOpenPerReference, int maxInputBytes, InputFiles inputFiles,
-    OutputFiles outputFiles, String onCancelled) {
+    OutputFiles outputFiles, String onCancelled, String enabledBy) {
 
     static final String NAME_PATTERN = "[a-z][a-z0-9._-]{0,99}";
     public static final Pattern NAME = Pattern.compile(NAME_PATTERN);
@@ -154,7 +158,7 @@ public record ExternalJobType<I, R>(String name, Class<I> inputType, Class<R> re
         int maxOpenPerRequester, boolean oneOpenPerReference) {
         this(name, inputType, resultType, handler, services, timeout, maxAttempts, initialBackoff, maxBackoff,
             maxConcurrency, onCompleted, onFailed, maxOpenPerRequester, oneOpenPerReference, DEFAULT_MAX_INPUT_BYTES,
-            null, null, null);
+            null, null, null, null);
     }
 
     /**
@@ -168,7 +172,21 @@ public record ExternalJobType<I, R>(String name, Class<I> inputType, Class<R> re
         OutputFiles outputFiles) {
         this(name, inputType, resultType, handler, services, timeout, maxAttempts, initialBackoff, maxBackoff,
             maxConcurrency, onCompleted, onFailed, maxOpenPerRequester, oneOpenPerReference, maxInputBytes, inputFiles,
-            outputFiles, null);
+            outputFiles, null, null);
+    }
+
+    /**
+     * A declaration as decision D52 item 2 had it, before a type could be held by a business parameter: never held.
+     * Kept for code of line 1.2 that calls the canonical constructor of then (decision D52 item 4).
+     */
+    public ExternalJobType(String name, Class<I> inputType, Class<R> resultType,
+        Class<? extends ExternalJobHandler<I, R>> handler, Set<String> services, Duration timeout, int maxAttempts,
+        Duration initialBackoff, Duration maxBackoff, int maxConcurrency, String onCompleted, String onFailed,
+        int maxOpenPerRequester, boolean oneOpenPerReference, int maxInputBytes, InputFiles inputFiles,
+        OutputFiles outputFiles, String onCancelled) {
+        this(name, inputType, resultType, handler, services, timeout, maxAttempts, initialBackoff, maxBackoff,
+            maxConcurrency, onCompleted, onFailed, maxOpenPerRequester, oneOpenPerReference, maxInputBytes, inputFiles,
+            outputFiles, onCancelled, null);
     }
 
     public static <I, R> ExternalJobType<I, R> define(String name, Class<I> inputType, Class<R> resultType,
@@ -287,6 +305,10 @@ public record ExternalJobType<I, R>(String name, Class<I> inputType, Class<R> re
         if (onCancelled != null && onCancelled.isBlank()) {
             problems.add("onCancelled: name the process that hears of a cancellation, or declare none");
         }
+        if (enabledBy != null && !ControlledParams.validKey(enabledBy)) {
+            problems.add("enabledBy: '" + enabledBy + "' is not a parameter key (lower case words of letters and "
+                + "digits joined by '.', '-' or '_', at most 200 characters)");
+        }
         return List.copyOf(problems);
     }
 
@@ -328,7 +350,7 @@ public record ExternalJobType<I, R>(String name, Class<I> inputType, Class<R> re
             + maxConcurrency + ", maxOpenPerRequester=" + maxOpenPerRequester + ", oneOpenPerReference="
             + oneOpenPerReference + ", maxInputBytes=" + maxInputBytes + ", inputFiles=" + inputFiles
             + ", outputFiles=" + outputFiles + ", onCompleted=" + onCompleted + ", onFailed=" + onFailed
-            + ", onCancelled=" + onCancelled + "]";
+            + ", onCancelled=" + onCancelled + ", enabledBy=" + enabledBy + "]";
     }
 
     public static final class Builder<I, R> {
@@ -351,6 +373,7 @@ public record ExternalJobType<I, R>(String name, Class<I> inputType, Class<R> re
         private String onCompleted;
         private String onFailed;
         private String onCancelled;
+        private String enabledBy;
 
         private Builder(String name, Class<I> inputType, Class<R> resultType) {
             this.name = name;
@@ -467,10 +490,23 @@ public record ExternalJobType<I, R>(String name, Class<I> inputType, Class<R> re
             return this;
         }
 
+        /**
+         * Holds the type unless the boolean business parameter {@code paramKey} is {@code true} now (decision D52
+         * item 4): before each claim the executor reads the value in effect at the clock's now, as the system. While
+         * it is missing, {@code false} or not a boolean, queued and retry-waiting jobs wait without using an attempt;
+         * a running attempt runs to its end; jobs can still be started and cancelled. Declare the key in a
+         * {@link ControlledParams} bean, so that pausing and resuming take four eyes (the startup check warns
+         * otherwise).
+         */
+        public Builder<I, R> enabledBy(String paramKey) {
+            this.enabledBy = paramKey;
+            return this;
+        }
+
         public ExternalJobType<I, R> build() {
             return new ExternalJobType<>(name, inputType, resultType, handler, services, timeout, maxAttempts,
                 initialBackoff, maxBackoff, maxConcurrency, onCompleted, onFailed, maxOpenPerRequester,
-                oneOpenPerReference, maxInputBytes, inputFiles, outputFiles, onCancelled);
+                oneOpenPerReference, maxInputBytes, inputFiles, outputFiles, onCancelled, enabledBy);
         }
     }
 }
