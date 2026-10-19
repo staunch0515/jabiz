@@ -45,7 +45,7 @@ const en = {
     running: 'The AI is writing {{n}} questions. This can take a few minutes; you can keep editing meanwhile.',
     runningLong: 'This is taking longer than usual. Look again later: the result is kept for you.',
     cancel: 'Cancel',
-    cancelled: 'Cancelled. Its usage still counts once the AI has finished.',
+    cancelled: 'Cancelled. If the AI had already started, what it used is counted when it stops; otherwise nothing is charged.',
     review: {
       title: 'Review the AI\'s questions',
       intro: 'Check every question and its answers against your materials. Change anything you like, then tick "I have reviewed this question". Only reviewed questions are added.',
@@ -152,7 +152,7 @@ const zh: typeof en = {
     running: 'AI 正在生成 {{n}} 道题，可能需要几分钟；你可以继续编辑。',
     runningLong: '比平时用时更长。请稍后再来查看，结果会为你保留。',
     cancel: '取消',
-    cancelled: '已取消。AI 完成后，用量仍会计入。',
+    cancelled: '已取消。若 AI 已经开始，它已用的量在停止时计入；否则不计费。',
     review: {
       title: '校对 AI 生成的题目',
       intro: '请对照资料逐题检查题干和答案，可任意修改，然后勾选“我已校对此题”。只有勾选的题目会加入题库。',
@@ -259,7 +259,7 @@ const ja: typeof en = {
     running: 'AI が {{n}} 問を作成しています。数分かかることがあります。その間も編集を続けられます。',
     runningLong: 'いつもより時間がかかっています。後でもう一度ご確認ください。結果は保管されます。',
     cancel: '取り消す',
-    cancelled: '取り消しました。AI の処理が終わると、使用量は計上されます。',
+    cancelled: '取り消しました。AI がすでに始めていた場合は、止まった時点までの使用量が計上されます。始めていなければ計上されません。',
     review: {
       title: 'AI の問題を確認',
       intro: '問題と答えを資料と照らして 1 問ずつ確認してください。自由に修正でき、「この問題を確認しました」にチェックしたものだけが追加されます。',

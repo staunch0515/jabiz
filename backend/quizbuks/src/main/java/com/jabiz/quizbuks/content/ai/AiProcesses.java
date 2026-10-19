@@ -846,8 +846,9 @@ public final class AiProcesses {
         }
         ctx.changes().update(QbAi.JOB, job.id(), job.version(), values);
         if (cancellation.attemptRan()) {
+            // A cancellation is no failure: counted among the jobs, not the failed ones (the admin's failure rate).
             addUsage(ctx, cancellation.requestedBy(), AiLimits.month(cancellation.finishedTime(), zone), usage, cost,
-                true);
+                false);
         }
         ctx.put(OUTPUT, new JobOutput(String.valueOf(job.id()), (String) values.getOrDefault("status",
             job.get("status"))));
@@ -1022,7 +1023,9 @@ public final class AiProcesses {
     }
 
     private static PlatformJobRef platformJob(ProcessContext ctx) {
-        return new PlatformJobRef(String.valueOf((Object) first(ctx, JOB).get("externalJobId")));
+        Object externalJobId = first(ctx, JOB).get("externalJobId");
+        return new PlatformJobRef(String.valueOf(Objects.requireNonNull(externalJobId,
+            "The AI job has no platform job (externalJobId is required)")));
     }
 
     /**
@@ -1265,11 +1268,6 @@ public final class AiProcesses {
     }
 
     @SuppressWarnings("unchecked")
-    /**
-     * What a job stopped at the platform is charged: every attempt's reserved input ({@code perAttempt}) within its
-     * estimate, the rest as output. For a model with a long-prompt rate, attempts whose input is above
-     * {@value ClaudeCalls#LONG_PROMPT_FROM} tokens are priced at it, as their calls would have been (Q8b re-review L-a).
-     */
     static Map<String, Object> params(EntityInstance job) {
         return JSON.readValue(String.valueOf((Object) job.get("params")), Map.class);
     }

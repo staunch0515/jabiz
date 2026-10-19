@@ -1,14 +1,20 @@
 package com.jabiz.quizbuks.it;
 
 import com.jabiz.quizbuks.content.ai.AiCodes;
+import com.jabiz.quizbuks.content.ai.AiLimits;
 import com.jabiz.quizbuks.content.ai.AiProcesses;
+import com.jabiz.quizbuks.content.ai.AiPrompt;
+import com.jabiz.quizbuks.content.ai.ClaudeApi;
 import com.jabiz.quizbuks.content.ai.QbAi;
 import com.jabiz.runtime.test.TestTokens;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
 
+import tools.jackson.databind.JsonNode;
+
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
@@ -39,6 +45,15 @@ class AiCancelIT extends AiItSupport {
 
     private static long number(Object value) {
         return value == null ? 0 : ((Number) value).longValue();
+    }
+
+    /** The sponsor's usage rows (one a month). */
+    private static List<Map<String, Object>> usageRows(String sponsorId) {
+        return query("SELECT * FROM qb_ai_usage WHERE sponsor_id = ?", sponsorId);
+    }
+
+    private static long countOf(String sql, Object... args) {
+        return number(query(sql, args).getFirst().get("n"));
     }
 
     /** Who cancelled the platform's job, if anybody did. */
@@ -135,6 +150,8 @@ class AiCancelIT extends AiItSupport {
         assertThat((BigDecimal) job.get("cost_usd")).isEqualByComparingTo("0.008800");
         Map<String, Object> month = usage(sponsor);
         assertThat(number(month.get("jobs"))).isEqualTo(1);
+        // A cancellation is no failure (the administrators' failure rate).
+        assertThat(number(month.get("failed_jobs"))).isZero();
         assertThat(number(month.get("input_tokens")) + number(month.get("output_tokens"))).isEqualTo(1000);
 
         // Once: nothing more is charged however often the jobs and events run, and nobody can cancel it again.
@@ -177,5 +194,110 @@ class AiCancelIT extends AiItSupport {
         runJobs();
         deliverEvents();
         assertThat(usage(sponsor)).isEqualTo(month);
+    }
+
+    @Test
+    void cancellingWhileAnUnansweredAttemptWaitsForItsRetryChargesThatAttemptsEstimateOnly() {
+        String sponsor = newSponsor("ai-cancel-retry-" + UUID.randomUUID());
+        String token = sponsorFull(sponsor);
+        List<String> quiz = quizWithArticle(token, title(), "Material for a slow provider.");
+        // Attempt 1 gets no answer in time (the tests' request timeout is 2 s): charged its estimate, then a retry waits.
+        CLAUDE.script(MESSAGES, answer("claude-opus-5-5", "end_turn", questions(1), 100, 100)
+            .after(Duration.ofSeconds(5)));
+        Map<String, Object> queued = request(token, quiz.get(0), List.of(quiz.get(1)), 1);
+        runJobs();
+        String externalJobId = String.valueOf(queued.get("externalJobId"));
+        assertThat(countOf("SELECT count(*) AS n FROM sys_external_job_attempt WHERE job_id = ?", externalJobId))
+            .isEqualTo(1);
+        assertThat(countOf("SELECT count(*) AS n FROM sys_external_job_outcome WHERE job_id = ?", externalJobId))
+            .isZero();
+        assertThat(job(queued.get("aiJobId")).get("finished_at")).isNull();
+        int calls = CLAUDE.requests(MESSAGES).size();
+
+        assertThat(run(AiProcesses.CANCEL, token, body("aiJobId", queued.get("aiJobId"))))
+            .containsEntry("status", QbAi.CANCELLED);
+        advance(Duration.ofMinutes(3));
+        runJobs();
+
+        // No retry, and attempt 1's estimate charged: its whole input and all the output it asked for.
+        assertThat(CLAUDE.requests(MESSAGES)).hasSize(calls);
+        JsonNode body = sent().getLast();
+        long bytes = body.get("messages").get(0).get("content").get(0).get("text").asString()
+            .getBytes(StandardCharsets.UTF_8).length + AiPrompt.SYSTEM.getBytes(StandardCharsets.UTF_8).length;
+        Map<String, Object> job = job(queued.get("aiJobId"));
+        assertThat(job).containsEntry("status", QbAi.CANCELLED).containsEntry("candidates", null);
+        assertThat(number(job.get("attempts"))).isEqualTo(1);
+        assertThat(number(job.get("input_tokens"))).isEqualTo(AiLimits.inputEstimate(bytes));
+        assertThat(number(job.get("output_tokens"))).isEqualTo(ClaudeApi.maxTokens(1));
+        List<Map<String, Object>> rows = usageRows(sponsor);
+        assertThat(rows).hasSize(1);
+        assertThat(number(rows.getFirst().get("jobs"))).isEqualTo(1);
+        assertThat(number(rows.getFirst().get("input_tokens")) + number(rows.getFirst().get("output_tokens")))
+            .isEqualTo(AiLimits.inputEstimate(bytes) + ClaudeApi.maxTokens(1));
+    }
+
+    @Test
+    void cancellingAfterThePlatformJobSucceededButBeforeItsOutcomeIsDeliveredChargesItOnceAndKeepsNothing() {
+        String sponsor = newSponsor("ai-cancel-late-" + UUID.randomUUID());
+        String token = sponsorFull(sponsor);
+        List<String> quiz = quizWithArticle(token, title(), "Material.");
+        Map<String, Object> queued = request(token, quiz.get(0), List.of(quiz.get(1)), 2);
+        // The attempt succeeds; its outcome process waits in the outbox.
+        assertThat(jobExecutor.runPending().block()).isEqualTo(1);
+        assertThat(job(queued.get("aiJobId"))).containsEntry("status", QbAi.QUEUED);
+
+        // The sponsor still sees it queued and cancels: the platform's job is over already, which is no error.
+        assertThat(run(AiProcesses.CANCEL, token, body("aiJobId", queued.get("aiJobId"))))
+            .containsEntry("status", QbAi.CANCELLED);
+        assertThat(cancelledBy(queued.get("externalJobId"))).isEmpty();
+        deliverEvents();
+        runJobs();
+
+        Map<String, Object> job = job(queued.get("aiJobId"));
+        assertThat(job).containsEntry("status", QbAi.CANCELLED).containsEntry("candidates", null)
+            .containsEntry("expires_at", null);
+        assertThat(number(job.get("input_tokens"))).isEqualTo(1200);
+        assertThat(number(job.get("output_tokens"))).isEqualTo(800);
+        List<Map<String, Object>> rows = usageRows(sponsor);
+        assertThat(rows).hasSize(1);
+        assertThat(number(rows.getFirst().get("jobs"))).isEqualTo(1);
+        assertThat(number(rows.getFirst().get("input_tokens")) + number(rows.getFirst().get("output_tokens")))
+            .isEqualTo(2000);
+        deliverEvents();
+        assertThat(usageRows(sponsor)).isEqualTo(rows);
+    }
+
+    @Test
+    void aCoverJobCancelledAfterItsPicturesWereStoredNeverRefersToThem() {
+        String sponsor = newSponsor("ai-cancel-late-cover-" + UUID.randomUUID());
+        String token = sponsorFull(sponsor);
+        List<String> quiz = quizWithArticle(token, title(), "Material.");
+        Map<String, Object> queued = requestCovers(token, quiz.get(0));
+        assertThat(jobExecutor.runPending().block()).isEqualTo(1);
+        String externalJobId = String.valueOf(queued.get("externalJobId"));
+        // The platform stored the three pictures the attempt drew.
+        List<Object> pictures = query("SELECT file_id FROM sys_external_job_file WHERE job_id = ?"
+            + " AND direction = 'OUTPUT'", externalJobId).stream().map(row -> row.get("file_id")).toList();
+        assertThat(pictures).hasSize(3);
+
+        assertThat(run(AiProcesses.CANCEL, token, body("aiJobId", queued.get("aiJobId"))))
+            .containsEntry("status", QbAi.CANCELLED);
+        deliverEvents();
+        runJobs();
+
+        Map<String, Object> job = job(queued.get("aiJobId"));
+        assertThat(job).containsEntry("status", QbAi.CANCELLED).containsEntry("candidates", null)
+            .containsEntry("cover_1", null).containsEntry("cover_2", null).containsEntry("cover_3", null);
+        assertThat(number(job.get("input_tokens")) + number(job.get("output_tokens"))).isEqualTo(500);
+        // Nothing refers to the pictures: the platform's sweep removes them.
+        assertThat(latest("qb_quiz_version", "quiz_id", "quiz_id = '" + quiz.get(0) + "'").getFirst())
+            .containsEntry("cover", null);
+        assertThat(countOf("SELECT count(*) AS n FROM qb_ai_job WHERE cover_1 = ANY(?::uuid[]) OR cover_2 = ANY(?::uuid[])"
+            + " OR cover_3 = ANY(?::uuid[])", ids(pictures), ids(pictures), ids(pictures))).isZero();
+        assertThat(number(usageRows(sponsor).getFirst().get("jobs"))).isEqualTo(1);
+    }
+
+    private static String ids(List<Object> values) {
+        return "{" + String.join(",", values.stream().map(String::valueOf).toList()) + "}";
     }
 }
