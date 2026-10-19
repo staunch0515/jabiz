@@ -486,6 +486,15 @@
 - 文档：`backend/quizbuks/CLAUDE.md`（取消步骤、没有记下用量的尝试、后台扩展的 axe）、`02-design.md`（流程表）、`operations.md` §7.8（删去"实例崩溃的尝试计为零"，写明新的计费与迟到的用量）。
 - 场景回放：合并平台后设置编号没有变化，10 个场景的快照不变（不需要重新推导答题位置）。
 - 验证（2026-10-19，本机 PostgreSQL 16，自己的库与端口）：`./gradlew :quizbuks:check :quizbuks:bootJar` 通过（820 个测试、0 失败，场景 10 个；`platformCheck` 0 错误）；后台扩展 `ext:check`（82 个测试，含 lint 与 bundle 步骤）；两个 SPA 没有改动（`spaCheck` 在 `check` 中通过）；e2e 全部 59 个通过（应用 18680，Claude 桩 18694、Stripe 桩 18693、Mailpit 18625/18626）。
+- 评审之后（同一分支，没有 High；评审同意 `unanswered` 改按预留）：
+  - M1：operations §7.8 的封面输出改为 `AiCoverJob.MAX_TOKENS`（8 000），原写 16 000。
+  - M2：单元测试 `AiChargingTest`（以构造的作业实例测 `charged` / `unrecordedAttempt`：封面 8 000 输出；带 PDF 的预留含页数上限；缺少预留时按 `inputBytes` 重算；3 次尝试都没有记下（文字与带 PDF）正好等于作业的预估；最小模型高于长提示线的按长提示价）；
+    `anAttemptWhoseInstanceDiedIsChargedItsEstimate` 另断言全体（`EVERYBODY`）的月用量增加同样的数。
+  - L1：`AiChargingTest.theFramingCoversTheSystemPromptsAndSchemasWithAMargin`：`FRAMING_TOKENS` 不小于题目与封面各自的系统提示加输出 Schema 的字节 / 3 再加 200，提示或图库变长时失败而不是悄悄吃掉余量。
+  - L2、L3：operations §7.8 写明在到达提供方之前死掉的尝试（计数、读文件、画图时）同样按完整估计计入（带 PDF 的即页数上限，缺省约 50 万 Token，有意偏高，D52 第 5 条），
+    以及有回退模型的文字请求没有回答时只计一次输入、提供方可能计两次（已知并接受的缺口）。
+  - L4：`AiQuestionsJob` 的 Javadoc 改为 `{@code userKey}`，`:quizbuks:javadoc` 通过。
+  - 重新验证：`./gradlew :quizbuks:javadoc :quizbuks:check` 通过（827 个测试、0 失败；`platformCheck` 0 错误）；`ext:check`（82 个测试）。界面没有变化，没有重跑 e2e。
 
 ### 待确认（需求方）
 

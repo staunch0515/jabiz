@@ -405,6 +405,7 @@ class AiCostControlIT extends AiItSupport {
         assertThat(reserved).isEqualTo(AiLimits.reservedInput(number(asked.get("input_bytes")), 0));
         long estimateIn = reserved;
         long estimateOut = ClaudeApi.maxTokens(2);
+        long everybodyBefore = monthTokens(QbAi.EVERYBODY);
 
         long recordedIn;
         long recordedOut;
@@ -454,6 +455,9 @@ class AiCostControlIT extends AiItSupport {
         assertThat(number(month.get("jobs"))).isEqualTo(1);
         assertThat(number(month.get("failed_jobs"))).isEqualTo("FAILED".equals(outcome) ? 1 : 0);
         assertThat(tokens(month)).isEqualTo(recordedIn + estimateIn + recordedOut + estimateOut);
+        // Everybody's month too (the global limit): the same charge, once.
+        assertThat(monthTokens(QbAi.EVERYBODY) - everybodyBefore)
+            .isEqualTo(recordedIn + estimateIn + recordedOut + estimateOut);
         assertThat((java.math.BigDecimal) month.get("cost_usd")).isEqualByComparingTo(
             (java.math.BigDecimal) job.get("cost_usd"));
         // Once: delivering again charges nothing more.

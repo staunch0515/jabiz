@@ -15,7 +15,7 @@ import java.util.UUID;
  * transaction, answered by {@code QB_AI_JOB_COMPLETED} or {@code QB_AI_JOB_FAILED} ({@code internal()}).
  *
  * <p>The input holds only the sponsor's own quiz content (D-Q8-2, A-11): no taker's data, no e-mail address, name,
- * company or user id: the provider's {@code metadata.user_id} is {@link #userKey}, an HMAC it cannot reverse. The
+ * company or user id: the provider's {@code metadata.user_id} is {@code userKey}, an HMAC it cannot reverse. The
  * platform stores the input as it is, once ({@code sys_external_job}, append-only, P4): it is the quiz's content, kept
  * anyway in the quiz's versions.
  */
