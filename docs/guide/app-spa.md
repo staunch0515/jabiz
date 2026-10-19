@@ -111,13 +111,16 @@ export default defineConfig({
   端到端（Playwright）：
 
   ```ts
-  import { expectAccessible, useAppearance } from '@jabiz/ui/testing/playwright'
-  await useAppearance(page, 'dark')          // 在第一次导航之前
+  import { expect, test } from '@playwright/test'
+  import { expectAccessible, setAppearance } from '@jabiz/ui/testing/playwright'
+  await setAppearance(page, 'dark')          // 在第一次导航之前
   await page.goto('/app/login')
-  await expectAccessible(page, 'sign-in (dark)')   // 等动画结束，含颜色对比度；违规为 soft 失败
+  await expectAccessible(page, 'sign-in (dark)', { expect })   // 等动画结束，含颜色对比度；违规为 soft 失败
   ```
   它们分别需要 `vitest` + `vitest-axe` 与 `@playwright/test` + `@axe-core/playwright`（`@jabiz/ui` 的可选 peer）：作为 SPA 自己的 devDependencies，
-  版本与平台前端相同（`app:check` 检查）。e2e 目录的 ESLint 关闭 `react-hooks/rules-of-hooks`（`useAppearance` 不是 React 的 hook）。
+  版本与平台前端相同（`app:check` 检查）。辅助函数不加载 `@playwright/test`，用的是你交给它的 `expect`；只要违规列表时用 `accessibilityViolations(page)`。
+  Vitest 中预设把 `vitest`、`vitest-axe` 指向 SPA 自己的副本。示范门户：`src/a11y.test.tsx`（Vitest）与 `e2e/a11y.spec.ts`（Playwright 示例，以 `tsconfig.e2e.json`
+  做类型检查；Vitest 的 `include` 只取 `src/**/*.test.*`，不运行它）。
 
 ## 5. 入口、会话与页面
 

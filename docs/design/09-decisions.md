@@ -1813,8 +1813,11 @@ P-8 原写"`false` 即逐条执行（16p-1 的局部合并同样受它控制）"
    - 作业类型可声明 `onCancelled("流程")`（`internal()`，以 core `ExternalJobCancellation` 为输入：作业号、类型、请求人、引用、全部尝试的用量合计、尝试次数、结束时间、
      取消人、取消时间、是否有尝试被领取过）。取消的作业结束时（没有正在执行的尝试即在取消的事务中，否则在那次尝试记录之后），`EXTERNAL_JOB_COMPLETE` 以子流程调用它一次；
      请求人、操作员（接口）与业务流程的取消都一样。不声明即照旧不调用任何流程。启动检查 `EXTERNAL`：流程存在、是 `internal()`、以 `ExternalJobCancellation` 为输入。
-   - 平台步骤 `CancelExternalJob.of(作业类型, ctx -> 作业号)[.ifOpen()]`（`com.jabiz.runtime.process.steps`）：授权是**流程自己的权限**；步骤只取消声明的类型的作业，
-     其他类型的作业与不存在的作业同一个 404；已结束的作业 422 `EXTERNAL_JOB_FINISHED`，`.ifOpen()` 时什么也不做；取消人是流程的操作人；与流程同一事务（回滚即作业仍开放）。
+   - 平台步骤 `CancelExternalJob.of(作业类型, ctx -> 作业号)[.ifOpen()]`（`com.jabiz.runtime.process.steps`）：能否运行是**流程自己的权限**；步骤再按缺省拒绝限定能取消哪些作业——
+     声明的类型、**由流程的操作人开始的**作业。其他类型的、别人开始的与不存在的作业同一个 404（不透露别人有哪些作业）。代表已知的所有人行事的流程以 `.requestedBy(ctx -> 用户)` 指明所有人；
+     运维或系统的流程要取消任何人的作业，须显式写 `.anyRequester()`（从不是缺省）。已结束的作业 422 `EXTERNAL_JOB_FINISHED`，`.ifOpen()` 时什么也不做；
+     取消人是流程的操作人；与流程同一事务（回滚即作业仍开放；作业行锁到流程事务结束）。
+     （独立评审 M1，2026-10-19：原先只按类型限定，持有流程权限的人能取消任何请求人的作业，并能由 422 与 200 的不同得知别人有未结束的作业；改为上面的缺省拒绝，V-5 相应细化。）
      原来接口所用的步骤 `runtime.external.CancelExternalJob` 改名为包内的 `CancelRequestedJob`，接口的行为不变。
 3. **按入口的退订页**：`jabiz.mail.unsubscribe-paths.<入口>` 是相对该入口 `app-path` 的路径（如 `mail/unsubscribe`）。声明了 `.entries(...)` 的模板，链接指向其中**第一个配置了路径**的入口的页
    （`entryUrl(入口) + 路径`）；其他模板仍用 `jabiz.mail.unsubscribe-path`。令牌与接口不变，退订不看入口（D49 第 1 条）；通用后台的页保留，之前发出的链接照常有效。
@@ -1837,7 +1840,9 @@ P-8 原写"`false` 即逐条执行（16p-1 的局部合并同样受它控制）"
 **实现说明（16v-1：第 1–3 条，及第 6–8 项）**：
 - 第 2 条：core `ExternalJobType.onCancelled`（record 组件 17 → 18，新组件在最后；原 14 参与 17 参构造保留，不声明取消流程）、`ExternalJobCancellation`；
   runtime `ExternalJobRecorder.cancel`（两种取消共用：先在不加锁的行上判断能否取消，再 `FOR UPDATE`）、`cancellation`、`anyClaim`，`RunExternalJobCallback`（取消的作业调用 `onCancelled`），
-  `CancelRequestedJob`（原 `CancelExternalJob`）、步骤 `process.steps.CancelExternalJob`（`CheckedStep`：类型已声明），`ExternalJobChecks`。没有迁移（取消人已在 `sys_external_job_cancel`）。
+  `CancelRequestedJob`（原 `CancelExternalJob`）、步骤 `process.steps.CancelExternalJob`（`CheckedStep`：类型已声明；`requestedBy` / `anyRequester`），`ExternalJobChecks`。没有迁移（取消人已在 `sys_external_job_cancel`）。
+  取消时先把该作业租约已过而未记录的领取补记为 `LEASE_EXPIRED`（与执行器的下一次轮询相同），立即结束的作业的尝试次数与用量因此完整；执行器补记过期租约时以 `SKIP LOCKED`
+  取作业行，业务流程在长事务中取消时持有的行不会使领取（持有类型的锁）等待，下一次轮询再补记（评审 Low 1、Low 2）。
 - 第 3 条：`MailTemplates`（`unsubscribeUrl(令牌, 模板)`，`jabiz.mail.unsubscribe-paths` 以 `Binder` 读入；原五参构造保留）、`DeliverMail`、`MailChecks`（原构造保留）；
   `@jabiz/ui` 的 `MailUnsubscribe`（命名空间 `auth` 的 `unsubscribe`），通用后台 `MailUnsubscribePage` 改为包装；示范门户在 `/portal/mail/unsubscribe` 挂载它，
   `jabiz.mail.unsubscribe-paths.portal=mail/unsubscribe`，`commerce.order-shipped` 的链接因此指向门户。
@@ -1845,12 +1850,16 @@ P-8 原写"`false` 即逐条执行（16p-1 的局部合并同样受它控制）"
   选择框悬停 `dark:hover:bg-input/50` 改为 `/30`。`theme.test.ts` 新增检查：占位文字在半透明背景（混合到 background、card、popover 之上）上静止与悬停都不低于 4.5:1，
   原来的值不通过（12 §11）。
 - 第 7 项（axe 辅助函数）：`@jabiz/ui/testing`（Vitest 的 `expectAccessible(root?)`，亮暗两种外观，不查颜色对比度）与 `@jabiz/ui/testing/playwright`
-  （`expectAccessible(page, 名称)`、`animationsSettled(page)`、`useAppearance(page, 外观)`）；`vitest`、`vitest-axe`、`@playwright/test`、`@axe-core/playwright`
-  是 `@jabiz/ui` 的可选 peerDependencies，SPA 有它们时 `app:check` 要求平台的版本。平台自己的测试改用这两个出口（原 `src/test/axe.ts` 删除）。e2e 的 ESLint 关闭
-  `react-hooks/rules-of-hooks`（`useAppearance` 不是 React 的 hook）。
+  （`expectAccessible(page, 名称, { expect })`、`accessibilityViolations(page)`、`animationsSettled(page)`、`setAppearance(page, 外观)`）；`vitest`、`vitest-axe`、`@playwright/test`、`@axe-core/playwright`
+  是 `@jabiz/ui` 的可选 peerDependencies，SPA 有它们时 `app:check` 要求平台的版本。平台自己的测试改用这两个出口（原 `src/test/axe.ts` 删除）。
+  评审 M2 之后：Playwright 的辅助函数自己不加载 `@playwright/test`（只用其类型），由调用方交出自己的 `expect`，一次运行只有一个 Playwright；`@jabiz/client/vite` 的预设在 Vitest 中把
+  `vitest`、`vitest-axe` 也指向 SPA 自己的副本（`TEST_PACKAGES`），辅助函数用的就是运行测试的那个 Vitest。示范门户以自己的依赖证明两者：Vitest 测试 `src/a11y.test.tsx`
+  经 `@jabiz/ui/testing` 检查，Playwright 示例 `e2e/a11y.spec.ts` 随门户做类型检查与 lint（门户没有自己的 Playwright 配置，它的页面在平台的 e2e 中检查）。
+  `WCAG_TAGS` 冻结并只定义一处；`useAppearance` 改名为 `setAppearance`（不是 React 的 hook），不需要放宽 ESLint 规则。
 - 第 8 项（存档的保留）：只读平台实体 `GeneratedFile`（`sys_generated_file`，自 `createdTime`）与 `DocumentRun`（`sys_document_run`，自 `issuedTime`），
   字段只有编号、类型或版式、大小、摘要、`subjectEntity` / `subjectId`、创建人或签发人、时间与 `processSeqId`——没有内容、PDF、文件名、标题、参数与范围；
   数据视图只读、需要 `audit.read`（写权限 `audit.archive.write` 无人持有）。应用可声明 `RetentionPolicy.of("GeneratedFile" | "DocumentRun")`，过期的行进入保留报表，
   可按编号或按对象（`subjectId`）放置法律保全；表本来就只追加，删除拦截不变（21 §3.1、14 §10、22）。
-- 线 1.2 内兼容：只新增；没有迁移，OpenAPI 不变，`StatementBudgetIT` 的预算不变。直接调用 `ExternalJobType` 规范构造器、对它解构或按组件反射的代码需要改写。
+- 线 1.2 内兼容：只新增；没有迁移，OpenAPI 不变，`StatementBudgetIT` 的预算不变。`ExternalJobType` 原来的 17 参（与 14 参）构造器保留，调用它们的代码不受影响；
+  只有对 record 解构的模式匹配与按组件的反射需要改写（组件数 17 → 18）。
   有意的可见变化：暗色的次要文字稍亮、暗色控件的背景稍亮；示范门户的退订链接指向门户。

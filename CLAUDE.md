@@ -132,7 +132,8 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
   作业的输入上限按类型 `maxInputSize`（缺省 64 KiB，至多 1 MiB；输入永久保存，只放需要的内容）；作业要读文件，类型声明 `inputFiles`、流程以 `StartExternalJob…files(…)` 给出（按请求人的读取权限检查），
   处理器只经 `ExternalJobContext.files()` 读；要产生文件，类型声明 `outputFiles(策略, …)`、处理器以 `ExternalJobResult…file(键, 名称, 字节)` 返回，完成流程以 `ExternalJobCompletion.file(键)` 取得编号（D50）。处理器不接触 `com.jabiz.runtime.file`。
   被取消的作业要结算或通知时，类型声明 `onCancelled(流程)`（`internal()`，输入 `ExternalJobCancellation`，含全部尝试的用量与取消人），不自己订阅 `jabiz.external-job.finished`；
-  流程中取消作业只用平台步骤 `CancelExternalJob.of(类型, ctx -> 作业号)[.ifOpen()]`（流程自己的权限，只取消该类型的作业，D52 第 2 条）。
+  流程中取消作业只用平台步骤 `CancelExternalJob.of(类型, ctx -> 作业号)[.ifOpen()]`（流程自己的权限；缺省只取消该类型、由操作人开始的作业，别人的与不存在同一个 404；
+  代表已知所有人用 `.requestedBy(ctx -> 用户)`，运维流程取消任何人的作业须显式 `.anyRequester()`，D52 第 2 条）。
   提供方不按幂等键去重时重试可能重复计费：在尝试中 `recordUsage`、没有回答的尝试按估计计费、在提供方设置支出上限（D52 第 1 条）。
 - **内容编辑**（见 16 与决策 D20）：多语言内容用 `f.apply(I18nText.of(...))`（值为 `{语言: 文本}`，存 `jsonb`，语言即平台支持的语言）；
   被引用的实体用 `eb.display(字段)` 声明显示字段；状态、审核意见等只由流程改变的字段用 `f.processOnly()`（照常可读，数据视图 API 与通用实体流程不能写）；
@@ -142,7 +143,7 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
 - **前端**（见 12）：业务对象不写前端代码，页面由元数据生成；界面按目录与权限隐藏操作，但权限只由服务端判断。
   元数据表达不了的工作流，由应用在自己目录中的**扩展**写页面（12 §9、决策 D22）：只经 `@jabiz/admin` 引用平台、不自带依赖，路由不占平台路径。
   界面组件只用 `@jabiz/ui`（shadcn 组件源码只在平台一处，应用与扩展不自行生成或复制；需要新组件先加到平台）；颜色只用主题 token（第三方品牌标志按其指南用自己的颜色，D44），亮暗两种外观都过 axe（决策 D34）。
-  axe 的检查只用 `@jabiz/ui/testing`（Vitest 的 `expectAccessible`）与 `@jabiz/ui/testing/playwright`（`expectAccessible`、`animationsSettled`、`useAppearance`），不复制辅助函数（12 §11）。
+  axe 的检查只用 `@jabiz/ui/testing`（Vitest 的 `expectAccessible`）与 `@jabiz/ui/testing/playwright`（`expectAccessible(page, 名称, { expect })`、`accessibilityViolations`、`animationsSettled`、`setAppearance`），不复制辅助函数（12 §11）。
   手写页面与扩展中的用户编号（准备人、审批人等）以 `UserName`（`@jabiz/admin`，10 §14）显示为名字，不显示编号。
   实体与字段的显示名写在消息资源（`entity.<实体>`、`entity.<实体>.<字段>`，三种语言；应用以 `jabizApp { languages(…) }` 只选部分语言时只写所选的，12 §10）。改动 Web 接口后更新 OpenAPI 快照并 `pnpm gen:api`。
 - **可观测性**（见 13 与决策 D16）：平台新的工作单元用 `PlatformObservations` 包装；观测标签只放名称与结果（流程、视图、模板、任务名），
@@ -220,7 +221,7 @@ Gradle 9（wrapper）多模块工程，根目录为 `backend/`（模块：`core`
   （写 `frontend/openapi/public-queries.json`，路径由 `jabizApp.publicQueriesSnapshot` 配置），随变更提交
 - 前后端共享校验用例 `spec/validation-cases.json`：core `ValidationCasesTest` 与前端 `validation.cases.test.ts` 都执行；
   字段元数据变化后 `./gradlew :core:test -Dvalidation-cases.update=true` 重写其中的 `fields`
-- 端到端（Playwright）：先运行打包的应用（`./gradlew :app:bootJar`，以 `JABIZ_JWT_SECRET`、`JABIZ_INTEGRITY_KEY`、`JABIZ_MFA_KEY`、`JABIZ_DEMO_AI_KEY`（示范外部服务的密钥，任意值）、`JABIZ_SECURITY_MFA_ADMINISTRATION=false`（共用的管理员没有二次验证）、`JABIZ_ADMIN_ROLES=*` 与 `JABIZ_PORTAL_SELF_REGISTRATION=false`（测试以自己的角色登录后台，示范门户因此不开放注册）、`JABIZ_PORTAL_REQUIRE_VERIFIED_EMAIL=false`（不发邮件，门户的客户无法验证邮箱，仍可登录）、`JABIZ_SECURITY_SIGN_IN_RATE_LIMIT_PER_USER_ADDRESS=6000` 与 `JABIZ_SECURITY_SIGN_IN_RATE_LIMIT_USER_BURST=1000`（共用的管理员从本机登录数十次，D47 的"地址 + 名字"限流放宽）、`JABIZ_BOOTSTRAP_ADMIN_USER/PASSWORD`、`JABIZ_FILES_LOCAL_ROOT` 与数据库环境变量
+- 端到端（Playwright）：先运行打包的应用（`./gradlew :app:bootJar`，以 `JABIZ_JWT_SECRET`、`JABIZ_INTEGRITY_KEY`、`JABIZ_MFA_KEY`、`JABIZ_DEMO_AI_KEY`（示范外部服务的密钥，任意值）、`JABIZ_SECURITY_MFA_ADMINISTRATION=false`（共用的管理员没有二次验证）、`JABIZ_ADMIN_ROLES=*` 与 `JABIZ_PORTAL_SELF_REGISTRATION=false`（测试以自己的角色登录后台，示范门户因此不开放注册）、`JABIZ_PORTAL_REQUIRE_VERIFIED_EMAIL=false`（不发邮件，门户的客户无法验证邮箱，仍可登录）、`JABIZ_SECURITY_SIGN_IN_RATE_LIMIT_PER_USER_ADDRESS=6000` 与 `JABIZ_SECURITY_SIGN_IN_RATE_LIMIT_USER_BURST=1000`（测试从同一地址频繁登录，与 CI 相同）、`JABIZ_SECURITY_SIGN_IN_RATE_LIMIT_PER_USER_ADDRESS=6000` 与 `JABIZ_SECURITY_SIGN_IN_RATE_LIMIT_USER_BURST=1000`（共用的管理员从本机登录数十次，D47 的"地址 + 名字"限流放宽）、`JABIZ_BOOTSTRAP_ADMIN_USER/PASSWORD`、`JABIZ_FILES_LOCAL_ROOT` 与数据库环境变量
   `SPRING_R2DBC_*`、`SPRING_FLYWAY_*` 启动 `app/build/libs/*.jar`），再在 `frontend/` 下
   `E2E_ADMIN_USER=… E2E_ADMIN_PASSWORD=… pnpm e2e`（`E2E_BASE_URL` 默认 `http://localhost:8080`；`E2E_CHROMIUM` 可指定已安装的 Chromium）。
   测试只增不删数据，可对同一数据库重复运行；CI 的 `e2e` 作业即如此
