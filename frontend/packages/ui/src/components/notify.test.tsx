@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import { i18n } from '@jabiz/client'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { expectAccessible } from '@jabiz/ui/testing'
@@ -10,8 +10,10 @@ describe('notify', () => {
   beforeEach(async () => {
     await act(() => i18n.changeLanguage('en'))
   })
-  afterEach(() => {
+  afterEach(async () => {
     act(() => notify.dismiss())
+    // Sonner removes a dismissed toast 200 ms later on a timer: wait for it while the test's DOM still exists.
+    await waitFor(() => expect(document.querySelector('[data-sonner-toast]')).toBeNull())
   })
 
   it('shows messages in the Toaster, in a named region screen readers follow', async () => {
