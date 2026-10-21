@@ -1,15 +1,18 @@
-# QuizBuks on the shared Docker server (deploy/quizbuks/DEPLOY.md). Installed as /opt/apps/quizbuks/compose.yaml by
-# the deploy workflow (.github/workflows/quizbuks-deploy.yml) and run by /opt/infra/scripts/deploy-app.sh, which sets
-# IMAGE_TAG. No ports and no database: Caddy reaches the application over the external network "proxy", and the
+# QuizBuks on the shared Docker server (deploy/quizbuks/DEPLOY.md), one file for every environment. Installed as
+# /opt/apps/<APP_NAME>/compose.yaml by the deploy workflow (.github/workflows/quizbuks-deploy.yml) and run there by
+# /opt/infra/scripts/deploy-app.sh, which sets IMAGE_TAG. APP_NAME (quizbuks for production, quizbuks-staging for
+# staging) comes from that directory's .env, so each environment is its own project with its own container and
+# volumes. No ports and no database: Caddy reaches the application over the external network "proxy", and the
 # server's shared PostgreSQL (container "postgres") is reached over the external network "db". Every setting and
-# secret comes from /opt/apps/quizbuks/.env, kept on the server only. The local compose with its own database is
+# secret comes from the environment's .env, kept on the server only. The local compose with its own database is
 # deploy/quizbuks/compose.dev.yaml and is never used here.
-name: quizbuks
+name: ${APP_NAME:?APP_NAME is required (set it in the environment's .env)}
 
 services:
   app:
     image: ghcr.io/staunch0515/jabiz-quizbuks:${IMAGE_TAG:?IMAGE_TAG is required}
-    container_name: quizbuks-app
+    # Caddy's upstream (deploy/quizbuks/server/site.caddy.tpl).
+    container_name: ${APP_NAME:?APP_NAME is required}-app
     restart: unless-stopped
     env_file: .env
     environment:
@@ -43,7 +46,7 @@ services:
         max-file: "5"
 
 volumes:
-  # Uploaded images, PDFs and audio (JABIZ_FILES_LOCAL_ROOT): back up together with the database.
+  # Uploaded images, PDFs and audio (JABIZ_FILES_LOCAL_ROOT), <APP_NAME>_files: back up together with the database.
   files:
   # The image's secrets folder: no platform key or administrator password is generated on a server (the start is
   # refused instead); the platform's entrypoint keeps only the demo application's placeholder key here.

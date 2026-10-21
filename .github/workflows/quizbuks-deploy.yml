@@ -1,12 +1,14 @@
 name: QuizBuks deploy
 
-# Deploys QuizBuks to the shared Docker server (deploy/quizbuks/DEPLOY.md): every push to the line branch is tested,
-# built into one image (the backend with its three front ends) and deployed by the server's deploy-app.sh.
-# A manual run with an image tag skips the tests and the build and deploys that tag again (a rollback). Only the line
-# branch deploys: a manual run from any other branch stops before building.
+# Deploys QuizBuks to the shared Docker server (deploy/quizbuks/DEPLOY.md) in two environments from one repository:
+#   staging     the line branch 1.2/quizbuks          APP_NAME quizbuks-staging  staging.<base domain>
+#   production  the release branch 1.2/quizbuks-release  APP_NAME quizbuks          <base domain>
+# Every push to either branch is tested, built into one image (the backend with its three front ends) and deployed by
+# the server's deploy-app.sh under that environment's APP_NAME. A manual run with an image tag skips the tests and the
+# build and deploys that tag again (a rollback). Other branches never deploy: a manual run from one stops at once.
 on:
   push:
-    branches: ['1.2/quizbuks']
+    branches: ['1.2/quizbuks', '1.2/quizbuks-release']
   workflow_dispatch:
     inputs:
       image-tag:
@@ -14,22 +16,26 @@ on:
         type: string
         default: ''
 
-# One deployment at a time; a newer one waits rather than cancelling a deployment in progress.
+# One deployment at a time per branch (environment); a newer one waits rather than cancelling one in progress.
 concurrency:
-  group: deploy-${{ github.repository }}-quizbuks
+  group: deploy-${{ github.repository }}-${{ github.ref }}
   cancel-in-progress: false
 
 permissions:
   contents: read
 
+# The environment follows the branch. The base domain is the repository variable QUIZBUKS_BASE_DOMAIN (Settings →
+# Secrets and variables → Actions → Variables), or the placeholder until it is set.
 env:
-  APP_NAME: quizbuks
+  APP_NAME: ${{ github.ref == 'refs/heads/1.2/quizbuks-release' && 'quizbuks' || 'quizbuks-staging' }}
+  BASE_DOMAIN: ${{ vars.QUIZBUKS_BASE_DOMAIN || 'quizbuks.example.com' }}
+  DOMAIN_PREFIX: ${{ github.ref == 'refs/heads/1.2/quizbuks-release' && '' || 'staging.' }}
 
 jobs:
   # The application's checks: the backend module with its startup checks (platformCheck) and integration tests
   # (Testcontainers postgres:16 on the runner, never the server's database), and the two front ends.
   test:
-    if: github.ref == 'refs/heads/1.2/quizbuks' && inputs.image-tag == ''
+    if: (github.ref == 'refs/heads/1.2/quizbuks' || github.ref == 'refs/heads/1.2/quizbuks-release') && inputs.image-tag == ''
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -81,7 +87,7 @@ jobs:
 
   build:
     needs: test
-    if: github.ref == 'refs/heads/1.2/quizbuks'
+    if: github.ref == 'refs/heads/1.2/quizbuks' || github.ref == 'refs/heads/1.2/quizbuks-release'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -103,9 +109,8 @@ jobs:
           file: deploy/quizbuks/Dockerfile
           platforms: linux/amd64
           push: true
-          tags: |
-            ${{ env.IMAGE }}:${{ github.sha }}
-            ${{ env.IMAGE }}:latest
+          # Both environments run the same image of a commit; only the commit SHA is a tag (no moving "latest").
+          tags: ${{ env.IMAGE }}:${{ github.sha }}
           labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
           cache-from: type=gha,scope=quizbuks
           cache-to: type=gha,mode=max,scope=quizbuks
@@ -114,8 +119,15 @@ jobs:
     needs: build
     # After a successful build, or alone for a manual run with a tag (the build is then skipped).
     if: >-
-      !cancelled() && github.ref == 'refs/heads/1.2/quizbuks' &&
+      !cancelled() && (github.ref == 'refs/heads/1.2/quizbuks' || github.ref == 'refs/heads/1.2/quizbuks-release') &&
       (needs.build.result == 'success' || (inputs.image-tag != '' && needs.build.result == 'skipped'))
+    # Protection rules (required reviewers, branch restrictions) and environment-scoped secrets are set per
+    # environment in the repository's settings.
+    environment:
+      name: ${{ github.ref == 'refs/heads/1.2/quizbuks-release' && 'production' || 'staging' }}
+      url: >-
+        https://${{ github.ref != 'refs/heads/1.2/quizbuks-release' && 'staging.' || ''
+        }}${{ vars.QUIZBUKS_BASE_DOMAIN || 'quizbuks.example.com' }}/
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -129,18 +141,38 @@ jobs:
     steps:
       # The tag goes into a command on the server: only a full commit SHA (the only tags the build pushes) is
       # accepted, matched as a whole string so that no second line can follow it.
-      - name: Check the image tag
+      - name: Check the image tag and the domain
         shell: bash
         run: |
           if [[ ! $IMAGE_TAG =~ ^[0-9a-f]{40}$ ]]; then
             echo "image tag must be a full commit SHA" >&2
             exit 1
           fi
+          domain="$DOMAIN_PREFIX$BASE_DOMAIN"
+          # The domain goes into sed and the Caddy site: a plain lower-case host name only.
+          if [[ ! $domain =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$ ]]; then
+            echo "not a host name: $domain" >&2
+            exit 1
+          fi
+          echo "DOMAIN=$domain" >> "$GITHUB_ENV"
       # The compose file and site of the deployed commit itself, so that a rollback runs the old image with the files
       # it was released with.
       - uses: actions/checkout@v5
         with:
           ref: ${{ env.IMAGE_TAG }}
+      # A commit from before the two environments has a compose with a fixed project and container name: deploying it
+      # as staging would replace production's containers. Such a commit is refused rather than deployed.
+      - name: The commit's deploy files take the environment's name
+        run: |
+          test -f deploy/quizbuks/server/site.caddy.tpl || { echo "no site template in $IMAGE_TAG" >&2; exit 1; }
+          grep -q '^name: \${APP_NAME' deploy/quizbuks/server/compose.yaml \
+            || { echo "the compose of $IMAGE_TAG does not take APP_NAME" >&2; exit 1; }
+      - name: Render the Caddy site
+        run: |
+          sed -e "s/__DOMAIN__/$DOMAIN/g" -e "s/__APP_NAME__/$APP_NAME/g" \
+            deploy/quizbuks/server/site.caddy.tpl > site.caddy
+          if grep -q '__[A-Z_]*__' site.caddy; then echo "unrendered placeholder in site.caddy" >&2; exit 1; fi
+          cat site.caddy
       - name: Configure SSH
         env:
           SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
@@ -155,15 +187,18 @@ jobs:
         run: |
           ssh "$SERVER_USER@$SERVER_HOST" "mkdir -p /opt/apps/$APP_NAME"
           scp deploy/quizbuks/server/compose.yaml "$SERVER_USER@$SERVER_HOST:/opt/apps/$APP_NAME/compose.yaml"
-          scp deploy/quizbuks/server/site.caddy "$SERVER_USER@$SERVER_HOST:/opt/apps/$APP_NAME/site.caddy"
-      # One session: the registry login goes into a Docker configuration of this deployment alone (other applications'
-      # logins on the shared server are neither replaced nor removed), the deploy script pulls with it, and it is
-      # deleted afterwards. The job's token expires with the job anyway.
+          scp site.caddy "$SERVER_USER@$SERVER_HOST:/opt/apps/$APP_NAME/site.caddy"
+      # One session: the environment's .env must name this environment (a copied .env naming the other one would make
+      # compose replace that environment's containers); the registry login goes into a Docker configuration of this
+      # deployment alone (other applications' logins on the shared server are neither replaced nor removed), the
+      # deploy script pulls with it, and it is deleted afterwards. The job's token expires with the job anyway.
       - name: Deploy
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           printf '%s' "$GHCR_TOKEN" | ssh "$SERVER_USER@$SERVER_HOST" "set -e
+            grep -qx 'APP_NAME=$APP_NAME' /opt/apps/$APP_NAME/.env \\
+              || { echo '/opt/apps/$APP_NAME/.env must contain the line APP_NAME=$APP_NAME' >&2; exit 1; }
             export DOCKER_CONFIG=\$(mktemp -d)
             trap 'rm -rf \"\$DOCKER_CONFIG\"' EXIT
             docker login ghcr.io -u '$REGISTRY_USER' --password-stdin
