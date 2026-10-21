@@ -31,10 +31,13 @@ beforeEach(async () => {
   await act(() => i18n.changeLanguage('en'))
 })
 
-afterEach(() => {
+afterEach(async () => {
   session.clear()
   configureClient({ entry: 'admin' })
   act(() => notify.dismiss())
+  // Sonner removes a dismissed toast 200 ms later on a timer; waiting for that here keeps it from firing after the
+  // test file's environment is gone (an unhandled "window is not defined" that fails the run).
+  await waitFor(() => expect(document.querySelector('[data-sonner-toast]')).toBeNull())
   vi.unstubAllGlobals()
 })
 
