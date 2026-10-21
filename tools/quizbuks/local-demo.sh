@@ -18,7 +18,7 @@ set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 STATE=${QB_DEMO_STATE:-$ROOT/deploy/quizbuks/.local-demo}
 JAR=$ROOT/backend/quizbuks/build/libs/quizbuks-0.0.1-SNAPSHOT.jar
-COMPOSE=(docker compose -f "$ROOT/deploy/quizbuks/docker-compose.yml")
+COMPOSE=(docker compose -f "$ROOT/deploy/quizbuks/compose.dev.yaml")
 MAILPIT_IMAGE=axllent/mailpit:v1.27.10
 PORT=${QB_DEMO_PORT:-8080}
 STUB_PORT=${QB_DEMO_STUB_PORT:-8093}

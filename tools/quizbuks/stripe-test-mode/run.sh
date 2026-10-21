@@ -120,7 +120,7 @@ EOF
 
 database() {
   [[ $DB_NAME =~ ^[a-z0-9_]+$ ]] || die "STRIPE_TM_DB_NAME must be lower-case letters, digits and _"
-  listening "$DB_PORT" || die "no PostgreSQL on port $DB_PORT (docker compose -f deploy/quizbuks/docker-compose.yml up -d db, or set STRIPE_TM_DB_*)"
+  listening "$DB_PORT" || die "no PostgreSQL on port $DB_PORT (docker compose -f deploy/quizbuks/compose.dev.yaml up -d db, or set STRIPE_TM_DB_*)"
   need psql "to create the database $DB_NAME"
   if [[ -z $(PGPASSWORD=$DB_PASSWORD psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d postgres -tAc \
       "SELECT 1 FROM pg_database WHERE datname = '$DB_NAME'") ]]; then

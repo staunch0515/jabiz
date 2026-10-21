@@ -8,3 +8,4 @@ docs/quizbuks-requirements/**
 deploy/quizbuks/**
 tools/quizbuks/**
 .github/workflows/quizbuks.yml
+.github/workflows/quizbuks-deploy.yml

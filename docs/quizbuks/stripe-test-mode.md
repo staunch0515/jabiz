@@ -46,7 +46,7 @@
 5. **打款（步骤 9）**：测试模式 → 设置 → 打款：加一个测试银行账户（日本的测试账号见 Stripe 文档"Testing → Payouts"），并把打款计划改为**手动**。自动计划下 Stripe 拒绝手动打款，脚本把这一步记为 SKIP。
 6. **Stripe CLI**（本机运行时）：<https://docs.stripe.com/stripe-cli>。不需要 `stripe login`：`run.sh serve` 以 `STRIPE_API_KEY` 环境变量把测试密钥交给它。
 
-**本机**：JDK 21、python3、curl、openssl、psql；PostgreSQL（缺省 compose 的 `localhost:5440`：`docker compose -f deploy/quizbuks/docker-compose.yml up -d db`）；Mailpit（在 1025 / 8025 没有时用 Docker 启动）。
+**本机**：JDK 21、python3、curl、openssl、psql；PostgreSQL（缺省 compose 的 `localhost:5440`：`docker compose -f deploy/quizbuks/compose.dev.yaml up -d db`）；Mailpit（在 1025 / 8025 没有时用 Docker 启动）。
 
 ## 3. 环境变量
 
@@ -77,7 +77,7 @@
 
 ```sh
 export STRIPE_TEST_SECRET_KEY=sk_test_…          # 不要写进任何文件；用 read -s 输入更好
-docker compose -f deploy/quizbuks/docker-compose.yml up -d db
+docker compose -f deploy/quizbuks/compose.dev.yaml up -d db
 tools/quizbuks/stripe-test-mode/run.sh serve      # 构建（首次几分钟）、启动应用与 stripe listen、Mailpit
 tools/quizbuks/stripe-test-mode/run.sh run --fund-balance
 tools/quizbuks/stripe-test-mode/run.sh stop

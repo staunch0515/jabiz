@@ -1,0 +1,47 @@
+# QuizBuks on the shared Docker server (deploy/quizbuks/DEPLOY.md). Installed as /opt/apps/quizbuks/compose.yaml by
+# the deploy workflow (.github/workflows/quizbuks-deploy.yml) and run by /opt/infra/scripts/deploy-app.sh, which sets
+# IMAGE_TAG. No ports and no database: Caddy reaches the application over the external network "proxy", and the
+# server's shared PostgreSQL (container "postgres") is reached over the external network "db". Every setting and
+# secret comes from /opt/apps/quizbuks/.env, kept on the server only. The local compose with its own database is
+# deploy/quizbuks/compose.dev.yaml and is never used here.
+name: quizbuks
+
+services:
+  app:
+    image: ghcr.io/staunch0515/jabiz-quizbuks:${IMAGE_TAG:?IMAGE_TAG is required}
+    container_name: quizbuks-app
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # A server never makes its own keys or Stripe placeholders (deploy/quizbuks/README.md, "密钥与部署"): a missing
+      # secret refuses the start instead.
+      QB_LOCAL_SECRETS: "false"
+      QB_STRIPE_PLACEHOLDERS: "false"
+      LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
+    # The image sizes the heap at 60 % of this (JAVA_TOOL_OPTIONS in deploy/quizbuks/Dockerfile).
+    mem_limit: 1536m
+    # Spring Boot's graceful shutdown waits up to 30 s for requests in progress (application.yml).
+    stop_grace_period: 45s
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      # The first start migrates an empty database and runs every startup check.
+      start_period: 180s
+    volumes:
+      - files:/var/lib/jabiz/files
+      - secrets:/var/lib/jabiz/secrets
+    networks: [proxy, db]
+
+volumes:
+  # Uploaded images, PDFs and audio (JABIZ_FILES_LOCAL_ROOT): back up together with the database.
+  files:
+  # The image's secrets folder; nothing is generated on a server, but the image declares it as a volume.
+  secrets:
+
+networks:
+  proxy:
+    external: true
+  db:
+    external: true
