@@ -18,8 +18,10 @@ services:
       QB_LOCAL_SECRETS: "false"
       QB_STRIPE_PLACEHOLDERS: "false"
       LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
-    # The image sizes the heap at 60 % of this (JAVA_TOOL_OPTIONS in deploy/quizbuks/Dockerfile).
-    mem_limit: 1536m
+    # The image sizes the heap at 60 % of this and caps Netty's direct buffers at 256 MiB (JAVA_TOOL_OPTIONS in
+    # deploy/quizbuks/Dockerfile); the rest is for metaspace, code cache and the native memory of PDF and cover
+    # rendering. Setting JAVA_TOOL_OPTIONS in .env replaces the image's value.
+    mem_limit: 2g
     # Spring Boot's graceful shutdown waits up to 30 s for requests in progress (application.yml).
     stop_grace_period: 45s
     healthcheck:
@@ -33,11 +35,18 @@ services:
       - files:/var/lib/jabiz/files
       - secrets:/var/lib/jabiz/secrets
     networks: [proxy, db]
+    # The shared server keeps every application's logs: bounded here, whatever the daemon's defaults.
+    logging:
+      driver: json-file
+      options:
+        max-size: 20m
+        max-file: "5"
 
 volumes:
   # Uploaded images, PDFs and audio (JABIZ_FILES_LOCAL_ROOT): back up together with the database.
   files:
-  # The image's secrets folder; nothing is generated on a server, but the image declares it as a volume.
+  # The image's secrets folder: no platform key or administrator password is generated on a server (the start is
+  # refused instead); the platform's entrypoint keeps only the demo application's placeholder key here.
   secrets:
 
 networks:

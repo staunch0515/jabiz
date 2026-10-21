@@ -281,7 +281,7 @@
   `QB_STRIPE_PLACEHOLDERS=true`（compose 缺省）时为未设置的 Stripe 密钥填占位并告警；改它时同步改 `tools/quizbuks/test/entrypoint.test.sh`（CI `deploy`）。
 - 首次启动后，管理员登录 `/admin/` 执行一次 `QB_SETUP`（流程页面）。
 - **服务器部署**（共用的 Docker 服务器，Caddy 为唯一入口，共用的 PostgreSQL）：`deploy/quizbuks/DEPLOY.md`；推送 `1.2/quizbuks` 由 `.github/workflows/quizbuks-deploy.yml` 测试、构建镜像 `ghcr.io/<仓库>-quizbuks` 并以服务器的 `deploy-app.sh` 部署。
-  服务器用的只有 `deploy/quizbuks/server/compose.yaml`（无端口、无数据库、外部网络 `proxy` 与 `db`）与 `site.caddy`；`compose.dev.yaml` 只在本机。客户端地址照旧只经 `JABIZ_TRUSTED_PROXIES`（`proxy` 网络的网段），不用 `server.forward-headers-strategy`。健康检查不含邮件服务器（`management.health.mail.enabled: false`）。
+  服务器用的只有 `deploy/quizbuks/server/compose.yaml`（无端口、无数据库、外部网络 `proxy` 与 `db`）与 `site.caddy`；`compose.dev.yaml` 只在本机。客户端地址照旧只经 `JABIZ_TRUSTED_PROXIES`（Caddy 在 `proxy` 网络中的地址，不是整个网段：网络上还有其他应用），不用 `server.forward-headers-strategy`。健康检查不含邮件服务器（`management.health.mail.enabled: false`）。
 - 本机试用：`tools/quizbuks/local-demo.sh start --seed`（构建、启动、首次设置与演示数据，只用于本机；`deploy/quizbuks/README.md` "本机演示"）。改了设置流程、入口或演示所用的流程输入时同步改它（CI `local-demo`）。
 - **生产运维**：`docs/quizbuks/operations.md`（密钥清单、备份与恢复演练、首次启动、切换正式模式、监控、容量、常见故障）与上线检查清单 `docs/quizbuks/launch-checklist.md`；
   新增环境变量、启动检查、任务或告警时同步改 `operations.md` 的对应表格。

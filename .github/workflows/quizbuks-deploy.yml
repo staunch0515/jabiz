@@ -2,14 +2,15 @@ name: QuizBuks deploy
 
 # Deploys QuizBuks to the shared Docker server (deploy/quizbuks/DEPLOY.md): every push to the line branch is tested,
 # built into one image (the backend with its three front ends) and deployed by the server's deploy-app.sh.
-# A manual run with an image tag skips the tests and the build and deploys that tag again (a rollback).
+# A manual run with an image tag skips the tests and the build and deploys that tag again (a rollback). Only the line
+# branch deploys: a manual run from any other branch stops before building.
 on:
   push:
     branches: ['1.2/quizbuks']
   workflow_dispatch:
     inputs:
       image-tag:
-        description: Deploy this existing image tag (a commit SHA) instead of building; empty builds the branch
+        description: Deploy this existing image tag (a full 40-character commit SHA) instead of building; empty builds the branch
         type: string
         default: ''
 
@@ -28,7 +29,7 @@ jobs:
   # The application's checks: the backend module with its startup checks (platformCheck) and integration tests
   # (Testcontainers postgres:16 on the runner, never the server's database), and the two front ends.
   test:
-    if: inputs.image-tag == ''
+    if: github.ref == 'refs/heads/1.2/quizbuks' && inputs.image-tag == ''
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -42,6 +43,9 @@ jobs:
           cache-read-only: true
       - run: ./gradlew :quizbuks:check
         working-directory: backend
+      - run: tools/quizbuks/test/entrypoint.test.sh
+      - name: The shared folder is the same in both SPAs
+        run: diff -r quizbuks-web/app/src/qb quizbuks-web/sponsor/src/qb
       - uses: pnpm/action-setup@v5
         with:
           package_json_file: frontend/package.json
@@ -54,6 +58,11 @@ jobs:
             quizbuks-web/app/pnpm-lock.yaml
             quizbuks-web/sponsor/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
+        working-directory: frontend
+      - run: |
+          pnpm app:check ../quizbuks-web/app
+          pnpm app:check ../quizbuks-web/sponsor
+          JABIZ_ADMIN_EXTENSION=../backend/quizbuks/admin-extension pnpm ext:check
         working-directory: frontend
       - name: App
         working-directory: quizbuks-web/app
@@ -72,6 +81,7 @@ jobs:
 
   build:
     needs: test
+    if: github.ref == 'refs/heads/1.2/quizbuks'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -104,7 +114,7 @@ jobs:
     needs: build
     # After a successful build, or alone for a manual run with a tag (the build is then skipped).
     if: >-
-      !cancelled() &&
+      !cancelled() && github.ref == 'refs/heads/1.2/quizbuks' &&
       (needs.build.result == 'success' || (inputs.image-tag != '' && needs.build.result == 'skipped'))
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -117,14 +127,20 @@ jobs:
       IMAGE_TAG: ${{ inputs.image-tag || github.sha }}
       REGISTRY_USER: ${{ github.actor }}
     steps:
-      - uses: actions/checkout@v5
-      # The tag goes into a command on the server: only a commit SHA is accepted.
+      # The tag goes into a command on the server: only a full commit SHA (the only tags the build pushes) is
+      # accepted, matched as a whole string so that no second line can follow it.
       - name: Check the image tag
+        shell: bash
         run: |
-          if ! printf '%s' "$IMAGE_TAG" | grep -Eq '^[0-9a-f]{7,40}$'; then
-            echo "image tag must be a commit SHA: $IMAGE_TAG" >&2
+          if [[ ! $IMAGE_TAG =~ ^[0-9a-f]{40}$ ]]; then
+            echo "image tag must be a full commit SHA" >&2
             exit 1
           fi
+      # The compose file and site of the deployed commit itself, so that a rollback runs the old image with the files
+      # it was released with.
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.IMAGE_TAG }}
       - name: Configure SSH
         env:
           SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
@@ -140,15 +156,15 @@ jobs:
           ssh "$SERVER_USER@$SERVER_HOST" "mkdir -p /opt/apps/$APP_NAME"
           scp deploy/quizbuks/server/compose.yaml "$SERVER_USER@$SERVER_HOST:/opt/apps/$APP_NAME/compose.yaml"
           scp deploy/quizbuks/server/site.caddy "$SERVER_USER@$SERVER_HOST:/opt/apps/$APP_NAME/site.caddy"
-      - name: Registry login on server
+      # One session: the registry login goes into a Docker configuration of this deployment alone (other applications'
+      # logins on the shared server are neither replaced nor removed), the deploy script pulls with it, and it is
+      # deleted afterwards. The job's token expires with the job anyway.
+      - name: Deploy
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          printf '%s' "$GHCR_TOKEN" | ssh "$SERVER_USER@$SERVER_HOST" \
-            "docker login ghcr.io -u '$REGISTRY_USER' --password-stdin"
-      - name: Deploy
-        run: ssh "$SERVER_USER@$SERVER_HOST" "/opt/infra/scripts/deploy-app.sh $APP_NAME $IMAGE_TAG"
-      # The job's token expires with the job; nothing stays logged in on the server.
-      - name: Registry logout on server
-        if: always()
-        run: ssh "$SERVER_USER@$SERVER_HOST" "docker logout ghcr.io" || true
+          printf '%s' "$GHCR_TOKEN" | ssh "$SERVER_USER@$SERVER_HOST" "set -e
+            export DOCKER_CONFIG=\$(mktemp -d)
+            trap 'rm -rf \"\$DOCKER_CONFIG\"' EXIT
+            docker login ghcr.io -u '$REGISTRY_USER' --password-stdin
+            /opt/infra/scripts/deploy-app.sh $APP_NAME $IMAGE_TAG"
