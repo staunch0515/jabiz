@@ -24,11 +24,11 @@ concurrency:
 permissions:
   contents: read
 
-# The environment follows the branch. The base domain is the repository variable QUIZBUKS_BASE_DOMAIN (Settings →
-# Secrets and variables → Actions → Variables), or the placeholder until it is set.
+# The environment follows the branch. The base domain is quizbuks.com unless the repository variable
+# QUIZBUKS_BASE_DOMAIN (Settings → Secrets and variables → Actions → Variables) names another.
 env:
   APP_NAME: ${{ github.ref == 'refs/heads/1.2/quizbuks-release' && 'quizbuks' || 'quizbuks-staging' }}
-  BASE_DOMAIN: ${{ vars.QUIZBUKS_BASE_DOMAIN || 'quizbuks.example.com' }}
+  BASE_DOMAIN: ${{ vars.QUIZBUKS_BASE_DOMAIN || 'quizbuks.com' }}
   DOMAIN_PREFIX: ${{ github.ref == 'refs/heads/1.2/quizbuks-release' && '' || 'staging.' }}
 
 jobs:
@@ -127,7 +127,7 @@ jobs:
       name: ${{ github.ref == 'refs/heads/1.2/quizbuks-release' && 'production' || 'staging' }}
       url: >-
         https://${{ github.ref != 'refs/heads/1.2/quizbuks-release' && 'staging.' || ''
-        }}${{ vars.QUIZBUKS_BASE_DOMAIN || 'quizbuks.example.com' }}/
+        }}${{ vars.QUIZBUKS_BASE_DOMAIN || 'quizbuks.com' }}/
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -139,6 +139,21 @@ jobs:
       IMAGE_TAG: ${{ inputs.image-tag || github.sha }}
       REGISTRY_USER: ${{ github.actor }}
     steps:
+      # Without the server's secrets ssh fails with a bare usage message: name what is missing instead.
+      - name: Check the server secrets
+        env:
+          SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.SERVER_KNOWN_HOSTS }}
+        run: |
+          missing=
+          [ -n "$SERVER_HOST" ] || missing="$missing SERVER_HOST"
+          [ -n "$SERVER_USER" ] || missing="$missing SERVER_USER"
+          [ -n "$SSH_KEY" ] || missing="$missing SERVER_SSH_KEY"
+          [ -n "$KNOWN_HOSTS" ] || missing="$missing SERVER_KNOWN_HOSTS"
+          if [ -n "$missing" ]; then
+            echo "::error::secrets not set for this repository or the environment:$missing (Settings → Secrets and variables → Actions)"
+            exit 1
+          fi
       # The tag goes into a command on the server: only a full commit SHA (the only tags the build pushes) is
       # accepted, matched as a whole string so that no second line can follow it.
       - name: Check the image tag and the domain

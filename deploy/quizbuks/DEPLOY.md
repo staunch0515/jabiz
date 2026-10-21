@@ -7,7 +7,7 @@ QuizBuks 是**一个镜像、一个服务**（`<APP_NAME>-app`，容器内端口
 |---|---|---|
 | 分支 | `1.2/quizbuks-release` | `1.2/quizbuks`（工作分支合入的线分支） |
 | APP_NAME | `quizbuks` | `quizbuks-staging` |
-| 域名 | `<基础域名>`（缺省占位 `quizbuks.example.com`） | `staging.<基础域名>` |
+| 域名 | `quizbuks.com` | `staging.quizbuks.com` |
 | 服务器目录 | `/opt/apps/quizbuks/` | `/opt/apps/quizbuks-staging/` |
 | 数据库（库与角色） | `quizbuks` | `quizbuks_staging` |
 | 容器 | `quizbuks-app` | `quizbuks-staging-app` |
@@ -26,8 +26,9 @@ QuizBuks 是**一个镜像、一个服务**（`<APP_NAME>-app`，容器内端口
 
 ## 一次性设置（GitHub）
 
-1. **基础域名**：Settings → Secrets and variables → Actions → Variables，新建 `QUIZBUKS_BASE_DOMAIN`（如 `quizbuks.example.com`，小写、不带协议）。
-   不设时 workflow 用占位 `quizbuks.example.com`，Caddy 申请不到证书。
+1. **基础域名**：缺省为 `quizbuks.com`（staging 即 `staging.quizbuks.com`）；要用其他域名时在 Settings → Secrets and variables → Actions → Variables
+   新建 `QUIZBUKS_BASE_DOMAIN`（小写、不带协议）。**服务器的 secrets**：同一页的 Secrets 中设 `SERVER_HOST`、`SERVER_USER`、`SERVER_SSH_KEY`、`SERVER_KNOWN_HOSTS`
+   （仓库级，或在 Environments 的 `staging` / `production` 中各设一份），缺少任何一个时部署在第一步停止并列出缺少的名字。
 2. **Environments**：Settings → Environments 中的 `production` 与 `staging` 在第一次部署时自动建立；建议给 `production` 设 Required reviewers
    与 Deployment branches（只允许 `1.2/quizbuks-release`）。服务器的 secrets（`SERVER_*`）可以留在仓库级，也可以按环境分别设置。
 3. **production 分支**：staging 部署正常之后，从 `1.2/quizbuks` 建 `1.2/quizbuks-release` 并推送（`git push origin origin/1.2/quizbuks:refs/heads/1.2/quizbuks-release`）。
@@ -81,9 +82,9 @@ JABIZ_BOOTSTRAP_ADMIN_PASSWORD=<强密码>
 JABIZ_TRUSTED_PROXIES=<如 172.18.0.2/32>
 
 # 地址（本环境的域名）
-JABIZ_MAIL_BASE_URL=https://quizbuks.example.com
-QB_APP_LINK=https://quizbuks.example.com/
-QB_SPONSOR_LINK=https://quizbuks.example.com/sponsor/
+JABIZ_MAIL_BASE_URL=https://quizbuks.com
+QB_APP_LINK=https://quizbuks.com/
+QB_SPONSOR_LINK=https://quizbuks.com/sponsor/
 
 # 邮件（注册验证、找回密码）
 JABIZ_MAIL_ENABLED=true
@@ -156,15 +157,15 @@ Run workflow，分支选该环境的分支，`image-tag` 留空。第一次启�
    ```sh
    APP_NAME=quizbuks-staging
    SPRING_PROFILES_ACTIVE=staging
-   JABIZ_MAIL_BASE_URL=https://staging.quizbuks.example.com
-   QB_APP_LINK=https://staging.quizbuks.example.com/
-   QB_SPONSOR_LINK=https://staging.quizbuks.example.com/sponsor/
+   JABIZ_MAIL_BASE_URL=https://staging.quizbuks.com
+   QB_APP_LINK=https://staging.quizbuks.com/
+   QB_SPONSOR_LINK=https://staging.quizbuks.com/sponsor/
    ```
 
    - **`APP_NAME` 必须是 `quizbuks-staging`**：它决定 compose 的项目名与容器名。从 production 复制 `.env` 而忘了改它时，compose 会替换 production 的容器；
      workflow 在部署前检查这一行，不一致即停止。
    - 平台密钥（`JABIZ_JWT_SECRET`、`JABIZ_INTEGRITY_KEY`、`JABIZ_MFA_KEY`）、首个管理员的密码、Stripe 的 Webhook 密钥都**另外生成**，不与 production 共用。
-   - Stripe 只用测试模式的密钥（`sk_test_` / `rk_test_`），Webhook 端点为 `https://staging.quizbuks.example.com/api/inbound/stripe` 与 `/api/inbound/stripe-connect`。
+   - Stripe 只用测试模式的密钥（`sk_test_` / `rk_test_`），Webhook 端点为 `https://staging.quizbuks.com/api/inbound/stripe` 与 `/api/inbound/stripe-connect`。
    - `SPRING_PROFILES_ACTIVE=staging` 只标出环境，应用中没有按环境写死的配置：环境的差异全部在这个 `.env` 中。同时开 Google 登录时写 `staging,google`。
 3. **DNS**：给 `staging.<基础域名>` 添加 A 记录（及 AAAA），指向同一台服务器。
 4. 第一次部署与首次启动之后的步骤同上（`https://staging.<基础域名>/admin/`）。
