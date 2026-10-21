@@ -1,21 +1,21 @@
 # QuizBuks — 部署
 
-一个镜像（`Dockerfile`，两段式：构建 jar 并打包三个前端，再放进 JRE 镜像）加 PostgreSQL 16（`docker-compose.yml`）。
-命令都在仓库根目录执行。
+一个镜像（`Dockerfile`，两段式：构建 jar 并打包三个前端，再放进 JRE 镜像）加 PostgreSQL 16（`compose.dev.yaml`，只在本机；服务器部署见 `DEPLOY.md`）。
+命令都在仓库根目录执行。**共用的 Docker 服务器**（Caddy、共用的 PostgreSQL、GitHub Actions 自动部署）：[`DEPLOY.md`](DEPLOY.md)。
 
 **生产**：环境变量与密钥的完整清单（来源、轮换、缺少时的后果）、数据库规格与备份、恢复演练、首次启动、切换到正式模式、监控与告警、容量与常见故障的处理见
 [`docs/quizbuks/operations.md`](../../docs/quizbuks/operations.md)；上线前逐条核对 [`docs/quizbuks/launch-checklist.md`](../../docs/quizbuks/launch-checklist.md)。
 **Stripe 测试模式的全流程**（真实测试密钥：充值、答题、开户、转账、退款、争议、打款）：[`docs/quizbuks/stripe-test-mode.md`](../../docs/quizbuks/stripe-test-mode.md)（`tools/quizbuks/stripe-test-mode/run.sh`）。
 
 ```sh
-QB_LOCAL_SECRETS=true docker compose -f deploy/quizbuks/docker-compose.yml up -d --build      # 数据库 127.0.0.1:5440，应用 127.0.0.1:8080
-docker compose -f deploy/quizbuks/docker-compose.yml exec app cat /var/lib/jabiz/secrets/admin-password   # 首个管理员的密码
+QB_LOCAL_SECRETS=true docker compose -f deploy/quizbuks/compose.dev.yaml up -d --build      # 数据库 127.0.0.1:5440，应用 127.0.0.1:8080
+docker compose -f deploy/quizbuks/compose.dev.yaml exec app cat /var/lib/jabiz/secrets/admin-password   # 首个管理员的密码
 ```
 
 - 没有 `deploy/quizbuks/.env` 也能在本机启动，但 Stripe 未配置（占位，日志中有 `quizbuks: WARNING`），充值与转账不能使用；邮件缺省关闭，注册的用户不能验证邮箱
   （见下文"充值与核对"中"本机的 compose"与"前端"中"本机注册"）。服务器上设 `QB_STRIPE_PLACEHOLDERS=false`。
 - 管理员密码**不打印**（Q10b，评审 M5）：首次启动时写入 secrets 卷中的只读文件，日志只给出路径；在仓库根目录用
-  `docker compose -f deploy/quizbuks/docker-compose.yml exec app cat /var/lib/jabiz/secrets/admin-password` 读取（应用服务因此命名为 `app`）。
+  `docker compose -f deploy/quizbuks/compose.dev.yaml exec app cat /var/lib/jabiz/secrets/admin-password` 读取（应用服务因此命名为 `app`）。
   本机以 `QB_LOCAL_SECRETS=true`（命令前或写进 `.env`）生成平台密钥与这个密码；compose 缺省 `false`（评审 L5）：不设时缺少任一密钥即拒绝启动，
   **服务器上不设它**并给出全部密钥，见下节"密钥与部署"。
 - 三个前端（见下节"前端"）：答题 App <http://localhost:8080/>、商家后台 <http://localhost:8080/sponsor/>、管理员后台 <http://localhost:8080/admin/>。
@@ -101,7 +101,7 @@ tools/quizbuks/local-demo.sh status | logs | seed
   `SPRING_PROFILES_ACTIVE=google`、`JABIZ_OIDC_GOOGLE_CLIENT_ID`、`JABIZ_OIDC_GOOGLE_CLIENT_SECRET` 与 `QB_OIDC_REDIRECT_APP`（同一地址）。
   首次用 Google 登录且邮箱未被使用时自动开户（答题人）；邮箱已被使用的人先用原来的方式登录，再在 App 的账户页关联 Google。商家后台不提供 Google 登录。
 - **Stripe 的返回地址**由配置决定，不在 Stripe 后台设置：充值跳回 `QB_SPONSOR_LINK` 下的 `wallet/topups/<编号>`，开通收款账户跳回 `QB_APP_LINK` 下的 `wallet/payout`。
-- **本机注册**：`docker compose -f deploy/quizbuks/docker-compose.yml --profile tools up -d` 另起 Mailpit（<http://localhost:8025> 查看邮件）；
+- **本机注册**：`docker compose -f deploy/quizbuks/compose.dev.yaml --profile tools up -d` 另起 Mailpit（<http://localhost:8025> 查看邮件）；
   在 `.env` 中设 `JABIZ_MAIL_ENABLED=true`、`JABIZ_MAIL_FROM=noreply@quizbuks.local`、`SPRING_MAIL_HOST=mailpit`、`SPRING_MAIL_PORT=1025`。
   邮件不随 `--profile tools` 自动开启：compose 中的应用不知道启用了哪些 profile，不起 Mailpit 时开着邮件只会投递失败，所以仍由 `.env` 显式设置。
 
@@ -119,7 +119,7 @@ tools/quizbuks/local-demo.sh status | logs | seed
 - **商家入驻**：商家注册、验证邮箱后在商家后台申请入驻，由内容管理员在 `/tasks` 的审批面板中审核；通过后才能提交发布。
   Q2 之前由管理员手工建的商家账号没有入驻记录，须申请一次（`QB_SPONSOR_APPLY`）。
 - **封禁**：超级管理员在后台对用户执行 `QB_USER_BAN`；被封禁的人三个入口都不能登录，已登录的会话在下一次刷新（至多 15 分钟）后失效，期间提交发布等动作被拒。
-- 只起数据库做本地开发：`docker compose -f deploy/quizbuks/docker-compose.yml up -d db`，再在 `backend/` 下
+- 只起数据库做本地开发：`docker compose -f deploy/quizbuks/compose.dev.yaml up -d db`，再在 `backend/` 下
   `./gradlew :quizbuks:bootRun --args='--spring.profiles.active=dev'`。
 
 ## 答题（Q5）

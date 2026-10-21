@@ -1,12 +1,12 @@
 # QuizBuks (docs/quizbuks/02-design.md). From the repository root:
 #
-#   QB_LOCAL_SECRETS=true docker compose -f deploy/quizbuks/docker-compose.yml up -d --build
+#   QB_LOCAL_SECRETS=true docker compose -f deploy/quizbuks/compose.dev.yaml up -d --build
 #
 # (QB_LOCAL_SECRETS=true, or in .env, lets the image make the platform's keys and the first administrator's password
 # for this machine; without it every secret must be given, as on a server: Q10b, review L5.)
 # then open http://localhost:8080/ (the app), /sponsor/ (the sponsor console) or /admin/ (the administration); the
 # first administrator's password is never printed (Q10b, M5): read it with
-# `docker compose -f deploy/quizbuks/docker-compose.yml exec app cat /var/lib/jabiz/secrets/admin-password`. The
+# `docker compose -f deploy/quizbuks/compose.dev.yaml exec app cat /var/lib/jabiz/secrets/admin-password`. The
 # application's service is named "app", as the platform's entrypoint (docker/app-entrypoint.sh) names it. Settings come
 # from deploy/quizbuks/.env (never committed); the variables are listed in README.md beside this file. This compose is
 # for this machine: on a server leave QB_LOCAL_SECRETS unset, set QB_STRIPE_PLACEHOLDERS=false and give every secret.

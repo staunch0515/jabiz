@@ -13,10 +13,10 @@
 # QB_LOCAL_SECRETS or not. A generated administrator password is never printed: it goes into a read-only file in the
 # secrets volume, and its path is printed. Whenever a key or the password is generated (or read back from the volume
 # where it was generated), QB_SECRETS_GENERATED=true is exported: the application's startup check refuses that next to
-# live mode however live mode is set (review L5). docker-compose.yml leaves QB_LOCAL_SECRETS false: a local
+# live mode however live mode is set (review L5). compose.dev.yaml leaves QB_LOCAL_SECRETS false: a local
 # demonstration sets it itself.
 #
-# Stripe placeholders only with QB_STRIPE_PLACEHOLDERS=true (docker-compose.yml sets it by default; the image alone
+# Stripe placeholders only with QB_STRIPE_PLACEHOLDERS=true (compose.dev.yaml sets it by default; the image alone
 # does not), only in test mode, and only for values that are not set:
 #   - STRIPE_API_KEY: a test-mode key that is plainly fake; every call to Stripe is refused.
 #   - STRIPE_WEBHOOK_SECRET / STRIPE_CONNECT_WEBHOOK_SECRET: generated once (whsec_ + 48 hex) into the secrets volume and
@@ -81,7 +81,7 @@ if [ -z "${JABIZ_BOOTSTRAP_ADMIN_PASSWORD:-}" ]; then
             (umask 077 && random_text > "$SECRETS/admin-password")
             chmod 400 "$SECRETS/admin-password"
             echo "quizbuks: first start: the first administrator's password is in $SECRETS/admin-password" \
-                "(read it with: docker compose -f deploy/quizbuks/docker-compose.yml exec app cat" \
+                "(read it with: docker compose -f deploy/quizbuks/compose.dev.yaml exec app cat" \
                 "$SECRETS/admin-password)"
         fi
         JABIZ_BOOTSTRAP_ADMIN_PASSWORD=$(cat "$SECRETS/admin-password")

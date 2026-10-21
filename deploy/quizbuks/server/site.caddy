@@ -1,0 +1,6 @@
+# QuizBuks behind the server's Caddy (deploy/quizbuks/DEPLOY.md). One upstream serves the API and all three front
+# ends: the app at /, the sponsor console at /sponsor/ and the administration at /admin/.
+quizbuks.example.com {
+	encode zstd gzip
+	reverse_proxy quizbuks-app:8080
+}

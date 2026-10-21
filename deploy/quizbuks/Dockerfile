@@ -17,9 +17,10 @@ RUN --mount=type=cache,target=/root/.gradle \
 
 FROM eclipse-temurin:21-jre
 # Chinese and Japanese in the PDFs (receipts, monthly reports; Q9d, D-5): TrueType fonts the platform's PDF writer can
-# embed (application.yml jabiz.reports.pdf.fonts), IPA Gothic for Japanese, Droid Sans Fallback for Chinese.
+# embed (application.yml jabiz.reports.pdf.fonts), IPA Gothic for Japanese, Droid Sans Fallback for Chinese. curl is
+# the health check's client (below and deploy/quizbuks/server/compose.yaml), installed rather than assumed.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends fonts-ipafont-gothic fonts-droid-fallback \
+    && apt-get install -y --no-install-recommends fonts-ipafont-gothic fonts-droid-fallback curl \
     && rm -rf /var/lib/apt/lists/*
 ENV JABIZ_REPORTS_PDF_FONTS=/usr/share/fonts/opentype/ipafont-gothic/ipag.ttf,/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf
 RUN useradd --system --uid 10001 --home-dir /app jabiz \
@@ -35,6 +36,9 @@ WORKDIR /app
 EXPOSE 8080
 VOLUME /var/lib/jabiz/secrets
 ENV JABIZ_FILES_LOCAL_ROOT=/var/lib/jabiz/files
+# The heap follows the container's memory limit (mem_limit in the server's compose); Netty's direct buffers would
+# otherwise be allowed as much again as the heap.
+ENV JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=60 -XX:MaxDirectMemorySize=256m"
 VOLUME /var/lib/jabiz/files
 HEALTHCHECK --interval=5s --timeout=3s --start-period=60s --retries=24 \
     CMD curl -sf http://localhost:8080/actuator/health || exit 1

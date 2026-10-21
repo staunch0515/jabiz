@@ -87,7 +87,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
-      COMPOSE: docker compose -f deploy/quizbuks/docker-compose.yml
+      COMPOSE: docker compose -f deploy/quizbuks/compose.dev.yaml
       # A local demonstration: the image makes the platform's keys (compose's default is false, Q10b review L5).
       QB_LOCAL_SECRETS: 'true'
     steps:

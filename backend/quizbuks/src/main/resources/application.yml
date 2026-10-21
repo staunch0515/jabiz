@@ -1,6 +1,8 @@
 spring:
   application:
     name: quizbuks
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
   r2dbc:
     url: ${SPRING_R2DBC_URL:r2dbc:postgresql://localhost:5440/quizbuks}
     username: ${SPRING_R2DBC_USERNAME:quizbuks}
@@ -200,6 +202,16 @@ management:
     web:
       exposure:
         include: health,info
+  # The health check decides whether a deployment is kept (deploy/quizbuks/DEPLOY.md): it covers the database only,
+  # never the mail server, which is outside the server and whose outage must not roll a release back.
+  health:
+    mail:
+      enabled: false
+
+# On a stop (a new release, a restart) requests in progress finish before the application exits; the server's compose
+# gives the container more than this to stop.
+server:
+  shutdown: graceful
 
 # QuizBuks's own settings. The sponsor console's absolute address, where Stripe sends a sponsor back from Checkout;
 # /sponsor/ on the host of jabiz.mail.base-url when not set (docs/quizbuks/plans/Q2-accounts.md, D-Q2-7). Mail links
