@@ -323,7 +323,7 @@ function OptionList({ single, value, onChoose, children }: { single: boolean; va
   onChoose: (option: number) => void; children: ReactNode }) {
   if (!single) return <ul className="flex flex-col gap-2" data-testid="play-options">{children}</ul>
   return (
-    <RadioGroup asChild value={value.length === 1 ? String(value[0]) : ''} aria-labelledby="play-question"
+    <RadioGroup value={value.length === 1 ? String(value[0]) : ''} aria-labelledby="play-question"
       onValueChange={(next) => onChoose(Number(next))}>
       <ul className="flex flex-col gap-2" data-testid="play-options">{children}</ul>
     </RadioGroup>
