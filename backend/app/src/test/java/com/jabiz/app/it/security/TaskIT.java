@@ -3,7 +3,10 @@ package com.jabiz.app.it.security;
 import com.jabiz.app.it.fixture.ItApprovalFixtures;
 import com.jabiz.app.it.fixture.ItTaskFixtures;
 import com.jabiz.app.it.fixture.SqlStatementLog;
+import com.jabiz.i18n.PlatformErrorCodes;
 import com.jabiz.runtime.approval.ApprovalPermissions;
+import com.jabiz.runtime.task.TaskPermissions;
+import com.jabiz.runtime.task.TaskResolution;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.HttpHeaders;
@@ -152,6 +155,66 @@ class TaskIT extends ApprovalItSupport {
         run("IT_PAY_CANCEL", preparer(), new HashMap<>(Map.of("paymentId", paymentId, "channel", channel,
             "amount", 1)));
         assertThat(mine(holder, "en")).extracting(t -> t.get("subjectId")).doesNotContain(second);
+    }
+
+    /** The key of the one task of {@code key} that {@code authorization} sees. */
+    String taskIdOf(String authorization, String key) {
+        return mine(authorization, "en").stream().filter(t -> String.valueOf(t.get("title")).contains(key))
+            .map(t -> String.valueOf(t.get("taskId"))).findFirst().orElseThrow();
+    }
+
+    @SuppressWarnings("unchecked")
+    static List<Object> codes(Map<String, Object> problem) {
+        List<Map<String, Object>> violations = (List<Map<String, Object>>) problem.get("violations");
+        return violations == null ? List.of() : violations.stream().map(v -> v.get("ruleCode")).toList();
+    }
+
+    @Test
+    void aPersonResolvesATaskTheySeeWithANoteAndOnlyOnce() {
+        String key = unique("K");
+        String permission = unique("it.task.check");
+        open(null, permission, key, key + "-p", null);
+        String holder = as("it-checker", TaskPermissions.RESOLVE, permission);
+        String taskId = taskIdOf(holder, key);
+
+        // Someone who cannot see it gets the same 404 as for no task; the note is required.
+        refused(TaskResolution.RESOLVE, as("it-stranger", TaskPermissions.RESOLVE, "other"),
+            Map.of("taskId", taskId, "outcome", "DONE", "note", "checked"), 404);
+        refused(TaskResolution.RESOLVE, holder, Map.of("taskId", java.util.UUID.randomUUID().toString(),
+            "outcome", "DONE", "note", "checked"), 404);
+        refused(TaskResolution.RESOLVE, holder, Map.of("taskId", taskId, "outcome", "DONE", "note", " "), 400);
+        refused(TaskResolution.RESOLVE, holder, Map.of("taskId", taskId, "outcome", "OPEN", "note", "x"), 400);
+        // Seeing it is not enough: resolving is a permission of its own.
+        refused(TaskResolution.RESOLVE, as("it-viewer", permission), Map.of("taskId", taskId, "outcome", "DONE",
+            "note", "checked"), 403);
+
+        assertThat(run(TaskResolution.RESOLVE, holder, Map.of("taskId", taskId, "outcome", "CANCELLED",
+            "note", " Nothing to do: Stripe's answer was fixed. "))).containsEntry("status", "CANCELLED");
+        assertThat(items(mine(holder, "en"), key)).isEmpty();
+        assertThat(query("SELECT status, closed_by, close_note FROM sys_task_version WHERE task_id = ?::uuid"
+            + " ORDER BY version_no DESC LIMIT 1", taskId).getFirst()).containsEntry("status", "CANCELLED")
+            .containsEntry("closed_by", "it-checker").containsEntry("close_note", "Nothing to do: Stripe's answer was fixed.");
+        assertThat(codes(refused(TaskResolution.RESOLVE, holder, Map.of("taskId", taskId, "outcome", "DONE",
+            "note", "again"), 422))).containsExactly(PlatformErrorCodes.TASK_NOT_OPEN);
+        // A process closing the same work later finds nothing open.
+        run("IT_TASK_CLOSE", opener(), Map.of("key", key));
+        // The change is in the audit, with who made it.
+        assertThat(query("SELECT count(*) AS n FROM sys_audit_record WHERE entity_type = 'SysTask' AND entity_id = ?"
+            + " AND actor_id = 'it-checker'", taskId).getFirst().get("n")).isEqualTo(1L);
+    }
+
+    @Test
+    void anApprovalsTaskIsClosedOnlyByTheDecision() {
+        String channel = unique("C");
+        String permission = unique("it.approve");
+        rule(channel, 1, List.of(Map.of("permission", permission)));
+        String requestId = (String) pay(preparer(), unique("P"), channel, 10, null).get("requestId");
+        String holder = as("it-approver", ApprovalPermissions.DECIDE, TaskPermissions.RESOLVE, permission);
+        String taskId = mine(holder, "en").stream().filter(t -> requestId.equals(t.get("subjectId")))
+            .map(t -> String.valueOf(t.get("taskId"))).findFirst().orElseThrow();
+        assertThat(codes(refused(TaskResolution.RESOLVE, holder, Map.of("taskId", taskId, "outcome", "DONE",
+            "note", "skip it"), 422))).containsExactly(PlatformErrorCodes.TASK_CLOSED_BY_ITS_PROCESS);
+        assertThat(mine(holder, "en")).anyMatch(t -> requestId.equals(t.get("subjectId")));
     }
 
     @Test

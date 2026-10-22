@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import i18n from '../i18n'
@@ -15,9 +16,11 @@ const TASKS = [
 const answer = vi.hoisted(() => ({ value: { isLoading: false, data: { total: 0, tasks: [] as unknown[] } } }))
 
 vi.mock('../meta/hooks', () => ({ useMyTasks: () => answer.value }))
+const permissions = vi.hoisted(() => ({ value: [] as string[] }))
 vi.mock('@jabiz/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@jabiz/client')>()),
   runProcess: vi.fn(),
+  useAuth: () => ({ can: (permission: string) => permissions.value.includes(permission) }),
 }))
 
 function show() {
@@ -52,5 +55,30 @@ describe('TasksPage', () => {
     answer.value = { isLoading: false, data: { total: 0, tasks: [] } }
     show()
     expect(screen.getByTestId('tasks-empty').textContent).toContain('Nothing to do.')
+  })
+
+  it('lets a holder of task.resolve close a task that is not an approval, with a note', async () => {
+    const { runProcess } = await import('@jabiz/client')
+    vi.mocked(runProcess).mockResolvedValue({ taskId: 't2', status: 'CANCELLED' })
+    permissions.value = ['task.resolve']
+    answer.value = { isLoading: false, data: { total: 2, tasks: TASKS } }
+    show()
+    // An approval is decided, never resolved by hand.
+    expect(screen.queryByTestId('task-resolve-t1')).toBeNull()
+    await userEvent.click(screen.getByTestId('task-resolve-t2'))
+    const submit = screen.getByTestId('task-resolve-submit-t2')
+    expect(submit).toBeDisabled()
+    await userEvent.click(screen.getByLabelText('Not needed'))
+    await userEvent.type(screen.getByTestId('task-resolve-note-t2'), ' Nothing to do ')
+    await userEvent.click(submit)
+    expect(runProcess).toHaveBeenCalledWith('TASK_RESOLVE', { taskId: 't2', outcome: 'CANCELLED', note: 'Nothing to do' })
+    await expectAccessible()
+  })
+
+  it('offers nothing to resolve without the permission', () => {
+    permissions.value = []
+    answer.value = { isLoading: false, data: { total: 2, tasks: TASKS } }
+    show()
+    expect(screen.queryByTestId('task-resolve-t2')).toBeNull()
   })
 })

@@ -259,7 +259,9 @@ const en = {
   mfa: {
     title: 'Two-step verification',
   },
-  tasks: { title: 'My tasks', empty: 'Nothing to do.', due: 'Due {{time}}', open: '{{count}} open tasks' },
+  tasks: { title: 'My tasks', empty: 'Nothing to do.', due: 'Due {{time}}', open: '{{count}} open tasks',
+    resolve: 'Resolve', resolveTitle: 'Resolve the task', resolveHint: 'For work no process will close: say what you found or did.',
+    done: 'Done', cancelled: 'Not needed', note: 'Note', resolved: 'The task is closed.', cancel: 'Cancel' },
   approval: {
     approve: 'Approve',
     reject: 'Reject',
@@ -648,7 +650,9 @@ const zh: Texts = {
   mfa: {
     title: '两步验证',
   },
-  tasks: { title: '我的待办', empty: '没有待办事项。', due: '截止 {{time}}', open: '{{count}} 项待办' },
+  tasks: { title: '我的待办', empty: '没有待办事项。', due: '截止 {{time}}', open: '{{count}} 项待办',
+    resolve: '处理', resolveTitle: '处理待办', resolveHint: '用于不会由流程关闭的工作：写下你查到或做了什么。',
+    done: '已完成', cancelled: '不需要', note: '说明', resolved: '待办已关闭。', cancel: '取消' },
   approval: {
     approve: '批准',
     reject: '驳回',
@@ -1034,7 +1038,9 @@ const ja: Texts = {
   mfa: {
     title: '2 段階認証',
   },
-  tasks: { title: '自分のタスク', empty: 'タスクはありません。', due: '期限 {{time}}', open: '未完了のタスク {{count}} 件' },
+  tasks: { title: '自分のタスク', empty: 'タスクはありません。', due: '期限 {{time}}', open: '未完了のタスク {{count}} 件',
+    resolve: '処理', resolveTitle: 'タスクを処理', resolveHint: 'プロセスが閉じない作業用です。確認したことや行ったことを記入してください。',
+    done: '完了', cancelled: '不要', note: 'メモ', resolved: 'タスクを閉じました。', cancel: 'キャンセル' },
   approval: {
     approve: '承認',
     reject: '却下',
