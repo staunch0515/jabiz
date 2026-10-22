@@ -16,7 +16,7 @@ KEY=${sk}_test_51TestOnlyAbCdEfGhIjKlMnOp
 LIVE=${sk}_live_51LiveKeyMustNeverPrint00
 ADMIN=admin-password-never-printed
 
-# Production hosts of the tests' own (the real list beside the script is empty).
+# Production hosts of the tests' own (the real list beside the script is checked separately, below).
 printf '# test list\nprod.quizbuks.test\n*.live.quizbuks.test\n' > "$work/production-hosts"
 
 # run [VAR=value …] -- <run.sh arguments>: run.sh in a clean environment; its output in $out, its exit code in $code.
@@ -92,6 +92,13 @@ run "${ok_env[@]}" -- guard --base-url https://prod.quizbuks.test
 check "every problem at once" '[[ $code == 2 && $out == *"production host"* && $out == *"--allow-remote"* ]]'
 run "${ok_env[@]}" STRIPE_TM_PRODUCTION_HOSTS_FILE="$work/no-such-hosts" -- guard
 check "a missing production hosts file: refused" '[[ $code == 2 && $out == *"production hosts file"*"no-such-hosts"* ]]'
+# The real list beside the script: production (quizbuks.com) is refused, staging (staging.quizbuks.com) is not.
+real_hosts="$root/tools/quizbuks/stripe-test-mode/production-hosts"
+run "${ok_env[@]}" STRIPE_TM_PRODUCTION_HOSTS_FILE="$real_hosts" -- guard --base-url https://quizbuks.com --allow-remote
+check "the real list refuses production" '[[ $code == 2 && $out == *"production host"* ]]'
+run "${ok_env[@]}" STRIPE_TM_PRODUCTION_HOSTS_FILE="$real_hosts" -- guard --base-url https://staging.quizbuks.com \
+  --allow-remote
+check "the real list lets staging through" '[[ $out != *"production host"* ]]'
 
 # 3. Live mode in this environment.
 run "${ok_env[@]}" QB_STRIPE_LIVEMODE=true -- guard
