@@ -10,9 +10,12 @@ COPY backend backend
 COPY frontend frontend
 COPY quizbuks-web quizbuks-web
 COPY spec spec
+# The commit the image is built from (the deploy workflow passes --build-arg JABIZ_BUILD_COMMIT=<sha>): the admin's
+# sign-in page shows it (platform 16z). The repository itself stays out of the build context.
+ARG JABIZ_BUILD_COMMIT=""
 # node-gradle downloads Node and pnpm and builds the single-page applications before packaging them.
 RUN --mount=type=cache,target=/root/.gradle \
-    cd backend && ./gradlew :quizbuks:bootJar --no-daemon --console=plain \
+    cd backend && JABIZ_BUILD_COMMIT="$JABIZ_BUILD_COMMIT" ./gradlew :quizbuks:bootJar --no-daemon --console=plain \
     && cp quizbuks/build/libs/quizbuks-0.0.1-SNAPSHOT.jar /src/app.jar
 
 FROM eclipse-temurin:21-jre
