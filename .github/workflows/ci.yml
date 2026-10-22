@@ -21,7 +21,9 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # On an application's branch `check` runs the application's modules too (QuizBuks alone takes about 25 minutes):
+    # 30 minutes cancelled it there.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-java@v5
