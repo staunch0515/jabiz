@@ -256,13 +256,14 @@ public final class StripeStub {
         answer(exchange, 200, "application/json", transfer);
     }
 
+    /** Like Stripe's v1 Account: no {@code livemode} (the request's key and the event say the mode). */
     private static String accountJson(String id, boolean enabled) {
         Map<String, String> account = ACCOUNTS.getOrDefault(id, Map.of());
         return "{\"id\":\"" + id + "\",\"object\":\"account\",\"type\":\"express\",\"country\":\""
             + text(account.get("country")) + "\",\"payouts_enabled\":" + enabled + ",\"details_submitted\":" + enabled
             + ",\"capabilities\":{\"transfers\":\"" + (enabled ? "active" : "inactive") + "\"},"
             + "\"requirements\":{\"currently_due\":[]},\"metadata\":{\"userId\":\"" + text(account.get("metadata[userId]"))
-            + "\"},\"livemode\":false}";
+            + "\"}}";
     }
 
     /** Signs an event as Stripe does ({@code t=…,v1=HMAC-SHA256(t + "." + body)}) and posts it. */

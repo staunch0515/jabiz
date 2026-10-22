@@ -69,7 +69,7 @@ abstract class PayoutItSupport extends TopUpItSupport {
         account.put("capabilities", Map.of("transfers", enabled ? "active" : "pending"));
         account.put("requirements", Map.of("currently_due", enabled ? List.of() : List.of("individual.id_number")));
         account.put("metadata", Map.of("userId", userId));
-        account.put("livemode", false);
+        // Like Stripe's: a v1 Account has no livemode (the event carries it).
         return account;
     }
 

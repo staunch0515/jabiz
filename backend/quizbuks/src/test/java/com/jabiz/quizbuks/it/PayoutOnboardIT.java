@@ -141,6 +141,21 @@ class PayoutOnboardIT extends PayoutItSupport {
     }
 
     @Test
+    void anAccountThatNamesTheOtherModeIsRefused() {
+        // Stripe's v1 Account has no livemode, so the event's mode decides; one that does name a mode must agree.
+        String taker = payee("t-onboard-account-live");
+        openPayoutAccount(taker);
+        String accountId = stripeAccountOf(taker);
+        Map<String, Object> object = account(accountId, taker, true);
+        object.put("livemode", true);
+        Map<String, Object> event = connectEvent("account.updated", accountId, object);
+        deliverConnect(event);
+        assertThat(payoutAccount(taker)).containsEntry("status", "PENDING");
+        assertThat(tasksAbout("stripe:" + event.get("id"))).extracting(t -> t.get("title_key"))
+            .containsExactly("task.qb.payout-check.LIVEMODE");
+    }
+
+    @Test
     void connectEventsNeedTheConnectSecret() {
         String taker = payee("t-onboard-forged");
         openPayoutAccount(taker);

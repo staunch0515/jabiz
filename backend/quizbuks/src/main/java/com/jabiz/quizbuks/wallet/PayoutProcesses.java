@@ -319,7 +319,9 @@ public final class PayoutProcesses {
             check(ctx, PayoutChecks.UNKNOWN_ACCOUNT);
             return;
         }
-        Boolean objectLivemode = report.account() == null ? event.livemode() : report.account().livemode();
+        // A v1 Account carries no livemode (only the event does): an account that names a mode must agree with it.
+        Boolean objectLivemode = report.account() == null || report.account().livemode() == null ? event.livemode()
+            : report.account().livemode();
         if (!Boolean.valueOf(stripe.livemode()).equals(event.livemode())
             || !Boolean.valueOf(stripe.livemode()).equals(objectLivemode)) {
             check(ctx, PayoutChecks.LIVEMODE);

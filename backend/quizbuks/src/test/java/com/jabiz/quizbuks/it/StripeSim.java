@@ -82,7 +82,7 @@ final class StripeSim {
             account.put("payouts_enabled", false);
             account.put("details_submitted", false);
             account.put("metadata", Map.of("userId", form.get("metadata[userId]")));
-            account.put("livemode", false);
+            // Like Stripe's: a v1 Account has no livemode (only the request's key and the event say the mode).
             return json(200, account);
         }
         if ("POST".equals(request.method()) && "/v1/account_links".equals(path)) {

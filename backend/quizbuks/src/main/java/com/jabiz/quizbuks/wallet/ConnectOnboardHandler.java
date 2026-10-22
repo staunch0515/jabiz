@@ -46,7 +46,9 @@ public class ConnectOnboardHandler implements ExternalJobHandler<PayoutJobs.Onbo
             }
             accountId = account.id();
             country = account.country();
-            livemode = account.livemode();
+            // A v1 Account carries no livemode: the mode is that of the key this deployment called with, which
+            // StripeModeCheck holds to quizbuks.stripe.livemode. Only an answer that names another mode is refused.
+            livemode = account.livemode() == null ? settings.livemode() : account.livemode();
         } else {
             livemode = settings.livemode();
         }
