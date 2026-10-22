@@ -235,7 +235,7 @@ runtime `ApprovalChecksTest`；app `ApprovalIT`（四眼修改规则、结论与
 ### 5.1 待办
 
 `SysTask`（时态平台实体，数据视图只经流程写入，读权限 `task.read`）：类型、标题（文案键 + 参数，按读者的语言显示）、指派对象（**一个用户或一个权限**，二者择一）、
-关联实体与标识、链接（后台中的路径）、状态（`OPEN` / `DONE` / `CANCELLED`）、截止时间、来源键、关闭人。
+关联实体与标识、链接（后台中的路径）、状态（`OPEN` / `DONE` / `CANCELLED`）、截止时间、来源键、关闭人、关闭说明（只有手工处理时有，5.3a）。
 
 ```java
 .step("Ask for the invoice", CreateTask.of(ctx -> TaskSpec.forUser("fin.invoice", "task.invoice", Map.of("order", no), owner)
@@ -262,6 +262,17 @@ runtime `ApprovalChecksTest`；app `ApprovalIT`（四眼修改规则、结论与
   其他待办链接到其页面。页头显示开放待办数（每分钟刷新），点击进入 `/tasks`。
 - `@jabiz/admin` 导出 `ApprovalPanel`（`{requestId, onDecided}`）与 `useMyTasks`，应用扩展可在自己的页面中使用（12 §9）。
 - 已知限制：准备人若也持有审批权限，会看到自己请求的待办（判断时被拒，`APPROVAL_OWN_REQUEST`）。
+
+### 5.3a 手工处理待办（16y）
+
+有些待办没有流程会关闭它们（如核对发现的问题查过之后无须处理）。流程 `TASK_RESOLVE`（权限 `task.resolve`）由人关闭一个**本人看得到的**开放待办
+（指派给本人，或指派给本人持有的权限；与 `GET /api/tasks/mine` 同一规则）：`outcome` 为 `DONE`（做完了）或 `CANCELLED`（不需要），`note` 必填（≤ 1000 字），
+写入新版本的状态、关闭人与关闭说明（`closeNote`），照常记入审计。
+
+- 看不到的待办与不存在的待办同为 404；已关闭的 422 `TASK_NOT_OPEN`。
+- **审批待办不能手工处理**（422 `TASK_CLOSED_BY_ITS_PROCESS`）：它只随审批的决定、作废或撤回关闭，否则待审批的请求会从审批人的待办中消失。
+- 之后流程按来源键关闭同一工作时找不到开放的待办，什么也不做。
+- 通用后台 `/tasks`：持有 `task.resolve` 时非审批待办下有"处理"，选做完 / 不需要并写说明。`task.resolve` 由应用授予（如财务、运维角色），平台不授予任何角色。
 
 ### 5.4 邮件通知
 
