@@ -7,9 +7,12 @@ WORKDIR /src
 COPY backend backend
 COPY frontend frontend
 COPY spec spec
+# The commit the image is built from (docker build --build-arg JABIZ_BUILD_COMMIT=$(git rev-parse HEAD)): the admin's
+# sign-in page shows it. The repository itself stays out of the build context (.dockerignore).
+ARG JABIZ_BUILD_COMMIT=""
 # node-gradle downloads Node and pnpm and builds the frontend before packaging it (backend/build.gradle.kts).
 RUN --mount=type=cache,target=/root/.gradle \
-    cd backend && ./gradlew :app:bootJar --no-daemon --console=plain \
+    cd backend && JABIZ_BUILD_COMMIT="$JABIZ_BUILD_COMMIT" ./gradlew :app:bootJar --no-daemon --console=plain \
     && cp app/build/libs/app-0.0.1-SNAPSHOT.jar /src/app.jar
 
 FROM eclipse-temurin:21-jre

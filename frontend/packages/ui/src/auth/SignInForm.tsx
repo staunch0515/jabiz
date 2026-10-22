@@ -46,6 +46,8 @@ export interface SignInFormProps extends AuthNavigation {
   auth?: Pick<AuthState, 'signIn' | 'verify'>
   /** Offers the appearance as well as the language (default true). */
   appearance?: boolean
+  /** Small print under the form on every step (the admin shows the build it runs). */
+  footer?: ReactNode
 }
 
 /**
@@ -57,7 +59,7 @@ export interface SignInFormProps extends AuthNavigation {
  * cause), in the language of the request.
  */
 export function SignInForm(props: SignInFormProps) {
-  const { brand, initialStep, notice, appearance, onNavigate, hrefOf } = props
+  const { brand, initialStep, notice, appearance, footer, onNavigate, hrefOf } = props
   // Only a path of this site: the page to return to may come from an address anyone can write.
   const returnTo = sitePath(props.returnTo)
   const { t } = useTranslation(AUTH_NAMESPACE)
@@ -82,7 +84,7 @@ export function SignInForm(props: SignInFormProps) {
     else if (isProblem(e, 'SIGN_IN_REFUSED')) setError(t('login.refused'))
     else setError(refusal(e, t('common.error')))
   }
-  const frame = { brand, appearance }
+  const frame = { brand, appearance, footer }
 
   if (step.kind === 'enroll') {
     const challenge = step.challenge
