@@ -3,7 +3,7 @@
  * labels) come from the server in the language of the request; only the platform's own chrome is here.
  */
 const en = {
-  app: { title: 'jabiz', language: 'Language', logout: 'Sign out', loading: 'Loading…', error: 'Something went wrong', security: 'Security', dataPeriod: 'Data {{from}} – {{to}}', dataPeriodHint: 'Your roles limit you to the data of this period.' },
+  app: { title: 'jabiz', language: 'Language', logout: 'Sign out', loading: 'Loading…', error: 'Something went wrong', security: 'Security', dataPeriod: 'Data {{from}} – {{to}}', dataPeriodHint: 'Your roles limit you to the data of this period.', build: 'Build {{commit}}' },
   nav: { datasets: 'Data', processes: 'Processes', home: 'Home', tasks: 'Tasks', reports: 'Reports', imports: 'Imports', audit: 'Audit', integrity: 'Integrity', retention: 'Retention', accessReview: 'Access review', sessions: 'Sessions', documents: 'Documents' },
   imports: {
     title: 'Imports',
@@ -394,7 +394,7 @@ type Texts = typeof en
 
 const zh: Texts = {
   languages: { zh: '中文', ja: '日本語', en: 'English' },
-  app: { title: 'jabiz', language: '语言', logout: '退出登录', loading: '加载中…', error: '出错了', security: '安全设置', dataPeriod: '数据期限 {{from}} – {{to}}', dataPeriodHint: '你的角色只允许查看这个期限内的数据。' },
+  app: { title: 'jabiz', language: '语言', logout: '退出登录', loading: '加载中…', error: '出错了', security: '安全设置', dataPeriod: '数据期限 {{from}} – {{to}}', dataPeriodHint: '你的角色只允许查看这个期限内的数据。', build: '构建 {{commit}}' },
   nav: { datasets: '数据', processes: '流程', home: '首页', tasks: '待办', reports: '报表', imports: '导入', audit: '审计', integrity: '防篡改', retention: '保留与归档', accessReview: '访问审查', sessions: '会话', documents: '单据' },
   imports: {
     title: '导入',
@@ -782,7 +782,7 @@ const zh: Texts = {
 
 const ja: Texts = {
   languages: { zh: '中文', ja: '日本語', en: 'English' },
-  app: { title: 'jabiz', language: '言語', logout: 'ログアウト', loading: '読み込み中…', error: 'エラーが発生しました', security: 'セキュリティ', dataPeriod: 'データ期間 {{from}} – {{to}}', dataPeriodHint: 'ロールにより、この期間のデータのみ閲覧できます。' },
+  app: { title: 'jabiz', language: '言語', logout: 'ログアウト', loading: '読み込み中…', error: 'エラーが発生しました', security: 'セキュリティ', dataPeriod: 'データ期間 {{from}} – {{to}}', dataPeriodHint: 'ロールにより、この期間のデータのみ閲覧できます。', build: 'ビルド {{commit}}' },
   nav: { datasets: 'データ', processes: 'プロセス', home: 'ホーム', tasks: 'タスク', reports: 'レポート', imports: 'インポート', audit: '監査', integrity: '改ざん検知', retention: '保存とアーカイブ', accessReview: 'アクセスレビュー', sessions: 'セッション', documents: '帳票' },
   imports: {
     title: 'インポート',
