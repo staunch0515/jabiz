@@ -222,6 +222,11 @@ class BootAppPlugin : Plugin<Project> {
             environment.put("VITE_JABIZ_REGION", app.region.orElse(""))
             inputs.property("languages", app.languages)
             inputs.property("region", app.region.orElse(""))
+            // The commit the build is from (JABIZ_BUILD_COMMIT, set by an image build): the admin's sign-in page
+            // shows it (17 section 3), so whoever signs in sees which version runs.
+            val commit = project.providers.environmentVariable("JABIZ_BUILD_COMMIT").orElse("")
+            environment.put("VITE_JABIZ_BUILD_COMMIT", commit)
+            inputs.property("buildCommit", commit)
             // The application's own admin pages (decision D22); the build type-checks them before bundling.
             extensionDir?.let { environment.put("JABIZ_ADMIN_EXTENSION", it.asFile.absolutePath) }
             pnpmCommand.set(outDir.map {
