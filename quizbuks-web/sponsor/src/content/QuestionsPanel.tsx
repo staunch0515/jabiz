@@ -167,7 +167,7 @@ function QuestionDialog({ question, number, survey, open, onOpenChange }: {
           <fieldset className="flex flex-col gap-3">
             <legend className="mb-2 text-sm font-medium">{t('questions.options')}</legend>
             <p className="text-muted-foreground text-sm">
-              {t('questions.optionsHint', { min: LIMITS.minOptions, max: LIMITS.options })}
+              {t(survey ? 'questions.surveyOptionsHint' : 'questions.optionsHint', { min: LIMITS.minOptions, max: LIMITS.options })}
             </p>
             <ol ref={optionsRef} className="flex flex-col gap-3">
               {options.map((option, index) => (

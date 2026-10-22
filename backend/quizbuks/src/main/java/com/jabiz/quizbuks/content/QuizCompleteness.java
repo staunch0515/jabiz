@@ -40,6 +40,12 @@ public final class QuizCompleteness {
                     problems.add(new Violation(path + ".selection", ContentCodes.SELECTION_REQUIRED, "Question "
                         + question.no() + " is neither single nor multiple choice", Map.of("question", question.no())));
                 }
+                // The processes write a point each and no correct option; checked again here, so that neither a
+                // version nor the submission's re-check takes a survey that scores (whatever wrote it).
+                if (question.points() != 1 || question.options().stream().anyMatch(QuizSnapshot.Option::correct)) {
+                    problems.add(new Violation(path, ContentCodes.SURVEY_SCORED, "Question " + question.no()
+                        + " of a survey has points or a correct option", Map.of("question", question.no())));
+                }
             } else if (question.options().stream().noneMatch(QuizSnapshot.Option::correct)) {
                 problems.add(new Violation(path + ".options", ContentCodes.NO_CORRECT,
                     "Question " + question.no() + " has no correct option", Map.of("question", question.no())));

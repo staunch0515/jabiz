@@ -14,7 +14,6 @@ results:
   sponsorId:         { from: QbPublication.sponsorId }
   name:              { from: QbPublication.name }
   quizTitle:         { from: QbQuizVersion.title }
-  kind:              { kind: { type: text, maxLength: 10 } }
   versionLabel:      { from: QbPublication.versionLabel }
   status:            { from: QbPublication.status }
   regions:           { from: QbPublication.regions }
@@ -48,8 +47,6 @@ SELECT
     p.{{QbPublication.sponsorId}}           AS sponsorId,
     p.{{QbPublication.name}}                AS name,
     v.{{QbQuizVersion.title}}               AS quizTitle,
-    -- A survey's snapshot names its kind (Q12); a scored quiz's does not.
-    CAST(coalesce(CAST(v.{{QbQuizVersion.content}} AS jsonb) ->> 'kind', 'QUIZ') AS varchar(10)) AS kind,
     p.{{QbPublication.versionLabel}}        AS versionLabel,
     p.{{QbPublication.status}}              AS status,
     p.{{QbPublication.regions}}             AS regions,

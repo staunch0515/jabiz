@@ -140,4 +140,27 @@ class SurveyIT extends PlayItSupport {
         assertThat(latest("qb_quiz_version", "quiz_id", "quiz_id = '" + copy + "'").getFirst())
             .containsEntry("kind", "SURVEY");
     }
+
+    @Test
+    void aSurveyCompleteAtItsDeadlineIsPaidAndASingleChoiceWithTwoOptionsIsNotAnAnswer() {
+        credit(sponsorA(), 1_000);
+        String publicationId = liveSurvey(sponsorA(), "At the deadline");
+        String complete = taker(u1());
+        String doubled = taker(u2());
+        String paid = (String) start(complete, publicationId).get("attemptId");
+        String unpaid = (String) start(doubled, publicationId).get("attemptId");
+        run("QB_ATTEMPT_SAVE", complete, body("attemptId", paid, "answers", shown(paid, List.of(
+            body("questionNo", 1, "selected", List.of(2)), body("questionNo", 2, "selected", List.of(1))))));
+        // Saving does not read the questions: two options for the single choice are kept, and count for nothing.
+        run("QB_ATTEMPT_SAVE", doubled, body("attemptId", unpaid, "answers", shown(unpaid, List.of(
+            body("questionNo", 1, "selected", List.of(1, 2)), body("questionNo", 2, "selected", List.of(3))))));
+        clock.advance(Duration.ofSeconds(301).plus(com.jabiz.quizbuks.play.PlayLimits.SUBMIT_GRACE));
+        systemRun("QB_ATTEMPT_EXPIRE", body("attemptId", paid));
+        systemRun("QB_ATTEMPT_EXPIRE", body("attemptId", unpaid));
+        assertThat(attempt(paid)).containsEntry("status", "EXPIRED").containsEntry("passed", true)
+            .containsEntry("reward_status", "PAID");
+        assertThat(attempt(unpaid)).containsEntry("status", "EXPIRED").containsEntry("score", BigDecimal.ONE)
+            .containsEntry("passed", false).containsEntry("reward_status", "NONE");
+        assertBooksBalance();
+    }
 }

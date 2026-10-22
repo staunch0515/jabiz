@@ -287,8 +287,10 @@ function Player({ started }: { started: Started }) {
         </Button>
         <span className="flex-1" />
         {last ? (
-          <Button onClick={() => setConfirmOpen(true)} disabled={blocked} aria-describedby={blocked
-            ? 'play-incomplete' : undefined} data-testid="play-submit">
+          // aria-disabled rather than disabled: the button keeps its focus and says why it waits.
+          <Button onClick={() => !blocked && setConfirmOpen(true)} aria-disabled={blocked || undefined}
+            aria-describedby={blocked ? 'play-incomplete' : undefined} data-testid="play-submit"
+            className={blocked ? 'cursor-not-allowed opacity-50' : undefined}>
             <Send aria-hidden />
             {t('play.submit')}
           </Button>

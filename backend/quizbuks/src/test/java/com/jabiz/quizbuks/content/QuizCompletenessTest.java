@@ -198,5 +198,10 @@ class QuizCompletenessTest {
         assertThat(QuizCompleteness.check(survey)).singleElement()
             .satisfies(v -> assertThat(v.ruleCode()).isEqualTo(ContentCodes.SELECTION_REQUIRED))
             .satisfies(v -> assertThat(v.field()).isEqualTo("questions[0].selection"));
+        // A survey that scores (points or a correct option, however it was written) is not a version either.
+        QuizSnapshot.Question scored = new QuizSnapshot.Question(1, "q", null, 2, List.of(Drafts.option(1, "a", true),
+            Drafts.option(2, "b", false)), QbContent.SINGLE);
+        assertThat(codes(new QuizSnapshot("S", null, null, null, false, List.of(), List.of(scored), true)))
+            .containsExactly(ContentCodes.SURVEY_SCORED);
     }
 }

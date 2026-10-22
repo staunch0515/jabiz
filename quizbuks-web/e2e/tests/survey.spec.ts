@@ -103,11 +103,11 @@ for (const appearance of ['light', 'dark'] as const) {
     await expectAccessible(page, at('app survey single choice'))
     await page.getByTestId('play-next').click()
     // The last question: nothing chosen yet, so submitting waits.
-    await expect(page.getByTestId('play-submit')).toBeDisabled()
+    await expect(page.getByTestId('play-submit')).toHaveAttribute('aria-disabled', 'true')
     await expect(page.getByTestId('play-incomplete')).toBeVisible()
     await page.getByRole('checkbox', { name: 'Green' }).click()
     await page.getByRole('checkbox', { name: 'Herbal' }).click()
-    await expect(page.getByTestId('play-submit')).toBeEnabled()
+    await expect(page.getByTestId('play-submit')).not.toHaveAttribute('aria-disabled')
     await page.getByTestId('play-submit').click()
     await page.getByRole('alertdialog').getByRole('button', { name: 'Submit answers' }).click()
 

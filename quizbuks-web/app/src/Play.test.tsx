@@ -479,11 +479,11 @@ describe('a survey', () => {
 
       await userEvent.click(screen.getByTestId('play-next'))
       expect(screen.getByText('Choose one or more answers.')).toBeInTheDocument()
-      expect(screen.getByTestId('play-submit')).toBeDisabled()
+      expect(screen.getByTestId('play-submit')).toHaveAttribute('aria-disabled', 'true')
       expect(screen.getByTestId('play-incomplete')).toHaveTextContent('1 still open')
       await userEvent.click(screen.getByRole('checkbox', { name: /Tea/ }))
       await userEvent.click(screen.getByRole('checkbox', { name: /Coffee/ }))
-      expect(screen.getByTestId('play-submit')).toBeEnabled()
+      expect(screen.getByTestId('play-submit')).not.toHaveAttribute('aria-disabled')
       expect(screen.queryByTestId('play-incomplete')).toBeNull()
       await userEvent.click(screen.getByTestId('play-submit'))
       await userEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button',

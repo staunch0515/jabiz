@@ -37,13 +37,21 @@
 | 答题 | `Scoring`（问卷按已回答计分）、`AttemptFinishing`（提交须完整、单选）、开始与继续的输出带 `kind` 与每题的 `selection`、`PlayCodes` |
 | 模板 | 首页、详情、历史、商家与后台读版本与卡片的模板带 `kind` |
 | 前端 | App：问卷的单选（单选按钮）与多选、全部回答前不能提交、结果页与历史；商家后台：新建时选 Quiz / 问卷、编辑器（单选 / 多选，隐藏正误与分值）、发布向导只填一笔奖励、版本列表与预览；后台扩展：版本预览与发布审核显示"问卷"与每份奖励 |
-| 测试 | 单元（完整性、快照的哈希不变与问卷的键、评分、发布检查）、`SurveyIT`（完整提交得奖、不完整与单选多项被拒、超时不付、类型不可改、AI 拒绝）、场景 `survey.yml`、前端 Vitest、e2e `survey.spec.ts`；已有场景快照不变 |
+| 测试 | 单元（完整性、快照的哈希不变与问卷的键、评分、发布检查）、`SurveyIT`（完整提交得奖、不完整与单选多项被拒、超时不付、类型不可改、AI 拒绝）、场景 `survey.yml`、前端 Vitest、e2e `survey.spec.ts`；已有场景快照只多出 `kind`（`QUIZ`）与 `selection`（空）两个字段，哈希不变 |
 
 ### Q12b 问卷结果（`1.2/quizbuks-12b-survey-results`）
 
 分析任务按版本的选项编号聚合每题各选项的人数（新表，迁移 V20），模板 `qb.sponsor.analytics.survey-answers`（k 规则同 Q9e），商家的分析页显示每题的分布与合计，导出经平台的 `POST /api/queries/{id}/export`。
 
-## 4. 风险
+## 4. 实施约定（Q12a）
+
+- 是否完整只在提交与评分时检查（`Answers.incomplete`、`Scoring`），保存进度不读快照（`AttemptStatementBudgetIT` 不变）；超时以已保存的答案评分，单选存了多项按未回答计。
+- 问卷的规则在三处：流程写入（分值 1、没有正确项）、`QuizCompleteness`（保存版本与提交发布时再查：`QB_QUESTION_SELECTION_REQUIRED`、`QB_QUESTION_SURVEY_SCORED`）与 `PublicationReadiness`（合格分与档位）；AI 的请求与接受都拒绝问卷。
+- 只有问卷的快照写 `kind` 与 `selection`；卡片的 `kind` 在上架时冻结，App 只读卡片与开始的输出。
+- 不完整的提交在发布锁内才被拒绝（App 在全部回答前不让提交）；锁外的预先检查不做，以免答题路径多一条读取。
+- 在 Q12b 之前，商家分析与后台的"正确率""及格"对问卷读作"作答率""完成"。
+
+## 5. 风险
 
 - **随便点也有钱**：问卷鼓励乱答。现有的保护照旧：一人一次、已验证邮箱、收款时的身份核实；注意力检查题等质量控制不在本阶段。
 - **计分 Quiz 的路径必须不变**：快照、评分、档位与页面的分支都以 `kind` 区分，已有测试与场景快照守住计分 Quiz。

@@ -923,6 +923,12 @@ public final class AiProcesses {
         if (!QuizEditing.current(ctx, quiz, input.baseRevision())) {
             return;
         }
+        if (QbContent.KIND_SURVEY.equals(quiz.get("kind"))) {
+            // Candidates have correct options and points; a survey has neither (Q12, D-Q12-9).
+            ctx.reject(new Violation("quizId", AiCodes.SURVEY_UNSUPPORTED, "Questions are not written for surveys",
+                Map.of()));
+            return;
+        }
         requireReady(ctx, job);
         List<AiQuestionsJob.Candidate> candidates = candidates(job);
         List<EntityInstance> existing = QuizEditing.ordered(QuizEditing.list(ctx, QuizEditing.QUESTIONS));
