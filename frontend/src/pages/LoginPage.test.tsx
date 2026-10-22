@@ -2,7 +2,7 @@ import { ApiError } from '@jabiz/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import i18n from '../i18n'
 import LoginPage from './LoginPage'
 import { expectAccessible } from '@jabiz/ui/testing'
@@ -58,6 +58,10 @@ describe('LoginPage', () => {
     startProviderSignIn.mockReset()
     home = undefined
     await i18n.changeLanguage('en')
+  })
+
+  afterEach(() => {
+    vi.unstubAllEnvs()
   })
 
   it('asks for the code after the password when two-step verification is on', async () => {
@@ -167,7 +171,6 @@ describe('LoginPage', () => {
     page()
     expect((await screen.findByTestId('auth-footer')).textContent).toBe('Build 4dc1aa14d922')
     await expectAccessible()
-    vi.unstubAllEnvs()
   })
 
   it('shows no build line when the build named no commit', async () => {
@@ -175,6 +178,5 @@ describe('LoginPage', () => {
     page()
     await screen.findByRole('heading', { level: 1 })
     expect(screen.queryByTestId('auth-footer')).toBeNull()
-    vi.unstubAllEnvs()
   })
 })
