@@ -1,5 +1,6 @@
 package com.jabiz.quizbuks.play;
 
+import com.jabiz.quizbuks.content.QbContent;
 import com.jabiz.quizbuks.content.QuizSnapshot;
 import net.jqwik.api.Arbitraries;
 import net.jqwik.api.Arbitrary;
@@ -154,5 +155,25 @@ class ScoringTest {
     @Provide
     Arbitrary<List<List<Integer>>> choices() {
         return Arbitraries.integers().between(1, 6).list().ofMaxSize(4).list().ofMaxSize(7);
+    }
+
+    /** Question 1 single choice, question 2 multiple choice; no correct options, a point each (Q12). */
+    static QuizSnapshot survey() {
+        return new QuizSnapshot("S", null, null, 300, false, List.of(), List.of(
+            new QuizSnapshot.Question(1, "a", null, 1, List.of(option(1, false), option(2, false)), QbContent.SINGLE),
+            new QuizSnapshot.Question(2, "b", null, 1, List.of(option(1, false), option(2, false), option(3, false)),
+                QbContent.MULTIPLE)), true);
+    }
+
+    @Test
+    void aSurveysQuestionEarnsItsPointWhenAnsweredWhateverTheAnswer() {
+        assertThat(Scoring.score(survey(), List.of(List.of(2), List.of(1, 3))).score()).isEqualTo(2);
+        assertThat(Scoring.score(survey(), List.of(List.of(1), List.of(2))).score()).isEqualTo(2);
+        // Unanswered, or a single choice with two options (saved, then the deadline passed): no point.
+        assertThat(Scoring.score(survey(), List.of(List.of(), List.of(2))).score()).isEqualTo(1);
+        assertThat(Scoring.score(survey(), List.of(List.of(1, 2), List.of(2))).score()).isEqualTo(1);
+        Scoring.Result result = Scoring.score(survey(), List.of(List.of(1), List.of(3)));
+        assertThat(result.fullScore()).isEqualTo(2);
+        assertThat(result.questions()).extracting(Scoring.QuestionResult::correct).containsOnly(List.of());
     }
 }

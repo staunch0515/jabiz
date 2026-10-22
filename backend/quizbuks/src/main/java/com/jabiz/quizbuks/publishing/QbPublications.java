@@ -293,6 +293,9 @@ public final class QbPublications {
             .asText(PublishingLimits.CARD_TIERS_LENGTH));
         // The country of the sponsor's profile when the publication went on, for the feed's filter (U-13).
         eb.field("sponsorCountry", f -> f.physicalColumn("sponsor_country").immutable(true).asText(2));
+        // A scored quiz or a survey (Q12), from the version's snapshot.
+        eb.field("kind", f -> f.physicalColumn("kind").immutable(true).required(true)
+            .asCode(QbContent.QUIZ_KIND_DICTIONARY, QbContent.KIND_QUIZ, QbContent.KIND_SURVEY));
         eb.field("wentOnAt", f -> f.physicalColumn("went_on_at").immutable(true).required(true)
             .asTemporal(TemporalRole.EVENT_TIME));
         // When it ended, by whatever reason (its time, its winners, its budget): the statistics job counts a

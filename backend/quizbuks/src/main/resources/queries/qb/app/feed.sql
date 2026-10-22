@@ -19,6 +19,7 @@ results:
   name:           { from: QbPublicationCard.name }
   quizTitle:      { from: QbPublicationCard.quizTitle }
   cover:          { from: QbPublicationCard.cover }
+  kind:           { from: QbPublicationCard.kind }
   maxReward:      { from: QbPublicationCard.maxReward }
   completions:    { from: QbPublicationCounter.completions }
   sponsorName:    { from: QbSponsor.contactName }
@@ -52,6 +53,7 @@ SELECT
     c.{{QbPublicationCard.name}}           AS name,
     c.{{QbPublicationCard.quizTitle}}      AS quizTitle,
     c.{{QbPublicationCard.cover}}          AS cover,
+    c.{{QbPublicationCard.kind}}           AS kind,
     c.{{QbPublicationCard.maxReward}}      AS maxReward,
     n.{{QbPublicationCounter.completions}} AS completions,
     sp.{{QbSponsor.contactName}}           AS sponsorName,

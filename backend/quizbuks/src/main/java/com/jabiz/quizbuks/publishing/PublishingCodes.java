@@ -49,6 +49,10 @@ public final class PublishingCodes {
     public static final String TIER_OVERLAP = "QB_TIER_OVERLAP";
     public static final String TIER_NOT_TO_FULL = "QB_TIER_NOT_TO_FULL";
     public static final String TIER_NO_REWARD = "QB_TIER_NO_REWARD";
+    /** A survey's pass mark that is not its number of questions (Q12, D-Q12-4). */
+    public static final String SURVEY_PASS_SCORE = "QB_PUBLICATION_SURVEY_PASS_SCORE";
+    /** A survey's tier that rewards an incomplete response (Q12, D-Q12-4). */
+    public static final String SURVEY_TIERS = "QB_PUBLICATION_SURVEY_TIERS";
 
     /** The sponsor tries to resume a publication an administrator paused (Q10b, M2). */
     public static final String ADMIN_PAUSED = "QB_PUBLICATION_ADMIN_PAUSED";
@@ -70,7 +74,7 @@ public final class PublishingCodes {
         BUDGET_RANGE, MAX_WINNERS_RANGE, TIER_REWARD_RANGE, TIME_ORDER, NOT_DRAFT, CHANGED, QUIZ_REMOVED,
         TIER_NOT_IN_PUBLICATION, EXPIRED_IN_REVIEW, NO_VERSION,
         FIELD_REQUIRED, END_PASSED, TOO_LONG, PASS_SCORE_RANGE, BUDGET_BELOW_MAX_REWARD, SPEND_RANGE, TIER_NOT_FROM_ZERO,
-        TIER_RANGE, TIER_GAP, TIER_OVERLAP, TIER_NOT_TO_FULL, TIER_NO_REWARD,
+        TIER_RANGE, TIER_GAP, TIER_OVERLAP, TIER_NOT_TO_FULL, TIER_NO_REWARD, SURVEY_PASS_SCORE, SURVEY_TIERS,
         ADMIN_PAUSED, NOT_ADMIN_PAUSED, SPONSOR_BANNED, TAKEN_DOWN, REVIEW_REQUIRED);
 
     private PublishingCodes() {}

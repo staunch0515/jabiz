@@ -46,10 +46,13 @@ public final class QuestionProcesses {
      * question together with its options, so {@code options} is the whole list: options left out of it are deleted,
      * and an empty list deletes them all. Without {@code options} (null) the options stay as they are.
      *
-     * @param points 1 when not given
+     * @param points    1 when not given; a survey's question is always 1 (Q12, D-Q12-3)
+     * @param selection a survey's question only: {@code SINGLE} or {@code MULTIPLE} (may be missing in a draft);
+     *                  a survey's options are never correct, whatever {@code correct} says
      */
     public record QuestionInput(@NotNull UUID quizId, UUID questionId, String stem, UUID image, Integer points,
-        @Size(max = ContentLimits.MAX_OPTIONS) List<@Valid @NotNull OptionInput> options, Long baseRevision) {}
+        @Size(max = ContentLimits.MAX_OPTIONS) List<@Valid @NotNull OptionInput> options, Long baseRevision,
+        String selection) {}
 
     public record QuestionRef(@NotNull UUID quizId, @NotNull UUID questionId, Long baseRevision) {}
 
@@ -118,6 +121,11 @@ public final class QuestionProcesses {
                     part == null ? null : part.get("image"));
             }
         }
+        boolean survey = QbContent.KIND_SURVEY.equals(quiz.get("kind"));
+        if (!survey && input.selection() != null) {
+            ctx.reject(new Violation("selection", ContentCodes.SELECTION_NOT_ALLOWED, "Only a survey's questions are "
+                + "single or multiple choice", Map.of()));
+        }
         if (ctx.hasViolations()) {
             return;
         }
@@ -125,7 +133,8 @@ public final class QuestionProcesses {
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("stem", text(input.stem()));
         values.put("image", input.image());
-        values.put("points", decimal(input.points() == null ? 1 : input.points()));
+        values.put("points", decimal(survey || input.points() == null ? 1 : input.points()));
+        values.put("selection", survey ? input.selection() : null);
         boolean changed = false;
         Object questionId;
         if (question == null) {
@@ -154,7 +163,7 @@ public final class QuestionProcesses {
                 row.put("seq", decimal(i + 1));
                 row.put("text", text(option.text()));
                 row.put("image", option.image());
-                row.put("correct", Boolean.TRUE.equals(option.correct()));
+                row.put("correct", !survey && Boolean.TRUE.equals(option.correct()));
                 rows.add(row);
             }
             changed |= QuizEditing.saveParts(ctx, QbContent.OPTION, existing,

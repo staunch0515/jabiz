@@ -11,7 +11,8 @@ import java.util.TreeSet;
 /**
  * Scores an attempt (docs/quizbuks/plans/Q5-answering.md, D-Q5-2, default answer to Q8): a question earns its points
  * when the options chosen are exactly its correct ones (several correct options make it a multiple choice), else 0;
- * no partial credit; an unanswered question earns 0.
+ * no partial credit; an unanswered question earns 0. A survey's question has no correct options and earns its point
+ * (1) when it is answered (Q12, D-Q12-5): a single choice by exactly one option, a multiple choice by at least one.
  */
 public final class Scoring {
 
@@ -44,7 +45,8 @@ public final class Scoring {
             List<Integer> selected = i < answers.size() ? List.copyOf(new TreeSet<>(answers.get(i))) : List.of();
             List<Integer> correct = question.options().stream().filter(QuizSnapshot.Option::correct)
                 .map(QuizSnapshot.Option::no).sorted().toList();
-            int earned = !correct.isEmpty() && selected.equals(correct) ? question.points() : 0;
+            int earned = snapshot.survey() ? (question.answeredBy(selected) ? question.points() : 0)
+                : !correct.isEmpty() && selected.equals(correct) ? question.points() : 0;
             score += earned;
             full += question.points();
             results.add(new QuestionResult(question.no(), selected, correct, question.points(), earned));

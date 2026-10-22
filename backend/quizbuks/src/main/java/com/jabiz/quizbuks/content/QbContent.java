@@ -30,6 +30,16 @@ public final class QbContent {
     public static final String DRAFT = "DRAFT";
     public static final String VERSIONED = "VERSIONED";
 
+    /** What a quiz is (Q12, D-Q12-1): a scored quiz or a survey, chosen when it is made and never changed. */
+    public static final String QUIZ_KIND_DICTIONARY = "urn:jabiz:dict:quizbuks:quiz-kind";
+    public static final String KIND_QUIZ = "QUIZ";
+    public static final String KIND_SURVEY = "SURVEY";
+
+    /** How a survey's question is answered (Q12, D-Q12-2): one option, or at least one. */
+    public static final String SELECTION_DICTIONARY = "urn:jabiz:dict:quizbuks:question-selection";
+    public static final String SINGLE = "SINGLE";
+    public static final String MULTIPLE = "MULTIPLE";
+
     /** File policies of content: uploaded with {@code qb.content.write}, read with {@code qb.content.file.read}. */
     public static final String IMAGE_POLICY = "qb.content.image";
     public static final String PDF_POLICY = "qb.content.pdf";
@@ -66,6 +76,8 @@ public final class QbContent {
         eb.field("quizId", f -> f.physicalColumn("quiz_id").immutable(true).required(true).generated(true)
             .asSemanticIdentity("urn:jabiz:entity:quizbuks:quiz"));
         eb.field("ownerId", f -> f.physicalColumn("owner_id").immutable(true).required(true).asText(128));
+        eb.field("kind", f -> f.physicalColumn("kind").immutable(true).required(true)
+            .asCode(QUIZ_KIND_DICTIONARY, KIND_QUIZ, KIND_SURVEY));
         eb.field("title", f -> f.physicalColumn("title").required(true).asText(ContentLimits.TITLE_LENGTH)
             .apply(Rules.notBlank(ContentCodes.QUIZ_TITLE_BLANK)));
         // Markdown, rendered by the frontends only, without raw HTML.
@@ -95,9 +107,9 @@ public final class QbContent {
         eb.display("title");
         eb.temporal(t -> t.allowScheduled(false));
         eb.listView("default", lv -> lv
-            .columns("cover", "title", "ownerId", "status", "versionLabel", "questionCount", "materialCount",
+            .columns("cover", "title", "kind", "ownerId", "status", "versionLabel", "questionCount", "materialCount",
                 "removed", "editedAt")
-            .filters("title", "ownerId", "status", "removed", "aiGenerated", "editedAt")
+            .filters("title", "kind", "ownerId", "status", "removed", "aiGenerated", "editedAt")
             .sorts("title", "editedAt", "questionCount")
             .defaultSort("editedAt", false));
     });
@@ -164,6 +176,8 @@ public final class QbContent {
         eb.field("points", f -> f.physicalColumn("points").required(true).asNumeric(4, 0)
             .apply(Rules.range(ContentCodes.QUESTION_POINTS_RANGE, BigDecimal.valueOf(ContentLimits.MIN_POINTS),
                 BigDecimal.valueOf(ContentLimits.MAX_POINTS))));
+        // A survey's questions only (Q12, D-Q12-2); a scored question has none.
+        eb.field("selection", f -> f.physicalColumn("selection").asCode(SELECTION_DICTIONARY, SINGLE, MULTIPLE));
         // The AI job the question was reviewed and accepted from (Q8a, M-20): the review pages mark it.
         eb.field("aiJobId", f -> f.physicalColumn("ai_job_id").immutable(true).processOnly().asText(36));
         eb.display("stem");

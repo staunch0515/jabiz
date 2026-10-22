@@ -71,9 +71,11 @@ public final class QuizProcesses {
      * @param intro        Markdown
      * @param cover        a file of the policy {@code qb.content.image}
      * @param baseRevision the revision the caller edited; when given and no longer current, 422
+     * @param kind         {@code QUIZ} (when not given) or {@code SURVEY}, chosen when the quiz is made (Q12,
+     *                     D-Q12-1); a quiz's kind never changes, so a changed quiz may only name its own
      */
     public record QuizInput(UUID quizId, @NotNull String title, String intro, UUID cover, Integer timeLimitSec,
-        Long baseRevision) {}
+        Long baseRevision, String kind) {}
 
     public record QuizRef(@NotNull UUID quizId, Long baseRevision) {}
 
@@ -137,7 +139,8 @@ public final class QuizProcesses {
             if (ctx.hasViolations()) {
                 return;
             }
-            Map<String, Object> values = newQuiz(ctx, heading, false, null);
+            Map<String, Object> values = newQuiz(ctx, heading, input.kind() == null ? QbContent.KIND_QUIZ
+                : input.kind(), false, null);
             UUID id = uuid(ctx.changes().insert(QbContent.QUIZ, values));
             ctx.put(OUTPUT, new EditOutput(id, 1, ctx.opTime(), null, List.of()));
             return;
@@ -149,6 +152,10 @@ public final class QuizProcesses {
         EntityInstance quiz = found.getFirst();
         if (!QuizEditing.current(ctx, quiz, input.baseRevision())) {
             return;
+        }
+        if (input.kind() != null && !input.kind().equals(quiz.get("kind"))) {
+            ctx.reject(new Violation("kind", ContentCodes.QUIZ_KIND_FIXED, "A quiz's kind cannot change; copy it "
+                + "into a new one instead", Map.of("kind", String.valueOf((Object) quiz.get("kind")))));
         }
         QuizEditing.requireOwnFile(ctx, quiz.get("ownerId"), "cover", input.cover(), quiz.get("cover"));
         if (ctx.hasViolations()) {
@@ -163,10 +170,11 @@ public final class QuizProcesses {
     }
 
     /** The values of a new draft of the caller's. */
-    private static Map<String, Object> newQuiz(ProcessContext ctx, Map<String, Object> heading, boolean ai,
-        Object clonedFrom) {
+    private static Map<String, Object> newQuiz(ProcessContext ctx, Map<String, Object> heading, String kind,
+        boolean ai, Object clonedFrom) {
         Map<String, Object> values = new LinkedHashMap<>(heading);
         values.put("ownerId", ctx.request().actorId());
+        values.put("kind", kind);
         values.put("status", QbContent.DRAFT);
         values.put("removed", false);
         values.put("aiGenerated", ai);
@@ -371,7 +379,8 @@ public final class QuizProcesses {
         heading.put("intro", content.intro());
         heading.put("cover", content.cover());
         heading.put("timeLimitSec", content.timeLimitSec() == null ? null : decimal(content.timeLimitSec()));
-        Map<String, Object> values = newQuiz(ctx, heading, content.aiGenerated(), source.id());
+        // A copy is of the same kind (D-Q12-1: the kind only changes by making a new quiz).
+        Map<String, Object> values = newQuiz(ctx, heading, content.kind(), content.aiGenerated(), source.id());
         values.put("questionCount", decimal(content.questions().size()));
         values.put("materialCount", decimal(content.materials().size()));
         Object quizId = ctx.changes().insert(QbContent.QUIZ, values);
@@ -408,6 +417,7 @@ public final class QuizProcesses {
             q.put("stem", question.stem());
             q.put("image", question.image());
             q.put("points", decimal(question.points()));
+            q.put("selection", question.selection());
             Object questionId = ctx.changes().insert(QbContent.QUESTION, q);
             for (QuizSnapshot.Option option : question.options()) {
                 Map<String, Object> o = new LinkedHashMap<>();

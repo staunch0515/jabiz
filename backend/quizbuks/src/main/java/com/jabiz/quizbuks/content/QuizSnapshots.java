@@ -40,6 +40,11 @@ public final class QuizSnapshots {
         map.put("cover", text(snapshot.cover()));
         map.put("timeLimitSec", snapshot.timeLimitSec());
         map.put("aiGenerated", snapshot.aiGenerated());
+        // Only a survey's snapshot names its kind and its questions' selection (Q12): a scored quiz's text and hash
+        // stay what they were.
+        if (snapshot.survey()) {
+            map.put("kind", QbContent.KIND_SURVEY);
+        }
         List<Object> materials = new ArrayList<>();
         for (QuizSnapshot.Material material : snapshot.materials()) {
             Map<String, Object> m = new LinkedHashMap<>();
@@ -70,6 +75,9 @@ public final class QuizSnapshots {
             q.put("stem", question.stem());
             q.put("image", text(question.image()));
             q.put("points", question.points());
+            if (snapshot.survey()) {
+                q.put("selection", question.selection());
+            }
             List<Object> options = new ArrayList<>();
             for (QuizSnapshot.Option option : question.options()) {
                 Map<String, Object> o = new LinkedHashMap<>();
@@ -91,6 +99,11 @@ public final class QuizSnapshots {
         if (!(schema instanceof Number n) || n.intValue() != QuizSnapshot.SCHEMA) {
             throw new IllegalArgumentException("Not a quiz snapshot of schema " + QuizSnapshot.SCHEMA + ": " + schema);
         }
+        Object kind = map.get("kind");
+        if (kind != null && !QbContent.KIND_SURVEY.equals(kind)) {
+            throw new IllegalArgumentException("Not a kind of quiz: " + kind);
+        }
+        boolean survey = kind != null;
         List<QuizSnapshot.Material> materials = new ArrayList<>();
         for (Map<String, ?> m : maps(map.get("materials"))) {
             List<QuizSnapshot.Image> images = new ArrayList<>();
@@ -109,11 +122,12 @@ public final class QuizSnapshots {
                     Boolean.TRUE.equals(o.get("correct"))));
             }
             questions.add(new QuizSnapshot.Question(number(q.get("no")), string(q.get("stem")), uuid(q.get("image")),
-                number(q.get("points")), options));
+                number(q.get("points")), options, survey ? string(q.get("selection")) : null));
         }
         Object limit = map.get("timeLimitSec");
         return new QuizSnapshot(string(map.get("title")), string(map.get("intro")), uuid(map.get("cover")),
-            limit == null ? null : number(limit), Boolean.TRUE.equals(map.get("aiGenerated")), materials, questions);
+            limit == null ? null : number(limit), Boolean.TRUE.equals(map.get("aiGenerated")), materials, questions,
+            survey);
     }
 
     /** The canonical text: keys sorted, no white space, absent values written as {@code null}. */

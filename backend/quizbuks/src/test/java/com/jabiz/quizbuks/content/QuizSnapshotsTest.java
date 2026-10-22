@@ -77,4 +77,28 @@ class QuizSnapshotsTest {
         assertThatThrownBy(() -> QuizSnapshots.fromJson("{\"schema\":2}"))
             .isInstanceOf(IllegalArgumentException.class);
     }
+
+    @Test
+    void aSurveyNamesItsKindAndSelectionsWhileAQuizTextIsAsBefore() {
+        QuizSnapshot survey = Drafts.survey();
+        String text = QuizSnapshots.toJson(survey);
+        assertThat(text).contains("\"kind\":\"SURVEY\"").contains("\"selection\":\"SINGLE\"")
+            .contains("\"selection\":\"MULTIPLE\"");
+        assertThat(QuizSnapshots.fromJson(text)).isEqualTo(survey);
+        assertThat(QuizSnapshots.hashOfText(text)).isEqualTo(QuizSnapshots.hash(survey));
+        assertThat(survey.kind()).isEqualTo(QbContent.KIND_SURVEY);
+        // A scored quiz has neither key (its hash is unchanged by Q12); a missing kind reads as a quiz.
+        String quiz = QuizSnapshots.toJson(Drafts.complete());
+        assertThat(QuizSnapshots.toMap(Drafts.complete())).doesNotContainKey("kind");
+        assertThat(quiz).doesNotContain("SURVEY").doesNotContain("selection");
+        assertThat(QuizSnapshots.fromJson(quiz).survey()).isFalse();
+        assertThat(QuizSnapshots.fromJson(quiz).kind()).isEqualTo(QbContent.KIND_QUIZ);
+    }
+
+    @Test
+    void refusesAnUnknownKind() {
+        Map<String, Object> map = QuizSnapshots.toMap(Drafts.survey());
+        map.put("kind", "POLL");
+        assertThatThrownBy(() -> QuizSnapshots.fromMap(map)).isInstanceOf(IllegalArgumentException.class);
+    }
 }

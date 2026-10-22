@@ -14,6 +14,7 @@ results:
   name:         { from: QbPublicationCard.name }
   quizTitle:    { from: QbPublicationCard.quizTitle }
   cover:        { from: QbPublicationCard.cover }
+  kind:         { from: QbPublicationCard.kind }
   status:       { from: QbAttempt.status }
   category:     { kind: { type: text, maxLength: 20 } }
   passed:       { from: QbAttempt.passed }
@@ -40,6 +41,7 @@ SELECT
     c.{{QbPublicationCard.name}}           AS name,
     c.{{QbPublicationCard.quizTitle}}      AS quizTitle,
     c.{{QbPublicationCard.cover}}          AS cover,
+    c.{{QbPublicationCard.kind}}           AS kind,
     m.{{QbAttempt.status}}                 AS status,
     CAST(CASE
         WHEN m.{{QbAttempt.status}} <> 'IN_PROGRESS' AND m.{{QbAttempt.passed}} THEN 'PASSED'

@@ -65,7 +65,9 @@ public final class AttemptProcesses {
     /** @param no the option's position in this attempt, 1..k in the order shown (Q10b, M1): what answers name */
     public record OptionView(int no, String text, UUID image) {}
 
-    public record QuestionView(int no, String stem, UUID image, int points, List<OptionView> options) {}
+    /** @param selection a survey's question: {@code SINGLE} or {@code MULTIPLE} (Q12); null for a scored one */
+    public record QuestionView(int no, String stem, UUID image, int points, List<OptionView> options,
+        String selection) {}
 
     /**
      * An attempt as its taker answers it: the questions in order, each one's options in the attempt's order and
@@ -73,10 +75,11 @@ public final class AttemptProcesses {
      *
      * @param deadline   when it must be submitted, by the server's clock ({@code serverTime} is that clock now)
      * @param resumed    whether the attempt was already in progress (continuing it)
+     * @param kind       {@code QUIZ} or {@code SURVEY} (Q12): a survey is submitted only with every question answered
      */
     public record StartOutput(String attemptId, UUID publicationId, String status, Instant startedAt,
         Instant deadline, Instant serverTime, int timeLimitSec, int currentIndex, boolean resumed,
-        List<QuestionView> questions, List<Answers.Given> answers) {}
+        List<QuestionView> questions, List<Answers.Given> answers, String kind) {}
 
     /**
      * @param answers      answers of some questions, each replacing that question's (an empty list clears it)
@@ -313,7 +316,7 @@ public final class AttemptProcesses {
         ctx.put(OUTPUT, new StartOutput(String.valueOf(attemptId), PlaySteps.uuid(publicationId),
             AttemptStatus.IN_PROGRESS, ctx.opTime(), deadline, ctx.opTime(),
             PlaySteps.integer(card.get("timeLimitSec")), 0, false, questions(snapshot, order),
-            List.of()));
+            List.of(), snapshot.kind()));
     }
 
     /** The output of an attempt in progress. */
@@ -326,7 +329,7 @@ public final class AttemptProcesses {
             attempt.get("status"), startedAt, deadline, ctx.opTime(),
             (int) java.time.Duration.between(startedAt, deadline).toSeconds(),
             PlaySteps.integer(attempt.get("currentIndex")), resumed, questions(snapshot, order),
-            Answers.given(Answers.fromJson(attempt.get("answers"))));
+            Answers.given(Answers.fromJson(attempt.get("answers"))), snapshot.kind());
     }
 
     /**
@@ -347,7 +350,7 @@ public final class AttemptProcesses {
                 options.add(new OptionView(options.size() + 1, option.text(), option.image()));
             }
             questions.add(new QuestionView(question.no(), question.stem(), question.image(), question.points(),
-                List.copyOf(options)));
+                List.copyOf(options), question.selection()));
         }
         return List.copyOf(questions);
     }

@@ -23,6 +23,7 @@ results:
   name:           { from: QbPublicationCard.name }
   quizTitle:      { from: QbPublicationCard.quizTitle }
   cover:          { from: QbPublicationCard.cover }
+  kind:           { from: QbPublicationCard.kind }
   intro:          { kind: { type: text, maxLength: 5000 } }
   materials:      { kind: { type: text } }
   status:         { from: QbPublicationCard.status }
@@ -63,6 +64,7 @@ SELECT
     d.name AS name,
     d.quizTitle AS quizTitle,
     d.cover AS cover,
+    d.kind AS kind,
     d.intro AS intro,
     d.materials AS materials,
     d.status AS status,
@@ -94,6 +96,7 @@ SELECT
     c.{{QbPublicationCard.name}}           AS name,
     c.{{QbPublicationCard.quizTitle}}      AS quizTitle,
     c.{{QbPublicationCard.cover}}          AS cover,
+    c.{{QbPublicationCard.kind}}           AS kind,
     CAST(v.{{QbQuizVersion.content}} AS jsonb) ->> 'intro' AS intro,
     CAST(CAST(v.{{QbQuizVersion.content}} AS jsonb) -> 'materials' AS text) AS materials,
     c.{{QbPublicationCard.status}}         AS status,

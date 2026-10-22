@@ -2,6 +2,7 @@ package com.jabiz.quizbuks.play;
 
 import com.jabiz.entity.Violation;
 import com.jabiz.quizbuks.content.ContentLimits;
+import com.jabiz.quizbuks.content.QuizSnapshot;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import tools.jackson.core.type.TypeReference;
@@ -103,6 +104,34 @@ public final class Answers {
                         "Question " + answer.questionNo() + " has no option " + option + " to choose"));
                 }
             }
+        }
+        return List.copyOf(problems);
+    }
+
+    /**
+     * What keeps a survey's answers from being submitted (Q12, D-Q12-5): a question not answered (its number by
+     * position, as the taker sees it) and a single choice with more than one option, each reported once.
+     *
+     * @param answers per question, the positions chosen (as {@link #merge} gives them)
+     */
+    public static List<Violation> incomplete(QuizSnapshot snapshot, List<List<Integer>> answers) {
+        List<Violation> problems = new ArrayList<>();
+        List<Integer> unanswered = new ArrayList<>();
+        List<QuizSnapshot.Question> questions = snapshot.questions();
+        for (int i = 0; i < questions.size(); i++) {
+            List<Integer> chosen = i < answers.size() ? answers.get(i) : List.of();
+            QuizSnapshot.Question question = questions.get(i);
+            if (chosen.isEmpty()) {
+                unanswered.add(i + 1);
+            } else if (!question.answeredBy(chosen)) {
+                problems.add(new Violation("answers", PlayCodes.SINGLE_CHOICE, "Question " + (i + 1) + " takes one "
+                    + "option, not " + chosen.size(), Map.of("questionNo", i + 1)));
+            }
+        }
+        if (!unanswered.isEmpty()) {
+            problems.addFirst(new Violation("answers", PlayCodes.INCOMPLETE, "Answer every question of the survey: "
+                + unanswered + " are not answered", Map.of("questions", List.copyOf(unanswered),
+                "count", unanswered.size())));
         }
         return List.copyOf(problems);
     }

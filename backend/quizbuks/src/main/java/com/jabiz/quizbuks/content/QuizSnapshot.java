@@ -11,14 +11,23 @@ import java.util.UUID;
  * change. Files are their {@code fileId}s.
  */
 public record QuizSnapshot(String title, String intro, UUID cover, Integer timeLimitSec, boolean aiGenerated,
-    List<Material> materials, List<Question> questions) {
+    List<Material> materials, List<Question> questions, boolean survey) {
 
-    /** The version of this format, written into every snapshot. */
+    /**
+     * The version of this format, written into every snapshot. A survey's snapshot adds its kind and its questions'
+     * selection (Q12); a scored quiz's has neither key, so its text and hash are what they were before surveys.
+     */
     public static final int SCHEMA = 1;
 
     public QuizSnapshot {
         materials = List.copyOf(Objects.requireNonNull(materials, "materials must not be null"));
         questions = List.copyOf(Objects.requireNonNull(questions, "questions must not be null"));
+    }
+
+    /** A scored quiz. */
+    public QuizSnapshot(String title, String intro, UUID cover, Integer timeLimitSec, boolean aiGenerated,
+        List<Material> materials, List<Question> questions) {
+        this(title, intro, cover, timeLimitSec, aiGenerated, materials, questions, false);
     }
 
     /**
@@ -36,13 +45,32 @@ public record QuizSnapshot(String title, String intro, UUID cover, Integer timeL
     /** One image of an image-group material, with its caption (the text alternative). */
     public record Image(int no, UUID image, String caption) {}
 
-    public record Question(int no, String stem, UUID image, int points, List<Option> options) {
+    /**
+     * @param selection a survey's question: {@code SINGLE} or {@code MULTIPLE} ({@link QbContent}); null for a scored
+     *                  question (and for a survey's question not yet set, which a version does not accept)
+     */
+    public record Question(int no, String stem, UUID image, int points, List<Option> options, String selection) {
         public Question {
             options = List.copyOf(Objects.requireNonNull(options, "options must not be null"));
+        }
+
+        /** A scored question. */
+        public Question(int no, String stem, UUID image, int points, List<Option> options) {
+            this(no, stem, image, points, options, null);
+        }
+
+        /** Whether these chosen options answer the question (Q12: a single choice takes exactly one). */
+        public boolean answeredBy(java.util.Collection<Integer> chosen) {
+            return QbContent.SINGLE.equals(selection) ? chosen.size() == 1 : !chosen.isEmpty();
         }
     }
 
     public record Option(int no, String text, UUID image, boolean correct) {}
+
+    /** {@code SURVEY} or {@code QUIZ} ({@link QbContent}). */
+    public String kind() {
+        return survey ? QbContent.KIND_SURVEY : QbContent.KIND_QUIZ;
+    }
 
     /** The sum of the questions' points. */
     public int fullScore() {

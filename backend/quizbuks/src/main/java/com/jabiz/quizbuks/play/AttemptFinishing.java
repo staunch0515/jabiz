@@ -106,9 +106,11 @@ public final class AttemptFinishing {
      * The result (U-33, U-34).
      *
      * @param message the notice of a pending reward in the caller's language; null otherwise
+     * @param kind    {@code QUIZ} or {@code SURVEY} (Q12): a survey's questions have no correct options
      */
     public record SubmitOutput(String attemptId, String status, int score, int fullScore, int passScore,
-        boolean passed, BigDecimal reward, String rewardStatus, String message, List<QuestionOutput> questions) {}
+        boolean passed, BigDecimal reward, String rewardStatus, String message, List<QuestionOutput> questions,
+        String kind) {}
 
     /** @param status the attempt's state afterwards; null when there is no such attempt */
     public record ExpireOutput(String attemptId, String status, boolean finished) {}
@@ -373,12 +375,20 @@ public final class AttemptFinishing {
             answers = Answers.merge(answers, order.size(), input.answers());
             currentIndex = input.currentIndex();
         }
+        QuizSnapshot snapshot = PlaySteps.snapshot(ctx);
+        if (!expire && snapshot.survey()) {
+            // A survey is submitted complete (Q12, D-Q12-5); at its deadline it ends with what was saved (D-Q12-6).
+            List<Violation> problems = Answers.incomplete(snapshot, answers);
+            if (!problems.isEmpty()) {
+                problems.forEach(ctx::reject);
+                return;
+            }
+        }
         EntityInstance card = PublicationMoves.card(ctx);
         EntityInstance counter = first(ctx, COUNTER);
         if (card == null || counter == null) {
             throw new IllegalStateException("A publication that went on has a card and counters");
         }
-        QuizSnapshot snapshot = PlaySteps.snapshot(ctx);
         Scoring.Result result = Scoring.scoreShown(snapshot, order, answers);
         int passScore = PlaySteps.integer(card.get("passScore"));
         CardTiers.Tier tier = TierPick.of(CardTiers.fromJson(card.get("tiers")), result.score())
@@ -483,7 +493,7 @@ public final class AttemptFinishing {
             q.selected(), q.correct(), q.points(), q.earned())).toList();
         ctx.put(OUTPUT, new SubmitOutput(String.valueOf(attempt.id()), plan.status(), plan.result().score(),
             plan.result().fullScore(), plan.passScore(), plan.passed(), plan.reward(), settlement.rewardStatus(),
-            message, questions));
+            message, questions, plan.card().get("kind")));
     }
 
     private AttemptFinishing() {}

@@ -29,5 +29,14 @@ final class Drafts {
                     new QuizSnapshot.Option(1, null, PICTURE, true), option(2, "None", false)))));
     }
 
+    /** A complete survey: a single and a multiple choice question, no correct options, a point each. */
+    static QuizSnapshot survey() {
+        return new QuizSnapshot("Habits", null, null, 300, false, List.of(), List.of(
+            new QuizSnapshot.Question(1, "How often?", null, 1, List.of(option(1, "Daily", false),
+                option(2, "Weekly", false)), QbContent.SINGLE),
+            new QuizSnapshot.Question(2, "Which ones?", null, 1, List.of(option(1, "Tea", false),
+                option(2, "Coffee", false), option(3, "Water", false)), QbContent.MULTIPLE)), true);
+    }
+
     private Drafts() {}
 }
