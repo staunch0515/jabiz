@@ -41,14 +41,20 @@ function Row({ row, onContinue, starting }: { row: HistoryRow; onContinue: () =>
     <li className="flex flex-col gap-2 rounded-lg border p-3" data-testid="history-row" data-category={row.category}>
       <div className="flex items-start gap-2">
         <h2 className="flex-1 font-medium">{row.name}</h2>
-        <Badge variant={BADGES[row.category]} data-testid="history-category">{t(`history.categories.${row.category}`)}</Badge>
+        <Badge variant={BADGES[row.category]} data-testid="history-category">
+          {/* A survey (Q12) is completed or not, never passed. */}
+          {row.kind === 'SURVEY' && finished ? t(`history.surveyCategories.${row.category}`)
+            : t(`history.categories.${row.category}`)}
+        </Badge>
       </div>
       <p className="text-muted-foreground text-xs">{t('history.startedAt', { time: formatDateTime(row.startedAt) })}</p>
       {finished && (
         <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-          <span data-testid="history-score">
-            {t('history.score', { score: row.score ?? 0, full: row.fullScore })}
-          </span>
+          {row.kind !== 'SURVEY' && (
+            <span data-testid="history-score">
+              {t('history.score', { score: row.score ?? 0, full: row.fullScore })}
+            </span>
+          )}
           {row.rewardStatus === 'PAID' && <span>{t('history.paid', { amount: formatKudos(row.reward) })}</span>}
           {row.rewardStatus === 'PENDING' && (
             <span className="text-warning">{t('history.pending', { amount: formatKudos(row.reward) })}</span>

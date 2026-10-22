@@ -172,6 +172,7 @@ export function PublicationPage({ publicationId, country }: { publicationId: str
       data-testid="detail-not-found" />
   }
   const sponsor = p.sponsorCompany ?? p.sponsorName
+  const survey = p.kind === 'SURVEY'
   return (
     <article className="flex flex-col gap-5" aria-labelledby="detail-title" data-testid="detail">
       <Link to="/" className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 self-start text-sm">
@@ -199,7 +200,14 @@ export function PublicationPage({ publicationId, country }: { publicationId: str
       )}
       <section aria-labelledby="facts-title" className="flex flex-col gap-2">
         <h2 id="facts-title" className="text-lg font-semibold">{t('detail.facts')}</h2>
-        <DescriptionList data-testid="detail-facts" items={[
+        {/* A survey (Q12) has no score: one reward for answering every question. */}
+        <DescriptionList data-testid="detail-facts" items={survey ? [
+          { key: 'kind', label: t('detail.kind'), value: t('detail.survey') },
+          { key: 'questions', label: t('detail.questions'), value: p.questionCount },
+          { key: 'timeLimit', label: t('detail.timeLimit'), value: duration(p.timeLimitSec) },
+          { key: 'maxReward', label: t('detail.surveyReward'), value: formatKudos(p.maxReward) },
+          { key: 'endAt', label: t('detail.endAt'), value: formatDateTime(p.endAt) },
+        ] : [
           { key: 'questions', label: t('detail.questions'), value: p.questionCount },
           { key: 'fullScore', label: t('detail.fullScore'), value: p.fullScore },
           { key: 'passScore', label: t('detail.passScore'), value: p.passScore },
@@ -207,8 +215,9 @@ export function PublicationPage({ publicationId, country }: { publicationId: str
           { key: 'maxReward', label: t('detail.maxReward'), value: formatKudos(p.maxReward) },
           { key: 'endAt', label: t('detail.endAt'), value: formatDateTime(p.endAt) },
         ]} />
+        {survey && <p className="text-muted-foreground text-sm" data-testid="detail-survey">{t('detail.surveyHint')}</p>}
       </section>
-      <Tiers tiers={tiers.data ?? []} />
+      {!survey && <Tiers tiers={tiers.data ?? []} />}
       <section aria-labelledby="stats-title" className="flex flex-col gap-2">
         <h2 id="stats-title" className="text-lg font-semibold">{t('detail.completions')}</h2>
         <DescriptionList layout="vertical" columns={2} data-testid="detail-stats" items={[

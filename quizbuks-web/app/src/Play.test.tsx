@@ -44,12 +44,13 @@ function started(over: Partial<StartOutput> = {}): StartOutput {
     deadline: new Date(now.getTime() + 300_000).toISOString(), serverTime: now.toISOString(), timeLimitSec: 300,
     currentIndex: 0, resumed: false,
     questions: [
-      { no: 1, stem: 'Capital of France?', image: null, points: 2,
+      { no: 1, stem: 'Capital of France?', image: null, points: 2, selection: null,
         options: [{ no: 2, text: 'Lyon', image: null }, { no: 1, text: 'Paris', image: null }] },
-      { no: 2, stem: 'Capital of Japan?', image: null, points: 3,
+      { no: 2, stem: 'Capital of Japan?', image: null, points: 3, selection: null,
         options: [{ no: 1, text: 'Tokyo', image: null }, { no: 2, text: 'Osaka', image: null }] },
     ],
     answers: [],
+    kind: 'QUIZ',
     ...over,
   }
 }
@@ -443,6 +444,73 @@ describe('answering', () => {
     window.history.replaceState(null, '', `/play/${ATTEMPT}`)
     render(<App />)
     expect(await screen.findByTestId('play-expired')).toBeInTheDocument()
+  })
+})
+
+describe('a survey', () => {
+  /** A survey's start (Q12): a single choice and a multiple choice, a point each, nothing correct. */
+  const survey = (): StartOutput => started({ kind: 'SURVEY', questions: [
+    { no: 1, stem: 'How often?', image: null, points: 1, selection: 'SINGLE',
+      options: [{ no: 1, text: 'Daily', image: null }, { no: 2, text: 'Weekly', image: null }] },
+    { no: 2, stem: 'Which ones?', image: null, points: 1, selection: 'MULTIPLE',
+      options: [{ no: 1, text: 'Tea', image: null }, { no: 2, text: 'Coffee', image: null }] },
+  ] })
+  const done = { attemptId: ATTEMPT, status: 'SUBMITTED', score: 2, fullScore: 2, passScore: 2, passed: true,
+    reward: 30, rewardStatus: 'PAID', message: null, kind: 'SURVEY', questions: [
+      { no: 1, selected: [2], correct: [], points: 1, earned: 1 },
+      { no: 2, selected: [1, 2], correct: [], points: 1, earned: 1 },
+    ] }
+
+  it('asks for one answer by radio buttons, submits only once every question is answered, and shows no score',
+    async () => {
+      const { posted } = server({ start: () => json(200, { output: survey() }),
+        submit: () => json(200, { output: done }) })
+      window.history.replaceState(null, '', `/p/${PUB}`)
+      render(<App />)
+      await userEvent.click(await screen.findByTestId('detail-start'))
+      expect(await screen.findByTestId('play-question')).toHaveTextContent('How often?')
+      expect(screen.getByText('Choose one answer.')).toBeInTheDocument()
+      expect(screen.queryByText(/Points/)).toBeNull()
+      await userEvent.click(screen.getByRole('radio', { name: /Daily/ }))
+      await userEvent.click(screen.getByRole('radio', { name: /Weekly/ }))
+      // One option holds: the second replaces the first.
+      expect(screen.getByRole('radio', { name: /Weekly/ })).toBeChecked()
+      expect(screen.getByRole('radio', { name: /Daily/ })).not.toBeChecked()
+
+      await userEvent.click(screen.getByTestId('play-next'))
+      expect(screen.getByText('Choose one or more answers.')).toBeInTheDocument()
+      expect(screen.getByTestId('play-submit')).toBeDisabled()
+      expect(screen.getByTestId('play-incomplete')).toHaveTextContent('1 still open')
+      await userEvent.click(screen.getByRole('checkbox', { name: /Tea/ }))
+      await userEvent.click(screen.getByRole('checkbox', { name: /Coffee/ }))
+      expect(screen.getByTestId('play-submit')).toBeEnabled()
+      expect(screen.queryByTestId('play-incomplete')).toBeNull()
+      await userEvent.click(screen.getByTestId('play-submit'))
+      await userEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button',
+        { name: 'Submit answers' }))
+
+      await waitFor(() => expect(window.location.pathname).toBe(`/result/${ATTEMPT}`))
+      expect(posted('QB_ATTEMPT_SUBMIT')).toEqual([{ attemptId: ATTEMPT, publicationId: PUB, currentIndex: 1,
+        answers: [{ questionNo: 1, selected: [2] }, { questionNo: 2, selected: [1, 2] }] }])
+      expect(await screen.findByTestId('result-survey')).toHaveAttribute('data-complete', 'true')
+      expect(screen.queryByTestId('result-score')).toBeNull()
+      expect(screen.getByTestId('result-reward')).toHaveAttribute('data-status', 'PAID')
+      const questions = screen.getAllByTestId('result-question')
+      expect(questions.map((q) => q.getAttribute('data-correct'))).toEqual([null, null])
+      expect(within(questions[0]).getByTestId('result-mine')).toHaveTextContent('B. Weekly')
+      expect(within(questions[1]).getByTestId('result-mine')).toHaveTextContent('A. Tea, B. Coffee')
+    })
+
+  it('says a survey cut short by its time earns nothing, read later from the record alone', async () => {
+    server({ attempt: { attemptId: ATTEMPT, publicationId: PUB, status: 'EXPIRED', score: 1, fullScore: 2,
+      passed: false, reward: 0, rewardStatus: 'NONE', deadline: '2026-10-01T00:05:00Z',
+      result: JSON.stringify([{ no: 1, selected: [1], correct: [], points: 1, earned: 1 },
+        { no: 2, selected: [], correct: [], points: 1, earned: 0 }]) } })
+    window.history.replaceState(null, '', `/result/${ATTEMPT}`)
+    render(<App />)
+    expect(await screen.findByTestId('result-survey')).toHaveAttribute('data-complete', 'false')
+    expect(screen.getByTestId('result-reward')).toHaveTextContent('Not every question was answered')
+    expect(screen.queryByTestId('result-score')).toBeNull()
   })
 })
 

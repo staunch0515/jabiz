@@ -64,7 +64,8 @@ function MaterialContent({ material }: { material: SnapshotMaterial }) {
 /**
  * A quiz version's whole frozen content, as the reviewer must see it before deciding: the cover and introduction, every
  * material (links open in a new tab; PDFs and sounds are downloads; article texts are folded), and every question with
- * its options, the correct ones marked in words. Questions are folded sections,
+ * its options, the correct ones marked in words (a survey's, Q12, have none: single or multiple choice instead).
+ * Questions are folded sections,
  * open to begin with. Markdown goes only through `MarkdownView` (no raw HTML).
  */
 export function VersionPreview({ content }: { content: Snapshot }) {
@@ -76,6 +77,7 @@ export function VersionPreview({ content }: { content: Snapshot }) {
       <div className="flex flex-col gap-2">
         <h3 className="flex flex-wrap items-center gap-2 text-lg font-semibold" data-testid="preview-title">
           {content.title}
+          {content.kind === 'SURVEY' && <Badge variant="secondary" data-testid="preview-survey">{t('preview.survey')}</Badge>}
           {content.aiGenerated && <Badge variant="outline">{t('preview.aiGenerated')}</Badge>}
         </h3>
         {content.cover && (
@@ -130,7 +132,10 @@ export function VersionPreview({ content }: { content: Snapshot }) {
                   <details open className="rounded-md border p-3">
                     <summary className="flex cursor-pointer flex-wrap items-center justify-between gap-2">
                       <span className="font-medium">{t('preview.question', { number: question.no })}</span>
-                      <Badge variant="outline">{t('preview.points', { points: question.points })}</Badge>
+                      <Badge variant="outline">
+                        {question.selection ? t(`preview.selections.${question.selection}`)
+                          : t('preview.points', { points: question.points })}
+                      </Badge>
                     </summary>
                     <div className="mt-2 flex flex-col gap-2">
                       <p className="whitespace-pre-wrap" data-testid="preview-stem">{question.stem}</p>

@@ -485,6 +485,21 @@ export function inputOf(form: PublicationForm, publicationId: string | null, bas
   }
 }
 
+/** A survey's one reward as typed: its full score's tier's (Q12). */
+export const surveyReward = (form: PublicationForm): string => form.tiers.at(-1)?.reward ?? ''
+
+/**
+ * The form of a survey's publication (Q12, D-Q12-4): its pass mark is the full score (every question answered, a
+ * point each) and its tiers are nothing below it and the one reward at it. The tiers keep their keys, so the next save
+ * sends them as the same tiers; the server checks the shape.
+ */
+export function asSurvey(form: PublicationForm, fullScore: number, reward: string): PublicationForm {
+  const tier = (i: number, from: number, to: number, value: string): TierDraft => ({ key: form.tiers[i]?.key ?? tierKey(),
+    tierId: form.tiers[i]?.tierId ?? null, fromScore: String(from), toScore: String(to), reward: value })
+  return { ...form, passScore: String(fullScore),
+    tiers: [tier(0, 0, Math.max(fullScore - 1, 0), '0'), tier(1, fullScore, fullScore, reward)] }
+}
+
 /**
  * A new tier after the last: from the score after the last one's end (0 for the first) to the full score, without a
  * reward yet.

@@ -210,7 +210,12 @@ export function QuizEditorPage({ quizId }: { quizId: string }) {
               </Link>
             </nav>
           }
-          title={<span data-testid="editor-title">{quiz.title}</span>}
+          title={
+            <span className="flex flex-wrap items-center gap-2">
+              <span data-testid="editor-title">{quiz.title}</span>
+              {quiz.kind === 'SURVEY' && <Badge variant="secondary" data-testid="editor-survey">{t('quizzes.kinds.SURVEY')}</Badge>}
+            </span>
+          }
           description={
             <span className="flex flex-wrap items-center gap-2" data-testid="editor-state">
               <Badge variant={quiz.status === 'VERSIONED' ? 'secondary' : 'outline'}>{statusLabel(quiz.status)}</Badge>
@@ -284,8 +289,9 @@ export function QuizEditorPage({ quizId }: { quizId: string }) {
             <AiCoverPanel quiz={quiz} />
           </TabsContent>
           <TabsContent value="questions" className="flex flex-col gap-4 pt-4">
-            <AiQuestionsPanel quiz={quiz} materials={materials} />
-            <QuestionsPanel questions={questions} />
+            {/* AI does not write a survey's questions (Q12, D-Q12-9). */}
+            {quiz.kind !== 'SURVEY' && <AiQuestionsPanel quiz={quiz} materials={materials} />}
+            <QuestionsPanel questions={questions} survey={quiz.kind === 'SURVEY'} />
           </TabsContent>
           <TabsContent value="materials" className="pt-4">
             <MaterialsPanel materials={materials} />

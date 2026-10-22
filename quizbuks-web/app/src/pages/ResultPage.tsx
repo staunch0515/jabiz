@@ -1,14 +1,14 @@
 import { ApiError } from '@jabiz/client'
 import { Alert, AlertDescription, AlertTitle, Badge, Button, PageState, cn } from '@jabiz/ui'
 import { useQuery } from '@tanstack/react-query'
-import { CircleCheck, CircleX, Clock, Hourglass, Trophy } from 'lucide-react'
+import { CircleCheck, CircleX, Clock, Hourglass, ListChecks, Trophy } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
 import { autoSubmitted, storedResult, storedStart } from '../play/storage'
 import { formatKudos } from '../qb/kudos'
 import { QB } from '../qb/messages'
-import { readAttempt, readPublication, type QuestionResult, type QuestionView, type RewardStatus }
+import { isSurveyResult, readAttempt, readPublication, type QuestionResult, type QuestionView, type RewardStatus }
   from '../qb/play'
 import { problemText } from '../qb/problems'
 import { Link, Redirect } from '../qb/router'
@@ -40,6 +40,24 @@ function optionTexts(question: QuestionView | undefined, numbers: number[]): str
     .map(({ option, label }) => (option.text ? `${label}. ${option.text}` : label))
 }
 
+/** A survey's question (Q12): what was chosen, never right or wrong. */
+function SurveyRow({ result, question, index }: { result: QuestionResult; question?: QuestionView; index: number }) {
+  const { t } = useTranslation(APP)
+  const mine = optionTexts(question, result.selected)
+  return (
+    <li className="flex flex-col gap-1 rounded-lg border p-3" data-testid="result-question">
+      <p className="font-medium">{t('result.question', { n: index + 1 })}</p>
+      {question?.stem && <p className="text-sm">{question.stem}</p>}
+      {question && (
+        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+          <dt className="text-muted-foreground">{t('result.yourAnswer')}</dt>
+          <dd data-testid="result-mine">{mine.length > 0 ? mine.join(', ') : t('result.noAnswer')}</dd>
+        </dl>
+      )}
+    </li>
+  )
+}
+
 function QuestionRow({ result, question, index }: { result: QuestionResult; question?: QuestionView; index: number }) {
   const { t } = useTranslation(APP)
   // Scoring's rule: right when the options chosen are exactly the correct ones.
@@ -69,7 +87,7 @@ function QuestionRow({ result, question, index }: { result: QuestionResult; ques
   )
 }
 
-function Reward({ outcome }: { outcome: Outcome }) {
+function Reward({ outcome, survey }: { outcome: Outcome; survey: boolean }) {
   const { t } = useTranslation(APP)
   if (outcome.rewardStatus === 'PENDING') {
     return (
@@ -91,7 +109,7 @@ function Reward({ outcome }: { outcome: Outcome }) {
   }
   return (
     <Alert data-testid="result-reward" data-status="NONE">
-      <AlertDescription>{t('result.none')}</AlertDescription>
+      <AlertDescription>{t(survey ? 'result.surveyIncomplete' : 'result.none')}</AlertDescription>
     </Alert>
   )
 }
@@ -101,7 +119,8 @@ function Reward({ outcome }: { outcome: Outcome }) {
  * pending (the sponsor's budget ran out: paid once they top up) or none. Right after finishing, this tab still has
  * the questions' text (the start's output, docs/quizbuks/plans/QP-pages.md A-3) and shows the answers chosen and the
  * correct ones; otherwise only right or wrong per question, from the attempt's record. An attempt whose time ran out
- * and is not finished yet is waited for: the server finishes it with its saved answers.
+ * and is not finished yet is waited for: the server finishes it with its saved answers. A survey's result (Q12) says
+ * whether it was complete, the reward, and the answers chosen, never right or wrong.
  */
 export function ResultPage({ attemptId, country }: { attemptId: string; country: string | null }) {
   const { t } = useTranslation(APP)
@@ -159,6 +178,9 @@ export function ResultPage({ attemptId, country }: { attemptId: string; country:
   const automatic = outcome.status === 'EXPIRED' || autoSubmitted(attemptId)
   const byNo = new Map((start?.questions ?? []).map((q) => [q.no, q]))
   const name = publication.data?.name
+  // A survey (Q12) has no score to show: complete (every question answered) or not, and what was chosen.
+  const survey = submitted?.kind === 'SURVEY' || start?.kind === 'SURVEY' || publication.data?.kind === 'SURVEY'
+    || isSurveyResult(outcome.questions)
 
   return (
     <section className="flex flex-col gap-4" aria-labelledby="result-title" data-testid="result">
@@ -172,6 +194,13 @@ export function ResultPage({ attemptId, country }: { attemptId: string; country:
           <AlertDescription>{t('result.automatic')}</AlertDescription>
         </Alert>
       )}
+      {survey ? (
+        <div className="flex items-center gap-3 rounded-lg border p-4" data-testid="result-survey"
+          data-complete={outcome.passed ? 'true' : 'false'}>
+          <ListChecks aria-hidden className="size-6 shrink-0" />
+          <p className="font-medium">{outcome.passed ? t('result.surveyDone') : t('result.surveyIncomplete')}</p>
+        </div>
+      ) : (
       <div className="flex items-center gap-4 rounded-lg border p-4">
         <p className="flex flex-col">
           <span className="text-muted-foreground text-sm">{t('result.score')}</span>
@@ -190,15 +219,18 @@ export function ResultPage({ attemptId, country }: { attemptId: string; country:
           {outcome.passed ? t('result.passed') : t('result.failed')}
         </Badge>
       </div>
-      <Reward outcome={outcome} />
+      )}
+      <Reward outcome={outcome} survey={survey} />
       {outcome.questions.length > 0 && (
         <section aria-labelledby="result-questions-title" className="flex flex-col gap-2">
-          <h2 id="result-questions-title" className="text-lg font-semibold">{t('result.questions')}</h2>
+          <h2 id="result-questions-title" className="text-lg font-semibold">
+            {survey ? t('result.surveyAnswers') : t('result.questions')}
+          </h2>
           {!start && <p className="text-muted-foreground text-sm">{t('result.textsGone')}</p>}
           <ol className="flex flex-col gap-2">
-            {outcome.questions.map((result, i) => (
-              <QuestionRow key={result.no} result={result} question={byNo.get(result.no)} index={i} />
-            ))}
+            {outcome.questions.map((result, i) => survey
+              ? <SurveyRow key={result.no} result={result} question={byNo.get(result.no)} index={i} />
+              : <QuestionRow key={result.no} result={result} question={byNo.get(result.no)} index={i} />)}
           </ol>
         </section>
       )}

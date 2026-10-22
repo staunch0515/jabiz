@@ -86,7 +86,12 @@ function Card({ card }: { card: FeedCard }) {
           ? <LazyImage fileId={card.cover} variant="w320" alt="" className="size-16 shrink-0 rounded-md" />
           : <span aria-hidden className="bg-muted size-16 shrink-0 rounded-md" />}
         <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span className="truncate font-medium" data-testid="feed-card-name">{card.name}</span>
+          <span className="flex min-w-0 items-center gap-2">
+            <span className="truncate font-medium" data-testid="feed-card-name">{card.name}</span>
+            {card.kind === 'SURVEY' && (
+              <Badge variant="secondary" className="shrink-0" data-testid="feed-card-survey">{t('feed.survey')}</Badge>
+            )}
+          </span>
           {sponsor && (
             <span className="text-muted-foreground flex items-center gap-1.5 truncate text-xs">
               {card.sponsorAvatar && (
@@ -98,7 +103,8 @@ function Card({ card }: { card: FeedCard }) {
           <span className="flex items-center gap-3 text-xs">
             <span className="text-primary flex items-center gap-1 font-semibold">
               <Trophy aria-hidden className="size-3.5" />
-              {t('feed.upTo', { amount: formatKudos(card.maxReward) })}
+              {card.kind === 'SURVEY' ? t('feed.surveyReward', { amount: formatKudos(card.maxReward) })
+                : t('feed.upTo', { amount: formatKudos(card.maxReward) })}
             </span>
             <span className="text-muted-foreground flex items-center gap-1">
               <Users aria-hidden className="size-3.5" />

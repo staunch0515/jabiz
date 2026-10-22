@@ -3,17 +3,14 @@ import {
   adminToken,
   expect,
   expectAccessible,
-  PASSWORD,
   prepareQuizbuks,
-  rows,
   run,
   signIn,
   test,
-  tokenOf,
   unique,
   setAppearance,
-  verifiedUser,
 } from './support'
+import { fundedSponsor, taker, untilLive } from './play'
 
 /**
  * Answering in the app (docs/quizbuks/plans/QP-pages.md, QP2): the feed, a publication's page, one question per page
@@ -26,46 +23,11 @@ test.beforeEach(async ({ request }) => {
   await prepareQuizbuks(request)
 })
 
-const SPONSOR_DATASET = 'urn:jabiz:dataset:sponsor:QbSponsor'
-const SPONSOR_WALLETS = 'urn:jabiz:dataset:sponsor:QbWallet'
-const SPONSOR_TOPUPS = 'urn:jabiz:dataset:sponsor:QbTopUp'
-
 interface Seeded {
   publicationId: string
   name: string
   /** The sponsor's whole balance, which is also the publication's top reward. */
   reward: number
-}
-
-/** An approved sponsor with a balance: a top-up paid at the Stripe stub's checkout. */
-async function fundedSponsor(request: APIRequestContext) {
-  const email = await verifiedUser(request, 'sponsor', 'Sora')
-  const token = await tokenOf(request, email, PASSWORD, 'sponsor')
-  const applied = await run(request, token, 'QB_SPONSOR_APPLY', { displayName: 'Sora',
-    company: unique('Quiz Co '), acceptTerms: true })
-  if (applied.approval === 'PENDING') {
-    await run(request, await adminToken(request), 'APPROVAL_DECIDE', { requestId: applied.approvalRequestId,
-      decision: 'APPROVE' })
-  }
-  await expect.poll(async () => (await rows(request, token, SPONSOR_DATASET, []))[0]?.attributes.reviewStatus,
-    { timeout: 30_000 }).toBe('APPROVED')
-
-  const topUp = await run(request, token, 'QB_TOPUP_START', { amount: 1000 })
-  let checkoutUrl: string | undefined
-  await expect.poll(async () => {
-    const found = (await rows(request, token, SPONSOR_TOPUPS, [])).find((r) => r.id === topUp.topUpId)
-    checkoutUrl = found?.attributes.checkoutUrl as string | undefined
-    return !!checkoutUrl
-  }, { message: 'the checkout opens', timeout: 30_000 }).toBe(true)
-  // The stub's "Pay" button: the checkout completes and its signed event is posted to the server.
-  const paid = await request.post(`${checkoutUrl}/paid`, { maxRedirects: 0 })
-  expect(paid.status()).toBeLessThan(400)
-  let balance = 0
-  await expect.poll(async () => {
-    balance = Number((await rows(request, token, SPONSOR_WALLETS, []))[0]?.attributes.balance ?? 0)
-    return balance
-  }, { message: 'the top-up is credited', timeout: 30_000 }).toBeGreaterThan(0)
-  return { token, balance }
 }
 
 /**
@@ -101,26 +63,6 @@ async function seedPublication(request: APIRequestContext, timeLimitSec: number)
       decision: 'APPROVE' })
   }
   return { publicationId, name, reward: sponsor.balance }
-}
-
-/** A verified taker in Japan; returns the address and an access token at the app's entry. */
-async function taker(request: APIRequestContext, name: string) {
-  const email = await verifiedUser(request, 'app', name)
-  const token = await tokenOf(request, email, PASSWORD, 'app')
-  await run(request, token, 'QB_PROFILE_SAVE', { displayName: name, countryCode: 'JP', preferredCurrency: 'JPY' })
-  return { email, token }
-}
-
-/** Waits until the publication is live for takers (its approval is handled by an event). */
-async function untilLive(request: APIRequestContext, token: string, publicationId: string) {
-  await expect.poll(async () => {
-    const response = await request.post('/api/queries/qb.app.publication', {
-      headers: { Authorization: `Bearer ${token}` },
-      data: { params: { publicationId, at: new Date().toISOString(), country: 'JP' } },
-    })
-    if (!response.ok()) return false
-    return ((await response.json()).items ?? [])[0]?.canStart === true
-  }, { message: 'the publication goes live', timeout: 30_000 }).toBe(true)
 }
 
 /** Opens the publication from the feed, found by its name. */
