@@ -2,6 +2,7 @@ package com.jabiz.quizbuks.publishing;
 
 import com.jabiz.entity.Violation;
 import com.jabiz.quizbuks.content.ContentCodes;
+import com.jabiz.quizbuks.content.QbContent;
 import com.jabiz.quizbuks.content.QuizSnapshot;
 import org.junit.jupiter.api.Test;
 
@@ -94,5 +95,41 @@ class PublicationReadinessTest {
         assertThat(PublicationReadiness.check(ready(), tiers(), incomplete, NOW))
             .extracting(Violation::field, Violation::ruleCode)
             .containsExactly(tuple("version.questions[0].options", ContentCodes.OPTION_COUNT));
+    }
+
+    /** A survey of two questions: full score 2. */
+    private static QuizSnapshot survey() {
+        return new QuizSnapshot("Habits", null, null, 300, false, List.of(), List.of(
+            new QuizSnapshot.Question(1, "Often?", null, 1, List.of(new QuizSnapshot.Option(1, "Yes", null, false),
+                new QuizSnapshot.Option(2, "No", null, false)), QbContent.SINGLE),
+            new QuizSnapshot.Question(2, "Which?", null, 1, List.of(new QuizSnapshot.Option(1, "Tea", null, false),
+                new QuizSnapshot.Option(2, "Coffee", null, false)), QbContent.MULTIPLE)), true);
+    }
+
+    private static PublicationReadiness.Draft surveyDraft(int passScore) {
+        return new PublicationReadiness.Draft(VERSION, "Habits", "GLOBAL", NOW.plus(Duration.ofDays(1)),
+            NOW.plus(Duration.ofDays(8)), 300, passScore, BigDecimal.valueOf(10_000), 50);
+    }
+
+    @Test
+    void aSurveyPaysOneRewardForACompleteResponseOnly() {
+        List<TierCoverage.Tier> one = List.of(new TierCoverage.Tier(0, 1, BigDecimal.ZERO),
+            new TierCoverage.Tier(2, 2, BigDecimal.valueOf(50)));
+        assertThat(PublicationReadiness.check(surveyDraft(2), one, survey(), NOW)).isEmpty();
+        assertThat(PublicationReadiness.check(surveyDraft(1), one, survey(), NOW))
+            .extracting(Violation::field, Violation::ruleCode)
+            .containsExactly(tuple("passScore", PublishingCodes.SURVEY_PASS_SCORE));
+        List<TierCoverage.Tier> partial = List.of(new TierCoverage.Tier(0, 0, BigDecimal.ZERO),
+            new TierCoverage.Tier(1, 1, BigDecimal.TEN), new TierCoverage.Tier(2, 2, BigDecimal.valueOf(50)));
+        assertThat(PublicationReadiness.check(surveyDraft(2), partial, survey(), NOW))
+            .extracting(Violation::field, Violation::ruleCode)
+            .containsExactly(tuple("tiers[1].reward", PublishingCodes.SURVEY_TIERS));
+        List<TierCoverage.Tier> wide = List.of(new TierCoverage.Tier(0, 0, BigDecimal.ZERO),
+            new TierCoverage.Tier(1, 2, BigDecimal.valueOf(50)));
+        assertThat(PublicationReadiness.check(surveyDraft(2), wide, survey(), NOW))
+            .extracting(Violation::field, Violation::ruleCode)
+            .containsExactly(tuple("tiers[1].reward", PublishingCodes.SURVEY_TIERS));
+        // A scored quiz may still reward any tier.
+        assertThat(PublicationReadiness.check(ready(), tiers(), quiz(), NOW)).isEmpty();
     }
 }

@@ -1,8 +1,9 @@
 import { ApiError } from '@jabiz/client'
-import { Alert, AlertDescription, Button, Checkbox, ConfirmDialog, PageState, cn } from '@jabiz/ui'
+import { Alert, AlertDescription, Button, Checkbox, ConfirmDialog, PageState, RadioGroup, RadioGroupItem, cn }
+  from '@jabiz/ui'
 import { useQuery } from '@tanstack/react-query'
 import { ChevronLeft, ChevronRight, Clock, Send } from 'lucide-react'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
 import { clockOffset, formatRemaining, threshold, useCountdown } from '../play/countdown'
@@ -11,7 +12,8 @@ import { markAutoSubmitted, storedStart, storeResult, storeStart, takeHandedOver
 import { FileImage } from '../qb/FileImage'
 import { CODE } from '../qb/ids'
 import { QB } from '../qb/messages'
-import { readAttempt, saveAttempt, startAttempt, submitAttempt, type Given } from '../qb/play'
+import { readAttempt, saveAttempt, startAttempt, submitAttempt, unanswered as unansweredOf, type Given }
+  from '../qb/play'
 import { Link, navigate, Redirect } from '../qb/router'
 import { isBusy, playProblemText, retryWhenBusy } from '../play/busy'
 import { refusedWith } from '../play/useStartAttempt'
@@ -188,15 +190,21 @@ function Player({ started }: { started: Started }) {
   if (total === 0) return <PageState kind="empty" description={t('play.noQuestions')} />
   const question = questions[index]
   const chosen = answers.get(question.no) ?? []
-  const unanswered = questions.filter((q) => (answers.get(q.no) ?? []).length === 0).length
+  // A survey (Q12) is submitted only with every question answered (a single choice by one option).
+  const survey = output.kind === 'SURVEY'
+  const single = survey && question.selection === 'SINGLE'
+  const open = unansweredOf(questions, answers)
+  const unanswered = open.length
+  const blocked = survey && unanswered > 0
   const last = index === total - 1
 
-  const toggle = (option: number, on: boolean) => {
-    const next = on ? [...new Set([...chosen, option])] : chosen.filter((o) => o !== option)
+  const choose = (next: number[]) => {
     setAnswers((current) => new Map(current).set(question.no, next))
     setSaveState('idle')
     saver.answer(question.no, next)
   }
+  const toggle = (option: number, on: boolean) =>
+    choose(on ? [...new Set([...chosen, option])] : chosen.filter((o) => o !== option))
   const go = (to: number) => {
     setIndex(to)
     void saver.move(to)
@@ -231,13 +239,14 @@ function Player({ started }: { started: Started }) {
           </h1>
         </legend>
         <p id="play-hint" className="text-muted-foreground text-sm">
-          {t('play.points', { count: question.points })} · {t('play.chooseAll')}
+          {survey ? t(single ? 'play.chooseOne' : 'play.chooseAny')
+            : <>{t('play.points', { count: question.points })} · {t('play.chooseAll')}</>}
         </p>
         {question.image && (
           <FileImage fileId={question.image} variant="w640" alt={t('play.questionImage')}
             className="max-h-64 w-full rounded-md object-contain" />
         )}
-        <ul className="flex flex-col gap-2" data-testid="play-options">
+        <OptionList single={single} value={chosen} onChoose={(option) => choose([option])}>
           {question.options.map((option, i) => {
             const id = `option-${question.no}-${option.no}`
             const checked = chosen.includes(option.no)
@@ -246,7 +255,8 @@ function Player({ started }: { started: Started }) {
                 <label htmlFor={id} data-testid="play-option" data-checked={checked || undefined}
                   className={cn('flex cursor-pointer items-center gap-3 rounded-lg border p-3',
                     checked ? 'border-primary bg-accent' : 'hover:bg-accent')}>
-                  <Checkbox id={id} checked={checked} onCheckedChange={(value) => toggle(option.no, value === true)} />
+                  {single ? <RadioGroupItem id={id} value={String(option.no)} />
+                    : <Checkbox id={id} checked={checked} onCheckedChange={(value) => toggle(option.no, value === true)} />}
                   <span aria-hidden className="text-muted-foreground w-4 text-sm font-semibold">{letter(i)}</span>
                   <span className="flex flex-1 flex-col gap-2">
                     {option.text && <span>{option.text}</span>}
@@ -259,7 +269,7 @@ function Player({ started }: { started: Started }) {
               </li>
             )
           })}
-        </ul>
+        </OptionList>
       </fieldset>
       <p className="text-muted-foreground min-h-5 text-xs" role="status" data-testid="play-save-state">
         {saveState === 'saving' ? t('play.saving') : saveState === 'saved' ? t('play.saved')
@@ -277,7 +287,10 @@ function Player({ started }: { started: Started }) {
         </Button>
         <span className="flex-1" />
         {last ? (
-          <Button onClick={() => setConfirmOpen(true)} data-testid="play-submit">
+          // aria-disabled rather than disabled: the button keeps its focus and says why it waits.
+          <Button onClick={() => !blocked && setConfirmOpen(true)} aria-disabled={blocked || undefined}
+            aria-describedby={blocked ? 'play-incomplete' : undefined} data-testid="play-submit"
+            className={blocked ? 'cursor-not-allowed opacity-50' : undefined}>
             <Send aria-hidden />
             {t('play.submit')}
           </Button>
@@ -288,6 +301,15 @@ function Player({ started }: { started: Started }) {
           </Button>
         )}
       </nav>
+      {blocked && last && (
+        <p id="play-incomplete" className="text-muted-foreground text-sm" data-testid="play-incomplete">
+          {t('play.surveyIncomplete', { count: unanswered })}{' '}
+          <Button variant="link" className="h-auto p-0" onClick={() => go(questions.findIndex((q) => q.no === open[0]))}
+            data-testid="play-first-unanswered">
+            {t('play.toUnanswered')}
+          </Button>
+        </p>
+      )}
       <ConfirmDialog open={confirmOpen} onOpenChange={setConfirmOpen} title={t('play.confirmTitle')}
         description={unanswered > 0 ? t('play.confirmUnanswered', { count: unanswered }) : t('play.confirmAll')}
         confirmLabel={t('play.submit')} cancelLabel={t('play.keepAnswering')}
@@ -297,9 +319,23 @@ function Player({ started }: { started: Started }) {
 }
 
 /**
+ * The options of a question: check boxes, or radio buttons for a survey's single choice (Q12), which hold one option.
+ */
+function OptionList({ single, value, onChoose, children }: { single: boolean; value: number[];
+  onChoose: (option: number) => void; children: ReactNode }) {
+  if (!single) return <ul className="flex flex-col gap-2" data-testid="play-options">{children}</ul>
+  return (
+    <RadioGroup value={value.length === 1 ? String(value[0]) : ''} aria-labelledby="play-question"
+      onValueChange={(next) => onChoose(Number(next))}>
+      <ul className="flex flex-col gap-2" data-testid="play-options">{children}</ul>
+    </RadioGroup>
+  )
+}
+
+/**
  * One question per page (U-30 – U-32, U-41; docs/quizbuks/plans/QP-pages.md): the progress, the countdown by the
  * server's clock, the options as check boxes (the start never says which questions have several correct options, so
- * any number may be chosen), previous and next; answers saved as they change, the current question on every move.
+ * any number may be chosen; a survey's single choice as radio buttons), previous and next; answers saved as they change, the current question on every move.
  * Submitting asks first; when the time runs out the answers are submitted without asking.
  */
 export function PlayPage({ attemptId }: { attemptId: string }) {

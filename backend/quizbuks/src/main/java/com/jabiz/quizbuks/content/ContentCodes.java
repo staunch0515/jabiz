@@ -24,12 +24,20 @@ public final class ContentCodes {
     public static final String MATERIAL_FIELD_NOT_ALLOWED = "QB_MATERIAL_FIELD_NOT_ALLOWED";
     public static final String VERSION_NOT_FOUND = "QB_QUIZ_VERSION_NOT_FOUND";
     public static final String FILE_NOT_OWN = "QB_CONTENT_FILE_NOT_OWN";
+    /** A quiz's kind given that is not its own: it never changes (Q12, D-Q12-1). */
+    public static final String QUIZ_KIND_FIXED = "QB_QUIZ_KIND_FIXED";
+    /** A scored quiz's question given a selection: only a survey's are single or multiple choice (Q12). */
+    public static final String SELECTION_NOT_ALLOWED = "QB_QUESTION_SELECTION_NOT_ALLOWED";
 
     // Making a version (422): the content rules of M-31.
     public static final String NO_QUESTIONS = "QB_QUIZ_NO_QUESTIONS";
     public static final String STEM_REQUIRED = "QB_QUESTION_STEM_REQUIRED";
     public static final String OPTION_COUNT = "QB_QUESTION_OPTION_COUNT";
     public static final String NO_CORRECT = "QB_QUESTION_NO_CORRECT";
+    /** A survey's question that is neither single nor multiple choice (Q12, D-Q12-3). */
+    public static final String SELECTION_REQUIRED = "QB_QUESTION_SELECTION_REQUIRED";
+    /** A survey's question with points other than 1 or a correct option (Q12, D-Q12-3). */
+    public static final String SURVEY_SCORED = "QB_QUESTION_SURVEY_SCORED";
     public static final String OPTION_EMPTY = "QB_OPTION_EMPTY";
     public static final String MATERIAL_TITLE_REQUIRED = "QB_MATERIAL_TITLE_REQUIRED";
     public static final String MATERIAL_CONTENT_REQUIRED = "QB_MATERIAL_CONTENT_REQUIRED";
@@ -40,8 +48,8 @@ public final class ContentCodes {
     /** Every code above. */
     public static final List<String> ALL = List.of(QUIZ_TITLE_BLANK, QUIZ_TIME_LIMIT_RANGE, QUESTION_POINTS_RANGE,
         MATERIAL_URL_FORMAT, QUIZ_CHANGED, CONTENT_NOT_IN_QUIZ, TOO_MANY_QUESTIONS, TOO_MANY_MATERIALS, ORDER_MISMATCH,
-        MATERIAL_KIND_FIXED, MATERIAL_FIELD_NOT_ALLOWED, VERSION_NOT_FOUND, FILE_NOT_OWN, NO_QUESTIONS, STEM_REQUIRED, OPTION_COUNT,
-        NO_CORRECT, OPTION_EMPTY, MATERIAL_TITLE_REQUIRED, MATERIAL_CONTENT_REQUIRED, MATERIAL_NO_IMAGES,
+        MATERIAL_KIND_FIXED, MATERIAL_FIELD_NOT_ALLOWED, VERSION_NOT_FOUND, FILE_NOT_OWN, QUIZ_KIND_FIXED, SELECTION_NOT_ALLOWED,
+        NO_QUESTIONS, STEM_REQUIRED, OPTION_COUNT, NO_CORRECT, SELECTION_REQUIRED, SURVEY_SCORED, OPTION_EMPTY, MATERIAL_TITLE_REQUIRED, MATERIAL_CONTENT_REQUIRED, MATERIAL_NO_IMAGES,
         VERSION_UNCHANGED, TOO_LARGE);
 
     private ContentCodes() {}

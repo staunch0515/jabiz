@@ -372,6 +372,11 @@ public final class AiProcesses {
         }
 
         EntityInstance quiz = QuizEditing.quiz(ctx);
+        if (QbContent.KIND_SURVEY.equals(quiz.get("kind"))) {
+            // The prompt and the candidates' rules call for correct options; a survey has none (Q12, D-Q12-9).
+            problems.add(new Violation("quizId", AiCodes.SURVEY_UNSUPPORTED, "Questions are not written for surveys",
+                Map.of()));
+        }
         List<EntityInstance> materials = QuizEditing.ordered(rows(ctx, MATERIAL_ROWS));
         Map<String, Integer> numbers = new LinkedHashMap<>();
         for (int i = 0; i < materials.size(); i++) {
@@ -916,6 +921,12 @@ public final class AiProcesses {
         }
         requireKind(job, QbAi.KIND_QUESTIONS);
         if (!QuizEditing.current(ctx, quiz, input.baseRevision())) {
+            return;
+        }
+        if (QbContent.KIND_SURVEY.equals(quiz.get("kind"))) {
+            // Candidates have correct options and points; a survey has neither (Q12, D-Q12-9).
+            ctx.reject(new Violation("quizId", AiCodes.SURVEY_UNSUPPORTED, "Questions are not written for surveys",
+                Map.of()));
             return;
         }
         requireReady(ctx, job);

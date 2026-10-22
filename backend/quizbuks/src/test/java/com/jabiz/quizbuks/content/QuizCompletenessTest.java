@@ -188,4 +188,20 @@ class QuizCompletenessTest {
         return Combinators.combine(question.list().ofMaxSize(4), material.list().ofMaxSize(3))
             .as((q, m) -> new QuizSnapshot("T", null, null, null, false, m, q));
     }
+
+    @Test
+    void aSurveyNeedsNoCorrectOptionButASelectionForEachQuestion() {
+        assertThat(QuizCompleteness.check(Drafts.survey())).isEmpty();
+        QuizSnapshot.Question unset = new QuizSnapshot.Question(1, "q", null, 1, List.of(Drafts.option(1, "a", false),
+            Drafts.option(2, "b", false)), null);
+        QuizSnapshot survey = new QuizSnapshot("S", null, null, null, false, List.of(), List.of(unset), true);
+        assertThat(QuizCompleteness.check(survey)).singleElement()
+            .satisfies(v -> assertThat(v.ruleCode()).isEqualTo(ContentCodes.SELECTION_REQUIRED))
+            .satisfies(v -> assertThat(v.field()).isEqualTo("questions[0].selection"));
+        // A survey that scores (points or a correct option, however it was written) is not a version either.
+        QuizSnapshot.Question scored = new QuizSnapshot.Question(1, "q", null, 2, List.of(Drafts.option(1, "a", true),
+            Drafts.option(2, "b", false)), QbContent.SINGLE);
+        assertThat(codes(new QuizSnapshot("S", null, null, null, false, List.of(), List.of(scored), true)))
+            .containsExactly(ContentCodes.SURVEY_SCORED);
+    }
 }

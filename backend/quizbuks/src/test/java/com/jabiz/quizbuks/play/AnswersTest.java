@@ -1,6 +1,7 @@
 package com.jabiz.quizbuks.play;
 
 import com.jabiz.entity.Violation;
+import com.jabiz.quizbuks.content.QuizSnapshot;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
@@ -72,5 +73,18 @@ class AnswersTest {
         assertThat(Answers.fromJson(null)).isEmpty();
         assertThat(Answers.none(3)).containsExactly(List.of(), List.of(), List.of());
         assertThat(Answers.given(List.of(List.of(), List.of(2)))).containsExactly(new Answers.Given(2, List.of(2)));
+    }
+
+    @Test
+    void aSurveyIsIncompleteUntilEveryQuestionIsAnsweredOnceForASingleChoice() {
+        QuizSnapshot survey = ScoringTest.survey();
+        assertThat(Answers.incomplete(survey, List.of(List.of(2), List.of(1, 3)))).isEmpty();
+        assertThat(Answers.incomplete(survey, List.of(List.of(), List.of())))
+            .extracting(Violation::ruleCode).containsExactly(PlayCodes.INCOMPLETE);
+        assertThat(Answers.incomplete(survey, List.of(List.of(1)))).singleElement()
+            .satisfies(v -> assertThat(v.ruleCode()).isEqualTo(PlayCodes.INCOMPLETE))
+            .satisfies(v -> assertThat(v.params()).containsEntry("questions", List.of(2)).containsEntry("count", 1));
+        assertThat(Answers.incomplete(survey, List.of(List.of(1, 2), List.of())))
+            .extracting(Violation::ruleCode).containsExactly(PlayCodes.INCOMPLETE, PlayCodes.SINGLE_CHOICE);
     }
 }

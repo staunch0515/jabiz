@@ -127,7 +127,20 @@ describe('the quiz list', () => {
     await userEvent.click(screen.getByTestId('new-quiz-create'))
     await waitFor(() => expect(window.location.pathname).toBe('/quizzes/q9'))
     expect(processCalls('QB_QUIZ_SAVE')).toEqual([{ title: 'Tea time', intro: null, cover: null,
-      timeLimitSec: null }])
+      timeLimitSec: null, kind: 'QUIZ' }])
+  })
+
+  it('makes a survey when the sponsor chooses one (Q12)', async () => {
+    const { processCalls } = server({ processes: { QB_QUIZ_SAVE: [edit(1, { quizId: 'q9' })] } })
+    window.history.replaceState(null, '', '/quizzes')
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('new-quiz'))
+    await userEvent.type(await screen.findByTestId('new-quiz-title'), 'Tea habits')
+    await userEvent.click(screen.getByTestId('new-quiz-kind-SURVEY'))
+    await userEvent.click(screen.getByTestId('new-quiz-create'))
+    await waitFor(() => expect(window.location.pathname).toBe('/quizzes/q9'))
+    expect(processCalls('QB_QUIZ_SAVE')).toEqual([{ title: 'Tea habits', intro: null, cover: null,
+      timeLimitSec: null, kind: 'SURVEY' }])
   })
 })
 
@@ -229,6 +242,31 @@ describe('the quiz editor', () => {
         { optionId: null, text: 'Rock', image: null, correct: false },
         { optionId: null, text: 'Cocoa', image: null, correct: false },
         { optionId: null, text: 'Coffee', image: null, correct: true },
+      ] }])
+  })
+
+  it('asks a survey\'s question for single or multiple choice, without points or correct options (Q12)', async () => {
+    const { processCalls } = server({ quiz: { ...QUIZ, kind: 'SURVEY' },
+      processes: { QB_QUESTION_SAVE: [edit(8, { itemId: 'k3' })] } })
+    render(<App />)
+    expect(await screen.findByTestId('editor-survey')).toHaveTextContent('Survey')
+    await userEvent.click(await screen.findByTestId('tab-questions'))
+    expect(screen.queryByTestId('ai-panel')).toBeNull()
+    await userEvent.click(await screen.findByTestId('question-add'))
+    const dialog = await screen.findByTestId('question-dialog')
+    expect(within(dialog).queryByTestId('question-points')).toBeNull()
+    expect(within(dialog).queryByTestId('option-correct')).toBeNull()
+    await userEvent.type(within(dialog).getByTestId('question-stem'), 'Which do you drink?')
+    const texts = within(dialog).getAllByTestId('option-text')
+    await userEvent.type(texts[0], 'Tea')
+    await userEvent.type(texts[1], 'Coffee')
+    await userEvent.click(within(dialog).getByTestId('question-selection-MULTIPLE'))
+    await userEvent.click(within(dialog).getByTestId('question-save'))
+    await waitFor(() => expect(screen.queryByTestId('question-dialog')).toBeNull())
+    expect(processCalls('QB_QUESTION_SAVE')).toEqual([{ quizId: 'q1', questionId: null, stem: 'Which do you drink?',
+      image: null, points: 1, baseRevision: 7, selection: 'MULTIPLE', options: [
+        { optionId: null, text: 'Tea', image: null, correct: false },
+        { optionId: null, text: 'Coffee', image: null, correct: false },
       ] }])
   })
 

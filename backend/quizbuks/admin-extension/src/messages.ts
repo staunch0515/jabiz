@@ -103,6 +103,8 @@ export const messages = {
     },
     preview: {
       cover: 'Cover',
+      survey: 'Survey',
+      selections: { SINGLE: 'Single choice', MULTIPLE: 'Multiple choice' },
       intro: 'Introduction',
       materials: 'Materials ({{n}})',
       questions: 'Questions ({{n}})',
@@ -318,6 +320,8 @@ export const messages = {
     },
     preview: {
       cover: '封面',
+      survey: '问卷',
+      selections: { SINGLE: '单选', MULTIPLE: '多选' },
       intro: '简介',
       materials: '资料（{{n}}）',
       questions: '题目（{{n}}）',
@@ -533,6 +537,8 @@ export const messages = {
     },
     preview: {
       cover: 'カバー',
+      survey: 'アンケート',
+      selections: { SINGLE: '単一選択', MULTIPLE: '複数選択' },
       intro: '紹介',
       materials: '資料（{{n}}）',
       questions: '問題（{{n}}）',

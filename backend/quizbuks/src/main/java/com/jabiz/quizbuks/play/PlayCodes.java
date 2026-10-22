@@ -23,6 +23,10 @@ public final class PlayCodes {
     public static final String NOT_IN_PROGRESS = "QB_ATTEMPT_NOT_IN_PROGRESS";
     public static final String FINISHED = "QB_ATTEMPT_FINISHED";
     public static final String ANSWER_INVALID = "QB_ANSWER_INVALID";
+    /** A survey submitted with questions unanswered (Q12, D-Q12-5). */
+    public static final String INCOMPLETE = "QB_ATTEMPT_INCOMPLETE";
+    /** A survey's single-choice question answered with several options (Q12, D-Q12-5). */
+    public static final String SINGLE_CHOICE = "QB_ANSWER_SINGLE_CHOICE";
 
     /**
      * A submission (or expiry) names another publication than its attempt's: the publication is its queue's key
@@ -37,7 +41,7 @@ public final class PlayCodes {
     public static final String REWARD_PENDING = "QB_REWARD_PENDING";
 
     public static final List<String> ALL = List.of(NOT_OPEN, NOT_VISIBLE, BUDGET_FULL, QUOTA_FULL, FUNDS_SHORT,
-        ALREADY_TAKEN, OWN_PUBLICATION, EXPIRED, NOT_IN_PROGRESS, FINISHED, ANSWER_INVALID, PUBLICATION_MISMATCH,
+        ALREADY_TAKEN, OWN_PUBLICATION, EXPIRED, NOT_IN_PROGRESS, FINISHED, ANSWER_INVALID, INCOMPLETE, SINGLE_CHOICE, PUBLICATION_MISMATCH,
         FEE_RATE_INVALID, REWARD_PENDING);
 
     private PlayCodes() {}

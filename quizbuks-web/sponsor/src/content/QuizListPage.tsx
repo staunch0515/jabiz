@@ -15,6 +15,8 @@ import {
   Label,
   PageHeader,
   PageState,
+  RadioGroup,
+  RadioGroupItem,
   type ColumnDef,
   type PaginationState,
   type SortingState,
@@ -27,7 +29,7 @@ import { SPONSOR } from '../messages'
 import { QB } from '../qb/messages'
 import { fieldProblem, generalProblem } from '../qb/problems'
 import { Link, navigate } from '../qb/router'
-import { readQuizStatuses, saveQuiz, searchQuizzes, type QuizRow } from './api'
+import { readQuizStatuses, saveQuiz, searchQuizzes, type QuizKind, type QuizRow } from './api'
 import { Thumbnail } from './ContentImage'
 import { LIMITS } from './limits'
 import { quizPath, QUIZZES_QUERY } from './paths'
@@ -48,13 +50,17 @@ function useDebounced<T>(value: T, ms: number): T {
   return settled
 }
 
-/** Starts a quiz with only its title (a draft may be incomplete, M-22) and opens it. */
+/**
+ * Starts a quiz with only its title (a draft may be incomplete, M-22) and its kind, a scored quiz or a survey (Q12:
+ * chosen now, never changed), and opens it.
+ */
 function NewQuizDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const { t } = useTranslation(SPONSOR)
   const id = useId()
   const [title, setTitle] = useState('')
+  const [kind, setKind] = useState<QuizKind>('QUIZ')
   const create = useMutation({
-    mutationFn: () => saveQuiz({ title: title.trim(), intro: null, cover: null, timeLimitSec: null }),
+    mutationFn: () => saveQuiz({ title: title.trim(), intro: null, cover: null, timeLimitSec: null, kind }),
     onSuccess: (output) => {
       onOpenChange(false)
       navigate(quizPath(output.quizId))
@@ -70,6 +76,7 @@ function NewQuizDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o
     <Dialog open={open} onOpenChange={(next) => {
       if (!next) {
         setTitle('')
+        setKind('QUIZ')
         create.reset()
       }
       onOpenChange(next)
@@ -87,6 +94,23 @@ function NewQuizDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o
               data-testid="new-quiz-title" onChange={(event) => setTitle(event.target.value)} />
             {problem && <p id={`${id}-title-error`} className="text-destructive text-sm">{problem}</p>}
           </div>
+          <fieldset className="flex flex-col gap-2">
+            <legend className="mb-2 text-sm font-medium">{t('quizzes.kind')}</legend>
+            <RadioGroup value={kind} onValueChange={(next) => setKind(next as QuizKind)} data-testid="new-quiz-kind">
+              {(['QUIZ', 'SURVEY'] as const).map((value) => (
+                <div key={value} className="flex items-start gap-2">
+                  <RadioGroupItem id={`${id}-${value}`} value={value} aria-describedby={`${id}-${value}-hint`}
+                    data-testid={`new-quiz-kind-${value}`} />
+                  <span className="flex flex-col gap-0.5">
+                    <Label htmlFor={`${id}-${value}`}>{t(`quizzes.kinds.${value}`)}</Label>
+                    <span id={`${id}-${value}-hint`} className="text-muted-foreground text-xs">
+                      {t(`quizzes.kindHints.${value}`)}
+                    </span>
+                  </span>
+                </div>
+              ))}
+            </RadioGroup>
+          </fieldset>
           {general && (
             <Alert variant="destructive"><AlertDescription>{general}</AlertDescription></Alert>
           )}
@@ -150,7 +174,12 @@ export function QuizListPage() {
             data-testid="quiz-link">
             {row.original.title}
           </Link>
-          {row.original.aiGenerated && <Badge variant="outline" className="w-fit">{t('quizzes.ai')}</Badge>}
+          <span className="flex flex-wrap gap-1">
+            {row.original.kind === 'SURVEY' && (
+              <Badge variant="secondary" className="w-fit" data-testid="quiz-survey">{t('quizzes.kinds.SURVEY')}</Badge>
+            )}
+            {row.original.aiGenerated && <Badge variant="outline" className="w-fit">{t('quizzes.ai')}</Badge>}
+          </span>
         </span>
       ),
     },

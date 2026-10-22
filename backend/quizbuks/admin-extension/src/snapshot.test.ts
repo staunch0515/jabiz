@@ -35,6 +35,16 @@ describe('parseSnapshot', () => {
       { no: 1, stem: 'Q', points: 1, options: [{ no: 1, text: 'a', correct: 'true' }, { no: 2, text: 'b' }] }] })
     expect(snapshot.questions[0].options.map((o) => o.correct)).toEqual([false, false])
   })
+  it('reads a survey\'s kind and its questions\' selection, and a quiz without them (Q12)', () => {
+    const survey = parseSnapshot({ schema: 1, kind: 'SURVEY', title: 'S', materials: [], questions: [
+      { no: 1, stem: 'Often?', points: 1, selection: 'SINGLE', options: [{ no: 1, text: 'Yes', correct: false }] }] })
+    expect(survey.kind).toBe('SURVEY')
+    expect(survey.questions[0].selection).toBe('SINGLE')
+    const quiz = parseSnapshot(SNAPSHOT_JSON)
+    expect(quiz.kind).toBe('QUIZ')
+    expect(quiz.questions.map((q) => q.selection)).toEqual([null, null])
+  })
+
 })
 
 describe('safeHttpUrl', () => {

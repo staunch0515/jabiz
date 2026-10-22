@@ -35,6 +35,7 @@ interface Server {
   tiers?: Record<string, unknown>[]
   /** Holds the answers to searches of the quizzes (with `q`) until it resolves. */
   quizSearch?: Promise<void>
+  versions?: Record<string, unknown>[]
 }
 
 /** The server as the console sees it, for a signed-in, approved sponsor. Records what was posted. */
@@ -89,7 +90,7 @@ function server(options: Server = {}) {
         return json(200, { items: [{ quizId: 'q1', title: 'Coffee basics', versionLabel: 'v1.0', latestVersionNo: 1,
           status: 'VERSIONED' }], offset: 0, limit: 20, total: 1 })
       case '/api/queries/qb.sponsor.quiz-versions':
-        return json(200, { items: VERSIONS, offset: 0, limit: 100 })
+        return json(200, { items: options.versions ?? VERSIONS, offset: 0, limit: 100 })
       default:
         return json(404, {})
     }
@@ -206,6 +207,21 @@ describe('the publication wizard', () => {
       regions: ['GLOBAL', 'JP'], startAt: '2026-11-01T00:00:00Z', endAt: '2026-11-08T00:00:00Z', timeLimitSec: 300,
       passScore: 2, budgetCap: null, maxWinners: null, baseRevision: 3,
       tiers: [{ tierId: null, fromScore: 0, toScore: 2, reward: 100 }] }])
+  })
+
+  it('asks a survey for its one reward and sends the pass mark and tiers it stands for (Q12)', async () => {
+    const { processCalls } = server({ versions: [{ ...VERSIONS[0], kind: 'SURVEY' }],
+      processes: { QB_PUBLICATION_SAVE: [saved(4, { tierIds: ['t1', 't2'] })] } })
+    window.history.replaceState(null, '', '/publications/p1?step=1')
+    render(<App />)
+    const reward = await screen.findByTestId('publication-survey-reward')
+    expect(screen.queryByTestId('publication-pass-score')).toBeNull()
+    expect(screen.queryByTestId('tier-add')).toBeNull()
+    await userEvent.type(reward, '50')
+    await userEvent.click(screen.getByTestId('publication-next'))
+    await waitFor(() => expect(processCalls('QB_PUBLICATION_SAVE')).toHaveLength(1))
+    expect(processCalls('QB_PUBLICATION_SAVE')[0]).toMatchObject({ passScore: 2, tiers: [
+      { tierId: null, fromScore: 0, toScore: 1, reward: 0 }, { tierId: null, fromScore: 2, toScore: 2, reward: 50 }] })
   })
 
   it('refuses a tier value that is not a whole number before asking the server', async () => {

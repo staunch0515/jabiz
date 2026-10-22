@@ -68,12 +68,14 @@ public final class AiCodes {
     public static final String PDF_UNREADABLE = "QB_AI_PDF_UNREADABLE";
     /** The quiz's title has characters no font of the server can draw: nothing was sent (Q8b covers). */
     public static final String COVER_FONT = "QB_AI_COVER_FONT";
+    /** Questions asked for a survey: they would need correct options (Q12, D-Q12-9). */
+    public static final String SURVEY_UNSUPPORTED = "QB_AI_SURVEY_UNSUPPORTED";
 
     public static final List<String> ALL = List.of(UNAVAILABLE, NOTICE_MISSING, NOTICE_REQUIRED, INPUT_TOO_LARGE, NO_SOURCE,
         MATERIAL_NOT_IN_QUIZ, QUIZ_BUSY, TOO_MANY_OPEN, DAILY_LIMIT, MONTHLY_LIMIT, GLOBAL_LIMIT, JOB_NOT_READY,
         JOB_EXPIRED, CANDIDATE_UNKNOWN, NOT_REVIEWED, TEXT_TOO_LONG, RATE_LIMITED, PROVIDER_UNAVAILABLE, AUTH,
         REQUEST_INVALID, BAD_RESPONSE, REFUSED, TRUNCATED, NO_CANDIDATES, COUNT_TOO_HIGH, STOPPED,
-        PDF_TOO_LARGE, WRONG_KIND, PDF_TOO_LONG, PDF_UNREADABLE, COVER_FONT);
+        PDF_TOO_LARGE, WRONG_KIND, PDF_TOO_LONG, PDF_UNREADABLE, COVER_FONT, SURVEY_UNSUPPORTED);
 
     private AiCodes() {}
 }

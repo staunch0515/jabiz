@@ -514,6 +514,7 @@ final class PublicationEditing {
             String.valueOf(row.id()), integer(row.get("fromScore")), integer(row.get("toScore")),
             money(row.get("reward")))).toList()));
         card.put("sponsorCountry", profile == null ? null : profile.get("countryCode"));
+        card.put("kind", snapshot.kind());
         card.put("wentOnAt", ctx.opTime());
         return card;
     }

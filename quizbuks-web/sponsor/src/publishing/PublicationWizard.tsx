@@ -31,6 +31,7 @@ import { noticeConsentProblem } from '../qb/ConsentGate'
 import { fieldProblem, problemText } from '../qb/problems'
 import { navigate } from '../qb/router'
 import {
+  asSurvey,
   formOf,
   inputOf,
   isStale,
@@ -38,6 +39,7 @@ import {
   REGIONS,
   savePublication,
   submitPublication,
+  surveyReward,
   type FormErrors,
   type Problem,
   type PublicationDetail,
@@ -84,6 +86,7 @@ function refusalProblems(error: unknown): Pick<Problem, 'field' | 'message'>[] {
  * reward tiers and money; then everything at once with every problem submitting would be refused for (the save's
  * output) and "Submit". Each "Save and continue" saves the whole draft (`QB_PUBLICATION_SAVE`, with the revision the
  * page last saw); a draft may be incomplete. A new publication is created by its first save and opened at its address.
+ * A survey's (Q12) asks for its one reward instead of a pass mark and tiers.
  */
 export function PublicationWizard({ detail, initialStep, onStale, stale, header }: {
   /** The draft as read; null for a new publication. */
@@ -133,6 +136,8 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
   const fullScore = version?.fullScore ?? output?.fullScore ?? detail?.publication.fullScore ?? null
   const quizTitle = version?.title ?? versions.data?.[0]?.title
     ?? quizzes.data?.items.find((quiz) => quiz.quizId === form.quizId)?.title ?? null
+  // A survey (Q12) has one reward for a complete response: the page builds its pass mark and tiers.
+  const survey = (version?.kind ?? quizzes.data?.items.find((quiz) => quiz.quizId === form.quizId)?.kind) === 'SURVEY'
 
   const set = <K extends keyof PublicationForm>(field: K, value: PublicationForm[K]) =>
     setForm((f) => ({ ...f, [field]: value }))
@@ -172,13 +177,15 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
 
   /** Saves the whole draft when what is typed can be sent; marks what cannot. */
   const run = (then: 'stay' | 'next') => {
-    const built = inputOf(form, publicationId, revision)
+    const shaped = survey && fullScore !== null ? asSurvey(form, fullScore, surveyReward(form)) : form
+    if (shaped !== form) setForm(shaped)
+    const built = inputOf(shaped, publicationId, revision)
     setTyped(built.errors ?? {})
     if (built.errors || badTimes.startAt || badTimes.endAt) {
       notify.error(t('publishing.wizard.fixTyping'))
       return
     }
-    save.mutate({ input: built.input, keys: form.tiers.map((tier) => tier.key), then })
+    save.mutate({ input: built.input, keys: shaped.tiers.map((tier) => tier.key), then })
   }
 
   const submit = () => {
@@ -307,17 +314,30 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
               data-testid="publication-time-limit" onChange={(event) => set('timeLimitSec', event.target.value)} />
           )}
         </Field>
-        <Field id={`${id}-pass`} label={t('publishing.field.passScore')} problem={problemOf('passScore')}
-          hint={fullScore === null ? t('publishing.field.passScoreHintNone')
-            : t('publishing.field.passScoreHint', { fullScore })}>
-          {(aria) => (
-            <Input {...aria} inputMode="numeric" value={form.passScore} autoComplete="off" disabled={locked}
-              data-testid="publication-pass-score" onChange={(event) => set('passScore', event.target.value)} />
-          )}
-        </Field>
+        {survey ? (
+          <Field id={`${id}-survey-reward`} label={t('publishing.field.surveyReward')}
+            problem={problemOf(`tiers[1].reward`) ?? problemOf('tiers')} hint={t('publishing.field.surveyRewardHint')}>
+            {(aria) => (
+              <MoneyInput {...aria} value={surveyReward(form)} scale={0} allowNegative={false} unit={KUDOS}
+                autoComplete="off" disabled={locked || fullScore === null} data-testid="publication-survey-reward"
+                onChange={(value) => fullScore !== null && setForm((f) => asSurvey(f, fullScore, value))} />
+            )}
+          </Field>
+        ) : (
+          <Field id={`${id}-pass`} label={t('publishing.field.passScore')} problem={problemOf('passScore')}
+            hint={fullScore === null ? t('publishing.field.passScoreHintNone')
+              : t('publishing.field.passScoreHint', { fullScore })}>
+            {(aria) => (
+              <Input {...aria} inputMode="numeric" value={form.passScore} autoComplete="off" disabled={locked}
+                data-testid="publication-pass-score" onChange={(event) => set('passScore', event.target.value)} />
+            )}
+          </Field>
+        )}
       </div>
-      <TiersEditor tiers={form.tiers} onChange={(tiers) => set('tiers', tiers)} fullScore={fullScore}
-        problemOf={problemOf} disabled={locked} />
+      {!survey && (
+        <TiersEditor tiers={form.tiers} onChange={(tiers) => set('tiers', tiers)} fullScore={fullScore}
+          problemOf={problemOf} disabled={locked} />
+      )}
       <div className="grid gap-4 md:grid-cols-2">
         <Field id={`${id}-budget`} label={t('publishing.field.budgetCap')} problem={problemOf('budgetCap')}
           hint={t('publishing.field.budgetHint')}>

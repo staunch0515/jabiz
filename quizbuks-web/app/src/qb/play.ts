@@ -20,6 +20,20 @@ function textOrNull(value: unknown): string | null {
   return value === null || value === undefined || value === '' ? null : String(value)
 }
 
+/**
+ * A scored quiz or a survey (docs/quizbuks/plans/Q12-survey.md): a survey's questions have no correct options, every
+ * one must be answered to submit, and a complete response earns the one reward.
+ */
+export type QuizKind = 'QUIZ' | 'SURVEY'
+
+/** The kind a template or process gave; a scored quiz unless it says survey. */
+export function kindOf(value: unknown): QuizKind {
+  return value === 'SURVEY' ? 'SURVEY' : 'QUIZ'
+}
+
+/** How a survey's question is answered: exactly one option, or at least one. Null for a scored question. */
+export type Selection = 'SINGLE' | 'MULTIPLE'
+
 // ---- the feed (qb.app.feed) -------------------------------------------------------------------------------------
 
 /** A card of the feed: a publication the caller can answer now. */
@@ -29,6 +43,7 @@ export interface FeedCard {
   quizTitle: string
   /** A file of the policy `qb.content.image`. */
   cover: string | null
+  kind: QuizKind
   /** The highest reward, in Kudos. */
   maxReward: unknown
   completions: number
@@ -73,6 +88,7 @@ function feedCard(row: Record<string, unknown>): FeedCard {
     name: String(row.name ?? ''),
     quizTitle: String(row.quizTitle ?? ''),
     cover: textOrNull(row.cover),
+    kind: kindOf(row.kind),
     maxReward: row.maxReward,
     completions: numberOf(row.completions),
     sponsorName: textOrNull(row.sponsorName),
@@ -151,6 +167,7 @@ export interface PublicationView {
   name: string
   quizTitle: string
   cover: string | null
+  kind: QuizKind
   /** Markdown. */
   intro: string | null
   materials: Material[]
@@ -203,6 +220,7 @@ export async function readPublication(request: PublicationRequest): Promise<Publ
     name: String(row.name ?? ''),
     quizTitle: String(row.quizTitle ?? ''),
     cover: textOrNull(row.cover),
+    kind: kindOf(row.kind),
     intro: textOrNull(row.intro),
     materials: parseMaterials(row.materials),
     status: String(row.status ?? ''),
@@ -268,6 +286,8 @@ export interface QuestionView {
   image: string | null
   points: number
   options: OptionView[]
+  /** A survey's question: one option or several; null for a scored question (any number may be chosen). */
+  selection: Selection | null
 }
 
 /** `Answers.Given`: the options chosen for one question. */
@@ -293,6 +313,17 @@ export interface StartOutput {
   resumed: boolean
   questions: QuestionView[]
   answers: Given[]
+  kind: QuizKind
+}
+
+/** Whether a choice answers a question: a survey's single choice takes exactly one option (Q12). */
+export function answeredBy(question: Pick<QuestionView, 'selection'>, selected: readonly number[]): boolean {
+  return question.selection === 'SINGLE' ? selected.length === 1 : selected.length > 0
+}
+
+/** The questions (their numbers) a choice does not answer yet, in order: a survey is submitted only without any. */
+export function unanswered(questions: readonly QuestionView[], answers: ReadonlyMap<number, readonly number[]>): number[] {
+  return questions.filter((q) => !answeredBy(q, answers.get(q.no) ?? [])).map((q) => q.no)
 }
 
 /**
@@ -345,6 +376,7 @@ export interface SubmitOutput {
   /** The notice of a pending reward in the caller's language; null otherwise. */
   message: string | null
   questions: QuestionResult[]
+  kind: QuizKind
 }
 
 /**
@@ -377,6 +409,14 @@ export interface AttemptRecord {
   reward: unknown
   rewardStatus: RewardStatus | null
   result: QuestionResult[] | null
+}
+
+/**
+ * Whether a finished attempt's result is a survey's: no question has a correct option (a scored question always has
+ * one), so the record itself tells, without the publication.
+ */
+export function isSurveyResult(result: readonly QuestionResult[] | null): boolean {
+  return !!result && result.length > 0 && result.every((q) => q.correct.length === 0)
 }
 
 /** The `result` column: every question's choice and correct options, or null before the attempt finished. */
@@ -429,6 +469,7 @@ export interface HistoryRow {
   name: string
   quizTitle: string
   cover: string | null
+  kind: QuizKind
   status: string
   category: HistoryCategory
   passed: boolean | null
@@ -466,6 +507,7 @@ export async function readHistory(request: HistoryRequest): Promise<QueryPage<Hi
       name: String(row.name ?? ''),
       quizTitle: String(row.quizTitle ?? ''),
       cover: textOrNull(row.cover),
+      kind: kindOf(row.kind),
       status: String(row.status ?? ''),
       category: String(row.category) as HistoryCategory,
       passed: row.passed === null || row.passed === undefined ? null : row.passed === true || row.passed === 'true',

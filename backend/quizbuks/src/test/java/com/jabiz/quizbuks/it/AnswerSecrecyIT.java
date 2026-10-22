@@ -42,13 +42,13 @@ class AnswerSecrecyIT extends PlayItSupport {
             publicationId).getFirst().get("content"));
         for (Map<String, Object> output : List.of(started, continued)) {
             assertThat(output).containsOnlyKeys("attemptId", "publicationId", "status", "startedAt", "deadline",
-                "serverTime", "timeLimitSec", "currentIndex", "resumed", "questions", "answers");
+                "serverTime", "timeLimitSec", "currentIndex", "resumed", "questions", "answers", "kind");
             List<Map<String, Object>> questions = (List<Map<String, Object>>) output.get("questions");
             assertThat(questions).hasSameSizeAs(snapshot.questions());
             for (int i = 0; i < questions.size(); i++) {
                 QuizSnapshot.Question question = snapshot.questions().get(i);
                 Map<String, Object> shown = questions.get(i);
-                assertThat(shown).containsOnlyKeys("no", "stem", "image", "points", "options")
+                assertThat(shown).containsOnlyKeys("no", "stem", "image", "points", "options", "selection")
                     .containsEntry("no", question.no()).containsEntry("stem", question.stem())
                     .containsEntry("points", question.points());
                 List<Map<String, Object>> options = (List<Map<String, Object>>) shown.get("options");

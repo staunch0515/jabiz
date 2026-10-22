@@ -40,7 +40,10 @@ function VersionView({ versionId }: { versionId: string }) {
   return (
     <div className="flex flex-col gap-5" data-testid="version-content">
       <div className="flex flex-col gap-2">
-        <h3 className="text-lg font-semibold" data-testid="version-title">{content.title}</h3>
+        <h3 className="flex flex-wrap items-center gap-2 text-lg font-semibold">
+          <span data-testid="version-title">{content.title}</span>
+          {content.kind === 'SURVEY' && <Badge variant="secondary">{t('quizzes.kinds.SURVEY')}</Badge>}
+        </h3>
         <p className="text-muted-foreground text-sm">
           {content.timeLimitSec == null ? t('versions.noTimeLimit')
             : t('versions.timeLimit', { seconds: content.timeLimitSec.toLocaleString() })}
@@ -75,7 +78,11 @@ function VersionView({ versionId }: { versionId: string }) {
             <li key={question.no} className="flex flex-col gap-2 rounded-md border p-3" data-testid="version-question">
               <p className="flex flex-wrap items-center justify-between gap-2">
                 <span className="font-medium">{t('questions.number', { number: question.no })}</span>
-                <Badge variant="outline">{t('questions.pointsValue', { points: question.points })}</Badge>
+                <Badge variant="outline">
+                  {/* A survey's question (Q12): one or several options, no points or correct ones. */}
+                  {question.selection ? t(`questions.selections.${question.selection}`)
+                    : t('questions.pointsValue', { points: question.points })}
+                </Badge>
               </p>
               <p className="whitespace-pre-wrap">{question.stem}</p>
               {question.image && <ContentImage fileId={question.image} width={160} />}

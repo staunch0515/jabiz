@@ -166,6 +166,20 @@ public class ContentConfig {
     }
 
     @Bean
+    StaticDictionary qbQuizKindDictionary() {
+        return StaticDictionary.define(QbContent.QUIZ_KIND_DICTIONARY, d -> d
+            .item(QbContent.KIND_QUIZ, "en", "Quiz", "zh", "测验", "ja", "クイズ")
+            .item(QbContent.KIND_SURVEY, "en", "Survey", "zh", "问卷", "ja", "アンケート"));
+    }
+
+    @Bean
+    StaticDictionary qbQuestionSelectionDictionary() {
+        return StaticDictionary.define(QbContent.SELECTION_DICTIONARY, d -> d
+            .item(QbContent.SINGLE, "en", "Single choice", "zh", "单选", "ja", "単一選択")
+            .item(QbContent.MULTIPLE, "en", "Multiple choice", "zh", "多选", "ja", "複数選択"));
+    }
+
+    @Bean
     StaticDictionary qbMaterialKindDictionary() {
         return StaticDictionary.define(QbContent.KIND_DICTIONARY, d -> d
             .item(MaterialKind.ARTICLE.name(), "en", "Article", "zh", "文章", "ja", "記事")

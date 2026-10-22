@@ -10,6 +10,7 @@ params:
 results:
   quizId:              { from: QbQuiz.quizId }
   title:               { from: QbQuiz.title }
+  kind:                { from: QbQuiz.kind }
   cover:               { from: QbQuiz.cover }
   versionLabel:        { from: QbQuiz.versionLabel }
   latestVersionNo:     { from: QbQuiz.latestVersionNo }
@@ -34,6 +35,7 @@ permissions: [qb.content.write]
 SELECT
     z.{{QbQuiz.quizId}}              AS quizId,
     z.{{QbQuiz.title}}               AS title,
+    z.{{QbQuiz.kind}}                AS kind,
     z.{{QbQuiz.cover}}               AS cover,
     z.{{QbQuiz.versionLabel}}        AS versionLabel,
     z.{{QbQuiz.latestVersionNo}}     AS latestVersionNo,

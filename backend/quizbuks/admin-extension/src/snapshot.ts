@@ -18,6 +18,8 @@ export interface SnapshotQuestion {
   image: string | null
   points: number
   options: SnapshotOption[]
+  /** A survey's question (Q12): one option or several; null for a scored question. */
+  selection: 'SINGLE' | 'MULTIPLE' | null
 }
 
 export interface SnapshotMaterial {
@@ -33,6 +35,8 @@ export interface SnapshotMaterial {
 }
 
 export interface Snapshot {
+  /** A survey (Q12) has no correct options and one reward for a complete response; only its snapshot names its kind. */
+  kind: 'QUIZ' | 'SURVEY'
   title: string
   intro: string | null
   cover: string | null
@@ -60,6 +64,7 @@ export function parseSnapshot(content: unknown): Snapshot {
   }
   const json = raw as Json
   return {
+    kind: json.kind === 'SURVEY' ? 'SURVEY' : 'QUIZ',
     title: text(json.title) ?? '',
     intro: text(json.intro),
     cover: text(json.cover),
@@ -83,6 +88,7 @@ export function parseSnapshot(content: unknown): Snapshot {
       stem: text(q.stem),
       image: text(q.image),
       points: whole(q.points),
+      selection: q.selection === 'SINGLE' || q.selection === 'MULTIPLE' ? q.selection : null,
       options: list(q.options).map((o) => ({
         no: whole(o.no),
         text: text(o.text),

@@ -89,12 +89,37 @@ public final class PublicationReadiness {
                 + "reward come to more than " + PublishingLimits.MAX_MONEY + "; set a budget or fewer winners",
                 Map.of("max", PublishingLimits.MAX_MONEY)));
         }
+        if (version != null && version.survey()) {
+            problems.addAll(survey(draft, tiers, fullScore));
+        }
         if (version != null) {
             QuizCompleteness.check(version).forEach(problem -> problems.add(new Violation(
                 problem.field() == null ? "version" : "version." + problem.field(), problem.ruleCode(),
                 problem.message(), problem.params())));
         }
         return List.copyOf(problems);
+    }
+
+    /**
+     * A survey pays one reward for a complete response (Q12, D-Q12-4): its pass mark is the full score (every
+     * question answered) and only the tier of the full score has a reward. The sponsor console builds these tiers;
+     * the coverage itself is {@link TierCoverage}'s.
+     */
+    private static List<Violation> survey(Draft draft, List<TierCoverage.Tier> tiers, int fullScore) {
+        List<Violation> problems = new ArrayList<>();
+        if (draft.passScore() != null && draft.passScore() != fullScore) {
+            problems.add(new Violation("passScore", PublishingCodes.SURVEY_PASS_SCORE, "A survey's pass mark is "
+                + "its number of questions " + fullScore, Map.of("fullScore", fullScore)));
+        }
+        for (int i = 0; i < tiers.size(); i++) {
+            TierCoverage.Tier tier = tiers.get(i);
+            if (tier.fromScore() < fullScore && tier.reward().signum() != 0) {
+                problems.add(new Violation("tiers[" + i + "].reward", PublishingCodes.SURVEY_TIERS, "Only a "
+                    + "complete response is rewarded: tier " + (i + 1) + " pays for an incomplete one",
+                    Map.of("tier", i + 1)));
+            }
+        }
+        return problems;
     }
 
     private static Violation required(String field) {

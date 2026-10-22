@@ -14,6 +14,8 @@ import {
   Input,
   Label,
   notify,
+  RadioGroup,
+  RadioGroupItem,
   Textarea,
 } from '@jabiz/ui'
 import { useMutation } from '@tanstack/react-query'
@@ -22,7 +24,7 @@ import { useId, useRef, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { SPONSOR } from '../messages'
 import { fieldProblem } from '../qb/problems'
-import { deleteQuestion, moved, reorderQuestions, saveQuestion, type Question } from './api'
+import { deleteQuestion, moved, reorderQuestions, saveQuestion, type Question, type Selection } from './api'
 import {
   failedRemoval,
   FileField,
@@ -47,18 +49,19 @@ interface OptionDraft {
 
 const blankOption = (): OptionDraft => ({ key: newKey(), optionId: null, text: '', image: null, correct: false })
 
-const FIELDS = ['stem', 'image', 'points', 'options'] as const
+const FIELDS = ['stem', 'image', 'points', 'options', 'selection'] as const
 
 /**
  * One question with all its options (M-24), saved at once with `QB_QUESTION_SAVE` (the options are the whole list in
  * their order). A draft may be incomplete: two to six options with at least one correct are checked when a version
- * is saved.
+ * is saved. A survey's question (Q12) has no points and no correct option: it is single or multiple choice.
  */
-function QuestionDialog({ question, number, open, onOpenChange }: {
+function QuestionDialog({ question, number, survey, open, onOpenChange }: {
   /** The question to change; a new one at the end when null. */
   question: Question | null
   /** Its place, from 1. */
   number: number
+  survey: boolean
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
@@ -68,6 +71,7 @@ function QuestionDialog({ question, number, open, onOpenChange }: {
   const [stem, setStem] = useState(question?.stem ?? '')
   const [image, setImage] = useState<string | null>(question?.image ?? null)
   const [points, setPoints] = useState(String(question?.points ?? 1))
+  const [selection, setSelection] = useState<Selection>(question?.selection ?? 'SINGLE')
   const [options, setOptions] = useState<OptionDraft[]>(() => question
     ? question.options.map((o) => ({ key: o.optionId, optionId: o.optionId, text: o.text ?? '', image: o.image,
       correct: o.correct }))
@@ -81,10 +85,11 @@ function QuestionDialog({ question, number, open, onOpenChange }: {
       questionId: question?.questionId ?? null,
       stem: textOrNull(stem),
       image,
-      points: wholeOrNull(points) ?? 1,
+      points: survey ? 1 : wholeOrNull(points) ?? 1,
       options: options.map((o) => ({ optionId: o.optionId, text: textOrNull(o.text), image: o.image,
-        correct: o.correct })),
+        correct: !survey && o.correct })),
       baseRevision: editing.revision(),
+      ...(survey ? { selection } : {}),
     }),
     onSuccess: async (output) => {
       onOpenChange(false)
@@ -97,7 +102,7 @@ function QuestionDialog({ question, number, open, onOpenChange }: {
   const submit = (event: FormEvent) => {
     event.preventDefault()
     const n = wholeOrNull(points)
-    if (n === null || n < LIMITS.minPoints || n > LIMITS.maxPoints) {
+    if (!survey && (n === null || n < LIMITS.minPoints || n > LIMITS.maxPoints)) {
       setLocal(t('questions.pointsRange', { min: LIMITS.minPoints, max: LIMITS.maxPoints.toLocaleString() }))
       return
     }
@@ -122,7 +127,7 @@ function QuestionDialog({ question, number, open, onOpenChange }: {
             <DialogTitle>
               {question ? t('questions.editTitle', { number }) : t('questions.newTitle', { number })}
             </DialogTitle>
-            <DialogDescription>{t('questions.dialogHint')}</DialogDescription>
+            <DialogDescription>{survey ? t('questions.surveyDialogHint') : t('questions.dialogHint')}</DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-2">
             <Label htmlFor={`${id}-stem`}>{t('questions.stem')}</Label>
@@ -135,6 +140,20 @@ function QuestionDialog({ question, number, open, onOpenChange }: {
           <FileField kind="image" label={t('questions.image')}
             uploadLabel={image ? t('questions.replaceImage') : t('questions.uploadImage')}
             value={image} onChange={setImage} error={problem('image')} testId="question-image" />
+          {survey ? (
+            <fieldset className="flex flex-col gap-2">
+              <legend className="mb-2 text-sm font-medium">{t('questions.selection')}</legend>
+              <RadioGroup value={selection} onValueChange={(next) => setSelection(next as Selection)}
+                className="flex flex-wrap gap-4" data-testid="question-selection">
+                {(['SINGLE', 'MULTIPLE'] as const).map((value) => (
+                  <div key={value} className="flex items-center gap-2">
+                    <RadioGroupItem id={`${id}-${value}`} value={value} data-testid={`question-selection-${value}`} />
+                    <Label htmlFor={`${id}-${value}`}>{t(`questions.selections.${value}`)}</Label>
+                  </div>
+                ))}
+              </RadioGroup>
+            </fieldset>
+          ) : (
           <div className="flex flex-col gap-2">
             <Label htmlFor={`${id}-points`}>{t('questions.points')}</Label>
             <Input id={`${id}-points`} type="number" inputMode="numeric" className="w-32" value={points}
@@ -144,10 +163,11 @@ function QuestionDialog({ question, number, open, onOpenChange }: {
               data-testid="question-points" onChange={(event) => setPoints(event.target.value)} />
             {pointsProblem && <p id={`${id}-points-error`} className="text-destructive text-sm">{pointsProblem}</p>}
           </div>
+          )}
           <fieldset className="flex flex-col gap-3">
             <legend className="mb-2 text-sm font-medium">{t('questions.options')}</legend>
             <p className="text-muted-foreground text-sm">
-              {t('questions.optionsHint', { min: LIMITS.minOptions, max: LIMITS.options })}
+              {t(survey ? 'questions.surveyOptionsHint' : 'questions.optionsHint', { min: LIMITS.minOptions, max: LIMITS.options })}
             </p>
             <ol ref={optionsRef} className="flex flex-col gap-3">
               {options.map((option, index) => (
@@ -158,11 +178,13 @@ function QuestionDialog({ question, number, open, onOpenChange }: {
                       autoComplete="off" data-option-text data-testid="option-text"
                       onChange={(event) => change(option.key, { text: event.target.value })} />
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Checkbox id={`${id}-${option.key}-correct`} checked={option.correct} data-testid="option-correct"
-                      onCheckedChange={(checked) => change(option.key, { correct: checked === true })} />
-                    <Label htmlFor={`${id}-${option.key}-correct`}>{t('questions.correct')}</Label>
-                  </div>
+                  {!survey && (
+                    <div className="flex items-center gap-2">
+                      <Checkbox id={`${id}-${option.key}-correct`} checked={option.correct} data-testid="option-correct"
+                        onCheckedChange={(checked) => change(option.key, { correct: checked === true })} />
+                      <Label htmlFor={`${id}-${option.key}-correct`}>{t('questions.correct')}</Label>
+                    </div>
+                  )}
                   <FileField kind="image" label={t('questions.optionImage', { number: index + 1 })}
                     uploadLabel={option.image ? t('questions.replaceOptionImage', { number: index + 1 })
                       : t('questions.uploadOptionImage', { number: index + 1 })}
@@ -225,9 +247,10 @@ function QuestionDialog({ question, number, open, onOpenChange }: {
 
 /**
  * The questions of the quiz in their order (M-24): each with its options, the correct ones marked; added, changed,
- * moved up or down (`QB_QUESTION_REORDER` with the whole order) and deleted.
+ * moved up or down (`QB_QUESTION_REORDER` with the whole order) and deleted. A survey's (Q12) say single or multiple
+ * choice instead of points and correct options.
  */
-export function QuestionsPanel({ questions }: { questions: Question[] }) {
+export function QuestionsPanel({ questions, survey = false }: { questions: Question[]; survey?: boolean }) {
   const { t } = useTranslation(SPONSOR)
   const editing = useEditing()
   const [editingQuestion, setEditingQuestion] = useState<{ question: Question | null; number: number } | null>(null)
@@ -278,7 +301,10 @@ export function QuestionsPanel({ questions }: { questions: Question[] }) {
                   <CardContent className="flex flex-col gap-3">
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <h2 className="font-medium">{t('questions.number', { number: index + 1 })}</h2>
-                      <Badge variant="outline">{t('questions.pointsValue', { points: question.points })}</Badge>
+                      <Badge variant="outline" data-testid="question-badge">
+                        {survey ? question.selection ? t(`questions.selections.${question.selection}`)
+                          : t('questions.noSelection') : t('questions.pointsValue', { points: question.points })}
+                      </Badge>
                     </div>
                     <p className="whitespace-pre-wrap" data-testid="question-stem-text">
                       {question.stem ?? <span className="text-muted-foreground">{t('questions.noStem')}</span>}
@@ -340,7 +366,7 @@ export function QuestionsPanel({ questions }: { questions: Question[] }) {
         )}
       {editingQuestion && (
         <QuestionDialog key={editingQuestion.question?.questionId ?? 'new'} question={editingQuestion.question}
-          number={editingQuestion.number} open onOpenChange={(open) => {
+          number={editingQuestion.number} survey={survey} open onOpenChange={(open) => {
             if (!open) setEditingQuestion(null)
           }} />
       )}

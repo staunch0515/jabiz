@@ -17,10 +17,21 @@ export type QuizStatus = 'DRAFT' | 'VERSIONED'
 export type MaterialKind = 'ARTICLE' | 'LINK' | 'VIDEO_LINK' | 'PDF' | 'IMAGES' | 'AUDIO'
 export const MATERIAL_KINDS: readonly MaterialKind[] = ['ARTICLE', 'LINK', 'VIDEO_LINK', 'PDF', 'IMAGES', 'AUDIO']
 
+/** A scored quiz or a survey (Q12, `plans/Q12-survey.md`): chosen when the quiz is made, never changed. */
+export type QuizKind = 'QUIZ' | 'SURVEY'
+
+/** How a survey's question is answered: exactly one option, or at least one. */
+export type Selection = 'SINGLE' | 'MULTIPLE'
+
+const kindOf = (value: unknown): QuizKind => (value === 'SURVEY' ? 'SURVEY' : 'QUIZ')
+const selectionOf = (value: unknown): Selection | null =>
+  value === 'SINGLE' || value === 'MULTIPLE' ? value : null
+
 /** A row of `qb.sponsor.quizzes` (M-20). */
 export interface QuizRow {
   quizId: string
   title: string
+  kind: QuizKind
   cover: string | null
   versionLabel: string | null
   latestVersionNo: number
@@ -39,6 +50,7 @@ export interface QuizRow {
 export interface Quiz {
   quizId: string
   title: string
+  kind: QuizKind
   intro: string | null
   cover: string | null
   timeLimitSec: number | null
@@ -67,6 +79,8 @@ export interface Question {
   image: string | null
   points: number
   options: Option[]
+  /** A survey's question; null for a scored question (and a survey's one not set yet). */
+  selection: Selection | null
 }
 
 export interface MaterialImage {
@@ -112,6 +126,8 @@ export interface QuizInput {
   cover: string | null
   timeLimitSec: number | null
   baseRevision?: number | null
+  /** A new quiz's kind (a scored quiz when not given); a changed quiz's kind never changes. */
+  kind?: QuizKind
 }
 
 /** `QuestionProcesses.QuestionInput`; `options` is the whole list in its order. */
@@ -123,6 +139,8 @@ export interface QuestionInput {
   points: number
   options: { optionId?: string | null; text: string | null; image: string | null; correct: boolean }[]
   baseRevision?: number | null
+  /** A survey's question only: the server takes a point each and no correct option. */
+  selection?: Selection | null
 }
 
 /** `MaterialProcesses.MaterialInput`: only the content field of the kind is given. */
@@ -168,6 +186,7 @@ export interface VersionRow {
   versionNo: number
   label: string
   title: string
+  kind: QuizKind
   questionCount: number
   fullScore: number
   versionedAt: string
@@ -176,6 +195,8 @@ export interface VersionRow {
 
 /** A version's snapshot (`QuizSnapshots`, schema 1): parts by their number, from 1. */
 export interface Snapshot {
+  /** Only a survey's snapshot names its kind; a scored quiz's has none. */
+  kind?: 'SURVEY'
   title: string
   intro: string | null
   cover: string | null
@@ -197,6 +218,8 @@ export interface Snapshot {
     image: string | null
     points: number
     options: { no: number; text: string | null; image: string | null; correct: boolean }[]
+    /** A survey's question only. */
+    selection?: Selection
   }[]
 }
 
@@ -241,6 +264,7 @@ export function toQuiz(row: Row): Quiz {
   return {
     quizId: String(row.quizId),
     title: String(row.title ?? ''),
+    kind: kindOf(row.kind),
     intro: str(row.intro),
     cover: str(row.cover),
     timeLimitSec: numOrNull(row.timeLimitSec),
@@ -279,6 +303,7 @@ export function assembleDraft(quiz: Row, questions: Row[], options: Row[], mater
       image: str(q.image),
       points: num(q.points) || 1,
       options: optionsOf.get(String(q.questionId)) ?? [],
+      selection: selectionOf(q.selection),
     })),
     materials: [...materials].sort(bySeq).map((m) => ({
       materialId: String(m.materialId),
@@ -342,6 +367,7 @@ export async function searchQuizzes({ q, sorts, offset, limit }: QuizSearch) {
     items: page.items.map((row): QuizRow => ({
       quizId: String(row.quizId),
       title: String(row.title ?? ''),
+      kind: kindOf(row.kind),
       cover: str(row.cover),
       versionLabel: str(row.versionLabel),
       latestVersionNo: num(row.latestVersionNo),
@@ -364,6 +390,7 @@ function toVersionRow(row: Row): VersionRow {
     versionNo: num(row.versionNo),
     label: String(row.label ?? ''),
     title: String(row.title ?? ''),
+    kind: kindOf(row.kind),
     questionCount: num(row.questionCount),
     fullScore: num(row.fullScore),
     versionedAt: String(row.versionedAt ?? ''),
@@ -386,12 +413,15 @@ export async function readVersion(versionId: string): Promise<VersionDetail | nu
   const page = await runQuery<Row>(CONTENT_TEMPLATE.quizVersion, { params: { versionId }, limit: 1 })
   const row = page.items[0]
   if (!row) return null
+  const content = JSON.parse(String(row.content)) as Snapshot
   return {
     ...toVersionRow(row),
+    // The version's own content says whether it is a survey.
+    kind: kindOf(content.kind),
     quizId: String(row.quizId),
     timeLimitSec: numOrNull(row.timeLimitSec),
     materialCount: num(row.materialCount),
-    content: JSON.parse(String(row.content)) as Snapshot,
+    content,
   }
 }
 
