@@ -243,6 +243,10 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 
 _OPENER = urllib.request.build_opener(NoRedirect)
 
+# Every request names the tool: in front of a test server Cloudflare's browser check refuses urllib's default
+# "Python-urllib/3.x" with 403 "error code: 1010" before the application sees it.
+USER_AGENT = "Mozilla/5.0 (compatible; quizbuks-stripe-test-mode/1.0)"
+
 
 def address(url):
     """A URL without its query and fragment, for messages."""
@@ -255,6 +259,7 @@ def http(method, url, body=None, token=None, headers=None, raw=None, content_typ
     redirect_ok); a failure to connect, a timeout or an unreadable answer is Failed."""
     data = raw if raw is not None else (json.dumps(body).encode() if body is not None else None)
     request = urllib.request.Request(url, data=data, method=method)
+    request.add_header("User-Agent", USER_AGENT)
     if data is not None:
         request.add_header("Content-Type", content_type)
     if token:

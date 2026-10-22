@@ -17,7 +17,7 @@
 |---|---|
 | 密钥 | `STRIPE_TEST_SECRET_KEY` 必须是 `sk_test_…`；`sk_live_` / `rk_live_` 一律拒绝，受限密钥 `rk_test_` 也拒绝（脚本要退款、提交争议证据、打款，需要完整的测试密钥） |
 | 目标 | 缺省 `http://localhost:8080`；只有字面的回环地址（`localhost`、`127.x`、`::1`，不查 DNS）算本机。其他主机须 `--allow-remote`（或 `STRIPE_TM_ALLOW_REMOTE=yes`）且必须是 `https`；地址不得带用户信息、查询或片段 |
-| 生产主机 | `tools/quizbuks/stripe-test-mode/production-hosts`（每行一个，`*.域名` 含域名本身与子域；`STRIPE_TM_PRODUCTION_HOSTS_FILE` 可换一个文件，读不到即拒绝）与 `STRIPE_TM_PRODUCTION_HOSTS` 中的主机**永远拒绝**，`--allow-remote` 也不放行。**只比较名字**：生产主机的 IP 地址或别名（CNAME）认不出，用目标的正式名字，不要绕过。**正式域名一确定就写进该文件**（上线检查清单） |
+| 生产主机 | `tools/quizbuks/stripe-test-mode/production-hosts`（每行一个，`*.域名` 含域名本身与子域；`STRIPE_TM_PRODUCTION_HOSTS_FILE` 可换一个文件，读不到即拒绝）与 `STRIPE_TM_PRODUCTION_HOSTS` 中的主机**永远拒绝**，`--allow-remote` 也不放行。**只比较名字**：生产主机的 IP 地址或别名（CNAME）认不出，用目标的正式名字，不要绕过。**正式域名一确定就写进该文件**（上线检查清单）。现在列着 `quizbuks.com` 与 `www.quizbuks.com`；不写 `*.quizbuks.com`，否则测试服务器 `staging.quizbuks.com` 也被拒绝 |
 | 正式模式开关 | 本环境中 `QB_STRIPE_LIVEMODE` / `QUIZBUKS_STRIPE_LIVEMODE` 不是 `false` 即拒绝 |
 
 连上之后、**写入任何东西之前**（汇总中的 `preflight`，只读：健康检查、Stripe 的余额与账户、管理员登录与以下两项），确认应用是测试模式（应用没有公开"当前模式"的接口，所以从它的行为判断），不成立即拒绝（退出码 2），什么也不写：
@@ -45,6 +45,10 @@
 4. **API 版本**：应用固定 `2025-03-31.basil`（`QB_STRIPE_API_VERSION`）。事件正文的结构由端点（或 `stripe listen` 所用账户的缺省版本）决定，不一致时字段对不上、事件只开待办。在开发者 → 概览中确认账户的缺省 API 版本；在后台建端点时选同一版本。
 5. **打款（步骤 9）**：测试模式 → 设置 → 打款：加一个测试银行账户（日本的测试账号见 Stripe 文档"Testing → Payouts"），并把打款计划改为**手动**。自动计划下 Stripe 拒绝手动打款，脚本把这一步记为 SKIP。
 6. **Stripe CLI**（本机运行时）：<https://docs.stripe.com/stripe-cli>。不需要 `stripe login`：`run.sh serve` 以 `STRIPE_API_KEY` 环境变量把测试密钥交给它。
+
+7. **Cloudflare**（域名经 Cloudflare 代理时，即橙色云朵）：Cloudflare 的浏览器检查与 Bot Fight Mode 会以 403 `error code: 1010` 拒绝 Stripe 的 Webhook
+   与本脚本（它们不是浏览器），请求根本到不了应用。在 Cloudflare 中为 `/api/inbound/` 建跳过规则（`deploy/quizbuks/DEPLOY.md`"Cloudflare"）。
+   脚本自己的请求带 `User-Agent: Mozilla/5.0 (compatible; quizbuks-stripe-test-mode/1.0)`，通常能通过；仍被拒时同样为脚本所用的路径放行，或关闭 Bot Fight Mode。
 
 **本机**：JDK 21、python3、curl、openssl、psql；PostgreSQL（缺省 compose 的 `localhost:5440`：`docker compose -f deploy/quizbuks/compose.dev.yaml up -d db`）；Mailpit（在 1025 / 8025 没有时用 Docker 启动）。
 
@@ -87,24 +91,63 @@ tools/quizbuks/stripe-test-mode/run.sh stop
 后台运行 `stripe listen --events <QuizBuks 订阅的类型> --forward-to …/api/inbound/stripe --forward-connect-to …/api/inbound/stripe-connect`；以下列设置启动打包的 jar：
 测试模式、回跳地址为 `http://localhost:8080/…`（测试模式允许 http）、邮件到 Mailpit、**转账任务与每日核对每分钟运行**（`QB_TRANSFER_RUN_CRON`、`QB_RECONCILE_RUN_CRON`，只在测试模式允许，`TransferScheduleCheck`）、管理操作不要求二次验证（只在本机）。
 
-### 4.2 测试服务器（公网地址）
+### 4.2 测试服务器：`staging.quizbuks.com`
 
-服务器以测试密钥运行（`QB_STRIPE_LIVEMODE=false`），在 Stripe 后台（测试模式）建两个端点（`deploy/quizbuks/README.md`"充值与核对""收款账户与自动转账"）：
+测试服务器是共用 Docker 服务器上的 staging 环境（`deploy/quizbuks/DEPLOY.md`）：应用在容器 `quizbuks-staging-app` 中，**不发布端口**，只经 Caddy（与 Cloudflare）以
+`https://staging.quizbuks.com` 对外。所以 4.1 的 `stripe listen --forward-to http://localhost:8080` 在这台服务器上**不可用**（`localhost:8080` 上没有应用）：一律用 Stripe 后台的端点。
 
-- `https://<测试主机>/api/inbound/stripe`：`checkout.session.completed`、`checkout.session.expired`、`charge.refunded`、`charge.dispute.created`、`charge.dispute.closed`、`transfer.reversed`、`payout.paid`、`payout.failed`；
-- `https://<测试主机>/api/inbound/stripe-connect`（"已连接的账户"）：`account.updated`、`account.application.deauthorized`。
+**一次性准备**
 
-两个签名密钥分别放进服务器的 `STRIPE_WEBHOOK_SECRET`、`STRIPE_CONNECT_WEBHOOK_SECRET`。也可以不建端点，在服务器上运行 `stripe listen --forward-to http://localhost:8080/api/inbound/stripe --forward-connect-to http://localhost:8080/api/inbound/stripe-connect`（同 4.1）。
-**转账任务**缺省每天 01:07 UTC 运行：测试服务器上设 `QB_TRANSFER_RUN_CRON='0 * * * * *'`（只在测试模式允许），否则步骤 6 会说"下一次运行在…"并失败。
+1. **Stripe 后台（测试模式）的两个端点**（API 版本同第 2 节第 4 条）：
+   - `https://staging.quizbuks.com/api/inbound/stripe`：`checkout.session.completed`、`checkout.session.expired`、`charge.refunded`、`charge.dispute.created`、
+     `charge.dispute.closed`、`transfer.reversed`、`payout.paid`、`payout.failed`；
+   - `https://staging.quizbuks.com/api/inbound/stripe-connect`（"已连接的账户"的事件）：`account.updated`、`account.application.deauthorized`。
+
+   两个端点各自的签名密钥（`whsec_…`）分别放进 `/opt/apps/quizbuks-staging/.env` 的 `STRIPE_WEBHOOK_SECRET` 与 `STRIPE_CONNECT_WEBHOOK_SECRET`。
+   **不要用自己生成的占位**：签名对不上时应用拒绝每一个事件，充值一直是 `OPEN`。
+2. **Cloudflare 放行 `/api/inbound/`**（第 2 节第 7 条）。检查（在服务器上；请求经 Cloudflare 回到服务器）：
+
+   ```sh
+   curl -s -o /dev/null -w '%{http_code}\n' -X POST https://staging.quizbuks.com/api/inbound/stripe \
+     -A 'Stripe/1.0 (+https://stripe.com/docs/webhooks)' -H 'Content-Type: application/json' -H 'Stripe-Signature: t=1,v1=x' -d '{}'
+   docker logs --since 2m quizbuks-staging-app 2>&1 | grep /api/inbound
+   ```
+
+   应为 400，且应用日志中有 `POST /api/inbound/stripe -> 400`（签名不符，说明请求到了应用）；403 且日志中没有这一行即 Cloudflare 拦下了。
+3. **`.env` 中的测试设置**：`QB_STRIPE_LIVEMODE=false`（缺省）、`STRIPE_API_KEY` 为同一账户的测试密钥（`sk_test_…` 或 `rk_test_…`）、
+   `QB_TRANSFER_RUN_CRON='0 * * * * *'`（转账任务每分钟运行，只在测试模式允许；否则步骤 6 说"下一次运行在…"并失败）。改了 `.env` 要重建容器
+   （`cd /opt/apps/quizbuks-staging && IMAGE_TAG=<当前 SHA> docker compose up -d --force-recreate --wait`）。
+4. **受控参数已发布**：`QB_SETUP` 的全部提案由第二位管理员发布（`DEPLOY.md`"首次启动之后"）。脚本的第 1 步只发布它这次调用 `QB_SETUP` 得到的新提案，
+   并在 `qb.transfer.enabled` 不是 true 时提出并发布 true。
+5. **两位管理员**：`STRIPE_TM_ADMIN_*` 是提出变更、批准入驻与发布的管理员（如首个管理员 `admin`），`STRIPE_TM_PUBLISHER_*` 是持 `control.publish` 的另一位
+   （财务管理员）。staging 的管理要求二次验证，所以两人都要给 `_TOTP`：**绑定二次验证时显示的密钥**（Base32），不是 6 位验证码。绑定时没有记下密钥的，
+   在后台"安全设置"中重新绑定一次并记下。
+6. **商家与答题人**：staging 发真实邮件、没有 Mailpit，脚本不能替它们验证邮箱：事先在 `https://staging.quizbuks.com/sponsor/` 与 `/` 各注册一个、点邮件中的链接验证。
+   Gmail 的别名很方便（`you+qb-sponsor-1@gmail.com`、`you+qb-taker-1@gmail.com`，邮件都到同一个信箱）。
+   **每次运行用新的商家**：新商家首次充值成功前与之后 30 天内累计充值至多 100 000（`qb.topup.new-sponsor.max-total`），几次运行（每次 10 000 + 争议的 2 000，
+   加上手工试过的充值）就会用完，之后充值一律 422 `QB_TOPUP_NEW_SPONSOR_LIMIT`。答题人也尽量新建（见下）。
+
+**运行**（在本机或服务器上，从仓库根目录；`--allow-remote` 只放行 https 的远程地址，`production-hosts` 中的正式域名永远拒绝）：
 
 ```sh
-export STRIPE_TEST_SECRET_KEY=sk_test_… STRIPE_TM_ADMIN_PASSWORD=… STRIPE_TM_ADMIN_TOTP=… \
+read -rs -p 'sk_test: ' STRIPE_TEST_SECRET_KEY; echo; export STRIPE_TEST_SECRET_KEY
+export STRIPE_TM_ADMIN_USER=admin STRIPE_TM_ADMIN_PASSWORD=… STRIPE_TM_ADMIN_TOTP=… \
   STRIPE_TM_PUBLISHER_USER=… STRIPE_TM_PUBLISHER_PASSWORD=… STRIPE_TM_PUBLISHER_TOTP=… \
-  STRIPE_TM_SPONSOR_EMAIL=… STRIPE_TM_SPONSOR_PASSWORD=… STRIPE_TM_TAKER_EMAIL=… STRIPE_TM_TAKER_PASSWORD=…
-tools/quizbuks/stripe-test-mode/run.sh run --base-url https://test.quizbuks.example --allow-remote --fund-balance
+  STRIPE_TM_SPONSOR_EMAIL=you+qb-sponsor-1@gmail.com STRIPE_TM_SPONSOR_PASSWORD=… \
+  STRIPE_TM_TAKER_EMAIL=you+qb-taker-1@gmail.com STRIPE_TM_TAKER_PASSWORD=…
+tools/quizbuks/stripe-test-mode/run.sh run --base-url https://staging.quizbuks.com --allow-remote --fund-balance
 ```
 
 事先准备的答题人若已开通收款账户，步骤 5 记为 SKIP；若它有余额，转账任务可能在脚本之前就把它转走（脚本只看本次运行之后建立的转账）。尽量每次用新的账号。
+
+**应用中的核对**（在服务器上，库与角色见 `DEPLOY.md`）：
+
+```sh
+docker exec -it postgres psql -U postgres -d quizbuks_staging -c "
+SELECT topup_id, status, amount, stripe_fee, net_amount, created_at, paid_at FROM qb_topup ORDER BY created_at DESC LIMIT 5;"
+docker exec -it postgres psql -U postgres -d quizbuks_staging -c "
+SELECT provider, event_type, received_time FROM sys_inbound_event ORDER BY received_time DESC LIMIT 10;"
+```
 
 ### 4.3 干跑（本地 Stripe 桩，不连 Stripe）
 
@@ -125,7 +168,7 @@ tools/quizbuks/stripe-test-mode/run.sh stop
 |---|---|---|---|---|---|
 | 1 | setup | （`preflight` 已确认测试模式。）serve 的实例上自建发布人；`QB_SETUP`，由第二位管理员只发布**本次**调用返回的提案；若 `qb.transfer.enabled` 不是 true，提出并发布 true（四眼） | — | — | 参数：门槛、审核线、抽成、转账手续费 |
 | 2 | sponsor | 注册并验证商家（或用给定账号），申请入驻，管理员批准 | — | — | 入驻 `APPROVED` |
-| 3 | topup | `QB_TOPUP_START`（10 000）；核对会话 `cs_test_`、本账户可读、`livemode=false`；等到账 | 打开打印的支付页地址，用 **4242 4242 4242 4242**、任意未来有效期、任意 CVC 与姓名付款 | 支付 → 一笔 ¥10,000 成功；开发者 → 事件（或 `stripe listen` 的输出）中 `checkout.session.completed` 投递 200 | 充值 `PAID`、`livemode=false`、有 `pi_`；钱包 +10 000；分录"Top-up"借 1110 / 贷 2110；手续费记下后分录"Stripe fee"借 5110 / 贷 1110；Stripe 上 PaymentIntent `succeeded`、金额相同 |
+| 3 | topup | `QB_TOPUP_START`（10 000）；核对会话 `cs_test_`、本账户可读、`livemode=false`；等到账 | 打开打印的支付页地址，用 **4242 4242 4242 4242**、任意未来有效期、任意 CVC 与姓名付款 | 支付 → 一笔 ¥10,000 成功；开发者 → 事件（或 `stripe listen` 的输出）中 `checkout.session.completed` 投递 200 | 充值 `PAID`、`livemode=false`、有 `pi_`；钱包 +10 000；分录"Top-up"借 1110 / 贷 2110；手续费记下后分录"Stripe fee"借 5110 / 贷 1110（`stripe_fee` + `net_amount` = 金额：手续费由平台承担，商家照样得到全额 Kudos；日本的卡约 3.6%，真实的一次 50 000 的付款为 1 998）；Stripe 上 PaymentIntent `succeeded`、金额相同 |
 | 4 | quiz | 建一题的 Quiz 与发布（及格档奖励 2 000）、管理员批准上架；答题人（JP）答对并提交 | — | — | 提交 `rewardStatus=PAID`；分录（来源 `QbAttempt`）借 2110 2 000 / 贷 2120（扣抽成）/ 贷 4110（抽成）；答题人余额增加，且不低于转账门槛 |
 | 5 | onboarding | `QB_PAYOUT_ONBOARD`，把开通链接写进私有文件 `deploy/quizbuks/.stripe-test-mode/onboarding-<运行号>.url`（链接过期即换新）；等 `account.updated` | 在浏览器中打开文件中的链接，用 Stripe 的测试数据完成 Express 开通：测试手机号与验证码 `000000`、出生日期 1901-01-01、地址 `address_full_match`、身份证号 `000000000`、测试银行账号（见 Stripe 文档"Testing Connect"）；完成后被送回 App 的 `/wallet/payout?onboarding=done` | Connect → 账户：新的 Express 账户（JP），"已启用"打款 | 收款账户 `ENABLED`、`acct_…`、`livemode=false`；Stripe 上 `payouts_enabled` |
 | 6 | transfer | 检查转账任务的下一次运行在等待时间内；等本次之后建立的转账（大额审核时由管理员批准）；等 `SENT` | — | 余额 → 转账：一笔到该 `acct_` 的转账；Connect → 该账户 → 余额中可见 | 转账 `SENT`、`tr_…`；分录"Transfer"借 2120 / 贷 2130（/ 贷 4110 手续费）与"Transfer settled"借 2130 / 贷 1110；答题人余额 0；Stripe 上金额与目的账户相同 |
@@ -172,6 +215,8 @@ Summary of run 20261017-101500
 
 | 现象 | 原因与处理 |
 |---|---|
+| 测试服务器：充值一直 `OPEN`，`sys_inbound_event` 没有行，应用日志中没有 `/api/inbound/stripe` | Stripe 的事件没有到达应用：没有建端点，或 Cloudflare 拦下了（端点的投递记录为 **403**、正文 `error code: 1010`）。按 4.2 的第 1、2 条建端点、放行并检查；之后在 Stripe 后台对该事件点"重新发送"。即使不修，每小时的 `qb.topup-stale` 也会在支付页过期（1 小时）之后向 Stripe 核实并入账 |
+| 脚本的任何请求得到 **403** 与 `error code: 1010` | Cloudflare 的浏览器检查或 Bot Fight Mode 拒绝了脚本：第 2 节第 7 条 |
 | 等"到账"超时；`stripe listen` 的输出中投递返回 **400** | 签名不符：应用的 `STRIPE_WEBHOOK_SECRET` 不是这次 `stripe listen` 的密钥（重启了 listen 而没重启应用，或用了另一个账户的 CLI）。`run.sh stop && run.sh serve` 一起重启。用后台端点时：密钥是**该端点**的 `whsec_`，两个端点各有各的；滚动密钥期间两个都配上（README"充值与核对"） |
 | 投递返回 400 且应用日志中是 `too_old` | 事件的时间戳太旧（重放了很久以前的事件，或本机时钟不准）：校准时钟，不要用 `stripe events resend` 重放旧事件 |
 | 投递 200 但充值不到账，后台待办有"模式不符""金额不符"等 | 事件被核对拒绝而只开了待办：常见是 API 版本不一致（第 2 节第 4 条）、应用与 CLI 用的不是同一个账户、或应用是正式模式。看待办与原样事件（财务管理员，`inbound.read`：`GET /api/inbound-events/{编号}/body`） |
@@ -191,12 +236,14 @@ Summary of run 20261017-101500
 | 步骤 9 `SKIP: Stripe refused a manual payout` | 打款计划是自动的，或没有测试银行账户：第 2 节第 5 条 |
 | 步骤 9 `PENDING` | 测试模式的打款按到账日变为已支付；之后 `run.sh payout-check po_…` |
 | 管理员登录 `MFA_REQUIRED` | 测试服务器开着管理的二次验证：设 `STRIPE_TM_ADMIN_TOTP`（与发布人的 `_TOTP`）。同一个码只能用一次：脚本会等下一个 30 秒 |
+| 步骤 3 `QB_TOPUP_NEW_SPONSOR_LIMIT` | 这个商家在新商家期内的充值已到上限（4.2 第 6 条）：用新的商家 |
+| 步骤 2 `qb.review.sponsor.auto` 等参数"没有生效的值" | `QB_SETUP` 的提案还没有发布（4.2 第 4 条） |
 
 ## 8. 没有覆盖的
 
 - 正式模式（任何形式）；`charge.dispute.closed` 的败诉（扣回）分支、`payout.failed`、`transfer.reversed`（Stripe 测试模式下撤回转账须在后台手工操作；应用中由集成测试覆盖）、`account.application.deauthorized`。
 - 本机 serve 只在回环地址上、管理不要求二次验证；测试服务器上的二次验证、反向代理、真实邮件只在 4.2 的运行中经过。
-- Stripe 的费用、外币结算（`QB_STRIPE_SETTLEMENT_CURRENCY` 不是 `jpy` 的账户）。
+- 外币结算（`QB_STRIPE_SETTLEMENT_CURRENCY` 不是 `jpy` 的账户）；Stripe 的费用只核对"手续费 + 净额 = 金额"与分录，不核对费率本身。
 
 ## 9. 结果记录
 
@@ -229,4 +276,5 @@ Summary of run 20261017-101500
 
 ### 记录
 
-（尚无。2026-10-17：脚本以桩干跑通过，见 `plans/Q10-launch.md` Q10c 的实施记录；真实的测试模式运行待做。）
+（尚无。2026-10-17：脚本以桩干跑通过，见 `plans/Q10-launch.md` Q10c 的实施记录；真实的测试模式运行待做。
+2026-10-22：在 `staging.quizbuks.com` 上手工的一次充值（50 000）付款成功，但充值停在 `OPEN`：Stripe 的事件没有到达应用（没有端点或被 Cloudflare 拦下），4.2 的准备因此补上。）

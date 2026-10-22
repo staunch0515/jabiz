@@ -120,6 +120,26 @@ Caddy 重建后地址可能改变：改后应用只会把所有请求看成来�
 
 给域名添加 A 记录，指向服务器的公网 IPv4（有 IPv6 时另加 AAAA）。记录生效后 Caddy 才能申请证书。
 
+### 3a. Cloudflare（记录经 Cloudflare 代理时，即橙色云朵）
+
+Cloudflare 的浏览器检查（Browser Integrity Check）与 Bot Fight Mode 把不是浏览器的请求以 **403 `error code: 1010`** 拒绝，请求到不了 Caddy 与应用。
+这挡住的是**外部服务的回调**：Stripe 的 Webhook（`/api/inbound/stripe`、`/api/inbound/stripe-connect`）一个也到不了，充值付款成功却一直是 `OPEN`。
+
+- Security → **WAF → Custom rules** → 新建：条件 **URI Path starts with `/api/inbound/`**，动作 **Skip**，勾选可跳过的全部检查（含 Browser Integrity Check）。
+  应用对每个回调自己验签（`STRIPE_WEBHOOK_SECRET` 等），跳过 Cloudflare 的检查不降低安全。
+- Security → **Bots**：免费套餐的 **Bot Fight Mode** 不能按路径跳过，开着时关掉。
+- 检查（在服务器上，请求经 Cloudflare 回到服务器）：
+
+  ```sh
+  curl -s -o /dev/null -w '%{http_code}\n' -X POST https://staging.quizbuks.com/api/inbound/stripe \
+    -A 'Stripe/1.0 (+https://stripe.com/docs/webhooks)' -H 'Content-Type: application/json' -H 'Stripe-Signature: t=1,v1=x' -d '{}'
+  docker logs --since 2m quizbuks-staging-app 2>&1 | grep /api/inbound
+  ```
+
+  400 且应用日志中有 `POST /api/inbound/stripe -> 400`（签名不符）：请求到了应用，放行生效。403 且日志中没有：仍被 Cloudflare 拦下。
+- 服务器上的脚本（如发布提案）不必经 Cloudflare：直接用容器的地址
+  `http://$(docker inspect <APP_NAME>-app -f '{{(index .NetworkSettings.Networks "proxy").IPAddress}}'):8080`。
+
 ### 4. 第一次部署
 
 production：推送 `1.2/quizbuks-release`（见上文"一次性设置"第 3 步）；staging：推送 `1.2/quizbuks`。或 GitHub → Actions → **QuizBuks deploy** →
@@ -164,8 +184,10 @@ Run workflow，分支选该环境的分支，`image-tag` 留空。第一次启�
 
    - **`APP_NAME` 必须是 `quizbuks-staging`**：它决定 compose 的项目名与容器名。从 production 复制 `.env` 而忘了改它时，compose 会替换 production 的容器；
      workflow 在部署前检查这一行，不一致即停止。
-   - 平台密钥（`JABIZ_JWT_SECRET`、`JABIZ_INTEGRITY_KEY`、`JABIZ_MFA_KEY`）、首个管理员的密码、Stripe 的 Webhook 密钥都**另外生成**，不与 production 共用。
-   - Stripe 只用测试模式的密钥（`sk_test_` / `rk_test_`），Webhook 端点为 `https://staging.quizbuks.com/api/inbound/stripe` 与 `/api/inbound/stripe-connect`。
+   - 平台密钥（`JABIZ_JWT_SECRET`、`JABIZ_INTEGRITY_KEY`、`JABIZ_MFA_KEY`）与首个管理员的密码都**另外生成**，不与 production 共用。
+   - Stripe 只用测试模式的密钥（`sk_test_` / `rk_test_`）。在 Stripe 后台（测试模式）建两个端点 `https://staging.quizbuks.com/api/inbound/stripe` 与
+     `/api/inbound/stripe-connect`（订阅的事件见 `docs/quizbuks/stripe-test-mode.md` §4.2），`STRIPE_WEBHOOK_SECRET` / `STRIPE_CONNECT_WEBHOOK_SECRET` 是
+     **这两个端点各自的签名密钥**（`whsec_…`，由 Stripe 给出，不能自己生成：签名对不上时每个事件都被拒绝，充值停在 `OPEN`）。经 Cloudflare 时先做"3a. Cloudflare"。
    - `SPRING_PROFILES_ACTIVE=staging` 只标出环境，应用中没有按环境写死的配置：环境的差异全部在这个 `.env` 中。同时开 Google 登录时写 `staging,google`。
 3. **DNS**：给 `staging.<基础域名>` 添加 A 记录（及 AAAA），指向同一台服务器。
 4. 第一次部署与首次启动之后的步骤同上（`https://staging.<基础域名>/admin/`）。

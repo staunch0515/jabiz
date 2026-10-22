@@ -355,10 +355,12 @@ class Recorder(http.server.BaseHTTPRequestHandler):
     """A loopback server: /redirect answers 302 to the other server's /target; every request is recorded."""
 
     seen = []
+    agents = []
     target = None
 
     def do_GET(self):  # noqa: N802 - http.server's naming
         Recorder.seen.append((self.server.server_port, self.path, self.headers.get("Authorization")))
+        Recorder.agents.append(self.headers.get("User-Agent"))
         if self.path == "/redirect":
             self.send_response(302)
             self.send_header("Location", Recorder.target)
@@ -389,6 +391,14 @@ class HttpTest(unittest.TestCase):
             stm.http("GET", f"http://127.0.0.1:{first.server_port}/redirect", token="secret-bearer-token")
         self.assertEqual(raised.exception.status, 302)
         self.assertEqual(Recorder.seen, [(first.server_port, "/redirect", "Bearer secret-bearer-token")])
+
+    def test_requests_name_the_tool_instead_of_pythons_library(self):
+        # Cloudflare's browser check refuses urllib's default signature (error 1010) in front of a test server.
+        server = self.serve()
+        Recorder.agents = []
+        stm.http("GET", f"http://127.0.0.1:{server.server_port}/ok")
+        self.assertEqual(Recorder.agents, [stm.USER_AGENT])
+        self.assertNotIn("Python-urllib", Recorder.agents[0])
 
     def test_the_stubs_buttons_accept_their_redirect(self):
         first, second = self.serve(), self.serve()
