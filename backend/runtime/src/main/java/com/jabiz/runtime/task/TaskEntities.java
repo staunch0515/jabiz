@@ -10,7 +10,7 @@ import org.springframework.context.annotation.Configuration;
 /**
  * Tasks and notifications as platform entities (docs/design/18-numbering-approvals-tasks.md section 5): a
  * {@code SysTask} (temporal) is created and closed by processes only ({@link CreateTask}, {@link CloseTasks}, the
- * approval steps); a {@code Notification} (append-only) records one message about a task to one recipient.
+ * approval steps, and a person's {@code TASK_RESOLVE}, {@link TaskResolution}); a {@code Notification} (append-only) records one message about a task to one recipient.
  */
 @Configuration
 public class TaskEntities {
@@ -47,6 +47,8 @@ public class TaskEntities {
         eb.field("dueTime", f -> f.physicalColumn("due_time").immutable(true).asTemporal(TemporalRole.EVENT_TIME));
         eb.field("sourceKey", f -> f.physicalColumn("source_key").immutable(true).asText(200));
         eb.field("closedBy", f -> f.physicalColumn("closed_by").asText(100));
+        // Why a person closed it (TASK_RESOLVE); null when its process closed it.
+        eb.field("closeNote", f -> f.physicalColumn("close_note").asText(TaskResolution.NOTE_LENGTH));
         eb.temporal(t -> t.allowScheduled(false));
         eb.listView("default", lv -> lv
             .columns("taskType", "titleKey", "assigneeUserId", "assigneePermission", "status", "dueTime",
