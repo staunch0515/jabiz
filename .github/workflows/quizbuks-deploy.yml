@@ -111,6 +111,8 @@ jobs:
           push: true
           # Both environments run the same image of a commit; only the commit SHA is a tag (no moving "latest").
           tags: ${{ env.IMAGE }}:${{ github.sha }}
+          # Shown under the admin's sign-in form, so the running version can be checked at a glance (platform 16z).
+          build-args: JABIZ_BUILD_COMMIT=${{ github.sha }}
           labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
           cache-from: type=gha,scope=quizbuks
           cache-to: type=gha,mode=max,scope=quizbuks

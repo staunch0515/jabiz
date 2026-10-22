@@ -37,7 +37,9 @@ public final class QbRoles {
         QbPermissions.REVIEW_SPONSOR, QbPermissions.REVIEW_PUBLICATION, QbPermissions.ADMIN_CONTENT_WRITE,
         QbPermissions.SPONSOR_AVATAR_READ, "approval.decide", "task.read",
         // Q8a: the AI page (usage and failures; the switch changes only through controlled changes).
-        QbPermissions.ADMIN_AI_READ);
+        QbPermissions.ADMIN_AI_READ,
+        // Platform 16y: closing by hand, with a note, a task no process will close (never an approval's).
+        "task.resolve");
 
     private static final List<String> FINANCE = List.of(QbPermissions.COUNTRY_READ, QbPermissions.ADMIN_USERS_READ,
         QbPermissions.ADMIN_FINANCE_READ, QbPermissions.ADMIN_PUBLICATION_READ, QbPermissions.PAYOUT_REVIEW,
@@ -47,7 +49,9 @@ public final class QbRoles {
         // Q9c (C-4): finance issues the monthly reports (report.issue above) and reads what was issued.
         "report.archive.read",
         // Q9d: the journal export, its confirmation and its archived CSV files.
-        QbPermissions.JOURNAL_EXPORT, QbPermissions.JOURNAL_CONFIRM, "file.generated.read");
+        QbPermissions.JOURNAL_EXPORT, QbPermissions.JOURNAL_CONFIRM, "file.generated.read",
+        // Platform 16y: closing by hand, with a note, a reconciliation task that needs nothing (TASK_RESOLVE).
+        "task.resolve");
 
     /**
      * What the super administrator holds beyond the other two: bans, reading parameters, proposing controlled changes,
