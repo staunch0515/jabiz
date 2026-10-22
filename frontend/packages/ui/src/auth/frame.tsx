@@ -60,13 +60,15 @@ export interface AuthFrameProps {
   /** Offers the appearance (light, dark, system) when an AppearanceProvider is around; default true. */
   appearance?: boolean
   className?: string
+  /** Under the card and the choices, in small print: the build the page is from, say. */
+  footer?: ReactNode
 }
 
 /**
  * The frame of the pages before a session (signing in, signing up, the pages of mailed links): the application's
  * name, the page's title and the choice of language (when the application has several) and appearance.
  */
-export function AuthFrame({ brand, title, children, testId, appearance = true, className }: AuthFrameProps) {
+export function AuthFrame({ brand, title, children, testId, appearance = true, className, footer }: AuthFrameProps) {
   const { t, i18n } = useTranslation(AUTH_NAMESPACE)
   const offerAppearance = useHasAppearance() && appearance
   return (
@@ -99,6 +101,7 @@ export function AuthFrame({ brand, title, children, testId, appearance = true, c
           {offerAppearance && <ThemeToggle />}
         </div>
       )}
+      {footer && <p className="text-muted-foreground mt-4 text-xs" data-testid="auth-footer">{footer}</p>}
     </main>
   )
 }

@@ -4322,3 +4322,12 @@ L4 共享仪表的注释；L5 13 写明每个键每次轮询多一个查询观�
 - 测试：app `TaskIT`（看得到才能处理、说明必填、只处理一次、审批待办拒绝、记入审计）、前端 `TasksPage.test.tsx`。
 
 **16y 状态**：✅ 已实施（PR 待建）。
+
+### 16z 登录页显示构建的提交（0.2 天）
+
+来源：需求方 2026-10-22，为确认部署的是最新版本。分支 `1.2/phase-16z-build-commit`。约定插件把 `JABIZ_BUILD_COMMIT` 作为 `VITE_JABIZ_BUILD_COMMIT` 传给 SPA 的构建，
+通用后台的登录页在表单下显示前 12 位；`SignInForm` / `AuthFrame` 加可选的 `footer`；平台 `Dockerfile` 收 `--build-arg JABIZ_BUILD_COMMIT`。设计 17 §3.1。
+测试：`LoginPage.test.tsx`（有与没有提交）。
+
+**16z 状态**：✅ 已实施（PR 待建）。
+

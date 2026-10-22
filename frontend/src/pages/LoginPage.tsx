@@ -28,6 +28,8 @@ export default function LoginPage() {
   })
 
   if (ready && signedIn) return <Navigate to={from} replace />
+  // The commit this build is from (JABIZ_BUILD_COMMIT at build time, 17 section 3): which version runs, at a glance.
+  const commit = String(import.meta.env.VITE_JABIZ_BUILD_COMMIT ?? '').trim().slice(0, 12)
 
   return (
     <SignInForm
@@ -43,6 +45,7 @@ export default function LoginPage() {
       providers={providers.data ?? []}
       startProvider={startProviderSignIn}
       auth={{ signIn, verify }}
+      footer={commit ? t('app.build', { commit }) : undefined}
     />
   )
 }

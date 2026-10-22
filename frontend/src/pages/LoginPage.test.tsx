@@ -161,4 +161,20 @@ describe('LoginPage', () => {
     const link = screen.getByRole('link', { name: 'Forgot your password?' })
     expect(link.getAttribute('href')).toBe('/auth/password-reset')
   })
+
+  it('shows the commit the build is from under the form, and nothing without one', async () => {
+    vi.stubEnv('VITE_JABIZ_BUILD_COMMIT', '4dc1aa14d922307712322dacf6aa563f4305ca38')
+    page()
+    expect((await screen.findByTestId('auth-footer')).textContent).toBe('Build 4dc1aa14d922')
+    await expectAccessible()
+    vi.unstubAllEnvs()
+  })
+
+  it('shows no build line when the build named no commit', async () => {
+    vi.stubEnv('VITE_JABIZ_BUILD_COMMIT', '')
+    page()
+    await screen.findByRole('heading', { level: 1 })
+    expect(screen.queryByTestId('auth-footer')).toBeNull()
+    vi.unstubAllEnvs()
+  })
 })

@@ -92,6 +92,9 @@ jabizApp {
   （`import com.jabiz.gradle.Pwa`）。`entry` 是它登录的入口，`pwa` 为 `OFF`（缺省）、`ON` 或 `REMOVE`。构建变量 `VITE_BASE`、`VITE_JABIZ_ENTRY`、
   `VITE_JABIZ_PWA` 与 `VITE_JABIZ_SPA_PREFIXES`（同一 jar 中其他 SPA 的前缀，以逗号分隔，如 `/,/sponsor/`）。插件把各 SPA 的路径、入口与 `pwa`
   写入 `jabiz-app.properties`：`jabiz.web.spa[i].*` 是服务端最低优先级的缺省，`jabiz.build.spa[i].*` 记下构建了什么（§3.2 的检查用）。
+- 构建所在的提交（16z）：环境变量 `JABIZ_BUILD_COMMIT`（镜像构建以 `--build-arg JABIZ_BUILD_COMMIT=<提交>` 给出，仓库不进构建上下文）由插件作为
+  `VITE_JABIZ_BUILD_COMMIT` 传给每个 SPA 的构建（也是构建输入）；通用后台的登录页在表单下以小字显示前 12 位（"Build 4dc1aa14d922"），没有即不显示（本机开发）。
+  页面与服务端在同一个 jar 中，所以它就是正在运行的版本。`@jabiz/ui` 的 `SignInForm` / `AuthFrame` 为此有可选的 `footer`。
 - `sourceDir` 不是平台前端时（经 `link:` 引用平台的两个包）：先安装平台前端（`pnpmInstallPlatformFrontend`，同一模块内只注册一次，
   以平台前端构建的 SPA 也用它），平台的 `frontend/packages/**` 是其构建输入；`spaCheck<名>` 在平台前端中运行 `pnpm app:check <目录>`，
   是 `spaBuild<名>` 的前置并挂在 `check` 上，版本不一致即构建失败。
