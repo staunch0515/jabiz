@@ -52,7 +52,8 @@ public class TaskResolution {
             pb -> pb
                 .description("Closes an open task the caller can see, with a note.")
                 .permissions(TaskPermissions.RESOLVE)
-                .actsOn(TaskEntities.TASK, "taskId")
+                // No actsOn row action: the generic data view cannot tell an approval's or another person's task;
+                // the page /tasks offers it on the caller's own open tasks.
                 .contextFactory((start, input) -> {
                     ProcessContext ctx = new ProcessContext(start);
                     ctx.put(INPUT, input);

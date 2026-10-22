@@ -196,11 +196,27 @@ class TaskIT extends ApprovalItSupport {
             .containsEntry("closed_by", "it-checker").containsEntry("close_note", "Nothing to do: Stripe's answer was fixed.");
         assertThat(codes(refused(TaskResolution.RESOLVE, holder, Map.of("taskId", taskId, "outcome", "DONE",
             "note", "again"), 422))).containsExactly(PlatformErrorCodes.TASK_NOT_OPEN);
-        // A process closing the same work later finds nothing open.
+        // A process closing the same work later finds nothing open: no new version.
+        long versions = (Long) query("SELECT count(*) AS n FROM sys_task_version WHERE task_id = ?::uuid", taskId)
+            .getFirst().get("n");
         run("IT_TASK_CLOSE", opener(), Map.of("key", key));
+        assertThat(query("SELECT count(*) AS n FROM sys_task_version WHERE task_id = ?::uuid", taskId).getFirst()
+            .get("n")).isEqualTo(versions);
         // The change is in the audit, with who made it.
         assertThat(query("SELECT count(*) AS n FROM sys_audit_record WHERE entity_type = 'SysTask' AND entity_id = ?"
             + " AND actor_id = 'it-checker'", taskId).getFirst().get("n")).isEqualTo(1L);
+    }
+
+    @Test
+    void aTaskOfOneUserIsResolvedByThemNotByAHolderOfEverything() {
+        String key = unique("K");
+        open("it-owner", null, key, key + "-u", null);
+        String owner = as("it-owner", TaskPermissions.RESOLVE);
+        String taskId = taskIdOf(owner, key);
+        refused(TaskResolution.RESOLVE, as("it-root", "*"), Map.of("taskId", taskId, "outcome", "DONE",
+            "note", "not mine"), 404);
+        assertThat(run(TaskResolution.RESOLVE, owner, Map.of("taskId", taskId, "outcome", "DONE", "note", "done")))
+            .containsEntry("status", "DONE");
     }
 
     @Test

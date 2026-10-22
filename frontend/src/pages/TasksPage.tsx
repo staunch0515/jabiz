@@ -14,7 +14,7 @@ import {
   Textarea,
 } from '@jabiz/ui'
 import { useQueryClient } from '@tanstack/react-query'
-import { useId, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
 import ApprovalPanel from '../components/ApprovalPanel'
@@ -28,18 +28,28 @@ const NOTE_LENGTH = 1000
  * Closes a task by hand with `TASK_RESOLVE` (docs/design/18-numbering-approvals-tasks.md section 5.3a): done or not
  * needed, with a note. Whether the user may (they see it, it is not an approval's) is the server's to say.
  */
-function ResolveForm({ taskId, onResolved }: { taskId: string; onResolved: () => void }) {
+function ResolveForm({ taskId, titleId, onResolved }: { taskId: string; titleId: string; onResolved: () => void }) {
   const { t } = useTranslation()
   const id = useId()
   const [open, setOpen] = useState(false)
+  const opener = useRef<HTMLButtonElement>(null)
+  const returned = useRef(false)
+  useEffect(() => {
+    // Back from the form, focus goes to the button that opened it.
+    if (!open && returned.current) opener.current?.focus()
+  }, [open])
+  const close = () => {
+    returned.current = true
+    setOpen(false)
+  }
   const [outcome, setOutcome] = useState<'DONE' | 'CANCELLED'>('DONE')
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   if (!open) {
     return (
-      <Button variant="outline" size="sm" className="self-start" onClick={() => setOpen(true)}
-        data-testid={`task-resolve-${taskId}`}>
+      <Button ref={opener} variant="outline" size="sm" className="self-start" onClick={() => setOpen(true)}
+        aria-describedby={titleId} data-testid={`task-resolve-${taskId}`}>
         {t('tasks.resolve')}
       </Button>
     )
@@ -83,7 +93,7 @@ function ResolveForm({ taskId, onResolved }: { taskId: string; onResolved: () =>
           data-testid={`task-resolve-submit-${taskId}`}>
           {t('tasks.resolve')}
         </Button>
-        <Button size="sm" variant="outline" disabled={busy} onClick={() => setOpen(false)}>{t('tasks.cancel')}</Button>
+        <Button size="sm" variant="outline" disabled={busy} onClick={close}>{t('tasks.cancel')}</Button>
       </div>
     </fieldset>
   )
@@ -108,11 +118,11 @@ export default function TasksPage() {
         <CardContent className="flex flex-col gap-3 px-4">
           <div className="flex flex-wrap items-center gap-2">
             {task.link && task.type !== 'approval' ? (
-              <Link to={task.link} className="text-primary font-medium hover:underline">
+              <Link id={`task-title-${task.taskId}`} to={task.link} className="text-primary font-medium hover:underline">
                 {task.title}
               </Link>
             ) : (
-              <span className="font-medium">{task.title}</span>
+              <span id={`task-title-${task.taskId}`} className="font-medium">{task.title}</span>
             )}
             {task.dueTime && (
               <Badge variant="warning">{t('tasks.due', { time: formatDateTime(task.dueTime) })}</Badge>
@@ -122,7 +132,7 @@ export default function TasksPage() {
             <ApprovalPanel requestId={task.subjectId} onDecided={refresh} />
           )}
           {task.type !== 'approval' && task.taskId && can('task.resolve') && (
-            <ResolveForm taskId={task.taskId} onResolved={refresh} />
+            <ResolveForm taskId={task.taskId} titleId={`task-title-${task.taskId}`} onResolved={refresh} />
           )}
         </CardContent>
       </Card>
