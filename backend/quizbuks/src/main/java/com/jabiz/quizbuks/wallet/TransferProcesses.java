@@ -493,13 +493,14 @@ public final class TransferProcesses {
         content.put("fee", QbPayouts.money(transfer.get("fee")));
         content.put("net", QbPayouts.money(transfer.get("net")));
         if (bank(transfer)) {
-            // The account the money goes to, as the reviewer sees it: the number only by its last digits (it is
-            // masked), the copy on the transfer never changes.
+            // The account the money goes to, as the reviewer sees it: the number masked as the platform masks it (a
+            // 7-digit number entirely: its last four would give most of it away); the copy on the transfer, which the
+            // approval belongs to, never changes.
             content.put("method", QbPayouts.BANK);
             content.put("bank", transfer.get("bankCode") + " " + transfer.get("bankName"));
             content.put("branch", transfer.get("branchCode") + " " + transfer.get("branchName"));
             content.put("accountType", transfer.get("accountType"));
-            content.put("accountLast4", last4(transfer.get("accountNumber")));
+            content.put("accountNumber", com.jabiz.entity.MaskStyle.LAST4.apply(transfer.get("accountNumber")));
             content.put("accountHolder", transfer.get("accountHolder"));
         }
         return ApprovalCase.of(transfer.id(), facts, content).preparedBy(transfer.get("userId"))
@@ -553,11 +554,6 @@ public final class TransferProcesses {
     /** Whether the transfer is a withdrawal to a bank account (Q13b). */
     static boolean bank(EntityInstance transfer) {
         return transfer != null && QbPayouts.BANK.equals(transfer.get("method"));
-    }
-
-    private static String last4(Object number) {
-        String text = number == null ? "" : number.toString();
-        return text.length() <= 4 ? text : text.substring(text.length() - 4);
     }
 
     /** The taker's bank account, if any (Q13b): how they are paid. */

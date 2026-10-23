@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../App'
 import '../messages'
-import { netOf, usableFrom, type BankSettings } from './api'
+import { netOf, smallestWithdrawal, usableFrom, type BankSettings } from './api'
 
 function json(status: number, body: unknown) {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
@@ -79,6 +79,8 @@ describe('the bank helpers', () => {
     expect(usableFrom({ ...settings, account: null })).toBeNull()
     expect(netOf(3000, 200)).toBe(2800)
     expect(netOf(100, 200)).toBe(0)
+    expect(smallestWithdrawal(settings)).toBe(1000)
+    expect(smallestWithdrawal({ ...settings, fee: 1500 })).toBe(1501)
   })
 })
 

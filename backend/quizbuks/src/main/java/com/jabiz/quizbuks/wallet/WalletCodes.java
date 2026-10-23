@@ -66,6 +66,8 @@ public final class WalletCodes {
     public static final String WITHDRAWAL_STATE = "QB_WITHDRAWAL_STATE";
     /** A finance administrator paying or returning their own withdrawal (Q13b). */
     public static final String WITHDRAWAL_OWN = "QB_WITHDRAWAL_OWN";
+    /** A finance administrator paying or returning a withdrawal they approved (Q13b, four eyes). */
+    public static final String WITHDRAWAL_APPROVER = "QB_WITHDRAWAL_APPROVER";
     /** The statement's entry (day and reference) paid another withdrawal already (Q13b). */
     public static final String WITHDRAWAL_REFERENCE_USED = "QB_WITHDRAWAL_REFERENCE_USED";
 
@@ -84,7 +86,7 @@ public final class WalletCodes {
         TOPUP_BANK_NO_REVIEW, TOPUP_BANK_REFERENCE_USED, TOPUP_BANK_OWN,
         PAYOUT_COUNTRY_UNSUPPORTED, PAYOUT_UNAVAILABLE, PAYOUT_ACCOUNT_CLOSED, TRANSFER_NOT_HELD, TRANSFER_RELEASE_OWN,
         TRANSFER_NOW_OWN, BANK_ACCOUNT_INVALID, BANK_ACCOUNT_IN_USE, BANK_ACCOUNT_MISSING, PAYOUT_METHOD_OPEN_TRANSFER,
-        WITHDRAWAL_UNAVAILABLE, WITHDRAWAL_AMOUNT, WITHDRAWAL_STATE, WITHDRAWAL_OWN, WITHDRAWAL_REFERENCE_USED,
+        WITHDRAWAL_UNAVAILABLE, WITHDRAWAL_AMOUNT, WITHDRAWAL_STATE, WITHDRAWAL_OWN, WITHDRAWAL_APPROVER, WITHDRAWAL_REFERENCE_USED,
         RECEIPT_NOT_PAID, RECEIPT_NO_ISSUER, RECEIPT_REFUNDED);
 
     private WalletCodes() {}

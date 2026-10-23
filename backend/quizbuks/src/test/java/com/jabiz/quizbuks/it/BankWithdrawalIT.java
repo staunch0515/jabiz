@@ -217,9 +217,15 @@ class BankWithdrawalIT extends PayoutItSupport {
     void returnedByTheBank() {
         String taker = bankTaker("t-q13b-returned", 4000);
         String transferId = (String) request(taker, 4000).get("transferId");
-        approve(transferId);
-        Map<String, Object> returned = run("QB_WITHDRAWAL_RETURNED", payer(), body("transferId", transferId,
-            "reason", "Account closed"));
+        // Approved by the payer: then another pays it, or says it came back (four eyes on the money leaving).
+        run("APPROVAL_DECIDE", payer(), body("requestId", transfer(transferId).get("approval_request_id"),
+            "decision", "APPROVE"));
+        deliverEvents();
+        assertThat(transfer(transferId)).containsEntry("status", "SENDING");
+        assertThat(codes(refused("QB_WITHDRAWAL_RETURNED", payer(), body("transferId", transferId,
+            "reason", "Account closed"), 422))).containsExactly(WalletCodes.WITHDRAWAL_APPROVER);
+        Map<String, Object> returned = run("QB_WITHDRAWAL_RETURNED", tokenOf(user("q13b-payer-2"),
+            QbRoles.ADMIN_FINANCE), body("transferId", transferId, "reason", "Account closed"));
         assertThat(returned).containsEntry("status", "FAILED");
         assertThat(transfer(transferId)).containsEntry("failure_code", "BANK_RETURNED")
             .containsEntry("failure_message", "Account closed");

@@ -378,7 +378,7 @@ steps:
     expect:
       query: qb.admin.monthly
       params: { from: "2026-10-01T00:00:00Z", to: "2026-11-01T00:00:00Z" }
-      rows: 13
+      rows: 14
       values:
         - { category: TOPUP, transactionCount: 1, amount: 5000, stripeBalance: 5000, sponsorWallets: -5000 }
         - { category: BANK_TOPUP, transactionCount: 0, amount: 0 }
@@ -388,6 +388,7 @@ steps:
         - { category: REWARD, transactionCount: 2, amount: 200, sponsorWallets: 200, takerWallets: -200, revenue: 0 }
         - { category: TRANSFER_SENT, transactionCount: 0 }
         - { category: TRANSFER_SETTLED, transactionCount: 0 }
+        - { category: WITHDRAWAL_PAID, transactionCount: 0 }
         - { category: TRANSFER_FAILED, transactionCount: 0 }
         - { category: TRANSFER_REVERSED, transactionCount: 0 }
         - { category: PAYOUT, transactionCount: 0 }

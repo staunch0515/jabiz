@@ -258,6 +258,10 @@ export interface WithdrawalOutput {
 export const requestWithdrawal = (amount: number, idempotencyKey: string) =>
   runProcess<WithdrawalOutput>(WALLET_PROCESS.withdrawalRequest, { amount }, { idempotencyKey })
 
+/** The smallest amount the server accepts: the threshold, and above the fee (`BankAccounts.amountProblem`). */
+export const smallestWithdrawal = (settings: BankSettings): number =>
+  Math.max(settings.minimum ?? 0, settings.fee + 1)
+
 /** What the taker receives of `amount`: less the fixed fee. */
 export const netOf = (amount: number, fee: number): number => Math.max(0, amount - fee)
 

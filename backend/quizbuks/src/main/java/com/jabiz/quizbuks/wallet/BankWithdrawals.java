@@ -137,6 +137,8 @@ public final class BankWithdrawals {
     private static final String OUTPUT = "output";
     private static final String USED = "usedReference";
     private static final String REFERENCE = "reference";
+    private static final String DECISIONS = "decisions";
+    private static final int MAX_DECISIONS = 20;
 
     private static final DateTimeFormatter SHOWN = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm 'JST'");
 
@@ -186,8 +188,7 @@ public final class BankWithdrawals {
                             BankAccounts.Account account = ctx.get(ACCOUNT, BankAccounts.Account.class);
                             return account.bankName() + " " + account.branchName();
                         },
-                        "account", ctx -> "****" + last4(ctx.get(ACCOUNT, BankAccounts.Account.class)
-                            .accountNumber()),
+                        "account", ctx -> masked(ctx.get(ACCOUNT, BankAccounts.Account.class).accountNumber()),
                         "usableFrom", ctx -> SHOWN.format(ctx.get(OUTPUT, AccountOutput.class).usableFrom()
                             .atZone(BankTransfers.ZONE))))));
     }
@@ -325,8 +326,8 @@ public final class BankWithdrawals {
                     if (approval == null || approval.status() != ApprovalOutcome.Status.PENDING) {
                         // A rule is in effect yet did not ask for a person (its condition was changed), or decided at
                         // once: never paid unreviewed. Nothing is kept.
-                        throw new IllegalStateException("The transfer review rule did not ask for a review of a "
-                            + "withdrawal");
+                        throw refusal(null, WalletCodes.WITHDRAWAL_UNAVAILABLE, "No review would be asked for",
+                            Map.of("reason", BankAccounts.NO_REVIEW));
                     }
                     TransferProcesses.write(ctx, first(ctx, TRANSFER), Map.of("approvalRequestId",
                         approval.requestId()));
@@ -401,6 +402,7 @@ public final class BankWithdrawals {
                 .contextFactory(BankWithdrawals::context)
                 .outputMapper(TransferProcesses::output)
                 .steps(b -> TransferProcesses.lockAndLoad(b, ctx -> ctx.get(INPUT, PaidInput.class).transferId()))
+                .steps(BankWithdrawals::loadDecisions)
                 .compute("Read the reference", (metadata, ctx) -> ctx.put(REFERENCE,
                     BankTransfers.reference(ctx.get(INPUT, PaidInput.class).paidReference())))
                 .step("Look for the statement's entry", QueryEntities.<ProcessContext>of(
@@ -461,6 +463,7 @@ public final class BankWithdrawals {
                 .outputMapper(TransferProcesses::output)
                 .steps(b -> TransferProcesses.lockAndLoad(b, ctx -> ctx.get(INPUT, ReturnedInput.class)
                     .transferId()))
+                .steps(BankWithdrawals::loadDecisions)
                 .step("Load the latest transfers", QueryEntities.<ProcessContext>of(
                     QbPayouts.defaultDataset(QbPayouts.TRANSFER), ctx -> TransferProcesses.latest(
                         TransferProcesses.transferUser(ctx)), LATEST))
@@ -487,7 +490,27 @@ public final class BankWithdrawals {
             throw refusal("transferId", WalletCodes.WITHDRAWAL_OWN, "Your own withdrawal is paid by someone else",
                 Map.of());
         }
+        // Four eyes on the money leaving: whoever approved it does not also pay it (or say it came back).
+        if (list(ctx, DECISIONS).stream().anyMatch(d -> ctx.request().actorId().equals(d.get("approverId")))) {
+            throw refusal("transferId", WalletCodes.WITHDRAWAL_APPROVER,
+                "A withdrawal you approved is paid by someone else", Map.of());
+        }
         return transfer;
+    }
+
+    /** Who decided the withdrawal's review (its own request only). */
+    private static <I, O> void loadDecisions(com.jabiz.process.ProcessDefinitionBuilder<I, O, ProcessContext> pb) {
+        pb.step("Load the review's decisions", QueryEntities.<ProcessContext>of(ApprovalEntities.DECISION_DATASET,
+            ctx -> {
+                EntityInstance transfer = first(ctx, TRANSFER);
+                Object request = transfer == null ? null : transfer.get("approvalRequestId");
+                List<Object> ids = new ArrayList<>();
+                if (request != null) {
+                    ids.add(String.valueOf(request));
+                }
+                return EntityQuery.builder().where(new QueryPredicate.In("requestId", ids)).limit(MAX_DECISIONS)
+                    .build();
+            }, DECISIONS));
     }
 
     // ---- tasks -----------------------------------------------------------------------------------------------------
@@ -511,7 +534,7 @@ public final class BankWithdrawals {
         Map<String, String> params = new LinkedHashMap<>();
         params.put("user", TopUpTasks.shown(userId));
         params.put("other", TopUpTasks.shown(other.get("userId")));
-        params.put("account", "****" + last4(other.get("accountNumber")));
+        params.put("account", masked(other.get("accountNumber")));
         return TaskSpec.forPermission(IN_USE_TASK, "task." + IN_USE_TASK, params, QbPermissions.RECONCILE)
             .source("bank-account-in-use:" + userId + ":" + other.id())
             .about(QbPayouts.BANK_ACCOUNT, String.valueOf(other.id()));
@@ -524,9 +547,9 @@ public final class BankWithdrawals {
         return new BusinessRuleViolationException(List.of(new Violation(field, code, message, params)));
     }
 
-    private static String last4(Object number) {
-        String text = number == null ? "" : number.toString();
-        return text.length() <= 4 ? text : text.substring(text.length() - 4);
+    /** An account number as the platform masks it for those without {@code qb.payout.bank.reveal}. */
+    private static String masked(Object number) {
+        return com.jabiz.entity.MaskStyle.LAST4.apply(number);
     }
 
     private static ProcessContext context(com.jabiz.process.ProcessStart start, Object input) {

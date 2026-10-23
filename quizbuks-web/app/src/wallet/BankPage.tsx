@@ -20,6 +20,7 @@ import {
   ACCOUNT_TYPES,
   BANK_QUERY,
   netOf,
+  smallestWithdrawal,
   readBankSettings,
   readWallet,
   requestWithdrawal,
@@ -258,7 +259,7 @@ function WithdrawSection({ settings }: { settings: BankSettings }) {
       data-testid="bank-withdraw">
       <h2 id={`${id}-title`} className="font-semibold">{t('bank.withdraw.title')}</h2>
       <p className="text-muted-foreground text-sm">
-        {t('bank.withdraw.limits', { min: formatKudos(settings.minimum ?? 0), max: formatKudos(most ?? 0),
+        {t('bank.withdraw.limits', { min: formatKudos(smallestWithdrawal(settings)), max: formatKudos(most ?? 0),
           fee: formatKudos(settings.fee) })}
       </p>
       <form className="flex flex-col gap-3" onSubmit={submit}>

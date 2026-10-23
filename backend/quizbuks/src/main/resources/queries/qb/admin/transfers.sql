@@ -10,6 +10,7 @@ results:
   transferId:        { from: QbTransfer.transferId }
   userId:            { from: QbTransfer.userId }
   externalAccountId: { from: QbTransfer.externalAccountId }
+  method:            { from: QbTransfer.method }
   amount:            { from: QbTransfer.amount }
   fee:               { from: QbTransfer.fee }
   net:               { from: QbTransfer.net }
@@ -25,7 +26,7 @@ results:
   releasedAt:        { from: QbTransfer.releasedAt }
   releasedBy:        { from: QbTransfer.releasedBy }
 list:
-  filters: [transferId, userId, status, createdAt, sentAt, amount, failureCode, stale, held]
+  filters: [transferId, userId, method, status, createdAt, sentAt, amount, failureCode, stale, held]
   sorts:   [createdAt, sentAt, amount]
   defaultSort: { field: createdAt, asc: false }
   key: [transferId]
@@ -39,6 +40,7 @@ SELECT
     t.{{QbTransfer.transferId}}        AS transferId,
     t.{{QbTransfer.userId}}            AS userId,
     t.{{QbTransfer.externalAccountId}} AS externalAccountId,
+    t.{{QbTransfer.method}}            AS method,
     t.{{QbTransfer.amount}}            AS amount,
     t.{{QbTransfer.fee}}               AS fee,
     t.{{QbTransfer.net}}               AS net,
