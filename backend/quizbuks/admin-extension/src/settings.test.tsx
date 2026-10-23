@@ -120,9 +120,9 @@ describe('BankSettingsPage', () => {
     expect(within(proposals[1]).getByText(/Your proposal/)).toBeInTheDocument()
     expect(screen.queryByTestId('bank-settings-form')).not.toBeInTheDocument()
     await userEvent.click(screen.getByTestId('bank-settings-publish'))
-    await waitFor(() => expect(server.runProcess).toHaveBeenCalledTimes(2))
-    expect(server.runProcess.mock.calls).toEqual([[CONTROL.publish, { changeId: 'c-bank' }],
-      [CONTROL.publish, { changeId: 'c-min' }]])
+    // One step on the server: all of them or none.
+    await waitFor(() => expect(server.runProcess).toHaveBeenCalledTimes(1))
+    expect(server.runProcess).toHaveBeenCalledWith(PROCESS.bankSettingsPublish, {})
   })
 
   it('says why a proposal is refused', async () => {

@@ -67,10 +67,16 @@ class BankTopUpSettingsIT extends AccountItSupport {
         assertThat(query("SELECT count(*) AS n FROM (SELECT DISTINCT ON (change_id) * FROM sys_control_change_version "
             + "ORDER BY change_id, version_no DESC) c WHERE status = 'PROPOSED' AND change_values LIKE "
             + "'%qb.bank.receiving.bank%'").getFirst().get("n")).isEqualTo(1L);
-        // The proposer cannot publish; another administrator does.
-        refused("CONTROL_CHANGE_PUBLISH", TestTokens.bearer(tokens, "installer", "control.publish"),
-            body("changeId", changeIds.getFirst()), 422);
-        publishProposals(Map.of("proposals", changeIds));
+        // The proposer has nothing to publish (the platform refuses the proposer); another administrator publishes
+        // all seven at once.
+        assertThat(codes(refused(BankSettings.PUBLISH, TestTokens.bearer(tokens, "installer", "control.publish"),
+            body(), 422))).containsExactly(WalletCodes.BANK_SETTINGS_NOTHING);
+        String publisher = TestTokens.bearer(tokens, "publisher", "control.publish");
+        Map<String, Object> published = run(BankSettings.PUBLISH, publisher, body());
+        assertThat(published.get("changeIds")).asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.LIST)
+            .containsExactlyInAnyOrderElementsOf(changeIds);
+        assertThat(codes(refused(BankSettings.PUBLISH, publisher, body(), 422)))
+            .containsExactly(WalletCodes.BANK_SETTINGS_NOTHING);
 
         String sponsor = tokenOf(userWithRole(unique("bank"), QbRoles.SPONSOR), QbRoles.SPONSOR);
         assertThat(items("qb.sponsor.bank-account", sponsor, body()).getFirst()).containsEntry("bank", "Mizuho (0001)")
@@ -80,5 +86,16 @@ class BankTopUpSettingsIT extends AccountItSupport {
             .containsExactly(WalletCodes.BANK_SETTINGS_UNCHANGED);
         Map<String, Object> again = run(BankSettings.PROPOSE, proposer, settings("Mizuho (0001)", 2_000, 500_000));
         assertThat(again.get("keys")).isEqualTo(List.of(QbParams.TOPUP_BANK_MIN));
+        run(BankSettings.PUBLISH, publisher, body());
+
+        // Limits that would end the wrong way round once published (each proposal alone was fine) are refused, and
+        // nothing is published.
+        run(BankSettings.PROPOSE, proposer, settings("Mizuho (0001)", 2_000, 3_000));
+        run("CONTROL_CHANGE_PROPOSE", TestTokens.bearer(tokens, "other-proposer", "control.propose"), body("targetEntity", "SysParam", "values",
+            body("paramKey", QbParams.TOPUP_BANK_MIN, "value", "5000"), "reason", "Higher"));
+        assertThat(codes(refused(BankSettings.PUBLISH, publisher, body(), 422)))
+            .containsExactly(WalletCodes.BANK_SETTINGS_RANGE);
+        assertThat(items("qb.sponsor.bank-account", sponsor, body()).getFirst()).containsEntry("min", 2_000)
+            .containsEntry("max", 500_000);
     }
 }

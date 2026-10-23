@@ -104,6 +104,8 @@ export const PROCESS = {
   bankRecord: 'QB_TOPUP_BANK_RECORD',
   /** Proposes the bank top-up's settings in one step (Q18a; `control.propose`); another administrator publishes. */
   bankSettingsPropose: 'QB_BANK_SETTINGS_PROPOSE',
+  /** Publishes another administrator's proposals of them together (Q18a; `control.publish`, a second factor). */
+  bankSettingsPublish: 'QB_BANK_SETTINGS_PUBLISH',
   /** An approved bank withdrawal paid in the bank, or returned by it (Q13b; `qb.withdrawal.pay`). */
   withdrawalPaid: 'QB_WITHDRAWAL_PAID',
   withdrawalReturned: 'QB_WITHDRAWAL_RETURNED',

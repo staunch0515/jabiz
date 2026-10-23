@@ -22,6 +22,7 @@ public final class WalletCodes {
     public static final String BANK_SETTINGS_RANGE = "QB_BANK_SETTINGS_RANGE";
     public static final String BANK_SETTINGS_OPEN = "QB_BANK_SETTINGS_OPEN";
     public static final String BANK_SETTINGS_UNCHANGED = "QB_BANK_SETTINGS_UNCHANGED";
+    public static final String BANK_SETTINGS_NOTHING = "QB_BANK_SETTINGS_NOTHING";
     /** The bank top-up is not in a state for this (param {@code status}; Q13a). */
     public static final String TOPUP_BANK_STATE = "QB_TOPUP_BANK_STATE";
     /** The payer's name is empty, too long or not printable (param {@code max}; Q13a). */
@@ -92,7 +93,7 @@ public final class WalletCodes {
         TRANSFER_NOW_OWN, BANK_ACCOUNT_INVALID, BANK_ACCOUNT_IN_USE, BANK_ACCOUNT_MISSING, PAYOUT_METHOD_OPEN_TRANSFER,
         WITHDRAWAL_UNAVAILABLE, WITHDRAWAL_AMOUNT, WITHDRAWAL_STATE, WITHDRAWAL_OWN, WITHDRAWAL_APPROVER, WITHDRAWAL_REFERENCE_USED,
         RECEIPT_NOT_PAID, RECEIPT_NO_ISSUER, RECEIPT_REFUNDED, BANK_SETTINGS_RANGE, BANK_SETTINGS_OPEN,
-        BANK_SETTINGS_UNCHANGED);
+        BANK_SETTINGS_UNCHANGED, BANK_SETTINGS_NOTHING);
 
     private WalletCodes() {}
 }

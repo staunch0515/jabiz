@@ -13,7 +13,8 @@
 | 商家后台 | 收款账户或金额范围未设置时，充值对话框中的"银行转账"不可选，并说明暂未开放（以前可以选，提交后才报错） |
 | `QB_BANK_SETTINGS_PROPOSE` | 一次提出七个设置（银行、支店、账户类型、账号、名义、最小与最大金额，加理由；权限 `control.propose`）：只为与现行值不同的项各提出一个受控变更，尚未声明的参数带上类型（与 `QB_SETUP` 相同）；本人对这些参数的未处理提案（包括安装时的初始提案）先撤回；他人的未处理提案、最小大于最大、全部未变各有业务码（`QB_BANK_SETTINGS_OPEN` / `RANGE` / `UNCHANGED`） |
 | 模板 `qb.admin.bank-settings` | 七个参数的现行值与是否存在（`qb.admin.finance.read`） |
-| 后台 `/qb/finance/bank-settings` | 现行值与是否已可用；待发布的提案（与现行值并列，提出人与理由）；发布人一键发布他人提出的全部提案（每项 `CONTROL_CHANGE_PUBLISH`，需二次验证）；提出人的表单从现行值开始 |
+| `QB_BANK_SETTINGS_PUBLISH` | 一次发布他人对这七个设置的全部待发布提案（权限 `control.publish`，二次验证）：在一个事务中逐项执行平台的 `CONTROL_CHANGE_PUBLISH`，全部成功或全部不发布（评审 Q18a：逐个发布时中途失败会让收款账户一半新一半旧）；发布后最小金额大于最大金额即拒绝，没有可发布的提案为 `QB_BANK_SETTINGS_NOTHING`。提出与发布按名称 `qb.bank-settings` 轮流（锁），一次最多读 500 个待发布的参数提案，更多即拒绝 |
+| 后台 `/qb/finance/bank-settings` | 现行值与是否已可用；待发布的提案（与现行值并列，提出人与理由）；发布人一键发布他人提出的全部提案；提出人的表单从现行值开始。提出也需二次验证 |
 
 测试：`BankTopUpSettingsIT`（未发布任何设置时只说暂未开放；他人的未处理提案、范围、未变；本人的初始提案被撤回；他人发布后商家读到；只改一项即一个提案）、
 `BankTopUpIT`（原有）、商家 Vitest（未设置时不可选）、扩展 Vitest `settings.test.tsx`、e2e `a11y.spec.ts`（设置页过 axe）。

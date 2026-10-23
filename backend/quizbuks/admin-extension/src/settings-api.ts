@@ -4,7 +4,8 @@ import { CONTROL, PAGE_LIMIT, PROCESS, TEMPLATE } from './ids'
 /*
  * The bank top-up's settings (Q18a; docs/quizbuks/plans/Q18-bank-settings-credit.md): the seven parameters in force
  * (`qb.admin.bank-settings`), the open proposals of them (the platform's controlled changes), proposing all of them in
- * one step (`QB_BANK_SETTINGS_PROPOSE`) and publishing each (`CONTROL_CHANGE_PUBLISH`, another administrator).
+ * one step (`QB_BANK_SETTINGS_PROPOSE`) and publishing them together (`QB_BANK_SETTINGS_PUBLISH`, another
+ * administrator).
  */
 
 type Row = Record<string, unknown>
@@ -93,9 +94,9 @@ export function proposeBankSettings(input: BankSettingsInput, reason: string) {
   })
 }
 
-/** Publishes the proposals one after the other; stops at the first the server refuses. */
-export async function publishProposals(changeIds: string[]) {
-  for (const changeId of changeIds) {
-    await runProcess(CONTROL.publish, { changeId })
-  }
-}
+/**
+ * Publishes every open proposal of the seven another administrator made, in one step on the server
+ * (`QB_BANK_SETTINGS_PUBLISH`): all of them or none, never an account half old and half new.
+ */
+export const publishBankSettings = () =>
+  runProcess<{ changeIds: string[]; keys: string[] }>(PROCESS.bankSettingsPublish, {})

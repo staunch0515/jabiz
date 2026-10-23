@@ -22,7 +22,7 @@ import {
   BANK_SETTING_KEYS,
   FIELD_OF,
   proposeBankSettings,
-  publishProposals,
+  publishBankSettings,
   readBankSettings,
   readOpenProposals,
   type BankSettings,
@@ -96,8 +96,7 @@ function OpenProposals({ open, current, onPublished }: {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
   const { can, userId } = useAuth()
   const others = open.filter((proposal) => proposal.proposedBy !== userId)
-  const publish = useMutation({ mutationFn: () => publishProposals(others.map((p) => p.changeId)),
-    onSettled: onPublished })
+  const publish = useMutation({ mutationFn: publishBankSettings, onSettled: onPublished })
   if (open.length === 0) return <p className="text-muted-foreground text-sm">{t('bankSettings.none')}</p>
   return (
     <div className="flex flex-col gap-3">

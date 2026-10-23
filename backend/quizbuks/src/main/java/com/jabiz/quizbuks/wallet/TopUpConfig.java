@@ -104,6 +104,11 @@ class TopUpConfig {
     }
 
     @Bean
+    ProcessDefinition<BankSettings.PublishInput, BankSettings.PublishOutput, ProcessContext> qbBankSettingsPublish() {
+        return BankSettings.publish();
+    }
+
+    @Bean
     DocumentLayout qbTopUpReceiptLayout() {
         return TopUpReceipts.LAYOUT;
     }
