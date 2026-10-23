@@ -374,13 +374,27 @@ public final class QuizProcesses {
         } else {
             content = QuizSnapshots.fromJson(list(ctx, VERSIONS).getFirst().get("content"));
         }
+        Object quizId = insertContent(ctx, content, text(input.title()) == null ? content.title() : input.title(),
+            content.aiGenerated(), source.id());
+        ctx.put(OUTPUT, new CloneOutput(uuid(quizId), uuid(source.id()), input.versionNo(), 1, ctx.opTime()));
+    }
+
+    /**
+     * Writes a new draft of the caller's with the content: the quiz, its materials and their images, its questions
+     * and their options, numbered in their order. For copies and imports (Q16), whose files are the caller's.
+     *
+     * @param clonedFrom the quiz copied, or null
+     * @return the new quiz's key
+     */
+    public static Object insertContent(ProcessContext ctx, QuizSnapshot content, String title, boolean aiGenerated,
+        Object clonedFrom) {
         Map<String, Object> heading = new LinkedHashMap<>();
-        heading.put("title", text(input.title()) == null ? content.title() : input.title());
+        heading.put("title", title);
         heading.put("intro", content.intro());
         heading.put("cover", content.cover());
         heading.put("timeLimitSec", content.timeLimitSec() == null ? null : decimal(content.timeLimitSec()));
         // A copy is of the same kind (D-Q12-1: the kind only changes by making a new quiz).
-        Map<String, Object> values = newQuiz(ctx, heading, content.kind(), content.aiGenerated(), source.id());
+        Map<String, Object> values = newQuiz(ctx, heading, content.kind(), aiGenerated, clonedFrom);
         values.put("questionCount", decimal(content.questions().size()));
         values.put("materialCount", decimal(content.materials().size()));
         Object quizId = ctx.changes().insert(QbContent.QUIZ, values);
@@ -431,7 +445,7 @@ public final class QuizProcesses {
                 ctx.changes().insert(QbContent.OPTION, o);
             }
         }
-        ctx.put(OUTPUT, new CloneOutput(uuid(quizId), uuid(source.id()), input.versionNo(), 1, ctx.opTime()));
+        return quizId;
     }
 
     // ---- versions --------------------------------------------------------------------------------------------------
