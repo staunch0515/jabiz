@@ -153,9 +153,11 @@ describe('the quiz file helpers', () => {
   })
 
   it('round-trip the bytes, leave the data out for the server and name the file after the title', async () => {
-    const bytes = new Uint8Array(70_000).map((_, i) => i % 256)
+    // More than one piece, and not a multiple of 3.
+    const bytes = new Uint8Array(70_001).map((_, i) => i % 256)
     const encoded = await base64Of(new Blob([bytes]))
     expect(new Uint8Array(await blobOf(encoded, 'image/png').arrayBuffer())).toEqual(bytes)
+    expect(encoded).toBe(btoa(String.fromCharCode(...bytes)))
     expect(withoutData({ format: 'x', files: { f1: { name: 'a', type: 'b', size: 1, data: 'AAAA' } } }))
       .toEqual({ format: 'x', files: { f1: { name: 'a', type: 'b', size: 1 } } })
     expect(exportFileName('Coffee: basics / 101')).toBe('Coffee-basics-101.quizbuks.json')
@@ -185,9 +187,14 @@ describe('the quiz file helpers', () => {
   })
 
   it('refuse a file without the data of a file it needs, and pass other refusals on', async () => {
+    const { uploads } = server()
+    // The second file has no data: nothing is uploaded, not even the first.
+    await expect(importQuiz({ files: { f1: { data: btoa('x') } } }, CHECK, undefined, vi.fn()))
+      .rejects.toBeInstanceOf(MissingFileData)
+    expect(uploads).toEqual([])
+    vi.restoreAllMocks()
     server({ uploads: [{ status: 422, body: { status: 422, violations: [
       { field: 'file', ruleCode: 'FILE_TYPE_NOT_ALLOWED', message: 'No' }] } }] })
-    await expect(importQuiz({ files: {} }, CHECK, undefined, vi.fn())).rejects.toBeInstanceOf(MissingFileData)
     await expect(importQuiz({ files: { f1: { data: btoa('x') }, f2: { data: btoa('y') } } }, CHECK, undefined,
       vi.fn())).rejects.toBeInstanceOf(ApiError)
   })
@@ -227,8 +234,8 @@ describe('the quiz list', () => {
     { type: 'application/json' })
     await screen.findByTestId('quiz-row')
     await userEvent.upload(screen.getByTestId('quiz-import-file'), file)
-    expect(await screen.findByTestId('quiz-import-summary')).toHaveTextContent('Coffee basics: 2 questions, 1 '
-      + 'materials, 1 files.')
+    expect(await screen.findByTestId('quiz-import-summary')).toHaveTextContent(
+      'Coffee basics — questions: 2, materials: 1, files: 1.')
     expect(screen.getByTestId('quiz-import-version')).toHaveTextContent('Format version 1')
     // The server checks the file without the data.
     expect(JSON.stringify(processCalls('QB_QUIZ_IMPORT_CHECK'))).not.toContain(btoa('abc'))

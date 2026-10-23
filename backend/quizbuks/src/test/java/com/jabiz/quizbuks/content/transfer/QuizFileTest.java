@@ -169,6 +169,36 @@ class QuizFileTest {
     }
 
     @Test
+    void textIsAsEditingKeepsIt() {
+        Map<String, Object> document = document();
+        // Blank is none: a link with a blank body is a link; characters count as characters.
+        document.put("materials", List.of(map("kind", "LINK", "url", "https://example.com", "body", "  ",
+            "title", "😀".repeat(ContentLimits.MATERIAL_TITLE_LENGTH))));
+        QuizFile file = QuizFileFormat.read(document).file();
+        assertThat(file.materials().getFirst().body()).isNull();
+        assertThat(QuizFileChecks.check(file)).isEmpty();
+        Map<String, Object> whole = document();
+        @SuppressWarnings("unchecked")
+        Map<String, Object> quiz = (Map<String, Object>) whole.get("quiz");
+        quiz.put("timeLimitSec", Long.MIN_VALUE);
+        assertThat(QuizFileFormat.read(whole).status()).isEqualTo(QuizFileFormat.Status.INVALID);
+    }
+
+    @Test
+    void aSurveysQuestionIsWorthOneWhateverTheFileSays() {
+        Map<String, Object> document = document();
+        @SuppressWarnings("unchecked")
+        Map<String, Object> quiz = (Map<String, Object>) document.get("quiz");
+        quiz.put("kind", "SURVEY");
+        document.put("questions", List.of(map("stem", "Favourite?", "points", 7, "selection", "SINGLE",
+            "options", List.of(map("text", "A"), map("text", "B")))));
+        QuizFile file = QuizFileFormat.read(document).file();
+        assertThat(QuizFileChecks.check(file)).isEmpty();
+        assertThat(QuizTransferProcesses.snapshot(file, Map.of("f1", UUID.randomUUID())).questions().getFirst()
+            .points()).isEqualTo(1);
+    }
+
+    @Test
     void aSurveyKeepsItsSelectionsAndHasNoCorrectOptions() {
         Map<String, Object> document = document();
         @SuppressWarnings("unchecked")

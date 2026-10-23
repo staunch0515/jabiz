@@ -117,7 +117,7 @@ public final class QuizTransferProcesses {
         if (!reading.supported()) {
             Map<String, Object> params = new LinkedHashMap<>();
             params.put("status", reading.status().name());
-            params.put("version", reading.version() == null ? "" : reading.version());
+            params.put("version", reading.version() == null ? "?" : reading.version());
             params.put("current", QuizFileFormat.CURRENT);
             params.put("oldest", QuizFileFormat.OLDEST);
             ctx.reject(new Violation(null, ContentCodes.QUIZ_FILE_UNSUPPORTED, reading.problem(), params));
@@ -184,8 +184,9 @@ public final class QuizTransferProcesses {
                 QuizFile.Option option = question.options().get(o);
                 options.add(new QuizSnapshot.Option(o + 1, option.text(), key(ids, option.image()), option.correct()));
             }
+            // A survey's question is worth 1, as editing makes it.
             questions.add(new QuizSnapshot.Question(q + 1, question.stem(), key(ids, question.image()),
-                question.points(), options, survey ? question.selection() : null));
+                survey ? 1 : question.points(), options, survey ? question.selection() : null));
         }
         return new QuizSnapshot(file.title(), file.intro(), key(ids, file.cover()), file.timeLimitSec(), false,
             materials, questions, survey);

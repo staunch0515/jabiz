@@ -173,9 +173,11 @@ public final class QuizFileFormat {
         return maps;
     }
 
+    /** Text as editing keeps it: blank is none ({@code QuizEditing.text}). */
     private static String text(Object value, String at) {
         if (value == null || value instanceof String) {
-            return (String) value;
+            String text = (String) value;
+            return text == null || text.isBlank() ? null : text;
         }
         throw new IllegalArgumentException(at + " must be text");
     }
@@ -184,8 +186,8 @@ public final class QuizFileFormat {
         if (value == null) {
             return null;
         }
-        if (value instanceof Number n && n.doubleValue() == n.longValue()
-            && Math.abs(n.longValue()) <= Integer.MAX_VALUE) {
+        if (value instanceof Number n && n.doubleValue() == n.longValue() && n.longValue() >= Integer.MIN_VALUE
+            && n.longValue() <= Integer.MAX_VALUE) {
             return n.intValue();
         }
         throw new IllegalArgumentException(at + " must be a whole number");

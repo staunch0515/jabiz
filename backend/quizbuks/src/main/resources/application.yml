@@ -1,6 +1,12 @@
 spring:
   application:
     name: quizbuks
+  # A JSON request body held in memory: Spring's default (256 KB) is less than a quiz file's content may be (Q16: up
+  # to 2 MB of snapshot, ten 20 000-character articles alone are 600 KB in three-byte characters). Uploads are
+  # streamed and limited by jabiz.files.*, not by this.
+  http:
+    codecs:
+      max-in-memory-size: 4MB
   lifecycle:
     timeout-per-shutdown-phase: 30s
   r2dbc:

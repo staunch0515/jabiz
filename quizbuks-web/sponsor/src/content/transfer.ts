@@ -54,14 +54,20 @@ function nameOf(kind: 'image' | 'pdf' | 'audio', type: string): string {
   return extension ? `${kind}.${extension}` : kind
 }
 
-/** Base64 of a blob's bytes, in chunks (a large file would overflow one call's arguments). */
+/** Bytes per piece of {@link base64Of}: a multiple of 3, so the pieces' base64 joins without padding between. */
+const BASE64_PIECE = 3 * 0x2000
+
+/**
+ * Base64 of a blob's bytes, piece by piece: never one binary string of the whole file (a 50 MB audio file), nor one
+ * call with more arguments than an engine takes.
+ */
 export async function base64Of(blob: Blob): Promise<string> {
   const bytes = new Uint8Array(await blob.arrayBuffer())
-  let binary = ''
-  for (let i = 0; i < bytes.length; i += 0x8000) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
+  const pieces: string[] = []
+  for (let i = 0; i < bytes.length; i += BASE64_PIECE) {
+    pieces.push(btoa(String.fromCharCode(...bytes.subarray(i, i + BASE64_PIECE))))
   }
-  return btoa(binary)
+  return pieces.join('')
 }
 
 /** The bytes of a base64 text as a blob of the type. */
@@ -122,19 +128,26 @@ export function exportFileName(title: string): string {
   return `${base || 'quiz'}.quizbuks.json`
 }
 
-/** Saves the file through the browser's download. */
-export function download(document: QuizFileDocument) {
-  const url = URL.createObjectURL(new Blob([JSON.stringify(document)], { type: 'application/json' }))
-  const link = window.document.createElement('a')
-  link.href = url
-  link.download = exportFileName(document.quiz.title)
-  link.click()
-  setTimeout(() => URL.revokeObjectURL(url), 0)
+/** The export written once: the file to download, its name and size. */
+export interface ExportFile {
+  blob: Blob
+  name: string
+  size: number
 }
 
-/** The size of the export when written. */
-export function exportSize(document: QuizFileDocument): number {
-  return new Blob([JSON.stringify(document)]).size
+export function exportFile(document: QuizFileDocument): ExportFile {
+  const blob = new Blob([JSON.stringify(document)], { type: 'application/json' })
+  return { blob, name: exportFileName(document.quiz.title), size: blob.size }
+}
+
+/** Saves the file through the browser's download. */
+export function download(file: ExportFile) {
+  const url = URL.createObjectURL(file.blob)
+  const link = window.document.createElement('a')
+  link.href = url
+  link.download = file.name
+  link.click()
+  setTimeout(() => URL.revokeObjectURL(url), 0)
 }
 
 /** The document without its files' data: what the server checks and keeps (it never reads the data). */
@@ -210,17 +223,20 @@ async function uploadPaced(policy: string, blob: Blob, name: string, wait: (ms: 
 export async function importQuiz(document: Record<string, unknown>, check: ImportCheck, onProgress?: Progress,
   wait: (ms: number) => Promise<unknown> = sleep): Promise<Imported> {
   const files = (document.files ?? {}) as Record<string, Partial<QuizFileEntry>>
+  // Every file's data before the first upload: a file missing one would leave the others uploaded for nothing.
+  for (const need of check.files) {
+    if (!KNOWN_POLICIES.has(need.policy) || typeof files[need.key]?.data !== 'string') {
+      throw new MissingFileData(need.key)
+    }
+  }
   const uploaded: Record<string, string> = {}
   let done = 0
   onProgress?.(0, check.files.length)
   for (const need of check.files) {
     const entry = files[need.key]
-    if (!KNOWN_POLICIES.has(need.policy) || typeof entry?.data !== 'string') {
-      throw new MissingFileData(need.key)
-    }
     const kind = need.policy === CONTENT_FILE_POLICY.pdf ? 'pdf' : need.policy === CONTENT_FILE_POLICY.audio
       ? 'audio' : 'image'
-    const blob = blobOf(entry.data, need.type)
+    const blob = blobOf(entry.data as string, need.type)
     const file = await uploadPaced(need.policy, blob, nameOf(kind, need.type), wait)
     uploaded[need.key] = String(file.fileId)
     onProgress?.(++done, check.files.length)

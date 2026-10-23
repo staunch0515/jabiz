@@ -35,7 +35,7 @@ test('a quiz is exported to a file and imported back as a new draft', async ({ p
   expect(Object.keys(document.files)).toEqual(['f1', 'f2'])
 
   await page.getByTestId('quiz-import-file').setInputFiles(path)
-  await expect(page.getByTestId('quiz-import-summary')).toContainText(`${title}: 1 questions`)
+  await expect(page.getByTestId('quiz-import-summary')).toContainText(`${title} — questions: 1`)
   await expectAccessible(page, 'quiz import')
   await page.getByTestId('quiz-import-confirm').click()
   await expect(page).not.toHaveURL(new RegExp(`/quizzes/${quizId}$`))

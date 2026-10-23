@@ -86,7 +86,7 @@ class QuizTransferIT extends ContentItSupport {
         wrong.put("questions", List.of(map("stem", "No points", "options", List.of(), "image", "nowhere")));
         assertThat(codes(refused("QB_QUIZ_IMPORT_CHECK", sponsorA(), body("document", wrong), 422)))
             .contains(ContentCodes.QUIZ_FILE_VALUE, ContentCodes.QUIZ_FILE_MISSING);
-        // A taker cannot import.
+        // Without qb.content.write (a content administrator reads, writes nothing): refused.
         assertThat(call("QB_QUIZ_IMPORT_CHECK", contentAdmin(), body("document", document("No"))).expectBody(MAP)
             .returnResult().getStatus().value()).isEqualTo(403);
     }
@@ -140,6 +140,11 @@ class QuizTransferIT extends ContentItSupport {
             "questions[0].image " + ContentCodes.QUIZ_FILE_TYPE,
             "questions[1].options[1].image " + ContentCodes.QUIZ_FILE_TYPE);
         assertThat(quizzes()).isEqualTo(before);
+        // A key given a file nobody uploaded.
+        assertThat(codes(refused("QB_QUIZ_IMPORT", sponsorA(), body("document", document("Unknown"), "files",
+            map("c", java.util.UUID.randomUUID().toString(), "m", cover, "p", paper)), 422)))
+            .containsExactly(ContentCodes.QUIZ_FILE_NOT_UPLOADED);
+        assertThat(quizzes()).isEqualTo(before);
         // A file with problems is refused by the import too, whatever was uploaded.
         assertThat(codes(refused("QB_QUIZ_IMPORT", sponsorA(), body("document", document(""), "files",
             map("c", cover, "m", cover, "p", paper)), 422))).contains(ContentCodes.QUIZ_FILE_VALUE);
@@ -147,15 +152,33 @@ class QuizTransferIT extends ContentItSupport {
     }
 
     @Test
+    void aQuizAtTheContentLimitsImports() {
+        // Ten articles of the longest body in three-byte characters: about 600 KB of JSON.
+        List<Object> materials = new java.util.ArrayList<>();
+        for (int i = 0; i < 10; i++) {
+            materials.add(map("kind", "ARTICLE", "title", "Article " + i, "body", "字".repeat(20_000),
+                "images", List.of()));
+        }
+        Map<String, Object> large = map("format", "quizbuks.quiz", "formatVersion", 1,
+            "quiz", map("kind", "QUIZ", "title", "Large", "intro", "字".repeat(5_000)), "materials", materials,
+            "questions", List.of(map("stem", "One?", "points", 1, "options", List.of(map("text", "Yes",
+                "correct", true), map("text", "No")))));
+        assertThat(run("QB_QUIZ_IMPORT_CHECK", sponsorA(), body("document", large))).containsEntry("materials", 10);
+        assertThat(run("QB_QUIZ_IMPORT", sponsorA(), body("document", large))).containsKey("quizId");
+    }
+
+    @Test
     void aSurveyFileImportsAsASurvey() {
         Map<String, Object> survey = map("format", "quizbuks.quiz", "formatVersion", 1,
             "quiz", map("kind", "SURVEY", "title", "Opinions"),
-            "questions", List.of(map("stem", "Which?", "points", 1, "selection", "MULTIPLE",
+            "questions", List.of(map("stem", "Which?", "points", 5, "selection", "MULTIPLE",
                 "options", List.of(map("text", "A"), map("text", "B")))));
         String quizId = (String) run("QB_QUIZ_IMPORT", sponsorA(), body("document", survey)).get("quizId");
         assertThat(query("SELECT kind FROM qb_quiz_version WHERE quiz_id = ?::uuid", quizId)).singleElement()
             .satisfies(r -> assertThat(r).containsEntry("kind", "SURVEY"));
-        assertThat(query("SELECT selection FROM qb_question_version WHERE quiz_id = ?::uuid", quizId))
-            .singleElement().satisfies(r -> assertThat(r).containsEntry("selection", "MULTIPLE"));
+        // Worth 1 whatever the file says, as editing makes a survey's question.
+        assertThat(query("SELECT selection, points FROM qb_question_version WHERE quiz_id = ?::uuid", quizId))
+            .singleElement().satisfies(r -> assertThat(r).containsEntry("selection", "MULTIPLE")
+                .satisfies(row -> assertThat(((Number) row.get("points")).intValue()).isEqualTo(1)));
     }
 }

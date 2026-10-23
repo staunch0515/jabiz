@@ -23,14 +23,14 @@ import { quizPath, QUIZZES_QUERY } from './paths'
 import {
   checkImport,
   download,
+  exportFile,
   exportQuiz,
-  exportSize,
   importQuiz,
   LARGE_EXPORT_BYTES,
   MissingFileData,
   readJsonFile,
+  type ExportFile,
   type ImportCheck,
-  type QuizFileDocument,
 } from './transfer'
 
 /**
@@ -40,16 +40,18 @@ import {
 export function ExportQuizButton({ quizId, title }: { quizId: string; title: string }) {
   const { t } = useTranslation(SPONSOR)
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
-  const [large, setLarge] = useState<QuizFileDocument | null>(null)
+  const [large, setLarge] = useState<ExportFile | null>(null)
 
   const run = async () => {
     setProgress({ done: 0, total: 0 })
     try {
       const document = await exportQuiz(quizId, (done, total) => setProgress({ done, total }))
       if (!document) throw new Error('not found')
-      if (exportSize(document) > LARGE_EXPORT_BYTES) setLarge(document)
+      // Written once: the size asked about is the file downloaded.
+      const file = exportFile(document)
+      if (file.size > LARGE_EXPORT_BYTES) setLarge(file)
       else {
-        download(document)
+        download(file)
         notify.success(t('quizzes.transfer.exported'))
       }
     } catch {
@@ -71,7 +73,7 @@ export function ExportQuizButton({ quizId, title }: { quizId: string; title: str
       </Button>
       <ConfirmDialog open={large !== null} onOpenChange={(open) => !open && setLarge(null)}
         title={t('quizzes.transfer.largeTitle')}
-        description={large ? t('quizzes.transfer.largeText', { size: formatBytes(exportSize(large)) }) : undefined}
+        description={large ? t('quizzes.transfer.largeText', { size: formatBytes(large.size) }) : undefined}
         confirmLabel={t('quizzes.transfer.largeConfirm')} cancelLabel={t('quizzes.transfer.cancel')}
         onConfirm={() => {
           if (large) download(large)

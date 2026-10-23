@@ -158,7 +158,8 @@ public final class QuizFileChecks {
     private static void question(List<Violation> problems, String at, QuizFile.Question question, boolean survey) {
         length(problems, at + ".stem", question.stem(), ContentLimits.STEM_LENGTH);
         Integer points = question.points();
-        if (points == null || points < ContentLimits.MIN_POINTS || points > ContentLimits.MAX_POINTS) {
+        // A survey's question is worth 1 whatever the file says, as editing makes it (D-Q12-1).
+        if (!survey && (points == null || points < ContentLimits.MIN_POINTS || points > ContentLimits.MAX_POINTS)) {
             problems.add(value(at + ".points", "between " + ContentLimits.MIN_POINTS + " and "
                 + ContentLimits.MAX_POINTS));
         }
@@ -185,8 +186,9 @@ public final class QuizFileChecks {
         }
     }
 
+    /** As the entities count: in characters (code points), not UTF-16 units. */
     private static void length(List<Violation> problems, String at, String text, int max) {
-        if (text != null && text.length() > max) {
+        if (text != null && text.codePointCount(0, text.length()) > max) {
             problems.add(value(at, "at most " + max + " characters"));
         }
     }
@@ -194,7 +196,7 @@ public final class QuizFileChecks {
     private static void count(List<Violation> problems, String at, int count, int max) {
         if (count > max) {
             problems.add(new Violation(at, ContentCodes.QUIZ_FILE_TOO_MANY, count + " " + at + ", at most " + max,
-                Map.of("count", count, "max", max)));
+                Map.of("field", at, "count", count, "max", max)));
         }
     }
 
