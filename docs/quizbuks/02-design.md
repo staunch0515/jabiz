@@ -419,7 +419,7 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 
 - **公开模板**（Q7b，平台 15、D17；`jabiz.public.enabled` 由 `JABIZ_PUBLIC_ENABLED` 打开，缺省开）：`qb.public.legal`（某种文本在时刻 `at` 的当前版本与下一个预告）、
   `qb.public.legal-version`、`qb.public.legal-history`、`qb.public.faq`（`audience`、`category`、`q` 在任一语言中字面匹配）。只读公开视图：法律文本的已发布版本（全部，含预告）与已发布的 FAQ；草稿没有公开视图。
-  `qb.public.publication`（Q15，发布的分享链接）：进行中的发布的概要与商家公司名，只在 `startAt <= at < endAt` 时有一行；公开视图是 `LIVE` 的卡片（白名单，不含地区、预算、奖励档）与已批准商家的公司名。App 入口开启邮件链接登录（平台 D54），分享页只要邮箱（`plans/Q15-share-link.md`）。
+  `qb.public.publication`（Q15，发布的分享链接）：进行中（`LIVE`）的发布的概要与商家公司名；公开视图是 `LIVE` 的卡片（白名单，不含地区、预算、奖励档）与已批准商家的公司名。App 入口开启邮件链接登录（平台 D54），分享页只要邮箱（`plans/Q15-share-link.md`）。
   已认证：`qb.me.consents`（本人对各文本的状态）、`qb.me.support`（支持邮箱）、`qb.admin.consents`（P-01 的同意记录）。
 - 完成人数：已认证的模板没有缓存，所以近期窗口由任务 `qb.publication-stats` 每 10 分钟按索引 `QbAttempt (publicationId, submittedAt)` 统计到 `qb_publication_stats`（需求 6.1 允许 10 分钟），累计取计数行；分析（Q9e）由任务 `qb.analytics` 每 10 分钟把计数的增量写进按小时的桶，按同一索引从水位线读新完成的会话汇总每题（答题路径不写任何分析数据，D-Q9e-2）。
   **残余（Q9e1 评审 M1 ④，已知、接受）**：概览的人数是任务的快照，但仪表盘的"正在答题"与今日支出是实时的合计，商家只有一个进行中的发布时，两次查看之差就是该发布在这段时间内的变化；Q4 的 `qb.sponsor.publications` 同样实时给出每个发布的计数。两者都只是人数与金额（E-4 不受 k 约束），推不出逐题作答。

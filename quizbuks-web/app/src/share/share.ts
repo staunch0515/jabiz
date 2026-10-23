@@ -1,4 +1,4 @@
-import { minuteNow, publicQuery } from '../qb/legal'
+import { publicQuery } from '../qb/legal'
 import type { QuizKind } from '../qb/play'
 
 /** The public template of a share link's page (`queries/qb/public/publication.sql`; Q15). */
@@ -20,9 +20,9 @@ export interface SharedPublication {
   sponsorCompany: string | null
 }
 
-/** The publication if it is live now, else null (paused, over, unknown: the page says it is not open). */
+/** The publication if it is live, else null (scheduled, paused, over, unknown: the page says it is not open). */
 export async function readSharedPublication(publicationId: string): Promise<SharedPublication | null> {
-  const rows = await publicQuery<SharedPublication>(SHARE_TEMPLATE, { publicationId, at: minuteNow() }, 1)
+  const rows = await publicQuery<SharedPublication>(SHARE_TEMPLATE, { publicationId }, 1)
   return rows[0] ?? null
 }
 

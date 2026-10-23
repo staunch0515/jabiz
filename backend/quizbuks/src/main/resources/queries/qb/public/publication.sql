@@ -2,7 +2,7 @@
 id: qb.public.publication
 description: >-
   A live publication as its share link shows it to anybody before signing in (Q15): the quiz's title, the sponsor's
-  company, the reward, the number of questions and the time limit; none when it is not live at the time
+  company, the reward, the number of questions and the time limit; none when it is not live
 access: public
 cacheSeconds: 60
 timeoutMs: 2000
@@ -12,7 +12,6 @@ datasets:
   QbSponsor: urn:jabiz:dataset:public:QbSponsor
 params:
   publicationId: { like: QbPublicationCard.publicationId, required: true, description: The publication }
-  at:            { kind: { type: temporal, role: EVENT_TIME }, required: true, description: "The time (the page's now, to the minute)" }
 results:
   publicationId:  { from: QbPublicationCard.publicationId }
   name:           { from: QbPublicationCard.name }
@@ -29,9 +28,10 @@ results:
 list:
   key: [publicationId]
 ---*/
--- The public dataset holds live cards only (its fixed scope), and only approved sponsors' companies: a paused or
--- ended publication, or one whose time has not come or has passed, is no row. Who may start it (the regions, the
--- budget, the winners, one attempt per taker) is decided after signing in, by the app's own page and QB_ATTEMPT_START.
+-- The public dataset holds live cards only (its fixed scope), and only approved sponsors' companies: a scheduled,
+-- paused or ended publication is no row. Live is the server's state (the minute's job ends it), not the visitor's
+-- clock. Who may start it (the regions, the budget, the winners, one attempt per taker) is decided after signing in,
+-- by the app's own page and QB_ATTEMPT_START.
 SELECT
     c.{{QbPublicationCard.publicationId}} AS publicationId,
     c.{{QbPublicationCard.name}}          AS name,
@@ -48,5 +48,3 @@ SELECT
 FROM {{QbPublicationCard}} c
 LEFT JOIN {{QbSponsor}} sp ON sp.{{QbSponsor.userId}} = c.{{QbPublicationCard.sponsorId}}
 WHERE c.{{QbPublicationCard.publicationId}} = :publicationId
-  AND c.{{QbPublicationCard.startAt}} <= :at
-  AND c.{{QbPublicationCard.endAt}} > :at

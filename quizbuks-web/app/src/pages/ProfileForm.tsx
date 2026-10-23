@@ -106,8 +106,10 @@ function ProfileFields({ profile, countries, currencies, submitLabel, onSaved, c
   const { displayName: signedUpAs, email, emailVerified } = useAuth()
   const queryClient = useQueryClient()
   const id = useId()
-  const [displayName, setDisplayName] = useState(() => profile?.displayName || signedUpAs
-    || (brief ? nameFromEmail(email) : ''))
+  // The short step shows no name: never the sign-in name when it is the address itself (an account a mailed link
+  // opened has none other), which would then be shown to sponsors.
+  const [displayName, setDisplayName] = useState(() => profile?.displayName
+    || (brief ? (signedUpAs && !signedUpAs.includes('@') ? signedUpAs : nameFromEmail(email)) : signedUpAs || ''))
   const [countryCode, setCountryCode] = useState<string | null>(() => {
     if (profile?.countryCode) return profile.countryCode
     const { languages, timeZone } = browserHints()

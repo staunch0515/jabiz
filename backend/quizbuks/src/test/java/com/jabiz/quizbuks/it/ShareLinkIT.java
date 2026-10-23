@@ -22,8 +22,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * A publication's share link (docs/quizbuks/plans/Q15-share-link.md): anybody reads a live publication's page through
- * the public template, with a whitelist of its fields and the sponsor's company only, and nothing once it is paused,
- * over or unknown; the app's entry signs in by a mailed link (platform decision D54) that leads back to the
+ * the public template, with a whitelist of its fields and the sponsor's company only, and nothing while it is
+ * scheduled, once it is paused, or when it is unknown; the app's entry signs in by a mailed link (platform decision D54) that leads back to the
  * publication's page, opening a verified taker's account for an address nobody uses.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK, properties = {
@@ -48,16 +48,15 @@ class ShareLinkIT extends PlayItSupport {
     }
 
     @SuppressWarnings("unchecked")
-    private List<Map<String, Object>> page(String publicationId, Duration from) {
-        return (List<Map<String, Object>>) publicQuery("p.publicationId=" + publicationId + "&p.at="
-            + clock.instant().plus(from)).expectStatus().isOk().expectBody(MAP).returnResult().getResponseBody()
-            .get("items");
+    private List<Map<String, Object>> page(String publicationId) {
+        return (List<Map<String, Object>>) publicQuery("p.publicationId=" + publicationId).expectStatus().isOk()
+            .expectBody(MAP).returnResult().getResponseBody().get("items");
     }
 
     @Test
     void aLivePublicationShowsAnybodyItsWhitelistOnly() {
         String publicationId = livePublication(sponsorA(), "Shared");
-        assertThat(page(publicationId, Duration.ZERO)).singleElement().satisfies(row -> {
+        assertThat(page(publicationId)).singleElement().satisfies(row -> {
             assertThat(row).containsOnlyKeys("publicationId", "name", "quizTitle", "kind", "startAt", "endAt",
                 "timeLimitSec", "questionCount", "fullScore", "passScore", "maxReward", "sponsorCompany");
             assertThat(row).containsEntry("publicationId", publicationId).containsEntry("name", "Shared")
@@ -65,16 +64,22 @@ class ShareLinkIT extends PlayItSupport {
             assertThat(row.get("sponsorCompany")).isNotNull();
         });
         // Nothing of the sponsor or the regions in the answer, whatever is asked.
-        String raw = publicQuery("p.publicationId=" + publicationId + "&p.at=" + clock.instant())
+        String raw = publicQuery("p.publicationId=" + publicationId)
             .expectStatus().isOk().expectBody(String.class).returnResult().getResponseBody();
         assertThat(raw).doesNotContain("sponsorId").doesNotContain("regions").doesNotContain("GLOBAL")
             .doesNotContain("tiers").doesNotContain("budget");
 
-        // Over (after its end), unknown, or paused: no row.
-        assertThat(page(publicationId, Duration.ofDays(8))).isEmpty();
-        assertThat(page(UUID.randomUUID().toString(), Duration.ZERO)).isEmpty();
+        // Neither the sponsor's id nor the regions can be filtered or sorted on: they are not results.
+        publicQuery("p.publicationId=" + publicationId + "&filter=sponsorId:eq:" + sponsorA()).expectStatus()
+            .isBadRequest();
+        publicQuery("p.publicationId=" + publicationId + "&sort=sponsorId").expectStatus().isBadRequest();
+        // Scheduled, unknown, or paused: no row.
+        String later = livePublication(sponsorA(), "Later",
+            Map.of("startAt", clock.instant().plus(Duration.ofDays(1))));
+        assertThat(page(later)).isEmpty();
+        assertThat(page(UUID.randomUUID().toString())).isEmpty();
         run("QB_PUBLICATION_PAUSE", sponsorToken(sponsorA()), body("publicationId", publicationId));
-        assertThat(page(publicationId, Duration.ZERO)).isEmpty();
+        assertThat(page(publicationId)).isEmpty();
     }
 
     @Test

@@ -240,7 +240,8 @@ function PublicPage({ path, signedIn, children }: { path: string; signedIn: bool
         <div className="mx-auto flex max-w-md items-center gap-2 px-4 py-2">
           <span className="mr-auto font-semibold">{t('brand')}</span>
           <ThemeToggle />
-          <Link to={signedIn ? HOME : '/login'} className="text-primary text-sm underline" data-testid="public-back">
+          <Link to={signedIn ? HOME : itemPage(path) ? `/login?next=${encodeURIComponent(path)}` : '/login'}
+            className="text-primary text-sm underline" data-testid="public-back">
             {signedIn ? tApp('public.back') : tApp('public.signIn')}
           </Link>
         </div>

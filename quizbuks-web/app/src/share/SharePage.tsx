@@ -1,4 +1,4 @@
-import { formatDateTime } from '@jabiz/client'
+import { entryInfo, formatDateTime } from '@jabiz/client'
 import { DescriptionList, EmailLinkForm, PageState } from '@jabiz/ui'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -19,16 +19,18 @@ export function SharePage({ publicationId }: { publicationId: string }) {
   const { t: tQb } = useTranslation(QB)
   const duration = useDuration()
   const shared = useQuery({ queryKey: ['qb', 'share', publicationId], queryFn: () => readSharedPublication(publicationId) })
+  // Signing in by a mailed link is the entry's (QB_APP_EMAIL_LINK): off, the password only.
+  const entry = useQuery({ queryKey: ['qb', 'entry'], queryFn: () => entryInfo(), staleTime: Infinity })
   const here = sharePath(publicationId)
   const signIn = `/login?next=${encodeURIComponent(here)}`
 
-  if (shared.isPending) return <PageState kind="loading" />
+  if (shared.isPending || entry.isPending) return <PageState kind="loading" />
   if (shared.isError) return <PageState kind="error" description={tQb('failed')} />
   const p = shared.data
   if (!p) {
     return (
       <PageState kind="notFound" titleAs="h1" title={t('share.notFound')} description={t('share.notFoundHint')}
-        action={<Link to={signIn} className="text-primary text-sm underline" data-testid="share-sign-in">
+        action={<Link to="/login" className="text-primary text-sm underline" data-testid="share-sign-in">
           {t('share.home')}</Link>} />
     )
   }
@@ -53,10 +55,12 @@ export function SharePage({ publicationId }: { publicationId: string }) {
         { key: 'endAt', label: t('detail.endAt'), value: formatDateTime(p.endAt) },
       ]} />
       <section aria-labelledby="share-start" className="flex flex-col gap-3">
-        <h2 id="share-start" className="text-lg font-semibold">{t('share.start')}</h2>
-        <p className="text-muted-foreground text-sm">{t('share.startHint')}</p>
-        <EmailLinkForm to={here} submitLabel={t('share.start')} />
-        <p className="text-muted-foreground text-sm">{t('share.delay')}</p>
+        {entry.data?.emailLink ? <>
+          <h2 id="share-start" className="text-lg font-semibold">{t('share.start')}</h2>
+          <p className="text-muted-foreground text-sm">{t('share.startHint')}</p>
+          <EmailLinkForm to={here} submitLabel={t('share.start')} />
+          <p className="text-muted-foreground text-sm">{t('share.delay')}</p>
+        </> : <h2 id="share-start" className="text-lg font-semibold">{t('share.signIn')}</h2>}
         <Link to={signIn} className="text-primary self-center text-sm underline" data-testid="share-password">
           {t('share.password')}
         </Link>

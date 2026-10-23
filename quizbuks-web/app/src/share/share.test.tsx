@@ -19,9 +19,12 @@ const SHARED = { publicationId: 'pub1', name: 'Spring quiz', quizTitle: 'Capital
   fullScore: 100, passScore: 60, maxReward: '500', sponsorCompany: 'Acme' }
 
 interface Server {
+  /** The entry signs in by a mailed link (QB_APP_EMAIL_LINK); on unless said. */
+  emailLink?: boolean
   /** The public template's row; none when the publication is not live. */
   shared?: Record<string, unknown> | null
   /** Signed in: who (no profile yet), from a link that opened the account. */
+  /** As `/api/auth/me` answers for an account a link opened: its name is the address. */
   me?: { displayName: string | null; email: string }
 }
 
@@ -39,7 +42,9 @@ function server(options: Server = {}) {
     if (request.method === 'POST') posted.push({ path, body })
     switch (path) {
       case '/api/auth/entries/app':
-        return json(200, ENTRY)
+        return json(200, { ...ENTRY, emailLink: options.emailLink ?? true })
+      case '/api/auth/login':
+        return json(200, { status: 'SIGNED_IN', accessToken: 'a1', refreshToken: 'r1' })
       case '/api/auth/oidc/providers':
         return json(200, [])
       case '/api/public/queries/qb.public.publication':
@@ -76,6 +81,8 @@ beforeAll(() => configureClient({ entry: 'app' }))
 beforeEach(() => {
   session.clear()
   forgetShareNext()
+  // Also forgets what the entry offers, read once per page.
+  configureClient({ entry: 'app' })
   vi.spyOn(navigator, 'languages', 'get').mockReturnValue(['ja-JP', 'en'])
 })
 afterEach(() => {
@@ -92,7 +99,7 @@ describe('the share link before signing in', () => {
     expect(window.location.pathname).toBe('/p/pub1')
     expect(screen.getByTestId('share-sponsor')).toHaveTextContent('Acme')
     expect(screen.getByTestId('share-facts')).toHaveTextContent('10')
-    expect(asked.some((a) => a.startsWith('/api/public/queries/qb.public.publication?p.publicationId=pub1&p.at=')))
+    expect(asked.some((a) => a.startsWith('/api/public/queries/qb.public.publication?p.publicationId=pub1&')))
       .toBe(true)
     // No token is sent for the public page.
     expect(asked).not.toContain('/api/auth/me')
@@ -122,11 +129,33 @@ describe('the share link before signing in', () => {
     expect(window.location.search).not.toContain('token')
   })
 
-  it('signs in with a password back to the publication', async () => {
-    server()
-    window.history.replaceState(null, '', '/login?next=%2Fp%2Fpub1')
+  it('offers the password only when the entry does not sign in by link', async () => {
+    server({ emailLink: false })
+    window.history.replaceState(null, '', '/p/pub1')
     render(<App />)
-    expect(await screen.findByRole('textbox', { name: 'User name' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Sign in to start' })).toBeInTheDocument()
+    expect(screen.queryByTestId('email-link-form')).toBeNull()
+    expect(screen.getByTestId('share-password')).toHaveAttribute('href', '/login?next=%2Fp%2Fpub1')
+    expect(screen.getByTestId('public-back')).toHaveAttribute('href', '/login?next=%2Fp%2Fpub1')
+  })
+
+  it('signs in with a password back to the publication, and only to a page of this site', async () => {
+    const me = { displayName: 'Mei', email: 'mei@example.com' }
+    for (const [next, expected] of [['%2Fp%2Fpub1', '/p/pub1'], ['%2F%2Fevil.example%2Fp', '/']] as const) {
+      server({ me })
+      window.history.replaceState(null, '', `/login?next=${next}`)
+      const { unmount } = render(<App />)
+      await userEvent.type(await screen.findByRole('textbox', { name: 'User name' }), 'mei@example.com')
+      await userEvent.type(screen.getByLabelText('Password'), 'secret{Enter}')
+      await waitFor(() => expect(window.location.pathname).not.toBe('/login'))
+      // A taker without a profile goes to the welcome step first, from the publication with it kept.
+      await waitFor(() => expect(window.location.pathname).toBe('/welcome'))
+      expect(shareNext()).toBe(expected === '/' ? null : expected)
+      unmount()
+      session.clear()
+      forgetShareNext()
+      vi.restoreAllMocks()
+    }
   })
 })
 
@@ -134,7 +163,7 @@ describe('a new taker from a share link', () => {
   beforeEach(() => session.store('access', 'refresh'))
 
   it('gives only the country and goes on to the publication', async () => {
-    const { posted } = server({ me: { displayName: null, email: 'mei.tanaka@example.com' } })
+    const { posted } = server({ me: { displayName: 'mei.tanaka@example.com', email: 'mei.tanaka@example.com' } })
     window.history.replaceState(null, '', '/p/pub1')
     render(<App />)
     await waitFor(() => expect(window.location.pathname).toBe('/welcome'))

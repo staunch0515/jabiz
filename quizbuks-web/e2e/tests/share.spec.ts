@@ -54,7 +54,7 @@ test('a visitor starts from a share link with an e-mail address only', async ({ 
   const shared = await sharedPublication(request)
   // The page may wait for the publication to go on.
   await expect.poll(async () => (await request.get('/api/public/queries/qb.public.publication', {
-    params: { 'p.publicationId': shared.publicationId, 'p.at': new Date().toISOString() } })).json()
+    params: { 'p.publicationId': shared.publicationId } })).json()
     .then((page) => page.items?.length ?? 0), { timeout: 60_000 }).toBe(1)
 
   await page.goto(`/p/${shared.publicationId}`)
@@ -83,4 +83,8 @@ test('a visitor starts from a share link with an e-mail address only', async ({ 
 
   await expect(page).toHaveURL(new RegExp(`/p/${shared.publicationId}$`))
   await expect(page.getByTestId('detail-start')).toBeVisible()
+
+  // The name sponsors may see is the address's part before the @, never the address.
+  await page.goto('/account')
+  await expect(page.getByTestId('profile-name')).toHaveValue(email.split('@')[0])
 })

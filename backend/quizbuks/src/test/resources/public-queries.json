@@ -293,21 +293,13 @@
     }
   }, {
     "cacheSeconds" : 60,
-    "description" : "A live publication as its share link shows it to anybody before signing in (Q15): the quiz's title, the sponsor's company, the reward, the number of questions and the time limit; none when it is not live at the time",
+    "description" : "A live publication as its share link shows it to anybody before signing in (Q15): the quiz's title, the sponsor's company, the reward, the number of questions and the time limit; none when it is not live",
     "id" : "qb.public.publication",
     "list" : {
       "filters" : [ ],
       "sorts" : [ ]
     },
     "params" : {
-      "at" : {
-        "kind" : {
-          "role" : "EVENT_TIME",
-          "type" : "temporal"
-        },
-        "list" : false,
-        "required" : true
-      },
       "publicationId" : {
         "kind" : {
           "targetEntity" : "QbPublication",
