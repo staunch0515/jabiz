@@ -43,7 +43,9 @@ public class SignUpRateLimits {
         /** Starting a sign-in through an identity provider (section 12), anonymous: counted per address. */
         OIDC_START,
         /** A signed-in user starting to link a provider account (section 12): counted per user. */
-        IDENTITY_LINK
+        IDENTITY_LINK,
+        /** Asking for a sign-in link (section 15.11; decision D54): counted per client address and per e-mail address. */
+        EMAIL_LINK
     }
 
     /** Default of {@code jabiz.security.account.rate-limit.per-user}. */

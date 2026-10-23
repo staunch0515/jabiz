@@ -173,6 +173,7 @@ public class LoginContext extends ProcessContext {
             case SecurityEntities.FACTOR_TOTP -> SignInAttempt.Factor.TOTP;
             case SecurityEntities.FACTOR_RECOVERY_CODE -> SignInAttempt.Factor.RECOVERY_CODE;
             case SecurityEntities.FACTOR_OIDC -> SignInAttempt.Factor.OIDC;
+            case SecurityEntities.FACTOR_EMAIL_LINK -> SignInAttempt.Factor.EMAIL_LINK;
             default -> SignInAttempt.Factor.PASSWORD;
         };
     }

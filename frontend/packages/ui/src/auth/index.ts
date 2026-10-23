@@ -1,7 +1,8 @@
 /**
  * The sign-in and account building blocks (decision D43; docs/design/12-frontend.md section 12): whole pages and parts
- * of pages for signing in, signing up, the pages of mailed links, resetting and changing a password, two-step
- * verification and step-up, identity providers and linked provider accounts, the session list, the mail preferences, the unsubscribe page and the banners of a signed-in user. They act for the frontend's
+ * of pages for signing in (with a password or a mailed link), signing up, the pages of mailed links, resetting and
+ * changing a password, two-step verification and step-up, identity providers and linked provider accounts, the session
+ * list, the mail preferences, the unsubscribe page and the banners of a signed-in user. They act for the frontend's
  * sign-in entry (`@jabiz/client`), depend on no router (navigation goes through `onNavigate` / `hrefOf` and callbacks)
  * and speak the namespace `auth` in every platform language.
  */
@@ -21,6 +22,8 @@ export {
   NewPasswordFields,
 } from './MailLinkPage'
 export type { MailLinkPageProps, MailLinkPageBase, MailLinkInfo, NewPassword } from './MailLinkPage'
+export { EmailLinkForm, EmailLinkPanel } from './EmailLink'
+export type { EmailLinkFormProps, EmailLinkPanelProps } from './EmailLink'
 export { PasswordResetRequest } from './PasswordResetRequest'
 export type { PasswordResetRequestProps } from './PasswordResetRequest'
 export { MfaCodeStep } from './MfaCodeStep'

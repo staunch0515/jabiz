@@ -14,6 +14,7 @@ import {
   listSessions,
   register,
   requestPasswordReset,
+  requestEmailLink,
   resendVerification,
   revokeOtherSessions,
   revokeSession,
@@ -54,10 +55,14 @@ describe('account functions (decision D43)', () => {
     await register({ email: 'ann@example.com', password: 'correct horse', displayName: 'Ann', locale: 'en' })
     await requestPasswordReset(' ann@example.com ')
     await resendVerification('ann@example.com', 'shop')
+    await requestEmailLink(' ann@example.com ', { to: '/p/1', locale: 'ja' })
+    await requestEmailLink('ann@example.com', {}, 'shop')
     expect(posts.map((p) => [p.path, p.body])).toEqual([
       ['/api/auth/register', { email: 'ann@example.com', password: 'correct horse', displayName: 'Ann', locale: 'en', entry: 'portal' }],
       ['/api/auth/password-reset/request', { email: 'ann@example.com', entry: 'portal' }],
       ['/api/auth/verify-email/resend', { email: 'ann@example.com', entry: 'shop' }],
+      ['/api/auth/email-link', { email: 'ann@example.com', entry: 'portal', to: '/p/1', locale: 'ja' }],
+      ['/api/auth/email-link', { email: 'ann@example.com', entry: 'shop' }],
     ])
   })
 

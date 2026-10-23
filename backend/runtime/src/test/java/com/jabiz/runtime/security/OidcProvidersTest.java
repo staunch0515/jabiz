@@ -130,8 +130,8 @@ class OidcProvidersTest {
     @Test
     void aProviderThatCouldOpenAccountsNowhereIsWarnedAbout() {
         SignInEntries entries = new SignInEntries(Map.of(
-            "portal", new SignInEntries.Config(List.of("CUSTOMER"), true, List.of("CUSTOMER"), null, null, null),
-            "admin", new SignInEntries.Config(List.of("ADMIN"), null, null, null, null, null)), true,
+            "portal", new SignInEntries.Config(List.of("CUSTOMER"), true, List.of("CUSTOMER"), null, null, null, null),
+            "admin", new SignInEntries.Config(List.of("ADMIN"), null, null, null, null, null, null)), true,
             () -> List.of("CUSTOMER", "ADMIN"));
         OidcProvider adminOnly = new OidcProvider("staff", "https://idp.example.com", "client", "s",
             "https://erp.example.com/login/oidc", null, null, null, null, null, true);

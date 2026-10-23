@@ -292,6 +292,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/auth/email-link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["requestEmailLink"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/email-link/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["confirmEmailLink"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/entries/{name}": {
         parameters: {
             query?: never;
@@ -1861,6 +1893,15 @@ export interface components {
             priority?: number;
             ruleCode?: string;
         };
+        EmailLinkConfirm: {
+            token?: string;
+        };
+        EmailLinkRequest: {
+            email?: string;
+            entry?: string;
+            locale?: string;
+            to?: string;
+        };
         EmailRequest: {
             email?: string;
             entry?: string;
@@ -1881,6 +1922,7 @@ export interface components {
         };
         EntryInfo: {
             appPath?: string;
+            emailLink?: boolean;
             name?: string;
             requireVerifiedEmail?: boolean;
             selfRegistration?: boolean;
@@ -3151,6 +3193,52 @@ export interface operations {
         requestBody?: {
             content: {
                 "application/json": components["schemas"]["ChallengeRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TokenResponse"];
+                };
+            };
+        };
+    };
+    requestEmailLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["EmailLinkRequest"];
+            };
+        };
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    confirmEmailLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["EmailLinkConfirm"];
             };
         };
         responses: {
