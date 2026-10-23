@@ -55,6 +55,7 @@
 | D50 | 外部作业的文件：按类型的输入上限（至多 1 MiB）、文件输入（按请求人的读取权限，只在尝试中可读）、文件输出（经上传流水线以请求人登记，`sys_file` 的第二个入口）（补充 D18、D31、D38、D47、D48，不取代） | 已确认（2026-10-18，QuizBuks Q8 的 A-13）；已实施（阶段 16t） | 11 §4a、14 §11、21 §3.1 |
 | D51 | 受保护变更的审批权限 `security.protected-change.decide`（代替 `approval.decide`，本身总是受保护）、按可配置的管理员权限计管理员、流程的备选权限、时间参数限于 PostgreSQL 的范围、`Combobox` 加载状态（修改 D48 第 1 条的管理员、审批人与缺省清单及实现说明⑥；补充 D7、D34） | 已确认（2026-10-18）；已实施（阶段 16u） | 10 §16、18 §3.4、05 §4、`@jabiz/ui` 的 `Combobox` |
 | D52 | 外部作业的剩余风险写明（流式结果暂不做）、取消的结局 `onCancelled` 与平台步骤 `CancelExternalJob`（可声明几种类型）、按入口的退订页 `jabiz.mail.unsubscribe-paths` 与积木 `MailUnsubscribe`、按业务参数暂停作业类型 `enabledBy`、没有用量的尝试数与迟到实例的用量（补充 D35、D38、D49，不取代） | 已确认（2026-10-19，16v 计划 V-1 至 V-10；第 2 条的补充与第 5 条为 16w 计划 W-1 至 W-11）；第 1–3 条已实施（阶段 16v-1），第 4 条已实施（阶段 16v-2），第 2 条的补充与第 5 条已实施（阶段 16w-1） | 11 §4a、06 §2.3、18 §5.6、12 §9 / §11 / §12、21 §3.1 |
+| D53 | 验证邮箱的链接：同一收件人较早的、未过期的验证链接仍有效，先用的一个生效、其余随之作废（修改 D35 第 3 条"只认最新令牌"对验证用途的适用；找回密码、加入入口仍只认最新） | 已确认（2026-10-23，需求方）；已实施（阶段 16za） | 18 §5.6、10 §15 |
 
 ---
 
@@ -1923,3 +1924,19 @@ P-8 原写"`false` 即逐条执行（16p-1 的局部合并同样受它控制）"
   测试 `ExternalJobUnrecordedIT`、`ExternalJobCancelIT`、`ExternalJobIT`、`CancelExternalJobTest`、`ExternalJobAttemptUsageTest`、`ExternalJobOutcomesTest`、`ExternalJobCancellationTest`。
 - 12 §9 / §11（D22、D34 的实现说明）：管理后台扩展的测试出口 `@jabiz/admin/testing`（`expectAccessible`、`WCAG_TAGS`，即 `@jabiz/ui/testing` 的）；
   扩展的 lint 拒绝 `@jabiz/ui(/*)`、`@jabiz/client(/*)` 与 `@jabiz/ui/testing`（W-7，只拒绝 D22 本来就不允许的），`@jabiz/admin/testing` 只在测试中。
+
+## D53 验证邮箱的较早链接仍有效
+
+**背景**：QuizBuks 的注册者收到两封验证邮件，点第一封的链接得到"链接无效"（需求方 2026-10-23）。第二封来自重新发送（注册完成页上立即给出的"重新发送"），
+或 Outbox 在邮件服务器收下邮件而应答丢失后的重发（18 §5.6，至少一次）。D35 第 3 条只认同一收件人同一用途的最新令牌，于是先到的那封的链接作废。
+
+**决定**（需求方 2026-10-23 同意）：
+1. 验证邮箱（用途 `jabiz.verify`）的令牌：未过期、未用过、且同一收件人同一用途的令牌都还没有用过的，任何一封的都有效；先用的生效，其余作废。
+   平台步骤 `MailTokens.consumeAnyUnused`（`MailTokens.consume` 不变：只认最新）；`SPONSOR_EMAIL_VERIFY` 与 `SPONSOR_EMAIL_VERIFY_CHECK` 用前者。
+2. 找回密码与加入入口仍只认最新：它们改变凭据或权限，后发的邮件使先前的失效更安全。
+3. 链接的能力不变：仍要求用户启用、地址仍是链接寄往的地址（`checkLink`），改了地址即作废；有效期不变（`jabiz.security.sign-up.verify-ttl`）。
+   剩余风险：地址改走又改回原址时，改走之前寄出的、仍未过期的链接重新有效（同一邮箱，能力相同）。
+4. 界面：注册完成页的重新发送放在"没有收到邮件？"之后；链接无效页加一句"已验证就直接登录"。
+
+**实现说明（16za）**：`MailTokens.Metadata` 增加组件 `earlierToo`（3 → 4），查找语句多一列 `sibling_used`；没有迁移，OpenAPI 不变，语句数不变（同一条查找）。
+SMTP 已有超时（`jabiz.mail.timeout`，缺省 10 秒）：慢的服务器可能在超时后才应答，从而重发——第 1 条使它不再妨碍验证。测试：app `SignUpIT`，前端 `blocks.test.tsx`。
