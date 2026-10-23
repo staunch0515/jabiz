@@ -26,6 +26,12 @@ class ProcessConfig {
     }
 
     @Bean
+    ProcessDefinition<com.jabiz.runtime.process.sponsor.SponsorEmailLinkSignInInput, SponsorSignInOutput,
+        com.jabiz.runtime.process.sponsor.EmailLinkContext> sponsorEmailLinkSignInProcess() {
+        return com.jabiz.runtime.process.sponsor.SponsorEmailLinkSignInProcess.DEFINITION;
+    }
+
+    @Bean
     @ConditionalOnMissingBean(ProcessSequence.class)
     ProcessSequence processSequence(DatabaseClient databaseClient) {
         return new DatabaseProcessSequence(databaseClient);

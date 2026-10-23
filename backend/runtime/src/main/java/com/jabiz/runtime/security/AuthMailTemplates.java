@@ -40,7 +40,7 @@ public class AuthMailTemplates {
 
     /** The platform's templates, by name; applications declare none under {@code jabiz.} ({@code MailChecks}). */
     public static final java.util.Set<String> NAMES = java.util.Set.of(VERIFY_EMAIL, ACCOUNT_EXISTS, PASSWORD_RESET,
-        PASSWORD_CHANGED, IDENTITY_LINKED, EMAIL_CHANGED);
+        PASSWORD_CHANGED, IDENTITY_LINKED, EMAIL_CHANGED, EmailLinkProcesses.TEMPLATE);
 
     /**
      * Purposes of the tokens, which are also their placeholders: in the platform's namespace, so that no application

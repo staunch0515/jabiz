@@ -51,6 +51,8 @@ public class SecurityEntities {
     public static final String FACTOR_TOTP = "TOTP";
     public static final String FACTOR_RECOVERY_CODE = "RECOVERY_CODE";
     public static final String FACTOR_OIDC = "OIDC";
+    /** A mailed one-time sign-in link (decision D54). */
+    public static final String FACTOR_EMAIL_LINK = "EMAIL_LINK";
 
     public static final String LOGIN_OUTCOME_DICTIONARY = "urn:jabiz:dict:platform:login-outcome";
 

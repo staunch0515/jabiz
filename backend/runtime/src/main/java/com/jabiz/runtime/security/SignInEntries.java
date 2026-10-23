@@ -122,12 +122,19 @@ public class SignInEntries implements PlatformCheck {
      * @param session              its sessions: lifetime, idle end and persistence (phase 16m)
      */
     public record Entry(String name, Set<String> acceptedRoles, boolean selfRegistration, Set<String> registrationRoles,
-        boolean requireVerifiedEmail, String appPath, Session session) {
+        boolean requireVerifiedEmail, String appPath, Session session, boolean emailLink) {
 
         public Entry {
             acceptedRoles = Set.copyOf(acceptedRoles);
             registrationRoles = Set.copyOf(registrationRoles);
             Objects.requireNonNull(session, "session must not be null");
+        }
+
+        /** An entry without sign-in by e-mail link (decision D54). */
+        public Entry(String name, Set<String> acceptedRoles, boolean selfRegistration, Set<String> registrationRoles,
+            boolean requireVerifiedEmail, String appPath, Session session) {
+            this(name, acceptedRoles, selfRegistration, registrationRoles, requireVerifiedEmail, appPath, session,
+                false);
         }
 
         /** An entry with the platform's default sessions. */
@@ -148,7 +155,7 @@ public class SignInEntries implements PlatformCheck {
 
     /** An entry as configured; every item optional. */
     public record Config(List<String> acceptedRoles, Boolean selfRegistration, List<String> registrationRoles,
-        Boolean requireVerifiedEmail, String appPath, SessionConfig session) {}
+        Boolean requireVerifiedEmail, String appPath, SessionConfig session, Boolean emailLink) {}
 
     /**
      * The sessions of an entry as configured ({@code jabiz.security.entries.<name>.session.*}); each item optional,
@@ -365,6 +372,12 @@ public class SignInEntries implements PlatformCheck {
         if (entry.selfRegistration() && entry.registrationRoles().isEmpty()) {
             errors.add("self-registration is on, but registration-roles is empty");
         }
+        // Signing in by a mailed link proves only the mailbox (decision D54): never for the administration, nor for an
+        // entry taking every role.
+        if (entry.emailLink() && (RequestContext.DEFAULT_ENTRY.equals(name)
+            || entry.acceptedRoles().contains(ALL_ROLES))) {
+            errors.add("email-link cannot be on for the administration entry or an entry accepting every role");
+        }
         if (entry.appPath() == null || !APP_PATH.matcher(entry.appPath()).matches()
             || List.of(entry.appPath().split("/")).stream().anyMatch(s -> s.equals(".") || s.equals(".."))) {
             errors.add("app-path must be an absolute path such as /portal/ (letters, digits, . _ ~ -), not '"
@@ -412,14 +425,14 @@ public class SignInEntries implements PlatformCheck {
     }
 
     private Entry entry(String name, Config config) {
-        Config c = config == null ? new Config(null, null, null, null, null, null) : config;
+        Config c = config == null ? new Config(null, null, null, null, null, null, null) : config;
         SessionConfig s = c.session() == null ? new SessionConfig(null, null, null) : c.session();
         Session session = new Session(s.refreshTokenTtl() == null ? defaults.refreshTokenTtl() : s.refreshTokenTtl(),
             s.idleTimeout() == null ? defaults.idleTimeout() : s.idleTimeout(),
             Persistence.of(s.persistence()).orElse(Persistence.TAB));
         return new Entry(name, trimmed(c.acceptedRoles()), Boolean.TRUE.equals(c.selfRegistration()),
             trimmed(c.registrationRoles()), Boolean.TRUE.equals(c.requireVerifiedEmail()),
-            c.appPath() == null ? "/" : c.appPath().trim(), session);
+            c.appPath() == null ? "/" : c.appPath().trim(), session, Boolean.TRUE.equals(c.emailLink()));
     }
 
     private static Set<String> trimmed(List<String> values) {
