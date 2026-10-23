@@ -134,6 +134,18 @@ afterEach(() => {
 })
 
 describe('the dashboard', () => {
+  it('counts the hour that began this minute in the top publications', async () => {
+    // A bucket starting at the minute "now" was rounded down to would be left out: the time asked for is not before now.
+    const before = Date.now()
+    const { top } = server()
+    window.history.replaceState(null, '', '/dashboard')
+    render(<App />)
+    await screen.findByTestId('top-row')
+    const at = Date.parse((top()[0] as { params: { at: string } }).params.at)
+    expect(at).toBeGreaterThanOrEqual(before)
+    expect(at - before).toBeLessThan(120_000)
+  })
+
   it('shows the key figures, the week by the server\'s days and the top publications', async () => {
     const { trend, totals, dashboard, top } = server()
     window.history.replaceState(null, '', '/dashboard')

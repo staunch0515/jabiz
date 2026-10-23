@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { minuteNow } from '../qb/legal'
+import { minuteNow, serverNow } from '../qb/legal'
 import {
   ANALYTICS_QUERY,
   readDashboard,
@@ -27,9 +27,17 @@ export function useDashboard(enabled = true) {
   })
 }
 
+/**
+ * The next whole minute of the server's clock: the top publications count the hourly buckets that start before it,
+ * so a bucket that began this very minute is counted (rounded down, the first minute of each hour left it out).
+ */
+export function minuteAhead(now: number = serverNow()): string {
+  return new Date(Math.ceil(now / 60_000) * 60_000).toISOString()
+}
+
 /** The five publications with the most completions in the last seven days. */
 export function useTop(enabled = true) {
-  return useQuery({ queryKey: [...ANALYTICS_QUERY, 'top'], queryFn: () => readTop(minuteNow()), enabled, ...live })
+  return useQuery({ queryKey: [...ANALYTICS_QUERY, 'top'], queryFn: () => readTop(minuteAhead()), enabled, ...live })
 }
 
 /**
