@@ -390,6 +390,11 @@ for (const appearance of ['light', 'dark'] as const) {
     await page.goto('/admin/qb/finance/journal/mapping')
     await expect(page.getByTestId('mapping-row').first()).toBeVisible()
     await expectAccessible(page, at('admin finance journal mapping'))
+    // Q18a: the bank top-up's settings, with the form (the e2e administrator holds every permission).
+    await page.goto('/admin/qb/finance/bank-settings')
+    await expect(page.getByTestId('bank-settings-current')).toBeVisible()
+    await expect(page.getByTestId('bank-settings-form')).toBeVisible()
+    await expectAccessible(page, at('admin bank settings'))
   })
 }
 

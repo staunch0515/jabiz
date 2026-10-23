@@ -133,6 +133,9 @@ function TopUpDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (ope
   const { t } = useTranslation(SPONSOR)
   const id = useId()
   const [method, setMethod] = useState<TopUpMethod>('STRIPE')
+  // Bank transfers are chosen only once the platform's account is set up (Q18): until then the choice says so.
+  const account = useQuery({ queryKey: [...WALLET_QUERY, 'bank-account'], queryFn: readBankAccount, enabled: open })
+  const bankReady = account.data !== undefined && bankAccountSet(account.data)
   const [text, setText] = useState('')
   const [key, setKey] = useState(() => crypto.randomUUID())
   const [invalid, setInvalid] = useState(false)
@@ -188,11 +191,12 @@ function TopUpDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (ope
               {(['STRIPE', 'BANK'] as const).map((value) => (
                 <div key={value} className="flex items-start gap-2">
                   <RadioGroupItem id={`${id}-${value}`} value={value} aria-describedby={`${id}-${value}-hint`}
-                    data-testid={`topup-method-${value}`} />
+                    disabled={value === 'BANK' && !bankReady} data-testid={`topup-method-${value}`} />
                   <span className="flex flex-col gap-0.5">
                     <Label htmlFor={`${id}-${value}`}>{t(`wallet.bank.methods.${value}`)}</Label>
                     <span id={`${id}-${value}-hint`} className="text-muted-foreground text-xs">
-                      {t(`wallet.bank.methodHints.${value}`)}
+                      {value === 'BANK' && account.data && !bankReady ? t('wallet.bank.unavailable')
+                        : t(`wallet.bank.methodHints.${value}`)}
                     </span>
                   </span>
                 </div>
