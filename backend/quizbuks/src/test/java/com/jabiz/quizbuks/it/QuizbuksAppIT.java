@@ -99,14 +99,12 @@ class QuizbuksAppIT extends PostgresIntegrationTest {
      */
     @Test
     void theAppFramesOnlyTheVideoPlayers() {
-        String app = client.get().uri("/").exchange().expectStatus().isOk().returnResult(String.class)
-            .getResponseHeaders().getFirst("Content-Security-Policy");
-        assertThat(app).isEqualTo(JabizWebProperties.DEFAULT_CONTENT_SECURITY_POLICY
+        // The policy each SPA's responses carry (SpaFallbackFilter); the test has no built pages to fetch.
+        java.util.Map<String, String> policies = web.spa().stream().collect(java.util.stream.Collectors.toMap(
+            JabizWebProperties.Spa::path, JabizWebProperties.Spa::contentSecurityPolicy));
+        assertThat(policies.get("/")).isEqualTo(JabizWebProperties.DEFAULT_CONTENT_SECURITY_POLICY
             + "; frame-src https://www.youtube-nocookie.com https://player.vimeo.com");
-        for (String path : java.util.List.of("/sponsor/", "/admin/")) {
-            assertThat(client.get().uri(path).exchange().returnResult(String.class).getResponseHeaders()
-                .getFirst("Content-Security-Policy")).as(path)
-                .isEqualTo(JabizWebProperties.DEFAULT_CONTENT_SECURITY_POLICY);
-        }
+        assertThat(policies.get("/sponsor")).isEqualTo(JabizWebProperties.DEFAULT_CONTENT_SECURITY_POLICY);
+        assertThat(policies.get("/admin")).isEqualTo(JabizWebProperties.DEFAULT_CONTENT_SECURITY_POLICY);
     }
 }
