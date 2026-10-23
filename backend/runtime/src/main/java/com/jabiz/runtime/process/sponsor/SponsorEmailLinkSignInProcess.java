@@ -15,7 +15,7 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Sign-in with a mailed one-time link (docs/design/10-security.md section 15.10; decision D54), after the platform
+ * Sign-in with a mailed one-time link (docs/design/10-security.md section 15.11; decision D54), after the platform
  * used the link: like {@link SponsorOidcSignInProcess} it records the attempt ({@code factor = EMAIL_LINK}) and ends
  * normally on refusals: a locked, disabled or role-less user is refused, then the entry's checks and guards, then the
  * second factor as for passwords (the mailbox never counts as one). No password is guessed here, so refusals do not

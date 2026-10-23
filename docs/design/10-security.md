@@ -744,6 +744,34 @@ jabiz:
 - 与 `SignUpRateLimits`（§15.7）、`SignInRateLimits`（§4.1）的关系：后两者限的是平台自己的匿名账户接口、本人账户操作与登录类接口（种类写死在代码中），不变；三者共用 `TokenBucketLimiter` 与 `ClientAddresses`。
   限流不是准入：限流挡住单个用户或地址刷请求，准入挡住所有人一起挤一把锁（503 `PROCESS_BUSY`，06 §4.2）。
 
+### 15.11 以邮件中的链接登录（阶段 16zb，决策 D54）
+
+开启了 `email-link` 的入口（不能是 `admin`，也不能接受 `*`）可以只凭邮箱登录：页面寄出一次性链接，打开链接即登录，不需要密码。
+
+```yaml
+jabiz:
+  security:
+    entries:
+      app:
+        accepted-roles: QB_TAKER
+        self-registration: true      # 无人使用的地址可经链接开户
+        email-link: true
+    email-link:
+      ttl: PT15M                     # 链接的有效期
+```
+
+| 接口 | 作用 |
+|---|---|
+| `POST /api/auth/email-link` | `{entry, email, to?, locale?}`，任何地址都答 202；可信地址的用户或（开放注册时）无人使用的地址收到链接 |
+| `POST /api/auth/email-link/confirm` | `{token}`，答复同登录（`SIGNED_IN` 或第二步）；无效即 422 `TOKEN_INVALID` |
+
+- 链接只寄往可信的地址：管理员设而本人没有验证过的地址收不到（同 §15.7 的验证链接）。
+- 打开链接：登录该用户；接管可预占的账号（清除密码等，同 §15.7）；或为无人使用的地址开已验证、无密码的账号（入口的注册角色）。
+  之后照常是登录流程 `SPONSOR_EMAIL_LINK_SIGN_IN`：登录记录（因素 `EMAIL_LINK`）、`SignInGuard`、入口角色与二次验证都照旧。
+- `to` 只能是本前端的路径（服务端与 `EmailLinkPanel` 都检查）；登录后回到它，否则回到入口的 `app-path`。
+- 限流：请求按客户端地址与邮箱（`EMAIL_LINK`），确认同其他链接（`LINK`）。
+
+
 ## 16. 受保护的授权：四眼【决策 D48 第 1 条，阶段 16r】
 
 一个管理员不能独自让某人（包括自己或另一个账号）得到能改权限、能审批、能记账的权限，也不能独自接管持有这类权限的账号。

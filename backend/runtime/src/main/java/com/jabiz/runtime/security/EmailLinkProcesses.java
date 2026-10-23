@@ -26,7 +26,7 @@ import java.util.Map;
 import java.util.regex.Pattern;
 
 /**
- * Signing in with a mailed one-time link (docs/design/10-security.md section 15.10; decision D54), at an entry that
+ * Signing in with a mailed one-time link (docs/design/10-security.md section 15.11; decision D54), at an entry that
  * turns it on ({@code jabiz.security.entries.<name>.email-link}; never the administration, nor an entry taking every
  * role). Both processes run only through {@code EmailLinkController} ({@code entryOnly()}, {@code SIGN_UP} granted to
  * no role):

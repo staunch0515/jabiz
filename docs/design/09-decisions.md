@@ -1940,3 +1940,27 @@ P-8 原写"`false` 即逐条执行（16p-1 的局部合并同样受它控制）"
 
 **实现说明（16za）**：`MailTokens.Metadata` 增加组件 `earlierToo`（3 → 4），查找语句多一列 `sibling_used`；没有迁移，OpenAPI 不变，语句数不变（同一条查找）。
 SMTP 已有超时（`jabiz.mail.timeout`，缺省 10 秒）：慢的服务器可能在超时后才应答，从而重发——第 1 条使它不再妨碍验证。测试：app `SignUpIT`，前端 `blocks.test.tsx`。
+
+## D54 以邮件中的一次性链接登录
+
+**背景**：QuizBuks 要给某个发布一个可分享的链接，打开后只输入邮箱就能开始答题（需求方 2026-10-23）。只凭输入的邮箱不能让任何人登录：
+知道别人邮箱的人就能冒充。能证明的只有邮箱本身——寄到该邮箱的一次性链接。
+
+**决定**（需求方 2026-10-23 同意）：
+1. 入口可开启 `jabiz.security.entries.<名>.email-link`（缺省关）。`admin` 入口与接受 `*` 的入口不能开启（启动检查 `SECURITY`）：链接只证明邮箱，不足以进入后台。
+2. `POST /api/auth/email-link`（`entry`、`email`、可选 `to` 与 `locale`）对任何地址都答 202，不透露谁有账号：
+   账号的可信地址（本人验证过或本人注册的，`SignUpProcesses.trusted`）且用户启用的，寄出登录该用户的链接；无人使用的地址且入口开放注册的，寄出开户链接；其他地址什么也不寄。
+   `to` 是链接登录后回到的本前端路径（以 `/` 开头、不以 `//` 或 `/\` 开头、不含 `\` 与 `..` 段、只用 URL 的路径与查询字符，至多 200 字符），不合格即 400。按客户端地址与邮箱限流（`SignUpRateLimits.Kind.EMAIL_LINK`）。
+3. 链接 `{entryUrl}auth/email-link?entry=…&token=…&to=…`，令牌用途 `jabiz.signIn`，有效期 `jabiz.security.email-link.ttl`（缺省 15 分钟），只用一次（较早未过期的也有效，先用的生效，同 D53）。
+   页面在点击之后才使用令牌（邮件扫描器打开链接不改变任何东西），并只跟随本站路径。
+4. `POST /api/auth/email-link/confirm`（`SPONSOR_EMAIL_LINK_OPEN`，再 `SPONSOR_EMAIL_LINK_SIGN_IN`）：
+   - 登录该邮箱的用户（仍启用、地址未改、仍可信）；
+   - 可预占的账号（别人用这个地址注册而未验证）由邮箱的所有者接管：清除密码、二次验证与外部关联，结束其会话（同 D36 的接管）；
+   - 无人使用的地址开新账号：已验证、没有密码、入口的注册角色，用户名取自邮箱（重名时加随机后缀，同自助注册）。
+   其余照常是写登录记录的登录流程（因素 `EMAIL_LINK`）：`SignInGuard`、入口角色、二次验证（`MFA_REQUIRED` / `MFA_ENROLLMENT_REQUIRED`）都照旧。失败一律 422 `TOKEN_INVALID`。
+5. 前端：`@jabiz/client` 的 `requestEmailLink` 与 `AuthState.signInWithEmailLink`，`@jabiz/ui` 的 `EmailLinkForm`（只有邮箱，嵌在应用页面中）与 `MailLinkPage` 的 `email-link` 页（`EmailLinkPanel`）。
+
+**剩余风险**：能读该邮箱的人即能登录该邮箱的账号（同找回密码）；开启二次验证的用户仍需第二因素。没有密码的账号以后可经找回密码设置密码。
+
+**实现说明（16zb）**：没有迁移（`sec_login_record_version.factor` 已是文本）；`SignInAttempt.Factor` 增加 `EMAIL_LINK`；`SignInEntries.Entry` 增加组件 `emailLink`。
+测试：app `EmailLinkIT`，runtime `SignInEntriesTest`，前端 `EmailLink.test.tsx`、`AuthContext.test.tsx`、`account.test.tsx`。

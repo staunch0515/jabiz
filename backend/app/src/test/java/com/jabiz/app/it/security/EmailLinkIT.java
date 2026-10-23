@@ -16,7 +16,7 @@ import java.util.regex.Pattern;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Signing in with a mailed one-time link (docs/design/10-security.md section 15.10; decision D54): the request answers
+ * Signing in with a mailed one-time link (docs/design/10-security.md section 15.11; decision D54): the request answers
  * alike for every address; the link signs in an account's user, takes over an account nobody verified, or opens an
  * account for an address nobody uses, and leads back to the path it carries; the sign-in is recorded, a second factor
  * is still asked, and the link is good once.

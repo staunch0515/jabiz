@@ -36,7 +36,7 @@ export interface EmailLinkFormProps {
 }
 
 /**
- * Asks for a link to sign in with by mail (docs/design/10-security.md section 15.10; decision D54): the address only,
+ * Asks for a link to sign in with by mail (docs/design/10-security.md section 15.11; decision D54): the address only,
  * no password. A part of a page, not a page: the application puts it where signing in starts (a page to share, its own
  * sign-in page). The answer is the same for every address, and so is what it says.
  */

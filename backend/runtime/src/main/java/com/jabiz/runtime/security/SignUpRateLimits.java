@@ -44,7 +44,7 @@ public class SignUpRateLimits {
         OIDC_START,
         /** A signed-in user starting to link a provider account (section 12): counted per user. */
         IDENTITY_LINK,
-        /** Asking for a sign-in link (section 15.10; decision D54): counted per client address and per e-mail address. */
+        /** Asking for a sign-in link (section 15.11; decision D54): counted per client address and per e-mail address. */
         EMAIL_LINK
     }
 

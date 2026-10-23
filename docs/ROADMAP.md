@@ -4337,3 +4337,12 @@ L4 共享仪表的注释；L5 13 写明每个键每次轮询多一个查询观�
 先用的生效（`MailTokens.consumeAnyUnused`）；注册完成页的重新发送放在"没有收到邮件？"之后，链接无效页加一句提示。设计 18 §5.6。测试：`SignUpIT`、`blocks.test.tsx`。
 
 **16za 状态**：✅ 已实施（PR 待建）。
+
+### 16zb 以邮件中的链接登录（2 天）
+
+来源：需求方 2026-10-23（QuizBuks：分享一个发布的链接，只输入邮箱即可开始答题）。分支 `1.2/phase-16zb-email-link`。决策 D54：入口开启 `email-link` 后，
+`POST /api/auth/email-link` 寄出一次性登录链接（任何地址同样答复），打开链接登录、接管可预占的账号或为无人使用的地址开户，第二因素照旧；
+`@jabiz/client` 的 `requestEmailLink` / `signInWithEmailLink`，`@jabiz/ui` 的 `EmailLinkForm` 与 `MailLinkPage` 的 `email-link` 页。设计 10 §15.11。
+测试：`EmailLinkIT`、`SignInEntriesTest`、`EmailLink.test.tsx`、`AuthContext.test.tsx`、`account.test.tsx`。
+
+**16zb 状态**：✅ 已实施（PR 待建）。

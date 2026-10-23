@@ -24,7 +24,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Signing in with a mailed one-time link over HTTP (docs/design/10-security.md section 15.10; decision D54).
+ * Signing in with a mailed one-time link over HTTP (docs/design/10-security.md section 15.11; decision D54).
  * Anonymous and rate limited. Asking for a link answers 202 whatever the address, after checking every value of the
  * request first (a bad value fails alike for every address); using one answers as {@code POST /api/auth/login} does
  * (tokens, a second-factor challenge, or the refusal), or 422 {@code TOKEN_INVALID} for any link that is not good.
