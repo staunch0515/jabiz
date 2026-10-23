@@ -21,6 +21,15 @@ class ParamValuesTest {
     }
 
     @Test
+    void aParameterWithoutAValueIsFoundAsAbsent() {
+        assertThat(values.find("rate", BigDecimal.class)).hasValueSatisfying(v -> assertThat(v).isEqualByComparingTo("0.1"));
+        assertThat(values.find("other", BigDecimal.class)).isEmpty();
+        assertThat(values.has("rate")).isTrue();
+        assertThat(values.has("other")).isFalse();
+        assertThatThrownBy(() -> values.find("rate", String.class)).hasMessageContaining("not a String");
+    }
+
+    @Test
     void unknownKeysAndWrongTypesFail() {
         assertThatThrownBy(() -> values.get("other", BigDecimal.class)).hasMessageContaining("was not loaded");
         assertThatThrownBy(() -> values.get("rate", String.class)).hasMessageContaining("not a String");
