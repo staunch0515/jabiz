@@ -15,8 +15,21 @@ public final class TopUpStatus {
     public static final String PAID = "PAID";
     public static final String EXPIRED = "EXPIRED";
     public static final String FAILED = "FAILED";
+    /** A bank top-up (Q13a): asked for, the money not seen yet. */
+    public static final String AWAITING = "AWAITING";
+    /** A bank top-up the sponsor says they sent. */
+    public static final String REPORTED = "REPORTED";
+    /** A bank top-up finance recorded as received, waiting for another administrator's approval; nothing posted. */
+    public static final String REVIEW = "REVIEW";
+    /** A bank top-up the sponsor withdrew before any money was recorded. */
+    public static final String CANCELLED = "CANCELLED";
 
-    public static final List<String> ALL = List.of(OPENING, OPEN, PAID, EXPIRED, FAILED);
+    public static final List<String> ALL = List.of(OPENING, OPEN, PAID, EXPIRED, FAILED, AWAITING, REPORTED, REVIEW,
+        CANCELLED);
+    /** The bank top-ups still waiting for money (they count against a sponsor's open ones and expire). */
+    public static final List<String> BANK_WAITING = List.of(AWAITING, REPORTED);
+    /** The bank top-ups finance may record money against (money may come after the request expired or was withdrawn). */
+    public static final List<String> BANK_RECORDABLE = List.of(AWAITING, REPORTED, EXPIRED, CANCELLED);
     /** The states a payment may still arrive in. */
     public static final List<String> UNSETTLED = List.of(OPENING, OPEN);
 

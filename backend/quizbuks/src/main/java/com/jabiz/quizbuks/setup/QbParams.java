@@ -38,6 +38,22 @@ public final class QbParams {
     public static final String TOPUP_MIN = "qb.topup.min";
     /** The largest top-up, in Kudos (Q6a). */
     public static final String TOPUP_MAX = "qb.topup.max";
+    /** The smallest and largest bank top-up, in Kudos (Q13a). */
+    public static final String TOPUP_BANK_MIN = "qb.topup.bank.min";
+    public static final String TOPUP_BANK_MAX = "qb.topup.bank.max";
+    /*
+     * The platform's account sponsors transfer to (Q13a): the bank and branch (names with their codes), the kind of
+     * account, its number and holder, as the sponsor console shows them. Empty until finance sets them; bank top-ups
+     * are refused until all are set. Controlled: changed by one person, sponsors' money would go to another account.
+     */
+    public static final String BANK_RECEIVING_PREFIX = "qb.bank.receiving.";
+    public static final String BANK_RECEIVING_BANK = BANK_RECEIVING_PREFIX + "bank";
+    public static final String BANK_RECEIVING_BRANCH = BANK_RECEIVING_PREFIX + "branch";
+    public static final String BANK_RECEIVING_TYPE = BANK_RECEIVING_PREFIX + "account-type";
+    public static final String BANK_RECEIVING_NUMBER = BANK_RECEIVING_PREFIX + "account-number";
+    public static final String BANK_RECEIVING_HOLDER = BANK_RECEIVING_PREFIX + "account-holder";
+    public static final List<String> BANK_RECEIVING = List.of(BANK_RECEIVING_BANK, BANK_RECEIVING_BRANCH,
+        BANK_RECEIVING_TYPE, BANK_RECEIVING_NUMBER, BANK_RECEIVING_HOLDER);
     /** Whether sponsor onboarding is approved without a person's review. */
     public static final String REVIEW_SPONSOR_AUTO = "qb.review.sponsor.auto";
     /** Whether publications are approved without a person's review. */
@@ -132,7 +148,8 @@ public final class QbParams {
     public static final List<String> CONTROLLED = java.util.stream.Stream.of(List.of(CREATOR_FEE_RATE,
         TRANSFER_THRESHOLD, TRANSFER_REVIEW_ABOVE, TRANSFER_ENABLED, REVIEW_SPONSOR_AUTO, REVIEW_PUBLICATION_AUTO,
         TOPUP_MIN, TOPUP_MAX, TRANSFER_FEE, TRANSFER_HOLD_DAYS, TOPUP_NEW_SPONSOR_DAYS, TOPUP_NEW_SPONSOR_MAX_TOTAL),
-        JOURNAL_ACCOUNTS, ISSUER, List.of(LEGAL_MAX_ANNOUNCE_DAYS), AI_CONTROLLED).flatMap(List::stream).toList();
+        JOURNAL_ACCOUNTS, ISSUER, List.of(LEGAL_MAX_ANNOUNCE_DAYS), AI_CONTROLLED,
+        List.of(TOPUP_BANK_MIN, TOPUP_BANK_MAX), BANK_RECEIVING).flatMap(List::stream).toList();
 
     /** A parameter: its key, kind (as the platform writes kinds) and first value. */
     public record Param(String key, Map<String, Object> valueKind, Object value, String description) {
@@ -218,7 +235,20 @@ public final class QbParams {
         new Param(AI_PRICE_INPUT, USD, "4",
             "Dollars per million input tokens, for the administrators' estimate only"),
         new Param(AI_PRICE_OUTPUT, USD, "20",
-            "Dollars per million output tokens, for the administrators' estimate only"));
+            "Dollars per million output tokens, for the administrators' estimate only"),
+        // Q13a: bank top-ups (controlled, last, in the order of CONTROLLED).
+        new Param(TOPUP_BANK_MIN, KUDOS, "1000", "The smallest bank top-up a sponsor may ask for, in Kudos"),
+        new Param(TOPUP_BANK_MAX, KUDOS, "10000000", "The largest bank top-up a sponsor may ask for, in Kudos"),
+        new Param(BANK_RECEIVING_BANK, Map.of("type", "text", "maxLength", 100), "",
+            "Bank sponsors transfer to, with its code (such as Mizuho Bank (0001))"),
+        new Param(BANK_RECEIVING_BRANCH, Map.of("type", "text", "maxLength", 100), "",
+            "Branch of the receiving account, with its code"),
+        new Param(BANK_RECEIVING_TYPE, Map.of("type", "text", "maxLength", 20), "",
+            "Kind of the receiving account (such as ordinary)"),
+        new Param(BANK_RECEIVING_NUMBER, Map.of("type", "text", "maxLength", 20), "",
+            "Number of the receiving account"),
+        new Param(BANK_RECEIVING_HOLDER, Map.of("type", "text", "maxLength", 100), "",
+            "Holder of the receiving account, as the bank shows it (katakana)"));
 
     private static Param journal(String key, String account) {
         return new Param(key, ACCOUNT_CODE, "", "Accounting system's account code for " + account

@@ -15,7 +15,7 @@ steps:
   - process: QB_SETUP@latest
     input: {}
     expectOutput:
-      rulesProposed: [qb.publication.review, qb.sponsor.review, qb.transfer.review,
+      rulesProposed: [qb.publication.review, qb.sponsor.review, qb.transfer.review, qb.topup-bank.review,
         qb.sod.control-changes, qb.sod.security-administration]
     save: { p1: "$.proposals[0]", p2: "$.proposals[1]", p3: "$.proposals[2]", p4: "$.proposals[3]",
       p5: "$.proposals[4]", p6: "$.proposals[5]", p7: "$.proposals[6]", p8: "$.proposals[7]", p9: "$.proposals[8]",
@@ -25,7 +25,9 @@ steps:
       p22: "$.proposals[21]", p23: "$.proposals[22]", p24: "$.proposals[23]",
       p25: "$.proposals[24]", p26: "$.proposals[25]", p27: "$.proposals[26]", p28: "$.proposals[27]",
       p29: "$.proposals[28]", p30: "$.proposals[29]", p31: "$.proposals[30]",
-      p32: "$.proposals[31]", p33: "$.proposals[32]", p34: "$.proposals[33]" }
+      p32: "$.proposals[31]", p33: "$.proposals[32]", p34: "$.proposals[33]",
+      p35: "$.proposals[34]", p36: "$.proposals[35]", p37: "$.proposals[36]", p38: "$.proposals[37]",
+      p39: "$.proposals[38]", p40: "$.proposals[39]", p41: "$.proposals[40]", p42: "$.proposals[41]" }
   - note: A second administrator publishes the parameters and the review rule.
     process: CONTROL_CHANGE_PUBLISH@latest
     actor: { id: publisher, permissions: [control.publish] }
@@ -129,6 +131,30 @@ steps:
   - process: CONTROL_CHANGE_PUBLISH@latest
     actor: { id: publisher, permissions: [control.publish] }
     input: { changeId: "${p34}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p35}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p36}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p37}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p38}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p39}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p40}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p41}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p42}" }
 
   - note: Sponsor A is onboarded (Q2); a content administrator approves.
     actor: { id: sponsor-a, permissions: [qb.sponsor.me] }

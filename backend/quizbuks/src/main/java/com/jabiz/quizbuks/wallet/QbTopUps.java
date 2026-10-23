@@ -22,6 +22,13 @@ public final class QbTopUps {
     public static final String STATUS_DICTIONARY = "urn:jabiz:dict:quizbuks:topup-status";
     /** A sponsor's own top-ups, read only. */
     public static final String SPONSOR_TOPUPS = "urn:jabiz:dataset:sponsor:" + TOPUP;
+    public static final String METHOD_DICTIONARY = "urn:jabiz:dict:quizbuks:topup-method";
+    /** Paid by card through Stripe's checkout (every top-up before Q13a). */
+    public static final String STRIPE = "STRIPE";
+    /** Paid by a transfer to the platform's bank account, recorded and approved by two administrators (Q13a). */
+    public static final String BANK = "BANK";
+    /** The sequence of the codes a sponsor puts before the payer's name of a bank transfer (Q13a). */
+    public static final String TRANSFER_CODE_SEQUENCE = "qb.topup.transfer-code";
 
     public static final int URL_LENGTH = 2048;
     static final int STRIPE_ID_LENGTH = 255;
@@ -33,7 +40,10 @@ public final class QbTopUps {
             .asSemanticIdentity("urn:jabiz:entity:quizbuks:topup"));
         eb.field("sponsorId", f -> f.physicalColumn("sponsor_id").immutable(true).required(true).processOnly()
             .asText(128));
-        eb.field("amount", f -> f.physicalColumn("amount").immutable(true).required(true).asMonetary("JPY", 0));
+        // What is credited: a card top-up's never changes; a bank one's becomes what finance recorded as received.
+        eb.field("amount", f -> f.physicalColumn("amount").required(true).asMonetary("JPY", 0));
+        eb.field("method", f -> f.physicalColumn("method").immutable(true).required(true).processOnly()
+            .asCode(METHOD_DICTIONARY, STRIPE, BANK));
         eb.field("status", f -> f.physicalColumn("status").required(true).processOnly()
             .asCode(STATUS_DICTIONARY, TopUpStatus.ALL.toArray(String[]::new)));
         eb.field("createdAt", f -> f.physicalColumn("created_at").immutable(true).required(true).processOnly()
@@ -81,17 +91,45 @@ public final class QbTopUps {
         eb.field("checkReason", f -> f.physicalColumn("check_reason").processOnly().asText(40));
         eb.field("checkRequestedAt", f -> f.physicalColumn("check_requested_at").processOnly()
             .asTemporal(TemporalRole.EVENT_TIME));
+        // A bank transfer (Q13a): the sponsor's request and report, and what finance recorded from the statement.
+        eb.field("transferCode", f -> f.physicalColumn("transfer_code").immutable(true).processOnly().asText(10));
+        eb.field("requestedAmount", f -> f.physicalColumn("requested_amount").immutable(true).processOnly()
+            .asMonetary("JPY", 0));
+        eb.field("payerName", f -> f.physicalColumn("payer_name").processOnly().asText(BankTransfers.PAYER_NAME_LENGTH));
+        eb.field("transferDate", f -> f.physicalColumn("transfer_date").processOnly().asDate());
+        eb.field("reportedAt", f -> f.physicalColumn("reported_at").processOnly()
+            .asTemporal(TemporalRole.EVENT_TIME));
+        eb.field("receivedOn", f -> f.physicalColumn("received_on").processOnly().asDate());
+        eb.field("bankReference", f -> f.physicalColumn("bank_reference").processOnly()
+            .asText(BankTransfers.REFERENCE_LENGTH));
+        eb.field("recordedBy", f -> f.physicalColumn("recorded_by").processOnly().asText(128));
+        eb.field("recordedAt", f -> f.physicalColumn("recorded_at").processOnly()
+            .asTemporal(TemporalRole.EVENT_TIME));
+        eb.field("reviewFrom", f -> f.physicalColumn("review_from").processOnly().asText(20));
+        eb.field("approvalRequestId", f -> f.physicalColumn("approval_request_id").processOnly().asText(64));
         eb.field("version", f -> f.physicalColumn("version").asVersion());
         eb.unique("uk_qb_topup_session", "checkoutSessionId");
         eb.unique("uk_qb_topup_payment", "paymentIntentId");
+        eb.unique("uk_qb_topup_transfer_code", "transferCode");
+        // A bank top-up waiting for money may be recorded even after it expired or was cancelled (the money came
+        // anyway); a rejected record goes back to where it was. Which states a method uses, the processes and the
+        // database (qb_topup_method) keep.
         eb.stateTransitions("status", st -> st
-            .initial(TopUpStatus.OPENING)
+            .initial(TopUpStatus.OPENING, TopUpStatus.AWAITING)
             .from(TopUpStatus.OPENING).to(TopUpStatus.OPEN, TopUpStatus.PAID, TopUpStatus.EXPIRED, TopUpStatus.FAILED)
-            .from(TopUpStatus.OPEN).to(TopUpStatus.PAID, TopUpStatus.EXPIRED));
+            .from(TopUpStatus.OPEN).to(TopUpStatus.PAID, TopUpStatus.EXPIRED)
+            .from(TopUpStatus.AWAITING).to(TopUpStatus.REPORTED, TopUpStatus.REVIEW, TopUpStatus.CANCELLED,
+                TopUpStatus.EXPIRED)
+            .from(TopUpStatus.REPORTED).to(TopUpStatus.REVIEW, TopUpStatus.CANCELLED, TopUpStatus.EXPIRED)
+            .from(TopUpStatus.REVIEW).to(TopUpStatus.PAID, TopUpStatus.AWAITING, TopUpStatus.REPORTED,
+                TopUpStatus.EXPIRED, TopUpStatus.CANCELLED)
+            .from(TopUpStatus.EXPIRED).to(TopUpStatus.REVIEW)
+            .from(TopUpStatus.CANCELLED).to(TopUpStatus.REVIEW));
         eb.listView("default", lv -> lv
-            .columns("sponsorId", "amount", "status", "createdAt", "paidAt", "stripeFee", "refundedAmount",
+            .columns("sponsorId", "method", "amount", "status", "createdAt", "paidAt", "stripeFee", "refundedAmount",
                 "disputeStatus")
-            .filters("sponsorId", "status", "createdAt", "paidAt", "checkoutSessionId", "paymentIntentId")
+            .filters("sponsorId", "method", "status", "createdAt", "paidAt", "checkoutSessionId", "paymentIntentId",
+                "transferCode")
             .sorts("createdAt", "paidAt", "amount")
             .defaultSort("createdAt", false));
     });

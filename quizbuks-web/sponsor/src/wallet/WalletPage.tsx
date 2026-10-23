@@ -16,6 +16,8 @@ import {
   Label,
   PageHeader,
   PageState,
+  RadioGroup,
+  RadioGroupItem,
   type ColumnDef,
   type PaginationState,
   type SortingState,
@@ -33,16 +35,22 @@ import { TRANSACTIONS_PATH } from '../transactions/api'
 import '../transactions/messages'
 import {
   available,
+  bankAccountSet,
+  bankTopUpPath,
   downloadReceipt,
   parseKudos,
+  pathOfTopUp,
+  readBankAccount,
   readTopUpLimit,
   readTopUpStatuses,
   readWallet,
   rememberJustStarted,
   searchTopUps,
+  startBankTopUp,
   startTopUp,
   topUpPath,
   WALLET_QUERY,
+  type TopUpMethod,
   type TopUpRow,
   type TopUpStatus,
 } from './api'
@@ -61,6 +69,30 @@ export const STATUS_BADGES: Record<TopUpStatus, 'success' | 'secondary' | 'outli
   PAID: 'success',
   EXPIRED: 'secondary',
   FAILED: 'destructive',
+  AWAITING: 'warning',
+  REPORTED: 'outline',
+  REVIEW: 'outline',
+  CANCELLED: 'secondary',
+}
+
+/** A bank top-up's range (`qb.sponsor.bank-account`), or that bank transfers are not set up yet. */
+function BankLimitNote() {
+  const { t } = useTranslation(SPONSOR)
+  const account = useQuery({ queryKey: [...WALLET_QUERY, 'bank-account'], queryFn: readBankAccount })
+  const data = account.data
+  if (!data) return null
+  if (!bankAccountSet(data)) {
+    return (
+      <p className="text-muted-foreground text-sm" data-testid="topup-bank-unavailable">
+        {t('wallet.bank.unavailable')}
+      </p>
+    )
+  }
+  return data.min !== null && data.max !== null ? (
+    <p className="text-muted-foreground text-sm" data-testid="topup-limit">
+      {t('wallet.dialog.range', { min: formatKudos(data.min), max: formatKudos(data.max) })}
+    </p>
+  ) : null
 }
 
 /**
@@ -91,21 +123,30 @@ function TopUpLimitNote() {
 }
 
 /**
- * The amount to top up, then `QB_TOPUP_START` and the top-up's page, which goes on to Stripe's checkout once it is
- * open. One idempotency key per amount: retrying the same submission (a lost answer) starts one top-up only. The
- * server checks the amount's range and the sponsor (approved, not banned, verified) and words its refusals.
+ * How to pay, the amount, then the top-up's page. By card: `QB_TOPUP_START`, and the page goes on to Stripe's
+ * checkout once it is open. By bank transfer (Q13a): `QB_TOPUP_BANK_START`, and the page shows the account and the
+ * code to put before the payer's name. One idempotency key per method and amount: retrying the same submission (a
+ * lost answer) starts one top-up only. The server checks the amount's range and the sponsor (approved, not banned,
+ * verified) and words its refusals.
  */
 function TopUpDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const { t } = useTranslation(SPONSOR)
   const id = useId()
+  const [method, setMethod] = useState<TopUpMethod>('STRIPE')
   const [text, setText] = useState('')
   const [key, setKey] = useState(() => crypto.randomUUID())
   const [invalid, setInvalid] = useState(false)
   const start = useMutation({
-    mutationFn: (amount: number) => startTopUp(amount, key),
+    mutationFn: async (amount: number) => method === 'BANK'
+      ? { method, topUpId: (await startBankTopUp(amount, key)).topUpId }
+      : { method, topUpId: (await startTopUp(amount, key)).topUpId },
     onSuccess: (output) => {
-      rememberJustStarted(output.topUpId)
       close()
+      if (output.method === 'BANK') {
+        navigate(bankTopUpPath(output.topUpId))
+        return
+      }
+      rememberJustStarted(output.topUpId)
       navigate(topUpPath(output.topUpId))
     },
   })
@@ -117,6 +158,7 @@ function TopUpDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (ope
   }
   /** Every way of closing (Cancel, Escape, the overlay, a started top-up) starts the next opening afresh. */
   function close() {
+    setMethod('STRIPE')
     setText('')
     setInvalid(false)
     setKey(crypto.randomUUID())
@@ -131,8 +173,32 @@ function TopUpDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (ope
         <form noValidate onSubmit={submit} className="flex flex-col gap-4">
           <DialogHeader>
             <DialogTitle>{t('wallet.dialog.title')}</DialogTitle>
-            <DialogDescription>{t('wallet.dialog.hint')}</DialogDescription>
+            <DialogDescription>
+              {method === 'BANK' ? t('wallet.bank.dialogHint') : t('wallet.dialog.hint')}
+            </DialogDescription>
           </DialogHeader>
+          <fieldset className="flex flex-col gap-2">
+            <legend className="mb-2 text-sm font-medium">{t('wallet.bank.method')}</legend>
+            <RadioGroup value={method} data-testid="topup-method" onValueChange={(next) => {
+              setMethod(next as TopUpMethod)
+              // Another method is another submission.
+              setKey(crypto.randomUUID())
+              start.reset()
+            }}>
+              {(['STRIPE', 'BANK'] as const).map((value) => (
+                <div key={value} className="flex items-start gap-2">
+                  <RadioGroupItem id={`${id}-${value}`} value={value} aria-describedby={`${id}-${value}-hint`}
+                    data-testid={`topup-method-${value}`} />
+                  <span className="flex flex-col gap-0.5">
+                    <Label htmlFor={`${id}-${value}`}>{t(`wallet.bank.methods.${value}`)}</Label>
+                    <span id={`${id}-${value}-hint`} className="text-muted-foreground text-xs">
+                      {t(`wallet.bank.methodHints.${value}`)}
+                    </span>
+                  </span>
+                </div>
+              ))}
+            </RadioGroup>
+          </fieldset>
           <div className="flex flex-col gap-2">
             <Label htmlFor={`${id}-amount`}>{t('wallet.dialog.amount')}</Label>
             <Input id={`${id}-amount`} value={text} inputMode="numeric" autoComplete="off" required maxLength={17}
@@ -146,7 +212,7 @@ function TopUpDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (ope
                 start.reset()
               }} />
             <p id={`${id}-amount-hint`} className="text-muted-foreground text-sm">{t('wallet.dialog.amountHint')}</p>
-            {open && <TopUpLimitNote />}
+            {open && (method === 'BANK' ? <BankLimitNote /> : <TopUpLimitNote />)}
             {problem && <p id={`${id}-amount-error`} className="text-destructive text-sm">{problem}</p>}
           </div>
           {general && (
@@ -158,7 +224,7 @@ function TopUpDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (ope
             </Button>
             <Button type="submit" disabled={start.isPending} aria-busy={start.isPending || undefined}
               data-testid="topup-submit">
-              {t('wallet.dialog.submit')}
+              {method === 'BANK' ? t('wallet.bank.submit') : t('wallet.dialog.submit')}
             </Button>
           </DialogFooter>
         </form>
@@ -239,6 +305,11 @@ export function WalletPage() {
           {row.original.refundedAmount > 0 && (
             <Badge variant="outline">{t('wallet.refunded')}: {formatKudos(row.original.refundedAmount)}</Badge>
           )}
+          {row.original.method === 'BANK' && (
+            <Badge variant="outline" data-testid="topup-row-bank">
+              {t('wallet.bank.methods.BANK')}{row.original.transferCode ? ` · ${row.original.transferCode}` : ''}
+            </Badge>
+          )}
         </span>
       ),
     },
@@ -255,7 +326,7 @@ export function WalletPage() {
         <span className="flex flex-wrap justify-end gap-2">
           {row.original.status === 'PAID' && <ReceiptButton row={row.original} onError={setReceiptError} />}
           <Button asChild size="sm" variant={row.original.checkoutUrl ? 'default' : 'outline'}>
-            <Link to={topUpPath(row.original.topUpId)} data-testid="topup-row-open">
+            <Link to={pathOfTopUp(row.original)} data-testid="topup-row-open">
               {row.original.checkoutUrl ? t('wallet.pay') : t('wallet.view')}
               <span className="sr-only">: {formatDateTime(row.original.createdAt)}</span>
             </Link>

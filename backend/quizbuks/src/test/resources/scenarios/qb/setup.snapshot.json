@@ -339,8 +339,8 @@
       "processSeqId" : "#op:1"
     }, {
       "rolePermissionId" : "#uuid:39",
-      "roleId" : "#uuid:4",
-      "permission" : "qb.country.read",
+      "roleId" : "#uuid:3",
+      "permission" : "qb.topup.bank.approve",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
@@ -348,7 +348,7 @@
     }, {
       "rolePermissionId" : "#uuid:40",
       "roleId" : "#uuid:4",
-      "permission" : "qb.admin.users.read",
+      "permission" : "qb.country.read",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
@@ -356,7 +356,7 @@
     }, {
       "rolePermissionId" : "#uuid:41",
       "roleId" : "#uuid:4",
-      "permission" : "qb.admin.finance.read",
+      "permission" : "qb.admin.users.read",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
@@ -364,7 +364,7 @@
     }, {
       "rolePermissionId" : "#uuid:42",
       "roleId" : "#uuid:4",
-      "permission" : "qb.admin.publication.read",
+      "permission" : "qb.admin.finance.read",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
@@ -372,7 +372,7 @@
     }, {
       "rolePermissionId" : "#uuid:43",
       "roleId" : "#uuid:4",
-      "permission" : "qb.payout.review",
+      "permission" : "qb.admin.publication.read",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
@@ -380,7 +380,7 @@
     }, {
       "rolePermissionId" : "#uuid:44",
       "roleId" : "#uuid:4",
-      "permission" : "qb.reconcile",
+      "permission" : "qb.payout.review",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
@@ -388,7 +388,7 @@
     }, {
       "rolePermissionId" : "#uuid:45",
       "roleId" : "#uuid:4",
-      "permission" : "qb.sponsor.avatar.read",
+      "permission" : "qb.reconcile",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
@@ -396,7 +396,7 @@
     }, {
       "rolePermissionId" : "#uuid:46",
       "roleId" : "#uuid:4",
-      "permission" : "ledger.read",
+      "permission" : "qb.sponsor.avatar.read",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
@@ -404,7 +404,7 @@
     }, {
       "rolePermissionId" : "#uuid:47",
       "roleId" : "#uuid:4",
-      "permission" : "ledger.account.read",
+      "permission" : "ledger.read",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
@@ -412,7 +412,7 @@
     }, {
       "rolePermissionId" : "#uuid:48",
       "roleId" : "#uuid:4",
-      "permission" : "report.issue",
+      "permission" : "ledger.account.read",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
@@ -420,7 +420,7 @@
     }, {
       "rolePermissionId" : "#uuid:49",
       "roleId" : "#uuid:4",
-      "permission" : "approval.decide",
+      "permission" : "report.issue",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
@@ -428,7 +428,7 @@
     }, {
       "rolePermissionId" : "#uuid:50",
       "roleId" : "#uuid:4",
-      "permission" : "task.read",
+      "permission" : "approval.decide",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
@@ -436,7 +436,7 @@
     }, {
       "rolePermissionId" : "#uuid:51",
       "roleId" : "#uuid:4",
-      "permission" : "external-job.read",
+      "permission" : "task.read",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
@@ -444,7 +444,7 @@
     }, {
       "rolePermissionId" : "#uuid:52",
       "roleId" : "#uuid:4",
-      "permission" : "report.archive.read",
+      "permission" : "external-job.read",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
@@ -452,7 +452,7 @@
     }, {
       "rolePermissionId" : "#uuid:53",
       "roleId" : "#uuid:4",
-      "permission" : "qb.journal.export",
+      "permission" : "report.archive.read",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
@@ -460,7 +460,7 @@
     }, {
       "rolePermissionId" : "#uuid:54",
       "roleId" : "#uuid:4",
-      "permission" : "qb.journal.confirm",
+      "permission" : "qb.journal.export",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
@@ -468,7 +468,7 @@
     }, {
       "rolePermissionId" : "#uuid:55",
       "roleId" : "#uuid:4",
-      "permission" : "file.generated.read",
+      "permission" : "qb.journal.confirm",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
@@ -476,7 +476,7 @@
     }, {
       "rolePermissionId" : "#uuid:56",
       "roleId" : "#uuid:4",
-      "permission" : "task.resolve",
+      "permission" : "file.generated.read",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
@@ -484,7 +484,7 @@
     }, {
       "rolePermissionId" : "#uuid:57",
       "roleId" : "#uuid:4",
-      "permission" : "control.publish",
+      "permission" : "task.resolve",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
@@ -492,31 +492,31 @@
     }, {
       "rolePermissionId" : "#uuid:58",
       "roleId" : "#uuid:4",
-      "permission" : "inbound.read",
+      "permission" : "qb.topup.bank.record",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
       "rolePermissionId" : "#uuid:59",
-      "roleId" : "#uuid:5",
-      "permission" : "qb.country.read",
+      "roleId" : "#uuid:4",
+      "permission" : "qb.topup.bank.approve",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
       "rolePermissionId" : "#uuid:60",
-      "roleId" : "#uuid:5",
-      "permission" : "qb.admin.users.read",
+      "roleId" : "#uuid:4",
+      "permission" : "control.publish",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
       "rolePermissionId" : "#uuid:61",
-      "roleId" : "#uuid:5",
-      "permission" : "qb.admin.quiz.read",
+      "roleId" : "#uuid:4",
+      "permission" : "inbound.read",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
@@ -524,7 +524,7 @@
     }, {
       "rolePermissionId" : "#uuid:62",
       "roleId" : "#uuid:5",
-      "permission" : "qb.content.file.read",
+      "permission" : "qb.country.read",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
@@ -532,7 +532,7 @@
     }, {
       "rolePermissionId" : "#uuid:63",
       "roleId" : "#uuid:5",
-      "permission" : "qb.admin.publication.read",
+      "permission" : "qb.admin.users.read",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
@@ -540,7 +540,7 @@
     }, {
       "rolePermissionId" : "#uuid:64",
       "roleId" : "#uuid:5",
-      "permission" : "qb.review.sponsor",
+      "permission" : "qb.admin.quiz.read",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
@@ -548,7 +548,7 @@
     }, {
       "rolePermissionId" : "#uuid:65",
       "roleId" : "#uuid:5",
-      "permission" : "qb.review.publication",
+      "permission" : "qb.content.file.read",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
@@ -556,7 +556,7 @@
     }, {
       "rolePermissionId" : "#uuid:66",
       "roleId" : "#uuid:5",
-      "permission" : "qb.admin.content.write",
+      "permission" : "qb.admin.publication.read",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
@@ -564,7 +564,7 @@
     }, {
       "rolePermissionId" : "#uuid:67",
       "roleId" : "#uuid:5",
-      "permission" : "qb.sponsor.avatar.read",
+      "permission" : "qb.review.sponsor",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
@@ -572,7 +572,7 @@
     }, {
       "rolePermissionId" : "#uuid:68",
       "roleId" : "#uuid:5",
-      "permission" : "task.read",
+      "permission" : "qb.review.publication",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
@@ -580,7 +580,7 @@
     }, {
       "rolePermissionId" : "#uuid:69",
       "roleId" : "#uuid:5",
-      "permission" : "qb.admin.ai.read",
+      "permission" : "qb.admin.content.write",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
@@ -588,7 +588,7 @@
     }, {
       "rolePermissionId" : "#uuid:70",
       "roleId" : "#uuid:5",
-      "permission" : "task.resolve",
+      "permission" : "qb.sponsor.avatar.read",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
@@ -596,7 +596,7 @@
     }, {
       "rolePermissionId" : "#uuid:71",
       "roleId" : "#uuid:5",
-      "permission" : "qb.admin.finance.read",
+      "permission" : "task.read",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
@@ -604,7 +604,7 @@
     }, {
       "rolePermissionId" : "#uuid:72",
       "roleId" : "#uuid:5",
-      "permission" : "qb.payout.review",
+      "permission" : "qb.admin.ai.read",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
@@ -612,7 +612,7 @@
     }, {
       "rolePermissionId" : "#uuid:73",
       "roleId" : "#uuid:5",
-      "permission" : "qb.reconcile",
+      "permission" : "task.resolve",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
@@ -620,7 +620,7 @@
     }, {
       "rolePermissionId" : "#uuid:74",
       "roleId" : "#uuid:5",
-      "permission" : "ledger.read",
+      "permission" : "qb.topup.bank.approve",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
@@ -628,7 +628,7 @@
     }, {
       "rolePermissionId" : "#uuid:75",
       "roleId" : "#uuid:5",
-      "permission" : "ledger.account.read",
+      "permission" : "qb.admin.finance.read",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
@@ -636,7 +636,7 @@
     }, {
       "rolePermissionId" : "#uuid:76",
       "roleId" : "#uuid:5",
-      "permission" : "report.issue",
+      "permission" : "qb.payout.review",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
@@ -644,7 +644,7 @@
     }, {
       "rolePermissionId" : "#uuid:77",
       "roleId" : "#uuid:5",
-      "permission" : "external-job.read",
+      "permission" : "qb.reconcile",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
@@ -652,7 +652,7 @@
     }, {
       "rolePermissionId" : "#uuid:78",
       "roleId" : "#uuid:5",
-      "permission" : "report.archive.read",
+      "permission" : "ledger.read",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
@@ -660,7 +660,7 @@
     }, {
       "rolePermissionId" : "#uuid:79",
       "roleId" : "#uuid:5",
-      "permission" : "qb.journal.export",
+      "permission" : "ledger.account.read",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
@@ -668,7 +668,7 @@
     }, {
       "rolePermissionId" : "#uuid:80",
       "roleId" : "#uuid:5",
-      "permission" : "qb.journal.confirm",
+      "permission" : "report.issue",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
@@ -676,7 +676,7 @@
     }, {
       "rolePermissionId" : "#uuid:81",
       "roleId" : "#uuid:5",
-      "permission" : "file.generated.read",
+      "permission" : "external-job.read",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
@@ -684,7 +684,7 @@
     }, {
       "rolePermissionId" : "#uuid:82",
       "roleId" : "#uuid:5",
-      "permission" : "qb.setup",
+      "permission" : "report.archive.read",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
@@ -692,7 +692,7 @@
     }, {
       "rolePermissionId" : "#uuid:83",
       "roleId" : "#uuid:5",
-      "permission" : "qb.admin.users.ban",
+      "permission" : "qb.journal.export",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
@@ -700,7 +700,7 @@
     }, {
       "rolePermissionId" : "#uuid:84",
       "roleId" : "#uuid:5",
-      "permission" : "platform.param.read",
+      "permission" : "qb.journal.confirm",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
@@ -708,7 +708,7 @@
     }, {
       "rolePermissionId" : "#uuid:85",
       "roleId" : "#uuid:5",
-      "permission" : "control.propose",
+      "permission" : "file.generated.read",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
@@ -716,7 +716,7 @@
     }, {
       "rolePermissionId" : "#uuid:86",
       "roleId" : "#uuid:5",
-      "permission" : "security.user.read",
+      "permission" : "qb.topup.bank.record",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
@@ -724,7 +724,7 @@
     }, {
       "rolePermissionId" : "#uuid:87",
       "roleId" : "#uuid:5",
-      "permission" : "security.user.write",
+      "permission" : "qb.setup",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
@@ -732,7 +732,7 @@
     }, {
       "rolePermissionId" : "#uuid:88",
       "roleId" : "#uuid:5",
-      "permission" : "security.user.create",
+      "permission" : "qb.admin.users.ban",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
@@ -740,7 +740,7 @@
     }, {
       "rolePermissionId" : "#uuid:89",
       "roleId" : "#uuid:5",
-      "permission" : "security.user.password",
+      "permission" : "platform.param.read",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
@@ -748,7 +748,7 @@
     }, {
       "rolePermissionId" : "#uuid:90",
       "roleId" : "#uuid:5",
-      "permission" : "security.user.unlock",
+      "permission" : "control.propose",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
@@ -756,7 +756,7 @@
     }, {
       "rolePermissionId" : "#uuid:91",
       "roleId" : "#uuid:5",
-      "permission" : "security.user.mfa-reset",
+      "permission" : "security.user.read",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
@@ -764,7 +764,7 @@
     }, {
       "rolePermissionId" : "#uuid:92",
       "roleId" : "#uuid:5",
-      "permission" : "security.user.identity.write",
+      "permission" : "security.user.write",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
@@ -772,7 +772,7 @@
     }, {
       "rolePermissionId" : "#uuid:93",
       "roleId" : "#uuid:5",
-      "permission" : "security.role.read",
+      "permission" : "security.user.create",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
@@ -780,7 +780,7 @@
     }, {
       "rolePermissionId" : "#uuid:94",
       "roleId" : "#uuid:5",
-      "permission" : "security.role.write",
+      "permission" : "security.user.password",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
@@ -788,7 +788,7 @@
     }, {
       "rolePermissionId" : "#uuid:95",
       "roleId" : "#uuid:5",
-      "permission" : "security.user-role.read",
+      "permission" : "security.user.unlock",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
@@ -796,7 +796,7 @@
     }, {
       "rolePermissionId" : "#uuid:96",
       "roleId" : "#uuid:5",
-      "permission" : "security.user-role.write",
+      "permission" : "security.user.mfa-reset",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
@@ -804,7 +804,7 @@
     }, {
       "rolePermissionId" : "#uuid:97",
       "roleId" : "#uuid:5",
-      "permission" : "security.menu.read",
+      "permission" : "security.user.identity.write",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
@@ -812,7 +812,7 @@
     }, {
       "rolePermissionId" : "#uuid:98",
       "roleId" : "#uuid:5",
-      "permission" : "security.menu.write",
+      "permission" : "security.role.read",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
@@ -820,7 +820,7 @@
     }, {
       "rolePermissionId" : "#uuid:99",
       "roleId" : "#uuid:5",
-      "permission" : "security.login-record.read",
+      "permission" : "security.role.write",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
@@ -828,7 +828,7 @@
     }, {
       "rolePermissionId" : "#uuid:100",
       "roleId" : "#uuid:5",
-      "permission" : "security.access-review.read",
+      "permission" : "security.user-role.read",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
@@ -836,13 +836,53 @@
     }, {
       "rolePermissionId" : "#uuid:101",
       "roleId" : "#uuid:5",
-      "permission" : "security.protected-change.decide",
+      "permission" : "security.user-role.write",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
       "rolePermissionId" : "#uuid:102",
+      "roleId" : "#uuid:5",
+      "permission" : "security.menu.read",
+      "versionNo" : 1,
+      "effectStartTime" : "2026-10-01T00:00:00Z",
+      "createdTime" : "2026-10-01T00:00:00Z",
+      "processSeqId" : "#op:1"
+    }, {
+      "rolePermissionId" : "#uuid:103",
+      "roleId" : "#uuid:5",
+      "permission" : "security.menu.write",
+      "versionNo" : 1,
+      "effectStartTime" : "2026-10-01T00:00:00Z",
+      "createdTime" : "2026-10-01T00:00:00Z",
+      "processSeqId" : "#op:1"
+    }, {
+      "rolePermissionId" : "#uuid:104",
+      "roleId" : "#uuid:5",
+      "permission" : "security.login-record.read",
+      "versionNo" : 1,
+      "effectStartTime" : "2026-10-01T00:00:00Z",
+      "createdTime" : "2026-10-01T00:00:00Z",
+      "processSeqId" : "#op:1"
+    }, {
+      "rolePermissionId" : "#uuid:105",
+      "roleId" : "#uuid:5",
+      "permission" : "security.access-review.read",
+      "versionNo" : 1,
+      "effectStartTime" : "2026-10-01T00:00:00Z",
+      "createdTime" : "2026-10-01T00:00:00Z",
+      "processSeqId" : "#op:1"
+    }, {
+      "rolePermissionId" : "#uuid:106",
+      "roleId" : "#uuid:5",
+      "permission" : "security.protected-change.decide",
+      "versionNo" : 1,
+      "effectStartTime" : "2026-10-01T00:00:00Z",
+      "createdTime" : "2026-10-01T00:00:00Z",
+      "processSeqId" : "#op:1"
+    }, {
+      "rolePermissionId" : "#uuid:107",
       "roleId" : "#uuid:5",
       "permission" : "approval.read",
       "versionNo" : 1,
@@ -851,7 +891,7 @@
       "processSeqId" : "#op:1"
     } ],
     "LedgerAccount" : [ {
-      "accountId" : "#uuid:103",
+      "accountId" : "#uuid:108",
       "accountCode" : "1110",
       "accountName" : "Stripe balance",
       "accountType" : "ASSET",
@@ -863,7 +903,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:2"
     }, {
-      "accountId" : "#uuid:104",
+      "accountId" : "#uuid:109",
       "accountCode" : "1120",
       "accountName" : "Bank deposits",
       "accountType" : "ASSET",
@@ -875,7 +915,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:3"
     }, {
-      "accountId" : "#uuid:105",
+      "accountId" : "#uuid:110",
       "accountCode" : "2110",
       "accountName" : "Sponsor prepayments (sponsor wallets)",
       "accountType" : "LIABILITY",
@@ -887,7 +927,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:4"
     }, {
-      "accountId" : "#uuid:106",
+      "accountId" : "#uuid:111",
       "accountCode" : "2120",
       "accountName" : "Rewards payable to users (user wallets)",
       "accountType" : "LIABILITY",
@@ -899,7 +939,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:5"
     }, {
-      "accountId" : "#uuid:107",
+      "accountId" : "#uuid:112",
       "accountCode" : "2130",
       "accountName" : "Transfers in transit",
       "accountType" : "LIABILITY",
@@ -911,7 +951,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:6"
     }, {
-      "accountId" : "#uuid:108",
+      "accountId" : "#uuid:113",
       "accountCode" : "4110",
       "accountName" : "Platform service revenue (commission)",
       "accountType" : "REVENUE",
@@ -923,7 +963,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:7"
     }, {
-      "accountId" : "#uuid:109",
+      "accountId" : "#uuid:114",
       "accountCode" : "5110",
       "accountName" : "Payment fees (Stripe)",
       "accountType" : "EXPENSE",
@@ -936,7 +976,7 @@
       "processSeqId" : "#op:8"
     } ],
     "SysParam" : [ {
-      "paramId" : "#uuid:110",
+      "paramId" : "#uuid:115",
       "paramKey" : "qb.app.min-version",
       "valueKind" : {
         "maxLength" : 20,
@@ -949,7 +989,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:9"
     }, {
-      "paramId" : "#uuid:111",
+      "paramId" : "#uuid:116",
       "paramKey" : "qb.stats.min-group",
       "valueKind" : {
         "precision" : 3,
@@ -963,7 +1003,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:10"
     }, {
-      "paramId" : "#uuid:112",
+      "paramId" : "#uuid:117",
       "paramKey" : "qb.support.email",
       "valueKind" : {
         "maxLength" : 200,
@@ -976,7 +1016,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:11"
     }, {
-      "paramId" : "#uuid:113",
+      "paramId" : "#uuid:118",
       "paramKey" : "qb.broadcast.sponsor.max-per-publication",
       "valueKind" : {
         "precision" : 2,
@@ -990,7 +1030,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:12"
     }, {
-      "paramId" : "#uuid:114",
+      "paramId" : "#uuid:119",
       "paramKey" : "qb.broadcast.sponsor.min-interval-hours",
       "valueKind" : {
         "precision" : 4,
@@ -1004,7 +1044,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:13"
     }, {
-      "paramId" : "#uuid:115",
+      "paramId" : "#uuid:120",
       "paramKey" : "qb.broadcast.expires-days",
       "valueKind" : {
         "precision" : 3,
@@ -1018,7 +1058,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:14"
     }, {
-      "paramId" : "#uuid:116",
+      "paramId" : "#uuid:121",
       "paramKey" : "qb.payout.reminder-days",
       "valueKind" : {
         "precision" : 3,
@@ -1032,7 +1072,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:15"
     }, {
-      "paramId" : "#uuid:117",
+      "paramId" : "#uuid:122",
       "paramKey" : "qb.broadcast.stats.min-audience",
       "valueKind" : {
         "precision" : 6,
@@ -1046,7 +1086,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:16"
     }, {
-      "paramId" : "#uuid:118",
+      "paramId" : "#uuid:123",
       "paramKey" : "qb.ai.candidates.expire-days",
       "valueKind" : {
         "precision" : 3,
@@ -1060,7 +1100,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:17"
     }, {
-      "paramId" : "#uuid:119",
+      "paramId" : "#uuid:124",
       "paramKey" : "qb.ai.price.input-per-mtok-usd",
       "valueKind" : {
         "precision" : 8,
@@ -1074,7 +1114,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:18"
     }, {
-      "paramId" : "#uuid:120",
+      "paramId" : "#uuid:125",
       "paramKey" : "qb.ai.price.output-per-mtok-usd",
       "valueKind" : {
         "precision" : 8,
@@ -1088,7 +1128,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:19"
     }, {
-      "paramId" : "#uuid:121",
+      "paramId" : "#uuid:126",
       "paramKey" : "qb.creator-fee-rate",
       "valueKind" : {
         "precision" : 4,
@@ -1102,7 +1142,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:20"
     }, {
-      "paramId" : "#uuid:122",
+      "paramId" : "#uuid:127",
       "paramKey" : "qb.transfer.threshold",
       "valueKind" : {
         "currency" : "JPY",
@@ -1114,9 +1154,9 @@
       "versionNo" : 2,
       "effectStartTime" : "2026-10-01T01:00:00Z",
       "createdTime" : "2026-10-01T01:00:00Z",
-      "processSeqId" : "#op:54"
+      "processSeqId" : "#op:62"
     }, {
-      "paramId" : "#uuid:123",
+      "paramId" : "#uuid:128",
       "paramKey" : "qb.transfer.review-above",
       "valueKind" : {
         "currency" : "JPY",
@@ -1130,7 +1170,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:22"
     }, {
-      "paramId" : "#uuid:124",
+      "paramId" : "#uuid:129",
       "paramKey" : "qb.transfer.enabled",
       "valueKind" : {
         "type" : "bool"
@@ -1142,7 +1182,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:23"
     }, {
-      "paramId" : "#uuid:125",
+      "paramId" : "#uuid:130",
       "paramKey" : "qb.review.sponsor.auto",
       "valueKind" : {
         "type" : "bool"
@@ -1154,7 +1194,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:24"
     }, {
-      "paramId" : "#uuid:126",
+      "paramId" : "#uuid:131",
       "paramKey" : "qb.review.publication.auto",
       "valueKind" : {
         "type" : "bool"
@@ -1166,7 +1206,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:25"
     }, {
-      "paramId" : "#uuid:127",
+      "paramId" : "#uuid:132",
       "paramKey" : "qb.topup.min",
       "valueKind" : {
         "currency" : "JPY",
@@ -1180,7 +1220,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:26"
     }, {
-      "paramId" : "#uuid:128",
+      "paramId" : "#uuid:133",
       "paramKey" : "qb.topup.max",
       "valueKind" : {
         "currency" : "JPY",
@@ -1194,7 +1234,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:27"
     }, {
-      "paramId" : "#uuid:129",
+      "paramId" : "#uuid:134",
       "paramKey" : "qb.transfer.fee",
       "valueKind" : {
         "currency" : "JPY",
@@ -1208,7 +1248,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:28"
     }, {
-      "paramId" : "#uuid:130",
+      "paramId" : "#uuid:135",
       "paramKey" : "qb.transfer.hold-days",
       "valueKind" : {
         "precision" : 3,
@@ -1222,7 +1262,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:29"
     }, {
-      "paramId" : "#uuid:131",
+      "paramId" : "#uuid:136",
       "paramKey" : "qb.topup.new-sponsor.days",
       "valueKind" : {
         "precision" : 3,
@@ -1236,7 +1276,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:30"
     }, {
-      "paramId" : "#uuid:132",
+      "paramId" : "#uuid:137",
       "paramKey" : "qb.topup.new-sponsor.max-total",
       "valueKind" : {
         "currency" : "JPY",
@@ -1250,7 +1290,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:31"
     }, {
-      "paramId" : "#uuid:133",
+      "paramId" : "#uuid:138",
       "paramKey" : "qb.journal.account.1110",
       "valueKind" : {
         "maxLength" : 20,
@@ -1263,7 +1303,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:32"
     }, {
-      "paramId" : "#uuid:134",
+      "paramId" : "#uuid:139",
       "paramKey" : "qb.journal.account.1120",
       "valueKind" : {
         "maxLength" : 20,
@@ -1276,7 +1316,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:33"
     }, {
-      "paramId" : "#uuid:135",
+      "paramId" : "#uuid:140",
       "paramKey" : "qb.journal.account.2110",
       "valueKind" : {
         "maxLength" : 20,
@@ -1289,7 +1329,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:34"
     }, {
-      "paramId" : "#uuid:136",
+      "paramId" : "#uuid:141",
       "paramKey" : "qb.journal.account.2120",
       "valueKind" : {
         "maxLength" : 20,
@@ -1302,7 +1342,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:35"
     }, {
-      "paramId" : "#uuid:137",
+      "paramId" : "#uuid:142",
       "paramKey" : "qb.journal.account.2130",
       "valueKind" : {
         "maxLength" : 20,
@@ -1315,7 +1355,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:36"
     }, {
-      "paramId" : "#uuid:138",
+      "paramId" : "#uuid:143",
       "paramKey" : "qb.journal.account.4110",
       "valueKind" : {
         "maxLength" : 20,
@@ -1328,7 +1368,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:37"
     }, {
-      "paramId" : "#uuid:139",
+      "paramId" : "#uuid:144",
       "paramKey" : "qb.journal.account.5110",
       "valueKind" : {
         "maxLength" : 20,
@@ -1341,7 +1381,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:38"
     }, {
-      "paramId" : "#uuid:140",
+      "paramId" : "#uuid:145",
       "paramKey" : "qb.issuer.name",
       "valueKind" : {
         "maxLength" : 200,
@@ -1354,7 +1394,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:39"
     }, {
-      "paramId" : "#uuid:141",
+      "paramId" : "#uuid:146",
       "paramKey" : "qb.issuer.address",
       "valueKind" : {
         "maxLength" : 500,
@@ -1367,7 +1407,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:40"
     }, {
-      "paramId" : "#uuid:142",
+      "paramId" : "#uuid:147",
       "paramKey" : "qb.issuer.registration-no",
       "valueKind" : {
         "maxLength" : 50,
@@ -1380,7 +1420,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:41"
     }, {
-      "paramId" : "#uuid:143",
+      "paramId" : "#uuid:148",
       "paramKey" : "qb.legal.max-announce-days",
       "valueKind" : {
         "precision" : 3,
@@ -1394,7 +1434,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:42"
     }, {
-      "paramId" : "#uuid:144",
+      "paramId" : "#uuid:149",
       "paramKey" : "qb.ai.enabled",
       "valueKind" : {
         "type" : "bool"
@@ -1406,7 +1446,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:43"
     }, {
-      "paramId" : "#uuid:145",
+      "paramId" : "#uuid:150",
       "paramKey" : "qb.ai.model",
       "valueKind" : {
         "allowedValues" : [ "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5" ],
@@ -1420,7 +1460,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:44"
     }, {
-      "paramId" : "#uuid:146",
+      "paramId" : "#uuid:151",
       "paramKey" : "qb.ai.effort",
       "valueKind" : {
         "allowedValues" : [ "low", "medium", "high" ],
@@ -1434,7 +1474,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:45"
     }, {
-      "paramId" : "#uuid:147",
+      "paramId" : "#uuid:152",
       "paramKey" : "qb.ai.sponsor.daily-jobs",
       "valueKind" : {
         "precision" : 4,
@@ -1448,7 +1488,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:46"
     }, {
-      "paramId" : "#uuid:148",
+      "paramId" : "#uuid:153",
       "paramKey" : "qb.ai.sponsor.monthly-tokens",
       "valueKind" : {
         "precision" : 12,
@@ -1462,7 +1502,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:47"
     }, {
-      "paramId" : "#uuid:149",
+      "paramId" : "#uuid:154",
       "paramKey" : "qb.ai.global.monthly-tokens",
       "valueKind" : {
         "precision" : 12,
@@ -1475,9 +1515,102 @@
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:48"
+    }, {
+      "paramId" : "#uuid:155",
+      "paramKey" : "qb.topup.bank.min",
+      "valueKind" : {
+        "currency" : "JPY",
+        "scale" : 0,
+        "type" : "monetary"
+      },
+      "value" : "1000",
+      "description" : "The smallest bank top-up a sponsor may ask for, in Kudos",
+      "versionNo" : 1,
+      "effectStartTime" : "2026-10-01T00:00:00Z",
+      "createdTime" : "2026-10-01T00:00:00Z",
+      "processSeqId" : "#op:49"
+    }, {
+      "paramId" : "#uuid:156",
+      "paramKey" : "qb.topup.bank.max",
+      "valueKind" : {
+        "currency" : "JPY",
+        "scale" : 0,
+        "type" : "monetary"
+      },
+      "value" : "10000000",
+      "description" : "The largest bank top-up a sponsor may ask for, in Kudos",
+      "versionNo" : 1,
+      "effectStartTime" : "2026-10-01T00:00:00Z",
+      "createdTime" : "2026-10-01T00:00:00Z",
+      "processSeqId" : "#op:50"
+    }, {
+      "paramId" : "#uuid:157",
+      "paramKey" : "qb.bank.receiving.bank",
+      "valueKind" : {
+        "maxLength" : 100,
+        "type" : "text"
+      },
+      "value" : "",
+      "description" : "Bank sponsors transfer to, with its code (such as Mizuho Bank (0001))",
+      "versionNo" : 1,
+      "effectStartTime" : "2026-10-01T00:00:00Z",
+      "createdTime" : "2026-10-01T00:00:00Z",
+      "processSeqId" : "#op:51"
+    }, {
+      "paramId" : "#uuid:158",
+      "paramKey" : "qb.bank.receiving.branch",
+      "valueKind" : {
+        "maxLength" : 100,
+        "type" : "text"
+      },
+      "value" : "",
+      "description" : "Branch of the receiving account, with its code",
+      "versionNo" : 1,
+      "effectStartTime" : "2026-10-01T00:00:00Z",
+      "createdTime" : "2026-10-01T00:00:00Z",
+      "processSeqId" : "#op:52"
+    }, {
+      "paramId" : "#uuid:159",
+      "paramKey" : "qb.bank.receiving.account-type",
+      "valueKind" : {
+        "maxLength" : 20,
+        "type" : "text"
+      },
+      "value" : "",
+      "description" : "Kind of the receiving account (such as ordinary)",
+      "versionNo" : 1,
+      "effectStartTime" : "2026-10-01T00:00:00Z",
+      "createdTime" : "2026-10-01T00:00:00Z",
+      "processSeqId" : "#op:53"
+    }, {
+      "paramId" : "#uuid:160",
+      "paramKey" : "qb.bank.receiving.account-number",
+      "valueKind" : {
+        "maxLength" : 20,
+        "type" : "text"
+      },
+      "value" : "",
+      "description" : "Number of the receiving account",
+      "versionNo" : 1,
+      "effectStartTime" : "2026-10-01T00:00:00Z",
+      "createdTime" : "2026-10-01T00:00:00Z",
+      "processSeqId" : "#op:54"
+    }, {
+      "paramId" : "#uuid:161",
+      "paramKey" : "qb.bank.receiving.account-holder",
+      "valueKind" : {
+        "maxLength" : 100,
+        "type" : "text"
+      },
+      "value" : "",
+      "description" : "Holder of the receiving account, as the bank shows it (katakana)",
+      "versionNo" : 1,
+      "effectStartTime" : "2026-10-01T00:00:00Z",
+      "createdTime" : "2026-10-01T00:00:00Z",
+      "processSeqId" : "#op:55"
     } ],
     "SysControlChange" : [ {
-      "changeId" : "#uuid:150",
+      "changeId" : "#uuid:162",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -1492,7 +1625,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:20"
     }, {
-      "changeId" : "#uuid:151",
+      "changeId" : "#uuid:163",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -1507,7 +1640,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:21"
     }, {
-      "changeId" : "#uuid:152",
+      "changeId" : "#uuid:164",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -1522,7 +1655,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:22"
     }, {
-      "changeId" : "#uuid:153",
+      "changeId" : "#uuid:165",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -1537,7 +1670,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:23"
     }, {
-      "changeId" : "#uuid:154",
+      "changeId" : "#uuid:166",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -1552,7 +1685,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:24"
     }, {
-      "changeId" : "#uuid:155",
+      "changeId" : "#uuid:167",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -1567,7 +1700,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:25"
     }, {
-      "changeId" : "#uuid:156",
+      "changeId" : "#uuid:168",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -1582,7 +1715,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:26"
     }, {
-      "changeId" : "#uuid:157",
+      "changeId" : "#uuid:169",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -1597,7 +1730,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:27"
     }, {
-      "changeId" : "#uuid:158",
+      "changeId" : "#uuid:170",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -1612,7 +1745,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:28"
     }, {
-      "changeId" : "#uuid:159",
+      "changeId" : "#uuid:171",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -1627,7 +1760,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:29"
     }, {
-      "changeId" : "#uuid:160",
+      "changeId" : "#uuid:172",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -1642,7 +1775,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:30"
     }, {
-      "changeId" : "#uuid:161",
+      "changeId" : "#uuid:173",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -1657,7 +1790,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:31"
     }, {
-      "changeId" : "#uuid:162",
+      "changeId" : "#uuid:174",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -1672,7 +1805,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:32"
     }, {
-      "changeId" : "#uuid:163",
+      "changeId" : "#uuid:175",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -1687,7 +1820,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:33"
     }, {
-      "changeId" : "#uuid:164",
+      "changeId" : "#uuid:176",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -1702,7 +1835,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:34"
     }, {
-      "changeId" : "#uuid:165",
+      "changeId" : "#uuid:177",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -1717,7 +1850,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:35"
     }, {
-      "changeId" : "#uuid:166",
+      "changeId" : "#uuid:178",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -1732,7 +1865,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:36"
     }, {
-      "changeId" : "#uuid:167",
+      "changeId" : "#uuid:179",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -1747,7 +1880,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:37"
     }, {
-      "changeId" : "#uuid:168",
+      "changeId" : "#uuid:180",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -1762,7 +1895,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:38"
     }, {
-      "changeId" : "#uuid:169",
+      "changeId" : "#uuid:181",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -1777,7 +1910,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:39"
     }, {
-      "changeId" : "#uuid:170",
+      "changeId" : "#uuid:182",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -1792,7 +1925,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:40"
     }, {
-      "changeId" : "#uuid:171",
+      "changeId" : "#uuid:183",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -1807,7 +1940,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:41"
     }, {
-      "changeId" : "#uuid:172",
+      "changeId" : "#uuid:184",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -1822,7 +1955,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:42"
     }, {
-      "changeId" : "#uuid:173",
+      "changeId" : "#uuid:185",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -1837,7 +1970,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:43"
     }, {
-      "changeId" : "#uuid:174",
+      "changeId" : "#uuid:186",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -1852,7 +1985,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:44"
     }, {
-      "changeId" : "#uuid:175",
+      "changeId" : "#uuid:187",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -1867,7 +2000,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:45"
     }, {
-      "changeId" : "#uuid:176",
+      "changeId" : "#uuid:188",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -1882,7 +2015,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:46"
     }, {
-      "changeId" : "#uuid:177",
+      "changeId" : "#uuid:189",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -1897,7 +2030,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:47"
     }, {
-      "changeId" : "#uuid:178",
+      "changeId" : "#uuid:190",
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -1912,7 +2045,112 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:48"
     }, {
-      "changeId" : "#uuid:179",
+      "changeId" : "#uuid:191",
+      "targetEntity" : "SysParam",
+      "targetId" : null,
+      "changeAction" : "UPSERT",
+      "changeValues" : "{\"paramKey\":\"qb.topup.bank.min\",\"valueKind\":{\"currency\":\"JPY\",\"scale\":0,\"type\":\"monetary\"},\"value\":\"1000\",\"description\":\"The smallest bank top-up a sponsor may ask for, in Kudos\"}",
+      "effectiveTime" : null,
+      "reason" : "First value of the QuizBuks parameter, proposed by QB_SETUP",
+      "status" : "PUBLISHED",
+      "proposedBy" : "installer",
+      "publishedBy" : "publisher",
+      "versionNo" : 2,
+      "effectStartTime" : "2026-10-01T00:00:00Z",
+      "createdTime" : "2026-10-01T00:00:00Z",
+      "processSeqId" : "#op:49"
+    }, {
+      "changeId" : "#uuid:192",
+      "targetEntity" : "SysParam",
+      "targetId" : null,
+      "changeAction" : "UPSERT",
+      "changeValues" : "{\"paramKey\":\"qb.topup.bank.max\",\"valueKind\":{\"currency\":\"JPY\",\"scale\":0,\"type\":\"monetary\"},\"value\":\"10000000\",\"description\":\"The largest bank top-up a sponsor may ask for, in Kudos\"}",
+      "effectiveTime" : null,
+      "reason" : "First value of the QuizBuks parameter, proposed by QB_SETUP",
+      "status" : "PUBLISHED",
+      "proposedBy" : "installer",
+      "publishedBy" : "publisher",
+      "versionNo" : 2,
+      "effectStartTime" : "2026-10-01T00:00:00Z",
+      "createdTime" : "2026-10-01T00:00:00Z",
+      "processSeqId" : "#op:50"
+    }, {
+      "changeId" : "#uuid:193",
+      "targetEntity" : "SysParam",
+      "targetId" : null,
+      "changeAction" : "UPSERT",
+      "changeValues" : "{\"paramKey\":\"qb.bank.receiving.bank\",\"valueKind\":{\"maxLength\":100,\"type\":\"text\"},\"value\":\"\",\"description\":\"Bank sponsors transfer to, with its code (such as Mizuho Bank (0001))\"}",
+      "effectiveTime" : null,
+      "reason" : "First value of the QuizBuks parameter, proposed by QB_SETUP",
+      "status" : "PUBLISHED",
+      "proposedBy" : "installer",
+      "publishedBy" : "publisher",
+      "versionNo" : 2,
+      "effectStartTime" : "2026-10-01T00:00:00Z",
+      "createdTime" : "2026-10-01T00:00:00Z",
+      "processSeqId" : "#op:51"
+    }, {
+      "changeId" : "#uuid:194",
+      "targetEntity" : "SysParam",
+      "targetId" : null,
+      "changeAction" : "UPSERT",
+      "changeValues" : "{\"paramKey\":\"qb.bank.receiving.branch\",\"valueKind\":{\"maxLength\":100,\"type\":\"text\"},\"value\":\"\",\"description\":\"Branch of the receiving account, with its code\"}",
+      "effectiveTime" : null,
+      "reason" : "First value of the QuizBuks parameter, proposed by QB_SETUP",
+      "status" : "PUBLISHED",
+      "proposedBy" : "installer",
+      "publishedBy" : "publisher",
+      "versionNo" : 2,
+      "effectStartTime" : "2026-10-01T00:00:00Z",
+      "createdTime" : "2026-10-01T00:00:00Z",
+      "processSeqId" : "#op:52"
+    }, {
+      "changeId" : "#uuid:195",
+      "targetEntity" : "SysParam",
+      "targetId" : null,
+      "changeAction" : "UPSERT",
+      "changeValues" : "{\"paramKey\":\"qb.bank.receiving.account-type\",\"valueKind\":{\"maxLength\":20,\"type\":\"text\"},\"value\":\"\",\"description\":\"Kind of the receiving account (such as ordinary)\"}",
+      "effectiveTime" : null,
+      "reason" : "First value of the QuizBuks parameter, proposed by QB_SETUP",
+      "status" : "PUBLISHED",
+      "proposedBy" : "installer",
+      "publishedBy" : "publisher",
+      "versionNo" : 2,
+      "effectStartTime" : "2026-10-01T00:00:00Z",
+      "createdTime" : "2026-10-01T00:00:00Z",
+      "processSeqId" : "#op:53"
+    }, {
+      "changeId" : "#uuid:196",
+      "targetEntity" : "SysParam",
+      "targetId" : null,
+      "changeAction" : "UPSERT",
+      "changeValues" : "{\"paramKey\":\"qb.bank.receiving.account-number\",\"valueKind\":{\"maxLength\":20,\"type\":\"text\"},\"value\":\"\",\"description\":\"Number of the receiving account\"}",
+      "effectiveTime" : null,
+      "reason" : "First value of the QuizBuks parameter, proposed by QB_SETUP",
+      "status" : "PUBLISHED",
+      "proposedBy" : "installer",
+      "publishedBy" : "publisher",
+      "versionNo" : 2,
+      "effectStartTime" : "2026-10-01T00:00:00Z",
+      "createdTime" : "2026-10-01T00:00:00Z",
+      "processSeqId" : "#op:54"
+    }, {
+      "changeId" : "#uuid:197",
+      "targetEntity" : "SysParam",
+      "targetId" : null,
+      "changeAction" : "UPSERT",
+      "changeValues" : "{\"paramKey\":\"qb.bank.receiving.account-holder\",\"valueKind\":{\"maxLength\":100,\"type\":\"text\"},\"value\":\"\",\"description\":\"Holder of the receiving account, as the bank shows it (katakana)\"}",
+      "effectiveTime" : null,
+      "reason" : "First value of the QuizBuks parameter, proposed by QB_SETUP",
+      "status" : "PUBLISHED",
+      "proposedBy" : "installer",
+      "publishedBy" : "publisher",
+      "versionNo" : 2,
+      "effectStartTime" : "2026-10-01T00:00:00Z",
+      "createdTime" : "2026-10-01T00:00:00Z",
+      "processSeqId" : "#op:55"
+    }, {
+      "changeId" : "#uuid:198",
       "targetEntity" : "SysApprovalRule",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -1925,9 +2163,9 @@
       "versionNo" : 2,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
-      "processSeqId" : "#op:49"
+      "processSeqId" : "#op:56"
     }, {
-      "changeId" : "#uuid:180",
+      "changeId" : "#uuid:199",
       "targetEntity" : "SysApprovalRule",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -1940,9 +2178,9 @@
       "versionNo" : 2,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
-      "processSeqId" : "#op:50"
+      "processSeqId" : "#op:57"
     }, {
-      "changeId" : "#uuid:181",
+      "changeId" : "#uuid:200",
       "targetEntity" : "SysApprovalRule",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -1955,9 +2193,24 @@
       "versionNo" : 2,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
-      "processSeqId" : "#op:51"
+      "processSeqId" : "#op:58"
     }, {
-      "changeId" : "#uuid:182",
+      "changeId" : "#uuid:201",
+      "targetEntity" : "SysApprovalRule",
+      "targetId" : null,
+      "changeAction" : "UPSERT",
+      "changeValues" : "{\"ruleCode\":\"qb.topup-bank.review\",\"subject\":\"qb.topup-bank\",\"condition\":\"{\\\"fact\\\":\\\"bank\\\",\\\"op\\\":\\\"eq\\\",\\\"value\\\":true}\",\"levels\":\"[{\\\"permission\\\":\\\"qb.topup.bank.approve\\\"}]\",\"priority\":100,\"enabled\":true,\"description\":\"Bank top-ups are credited only after another administrator approves what finance recorded\"}",
+      "effectiveTime" : null,
+      "reason" : "QuizBuks approval rule, proposed by QB_SETUP",
+      "status" : "PUBLISHED",
+      "proposedBy" : "installer",
+      "publishedBy" : "publisher",
+      "versionNo" : 2,
+      "effectStartTime" : "2026-10-01T00:00:00Z",
+      "createdTime" : "2026-10-01T00:00:00Z",
+      "processSeqId" : "#op:59"
+    }, {
+      "changeId" : "#uuid:202",
       "targetEntity" : "SysSodRule",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -1970,9 +2223,9 @@
       "versionNo" : 2,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
-      "processSeqId" : "#op:52"
+      "processSeqId" : "#op:60"
     }, {
-      "changeId" : "#uuid:183",
+      "changeId" : "#uuid:203",
       "targetEntity" : "SysSodRule",
       "targetId" : null,
       "changeAction" : "UPSERT",
@@ -1985,11 +2238,11 @@
       "versionNo" : 2,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
-      "processSeqId" : "#op:53"
+      "processSeqId" : "#op:61"
     }, {
-      "changeId" : "#uuid:184",
+      "changeId" : "#uuid:204",
       "targetEntity" : "SysParam",
-      "targetId" : "#uuid:122",
+      "targetId" : "#uuid:127",
       "changeAction" : "UPSERT",
       "changeValues" : "{\"paramKey\":\"qb.transfer.threshold\",\"value\":\"3000\"}",
       "effectiveTime" : null,
@@ -2000,10 +2253,10 @@
       "versionNo" : 2,
       "effectStartTime" : "2026-10-01T01:00:00Z",
       "createdTime" : "2026-10-01T01:00:00Z",
-      "processSeqId" : "#op:54"
+      "processSeqId" : "#op:62"
     } ],
     "SysApprovalRule" : [ {
-      "ruleId" : "#uuid:185",
+      "ruleId" : "#uuid:205",
       "ruleCode" : "qb.publication.review",
       "subject" : "qb.publication",
       "condition" : "{\"fact\":\"autoApprove\",\"op\":\"eq\",\"value\":false}",
@@ -2014,9 +2267,9 @@
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
-      "processSeqId" : "#op:49"
+      "processSeqId" : "#op:56"
     }, {
-      "ruleId" : "#uuid:186",
+      "ruleId" : "#uuid:206",
       "ruleCode" : "qb.sponsor.review",
       "subject" : "qb.sponsor",
       "condition" : "{\"fact\":\"autoApprove\",\"op\":\"eq\",\"value\":false}",
@@ -2027,9 +2280,9 @@
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
-      "processSeqId" : "#op:50"
+      "processSeqId" : "#op:57"
     }, {
-      "ruleId" : "#uuid:187",
+      "ruleId" : "#uuid:207",
       "ruleCode" : "qb.transfer.review",
       "subject" : "qb.transfer",
       "condition" : "{\"fact\":\"needsReview\",\"op\":\"eq\",\"value\":true}",
@@ -2040,10 +2293,23 @@
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
-      "processSeqId" : "#op:51"
+      "processSeqId" : "#op:58"
+    }, {
+      "ruleId" : "#uuid:208",
+      "ruleCode" : "qb.topup-bank.review",
+      "subject" : "qb.topup-bank",
+      "condition" : "{\"fact\":\"bank\",\"op\":\"eq\",\"value\":true}",
+      "levels" : "[{\"permission\":\"qb.topup.bank.approve\"}]",
+      "priority" : "100",
+      "enabled" : true,
+      "description" : "Bank top-ups are credited only after another administrator approves what finance recorded",
+      "versionNo" : 1,
+      "effectStartTime" : "2026-10-01T00:00:00Z",
+      "createdTime" : "2026-10-01T00:00:00Z",
+      "processSeqId" : "#op:59"
     } ],
     "QbCountry" : [ {
-      "countryId" : "#uuid:188",
+      "countryId" : "#uuid:209",
       "code" : "AD",
       "name" : {
         "en" : "Andorra",
@@ -2056,7 +2322,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:189",
+      "countryId" : "#uuid:210",
       "code" : "AE",
       "name" : {
         "en" : "United Arab Emirates",
@@ -2069,7 +2335,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:190",
+      "countryId" : "#uuid:211",
       "code" : "AF",
       "name" : {
         "en" : "Afghanistan",
@@ -2082,7 +2348,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:191",
+      "countryId" : "#uuid:212",
       "code" : "AG",
       "name" : {
         "en" : "Antigua and Barbuda",
@@ -2095,7 +2361,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:192",
+      "countryId" : "#uuid:213",
       "code" : "AI",
       "name" : {
         "en" : "Anguilla",
@@ -2108,7 +2374,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:193",
+      "countryId" : "#uuid:214",
       "code" : "AL",
       "name" : {
         "en" : "Albania",
@@ -2121,7 +2387,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:194",
+      "countryId" : "#uuid:215",
       "code" : "AM",
       "name" : {
         "en" : "Armenia",
@@ -2134,7 +2400,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:195",
+      "countryId" : "#uuid:216",
       "code" : "AO",
       "name" : {
         "en" : "Angola",
@@ -2147,7 +2413,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:196",
+      "countryId" : "#uuid:217",
       "code" : "AQ",
       "name" : {
         "en" : "Antarctica",
@@ -2160,7 +2426,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:197",
+      "countryId" : "#uuid:218",
       "code" : "AR",
       "name" : {
         "en" : "Argentina",
@@ -2173,7 +2439,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:198",
+      "countryId" : "#uuid:219",
       "code" : "AS",
       "name" : {
         "en" : "American Samoa",
@@ -2186,7 +2452,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:199",
+      "countryId" : "#uuid:220",
       "code" : "AT",
       "name" : {
         "en" : "Austria",
@@ -2199,7 +2465,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:200",
+      "countryId" : "#uuid:221",
       "code" : "AU",
       "name" : {
         "en" : "Australia",
@@ -2212,7 +2478,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:201",
+      "countryId" : "#uuid:222",
       "code" : "AW",
       "name" : {
         "en" : "Aruba",
@@ -2225,7 +2491,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:202",
+      "countryId" : "#uuid:223",
       "code" : "AX",
       "name" : {
         "en" : "Åland Islands",
@@ -2238,7 +2504,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:203",
+      "countryId" : "#uuid:224",
       "code" : "AZ",
       "name" : {
         "en" : "Azerbaijan",
@@ -2251,7 +2517,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:204",
+      "countryId" : "#uuid:225",
       "code" : "BA",
       "name" : {
         "en" : "Bosnia and Herzegovina",
@@ -2264,7 +2530,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:205",
+      "countryId" : "#uuid:226",
       "code" : "BB",
       "name" : {
         "en" : "Barbados",
@@ -2277,7 +2543,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:206",
+      "countryId" : "#uuid:227",
       "code" : "BD",
       "name" : {
         "en" : "Bangladesh",
@@ -2290,7 +2556,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:207",
+      "countryId" : "#uuid:228",
       "code" : "BE",
       "name" : {
         "en" : "Belgium",
@@ -2303,7 +2569,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:208",
+      "countryId" : "#uuid:229",
       "code" : "BF",
       "name" : {
         "en" : "Burkina Faso",
@@ -2316,7 +2582,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:209",
+      "countryId" : "#uuid:230",
       "code" : "BG",
       "name" : {
         "en" : "Bulgaria",
@@ -2329,7 +2595,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:210",
+      "countryId" : "#uuid:231",
       "code" : "BH",
       "name" : {
         "en" : "Bahrain",
@@ -2342,7 +2608,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:211",
+      "countryId" : "#uuid:232",
       "code" : "BI",
       "name" : {
         "en" : "Burundi",
@@ -2355,7 +2621,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:212",
+      "countryId" : "#uuid:233",
       "code" : "BJ",
       "name" : {
         "en" : "Benin",
@@ -2368,7 +2634,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:213",
+      "countryId" : "#uuid:234",
       "code" : "BL",
       "name" : {
         "en" : "Saint Barthélemy",
@@ -2381,7 +2647,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:214",
+      "countryId" : "#uuid:235",
       "code" : "BM",
       "name" : {
         "en" : "Bermuda",
@@ -2394,7 +2660,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:215",
+      "countryId" : "#uuid:236",
       "code" : "BN",
       "name" : {
         "en" : "Brunei",
@@ -2407,7 +2673,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:216",
+      "countryId" : "#uuid:237",
       "code" : "BO",
       "name" : {
         "en" : "Bolivia",
@@ -2420,7 +2686,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:217",
+      "countryId" : "#uuid:238",
       "code" : "BQ",
       "name" : {
         "en" : "Caribbean Netherlands",
@@ -2433,7 +2699,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:218",
+      "countryId" : "#uuid:239",
       "code" : "BR",
       "name" : {
         "en" : "Brazil",
@@ -2446,7 +2712,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:219",
+      "countryId" : "#uuid:240",
       "code" : "BS",
       "name" : {
         "en" : "Bahamas",
@@ -2459,7 +2725,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:220",
+      "countryId" : "#uuid:241",
       "code" : "BT",
       "name" : {
         "en" : "Bhutan",
@@ -2472,7 +2738,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:221",
+      "countryId" : "#uuid:242",
       "code" : "BV",
       "name" : {
         "en" : "Bouvet Island",
@@ -2485,7 +2751,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:222",
+      "countryId" : "#uuid:243",
       "code" : "BW",
       "name" : {
         "en" : "Botswana",
@@ -2498,7 +2764,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:223",
+      "countryId" : "#uuid:244",
       "code" : "BY",
       "name" : {
         "en" : "Belarus",
@@ -2511,7 +2777,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:224",
+      "countryId" : "#uuid:245",
       "code" : "BZ",
       "name" : {
         "en" : "Belize",
@@ -2524,7 +2790,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:225",
+      "countryId" : "#uuid:246",
       "code" : "CA",
       "name" : {
         "en" : "Canada",
@@ -2537,7 +2803,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:226",
+      "countryId" : "#uuid:247",
       "code" : "CC",
       "name" : {
         "en" : "Cocos (Keeling) Islands",
@@ -2550,7 +2816,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:227",
+      "countryId" : "#uuid:248",
       "code" : "CD",
       "name" : {
         "en" : "Democratic Republic of the Congo",
@@ -2563,7 +2829,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:228",
+      "countryId" : "#uuid:249",
       "code" : "CF",
       "name" : {
         "en" : "Central African Republic",
@@ -2576,7 +2842,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:229",
+      "countryId" : "#uuid:250",
       "code" : "CG",
       "name" : {
         "en" : "Republic of the Congo",
@@ -2589,7 +2855,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:230",
+      "countryId" : "#uuid:251",
       "code" : "CH",
       "name" : {
         "en" : "Switzerland",
@@ -2602,7 +2868,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:231",
+      "countryId" : "#uuid:252",
       "code" : "CI",
       "name" : {
         "en" : "Côte d'Ivoire",
@@ -2615,7 +2881,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:232",
+      "countryId" : "#uuid:253",
       "code" : "CK",
       "name" : {
         "en" : "Cook Islands",
@@ -2628,7 +2894,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:233",
+      "countryId" : "#uuid:254",
       "code" : "CL",
       "name" : {
         "en" : "Chile",
@@ -2641,7 +2907,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:234",
+      "countryId" : "#uuid:255",
       "code" : "CM",
       "name" : {
         "en" : "Cameroon",
@@ -2654,7 +2920,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:235",
+      "countryId" : "#uuid:256",
       "code" : "CN",
       "name" : {
         "en" : "China",
@@ -2667,7 +2933,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:236",
+      "countryId" : "#uuid:257",
       "code" : "CO",
       "name" : {
         "en" : "Colombia",
@@ -2680,7 +2946,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:237",
+      "countryId" : "#uuid:258",
       "code" : "CR",
       "name" : {
         "en" : "Costa Rica",
@@ -2693,7 +2959,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:238",
+      "countryId" : "#uuid:259",
       "code" : "CU",
       "name" : {
         "en" : "Cuba",
@@ -2706,7 +2972,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:239",
+      "countryId" : "#uuid:260",
       "code" : "CV",
       "name" : {
         "en" : "Cabo Verde",
@@ -2719,7 +2985,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:240",
+      "countryId" : "#uuid:261",
       "code" : "CW",
       "name" : {
         "en" : "Curaçao",
@@ -2732,7 +2998,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:241",
+      "countryId" : "#uuid:262",
       "code" : "CX",
       "name" : {
         "en" : "Christmas Island",
@@ -2745,7 +3011,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:242",
+      "countryId" : "#uuid:263",
       "code" : "CY",
       "name" : {
         "en" : "Cyprus",
@@ -2758,7 +3024,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:243",
+      "countryId" : "#uuid:264",
       "code" : "CZ",
       "name" : {
         "en" : "Czechia",
@@ -2771,7 +3037,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:244",
+      "countryId" : "#uuid:265",
       "code" : "DE",
       "name" : {
         "en" : "Germany",
@@ -2784,7 +3050,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:245",
+      "countryId" : "#uuid:266",
       "code" : "DJ",
       "name" : {
         "en" : "Djibouti",
@@ -2797,7 +3063,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:246",
+      "countryId" : "#uuid:267",
       "code" : "DK",
       "name" : {
         "en" : "Denmark",
@@ -2810,7 +3076,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:247",
+      "countryId" : "#uuid:268",
       "code" : "DM",
       "name" : {
         "en" : "Dominica",
@@ -2823,7 +3089,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:248",
+      "countryId" : "#uuid:269",
       "code" : "DO",
       "name" : {
         "en" : "Dominican Republic",
@@ -2836,7 +3102,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:249",
+      "countryId" : "#uuid:270",
       "code" : "DZ",
       "name" : {
         "en" : "Algeria",
@@ -2849,7 +3115,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:250",
+      "countryId" : "#uuid:271",
       "code" : "EC",
       "name" : {
         "en" : "Ecuador",
@@ -2862,7 +3128,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:251",
+      "countryId" : "#uuid:272",
       "code" : "EE",
       "name" : {
         "en" : "Estonia",
@@ -2875,7 +3141,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:252",
+      "countryId" : "#uuid:273",
       "code" : "EG",
       "name" : {
         "en" : "Egypt",
@@ -2888,7 +3154,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:253",
+      "countryId" : "#uuid:274",
       "code" : "EH",
       "name" : {
         "en" : "Western Sahara",
@@ -2901,7 +3167,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:254",
+      "countryId" : "#uuid:275",
       "code" : "ER",
       "name" : {
         "en" : "Eritrea",
@@ -2914,7 +3180,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:255",
+      "countryId" : "#uuid:276",
       "code" : "ES",
       "name" : {
         "en" : "Spain",
@@ -2927,7 +3193,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:256",
+      "countryId" : "#uuid:277",
       "code" : "ET",
       "name" : {
         "en" : "Ethiopia",
@@ -2940,7 +3206,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:257",
+      "countryId" : "#uuid:278",
       "code" : "FI",
       "name" : {
         "en" : "Finland",
@@ -2953,7 +3219,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:258",
+      "countryId" : "#uuid:279",
       "code" : "FJ",
       "name" : {
         "en" : "Fiji",
@@ -2966,7 +3232,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:259",
+      "countryId" : "#uuid:280",
       "code" : "FK",
       "name" : {
         "en" : "Falkland Islands",
@@ -2979,7 +3245,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:260",
+      "countryId" : "#uuid:281",
       "code" : "FM",
       "name" : {
         "en" : "Micronesia",
@@ -2992,7 +3258,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:261",
+      "countryId" : "#uuid:282",
       "code" : "FO",
       "name" : {
         "en" : "Faroe Islands",
@@ -3005,7 +3271,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:262",
+      "countryId" : "#uuid:283",
       "code" : "FR",
       "name" : {
         "en" : "France",
@@ -3018,7 +3284,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:263",
+      "countryId" : "#uuid:284",
       "code" : "GA",
       "name" : {
         "en" : "Gabon",
@@ -3031,7 +3297,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:264",
+      "countryId" : "#uuid:285",
       "code" : "GB",
       "name" : {
         "en" : "United Kingdom",
@@ -3044,7 +3310,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:265",
+      "countryId" : "#uuid:286",
       "code" : "GD",
       "name" : {
         "en" : "Grenada",
@@ -3057,7 +3323,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:266",
+      "countryId" : "#uuid:287",
       "code" : "GE",
       "name" : {
         "en" : "Georgia",
@@ -3070,7 +3336,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:267",
+      "countryId" : "#uuid:288",
       "code" : "GF",
       "name" : {
         "en" : "French Guiana",
@@ -3083,7 +3349,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:268",
+      "countryId" : "#uuid:289",
       "code" : "GG",
       "name" : {
         "en" : "Guernsey",
@@ -3096,7 +3362,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:269",
+      "countryId" : "#uuid:290",
       "code" : "GH",
       "name" : {
         "en" : "Ghana",
@@ -3109,7 +3375,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:270",
+      "countryId" : "#uuid:291",
       "code" : "GI",
       "name" : {
         "en" : "Gibraltar",
@@ -3122,7 +3388,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:271",
+      "countryId" : "#uuid:292",
       "code" : "GL",
       "name" : {
         "en" : "Greenland",
@@ -3135,7 +3401,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:272",
+      "countryId" : "#uuid:293",
       "code" : "GM",
       "name" : {
         "en" : "Gambia",
@@ -3148,7 +3414,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:273",
+      "countryId" : "#uuid:294",
       "code" : "GN",
       "name" : {
         "en" : "Guinea",
@@ -3161,7 +3427,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:274",
+      "countryId" : "#uuid:295",
       "code" : "GP",
       "name" : {
         "en" : "Guadeloupe",
@@ -3174,7 +3440,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:275",
+      "countryId" : "#uuid:296",
       "code" : "GQ",
       "name" : {
         "en" : "Equatorial Guinea",
@@ -3187,7 +3453,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:276",
+      "countryId" : "#uuid:297",
       "code" : "GR",
       "name" : {
         "en" : "Greece",
@@ -3200,7 +3466,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:277",
+      "countryId" : "#uuid:298",
       "code" : "GS",
       "name" : {
         "en" : "South Georgia and the South Sandwich Islands",
@@ -3213,7 +3479,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:278",
+      "countryId" : "#uuid:299",
       "code" : "GT",
       "name" : {
         "en" : "Guatemala",
@@ -3226,7 +3492,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:279",
+      "countryId" : "#uuid:300",
       "code" : "GU",
       "name" : {
         "en" : "Guam",
@@ -3239,7 +3505,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:280",
+      "countryId" : "#uuid:301",
       "code" : "GW",
       "name" : {
         "en" : "Guinea-Bissau",
@@ -3252,7 +3518,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:281",
+      "countryId" : "#uuid:302",
       "code" : "GY",
       "name" : {
         "en" : "Guyana",
@@ -3265,7 +3531,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:282",
+      "countryId" : "#uuid:303",
       "code" : "HK",
       "name" : {
         "en" : "Hong Kong",
@@ -3278,7 +3544,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:283",
+      "countryId" : "#uuid:304",
       "code" : "HM",
       "name" : {
         "en" : "Heard Island and McDonald Islands",
@@ -3291,7 +3557,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:284",
+      "countryId" : "#uuid:305",
       "code" : "HN",
       "name" : {
         "en" : "Honduras",
@@ -3304,7 +3570,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:285",
+      "countryId" : "#uuid:306",
       "code" : "HR",
       "name" : {
         "en" : "Croatia",
@@ -3317,7 +3583,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:286",
+      "countryId" : "#uuid:307",
       "code" : "HT",
       "name" : {
         "en" : "Haiti",
@@ -3330,7 +3596,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:287",
+      "countryId" : "#uuid:308",
       "code" : "HU",
       "name" : {
         "en" : "Hungary",
@@ -3343,7 +3609,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:288",
+      "countryId" : "#uuid:309",
       "code" : "ID",
       "name" : {
         "en" : "Indonesia",
@@ -3356,7 +3622,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:289",
+      "countryId" : "#uuid:310",
       "code" : "IE",
       "name" : {
         "en" : "Ireland",
@@ -3369,7 +3635,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:290",
+      "countryId" : "#uuid:311",
       "code" : "IL",
       "name" : {
         "en" : "Israel",
@@ -3382,7 +3648,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:291",
+      "countryId" : "#uuid:312",
       "code" : "IM",
       "name" : {
         "en" : "Isle of Man",
@@ -3395,7 +3661,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:292",
+      "countryId" : "#uuid:313",
       "code" : "IN",
       "name" : {
         "en" : "India",
@@ -3408,7 +3674,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:293",
+      "countryId" : "#uuid:314",
       "code" : "IO",
       "name" : {
         "en" : "British Indian Ocean Territory",
@@ -3421,7 +3687,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:294",
+      "countryId" : "#uuid:315",
       "code" : "IQ",
       "name" : {
         "en" : "Iraq",
@@ -3434,7 +3700,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:295",
+      "countryId" : "#uuid:316",
       "code" : "IR",
       "name" : {
         "en" : "Iran",
@@ -3447,7 +3713,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:296",
+      "countryId" : "#uuid:317",
       "code" : "IS",
       "name" : {
         "en" : "Iceland",
@@ -3460,7 +3726,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:297",
+      "countryId" : "#uuid:318",
       "code" : "IT",
       "name" : {
         "en" : "Italy",
@@ -3473,7 +3739,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:298",
+      "countryId" : "#uuid:319",
       "code" : "JE",
       "name" : {
         "en" : "Jersey",
@@ -3486,7 +3752,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:299",
+      "countryId" : "#uuid:320",
       "code" : "JM",
       "name" : {
         "en" : "Jamaica",
@@ -3499,7 +3765,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:300",
+      "countryId" : "#uuid:321",
       "code" : "JO",
       "name" : {
         "en" : "Jordan",
@@ -3512,7 +3778,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:301",
+      "countryId" : "#uuid:322",
       "code" : "JP",
       "name" : {
         "en" : "Japan",
@@ -3525,7 +3791,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:302",
+      "countryId" : "#uuid:323",
       "code" : "KE",
       "name" : {
         "en" : "Kenya",
@@ -3538,7 +3804,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:303",
+      "countryId" : "#uuid:324",
       "code" : "KG",
       "name" : {
         "en" : "Kyrgyzstan",
@@ -3551,7 +3817,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:304",
+      "countryId" : "#uuid:325",
       "code" : "KH",
       "name" : {
         "en" : "Cambodia",
@@ -3564,7 +3830,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:305",
+      "countryId" : "#uuid:326",
       "code" : "KI",
       "name" : {
         "en" : "Kiribati",
@@ -3577,7 +3843,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:306",
+      "countryId" : "#uuid:327",
       "code" : "KM",
       "name" : {
         "en" : "Comoros",
@@ -3590,7 +3856,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:307",
+      "countryId" : "#uuid:328",
       "code" : "KN",
       "name" : {
         "en" : "Saint Kitts and Nevis",
@@ -3603,7 +3869,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:308",
+      "countryId" : "#uuid:329",
       "code" : "KP",
       "name" : {
         "en" : "North Korea",
@@ -3616,7 +3882,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:309",
+      "countryId" : "#uuid:330",
       "code" : "KR",
       "name" : {
         "en" : "South Korea",
@@ -3629,7 +3895,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:310",
+      "countryId" : "#uuid:331",
       "code" : "KW",
       "name" : {
         "en" : "Kuwait",
@@ -3642,7 +3908,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:311",
+      "countryId" : "#uuid:332",
       "code" : "KY",
       "name" : {
         "en" : "Cayman Islands",
@@ -3655,7 +3921,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:312",
+      "countryId" : "#uuid:333",
       "code" : "KZ",
       "name" : {
         "en" : "Kazakhstan",
@@ -3668,7 +3934,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:313",
+      "countryId" : "#uuid:334",
       "code" : "LA",
       "name" : {
         "en" : "Laos",
@@ -3681,7 +3947,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:314",
+      "countryId" : "#uuid:335",
       "code" : "LB",
       "name" : {
         "en" : "Lebanon",
@@ -3694,7 +3960,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:315",
+      "countryId" : "#uuid:336",
       "code" : "LC",
       "name" : {
         "en" : "Saint Lucia",
@@ -3707,7 +3973,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:316",
+      "countryId" : "#uuid:337",
       "code" : "LI",
       "name" : {
         "en" : "Liechtenstein",
@@ -3720,7 +3986,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:317",
+      "countryId" : "#uuid:338",
       "code" : "LK",
       "name" : {
         "en" : "Sri Lanka",
@@ -3733,7 +3999,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:318",
+      "countryId" : "#uuid:339",
       "code" : "LR",
       "name" : {
         "en" : "Liberia",
@@ -3746,7 +4012,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:319",
+      "countryId" : "#uuid:340",
       "code" : "LS",
       "name" : {
         "en" : "Lesotho",
@@ -3759,7 +4025,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:320",
+      "countryId" : "#uuid:341",
       "code" : "LT",
       "name" : {
         "en" : "Lithuania",
@@ -3772,7 +4038,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:321",
+      "countryId" : "#uuid:342",
       "code" : "LU",
       "name" : {
         "en" : "Luxembourg",
@@ -3785,7 +4051,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:322",
+      "countryId" : "#uuid:343",
       "code" : "LV",
       "name" : {
         "en" : "Latvia",
@@ -3798,7 +4064,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:323",
+      "countryId" : "#uuid:344",
       "code" : "LY",
       "name" : {
         "en" : "Libya",
@@ -3811,7 +4077,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:324",
+      "countryId" : "#uuid:345",
       "code" : "MA",
       "name" : {
         "en" : "Morocco",
@@ -3824,7 +4090,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:325",
+      "countryId" : "#uuid:346",
       "code" : "MC",
       "name" : {
         "en" : "Monaco",
@@ -3837,7 +4103,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:326",
+      "countryId" : "#uuid:347",
       "code" : "MD",
       "name" : {
         "en" : "Moldova",
@@ -3850,7 +4116,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:327",
+      "countryId" : "#uuid:348",
       "code" : "ME",
       "name" : {
         "en" : "Montenegro",
@@ -3863,7 +4129,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:328",
+      "countryId" : "#uuid:349",
       "code" : "MF",
       "name" : {
         "en" : "Saint Martin (French part)",
@@ -3876,7 +4142,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:329",
+      "countryId" : "#uuid:350",
       "code" : "MG",
       "name" : {
         "en" : "Madagascar",
@@ -3889,7 +4155,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:330",
+      "countryId" : "#uuid:351",
       "code" : "MH",
       "name" : {
         "en" : "Marshall Islands",
@@ -3902,7 +4168,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:331",
+      "countryId" : "#uuid:352",
       "code" : "MK",
       "name" : {
         "en" : "North Macedonia",
@@ -3915,7 +4181,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:332",
+      "countryId" : "#uuid:353",
       "code" : "ML",
       "name" : {
         "en" : "Mali",
@@ -3928,7 +4194,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:333",
+      "countryId" : "#uuid:354",
       "code" : "MM",
       "name" : {
         "en" : "Myanmar",
@@ -3941,7 +4207,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:334",
+      "countryId" : "#uuid:355",
       "code" : "MN",
       "name" : {
         "en" : "Mongolia",
@@ -3954,7 +4220,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:335",
+      "countryId" : "#uuid:356",
       "code" : "MO",
       "name" : {
         "en" : "Macao",
@@ -3967,7 +4233,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:336",
+      "countryId" : "#uuid:357",
       "code" : "MP",
       "name" : {
         "en" : "Northern Mariana Islands",
@@ -3980,7 +4246,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:337",
+      "countryId" : "#uuid:358",
       "code" : "MQ",
       "name" : {
         "en" : "Martinique",
@@ -3993,7 +4259,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:338",
+      "countryId" : "#uuid:359",
       "code" : "MR",
       "name" : {
         "en" : "Mauritania",
@@ -4006,7 +4272,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:339",
+      "countryId" : "#uuid:360",
       "code" : "MS",
       "name" : {
         "en" : "Montserrat",
@@ -4019,7 +4285,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:340",
+      "countryId" : "#uuid:361",
       "code" : "MT",
       "name" : {
         "en" : "Malta",
@@ -4032,7 +4298,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:341",
+      "countryId" : "#uuid:362",
       "code" : "MU",
       "name" : {
         "en" : "Mauritius",
@@ -4045,7 +4311,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:342",
+      "countryId" : "#uuid:363",
       "code" : "MV",
       "name" : {
         "en" : "Maldives",
@@ -4058,7 +4324,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:343",
+      "countryId" : "#uuid:364",
       "code" : "MW",
       "name" : {
         "en" : "Malawi",
@@ -4071,7 +4337,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:344",
+      "countryId" : "#uuid:365",
       "code" : "MX",
       "name" : {
         "en" : "Mexico",
@@ -4084,7 +4350,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:345",
+      "countryId" : "#uuid:366",
       "code" : "MY",
       "name" : {
         "en" : "Malaysia",
@@ -4097,7 +4363,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:346",
+      "countryId" : "#uuid:367",
       "code" : "MZ",
       "name" : {
         "en" : "Mozambique",
@@ -4110,7 +4376,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:347",
+      "countryId" : "#uuid:368",
       "code" : "NA",
       "name" : {
         "en" : "Namibia",
@@ -4123,7 +4389,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:348",
+      "countryId" : "#uuid:369",
       "code" : "NC",
       "name" : {
         "en" : "New Caledonia",
@@ -4136,7 +4402,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:349",
+      "countryId" : "#uuid:370",
       "code" : "NE",
       "name" : {
         "en" : "Niger",
@@ -4149,7 +4415,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:350",
+      "countryId" : "#uuid:371",
       "code" : "NF",
       "name" : {
         "en" : "Norfolk Island",
@@ -4162,7 +4428,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:351",
+      "countryId" : "#uuid:372",
       "code" : "NG",
       "name" : {
         "en" : "Nigeria",
@@ -4175,7 +4441,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:352",
+      "countryId" : "#uuid:373",
       "code" : "NI",
       "name" : {
         "en" : "Nicaragua",
@@ -4188,7 +4454,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:353",
+      "countryId" : "#uuid:374",
       "code" : "NL",
       "name" : {
         "en" : "Netherlands",
@@ -4201,7 +4467,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:354",
+      "countryId" : "#uuid:375",
       "code" : "NO",
       "name" : {
         "en" : "Norway",
@@ -4214,7 +4480,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:355",
+      "countryId" : "#uuid:376",
       "code" : "NP",
       "name" : {
         "en" : "Nepal",
@@ -4227,7 +4493,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:356",
+      "countryId" : "#uuid:377",
       "code" : "NR",
       "name" : {
         "en" : "Nauru",
@@ -4240,7 +4506,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:357",
+      "countryId" : "#uuid:378",
       "code" : "NU",
       "name" : {
         "en" : "Niue",
@@ -4253,7 +4519,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:358",
+      "countryId" : "#uuid:379",
       "code" : "NZ",
       "name" : {
         "en" : "New Zealand",
@@ -4266,7 +4532,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:359",
+      "countryId" : "#uuid:380",
       "code" : "OM",
       "name" : {
         "en" : "Oman",
@@ -4279,7 +4545,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:360",
+      "countryId" : "#uuid:381",
       "code" : "PA",
       "name" : {
         "en" : "Panama",
@@ -4292,7 +4558,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:361",
+      "countryId" : "#uuid:382",
       "code" : "PE",
       "name" : {
         "en" : "Peru",
@@ -4305,7 +4571,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:362",
+      "countryId" : "#uuid:383",
       "code" : "PF",
       "name" : {
         "en" : "French Polynesia",
@@ -4318,7 +4584,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:363",
+      "countryId" : "#uuid:384",
       "code" : "PG",
       "name" : {
         "en" : "Papua New Guinea",
@@ -4331,7 +4597,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:364",
+      "countryId" : "#uuid:385",
       "code" : "PH",
       "name" : {
         "en" : "Philippines",
@@ -4344,7 +4610,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:365",
+      "countryId" : "#uuid:386",
       "code" : "PK",
       "name" : {
         "en" : "Pakistan",
@@ -4357,7 +4623,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:366",
+      "countryId" : "#uuid:387",
       "code" : "PL",
       "name" : {
         "en" : "Poland",
@@ -4370,7 +4636,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:367",
+      "countryId" : "#uuid:388",
       "code" : "PM",
       "name" : {
         "en" : "Saint Pierre and Miquelon",
@@ -4383,7 +4649,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:368",
+      "countryId" : "#uuid:389",
       "code" : "PN",
       "name" : {
         "en" : "Pitcairn Islands",
@@ -4396,7 +4662,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:369",
+      "countryId" : "#uuid:390",
       "code" : "PR",
       "name" : {
         "en" : "Puerto Rico",
@@ -4409,7 +4675,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:370",
+      "countryId" : "#uuid:391",
       "code" : "PS",
       "name" : {
         "en" : "Palestine",
@@ -4422,7 +4688,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:371",
+      "countryId" : "#uuid:392",
       "code" : "PT",
       "name" : {
         "en" : "Portugal",
@@ -4435,7 +4701,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:372",
+      "countryId" : "#uuid:393",
       "code" : "PW",
       "name" : {
         "en" : "Palau",
@@ -4448,7 +4714,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:373",
+      "countryId" : "#uuid:394",
       "code" : "PY",
       "name" : {
         "en" : "Paraguay",
@@ -4461,7 +4727,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:374",
+      "countryId" : "#uuid:395",
       "code" : "QA",
       "name" : {
         "en" : "Qatar",
@@ -4474,7 +4740,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:375",
+      "countryId" : "#uuid:396",
       "code" : "RE",
       "name" : {
         "en" : "Réunion",
@@ -4487,7 +4753,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:376",
+      "countryId" : "#uuid:397",
       "code" : "RO",
       "name" : {
         "en" : "Romania",
@@ -4500,7 +4766,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:377",
+      "countryId" : "#uuid:398",
       "code" : "RS",
       "name" : {
         "en" : "Serbia",
@@ -4513,7 +4779,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:378",
+      "countryId" : "#uuid:399",
       "code" : "RU",
       "name" : {
         "en" : "Russia",
@@ -4526,7 +4792,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:379",
+      "countryId" : "#uuid:400",
       "code" : "RW",
       "name" : {
         "en" : "Rwanda",
@@ -4539,7 +4805,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:380",
+      "countryId" : "#uuid:401",
       "code" : "SA",
       "name" : {
         "en" : "Saudi Arabia",
@@ -4552,7 +4818,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:381",
+      "countryId" : "#uuid:402",
       "code" : "SB",
       "name" : {
         "en" : "Solomon Islands",
@@ -4565,7 +4831,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:382",
+      "countryId" : "#uuid:403",
       "code" : "SC",
       "name" : {
         "en" : "Seychelles",
@@ -4578,7 +4844,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:383",
+      "countryId" : "#uuid:404",
       "code" : "SD",
       "name" : {
         "en" : "Sudan",
@@ -4591,7 +4857,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:384",
+      "countryId" : "#uuid:405",
       "code" : "SE",
       "name" : {
         "en" : "Sweden",
@@ -4604,7 +4870,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:385",
+      "countryId" : "#uuid:406",
       "code" : "SG",
       "name" : {
         "en" : "Singapore",
@@ -4617,7 +4883,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:386",
+      "countryId" : "#uuid:407",
       "code" : "SH",
       "name" : {
         "en" : "Saint Helena, Ascension and Tristan da Cunha",
@@ -4630,7 +4896,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:387",
+      "countryId" : "#uuid:408",
       "code" : "SI",
       "name" : {
         "en" : "Slovenia",
@@ -4643,7 +4909,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:388",
+      "countryId" : "#uuid:409",
       "code" : "SJ",
       "name" : {
         "en" : "Svalbard and Jan Mayen",
@@ -4656,7 +4922,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:389",
+      "countryId" : "#uuid:410",
       "code" : "SK",
       "name" : {
         "en" : "Slovakia",
@@ -4669,7 +4935,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:390",
+      "countryId" : "#uuid:411",
       "code" : "SL",
       "name" : {
         "en" : "Sierra Leone",
@@ -4682,7 +4948,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:391",
+      "countryId" : "#uuid:412",
       "code" : "SM",
       "name" : {
         "en" : "San Marino",
@@ -4695,7 +4961,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:392",
+      "countryId" : "#uuid:413",
       "code" : "SN",
       "name" : {
         "en" : "Senegal",
@@ -4708,7 +4974,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:393",
+      "countryId" : "#uuid:414",
       "code" : "SO",
       "name" : {
         "en" : "Somalia",
@@ -4721,7 +4987,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:394",
+      "countryId" : "#uuid:415",
       "code" : "SR",
       "name" : {
         "en" : "Suriname",
@@ -4734,7 +5000,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:395",
+      "countryId" : "#uuid:416",
       "code" : "SS",
       "name" : {
         "en" : "South Sudan",
@@ -4747,7 +5013,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:396",
+      "countryId" : "#uuid:417",
       "code" : "ST",
       "name" : {
         "en" : "São Tomé and Príncipe",
@@ -4760,7 +5026,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:397",
+      "countryId" : "#uuid:418",
       "code" : "SV",
       "name" : {
         "en" : "El Salvador",
@@ -4773,7 +5039,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:398",
+      "countryId" : "#uuid:419",
       "code" : "SX",
       "name" : {
         "en" : "Sint Maarten (Dutch part)",
@@ -4786,7 +5052,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:399",
+      "countryId" : "#uuid:420",
       "code" : "SY",
       "name" : {
         "en" : "Syria",
@@ -4799,7 +5065,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:400",
+      "countryId" : "#uuid:421",
       "code" : "SZ",
       "name" : {
         "en" : "Eswatini",
@@ -4812,7 +5078,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:401",
+      "countryId" : "#uuid:422",
       "code" : "TC",
       "name" : {
         "en" : "Turks and Caicos Islands",
@@ -4825,7 +5091,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:402",
+      "countryId" : "#uuid:423",
       "code" : "TD",
       "name" : {
         "en" : "Chad",
@@ -4838,7 +5104,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:403",
+      "countryId" : "#uuid:424",
       "code" : "TF",
       "name" : {
         "en" : "French Southern Territories",
@@ -4851,7 +5117,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:404",
+      "countryId" : "#uuid:425",
       "code" : "TG",
       "name" : {
         "en" : "Togo",
@@ -4864,7 +5130,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:405",
+      "countryId" : "#uuid:426",
       "code" : "TH",
       "name" : {
         "en" : "Thailand",
@@ -4877,7 +5143,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:406",
+      "countryId" : "#uuid:427",
       "code" : "TJ",
       "name" : {
         "en" : "Tajikistan",
@@ -4890,7 +5156,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:407",
+      "countryId" : "#uuid:428",
       "code" : "TK",
       "name" : {
         "en" : "Tokelau",
@@ -4903,7 +5169,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:408",
+      "countryId" : "#uuid:429",
       "code" : "TL",
       "name" : {
         "en" : "Timor-Leste",
@@ -4916,7 +5182,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:409",
+      "countryId" : "#uuid:430",
       "code" : "TM",
       "name" : {
         "en" : "Turkmenistan",
@@ -4929,7 +5195,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:410",
+      "countryId" : "#uuid:431",
       "code" : "TN",
       "name" : {
         "en" : "Tunisia",
@@ -4942,7 +5208,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:411",
+      "countryId" : "#uuid:432",
       "code" : "TO",
       "name" : {
         "en" : "Tonga",
@@ -4955,7 +5221,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:412",
+      "countryId" : "#uuid:433",
       "code" : "TR",
       "name" : {
         "en" : "Türkiye",
@@ -4968,7 +5234,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:413",
+      "countryId" : "#uuid:434",
       "code" : "TT",
       "name" : {
         "en" : "Trinidad and Tobago",
@@ -4981,7 +5247,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:414",
+      "countryId" : "#uuid:435",
       "code" : "TV",
       "name" : {
         "en" : "Tuvalu",
@@ -4994,7 +5260,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:415",
+      "countryId" : "#uuid:436",
       "code" : "TW",
       "name" : {
         "en" : "Taiwan",
@@ -5007,7 +5273,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:416",
+      "countryId" : "#uuid:437",
       "code" : "TZ",
       "name" : {
         "en" : "Tanzania",
@@ -5020,7 +5286,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:417",
+      "countryId" : "#uuid:438",
       "code" : "UA",
       "name" : {
         "en" : "Ukraine",
@@ -5033,7 +5299,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:418",
+      "countryId" : "#uuid:439",
       "code" : "UG",
       "name" : {
         "en" : "Uganda",
@@ -5046,7 +5312,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:419",
+      "countryId" : "#uuid:440",
       "code" : "UM",
       "name" : {
         "en" : "United States Minor Outlying Islands",
@@ -5059,7 +5325,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:420",
+      "countryId" : "#uuid:441",
       "code" : "US",
       "name" : {
         "en" : "United States",
@@ -5072,7 +5338,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:421",
+      "countryId" : "#uuid:442",
       "code" : "UY",
       "name" : {
         "en" : "Uruguay",
@@ -5085,7 +5351,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:422",
+      "countryId" : "#uuid:443",
       "code" : "UZ",
       "name" : {
         "en" : "Uzbekistan",
@@ -5098,7 +5364,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:423",
+      "countryId" : "#uuid:444",
       "code" : "VA",
       "name" : {
         "en" : "Vatican City",
@@ -5111,7 +5377,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:424",
+      "countryId" : "#uuid:445",
       "code" : "VC",
       "name" : {
         "en" : "Saint Vincent and the Grenadines",
@@ -5124,7 +5390,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:425",
+      "countryId" : "#uuid:446",
       "code" : "VE",
       "name" : {
         "en" : "Venezuela",
@@ -5137,7 +5403,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:426",
+      "countryId" : "#uuid:447",
       "code" : "VG",
       "name" : {
         "en" : "British Virgin Islands",
@@ -5150,7 +5416,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:427",
+      "countryId" : "#uuid:448",
       "code" : "VI",
       "name" : {
         "en" : "U.S. Virgin Islands",
@@ -5163,7 +5429,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:428",
+      "countryId" : "#uuid:449",
       "code" : "VN",
       "name" : {
         "en" : "Vietnam",
@@ -5176,7 +5442,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:429",
+      "countryId" : "#uuid:450",
       "code" : "VU",
       "name" : {
         "en" : "Vanuatu",
@@ -5189,7 +5455,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:430",
+      "countryId" : "#uuid:451",
       "code" : "WF",
       "name" : {
         "en" : "Wallis and Futuna",
@@ -5202,7 +5468,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:431",
+      "countryId" : "#uuid:452",
       "code" : "WS",
       "name" : {
         "en" : "Samoa",
@@ -5215,7 +5481,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:432",
+      "countryId" : "#uuid:453",
       "code" : "YE",
       "name" : {
         "en" : "Yemen",
@@ -5228,7 +5494,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:433",
+      "countryId" : "#uuid:454",
       "code" : "YT",
       "name" : {
         "en" : "Mayotte",
@@ -5241,7 +5507,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:434",
+      "countryId" : "#uuid:455",
       "code" : "ZA",
       "name" : {
         "en" : "South Africa",
@@ -5254,7 +5520,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:435",
+      "countryId" : "#uuid:456",
       "code" : "ZM",
       "name" : {
         "en" : "Zambia",
@@ -5267,7 +5533,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "countryId" : "#uuid:436",
+      "countryId" : "#uuid:457",
       "code" : "ZW",
       "name" : {
         "en" : "Zimbabwe",
@@ -5281,7 +5547,7 @@
       "processSeqId" : "#op:1"
     } ],
     "QbLegalDoc" : [ {
-      "docId" : "#uuid:437",
+      "docId" : "#uuid:458",
       "kind" : "TERMS_APP",
       "title" : {
         "en" : "[TEST PLACEHOLDER] Terms of use",
@@ -5301,7 +5567,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "docId" : "#uuid:438",
+      "docId" : "#uuid:459",
       "kind" : "TERMS_SPONSOR",
       "title" : {
         "en" : "[TEST PLACEHOLDER] Sponsor terms",
@@ -5321,7 +5587,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "docId" : "#uuid:439",
+      "docId" : "#uuid:460",
       "kind" : "PRIVACY",
       "title" : {
         "en" : "[TEST PLACEHOLDER] Privacy policy",
@@ -5341,7 +5607,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "docId" : "#uuid:440",
+      "docId" : "#uuid:461",
       "kind" : "COMMERCE_NOTICE",
       "title" : {
         "en" : "[TEST PLACEHOLDER] Notice under the Act on Specified Commercial Transactions",
@@ -5361,7 +5627,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "docId" : "#uuid:441",
+      "docId" : "#uuid:462",
       "kind" : "AI_NOTICE",
       "title" : {
         "en" : "[TEST PLACEHOLDER] AI notice",

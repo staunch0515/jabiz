@@ -126,6 +126,8 @@ public final class TopUpProcesses {
                 QbTopUps.defaultDataset(QbTopUps.TOPUP), ctx -> EntityQuery.builder()
                     .where(new QueryPredicate.And(List.of(
                         new QueryPredicate.Eq("sponsorId", ctx.request().actorId()),
+                        // Card top-ups only (Q13a): bank transfers bring no chargebacks the limit guards against.
+                        new QueryPredicate.Eq("method", QbTopUps.STRIPE),
                         new QueryPredicate.IsNotNull("paidAt"))))
                     .orderBy("paidAt", true).limit(WalletLimits.NEW_SPONSOR_TOPUPS).build(), PAID))
             // An opening one counts until its checkout job has finished or failed (review L4): the job's completion
@@ -181,6 +183,7 @@ public final class TopUpProcesses {
         }
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("sponsorId", ctx.request().actorId());
+        values.put("method", QbTopUps.STRIPE);
         values.put("amount", amount);
         values.put("status", TopUpStatus.OPENING);
         values.put("createdAt", ctx.opTime());

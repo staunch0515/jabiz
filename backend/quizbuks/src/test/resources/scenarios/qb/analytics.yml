@@ -20,7 +20,9 @@ steps:
       p22: "$.proposals[21]", p23: "$.proposals[22]", p24: "$.proposals[23]",
       p25: "$.proposals[24]", p26: "$.proposals[25]", p27: "$.proposals[26]", p28: "$.proposals[27]",
       p29: "$.proposals[28]", p30: "$.proposals[29]", p31: "$.proposals[30]",
-      p32: "$.proposals[31]", p33: "$.proposals[32]", p34: "$.proposals[33]" }
+      p32: "$.proposals[31]", p33: "$.proposals[32]", p34: "$.proposals[33]",
+      p35: "$.proposals[34]", p36: "$.proposals[35]", p37: "$.proposals[36]", p38: "$.proposals[37]",
+      p39: "$.proposals[38]", p40: "$.proposals[39]", p41: "$.proposals[40]", p42: "$.proposals[41]" }
   - process: CONTROL_CHANGE_PUBLISH@latest
     actor: { id: publisher, permissions: [control.publish] }
     input: { changeId: "${p1}" }
@@ -123,6 +125,30 @@ steps:
   - process: CONTROL_CHANGE_PUBLISH@latest
     actor: { id: publisher, permissions: [control.publish] }
     input: { changeId: "${p34}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p35}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p36}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p37}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p38}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p39}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p40}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p41}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p42}" }
   - note: Publications go on without a review (the controlled switch, four eyes).
     actor: { id: super-admin, permissions: [control.propose] }
     process: CONTROL_CHANGE_PROPOSE@latest
@@ -240,7 +266,7 @@ steps:
   - advanceClock: PT1M
   - actor: { id: "${u1}", permissions: [qb.play, qb.me] }
     process: QB_ATTEMPT_SUBMIT@latest
-    input: { attemptId: "${t1}", publicationId: "${pub}", answers: [{ questionNo: 1, selected: [2] }, { questionNo: 2, selected: [1] }] }
+    input: { attemptId: "${t1}", publicationId: "${pub}", answers: [{ questionNo: 1, selected: [1] }, { questionNo: 2, selected: [1] }] }
     expectOutput: { status: SUBMITTED, score: 5, passed: true, reward: 100, rewardStatus: PAID }
   - setClock: 2026-10-01T01:17:00Z
   - runJob: { job: qb.attempt-expire, items: { succeeded: 1 } }

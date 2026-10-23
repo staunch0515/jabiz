@@ -69,6 +69,15 @@
 | `QB_STRIPE_ALLOW_LIVE_WITH_TEST_DATA` | **不设** | — | — | 缺省 `false`：库中有测试数据时正式模式启动失败（§4） |
 | `ANTHROPIC_API_KEY` | 是（Q8a；Q8b 的封面与 PDF 资料同一把） | Anthropic Console → API Keys：为本部署新建的密钥（建议单独的工作区，在 Console 设工作区的月支出上限作为最后一道防线） | Console 新建密钥、改环境变量、重启，再删除旧密钥。泄露时立即删除，并先以受控变更关闭 `qb.ai.enabled` | 启动失败（EXTERNAL）；没有密钥时设占位，AI 保持关闭 |
 
+### 1.3a 银行转账充值（Q13a，`plans/Q13-bank-transfer.md`）
+
+不需要环境变量。开启的步骤（都在后台，四眼）：
+
+1. 新版本部署后运行一次 `QB_SETUP`：给角色加上 `qb.topup.bank.record` / `qb.topup.bank.approve`，并提出审批规则 `qb.topup-bank.review` 与新的受控参数；**另一位管理员发布这些提议**（审批规则生效之前，财务登记一律被拒 `QB_TOPUP_BANK_NO_REVIEW`）。
+2. 以受控变更设收款账户：`qb.bank.receiving.bank`、`.branch`（名称带代码）、`.account-type`、`.account-number`、`.account-holder`（片假名），以及 `qb.topup.bank.min` / `max`。五项都设了之前，商家的银行转账充值一律被拒（`QB_TOPUP_BANK_UNAVAILABLE`）。
+3. 日常：商家报告汇款后财务会收到待办；在后台"银行转账充值"中对照银行流水登记实收、到账日与流水号；另一位管理员（内容或财务）在同一页审批后才入账。登记人不能审批自己的登记。驳回会回到登记前的状态，可重新登记。
+4. 30 天没有到账的申请由每日任务（19:23 UTC）置为过期；之后才到的钱仍可在"已过期"的申请上登记。
+
 ### 1.4 只给测试的开关（生产不设）
 
 正式模式（或正式密钥）下设了即**启动失败**的：

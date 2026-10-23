@@ -72,7 +72,7 @@ FROM (
         CAST(t.{{QbTopUp.topUpId}} AS varchar(64))     AS entryId,
         CAST('TOPUP' AS varchar(20))                   AS type,
         CAST(CASE WHEN t.{{QbTopUp.status}} = 'PAID' THEN 'COMPLETED'
-                  WHEN t.{{QbTopUp.status}} IN ('FAILED', 'EXPIRED') THEN 'FAILED'
+                  WHEN t.{{QbTopUp.status}} IN ('FAILED', 'EXPIRED', 'CANCELLED') THEN 'FAILED'
                   ELSE 'PROCESSING' END AS varchar(20)) AS status,
         t.{{QbTopUp.amount}}                           AS amount,
         t.{{QbTopUp.refundedAmount}} + t.{{QbTopUp.disputeClawback}} AS refunded,

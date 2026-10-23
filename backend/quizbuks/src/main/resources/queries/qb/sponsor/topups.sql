@@ -1,6 +1,6 @@
 /*---
 id: qb.sponsor.topups
-description: The sponsor's own top-ups (M-04), newest first, with the checkout's address while it can still be paid
+description: The sponsor's own top-ups (M-04), newest first, with the checkout's address while it can still be paid, and a bank transfer's code, report and what was received (Q13a)
 entities: [QbTopUp]
 datasets:
   QbTopUp: urn:jabiz:dataset:sponsor:QbTopUp
@@ -17,15 +17,23 @@ results:
   stripeFee:      { from: QbTopUp.stripeFee }
   refundedAmount: { from: QbTopUp.refundedAmount }
   failureCode:    { from: QbTopUp.failureCode }
+  method:          { from: QbTopUp.method }
+  transferCode:    { from: QbTopUp.transferCode }
+  requestedAmount: { from: QbTopUp.requestedAmount }
+  payerName:       { from: QbTopUp.payerName }
+  transferDate:    { from: QbTopUp.transferDate }
+  reportedAt:      { from: QbTopUp.reportedAt }
+  receivedOn:      { from: QbTopUp.receivedOn }
 list:
-  filters: [status, createdAt, paidAt, amount]
+  filters: [status, createdAt, paidAt, amount, method]
   sorts:   [createdAt, paidAt, amount]
   defaultSort: { field: createdAt, asc: false }
   key: [topUpId]
 permissions: [qb.sponsor.finance.read]
 ---*/
 -- The address only while the top-up is open (and, given the client's now, not expired): a page never sends the
--- sponsor to a checkout that cannot be paid. Taken back includes lost disputes.
+-- sponsor to a checkout that cannot be paid. Taken back includes lost disputes. A bank top-up's day received only once
+-- it is paid: under review it may still be rejected, and finance's reference stays finance's.
 SELECT
     t.{{QbTopUp.topUpId}}   AS topUpId,
     t.{{QbTopUp.amount}}    AS amount,
@@ -38,5 +46,12 @@ SELECT
     t.{{QbTopUp.paidAt}}    AS paidAt,
     t.{{QbTopUp.stripeFee}} AS stripeFee,
     t.{{QbTopUp.refundedAmount}} + t.{{QbTopUp.disputeClawback}} AS refundedAmount,
-    t.{{QbTopUp.failureCode}} AS failureCode
+    t.{{QbTopUp.failureCode}} AS failureCode,
+    t.{{QbTopUp.method}} AS method,
+    t.{{QbTopUp.transferCode}} AS transferCode,
+    t.{{QbTopUp.requestedAmount}} AS requestedAmount,
+    t.{{QbTopUp.payerName}} AS payerName,
+    t.{{QbTopUp.transferDate}} AS transferDate,
+    t.{{QbTopUp.reportedAt}} AS reportedAt,
+    CASE WHEN t.{{QbTopUp.status}} = 'PAID' THEN t.{{QbTopUp.receivedOn}} END AS receivedOn
 FROM {{QbTopUp}} t
