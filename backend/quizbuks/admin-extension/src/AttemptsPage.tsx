@@ -24,7 +24,7 @@ const right = { className: 'text-right tabular-nums' }
 /**
  * Every taker's attempts (Q14), newest first, by taker, publication, state or reward state (the address carries the
  * filter: a user's page and a publication link here). Neither answers nor results: support needs the outcome. Finance
- * also sees each attempt's Kudos (the taker's share of the reward), read for the page shown.
+ * also sees each paid attempt's Kudos (the taker's share of the reward, as posted), read for the page shown.
  */
 export default function AttemptsPage() {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
@@ -78,7 +78,7 @@ export default function AttemptsPage() {
       cell: ({ row }) => (row.original.rewardStatus ? rewardLabel(row.original.rewardStatus) : '') },
     ...(finance ? [{ id: 'kudos', header: t('attempts.kudos'), meta: right,
       cell: ({ row }: { row: { original: AttemptListRow } }) => {
-        const value = kudos.data?.get(row.original.attemptId)
+        const value = row.original.rewardStatus === 'PAID' ? kudos.data?.get(row.original.attemptId) : undefined
         return value === undefined ? '' : <span data-testid="attempt-kudos">{money(value)}</span>
       } }] : []),
   ], [t, statusLabel, rewardLabel, finance, kudos.data])

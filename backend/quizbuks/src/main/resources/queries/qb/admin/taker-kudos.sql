@@ -25,7 +25,8 @@ permissions: [qb.admin.finance.read]
 -- The takers who answered at least once. Earned is the taker's share of the paid rewards (reward less the
 -- commission, as posted to 2120); pending rewards wait for their sponsor's top-up and are not in the ledger. The
 -- balance and what is on its way out are the wallet's cache (the ledger is the truth, reconciled daily: qb.admin.wallets
--- says the same); transferred is what Stripe received for them (the net of the transfers sent).
+-- says the same); transferred is what Stripe kept for them (the net of the transfers sent, less what was reversed
+-- of them: a partial reversal leaves the transfer SENT and its money back in the balance). Completed: submitted.
 SELECT
     a.a_user                       AS userId,
     a.a_attempts                   AS attempts,
@@ -38,7 +39,7 @@ SELECT
 FROM (
     SELECT m.{{QbAttempt.userId}} AS a_user,
            count(*) AS a_attempts,
-           count(*) FILTER (WHERE m.{{QbAttempt.status}} IN ('SUBMITTED', 'EXPIRED')) AS a_completed,
+           count(*) FILTER (WHERE m.{{QbAttempt.status}} = 'SUBMITTED') AS a_completed,
            coalesce(sum(m.{{QbAttempt.reward}} - coalesce(m.{{QbAttempt.fee}}, 0))
                FILTER (WHERE m.{{QbAttempt.rewardStatus}} = 'PAID'), 0) AS a_earned,
            coalesce(sum(m.{{QbAttempt.reward}}) FILTER (WHERE m.{{QbAttempt.rewardStatus}} = 'PENDING'), 0) AS a_pending
@@ -46,7 +47,7 @@ FROM (
     GROUP BY m.{{QbAttempt.userId}}) a
 LEFT JOIN {{QbWallet}} w ON w.{{QbWallet.ownerId}} = a.a_user AND w.{{QbWallet.kind}} = 'TAKER'
 LEFT JOIN (
-    SELECT x.{{QbTransfer.userId}} AS t_user, sum(x.{{QbTransfer.net}}) AS t_sent
+    SELECT x.{{QbTransfer.userId}} AS t_user, sum(x.{{QbTransfer.net}} - x.{{QbTransfer.reversedAmount}}) AS t_sent
     FROM {{QbTransfer}} x
     WHERE x.{{QbTransfer.status}} = 'SENT'
     GROUP BY x.{{QbTransfer.userId}}) t ON t.t_user = a.a_user

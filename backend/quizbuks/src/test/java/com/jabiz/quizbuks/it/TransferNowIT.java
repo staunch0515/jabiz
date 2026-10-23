@@ -17,7 +17,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * The administrators' payouts (Q14): finance sees why a taker would or would not be transferred to now
- * ({@code QB_TRANSFER_PREVIEW}, which writes nothing) and transfers at once ({@code QB_TRANSFER_NOW}) with the daily
+ * ({@code QB_TRANSFER_PREVIEW}, which writes no business data) and transfers at once ({@code QB_TRANSFER_NOW}) with the daily
  * run's own checks; never to oneself. The takers' Kudos at a glance ({@code qb.admin.taker-kudos}).
  */
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
@@ -89,16 +89,23 @@ class TransferNowIT extends PayoutItSupport {
 
     @Test
     @Order(4)
-    void aLargeOneWaitsForAReview() {
+    void aLargeOneIsLeftToTheDailyRunsReview() {
         param(QbParams.TRANSFER_REVIEW_ABOVE, "1000");
         try {
             String taker = payee("t-q14-review");
             enabledPayee(taker);
             earn(taker, 5000);
             assertThat(preview(taker)).containsEntry("transfers", true).containsEntry("review", true);
-            Map<String, Object> output = run("QB_TRANSFER_NOW", finance(), body("userId", taker));
-            assertThat(output).containsEntry("status", "REVIEW");
-            assertThat(output.get("approvalRequestId")).isNotNull();
+            // Not from "transfer now": the administrator who started it could approve it. Nothing is written.
+            assertThat(run("QB_TRANSFER_NOW", finance(), body("userId", taker)))
+                .containsEntry("reason", TransferRules.REVIEW_NOT_NOW).containsEntry("transferId", null);
+            assertThat(transfersOf(taker)).isEmpty();
+            // The daily run asks for the review, as the payee's.
+            runTransfers();
+            assertThat(transfersOf(taker)).singleElement().satisfies(t -> {
+                assertThat(t).containsEntry("status", "REVIEW");
+                assertThat(t.get("approval_request_id")).isNotNull();
+            });
         } finally {
             param(QbParams.TRANSFER_REVIEW_ABOVE, "50000");
         }

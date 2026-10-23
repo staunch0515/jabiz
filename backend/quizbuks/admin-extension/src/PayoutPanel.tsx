@@ -22,7 +22,8 @@ import { previewTransfer, readTakerKudos, transferNow, type TransferNowOutput } 
  * A taker's Kudos and their payout now (Q14), on the user's page for finance: what they earned and were paid, whether
  * the daily transfer would send their balance now (and if not, why: `QB_TRANSFER_PREVIEW`, which writes nothing), and
  * "Transfer now" (`QB_TRANSFER_NOW`, the daily run's checks for this taker at once; never to oneself, which the server
- * refuses). After a transfer the page's figures are read again.
+ * refuses; above the review limit the daily run asks for the review instead, so that whoever started a transfer is
+ * not the one who approves it). After a transfer the page's figures are read again.
  */
 export function PayoutPanel({ userId }: { userId: string }) {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
@@ -69,7 +70,7 @@ export function PayoutPanel({ userId }: { userId: string }) {
         {!p.transfers && p.skip && <p className="text-muted-foreground text-sm" data-testid="payout-reason">
           {reason(p.skip)}</p>}
         {Number(p.held) > 0 && <p className="text-muted-foreground text-sm">{t('payout.held', { held: money(p.held) })}</p>}
-        {can(PERMISSION.transferNow) && p.transfers && (
+        {can(PERMISSION.transferNow) && p.transfers && !p.review && (
           <ConfirmDialog title={t('payout.nowTitle', { amount: money(p.amount ?? '0') })}
             description={t('payout.nowText')} confirmLabel={t('payout.nowConfirm')} cancelLabel={t('payout.cancel')}
             onConfirm={run}

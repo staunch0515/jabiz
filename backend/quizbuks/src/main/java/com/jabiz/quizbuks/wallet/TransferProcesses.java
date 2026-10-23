@@ -201,13 +201,15 @@ public final class TransferProcesses {
                 .internal()
                 .contextFactory(TransferProcesses::context)
                 .outputMapper(TransferProcesses::output)
-                .steps(b -> createSteps(b, stripe)));
+                .steps(b -> createSteps(b, stripe, true)));
     }
 
     /**
      * A finance administrator's "transfer now" for one taker (Q14): the daily run's steps for that taker at once, with
-     * all its checks (the switch, the threshold, the account, holds, the review above the limit). Nothing is sent that
-     * the daily run would not send; the output names the reason when nothing is. Never to oneself.
+     * all its checks (the switch, the threshold, the account, holds). Nothing is sent that the daily run would not send;
+     * the output names the reason when nothing is. Never to oneself. Above the review limit it writes nothing
+     * ({@link TransferRules#REVIEW_NOT_NOW}): the daily run asks for the review, as the payee's, so that the
+     * administrator who would start it is not the one who could approve it (Q14 review H1).
      */
     public static ProcessDefinition<UserRef, TransferOutput, ProcessContext> now(StripeSettings stripe) {
         return ProcessDefinition.define(NOW, 1, UserRef.class, TransferOutput.class, ProcessContext.class,
@@ -218,13 +220,13 @@ public final class TransferProcesses {
                 .contextFactory(TransferProcesses::context)
                 .outputMapper(TransferProcesses::output)
                 .compute("Not to oneself", (metadata, ctx) -> {
-                    if (ctx.request().actorId().equals(userOf(ctx))) {
+                    if (ctx.request().actorId().equalsIgnoreCase(userOf(ctx).strip())) {
                         throw new BusinessRuleViolationException(List.of(new Violation(null,
                             WalletCodes.TRANSFER_NOW_OWN, "A transfer to oneself is made by another administrator",
                             Map.of())));
                     }
                 })
-                .steps(b -> createSteps(b, stripe)));
+                .steps(b -> createSteps(b, stripe, false)));
     }
 
     /**
@@ -257,8 +259,12 @@ public final class TransferProcesses {
                 .compute("Decide", (metadata, ctx) -> ctx.put(PLAN, planOf(ctx))));
     }
 
-    /** The daily run's steps for one taker: decide under their wallet lock, then send or ask for a review. */
-    private static <I, O> void createSteps(ProcessDefinitionBuilder<I, O, ProcessContext> pb, StripeSettings stripe) {
+    /**
+     * The daily run's steps for one taker: decide under their wallet lock, then send or (when {@code reviewable}) ask
+     * for a review.
+     */
+    private static <I, O> void createSteps(ProcessDefinitionBuilder<I, O, ProcessContext> pb, StripeSettings stripe,
+        boolean reviewable) {
         pb
                 .step("Lock the taker's wallet", HoldLock.<ProcessContext>exclusive(
                     ctx -> QbWallets.lockName(QbWallets.TAKER, userOf(ctx))))
@@ -275,7 +281,7 @@ public final class TransferProcesses {
                         new QueryPredicate.Eq("subject", QbPayouts.APPROVAL_SUBJECT),
                         new QueryPredicate.Eq("enabled", true)))).limit(1).build(), RULES))
                 .steps(b -> TakerWallets.load(b, TransferProcesses::userOf))
-                .compute("Decide", (metadata, ctx) -> plan(ctx))
+                .compute("Decide", (metadata, ctx) -> plan(ctx, reviewable))
                 // No rule: nothing is written for the taker; finance hears of it once a day, not once per taker.
                 .step("Find the day's task about the rule", QueryEntities.<ProcessContext>of(TaskEntities.TASK_DATASET,
                     ctx -> EntityQuery.builder().where(new QueryPredicate.In("sourceKey", reviewMissing(ctx)
@@ -296,12 +302,16 @@ public final class TransferProcesses {
                 .steps(TransferProcesses::finish);
     }
 
-    static void plan(ProcessContext ctx) {
+    static void plan(ProcessContext ctx, boolean reviewable) {
         EntityInstance account = first(ctx, ACCOUNT);
         TransferRules.Plan plan = planOf(ctx);
         ctx.put(PLAN, plan);
         if (!plan.transfers()) {
             ctx.put(SKIP, plan.skip());
+            return;
+        }
+        if (plan.review() && !reviewable) {
+            ctx.put(SKIP, TransferRules.REVIEW_NOT_NOW);
             return;
         }
         Map<String, Object> values = new LinkedHashMap<>();

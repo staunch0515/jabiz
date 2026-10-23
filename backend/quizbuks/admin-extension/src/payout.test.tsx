@@ -108,6 +108,13 @@ describe('PayoutPanel', () => {
     expect(screen.queryByTestId('transfer-now')).toBeNull()
   })
 
+  it('leaves a transfer above the review limit to the daily run', async () => {
+    server.preview = { ...server.preview, review: true }
+    renderAt('/', '/', <PayoutPanel userId={TAKER} />)
+    expect(await screen.findByTestId('payout-status')).toHaveTextContent('cannot be transferred now')
+    expect(screen.queryByTestId('transfer-now')).toBeNull()
+  })
+
   it('offers no transfer without the permission', async () => {
     server.permissions = new Set(['qb.admin.finance.read'])
     renderAt('/', '/', <PayoutPanel userId={TAKER} />)
