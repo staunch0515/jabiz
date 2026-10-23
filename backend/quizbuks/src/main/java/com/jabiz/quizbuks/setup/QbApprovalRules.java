@@ -3,6 +3,7 @@ package com.jabiz.quizbuks.setup;
 import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.quizbuks.identity.SponsorApprovals;
 import com.jabiz.quizbuks.publishing.PublicationApprovals;
+import com.jabiz.quizbuks.wallet.BankTopUps;
 import com.jabiz.quizbuks.wallet.QbPayouts;
 
 import java.util.Collections;
@@ -55,7 +56,17 @@ public final class QbApprovalRules {
         List.of(entries("permission", QbPermissions.PAYOUT_REVIEW)), 100,
         "Transfers above qb.transfer.review-above are reviewed");
 
-    public static final List<Rule> ALL = List.of(PUBLICATION_REVIEW, SPONSOR_REVIEW, TRANSFER_REVIEW);
+    /**
+     * Every bank top-up finance records waits for another administrator's approval before it is credited (Q13a, B-1):
+     * the recorder prepares the case, so they cannot approve their own.
+     */
+    public static final Rule BANK_TOPUP_REVIEW = new Rule(BankTopUps.REVIEW_RULE, BankTopUps.APPROVAL_SUBJECT,
+        entries("fact", "bank", "op", "eq", "value", true),
+        List.of(entries("permission", QbPermissions.TOPUP_BANK_APPROVE)), 100,
+        "Bank top-ups are credited only after another administrator approves what finance recorded");
+
+    public static final List<Rule> ALL = List.of(PUBLICATION_REVIEW, SPONSOR_REVIEW, TRANSFER_REVIEW,
+        BANK_TOPUP_REVIEW);
 
     private static Map<String, Object> entries(Object... pairs) {
         Map<String, Object> map = new LinkedHashMap<>();

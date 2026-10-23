@@ -9,6 +9,10 @@ export const WALLET_PROCESS = {
   topUpStart: 'QB_TOPUP_START',
   /** Issues the receipt of a paid top-up, or gives the one issued before (`wallet.TopUpReceipts`, Q9d). */
   receiptIssue: 'QB_TOPUP_RECEIPT_ISSUE',
+  /** Bank transfers (`wallet.BankTopUps`, Q13a): ask for one, say it was sent, withdraw it. */
+  bankStart: 'QB_TOPUP_BANK_START',
+  bankReport: 'QB_TOPUP_BANK_REPORT',
+  bankCancel: 'QB_TOPUP_BANK_CANCEL',
 } as const
 
 /** SQL templates (`queries/qb/sponsor`). */
@@ -17,6 +21,8 @@ export const WALLET_TEMPLATE = {
   topUps: 'qb.sponsor.topups',
   /** Q10b: the top-up's range and the new sponsors' limit. */
   topUpLimit: 'qb.sponsor.topup-limit',
+  /** Q13a: the platform's receiving account and a bank top-up's range. */
+  bankAccount: 'qb.sponsor.bank-account',
 } as const
 
 /** The sponsor's own top-ups, read only (the checkout's address included: it is theirs). */

@@ -93,8 +93,15 @@ public final class QbPermissions {
      * events, the jobs' results, the daily transfers and their checks. {@code internal()}; granted to no role.
      */
     public static final String PAYOUT_SYSTEM = "qb.payout.system";
-    /** Top up the sponsor wallet. */
+    /** Top up the sponsor wallet (by card, or by bank transfer: ask for one, report it sent, withdraw it). */
     public static final String TOPUP = "qb.topup";
+    /** Record the money of a bank top-up found on the bank statement, for another's approval (Q13a). Finance. */
+    public static final String TOPUP_BANK_RECORD = "qb.topup.bank.record";
+    /**
+     * Approve a recorded bank top-up: the permission of the level of the rule {@code qb.topup-bank.review} (Q13a; with
+     * the platform's {@code approval.decide}). Content and finance administrators, never the one who recorded it.
+     */
+    public static final String TOPUP_BANK_APPROVE = "qb.topup.bank.approve";
     /** A sponsor's own transactions and reports. */
     public static final String SPONSOR_FINANCE_READ = "qb.sponsor.finance.read";
     /** Notices to the takers of a sponsor's publications. */

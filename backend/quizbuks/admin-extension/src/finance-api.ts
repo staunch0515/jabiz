@@ -494,3 +494,82 @@ export async function readIssuedRuns(id: ReportId, period: Period): Promise<Issu
     supersededBy: str(run.supersededBy),
   }))
 }
+
+/** A row of `qb.admin.bank-topups` (Q13a). */
+export interface BankTopUp {
+  topUpId: string
+  sponsorId: string
+  company: string | null
+  transferCode: string | null
+  requestedAmount: string
+  /** What is credited: the amount asked for until finance records what arrived. */
+  amount: string
+  status: string
+  createdAt: string | null
+  payerName: string | null
+  transferDate: string | null
+  reportedAt: string | null
+  receivedOn: string | null
+  bankReference: string | null
+  recordedBy: string | null
+  recordedAt: string | null
+  approvalRequestId: string | null
+  paidAt: string | null
+}
+
+function toBankTopUp(row: Row): BankTopUp {
+  return {
+    topUpId: String(row.topUpId),
+    sponsorId: String(row.sponsorId ?? ''),
+    company: str(row.company),
+    transferCode: str(row.transferCode),
+    requestedAmount: amount(row.requestedAmount),
+    amount: amount(row.amount),
+    status: String(row.status ?? ''),
+    createdAt: str(row.createdAt),
+    payerName: str(row.payerName),
+    transferDate: str(row.transferDate),
+    reportedAt: str(row.reportedAt),
+    receivedOn: str(row.receivedOn),
+    bankReference: str(row.bankReference),
+    recordedBy: str(row.recordedBy),
+    recordedAt: str(row.recordedAt),
+    approvalRequestId: str(row.approvalRequestId),
+    paidAt: str(row.paidAt),
+  }
+}
+
+/** The bank top-ups, newest first, of a state (all when null) or with a transfer code. */
+export async function readBankTopUps(status: string | null, code: string | null, offset: number, limit: number):
+  Promise<Page<BankTopUp>> {
+  const filters: Filter[] = []
+  if (status) filters.push({ field: 'status', op: 'eq', value: status })
+  if (code) filters.push({ field: 'transferCode', op: 'eq', value: code })
+  const page = await runQuery<Row>(TEMPLATE.bankTopUps, { filters, offset, limit, count: true })
+  return { total: page.total, items: page.items.map(toBankTopUp) }
+}
+
+/** One bank top-up; null when there is none. */
+export async function readBankTopUp(topUpId: string): Promise<BankTopUp | null> {
+  const page = await runQuery<Row>(TEMPLATE.bankTopUps, { filters: [{ field: 'topUpId', op: 'eq', value: topUpId }],
+    limit: 1 })
+  return page.items[0] ? toBankTopUp(page.items[0]) : null
+}
+
+/** `BankTopUps.RecordInput`: what the statement shows; `receivedOn` is a day (`YYYY-MM-DD`) in Japan. */
+export type BankRecordInput = {
+  topUpId: string
+  amount: number
+  receivedOn: string
+  bankReference: string
+}
+
+/** Records the money for another administrator's approval; the output names the request. */
+export const recordBankTopUp = (input: BankRecordInput) =>
+  runProcess<{ topUpId: string; status: string; approvalRequestId: string | null }>(PROCESS.bankRecord, input)
+
+/** Today in Japan (`YYYY-MM-DD`), where the bank is: the server checks the day against it. */
+export function todayInJapan(now = new Date()): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit',
+    day: '2-digit' }).format(now)
+}

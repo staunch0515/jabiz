@@ -89,6 +89,8 @@ kinds AS (
                     AND p.a1110 < 0 AND p.a2110 > 0 AND p.ref_kind IN ('ch_', 'py_') THEN 'REFUND'
                WHEN p.src = 'QbTopUp' AND NOT p.reversal AND p.accts = '1110,2110'
                     AND p.a1110 < 0 AND p.a2110 > 0 AND p.ref_kind IN ('dp_', 'du_') THEN 'DISPUTE'
+               WHEN p.src = 'QbTopUp' AND NOT p.reversal AND p.accts = '1120,2110'
+                    AND p.a1120 > 0 AND p.a2110 < 0 THEN 'BANK_TOPUP'
                WHEN p.src = 'QbTopUp' AND NOT p.reversal AND p.accts = '1110,5110'
                     AND p.a1110 < 0 AND p.a5110 > 0 THEN 'STRIPE_FEE'
                WHEN p.src = 'QbAttempt' AND NOT p.reversal AND p.accts IN ('2110,2120', '2110,2120,4110', '2110,4110')
@@ -121,8 +123,8 @@ SELECT
     coalesce(sum(k.a2130), 0)   AS inTransit,
     coalesce(sum(k.a4110), 0)   AS revenue,
     coalesce(sum(k.a5110), 0)   AS paymentFees
-FROM (VALUES (1, 'TOPUP'), (2, 'REFUND'), (3, 'DISPUTE'), (4, 'STRIPE_FEE'), (5, 'REWARD'), (6, 'TRANSFER_SENT'),
-             (7, 'TRANSFER_SETTLED'), (8, 'TRANSFER_FAILED'), (9, 'TRANSFER_REVERSED'), (10, 'PAYOUT'),
-             (11, 'PAYOUT_FAILED'), (12, 'OTHER')) AS c (seq, kind)
+FROM (VALUES (1, 'TOPUP'), (2, 'BANK_TOPUP'), (3, 'REFUND'), (4, 'DISPUTE'), (5, 'STRIPE_FEE'), (6, 'REWARD'),
+             (7, 'TRANSFER_SENT'), (8, 'TRANSFER_SETTLED'), (9, 'TRANSFER_FAILED'), (10, 'TRANSFER_REVERSED'),
+             (11, 'PAYOUT'), (12, 'PAYOUT_FAILED'), (13, 'OTHER')) AS c (seq, kind)
 LEFT JOIN kinds k ON k.kind = c.kind
 GROUP BY c.seq, c.kind

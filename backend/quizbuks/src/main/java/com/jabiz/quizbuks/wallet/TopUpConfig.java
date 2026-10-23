@@ -1,5 +1,6 @@
 package com.jabiz.quizbuks.wallet;
 
+import com.jabiz.approval.ApprovalSubject;
 import com.jabiz.context.RequestContext;
 import com.jabiz.dataset.DatasetDefinition;
 import com.jabiz.dictionary.StaticDictionary;
@@ -12,11 +13,13 @@ import com.jabiz.external.ExternalJobType;
 import com.jabiz.external.ExternalService;
 import com.jabiz.job.JobDefinition;
 import com.jabiz.job.JobItems;
+import com.jabiz.numbering.NumberSequence;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.quizbuks.identity.AccountLinks;
 import com.jabiz.retention.RetentionPolicy;
+import com.jabiz.runtime.approval.ApprovalProcesses;
 import com.jabiz.runtime.inbound.InboundEntities;
 import com.jabiz.runtime.inbound.InboundEvents;
 import org.springframework.beans.factory.annotation.Value;
@@ -142,7 +145,30 @@ class TopUpConfig {
             .item(TopUpStatus.OPEN, "en", "Awaiting payment", "zh", "待支付", "ja", "支払い待ち")
             .item(TopUpStatus.PAID, "en", "Paid", "zh", "已到账", "ja", "入金済み")
             .item(TopUpStatus.EXPIRED, "en", "Expired", "zh", "已过期", "ja", "期限切れ")
-            .item(TopUpStatus.FAILED, "en", "Failed", "zh", "失败", "ja", "失敗"));
+            .item(TopUpStatus.FAILED, "en", "Failed", "zh", "失败", "ja", "失敗")
+            .item(TopUpStatus.AWAITING, "en", "Awaiting transfer", "zh", "待汇款", "ja", "振込待ち")
+            .item(TopUpStatus.REPORTED, "en", "Transfer reported", "zh", "已报告汇款", "ja", "振込連絡済み")
+            .item(TopUpStatus.REVIEW, "en", "Being confirmed", "zh", "确认中", "ja", "確認中")
+            .item(TopUpStatus.CANCELLED, "en", "Cancelled", "zh", "已取消", "ja", "取消済み"));
+    }
+
+    @Bean
+    StaticDictionary qbTopUpMethodDictionary() {
+        return StaticDictionary.define(QbTopUps.METHOD_DICTIONARY, d -> d
+            .item(QbTopUps.STRIPE, "en", "Card", "zh", "银行卡", "ja", "カード")
+            .item(QbTopUps.BANK, "en", "Bank transfer", "zh", "银行转账", "ja", "銀行振込"));
+    }
+
+    /** The codes a sponsor puts before the payer's name of a bank transfer (Q13a): seven digits, never repeated. */
+    @Bean
+    NumberSequence qbTopUpTransferCodes() {
+        return NumberSequence.define(QbTopUps.TRANSFER_CODE_SEQUENCE, s -> s.format("{n:7}").startAt(1000001));
+    }
+
+    @Bean
+    ApprovalSubject qbBankTopUpApprovalSubject() {
+        return ApprovalSubject.define(BankTopUps.APPROVAL_SUBJECT, s -> s.entity(QbTopUps.TOPUP).bool("bank")
+            .number("amount").text("sponsorId"));
     }
 
     @Bean
@@ -294,6 +320,70 @@ class TopUpConfig {
     ProcessDefinition<TopUpEvents.InboundRef, TopUpClawback.ClawbackOutput, ProcessContext> qbTopUpDisputeClosed(
         StripeSettings settings) {
         return TopUpClawback.disputeClosed(settings);
+    }
+
+    // ---- bank transfers (Q13a) ---------------------------------------------------------------------------------------
+
+    @Bean
+    ProcessDefinition<BankTopUps.StartInput, BankTopUps.StartOutput, ProcessContext> qbBankTopUpStart() {
+        return BankTopUps.start();
+    }
+
+    @Bean
+    ProcessDefinition<BankTopUps.ReportInput, BankTopUps.BankOutput, ProcessContext> qbBankTopUpReport() {
+        return BankTopUps.report();
+    }
+
+    @Bean
+    ProcessDefinition<TopUpProcesses.TopUpRef, BankTopUps.BankOutput, ProcessContext> qbBankTopUpCancel() {
+        return BankTopUps.cancel();
+    }
+
+    @Bean
+    ProcessDefinition<BankTopUps.RecordInput, BankTopUps.BankOutput, ProcessContext> qbBankTopUpRecord() {
+        return BankTopUps.record();
+    }
+
+    @Bean
+    ProcessDefinition<TransferProcesses.ApprovalResultInput, BankTopUps.BankOutput, ProcessContext>
+        qbBankTopUpApprovalResult() {
+        return BankTopUps.approvalResult();
+    }
+
+    @Bean
+    ProcessDefinition<TopUpProcesses.TopUpRef, BankTopUps.BankOutput, ProcessContext> qbBankTopUpExpire() {
+        return BankTopUps.expire();
+    }
+
+    @Bean
+    EventSubscription<TransferProcesses.ApprovalResultInput> qbBankTopUpApprovedSubscription(
+        ProcessDefinition<TransferProcesses.ApprovalResultInput, BankTopUps.BankOutput, ProcessContext>
+            qbBankTopUpApprovalResult) {
+        return EventSubscription.of("qb.topup-bank-approved", ApprovalProcesses.APPROVED_EVENT,
+            qbBankTopUpApprovalResult, TransferProcesses::resultInput);
+    }
+
+    @Bean
+    EventSubscription<TransferProcesses.ApprovalResultInput> qbBankTopUpRejectedSubscription(
+        ProcessDefinition<TransferProcesses.ApprovalResultInput, BankTopUps.BankOutput, ProcessContext>
+            qbBankTopUpApprovalResult) {
+        return EventSubscription.of("qb.topup-bank-rejected", ApprovalProcesses.REJECTED_EVENT,
+            qbBankTopUpApprovalResult, TransferProcesses::resultInput);
+    }
+
+    /**
+     * Every day at 19:23 UTC (04:23 in Tokyo): the bank top-ups still waiting for money 30 days after they were asked
+     * for, each expired by {@code QB_TOPUP_BANK_EXPIRE} in a transaction of its own (platform decision D42).
+     */
+    @Bean
+    JobDefinition<TopUpProcesses.TopUpRef> qbBankTopUpExpireJob(
+        ProcessDefinition<TopUpProcesses.TopUpRef, BankTopUps.BankOutput, ProcessContext> qbBankTopUpExpire) {
+        return JobDefinition.forEach(BankTopUps.EXPIRE_JOB, "0 23 19 * * *", ZoneOffset.UTC,
+                JobItems.template(BankTopUps.EXPIRE_TEMPLATE, scheduledTime -> Map.of(
+                    "createdBefore", scheduledTime.minus(BankTransfers.EXPIRES_AFTER)), "topUpId"),
+                qbBankTopUpExpire,
+                (scheduledTime, row) -> new TopUpProcesses.TopUpRef(String.valueOf(row.get("topUpId"))))
+            .maxItems(BankTransfers.EXPIRE_BATCH);
     }
 
     @Bean

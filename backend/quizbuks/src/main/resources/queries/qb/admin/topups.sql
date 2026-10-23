@@ -1,6 +1,6 @@
 /*---
 id: qb.admin.topups
-description: Every sponsor's top-ups, newest first, with Stripe's references, the fee and what was taken back (no checkout address)
+description: Every sponsor's top-ups, newest first, with Stripe's references, the fee and what was taken back (no checkout address), and a bank transfer's code, report and record (Q13a)
 entities: [QbTopUp, QbSponsor]
 datasets:
   QbTopUp: urn:jabiz:dataset:default:QbTopUp
@@ -31,8 +31,20 @@ results:
   failureCode:          { from: QbTopUp.failureCode }
   checkReason:          { from: QbTopUp.checkReason }
   ledgerTransactionId:  { from: QbTopUp.ledgerTransactionId }
+  method:               { from: QbTopUp.method }
+  transferCode:         { from: QbTopUp.transferCode }
+  requestedAmount:      { from: QbTopUp.requestedAmount }
+  payerName:            { from: QbTopUp.payerName }
+  transferDate:         { from: QbTopUp.transferDate }
+  reportedAt:           { from: QbTopUp.reportedAt }
+  receivedOn:           { from: QbTopUp.receivedOn }
+  bankReference:        { from: QbTopUp.bankReference }
+  recordedBy:           { from: QbTopUp.recordedBy }
+  recordedAt:           { from: QbTopUp.recordedAt }
+  approvalRequestId:    { from: QbTopUp.approvalRequestId }
 list:
-  filters: [topUpId, sponsorId, status, createdAt, paidAt, amount, checkReason, disputeStatus, paymentIntentId]
+  filters: [topUpId, sponsorId, status, createdAt, paidAt, amount, checkReason, disputeStatus, paymentIntentId,
+    method, transferCode]
   sorts:   [createdAt, paidAt, amount]
   defaultSort: { field: createdAt, asc: false }
   key: [topUpId]
@@ -63,6 +75,17 @@ SELECT
     t.{{QbTopUp.disputeHeld}}          AS disputeHeld,
     t.{{QbTopUp.failureCode}}          AS failureCode,
     t.{{QbTopUp.checkReason}}          AS checkReason,
-    t.{{QbTopUp.ledgerTransactionId}}  AS ledgerTransactionId
+    t.{{QbTopUp.ledgerTransactionId}}  AS ledgerTransactionId,
+    t.{{QbTopUp.method}}               AS method,
+    t.{{QbTopUp.transferCode}}         AS transferCode,
+    t.{{QbTopUp.requestedAmount}}      AS requestedAmount,
+    t.{{QbTopUp.payerName}}            AS payerName,
+    t.{{QbTopUp.transferDate}}         AS transferDate,
+    t.{{QbTopUp.reportedAt}}           AS reportedAt,
+    t.{{QbTopUp.receivedOn}}           AS receivedOn,
+    t.{{QbTopUp.bankReference}}        AS bankReference,
+    t.{{QbTopUp.recordedBy}}           AS recordedBy,
+    t.{{QbTopUp.recordedAt}}           AS recordedAt,
+    t.{{QbTopUp.approvalRequestId}}    AS approvalRequestId
 FROM {{QbTopUp}} t
 LEFT JOIN {{QbSponsor}} s ON s.{{QbSponsor.userId}} = t.{{QbTopUp.sponsorId}}

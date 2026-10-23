@@ -47,13 +47,13 @@ class SponsorReviewSettingsIT extends AccountItSupport {
         assertThat(codes(refused("QB_SPONSOR_APPLY", token, application("Acme"), 422)))
             .containsExactly("PARAM_NOT_FOUND");
         // The parameters published, not the rule: no review would be asked for, which is refused.
-        publishProposals(Map.of("proposals", proposals.subList(0, count - 3)));
+        publishProposals(Map.of("proposals", proposals.subList(0, count - 4)));
         assertThat(codes(refused("QB_SPONSOR_APPLY", token, application("Acme"), 422)))
             .containsExactly(ReviewCodes.REVIEW_NOT_CONFIGURED);
         assertThat(onboardingOf(sara)).isNull();
 
         // With the rule, a review is asked for.
-        publishProposals(Map.of("proposals", proposals.subList(count - 2, count - 1)));
+        publishProposals(Map.of("proposals", proposals.subList(count - 3, count - 2)));
         assertThat(run("QB_SPONSOR_APPLY", token, application("Acme"))).containsEntry("reviewStatus",
             SponsorStatus.PENDING);
 

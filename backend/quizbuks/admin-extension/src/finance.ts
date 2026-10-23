@@ -83,3 +83,11 @@ export function failed(error: unknown, fallback: string): never {
   tell(error, fallback)
   throw error
 }
+
+/** A whole, positive amount as typed (digits, with separators); null otherwise (Q13a: a bank top-up's money). */
+export function parseAmount(text: string): number | null {
+  const plain = text.trim().replace(/[,\s_]/g, '')
+  if (!/^\d{1,13}$/.test(plain)) return null
+  const value = Number(plain)
+  return value > 0 ? value : null
+}

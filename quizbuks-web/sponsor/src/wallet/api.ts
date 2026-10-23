@@ -8,9 +8,17 @@ import { WALLET_DATASET, WALLET_DICTIONARY, WALLET_PROCESS, WALLET_TEMPLATE } fr
  * the server. Amounts stay as the server sends them (whole Kudos) and are shown only through `formatKudos`.
  */
 
-/** `TopUpStatus`: only the server's notices from Stripe move a top-up on; the page only reads it. */
-export type TopUpStatus = 'OPENING' | 'OPEN' | 'PAID' | 'EXPIRED' | 'FAILED'
+/**
+ * `TopUpStatus`: only the server's notices from Stripe move a card top-up on, and only finance with another
+ * administrator's approval a bank one; the page only reads it.
+ */
+export type TopUpStatus = 'OPENING' | 'OPEN' | 'PAID' | 'EXPIRED' | 'FAILED' | 'AWAITING' | 'REPORTED' | 'REVIEW'
+  | 'CANCELLED'
 export const FINAL_STATUSES: readonly TopUpStatus[] = ['PAID', 'EXPIRED', 'FAILED']
+/** How a top-up is paid: by card on Stripe's page, or by a transfer to the platform's bank account (Q13a). */
+export type TopUpMethod = 'STRIPE' | 'BANK'
+/** The bank top-ups the sponsor may still report or withdraw (no money recorded yet). */
+export const BANK_WAITING: readonly TopUpStatus[] = ['AWAITING', 'REPORTED']
 
 /** The row of `qb.sponsor.wallet` (M-04). */
 export interface SponsorWallet {
@@ -36,6 +44,8 @@ export interface TopUpRow {
   checkoutUrl: string | null
   paidAt: string | null
   refundedAmount: number
+  method: TopUpMethod
+  transferCode: string | null
 }
 
 /** The top-up as the sponsor's dataset has it. */
@@ -47,6 +57,14 @@ export interface TopUp {
   expiresAt: string | null
   checkoutUrl: string | null
   paidAt: string | null
+  method: TopUpMethod
+  /** A bank transfer's: the code to put before the payer's name, and what the sponsor asked for and reported. */
+  transferCode: string | null
+  requestedAmount: number | null
+  payerName: string | null
+  transferDate: string | null
+  /** The day the money arrived, once it is paid. */
+  receivedOn: string | null
 }
 
 /** `TopUpProcesses.StartOutput`. */
@@ -136,6 +154,8 @@ export async function searchTopUps({ sorts, offset, limit }: TopUpSearch) {
       checkoutUrl: str(row.checkoutUrl),
       paidAt: str(row.paidAt),
       refundedAmount: num(row.refundedAmount),
+      method: row.method === 'BANK' ? 'BANK' : 'STRIPE',
+      transferCode: str(row.transferCode),
     })),
   }
 }
@@ -159,6 +179,12 @@ export async function readTopUp(topUpId: string): Promise<TopUp | null> {
     expiresAt: str(row.expiresAt),
     checkoutUrl: str(row.checkoutUrl),
     paidAt: str(row.paidAt),
+    method: row.method === 'BANK' ? 'BANK' : 'STRIPE',
+    transferCode: str(row.transferCode),
+    requestedAmount: numOrNull(row.requestedAmount),
+    payerName: str(row.payerName),
+    transferDate: str(row.transferDate),
+    receivedOn: row.status === 'PAID' ? str(row.receivedOn) : null,
   }
 }
 
@@ -178,6 +204,59 @@ export function payableUrl(topUp: Pick<TopUp, 'status' | 'checkoutUrl' | 'expire
  */
 export const startTopUp = (amount: number, idempotencyKey: string) =>
   runProcess<StartOutput>(WALLET_PROCESS.topUpStart, { amount }, { idempotencyKey })
+
+/** The platform's receiving account (`qb.sponsor.bank-account`, Q13a); a part not set is null. */
+export interface BankAccount {
+  bank: string | null
+  branch: string | null
+  accountType: string | null
+  accountNumber: string | null
+  accountHolder: string | null
+  min: number | null
+  max: number | null
+}
+
+/** Whether every part of the account is set (until then the server refuses bank top-ups). */
+export const bankAccountSet = (account: BankAccount) => Boolean(account.bank && account.branch
+  && account.accountType && account.accountNumber && account.accountHolder)
+
+export async function readBankAccount(): Promise<BankAccount> {
+  const row = (await runQuery<Row>(WALLET_TEMPLATE.bankAccount, { limit: 1 })).items[0] ?? {}
+  return {
+    bank: str(row.bank),
+    branch: str(row.branch),
+    accountType: str(row.accountType),
+    accountNumber: str(row.accountNumber),
+    accountHolder: str(row.accountHolder),
+    min: numOrNull(row.min),
+    max: numOrNull(row.max),
+  }
+}
+
+/** `BankTopUps.StartOutput`. */
+export interface BankStartOutput {
+  topUpId: string
+  transferCode: string
+  amount: number
+  status: TopUpStatus
+}
+
+/** Asks for a bank top-up of `amount` whole Kudos (one per key, as with a card top-up). */
+export const startBankTopUp = (amount: number, idempotencyKey: string) =>
+  runProcess<BankStartOutput>(WALLET_PROCESS.bankStart, { amount }, { idempotencyKey })
+
+/** Says the money was sent: the payer's name as the bank shows it and the day (`YYYY-MM-DD`, in Japan). */
+export const reportBankTransfer = (topUpId: string, payerName: string, transferDate: string) =>
+  runProcess<unknown>(WALLET_PROCESS.bankReport, { topUpId, payerName, transferDate })
+
+/** Withdraws a bank top-up no money was recorded against. */
+export const cancelBankTopUp = (topUpId: string) => runProcess<unknown>(WALLET_PROCESS.bankCancel, { topUpId })
+
+/** Today in Japan (`YYYY-MM-DD`), where the bank is: the server checks the days against it. */
+export function todayInJapan(now = new Date()): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit',
+    day: '2-digit' }).format(now)
+}
 
 /** `TopUpReceipts.IssueOutput`: the receipt's document, issued now or before. */
 export interface ReceiptOutput {
@@ -235,10 +314,24 @@ export function checkoutReturn(search: string): 'paid' | 'cancelled' | null {
 /** The wallet's pages and the keys of what they read. */
 export const WALLET_PATH = '/wallet'
 export const topUpPath = (topUpId: string) => `${WALLET_PATH}/topups/${encodeURIComponent(topUpId)}`
+/** A bank top-up's page: the account to transfer to, the code, the report (Q13a). */
+export const bankTopUpPath = (topUpId: string) => `${WALLET_PATH}/bank/${encodeURIComponent(topUpId)}`
+/** The page of a top-up of either method. */
+export const pathOfTopUp = (row: { topUpId: string; method: TopUpMethod }) =>
+  row.method === 'BANK' ? bankTopUpPath(row.topUpId) : topUpPath(row.topUpId)
 
 /** The top-up of a page's path (`/wallet/topups/<id>`), or null. */
 export function topUpIdOf(path: string): string | null {
-  const match = /^\/wallet\/topups\/([^/]+)\/?$/.exec(path)
+  return idOf(/^\/wallet\/topups\/([^/]+)\/?$/, path)
+}
+
+/** The bank top-up of a page's path (`/wallet/bank/<id>`), or null. */
+export function bankTopUpIdOf(path: string): string | null {
+  return idOf(/^\/wallet\/bank\/([^/]+)\/?$/, path)
+}
+
+function idOf(pattern: RegExp, path: string): string | null {
+  const match = pattern.exec(path)
   if (!match) return null
   try {
     return decodeURIComponent(match[1])

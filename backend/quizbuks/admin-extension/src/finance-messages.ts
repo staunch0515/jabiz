@@ -17,6 +17,7 @@ export const financeMessages = {
     filter: { label: 'Filters', status: 'State', all: 'All', from: 'From', to: 'To' },
     category: {
       TOPUP: 'Top-ups credited',
+      BANK_TOPUP: 'Bank top-ups credited',
       REFUND: 'Refunds taken back',
       DISPUTE: 'Lost disputes taken back',
       STRIPE_FEE: "Stripe's fees",
@@ -273,6 +274,7 @@ export const financeMessages = {
     filter: { label: '筛选', status: '状态', all: '全部', from: '从', to: '到' },
     category: {
       TOPUP: '充值到账',
+      BANK_TOPUP: '银行转账充值到账',
       REFUND: '退款扣回',
       DISPUTE: '争议败诉扣回',
       STRIPE_FEE: 'Stripe 手续费',
@@ -529,6 +531,7 @@ export const financeMessages = {
     filter: { label: '絞り込み', status: 'ステータス', all: 'すべて', from: '開始', to: '終了' },
     category: {
       TOPUP: 'チャージの入金',
+      BANK_TOPUP: '銀行振込チャージの入金',
       REFUND: '返金による取り戻し',
       DISPUTE: '異議申し立ての敗訴による取り戻し',
       STRIPE_FEE: 'Stripe の手数料',

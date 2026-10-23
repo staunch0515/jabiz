@@ -46,7 +46,8 @@ class SetupIT extends QbItSupport {
         // sponsor onboarding review (Q2) are proposed.
         // Q10b (L3): the separation of duties too.
         assertThat(first.get("rulesProposed")).isEqualTo(List.of(PublicationApprovals.RULE, SponsorApprovals.RULE,
-            com.jabiz.quizbuks.wallet.QbPayouts.REVIEW_RULE, QbSodRules.CONTROL.code(), QbSodRules.SECURITY.code()));
+            com.jabiz.quizbuks.wallet.QbPayouts.REVIEW_RULE, com.jabiz.quizbuks.wallet.BankTopUps.REVIEW_RULE,
+            QbSodRules.CONTROL.code(), QbSodRules.SECURITY.code()));
         assertThat((List<?>) first.get("proposals")).hasSize(QbParams.CONTROLLED.size() + QbApprovalRules.ALL.size()
             + QbSodRules.ALL.size());
         // Q7b: a draft of each legal text, a marked test placeholder; nothing published.
@@ -88,6 +89,13 @@ class SetupIT extends QbItSupport {
                     .satisfies(r -> assertThat(r.get("condition").toString()).contains("autoApprove"))
                     .satisfies(r -> assertThat(r.get("levels").toString())
                         .contains(QbPermissions.REVIEW_SPONSOR)),
+                // Q13a: every bank top-up finance records, approved by another administrator.
+                rule -> assertThat(rule).containsEntry("rule_code", com.jabiz.quizbuks.wallet.BankTopUps.REVIEW_RULE)
+                    .containsEntry("subject", com.jabiz.quizbuks.wallet.BankTopUps.APPROVAL_SUBJECT)
+                    .containsEntry("enabled", true)
+                    .satisfies(r -> assertThat(r.get("condition").toString()).contains("bank"))
+                    .satisfies(r -> assertThat(r.get("levels").toString())
+                        .contains(QbPermissions.TOPUP_BANK_APPROVE)),
                 // Q6b: transfers above the limit, reviewed by finance.
                 rule -> assertThat(rule).containsEntry("rule_code", com.jabiz.quizbuks.wallet.QbPayouts.REVIEW_RULE)
                     .containsEntry("subject", com.jabiz.quizbuks.wallet.QbPayouts.APPROVAL_SUBJECT)
@@ -228,6 +236,10 @@ class SetupIT extends QbItSupport {
         expected.put(QbParams.PAYOUT_REMINDER_DAYS, "30");
         // Q7c review M2: below this reach a sponsor sees no clicks or conversions.
         expected.put(QbParams.BROADCAST_STATS_MIN_AUDIENCE, "50");
+        // Q13a: bank top-ups' range, and the receiving account empty until finance sets it with four eyes.
+        expected.put(QbParams.TOPUP_BANK_MIN, "1000");
+        expected.put(QbParams.TOPUP_BANK_MAX, "10000000");
+        QbParams.BANK_RECEIVING.forEach(key -> expected.put(key, ""));
         assertThat(values).containsExactlyInAnyOrderEntriesOf(expected);
     }
 

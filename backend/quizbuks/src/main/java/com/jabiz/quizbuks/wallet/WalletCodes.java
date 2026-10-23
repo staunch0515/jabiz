@@ -16,6 +16,23 @@ public final class WalletCodes {
      * {@code remaining}, {@code max} and {@code until}, "-" before the first paid top-up).
      */
     public static final String TOPUP_NEW_SPONSOR_LIMIT = "QB_TOPUP_NEW_SPONSOR_LIMIT";
+    /** Bank top-ups are not set up here: the platform's receiving account is not set (Q13a). */
+    public static final String TOPUP_BANK_UNAVAILABLE = "QB_TOPUP_BANK_UNAVAILABLE";
+    /** The bank top-up is not in a state for this (param {@code status}; Q13a). */
+    public static final String TOPUP_BANK_STATE = "QB_TOPUP_BANK_STATE";
+    /** The payer's name is empty, too long or not printable (param {@code max}; Q13a). */
+    public static final String TOPUP_BANK_PAYER_NAME = "QB_TOPUP_BANK_PAYER_NAME";
+    /** A transfer or receipt day after today (Q13a). */
+    public static final String TOPUP_BANK_DATE_FUTURE = "QB_TOPUP_BANK_DATE_FUTURE";
+    /**
+     * No approval rule asks for another administrator's approval of bank top-ups (Q13a, B-1): without one nothing is
+     * recorded, so that money is never credited by one person.
+     */
+    public static final String TOPUP_BANK_NO_REVIEW = "QB_TOPUP_BANK_NO_REVIEW";
+    /** The statement's entry (day and reference) is recorded against another top-up already (Q13a). */
+    public static final String TOPUP_BANK_REFERENCE_USED = "QB_TOPUP_BANK_REFERENCE_USED";
+    /** An administrator recording a top-up of their own (Q13a). */
+    public static final String TOPUP_BANK_OWN = "QB_TOPUP_BANK_OWN";
 
     /** The taker's country is not the one payout accounts are opened in (param {@code country}; Q18: no cross-border). */
     public static final String PAYOUT_COUNTRY_UNSUPPORTED = "QB_PAYOUT_COUNTRY_UNSUPPORTED";
@@ -39,7 +56,8 @@ public final class WalletCodes {
     public static final String RECEIPT_REFUNDED = "QB_RECEIPT_REFUNDED";
 
     public static final List<String> ALL = List.of(TOPUP_AMOUNT_RANGE, TOPUP_TOO_MANY_OPEN, TOPUP_UNAVAILABLE,
-        TOPUP_NEW_SPONSOR_LIMIT,
+        TOPUP_NEW_SPONSOR_LIMIT, TOPUP_BANK_UNAVAILABLE, TOPUP_BANK_STATE, TOPUP_BANK_PAYER_NAME, TOPUP_BANK_DATE_FUTURE,
+        TOPUP_BANK_NO_REVIEW, TOPUP_BANK_REFERENCE_USED, TOPUP_BANK_OWN,
         PAYOUT_COUNTRY_UNSUPPORTED, PAYOUT_UNAVAILABLE, PAYOUT_ACCOUNT_CLOSED, TRANSFER_NOT_HELD, TRANSFER_RELEASE_OWN,
         RECEIPT_NOT_PAID, RECEIPT_NO_ISSUER, RECEIPT_REFUNDED);
 
