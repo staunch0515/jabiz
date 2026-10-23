@@ -201,7 +201,7 @@ describe('QuizDetailPage', () => {
 
   it('reads a version\'s frozen content only when asked', async () => {
     renderQuiz()
-    const show = await screen.findByTestId('quiz-version-show')
+    const show = await screen.findByRole('button', { name: 'Show the content of v1.0' })
     const versionReads = () => server.get.mock.calls.filter(([, options]) =>
       options?.params?.path?.resourceId === DATASET.version)
     expect(versionReads()).toHaveLength(0)
@@ -209,6 +209,7 @@ describe('QuizDetailPage', () => {
     const content = await screen.findByTestId('quiz-version-content')
     expect(await within(content).findByTestId('version-preview')).toBeInTheDocument()
     expect(show).toHaveAttribute('aria-expanded', 'true')
+    expect(show).toHaveAccessibleName('Hide the content of v1.0')
     await userEvent.click(show)
     expect(screen.queryByTestId('quiz-version-content')).not.toBeInTheDocument()
   })
@@ -257,6 +258,14 @@ describe('PublicationsPage', () => {
       { field: 'quizId', op: 'eq', value: QUIZ }] })
     await userEvent.click(screen.getByTestId('publications-all'))
     await waitFor(() => expect(lastCall(TEMPLATE.publications)).toMatchObject({ filters: [] }))
+  })
+
+  it('ignores what in the address is no key or state', async () => {
+    renderAt('/qb/publications?status=live;drop&sponsor=nobody&quiz=1%20OR%201', '/qb/publications',
+      <PublicationsPage />)
+    await screen.findAllByTestId('publication-row')
+    expect(lastCall(TEMPLATE.publications)).toMatchObject({ filters: [] })
+    expect(screen.queryByTestId('publications-all')).not.toBeInTheDocument()
   })
 
   it('links no quiz to whom the quizzes are not offered (finance)', async () => {

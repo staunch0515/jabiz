@@ -37,6 +37,7 @@ import {
   type Version,
 } from './api'
 import { AfterDecision, LoadFailed, Section } from './components'
+import type { BackTo } from './PublicationsPage'
 import { forbidden, money, QUEUE, useAfterDecision, useLabels, when } from './hooks'
 import { ACCOUNT_SUSPENDED, DICTIONARY, PATH, PENDING_REVIEW, PERMISSION, PUBLICATION_ADMIN } from './ids'
 
@@ -84,7 +85,6 @@ function Takedowns({ takedowns }: { takedowns: UseQueryResult<Takedown[]> }) {
     </Section>
   )
 }
-import type { BackTo } from './PublicationsPage'
 import { VersionPreview } from './VersionPreview'
 
 const linkClass = 'text-primary font-medium underline-offset-4 hover:underline'

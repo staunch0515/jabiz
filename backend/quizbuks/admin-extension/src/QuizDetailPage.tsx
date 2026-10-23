@@ -120,7 +120,7 @@ function ShowToggle({ version }: { version: QuizVersionRow }) {
   const open = shown === version.versionId
   return (
     <Button variant="outline" size="sm" aria-expanded={open} data-testid="quiz-version-show"
-      aria-label={open ? t('quiz.hide') : t('quiz.versionContent', { label: version.label })}
+      aria-label={open ? t('quiz.hideOf', { label: version.label }) : t('quiz.showOf', { label: version.label })}
       onClick={() => toggle(version)}>
       {open ? t('quiz.hide') : t('quiz.show')}
     </Button>
@@ -231,7 +231,7 @@ export default function QuizDetailPage() {
             value: q.timeLimitSec === null ? t('common.notSet') : t('common.seconds', { seconds: q.timeLimitSec }) },
           { key: 'editedAt', label: t('quiz.editedAt'), value: when(q.editedAt) },
           ...(q.clonedFrom ? [{ key: 'clonedFrom', label: t('quiz.clonedFrom'), value: (
-            <Link to={PATH.quiz(q.clonedFrom)} className={linkClass}>{t('common.open')}</Link>
+            <Link to={PATH.quiz(q.clonedFrom)} className={linkClass}>{t('quiz.openClonedFrom')}</Link>
           ) }] : []),
         ]} />
       </Section>

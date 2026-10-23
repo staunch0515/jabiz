@@ -1,6 +1,6 @@
 import { api, ApiError, runQuery, unwrap, type Filter } from '@jabiz/admin'
 import { toPublicationRow, type Page, type PublicationRow } from './api'
-import { DATASET, PAGE_LIMIT, TEMPLATE } from './ids'
+import { DATASET, isUserId, PAGE_LIMIT, TEMPLATE } from './ids'
 import type { MaterialKind, Snapshot } from './snapshot'
 
 /*
@@ -18,6 +18,9 @@ const num = (value: unknown): number | null => {
   return Number.isFinite(n) ? n : null
 }
 const bool = (value: unknown): boolean => value === true || value === 'true'
+/** A key in the address, or null for anything that is none (the server would refuse it). */
+const keyOf = (value: string | null): string | null => (value && isUserId(value) ? value : null)
+const codeOf = (value: string | null): string | null => (value && /^[A-Z_]{1,20}$/.test(value) ? value : null)
 
 /** A row of `qb.admin.quizzes`. */
 export interface QuizRow {
@@ -70,7 +73,7 @@ export interface QuizFilter {
 }
 
 export function quizFilterOf(search: URLSearchParams): QuizFilter {
-  return { q: str(search.get('q')?.trim()), ownerId: str(search.get('sponsor')), removed: search.get('removed') === '1' }
+  return { q: str(search.get('q')?.trim()), ownerId: keyOf(search.get('sponsor')), removed: search.get('removed') === '1' }
 }
 
 /** A page of quizzes, the last edited first, with their count. */
@@ -224,8 +227,8 @@ export interface PublicationFilter {
 }
 
 export function publicationFilterOf(search: URLSearchParams): PublicationFilter {
-  return { q: str(search.get('q')?.trim()), status: str(search.get('status')), sponsorId: str(search.get('sponsor')),
-    quizId: str(search.get('quiz')) }
+  return { q: str(search.get('q')?.trim()), status: codeOf(search.get('status')),
+    sponsorId: keyOf(search.get('sponsor')), quizId: keyOf(search.get('quiz')) }
 }
 
 /** A page of publications in every state, the last edited first, with their count. */

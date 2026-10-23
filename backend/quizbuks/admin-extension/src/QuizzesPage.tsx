@@ -35,6 +35,12 @@ export default function QuizzesPage() {
   const [search, setSearch] = useSearchParams()
   const filter = quizFilterOf(search)
   const [text, setText] = useState(filter.q ?? '')
+  // The box follows the address (back and forward, the menu's link without a search).
+  const [shownQ, setShownQ] = useState(filter.q)
+  if (shownQ !== filter.q) {
+    setShownQ(filter.q)
+    setText(filter.q ?? '')
+  }
   const set = (change: Record<string, string | null>) => {
     const next = new URLSearchParams(search)
     for (const [key, value] of Object.entries(change)) {
