@@ -99,6 +99,8 @@ kinds AS (
                     AND p.a2120 > 0 AND p.a2130 < 0 AND p.a4110 <= 0 THEN 'TRANSFER_SENT'
                WHEN p.src = 'QbTransfer' AND NOT p.reversal AND p.accts = '1110,2130'
                     AND p.a1110 < 0 AND p.a2130 > 0 THEN 'TRANSFER_SETTLED'
+               WHEN p.src = 'QbTransfer' AND NOT p.reversal AND p.accts = '1120,2130'
+                    AND p.a1120 < 0 AND p.a2130 > 0 THEN 'WITHDRAWAL_PAID'
                WHEN p.src = 'QbTransfer' AND p.reversal AND p.accts IN ('2120,2130', '2120,2130,4110')
                     AND p.a2120 < 0 AND p.a2130 > 0 AND p.a4110 >= 0 THEN 'TRANSFER_FAILED'
                WHEN p.src = 'QbTransfer' AND NOT p.reversal AND p.accts = '1110,2120'
@@ -124,7 +126,7 @@ SELECT
     coalesce(sum(k.a4110), 0)   AS revenue,
     coalesce(sum(k.a5110), 0)   AS paymentFees
 FROM (VALUES (1, 'TOPUP'), (2, 'BANK_TOPUP'), (3, 'REFUND'), (4, 'DISPUTE'), (5, 'STRIPE_FEE'), (6, 'REWARD'),
-             (7, 'TRANSFER_SENT'), (8, 'TRANSFER_SETTLED'), (9, 'TRANSFER_FAILED'), (10, 'TRANSFER_REVERSED'),
-             (11, 'PAYOUT'), (12, 'PAYOUT_FAILED'), (13, 'OTHER')) AS c (seq, kind)
+             (7, 'TRANSFER_SENT'), (8, 'TRANSFER_SETTLED'), (9, 'WITHDRAWAL_PAID'), (10, 'TRANSFER_FAILED'),
+             (11, 'TRANSFER_REVERSED'), (12, 'PAYOUT'), (13, 'PAYOUT_FAILED'), (14, 'OTHER')) AS c (seq, kind)
 LEFT JOIN kinds k ON k.kind = c.kind
 GROUP BY c.seq, c.kind

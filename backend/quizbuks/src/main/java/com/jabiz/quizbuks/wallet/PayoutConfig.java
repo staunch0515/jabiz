@@ -69,6 +69,70 @@ class PayoutConfig {
     }
 
     @Bean
+    EntityDefinition qbBankAccountEntity() {
+        return QbPayouts.BANK_ACCOUNT_ENTITY;
+    }
+
+    @Bean
+    DatasetDefinition qbBankAccountDataset() {
+        return processOnly(QbPayouts.BANK_ACCOUNT, 10);
+    }
+
+    /** A taker's own bank account, read only (the number masked: they typed it). */
+    @Bean
+    DatasetDefinition qbMyBankAccountDataset() {
+        return mine(QbPayouts.MY_BANK_ACCOUNT, QbPayouts.BANK_ACCOUNT);
+    }
+
+    @Bean
+    StaticDictionary qbBankAccountTypeDictionary() {
+        return StaticDictionary.define(QbPayouts.BANK_ACCOUNT_TYPE_DICTIONARY, d -> d
+            .item("ORDINARY", "en", "Ordinary", "zh", "普通", "ja", "普通")
+            .item("CURRENT", "en", "Current", "zh", "当座", "ja", "当座")
+            .item("SAVINGS", "en", "Savings", "zh", "储蓄", "ja", "貯蓄"));
+    }
+
+    @Bean
+    StaticDictionary qbPayoutMethodDictionary() {
+        return StaticDictionary.define(QbPayouts.PAYOUT_METHOD_DICTIONARY, d -> d
+            .item(QbPayouts.STRIPE, "en", "Stripe", "zh", "Stripe", "ja", "Stripe")
+            .item(QbPayouts.BANK, "en", "Bank account", "zh", "银行账户", "ja", "銀行口座"));
+    }
+
+    @Bean
+    com.jabiz.mail.MailTemplate qbBankAccountChangedMail() {
+        return BankWithdrawals.ACCOUNT_CHANGED_MAIL;
+    }
+
+    @Bean
+    ProcessDefinition<BankWithdrawals.AccountInput, BankWithdrawals.AccountOutput, ProcessContext>
+        qbBankAccountSave() {
+        return BankWithdrawals.saveAccount();
+    }
+
+    @Bean
+    ProcessDefinition<BankWithdrawals.MethodInput, BankWithdrawals.MethodOutput, ProcessContext> qbPayoutMethodSet() {
+        return BankWithdrawals.setMethod();
+    }
+
+    @Bean
+    ProcessDefinition<BankWithdrawals.RequestInput, TransferProcesses.TransferOutput, ProcessContext>
+        qbWithdrawalRequest() {
+        return BankWithdrawals.request();
+    }
+
+    @Bean
+    ProcessDefinition<BankWithdrawals.PaidInput, TransferProcesses.TransferOutput, ProcessContext> qbWithdrawalPaid() {
+        return BankWithdrawals.paid();
+    }
+
+    @Bean
+    ProcessDefinition<BankWithdrawals.ReturnedInput, TransferProcesses.TransferOutput, ProcessContext>
+        qbWithdrawalReturned() {
+        return BankWithdrawals.returned();
+    }
+
+    @Bean
     DatasetDefinition qbPayoutAccountDataset() {
         return processOnly(QbPayouts.ACCOUNT, 10);
     }

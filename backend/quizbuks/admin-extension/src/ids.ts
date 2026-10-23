@@ -16,6 +16,8 @@ export const DATASET = {
   legalDoc: 'urn:jabiz:dataset:default:QbLegalDoc',
   /** The named users of an announcement (`qb.admin.content.write`; Q7c). */
   broadcastTarget: 'urn:jabiz:dataset:default:QbBroadcastTarget',
+  /** Transfers: a bank withdrawal's account number is revealed from here (`qb.payout.bank.reveal`; Q13b). */
+  transfer: 'urn:jabiz:dataset:default:QbTransfer',
 } as const
 
 /** SQL templates (`queries/qb/admin`). */
@@ -38,6 +40,8 @@ export const TEMPLATE = {
   topUps: 'qb.admin.topups',
   /** Bank top-ups (Q13a): what recording and approving one needs (`qb.topup.bank.approve`). */
   bankTopUps: 'qb.admin.bank-topups',
+  /** Bank withdrawals (Q13b; finance). */
+  bankWithdrawals: 'qb.admin.bank-withdrawals',
   payoutAccounts: 'qb.admin.payout-accounts',
   /** Finance (Q9c): the overview's numbers, the wallets, the reconciliation and the two monthly reports (F-08). */
   financeSummary: 'qb.admin.finance-summary',
@@ -87,6 +91,9 @@ export const PROCESS = {
   transferNow: 'QB_TRANSFER_NOW',
   /** Records the money of a bank top-up found on the statement, for another administrator's approval (Q13a). */
   bankRecord: 'QB_TOPUP_BANK_RECORD',
+  /** An approved bank withdrawal paid in the bank, or returned by it (Q13b; `qb.withdrawal.pay`). */
+  withdrawalPaid: 'QB_WITHDRAWAL_PAID',
+  withdrawalReturned: 'QB_WITHDRAWAL_RETURNED',
   /** The platform's issue of a report: archived with its content hash (`report.issue`). */
   reportIssue: 'REPORT_ISSUE',
   /** The next journal export as it would be now; writes nothing (`qb.journal.export`; Q9d). */
@@ -181,6 +188,9 @@ export const PERMISSION = {
   /** Bank top-ups (Q13a): finance records the money, another administrator approves it. */
   bankRecord: 'qb.topup.bank.record',
   bankApprove: 'qb.topup.bank.approve',
+  /** Bank withdrawals (Q13b): paying them, and the account number in plain text to do so. */
+  withdrawalPay: 'qb.withdrawal.pay',
+  bankReveal: 'qb.payout.bank.reveal',
 } as const
 
 /** The bank top-up states finance may record money against, and the one an approval waits in (Q13a). */
@@ -232,6 +242,8 @@ export const PATH = {
   /** Bank top-ups: recording the money and approving it (Q13a). */
   bankTopUps: '/qb/finance/bank-topups',
   bankTopUp: (topUpId: string) => `/qb/finance/bank-topups/${encodeURIComponent(topUpId)}`,
+  /** Bank withdrawals: reviewing, paying and returning them (Q13b). */
+  bankWithdrawals: '/qb/finance/bank-withdrawals',
   reconciliation: '/qb/finance/reconciliation',
   reconRun: (runId: string) => `/qb/finance/reconciliation?${new URLSearchParams({ run: runId })}`,
   reports: '/qb/finance/reports',

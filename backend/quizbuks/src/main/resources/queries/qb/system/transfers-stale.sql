@@ -20,6 +20,8 @@ permissions: [qb.payout.system]
 -- wallet lock and leaves one settled meanwhile.
 SELECT t.{{QbTransfer.transferId}} AS transferId, t.{{QbTransfer.createdAt}} AS createdAt
 FROM {{QbTransfer}} t
-WHERE (t.{{QbTransfer.status}} = 'CHECK'
+WHERE t.{{QbTransfer.method}} = 'STRIPE'
+  -- A bank withdrawal (Q13b) waits in SENDING for finance, not for Stripe.
+  AND (t.{{QbTransfer.status}} = 'CHECK'
        OR (t.{{QbTransfer.status}} = 'SENDING' AND t.{{QbTransfer.createdAt}} < :sendingBefore))
   AND (t.{{QbTransfer.checkRequestedAt}} IS NULL OR t.{{QbTransfer.checkRequestedAt}} < :askedBefore)

@@ -47,6 +47,30 @@ public final class WalletCodes {
     /** A finance administrator transferring to themselves at once (Q14): another administrator does it. */
     public static final String TRANSFER_NOW_OWN = "QB_TRANSFER_NOW_OWN";
 
+    /** A bank account field that is not valid: a code's digits, the kind, the number, the holder's katakana (Q13b). */
+    public static final String BANK_ACCOUNT_INVALID = "QB_BANK_ACCOUNT_INVALID";
+    /** The bank account is another user's already (Q13b): finance is told. */
+    public static final String BANK_ACCOUNT_IN_USE = "QB_BANK_ACCOUNT_IN_USE";
+    /** Paid by bank without a bank account (Q13b). */
+    public static final String BANK_ACCOUNT_MISSING = "QB_BANK_ACCOUNT_MISSING";
+    /** The way of being paid changes only with nothing unfinished (Q13b). */
+    public static final String PAYOUT_METHOD_OPEN_TRANSFER = "QB_PAYOUT_METHOD_OPEN_TRANSFER";
+    /**
+     * A withdrawal cannot be asked for now (param {@code reason}: off, banned, held, an unfinished transfer, not paid
+     * by bank, the cooling-off period (param {@code until}), no review rule; Q13b).
+     */
+    public static final String WITHDRAWAL_UNAVAILABLE = "QB_WITHDRAWAL_UNAVAILABLE";
+    /** The amount is not whole Kudos from the threshold to what may be withdrawn, above the fee (params; Q13b). */
+    public static final String WITHDRAWAL_AMOUNT = "QB_WITHDRAWAL_AMOUNT";
+    /** The withdrawal is not in a state for this (param {@code status}; Q13b). */
+    public static final String WITHDRAWAL_STATE = "QB_WITHDRAWAL_STATE";
+    /** A finance administrator paying or returning their own withdrawal (Q13b). */
+    public static final String WITHDRAWAL_OWN = "QB_WITHDRAWAL_OWN";
+    /** A finance administrator paying or returning a withdrawal they approved (Q13b, four eyes). */
+    public static final String WITHDRAWAL_APPROVER = "QB_WITHDRAWAL_APPROVER";
+    /** The statement's entry (day and reference) paid another withdrawal already (Q13b). */
+    public static final String WITHDRAWAL_REFERENCE_USED = "QB_WITHDRAWAL_REFERENCE_USED";
+
     /** A receipt is only for a paid top-up (Q9d, F-09). */
     public static final String RECEIPT_NOT_PAID = "QB_RECEIPT_NOT_PAID";
     /** The receipts' issuer (the operator's name, {@code qb.issuer.name}) is not set yet (Q9d, F-09). */
@@ -61,7 +85,8 @@ public final class WalletCodes {
         TOPUP_NEW_SPONSOR_LIMIT, TOPUP_BANK_UNAVAILABLE, TOPUP_BANK_STATE, TOPUP_BANK_PAYER_NAME, TOPUP_BANK_DATE_FUTURE,
         TOPUP_BANK_NO_REVIEW, TOPUP_BANK_REFERENCE_USED, TOPUP_BANK_OWN,
         PAYOUT_COUNTRY_UNSUPPORTED, PAYOUT_UNAVAILABLE, PAYOUT_ACCOUNT_CLOSED, TRANSFER_NOT_HELD, TRANSFER_RELEASE_OWN,
-        TRANSFER_NOW_OWN,
+        TRANSFER_NOW_OWN, BANK_ACCOUNT_INVALID, BANK_ACCOUNT_IN_USE, BANK_ACCOUNT_MISSING, PAYOUT_METHOD_OPEN_TRANSFER,
+        WITHDRAWAL_UNAVAILABLE, WITHDRAWAL_AMOUNT, WITHDRAWAL_STATE, WITHDRAWAL_OWN, WITHDRAWAL_APPROVER, WITHDRAWAL_REFERENCE_USED,
         RECEIPT_NOT_PAID, RECEIPT_NO_ISSUER, RECEIPT_REFUNDED);
 
     private WalletCodes() {}

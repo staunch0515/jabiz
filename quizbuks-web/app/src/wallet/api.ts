@@ -163,8 +163,112 @@ export function onboardingReturn(search: string): 'done' | 'refresh' | null {
   return value === 'done' || value === 'refresh' ? value : null
 }
 
+// ---- Q13b: withdrawals to a bank account ------------------------------------------------------------------------
+
+export type PayoutMethod = 'STRIPE' | 'BANK'
+export const ACCOUNT_TYPES = ['ORDINARY', 'CURRENT', 'SAVINGS'] as const
+export type AccountType = (typeof ACCOUNT_TYPES)[number]
+
+/** The taker's bank account as the server keeps it (the number masked), or none. */
+export interface BankAccount {
+  bankCode: string
+  bankName: string
+  branchCode: string
+  branchName: string
+  accountType: AccountType
+  accountNumber: string
+  accountHolder: string
+  changedAt: string
+}
+
+/** The row of `qb.app.bank-account`: the settings, how the taker is paid and their account. */
+export interface BankSettings {
+  enabled: boolean
+  fee: number
+  /** The smallest withdrawal (the transfer threshold); null when not set. */
+  minimum: number | null
+  cooldownHours: number
+  method: PayoutMethod
+  account: BankAccount | null
+}
+
+export async function readBankSettings(): Promise<BankSettings> {
+  const row = (await runQuery<Row>(WALLET_TEMPLATE.bankAccount, { limit: 1 })).items[0] ?? {}
+  const account: BankAccount | null = row.bankCode == null ? null : {
+    bankCode: String(row.bankCode),
+    bankName: String(row.bankName ?? ''),
+    branchCode: String(row.branchCode ?? ''),
+    branchName: String(row.branchName ?? ''),
+    accountType: String(row.accountType) as AccountType,
+    accountNumber: String(row.accountNumber ?? ''),
+    accountHolder: String(row.accountHolder ?? ''),
+    changedAt: String(row.changedAt ?? ''),
+  }
+  return {
+    enabled: row.enabled === true || row.enabled === 'true',
+    fee: num(row.fee),
+    minimum: row.minimum == null ? null : num(row.minimum),
+    cooldownHours: num(row.cooldownHours),
+    method: row.payoutMethod === 'BANK' ? 'BANK' : 'STRIPE',
+    account,
+  }
+}
+
+/** When a withdrawal to the account may be asked for: its last change plus the cooling-off period. */
+export function usableFrom(settings: BankSettings): Date | null {
+  if (!settings.account?.changedAt) return null
+  const changed = new Date(settings.account.changedAt)
+  return Number.isNaN(changed.getTime()) ? null : new Date(changed.getTime() + settings.cooldownHours * 3_600_000)
+}
+
+/** What the taker types; the server checks and normalises it (width, padding) again. */
+export interface BankAccountForm {
+  bankCode: string
+  bankName: string
+  branchCode: string
+  branchName: string
+  accountType: AccountType
+  bankAccountNumber: string
+  accountHolder: string
+}
+
+/** `BankWithdrawals.AccountOutput`: not saved when the account is another user's (`reason`). */
+export interface BankAccountSaved {
+  bankAccountId: string | null
+  saved: boolean
+  reason: string | null
+  usableFrom: string | null
+}
+
+export const saveBankAccount = (form: BankAccountForm) =>
+  runProcess<BankAccountSaved>(WALLET_PROCESS.bankAccountSave, { ...form })
+
+export const setPayoutMethod = (method: PayoutMethod) =>
+  runProcess<{ method: PayoutMethod }>(WALLET_PROCESS.payoutMethodSet, { method })
+
+/** `TransferProcesses.TransferOutput` of a withdrawal: `REVIEW` with its request. */
+export interface WithdrawalOutput {
+  transferId: string | null
+  status: string | null
+  reason: string | null
+  approvalRequestId: string | null
+}
+
+/** Asks for a withdrawal; the same key when the taker retries the same submission. */
+export const requestWithdrawal = (amount: number, idempotencyKey: string) =>
+  runProcess<WithdrawalOutput>(WALLET_PROCESS.withdrawalRequest, { amount }, { idempotencyKey })
+
+/** The smallest amount the server accepts: the threshold, and above the fee (`BankAccounts.amountProblem`). */
+export const smallestWithdrawal = (settings: BankSettings): number =>
+  Math.max(settings.minimum ?? 0, settings.fee + 1)
+
+/** What the taker receives of `amount`: less the fixed fee. */
+export const netOf = (amount: number, fee: number): number => Math.max(0, amount - fee)
+
 /** The wallet's pages and the keys of what they read. */
 export const WALLET_PATH = '/wallet'
 export const PAYOUT_PATH = '/wallet/payout'
+export const BANK_PATH = '/wallet/bank'
 export const WALLET_QUERY = ['qb', 'taker-wallet'] as const
 export const PAYOUT_QUERY = [...WALLET_QUERY, 'payout-account'] as const
+export const BANK_QUERY = [...WALLET_QUERY, 'bank-account'] as const

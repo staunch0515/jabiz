@@ -10,8 +10,11 @@ import { QB } from '../qb/messages'
 import { problemText } from '../qb/problems'
 import { Link } from '../qb/router'
 import {
+  BANK_PATH,
+  BANK_QUERY,
   PAYOUT_PATH,
   PAYOUT_QUERY,
+  readBankSettings,
   readLedger,
   readPayoutAccount,
   readWallet,
@@ -83,6 +86,27 @@ function PayoutCard() {
       <Button asChild size="sm" variant={status === 'ENABLED' ? 'outline' : 'default'} className="self-start">
         <Link to={PAYOUT_PATH} data-testid="wallet-payout-open">
           {status ? t('wallet.payout.open') : t('wallet.payout.setUp')}
+          <ChevronRight aria-hidden />
+        </Link>
+      </Button>
+    </section>
+  )
+}
+
+/** Withdrawals to a bank account (Q13b), once they are on: how the taker is paid, leading to its page. */
+function BankCard() {
+  const { t } = useTranslation(APP)
+  const settings = useQuery({ queryKey: BANK_QUERY, queryFn: readBankSettings })
+  if (!settings.data?.enabled) return null
+  const method = settings.data.method
+  return (
+    <section aria-labelledby="wallet-bank" className="flex flex-col gap-2 rounded-lg border p-3"
+      data-testid="wallet-bank" data-method={method}>
+      <h2 id="wallet-bank" className="font-semibold">{t('wallet.bankCard.title')}</h2>
+      <p className="text-sm">{t(`wallet.bankCard.${method}`)}</p>
+      <Button asChild size="sm" variant="outline" className="self-start">
+        <Link to={BANK_PATH} data-testid="wallet-bank-open">
+          {t('wallet.bankCard.open')}
           <ChevronRight aria-hidden />
         </Link>
       </Button>
@@ -181,6 +205,7 @@ export function WalletPage() {
         </div>
       )}
       <PayoutCard />
+      <BankCard />
       <section aria-labelledby="ledger-title" className="flex flex-col gap-3">
         <h2 id="ledger-title" className="text-lg font-semibold">{t('wallet.ledger.title')}</h2>
         <form role="search" onSubmit={search} className="flex gap-2">

@@ -96,6 +96,22 @@ Stripe（卡支付充值、Connect 自动转账）保持不变，银行转账是
   - 待打款的列表显示户名、银行、支店、种类，以及遮蔽的账号；"显示账号"走平台的 `reveal`。
   - 列表上有"已打款 / 退回"表单。
 
+### 3.4 Q13b 实施记录
+
+- **迁移 V21**：`qb_bank_account`（每人一行，`(银行, 支店, 种类, 账号)` 唯一）；`qb_transfer` 加 `method`、账户快照、`paid_on` / `paid_reference`（同一条流水只付一笔：部分唯一索引）、`paid_by`、`returned_by`；
+  `SENT` 的约束改为"有 Stripe 转账，或（BANK）有流水与打款人"，BANK 不进入 `CHECK` / `REVERSED`。
+- **收款方式**记在 `QbBankAccount.payoutMethod`（没有银行账户即 Stripe），不放在 `QbPayoutAccount`：只用银行的答题人没有 Stripe 账户。
+- **答题人的流程沿用 `qb.payout.onboard`**（收款设置的权限），不另加答题人权限；财务新加 `qb.payout.bank.reveal`、`qb.withdrawal.pay`。
+- **账户已被他人使用**：不抛错（抛错会回滚待办），返回 `saved=false`、`reason=QB_BANK_ACCOUNT_IN_USE` 并给财务待办。
+- **审批内容**：银行、支店、种类、户名与平台遮蔽后的账号（7 位账号全部遮蔽为 `****`：后四位会泄露大半；待办与邮件同样）；转账上的账户快照不可变，审批即绑定它。
+- **批准后**：与 Stripe 相同的过账；不开作业，给 `qb.withdrawal.pay` 一个"请打款"待办（`withdrawal:<转账>:pay`），记已打款或退回时关闭。
+- **每日转账**跳过收款方式为银行的答题人（`transfers-due` 与 `planOf` 的 `BANK_METHOD`），每小时的核实跳过 BANK（模板与 `inDoubt`）。
+- **账号的显示**：平台对 7 位账号的 `LAST4` 遮蔽给出 `****`；财务打款时在"银行提现"页逐条显示（平台的 `reveal`，记入 `sys_reveal_record`）。
+- **独立评审的修正**：批准该笔的人不能再记已打款或退回（`QB_WITHDRAWAL_APPROVER`，四眼到钱离开为止）；月报加 `WITHDRAWAL_PAID`（借 2130 / 贷 1120，原来落入 `OTHER`）；
+  `qb.admin.transfers` 加 `method`（银行提现的 `externalAccountId` 是银行账户编号）；审核规则不要求审核时 422 `WITHDRAWAL_UNAVAILABLE`（`NO_REVIEW`）而不是 500；App 的最低额与服务器相同（门槛与手续费 + 1 取大）。
+- **已知并接受**：保存账户时能得知该账户是否已被他人登记（`QB_BANK_ACCOUNT_IN_USE`）；每次都给财务待办，并以 `jabiz.process.rate-limits` 限制每人每小时 10 次。
+- **未做**：场景 `bank-withdrawal.yml` 与 e2e（集成测试 `BankWithdrawalIT` 覆盖流程）；退回后不暂停答题人（多为账号错误，请其改账户）。
+
 ## 4. 权限（`QbRoles`）
 
 | 权限 | 角色 |

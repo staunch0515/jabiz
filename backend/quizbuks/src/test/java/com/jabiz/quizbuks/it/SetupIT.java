@@ -240,6 +240,9 @@ class SetupIT extends QbItSupport {
         expected.put(QbParams.TOPUP_BANK_MIN, "1000");
         expected.put(QbParams.TOPUP_BANK_MAX, "10000000");
         QbParams.BANK_RECEIVING.forEach(key -> expected.put(key, ""));
+        expected.put(QbParams.WITHDRAWAL_BANK_ENABLED, "false");
+        expected.put(QbParams.WITHDRAWAL_BANK_FEE, "0");
+        expected.put(QbParams.WITHDRAWAL_BANK_COOLDOWN_HOURS, "72");
         assertThat(values).containsExactlyInAnyOrderEntriesOf(expected);
     }
 
