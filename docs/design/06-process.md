@@ -40,6 +40,7 @@
 | `CallProcess.of(name, version, ctx -> 输入, outputKey)` / `CallProcess.latest(...)` / `CallProcess.when(条件, name, version, …)` | 子流程输出（`when` 的条件不成立时不调用）【D14】 |
 | `CallProcess.forEach(name, version, ctx -> 输入列表, outputKey)` | 对列表中每个输入依次调用一次（列表为空时不调用），输出为同序的列表（阶段 13e） |
 | `LoadParams.of(ctx -> 业务时间, targetKey, key…)` | `ParamValues`：各业务参数在该时间点生效的值（04 §9；缺失 → 422 `PARAM_NOT_FOUND`） |
+| `LoadParams.optional(ctx -> 业务时间, targetKey, key…)` | 同上，但没有生效值的键缺席而不报错，以 `ParamValues.find` 读取（"尚未设置"由流程决定，04 §9，阶段 16zc） |
 | `AssignNumber.of(序列, [ctx -> 范围,] targetKey)` / `AssignNumber.when(条件, 序列, ctx -> 范围 或 null, targetKey)` | 该序列在该范围内的下一个号码（文本）；在流程事务内取号，回滚即归还，无缺号、无重复（18 §2、D23） |
 | `RequireApproval.of(审批对象, ctx -> ApprovalCase, targetKey)` / `RequireApproval.when(条件, …)` | 该单据是否需要审批：`ApprovalOutcome`（`NOT_REQUIRED` / `PENDING` / `APPROVED`）；需要时建请求，批准绑定内容哈希（18 §3.3、D23） |
 | `WithdrawApproval.of(审批对象, ctx -> 单据标识)` / `WithdrawApproval.when(ctx -> 条件, 审批对象, ctx -> 单据标识)` | 撤回该单据待审批的请求（18 §3.3）；`when` 的条件不成立时什么也不做（阶段 16k） |

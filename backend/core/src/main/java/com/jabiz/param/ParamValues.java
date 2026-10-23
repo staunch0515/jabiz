@@ -5,6 +5,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * Business parameters as they were in effect at one time (docs/design/04-temporal-append-only.md section 9), put
@@ -24,17 +25,34 @@ public record ParamValues(Instant asOf, Map<String, Object> values) {
     /**
      * The value of a loaded parameter.
      *
-     * @throws IllegalStateException when the key was not loaded, or its value is not of {@code type}
+     * @throws IllegalStateException when the key was not loaded (or, loaded as optional, had no value in effect), or
+     *     its value is not of {@code type}
      */
     public <T> T get(String key, Class<T> type) {
+        return find(key, type).orElseThrow(() -> new IllegalStateException("Parameter '" + key
+            + "' was not loaded or has no value in effect; loaded: " + values.keySet()));
+    }
+
+    /**
+     * The value of a parameter, if it has one: a parameter loaded with {@code LoadParams.optional} that had no value
+     * in effect is absent, as is one that was not loaded at all.
+     *
+     * @throws IllegalStateException when the value is not of {@code type}
+     */
+    public <T> Optional<T> find(String key, Class<T> type) {
         Object value = values.get(key);
         if (value == null) {
-            throw new IllegalStateException("Parameter '" + key + "' was not loaded; loaded: " + values.keySet());
+            return Optional.empty();
         }
         if (!type.isInstance(value)) {
             throw new IllegalStateException("Parameter '" + key + "' is a " + value.getClass().getSimpleName()
                 + ", not a " + type.getSimpleName());
         }
-        return type.cast(value);
+        return Optional.of(type.cast(value));
+    }
+
+    /** Whether the parameter has a value here. */
+    public boolean has(String key) {
+        return values.containsKey(key);
     }
 }
