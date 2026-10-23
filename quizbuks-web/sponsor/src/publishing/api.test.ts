@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   actionsOf,
+  asSurvey,
   formOf,
   inputOf,
   nextTier,
@@ -112,5 +113,20 @@ describe('what the pages say about a publication', () => {
     expect(timeNote('PAUSED', start, end, at(end))).toBe('ending')
     expect(timeNote('ENDED', start, end, at(end))).toBeNull()
     expect(timeNote('DRAFT', start, end, at(end))).toBeNull()
+  })
+})
+
+describe('a survey\'s form (Q12)', () => {
+  it('saves a draft before its reward is typed: no tiers yet, nothing typed wrong', () => {
+    const shaped = asSurvey({ ...FORM, passScore: '', tiers: [] }, 5, '')
+    expect(shaped.passScore).toBe('5')
+    expect(shaped.tiers).toEqual([])
+    expect(inputOf(shaped, null, null).errors).toBeUndefined()
+  })
+
+  it('builds the two tiers once the reward is typed', () => {
+    const shaped = asSurvey({ ...FORM, tiers: [] }, 5, '30')
+    expect(shaped.tiers.map((tier) => [tier.fromScore, tier.toScore, tier.reward])).toEqual([
+      ['0', '4', '0'], ['5', '5', '30']])
   })
 })
