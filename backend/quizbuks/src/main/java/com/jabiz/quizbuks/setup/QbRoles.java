@@ -55,7 +55,9 @@ public final class QbRoles {
         // Platform 16y: closing by hand, with a note, a reconciliation task that needs nothing (TASK_RESOLVE).
         "task.resolve",
         // Q13a: bank top-ups, recorded from the statement by one administrator and approved by another.
-        QbPermissions.TOPUP_BANK_RECORD, QbPermissions.TOPUP_BANK_APPROVE);
+        QbPermissions.TOPUP_BANK_RECORD, QbPermissions.TOPUP_BANK_APPROVE,
+        // Q14: a taker's transfer at once, with the daily run's checks.
+        QbPermissions.TRANSFER_NOW);
 
     /**
      * What the super administrator holds beyond the other two: bans, reading parameters, proposing controlled changes,

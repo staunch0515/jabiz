@@ -235,6 +235,18 @@ class PayoutConfig {
     }
 
     @Bean
+    ProcessDefinition<TransferProcesses.UserRef, TransferProcesses.TransferOutput, ProcessContext> qbTransferNow(
+        StripeSettings stripe) {
+        return TransferProcesses.now(stripe);
+    }
+
+    @Bean
+    ProcessDefinition<TransferProcesses.UserRef, TransferProcesses.PreviewOutput, ProcessContext>
+        qbTransferPreview() {
+        return TransferProcesses.preview();
+    }
+
+    @Bean
     ProcessDefinition<ExternalJobCompletion, TransferProcesses.TransferOutput, ProcessContext> qbTransferSent(
         StripeSettings stripe) {
         return TransferProcesses.sent(stripe);

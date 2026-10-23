@@ -18,7 +18,7 @@ results:
   rewardPaidAt:        { from: QbAttempt.rewardPaidAt }
   ledgerTransactionId: { from: QbAttempt.ledgerTransactionId }
 list:
-  filters: [userId, publicationId, sponsorId, rewardStatus, submittedAt]
+  filters: [attemptId, userId, publicationId, sponsorId, rewardStatus, submittedAt]
   sorts:   [submittedAt, reward]
   defaultSort: { field: submittedAt, asc: false }
   key: [attemptId]

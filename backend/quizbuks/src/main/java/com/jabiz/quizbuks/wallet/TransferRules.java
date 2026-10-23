@@ -39,6 +39,11 @@ public final class TransferRules {
     public static final String HELD = "HELD";
     /** It would need a review, but no review rule is in effect: nothing is written, finance is told once a day. */
     public static final String REVIEW_NOT_CONFIGURED = PayoutChecks.REVIEW_NOT_CONFIGURED;
+    /**
+     * Above the review limit, asked for by an administrator's "transfer now" (Q14): nothing is written, the daily run
+     * asks for the review. Never from {@link #plan}.
+     */
+    public static final String REVIEW_NOT_NOW = "REVIEW_NOT_NOW";
 
     public static final int MAX_FAILURE_STREAK = 3;
 

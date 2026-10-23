@@ -44,6 +44,8 @@ public final class WalletCodes {
     public static final String TRANSFER_NOT_HELD = "QB_TRANSFER_NOT_HELD";
     /** A finance administrator releasing transfers to themselves (four eyes, as with the review). */
     public static final String TRANSFER_RELEASE_OWN = "QB_TRANSFER_RELEASE_OWN";
+    /** A finance administrator transferring to themselves at once (Q14): another administrator does it. */
+    public static final String TRANSFER_NOW_OWN = "QB_TRANSFER_NOW_OWN";
 
     /** A receipt is only for a paid top-up (Q9d, F-09). */
     public static final String RECEIPT_NOT_PAID = "QB_RECEIPT_NOT_PAID";
@@ -59,6 +61,7 @@ public final class WalletCodes {
         TOPUP_NEW_SPONSOR_LIMIT, TOPUP_BANK_UNAVAILABLE, TOPUP_BANK_STATE, TOPUP_BANK_PAYER_NAME, TOPUP_BANK_DATE_FUTURE,
         TOPUP_BANK_NO_REVIEW, TOPUP_BANK_REFERENCE_USED, TOPUP_BANK_OWN,
         PAYOUT_COUNTRY_UNSUPPORTED, PAYOUT_UNAVAILABLE, PAYOUT_ACCOUNT_CLOSED, TRANSFER_NOT_HELD, TRANSFER_RELEASE_OWN,
+        TRANSFER_NOW_OWN,
         RECEIPT_NOT_PAID, RECEIPT_NO_ISSUER, RECEIPT_REFUNDED);
 
     private WalletCodes() {}

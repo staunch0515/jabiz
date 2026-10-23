@@ -32,6 +32,8 @@ export const TEMPLATE = {
   attempts: 'qb.admin.attempts',
   /** The four below need `qb.admin.finance.read`. */
   attemptRewards: 'qb.admin.attempt-rewards',
+  /** Q14: each taker's attempts and Kudos (finance). */
+  takerKudos: 'qb.admin.taker-kudos',
   transfers: 'qb.admin.transfers',
   topUps: 'qb.admin.topups',
   /** Bank top-ups (Q13a): what recording and approving one needs (`qb.topup.bank.approve`). */
@@ -80,6 +82,9 @@ export const BROADCAST = {
 export const PROCESS = {
   /** Lets transfers to a taker held after a rejected or reversed transfer go on (`qb.payout.review`). */
   holdRelease: 'QB_TRANSFER_HOLD_RELEASE',
+  /** Q14: what the daily run would do for a taker now (`qb.admin.finance.read`), and doing it at once (`qb.transfer.now`). */
+  transferPreview: 'QB_TRANSFER_PREVIEW',
+  transferNow: 'QB_TRANSFER_NOW',
   /** Records the money of a bank top-up found on the statement, for another administrator's approval (Q13a). */
   bankRecord: 'QB_TOPUP_BANK_RECORD',
   /** The platform's issue of a report: archived with its content hash (`report.issue`). */
@@ -171,6 +176,8 @@ export const PERMISSION = {
   contentWrite: 'qb.admin.content.write',
   /** The AI page (Q8a). */
   aiRead: 'qb.admin.ai.read',
+  /** A taker's transfer at once (Q14). */
+  transferNow: 'qb.transfer.now',
   /** Bank top-ups (Q13a): finance records the money, another administrator approves it. */
   bankRecord: 'qb.topup.bank.record',
   bankApprove: 'qb.topup.bank.approve',
@@ -212,6 +219,9 @@ export const PATH = {
   publication: (publicationId: string) => `/qb/reviews/publications/${encodeURIComponent(publicationId)}`,
   sponsor: (userId: string) => `/qb/reviews/sponsors/${encodeURIComponent(userId)}`,
   users: '/qb/users',
+  /** Every attempt (Q14), by user, publication and state. */
+  attempts: '/qb/attempts',
+  attemptsOf: (filter: Record<string, string>) => `/qb/attempts?${new URLSearchParams(filter)}`,
   user: (userId: string) => `/qb/users/${encodeURIComponent(userId)}`,
   finance: '/qb/finance',
   transfers: '/qb/finance/transfers',
