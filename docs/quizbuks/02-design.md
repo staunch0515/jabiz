@@ -471,6 +471,7 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
   - Q9c：财务（`/qb/finance/**`）：总览、转账与大额审批、充值、核对、月报。
   - Q9d：分录导出（`/qb/finance/journal`：预览下一期、导出、下载存档的 CSV、记录外部凭证号）与科目映射（`/qb/finance/journal/mapping`：只读，修改链到平台的受控变更）。
   - Q8a：AI（`/qb/ai`，`qb.admin.ai.read`）：开关与上限的现行值（开关经受控变更提出，另一位管理员发布）、按商家与月份的用量、失败率与美元估算、最近的请求与失败原因。
+  - Q17：全部 Quiz（`/qb/quizzes`，含已删除）与一个 Quiz 的详情（`/qb/quizzes/:quizId`：发布、版本（按要求显示冻结内容）、当前草稿，只读，`qb.admin.quiz.read`），每个状态的全部发布（`/qb/publications`，`qb.admin.publication.read`；审核页只列待审的），链到发布页与答题记录（`plans/Q17-admin-overview.md`）。
 
 ### 7.4 "Kudos"
 

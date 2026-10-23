@@ -42,6 +42,7 @@ const right = { className: 'text-right tabular-nums' }
 function Profile({ user }: { user: UserRow }) {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
   const sponsorStatus = useLabels(DICTIONARY.sponsorReviewStatus)
+  const { can } = useAuth()
   const ban = useQuery({ queryKey: ['qb-ext', 'ban', user.userId], queryFn: () => readBan(user.userId) })
   const notSet = t('common.notSet')
   const yesNo = (value: boolean) => (value ? t('common.yes') : t('common.no'))
@@ -67,6 +68,18 @@ function Profile({ user }: { user: UserRow }) {
             <Link to={PATH.sponsor(user.userId)} className={linkClass} data-testid="user-application">
               {t('user.application')}
             </Link>
+            {can(PERMISSION.quizRead) && (
+              <Link to={PATH.quizzesWhere({ sponsor: user.userId, removed: '1' })} className={linkClass}
+                data-testid="user-quizzes">
+                {t('menu.quizzes')}
+              </Link>
+            )}
+            {can(PERMISSION.publicationRead) && (
+              <Link to={PATH.publicationsWhere({ sponsor: user.userId })} className={linkClass}
+                data-testid="user-publications">
+                {t('menu.publications')}
+              </Link>
+            )}
           </span>
         )
         : t('user.noSponsor'),

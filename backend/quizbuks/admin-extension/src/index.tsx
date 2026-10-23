@@ -4,10 +4,12 @@ import {
   Banknote,
   BookOpenCheck,
   ClipboardCheck,
+  FileQuestion,
   FileSpreadsheet,
   Landmark,
   ListChecks,
   Megaphone,
+  Rocket,
   Scale,
   ScrollText,
   Sparkles,
@@ -27,6 +29,9 @@ import JournalPage from './JournalPage'
 import LegalPage from './LegalPage'
 import { messages } from './messages'
 import PublicationReviewPage from './PublicationReviewPage'
+import PublicationsPage from './PublicationsPage'
+import QuizDetailPage from './QuizDetailPage'
+import QuizzesPage from './QuizzesPage'
 import ReconciliationPage from './ReconciliationPage'
 import ReportsPage from './ReportsPage'
 import ReviewsPage from './ReviewsPage'
@@ -39,7 +44,7 @@ import UsersPage from './UsersPage'
 
 /**
  * QuizBuks's own pages in the platform's admin frontend (docs/quizbuks/02-design.md section 7.3,
- * docs/quizbuks/plans/Q9a-admin-extension.md and Q9c-admin-finance.md; platform decision D22): the review of sponsor
+ * docs/quizbuks/plans/Q9a-admin-extension.md and Q9c-admin-finance.md; platform decision D22): every quiz and every publication (Q17), the review of sponsor
  * applications and submitted publications with everything the decision is about, the user summary (P-01), and
  * the legal texts (publishing the drafts and withdrawing announced versions, Q7b), the announcements and notices (Q7c), finance's pages (the overview, transfers and their review, top-ups, the reconciliation, the monthly reports and the
  * journal export with its account mapping, Q9d).
@@ -55,6 +60,9 @@ export default defineExtension({
     { path: PATH.users, element: <UsersPage /> },
     { path: '/qb/users/:userId', element: <UserSummaryPage /> },
     { path: PATH.attempts, element: <AttemptsPage /> },
+    { path: PATH.quizzes, element: <QuizzesPage /> },
+    { path: '/qb/quizzes/:quizId', element: <QuizDetailPage /> },
+    { path: PATH.publications, element: <PublicationsPage /> },
     { path: PATH.finance, element: <FinanceOverviewPage /> },
     { path: PATH.transfers, element: <TransfersPage /> },
     { path: '/qb/finance/transfers/:transferId/review', element: <TransferReviewPage /> },
@@ -82,6 +90,11 @@ export default defineExtension({
           icon: ClipboardCheck,
           permission: PERMISSION.reviewPublication,
         },
+        // Q17: every quiz and every publication, whatever became of them (the review queue shows only the waiting).
+        { key: 'qb-quizzes', label: 'menu.quizzes', path: PATH.quizzes, icon: FileQuestion,
+          permission: PERMISSION.quizRead },
+        { key: 'qb-publications', label: 'menu.publications', path: PATH.publications, icon: Rocket,
+          permission: PERMISSION.publicationRead },
         { key: 'qb-users', label: 'menu.users', path: PATH.users, icon: Users, permission: PERMISSION.usersRead },
         { key: 'qb-attempts', label: 'menu.attempts', path: PATH.attempts, icon: ListChecks,
           permission: PERMISSION.usersRead },
