@@ -121,6 +121,24 @@ public class PublishingConfig {
         return defaultDataset(QbPublications.CARD, PublicationFunds.BATCH);
     }
 
+    /**
+     * The cards of live publications, for a share link's page (Q15, template {@code qb.public.publication}): what the
+     * app's page shows anybody before signing in, never the regions, the budget or the tiers (the sponsor's id only to
+     * join the sponsor's company; the template does not return it). A
+     * paused, ended or not yet started publication is outside the fixed scope.
+     */
+    @Bean
+    DatasetDefinition qbPublicPublicationCardDataset() {
+        return DatasetDefinition.define(QbPublications.PUBLIC_CARDS, d -> d
+            .targetEntityType(QbPublications.CARD)
+            .scope(s -> s.fixed("status", PublicationStatus.LIVE))
+            .publicRead(p -> p.fields("publicationId", "sponsorId", "name", "quizTitle", "kind", "startAt", "endAt",
+                "timeLimitSec", "questionCount", "fullScore", "passScore", "maxReward"))
+            .permissions(QbPermissions.ADMIN_PUBLICATION_READ, QbPermissions.SPONSOR_VIEW_WRITE)
+            .policy(p -> p.readOnly(true).allowTimeTravel(false))
+            .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
+    }
+
     @Bean
     EntityDefinition qbPublicationOwnerEntity() {
         return QbPublications.OWNER_ENTITY;

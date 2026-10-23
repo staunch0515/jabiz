@@ -45,6 +45,8 @@ public final class QbAccounts {
     public static final String MY_PROFILE_DATASET = "urn:jabiz:dataset:me:" + PROFILE;
     /** A sponsor's own onboarding, read only. */
     public static final String MY_SPONSOR_DATASET = "urn:jabiz:dataset:sponsor:" + SPONSOR;
+    /** Approved sponsors' company names, for a share link's page (Q15): nothing else of the onboarding. */
+    public static final String PUBLIC_SPONSOR_DATASET = "urn:jabiz:dataset:public:" + SPONSOR;
     /** One's own sign-in records (M-02), read only: the platform's entity, limited to the caller. */
     public static final String MY_SIGN_INS_DATASET = "urn:jabiz:dataset:me:SecLoginRecord";
 
