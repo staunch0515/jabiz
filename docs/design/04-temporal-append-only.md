@@ -282,6 +282,8 @@ WHERE NOT v.is_deleted AND <范围条件> AND <查询条件>
 - 读取：`ParamService.get(key, asOf)` / `load(keys, asOf)`（平台代码，返回 `Mono`）；流程中用平台步骤
   `LoadParams.of(ctx -> 业务时间, 结果键, key…)` 把 core 的 `ParamValues` 放入上下文，计算步骤 `get(key, BigDecimal.class)` 读取。
   `asOf` 时没有生效值的键一次性全部列出：422 `PARAM_NOT_FOUND`（参数 `key`、`asOf`）。
+  应用视为"尚未设置"的参数（如尚未配置的功能）用 `LoadParams.optional(…)`（阶段 16zc）：没有生效值的键不报错、在 `ParamValues` 中缺席，
+  计算步骤以 `find(key, 类型)`（`Optional`）与 `has(key)` 读取，自己决定"未设置"的含义（如以业务码拒绝并说明功能未开放）；`get` 对缺席的键照旧失败。
 - 维护流程（权限都是 `platform.param.write`：数据视图本身也能插入参数，另设“建参数”权限并不能成立）：`PARAM_CREATE`（建参数与首个值，立即生效）、`PARAM_SET`（立即生效）、
   `PARAM_SCHEDULE`（生效时间须晚于操作时间，否则 422 `EFFECTIVE_TIME_NOT_FUTURE`）、`PARAM_CANCEL_SCHEDULED`（无预定 → 422 `NOT_SCHEDULED`）。修改按 D1 变基：存在修改同一值的预定时 `PARAM_SET` 被拒绝（409），先取消预定。
 

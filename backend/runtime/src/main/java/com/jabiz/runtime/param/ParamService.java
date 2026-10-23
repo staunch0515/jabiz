@@ -57,6 +57,18 @@ public class ParamService {
      * @return all of them; an error {@code PARAM_NOT_FOUND} (422) naming every key without a value then
      */
     public Mono<ParamValues> load(Collection<String> keys, Instant asOf) {
+        return load(keys, asOf, true);
+    }
+
+    /**
+     * The values of those of {@code keys} that have one in effect at {@code asOf}; the others are absent (a setting
+     * the application treats as "not set", such as a feature not configured yet).
+     */
+    public Mono<ParamValues> loadAvailable(Collection<String> keys, Instant asOf) {
+        return load(keys, asOf, false);
+    }
+
+    private Mono<ParamValues> load(Collection<String> keys, Instant asOf, boolean required) {
         Objects.requireNonNull(asOf, "asOf must not be null");
         Set<String> wanted = new LinkedHashSet<>(keys);
         if (wanted.isEmpty()) {
@@ -70,10 +82,11 @@ public class ParamService {
         // Every key asked for, however many: a page of the dataset would report the rest missing (decision D32).
         return entityManager.queryAll(dataset, ParamEntities.SYS_PARAM, query, asOf, null)
             .collectList()
-            .map(found -> values(found, wanted, asOf));
+            .map(found -> values(found, wanted, asOf, required));
     }
 
-    private static ParamValues values(List<EntityInstance> found, Set<String> wanted, Instant asOf) {
+    private static ParamValues values(List<EntityInstance> found, Set<String> wanted, Instant asOf,
+        boolean required) {
         Map<String, Object> byKey = new LinkedHashMap<>();
         for (EntityInstance param : found) {
             byKey.put(param.get(ParamEntities.KEY), value(param));
@@ -89,7 +102,7 @@ public class ParamService {
                     Map.of("key", key, "asOf", asOf.toString())));
             }
         }
-        if (!missing.isEmpty()) {
+        if (required && !missing.isEmpty()) {
             throw new BusinessRuleViolationException(missing);
         }
         return new ParamValues(asOf, ordered);
