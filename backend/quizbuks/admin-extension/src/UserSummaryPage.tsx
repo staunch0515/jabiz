@@ -33,6 +33,7 @@ import {
 } from './api'
 import { DICTIONARY, isUserId, PATH, PERMISSION } from './ids'
 import { LoadFailed, Section } from './components'
+import { PayoutPanel } from './PayoutPanel'
 import { money, useLabels, usePaged, when } from './hooks'
 
 const linkClass = 'text-primary font-medium underline-offset-4 hover:underline'
@@ -212,6 +213,7 @@ function Finance({ userId, sponsor }: { userId: string; sponsor: boolean }) {
   }
   return (
     <Section title={t('user.finance')} testId="user-finance">
+      <PayoutPanel userId={userId} />
       <div className="flex flex-col gap-2" data-testid="user-rewards">
         <h3 className="font-semibold">{t('user.rewards')}</h3>
         {rewards.query.isError

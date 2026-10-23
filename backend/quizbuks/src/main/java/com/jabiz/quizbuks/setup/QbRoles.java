@@ -51,7 +51,9 @@ public final class QbRoles {
         // Q9d: the journal export, its confirmation and its archived CSV files.
         QbPermissions.JOURNAL_EXPORT, QbPermissions.JOURNAL_CONFIRM, "file.generated.read",
         // Platform 16y: closing by hand, with a note, a reconciliation task that needs nothing (TASK_RESOLVE).
-        "task.resolve");
+        "task.resolve",
+        // Q14: a taker's transfer at once, with the daily run's checks.
+        QbPermissions.TRANSFER_NOW);
 
     /**
      * What the super administrator holds beyond the other two: bans, reading parameters, proposing controlled changes,

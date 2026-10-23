@@ -1,4 +1,5 @@
 import { financeMenu, financeMessages } from './finance-messages'
+import { attemptsMenu, attemptsMessages, payoutMessages } from './payout-messages'
 import { broadcastsMenu, broadcastsMessages, legalAnnounce } from './broadcasts-messages'
 import { aiMenu, aiMessages } from './ai-messages'
 import { legalMenu, legalMessages } from './legal-messages'
@@ -7,11 +8,13 @@ import { legalMenu, legalMessages } from './legal-messages'
 export const messages = {
   en: {
     menu: { group: 'QuizBuks', reviews: 'Reviews', users: 'Users', ...legalMenu.en, ...aiMenu.en,
-      ...financeMenu.en, ...broadcastsMenu.en },
+      ...financeMenu.en, ...broadcastsMenu.en, ...attemptsMenu.en },
     legal: { ...legalMessages.en, ...legalAnnounce.en },
     broadcasts: broadcastsMessages.en,
     ai: aiMessages.en,
     finance: financeMessages.en,
+    payout: payoutMessages.en,
+    attempts: attemptsMessages.en,
     common: {
       notSet: 'Not set',
       failed: 'Could not load this. Try again.',
@@ -224,11 +227,13 @@ export const messages = {
   },
   zh: {
     menu: { group: 'QuizBuks', reviews: '审核', users: '用户', ...legalMenu.zh, ...aiMenu.zh,
-      ...financeMenu.zh, ...broadcastsMenu.zh },
+      ...financeMenu.zh, ...broadcastsMenu.zh, ...attemptsMenu.zh },
     legal: { ...legalMessages.zh, ...legalAnnounce.zh },
     broadcasts: broadcastsMessages.zh,
     ai: aiMessages.zh,
     finance: financeMessages.zh,
+    payout: payoutMessages.zh,
+    attempts: attemptsMessages.zh,
     common: {
       notSet: '未设置',
       failed: '无法读取，请重试。',
@@ -441,11 +446,13 @@ export const messages = {
   },
   ja: {
     menu: { group: 'QuizBuks', reviews: '審査', users: 'ユーザー', ...legalMenu.ja, ...aiMenu.ja,
-      ...financeMenu.ja, ...broadcastsMenu.ja },
+      ...financeMenu.ja, ...broadcastsMenu.ja, ...attemptsMenu.ja },
     legal: { ...legalMessages.ja, ...legalAnnounce.ja },
     broadcasts: broadcastsMessages.ja,
     ai: aiMessages.ja,
     finance: financeMessages.ja,
+    payout: payoutMessages.ja,
+    attempts: attemptsMessages.ja,
     common: {
       notSet: '未設定',
       failed: '読み込めませんでした。もう一度お試しください。',

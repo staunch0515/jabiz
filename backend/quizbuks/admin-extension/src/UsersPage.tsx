@@ -9,17 +9,22 @@ import {
   EXTENSION_NAMESPACE,
   Input,
   PageHeader,
+  useAuth,
   type ColumnDef,
   type PaginationState,
 } from '@jabiz/admin'
 import { searchUsers, type UserRow } from './api'
-import { DICTIONARY, PATH } from './ids'
+import { DICTIONARY, PATH, PERMISSION } from './ids'
 import { LoadFailed } from './components'
-import { useLabels, when } from './hooks'
+import { money, useLabels, when } from './hooks'
+import { readTakerKudos } from './payout-api'
 
 const linkClass = 'text-primary font-medium underline-offset-4 hover:underline'
 
-/** The users (`qb.admin.users`), searched by user name, address, name or company; each opens its summary (P-01). */
+/**
+ * The users (`qb.admin.users`), searched by user name, address, name or company; each opens its summary (P-01). Finance
+ * also sees each taker's attempts, Kudos earned and balance (`qb.admin.taker-kudos`, Q14), read for the page shown.
+ */
 export default function UsersPage() {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
   const sponsorStatus = useLabels(DICTIONARY.sponsorReviewStatus)
@@ -30,6 +35,14 @@ export default function UsersPage() {
     queryKey: ['qb-ext', 'users', q, pagination],
     queryFn: () => searchUsers(q, pagination.pageIndex * pagination.pageSize, pagination.pageSize),
     placeholderData: keepPreviousData,
+  })
+  const { can } = useAuth()
+  const finance = can(PERMISSION.financeRead)
+  const ids = (users.data ?? []).map((user) => user.userId)
+  const kudos = useQuery({
+    queryKey: ['qb-ext', 'kudos', 'page', ids],
+    queryFn: () => readTakerKudos(ids),
+    enabled: finance && ids.length > 0,
   })
   const columns = useMemo<ColumnDef<UserRow, unknown>[]>(() => [
     {
@@ -52,7 +65,21 @@ export default function UsersPage() {
       header: t('users.banned'),
       cell: ({ row }) => (row.original.banned ? t('common.yes') : ''),
     },
-  ], [t, sponsorStatus])
+    ...(finance ? [
+      { id: 'attempts', header: t('payout.attempts'), meta: { className: 'text-right tabular-nums' },
+        cell: ({ row }) => String(kudos.data?.get(row.original.userId)?.attempts ?? '') },
+      { id: 'earned', header: t('payout.earned'), meta: { className: 'text-right tabular-nums' },
+        cell: ({ row }) => {
+          const k = kudos.data?.get(row.original.userId)
+          return k ? <span data-testid="user-earned">{money(k.earned)}</span> : ''
+        } },
+      { id: 'balance', header: t('payout.balance'), meta: { className: 'text-right tabular-nums' },
+        cell: ({ row }) => {
+          const k = kudos.data?.get(row.original.userId)
+          return k ? money(k.balance) : ''
+        } },
+    ] satisfies ColumnDef<UserRow, unknown>[] : []),
+  ], [t, sponsorStatus, finance, kudos.data])
 
   return (
     <div className="flex flex-col gap-4" data-testid="qb-users">

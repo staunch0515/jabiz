@@ -79,6 +79,9 @@ public final class TransferProcesses {
 
     public static final String CREATE = "QB_TRANSFER_CREATE";
     public static final String APPROVAL_RESULT = "QB_TRANSFER_APPROVAL_RESULT";
+    /** Q14: a finance administrator's transfer for one taker now, and what it would do. */
+    public static final String NOW = "QB_TRANSFER_NOW";
+    public static final String PREVIEW = "QB_TRANSFER_PREVIEW";
     public static final String SENT = "QB_TRANSFER_SENT";
     public static final String SEND_FAILED = "QB_TRANSFER_SEND_FAILED";
     public static final String CHECK = "QB_TRANSFER_CHECK";
@@ -130,6 +133,17 @@ public final class TransferProcesses {
      * @param approvalRequestId the review's request of a transfer waiting for one
      */
     public record TransferOutput(String transferId, String status, String reason, String approvalRequestId) {}
+
+    /**
+     * What the daily run would do for a taker now (Q14).
+     *
+     * @param transfers whether it would transfer; otherwise {@code skip} says why ({@link TransferRules})
+     * @param review    whether the transfer would wait for a review (above {@code qb.transfer.review-above})
+     * @param balance   the taker's rewards payable (2120) in the ledger
+     * @param held      what of it is held back (the hold period, open disputes)
+     */
+    public record PreviewOutput(boolean transfers, String skip, BigDecimal amount, BigDecimal fee, BigDecimal net,
+        boolean review, BigDecimal balance, BigDecimal held) {}
 
     static final String INPUT = "input";
     static final String PARAMS = "params";
@@ -187,6 +201,65 @@ public final class TransferProcesses {
                 .internal()
                 .contextFactory(TransferProcesses::context)
                 .outputMapper(TransferProcesses::output)
+                .steps(b -> createSteps(b, stripe)));
+    }
+
+    /**
+     * A finance administrator's "transfer now" for one taker (Q14): the daily run's steps for that taker at once, with
+     * all its checks (the switch, the threshold, the account, holds, the review above the limit). Nothing is sent that
+     * the daily run would not send; the output names the reason when nothing is. Never to oneself.
+     */
+    public static ProcessDefinition<UserRef, TransferOutput, ProcessContext> now(StripeSettings stripe) {
+        return ProcessDefinition.define(NOW, 1, UserRef.class, TransferOutput.class, ProcessContext.class,
+            pb -> pb
+                .description("Transfers a taker's balance to their Stripe account now, as the daily run would.")
+                .permissions(QbPermissions.TRANSFER_NOW)
+                .requiresVerifiedEmail()
+                .contextFactory(TransferProcesses::context)
+                .outputMapper(TransferProcesses::output)
+                .compute("Not to oneself", (metadata, ctx) -> {
+                    if (ctx.request().actorId().equals(userOf(ctx))) {
+                        throw new BusinessRuleViolationException(List.of(new Violation(null,
+                            WalletCodes.TRANSFER_NOW_OWN, "A transfer to oneself is made by another administrator",
+                            Map.of())));
+                    }
+                })
+                .steps(b -> createSteps(b, stripe)));
+    }
+
+    /**
+     * What the daily run would do for a taker now, without doing it (Q14): the decision and its reason, the balance
+     * and what is held back. Read without the wallet lock: a view, not a promise.
+     */
+    public static ProcessDefinition<UserRef, PreviewOutput, ProcessContext> preview() {
+        return ProcessDefinition.define(PREVIEW, 1, UserRef.class, PreviewOutput.class, ProcessContext.class,
+            pb -> pb
+                .description("Says whether a taker would be transferred to now, and why not.")
+                .permissions(QbPermissions.ADMIN_FINANCE_READ)
+                .contextFactory(TransferProcesses::context)
+                .outputMapper(ctx -> {
+                    TransferRules.Plan plan = ctx.get(PLAN, TransferRules.Plan.class);
+                    return new PreviewOutput(plan.transfers(), plan.skip(), plan.amount(), plan.fee(), plan.net(),
+                        plan.review(), ledgerBalance(ctx), rewardsHeld(ctx));
+                })
+                .step("Load the parameters", LoadParams.<ProcessContext>of(ProcessContext::opTime, PARAMS,
+                    QbParams.TRANSFER_ENABLED, QbParams.TRANSFER_THRESHOLD, QbParams.TRANSFER_REVIEW_ABOVE,
+                    QbParams.TRANSFER_FEE, QbParams.TRANSFER_HOLD_DAYS))
+                .steps(b -> loadTaker(b, TransferProcesses::userOf))
+                .step("Load the latest transfers", QueryEntities.<ProcessContext>of(
+                    QbPayouts.defaultDataset(QbPayouts.TRANSFER), ctx -> latest(userOf(ctx)), LATEST))
+                .step("Load what holds the taker", QueryEntities.<ProcessContext>of(
+                    QbPayouts.defaultDataset(QbPayouts.TRANSFER), ctx -> holds(userOf(ctx)), HOLDS))
+                .step("Load the review rule", QueryEntities.<ProcessContext>of(ApprovalEntities.RULE_DATASET,
+                    ctx -> EntityQuery.builder().where(new QueryPredicate.And(List.of(
+                        new QueryPredicate.Eq("subject", QbPayouts.APPROVAL_SUBJECT),
+                        new QueryPredicate.Eq("enabled", true)))).limit(1).build(), RULES))
+                .compute("Decide", (metadata, ctx) -> ctx.put(PLAN, planOf(ctx))));
+    }
+
+    /** The daily run's steps for one taker: decide under their wallet lock, then send or ask for a review. */
+    private static <I, O> void createSteps(ProcessDefinitionBuilder<I, O, ProcessContext> pb, StripeSettings stripe) {
+        pb
                 .step("Lock the taker's wallet", HoldLock.<ProcessContext>exclusive(
                     ctx -> QbWallets.lockName(QbWallets.TAKER, userOf(ctx))))
                 .step("Load the parameters", LoadParams.<ProcessContext>of(ProcessContext::opTime, PARAMS,
@@ -220,25 +293,12 @@ public final class TransferProcesses {
                     APPROVAL))
                 .compute("Send or wait", (metadata, ctx) -> created(ctx))
                 .steps(b -> sending(b, stripe))
-                .steps(TransferProcesses::finish));
+                .steps(TransferProcesses::finish);
     }
 
     static void plan(ProcessContext ctx) {
-        ParamValues params = ctx.get(PARAMS, ParamValues.class);
-        EntityInstance ban = first(ctx, BAN);
         EntityInstance account = first(ctx, ACCOUNT);
-        List<TransferRules.Past> latest = past(list(ctx, LATEST));
-        TransferRules.Plan plan = TransferRules.plan(
-            new TransferRules.Params(params.get(QbParams.TRANSFER_ENABLED, Boolean.class),
-                params.get(QbParams.TRANSFER_THRESHOLD, BigDecimal.class),
-                params.get(QbParams.TRANSFER_REVIEW_ABOVE, BigDecimal.class),
-                params.get(QbParams.TRANSFER_FEE, BigDecimal.class),
-                params.get(QbParams.TRANSFER_HOLD_DAYS, BigDecimal.class)),
-            new TransferRules.Facts(BanRules.banned(ban == null ? null : ban.attributes()),
-                account == null ? null : account.get("status"),
-                latest.stream().anyMatch(t -> TransferStatus.UNFINISHED.contains(t.status())),
-                TransferRules.failureStreak(latest), TransferRules.held(past(list(ctx, HOLDS))),
-                first(ctx, RULES) != null, ledgerBalance(ctx), rewardsHeld(ctx)));
+        TransferRules.Plan plan = planOf(ctx);
         ctx.put(PLAN, plan);
         if (!plan.transfers()) {
             ctx.put(SKIP, plan.skip());
@@ -254,6 +314,25 @@ public final class TransferProcesses {
         values.put("reversedAmount", BigDecimal.ZERO);
         values.put("createdAt", ctx.opTime());
         ctx.put(NEW_ID, String.valueOf(ctx.changes().insert(QbPayouts.TRANSFER, values)));
+    }
+
+    /** The rules' decision for the taker from what was read (the parameters, the taker, their transfers, the rule). */
+    static TransferRules.Plan planOf(ProcessContext ctx) {
+        ParamValues params = ctx.get(PARAMS, ParamValues.class);
+        EntityInstance ban = first(ctx, BAN);
+        EntityInstance account = first(ctx, ACCOUNT);
+        List<TransferRules.Past> latest = past(list(ctx, LATEST));
+        return TransferRules.plan(
+            new TransferRules.Params(params.get(QbParams.TRANSFER_ENABLED, Boolean.class),
+                params.get(QbParams.TRANSFER_THRESHOLD, BigDecimal.class),
+                params.get(QbParams.TRANSFER_REVIEW_ABOVE, BigDecimal.class),
+                params.get(QbParams.TRANSFER_FEE, BigDecimal.class),
+                params.get(QbParams.TRANSFER_HOLD_DAYS, BigDecimal.class)),
+            new TransferRules.Facts(BanRules.banned(ban == null ? null : ban.attributes()),
+                account == null ? null : account.get("status"),
+                latest.stream().anyMatch(t -> TransferStatus.UNFINISHED.contains(t.status())),
+                TransferRules.failureStreak(latest), TransferRules.held(past(list(ctx, HOLDS))),
+                first(ctx, RULES) != null, ledgerBalance(ctx), rewardsHeld(ctx)));
     }
 
     static void created(ProcessContext ctx) {

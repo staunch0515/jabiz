@@ -5,6 +5,7 @@ import {
   ClipboardCheck,
   FileSpreadsheet,
   Landmark,
+  ListChecks,
   Megaphone,
   Scale,
   ScrollText,
@@ -14,6 +15,7 @@ import {
 } from 'lucide-react'
 import BroadcastsPage from './BroadcastsPage'
 import AiPage from './AiPage'
+import AttemptsPage from './AttemptsPage'
 import FinanceOverviewPage from './FinanceOverviewPage'
 import { PATH, PERMISSION } from './ids'
 import JournalMappingPage from './JournalMappingPage'
@@ -48,6 +50,7 @@ export default defineExtension({
     { path: '/qb/reviews/sponsors/:userId', element: <SponsorReviewPage /> },
     { path: PATH.users, element: <UsersPage /> },
     { path: '/qb/users/:userId', element: <UserSummaryPage /> },
+    { path: PATH.attempts, element: <AttemptsPage /> },
     { path: PATH.finance, element: <FinanceOverviewPage /> },
     { path: PATH.transfers, element: <TransfersPage /> },
     { path: '/qb/finance/transfers/:transferId/review', element: <TransferReviewPage /> },
@@ -73,6 +76,8 @@ export default defineExtension({
           permission: PERMISSION.reviewPublication,
         },
         { key: 'qb-users', label: 'menu.users', path: PATH.users, icon: Users, permission: PERMISSION.usersRead },
+        { key: 'qb-attempts', label: 'menu.attempts', path: PATH.attempts, icon: ListChecks,
+          permission: PERMISSION.usersRead },
         { key: 'qb-legal', label: 'menu.legal', path: PATH.legal, icon: ScrollText,
           permission: PERMISSION.contentWrite },
         { key: 'qb-broadcasts', label: 'menu.broadcasts', path: PATH.broadcasts, icon: Megaphone,
