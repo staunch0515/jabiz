@@ -65,12 +65,17 @@ function VerifyFirst() {
  * in. The first save completes registration (the welcome page); later ones edit it (the account page), refused when
  * somebody changed it meanwhile. A new profile starts from the name given at sign-up and the browser's country.
  */
-export function ProfileForm({ profile, submitLabel, onSaved, consent = false }: {
+export function ProfileForm({ profile, submitLabel, onSaved, consent = false, brief = false }: {
   profile: Profile | null
   submitLabel: string
   onSaved?: (output: ProfileOutput) => void
   /** Registration's second step: the terms and the privacy policy in effect are accepted with it (Q7-3). */
   consent?: boolean
+  /**
+   * The short step after a share link (Q15): the country (and the terms) only; the name is the one signed up with,
+   * else the address's part before the @, and the currency the country's. Both can be changed on the account page.
+   */
+  brief?: boolean
 }) {
   const countries = useQuery({ queryKey: ['qb', 'countries'], queryFn: readCountries, staleTime: Infinity })
   const currencies = useQuery({ queryKey: ['qb', 'currencies', i18n.language], queryFn: readCurrencies })
@@ -78,23 +83,33 @@ export function ProfileForm({ profile, submitLabel, onSaved, consent = false }: 
   if (countries.isError || currencies.isError) return <PageState kind="error" description={t('failed')} />
   if (!countries.data || !currencies.data) return <PageState kind="loading" />
   return <ProfileFields profile={profile} countries={countries.data} currencies={currencies.data}
-    submitLabel={submitLabel} onSaved={onSaved} consent={consent} />
+    submitLabel={submitLabel} onSaved={onSaved} consent={consent} brief={brief} />
 }
 
-function ProfileFields({ profile, countries, currencies, submitLabel, onSaved, consent }: {
+/** A name from an address: the part before the @, at most the profile's length. */
+export function nameFromEmail(email: string | null | undefined): string {
+  const local = (email ?? '').split('@')[0]?.trim() ?? ''
+  return local.slice(0, 100)
+}
+
+function ProfileFields({ profile, countries, currencies, submitLabel, onSaved, consent, brief }: {
   profile: Profile | null
   countries: Country[]
   currencies: DictionaryItem[]
   submitLabel: string
   onSaved?: (output: ProfileOutput) => void
   consent: boolean
+  brief: boolean
 }) {
   const { t, i18n: { language } } = useTranslation(APP)
   const { t: tQb } = useTranslation(QB)
-  const { displayName: signedUpAs, emailVerified } = useAuth()
+  const { displayName: signedUpAs, email, emailVerified } = useAuth()
   const queryClient = useQueryClient()
   const id = useId()
-  const [displayName, setDisplayName] = useState(() => profile?.displayName || signedUpAs || '')
+  // The short step shows no name: never the sign-in name when it is the address itself (an account a mailed link
+  // opened has none other), which would then be shown to sponsors.
+  const [displayName, setDisplayName] = useState(() => profile?.displayName
+    || (brief ? (signedUpAs && !signedUpAs.includes('@') ? signedUpAs : nameFromEmail(email)) : signedUpAs || ''))
   const [countryCode, setCountryCode] = useState<string | null>(() => {
     if (profile?.countryCode) return profile.countryCode
     const { languages, timeZone } = browserHints()
@@ -114,7 +129,8 @@ function ProfileFields({ profile, countries, currencies, submitLabel, onSaved, c
       displayName: displayName.trim(),
       countryCode: countryCode ?? '',
       city: city.trim() === '' ? null : city.trim(),
-      preferredCurrency: currency,
+      // The short step shows no currency: the country's.
+      preferredCurrency: brief ? currencyOf(countryCode, currencies.map((c) => c.code)) : currency,
       baseRevision: profile?.revision ?? null,
       ...(asksTerms ? { acceptTerms, ...acceptedVersions(terms.data) } : {}),
     }),
@@ -148,7 +164,7 @@ function ProfileFields({ profile, countries, currencies, submitLabel, onSaved, c
   return (
     <form noValidate onSubmit={submit} className="flex flex-col gap-4" data-testid="profile-form">
       <VerifyFirst />
-      <div className="flex flex-col gap-2">
+      {(!brief || problem('displayName')) && <div className="flex flex-col gap-2">
         <Label htmlFor={`${id}-name`}>{t('profile.displayName')}</Label>
         <Input id={`${id}-name`} value={displayName} required maxLength={100} autoComplete="nickname"
           aria-invalid={problem('displayName') ? true : undefined}
@@ -157,7 +173,7 @@ function ProfileFields({ profile, countries, currencies, submitLabel, onSaved, c
         {problem('displayName') && (
           <p id={`${id}-name-error`} className="text-destructive text-sm">{problem('displayName')}</p>
         )}
-      </div>
+      </div>}
       <div className="flex flex-col gap-2">
         <Label htmlFor={`${id}-country`}>{t('profile.country')}</Label>
         <Combobox id={`${id}-country`} value={countryCode} onChange={setCountryCode} options={options} required
@@ -168,6 +184,7 @@ function ProfileFields({ profile, countries, currencies, submitLabel, onSaved, c
           <p id={`${id}-country-error`} className="text-destructive text-sm">{problem('countryCode')}</p>
         )}
       </div>
+      {!brief && <>
       <div className="flex flex-col gap-2">
         <Label htmlFor={`${id}-city`}>{t('profile.city')}</Label>
         <Input id={`${id}-city`} value={city} maxLength={100} autoComplete="address-level2"
@@ -196,6 +213,7 @@ function ProfileFields({ profile, countries, currencies, submitLabel, onSaved, c
           <p id={`${id}-currency-error`} className="text-destructive text-sm">{problem('preferredCurrency')}</p>
         )}
       </div>
+      </>}
       {asksTerms && (
         <div className="flex flex-col gap-2">
           <TermsAgreement id={`${id}-terms`} kinds={LEGAL.appKinds} rows={terms.data ?? []} checked={acceptTerms}

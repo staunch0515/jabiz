@@ -100,6 +100,8 @@ jabiz:
     # signed in on the device for 30 days and never locks for idleness (an attempt has its own time limit); the
     # sponsor console and the administration lock after 30 minutes without activity and keep the session in the tab
     # (the administration cannot keep it on the device).
+    # The app also signs in by a mailed link (Q15, decision D54): a publication's share link asks only for the address;
+    # the link signs the taker in, or opens a verified account (self-registration on), and leads back to /p/<id>.
     entries:
       admin:
         accepted-roles: ${QB_ADMIN_ROLES:ADMIN,QB_ADMIN_SUPER,QB_ADMIN_CONTENT,QB_ADMIN_FINANCE}
@@ -111,6 +113,7 @@ jabiz:
         self-registration: ${QB_APP_SELF_REGISTRATION:true}
         registration-roles: QB_TAKER
         require-verified-email: false
+        email-link: ${QB_APP_EMAIL_LINK:true}
         app-path: /
         session:
           persistence: device

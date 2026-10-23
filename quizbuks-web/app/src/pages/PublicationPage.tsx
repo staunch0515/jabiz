@@ -35,7 +35,7 @@ export function minutesUntil(time: string | null, now: number = Date.now()): num
 }
 
 /** The time limit as people read it: minutes, with seconds when not whole. */
-function useDuration() {
+export function useDuration() {
   const { t } = useTranslation(APP)
   return (seconds: number) => {
     const minutes = Math.floor(seconds / 60)

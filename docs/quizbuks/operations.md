@@ -24,6 +24,7 @@
 | `JABIZ_STORAGE_WRITE_BATCHING_ENABLED` | **不设** | — | — | 缺省 `true`：平台在事务中缓冲写入（决策 D46，16p-2）。应急开关：只在怀疑写缓冲有缺陷时设 `false` 并重启，行为与保证不变，热门发布的容量约降 30 %（`perf/Q10a-load-test.md` §11） |
 | `QB_ADMIN_ROLES` | 否 | 缺省 `ADMIN,QB_ADMIN_SUPER,QB_ADMIN_CONTENT,QB_ADMIN_FINANCE` | — | 用缺省。**永远不要**加 `*`、`QB_TAKER`、`QB_SPONSOR`（自己注册的人会进入管理后台）。启动检查只在相应入口开放注册时拒绝（`SignInEntries`）：`*` 在 App 或商家任一入口开放注册时、`QB_TAKER` 在 App 开放注册时（`QB_APP_SELF_REGISTRATION`）、`QB_SPONSOR` 在商家开放注册时（`QB_SPONSOR_SELF_REGISTRATION`）启动失败；关掉注册后不再拦，但仍不要这样配置。也不得含测试的 `QB_E2E_*`（正式模式下启动失败） |
 | `QB_APP_SELF_REGISTRATION` / `QB_SPONSOR_SELF_REGISTRATION` | 否 | 缺省 `true` | — | — |
+| `QB_APP_EMAIL_LINK` | 否 | 缺省 `true` | — | App 以邮件中的链接登录（Q15 的分享链接，平台 D54）；关掉后分享页仍显示，但只能用密码登录 |
 | `JABIZ_PUBLIC_ENABLED` | 否 | 缺省 `true`（Q7b） | — | 设 `false` 时 `/api/public/**` 一律 404：帮助中心与条款、隐私政策页（App 与商家后台，也给未登录的人看）都打不开。只有四个公开模板 `qb.public.*`（已发布的法律文本版本与已发布的 FAQ），没有公开的文件；按客户端地址限流（平台缺省每分钟 300 次），结果缓存 5 分钟 |
 
 ### 1.2 邮件与登录
