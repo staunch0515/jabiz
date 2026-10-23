@@ -83,7 +83,8 @@ public final class Rbac {
     /**
      * The roles among {@code roles} that count in a session of {@code entry}: all of them, except that in an entry with
      * long sessions ({@link SignInEntries.Session#longLived}: kept on the device or never ended for idleness; decision
-     * D43 item 2) a role granting the platform's administration (every permission, or any of the security module's,
+     * D43 item 2), or with sign-in by mailed link ({@link SignInEntries.Entry#emailLink}: the mailbox is all it proves;
+     * decision D54), a role granting the platform's administration (every permission, or any of the security module's,
      * {@code security.*}) does not count. Roles are data an administrator can change at any time, so this is decided
      * at every sign-in and refresh, not only at startup (which refuses such an entry accepting every role).
      *
@@ -92,7 +93,7 @@ public final class Rbac {
     public static List<EntityInstance> withoutAdministration(Collection<EntityInstance> roles,
         Collection<EntityInstance> grants, SignInEntries.Entry entry) {
         complete(roles);
-        if (entry == null || !entry.session().longLived()) {
+        if (entry == null || !entry.session().longLived() && !entry.emailLink()) {
             return List.copyOf(roles);
         }
         Set<String> administrative = new HashSet<>();

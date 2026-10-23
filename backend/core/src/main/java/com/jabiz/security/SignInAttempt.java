@@ -28,6 +28,8 @@ public record SignInAttempt(String userId, String userName, String entry, Set<St
         OIDC,
         TOTP,
         RECOVERY_CODE,
+        /** A mailed one-time link (decision D54): the mailbox, nothing else. */
+        EMAIL_LINK,
         /** Renewing a session: no credentials, the refresh token stands for the sign-in. */
         REFRESH
     }

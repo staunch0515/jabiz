@@ -47,6 +47,7 @@ export {
   entryInfo,
   register,
   requestPasswordReset,
+  requestEmailLink,
   confirmPasswordReset,
   resendVerification,
   changePassword,
@@ -62,6 +63,7 @@ export {
 export type {
   EntryInfo,
   Registration,
+  EmailLinkRequest,
   SessionList,
   SessionInfo,
   SessionsRevoked,

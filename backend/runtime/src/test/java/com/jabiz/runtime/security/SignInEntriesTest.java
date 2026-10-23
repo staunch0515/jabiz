@@ -20,13 +20,13 @@ class SignInEntriesTest {
 
     private static SignInEntries.Config config(List<String> accepted, Boolean registration, List<String> granted,
         Boolean verified, String appPath) {
-        return new SignInEntries.Config(accepted, registration, granted, verified, appPath, null);
+        return new SignInEntries.Config(accepted, registration, granted, verified, appPath, null, null);
     }
 
     private static SignInEntries.Config sessions(List<String> accepted, Duration ttl, Duration idle,
         String persistence) {
         return new SignInEntries.Config(accepted, null, null, null, null,
-            new SignInEntries.SessionConfig(ttl, idle, persistence));
+            new SignInEntries.SessionConfig(ttl, idle, persistence), null);
     }
 
     @Test
@@ -205,6 +205,30 @@ class SignInEntriesTest {
             .longLived()).isTrue();
         assertThat(new SignInEntries.Session(Duration.ofDays(1), Duration.ofMinutes(15),
             SignInEntries.Persistence.DEVICE).longLived()).isTrue();
+    }
+
+    @Test
+    void aMailedLinkNeverSignsInToTheAdministrationNorToAnEntryTakingEveryRole() {
+        SignInEntries entries = new SignInEntries(Map.of(
+            "admin", emailLink(List.of("ADMIN")),
+            "wild", emailLink(List.of("A", "*")),
+            "portal", emailLink(List.of("A"))), false, null);
+
+        assertThat(entries.check()).filteredOn(CheckProblem::isError).extracting(p -> p.location() + ": "
+            + p.message()).containsExactlyInAnyOrder(
+                "jabiz.security.entries.admin: email-link cannot be on for the administration entry or an entry "
+                    + "accepting every role",
+                "jabiz.security.entries.wild: email-link cannot be on for the administration entry or an entry "
+                    + "accepting every role");
+        assertThat(entries.all()).extracting(SignInEntries.Entry::name).containsExactly("portal");
+        assertThat(entries.find("portal").orElseThrow().emailLink()).isTrue();
+        // Off unless said.
+        assertThat(new SignInEntries(Map.of("plain", config(List.of("A"), null, null, null, null)), false, null)
+            .find("plain").orElseThrow().emailLink()).isFalse();
+    }
+
+    private static SignInEntries.Config emailLink(List<String> accepted) {
+        return new SignInEntries.Config(accepted, null, null, null, null, null, true);
     }
 
     @Test

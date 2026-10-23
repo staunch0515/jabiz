@@ -582,6 +582,31 @@
         },
         "type" : "object"
       },
+      "EmailLinkConfirm" : {
+        "properties" : {
+          "token" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "EmailLinkRequest" : {
+        "properties" : {
+          "email" : {
+            "type" : "string"
+          },
+          "entry" : {
+            "type" : "string"
+          },
+          "locale" : {
+            "type" : "string"
+          },
+          "to" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "EmailRequest" : {
         "properties" : {
           "email" : {
@@ -628,6 +653,9 @@
         "properties" : {
           "appPath" : {
             "type" : "string"
+          },
+          "emailLink" : {
+            "type" : "boolean"
           },
           "name" : {
             "type" : "string"
@@ -3403,6 +3431,53 @@
           }
         },
         "tags" : [ "mfa-controller" ]
+      }
+    },
+    "/api/auth/email-link" : {
+      "post" : {
+        "operationId" : "requestEmailLink",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/EmailLinkRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "202" : {
+            "description" : "Accepted"
+          }
+        },
+        "tags" : [ "email-link-controller" ]
+      }
+    },
+    "/api/auth/email-link/confirm" : {
+      "post" : {
+        "operationId" : "confirmEmailLink",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/EmailLinkConfirm"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/TokenResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "email-link-controller" ]
       }
     },
     "/api/auth/entries/{name}" : {

@@ -214,6 +214,17 @@ const en = {
     unlinked: '{{provider}} has been removed.',
     failed: 'The linked accounts could not be loaded or changed. Please try again.',
   },
+  emailLink: {
+    hint: 'Enter your e-mail address. We send you a link to sign in with; no password needed.',
+    send: 'Send me a link',
+    sent: 'If you can sign in here with {{email}}, a link is on its way.',
+    otherAddress: 'Use another address',
+    title: 'Sign in',
+    signInHint: 'Continue to sign in as the owner of this mailbox.',
+    signIn: 'Sign in',
+    invalidHint: 'Ask for a new link below.',
+    enrolled: 'Two-step verification is set up. Ask for a new link to sign in with it.',
+  },
 }
 
 type Messages = typeof en
@@ -421,6 +432,17 @@ const zh: Messages = {
     unlinked: '已解除 {{provider}} 的关联。',
     failed: '无法读取或修改关联的账号，请重试。',
   },
+  emailLink: {
+    hint: '输入您的邮箱地址，我们会发送一个登录链接，无需密码。',
+    send: '发送登录链接',
+    sent: '如果 {{email}} 可以在这里登录，登录链接已发出。',
+    otherAddress: '使用其他地址',
+    title: '登录',
+    signInHint: '以此邮箱所有者的身份继续登录。',
+    signIn: '登录',
+    invalidHint: '请在下面重新获取链接。',
+    enrolled: '两步验证已设置。请重新获取链接，用它登录。',
+  },
 }
 
 const ja: Messages = {
@@ -625,6 +647,17 @@ const ja: Messages = {
     alreadyLinked: 'この {{provider}} アカウントはすでに連携されています。',
     unlinked: '{{provider}} の連携を解除しました。',
     failed: '連携しているアカウントを読み込めないか、変更できませんでした。もう一度お試しください。',
+  },
+  emailLink: {
+    hint: 'メールアドレスを入力してください。ログイン用のリンクをお送りします。パスワードは不要です。',
+    send: 'リンクを送信',
+    sent: '{{email}} でここにログインできる場合、リンクをお送りしました。',
+    otherAddress: '別のアドレスを使う',
+    title: 'ログイン',
+    signInHint: 'このメールボックスの所有者としてログインを続けます。',
+    signIn: 'ログイン',
+    invalidHint: '下から新しいリンクを請求してください。',
+    enrolled: '二段階認証を設定しました。新しいリンクを請求して、それでログインしてください。',
   },
 }
 
