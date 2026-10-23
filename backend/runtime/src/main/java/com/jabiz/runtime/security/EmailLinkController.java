@@ -42,12 +42,12 @@ class EmailLinkController {
      * @param locale the language of the mail to an address with no account ({@code zh}, {@code ja}, {@code en});
      *               optional
      */
-    record LinkRequest(String email, String entry, String to, String locale) {}
+    record EmailLinkRequest(String email, String entry, String to, String locale) {}
 
-    record ConfirmRequest(@Sensitive String token) {
+    record EmailLinkConfirm(@Sensitive String token) {
         @Override
         public String toString() {
-            return "ConfirmRequest[***]";
+            return "EmailLinkConfirm[***]";
         }
     }
 
@@ -79,10 +79,11 @@ class EmailLinkController {
     /** 202 whatever the address: an account's user or an address nobody uses gets a link, as the entry allows. */
     @PostMapping(REQUEST)
     @ResponseStatus(HttpStatus.ACCEPTED)
-    Mono<ResponseEntity<Void>> request(@RequestBody(required = false) LinkRequest request, ServerHttpRequest http) {
+    Mono<ResponseEntity<Void>> requestEmailLink(@RequestBody(required = false) EmailLinkRequest request,
+        ServerHttpRequest http) {
         return Mono.defer(() -> {
             limits.client(SignUpRateLimits.Kind.EMAIL_LINK, clients.clientOf(http));
-            LinkRequest body = request == null ? new LinkRequest(null, null, null, null) : request;
+            EmailLinkRequest body = request == null ? new EmailLinkRequest(null, null, null, null) : request;
             SignInEntries.Entry entry = entries.find(body.entry()).filter(SignInEntries.Entry::emailLink).orElse(null);
             if (entry == null) {
                 return Mono.error(new SignUpDisabledException("Signing in by link is not open at entry "
@@ -113,7 +114,7 @@ class EmailLinkController {
      * {@code POST /api/auth/login} answers, at the entry the link was mailed for.
      */
     @PostMapping(CONFIRM)
-    Mono<AuthController.TokenResponse> confirm(@RequestBody(required = false) ConfirmRequest request,
+    Mono<AuthController.TokenResponse> confirmEmailLink(@RequestBody(required = false) EmailLinkConfirm request,
         ServerHttpRequest http) {
         return Mono.defer(() -> {
             limits.client(SignUpRateLimits.Kind.LINK, clients.clientOf(http));

@@ -10,7 +10,7 @@ import { AuthProvider, useAuth } from './AuthContext'
 type Me = { userId: string; entry?: string; email?: string; emailVerified?: boolean }
 
 /** The server of these tests: the entry's settings, sign-in, refresh and /me as given. Returns the bodies posted. */
-function server(options: { me: () => Me; persistence?: 'tab' | 'device' }) {
+function server(options: { me: () => Me; persistence?: 'tab' | 'device'; secondFactor?: boolean }) {
   const posts: { path: string; body: Record<string, unknown> }[] = []
   let issued = 0
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -24,7 +24,11 @@ function server(options: { me: () => Me; persistence?: 'tab' | 'device' }) {
     if (url.pathname.startsWith('/api/auth/entries/')) {
       return json(200, { name: url.pathname.split('/').pop(), sessionPersistence: options.persistence })
     }
-    if (url.pathname === '/api/auth/login' || url.pathname === '/api/auth/refresh') {
+    if (url.pathname === '/api/auth/email-link/confirm' && options.secondFactor) {
+      return json(200, { status: 'MFA_REQUIRED', challenge: 'c1' })
+    }
+    if (url.pathname === '/api/auth/login' || url.pathname === '/api/auth/refresh'
+      || url.pathname === '/api/auth/email-link/confirm') {
       issued += 1
       return json(200, { status: 'SIGNED_IN', accessToken: `a${issued}`, refreshToken: `r${issued}` })
     }
@@ -76,6 +80,22 @@ describe('AuthProvider with a sign-in entry (decision D43)', () => {
     })
     expect(result.current.email).toBe('ann@example.com')
     expect(result.current.emailVerified).toBe(false)
+  })
+
+  it('signs in with the token of a mailed link, or hands over the second step (decision D54)', async () => {
+    configureSession('portal')
+    const posts = server({ me: () => ({ userId: 'u2', entry: 'portal' }) })
+    const { result } = renderHook(() => useAuth(), { wrapper })
+    await waitFor(() => expect(result.current.ready).toBe(true))
+    await expect(act(() => result.current.signInWithEmailLink('t1'))).resolves.toEqual({ status: 'SIGNED_IN' })
+    await waitFor(() => expect(result.current.userId).toBe('u2'))
+    expect(posts.find((p) => p.path === '/api/auth/email-link/confirm')?.body).toEqual({ token: 't1' })
+    session.clear()
+
+    server({ me: () => ({ userId: 'u3', entry: 'portal' }), secondFactor: true })
+    await expect(act(() => result.current.signInWithEmailLink('t2')))
+      .resolves.toEqual({ status: 'MFA_REQUIRED', challenge: 'c1' })
+    expect(session.accessToken()).toBeNull()
   })
 
   it('ends a session that belongs to another entry', async () => {

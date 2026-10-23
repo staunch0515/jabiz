@@ -79,6 +79,24 @@ export async function resendVerification(email: string, entry: string = session.
   await unwrap(api.POST('/api/auth/verify-email/resend', { body: { email: email.trim(), entry } }))
 }
 
+export interface EmailLinkRequest {
+  /** The path of this frontend the link leads back to once signed in (`/p/123?ref=share`); the entry's home when absent. */
+  to?: string
+  /** The language of the mail (a platform language); the interface language when absent. */
+  locale?: string
+}
+
+/**
+ * Asks for a link to sign in with by mail (decision D54): answered 202 alike for every address, so that nobody learns
+ * who has an account. A trusted address of an account gets a link that signs its user in; an address nobody uses gets
+ * one that opens an account where the entry opens accounts; any other address gets nothing.
+ */
+export async function requestEmailLink(email: string, request: EmailLinkRequest = {},
+  entry: string = session.entry()): Promise<void> {
+  await unwrap(api.POST('/api/auth/email-link', { body: { email: email.trim(), entry, to: request.to,
+    locale: request.locale } }))
+}
+
 /**
  * Changes the signed-in user's own password (`POST /api/auth/account/password`, phase 16m; decision D43 item 3): needs
  * the current one, a wrong one counting towards the lock-out. The other sessions end; this one is kept, as its
