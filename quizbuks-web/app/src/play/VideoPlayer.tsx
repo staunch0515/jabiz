@@ -1,7 +1,7 @@
 /**
  * A video's own player in the page (Q19): YouTube's no-cookie player or Vimeo's, loaded when it comes near the
  * screen and never playing by itself (the viewer presses its play button). The frame is sandboxed to what the players
- * need; it cannot navigate the App. Its address is one of the two players (`play/video.ts`), never anything else.
+ * need; it cannot navigate the App. Its address is one of the two players (`qb/video.ts`), never anything else.
  */
 export function VideoPlayer({ player, title }: { player: string; title: string }) {
   return (

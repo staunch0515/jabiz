@@ -9,7 +9,7 @@
 
 | 部分 | 内容 |
 |---|---|
-| 视频地址 | `content.VideoEmbeds`（App 的 `play/video.ts` 同样读法，测试用例相同）：YouTube（`watch?v=`、`youtu.be/`、`shorts/`、`embed/`、`live/`）与 Vimeo（`vimeo.com/<数字>`、`player.vimeo.com/video/<数字>`）的单个视频 → 播放器地址；YouTube 用无 Cookie 的 `www.youtube-nocookie.com/embed/<id>`。其他地址不是播放器 |
+| 视频地址 | `content.VideoEmbeds`（App 的 `qb/video.ts` 同样读法，测试用例相同）：YouTube（`watch?v=`、`youtu.be/`、`shorts/`、`embed/`、`live/`）与 Vimeo（`vimeo.com/<数字>`、`player.vimeo.com/video/<数字>`）的单个视频 → 播放器地址；YouTube 用无 Cookie 的 `www.youtube-nocookie.com/embed/<id>`。其他地址不是播放器 |
 | "看视频即可答题" | 资料的新字段 `watchToAnswer`（`QbMaterial`，迁移 V22）：只有视频链接可勾选（否则 422 `QB_MATERIAL_FIELD_NOT_ALLOWED`），地址须是 YouTube / Vimeo 的单个视频（422 `QB_MATERIAL_VIDEO_NOT_EMBEDDABLE`），每个模版一个（422 `QB_QUIZ_ONE_WATCH_VIDEO`）|
 | 版本 | 快照中只有该视频写 `"watchToAnswer":true`：其他资料与已有版本的文本与哈希不变；复制与导入照样带上 |
 | 发布卡片 | 发布上线时，卡片（`QbPublicationCard.video`，迁移 V22）冻结该视频的播放器地址；模板 `qb.app.feed` 返回 `video` |

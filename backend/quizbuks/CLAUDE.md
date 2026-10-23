@@ -197,7 +197,7 @@
 ## 5. 前端（`quizbuks-web/`，`docs/quizbuks/plans/QP-pages.md`）
 
 - **两个 SPA，各是独立的 pnpm 工程**（自己的 `package.json` 与 `pnpm-lock.yaml`，经 `link:../../frontend/packages/{client,ui}` 用平台的包；不用 pnpm 工作区）：
-  `app`（答题 App，`/`，入口 `app`，PWA）与 `sponsor`（商家后台，`/sponsor/`，入口 `sponsor`）；`build.gradle.kts` 的 `spa(...)` 构建它们，`application.yml` 不写 `jabiz.web.spa`。
+  `app`（答题 App，`/`，入口 `app`，PWA）与 `sponsor`（商家后台，`/sponsor/`，入口 `sponsor`）；`build.gradle.kts` 的 `spa(...)` 构建它们。`application.yml` 写出完整的 `jabiz.web.spa`（Q19：App 自己的内容安全策略多 `frame-src` 两个视频播放器），三个前端的路径、入口与 PWA 须与 `build.gradle.kts` 一致（启动检查 `WEB` 告警）。
   共享依赖的版本必须与平台前端相同（`pnpm app:check`，Gradle 中 `spaCheckRoot` / `spaCheckSponsor`，在 `check` 中）。指南：平台 `docs/guide/app-spa.md`。
 - **共用代码只在 `src/qb/`**，两个 SPA 中各一份、**完全相同**（CI `diff -r`）：改一处即复制到另一处。流程、模板、数据视图、字典与文件策略的名字只写在 `qb/ids.ts`；
   流程的输入输出对照 Java record 手写在 `qb/api.ts`（答题的在 `qb/play.ts`；QuizBuks 没有自己的接口，因此没有 OpenAPI 类型），改了 record 就改这里并由 e2e 覆盖。

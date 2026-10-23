@@ -27,6 +27,8 @@ describe('videoPlayer', () => {
     'https://vimeo.com/76979871/extra', 'https://vimeo.com/abc', 'https://evil.example/watch?v=dQw4w9WgXcQ',
     'https://youtube.com.evil.example/watch?v=dQw4w9WgXcQ', 'https://user@youtube.com/watch?v=dQw4w9WgXcQ',
     'https://youtube.com:8443/watch?v=dQw4w9WgXcQ',
+    'https://vimeo.com/76979871/', 'https://www.youtube.com/embed/dQw4w9WgXcQ/', 'https://www.youtube.com/watch/?v=dQw4w9WgXcQ',
+    'https://www.youtube.com/embed/dQw4w9WgX%63Q',
   ])('shows %j as no player', (url) => {
     expect(videoPlayer(url)).toBeNull()
   })

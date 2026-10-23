@@ -11,7 +11,7 @@ import java.util.regex.Pattern;
  * The video links QuizBuks shows in its own pages (docs/quizbuks/plans/Q19-embedded-video.md): a YouTube or Vimeo
  * video, as the address of its player. YouTube's player is its no-cookie domain; nothing plays by itself. The App's
  * content security policy frames these two players only (`frame-src`), so any other link stays a link. The App's
- * {@code video.ts} reads links the same way (its test has the cases of {@code VideoEmbedsTest}).
+ * {@code qb/video.ts} reads links the same way (its test has the cases of {@code VideoEmbedsTest}).
  */
 public final class VideoEmbeds {
 
@@ -44,7 +44,8 @@ public final class VideoEmbeds {
         if (!scheme.equals("https") && !scheme.equals("http") || uri.getUserInfo() != null || uri.getPort() != -1) {
             return Optional.empty();
         }
-        String[] path = (uri.getPath() == null ? "" : uri.getPath()).split("/");
+        // As the App reads it: the raw path, empty segments kept (a trailing slash is not the same video).
+        String[] path = (uri.getRawPath() == null ? "" : uri.getRawPath()).split("/", -1);
         if (host.equals("youtu.be")) {
             return youtube(path.length > 1 ? path[1] : null);
         }

@@ -37,6 +37,9 @@ class VideoEmbedsTest {
         "https://vimeo.com/76979871/extra", "https://vimeo.com/abc", "https://evil.example/watch?v=dQw4w9WgXcQ",
         "https://youtube.com.evil.example/watch?v=dQw4w9WgXcQ", "https://user@youtube.com/watch?v=dQw4w9WgXcQ",
         "https://youtube.com:8443/watch?v=dQw4w9WgXcQ",
+        // Read as the App reads them: a trailing slash, and an escaped id, are not one video.
+        "https://vimeo.com/76979871/", "https://www.youtube.com/embed/dQw4w9WgXcQ/",
+        "https://www.youtube.com/watch/?v=dQw4w9WgXcQ", "https://www.youtube.com/embed/dQw4w9WgX%63Q",
     })
     void anyOtherAddressIsNoPlayer(String url) {
         assertThat(VideoEmbeds.player(url)).isEmpty();

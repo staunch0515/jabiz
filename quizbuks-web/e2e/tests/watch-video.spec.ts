@@ -16,7 +16,7 @@ const PLAYER = 'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ'
 test('a video to watch is shown on the home with its reward and starts the quiz', async ({ page, request }) => {
   test.setTimeout(180_000)
   await page.route('https://www.youtube-nocookie.com/**', (route) => route.fulfill({ contentType: 'text/html',
-    body: '<!doctype html><title>Player</title><button>Play</button>' }))
+    body: '<!doctype html><html lang="en"><title>Player</title><button>Play</button></html>' }))
   const sponsor = await fundedSponsor(request)
   const quiz = await run(request, sponsor.token, 'QB_QUIZ_SAVE', { title: unique('Watch quiz '), timeLimitSec: 300 })
   const quizId = quiz.quizId as string

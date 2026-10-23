@@ -3,7 +3,7 @@ import { ExternalLink } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
 import { CONTENT_IMAGE_VARIANTS } from '../qb/ids'
-import { videoPlayer } from '../play/video'
+import { videoPlayer } from '../qb/video'
 import { VideoPlayer } from '../play/VideoPlayer'
 import type { Material } from '../qb/play'
 
