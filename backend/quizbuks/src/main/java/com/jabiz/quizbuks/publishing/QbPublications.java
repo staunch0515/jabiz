@@ -278,6 +278,8 @@ public final class QbPublications {
             .asText(ContentLimits.TITLE_LENGTH));
         // The cover's file key as text: the version's files keep the file, the card only names it.
         eb.field("cover", f -> f.physicalColumn("cover").immutable(true).asText(36));
+        // Q19: the player of the version's video to watch (VideoEmbeds), shown on the App's home.
+        eb.field("video", f -> f.physicalColumn("video").immutable(true).asText(80));
         eb.field("versionId", f -> f.physicalColumn("version_id").immutable(true).required(true)
             .asReference(QbContent.VERSION));
         eb.field("maxReward", f -> f.physicalColumn("max_reward").immutable(true).required(true)

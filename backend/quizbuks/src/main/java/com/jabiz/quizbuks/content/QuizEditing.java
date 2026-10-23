@@ -173,7 +173,7 @@ public final class QuizEditing {
             }
             m.add(new QuizSnapshot.Material(m.size() + 1, material.get("kind"), material.get("title"),
                 material.get("description"), material.get("body"), material.get("url"), uuid(material.get("pdf")),
-                uuid(material.get("audio")), list));
+                uuid(material.get("audio")), list, Boolean.TRUE.equals(material.get("watchToAnswer"))));
         }
         List<QuizSnapshot.Question> q = new ArrayList<>();
         for (EntityInstance question : ordered(questions)) {

@@ -79,9 +79,9 @@ class QuizbuksAppIT extends PostgresIntegrationTest {
     }
 
     /**
-     * The three front ends come from the jar (jabizApp writes them as the defaults of jabiz.web.spa;
-     * docs/quizbuks/plans/QP-pages.md section 2): the app at / as a PWA signing in to "app", the sponsor console at
-     * /sponsor and the administration at /admin, each with its own entry. application.yml no longer replaces the list.
+     * The three front ends (docs/quizbuks/plans/QP-pages.md section 2): the app at / as a PWA signing in to "app", the
+     * sponsor console at /sponsor and the administration at /admin, each with its own entry. application.yml writes the
+     * list as the jar has it, for the App's own content security policy (Q19).
      */
     @Test
     void servesTheThreeFrontEndsOfTheJar() {
@@ -91,5 +91,22 @@ class QuizbuksAppIT extends PostgresIntegrationTest {
                 org.assertj.core.groups.Tuple.tuple("/", "app", JabizWebProperties.Pwa.ON),
                 org.assertj.core.groups.Tuple.tuple("/sponsor", "sponsor", JabizWebProperties.Pwa.OFF),
                 org.assertj.core.groups.Tuple.tuple("/admin", "admin", JabizWebProperties.Pwa.OFF));
+    }
+
+    /**
+     * Q19: the App frames the two video players it shows (YouTube without cookies, Vimeo) and nothing else; its policy
+     * is otherwise the platform's default, which the sponsor console and the administration keep.
+     */
+    @Test
+    void theAppFramesOnlyTheVideoPlayers() {
+        String app = client.get().uri("/").exchange().expectStatus().isOk().returnResult(String.class)
+            .getResponseHeaders().getFirst("Content-Security-Policy");
+        assertThat(app).isEqualTo(JabizWebProperties.DEFAULT_CONTENT_SECURITY_POLICY
+            + "; frame-src https://www.youtube-nocookie.com https://player.vimeo.com");
+        for (String path : java.util.List.of("/sponsor/", "/admin/")) {
+            assertThat(client.get().uri(path).exchange().returnResult(String.class).getResponseHeaders()
+                .getFirst("Content-Security-Policy")).as(path)
+                .isEqualTo(JabizWebProperties.DEFAULT_CONTENT_SECURITY_POLICY);
+        }
     }
 }

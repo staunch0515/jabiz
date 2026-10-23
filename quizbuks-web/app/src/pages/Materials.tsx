@@ -3,6 +3,8 @@ import { ExternalLink } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
 import { CONTENT_IMAGE_VARIANTS } from '../qb/ids'
+import { videoPlayer } from '../play/video'
+import { VideoPlayer } from '../play/VideoPlayer'
 import type { Material } from '../qb/play'
 
 const IMAGE_FIELD = { image: true, variants: [...CONTENT_IMAGE_VARIANTS] }
@@ -17,7 +19,7 @@ function Audio({ fileId, title }: { fileId: string; title: string }) {
   return <audio controls preload="metadata" src={url} aria-label={title} className="w-full" />
 }
 
-/** A link of a material: always to another site, opened in a new tab (Q-3: videos are links, never embedded). */
+/** A link of a material: always to another site, opened in a new tab (a video the App cannot show, Q-3, Q19). */
 function OutLink({ url, label }: { url: string; label: string }) {
   const { t } = useTranslation(APP)
   let safe: string | null = null
@@ -56,9 +58,11 @@ export function Materials({ materials }: { materials: Material[] }) {
               <h3 className="font-medium">{title}</h3>
               {m.description && <p className="text-muted-foreground text-sm whitespace-pre-line">{m.description}</p>}
               {m.kind === 'ARTICLE' && m.body && <MarkdownView text={m.body} />}
-              {(m.kind === 'LINK' || m.kind === 'VIDEO_LINK') && m.url && (
-                <OutLink url={m.url} label={m.kind === 'VIDEO_LINK' ? t('detail.watchVideo') : t('detail.openLink')} />
-              )}
+              {m.kind === 'LINK' && m.url && <OutLink url={m.url} label={t('detail.openLink')} />}
+              {m.kind === 'VIDEO_LINK' && m.url && (videoPlayer(m.url)
+                // Q19: a YouTube or Vimeo video plays in the page; any other video opens on its own site.
+                ? <VideoPlayer player={videoPlayer(m.url)!} title={title} />
+                : <OutLink url={m.url} label={t('detail.watchVideo')} />)}
               {m.kind === 'PDF' && m.pdf && <FilePreview fileId={m.pdf} field={FILE_FIELD} width={0} />}
               {m.kind === 'AUDIO' && m.audio && <Audio fileId={m.audio} title={title} />}
               {m.kind === 'IMAGES' && m.images.length > 0 && (

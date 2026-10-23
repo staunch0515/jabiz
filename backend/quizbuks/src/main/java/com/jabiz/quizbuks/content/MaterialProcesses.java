@@ -46,11 +46,21 @@ public final class MaterialProcesses {
      * given: {@code body} (ARTICLE, Markdown), {@code url} (LINK, VIDEO_LINK), {@code pdf}, {@code audio} or
      * {@code images} (IMAGES). {@code images} is the whole list, as the sponsor console saves a material with its
      * images: those left out are deleted, an empty list deletes them all, and without it (null) they stay as they are.
+     * {@code watchToAnswer} (Q19, VIDEO_LINK only; null is false): watching this YouTube or Vimeo video is enough to
+     * answer, so the App shows its player on the publication's card; one such video per quiz.
      */
     public record MaterialInput(@NotNull UUID quizId, UUID materialId,
         @NotNull @Pattern(regexp = "ARTICLE|LINK|VIDEO_LINK|PDF|IMAGES|AUDIO") String kind, String title,
         String description, String body, String url, UUID pdf, UUID audio,
-        @Size(max = ContentLimits.MAX_IMAGES) List<@Valid @NotNull ImageInput> images, Long baseRevision) {}
+        @Size(max = ContentLimits.MAX_IMAGES) List<@Valid @NotNull ImageInput> images, Long baseRevision,
+        Boolean watchToAnswer) {
+
+        /** A material that is not the video to watch. */
+        public MaterialInput(UUID quizId, UUID materialId, String kind, String title, String description, String body,
+            String url, UUID pdf, UUID audio, List<ImageInput> images, Long baseRevision) {
+            this(quizId, materialId, kind, title, description, body, url, pdf, audio, images, baseRevision, null);
+        }
+    }
 
     public record MaterialRef(@NotNull UUID quizId, @NotNull UUID materialId, Long baseRevision) {}
 
@@ -82,6 +92,29 @@ public final class MaterialProcesses {
                     return files;
                 }))
                 .compute("Save the material", (metadata, ctx) -> save(ctx)));
+    }
+
+    /**
+     * Why a material cannot be the video to watch (Q19): only a video link, only one the App can show (YouTube or
+     * Vimeo, {@link VideoEmbeds}), and only one per quiz.
+     */
+    private static void watchProblems(ProcessContext ctx, MaterialKind kind, String url,
+        List<EntityInstance> materials, EntityInstance material) {
+        if (kind != MaterialKind.VIDEO_LINK) {
+            ctx.reject(new Violation("watchToAnswer", ContentCodes.MATERIAL_FIELD_NOT_ALLOWED, "A material of kind "
+                + kind + " has no watchToAnswer", Map.of("kind", kind.name(), "field", "watchToAnswer")));
+            return;
+        }
+        if (VideoEmbeds.player(text(url)).isEmpty()) {
+            ctx.reject(new Violation("url", ContentCodes.MATERIAL_VIDEO_NOT_EMBEDDABLE,
+                "Only a YouTube or Vimeo video can be watched in the App"));
+        }
+        boolean another = materials.stream().anyMatch(other -> Boolean.TRUE.equals(other.get("watchToAnswer"))
+            && (material == null || !other.id().equals(material.id())));
+        if (another) {
+            ctx.reject(new Violation("watchToAnswer", ContentCodes.QUIZ_ONE_WATCH_VIDEO,
+                "A quiz has one video to watch"));
+        }
     }
 
     static void save(ProcessContext ctx) {
@@ -122,6 +155,10 @@ public final class MaterialProcesses {
                     + " has no " + field, Map.of("kind", kind.name(), "field", field)));
             }
         });
+        boolean watch = Boolean.TRUE.equals(input.watchToAnswer());
+        if (watch) {
+            watchProblems(ctx, kind, input.url(), materials, material);
+        }
         // Loaded by the input's materialId: only when that material is in this quiz are they its images.
         List<EntityInstance> existing = material == null ? List.of() : list(ctx, IMAGES);
         if (ctx.hasViolations() || images != null && !QuizEditing.knownParts(ctx,
@@ -151,6 +188,7 @@ public final class MaterialProcesses {
         values.put("url", text(input.url()));
         values.put("pdf", input.pdf());
         values.put("audio", input.audio());
+        values.put("watchToAnswer", watch);
         boolean changed = false;
         Object materialId;
         if (material == null) {

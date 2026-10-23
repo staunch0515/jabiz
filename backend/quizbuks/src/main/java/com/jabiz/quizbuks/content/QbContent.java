@@ -133,6 +133,8 @@ public final class QbContent {
             .apply(Rules.pattern(ContentCodes.MATERIAL_URL_FORMAT, URL_PATTERN)));
         eb.field("pdf", f -> f.physicalColumn("pdf").kind(FileKind.of(PDF_POLICY)));
         eb.field("audio", f -> f.physicalColumn("audio").kind(FileKind.of(AUDIO_POLICY)));
+        // Q19: a video watching which is enough to answer; the App shows it on the publication's card.
+        eb.field("watchToAnswer", f -> f.physicalColumn("watch_to_answer").required(true).asBool());
         eb.display("title");
         eb.temporal(t -> t.allowScheduled(false));
         eb.listView("default", lv -> lv

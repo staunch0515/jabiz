@@ -6,6 +6,7 @@ import com.jabiz.quizbuks.content.ContentCodes;
 import com.jabiz.quizbuks.content.ContentLimits;
 import com.jabiz.quizbuks.content.MaterialKind;
 import com.jabiz.quizbuks.content.QbContent;
+import com.jabiz.quizbuks.content.VideoEmbeds;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -105,6 +106,9 @@ public final class QuizFileChecks {
         for (int m = 0; m < file.materials().size(); m++) {
             material(problems, "materials[" + m + "]", file.materials().get(m));
         }
+        if (file.materials().stream().filter(QuizFile.Material::watchToAnswer).count() > 1) {
+            problems.add(new Violation("materials", ContentCodes.QUIZ_ONE_WATCH_VIDEO, "A quiz has one video to watch"));
+        }
         count(problems, "questions", file.questions().size(), ContentLimits.MAX_QUESTIONS);
         for (int q = 0; q < file.questions().size(); q++) {
             question(problems, "questions[" + q + "]", file.questions().get(q), survey);
@@ -144,6 +148,14 @@ public final class QuizFileChecks {
                 problems.add(new Violation(at + "." + field, ContentCodes.MATERIAL_FIELD_NOT_ALLOWED, "A "
                     + kind + " material has no " + field));
             }
+        }
+        // The video to watch, as editing has it (Q19).
+        if (material.watchToAnswer() && kind != MaterialKind.VIDEO_LINK) {
+            problems.add(new Violation(at + ".watchToAnswer", ContentCodes.MATERIAL_FIELD_NOT_ALLOWED, "A "
+                + kind + " material has no watchToAnswer"));
+        } else if (material.watchToAnswer() && VideoEmbeds.player(material.url()).isEmpty()) {
+            problems.add(new Violation(at + ".url", ContentCodes.MATERIAL_VIDEO_NOT_EMBEDDABLE,
+                "Only a YouTube or Vimeo video can be watched in the App"));
         }
         count(problems, at + ".images", material.images().size(), ContentLimits.MAX_IMAGES);
         for (int i = 0; i < material.images().size(); i++) {

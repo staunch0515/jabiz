@@ -3,6 +3,7 @@ import {
   Button,
   Card,
   CardContent,
+  Checkbox,
   ConfirmDialog,
   Dialog,
   DialogContent,
@@ -80,7 +81,7 @@ interface ImageDraft {
   caption: string
 }
 
-const FIELDS = ['kind', 'title', 'description', 'body', 'url', 'pdf', 'audio', 'images'] as const
+const FIELDS = ['kind', 'title', 'description', 'body', 'url', 'pdf', 'audio', 'images', 'watchToAnswer'] as const
 
 /**
  * One reference material (M-23) with its content, saved with `QB_MATERIAL_SAVE`: a Markdown article, a link, a
@@ -102,6 +103,7 @@ function MaterialDialog({ material, number, open, onOpenChange }: {
   const [description, setDescription] = useState(material?.description ?? '')
   const [body, setBody] = useState(material?.body ?? '')
   const [url, setUrl] = useState(material?.url ?? '')
+  const [watch, setWatch] = useState(material?.watchToAnswer ?? false)
   const [pdf, setPdf] = useState<string | null>(material?.pdf ?? null)
   const [audio, setAudio] = useState<string | null>(material?.audio ?? null)
   const [images, setImages] = useState<ImageDraft[]>(() => (material?.images ?? []).map((i) => ({
@@ -121,7 +123,8 @@ function MaterialDialog({ material, number, open, onOpenChange }: {
       case 'body':
         return { ...base, body: textOrNull(body) }
       case 'url':
-        return { ...base, url: url.trim() === '' ? null : url.trim() }
+        return { ...base, url: url.trim() === '' ? null : url.trim(),
+          ...(kind === 'VIDEO_LINK' ? { watchToAnswer: watch } : {}) }
       case 'pdf':
         return { ...base, pdf }
       case 'audio':
@@ -211,6 +214,21 @@ function MaterialDialog({ material, number, open, onOpenChange }: {
                 data-testid="material-url" onChange={(event) => setUrl(event.target.value)} />
               <p id={`${id}-url-hint`} className="text-muted-foreground text-sm">{t('materials.urlHint')}</p>
               {problem('url') && <p id={`${id}-url-error`} className="text-destructive text-sm">{problem('url')}</p>}
+              {kind === 'VIDEO_LINK' && (
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-center gap-2">
+                    <Checkbox id={`${id}-watch`} checked={watch} data-testid="material-watch"
+                      aria-describedby={[`${id}-watch-hint`, problem('watchToAnswer') ? `${id}-watch-error` : '']
+                        .join(' ').trim()}
+                      onCheckedChange={(checked) => setWatch(checked === true)} />
+                    <Label htmlFor={`${id}-watch`}>{t('materials.watchToAnswer')}</Label>
+                  </div>
+                  <p id={`${id}-watch-hint`} className="text-muted-foreground text-sm">{t('materials.watchHint')}</p>
+                  {problem('watchToAnswer') && (
+                    <p id={`${id}-watch-error`} className="text-destructive text-sm">{problem('watchToAnswer')}</p>
+                  )}
+                </div>
+              )}
             </div>
           )}
           {field === 'pdf' && (
@@ -390,6 +408,9 @@ export function MaterialsPanel({ materials }: { materials: Material[] }) {
                           : t('materials.number', { number: index + 1 })}
                       </h2>
                       <Badge variant="outline">{kindLabel(material.kind)}</Badge>
+                      {material.watchToAnswer && (
+                        <Badge variant="secondary" data-testid="material-watch-badge">{t('materials.watchBadge')}</Badge>
+                      )}
                     </div>
                     {material.description && <p className="text-muted-foreground text-sm">{material.description}</p>}
                     <MaterialContent material={material} />
