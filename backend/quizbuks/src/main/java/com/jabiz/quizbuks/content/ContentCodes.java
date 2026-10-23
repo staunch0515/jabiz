@@ -24,6 +24,14 @@ public final class ContentCodes {
     public static final String MATERIAL_FIELD_NOT_ALLOWED = "QB_MATERIAL_FIELD_NOT_ALLOWED";
     public static final String VERSION_NOT_FOUND = "QB_QUIZ_VERSION_NOT_FOUND";
     public static final String FILE_NOT_OWN = "QB_CONTENT_FILE_NOT_OWN";
+    // Quiz files (Q16): a file this system cannot read, a value or a count over the content's limits, a file of the
+    // quiz the file does not list or of a type or size its field does not take, or one not uploaded for the import.
+    public static final String QUIZ_FILE_UNSUPPORTED = "QB_QUIZ_FILE_UNSUPPORTED";
+    public static final String QUIZ_FILE_VALUE = "QB_QUIZ_FILE_VALUE";
+    public static final String QUIZ_FILE_TOO_MANY = "QB_QUIZ_FILE_TOO_MANY";
+    public static final String QUIZ_FILE_MISSING = "QB_QUIZ_FILE_MISSING";
+    public static final String QUIZ_FILE_TYPE = "QB_QUIZ_FILE_TYPE";
+    public static final String QUIZ_FILE_NOT_UPLOADED = "QB_QUIZ_FILE_NOT_UPLOADED";
     /** A quiz's kind given that is not its own: it never changes (Q12, D-Q12-1). */
     public static final String QUIZ_KIND_FIXED = "QB_QUIZ_KIND_FIXED";
     /** A scored quiz's question given a selection: only a survey's are single or multiple choice (Q12). */

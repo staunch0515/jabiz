@@ -10,6 +10,8 @@ export const CONTENT_PROCESS = {
   quizDelete: 'QB_QUIZ_DELETE',
   quizClone: 'QB_QUIZ_CLONE',
   quizPublishVersion: 'QB_QUIZ_PUBLISH_VERSION',
+  quizImportCheck: 'QB_QUIZ_IMPORT_CHECK',
+  quizImport: 'QB_QUIZ_IMPORT',
   questionSave: 'QB_QUESTION_SAVE',
   questionDelete: 'QB_QUESTION_DELETE',
   questionReorder: 'QB_QUESTION_REORDER',

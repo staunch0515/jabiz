@@ -1,5 +1,10 @@
 package com.jabiz.quizbuks.content;
 
+import com.jabiz.file.FilePolicy;
+import com.jabiz.file.MediaTypes;
+
+import java.util.List;
+
 /**
  * Every limit of quiz content in one place (docs/quizbuks/plans/Q3-content.md, D-Q3-5). The requirements give none
  * of them; they are the plan's values (question Q3-3), used by the entities, the process inputs and the checks alike.
@@ -48,6 +53,14 @@ public final class ContentLimits {
 
     /** Largest canonical snapshot text of a version, in UTF-8 bytes; the limits above keep it near 1 MB. */
     public static final int MAX_SNAPSHOT_BYTES = 2 * 1024 * 1024;
+
+    // The content files' policies (ContentConfig) and the import's checks of a quiz file (Q16) use these.
+    public static final List<MediaTypes> IMAGE_TYPES = List.of(MediaTypes.JPEG, MediaTypes.PNG);
+    public static final long IMAGE_MAX_BYTES = 10 * FilePolicy.MB;
+    public static final List<MediaTypes> PDF_TYPES = List.of(MediaTypes.PDF);
+    public static final long PDF_MAX_BYTES = 20 * FilePolicy.MB;
+    public static final List<MediaTypes> AUDIO_TYPES = List.of(MediaTypes.MP3, MediaTypes.M4A, MediaTypes.OGG);
+    public static final long AUDIO_MAX_BYTES = 50 * FilePolicy.MB;
 
     private ContentLimits() {}
 }
