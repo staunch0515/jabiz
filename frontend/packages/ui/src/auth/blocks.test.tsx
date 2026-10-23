@@ -244,6 +244,9 @@ describe('SignUpForm', () => {
     expect(onSubmitted.mock.calls[0][0]).not.toHaveProperty('password')
     await expectAccessible()
 
+    // Not offered at once (a second mail used to void the first link): behind "didn't get the mail?".
+    expect(screen.queryByRole('button', { name: 'Send a new link' })).toBeNull()
+    await user().click(screen.getByRole('button', { name: 'Didn’t get the mail?' }))
     await user().click(screen.getByRole('button', { name: 'Send a new link' }))
     await waitFor(() => expect(screen.getByTestId('resend-state')).toBeInTheDocument())
     expect(posts[1]).toEqual(expect.objectContaining({ body: { email: 'ann@example.com', entry: 'portal' } }))

@@ -255,7 +255,7 @@ public class SignUpProcesses {
                 .contextFactory((start, input) -> new AccountContext(start, null, null, null, null, null,
                     input.token(), null))
                 .outputMapper(ctx -> new VerifyCheck(preClaimable(linked(ctx))))
-                .step("Use the link", MailTokens.<AccountContext>consume(AuthMailTemplates.VERIFY,
+                .step("Use the link", MailTokens.<AccountContext>consumeAnyUnused(AuthMailTemplates.VERIFY,
                     AccountContext::token, CONSUMED))
                 .step("Load the user", QueryEntities.<AccountContext>of(SecurityEntities.USER_DATASET,
                     SignUpProcesses::linkUser, USERS))
@@ -274,7 +274,7 @@ public class SignUpProcesses {
                 return ctx;
             })
             .outputMapper(DONE)
-            .step("Use the link", MailTokens.<AccountContext>consume(AuthMailTemplates.VERIFY, AccountContext::token,
+            .step("Use the link", MailTokens.<AccountContext>consumeAnyUnused(AuthMailTemplates.VERIFY, AccountContext::token,
                 CONSUMED))
             .step("Load the user", QueryEntities.<AccountContext>of(SecurityEntities.USER_DATASET,
                 SignUpProcesses::linkUser, USERS))
