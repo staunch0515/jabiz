@@ -33,6 +33,7 @@ import { readQuizStatuses, saveQuiz, searchQuizzes, type QuizKind, type QuizRow 
 import { Thumbnail } from './ContentImage'
 import { LIMITS } from './limits'
 import { quizPath, QUIZZES_QUERY } from './paths'
+import { ExportQuizButton, ImportQuizButton } from './QuizTransfer'
 
 /** The labels of the quiz states, from the server's dictionary (the code until it answered). */
 export function useQuizStatusLabel() {
@@ -227,6 +228,13 @@ export function QuizListPage() {
       header: t('quizzes.editedAt'),
       cell: ({ row }) => formatDateTime(row.original.editedAt),
     },
+    {
+      id: 'actions',
+      header: () => <span className="sr-only">{t('quizzes.transfer.export')}</span>,
+      enableSorting: false,
+      meta: { className: 'text-right' },
+      cell: ({ row }) => <ExportQuizButton quizId={row.original.quizId} title={row.original.title} />,
+    },
   ], [t, statusLabel])
 
   const rows = quizzes.data?.items ?? []
@@ -236,10 +244,13 @@ export function QuizListPage() {
     <section className="flex flex-col gap-4" data-testid="quiz-list">
       <PageHeader title={t('quizzes.title')} description={t('quizzes.intro')}
         actions={
-          <Button onClick={() => setCreating(true)} data-testid="new-quiz">
-            <Plus aria-hidden />
-            {t('quizzes.new')}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <ImportQuizButton />
+            <Button onClick={() => setCreating(true)} data-testid="new-quiz">
+              <Plus aria-hidden />
+              {t('quizzes.new')}
+            </Button>
+          </div>
         } />
       <form role="search" className="flex max-w-sm flex-col gap-2" onSubmit={(event) => event.preventDefault()}>
         <Label htmlFor={`${id}-search`}>{t('quizzes.search')}</Label>
