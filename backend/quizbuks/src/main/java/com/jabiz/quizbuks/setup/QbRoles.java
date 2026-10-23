@@ -39,7 +39,9 @@ public final class QbRoles {
         // Q8a: the AI page (usage and failures; the switch changes only through controlled changes).
         QbPermissions.ADMIN_AI_READ,
         // Platform 16y: closing by hand, with a note, a task no process will close (never an approval's).
-        "task.resolve");
+        "task.resolve",
+        // Q13a: the second person on a bank top-up finance recorded.
+        QbPermissions.TOPUP_BANK_APPROVE);
 
     private static final List<String> FINANCE = List.of(QbPermissions.COUNTRY_READ, QbPermissions.ADMIN_USERS_READ,
         QbPermissions.ADMIN_FINANCE_READ, QbPermissions.ADMIN_PUBLICATION_READ, QbPermissions.PAYOUT_REVIEW,
@@ -52,6 +54,8 @@ public final class QbRoles {
         QbPermissions.JOURNAL_EXPORT, QbPermissions.JOURNAL_CONFIRM, "file.generated.read",
         // Platform 16y: closing by hand, with a note, a reconciliation task that needs nothing (TASK_RESOLVE).
         "task.resolve",
+        // Q13a: bank top-ups, recorded from the statement by one administrator and approved by another.
+        QbPermissions.TOPUP_BANK_RECORD, QbPermissions.TOPUP_BANK_APPROVE,
         // Q14: a taker's transfer at once, with the daily run's checks.
         QbPermissions.TRANSFER_NOW);
 

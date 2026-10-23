@@ -36,6 +36,8 @@ export const TEMPLATE = {
   takerKudos: 'qb.admin.taker-kudos',
   transfers: 'qb.admin.transfers',
   topUps: 'qb.admin.topups',
+  /** Bank top-ups (Q13a): what recording and approving one needs (`qb.topup.bank.approve`). */
+  bankTopUps: 'qb.admin.bank-topups',
   payoutAccounts: 'qb.admin.payout-accounts',
   /** Finance (Q9c): the overview's numbers, the wallets, the reconciliation and the two monthly reports (F-08). */
   financeSummary: 'qb.admin.finance-summary',
@@ -83,6 +85,8 @@ export const PROCESS = {
   /** Q14: what the daily run would do for a taker now (`qb.admin.finance.read`), and doing it at once (`qb.transfer.now`). */
   transferPreview: 'QB_TRANSFER_PREVIEW',
   transferNow: 'QB_TRANSFER_NOW',
+  /** Records the money of a bank top-up found on the statement, for another administrator's approval (Q13a). */
+  bankRecord: 'QB_TOPUP_BANK_RECORD',
   /** The platform's issue of a report: archived with its content hash (`report.issue`). */
   reportIssue: 'REPORT_ISSUE',
   /** The next journal export as it would be now; writes nothing (`qb.journal.export`; Q9d). */
@@ -174,7 +178,14 @@ export const PERMISSION = {
   aiRead: 'qb.admin.ai.read',
   /** A taker's transfer at once (Q14). */
   transferNow: 'qb.transfer.now',
+  /** Bank top-ups (Q13a): finance records the money, another administrator approves it. */
+  bankRecord: 'qb.topup.bank.record',
+  bankApprove: 'qb.topup.bank.approve',
 } as const
+
+/** The bank top-up states finance may record money against, and the one an approval waits in (Q13a). */
+export const BANK_RECORDABLE = ['AWAITING', 'REPORTED', 'EXPIRED', 'CANCELLED'] as const
+export const BANK_REVIEW = 'REVIEW'
 
 /** The administrators' processes on a publication (Q10b, review M2), run from the platform's process page. */
 export const PUBLICATION_ADMIN = {
@@ -218,6 +229,9 @@ export const PATH = {
   transferReview: (transferId: string) => `/qb/finance/transfers/${encodeURIComponent(transferId)}/review`,
   topUps: '/qb/finance/topups',
   topUpsWhere: (filter: Record<string, string>) => `/qb/finance/topups?${new URLSearchParams(filter)}`,
+  /** Bank top-ups: recording the money and approving it (Q13a). */
+  bankTopUps: '/qb/finance/bank-topups',
+  bankTopUp: (topUpId: string) => `/qb/finance/bank-topups/${encodeURIComponent(topUpId)}`,
   reconciliation: '/qb/finance/reconciliation',
   reconRun: (runId: string) => `/qb/finance/reconciliation?${new URLSearchParams({ run: runId })}`,
   reports: '/qb/finance/reports',

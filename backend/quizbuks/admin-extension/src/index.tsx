@@ -1,6 +1,7 @@
 import { defineExtension } from '@jabiz/admin'
 import {
   ArrowLeftRight,
+  Banknote,
   BookOpenCheck,
   ClipboardCheck,
   FileSpreadsheet,
@@ -13,6 +14,8 @@ import {
   Users,
   Wallet,
 } from 'lucide-react'
+import BankTopUpPage from './BankTopUpPage'
+import BankTopUpsPage from './BankTopUpsPage'
 import BroadcastsPage from './BroadcastsPage'
 import AiPage from './AiPage'
 import AttemptsPage from './AttemptsPage'
@@ -55,6 +58,8 @@ export default defineExtension({
     { path: PATH.transfers, element: <TransfersPage /> },
     { path: '/qb/finance/transfers/:transferId/review', element: <TransferReviewPage /> },
     { path: PATH.topUps, element: <TopUpsPage /> },
+    { path: PATH.bankTopUps, element: <BankTopUpsPage /> },
+    { path: '/qb/finance/bank-topups/:topUpId', element: <BankTopUpPage /> },
     { path: PATH.reconciliation, element: <ReconciliationPage /> },
     { path: PATH.reports, element: <ReportsPage /> },
     { path: PATH.journal, element: <JournalPage /> },
@@ -94,6 +99,9 @@ export default defineExtension({
         { key: 'qb-transfers', label: 'menu.transfers', path: PATH.transfers, icon: ArrowLeftRight,
           permission: PERMISSION.financeRead },
         { key: 'qb-topups', label: 'menu.topUps', path: PATH.topUps, icon: Wallet, permission: PERMISSION.financeRead },
+        // Q13a: both who record (finance) and who approve (content or another finance administrator).
+        { key: 'qb-bank-topups', label: 'menu.bankTopUps', path: PATH.bankTopUps, icon: Banknote,
+          permission: PERMISSION.bankApprove },
         { key: 'qb-reconciliation', label: 'menu.reconciliation', path: PATH.reconciliation, icon: Scale,
           permission: PERMISSION.reconcile },
         { key: 'qb-reports', label: 'menu.reports', path: PATH.reports, icon: FileSpreadsheet,

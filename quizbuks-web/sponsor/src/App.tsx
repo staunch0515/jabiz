@@ -47,7 +47,8 @@ import { hrefOf, navigate, navigation, Redirect, useLocation } from './qb/router
 import { useSessionLock } from './qb/session'
 import { TRANSACTIONS_PATH } from './transactions/api'
 import { TransactionsPage } from './transactions/TransactionsPage'
-import { topUpIdOf, WALLET_PATH } from './wallet/api'
+import { BankTopUpPage } from './wallet/BankTopUpPage'
+import { bankTopUpIdOf, topUpIdOf, WALLET_PATH } from './wallet/api'
 import { TopUpPage } from './wallet/TopUpPage'
 import { WalletPage } from './wallet/WalletPage'
 
@@ -115,6 +116,7 @@ function SignedIn({ path }: { path: string }) {
   let page: ReactNode
   const quizId = quizIdOf(path)
   const topUpId = topUpIdOf(path)
+  const bankTopUpId = bankTopUpIdOf(path)
   const open = publicPage(path)
   if (open) page = open
   else if (path === DASHBOARD) page = <DashboardPage />
@@ -126,6 +128,7 @@ function SignedIn({ path }: { path: string }) {
   else if (path === ONBOARDING) page = <OnboardingPage />
   else if (path === WALLET_PATH) page = <WalletPage />
   else if (topUpId) page = <TopUpPage key={topUpId} topUpId={topUpId} />
+  else if (bankTopUpId) page = <BankTopUpPage key={bankTopUpId} topUpId={bankTopUpId} />
   else if (path === TRANSACTIONS_PATH) page = <TransactionsPage key={search} />
   else if (path === MESSAGES_PATH) page = <MessagesPage />
   else if (path === ACCOUNT_PATH) page = <AccountPage />
