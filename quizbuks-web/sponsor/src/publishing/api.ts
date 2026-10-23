@@ -496,6 +496,9 @@ export const surveyReward = (form: PublicationForm): string => form.tiers.at(-1)
 export function asSurvey(form: PublicationForm, fullScore: number, reward: string): PublicationForm {
   const tier = (i: number, from: number, to: number, value: string): TierDraft => ({ key: form.tiers[i]?.key ?? tierKey(),
     tierId: form.tiers[i]?.tierId ?? null, fromScore: String(from), toScore: String(to), reward: value })
+  // Before the reward is typed (the first step saves a draft) there are no tiers yet: a blank one would be refused as
+  // typed wrong on a step that does not show it. The check before submitting asks for the tiers.
+  if (reward.trim() === '') return { ...form, passScore: String(fullScore), tiers: [] }
   return { ...form, passScore: String(fullScore),
     tiers: [tier(0, 0, Math.max(fullScore - 1, 0), '0'), tier(1, fullScore, fullScore, reward)] }
 }
