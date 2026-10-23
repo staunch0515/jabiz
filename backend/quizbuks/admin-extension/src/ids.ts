@@ -10,6 +10,12 @@ export const DATASET = {
   tier: 'urn:jabiz:dataset:default:QbRewardTier',
   /** A version holds the correct answers: only `qb.admin.quiz.read` (the content administrators) reads it. */
   version: 'urn:jabiz:dataset:default:QbQuizVersion',
+  /** A quiz's draft as it is now, part by part (`qb.admin.quiz.read`; Q17). */
+  quiz: 'urn:jabiz:dataset:default:QbQuiz',
+  material: 'urn:jabiz:dataset:default:QbMaterial',
+  materialImage: 'urn:jabiz:dataset:default:QbMaterialImage',
+  question: 'urn:jabiz:dataset:default:QbQuestion',
+  option: 'urn:jabiz:dataset:default:QbOption',
   sponsor: 'urn:jabiz:dataset:default:QbSponsor',
   ban: 'urn:jabiz:dataset:default:QbUserBan',
   /** The drafts of the legal texts, edited on the platform's generic pages (`qb.admin.content.write`; Q7b). */
@@ -24,6 +30,9 @@ export const DATASET = {
 export const TEMPLATE = {
   /** The review queue: no money (the content administrators read it). */
   publications: 'qb.admin.publications',
+  /** Every sponsor's quizzes and a quiz's versions, without the versions' content (Q17; `qb.admin.quiz.read`). */
+  quizzes: 'qb.admin.quizzes',
+  quizVersions: 'qb.admin.quiz-versions',
   /** The publications of a quiz an administrator took down, with the reasons (Q10b, review M-d). */
   quizTakedowns: 'qb.admin.quiz-takedowns',
   /** A publication's sponsor's funds; `qb.admin.finance.read`. */
@@ -144,6 +153,8 @@ export const TRANSFER_REVIEW = 'REVIEW'
 export const DICTIONARY = {
   region: 'urn:jabiz:dict:quizbuks:region',
   publicationStatus: 'urn:jabiz:dict:quizbuks:publication-status',
+  quizStatus: 'urn:jabiz:dict:quizbuks:quiz-status',
+  quizKind: 'urn:jabiz:dict:quizbuks:quiz-kind',
   sponsorReviewStatus: 'urn:jabiz:dict:quizbuks:sponsor-review-status',
   materialKind: 'urn:jabiz:dict:quizbuks:material-kind',
   attemptStatus: 'urn:jabiz:dict:quizbuks:attempt-status',
@@ -165,6 +176,8 @@ export const PERMISSION = {
   reviewPublication: 'qb.review.publication',
   reviewSponsor: 'qb.review.sponsor',
   quizRead: 'qb.admin.quiz.read',
+  /** Every publication (Q17): the content and the finance administrators. */
+  publicationRead: 'qb.admin.publication.read',
   usersRead: 'qb.admin.users.read',
   financeRead: 'qb.admin.finance.read',
   payoutReview: 'qb.payout.review',
@@ -233,6 +246,13 @@ export const PATH = {
   attempts: '/qb/attempts',
   attemptsOf: (filter: Record<string, string>) => `/qb/attempts?${new URLSearchParams(filter)}`,
   user: (userId: string) => `/qb/users/${encodeURIComponent(userId)}`,
+  /** Every sponsor's quizzes and one quiz's draft, versions and publications (Q17). */
+  quizzes: '/qb/quizzes',
+  quizzesWhere: (filter: Record<string, string>) => `/qb/quizzes?${new URLSearchParams(filter)}`,
+  quiz: (quizId: string) => `/qb/quizzes/${encodeURIComponent(quizId)}`,
+  /** Every publication in every state (Q17), by state, sponsor and quiz. */
+  publications: '/qb/publications',
+  publicationsWhere: (filter: Record<string, string>) => `/qb/publications?${new URLSearchParams(filter)}`,
   finance: '/qb/finance',
   transfers: '/qb/finance/transfers',
   transfersWhere: (filter: Record<string, string>) => `/qb/finance/transfers?${new URLSearchParams(filter)}`,

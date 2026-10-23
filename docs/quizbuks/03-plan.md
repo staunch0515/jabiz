@@ -56,6 +56,7 @@
 | Q14 | 后台的答题情况与 Kudos（`plans/Q14-admin-payouts.md`，2026-10-23 确认）：答题记录页、用户的 Kudos 合计、收款状态与不转的原因（`QB_TRANSFER_PREVIEW`）、财务"立即转账"（`QB_TRANSFER_NOW`，与每日任务同样的检查），没有迁移；已完成，待评审 | 需求方 2026-10-23 新增 | 2–3 天 | 无 |
 | Q15 | 发布的分享链接（`plans/Q15-share-link.md`，2026-10-23 确认）：平台 16zb 的邮件链接登录（D54）在 App 入口开启；公开模板 `qb.public.publication`（白名单）与 App 未登录的分享页；新答题人只填国家与条款；`/login?next=`；商家"复制分享链接"，没有迁移；已完成，待评审 | 需求方 2026-10-23 新增 | 2 天 | 平台 16zb |
 | Q16 | Quiz 的导出与导入（`plans/Q16-quiz-transfer.md`，2026-10-23 确认）：带格式版本（`quizbuks.quiz`，版本 1，逐版升级）的 JSON 文件，图片、PDF、音频以 base64 嵌入；导出在商家后台完成，导入经 `QB_QUIZ_IMPORT_CHECK` 与 `QB_QUIZ_IMPORT`（一个事务），没有迁移；已完成，待评审 | 需求方 2026-10-23 新增 | 2 天 | 无 |
+| Q17 | 管理员看全量的问卷与发布（`plans/Q17-admin-overview.md`，2026-10-23 确认）：模板 `qb.admin.quizzes`、`qb.admin.quiz-versions`，`qb.admin.publications` 增加 `quizId`；后台 `/qb/quizzes`（含已删除）、Quiz 详情（发布、版本、草稿，含正确答案）、`/qb/publications`（每个状态，链到发布页与答题记录）；没有迁移；已完成，待评审 | 需求方 2026-10-23 新增 | 1–2 天 | 无 |
 
 应用合计约 51–64 天。
 

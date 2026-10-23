@@ -331,6 +331,18 @@ for (const appearance of ['light', 'dark'] as const) {
     await expect(page.getByTestId('user-attempts')).toBeVisible()
     await expect(page.getByTestId('user-payout')).toBeVisible()
     await expectAccessible(page, at('admin user summary'))
+    // Q17: every quiz, one quiz with its version shown, every publication.
+    await page.goto(`/admin/qb/quizzes?${new URLSearchParams({ q: quiz.title })}`)
+    await expect(page.getByTestId('quiz-row')).toHaveCount(1)
+    await expectAccessible(page, at('admin quizzes'))
+    await page.goto(`/admin/qb/quizzes/${quiz.quizId}`)
+    await expect(page.getByTestId('quiz-draft').getByTestId('preview-question')).toHaveCount(2)
+    await page.getByTestId('quiz-version-show').first().click()
+    await expect(page.getByTestId('quiz-version-content').getByTestId('preview-question')).toHaveCount(2)
+    await expectAccessible(page, at('admin quiz'))
+    await page.goto(`/admin/qb/publications?${new URLSearchParams({ quiz: quiz.quizId })}`)
+    await expect(page.getByTestId('publication-row')).toHaveCount(1)
+    await expectAccessible(page, at('admin publications'))
   })
 }
 

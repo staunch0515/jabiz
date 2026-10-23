@@ -12,6 +12,7 @@ params:
 results:
   publicationId:     { from: QbPublication.publicationId }
   sponsorId:         { from: QbPublication.sponsorId }
+  quizId:            { from: QbPublication.quizId }
   name:              { from: QbPublication.name }
   quizTitle:         { from: QbQuizVersion.title }
   versionLabel:      { from: QbPublication.versionLabel }
@@ -33,7 +34,7 @@ results:
   rejectCode:        { from: QbPublication.rejectCode }
   editedAt:          { from: QbPublication.editedAt }
 list:
-  filters: [publicationId, sponsorId, status, startAt, submittedAt]
+  filters: [publicationId, sponsorId, quizId, status, startAt, submittedAt]
   sorts:   [editedAt, submittedAt, startAt, name]
   defaultSort: { field: editedAt, asc: false }
   key: [publicationId]
@@ -45,6 +46,7 @@ permissions: [qb.admin.publication.read]
 SELECT
     p.{{QbPublication.publicationId}}       AS publicationId,
     p.{{QbPublication.sponsorId}}           AS sponsorId,
+    p.{{QbPublication.quizId}}              AS quizId,
     p.{{QbPublication.name}}                AS name,
     v.{{QbQuizVersion.title}}               AS quizTitle,
     p.{{QbPublication.versionLabel}}        AS versionLabel,

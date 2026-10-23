@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
 import { ArrowLeft } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { Link, useParams } from 'react-router'
+import { Link, useLocation, useParams } from 'react-router'
 import {
   Alert,
   AlertDescription,
@@ -37,6 +37,7 @@ import {
   type Version,
 } from './api'
 import { AfterDecision, LoadFailed, Section } from './components'
+import type { BackTo } from './PublicationsPage'
 import { forbidden, money, QUEUE, useAfterDecision, useLabels, when } from './hooks'
 import { ACCOUNT_SUSPENDED, DICTIONARY, PATH, PENDING_REVIEW, PERMISSION, PUBLICATION_ADMIN } from './ids'
 
@@ -279,9 +280,13 @@ export default function PublicationReviewPage() {
     enabled: !!sponsorId,
   })
 
+  // Opened from the publication list or a quiz (Q17), it goes back there; else to the review queue.
+  const backTo = (useLocation().state as { backTo?: BackTo } | null)?.backTo
   const back = (
     <Button variant="ghost" size="sm" asChild>
-      <Link to={PATH.reviews}><ArrowLeft aria-hidden />{t('publication.back')}</Link>
+      <Link to={backTo?.path ?? PATH.reviews}>
+        <ArrowLeft aria-hidden />{backTo ? t(backTo.label) : t('publication.back')}
+      </Link>
     </Button>
   )
   if (publication.isPending) return <PageState kind="loading" />
@@ -361,6 +366,17 @@ export default function PublicationReviewPage() {
               </Link>
             </span>
             {p.submittedAt && <span>{t('publication.submittedAt')}: {when(p.submittedAt)}</span>}
+            {p.quizId && can(PERMISSION.quizRead) && (
+              <Link to={PATH.quiz(p.quizId)} className={linkClass} data-testid="publication-quiz">
+                {t('publications.openQuiz')}
+              </Link>
+            )}
+            {can(PERMISSION.usersRead) && (
+              <Link to={PATH.attemptsOf({ publication: p.publicationId })} className={linkClass}
+                data-testid="publication-attempts">
+                {t('publications.attempts')}
+              </Link>
+            )}
             <Badge variant={pending ? 'secondary' : 'outline'} data-testid="publication-status">
               {statusLabel(p.status)}
             </Badge>

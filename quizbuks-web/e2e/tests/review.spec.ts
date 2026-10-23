@@ -77,6 +77,17 @@ test('a sponsor and a publication are reviewed in the administration', async ({ 
   expect(sentBack.text).toContain(reason)
   expect(linkIn(sentBack.text, '/publications').pathname).toBe('/sponsor/publications')
 
+  // Q17: no longer in the queue, still in the administration's publication list, marked as sent back.
+  await page.goto(`/admin/qb/publications?${new URLSearchParams({ q: name })}`)
+  const listed = page.locator(`[data-testid="publication-row"][data-id="${publicationId}"]`)
+  await expect(listed).toHaveAttribute('data-status', 'DRAFT')
+  await expect(listed.getByTestId('publication-sent-back')).toBeVisible()
+  await listed.getByTestId('publication-link').click()
+  await expect(page.getByTestId('publication-not-pending')).toContainText(reason)
+  await page.getByRole('link', { name: 'Back to publications' }).click()
+  await expect(listed).toBeVisible()
+  await page.goto(`/admin/qb/reviews/publications/${publicationId}`)
+
   const sponsorPage = await context.newPage()
   await signIn(sponsorPage, '/sponsor/', made.email)
   await expect(sponsorPage.getByTestId('dashboard-status')).toBeVisible()
