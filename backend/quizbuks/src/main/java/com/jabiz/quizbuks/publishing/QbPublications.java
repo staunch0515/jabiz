@@ -42,6 +42,8 @@ public final class QbPublications {
     public static final String START_COUNTER = "QbPublicationStartCounter";
     public static final String SCHEDULE = "QbPublicationSchedule";
     public static final String CARD = "QbPublicationCard";
+    /** The live publications' cards that a share link shows to anybody (Q15): a whitelist of their fields. */
+    public static final String PUBLIC_CARDS = "urn:jabiz:dataset:public:" + CARD;
     public static final String OWNER = "QbPublicationOwner";
     /** The cards of the caller's own publications: the takers' templates leave them out of what can be started. */
     public static final String MY_OWNER_DATASET = "urn:jabiz:dataset:me:" + OWNER;

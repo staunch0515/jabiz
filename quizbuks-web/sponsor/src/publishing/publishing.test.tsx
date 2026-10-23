@@ -3,6 +3,7 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../App'
+import { shareLink } from './paths'
 import '../messages'
 
 function json(status: number, body: unknown) {
@@ -332,6 +333,26 @@ describe('a submitted publication', () => {
     await waitFor(() => expect(screen.getByTestId('publication-view')).toHaveAttribute('data-status', 'PAUSED'))
     expect(processCalls('QB_PUBLICATION_PAUSE')).toEqual([{ publicationId: 'p1' }])
     expect(screen.getByTestId('publication-resume')).toBeInTheDocument()
+  })
+
+  it('copies the share link of a live publication (Q15), and offers none once it is paused', async () => {
+    const writeText = vi.fn(async () => undefined)
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    server({ publication: { ...DRAFT, status: 'LIVE', revision: 6, budgetCap: '1000', maxReward: '100',
+      maxSpend: '1000' } })
+    window.history.replaceState(null, '', '/publications/p1')
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('publication-share'))
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/p/p1`))
+    expect(shareLink('a b', 'https://quizbuks.com')).toBe('https://quizbuks.com/p/a%20b')
+  })
+
+  it('offers no share link for a paused publication', async () => {
+    server({ publication: { ...DRAFT, status: 'PAUSED', revision: 7, pausedAt: '2026-10-14T03:00:00Z' } })
+    window.history.replaceState(null, '', '/publications/p1')
+    render(<App />)
+    expect(await screen.findByTestId('publication-view')).toBeInTheDocument()
+    expect(screen.queryByTestId('publication-share')).toBeNull()
   })
 
   it('says an administrator paused it, with the reason, and offers no resume (Q10b)', async () => {

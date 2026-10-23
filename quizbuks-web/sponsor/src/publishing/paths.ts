@@ -14,3 +14,11 @@ export function publicationIdOf(path: string): string | null {
 
 export const PUBLICATIONS_QUERY = ['qb', 'publications'] as const
 export const publicationQuery = (publicationId: string) => [...PUBLICATIONS_QUERY, 'one', publicationId] as const
+
+/**
+ * The link a sponsor shares (Q15): the app's page of the publication, which anybody can open; before signing in it
+ * shows the quiz and asks for an e-mail address only. The app is at this site's root.
+ */
+export function shareLink(publicationId: string, origin: string = window.location.origin): string {
+  return `${origin}/p/${encodeURIComponent(publicationId)}`
+}

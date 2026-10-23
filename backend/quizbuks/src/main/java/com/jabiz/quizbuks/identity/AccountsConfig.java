@@ -92,6 +92,22 @@ public class AccountsConfig {
         return defaultDataset(QbAccounts.SPONSOR);
     }
 
+    /**
+     * The company of every approved sponsor, for a share link's page (Q15, template {@code qb.public.publication},
+     * which names only the sponsors of live publications): not the contact's name, the introduction or anything of the
+     * review.
+     */
+    @Bean
+    DatasetDefinition qbPublicSponsorDataset() {
+        return DatasetDefinition.define(QbAccounts.PUBLIC_SPONSOR_DATASET, d -> d
+            .targetEntityType(QbAccounts.SPONSOR)
+            .scope(s -> s.fixed("reviewStatus", SponsorStatus.APPROVED))
+            .publicRead(p -> p.fields("userId", "company"))
+            .permissions(QbPermissions.ADMIN_USERS_READ, QbPermissions.SPONSOR_VIEW_WRITE)
+            .policy(p -> p.readOnly(true).allowTimeTravel(false))
+            .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
+    }
+
     @Bean
     DatasetDefinition qbUserBanDataset() {
         return defaultDataset(QbAccounts.BAN);

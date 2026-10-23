@@ -49,6 +49,8 @@ import { Link, navigate, navigation, Redirect, useLocation } from './qb/router'
 import { useSessionLock } from './qb/session'
 import { BANK_PATH, PAYOUT_PATH, WALLET_PATH } from './wallet/api'
 import { BankPage } from './wallet/BankPage'
+import { rememberShareNext } from './share/share'
+import { SharePage } from './share/SharePage'
 import { PayoutPage } from './wallet/PayoutPage'
 import { WalletPage } from './wallet/WalletPage'
 
@@ -62,7 +64,7 @@ const ABOUT = '/about'
 /** The second step of a sign-in through an identity provider, handed from the callback to the sign-in page. */
 let pendingStep: SignInStep | undefined
 
-const MAIL_PAGES = new Set(['/auth/verify-email', '/auth/join', '/auth/password-reset'])
+const MAIL_PAGES = new Set(['/auth/verify-email', '/auth/join', '/auth/password-reset', '/auth/email-link'])
 
 /**
  * The unsubscribe page of the app's notification mail (platform decision D52 item 3):
@@ -172,7 +174,11 @@ function SignedIn({ path }: { path: string }) {
       action={<Button variant="outline" onClick={() => void profile.refetch()}>{t('retry')}</Button>} />
   }
   const complete = profile.data?.countryCode ? profile.data : null
-  if (!complete && emailVerified && path !== WELCOME && path !== ACCOUNT_PATH) return <Redirect to={WELCOME} />
+  if (!complete && emailVerified && path !== WELCOME && path !== ACCOUNT_PATH) {
+    // From a share link (Q15): the short welcome step, then back to the publication.
+    if (itemPage(path)?.page === 'p') rememberShareNext(path)
+    return <Redirect to={WELCOME} />
+  }
   if (complete && path === WELCOME) return <Redirect to={HOME} />
 
   const country = complete?.countryCode ?? null
@@ -220,11 +226,11 @@ function SignedIn({ path }: { path: string }) {
  * The help centre, the legal texts and the About page (Q7b): readable without signing in, in a frame of their own
  * with the way back (to the app, or to signing in).
  */
-function PublicPage({ path, signedIn }: { path: string; signedIn: boolean }) {
+function PublicPage({ path, signedIn, children }: { path: string; signedIn: boolean; children?: ReactNode }) {
   const { t } = useTranslation(QB)
   const { t: tApp } = useTranslation(APP)
   const kind = legalKindOf(path)
-  const page = path === HELP ? <HelpPage audience="APP" />
+  const page = children ? children : path === HELP ? <HelpPage audience="APP" />
     : path === ABOUT ? <AboutPage />
     : kind ? <LegalPage key={kind} kind={kind} />
     : null
@@ -292,6 +298,14 @@ function Routes() {
   }
   if (!ready) return <PageState kind="loading" />
   if (isPublic(path)) return <PublicPage path={path} signedIn={signedIn} />
+  // A publication's share link before signing in (Q15): its public page with the address to sign in by.
+  const shared = itemPage(path)
+  if (!signedIn && shared?.page === 'p') {
+    return <PublicPage path={path} signedIn={false}><SharePage publicationId={shared.id} /></PublicPage>
+  }
+  // Where signing in leads: a page of the app the person came from (a share link's), else home.
+  const next = new URLSearchParams(search).get('next')
+  const afterSignIn = next && next.startsWith('/') && !next.startsWith('//') ? next : HOME
   // Signed in, the pages of signing up and asking for a new password lead home.
   if (signedIn && (path === '/signup' || path === '/password-reset')) return <Redirect to={HOME} />
   if (path === '/password-reset') {
@@ -310,8 +324,8 @@ function Routes() {
     </>)
   }
   if (path === '/login') {
-    if (signedIn) return <Redirect to={HOME} />
-    return frame(<SignInForm {...navigation} brand={brand} returnTo={HOME} initialStep={pendingStep}
+    if (signedIn) return <Redirect to={afterSignIn} />
+    return frame(<SignInForm {...navigation} brand={brand} returnTo={afterSignIn} initialStep={pendingStep}
       onSignedIn={(to) => {
         pendingStep = undefined
         navigate(to, { replace: true })

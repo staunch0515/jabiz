@@ -12,7 +12,7 @@ import {
   notify,
 } from '@jabiz/ui'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Copy, Pause, Play, Trash2, Undo2 } from 'lucide-react'
+import { Copy, Link2, Pause, Play, Trash2, Undo2 } from 'lucide-react'
 import { useId, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ProblemList } from '../content/editing'
@@ -30,7 +30,18 @@ import {
   withdrawPublication,
   type Publication,
 } from './api'
-import { publicationPath, PUBLICATIONS_PATH, PUBLICATIONS_QUERY } from './paths'
+import { publicationPath, PUBLICATIONS_PATH, PUBLICATIONS_QUERY, shareLink } from './paths'
+
+/** Copies the share link, or says it when the browser does not let the page copy. */
+async function copyShareLink(publicationId: string, t: (key: string, options?: Record<string, unknown>) => string) {
+  const link = shareLink(publicationId)
+  try {
+    await navigator.clipboard.writeText(link)
+    notify.success(t('publishing.actions.shareCopied', { link }))
+  } catch {
+    notify.info(t('publishing.actions.shareFailed', { link }))
+  }
+}
 
 /** A copy of a publication as a new draft (M-36), under a name of the sponsor's choice or the server's. */
 function CopyDialog({ publication, open, onOpenChange }: {
@@ -160,6 +171,12 @@ export function PublicationActions({ publication, revision, disabled, onStale }:
               {t('publishing.actions.resume')}
             </Button>
           } />
+      )}
+      {(publication.status === 'LIVE' || publication.status === 'SCHEDULED') && (
+        <Button variant="outline" data-testid="publication-share" onClick={() => void copyShareLink(id, t)}>
+          <Link2 aria-hidden />
+          {t('publishing.actions.share')}
+        </Button>
       )}
       {can.copy && (
         <Button variant="outline" disabled={disabled} data-testid="publication-copy" onClick={() => setCopying(true)}>

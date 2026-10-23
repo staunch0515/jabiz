@@ -291,5 +291,90 @@
         "type" : "bool"
       }
     }
+  }, {
+    "cacheSeconds" : 60,
+    "description" : "A live publication as its share link shows it to anybody before signing in (Q15): the quiz's title, the sponsor's company, the reward, the number of questions and the time limit; none when it is not live at the time",
+    "id" : "qb.public.publication",
+    "list" : {
+      "filters" : [ ],
+      "sorts" : [ ]
+    },
+    "params" : {
+      "at" : {
+        "kind" : {
+          "role" : "EVENT_TIME",
+          "type" : "temporal"
+        },
+        "list" : false,
+        "required" : true
+      },
+      "publicationId" : {
+        "kind" : {
+          "targetEntity" : "QbPublication",
+          "type" : "reference"
+        },
+        "list" : false,
+        "required" : true
+      }
+    },
+    "results" : {
+      "endAt" : {
+        "role" : "EVENT_TIME",
+        "type" : "temporal"
+      },
+      "fullScore" : {
+        "precision" : 7,
+        "scale" : 0,
+        "type" : "numeric"
+      },
+      "kind" : {
+        "allowedValues" : [ "QUIZ", "SURVEY" ],
+        "dictUrn" : "urn:jabiz:dict:quizbuks:quiz-kind",
+        "type" : "code"
+      },
+      "maxReward" : {
+        "currency" : "JPY",
+        "scale" : 0,
+        "type" : "monetary"
+      },
+      "name" : {
+        "maxLength" : 100,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "passScore" : {
+        "precision" : 6,
+        "scale" : 0,
+        "type" : "numeric"
+      },
+      "publicationId" : {
+        "targetEntity" : "QbPublication",
+        "type" : "reference"
+      },
+      "questionCount" : {
+        "precision" : 4,
+        "scale" : 0,
+        "type" : "numeric"
+      },
+      "quizTitle" : {
+        "maxLength" : 100,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "sponsorCompany" : {
+        "maxLength" : 100,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "startAt" : {
+        "role" : "EVENT_TIME",
+        "type" : "temporal"
+      },
+      "timeLimitSec" : {
+        "precision" : 5,
+        "scale" : 0,
+        "type" : "numeric"
+      }
+    }
   } ]
 }
