@@ -3,6 +3,7 @@ import { Mail, User } from 'lucide-react'
 import { useId, useState, type ReactNode } from 'react'
 import { useForm, useWatch, type UseFormReturn } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
+import { Button } from '../components/ui/button'
 import { Label } from '../components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select'
 import { AUTH_LINK_CLASS, AuthError, AuthField, AuthFrame, AuthLink, AuthSubmit, Outcome, type AuthNavigation } from './frame'
@@ -144,16 +145,25 @@ export interface SignUpSentProps extends AuthNavigation {
   signInPath?: string
 }
 
-/** After signing up (202): look in the mailbox; a new mail can be asked for (answered alike for every address). */
+/**
+ * After signing up (202): look in the mailbox. A new mail can be asked for (answered alike for every address), behind
+ * "didn't get the mail?": offered at once, it was sent by people waiting for the first, whose link it used to void.
+ */
 export function SignUpSent({ brand, appearance, email, signInPath, onNavigate, hrefOf }: SignUpSentProps) {
   const { t } = useTranslation(AUTH_NAMESPACE)
+  const [resending, setResending] = useState(false)
   return (
     <AuthFrame brand={brand} appearance={appearance} title={t('signUp.title')} testId="sign-up-sent">
       <Outcome ok testId="sign-up-state">
         {t('signUp.sent', { email })}
       </Outcome>
       <p className="text-muted-foreground text-sm">{t('signUp.sentHint')}</p>
-      <ResendVerification initialEmail={email} />
+      {resending ? <ResendVerification initialEmail={email} /> : (
+        <Button variant="link" className="h-auto self-start p-0" data-testid="sign-up-no-mail"
+          onClick={() => setResending(true)}>
+          {t('signUp.noMail')}
+        </Button>
+      )}
       {signInPath && (
         <AuthLink to={signInPath} onNavigate={onNavigate} hrefOf={hrefOf} className={AUTH_LINK_CLASS}>
           {t('login.back')}

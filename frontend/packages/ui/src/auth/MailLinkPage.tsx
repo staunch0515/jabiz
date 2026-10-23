@@ -178,6 +178,7 @@ export function VerifyEmailPanel({ link, brand, appearance }: PanelProps) {
           <Outcome ok={false} testId="verify-state">
             <span data-state={state}>{t('account.invalidLink')}</span>
           </Outcome>
+          <p className="text-muted-foreground text-sm">{t('account.invalidLinkHint')}</p>
           <ResendVerification entry={entry} />
         </>
       )}

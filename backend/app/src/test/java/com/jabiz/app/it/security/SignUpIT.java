@@ -425,14 +425,16 @@ class SignUpIT extends SignUpItSupport {
         assertThat(refusal(anonymous("/api/auth/verify-email/check", Map.of("token", access)), 422))
             .isEqualTo("TOKEN_INVALID");
 
-        // The resent mail supersedes the first link; the second is good once, and checking it does not use it.
+        // A resent mail does not void the first link (D53): either is good, checking does not use it, and the first
+        // one used wins - the other is void then.
         deliver();
         String second = token(VERIFY_LINK, email);
         assertThat(second).isNotEqualTo(verify);
+        check(verify);
+        check(second);
+        check(second);
+        verify(Map.of("token", verify, "password", PASSWORD)).expectStatus().isNoContent();
         assertThat(refusal(verify(Map.of("token", verify, "password", PASSWORD)), 422)).isEqualTo("TOKEN_INVALID");
-        check(second);
-        check(second);
-        verify(Map.of("token", second, "password", PASSWORD)).expectStatus().isNoContent();
         assertThat(refusal(verify(Map.of("token", second, "password", PASSWORD)), 422)).isEqualTo("TOKEN_INVALID");
         assertThat(refusal(anonymous("/api/auth/verify-email/check", Map.of("token", second)), 422))
             .isEqualTo("TOKEN_INVALID");
