@@ -532,7 +532,7 @@ public class SignUpProcesses {
      * docs/design/10-security.md section 15.6). A pre-claimable account cannot link a provider itself
      * ({@code SEC_IDENTITY_LINK_SELF}), but an administrator may have linked one.
      */
-    private static void claim(AccountContext ctx) {
+    static void claim(AccountContext ctx) {
         for (EntityInstance mfa : ctx.list(MFA)) {
             ctx.changes().delete(SecurityEntities.USER_MFA, mfa.id(), mfa.version());
         }
@@ -543,7 +543,7 @@ public class SignUpProcesses {
     }
 
     /** The verification fields proving the user's current address. */
-    private static Map<String, Object> proof(AccountContext ctx, EntityInstance user) {
+    static Map<String, Object> proof(AccountContext ctx, EntityInstance user) {
         Map<String, Object> changed = new LinkedHashMap<>();
         changed.put("verifiedEmail", user.get("email"));
         changed.put("emailVerifiedAt", ctx.opTime());
@@ -586,7 +586,7 @@ public class SignUpProcesses {
     }
 
     /** The entry's registration roles by code, enabled and existing; null (and a violation) when one is missing. */
-    private static Map<String, EntityInstance> registrationRoles(AccountContext ctx, SignInEntries.Entry entry) {
+    static Map<String, EntityInstance> registrationRoles(AccountContext ctx, SignInEntries.Entry entry) {
         Map<String, EntityInstance> byCode = new LinkedHashMap<>();
         ctx.list(ROLES).stream().filter(Rbac::enabled)
             .forEach(role -> byCode.put(String.valueOf(role.<Object>get("roleCode")), role));
@@ -605,7 +605,7 @@ public class SignUpProcesses {
         return consumed == null || consumed.userId() == null ? byId(null) : byId(consumed.userId());
     }
 
-    private static EntityQuery byId(String userId) {
+    static EntityQuery byId(String userId) {
         QueryPredicate where;
         try {
             where = userId == null ? new QueryPredicate.In("userId", List.of())
@@ -621,7 +621,7 @@ public class SignUpProcesses {
         return Rbac.all(new QueryPredicate.In("userId", user == null ? List.of() : List.of(user)), "userId");
     }
 
-    private static EntityQuery rolesNamed(Set<String> codes) {
+    static EntityQuery rolesNamed(Set<String> codes) {
         return Rbac.all(new QueryPredicate.In("roleCode", List.copyOf(codes)), "roleCode");
     }
 
@@ -642,7 +642,7 @@ public class SignUpProcesses {
     }
 
     /** The language of the verification mail: as asked, else the request's. */
-    private static Locale mailLocale(AccountContext ctx) {
+    static Locale mailLocale(AccountContext ctx) {
         return ctx.locale() != null ? Locale.of(ctx.locale()) : ctx.request().locale();
     }
 

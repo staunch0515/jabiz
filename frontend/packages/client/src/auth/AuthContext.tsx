@@ -38,6 +38,8 @@ export interface AuthState {
   verify(challenge: string, code: string): Promise<void>
   /** The return from an identity provider (docs/design/10-security.md section 12): state and code. */
   signInWithProvider(state: string, code: string, binder: string): Promise<SignInStep>
+  /** The token of a mailed sign-in link (decision D54); used once, whatever the answer. */
+  signInWithEmailLink(token: string): Promise<SignInStep>
   /** New tokens for the session: with `force`, after the address was verified, so that the new ones say so. */
   refreshSession(options?: RefreshOptions): Promise<boolean>
   signOut(): Promise<void>
@@ -154,6 +156,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [queryClient],
   )
 
+  const signInWithEmailLink = useCallback(
+    async (token: string): Promise<SignInStep> => {
+      const answer = await unwrap(api.POST('/api/auth/email-link/confirm', { body: { token } }))
+      if (answer.status === 'MFA_REQUIRED' || answer.status === 'MFA_ENROLLMENT_REQUIRED') {
+        return { status: answer.status, challenge: answer.challenge! }
+      }
+      session.store(answer.accessToken!, answer.refreshToken!)
+      queryClient.clear()
+      return { status: 'SIGNED_IN' }
+    },
+    [queryClient],
+  )
+
   const verify = useCallback(
     async (challenge: string, code: string) => {
       const tokens = await unwrap(api.POST('/api/auth/challenge/verify', { body: { challenge, code } }))
@@ -185,12 +200,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signIn,
       verify,
       signInWithProvider,
+      signInWithEmailLink,
       // A new access token changes the identity query's key, so the identity is asked again.
       refreshSession: refreshTokens,
       signOut,
       can: (permission: string) => permissions.has('*') || permissions.has(permission),
     }
-  }, [ready, token, identity, signIn, verify, signInWithProvider, signOut])
+  }, [ready, token, identity, signIn, verify, signInWithProvider, signInWithEmailLink, signOut])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

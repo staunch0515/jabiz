@@ -77,6 +77,9 @@ public class SecurityConfig {
             SignUpController.VERIFY, SignUpController.VERIFY_CHECK, SignUpController.VERIFY_RESEND, SignUpController.RESET_REQUEST,
             SignUpController.RESET_CONFIRM),
         ServerWebExchangeMatchers.pathMatchers(HttpMethod.GET, SignUpController.ENTRIES + "/*"),
+        // Signing in with a mailed link (decision D54): rate limited, answered alike for every address.
+        ServerWebExchangeMatchers.pathMatchers(HttpMethod.POST, EmailLinkController.REQUEST,
+            EmailLinkController.CONFIRM),
         // Signing in through an identity provider (docs/design/10-security.md section 12).
         ServerWebExchangeMatchers.pathMatchers(HttpMethod.GET, OidcController.BASE + "/providers"),
         ServerWebExchangeMatchers.pathMatchers(HttpMethod.POST, OidcController.BASE + "/*/start",

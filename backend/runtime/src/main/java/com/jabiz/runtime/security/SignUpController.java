@@ -124,7 +124,7 @@ class SignUpController {
      *                           {@code device} ({@code localStorage}; decision D43 item 2)
      */
     record EntryInfo(String name, boolean selfRegistration, boolean requireVerifiedEmail, String appPath,
-        SignInEntries.Persistence sessionPersistence) {}
+        SignInEntries.Persistence sessionPersistence, boolean emailLink) {}
 
     private final ProcessExecutor processes;
     private final SignInEntries entries;
@@ -315,7 +315,7 @@ class SignUpController {
     Mono<EntryInfo> entry(@PathVariable String name) {
         return Mono.fromCallable(() -> entries.find(name)
             .map(entry -> new EntryInfo(entry.name(), entry.selfRegistration(), entry.requireVerifiedEmail(),
-                entry.appPath(), entry.session().persistence()))
+                entry.appPath(), entry.session().persistence(), entry.emailLink()))
             .orElseThrow(() -> new ResourceNotFoundException("No sign-in entry " + name)));
     }
 
@@ -334,7 +334,7 @@ class SignUpController {
     }
 
     /** 202 without a body, saying so ({@code Content-Length: 0}): the same for every address. */
-    private static ResponseEntity<Void> accepted() {
+    static ResponseEntity<Void> accepted() {
         return ResponseEntity.accepted().contentLength(0).build();
     }
 
@@ -344,7 +344,7 @@ class SignUpController {
             PlatformErrorCodes.UNIQUE_VIOLATION.equals(violation.ruleCode()) && "email".equals(violation.field()));
     }
 
-    private static List<Violation> emailProblems(String email) {
+    static List<Violation> emailProblems(String email) {
         if (blank(email)) {
             return List.of(new Violation("email", PlatformErrorCodes.REQUIRED, "An e-mail address is required",
                 Map.of("field", "email")));
@@ -356,7 +356,7 @@ class SignUpController {
         return List.of();
     }
 
-    private static Violation invalid(String field, String message) {
+    static Violation invalid(String field, String message) {
         return new Violation(field, PlatformErrorCodes.INVALID_VALUE, message, Map.of("field", field));
     }
 

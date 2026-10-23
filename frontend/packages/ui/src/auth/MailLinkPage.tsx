@@ -15,6 +15,7 @@ import {
   Outcome,
   type AuthNavigation,
 } from './frame'
+import { EmailLinkPanel } from './EmailLink'
 import { AUTH_NAMESPACE } from './messages'
 import { PasswordResetRequest } from './PasswordResetRequest'
 import { failure, invalidLink, passwordProblems, passwordRequired } from './problems'
@@ -37,11 +38,16 @@ export interface MailLinkPageBase extends AuthNavigation {
   signInPath?: string
   /** The page to ask for a new password, as a path of this frontend; this page's path when absent. */
   passwordResetPath?: string
+  /**
+   * Signed in with a mailed sign-in link (`email-link`, decision D54): goes to `path`, the link's own path of this
+   * frontend; the frontend's navigation (`onNavigate`) or a page load when absent.
+   */
+  onSignedIn?(path: string): void
 }
 
 export interface MailLinkPageProps extends MailLinkPageBase {
   /**
-   * Which page of a link this is: `verify-email`, `join` or `password-reset`; the last segment of the address when
+   * Which page of a link this is: `verify-email`, `join`, `password-reset` or `email-link`; the last segment of the address when
    * absent (links are `{entryUrl}auth/<page>?entry=…&token=…`, decision D43 item 4).
    */
   page?: string
@@ -51,8 +57,8 @@ export interface MailLinkPageProps extends MailLinkPageBase {
 
 /**
  * The pages mailed links lead to (docs/design/10-security.md section 15.7; decisions D36 and D43): verifying an
- * address, joining an entry with an existing account, and choosing a new password (or, without a token, asking for
- * the link). The token is taken out of the address bar at once and the page sends no referrer while open; nothing is
+ * address, joining an entry with an existing account, choosing a new password (or, without a token, asking for
+ * the link) and signing in with a mailed link. The token is taken out of the address bar at once and the page sends no referrer while open; nothing is
  * sent before the person clicks, so that a mail scanner opening the link changes nothing.
  */
 export function MailLinkPage({ page, search, ...base }: MailLinkPageProps) {
@@ -61,6 +67,9 @@ export function MailLinkPage({ page, search, ...base }: MailLinkPageProps) {
   const which = page ?? link.page
   if (which === 'verify-email') return <VerifyEmailPanel {...base} link={link} />
   if (which === 'join') return <JoinPanel {...base} link={link} />
+  if (which === 'email-link') {
+    return <EmailLinkPanel {...base} link={link} to={new URLSearchParams(search ?? window.location.search).get('to')} />
+  }
   if (which === 'password-reset') {
     return link.token
       ? <PasswordResetConfirm {...base} link={link} />
