@@ -23,6 +23,7 @@ const reasons = {
     HELD: 'A transfer of theirs was rejected or reversed: release them on the transfers page first.',
     REVIEW_NOT_CONFIGURED: 'It needs a review, but no review rule for transfers is in force.',
     REVIEW_NOT_NOW: 'It is above the review limit: the daily transfer asks another administrator to review it.',
+    BANK_METHOD: 'The taker is paid by bank: they ask for each withdrawal (Bank withdrawals).',
   },
   zh: {
     DISABLED: '转账已关闭（qb.transfer.enabled）：请以四眼方式开启。',
@@ -38,6 +39,7 @@ const reasons = {
     HELD: '他们的一笔转账被驳回或撤回：请先在转账页放行。',
     REVIEW_NOT_CONFIGURED: '需要审核，但没有生效的转账审核规则。',
     REVIEW_NOT_NOW: '超过审核额：由每日转账提交给另一位管理员审核。',
+    BANK_METHOD: '该答题人选择银行收款：由本人申请每笔提现（银行提现）。',
   },
   ja: {
     DISABLED: '送金はオフです（qb.transfer.enabled）。四眼でオンにしてください。',
@@ -53,6 +55,7 @@ const reasons = {
     HELD: '送金が却下または取り消されました。先に送金ページで保留を解除してください。',
     REVIEW_NOT_CONFIGURED: '審査が必要ですが、有効な送金の審査ルールがありません。',
     REVIEW_NOT_NOW: '審査額を超えています。毎日の送金で別の管理者の審査に回ります。',
+    BANK_METHOD: 'この回答者は銀行で受け取ります。出金のたびに本人が申請します（銀行出金）。',
   },
 }
 

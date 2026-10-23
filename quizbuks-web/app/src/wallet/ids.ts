@@ -7,6 +7,10 @@
 /** Processes (`wallet.PayoutProcesses`). */
 export const WALLET_PROCESS = {
   payoutOnboard: 'QB_PAYOUT_ONBOARD',
+  /** Q13b (`wallet.BankWithdrawals`): the bank account, how the taker is paid, and a withdrawal. */
+  bankAccountSave: 'QB_BANK_ACCOUNT_SAVE',
+  payoutMethodSet: 'QB_PAYOUT_METHOD_SET',
+  withdrawalRequest: 'QB_WITHDRAWAL_REQUEST',
 } as const
 
 /** SQL templates (`queries/qb/app`). */
@@ -14,6 +18,7 @@ export const WALLET_TEMPLATE = {
   wallet: 'qb.app.wallet',
   ledger: 'qb.app.ledger',
   payoutAccount: 'qb.app.payout-account',
+  bankAccount: 'qb.app.bank-account',
 } as const
 
 /** Dictionaries, labelled by the server in the request's language. */

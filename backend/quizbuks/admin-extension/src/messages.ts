@@ -1,4 +1,5 @@
 import { bankMenu, bankMessages } from './bank-messages'
+import { withdrawalMenu, withdrawalMessages } from './withdrawal-messages'
 import { financeMenu, financeMessages } from './finance-messages'
 import { attemptsMenu, attemptsMessages, payoutMessages } from './payout-messages'
 import { broadcastsMenu, broadcastsMessages, legalAnnounce } from './broadcasts-messages'
@@ -9,7 +10,7 @@ import { legalMenu, legalMessages } from './legal-messages'
 export const messages = {
   en: {
     menu: { group: 'QuizBuks', reviews: 'Reviews', users: 'Users', ...legalMenu.en, ...aiMenu.en,
-      ...financeMenu.en, ...broadcastsMenu.en, ...attemptsMenu.en, ...bankMenu.en },
+      ...financeMenu.en, ...broadcastsMenu.en, ...attemptsMenu.en, ...bankMenu.en, ...withdrawalMenu.en },
     legal: { ...legalMessages.en, ...legalAnnounce.en },
     broadcasts: broadcastsMessages.en,
     ai: aiMessages.en,
@@ -17,6 +18,7 @@ export const messages = {
     payout: payoutMessages.en,
     attempts: attemptsMessages.en,
     bank: bankMessages.en,
+    withdrawal: withdrawalMessages.en,
     common: {
       notSet: 'Not set',
       failed: 'Could not load this. Try again.',
@@ -229,7 +231,7 @@ export const messages = {
   },
   zh: {
     menu: { group: 'QuizBuks', reviews: '审核', users: '用户', ...legalMenu.zh, ...aiMenu.zh,
-      ...financeMenu.zh, ...broadcastsMenu.zh, ...attemptsMenu.zh, ...bankMenu.zh },
+      ...financeMenu.zh, ...broadcastsMenu.zh, ...attemptsMenu.zh, ...bankMenu.zh, ...withdrawalMenu.zh },
     legal: { ...legalMessages.zh, ...legalAnnounce.zh },
     broadcasts: broadcastsMessages.zh,
     ai: aiMessages.zh,
@@ -237,6 +239,7 @@ export const messages = {
     payout: payoutMessages.zh,
     attempts: attemptsMessages.zh,
     bank: bankMessages.zh,
+    withdrawal: withdrawalMessages.zh,
     common: {
       notSet: '未设置',
       failed: '无法读取，请重试。',
@@ -449,7 +452,7 @@ export const messages = {
   },
   ja: {
     menu: { group: 'QuizBuks', reviews: '審査', users: 'ユーザー', ...legalMenu.ja, ...aiMenu.ja,
-      ...financeMenu.ja, ...broadcastsMenu.ja, ...attemptsMenu.ja, ...bankMenu.ja },
+      ...financeMenu.ja, ...broadcastsMenu.ja, ...attemptsMenu.ja, ...bankMenu.ja, ...withdrawalMenu.ja },
     legal: { ...legalMessages.ja, ...legalAnnounce.ja },
     broadcasts: broadcastsMessages.ja,
     ai: aiMessages.ja,
@@ -457,6 +460,7 @@ export const messages = {
     payout: payoutMessages.ja,
     attempts: attemptsMessages.ja,
     bank: bankMessages.ja,
+    withdrawal: withdrawalMessages.ja,
     common: {
       notSet: '未設定',
       failed: '読み込めませんでした。もう一度お試しください。',

@@ -47,7 +47,8 @@ import { LegalPage } from './qb/LegalPage'
 import { QB } from './qb/messages'
 import { Link, navigate, navigation, Redirect, useLocation } from './qb/router'
 import { useSessionLock } from './qb/session'
-import { PAYOUT_PATH, WALLET_PATH } from './wallet/api'
+import { BANK_PATH, PAYOUT_PATH, WALLET_PATH } from './wallet/api'
+import { BankPage } from './wallet/BankPage'
 import { PayoutPage } from './wallet/PayoutPage'
 import { WalletPage } from './wallet/WalletPage'
 
@@ -116,7 +117,7 @@ function BottomNav({ path }: { path: string }) {
   // A publication's page belongs to home, an attempt's to the history, the payout account to the wallet, a message
   // to the inbox.
   const item = itemPage(path)
-  const section = item ? (item.page === 'p' ? HOME : HISTORY) : path === PAYOUT_PATH ? WALLET_PATH
+  const section = item ? (item.page === 'p' ? HOME : HISTORY) : path === PAYOUT_PATH || path === BANK_PATH ? WALLET_PATH
     : inboxItemOf(path) ? INBOX_PATH : path
   return (
     <nav aria-label={t('nav.label')}
@@ -182,6 +183,7 @@ function SignedIn({ path }: { path: string }) {
   else if (path === HISTORY) page = <HistoryPage />
   else if (path === WALLET_PATH) page = <WalletPage />
   else if (path === PAYOUT_PATH) page = <PayoutPage />
+  else if (path === BANK_PATH) page = <BankPage />
   else if (path === ACCOUNT_PATH) page = <AccountPage />
   else if (path === INBOX_PATH) page = <InboxPage />
   else if (inboxItemOf(path)) {

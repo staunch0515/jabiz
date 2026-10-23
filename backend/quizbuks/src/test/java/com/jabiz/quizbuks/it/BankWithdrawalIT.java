@@ -79,8 +79,12 @@ class BankWithdrawalIT extends PayoutItSupport {
         assertThat(row).containsEntry("bank_code", "0001").containsEntry("account_number", "000" + number)
             .containsEntry("account_holder", "ヤマダ タロウ").containsEntry("payout_method", "STRIPE");
         // Theirs to read, the number masked; the input never kept in the clear.
-        assertThat(String.valueOf(items(entitiesOf("urn:jabiz:dataset:taker:QbBankAccount", taker(taker)))))
+        assertThat(String.valueOf(itemsOf(entitiesOf("urn:jabiz:dataset:taker:QbBankAccount", taker(taker)))))
             .contains("***").doesNotContain("000" + number);
+        Map<String, Object> app = items("qb.app.bank-account", taker(taker), Map.of()).getFirst();
+        assertThat(app).containsEntry("enabled", true).containsEntry("payoutMethod", "STRIPE")
+            .containsEntry("accountHolder", "ヤマダ タロウ");
+        assertThat(String.valueOf(app.get("accountNumber"))).doesNotContain(number);
         assertThat(query("SELECT input_summary::text AS s FROM op_process WHERE process_name = 'QB_BANK_ACCOUNT_SAVE' "
             + "AND actor_id = ?", taker).toString()).contains("bankAccountNumber").doesNotContain(number);
 
@@ -260,7 +264,7 @@ class BankWithdrawalIT extends PayoutItSupport {
     // ---- helpers ---------------------------------------------------------------------------------------------------
 
     @SuppressWarnings("unchecked")
-    private List<Map<String, Object>> items(Map<String, Object> page) {
+    private List<Map<String, Object>> itemsOf(Map<String, Object> page) {
         return (List<Map<String, Object>>) page.get("items");
     }
 

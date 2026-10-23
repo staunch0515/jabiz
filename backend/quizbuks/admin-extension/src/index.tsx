@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import BankTopUpPage from './BankTopUpPage'
 import BankTopUpsPage from './BankTopUpsPage'
+import BankWithdrawalsPage from './BankWithdrawalsPage'
 import BroadcastsPage from './BroadcastsPage'
 import AiPage from './AiPage'
 import AttemptsPage from './AttemptsPage'
@@ -60,6 +61,7 @@ export default defineExtension({
     { path: PATH.topUps, element: <TopUpsPage /> },
     { path: PATH.bankTopUps, element: <BankTopUpsPage /> },
     { path: '/qb/finance/bank-topups/:topUpId', element: <BankTopUpPage /> },
+    { path: PATH.bankWithdrawals, element: <BankWithdrawalsPage /> },
     { path: PATH.reconciliation, element: <ReconciliationPage /> },
     { path: PATH.reports, element: <ReportsPage /> },
     { path: PATH.journal, element: <JournalPage /> },
@@ -102,6 +104,9 @@ export default defineExtension({
         // Q13a: both who record (finance) and who approve (content or another finance administrator).
         { key: 'qb-bank-topups', label: 'menu.bankTopUps', path: PATH.bankTopUps, icon: Banknote,
           permission: PERMISSION.bankApprove },
+        // Q13b: finance reviews (the transfers' review), pays and records them.
+        { key: 'qb-bank-withdrawals', label: 'menu.bankWithdrawals', path: PATH.bankWithdrawals, icon: Landmark,
+          permission: PERMISSION.financeRead },
         { key: 'qb-reconciliation', label: 'menu.reconciliation', path: PATH.reconciliation, icon: Scale,
           permission: PERMISSION.reconcile },
         { key: 'qb-reports', label: 'menu.reports', path: PATH.reports, icon: FileSpreadsheet,
