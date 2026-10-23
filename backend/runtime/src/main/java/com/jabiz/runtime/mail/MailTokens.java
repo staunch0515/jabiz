@@ -32,7 +32,11 @@ import java.util.function.Function;
  * }</pre>
  * The token is found by its SHA-256; it must be of the purpose, unexpired at the operation time, the latest token of
  * that purpose sent to its recipient (a later mail supersedes it), and unused. Its use is recorded in the process's
- * transaction, whose primary key allows it once. On success the context holds a {@link Consumed} under the target key;
+ * transaction, whose primary key allows it once.
+ * <p>{@link #consumeAnyUnused} (decision D53) also takes an earlier token of the purpose, as long as no token of that
+ * purpose and recipient was used yet: the first one used wins. For links whose only power is proving the mailbox
+ * (verifying an address), where a second mail (a resend, or the outbox sending again after a reply was lost) must not
+ * make the first one fail; the process still checks the recipient's address is the one the link went to. On success the context holds a {@link Consumed} under the target key;
  * otherwise the process is rejected with {@code TOKEN_INVALID} (422), whatever the reason, and the key stays empty.
  */
 @Component
@@ -45,7 +49,7 @@ public class MailTokens<C extends ProcessContext> implements StepHandler<MailTok
     /** A used token: to whom its mail went. */
     public record Consumed(String messageId, String userId, String address) {}
 
-    public record Metadata<C>(String purpose, Function<C, String> token, String targetKey) {
+    public record Metadata<C>(String purpose, Function<C, String> token, String targetKey, boolean earlierToo) {
         public Metadata {
             Objects.requireNonNull(purpose, "purpose must not be null");
             Objects.requireNonNull(token, "token must not be null");
@@ -55,7 +59,13 @@ public class MailTokens<C extends ProcessContext> implements StepHandler<MailTok
 
     public static <C extends ProcessContext> StepSpec<Metadata<C>, C> consume(String purpose,
         Function<C, String> token, String targetKey) {
-        return StepSpec.of(MailTokens.class, new Metadata<>(purpose, token, targetKey));
+        return StepSpec.of(MailTokens.class, new Metadata<>(purpose, token, targetKey, false));
+    }
+
+    /** As {@link #consume}, also taking an earlier token while none of the purpose and recipient was used (D53). */
+    public static <C extends ProcessContext> StepSpec<Metadata<C>, C> consumeAnyUnused(String purpose,
+        Function<C, String> token, String targetKey) {
+        return StepSpec.of(MailTokens.class, new Metadata<>(purpose, token, targetKey, true));
     }
 
     private static final String FIND = """
@@ -63,7 +73,11 @@ public class MailTokens<C extends ProcessContext> implements StepHandler<MailTok
                NOT EXISTS (SELECT 1 FROM sys_mail_token n
                             WHERE n.purpose = t.purpose AND n.issue_seq > t.issue_seq
                               AND (n.user_id = t.user_id
-                                   OR (t.user_id IS NULL AND n.user_id IS NULL AND n.address = t.address))) AS latest
+                                   OR (t.user_id IS NULL AND n.user_id IS NULL AND n.address = t.address))) AS latest,
+               EXISTS (SELECT 1 FROM sys_mail_token n JOIN sys_mail_token_use u ON u.token_hash = n.token_hash
+                        WHERE n.purpose = t.purpose AND n.token_hash <> t.token_hash
+                          AND (n.user_id = t.user_id
+                               OR (t.user_id IS NULL AND n.user_id IS NULL AND n.address = t.address))) AS sibling_used
         FROM sys_mail_token t WHERE t.token_hash = :hash""";
 
     /** Not a plain insert: a key violation would abort the process's transaction. */
@@ -106,8 +120,9 @@ public class MailTokens<C extends ProcessContext> implements StepHandler<MailTok
                     if (!ctx.opTime().isBefore(Rows.instant(row.get("expires_time")))) {
                         return invalid(ctx, "expired");
                     }
-                    if (!Boolean.TRUE.equals(row.get("latest"))) {
-                        return invalid(ctx, "superseded");
+                    if (metadata.earlierToo() ? Boolean.TRUE.equals(row.get("sibling_used"))
+                        : !Boolean.TRUE.equals(row.get("latest"))) {
+                        return invalid(ctx, metadata.earlierToo() ? "another of its mails was used" : "superseded");
                     }
                     Map<String, BoundValue> use = new LinkedHashMap<>();
                     use.put("hash", BoundValue.of(hash));
