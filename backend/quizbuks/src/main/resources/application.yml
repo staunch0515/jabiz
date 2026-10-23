@@ -1,6 +1,12 @@
 spring:
   application:
     name: quizbuks
+  # A JSON request body held in memory: Spring's default (256 KB) is less than a quiz file's content may be (Q16: up
+  # to 2 MB of snapshot, ten 20 000-character articles alone are 600 KB in three-byte characters). Uploads are
+  # streamed and limited by jabiz.files.*, not by this.
+  http:
+    codecs:
+      max-in-memory-size: 4MB
   lifecycle:
     timeout-per-shutdown-phase: 30s
   r2dbc:
@@ -47,6 +53,9 @@ jabiz:
       # Q13b: saving a bank account tells whether it is another user's (and tells finance): not a way to look many up.
       "[QB_BANK_ACCOUNT_SAVE]": { per-user: 10, period: 1h }
       "[QB_WITHDRAWAL_REQUEST]": { per-user: 20, period: 1h }
+      # Q16: importing a quiz file makes a whole draft (up to 100 questions) in one transaction.
+      "[QB_QUIZ_IMPORT_CHECK]": { per-user: 60, period: 1h }
+      "[QB_QUIZ_IMPORT]": { per-user: 20, period: 1h }
       "[QB_TOPUP_START]": { per-user: 20, period: 1h }
       "[QB_JOURNAL_PREVIEW]": { per-user: 10, period: 1m }
       "[QB_ATTEMPT_SAVE]": { per-user: 120, period: 1m }

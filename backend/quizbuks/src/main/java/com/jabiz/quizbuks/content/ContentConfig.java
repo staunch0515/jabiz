@@ -9,6 +9,7 @@ import com.jabiz.file.MediaTypes;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.content.transfer.QuizTransferProcesses;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -194,8 +195,8 @@ public class ContentConfig {
     @Bean
     FilePolicy qbContentImagePolicy() {
         return FilePolicy.define(QbContent.IMAGE_POLICY)
-            .allow(MediaTypes.JPEG, MediaTypes.PNG)
-            .maxBytes(10 * FilePolicy.MB)
+            .allow(ContentLimits.IMAGE_TYPES.toArray(MediaTypes[]::new))
+            .maxBytes(ContentLimits.IMAGE_MAX_BYTES)
             .image(i -> i.maxPixels(40_000_000).variants(320, 640, 1280))
             .permissions(QbPermissions.CONTENT_WRITE, QbPermissions.CONTENT_FILE_READ)
             // Takers read content files: the sponsor's file name, their id and the upload time stay theirs
@@ -207,8 +208,8 @@ public class ContentConfig {
     @Bean
     FilePolicy qbContentPdfPolicy() {
         return FilePolicy.define(QbContent.PDF_POLICY)
-            .allow(MediaTypes.PDF)
-            .maxBytes(20 * FilePolicy.MB)
+            .allow(ContentLimits.PDF_TYPES.toArray(MediaTypes[]::new))
+            .maxBytes(ContentLimits.PDF_MAX_BYTES)
             .permissions(QbPermissions.CONTENT_WRITE, QbPermissions.CONTENT_FILE_READ)
             // Takers read content files: the sponsor's file name, their id and the upload time stay theirs
             // (Q10b item 12, platform decision D47).
@@ -219,8 +220,8 @@ public class ContentConfig {
     @Bean
     FilePolicy qbContentAudioPolicy() {
         return FilePolicy.define(QbContent.AUDIO_POLICY)
-            .allow(MediaTypes.MP3, MediaTypes.M4A, MediaTypes.OGG)
-            .maxBytes(50 * FilePolicy.MB)
+            .allow(ContentLimits.AUDIO_TYPES.toArray(MediaTypes[]::new))
+            .maxBytes(ContentLimits.AUDIO_MAX_BYTES)
             .permissions(QbPermissions.CONTENT_WRITE, QbPermissions.CONTENT_FILE_READ)
             // Takers read content files: the sponsor's file name, their id and the upload time stay theirs
             // (Q10b item 12, platform decision D47).
@@ -251,6 +252,18 @@ public class ContentConfig {
     @Bean
     ProcessDefinition<QuizProcesses.QuizRef, QuizProcesses.VersionOutput, ProcessContext> qbQuizPublishVersion() {
         return QuizProcesses.publishVersion();
+    }
+
+    @Bean
+    ProcessDefinition<QuizTransferProcesses.CheckInput, QuizTransferProcesses.CheckOutput, ProcessContext>
+        qbQuizImportCheck() {
+        return QuizTransferProcesses.check();
+    }
+
+    @Bean
+    ProcessDefinition<QuizTransferProcesses.ImportInput, QuizTransferProcesses.ImportOutput, ProcessContext>
+        qbQuizImport() {
+        return QuizTransferProcesses.importQuiz();
     }
 
     @Bean
