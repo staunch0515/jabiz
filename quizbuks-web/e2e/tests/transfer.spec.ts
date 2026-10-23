@@ -50,8 +50,11 @@ test('a quiz is exported to a file and imported back as a new draft', async ({ p
   expect(importedId).not.toBe(quizId)
 
   // The same content, with files of its own.
-  const [copy] = await rows(request, me.token, 'urn:jabiz:dataset:sponsor:QbQuiz',
-    [{ field: 'quizId', op: 'eq', value: importedId }])
+  // Read by its key: the quiz dataset is not filtered by key.
+  const read = await request.get(`/api/datasets/${encodeURIComponent('urn:jabiz:dataset:sponsor:QbQuiz')}`
+    + `/entities/${importedId}`, { headers: { Authorization: `Bearer ${me.token}` } })
+  expect(read.status(), await read.text()).toBe(200)
+  const copy = (await read.json()) as { attributes: Record<string, unknown> }
   expect(copy.attributes).toMatchObject({ title, intro: 'From **a file**.', timeLimitSec: 240, status: 'DRAFT' })
   expect(copy.attributes.cover).toBeTruthy()
   expect(copy.attributes.cover).not.toBe(cover)
