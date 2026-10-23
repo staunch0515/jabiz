@@ -4346,3 +4346,12 @@ L4 共享仪表的注释；L5 13 写明每个键每次轮询多一个查询观�
 测试：`EmailLinkIT`、`SignInEntriesTest`、`EmailLink.test.tsx`、`AuthContext.test.tsx`、`account.test.tsx`。
 
 **16zb 状态**：✅ 已实施（PR 待建）。
+
+### 16zc 可以尚未设置的业务参数（0.5 天）
+
+来源：需求方 2026-10-23（QuizBuks：银行转账充值尚未配置时，商家看到的是一串"业务参数 … 没有生效的值"）。分支 `1.2/phase-16zc-optional-params`。
+平台步骤 `LoadParams.optional(ctx -> 业务时间, 结果键, key…)`：没有生效值的键在 `ParamValues` 中缺席而不报 `PARAM_NOT_FOUND`；
+`ParamValues.find(key, 类型)`（`Optional`）与 `has(key)`；`ParamService.loadAvailable`（平台代码）。兼容的新增，`LoadParams.of` 不变。设计 04 §9、06 §2.1。
+测试：`ParamValuesTest`、`ParamServiceIT.optionalParametersWithoutAValueAreAbsent`。
+
+**16zc 状态**：✅ 已实施（PR 待建）。

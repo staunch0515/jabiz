@@ -276,6 +276,39 @@ class ParamServiceIT extends PostgresIntegrationTest {
             .hasMessageContaining("append-only table");
     }
 
+    /** Phase 16zc: keys without a value in effect are left out, not refused; the present ones are read as usual. */
+    @Test
+    void optionalParametersWithoutAValueAreAbsent() {
+        String present = key();
+        run(ParamProcesses.CREATE, new ParamProcesses.CreateInput(present, RATE, "0.25", null));
+        var values = asTestRequest(params.loadAvailable(List.of(present, "it.nope-3"), clock.instant())).block();
+        assertThat(values.has(present)).isTrue();
+        assertThat(values.has("it.nope-3")).isFalse();
+        assertThat(values.find(present, BigDecimal.class)).hasValueSatisfying(v ->
+            assertThat(v).isEqualByComparingTo("0.25"));
+        // Before it was created, it is absent too.
+        assertThat(asTestRequest(params.loadAvailable(List.of(present), clock.instant().minusSeconds(1))).block()
+            .values()).isEmpty();
+
+        // The step in a process: the process decides what "not set" means.
+        ProcessDefinition<String, String, ProcessContext> settings = ProcessDefinition.define("IT_OPTIONAL_PARAMS", 1,
+            String.class, String.class, ProcessContext.class, pb -> pb
+                .description("Reads a setting that may not be set.")
+                .permissions("it.optional-params")
+                .contextFactory((start, input) -> {
+                    ProcessContext ctx = new ProcessContext(start);
+                    ctx.put("key", input);
+                    return ctx;
+                })
+                .outputMapper(ctx -> ctx.get("params", com.jabiz.param.ParamValues.class)
+                    .find(ctx.get("key", String.class), BigDecimal.class).map(BigDecimal::toPlainString)
+                    .orElse("not set"))
+                .step("Load the setting", com.jabiz.runtime.process.steps.LoadParams.optional(ProcessContext::opTime,
+                    "params", present, "it.nope-4")));
+        assertThat(run(settings, present)).isEqualTo("0.2500");
+        assertThat(run(settings, "it.nope-4")).isEqualTo("not set");
+    }
+
     /** Review finding (phase 14p, decision D32): more keys than a page of the dataset (100) are all found. */
     @Test
     void moreKeysThanAPageAreAllLoaded() {

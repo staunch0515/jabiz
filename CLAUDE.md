@@ -35,7 +35,7 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
 3. **业务扩展点全部同步**：字段规则（`RulePredicate`）、迁移守卫、流程计算步骤（`ComputeStep`）、阻塞步骤（`BlockingStep`）。
    平台内部的 `StepHandler`（返回 `Mono`）只供平台自己的 I/O 步骤使用，不对业务开放。
    业务流程用平台步骤的工厂（`LoadEntity.by`、`QueryEntities.of`（几个互不依赖的查询一条语句：`QueryEntities.all`）、`RunTemplate.of`、`SaveChanges.now`、`CallProcess.of`、`PublishEvent.of`；不能重叠的流程以 `HoldLock.shared/exclusive` 取命名锁，见 06 §4.1）
-   做 I/O（业务参数用 `LoadParams.of`，以业务发生时间读取，见 04 §9），用 `ctx.changes()` 登记变更、`ctx.reject(...)` 累积违规，由平台在流程结束时统一提交（见 06 与决策 D11）。每个流程必须声明权限。
+   做 I/O（业务参数用 `LoadParams.of`，以业务发生时间读取；可以尚未设置的用 `LoadParams.optional` 并以 `find` 读取，见 04 §9），用 `ctx.changes()` 登记变更、`ctx.reject(...)` 累积违规，由平台在流程结束时统一提交（见 06 与决策 D11）。每个流程必须声明权限。
    热门的命名锁在流程上以 `admission(族, 输入 -> 键)` 声明取锁前的排队（族名与键同该流程最外层 `HoldLock` 的名称，由同一辅助方法生成；06 §4.2、决策 D45），正确性仍由 `HoldLock` 保证；
    子流程从不排队；过载即 503 `PROCESS_BUSY`。流程入口的限流只在 `jabiz.process.rate-limits` 配置，不在业务代码中自己计数。
    不经流程接口的流程按用途声明（06 §8、决策 D41）：事件消费、定时任务、回调用 `internal()`（只由系统身份运行），平台入口自己运行的用 `entryOnly()`，只作子流程的用 `subProcessOnly()`；依赖声明，由平台检查（步骤中对系统身份的检查只是已有处的多余的第二道防线，不再新加）。
