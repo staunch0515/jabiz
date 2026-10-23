@@ -23,8 +23,14 @@ test('a quiz is exported to a file and imported back as a new draft', async ({ p
     options: [{ text: 'Green', correct: true }, { text: 'Red' }] })
 
   await signIn(page, '/sponsor/', me.email)
-  await page.goto('/sponsor/quizzes')
+  // Signed in once the console leads to the onboarding (not approved yet; the quizzes are open).
+  await expect(page).toHaveURL(/\/sponsor\/onboarding$/)
+  await page.getByRole('link', { name: 'Quizzes' }).click()
+  await expect(page.getByTestId('quiz-list')).toBeVisible()
+  // Other tests' quizzes share the database: find this one by its title.
+  await page.getByTestId('quiz-search').fill(title)
   const row = page.locator(`[data-testid="quiz-row"][data-quiz="${quizId}"]`)
+  await expect(row).toBeVisible()
   const downloaded = page.waitForEvent('download')
   await row.getByTestId('quiz-export').click()
   const file = await downloaded
