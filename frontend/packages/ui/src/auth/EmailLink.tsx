@@ -1,4 +1,5 @@
 import {
+  ApiError,
   api,
   isProblem,
   languages,
@@ -25,7 +26,7 @@ import { failure, invalidLink, refusal } from './problems'
 export interface EmailLinkFormProps {
   /** The entry the link signs in to; the frontend's when absent. */
   entry?: string
-  /** The path of this frontend the link leads back to once signed in; the entry's home when absent. */
+  /** The path the link leads back to once signed in, from the site's root within the entry's front end; its home when absent. */
   to?: string
   /** The address to start with. */
   initialEmail?: string
@@ -91,7 +92,7 @@ export function EmailLinkForm({ entry, to, initialEmail = '', submitLabel, onSen
 
 export interface EmailLinkPanelProps extends MailLinkPageBase {
   link: MailLinkInfo
-  /** The path the link leads back to (its `to`); only a path of this site is followed. */
+  /** The path the link leads back to (its `to`): followed only within the entry's front end (`app-path`). */
   to?: string | null
   /** Signs in with the token and finishes the second step; the session's (`useAuth`) by default. */
   auth?: Pick<AuthState, 'signInWithEmailLink' | 'verify'>
@@ -104,6 +105,9 @@ type PanelState =
   | { kind: 'code'; challenge: string }
   | { kind: 'enroll'; challenge: string }
   | { kind: 'enrolled' }
+  /** Back from the second step: asking for a new link (this one is used). */
+  | { kind: 'request' }
+  | { kind: 'refused'; message: string }
   | { kind: 'invalid' }
   | { kind: 'failed' }
 
@@ -112,18 +116,29 @@ const NO_AUTH: Pick<AuthState, 'signInWithEmailLink' | 'verify'> = {
   verify: () => Promise.reject(new Error('EmailLinkPanel needs an AuthProvider around it, or the auth property')),
 }
 
+/** `to` when it is a path within the front end at `appPath`, else null. */
+function withinFrontEnd(to: string | null | undefined, appPath: string): string | null {
+  // Only a path of this site, then only of the entry's front end: the path comes from an address anyone can write.
+  const path = sitePath(to, '')
+  if (!path) return null
+  const root = appPath.endsWith('/') ? appPath : `${appPath}/`
+  const bare = path.split(/[?#]/, 1)[0]
+  return bare === appPath || bare.startsWith(root) ? path : null
+}
+
 /**
  * Where a mailed sign-in link leads (decision D54): the click signs in (nothing is sent before it, so that a mail
  * scanner opening the link uses nothing), a second factor is asked like after a password, and the page goes back to
- * the path of the link. A link that is no good offers to send a new one for the same path.
+ * the path of the link. The link is used by the click whatever comes of it: a link that is no good, or a sign-in that
+ * was refused or not finished, offers to send a new one for the same path.
  */
 export function EmailLinkPanel({ link, to, brand, appearance, onNavigate, hrefOf, ...props }: EmailLinkPanelProps) {
   const { t } = useTranslation(AUTH_NAMESPACE)
   const session = useOptionalAuth()
   const auth = props.auth ?? session ?? NO_AUTH
   const { entry, token, appPath } = link
-  // Only a path of this site: the path comes from an address anyone can write.
-  const returnTo = sitePath(to, appPath)
+  const path = withinFrontEnd(to, appPath)
+  const returnTo = path ?? appPath
   const [state, setState] = useState<PanelState>(token ? { kind: 'ready' } : { kind: 'invalid' })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -133,34 +148,31 @@ export function EmailLinkPanel({ link, to, brand, appearance, onNavigate, hrefOf
     if (step.status === 'SIGNED_IN') signedIn()
     else setState({ kind: step.status === 'MFA_REQUIRED' ? 'code' : 'enroll', challenge: step.challenge })
   }
+  const refused = (e: unknown) =>
+    isProblem(e, 'SIGN_IN_REFUSED') ? t('login.refused') : refusal(e, t('common.error'))
 
   const start = async () => {
     setBusy(true)
-    setError(null)
     try {
       next(await auth.signInWithEmailLink(token!))
     } catch (e) {
       if (invalidLink(e)) setState({ kind: 'invalid' })
-      else if (isProblem(e, 'SIGN_IN_REFUSED')) setError(t('login.refused'))
-      else setState({ kind: 'failed' })
+      else if (e instanceof ApiError && (e.status === 401 || e.status === 403)) {
+        setState({ kind: 'refused', message: refused(e) })
+      } else setState({ kind: 'failed' })
     } finally {
       setBusy(false)
     }
   }
 
-  const again = (
-    <EmailLinkForm entry={entry} to={to ?? undefined} />
-  )
+  const again = <EmailLinkForm entry={entry} to={path ?? undefined} />
+  const title = state.kind === 'code' ? t('login.codeTitle')
+    : state.kind === 'enroll' ? t('login.enrollTitle') : t('emailLink.title')
 
   return (
-    <AuthFrame brand={brand} appearance={appearance} title={t('emailLink.title')} testId="email-link">
+    <AuthFrame brand={brand} appearance={appearance} title={title} testId="email-link">
       {state.kind === 'ready' && (
         <>
-          {error && (
-            <Outcome ok={false} testId="email-link-error">
-              {error}
-            </Outcome>
-          )}
           <p className="text-sm">{t('emailLink.signInHint')}</p>
           <Button size="lg" className="w-full" disabled={busy} aria-busy={busy || undefined}
             data-testid="email-link-start" onClick={() => void start()}>
@@ -173,7 +185,7 @@ export function EmailLinkPanel({ link, to, brand, appearance, onNavigate, hrefOf
           error={error}
           onBack={() => {
             setError(null)
-            setState({ kind: 'invalid' })
+            setState({ kind: 'request' })
           }}
           onVerify={async (code) => {
             setError(null)
@@ -181,7 +193,7 @@ export function EmailLinkPanel({ link, to, brand, appearance, onNavigate, hrefOf
               await auth.verify(state.challenge, code)
               signedIn()
             } catch (e) {
-              setError(refusal(e, t('common.error')))
+              setError(refused(e))
             }
           }}
         />
@@ -203,12 +215,24 @@ export function EmailLinkPanel({ link, to, brand, appearance, onNavigate, hrefOf
             }
             onDone={() => setState({ kind: 'enrolled' })}
           />
+          <Button variant="link" onClick={() => setState({ kind: 'request' })}>
+            {t('login.back')}
+          </Button>
         </>
       )}
       {state.kind === 'enrolled' && (
         <>
           <Outcome ok testId="email-link-state">
             <span data-state="enrolled">{t('emailLink.enrolled')}</span>
+          </Outcome>
+          {again}
+        </>
+      )}
+      {state.kind === 'request' && again}
+      {state.kind === 'refused' && (
+        <>
+          <Outcome ok={false} testId="email-link-state">
+            <span data-state="refused">{state.message}</span>
           </Outcome>
           {again}
         </>

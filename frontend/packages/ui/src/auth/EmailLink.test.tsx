@@ -91,9 +91,9 @@ describe('EmailLinkPanel', () => {
     expect(signInWithEmailLink).toHaveBeenCalledExactlyOnceWith('t1')
   })
 
-  it('leads only to paths of this site', async () => {
+  it("leads only to paths of the entry's front end", async () => {
     server()
-    for (const to of ['//evil.example/', 'https://evil.example/', '/\\evil.example', null]) {
+    for (const to of ['//evil.example/', 'https://evil.example/', '/\\evil.example', '/admin/', '/portalx/', null]) {
       const onSignedIn = vi.fn()
       const { unmount } = render(<EmailLinkPanel brand="Portal" link={link('t1')} to={to} onSignedIn={onSignedIn}
         auth={{ signInWithEmailLink: async () => ({ status: 'SIGNED_IN' }), verify: vi.fn() }} />)
@@ -113,6 +113,29 @@ describe('EmailLinkPanel', () => {
     await user().type(await screen.findByRole('textbox', { name: 'Code' }), '123456{Enter}')
     await waitFor(() => expect(onSignedIn).toHaveBeenCalledWith('/portal/p/7'))
     expect(verify).toHaveBeenCalledWith('c1', '123456')
+  })
+
+  it('says when the sign-in was refused, and offers a new link', async () => {
+    server()
+    render(<EmailLinkPanel brand="Portal" link={link('t1')} to="/portal/p/7"
+      auth={{ signInWithEmailLink: () => Promise.reject(refused(403, 'SIGN_IN_REFUSED')), verify: vi.fn() }} />)
+    await user().click(screen.getByTestId('email-link-start'))
+    expect(await screen.findByTestId('email-link-state')).toHaveTextContent('You cannot sign in here at the moment.')
+    // The link is used: no button to try it again, a form for a new one.
+    expect(screen.queryByTestId('email-link-start')).toBeNull()
+    expect(screen.getByTestId('email-link-email')).toBeInTheDocument()
+    await expectAccessible()
+  })
+
+  it('goes back from the second step to asking for a new link', async () => {
+    server()
+    render(<EmailLinkPanel brand="Portal" link={link('t1')}
+      auth={{ signInWithEmailLink: async () => ({ status: 'MFA_REQUIRED', challenge: 'c1' }), verify: vi.fn() }} />)
+    await user().click(screen.getByTestId('email-link-start'))
+    expect(await screen.findByText('Two-step verification')).toBeInTheDocument()
+    await user().click(screen.getByRole('button', { name: 'Back to sign in' }))
+    expect(screen.getByTestId('email-link-email')).toBeInTheDocument()
+    expect(screen.queryByTestId('email-link-state')).toBeNull()
   })
 
   it('offers a new link for the same path when the link is no good', async () => {

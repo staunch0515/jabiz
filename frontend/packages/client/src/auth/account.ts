@@ -80,7 +80,10 @@ export async function resendVerification(email: string, entry: string = session.
 }
 
 export interface EmailLinkRequest {
-  /** The path of this frontend the link leads back to once signed in (`/p/123?ref=share`); the entry's home when absent. */
+  /**
+   * The path the link leads back to once signed in: from the site's root, within the entry's front end (`app-path`),
+   * such as `/portal/p/123?ref=share`; the entry's home when absent.
+   */
   to?: string
   /** The language of the mail (a platform language); the interface language when absent. */
   locale?: string

@@ -91,9 +91,9 @@ class EmailLinkController {
             }
             List<Violation> problems = new ArrayList<>(SignUpController.emailProblems(body.email()));
             String to = body.to() == null ? "" : body.to().strip();
-            if (!EmailLinkProcesses.returnPath(to)) {
-                problems.add(SignUpController.invalid("to", "A path of the entry's front end, at most "
-                    + EmailLinkProcesses.MAX_TO + " characters"));
+            if (!EmailLinkProcesses.returnPath(to, entry.appPath())) {
+                problems.add(SignUpController.invalid("to", "A path within the entry's front end (" + entry.appPath()
+                    + "), at most " + EmailLinkProcesses.MAX_TO + " characters"));
             }
             String locale = body.locale() == null || body.locale().isBlank() ? null : body.locale().strip();
             if (locale != null && !PlatformLanguages.isSupported(locale)) {
@@ -118,15 +118,19 @@ class EmailLinkController {
         ServerHttpRequest http) {
         return Mono.defer(() -> {
             limits.client(SignUpRateLimits.Kind.LINK, clients.clientOf(http));
-            return processes.executeAtEntry(open, new EmailLinkProcesses.OpenInput(request == null ? null
-                    : request.token()))
+            EmailLinkProcesses.OpenInput input = new EmailLinkProcesses.OpenInput(request == null ? null
+                : request.token());
+            return processes.executeAtEntry(open, input)
+                // Another link of the address opened the account at the same moment: this one, rolled back and still
+                // unused, now finds that account (and stands for it, or is refused as used).
+                .onErrorResume(EmailLinkController::raceLost, e -> processes.executeAtEntry(open, input))
                 .flatMap(opened -> {
                     SignInSource source = AuthController.source(clients, http, opened.entry());
-                    SponsorEmailLinkSignInInput input = new SponsorEmailLinkSignInInput(opened.userId(), source);
-                    return processes.executeAtEntry(SponsorEmailLinkSignInProcess.DEFINITION, input)
+                    SponsorEmailLinkSignInInput signIn = new SponsorEmailLinkSignInInput(opened.userId(), source);
+                    return processes.executeAtEntry(SponsorEmailLinkSignInProcess.DEFINITION, signIn)
                         // Two sign-ins of one user at once: the later loses the race for the next login record.
                         .onErrorResume(EmailLinkController::raceLost, e -> processes.executeAtEntry(
-                            SponsorEmailLinkSignInProcess.DEFINITION, input))
+                            SponsorEmailLinkSignInProcess.DEFINITION, signIn))
                         .flatMap(result -> AuthController.answer(result, null, null, source, refreshTokens, tokens,
                             mfa, "Sign-in with a mailed link"));
                 });

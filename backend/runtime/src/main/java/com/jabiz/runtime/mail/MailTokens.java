@@ -33,10 +33,12 @@ import java.util.function.Function;
  * The token is found by its SHA-256; it must be of the purpose, unexpired at the operation time, the latest token of
  * that purpose sent to its recipient (a later mail supersedes it), and unused. Its use is recorded in the process's
  * transaction, whose primary key allows it once.
- * <p>{@link #consumeAnyUnused} (decision D53) also takes an earlier token of the purpose, as long as no token of that
- * purpose and recipient was used yet: the first one used wins. For links whose only power is proving the mailbox
- * (verifying an address), where a second mail (a resend, or the outbox sending again after a reply was lost) must not
- * make the first one fail; the process still checks the recipient's address is the one the link went to. On success the context holds a {@link Consumed} under the target key;
+ * <p>{@link #consumeAnyUnused} (decisions D53 and D54) also takes an earlier token of the purpose, as long as no token
+ * of that purpose and recipient was used since it was issued: of the mails out at once, the first one used wins, and a
+ * mail sent after a use is good again. For links whose power is proving the mailbox (verifying an address, signing in
+ * by link), where a second mail (a resend, or the outbox sending again after a reply was lost) must not make the
+ * first one fail; the process still checks the recipient's address is the one the link went to. On success the
+ * context holds a {@link Consumed} under the target key;
  * otherwise the process is rejected with {@code TOKEN_INVALID} (422), whatever the reason, and the key stays empty.
  */
 @Component
@@ -62,7 +64,10 @@ public class MailTokens<C extends ProcessContext> implements StepHandler<MailTok
         return StepSpec.of(MailTokens.class, new Metadata<>(purpose, token, targetKey, false));
     }
 
-    /** As {@link #consume}, also taking an earlier token while none of the purpose and recipient was used (D53). */
+    /**
+     * As {@link #consume}, also taking an earlier token while none of the purpose and recipient was used since it was
+     * issued (D53).
+     */
     public static <C extends ProcessContext> StepSpec<Metadata<C>, C> consumeAnyUnused(String purpose,
         Function<C, String> token, String targetKey) {
         return StepSpec.of(MailTokens.class, new Metadata<>(purpose, token, targetKey, true));
@@ -75,7 +80,7 @@ public class MailTokens<C extends ProcessContext> implements StepHandler<MailTok
                               AND (n.user_id = t.user_id
                                    OR (t.user_id IS NULL AND n.user_id IS NULL AND n.address = t.address))) AS latest,
                EXISTS (SELECT 1 FROM sys_mail_token n JOIN sys_mail_token_use u ON u.token_hash = n.token_hash
-                        WHERE n.purpose = t.purpose AND n.token_hash <> t.token_hash
+                        WHERE n.purpose = t.purpose AND n.token_hash <> t.token_hash AND u.used_time >= t.issued_time
                           AND (n.user_id = t.user_id
                                OR (t.user_id IS NULL AND n.user_id IS NULL AND n.address = t.address))) AS sibling_used
         FROM sys_mail_token t WHERE t.token_hash = :hash""";

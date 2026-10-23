@@ -762,15 +762,16 @@ jabiz:
 
 | 接口 | 作用 |
 |---|---|
-| `POST /api/auth/email-link` | `{entry, email, to?, locale?}`，任何地址都答 202；可信地址的用户或（开放注册时）无人使用的地址收到链接 |
+| `POST /api/auth/email-link` | `{entry, email, to?, locale?}`，任何地址都答 202（入口没有开启即 422 `SIGN_UP_DISABLED`，`to` 等不合格即 400）；可信地址上该入口会接受的用户、或（开放注册时）无人使用的地址收到链接 |
 | `POST /api/auth/email-link/confirm` | `{token}`，答复同登录（`SIGNED_IN` 或第二步）；无效即 422 `TOKEN_INVALID` |
 
 - 链接只寄往可信的地址：管理员设而本人没有验证过的地址收不到（同 §15.7 的验证链接）。
 - 打开链接：登录该用户；接管可预占的账号（清除密码等，同 §15.7）；或为无人使用的地址开已验证、无密码的账号（入口的注册角色）。
   之后照常是登录流程 `SPONSOR_EMAIL_LINK_SIGN_IN`：登录记录（因素 `EMAIL_LINK`）、`SignInGuard`、入口角色与二次验证都照旧。
-- `to` 只能是本前端的路径（服务端与 `EmailLinkPanel` 都检查）；登录后回到它，否则回到入口的 `app-path`。
+- 开启链接登录的入口上，授予 `*` 或 `security.*` 的角色不计（每次登录与刷新，同长会话，§15.1 与 D43 第 2 条）；入口不接受的用户收不到链接，打开时不再接受的在改变任何东西之前拒绝。
+- `to` 是自站点根起、在入口 `app-path` 之内的路径（服务端与 `EmailLinkPanel` 都检查，解码后的路径段不能是 `.`、`..`）；登录后回到它，否则回到入口的 `app-path`。
+- 链接只用一次；同时寄出的几封中先用的生效，之后寄出的照常有效（`MailTokens.consumeAnyUnused`，18 §5.6）。
 - 限流：请求按客户端地址与邮箱（`EMAIL_LINK`），确认同其他链接（`LINK`）。
-
 
 ## 16. 受保护的授权：四眼【决策 D48 第 1 条，阶段 16r】
 

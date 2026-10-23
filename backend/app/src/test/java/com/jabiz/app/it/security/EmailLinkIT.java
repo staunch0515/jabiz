@@ -2,12 +2,14 @@ package com.jabiz.app.it.security;
 
 import com.icegreen.greenmail.junit5.GreenMailExtension;
 import com.icegreen.greenmail.util.ServerSetup;
+import com.jabiz.runtime.security.SecurityEntities;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.web.reactive.server.WebTestClient;
 
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -25,7 +27,8 @@ import static org.assertj.core.api.Assertions.assertThat;
     "jabiz.mail.enabled=true", "jabiz.mail.from=jabiz@example.com", "jabiz.mail.base-url=https://app.example.com",
     "spring.mail.host=localhost", "spring.mail.port=3029", SignUpItSupport.ENTRY_PROPERTIES_REGISTRATION,
     SignUpItSupport.ENTRY_PROPERTIES_ADMIN, SignUpItSupport.ENTRY_PROPERTIES_LOOSE,
-    "jabiz.security.entries.portal.email-link=true", "jabiz.security.entries.loose.email-link=true"})
+    "jabiz.security.entries.portal.email-link=true", "jabiz.security.entries.loose.email-link=true",
+    "jabiz.security.entries.ops.accepted-roles=" + SignUpItSupport.BACK_OFFICE, "jabiz.security.entries.ops.email-link=true"})
 @Import(SignUpItSupport.FixedTimeLimits.class)
 class EmailLinkIT extends SignUpItSupport {
 
@@ -66,13 +69,13 @@ class EmailLinkIT extends SignUpItSupport {
     @Test
     void aLinkOpensAnAccountForANewAddressAndLeadsBack() {
         String email = address("new");
-        ask(PORTAL, email, "/p/123?ref=share").expectStatus().isAccepted();
+        ask(PORTAL, email, "/portal/p/123?ref=share").expectStatus().isAccepted();
         // Nothing opened before the mailbox is proven.
         assertThat(query("SELECT 1 FROM sec_user_version WHERE lower(email) = lower(?)", email)).isEmpty();
         deliver();
         assertThat(to(email)).singleElement().satisfies(m -> assertThat(text(m))
             .contains("https://app.example.com/portal/auth/email-link?entry=portal&token=")
-            .contains("&to=%2Fp%2F123%3Fref%3Dshare"));
+            .contains("&to=%2Fportal%2Fp%2F123%3Fref%3Dshare"));
         String token = token(LINK, email);
 
         Map<String, Object> session = signedIn(token);
@@ -87,12 +90,34 @@ class EmailLinkIT extends SignUpItSupport {
 
         // Good once.
         assertThat(refusal(confirm(token), 422)).isEqualTo("TOKEN_INVALID");
-        // Asked again: now the account's user's link, which signs in the same user.
-        ask(PORTAL, email, null).expectStatus().isAccepted();
-        deliver();
-        signedIn(token(LINK, email));
+        // Asked again, and again later: the account's user's links, each signing in the same user.
+        for (int i = 0; i < 2; i++) {
+            clock.advance(Duration.ofMinutes(1));
+            ask(PORTAL, email, null).expectStatus().isAccepted();
+            deliver();
+            assertThat(signedIn(token(LINK, email))).containsEntry("status", "SIGNED_IN");
+        }
         assertThat(query("SELECT DISTINCT user_id FROM sec_user_version WHERE lower(email) = lower(?)", email))
             .hasSize(1);
+        assertThat(factorsOf((String) user.get("user_id"))).hasSize(3);
+    }
+
+    @Test
+    void ofTwoMailsOutAtOnceTheFirstUsedWins() {
+        String email = address("two");
+        String userId = createUserWithEmail(unique("two"), email, PASSWORD);
+        verifyEmail(userId);
+        roleOf(userId, CUSTOMER);
+        ask(PORTAL, email, null).expectStatus().isAccepted();
+        deliver();
+        String first = token(LINK, email);
+        ask(PORTAL, email, null).expectStatus().isAccepted();
+        deliver();
+        String second = token(LINK, email);
+        assertThat(second).isNotEqualTo(first);
+        // The earlier mail is still good (a resend, or the outbox sending again); the other is then used up.
+        signedIn(first);
+        assertThat(refusal(confirm(second), 422)).isEqualTo("TOKEN_INVALID");
     }
 
     @Test
@@ -101,7 +126,7 @@ class EmailLinkIT extends SignUpItSupport {
         String userId = createUserWithEmail(unique("ver"), verified, PASSWORD);
         verifyEmail(userId);
         roleOf(userId, CUSTOMER);
-        ask(PORTAL, verified, "/").expectStatus().isAccepted();
+        ask(PORTAL, verified, "/portal/").expectStatus().isAccepted();
         deliver();
         signedIn(token(LINK, verified));
         assertThat(userOf(verified)).containsEntry("user_id", userId);
@@ -111,9 +136,45 @@ class EmailLinkIT extends SignUpItSupport {
         register(PORTAL, claimed, PASSWORD).expectStatus().isAccepted();
         ask(PORTAL, claimed, null).expectStatus().isAccepted();
         deliver();
-        signedIn(token(LINK, claimed));
-        assertThat(userOf(claimed)).containsEntry("password_hash", null).containsEntry("verified_email", claimed);
+        String registrant = (String) userOf(claimed).get("user_id");
+        // The registrant set up a second factor: it goes with the account, as do the registrant's sessions.
+        Map<String, Object> theirs = session((String) userOf(claimed).get("user_name"), PASSWORD, LOOSE);
+        enrollMfa(bearerOf(theirs));
+        assertThat(hasMfa(registrant)).isTrue();
+        ask(PORTAL, claimed, null).expectStatus().isAccepted();
+        deliver();
+        assertThat(signedIn(token(LINK, claimed))).containsEntry("status", "SIGNED_IN");
+        assertThat(userOf(claimed)).containsEntry("user_id", registrant).containsEntry("password_hash", null)
+            .containsEntry("verified_email", claimed);
+        assertThat(hasMfa(registrant)).isFalse();
         assertThat(refusal(loginTo(claimed, PASSWORD, PORTAL), 401)).isEqualTo("LOGIN_FAILED");
+        anonymous("/api/auth/refresh", Map.of("refreshToken", theirs.get("refreshToken"), "entry", LOOSE))
+            .expectStatus().isUnauthorized();
+    }
+
+    @Test
+    void onlyUsersTheEntryWouldSignInGetALinkAndTheAdministrationNeverCounts() {
+        // A back-office user at the portal: the portal does not accept the role.
+        String staff = address("staff");
+        String staffId = createUserWithEmail(unique("staff"), staff, PASSWORD);
+        verifyEmail(staffId);
+        roleOf(staffId, BACK_OFFICE);
+        ask(PORTAL, staff, null).expectStatus().isAccepted();
+        // An entry that accepts it, by link: a role granting every permission does not count there.
+        ask("ops", staff, null).expectStatus().isAccepted();
+        deliver();
+        assertThat(to(staff)).isEmpty();
+
+        // The role went after the link was mailed: the link is refused before anything changes.
+        String gone = address("gone");
+        String goneId = createUserWithEmail(unique("gone"), gone, PASSWORD);
+        verifyEmail(goneId);
+        roleOf(goneId, CUSTOMER);
+        ask(PORTAL, gone, null).expectStatus().isAccepted();
+        deliver();
+        String token = token(LINK, gone);
+        unassign(goneId);
+        assertThat(refusal(confirm(token), 422)).isEqualTo("TOKEN_INVALID");
     }
 
     @Test
@@ -131,7 +192,8 @@ class EmailLinkIT extends SignUpItSupport {
 
         // Not where it is off (the administration), and only a path of the front end.
         assertThat(refusal(ask("admin", nobody, null), 422)).isEqualTo("SIGN_UP_DISABLED");
-        for (String bad : List.of("//evil.example", "https://evil.example/", "/\\evil", "p/1", "/a/../b")) {
+        for (String bad : List.of("//evil.example", "https://evil.example/", "/\\evil", "p/1", "/portal/a/../b",
+            "/portal/%2e%2e/admin", "/portal/a/..?x", "/admin/", "/p/1", "/portalx/")) {
             assertThat(refusal(ask(PORTAL, nobody, bad), 400)).as(bad).isEqualTo("INVALID_VALUE");
         }
         assertThat(refusal(ask(PORTAL, "not an address", null), 400)).isEqualTo("INVALID_VALUE");
@@ -163,5 +225,15 @@ class EmailLinkIT extends SignUpItSupport {
 
     private void roleOf(String userId, String role) {
         assign(userId, roleId(role), null);
+    }
+
+    /** Removes the user's (only) role assignment, as an administrator. */
+    private void unassign(String userId) {
+        Map<String, Object> assignment = query("""
+            SELECT user_role_id::text AS id, version_no FROM sec_user_role_version WHERE user_id = ?::uuid
+            ORDER BY version_no DESC LIMIT 1""", userId).getFirst();
+        post("/api/datasets/" + SecurityEntities.USER_ROLE_DATASET + "/commit", admin(), Map.of("changes", List.of(
+            Map.of("action", "DELETE", "id", assignment.get("id"), "version", assignment.get("version_no")))))
+            .expectStatus().isOk();
     }
 }

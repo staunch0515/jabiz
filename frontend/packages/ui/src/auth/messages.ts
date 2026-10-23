@@ -217,15 +217,13 @@ const en = {
   emailLink: {
     hint: 'Enter your e-mail address. We send you a link to sign in with; no password needed.',
     send: 'Send me a link',
-    sent: 'If you can sign in here with {{email}}, a link is on its way. Open it on this device to continue.',
+    sent: 'If you can sign in here with {{email}}, a link is on its way.',
     otherAddress: 'Use another address',
     title: 'Sign in',
     signInHint: 'Continue to sign in as the owner of this mailbox.',
     signIn: 'Sign in',
     invalidHint: 'Ask for a new link below.',
     enrolled: 'Two-step verification is set up. Ask for a new link to sign in with it.',
-    usePassword: 'Sign in with a password instead',
-    useLink: 'Sign in with a link by e-mail instead',
   },
 }
 
@@ -437,15 +435,13 @@ const zh: Messages = {
   emailLink: {
     hint: '输入您的邮箱地址，我们会发送一个登录链接，无需密码。',
     send: '发送登录链接',
-    sent: '如果 {{email}} 可以在这里登录，登录链接已发出。请在本设备上打开它继续。',
+    sent: '如果 {{email}} 可以在这里登录，登录链接已发出。',
     otherAddress: '使用其他地址',
     title: '登录',
     signInHint: '以此邮箱所有者的身份继续登录。',
     signIn: '登录',
     invalidHint: '请在下面重新获取链接。',
     enrolled: '两步验证已设置。请重新获取链接，用它登录。',
-    usePassword: '改用密码登录',
-    useLink: '改用邮件链接登录',
   },
 }
 
@@ -655,15 +651,13 @@ const ja: Messages = {
   emailLink: {
     hint: 'メールアドレスを入力してください。ログイン用のリンクをお送りします。パスワードは不要です。',
     send: 'リンクを送信',
-    sent: '{{email}} でここにログインできる場合、リンクをお送りしました。この端末で開いて続けてください。',
+    sent: '{{email}} でここにログインできる場合、リンクをお送りしました。',
     otherAddress: '別のアドレスを使う',
     title: 'ログイン',
     signInHint: 'このメールボックスの所有者としてログインを続けます。',
     signIn: 'ログイン',
     invalidHint: '下から新しいリンクを請求してください。',
     enrolled: '二段階認証を設定しました。新しいリンクを請求して、それでログインしてください。',
-    usePassword: 'パスワードでログインする',
-    useLink: 'メールのリンクでログインする',
   },
 }
 

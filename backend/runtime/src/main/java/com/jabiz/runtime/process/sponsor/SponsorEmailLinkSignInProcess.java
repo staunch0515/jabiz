@@ -1,5 +1,6 @@
 package com.jabiz.runtime.process.sponsor;
 
+import com.jabiz.process.ComputeStep;
 import com.jabiz.process.NoMetadata;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.query.QueryPredicate;
@@ -59,7 +60,7 @@ public final class SponsorEmailLinkSignInProcess {
 
     /** Whether the user may sign in at all: not locked, enabled. */
     @Component
-    public static class EmailLinkAccountStep implements com.jabiz.process.ComputeStep<NoMetadata, EmailLinkContext> {
+    public static class EmailLinkAccountStep implements ComputeStep<NoMetadata, EmailLinkContext> {
 
         private final LoginAttemptPolicy policy;
 
@@ -84,7 +85,7 @@ public final class SponsorEmailLinkSignInProcess {
 
     /** {@link LoginRecordStep} for sign-ins with a mailed link. */
     @Component
-    public static class EmailLinkLoginRecordStep implements com.jabiz.process.ComputeStep<NoMetadata, EmailLinkContext> {
+    public static class EmailLinkLoginRecordStep implements ComputeStep<NoMetadata, EmailLinkContext> {
 
         private final LoginAttemptPolicy policy;
 

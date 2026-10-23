@@ -6,6 +6,7 @@ import com.jabiz.mail.MailCategory;
 import com.jabiz.mail.MailRecipient;
 import com.jabiz.mail.MailTemplate;
 import com.jabiz.process.ProcessDefinition;
+import com.jabiz.process.ProcessDefinitionBuilder;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.runtime.EntityInstance;
@@ -15,14 +16,18 @@ import com.jabiz.runtime.mail.SendMail;
 import com.jabiz.runtime.process.steps.QueryEntities;
 import com.jabiz.security.EmailVerification;
 import com.jabiz.security.Sensitive;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 import java.util.regex.Pattern;
 
 /**
@@ -32,18 +37,19 @@ import java.util.regex.Pattern;
  * no role):
  * <ul>
  *   <li>{@value #SEND}: answered alike for every address. An enabled user at a trusted address (verified, or
- *       pre-claimable) gets a sign-in link; an address nobody uses gets one that opens an account, where the entry lets
- *       people register; anyone else gets nothing.</li>
+ *       pre-claimable) who holds a role the entry accepts gets a sign-in link; an address nobody uses gets one that
+ *       opens an account, where the entry lets people register; anyone else gets nothing.</li>
  *   <li>{@value #OPEN}: uses the link (the first of the recipient's links used wins, as for verification, D53), then
- *       checks the user it stands for as any mailed link is checked (enabled, still at that address) and proves the
- *       address. A pre-claimable account is taken over (its password, second factor, provider links and sessions go:
+ *       checks the user it stands for as any mailed link is checked (enabled, still at that address, still holding a
+ *       role the entry accepts) and proves the address. A pre-claimable account is taken over (its password, second factor, provider links and sessions go:
  *       whoever registered it may not own the mailbox). An address link opens the account then: verified, no password,
  *       the entry's registration roles; when the address meanwhile belongs to a user at a trusted address, the link
  *       stands for that user. The sign-in itself, with its record, guards and second factor, is
  *       {@code SPONSOR_EMAIL_LINK_SIGN_IN} run right afterwards.</li>
  * </ul>
- * A link carries the path of the entry's front end to return to ({@code to}): a relative path, checked before it is
- * mailed and again by the page.
+ * A link carries the path to return to ({@code to}): a path from the site's root within the entry's front end
+ * ({@code app-path}), checked before it is mailed and again by the page. Roles granting the administration do not
+ * count at an entry with sign-in links, as in a long session ({@link Rbac#withoutAdministration}).
  */
 @Configuration
 public class EmailLinkProcesses {
@@ -59,15 +65,39 @@ public class EmailLinkProcesses {
     /** Longest path to return to. */
     public static final int MAX_TO = 200;
     /**
-     * A path of the front end: starts with one {@code /}, then the characters of a path and its query only (no
-     * scheme, host, {@code //} or {@code \}), so the link can only lead within the front end.
+     * A path of this site: starts with one {@code /}, then the characters of a path and its query only (no scheme,
+     * host, {@code //} or {@code \}).
      */
     static final Pattern RETURN_PATH = Pattern.compile("/(?![/\\\\])[A-Za-z0-9._~!$&'()*+,;=:@%/?-]*");
 
-    /** Whether {@code to} may be mailed as the path to return to: empty (the front end's root), or a path of it. */
-    public static boolean returnPath(String to) {
-        return to == null || to.isEmpty() || (to.length() <= MAX_TO && RETURN_PATH.matcher(to).matches()
-            && !to.contains("/../") && !to.endsWith("/..") && !to.contains("\\"));
+    /**
+     * Whether {@code to} may be mailed as the path to return to: empty (the front end's root), or a path from the
+     * site's root within {@code appPath} whose segments, decoded, are never {@code .} or {@code ..}.
+     */
+    public static boolean returnPath(String to, String appPath) {
+        if (to == null || to.isEmpty()) {
+            return true;
+        }
+        if (to.length() > MAX_TO || !RETURN_PATH.matcher(to).matches()) {
+            return false;
+        }
+        String path = to.split("[?#]", 2)[0];
+        String root = appPath.endsWith("/") ? appPath : appPath + "/";
+        if (!path.equals(appPath) && !path.startsWith(root)) {
+            return false;
+        }
+        for (String segment : path.split("/")) {
+            String decoded;
+            try {
+                decoded = URLDecoder.decode(segment.replace("+", "%2B"), StandardCharsets.UTF_8);
+            } catch (IllegalArgumentException malformed) {
+                return false;
+            }
+            if (decoded.equals(".") || decoded.equals("..") || decoded.contains("/") || decoded.contains("\\")) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
@@ -99,6 +129,9 @@ public class EmailLinkProcesses {
     private static final String TO_USER = "to_user";
     private static final String TO_ADDRESS = "to_address";
     private static final String OPENED = "opened";
+    private static final String ASSIGNMENTS = "assignments";
+    private static final String HELD_ROLES = "held_roles";
+    private static final String GRANTS = "grants";
 
     // ---- the request ------------------------------------------------------------------------------------------------
 
@@ -118,17 +151,21 @@ public class EmailLinkProcesses {
                 .outputMapper(ctx -> SignUpProcesses.Done.DONE)
                 .step("Find the address", LoadUserByEmail.<AccountContext>into(AccountContext::email,
                     SignUpProcesses.USERS))
+                .steps(b -> roleSteps(b, entries))
                 .compute("Decide", (metadata, ctx) -> {
                     SignInEntries.Entry entry = entries.find(ctx.entryName()).filter(SignInEntries.Entry::emailLink)
                         .orElse(null);
-                    if (entry == null || !returnPath((String) ctx.get(TO))) {
+                    if (entry == null || !returnPath((String) ctx.get(TO), entry.appPath())) {
                         return;
                     }
                     List<EntityInstance> found = ctx.list(SignUpProcesses.USERS);
                     EntityInstance user = ctx.user();
                     if (!found.isEmpty()) {
                         // An address an administrator set and nobody verified gets nothing: its link proves nothing.
-                        if (user != null && Rbac.enabled(user) && SignUpProcesses.trusted(user)) {
+                        // Nor does a user the entry would refuse: the link would take over a pre-claimable account
+                        // for nothing.
+                        if (user != null && Rbac.enabled(user) && SignUpProcesses.trusted(user)
+                            && signsIn(ctx, entry)) {
                             ctx.put(TO_USER, user.id());
                         }
                     } else if (entry.selfRegistration()) {
@@ -142,8 +179,30 @@ public class EmailLinkProcesses {
                     ctx -> MailRecipient.address(ctx.email(), SignUpProcesses.mailLocale(ctx)), params())));
     }
 
-    private static Map<String, java.util.function.Function<AccountContext, ?>> params() {
+    private static Map<String, Function<AccountContext, ?>> params() {
         return Map.of(AuthMailTemplates.ENTRY, AccountContext::entryName, TO, ctx -> ctx.get(TO));
+    }
+
+    /** The roles of the user found and the permissions of those the entry accepts, for {@link #signsIn}. */
+    private static void roleSteps(ProcessDefinitionBuilder<?, ?, AccountContext> pb,
+        SignInEntries entries) {
+        pb.step("Load the role assignments", QueryEntities.<AccountContext>of(SecurityEntities.USER_ROLE_DATASET,
+                ctx -> Rbac.assignmentsOf(ctx.user() == null ? null : ctx.user().id()), ASSIGNMENTS))
+            .step("Load the roles", QueryEntities.<AccountContext>of(SecurityEntities.ROLE_DATASET,
+                ctx -> Rbac.rolesOf(ctx.list(ASSIGNMENTS)), HELD_ROLES))
+            .step("Load the permissions", QueryEntities.<AccountContext>of(SecurityEntities.ROLE_PERMISSION_DATASET,
+                ctx -> Rbac.permissionsOf(Rbac.acceptedBy(ctx.list(HELD_ROLES),
+                    entries.find(ctx.entryName()).orElse(null))), GRANTS));
+    }
+
+    /**
+     * Whether the user found holds a role in effect that the entry accepts, roles granting the administration aside:
+     * the sign-in that follows the link would refuse anyone else ({@code NO_ROLE}).
+     */
+    private static boolean signsIn(AccountContext ctx, SignInEntries.Entry entry) {
+        List<EntityInstance> grants = ctx.list(GRANTS);
+        return !Rbac.access(ctx.list(ASSIGNMENTS), Rbac.withoutAdministration(Rbac.acceptedBy(ctx.list(HELD_ROLES),
+            entry), grants, entry), grants).roles().isEmpty();
     }
 
     // ---- the link ---------------------------------------------------------------------------------------------------
@@ -172,6 +231,7 @@ public class EmailLinkProcesses {
             .step("Find the user name", QueryEntities.<AccountContext>of(SecurityEntities.USER_DATASET,
                 ctx -> EntityQuery.builder().where(new QueryPredicate.Eq("userName", SignUpProcesses.baseName(
                     ctx.consumed() == null ? "" : ctx.consumed().address()))).limit(1).build(), SignUpProcesses.NAMES))
+            .steps(b -> roleSteps(b, entries))
             .step("Find the registration roles", QueryEntities.<AccountContext>of(SecurityEntities.ROLE_DATASET,
                 ctx -> SignUpProcesses.rolesNamed(entries.resolve(ctx.entryName()).registrationRoles()),
                 SignUpProcesses.ROLES))
@@ -212,6 +272,11 @@ public class EmailLinkProcesses {
                 invalid(ctx, "user or address changed");
                 return;
             }
+            if (!signsIn(ctx, entry)) {
+                // Checked before anything changes: no takeover for a sign-in that would be refused.
+                invalid(ctx, "the user cannot sign in here");
+                return;
+            }
             Map<String, Object> changed = SignUpProcesses.proof(ctx, user);
             if (SignUpProcesses.preClaimable(user)) {
                 // Whoever registered the address may not own the mailbox: the account is the mailbox owner's now.
@@ -225,8 +290,8 @@ public class EmailLinkProcesses {
             ctx.put(OPENED, new OpenOutput(String.valueOf(user.id()), entry.name(), false));
             return;
         }
-        if (toUser || !entry.selfRegistration()) {
-            invalid(ctx, toUser ? "the user is gone" : "the entry takes no registrations");
+        if (toUser || !entry.selfRegistration() || !ctx.list(SignUpProcesses.USERS).isEmpty()) {
+            invalid(ctx, toUser ? "the user is gone" : "the entry takes no registrations, or the address is taken");
             return;
         }
         Map<String, EntityInstance> roles = SignUpProcesses.registrationRoles(ctx, entry);
@@ -264,7 +329,7 @@ public class EmailLinkProcesses {
 
     @Bean
     ProcessDefinition<SendInput, SignUpProcesses.Done, AccountContext> sponsorEmailLinkSendProcess(
-        @org.springframework.beans.factory.annotation.Qualifier("authEmailLinkMail") MailTemplate template,
+        @Qualifier("authEmailLinkMail") MailTemplate template,
         SignInEntries entries) {
         return send(template, entries);
     }
