@@ -54,6 +54,14 @@ public final class QbParams {
     public static final String BANK_RECEIVING_HOLDER = BANK_RECEIVING_PREFIX + "account-holder";
     public static final List<String> BANK_RECEIVING = List.of(BANK_RECEIVING_BANK, BANK_RECEIVING_BRANCH,
         BANK_RECEIVING_TYPE, BANK_RECEIVING_NUMBER, BANK_RECEIVING_HOLDER);
+    /** Whether takers may withdraw to a bank account (Q13b). */
+    public static final String WITHDRAWAL_BANK_ENABLED = "qb.withdrawal.bank.enabled";
+    /** The platform's fixed fee on each bank withdrawal, in Kudos, taken from the amount (Q13b, B-4). */
+    public static final String WITHDRAWAL_BANK_FEE = "qb.withdrawal.bank.fee";
+    /** Hours after a bank account is saved or changed before anything may be withdrawn to it (Q13b). */
+    public static final String WITHDRAWAL_BANK_COOLDOWN_HOURS = "qb.withdrawal.bank.cooldown-hours";
+    public static final List<String> WITHDRAWAL_BANK = List.of(WITHDRAWAL_BANK_ENABLED, WITHDRAWAL_BANK_FEE,
+        WITHDRAWAL_BANK_COOLDOWN_HOURS);
     /** Whether sponsor onboarding is approved without a person's review. */
     public static final String REVIEW_SPONSOR_AUTO = "qb.review.sponsor.auto";
     /** Whether publications are approved without a person's review. */
@@ -149,7 +157,7 @@ public final class QbParams {
         TRANSFER_THRESHOLD, TRANSFER_REVIEW_ABOVE, TRANSFER_ENABLED, REVIEW_SPONSOR_AUTO, REVIEW_PUBLICATION_AUTO,
         TOPUP_MIN, TOPUP_MAX, TRANSFER_FEE, TRANSFER_HOLD_DAYS, TOPUP_NEW_SPONSOR_DAYS, TOPUP_NEW_SPONSOR_MAX_TOTAL),
         JOURNAL_ACCOUNTS, ISSUER, List.of(LEGAL_MAX_ANNOUNCE_DAYS), AI_CONTROLLED,
-        List.of(TOPUP_BANK_MIN, TOPUP_BANK_MAX), BANK_RECEIVING).flatMap(List::stream).toList();
+        List.of(TOPUP_BANK_MIN, TOPUP_BANK_MAX), BANK_RECEIVING, WITHDRAWAL_BANK).flatMap(List::stream).toList();
 
     /** A parameter: its key, kind (as the platform writes kinds) and first value. */
     public record Param(String key, Map<String, Object> valueKind, Object value, String description) {
@@ -248,7 +256,12 @@ public final class QbParams {
         new Param(BANK_RECEIVING_NUMBER, Map.of("type", "text", "maxLength", 20), "",
             "Number of the receiving account"),
         new Param(BANK_RECEIVING_HOLDER, Map.of("type", "text", "maxLength", 100), "",
-            "Holder of the receiving account, as the bank shows it (katakana)"));
+            "Holder of the receiving account, as the bank shows it (katakana)"),
+        // Q13b: bank withdrawals (controlled, last, in the order of CONTROLLED).
+        new Param(WITHDRAWAL_BANK_ENABLED, BOOL, false, "Whether takers may withdraw to a bank account"),
+        new Param(WITHDRAWAL_BANK_FEE, KUDOS, "0", "The platform's fee on each bank withdrawal, in Kudos (0: none)"),
+        new Param(WITHDRAWAL_BANK_COOLDOWN_HOURS, Map.of("type", "numeric", "precision", 4, "scale", 0), "72",
+            "Hours after a bank account is saved or changed before anything may be withdrawn to it"));
 
     private static Param journal(String key, String account) {
         return new Param(key, ACCOUNT_CODE, "", "Accounting system's account code for " + account

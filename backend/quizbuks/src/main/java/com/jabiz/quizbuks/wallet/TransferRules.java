@@ -44,6 +44,8 @@ public final class TransferRules {
      * asks for the review. Never from {@link #plan}.
      */
     public static final String REVIEW_NOT_NOW = "REVIEW_NOT_NOW";
+    /** The taker is paid by bank (Q13b): they ask for each withdrawal, the daily run leaves them. */
+    public static final String BANK_METHOD = "BANK_METHOD";
 
     public static final int MAX_FAILURE_STREAK = 3;
 

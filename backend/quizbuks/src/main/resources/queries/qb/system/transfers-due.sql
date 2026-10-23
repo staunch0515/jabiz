@@ -1,12 +1,13 @@
 /*---
 id: qb.system.transfers-due
 description: Takers to transfer to at the given time - transfers on, a cached balance at the threshold, an enabled payout account, not banned, nothing unfinished, not held (the items of the job qb.transfer-run)
-entities: [QbWallet, QbPayoutAccount, QbTransfer, QbUserBan, SysParam]
+entities: [QbWallet, QbPayoutAccount, QbTransfer, QbUserBan, QbBankAccount, SysParam]
 datasets:
   QbWallet: urn:jabiz:dataset:default:QbWallet
   QbPayoutAccount: urn:jabiz:dataset:default:QbPayoutAccount
   QbTransfer: urn:jabiz:dataset:default:QbTransfer
   QbUserBan: urn:jabiz:dataset:default:QbUserBan
+  QbBankAccount: urn:jabiz:dataset:default:QbBankAccount
   SysParam: urn:jabiz:dataset:platform:SysParam
 timeSlice: { asOf: at }
 params:
@@ -39,6 +40,10 @@ WHERE w.{{QbWallet.kind}} = 'TAKER'
   AND w.{{QbWallet.balance}} > 0
   AND w.{{QbWallet.balance}} >= CAST(params.p_threshold AS numeric)
   AND pa.{{QbPayoutAccount.status}} = 'ENABLED'
+  -- Paid by bank (Q13b): the taker asks for each withdrawal.
+  AND NOT EXISTS (SELECT 1 FROM {{QbBankAccount}} ba
+                  WHERE ba.{{QbBankAccount.userId}} = w.{{QbWallet.ownerId}}
+                    AND ba.{{QbBankAccount.payoutMethod}} = 'BANK')
   AND NOT EXISTS (SELECT 1 FROM {{QbUserBan}} b
                   WHERE CAST(b.{{QbUserBan.userId}} AS text) = w.{{QbWallet.ownerId}} AND b.{{QbUserBan.banned}})
   AND NOT EXISTS (SELECT 1 FROM {{QbTransfer}} t

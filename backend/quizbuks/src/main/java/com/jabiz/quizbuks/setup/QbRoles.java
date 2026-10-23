@@ -57,7 +57,9 @@ public final class QbRoles {
         // Q13a: bank top-ups, recorded from the statement by one administrator and approved by another.
         QbPermissions.TOPUP_BANK_RECORD, QbPermissions.TOPUP_BANK_APPROVE,
         // Q14: a taker's transfer at once, with the daily run's checks.
-        QbPermissions.TRANSFER_NOW);
+        QbPermissions.TRANSFER_NOW,
+        // Q13b: bank withdrawals, paid by hand from the account number revealed one at a time.
+        QbPermissions.PAYOUT_BANK_REVEAL, QbPermissions.WITHDRAWAL_PAY);
 
     /**
      * What the super administrator holds beyond the other two: bans, reading parameters, proposing controlled changes,

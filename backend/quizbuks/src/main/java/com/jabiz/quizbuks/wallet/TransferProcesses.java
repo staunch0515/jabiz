@@ -183,6 +183,7 @@ public final class TransferProcesses {
     static final String RULES = "rules";
     static final String REVIEW_TASKS = "reviewTasks";
     static final String PENDING_WRITE = "pendingWrite";
+    static final String BANK_ACCOUNT = "bankAccount";
 
     /** The code of a transfer in doubt that Stripe was found not to have: reversed (not the taker's failure). */
     public static final String NOT_AT_STRIPE = "NOT_AT_STRIPE";
@@ -256,6 +257,7 @@ public final class TransferProcesses {
                     ctx -> EntityQuery.builder().where(new QueryPredicate.And(List.of(
                         new QueryPredicate.Eq("subject", QbPayouts.APPROVAL_SUBJECT),
                         new QueryPredicate.Eq("enabled", true)))).limit(1).build(), RULES))
+                .steps(b -> loadBankAccount(b, TransferProcesses::userOf))
                 .compute("Decide", (metadata, ctx) -> ctx.put(PLAN, planOf(ctx))));
     }
 
@@ -281,6 +283,7 @@ public final class TransferProcesses {
                         new QueryPredicate.Eq("subject", QbPayouts.APPROVAL_SUBJECT),
                         new QueryPredicate.Eq("enabled", true)))).limit(1).build(), RULES))
                 .steps(b -> TakerWallets.load(b, TransferProcesses::userOf))
+                .steps(b -> loadBankAccount(b, TransferProcesses::userOf))
                 .compute("Decide", (metadata, ctx) -> plan(ctx, reviewable))
                 // No rule: nothing is written for the taker; finance hears of it once a day, not once per taker.
                 .step("Find the day's task about the rule", QueryEntities.<ProcessContext>of(TaskEntities.TASK_DATASET,
@@ -316,6 +319,7 @@ public final class TransferProcesses {
         }
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("userId", userOf(ctx));
+        values.put("method", QbPayouts.STRIPE);
         values.put("externalAccountId", account.get("externalAccountId"));
         values.put("amount", plan.amount());
         values.put("fee", plan.fee());
@@ -328,6 +332,11 @@ public final class TransferProcesses {
 
     /** The rules' decision for the taker from what was read (the parameters, the taker, their transfers, the rule). */
     static TransferRules.Plan planOf(ProcessContext ctx) {
+        EntityInstance bank = first(ctx, BANK_ACCOUNT);
+        if (bank != null && QbPayouts.BANK.equals(bank.get("payoutMethod"))) {
+            // Paid by bank (Q13b): the taker asks for each withdrawal; the daily run leaves them.
+            return TransferRules.Plan.skip(TransferRules.BANK_METHOD);
+        }
         ParamValues params = ctx.get(PARAMS, ParamValues.class);
         EntityInstance ban = first(ctx, BAN);
         EntityInstance account = first(ctx, ACCOUNT);
@@ -390,7 +399,7 @@ public final class TransferProcesses {
                     return QbPayouts.APPROVAL_SUBJECT.equals(input.subject()) ? input.entityId() : null;
                 }))
                 .step("Load the parameters", LoadParams.<ProcessContext>of(ProcessContext::opTime, PARAMS,
-                    QbParams.TRANSFER_ENABLED, QbParams.TRANSFER_HOLD_DAYS))
+                    QbParams.TRANSFER_ENABLED, QbParams.TRANSFER_HOLD_DAYS, QbParams.WITHDRAWAL_BANK_ENABLED))
                 .steps(b -> loadTaker(b, TransferProcesses::transferUser))
                 .step("Load the request", QueryEntities.<ProcessContext>of(ApprovalEntities.REQUEST_DATASET,
                     ctx -> EntityQuery.builder().where(new QueryPredicate.In("requestId", ownRequest(ctx)
@@ -401,7 +410,11 @@ public final class TransferProcesses {
                     ctx -> approvalCase(first(ctx, TRANSFER)).preparedBy(approvalInput(ctx).preparerId()), APPROVAL))
                 .compute("Send or reject", (metadata, ctx) -> decided(ctx))
                 .steps(b -> sending(b, stripe))
-                .steps(TransferProcesses::finish));
+                .steps(TransferProcesses::finish)
+                // An approved withdrawal (Q13b) is paid by finance by hand.
+                .step("Ask finance to pay", CreateTask.<ProcessContext>when(
+                    ctx -> ctx.contains(SEND) && bank(first(ctx, TRANSFER)),
+                    ctx -> BankWithdrawals.payTask(first(ctx, TRANSFER)))));
     }
 
     private static boolean ownRequest(ProcessContext ctx) {
@@ -429,12 +442,16 @@ public final class TransferProcesses {
             EntityInstance ban = first(ctx, BAN);
             BigDecimal amount = QbPayouts.money(transfer.get("amount"));
             ParamValues params = ctx.get(PARAMS, ParamValues.class);
-            boolean sendable = Boolean.TRUE.equals(params.get(QbParams.TRANSFER_ENABLED, Boolean.class))
-                && TransferRules.wholeAndNotNegative(params.get(QbParams.TRANSFER_HOLD_DAYS, BigDecimal.class))
+            boolean common = TransferRules.wholeAndNotNegative(params.get(QbParams.TRANSFER_HOLD_DAYS,
+                    BigDecimal.class))
                 && !BanRules.banned(ban == null ? null : ban.attributes())
-                && account != null && PayoutAccountStatus.ENABLED.equals(account.get("status"))
-                && transfer.get("externalAccountId").equals(account.get("externalAccountId"))
                 && TransferRules.transferable(ledgerBalance(ctx), rewardsHeld(ctx)).compareTo(amount) >= 0;
+            // A withdrawal goes to the bank account copied when it was asked for (Q13b): finance pays it by hand.
+            boolean sendable = common && (bank(transfer)
+                ? Boolean.TRUE.equals(params.get(QbParams.WITHDRAWAL_BANK_ENABLED, Boolean.class))
+                : Boolean.TRUE.equals(params.get(QbParams.TRANSFER_ENABLED, Boolean.class))
+                    && account != null && PayoutAccountStatus.ENABLED.equals(account.get("status"))
+                    && transfer.get("externalAccountId").equals(account.get("externalAccountId")));
             if (sendable) {
                 ctx.put(SEND, true);
             } else {
@@ -475,6 +492,16 @@ public final class TransferProcesses {
         content.put("amount", QbPayouts.money(transfer.get("amount")));
         content.put("fee", QbPayouts.money(transfer.get("fee")));
         content.put("net", QbPayouts.money(transfer.get("net")));
+        if (bank(transfer)) {
+            // The account the money goes to, as the reviewer sees it: the number only by its last digits (it is
+            // masked), the copy on the transfer never changes.
+            content.put("method", QbPayouts.BANK);
+            content.put("bank", transfer.get("bankCode") + " " + transfer.get("bankName"));
+            content.put("branch", transfer.get("branchCode") + " " + transfer.get("branchName"));
+            content.put("accountType", transfer.get("accountType"));
+            content.put("accountLast4", last4(transfer.get("accountNumber")));
+            content.put("accountHolder", transfer.get("accountHolder"));
+        }
         return ApprovalCase.of(transfer.id(), facts, content).preparedBy(transfer.get("userId"))
             .reference(String.valueOf(transfer.id()));
     }
@@ -518,8 +545,27 @@ public final class TransferProcesses {
                         transfer.get("externalAccountId"), QbPayouts.money(transfer.get("net")));
                 })
                 .reference(ctx -> String.valueOf(first(ctx, TRANSFER).id()))
-                .when(ctx -> ctx.contains(SEND))
+                // A withdrawal waits in SENDING for finance to pay it by hand (Q13b): nothing goes to Stripe.
+                .when(ctx -> ctx.contains(SEND) && !bank(first(ctx, TRANSFER)))
                 .outputKey(JOB_ID));
+    }
+
+    /** Whether the transfer is a withdrawal to a bank account (Q13b). */
+    static boolean bank(EntityInstance transfer) {
+        return transfer != null && QbPayouts.BANK.equals(transfer.get("method"));
+    }
+
+    private static String last4(Object number) {
+        String text = number == null ? "" : number.toString();
+        return text.length() <= 4 ? text : text.substring(text.length() - 4);
+    }
+
+    /** The taker's bank account, if any (Q13b): how they are paid. */
+    static <I, O> void loadBankAccount(ProcessDefinitionBuilder<I, O, ProcessContext> pb,
+        Function<ProcessContext, Object> userId) {
+        pb.step("Load the bank account", QueryEntities.<ProcessContext>of(
+            QbPayouts.defaultDataset(QbPayouts.BANK_ACCOUNT), ctx -> EntityQuery.builder().where(
+                new QueryPredicate.In("userId", userIds(userId.apply(ctx)))).limit(1).build(), BANK_ACCOUNT));
     }
 
     // ---- the job's result ------------------------------------------------------------------------------------------
@@ -609,6 +655,9 @@ public final class TransferProcesses {
      * does not fit the record is a person's: Stripe would only say the same again.
      */
     static boolean inDoubt(EntityInstance transfer, Instant now) {
+        if (bank(transfer)) {
+            return false;
+        }
         Instant asked = transfer.get("checkRequestedAt");
         if (asked != null && asked.isAfter(now.minus(ASK_AGAIN_AFTER))) {
             return false;
@@ -763,7 +812,7 @@ public final class TransferProcesses {
         ctx.put(REASON_AMOUNT, QbPayouts.money(transfer.get("net")));
     }
 
-    private static <I, O> void settling(ProcessDefinitionBuilder<I, O, ProcessContext> pb) {
+    static <I, O> void settling(ProcessDefinitionBuilder<I, O, ProcessContext> pb) {
         pb.step("Post the settlement", CallProcess.<ProcessContext>when(ctx -> ctx.contains(SETTLE),
                 LedgerProcesses.POST, 1, ctx -> ctx.get(SETTLE_INPUT), SETTLEMENT))
             .compute("Record the settlement", (metadata, ctx) -> {
@@ -783,7 +832,7 @@ public final class TransferProcesses {
             });
     }
 
-    private static <I, O> void reversing(ProcessDefinitionBuilder<I, O, ProcessContext> pb) {
+    static <I, O> void reversing(ProcessDefinitionBuilder<I, O, ProcessContext> pb) {
         pb.step("Reverse the sending", CallProcess.<ProcessContext>when(ctx -> ctx.contains(REVERSE),
                 LedgerProcesses.REVERSE, 1, ctx -> ctx.get(REVERSE_INPUT), REVERSAL))
             .compute("Record the failure", (metadata, ctx) -> {
@@ -964,7 +1013,7 @@ public final class TransferProcesses {
     // ---- shared ----------------------------------------------------------------------------------------------------
 
     /** Finds the transfer, locks its taker's wallet, reads the transfer and the wallet again. */
-    private static <I, O> void lockAndLoad(ProcessDefinitionBuilder<I, O, ProcessContext> pb,
+    static <I, O> void lockAndLoad(ProcessDefinitionBuilder<I, O, ProcessContext> pb,
         Function<ProcessContext, String> transferId) {
         pb.step("Find the transfer", QueryEntities.<ProcessContext>of(QbPayouts.defaultDataset(QbPayouts.TRANSFER),
                 ctx -> byId(transferId.apply(ctx)), FOUND))
@@ -981,7 +1030,7 @@ public final class TransferProcesses {
      * The taker's ban, payout account, ledger balance and the rewards held back (under their wallet lock; Q10b, M3:
      * {@value TakerWallets#TRANSFERABLE_TEMPLATE}, after the parameters are loaded).
      */
-    private static <I, O> void loadTaker(ProcessDefinitionBuilder<I, O, ProcessContext> pb,
+    static <I, O> void loadTaker(ProcessDefinitionBuilder<I, O, ProcessContext> pb,
         Function<ProcessContext, Object> userId) {
         pb.step("Load the taker's ban", QueryEntities.<ProcessContext>of(QbAccounts.defaultDataset(QbAccounts.BAN),
                 ctx -> EntityQuery.builder().where(new QueryPredicate.In("userId", uuids(userId.apply(ctx))))
@@ -1006,7 +1055,7 @@ public final class TransferProcesses {
      * The end of every transfer process: the taker's wallet recomputed from the ledger when the transfer moved money,
      * the change announced (and its outcome, for Q7), a task when there is a reason.
      */
-    private static <I, O> void finish(ProcessDefinitionBuilder<I, O, ProcessContext> pb) {
+    static <I, O> void finish(ProcessDefinitionBuilder<I, O, ProcessContext> pb) {
         pb.compute("Save the transfer's changes", (metadata, ctx) -> save(ctx))
             .compute("Note what changed", (metadata, ctx) -> {
                 if (ctx.contains(SEND) || ctx.contains(SETTLE) || ctx.contains(REVERSE) || ctx.contains(RETURN)) {
@@ -1060,7 +1109,7 @@ public final class TransferProcesses {
      * it, and each update is checked against the version read).
      */
     @SuppressWarnings("unchecked")
-    private static void write(ProcessContext ctx, EntityInstance transfer, Map<String, Object> values) {
+    static void write(ProcessContext ctx, EntityInstance transfer, Map<String, Object> values) {
         Map<String, Object> pending = ctx.contains(PENDING_WRITE) ? (Map<String, Object>) ctx.get(PENDING_WRITE)
             : new LinkedHashMap<>();
         pending.putAll(values);
@@ -1068,7 +1117,7 @@ public final class TransferProcesses {
     }
 
     @SuppressWarnings("unchecked")
-    private static void save(ProcessContext ctx) {
+    static void save(ProcessContext ctx) {
         EntityInstance transfer = first(ctx, TRANSFER);
         if (transfer == null || !ctx.contains(PENDING_WRITE)) {
             return;
@@ -1094,7 +1143,7 @@ public final class TransferProcesses {
             .orderBy("createdAt", false).limit(HOLD_BATCH).build();
     }
 
-    private static List<Object> userIds(Object userId) {
+    static List<Object> userIds(Object userId) {
         List<Object> ids = new ArrayList<>();
         if (userId != null) {
             ids.add(String.valueOf(userId));
@@ -1115,7 +1164,7 @@ public final class TransferProcesses {
         return EntityQuery.builder().where(new QueryPredicate.In("transferId", ids(transferId))).limit(1).build();
     }
 
-    private static List<Object> ids(String id) {
+    static List<Object> ids(String id) {
         List<Object> ids = new ArrayList<>();
         if (StripeIds.is(StripeIds.TOPUP, id)) {
             ids.add(id);
@@ -1123,7 +1172,7 @@ public final class TransferProcesses {
         return ids;
     }
 
-    private static List<Object> uuids(Object id) {
+    static List<Object> uuids(Object id) {
         List<Object> ids = new ArrayList<>();
         try {
             if (id != null) {
@@ -1135,12 +1184,12 @@ public final class TransferProcesses {
         return ids;
     }
 
-    private static BigDecimal ledgerBalance(ProcessContext ctx) {
+    static BigDecimal ledgerBalance(ProcessContext ctx) {
         return ledger(ctx, "available");
     }
 
     /** The rewards held back from transfers (Q10b, M3). */
-    private static BigDecimal rewardsHeld(ProcessContext ctx) {
+    static BigDecimal rewardsHeld(ProcessContext ctx) {
         return ledger(ctx, "held");
     }
 
@@ -1150,12 +1199,12 @@ public final class TransferProcesses {
         return rows == null || rows.isEmpty() ? BigDecimal.ZERO : TakerWallets.money(rows.getFirst().get(column));
     }
 
-    private static String userOf(ProcessContext ctx) {
+    static String userOf(ProcessContext ctx) {
         return ctx.get(INPUT, UserRef.class).userId();
     }
 
     /** The taker the process is about: the transfer's, or the input's for the creation. */
-    private static Object transferUser(ProcessContext ctx) {
+    static Object transferUser(ProcessContext ctx) {
         EntityInstance transfer = first(ctx, TRANSFER);
         if (transfer != null) {
             return transfer.get("userId");
@@ -1176,17 +1225,17 @@ public final class TransferProcesses {
         return ctx.get(EVENT, ReceivedEvent.class);
     }
 
-    private static String clip(String text, int max) {
+    static String clip(String text, int max) {
         return text == null || text.length() <= max ? text : text.substring(0, max);
     }
 
-    private static ProcessContext context(com.jabiz.process.ProcessStart start, Object input) {
+    static ProcessContext context(com.jabiz.process.ProcessStart start, Object input) {
         ProcessContext ctx = new ProcessContext(start);
         ctx.put(INPUT, input);
         return ctx;
     }
 
-    private static TransferOutput output(ProcessContext ctx) {
+    static TransferOutput output(ProcessContext ctx) {
         EntityInstance transfer = first(ctx, TRANSFER);
         if (transfer == null && TransferRules.OPEN_TRANSFER.equals(ctx.get(SKIP))) {
             // Skipped for the unfinished one: that is the transfer the caller is told about.

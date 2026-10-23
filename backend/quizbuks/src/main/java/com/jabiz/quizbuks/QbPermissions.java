@@ -132,6 +132,13 @@ public final class QbPermissions {
      * Transfer a taker's balance at once instead of waiting for the daily run, with the same checks (Q14). Finance.
      */
     public static final String TRANSFER_NOW = "qb.transfer.now";
+    /**
+     * See a taker's bank account number in plain text, one value at a time (Q13b: the platform's reveal, recorded), to
+     * pay a withdrawal. Finance.
+     */
+    public static final String PAYOUT_BANK_REVEAL = "qb.payout.bank.reveal";
+    /** Record an approved bank withdrawal as paid by the bank, or as returned (Q13b). Finance. */
+    public static final String WITHDRAWAL_PAY = "qb.withdrawal.pay";
     /** See and follow up the daily balance reconciliation. */
     public static final String RECONCILE = "qb.reconcile";
     /**
