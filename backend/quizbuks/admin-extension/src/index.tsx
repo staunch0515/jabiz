@@ -6,6 +6,7 @@ import {
   ClipboardCheck,
   FileQuestion,
   FileSpreadsheet,
+  HandCoins,
   Landmark,
   ListChecks,
   Megaphone,
@@ -21,6 +22,8 @@ import BankTopUpPage from './BankTopUpPage'
 import BankSettingsPage from './BankSettingsPage'
 import BankTopUpsPage from './BankTopUpsPage'
 import BankWithdrawalsPage from './BankWithdrawalsPage'
+import ManualCreditPage from './ManualCreditPage'
+import ManualCreditsPage from './ManualCreditsPage'
 import BroadcastsPage from './BroadcastsPage'
 import AiPage from './AiPage'
 import AttemptsPage from './AttemptsPage'
@@ -73,6 +76,8 @@ export default defineExtension({
     { path: PATH.bankSettings, element: <BankSettingsPage /> },
     { path: '/qb/finance/bank-topups/:topUpId', element: <BankTopUpPage /> },
     { path: PATH.bankWithdrawals, element: <BankWithdrawalsPage /> },
+    { path: PATH.manualCredits, element: <ManualCreditsPage /> },
+    { path: '/qb/finance/manual-credits/:topUpId', element: <ManualCreditPage /> },
     { path: PATH.reconciliation, element: <ReconciliationPage /> },
     { path: PATH.reports, element: <ReportsPage /> },
     { path: PATH.journal, element: <JournalPage /> },
@@ -123,6 +128,9 @@ export default defineExtension({
         // Q18a: the receiving account and limits, proposed by one administrator and published by another.
         { key: 'qb-bank-settings', label: 'menu.bankSettings', path: PATH.bankSettings, icon: Settings,
           permission: PERMISSION.financeRead },
+        // Q18b: finance records manual credits; the bank top-ups' approvers approve them.
+        { key: 'qb-manual-credits', label: 'menu.manualCredits', path: PATH.manualCredits, icon: HandCoins,
+          permission: PERMISSION.bankApprove },
         // Q13b: finance reviews (the transfers' review), pays and records them.
         { key: 'qb-bank-withdrawals', label: 'menu.bankWithdrawals', path: PATH.bankWithdrawals, icon: Landmark,
           permission: PERMISSION.financeRead },

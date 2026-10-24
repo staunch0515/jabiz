@@ -102,6 +102,12 @@ public final class QbPermissions {
      * the platform's {@code approval.decide}). Content and finance administrators, never the one who recorded it.
      */
     public static final String TOPUP_BANK_APPROVE = "qb.topup.bank.approve";
+    /**
+     * Credit a sponsor's wallet by hand (Q18b): money received outside the system, or a grant, for another
+     * administrator's approval (the rule {@code qb.topup-manual.review}, whose level is {@link #TOPUP_BANK_APPROVE}).
+     * Finance.
+     */
+    public static final String TOPUP_MANUAL_RECORD = "qb.topup.manual.record";
     /** A sponsor's own transactions and reports. */
     public static final String SPONSOR_FINANCE_READ = "qb.sponsor.finance.read";
     /** Notices to the takers of a sponsor's publications. */

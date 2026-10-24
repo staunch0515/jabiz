@@ -172,6 +172,7 @@ docs/quizbuks/               本文件等
 | 2130 | 转账中 | 负债 | 当事人（用户） |
 | 4110 | 平台服务收入（抽成） | 收入 | — |
 | 5110 | 支付手续费（Stripe） | 费用 | — |
+| 5120 | 推广费用（赠送的 Kudos，Q18b） | 费用 | — |
 
 维度"当事人"（`LedgerDimension` 位置 1，取值为用户编号）与"发布"（位置 2，`QbPublication.publicationId`，Q5：商家花费与汇总凭证按发布从账本汇总）。每笔分录带来源（`sourceEntity` / `sourceId`）：充值、答题会话、转账。
 
@@ -181,6 +182,8 @@ docs/quizbuks/               本文件等
 |---|---|---|---|
 | 充值到账（Stripe 通知或核实） | `QB_TOPUP_CONFIRM` / `QB_TOPUP_CHECKED` | 1110 Stripe 余额（记录的金额） | 2110 商家预收款（商家） |
 | 银行转账充值获批（Q13a：财务登记实收、另一位管理员批准；记账时间为批准时刻） | `QB_TOPUP_BANK_APPROVAL_RESULT` | 1120 银行存款（实收） | 2110 商家预收款（商家） |
+| 手工加币获批：系统外收款（Q18b：财务登记、另一位管理员批准；参照 `mn_` + 编号） | `QB_TOPUP_MANUAL_APPROVAL_RESULT` | 1120 银行存款 | 2110 商家预收款（商家） |
+| 手工加币获批：赠送（Q18b，没有收款、没有收据） | `QB_TOPUP_MANUAL_APPROVAL_RESULT` | 5120 推广费用 | 2110 商家预收款（商家） |
 | Stripe 手续费确定（作业读取余额流水） | `QB_TOPUP_FEE_RECORD` | 5110 支付手续费 | 1110 Stripe 余额（为 0 时不过账） |
 | 退款 / 争议败诉（Stripe 后台发生；扣回可用余额以内的部分，余下为差额待办） | `QB_TOPUP_REFUNDED` / `QB_TOPUP_DISPUTE_CLOSED` | 2110 商家预收款（商家） | 1110 Stripe 余额 |
 | 答题奖励结算 | `QB_ATTEMPT_SUBMIT` / `QB_ATTEMPT_EXPIRE` / `QB_PENDING_PAY` | 2110 商家预收款（商家，发布）：奖励 | 2120 应付用户奖励（用户，发布）：奖励 − 抽成；4110（发布）：抽成（当前 0，为 0 时不出该行） |
@@ -333,6 +336,8 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 | `QB_TOPUP_BANK_START` / `_REPORT` / `_CANCEL`（Q13a） | `qb.topup`，要求已验证 | 开始：未封禁、入驻已通过、已同意条款，金额在 `qb.topup.bank.min` – `max`、收款账户 `qb.bank.receiving.*` 都已设、未结的银行转账至多 3 笔 → `AWAITING` 与 7 位识别码（`NumberSequence`）；报告：本人的、等待中的 → `REPORTED`（汇款人名称、汇款日不晚于今天），第一次报告给财务一个待办；取消：等待中的 → `CANCELLED` |
 | `QB_TOPUP_BANK_RECORD`（Q13a） | `qb.topup.bank.record`，要求已验证 | 商家钱包锁：银行转账、可登记（等待中、过期或已取消）、不是本人的、日期不晚于今天、流水的这一笔没有登记过、审批规则 `qb.topup-bank.review` 已生效 → `RequireApproval`（准备人 = 登记人，内容为金额、到账日与流水号）→ `REVIEW`，金额改为实收；规则不适用即整体拒绝（`QB_TOPUP_BANK_NO_REVIEW`），绝不由一人入账 |
 | `QB_TOPUP_BANK_APPROVAL_RESULT` / `QB_TOPUP_BANK_EXPIRE`（Q13a） | 系统（审批事件 / 每日 19:23 UTC 的逐项任务） | 只认充值自己的请求：批准即过账 1120 / 2110、钱包增加、`PAID`，发布 `qb.sponsor.settle-pending` 与 `qb.topup.paid`；驳回即回到登记前的状态、金额恢复为申请金额；30 天仍在等待的 `EXPIRED`（之后到的钱仍可登记） |
+| `QB_TOPUP_MANUAL_RECORD`（Q18b） | `qb.topup.manual.record`，要求已验证 | 手工加币（`plans/Q18-bank-settings-credit.md`）：商家已通过审核、不是本人；`PAID_OUTSIDE` 须有收款日（不晚于今天）与未被用过的流水号，`GRANT` 不得有；审批规则 `qb.topup-manual.review` 已生效 → 写入 `MANUAL` / `REVIEW`（编号取自转账码序列，对商家不可见）→ `RequireApproval`（准备人 = 登记人，内容为商家、种类、金额、理由与流水）→ 记审批请求 |
+| `QB_TOPUP_MANUAL_APPROVAL_RESULT`（Q18b） | 系统（审批事件，`internal()`） | 只认加币自己的请求：批准即过账 1120（系统外收款）或 5120（赠送）/ 2110、钱包增加、`PAID` 并对商家可见，发布 `qb.sponsor.settle-pending` 与 `qb.topup.paid`（赠送的邮件为 `qb.topup.granted`）；驳回或商家本人批准即 `CANCELLED`（流水号释放；本人批准另给财务待办） |
 | `QB_TOPUP_CHECK` / `QB_TOPUP_CHECKED` / `QB_TOPUP_CHECK_FAILED` | 系统（逐项任务 `qb.topup-stale` 每小时 / 作业） | 支付页过期一小时仍无通知的充值向 Stripe 核实（6 小时内不重复），按回答与通知同一套步骤入账或过期 |
 | `QB_TOPUP_FEE_RECORD` / `QB_TOPUP_FEE_FAILED` | 系统（作业） | Stripe 手续费：核对币种与 `fee + net = 金额` 后过账 5110 / 1110 并记流水号；不符或失败即待办 |
 | `QB_TOPUP_REFUNDED` / `QB_TOPUP_DISPUTE_OPENED` / `QB_TOPUP_DISPUTE_CLOSED` | 系统（`charge.refunded`、`charge.dispute.*`） | 按累计退款额只处理一次（`RefundMath`），扣回可用余额以内的部分、余下记差额并开待办（差额不再自动扣回）；争议开立即待办并冻结争议金额（钱包 `held`，不付奖励），败诉同退款（先从冻结扣），胜诉释放并结算待付奖励；付款尚未确认的退款先失败重试 30 分钟 |
@@ -476,6 +481,7 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
   - Q8a：AI（`/qb/ai`，`qb.admin.ai.read`）：开关与上限的现行值（开关经受控变更提出，另一位管理员发布）、按商家与月份的用量、失败率与美元估算、最近的请求与失败原因。
   - Q17：全部 Quiz（`/qb/quizzes`，含已删除）与一个 Quiz 的详情（`/qb/quizzes/:quizId`：发布、版本（按要求显示冻结内容）、当前草稿，只读，`qb.admin.quiz.read`），每个状态的全部发布（`/qb/publications`，`qb.admin.publication.read`；审核页只列待审的），链到发布页与答题记录（`plans/Q17-admin-overview.md`）。
   - Q18a：银行转账充值的设置（`/qb/finance/bank-settings`）：现行值、一次提出七个设置（`QB_BANK_SETTINGS_PROPOSE`）、他人一键发布（`plans/Q18-bank-settings-credit.md`）。
+  - Q18b：手工加币（`/qb/finance/manual-credits`，`qb.topup.bank.approve` 可读）：列表、新建（`qb.topup.manual.record`：商家、种类、金额、理由，系统外收款再填收款日与流水号）、详情页经平台的 `ApprovalPanel` 由另一位管理员审批；商家在审批通过后才看到。
 
 ### 7.4 "Kudos"
 

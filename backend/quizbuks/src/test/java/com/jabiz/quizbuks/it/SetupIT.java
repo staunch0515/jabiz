@@ -47,7 +47,7 @@ class SetupIT extends QbItSupport {
         // Q10b (L3): the separation of duties too.
         assertThat(first.get("rulesProposed")).isEqualTo(List.of(PublicationApprovals.RULE, SponsorApprovals.RULE,
             com.jabiz.quizbuks.wallet.QbPayouts.REVIEW_RULE, com.jabiz.quizbuks.wallet.BankTopUps.REVIEW_RULE,
-            QbSodRules.CONTROL.code(), QbSodRules.SECURITY.code()));
+            com.jabiz.quizbuks.wallet.ManualCredits.REVIEW_RULE, QbSodRules.CONTROL.code(), QbSodRules.SECURITY.code()));
         assertThat((List<?>) first.get("proposals")).hasSize(QbParams.CONTROLLED.size() + QbApprovalRules.ALL.size()
             + QbSodRules.ALL.size());
         // Q7b: a draft of each legal text, a marked test placeholder; nothing published.
@@ -94,6 +94,13 @@ class SetupIT extends QbItSupport {
                     .containsEntry("subject", com.jabiz.quizbuks.wallet.BankTopUps.APPROVAL_SUBJECT)
                     .containsEntry("enabled", true)
                     .satisfies(r -> assertThat(r.get("condition").toString()).contains("bank"))
+                    .satisfies(r -> assertThat(r.get("levels").toString())
+                        .contains(QbPermissions.TOPUP_BANK_APPROVE)),
+                // Q18b: every manual credit finance records, approved by another administrator.
+                rule -> assertThat(rule).containsEntry("rule_code", com.jabiz.quizbuks.wallet.ManualCredits.REVIEW_RULE)
+                    .containsEntry("subject", com.jabiz.quizbuks.wallet.ManualCredits.APPROVAL_SUBJECT)
+                    .containsEntry("enabled", true)
+                    .satisfies(r -> assertThat(r.get("condition").toString()).contains("manual"))
                     .satisfies(r -> assertThat(r.get("levels").toString())
                         .contains(QbPermissions.TOPUP_BANK_APPROVE)),
                 // Q6b: transfers above the limit, reviewed by finance.
@@ -187,7 +194,8 @@ class SetupIT extends QbItSupport {
         Map<Object, Object> accounts = query("SELECT account_code, account_type FROM ledger_account_version")
             .stream().collect(Collectors.toMap(row -> row.get("account_code"), row -> row.get("account_type")));
         assertThat(accounts).containsExactlyInAnyOrderEntriesOf(Map.of("1110", "ASSET", "1120", "ASSET",
-            "2110", "LIABILITY", "2120", "LIABILITY", "2130", "LIABILITY", "4110", "REVENUE", "5110", "EXPENSE"));
+            "2110", "LIABILITY", "2120", "LIABILITY", "2130", "LIABILITY", "4110", "REVENUE", "5110", "EXPENSE",
+            "5120", "EXPENSE"));
     }
 
     private void assertCountries() {

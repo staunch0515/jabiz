@@ -22,6 +22,7 @@ results:
   inTransit:        { kind: { type: monetary, currency: JPY, scale: 0 } }
   revenue:          { kind: { type: monetary, currency: JPY, scale: 0 } }
   paymentFees:      { kind: { type: monetary, currency: JPY, scale: 0 } }
+  promotion:        { kind: { type: monetary, currency: JPY, scale: 0 } }
 list:
   filters: [category]
   sorts:   [seq]
@@ -40,7 +41,8 @@ report:
 -- set of accounts it moved and the direction of each (QbLedger and the wallet processes post each kind from one place;
 -- AdminFinanceIT checks every kind). Anything else is OTHER: the development credit, a posting of no source, and any
 -- new kind of posting until it is added here. A refund and a lost dispute move the same accounts; they differ in their
--- reference, the Stripe object they were posted for (a charge ch_ / py_, a dispute dp_ / du_: StripeIds). A reversal
+-- reference, the Stripe object they were posted for (a charge ch_ / py_, a dispute dp_ / du_: StripeIds); so do a bank
+-- top-up and money received outside the system credited by hand (Q18b), whose reference is mn_ and its code. A reversal
 -- keeps its original's source and reference: a transfer's is the failed sending, a payout's the failed payout.
 -- amount is what the transactions moved (the sum of their debits); the account columns are each account's debit less
 -- credit, as in jabiz.ledger.account_balances (an asset grows positive, a liability or revenue negative), so that a
@@ -76,7 +78,8 @@ per_tx AS (
            coalesce(sum(net) FILTER (WHERE code = '2120'), 0) AS a2120,
            coalesce(sum(net) FILTER (WHERE code = '2130'), 0) AS a2130,
            coalesce(sum(net) FILTER (WHERE code = '4110'), 0) AS a4110,
-           coalesce(sum(net) FILTER (WHERE code = '5110'), 0) AS a5110
+           coalesce(sum(net) FILTER (WHERE code = '5110'), 0) AS a5110,
+           coalesce(sum(net) FILTER (WHERE code = '5120'), 0) AS a5120
     FROM moves
     GROUP BY tx_key, src, ref_kind, reversal
 ),
@@ -90,7 +93,11 @@ kinds AS (
                WHEN p.src = 'QbTopUp' AND NOT p.reversal AND p.accts = '1110,2110'
                     AND p.a1110 < 0 AND p.a2110 > 0 AND p.ref_kind IN ('dp_', 'du_') THEN 'DISPUTE'
                WHEN p.src = 'QbTopUp' AND NOT p.reversal AND p.accts = '1120,2110'
-                    AND p.a1120 > 0 AND p.a2110 < 0 THEN 'BANK_TOPUP'
+                    AND p.a1120 > 0 AND p.a2110 < 0 AND p.ref_kind = 'mn_' THEN 'MANUAL_TOPUP'
+               WHEN p.src = 'QbTopUp' AND NOT p.reversal AND p.accts = '1120,2110'
+                    AND p.a1120 > 0 AND p.a2110 < 0 AND p.ref_kind <> 'mn_' THEN 'BANK_TOPUP'
+               WHEN p.src = 'QbTopUp' AND NOT p.reversal AND p.accts = '2110,5120'
+                    AND p.a5120 > 0 AND p.a2110 < 0 AND p.ref_kind = 'mn_' THEN 'GRANT'
                WHEN p.src = 'QbTopUp' AND NOT p.reversal AND p.accts = '1110,5110'
                     AND p.a1110 < 0 AND p.a5110 > 0 THEN 'STRIPE_FEE'
                WHEN p.src = 'QbAttempt' AND NOT p.reversal AND p.accts IN ('2110,2120', '2110,2120,4110', '2110,4110')
@@ -124,9 +131,11 @@ SELECT
     coalesce(sum(k.a2120), 0)   AS takerWallets,
     coalesce(sum(k.a2130), 0)   AS inTransit,
     coalesce(sum(k.a4110), 0)   AS revenue,
-    coalesce(sum(k.a5110), 0)   AS paymentFees
-FROM (VALUES (1, 'TOPUP'), (2, 'BANK_TOPUP'), (3, 'REFUND'), (4, 'DISPUTE'), (5, 'STRIPE_FEE'), (6, 'REWARD'),
-             (7, 'TRANSFER_SENT'), (8, 'TRANSFER_SETTLED'), (9, 'WITHDRAWAL_PAID'), (10, 'TRANSFER_FAILED'),
-             (11, 'TRANSFER_REVERSED'), (12, 'PAYOUT'), (13, 'PAYOUT_FAILED'), (14, 'OTHER')) AS c (seq, kind)
+    coalesce(sum(k.a5110), 0)   AS paymentFees,
+    coalesce(sum(k.a5120), 0)   AS promotion
+FROM (VALUES (1, 'TOPUP'), (2, 'BANK_TOPUP'), (3, 'MANUAL_TOPUP'), (4, 'GRANT'), (5, 'REFUND'), (6, 'DISPUTE'),
+             (7, 'STRIPE_FEE'), (8, 'REWARD'), (9, 'TRANSFER_SENT'), (10, 'TRANSFER_SETTLED'), (11, 'WITHDRAWAL_PAID'),
+             (12, 'TRANSFER_FAILED'), (13, 'TRANSFER_REVERSED'), (14, 'PAYOUT'), (15, 'PAYOUT_FAILED'), (16, 'OTHER'))
+         AS c (seq, kind)
 LEFT JOIN kinds k ON k.kind = c.kind
 GROUP BY c.seq, c.kind

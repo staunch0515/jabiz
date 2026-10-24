@@ -218,6 +218,13 @@ export function TopUpPage({ topUpId }: { topUpId: string }) {
               {statusLabel(topUp.status)}
             </Badge>
           ) },
+        ...(topUp.method === 'MANUAL' ? [{ key: 'kind', label: t('wallet.detail.kind'),
+          value: (
+            <span data-testid="topup-kind" data-kind={topUp.manualKind ?? ''}>
+              {t(`wallet.manual.kinds.${topUp.manualKind ?? 'PAID_OUTSIDE'}`)}
+              {topUp.transferCode ? ` · ${topUp.transferCode}` : ''}
+            </span>
+          ) }] : []),
         { key: 'created', label: t('wallet.detail.created'), value: formatDateTime(topUp.createdAt) },
         ...(topUp.paidAt ? [{ key: 'paidAt', label: t('wallet.detail.paidAt'), value: formatDateTime(topUp.paidAt) }]
           : []),

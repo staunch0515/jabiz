@@ -142,6 +142,9 @@ public final class TopUpReceipts {
         if (!TopUpStatus.PAID.equals(topUp.get("status"))) {
             problems.add(new Violation(null, WalletCodes.RECEIPT_NOT_PAID, "A receipt is only for a paid top-up",
                 Map.of()));
+        } else if (QbTopUps.GRANT.equals(topUp.get("manualKind"))) {
+            problems.add(new Violation(null, WalletCodes.RECEIPT_GRANT, "Kudos granted have no receipt: no money was "
+                + "received", Map.of()));
         } else if (refundedOrDisputed(topUp)) {
             problems.add(new Violation(null, WalletCodes.RECEIPT_REFUNDED, "The top-up has been refunded or disputed",
                 Map.of()));

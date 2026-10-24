@@ -61,6 +61,7 @@ class ProcessAccessIT extends QbItSupport {
         Map.entry("QB_TOPUP_CHECKED", ProcessAccess.INTERNAL),
         Map.entry("QB_TOPUP_CHECK_FAILED", ProcessAccess.INTERNAL),
         Map.entry("QB_TOPUP_FEE_RECORD", ProcessAccess.INTERNAL),
+        Map.entry("QB_TOPUP_MANUAL_APPROVAL_RESULT", ProcessAccess.INTERNAL),
         Map.entry("QB_TOPUP_FEE_FAILED", ProcessAccess.INTERNAL),
         Map.entry("QB_TOPUP_REFUNDED", ProcessAccess.INTERNAL),
         Map.entry("QB_TOPUP_DISPUTE_OPENED", ProcessAccess.INTERNAL),

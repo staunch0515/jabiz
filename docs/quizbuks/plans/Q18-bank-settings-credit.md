@@ -19,18 +19,19 @@
 测试：`BankTopUpSettingsIT`（未发布任何设置时只说暂未开放；他人的未处理提案、范围、未变；本人的初始提案被撤回；他人发布后商家读到；只改一项即一个提案）、
 `BankTopUpIT`（原有）、商家 Vitest（未设置时不可选）、扩展 Vitest `settings.test.tsx`、e2e `a11y.spec.ts`（设置页过 axe）。
 
-## Q18b 管理员手工加币（待确认）
+## Q18b 管理员手工加币（2026-10-24 确认，已完成，待评审）
 
-财务管理员选择商家、金额、种类与理由，另一位管理员审批（准备人不能审批，平台的审批流程保证），批准后入账、加到钱包。沿用银行转账充值的"记录 → 审批 → 结果"流程：
+财务管理员选择商家、金额、种类与理由，另一位管理员审批（准备人不能审批，平台的审批流程保证），批准后入账、加到钱包。沿用银行转账充值的"登记 → 审批 → 结果"流程，没有冲正（需求方 2026-10-24：暂不做）：
 
 | 部分 | 内容 |
 |---|---|
-| 数据 | `QbTopUp` 的新方式 `MANUAL`，新字段 `manualKind`（`PAID_OUTSIDE` / `GRANT`）与 `manualReason`；迁移 V23 改约束（方式、已付须有入账、审核中须有银行流水号的规则对 `MANUAL` 另写）。`PAID_OUTSIDE` 带收款日与凭证号，`GRANT` 没有 |
-| 流程 | `QB_TOPUP_MANUAL_RECORD`（新权限 `qb.topup.manual.record`，财务）：建记录为 `REVIEW` 并请求审批（新审批对象 `qb.topup-manual`，审批人须有 `qb.topup.bank.approve`）；`QB_TOPUP_MANUAL_APPROVAL_RESULT`（审批事件）：批准即记账（`PAID_OUTSIDE` 借 1120，`GRANT` 借 5120，均贷 2110）、加钱包、结算待付奖励，`PAID`；驳回即 `CANCELLED` |
-| 科目 | 新科目 5120 推广费用（下次运行 `QB_SETUP` 时开设）与它的分录导出映射参数（受控，启动检查要求有映射） |
-| 收据与邮件 | 只有 `PAID_OUTSIDE` 有收据；`GRANT` 的邮件与入账说明用"赠送"文案 |
-| 商家看到 | 审批通过后才在充值记录与交易中出现（审核中不显示），标"手工"；收据按钮只给 `PAID_OUTSIDE` |
-| 报表与核对 | 月报新增"系统外收款"与"赠送"两类及 5120 一列；余额表自动多一行；核对（充值分录）照常适用，手续费检查不涉及 |
-| 后台 | `/qb/finance/manual-credits`：新建（商家、金额、种类、理由，系统外收款再填日期与凭证号）、列表、审批（平台的 `ApprovalPanel`） |
+| 数据 | `QbTopUp` 的新方式 `MANUAL`，新字段 `manualKind`（`PAID_OUTSIDE` / `GRANT`）、`manualReason` 与 `sponsorVisible`（商家数据集按它过滤：手工加币只在 `PAID` 后可见）；迁移 V23 改约束（方式各守各的状态与字段；`PAID_OUTSIDE` 须有收款日与流水号，`GRANT` 不得有；审核中的手工加币先写入再取得审批请求，同一事务）。编号取自转账码序列（`transferCode`），分录参照为 `mn_` + 编号 |
+| 流程 | `QB_TOPUP_MANUAL_RECORD`（新权限 `qb.topup.manual.record`，财务角色）：商家须已通过审核、不是本人；`PAID_OUTSIDE` 的收款日不得在未来、流水号未被任何充值用过（含银行转账充值）；建记录为 `REVIEW` 并请求审批（新审批对象 `qb.topup-manual`，规则 `qb.topup-manual.review` 由 `QB_SETUP` 提出，审批人须有 `qb.topup.bank.approve`）；没有规则即拒绝（`QB_TOPUP_MANUAL_NO_REVIEW`）。`QB_TOPUP_MANUAL_APPROVAL_RESULT`（审批事件，`internal()`）：批准即记账（`PAID_OUTSIDE` 借 1120，`GRANT` 借 5120，均贷 2110）、加钱包、结算待付奖励、发 `qb.topup.paid`，`PAID` 并对商家可见；驳回或商家本人批准即 `CANCELLED`（流水号释放，可重新登记；本人批准另给财务待办） |
+| 科目 | 新科目 5120 推广费用（`QB_SETUP` 开设）与映射参数 `qb.journal.account.5120`（受控）。**升级时**：重新运行 `QB_SETUP` 后，先经四眼发布 `qb.journal.account.5120` 的映射，再批准第一笔赠送，否则该月的分录导出因未映射而被拒 |
+| 收据与邮件 | 只有 `PAID_OUTSIDE` 有收据（`QB_RECEIPT_GRANT` 拒绝赠送的；收据模板也不返回赠送）；`GRANT` 发邮件 `qb.topup.granted`（"赠送"文案），`PAID_OUTSIDE` 照常 `qb.topup.paid` |
+| 商家看到 | 审批通过后才出现在充值记录与交易中，标"系统外收款"或"QuizBuks 赠送"及编号；收据按钮只给 `PAID_OUTSIDE` |
+| 报表与核对 | 月报新增 `MANUAL_TOPUP`（按 `mn_` 参照与 `BANK_TOPUP` 区分）与 `GRANT` 两类及 5120 一列（16 行）；余额表多一行 5120；核对（充值分录）照常适用 |
+| 后台 | `/qb/finance/manual-credits`（`qb.topup.bank.approve` 可读）：列表（状态筛选）、"新建加币"（`qb.topup.manual.record`：已通过审核的商家下拉、种类、金额、理由，系统外收款再填收款日与流水号）、详情页用平台的 `ApprovalPanel` 审批 |
 
-估计 2–3 天。测试：记录与审批（准备人不能批、驳回）、两种记账、钱包与待付奖励、收据只给系统外收款、商家在审批前看不到、月报分类、迁移的约束。
+测试：`ManualCreditIT`（系统外收款经审批入账、收据、月报与核对；赠送记 5120、无收据；驳回取消并可重登同一流水号；校验（非商家、种类与流水号、未来日期、本人、权限）；商家本人批准不入账；读取权限；数据库约束）、
+`AdminFinanceIT` / `SetupIT` / `JournalExportIT` / `ProcessAccessIT` 与场景（新参数与规则）、扩展 Vitest `manual.test.tsx`、商家 Vitest（手工加币行与收据按钮）、e2e `a11y.spec.ts`（手工加币页与对话框过 axe）。

@@ -51,6 +51,7 @@ class AdminFinanceIT extends PayoutItSupport {
         COLUMNS.put("2130", "inTransit");
         COLUMNS.put("4110", "revenue");
         COLUMNS.put("5110", "paymentFees");
+        COLUMNS.put("5120", "promotion");
     }
 
     @BeforeEach
@@ -230,6 +231,8 @@ class AdminFinanceIT extends PayoutItSupport {
         List<Expected> expected = List.of(
             row("TOPUP", 2, 12_000, "1110", 12_000, "2110", -12_000),
             row("BANK_TOPUP", 0, 0),
+            row("MANUAL_TOPUP", 0, 0),
+            row("GRANT", 0, 0),
             row("REFUND", 1, 1_000, "1110", -1_000, "2110", 1_000),
             row("DISPUTE", 1, 2_000, "1110", -2_000, "2110", 2_000),
             row("STRIPE_FEE", 1, 360, "1110", -360, "5110", 360),
@@ -279,9 +282,9 @@ class AdminFinanceIT extends PayoutItSupport {
         Map<String, BigDecimal> closing = accountBalances(to.minusNanos(1_000), to);
         assertThat(opening.get("2110")).isEqualByComparingTo("-700");
         Map<String, Long> debits = Map.of("1110", 17_300L, "1120", 6_070L, "2110", 3_100L, "2120", 3_500L,
-            "2130", 3_300L, "4110", 100L, "5110", 360L);
+            "2130", 3_300L, "4110", 100L, "5110", 360L, "5120", 0L);
         Map<String, Long> credits = Map.of("1110", 11_330L, "1120", 1_000L, "2110", 12_300L, "2120", 5_580L,
-            "2130", 3_300L, "4110", 220L, "5110", 0L);
+            "2130", 3_300L, "4110", 220L, "5110", 0L, "5120", 0L);
         List<Map<String, Object>> balances = report(BALANCES, from, to, to);
         Map<String, Map<String, Object>> accounts = balances.stream().filter(r -> "ACCOUNT".equals(r.get("rowKind")))
             .collect(Collectors.toMap(r -> (String) r.get("code"), Function.identity()));
@@ -314,7 +317,7 @@ class AdminFinanceIT extends PayoutItSupport {
         // the archive reproduces it.
         Map<String, Object> issued = run("REPORT_ISSUE", finance(), body("templateId", MONTHLY, "params",
             period(from, to)));
-        assertThat(issued).containsEntry("rowCount", 14).containsEntry("recomputable", true);
+        assertThat(issued).containsEntry("rowCount", 16).containsEntry("recomputable", true);
         advance(Duration.ofMinutes(5));
         credit(sponsor, 25);
         Map<String, Object> again = run("REPORT_ISSUE", finance(), body("templateId", MONTHLY, "params",
@@ -330,12 +333,12 @@ class AdminFinanceIT extends PayoutItSupport {
             .expectBodyList(MAP).returnResult().getResponseBody();
         assertThat(runs).extracting(r -> r.get("runId")).contains(issued.get("runId"), again.get("runId"));
         assertThat(run("REPORT_ISSUE", finance(), body("templateId", BALANCES, "params", period(from, to))))
-            .containsEntry("rowCount", 11);
+            .containsEntry("rowCount", 12);
 
         // The export is the platform's, of the same rows; as known at the month's end, without the late posting,
         // and so is the run issued as known then (its archived rows, not run again).
         String csv = exportCsv(MONTHLY, period(from, to));
-        assertThat(csv.lines().count()).isEqualTo(15);
+        assertThat(csv.lines().count()).isEqualTo(17);
         assertThat(csv).contains("TRANSFER_REVERSED");
         String known = exportCsv(MONTHLY, period(from, to, to));
         assertThat(line(known, "OTHER")).isNotEqualTo(line(csv, "OTHER")).contains(",4,");

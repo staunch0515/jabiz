@@ -24,6 +24,7 @@ results:
   transferDate:    { from: QbTopUp.transferDate }
   reportedAt:      { from: QbTopUp.reportedAt }
   receivedOn:      { from: QbTopUp.receivedOn }
+  manualKind:      { from: QbTopUp.manualKind }
 list:
   filters: [status, createdAt, paidAt, amount, method]
   sorts:   [createdAt, paidAt, amount]
@@ -33,7 +34,8 @@ permissions: [qb.sponsor.finance.read]
 ---*/
 -- The address only while the top-up is open (and, given the client's now, not expired): a page never sends the
 -- sponsor to a checkout that cannot be paid. Taken back includes lost disputes. A bank top-up's day received only once
--- it is paid: under review it may still be rejected, and finance's reference stays finance's.
+-- it is paid: under review it may still be rejected, and finance's reference stays finance's. A manual credit (Q18b) is
+-- in the sponsor's dataset only once paid; its kind says whether money was received (a receipt) or Kudos granted.
 SELECT
     t.{{QbTopUp.topUpId}}   AS topUpId,
     t.{{QbTopUp.amount}}    AS amount,
@@ -53,5 +55,6 @@ SELECT
     t.{{QbTopUp.payerName}} AS payerName,
     t.{{QbTopUp.transferDate}} AS transferDate,
     t.{{QbTopUp.reportedAt}} AS reportedAt,
-    CASE WHEN t.{{QbTopUp.status}} = 'PAID' THEN t.{{QbTopUp.receivedOn}} END AS receivedOn
+    CASE WHEN t.{{QbTopUp.status}} = 'PAID' THEN t.{{QbTopUp.receivedOn}} END AS receivedOn,
+    t.{{QbTopUp.manualKind}} AS manualKind
 FROM {{QbTopUp}} t

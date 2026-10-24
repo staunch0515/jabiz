@@ -26,7 +26,7 @@ steps:
       p32: "$.proposals[31]", p33: "$.proposals[32]", p34: "$.proposals[33]",
       p35: "$.proposals[34]", p36: "$.proposals[35]", p37: "$.proposals[36]", p38: "$.proposals[37]",
       p39: "$.proposals[38]", p40: "$.proposals[39]", p41: "$.proposals[40]", p42: "$.proposals[41]",
-      p43: "$.proposals[42]", p44: "$.proposals[43]", p45: "$.proposals[44]" }
+      p43: "$.proposals[42]", p44: "$.proposals[43]", p45: "$.proposals[44]", p46: "$.proposals[45]", p47: "$.proposals[46]" }
   - process: CONTROL_CHANGE_PUBLISH@latest
     actor: { id: publisher, permissions: [control.publish] }
     input: { changeId: "${p1}" }
@@ -162,6 +162,12 @@ steps:
   - process: CONTROL_CHANGE_PUBLISH@latest
     actor: { id: publisher, permissions: [control.publish] }
     input: { changeId: "${p45}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p46}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p47}" }
   - expect: { param: qb.topup.min, value: 1000 }
   - expect: { param: qb.topup.max, value: 1000000 }
   - note: Publications go on without a review (the controlled switch, four eyes).
@@ -254,11 +260,11 @@ steps:
     save: { t2: $.attemptId }
   - actor: { id: "${u1}", permissions: [qb.play, qb.me] }
     process: QB_ATTEMPT_SUBMIT@latest
-    input: { attemptId: "${t1}", publicationId: "${pub}", answers: [{ questionNo: 1, selected: [1] }, { questionNo: 2, selected: [2] }] }
+    input: { attemptId: "${t1}", publicationId: "${pub}", answers: [{ questionNo: 1, selected: [2] }, { questionNo: 2, selected: [2] }] }
     expectOutput: { reward: 100, rewardStatus: PAID }
   - actor: { id: "${u2}", permissions: [qb.play, qb.me] }
     process: QB_ATTEMPT_SUBMIT@latest
-    input: { attemptId: "${t2}", publicationId: "${pub}", answers: [{ questionNo: 1, selected: [1] }, { questionNo: 2, selected: [2] }] }
+    input: { attemptId: "${t2}", publicationId: "${pub}", answers: [{ questionNo: 1, selected: [2] }, { questionNo: 2, selected: [2] }] }
     expectOutput: { reward: 100, rewardStatus: PENDING }
   - expect: { entity: QbPublication, id: "${pub}", fields: { status: FUNDS_SHORT } }
 
@@ -378,10 +384,12 @@ steps:
     expect:
       query: qb.admin.monthly
       params: { from: "2026-10-01T00:00:00Z", to: "2026-11-01T00:00:00Z" }
-      rows: 14
+      rows: 16
       values:
         - { category: TOPUP, transactionCount: 1, amount: 5000, stripeBalance: 5000, sponsorWallets: -5000 }
         - { category: BANK_TOPUP, transactionCount: 0, amount: 0 }
+        - { category: MANUAL_TOPUP, transactionCount: 0, amount: 0 }
+        - { category: GRANT, transactionCount: 0, amount: 0, promotion: 0 }
         - { category: REFUND, transactionCount: 0, amount: 0 }
         - { category: DISPUTE, transactionCount: 0, amount: 0 }
         - { category: STRIPE_FEE, transactionCount: 1, amount: 180, stripeBalance: -180, paymentFees: 180 }
@@ -397,7 +405,7 @@ steps:
   - expect:
       query: qb.admin.balances
       params: { from: "2026-10-01T00:00:00Z", to: "2026-11-01T00:00:00Z" }
-      rows: 11
+      rows: 12
       values:
         - { rowKind: ACCOUNT, code: "1110", opening: 0, debit: 5100, credit: 180, closing: 4920 }
         - { rowKind: ACCOUNT, code: "1120", opening: 0, debit: 0, credit: 0, closing: 0 }
@@ -406,6 +414,7 @@ steps:
         - { rowKind: ACCOUNT, code: "2130", closing: 0 }
         - { rowKind: ACCOUNT, code: "4110", closing: 0 }
         - { rowKind: ACCOUNT, code: "5110", debit: 180, closing: 180 }
+        - { rowKind: ACCOUNT, code: "5120", debit: 0, closing: 0 }
         - { rowKind: CHECK, code: SPONSOR_WALLETS, closing: -4900, partyTotal: -4900, matches: true }
         - { rowKind: CHECK, code: TAKER_WALLETS, closing: -200, partyTotal: -200, matches: true }
         - { rowKind: CHECK, code: NO_OVERDRAWN_WALLET, closing: 0, matches: true }

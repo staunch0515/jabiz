@@ -314,6 +314,12 @@ export function WalletPage() {
               {t('wallet.bank.methods.BANK')}{row.original.transferCode ? ` · ${row.original.transferCode}` : ''}
             </Badge>
           )}
+          {row.original.method === 'MANUAL' && (
+            <Badge variant="outline" data-testid="topup-row-manual" data-kind={row.original.manualKind ?? ''}>
+              {t(`wallet.manual.kinds.${row.original.manualKind ?? 'PAID_OUTSIDE'}`)}
+              {row.original.transferCode ? ` · ${row.original.transferCode}` : ''}
+            </Badge>
+          )}
         </span>
       ),
     },
@@ -328,7 +334,9 @@ export function WalletPage() {
       enableSorting: false,
       cell: ({ row }) => (
         <span className="flex flex-wrap justify-end gap-2">
-          {row.original.status === 'PAID' && <ReceiptButton row={row.original} onError={setReceiptError} />}
+          {row.original.status === 'PAID' && row.original.manualKind !== 'GRANT' && (
+            <ReceiptButton row={row.original} onError={setReceiptError} />
+          )}
           <Button asChild size="sm" variant={row.original.checkoutUrl ? 'default' : 'outline'}>
             <Link to={pathOfTopUp(row.original)} data-testid="topup-row-open">
               {row.original.checkoutUrl ? t('wallet.pay') : t('wallet.view')}
