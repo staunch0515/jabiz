@@ -94,7 +94,7 @@
 ## 5. 缺口
 
 - **应用**（`1.2/quizbuks-*`，都不阻塞 QP1）：A-1 删 `jabiz.web.spa`、加入口的 `session.*`（QP1）；A-2 商家邮件改 `{entryUrl.sponsor}` 与 `application-google.yml`（QP1，可选）；
-  A-3 完成后的回看没有题目文字（`result` 只有数字），缺省以 `sessionStorage` 保存开始的输出（不含答案）供刚完成的结果页用，历史只显示分数与逐题对错（Q-2）；
+  A-3 完成后的回看没有题目文字（`result` 只有数字），缺省以 `sessionStorage` 保存开始的输出（不含答案）供刚完成的结果页用，历史只显示分数与逐题对错（Q-2；**已由 Q20 取代**：`QB_ATTEMPT_RESULT` 随时给出题目与答案，`plans/Q20-result-review.md`）；
   A-4 商家交易明细（`qb.sponsor.transactions`，M-50 – M-52）属 Q9（已由 Q9b 完成，`plans/Q9b-sponsor-transactions.md`）；A-5 `deploy/quizbuks` 的改动（第 8 节）。
 - **平台**（先在 `1.2/platform` 上做，带平台自己的测试与 `backend/app` 中的示范，再合并到 `1.2/quizbuks`）：
   - **PG-1**（阻塞 QP2 的详情与 QP3a 的资料）：`MarkdownView`、`FilePreview` 移入 `@jabiz/ui`（现在只在 `frontend/src/components`，经 `@jabiz/admin` 导出，应用 SPA 不得引用 `@jabiz/admin`）；
@@ -174,7 +174,7 @@
 | 编号 | 问题 | 缺省 |
 |---|---|---|
 | Q-1 | 每个入口一个 SPA，还是两个入口共用一个 | 每个入口一个，两个独立的工程（第 1 节） |
-| Q-2 | 完成后能否带题目文字回看 | 现在不改后端：刚完成时用 `sessionStorage`，之后只显示分数与逐题对错；需求方要求时再做 A-3 |
+| Q-2 | 完成后能否带题目文字回看 | 现在不改后端：刚完成时用 `sessionStorage`，之后只显示分数与逐题对错；需求方要求时再做 A-3（**已由 Q20 取代**，2026-10-24：始终可回看完整题目与选项，`plans/Q20-result-review.md`） |
 | Q-3 | 视频资料是否内嵌 | 不内嵌：新标签页打开外链，保持缺省 CSP。以后内嵌需要 `/` 的 `frame-src`，并在 `application.yml` 中写出完整的 `jabiz.web.spa`（**已由 Q19 取代**：YouTube / Vimeo 视频在页面中播放，`plans/Q19-embedded-video.md`） |
 | Q-4 | 商家后台只要中 / 英（设计 Q16） | 照常提供 en / zh / ja（文案都已有），不做 PG-2 |
 | Q-5 | 通用后台的扩展页（P-01 用户汇总、转账监控） | 不在这些阶段；生成的页面与 `qb.admin.*` 模板覆盖运营；与 Q9 一起做 `1.2/quizbuks-9-admin-extension` |
@@ -245,7 +245,7 @@
   （`play/saver.ts`：一次一个、只发自上次成功以来改过的题、失败保留并 5 秒后重试、会话结束即停止）。倒计时按 `deadline` 与 `serverTime` 的偏移（`play/countdown.ts`），
   `role="timer"`，只在剩 1 分钟与 10 秒时由礼貌的 live 区域朗读；翻页后焦点移到题目标题。最后一题"提交答案"先确认（说明未答的题数）；到 0:00 不确认即提交；
   提交超时或已被系统结束即到结果页；提交因其他原因失败时留在本页、重新保存全部答案、可再次提交（同一个 `Idempotency-Key`）。答题时不显示底部导航。
-- **结果 `/result/:attemptId`**（A-3 按缺省）：刚提交时用提交的输出与本标签页的开始输出，显示得分、合格分、是否合格、奖励（已到账 / 待支付及服务端的说明 / 无）与逐题的
+- **结果 `/result/:attemptId`**（A-3 按缺省；**Q20 起**一律读 `QB_ATTEMPT_RESULT`：题目、所选与正确选项都来自服务端，下述"之后只显示分数与逐题对错"不再成立）：刚提交时用提交的输出与本标签页的开始输出，显示得分、合格分、是否合格、奖励（已到账 / 待支付及服务端的说明 / 无）与逐题的
   "我的答案 vs 正确答案"（选项字母与文字）；之后（其他标签页、关闭后）读本人的会话记录（`result` 列）与 `qb.app.publication`（名称、合格分），只显示分数与逐题对错并说明题目内容
   只在刚完成时显示。超时自动提交（本页提交或状态 `EXPIRED`）另有说明；时间已过而尚未结束的会话每 5 秒再读，直到系统以已保存的答案结束它。退出登录时清除本标签页保存的答题数据。
 - **历史 `/history`**：`qb.app.history`（`at` 为打开的时刻），搜索与"全部 / 已完成 / 未完成"（`category` 筛选）；每行：名称、类别（合格、不合格、进行中、已超时）、开始时间、

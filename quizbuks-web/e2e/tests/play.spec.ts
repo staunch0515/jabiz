@@ -167,6 +167,13 @@ for (const appearance of ['light', 'dark'] as const) {
     await expect(row).toHaveAttribute('data-category', 'PASSED')
     await expect(row).toContainText('Pending')
     await expectAccessible(page, at('app history'))
+    // Q20: the result read later shows the questions and the answers, from the server (this tab kept nothing).
+    await page.evaluate(() => window.sessionStorage.clear())
+    await row.locator('a[href^="/result/"]').first().click()
+    await expect(page).toHaveURL(/\/result\/[^/]+$/)
+    await expect(page.getByTestId('result-question')).toHaveCount(2)
+    await expect(page.getByTestId('result-mine').first()).toContainText('Paris')
+    await expect(page.getByTestId('result-correct').first()).toContainText('Paris')
     await page.goto(`/p/${seeded.publicationId}`)
     await expect(page.getByTestId('detail-answered')).toBeVisible()
     await expect(page.getByTestId('detail-start')).toHaveCount(0)

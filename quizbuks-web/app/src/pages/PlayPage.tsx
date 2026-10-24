@@ -12,7 +12,7 @@ import { markAutoSubmitted, storedStart, storeResult, storeStart, takeHandedOver
 import { FileImage } from '../qb/FileImage'
 import { CODE } from '../qb/ids'
 import { QB } from '../qb/messages'
-import { readAttempt, saveAttempt, startAttempt, submitAttempt, unanswered as unansweredOf, type Given }
+import { readAttemptResult, saveAttempt, startAttempt, submitAttempt, unanswered as unansweredOf, type Given }
   from '../qb/play'
 import { Link, navigate, Redirect } from '../qb/router'
 import { isBusy, playProblemText, retryWhenBusy } from '../play/busy'
@@ -30,7 +30,7 @@ type Resolved = { started: Started } | { result: string } | { expired: string }
 /**
  * The attempt to play: handed over by the page that started it, else continued from the server (`QB_ATTEMPT_START`
  * returns the attempt in progress with its answers and current question: a reload resumes it). The publication comes
- * from this tab's copy of the start, else from the caller's attempt record. A finished attempt goes to its result.
+ * from this tab's copy of the start, else from the attempt's result (its state). A finished attempt goes to its result.
  */
 async function resolve(attemptId: string, onBusy: (busy: boolean) => void, signal?: AbortSignal):
   Promise<Resolved> {
@@ -38,7 +38,7 @@ async function resolve(attemptId: string, onBusy: (busy: boolean) => void, signa
   if (handed) return { started: handed }
   let publicationId = storedStart(attemptId)?.publicationId
   if (!publicationId) {
-    const record = await readAttempt(attemptId)
+    const record = await readAttemptResult(attemptId)
     if (record.status !== 'IN_PROGRESS') return { result: attemptId }
     publicationId = record.publicationId
   }

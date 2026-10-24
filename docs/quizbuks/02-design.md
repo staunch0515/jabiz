@@ -326,6 +326,7 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 | `QB_PUBLICATION_APPROVAL_RESULT` | 系统（审批事件；`qb.publication.system`，不授予任何角色） | 只认发布自己的请求（`approvalRequestId`）：批准且内容未变 → 上架；驳回（以存储的请求为准）→ 草稿附理由 |
 | `QB_VIEW` | `qb.play`，要求已验证 | 记第一次浏览（重复忽略）；发布须对本人可见，否则 404 |
 | `QB_ATTEMPT_START` | `qb.play`，要求已验证 | 本人进行中的会话直接继续（不取锁）；否则发布锁内：`LIVE` 且在时间内、地区有交集、不是自己的发布、名额与预算（进行中的会话各预占一个名额与最高奖励）、商家可支付（软检查，余额在取锁前读，Q10a）→ 建会话（`deadline = now + 时限`，选项按会话打乱，**编号为本次显示的位置 1..k**，Q10b）、`starts + 1`、`reserved + maxReward`。返回题目（**不含正确答案**） |
+| `QB_ATTEMPT_RESULT`（Q20） | `qb.me` | 本人会话的结果，随时可读（`plans/Q20-result-review.md`）：经答题人视图读会话（别人的 404）、其版本与卡片；已完成时返回题目（与开始同一个视图：按会话顺序、选项按位置编号、不含正误）与存储的 `result`（按位置的所选与正确选项），进行中只返回状态与截止；不取锁 |
 | `QB_ATTEMPT_SAVE` | `qb.play`，要求已验证 | 保存当前题号与已选答案（按位置；不取锁）；超过 `deadline` 拒绝；非法题号或位置一次报告全部 |
 | `QB_ATTEMPT_SUBMIT` | `qb.play`，要求已验证 | 晚取锁：发布锁 → 超时（`now > deadline + 宽限 5 秒`）422 `QB_ATTEMPT_EXPIRED`（本次答案不用）；评分 → 档位 → 计数 →（奖励大于 0）钱包锁 → 无待支付且余额够则子流程 `LEDGER_POST`、`PAID`，否则 `PENDING` 并把 `LIVE` 的发布置 `FUNDS_SHORT`；名额或预算用完即 `ENDED`；发布事件 `qb.reward.settled` / `qb.reward.pending`（Q7 的站内信）。幂等键与会话状态防重复提交 |
 | `QB_ATTEMPT_EXPIRE` | 系统（`qb.play.system`） | 过了时限与宽限仍 IN_PROGRESS 的会话按已保存答案完成（`EXPIRED`），与提交同一套步骤；已完成或未到期的什么也不做。由逐项任务 `qb.attempt-expire`（每分钟，平台决策 D42）对模板 `qb.system.attempts-due` 选出的会话（`deadline + 宽限 < 计划时刻`，按截止时间，至多 2 000 个）逐个执行，各自一个事务（Q5b） |

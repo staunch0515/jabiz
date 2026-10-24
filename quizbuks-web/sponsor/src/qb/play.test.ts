@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { numberOf, parseMaterials, parseResult } from './play'
+import { numberOf, parseMaterials } from './play'
 
 describe('reading answering\'s templates', () => {
   it('reads numbers given as numbers or as decimal text', () => {
@@ -32,12 +32,5 @@ describe('reading answering\'s templates', () => {
     expect(parseMaterials('')).toEqual([])
     expect(parseMaterials('{')).toEqual([])
     expect(parseMaterials('{"a":1}')).toEqual([])
-  })
-
-  it('reads a finished attempt\'s result, and none before it finished', () => {
-    expect(parseResult(null)).toBeNull()
-    expect(parseResult('not json')).toBeNull()
-    expect(parseResult(JSON.stringify([{ no: 1, selected: [2], correct: [1], points: 2, earned: 0 }])))
-      .toEqual([{ no: 1, selected: [2], correct: [1], points: 2, earned: 0 }])
   })
 })

@@ -1,4 +1,4 @@
-import { api, runProcess, runQuery, unwrap, type Filter, type QueryPage, type Sort } from '@jabiz/client'
+import { runProcess, runQuery, type Filter, type QueryPage, type Sort } from '@jabiz/client'
 import { trustedPlayer } from './video'
 import { PLAY } from './ids'
 
@@ -400,68 +400,32 @@ export const submitAttempt = (input: SubmitInput, idempotencyKey?: string) =>
 
 // ---- the caller's attempts ---------------------------------------------------------------------------------------
 
-/** One of the caller's attempts as the dataset keeps it; the result only once finished (D-Q5-2). */
-export interface AttemptRecord {
+/**
+ * `AttemptResults.ResultOutput` (Q20): one of the caller's attempts with, once finished, its questions as that attempt
+ * showed them (options by position, as the start gives them) and its result by the same positions. In progress it
+ * carries the state only; `passScore` is null for a survey.
+ */
+export interface AttemptResult {
   attemptId: string
   publicationId: string
+  /** The publication's name, as its card has it. */
+  name: string | null
   status: string
+  kind: QuizKind
   deadline: string | null
-  submittedAt: string | null
+  serverTime: string
   score: number | null
   fullScore: number | null
+  passScore: number | null
   passed: boolean | null
   reward: unknown
   rewardStatus: RewardStatus | null
-  result: QuestionResult[] | null
+  questions: QuestionView[]
+  result: QuestionResult[]
 }
 
-/**
- * Whether a finished attempt's result is a survey's: no question has a correct option (a scored question always has
- * one), so the record itself tells, without the publication.
- */
-export function isSurveyResult(result: readonly QuestionResult[] | null): boolean {
-  return !!result && result.length > 0 && result.every((q) => q.correct.length === 0)
-}
-
-/** The `result` column: every question's choice and correct options, or null before the attempt finished. */
-export function parseResult(json: unknown): QuestionResult[] | null {
-  if (typeof json !== 'string' || json.trim() === '') return null
-  try {
-    const rows = JSON.parse(json) as unknown
-    if (!Array.isArray(rows)) return null
-    return rows.map((row: Record<string, unknown>) => ({
-      no: numberOf(row.no),
-      selected: Array.isArray(row.selected) ? row.selected.map(numberOf) : [],
-      correct: Array.isArray(row.correct) ? row.correct.map(numberOf) : [],
-      points: numberOf(row.points),
-      earned: numberOf(row.earned),
-    }))
-  } catch {
-    return null
-  }
-}
-
-/** One of the caller's own attempts; an `ApiError` 404 when it is not theirs or does not exist. */
-export async function readAttempt(attemptId: string): Promise<AttemptRecord> {
-  const entity = await unwrap(api.GET('/api/datasets/{resourceId}/entities/{id}', {
-    params: { path: { resourceId: PLAY.myAttempts, id: attemptId } },
-  }))
-  const row = (entity.attributes ?? {}) as Record<string, unknown>
-  const optional = (value: unknown) => (value === null || value === undefined ? null : numberOf(value))
-  return {
-    attemptId: String(row.attemptId ?? attemptId),
-    publicationId: String(row.publicationId ?? ''),
-    status: String(row.status ?? ''),
-    deadline: textOrNull(row.deadline),
-    submittedAt: textOrNull(row.submittedAt),
-    score: optional(row.score),
-    fullScore: optional(row.fullScore),
-    passed: row.passed === null || row.passed === undefined ? null : row.passed === true || row.passed === 'true',
-    reward: row.reward,
-    rewardStatus: (textOrNull(row.rewardStatus) as RewardStatus | null),
-    result: parseResult(row.result),
-  }
-}
+/** The result of one of the caller's own attempts; an `ApiError` 404 when it is not theirs or does not exist. */
+export const readAttemptResult = (attemptId: string) => runProcess<AttemptResult>(PLAY.result, { attemptId })
 
 /** The history's categories (D-Q5-11). */
 export type HistoryCategory = 'PASSED' | 'FAILED' | 'IN_PROGRESS' | 'TIMED_OUT'
