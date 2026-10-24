@@ -51,7 +51,9 @@ async function cashRewardOwed(request: Parameters<typeof approvedSponsor>[0]) {
   const result = await run(request, taker.token, 'QB_ATTEMPT_SUBMIT', { attemptId: started.attemptId, publicationId,
     answers })
   expect(result.rewardStatus).toBe('CASH')
-  const cash = result.cash as { code: string; status: string }
+  // The submission names the way it is paid; the record itself (code, state) comes with the result (Q20's process).
+  const read = await run(request, taker.token, 'QB_ATTEMPT_RESULT', { attemptId: started.attemptId })
+  const cash = read.cash as { code: string; status: string }
   expect(cash.status).toBe('DUE')
   return { sponsor, taker, name, publicationId, attemptId: started.attemptId as string, code: cash.code }
 }
