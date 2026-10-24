@@ -1,4 +1,4 @@
-import { ApiError } from '@jabiz/client'
+import { ApiError, forgetEnvironment, setEnvironment } from '@jabiz/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
@@ -171,6 +171,18 @@ describe('LoginPage', () => {
     page()
     expect((await screen.findByTestId('auth-footer')).textContent).toBe('Build 4dc1aa14d922')
     await expectAccessible()
+  })
+
+  it('says before signing in that this is a test system, as the entry tells it (phase 16zd)', async () => {
+    setEnvironment('staging')
+    try {
+      page()
+      const banner = await screen.findByTestId('environment-banner')
+      expect(banner).toHaveTextContent('staging')
+      await expectAccessible()
+    } finally {
+      forgetEnvironment()
+    }
   })
 
   it('shows no build line when the build named no commit', async () => {

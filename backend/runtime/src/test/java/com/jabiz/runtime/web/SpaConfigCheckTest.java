@@ -84,6 +84,26 @@ class SpaConfigCheckTest {
         assertThat(new SpaConfigCheck(new JabizWebProperties(built), built, name -> true).check()).isEmpty();
     }
 
+    @Test
+    void theEnvironmentIsATestSystemUnlessItSaysProduction() {
+        assertThat(new JabizWebProperties(null).environment()).isEqualTo(JabizWebProperties.TEST);
+        assertThat(new JabizWebProperties(null).production()).isFalse();
+        assertThat(new JabizWebProperties(null, " ").environment()).isEqualTo(JabizWebProperties.TEST);
+        assertThat(new JabizWebProperties(null, "Production").production()).isTrue();
+        assertThat(new JabizWebProperties(null, "staging").environment()).isEqualTo("staging");
+        assertThat(new JabizWebProperties(null, "staging").production()).isFalse();
+        assertThat(new SpaConfigCheck(new JabizWebProperties(null, "UAT 2")).check()).isEmpty();
+    }
+
+    @Test
+    void anEnvironmentNameThatCouldNotBeShownIsReported() {
+        List<CheckProblem> problems = new SpaConfigCheck(new JabizWebProperties(null, "<b>prod</b>")).check();
+        assertThat(problems).hasSize(1);
+        assertThat(problems.getFirst().isError()).isTrue();
+        assertThat(problems.getFirst().location()).isEqualTo("jabiz.web.environment");
+        assertThat(new SpaConfigCheck(new JabizWebProperties(null, "a".repeat(33))).check()).hasSize(1);
+    }
+
     private static List<CheckProblem> check(List<Spa> spas) {
         return new SpaConfigCheck(new JabizWebProperties(spas)).check();
     }

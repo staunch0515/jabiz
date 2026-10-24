@@ -4355,3 +4355,15 @@ L4 共享仪表的注释；L5 13 写明每个键每次轮询多一个查询观�
 测试：`ParamValuesTest`、`ParamServiceIT.optionalParametersWithoutAValueAreAbsent`。
 
 **16zc 状态**：✅ 已实施（PR 待建）。
+
+### 16zd 每一页都标明测试系统（0.5 天）
+
+来源：需求方 2026-10-24（QuizBuks：测试环境与正式环境运行同一镜像，页面要非常明显地区分）。分支 `1.2/phase-16zd-environment-badge`。
+运行时设置 `jabiz.web.environment`（环境变量 `JABIZ_WEB_ENVIRONMENT`）：`production` 为正式系统，其他名字（缺省 `test`）为测试系统——没有声明自己是正式的系统永远不会看起来像正式的。
+`GET /api/auth/entries/{name}` 多返回 `environment`，前端登录前就读到；`@jabiz/client` 的 `useEnvironment()`，`@jabiz/ui` 的 `EnvironmentBanner`（警示色的通栏横条：
+环境名大写 + "测试环境，不是正式版"，三种语言，并在文档标题前加 `[TEST]`；正式系统与尚未读到时什么也不显示），`AppShell` 与 `AuthFrame` 自己渲染它，
+通用后台与建在它们上的控制台因此每一页（含登录页）都有；自带外框的前端把它放在外框顶部。名字只允许字母、数字、空格、连字符（至多 32 字符），
+`SpaConfigCheck` 检查。设计 17 §3.2、10 §15.1。
+测试：`SpaConfigCheckTest`、`SignUpIT`（`environment: test`）、`environment.test.tsx`、`environment-banner.test.tsx`、`app-shell.test.tsx`、`LoginPage.test.tsx`、e2e `login.spec.ts`。
+
+**16zd 状态**：✅ 已实施（PR 待建）。

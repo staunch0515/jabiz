@@ -3,6 +3,7 @@ import { Collapsible } from 'radix-ui'
 import { ChevronRightIcon, type LucideIcon } from 'lucide-react'
 
 import { cn } from '../lib/utils'
+import { EnvironmentBanner } from './environment-banner'
 import { Separator } from './ui/separator'
 import {
   Sidebar,
@@ -74,16 +75,18 @@ export function AppShell({ brand, navigation, sidebarFooter, header, children, c
         <SidebarRail />
       </Sidebar>
       <SidebarInset>
-        <header
-          data-slot="app-shell-header"
-          className={cn(
-            'bg-background text-foreground sticky top-0 z-20 flex h-12 shrink-0 items-center gap-2 border-b px-3',
-          )}
-        >
-          <SidebarTrigger className="-ml-1" />
-          <Separator orientation="vertical" className="mr-1 data-[orientation=vertical]:h-4" />
-          {header}
-        </header>
+        {/* The environment's banner (a test system, phase 16zd) and the header bar stay on screen together. */}
+        <div className="sticky top-0 z-20 shrink-0">
+          <EnvironmentBanner />
+          <header
+            data-slot="app-shell-header"
+            className={cn('bg-background text-foreground flex h-12 shrink-0 items-center gap-2 border-b px-3')}
+          >
+            <SidebarTrigger className="-ml-1" />
+            <Separator orientation="vertical" className="mr-1 data-[orientation=vertical]:h-4" />
+            {header}
+          </header>
+        </div>
         <div data-slot="app-shell-content" className={cn('flex-1 p-4', contentClassName)}>
           {children}
         </div>

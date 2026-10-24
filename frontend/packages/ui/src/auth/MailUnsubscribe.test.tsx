@@ -1,4 +1,4 @@
-import { i18n } from '@jabiz/client'
+import { forgetEnvironment, i18n, setEnvironment } from '@jabiz/client'
 import { act, render, screen, waitFor } from '@testing-library/react'
 import { StrictMode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -23,10 +23,13 @@ function state() {
 
 beforeEach(async () => {
   await act(() => i18n.changeLanguage('en'))
+  // The frame's environment banner (16zd) would otherwise ask the server: the counted calls are the page's alone.
+  setEnvironment('test')
 })
 
 afterEach(() => {
   vi.unstubAllGlobals()
+  forgetEnvironment()
 })
 
 describe('MailUnsubscribe', () => {
