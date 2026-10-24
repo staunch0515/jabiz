@@ -8,6 +8,7 @@ const en = {
   loading: "Loading…",
   more: "More",
   toggleSidebar: "Toggle sidebar",
+  environment: { label: "Environment", notProduction: "Test system, not the production system" },
   sidebar: "Navigation",
   breadcrumb: "Breadcrumb",
   dataTable: {
@@ -99,6 +100,7 @@ const zh: Messages = {
   loading: "加载中…",
   more: "更多",
   toggleSidebar: "展开或收起侧栏",
+  environment: { label: "环境", notProduction: "测试环境，不是正式版" },
   sidebar: "导航",
   breadcrumb: "面包屑",
   dataTable: {
@@ -188,6 +190,7 @@ const ja: Messages = {
   loading: "読み込み中…",
   more: "その他",
   toggleSidebar: "サイドバーの表示を切り替え",
+  environment: { label: "環境", notProduction: "テスト環境、本番ではありません" },
   sidebar: "ナビゲーション",
   breadcrumb: "パンくずリスト",
   dataTable: {

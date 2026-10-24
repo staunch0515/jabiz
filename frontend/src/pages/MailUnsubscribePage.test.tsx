@@ -1,3 +1,4 @@
+import { forgetEnvironment, setEnvironment } from '@jabiz/client'
 import { render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -26,10 +27,13 @@ function respond(status: number) {
 describe('MailUnsubscribePage', () => {
   beforeEach(async () => {
     await i18n.changeLanguage('en')
+    // The frame's environment banner (16zd) would otherwise ask the server: the counted calls are the page's alone.
+    setEnvironment('test')
   })
 
   afterEach(() => {
     vi.unstubAllGlobals()
+    forgetEnvironment()
   })
 
   it('posts the token of the link once and confirms', async () => {
