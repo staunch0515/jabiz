@@ -7,6 +7,8 @@
 /** Processes (`publishing.PublicationProcesses`, `PublicationLifecycle`). */
 export const PUBLISHING_PROCESS = {
   save: 'QB_PUBLICATION_SAVE',
+  /** The sponsor says they handed the taker a cash reward (Q22). */
+  cashMarkPaid: 'QB_CASH_REWARD_MARK_PAID',
   delete: 'QB_PUBLICATION_DELETE',
   copy: 'QB_PUBLICATION_COPY',
   submit: 'QB_PUBLICATION_SUBMIT',
@@ -18,12 +20,16 @@ export const PUBLISHING_PROCESS = {
 /** SQL templates (`queries/qb/sponsor`). The wizard's quizzes and versions are the content workshop's templates. */
 export const PUBLISHING_TEMPLATE = {
   publications: 'qb.sponsor.publications',
+  /** The cash rewards the sponsor owes or paid (Q22). */
+  cashRewards: 'qb.sponsor.cash-rewards',
 } as const
 
 /** The sponsor's own rows of the publishing entities (read only; writing is the processes'). */
 export const PUBLISHING_DATASET = {
   publication: 'urn:jabiz:dataset:sponsor:QbPublication',
   tier: 'urn:jabiz:dataset:sponsor:QbRewardTier',
+  /** The reward methods an administrator allowed the sponsor (Q22); no row means the platform's Kudos only. */
+  rewardMethods: 'urn:jabiz:dataset:sponsor:QbSponsorRewardMethods',
 } as const
 
 /** Dictionaries, labelled by the server in the request's language. */
@@ -31,6 +37,8 @@ export const PUBLISHING_DICTIONARY = {
   status: 'urn:jabiz:dict:quizbuks:publication-status',
   endReason: 'urn:jabiz:dict:quizbuks:publication-end-reason',
   region: 'urn:jabiz:dict:quizbuks:region',
+  rewardMethod: 'urn:jabiz:dict:quizbuks:reward-method',
+  cashStatus: 'urn:jabiz:dict:quizbuks:cash-reward-status',
 } as const
 
 /** Error codes the pages react to (`publishing.PublishingCodes`). */

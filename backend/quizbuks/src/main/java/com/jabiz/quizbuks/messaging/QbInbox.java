@@ -69,14 +69,28 @@ public final class QbInbox {
     public static final String TRANSFER_FAILED = "TRANSFER_FAILED";
     public static final String PAYOUT_ACTION_NEEDED = "PAYOUT_ACTION_NEEDED";
     public static final String PAYOUT_REMINDER = "PAYOUT_REMINDER";
+    /** Q22: a cash reward owed to the taker, each step of it, and a prize to collect. */
+    public static final String CASH_DUE = "CASH_DUE";
+    public static final String CASH_MARKED_PAID = "CASH_MARKED_PAID";
+    public static final String CASH_CONFIRMED = "CASH_CONFIRMED";
+    public static final String CASH_DISPUTED = "CASH_DISPUTED";
+    public static final String CASH_RESOLVED = "CASH_RESOLVED";
+    public static final String CASH_RESOLVED_SPONSOR = "CASH_RESOLVED_SPONSOR";
+    public static final String CASH_OVERDUE = "CASH_OVERDUE";
+    public static final String REDEEM_DUE = "REDEEM_DUE";
+    public static final List<String> CASH_KINDS = List.of(CASH_DUE, CASH_MARKED_PAID, CASH_CONFIRMED, CASH_DISPUTED,
+        CASH_RESOLVED, CASH_RESOLVED_SPONSOR, CASH_OVERDUE);
     public static final List<String> MESSAGE_KINDS = List.of(REWARD_PAID, REWARD_PENDING, TRANSFER_SENT,
-        TRANSFER_FAILED, PAYOUT_ACTION_NEEDED, PAYOUT_REMINDER);
+        TRANSFER_FAILED, PAYOUT_ACTION_NEEDED, PAYOUT_REMINDER, CASH_DUE, CASH_MARKED_PAID, CASH_CONFIRMED,
+        CASH_DISPUTED, CASH_RESOLVED, CASH_RESOLVED_SPONSOR, CASH_OVERDUE, REDEEM_DUE);
 
     /** Where a message leads the app: an attempt's result, the wallet or the payout account. */
     public static final String ACTION_RESULT = "RESULT";
     public static final String ACTION_WALLET = "WALLET";
     public static final String ACTION_PAYOUT = "PAYOUT";
-    public static final List<String> ACTIONS = List.of(ACTION_RESULT, ACTION_WALLET, ACTION_PAYOUT);
+    /** Q22: the sponsor console's cash rewards (a sponsor's message). */
+    public static final String ACTION_CASH = "CASH";
+    public static final List<String> ACTIONS = List.of(ACTION_RESULT, ACTION_WALLET, ACTION_PAYOUT, ACTION_CASH);
 
     // ---- broadcasts ------------------------------------------------------------------------------------------------
 

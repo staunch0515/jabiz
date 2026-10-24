@@ -39,10 +39,14 @@ public final class PlayCodes {
 
     /** Not a refusal: the result page's notice that the reward waits for the sponsor's top-up (U-34). */
     public static final String REWARD_PENDING = "QB_REWARD_PENDING";
+    /** Q22: the notice that the sponsor pays the reward in cash, with its code. */
+    public static final String REWARD_CASH = "QB_REWARD_CASH";
+    /** Q22: the notice that the prize is collected at the sponsor's place. */
+    public static final String REWARD_REDEEM = "QB_REWARD_REDEEM";
 
     public static final List<String> ALL = List.of(NOT_OPEN, NOT_VISIBLE, BUDGET_FULL, QUOTA_FULL, FUNDS_SHORT,
         ALREADY_TAKEN, OWN_PUBLICATION, EXPIRED, NOT_IN_PROGRESS, FINISHED, ANSWER_INVALID, INCOMPLETE, SINGLE_CHOICE, PUBLICATION_MISMATCH,
-        FEE_RATE_INVALID, REWARD_PENDING);
+        FEE_RATE_INVALID, REWARD_PENDING, REWARD_CASH, REWARD_REDEEM);
 
     private PlayCodes() {}
 }

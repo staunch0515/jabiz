@@ -22,7 +22,16 @@ public final class PublicationReadiness {
 
     /** The policy of a publication as it stands; any part may be missing in a draft. */
     public record Draft(UUID versionId, String name, String regions, Instant startAt, Instant endAt,
-        Integer timeLimitSec, Integer passScore, BigDecimal budgetCap, Integer maxWinners) {}
+        Integer timeLimitSec, Integer passScore, BigDecimal budgetCap, Integer maxWinners, String rewardMethod,
+        String redeemDescription) {
+
+        /** A draft paid by the platform (Q22): what every draft was before. */
+        public Draft(UUID versionId, String name, String regions, Instant startAt, Instant endAt,
+            Integer timeLimitSec, Integer passScore, BigDecimal budgetCap, Integer maxWinners) {
+            this(versionId, name, regions, startAt, endAt, timeLimitSec, passScore, budgetCap, maxWinners,
+                RewardMethod.PLATFORM, null);
+        }
+    }
 
     /**
      * @param version the snapshot of the chosen version; null without one
@@ -91,6 +100,11 @@ public final class PublicationReadiness {
         }
         if (version != null && version.survey()) {
             problems.addAll(survey(draft, tiers, fullScore));
+        }
+        // Q22: a prize at the sponsor's place is described to the taker (what, where); the other methods say nothing.
+        if (RewardMethod.OFFLINE_REDEEM.equals(draft.rewardMethod())
+            && (draft.redeemDescription() == null || draft.redeemDescription().isBlank())) {
+            problems.add(required("redeemDescription"));
         }
         if (version != null) {
             QuizCompleteness.check(version).forEach(problem -> problems.add(new Violation(

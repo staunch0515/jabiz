@@ -27,6 +27,8 @@ const FORM: PublicationForm = {
     { key: 'a', tierId: 't1', fromScore: '0', toScore: '1', reward: '0' },
     { key: 'b', tierId: null, fromScore: '2', toScore: '2', reward: '100' },
   ],
+  rewardMethod: 'PLATFORM',
+  redeemDescription: '',
 }
 
 describe('the publishing paths', () => {
@@ -47,7 +49,7 @@ describe('the wizard\'s form', () => {
       budgetCap: 1000, maxWinners: 10, baseRevision: 4, tiers: [
         { tierId: 't1', fromScore: 0, toScore: 1, reward: 0 },
         { tierId: null, fromScore: 2, toScore: 2, reward: 100 },
-      ] } })
+      ], rewardMethod: 'PLATFORM', redeemDescription: null } })
   })
 
   it('marks what is not a whole number, and a tier\'s missing values, without sending', () => {

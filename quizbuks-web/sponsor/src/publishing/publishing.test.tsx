@@ -43,6 +43,9 @@ interface Server {
   /** Holds the answers to searches of the quizzes (with `q`) until it resolves. */
   quizSearch?: Promise<void>
   versions?: Record<string, unknown>[]
+  /** The sponsor's reward methods setting (Q22); none means the platform's Kudos only. */
+  methods?: string
+  cashRewards?: Record<string, unknown>[]
 }
 
 /** The server as the console sees it, for a signed-in, approved sponsor. Records what was posted. */
@@ -82,6 +85,17 @@ function server(options: Server = {}) {
           : json(404, { detail: 'Not found' })
       case '/api/datasets/urn:jabiz:dataset:sponsor:QbRewardTier/query':
         return rows(options.tiers ?? [])
+      case '/api/datasets/urn:jabiz:dataset:sponsor:QbSponsorRewardMethods/query':
+        return rows(options.methods ? [{ methods: options.methods, note: null }] : [])
+      case '/api/dictionaries/urn:jabiz:dict:quizbuks:reward-method':
+        return json(200, [{ code: 'PLATFORM', label: 'Kudos paid by QuizBuks' },
+          { code: 'SPONSOR_CASH', label: 'Cash from the sponsor' },
+          { code: 'OFFLINE_REDEEM', label: "Prize at the sponsor's place" }])
+      case '/api/dictionaries/urn:jabiz:dict:quizbuks:cash-reward-status':
+        return json(200, [{ code: 'DUE', label: 'To be paid by the sponsor' }, { code: 'MARKED_PAID', label: 'Paid, awaiting confirmation' },
+          { code: 'CONFIRMED', label: 'Confirmed' }, { code: 'DISPUTED', label: 'Disputed' }])
+      case '/api/queries/qb.sponsor.cash-rewards':
+        return json(200, { items: options.cashRewards ?? [], offset: 0, limit: 20, total: options.cashRewards?.length ?? 0 })
       case '/api/dictionaries/urn:jabiz:dict:quizbuks:publication-status':
         return json(200, [{ code: 'DRAFT', label: 'Draft' }, { code: 'PENDING_REVIEW', label: 'In review' },
           { code: 'LIVE', label: 'Live' }, { code: 'PAUSED', label: 'Paused' }])
@@ -150,7 +164,7 @@ describe('the publication wizard', () => {
     expect(window.location.search).toBe('?step=1')
     expect(processCalls('QB_PUBLICATION_SAVE')).toEqual([{ publicationId: null, versionId: null, name: 'Tea week',
       regions: [], startAt: null, endAt: null, timeLimitSec: null, passScore: null, budgetCap: null,
-      maxWinners: null, tiers: [], baseRevision: null }])
+      maxWinners: null, tiers: [], baseRevision: null, rewardMethod: 'PLATFORM', redeemDescription: null }])
   })
 
   it('chooses the newest version with the quiz', async () => {
@@ -212,7 +226,7 @@ describe('the publication wizard', () => {
     expect(document.activeElement).toBe(screen.getByTestId('publication-step-title'))
     expect(processCalls('QB_PUBLICATION_SAVE')).toEqual([{ publicationId: 'p1', versionId: 'v1', name: 'Coffee week',
       regions: ['GLOBAL', 'JP'], startAt: '2026-11-01T00:00:00Z', endAt: '2026-11-08T00:00:00Z', timeLimitSec: 300,
-      passScore: 2, budgetCap: null, maxWinners: null, baseRevision: 3,
+      passScore: 2, budgetCap: null, maxWinners: null, baseRevision: 3, rewardMethod: 'PLATFORM', redeemDescription: null,
       tiers: [{ tierId: null, fromScore: 0, toScore: 2, reward: 100 }] }])
   })
 
@@ -317,6 +331,69 @@ describe('the publication wizard', () => {
     const reason = await screen.findByTestId('publication-sent-back-reason')
     expect(reason).toHaveTextContent('Your account was suspended while it was in review')
     expect(reason).not.toHaveTextContent('QB_USER_BANNED')
+  })
+})
+
+describe('the reward method (Q22)', () => {
+  it('offers no choice while only the platform pays, and sends the platform\'s method', async () => {
+    const { processCalls } = server({ processes: { QB_PUBLICATION_SAVE: [saved(4)] } })
+    window.history.replaceState(null, '', '/publications/p1?step=1')
+    render(<App />)
+    await screen.findByTestId('publication-regions')
+    expect(screen.queryByTestId('publication-method')).toBeNull()
+    await userEvent.click(screen.getByTestId('publication-next'))
+    await waitFor(() => expect(processCalls('QB_PUBLICATION_SAVE')).toHaveLength(1))
+    expect(processCalls('QB_PUBLICATION_SAVE')[0]).toMatchObject({ rewardMethod: 'PLATFORM', redeemDescription: null })
+  })
+
+  it('offers the allowed methods, asks a prize for its description, and shows both in the summary', async () => {
+    const { processCalls } = server({ methods: 'PLATFORM,SPONSOR_CASH,OFFLINE_REDEEM',
+      processes: { QB_PUBLICATION_SAVE: [saved(4)] } })
+    window.history.replaceState(null, '', '/publications/p1?step=1')
+    render(<App />)
+    const choice = await screen.findByTestId('publication-method')
+    expect(within(choice).getAllByRole('radio')).toHaveLength(3)
+    expect(screen.queryByTestId('publication-redeem')).toBeNull()
+    await userEvent.click(within(choice).getByTestId('publication-method-OFFLINE_REDEEM'))
+    await userEvent.type(await screen.findByTestId('publication-redeem'), 'A coffee at our counter')
+    await userEvent.click(screen.getByTestId('publication-next'))
+    await waitFor(() => expect(processCalls('QB_PUBLICATION_SAVE')).toHaveLength(1))
+    expect(processCalls('QB_PUBLICATION_SAVE')[0]).toMatchObject({ rewardMethod: 'OFFLINE_REDEEM',
+      redeemDescription: 'A coffee at our counter' })
+    await waitFor(() => expect(screen.getByTestId('summary-reward-method')).toHaveTextContent("Prize at the sponsor's place"))
+    expect(screen.getByTestId('summary-redeem')).toHaveTextContent('A coffee at our counter')
+  })
+
+  it('starts a new draft with the first method allowed when the platform\'s is not', async () => {
+    const { processCalls } = server({ methods: 'SPONSOR_CASH', processes: { QB_PUBLICATION_SAVE: [saved(4)] } })
+    window.history.replaceState(null, '', '/publications/new')
+    render(<App />)
+    await screen.findByTestId('publication-name')
+    await userEvent.type(screen.getByTestId('publication-name'), 'Cash week')
+    await userEvent.click(screen.getByTestId('publication-next'))
+    await waitFor(() => expect(processCalls('QB_PUBLICATION_SAVE')).toHaveLength(1))
+    expect(processCalls('QB_PUBLICATION_SAVE')[0]).toMatchObject({ rewardMethod: 'SPONSOR_CASH' })
+  })
+
+  it('lists the cash rewards owed and marks one paid with a note', async () => {
+    const reward = { cashRewardId: 'c1', code: 'C-ABCD1234', publicationId: 'p1', publicationName: 'Coffee week',
+      takerName: 'Mei', amount: '100', status: 'DUE', dueAt: '2026-10-20T01:00:00Z', payBy: '2026-11-03T01:00:00Z',
+      markedPaidAt: null, markedPaidNote: null, confirmBy: null, confirmedAt: null, disputedAt: null,
+      disputeNote: null, resolution: null, resolveNote: null }
+    const { processCalls } = server({ cashRewards: [reward], processes: { QB_CASH_REWARD_MARK_PAID: [
+      { status: 200, body: { output: { cashRewardId: 'c1', status: 'MARKED_PAID', revision: 2 } } }] } })
+    window.history.replaceState(null, '', '/cash-rewards')
+    render(<App />)
+    const row = await screen.findByTestId('cash-row')
+    expect(row).toHaveTextContent('C-ABCD1234')
+    expect(row).toHaveTextContent('Mei')
+    expect(row).toHaveTextContent('100 Kudos')
+    await waitFor(() => expect(within(row).getByTestId('cash-status')).toHaveTextContent('To be paid by the sponsor'))
+    await userEvent.click(within(row).getByTestId('cash-mark'))
+    await userEvent.type(await screen.findByTestId('cash-mark-note'), 'Receipt 17')
+    await userEvent.click(screen.getByTestId('cash-mark-confirm'))
+    await waitFor(() => expect(processCalls('QB_CASH_REWARD_MARK_PAID')).toEqual([{ cashRewardId: 'c1', note: 'Receipt 17' }]))
+    await waitFor(() => expect(screen.queryByTestId('cash-mark-dialog')).toBeNull())
   })
 })
 

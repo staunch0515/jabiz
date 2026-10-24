@@ -177,6 +177,41 @@ final class PublicationEditing {
                 BAN_ROWS));
     }
 
+    /** The caller's reward methods setting (Q22), for {@link #allowedMethods}. */
+    static final String SPONSOR_METHODS = "sponsorMethods";
+
+    /**
+     * Loads the setting of the methods the caller may publish with (Q22, {@code QbSponsorRewardMethods}; none means
+     * {@link RewardMethod#DEFAULT}). By the immutable user, read only: a setting changed meanwhile is caught by the
+     * next action, as the ban is.
+     */
+    static <I, O> void loadSponsorMethods(ProcessDefinitionBuilder<I, O, ProcessContext> pb) {
+        pb.step("Load the sponsor's reward methods", QueryEntities.<ProcessContext>of(
+            QbPublications.defaultDataset(QbPublications.SPONSOR_METHODS), ctx -> EntityQuery.builder()
+                .where(new QueryPredicate.Eq("userId", ctx.request().actorId())).limit(1).build(), SPONSOR_METHODS));
+    }
+
+    /** The methods the caller may publish with, from {@link #loadSponsorMethods}. */
+    static List<String> allowedMethods(ProcessContext ctx) {
+        EntityInstance setting = first(ctx, SPONSOR_METHODS);
+        return RewardMethod.parse(setting == null ? null : setting.get("methods"));
+    }
+
+    /**
+     * Why the publication's method may not be used by the caller (422 {@code QB_REWARD_METHOD_NOT_ALLOWED}); none
+     * when it may. Checked when a draft is saved and again when it is submitted: an administrator may have taken the
+     * method away meanwhile.
+     */
+    static List<Violation> methodProblems(ProcessContext ctx, Object method) {
+        List<String> allowed = allowedMethods(ctx);
+        if (method == null || allowed.contains(method.toString())) {
+            return List.of();
+        }
+        return List.of(new Violation("rewardMethod", PublishingCodes.REWARD_METHOD_NOT_ALLOWED, "This sponsor "
+            + "may not publish with the reward method " + method + "; allowed: " + String.join(", ", allowed),
+            Map.of("rewardMethod", method.toString(), "allowed", String.join(",", allowed))));
+    }
+
     /** The publication named by {@link #PUB_ID} as read before the locks, for its (immutable) sponsor (Q10b). */
     static final String BEFORE = "before";
 
@@ -505,9 +540,10 @@ final class PublicationEditing {
         card.put("sponsorId", publication.get("sponsorId"));
         card.put("status", status);
         for (String field : List.of("regions", "startAt", "endAt", "name", "versionId", "maxReward", "fullScore",
-            "passScore", "timeLimitSec", "budgetCap", "maxWinners")) {
+            "passScore", "timeLimitSec", "budgetCap", "maxWinners", "redeemDescription")) {
             card.put(field, publication.get(field));
         }
+        card.put("rewardMethod", methodOf(publication.attributes()));
         card.put("quizTitle", version.get("title"));
         card.put("questionCount", version.get("questionCount"));
         card.put("cover", snapshot.cover() == null ? null : snapshot.cover().toString());
@@ -527,7 +563,13 @@ final class PublicationEditing {
         return new PublicationReadiness.Draft(uuid(values.get("versionId")), (String) values.get("name"),
             (String) values.get("regions"), instant(values.get("startAt")), instant(values.get("endAt")),
             integer(values.get("timeLimitSec")), integer(values.get("passScore")), money(values.get("budgetCap")),
-            integer(values.get("maxWinners")));
+            integer(values.get("maxWinners")), methodOf(values), (String) values.get("redeemDescription"));
+    }
+
+    /** The reward method of a publication's values; {@link RewardMethod#PLATFORM} when none is written (Q22). */
+    static String methodOf(Map<String, Object> values) {
+        Object method = values.get("rewardMethod");
+        return method == null ? RewardMethod.PLATFORM : method.toString();
     }
 
     static PublicationReadiness.Draft draftOf(EntityInstance publication) {
@@ -568,7 +610,7 @@ final class PublicationEditing {
         List<TierCoverage.Tier> ranges = tiersOf(tiers);
         Map<String, Object> facts = PublicationApprovals.facts(autoApprove && !takenDown,
             money(publication.get("maxReward")), money(publication.get("maxSpend")), publication.get("sponsorId"),
-            publication.get("regions"), takenDown);
+            publication.get("regions"), takenDown, methodOf(publication.attributes()));
         Map<String, Object> content = PublicationApprovals.content(draftOf(publication),
             version == null ? null : version.get("contentHash"), ranges);
         return ApprovalCase.of(publication.id(), facts, content).reference(publication.get("name"));

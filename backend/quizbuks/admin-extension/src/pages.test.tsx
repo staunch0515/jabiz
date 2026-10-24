@@ -8,7 +8,7 @@ import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, AppearanceProvider, EXTENSION_NAMESPACE, Toaster } from '@jabiz/admin'
 import { COVER, PDF, PICTURE, SNAPSHOT_JSON } from './fixtures'
-import { DATASET, TEMPLATE } from './ids'
+import { DATASET, TEMPLATE, PROCESS } from './ids'
 import { messages } from './messages'
 import PublicationReviewPage from './PublicationReviewPage'
 import ReviewsPage from './ReviewsPage'
@@ -24,6 +24,7 @@ const server = vi.hoisted(() => ({
   datasets: new Map<string, Row[]>(),
   templates: new Map<string, Row[] | Error>(),
   runQuery: vi.fn(),
+  runProcess: vi.fn(),
   get: vi.fn(),
   post: vi.fn(),
   decided: vi.fn(),
@@ -38,6 +39,7 @@ vi.mock('@jabiz/admin', async (original) => {
     api: { GET: server.get, POST: server.post },
     unwrap: async (call: Promise<unknown>) => call,
     runQuery: server.runQuery,
+    runProcess: server.runProcess,
     useAuth: () => ({ can: (p: string) => server.permissions.has('*') || server.permissions.has(p) }),
     // The platform's own parts that call the server themselves stand in by what they were given.
     FilePreview: ({ fileId, field }: { fileId: string; field: { image?: boolean } }) => (
@@ -100,6 +102,7 @@ beforeEach(() => {
       { seq: 2, fromScore: 5, toScore: 5, reward: 100 }]],
     [DATASET.sponsor, [SPONSOR]],
     [DATASET.ban, []],
+    [DATASET.sponsorMethods, []],
   ])
   server.templates = new Map<string, Row[] | Error>([
     [TEMPLATE.publications, [{ ...publication(), quizTitle: 'World capitals' }]],
@@ -144,6 +147,7 @@ beforeEach(() => {
     return { items: all.slice(offset, offset + limit), offset, limit, ...(options.count ? { total: all.length } : {}) }
   })
   server.decided.mockReset()
+  server.runProcess.mockReset().mockResolvedValue({})
   server.decision = 'APPROVED'
 })
 
@@ -455,6 +459,19 @@ describe('SponsorReviewPage', () => {
     renderAt(`/qb/reviews/sponsors/${SPONSOR_ID}`, '/qb/reviews/sponsors/:userId', <SponsorReviewPage />)
     expect(await screen.findByText('Deciding needs the permission to review sponsors.')).toBeInTheDocument()
     expect(screen.queryByTestId('approval-panel')).not.toBeInTheDocument()
+    // Q22: the methods are shown to everyone, changed only with the permission.
+    expect(await screen.findByTestId('sponsor-methods-current')).toHaveTextContent('Allowed now: PLATFORM')
+    expect(screen.queryByTestId('sponsor-methods-save')).toBeNull()
+  })
+
+  it('lets an administrator allow cash rewards, keeping the platform\'s Kudos (Q22)', async () => {
+    server.permissions.add('qb.admin.reward-methods')
+    renderAt(`/qb/reviews/sponsors/${SPONSOR_ID}`, '/qb/reviews/sponsors/:userId', <SponsorReviewPage />)
+    await userEvent.click(await screen.findByTestId('sponsor-method-SPONSOR_CASH'))
+    await userEvent.type(screen.getByTestId('sponsor-methods-note'), 'Trusted shop')
+    await userEvent.click(screen.getByTestId('sponsor-methods-save'))
+    await waitFor(() => expect(server.runProcess).toHaveBeenCalledWith(PROCESS.rewardMethodsSet,
+      { userId: SPONSOR_ID, methods: ['PLATFORM', 'SPONSOR_CASH'], note: 'Trusted shop' }))
   })
 })
 

@@ -14,6 +14,7 @@ params:
   at:      { kind: { type: temporal, role: EVENT_TIME }, required: true, description: The time the feed is for (the client's now) }
   country: { kind: { type: text, maxLength: 2 }, description: "The taker's country (QbCountry.code); without one only publications aimed at GLOBAL" }
   q:       { kind: { type: text, maxLength: 100 }, description: Only publications whose name or quiz title contains this text }
+  method:  { like: QbPublicationCard.rewardMethod, description: "Only publications whose reward comes this way (Q22): PLATFORM, SPONSOR_CASH or OFFLINE_REDEEM" }
 results:
   publicationId:  { from: QbPublicationCard.publicationId }
   name:           { from: QbPublicationCard.name }
@@ -22,6 +23,7 @@ results:
   video:          { from: QbPublicationCard.video }
   kind:           { from: QbPublicationCard.kind }
   maxReward:      { from: QbPublicationCard.maxReward }
+  rewardMethod:   { from: QbPublicationCard.rewardMethod }
   completions:    { from: QbPublicationCounter.completions }
   sponsorName:    { from: QbSponsor.contactName }
   sponsorCompany: { from: QbSponsor.company }
@@ -33,7 +35,7 @@ results:
   questionCount:  { from: QbPublicationCard.questionCount }
   fullScore:      { from: QbPublicationCard.fullScore }
 list:
-  filters: [sponsorCountry, sponsorName, sponsorCompany, maxReward, completions, startAt]
+  filters: [sponsorCountry, sponsorName, sponsorCompany, maxReward, rewardMethod, completions, startAt]
   sorts:   [startAt, maxReward, completions]
   defaultSort: { field: startAt, asc: false }
   key: [publicationId]
@@ -42,7 +44,8 @@ permissions: [qb.play]
 -- The conditions of play.AttemptRules.startRefusal (D-Q5-6), which QB_ATTEMPT_START checks again by the server's
 -- clock: live and within its time; aimed at a region of the taker's country (every country is in GLOBAL); budget and
 -- winners not used up, attempts in progress counting with the highest reward and a winner's place each; a sponsor
--- with nothing pending and a balance that pays the highest reward (no wallet row is a balance of 0); not the caller's
+-- with nothing pending and a balance that pays the highest reward (no wallet row is a balance of 0; only for rewards
+-- paid from the wallet, Q22: cash and prizes are the sponsor's own affair); not the caller's
 -- own (QbPublicationOwner: the cards of the caller's publications). Only ordinary
 -- tables but the countries and the sponsors, both small. The sponsor's name and avatar are an approved onboarding's
 -- only (Q2 review). The text is found as written: strpos takes it literally, so % _ and \ match themselves.
@@ -57,6 +60,7 @@ SELECT
     c.{{QbPublicationCard.video}}          AS video,
     c.{{QbPublicationCard.kind}}           AS kind,
     c.{{QbPublicationCard.maxReward}}      AS maxReward,
+    c.{{QbPublicationCard.rewardMethod}}   AS rewardMethod,
     n.{{QbPublicationCounter.completions}} AS completions,
     sp.{{QbSponsor.contactName}}           AS sponsorName,
     sp.{{QbSponsor.company}}               AS sponsorCompany,
@@ -86,8 +90,10 @@ WHERE c.{{QbPublicationCard.status}} = 'LIVE'
   AND (c.{{QbPublicationCard.maxWinners}} IS NULL
        OR n.{{QbPublicationCounter.winners}} + s.{{QbPublicationStartCounter.starts}}
           - n.{{QbPublicationCounter.completions}} < c.{{QbPublicationCard.maxWinners}})
-  AND coalesce(w.{{QbWallet.pendingCount}}, 0) = 0
-  AND coalesce(w.{{QbWallet.balance}} - w.{{QbWallet.held}}, 0) >= c.{{QbPublicationCard.maxReward}}
+  AND (c.{{QbPublicationCard.rewardMethod}} <> 'PLATFORM'
+       OR (coalesce(w.{{QbWallet.pendingCount}}, 0) = 0
+           AND coalesce(w.{{QbWallet.balance}} - w.{{QbWallet.held}}, 0) >= c.{{QbPublicationCard.maxReward}}))
+  AND (CAST(:method AS text) IS NULL OR c.{{QbPublicationCard.rewardMethod}} = CAST(:method AS text))
   AND NOT EXISTS (SELECT 1 FROM {{QbPublicationOwner}} own
                   WHERE own.{{QbPublicationOwner.publicationId}} = c.{{QbPublicationCard.publicationId}})
   AND (CAST(:q AS text) IS NULL

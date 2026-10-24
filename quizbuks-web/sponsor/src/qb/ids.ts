@@ -48,6 +48,10 @@ export const PLAY = {
   submit: 'QB_ATTEMPT_SUBMIT',
   /** A finished attempt's questions as shown and its answers, read any time later (Q20). */
   result: 'QB_ATTEMPT_RESULT',
+  /** Q22: the taker confirms or disputes a cash reward; their open ones. */
+  cashConfirm: 'QB_CASH_REWARD_CONFIRM',
+  cashDispute: 'QB_CASH_REWARD_DISPUTE',
+  cashRewards: 'qb.app.cash-rewards',
   feed: 'qb.app.feed',
   publication: 'qb.app.publication',
   publicationTiers: 'qb.app.publication-tiers',

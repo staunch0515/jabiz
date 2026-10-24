@@ -12,6 +12,7 @@ import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.quizbuks.play.AttemptFinishing;
+import com.jabiz.quizbuks.reward.CashRewardProcesses;
 import com.jabiz.quizbuks.wallet.PayoutProcesses;
 import com.jabiz.quizbuks.wallet.QbPayouts;
 import org.springframework.beans.factory.annotation.Value;
@@ -471,5 +472,72 @@ public class InboxConfig {
             qbMessageFromEvent) {
         return EventSubscription.of(MessageProcesses.PAYOUT_RESTRICTED_CONSUMER, PayoutProcesses.RESTRICTED_EVENT,
             qbMessageFromEvent, MessageProcesses::payoutInput);
+    }
+
+    // Q22: the cash reward's steps, each to the side that must hear of it, and the prize to collect.
+
+    @Bean
+    EventSubscription<MessageProcesses.EventInput> qbMessageCashDueSubscription(
+        ProcessDefinition<MessageProcesses.EventInput, MessageProcesses.MessageOutput, ProcessContext>
+            qbMessageFromEvent) {
+        return EventSubscription.of(MessageProcesses.CASH_DUE_CONSUMER, AttemptFinishing.CASH_EVENT,
+            qbMessageFromEvent, event -> MessageProcesses.cashInput(event, QbInbox.CASH_DUE));
+    }
+
+    @Bean
+    EventSubscription<MessageProcesses.EventInput> qbMessageCashMarkedPaidSubscription(
+        ProcessDefinition<MessageProcesses.EventInput, MessageProcesses.MessageOutput, ProcessContext>
+            qbMessageFromEvent) {
+        return EventSubscription.of(MessageProcesses.CASH_MARKED_PAID_CONSUMER, CashRewardProcesses.MARKED_PAID_EVENT,
+            qbMessageFromEvent, event -> MessageProcesses.cashInput(event, QbInbox.CASH_MARKED_PAID));
+    }
+
+    @Bean
+    EventSubscription<MessageProcesses.EventInput> qbMessageCashConfirmedSubscription(
+        ProcessDefinition<MessageProcesses.EventInput, MessageProcesses.MessageOutput, ProcessContext>
+            qbMessageFromEvent) {
+        return EventSubscription.of(MessageProcesses.CASH_CONFIRMED_CONSUMER, CashRewardProcesses.CONFIRMED_EVENT,
+            qbMessageFromEvent, event -> MessageProcesses.cashInput(event, QbInbox.CASH_CONFIRMED));
+    }
+
+    @Bean
+    EventSubscription<MessageProcesses.EventInput> qbMessageCashDisputedSubscription(
+        ProcessDefinition<MessageProcesses.EventInput, MessageProcesses.MessageOutput, ProcessContext>
+            qbMessageFromEvent) {
+        return EventSubscription.of(MessageProcesses.CASH_DISPUTED_CONSUMER, CashRewardProcesses.DISPUTED_EVENT,
+            qbMessageFromEvent, event -> MessageProcesses.cashInput(event, QbInbox.CASH_DISPUTED));
+    }
+
+    @Bean
+    EventSubscription<MessageProcesses.EventInput> qbMessageCashResolvedSubscription(
+        ProcessDefinition<MessageProcesses.EventInput, MessageProcesses.MessageOutput, ProcessContext>
+            qbMessageFromEvent) {
+        return EventSubscription.of(MessageProcesses.CASH_RESOLVED_CONSUMER, CashRewardProcesses.RESOLVED_EVENT,
+            qbMessageFromEvent, event -> MessageProcesses.cashInput(event, QbInbox.CASH_RESOLVED));
+    }
+
+    @Bean
+    EventSubscription<MessageProcesses.EventInput> qbMessageCashResolvedSponsorSubscription(
+        ProcessDefinition<MessageProcesses.EventInput, MessageProcesses.MessageOutput, ProcessContext>
+            qbMessageFromEvent) {
+        return EventSubscription.of(MessageProcesses.CASH_RESOLVED_SPONSOR_CONSUMER,
+            CashRewardProcesses.RESOLVED_EVENT, qbMessageFromEvent,
+            event -> MessageProcesses.cashInput(event, QbInbox.CASH_RESOLVED_SPONSOR));
+    }
+
+    @Bean
+    EventSubscription<MessageProcesses.EventInput> qbMessageCashOverdueSubscription(
+        ProcessDefinition<MessageProcesses.EventInput, MessageProcesses.MessageOutput, ProcessContext>
+            qbMessageFromEvent) {
+        return EventSubscription.of(MessageProcesses.CASH_OVERDUE_CONSUMER, CashRewardProcesses.OVERDUE_EVENT,
+            qbMessageFromEvent, event -> MessageProcesses.cashInput(event, QbInbox.CASH_OVERDUE));
+    }
+
+    @Bean
+    EventSubscription<MessageProcesses.EventInput> qbMessageRedeemDueSubscription(
+        ProcessDefinition<MessageProcesses.EventInput, MessageProcesses.MessageOutput, ProcessContext>
+            qbMessageFromEvent) {
+        return EventSubscription.of(MessageProcesses.REDEEM_DUE_CONSUMER, AttemptFinishing.REDEEM_EVENT,
+            qbMessageFromEvent, MessageProcesses::redeemInput);
     }
 }

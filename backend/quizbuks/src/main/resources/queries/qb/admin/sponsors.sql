@@ -1,9 +1,10 @@
 /*---
 id: qb.admin.sponsors
 description: Sponsor onboarding (P-09) with the sponsor's name and address, newest application first
-entities: [QbSponsor, SecUser]
+entities: [QbSponsor, SecUser, QbSponsorRewardMethods]
 datasets:
   QbSponsor: urn:jabiz:dataset:default:QbSponsor
+  QbSponsorRewardMethods: urn:jabiz:dataset:default:QbSponsorRewardMethods
 results:
   onboardingId:      { from: QbSponsor.onboardingId }
   userId:            { from: QbSponsor.userId }
@@ -15,6 +16,7 @@ results:
   approvedAt:        { from: QbSponsor.approvedAt }
   rejectReason:      { from: QbSponsor.rejectReason }
   approvalRequestId: { from: QbSponsor.approvalRequestId }
+  rewardMethods:     { from: QbSponsorRewardMethods.methods }
 list:
   filters: [reviewStatus, submittedAt]
   sorts:   [submittedAt, approvedAt, company]
@@ -33,6 +35,9 @@ SELECT
     s.{{QbSponsor.submittedAt}}       AS submittedAt,
     s.{{QbSponsor.approvedAt}}        AS approvedAt,
     s.{{QbSponsor.rejectReason}}      AS rejectReason,
-    s.{{QbSponsor.approvalRequestId}} AS approvalRequestId
+    s.{{QbSponsor.approvalRequestId}} AS approvalRequestId,
+    coalesce(rm.{{QbSponsorRewardMethods.methods}}, 'PLATFORM') AS rewardMethods
 FROM {{QbSponsor}} s
 LEFT JOIN {{SecUser}} u ON CAST(u.{{SecUser.userId}} AS text) = s.{{QbSponsor.userId}}
+-- Q22: the reward methods an administrator allowed; PLATFORM alone without a setting.
+LEFT JOIN {{QbSponsorRewardMethods}} rm ON rm.{{QbSponsorRewardMethods.userId}} = s.{{QbSponsor.userId}}

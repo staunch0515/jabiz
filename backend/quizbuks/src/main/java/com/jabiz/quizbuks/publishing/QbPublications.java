@@ -45,6 +45,8 @@ public final class QbPublications {
     /** The live publications' cards that a share link shows to anybody (Q15): a whitelist of their fields. */
     public static final String PUBLIC_CARDS = "urn:jabiz:dataset:public:" + CARD;
     public static final String OWNER = "QbPublicationOwner";
+    /** Q22: the reward methods a sponsor may publish with, set by an administrator. */
+    public static final String SPONSOR_METHODS = "QbSponsorRewardMethods";
     /** The cards of the caller's own publications: the takers' templates leave them out of what can be started. */
     public static final String MY_OWNER_DATASET = "urn:jabiz:dataset:me:" + OWNER;
 
@@ -91,6 +93,12 @@ public final class QbPublications {
         eb.field("maxWinners", f -> f.physicalColumn("max_winners").asNumeric(9, 0)
             .apply(Rules.range(PublishingCodes.MAX_WINNERS_RANGE, BigDecimal.ONE,
                 decimal(PublishingLimits.MAX_WINNERS))));
+        // Q22: how the reward reaches the taker (RewardMethod), and for a prize collected at the sponsor's place what
+        // it is and where; both frozen with the policy.
+        eb.field("rewardMethod", f -> f.physicalColumn("reward_method").required(true)
+            .asCode(RewardMethod.DICTIONARY, RewardMethod.ALL.toArray(String[]::new)));
+        eb.field("redeemDescription", f -> f.physicalColumn("redeem_description")
+            .asText(PublishingLimits.REDEEM_DESCRIPTION_LENGTH, true));
         eb.field("fullScore", f -> f.physicalColumn("full_score").processOnly().asNumeric(7, 0));
         eb.field("maxReward", f -> f.physicalColumn("max_reward").processOnly().asMonetary("JPY", 0));
         eb.field("maxSpend", f -> f.physicalColumn("max_spend").processOnly().asMonetary("JPY", 0));
@@ -132,9 +140,10 @@ public final class QbPublications {
         eb.display("name");
         eb.temporal(t -> t.allowScheduled(false));
         eb.listView("default", lv -> lv
-            .columns("name", "sponsorId", "versionLabel", "status", "regions", "startAt", "endAt", "maxReward",
-                "maxSpend", "submittedAt", "editedAt")
-            .filters("name", "sponsorId", "quizId", "versionId", "status", "startAt", "endAt", "editedAt")
+            .columns("name", "sponsorId", "versionLabel", "status", "rewardMethod", "regions", "startAt", "endAt",
+                "maxReward", "maxSpend", "submittedAt", "editedAt")
+            .filters("name", "sponsorId", "quizId", "versionId", "status", "rewardMethod", "startAt", "endAt",
+                "editedAt")
             .sorts("publicationId", "name", "startAt", "endAt", "editedAt", "submittedAt")
             .defaultSort("editedAt", false));
     });
@@ -300,6 +309,12 @@ public final class QbPublications {
         // A scored quiz or a survey (Q12), from the version's snapshot.
         eb.field("kind", f -> f.physicalColumn("kind").immutable(true).required(true)
             .asCode(QbContent.QUIZ_KIND_DICTIONARY, QbContent.KIND_QUIZ, QbContent.KIND_SURVEY));
+        // Q22: the reward method and, for a prize at the sponsor's place, what it is: the feed filters on the method
+        // and the detail page shows the prize.
+        eb.field("rewardMethod", f -> f.physicalColumn("reward_method").immutable(true).required(true)
+            .asCode(RewardMethod.DICTIONARY, RewardMethod.ALL.toArray(String[]::new)));
+        eb.field("redeemDescription", f -> f.physicalColumn("redeem_description").immutable(true)
+            .asText(PublishingLimits.REDEEM_DESCRIPTION_LENGTH, true));
         eb.field("wentOnAt", f -> f.physicalColumn("went_on_at").immutable(true).required(true)
             .asTemporal(TemporalRole.EVENT_TIME));
         // When it ended, by whatever reason (its time, its winners, its budget): the statistics job counts a
@@ -307,8 +322,9 @@ public final class QbPublications {
         eb.field("endedAt", f -> f.physicalColumn("ended_at").asTemporal(TemporalRole.EVENT_TIME));
         eb.field("version", f -> f.physicalColumn("version").asVersion());
         eb.listView("default", lv -> lv
-            .columns("name", "quizTitle", "sponsorId", "status", "regions", "startAt", "endAt", "maxReward")
-            .filters("sponsorId", "status", "startAt", "endAt", "endedAt")
+            .columns("name", "quizTitle", "sponsorId", "status", "rewardMethod", "regions", "startAt", "endAt",
+                "maxReward")
+            .filters("sponsorId", "status", "rewardMethod", "startAt", "endAt", "endedAt")
             .sorts("startAt", "endAt", "wentOnAt", "publicationId")
             .defaultSort("wentOnAt", false));
     });
@@ -332,13 +348,44 @@ public final class QbPublications {
     });
 
     /**
+     * The reward methods a sponsor may publish with (Q22, docs/quizbuks/plans/Q22-reward-methods.md): set by an
+     * administrator with a note, one row per sponsor ({@code userId}, unique); a sponsor without one has
+     * {@link RewardMethod#DEFAULT}. Temporal: its versions are the record of who allowed what when. Only
+     * {@code QB_SPONSOR_REWARD_METHODS_SET} writes it; the sponsor reads their own through the templates.
+     */
+    public static final EntityDefinition SPONSOR_METHODS_ENTITY = EntityDefinition.define(SPONSOR_METHODS, eb -> {
+        eb.physicalTable("qb_sponsor_reward_methods_version");
+        eb.primaryKey("settingId");
+        eb.field("settingId", f -> f.physicalColumn("setting_id").immutable(true).required(true).generated(true)
+            .asSemanticIdentity("urn:jabiz:entity:quizbuks:sponsor-reward-methods"));
+        eb.field("userId", f -> f.physicalColumn("user_id").immutable(true).required(true).asText(128));
+        // The methods as RewardMethod.format writes them.
+        eb.field("methods", f -> f.physicalColumn("methods").required(true).processOnly().asText(64)
+            .apply(Rules.pattern(PublishingCodes.REWARD_METHODS_FORMAT,
+                "(PLATFORM|SPONSOR_CASH|OFFLINE_REDEEM)(,(PLATFORM|SPONSOR_CASH|OFFLINE_REDEEM))*")));
+        eb.field("note", f -> f.physicalColumn("note").processOnly()
+            .asText(PublishingLimits.REJECT_REASON_LENGTH, true));
+        eb.field("setBy", f -> f.physicalColumn("set_by").required(true).processOnly().asText(128));
+        eb.field("setAt", f -> f.physicalColumn("set_at").required(true).processOnly()
+            .asTemporal(TemporalRole.EVENT_TIME));
+        eb.field("revision", f -> f.physicalColumn("revision").required(true).processOnly().asNumeric(9, 0));
+        eb.unique("uk_qb_sponsor_reward_methods_user", "userId");
+        eb.temporal(t -> t.allowScheduled(false));
+        eb.listView("default", lv -> lv
+            .columns("userId", "methods", "note", "setBy", "setAt")
+            .filters("userId", "setAt")
+            .sorts("setAt", "userId")
+            .defaultSort("setAt", false));
+    });
+
+    /**
      * The approval subject of publications (D-Q4-4): the facts the rules test. The rule {@link
      * PublicationApprovals#RULE} asks for a review unless {@code autoApprove}.
      */
     public static ApprovalSubject approvalSubject() {
         return ApprovalSubject.define(PublicationApprovals.SUBJECT, s -> s.entity(PUBLICATION).bool("autoApprove")
             .bool("takenDown")
-            .number("maxReward").number("maxSpend").text("sponsorId").text("regions"));
+            .number("maxReward").number("maxSpend").text("sponsorId").text("regions").text("rewardMethod"));
     }
 
     private QbPublications() {}

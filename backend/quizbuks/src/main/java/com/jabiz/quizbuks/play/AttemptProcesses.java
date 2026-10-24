@@ -8,6 +8,7 @@ import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.quizbuks.content.ContentLimits;
 import com.jabiz.quizbuks.content.QuizSnapshot;
 import com.jabiz.quizbuks.identity.CallerChecks;
+import com.jabiz.quizbuks.reward.CashRewardChecks;
 import com.jabiz.quizbuks.country.Regions;
 import com.jabiz.quizbuks.publishing.PublicationMoves;
 import com.jabiz.quizbuks.publishing.PublicationRules;
@@ -181,6 +182,8 @@ public final class AttemptProcesses {
                 // no lock.
                 .admission(PublicationMoves.START_LOCK_FAMILY, PublicationRef::publicationId)
                 .steps(CallerChecks::refuseBanned)
+                // Q22: a taker with a cash reward they neither confirmed nor disputed in time starts no new attempt.
+                .steps(CashRewardChecks::refuseOverdue)
                 .contextFactory((start, input) -> {
                     ProcessContext ctx = new ProcessContext(start);
                     ctx.put(INPUT, input);

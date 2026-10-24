@@ -12,12 +12,15 @@ import {
   Label,
   MoneyInput,
   notify,
+  RadioGroup,
+  RadioGroupItem,
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
   Steps,
+  Textarea,
 } from '@jabiz/ui'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, ArrowRight, CircleCheck, RefreshCw, Save, Send } from 'lucide-react'
@@ -36,6 +39,8 @@ import {
   inputOf,
   isStale,
   PUBLISHING_LIMITS,
+  readAllowedMethods,
+  REDEEM_DESCRIPTION_LENGTH,
   REGIONS,
   savePublication,
   submitPublication,
@@ -44,11 +49,12 @@ import {
   type Problem,
   type PublicationDetail,
   type PublicationForm,
+  type RewardMethod,
   type SaveInput,
   type SaveOutput,
 } from './api'
 import { publicationPath, PUBLICATIONS_QUERY } from './paths'
-import { LabelledProblems, PublicationSummary, useDebounced, useRegionLabel, useVersionOf } from './shared'
+import { LabelledProblems, PublicationSummary, useDebounced, useRegionLabel, useRewardMethodLabel, useVersionOf } from './shared'
 import { TiersEditor } from './TiersEditor'
 
 export const STEP_COUNT = 3
@@ -139,6 +145,17 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
   // A survey (Q12) has one reward for a complete response: the page builds its pass mark and tiers.
   const survey = (version?.kind ?? quizzes.data?.items.find((quiz) => quiz.quizId === form.quizId)?.kind) === 'SURVEY'
 
+  // Q22: the methods an administrator allowed this sponsor; the choice is shown only when there is one to make.
+  const allowed = useQuery({ queryKey: ['qb', 'reward-methods', 'allowed'], queryFn: readAllowedMethods,
+    staleTime: 60_000 })
+  const methodLabel = useRewardMethodLabel()
+  const methodChoices: RewardMethod[] = allowed.data ?? ['PLATFORM']
+  // A new draft starts with the first method allowed (the platform's is not always among them) until the sponsor
+  // picks one; a draft already saved keeps its own, which the choice then shows as not allowed any more.
+  const rewardMethod: RewardMethod = !detail && allowed.data && !allowed.data.includes(form.rewardMethod)
+    ? allowed.data[0] : form.rewardMethod
+  const showMethods = methodChoices.length > 1 || !methodChoices.includes(rewardMethod)
+
   const set = <K extends keyof PublicationForm>(field: K, value: PublicationForm[K]) =>
     setForm((f) => ({ ...f, [field]: value }))
 
@@ -177,7 +194,8 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
 
   /** Saves the whole draft when what is typed can be sent; marks what cannot. */
   const run = (then: 'stay' | 'next') => {
-    const shaped = survey && fullScore !== null ? asSurvey(form, fullScore, surveyReward(form)) : form
+    const chosen = rewardMethod === form.rewardMethod ? form : { ...form, rewardMethod }
+    const shaped = survey && fullScore !== null ? asSurvey(chosen, fullScore, surveyReward(chosen)) : chosen
     if (shaped !== form) setForm(shaped)
     const built = inputOf(shaped, publicationId, revision)
     setTyped(built.errors ?? {})
@@ -268,6 +286,42 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
 
     // 2. Who sees it and when, the marks, the rewards and the money.
     <div key="policy" className="flex flex-col gap-6">
+      {showMethods && (
+        <fieldset className="flex flex-col gap-2" data-testid="publication-method"
+          aria-describedby={[`${id}-method-hint`, problemOf('rewardMethod') ? `${id}-method-error` : undefined]
+            .filter(Boolean).join(' ')}>
+          <legend className="text-sm font-medium">{t('publishing.field.rewardMethod')}</legend>
+          <p id={`${id}-method-hint`} className="text-muted-foreground text-sm">{t('publishing.field.rewardMethodHint')}</p>
+          <RadioGroup value={rewardMethod} disabled={locked}
+            onValueChange={(value) => set('rewardMethod', value as RewardMethod)}>
+            {methodChoices.map((method) => (
+              <div key={method} className="flex items-start gap-2">
+                <RadioGroupItem id={`${id}-method-${method}`} value={method} aria-describedby={`${id}-method-${method}-hint`}
+                  data-testid={`publication-method-${method}`} />
+                <div className="flex flex-col">
+                  <Label htmlFor={`${id}-method-${method}`} className="font-normal">{methodLabel(method)}</Label>
+                  <span id={`${id}-method-${method}-hint`} className="text-muted-foreground text-xs">
+                    {t(`publishing.methods.${method}`)}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </RadioGroup>
+          {problemOf('rewardMethod') && (
+            <p id={`${id}-method-error`} className="text-destructive text-sm">{problemOf('rewardMethod')}</p>
+          )}
+        </fieldset>
+      )}
+      {rewardMethod === 'OFFLINE_REDEEM' && (
+        <Field id={`${id}-redeem`} label={t('publishing.field.redeemDescription')} problem={problemOf('redeemDescription')}
+          hint={t('publishing.field.redeemDescriptionHint', { max: REDEEM_DESCRIPTION_LENGTH })}>
+          {(aria) => (
+            <Textarea {...aria} value={form.redeemDescription} rows={3} maxLength={REDEEM_DESCRIPTION_LENGTH}
+              disabled={locked} data-testid="publication-redeem"
+              onChange={(event) => set('redeemDescription', event.target.value)} />
+          )}
+        </Field>
+      )}
       <fieldset className="flex flex-col gap-2" aria-describedby={[`${id}-regions-hint`,
         problemOf('regions') ? `${id}-regions-error` : undefined].filter(Boolean).join(' ')} data-testid="publication-regions">
         <legend className="text-sm font-medium">{t('publishing.field.regions')}</legend>
@@ -396,6 +450,8 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
         maxSpend: output?.maxSpend ?? null,
         tiers: form.tiers.map((tier) => ({ fromScore: Number(tier.fromScore), toScore: Number(tier.toScore),
           reward: tier.reward })),
+        rewardMethod,
+        redeemDescription: form.redeemDescription.trim() || null,
       }} />
     </div>,
   ]

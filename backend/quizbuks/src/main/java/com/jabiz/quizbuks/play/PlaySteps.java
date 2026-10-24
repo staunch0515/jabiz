@@ -144,7 +144,9 @@ final class PlaySteps {
 
     static AttemptRules.Card cardOf(EntityInstance card) {
         return new AttemptRules.Card(card.get("sponsorId"), card.get("status"), card.get("regions"),
-            instant(card.get("startAt")), instant(card.get("endAt")), limits(card));
+            instant(card.get("startAt")), instant(card.get("endAt")), limits(card),
+            card.get("rewardMethod") == null ? com.jabiz.quizbuks.publishing.RewardMethod.PLATFORM
+                : card.get("rewardMethod"));
     }
 
     static List<Object> ids(Object id) {

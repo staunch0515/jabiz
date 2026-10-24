@@ -132,6 +132,7 @@ public final class PublicationLifecycle {
                     ctx -> QbContent.lockName(ctx.get(FIRST, EntityInstance.class).get("quizId"))))
                 .steps(PublicationEditing::lockAndLoad)
                 .steps(PublicationEditing::loadSponsor)
+                .steps(PublicationEditing::loadSponsorMethods)
                 .steps(b -> PublicationEditing.loadSponsorPublications(b, PublicationEditing::publication))
                 .steps(b -> PublicationEditing.loadSponsorProfile(b, PublicationEditing::publication))
                 .step("Load the review switch", LoadParams.<ProcessContext>of(ProcessContext::opTime, PARAMS,
@@ -171,6 +172,8 @@ public final class PublicationLifecycle {
             PublicationEditing.tiersOf(list(ctx, TIERS)), PublicationEditing.snapshot(version), ctx.opTime())
             .forEach(ctx::reject);
         PublicationEditing.sponsorProblems(ctx).forEach(ctx::reject);
+        PublicationEditing.methodProblems(ctx, PublicationEditing.methodOf(publication.attributes()))
+            .forEach(ctx::reject);
         if (!ctx.hasViolations()) {
             boolean takenDown = !PublicationEditing.takenDownOfQuiz(ctx, publication).isEmpty();
             ctx.put(TAKEN_DOWN, takenDown);

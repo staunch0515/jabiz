@@ -28,7 +28,14 @@ public final class PublicationApprovals {
     /** The facts of a submission, as the subject declares them. */
     public static Map<String, Object> facts(boolean autoApprove, BigDecimal maxReward, BigDecimal maxSpend,
         String sponsorId, String regions, boolean takenDown) {
+        return facts(autoApprove, maxReward, maxSpend, sponsorId, regions, takenDown, RewardMethod.PLATFORM);
+    }
+
+    /** @param rewardMethod how the reward reaches the taker (Q22): a rule may review cash and prizes differently */
+    public static Map<String, Object> facts(boolean autoApprove, BigDecimal maxReward, BigDecimal maxSpend,
+        String sponsorId, String regions, boolean takenDown, String rewardMethod) {
         Map<String, Object> facts = new LinkedHashMap<>();
+        facts.put("rewardMethod", rewardMethod);
         facts.put("autoApprove", autoApprove);
         facts.put("takenDown", takenDown);
         facts.put("maxReward", maxReward);
@@ -56,6 +63,12 @@ public final class PublicationApprovals {
         content.put("passScore", draft.passScore());
         content.put("budgetCap", draft.budgetCap());
         content.put("maxWinners", draft.maxWinners());
+        // Q22: only when the sponsor settles the reward themselves, so the publications paid by the platform (all of
+        // them before Q22, some still waiting for their review) keep the hash their approval is bound to.
+        if (!RewardMethod.platform(draft.rewardMethod())) {
+            content.put("rewardMethod", draft.rewardMethod());
+            content.put("redeemDescription", draft.redeemDescription());
+        }
         List<Object> ranges = new ArrayList<>();
         tiers.stream().sorted(Comparator.comparingInt(TierCoverage.Tier::fromScore)
                 .thenComparingInt(TierCoverage.Tier::toScore))

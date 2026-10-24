@@ -1,5 +1,9 @@
 package com.jabiz.quizbuks.setup;
 
+import com.jabiz.param.ParamValues;
+
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.List;
 import java.util.Map;
 
@@ -88,6 +92,15 @@ public final class QbParams {
     /** The controlled AI parameters, in the order the administrators' page shows them. */
     public static final List<String> AI_CONTROLLED = List.of(AI_ENABLED, AI_MODEL, AI_EFFORT, AI_SPONSOR_DAILY_JOBS,
         AI_SPONSOR_MONTHLY_TOKENS, AI_GLOBAL_MONTHLY_TOKENS);
+    /**
+     * Rewards settled outside the wallet (Q22, docs/quizbuks/plans/Q22-reward-methods.md): days the taker has to
+     * confirm or dispute a cash reward the sponsor marked paid before they are stopped from starting new attempts;
+     * days the sponsor has to pay a cash reward before they are reminded; days a prize may be collected after the
+     * attempt. Not money and no review switch, so not controlled.
+     */
+    public static final String CASH_CONFIRM_DAYS = "qb.reward.cash.confirm-days";
+    public static final String CASH_PAY_DAYS = "qb.reward.cash.pay-days";
+    public static final String REDEEM_DAYS = "qb.reward.redeem-days";
     /** The oldest version of the app that may still be used. */
     public static final String APP_MIN_VERSION = "qb.app.min-version";
     /**
@@ -229,6 +242,13 @@ public final class QbParams {
             "Days between reminders to open a payout account once the rewards reach the transfer threshold"),
         new Param(BROADCAST_STATS_MIN_AUDIENCE, Map.of("type", "numeric", "precision", 6, "scale", 0), "50",
             "Below how many people reached a sponsor sees no clicks or conversions of a notice"),
+        // Q22: rewards settled outside the wallet; not controlled (neither money nor a review switch).
+        new Param(CASH_CONFIRM_DAYS, DAYS, "7",
+            "Days a taker has to confirm or dispute a cash reward the sponsor marked paid before they may start no "
+                + "new quiz"),
+        new Param(CASH_PAY_DAYS, DAYS, "14",
+            "Days a sponsor has to pay a cash reward before they are reminded"),
+        new Param(REDEEM_DAYS, DAYS, "30", "Days a prize may be collected at the sponsor's place after the quiz"),
         // Q8a: AI generation (the controlled ones last, in the order of AI_CONTROLLED).
         new Param(AI_ENABLED, BOOL, false, "Whether sponsors may ask the AI for questions (Claude)"),
         new Param(AI_MODEL, Map.of("type", "code", "dictUrn", "urn:jabiz:dict:quizbuks:ai-model", "allowedValues",
@@ -265,6 +285,25 @@ public final class QbParams {
         new Param(WITHDRAWAL_BANK_FEE, KUDOS, "0", "The platform's fee on each bank withdrawal, in Kudos (0: none)"),
         new Param(WITHDRAWAL_BANK_COOLDOWN_HOURS, Map.of("type", "numeric", "precision", 4, "scale", 0), "72",
             "Hours after a bank account is saved or changed before anything may be withdrawn to it"));
+
+    /** The declared value of a parameter: what {@code QB_SETUP} writes. */
+    public static String defaultOf(String key) {
+        return ALL.stream().filter(param -> param.key().equals(key)).map(param -> String.valueOf(param.value()))
+            .findFirst().orElseThrow(() -> new IllegalArgumentException("No parameter " + key));
+    }
+
+    /**
+     * A number of days a parameter gives, as read at a time: the declared value when the parameter is not there yet
+     * (before setup), whole days (a fraction is dropped), never negative and at most ten years, so a mistyped value
+     * neither fails the process nor sets a date in the far future.
+     */
+    public static int days(ParamValues params, String key) {
+        BigDecimal days = params.get(key, BigDecimal.class);
+        if (days == null) {
+            days = new BigDecimal(defaultOf(key));
+        }
+        return Math.clamp(days.setScale(0, RoundingMode.DOWN).longValue(), 0, 3650);
+    }
 
     private static Param journal(String key, String account) {
         return new Param(key, ACCOUNT_CODE, "", "Accounting system's account code for " + account

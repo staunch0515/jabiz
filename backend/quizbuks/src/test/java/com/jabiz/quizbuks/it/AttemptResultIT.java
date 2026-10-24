@@ -49,7 +49,8 @@ class AttemptResultIT extends PlayItSupport {
         submit(token, attemptId, answers(true, false));
         Map<String, Object> after = result(token, attemptId);
         assertThat(after).containsOnlyKeys("attemptId", "publicationId", "name", "status", "kind", "deadline",
-            "serverTime", "score", "fullScore", "passScore", "passed", "reward", "rewardStatus", "questions", "result");
+            "serverTime", "score", "fullScore", "passScore", "passed", "reward", "rewardStatus", "questions", "result",
+            "rewardMethod", "cash", "redeem");
         assertThat(after).containsEntry("attemptId", attemptId).containsEntry("publicationId", publicationId)
             .containsEntry("name", "Result")
             .containsEntry("status", "SUBMITTED").containsEntry("kind", "QUIZ").containsEntry("score", 2)

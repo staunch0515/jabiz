@@ -24,6 +24,8 @@ results:
   fullScore:      { from: QbPublicationCard.fullScore }
   passScore:      { from: QbPublicationCard.passScore }
   maxReward:      { from: QbPublicationCard.maxReward }
+  rewardMethod:   { from: QbPublicationCard.rewardMethod }
+  redeemDescription: { from: QbPublicationCard.redeemDescription }
   sponsorCompany: { from: QbSponsor.company }
 list:
   key: [publicationId]
@@ -44,6 +46,8 @@ SELECT
     c.{{QbPublicationCard.fullScore}}     AS fullScore,
     c.{{QbPublicationCard.passScore}}     AS passScore,
     c.{{QbPublicationCard.maxReward}}     AS maxReward,
+    c.{{QbPublicationCard.rewardMethod}}  AS rewardMethod,
+    c.{{QbPublicationCard.redeemDescription}} AS redeemDescription,
     sp.{{QbSponsor.company}}              AS sponsorCompany
 FROM {{QbPublicationCard}} c
 LEFT JOIN {{QbSponsor}} sp ON sp.{{QbSponsor.userId}} = c.{{QbPublicationCard.sponsorId}}

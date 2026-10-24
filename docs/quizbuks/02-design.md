@@ -118,13 +118,16 @@ docs/quizbuks/               本文件等
 | `QbPublicationCounter` | P | `publicationId`（主键）、`completions`、`passes`、`winners`、`released`（历来每个完成释放的预占之和）、`spent` | 计数的**完成一侧**（Q10a4 锁拆分，`plans/Q10-lock-split.md`）：上架时与开始一侧在同一事务插入全 0 的一行（Q4），只由完成（提交、超时）在发布锁 `qb.pub` 内更新（4.3）；不进时态（否则每次答题都给发布追加一个版本） |
 | `QbPublicationStartCounter` | P | `publicationId`（主键）、`starts`、`reservedTotal`（历来每个开始预占的最高奖励之和） | 计数的**开始一侧**（Q10a4）：上架时插入全 0 的一行，只由开始在开始锁 `qb.pub-start` 内更新。派生量只由两侧一起算：进行中 = `starts − completions`、预占 = `reservedTotal − released`；读两侧的地方（开始的锁内重读、首页、详情、商家与管理员的发布列表）一律**在一条语句中**读（同一快照：不会出现负的进行中） |
 | `QbPublicationCard` | P | `publicationId`（主键）、`sponsorId`、`status`、`regions`、`startAt`、`endAt`、`name`、`quizTitle`、`cover`、`versionId`、`maxReward`、`fullScore`、`passScore`、`timeLimitSec`、`questionCount`、`budgetCap`、`maxWinners`、`tiers`（档位的规范 JSON）、`sponsorCountry`、`wentOnAt`、`kind`（Q12：QUIZ / SURVEY，取自版本的快照） | 上架时随计数行插入（Q5）。除状态外全部在提交时冻结，状态由发布的流程在发布锁内同步。答题人的首页、详情、档位与答题流程只读它（时态表上按状态、时间、地区筛选要读全部版本） |
-| `QbAttempt` | P → 结束后流程拒绝修改 | `userId`、`publicationId`（二者唯一，一人一次）、`sponsorId`、`versionId`、`startedAt`、`deadline`、`status`（IN_PROGRESS / SUBMITTED / EXPIRED）、`currentIndex`、`optionOrder`、`answers`、`result`（三者都是规范 JSON 文本）、`submittedAt`、`score`、`fullScore`、`passed`、`tierId`、`reward`、`fee`、`rewardStatus`（NONE / PAID / PENDING）、`rewardPaidAt`、`ledgerTransactionId` | 答题会话（Q5）。进行中只有 `answers`、`currentIndex` 会变（保存进度，U-41）；`result`（含每题正确选项；问卷为空列表，Q12）在完成时才写。问卷的提交须回答全部题目（单选恰 1 项、多选至少 1 项），完整即满分、得唯一一档的奖励；超时按已保存的答案评分，不完整即不付（`plans/Q12-survey.md`）。不建逐题答案表：每次保存只写一行，题目分析（Q9）用 `jsonb_array_elements` 展开。一人一次按发布：版本是模板，发布定义范围，用户可参加满足条件的任何发布，不论是否参加过同一版本的其他发布（需求方 2026-10-11 确认）。数据视图（Q9c，C-2）：缺省视图不给任何角色读取（数据视图不能去掉字段，而会话带奖励与抽成），财务读只读视图 `finance:QbAttempt`，支持人员经不含金额的 `qb.admin.attempts` 读取 |
+| `QbAttempt` | P → 结束后流程拒绝修改 | `userId`、`publicationId`（二者唯一，一人一次）、`sponsorId`、`versionId`、`startedAt`、`deadline`、`status`（IN_PROGRESS / SUBMITTED / EXPIRED）、`currentIndex`、`optionOrder`、`answers`、`result`（三者都是规范 JSON 文本）、`submittedAt`、`score`、`fullScore`、`passed`、`tierId`、`reward`、`fee`、`rewardStatus`（NONE / PAID / PENDING，Q22：CASH / REDEEM）、`rewardPaidAt`、`ledgerTransactionId` | 答题会话（Q5）。进行中只有 `answers`、`currentIndex` 会变（保存进度，U-41）；`result`（含每题正确选项；问卷为空列表，Q12）在完成时才写。问卷的提交须回答全部题目（单选恰 1 项、多选至少 1 项），完整即满分、得唯一一档的奖励；超时按已保存的答案评分，不完整即不付（`plans/Q12-survey.md`）。不建逐题答案表：每次保存只写一行，题目分析（Q9）用 `jsonb_array_elements` 展开。一人一次按发布：版本是模板，发布定义范围，用户可参加满足条件的任何发布，不论是否参加过同一版本的其他发布（需求方 2026-10-11 确认）。数据视图（Q9c，C-2）：缺省视图不给任何角色读取（数据视图不能去掉字段，而会话带奖励与抽成），财务读只读视图 `finance:QbAttempt`，支持人员经不含金额的 `qb.admin.attempts` 读取 |
 | `QbPublicationView` | P | `userId`、`publicationId`（唯一）、`firstViewedAt` | 漏斗的"浏览"：每人每发布只记第一次（`QB_VIEW`） |
 | `QbPublicationStats` | P | `publicationId`（主键）、`last1h`、`last24h`、`last7d`、`last30d`、`refreshedAt` | 近期完成人数，由任务 `qb.publication-stats` 每 10 分钟分块写入（只写变化的行；运行时间记在 `QbStatsRun`）；已认证的模板没有缓存；累计完成数取计数行，实时 |
 | `QbAnalyticsHour` | P | `publicationId`、`sponsorId`、`hourStart`（UTC 整点）、`views`、`starts`、`completions`、`passes`、`winners`、`spent`、`gap` | 商家分析（Q9e，`plans/Q9e-analytics.md`）的按小时的桶：任务 `qb.analytics` 把计数自上次以来的增量加进一个小时（本次运行的小时；跨过整点后的第一次运行加进上一次运行的小时）；没有增量的小时没有行；`gap` = 含任务停机期间的增量或首次运行之前的历史。唯一 `(publicationId, hourStart)`，保留 400 天（任务删除更早的） |
 | `QbAnalyticsCursor` | P | `publicationId`（主键）、`sponsorId`、上次变化时的六个累计值、`viewsUntil`、水位线 `watermarkAt` / `watermarkId`、已分析的完成数与按时提交 / 超时 / 用时合计、各题合计 `questions`（规范 JSON）、公开的同一组值 `shown*` / `shownAt`、`finalizedAt` | 任务对每个发布的进度。当前的合计只给任务与管理员；商家只经模板看到 `shown*`，它只在新增至少 k 个完成后更新（E-4） |
 | `QbQuestionStat` | P | `publicationId`、`sponsorId`、`questionNo`（唯一二者）、`completions`、`correct`、`shownAt` | 商家看到的每题作答数与答对数（得分 > 0；多选题全对），只在公开值变化时写 |
 | `QbPublicationOwner` | 视图 | `publicationId`、`sponsorId`（卡片的） | 只读，经限本人的数据视图读取：答题人的模板据此排除本人的发布（不能开始） |
+| `QbSponsorRewardMethods` | T | `settingId`、`userId`（唯一）、`methods`（固定顺序、逗号分隔）、`note`、`setBy`、`setAt` | 管理员按商家允许的奖励支付方式（Q22，`plans/Q22-reward-methods.md`）；没有记录 = 只有 `PLATFORM`。只经 `QB_SPONSOR_REWARD_METHODS_SET` 写入 |
+| `QbCashReward` | T | `attemptId`、`publicationId`、`sponsorId`、`userId`、`amount`、`code`、`status`（DUE / MARKED_PAID / CONFIRMED / DISPUTED / OVERDUE / VOID）、`payBy`、`confirmBy`、标记 / 确认 / 争议 / 逾期 / 裁定的时刻与说明 | 商家付现金的奖励（Q22）：不经账本；双方确认即完成，逾期不确认的答题人不能开始新答题 |
+| `QbRedemption` | T | `attemptId`、`publicationId`、`sponsorId`、`userId`、`amount`、`description`、`code`、`status`（DUE / REDEEMED / EXPIRED / VOID）、`expiresAt`、`redeemedAt` | 商家处兑换的奖励（Q22）：Q22a 登记，Q22b 扫码领取 |
 
 ### 3.4 钱包与资金
 
@@ -330,6 +333,9 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 | `QB_ATTEMPT_SAVE` | `qb.play`，要求已验证 | 保存当前题号与已选答案（按位置；不取锁）；超过 `deadline` 拒绝；非法题号或位置一次报告全部 |
 | `QB_ATTEMPT_SUBMIT` | `qb.play`，要求已验证 | 晚取锁：发布锁 → 超时（`now > deadline + 宽限 5 秒`）422 `QB_ATTEMPT_EXPIRED`（本次答案不用）；评分 → 档位 → 计数 →（奖励大于 0）钱包锁 → 无待支付且余额够则子流程 `LEDGER_POST`、`PAID`，否则 `PENDING` 并把 `LIVE` 的发布置 `FUNDS_SHORT`；名额或预算用完即 `ENDED`；发布事件 `qb.reward.settled` / `qb.reward.pending`（Q7 的站内信）。幂等键与会话状态防重复提交 |
 | `QB_ATTEMPT_EXPIRE` | 系统（`qb.play.system`） | 过了时限与宽限仍 IN_PROGRESS 的会话按已保存答案完成（`EXPIRED`），与提交同一套步骤；已完成或未到期的什么也不做。由逐项任务 `qb.attempt-expire`（每分钟，平台决策 D42）对模板 `qb.system.attempts-due` 选出的会话（`deadline + 宽限 < 计划时刻`，按截止时间，至多 2 000 个）逐个执行，各自一个事务（Q5b） |
+| `QB_SPONSOR_REWARD_METHODS_SET` | `qb.admin.reward-methods` | 管理员设定商家允许的奖励支付方式（1–3 种，Q22）；商家账户锁内 |
+| `QB_CASH_REWARD_MARK_PAID` / `QB_CASH_REWARD_CONFIRM` / `QB_CASH_REWARD_DISPUTE` / `QB_CASH_REWARD_RESOLVE` | `qb.publication.write` / `qb.me` / `qb.me` / `qb.cash.resolve` | 现金奖励（Q22）：商家标记已付（`confirmBy = now + qb.reward.cash.confirm-days`）；答题人确认（`MARKED_PAID` / `OVERDUE` → `CONFIRMED`）或争议（附说明，待办给 `qb.cash.resolve`）；管理员裁定 `PAID` / `UNPAID`（回到 `DUE`）/ `VOID`。都在现金记录锁 `qb.cash:<记录>` 内；事件 `qb.cash-reward.*` 送站内信 |
+| `QB_CASH_REWARD_OVERDUE` / `QB_CASH_REWARD_REMIND` | 系统（`internal()`） | 逐项任务 `qb.cash-reward-overdue`（每小时：标记已付过了 `confirmBy` → `OVERDUE`，答题人此后不能开始新答题，422 `QB_CASH_CONFIRM_DUE`）与 `qb.cash-reward-remind`（每日：`DUE` 过了 `payBy` → 提醒商家一次） |
 | `QB_TOPUP_START` | `qb.topup`，要求已验证 | 未封禁、入驻已通过；金额为受控参数 `qb.topup.min` – `max` 之间的整数 Kudos；未完成的至多 3 笔 → 插入 `OPENING`，登记作业 `qb.stripe.checkout-create`（会话的金额、引用与返回地址只来自服务端记录与配置）。页面轮询到 `OPEN` 后跳转 |
 | `QB_TOPUP_OPENED` / `QB_TOPUP_OPEN_FAILED` | 系统（作业完成 / 失败，`qb.wallet.system`，`internal()`） | 商家钱包锁：核对会话（编号、模式、地址前缀、引用、金额）后 `OPEN`，不符或作业失败即 `FAILED`（不符另开待办） |
 | `QB_TOPUP_CONFIRM` | 系统（`checkout.session.completed`，`internal()`） | 商家钱包锁 → `TopUpChecks` 逐项核对 → 同一事务中过账、钱包增加、`PAID`，发布 `qb.sponsor.settle-pending`（补发在另一事务中）与 `qb.topup.paid`，登记手续费作业；不符即待办、不入账 |
@@ -393,9 +399,10 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 
 | 模板 | 用途 | 权限 |
 |---|---|---|
-| `qb.app.feed` | 首页卡片：可见性（LIVE + 时间内 + 地区交集 + 名额与预算未满 + 商家可支付）、关键字、筛选（发布人国家与名称、金额、完成人数、开始日期）、排序（U-10 – U-14）。只读卡片、计数、钱包（与较小的国家、入驻）；"现在"（`at`）与国家（`country`）由调用方传，开始答题在服务端再判断 | `qb.play` |
+| `qb.app.feed` | 首页卡片：可见性（LIVE + 时间内 + 地区交集 + 名额与预算未满 + 商家可支付）、关键字、筛选（发布人国家与名称、金额、完成人数、开始日期）、排序（U-10 – U-14）、按支付方式筛选（`method`，Q22；"商家可支付"只对 `PLATFORM`）。只读卡片、计数、钱包（与较小的国家、入驻）；"现在"（`at`）与国家（`country`）由调用方传，开始答题在服务端再判断 | `qb.play` |
 | `qb.app.publication` / `qb.app.publication-tiers` | 详情（U-20 – U-23）：卡片、简介与资料（版本快照中，不含题目）、发布人（入驻已通过的）、完成人数（近期窗口取统计表，累计取计数行）、本人的会话；档位取卡片 | `qb.play` |
-| `qb.app.history` | 本人的答题记录（U-40 – U-42）：已完成（合格 / 不合格）、进行中、已过时限待自动提交；关键字、日期、金额、状态筛选 | `qb.me` |
+| `qb.app.history` | 本人的答题记录（U-40 – U-42）：已完成（合格 / 不合格）、进行中、已过时限待自动提交；关键字、日期、金额、状态筛选；现金 / 兑换的状态（Q22） | `qb.me` |
+| `qb.app.cash-rewards` / `qb.sponsor.cash-rewards` / `qb.admin.cash-rewards` | 现金奖励（Q22）：本人未结的（App 首页提示）/ 商家欠付与已付的（搜索、状态）/ 全部（争议的裁定） | `qb.me` / `qb.publication.write` / `qb.admin.publication.read` |
 | `qb.app.wallet` / `qb.app.ledger` | 余额概览（可用 = 本人 2120、累计收入、待支付、转账中 = 2130；带 `at` 时另给保留中的奖励 `held`、其中争议冻结的 `heldOpen` 与预计可转时刻 `heldUntil`，规则同 `qb.wallet.taker-transferable`，Q10b）与流水（奖励：已到账 / 处理中；Q6b 加转账），只读本人的分录（数据视图 `taker:LedgerEntry`，按 `dimension1` = 调用者）与会话（U-50 – U-52，Q6a） | `qb.me` |
 | `qb.sponsor.wallet` / `qb.sponsor.topups` | 商家钱包概览（余额、待支付、累计充值与退款、累计支出）与本人充值记录（支付页地址只在 `OPEN` 且未过期时给出）（M-04，Q6a） | `qb.sponsor.finance.read` |
 | `qb.sponsor.topup-limit` | 每笔充值的范围与新商家的累计上限、剩余额度、期限（Q10b，评审 M3；判断仍在 `QB_TOPUP_START`） | `qb.sponsor.finance.read` |

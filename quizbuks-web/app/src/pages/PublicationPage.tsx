@@ -206,16 +206,32 @@ export function PublicationPage({ publicationId, country }: { publicationId: str
           { key: 'questions', label: t('detail.questions'), value: p.questionCount },
           { key: 'timeLimit', label: t('detail.timeLimit'), value: duration(p.timeLimitSec) },
           { key: 'maxReward', label: t('detail.surveyReward'), value: formatKudos(p.maxReward) },
+          { key: 'method', label: t('detail.method'),
+            value: <span data-testid="detail-method" data-method={p.rewardMethod}>{t(`methods.${p.rewardMethod}`)}</span> },
           { key: 'endAt', label: t('detail.endAt'), value: formatDateTime(p.endAt) },
         ] : [
           { key: 'questions', label: t('detail.questions'), value: p.questionCount },
           { key: 'fullScore', label: t('detail.fullScore'), value: p.fullScore },
           { key: 'passScore', label: t('detail.passScore'), value: p.passScore },
           { key: 'timeLimit', label: t('detail.timeLimit'), value: duration(p.timeLimitSec) },
-          { key: 'maxReward', label: t('detail.maxReward'), value: formatKudos(p.maxReward) },
+          { key: 'maxReward', label: p.rewardMethod === 'OFFLINE_REDEEM' ? t('detail.prizeValue') : t('detail.maxReward'),
+            value: formatKudos(p.maxReward) },
+          { key: 'method', label: t('detail.method'),
+            value: <span data-testid="detail-method" data-method={p.rewardMethod}>{t(`methods.${p.rewardMethod}`)}</span> },
           { key: 'endAt', label: t('detail.endAt'), value: formatDateTime(p.endAt) },
         ]} />
         {survey && <p className="text-muted-foreground text-sm" data-testid="detail-survey">{t('detail.surveyHint')}</p>}
+        {/* Q22: what the sponsor does after a pass, in their words for a prize. */}
+        {p.rewardMethod !== 'PLATFORM' && (
+          <Alert data-testid="detail-method-note" data-method={p.rewardMethod}>
+            <AlertDescription className="flex flex-col gap-1">
+              <span>{t(`methods.${p.rewardMethod}Hint`)}</span>
+              {p.rewardMethod === 'OFFLINE_REDEEM' && p.redeemDescription && (
+                <span className="whitespace-pre-line font-medium" data-testid="detail-prize">{p.redeemDescription}</span>
+              )}
+            </AlertDescription>
+          </Alert>
+        )}
       </section>
       {!survey && <Tiers tiers={tiers.data ?? []} />}
       <section aria-labelledby="stats-title" className="flex flex-col gap-2">

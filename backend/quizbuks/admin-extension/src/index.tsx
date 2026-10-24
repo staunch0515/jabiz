@@ -41,6 +41,7 @@ import ReconciliationPage from './ReconciliationPage'
 import ReportsPage from './ReportsPage'
 import ReviewsPage from './ReviewsPage'
 import SponsorReviewPage from './SponsorReviewPage'
+import CashRewardsPage from './CashRewardsPage'
 import TopUpsPage from './TopUpsPage'
 import TransferReviewPage from './TransferReviewPage'
 import TransfersPage from './TransfersPage'
@@ -68,6 +69,7 @@ export default defineExtension({
     { path: PATH.quizzes, element: <QuizzesPage /> },
     { path: '/qb/quizzes/:quizId', element: <QuizDetailPage /> },
     { path: PATH.publications, element: <PublicationsPage /> },
+    { path: PATH.cashRewards, element: <CashRewardsPage /> },
     { path: PATH.finance, element: <FinanceOverviewPage /> },
     { path: PATH.transfers, element: <TransfersPage /> },
     { path: '/qb/finance/transfers/:transferId/review', element: <TransferReviewPage /> },
@@ -104,6 +106,9 @@ export default defineExtension({
         { key: 'qb-publications', label: 'menu.publications', path: PATH.publications, icon: Rocket,
           permission: PERMISSION.publicationRead },
         { key: 'qb-users', label: 'menu.users', path: PATH.users, icon: Users, permission: PERMISSION.usersRead },
+        // Q22: the cash rewards sponsors pay takers themselves, with the disputes to decide.
+        { key: 'qb-cash-rewards', label: 'menu.cashRewards', path: PATH.cashRewards, icon: HandCoins,
+          permission: PERMISSION.publicationRead },
         { key: 'qb-attempts', label: 'menu.attempts', path: PATH.attempts, icon: ListChecks,
           permission: PERMISSION.usersRead },
         { key: 'qb-legal', label: 'menu.legal', path: PATH.legal, icon: ScrollText,
