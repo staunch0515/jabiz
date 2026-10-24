@@ -12,7 +12,7 @@ import {
   notify,
 } from '@jabiz/ui'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Copy, Link2, Pause, Play, Trash2, Undo2 } from 'lucide-react'
+import { Copy, Link2, Pause, Play, QrCode, Trash2, Undo2 } from 'lucide-react'
 import { useId, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ProblemList } from '../content/editing'
@@ -31,6 +31,7 @@ import {
   type Publication,
 } from './api'
 import { publicationPath, PUBLICATIONS_PATH, PUBLICATIONS_QUERY, shareLink } from './paths'
+import { PublicationQrDialog } from './PublicationQrDialog'
 
 /** Copies the share link, or says it when the browser does not let the page copy. */
 async function copyShareLink(publicationId: string, t: (key: string, options?: Record<string, unknown>) => string) {
@@ -117,8 +118,10 @@ export function PublicationActions({ publication, revision, disabled, onStale }:
   const { t } = useTranslation(SPONSOR)
   const queryClient = useQueryClient()
   const [copying, setCopying] = useState(false)
+  const [showingQr, setShowingQr] = useState(false)
   const can = actionsOf(publication.status, publication.pausedBy, publication.endReason)
   const id = publication.publicationId
+  const shareable = publication.status === 'LIVE' || publication.status === 'SCHEDULED'
 
   /** Runs a change; afterwards the lists and this page read again. A failure keeps the confirmation open. */
   const change = (run: () => Promise<unknown>, done: string, after?: () => void) => run().then(
@@ -172,10 +175,16 @@ export function PublicationActions({ publication, revision, disabled, onStale }:
             </Button>
           } />
       )}
-      {(publication.status === 'LIVE' || publication.status === 'SCHEDULED') && (
+      {shareable && (
         <Button variant="outline" data-testid="publication-share" onClick={() => void copyShareLink(id, t)}>
           <Link2 aria-hidden />
           {t('publishing.actions.share')}
+        </Button>
+      )}
+      {shareable && (
+        <Button variant="outline" data-testid="publication-qr" onClick={() => setShowingQr(true)}>
+          <QrCode aria-hidden />
+          {t('publishing.actions.qr')}
         </Button>
       )}
       {can.copy && (
@@ -198,6 +207,7 @@ export function PublicationActions({ publication, revision, disabled, onStale }:
           } />
       )}
       {copying && <CopyDialog publication={publication} open onOpenChange={setCopying} />}
+      {showingQr && <PublicationQrDialog publicationId={id} name={publication.name} open onOpenChange={setShowingQr} />}
     </div>
   )
 }

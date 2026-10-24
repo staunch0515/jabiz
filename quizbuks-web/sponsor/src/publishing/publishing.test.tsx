@@ -6,6 +6,12 @@ import App from '../App'
 import { shareLink } from './paths'
 import '../messages'
 
+// The QR code (Q21) is drawn by `qrcode`; jsdom has no canvas, so the drawing is mocked and the files are checked.
+vi.mock('qrcode', () => ({ default: {
+  toString: vi.fn(async (text: string) => `<svg>${text}</svg>`),
+  toCanvas: vi.fn(async () => undefined),
+} }))
+
 function json(status: number, body: unknown) {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 }
@@ -347,12 +353,43 @@ describe('a submitted publication', () => {
     expect(shareLink('a b', 'https://quizbuks.com')).toBe('https://quizbuks.com/p/a%20b')
   })
 
+  it('shows the QR code of a live publication with its link, and saves the poster (Q21)', async () => {
+    const saved: string[] = []
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(() => ({
+      fillRect() {}, fillText() {}, drawImage() {}, measureText: (text: string) => ({ width: text.length * 60 }),
+    }) as unknown as CanvasRenderingContext2D)
+    vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation((callback) => callback(new Blob(['png'])))
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:qr')
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined)
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+      saved.push(this.download)
+    })
+    server({ publication: { ...DRAFT, status: 'LIVE', revision: 6, budgetCap: '1000', maxReward: '100',
+      maxSpend: '1000' } })
+    window.history.replaceState(null, '', '/publications/p1')
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('publication-qr'))
+    const dialog = await screen.findByTestId('publication-qr-dialog')
+    const image = await within(dialog).findByTestId('publication-qr-image')
+    expect(decodeURIComponent(image.getAttribute('src')!.split(',')[1])).toBe(`<svg>${window.location.origin}/p/p1</svg>`)
+    expect(image).toHaveAccessibleName('QR code leading to Coffee week')
+    expect(within(dialog).getByTestId('publication-qr-link')).toHaveTextContent(`${window.location.origin}/p/p1`)
+
+    await userEvent.click(within(dialog).getByTestId('publication-qr-poster'))
+    await waitFor(() => expect(saved).toEqual(['Coffee week poster.png']))
+    await userEvent.click(within(dialog).getByTestId('publication-qr-svg'))
+    await waitFor(() => expect(saved).toEqual(['Coffee week poster.png', 'Coffee week QR.svg']))
+    await userEvent.click(within(dialog).getByTestId('publication-qr-png'))
+    await waitFor(() => expect(saved).toEqual(['Coffee week poster.png', 'Coffee week QR.svg', 'Coffee week QR.png']))
+  })
+
   it('offers no share link for a paused publication', async () => {
     server({ publication: { ...DRAFT, status: 'PAUSED', revision: 7, pausedAt: '2026-10-14T03:00:00Z' } })
     window.history.replaceState(null, '', '/publications/p1')
     render(<App />)
     expect(await screen.findByTestId('publication-view')).toBeInTheDocument()
     expect(screen.queryByTestId('publication-share')).toBeNull()
+    expect(screen.queryByTestId('publication-qr')).toBeNull()
   })
 
   it('says an administrator paused it, with the reason, and offers no resume (Q10b)', async () => {

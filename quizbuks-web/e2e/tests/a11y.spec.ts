@@ -244,6 +244,11 @@ for (const appearance of ['light', 'dark'] as const) {
     await expect(page.getByTestId('publication-copy-dialog')).toBeVisible()
     await expectAccessible(page, at('sponsor publication copy'))
     await page.keyboard.press('Escape')
+    // The QR code of the share link (Q21), once drawn.
+    await page.getByTestId('publication-qr').click()
+    await expect(page.getByTestId('publication-qr-image')).toBeVisible()
+    await expectAccessible(page, at('sponsor publication QR code'))
+    await page.keyboard.press('Escape')
     await page.setViewportSize({ width: 390, height: 844 })
     await expectAccessible(page, at('sponsor live publication 390px'))
   })
