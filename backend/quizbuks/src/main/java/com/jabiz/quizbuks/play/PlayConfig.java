@@ -155,6 +155,12 @@ public class PlayConfig {
         return AttemptProcesses.save();
     }
 
+    /** Q20: a finished attempt's questions and answers, read any time later. */
+    @Bean
+    ProcessDefinition<AttemptResults.ResultInput, AttemptResults.ResultOutput, ProcessContext> qbAttemptResult() {
+        return AttemptResults.result();
+    }
+
     @Bean
     ProcessDefinition<AttemptFinishing.SubmitInput, AttemptFinishing.SubmitOutput, ProcessContext> qbAttemptSubmit(
         MessageCatalog messages) {

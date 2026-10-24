@@ -8,8 +8,8 @@ import { APP } from '../messages'
 import { autoSubmitted, storedResult, storedStart } from '../play/storage'
 import { formatKudos } from '../qb/kudos'
 import { QB } from '../qb/messages'
-import { isSurveyResult, readAttempt, readPublication, type QuestionResult, type QuestionView, type RewardStatus }
-  from '../qb/play'
+import { readAttemptResult, type AttemptResult, type QuestionResult, type QuestionView, type RewardStatus,
+  type StartOutput, type SubmitOutput } from '../qb/play'
 import { problemText } from '../qb/problems'
 import { Link, Redirect } from '../qb/router'
 import { letter } from './PlayPage'
@@ -17,7 +17,19 @@ import { letter } from './PlayPage'
 /** How often the page asks again while the server finishes an attempt whose time ran out. */
 export const FINISHING_POLL_MS = 5_000
 
-/** A finished attempt as the page shows it, from the submission's answer or from the caller's attempt record. */
+/**
+ * The submission's own answer, with this tab's copy of the start, as a result: what the page shows when the server's
+ * result cannot be read right after finishing (a phone's connection dropped, a busy quiz).
+ */
+function fromSubmission(submitted: SubmitOutput, start: StartOutput | null): AttemptResult {
+  return { attemptId: submitted.attemptId, publicationId: start?.publicationId ?? '', name: null,
+    status: submitted.status, kind: submitted.kind, deadline: null, serverTime: '', score: submitted.score,
+    fullScore: submitted.fullScore, passScore: submitted.kind === 'SURVEY' ? null : submitted.passScore,
+    passed: submitted.passed, reward: submitted.reward, rewardStatus: submitted.rewardStatus,
+    questions: start?.questions ?? [], result: submitted.questions }
+}
+
+/** A finished attempt as the page shows it, from the server's result. */
 interface Outcome {
   status: string
   score: number
@@ -26,7 +38,7 @@ interface Outcome {
   passed: boolean
   reward: unknown
   rewardStatus: RewardStatus
-  /** The server's notice of a pending reward, in the caller's language. */
+  /** The server's notice of a pending reward, in the caller's language (the submission's answer, this tab only). */
   message: string | null
   questions: QuestionResult[]
 }
@@ -115,72 +127,65 @@ function Reward({ outcome, survey }: { outcome: Outcome; survey: boolean }) {
 }
 
 /**
- * The result (U-33, U-34): score, pass mark, passed or not, each question right or wrong, and the reward paid,
- * pending (the sponsor's budget ran out: paid once they top up) or none. Right after finishing, this tab still has
- * the questions' text (the start's output, docs/quizbuks/plans/QP-pages.md A-3) and shows the answers chosen and the
- * correct ones; otherwise only right or wrong per question, from the attempt's record. An attempt whose time ran out
- * and is not finished yet is waited for: the server finishes it with its saved answers. A survey's result (Q12) says
- * whether it was complete, the reward, and the answers chosen, never right or wrong.
+ * The result (U-33, U-34): score, pass mark, passed or not, each question with the answer chosen and the correct
+ * one, and the reward paid, pending (the sponsor's budget ran out: paid once they top up) or none. Everything comes
+ * from the server (`QB_ATTEMPT_RESULT`, docs/quizbuks/plans/Q20-result-review.md): the questions as this attempt
+ * showed them and its stored result, so the page reads the same from the history, another device or after the tab
+ * closed. Only the pending reward's notice is the submission's own (this tab), and the submission's answer stands in
+ * when the server cannot be read right after finishing. An attempt whose time ran out and is not finished yet is
+ * waited for: the server finishes it with its saved answers. A survey's result (Q12) says whether it was complete, the
+ * reward, and the answers chosen, never right or wrong.
  */
-export function ResultPage({ attemptId, country }: { attemptId: string; country: string | null }) {
+export function ResultPage({ attemptId }: { attemptId: string }) {
   const { t } = useTranslation(APP)
   const { t: tQb } = useTranslation(QB)
   const [submitted] = useState(() => storedResult(attemptId))
-  const [start] = useState(() => storedStart(attemptId))
-  const record = useQuery({
-    queryKey: ['qb', 'attempt', attemptId],
-    // Whether it can still be answered, by the device's clock when read (a hint: the play page asks the server).
-    queryFn: async () => {
-      const found = await readAttempt(attemptId)
-      return { ...found, inTime: !!found.deadline && Date.parse(found.deadline) > Date.now() }
-    },
-    enabled: !submitted,
+  const result = useQuery({
+    queryKey: ['qb', 'attempt-result', attemptId],
+    queryFn: () => readAttemptResult(attemptId),
+    // A copy of this attempt in progress may be cached from before it was finished: always read again on arrival.
+    refetchOnMount: 'always',
     refetchInterval: (query) => (query.state.data?.status === 'IN_PROGRESS' ? FINISHING_POLL_MS : false),
   })
-  const publicationId = start?.publicationId ?? record.data?.publicationId
-  const [at] = useState(() => new Date().toISOString())
-  const publication = useQuery({
-    queryKey: ['qb', 'publication', { publicationId, at, country }],
-    queryFn: () => readPublication({ publicationId: publicationId!, at, country }),
-    enabled: !!publicationId,
-  })
 
-  if (!submitted) {
-    if (record.isPending) return <PageState kind="loading" />
-    if (record.isError) {
-      if (record.error instanceof ApiError && record.error.status === 404) {
-        return <PageState kind="notFound" titleAs="h1" description={tQb('notFound')} />
-      }
-      return <PageState kind="error" description={problemText(record.error)}
-        action={<Button variant="outline" onClick={() => void record.refetch()}>{tQb('retry')}</Button>} />
+  if (result.isPending) return <PageState kind="loading" />
+  // The submission's own answer stands in only when the server could not answer (not when it refused: a 404 or 403 is
+  // another user's or no attempt, and must not show what this tab kept).
+  const refused = result.error instanceof ApiError && result.error.status < 500
+  const data = result.data ?? (submitted && !refused ? fromSubmission(submitted, storedStart(attemptId)) : null)
+  if (!data) {
+    if (result.error instanceof ApiError && result.error.status === 404) {
+      return <PageState kind="notFound" titleAs="h1" description={tQb('notFound')} />
     }
+    return <PageState kind="error" description={problemText(result.error)}
+      action={<Button variant="outline" onClick={() => void result.refetch()}>{tQb('retry')}</Button>} />
   }
-  const data = record.data
-  if (!submitted && data && data.status === 'IN_PROGRESS') {
-    // Still in time: back to answering; else the server is finishing it with the saved answers.
-    if (data.inTime) return <Redirect to={`/play/${attemptId}`} />
+  if (data.status === 'IN_PROGRESS') {
+    // What is cached may be stale (the attempt was finished since): wait for the read under way before deciding.
+    if (result.isFetching) return <PageState kind="loading" />
+    // Still in time by the server's clock: back to answering; else the server is finishing it with the saved answers.
+    const inTime = !!data.deadline && Date.parse(data.deadline) > Date.parse(data.serverTime)
+    if (inTime) return <Redirect to={`/play/${attemptId}`} />
     return (
       <PageState kind="loading" title={t('result.finishing')} data-testid="result-finishing" />
     )
   }
-  const outcome: Outcome | null = submitted ? submitted : data ? {
+  const outcome: Outcome = {
     status: data.status,
     score: data.score ?? 0,
     fullScore: data.fullScore ?? 0,
-    passScore: publication.data?.passScore ?? null,
+    passScore: data.passScore,
     passed: data.passed === true,
     reward: data.reward,
     rewardStatus: data.rewardStatus ?? 'NONE',
-    message: null,
-    questions: data.result ?? [],
-  } : null
-  if (!outcome) return <PageState kind="loading" />
+    message: submitted?.message ?? null,
+    questions: data.result,
+  }
   const automatic = outcome.status === 'EXPIRED' || autoSubmitted(attemptId)
-  const byNo = new Map((start?.questions ?? []).map((q) => [q.no, q]))
-  const name = publication.data?.name
+  const byNo = new Map(data.questions.map((q) => [q.no, q]))
+  const name = data.name
   // A survey (Q12) has no score to show: complete (every question answered) or not, and what was chosen.
-  const survey = submitted?.kind === 'SURVEY' || start?.kind === 'SURVEY' || publication.data?.kind === 'SURVEY'
-    || isSurveyResult(outcome.questions)
+  const survey = data.kind === 'SURVEY'
 
   return (
     <section className="flex flex-col gap-4" aria-labelledby="result-title" data-testid="result">
@@ -226,7 +231,6 @@ export function ResultPage({ attemptId, country }: { attemptId: string; country:
           <h2 id="result-questions-title" className="text-lg font-semibold">
             {survey ? t('result.surveyAnswers') : t('result.questions')}
           </h2>
-          {!start && <p className="text-muted-foreground text-sm">{t('result.textsGone')}</p>}
           <ol className="flex flex-col gap-2">
             {outcome.questions.map((result, i) => survey
               ? <SurveyRow key={result.no} result={result} question={byNo.get(result.no)} index={i} />

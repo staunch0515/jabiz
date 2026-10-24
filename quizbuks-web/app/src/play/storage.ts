@@ -2,10 +2,10 @@ import type { StartOutput, SubmitOutput } from '../qb/play'
 import { clockOffset } from './countdown'
 
 /*
- * What the play and result pages keep in the tab (docs/quizbuks/plans/QP-pages.md, gap A-3, Q-2): the output of
- * QB_ATTEMPT_START (the questions and their options as shown, never which are correct) and of QB_ATTEMPT_SUBMIT. The
- * result page shows the questions' text from it right after finishing; later, from another tab or after the tab
- * closed, only the score and each question's right or wrong come from the server (the attempt's `result`).
+ * What the play and result pages keep in the tab: the output of QB_ATTEMPT_START (the questions and their options as
+ * shown, never which are correct), for the play page to continue without asking again, and of QB_ATTEMPT_SUBMIT, for
+ * the pending reward's notice in the caller's language. The result page itself reads everything from the server
+ * (QB_ATTEMPT_RESULT, docs/quizbuks/plans/Q20-result-review.md), so another tab or a later visit shows the same.
  *
  * sessionStorage can be missing or refuse (private windows, full storage): every access is guarded and the pages work
  * without it, reading from the server instead.

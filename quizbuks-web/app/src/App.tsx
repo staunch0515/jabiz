@@ -198,7 +198,7 @@ function SignedIn({ path }: { path: string }) {
   }
   else if (item?.page === 'p') page = <PublicationPage key={item.id} publicationId={item.id} country={country} />
   else if (item?.page === 'play') page = <PlayPage key={item.id} attemptId={item.id} />
-  else if (item?.page === 'result') page = <ResultPage key={item.id} attemptId={item.id} country={country} />
+  else if (item?.page === 'result') page = <ResultPage key={item.id} attemptId={item.id} />
   else page = <PageState kind="notFound" titleAs="h1" description={t('notFound')} />
   // The navigation is the app's; the welcome step stands alone, and answering keeps the screen to the question.
   const nav = path !== WELCOME && item?.page !== 'play'

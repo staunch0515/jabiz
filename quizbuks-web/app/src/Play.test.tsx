@@ -5,8 +5,8 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import App from './App'
 import './messages'
 import { containsPattern, feedFilters, NO_FILTERS } from './pages/FeedPage'
-import { forgetAttempts, storeStart } from './play/storage'
-import type { StartOutput } from './qb/play'
+import { forgetAttempts, storeResult, storeStart } from './play/storage'
+import type { StartOutput, SubmitOutput } from './qb/play'
 
 function json(status: number, body: unknown) {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
@@ -63,10 +63,20 @@ const SUBMITTED = { attemptId: ATTEMPT, status: 'SUBMITTED', score: 2, fullScore
     { no: 2, selected: [2], correct: [1], points: 3, earned: 0 },
   ] }
 
+/** The result as QB_ATTEMPT_RESULT gives it once finished (Q20): the start's questions and the submission's answers. */
+function finished(over: Record<string, unknown> = {}) {
+  return { attemptId: ATTEMPT, publicationId: PUB, name: 'Capitals week', status: 'SUBMITTED', kind: 'QUIZ',
+    deadline: started().deadline,
+    serverTime: new Date().toISOString(), score: SUBMITTED.score, fullScore: SUBMITTED.fullScore,
+    passScore: SUBMITTED.passScore, passed: SUBMITTED.passed, reward: SUBMITTED.reward,
+    rewardStatus: SUBMITTED.rewardStatus, questions: started().questions, result: SUBMITTED.questions, ...over }
+}
+
 interface Options {
   start?: () => Response
   submit?: () => Response
-  attempt?: Record<string, unknown>
+  /** The answer of QB_ATTEMPT_RESULT; the finished quiz by default. */
+  result?: () => Response
   history?: Record<string, unknown>[]
   emailVerified?: boolean
   feed?: Record<string, unknown>[]
@@ -112,8 +122,8 @@ function server(options: Options = {}) {
       }
       case '/api/processes/QB_ATTEMPT_SUBMIT/latest':
         return options.submit ? options.submit() : json(200, { output: SUBMITTED })
-      case `/api/datasets/urn:jabiz:dataset:taker:QbAttempt/entities/${ATTEMPT}`:
-        return options.attempt ? json(200, { id: ATTEMPT, version: 1, attributes: options.attempt }) : json(404, {})
+      case '/api/processes/QB_ATTEMPT_RESULT/latest':
+        return options.result ? options.result() : json(200, { output: finished() })
       default:
         return json(404, {})
     }
@@ -439,8 +449,8 @@ describe('answering', () => {
   })
 
   it('finds the publication of an attempt this tab never started, then continues it', async () => {
-    const { posted } = server({ attempt: { attemptId: ATTEMPT, publicationId: PUB, status: 'IN_PROGRESS',
-      deadline: started().deadline } })
+    const { posted } = server({ result: () => json(200, { output: finished({ status: 'IN_PROGRESS',
+      deadline: started().deadline, score: null, questions: [], result: [] }) }) })
     window.history.replaceState(null, '', `/play/${ATTEMPT}`)
     render(<App />)
     expect(await screen.findByTestId('play-progress')).toHaveTextContent('Question 1 of 2')
@@ -467,8 +477,8 @@ describe('answering', () => {
     server({
       start: () => json(422, { title: 'Refused', status: 422, violations: [
         { field: 'publicationId', ruleCode: 'QB_ATTEMPT_ALREADY_TAKEN', message: 'Answered already' }] }),
-      attempt: { attemptId: ATTEMPT, publicationId: PUB, status: 'SUBMITTED', score: 5, fullScore: 5, passed: true,
-        reward: 100, rewardStatus: 'PAID', result: JSON.stringify([]) },
+      result: () => json(200, { output: finished({ score: 5, passed: true, reward: 100, rewardStatus: 'PAID',
+        result: [] }) }),
     })
     storeStart(started())
     window.history.replaceState(null, '', `/play/${ATTEMPT}`)
@@ -504,7 +514,9 @@ describe('a survey', () => {
   it('asks for one answer by radio buttons, submits only once every question is answered, and shows no score',
     async () => {
       const { posted } = server({ start: () => json(200, { output: survey() }),
-        submit: () => json(200, { output: done }) })
+        submit: () => json(200, { output: done }),
+        result: () => json(200, { output: finished({ kind: 'SURVEY', score: 2, fullScore: 2, passScore: null,
+          passed: true, reward: 30, rewardStatus: 'PAID', questions: survey().questions, result: done.questions }) }) })
       window.history.replaceState(null, '', `/p/${PUB}`)
       render(<App />)
       await userEvent.click(await screen.findByTestId('detail-start'))
@@ -542,10 +554,10 @@ describe('a survey', () => {
     })
 
   it('says a survey cut short by its time earns nothing, read later from the record alone', async () => {
-    server({ attempt: { attemptId: ATTEMPT, publicationId: PUB, status: 'EXPIRED', score: 1, fullScore: 2,
-      passed: false, reward: 0, rewardStatus: 'NONE', deadline: '2026-10-01T00:05:00Z',
-      result: JSON.stringify([{ no: 1, selected: [1], correct: [], points: 1, earned: 1 },
-        { no: 2, selected: [], correct: [], points: 1, earned: 0 }]) } })
+    server({ result: () => json(200, { output: finished({ kind: 'SURVEY', status: 'EXPIRED', score: 1, fullScore: 2,
+      passScore: null, passed: false, reward: 0, rewardStatus: 'NONE', deadline: '2026-10-01T00:05:00Z',
+      questions: survey().questions, result: [{ no: 1, selected: [1], correct: [], points: 1, earned: 1 },
+        { no: 2, selected: [], correct: [], points: 1, earned: 0 }] }) }) })
     window.history.replaceState(null, '', `/result/${ATTEMPT}`)
     render(<App />)
     expect(await screen.findByTestId('result-survey')).toHaveAttribute('data-complete', 'false')
@@ -555,28 +567,66 @@ describe('a survey', () => {
 })
 
 describe('a result read later', () => {
-  it('shows the score and each question right or wrong without the texts, which only the tab kept', async () => {
-    server({ attempt: { attemptId: ATTEMPT, publicationId: PUB, status: 'EXPIRED', score: 2, fullScore: 5,
-      passed: false, reward: 0, rewardStatus: 'NONE', deadline: '2026-10-01T00:05:00Z',
-      result: JSON.stringify(SUBMITTED.questions) } })
-    window.history.replaceState(null, '', `/result/${ATTEMPT}`)
-    render(<App />)
-    expect(await screen.findByTestId('result-score')).toHaveTextContent('2 / 5')
-    expect(screen.getByTestId('result-automatic')).toBeInTheDocument()
-    expect(screen.getByTestId('result-reward')).toHaveAttribute('data-status', 'NONE')
-    const questions = screen.getAllByTestId('result-question')
-    expect(questions.map((q) => q.getAttribute('data-correct'))).toEqual(['true', 'false'])
-    expect(screen.queryByTestId('result-mine')).toBeNull()
-    expect(await screen.findByTestId('result-pass-score')).toHaveTextContent('3')
-    expect(screen.getByTestId('result-name')).toHaveTextContent('Capitals week')
-  })
+  it('shows the questions, the answers chosen and the correct ones from the server, nothing kept in the tab',
+    async () => {
+      const { posted } = server({ result: () => json(200, { output: finished({ status: 'EXPIRED', reward: 0,
+        rewardStatus: 'NONE', deadline: '2026-10-01T00:05:00Z' }) }) })
+      window.history.replaceState(null, '', `/result/${ATTEMPT}`)
+      render(<App />)
+      expect(await screen.findByTestId('result-score')).toHaveTextContent('2 / 5')
+      expect(screen.getByTestId('result-automatic')).toBeInTheDocument()
+      expect(screen.getByTestId('result-reward')).toHaveAttribute('data-status', 'NONE')
+      const questions = screen.getAllByTestId('result-question')
+      expect(questions.map((q) => q.getAttribute('data-correct'))).toEqual(['true', 'false'])
+      // The texts, in the order that attempt showed the options (Q20): from the server, not from this tab.
+      expect(questions[0]).toHaveTextContent('Capital of France?')
+      expect(within(questions[0]).getByTestId('result-mine')).toHaveTextContent('B. Paris')
+      expect(within(questions[1]).getByTestId('result-mine')).toHaveTextContent('B. Osaka')
+      expect(within(questions[1]).getByTestId('result-correct')).toHaveTextContent('A. Tokyo')
+      expect(screen.queryByText(/shown only right after/)).toBeNull()
+      expect(await screen.findByTestId('result-pass-score')).toHaveTextContent('3')
+      expect(screen.getByTestId('result-name')).toHaveTextContent('Capitals week')
+      expect(posted('QB_ATTEMPT_RESULT')).toEqual([{ attemptId: ATTEMPT }])
+    })
 
   it('waits while the server finishes an attempt whose time ran out', async () => {
-    server({ attempt: { attemptId: ATTEMPT, publicationId: PUB, status: 'IN_PROGRESS',
-      deadline: '2026-10-01T00:05:00Z' } })
+    server({ result: () => json(200, { output: finished({ status: 'IN_PROGRESS', deadline: '2026-10-01T00:05:00Z',
+      score: null, fullScore: null, passScore: null, passed: null, reward: null, rewardStatus: null, questions: [],
+      result: [] }) }) })
     window.history.replaceState(null, '', `/result/${ATTEMPT}`)
     render(<App />)
     expect(await screen.findByTestId('result-finishing')).toBeInTheDocument()
+  })
+
+  it('sends an attempt still in time back to answering', async () => {
+    const deadline = new Date(Date.now() + 120_000).toISOString()
+    server({ result: () => json(200, { output: finished({ status: 'IN_PROGRESS', deadline, score: null, questions: [],
+      result: [] }) }) })
+    storeStart(started({ deadline }))
+    window.history.replaceState(null, '', `/result/${ATTEMPT}`)
+    render(<App />)
+    await waitFor(() => expect(window.location.pathname).toBe(`/play/${ATTEMPT}`))
+  })
+
+  it('falls back to the submission\'s own answer when the server cannot be read right after finishing', async () => {
+    server({ result: () => json(503, { title: 'Service unavailable', status: 503 }) })
+    storeStart(started())
+    storeResult({ ...SUBMITTED, kind: 'QUIZ' } as SubmitOutput)
+    window.history.replaceState(null, '', `/result/${ATTEMPT}`)
+    render(<App />)
+    expect(await screen.findByTestId('result-score')).toHaveTextContent('2 / 5')
+    expect(screen.getByTestId('result-reward')).toHaveTextContent('The sponsor is topping up.')
+    expect(within(screen.getAllByTestId('result-question')[0]).getByTestId('result-mine')).toHaveTextContent('B. Paris')
+  })
+
+  it('says when there is no such attempt, whatever this tab kept', async () => {
+    server({ result: () => json(404, { title: 'Not found', status: 404 }) })
+    storeStart(started())
+    storeResult({ ...SUBMITTED, kind: 'QUIZ' } as SubmitOutput)
+    window.history.replaceState(null, '', `/result/${ATTEMPT}`)
+    render(<App />)
+    expect(await screen.findByText('This page does not exist.')).toBeInTheDocument()
+    expect(screen.queryByTestId('result-score')).toBeNull()
   })
 })
 

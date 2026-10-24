@@ -46,12 +46,12 @@ export const PLAY = {
   start: 'QB_ATTEMPT_START',
   save: 'QB_ATTEMPT_SAVE',
   submit: 'QB_ATTEMPT_SUBMIT',
+  /** A finished attempt's questions as shown and its answers, read any time later (Q20). */
+  result: 'QB_ATTEMPT_RESULT',
   feed: 'qb.app.feed',
   publication: 'qb.app.publication',
   publicationTiers: 'qb.app.publication-tiers',
   history: 'qb.app.history',
-  /** The taker's own attempts, read only; a finished one's `result` holds every question's right answer. */
-  myAttempts: 'urn:jabiz:dataset:taker:QbAttempt',
 } as const
 
 /** The widths the policy `qb.content.image` keeps of every image (covers, questions, options, materials). */

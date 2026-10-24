@@ -1,0 +1,108 @@
+package com.jabiz.quizbuks.play;
+
+import com.jabiz.process.ProcessContext;
+import com.jabiz.process.ProcessDefinition;
+import com.jabiz.query.EntityQuery;
+import com.jabiz.query.QueryPredicate;
+import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.content.QbContent;
+import com.jabiz.quizbuks.content.QuizSnapshot;
+import com.jabiz.runtime.EntityInstance;
+import com.jabiz.runtime.process.steps.LoadEntity;
+import com.jabiz.runtime.process.steps.QueryEntities;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
+
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.List;
+import java.util.UUID;
+
+import static com.jabiz.quizbuks.play.PlaySteps.INPUT;
+import static com.jabiz.quizbuks.play.PlaySteps.OUTPUT;
+import static com.jabiz.quizbuks.play.PlaySteps.first;
+
+/**
+ * The result of one of the caller's attempts, read later (docs/quizbuks/plans/Q20-result-review.md, closing gap A-3
+ * of QP-pages): the questions as that attempt showed them (the same view as {@code QB_ATTEMPT_START}: options by
+ * their position, never which are correct) together with the stored result, which names, by the same positions, the
+ * options chosen and the correct ones. Only a finished attempt has them: the correct answers still appear only once
+ * the attempt is finished (design section 9), and an attempt in progress gets its state alone. The option order stays
+ * on the server, as everywhere else.
+ */
+public final class AttemptResults {
+
+    public static final String RESULT = "QB_ATTEMPT_RESULT";
+
+    public record ResultInput(@NotBlank @Size(max = 36) String attemptId) {}
+
+    /**
+     * @param deadline   when the attempt must be (or had to be) submitted, by the server's clock
+     * @param serverTime the server's clock now (an attempt in progress is still answerable before its deadline)
+     * @param name       the publication's name, as its card has it
+     * @param passScore  the publication's pass mark; null for a survey
+     * @param questions  once finished: the questions in the attempt's order, each option by its position
+     * @param result     once finished: per question, the positions chosen and the correct ones (none for a survey)
+     */
+    public record ResultOutput(String attemptId, UUID publicationId, String name, String status, String kind,
+        Instant deadline, Instant serverTime, Integer score, Integer fullScore, Integer passScore, Boolean passed, BigDecimal reward,
+        String rewardStatus, List<AttemptProcesses.QuestionView> questions,
+        List<AttemptFinishing.QuestionOutput> result) {}
+
+    static final String ATTEMPT_KEY = "play.attemptId";
+    static final String ATTEMPT = "play.attempt";
+    static final String CARD = "play.card";
+
+    public static ProcessDefinition<ResultInput, ResultOutput, ProcessContext> result() {
+        return ProcessDefinition.define(RESULT, 1, ResultInput.class, ResultOutput.class, ProcessContext.class,
+            pb -> pb
+                .description("Reads the result of one of the caller's attempts: once finished, the questions as "
+                    + "shown with the options chosen and the correct ones.")
+                .permissions(QbPermissions.ME)
+                .contextFactory((start, input) -> {
+                    ProcessContext ctx = new ProcessContext(start);
+                    ctx.put(INPUT, input);
+                    ctx.put(ATTEMPT_KEY, input.attemptId());
+                    return ctx;
+                })
+                .outputMapper(ctx -> ctx.get(OUTPUT, ResultOutput.class))
+                // Through the caller's own dataset: another taker's attempt is not found (404).
+                .step("Load the attempt", LoadEntity.by(QbPlay.TAKER_ATTEMPTS, ATTEMPT_KEY, ATTEMPT))
+                // The frozen version the attempt was answered from, and the card (its name and pass mark): one
+                // statement, as the two depend on the attempt alone (platform decision D46).
+                .step("Load the version and the card", QueryEntities.<ProcessContext>all(
+                    QueryEntities.query(QbContent.defaultDataset(QbContent.VERSION), ctx -> EntityQuery.builder()
+                        .where(new QueryPredicate.In("versionId", PlaySteps.ids(ctx.get(ATTEMPT, EntityInstance.class)
+                            .get("versionId")))).limit(1).build(), PlaySteps.VERSION),
+                    PlaySteps.card(ctx -> ctx.get(ATTEMPT, EntityInstance.class).get("publicationId"), CARD)))
+                .compute("Read the result", (metadata, ctx) -> read(ctx)));
+    }
+
+    static void read(ProcessContext ctx) {
+        EntityInstance attempt = ctx.get(ATTEMPT, EntityInstance.class);
+        QuizSnapshot snapshot = PlaySteps.snapshot(ctx);
+        EntityInstance card = first(ctx, CARD);
+        boolean finished = AttemptStatus.finished(attempt.get("status"));
+        Integer passScore = snapshot.survey() || card == null ? null : PlaySteps.integer(card.get("passScore"));
+        List<AttemptProcesses.QuestionView> questions = finished
+            ? AttemptProcesses.questions(snapshot, Answers.fromJson(attempt.get("optionOrder"))) : List.of();
+        List<AttemptFinishing.QuestionOutput> result = finished
+            ? Scoring.fromJson(attempt.get("result")).stream().map(question -> new AttemptFinishing.QuestionOutput(
+                question.no(), question.selected(), question.correct(), question.points(), question.earned()))
+                .toList()
+            : List.of();
+        Object passed = attempt.get("passed");
+        ctx.put(OUTPUT, new ResultOutput(String.valueOf(attempt.id()), PlaySteps.uuid(attempt.get("publicationId")),
+            card == null ? null : card.get("name"), attempt.get("status"), snapshot.kind(), PlaySteps.instant(attempt.get("deadline")), ctx.opTime(),
+            number(attempt.get("score")), number(attempt.get("fullScore")), passScore,
+            passed == null ? null : Boolean.TRUE.equals(passed) || "true".equals(String.valueOf(passed)),
+            attempt.get("reward") == null ? null : PlaySteps.money(attempt.get("reward")),
+            attempt.get("rewardStatus"), questions, result));
+    }
+
+    private static Integer number(Object value) {
+        return value == null ? null : PlaySteps.integer(value);
+    }
+
+    private AttemptResults() {}
+}

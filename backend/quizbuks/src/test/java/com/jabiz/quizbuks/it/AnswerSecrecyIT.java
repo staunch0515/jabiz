@@ -3,6 +3,7 @@ package com.jabiz.quizbuks.it;
 import com.jabiz.quizbuks.content.QbContent;
 import com.jabiz.quizbuks.content.QuizSnapshot;
 import com.jabiz.quizbuks.content.QuizSnapshots;
+import com.jabiz.quizbuks.play.AttemptResults;
 import com.jabiz.quizbuks.play.QbPlay;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.json.JsonMapper;
@@ -81,6 +82,11 @@ class AnswerSecrecyIT extends PlayItSupport {
             String text = json.writeValueAsString(page);
             assertThat(text).doesNotContain("correct").doesNotContain("\"questions\"");
         }
+        // The result read later (Q20): in progress it has no questions and no result, let alone the correct ones.
+        Map<String, Object> early = run(AttemptResults.RESULT, token, body("attemptId", attemptId));
+        assertThat(early).containsEntry("status", "IN_PROGRESS").containsEntry("questions", List.of())
+            .containsEntry("result", List.of());
+        assertThat(json.writeValueAsString(early)).doesNotContain("correct");
         assertThat(mine).singleElement().satisfies(row -> {
             assertThat(row.get("result")).isNull();
             assertThat(row.get("score")).isNull();

@@ -65,6 +65,11 @@ public final class Answers {
         return JSON.writeValueAsString(value);
     }
 
+    /** Reads JSON written by {@link #json} back, with the same mapper. */
+    static <T> T parse(String json, TypeReference<T> type) {
+        return JSON.readValue(json, type);
+    }
+
     /**
      * Every problem of {@code given} against the attempt's option order (question {@code i + 1} shows
      * {@code order.get(i).size()} options, at positions 1..k): a question that is not one, a question given twice, a

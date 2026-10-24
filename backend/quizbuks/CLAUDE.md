@@ -209,7 +209,7 @@
   提交前的问题与预计最大支出**只取保存的输出**（`problems`、`maxSpend`），页面不重算规则；`QB_PUBLICATION_CHANGED` / `QB_PUBLICATION_NOT_DRAFT` 即提示重新加载。
   非草稿只显示、不编辑（提交即冻结），操作按状态给出且都先确认。e2e 的数据准备（已通过的商家、审核的决定、上架的发布）在 `e2e/tests/publishing.ts`。
 - **答题页**（App，QP2）：倒计时只按服务器时间（`deadline` 与 `serverTime` 的偏移，`play/countdown.ts`）；保存进度只经 `play/saver.ts`（防抖、一次一个、失败保留重发）；
-  开始的输出（不含正误）存在 `sessionStorage`，只供刚完成的结果页显示题目文字（计划 A-3），之后只显示分数与逐题对错；退出登录时清除。
+  结果页一律读 `QB_ATTEMPT_RESULT`（Q20：已完成会话的题目按会话顺序、所选与正确选项都来自服务端，历史、其他设备、关闭标签页后一样显示）；`sessionStorage` 只留开始的输出供答题页接续与提交输出中"奖励待付"的提示（本标签页），退出登录时清除。
   开始与提交只经 `play/busy.ts` 的 `retryWhenBusy`：503 `PROCESS_BUSY` 时显示"人多，正在重试"，按 `Retry-After` 与加倍的退避自动重试，**每次开始、每次提交各一个 `Idempotency-Key`，重试用同一个**；
   提交带上会话的 `publicationId`（服务端排队的键）。重试在页面离开时停止（`signal`，开始的晚到成功不再把人带回答题页），
   等待合计至多 60 秒，提交过了截止加宽限（5 秒）即不再重试、去结果页（服务端以已保存的答案结束）；提交前先经 `saver.settle()` 保存未存的答案（保存不排队），

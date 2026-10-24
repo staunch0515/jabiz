@@ -24,6 +24,9 @@ public final class Scoring {
         }
     }
 
+    private static final tools.jackson.core.type.TypeReference<List<QuestionResult>> RESULT_ROWS =
+        new tools.jackson.core.type.TypeReference<>() {};
+
     /** @param score the points earned; {@code fullScore} the sum of all questions' points */
     public record Result(int score, int fullScore, List<QuestionResult> questions) {
         public Result {
@@ -72,6 +75,11 @@ public final class Scoring {
                 Answers.positions(positions, question.correct()), question.points(), question.earned()));
         }
         return new Result(scored.score(), scored.fullScore(), shown);
+    }
+
+    /** The questions of a stored result ({@link #toJson}); none for an attempt not finished (null or blank). */
+    public static List<QuestionResult> fromJson(String json) {
+        return json == null || json.isBlank() ? List.of() : Answers.parse(json, RESULT_ROWS);
     }
 
     /** The canonical JSON the attempt keeps as its result (written only when it is finished). */
