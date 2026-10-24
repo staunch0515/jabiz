@@ -44,4 +44,6 @@ public final class PublishingLimits {
     public static final int MAX_WINNERS = 999_999_999;
 
     private PublishingLimits() {}
+    /** Q22: what a prize collected at the sponsor's place is and where, as the taker reads it. */
+    public static final int REDEEM_DESCRIPTION_LENGTH = 500;
 }

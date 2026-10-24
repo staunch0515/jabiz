@@ -27,7 +27,7 @@ import { Link, navigate } from '../qb/router'
 import { PUBLICATION_STATUSES, PUBLISHING_LIMITS, searchPublications, type PublicationRow,
   type PublicationStatus } from './api'
 import { NEW_PUBLICATION, publicationPath, PUBLICATIONS_QUERY } from './paths'
-import { Period, StatusBadge, useDebounced, useRegionsText, useStatusLabel } from './shared'
+import { Period, StatusBadge, useDebounced, useRegionsText, useStatusLabel, useRewardMethodLabel } from './shared'
 
 const PAGE_SIZE = 20
 const ALL = 'all'
@@ -41,6 +41,7 @@ export function PublicationListPage() {
   const { t: tQb } = useTranslation(QB)
   const id = useId()
   const statusLabel = useStatusLabel()
+  const methodLabel = useRewardMethodLabel()
   const regionsText = useRegionsText()
   const [search, setSearch] = useState('')
   const q = useDebounced(search, 300)
@@ -99,6 +100,12 @@ export function PublicationListPage() {
               {t('publishing.list.fundsShort')}
             </Badge>
           )}
+          {row.original.rewardMethod !== 'PLATFORM' && (
+            <Badge variant="outline" className="w-fit" data-testid="publication-method-badge"
+              data-method={row.original.rewardMethod}>
+              {methodLabel(row.original.rewardMethod)}
+            </Badge>
+          )}
         </span>
       ),
     },
@@ -146,7 +153,7 @@ export function PublicationListPage() {
       header: t('publishing.list.editedAt'),
       cell: ({ row }) => formatDateTime(row.original.editedAt),
     },
-  ], [t, regionsText])
+  ], [t, regionsText, methodLabel])
 
   const rows = publications.data?.items ?? []
   const empty = q || status ? t('publishing.list.noMatch') : t('publishing.list.none')

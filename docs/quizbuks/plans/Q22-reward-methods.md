@@ -1,0 +1,67 @@
+# Q22 奖励的三种支付方式：平台代付、商家付现金、商家处兑换
+
+需求方 2026-10-24：奖励（Kudos）有三种支付方式——(1) 平台支付（现状），(2) 商家直接付现金，(3) 商家处线下兑换（答题人扫商家的码领奖）。
+1) 管理员按商家设定允许哪几种（一到三种）；2) 商家按发布选一种，线下兑换要给出等值 Kudos 与说明；3) 现金另行记录：商家标记已付、答题人须确认，双方都确认即完成；
+答题人一段时间内不确认也不争议 → 禁止开始新的答题；4) 兑换：合格后答题人扫商家的码领奖，扫码即完成；5) 答题人首页可按三种方式筛选；6) 其余相关事项由实现方补齐。
+
+确认（2026-10-24，"全部同意"）：现金金额就是 Kudos 的数字（JPY）；平台不收费、不入账；缺省期限：答题人确认 7 天、商家付款 14 天、兑换 30 天（非受控参数，管理员改）；
+兑换缺省用商家后台**轮换的码**，另可打印固定码；设定允许方式的是单个管理员（不走四眼）。
+
+分两个 PR：**Q22a**（本文）= 方式的模型、管理员设定、发布的方式、首页筛选、现金的全套流程、兑换的登记；**Q22b** = 线下兑换的领取（扫码）、商家的兑换屏幕。
+
+## 1. 做法（Q22a）
+
+| 部分 | 内容 |
+|---|---|
+| 方式 | `publishing.RewardMethod`：`PLATFORM` / `SPONSOR_CASH` / `OFFLINE_REDEEM`，字典 `urn:jabiz:dict:quizbuks:reward-method`。商家缺省只有 `PLATFORM` |
+| 商家允许的方式 | 时态实体 `QbSponsorRewardMethods`（`userId` 唯一，`methods` 为按固定顺序的逗号分隔文本，`note`、`setBy`、`setAt`）。只经流程 `QB_SPONSOR_REWARD_METHODS_SET`（权限 `qb.admin.reward-methods`，1–3 种，锁商家账户锁）写入；没有记录 = 只有 `PLATFORM`。商家经限本人的视图 `sponsor:QbSponsorRewardMethods` 读自己的 |
+| 发布 | `QbPublication` 与 `QbPublicationCard` 新字段 `rewardMethod`（必填）、`redeemDescription`（兑换说明，至多 500 字，只在 `OFFLINE_REDEEM` 时写）。保存、复制与提交都核对商家此刻允许的方式（422 `QB_REWARD_METHOD_NOT_ALLOWED`）；兑换缺说明在就绪检查中报 `FIELD_REQUIRED`；审核请求的事实与内容带方式（改方式即重审） |
+| 结算 | `AttemptFinishing`：方式不是 `PLATFORM` 时**不取钱包锁、不读钱包、不过账**（`AttemptRules` 不再要求商家可支付；首页与详情的"商家可支付"条件只对 `PLATFORM`）；计数照常记获奖人数与 `spent`（等值）。`QbAttempt.rewardStatus` 多 `CASH` / `REDEEM`。现金：插入 `QbCashReward`（`DUE`，`payBy = now + qb.reward.cash.pay-days`），事件 `qb.reward.cash-due`；兑换：插入 `QbRedemption`（`DUE`，`expiresAt = max(now + qb.reward.redeem-days, 发布结束)`，说明取自卡片），事件 `qb.reward.redeem-due`。两者都有人认得的码 `C-<会话编号末 8 位>` |
+| 现金记录 | 时态实体 `QbCashReward`（`reward` 包）：状态 `DUE → MARKED_PAID → CONFIRMED`；`DISPUTED`（答题人任何未结状态都可提出，须附说明）；`OVERDUE`（标记已付后过了 `confirmBy` 仍未确认）；`VOID`。流程：商家 `QB_CASH_REWARD_MARK_PAID`（`confirmBy = now + qb.reward.cash.confirm-days`，附注至多 200 字）；答题人 `QB_CASH_REWARD_CONFIRM`（`MARKED_PAID` / `OVERDUE` → `CONFIRMED`）、`QB_CASH_REWARD_DISPUTE`；管理员 `QB_CASH_REWARD_RESOLVE`（权限 `qb.cash.resolve`：`PAID` → `CONFIRMED`，`UNPAID` → 回到 `DUE` 重新付，`VOID`）。争议建待办 `qb.cash-reward.dispute`（权限 `qb.cash.resolve`）；到付款期限未付建待办 `qb.cash-reward.pay`（商家） |
+| 定时任务 | `qb.cash-reward-overdue`（每小时）：`MARKED_PAID` 过了 `confirmBy` → `OVERDUE`；`qb.cash-reward-remind`（每日 01:20 UTC）：`DUE` 过了 `payBy` 且未提醒 → 记 `remindedAt`、商家待办与消息。都是 `JobDefinition.forEach` 的 `internal()` 流程 |
+| 禁止新答题 | `QB_ATTEMPT_START` 在封禁检查之后 `CashRewardChecks.refuseOverdue`：本人有 `OVERDUE` 的现金记录即 422 `QB_CASH_CONFIRM_DUE`（确认或争议后解除） |
+| 消息 | 站内信（Q7c）：答题人收到现金待付 / 商家已付请确认 / 已逾期 / 裁定结果 / 兑换待领；商家收到答题人已确认、提出争议、裁定结果（商家后台的收件箱现只显示公告，商家的这些消息在平台通用后台可见，Q22b 一并补商家收件箱） |
+| 模板 | `qb.app.feed` 多参数 `method` 与列 `rewardMethod`；`qb.app.publication`、`qb.public.publication` 多 `rewardMethod`、`redeemDescription`；`qb.app.history` 带现金 / 兑换的状态；新 `qb.app.cash-rewards`（本人未结的）、`qb.sponsor.cash-rewards`、`qb.admin.cash-rewards`；`qb.admin.sponsors` 多 `rewardMethods`；`qb.sponsor.publications` 多 `rewardMethod` |
+| 参数 | `qb.reward.cash.confirm-days`（7）、`qb.reward.cash.pay-days`（14）、`qb.reward.redeem-days`（30）：普通业务参数（不受控），`QB_SETUP` 建立 |
+| 迁移 | `V24__quizbuks_reward_methods.sql`：两列加到发布版本与卡片（卡片按 `(reward_method, status)` 索引），`qb_attempt` 的奖励状态检查放宽，新时态表 `qb_sponsor_reward_methods_version`、`qb_cash_reward_version`、`qb_redemption_version` |
+| 商家后台 | 向导第一步在有多于一种可选时显示方式的单选（`publication-method`），兑换时要求说明（`publication-redeem`）；概要与列表显示方式；新页 `/cash-rewards`（待付现金：搜索、按状态筛选、"标记已付"对话框） |
+| App | 首页顶部分段控件按方式筛选（记在本机 `qb.feed.method`），卡片带方式徽章；有未结现金时首页提示并链到结果页；详情页显示方式与兑换说明；结果页：现金 → 码、状态、"我收到了" / "有问题"（附说明）；兑换 → 说明、码、有效期（领取在 Q22b）；历史带状态 |
+| 后台扩展 | 商家审核页多"允许的支付方式"面板（勾选、附注、保存）；新页 `/qb/cash-rewards`（全部现金记录、争议的裁定对话框）；菜单项 |
+
+`src/qb/` 的 `play.ts`、`ids.ts` 两处相同。
+
+## 2. 测试
+
+- IT `RewardMethodsIT`：方式的允许 / 拒绝 / 复制；现金 欠付 → 已付 → 确认（模板、消息、他人 404）；逾期任务禁止开始，争议、裁定与提醒；兑换记录。
+- 单元：`RewardMethodTest`、`AttemptRulesTest`（现金与兑换不要求钱包）、`PublicationReadinessTest`（兑换须有说明）。`SetupIT` 与场景 `setup.yml` 的参数。
+- 商家 Vitest `publishing.test.tsx`：只有平台时不显示选择并发送 `PLATFORM`；三种时选兑换、填说明、概要显示；现金页列出并标记已付。
+- App Vitest `Play.test.tsx`：筛选参数与本机记忆、徽章；首页的未结现金提示；详情页的方式；结果页的现金（码、确认、争议）与兑换；历史。
+- 后台扩展 `pages.test.tsx`（面板只在有权限时可保存）、`reward.test.tsx`（现金页、裁定、按状态筛选、axe）。
+- 场景：`setup.yml` 的参数；`QB_SETUP` 多建三个参数使之后生成的编号后移，选项的打乱随发布编号改变，`play` / `payout` / `topup` / `analytics` 场景中写死的所选位置按新顺序改（与 Q18b 相同），快照随之更新。
+- e2e `reward-methods.spec.ts`：管理员允许现金 → 商家发布现金方式 → 答题人合格 → 商家后台标记已付 → App 首页提示 → 结果页确认 → 历史；新页面过 axe。
+
+## 3. 风险
+
+- 现金与兑换绕过账本：平台不知道钱有没有真付；争议只能靠管理员裁定与商家信誉。管理员应只对信得过的商家开放（设定时写附注）。
+- 商家一直不付：到期提醒商家，但不自动惩罚商家（Q22b 或后续按逾期数限制商家发布）。
+- 逾期禁止新答题只在答题人确认或争议后解除；争议中的答题人可以继续答题。
+- 兑换在 Q22a 只登记，没有领取的入口（Q22b）；此前发布兑换方式的商家需知道这一点（管理员开放时注意）。
+- 商家后台的收件箱不显示发给商家的现金消息（现只有公告），Q22b 补。
+
+## 4. 独立评审的修正
+
+| 级别 | 问题 | 处理 |
+|---|---|---|
+| 中 | 现金消息按"种类:记录"去重，裁定"未付"后再次标记已付 / 争议 / 逾期不再有消息 | 这些种类的消息键带事件时刻；同一事件的重复投递仍只一条 |
+| 中 | 裁定"未付"后付款期限与提醒不重置，已提醒过的商家不再被提醒 | 裁定"未付"时 `payBy = 裁定时刻 + 付款天数`、`remindedAt` 清空 |
+| 中 | `QB_SPONSOR_REWARD_METHODS_SET` 的 `actsOn` 指向 `QbSponsor`（主键是入驻编号，不是用户） | 改为 `SecurityEntities.USER`（同封禁流程） |
+| 中 | 审核内容加入方式后，部署前已在审核中的发布的内容哈希改变、批准失效 | 只有不是 `PLATFORM` 时才把方式与说明放进审核内容 |
+| 中 | 天数参数缺失当作 0 天、非整数抛错导致提交 500 | `QbParams.days`：缺失取声明的缺省，取整、0–3650 天 |
+| 低 | 裁定消息把状态码（`DUE`）写进正文 | 消息 `qb.cash-reward.status.<状态>` 按语言填入 |
+| 低 | 结果页对平台支付的会话也查现金、兑换与商家 | 只按会话的 `rewardStatus` 查 |
+| 低 | 站内信对现金种类也查会话（永远查不到） | 只对平台奖励的种类查会话 |
+| 低 | 未用的常量 `DUE_EVENT` | 删除 |
+| 低 | 商家只被允许现金时，新草稿缺省仍是 `PLATFORM`，第一次保存被拒 | 新草稿取第一个允许的方式 |
+
+安全评审（无高、中级问题）：现金流程先取记录锁再按限本人的视图读（他人只能短暂争用锁，与发布流程一致，接受）；一条说明即可以争议解除逾期禁止（设计如此：争议交管理员裁定）；
+管理员撤回方式后已批准的发布照常上架（本计划 §3 已列）；`days()` 的取整与上限已修。

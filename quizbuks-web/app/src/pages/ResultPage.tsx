@@ -1,15 +1,33 @@
-import { ApiError } from '@jabiz/client'
-import { Alert, AlertDescription, AlertTitle, Badge, Button, PageState, cn } from '@jabiz/ui'
-import { useQuery } from '@tanstack/react-query'
-import { CircleCheck, CircleX, Clock, Hourglass, ListChecks, Trophy } from 'lucide-react'
-import { useState } from 'react'
+import { ApiError, formatDateTime } from '@jabiz/client'
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+  Badge,
+  Button,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  Label,
+  notify,
+  PageState,
+  Textarea,
+  cn,
+} from '@jabiz/ui'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Banknote, CircleCheck, CircleX, Clock, Gift, Hourglass, ListChecks, Trophy } from 'lucide-react'
+import { useId, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
 import { autoSubmitted, storedResult, storedStart } from '../play/storage'
 import { formatKudos } from '../qb/kudos'
 import { QB } from '../qb/messages'
-import { readAttemptResult, type AttemptResult, type QuestionResult, type QuestionView, type RewardStatus,
-  type StartOutput, type SubmitOutput } from '../qb/play'
+import { confirmCashReward, disputeCashReward, readAttemptResult, type AttemptResult, type CashView,
+  type QuestionResult, type QuestionView, type RedeemView, type RewardStatus, type StartOutput, type SubmitOutput }
+  from '../qb/play'
 import { problemText } from '../qb/problems'
 import { Link, Redirect } from '../qb/router'
 import { letter } from './PlayPage'
@@ -26,7 +44,9 @@ function fromSubmission(submitted: SubmitOutput, start: StartOutput | null): Att
     status: submitted.status, kind: submitted.kind, deadline: null, serverTime: '', score: submitted.score,
     fullScore: submitted.fullScore, passScore: submitted.kind === 'SURVEY' ? null : submitted.passScore,
     passed: submitted.passed, reward: submitted.reward, rewardStatus: submitted.rewardStatus,
-    questions: start?.questions ?? [], result: submitted.questions }
+    questions: start?.questions ?? [], result: submitted.questions,
+    rewardMethod: submitted.rewardStatus === 'CASH' ? 'SPONSOR_CASH'
+      : submitted.rewardStatus === 'REDEEM' ? 'OFFLINE_REDEEM' : 'PLATFORM', cash: null, redeem: null }
 }
 
 /** A finished attempt as the page shows it, from the server's result. */
@@ -41,6 +61,9 @@ interface Outcome {
   /** The server's notice of a pending reward, in the caller's language (the submission's answer, this tab only). */
   message: string | null
   questions: QuestionResult[]
+  /** Q22: the cash reward's or the prize's record, once the server has it. */
+  cash: CashView | null
+  redeem: RedeemView | null
 }
 
 /** The texts of a question's options, in the order they were shown (letters), for the chosen numbers. */
@@ -99,8 +122,139 @@ function QuestionRow({ result, question, index }: { result: QuestionResult; ques
   )
 }
 
-function Reward({ outcome, survey }: { outcome: Outcome; survey: boolean }) {
+/** The taker says what is wrong with the cash reward (Q22); an administrator decides. */
+function DisputeDialog({ cash, onDone }: { cash: CashView; onDone: () => void }) {
   const { t } = useTranslation(APP)
+  const id = useId()
+  const [note, setNote] = useState('')
+  const dispute = useMutation({
+    mutationFn: () => disputeCashReward(cash.cashRewardId, note),
+    onSuccess: () => {
+      notify.success(t('cash.disputed'))
+      onDone()
+    },
+  })
+  return (
+    <Dialog open onOpenChange={(open) => {
+      if (!open && !dispute.isPending) onDone()
+    }}>
+      <DialogContent data-testid="cash-dispute-dialog">
+        <form noValidate className="flex flex-col gap-4" onSubmit={(event: FormEvent) => {
+          event.preventDefault()
+          if (note.trim() && !dispute.isPending) dispute.mutate()
+        }}>
+          <DialogHeader>
+            <DialogTitle>{t('cash.disputeTitle', { code: cash.code })}</DialogTitle>
+            <DialogDescription>{t('cash.disputeText')}</DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor={`${id}-note`}>{t('cash.disputeNote')}</Label>
+            <Textarea id={`${id}-note`} value={note} rows={3} maxLength={500} required data-testid="cash-dispute-note"
+              onChange={(event) => setNote(event.target.value)} />
+          </div>
+          {dispute.isError && <p className="text-destructive text-sm" role="alert">{problemText(dispute.error)}</p>}
+          <DialogFooter>
+            <Button type="button" variant="outline" disabled={dispute.isPending} onClick={onDone}>{t('cash.cancel')}</Button>
+            <Button type="submit" variant="destructive" disabled={dispute.isPending || !note.trim()}
+              aria-busy={dispute.isPending || undefined} data-testid="cash-dispute-send">
+              {t('cash.disputeSend')}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+/**
+ * A reward the sponsor pays in cash (Q22): the code to show, where it stands, and the taker's confirm or report once
+ * the sponsor marked it paid (or before, when they say nothing is coming).
+ */
+function CashReward({ cash, attemptId, outcome }: { cash: CashView | null; attemptId: string; outcome: Outcome }) {
+  const { t } = useTranslation(APP)
+  const queryClient = useQueryClient()
+  const [disputing, setDisputing] = useState(false)
+  const confirm = useMutation({
+    mutationFn: () => confirmCashReward(cash!.cashRewardId),
+    onSuccess: async () => {
+      notify.success(t('cash.confirmed'))
+      await queryClient.invalidateQueries({ queryKey: ['qb', 'attempt-result', attemptId] })
+      await queryClient.invalidateQueries({ queryKey: ['qb', 'cash-rewards'] })
+    },
+  })
+  const refresh = () => {
+    void queryClient.invalidateQueries({ queryKey: ['qb', 'attempt-result', attemptId] })
+    void queryClient.invalidateQueries({ queryKey: ['qb', 'cash-rewards'] })
+  }
+  const status = cash?.status ?? 'DUE'
+  const variant = status === 'CONFIRMED' ? 'success' : status === 'OVERDUE' || status === 'DISPUTED' ? 'warning' : 'default'
+  const canConfirm = status === 'MARKED_PAID' || status === 'OVERDUE'
+  const canDispute = status === 'DUE' || status === 'MARKED_PAID' || status === 'OVERDUE'
+  return (
+    <Alert variant={variant} data-testid="result-reward" data-status="CASH" data-cash-status={status}>
+      <Banknote aria-hidden />
+      <AlertTitle>{t('cash.title', { amount: formatKudos(outcome.reward) })}</AlertTitle>
+      <AlertDescription className="text-current flex flex-col gap-2">
+        <span>{t(`cash.status.${status}`, { sponsor: cash?.sponsorCompany ?? t('cash.theSponsor'),
+          time: cash?.confirmBy ? formatDateTime(cash.confirmBy) : '' })}</span>
+        {cash && (
+          <span className="flex items-center gap-2">
+            <span>{t('cash.code')}</span>
+            <span className="rounded bg-muted px-2 py-0.5 font-mono text-base font-semibold" data-testid="cash-code">
+              {cash.code}
+            </span>
+          </span>
+        )}
+        {outcome.message && !cash && <span>{outcome.message}</span>}
+        {cash && (canConfirm || canDispute) && (
+          <span className="flex flex-wrap gap-2">
+            {canConfirm && (
+              <Button size="sm" disabled={confirm.isPending} aria-busy={confirm.isPending || undefined}
+                data-testid="cash-confirm" onClick={() => confirm.mutate()}>
+                <CircleCheck aria-hidden />
+                {t('cash.confirm')}
+              </Button>
+            )}
+            {canDispute && (
+              <Button size="sm" variant="outline" data-testid="cash-dispute" onClick={() => setDisputing(true)}>
+                {t('cash.dispute')}
+              </Button>
+            )}
+          </span>
+        )}
+        {confirm.isError && <span className="text-destructive" role="alert">{problemText(confirm.error)}</span>}
+        {disputing && cash && <DisputeDialog cash={cash} onDone={() => {
+          setDisputing(false)
+          refresh()
+        }} />}
+      </AlertDescription>
+    </Alert>
+  )
+}
+
+/** A prize to collect at the sponsor's place (Q22): what it is, until when (claiming it by a scan is Q22b). */
+function Redemption({ redeem, outcome }: { redeem: RedeemView | null; outcome: Outcome }) {
+  const { t } = useTranslation(APP)
+  const status = redeem?.status ?? 'DUE'
+  return (
+    <Alert variant={status === 'REDEEMED' ? 'success' : status === 'EXPIRED' || status === 'VOID' ? 'default' : 'success'}
+      data-testid="result-reward" data-status="REDEEM" data-redeem-status={status}>
+      <Gift aria-hidden />
+      <AlertTitle>{t('redeem.title', { amount: formatKudos(outcome.reward) })}</AlertTitle>
+      <AlertDescription className="text-current flex flex-col gap-1">
+        <span>{t(`redeem.status.${status}`, { sponsor: redeem?.sponsorCompany ?? t('cash.theSponsor'),
+          time: redeem?.expiresAt ? formatDateTime(redeem.expiresAt) : '' })}</span>
+        {redeem?.description && <span className="whitespace-pre-line font-medium" data-testid="redeem-prize">{redeem.description}</span>}
+        {outcome.message && !redeem && <span>{outcome.message}</span>}
+      </AlertDescription>
+    </Alert>
+  )
+}
+
+function Reward({ outcome, survey, attemptId }: { outcome: Outcome; survey: boolean; attemptId: string }) {
+  const { t } = useTranslation(APP)
+  if (outcome.rewardStatus === 'CASH') return <CashReward cash={outcome.cash} attemptId={attemptId} outcome={outcome} />
+  if (outcome.rewardStatus === 'REDEEM') return <Redemption redeem={outcome.redeem} outcome={outcome} />
   if (outcome.rewardStatus === 'PENDING') {
     return (
       <Alert variant="warning" data-testid="result-reward" data-status="PENDING">
@@ -180,6 +334,8 @@ export function ResultPage({ attemptId }: { attemptId: string }) {
     rewardStatus: data.rewardStatus ?? 'NONE',
     message: submitted?.message ?? null,
     questions: data.result,
+    cash: data.cash ?? null,
+    redeem: data.redeem ?? null,
   }
   const automatic = outcome.status === 'EXPIRED' || autoSubmitted(attemptId)
   const byNo = new Map(data.questions.map((q) => [q.no, q]))
@@ -225,7 +381,7 @@ export function ResultPage({ attemptId }: { attemptId: string }) {
         </Badge>
       </div>
       )}
-      <Reward outcome={outcome} survey={survey} />
+      <Reward outcome={outcome} survey={survey} attemptId={attemptId} />
       {outcome.questions.length > 0 && (
         <section aria-labelledby="result-questions-title" className="flex flex-col gap-2">
           <h2 id="result-questions-title" className="text-lg font-semibold">

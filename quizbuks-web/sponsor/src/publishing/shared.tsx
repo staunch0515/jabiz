@@ -22,10 +22,13 @@ import {
   readEndReasons,
   readPublicationStatuses,
   readRegions,
+  readRewardMethods,
+  readCashStatuses,
   timeNote,
   type Problem,
   type PublicationStatus,
   type Tier,
+  type RewardMethod,
 } from './api'
 
 /** Waits until typing paused before searching. */
@@ -47,6 +50,8 @@ function useLabels(key: string, read: () => Promise<{ code: string; label: strin
 export const useStatusLabel = () => useLabels('publication-status', readPublicationStatuses)
 export const useEndReasonLabel = () => useLabels('publication-end-reason', readEndReasons)
 export const useRegionLabel = () => useLabels('region', readRegions)
+export const useRewardMethodLabel = () => useLabels('reward-method', readRewardMethods)
+export const useCashStatusLabel = () => useLabels('cash-reward-status', readCashStatuses)
 
 const VARIANT: Record<PublicationStatus, 'outline' | 'secondary' | 'success' | 'warning'> = {
   DRAFT: 'outline',
@@ -151,6 +156,9 @@ export interface SummaryValues {
   maxReward: string | null
   maxSpend: string | null
   tiers: readonly Pick<Tier, 'fromScore' | 'toScore' | 'reward'>[]
+  /** Q22: how the reward reaches the taker, and the prize when it is collected at the sponsor's place. */
+  rewardMethod?: RewardMethod
+  redeemDescription?: string | null
 }
 
 /** What a publication is: its version, audience, time, marks and money, and its tiers. Amounts in Kudos. */
@@ -160,6 +168,8 @@ export function PublicationSummary({ values }: { values: SummaryValues }) {
   const tiersId = useId()
   const notSet = t('publishing.notSet')
   const noLimit = t('publishing.noLimit')
+  const methodLabel = useRewardMethodLabel()
+  const method = values.rewardMethod ?? 'PLATFORM'
   const items: DescriptionItem[] = [
     { key: 'name', label: t('publishing.field.name'), value: values.name || notSet },
     {
@@ -181,6 +191,10 @@ export function PublicationSummary({ values }: { values: SummaryValues }) {
     { key: 'budgetCap', label: t('publishing.field.budgetCap'),
       value: values.budgetCap === null ? noLimit : formatKudos(values.budgetCap) },
     { key: 'maxWinners', label: t('publishing.field.maxWinners'), value: values.maxWinners ?? noLimit },
+    { key: 'rewardMethod', label: t('publishing.field.rewardMethod'),
+      value: <span data-testid="summary-reward-method">{methodLabel(method)}</span> },
+    ...(method === 'OFFLINE_REDEEM' ? [{ key: 'redeemDescription', label: t('publishing.field.redeemDescription'),
+      value: <span className="whitespace-pre-line" data-testid="summary-redeem">{values.redeemDescription || notSet}</span> }] : []),
     { key: 'maxReward', label: t('publishing.summary.maxReward'),
       value: values.maxReward === null ? notSet : formatKudos(values.maxReward) },
     { key: 'maxSpend', label: t('publishing.summary.maxSpend'),

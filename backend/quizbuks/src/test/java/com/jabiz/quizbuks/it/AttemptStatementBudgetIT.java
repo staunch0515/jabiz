@@ -46,11 +46,12 @@ class AttemptStatementBudgetIT extends PlayItSupport {
     record Budget(int held, int perCommit) {}
 
     /**
-     * {@code QB_ATTEMPT_START}, a new attempt, in its transaction [— / 16]: the operation (with the lock timeout and
-     * its number), banned?, one read of the caller's attempt, the card and the publication, the profile, the version
-     * (no country without a profile: no statement), the sponsor's wallet, the start lock, then under it.
+     * {@code QB_ATTEMPT_START}, a new attempt, in its transaction [— / 17]: the operation (with the lock timeout and
+     * its number), banned?, an overdue cash reward? (Q22), one read of the caller's attempt, the card and the
+     * publication, the profile, the version (no country without a profile: no statement), the sponsor's wallet, the
+     * start lock, then under it.
      */
-    static final Budget START_TOTAL = new Budget(10, 12);
+    static final Budget START_TOTAL = new Budget(11, 13);
     /**
      * Under the start lock [12 / 8]: the caller's attempt, the card and both sides of the counters again (one
      * statement); the attempt with its audit record (its references to the publication and the version answered by

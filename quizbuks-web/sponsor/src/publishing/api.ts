@@ -7,6 +7,11 @@ import { PUBLISHING_CODE, PUBLISHING_DATASET, PUBLISHING_DICTIONARY, PUBLISHING_
  * no OpenAPI types of their own). The end-to-end test `sponsor.spec.ts` runs every one of them against the server.
  */
 
+/** `publishing.RewardMethod` (Q22, dictionary `reward-method`): how the reward reaches the taker. */
+export type RewardMethod = 'PLATFORM' | 'SPONSOR_CASH' | 'OFFLINE_REDEEM'
+export const REWARD_METHODS: readonly RewardMethod[] = ['PLATFORM', 'SPONSOR_CASH', 'OFFLINE_REDEEM']
+export const REDEEM_DESCRIPTION_LENGTH = 500
+
 /** `publishing.PublicationStatus` (dictionary `publication-status`). */
 export type PublicationStatus = 'DRAFT' | 'PENDING_REVIEW' | 'SCHEDULED' | 'LIVE' | 'PAUSED' | 'FUNDS_SHORT' | 'ENDED'
 export const PUBLICATION_STATUSES: readonly PublicationStatus[] = ['DRAFT', 'PENDING_REVIEW', 'SCHEDULED', 'LIVE',
@@ -47,6 +52,9 @@ export interface Publication {
   passScore: number | null
   budgetCap: string | null
   maxWinners: number | null
+  /** How the reward reaches the taker (Q22); a prize at the sponsor's place is described. */
+  rewardMethod: RewardMethod
+  redeemDescription: string | null
   fullScore: number | null
   maxReward: string | null
   maxSpend: string | null
@@ -81,6 +89,7 @@ export interface PublicationRow {
   quizTitle: string | null
   versionLabel: string | null
   status: PublicationStatus
+  rewardMethod: RewardMethod
   regions: string[]
   starts: number
   completions: number
@@ -121,6 +130,8 @@ export interface SaveInput {
   /** The whole list in its order. */
   tiers: TierInput[]
   baseRevision: number | null
+  rewardMethod: RewardMethod
+  redeemDescription: string | null
 }
 
 /** One problem submitting would be refused for, in the caller's language (`SaveOutput.Problem`). */
@@ -165,6 +176,10 @@ const numOrNull = (value: unknown): number | null => (value == null || value ===
 const str = (value: unknown): string | null => (value == null ? null : String(value))
 const bool = (value: unknown): boolean => value === true || value === 'true'
 
+/** A reward method as the server writes it; the platform's for a row from before Q22. */
+export const methodOf = (value: unknown): RewardMethod =>
+  (REWARD_METHODS as readonly string[]).includes(String(value)) ? (value as RewardMethod) : 'PLATFORM'
+
 /** The regions of their written form (`GLOBAL,JP`). */
 export const regionsOf = (value: unknown): string[] => (value == null || value === '' ? [] : String(value).split(','))
 
@@ -182,6 +197,8 @@ export function toPublication(row: Row): Publication {
     passScore: numOrNull(row.passScore),
     budgetCap: str(row.budgetCap),
     maxWinners: numOrNull(row.maxWinners),
+    rewardMethod: methodOf(row.rewardMethod),
+    redeemDescription: str(row.redeemDescription),
     fullScore: numOrNull(row.fullScore),
     maxReward: str(row.maxReward),
     maxSpend: str(row.maxSpend),
@@ -269,6 +286,7 @@ export async function searchPublications({ q, status, sorts, offset, limit }: Pu
       quizTitle: str(row.quizTitle),
       versionLabel: str(row.versionLabel),
       status: (row.status as PublicationStatus) ?? 'DRAFT',
+      rewardMethod: methodOf(row.rewardMethod),
       regions: regionsOf(row.regions),
       starts: num(row.starts),
       completions: num(row.completions),
@@ -291,6 +309,94 @@ export async function searchPublications({ q, status, sorts, offset, limit }: Pu
 export const readPublicationStatuses = (): Promise<DictionaryItem[]> => readDictionary(PUBLISHING_DICTIONARY.status)
 export const readEndReasons = (): Promise<DictionaryItem[]> => readDictionary(PUBLISHING_DICTIONARY.endReason)
 export const readRegions = (): Promise<DictionaryItem[]> => readDictionary(PUBLISHING_DICTIONARY.region)
+export const readRewardMethods = (): Promise<DictionaryItem[]> => readDictionary(PUBLISHING_DICTIONARY.rewardMethod)
+export const readCashStatuses = (): Promise<DictionaryItem[]> => readDictionary(PUBLISHING_DICTIONARY.cashStatus)
+
+/**
+ * The reward methods an administrator allowed the sponsor (Q22): their own row of the setting, or the platform's
+ * Kudos alone without one. The server checks again when a draft is saved and submitted.
+ */
+export async function readAllowedMethods(): Promise<RewardMethod[]> {
+  const page = await unwrap(api.POST('/api/datasets/{resourceId}/query', {
+    params: { path: { resourceId: PUBLISHING_DATASET.rewardMethods } },
+    body: { limit: 1 },
+  }))
+  const row = (page.items ?? [])[0]?.attributes as Row | undefined
+  const methods = row ? String(row.methods ?? '').split(',').map(methodOf) : []
+  return methods.length > 0 ? REWARD_METHODS.filter((method) => methods.includes(method)) : ['PLATFORM']
+}
+
+// ---- cash rewards (Q22) -------------------------------------------------------------------------------------------
+
+/** `reward.CashRewardStatus` (dictionary `cash-reward-status`). */
+export type CashStatus = 'DUE' | 'MARKED_PAID' | 'CONFIRMED' | 'DISPUTED' | 'OVERDUE' | 'VOID'
+export const CASH_STATUSES: readonly CashStatus[] = ['DUE', 'MARKED_PAID', 'CONFIRMED', 'DISPUTED', 'OVERDUE', 'VOID']
+
+/** A row of `qb.sponsor.cash-rewards`: what the sponsor owes a taker for one attempt, and where it stands. */
+export interface CashRewardRow {
+  cashRewardId: string
+  code: string
+  publicationId: string
+  publicationName: string
+  takerName: string | null
+  amount: string
+  status: CashStatus
+  dueAt: string
+  payBy: string | null
+  markedPaidAt: string | null
+  markedPaidNote: string | null
+  confirmBy: string | null
+  confirmedAt: string | null
+  disputedAt: string | null
+  disputeNote: string | null
+  resolution: string | null
+  resolveNote: string | null
+}
+
+export interface CashRewardSearch {
+  q?: string
+  status?: CashStatus | null
+  offset: number
+  limit: number
+}
+
+export async function searchCashRewards({ q, status, offset, limit }: CashRewardSearch) {
+  const text = q?.trim()
+  const page = await runQuery<Row>(PUBLISHING_TEMPLATE.cashRewards, {
+    params: text ? { q: text } : {},
+    filters: status ? [{ field: 'status', op: 'eq', value: status }] : [],
+    offset,
+    limit,
+    count: true,
+  })
+  return {
+    total: page.total,
+    items: page.items.map((row): CashRewardRow => ({
+      cashRewardId: String(row.cashRewardId),
+      code: String(row.code ?? ''),
+      publicationId: String(row.publicationId),
+      publicationName: String(row.publicationName ?? ''),
+      takerName: str(row.takerName),
+      amount: String(row.amount ?? '0'),
+      status: (CASH_STATUSES as readonly string[]).includes(String(row.status)) ? (row.status as CashStatus) : 'DUE',
+      dueAt: String(row.dueAt ?? ''),
+      payBy: str(row.payBy),
+      markedPaidAt: str(row.markedPaidAt),
+      markedPaidNote: str(row.markedPaidNote),
+      confirmBy: str(row.confirmBy),
+      confirmedAt: str(row.confirmedAt),
+      disputedAt: str(row.disputedAt),
+      disputeNote: str(row.disputeNote),
+      resolution: str(row.resolution),
+      resolveNote: str(row.resolveNote),
+    })),
+  }
+}
+
+/** The sponsor handed the taker the cash: `QB_CASH_REWARD_MARK_PAID`, with a note for the record. */
+export const markCashPaid = (cashRewardId: string, note: string) =>
+  runProcess<{ cashRewardId: string; status: CashStatus; revision: number }>(PUBLISHING_PROCESS.cashMarkPaid,
+    { cashRewardId, note: note.trim() || null })
 
 function toSaveOutput(output: Row): SaveOutput {
   return {
@@ -404,6 +510,8 @@ export interface PublicationForm {
   budgetCap: string
   maxWinners: string
   tiers: TierDraft[]
+  rewardMethod: RewardMethod
+  redeemDescription: string
 }
 
 let keys = 0
@@ -426,6 +534,8 @@ export function formOf(detail: PublicationDetail | null): PublicationForm {
     passScore: text(p?.passScore),
     budgetCap: text(p?.budgetCap),
     maxWinners: text(p?.maxWinners),
+    rewardMethod: p?.rewardMethod ?? 'PLATFORM',
+    redeemDescription: p?.redeemDescription ?? '',
     tiers: (detail?.tiers ?? []).map((tier) => ({ key: tierKey(), tierId: tier.tierId,
       fromScore: String(tier.fromScore), toScore: String(tier.toScore), reward: tier.reward })),
   }
@@ -481,6 +591,9 @@ export function inputOf(form: PublicationForm, publicationId: string | null, bas
       maxWinners,
       tiers,
       baseRevision,
+      rewardMethod: form.rewardMethod,
+      redeemDescription: form.rewardMethod === 'OFFLINE_REDEEM' && form.redeemDescription.trim()
+        ? form.redeemDescription.trim() : null,
     },
   }
 }
@@ -517,7 +630,7 @@ export function nextTier(tiers: readonly TierDraft[], fullScore: number | null):
 
 /** The fields of the publication the pages name (`entity.QbPublication.<field>` on the server). */
 export const PUBLICATION_FIELDS = ['name', 'versionId', 'regions', 'startAt', 'endAt', 'timeLimitSec', 'passScore',
-  'budgetCap', 'maxWinners'] as const
+  'budgetCap', 'maxWinners', 'rewardMethod', 'redeemDescription'] as const
 export type PublicationField = (typeof PUBLICATION_FIELDS)[number]
 
 /**

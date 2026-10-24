@@ -1,5 +1,8 @@
 import { i18n, type Filter } from '@jabiz/client'
 import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
   Badge,
   Button,
   Combobox,
@@ -11,6 +14,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
+  SegmentedControl,
   Sheet,
   SheetContent,
   SheetDescription,
@@ -20,7 +24,7 @@ import {
   Spinner,
 } from '@jabiz/ui'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
-import { Play, Search, SlidersHorizontal, Trophy, Users } from 'lucide-react'
+import { Banknote, Gift, HandCoins, Play, Search, SlidersHorizontal, Trophy, Users } from 'lucide-react'
 import { useId, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
@@ -31,12 +35,48 @@ import { VideoPlayer } from '../play/VideoPlayer'
 import { readCountries } from '../qb/api'
 import { formatKudos } from '../qb/kudos'
 import { QB } from '../qb/messages'
-import { FEED_SORTS, readFeed, type FeedCard, type FeedSort } from '../qb/play'
+import { FEED_SORTS, readFeed, readOpenCashRewards, type FeedCard, type FeedSort, type RewardMethod } from '../qb/play'
 import { problemText } from '../qb/problems'
 import { Link } from '../qb/router'
 
 /** Cards per page of the feed. */
 export const FEED_PAGE = 20
+
+/** The ways a reward is paid the home can be narrowed to (Q22): all, or one of the methods. */
+export type MethodChoice = 'ALL' | RewardMethod
+const METHOD_CHOICES: readonly MethodChoice[] = ['ALL', 'PLATFORM', 'SPONSOR_CASH', 'OFFLINE_REDEEM']
+const METHOD_KEY = 'qb.feed.method'
+
+/** The method chosen last on this device; all when none or when the browser keeps nothing. */
+export function storedMethod(): MethodChoice {
+  try {
+    const stored = window.localStorage.getItem(METHOD_KEY)
+    return (METHOD_CHOICES as readonly string[]).includes(stored ?? '') ? (stored as MethodChoice) : 'ALL'
+  } catch {
+    return 'ALL'
+  }
+}
+
+function storeMethod(choice: MethodChoice) {
+  try {
+    window.localStorage.setItem(METHOD_KEY, choice)
+  } catch {
+    // A private window or blocked storage: the choice lasts for the page only.
+  }
+}
+
+/** The badge of a reward paid otherwise than in Kudos by QuizBuks (Q22); none for the platform's Kudos. */
+export function MethodBadge({ method, testId }: { method: RewardMethod; testId?: string }) {
+  const { t } = useTranslation(APP)
+  if (method === 'PLATFORM') return null
+  const Icon = method === 'SPONSOR_CASH' ? Banknote : Gift
+  return (
+    <Badge variant="outline" className="shrink-0" data-testid={testId ?? 'method-badge'} data-method={method}>
+      <Icon aria-hidden className="size-3" />
+      {t(`methods.${method}`)}
+    </Badge>
+  )
+}
 
 /** The advanced filters (U-13); empty texts are no filter. */
 export interface FeedFilters {
@@ -94,6 +134,7 @@ function Card({ card }: { card: FeedCard }) {
             {card.kind === 'SURVEY' && (
               <Badge variant="secondary" className="shrink-0" data-testid="feed-card-survey">{t('feed.survey')}</Badge>
             )}
+            <MethodBadge method={card.rewardMethod} testId="feed-card-method" />
           </span>
           {sponsor && (
             <span className="text-muted-foreground flex items-center gap-1.5 truncate text-xs">
@@ -257,11 +298,20 @@ export function FeedPage({ name, country }: { name: string; country: string | nu
   const [filters, setFilters] = useState<FeedFilters>(NO_FILTERS)
   const [filtersOpen, setFiltersOpen] = useState(false)
   const filterList = feedFilters(filters)
+  // Q22: narrowed to one way of paying the reward; remembered on this device.
+  const [method, setMethod] = useState<MethodChoice>(storedMethod)
+  const chooseMethod = (choice: MethodChoice) => {
+    setMethod(choice)
+    storeMethod(choice)
+  }
+  // The cash rewards still waiting for the taker or the sponsor: a notice at the top, with each to look at.
+  const cash = useQuery({ queryKey: ['qb', 'cash-rewards', 'open'], queryFn: readOpenCashRewards })
+  const openCash = cash.data ?? []
 
   const feed = useInfiniteQuery({
-    queryKey: ['qb', 'feed', at, country, q, sort, filterList, i18n.language],
-    queryFn: ({ pageParam }) => readFeed({ at, country, q, sort, filters: filterList, offset: pageParam,
-      limit: FEED_PAGE }),
+    queryKey: ['qb', 'feed', at, country, q, sort, method, filterList, i18n.language],
+    queryFn: ({ pageParam }) => readFeed({ at, country, q, sort, method: method === 'ALL' ? null : method,
+      filters: filterList, offset: pageParam, limit: FEED_PAGE }),
     initialPageParam: 0,
     getNextPageParam: (last) => (last.items.length < FEED_PAGE ? undefined : last.offset + FEED_PAGE),
   })
@@ -275,6 +325,23 @@ export function FeedPage({ name, country }: { name: string; country: string | nu
   return (
     <section className="flex flex-col gap-4" aria-labelledby="home-title" data-testid="home">
       <h1 id="home-title" className="text-xl font-semibold">{t('home.greeting', { name })}</h1>
+      {openCash.length > 0 && (
+        <Alert variant={openCash.some((r) => r.status === 'OVERDUE') ? 'warning' : 'default'} data-testid="home-cash">
+          <HandCoins aria-hidden />
+          <AlertTitle>{t('cash.openTitle', { count: openCash.length })}</AlertTitle>
+          <AlertDescription className="text-current">
+            <ul className="flex flex-col gap-1">
+              {openCash.map((r) => (
+                <li key={r.cashRewardId} data-testid="home-cash-item" data-status={r.status}>
+                  <Link to={`/result/${encodeURIComponent(r.attemptId)}`} className="underline underline-offset-4">
+                    {t(`cash.open.${r.status}`, { name: r.publicationName, amount: formatKudos(r.amount), code: r.code })}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </AlertDescription>
+        </Alert>
+      )}
       <form role="search" onSubmit={search} className="flex gap-2">
         <Label htmlFor={`${id}-q`} className="sr-only">{t('feed.search')}</Label>
         <Input id={`${id}-q`} type="search" value={text} maxLength={100} placeholder={t('feed.search')}
@@ -307,6 +374,9 @@ export function FeedPage({ name, country }: { name: string; country: string | nu
           )}
         </Button>
       </div>
+      <SegmentedControl value={method} onChange={chooseMethod} aria-label={t('methods.choose')}
+        data-testid="feed-method" className="w-full" options={METHOD_CHOICES.map((choice) => ({
+          value: choice, label: choice === 'ALL' ? t('methods.all') : t(`methods.${choice}Short`) }))} />
       <FiltersSheet open={filtersOpen} onOpenChange={setFiltersOpen} value={filters} onApply={setFilters} />
       {feed.isPending ? (
         <PageState kind="loading" />

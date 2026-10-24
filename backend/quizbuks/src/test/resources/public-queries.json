@@ -353,6 +353,16 @@
         "multiline" : false,
         "type" : "text"
       },
+      "redeemDescription" : {
+        "maxLength" : 500,
+        "multiline" : true,
+        "type" : "text"
+      },
+      "rewardMethod" : {
+        "allowedValues" : [ "PLATFORM", "SPONSOR_CASH", "OFFLINE_REDEEM" ],
+        "dictUrn" : "urn:jabiz:dict:quizbuks:reward-method",
+        "type" : "code"
+      },
       "sponsorCompany" : {
         "maxLength" : 100,
         "multiline" : false,

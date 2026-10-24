@@ -6,6 +6,9 @@ import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.quizbuks.content.QbContent;
+import com.jabiz.quizbuks.identity.QbAccounts;
+import com.jabiz.quizbuks.publishing.RewardMethod;
+import com.jabiz.quizbuks.reward.QbRewards;
 import com.jabiz.quizbuks.content.QuizSnapshot;
 import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.process.steps.LoadEntity;
@@ -47,11 +50,22 @@ public final class AttemptResults {
     public record ResultOutput(String attemptId, UUID publicationId, String name, String status, String kind,
         Instant deadline, Instant serverTime, Integer score, Integer fullScore, Integer passScore, Boolean passed, BigDecimal reward,
         String rewardStatus, List<AttemptProcesses.QuestionView> questions,
-        List<AttemptFinishing.QuestionOutput> result) {}
+        List<AttemptFinishing.QuestionOutput> result, String rewardMethod, CashView cash, RedeemView redeem) {}
+
+    /** Q22: where the cash reward stands, for the result page's confirm and dispute. */
+    public record CashView(String cashRewardId, String status, String code, BigDecimal amount, Instant markedPaidAt,
+        Instant confirmBy, String sponsorCompany) {}
+
+    /** Q22: the prize to collect and until when (claiming it is Q22b). */
+    public record RedeemView(String redemptionId, String status, String code, BigDecimal amount, String description,
+        Instant expiresAt, String sponsorCompany) {}
 
     static final String ATTEMPT_KEY = "play.attemptId";
     static final String ATTEMPT = "play.attempt";
     static final String CARD = "play.card";
+    static final String CASH = "play.cash";
+    static final String REDEEM = "play.redeem";
+    static final String SPONSOR = "play.sponsor";
 
     public static ProcessDefinition<ResultInput, ResultOutput, ProcessContext> result() {
         return ProcessDefinition.define(RESULT, 1, ResultInput.class, ResultOutput.class, ProcessContext.class,
@@ -74,7 +88,17 @@ public final class AttemptResults {
                     QueryEntities.query(QbContent.defaultDataset(QbContent.VERSION), ctx -> EntityQuery.builder()
                         .where(new QueryPredicate.In("versionId", PlaySteps.ids(ctx.get(ATTEMPT, EntityInstance.class)
                             .get("versionId")))).limit(1).build(), PlaySteps.VERSION),
-                    PlaySteps.card(ctx -> ctx.get(ATTEMPT, EntityInstance.class).get("publicationId"), CARD)))
+                    PlaySteps.card(ctx -> ctx.get(ATTEMPT, EntityInstance.class).get("publicationId"), CARD),
+                    // Q22: the reward's record when the sponsor settles it themselves, and the sponsor's company.
+                    // (Only for the attempts settled that way: the others read nothing here.)
+                    QueryEntities.query(QbRewards.takerDataset(QbRewards.CASH_REWARD),
+                        ctx -> byAttempt(ctx, RewardStatus.CASH), CASH),
+                    QueryEntities.query(QbRewards.takerDataset(QbRewards.REDEMPTION),
+                        ctx -> byAttempt(ctx, RewardStatus.REDEEM), REDEEM),
+                    QueryEntities.query(QbAccounts.defaultDataset(QbAccounts.SPONSOR), ctx -> EntityQuery.builder()
+                        .where(new QueryPredicate.In("userId", external(ctx)
+                            ? List.of(String.valueOf((Object) ctx.get(ATTEMPT, EntityInstance.class).get("sponsorId")))
+                            : List.of())).limit(1).build(), SPONSOR)))
                 .compute("Read the result", (metadata, ctx) -> read(ctx)));
     }
 
@@ -97,7 +121,37 @@ public final class AttemptResults {
             number(attempt.get("score")), number(attempt.get("fullScore")), passScore,
             passed == null ? null : Boolean.TRUE.equals(passed) || "true".equals(String.valueOf(passed)),
             attempt.get("reward") == null ? null : PlaySteps.money(attempt.get("reward")),
-            attempt.get("rewardStatus"), questions, result));
+            attempt.get("rewardStatus"), questions, result,
+            card == null || card.get("rewardMethod") == null ? RewardMethod.PLATFORM : card.get("rewardMethod"),
+            cash(first(ctx, CASH), company(ctx)), redeem(first(ctx, REDEEM), company(ctx))));
+    }
+
+    private static EntityQuery byAttempt(ProcessContext ctx, String rewardStatus) {
+        boolean wanted = rewardStatus.equals(ctx.get(ATTEMPT, EntityInstance.class).get("rewardStatus"));
+        return EntityQuery.builder().where(new QueryPredicate.In("attemptId",
+            wanted ? List.of(String.valueOf((Object) ctx.get(ATTEMPT_KEY))) : List.of())).limit(1).build();
+    }
+
+    private static boolean external(ProcessContext ctx) {
+        return RewardStatus.external(String.valueOf((Object) ctx.get(ATTEMPT, EntityInstance.class)
+            .get("rewardStatus")));
+    }
+
+    private static String company(ProcessContext ctx) {
+        EntityInstance sponsor = first(ctx, SPONSOR);
+        return sponsor == null ? null : sponsor.get("company");
+    }
+
+    static CashView cash(EntityInstance cash, String company) {
+        return cash == null ? null : new CashView(String.valueOf(cash.id()), cash.get("status"), cash.get("code"),
+            PlaySteps.money(cash.get("amount")), PlaySteps.instant(cash.get("markedPaidAt")),
+            PlaySteps.instant(cash.get("confirmBy")), company);
+    }
+
+    static RedeemView redeem(EntityInstance redemption, String company) {
+        return redemption == null ? null : new RedeemView(String.valueOf(redemption.id()),
+            redemption.get("status"), redemption.get("code"), PlaySteps.money(redemption.get("amount")),
+            redemption.get("description"), PlaySteps.instant(redemption.get("expiresAt")), company);
     }
 
     private static Integer number(Object value) {

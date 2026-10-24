@@ -59,6 +59,16 @@ function Row({ row, onContinue, starting }: { row: HistoryRow; onContinue: () =>
           {row.rewardStatus === 'PENDING' && (
             <span className="text-warning">{t('history.pending', { amount: formatKudos(row.reward) })}</span>
           )}
+          {row.rewardStatus === 'CASH' && row.cashStatus && (
+            <span data-testid="history-cash" data-status={row.cashStatus}>
+              {t(`history.cash.${row.cashStatus}`, { amount: formatKudos(row.reward), code: row.cashCode ?? '' })}
+            </span>
+          )}
+          {row.rewardStatus === 'REDEEM' && (
+            <span data-testid="history-redeem" data-status={row.redeemStatus ?? ''}>
+              {t(`history.redeem.${row.redeemStatus ?? 'DUE'}`, { amount: formatKudos(row.reward) })}
+            </span>
+          )}
         </p>
       )}
       {row.category === 'TIMED_OUT' && <p className="text-sm">{t('history.timedOut')}</p>}

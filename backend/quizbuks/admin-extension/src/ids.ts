@@ -18,6 +18,8 @@ export const DATASET = {
   option: 'urn:jabiz:dataset:default:QbOption',
   sponsor: 'urn:jabiz:dataset:default:QbSponsor',
   ban: 'urn:jabiz:dataset:default:QbUserBan',
+  /** The reward methods an administrator allowed a sponsor (Q22). */
+  sponsorMethods: 'urn:jabiz:dataset:default:QbSponsorRewardMethods',
   /** The drafts of the legal texts, edited on the platform's generic pages (`qb.admin.content.write`; Q7b). */
   legalDoc: 'urn:jabiz:dataset:default:QbLegalDoc',
   /** The named users of an announcement (`qb.admin.content.write`; Q7c). */
@@ -30,6 +32,8 @@ export const DATASET = {
 export const TEMPLATE = {
   /** The review queue: no money (the content administrators read it). */
   publications: 'qb.admin.publications',
+  /** Every cash reward (Q22): disputes and late sponsors (`qb.admin.publication.read`). */
+  cashRewards: 'qb.admin.cash-rewards',
   /** Every sponsor's quizzes and a quiz's versions, without the versions' content (Q17; `qb.admin.quiz.read`). */
   quizzes: 'qb.admin.quizzes',
   quizVersions: 'qb.admin.quiz-versions',
@@ -125,6 +129,10 @@ export const PROCESS = {
   legalPublish: 'QB_LEGAL_PUBLISH',
   /** Withdraws a version announced for later, before it takes effect (the same; review M1). */
   legalWithdraw: 'QB_LEGAL_WITHDRAW',
+  /** Sets the reward methods a sponsor may publish with (Q22; `qb.admin.reward-methods`). */
+  rewardMethodsSet: 'QB_SPONSOR_REWARD_METHODS_SET',
+  /** Decides a disputed cash reward (Q22; `qb.cash.resolve`). */
+  cashResolve: 'QB_CASH_REWARD_RESOLVE',
 } as const
 
 /** The platform's controlled changes (four eyes, decision D40): the mapping changes only through them. */
@@ -169,6 +177,9 @@ export const DICTIONARY = {
   materialKind: 'urn:jabiz:dict:quizbuks:material-kind',
   attemptStatus: 'urn:jabiz:dict:quizbuks:attempt-status',
   rewardStatus: 'urn:jabiz:dict:quizbuks:reward-status',
+  rewardMethod: 'urn:jabiz:dict:quizbuks:reward-method',
+  cashStatus: 'urn:jabiz:dict:quizbuks:cash-reward-status',
+  cashResolution: 'urn:jabiz:dict:quizbuks:cash-reward-resolution',
   topUpManualKind: 'urn:jabiz:dict:quizbuks:topup-manual-kind',
   transferStatus: 'urn:jabiz:dict:quizbuks:transfer-status',
   topUpStatus: 'urn:jabiz:dict:quizbuks:topup-status',
@@ -214,6 +225,9 @@ export const PERMISSION = {
   bankApprove: 'qb.topup.bank.approve',
   /** Manual credits (Q18b): finance records them; the bank top-ups' approvers approve them. */
   manualRecord: 'qb.topup.manual.record',
+  /** Q22: which reward methods a sponsor may use, and deciding disputed cash rewards. */
+  rewardMethods: 'qb.admin.reward-methods',
+  cashResolve: 'qb.cash.resolve',
   /** Bank withdrawals (Q13b): paying them, and the account number in plain text to do so. */
   withdrawalPay: 'qb.withdrawal.pay',
   bankReveal: 'qb.payout.bank.reveal',
@@ -265,6 +279,8 @@ export const PATH = {
   quiz: (quizId: string) => `/qb/quizzes/${encodeURIComponent(quizId)}`,
   /** Every publication in every state (Q17), by state, sponsor and quiz. */
   publications: '/qb/publications',
+  /** Every cash reward (Q22): disputes to decide, late sponsors. */
+  cashRewards: '/qb/cash-rewards',
   publicationsWhere: (filter: Record<string, string>) => `/qb/publications?${new URLSearchParams(filter)}`,
   finance: '/qb/finance',
   transfers: '/qb/finance/transfers',

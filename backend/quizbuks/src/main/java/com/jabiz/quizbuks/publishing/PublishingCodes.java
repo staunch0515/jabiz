@@ -68,6 +68,10 @@ public final class PublishingCodes {
      */
     public static final String REVIEW_REQUIRED = "QB_PUBLICATION_REVIEW_REQUIRED";
 
+    /** Q22: the publication's reward method is not one the sponsor may publish with. */
+    public static final String REWARD_METHOD_NOT_ALLOWED = "QB_REWARD_METHOD_NOT_ALLOWED";
+    /** Q22: a setting's methods are not written as {@code RewardMethod.format} writes them (400). */
+    public static final String REWARD_METHODS_FORMAT = "QB_REWARD_METHODS_FORMAT";
     /** Every code above that is publishing's own (not the shared review and account codes). */
 
     public static final List<String> ALL = List.of(NAME_BLANK, REGIONS_FORMAT, TIME_LIMIT_RANGE, SCORE_RANGE,
@@ -75,7 +79,8 @@ public final class PublishingCodes {
         TIER_NOT_IN_PUBLICATION, EXPIRED_IN_REVIEW, NO_VERSION,
         FIELD_REQUIRED, END_PASSED, TOO_LONG, PASS_SCORE_RANGE, BUDGET_BELOW_MAX_REWARD, SPEND_RANGE, TIER_NOT_FROM_ZERO,
         TIER_RANGE, TIER_GAP, TIER_OVERLAP, TIER_NOT_TO_FULL, TIER_NO_REWARD, SURVEY_PASS_SCORE, SURVEY_TIERS,
-        ADMIN_PAUSED, NOT_ADMIN_PAUSED, SPONSOR_BANNED, TAKEN_DOWN, REVIEW_REQUIRED);
+        ADMIN_PAUSED, NOT_ADMIN_PAUSED, SPONSOR_BANNED, TAKEN_DOWN, REVIEW_REQUIRED, REWARD_METHOD_NOT_ALLOWED,
+        REWARD_METHODS_FORMAT);
 
     private PublishingCodes() {}
 }

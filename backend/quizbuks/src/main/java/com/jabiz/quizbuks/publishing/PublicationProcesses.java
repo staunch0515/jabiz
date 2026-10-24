@@ -68,13 +68,17 @@ public final class PublicationProcesses {
      * empty one clears it, except the time limit, which is the version's when not given. {@code tiers} is the whole
      * list (tiers left out are deleted); without it (null) the tiers stay as they are.
      *
-     * @param regions      region codes ({@code country.Regions}); none until chosen
-     * @param baseRevision the revision the caller edited; when given and no longer current, 422
+     * @param regions           region codes ({@code country.Regions}); none until chosen
+     * @param rewardMethod      how the reward reaches the taker (Q22, {@link RewardMethod}); {@code PLATFORM} when not
+     *                          given; one the sponsor may use, or 422 {@code QB_REWARD_METHOD_NOT_ALLOWED}
+     * @param redeemDescription for {@code OFFLINE_REDEEM}, what the prize is and where to collect it
+     * @param baseRevision      the revision the caller edited; when given and no longer current, 422
      */
     public record SaveInput(UUID publicationId, UUID versionId, @NotNull String name, List<@NotNull String> regions,
         Instant startAt, Instant endAt, Integer timeLimitSec, Integer passScore, BigDecimal budgetCap,
         Integer maxWinners, @Size(max = PublishingLimits.MAX_TIERS) List<@Valid @NotNull TierInput> tiers,
-        Long baseRevision) {}
+        Long baseRevision, @Size(max = 20) String rewardMethod,
+        @Size(max = PublishingLimits.REDEEM_DESCRIPTION_LENGTH) String redeemDescription) {}
 
     public record PublicationRef(@NotNull UUID publicationId, Long baseRevision) {}
 
@@ -108,6 +112,7 @@ public final class PublicationProcesses {
                     .limit(1).build(), FOUND))
             .steps(PublicationEditing::loadTiers)
             .steps(PublicationEditing::loadSponsor)
+            .steps(PublicationEditing::loadSponsorMethods)
             .steps(b -> PublicationEditing.loadVersion(b, ctx -> {
                 UUID given = ctx.get(INPUT, SaveInput.class).versionId();
                 EntityInstance found = first(ctx, FOUND);
@@ -131,12 +136,20 @@ public final class PublicationProcesses {
         EntityInstance version = versionId == null ? null : PublicationEditing.requireVersion(ctx, versionId);
         String regions = regions(ctx, input.regions());
         List<TierPlan> tiers = tierPlan(ctx, input.tiers(), PublicationEditing.ordered(list(ctx, TIERS)));
+        String method = input.rewardMethod() == null || input.rewardMethod().isBlank() ? RewardMethod.PLATFORM
+            : input.rewardMethod();
+        PublicationEditing.methodProblems(ctx, method).forEach(ctx::reject);
         if (ctx.hasViolations()) {
             return;
         }
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("name", input.name());
         values.put("regions", regions);
+        values.put("rewardMethod", method);
+        // Only a prize at the sponsor's place has a description; blank is none.
+        values.put("redeemDescription", !RewardMethod.OFFLINE_REDEEM.equals(method)
+            || input.redeemDescription() == null || input.redeemDescription().isBlank() ? null
+            : input.redeemDescription().strip());
         values.put("startAt", input.startAt());
         values.put("endAt", input.endAt());
         Integer limit = input.timeLimitSec() == null && version != null
@@ -289,8 +302,10 @@ public final class PublicationProcesses {
         List<TierCoverage.Tier> ranges = tiers.stream().map(TierPlan::tier).toList();
         List<Violation> problems = new ArrayList<>(PublicationReadiness.check(PublicationEditing.draftOf(values),
             ranges, PublicationEditing.snapshot(version), ctx.opTime()));
-        // What submitting would also say: the caller is no approved sponsor, or is banned (D-Q2-6).
+        // What submitting would also say: the caller is no approved sponsor, or is banned (D-Q2-6); the method is
+        // one they may not use (Q22: a copy of a publication made before the method was taken away).
         problems.addAll(PublicationEditing.sponsorProblems(ctx));
+        problems.addAll(PublicationEditing.methodProblems(ctx, PublicationEditing.methodOf(values)));
         return new SaveOutput(publicationId, PublicationStatus.DRAFT, revision, editedAt,
             PublicationEditing.integer(values.get("fullScore")), (BigDecimal) values.get("maxReward"),
             (BigDecimal) values.get("maxSpend"), tierIds, PublicationEditing.problems(problems, messages, ctx));
@@ -342,6 +357,7 @@ public final class PublicationProcesses {
                 PUB_ID, PUBLICATION))
             .steps(PublicationEditing::loadTiers)
             .steps(PublicationEditing::loadSponsor)
+            .steps(PublicationEditing::loadSponsorMethods)
             .steps(b -> PublicationEditing.loadVersion(b, ctx -> {
                 UUID given = ctx.get(INPUT, CopyInput.class).versionId();
                 return given != null ? given : PublicationEditing.publication(ctx).get("versionId");
@@ -368,9 +384,10 @@ public final class PublicationProcesses {
         values.put("name", input.name() == null || input.name().isBlank() ? copyName(messages, ctx,
             source.get("name")) : input.name());
         for (String field : List.of("regions", "startAt", "endAt", "timeLimitSec", "passScore", "budgetCap",
-            "maxWinners")) {
+            "maxWinners", "redeemDescription")) {
             values.put(field, source.get(field));
         }
+        values.put("rewardMethod", PublicationEditing.methodOf(source.attributes()));
         if (input.startAt() != null) {
             values.put("startAt", input.startAt());
         }

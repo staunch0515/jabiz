@@ -8,6 +8,9 @@ import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.quizbuks.play.QbPlay;
 import com.jabiz.quizbuks.play.RewardStatus;
+import com.jabiz.quizbuks.reward.CashRewardStatus;
+import com.jabiz.quizbuks.reward.QbRewards;
+import com.jabiz.quizbuks.reward.RedemptionStatus;
 import com.jabiz.quizbuks.publishing.QbPublications;
 import com.jabiz.quizbuks.setup.QbParams;
 import com.jabiz.quizbuks.wallet.PayoutAccountStatus;
@@ -60,6 +63,15 @@ public final class MessageProcesses {
     public static final String TRANSFER_SENT_CONSUMER = "qb.msg-transfer-sent";
     public static final String TRANSFER_FAILED_CONSUMER = "qb.msg-transfer-failed";
     public static final String PAYOUT_RESTRICTED_CONSUMER = "qb.msg-payout-restricted";
+    /** Q22: the cash reward's steps and the prize, one consumer each (two for a resolution: both sides hear). */
+    public static final String CASH_DUE_CONSUMER = "qb.msg-cash-due";
+    public static final String CASH_MARKED_PAID_CONSUMER = "qb.msg-cash-marked-paid";
+    public static final String CASH_CONFIRMED_CONSUMER = "qb.msg-cash-confirmed";
+    public static final String CASH_DISPUTED_CONSUMER = "qb.msg-cash-disputed";
+    public static final String CASH_RESOLVED_CONSUMER = "qb.msg-cash-resolved";
+    public static final String CASH_RESOLVED_SPONSOR_CONSUMER = "qb.msg-cash-resolved-sponsor";
+    public static final String CASH_OVERDUE_CONSUMER = "qb.msg-cash-overdue";
+    public static final String REDEEM_DUE_CONSUMER = "qb.msg-redeem-due";
 
     /** An event older than this makes no message (a replay to a new subscription, a long backlog). */
     public static final Duration MAX_AGE = Duration.ofDays(7);
@@ -90,6 +102,8 @@ public final class MessageProcesses {
     static final String CARD = "card";
     static final String TRANSFER = "transfer";
     static final String ACCOUNT = "account";
+    static final String CASH = "cash";
+    static final String REDEMPTION = "redemption";
     static final String WALLET = "wallet";
     static final String LAST = "lastReminder";
     static final String PARAMS = "params";
@@ -118,14 +132,20 @@ public final class MessageProcesses {
                     QueryEntities.query(QbInbox.defaultDataset(QbInbox.MESSAGE), ctx -> EntityQuery.builder()
                         .where(new QueryPredicate.Eq("sourceKey", ctx.get(SOURCE_KEY))).limit(1).build(), EXISTING),
                     QueryEntities.query(QbPlay.defaultDataset(QbPlay.ATTEMPT), ctx -> byId("attemptId",
-                        reward(ctx) ? input(ctx).sourceId() : null), ATTEMPT),
+                        attemptReward(ctx) ? input(ctx).sourceId() : null), ATTEMPT),
                     QueryEntities.query(QbPublications.defaultDataset(QbPublications.CARD), ctx -> byId(
                         "publicationId", reward(ctx) ? uuid(input(ctx).publicationId()) : null), CARD),
                     QueryEntities.query(QbPayouts.defaultDataset(QbPayouts.TRANSFER), ctx -> byId("transferId",
                         transfer(ctx) ? input(ctx).sourceId() : null), TRANSFER),
                     QueryEntities.query(QbPayouts.defaultDataset(QbPayouts.ACCOUNT), ctx -> byId("userId",
                         QbInbox.PAYOUT_ACTION_NEEDED.equals(input(ctx).kind()) ? input(ctx).sourceId() : null),
-                        ACCOUNT)))
+                        ACCOUNT),
+                    // Q22: the cash reward or the redemption the event names, with its publication's card.
+                    QueryEntities.query(QbRewards.defaultDataset(QbRewards.CASH_REWARD), ctx -> byId("cashRewardId",
+                        QbInbox.CASH_KINDS.contains(input(ctx).kind()) ? uuid(input(ctx).sourceId()) : null), CASH),
+                    QueryEntities.query(QbRewards.defaultDataset(QbRewards.REDEMPTION), ctx -> byId("redemptionId",
+                        QbInbox.REDEEM_DUE.equals(input(ctx).kind()) ? uuid(input(ctx).sourceId()) : null),
+                        REDEMPTION)))
                 .compute("Make the message", (metadata, ctx) -> fromEvent(ctx, texts)));
     }
 
@@ -135,10 +155,23 @@ public final class MessageProcesses {
         if (QbInbox.PAYOUT_ACTION_NEEDED.equals(input.kind())) {
             return "payout-action:" + id + ":" + input.occurredAt().atOffset(ZoneOffset.UTC).toLocalDate();
         }
-        return input.kind().toLowerCase(java.util.Locale.ROOT).replace('_', '-') + ":" + id;
+        String key = input.kind().toLowerCase(java.util.Locale.ROOT).replace('_', '-') + ":" + id;
+        // Q22: a cash reward can be marked paid, disputed or late more than once (an "unpaid" decision sends it
+        // back): each round is its own message, a redelivery of the same event is not.
+        if (QbInbox.CASH_KINDS.contains(input.kind()) && !QbInbox.CASH_DUE.equals(input.kind())) {
+            return key + ":" + input.occurredAt().getEpochSecond();
+        }
+        return key;
     }
 
+    /** The kinds that read the publication's card: the platform's reward, and the cash or prize of Q22. */
     private static boolean reward(ProcessContext ctx) {
+        String kind = input(ctx).kind();
+        return attemptReward(ctx) || QbInbox.CASH_KINDS.contains(kind) || QbInbox.REDEEM_DUE.equals(kind);
+    }
+
+    /** The kinds whose source is the attempt itself. */
+    private static boolean attemptReward(ProcessContext ctx) {
         String kind = input(ctx).kind();
         return QbInbox.REWARD_PAID.equals(kind) || QbInbox.REWARD_PENDING.equals(kind);
     }
@@ -158,6 +191,10 @@ public final class MessageProcesses {
             case QbInbox.REWARD_PAID, QbInbox.REWARD_PENDING -> rewardMessage(ctx, input, params);
             case QbInbox.TRANSFER_SENT, QbInbox.TRANSFER_FAILED -> transferMessage(ctx, texts, input, params);
             case QbInbox.PAYOUT_ACTION_NEEDED -> payoutMessage(ctx);
+            case QbInbox.CASH_DUE, QbInbox.CASH_MARKED_PAID, QbInbox.CASH_CONFIRMED, QbInbox.CASH_DISPUTED,
+                 QbInbox.CASH_RESOLVED, QbInbox.CASH_RESOLVED_SPONSOR, QbInbox.CASH_OVERDUE ->
+                cashMessage(ctx, input, params, texts);
+            case QbInbox.REDEEM_DUE -> redeemMessage(ctx, params);
             default -> null;
         };
         if (draft != null) {
@@ -185,6 +222,61 @@ public final class MessageProcesses {
         params.put("name", MessageTexts.Value.of(card.get("name")));
         return new Draft(attempt.get("userId"), QbInbox.TYPE_REWARD, input.kind(), card.id(), QbInbox.ACTION_RESULT,
             String.valueOf(attempt.id()));
+    }
+
+    /**
+     * A cash reward's message (Q22): to the taker when it is owed, marked paid, overdue or resolved; to the sponsor
+     * when it is confirmed, disputed or resolved. Only while the reward still stands as the event said (a later step
+     * has its own message); the card gives the publication's name.
+     */
+    private static Draft cashMessage(ProcessContext ctx, EventInput input, Map<String, MessageTexts.Value> params,
+        MessageTexts texts) {
+        EntityInstance cash = first(ctx, CASH);
+        EntityInstance card = first(ctx, CARD);
+        if (cash == null || card == null) {
+            return null;
+        }
+        String expected = switch (input.kind()) {
+            case QbInbox.CASH_DUE -> CashRewardStatus.DUE;
+            case QbInbox.CASH_MARKED_PAID -> CashRewardStatus.MARKED_PAID;
+            case QbInbox.CASH_CONFIRMED -> CashRewardStatus.CONFIRMED;
+            case QbInbox.CASH_DISPUTED -> CashRewardStatus.DISPUTED;
+            case QbInbox.CASH_OVERDUE -> CashRewardStatus.OVERDUE;
+            default -> null;
+        };
+        if (expected != null && !expected.equals(cash.get("status"))) {
+            return null;
+        }
+        params.put("amount", MessageTexts.Value.of(MailValues.kudos(cash.get("amount"))));
+        params.put("name", MessageTexts.Value.of(card.get("name")));
+        params.put("code", MessageTexts.Value.of(cash.get("code")));
+        // The state in the reader's language (the dictionary's words), not its code.
+        params.put("status", texts.message(QbRewards.STATUS_MESSAGE_PREFIX + cash.get("status")));
+        boolean sponsors = QbInbox.CASH_CONFIRMED.equals(input.kind()) || QbInbox.CASH_DISPUTED.equals(input.kind())
+            || QbInbox.CASH_RESOLVED_SPONSOR.equals(input.kind());
+        return sponsors
+            ? new Draft(cash.get("sponsorId"), QbInbox.TYPE_SYSTEM, input.kind(), card.id(), QbInbox.ACTION_CASH,
+                String.valueOf(cash.id()))
+            : new Draft(cash.get("userId"), QbInbox.TYPE_REWARD, input.kind(), card.id(), QbInbox.ACTION_RESULT,
+                cash.get("attemptId"));
+    }
+
+    /** The prize to collect (Q22): to the taker, with what it is and until when. */
+    private static Draft redeemMessage(ProcessContext ctx, Map<String, MessageTexts.Value> params) {
+        EntityInstance redemption = first(ctx, REDEMPTION);
+        EntityInstance card = first(ctx, CARD);
+        if (redemption == null || card == null || !RedemptionStatus.DUE.equals(redemption.get("status"))) {
+            return null;
+        }
+        params.put("amount", MessageTexts.Value.of(MailValues.kudos(redemption.get("amount"))));
+        params.put("name", MessageTexts.Value.of(card.get("name")));
+        params.put("description", MessageTexts.Value.of(redemption.get("description")));
+        // The day only (UTC): the message is written once, in every language, without the reader's zone.
+        Object expires = redemption.get("expiresAt");
+        params.put("expiresAt", MessageTexts.Value.of(expires == null ? "" : String.valueOf(expires).substring(0,
+            Math.min(10, String.valueOf(expires).length()))));
+        return new Draft(redemption.get("userId"), QbInbox.TYPE_REWARD, QbInbox.REDEEM_DUE, card.id(),
+            QbInbox.ACTION_RESULT, redemption.get("attemptId"));
     }
 
     private static Draft transferMessage(ProcessContext ctx, MessageTexts texts, EventInput input,
@@ -235,6 +327,16 @@ public final class MessageProcesses {
 
     static EventInput rewardInput(DomainEvent event, String kind) {
         return new EventInput(kind, text(event, "attemptId"), text(event, "publicationId"), event.createdTime());
+    }
+
+    /** Q22: a cash reward's or a redemption's event: the record's id and its publication. */
+    static EventInput cashInput(DomainEvent event, String kind) {
+        return new EventInput(kind, text(event, "cashRewardId"), text(event, "publicationId"), event.createdTime());
+    }
+
+    static EventInput redeemInput(DomainEvent event) {
+        return new EventInput(QbInbox.REDEEM_DUE, text(event, "redemptionId"), text(event, "publicationId"),
+            event.createdTime());
     }
 
     static EventInput transferInput(DomainEvent event, String kind) {

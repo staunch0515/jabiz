@@ -2,6 +2,7 @@ package com.jabiz.quizbuks.play;
 
 import com.jabiz.quizbuks.country.Regions;
 import com.jabiz.quizbuks.publishing.PublicationRules;
+import com.jabiz.quizbuks.publishing.RewardMethod;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -84,7 +85,13 @@ public final class AttemptRules {
 
     /** The publication as a taker sees it at {@code now}: the facts of every condition of the feed. */
     public record Card(String sponsorId, String status, String regions, Instant startAt, Instant endAt,
-        Limits limits) {}
+        Limits limits, String rewardMethod) {
+
+        /** A card paid by the platform (Q22): what every card was before. */
+        public Card(String sponsorId, String status, String regions, Instant startAt, Instant endAt, Limits limits) {
+            this(sponsorId, status, regions, startAt, endAt, limits, RewardMethod.PLATFORM);
+        }
+    }
 
     /**
      * Why the caller cannot start an attempt of the publication, or null when they can: their own publication, closed
@@ -108,7 +115,9 @@ public final class AttemptRules {
         if (limit != null) {
             return limit;
         }
-        if (!sponsorPays(sponsorBalance, sponsorPending, card.limits().maxReward())) {
+        // Only the platform's Kudos come from the wallet (Q22): cash and prizes are the sponsor's own affair.
+        if (RewardMethod.platform(card.rewardMethod())
+            && !sponsorPays(sponsorBalance, sponsorPending, card.limits().maxReward())) {
             return PlayCodes.FUNDS_SHORT;
         }
         return null;

@@ -80,6 +80,9 @@ interface Options {
   history?: Record<string, unknown>[]
   emailVerified?: boolean
   feed?: Record<string, unknown>[]
+  /** The taker's open cash rewards (Q22). */
+  cashRewards?: Record<string, unknown>[]
+  cash?: () => Response
 }
 
 /** The server as the play pages see it; records every call (path and body). */
@@ -111,6 +114,11 @@ function server(options: Options = {}) {
           { seq: 2, fromScore: 3, toScore: 5, reward: 100 }], offset: 0, limit: 20 })
       case '/api/queries/qb.app.history':
         return json(200, { items: options.history ?? [], offset: 0, limit: 20 })
+      case '/api/queries/qb.app.cash-rewards':
+        return json(200, { items: options.cashRewards ?? [], offset: 0, limit: 50 })
+      case '/api/processes/QB_CASH_REWARD_CONFIRM/latest':
+      case '/api/processes/QB_CASH_REWARD_DISPUTE/latest':
+        return options.cash ? options.cash() : json(200, { output: { cashRewardId: 'c1', status: 'CONFIRMED', revision: 3 } })
       case '/api/processes/QB_VIEW/latest':
         return json(200, { output: { publicationId: PUB, firstView: true } })
       case '/api/processes/QB_ATTEMPT_START/latest':
@@ -174,6 +182,78 @@ describe('the feed', () => {
       { field: 'completions', op: 'gte', value: 3 },
     ])
     expect(containsPattern('a\\b')).toBe('%a\\\\b%')
+  })
+})
+
+describe('the ways a reward is paid (Q22)', () => {
+  const cash = { cashRewardId: 'c1', status: 'MARKED_PAID', code: 'C-ABCD1234', amount: 100,
+    markedPaidAt: '2026-10-20T01:00:00Z', confirmBy: '2026-10-27T01:00:00Z', sponsorCompany: 'Capitals Inc' }
+
+  it('narrows the home to one way, remembers it on the device, and badges cash and prizes', async () => {
+    const { calls } = server({ feed: [{ ...CARD, rewardMethod: 'SPONSOR_CASH' }] })
+    render(<App />)
+    const card = await screen.findByTestId('feed-card')
+    expect(within(card).getByTestId('feed-card-method')).toHaveAttribute('data-method', 'SPONSOR_CASH')
+    await userEvent.click(screen.getByRole('radio', { name: 'Prize' }))
+    await waitFor(() => expect(calls.some((c) => c.path === '/api/queries/qb.app.feed'
+      && (c.body as { params: { method?: string } }).params.method === 'OFFLINE_REDEEM')).toBe(true))
+    expect(window.localStorage.getItem('qb.feed.method')).toBe('OFFLINE_REDEEM')
+    window.localStorage.removeItem('qb.feed.method')
+  })
+
+  it('lists the cash rewards waiting for the taker on the home, leading to each result', async () => {
+    server({ cashRewards: [{ cashRewardId: 'c1', attemptId: ATTEMPT, code: 'C-ABCD1234', publicationId: PUB,
+      publicationName: 'Capitals week', sponsorCompany: 'Capitals Inc', amount: 100, status: 'MARKED_PAID',
+      dueAt: '2026-10-20T00:00:00Z', markedPaidAt: '2026-10-20T01:00:00Z', confirmBy: '2026-10-27T01:00:00Z' }] })
+    render(<App />)
+    const notice = await screen.findByTestId('home-cash')
+    expect(notice).toHaveTextContent('A cash reward needs your attention')
+    expect(within(notice).getByRole('link')).toHaveAttribute('href', `/result/${ATTEMPT}`)
+    expect(within(notice).getByTestId('home-cash-item')).toHaveTextContent('C-ABCD1234')
+  })
+
+  it('says how a quiz pays on its page, with the prize to collect', async () => {
+    vi.spyOn(globalThis, 'fetch').mockRestore?.()
+    const { calls } = server()
+    calls.length = 0
+    window.history.replaceState(null, '', `/p/${PUB}`)
+    render(<App />)
+    await screen.findByTestId('detail')
+    // The server's answer is the platform's: no note.
+    expect(screen.getByTestId('detail-method')).toHaveAttribute('data-method', 'PLATFORM')
+    expect(screen.queryByTestId('detail-method-note')).toBeNull()
+  })
+
+  it('shows a cash reward with its code, confirms it, and reports a problem with a note', async () => {
+    const { posted } = server({ result: () => json(200, { output: finished({ score: 5, passed: true, reward: 100,
+      rewardStatus: 'CASH', rewardMethod: 'SPONSOR_CASH', cash, redeem: null }) }) })
+    window.history.replaceState(null, '', `/result/${ATTEMPT}`)
+    render(<App />)
+    const reward = await screen.findByTestId('result-reward')
+    expect(reward).toHaveAttribute('data-status', 'CASH')
+    expect(reward).toHaveAttribute('data-cash-status', 'MARKED_PAID')
+    expect(within(reward).getByTestId('cash-code')).toHaveTextContent('C-ABCD1234')
+    expect(reward).toHaveTextContent('Capitals Inc says they paid you')
+    await userEvent.click(within(reward).getByTestId('cash-dispute'))
+    await userEvent.type(await screen.findByTestId('cash-dispute-note'), 'I got 50, not 100')
+    await userEvent.click(screen.getByTestId('cash-dispute-send'))
+    await waitFor(() => expect(posted('QB_CASH_REWARD_DISPUTE')).toEqual([{ cashRewardId: 'c1', note: 'I got 50, not 100' }]))
+    await waitFor(() => expect(screen.queryByTestId('cash-dispute-dialog')).toBeNull())
+    await userEvent.click(within(screen.getByTestId('result-reward')).getByTestId('cash-confirm'))
+    await waitFor(() => expect(posted('QB_CASH_REWARD_CONFIRM')).toEqual([{ cashRewardId: 'c1' }]))
+  })
+
+  it('shows a prize with what it is and until when', async () => {
+    server({ result: () => json(200, { output: finished({ score: 5, passed: true, reward: 100,
+      rewardStatus: 'REDEEM', rewardMethod: 'OFFLINE_REDEEM', cash: null, redeem: { redemptionId: 'r1', status: 'DUE',
+      code: 'C-ABCD1234', amount: 100, description: 'A coffee at our counter, Shibuya', expiresAt: '2026-11-20T00:00:00Z',
+      sponsorCompany: 'Capitals Inc' } }) }) })
+    window.history.replaceState(null, '', `/result/${ATTEMPT}`)
+    render(<App />)
+    const reward = await screen.findByTestId('result-reward')
+    expect(reward).toHaveAttribute('data-status', 'REDEEM')
+    expect(within(reward).getByTestId('redeem-prize')).toHaveTextContent('A coffee at our counter, Shibuya')
+    expect(reward).toHaveTextContent("Collect it at Capitals Inc's place by")
   })
 })
 
@@ -648,6 +728,14 @@ describe('the history', () => {
     await userEvent.click(screen.getByRole('radio', { name: 'Unfinished' }))
     await waitFor(() => expect(calls.some((c) => JSON.stringify(c.body).includes('"values":["IN_PROGRESS","TIMED_OUT"]')))
       .toBe(true))
+  })
+
+  it('says where a cash reward stands (Q22)', async () => {
+    server({ history: [row({ rewardStatus: 'CASH', rewardMethod: 'SPONSOR_CASH', cashRewardId: 'c1',
+      cashStatus: 'MARKED_PAID', cashCode: 'C-ABCD1234' })] })
+    window.history.replaceState(null, '', '/history')
+    render(<App />)
+    expect(await screen.findByTestId('history-cash')).toHaveTextContent('The sponsor paid 100 Kudos: confirm it')
   })
 
   it('continues an attempt in progress where it was left', async () => {

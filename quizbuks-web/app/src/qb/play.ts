@@ -37,6 +37,12 @@ export type Selection = 'SINGLE' | 'MULTIPLE'
 
 // ---- the feed (qb.app.feed) -------------------------------------------------------------------------------------
 
+/** `publishing.RewardMethod` (Q22): Kudos paid by QuizBuks, cash from the sponsor, or a prize at the sponsor's place. */
+export type RewardMethod = 'PLATFORM' | 'SPONSOR_CASH' | 'OFFLINE_REDEEM'
+export const REWARD_METHODS: readonly RewardMethod[] = ['PLATFORM', 'SPONSOR_CASH', 'OFFLINE_REDEEM']
+export const methodOf = (value: unknown): RewardMethod =>
+  (REWARD_METHODS as readonly string[]).includes(String(value)) ? (value as RewardMethod) : 'PLATFORM'
+
 /** A card of the feed: a publication the caller can answer now. */
 export interface FeedCard {
   publicationId: string
@@ -49,6 +55,8 @@ export interface FeedCard {
   kind: QuizKind
   /** The highest reward, in Kudos. */
   maxReward: unknown
+  /** How the reward reaches the taker (Q22). */
+  rewardMethod: RewardMethod
   completions: number
   sponsorName: string | null
   sponsorCompany: string | null
@@ -79,6 +87,8 @@ export interface FeedRequest {
   /** The taker's country; without one only publications aimed at GLOBAL. */
   country: string | null
   q?: string
+  /** Only publications whose reward comes this way (Q22); all when absent. */
+  method?: RewardMethod | null
   sort?: FeedSort
   filters?: Filter[]
   offset?: number
@@ -94,6 +104,7 @@ function feedCard(row: Record<string, unknown>): FeedCard {
     video: trustedPlayer(textOrNull(row.video)),
     kind: kindOf(row.kind),
     maxReward: row.maxReward,
+    rewardMethod: methodOf(row.rewardMethod),
     completions: numberOf(row.completions),
     sponsorName: textOrNull(row.sponsorName),
     sponsorCompany: textOrNull(row.sponsorCompany),
@@ -110,7 +121,8 @@ function feedCard(row: Record<string, unknown>): FeedCard {
 /** One page of the feed (U-10 – U-14). */
 export async function readFeed(request: FeedRequest): Promise<QueryPage<FeedCard>> {
   const page = await runQuery<Record<string, unknown>>(PLAY.feed, {
-    params: { at: request.at, country: request.country, q: request.q?.trim() || null },
+    params: { at: request.at, country: request.country, q: request.q?.trim() || null,
+      method: request.method ?? null },
     filters: request.filters,
     sorts: request.sort ? [FEED_SORTS[request.sort]] : undefined,
     offset: request.offset,
@@ -183,6 +195,9 @@ export interface PublicationView {
   fullScore: number
   passScore: number
   maxReward: unknown
+  /** How the reward reaches the taker (Q22), and the prize when it is collected at the sponsor's place. */
+  rewardMethod: RewardMethod
+  redeemDescription: string | null
   sponsorName: string | null
   sponsorCompany: string | null
   sponsorIntro: string | null
@@ -235,6 +250,8 @@ export async function readPublication(request: PublicationRequest): Promise<Publ
     fullScore: numberOf(row.fullScore),
     passScore: numberOf(row.passScore),
     maxReward: row.maxReward,
+    rewardMethod: methodOf(row.rewardMethod),
+    redeemDescription: textOrNull(row.redeemDescription),
     sponsorName: textOrNull(row.sponsorName),
     sponsorCompany: textOrNull(row.sponsorCompany),
     sponsorIntro: textOrNull(row.sponsorIntro),
@@ -365,7 +382,8 @@ export interface QuestionResult {
   earned: number
 }
 
-export type RewardStatus = 'NONE' | 'PAID' | 'PENDING'
+/** `play.RewardStatus`: since Q22 also owed in cash by the sponsor (CASH) or a prize to collect (REDEEM). */
+export type RewardStatus = 'NONE' | 'PAID' | 'PENDING' | 'CASH' | 'REDEEM'
 
 /** `AttemptFinishing.SubmitOutput` (U-33, U-34). */
 export interface SubmitOutput {
@@ -422,6 +440,77 @@ export interface AttemptResult {
   rewardStatus: RewardStatus | null
   questions: QuestionView[]
   result: QuestionResult[]
+  /** Q22: how the reward reaches the taker, with the cash reward's or the prize's record when there is one. */
+  rewardMethod: RewardMethod
+  cash: CashView | null
+  redeem: RedeemView | null
+}
+
+/** `reward.CashRewardStatus` (dictionary `cash-reward-status`). */
+export type CashStatus = 'DUE' | 'MARKED_PAID' | 'CONFIRMED' | 'DISPUTED' | 'OVERDUE' | 'VOID'
+
+/** `AttemptResults.CashView` (Q22): where the cash reward stands. */
+export interface CashView {
+  cashRewardId: string
+  status: CashStatus
+  code: string
+  amount: unknown
+  markedPaidAt: string | null
+  confirmBy: string | null
+  sponsorCompany: string | null
+}
+
+/** `AttemptResults.RedeemView` (Q22): the prize to collect and until when. */
+export interface RedeemView {
+  redemptionId: string
+  status: 'DUE' | 'REDEEMED' | 'EXPIRED' | 'VOID'
+  code: string
+  amount: unknown
+  description: string
+  expiresAt: string | null
+  sponsorCompany: string | null
+}
+
+/** The taker confirms they received the cash (`QB_CASH_REWARD_CONFIRM`). */
+export const confirmCashReward = (cashRewardId: string) =>
+  runProcess<{ cashRewardId: string; status: CashStatus; revision: number }>(PLAY.cashConfirm, { cashRewardId })
+
+/** The taker says what is wrong with the cash reward (`QB_CASH_REWARD_DISPUTE`); an administrator decides. */
+export const disputeCashReward = (cashRewardId: string, note: string) =>
+  runProcess<{ cashRewardId: string; status: CashStatus; revision: number }>(PLAY.cashDispute,
+    { cashRewardId, note: note.trim() })
+
+/** A row of `qb.app.cash-rewards`: one of the caller's cash rewards. */
+export interface CashRewardRow {
+  cashRewardId: string
+  attemptId: string
+  code: string
+  publicationId: string
+  publicationName: string
+  sponsorCompany: string | null
+  amount: unknown
+  status: CashStatus
+  dueAt: string
+  markedPaidAt: string | null
+  confirmBy: string | null
+}
+
+/** The caller's cash rewards that still need something of them or the sponsor (Q22), newest first. */
+export async function readOpenCashRewards(): Promise<CashRewardRow[]> {
+  const page = await runQuery<Record<string, unknown>>(PLAY.cashRewards, { params: { open: true }, limit: 50 })
+  return page.items.map((row) => ({
+    cashRewardId: String(row.cashRewardId),
+    attemptId: String(row.attemptId ?? ''),
+    code: String(row.code ?? ''),
+    publicationId: String(row.publicationId),
+    publicationName: String(row.publicationName ?? ''),
+    sponsorCompany: textOrNull(row.sponsorCompany),
+    amount: row.amount,
+    status: String(row.status) as CashStatus,
+    dueAt: String(row.dueAt ?? ''),
+    markedPaidAt: textOrNull(row.markedPaidAt),
+    confirmBy: textOrNull(row.confirmBy),
+  }))
 }
 
 /** The result of one of the caller's own attempts; an `ApiError` 404 when it is not theirs or does not exist. */
@@ -445,6 +534,13 @@ export interface HistoryRow {
   fullScore: number
   reward: unknown
   rewardStatus: RewardStatus | null
+  /** Q22: how the reward reaches the taker, and where the cash reward or the prize stands. */
+  rewardMethod: RewardMethod
+  cashRewardId: string | null
+  cashStatus: CashStatus | null
+  cashCode: string | null
+  redeemStatus: string | null
+  redeemExpiresAt: string | null
   startedAt: string
   submittedAt: string | null
   deadline: string
@@ -483,6 +579,12 @@ export async function readHistory(request: HistoryRequest): Promise<QueryPage<Hi
       fullScore: numberOf(row.fullScore),
       reward: row.reward,
       rewardStatus: textOrNull(row.rewardStatus) as RewardStatus | null,
+      rewardMethod: methodOf(row.rewardMethod),
+      cashRewardId: textOrNull(row.cashRewardId),
+      cashStatus: textOrNull(row.cashStatus) as CashStatus | null,
+      cashCode: textOrNull(row.cashCode),
+      redeemStatus: textOrNull(row.redeemStatus),
+      redeemExpiresAt: textOrNull(row.redeemExpiresAt),
       startedAt: String(row.startedAt ?? ''),
       submittedAt: textOrNull(row.submittedAt),
       deadline: String(row.deadline ?? ''),

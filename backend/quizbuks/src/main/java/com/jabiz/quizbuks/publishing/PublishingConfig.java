@@ -133,7 +133,8 @@ public class PublishingConfig {
             .targetEntityType(QbPublications.CARD)
             .scope(s -> s.fixed("status", PublicationStatus.LIVE))
             .publicRead(p -> p.fields("publicationId", "sponsorId", "name", "quizTitle", "kind", "startAt", "endAt",
-                "timeLimitSec", "questionCount", "fullScore", "passScore", "maxReward"))
+                "timeLimitSec", "questionCount", "fullScore", "passScore", "maxReward", "rewardMethod",
+                "redeemDescription"))
             .permissions(QbPermissions.ADMIN_PUBLICATION_READ, QbPermissions.SPONSOR_VIEW_WRITE)
             .policy(p -> p.readOnly(true).allowTimeTravel(false))
             .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
@@ -213,6 +214,46 @@ public class PublishingConfig {
             .item(PublicationStatus.BUDGET, "en", "Budget spent", "zh", "预算已用完", "ja", "予算を使い切り")
             .item(PublicationStatus.ADMIN, "en", "Ended by an administrator", "zh", "已被管理员结束",
                 "ja", "管理者が終了"));
+    }
+
+    /** Q22: how a reward reaches the taker. */
+    @Bean
+    StaticDictionary qbRewardMethodDictionary() {
+        return StaticDictionary.define(RewardMethod.DICTIONARY, d -> d
+            .item(RewardMethod.PLATFORM, "en", "Kudos paid by QuizBuks", "zh", "平台支付 Kudos",
+                "ja", "QuizBuks が Kudos を支払う")
+            .item(RewardMethod.SPONSOR_CASH, "en", "Cash from the sponsor", "zh", "商家直接付现金",
+                "ja", "スポンサーが現金で支払う")
+            .item(RewardMethod.OFFLINE_REDEEM, "en", "Prize at the sponsor's place", "zh", "商家线下兑付",
+                "ja", "スポンサーの店舗で引き換え"));
+    }
+
+    @Bean
+    EntityDefinition qbSponsorRewardMethodsEntity() {
+        return QbPublications.SPONSOR_METHODS_ENTITY;
+    }
+
+    /** Read by the administrators and the processes; written by {@code QB_SPONSOR_REWARD_METHODS_SET} only. */
+    @Bean
+    DatasetDefinition qbSponsorRewardMethodsDataset() {
+        return defaultDataset(QbPublications.SPONSOR_METHODS, 10);
+    }
+
+    /** The sponsor's own setting (the wizard offers only the methods it allows); none means the platform's only. */
+    @Bean
+    DatasetDefinition qbSponsorOwnRewardMethodsDataset() {
+        return DatasetDefinition.define(QbPublications.sponsorDataset(QbPublications.SPONSOR_METHODS), d -> d
+            .targetEntityType(QbPublications.SPONSOR_METHODS)
+            .permissions(QbPermissions.PUBLICATION_WRITE, QbPermissions.SPONSOR_VIEW_WRITE)
+            .policy(p -> p.readOnly(true).allowTimeTravel(false))
+            .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef))
+            .scope(s -> s.fromContext("userId", "actorId", RequestContext::actorId)));
+    }
+
+    @Bean
+    ProcessDefinition<RewardMethodProcesses.SetInput, RewardMethodProcesses.SetOutput, ProcessContext>
+        qbSponsorRewardMethodsSet() {
+        return RewardMethodProcesses.set();
     }
 
     @Bean

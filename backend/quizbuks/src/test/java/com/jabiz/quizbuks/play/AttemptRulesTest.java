@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -103,5 +104,24 @@ class AttemptRulesTest {
         assertThat(PublicationRules.endsBy(BigDecimal.valueOf(1000), null, BigDecimal.valueOf(100), 3,
             BigDecimal.valueOf(900))).isNull();
         assertThat(PublicationRules.endsBy(null, null, BigDecimal.TEN, 1_000_000, BigDecimal.TEN)).isNull();
+    }
+
+    @Test
+    void cashAndPrizesNeverWantTheSponsorsWallet() {
+        // Q22: an empty wallet refuses a platform-paid card and nobody else.
+        AttemptRules.Counts none = counts(0, 0, 0, 0, 0);
+        AttemptRules.Card platform = card("LIVE", "JP");
+        assertThat(AttemptRules.startRefusal("taker", "GLOBAL,JP", platform, none, BigDecimal.ZERO, 0, NOW))
+            .isEqualTo(PlayCodes.FUNDS_SHORT);
+        for (String method : List.of(com.jabiz.quizbuks.publishing.RewardMethod.SPONSOR_CASH,
+            com.jabiz.quizbuks.publishing.RewardMethod.OFFLINE_REDEEM)) {
+            AttemptRules.Card own = new AttemptRules.Card("sponsor", "LIVE", "JP", NOW.minusSeconds(60),
+                NOW.plusSeconds(3600), limits(1000, 10, 100), method);
+            assertThat(AttemptRules.startRefusal("taker", "GLOBAL,JP", own, none, BigDecimal.ZERO, 3, NOW)).isNull();
+            // The other limits still hold.
+            assertThat(AttemptRules.startRefusal("taker", "GLOBAL,JP", own, counts(10, 0, 0, 1000, 0),
+                BigDecimal.ZERO, 0, NOW)).isEqualTo(PlayCodes.BUDGET_FULL);
+        }
+        assertThat(platform.rewardMethod()).isEqualTo(com.jabiz.quizbuks.publishing.RewardMethod.PLATFORM);
     }
 }

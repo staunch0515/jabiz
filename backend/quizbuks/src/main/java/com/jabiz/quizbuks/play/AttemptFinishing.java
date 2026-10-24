@@ -2,6 +2,7 @@ package com.jabiz.quizbuks.play;
 
 import com.jabiz.entity.Violation;
 import com.jabiz.i18n.MessageCatalog;
+import com.jabiz.i18n.MessageTemplate;
 import com.jabiz.param.ParamValues;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
@@ -15,6 +16,10 @@ import com.jabiz.quizbuks.identity.CallerChecks;
 import com.jabiz.quizbuks.publishing.CardTiers;
 import com.jabiz.quizbuks.publishing.PublicationMoves;
 import com.jabiz.quizbuks.publishing.QbPublications;
+import com.jabiz.quizbuks.publishing.RewardMethod;
+import com.jabiz.quizbuks.reward.CashRewardStatus;
+import com.jabiz.quizbuks.reward.QbRewards;
+import com.jabiz.quizbuks.reward.RedemptionStatus;
 import com.jabiz.quizbuks.setup.QbParams;
 import com.jabiz.quizbuks.wallet.QbWallets;
 import com.jabiz.runtime.EntityInstance;
@@ -31,6 +36,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -79,6 +85,9 @@ public final class AttemptFinishing {
     /** Events for the takers' messages (Q7): a reward paid, a reward pending. */
     public static final String SETTLED_EVENT = "qb.reward.settled";
     public static final String PENDING_EVENT = "qb.reward.pending";
+    /** Q22: a reward owed in cash by the sponsor, a prize to collect at the sponsor's place. */
+    public static final String CASH_EVENT = "qb.reward.cash-due";
+    public static final String REDEEM_EVENT = "qb.reward.redeem-due";
 
     /**
      * @param answers       last answers, each replacing that question's; applied only in time
@@ -129,6 +138,8 @@ public final class AttemptFinishing {
     static final String POSTING = "play.posting";
     static final String MOVE = "play.move";
     static final String MOVED = "play.moved";
+    /** Q22: the key of the cash reward or redemption written with the attempt. */
+    static final String EXTERNAL_ID = "play.externalId";
 
     /** What the finishing decided before the wallet: the attempt in its new state, without the money's outcome. */
     record Plan(EntityInstance attempt, EntityInstance card, EntityInstance counter, String status,
@@ -137,6 +148,17 @@ public final class AttemptFinishing {
 
         boolean rewarded() {
             return reward.signum() > 0;
+        }
+
+        /** How the reward reaches the taker (Q22): the card's method, the platform's for a card from before. */
+        String method() {
+            Object method = card.get("rewardMethod");
+            return method == null ? RewardMethod.PLATFORM : method.toString();
+        }
+
+        /** Whether the reward is paid from the sponsor's wallet: only then is the wallet locked and read. */
+        boolean fromWallet() {
+            return rewarded() && RewardMethod.platform(method());
         }
     }
 
@@ -268,8 +290,9 @@ public final class AttemptFinishing {
                 return active(ctx) && attempt != null ? attempt.get("versionId") : null;
             }))
             // The rate in effect now: a reward is split when it is paid (D-Q5-4).
+            // Q22: with the days a sponsor has to pay a cash reward and a taker to collect a prize.
             .step("Load the commission rate", LoadParams.<ProcessContext>of(ProcessContext::opTime, PARAMS,
-                QbParams.CREATOR_FEE_RATE))
+                QbParams.CREATOR_FEE_RATE, QbParams.CASH_PAY_DAYS, QbParams.REDEEM_DAYS))
             .step("Lock the publication", HoldLock.<ProcessContext>exclusive(
                 ctx -> PublicationMoves.lockName(publicationOf(ctx))))
             // The card only: its state is the publication's, its limits the publication's frozen ones (Q10a). One
@@ -282,13 +305,13 @@ public final class AttemptFinishing {
             .compute("Score the attempt", (metadata, ctx) -> score(ctx, expire))
             .step("Lock the sponsor's wallet", HoldLock.<ProcessContext>exclusive(ctx -> {
                 Plan plan = plan(ctx);
-                return plan != null && plan.rewarded() ? QbWallets.lockName(QbWallets.SPONSOR,
+                return plan != null && plan.fromWallet() ? QbWallets.lockName(QbWallets.SPONSOR,
                     plan.attempt().get("sponsorId")) : null;
             }))
             .step("Load the sponsor's wallet", QueryEntities.<ProcessContext>of(
                 QbWallets.defaultDataset(QbWallets.WALLET), ctx -> {
                     Plan plan = plan(ctx);
-                    return QbWallets.query(QbWallets.SPONSOR, plan != null && plan.rewarded()
+                    return QbWallets.query(QbWallets.SPONSOR, plan != null && plan.fromWallet()
                         ? plan.attempt().get("sponsorId") : null);
                 }, WALLET))
             .compute("Settle the reward", (metadata, ctx) -> settle(ctx))
@@ -303,7 +326,11 @@ public final class AttemptFinishing {
             .step("Announce a paid reward", PublishEvent.<ProcessContext>when(
                 ctx -> announced(ctx, RewardStatus.PAID), SETTLED_EVENT, AttemptFinishing::payload))
             .step("Announce a pending reward", PublishEvent.<ProcessContext>when(
-                ctx -> announced(ctx, RewardStatus.PENDING), PENDING_EVENT, AttemptFinishing::payload));
+                ctx -> announced(ctx, RewardStatus.PENDING), PENDING_EVENT, AttemptFinishing::payload))
+            .step("Announce a cash reward", PublishEvent.<ProcessContext>when(
+                ctx -> announced(ctx, RewardStatus.CASH), CASH_EVENT, AttemptFinishing::payload))
+            .step("Announce a prize", PublishEvent.<ProcessContext>when(
+                ctx -> announced(ctx, RewardStatus.REDEEM), REDEEM_EVENT, AttemptFinishing::payload));
     }
 
     private static Plan plan(ProcessContext ctx) {
@@ -326,6 +353,11 @@ public final class AttemptFinishing {
         payload.put("userId", plan.attempt().get("userId"));
         payload.put("publicationId", String.valueOf((Object) plan.attempt().get("publicationId")));
         payload.put("reward", plan.reward());
+        // Q22: the record of a reward the sponsor settles themselves, for the messages.
+        if (ctx.contains(EXTERNAL_ID)) {
+            payload.put(RewardStatus.CASH.equals(settlement(ctx).rewardStatus()) ? "cashRewardId" : "redemptionId",
+                String.valueOf((Object) ctx.get(EXTERNAL_ID)));
+        }
         return payload;
     }
 
@@ -411,6 +443,12 @@ public final class AttemptFinishing {
             ctx.put(SETTLEMENT, new Settlement(RewardStatus.NONE, null, null));
             return;
         }
+        if (!plan.fromWallet()) {
+            // Q22: the sponsor settles it themselves; the record of it is written with the attempt (record).
+            ctx.put(SETTLEMENT, new Settlement(RewardMethod.SPONSOR_CASH.equals(plan.method()) ? RewardStatus.CASH
+                : RewardStatus.REDEEM, null, null));
+            return;
+        }
         EntityInstance wallet = first(ctx, WALLET);
         Object sponsorId = plan.attempt().get("sponsorId");
         if (QbWallets.pays(wallet, plan.reward())) {
@@ -465,6 +503,9 @@ public final class AttemptFinishing {
             values.put("ledgerTransactionId", ctx.get(POSTING, LedgerProcesses.PostOutput.class).transactionId());
         }
         ctx.changes().update(QbPlay.ATTEMPT, attempt.id(), attempt.version(), values);
+        if (RewardStatus.external(settlement.rewardStatus())) {
+            external(ctx, plan, settlement.rewardStatus());
+        }
 
         EntityInstance counter = plan.counter();
         long winners = PlaySteps.number(counter.get("winners")) + (plan.rewarded() ? 1 : 0);
@@ -486,14 +527,57 @@ public final class AttemptFinishing {
                 pending, move));
         }
 
-        String message = RewardStatus.PENDING.equals(settlement.rewardStatus())
-            ? messages.find(PlayCodes.REWARD_PENDING,
-                java.util.Objects.requireNonNullElse(ctx.request().locale(), java.util.Locale.ENGLISH)).orElse(null) : null;
+        String notice = switch (settlement.rewardStatus()) {
+            case RewardStatus.PENDING -> PlayCodes.REWARD_PENDING;
+            case RewardStatus.CASH -> PlayCodes.REWARD_CASH;
+            case RewardStatus.REDEEM -> PlayCodes.REWARD_REDEEM;
+            default -> null;
+        };
+        // The cash notice names the code the taker shows the sponsor (Q22).
+        String message = notice == null ? null : messages.find(notice,
+            java.util.Objects.requireNonNullElse(ctx.request().locale(), java.util.Locale.ENGLISH))
+            .map(text -> MessageTemplate.format(text, Map.of("code", QbRewards.codeOf(attempt.id())))).orElse(null);
         List<QuestionOutput> questions = plan.result().questions().stream().map(q -> new QuestionOutput(q.no(),
             q.selected(), q.correct(), q.points(), q.earned())).toList();
         ctx.put(OUTPUT, new SubmitOutput(String.valueOf(attempt.id()), plan.status(), plan.result().score(),
             plan.result().fullScore(), plan.passScore(), plan.passed(), plan.reward(), settlement.rewardStatus(),
             message, questions, plan.card().get("kind")));
+    }
+
+    /**
+     * The record of a reward the sponsor settles themselves (Q22): a cash reward owed from now, to be paid within
+     * {@code qb.reward.cash.pay-days}; or a prize to collect within {@code qb.reward.redeem-days} (the publication's
+     * end if that is later), described as the card describes it. One per attempt; its code is the attempt's.
+     */
+    static void external(ProcessContext ctx, Plan plan, String rewardStatus) {
+        EntityInstance attempt = plan.attempt();
+        ParamValues params = ctx.get(PARAMS, ParamValues.class);
+        Map<String, Object> values = new LinkedHashMap<>();
+        values.put("attemptId", String.valueOf(attempt.id()));
+        values.put("publicationId", attempt.get("publicationId"));
+        values.put("sponsorId", attempt.get("sponsorId"));
+        values.put("userId", attempt.get("userId"));
+        values.put("amount", plan.reward());
+        values.put("code", QbRewards.codeOf(attempt.id()));
+        values.put("dueAt", ctx.opTime());
+        values.put("revision", BigDecimal.ONE);
+        if (RewardStatus.CASH.equals(rewardStatus)) {
+            values.put("status", CashRewardStatus.DUE);
+            values.put("payBy", ctx.opTime().plus(Duration.ofDays(days(params, QbParams.CASH_PAY_DAYS))));
+            ctx.put(EXTERNAL_ID, ctx.changes().insert(QbRewards.CASH_REWARD, values));
+        } else {
+            Instant expires = ctx.opTime().plus(Duration.ofDays(days(params, QbParams.REDEEM_DAYS)));
+            Instant end = PlaySteps.instant(plan.card().get("endAt"));
+            values.put("status", RedemptionStatus.DUE);
+            values.put("description", plan.card().get("redeemDescription") == null ? ""
+                : plan.card().get("redeemDescription"));
+            values.put("expiresAt", end != null && end.isAfter(expires) ? end : expires);
+            ctx.put(EXTERNAL_ID, ctx.changes().insert(QbRewards.REDEMPTION, values));
+        }
+    }
+
+    private static int days(ParamValues params, String key) {
+        return QbParams.days(params, key);
     }
 
     private AttemptFinishing() {}

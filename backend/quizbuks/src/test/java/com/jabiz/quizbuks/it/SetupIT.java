@@ -251,6 +251,10 @@ class SetupIT extends QbItSupport {
         expected.put(QbParams.WITHDRAWAL_BANK_ENABLED, "false");
         expected.put(QbParams.WITHDRAWAL_BANK_FEE, "0");
         expected.put(QbParams.WITHDRAWAL_BANK_COOLDOWN_HOURS, "72");
+        // Q22: the days of cash rewards and prizes.
+        expected.put(QbParams.CASH_CONFIRM_DAYS, "7");
+        expected.put(QbParams.CASH_PAY_DAYS, "14");
+        expected.put(QbParams.REDEEM_DAYS, "30");
         assertThat(values).containsExactlyInAnyOrderEntriesOf(expected);
     }
 

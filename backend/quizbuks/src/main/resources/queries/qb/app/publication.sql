@@ -34,6 +34,8 @@ results:
   fullScore:      { from: QbPublicationCard.fullScore }
   passScore:      { from: QbPublicationCard.passScore }
   maxReward:      { from: QbPublicationCard.maxReward }
+  rewardMethod:   { from: QbPublicationCard.rewardMethod }
+  redeemDescription: { from: QbPublicationCard.redeemDescription }
   sponsorName:    { from: QbSponsor.contactName }
   sponsorCompany: { from: QbSponsor.company }
   sponsorIntro:   { from: QbSponsor.intro }
@@ -75,6 +77,8 @@ SELECT
     d.fullScore AS fullScore,
     d.passScore AS passScore,
     d.maxReward AS maxReward,
+    d.rewardMethod AS rewardMethod,
+    d.redeemDescription AS redeemDescription,
     d.sponsorName AS sponsorName,
     d.sponsorCompany AS sponsorCompany,
     d.sponsorIntro AS sponsorIntro,
@@ -107,6 +111,8 @@ SELECT
     c.{{QbPublicationCard.fullScore}}      AS fullScore,
     c.{{QbPublicationCard.passScore}}      AS passScore,
     c.{{QbPublicationCard.maxReward}}      AS maxReward,
+    c.{{QbPublicationCard.rewardMethod}}   AS rewardMethod,
+    c.{{QbPublicationCard.redeemDescription}} AS redeemDescription,
     sp.{{QbSponsor.contactName}}           AS sponsorName,
     sp.{{QbSponsor.company}}               AS sponsorCompany,
     sp.{{QbSponsor.intro}}                 AS sponsorIntro,
@@ -129,8 +135,9 @@ SELECT
     AND (c.{{QbPublicationCard.maxWinners}} IS NULL
          OR n.{{QbPublicationCounter.winners}} + s.{{QbPublicationStartCounter.starts}}
             - n.{{QbPublicationCounter.completions}} < c.{{QbPublicationCard.maxWinners}})
-    AND coalesce(w.{{QbWallet.pendingCount}}, 0) = 0
-    AND coalesce(w.{{QbWallet.balance}} - w.{{QbWallet.held}}, 0) >= c.{{QbPublicationCard.maxReward}}
+    AND (c.{{QbPublicationCard.rewardMethod}} <> 'PLATFORM'
+         OR (coalesce(w.{{QbWallet.pendingCount}}, 0) = 0
+             AND coalesce(w.{{QbWallet.balance}} - w.{{QbWallet.held}}, 0) >= c.{{QbPublicationCard.maxReward}}))
     AND own.{{QbPublicationOwner.publicationId}} IS NULL AS startable,
     m.{{QbAttempt.attemptId}}              AS myAttemptId,
     m.{{QbAttempt.status}}                 AS myStatus,

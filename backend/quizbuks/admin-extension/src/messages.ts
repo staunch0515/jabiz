@@ -1,5 +1,6 @@
 import { bankMenu, bankMessages } from './bank-messages'
 import { manualMenu, manualMessages } from './manual-messages'
+import { rewardMenu, rewardMessages } from './reward-messages'
 import { withdrawalMenu, withdrawalMessages } from './withdrawal-messages'
 import { financeMenu, financeMessages } from './finance-messages'
 import { attemptsMenu, attemptsMessages, payoutMessages } from './payout-messages'
@@ -13,7 +14,7 @@ import { overviewMenu, publicationsMessages, quizMessages, quizzesMessages } fro
 export const messages = {
   en: {
     menu: { group: 'QuizBuks', reviews: 'Reviews', users: 'Users', ...legalMenu.en, ...aiMenu.en,
-      ...financeMenu.en, ...broadcastsMenu.en, ...attemptsMenu.en, ...bankMenu.en, ...manualMenu.en, ...settingsMenu.en, ...withdrawalMenu.en,
+      ...financeMenu.en, ...broadcastsMenu.en, ...attemptsMenu.en, ...bankMenu.en, ...manualMenu.en, ...rewardMenu.en, ...settingsMenu.en, ...withdrawalMenu.en,
       ...overviewMenu.en },
     quizzes: quizzesMessages.en,
     quiz: quizMessages.en,
@@ -26,6 +27,7 @@ export const messages = {
     attempts: attemptsMessages.en,
     bank: bankMessages.en,
     manual: manualMessages.en,
+    reward: rewardMessages.en,
     bankSettings: settingsMessages.en,
     withdrawal: withdrawalMessages.en,
     common: {
@@ -240,7 +242,7 @@ export const messages = {
   },
   zh: {
     menu: { group: 'QuizBuks', reviews: '审核', users: '用户', ...legalMenu.zh, ...aiMenu.zh,
-      ...financeMenu.zh, ...broadcastsMenu.zh, ...attemptsMenu.zh, ...bankMenu.zh, ...manualMenu.zh, ...settingsMenu.zh, ...withdrawalMenu.zh,
+      ...financeMenu.zh, ...broadcastsMenu.zh, ...attemptsMenu.zh, ...bankMenu.zh, ...manualMenu.zh, ...rewardMenu.zh, ...settingsMenu.zh, ...withdrawalMenu.zh,
       ...overviewMenu.zh },
     quizzes: quizzesMessages.zh,
     quiz: quizMessages.zh,
@@ -253,6 +255,7 @@ export const messages = {
     attempts: attemptsMessages.zh,
     bank: bankMessages.zh,
     manual: manualMessages.zh,
+    reward: rewardMessages.zh,
     bankSettings: settingsMessages.zh,
     withdrawal: withdrawalMessages.zh,
     common: {
@@ -467,7 +470,7 @@ export const messages = {
   },
   ja: {
     menu: { group: 'QuizBuks', reviews: '審査', users: 'ユーザー', ...legalMenu.ja, ...aiMenu.ja,
-      ...financeMenu.ja, ...broadcastsMenu.ja, ...attemptsMenu.ja, ...bankMenu.ja, ...manualMenu.ja, ...settingsMenu.ja, ...withdrawalMenu.ja,
+      ...financeMenu.ja, ...broadcastsMenu.ja, ...attemptsMenu.ja, ...bankMenu.ja, ...manualMenu.ja, ...rewardMenu.ja, ...settingsMenu.ja, ...withdrawalMenu.ja,
       ...overviewMenu.ja },
     quizzes: quizzesMessages.ja,
     quiz: quizMessages.ja,
@@ -480,6 +483,7 @@ export const messages = {
     attempts: attemptsMessages.ja,
     bank: bankMessages.ja,
     manual: manualMessages.ja,
+    reward: rewardMessages.ja,
     bankSettings: settingsMessages.ja,
     withdrawal: withdrawalMessages.ja,
     common: {

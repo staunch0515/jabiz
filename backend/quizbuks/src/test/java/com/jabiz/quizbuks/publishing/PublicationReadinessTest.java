@@ -132,4 +132,25 @@ class PublicationReadinessTest {
         // A scored quiz may still reward any tier.
         assertThat(PublicationReadiness.check(ready(), tiers(), quiz(), NOW)).isEmpty();
     }
+
+    @Test
+    void aPrizeAtTheSponsorsPlaceIsDescribed() {
+        // Q22: OFFLINE_REDEEM needs the description; the other methods never do.
+        PublicationReadiness.Draft base = ready();
+        PublicationReadiness.Draft prize = new PublicationReadiness.Draft(base.versionId(), base.name(),
+            base.regions(), base.startAt(), base.endAt(), base.timeLimitSec(), base.passScore(), base.budgetCap(),
+            base.maxWinners(), RewardMethod.OFFLINE_REDEEM, "  ");
+        assertThat(PublicationReadiness.check(prize, tiers(), quiz(), NOW))
+            .extracting(Violation::field, Violation::ruleCode)
+            .containsExactly(tuple("redeemDescription", PublishingCodes.FIELD_REQUIRED));
+        PublicationReadiness.Draft described = new PublicationReadiness.Draft(base.versionId(), base.name(),
+            base.regions(), base.startAt(), base.endAt(), base.timeLimitSec(), base.passScore(), base.budgetCap(),
+            base.maxWinners(), RewardMethod.OFFLINE_REDEEM, "A coffee at the counter, 9-18h");
+        assertThat(PublicationReadiness.check(described, tiers(), quiz(), NOW)).isEmpty();
+        PublicationReadiness.Draft cash = new PublicationReadiness.Draft(base.versionId(), base.name(),
+            base.regions(), base.startAt(), base.endAt(), base.timeLimitSec(), base.passScore(), base.budgetCap(),
+            base.maxWinners(), RewardMethod.SPONSOR_CASH, null);
+        assertThat(PublicationReadiness.check(cash, tiers(), quiz(), NOW)).isEmpty();
+        assertThat(base.rewardMethod()).isEqualTo(RewardMethod.PLATFORM);
+    }
 }
