@@ -70,6 +70,8 @@ export type {
   LinkedIdentity,
   IdentityLinked,
 } from './auth/account'
+export { useEnvironment, setEnvironment, forgetEnvironment, toEnvironment } from './auth/environment'
+export type { Environment } from './auth/environment'
 export {
   getMailPreferences,
   setMailPreference,

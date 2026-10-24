@@ -48,7 +48,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * notifications can be turned off through the signed link, transactional mail cannot; nothing is updated or deleted.
  */
 @SpringBootTest(properties = {"jabiz.mail.enabled=true", "jabiz.mail.from=jabiz@example.com",
-    "jabiz.mail.base-url=https://app.example.com", "spring.mail.host=localhost", "spring.mail.port=3027"})
+    "jabiz.mail.base-url=https://app.example.com", "spring.mail.host=localhost", "spring.mail.port=3027",
+    // The portal signs in by mailed link and opens accounts (decision D54): an application's invitation (D55) uses it.
+    // With registration open, the administration must name its roles (SignInEntries).
+    "jabiz.security.entries.portal.self-registration=true", "jabiz.security.entries.portal.email-link=true",
+    "jabiz.security.entries.admin.accepted-roles=IT_BACK_OFFICE"})
 class MailIT extends SecurityItSupport {
 
     @RegisterExtension
@@ -57,6 +61,8 @@ class MailIT extends SecurityItSupport {
     private static final Pattern VERIFY_LINK = Pattern.compile("/verify\\?token=([A-Za-z0-9_-]+)");
     private static final Pattern RESET_LINK = Pattern.compile("/reset\\?token=([A-Za-z0-9_-]+)");
     private static final Pattern UNSUBSCRIBE_LINK = Pattern.compile("/mail/unsubscribe\\?token=([A-Za-z0-9._-]+)");
+    private static final Pattern SIGN_IN_LINK = Pattern.compile(
+        "https://app\\.example\\.com/portal/auth/email-link\\?entry=portal&token=([A-Za-z0-9_-]+)&to=([^)\\s]*)");
 
     /**
      * Fails the first attempt for addresses starting with "flaky" before sending, and for those starting with "lost"
@@ -100,10 +106,21 @@ class MailIT extends SecurityItSupport {
     JwtService jwt;
 
     @Autowired
+    MutableClock clock;
+
+    @Autowired
     org.springframework.context.ApplicationContext beans;
 
     private String caller() {
         return bearer(ItMailFixtures.PERMISSION);
+    }
+
+    /** The portal's registration role (application.yml): a sign-in link to a new address opens an account with it. */
+    @org.junit.jupiter.api.BeforeEach
+    void customerRole() {
+        if (query("SELECT 1 FROM sec_role_version WHERE role_code = ?", "CUSTOMER").isEmpty()) {
+            createRole("CUSTOMER", com.jabiz.app.commerce.PortalOrders.PERMISSION);
+        }
     }
 
     @SuppressWarnings("unchecked")
@@ -132,6 +149,24 @@ class MailIT extends SecurityItSupport {
 
     private void send(String template, String userId, String value) {
         send(template, userId, null, null, value, false, 200);
+    }
+
+    /** An invitation (it.invite, decision D55) to a plain address, with a sign-in link at {@code entry} to {@code to}. */
+    private Map<String, Object> invite(String address, String entry, String to, int status) {
+        Map<String, Object> input = new LinkedHashMap<>();
+        input.put("template", "invite");
+        input.put("address", address);
+        input.put("locale", "en");
+        input.put("value", "the quiz");
+        input.put("entry", entry);
+        input.put("to", to);
+        return post("/api/processes/IT_MAIL_SEND/latest", caller(), input)
+            .expectStatus().isEqualTo(status).expectBody(MAP).returnResult().getResponseBody();
+    }
+
+    private Map<String, Object> openLink(String token) {
+        return post("/api/auth/email-link/confirm", null, Map.of("token", token)).expectStatus().isOk()
+            .expectBody(MAP).returnResult().getResponseBody();
     }
 
     private int deliver() {
@@ -581,5 +616,81 @@ class MailIT extends SecurityItSupport {
         } catch (Exception e) {
             throw new IllegalStateException(e);
         }
+    }
+
+    /** An application's mail carries a one-time sign-in link (decision D55): the platform's processes open it. */
+    @Test
+    void anApplicationsMailMayCarryASignInLinkThatSignsInOrOpensAnAccount() throws Exception {
+        String address = address("invited");
+        invite(address, "portal", "/portal/p/42?ref=mail", 200);
+        deliver();
+        MimeMessage mail = to(address).getFirst();
+        assertThat(mail.getSubject()).isEqualTo("You are invited to the quiz");
+        String text = part(mail, "text/plain");
+        assertThat(text).contains("https://app.example.com/portal/auth/email-link?entry=portal&token=")
+            .contains("&to=%2Fportal%2Fp%2F42%3Fref%3Dmail");
+        // Nothing opened before the mailbox is proven.
+        assertThat(query("SELECT 1 FROM sec_user_version WHERE lower(email) = lower(?)", address)).isEmpty();
+
+        String token = link(SIGN_IN_LINK, mail);
+        assertThat(openLink(token)).containsEntry("status", "SIGNED_IN").containsKey("accessToken");
+        List<Map<String, Object>> users = query("SELECT user_id, verified_email, password_hash FROM sec_user_version"
+            + " WHERE lower(email) = lower(?) ORDER BY version_no DESC", address);
+        assertThat(users).isNotEmpty();
+        assertThat(users.getFirst()).containsEntry("verified_email", address).containsEntry("password_hash", null);
+        String userId = String.valueOf(users.getFirst().get("user_id"));
+        // Good once.
+        assertThat(ruleCode(post("/api/auth/email-link/confirm", null, Map.of("token", token)).expectStatus()
+            .isEqualTo(422).expectBody(MAP).returnResult().getResponseBody())).isEqualTo("TOKEN_INVALID");
+
+        // Invited again, later (a link issued at the instant another was used would count as superseded, D54 item
+        // 3): the link signs in the account the address has now, as a mail to a user would.
+        clock.advance(java.time.Duration.ofMinutes(1));
+        invite(address, "portal", "", 200);
+        deliver();
+        assertThat(openLink(link(SIGN_IN_LINK, to(address).get(1)))).containsEntry("status", "SIGNED_IN");
+        assertThat(query("SELECT DISTINCT user_id FROM sec_user_version WHERE lower(email) = lower(?)", address))
+            .singleElement().satisfies(row -> assertThat(String.valueOf(row.get("user_id"))).isEqualTo(userId));
+    }
+
+    /** The link signs in at an entry that signs in by mailed link only, and leads back within that entry's pages. */
+    @Test
+    void aSignInLinkIsRefusedForAnEntryWithoutLinkSignInOrAPathOutsideIt() {
+        String address = address("refused");
+        assertThat(ruleCode(invite(address, "admin", "", 422))).isEqualTo("MAIL_SIGN_IN_LINK");
+        assertThat(ruleCode(invite(address, "no-such-entry", "", 422))).isEqualTo("MAIL_SIGN_IN_LINK");
+        assertThat(ruleCode(invite(address, "portal", "/elsewhere/p/1", 422))).isEqualTo("MAIL_SIGN_IN_LINK");
+        assertThat(ruleCode(invite(address, "portal", "https://evil.example.com/", 422))).isEqualTo("MAIL_SIGN_IN_LINK");
+        assertThat(query("SELECT 1 FROM sys_mail_message WHERE address = ?", address)).isEmpty();
+    }
+
+    /** A notification to a plain address (decision D55): its link opts the address out, whatever its case. */
+    @Test
+    void anAddressWithoutAUserOptsOutOfANotificationThroughItsLink() throws Exception {
+        String address = address("optout");
+        invite(address, "portal", "", 200);
+        deliver();
+        MimeMessage first = to(address).getFirst();
+        String token = link(UNSUBSCRIBE_LINK, first);
+        // Anonymous; repeating it changes nothing.
+        post("/api/auth/mail/unsubscribe", null, Map.of("token", token)).expectStatus().isNoContent();
+        post("/api/auth/mail/unsubscribe", null, Map.of("token", token)).expectStatus().isNoContent();
+        assertThat(query("SELECT address, template FROM sys_mail_address_optout WHERE address = ?",
+            address.toLowerCase(java.util.Locale.ROOT))).singleElement()
+            .satisfies(row -> assertThat(row).containsEntry("template", "it.invite"));
+
+        // Not mailed again, in whatever case the address is written; transactional mail to it still goes out.
+        invite(address, "portal", "", 200);
+        invite(address.toUpperCase(java.util.Locale.ROOT), "portal", "", 200);
+        send("verify", null, address, "en", "Ivy", false, 200);
+        deliver();
+        assertThat(attempts(address)).extracting(row -> row.get("outcome"), row -> row.get("detail"))
+            .containsExactly(org.assertj.core.groups.Tuple.tuple("SENT", null),
+                org.assertj.core.groups.Tuple.tuple("SKIPPED", "UNSUBSCRIBED"),
+                org.assertj.core.groups.Tuple.tuple("SENT", null));
+        assertThat(attempts(address.toUpperCase(java.util.Locale.ROOT))).extracting(row -> row.get("detail"))
+            .containsExactly("UNSUBSCRIBED");
+        assertThat(to(address)).extracting(MailIT::subject).containsExactly("You are invited to the quiz",
+            "Verify your address, Ivy");
     }
 }

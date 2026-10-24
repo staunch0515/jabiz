@@ -4,6 +4,7 @@ import { CircleCheck, TriangleAlert } from 'lucide-react'
 import { useId, type ComponentProps, type MouseEvent, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useHasAppearance } from '../components/appearance'
+import { EnvironmentBanner } from '../components/environment-banner'
 import { Spinner } from '../components/spinner'
 import { ThemeToggle } from '../components/theme-toggle'
 import { Alert, AlertDescription } from '../components/ui/alert'
@@ -73,6 +74,8 @@ export function AuthFrame({ brand, title, children, testId, appearance = true, c
   const offerAppearance = useHasAppearance() && appearance
   return (
     <main className={cn('bg-background text-foreground flex min-h-screen flex-col items-center px-4 pt-20', className)}>
+      {/* A test system says so above the card (phase 16zd); the card keeps its place below. */}
+      <EnvironmentBanner className="-mt-20 mb-16" />
       <Card className="w-full max-w-sm" data-testid={testId}>
         <CardHeader className="text-center">
           <CardTitle>

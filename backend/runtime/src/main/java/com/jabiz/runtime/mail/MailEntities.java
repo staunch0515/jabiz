@@ -24,6 +24,8 @@ public class MailEntities {
     public static final String MESSAGE = "MailMessage";
     public static final String ATTEMPT = "MailAttempt";
     public static final String MESSAGE_DATASET = "urn:jabiz:dataset:platform:MailMessage";
+    public static final String ADDRESS_OPT_OUT = "MailAddressOptOut";
+    public static final String ADDRESS_OPT_OUT_DATASET = "urn:jabiz:dataset:platform:MailAddressOptOut";
     public static final String ATTEMPT_DATASET = "urn:jabiz:dataset:platform:MailAttempt";
 
     static final String CATEGORIES = "urn:jabiz:dict:mail:category";
@@ -81,9 +83,42 @@ public class MailEntities {
             .defaultSort("attemptedTime", false));
     });
 
+    /**
+     * An address that opted out of a notification template through the link of a mail sent to it without a user
+     * (decision D55): one row per address (lower case) and template, written by {@code SEC_MAIL_ADDRESS_OPT_OUT}
+     * only; the delivery skips the template's notifications to the address while the row exists.
+     */
+    public static final EntityDefinition ADDRESS_OPT_OUT_ENTITY = EntityDefinition.define(ADDRESS_OPT_OUT, eb -> {
+        eb.physicalTable("sys_mail_address_optout");
+        eb.primaryKey("optOutId");
+        eb.field("optOutId", f -> f.physicalColumn("opt_out_id").immutable(true).required(true).generated(true)
+            .asSemanticIdentity("urn:jabiz:entity:platform:mail-address-opt-out"));
+        eb.field("address", f -> f.physicalColumn("address").immutable(true).required(true).asText(320));
+        eb.field("template", f -> f.physicalColumn("template").immutable(true).required(true).asText(100));
+        eb.field("optedOutTime", f -> f.physicalColumn("opted_out_time").immutable(true).required(true)
+            .asTemporal(TemporalRole.EVENT_TIME));
+        eb.field("version", f -> f.physicalColumn("version").asVersion());
+        eb.unique("uk_sys_mail_address_optout", "address", "template");
+        eb.listView("default", lv -> lv
+            .columns("address", "template", "optedOutTime")
+            .filters("address", "template")
+            .sorts("optedOutTime")
+            .defaultSort("optedOutTime", false));
+    });
+
     @Bean
     EntityDefinition mailMessageEntity() {
         return MESSAGE_ENTITY;
+    }
+
+    @Bean
+    EntityDefinition mailAddressOptOutEntity() {
+        return ADDRESS_OPT_OUT_ENTITY;
+    }
+
+    @Bean
+    DatasetDefinition mailAddressOptOutDataset(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
+        return dataset(ADDRESS_OPT_OUT_DATASET, ADDRESS_OPT_OUT, false, poolRef);
     }
 
     @Bean

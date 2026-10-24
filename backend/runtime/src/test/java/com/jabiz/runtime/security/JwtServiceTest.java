@@ -228,4 +228,13 @@ class JwtServiceTest {
         jwt.sign(new MACSigner(KEY));
         return jwt.serialize();
     }
+
+    @Test
+    void anUnsubscribeTokenMayStandForAnAddressInsteadOfAUser() {
+        String token = service.issueAddressUnsubscribe("Ann@Example.com", "shop.invite");
+        clock.advance(Duration.ofDays(400));
+        assertThat(service.verifyUnsubscribe(token))
+            .isEqualTo(new JwtService.Unsubscribe(null, "Ann@Example.com", "shop.invite"));
+        assertThat(service.verifyUnsubscribe(service.issueUnsubscribe("u1", "shop.news")).address()).isNull();
+    }
 }

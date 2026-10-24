@@ -606,7 +606,7 @@ class PortalSignInGuard implements SignInGuard {
 | `POST /api/auth/account/verify-email`（已登录） | 同上（本人、会话的入口） | 202；给启用、邮箱未验证的本人发信 |
 | `POST /api/auth/password-reset/request {email, entry?}`（匿名） | `SPONSOR_PASSWORD_RESET_REQUEST` | 202，对任何邮箱相同；只给启用、邮箱可信的用户发信 |
 | `POST /api/auth/password-reset/confirm {token, password}`（匿名） | `SPONSOR_PASSWORD_RESET_CONFIRM` | 204，不自动登录；链接无效 422 `TOKEN_INVALID` |
-| `GET /api/auth/entries/{name}`（匿名） | — | `{name, selfRegistration, requireVerifiedEmail, appPath, sessionPersistence}`（`tab` / `device`，§15.1）；未知 404 |
+| `GET /api/auth/entries/{name}`（匿名） | — | `{name, selfRegistration, requireVerifiedEmail, appPath, sessionPersistence, emailLink, environment}`（`tab` / `device`，§15.1；`environment` 为 `production` 或测试系统的名字，17 §3.2）；未知 404 |
 
 `SIGN_UP_DISABLED` 一律是 422（入口的配置不是秘密）：入口不存在或不允许注册，或注册角色不存在、已停用；被拒的加入不消费令牌。
 
@@ -758,6 +758,7 @@ jabiz:
         email-link: true
     email-link:
       ttl: PT15M                     # 链接的有效期
+      max-ttl: P30D                  # 应用邮件中的登录链接（D55）最长的有效期
 ```
 
 | 接口 | 作用 |
@@ -772,6 +773,9 @@ jabiz:
 - `to` 是自站点根起、在入口 `app-path` 之内的路径（服务端与 `EmailLinkPanel` 都检查，解码后的路径段不能是 `.`、`..`）；登录后回到它，否则回到入口的 `app-path`。
 - 链接只用一次；同时寄出的几封中先用的生效，之后寄出的照常有效（`MailTokens.consumeAnyUnused`，18 §5.6）。
 - 限流：请求按客户端地址与邮箱（`EMAIL_LINK`），确认同其他链接（`LINK`）。
+- **应用邮件中的登录链接**（16ze，决策 D55）：应用模板以 `signInLink(有效期)` 声明后，自己的流程可把登录链接寄给任何地址（`SendMail`，收件人为地址或用户）；
+  有效期至多 `jabiz.security.email-link.max-ttl`（缺省 30 天）。发送时检查入口开启了 `email-link`、`to` 在该入口前端之内（422 `MAIL_SIGN_IN_LINK`）；
+  打开链接与上面完全相同（`SPONSOR_EMAIL_LINK_OPEN` 再 `SPONSOR_EMAIL_LINK_SIGN_IN`）。
 
 ## 16. 受保护的授权：四眼【决策 D48 第 1 条，阶段 16r】
 

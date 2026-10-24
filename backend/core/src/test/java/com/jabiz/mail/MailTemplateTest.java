@@ -173,4 +173,20 @@ class MailTemplateTest {
         assertThatThrownBy(() -> MailRecipient.address("not-an-address", null))
             .isInstanceOf(IllegalArgumentException.class);
     }
+
+    @Test
+    void aSignInLinkDeclaresItsTokenAndTheEntryAndPathParameters() {
+        MailTemplate invite = MailTemplate.define("shop.invite", t -> t.category(MailCategory.NOTIFICATION)
+            .param("item").signInLink(Duration.ofDays(7)));
+        assertThat(invite.signInLink()).isTrue();
+        assertThat(invite.tokens()).containsEntry(MailTemplate.SIGN_IN_TOKEN, Duration.ofDays(7));
+        assertThat(invite.params()).containsExactly("item", "entry", "to");
+        assertThat(invite.placeholders()).contains("jabiz.signIn", "entry", "to", "entryUrl", "unsubscribeUrl");
+        assertThat(MailTemplate.define("shop.plain", t -> t.category(MailCategory.NOTIFICATION)).signInLink())
+            .isFalse();
+        // The token alone, without the entry and the path, is no sign-in link.
+        assertThatThrownBy(() -> MailTemplate.define("shop.bare", t -> t.category(MailCategory.TRANSACTIONAL)
+            .token(MailTemplate.SIGN_IN_TOKEN, Duration.ofDays(1))))
+            .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("signInLink");
+    }
 }
