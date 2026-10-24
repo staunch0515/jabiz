@@ -12,23 +12,29 @@ test.beforeEach(async ({ request }) => {
   await prepareQuizbuks(request)
 })
 
-/** A sponsor allowed to pay cash themselves, with a live quiz paid that way; the taker passed it. */
-async function cashRewardOwed(request: Parameters<typeof approvedSponsor>[0]) {
-  const sponsor = await approvedSponsor(request, 'Cash')
+type Method = 'SPONSOR_CASH' | 'OFFLINE_REDEEM'
+
+/**
+ * A sponsor allowed to settle rewards themselves (cash, or a prize at their place), with a live quiz paid that way;
+ * the taker passed it.
+ */
+async function rewardOwed(request: Parameters<typeof approvedSponsor>[0], method: Method) {
+  const sponsor = await approvedSponsor(request, method === 'SPONSOR_CASH' ? 'Cash' : 'Prize')
   const admin = await adminToken(request)
   const userId = (await rows(request, sponsor.token, 'urn:jabiz:dataset:sponsor:QbSponsor', []))[0].attributes.userId as string
   // Allowing the methods asks for a verified address, which the first administrator has not: a content administrator.
   const allower = await tokenOf(request, await contentAdmin(request, 'Rin'), PASSWORD, 'admin')
-  await run(request, allower, 'QB_SPONSOR_REWARD_METHODS_SET', { userId, methods: ['PLATFORM', 'SPONSOR_CASH'],
+  await run(request, allower, 'QB_SPONSOR_REWARD_METHODS_SET', { userId, methods: ['PLATFORM', method],
     note: 'e2e' })
 
   const quiz = await completeQuiz(request, sponsor.token, { questions: 1 })
   const versionId = (await query(request, sponsor.token, 'qb.sponsor.quiz-versions', { quizId: quiz.quizId }))[0].versionId
   const now = Date.now()
-  const name = `Cash quiz ${now}`
+  const name = `${method === 'SPONSOR_CASH' ? 'Cash' : 'Prize'} quiz ${now}`
   const saved = await run(request, sponsor.token, 'QB_PUBLICATION_SAVE', { versionId, name, regions: ['GLOBAL'],
     startAt: new Date(now - 60_000).toISOString(), endAt: new Date(now + 7 * 86_400_000).toISOString(),
-    timeLimitSec: 300, passScore: 1, rewardMethod: 'SPONSOR_CASH',
+    timeLimitSec: 300, passScore: 1, rewardMethod: method,
+    redeemDescription: method === 'OFFLINE_REDEEM' ? 'A coffee at our counter' : null,
     tiers: [{ fromScore: 0, toScore: 0, reward: 0 }, { fromScore: 1, toScore: 1, reward: 300 }] })
   const publicationId = saved.publicationId as string
   const submitted = await run(request, sponsor.token, 'QB_PUBLICATION_SUBMIT', { publicationId })
@@ -50,13 +56,15 @@ async function cashRewardOwed(request: Parameters<typeof approvedSponsor>[0]) {
     selected: q.options.filter((o) => o.text.startsWith('Right')).map((o) => o.no) }))
   const result = await run(request, taker.token, 'QB_ATTEMPT_SUBMIT', { attemptId: started.attemptId, publicationId,
     answers })
-  expect(result.rewardStatus).toBe('CASH')
+  expect(result.rewardStatus).toBe(method === 'SPONSOR_CASH' ? 'CASH' : 'REDEEM')
   // The submission names the way it is paid; the record itself (code, state) comes with the result (Q20's process).
   const read = await run(request, taker.token, 'QB_ATTEMPT_RESULT', { attemptId: started.attemptId })
-  const cash = read.cash as { code: string; status: string }
-  expect(cash.status).toBe('DUE')
-  return { sponsor, taker, name, publicationId, attemptId: started.attemptId as string, code: cash.code }
+  const record = (method === 'SPONSOR_CASH' ? read.cash : read.redeem) as { code: string; status: string }
+  expect(record.status).toBe('DUE')
+  return { sponsor, taker, name, publicationId, attemptId: started.attemptId as string, code: record.code }
 }
+
+const cashRewardOwed = (request: Parameters<typeof approvedSponsor>[0]) => rewardOwed(request, 'SPONSOR_CASH')
 
 test('the sponsor marks a cash reward paid and the taker confirms it', async ({ page, request }) => {
   test.setTimeout(240_000)
@@ -79,7 +87,10 @@ test('the sponsor marks a cash reward paid and the taker confirms it', async ({ 
 
   // The app: the home points at the reward; the result shows the code and takes the confirmation.
   await page.context().clearCookies()
-  await page.evaluate(() => window.localStorage.clear())
+  await page.evaluate(() => {
+    window.localStorage.clear()
+    window.sessionStorage.clear()
+  })
   await signIn(page, '/', owed.taker.email)
   await expect(page.getByTestId('home')).toBeVisible()
   const notice = page.getByTestId('home-cash')
@@ -101,4 +112,61 @@ test('the sponsor marks a cash reward paid and the taker confirms it', async ({ 
   await page.getByTestId('nav-history').click()
   await expect(page.getByTestId('history-row').filter({ hasText: owed.name }).getByTestId('history-cash'))
     .toHaveAttribute('data-status', 'CONFIRMED')
+})
+
+test('a taker collects a prize by scanning the code on the sponsor\'s screen', async ({ page, request }) => {
+  test.setTimeout(240_000)
+  const owed = await rewardOwed(request, 'OFFLINE_REDEEM')
+
+  // The console's redeem page: the rotating code, as a link the phone's camera would open.
+  await signIn(page, '/sponsor/', owed.sponsor.email)
+  await expect(page.getByTestId('dashboard-status')).toBeVisible()
+  await page.getByRole('link', { name: 'Prizes' }).click()
+  await expect(page).toHaveURL(/\/sponsor\/redeem$/)
+  await expect(page.getByTestId('redeem-rotating-image')).toBeVisible()
+  const link = (await page.getByTestId('redeem-rotating-link').textContent())!.trim()
+  expect(link).toMatch(/\/redeem\/[A-Za-z0-9_-]{30,}$/)
+  await page.getByTestId('redeem-printed-show').click()
+  await expect(page.getByTestId('redeem-printed-image')).toBeVisible()
+  await expectAccessible(page, 'sponsor redeem page')
+
+  // The taker, signed out, opens the scanned link: signing in leads back to it; one tap collects the prize.
+  await page.context().clearCookies()
+  await page.evaluate(() => {
+    window.localStorage.clear()
+    window.sessionStorage.clear()
+  })
+  const path = new URL(link).pathname
+  await page.goto(path)
+  await expect(page).toHaveURL(/\/login\?next=/)
+  await page.getByPlaceholder('User name', { exact: true }).fill(owed.taker.email)
+  await page.getByPlaceholder('Password', { exact: true }).fill(PASSWORD)
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click()
+  const redeem = page.getByTestId('redeem-page')
+  await expect(redeem).toBeVisible()
+  await expect(redeem).toHaveAttribute('data-kind', 'ROTATING')
+  const prize = page.getByTestId('redeem-prize')
+  await expect(prize).toContainText('A coffee at our counter')
+  await expect(prize).toContainText(owed.code)
+  await expectAccessible(page, 'app redeem page')
+  await prize.getByTestId('redeem-collect').click()
+  const done = page.getByTestId('redeem-done')
+  await expect(done).toHaveAttribute('data-status', 'REDEEMED')
+  await expect(done.getByTestId('redeem-code')).toHaveText(owed.code)
+  await expectAccessible(page, 'app redeem page: collected')
+
+  // The result and the history say so; the sponsor's page lists it among today's.
+  await done.getByTestId('redeem-result-link').click()
+  await expect(page.getByTestId('result-reward')).toHaveAttribute('data-redeem-status', 'REDEEMED')
+  await page.context().clearCookies()
+  await page.evaluate(() => {
+    window.localStorage.clear()
+    window.sessionStorage.clear()
+  })
+  await signIn(page, '/sponsor/', owed.sponsor.email)
+  await expect(page.getByTestId('dashboard-status')).toBeVisible()
+  await page.goto('/sponsor/redeem')
+  await expect(page.getByTestId('redeem-today-item').filter({ hasText: owed.code })).toBeVisible()
+  await expect(page.getByTestId('redemption-row').filter({ hasText: owed.code })).toHaveAttribute('data-status',
+    'REDEEMED')
 })

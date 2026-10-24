@@ -13,6 +13,7 @@ import com.jabiz.process.ProcessDefinition;
 import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.quizbuks.play.AttemptFinishing;
 import com.jabiz.quizbuks.reward.CashRewardProcesses;
+import com.jabiz.quizbuks.reward.RedemptionProcesses;
 import com.jabiz.quizbuks.wallet.PayoutProcesses;
 import com.jabiz.quizbuks.wallet.QbPayouts;
 import org.springframework.beans.factory.annotation.Value;
@@ -531,6 +532,46 @@ public class InboxConfig {
             qbMessageFromEvent) {
         return EventSubscription.of(MessageProcesses.CASH_OVERDUE_CONSUMER, CashRewardProcesses.OVERDUE_EVENT,
             qbMessageFromEvent, event -> MessageProcesses.cashInput(event, QbInbox.CASH_OVERDUE));
+    }
+
+    @Bean
+    EventSubscription<MessageProcesses.EventInput> qbMessageRedeemClaimedSubscription(
+        ProcessDefinition<MessageProcesses.EventInput, MessageProcesses.MessageOutput, ProcessContext>
+            qbMessageFromEvent) {
+        return EventSubscription.of(MessageProcesses.REDEEM_CLAIMED_CONSUMER, RedemptionProcesses.CLAIMED_EVENT,
+            qbMessageFromEvent, event -> MessageProcesses.redeemInput(event, QbInbox.REDEEM_CLAIMED));
+    }
+
+    @Bean
+    EventSubscription<MessageProcesses.EventInput> qbMessageRedeemRedeemedSubscription(
+        ProcessDefinition<MessageProcesses.EventInput, MessageProcesses.MessageOutput, ProcessContext>
+            qbMessageFromEvent) {
+        return EventSubscription.of(MessageProcesses.REDEEM_REDEEMED_CONSUMER, RedemptionProcesses.REDEEMED_EVENT,
+            qbMessageFromEvent, event -> MessageProcesses.redeemInput(event, QbInbox.REDEEM_REDEEMED));
+    }
+
+    @Bean
+    EventSubscription<MessageProcesses.EventInput> qbMessageRedeemDeclinedSubscription(
+        ProcessDefinition<MessageProcesses.EventInput, MessageProcesses.MessageOutput, ProcessContext>
+            qbMessageFromEvent) {
+        return EventSubscription.of(MessageProcesses.REDEEM_DECLINED_CONSUMER, RedemptionProcesses.DECLINED_EVENT,
+            qbMessageFromEvent, event -> MessageProcesses.redeemInput(event, QbInbox.REDEEM_DECLINED));
+    }
+
+    @Bean
+    EventSubscription<MessageProcesses.EventInput> qbMessageRedeemExpiredSubscription(
+        ProcessDefinition<MessageProcesses.EventInput, MessageProcesses.MessageOutput, ProcessContext>
+            qbMessageFromEvent) {
+        return EventSubscription.of(MessageProcesses.REDEEM_EXPIRED_CONSUMER, RedemptionProcesses.EXPIRED_EVENT,
+            qbMessageFromEvent, event -> MessageProcesses.redeemInput(event, QbInbox.REDEEM_EXPIRED));
+    }
+
+    @Bean
+    EventSubscription<MessageProcesses.EventInput> qbMessageRedeemVoidSubscription(
+        ProcessDefinition<MessageProcesses.EventInput, MessageProcesses.MessageOutput, ProcessContext>
+            qbMessageFromEvent) {
+        return EventSubscription.of(MessageProcesses.REDEEM_VOID_CONSUMER, RedemptionProcesses.VOIDED_EVENT,
+            qbMessageFromEvent, event -> MessageProcesses.redeemInput(event, QbInbox.REDEEM_VOID));
     }
 
     @Bean

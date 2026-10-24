@@ -29,6 +29,7 @@ import { PlayPage } from './pages/PlayPage'
 import { PublicationPage } from './pages/PublicationPage'
 import { PROFILE_QUERY } from './pages/ProfileForm'
 import { ResultPage } from './pages/ResultPage'
+import { RedeemPage } from './pages/RedeemPage'
 import { WelcomePage } from './pages/WelcomePage'
 import { AboutPage } from './pages/AboutPage'
 import { badgeText, inboxItemOf, INBOX_PATH } from './inbox/api'
@@ -199,6 +200,7 @@ function SignedIn({ path }: { path: string }) {
   else if (item?.page === 'p') page = <PublicationPage key={item.id} publicationId={item.id} country={country} />
   else if (item?.page === 'play') page = <PlayPage key={item.id} attemptId={item.id} />
   else if (item?.page === 'result') page = <ResultPage key={item.id} attemptId={item.id} />
+  else if (item?.page === 'redeem') page = <RedeemPage key={item.id} scannedKey={item.id} />
   else page = <PageState kind="notFound" titleAs="h1" description={t('notFound')} />
   // The navigation is the app's; the welcome step stands alone, and answering keeps the screen to the question.
   const nav = path !== WELCOME && item?.page !== 'play'
@@ -304,6 +306,8 @@ function Routes() {
   if (!signedIn && shared?.page === 'p') {
     return <PublicPage path={path} signedIn={false}><SharePage publicationId={shared.id} /></PublicPage>
   }
+  // A sponsor's redeem code scanned before signing in (Q22b): sign in, then back to it.
+  if (!signedIn && shared?.page === 'redeem') return <Redirect to={`/login?next=${encodeURIComponent(path)}`} />
   // Where signing in leads: a page of the app the person came from (a share link's), else home.
   const next = new URLSearchParams(search).get('next')
   const afterSignIn = next && next.startsWith('/') && !next.startsWith('//') ? next : HOME

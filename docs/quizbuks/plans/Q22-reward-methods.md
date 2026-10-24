@@ -30,6 +30,27 @@
 
 `src/qb/` 的 `play.ts`、`ids.ts` 两处相同。
 
+## 1b. 做法（Q22b：到店领取）
+
+确认（2026-10-24，"开始"）：码存表（可撤销、一码一次只对一位商家）；固定码的领取须商家确认，轮换码即时完成；领取是终局（商家在场，不设争议）；管理员只能作废未领取的奖品。
+
+| 部分 | 内容 |
+|---|---|
+| 商家的码 | 普通表 `qb_redeem_token`（实体 `QbRedeemToken`：`sponsorId`、`tokenValue`（敏感，数据视图不返回；名字含 token，平台按名遮蔽）、`kind` ROTATING / PRINTED、`issuedAt`、`expiresAt`、`revokedAt`）。只经 `QB_REDEEM_CODE_ISSUE`（商家，`qb.publication.write`）写入：ROTATING 有效 2 分钟（`QbRewards.ROTATING_TOKEN_LIFE`），每次签发顺带删除本商家已失效的轮换码；PRINTED 长期有效，再次请求返回同一个，`renew: true` 作废旧码并签发新码。随机数经平台的阻塞步骤 `RandomBytesStep`（192 位，URL 安全 Base64），只在该流程的输出 `redeemKey` 中出现一次 |
+| 码的内容 | App 链接 `<站点>/redeem/<redeemKey>`：任何手机相机扫码即打开；未登录先登录再回到该页（`next`）。App 中不写扫码代码 |
+| 核对 | `QB_REDEEM_TOKEN_CHECK`（答题人，`qb.me`，输入 `scannedKey`）：码此刻有效（未失效、未作废，否则 422 `QB_REDEEM_TOKEN_INVALID`）→ 商家公司名、码的种类与本人在该商家未领取的奖品（`DUE` / `CLAIMED`，超过 `confirmBy` 的申请按 `DUE` 显示） |
+| 领取 | `QB_REDEMPTION_CLAIM`（答题人，输入 `scannedKey` + `redemptionId`）：奖品锁内经答题人视图读（他人 404），码须有效且属于奖品的商家（422 `QB_REDEEM_TOKEN_SPONSOR`），状态须为 `DUE`（含超时的申请）。轮换码 → `REDEEMED`（`redeemedBy` = 商家，事件 `qb.redemption.redeemed`）；固定码 → `CLAIMED`（`confirmBy = now + 10 分钟`，事件 `qb.redemption.claimed` → 商家收件箱） |
+| 商家的回答 | `QB_REDEMPTION_CONFIRM`（`CLAIMED` 未超时 → `REDEEMED`，`redeemedBy` = 操作人；超时即 422 `QB_REDEMPTION_CLAIM_LAPSED`）、`QB_REDEMPTION_DECLINE`（→ `DUE`，事件 `qb.redemption.declined` 告知答题人）。都经商家视图读（他人 404） |
+| 作废与过期 | `QB_REDEMPTION_VOID`（管理员，权限 `qb.redemption.void`，`DUE` / `CLAIMED` → `VOID`，附注）；任务 `qb.redemption-expire`（每日 02:10 UTC，`DUE` 过了 `expiresAt` → `EXPIRED`）与 `qb.redemption-lapse`（每十分钟，`CLAIMED` 过了 `confirmBy` → `DUE`），都是 `forEach` 的 `internal()` 流程 |
+| 状态 | `RedemptionStatus`：DUE → CLAIMED / REDEEMED / EXPIRED / VOID；CLAIMED → REDEEMED / DUE / VOID。`QbRedemption` 新字段 `claimKind`、`claimedAt`、`confirmBy`、`redeemedBy`、`voidedBy`、`voidNote`（迁移 `V25`） |
+| 消息 | 站内信种类 `REDEEM_CLAIMED`（商家，动作 `REDEEM` → 领奖页）、`REDEEM_REDEEMED` / `REDEEM_DECLINED` / `REDEEM_EXPIRED` / `REDEEM_VOID`（答题人 → 结果页）。**商家后台的收件箱**（`qb.sponsor.inbox`）现在同时列出商家自己的消息（现金与奖品）与平台公告（Q22a 遗留项） |
+| 模板 | `qb.sponsor.redemptions`（搜索、状态、`since`）、`qb.app.redemptions`（`open`）、`qb.admin.redemptions`、`qb.system.redemptions-expired`、`qb.system.redemption-claims-lapsed` |
+| 商家后台 | 页 `/redeem`（导航"奖品领取"）：轮换码（每分钟重新签发、显示链接与有效期）、固定码（按需显示，保存 PNG / SVG / A4 海报，更换）、待确认的申请（每 5 秒轮询，确认 / 拒绝）、今天已领取、全部奖品的表（搜索、状态） |
+| App | 页 `/redeem/<key>`：商家名、可领奖品、"领取"按钮；轮换码即显示"已领取"，固定码显示"等待商家确认"并轮询结果；码失效的说明。结果页显示奖品码、扫码提示、`CLAIMED` 状态；首页"奖品等你领取"提示；历史带 `CLAIMED` |
+| 后台扩展 | 页 `/qb/redemptions`：全部奖品、状态筛选、搜索、作废对话框（权限 `qb.redemption.void`）；菜单"奖品" |
+
+没有新参数（2 分钟、10 分钟是常量）。`src/qb/` 的 `play.ts`、`ids.ts` 两处相同。
+
 ## 2. 测试
 
 - IT `RewardMethodsIT`：方式的允许 / 拒绝 / 复制；现金 欠付 → 已付 → 确认（模板、消息、他人 404）；逾期任务禁止开始，争议、裁定与提醒；兑换记录。
@@ -38,9 +59,19 @@
 - App Vitest `Play.test.tsx`：筛选参数与本机记忆、徽章；首页的未结现金提示；详情页的方式；结果页的现金（码、确认、争议）与兑换；历史。
 - 后台扩展 `pages.test.tsx`（面板只在有权限时可保存）、`reward.test.tsx`（现金页、裁定、按状态筛选、axe）。
 - 场景：`setup.yml` 的参数；`QB_SETUP` 多建三个参数使之后生成的编号后移，选项的打乱随发布编号改变，`play` / `payout` / `topup` / `analytics` 场景中写死的所选位置按新顺序改（与 Q18b 相同），快照随之更新。
+- IT `RedemptionIT`（Q22b）：轮换码签发 / 核对 / 即时领取、码失效与清理、他人 404、模板与数据视图不返回令牌；固定码的申请、商家收件箱与标记已读、确认 / 拒绝、超时与任务、更换固定码、他商家的码；过期任务、作废与消息。
+- Vitest：商家 `publishing.test.tsx`（领奖页：轮换码链接、固定码、申请的确认、全部奖品）与 `notices.test.tsx`（收件箱中的消息：纯文本、动作链接、按 MESSAGE 标记已读）；App `Play.test.tsx`（领取页：即时领取、固定码等待、码失效；首页提示；结果页 `CLAIMED`）；后台扩展 `reward.test.tsx`（奖品页与作废，axe）。
+- 场景（Q22b）：`QB_SETUP` 多建一条角色权限（`qb.redemption.void`）使之后生成的编号后移、选项打乱改变，`play` / `payout` / `topup` / `analytics` 的所选位置按新顺序改（同 Q18b、Q22a），快照随之更新。
+- e2e `reward-methods.spec.ts`（Q22b）：商家后台领奖页取得轮换码链接 → 未登录的答题人打开链接、登录后回到该页 → 领取 → 结果页 → 商家页的"今天已领取"；新页面过 axe。
 - e2e `reward-methods.spec.ts`：管理员允许现金 → 商家发布现金方式 → 答题人合格 → 商家后台标记已付 → App 首页提示 → 结果页确认 → 历史；新页面过 axe。
 
 ## 3. 风险
+
+Q22b：
+- 固定码可在任何地方扫：申请须商家在十分钟内确认，否则回到待领取；商家不在屏幕前时答题人要重扫轮换码。
+- 轮换码是链接中的秘密：两分钟有效、只在签发流程的输出中出现、存储时按名遮蔽、数据视图不返回；管理员后台也看不到码的值。
+- 手机相机扫码打开的是本站链接；App 不请求相机权限。
+
 
 - 现金与兑换绕过账本：平台不知道钱有没有真付；争议只能靠管理员裁定与商家信誉。管理员应只对信得过的商家开放（设定时写附注）。
 - 商家一直不付：到期提醒商家，但不自动惩罚商家（Q22b 或后续按逾期数限制商家发布）。
@@ -49,6 +80,23 @@
 - 商家后台的收件箱不显示发给商家的现金消息（现只有公告），Q22b 补。
 
 ## 4. 独立评审的修正
+
+Q22b：
+
+| 级别 | 问题 | 处理 |
+|---|---|---|
+| 中 | 签发流程把商家全部码读 200 条且无顺序：轮换码多了会漏掉在用的固定码（更换时旧码不作废）、失效码不再清理 | 分两条有条件的查询（在用的固定码；已失效的轮换码），并给 `QB_REDEEM_CODE_ISSUE` / `TOKEN_CHECK` / `REDEMPTION_CLAIM` 加限流 |
+| 中 | 领取与确认不看 `expiresAt`，过期奖品在每日任务之前仍可领；申请中（`CLAIMED`）过期的从不过期 | `effectiveStatus` 先判过期（核对不列出、领取与确认 422）；过期任务与状态机覆盖 `CLAIMED` |
+| 中 | 签发输出 `redeemKey` 不遮蔽：带幂等键的调用会把它存进 `op_process_result` | 商家后台签发时不带幂等键（平台只为带键的调用保存输出）；轮换码两分钟、固定码的申请仍须商家确认，残余风险可接受 |
+| 中 | App 领取后用"未领取列表"找会话编号，已领取的不在其中，结果链接不显示 | 核对输出的每件奖品带 `attemptId` |
+| 低 | App 把申请中的奖品也显示"领取"按钮（服务端拒绝） | 申请中的显示"等待商家交付"，不给按钮 |
+| 低 | 商家后台待确认列表含已超时的申请（确认即 422） | 按 `confirmBy` 过滤（以读取时刻） |
+| 低 | 两个任务的扫描没有索引 | `V25` 加部分索引 `(confirm_by) WHERE status='CLAIMED'`、`(expires_at) WHERE status IN (DUE, CLAIMED)` |
+| 低 | 结果页用 `setInterval` 轮询，后台标签页也轮询 | 改为结果查询自己的 `refetchInterval` |
+| 低 | "今天已领取"在客户端过滤 50 条 | 服务端按状态筛选 |
+
+安全评审（Q22b）：无高级问题；中级即上表第一条。令牌明文存储（字段敏感、数据视图与审计不返回、输入按名遮蔽）接受；链接中的秘密进入浏览器历史与代理日志（两分钟有效 / 固定码本就印在海报上）接受；`next` 重定向经平台 `sitePath` 校验，无开放重定向。
+
 
 | 级别 | 问题 | 处理 |
 |---|---|---|

@@ -56,9 +56,12 @@ public final class AttemptResults {
     public record CashView(String cashRewardId, String status, String code, BigDecimal amount, Instant markedPaidAt,
         Instant confirmBy, String sponsorCompany) {}
 
-    /** Q22: the prize to collect and until when (claiming it is Q22b). */
+    /**
+     * Q22: the prize to collect and until when; Q22b: a claim from the sponsor's printed code waiting for the sponsor
+     * until {@code confirmBy}, and when it was collected.
+     */
     public record RedeemView(String redemptionId, String status, String code, BigDecimal amount, String description,
-        Instant expiresAt, String sponsorCompany) {}
+        Instant expiresAt, String sponsorCompany, Instant confirmBy, Instant redeemedAt) {}
 
     static final String ATTEMPT_KEY = "play.attemptId";
     static final String ATTEMPT = "play.attempt";
@@ -151,7 +154,8 @@ public final class AttemptResults {
     static RedeemView redeem(EntityInstance redemption, String company) {
         return redemption == null ? null : new RedeemView(String.valueOf(redemption.id()),
             redemption.get("status"), redemption.get("code"), PlaySteps.money(redemption.get("amount")),
-            redemption.get("description"), PlaySteps.instant(redemption.get("expiresAt")), company);
+            redemption.get("description"), PlaySteps.instant(redemption.get("expiresAt")), company,
+            PlaySteps.instant(redemption.get("confirmBy")), PlaySteps.instant(redemption.get("redeemedAt")));
     }
 
     private static Integer number(Object value) {

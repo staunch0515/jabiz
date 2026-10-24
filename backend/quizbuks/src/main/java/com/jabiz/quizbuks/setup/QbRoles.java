@@ -43,7 +43,7 @@ public final class QbRoles {
         // Q13a: the second person on a bank top-up finance recorded.
         QbPermissions.TOPUP_BANK_APPROVE,
         // Q22: which reward methods a sponsor may use, and the disputes between sponsors and takers over cash.
-        QbPermissions.ADMIN_REWARD_METHODS, QbPermissions.CASH_RESOLVE);
+        QbPermissions.ADMIN_REWARD_METHODS, QbPermissions.CASH_RESOLVE, QbPermissions.REDEMPTION_VOID);
 
     private static final List<String> FINANCE = List.of(QbPermissions.COUNTRY_READ, QbPermissions.ADMIN_USERS_READ,
         QbPermissions.ADMIN_FINANCE_READ, QbPermissions.ADMIN_PUBLICATION_READ, QbPermissions.PAYOUT_REVIEW,

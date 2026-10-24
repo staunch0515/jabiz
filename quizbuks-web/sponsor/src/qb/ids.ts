@@ -52,6 +52,10 @@ export const PLAY = {
   cashConfirm: 'QB_CASH_REWARD_CONFIRM',
   cashDispute: 'QB_CASH_REWARD_DISPUTE',
   cashRewards: 'qb.app.cash-rewards',
+  /** Q22b: what a scanned redeem code stands for, the collection of a prize by it, and the taker's own prizes. */
+  redeemCheck: 'QB_REDEEM_TOKEN_CHECK',
+  redeemClaim: 'QB_REDEMPTION_CLAIM',
+  redemptions: 'qb.app.redemptions',
   feed: 'qb.app.feed',
   publication: 'qb.app.publication',
   publicationTiers: 'qb.app.publication-tiers',
