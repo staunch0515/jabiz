@@ -52,6 +52,8 @@
 - [ ] **密钥已从任何演示或测试的值轮换**：`JABIZ_JWT_SECRET`、`JABIZ_INTEGRITY_KEY`、`JABIZ_MFA_KEY`、数据库密码、Stripe 密钥与签名密钥、SMTP、Google 客户端密钥都是为生产新生成的，没有在本机演示、e2e、压测或测试服务器上用过；`JABIZ_INTEGRITY_KEY` 与 `JABIZ_MFA_KEY` 的离线副本已保存
 - [ ] `operations.md` §1.4 的测试开关一个都没设；`SPRING_PROFILES_ACTIVE` 不含 `dev`；`JABIZ_SECURITY_MFA_ADMINISTRATION` 未设；`QB_STRIPE_PLACEHOLDERS=false`
 - [ ] 只经 HTTPS 访问（HSTS），`JABIZ_TRUSTED_PROXIES` 已设；数据库与管理端口不对公网开放；指标不在应用端口上暴露
+- [ ] 正式环境的 `.env` 有 `JABIZ_WEB_ENVIRONMENT=production`（平台 16zd）：打开 App、商家后台与管理后台的登录页，顶部**没有**"测试环境"的横条、标题没有 `[TEST]`；
+  staging 打开同样的页面**有**横条（两边各看一次，确认标志指向正确的环境）
 - [x] 正式域名已写进 `tools/quizbuks/stripe-test-mode/production-hosts`（`quizbuks.com`、`www.quizbuks.com`；正式域名变了要同步改）
 
 ## 运维

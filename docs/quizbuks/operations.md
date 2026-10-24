@@ -27,6 +27,10 @@
 | `QB_APP_EMAIL_LINK` | 否 | 缺省 `true` | — | App 以邮件中的链接登录（Q15 的分享链接，平台 D54）；关掉后分享页仍显示，但只能用密码登录 |
 | `JABIZ_PUBLIC_ENABLED` | 否 | 缺省 `true`（Q7b） | — | 设 `false` 时 `/api/public/**` 一律 404：帮助中心与条款、隐私政策页（App 与商家后台，也给未登录的人看）都打不开。只有四个公开模板 `qb.public.*`（已发布的法律文本版本与已发布的 FAQ），没有公开的文件；按客户端地址限流（平台缺省每分钟 300 次），结果缓存 5 分钟 |
 
+- `JABIZ_WEB_ENVIRONMENT`（平台 16zd）：页面上的系统标志。只有正式环境设 `production`；其他值（`staging`、`local`，不设即 `test`）让 App、商家后台与管理后台的
+  **每一页**（含登录页）顶部显示警示色横条 "<环境名> · 测试环境，不是正式版"、标题前加 `[<环境名>]`。设置来自各环境的 `.env`（`deploy/quizbuks/DEPLOY.md`），
+  deploy workflow 部署前检查 production 有这一行、staging 没有写 production。
+
 ### 1.2 邮件与登录
 
 | 变量 | 必需 | 来源 | 轮换 | 缺少时 |
