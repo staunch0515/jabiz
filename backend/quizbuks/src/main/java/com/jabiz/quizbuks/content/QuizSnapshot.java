@@ -35,10 +35,16 @@ public record QuizSnapshot(String title, String intro, UUID cover, Integer timeL
      * ({@link MaterialKind}).
      */
     public record Material(int no, String kind, String title, String description, String body, String url, UUID pdf,
-        UUID audio, List<Image> images) {
+        UUID audio, List<Image> images, boolean watchToAnswer) {
         public Material {
             Objects.requireNonNull(kind, "kind must not be null");
             images = List.copyOf(Objects.requireNonNull(images, "images must not be null"));
+        }
+
+        /** A material that is not the video to watch (Q19). */
+        public Material(int no, String kind, String title, String description, String body, String url, UUID pdf,
+            UUID audio, List<Image> images) {
+            this(no, kind, title, description, body, url, pdf, audio, images, false);
         }
     }
 

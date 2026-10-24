@@ -285,7 +285,25 @@ describe('the quiz editor', () => {
     await userEvent.click(within(dialog).getByTestId('material-save'))
     await waitFor(() => expect(processCalls('QB_MATERIAL_SAVE')).toHaveLength(1))
     expect(processCalls('QB_MATERIAL_SAVE')[0]).toEqual({ quizId: 'q1', materialId: null, kind: 'VIDEO_LINK',
-      title: 'Watch', description: null, url: 'https://example.com/v', baseRevision: 7 })
+      title: 'Watch', description: null, url: 'https://example.com/v', baseRevision: 7, watchToAnswer: false })
+  })
+
+  it('marks a video as the one watching which is enough to answer (Q19)', async () => {
+    const { processCalls } = server({ processes: { QB_MATERIAL_SAVE: [edit(8, { itemId: 'm2' })] } })
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('tab-materials'))
+    await userEvent.click(await screen.findByTestId('material-add'))
+    const dialog = await screen.findByTestId('material-dialog')
+    // Only a video offers it.
+    expect(within(dialog).queryByTestId('material-watch')).not.toBeInTheDocument()
+    await userEvent.click(within(dialog).getByRole('radio', { name: 'VIDEO_LINK' }))
+    await userEvent.type(within(dialog).getByTestId('material-title'), 'Watch')
+    await userEvent.type(within(dialog).getByTestId('material-url'), 'https://youtu.be/dQw4w9WgXcQ')
+    await userEvent.click(within(dialog).getByRole('checkbox', { name: 'Watching this video is enough to answer' }))
+    await userEvent.click(within(dialog).getByTestId('material-save'))
+    await waitFor(() => expect(processCalls('QB_MATERIAL_SAVE')).toHaveLength(1))
+    expect(processCalls('QB_MATERIAL_SAVE')[0]).toMatchObject({ kind: 'VIDEO_LINK',
+      url: 'https://youtu.be/dQw4w9WgXcQ', watchToAnswer: true })
   })
 
   it('lists every reason a version was refused', async () => {

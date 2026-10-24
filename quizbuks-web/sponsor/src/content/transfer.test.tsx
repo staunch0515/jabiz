@@ -42,7 +42,7 @@ const DRAFT: Draft = {
     { questionId: 'k2', stem: 'Second?', image: null, points: 1, selection: null, options: [] },
   ],
   materials: [{ materialId: 'm1', kind: 'PDF', title: 'Paper', description: null, body: null, url: null,
-    pdf: 'file-pdf', audio: null, images: [] }],
+    pdf: 'file-pdf', audio: null, images: [], watchToAnswer: false }],
 }
 
 const CHECK: ImportCheck = { formatVersion: 1, currentVersion: 1, readers: [1], kind: 'QUIZ', title: 'Coffee basics',

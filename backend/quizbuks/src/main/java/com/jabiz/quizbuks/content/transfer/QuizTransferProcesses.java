@@ -173,7 +173,8 @@ public final class QuizTransferProcesses {
                 images.add(new QuizSnapshot.Image(i + 1, ids.get(image.image()), image.caption()));
             }
             materials.add(new QuizSnapshot.Material(m + 1, material.kind(), material.title(), material.description(),
-                material.body(), material.url(), key(ids, material.pdf()), key(ids, material.audio()), images));
+                material.body(), material.url(), key(ids, material.pdf()), key(ids, material.audio()), images,
+                material.watchToAnswer()));
         }
         boolean survey = "SURVEY".equals(file.kind());
         List<QuizSnapshot.Question> questions = new ArrayList<>();

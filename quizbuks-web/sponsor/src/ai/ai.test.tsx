@@ -26,7 +26,7 @@ const QUIZ: Quiz = {
 
 const material = (id: string, kind: Material['kind'], body: string | null): Material => ({
   materialId: id, kind, title: `Material ${id}`, description: 'About it', body, url: null, pdf: null, audio: null,
-  images: [],
+  images: [], watchToAnswer: false,
 })
 
 const MATERIALS = [material('m1', 'ARTICLE', 'Paris is the capital of France.'), material('m2', 'VIDEO_LINK', null)]

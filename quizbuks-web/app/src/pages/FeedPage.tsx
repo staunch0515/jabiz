@@ -20,11 +20,14 @@ import {
   Spinner,
 } from '@jabiz/ui'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
-import { Search, SlidersHorizontal, Trophy, Users } from 'lucide-react'
+import { Play, Search, SlidersHorizontal, Trophy, Users } from 'lucide-react'
 import { useId, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
+import { playProblemText } from '../play/busy'
 import { LazyImage } from '../play/LazyImage'
+import { useStartAttempt } from '../play/useStartAttempt'
+import { VideoPlayer } from '../play/VideoPlayer'
 import { readCountries } from '../qb/api'
 import { formatKudos } from '../qb/kudos'
 import { QB } from '../qb/messages'
@@ -113,6 +116,47 @@ function Card({ card }: { card: FeedCard }) {
           </span>
         </span>
       </Link>
+    </li>
+  )
+}
+
+/**
+ * A card whose quiz is answered by watching a video (Q19): the video's own player (it plays when the taker presses its
+ * button, never by itself), what answering earns, and the start. The name still leads to the publication's page.
+ */
+function VideoCard({ card, player }: { card: FeedCard; player: string }) {
+  const { t } = useTranslation(APP)
+  const { t: tQb } = useTranslation(QB)
+  const start = useStartAttempt()
+  const hint = `feed-video-hint-${card.publicationId}`
+  return (
+    <li className="flex flex-col gap-2 rounded-lg border p-2" data-testid="feed-video-card">
+      <VideoPlayer player={player} title={t('feed.videoTitle', { name: card.name })} />
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <Link to={`/p/${card.publicationId}`} className="truncate font-medium underline-offset-4 hover:underline"
+            data-testid="feed-card-name">
+            {card.name}
+          </Link>
+          <span id={hint} className="text-primary flex items-center gap-1 text-sm font-semibold"
+            data-testid="feed-video-reward">
+            <Trophy aria-hidden className="size-3.5" />
+            {card.kind === 'SURVEY' ? t('feed.videoSurveyReward', { amount: formatKudos(card.maxReward) })
+              : t('feed.videoReward', { amount: formatKudos(card.maxReward) })}
+          </span>
+        </div>
+        <Button disabled={start.isPending} aria-busy={start.isPending || undefined} aria-describedby={hint}
+          data-testid="feed-video-start" onClick={() => start.mutate(card.publicationId)}>
+          <Play aria-hidden />
+          {t('detail.start')}
+        </Button>
+      </div>
+      <p className="text-muted-foreground text-sm empty:hidden" role="status">{start.busy ? t('play.busy') : ''}</p>
+      {start.isError && (
+        <p className="text-destructive text-sm" role="alert" data-testid="feed-video-error">
+          {playProblemText(start.error) || tQb('failed')}
+        </p>
+      )}
     </li>
   )
 }
@@ -276,7 +320,9 @@ export function FeedPage({ name, country }: { name: string; country: string | nu
         <>
           <h2 className="sr-only">{t('feed.listTitle')}</h2>
           <ul className="flex flex-col gap-2" data-testid="feed-list">
-            {cards.map((card) => <Card key={card.publicationId} card={card} />)}
+            {cards.map((card) => (card.video
+              ? <VideoCard key={card.publicationId} card={card} player={card.video} />
+              : <Card key={card.publicationId} card={card} />))}
           </ul>
           {feed.hasNextPage && (
             <Button variant="outline" disabled={feed.isFetchingNextPage} data-testid="feed-more"

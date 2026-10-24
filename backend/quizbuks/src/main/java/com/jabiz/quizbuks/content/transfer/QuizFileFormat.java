@@ -111,10 +111,15 @@ public final class QuizFileFormat {
                 images.add(new QuizFile.Image(text(image.get("image"), imageAt + ".image"),
                     text(image.get("caption"), imageAt + ".caption")));
             }
+            Object watch = material.get("watchToAnswer");
+            if (watch != null && !(watch instanceof Boolean)) {
+                throw new IllegalArgumentException(at + ".watchToAnswer must be true or false");
+            }
             materials.add(new QuizFile.Material(text(material.get("kind"), at + ".kind"),
                 text(material.get("title"), at + ".title"), text(material.get("description"), at + ".description"),
                 text(material.get("body"), at + ".body"), text(material.get("url"), at + ".url"),
-                text(material.get("pdf"), at + ".pdf"), text(material.get("audio"), at + ".audio"), images));
+                text(material.get("pdf"), at + ".pdf"), text(material.get("audio"), at + ".audio"), images,
+                Boolean.TRUE.equals(watch)));
         }
         List<QuizFile.Question> questions = new ArrayList<>();
         int q = 0;

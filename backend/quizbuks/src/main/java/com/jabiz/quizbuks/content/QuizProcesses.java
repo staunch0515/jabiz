@@ -411,6 +411,7 @@ public final class QuizProcesses {
             m.put("url", material.url());
             m.put("pdf", material.pdf());
             m.put("audio", material.audio());
+            m.put("watchToAnswer", material.watchToAnswer());
             Object materialId = ctx.changes().insert(QbContent.MATERIAL, m);
             for (QuizSnapshot.Image image : material.images()) {
                 Map<String, Object> i = new LinkedHashMap<>();

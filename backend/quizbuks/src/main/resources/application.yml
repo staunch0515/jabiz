@@ -203,10 +203,22 @@ jabiz:
     # Error messages in English when Accept-Language names none of the application's languages.
     default-locale: en
     bundles: messages
-  # The three front ends (/, /sponsor/, /admin/) and their entries and PWA settings come from the jar
-  # (jabizApp in build.gradle.kts writes them as the defaults of jabiz.web.spa). Setting jabiz.web.spa here would
-  # replace that list as a whole: only do it with all three, for example to give the app a content security policy of
-  # its own (docs/guide/app-spa.md section 2).
+  # The three front ends (/, /sponsor/, /admin/), as jabizApp in build.gradle.kts declares them (the startup check WEB
+  # compares this list with the jar's). Written here as a whole because the App has a content security policy of its
+  # own (docs/guide/app-spa.md section 2): the platform's default plus frame-src for the two video players it shows
+  # (Q19, content.VideoEmbeds; YouTube without cookies). The sponsor console and the administration keep the default.
+  web:
+    spa:
+      - path: /
+        entry: app
+        pwa: "on"
+        content-security-policy: "default-src 'self'; img-src 'self' blob: data:; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'; worker-src 'self'; manifest-src 'self'; frame-src https://www.youtube-nocookie.com https://player.vimeo.com"
+      - path: /sponsor
+        entry: sponsor
+        pwa: "off"
+      - path: /admin
+        entry: admin
+        pwa: "off"
 
 logging:
   pattern:

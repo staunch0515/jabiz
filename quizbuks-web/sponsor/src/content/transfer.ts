@@ -32,6 +32,8 @@ export interface QuizFileDocument {
   materials: {
     kind: string; title: string | null; description: string | null; body: string | null; url: string | null
     pdf: string | null; audio: string | null; images: { image: string; caption: string | null }[]
+    /** Q19, written only when true (absent is false). */
+    watchToAnswer?: true
   }[]
   questions: {
     stem: string | null; image: string | null; points: number; selection: string | null
@@ -98,6 +100,7 @@ export async function exportDraft(draft: Draft, onProgress?: Progress,
       kind: m.kind, title: m.title, description: m.description, body: m.body, url: m.url,
       pdf: key(m.pdf, 'pdf'), audio: key(m.audio, 'audio'),
       images: m.images.map((i) => ({ image: key(i.image, 'image')!, caption: i.caption })),
+      ...(m.watchToAnswer ? { watchToAnswer: true as const } : {}),
     })),
     questions: draft.questions.map((q) => ({
       stem: q.stem, image: key(q.image, 'image'), points: q.points, selection: q.selection,

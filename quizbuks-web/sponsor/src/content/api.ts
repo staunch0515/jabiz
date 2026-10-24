@@ -99,6 +99,8 @@ export interface Material {
   pdf: string | null
   audio: string | null
   images: MaterialImage[]
+  /** Q19: a YouTube or Vimeo video watching which is enough to answer; the App shows it on the card. */
+  watchToAnswer: boolean
 }
 
 /** A quiz's draft as the editor shows it: questions and materials in their order, each with its parts. */
@@ -156,6 +158,8 @@ export interface MaterialInput {
   audio?: string | null
   images?: { imageId?: string | null; image: string; caption: string | null }[] | null
   baseRevision?: number | null
+  /** VIDEO_LINK only (Q19). */
+  watchToAnswer?: boolean
 }
 
 /** `QuizProcesses.CloneOutput`. */
@@ -315,6 +319,7 @@ export function assembleDraft(quiz: Row, questions: Row[], options: Row[], mater
       pdf: str(m.pdf),
       audio: str(m.audio),
       images: imagesOf.get(String(m.materialId)) ?? [],
+      watchToAnswer: m.watchToAnswer === true,
     })),
   }
 }
