@@ -36,6 +36,12 @@ public final class ItMailFixtures {
     /** A notification for the users of the portal only (decision D49): not among the administration's preferences. */
     public static final MailTemplate OFFERS = MailTemplate.define("it.offers", t -> t
         .category(MailCategory.NOTIFICATION).param("item").entries("portal"));
+    /**
+     * An invitation to a plain address with a sign-in link (decision D55): a notification, so the address may opt out
+     * through its link.
+     */
+    public static final MailTemplate INVITE = MailTemplate.define("it.invite", t -> t
+        .category(MailCategory.NOTIFICATION).param("item").entries("portal").signInLink(Duration.ofDays(7)));
 
     /**
      * @param template {@code verify}, {@code reset}, {@code news} or {@code offers}
@@ -43,9 +49,16 @@ public final class ItMailFixtures {
      * @param locale   the language to send in; null: the user's
      * @param value    the template's parameter
      * @param fail     whether the process fails after the mail step
+     * @param entry    {@code invite}: the entry its sign-in link signs in at
+     * @param to       {@code invite}: the path the link returns to
      */
     public record SendInput(@NotBlank String template, String userId, String address, String locale, String value,
-        Boolean fail) {}
+        Boolean fail, String entry, String to) {
+
+        public SendInput(String template, String userId, String address, String locale, String value, Boolean fail) {
+            this(template, userId, address, locale, value, fail, null, null);
+        }
+    }
 
     public record UseInput(String token) {}
 
@@ -71,6 +84,10 @@ public final class ItMailFixtures {
                 ItMailFixtures::recipient, Map.of("item", ctx -> input(ctx).value())))
             .step("Send the offers", SendMail.when(ctx -> "offers".equals(input(ctx).template()), OFFERS,
                 ItMailFixtures::recipient, Map.of("item", ctx -> input(ctx).value())))
+            .step("Send the invitation", SendMail.when(ctx -> "invite".equals(input(ctx).template()), INVITE,
+                ItMailFixtures::recipient, Map.of("item", ctx -> input(ctx).value(),
+                    MailTemplate.ENTRY_PARAM, ctx -> input(ctx).entry(), MailTemplate.RETURN_PARAM,
+                    ctx -> input(ctx).to())))
             .compute("Fail on request", (metadata, ctx) -> {
                 if (Boolean.TRUE.equals(input(ctx).fail())) {
                     ctx.reject(new Violation(null, PlatformErrorCodes.INVALID_VALUE, "asked to fail"));
@@ -145,6 +162,11 @@ public final class ItMailFixtures {
         @Bean
         MailTemplate itOffersMail() {
             return OFFERS;
+        }
+
+        @Bean
+        MailTemplate itInviteMail() {
+            return INVITE;
         }
 
         @Bean

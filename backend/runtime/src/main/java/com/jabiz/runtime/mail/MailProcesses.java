@@ -10,6 +10,7 @@ import com.jabiz.process.ProcessDefinition;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.PermissionDeniedException;
+import com.jabiz.runtime.process.steps.HoldLock;
 import com.jabiz.runtime.process.steps.QueryEntities;
 import com.jabiz.runtime.security.Rbac;
 import com.jabiz.runtime.security.SecurityEntities;
@@ -37,6 +38,11 @@ public class MailProcesses {
     public static final String SEND = "MAIL_SEND";
     public static final String CONSUMER = "jabiz.mail";
     public static final String PREFERENCE_SET = "SEC_MAIL_PREFERENCE_SET";
+    /**
+     * Opts a plain address out of a notification template (decision D55): run by the unsubscribe link of a mail sent
+     * to an address without a user, as the system (the address is the only credential).
+     */
+    public static final String ADDRESS_OPT_OUT = "SEC_MAIL_ADDRESS_OPT_OUT";
 
     public record SendInput(@NotBlank String messageId) {}
 
@@ -46,6 +52,12 @@ public class MailProcesses {
     public record PreferenceInput(@NotNull String userId, @NotBlank String template, @NotNull Boolean subscribed) {}
 
     public record PreferenceOutput(String template, boolean subscribed) {}
+
+    /** @param address the address, as the mail was sent to it (matched in lower case) */
+    public record OptOutInput(@NotBlank String address, @NotBlank String template) {}
+
+    /** @param optedOut whether the row exists now (false only when the template takes no opt-out) */
+    public record OptOutOutput(String template, boolean optedOut) {}
 
     private static final String MESSAGE_ID = "messageId";
     private static final String OUTCOME = "outcome";
@@ -88,6 +100,50 @@ public class MailProcesses {
                             new QueryPredicate.Eq("template", input.template()))), "template");
                     }, PREFERENCES))
                 .compute("Record the choice", (metadata, ctx) -> setPreference(ctx, templates)));
+    }
+
+    static ProcessDefinition<OptOutInput, OptOutOutput, ProcessContext> addressOptOut(MailTemplates templates) {
+        return ProcessDefinition.define(ADDRESS_OPT_OUT, 1, OptOutInput.class, OptOutOutput.class,
+            ProcessContext.class, pb -> pb
+                .description("Opts an address without a user out of a notification template, through its mailed link.")
+                .permissions(MailPermissions.PREFERENCE)
+                .internal()
+                .contextFactory((start, input) -> {
+                    ProcessContext ctx = new ProcessContext(start);
+                    ctx.put(INPUT, new OptOutInput(input.address().trim().toLowerCase(java.util.Locale.ROOT),
+                        input.template()));
+                    return ctx;
+                })
+                .outputMapper(ctx -> new OptOutOutput(ctx.get(INPUT, OptOutInput.class).template(),
+                    !ctx.hasViolations()))
+                // Two clicks of the same link at once (a double click, a mail client's prefetch) would both insert:
+                // the lock makes the second see the first's row and change nothing, as the link promises (204).
+                .step("Lock the address", HoldLock.<ProcessContext>exclusive(ctx -> "mail.opt-out:" + ctx.get(INPUT, OptOutInput.class)
+                    .template() + ":" + ctx.get(INPUT, OptOutInput.class).address()))
+                .step("Load the opt-out", QueryEntities.of(MailEntities.ADDRESS_OPT_OUT_DATASET, ctx -> {
+                    OptOutInput input = ctx.get(INPUT, OptOutInput.class);
+                    return Rbac.all(new QueryPredicate.And(List.of(
+                        new QueryPredicate.Eq("address", input.address()),
+                        new QueryPredicate.Eq("template", input.template()))), "template");
+                }, PREFERENCES))
+                .compute("Record the opt-out", (metadata, ctx) -> {
+                    OptOutInput input = ctx.get(INPUT, OptOutInput.class);
+                    if (templates.find(input.template()).filter(MailTemplate::unsubscribable).isEmpty()) {
+                        ctx.reject(notANotification(input.template()));
+                        return;
+                    }
+                    @SuppressWarnings("unchecked")
+                    List<EntityInstance> existing = (List<EntityInstance>) ctx.get(PREFERENCES);
+                    if (existing != null && !existing.isEmpty()) {
+                        // Repeating the link changes nothing.
+                        return;
+                    }
+                    Map<String, Object> row = new LinkedHashMap<>();
+                    row.put("address", input.address());
+                    row.put("template", input.template());
+                    row.put("optedOutTime", ctx.opTime());
+                    ctx.changes().insert(MailEntities.ADDRESS_OPT_OUT, row);
+                }));
     }
 
     @SuppressWarnings("unchecked")
@@ -137,6 +193,11 @@ public class MailProcesses {
     @Bean
     ProcessDefinition<SendInput, SendOutput, ProcessContext> mailSendProcess() {
         return SEND_PROCESS;
+    }
+
+    @Bean
+    ProcessDefinition<OptOutInput, OptOutOutput, ProcessContext> mailAddressOptOutProcess(MailTemplates templates) {
+        return addressOptOut(templates);
     }
 
     @Bean

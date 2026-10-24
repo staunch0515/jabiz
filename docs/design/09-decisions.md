@@ -56,6 +56,7 @@
 | D51 | 受保护变更的审批权限 `security.protected-change.decide`（代替 `approval.decide`，本身总是受保护）、按可配置的管理员权限计管理员、流程的备选权限、时间参数限于 PostgreSQL 的范围、`Combobox` 加载状态（修改 D48 第 1 条的管理员、审批人与缺省清单及实现说明⑥；补充 D7、D34） | 已确认（2026-10-18）；已实施（阶段 16u） | 10 §16、18 §3.4、05 §4、`@jabiz/ui` 的 `Combobox` |
 | D52 | 外部作业的剩余风险写明（流式结果暂不做）、取消的结局 `onCancelled` 与平台步骤 `CancelExternalJob`（可声明几种类型）、按入口的退订页 `jabiz.mail.unsubscribe-paths` 与积木 `MailUnsubscribe`、按业务参数暂停作业类型 `enabledBy`、没有用量的尝试数与迟到实例的用量（补充 D35、D38、D49，不取代） | 已确认（2026-10-19，16v 计划 V-1 至 V-10；第 2 条的补充与第 5 条为 16w 计划 W-1 至 W-11）；第 1–3 条已实施（阶段 16v-1），第 4 条已实施（阶段 16v-2），第 2 条的补充与第 5 条已实施（阶段 16w-1） | 11 §4a、06 §2.3、18 §5.6、12 §9 / §11 / §12、21 §3.1 |
 | D53 | 验证邮箱的链接：同一收件人较早的、未过期的验证链接仍有效，先用的一个生效、其余随之作废（修改 D35 第 3 条"只认最新令牌"对验证用途的适用；找回密码、加入入口仍只认最新） | 已确认（2026-10-23，需求方）；已实施（阶段 16za） | 18 §5.6、10 §15 |
+| D55 | 应用的邮件可带一次性登录链接（`MailTemplate.signInLink`，有效期不超过 `jabiz.security.email-link.max-ttl`，发送时检查入口与返回路径）；通知可发给没有账号的地址，退订按地址（`sys_mail_address_optout`）（补充 D35 第 4 条与 D54，不取代） | 已确认（2026-10-24，需求方：QuizBuks 指定邮箱的发布选方案 B）；已实施（阶段 16ze） | 18 §5.6、10 §15.11 |
 
 ---
 
@@ -1975,3 +1976,23 @@ SMTP 已有超时（`jabiz.mail.timeout`，缺省 10 秒）：慢的服务器可
 
 **实现说明（16zb）**：没有迁移（`sec_login_record_version.factor` 已是文本）；`SignInAttempt.Factor` 增加 `EMAIL_LINK`；`SignInEntries.Entry` 增加组件 `emailLink`。
 测试：app `EmailLinkIT`，runtime `SignInEntriesTest`，前端 `EmailLink.test.tsx`、`AuthContext.test.tsx`、`account.test.tsx`。
+
+## D55 应用的邮件可带登录链接；通知可发给没有账号的地址
+
+**背景**：QuizBuks 的商家要把一个发布只开放给一份邮箱清单，并给每个地址寄一封邮件，点链接直接进入答题页（需求方 2026-10-24，选了"一封邮件、一次点击"的方案 B）。
+D54 的登录链接只由平台的 `POST /api/auth/email-link` 寄出（平台自己的模板与文字）；应用的模板不能取平台命名空间的令牌（18 §5.6）。
+收件人多半没有账号，而给没有账号的地址发的邮件没有退订（D35 第 4 条"退订按用户"）——批量邀请在法律上需要退订。
+
+**决定**（需求方 2026-10-24 同意）：
+1. `MailTemplate.define(名, t -> t.signInLink(有效期))`：应用模板声明它带登录链接。它是应用模板能取的唯一平台令牌（`jabiz.signIn`），并随之声明参数 `entry`（登录的入口）与 `to`（返回路径）；
+   正文写 `[…]({entryUrl}auth/email-link?entry={entry}&token={jabiz.signIn}&to={to})`。有效期不得超过 `jabiz.security.email-link.max-ttl`（缺省 30 天，启动检查 `MAIL`）。
+2. 发送时（`SendMail`）检查：`entry` 是开启了 `email-link` 的入口、`to` 是该入口前端之内的路径（同 D54 第 2 条的规则），否则 422 `MAIL_SIGN_IN_LINK`，不写消息。
+3. 打开链接照常是 `SPONSOR_EMAIL_LINK_OPEN`（D54 第 4 条）：地址已有账号即登录该用户，无人使用的地址在入口开放注册时开已验证、无密码的账号，守卫、入口角色与二次验证都不变。
+   收件人是地址（`MailRecipient.address`）或用户都可以；先用的链接生效、其后寄出的照常有效（D54 第 3 条）。
+4. `NOTIFICATION` 可以发给没有账号的地址：这样一封邮件的 `{unsubscribeUrl}` 代表该地址（令牌 `jabiz-unsub+jwt`，主体为地址、带 `adr` 声明）；点击即以系统身份运行
+   `SEC_MAIL_ADDRESS_OPT_OUT`，在 `sys_mail_address_optout`（地址小写 × 模板，普通表，平台实体 `MailAddressOptOut`）记一行；投递对该模板发往该地址（不分大小写）的通知记 `SKIPPED`（`UNSUBSCRIBED`）。
+   有账号的用户照旧按偏好；地址的退订不随之后开的账号转移（用户仍可在偏好中关掉）。事务邮件不受影响。
+
+**剩余风险**：登录链接可以有效多天：能读到邮件的人在此期间都能以该地址登录（同找回密码的链接，只是更长）；应用应给短的有效期并只在需要时用。
+转发的链接进入发送者的账号（D54 的剩余风险）。应用对清单邮件的合规（取得同意、发件人身份）由应用负责，平台只提供退订。
+

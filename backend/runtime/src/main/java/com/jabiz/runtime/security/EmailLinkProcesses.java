@@ -59,9 +59,9 @@ public class EmailLinkProcesses {
 
     public static final String TEMPLATE = "jabiz.auth.email-link";
     /** The token's purpose and placeholder, in the platform's namespace. */
-    public static final String SIGN_IN = "jabiz.signIn";
+    public static final String SIGN_IN = MailTemplate.SIGN_IN_TOKEN;
     /** The parameter with the path to return to in the entry's front end. */
-    public static final String TO = "to";
+    public static final String TO = MailTemplate.RETURN_PARAM;
     /** Longest path to return to. */
     public static final int MAX_TO = 200;
     /**
