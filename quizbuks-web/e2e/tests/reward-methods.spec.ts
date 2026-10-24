@@ -1,5 +1,6 @@
 import { completeQuiz, query } from './content'
-import { adminToken, expect, expectAccessible, prepareQuizbuks, rows, run, signIn, test } from './support'
+import { contentAdmin } from './legal'
+import { adminToken, expect, expectAccessible, PASSWORD, prepareQuizbuks, rows, run, signIn, test, tokenOf } from './support'
 import { approvedSponsor, takerInJapan } from './wallet'
 
 /**
@@ -16,7 +17,9 @@ async function cashRewardOwed(request: Parameters<typeof approvedSponsor>[0]) {
   const sponsor = await approvedSponsor(request, 'Cash')
   const admin = await adminToken(request)
   const userId = (await rows(request, sponsor.token, 'urn:jabiz:dataset:sponsor:QbSponsor', []))[0].attributes.userId as string
-  await run(request, admin, 'QB_SPONSOR_REWARD_METHODS_SET', { userId, methods: ['PLATFORM', 'SPONSOR_CASH'],
+  // Allowing the methods asks for a verified address, which the first administrator has not: a content administrator.
+  const allower = await tokenOf(request, await contentAdmin(request, 'Rin'), PASSWORD, 'admin')
+  await run(request, allower, 'QB_SPONSOR_REWARD_METHODS_SET', { userId, methods: ['PLATFORM', 'SPONSOR_CASH'],
     note: 'e2e' })
 
   const quiz = await completeQuiz(request, sponsor.token, { questions: 1 })
