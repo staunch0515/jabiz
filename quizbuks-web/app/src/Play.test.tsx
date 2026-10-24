@@ -73,6 +73,8 @@ function finished(over: Record<string, unknown> = {}) {
 }
 
 interface Options {
+  /** Answers each read of the publication's page (Q25: none until the view claimed the invitation). */
+  publicationPage?: () => Response
   start?: () => Response
   submit?: () => Response
   /** The answer of QB_ATTEMPT_RESULT; the finished quiz by default. */
@@ -112,7 +114,7 @@ function server(options: Options = {}) {
       case '/api/queries/qb.app.feed':
         return json(200, { items: options.feed ?? [CARD], offset: 0, limit: 20 })
       case '/api/queries/qb.app.publication':
-        return json(200, { items: [publication()], offset: 0, limit: 1 })
+        return options.publicationPage ? options.publicationPage() : json(200, { items: [publication()], offset: 0, limit: 1 })
       case '/api/queries/qb.app.publication-tiers':
         return json(200, { items: [{ seq: 1, fromScore: 0, toScore: 2, reward: 0 },
           { seq: 2, fromScore: 3, toScore: 5, reward: 100 }], offset: 0, limit: 20 })
@@ -393,6 +395,18 @@ describe('a publication\'s page', () => {
       .toHaveAttribute('src', 'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ')
     expect(await screen.findByTestId('detail-tiers')).toHaveTextContent('100 Kudos')
     await waitFor(() => expect(posted('QB_VIEW')).toEqual([{ publicationId: PUB }]))
+  })
+
+  it('shows an invited publication once the view claimed the invitation (Q25)', async () => {
+    let reads = 0
+    const { posted } = server({ publicationPage: () => json(200, { items: ++reads === 1 ? []
+      : [publication({ audience: 'INVITED', invited: true })], offset: 0, limit: 1 }) })
+    window.history.replaceState(null, '', `/p/${PUB}`)
+    render(<App />)
+    expect(await screen.findByTestId('detail-invited')).toHaveTextContent('By invitation')
+    expect(screen.getByTestId('detail-start')).toBeInTheDocument()
+    expect(posted('QB_VIEW')).toEqual([{ publicationId: PUB }])
+    expect(reads).toBe(2)
   })
 
   it('cannot start before the address is verified, and records no view', async () => {

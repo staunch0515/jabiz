@@ -23,13 +23,26 @@ public final class PublicationReadiness {
     /** The policy of a publication as it stands; any part may be missing in a draft. */
     public record Draft(UUID versionId, String name, String regions, Instant startAt, Instant endAt,
         Integer timeLimitSec, Integer passScore, BigDecimal budgetCap, Integer maxWinners, String rewardMethod,
-        String redeemDescription) {
+        String redeemDescription, String audience) {
 
         /** A draft paid by the platform (Q22): what every draft was before. */
         public Draft(UUID versionId, String name, String regions, Instant startAt, Instant endAt,
             Integer timeLimitSec, Integer passScore, BigDecimal budgetCap, Integer maxWinners) {
             this(versionId, name, regions, startAt, endAt, timeLimitSec, passScore, budgetCap, maxWinners,
-                RewardMethod.PLATFORM, null);
+                RewardMethod.PLATFORM, null, Audience.PUBLIC);
+        }
+
+        /** A draft for everybody in its regions (what every draft was before Q25). */
+        public Draft(UUID versionId, String name, String regions, Instant startAt, Instant endAt,
+            Integer timeLimitSec, Integer passScore, BigDecimal budgetCap, Integer maxWinners, String rewardMethod,
+            String redeemDescription) {
+            this(versionId, name, regions, startAt, endAt, timeLimitSec, passScore, budgetCap, maxWinners,
+                rewardMethod, redeemDescription, Audience.PUBLIC);
+        }
+
+        /** Whether only the invited answer (Q25): then the regions are not asked. */
+        public boolean invited() {
+            return Audience.invited(audience);
         }
     }
 
@@ -48,7 +61,7 @@ public final class PublicationReadiness {
         if (draft.name() == null || draft.name().isBlank()) {
             problems.add(required("name"));
         }
-        if (draft.regions() == null || draft.regions().isBlank()) {
+        if (!draft.invited() && (draft.regions() == null || draft.regions().isBlank())) {
             problems.add(required("regions"));
         }
         if (draft.startAt() == null) {

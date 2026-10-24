@@ -28,6 +28,8 @@ import com.jabiz.runtime.ledger.LedgerProcesses;
 import com.jabiz.runtime.process.steps.CallProcess;
 import com.jabiz.runtime.process.steps.HoldLock;
 import com.jabiz.runtime.process.steps.LoadParams;
+import com.jabiz.quizbuks.invitation.InvitationStatus;
+import com.jabiz.quizbuks.invitation.QbInvitations;
 import com.jabiz.runtime.process.steps.PublishEvent;
 import com.jabiz.runtime.process.steps.QueryEntities;
 import jakarta.validation.Valid;
@@ -140,6 +142,8 @@ public final class AttemptFinishing {
     static final String MOVED = "play.moved";
     /** Q22: the key of the cash reward or redemption written with the attempt. */
     static final String EXTERNAL_ID = "play.externalId";
+    /** Q25: the invitation the attempt started on, when its publication is invited. */
+    static final String INVITATION = "play.invitation";
 
     /** What the finishing decided before the wallet: the attempt in its new state, without the money's outcome. */
     record Plan(EntityInstance attempt, EntityInstance card, EntityInstance counter, String status,
@@ -303,6 +307,13 @@ public final class AttemptFinishing {
                 PlaySteps.counter(AttemptFinishing::publicationOf, COUNTER),
                 PublicationMoves.cardRead(AttemptFinishing::publicationOf)))
             .compute("Score the attempt", (metadata, ctx) -> score(ctx, expire))
+            // Q25: an invited card only (no statement otherwise): the invitation the attempt started on.
+            .step("Load the invitation", QueryEntities.<ProcessContext>of(QbInvitations.DEFAULT_DATASET, ctx -> {
+                Plan plan = plan(ctx);
+                return EntityQuery.builder().where(new QueryPredicate.In("attemptId",
+                    plan != null && PlaySteps.invited(plan.card()) ? List.of(String.valueOf(plan.attempt().id()))
+                        : List.of())).limit(1).build();
+            }, INVITATION))
             .step("Lock the sponsor's wallet", HoldLock.<ProcessContext>exclusive(ctx -> {
                 Plan plan = plan(ctx);
                 return plan != null && plan.fromWallet() ? QbWallets.lockName(QbWallets.SPONSOR,
@@ -498,6 +509,16 @@ public final class AttemptFinishing {
         values.put("reward", plan.reward());
         values.put("rewardStatus", settlement.rewardStatus());
         values.put("fee", settlement.fee());
+        EntityInstance invitation = first(ctx, INVITATION);
+        if (invitation != null) {
+            // Q25: the sponsor sees on the list when the invitee answered and what they scored and won.
+            Map<String, Object> answered = new LinkedHashMap<>();
+            answered.put("status", InvitationStatus.ANSWERED);
+            answered.put("answeredAt", ctx.opTime());
+            answered.put("score", BigDecimal.valueOf(plan.result().score()));
+            answered.put("reward", plan.reward());
+            ctx.changes().update(QbInvitations.INVITATION, invitation.id(), invitation.version(), answered);
+        }
         if (RewardStatus.PAID.equals(settlement.rewardStatus())) {
             values.put("rewardPaidAt", ctx.opTime());
             values.put("ledgerTransactionId", ctx.get(POSTING, LedgerProcesses.PostOutput.class).transactionId());

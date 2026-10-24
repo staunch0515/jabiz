@@ -214,6 +214,9 @@ export interface PublicationView {
   myAttemptId: string | null
   myStatus: string | null
   myDeadline: string | null
+  /** Q25: who may answer, and whether the caller's account holds an invitation (claimed by `QB_VIEW` or a start). */
+  audience: 'PUBLIC' | 'INVITED'
+  invited: boolean
 }
 
 export interface Tier {
@@ -267,6 +270,8 @@ export async function readPublication(request: PublicationRequest): Promise<Publ
     myAttemptId: textOrNull(row.myAttemptId),
     myStatus: textOrNull(row.myStatus),
     myDeadline: textOrNull(row.myDeadline),
+    audience: row.audience === 'INVITED' ? 'INVITED' : 'PUBLIC',
+    invited: row.invited === true || row.invited === 'true',
   }
 }
 

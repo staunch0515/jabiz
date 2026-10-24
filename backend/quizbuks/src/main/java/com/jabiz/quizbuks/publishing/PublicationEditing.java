@@ -10,6 +10,7 @@ import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.content.QbContent;
 import com.jabiz.quizbuks.content.QuizSnapshot;
+import com.jabiz.quizbuks.country.Regions;
 import com.jabiz.quizbuks.content.QuizSnapshots;
 import com.jabiz.quizbuks.content.VideoEmbeds;
 import com.jabiz.quizbuks.identity.QbAccounts;
@@ -543,7 +544,13 @@ final class PublicationEditing {
             "passScore", "timeLimitSec", "budgetCap", "maxWinners", "redeemDescription")) {
             card.put(field, publication.get(field));
         }
+        if (card.get("regions") == null) {
+            // Q25: an invited publication chose none; its card says GLOBAL, which no feed reads (the audience keeps
+            // it out) and no start checks (the invitation does instead).
+            card.put("regions", Regions.GLOBAL);
+        }
         card.put("rewardMethod", methodOf(publication.attributes()));
+        card.put("audience", Audience.of(publication.get("audience")));
         card.put("quizTitle", version.get("title"));
         card.put("questionCount", version.get("questionCount"));
         card.put("cover", snapshot.cover() == null ? null : snapshot.cover().toString());
@@ -563,7 +570,8 @@ final class PublicationEditing {
         return new PublicationReadiness.Draft(uuid(values.get("versionId")), (String) values.get("name"),
             (String) values.get("regions"), instant(values.get("startAt")), instant(values.get("endAt")),
             integer(values.get("timeLimitSec")), integer(values.get("passScore")), money(values.get("budgetCap")),
-            integer(values.get("maxWinners")), methodOf(values), (String) values.get("redeemDescription"));
+            integer(values.get("maxWinners")), methodOf(values), (String) values.get("redeemDescription"),
+            Audience.of(values.get("audience")));
     }
 
     /** The reward method of a publication's values; {@link RewardMethod#PLATFORM} when none is written (Q22). */

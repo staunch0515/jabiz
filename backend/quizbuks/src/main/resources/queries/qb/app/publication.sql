@@ -1,7 +1,7 @@
 /*---
 id: qb.app.publication
 description: One publication's page for a taker (U-20 – U-23) with the caller's own attempt; none when they cannot see it
-entities: [QbPublicationCard, QbPublicationCounter, QbPublicationStartCounter, QbPublicationStats, QbStatsRun, QbWallet, QbCountry, QbSponsor, QbQuizVersion, QbAttempt, QbPublicationOwner]
+entities: [QbPublicationCard, QbPublicationCounter, QbPublicationStartCounter, QbPublicationStats, QbStatsRun, QbWallet, QbCountry, QbSponsor, QbQuizVersion, QbAttempt, QbPublicationOwner, QbInvitation]
 datasets:
   QbPublicationCard: urn:jabiz:dataset:default:QbPublicationCard
   QbPublicationCounter: urn:jabiz:dataset:default:QbPublicationCounter
@@ -14,6 +14,7 @@ datasets:
   QbQuizVersion: urn:jabiz:dataset:default:QbQuizVersion
   QbAttempt: urn:jabiz:dataset:taker:QbAttempt
   QbPublicationOwner: urn:jabiz:dataset:me:QbPublicationOwner
+  QbInvitation: urn:jabiz:dataset:me:QbInvitation
 params:
   publicationId: { like: QbPublicationCard.publicationId, required: true, description: The publication }
   at:            { kind: { type: temporal, role: EVENT_TIME }, required: true, description: The time the page is for (the client's now) }
@@ -36,6 +37,8 @@ results:
   maxReward:      { from: QbPublicationCard.maxReward }
   rewardMethod:   { from: QbPublicationCard.rewardMethod }
   redeemDescription: { from: QbPublicationCard.redeemDescription }
+  audience:       { from: QbPublicationCard.audience }
+  invited:        { kind: { type: bool } }
   sponsorName:    { from: QbSponsor.contactName }
   sponsorCompany: { from: QbSponsor.company }
   sponsorIntro:   { from: QbSponsor.intro }
@@ -55,7 +58,8 @@ list:
   key: [publicationId]
 permissions: [qb.play]
 ---*/
--- Shown (the conditions QB_VIEW checks too): live, within its time and aimed at a region of the taker's country, or
+-- Shown (the conditions QB_VIEW checks too): live, within its time and aimed at a region of the taker's country (for
+-- an invited publication, Q25: the caller's account holds an invitation of it, claimed by QB_VIEW or the start), or
 -- the caller has an attempt of it (to look at what they answered). canStart adds the feed's other conditions (winners
 -- and budget not used up, a sponsor who can pay), no attempt yet, and not the caller's own publication. The
 -- introduction and the materials come from the version's snapshot, never its questions (design section 9). The
@@ -79,6 +83,8 @@ SELECT
     d.maxReward AS maxReward,
     d.rewardMethod AS rewardMethod,
     d.redeemDescription AS redeemDescription,
+    d.audience AS audience,
+    d.invited AS invited,
     d.sponsorName AS sponsorName,
     d.sponsorCompany AS sponsorCompany,
     d.sponsorIntro AS sponsorIntro,
@@ -113,6 +119,8 @@ SELECT
     c.{{QbPublicationCard.maxReward}}      AS maxReward,
     c.{{QbPublicationCard.rewardMethod}}   AS rewardMethod,
     c.{{QbPublicationCard.redeemDescription}} AS redeemDescription,
+    c.{{QbPublicationCard.audience}}       AS audience,
+    (inv.{{QbInvitation.invitationId}} IS NOT NULL) AS invited,
     sp.{{QbSponsor.contactName}}           AS sponsorName,
     sp.{{QbSponsor.company}}               AS sponsorCompany,
     sp.{{QbSponsor.intro}}                 AS sponsorIntro,
@@ -126,9 +134,10 @@ SELECT
     sr.{{QbStatsRun.refreshedAt}}          AS statsAt,
     (c.{{QbPublicationCard.status}} = 'LIVE'
      AND c.{{QbPublicationCard.startAt}} <= :at AND :at < c.{{QbPublicationCard.endAt}}
-     AND string_to_array(c.{{QbPublicationCard.regions}}, ',') && string_to_array(coalesce(
+     AND CASE WHEN c.{{QbPublicationCard.audience}} = 'INVITED' THEN inv.{{QbInvitation.invitationId}} IS NOT NULL
+         ELSE string_to_array(c.{{QbPublicationCard.regions}}, ',') && string_to_array(coalesce(
          (SELECT co.{{QbCountry.regions}} FROM {{QbCountry}} co WHERE co.{{QbCountry.code}} = CAST(:country AS text)),
-         'GLOBAL'), ',')) AS shown,
+         'GLOBAL'), ',') END) AS shown,
     (c.{{QbPublicationCard.budgetCap}} IS NULL
      OR n.{{QbPublicationCounter.spent}} + s.{{QbPublicationStartCounter.reservedTotal}}
         - n.{{QbPublicationCounter.released}} + c.{{QbPublicationCard.maxReward}} <= c.{{QbPublicationCard.budgetCap}})
@@ -156,6 +165,7 @@ LEFT JOIN {{QbSponsor}} sp ON sp.{{QbSponsor.userId}} = c.{{QbPublicationCard.sp
 LEFT JOIN {{QbAttempt}} m ON m.{{QbAttempt.publicationId}} = c.{{QbPublicationCard.publicationId}}
 LEFT JOIN {{QbPublicationOwner}} own
     ON own.{{QbPublicationOwner.publicationId}} = c.{{QbPublicationCard.publicationId}}
+LEFT JOIN {{QbInvitation}} inv ON inv.{{QbInvitation.publicationId}} = c.{{QbPublicationCard.publicationId}}
 WHERE c.{{QbPublicationCard.publicationId}} = :publicationId
 ) d
 WHERE d.shown OR d.myAttemptId IS NOT NULL

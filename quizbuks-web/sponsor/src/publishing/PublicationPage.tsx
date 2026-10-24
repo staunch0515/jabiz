@@ -12,6 +12,7 @@ import { analyticsPath } from '../analytics/api'
 import '../analytics/messages'
 import { transactionsOf } from '../transactions/api'
 import '../transactions/messages'
+import { InvitationsSection } from './Invitations'
 import { PublicationActions } from './PublicationActions'
 import { StaleBanner, PublicationWizard } from './PublicationWizard'
 import { PublicationSummary, StatusBadge, useEndReasonLabel, useVersionOf } from './shared'
@@ -130,6 +131,9 @@ function PublicationView({ detail, stale, onStale }: {
         quizTitle: version?.title ?? null,
         tiers,
       }} />
+      {publication.audience === 'INVITED' && (
+        <InvitationsSection publicationId={publication.publicationId} status={publication.status} />
+      )}
       {dates.length > 0 && (
         <div className="flex flex-col gap-2">
           <h2 className="text-sm font-medium">{t('publishing.detail.dates')}</h2>

@@ -91,6 +91,11 @@
   `qb_wallet.balance >= 0` 由检查约束兜底。评分、档位、抽成、打乱、时限与开始条件是纯 Java 的 `Scoring`、`TierPick`、`RewardSplit`、`OptionShuffle`、`AttemptRules`；
   上限在 `PlayLimits`，错误码在 `PlayCodes`。系统流程的权限 `qb.play.system` 不授予任何角色。**开发入账** `QB_WALLET_DEV_CREDIT` 只在
   `quizbuks.wallet.dev-credit.enabled=true`（`dev` 与测试）时注册，权限 `qb.wallet.dev-credit` 不授予任何角色，生产不开（启动检查 `StripeModeCheck` 拒绝它与正式模式或 Stripe 正式密钥同时出现）。它是开放流程，补发经事件 `qb.sponsor.settle-pending` 由系统运行（`QB_PENDING_SETTLE` 等答题的系统流程都是 `internal()`，D41）。
+- **指定邮箱回答的发布**（`publishing.Audience`、包 `invitation`，`docs/quizbuks/plans/Q25-invitations.md`）：受众是发布的字段 `audience`（`PUBLIC` / `INVITED`，上架时冻结到卡片），
+  `INVITED` 的发布不要求地区（`PublicationReadiness`）、不进首页与公开模板、`qb.app.publication` 只对有邀请行的账号返回。清单 `QbInvitation` 只经 `QB_INVITATION_ADD` / `REMOVE` / `SEND`
+  （都先 `CallerChecks::refuseBanned`，都在列表锁 `qb.invitation-list:<发布>` 内，发送再取配额锁 `qb.invitation-quota:<商家>`；上限与每日配额在配置 `quizbuks.invitations.*`，不是业务参数；寄送只在 `LIVE` 时）与内部 `QB_INVITATION_MAIL`（任务 `qb.invitation-mail`）写入；邀请邮件是模板
+  `qb.invitation`（`signInLink`，平台决策 D55；收件人 `MailRecipient.address`）。答题流程读调用者的邀请只经 `Invitations.loadForTaker` / `mine`（公开的卡片一条语句也不读，预算不变）：
+  `QB_VIEW` 认领、开始写 `STARTED` 与 `attemptId`、完成写 `ANSWERED` 与分数、奖励；不另写认领接口或事件消费者。读卡片地区的其他地方（通告、档位模板）要先排除 `INVITED`（其卡片的地区是占位的 `GLOBAL`）；管理员只看人数，地址只给商家。
 - **奖励的支付方式**（`publishing.RewardMethod`、`reward`，`docs/quizbuks/plans/Q22-reward-methods.md`）：`PLATFORM`（平台经账本付）、`SPONSOR_CASH`（商家付现金）、
   `OFFLINE_REDEEM`（商家处兑换）。商家允许的方式只经 `QB_SPONSOR_REWARD_METHODS_SET` 写 `QbSponsorRewardMethods`（没有记录 = 只有 `PLATFORM`）；发布的 `rewardMethod` 在保存、复制、提交时都经
   `PublicationEditing.methodProblems` 核对，兑换须有 `redeemDescription`。不是 `PLATFORM` 的结算**不取钱包锁、不读钱包、不过账**（`AttemptFinishing`、`AttemptRules`），只插入 `QbCashReward` / `QbRedemption`

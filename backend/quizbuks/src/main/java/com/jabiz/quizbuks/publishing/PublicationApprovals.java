@@ -65,6 +65,10 @@ public final class PublicationApprovals {
         content.put("maxWinners", draft.maxWinners());
         // Q22: only when the sponsor settles the reward themselves, so the publications paid by the platform (all of
         // them before Q22, some still waiting for their review) keep the hash their approval is bound to.
+        // Q25: likewise only an invited publication names its audience, so earlier hashes stand.
+        if (draft.invited()) {
+            content.put("audience", draft.audience());
+        }
         if (!RewardMethod.platform(draft.rewardMethod())) {
             content.put("rewardMethod", draft.rewardMethod());
             content.put("redeemDescription", draft.redeemDescription());

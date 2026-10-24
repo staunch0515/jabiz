@@ -48,6 +48,22 @@ class PublicationReadinessTest {
         assertThat(PublicationReadiness.check(started, tiers(), quiz(), NOW)).isEmpty();
     }
 
+    /** Q25: an invited publication's list replaces its regions. */
+    @Test
+    void anInvitedDraftNeedsNoRegions() {
+        PublicationReadiness.Draft invited = new PublicationReadiness.Draft(VERSION, "Invited", null,
+            NOW.plus(Duration.ofDays(1)), NOW.plus(Duration.ofDays(8)), 300, 3, BigDecimal.valueOf(10_000), 50,
+            RewardMethod.PLATFORM, null, Audience.INVITED);
+        assertThat(invited.invited()).isTrue();
+        assertThat(PublicationReadiness.check(invited, tiers(), quiz(), NOW)).isEmpty();
+        PublicationReadiness.Draft open = new PublicationReadiness.Draft(VERSION, "Open", null,
+            NOW.plus(Duration.ofDays(1)), NOW.plus(Duration.ofDays(8)), 300, 3, BigDecimal.valueOf(10_000), 50,
+            RewardMethod.PLATFORM, null, Audience.PUBLIC);
+        assertThat(PublicationReadiness.check(open, tiers(), quiz(), NOW))
+            .extracting(Violation::field, Violation::ruleCode)
+            .containsExactly(tuple("regions", PublishingCodes.FIELD_REQUIRED));
+    }
+
     @Test
     void aDraftWithOnlyANameReportsEveryProblemAtOnce() {
         PublicationReadiness.Draft empty = new PublicationReadiness.Draft(null, "Only a name", null, null, null,

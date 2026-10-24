@@ -68,6 +68,27 @@ class AttemptRulesTest {
             limits(1000, 10, 100));
     }
 
+    /** Q25: an invited card asks for the caller's invitation instead of their regions. */
+    @Test
+    void anInvitedCardAsksForTheInvitationNotTheRegions() {
+        AttemptRules.Card invited = new AttemptRules.Card("sponsor", "LIVE", "GLOBAL", NOW.minusSeconds(60),
+            NOW.plusSeconds(3600), limits(1000, 10, 100), "PLATFORM", true);
+        AttemptRules.Counts none = counts(0, 0, 0, 0, 0);
+        BigDecimal rich = BigDecimal.valueOf(10_000);
+        assertThat(AttemptRules.startRefusal("taker", "GLOBAL,US,NORTH_AMERICA", true, invited, none, rich, 0, NOW))
+            .isNull();
+        assertThat(AttemptRules.startRefusal("taker", "GLOBAL,JP,ASIA", false, invited, none, rich, 0, NOW))
+            .isEqualTo(PlayCodes.NOT_INVITED);
+        // The other refusals come first or after as before: the sponsor's own, closed, the limits.
+        assertThat(AttemptRules.startRefusal("sponsor", "GLOBAL", true, invited, none, rich, 0, NOW))
+            .isEqualTo(PlayCodes.OWN_PUBLICATION);
+        assertThat(AttemptRules.startRefusal("taker", "GLOBAL", true, invited, counts(10, 0, 0, 0, 0), rich, 0, NOW))
+            .isEqualTo(PlayCodes.QUOTA_FULL);
+        // A public card never reads an invitation: the regions decide.
+        assertThat(AttemptRules.startRefusal("taker", "GLOBAL,US,NORTH_AMERICA", true, card("LIVE", "JP"), none,
+            rich, 0, NOW)).isEqualTo(PlayCodes.NOT_VISIBLE);
+    }
+
     @Test
     void theFirstRefusalThatApplies() {
         AttemptRules.Counts none = counts(0, 0, 0, 0, 0);
