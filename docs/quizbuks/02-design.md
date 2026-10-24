@@ -127,7 +127,8 @@ docs/quizbuks/               本文件等
 | `QbPublicationOwner` | 视图 | `publicationId`、`sponsorId`（卡片的） | 只读，经限本人的数据视图读取：答题人的模板据此排除本人的发布（不能开始） |
 | `QbSponsorRewardMethods` | T | `settingId`、`userId`（唯一）、`methods`（固定顺序、逗号分隔）、`note`、`setBy`、`setAt` | 管理员按商家允许的奖励支付方式（Q22，`plans/Q22-reward-methods.md`）；没有记录 = 只有 `PLATFORM`。只经 `QB_SPONSOR_REWARD_METHODS_SET` 写入 |
 | `QbCashReward` | T | `attemptId`、`publicationId`、`sponsorId`、`userId`、`amount`、`code`、`status`（DUE / MARKED_PAID / CONFIRMED / DISPUTED / OVERDUE / VOID）、`payBy`、`confirmBy`、标记 / 确认 / 争议 / 逾期 / 裁定的时刻与说明 | 商家付现金的奖励（Q22）：不经账本；双方确认即完成，逾期不确认的答题人不能开始新答题 |
-| `QbRedemption` | T | `attemptId`、`publicationId`、`sponsorId`、`userId`、`amount`、`description`、`code`、`status`（DUE / REDEEMED / EXPIRED / VOID）、`expiresAt`、`redeemedAt` | 商家处兑换的奖励（Q22）：Q22a 登记，Q22b 扫码领取 |
+| `QbRedemption` | T | `attemptId`、`publicationId`、`sponsorId`、`userId`、`amount`、`description`、`code`、`status`（DUE / CLAIMED / REDEEMED / EXPIRED / VOID）、`expiresAt`、`claimKind`、`claimedAt`、`confirmBy`、`redeemedAt`、`redeemedBy`、`voidedBy`、`voidNote` | 商家处兑换的奖励（Q22）：登记于结算；答题人扫商家后台的轮换码即时领取，扫打印的固定码产生申请（`CLAIMED`，十分钟内由商家确认）（Q22b） |
+| `QbRedeemToken` | P | `sponsorId`、`tokenValue`（敏感）、`kind`（ROTATING / PRINTED）、`issuedAt`、`expiresAt`、`revokedAt` | 商家的领奖码（Q22b）：链接 `/redeem/<key>` 中的秘密；只经 `QB_REDEEM_CODE_ISSUE` 写入，数据视图不返回值 |
 
 ### 3.4 钱包与资金
 
@@ -335,6 +336,10 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 | `QB_ATTEMPT_EXPIRE` | 系统（`qb.play.system`） | 过了时限与宽限仍 IN_PROGRESS 的会话按已保存答案完成（`EXPIRED`），与提交同一套步骤；已完成或未到期的什么也不做。由逐项任务 `qb.attempt-expire`（每分钟，平台决策 D42）对模板 `qb.system.attempts-due` 选出的会话（`deadline + 宽限 < 计划时刻`，按截止时间，至多 2 000 个）逐个执行，各自一个事务（Q5b） |
 | `QB_SPONSOR_REWARD_METHODS_SET` | `qb.admin.reward-methods` | 管理员设定商家允许的奖励支付方式（1–3 种，Q22）；商家账户锁内 |
 | `QB_CASH_REWARD_MARK_PAID` / `QB_CASH_REWARD_CONFIRM` / `QB_CASH_REWARD_DISPUTE` / `QB_CASH_REWARD_RESOLVE` | `qb.publication.write` / `qb.me` / `qb.me` / `qb.cash.resolve` | 现金奖励（Q22）：商家标记已付（`confirmBy = now + qb.reward.cash.confirm-days`）；答题人确认（`MARKED_PAID` / `OVERDUE` → `CONFIRMED`）或争议（附说明，待办给 `qb.cash.resolve`）；管理员裁定 `PAID` / `UNPAID`（回到 `DUE`）/ `VOID`。都在现金记录锁 `qb.cash:<记录>` 内；事件 `qb.cash-reward.*` 送站内信 |
+| `QB_REDEEM_CODE_ISSUE` | `qb.publication.write` | 商家的领奖码（Q22b）：轮换码（2 分钟，顺带删除本商家失效的）或固定码（长期；`renew` 作废旧码）；随机数经 `RandomBytesStep`；商家码锁 `qb.redeem-token:<商家>` |
+| `QB_REDEEM_TOKEN_CHECK` / `QB_REDEMPTION_CLAIM` | `qb.me` | 答题人扫到的码：有效（422 `QB_REDEEM_TOKEN_INVALID`）→ 商家与本人在该商家的未领奖品；领取一件（码须属于奖品的商家，422 `QB_REDEEM_TOKEN_SPONSOR`）：轮换码 → `REDEEMED`，固定码 → `CLAIMED`（`confirmBy` + 10 分钟）。奖品锁 `qb.redeem:<奖品>` 内经答题人视图读 |
+| `QB_REDEMPTION_CONFIRM` / `QB_REDEMPTION_DECLINE` / `QB_REDEMPTION_VOID` | `qb.publication.write` / 同 / `qb.redemption.void` | 商家确认申请（未超时 → `REDEEMED`，超时 422 `QB_REDEMPTION_CLAIM_LAPSED`）或拒绝（→ `DUE`）；管理员作废未领取的奖品 |
+| `QB_REDEMPTION_EXPIRE` / `QB_REDEMPTION_LAPSE` | 系统（`internal()`） | 逐项任务 `qb.redemption-expire`（每日：`DUE` 过期 → `EXPIRED`）与 `qb.redemption-lapse`（每十分钟：`CLAIMED` 过了 `confirmBy` → `DUE`） |
 | `QB_CASH_REWARD_OVERDUE` / `QB_CASH_REWARD_REMIND` | 系统（`internal()`） | 逐项任务 `qb.cash-reward-overdue`（每小时：标记已付过了 `confirmBy` → `OVERDUE`，答题人此后不能开始新答题，422 `QB_CASH_CONFIRM_DUE`）与 `qb.cash-reward-remind`（每日：`DUE` 过了 `payBy` → 提醒商家一次） |
 | `QB_TOPUP_START` | `qb.topup`，要求已验证 | 未封禁、入驻已通过；金额为受控参数 `qb.topup.min` – `max` 之间的整数 Kudos；未完成的至多 3 笔 → 插入 `OPENING`，登记作业 `qb.stripe.checkout-create`（会话的金额、引用与返回地址只来自服务端记录与配置）。页面轮询到 `OPEN` 后跳转 |
 | `QB_TOPUP_OPENED` / `QB_TOPUP_OPEN_FAILED` | 系统（作业完成 / 失败，`qb.wallet.system`，`internal()`） | 商家钱包锁：核对会话（编号、模式、地址前缀、引用、金额）后 `OPEN`，不符或作业失败即 `FAILED`（不符另开待办） |
@@ -402,6 +407,7 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 | `qb.app.feed` | 首页卡片：可见性（LIVE + 时间内 + 地区交集 + 名额与预算未满 + 商家可支付）、关键字、筛选（发布人国家与名称、金额、完成人数、开始日期）、排序（U-10 – U-14）、按支付方式筛选（`method`，Q22；"商家可支付"只对 `PLATFORM`）。只读卡片、计数、钱包（与较小的国家、入驻）；"现在"（`at`）与国家（`country`）由调用方传，开始答题在服务端再判断 | `qb.play` |
 | `qb.app.publication` / `qb.app.publication-tiers` | 详情（U-20 – U-23）：卡片、简介与资料（版本快照中，不含题目）、发布人（入驻已通过的）、完成人数（近期窗口取统计表，累计取计数行）、本人的会话；档位取卡片 | `qb.play` |
 | `qb.app.history` | 本人的答题记录（U-40 – U-42）：已完成（合格 / 不合格）、进行中、已过时限待自动提交；关键字、日期、金额、状态筛选；现金 / 兑换的状态（Q22） | `qb.me` |
+| `qb.app.redemptions` / `qb.sponsor.redemptions` / `qb.admin.redemptions` | 奖品（Q22b）：本人未领取的（首页提示）/ 商家的（待确认的申请、今天已领取、全部）/ 全部（作废） | `qb.me` / `qb.publication.write` / `qb.admin.publication.read` |
 | `qb.app.cash-rewards` / `qb.sponsor.cash-rewards` / `qb.admin.cash-rewards` | 现金奖励（Q22）：本人未结的（App 首页提示）/ 商家欠付与已付的（搜索、状态）/ 全部（争议的裁定） | `qb.me` / `qb.publication.write` / `qb.admin.publication.read` |
 | `qb.app.wallet` / `qb.app.ledger` | 余额概览（可用 = 本人 2120、累计收入、待支付、转账中 = 2130；带 `at` 时另给保留中的奖励 `held`、其中争议冻结的 `heldOpen` 与预计可转时刻 `heldUntil`，规则同 `qb.wallet.taker-transferable`，Q10b）与流水（奖励：已到账 / 处理中；Q6b 加转账），只读本人的分录（数据视图 `taker:LedgerEntry`，按 `dimension1` = 调用者）与会话（U-50 – U-52，Q6a） | `qb.me` |
 | `qb.sponsor.wallet` / `qb.sponsor.topups` | 商家钱包概览（余额、待支付、累计充值与退款、累计支出）与本人充值记录（支付页地址只在 `OPEN` 且未过期时给出）（M-04，Q6a） | `qb.sponsor.finance.read` |

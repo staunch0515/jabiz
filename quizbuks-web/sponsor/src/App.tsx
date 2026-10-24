@@ -21,6 +21,7 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import { CircleHelp, FileQuestion, LayoutDashboard, Megaphone, MessagesSquare, ReceiptText, Store, UserRound,
   Wallet,
   HandCoins,
+  Gift,
 } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -35,6 +36,7 @@ import { DashboardPage } from './pages/DashboardPage'
 import { PublicationListPage } from './publishing/PublicationListPage'
 import { PublicationPage } from './publishing/PublicationPage'
 import { CASH_REWARDS_PATH, CashRewardsPage } from './publishing/CashRewardsPage'
+import { REDEEM_PATH, RedeemPage } from './publishing/RedeemPage'
 import { publicationIdOf, PUBLICATIONS_PATH } from './publishing/paths'
 import { OnboardingPage, useMySponsor } from './pages/OnboardingPage'
 import { MESSAGES_PATH } from './notices/api'
@@ -127,6 +129,7 @@ function SignedIn({ path }: { path: string }) {
   else if (quizId) page = <QuizEditorPage key={quizId} quizId={quizId} />
   else if (path === PUBLICATIONS_PATH) page = <PublicationListPage />
   else if (path === CASH_REWARDS_PATH) page = <CashRewardsPage />
+  else if (path === REDEEM_PATH) page = <RedeemPage />
   else if (analyticsIdOf(path)) page = <PublicationAnalyticsPage key={path} publicationId={analyticsIdOf(path)!} />
   else if (publicationIdOf(path)) page = <PublicationPage key={path} publicationId={publicationIdOf(path)!} />
   else if (path === ONBOARDING) page = <OnboardingPage />
@@ -143,6 +146,7 @@ function SignedIn({ path }: { path: string }) {
     { key: 'quizzes', label: t('nav.quizzes'), path: QUIZZES_PATH, icon: FileQuestion },
     { key: 'publications', label: t('publishing.nav'), path: PUBLICATIONS_PATH, icon: Megaphone },
     { key: 'cash', label: t('publishing.cash.nav'), path: CASH_REWARDS_PATH, icon: HandCoins },
+    { key: 'redeem', label: t('publishing.redeem.nav'), path: REDEEM_PATH, icon: Gift },
     { key: 'onboarding', label: t('nav.onboarding'), path: ONBOARDING, icon: Store },
     { key: 'wallet', label: t('wallet.nav'), path: WALLET_PATH, icon: Wallet },
     { key: 'transactions', label: t('transactions.nav'), path: TRANSACTIONS_PATH, icon: ReceiptText },

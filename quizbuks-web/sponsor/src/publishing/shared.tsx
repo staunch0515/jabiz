@@ -24,6 +24,7 @@ import {
   readRegions,
   readRewardMethods,
   readCashStatuses,
+  readRedemptionStatuses,
   timeNote,
   type Problem,
   type PublicationStatus,
@@ -52,6 +53,7 @@ export const useEndReasonLabel = () => useLabels('publication-end-reason', readE
 export const useRegionLabel = () => useLabels('region', readRegions)
 export const useRewardMethodLabel = () => useLabels('reward-method', readRewardMethods)
 export const useCashStatusLabel = () => useLabels('cash-reward-status', readCashStatuses)
+export const useRedemptionStatusLabel = () => useLabels('redemption-status', readRedemptionStatuses)
 
 const VARIANT: Record<PublicationStatus, 'outline' | 'secondary' | 'success' | 'warning'> = {
   DRAFT: 'outline',

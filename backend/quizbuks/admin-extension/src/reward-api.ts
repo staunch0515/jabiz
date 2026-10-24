@@ -110,3 +110,76 @@ export async function readCashRewards(status: string | null, q: string, offset: 
 export const resolveCashReward = (cashRewardId: string, resolution: CashResolution, note: string) =>
   runProcess<{ cashRewardId: string; status: CashStatus; revision: number }>(PROCESS.cashResolve,
     { cashRewardId, resolution, note: note.trim() || null })
+
+// ---- prizes collected at the sponsor's place (Q22b) ------------------------------------------------------------------
+
+export type RedemptionStatus = 'DUE' | 'CLAIMED' | 'REDEEMED' | 'EXPIRED' | 'VOID'
+export const REDEMPTION_STATUSES: readonly RedemptionStatus[] = ['DUE', 'CLAIMED', 'REDEEMED', 'EXPIRED', 'VOID']
+
+/** A row of `qb.admin.redemptions`. */
+export interface Redemption {
+  redemptionId: string
+  code: string
+  attemptId: string
+  publicationId: string
+  publicationName: string
+  sponsorId: string
+  sponsorCompany: string | null
+  userId: string
+  takerName: string | null
+  amount: string
+  description: string
+  status: RedemptionStatus
+  dueAt: string
+  expiresAt: string | null
+  claimKind: string | null
+  claimedAt: string | null
+  confirmBy: string | null
+  redeemedAt: string | null
+  redeemedBy: string | null
+  voidedBy: string | null
+  voidNote: string | null
+}
+
+function redemption(row: Row): Redemption {
+  return {
+    redemptionId: String(row.redemptionId),
+    code: String(row.code ?? ''),
+    attemptId: String(row.attemptId ?? ''),
+    publicationId: String(row.publicationId ?? ''),
+    publicationName: String(row.publicationName ?? ''),
+    sponsorId: String(row.sponsorId ?? ''),
+    sponsorCompany: str(row.sponsorCompany),
+    userId: String(row.userId ?? ''),
+    takerName: str(row.takerName),
+    amount: String(row.amount ?? '0'),
+    description: String(row.description ?? ''),
+    status: (REDEMPTION_STATUSES as readonly string[]).includes(String(row.status))
+      ? (row.status as RedemptionStatus) : 'DUE',
+    dueAt: String(row.dueAt ?? ''),
+    expiresAt: str(row.expiresAt),
+    claimKind: str(row.claimKind),
+    claimedAt: str(row.claimedAt),
+    confirmBy: str(row.confirmBy),
+    redeemedAt: str(row.redeemedAt),
+    redeemedBy: str(row.redeemedBy),
+    voidedBy: str(row.voidedBy),
+    voidNote: str(row.voidNote),
+  }
+}
+
+export async function readRedemptions(status: string | null, q: string, offset: number, limit: number):
+  Promise<{ items: Redemption[]; total?: number }> {
+  const page = await runQuery<Row>(TEMPLATE.redemptions, {
+    params: q.trim() ? { q: q.trim() } : {},
+    filters: status ? [{ field: 'status', op: 'eq', value: status }] : [],
+    offset,
+    limit,
+    count: true,
+  })
+  return { items: page.items.map(redemption), total: page.total }
+}
+
+export const voidRedemption = (redemptionId: string, note: string) =>
+  runProcess<{ redemptionId: string; status: RedemptionStatus; revision: number }>(PROCESS.redemptionVoid,
+    { redemptionId, note: note.trim() || null })

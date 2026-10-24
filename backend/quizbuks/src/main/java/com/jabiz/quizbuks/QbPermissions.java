@@ -121,6 +121,8 @@ public final class QbPermissions {
     public static final String ADMIN_REWARD_METHODS = "qb.admin.reward-methods";
     /** Resolve a disputed cash reward (Q22): confirm it paid, send it back to the sponsor, or void it. */
     public static final String CASH_RESOLVE = "qb.cash.resolve";
+    /** Void a prize not yet collected (Q22b). */
+    public static final String REDEMPTION_VOID = "qb.redemption.void";
     /** Read every sponsor's quizzes, their content and their versions (read only). */
     public static final String ADMIN_QUIZ_READ = "qb.admin.quiz.read";
     /** Read every sponsor's publications, their tiers and counters (read only). */

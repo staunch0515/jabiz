@@ -1,5 +1,5 @@
 import { configureClient, session } from '@jabiz/client'
-import { act, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
@@ -83,6 +83,10 @@ interface Options {
   /** The taker's open cash rewards (Q22). */
   cashRewards?: Record<string, unknown>[]
   cash?: () => Response
+  /** Q22b: the taker's prizes, what a scanned code stands for, and the answer to collecting one. */
+  redemptions?: Record<string, unknown>[]
+  redeemCheck?: () => Response
+  redeemClaim?: () => Response
 }
 
 /** The server as the play pages see it; records every call (path and body). */
@@ -116,6 +120,16 @@ function server(options: Options = {}) {
         return json(200, { items: options.history ?? [], offset: 0, limit: 20 })
       case '/api/queries/qb.app.cash-rewards':
         return json(200, { items: options.cashRewards ?? [], offset: 0, limit: 50 })
+      case '/api/queries/qb.app.redemptions':
+        return json(200, { items: options.redemptions ?? [], offset: 0, limit: 50 })
+      case '/api/processes/QB_REDEEM_TOKEN_CHECK/latest':
+        return options.redeemCheck ? options.redeemCheck() : json(200, { output: { sponsorCompany: 'Capitals Inc',
+          kind: 'ROTATING', prizes: [{ redemptionId: 'r1', attemptId: ATTEMPT, code: 'C-ABCD1234', amount: 100,
+            description: 'A coffee at our counter', publicationName: 'Capitals week', status: 'DUE',
+            expiresAt: '2026-11-20T00:00:00Z' }] } })
+      case '/api/processes/QB_REDEMPTION_CLAIM/latest':
+        return options.redeemClaim ? options.redeemClaim() : json(200, { output: { redemptionId: 'r1', status: 'REDEEMED',
+          revision: 2 } })
       case '/api/processes/QB_CASH_REWARD_CONFIRM/latest':
       case '/api/processes/QB_CASH_REWARD_DISPUTE/latest':
         return options.cash ? options.cash() : json(200, { output: { cashRewardId: 'c1', status: 'CONFIRMED', revision: 3 } })
@@ -254,6 +268,77 @@ describe('the ways a reward is paid (Q22)', () => {
     expect(reward).toHaveAttribute('data-status', 'REDEEM')
     expect(within(reward).getByTestId('redeem-prize')).toHaveTextContent('A coffee at our counter, Shibuya')
     expect(reward).toHaveTextContent("Collect it at Capitals Inc's place by")
+  })
+})
+
+describe('collecting a prize by the sponsor\'s code (Q22b)', () => {
+  const prizeRow = { redemptionId: 'r1', attemptId: ATTEMPT, code: 'C-ABCD1234', publicationId: PUB,
+    publicationName: 'Capitals week', sponsorCompany: 'Capitals Inc', amount: 100, description: 'A coffee at our counter',
+    status: 'DUE', dueAt: '2026-10-20T00:00:00Z', expiresAt: '2026-11-20T00:00:00Z', claimedAt: null, confirmBy: null,
+    redeemedAt: null }
+
+  it('shows the prizes to collect at the sponsor whose code was scanned, and collects one at once', async () => {
+    const { posted } = server({ redemptions: [prizeRow] })
+    window.history.replaceState(null, '', '/redeem/rot-key-1')
+    render(<App />)
+    const page = await screen.findByTestId('redeem-page')
+    expect(page).toHaveAttribute('data-kind', 'ROTATING')
+    expect(page).toHaveTextContent('Collect your prize at Capitals Inc')
+    const prize = screen.getByTestId('redeem-prize')
+    expect(prize).toHaveTextContent('A coffee at our counter')
+    expect(prize).toHaveTextContent('Code C-ABCD1234')
+    await userEvent.click(within(prize).getByTestId('redeem-collect'))
+    await waitFor(() => expect(posted('QB_REDEMPTION_CLAIM')).toEqual([{ scannedKey: 'rot-key-1', redemptionId: 'r1' }]))
+    const done = await screen.findByTestId('redeem-done')
+    expect(done).toHaveAttribute('data-status', 'REDEEMED')
+    expect(done).toHaveTextContent('Collected!')
+    expect(within(done).getByTestId('redeem-code')).toHaveTextContent('C-ABCD1234')
+    expect(within(done).getByTestId('redeem-result-link')).toHaveAttribute('href', `/result/${ATTEMPT}`)
+    expect(posted('QB_REDEEM_TOKEN_CHECK')).toEqual([{ scannedKey: 'rot-key-1' }])
+  })
+
+  it('waits for the sponsor after a printed code\'s claim, and says when a code no longer works', async () => {
+    server({ redemptions: [prizeRow],
+      redeemCheck: () => json(200, { output: { sponsorCompany: 'Capitals Inc', kind: 'PRINTED', prizes: [{
+        redemptionId: 'r1', attemptId: ATTEMPT, code: 'C-ABCD1234', amount: 100, description: 'A coffee at our counter',
+        publicationName: 'Capitals week', status: 'DUE', expiresAt: '2026-11-20T00:00:00Z' }] } }),
+      redeemClaim: () => json(200, { output: { redemptionId: 'r1', status: 'CLAIMED', revision: 2 } }) })
+    window.history.replaceState(null, '', '/redeem/print-key-1')
+    render(<App />)
+    expect(await screen.findByTestId('redeem-page')).toHaveTextContent('The sponsor confirms it on their screen')
+    await userEvent.click(screen.getByTestId('redeem-collect'))
+    const done = await screen.findByTestId('redeem-done')
+    expect(done).toHaveAttribute('data-status', 'CLAIMED')
+    expect(done).toHaveTextContent('Waiting for the sponsor')
+    cleanup()
+    server({ redeemCheck: () => json(422, { title: 'Unprocessable', status: 422, violations: [{ ruleCode: 'QB_REDEEM_TOKEN_INVALID' }] }) })
+    window.history.replaceState(null, '', '/redeem/old-key')
+    render(<App />)
+    expect(await screen.findByText('This code does not work any more')).toBeInTheDocument()
+  })
+
+  it('lists the prizes waiting on the home, and shows a claim waiting for the sponsor on the result', async () => {
+    server({ redemptions: [{ ...prizeRow, status: 'CLAIMED', confirmBy: '2026-10-20T01:10:00Z' }],
+      result: () => json(200, { output: finished({ score: 5, passed: true, reward: 100, rewardStatus: 'REDEEM',
+        rewardMethod: 'OFFLINE_REDEEM', cash: null, redeem: { redemptionId: 'r1', status: 'CLAIMED', code: 'C-ABCD1234',
+          amount: 100, description: 'A coffee at our counter', expiresAt: '2026-11-20T00:00:00Z',
+          sponsorCompany: 'Capitals Inc', confirmBy: '2026-10-20T01:10:00Z', redeemedAt: null } }) }) })
+    render(<App />)
+    const notice = await screen.findByTestId('home-redeem')
+    expect(notice).toHaveTextContent('A prize is waiting for you')
+    expect(within(notice).getByTestId('home-redeem-item')).toHaveAttribute('data-status', 'CLAIMED')
+    expect(within(notice).getByRole('link')).toHaveAttribute('href', `/result/${ATTEMPT}`)
+    cleanup()
+    server({ result: () => json(200, { output: finished({ score: 5, passed: true, reward: 100, rewardStatus: 'REDEEM',
+      rewardMethod: 'OFFLINE_REDEEM', cash: null, redeem: { redemptionId: 'r1', status: 'CLAIMED', code: 'C-ABCD1234',
+        amount: 100, description: 'A coffee at our counter', expiresAt: '2026-11-20T00:00:00Z',
+        sponsorCompany: 'Capitals Inc', confirmBy: '2026-10-20T01:10:00Z', redeemedAt: null } }) }) })
+    window.history.replaceState(null, '', `/result/${ATTEMPT}`)
+    render(<App />)
+    const reward = await screen.findByTestId('result-reward')
+    expect(reward).toHaveAttribute('data-redeem-status', 'CLAIMED')
+    expect(reward).toHaveTextContent("You scanned Capitals Inc's printed code")
+    expect(within(reward).getByTestId('redeem-code')).toHaveTextContent('C-ABCD1234')
   })
 })
 

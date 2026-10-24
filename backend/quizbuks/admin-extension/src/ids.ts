@@ -34,6 +34,8 @@ export const TEMPLATE = {
   publications: 'qb.admin.publications',
   /** Every cash reward (Q22): disputes and late sponsors (`qb.admin.publication.read`). */
   cashRewards: 'qb.admin.cash-rewards',
+  /** Every prize to collect at a sponsor's place (Q22b). */
+  redemptions: 'qb.admin.redemptions',
   /** Every sponsor's quizzes and a quiz's versions, without the versions' content (Q17; `qb.admin.quiz.read`). */
   quizzes: 'qb.admin.quizzes',
   quizVersions: 'qb.admin.quiz-versions',
@@ -133,6 +135,8 @@ export const PROCESS = {
   rewardMethodsSet: 'QB_SPONSOR_REWARD_METHODS_SET',
   /** Decides a disputed cash reward (Q22; `qb.cash.resolve`). */
   cashResolve: 'QB_CASH_REWARD_RESOLVE',
+  /** An administrator voids a prize not yet collected (Q22b). */
+  redemptionVoid: 'QB_REDEMPTION_VOID',
 } as const
 
 /** The platform's controlled changes (four eyes, decision D40): the mapping changes only through them. */
@@ -180,6 +184,7 @@ export const DICTIONARY = {
   rewardMethod: 'urn:jabiz:dict:quizbuks:reward-method',
   cashStatus: 'urn:jabiz:dict:quizbuks:cash-reward-status',
   cashResolution: 'urn:jabiz:dict:quizbuks:cash-reward-resolution',
+  redemptionStatus: 'urn:jabiz:dict:quizbuks:redemption-status',
   topUpManualKind: 'urn:jabiz:dict:quizbuks:topup-manual-kind',
   transferStatus: 'urn:jabiz:dict:quizbuks:transfer-status',
   topUpStatus: 'urn:jabiz:dict:quizbuks:topup-status',
@@ -228,6 +233,7 @@ export const PERMISSION = {
   /** Q22: which reward methods a sponsor may use, and deciding disputed cash rewards. */
   rewardMethods: 'qb.admin.reward-methods',
   cashResolve: 'qb.cash.resolve',
+  redemptionVoid: 'qb.redemption.void',
   /** Bank withdrawals (Q13b): paying them, and the account number in plain text to do so. */
   withdrawalPay: 'qb.withdrawal.pay',
   bankReveal: 'qb.payout.bank.reveal',
@@ -281,6 +287,7 @@ export const PATH = {
   publications: '/qb/publications',
   /** Every cash reward (Q22): disputes to decide, late sponsors. */
   cashRewards: '/qb/cash-rewards',
+  redemptions: '/qb/redemptions',
   publicationsWhere: (filter: Record<string, string>) => `/qb/publications?${new URLSearchParams(filter)}`,
   finance: '/qb/finance',
   transfers: '/qb/finance/transfers',

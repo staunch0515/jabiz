@@ -96,10 +96,16 @@ export interface PublicationOption {
 
 /** A row of `qb.sponsor.inbox`: an announcement of QuizBuks to the sponsor. */
 export interface Announcement {
+  /** An announcement of QuizBuks's (BROADCAST, Markdown) or a message to the sponsor (MESSAGE, plain text; Q22). */
+  itemKind: 'MESSAGE' | 'BROADCAST'
   itemId: string
   type: string
+  kind: string | null
   title: I18nText
   body: I18nText
+  markdown: boolean
+  /** Where a message leads: the cash rewards or the redeem page (Q22); null for an announcement. */
+  action: 'CASH' | 'REDEEM' | null
   at: string
   expiresAt: string | null
   readAt: string | null
@@ -170,10 +176,14 @@ export async function readAnnouncements(): Promise<Announcement[]> {
   // The server's now (review L1): the device's clock is no parameter.
   const page = await runQuery<Row>(NOTICE_TEMPLATE.inbox, { params: {}, limit: 100 })
   return page.items.map((row) => ({
+    itemKind: row.itemKind === 'MESSAGE' ? 'MESSAGE' : 'BROADCAST',
     itemId: String(row.itemId),
     type: String(row.type),
+    kind: str(row.kind),
     title: text(row.title),
     body: text(row.body),
+    markdown: row.markdown !== false,
+    action: row.action === 'CASH' || row.action === 'REDEEM' ? row.action : null,
     at: String(row.at),
     expiresAt: str(row.expiresAt),
     readAt: str(row.readAt),
@@ -195,8 +205,8 @@ export const cancelNotice = (broadcastId: string, baseRevision: number) =>
 export const withdrawNotice = (broadcastId: string, baseRevision: number) =>
   runProcess<BroadcastOutput>(NOTICE_PROCESS.withdraw, { broadcastId, baseRevision })
 
-export const markAnnouncementRead = (id: string) =>
-  runProcess<{ changed: boolean }>(NOTICE_PROCESS.mark, { kind: 'BROADCAST', id, action: 'READ' })
+export const markAnnouncementRead = (id: string, kind: 'MESSAGE' | 'BROADCAST' = 'BROADCAST') =>
+  runProcess<{ changed: boolean }>(NOTICE_PROCESS.mark, { kind, id, action: 'READ' })
 
 /** A share in whole per cent, or null when either count is unknown (fewer than five) or there is no base. */
 export function rate(part: number | null, whole: number | null): number | null {

@@ -19,8 +19,9 @@ import java.util.UUID;
 
 /**
  * Registers the rewards settled outside the wallet (Q22, docs/quizbuks/plans/Q22-reward-methods.md): the two
- * entities, their datasets (the administrators' default one, the sponsor's own, the taker's own; all read only and
- * written by the processes only), their dictionaries, the cash reward processes and the two jobs.
+ * entities and the sponsors' codes (Q22b), their datasets (the administrators' default one, the sponsor's own, the
+ * taker's own; all read only and written by the processes only), their dictionaries, the cash reward and redemption
+ * processes and the jobs.
  */
 @Configuration
 public class RewardConfig {
@@ -58,6 +59,23 @@ public class RewardConfig {
     @Bean
     EntityDefinition qbRedemptionEntity() {
         return QbRewards.REDEMPTION_ENTITY;
+    }
+
+    @Bean
+    EntityDefinition qbRedeemTokenEntity() {
+        return QbRewards.REDEEM_TOKEN_ENTITY;
+    }
+
+    /** The codes: written by the processes only; the sponsor sees their own (never the token's value). */
+    @Bean
+    DatasetDefinition qbRedeemTokenDataset() {
+        return defaultDataset(QbRewards.REDEEM_TOKEN);
+    }
+
+    @Bean
+    DatasetDefinition qbSponsorRedeemTokenDataset() {
+        return ownDataset(QbRewards.sponsorDataset(QbRewards.REDEEM_TOKEN), QbRewards.REDEEM_TOKEN, "sponsorId",
+            QbPermissions.PUBLICATION_WRITE);
     }
 
     @Bean
@@ -119,9 +137,95 @@ public class RewardConfig {
     StaticDictionary qbRedemptionStatusDictionary() {
         return StaticDictionary.define(QbRewards.REDEMPTION_STATUS_DICTIONARY, d -> d
             .item(RedemptionStatus.DUE, "en", "To be collected", "zh", "待领取", "ja", "引き換え待ち")
+            .item(RedemptionStatus.CLAIMED, "en", "Claimed, awaiting the sponsor", "zh", "已扫码，待商家确认",
+                "ja", "スキャン済み、スポンサーの確認待ち")
             .item(RedemptionStatus.REDEEMED, "en", "Collected", "zh", "已领取", "ja", "引き換え済み")
             .item(RedemptionStatus.EXPIRED, "en", "Expired", "zh", "已过期", "ja", "期限切れ")
             .item(RedemptionStatus.VOID, "en", "Void", "zh", "已作废", "ja", "無効"));
+    }
+
+    @Bean
+    StaticDictionary qbRedeemKindDictionary() {
+        return StaticDictionary.define(QbRewards.REDEEM_KIND_DICTIONARY, d -> d
+            .item(RedemptionStatus.KIND_ROTATING, "en", "Code on the console's screen", "zh", "商家后台屏幕上的码",
+                "ja", "コンソール画面のコード")
+            .item(RedemptionStatus.KIND_PRINTED, "en", "Printed code", "zh", "打印的固定码", "ja", "印刷したコード"));
+    }
+
+    @Bean
+    ProcessDefinition<RedemptionProcesses.IssueInput, RedemptionProcesses.IssueOutput, ProcessContext>
+        qbRedeemCodeIssue() {
+        return RedemptionProcesses.issue();
+    }
+
+    @Bean
+    ProcessDefinition<RedemptionProcesses.TokenInput, RedemptionProcesses.CheckOutput, ProcessContext>
+        qbRedeemTokenCheck() {
+        return RedemptionProcesses.check();
+    }
+
+    @Bean
+    ProcessDefinition<RedemptionProcesses.ClaimInput, RedemptionProcesses.RedemptionOutput, ProcessContext>
+        qbRedemptionClaim() {
+        return RedemptionProcesses.claim();
+    }
+
+    @Bean
+    ProcessDefinition<RedemptionProcesses.RedemptionRef, RedemptionProcesses.RedemptionOutput, ProcessContext>
+        qbRedemptionConfirm() {
+        return RedemptionProcesses.confirm();
+    }
+
+    @Bean
+    ProcessDefinition<RedemptionProcesses.RedemptionRef, RedemptionProcesses.RedemptionOutput, ProcessContext>
+        qbRedemptionDecline() {
+        return RedemptionProcesses.decline();
+    }
+
+    @Bean
+    ProcessDefinition<RedemptionProcesses.VoidInput, RedemptionProcesses.RedemptionOutput, ProcessContext>
+        qbRedemptionVoid() {
+        return RedemptionProcesses.voidPrize();
+    }
+
+    @Bean
+    ProcessDefinition<RedemptionProcesses.RedemptionRef, RedemptionProcesses.RedemptionOutput, ProcessContext>
+        qbRedemptionExpire() {
+        return RedemptionProcesses.expire();
+    }
+
+    @Bean
+    ProcessDefinition<RedemptionProcesses.RedemptionRef, RedemptionProcesses.RedemptionOutput, ProcessContext>
+        qbRedemptionLapse() {
+        return RedemptionProcesses.lapse();
+    }
+
+    /** Every day: the prizes not collected in time, each in a transaction of its own (D42). */
+    @Bean
+    JobDefinition<RedemptionProcesses.RedemptionRef> qbRedemptionExpireJob(
+        ProcessDefinition<RedemptionProcesses.RedemptionRef, RedemptionProcesses.RedemptionOutput, ProcessContext>
+            qbRedemptionExpire) {
+        return JobDefinition.forEach(RedemptionProcesses.EXPIRE_JOB, "0 10 2 * * *", ZoneOffset.UTC,
+                JobItems.template(RedemptionProcesses.EXPIRED_TEMPLATE,
+                    scheduledTime -> Map.of("cutoff", scheduledTime), "redemptionId"),
+                qbRedemptionExpire,
+                (scheduledTime, row) -> new RedemptionProcesses.RedemptionRef(
+                    UUID.fromString(String.valueOf(row.get("redemptionId")))))
+            .maxItems(1_000);
+    }
+
+    /** Every ten minutes: the claims from a printed code the sponsor did not confirm in time are due again. */
+    @Bean
+    JobDefinition<RedemptionProcesses.RedemptionRef> qbRedemptionLapseJob(
+        ProcessDefinition<RedemptionProcesses.RedemptionRef, RedemptionProcesses.RedemptionOutput, ProcessContext>
+            qbRedemptionLapse) {
+        return JobDefinition.forEach(RedemptionProcesses.LAPSE_JOB, "0 */10 * * * *", ZoneOffset.UTC,
+                JobItems.template(RedemptionProcesses.LAPSED_TEMPLATE,
+                    scheduledTime -> Map.of("cutoff", scheduledTime), "redemptionId"),
+                qbRedemptionLapse,
+                (scheduledTime, row) -> new RedemptionProcesses.RedemptionRef(
+                    UUID.fromString(String.valueOf(row.get("redemptionId")))))
+            .maxItems(1_000);
     }
 
     @Bean

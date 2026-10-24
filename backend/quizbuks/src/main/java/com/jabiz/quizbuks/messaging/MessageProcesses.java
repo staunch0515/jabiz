@@ -72,6 +72,11 @@ public final class MessageProcesses {
     public static final String CASH_RESOLVED_SPONSOR_CONSUMER = "qb.msg-cash-resolved-sponsor";
     public static final String CASH_OVERDUE_CONSUMER = "qb.msg-cash-overdue";
     public static final String REDEEM_DUE_CONSUMER = "qb.msg-redeem-due";
+    public static final String REDEEM_CLAIMED_CONSUMER = "qb.msg-redeem-claimed";
+    public static final String REDEEM_REDEEMED_CONSUMER = "qb.msg-redeem-redeemed";
+    public static final String REDEEM_DECLINED_CONSUMER = "qb.msg-redeem-declined";
+    public static final String REDEEM_EXPIRED_CONSUMER = "qb.msg-redeem-expired";
+    public static final String REDEEM_VOID_CONSUMER = "qb.msg-redeem-void";
 
     /** An event older than this makes no message (a replay to a new subscription, a long backlog). */
     public static final Duration MAX_AGE = Duration.ofDays(7);
@@ -144,7 +149,7 @@ public final class MessageProcesses {
                     QueryEntities.query(QbRewards.defaultDataset(QbRewards.CASH_REWARD), ctx -> byId("cashRewardId",
                         QbInbox.CASH_KINDS.contains(input(ctx).kind()) ? uuid(input(ctx).sourceId()) : null), CASH),
                     QueryEntities.query(QbRewards.defaultDataset(QbRewards.REDEMPTION), ctx -> byId("redemptionId",
-                        QbInbox.REDEEM_DUE.equals(input(ctx).kind()) ? uuid(input(ctx).sourceId()) : null),
+                        QbInbox.REDEEM_KINDS.contains(input(ctx).kind()) ? uuid(input(ctx).sourceId()) : null),
                         REDEMPTION)))
                 .compute("Make the message", (metadata, ctx) -> fromEvent(ctx, texts)));
     }
@@ -158,7 +163,8 @@ public final class MessageProcesses {
         String key = input.kind().toLowerCase(java.util.Locale.ROOT).replace('_', '-') + ":" + id;
         // Q22: a cash reward can be marked paid, disputed or late more than once (an "unpaid" decision sends it
         // back): each round is its own message, a redelivery of the same event is not.
-        if (QbInbox.CASH_KINDS.contains(input.kind()) && !QbInbox.CASH_DUE.equals(input.kind())) {
+        if (QbInbox.CASH_KINDS.contains(input.kind()) && !QbInbox.CASH_DUE.equals(input.kind())
+            || QbInbox.REDEEM_CLAIMED.equals(input.kind()) || QbInbox.REDEEM_DECLINED.equals(input.kind())) {
             return key + ":" + input.occurredAt().getEpochSecond();
         }
         return key;
@@ -167,7 +173,7 @@ public final class MessageProcesses {
     /** The kinds that read the publication's card: the platform's reward, and the cash or prize of Q22. */
     private static boolean reward(ProcessContext ctx) {
         String kind = input(ctx).kind();
-        return attemptReward(ctx) || QbInbox.CASH_KINDS.contains(kind) || QbInbox.REDEEM_DUE.equals(kind);
+        return attemptReward(ctx) || QbInbox.CASH_KINDS.contains(kind) || QbInbox.REDEEM_KINDS.contains(kind);
     }
 
     /** The kinds whose source is the attempt itself. */
@@ -194,7 +200,8 @@ public final class MessageProcesses {
             case QbInbox.CASH_DUE, QbInbox.CASH_MARKED_PAID, QbInbox.CASH_CONFIRMED, QbInbox.CASH_DISPUTED,
                  QbInbox.CASH_RESOLVED, QbInbox.CASH_RESOLVED_SPONSOR, QbInbox.CASH_OVERDUE ->
                 cashMessage(ctx, input, params, texts);
-            case QbInbox.REDEEM_DUE -> redeemMessage(ctx, params);
+            case QbInbox.REDEEM_DUE, QbInbox.REDEEM_CLAIMED, QbInbox.REDEEM_REDEEMED, QbInbox.REDEEM_DECLINED,
+                 QbInbox.REDEEM_EXPIRED, QbInbox.REDEEM_VOID -> redeemMessage(ctx, input, params);
             default -> null;
         };
         if (draft != null) {
@@ -261,13 +268,29 @@ public final class MessageProcesses {
                 cash.get("attemptId"));
     }
 
-    /** The prize to collect (Q22): to the taker, with what it is and until when. */
-    private static Draft redeemMessage(ProcessContext ctx, Map<String, MessageTexts.Value> params) {
+    /**
+     * The prize to collect (Q22): to the taker, with what it is and until when; and its fate (Q22b): a claim from the
+     * printed code to the sponsor, collected, declined, expired or voided to the taker. Skipped when the prize moved on
+     * since the event (the next message says where it stands).
+     */
+    private static Draft redeemMessage(ProcessContext ctx, EventInput input, Map<String, MessageTexts.Value> params) {
         EntityInstance redemption = first(ctx, REDEMPTION);
         EntityInstance card = first(ctx, CARD);
-        if (redemption == null || card == null || !RedemptionStatus.DUE.equals(redemption.get("status"))) {
+        if (redemption == null || card == null) {
             return null;
         }
+        String expected = switch (input.kind()) {
+            case QbInbox.REDEEM_DUE, QbInbox.REDEEM_DECLINED -> RedemptionStatus.DUE;
+            case QbInbox.REDEEM_CLAIMED -> RedemptionStatus.CLAIMED;
+            case QbInbox.REDEEM_REDEEMED -> RedemptionStatus.REDEEMED;
+            case QbInbox.REDEEM_EXPIRED -> RedemptionStatus.EXPIRED;
+            case QbInbox.REDEEM_VOID -> RedemptionStatus.VOID;
+            default -> null;
+        };
+        if (expected != null && !expected.equals(redemption.get("status"))) {
+            return null;
+        }
+        params.put("code", MessageTexts.Value.of(redemption.get("code")));
         params.put("amount", MessageTexts.Value.of(MailValues.kudos(redemption.get("amount"))));
         params.put("name", MessageTexts.Value.of(card.get("name")));
         params.put("description", MessageTexts.Value.of(redemption.get("description")));
@@ -275,7 +298,11 @@ public final class MessageProcesses {
         Object expires = redemption.get("expiresAt");
         params.put("expiresAt", MessageTexts.Value.of(expires == null ? "" : String.valueOf(expires).substring(0,
             Math.min(10, String.valueOf(expires).length()))));
-        return new Draft(redemption.get("userId"), QbInbox.TYPE_REWARD, QbInbox.REDEEM_DUE, card.id(),
+        if (QbInbox.REDEEM_CLAIMED.equals(input.kind())) {
+            return new Draft(redemption.get("sponsorId"), QbInbox.TYPE_SYSTEM, input.kind(), card.id(),
+                QbInbox.ACTION_REDEEM, String.valueOf(redemption.id()));
+        }
+        return new Draft(redemption.get("userId"), QbInbox.TYPE_REWARD, input.kind(), card.id(),
             QbInbox.ACTION_RESULT, redemption.get("attemptId"));
     }
 
@@ -335,8 +362,11 @@ public final class MessageProcesses {
     }
 
     static EventInput redeemInput(DomainEvent event) {
-        return new EventInput(QbInbox.REDEEM_DUE, text(event, "redemptionId"), text(event, "publicationId"),
-            event.createdTime());
+        return redeemInput(event, QbInbox.REDEEM_DUE);
+    }
+
+    static EventInput redeemInput(DomainEvent event, String kind) {
+        return new EventInput(kind, text(event, "redemptionId"), text(event, "publicationId"), event.createdTime());
     }
 
     static EventInput transferInput(DomainEvent event, String kind) {

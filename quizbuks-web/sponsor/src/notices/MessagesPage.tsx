@@ -26,7 +26,10 @@ import { SPONSOR } from '../messages'
 import { pickText } from '../qb/legal'
 import { QB } from '../qb/messages'
 import { problemText } from '../qb/problems'
+import { CASH_REWARDS_PATH } from '../publishing/CashRewardsPage'
+import { REDEEM_PATH } from '../publishing/RedeemPage'
 import { useRegionLabel } from '../publishing/shared'
+import { Link } from '../qb/router'
 import {
   ANNOUNCEMENTS_QUERY,
   cancelNotice,
@@ -226,14 +229,14 @@ function AnnouncementItem({ item }: { item: Announcement }) {
   const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
   const read = useMutation({
-    mutationFn: () => markAnnouncementRead(item.itemId),
+    mutationFn: () => markAnnouncementRead(item.itemId, item.itemKind),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ANNOUNCEMENTS_QUERY }),
   })
   const title = pickText(item.title, i18n.language)
   const body = pickText(item.body, i18n.language)
   const panel = `announcement-${item.itemId}`
   return (
-    <li className="rounded-lg border p-3" data-testid="announcement" data-unread={item.unread}>
+    <li className="rounded-lg border p-3" data-testid="announcement" data-unread={item.unread} data-kind={item.itemKind}>
       <div className="flex flex-wrap items-center gap-2">
         <span className={item.unread ? 'font-semibold' : 'font-medium'} lang={title.lang}>{title.text}</span>
         {item.unread && <Badge>{t('notices.inbox.unread')}</Badge>}
@@ -248,7 +251,14 @@ function AnnouncementItem({ item }: { item: Announcement }) {
       </div>
       {open && (
         <div id={panel} className="mt-2 flex flex-col gap-1">
-          <MarkdownView text={body.text} lang={body.lang} />
+          {item.markdown ? <MarkdownView text={body.text} lang={body.lang} />
+            : <p className="whitespace-pre-line text-sm" lang={body.lang}>{body.text}</p>}
+          {item.action && (
+            <Link to={item.action === 'CASH' ? CASH_REWARDS_PATH : REDEEM_PATH}
+              className="text-primary w-fit text-sm underline underline-offset-4" data-testid="announcement-action">
+              {t(item.action === 'CASH' ? 'notices.inbox.openCash' : 'notices.inbox.openRedeem')}
+            </Link>
+          )}
           {item.expiresAt && (
             <p className="text-muted-foreground text-xs">{t('notices.inbox.until', {
               time: formatDateTime(item.expiresAt) })}</p>

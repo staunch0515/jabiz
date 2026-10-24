@@ -644,3 +644,102 @@ export function problemPlace(field: string | null): PublicationField | 'tiers' |
   if (field === 'version' || field.startsWith('version.')) return 'version'
   return (PUBLICATION_FIELDS as readonly string[]).includes(field) ? (field as PublicationField) : null
 }
+
+// ---- prizes collected at the sponsor's place (Q22b) ------------------------------------------------------------------
+
+export type RedemptionStatus = 'DUE' | 'CLAIMED' | 'REDEEMED' | 'EXPIRED' | 'VOID'
+export const REDEMPTION_STATUSES: readonly RedemptionStatus[] = ['DUE', 'CLAIMED', 'REDEEMED', 'EXPIRED', 'VOID']
+export type RedeemKind = 'ROTATING' | 'PRINTED'
+
+/** A code issued by `QB_REDEEM_CODE_ISSUE`: the secret for the QR's link, and when a rotating one stops working. */
+export interface RedeemCode {
+  redeemKey: string
+  kind: RedeemKind
+  issuedAt: string
+  expiresAt: string | null
+}
+
+/**
+ * Issues a code. Without an idempotency key on purpose: the platform keeps the output of a keyed call for replays,
+ * and the key in the QR is a secret that should live nowhere but in the console's memory (and the token table).
+ */
+export const issueRedeemCode = async (kind: RedeemKind, renew = false): Promise<RedeemCode> => {
+  const answer = await unwrap(api.POST('/api/processes/{name}/{version}', {
+    params: { path: { name: PUBLISHING_PROCESS.redeemIssue, version: 'latest' } },
+    body: renew ? { kind, renew: true } : { kind },
+  }))
+  return (answer as { output?: RedeemCode }).output as RedeemCode
+}
+
+export const readRedemptionStatuses = (): Promise<DictionaryItem[]> =>
+  readDictionary(PUBLISHING_DICTIONARY.redemptionStatus)
+
+/** A row of `qb.sponsor.redemptions`. */
+export interface RedemptionRow {
+  redemptionId: string
+  code: string
+  publicationId: string
+  publicationName: string
+  takerName: string | null
+  amount: number
+  description: string
+  status: RedemptionStatus
+  dueAt: string
+  expiresAt: string | null
+  claimKind: RedeemKind | null
+  claimedAt: string | null
+  confirmBy: string | null
+  redeemedAt: string | null
+}
+
+export interface RedemptionSearch {
+  q?: string
+  status?: RedemptionStatus | null
+  /** Only prizes claimed or collected at or after this time (the redeem page's recent list). */
+  since?: string | null
+  offset: number
+  limit: number
+}
+
+export async function searchRedemptions({ q, status, since, offset, limit }: RedemptionSearch) {
+  const text = q?.trim()
+  const params: Record<string, unknown> = {}
+  if (text) params.q = text
+  if (since) params.since = since
+  const page = await runQuery<Row>(PUBLISHING_TEMPLATE.redemptions, {
+    params,
+    filters: status ? [{ field: 'status', op: 'eq', value: status }] : [],
+    offset,
+    limit,
+    count: true,
+  })
+  return {
+    total: page.total,
+    items: page.items.map((row): RedemptionRow => ({
+      redemptionId: String(row.redemptionId),
+      code: String(row.code ?? ''),
+      publicationId: String(row.publicationId),
+      publicationName: String(row.publicationName ?? ''),
+      takerName: row.takerName == null ? null : String(row.takerName),
+      amount: Number(row.amount ?? 0),
+      description: String(row.description ?? ''),
+      status: String(row.status) as RedemptionStatus,
+      dueAt: String(row.dueAt),
+      expiresAt: row.expiresAt == null ? null : String(row.expiresAt),
+      claimKind: row.claimKind == null ? null : (String(row.claimKind) as RedeemKind),
+      claimedAt: row.claimedAt == null ? null : String(row.claimedAt),
+      confirmBy: row.confirmBy == null ? null : String(row.confirmBy),
+      redeemedAt: row.redeemedAt == null ? null : String(row.redeemedAt),
+    })),
+  }
+}
+
+type RedemptionOutput = { redemptionId: string; status: RedemptionStatus; revision: number }
+
+/** The claim at the counter is the person: collected. */
+export const confirmRedemption = (redemptionId: string) =>
+  runProcess<RedemptionOutput>(PUBLISHING_PROCESS.redemptionConfirm, { redemptionId })
+
+/** The claim is not the person at the counter: the prize is due again. */
+export const declineRedemption = (redemptionId: string) =>
+  runProcess<RedemptionOutput>(PUBLISHING_PROCESS.redemptionDecline, { redemptionId })

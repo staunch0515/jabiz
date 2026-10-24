@@ -60,6 +60,10 @@ jabiz:
       "[QB_JOURNAL_PREVIEW]": { per-user: 10, period: 1m }
       # Q20: the result page polls it every 5 s while an expired attempt is finished; a script could loop on it.
       "[QB_ATTEMPT_RESULT]": { per-user: 120, period: 1m }
+      # Q22b: the console asks for a rotating code once a minute (a few tabs at most); a scan checks and claims once.
+      "[QB_REDEEM_CODE_ISSUE]": { per-user: 20, period: 1m }
+      "[QB_REDEEM_TOKEN_CHECK]": { per-user: 60, period: 1m }
+      "[QB_REDEMPTION_CLAIM]": { per-user: 30, period: 1m }
       "[QB_ATTEMPT_SAVE]": { per-user: 120, period: 1m }
       "[QB_VIEW]": { per-user: 300, period: 1m }
       "[QB_PUBLICATION_SAVE]": { per-user: 60, period: 1m }

@@ -74,9 +74,14 @@ function server(options: Server = {}) {
         return json(200, { items: [{ publicationId: P1, name: 'Big prize', status: 'LIVE', regions: 'JP,ASIA',
           startAt: '2026-10-10T00:00:00Z', endAt: '2026-10-25T00:00:00Z', notices: 1 }], offset: 0, limit: 200 })
       case '/api/queries/qb.sponsor.inbox':
-        return json(200, { items: [{ itemKind: 'BROADCAST', itemId: 'a1', type: 'SYSTEM',
-          title: { en: 'New fees' }, body: { en: 'Fees **change**.' }, at: '2026-10-16T00:00:00Z',
-          expiresAt: null, readAt: null, unread: true }], offset: 0, limit: 100 })
+        return json(200, { items: [{ itemKind: 'BROADCAST', itemId: 'a1', type: 'SYSTEM', kind: null,
+          title: { en: 'New fees' }, body: { en: 'Fees **change**.' }, markdown: true, action: null, actionId: null,
+          at: '2026-10-16T00:00:00Z', expiresAt: null, readAt: null, unread: true },
+        // Q22b: the sponsor's own message, plain text, leading to the redeem page.
+        { itemKind: 'MESSAGE', itemId: 'm1', type: 'SYSTEM', kind: 'REDEEM_CLAIMED',
+          title: { en: 'A taker scanned your printed code' }, body: { en: 'Someone **claims** the prize.' },
+          markdown: false, action: 'REDEEM', actionId: 'r1', at: '2026-10-15T00:00:00Z', expiresAt: null,
+          readAt: null, unread: true }], offset: 0, limit: 100 })
       case '/api/queries/qb.me.consents':
         return json(200, { items: [], offset: 0, limit: 20 })
       case '/api/processes/QB_BROADCAST_SAVE/latest': {
@@ -222,10 +227,19 @@ describe('the message centre', () => {
     const user = userEvent.setup()
     render(<App />)
     await user.click(await screen.findByTestId('messages-tab-inbox'))
-    const item = await screen.findByTestId('announcement')
+    const items = await screen.findAllByTestId('announcement')
+    const item = items[0]
     expect(item).toHaveAttribute('data-unread', 'true')
     await user.click(within(item).getByTestId('announcement-open'))
     expect(within(item).getByTestId('markdown-view')).toContainHTML('<strong>change</strong>')
     await waitFor(() => expect(calls('QB_MESSAGE_MARK')).toEqual([{ kind: 'BROADCAST', id: 'a1', action: 'READ' }]))
+    // The sponsor's own message (Q22b): plain text (no Markdown), a link to the page it concerns, read as a message.
+    const message = items[1]
+    expect(message).toHaveAttribute('data-kind', 'MESSAGE')
+    await user.click(within(message).getByTestId('announcement-open'))
+    expect(within(message).queryByTestId('markdown-view')).toBeNull()
+    expect(message).toHaveTextContent('Someone **claims** the prize.')
+    expect(within(message).getByTestId('announcement-action')).toHaveAttribute('href', '/redeem')
+    await waitFor(() => expect(calls('QB_MESSAGE_MARK')).toContainEqual({ kind: 'MESSAGE', id: 'm1', action: 'READ' }))
   })
 })

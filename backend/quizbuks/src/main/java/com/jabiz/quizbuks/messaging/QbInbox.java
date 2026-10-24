@@ -78,11 +78,20 @@ public final class QbInbox {
     public static final String CASH_RESOLVED_SPONSOR = "CASH_RESOLVED_SPONSOR";
     public static final String CASH_OVERDUE = "CASH_OVERDUE";
     public static final String REDEEM_DUE = "REDEEM_DUE";
+    /** Q22b: a claim from the sponsor's printed code (to the sponsor); the prize's fate (to the taker). */
+    public static final String REDEEM_CLAIMED = "REDEEM_CLAIMED";
+    public static final String REDEEM_REDEEMED = "REDEEM_REDEEMED";
+    public static final String REDEEM_DECLINED = "REDEEM_DECLINED";
+    public static final String REDEEM_EXPIRED = "REDEEM_EXPIRED";
+    public static final String REDEEM_VOID = "REDEEM_VOID";
     public static final List<String> CASH_KINDS = List.of(CASH_DUE, CASH_MARKED_PAID, CASH_CONFIRMED, CASH_DISPUTED,
         CASH_RESOLVED, CASH_RESOLVED_SPONSOR, CASH_OVERDUE);
+    public static final List<String> REDEEM_KINDS = List.of(REDEEM_DUE, REDEEM_CLAIMED, REDEEM_REDEEMED,
+        REDEEM_DECLINED, REDEEM_EXPIRED, REDEEM_VOID);
     public static final List<String> MESSAGE_KINDS = List.of(REWARD_PAID, REWARD_PENDING, TRANSFER_SENT,
         TRANSFER_FAILED, PAYOUT_ACTION_NEEDED, PAYOUT_REMINDER, CASH_DUE, CASH_MARKED_PAID, CASH_CONFIRMED,
-        CASH_DISPUTED, CASH_RESOLVED, CASH_RESOLVED_SPONSOR, CASH_OVERDUE, REDEEM_DUE);
+        CASH_DISPUTED, CASH_RESOLVED, CASH_RESOLVED_SPONSOR, CASH_OVERDUE, REDEEM_DUE, REDEEM_CLAIMED,
+        REDEEM_REDEEMED, REDEEM_DECLINED, REDEEM_EXPIRED, REDEEM_VOID);
 
     /** Where a message leads the app: an attempt's result, the wallet or the payout account. */
     public static final String ACTION_RESULT = "RESULT";
@@ -90,7 +99,10 @@ public final class QbInbox {
     public static final String ACTION_PAYOUT = "PAYOUT";
     /** Q22: the sponsor console's cash rewards (a sponsor's message). */
     public static final String ACTION_CASH = "CASH";
-    public static final List<String> ACTIONS = List.of(ACTION_RESULT, ACTION_WALLET, ACTION_PAYOUT, ACTION_CASH);
+    /** Q22b: the sponsor console's redeem page (a claim to confirm). */
+    public static final String ACTION_REDEEM = "REDEEM";
+    public static final List<String> ACTIONS = List.of(ACTION_RESULT, ACTION_WALLET, ACTION_PAYOUT, ACTION_CASH,
+        ACTION_REDEEM);
 
     // ---- broadcasts ------------------------------------------------------------------------------------------------
 
