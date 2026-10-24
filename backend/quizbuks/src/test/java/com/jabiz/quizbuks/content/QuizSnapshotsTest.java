@@ -36,6 +36,23 @@ class QuizSnapshotsTest {
         }
     }
 
+    /** Q19: only the video to watch says so; every other material's text, and so every earlier hash, is as before. */
+    @Test
+    void onlyTheVideoToWatchSaysSo() {
+        QuizSnapshot.Material plain = new QuizSnapshot.Material(1, "VIDEO_LINK", "V", null, null,
+            "https://www.youtube.com/watch?v=dQw4w9WgXcQ", null, null, List.of());
+        QuizSnapshot.Material watched = new QuizSnapshot.Material(1, "VIDEO_LINK", "V", null, null,
+            "https://www.youtube.com/watch?v=dQw4w9WgXcQ", null, null, List.of(), true);
+        QuizSnapshot without = new QuizSnapshot("T", null, null, null, false, List.of(plain),
+            Drafts.complete().questions());
+        QuizSnapshot with = new QuizSnapshot("T", null, null, null, false, List.of(watched),
+            Drafts.complete().questions());
+        assertThat(QuizSnapshots.toJson(without)).doesNotContain("watchToAnswer");
+        assertThat(QuizSnapshots.toJson(with)).contains("\"watchToAnswer\":true");
+        assertThat(QuizSnapshots.fromJson(QuizSnapshots.toJson(with))).isEqualTo(with);
+        assertThat(QuizSnapshots.hash(with)).isNotEqualTo(QuizSnapshots.hash(without));
+    }
+
     @Test
     void writesSortedKeysWithoutSpaceAndEveryAbsentValueAsNull() {
         String text = QuizSnapshots.toJson(new QuizSnapshot("T", null, null, null, false, List.of(), List.of(

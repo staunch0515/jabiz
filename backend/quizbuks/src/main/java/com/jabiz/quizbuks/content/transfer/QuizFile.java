@@ -22,11 +22,19 @@ public record QuizFile(String kind, String title, String intro, String cover, In
         files = Map.copyOf(Objects.requireNonNull(files, "files must not be null"));
     }
 
-    /** A material; its file fields are keys of {@link #files}. */
+    /**
+     * A material; its file fields are keys of {@link #files}. {@code watchToAnswer} (Q19, optional in version 1, absent
+     * is false): the video watching which is enough to answer.
+     */
     public record Material(String kind, String title, String description, String body, String url, String pdf,
-        String audio, List<Image> images) {
+        String audio, List<Image> images, boolean watchToAnswer) {
         public Material {
             images = List.copyOf(Objects.requireNonNull(images, "images must not be null"));
+        }
+
+        public Material(String kind, String title, String description, String body, String url, String pdf,
+            String audio, List<Image> images) {
+            this(kind, title, description, body, url, pdf, audio, images, false);
         }
     }
 

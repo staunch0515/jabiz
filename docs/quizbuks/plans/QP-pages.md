@@ -175,7 +175,7 @@
 |---|---|---|
 | Q-1 | 每个入口一个 SPA，还是两个入口共用一个 | 每个入口一个，两个独立的工程（第 1 节） |
 | Q-2 | 完成后能否带题目文字回看 | 现在不改后端：刚完成时用 `sessionStorage`，之后只显示分数与逐题对错；需求方要求时再做 A-3 |
-| Q-3 | 视频资料是否内嵌 | 不内嵌：新标签页打开外链，保持缺省 CSP。以后内嵌需要 `/` 的 `frame-src`，并在 `application.yml` 中写出完整的 `jabiz.web.spa` |
+| Q-3 | 视频资料是否内嵌 | 不内嵌：新标签页打开外链，保持缺省 CSP。以后内嵌需要 `/` 的 `frame-src`，并在 `application.yml` 中写出完整的 `jabiz.web.spa`（**已由 Q19 取代**：YouTube / Vimeo 视频在页面中播放，`plans/Q19-embedded-video.md`） |
 | Q-4 | 商家后台只要中 / 英（设计 Q16） | 照常提供 en / zh / ja（文案都已有），不做 PG-2 |
 | Q-5 | 通用后台的扩展页（P-01 用户汇总、转账监控） | 不在这些阶段；生成的页面与 `qb.admin.*` 模板覆盖运营；与 Q9 一起做 `1.2/quizbuks-9-admin-extension` |
 | Q-6 | 商家是否可用 Google 登录（Q2-16） | 只给 App |

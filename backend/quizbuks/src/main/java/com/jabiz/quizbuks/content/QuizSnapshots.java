@@ -65,6 +65,10 @@ public final class QuizSnapshots {
                 images.add(i);
             }
             m.put("images", images);
+            // Only the video to watch says so (Q19): every other material's text and hash stay what they were.
+            if (material.watchToAnswer()) {
+                m.put("watchToAnswer", true);
+            }
             materials.add(m);
         }
         map.put("materials", materials);
@@ -112,7 +116,7 @@ public final class QuizSnapshots {
             }
             materials.add(new QuizSnapshot.Material(number(m.get("no")), string(m.get("kind")),
                 string(m.get("title")), string(m.get("description")), string(m.get("body")), string(m.get("url")),
-                uuid(m.get("pdf")), uuid(m.get("audio")), images));
+                uuid(m.get("pdf")), uuid(m.get("audio")), images, Boolean.TRUE.equals(m.get("watchToAnswer"))));
         }
         List<QuizSnapshot.Question> questions = new ArrayList<>();
         for (Map<String, ?> q : maps(map.get("questions"))) {

@@ -11,6 +11,7 @@ import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.content.QbContent;
 import com.jabiz.quizbuks.content.QuizSnapshot;
 import com.jabiz.quizbuks.content.QuizSnapshots;
+import com.jabiz.quizbuks.content.VideoEmbeds;
 import com.jabiz.quizbuks.identity.QbAccounts;
 import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.EntityNotFoundException;
@@ -515,6 +516,8 @@ final class PublicationEditing {
             money(row.get("reward")))).toList()));
         card.put("sponsorCountry", profile == null ? null : profile.get("countryCode"));
         card.put("kind", snapshot.kind());
+        card.put("video", snapshot.materials().stream().filter(QuizSnapshot.Material::watchToAnswer).findFirst()
+            .flatMap(material -> VideoEmbeds.player(material.url())).orElse(null));
         card.put("wentOnAt", ctx.opTime());
         return card;
     }

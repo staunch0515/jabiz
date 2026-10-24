@@ -1,4 +1,5 @@
 import { api, runProcess, runQuery, unwrap, type Filter, type QueryPage, type Sort } from '@jabiz/client'
+import { trustedPlayer } from './video'
 import { PLAY } from './ids'
 
 /*
@@ -43,6 +44,8 @@ export interface FeedCard {
   quizTitle: string
   /** A file of the policy `qb.content.image`. */
   cover: string | null
+  /** Q19: the player of the video watching which is enough to answer (one of `qb/video.ts`), else null. */
+  video: string | null
   kind: QuizKind
   /** The highest reward, in Kudos. */
   maxReward: unknown
@@ -88,6 +91,7 @@ function feedCard(row: Record<string, unknown>): FeedCard {
     name: String(row.name ?? ''),
     quizTitle: String(row.quizTitle ?? ''),
     cover: textOrNull(row.cover),
+    video: trustedPlayer(textOrNull(row.video)),
     kind: kindOf(row.kind),
     maxReward: row.maxReward,
     completions: numberOf(row.completions),

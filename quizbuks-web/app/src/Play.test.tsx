@@ -28,6 +28,8 @@ const MATERIALS = JSON.stringify([
     pdf: null, audio: null, images: [] },
   { no: 2, kind: 'VIDEO_LINK', title: 'A tour', description: null, body: null, url: 'https://video.example.com/tour',
     pdf: null, audio: null, images: [] },
+  { no: 3, kind: 'VIDEO_LINK', title: 'On YouTube', description: null, body: null,
+    url: 'https://youtu.be/dQw4w9WgXcQ', pdf: null, audio: null, images: [] },
 ])
 
 function publication(mine: Record<string, unknown> = {}) {
@@ -67,6 +69,7 @@ interface Options {
   attempt?: Record<string, unknown>
   history?: Record<string, unknown>[]
   emailVerified?: boolean
+  feed?: Record<string, unknown>[]
 }
 
 /** The server as the play pages see it; records every call (path and body). */
@@ -90,7 +93,7 @@ function server(options: Options = {}) {
         return json(200, { items: [{ id: 'p1', version: 1, attributes: { displayName: 'Mei', countryCode: 'JP',
           city: null, preferredCurrency: 'JPY', revision: 1 } }], offset: 0, limit: 1 })
       case '/api/queries/qb.app.feed':
-        return json(200, { items: [CARD], offset: 0, limit: 20 })
+        return json(200, { items: options.feed ?? [CARD], offset: 0, limit: 20 })
       case '/api/queries/qb.app.publication':
         return json(200, { items: [publication()], offset: 0, limit: 1 })
       case '/api/queries/qb.app.publication-tiers':
@@ -164,6 +167,40 @@ describe('the feed', () => {
   })
 })
 
+describe('the video to watch (Q19)', () => {
+  const PLAYER = 'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ'
+
+  it('shows the video itself on the home, with what answering earns and a start, and does not play it', async () => {
+    const api = server({ feed: [{ ...CARD, video: PLAYER }] })
+    render(<App />)
+    const card = await screen.findByTestId('feed-video-card')
+    const frame = within(card).getByTitle('Video: Capitals week')
+    expect(frame.tagName).toBe('IFRAME')
+    expect(frame).toHaveAttribute('src', PLAYER)
+    expect(frame.getAttribute('src')).not.toMatch(/autoplay/)
+    expect(frame).toHaveAttribute('loading', 'lazy')
+    expect(within(card).getByTestId('feed-video-reward')).toHaveTextContent('Answer correctly to earn up to 100 Kudos')
+    expect(screen.queryByTestId('feed-card')).not.toBeInTheDocument()
+    await userEvent.click(within(card).getByTestId('feed-video-start'))
+    await waitFor(() => expect(window.location.pathname).toBe(`/play/${ATTEMPT}`))
+    expect(api.posted('QB_ATTEMPT_START')).toEqual([{ publicationId: PUB }])
+  })
+
+  it('shows a survey\'s reward for answering', async () => {
+    server({ feed: [{ ...CARD, kind: 'SURVEY', video: PLAYER }] })
+    render(<App />)
+    expect(await screen.findByTestId('feed-video-reward')).toHaveTextContent('Answer to earn 100 Kudos')
+  })
+
+  it('frames no other address, whatever the server says', async () => {
+    server({ feed: [{ ...CARD, video: 'https://evil.example/embed/dQw4w9WgXcQ' }] })
+    render(<App />)
+    expect(await screen.findByTestId('feed-card')).toBeInTheDocument()
+    expect(screen.queryByTestId('feed-video-card')).not.toBeInTheDocument()
+    expect(document.querySelector('iframe')).toBeNull()
+  })
+})
+
 describe('a publication\'s page', () => {
   it('shows the materials as Markdown and links, the tiers, and records the first view', async () => {
     const { posted } = server()
@@ -176,6 +213,9 @@ describe('a publication\'s page', () => {
     expect(link).toHaveAttribute('href', 'https://video.example.com/tour')
     expect(link).toHaveAttribute('target', '_blank')
     expect(link).toHaveAttribute('rel', 'noopener noreferrer')
+    // Q19: a YouTube or Vimeo video plays in the page.
+    expect(within(materials).getByTitle('On YouTube'))
+      .toHaveAttribute('src', 'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ')
     expect(await screen.findByTestId('detail-tiers')).toHaveTextContent('100 Kudos')
     await waitFor(() => expect(posted('QB_VIEW')).toEqual([{ publicationId: PUB }]))
   })
