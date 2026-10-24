@@ -77,6 +77,8 @@ public final class JwtService {
      */
     static final JOSEObjectType UNSUBSCRIBE_TYPE = new JOSEObjectType("jabiz-unsub+jwt");
     static final String TEMPLATE = "tpl";
+    /** The claim of an unsubscribe token that stands for an address rather than a user (decision D55). */
+    static final String ADDRESS = "adr";
 
     /** What a challenge token lets its holder do (docs/design/10-security.md section 9). */
     public enum Purpose {
@@ -87,7 +89,16 @@ public final class JwtService {
     }
 
     /** A verified unsubscribe token: whose, and which mail template it turns off. */
-    public record Unsubscribe(String userId, String template) {}
+    /**
+     * Whom an unsubscribe link stands for: a user, or (a notification mailed to a plain address, decision D55) an
+     * address; and the template it turns off.
+     */
+    public record Unsubscribe(String userId, String address, String template) {
+        /** A user's. */
+        public Unsubscribe(String userId, String template) {
+            this(userId, null, template);
+        }
+    }
 
     /** A verified challenge: whose, and the login record it followed. */
     /**
@@ -233,6 +244,21 @@ public final class JwtService {
     }
 
     /**
+     * An unsubscribe token for a notification mailed to a plain address (no user; decision D55): opting the address
+     * out of the template. Never expires, like a user's.
+     */
+    public String issueAddressUnsubscribe(String address, String template) {
+        JWTClaimsSet claims = new JWTClaimsSet.Builder()
+            .issuer(ISSUER)
+            .subject(Objects.requireNonNull(address, "address must not be null"))
+            .issueTime(Date.from(clock.instant().truncatedTo(ChronoUnit.SECONDS)))
+            .claim(TEMPLATE, Objects.requireNonNull(template, "template must not be null"))
+            .claim(ADDRESS, true)
+            .build();
+        return sign(claims, UNSUBSCRIBE_TYPE);
+    }
+
+    /**
      * The user and template of a valid unsubscribe token.
      *
      * @throws InvalidTokenException if the token is malformed, forged or of another type
@@ -244,7 +270,9 @@ public final class JwtService {
             if (template == null || template.isBlank()) {
                 throw new InvalidTokenException("Unsubscribe token without template");
             }
-            return new Unsubscribe(claims.getSubject(), template);
+            boolean address = Boolean.TRUE.equals(claims.getBooleanClaim(ADDRESS));
+            return address ? new Unsubscribe(null, claims.getSubject(), template)
+                : new Unsubscribe(claims.getSubject(), template);
         } catch (ParseException e) {
             throw new InvalidTokenException("Malformed unsubscribe claims");
         }

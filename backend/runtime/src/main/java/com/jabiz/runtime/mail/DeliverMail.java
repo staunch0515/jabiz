@@ -131,10 +131,12 @@ class DeliverMail implements StepHandler<DeliverMail.Metadata, ProcessContext> {
                        (SELECT count(*) FROM sys_mail_attempt a WHERE a.message_id = m.message_id) AS attempts,
                        EXISTS (SELECT 1 FROM sys_mail_attempt a WHERE a.message_id = m.message_id
                                AND a.outcome IN ('SENT', 'SKIPPED')) AS done,
-                       m.category = 'NOTIFICATION' AND COALESCE(
+                       m.category = 'NOTIFICATION' AND (COALESCE(
                            (SELECT NOT p.subscribed AND NOT p.is_deleted FROM sec_user_mail_preference_version p
                              WHERE p.user_id = m.user_id AND p.template = m.template
-                             ORDER BY p.row_id DESC LIMIT 1), false) AS unsubscribed
+                             ORDER BY p.row_id DESC LIMIT 1), false)
+                           OR (m.user_id IS NULL AND EXISTS (SELECT 1 FROM sys_mail_address_optout o
+                               WHERE lower(o.address) = lower(m.address) AND o.template = m.template))) AS unsubscribed
                 FROM sys_mail_message m WHERE m.message_id = :id""", Map.of("id", BoundValue.of(messageId)))
             .next()
             .switchIfEmpty(Mono.error(() -> new IllegalStateException("No mail message " + messageId)))
@@ -172,9 +174,12 @@ class DeliverMail implements StepHandler<DeliverMail.Metadata, ProcessContext> {
                 Object entry = pending.params().get(MailTemplate.ENTRY_PARAM);
                 values.put(MailTemplate.ENTRY_URL, templates.entryUrl(entry == null ? null : String.valueOf(entry)));
             }
-            if (template.unsubscribable() && pending.userId() != null) {
-                values.put(MailTemplate.UNSUBSCRIBE_URL, templates.unsubscribeUrl(
-                    tokens.issueUnsubscribe(pending.userId().toString(), template.name()), template));
+            if (template.unsubscribable()) {
+                // To a user: their preference; to a plain address (decision D55): the address's opt-out.
+                String token = pending.userId() != null
+                    ? tokens.issueUnsubscribe(pending.userId().toString(), template.name())
+                    : tokens.issueAddressUnsubscribe(pending.address(), template.name());
+                values.put(MailTemplate.UNSUBSCRIBE_URL, templates.unsubscribeUrl(token, template));
             }
             Base64.Encoder base64 = Base64.getUrlEncoder().withoutPadding();
             Flux<Void> stored = Flux.empty();

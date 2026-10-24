@@ -107,13 +107,14 @@ class MailPreferencesIT extends SecurityItSupport {
         // The portal: its own and the one for every entry, in the request's language.
         assertThat(preferences(at("portal", user), "ja")).containsExactly(
             preference("commerce.order-shipped", true, "発送のお知らせ"),
+            preference("it.invite", true, "招待"),
             preference("it.news", true, "お知らせ"),
             preference("it.offers", true, "お客様向けのご案内"));
         assertThat(preferences(at("portal", user), "zh")).extracting(row -> row.get("displayName"))
-            .containsExactly("发货通知", "消息", "给客户的优惠");
+            .containsExactly("发货通知", "邀请", "消息", "给客户的优惠");
         // A language the application does not have: its default (en).
         assertThat(preferences(at("portal", user), "fr")).extracting(row -> row.get("displayName"))
-            .containsExactly("Shipment notices", "News", "Offers for customers");
+            .containsExactly("Shipment notices", "Invitations", "News", "Offers for customers");
         // An entry no template is declared for sees the ones for every entry only.
         assertThat(preferences(at("shop", user), "en")).extracting(row -> row.get("template"))
             .containsExactly("it.news");

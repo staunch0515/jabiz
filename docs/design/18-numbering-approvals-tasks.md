@@ -306,6 +306,9 @@ e2e `tasks.spec`。
 
 - 名称规则同事件名；参数与令牌用途为不含下划线的标识符（`[a-z][A-Za-z0-9]*`，免得 Markdown 把 `_` 当作强调），不能与内置占位符同名，不能重复。
 - `TRANSACTIONAL`（验证、重置、安全通知）不能退订；`NOTIFICATION` 可按用户与模板退订，其正文必须使用 `{unsubscribeUrl}`。
+- **登录链接**（16ze，决策 D55）：`t.signInLink(有效期)` 声明模板带一次性登录链接——应用模板能取的唯一平台令牌 `{jabiz.signIn}`，并随之声明参数 `entry` 与 `to`；
+  正文写 `[打开]({entryUrl}auth/email-link?entry={entry}&token={jabiz.signIn}&to={to})`。有效期不得超过 `jabiz.security.email-link.max-ttl`（缺省 `P30D`，启动检查）。
+  发送时检查 `entry` 开启了 `email-link`、`to` 在该入口前端之内（10 §15.11 的规则），否则 422 `MAIL_SIGN_IN_LINK`。打开链接即 D54 的 `SPONSOR_EMAIL_LINK_OPEN`：登录地址的用户，或为无人使用的地址开户。
 - 标题与正文在消息 `mail.<名>.subject` / `mail.<名>.body`（应用所选的每种语言）；正文为 Markdown。占位符：声明的参数、令牌（以用途为名，值为令牌原文）、
   `{baseUrl}`（`jabiz.mail.base-url`）、`{unsubscribeUrl}`（仅 NOTIFICATION），以及入口前端的根（阶段 16c-2，决策 D43 第 4 条）：
   - `{entryUrl}`：`{baseUrl}` 加参数 `entry` 所名入口的 `app-path`，以 `/` 结尾（`https://shop.example.com/portal/`）；只用于声明了参数 `entry` 的模板，
@@ -319,7 +322,8 @@ HTML 部分转义全部文本与正文中的原始 HTML，纯文本部分为原�
 
 **发送**：步骤 `SendMail.of(模板, 收件人, Map<参数名, 取值函数>)` / `SendMail.when(条件, …)`（平台 I/O 步骤）。
 
-- 收件人 `MailRecipient.user(用户)`（取其 `email` 与 `locale`）、`user(用户, 地址, 语言)`（显式给出）、`address(地址, 语言)`。NOTIFICATION 只发给用户（退订按用户）。
+- 收件人 `MailRecipient.user(用户)`（取其 `email` 与 `locale`）、`user(用户, 地址, 语言)`（显式给出）、`address(地址, 语言)`。发给用户的 NOTIFICATION 按用户退订；
+  发给地址（没有用户）的按地址退订（16ze，D55，见下）。
 - 用户没有地址：登记违规 `MAIL_NO_ADDRESS`（422）；流程可用 `when` 跳过。
 - 语言：显式给出 → 用户的 `SecUser.locale` → 平台缺省语言；不在应用语言中时取缺省。
 - 参数值以文本**原样**保存（`BigDecimal` 为普通写法；日期、金额的格式由流程决定），邮件即由它渲染；`op_process.input_summary` 照旧遮蔽。
@@ -363,6 +367,9 @@ HTML 部分转义全部文本与正文中的原始 HTML，纯文本部分为原�
   应用在配置的路径挂载它（示范门户：`/portal/mail/unsubscribe`）。启动检查 `MAIL`（错误）：路径是相对路径（字母、数字与 `. _ ~ -` 组成的段，不含 `..`、协议与主机）、
   入口可用、`app-path` 加路径位于本应用提供的某个 SPA（`jabiz.web.spa`）之下。链接只由配置组成，从不取请求中的值。
 - `POST /api/auth/mail/unsubscribe {token}`：匿名（令牌即凭证）、幂等，204；篡改或其他类型的令牌、非 NOTIFICATION 模板 → 422 `TOKEN_INVALID`。
+- **按地址退订**（16ze，决策 D55 第 4 条）：发给没有用户的地址的通知，其 `{unsubscribeUrl}` 的令牌主体是地址（声明 `adr`）；同一接口以系统身份运行 `SEC_MAIL_ADDRESS_OPT_OUT`
+  （`internal()`），在 `sys_mail_address_optout`（平台实体 `MailAddressOptOut`：地址小写 × 模板唯一，普通表，`db/jabiz/V44`）记一行；`MAIL_SEND` 对该模板发往该地址
+  （不分大小写）的通知记 `SKIPPED`（`UNSUBSCRIBED`）。地址之后开了账号，账号的偏好另算。
 - 登录用户：`GET /api/auth/mail/preferences`（NOTIFICATION 模板及是否接收）、`POST /api/auth/mail/preferences {template, subscribed}`。
 
 **按入口的收件偏好与显示名**（16s，决策 D49）：

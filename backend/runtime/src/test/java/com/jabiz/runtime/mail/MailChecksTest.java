@@ -207,4 +207,19 @@ class MailChecksTest {
         assertThat(checks(false, "", "", null, catalog(Locale.ENGLISH), OK, OK).check())
             .extracting(CheckProblem::message).containsExactly("is declared more than once");
     }
+
+    /** Decision D55: the sign-in token is the one platform token an application template may carry, as declared. */
+    @Test
+    void anApplicationMayCarryASignInLinkWithinTheAllowedValidity() {
+        MailTemplate invite = MailTemplate.define("t.invite", t -> t.category(MailCategory.NOTIFICATION)
+            .signInLink(Duration.ofDays(7)));
+        MailTemplate tooLong = MailTemplate.define("t.long", t -> t.category(MailCategory.NOTIFICATION)
+            .signInLink(Duration.ofDays(31)));
+        List<String> messages = checks(false, "", "", null, catalog(Locale.ENGLISH), invite, tooLong).check().stream()
+            .map(CheckProblem::message).toList();
+        assertThat(messages).noneMatch(message -> message.contains("draws tokens of purpose jabiz.signIn"));
+        assertThat(messages).contains("its sign-in link is valid for PT744H, longer than "
+            + "jabiz.security.email-link.max-ttl (PT720H)");
+        assertThat(messages).noneMatch(message -> message.contains("valid for PT168H"));
+    }
 }

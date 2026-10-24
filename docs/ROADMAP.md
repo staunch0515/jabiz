@@ -4367,3 +4367,14 @@ L4 共享仪表的注释；L5 13 写明每个键每次轮询多一个查询观�
 测试：`SpaConfigCheckTest`、`SignUpIT`（`environment: test`）、`environment.test.tsx`、`environment-banner.test.tsx`、`app-shell.test.tsx`、`LoginPage.test.tsx`、e2e `login.spec.ts`。
 
 **16zd 状态**：✅ 已实施（PR 待建）。
+
+### 16ze 应用邮件中的登录链接与按地址退订（1 天）
+
+来源：需求方 2026-10-24（QuizBuks：只开放给指定邮箱的发布，给清单中的每个地址寄一封邮件，点链接直接进入答题页；选了一封邮件、一次点击的方案）。
+分支 `1.2/phase-16ze-mail-invite`。决策 D55：`MailTemplate.signInLink(有效期)`（应用模板能取的唯一平台令牌 `jabiz.signIn`，随之声明 `entry` 与 `to`；
+有效期 ≤ `jabiz.security.email-link.max-ttl`，缺省 30 天，启动检查）；`SendMail` 发送时检查入口与返回路径（422 `MAIL_SIGN_IN_LINK`）；打开链接即 D54 的流程。
+通知可发给没有账号的地址：退订令牌代表地址，`SEC_MAIL_ADDRESS_OPT_OUT`（`internal()`，由退订接口以系统身份运行）写 `sys_mail_address_optout`（迁移 `db/jabiz/V44`，
+平台实体 `MailAddressOptOut`），投递对该地址的该模板记 `SKIPPED`。设计 18 §5.6、10 §15.11。
+测试：`MailTemplateTest`、`MailChecksTest`、`JwtServiceTest`、`MailIT`（应用邮件的链接开户与登录、入口与路径的拒绝、地址退订与大小写）、`ProcessAccessIT`。
+
+**16ze 状态**：✅ 已实施（PR 待建）。
