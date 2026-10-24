@@ -64,7 +64,9 @@ test('the sponsor marks a cash reward paid and the taker confirms it', async ({ 
 
   // The console: the reward owed, marked paid with a note.
   await signIn(page, '/sponsor/', owed.sponsor.email)
-  await page.goto('/sponsor/cash-rewards')
+  await expect(page.getByTestId('dashboard-status')).toBeVisible()
+  await page.getByRole('link', { name: 'Cash rewards' }).click()
+  await expect(page).toHaveURL(/\/sponsor\/cash-rewards$/)
   const row = page.getByTestId('cash-row').filter({ hasText: owed.code })
   await expect(row).toHaveAttribute('data-status', 'DUE')
   await expect(row).toContainText('Mei')
@@ -79,6 +81,7 @@ test('the sponsor marks a cash reward paid and the taker confirms it', async ({ 
   await page.context().clearCookies()
   await page.evaluate(() => window.localStorage.clear())
   await signIn(page, '/', owed.taker.email)
+  await expect(page.getByTestId('home')).toBeVisible()
   const notice = page.getByTestId('home-cash')
   await expect(notice).toBeVisible()
   await expect(notice.getByTestId('home-cash-item').filter({ hasText: owed.code })).toHaveAttribute('data-status',
@@ -96,6 +99,6 @@ test('the sponsor marks a cash reward paid and the taker confirms it', async ({ 
 
   // The history and the home agree.
   await page.getByTestId('nav-history').click()
-  await expect(page.getByTestId('history-cash').filter({ hasText: owed.code }).first()).toHaveAttribute('data-status',
-    'CONFIRMED')
+  await expect(page.getByTestId('history-row').filter({ hasText: owed.name }).getByTestId('history-cash'))
+    .toHaveAttribute('data-status', 'CONFIRMED')
 })
