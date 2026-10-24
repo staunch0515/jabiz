@@ -119,6 +119,11 @@ jabizApp {
 - 配置由 `SpaConfigCheck`（启动检查，类别 `WEB`）一次性报告：前缀格式、重复、落在 `/api` `/actuator` 下，`index` 格式，CSP 为空或多行，
   `entry` 格式（错误）与不是可用的登录入口（错误）；与 jar 中构建的 SPA 不一致（配置了但没有构建、构建了但没有配置、入口或 `pwa` 不同）为警告。
 - 同源的多个 SPA 共享 `localStorage` / `sessionStorage`：公开前端不存令牌（第 4 节），也不得读写后台的会话键。
+- **测试系统的标志**（16zd）：`jabiz.web.environment`（环境变量 `JABIZ_WEB_ENVIRONMENT`）是运行时设置，因为测试与正式环境运行同一镜像：`production` 为正式系统，
+  其他名字为测试系统，缺省 `test`（没有声明自己是正式的系统永远不会看起来像正式的）；名字只允许字母、数字、空格、连字符，至多 32 字符（`SpaConfigCheck`）。
+  `GET /api/auth/entries/{name}` 返回它（`environment`），前端登录前就读到（`@jabiz/client` 的 `useEnvironment()`）。`@jabiz/ui` 的 `EnvironmentBanner` 是警示色的通栏横条
+  （环境名大写 + "测试环境，不是正式版"，三种语言；文档标题前加 `[TEST]`；正式系统与尚未读到时什么也不显示），`AppShell` 把它与顶栏一起固定在页面顶部、`AuthFrame` 放在卡片之上，
+  所以通用后台与建在这两者上的前端每一页都有；自带外框的前端（如手机式的 App）把它放在自己外框的顶部。部署时只有正式环境设置 `JABIZ_WEB_ENVIRONMENT=production`。
 - 构建：插件为每个 `spa(...)` 注册安装任务（平台前端为 `pnpmInstallPlatformFrontend`，其他目录为 `pnpmInstall<名>`）与 `spaBuild<名>`
   （`VITE_BASE=<前缀>/`，输出到本模块的 `build/spa/<名>`，因此两个应用可用不同的 base 构建同一个 `frontend/`；全部 pnpm 任务串行），
   应用自己的 SPA 另有 `spaCheck<名>`（§3.1），`bootJar` 把输出放到 `static/<前缀>`。

@@ -1923,6 +1923,7 @@ export interface components {
         EntryInfo: {
             appPath?: string;
             emailLink?: boolean;
+            environment?: string;
             name?: string;
             requireVerifiedEmail?: boolean;
             selfRegistration?: boolean;

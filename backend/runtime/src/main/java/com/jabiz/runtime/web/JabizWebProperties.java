@@ -16,9 +16,22 @@ import java.util.regex.Pattern;
  * The build writes the SPAs of {@code jabizApp { spa(...) }} into the jar ({@code META-INF/jabiz-app.properties}) as the
  * lowest-priority default; an application's own {@code jabiz.web.spa} replaces that list as a whole. Without either,
  * the admin frontend is served at {@code /} as before. {@link SpaConfigCheck} reports invalid entries at startup.
+ *
+ * <p>{@code jabiz.web.environment} (phase 16zd) names the system the pages run on: {@value #PRODUCTION} is the real
+ * one; any other name is a test system, which every page shows in a banner so that nobody mistakes it for the real one.
+ * Unset means {@value #TEST}: a system that does not say it is production never looks like it. The front ends read it
+ * before signing in ({@code GET /api/auth/entries/{name}}).
+ *
+ * @param spa         the single-page applications served
+ * @param environment the system's name: {@value #PRODUCTION} or a test system's
  */
 @ConfigurationProperties("jabiz.web")
-public record JabizWebProperties(List<Spa> spa) {
+public record JabizWebProperties(List<Spa> spa, String environment) {
+
+    /** The environment of the real system: the only one the pages show no banner for. */
+    public static final String PRODUCTION = "production";
+    /** The environment when none is configured. */
+    public static final String TEST = "test";
 
     /**
      * The policy of every SPA that sets none (decision D43 item 7). Inline styles stay allowed (Radix's scroll lock and
@@ -40,10 +53,22 @@ public record JabizWebProperties(List<Spa> spa) {
     /** The directory of an SPA's content-hashed files (Vite's {@code assets/}). */
     public static final String ASSETS = "assets/";
 
+    @ConstructorBinding
     public JabizWebProperties {
         spa = spa == null || spa.isEmpty()
             ? List.of(new Spa("/", null, null))
             : List.copyOf(spa.stream().map(s -> s == null ? new Spa(null, null, null) : s).toList());
+        environment = environment == null || environment.isBlank() ? TEST : environment.trim();
+    }
+
+    /** The SPAs, on a test system. */
+    public JabizWebProperties(List<Spa> spa) {
+        this(spa, null);
+    }
+
+    /** Whether this is the real system ({@value #PRODUCTION}, whatever its case). */
+    public boolean production() {
+        return PRODUCTION.equalsIgnoreCase(environment);
     }
 
     /** The SPA that owns a request path: the longest prefix that matches whole path segments. */
@@ -124,6 +149,10 @@ public record JabizWebProperties(List<Spa> spa) {
     /** Every problem of the configuration, as {@code "location: message"} texts; empty when it is valid. */
     List<String> problems() {
         List<String> problems = new ArrayList<>();
+        if (!ENVIRONMENT.matcher(environment).matches()) {
+            problems.add("jabiz.web.environment: must be \"" + PRODUCTION + "\" or a short name of a test system "
+                + "(letters, digits, spaces, hyphens, up to 32 characters), was " + quoted(environment));
+        }
         List<String> seen = new ArrayList<>();
         for (int i = 0; i < spa.size(); i++) {
             Spa s = spa.get(i);
@@ -166,4 +195,6 @@ public record JabizWebProperties(List<Spa> spa) {
     private static final Pattern INDEX =
         Pattern.compile("(/[A-Za-z0-9][A-Za-z0-9._-]*)*/[A-Za-z0-9._-]+\\.html");
     private static final Pattern ENTRY = Pattern.compile("[a-z][a-z0-9-]{0,39}");
+    /** A system's name as the banner shows it: a word or a few, nothing that could be markup. */
+    private static final Pattern ENVIRONMENT = Pattern.compile("[A-Za-z0-9][A-Za-z0-9 -]{0,31}");
 }

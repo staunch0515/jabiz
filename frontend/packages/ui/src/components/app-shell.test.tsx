@@ -1,6 +1,6 @@
 import { act, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { i18n } from '@jabiz/client'
+import { forgetEnvironment, i18n, setEnvironment } from '@jabiz/client'
 import { DatabaseIcon } from 'lucide-react'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { expectAccessible } from '@jabiz/ui/testing'
@@ -124,5 +124,24 @@ describe('AppShell and ShellNav', () => {
       await userEvent.click(within(sheet).getByRole('link', { name: 'Tasks' }))
       expect(screen.queryByRole('dialog')).toBeNull()
     })
+  })
+
+  it('says on every page that this is a test system, and nothing on production (phase 16zd)', async () => {
+    setEnvironment('staging')
+    try {
+      const { container, unmount } = renderShell('/data')
+      const banner = screen.getByTestId('environment-banner')
+      expect(banner).toHaveTextContent('staging')
+      expect(banner).toHaveTextContent('Test system, not the production system')
+      // The banner and the header bar stay on screen together.
+      expect(banner.parentElement).toContainElement(container.querySelector('[data-slot="app-shell-header"]'))
+      await expectAccessible(container)
+      unmount()
+      setEnvironment('production')
+      renderShell('/data')
+      expect(screen.queryByTestId('environment-banner')).not.toBeInTheDocument()
+    } finally {
+      forgetEnvironment()
+    }
   })
 })

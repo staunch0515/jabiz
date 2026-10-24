@@ -63,6 +63,8 @@ services:
       QB_APP_SELF_REGISTRATION: ${QB_APP_SELF_REGISTRATION:-true}
       QB_SPONSOR_SELF_REGISTRATION: ${QB_SPONSOR_SELF_REGISTRATION:-true}
       JABIZ_MAIL_ENABLED: ${JABIZ_MAIL_ENABLED:-false}
+      # A local compose is a test system; its pages say so (platform 16zd).
+      JABIZ_WEB_ENVIRONMENT: ${JABIZ_WEB_ENVIRONMENT:-local}
       JABIZ_MAIL_FROM: ${JABIZ_MAIL_FROM:-}
       JABIZ_MAIL_BASE_URL: ${JABIZ_MAIL_BASE_URL:-http://localhost:8080}
       QB_SPONSOR_LINK: ${QB_SPONSOR_LINK:-}

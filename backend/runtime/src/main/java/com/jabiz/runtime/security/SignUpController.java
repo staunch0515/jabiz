@@ -13,6 +13,7 @@ import com.jabiz.runtime.process.ExecutionOptions;
 import com.jabiz.runtime.process.ProcessExecutor;
 import com.jabiz.runtime.process.ProcessResult;
 import com.jabiz.runtime.web.ClientAddresses;
+import com.jabiz.runtime.web.JabizWebProperties;
 import com.jabiz.security.Sensitive;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -122,15 +123,18 @@ class SignUpController {
      *
      * @param sessionPersistence where the front end keeps the refresh token: {@code tab} ({@code sessionStorage}) or
      *                           {@code device} ({@code localStorage}; decision D43 item 2)
+     * @param environment        the system the pages run on ({@code jabiz.web.environment}, phase 16zd):
+     *                           {@code production}, or a test system's name, which every page shows
      */
     record EntryInfo(String name, boolean selfRegistration, boolean requireVerifiedEmail, String appPath,
-        SignInEntries.Persistence sessionPersistence, boolean emailLink) {}
+        SignInEntries.Persistence sessionPersistence, boolean emailLink, String environment) {}
 
     private final ProcessExecutor processes;
     private final SignInEntries entries;
     private final SignUpRateLimits limits;
     private final ClientAddresses clients;
     private final PasswordHasher hasher;
+    private final JabizWebProperties web;
     private final ProcessDefinition<SignUpProcesses.SignUpInput, SignUpProcesses.Done, AccountContext> signUp;
     private final ProcessDefinition<SignUpProcesses.JoinInput, SignUpProcesses.Done, AccountContext> join;
     private final ProcessDefinition<SignUpProcesses.VerifyInput, SignUpProcesses.Done, AccountContext> verify;
@@ -143,7 +147,7 @@ class SignUpController {
         resetConfirm;
 
     SignUpController(ProcessExecutor processes, SignInEntries entries, SignUpRateLimits limits,
-        ClientAddresses clients, PasswordHasher hasher,
+        ClientAddresses clients, PasswordHasher hasher, JabizWebProperties web,
         ProcessDefinition<SignUpProcesses.SignUpInput, SignUpProcesses.Done, AccountContext> signUp,
         ProcessDefinition<SignUpProcesses.JoinInput, SignUpProcesses.Done, AccountContext> join,
         ProcessDefinition<SignUpProcesses.VerifyInput, SignUpProcesses.Done, AccountContext> verify,
@@ -156,6 +160,7 @@ class SignUpController {
         this.limits = limits;
         this.clients = clients;
         this.hasher = hasher;
+        this.web = web;
         this.signUp = signUp;
         this.join = join;
         this.verify = verify;
@@ -315,7 +320,7 @@ class SignUpController {
     Mono<EntryInfo> entry(@PathVariable String name) {
         return Mono.fromCallable(() -> entries.find(name)
             .map(entry -> new EntryInfo(entry.name(), entry.selfRegistration(), entry.requireVerifiedEmail(),
-                entry.appPath(), entry.session().persistence(), entry.emailLink()))
+                entry.appPath(), entry.session().persistence(), entry.emailLink(), web.environment()))
             .orElseThrow(() -> new ResourceNotFoundException("No sign-in entry " + name)));
     }
 

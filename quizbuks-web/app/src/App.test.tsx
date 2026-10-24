@@ -10,7 +10,7 @@ function json(status: number, body: unknown) {
 }
 
 const ENTRY = { name: 'app', selfRegistration: true, requireVerifiedEmail: false, appPath: '/',
-  sessionPersistence: 'device' }
+  sessionPersistence: 'device', environment: 'staging' }
 
 interface Me {
   emailVerified?: boolean
@@ -105,6 +105,8 @@ describe('a visitor', () => {
     await waitFor(() => expect(document.querySelector('a[href="/signup"]')).not.toBeNull())
     expect(document.querySelector('a[href="/password-reset"]')).not.toBeNull()
     await waitFor(() => expect(asked).toContain('/api/auth/oidc/providers?entry=app'))
+    // A test system says so before signing in (platform 16zd): the entry names the environment.
+    expect(await screen.findByTestId('environment-banner')).toHaveTextContent('staging')
   })
 
   it('opens the pages of mailed links without signing in, and drops the token from the address', async () => {
@@ -164,6 +166,8 @@ describe('a signed-in taker', () => {
     server({ profile: null, emailVerified: false })
     render(<App />)
     expect(await screen.findByTestId('home')).toHaveTextContent('Mei')
+    // The app's own header carries the test system's banner too (platform 16zd).
+    expect(await screen.findByTestId('environment-banner')).toHaveTextContent('staging')
     expect(window.location.pathname).toBe('/')
     expect(screen.getByTestId('verify-email-banner')).toHaveTextContent('mei@example.com')
     expect(screen.getByRole('navigation', { name: 'App' })).toBeInTheDocument()

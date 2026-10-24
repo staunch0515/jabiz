@@ -2,6 +2,7 @@ import { AuthProvider, useAuth, type SignInStep } from '@jabiz/client'
 import {
   AppearanceProvider,
   Button,
+  EnvironmentBanner,
   MailLinkPage,
   MailUnsubscribe,
   OfflineBanner,
@@ -95,6 +96,8 @@ function Header() {
   const { signOut } = useAuth()
   return (
     <header className="bg-background sticky top-0 z-10 border-b">
+      {/* A test system says so on every page (platform 16zd); the app's frame is its own, so it places the banner. */}
+      <EnvironmentBanner />
       <div className="mx-auto flex max-w-md items-center gap-2 px-4 py-2">
         <span className="mr-auto font-semibold">{t('brand')}</span>
         <ThemeToggle />
@@ -239,6 +242,7 @@ function PublicPage({ path, signedIn, children }: { path: string; signedIn: bool
   return (
     <div className="flex min-h-full flex-col">
       <header className="bg-background sticky top-0 z-10 border-b">
+        <EnvironmentBanner />
         <div className="mx-auto flex max-w-md items-center gap-2 px-4 py-2">
           <span className="mr-auto font-semibold">{t('brand')}</span>
           <ThemeToggle />

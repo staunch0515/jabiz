@@ -124,6 +124,9 @@ export default defineConfig({
 
 ## 5. 入口、会话与页面
 
+- **测试系统的标志**（17 §3.2）：用 `AppShell` / `SignInForm` 等平台外框的页面自动在顶部显示测试系统的横条；自己写外框的前端在外框顶部放 `<EnvironmentBanner />`（`@jabiz/ui`），
+  正式环境以 `JABIZ_WEB_ENVIRONMENT=production` 关掉它，其他环境什么都不用设。
+
 - **入口**（10 §15.1）：
 
   ```yaml
