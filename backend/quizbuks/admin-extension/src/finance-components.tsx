@@ -17,11 +17,13 @@ import { readDictionary } from './api'
 const ALL = '*'
 
 /** A state filter: every item of a dictionary, or all. */
-export function StatusFilter({ dictionary, value, onChange, testId }: {
+export function StatusFilter({ dictionary, value, onChange, testId, only }: {
   dictionary: string
   value: string | null
   onChange: (value: string | null) => void
   testId: string
+  /** The codes offered, when the page's rows can only be some of the dictionary's (in the dictionary's order). */
+  only?: readonly string[]
 }) {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
   const id = useId()
@@ -36,7 +38,8 @@ export function StatusFilter({ dictionary, value, onChange, testId }: {
         </SelectTrigger>
         <SelectContent>
           <SelectItem value={ALL}>{t('finance.filter.all')}</SelectItem>
-          {(items.data ?? []).map((item) => <SelectItem key={item.code} value={item.code}>{item.label}</SelectItem>)}
+          {(items.data ?? []).filter((item) => !only || only.includes(item.code))
+            .map((item) => <SelectItem key={item.code} value={item.code}>{item.label}</SelectItem>)}
         </SelectContent>
       </Select>
     </div>

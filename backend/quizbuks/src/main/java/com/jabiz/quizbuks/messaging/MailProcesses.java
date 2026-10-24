@@ -217,10 +217,11 @@ public final class MailProcesses {
             ctx -> {
                 EntityInstance topUp = record(ctx);
                 if (topUp != null && topUp.get("paidAt") != null) {
-                    decide(ctx, NotificationMails.TOPUP_PAID, Map.of("amount",
-                        MailValues.kudos(topUp.get("amount"))));
+                    // Kudos granted by hand (Q18b) are no payment received.
+                    decide(ctx, QbTopUps.GRANT.equals(topUp.get("manualKind")) ? NotificationMails.TOPUP_GRANTED
+                        : NotificationMails.TOPUP_PAID, Map.of("amount", MailValues.kudos(topUp.get("amount"))));
                 }
-            }, messages, NotificationMails.TOPUP_PAID);
+            }, messages, NotificationMails.TOPUP_PAID, NotificationMails.TOPUP_GRANTED);
     }
 
     static TopUpMailInput topUpInput(DomainEvent event) {

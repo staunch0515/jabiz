@@ -16,6 +16,8 @@ public final class QbLedger {
     public static final String TRANSFERS_IN_TRANSIT = "2130";
     public static final String SERVICE_REVENUE = "4110";
     public static final String PAYMENT_FEES = "5110";
+    /** Kudos granted by hand with no money received (Q18b): the platform's promotion expense. */
+    public static final String PROMOTION_EXPENSES = "5120";
 
     /** The name of the dimension that carries the party (a user's id) on the wallet accounts. */
     public static final String PARTY = "party";
@@ -31,7 +33,8 @@ public final class QbLedger {
         new Account(REWARDS_PAYABLE, "Rewards payable to users (user wallets)", "LIABILITY"),
         new Account(TRANSFERS_IN_TRANSIT, "Transfers in transit", "LIABILITY"),
         new Account(SERVICE_REVENUE, "Platform service revenue (commission)", "REVENUE"),
-        new Account(PAYMENT_FEES, "Payment fees (Stripe)", "EXPENSE"));
+        new Account(PAYMENT_FEES, "Payment fees (Stripe)", "EXPENSE"),
+        new Account(PROMOTION_EXPENSES, "Promotion expenses (Kudos granted)", "EXPENSE"));
 
     private QbLedger() {}
 }

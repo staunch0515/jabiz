@@ -15,8 +15,16 @@ import { WALLET_DATASET, WALLET_DICTIONARY, WALLET_PROCESS, WALLET_TEMPLATE } fr
 export type TopUpStatus = 'OPENING' | 'OPEN' | 'PAID' | 'EXPIRED' | 'FAILED' | 'AWAITING' | 'REPORTED' | 'REVIEW'
   | 'CANCELLED'
 export const FINAL_STATUSES: readonly TopUpStatus[] = ['PAID', 'EXPIRED', 'FAILED']
-/** How a top-up is paid: by card on Stripe's page, or by a transfer to the platform's bank account (Q13a). */
-export type TopUpMethod = 'STRIPE' | 'BANK'
+/**
+ * How a top-up is paid: by card on Stripe's page, by a transfer to the platform's bank account (Q13a), or credited by
+ * the platform's team by hand (Q18b: money received outside, or Kudos granted).
+ */
+export type TopUpMethod = 'STRIPE' | 'BANK' | 'MANUAL'
+/** A manual credit's kind: money received outside the system (it has a receipt), or Kudos granted (none). */
+export type ManualKind = 'PAID_OUTSIDE' | 'GRANT'
+export const methodOf = (value: unknown): TopUpMethod => value === 'BANK' || value === 'MANUAL' ? value : 'STRIPE'
+export const manualKindOf = (value: unknown): ManualKind | null =>
+  value === 'PAID_OUTSIDE' || value === 'GRANT' ? value : null
 /** The bank top-ups the sponsor may still report or withdraw (no money recorded yet). */
 export const BANK_WAITING: readonly TopUpStatus[] = ['AWAITING', 'REPORTED']
 
@@ -46,6 +54,7 @@ export interface TopUpRow {
   refundedAmount: number
   method: TopUpMethod
   transferCode: string | null
+  manualKind: ManualKind | null
 }
 
 /** The top-up as the sponsor's dataset has it. */
@@ -65,6 +74,8 @@ export interface TopUp {
   transferDate: string | null
   /** The day the money arrived, once it is paid. */
   receivedOn: string | null
+  /** A manual credit's kind (Q18b); null for the other methods. */
+  manualKind: ManualKind | null
 }
 
 /** `TopUpProcesses.StartOutput`. */
@@ -154,8 +165,9 @@ export async function searchTopUps({ sorts, offset, limit }: TopUpSearch) {
       checkoutUrl: str(row.checkoutUrl),
       paidAt: str(row.paidAt),
       refundedAmount: num(row.refundedAmount),
-      method: row.method === 'BANK' ? 'BANK' : 'STRIPE',
+      method: methodOf(row.method),
       transferCode: str(row.transferCode),
+      manualKind: manualKindOf(row.manualKind),
     })),
   }
 }
@@ -179,12 +191,13 @@ export async function readTopUp(topUpId: string): Promise<TopUp | null> {
     expiresAt: str(row.expiresAt),
     checkoutUrl: str(row.checkoutUrl),
     paidAt: str(row.paidAt),
-    method: row.method === 'BANK' ? 'BANK' : 'STRIPE',
+    method: methodOf(row.method),
     transferCode: str(row.transferCode),
     requestedAmount: numOrNull(row.requestedAmount),
     payerName: str(row.payerName),
     transferDate: str(row.transferDate),
     receivedOn: row.status === 'PAID' ? str(row.receivedOn) : null,
+    manualKind: manualKindOf(row.manualKind),
   }
 }
 

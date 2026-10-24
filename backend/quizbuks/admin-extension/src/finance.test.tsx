@@ -172,7 +172,7 @@ describe('FinanceOverviewPage', () => {
     // The staleness is the server's: the page only says since when.
     expect(calledWith(TEMPLATE.financeSummary)[0][1].params.staleBefore).toMatch(/^\d{4}-\d{2}-\d{2}T/)
     const accounts = await screen.findAllByTestId('finance-account')
-    expect(accounts.map((row) => row.dataset.code)).toEqual(['2110', '2120', '2130', '1110', '1120', '4110', '5110'])
+    expect(accounts.map((row) => row.dataset.code)).toEqual(['2110', '2120', '2130', '1110', '1120', '4110', '5110', '5120'])
     expect(accounts[3]).toHaveTextContent('1110 Stripe balance')
   })
 

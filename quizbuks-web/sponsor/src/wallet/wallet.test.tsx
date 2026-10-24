@@ -34,6 +34,8 @@ interface Server {
   receipt?: { status: number; body: unknown }
   /** The row of `qb.sponsor.topup-limit`; none: not found. */
   limit?: Record<string, unknown>
+  /** More rows of `qb.sponsor.topups`, after the two usual ones. */
+  moreRows?: Record<string, unknown>[]
   /** The rows of `qb.me.consents` once a top-up was refused (a new version took effect meanwhile); none before. */
   consentsAfterStart?: Record<string, unknown>[]
 }
@@ -74,7 +76,8 @@ function server(options: Server = {}) {
             checkoutUrl: CHECKOUT, paidAt: null, refundedAmount: '0' },
           { topUpId: 't0', amount: '6000', status: 'PAID', createdAt: '2026-10-13T01:00:00Z', expiresAt: LATER,
             checkoutUrl: null, paidAt: '2026-10-13T01:01:00Z', refundedAmount: '0' },
-        ], offset: 0, limit: 20, total: 2 })
+          ...(options.moreRows ?? []),
+        ], offset: 0, limit: 20, total: 2 + (options.moreRows?.length ?? 0) })
       case '/api/queries/qb.me.consents':
         return json(200, { items: started ? options.consentsAfterStart ?? [] : [], offset: 0, limit: 20 })
       case '/api/processes/QB_TOPUP_START/latest':
@@ -282,6 +285,25 @@ describe('the receipts', () => {
       body: { topUpId: 't0', language: 'en' } })
     expect(click.mock.contexts[0]).toHaveProperty('download', 't0.pdf')
     expect(screen.queryByTestId('topup-receipt-problem')).not.toBeInTheDocument()
+  })
+
+  it('marks a manual credit (Q18b), with a receipt for money received and none for Kudos granted', async () => {
+    server({ moreRows: [
+      { topUpId: 'm1', amount: '3000', status: 'PAID', createdAt: '2026-10-12T01:00:00Z', expiresAt: null,
+        checkoutUrl: null, paidAt: '2026-10-12T01:01:00Z', refundedAmount: '0', method: 'MANUAL',
+        transferCode: '1000077', manualKind: 'PAID_OUTSIDE' },
+      { topUpId: 'm2', amount: '500', status: 'PAID', createdAt: '2026-10-11T01:00:00Z', expiresAt: null,
+        checkoutUrl: null, paidAt: '2026-10-11T01:01:00Z', refundedAmount: '0', method: 'MANUAL',
+        transferCode: '1000078', manualKind: 'GRANT' },
+    ] })
+    window.history.replaceState(null, '', '/wallet')
+    render(<App />)
+    const rows = await screen.findAllByTestId('topup-row')
+    expect(rows).toHaveLength(4)
+    expect(within(rows[2]).getByTestId('topup-row-manual')).toHaveTextContent('Paid outside the system · 1000077')
+    expect(within(rows[2]).getByTestId('topup-row-receipt')).toBeInTheDocument()
+    expect(within(rows[3]).getByTestId('topup-row-manual')).toHaveTextContent('Granted by QuizBuks · 1000078')
+    expect(within(rows[3]).queryByTestId('topup-row-receipt')).not.toBeInTheDocument()
   })
 
   it('shows the server\'s refusal', async () => {

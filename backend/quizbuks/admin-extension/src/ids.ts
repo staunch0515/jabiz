@@ -51,6 +51,8 @@ export const TEMPLATE = {
   bankTopUps: 'qb.admin.bank-topups',
   /** The bank top-up's settings in force (Q18a; `qb.admin.finance.read`). */
   bankSettings: 'qb.admin.bank-settings',
+  /** Manual credits (Q18b): what recording and approving one needs (`qb.topup.bank.approve`). */
+  manualCredits: 'qb.admin.manual-credits',
   /** Bank withdrawals (Q13b; finance). */
   bankWithdrawals: 'qb.admin.bank-withdrawals',
   payoutAccounts: 'qb.admin.payout-accounts',
@@ -102,6 +104,8 @@ export const PROCESS = {
   transferNow: 'QB_TRANSFER_NOW',
   /** Records the money of a bank top-up found on the statement, for another administrator's approval (Q13a). */
   bankRecord: 'QB_TOPUP_BANK_RECORD',
+  /** Records a manual credit of a sponsor's wallet, for another administrator's approval (Q18b). */
+  manualRecord: 'QB_TOPUP_MANUAL_RECORD',
   /** Proposes the bank top-up's settings in one step (Q18a; `control.propose`); another administrator publishes. */
   bankSettingsPropose: 'QB_BANK_SETTINGS_PROPOSE',
   /** Publishes another administrator's proposals of them together (Q18a; `control.publish`, a second factor). */
@@ -140,7 +144,7 @@ export const ACCOUNT_SUSPENDED = 'QB_ACCOUNT_SUSPENDED'
 export type ReportId = (typeof REPORTS)[number]
 
 /** The ledger's accounts (backend `QbLedger`), in the order the overview shows them. */
-export const ACCOUNTS = ['2110', '2120', '2130', '1110', '1120', '4110', '5110'] as const
+export const ACCOUNTS = ['2110', '2120', '2130', '1110', '1120', '4110', '5110', '5120'] as const
 
 /** A transfer still sending this long after it was created is in doubt (the backend's `STALE_AFTER`). */
 export const STALE_AFTER_MS = 60 * 60 * 1000
@@ -165,6 +169,7 @@ export const DICTIONARY = {
   materialKind: 'urn:jabiz:dict:quizbuks:material-kind',
   attemptStatus: 'urn:jabiz:dict:quizbuks:attempt-status',
   rewardStatus: 'urn:jabiz:dict:quizbuks:reward-status',
+  topUpManualKind: 'urn:jabiz:dict:quizbuks:topup-manual-kind',
   transferStatus: 'urn:jabiz:dict:quizbuks:transfer-status',
   topUpStatus: 'urn:jabiz:dict:quizbuks:topup-status',
   payoutAccountStatus: 'urn:jabiz:dict:quizbuks:payout-account-status',
@@ -207,6 +212,8 @@ export const PERMISSION = {
   /** Bank top-ups (Q13a): finance records the money, another administrator approves it. */
   bankRecord: 'qb.topup.bank.record',
   bankApprove: 'qb.topup.bank.approve',
+  /** Manual credits (Q18b): finance records them; the bank top-ups' approvers approve them. */
+  manualRecord: 'qb.topup.manual.record',
   /** Bank withdrawals (Q13b): paying them, and the account number in plain text to do so. */
   withdrawalPay: 'qb.withdrawal.pay',
   bankReveal: 'qb.payout.bank.reveal',
@@ -270,6 +277,9 @@ export const PATH = {
   /** The bank top-up's receiving account and limits (Q18a). */
   bankSettings: '/qb/finance/bank-settings',
   bankTopUp: (topUpId: string) => `/qb/finance/bank-topups/${encodeURIComponent(topUpId)}`,
+  /** Manual credits: recording and approving them (Q18b). */
+  manualCredits: '/qb/finance/manual-credits',
+  manualCredit: (topUpId: string) => `/qb/finance/manual-credits/${encodeURIComponent(topUpId)}`,
   /** Bank withdrawals: reviewing, paying and returning them (Q13b). */
   bankWithdrawals: '/qb/finance/bank-withdrawals',
   reconciliation: '/qb/finance/reconciliation',

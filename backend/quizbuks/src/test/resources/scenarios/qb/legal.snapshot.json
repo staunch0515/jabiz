@@ -404,6 +404,9 @@
       "recordedAt" : null,
       "reviewFrom" : null,
       "approvalRequestId" : null,
+      "manualKind" : null,
+      "manualReason" : null,
+      "sponsorVisible" : true,
       "version" : 1
     }, {
       "topUpId" : "#uuid:23",
@@ -450,6 +453,9 @@
       "recordedAt" : null,
       "reviewFrom" : null,
       "approvalRequestId" : null,
+      "manualKind" : null,
+      "manualReason" : null,
+      "sponsorVisible" : true,
       "version" : 1
     } ]
   }

@@ -136,8 +136,10 @@ public final class QbParams {
     public static final String JOURNAL_ACCOUNT_2130 = JOURNAL_ACCOUNT_PREFIX + "2130";
     public static final String JOURNAL_ACCOUNT_4110 = JOURNAL_ACCOUNT_PREFIX + "4110";
     public static final String JOURNAL_ACCOUNT_5110 = JOURNAL_ACCOUNT_PREFIX + "5110";
+    public static final String JOURNAL_ACCOUNT_5120 = JOURNAL_ACCOUNT_PREFIX + "5120";
     public static final List<String> JOURNAL_ACCOUNTS = List.of(JOURNAL_ACCOUNT_1110, JOURNAL_ACCOUNT_1120,
-        JOURNAL_ACCOUNT_2110, JOURNAL_ACCOUNT_2120, JOURNAL_ACCOUNT_2130, JOURNAL_ACCOUNT_4110, JOURNAL_ACCOUNT_5110);
+        JOURNAL_ACCOUNT_2110, JOURNAL_ACCOUNT_2120, JOURNAL_ACCOUNT_2130, JOURNAL_ACCOUNT_4110, JOURNAL_ACCOUNT_5110,
+        JOURNAL_ACCOUNT_5120);
 
     /*
      * The issuer of the top-up receipts (Q9d, F-09, D-4): the operator's name, address and registration number as the
@@ -205,6 +207,7 @@ public final class QbParams {
         journal(JOURNAL_ACCOUNT_2130, "2130 Transfers in transit"),
         journal(JOURNAL_ACCOUNT_4110, "4110 Service revenue"),
         journal(JOURNAL_ACCOUNT_5110, "5110 Payment fees"),
+        journal(JOURNAL_ACCOUNT_5120, "5120 Promotion expenses"),
         new Param(ISSUER_NAME, Map.of("type", "text", "maxLength", 200), "",
             "Name of the operator issuing the top-up receipts"),
         new Param(ISSUER_ADDRESS, Map.of("type", "text", "maxLength", 500), "",

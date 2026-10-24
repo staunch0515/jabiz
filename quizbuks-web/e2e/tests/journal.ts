@@ -19,7 +19,7 @@ const USERS = 'urn:jabiz:dataset:platform:SecUser'
 const USER_ROLES = 'urn:jabiz:dataset:platform:SecUserRole'
 
 /** The accounts of the chart (backend `QbLedger`) and the codes the tests map them to. */
-export const ACCOUNTS = ['1110', '1120', '2110', '2120', '2130', '4110', '5110']
+export const ACCOUNTS = ['1110', '1120', '2110', '2120', '2130', '4110', '5110', '5120']
 export const codeOf = (account: string) => `E2E-${account}`
 
 let mapped = false

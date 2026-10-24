@@ -395,6 +395,12 @@ for (const appearance of ['light', 'dark'] as const) {
     await expect(page.getByTestId('bank-settings-current')).toBeVisible()
     await expect(page.getByTestId('bank-settings-form')).toBeVisible()
     await expectAccessible(page, at('admin bank settings'))
+    // Q18b: manual credits, with the recording dialog (the e2e administrator holds every permission).
+    await page.goto('/admin/qb/finance/manual-credits')
+    await expect(page.getByTestId('manual-credits')).toBeVisible()
+    await page.getByTestId('manual-new').click()
+    await expect(page.getByTestId('manual-record-dialog')).toBeVisible()
+    await expectAccessible(page, at('admin manual credits'))
   })
 }
 

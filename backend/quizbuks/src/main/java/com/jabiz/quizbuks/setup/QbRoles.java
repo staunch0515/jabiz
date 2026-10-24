@@ -56,6 +56,8 @@ public final class QbRoles {
         "task.resolve",
         // Q13a: bank top-ups, recorded from the statement by one administrator and approved by another.
         QbPermissions.TOPUP_BANK_RECORD, QbPermissions.TOPUP_BANK_APPROVE,
+        // Q18b: manual credits, recorded by one administrator and approved by another.
+        QbPermissions.TOPUP_MANUAL_RECORD,
         // Q14: a taker's transfer at once, with the daily run's checks.
         QbPermissions.TRANSFER_NOW,
         // Q13b: bank withdrawals, paid by hand from the account number revealed one at a time.

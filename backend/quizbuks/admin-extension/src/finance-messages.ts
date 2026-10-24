@@ -18,6 +18,8 @@ export const financeMessages = {
     category: {
       TOPUP: 'Top-ups credited',
       BANK_TOPUP: 'Bank top-ups credited',
+      MANUAL_TOPUP: 'Manual credits: money received outside',
+      GRANT: 'Manual credits: Kudos granted',
       REFUND: 'Refunds taken back',
       DISPUTE: 'Lost disputes taken back',
       STRIPE_FEE: "Stripe's fees",
@@ -276,6 +278,8 @@ export const financeMessages = {
     category: {
       TOPUP: '充值到账',
       BANK_TOPUP: '银行转账充值到账',
+      MANUAL_TOPUP: '手工加币：系统外收款',
+      GRANT: '手工加币：赠送',
       REFUND: '退款扣回',
       DISPUTE: '争议败诉扣回',
       STRIPE_FEE: 'Stripe 手续费',
@@ -534,6 +538,8 @@ export const financeMessages = {
     category: {
       TOPUP: 'チャージの入金',
       BANK_TOPUP: '銀行振込チャージの入金',
+      MANUAL_TOPUP: '手動付与：システム外の入金',
+      GRANT: '手動付与：Kudos の付与',
       REFUND: '返金による取り戻し',
       DISPUTE: '異議申し立ての敗訴による取り戻し',
       STRIPE_FEE: 'Stripe の手数料',

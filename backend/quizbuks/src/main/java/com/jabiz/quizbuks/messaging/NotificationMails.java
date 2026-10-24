@@ -41,6 +41,10 @@ public final class NotificationMails {
     public static final MailTemplate TOPUP_PAID = MailTemplate.define("qb.topup.paid", t -> t
         .category(MailCategory.TRANSACTIONAL).param("amount"));
 
+    /** Kudos granted to a sponsor by hand are on their wallet (Q18b): no money was received, so no receipt. */
+    public static final MailTemplate TOPUP_GRANTED = MailTemplate.define("qb.topup.granted", t -> t
+        .category(MailCategory.TRANSACTIONAL).param("amount"));
+
     /** A sponsor's publication passed its review. */
     public static final MailTemplate PUBLICATION_APPROVED = MailTemplate.define("qb.publication.approved", t -> t
         .category(MailCategory.TRANSACTIONAL).param("name", "start"));
@@ -66,7 +70,7 @@ public final class NotificationMails {
         .category(MailCategory.NOTIFICATION).entries("sponsor").param("name", "reason", "completions"));
 
     public static final List<MailTemplate> ALL = List.of(TRANSFER_SENT, TRANSFER_FAILED, PAYOUT_ACTION_NEEDED,
-        TOPUP_PAID, PUBLICATION_APPROVED, PUBLICATION_REJECTED, PUBLICATION_TAKEN_DOWN, PUBLICATION_FUNDS_SHORT,
+        TOPUP_PAID, TOPUP_GRANTED, PUBLICATION_APPROVED, PUBLICATION_REJECTED, PUBLICATION_TAKEN_DOWN, PUBLICATION_FUNDS_SHORT,
         PUBLICATION_ENDED);
 
     /**

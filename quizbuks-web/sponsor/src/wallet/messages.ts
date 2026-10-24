@@ -48,6 +48,7 @@ const en = {
       submit: 'Continue to payment',
     },
     detail: {
+      kind: 'How it was credited',
       title: 'Top-up',
       back: 'Back to the wallet',
       notFound: 'There is no such top-up.',
@@ -69,6 +70,9 @@ const en = {
       unsafe: 'The payment page\'s address could not be verified, so it was not opened. Please contact us.',
       checkAgain: 'Check again',
       newTopUp: 'New top-up',
+    },
+    manual: {
+      kinds: { PAID_OUTSIDE: 'Paid outside the system', GRANT: 'Granted by QuizBuks' },
     },
     bank: {
       method: 'How do you pay?',
@@ -158,6 +162,7 @@ const zh: typeof en = {
       submit: '继续支付',
     },
     detail: {
+      kind: '加币方式',
       title: '充值',
       back: '返回钱包',
       notFound: '没有这笔充值。',
@@ -179,6 +184,9 @@ const zh: typeof en = {
       unsafe: '无法确认支付页面的地址，因此没有打开。请联系我们。',
       checkAgain: '再次查看',
       newTopUp: '重新充值',
+    },
+    manual: {
+      kinds: { PAID_OUTSIDE: '系统外收款', GRANT: 'QuizBuks 赠送' },
     },
     bank: {
       method: '支付方式',
@@ -268,6 +276,7 @@ const ja: typeof en = {
       submit: '支払いへ進む',
     },
     detail: {
+      kind: '付与の方法',
       title: 'チャージ',
       back: 'ウォレットに戻る',
       notFound: 'このチャージはありません。',
@@ -289,6 +298,9 @@ const ja: typeof en = {
       unsafe: '支払いページのアドレスを確認できなかったため、開きませんでした。お問い合わせください。',
       checkAgain: 'もう一度確認',
       newTopUp: '新しくチャージ',
+    },
+    manual: {
+      kinds: { PAID_OUTSIDE: 'システム外の入金', GRANT: 'QuizBuks からの付与' },
     },
     bank: {
       method: 'お支払い方法',

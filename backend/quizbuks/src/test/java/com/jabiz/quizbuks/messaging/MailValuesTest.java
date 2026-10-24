@@ -44,7 +44,7 @@ class MailValuesTest {
 
     @Test
     void onlyTheSponsorsTwoNotificationsMayBeTurnedOffAndOnlyAtTheSponsorConsole() {
-        assertThat(NotificationMails.ALL).hasSize(9);
+        assertThat(NotificationMails.ALL).hasSize(10);
         assertThat(NotificationMails.ALL).filteredOn(MailTemplate::unsubscribable).extracting(MailTemplate::name)
             .containsExactly("qb.publication.funds-short", "qb.publication.ended");
         assertThat(NotificationMails.ALL).filteredOn(MailTemplate::unsubscribable).allSatisfy(template -> {
@@ -54,6 +54,6 @@ class MailValuesTest {
         });
         // The transactional ones are always sent and name no entry (entries mean nothing for them, D49 item 5).
         assertThat(NotificationMails.ALL).filteredOn(template -> template.category() == MailCategory.TRANSACTIONAL)
-            .hasSize(7).allSatisfy(template -> assertThat(template.entries()).isEmpty());
+            .hasSize(8).allSatisfy(template -> assertThat(template.entries()).isEmpty());
     }
 }

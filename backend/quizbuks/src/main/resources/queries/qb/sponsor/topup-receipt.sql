@@ -19,7 +19,8 @@ results:
 permissions: [qb.topup]
 ---*/
 -- Paid top-ups only: a receipt is for money received. The payment's reference is the end of Stripe's payment id, enough
--- for the sponsor to match their card statement's entry without the whole id; a bank transfer's is its code (Q13a).
+-- for the sponsor to match their card statement's entry without the whole id; a bank transfer's is its code (Q13a), as
+-- is money credited by hand that was received outside the system (Q18b). Kudos granted have no receipt: no money.
 -- Refunds do not change the receipt.
 -- paidIn is what the card was charged: the currency Stripe converted to (its amount in the currency's minor unit, as
 -- Stripe gives it: none for its zero-decimal currencies, three for the three-decimal ones, else two), else the yen.
@@ -28,7 +29,7 @@ SELECT
     s.{{QbSponsor.company}} AS company,
     s.{{QbSponsor.contactName}} AS contactName,
     t.{{QbTopUp.paidAt}} AS paidAt,
-    CAST(CASE WHEN t.{{QbTopUp.method}} = 'BANK' THEN t.{{QbTopUp.transferCode}}
+    CAST(CASE WHEN t.{{QbTopUp.method}} IN ('BANK', 'MANUAL') THEN t.{{QbTopUp.transferCode}}
         ELSE '...' || right(t.{{QbTopUp.paymentIntentId}}, 8) END AS varchar(20)) AS paymentReference,
     CAST(CASE
         WHEN t.{{QbTopUp.presentmentCurrency}} IS NULL OR t.{{QbTopUp.presentmentAmount}} IS NULL
@@ -50,3 +51,4 @@ FROM {{QbTopUp}} t
 LEFT JOIN {{QbSponsor}} s ON s.{{QbSponsor.userId}} = t.{{QbTopUp.sponsorId}}
 WHERE t.{{QbTopUp.topUpId}} = :topUpId
   AND t.{{QbTopUp.status}} = 'PAID'
+  AND t.{{QbTopUp.manualKind}} IS DISTINCT FROM 'GRANT'

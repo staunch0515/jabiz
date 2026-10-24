@@ -81,6 +81,11 @@ class MessagingConfig {
     }
 
     @Bean
+    MailTemplate qbTopUpGrantedMail() {
+        return NotificationMails.TOPUP_GRANTED;
+    }
+
+    @Bean
     MailTemplate qbPublicationApprovedMail() {
         return NotificationMails.PUBLICATION_APPROVED;
     }

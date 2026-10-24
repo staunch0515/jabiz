@@ -82,7 +82,9 @@ class TopUpConfig {
             .permissions(QbPermissions.SPONSOR_FINANCE_READ, QbPermissions.SPONSOR_VIEW_WRITE)
             .policy(p -> p.readOnly(true).allowTimeTravel(false))
             .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef))
-            .scope(s -> s.fromContext("sponsorId", "actorId", RequestContext::actorId)));
+            .scope(s -> s.fromContext("sponsorId", "actorId", RequestContext::actorId)
+                // A manual credit only once it is paid (Q18b): under review it may still be rejected.
+                .fixed("sponsorVisible", true)));
     }
 
     /** The receipts issued (Q9d): read by finance, written by {@code QB_TOPUP_RECEIPT_ISSUE} only. */
@@ -167,7 +169,15 @@ class TopUpConfig {
     StaticDictionary qbTopUpMethodDictionary() {
         return StaticDictionary.define(QbTopUps.METHOD_DICTIONARY, d -> d
             .item(QbTopUps.STRIPE, "en", "Card", "zh", "银行卡", "ja", "カード")
-            .item(QbTopUps.BANK, "en", "Bank transfer", "zh", "银行转账", "ja", "銀行振込"));
+            .item(QbTopUps.BANK, "en", "Bank transfer", "zh", "银行转账", "ja", "銀行振込")
+            .item(QbTopUps.MANUAL, "en", "Manual credit", "zh", "手工加币", "ja", "手動付与"));
+    }
+
+    @Bean
+    StaticDictionary qbTopUpManualKindDictionary() {
+        return StaticDictionary.define(QbTopUps.MANUAL_KIND_DICTIONARY, d -> d
+            .item(QbTopUps.PAID_OUTSIDE, "en", "Paid outside the system", "zh", "系统外收款", "ja", "システム外の入金")
+            .item(QbTopUps.GRANT, "en", "Granted", "zh", "赠送", "ja", "付与"));
     }
 
     /** The codes a sponsor puts before the payer's name of a bank transfer (Q13a): seven digits, never repeated. */
@@ -180,6 +190,12 @@ class TopUpConfig {
     ApprovalSubject qbBankTopUpApprovalSubject() {
         return ApprovalSubject.define(BankTopUps.APPROVAL_SUBJECT, s -> s.entity(QbTopUps.TOPUP).bool("bank")
             .number("amount").text("sponsorId"));
+    }
+
+    @Bean
+    ApprovalSubject qbManualCreditApprovalSubject() {
+        return ApprovalSubject.define(ManualCredits.APPROVAL_SUBJECT, s -> s.entity(QbTopUps.TOPUP).bool("manual")
+            .number("amount").text("sponsorId").text("kind"));
     }
 
     @Bean
@@ -353,6 +369,34 @@ class TopUpConfig {
     @Bean
     ProcessDefinition<BankTopUps.RecordInput, BankTopUps.BankOutput, ProcessContext> qbBankTopUpRecord() {
         return BankTopUps.record();
+    }
+
+    /** Q18b: manual credits, recorded by finance and approved by another administrator. */
+    @Bean
+    ProcessDefinition<ManualCredits.RecordInput, ManualCredits.ManualOutput, ProcessContext> qbManualCreditRecord() {
+        return ManualCredits.record();
+    }
+
+    @Bean
+    ProcessDefinition<TransferProcesses.ApprovalResultInput, ManualCredits.ManualOutput, ProcessContext>
+        qbManualCreditApprovalResult() {
+        return ManualCredits.approvalResult();
+    }
+
+    @Bean
+    EventSubscription<TransferProcesses.ApprovalResultInput> qbManualCreditApprovedSubscription(
+        ProcessDefinition<TransferProcesses.ApprovalResultInput, ManualCredits.ManualOutput, ProcessContext>
+            qbManualCreditApprovalResult) {
+        return EventSubscription.of("qb.topup-manual-approved", ApprovalProcesses.APPROVED_EVENT,
+            qbManualCreditApprovalResult, TransferProcesses::resultInput);
+    }
+
+    @Bean
+    EventSubscription<TransferProcesses.ApprovalResultInput> qbManualCreditRejectedSubscription(
+        ProcessDefinition<TransferProcesses.ApprovalResultInput, ManualCredits.ManualOutput, ProcessContext>
+            qbManualCreditApprovalResult) {
+        return EventSubscription.of("qb.topup-manual-rejected", ApprovalProcesses.REJECTED_EVENT,
+            qbManualCreditApprovalResult, TransferProcesses::resultInput);
     }
 
     @Bean

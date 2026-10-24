@@ -39,6 +39,20 @@ public final class WalletCodes {
     /** An administrator recording a top-up of their own (Q13a). */
     public static final String TOPUP_BANK_OWN = "QB_TOPUP_BANK_OWN";
 
+    /** Q18b: the sponsor credited by hand is not an approved sponsor. */
+    public static final String TOPUP_MANUAL_SPONSOR = "QB_TOPUP_MANUAL_SPONSOR";
+    /**
+     * Q18b: money received outside the system needs the day and the statement's reference; a grant has neither (param
+     * {@code kind}).
+     */
+    public static final String TOPUP_MANUAL_KIND = "QB_TOPUP_MANUAL_KIND";
+    /** Q18b: an administrator crediting their own wallet. */
+    public static final String TOPUP_MANUAL_OWN = "QB_TOPUP_MANUAL_OWN";
+    /** Q18b: no approval rule asks for another administrator's approval of manual credits: nothing is recorded. */
+    public static final String TOPUP_MANUAL_NO_REVIEW = "QB_TOPUP_MANUAL_NO_REVIEW";
+    /** Q18b: no receipt for Kudos granted: no money was received. */
+    public static final String RECEIPT_GRANT = "QB_RECEIPT_GRANT";
+
     /** The taker's country is not the one payout accounts are opened in (param {@code country}; Q18: no cross-border). */
     public static final String PAYOUT_COUNTRY_UNSUPPORTED = "QB_PAYOUT_COUNTRY_UNSUPPORTED";
     /** Payout accounts are not configured here: the app's address, where Stripe returns, is missing. */
@@ -93,7 +107,8 @@ public final class WalletCodes {
         TRANSFER_NOW_OWN, BANK_ACCOUNT_INVALID, BANK_ACCOUNT_IN_USE, BANK_ACCOUNT_MISSING, PAYOUT_METHOD_OPEN_TRANSFER,
         WITHDRAWAL_UNAVAILABLE, WITHDRAWAL_AMOUNT, WITHDRAWAL_STATE, WITHDRAWAL_OWN, WITHDRAWAL_APPROVER, WITHDRAWAL_REFERENCE_USED,
         RECEIPT_NOT_PAID, RECEIPT_NO_ISSUER, RECEIPT_REFUNDED, BANK_SETTINGS_RANGE, BANK_SETTINGS_OPEN,
-        BANK_SETTINGS_UNCHANGED, BANK_SETTINGS_NOTHING);
+        BANK_SETTINGS_UNCHANGED, BANK_SETTINGS_NOTHING, TOPUP_MANUAL_SPONSOR, TOPUP_MANUAL_KIND, TOPUP_MANUAL_OWN,
+        TOPUP_MANUAL_NO_REVIEW, RECEIPT_GRANT);
 
     private WalletCodes() {}
 }

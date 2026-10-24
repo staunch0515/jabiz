@@ -27,10 +27,21 @@ public final class QbTopUps {
     public static final String STRIPE = "STRIPE";
     /** Paid by a transfer to the platform's bank account, recorded and approved by two administrators (Q13a). */
     public static final String BANK = "BANK";
+    /**
+     * Credited by a finance administrator by hand and approved by another (Q18b): money received outside the system,
+     * or a grant. Recorded under review, then paid or cancelled; its code is drawn from the transfer codes.
+     */
+    public static final String MANUAL = "MANUAL";
+    public static final String MANUAL_KIND_DICTIONARY = "urn:jabiz:dict:quizbuks:topup-manual-kind";
+    /** Money the platform received outside the system (debit 1120 Bank deposits). */
+    public static final String PAID_OUTSIDE = "PAID_OUTSIDE";
+    /** Kudos given with no money (debit 5120 Promotion expenses); it has no receipt. */
+    public static final String GRANT = "GRANT";
     /** The sequence of the codes a sponsor puts before the payer's name of a bank transfer (Q13a). */
     public static final String TRANSFER_CODE_SEQUENCE = "qb.topup.transfer-code";
 
     public static final int URL_LENGTH = 2048;
+    public static final int MANUAL_REASON_LENGTH = 500;
     static final int STRIPE_ID_LENGTH = 255;
 
     public static final EntityDefinition TOPUP_ENTITY = EntityDefinition.define(TOPUP, eb -> {
@@ -43,7 +54,7 @@ public final class QbTopUps {
         // What is credited: a card top-up's never changes; a bank one's becomes what finance recorded as received.
         eb.field("amount", f -> f.physicalColumn("amount").required(true).asMonetary("JPY", 0));
         eb.field("method", f -> f.physicalColumn("method").immutable(true).required(true).processOnly()
-            .asCode(METHOD_DICTIONARY, STRIPE, BANK));
+            .asCode(METHOD_DICTIONARY, STRIPE, BANK, MANUAL));
         eb.field("status", f -> f.physicalColumn("status").required(true).processOnly()
             .asCode(STATUS_DICTIONARY, TopUpStatus.ALL.toArray(String[]::new)));
         eb.field("createdAt", f -> f.physicalColumn("created_at").immutable(true).required(true).processOnly()
@@ -107,15 +118,22 @@ public final class QbTopUps {
             .asTemporal(TemporalRole.EVENT_TIME));
         eb.field("reviewFrom", f -> f.physicalColumn("review_from").processOnly().asText(20));
         eb.field("approvalRequestId", f -> f.physicalColumn("approval_request_id").processOnly().asText(64));
+        // A manual credit (Q18b): which kind, and why. The sponsor sees it only once it is paid: sponsorVisible is
+        // derived by the database (V23) and the sponsor's dataset is scoped to it; no process writes it.
+        eb.field("manualKind", f -> f.physicalColumn("manual_kind").immutable(true).processOnly()
+            .asCode(MANUAL_KIND_DICTIONARY, PAID_OUTSIDE, GRANT));
+        eb.field("manualReason", f -> f.physicalColumn("manual_reason").immutable(true).processOnly()
+            .asText(MANUAL_REASON_LENGTH));
+        eb.field("sponsorVisible", f -> f.physicalColumn("sponsor_visible").processOnly().asBool());
         eb.field("version", f -> f.physicalColumn("version").asVersion());
         eb.unique("uk_qb_topup_session", "checkoutSessionId");
         eb.unique("uk_qb_topup_payment", "paymentIntentId");
         eb.unique("uk_qb_topup_transfer_code", "transferCode");
-        // A bank top-up waiting for money may be recorded even after it expired or was cancelled (the money came
-        // anyway); a rejected record goes back to where it was. Which states a method uses, the processes and the
-        // database (qb_topup_method) keep.
+        // A manual credit starts under review (Q18b) and is paid or cancelled. A bank top-up waiting for money may be
+        // recorded even after it expired or was cancelled (the money came anyway); a rejected record goes back to where
+        // it was. Which states a method uses, the processes and the database (qb_topup_method) keep.
         eb.stateTransitions("status", st -> st
-            .initial(TopUpStatus.OPENING, TopUpStatus.AWAITING)
+            .initial(TopUpStatus.OPENING, TopUpStatus.AWAITING, TopUpStatus.REVIEW)
             .from(TopUpStatus.OPENING).to(TopUpStatus.OPEN, TopUpStatus.PAID, TopUpStatus.EXPIRED, TopUpStatus.FAILED)
             .from(TopUpStatus.OPEN).to(TopUpStatus.PAID, TopUpStatus.EXPIRED)
             .from(TopUpStatus.AWAITING).to(TopUpStatus.REPORTED, TopUpStatus.REVIEW, TopUpStatus.CANCELLED,
