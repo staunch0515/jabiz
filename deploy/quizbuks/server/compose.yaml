@@ -21,6 +21,9 @@ services:
       QB_LOCAL_SECRETS: "false"
       QB_STRIPE_PLACEHOLDERS: "false"
       LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
+      # Which system the pages say they are (platform 16zd): only production's .env sets it to "production"; every
+      # other environment shows the test banner on every page. The deploy workflow checks the line against APP_NAME.
+      JABIZ_WEB_ENVIRONMENT: ${JABIZ_WEB_ENVIRONMENT:-test}
     # The image sizes the heap at 60 % of this and caps Netty's direct buffers at 256 MiB (JAVA_TOOL_OPTIONS in
     # deploy/quizbuks/Dockerfile); the rest is for metaspace, code cache and the native memory of PDF and cover
     # rendering. Setting JAVA_TOOL_OPTIONS in .env replaces the image's value.

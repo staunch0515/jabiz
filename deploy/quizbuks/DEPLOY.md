@@ -59,6 +59,9 @@ mkdir -p /opt/apps/quizbuks && touch /opt/apps/quizbuks/.env && chmod 600 /opt/a
 ```sh
 # 环境：compose 的项目名与容器名；workflow 部署前检查这一行与所部署的环境一致（不加引号）
 APP_NAME=quizbuks
+# 页面上的系统标志（平台 16zd）：只有正式环境写 production；其他值（或不写）都让每一页顶部显示"测试环境"的横条。
+# workflow 部署前检查：production 的 .env 必须有这一行，staging 的 .env 不得写 production
+JABIZ_WEB_ENVIRONMENT=production
 
 # 数据库（create-db.sh 的输出）
 SPRING_R2DBC_URL=r2dbc:postgresql://postgres:5432/quizbuks
@@ -176,6 +179,7 @@ Run workflow，分支选该环境的分支，`image-tag` 留空。第一次启�
 
    ```sh
    APP_NAME=quizbuks-staging
+   JABIZ_WEB_ENVIRONMENT=staging
    SPRING_PROFILES_ACTIVE=staging
    JABIZ_MAIL_BASE_URL=https://staging.quizbuks.com
    QB_APP_LINK=https://staging.quizbuks.com/
@@ -189,6 +193,8 @@ Run workflow，分支选该环境的分支，`image-tag` 留空。第一次启�
      `/api/inbound/stripe-connect`（订阅的事件见 `docs/quizbuks/stripe-test-mode.md` §4.2），`STRIPE_WEBHOOK_SECRET` / `STRIPE_CONNECT_WEBHOOK_SECRET` 是
      **这两个端点各自的签名密钥**（`whsec_…`，由 Stripe 给出，不能自己生成：签名对不上时每个事件都被拒绝，充值停在 `OPEN`）。经 Cloudflare 时先做"3a. Cloudflare"。
    - `SPRING_PROFILES_ACTIVE=staging` 只标出环境，应用中没有按环境写死的配置：环境的差异全部在这个 `.env` 中。同时开 Google 登录时写 `staging,google`。
+   - `JABIZ_WEB_ENVIRONMENT=staging`（平台 16zd）让三个前端的每一页顶部都显示 "STAGING · 测试环境，不是正式版" 的横条，标题前加 `[STAGING]`；
+     不写也一样（缺省 `test`）。**绝不能写 `production`**：workflow 部署前检查，staging 的 `.env` 写了 production 即停止。
 3. **DNS**：给 `staging.<基础域名>` 添加 A 记录（及 AAAA），指向同一台服务器。
 4. 第一次部署与首次启动之后的步骤同上（`https://staging.<基础域名>/admin/`）。
 

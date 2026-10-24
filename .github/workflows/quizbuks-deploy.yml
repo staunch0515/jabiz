@@ -216,6 +216,12 @@ jobs:
           printf '%s' "$GHCR_TOKEN" | ssh "$SERVER_USER@$SERVER_HOST" "set -e
             grep -qx 'APP_NAME=$APP_NAME' /opt/apps/$APP_NAME/.env \\
               || { echo '/opt/apps/$APP_NAME/.env must contain the line APP_NAME=$APP_NAME' >&2; exit 1; }
+            if [ '$APP_NAME' = quizbuks ]; then
+              grep -qx 'JABIZ_WEB_ENVIRONMENT=production' /opt/apps/$APP_NAME/.env \\
+                || { echo '/opt/apps/$APP_NAME/.env must contain the line JABIZ_WEB_ENVIRONMENT=production (platform 16zd)' >&2; exit 1; }
+            elif grep -qix 'JABIZ_WEB_ENVIRONMENT=production' /opt/apps/$APP_NAME/.env; then
+              echo '/opt/apps/$APP_NAME/.env says JABIZ_WEB_ENVIRONMENT=production, but $APP_NAME is not production' >&2; exit 1
+            fi
             export DOCKER_CONFIG=\$(mktemp -d)
             trap 'rm -rf \"\$DOCKER_CONFIG\"' EXIT
             docker login ghcr.io -u '$REGISTRY_USER' --password-stdin
