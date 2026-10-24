@@ -345,9 +345,11 @@ class SignUpIT extends SignUpItSupport {
         // What a front end may know of its entry.
         assertThat(get("/api/auth/entries/portal", null).expectStatus().isOk().expectBody(MAP).returnResult()
             .getResponseBody()).containsEntry("name", "portal").containsEntry("selfRegistration", true)
-            .containsEntry("requireVerifiedEmail", true).containsEntry("appPath", "/portal/");
+            .containsEntry("requireVerifiedEmail", true).containsEntry("appPath", "/portal/")
+            // Not configured as production: a test system, which the pages say (phase 16zd).
+            .containsEntry("environment", "test");
         assertThat(get("/api/auth/entries/admin", null).expectStatus().isOk().expectBody(MAP).returnResult()
-            .getResponseBody()).containsEntry("selfRegistration", false);
+            .getResponseBody()).containsEntry("selfRegistration", false).containsEntry("environment", "test");
         get("/api/auth/entries/no-such-entry", null).expectStatus().isNotFound();
     }
 

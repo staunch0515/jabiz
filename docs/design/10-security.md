@@ -606,7 +606,7 @@ class PortalSignInGuard implements SignInGuard {
 | `POST /api/auth/account/verify-email`（已登录） | 同上（本人、会话的入口） | 202；给启用、邮箱未验证的本人发信 |
 | `POST /api/auth/password-reset/request {email, entry?}`（匿名） | `SPONSOR_PASSWORD_RESET_REQUEST` | 202，对任何邮箱相同；只给启用、邮箱可信的用户发信 |
 | `POST /api/auth/password-reset/confirm {token, password}`（匿名） | `SPONSOR_PASSWORD_RESET_CONFIRM` | 204，不自动登录；链接无效 422 `TOKEN_INVALID` |
-| `GET /api/auth/entries/{name}`（匿名） | — | `{name, selfRegistration, requireVerifiedEmail, appPath, sessionPersistence}`（`tab` / `device`，§15.1）；未知 404 |
+| `GET /api/auth/entries/{name}`（匿名） | — | `{name, selfRegistration, requireVerifiedEmail, appPath, sessionPersistence, emailLink, environment}`（`tab` / `device`，§15.1；`environment` 为 `production` 或测试系统的名字，17 §3.2）；未知 404 |
 
 `SIGN_UP_DISABLED` 一律是 422（入口的配置不是秘密）：入口不存在或不允许注册，或注册角色不存在、已停用；被拒的加入不消费令牌。
 
