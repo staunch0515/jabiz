@@ -94,6 +94,8 @@ public class MailUnsubscribeController {
     private final ProcessInputs inputs;
     private final ProcessDefinition<MailProcesses.PreferenceInput, MailProcesses.PreferenceOutput, ProcessContext>
         preferenceSet;
+    private final ProcessDefinition<MailProcesses.OptOutInput, MailProcesses.OptOutOutput, ProcessContext>
+        addressOptOut;
     private final JwtService tokens;
     private final MailTemplates templates;
     private final StorageAdapterRegistry storages;
@@ -102,12 +104,14 @@ public class MailUnsubscribeController {
 
     MailUnsubscribeController(ProcessExecutor processes, ProcessInputs inputs,
         ProcessDefinition<MailProcesses.PreferenceInput, MailProcesses.PreferenceOutput, ProcessContext> preferenceSet,
+        ProcessDefinition<MailProcesses.OptOutInput, MailProcesses.OptOutOutput, ProcessContext> addressOptOut,
         JwtService tokens, MailTemplates templates, StorageAdapterRegistry storages, MessageCatalog messages,
         @Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
         this.messages = messages;
         this.processes = processes;
         this.inputs = inputs;
         this.preferenceSet = preferenceSet;
+        this.addressOptOut = addressOptOut;
         this.tokens = tokens;
         this.templates = templates;
         this.storages = storages;
@@ -125,12 +129,22 @@ public class MailUnsubscribeController {
             JwtService.Unsubscribe link;
             try {
                 link = tokens.verifyUnsubscribe(request.token());
-                UUID.fromString(link.userId());
+                if (link.userId() != null) {
+                    UUID.fromString(link.userId());
+                }
             } catch (JwtService.InvalidTokenException | IllegalArgumentException e) {
                 return Mono.error(tokenInvalid());
             }
             if (templates.find(link.template()).filter(MailTemplate::unsubscribable).isEmpty()) {
                 return Mono.error(tokenInvalid());
+            }
+            if (link.userId() == null) {
+                // A mail to a plain address (decision D55): the address opts out, as the system, since there is no
+                // user to act as; the signed token is the credential, as for a user's link.
+                return RequestContexts.current().flatMap(started -> processes.execute(addressOptOut,
+                        new MailProcesses.OptOutInput(link.address(), link.template()))
+                    .contextWrite(view -> RequestContexts.put(view, RequestContext.system(started.locale(),
+                        started.requestId())))).then();
             }
             return ActingUser.as(link.userId(), processes.executeAtEntry(preferenceSet,
                 new MailProcesses.PreferenceInput(link.userId(), link.template(), false))).then();

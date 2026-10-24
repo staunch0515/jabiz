@@ -50,6 +50,14 @@ public record MailTemplate(String name, MailCategory category, List<String> para
     public static final Pattern TOKEN_PURPOSE = Pattern.compile("(?:[a-z][a-z0-9]{0,19}\\.)?[a-z][A-Za-z0-9]{0,39}");
     /** Template names and token purposes of the platform's own mail; applications do not use it. */
     public static final String PLATFORM_PREFIX = "jabiz.";
+    /**
+     * The one-time sign-in token of a mailed link (decisions D54 and D55): the platform's processes send it, and an
+     * application template carries it only through {@link Builder#signInLink}, which also declares the parameters
+     * {@value #ENTRY_PARAM} (the entry signed in to) and {@value #RETURN_PARAM} (the path to return to).
+     */
+    public static final String SIGN_IN_TOKEN = "jabiz.signIn";
+    /** The parameter naming the path a sign-in link returns to, within the entry's frontend. */
+    public static final String RETURN_PARAM = "to";
     /** The address of the application ({@code jabiz.mail.base-url}). */
     public static final String BASE_URL = "baseUrl";
     /** The signed link that turns this template off for the recipient (notifications only). */
@@ -100,6 +108,18 @@ public record MailTemplate(String name, MailCategory category, List<String> para
                     + " needs a positive validity");
             }
         }
+        if (tokens.containsKey(SIGN_IN_TOKEN) && !(params.contains(ENTRY_PARAM) && params.contains(RETURN_PARAM))) {
+            throw new IllegalArgumentException("Mail template " + name + " carries a sign-in link, which needs the "
+                + "parameters " + ENTRY_PARAM + " and " + RETURN_PARAM + " (declare it with signInLink)");
+        }
+    }
+
+    /**
+     * Whether the mail carries a one-time sign-in link ({@link Builder#signInLink}): its token {@value #SIGN_IN_TOKEN}
+     * is drawn when it is sent and opens the entry's {@code auth/email-link} page.
+     */
+    public boolean signInLink() {
+        return tokens.containsKey(SIGN_IN_TOKEN);
     }
 
     /** A template for the users of every sign-in entry (as before phase 16s). */
@@ -238,6 +258,24 @@ public record MailTemplate(String name, MailCategory category, List<String> para
         public Builder token(String purpose, Duration validity) {
             if (tokens.putIfAbsent(purpose, validity) != null) {
                 throw new IllegalArgumentException("Token purpose " + purpose + " declared twice");
+            }
+            return this;
+        }
+
+        /**
+         * A one-time sign-in link (decision D55), valid for {@code validity} from sending: the body links to
+         * {@code {entryUrl}auth/email-link?entry={entry}&token={jabiz.signIn}&to={to}}; opening it signs the
+         * recipient in at the entry (or opens an account for an address nobody uses, where the entry lets people
+         * register) and leads to the path {@code to} of the entry's frontend. Declares the parameters {@code entry} and
+         * {@code to}; the sending process gives their values, which are checked when the mail is sent. The validity may
+         * not exceed {@code jabiz.security.email-link.max-ttl} (startup check).
+         */
+        public Builder signInLink(Duration validity) {
+            token(SIGN_IN_TOKEN, validity);
+            for (String param : List.of(ENTRY_PARAM, RETURN_PARAM)) {
+                if (!params.contains(param)) {
+                    params.add(param);
+                }
             }
             return this;
         }

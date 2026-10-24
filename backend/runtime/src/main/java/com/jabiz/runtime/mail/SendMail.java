@@ -11,6 +11,8 @@ import com.jabiz.query.BoundValue;
 import com.jabiz.runtime.process.StepHandler;
 import com.jabiz.runtime.process.steps.CheckedStep;
 import com.jabiz.runtime.process.steps.EventPublisher;
+import com.jabiz.runtime.security.EmailLinkProcesses;
+import com.jabiz.runtime.security.SignInEntries;
 import com.jabiz.runtime.storage.Rows;
 import com.jabiz.runtime.storage.StorageAdapterRegistry;
 import com.jabiz.security.Sensitive;
@@ -29,6 +31,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.UUID;
@@ -94,16 +97,18 @@ public class SendMail<C extends ProcessContext> implements StepHandler<SendMail.
     private final JsonMapper json;
     private final ObjectProvider<EventPublisher> publisher;
     private final StorageAdapterRegistry storages;
+    private final ObjectProvider<SignInEntries> entries;
     private final String poolRef;
 
     public SendMail(MailTemplates templates, MessageCatalog messages, JsonMapper json,
         ObjectProvider<EventPublisher> publisher, StorageAdapterRegistry storages,
-        @Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
+        ObjectProvider<SignInEntries> entries, @Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
         this.templates = templates;
         this.messages = messages;
         this.json = json;
         this.publisher = publisher;
         this.storages = storages;
+        this.entries = entries;
         this.poolRef = poolRef;
     }
 
@@ -119,10 +124,6 @@ public class SendMail<C extends ProcessContext> implements StepHandler<SendMail.
             MailTemplate template = metadata.template();
             MailRecipient recipient = Objects.requireNonNull(metadata.recipient().apply(ctx),
                 "the recipient must not be null");
-            if (template.unsubscribable() && recipient.userId() == null) {
-                return Mono.error(new IllegalArgumentException("Mail " + template.name() + " is a notification, "
-                    + "which goes to users only (unsubscribing is per user)"));
-            }
             Map<String, String> values = new TreeMap<>();
             for (String param : template.params()) {
                 Function<C, ?> value = metadata.params().get(param);
@@ -133,6 +134,24 @@ public class SendMail<C extends ProcessContext> implements StepHandler<SendMail.
                     return Mono.empty();
                 }
                 values.put(param, raw == null ? "" : text(raw));
+            }
+            if (template.signInLink()) {
+                // Decision D55: the link signs in at the entry named, and leads back within that entry's pages only.
+                String entry = values.get(MailTemplate.ENTRY_PARAM);
+                String to = values.get(MailTemplate.RETURN_PARAM);
+                SignInEntries known = entries.getIfAvailable();
+                Optional<SignInEntries.Entry> target = known == null ? Optional.empty()
+                    : known.find(entry).filter(SignInEntries.Entry::emailLink);
+                String problem = target.isEmpty() ? "entry " + entry + " does not sign in by mailed link"
+                    : !template.appliesTo(entry) ? "the template is declared for the entries " + template.entries()
+                    + ", not " + entry
+                    : !EmailLinkProcesses.returnPath(to, target.get().appPath())
+                    ? "the path " + to + " is not within the pages of entry " + entry : null;
+                if (problem != null) {
+                    ctx.reject(new Violation(null, PlatformErrorCodes.MAIL_SIGN_IN_LINK, "Mail " + template.name()
+                        + ": " + problem, Map.of("detail", problem)));
+                    return Mono.empty();
+                }
             }
             String params = json.writeValueAsString(values);
             if (params.length() > MAX_PARAMS) {

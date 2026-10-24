@@ -758,6 +758,7 @@ jabiz:
         email-link: true
     email-link:
       ttl: PT15M                     # 链接的有效期
+      max-ttl: P30D                  # 应用邮件中的登录链接（D55）最长的有效期
 ```
 
 | 接口 | 作用 |
@@ -772,6 +773,9 @@ jabiz:
 - `to` 是自站点根起、在入口 `app-path` 之内的路径（服务端与 `EmailLinkPanel` 都检查，解码后的路径段不能是 `.`、`..`）；登录后回到它，否则回到入口的 `app-path`。
 - 链接只用一次；同时寄出的几封中先用的生效，之后寄出的照常有效（`MailTokens.consumeAnyUnused`，18 §5.6）。
 - 限流：请求按客户端地址与邮箱（`EMAIL_LINK`），确认同其他链接（`LINK`）。
+- **应用邮件中的登录链接**（16ze，决策 D55）：应用模板以 `signInLink(有效期)` 声明后，自己的流程可把登录链接寄给任何地址（`SendMail`，收件人为地址或用户）；
+  有效期至多 `jabiz.security.email-link.max-ttl`（缺省 30 天）。发送时检查入口开启了 `email-link`、`to` 在该入口前端之内（422 `MAIL_SIGN_IN_LINK`）；
+  打开链接与上面完全相同（`SPONSOR_EMAIL_LINK_OPEN` 再 `SPONSOR_EMAIL_LINK_SIGN_IN`）。
 
 ## 16. 受保护的授权：四眼【决策 D48 第 1 条，阶段 16r】
 

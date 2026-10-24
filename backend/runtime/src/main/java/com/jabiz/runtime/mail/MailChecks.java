@@ -14,6 +14,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Component;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -51,6 +52,9 @@ public class MailChecks implements PlatformCheck {
 
     public static final String CATEGORY = "MAIL";
 
+    /** {@code jabiz.security.email-link.max-ttl} when not configured. */
+    static final Duration DEFAULT_MAX_SIGN_IN_LINK = Duration.ofDays(30);
+
     private final boolean enabled;
     private final String from;
     private final String baseUrl;
@@ -60,6 +64,7 @@ public class MailChecks implements PlatformCheck {
     private final Predicate<String> hidden;
     private final Predicate<String> entryExists;
     private final Map<String, String> unsubscribePaths;
+    private final Duration maxSignInLink;
     private final Function<String, Optional<String>> appPathOf;
     private final Predicate<String> served;
 
@@ -79,7 +84,8 @@ public class MailChecks implements PlatformCheck {
     public MailChecks(@Value("${jabiz.mail.enabled:false}") boolean enabled, @Value("${jabiz.mail.from:}") String from,
         @Value("${jabiz.mail.base-url:}") String baseUrl, ObjectProvider<JavaMailSender> mail,
         ObjectProvider<MailTemplate> templates, MessageCatalog messages, SensitiveDataMasker masker,
-        SignInEntries entries, MailTemplates settings, ObjectProvider<JabizWebProperties> web) {
+        SignInEntries entries, MailTemplates settings, ObjectProvider<JabizWebProperties> web,
+        @Value("${jabiz.security.email-link.max-ttl:P30D}") Duration maxSignInLink) {
         this(enabled, from, baseUrl, mail, templates, messages, masker::hidesByName,
             name -> entries.find(name).filter(entry -> entry.name().equals(name)).isPresent(),
             settings.unsubscribePaths(),
@@ -87,7 +93,7 @@ public class MailChecks implements PlatformCheck {
             path -> {
                 JabizWebProperties spas = web.getIfAvailable();
                 return spas == null || spas.spaFor(path).isPresent();
-            });
+            }, maxSignInLink);
     }
 
     /** @param hidden whether values under a name are hidden (secrets, masked fields) */
@@ -104,7 +110,7 @@ public class MailChecks implements PlatformCheck {
         ObjectProvider<MailTemplate> templates, MessageCatalog messages, Predicate<String> hidden,
         Predicate<String> entryExists) {
         this(enabled, from, baseUrl, mail, templates, messages, hidden, entryExists, Map.of(), name -> Optional.empty(),
-            path -> true);
+            path -> true, DEFAULT_MAX_SIGN_IN_LINK);
     }
 
     /**
@@ -116,8 +122,18 @@ public class MailChecks implements PlatformCheck {
         ObjectProvider<MailTemplate> templates, MessageCatalog messages, Predicate<String> hidden,
         Predicate<String> entryExists, Map<String, String> unsubscribePaths,
         Function<String, Optional<String>> appPathOf, Predicate<String> served) {
+        this(enabled, from, baseUrl, mail, templates, messages, hidden, entryExists, unsubscribePaths, appPathOf,
+            served, DEFAULT_MAX_SIGN_IN_LINK);
+    }
+
+    /** @param maxSignInLink the longest validity of a sign-in link an application mail may carry (decision D55) */
+    MailChecks(boolean enabled, String from, String baseUrl, ObjectProvider<JavaMailSender> mail,
+        ObjectProvider<MailTemplate> templates, MessageCatalog messages, Predicate<String> hidden,
+        Predicate<String> entryExists, Map<String, String> unsubscribePaths,
+        Function<String, Optional<String>> appPathOf, Predicate<String> served, Duration maxSignInLink) {
         this.unsubscribePaths = Map.copyOf(unsubscribePaths);
         this.appPathOf = appPathOf;
+        this.maxSignInLink = maxSignInLink;
         this.served = served;
         this.hidden = hidden;
         this.entryExists = entryExists;
@@ -147,10 +163,19 @@ public class MailChecks implements PlatformCheck {
                     problems.add(CheckProblem.error(CATEGORY, location, "is named in the platform's namespace "
                         + MailTemplate.PLATFORM_PREFIX + ", which applications do not use"));
                 }
-                template.tokens().keySet().stream().filter(purpose -> purpose.startsWith(MailTemplate.PLATFORM_PREFIX))
+                // Except the sign-in link an application declares as such (decision D55): that token is meant to be
+                // opened by the platform's SPONSOR_EMAIL_LINK_OPEN.
+                template.tokens().keySet().stream().filter(purpose -> purpose.startsWith(MailTemplate.PLATFORM_PREFIX)
+                        && !MailTemplate.SIGN_IN_TOKEN.equals(purpose))
                     .forEach(purpose -> problems.add(CheckProblem.error(CATEGORY, location, "draws tokens of purpose "
                         + purpose + ", in the platform's namespace " + MailTemplate.PLATFORM_PREFIX
                         + ", which applications do not use")));
+                if (template.signInLink() && template.tokens().get(MailTemplate.SIGN_IN_TOKEN).compareTo(maxSignInLink)
+                    > 0) {
+                    problems.add(CheckProblem.error(CATEGORY, location, "its sign-in link is valid for "
+                        + template.tokens().get(MailTemplate.SIGN_IN_TOKEN) + ", longer than "
+                        + "jabiz.security.email-link.max-ttl (" + maxSignInLink + ")"));
+                }
             }
             for (String param : template.params()) {
                 if (hidden.test(param)) {

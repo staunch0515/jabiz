@@ -119,7 +119,7 @@ class ProcessAccessIT extends PostgresIntegrationTest {
         for (String process : List.of("IT_D41_HAND_OFF", "MAIL_SEND", "INBOUND_RECEIVE", "WEBHOOK_DELIVER",
             "SEC_BOOTSTRAP_ADMIN", "IT_D41_ENTRY", "ADD_ENTITY", "UPDATE_ENTITY", "DELETE_ENTITY", "SPONSOR_SIGN_IN",
             "SPONSOR_MFA_VERIFY", "SPONSOR_OIDC_SIGN_IN", "SPONSOR_SIGN_UP", "SEC_MFA_ENROLL_BEGIN",
-            "SEC_USER_SET_LOCALE", "SEC_MAIL_PREFERENCE_SET", "FILE_REGISTER", "IMPORT_RUN",
+            "SEC_USER_SET_LOCALE", "SEC_MAIL_PREFERENCE_SET", "SEC_MAIL_ADDRESS_OPT_OUT", "FILE_REGISTER", "IMPORT_RUN",
             "SPONSOR_OIDC_SIGN_UP", "SEC_IDENTITY_LINK_BEGIN", "SEC_IDENTITY_LINK_SELF", "SEC_IDENTITY_UNLINK_SELF",
             GeneratedFileProcesses.ARCHIVE)) {
             Map<String, Object> problem = run(process, Map.of(), admin()).expectStatus().isForbidden()
