@@ -28,10 +28,13 @@ public final class QbRewards {
     /** The messages naming a cash reward's state in the reader's language: {@code qb.cash-reward.status.<state>}. */
     public static final String STATUS_MESSAGE_PREFIX = "qb.cash-reward.status.";
     public static final String REDEMPTION = "QbRedemption";
+    /** The codes a sponsor's console shows or prints for takers to scan (Q22b): an ordinary table. */
+    public static final String REDEEM_TOKEN = "QbRedeemToken";
 
     public static final String CASH_STATUS_DICTIONARY = "urn:jabiz:dict:quizbuks:cash-reward-status";
     public static final String CASH_RESOLUTION_DICTIONARY = "urn:jabiz:dict:quizbuks:cash-reward-resolution";
     public static final String REDEMPTION_STATUS_DICTIONARY = "urn:jabiz:dict:quizbuks:redemption-status";
+    public static final String REDEEM_KIND_DICTIONARY = "urn:jabiz:dict:quizbuks:redeem-kind";
 
     /** The default (administrators' read-only) dataset of an entity. */
     public static String defaultDataset(String entity) {
@@ -53,6 +56,16 @@ public final class QbRewards {
         return cashRewardId == null ? null : "qb.cash:" + cashRewardId;
     }
 
+    /** The lock of a redemption: taken by every process that writes it, before it is read. */
+    public static String redemptionLockName(Object redemptionId) {
+        return redemptionId == null ? null : "qb.redeem:" + redemptionId;
+    }
+
+    /** The lock of a sponsor's codes: one printed code at a time, the rotating ones issued one after another. */
+    public static String tokenLockName(Object sponsorId) {
+        return "qb.redeem-token:" + sponsorId;
+    }
+
     /** The source key of the administrators' task about a disputed cash reward. */
     public static String disputeTaskSource(Object cashRewardId) {
         return "qb.cash-dispute:" + cashRewardId;
@@ -70,6 +83,11 @@ public final class QbRewards {
 
     public static final int CODE_LENGTH = 16;
     public static final int NOTE_LENGTH = 200;
+    public static final int TOKEN_LENGTH = 64;
+    /** How long the console's rotating code is good for; the console asks for a new one every minute. */
+    public static final java.time.Duration ROTATING_TOKEN_LIFE = java.time.Duration.ofMinutes(2);
+    /** How long the sponsor has to confirm a claim made by scanning their printed code. */
+    public static final java.time.Duration PRINTED_CLAIM_LIFE = java.time.Duration.ofMinutes(10);
 
     /**
      * The code the taker and the sponsor say to each other at the counter: {@code C-} and the last eight characters of
@@ -165,20 +183,65 @@ public final class QbRewards {
             .asTemporal(TemporalRole.EVENT_TIME));
         eb.field("redeemedAt", f -> f.physicalColumn("redeemed_at").processOnly()
             .asTemporal(TemporalRole.EVENT_TIME));
+        // Q22b: the scan. A printed code's claim waits for the sponsor until confirmBy; the console's rotating code
+        // completes the redemption at once. redeemedBy is the sponsor's user who confirmed, or the sponsor whose
+        // rotating code was scanned.
+        eb.field("claimKind", f -> f.physicalColumn("claim_kind").processOnly()
+            .asCode(REDEEM_KIND_DICTIONARY, RedemptionStatus.KINDS.toArray(String[]::new)));
+        eb.field("claimedAt", f -> f.physicalColumn("claimed_at").processOnly()
+            .asTemporal(TemporalRole.EVENT_TIME));
+        eb.field("confirmBy", f -> f.physicalColumn("confirm_by").processOnly()
+            .asTemporal(TemporalRole.EVENT_TIME));
+        eb.field("redeemedBy", f -> f.physicalColumn("redeemed_by").processOnly().asText(128));
+        eb.field("voidedBy", f -> f.physicalColumn("voided_by").processOnly().asText(128));
+        eb.field("voidNote", f -> f.physicalColumn("void_note").processOnly()
+            .asText(PublishingLimits.REJECT_REASON_LENGTH, true));
         eb.field("revision", f -> f.physicalColumn("revision").required(true).processOnly().asNumeric(9, 0));
+        // A claim the sponsor declines, or that lapses, is due again; redeemed, expired and void are final.
         eb.stateTransitions("status", st -> st
             .initial(RedemptionStatus.DUE)
-            .from(RedemptionStatus.DUE).to(RedemptionStatus.REDEEMED, RedemptionStatus.EXPIRED,
-                RedemptionStatus.VOID));
+            .from(RedemptionStatus.DUE).to(RedemptionStatus.CLAIMED, RedemptionStatus.REDEEMED,
+                RedemptionStatus.EXPIRED, RedemptionStatus.VOID)
+            .from(RedemptionStatus.CLAIMED).to(RedemptionStatus.REDEEMED, RedemptionStatus.DUE,
+                RedemptionStatus.EXPIRED, RedemptionStatus.VOID));
         eb.unique("uk_qb_redemption_attempt", "attemptId");
         eb.display("code");
         eb.temporal(t -> t.allowScheduled(false));
         eb.listView("default", lv -> lv
             .columns("code", "publicationId", "sponsorId", "userId", "amount", "status", "dueAt", "expiresAt",
-                "redeemedAt")
-            .filters("publicationId", "sponsorId", "userId", "status", "dueAt", "expiresAt")
+                "claimedAt", "redeemedAt")
+            .filters("publicationId", "sponsorId", "userId", "status", "dueAt", "expiresAt", "confirmBy")
             .sorts("dueAt", "expiresAt", "amount", "status")
             .defaultSort("dueAt", false));
+    });
+
+    /**
+     * A code a sponsor's console shows or prints (Q22b). The token is the secret in the QR: never read back through
+     * the datasets (it is sensitive), only returned by the process that issues it (as {@code redeemKey}). A rotating one expires; a printed
+     * one lasts until the sponsor replaces it (revoked).
+     */
+    public static final EntityDefinition REDEEM_TOKEN_ENTITY = EntityDefinition.define(REDEEM_TOKEN, eb -> {
+        eb.physicalTable("qb_redeem_token");
+        eb.primaryKey("tokenId");
+        eb.field("tokenId", f -> f.physicalColumn("token_id").immutable(true).required(true).generated(true)
+            .asSemanticIdentity("urn:jabiz:entity:quizbuks:redeem-token"));
+        eb.field("sponsorId", f -> f.physicalColumn("sponsor_id").immutable(true).required(true).asText(128));
+        // Sensitive, and named with "token": masked by name wherever the platform records or returns it.
+        eb.field("tokenValue", f -> f.physicalColumn("token_value").immutable(true).required(true)
+            .asText(TOKEN_LENGTH).sensitive());
+        eb.field("kind", f -> f.physicalColumn("kind").immutable(true).required(true)
+            .asCode(REDEEM_KIND_DICTIONARY, RedemptionStatus.KINDS.toArray(String[]::new)));
+        eb.field("issuedAt", f -> f.physicalColumn("issued_at").immutable(true).required(true)
+            .asTemporal(TemporalRole.EVENT_TIME));
+        eb.field("expiresAt", f -> f.physicalColumn("expires_at").immutable(true).asTemporal(TemporalRole.EVENT_TIME));
+        eb.field("revokedAt", f -> f.physicalColumn("revoked_at").processOnly().asTemporal(TemporalRole.EVENT_TIME));
+        eb.field("version", f -> f.physicalColumn("version").asVersion());
+        eb.unique("uk_qb_redeem_token", "tokenValue");
+        eb.listView("default", lv -> lv
+            .columns("sponsorId", "kind", "issuedAt", "expiresAt", "revokedAt")
+            .filters("sponsorId", "kind", "issuedAt")
+            .sorts("issuedAt")
+            .defaultSort("issuedAt", false));
     });
 
     static BigDecimal decimal(long value) {

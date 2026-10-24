@@ -460,15 +460,83 @@ export interface CashView {
   sponsorCompany: string | null
 }
 
-/** `AttemptResults.RedeemView` (Q22): the prize to collect and until when. */
+export type RedemptionStatus = 'DUE' | 'CLAIMED' | 'REDEEMED' | 'EXPIRED' | 'VOID'
+
+/**
+ * `AttemptResults.RedeemView` (Q22): the prize to collect and until when; a claim from the sponsor's printed code
+ * waiting for the sponsor until `confirmBy` (Q22b).
+ */
 export interface RedeemView {
   redemptionId: string
-  status: 'DUE' | 'REDEEMED' | 'EXPIRED' | 'VOID'
+  status: RedemptionStatus
   code: string
   amount: unknown
   description: string
   expiresAt: string | null
   sponsorCompany: string | null
+  confirmBy: string | null
+  redeemedAt: string | null
+}
+
+/** What a scanned redeem code stands for (`QB_REDEEM_TOKEN_CHECK`, Q22b): the sponsor and the caller's prizes there. */
+export interface RedeemCheck {
+  sponsorCompany: string | null
+  /** ROTATING (collected at once) or PRINTED (a claim the sponsor confirms). */
+  kind: 'ROTATING' | 'PRINTED'
+  prizes: RedeemPrize[]
+}
+
+export interface RedeemPrize {
+  redemptionId: string
+  /** The attempt the prize was won by: its result page. */
+  attemptId: string
+  code: string
+  amount: unknown
+  description: string
+  publicationName: string | null
+  status: RedemptionStatus
+  expiresAt: string | null
+}
+
+export const checkRedeemCode = (scannedKey: string) =>
+  runProcess<RedeemCheck>(PLAY.redeemCheck, { scannedKey })
+
+/** Collects one prize by the scanned code (`QB_REDEMPTION_CLAIM`): REDEEMED, or CLAIMED for the sponsor to confirm. */
+export const claimRedemption = (scannedKey: string, redemptionId: string) =>
+  runProcess<{ redemptionId: string; status: RedemptionStatus; revision: number }>(PLAY.redeemClaim,
+    { scannedKey, redemptionId })
+
+/** A row of `qb.app.redemptions`: one of the caller's prizes. */
+export interface RedemptionRow {
+  redemptionId: string
+  attemptId: string
+  code: string
+  publicationId: string
+  publicationName: string
+  sponsorCompany: string | null
+  amount: unknown
+  description: string
+  status: RedemptionStatus
+  expiresAt: string | null
+  confirmBy: string | null
+}
+
+/** The caller's prizes not collected yet (due, or claimed and waiting for the sponsor). */
+export async function readOpenRedemptions(): Promise<RedemptionRow[]> {
+  const page = await runQuery<Record<string, unknown>>(PLAY.redemptions, { params: { open: true }, limit: 50 })
+  return page.items.map((row) => ({
+    redemptionId: String(row.redemptionId),
+    attemptId: String(row.attemptId ?? ''),
+    code: String(row.code ?? ''),
+    publicationId: String(row.publicationId),
+    publicationName: String(row.publicationName ?? ''),
+    sponsorCompany: textOrNull(row.sponsorCompany),
+    amount: row.amount,
+    description: String(row.description ?? ''),
+    status: String(row.status) as RedemptionStatus,
+    expiresAt: textOrNull(row.expiresAt),
+    confirmBy: textOrNull(row.confirmBy),
+  }))
 }
 
 /** The taker confirms they received the cash (`QB_CASH_REWARD_CONFIRM`). */

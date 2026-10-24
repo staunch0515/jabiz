@@ -34,6 +34,8 @@ import { letter } from './PlayPage'
 
 /** How often the page asks again while the server finishes an attempt whose time ran out. */
 export const FINISHING_POLL_MS = 5_000
+/** How often a prize claim waiting for the sponsor is read again. */
+const CLAIM_POLL_MS = 4_000
 
 /**
  * The submission's own answer, with this tab's copy of the start, as a result: what the page shows when the server's
@@ -232,19 +234,33 @@ function CashReward({ cash, attemptId, outcome }: { cash: CashView | null; attem
   )
 }
 
-/** A prize to collect at the sponsor's place (Q22): what it is, until when (claiming it by a scan is Q22b). */
+/**
+ * A prize to collect at the sponsor's place (Q22): what it is, until when, and the code; collected by scanning the
+ * sponsor's code (Q22b), or claimed by their printed one and waiting for them (the page asks again while it waits).
+ */
 function Redemption({ redeem, outcome }: { redeem: RedeemView | null; outcome: Outcome }) {
   const { t } = useTranslation(APP)
   const status = redeem?.status ?? 'DUE'
+  const variant = status === 'REDEEMED' ? 'success' : status === 'EXPIRED' || status === 'VOID' ? 'default'
+    : status === 'CLAIMED' ? 'warning' : 'success'
   return (
-    <Alert variant={status === 'REDEEMED' ? 'success' : status === 'EXPIRED' || status === 'VOID' ? 'default' : 'success'}
-      data-testid="result-reward" data-status="REDEEM" data-redeem-status={status}>
+    <Alert variant={variant} data-testid="result-reward" data-status="REDEEM" data-redeem-status={status}>
       <Gift aria-hidden />
       <AlertTitle>{t('redeem.title', { amount: formatKudos(outcome.reward) })}</AlertTitle>
       <AlertDescription className="text-current flex flex-col gap-1">
         <span>{t(`redeem.status.${status}`, { sponsor: redeem?.sponsorCompany ?? t('cash.theSponsor'),
-          time: redeem?.expiresAt ? formatDateTime(redeem.expiresAt) : '' })}</span>
+          time: formatDateTime(status === 'CLAIMED' ? redeem?.confirmBy ?? '' : status === 'REDEEMED'
+            ? redeem?.redeemedAt ?? '' : redeem?.expiresAt ?? '') })}</span>
         {redeem?.description && <span className="whitespace-pre-line font-medium" data-testid="redeem-prize">{redeem.description}</span>}
+        {redeem && (status === 'DUE' || status === 'CLAIMED') && (
+          <span className="flex items-center gap-2">
+            <span>{t('cash.code')}</span>
+            <span className="rounded bg-muted px-2 py-0.5 font-mono text-base font-semibold" data-testid="redeem-code">
+              {redeem.code}
+            </span>
+          </span>
+        )}
+        {status === 'DUE' && <span className="text-xs">{t('redeem.scanHint')}</span>}
         {outcome.message && !redeem && <span>{outcome.message}</span>}
       </AlertDescription>
     </Alert>
@@ -299,7 +315,9 @@ export function ResultPage({ attemptId }: { attemptId: string }) {
     queryFn: () => readAttemptResult(attemptId),
     // A copy of this attempt in progress may be cached from before it was finished: always read again on arrival.
     refetchOnMount: 'always',
-    refetchInterval: (query) => (query.state.data?.status === 'IN_PROGRESS' ? FINISHING_POLL_MS : false),
+    // Still finishing, or a prize claim waiting for the sponsor (Q22b): asked again until it settles.
+    refetchInterval: (query) => (query.state.data?.status === 'IN_PROGRESS' ? FINISHING_POLL_MS
+      : query.state.data?.redeem?.status === 'CLAIMED' ? CLAIM_POLL_MS : false),
   })
 
   if (result.isPending) return <PageState kind="loading" />

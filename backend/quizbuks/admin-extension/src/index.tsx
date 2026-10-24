@@ -7,6 +7,7 @@ import {
   FileQuestion,
   FileSpreadsheet,
   HandCoins,
+  Gift,
   Landmark,
   ListChecks,
   Megaphone,
@@ -35,6 +36,7 @@ import LegalPage from './LegalPage'
 import { messages } from './messages'
 import PublicationReviewPage from './PublicationReviewPage'
 import PublicationsPage from './PublicationsPage'
+import RedemptionsPage from './RedemptionsPage'
 import QuizDetailPage from './QuizDetailPage'
 import QuizzesPage from './QuizzesPage'
 import ReconciliationPage from './ReconciliationPage'
@@ -70,6 +72,7 @@ export default defineExtension({
     { path: '/qb/quizzes/:quizId', element: <QuizDetailPage /> },
     { path: PATH.publications, element: <PublicationsPage /> },
     { path: PATH.cashRewards, element: <CashRewardsPage /> },
+    { path: PATH.redemptions, element: <RedemptionsPage /> },
     { path: PATH.finance, element: <FinanceOverviewPage /> },
     { path: PATH.transfers, element: <TransfersPage /> },
     { path: '/qb/finance/transfers/:transferId/review', element: <TransferReviewPage /> },
@@ -108,6 +111,9 @@ export default defineExtension({
         { key: 'qb-users', label: 'menu.users', path: PATH.users, icon: Users, permission: PERMISSION.usersRead },
         // Q22: the cash rewards sponsors pay takers themselves, with the disputes to decide.
         { key: 'qb-cash-rewards', label: 'menu.cashRewards', path: PATH.cashRewards, icon: HandCoins,
+          permission: PERMISSION.publicationRead },
+        // Q22b: the prizes takers collect at a sponsor's place.
+        { key: 'qb-redemptions', label: 'menu.redemptions', path: PATH.redemptions, icon: Gift,
           permission: PERMISSION.publicationRead },
         { key: 'qb-attempts', label: 'menu.attempts', path: PATH.attempts, icon: ListChecks,
           permission: PERMISSION.usersRead },

@@ -106,7 +106,9 @@ class ProcessAccessIT extends QbItSupport {
         Map.entry("QB_BROADCAST_EXPIRE", ProcessAccess.INTERNAL),
         Map.entry("QB_BROADCAST_STATS", ProcessAccess.INTERNAL),
         Map.entry("QB_CASH_REWARD_OVERDUE", ProcessAccess.INTERNAL),
-        Map.entry("QB_CASH_REWARD_REMIND", ProcessAccess.INTERNAL));
+        Map.entry("QB_CASH_REWARD_REMIND", ProcessAccess.INTERNAL),
+        Map.entry("QB_REDEMPTION_EXPIRE", ProcessAccess.INTERNAL),
+        Map.entry("QB_REDEMPTION_LAPSE", ProcessAccess.INTERNAL));
 
     @Autowired
     ProcessRegistry registry;

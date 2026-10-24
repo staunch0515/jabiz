@@ -46,6 +46,8 @@ interface Server {
   /** The sponsor's reward methods setting (Q22); none means the platform's Kudos only. */
   methods?: string
   cashRewards?: Record<string, unknown>[]
+  /** The prizes of the redeem page (Q22b), answered to every search of `qb.sponsor.redemptions`. */
+  redemptions?: Record<string, unknown>[]
 }
 
 /** The server as the console sees it, for a signed-in, approved sponsor. Records what was posted. */
@@ -94,6 +96,14 @@ function server(options: Server = {}) {
       case '/api/dictionaries/urn:jabiz:dict:quizbuks:cash-reward-status':
         return json(200, [{ code: 'DUE', label: 'To be paid by the sponsor' }, { code: 'MARKED_PAID', label: 'Paid, awaiting confirmation' },
           { code: 'CONFIRMED', label: 'Confirmed' }, { code: 'DISPUTED', label: 'Disputed' }])
+      case '/api/dictionaries/urn:jabiz:dict:quizbuks:redemption-status':
+        return json(200, [{ code: 'DUE', label: 'To be collected' }, { code: 'CLAIMED', label: 'Claimed, awaiting the sponsor' },
+          { code: 'REDEEMED', label: 'Collected' }, { code: 'EXPIRED', label: 'Expired' }, { code: 'VOID', label: 'Void' }])
+      case '/api/queries/qb.sponsor.redemptions': {
+        const filter = (body as { filters?: { field: string; value: string }[] } | null)?.filters?.find((f) => f.field === 'status')
+        const items = (options.redemptions ?? []).filter((row) => !filter || row.status === filter.value)
+        return json(200, { items, offset: 0, limit: 20, total: items.length })
+      }
       case '/api/queries/qb.sponsor.cash-rewards':
         return json(200, { items: options.cashRewards ?? [], offset: 0, limit: 20, total: options.cashRewards?.length ?? 0 })
       case '/api/dictionaries/urn:jabiz:dict:quizbuks:publication-status':
@@ -394,6 +404,56 @@ describe('the reward method (Q22)', () => {
     await userEvent.click(screen.getByTestId('cash-mark-confirm'))
     await waitFor(() => expect(processCalls('QB_CASH_REWARD_MARK_PAID')).toEqual([{ cashRewardId: 'c1', note: 'Receipt 17' }]))
     await waitFor(() => expect(screen.queryByTestId('cash-mark-dialog')).toBeNull())
+  })
+})
+
+describe('the redeem page (Q22b)', () => {
+  const issued = (kind: string, key: string) => ({ status: 200, body: { output: { redeemKey: key, kind,
+    issuedAt: '2026-10-20T01:00:00Z', expiresAt: kind === 'ROTATING' ? '2026-10-20T01:02:00Z' : null } } })
+  const prize = (over: Record<string, unknown>) => ({ redemptionId: 'r1', code: 'C-ABCD1234', publicationId: 'p1',
+    publicationName: 'Coffee week', takerName: 'Mei', amount: '100', description: 'A coffee at our counter',
+    status: 'DUE', dueAt: '2026-10-20T00:00:00Z', expiresAt: '2026-11-19T00:00:00Z', claimKind: null, claimedAt: null,
+    confirmBy: null, redeemedAt: null, ...over })
+
+  it('shows the rotating code as a link into the app, and the printed one on request with its files', async () => {
+    const { processCalls } = server({ processes: { QB_REDEEM_CODE_ISSUE: [issued('ROTATING', 'rot-key-1'),
+      issued('PRINTED', 'print-key-1')] } })
+    window.history.replaceState(null, '', '/redeem')
+    render(<App />)
+    const link = await screen.findByTestId('redeem-rotating-link')
+    expect(link).toHaveTextContent(`${window.location.origin}/redeem/rot-key-1`)
+    await screen.findByTestId('redeem-rotating-image')
+    expect(screen.getByTestId('redeem-rotating-expires')).toHaveTextContent('This code works until')
+    expect(processCalls('QB_REDEEM_CODE_ISSUE')).toEqual([{ kind: 'ROTATING' }])
+    expect(screen.queryByTestId('redeem-printed-link')).toBeNull()
+    await userEvent.click(screen.getByTestId('redeem-printed-show'))
+    expect(await screen.findByTestId('redeem-printed-link')).toHaveTextContent('/redeem/print-key-1')
+    await waitFor(() => expect(processCalls('QB_REDEEM_CODE_ISSUE')).toEqual([{ kind: 'ROTATING' }, { kind: 'PRINTED' }]))
+    expect(screen.getByTestId('redeem-printed-png')).toBeEnabled()
+    expect(screen.getByTestId('redeem-printed-poster')).toBeEnabled()
+    expect(screen.getByTestId('redeem-today')).toHaveTextContent('Nothing collected yet today.')
+  })
+
+  it('lists the claims from the printed code and confirms or declines them, and shows every prize', async () => {
+    const { processCalls } = server({
+      redemptions: [prize({ status: 'CLAIMED', claimKind: 'PRINTED', claimedAt: '2026-10-20T01:00:00Z',
+        confirmBy: '2099-01-01T00:10:00Z' }), prize({ redemptionId: 'r2', code: 'C-00000002', takerName: 'Aki',
+        status: 'REDEEMED', redeemedAt: '2026-10-20T00:30:00Z' })],
+      processes: { QB_REDEEM_CODE_ISSUE: [issued('ROTATING', 'rot-key-2')],
+        QB_REDEMPTION_CONFIRM: [{ status: 200, body: { output: { redemptionId: 'r1', status: 'REDEEMED', revision: 2 } } }] },
+    })
+    window.history.replaceState(null, '', '/redeem')
+    render(<App />)
+    const claim = await screen.findByTestId('redeem-claim')
+    expect(claim).toHaveTextContent('C-ABCD1234')
+    expect(claim).toHaveTextContent('Mei')
+    expect(claim).toHaveTextContent('A coffee at our counter')
+    await userEvent.click(within(claim).getByTestId('redeem-claim-confirm'))
+    await waitFor(() => expect(processCalls('QB_REDEMPTION_CONFIRM')).toEqual([{ redemptionId: 'r1' }]))
+    const rows = await screen.findAllByTestId('redemption-row')
+    expect(rows).toHaveLength(2)
+    expect(rows.map((row) => row.getAttribute('data-status'))).toEqual(['CLAIMED', 'REDEEMED'])
+    await waitFor(() => expect(within(rows[1]).getByTestId('redemption-status')).toHaveTextContent('Collected'))
   })
 })
 

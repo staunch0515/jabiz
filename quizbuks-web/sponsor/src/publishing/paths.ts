@@ -22,3 +22,11 @@ export const publicationQuery = (publicationId: string) => [...PUBLICATIONS_QUER
 export function shareLink(publicationId: string, origin: string = window.location.origin): string {
   return `${origin}/p/${encodeURIComponent(publicationId)}`
 }
+
+/**
+ * The link in a redeem code (Q22b): the app's page that collects the caller's prize at the sponsor whose code it is.
+ * The key is the secret the server issued; the app is at this site's root.
+ */
+export function redeemLink(redeemKey: string, origin: string = window.location.origin): string {
+  return `${origin}/redeem/${encodeURIComponent(redeemKey)}`
+}

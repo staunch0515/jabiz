@@ -35,7 +35,8 @@ import { VideoPlayer } from '../play/VideoPlayer'
 import { readCountries } from '../qb/api'
 import { formatKudos } from '../qb/kudos'
 import { QB } from '../qb/messages'
-import { FEED_SORTS, readFeed, readOpenCashRewards, type FeedCard, type FeedSort, type RewardMethod } from '../qb/play'
+import { FEED_SORTS, readFeed, readOpenCashRewards, readOpenRedemptions, type FeedCard, type FeedSort, type RewardMethod }
+  from '../qb/play'
 import { problemText } from '../qb/problems'
 import { Link } from '../qb/router'
 
@@ -307,6 +308,8 @@ export function FeedPage({ name, country }: { name: string; country: string | nu
   // The cash rewards still waiting for the taker or the sponsor: a notice at the top, with each to look at.
   const cash = useQuery({ queryKey: ['qb', 'cash-rewards', 'open'], queryFn: readOpenCashRewards })
   const openCash = cash.data ?? []
+  const prizes = useQuery({ queryKey: ['qb', 'redemptions', 'open'], queryFn: readOpenRedemptions })
+  const openPrizes = prizes.data ?? []
 
   const feed = useInfiniteQuery({
     queryKey: ['qb', 'feed', at, country, q, sort, method, filterList, i18n.language],
@@ -335,6 +338,24 @@ export function FeedPage({ name, country }: { name: string; country: string | nu
                 <li key={r.cashRewardId} data-testid="home-cash-item" data-status={r.status}>
                   <Link to={`/result/${encodeURIComponent(r.attemptId)}`} className="underline underline-offset-4">
                     {t(`cash.open.${r.status}`, { name: r.publicationName, amount: formatKudos(r.amount), code: r.code })}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </AlertDescription>
+        </Alert>
+      )}
+      {openPrizes.length > 0 && (
+        <Alert data-testid="home-redeem">
+          <Gift aria-hidden />
+          <AlertTitle>{t('redeem.openTitle', { count: openPrizes.length })}</AlertTitle>
+          <AlertDescription className="text-current">
+            <ul className="flex flex-col gap-1">
+              {openPrizes.map((r) => (
+                <li key={r.redemptionId} data-testid="home-redeem-item" data-status={r.status}>
+                  <Link to={`/result/${encodeURIComponent(r.attemptId)}`} className="underline underline-offset-4">
+                    {t(`redeem.open.${r.status === 'CLAIMED' ? 'CLAIMED' : 'DUE'}`, { sponsor: r.sponsorCompany ?? t('cash.theSponsor'),
+                      description: r.description, code: r.code })}
                   </Link>
                 </li>
               ))}
