@@ -381,7 +381,6 @@ describe('a submitted publication', () => {
     await waitFor(() => expect(saved).toEqual(['Coffee week poster.png', 'Coffee week QR.svg']))
     await userEvent.click(within(dialog).getByTestId('publication-qr-png'))
     await waitFor(() => expect(saved).toEqual(['Coffee week poster.png', 'Coffee week QR.svg', 'Coffee week QR.png']))
-    vi.restoreAllMocks()
   })
 
   it('offers no share link for a paused publication', async () => {

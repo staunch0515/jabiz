@@ -13,11 +13,10 @@ import { Download, FileImage } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { SPONSOR } from '../messages'
+import { download } from '../content/transfer'
+import { LANGUAGES } from '../qb/messageKeys'
 import { shareLink } from './paths'
-import { posterPng, qrFileName, qrImageUrl, qrPng, qrSvg, saveFile } from './qr'
-
-/** The poster's instruction in every language the App speaks: a stop's passers-by are not all alike. */
-export const POSTER_LANGUAGES = ['en', 'zh', 'ja'] as const
+import { posterPng, qrFileName, qrImageUrl, qrPng, qrSvg } from './qr'
 
 /**
  * The QR code of a publication's share link (Q21): shown with the link, saved as PNG or SVG for the sponsor's own
@@ -34,20 +33,19 @@ export function PublicationQrDialog({ publicationId, name, open, onOpenChange }:
   const image = useQuery({ queryKey: ['publication-qr', link], queryFn: () => qrImageUrl(link), staleTime: Infinity })
   const [saving, setSaving] = useState<string | null>(null)
 
-  const save = (what: string, make: () => Promise<Blob>, fileName: string) => {
+  const save = async (what: string, make: () => Promise<Blob>, name: string) => {
     setSaving(what)
-    make().then(
-      (blob) => {
-        saveFile(blob, fileName)
-        setSaving(null)
-      },
-      () => {
-        notify.error(t('publishing.qr.failed'))
-        setSaving(null)
-      },
-    )
+    try {
+      const blob = await make()
+      download({ blob, name, size: blob.size })
+    } catch {
+      notify.error(t('publishing.qr.failed'))
+    } finally {
+      setSaving(null)
+    }
   }
-  const instructions = POSTER_LANGUAGES.map((lng) => t('publishing.qr.posterLine', { lng }))
+  // The poster's instruction in every language the App speaks: a stop's passers-by are not all alike.
+  const instructions = LANGUAGES.map((lng) => t('publishing.qr.posterLine', { lng }))
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -58,8 +56,13 @@ export function PublicationQrDialog({ publicationId, name, open, onOpenChange }:
         </DialogHeader>
         <div className="flex flex-col items-center gap-3">
           {image.data ? (
+            // The image carries its own light background: it stays scannable in the dark appearance.
             <img src={image.data} alt={t('publishing.qr.alt', { name })} width={240} height={240}
-              className="rounded-md bg-white p-2" data-testid="publication-qr-image" />
+              className="rounded-md" data-testid="publication-qr-image" />
+          ) : image.isError ? (
+            <p role="alert" className="text-destructive text-sm" data-testid="publication-qr-failed">
+              {t('publishing.qr.failed')}
+            </p>
           ) : (
             <div className="bg-muted size-[240px] animate-pulse rounded-md" aria-hidden />
           )}
@@ -68,19 +71,19 @@ export function PublicationQrDialog({ publicationId, name, open, onOpenChange }:
         <DialogFooter className="flex-wrap">
           <Button type="button" variant="outline" disabled={saving !== null} aria-busy={saving === 'png' || undefined}
             data-testid="publication-qr-png"
-            onClick={() => save('png', () => qrPng(link), qrFileName(name, 'QR', 'png'))}>
+            onClick={() => void save('png', () => qrPng(link), qrFileName(name, 'QR', 'png'))}>
             <Download aria-hidden />
             {t('publishing.qr.png')}
           </Button>
           <Button type="button" variant="outline" disabled={saving !== null} aria-busy={saving === 'svg' || undefined}
             data-testid="publication-qr-svg"
-            onClick={() => save('svg', () => qrSvg(link), qrFileName(name, 'QR', 'svg'))}>
+            onClick={() => void save('svg', () => qrSvg(link), qrFileName(name, 'QR', 'svg'))}>
             <Download aria-hidden />
             {t('publishing.qr.svg')}
           </Button>
           <Button type="button" disabled={saving !== null} aria-busy={saving === 'poster' || undefined}
             data-testid="publication-qr-poster"
-            onClick={() => save('poster', () => posterPng(link, { name, instructions }),
+            onClick={() => void save('poster', () => posterPng(link, { name, instructions }),
               qrFileName(name, 'poster', 'png'))}>
             <FileImage aria-hidden />
             {t('publishing.qr.poster')}

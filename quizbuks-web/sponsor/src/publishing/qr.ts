@@ -80,9 +80,15 @@ export async function posterPng(link: string, text: PosterText): Promise<Blob> {
     }
   }
 
-  ctx.font = `64px ${FONTS}`
+  // The link is for those who cannot scan: never cut, drawn smaller when it is long.
+  let linkSize = 64
+  ctx.font = `${linkSize}px ${FONTS}`
+  while (linkSize > 24 && ctx.measureText(link).width > width) {
+    linkSize -= 4
+    ctx.font = `${linkSize}px ${FONTS}`
+  }
   ctx.textBaseline = 'bottom'
-  ctx.fillText(fit(ctx, link, width), centre, POSTER_HEIGHT - margin)
+  ctx.fillText(link, centre, POSTER_HEIGHT - margin)
   return toBlob(canvas)
 }
 
@@ -104,10 +110,10 @@ function wrap(ctx: CanvasRenderingContext2D, text: string, width: number, maxLin
     }
   }
   if (current) lines.push(current)
-  if (lines.length <= maxLines) return lines
   const kept = lines.slice(0, maxLines)
-  kept[maxLines - 1] = fit(ctx, kept.slice(maxLines - 1).join(glue) + glue + lines.slice(maxLines).join(glue), width)
-  return kept
+  if (lines.length > maxLines) kept[maxLines - 1] = lines.slice(maxLines - 1).join(glue)
+  // A single word wider than the page, or what did not fit on the last line, is shortened.
+  return kept.map((line) => fit(ctx, line, width))
 }
 
 /** The text, or as much of it as fits followed by an ellipsis. */
@@ -127,16 +133,7 @@ function toBlob(canvas: HTMLCanvasElement): Promise<Blob> {
 /** A file name from the publication's name: what the file system allows, no longer than needed. */
 export function qrFileName(name: string, suffix: string, extension: 'png' | 'svg'): string {
   // eslint-disable-next-line no-control-regex -- control characters are exactly what a file name must not hold
-  const base = name.replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60)
+  const cleaned = name.replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ')
+  const base = Array.from(cleaned.trim()).slice(0, 60).join('').replace(/[\s.]+$/, '')
   return `${base || 'publication'} ${suffix}.${extension}`
-}
-
-/** Saves a file through the browser's download. */
-export function saveFile(blob: Blob, name: string) {
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = name
-  link.click()
-  setTimeout(() => URL.revokeObjectURL(url), 0)
 }

@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { POSTER_HEIGHT, POSTER_WIDTH, posterPng, qrFileName, qrImageUrl, qrPng, qrSvg, QR_PNG_SIZE } from './qr'
 
+const FONTS = 'system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", "Noto Sans CJK SC", "Noto Sans CJK JP", sans-serif'
+
 const toString = vi.fn(async (text: string) => `<svg>${text}</svg>`)
 const toCanvas = vi.fn(async () => undefined)
 vi.mock('qrcode', () => ({ default: { toString: (...args: unknown[]) => toString(...(args as [string])),
@@ -52,7 +54,7 @@ describe('the QR code of a share link', () => {
   })
 
   it('makes an A4 poster with the name, the code, every instruction and the link', async () => {
-    const { calls } = fakeCanvas()
+    const { calls, ctx } = fakeCanvas()
     const file = await posterPng('https://quizbuks.com/p/p1', { name: 'Coffee week',
       instructions: ['Scan to answer', '扫码答题'] })
     expect(await file.text()).toBe(`${POSTER_WIDTH}x${POSTER_HEIGHT}`)
@@ -62,6 +64,7 @@ describe('the QR code of a share link', () => {
     expect(calls.some((call) => call.startsWith('fillText Scan to answer '))).toBe(true)
     expect(calls.some((call) => call.startsWith('fillText 扫码答题 '))).toBe(true)
     expect(calls.at(-1)).toBe(`fillText https://quizbuks.com/p/p1 1240,${POSTER_HEIGHT - 160}`)
+    expect(ctx.font).toBe('64px ' + FONTS)
     expect(toCanvas).toHaveBeenCalledWith(expect.any(HTMLCanvasElement), 'https://quizbuks.com/p/p1',
       expect.objectContaining({ errorCorrectionLevel: 'H' }))
   })
@@ -77,10 +80,29 @@ describe('the QR code of a share link', () => {
     for (const line of title) expect(Array.from(line.replace(/^fillText /, '').replace(/ \d+,\d+$/, '')).length).toBeLessThanOrEqual(36)
   })
 
+  it('draws a long link smaller rather than cutting it', async () => {
+    const { calls, ctx } = fakeCanvas()
+    // 60 px a character at 64 px: 80 characters need 4800 px, more than the 2160 px available.
+    const link = `https://staging.quizbuks.example.com/p/${'0192f3a0-1234-7abc-8def-0123456789ab'}`
+    await posterPng(link, { name: 'Coffee week', instructions: [] })
+    expect(calls.at(-1)).toBe(`fillText ${link} 1240,${POSTER_HEIGHT - 160}`)
+    expect(ctx.font).toBe('24px ' + FONTS)
+  })
+
+  it('shortens a single word wider than the page', async () => {
+    const { calls } = fakeCanvas()
+    await posterPng('https://quizbuks.com/p/p1', { name: `Coffee ${'x'.repeat(50)}`, instructions: [] })
+    const title = calls.filter((call) => /^fillText (Coffee|x)/.test(call))
+    expect(title).toHaveLength(2)
+    expect(title[1]).toMatch(/^fillText x{35}… /)
+  })
+
   it('names the files after the publication, without what a file system refuses', () => {
     expect(qrFileName('Coffee week', 'QR', 'png')).toBe('Coffee week QR.png')
     expect(qrFileName('a/b:c*d?"e<f>g|h', 'poster', 'png')).toBe('a b c d e f g h poster.png')
     expect(qrFileName('   ', 'QR', 'svg')).toBe('publication QR.svg')
     expect(qrFileName('x'.repeat(100), 'QR', 'svg')).toBe(`${'x'.repeat(60)} QR.svg`)
+    expect(qrFileName(`${'x'.repeat(59)}😀`, 'QR', 'svg')).toBe(`${'x'.repeat(59)}😀 QR.svg`)
+    expect(qrFileName('Promo v2 .', 'QR', 'png')).toBe('Promo v2 QR.png')
   })
 })
