@@ -12,11 +12,13 @@ import {
   Rocket,
   Scale,
   ScrollText,
+  Settings,
   Sparkles,
   Users,
   Wallet,
 } from 'lucide-react'
 import BankTopUpPage from './BankTopUpPage'
+import BankSettingsPage from './BankSettingsPage'
 import BankTopUpsPage from './BankTopUpsPage'
 import BankWithdrawalsPage from './BankWithdrawalsPage'
 import BroadcastsPage from './BroadcastsPage'
@@ -68,6 +70,7 @@ export default defineExtension({
     { path: '/qb/finance/transfers/:transferId/review', element: <TransferReviewPage /> },
     { path: PATH.topUps, element: <TopUpsPage /> },
     { path: PATH.bankTopUps, element: <BankTopUpsPage /> },
+    { path: PATH.bankSettings, element: <BankSettingsPage /> },
     { path: '/qb/finance/bank-topups/:topUpId', element: <BankTopUpPage /> },
     { path: PATH.bankWithdrawals, element: <BankWithdrawalsPage /> },
     { path: PATH.reconciliation, element: <ReconciliationPage /> },
@@ -117,6 +120,9 @@ export default defineExtension({
         // Q13a: both who record (finance) and who approve (content or another finance administrator).
         { key: 'qb-bank-topups', label: 'menu.bankTopUps', path: PATH.bankTopUps, icon: Banknote,
           permission: PERMISSION.bankApprove },
+        // Q18a: the receiving account and limits, proposed by one administrator and published by another.
+        { key: 'qb-bank-settings', label: 'menu.bankSettings', path: PATH.bankSettings, icon: Settings,
+          permission: PERMISSION.financeRead },
         // Q13b: finance reviews (the transfers' review), pays and records them.
         { key: 'qb-bank-withdrawals', label: 'menu.bankWithdrawals', path: PATH.bankWithdrawals, icon: Landmark,
           permission: PERMISSION.financeRead },

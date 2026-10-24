@@ -100,14 +100,17 @@ describe('top-ups by bank transfer (Q13a)', () => {
     expect(await screen.findByTestId('bank-topup-code')).toHaveTextContent('1000042')
   })
 
-  it('says when bank transfers are not set up yet', async () => {
+  it('offers no bank transfer while it is not set up, and says so (Q18)', async () => {
     server(null, { bank: null, branch: null, accountType: null, accountNumber: null, accountHolder: null })
     window.history.replaceState(null, '', '/wallet')
     const user = userEvent.setup()
     render(<App />)
     await user.click(await screen.findByTestId('topup-open'))
-    await user.click(screen.getByTestId('topup-method-BANK'))
-    expect(await screen.findByTestId('topup-bank-unavailable')).toHaveTextContent('not available yet')
+    const bank = screen.getByTestId('topup-method-BANK')
+    await waitFor(() => expect(bank).toBeDisabled())
+    expect(screen.getByTestId('topup-method')).toHaveTextContent('not available yet. Please top up by card, or contact us.')
+    await user.click(bank)
+    expect(screen.getByTestId('topup-method-STRIPE')).toBeChecked()
   })
 
   it('lists a bank top-up with its code and links to its page', async () => {

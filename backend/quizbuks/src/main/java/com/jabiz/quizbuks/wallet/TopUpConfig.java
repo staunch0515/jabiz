@@ -97,6 +97,17 @@ class TopUpConfig {
             QbPermissions.ADMIN_FINANCE_READ, 10);
     }
 
+    /** Q18a: the bank top-up's settings, proposed in one step (another administrator publishes them). */
+    @Bean
+    ProcessDefinition<BankSettings.ProposeInput, BankSettings.ProposeOutput, ProcessContext> qbBankSettingsPropose() {
+        return BankSettings.propose();
+    }
+
+    @Bean
+    ProcessDefinition<BankSettings.PublishInput, BankSettings.PublishOutput, ProcessContext> qbBankSettingsPublish() {
+        return BankSettings.publish();
+    }
+
     @Bean
     DocumentLayout qbTopUpReceiptLayout() {
         return TopUpReceipts.LAYOUT;

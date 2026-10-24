@@ -49,6 +49,8 @@ export const TEMPLATE = {
   topUps: 'qb.admin.topups',
   /** Bank top-ups (Q13a): what recording and approving one needs (`qb.topup.bank.approve`). */
   bankTopUps: 'qb.admin.bank-topups',
+  /** The bank top-up's settings in force (Q18a; `qb.admin.finance.read`). */
+  bankSettings: 'qb.admin.bank-settings',
   /** Bank withdrawals (Q13b; finance). */
   bankWithdrawals: 'qb.admin.bank-withdrawals',
   payoutAccounts: 'qb.admin.payout-accounts',
@@ -100,6 +102,10 @@ export const PROCESS = {
   transferNow: 'QB_TRANSFER_NOW',
   /** Records the money of a bank top-up found on the statement, for another administrator's approval (Q13a). */
   bankRecord: 'QB_TOPUP_BANK_RECORD',
+  /** Proposes the bank top-up's settings in one step (Q18a; `control.propose`); another administrator publishes. */
+  bankSettingsPropose: 'QB_BANK_SETTINGS_PROPOSE',
+  /** Publishes another administrator's proposals of them together (Q18a; `control.publish`, a second factor). */
+  bankSettingsPublish: 'QB_BANK_SETTINGS_PUBLISH',
   /** An approved bank withdrawal paid in the bank, or returned by it (Q13b; `qb.withdrawal.pay`). */
   withdrawalPaid: 'QB_WITHDRAWAL_PAID',
   withdrawalReturned: 'QB_WITHDRAWAL_RETURNED',
@@ -261,6 +267,8 @@ export const PATH = {
   topUpsWhere: (filter: Record<string, string>) => `/qb/finance/topups?${new URLSearchParams(filter)}`,
   /** Bank top-ups: recording the money and approving it (Q13a). */
   bankTopUps: '/qb/finance/bank-topups',
+  /** The bank top-up's receiving account and limits (Q18a). */
+  bankSettings: '/qb/finance/bank-settings',
   bankTopUp: (topUpId: string) => `/qb/finance/bank-topups/${encodeURIComponent(topUpId)}`,
   /** Bank withdrawals: reviewing, paying and returning them (Q13b). */
   bankWithdrawals: '/qb/finance/bank-withdrawals',

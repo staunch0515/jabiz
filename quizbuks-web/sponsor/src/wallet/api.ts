@@ -216,9 +216,10 @@ export interface BankAccount {
   max: number | null
 }
 
-/** Whether every part of the account is set (until then the server refuses bank top-ups). */
+/** Whether every part of the account and both limits are set (until then the server refuses bank top-ups). */
 export const bankAccountSet = (account: BankAccount) => Boolean(account.bank && account.branch
   && account.accountType && account.accountNumber && account.accountHolder)
+  && account.min !== null && account.max !== null
 
 export async function readBankAccount(): Promise<BankAccount> {
   const row = (await runQuery<Row>(WALLET_TEMPLATE.bankAccount, { limit: 1 })).items[0] ?? {}

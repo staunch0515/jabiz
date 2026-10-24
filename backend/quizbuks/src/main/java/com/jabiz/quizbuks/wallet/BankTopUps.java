@@ -152,8 +152,9 @@ public final class BankTopUps {
             .outputMapper(ctx -> new StartOutput((String) ctx.get(NEW_ID), (String) ctx.get(CODE),
                 ctx.get(INPUT, StartInput.class).amount(), TopUpStatus.AWAITING))
             .steps(SponsorChecks::load)
-            .step("Load the limits and the account", LoadParams.<ProcessContext>of(ProcessContext::opTime, PARAMS,
-                params()))
+            // Optional (platform 16zc): settings not yet published mean "not available yet", one message (Q18).
+            .step("Load the limits and the account", LoadParams.<ProcessContext>optional(ProcessContext::opTime,
+                PARAMS, params()))
             // A sponsor's starts take turns (the open ones are counted), as the card top-ups' do: the same lock.
             .step("Lock the sponsor's top-ups", HoldLock.<ProcessContext>exclusive(
                 ctx -> TopUpProcesses.lockName(ctx.request().actorId())))
@@ -181,10 +182,10 @@ public final class BankTopUps {
         List<Violation> problems = new ArrayList<>(SponsorChecks.problems(ctx));
         BigDecimal amount = ctx.get(INPUT, StartInput.class).amount();
         ParamValues params = ctx.get(PARAMS, ParamValues.class);
-        BigDecimal min = params.get(QbParams.TOPUP_BANK_MIN, BigDecimal.class);
-        BigDecimal max = params.get(QbParams.TOPUP_BANK_MAX, BigDecimal.class);
+        BigDecimal min = params.find(QbParams.TOPUP_BANK_MIN, BigDecimal.class).orElse(null);
+        BigDecimal max = params.find(QbParams.TOPUP_BANK_MAX, BigDecimal.class).orElse(null);
         boolean accountSet = QbParams.BANK_RECEIVING.stream()
-            .allMatch(key -> params.get(key, String.class) instanceof String value && !value.isBlank());
+            .allMatch(key -> params.find(key, String.class).filter(value -> !value.isBlank()).isPresent());
         if (min == null || max == null || !accountSet) {
             problems.add(new Violation(null, WalletCodes.TOPUP_BANK_UNAVAILABLE,
                 "Bank top-ups are not set up yet", Map.of()));
