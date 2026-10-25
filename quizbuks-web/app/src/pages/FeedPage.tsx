@@ -24,7 +24,7 @@ import {
   Spinner,
 } from '@jabiz/ui'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
-import { Banknote, Gift, HandCoins, Play, Search, SlidersHorizontal, Trophy, Users } from 'lucide-react'
+import { Banknote, Gift, HandCoins, Play, Search, SlidersHorizontal, Ticket, Trophy, Users } from 'lucide-react'
 import { useId, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
@@ -46,7 +46,7 @@ export const FEED_PAGE = 20
 
 /** The ways a reward is paid the home can be narrowed to (Q22): all, or one of the methods. */
 export type MethodChoice = 'ALL' | RewardMethod
-const METHOD_CHOICES: readonly MethodChoice[] = ['ALL', 'PLATFORM', 'SPONSOR_CASH', 'OFFLINE_REDEEM']
+const METHOD_CHOICES: readonly MethodChoice[] = ['ALL', 'PLATFORM', 'SPONSOR_CASH', 'OFFLINE_REDEEM', 'DIGITAL_PRIZE']
 const METHOD_KEY = 'qb.feed.method'
 
 /** The method chosen last on this device; all when none or when the browser keeps nothing. */
@@ -71,7 +71,7 @@ function storeMethod(choice: MethodChoice) {
 export function MethodBadge({ method, testId }: { method: RewardMethod; testId?: string }) {
   const { t } = useTranslation(APP)
   if (method === 'PLATFORM') return null
-  const Icon = method === 'SPONSOR_CASH' ? Banknote : Gift
+  const Icon = method === 'SPONSOR_CASH' ? Banknote : method === 'DIGITAL_PRIZE' ? Ticket : Gift
   return (
     <Badge variant="outline" className="shrink-0" data-testid={testId ?? 'method-badge'} data-method={method}>
       <Icon aria-hidden className="size-3" />

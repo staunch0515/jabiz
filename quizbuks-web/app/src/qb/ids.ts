@@ -56,6 +56,10 @@ export const PLAY = {
   redeemCheck: 'QB_REDEEM_TOKEN_CHECK',
   redeemClaim: 'QB_REDEMPTION_CLAIM',
   redemptions: 'qb.app.redemptions',
+  /** Q33: the winner opens a digital prize's content (recorded), says it works, or reports a problem with it. */
+  digitalOpen: 'QB_DIGITAL_PRIZE_OPEN',
+  digitalConfirm: 'QB_DIGITAL_PRIZE_CONFIRM',
+  digitalDispute: 'QB_DIGITAL_PRIZE_DISPUTE',
   feed: 'qb.app.feed',
   publication: 'qb.app.publication',
   publicationTiers: 'qb.app.publication-tiers',

@@ -1,4 +1,5 @@
 import { configureClient, session } from '@jabiz/client'
+import { expectAccessible } from '@jabiz/ui/testing'
 import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -73,6 +74,9 @@ function finished(over: Record<string, unknown> = {}) {
     rewardStatus: SUBMITTED.rewardStatus, questions: started().questions, result: SUBMITTED.questions, ...over }
 }
 
+/** The content of the digital prize `QB_DIGITAL_PRIZE_OPEN` answers (Q33): a link, so the page offers to open it. */
+const PRIZE_LINK = 'https://shop.example.com/voucher/WXYZ'
+
 interface Options {
   /** Answers each read of the publication's page (Q25: none until the view claimed the invitation). */
   publicationPage?: () => Response
@@ -90,6 +94,8 @@ interface Options {
   redemptions?: Record<string, unknown>[]
   redeemCheck?: () => Response
   redeemClaim?: () => Response
+  /** Q33: the answer to opening a digital prize's content. */
+  digitalOpen?: () => Response
 }
 
 /** The server as the play pages see it; records every call (path and body). */
@@ -136,6 +142,13 @@ function server(options: Options = {}) {
       case '/api/processes/QB_CASH_REWARD_CONFIRM/latest':
       case '/api/processes/QB_CASH_REWARD_DISPUTE/latest':
         return options.cash ? options.cash() : json(200, { output: { cashRewardId: 'c1', status: 'CONFIRMED', revision: 3 } })
+      case '/api/processes/QB_DIGITAL_PRIZE_OPEN/latest':
+        return options.digitalOpen ? options.digitalOpen() : json(200, { output: { digitalPrizeId: 'd1',
+          status: 'DELIVERED', description: 'A voucher for our online shop', prizeContent: PRIZE_LINK,
+          openedAt: '2026-10-21T01:00:00Z' } })
+      case '/api/processes/QB_DIGITAL_PRIZE_CONFIRM/latest':
+      case '/api/processes/QB_DIGITAL_PRIZE_DISPUTE/latest':
+        return json(200, { output: { digitalPrizeId: 'd1', status: 'CONFIRMED', revision: 3 } })
       case '/api/processes/QB_VIEW/latest':
         return json(200, { output: { publicationId: PUB, firstView: true } })
       case '/api/processes/QB_ATTEMPT_START/latest':
@@ -367,6 +380,123 @@ describe('collecting a prize by the sponsor\'s code (Q22b)', () => {
     expect(reward).toHaveAttribute('data-redeem-status', 'CLAIMED')
     expect(reward).toHaveTextContent("You scanned Capitals Inc's printed code")
     expect(within(reward).getByTestId('redeem-code')).toHaveTextContent('C-ABCD1234')
+  })
+})
+
+describe('a digital prize (Q33)', () => {
+  const digital = { digitalPrizeId: 'd1', status: 'DELIVERED', delivery: 'POOL', amount: 100,
+    description: 'A voucher for our online shop', hint: '…WXYZ', deliveredAt: '2026-10-20T01:00:00Z', sendBy: null,
+    confirmBy: '2026-10-27T01:00:00Z', openedAt: null, confirmedAt: null, sponsorCompany: 'Capitals Inc' }
+  const result = (over: Record<string, unknown>) => () => json(200, { output: finished({ score: 5, passed: true,
+    reward: 100, rewardStatus: 'DIGITAL', rewardMethod: 'DIGITAL_PRIZE', cash: null, redeem: null,
+    digital: { ...digital, ...over } }) })
+
+  it('shows a delivered prize, reads its content only when asked, copies and links it, and confirms it', async () => {
+    const { posted } = server({ result: result({}) })
+    window.history.replaceState(null, '', `/result/${ATTEMPT}`)
+    render(<App />)
+    const reward = await screen.findByTestId('result-reward')
+    expect(reward).toHaveAttribute('data-status', 'DIGITAL')
+    expect(reward).toHaveAttribute('data-digital-status', 'DELIVERED')
+    expect(within(reward).getByTestId('digital-prize')).toHaveTextContent('A voucher for our online shop')
+    expect(within(reward).getByTestId('digital-hint')).toHaveTextContent('Code ending …WXYZ')
+    // The content is never read with the result (D-Q33-3): only the tap asks for it.
+    expect(within(reward).queryByTestId('digital-content')).toBeNull()
+    expect(posted('QB_DIGITAL_PRIZE_OPEN')).toEqual([])
+    await expectAccessible()
+    await userEvent.click(within(reward).getByTestId('digital-show'))
+    expect(await within(reward).findByTestId('digital-content')).toHaveTextContent(PRIZE_LINK)
+    expect(posted('QB_DIGITAL_PRIZE_OPEN')).toEqual([{ digitalPrizeId: 'd1' }])
+    expect(within(reward).queryByTestId('digital-show')).toBeNull()
+    const link = within(reward).getByTestId('digital-link')
+    expect(link).toHaveAttribute('href', PRIZE_LINK)
+    expect(link).toHaveAttribute('target', '_blank')
+    expect(link.getAttribute('rel')).toContain('noopener')
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    await userEvent.click(within(reward).getByTestId('digital-copy'))
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(PRIZE_LINK))
+    await expectAccessible()
+    await userEvent.click(within(reward).getByTestId('digital-confirm'))
+    await waitFor(() => expect(posted('QB_DIGITAL_PRIZE_CONFIRM')).toEqual([{ digitalPrizeId: 'd1' }]))
+  })
+
+  it('shows a code that is no link without one, and keeps showing it when the clipboard is refused', async () => {
+    server({ result: result({ delivery: 'SHARED', hint: null }),
+      digitalOpen: () => json(200, { output: { digitalPrizeId: 'd1', status: 'DELIVERED',
+        description: 'A voucher for our online shop', prizeContent: 'SPRING-2026', openedAt: '2026-10-21T01:00:00Z' } }) })
+    window.history.replaceState(null, '', `/result/${ATTEMPT}`)
+    render(<App />)
+    const reward = await screen.findByTestId('result-reward')
+    expect(within(reward).queryByTestId('digital-hint')).toBeNull()
+    await userEvent.click(within(reward).getByTestId('digital-show'))
+    expect(await within(reward).findByTestId('digital-content')).toHaveTextContent('SPRING-2026')
+    expect(within(reward).queryByTestId('digital-link')).toBeNull()
+    const writeText = vi.fn().mockRejectedValue(new Error('denied'))
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    await userEvent.click(within(reward).getByTestId('digital-copy'))
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('SPRING-2026'))
+    expect(within(reward).getByTestId('digital-content')).toHaveTextContent('SPRING-2026')
+  })
+
+  it('says when the sponsor sends a due prize, offers only a report, and sends its note', async () => {
+    const { posted } = server({ result: result({ status: 'DUE', delivery: 'SPONSOR_SENT', hint: null, deliveredAt: null,
+      sendBy: '2026-10-23T01:00:00Z', confirmBy: null }) })
+    window.history.replaceState(null, '', `/result/${ATTEMPT}`)
+    render(<App />)
+    const reward = await screen.findByTestId('result-reward')
+    expect(reward).toHaveAttribute('data-digital-status', 'DUE')
+    expect(reward).toHaveTextContent('Capitals Inc sends it to you by')
+    expect(within(reward).queryByTestId('digital-show')).toBeNull()
+    expect(within(reward).queryByTestId('digital-confirm')).toBeNull()
+    expect(posted('QB_DIGITAL_PRIZE_OPEN')).toEqual([])
+    await userEvent.click(within(reward).getByTestId('digital-dispute'))
+    await userEvent.type(await screen.findByTestId('digital-dispute-note'), 'Nothing came')
+    await expectAccessible()
+    await userEvent.click(screen.getByTestId('digital-dispute-send'))
+    await waitFor(() => expect(posted('QB_DIGITAL_PRIZE_DISPUTE')).toEqual([{ digitalPrizeId: 'd1', note: 'Nothing came' }]))
+    await waitFor(() => expect(screen.queryByTestId('digital-dispute-dialog')).toBeNull())
+  })
+
+  it('badges a digital prize on the home and offers it in the filter', async () => {
+    const { calls } = server({ feed: [{ ...CARD, rewardMethod: 'DIGITAL_PRIZE', digitalDelivery: 'POOL',
+      digitalDescription: 'A voucher for our online shop' }] })
+    render(<App />)
+    const card = await screen.findByTestId('feed-card')
+    expect(within(card).getByTestId('feed-card-method')).toHaveAttribute('data-method', 'DIGITAL_PRIZE')
+    expect(within(card).getByTestId('feed-card-method')).toHaveTextContent('Digital prize')
+    await expectAccessible()
+    await userEvent.click(screen.getByRole('radio', { name: 'Digital' }))
+    await waitFor(() => expect(calls.some((c) => c.path === '/api/queries/qb.app.feed'
+      && (c.body as { params: { method?: string } }).params.method === 'DIGITAL_PRIZE')).toBe(true))
+    window.localStorage.removeItem('qb.feed.method')
+  })
+
+  it('says how a quiz with a digital prize pays on its page, with what the prize is', async () => {
+    server({ publicationPage: () => json(200, { items: [publication({ rewardMethod: 'DIGITAL_PRIZE',
+      digitalDelivery: 'SHARED', digitalDescription: '10% off at our online shop' })], offset: 0, limit: 1 }) })
+    window.history.replaceState(null, '', `/p/${PUB}`)
+    render(<App />)
+    await screen.findByTestId('detail')
+    expect(screen.getByTestId('detail-method')).toHaveAttribute('data-method', 'DIGITAL_PRIZE')
+    const note = screen.getByTestId('detail-method-note')
+    expect(note).toHaveAttribute('data-method', 'DIGITAL_PRIZE')
+    expect(within(note).getByTestId('detail-prize')).toHaveTextContent('10% off at our online shop')
+    expect(screen.getByTestId('detail-facts')).toHaveTextContent('Value of the prize')
+  })
+
+  it('says where a digital prize stands in the history', async () => {
+    server({ history: [{ attemptId: ATTEMPT, publicationId: PUB, name: 'Capitals week', quizTitle: 'World capitals',
+      cover: null, status: 'SUBMITTED', category: 'PASSED', passed: true, score: 5, fullScore: 5, reward: 100,
+      rewardStatus: 'DIGITAL', rewardMethod: 'DIGITAL_PRIZE', digitalPrizeId: 'd1', digitalStatus: 'DELIVERED',
+      digitalSendBy: null, startedAt: '2026-10-01T01:05:00Z', submittedAt: '2026-10-01T01:07:00Z',
+      deadline: '2026-10-01T01:10:00Z' }] })
+    window.history.replaceState(null, '', '/history')
+    render(<App />)
+    const item = await screen.findByTestId('history-digital')
+    expect(item).toHaveAttribute('data-status', 'DELIVERED')
+    expect(item).toHaveTextContent('Digital prize worth 100 Kudos is ready: show it')
+    await expectAccessible()
   })
 })
 

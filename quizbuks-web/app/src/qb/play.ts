@@ -37,9 +37,20 @@ export type Selection = 'SINGLE' | 'MULTIPLE'
 
 // ---- the feed (qb.app.feed) -------------------------------------------------------------------------------------
 
-/** `publishing.RewardMethod` (Q22): Kudos paid by QuizBuks, cash from the sponsor, or a prize at the sponsor's place. */
-export type RewardMethod = 'PLATFORM' | 'SPONSOR_CASH' | 'OFFLINE_REDEEM'
-export const REWARD_METHODS: readonly RewardMethod[] = ['PLATFORM', 'SPONSOR_CASH', 'OFFLINE_REDEEM']
+/**
+ * `publishing.RewardMethod` (Q22): Kudos paid by QuizBuks, cash from the sponsor, a prize at the sponsor's place, or
+ * (Q33) a digital prize: a code, a voucher number or a link the winner gets without going anywhere.
+ */
+export type RewardMethod = 'PLATFORM' | 'SPONSOR_CASH' | 'OFFLINE_REDEEM' | 'DIGITAL_PRIZE'
+export const REWARD_METHODS: readonly RewardMethod[] = ['PLATFORM', 'SPONSOR_CASH', 'OFFLINE_REDEEM', 'DIGITAL_PRIZE']
+
+/**
+ * `publishing.DigitalDelivery` (Q33): how a digital prize reaches the winner: one code each from a pool the sponsor
+ * loaded, one shared code or link for everyone, or sent by the sponsor by hand within some days.
+ */
+export type DigitalDelivery = 'POOL' | 'SHARED' | 'SPONSOR_SENT'
+export const digitalDeliveryOf = (value: unknown): DigitalDelivery | null =>
+  value === 'POOL' || value === 'SHARED' || value === 'SPONSOR_SENT' ? value : null
 export const methodOf = (value: unknown): RewardMethod =>
   (REWARD_METHODS as readonly string[]).includes(String(value)) ? (value as RewardMethod) : 'PLATFORM'
 
@@ -57,6 +68,9 @@ export interface FeedCard {
   maxReward: unknown
   /** How the reward reaches the taker (Q22). */
   rewardMethod: RewardMethod
+  /** Q33: how a digital prize is delivered and what it is; null for the other methods. */
+  digitalDelivery: DigitalDelivery | null
+  digitalDescription: string | null
   completions: number
   sponsorName: string | null
   sponsorCompany: string | null
@@ -105,6 +119,8 @@ function feedCard(row: Record<string, unknown>): FeedCard {
     kind: kindOf(row.kind),
     maxReward: row.maxReward,
     rewardMethod: methodOf(row.rewardMethod),
+    digitalDelivery: digitalDeliveryOf(row.digitalDelivery),
+    digitalDescription: textOrNull(row.digitalDescription),
     completions: numberOf(row.completions),
     sponsorName: textOrNull(row.sponsorName),
     sponsorCompany: textOrNull(row.sponsorCompany),
@@ -198,6 +214,9 @@ export interface PublicationView {
   /** How the reward reaches the taker (Q22), and the prize when it is collected at the sponsor's place. */
   rewardMethod: RewardMethod
   redeemDescription: string | null
+  /** Q33: how a digital prize is delivered and what it is; null for the other methods. */
+  digitalDelivery: DigitalDelivery | null
+  digitalDescription: string | null
   sponsorName: string | null
   sponsorCompany: string | null
   sponsorIntro: string | null
@@ -255,6 +274,8 @@ export async function readPublication(request: PublicationRequest): Promise<Publ
     maxReward: row.maxReward,
     rewardMethod: methodOf(row.rewardMethod),
     redeemDescription: textOrNull(row.redeemDescription),
+    digitalDelivery: digitalDeliveryOf(row.digitalDelivery),
+    digitalDescription: textOrNull(row.digitalDescription),
     sponsorName: textOrNull(row.sponsorName),
     sponsorCompany: textOrNull(row.sponsorCompany),
     sponsorIntro: textOrNull(row.sponsorIntro),
@@ -387,8 +408,11 @@ export interface QuestionResult {
   earned: number
 }
 
-/** `play.RewardStatus`: since Q22 also owed in cash by the sponsor (CASH) or a prize to collect (REDEEM). */
-export type RewardStatus = 'NONE' | 'PAID' | 'PENDING' | 'CASH' | 'REDEEM'
+/**
+ * `play.RewardStatus`: since Q22 also owed in cash by the sponsor (CASH) or a prize to collect (REDEEM); since Q33 a
+ * digital prize (DIGITAL).
+ */
+export type RewardStatus = 'NONE' | 'PAID' | 'PENDING' | 'CASH' | 'REDEEM' | 'DIGITAL'
 
 /** `AttemptFinishing.SubmitOutput` (U-33, U-34). */
 export interface SubmitOutput {
@@ -449,6 +473,8 @@ export interface AttemptResult {
   rewardMethod: RewardMethod
   cash: CashView | null
   redeem: RedeemView | null
+  /** Q33: the digital prize's record when there is one. */
+  digital: DigitalView | null
 }
 
 /** `reward.CashRewardStatus` (dictionary `cash-reward-status`). */
@@ -482,6 +508,55 @@ export interface RedeemView {
   confirmBy: string | null
   redeemedAt: string | null
 }
+
+/**
+ * `reward.DigitalPrizeStatus` (Q33): the sponsor still has to send it (DUE, by `sendBy`), its content can be opened
+ * (DELIVERED), the winner said it works (CONFIRMED) or reported a problem (DISPUTED), the sponsor is late (OVERDUE), or
+ * QuizBuks voided it.
+ */
+export type DigitalStatus = 'DUE' | 'DELIVERED' | 'CONFIRMED' | 'DISPUTED' | 'OVERDUE' | 'VOID'
+
+/**
+ * `AttemptResults.DigitalView` (Q33): where the digital prize stands. Never its content: that comes only from
+ * `openDigitalPrize`, once the winner asks for it (D-Q33-3). `hint` is the end of a pool's code when it is long enough.
+ */
+export interface DigitalView {
+  digitalPrizeId: string
+  status: DigitalStatus
+  delivery: DigitalDelivery
+  amount: unknown
+  description: string
+  hint: string | null
+  deliveredAt: string | null
+  sendBy: string | null
+  confirmBy: string | null
+  openedAt: string | null
+  confirmedAt: string | null
+  sponsorCompany: string | null
+}
+
+/** `DigitalPrizeProcesses.OpenOutput` (Q33): the prize's content, read only when the winner taps "Show prize". */
+export interface DigitalPrizeOpened {
+  digitalPrizeId: string
+  status: DigitalStatus
+  description: string
+  prizeContent: string
+  openedAt: string
+}
+
+/** Opens one of the caller's digital prizes (`QB_DIGITAL_PRIZE_OPEN`); the first call records when it was opened. */
+export const openDigitalPrize = (digitalPrizeId: string) =>
+  runProcess<DigitalPrizeOpened>(PLAY.digitalOpen, { digitalPrizeId })
+
+/** The winner says the digital prize works (`QB_DIGITAL_PRIZE_CONFIRM`). */
+export const confirmDigitalPrize = (digitalPrizeId: string) =>
+  runProcess<{ digitalPrizeId: string; status: DigitalStatus; revision: number }>(PLAY.digitalConfirm,
+    { digitalPrizeId })
+
+/** The winner says what is wrong with the digital prize (`QB_DIGITAL_PRIZE_DISPUTE`); an administrator decides. */
+export const disputeDigitalPrize = (digitalPrizeId: string, note: string) =>
+  runProcess<{ digitalPrizeId: string; status: DigitalStatus; revision: number }>(PLAY.digitalDispute,
+    { digitalPrizeId, note: note.trim() })
 
 /** What a scanned redeem code stands for (`QB_REDEEM_TOKEN_CHECK`, Q22b): the sponsor and the caller's prizes there. */
 export interface RedeemCheck {
@@ -614,6 +689,10 @@ export interface HistoryRow {
   cashCode: string | null
   redeemStatus: string | null
   redeemExpiresAt: string | null
+  /** Q33: the digital prize's record and where it stands; while DUE, when the sponsor must have sent it. */
+  digitalPrizeId: string | null
+  digitalStatus: DigitalStatus | null
+  digitalSendBy: string | null
   startedAt: string
   submittedAt: string | null
   deadline: string
@@ -658,6 +737,9 @@ export async function readHistory(request: HistoryRequest): Promise<QueryPage<Hi
       cashCode: textOrNull(row.cashCode),
       redeemStatus: textOrNull(row.redeemStatus),
       redeemExpiresAt: textOrNull(row.redeemExpiresAt),
+      digitalPrizeId: textOrNull(row.digitalPrizeId),
+      digitalStatus: textOrNull(row.digitalStatus) as DigitalStatus | null,
+      digitalSendBy: textOrNull(row.digitalSendBy),
       startedAt: String(row.startedAt ?? ''),
       submittedAt: textOrNull(row.submittedAt),
       deadline: String(row.deadline ?? ''),

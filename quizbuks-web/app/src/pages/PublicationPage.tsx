@@ -232,7 +232,8 @@ export function PublicationPage({ publicationId, country }: { publicationId: str
           { key: 'fullScore', label: t('detail.fullScore'), value: p.fullScore },
           { key: 'passScore', label: t('detail.passScore'), value: p.passScore },
           { key: 'timeLimit', label: t('detail.timeLimit'), value: duration(p.timeLimitSec) },
-          { key: 'maxReward', label: p.rewardMethod === 'OFFLINE_REDEEM' ? t('detail.prizeValue') : t('detail.maxReward'),
+          { key: 'maxReward', label: p.rewardMethod === 'OFFLINE_REDEEM' || p.rewardMethod === 'DIGITAL_PRIZE'
+            ? t('detail.prizeValue') : t('detail.maxReward'),
             value: formatKudos(p.maxReward) },
           { key: 'method', label: t('detail.method'),
             value: <span data-testid="detail-method" data-method={p.rewardMethod}>{t(`methods.${p.rewardMethod}`)}</span> },
@@ -246,6 +247,9 @@ export function PublicationPage({ publicationId, country }: { publicationId: str
               <span>{t(`methods.${p.rewardMethod}Hint`)}</span>
               {p.rewardMethod === 'OFFLINE_REDEEM' && p.redeemDescription && (
                 <span className="whitespace-pre-line font-medium" data-testid="detail-prize">{p.redeemDescription}</span>
+              )}
+              {p.rewardMethod === 'DIGITAL_PRIZE' && p.digitalDescription && (
+                <span className="whitespace-pre-line font-medium" data-testid="detail-prize">{p.digitalDescription}</span>
               )}
             </AlertDescription>
           </Alert>
