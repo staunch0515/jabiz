@@ -45,6 +45,17 @@ for (const appearance of ['light', 'dark'] as const) {
     for (const width of [390, 1280]) {
       await page.setViewportSize({ width, height: 844 })
       const size = `${width}px`
+      // A first visit of the root: the introduction (Q32), each slide; skipped, it leads to the sign-in.
+      await page.goto('/taker/')
+      await page.evaluate(() => window.localStorage.removeItem('qb.intro.seen'))
+      await page.goto('/taker/')
+      await expect(page.getByTestId('intro')).toHaveAttribute('data-slide', 'answer')
+      await expectAccessible(page, at(`app intro ${size}`))
+      await page.getByTestId('intro-next').click()
+      await expect(page.getByTestId('intro')).toHaveAttribute('data-slide', 'earn')
+      await expectAccessible(page, at(`app intro slide 2 ${size}`))
+      await page.getByTestId('intro-skip').click()
+      await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeVisible()
       await page.goto('/taker/login')
       await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeVisible()
       if (appearance === 'dark') await expect(page.locator('html')).toHaveClass(/dark/)

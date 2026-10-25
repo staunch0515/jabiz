@@ -1,0 +1,73 @@
+/*
+ * QuizBuks's brand on the platform's theme (docs/quizbuks/plans/Q32-visual-refresh.md; platform decision D34 item 3,
+ * which lets an application override tokens after importing @jabiz/ui's theme.css). Emerald replaces the platform's
+ * blue as the primary colour in both appearances; the contrast pairs the platform checks still hold:
+ * light --primary #047857 on white 5.3:1, dark --primary #6ee7b7 on #0a0a0a and #18181b ≥ 11:1. The brand tokens
+ * (--qb-*) are the hero band and the illustrations' colours, exposed to Tailwind as qb-* colours; nothing else in the
+ * front ends names a colour. This file is the same in both SPAs (src/qb is shared, CI compares the folders).
+ */
+:root {
+  --primary: #047857;
+  --primary-foreground: #ffffff;
+  --ring: #047857;
+  --accent: #ecfdf5;
+  --accent-foreground: #064e3b;
+  --sidebar-primary: #047857;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-ring: #047857;
+  --sidebar-accent: #ecfdf5;
+  --sidebar-accent-foreground: #064e3b;
+  /* The first chart series is the brand green; the second the coin amber, so two series stay apart (also for
+     colour-vision deficiency, where the platform's two greens would not). */
+  --chart-1: #047857;
+  --chart-2: #fbbf24;
+  /* The hero band: a gradient dark enough for white text (≥ 5.3:1 at its lightest). */
+  --qb-hero-from: #065f46;
+  --qb-hero-to: #047857;
+  --qb-hero-foreground: #ffffff;
+  --qb-hero-muted: #d1fae5;
+  /* Illustrations (decorative, aria-hidden): leaves, coins and their shadows. */
+  --qb-leaf: #34d399;
+  --qb-leaf-deep: #059669;
+  --qb-coin: #fbbf24;
+  --qb-coin-deep: #d97706;
+  --qb-sky: #ecfdf5;
+  --qb-ink: #064e3b;
+}
+
+.dark {
+  --primary: #6ee7b7;
+  --primary-foreground: #052e16;
+  --ring: #6ee7b7;
+  /* Lighter than the platform's dark accent so a ghost button's hover (accent at 50%) stays visible. */
+  --accent: #123b2d;
+  --accent-foreground: #d1fae5;
+  --sidebar-primary: #6ee7b7;
+  --sidebar-primary-foreground: #052e16;
+  --sidebar-ring: #6ee7b7;
+  --sidebar-accent: #123b2d;
+  --sidebar-accent-foreground: #d1fae5;
+  --chart-1: #6ee7b7;
+  --chart-2: #b45309;
+  --qb-hero-from: #064e3b;
+  --qb-hero-to: #065f46;
+  --qb-hero-foreground: #ffffff;
+  --qb-hero-muted: #a7f3d0;
+  --qb-leaf: #34d399;
+  --qb-leaf-deep: #10b981;
+  --qb-coin: #fbbf24;
+  --qb-coin-deep: #f59e0b;
+  --qb-sky: #123b2d;
+  --qb-ink: #d1fae5;
+}
+
+@theme inline {
+  --color-qb-hero-from: var(--qb-hero-from);
+  --color-qb-hero-to: var(--qb-hero-to);
+  --color-qb-hero-foreground: var(--qb-hero-foreground);
+  --color-qb-hero-muted: var(--qb-hero-muted);
+  --color-qb-leaf: var(--qb-leaf);
+  --color-qb-coin: var(--qb-coin);
+  --color-qb-sky: var(--qb-sky);
+  --color-qb-ink: var(--qb-ink);
+}

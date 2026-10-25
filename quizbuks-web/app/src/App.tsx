@@ -33,6 +33,8 @@ import { ResultPage } from './pages/ResultPage'
 import { RedeemPage } from './pages/RedeemPage'
 import { WelcomePage } from './pages/WelcomePage'
 import { AboutPage } from './pages/AboutPage'
+import { IntroPage, introSeen, rememberSeen } from './pages/IntroPage'
+import { Wordmark } from './art/Illustrations'
 import { badgeText, inboxItemOf, INBOX_PATH } from './inbox/api'
 import { InboxItemPage } from './inbox/InboxItemPage'
 import { InboxPage } from './inbox/InboxPage'
@@ -99,7 +101,7 @@ function Header() {
       {/* A test system says so on every page (platform 16zd); the app's frame is its own, so it places the banner. */}
       <EnvironmentBanner />
       <div className="mx-auto flex max-w-md items-center gap-2 px-4 py-2">
-        <span className="mr-auto font-semibold">{t('brand')}</span>
+        <Wordmark name={t('brand')} compact className="text-primary mr-auto" />
         <ThemeToggle />
         <Button variant="ghost" size="sm" data-testid="sign-out"
           onClick={() => void signOut().then(() => {
@@ -127,7 +129,7 @@ function BottomNav({ path }: { path: string }) {
     : inboxItemOf(path) ? INBOX_PATH : path
   return (
     <nav aria-label={t('nav.label')}
-      className="bg-background fixed inset-x-0 bottom-0 z-10 border-t pb-[env(safe-area-inset-bottom)]">
+      className="bg-card fixed inset-x-0 bottom-0 z-10 border-t pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_16px_-12px_var(--overlay)]">
       <ul className="mx-auto flex max-w-md">
         {NAV.map((item) => {
           const Icon = item.icon
@@ -244,7 +246,7 @@ function PublicPage({ path, signedIn, children }: { path: string; signedIn: bool
       <header className="bg-background sticky top-0 z-10 border-b">
         <EnvironmentBanner />
         <div className="mx-auto flex max-w-md items-center gap-2 px-4 py-2">
-          <span className="mr-auto font-semibold">{t('brand')}</span>
+          <Wordmark name={t('brand')} compact className="text-primary mr-auto" />
           <ThemeToggle />
           <Link to={signedIn ? HOME : itemPage(path) ? `/login?next=${encodeURIComponent(path)}` : '/login'}
             className="text-primary text-sm underline" data-testid="public-back">
@@ -272,7 +274,7 @@ function Routes() {
   const { t: tApp } = useTranslation(APP)
   const { ready, signedIn } = useAuth()
   const { path, search } = useLocation()
-  const brand = t('brand')
+  const brand = <Wordmark name={t('brand')} className="text-primary justify-center" />
   const frame = (content: ReactNode) => (
     <div className="flex min-h-full flex-col">
       <div className="mx-auto w-full max-w-md px-4 pt-4 empty:hidden">
@@ -283,6 +285,10 @@ function Routes() {
     </div>
   )
 
+  // Whoever reaches a sign-in, sign-up or mailed-link page knows the app: no introduction afterwards (a verified
+  // address continues to the root and must land on the sign-in, as before Q32).
+  if (path === '/login' || path === '/signup' || path === '/password-reset' || MAIL_PAGES.has(path)
+    || path === UNSUBSCRIBE_PATH) rememberSeen()
   // The blocks of mailed links and of the identity provider's return read the address themselves, once: the token
   // and the code are removed from it right away.
   if (path === UNSUBSCRIBE_PATH) return frame(<MailUnsubscribe brand={brand} search={search} />)
@@ -337,9 +343,13 @@ function Routes() {
     return frame(<SignInForm {...navigation} brand={brand} returnTo={afterSignIn} initialStep={pendingStep}
       onSignedIn={(to) => {
         pendingStep = undefined
+        // Someone who signed in knows the app: no introduction when the session later expires (Q32).
+        rememberSeen()
         navigate(to, { replace: true })
       }} passwordResetPath="/password-reset" signUpPath="/signup" />)
   }
+  // A visitor's first time at the root: the introduction (Q32), remembered on the device; then the sign-in.
+  if (!signedIn && path === HOME && !introSeen()) return <IntroPage />
   if (!signedIn) return <Redirect to="/login" />
   return (
     <StepUpProvider {...navigation} securityPath={ACCOUNT_PATH}>
