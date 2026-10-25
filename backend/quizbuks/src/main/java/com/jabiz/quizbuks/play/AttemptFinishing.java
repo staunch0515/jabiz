@@ -337,12 +337,14 @@ public final class AttemptFinishing {
             .step("Pick a code", QueryEntities.<ProcessContext>of(
                 QbDigitalPrizes.defaultDataset(QbDigitalPrizes.DIGITAL_CODE), ctx -> {
                     Plan plan = plan(ctx);
-                    // Typed as Object: the generic get would be inferred as the varargs' array.
+                    // Typed as Object: the generic get would be inferred as the varargs' array. One AND (the builder's
+                    // where replaces): no publication (not pooled) matches nothing and costs no statement.
                     Object publicationId = plan == null ? null : plan.attempt().get("publicationId");
                     return EntityQuery.builder()
-                        .where(new QueryPredicate.In("publicationId", plan != null && plan.pooled()
-                            ? List.of(publicationId) : List.of()))
-                        .where(new QueryPredicate.Eq("status", DigitalPrizeStatus.CODE_AVAILABLE))
+                        .where(new QueryPredicate.And(List.of(
+                            new QueryPredicate.In("publicationId", plan != null && plan.pooled()
+                                ? List.of(publicationId) : List.of()),
+                            new QueryPredicate.Eq("status", DigitalPrizeStatus.CODE_AVAILABLE))))
                         .orderBy("seq", true).limit(1).build();
                 }, POOL_CODE))
             .step("Lock the sponsor's wallet", HoldLock.<ProcessContext>exclusive(ctx -> {

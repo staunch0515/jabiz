@@ -51,11 +51,15 @@ public final class DigitalCodeProcesses {
     public static final String REVOKE = "QB_DIGITAL_CODES_REVOKE";
 
     /** @param lines the codes, one a line; never recorded */
-    public record LoadInput(@NotNull UUID publicationId, @Sensitive @NotBlank @Size(max = 250_000) String lines) {
+    /**
+     * @param pastedCodes the codes, one a line. A distinctive name: the platform masks a {@code @Sensitive} component's
+     *                    name wherever it appears, so a common word here would blank other processes' outputs.
+     */
+    public record LoadInput(@NotNull UUID publicationId, @Sensitive @NotBlank @Size(max = 250_000) String pastedCodes) {
 
         @Override
         public String toString() {
-            return "LoadInput[publicationId=" + publicationId + ", lines=***]";
+            return "LoadInput[publicationId=" + publicationId + ", pastedCodes=***]";
         }
     }
 
@@ -101,12 +105,14 @@ public final class DigitalCodeProcesses {
 
     /**
      * The codes of the publication in a state, oldest first, up to the most a pool covers; none when {@code wanted}
-     * is false (after a refusal: the predicate matches no row, as a limit of zero is not allowed).
+     * is false (after a refusal): an AND with an IN of no values matches nothing and costs no statement (the builder's
+     * {@code where} replaces the predicate, so the two conditions are one AND).
      */
     static EntityQuery codes(ProcessContext ctx, String status, boolean wanted) {
         return EntityQuery.builder()
-            .where(new QueryPredicate.In("publicationId", wanted ? List.of(ctx.get(PUB_ID)) : List.of()))
-            .where(new QueryPredicate.Eq("status", status))
+            .where(new QueryPredicate.And(List.of(
+                new QueryPredicate.In("publicationId", wanted ? List.of(ctx.get(PUB_ID)) : List.of()),
+                new QueryPredicate.Eq("status", status))))
             .orderBy("seq", true)
             .limit(PublishingLimits.MAX_POOL_WINNERS)
             .build();
@@ -145,13 +151,13 @@ public final class DigitalCodeProcesses {
         }
         LoadInput input = ctx.get(INPUT, LoadInput.class);
         Set<String> lines = new LinkedHashSet<>();
-        for (String raw : input.lines().split("\\R")) {
+        for (String raw : input.pastedCodes().split("\\R")) {
             String line = raw.strip();
             if (line.isEmpty()) {
                 continue;
             }
             if (line.length() > PublishingLimits.DIGITAL_CODE_LENGTH) {
-                ctx.reject(new Violation("lines", RewardCodes.DIGITAL_CODE_TOO_LONG, "A code is longer than "
+                ctx.reject(new Violation("pastedCodes", RewardCodes.DIGITAL_CODE_TOO_LONG, "A code is longer than "
                     + PublishingLimits.DIGITAL_CODE_LENGTH + " characters",
                     Map.of("max", PublishingLimits.DIGITAL_CODE_LENGTH, "line", lines.size() + 1)));
                 return;
@@ -159,11 +165,11 @@ public final class DigitalCodeProcesses {
             lines.add(line);
         }
         if (lines.isEmpty()) {
-            ctx.reject(new Violation("lines", RewardCodes.DIGITAL_CODES_EMPTY, "No code to load", Map.of()));
+            ctx.reject(new Violation("pastedCodes", RewardCodes.DIGITAL_CODES_EMPTY, "No code to load", Map.of()));
             return;
         }
         if (lines.size() > PublishingLimits.DIGITAL_CODES_PER_LOAD) {
-            ctx.reject(new Violation("lines", RewardCodes.DIGITAL_CODES_TOO_MANY, "At most "
+            ctx.reject(new Violation("pastedCodes", RewardCodes.DIGITAL_CODES_TOO_MANY, "At most "
                 + PublishingLimits.DIGITAL_CODES_PER_LOAD + " codes a load", Map.of("max",
                     PublishingLimits.DIGITAL_CODES_PER_LOAD, "given", lines.size())));
             return;

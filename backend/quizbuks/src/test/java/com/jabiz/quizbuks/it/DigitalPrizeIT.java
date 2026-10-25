@@ -241,18 +241,18 @@ class DigitalPrizeIT extends PlayItSupport {
         assertThat(codes(refusal)).containsExactly(PublishingCodes.DIGITAL_POOL_SHORT);
         // Loading: the sponsor's own publication only, pooled only, codes within their limits, blank lines and
         // repeats dropped.
-        refused(DigitalCodeProcesses.LOAD, sponsorToken(sponsorB()), body("publicationId", publicationId, "lines",
+        refused(DigitalCodeProcesses.LOAD, sponsorToken(sponsorB()), body("publicationId", publicationId, "pastedCodes",
             "X-1"), 404);
         String shared = (String) run("QB_PUBLICATION_SAVE", sponsorToken, complete(version(sponsorToken,
             "Other quiz"), "Shared week", now, now.plus(Duration.ofDays(7)))).get("publicationId");
-        assertThat(codes(refused(DigitalCodeProcesses.LOAD, sponsorToken, body("publicationId", shared, "lines",
+        assertThat(codes(refused(DigitalCodeProcesses.LOAD, sponsorToken, body("publicationId", shared, "pastedCodes",
             "X-1"), 422))).containsExactly(RewardCodes.DIGITAL_NOT_POOLED);
         // Nothing to load is refused before the process runs (the lines are required).
-        refused(DigitalCodeProcesses.LOAD, sponsorToken, body("publicationId", publicationId, "lines", " \n\n"), 400);
+        refused(DigitalCodeProcesses.LOAD, sponsorToken, body("publicationId", publicationId, "pastedCodes", " \n\n"), 400);
         assertThat(codes(refused(DigitalCodeProcesses.LOAD, sponsorToken, body("publicationId", publicationId,
-            "lines", "A-1\n" + "x".repeat(201)), 422))).containsExactly(RewardCodes.DIGITAL_CODE_TOO_LONG);
+            "pastedCodes", "A-1\n" + "x".repeat(201)), 422))).containsExactly(RewardCodes.DIGITAL_CODE_TOO_LONG);
         Map<String, Object> loaded = run(DigitalCodeProcesses.LOAD, sponsorToken, body("publicationId", publicationId,
-            "lines", "GIFT-0001-AAAA\n\n  GIFT-0002-BBBB  \nGIFT-0001-AAAA\n"));
+            "pastedCodes", "GIFT-0001-AAAA\n\n  GIFT-0002-BBBB  \nGIFT-0001-AAAA\n"));
         assertThat(loaded).containsEntry("loaded", 2).containsEntry("available", 2);
         assertThat(summaries(DigitalCodeProcesses.LOAD)).isNotEmpty()
             .allSatisfy(s -> assertThat(s).doesNotContain("GIFT-"));
@@ -276,6 +276,17 @@ class DigitalPrizeIT extends PlayItSupport {
         assertThat(codes(refused(DigitalCodeProcesses.REVOKE, sponsorToken, body("publicationId", publicationId),
             422))).containsExactly(RewardCodes.DIGITAL_POOL_LOCKED);
 
+        // Another sponsor's live pool with codes of its own: a pick must never reach into it.
+        String otherSponsor = newSponsor("s-q33-pool-other");
+        allowDigital(otherSponsor);
+        Map<String, Object> otherSave = complete(version(sponsorToken(otherSponsor), "Other pool quiz"), "Other pool",
+            now, now.plus(Duration.ofDays(7)));
+        otherSave.putAll(digital(DigitalDelivery.POOL, "Another code"));
+        otherSave.put("maxWinners", 1);
+        String otherPool = (String) run("QB_PUBLICATION_SAVE", sponsorToken(otherSponsor), otherSave).get("publicationId");
+        run(DigitalCodeProcesses.LOAD, sponsorToken(otherSponsor), body("publicationId", otherPool, "pastedCodes", "OTHER-0000-ZZZZ"));
+        assertThat(submit(sponsorToken(otherSponsor), otherPool)).containsEntry("status", "LIVE");
+
         String first = newTaker("t-q33-pool-1", "JP");
         String second = newTaker("t-q33-pool-2", "JP");
         String firstToken = taker(first);
@@ -292,6 +303,8 @@ class DigitalPrizeIT extends PlayItSupport {
         assertThat(codesOf(publicationId)).extracting(code -> code.get("status"))
             .containsExactly("ISSUED", "ISSUED");
         assertThat(codesOf(publicationId).getFirst()).containsEntry("issued_attempt_id", secondAttempt);
+        assertThat(codesOf(otherPool)).singleElement().satisfies(code -> assertThat(code).containsEntry("status",
+            "AVAILABLE"));
         assertThat(run(DigitalPrizeProcesses.OPEN, secondToken, body("digitalPrizeId",
             String.valueOf(prize(secondAttempt).get("digital_prize_id"))))).containsEntry("prizeContent",
             "GIFT-0001-AAAA");
@@ -358,7 +371,7 @@ class DigitalPrizeIT extends PlayItSupport {
         spareSave.put("publicationId", spare);
         spareSave.putAll(digital(DigitalDelivery.POOL, "Spare codes"));
         run("QB_PUBLICATION_SAVE", sponsorToken, spareSave);
-        run(DigitalCodeProcesses.LOAD, sponsorToken, body("publicationId", spare, "lines", "S-1\nS-2\nS-3"));
+        run(DigitalCodeProcesses.LOAD, sponsorToken, body("publicationId", spare, "pastedCodes", "S-1\nS-2\nS-3"));
         assertThat(run(DigitalCodeProcesses.REVOKE, sponsorToken, body("publicationId", spare)))
             .containsEntry("revoked", 3).containsEntry("available", 0);
         assertThat(run(DigitalCodeProcesses.REVOKE, sponsorToken, body("publicationId", spare)))

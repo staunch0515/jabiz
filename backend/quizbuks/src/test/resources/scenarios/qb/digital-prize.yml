@@ -337,7 +337,7 @@ steps:
       ruleCode: QB_DIGITAL_POOL_SHORT
   - actor: { id: "${a}", permissions: [qb.publication.write] }
     process: QB_DIGITAL_CODES_LOAD@latest
-    input: { publicationId: "${pool}", lines: "GIFT-0001-AAAA\n\nGIFT-0002-BBBB\nGIFT-0001-AAAA\n" }
+    input: { publicationId: "${pool}", pastedCodes: "GIFT-0001-AAAA\n\nGIFT-0002-BBBB\nGIFT-0001-AAAA\n" }
     expectOutput: { loaded: 2, available: 2 }
   - actor: { id: "${a}", permissions: [qb.publication.write] }
     process: QB_PUBLICATION_SUBMIT@latest

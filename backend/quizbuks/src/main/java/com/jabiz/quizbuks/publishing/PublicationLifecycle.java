@@ -151,10 +151,11 @@ public final class PublicationLifecycle {
                         EntityInstance publication = PublicationEditing.publication(ctx);
                         boolean pooled = publication != null
                             && PublicationEditing.draftOf(publication).pooled();
+                        // One AND (the builder's where replaces): not pooled matches nothing, no statement.
                         return EntityQuery.builder()
-                            .where(new QueryPredicate.In("publicationId", pooled ? List.of(publication.id())
-                                : List.of()))
-                            .where(new QueryPredicate.Eq("status", DigitalPrizeStatus.CODE_AVAILABLE))
+                            .where(new QueryPredicate.And(List.of(
+                                new QueryPredicate.In("publicationId", pooled ? List.of(publication.id()) : List.of()),
+                                new QueryPredicate.Eq("status", DigitalPrizeStatus.CODE_AVAILABLE))))
                             .limit(PublishingLimits.MAX_POOL_WINNERS).build();
                     }, POOL))
                 .compute("Check the publication", (metadata, ctx) -> check(ctx))
