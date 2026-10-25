@@ -54,7 +54,7 @@ function useIssued(id: ReportId, period: Period) {
  * issued before supersedes its latest run (the platform's `supersedes`), so the archive keeps one current run per
  * period; without `report.archive.read` the page cannot know the earlier run and issues a new one beside it.
  */
-function ReportActions({ id, period }: { id: ReportId; period: Period }) {
+export function ReportActions({ id, period }: { id: ReportId; period: Period }) {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
   const { can } = useAuth()
   const queryClient = useQueryClient()
@@ -102,7 +102,7 @@ function ReportActions({ id, period }: { id: ReportId; period: Period }) {
 }
 
 /** The issued runs of a report for the period (the platform's archive; `report.archive.read`). */
-function Issued({ id, period }: { id: ReportId; period: Period }) {
+export function Issued({ id, period }: { id: ReportId; period: Period }) {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
   const runs = useIssued(id, period)
   let body: ReactNode

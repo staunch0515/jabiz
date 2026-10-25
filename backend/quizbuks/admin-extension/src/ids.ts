@@ -73,6 +73,9 @@ export const TEMPLATE = {
   reconItems: 'qb.admin.recon-items',
   monthly: 'qb.admin.monthly',
   balances: 'qb.admin.balances',
+  /** The investors' figures (Q27): a row per UTC month of a period, and the merchants behind them (finance). */
+  investorMetrics: 'qb.admin.investor-metrics',
+  investorSponsors: 'qb.admin.investor-sponsors',
   /** The platform's account balances (`ledger.read`). */
   accountBalances: 'jabiz.ledger.account_balances',
   /** The journal exports with their files and confirmations (Q9d; `qb.admin.finance.read`). */
@@ -150,8 +153,8 @@ export const CONTROL = {
   changes: 'urn:jabiz:dataset:platform:SysControlChange',
 } as const
 
-/** The reports of the monthly page (F-08), in the order shown. */
-export const REPORTS = [TEMPLATE.monthly, TEMPLATE.balances] as const
+/** The reports that are issued and archived: the monthly page's (F-08), in the order shown, then the investors' (Q27). */
+export const REPORTS = [TEMPLATE.monthly, TEMPLATE.balances, TEMPLATE.investorMetrics, TEMPLATE.investorSponsors] as const
 
 /** The reason a ban's pause records instead of the ban's own (Q10b, review L3): shown in the reader's language. */
 export const ACCOUNT_SUSPENDED = 'QB_ACCOUNT_SUSPENDED'
@@ -312,6 +315,8 @@ export const PATH = {
   reconRun: (runId: string) => `/qb/finance/reconciliation?${new URLSearchParams({ run: runId })}`,
   reports: '/qb/finance/reports',
   reportsOf: (month: string) => `/qb/finance/reports?${new URLSearchParams({ month })}`,
+  /** The investors' figures by month (Q27). */
+  investorMetrics: '/qb/finance/investor-metrics',
   journal: '/qb/finance/journal',
   journalMapping: '/qb/finance/journal/mapping',
   /** The legal texts: publishing the drafts and withdrawing announced versions (Q7b). */
