@@ -4387,3 +4387,12 @@ L4 共享仪表的注释；L5 13 写明每个键每次轮询多一个查询观�
 测试：`SpaFallbackFilterTest`、`SpaConfigCheckTest`。
 
 **16zf-a 状态**：✅ 已实施（PR 待建）。
+
+### 16zf-b 静态站点的多页（0.2 天）
+
+来源：需求方 2026-10-25（QuizBuks 招商网站 `/biz/`：每种语言一组页面，地址如 `/biz/zh/pricing/`）。分支 `1.2/phase-16zf-b-static-pages`。
+`StaticPages`：没有入口的 SPA 的每个目录可以有自己的 `index.html`，启动时扫描一次，`SpaFallbackFilter` 对命中目录的路由交出该页；其他路由仍回退到首页。设计 17 §3.2。
+只算该站点自己拥有的目录（`/` 上的站点看得到所有 SPA 的文件，别的 SPA 的页面归它们）；目录名带点的不是客户端路由，不算。`HEAD` 与从前一样不回退（只有 `GET` 的路由回退）。
+测试：`SpaFallbackFilterTest`、`StaticPagesTest`（含 jar、嵌套 jar 与展开目录的地址）。
+
+**16zf-b 状态**：✅ 已实施（PR 待建）。
