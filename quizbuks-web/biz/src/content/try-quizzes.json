@@ -1,0 +1,6 @@
+{
+  "_comment": "The try-it block of the home page: QuizBuks's own quiz in each language. url: the share link of the publication (https://quizbuks.com/taker/p/<id>, https only); qr: the path, under public/, of a PNG or SVG QR image of that link (e.g. qr-en.png). An empty value shows the placeholder; both empty, the block says 'coming soon'. The build fails on anything else.",
+  "en": { "url": "", "qr": "" },
+  "zh": { "url": "", "qr": "" },
+  "ja": { "url": "", "qr": "" }
+}

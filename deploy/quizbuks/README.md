@@ -88,7 +88,7 @@ tools/quizbuks/local-demo.sh status | logs | seed
 
 ## 前端（QP1）
 
-- **三个前端在同一个 jar 中**（`docs/quizbuks/plans/QP-pages.md`）：答题 App 在 `/taker/`（`quizbuks-web/app`，PWA，入口 `app`；Q30 从 `/` 搬来，旧地址 301）、招商网站在 `/biz/`（`quizbuks-web/biz`，静态页面；裸域名 302 到它）、商家后台在 `/sponsor/`
+- **三个前端在同一个 jar 中**（`docs/quizbuks/plans/QP-pages.md`）：答题 App 在 `/taker/`（`quizbuks-web/app`，PWA，入口 `app`；Q30 从 `/` 搬来，旧地址 301）、招商网站在 `/biz/`（`quizbuks-web/biz`，Q31：三语静态页面，`/biz/zh/…`、`/biz/ja/…`；裸域名 302 到它）、商家后台在 `/sponsor/`
   （`quizbuks-web/sponsor`，入口 `sponsor`）、管理员后台在 `/admin/`（平台通用后台，入口 `admin`）。三者分开登录：一个入口的会话不会登录另一个。
 - **会话**：App 的会话保存在设备上（关闭浏览器后仍登录，30 天，不按闲置锁定）；商家后台与管理员后台只在当前标签页中，闲置 30 分钟锁定。
 - **已知限制（D43）**：App 的刷新令牌存在设备上（`localStorage` 与 IndexedDB），而三个前端同源：同源的任何页面（含被注入的脚本）都能读到它；

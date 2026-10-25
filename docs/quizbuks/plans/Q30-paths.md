@@ -8,7 +8,7 @@
 | # | 决定 |
 |---|---|
 | D-Q30-1 | **答题人前端在 `/taker/`**：`jabizApp { spa("/taker", "../../quizbuks-web/app", entry = "app", pwa = Pwa.ON) }`，入口 `app` 的 `app-path: /taker/`（邮件链接、OIDC 回调、退订页随之），PWA 的 manifest 与 Service Worker 在 `/taker/` 之下（作用域 `/taker/`）。商家后台 `/sponsor/`、管理后台 `/admin/` 不变 |
-| D-Q30-2 | **招商网站在 `/biz/`**：`quizbuks-web/biz` 是一个只有 HTML 与一份样式表的 Vite 项目（没有脚本、没有 React、不用平台包；`app:check` 只要求 `vite` 同版本，16zf-a），三页三语（`/biz/`、`/biz/zh.html`、`/biz/ja.html`，`hreflang` 互指），链接到 `/taker/`、`/sponsor/` 与 App 的条款与隐私页。平台的缺省内容安全策略。本阶段只有一页；完整的招商站（定价、案例、联系表单）另立计划 |
+| D-Q30-2 | **招商网站在 `/biz/`**：`quizbuks-web/biz` 是一个只有 HTML 与一份样式表的 Vite 项目（没有脚本、没有 React、不用平台包；`app:check` 只要求 `vite` 同版本，16zf-a），三页三语（`/biz/`、`/biz/zh.html`、`/biz/ja.html`，`hreflang` 互指），链接到 `/taker/`、`/sponsor/` 与 App 的条款与隐私页。平台的缺省内容安全策略。本阶段只有一页；完整的招商站见 Q31（`plans/Q31-biz-site.md`，取代这一页） |
 | D-Q30-3 | **裸域名**：`jabiz.web.root-redirect: /biz/`（可用 `JABIZ_WEB_ROOT_REDIRECT` 改），对恰好 `/` 的 `GET` / `HEAD` 302 到 `/biz/`，查询串保留（16zf-a） |
 | D-Q30-4 | **旧链接继续有效**：`jabiz.web.redirects` 把 App 原来在根下的路径（`/p`、`/play`、`/result`、`/redeem`、`/auth`、`/mail`、`/login`、`/signup`、`/password-reset`、`/welcome`、`/wallet`、`/history`、`/account`、`/inbox`、`/legal`、`/help`、`/about`）301 到 `/taker/` 下的同一路径（查询串保留）：印出的二维码、此前寄出的邀请与欢迎邮件、Stripe 的返回地址都仍然可用 |
 | D-Q30-5 | **登录链接的返回路径是站点路径**：平台只接受入口 `app-path` 之下的路径，所以 App 的分享页用 `hrefOf(...)` 给出 `/taker/p/<id>`，邀请邮件的 `to` 由 `jabiz.security.entries.app.app-path` 拼出（`InvitationProcesses.returnPath(appPath, id)`），不写死 `/taker` |
