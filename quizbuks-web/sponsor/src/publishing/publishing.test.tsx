@@ -119,8 +119,14 @@ function server(options: Server = {}) {
           { code: 'SENT', label: 'Sent' }, { code: 'STARTED', label: 'Started' }, { code: 'ANSWERED', label: 'Answered' }])
       case '/api/queries/qb.sponsor.invitations':
         return json(200, { items: options.invitations ?? [], offset: 0, limit: 20, total: options.invitations?.length ?? 0 })
-      case '/api/queries/qb.sponsor.mail-server':
-        return json(200, { items: options.mailServer ? [options.mailServer] : [], offset: 0, limit: 1 })
+      case '/api/queries/qb.sponsor.mail-server': {
+        // Once saved, the row exists (as it does in the system), whatever the test started with.
+        const set = posted.find((c) => c.path === '/api/processes/QB_MAIL_SERVER_SET/latest')?.body as
+          { input?: Record<string, unknown> } | undefined
+        const row = options.mailServer ?? (set ? { ...VERIFIED_SERVER, ...set.input, verifiedAt: null, lastError: 'Could not connect to host',
+          testedAt: '2026-10-21T00:00:00Z' } : null)
+        return json(200, { items: row ? [row] : [], offset: 0, limit: 1 })
+      }
       case '/api/queries/qb.sponsor.invitation-summary': {
         const rows = options.invitations ?? []
         const count = (status: string) => rows.filter((row) => row.status === status).length
@@ -690,6 +696,29 @@ describe('the mail server (Q29)', () => {
     expect(await screen.findByTestId('mail-server-result')).toHaveAttribute('data-verified', 'true')
     expect(screen.getByTestId('mail-server-result')).toHaveTextContent('sent to sara@example.com')
     // The password is never kept on the page.
+    expect(screen.getByTestId('mail-server-password')).toHaveValue('')
+  })
+
+  it('shows the first save\'s answer when the test mail did not leave (the row appears with the save)', async () => {
+    const { processCalls } = server({ mailServer: null, processes: {
+      QB_MAIL_SERVER_SET: [{ status: 200, body: { output: { sponsorId: 'u2', verified: false,
+        error: 'Could not connect to host', testedAt: '2026-10-21T00:00:00Z', sentTo: null } } }],
+    } })
+    window.history.replaceState(null, '', '/mail-server')
+    render(<App />)
+    expect(await screen.findByTestId('mail-server-status')).toHaveAttribute('data-status', 'NONE')
+    await userEvent.type(screen.getByTestId('mail-server-host'), 'smtp.example.com')
+    await userEvent.type(screen.getByTestId('mail-server-username'), 'shop')
+    await userEvent.type(screen.getByTestId('mail-server-password'), 'secret-1')
+    await userEvent.type(screen.getByTestId('mail-server-from'), 'shop@example.com')
+    await userEvent.click(screen.getByTestId('mail-server-save'))
+    await waitFor(() => expect(processCalls('QB_MAIL_SERVER_SET')).toHaveLength(1))
+    // The row now exists, so the status changes; the answer to this save stays on the page.
+    expect(await screen.findByTestId('mail-server-status')).toHaveAttribute('data-status', 'FAILED')
+    expect(await screen.findByTestId('mail-server-result')).toHaveAttribute('data-verified', 'false')
+    expect(screen.getByTestId('mail-server-result')).toHaveTextContent('Could not connect to host')
+    // The settings typed stay in the form, the password field is blank: the stored one is kept.
+    expect(screen.getByTestId('mail-server-host')).toHaveValue('smtp.example.com')
     expect(screen.getByTestId('mail-server-password')).toHaveValue('')
   })
 

@@ -211,7 +211,7 @@ interface MailSummary {
 
 /** The newest mail to an address whose subject matches, waiting for it to arrive (at the platform's Mailpit unless told). */
 export async function mailTo(request: APIRequestContext, to: string, subject: RegExp,
-  mailpit: string = MAILPIT): Promise<{ subject: string; text: string }> {
+  mailpit: string = MAILPIT): Promise<{ subject: string; text: string; from: string }> {
   let found: MailSummary | undefined
   await expect.poll(async () => {
     const response = await request.get(`${mailpit}/api/v1/search`, { params: { query: `to:"${to}"` } })
@@ -223,7 +223,9 @@ export async function mailTo(request: APIRequestContext, to: string, subject: Re
   const message = await request.get(`${mailpit}/api/v1/message/${found!.ID}`)
   expect(message.ok()).toBe(true)
   const body = await message.json()
-  return { subject: body.Subject as string, text: `${body.Text ?? ''}\n${body.HTML ?? ''}` }
+  const from = body.From as { Name?: string; Address?: string } | undefined
+  return { subject: body.Subject as string, text: `${body.Text ?? ''}\n${body.HTML ?? ''}`,
+    from: `${from?.Name ?? ''} <${from?.Address ?? ''}>` }
 }
 
 /** The first address in a mail that leads to `path` (`/auth/verify-email`), as a URL. */

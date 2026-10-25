@@ -113,8 +113,8 @@ test('an invited address answers through its mailed link; nobody else sees the p
   // The invitee opens the mailed link: signed in with the address, back on the publication, able to start.
   const mail = await invitationMail(request, invitee)
   expect(mail.subject).toContain('Invited capitals')
-  // In the sponsor's name: the mail came from their server, never from the platform's.
-  expect(mail.subject).toContain('Sora Co')
+  // From the sponsor's own address and server, never from the platform's.
+  expect(mail.from).toContain('sora@example.com')
   await expect(request.get(`${process.env.E2E_MAILPIT_URL ?? 'http://localhost:8025'}/api/v1/search`,
     { params: { query: `to:"${invitee}"` } }).then((r) => r.json())).resolves.toMatchObject({ messages: [] })
   const link = linkIn(mail.text, '/auth/email-link')

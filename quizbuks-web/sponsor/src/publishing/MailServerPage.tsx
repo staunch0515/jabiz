@@ -50,6 +50,9 @@ export function MailServerPage() {
   const { t } = useTranslation(SPONSOR)
   const { t: tQb } = useTranslation(QB)
   const server = useMailServer()
+  // The last save's answer, held here: the form below is remounted when the row first appears (its key), and the
+  // answer to the save that created the row must survive that.
+  const [result, setResult] = useState<MailServerOutput | null>(null)
   if (server.isPending) return <PageState kind="loading" />
   if (server.isError) {
     return <PageState kind="error" description={problemText(server.error)}
@@ -62,7 +65,7 @@ export function MailServerPage() {
         <p className="text-muted-foreground text-sm">{t('publishing.mailServer.intro')}</p>
       </div>
       <MailServerStatus server={server.data} />
-      <MailServerForm key={server.data ? 'saved' : 'none'} server={server.data} />
+      <MailServerForm key={server.data ? 'saved' : 'none'} server={server.data} result={result} onResult={setResult} />
     </div>
   )
 }
@@ -96,7 +99,11 @@ function MailServerStatus({ server }: { server: MailServer | null }) {
   )
 }
 
-function MailServerForm({ server }: { server: MailServer | null }) {
+function MailServerForm({ server, result, onResult }: {
+  server: MailServer | null
+  result: MailServerOutput | null
+  onResult: (result: MailServerOutput | null) => void
+}) {
   const { t } = useTranslation(SPONSOR)
   const queryClient = useQueryClient()
   const id = useId()
@@ -107,7 +114,6 @@ function MailServerForm({ server }: { server: MailServer | null }) {
   const [password, setPassword] = useState('')
   const [fromAddress, setFromAddress] = useState(server?.fromAddress ?? '')
   const [fromName, setFromName] = useState(server?.fromName ?? '')
-  const [result, setResult] = useState<MailServerOutput | null>(null)
   const [confirmRemove, setConfirmRemove] = useState(false)
 
   const save = useMutation({
@@ -121,7 +127,7 @@ function MailServerForm({ server }: { server: MailServer | null }) {
       fromName: fromName.trim() === '' ? null : fromName.trim(),
     }),
     onSuccess: async (output) => {
-      setResult(output)
+      onResult(output)
       setPassword('')
       await queryClient.invalidateQueries({ queryKey: MAIL_SERVER_QUERY })
     },
@@ -129,14 +135,14 @@ function MailServerForm({ server }: { server: MailServer | null }) {
   const remove = useMutation({
     mutationFn: removeMailServer,
     onSuccess: async () => {
-      setResult(null)
+      onResult(null)
       await queryClient.invalidateQueries({ queryKey: MAIL_SERVER_QUERY })
     },
   })
 
   const submit = (event: FormEvent) => {
     event.preventDefault()
-    setResult(null)
+    onResult(null)
     save.mutate()
   }
   const problem = (field: string) => fieldProblem(save.error, field)
