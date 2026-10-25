@@ -36,7 +36,7 @@ export function DashboardPage() {
           {/* On the band in the brand's own colours: a white button reads in both appearances (a secondary one is
               dark on dark green in the dark appearance). */}
           {sponsor.isSuccess && status !== 'APPROVED' && (
-            <Button size="sm" className="bg-qb-hero-foreground text-qb-ink hover:bg-qb-hero-muted self-start"
+            <Button size="sm" className="bg-qb-hero-foreground text-qb-hero-from hover:bg-qb-hero-muted hover:text-qb-hero-from self-start"
               onClick={() => navigate('/onboarding')}>
               {t('dashboard.toOnboarding')}
             </Button>

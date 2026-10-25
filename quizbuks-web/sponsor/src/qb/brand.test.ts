@@ -45,6 +45,8 @@ const TEXT: [string, string][] = [
   ['qb-hero-muted', 'qb-hero-from'],
   ['qb-hero-muted', 'qb-hero-to'],
   ['qb-ink', 'qb-sky'],
+  // The button on the hero band: the band's dark green on the band's white.
+  ['qb-hero-from', 'qb-hero-foreground'],
 ]
 
 /** Boundaries of controls, the focus indicator and the carousel's dots: 3:1 (1.4.11). */
