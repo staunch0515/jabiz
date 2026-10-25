@@ -68,13 +68,11 @@ public final class DigitalPrizeProcesses {
     public record PrizeOutput(UUID digitalPrizeId, String status, long revision) {}
 
     /**
-     * @param prizeContent the code or link, for the winner's eyes. Not {@code @Sensitive}: the generic process
-     *                     endpoint returns such components as null, and this is the one place the winner reads it.
-     *                     The output is recorded only when the call carries an idempotency key (the App sends none
-     *                     for a read), events carry none of it, and {@code toString()} masks it.
+     * @param prizeContent the code or link, for the winner's eyes: returned to them (this is the one place they read
+     *                     it) and kept from every record, the output held for a replay included (platform 16zh)
      */
-    public record OpenOutput(UUID digitalPrizeId, String status, String description, String prizeContent,
-        Instant openedAt) {
+    public record OpenOutput(UUID digitalPrizeId, String status, String description,
+        @Sensitive(returned = true) String prizeContent, Instant openedAt) {
 
         @Override
         public String toString() {
