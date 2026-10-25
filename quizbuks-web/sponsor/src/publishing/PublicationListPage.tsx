@@ -21,6 +21,7 @@ import { Plus } from 'lucide-react'
 import { useId, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { SPONSOR } from '../messages'
+import { EmptyState } from '../EmptyState'
 import { formatKudos } from '../qb/kudos'
 import { QB } from '../qb/messages'
 import { Link, navigate } from '../qb/router'
@@ -156,7 +157,8 @@ export function PublicationListPage() {
   ], [t, regionsText, methodLabel])
 
   const rows = publications.data?.items ?? []
-  const empty = q || status ? t('publishing.list.noMatch') : t('publishing.list.none')
+  const empty = q || status ? t('publishing.list.noMatch')
+    : <EmptyState testId="publications-empty">{t('publishing.list.none')}</EmptyState>
 
   return (
     <section className="flex flex-col gap-4" data-testid="publication-list">

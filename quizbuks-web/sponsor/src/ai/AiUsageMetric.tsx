@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { Sparkles } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Metric } from '../analytics/Metric'
 import { zoneTime } from '../analytics/api'
@@ -24,7 +25,7 @@ export function AiUsageMetric({ zone }: { zone: string }) {
       ? t('ai.usage.remaining', { tokens: n(u.remainingTokens), time: zoneTime(u.monthEnds, zone, locale) })
       : undefined
   return (
-    <Metric testId="metric-ai" label={t('ai.usage.label')}
+    <Metric testId="metric-ai" label={t('ai.usage.label')} icon={Sparkles}
       value={<span className="flex flex-col gap-1">
         <span>{t('ai.usage.tokens', { tokens: n(u.inputTokens + u.outputTokens) })}</span>
         <span className="text-muted-foreground text-sm font-normal" data-testid="metric-ai-detail">

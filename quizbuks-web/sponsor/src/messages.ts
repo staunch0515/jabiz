@@ -22,6 +22,7 @@ const en = {
   mail: { hint: 'Mail about your top-ups, the reviews of your publications and publications an administrator stops is always sent. You can choose here which other mail you get.' },
   dashboard: {
     title: 'Dashboard',
+    greeting: 'Hello, {{name}}',
     none: 'Before you publish quizzes, tell us about your company: we review every sponsor.',
     pending: 'Your sponsor application is in review. We will mail you when it is decided.',
     rejected: 'Your sponsor application was sent back. See why, change it and apply again.',
@@ -71,6 +72,7 @@ const zh: typeof en = {
   mail: { hint: '关于充值、发布的审核结果以及被管理员停止的发布的邮件总会发送。其他邮件可以在这里选择是否接收。' },
   dashboard: {
     title: '概览',
+    greeting: '你好，{{name}}',
     none: '发布 Quiz 之前，请先填写公司信息：每个商家都需经过审核。',
     pending: '你的商家申请正在审核中。审核完成后我们会发邮件通知你。',
     rejected: '你的商家申请已被驳回。请查看原因，修改后重新申请。',
@@ -121,6 +123,7 @@ const ja: typeof en = {
   mail: { hint: 'チャージ、公開の審査結果、管理者による公開の停止に関するメールは必ずお送りします。その他のメールはここで受け取るかどうかを選べます。' },
   dashboard: {
     title: 'ダッシュボード',
+    greeting: 'こんにちは、{{name}} さん',
     none: 'クイズを公開する前に、会社について教えてください。すべてのスポンサーを審査します。',
     pending: 'スポンサー申請は審査中です。結果はメールでお知らせします。',
     rejected: 'スポンサー申請は差し戻されました。理由を確認し、修正して再申請してください。',

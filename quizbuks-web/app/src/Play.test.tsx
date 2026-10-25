@@ -3,7 +3,7 @@ import { act, cleanup, render, screen, waitFor, within } from '@testing-library/
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
-import { placeholderIndex } from './art/Illustrations'
+import { placeholderIndex } from './qb/Illustrations'
 import './messages'
 import { containsPattern, feedFilters, NO_FILTERS } from './pages/FeedPage'
 import { forgetAttempts, storeResult, storeStart } from './play/storage'

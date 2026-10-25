@@ -53,6 +53,22 @@ describe('the rendered pages', () => {
     }
   })
 
+  it('carry the wordmark, and the drawings only as decoration (Q32)', () => {
+    const home = renderPage({ language: 'en', page: 'home', content: contentOf('en'), base: '/biz/', tryQuizzes, assets, siteUrl })
+    // The header and the footer: the coin beside the name, no image file.
+    expect(home.match(/<a class="brand" href="\/biz\/"><svg class="coin"/g)).toHaveLength(2)
+    expect(home).not.toContain('icon-192.png" alt=""')
+    // The four steps and the hero carry a drawing each; every drawing is hidden from assistive technology.
+    expect(home.match(/<svg class="art"/g)).toHaveLength(5)
+    expect(home).not.toMatch(/<svg class="(art|hero-art|coin)"(?![^>]*aria-hidden="true")/)
+    for (const page of ['merchants', 'takers', 'surveys'] as const) {
+      const html = renderPage({ language: 'ja', page, content: contentOf('ja'), base: '/biz/', tryQuizzes, assets, siteUrl })
+      expect(html.match(/<svg class="hero-art"/g)).toHaveLength(1)
+    }
+    const pricing = renderPage({ language: 'zh', page: 'pricing', content: contentOf('zh'), base: '/biz/', tryQuizzes, assets, siteUrl })
+    expect(pricing).not.toContain('class="hero-art"')
+  })
+
   it('escape the content and link the languages to the same page', () => {
     const content = structuredClone(contentOf('en'))
     content.home.title = 'Fish & <chips>'

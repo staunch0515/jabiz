@@ -1,19 +1,30 @@
 /* QuizBuks business site (docs/quizbuks/plans/Q31-biz-site.md). One stylesheet, design tokens for light and dark,
-   no framework. Colours follow the app's theme: slate with a blue accent; every pair passes WCAG AA. */
+   no framework. Colours follow the apps' brand (Q32, qb/brand.css): slate with the emerald accent; every text pair
+   passes WCAG AA (light: accent on white 5.5:1, white on accent 5.5:1, --chip-fg on --accent-soft 8.6:1; dark: accent
+   on --bg 12.3:1, --accent-fg on accent 9.8:1). The --leaf/--coin/--sky/--ink/--paper tokens colour the
+   illustrations (decorative). */
 :root {
   color-scheme: light dark;
   --bg: #ffffff;
-  --bg-soft: #f8fafc;
+  --bg-soft: #f4faf7;
   --fg: #0f172a;
   --muted: #475569;
   --card: #ffffff;
   --card-soft: #f1f5f9;
   --line: #e2e8f0;
-  --accent: #2563eb;
-  --accent-strong: #1d4ed8;
-  --accent-soft: #dbeafe;
+  --accent: #047857;
+  --accent-strong: #065f46;
+  --accent-soft: #d1fae5;
   --accent-fg: #ffffff;
+  --chip-fg: #064e3b;
   --ok: #047857;
+  --paper: #ffffff;
+  --leaf: #34d399;
+  --leaf-deep: #059669;
+  --coin: #fbbf24;
+  --coin-deep: #d97706;
+  --sky: #ecfdf5;
+  --ink: #064e3b;
   --shadow: 0 1px 2px rgba(15, 23, 42, .06), 0 12px 32px -16px rgba(15, 23, 42, .25);
   --radius: 16px;
   --max: 72rem;
@@ -27,11 +38,19 @@
     --card: #111a2e;
     --card-soft: #1e293b;
     --line: #27354d;
-    --accent: #60a5fa;
-    --accent-strong: #93c5fd;
-    --accent-soft: #1e3a8a;
-    --accent-fg: #0b1220;
+    --accent: #6ee7b7;
+    --accent-strong: #a7f3d0;
+    --accent-soft: #123b2d;
+    --accent-fg: #052e16;
+    --chip-fg: #d1fae5;
     --ok: #34d399;
+    --paper: #ffffff;
+    --leaf: #34d399;
+    --leaf-deep: #10b981;
+    --coin: #fbbf24;
+    --coin-deep: #f59e0b;
+    --sky: #123b2d;
+    --ink: #d1fae5;
     --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 12px 32px -16px rgba(0, 0, 0, .7);
   }
 }
@@ -62,7 +81,8 @@ p { margin: 0 0 1rem; }
 .top { position: sticky; top: 0; z-index: 50; background: color-mix(in srgb, var(--bg) 85%, transparent); backdrop-filter: blur(12px); border-bottom: 1px solid var(--line); }
 .bar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; min-height: 4rem; position: relative; }
 .brand { display: flex; align-items: center; gap: .6rem; font-weight: 800; font-size: 1.2rem; color: var(--fg); text-decoration: none; }
-.brand img { width: 2rem; height: 2rem; border-radius: .5rem; }
+.brand .coin { width: 2rem; height: 2rem; flex: none; }
+.foot .brand .coin { width: 1.75rem; height: 1.75rem; }
 .menu { display: flex; align-items: center; gap: 1.25rem; }
 .menu .links { display: flex; gap: 1.1rem; }
 .menu .links a { color: var(--fg); font-weight: 500; font-size: .95rem; padding: .35rem 0; border-bottom: 2px solid transparent; white-space: nowrap; }
@@ -110,14 +130,19 @@ p { margin: 0 0 1rem; }
 /* hero */
 .hero { padding: 4.5rem 0 3.5rem; background: radial-gradient(60rem 30rem at 85% -10%, var(--accent-soft), transparent 60%), linear-gradient(180deg, var(--bg-soft), var(--bg)); border-bottom: 1px solid var(--line); }
 .hero.compact { padding: 3.5rem 0 2.5rem; }
+.hero-split { display: grid; grid-template-columns: 1.2fr .8fr; gap: 2rem; align-items: center; }
+.hero-art { width: 100%; max-width: 22rem; height: auto; justify-self: end; }
+@media (max-width: 900px) { .hero-split { grid-template-columns: 1fr; } .hero-art { display: none; } }
 .hero-grid { display: grid; grid-template-columns: 1.1fr .9fr; gap: 3rem; align-items: center; }
 @media (max-width: 900px) { .hero-grid { grid-template-columns: 1fr; } .mock { display: none; } }
 .mock { position: relative; min-height: 36rem; }
+.mock .art { position: absolute; right: -1rem; top: -1.5rem; width: 15rem; height: auto; opacity: .95; }
+/* A narrower column: the drawing would slide behind the phone, so it shrinks and sits above the stat card instead. */
+@media (max-width: 1180px) { .mock .art { width: 11rem; top: auto; bottom: 0; right: 0; } }
 .phone { position: absolute; left: 0; top: 0; width: 16.5rem; height: 30rem; border-radius: 2rem; background: var(--card); border: 1px solid var(--line); box-shadow: var(--shadow); padding: 1rem; }
 .phone-bar { width: 5rem; height: .4rem; background: var(--line); border-radius: 99px; margin: .25rem auto 1.25rem; }
 .phone-card strong { display: block; margin: .6rem 0 .8rem; font-size: 1.05rem; line-height: 1.35; }
-.chip { display: inline-block; font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; background: var(--accent-soft); color: var(--accent-strong); padding: .2rem .55rem; border-radius: 999px; }
-@media (prefers-color-scheme: dark) { .chip { color: #bfdbfe; } }
+.chip { display: inline-block; font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; background: var(--accent-soft); color: var(--chip-fg); padding: .2rem .55rem; border-radius: 999px; }
 .opt { border: 1px solid var(--line); border-radius: 10px; padding: .6rem .75rem; margin: .4rem 0; font-size: .92rem; background: var(--bg); }
 .opt.selected { border-color: var(--accent); background: var(--accent-soft); font-weight: 600; }
 .reward { display: flex; align-items: center; gap: .5rem; margin-top: 1rem; padding: .6rem .75rem; border-radius: 10px; background: var(--card-soft); font-size: .9rem; font-weight: 600; color: var(--ok); }
@@ -150,7 +175,8 @@ p { margin: 0 0 1rem; }
 .steps { list-style: none; counter-reset: step; padding: 0; margin: 2rem 0 0; display: grid; gap: 1.25rem; grid-template-columns: repeat(4, minmax(0, 1fr)); }
 @media (max-width: 900px) { .steps { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 560px) { .steps { grid-template-columns: 1fr; } }
-.steps li { display: flex; gap: .9rem; align-items: flex-start; }
+.steps li { display: flex; gap: .9rem; align-items: flex-start; flex-wrap: wrap; }
+.steps .art { width: 100%; height: 7.5rem; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: .5rem; box-shadow: var(--shadow); }
 .steps .num { flex: none; width: 2.2rem; height: 2.2rem; border-radius: 999px; display: grid; place-items: center; background: var(--accent); color: var(--accent-fg); font-weight: 800; }
 .steps h3 { font-size: 1.05rem; margin-bottom: .25rem; }
 .steps p { color: var(--muted); margin: 0; font-size: .95rem; }
@@ -183,7 +209,7 @@ p { margin: 0 0 1rem; }
 @media (max-width: 1100px) { .plans { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 600px) { .plans { grid-template-columns: 1fr; } }
 .plan { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 1.6rem; display: flex; flex-direction: column; gap: .4rem; box-shadow: var(--shadow); }
-.plan.highlight { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), var(--shadow); }
+.plan.highlight { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), var(--shadow); background: linear-gradient(180deg, var(--accent-soft), var(--card) 9rem); }
 .plan .price { margin: .25rem 0 .25rem; display: flex; align-items: baseline; gap: .35rem; }
 .plan .amount { font-size: 2rem; font-weight: 800; letter-spacing: -.02em; }
 .plan .unit { color: var(--muted); font-size: .9rem; }

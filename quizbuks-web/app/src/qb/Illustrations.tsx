@@ -172,3 +172,35 @@ export function CoverPlaceholder({ seed, className, ...rest }: Art & { seed: str
     </svg>
   )
 }
+
+/** Bars growing under a leaf: the sponsor's dashboard. */
+export function GrowthArt({ className, ...rest }: Art) {
+  return (
+    <svg viewBox="0 0 160 140" {...base(className)} {...rest}>
+      <ellipse cx="80" cy="126" rx="56" ry="8" fill="var(--qb-sky)" />
+      <rect x="34" y="84" width="20" height="36" rx="4" fill="var(--qb-leaf-deep)" />
+      <rect x="62" y="64" width="20" height="56" rx="4" fill="var(--qb-leaf)" />
+      <rect x="90" y="44" width="20" height="76" rx="4" fill="var(--qb-coin)" />
+      <circle cx="100" cy="30" r="12" fill="var(--qb-coin-deep)" />
+      <path d="M100 30V12" stroke="var(--qb-leaf-deep)" strokeWidth="3" strokeLinecap="round" />
+      <path d="M100 22c-10-1-16-8-17-18 10 0 16 6 17 18z" fill="var(--qb-leaf)" />
+      <path d="M100 16c10-1 16-8 17-18-10 0-16 6-17 18z" fill="var(--qb-leaf-deep)" />
+      <path d="M30 120h100" stroke="var(--qb-ink)" strokeWidth="2" strokeLinecap="round" opacity="0.3" />
+    </svg>
+  )
+}
+
+/** A clipboard with a leaf: the sponsor's profile and its review. */
+export function PlanArt({ className, ...rest }: Art) {
+  return (
+    <svg viewBox="0 0 160 140" {...base(className)} {...rest}>
+      <ellipse cx="80" cy="126" rx="48" ry="8" fill="var(--qb-sky)" />
+      <rect x="46" y="22" width="68" height="94" rx="8" fill="var(--qb-leaf-deep)" />
+      <rect x="54" y="34" width="52" height="74" rx="4" fill="var(--qb-hero-foreground)" />
+      <rect x="66" y="14" width="28" height="14" rx="5" fill="var(--qb-coin)" />
+      <path d="M62 52h36M62 66h36M62 80h24" stroke="var(--qb-ink)" strokeWidth="4" strokeLinecap="round" opacity="0.35" />
+      <circle cx="104" cy="96" r="14" fill="var(--qb-leaf)" />
+      <path d="M97 96l5 5 9-10" stroke="var(--qb-hero-foreground)" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+    </svg>
+  )
+}

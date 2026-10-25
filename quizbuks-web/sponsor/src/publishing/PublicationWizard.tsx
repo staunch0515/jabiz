@@ -23,7 +23,7 @@ import {
   Textarea,
 } from '@jabiz/ui'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, ArrowRight, CircleCheck, RefreshCw, Save, Send } from 'lucide-react'
+import { ArrowLeft, ArrowRight, CircleCheck, FileText, RefreshCw, Save, Send, SlidersHorizontal, type LucideIcon } from 'lucide-react'
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { readVersions, searchQuizzes } from '../content/api'
@@ -236,6 +236,10 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
   const saveProblems = refusalProblems(save.error)
   const problems = output?.problems ?? []
   const stepTitles = [t('publishing.steps.content'), t('publishing.steps.policy'), t('publishing.steps.confirm')]
+  /** A step's name with a picture of it (Q32); the picture is decorative. */
+  const stepTitle = (Icon: LucideIcon, title: string) => (
+    <span className="inline-flex items-center gap-1.5"><Icon aria-hidden className="size-4" />{title}</span>
+  )
 
   const steps: ReactNode[] = [
     // 1. The quiz version and the name.
@@ -495,9 +499,9 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
     <section className="flex flex-col gap-4" data-testid="publication-wizard" data-step={step}>
       {header(revision ?? 0)}
       <Steps current={step} aria-label={t('publishing.steps.label')} data-testid="publication-steps" items={[
-        { key: 'content', title: stepTitles[0], description: t('publishing.steps.contentHint') },
-        { key: 'policy', title: stepTitles[1], description: t('publishing.steps.policyHint') },
-        { key: 'confirm', title: stepTitles[2], description: t('publishing.steps.confirmHint') },
+        { key: 'content', title: stepTitle(FileText, stepTitles[0]), description: t('publishing.steps.contentHint') },
+        { key: 'policy', title: stepTitle(SlidersHorizontal, stepTitles[1]), description: t('publishing.steps.policyHint') },
+        { key: 'confirm', title: stepTitle(CircleCheck, stepTitles[2]), description: t('publishing.steps.confirmHint') },
       ]} />
       <form noValidate className="flex flex-col gap-6" aria-labelledby={`${id}-step`} onSubmit={(event) => {
         event.preventDefault()
