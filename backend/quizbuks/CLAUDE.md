@@ -91,6 +91,7 @@
   `qb_wallet.balance >= 0` 由检查约束兜底。评分、档位、抽成、打乱、时限与开始条件是纯 Java 的 `Scoring`、`TierPick`、`RewardSplit`、`OptionShuffle`、`AttemptRules`；
   上限在 `PlayLimits`，错误码在 `PlayCodes`。系统流程的权限 `qb.play.system` 不授予任何角色。**开发入账** `QB_WALLET_DEV_CREDIT` 只在
   `quizbuks.wallet.dev-credit.enabled=true`（`dev` 与测试）时注册，权限 `qb.wallet.dev-credit` 不授予任何角色，生产不开（启动检查 `StripeModeCheck` 拒绝它与正式模式或 Stripe 正式密钥同时出现）。它是开放流程，补发经事件 `qb.sponsor.settle-pending` 由系统运行（`QB_PENDING_SETTLE` 等答题的系统流程都是 `internal()`，D41）。
+- **业务参数的存在**由启动检查 `setup.SetupParamsCheck` 保证（Q26）：新增参数只加进 `QbParams.ALL`（受控的还加进 `CONTROLLED`），部署后执行 `QB_SETUP`；缺少即启动警告，不在流程里自己给缺省值。
 - **奖励的支付方式**（`publishing.RewardMethod`、`reward`，`docs/quizbuks/plans/Q22-reward-methods.md`）：`PLATFORM`（平台经账本付）、`SPONSOR_CASH`（商家付现金）、
   `OFFLINE_REDEEM`（商家处兑换）。商家允许的方式只经 `QB_SPONSOR_REWARD_METHODS_SET` 写 `QbSponsorRewardMethods`（没有记录 = 只有 `PLATFORM`）；发布的 `rewardMethod` 在保存、复制、提交时都经
   `PublicationEditing.methodProblems` 核对，兑换须有 `redeemDescription`。不是 `PLATFORM` 的结算**不取钱包锁、不读钱包、不过账**（`AttemptFinishing`、`AttemptRules`），只插入 `QbCashReward` / `QbRedemption`
