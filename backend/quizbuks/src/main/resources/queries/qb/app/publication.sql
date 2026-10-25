@@ -37,6 +37,8 @@ results:
   maxReward:      { from: QbPublicationCard.maxReward }
   rewardMethod:   { from: QbPublicationCard.rewardMethod }
   redeemDescription: { from: QbPublicationCard.redeemDescription }
+  digitalDelivery: { from: QbPublicationCard.digitalDelivery }
+  digitalDescription: { from: QbPublicationCard.digitalDescription }
   audience:       { from: QbPublicationCard.audience }
   invited:        { kind: { type: bool } }
   sponsorName:    { from: QbSponsor.contactName }
@@ -83,6 +85,8 @@ SELECT
     d.maxReward AS maxReward,
     d.rewardMethod AS rewardMethod,
     d.redeemDescription AS redeemDescription,
+    d.digitalDelivery AS digitalDelivery,
+    d.digitalDescription AS digitalDescription,
     d.audience AS audience,
     d.invited AS invited,
     d.sponsorName AS sponsorName,
@@ -119,6 +123,8 @@ SELECT
     c.{{QbPublicationCard.maxReward}}      AS maxReward,
     c.{{QbPublicationCard.rewardMethod}}   AS rewardMethod,
     c.{{QbPublicationCard.redeemDescription}} AS redeemDescription,
+    c.{{QbPublicationCard.digitalDelivery}} AS digitalDelivery,
+    c.{{QbPublicationCard.digitalDescription}} AS digitalDescription,
     c.{{QbPublicationCard.audience}}       AS audience,
     (inv.{{QbInvitation.invitationId}} IS NOT NULL) AS invited,
     sp.{{QbSponsor.contactName}}           AS sponsorName,

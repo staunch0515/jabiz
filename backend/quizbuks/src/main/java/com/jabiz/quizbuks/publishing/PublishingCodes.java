@@ -72,6 +72,12 @@ public final class PublishingCodes {
 
     /** Q22: the publication's reward method is not one the sponsor may publish with. */
     public static final String REWARD_METHOD_NOT_ALLOWED = "QB_REWARD_METHOD_NOT_ALLOWED";
+    /** Q33: a digital prize names no delivery, or one that is unknown. */
+    public static final String DIGITAL_DELIVERY_INVALID = "QB_DIGITAL_DELIVERY_INVALID";
+    /** Q33: the days a sponsor has to send a digital prize are not within 1 and the limit. */
+    public static final String DIGITAL_SEND_DAYS_RANGE = "QB_DIGITAL_SEND_DAYS_RANGE";
+    /** Q33: a pool-delivered publication's winners are not covered by its codes, or too many for a pool. */
+    public static final String DIGITAL_POOL_SHORT = "QB_DIGITAL_POOL_SHORT";
     /** Q22: a setting's methods are not written as {@code RewardMethod.format} writes them (400). */
     public static final String REWARD_METHODS_FORMAT = "QB_REWARD_METHODS_FORMAT";
     /** A tier pays more than the highest reward one attempt may win (Q28). */
@@ -83,7 +89,8 @@ public final class PublishingCodes {
         TIER_NOT_IN_PUBLICATION, EXPIRED_IN_REVIEW, NO_VERSION,
         FIELD_REQUIRED, END_PASSED, TOO_LONG, PASS_SCORE_RANGE, BUDGET_BELOW_MAX_REWARD, SPEND_RANGE, TIER_NOT_FROM_ZERO,
         TIER_RANGE, TIER_GAP, TIER_OVERLAP, TIER_NOT_TO_FULL, TIER_NO_REWARD, SURVEY_PASS_SCORE, SURVEY_TIERS,
-        ADMIN_PAUSED, NOT_ADMIN_PAUSED, SPONSOR_BANNED, TAKEN_DOWN, REVIEW_REQUIRED, REWARD_METHOD_NOT_ALLOWED,
+        ADMIN_PAUSED, NOT_ADMIN_PAUSED, SPONSOR_BANNED, TAKEN_DOWN, REVIEW_REQUIRED, REWARD_METHOD_NOT_ALLOWED, DIGITAL_DELIVERY_INVALID,
+        DIGITAL_SEND_DAYS_RANGE, DIGITAL_POOL_SHORT,
         REWARD_METHODS_FORMAT, REWARD_ABOVE_MAX);
 
     private PublishingCodes() {}

@@ -146,6 +146,35 @@ class MessagesTest {
         assertThat(en.stringPropertyNames()).allSatisfy(key -> assertThat(en.getProperty(key)).as(key).isNotBlank());
     }
     @Test
+    void digitalPrizesHaveTheirTexts() throws IOException {
+        // Q33: the codes, the processes, the parameter, the two entities and their fields, the tasks, the states in
+        // words and the templates, in every language.
+        for (String language : List.of("en", "zh", "ja")) {
+            Properties texts = load(language);
+            assertThat(texts.stringPropertyNames()).as(language)
+                .contains("QB_DIGITAL_DELIVERY_INVALID", "QB_DIGITAL_SEND_DAYS_RANGE", "QB_DIGITAL_POOL_SHORT",
+                    "QB_DIGITAL_PRIZE_STATE", "QB_DIGITAL_UNREADABLE", "QB_DIGITAL_DISPUTE_NOTE",
+                    "QB_DIGITAL_RESOLUTION", "QB_DIGITAL_CODES_EMPTY", "QB_DIGITAL_CODES_TOO_MANY",
+                    "QB_DIGITAL_CODE_TOO_LONG", "QB_DIGITAL_NOT_POOLED", "QB_DIGITAL_POOL_LOCKED", "QB_REWARD_DIGITAL",
+                    "QB_REWARD_DIGITAL_DUE", "process.QB_DIGITAL_CODES_LOAD", "process.QB_DIGITAL_CODES_REVOKE",
+                    "process.QB_DIGITAL_PRIZE_OPEN", "process.QB_DIGITAL_PRIZE_CONFIRM",
+                    "process.QB_DIGITAL_PRIZE_DISPUTE", "process.QB_DIGITAL_PRIZE_RESOLVE",
+                    "param.qb.reward.digital.send-days", "task.qb.digital-prize.dispute", "task.qb.digital-prize.send",
+                    "entity.QbDigitalPrize", "entity.QbDigitalPrize.sealedContent", "entity.QbDigitalCode",
+                    "entity.QbDigitalCode.sealedContent", "entity.QbPublication.digitalDelivery",
+                    "entity.QbPublicationCard.sealedDigitalContent", "query.qb.sponsor.digital-codes",
+                    "query.qb.sponsor.digital-pool-summary", "query.qb.sponsor.digital-prizes",
+                    "query.qb.admin.digital-prizes", "query.qb.app.history.digitalStatus",
+                    "query.qb.app.feed.digitalDelivery", "query.qb.public.publication.digitalDescription")
+                .containsAll(com.jabiz.quizbuks.reward.DigitalPrizeStatus.ALL.stream()
+                    .map(k -> com.jabiz.quizbuks.reward.QbDigitalPrizes.STATUS_MESSAGE_PREFIX + k).toList())
+                .containsAll(com.jabiz.quizbuks.messaging.QbInbox.DIGITAL_KINDS.stream()
+                    .flatMap(k -> java.util.stream.Stream.of("qb.msg." + k + ".title", "qb.msg." + k + ".body"))
+                    .toList());
+        }
+    }
+
+    @Test
     void aiGenerationHasItsTexts() throws IOException {
         // Q8a: the codes, the processes, the parameters, the two entities and the templates.
         Properties en = load("en");

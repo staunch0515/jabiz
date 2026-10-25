@@ -23,7 +23,21 @@ public final class PublicationReadiness {
     /** The policy of a publication as it stands; any part may be missing in a draft. */
     public record Draft(UUID versionId, String name, String regions, Instant startAt, Instant endAt,
         Integer timeLimitSec, Integer passScore, BigDecimal budgetCap, Integer maxWinners, String rewardMethod,
-        String redeemDescription, String audience) {
+        String redeemDescription, String audience, String digitalDelivery, String digitalDescription,
+        boolean hasDigitalContent) {
+
+        /** As before Q33: no digital prize. */
+        public Draft(UUID versionId, String name, String regions, Instant startAt, Instant endAt,
+            Integer timeLimitSec, Integer passScore, BigDecimal budgetCap, Integer maxWinners, String rewardMethod,
+            String redeemDescription, String audience) {
+            this(versionId, name, regions, startAt, endAt, timeLimitSec, passScore, budgetCap, maxWinners,
+                rewardMethod, redeemDescription, audience, null, null, false);
+        }
+
+        /** Whether the prize is digital and delivered from a pool (Q33): the pool must cover the winners. */
+        public boolean pooled() {
+            return RewardMethod.DIGITAL_PRIZE.equals(rewardMethod) && DigitalDelivery.POOL.equals(digitalDelivery);
+        }
 
         /** A draft paid by the platform (Q22): what every draft was before. */
         public Draft(UUID versionId, String name, String regions, Instant startAt, Instant endAt,
@@ -138,6 +152,28 @@ public final class PublicationReadiness {
             && (draft.redeemDescription() == null || draft.redeemDescription().isBlank())) {
             problems.add(required("redeemDescription"));
         }
+        // Q33: a digital prize says how it is delivered and what it is; a shared one has its content; a pool names
+        // how many may win (the codes must cover them: checked at submission with the pool, pool()).
+        if (RewardMethod.DIGITAL_PRIZE.equals(draft.rewardMethod())) {
+            if (draft.digitalDelivery() == null) {
+                problems.add(new Violation("digitalDelivery", PublishingCodes.DIGITAL_DELIVERY_INVALID, "A digital "
+                    + "prize is delivered from a pool, shared, or sent by the sponsor", Map.of()));
+            }
+            if (draft.digitalDescription() == null || draft.digitalDescription().isBlank()) {
+                problems.add(required("digitalDescription"));
+            }
+            if (DigitalDelivery.SHARED.equals(draft.digitalDelivery()) && !draft.hasDigitalContent()) {
+                problems.add(required("digitalContent"));
+            }
+            if (draft.pooled() && draft.maxWinners() == null) {
+                problems.add(required("maxWinners"));
+            }
+            if (draft.pooled() && draft.maxWinners() != null && draft.maxWinners() > PublishingLimits.MAX_POOL_WINNERS) {
+                problems.add(new Violation("maxWinners", PublishingCodes.DIGITAL_POOL_SHORT, "A pool covers at most "
+                    + PublishingLimits.MAX_POOL_WINNERS + " winners", Map.of("available", 0,
+                        "max", PublishingLimits.MAX_POOL_WINNERS)));
+            }
+        }
         if (version != null) {
             QuizCompleteness.check(version).forEach(problem -> problems.add(new Violation(
                 problem.field() == null ? "version" : "version." + problem.field(), problem.ruleCode(),
@@ -166,6 +202,19 @@ public final class PublicationReadiness {
             }
         }
         return problems;
+    }
+
+    /**
+     * Q33: whether the pool covers the winners of a pool-delivered publication: {@code available} codes not issued
+     * nor revoked against {@code maxWinners}; nothing for the other deliveries.
+     */
+    public static List<Violation> pool(Draft draft, int available) {
+        if (!draft.pooled() || draft.maxWinners() == null || available >= draft.maxWinners()) {
+            return List.of();
+        }
+        return List.of(new Violation("maxWinners", PublishingCodes.DIGITAL_POOL_SHORT, "The pool has " + available
+            + " codes for " + draft.maxWinners() + " winners: load more or lower the winners",
+            Map.of("available", available, "max", draft.maxWinners())));
     }
 
     private static Violation required(String field) {

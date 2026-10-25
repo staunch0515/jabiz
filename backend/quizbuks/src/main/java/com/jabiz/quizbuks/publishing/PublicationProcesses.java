@@ -13,6 +13,8 @@ import com.jabiz.quizbuks.country.Regions;
 import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.EntityNotFoundException;
 import com.jabiz.runtime.process.steps.HoldLock;
+import com.jabiz.runtime.security.secret.SealSecret;
+import com.jabiz.security.Sensitive;
 import com.jabiz.runtime.process.steps.LoadEntity;
 import com.jabiz.runtime.process.steps.QueryEntities;
 import jakarta.validation.Valid;
@@ -81,14 +83,33 @@ public final class PublicationProcesses {
         Integer maxWinners, @Size(max = PublishingLimits.MAX_TIERS) List<@Valid @NotNull TierInput> tiers,
         Long baseRevision, @Size(max = 20) String rewardMethod,
         @Size(max = PublishingLimits.REDEEM_DESCRIPTION_LENGTH) String redeemDescription,
-        @Size(max = 10) String audience) {
+        @Size(max = 10) String audience, @Size(max = 20) String digitalDelivery,
+        @Size(max = PublishingLimits.REDEEM_DESCRIPTION_LENGTH) String digitalDescription, Integer digitalSendDays,
+        @Sensitive @Size(max = PublishingLimits.DIGITAL_CONTENT_LENGTH) String digitalContent) {
 
         /** As before Q25: everybody in the regions. */
         public SaveInput(UUID publicationId, UUID versionId, String name, List<String> regions, Instant startAt,
             Instant endAt, Integer timeLimitSec, Integer passScore, BigDecimal budgetCap, Integer maxWinners,
             List<TierInput> tiers, Long baseRevision, String rewardMethod, String redeemDescription) {
             this(publicationId, versionId, name, regions, startAt, endAt, timeLimitSec, passScore, budgetCap,
-                maxWinners, tiers, baseRevision, rewardMethod, redeemDescription, null);
+                maxWinners, tiers, baseRevision, rewardMethod, redeemDescription, null, null, null, null, null);
+        }
+
+        /** As before Q33: no digital prize. */
+        public SaveInput(UUID publicationId, UUID versionId, String name, List<String> regions, Instant startAt,
+            Instant endAt, Integer timeLimitSec, Integer passScore, BigDecimal budgetCap, Integer maxWinners,
+            List<TierInput> tiers, Long baseRevision, String rewardMethod, String redeemDescription,
+            String audience) {
+            this(publicationId, versionId, name, regions, startAt, endAt, timeLimitSec, passScore, budgetCap,
+                maxWinners, tiers, baseRevision, rewardMethod, redeemDescription, audience, null, null, null, null);
+        }
+
+        /** The shared code or link, only ever shown masked. */
+        @Override
+        public String toString() {
+            return "SaveInput[publicationId=" + publicationId + ", versionId=" + versionId + ", name=" + name
+                + ", rewardMethod=" + rewardMethod + ", digitalDelivery=" + digitalDelivery
+                + ", digitalContent=" + (digitalContent == null ? "null" : "***") + "]";
         }
     }
 
@@ -130,7 +151,21 @@ public final class PublicationProcesses {
                 EntityInstance found = first(ctx, FOUND);
                 return given != null || found == null ? given : found.get("versionId");
             }, true))
+            // Q33: a shared digital prize's code or link, sealed for this sponsor before anything is written (the
+            // step draws random bytes, so it is a blocking one); blank keeps the stored one.
+            .step("Seal the shared prize", SealSecret.<ProcessContext>of(PublicationProcesses::sharedContent,
+                ctx -> String.valueOf((Object) ctx.request().actorId()), SEALED_DIGITAL))
             .compute("Save the publication", (metadata, ctx) -> save(ctx, messages)));
+    }
+
+    /** The context key of the shared content sealed, when the save gives one. */
+    static final String SEALED_DIGITAL = "sealedDigital";
+
+    static String sharedContent(ProcessContext ctx) {
+        SaveInput input = ctx.get(INPUT, SaveInput.class);
+        return RewardMethod.DIGITAL_PRIZE.equals(input.rewardMethod())
+            && DigitalDelivery.SHARED.equals(DigitalDelivery.of(input.digitalDelivery())) ? input.digitalContent()
+            : null;
     }
 
     static void save(ProcessContext ctx, MessageCatalog messages) {
@@ -168,6 +203,26 @@ public final class PublicationProcesses {
         values.put("redeemDescription", !RewardMethod.OFFLINE_REDEEM.equals(method)
             || input.redeemDescription() == null || input.redeemDescription().isBlank() ? null
             : input.redeemDescription().strip());
+        // Q33: a digital prize's delivery and description; the shared content sealed, kept when the save leaves it
+        // blank; nothing of them for the other methods.
+        boolean digital = RewardMethod.DIGITAL_PRIZE.equals(method);
+        boolean deliveryGiven = input.digitalDelivery() != null && !input.digitalDelivery().isBlank();
+        String delivery = digital && deliveryGiven ? DigitalDelivery.of(input.digitalDelivery()) : null;
+        if (digital && deliveryGiven && delivery == null) {
+            // A name nobody knows is refused; none at all is a problem of the draft (PublicationReadiness).
+            ctx.reject(new Violation("digitalDelivery", PublishingCodes.DIGITAL_DELIVERY_INVALID, "A digital prize "
+                + "is delivered from a pool, shared, or sent by the sponsor", Map.of("digitalDelivery",
+                    String.valueOf(input.digitalDelivery()))));
+            return;
+        }
+        values.put("digitalDelivery", delivery);
+        values.put("digitalDescription", !digital || input.digitalDescription() == null
+            || input.digitalDescription().isBlank() ? null : input.digitalDescription().strip());
+        values.put("digitalSendDays", digital && DigitalDelivery.SPONSOR_SENT.equals(delivery)
+            ? decimal(input.digitalSendDays()) : null);
+        String sealed = ctx.contains(SEALED_DIGITAL) ? ctx.get(SEALED_DIGITAL, String.class) : null;
+        values.put("sealedDigitalContent", !digital || !DigitalDelivery.SHARED.equals(delivery) ? null
+            : sealed != null ? sealed : publication == null ? null : publication.get("sealedDigitalContent"));
         values.put("startAt", input.startAt());
         values.put("endAt", input.endAt());
         Integer limit = input.timeLimitSec() == null && version != null
@@ -402,7 +457,8 @@ public final class PublicationProcesses {
         values.put("name", input.name() == null || input.name().isBlank() ? copyName(messages, ctx,
             source.get("name")) : input.name());
         for (String field : List.of("regions", "startAt", "endAt", "timeLimitSec", "passScore", "budgetCap",
-            "maxWinners", "redeemDescription")) {
+            "maxWinners", "redeemDescription", "digitalDelivery", "digitalDescription", "digitalSendDays",
+            "sealedDigitalContent")) {
             values.put(field, source.get(field));
         }
         values.put("rewardMethod", PublicationEditing.methodOf(source.attributes()));

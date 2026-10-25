@@ -16,12 +16,14 @@ public final class RewardStatus {
     public static final String CASH = "CASH";
     /** Q22: a prize to collect at the sponsor's place (a {@code QbRedemption} says where it stands). */
     public static final String REDEEM = "REDEEM";
+    /** Q33: a digital prize (a {@code QbDigitalPrize} says where it stands). */
+    public static final String DIGITAL = "DIGITAL";
 
-    public static final List<String> ALL = List.of(NONE, PAID, PENDING, CASH, REDEEM);
+    public static final List<String> ALL = List.of(NONE, PAID, PENDING, CASH, REDEEM, DIGITAL);
 
-    /** Whether the reward is settled outside the wallet (Q22): never posted, never pending. */
+    /** Whether the reward is settled outside the wallet (Q22, Q33): never posted, never pending. */
     public static boolean external(Object status) {
-        return CASH.equals(status) || REDEEM.equals(status);
+        return CASH.equals(status) || REDEEM.equals(status) || DIGITAL.equals(status);
     }
 
     private RewardStatus() {}

@@ -1,12 +1,13 @@
 /*---
 id: qb.app.history
 description: The taker's own attempts (U-40 – U-42), newest first, with their results and rewards
-entities: [QbAttempt, QbPublicationCard, QbCashReward, QbRedemption]
+entities: [QbAttempt, QbPublicationCard, QbCashReward, QbRedemption, QbDigitalPrize]
 datasets:
   QbAttempt: urn:jabiz:dataset:taker:QbAttempt
   QbPublicationCard: urn:jabiz:dataset:default:QbPublicationCard
   QbCashReward: urn:jabiz:dataset:taker:QbCashReward
   QbRedemption: urn:jabiz:dataset:taker:QbRedemption
+  QbDigitalPrize: urn:jabiz:dataset:taker:QbDigitalPrize
 params:
   at: { kind: { type: temporal, role: EVENT_TIME }, description: "The client's now: an attempt in progress past its deadline is waiting to be finished" }
   q:  { kind: { type: text, maxLength: 100 }, description: Only attempts whose publication's name or quiz title contains this text }
@@ -31,6 +32,9 @@ results:
   cashConfirmBy: { from: QbCashReward.confirmBy }
   redeemStatus: { from: QbRedemption.status }
   redeemExpiresAt: { from: QbRedemption.expiresAt }
+  digitalPrizeId: { from: QbDigitalPrize.digitalPrizeId }
+  digitalStatus: { from: QbDigitalPrize.status }
+  digitalSendBy: { from: QbDigitalPrize.sendBy }
   startedAt:    { from: QbAttempt.startedAt }
   submittedAt:  { from: QbAttempt.submittedAt }
   deadline:     { from: QbAttempt.deadline }
@@ -71,6 +75,9 @@ SELECT
     cr.{{QbCashReward.confirmBy}}          AS cashConfirmBy,
     rd.{{QbRedemption.status}}             AS redeemStatus,
     rd.{{QbRedemption.expiresAt}}          AS redeemExpiresAt,
+    dg.{{QbDigitalPrize.digitalPrizeId}}   AS digitalPrizeId,
+    dg.{{QbDigitalPrize.status}}           AS digitalStatus,
+    dg.{{QbDigitalPrize.sendBy}}           AS digitalSendBy,
     m.{{QbAttempt.startedAt}}              AS startedAt,
     m.{{QbAttempt.submittedAt}}            AS submittedAt,
     m.{{QbAttempt.deadline}}               AS deadline
@@ -78,6 +85,7 @@ FROM {{QbAttempt}} m
 JOIN {{QbPublicationCard}} c ON c.{{QbPublicationCard.publicationId}} = m.{{QbAttempt.publicationId}}
 LEFT JOIN {{QbCashReward}} cr ON cr.{{QbCashReward.attemptId}} = m.{{QbAttempt.attemptId}}
 LEFT JOIN {{QbRedemption}} rd ON rd.{{QbRedemption.attemptId}} = m.{{QbAttempt.attemptId}}
+LEFT JOIN {{QbDigitalPrize}} dg ON dg.{{QbDigitalPrize.attemptId}} = m.{{QbAttempt.attemptId}}
 WHERE (CAST(:q AS text) IS NULL
        OR strpos(lower(c.{{QbPublicationCard.name}}), lower(CAST(:q AS text))) > 0
        OR strpos(lower(c.{{QbPublicationCard.quizTitle}}), lower(CAST(:q AS text))) > 0)

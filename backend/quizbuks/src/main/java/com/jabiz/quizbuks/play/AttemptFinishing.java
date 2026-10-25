@@ -14,10 +14,13 @@ import com.jabiz.quizbuks.content.ContentLimits;
 import com.jabiz.quizbuks.content.QuizSnapshot;
 import com.jabiz.quizbuks.identity.CallerChecks;
 import com.jabiz.quizbuks.publishing.CardTiers;
+import com.jabiz.quizbuks.publishing.DigitalDelivery;
 import com.jabiz.quizbuks.publishing.PublicationMoves;
 import com.jabiz.quizbuks.publishing.QbPublications;
 import com.jabiz.quizbuks.publishing.RewardMethod;
 import com.jabiz.quizbuks.reward.CashRewardStatus;
+import com.jabiz.quizbuks.reward.DigitalPrizeStatus;
+import com.jabiz.quizbuks.reward.QbDigitalPrizes;
 import com.jabiz.quizbuks.reward.QbRewards;
 import com.jabiz.quizbuks.reward.RedemptionStatus;
 import com.jabiz.quizbuks.setup.QbParams;
@@ -90,6 +93,8 @@ public final class AttemptFinishing {
     /** Q22: a reward owed in cash by the sponsor, a prize to collect at the sponsor's place. */
     public static final String CASH_EVENT = "qb.reward.cash-due";
     public static final String REDEEM_EVENT = "qb.reward.redeem-due";
+    /** Q33: a digital prize won: delivered at once, or owed by the sponsor (the payload's status says which). */
+    public static final String DIGITAL_EVENT = "qb.reward.digital";
 
     /**
      * @param answers       last answers, each replacing that question's; applied only in time
@@ -144,6 +149,8 @@ public final class AttemptFinishing {
     static final String EXTERNAL_ID = "play.externalId";
     /** Q25: the invitation the attempt started on, when its publication is invited. */
     static final String INVITATION = "play.invitation";
+    /** Q33: the next code of the publication's pool, read under the pool's lock for a digital prize from it. */
+    static final String POOL_CODE = "play.poolCode";
 
     /** What the finishing decided before the wallet: the attempt in its new state, without the money's outcome. */
     record Plan(EntityInstance attempt, EntityInstance card, EntityInstance counter, String status,
@@ -163,6 +170,12 @@ public final class AttemptFinishing {
         /** Whether the reward is paid from the sponsor's wallet: only then is the wallet locked and read. */
         boolean fromWallet() {
             return rewarded() && RewardMethod.platform(method());
+        }
+
+        /** Q33: whether the reward is a digital prize issued from the publication's pool. */
+        boolean pooled() {
+            return rewarded() && RewardMethod.DIGITAL_PRIZE.equals(method())
+                && DigitalDelivery.POOL.equals(DigitalDelivery.of(card.get("digitalDelivery")));
         }
     }
 
@@ -296,7 +309,7 @@ public final class AttemptFinishing {
             // The rate in effect now: a reward is split when it is paid (D-Q5-4).
             // Q22: with the days a sponsor has to pay a cash reward and a taker to collect a prize.
             .step("Load the commission rate", LoadParams.<ProcessContext>of(ProcessContext::opTime, PARAMS,
-                QbParams.CREATOR_FEE_RATE, QbParams.CASH_PAY_DAYS, QbParams.REDEEM_DAYS))
+                QbParams.CREATOR_FEE_RATE, QbParams.CASH_PAY_DAYS, QbParams.REDEEM_DAYS, QbParams.DIGITAL_SEND_DAYS))
             .step("Lock the publication", HoldLock.<ProcessContext>exclusive(
                 ctx -> PublicationMoves.lockName(publicationOf(ctx))))
             // The card only: its state is the publication's, its limits the publication's frozen ones (Q10a). One
@@ -314,6 +327,24 @@ public final class AttemptFinishing {
                     plan != null && PlaySteps.invited(plan.card()) ? List.of(String.valueOf(plan.attempt().id()))
                         : List.of())).limit(1).build();
             }, INVITATION))
+            // Q33: a digital prize from the pool: the pool's lock (after the publication's, before the wallet's, which
+            // a digital prize never takes), then its next code, oldest first.
+            .step("Lock the code pool", HoldLock.<ProcessContext>exclusive(ctx -> {
+                Plan plan = plan(ctx);
+                return plan != null && plan.pooled() ? QbDigitalPrizes.poolLockName(plan.attempt().get("publicationId"))
+                    : null;
+            }))
+            .step("Pick a code", QueryEntities.<ProcessContext>of(
+                QbDigitalPrizes.defaultDataset(QbDigitalPrizes.DIGITAL_CODE), ctx -> {
+                    Plan plan = plan(ctx);
+                    // Typed as Object: the generic get would be inferred as the varargs' array.
+                    Object publicationId = plan == null ? null : plan.attempt().get("publicationId");
+                    return EntityQuery.builder()
+                        .where(new QueryPredicate.In("publicationId", plan != null && plan.pooled()
+                            ? List.of(publicationId) : List.of()))
+                        .where(new QueryPredicate.Eq("status", DigitalPrizeStatus.CODE_AVAILABLE))
+                        .orderBy("seq", true).limit(1).build();
+                }, POOL_CODE))
             .step("Lock the sponsor's wallet", HoldLock.<ProcessContext>exclusive(ctx -> {
                 Plan plan = plan(ctx);
                 return plan != null && plan.fromWallet() ? QbWallets.lockName(QbWallets.SPONSOR,
@@ -341,7 +372,9 @@ public final class AttemptFinishing {
             .step("Announce a cash reward", PublishEvent.<ProcessContext>when(
                 ctx -> announced(ctx, RewardStatus.CASH), CASH_EVENT, AttemptFinishing::payload))
             .step("Announce a prize", PublishEvent.<ProcessContext>when(
-                ctx -> announced(ctx, RewardStatus.REDEEM), REDEEM_EVENT, AttemptFinishing::payload));
+                ctx -> announced(ctx, RewardStatus.REDEEM), REDEEM_EVENT, AttemptFinishing::payload))
+            .step("Announce a digital prize", PublishEvent.<ProcessContext>when(
+                ctx -> announced(ctx, RewardStatus.DIGITAL), DIGITAL_EVENT, AttemptFinishing::payload));
     }
 
     private static Plan plan(ProcessContext ctx) {
@@ -366,8 +399,14 @@ public final class AttemptFinishing {
         payload.put("reward", plan.reward());
         // Q22: the record of a reward the sponsor settles themselves, for the messages.
         if (ctx.contains(EXTERNAL_ID)) {
-            payload.put(RewardStatus.CASH.equals(settlement(ctx).rewardStatus()) ? "cashRewardId" : "redemptionId",
+            String status = settlement(ctx).rewardStatus();
+            payload.put(RewardStatus.CASH.equals(status) ? "cashRewardId"
+                : RewardStatus.DIGITAL.equals(status) ? "digitalPrizeId" : "redemptionId",
                 String.valueOf((Object) ctx.get(EXTERNAL_ID)));
+            if (RewardStatus.DIGITAL.equals(status)) {
+                // Q33: delivered at once or owed by the sponsor: the inbox tells the winner which.
+                payload.put("status", ctx.get(DIGITAL_STATUS));
+            }
         }
         return payload;
     }
@@ -456,8 +495,11 @@ public final class AttemptFinishing {
         }
         if (!plan.fromWallet()) {
             // Q22: the sponsor settles it themselves; the record of it is written with the attempt (record).
-            ctx.put(SETTLEMENT, new Settlement(RewardMethod.SPONSOR_CASH.equals(plan.method()) ? RewardStatus.CASH
-                : RewardStatus.REDEEM, null, null));
+            ctx.put(SETTLEMENT, new Settlement(switch (plan.method()) {
+                case RewardMethod.SPONSOR_CASH -> RewardStatus.CASH;
+                case RewardMethod.DIGITAL_PRIZE -> RewardStatus.DIGITAL;
+                default -> RewardStatus.REDEEM;
+            }, null, null));
             return;
         }
         EntityInstance wallet = first(ctx, WALLET);
@@ -552,6 +594,8 @@ public final class AttemptFinishing {
             case RewardStatus.PENDING -> PlayCodes.REWARD_PENDING;
             case RewardStatus.CASH -> PlayCodes.REWARD_CASH;
             case RewardStatus.REDEEM -> PlayCodes.REWARD_REDEEM;
+            case RewardStatus.DIGITAL -> DigitalPrizeStatus.DELIVERED.equals(ctx.get(DIGITAL_STATUS))
+                ? PlayCodes.REWARD_DIGITAL : PlayCodes.REWARD_DIGITAL_DUE;
             default -> null;
         };
         // The cash notice names the code the taker shows the sponsor (Q22).
@@ -586,6 +630,8 @@ public final class AttemptFinishing {
             values.put("status", CashRewardStatus.DUE);
             values.put("payBy", ctx.opTime().plus(Duration.ofDays(days(params, QbParams.CASH_PAY_DAYS))));
             ctx.put(EXTERNAL_ID, ctx.changes().insert(QbRewards.CASH_REWARD, values));
+        } else if (RewardStatus.DIGITAL.equals(rewardStatus)) {
+            digital(ctx, plan, values, params);
         } else {
             Instant expires = ctx.opTime().plus(Duration.ofDays(days(params, QbParams.REDEEM_DAYS)));
             Instant end = PlaySteps.instant(plan.card().get("endAt"));
@@ -594,6 +640,49 @@ public final class AttemptFinishing {
                 : plan.card().get("redeemDescription"));
             values.put("expiresAt", end != null && end.isAfter(expires) ? end : expires);
             ctx.put(EXTERNAL_ID, ctx.changes().insert(QbRewards.REDEMPTION, values));
+        }
+    }
+
+    /** Q33: what the inbox and the result's notice need to know: the prize's state as written. */
+    static final String DIGITAL_STATUS = "play.digitalStatus";
+
+    /**
+     * Q33: the record of a digital prize. From the pool: the next code, issued to this attempt, is the winner's at
+     * once (the pool ran out, which the readiness check and the winner limit prevent short of a revoke: owed by the
+     * sponsor instead). Shared: the card's content, the winner's at once. Sent by the sponsor: owed within the
+     * card's days to send, or the parameter's.
+     */
+    static void digital(ProcessContext ctx, Plan plan, Map<String, Object> values, ParamValues params) {
+        EntityInstance card = plan.card();
+        String delivery = DigitalDelivery.of(card.get("digitalDelivery"));
+        values.remove("code");
+        values.put("description", card.get("digitalDescription"));
+        values.put("delivery", delivery == null ? DigitalDelivery.SPONSOR_SENT : delivery);
+        EntityInstance code = DigitalDelivery.POOL.equals(delivery) ? first(ctx, POOL_CODE) : null;
+        String sealed = code != null ? code.get("sealedContent")
+            : DigitalDelivery.SHARED.equals(delivery) ? card.get("sealedDigitalContent") : null;
+        if (sealed != null) {
+            values.put("status", DigitalPrizeStatus.DELIVERED);
+            values.put("sealedContent", sealed);
+            values.put("hint", code != null ? code.get("hint") : null);
+            values.put("deliveredAt", ctx.opTime());
+            values.put("deliveredBy", DigitalPrizeStatus.BY_SYSTEM);
+        } else {
+            Object cardDays = card.get("digitalSendDays");
+            int days = cardDays == null ? days(params, QbParams.DIGITAL_SEND_DAYS)
+                : new BigDecimal(cardDays.toString()).intValue();
+            values.put("status", DigitalPrizeStatus.DUE);
+            values.put("sendBy", ctx.opTime().plus(Duration.ofDays(days)));
+        }
+        ctx.put(DIGITAL_STATUS, values.get("status"));
+        Object prizeId = ctx.changes().insert(QbDigitalPrizes.DIGITAL_PRIZE, values);
+        ctx.put(EXTERNAL_ID, prizeId);
+        if (code != null) {
+            Map<String, Object> issued = new LinkedHashMap<>();
+            issued.put("status", DigitalPrizeStatus.CODE_ISSUED);
+            issued.put("issuedAttemptId", String.valueOf(plan.attempt().id()));
+            issued.put("issuedAt", ctx.opTime());
+            ctx.changes().update(QbDigitalPrizes.DIGITAL_CODE, code.id(), code.version(), issued);
         }
     }
 

@@ -267,11 +267,11 @@ steps:
     save: { t2: $.attemptId }
   - actor: { id: "${u1}", permissions: [qb.play, qb.me] }
     process: QB_ATTEMPT_SUBMIT@latest
-    input: { attemptId: "${t1}", publicationId: "${pub}", answers: [{ questionNo: 1, selected: [2] }, { questionNo: 2, selected: [1] }] }
+    input: { attemptId: "${t1}", publicationId: "${pub}", answers: [{ questionNo: 1, selected: [2] }, { questionNo: 2, selected: [2] }] }
     expectOutput: { reward: 100, rewardStatus: PAID }
   - actor: { id: "${u2}", permissions: [qb.play, qb.me] }
     process: QB_ATTEMPT_SUBMIT@latest
-    input: { attemptId: "${t2}", publicationId: "${pub}", answers: [{ questionNo: 1, selected: [2] }, { questionNo: 2, selected: [2] }] }
+    input: { attemptId: "${t2}", publicationId: "${pub}", answers: [{ questionNo: 1, selected: [1] }, { questionNo: 2, selected: [2] }] }
     expectOutput: { reward: 100, rewardStatus: PENDING }
   - expect: { entity: QbPublication, id: "${pub}", fields: { status: FUNDS_SHORT } }
 

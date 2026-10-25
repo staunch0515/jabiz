@@ -123,6 +123,8 @@ public final class QbPermissions {
     public static final String CASH_RESOLVE = "qb.cash.resolve";
     /** Void a prize not yet collected (Q22b). */
     public static final String REDEMPTION_VOID = "qb.redemption.void";
+    /** Resolve a disputed digital prize (Q33): delivered, not delivered (owed again), or void. */
+    public static final String DIGITAL_RESOLVE = "qb.digital.resolve";
     /** Read every sponsor's quizzes, their content and their versions (read only). */
     public static final String ADMIN_QUIZ_READ = "qb.admin.quiz.read";
     /** Read every sponsor's publications, their tiers and counters (read only). */

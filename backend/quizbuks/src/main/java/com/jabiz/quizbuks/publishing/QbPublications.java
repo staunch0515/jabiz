@@ -102,6 +102,17 @@ public final class QbPublications {
             .asCode(RewardMethod.DICTIONARY, RewardMethod.ALL.toArray(String[]::new)));
         eb.field("redeemDescription", f -> f.physicalColumn("redeem_description")
             .asText(PublishingLimits.REDEEM_DESCRIPTION_LENGTH, true));
+        // Q33: a digital prize's delivery, what it is (as the winner reads it), the days the sponsor has to send one
+        // by hand, and the shared code or link sealed (sensitive: never read back, opened for a winner only).
+        eb.field("digitalDelivery", f -> f.physicalColumn("digital_delivery")
+            .asCode(DigitalDelivery.DICTIONARY, DigitalDelivery.ALL.toArray(String[]::new)));
+        eb.field("digitalDescription", f -> f.physicalColumn("digital_description")
+            .asText(PublishingLimits.REDEEM_DESCRIPTION_LENGTH, true));
+        eb.field("digitalSendDays", f -> f.physicalColumn("digital_send_days").asNumeric(3, 0)
+            .apply(Rules.range(PublishingCodes.DIGITAL_SEND_DAYS_RANGE, BigDecimal.ONE,
+                decimal(PublishingLimits.MAX_DIGITAL_SEND_DAYS))));
+        eb.field("sealedDigitalContent", f -> f.physicalColumn("sealed_digital_content").sensitive()
+            .asText(PublishingLimits.SEALED_LENGTH));
         eb.field("fullScore", f -> f.physicalColumn("full_score").processOnly().asNumeric(7, 0));
         eb.field("maxReward", f -> f.physicalColumn("max_reward").processOnly().asMonetary("JPY", 0));
         eb.field("maxSpend", f -> f.physicalColumn("max_spend").processOnly().asMonetary("JPY", 0));
@@ -321,6 +332,14 @@ public final class QbPublications {
             .asCode(RewardMethod.DICTIONARY, RewardMethod.ALL.toArray(String[]::new)));
         eb.field("redeemDescription", f -> f.physicalColumn("redeem_description").immutable(true)
             .asText(PublishingLimits.REDEEM_DESCRIPTION_LENGTH, true));
+        // Q33: the digital prize's delivery and description, and the shared content sealed (copied to each winner).
+        eb.field("digitalDelivery", f -> f.physicalColumn("digital_delivery").immutable(true)
+            .asCode(DigitalDelivery.DICTIONARY, DigitalDelivery.ALL.toArray(String[]::new)));
+        eb.field("digitalDescription", f -> f.physicalColumn("digital_description").immutable(true)
+            .asText(PublishingLimits.REDEEM_DESCRIPTION_LENGTH, true));
+        eb.field("digitalSendDays", f -> f.physicalColumn("digital_send_days").immutable(true).asNumeric(3, 0));
+        eb.field("sealedDigitalContent", f -> f.physicalColumn("sealed_digital_content").immutable(true)
+            .sensitive().asText(PublishingLimits.SEALED_LENGTH));
         eb.field("wentOnAt", f -> f.physicalColumn("went_on_at").immutable(true).required(true)
             .asTemporal(TemporalRole.EVENT_TIME));
         // When it ended, by whatever reason (its time, its winners, its budget): the statistics job counts a
@@ -368,7 +387,7 @@ public final class QbPublications {
         // The methods as RewardMethod.format writes them.
         eb.field("methods", f -> f.physicalColumn("methods").required(true).processOnly().asText(64)
             .apply(Rules.pattern(PublishingCodes.REWARD_METHODS_FORMAT,
-                "(PLATFORM|SPONSOR_CASH|OFFLINE_REDEEM)(,(PLATFORM|SPONSOR_CASH|OFFLINE_REDEEM))*")));
+                "(PLATFORM|SPONSOR_CASH|OFFLINE_REDEEM|DIGITAL_PRIZE)(,(PLATFORM|SPONSOR_CASH|OFFLINE_REDEEM|DIGITAL_PRIZE))*")));
         eb.field("note", f -> f.physicalColumn("note").processOnly()
             .asText(PublishingLimits.REJECT_REASON_LENGTH, true));
         eb.field("setBy", f -> f.physicalColumn("set_by").required(true).processOnly().asText(128));

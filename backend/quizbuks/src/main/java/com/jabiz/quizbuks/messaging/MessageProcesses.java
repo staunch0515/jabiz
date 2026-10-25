@@ -9,6 +9,8 @@ import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.quizbuks.play.QbPlay;
 import com.jabiz.quizbuks.play.RewardStatus;
 import com.jabiz.quizbuks.reward.CashRewardStatus;
+import com.jabiz.quizbuks.reward.DigitalPrizeStatus;
+import com.jabiz.quizbuks.reward.QbDigitalPrizes;
 import com.jabiz.quizbuks.reward.QbRewards;
 import com.jabiz.quizbuks.reward.RedemptionStatus;
 import com.jabiz.quizbuks.publishing.QbPublications;
@@ -77,6 +79,12 @@ public final class MessageProcesses {
     public static final String REDEEM_DECLINED_CONSUMER = "qb.msg-redeem-declined";
     public static final String REDEEM_EXPIRED_CONSUMER = "qb.msg-redeem-expired";
     public static final String REDEEM_VOID_CONSUMER = "qb.msg-redeem-void";
+    /** Q33: the digital prize's steps, one consumer each (two for a resolution: both sides hear). */
+    public static final String DIGITAL_WON_CONSUMER = "qb.msg-digital-won";
+    public static final String DIGITAL_CONFIRMED_CONSUMER = "qb.msg-digital-confirmed";
+    public static final String DIGITAL_DISPUTED_CONSUMER = "qb.msg-digital-disputed";
+    public static final String DIGITAL_RESOLVED_CONSUMER = "qb.msg-digital-resolved";
+    public static final String DIGITAL_RESOLVED_SPONSOR_CONSUMER = "qb.msg-digital-resolved-sponsor";
 
     /** An event older than this makes no message (a replay to a new subscription, a long backlog). */
     public static final Duration MAX_AGE = Duration.ofDays(7);
@@ -109,6 +117,7 @@ public final class MessageProcesses {
     static final String ACCOUNT = "account";
     static final String CASH = "cash";
     static final String REDEMPTION = "redemption";
+    static final String DIGITAL = "digital";
     static final String WALLET = "wallet";
     static final String LAST = "lastReminder";
     static final String PARAMS = "params";
@@ -150,7 +159,11 @@ public final class MessageProcesses {
                         QbInbox.CASH_KINDS.contains(input(ctx).kind()) ? uuid(input(ctx).sourceId()) : null), CASH),
                     QueryEntities.query(QbRewards.defaultDataset(QbRewards.REDEMPTION), ctx -> byId("redemptionId",
                         QbInbox.REDEEM_KINDS.contains(input(ctx).kind()) ? uuid(input(ctx).sourceId()) : null),
-                        REDEMPTION)))
+                        REDEMPTION),
+                    // Q33: the digital prize the event names.
+                    QueryEntities.query(QbDigitalPrizes.defaultDataset(QbDigitalPrizes.DIGITAL_PRIZE),
+                        ctx -> byId("digitalPrizeId", QbInbox.DIGITAL_KINDS.contains(input(ctx).kind())
+                            ? uuid(input(ctx).sourceId()) : null), DIGITAL)))
                 .compute("Make the message", (metadata, ctx) -> fromEvent(ctx, texts)));
     }
 
@@ -163,8 +176,10 @@ public final class MessageProcesses {
         String key = input.kind().toLowerCase(java.util.Locale.ROOT).replace('_', '-') + ":" + id;
         // Q22: a cash reward can be marked paid, disputed or late more than once (an "unpaid" decision sends it
         // back): each round is its own message, a redelivery of the same event is not.
+        // Q33: likewise a digital prize can be sent, disputed and decided more than once.
         if (QbInbox.CASH_KINDS.contains(input.kind()) && !QbInbox.CASH_DUE.equals(input.kind())
-            || QbInbox.REDEEM_CLAIMED.equals(input.kind()) || QbInbox.REDEEM_DECLINED.equals(input.kind())) {
+            || QbInbox.REDEEM_CLAIMED.equals(input.kind()) || QbInbox.REDEEM_DECLINED.equals(input.kind())
+            || QbInbox.DIGITAL_KINDS.contains(input.kind())) {
             return key + ":" + input.occurredAt().getEpochSecond();
         }
         return key;
@@ -173,7 +188,8 @@ public final class MessageProcesses {
     /** The kinds that read the publication's card: the platform's reward, and the cash or prize of Q22. */
     private static boolean reward(ProcessContext ctx) {
         String kind = input(ctx).kind();
-        return attemptReward(ctx) || QbInbox.CASH_KINDS.contains(kind) || QbInbox.REDEEM_KINDS.contains(kind);
+        return attemptReward(ctx) || QbInbox.CASH_KINDS.contains(kind) || QbInbox.REDEEM_KINDS.contains(kind)
+            || QbInbox.DIGITAL_KINDS.contains(kind);
     }
 
     /** The kinds whose source is the attempt itself. */
@@ -202,6 +218,9 @@ public final class MessageProcesses {
                 cashMessage(ctx, input, params, texts);
             case QbInbox.REDEEM_DUE, QbInbox.REDEEM_CLAIMED, QbInbox.REDEEM_REDEEMED, QbInbox.REDEEM_DECLINED,
                  QbInbox.REDEEM_EXPIRED, QbInbox.REDEEM_VOID -> redeemMessage(ctx, input, params);
+            case QbInbox.DIGITAL_DELIVERED, QbInbox.DIGITAL_DUE, QbInbox.DIGITAL_CONFIRMED, QbInbox.DIGITAL_DISPUTED,
+                 QbInbox.DIGITAL_RESOLVED, QbInbox.DIGITAL_RESOLVED_SPONSOR, QbInbox.DIGITAL_OVERDUE ->
+                digitalMessage(ctx, input, params, texts);
             default -> null;
         };
         if (draft != null) {
@@ -306,6 +325,47 @@ public final class MessageProcesses {
             QbInbox.ACTION_RESULT, redemption.get("attemptId"));
     }
 
+    /**
+     * The digital prize (Q33): delivered or owed to the taker, with what it is (never its content: the result page
+     * opens it); confirmed or disputed to the sponsor; a decision to both; late to the sponsor. Skipped when the
+     * prize moved on since the event.
+     */
+    private static Draft digitalMessage(ProcessContext ctx, EventInput input, Map<String, MessageTexts.Value> params,
+        MessageTexts texts) {
+        EntityInstance prize = first(ctx, DIGITAL);
+        EntityInstance card = first(ctx, CARD);
+        if (prize == null || card == null) {
+            return null;
+        }
+        String expected = switch (input.kind()) {
+            case QbInbox.DIGITAL_DELIVERED -> DigitalPrizeStatus.DELIVERED;
+            case QbInbox.DIGITAL_DUE -> DigitalPrizeStatus.DUE;
+            case QbInbox.DIGITAL_CONFIRMED -> DigitalPrizeStatus.CONFIRMED;
+            case QbInbox.DIGITAL_DISPUTED -> DigitalPrizeStatus.DISPUTED;
+            case QbInbox.DIGITAL_OVERDUE -> DigitalPrizeStatus.OVERDUE;
+            default -> null;
+        };
+        if (expected != null && !expected.equals(prize.get("status"))) {
+            return null;
+        }
+        params.put("amount", MessageTexts.Value.of(MailValues.kudos(prize.get("amount"))));
+        params.put("name", MessageTexts.Value.of(card.get("name")));
+        params.put("description", MessageTexts.Value.of(prize.get("description") == null ? ""
+            : prize.get("description")));
+        Object sendBy = prize.get("sendBy");
+        params.put("sendBy", MessageTexts.Value.of(sendBy == null ? "" : String.valueOf(sendBy).substring(0,
+            Math.min(10, String.valueOf(sendBy).length()))));
+        params.put("status", texts.message(QbDigitalPrizes.STATUS_MESSAGE_PREFIX + prize.get("status")));
+        boolean sponsors = QbInbox.DIGITAL_CONFIRMED.equals(input.kind())
+            || QbInbox.DIGITAL_DISPUTED.equals(input.kind()) || QbInbox.DIGITAL_OVERDUE.equals(input.kind())
+            || QbInbox.DIGITAL_RESOLVED_SPONSOR.equals(input.kind());
+        return sponsors
+            ? new Draft(prize.get("sponsorId"), QbInbox.TYPE_SYSTEM, input.kind(), card.id(),
+                QbInbox.ACTION_DIGITAL, String.valueOf(prize.id()))
+            : new Draft(prize.get("userId"), QbInbox.TYPE_REWARD, input.kind(), card.id(), QbInbox.ACTION_RESULT,
+                prize.get("attemptId"));
+    }
+
     private static Draft transferMessage(ProcessContext ctx, MessageTexts texts, EventInput input,
         Map<String, MessageTexts.Value> params) {
         EntityInstance transfer = first(ctx, TRANSFER);
@@ -367,6 +427,17 @@ public final class MessageProcesses {
 
     static EventInput redeemInput(DomainEvent event, String kind) {
         return new EventInput(kind, text(event, "redemptionId"), text(event, "publicationId"), event.createdTime());
+    }
+
+    /** Q33: a prize won is delivered or owed, as the event's payload says. */
+    static EventInput digitalWonInput(DomainEvent event) {
+        return new EventInput(DigitalPrizeStatus.DELIVERED.equals(text(event, "status")) ? QbInbox.DIGITAL_DELIVERED
+            : QbInbox.DIGITAL_DUE, text(event, "digitalPrizeId"), text(event, "publicationId"), event.createdTime());
+    }
+
+    static EventInput digitalInput(DomainEvent event, String kind) {
+        return new EventInput(kind, text(event, "digitalPrizeId"), text(event, "publicationId"),
+            event.createdTime());
     }
 
     static EventInput transferInput(DomainEvent event, String kind) {

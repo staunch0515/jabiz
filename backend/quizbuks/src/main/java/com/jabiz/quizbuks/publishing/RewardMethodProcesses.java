@@ -43,7 +43,7 @@ public final class RewardMethodProcesses {
      * @param methods the methods allowed from now on, at least one ({@link RewardMethod#ALL})
      * @param note    why, for the record
      */
-    public record SetInput(@NotBlank @Size(max = 128) String userId, @NotNull @Size(min = 1, max = 3)
+    public record SetInput(@NotBlank @Size(max = 128) String userId, @NotNull @Size(min = 1, max = 4)
         List<@NotBlank String> methods, @Size(max = PublishingLimits.REJECT_REASON_LENGTH) String note) {}
 
     public record SetOutput(String userId, List<String> methods, long revision) {}

@@ -310,6 +310,16 @@
       }
     },
     "results" : {
+      "digitalDelivery" : {
+        "allowedValues" : [ "POOL", "SHARED", "SPONSOR_SENT" ],
+        "dictUrn" : "urn:jabiz:dict:quizbuks:digital-delivery",
+        "type" : "code"
+      },
+      "digitalDescription" : {
+        "maxLength" : 500,
+        "multiline" : true,
+        "type" : "text"
+      },
       "endAt" : {
         "role" : "EVENT_TIME",
         "type" : "temporal"
@@ -359,7 +369,7 @@
         "type" : "text"
       },
       "rewardMethod" : {
-        "allowedValues" : [ "PLATFORM", "SPONSOR_CASH", "OFFLINE_REDEEM" ],
+        "allowedValues" : [ "PLATFORM", "SPONSOR_CASH", "OFFLINE_REDEEM", "DIGITAL_PRIZE" ],
         "dictUrn" : "urn:jabiz:dict:quizbuks:reward-method",
         "type" : "code"
       },

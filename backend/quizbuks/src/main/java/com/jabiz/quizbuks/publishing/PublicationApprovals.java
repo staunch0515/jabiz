@@ -73,6 +73,11 @@ public final class PublicationApprovals {
             content.put("rewardMethod", draft.rewardMethod());
             content.put("redeemDescription", draft.redeemDescription());
         }
+        // Q33: what a digital prize is and how it is delivered (never its content: the reviewer sees no code).
+        if (RewardMethod.DIGITAL_PRIZE.equals(draft.rewardMethod())) {
+            content.put("digitalDelivery", draft.digitalDelivery());
+            content.put("digitalDescription", draft.digitalDescription());
+        }
         List<Object> ranges = new ArrayList<>();
         tiers.stream().sorted(Comparator.comparingInt(TierCoverage.Tier::fromScore)
                 .thenComparingInt(TierCoverage.Tier::toScore))

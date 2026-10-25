@@ -14,7 +14,7 @@ params:
   at:      { kind: { type: temporal, role: EVENT_TIME }, required: true, description: The time the feed is for (the client's now) }
   country: { kind: { type: text, maxLength: 2 }, description: "The taker's country (QbCountry.code); without one only publications aimed at GLOBAL" }
   q:       { kind: { type: text, maxLength: 100 }, description: Only publications whose name or quiz title contains this text }
-  method:  { like: QbPublicationCard.rewardMethod, description: "Only publications whose reward comes this way (Q22): PLATFORM, SPONSOR_CASH or OFFLINE_REDEEM" }
+  method:  { like: QbPublicationCard.rewardMethod, description: "Only publications whose reward comes this way (Q22, Q33): PLATFORM, SPONSOR_CASH, OFFLINE_REDEEM or DIGITAL_PRIZE" }
 results:
   publicationId:  { from: QbPublicationCard.publicationId }
   name:           { from: QbPublicationCard.name }
@@ -24,6 +24,8 @@ results:
   kind:           { from: QbPublicationCard.kind }
   maxReward:      { from: QbPublicationCard.maxReward }
   rewardMethod:   { from: QbPublicationCard.rewardMethod }
+  digitalDelivery: { from: QbPublicationCard.digitalDelivery }
+  digitalDescription: { from: QbPublicationCard.digitalDescription }
   completions:    { from: QbPublicationCounter.completions }
   sponsorName:    { from: QbSponsor.contactName }
   sponsorCompany: { from: QbSponsor.company }
@@ -61,6 +63,8 @@ SELECT
     c.{{QbPublicationCard.kind}}           AS kind,
     c.{{QbPublicationCard.maxReward}}      AS maxReward,
     c.{{QbPublicationCard.rewardMethod}}   AS rewardMethod,
+    c.{{QbPublicationCard.digitalDelivery}} AS digitalDelivery,
+    c.{{QbPublicationCard.digitalDescription}} AS digitalDescription,
     n.{{QbPublicationCounter.completions}} AS completions,
     sp.{{QbSponsor.contactName}}           AS sponsorName,
     sp.{{QbSponsor.company}}               AS sponsorCompany,

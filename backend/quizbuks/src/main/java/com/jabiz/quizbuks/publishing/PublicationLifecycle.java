@@ -8,6 +8,8 @@ import com.jabiz.process.ProcessDefinition;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.reward.DigitalPrizeStatus;
+import com.jabiz.quizbuks.reward.QbDigitalPrizes;
 import com.jabiz.quizbuks.messaging.ConsentChecks;
 import com.jabiz.quizbuks.identity.CallerChecks;
 import com.jabiz.quizbuks.content.QbContent;
@@ -106,6 +108,8 @@ public final class PublicationLifecycle {
         String requestId, String preparerId, String contentHash, String reason) {}
 
     static final String FIRST = "first";
+    /** Q33: the available codes of a pooled publication, loaded at submission. */
+    static final String POOL = "pool";
     /** Whether an administrator took down another publication of the submitted one's quiz (Q10b, M-d). */
     static final String TAKEN_DOWN = "takenDown";
     static final String PARAMS = "params";
@@ -140,6 +144,19 @@ public final class PublicationLifecycle {
                 .steps(PublicationEditing::loadTiers)
                 .steps(b -> PublicationEditing.loadVersion(b,
                     ctx -> PublicationEditing.publication(ctx).get("versionId"), true))
+                // Q33: a digital prize from a pool promises each winner a code: the pool is counted (no statement
+                // for the other publications).
+                .step("Load the pool", QueryEntities.<ProcessContext>of(
+                    QbDigitalPrizes.defaultDataset(QbDigitalPrizes.DIGITAL_CODE), ctx -> {
+                        EntityInstance publication = PublicationEditing.publication(ctx);
+                        boolean pooled = publication != null
+                            && PublicationEditing.draftOf(publication).pooled();
+                        return EntityQuery.builder()
+                            .where(new QueryPredicate.In("publicationId", pooled ? List.of(publication.id())
+                                : List.of()))
+                            .where(new QueryPredicate.Eq("status", DigitalPrizeStatus.CODE_AVAILABLE))
+                            .limit(PublishingLimits.MAX_POOL_WINNERS).build();
+                    }, POOL))
                 .compute("Check the publication", (metadata, ctx) -> check(ctx))
                 .step("Ask for a review", RequireApproval.<ProcessContext>when(ctx -> ctx.contains(CASE),
                     PublicationApprovals.SUBJECT, ctx -> ctx.get(CASE, ApprovalCase.class), APPROVAL))
@@ -171,6 +188,8 @@ public final class PublicationLifecycle {
         PublicationReadiness.check(PublicationEditing.draftOf(publication),
             PublicationEditing.tiersOf(list(ctx, TIERS)), PublicationEditing.snapshot(version), ctx.opTime(),
             PublicationEditing.maxRewardPerAttempt(ctx)).forEach(ctx::reject);
+        PublicationReadiness.pool(PublicationEditing.draftOf(publication), list(ctx, POOL).size())
+            .forEach(ctx::reject);
         PublicationEditing.sponsorProblems(ctx).forEach(ctx::reject);
         PublicationEditing.methodProblems(ctx, PublicationEditing.methodOf(publication.attributes()))
             .forEach(ctx::reject);
