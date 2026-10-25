@@ -1,6 +1,8 @@
 // The business site's one script (docs/quizbuks/plans/Q31-biz-site.md): the language a first visitor is sent to, the
 // language switch that is remembered, and the two sign-up buttons. No framework, no inline code (the platform's
-// content security policy allows scripts from this origin only). The pure functions are exported for the tests.
+// content security policy allows scripts from this origin only). The pure functions are exported for the tests; the
+// build strips the `export` keywords and serves the file as a classic script in <head>, so that the language redirect
+// runs before the English page is painted (the DOM wiring waits for DOMContentLoaded).
 
 export const LANGUAGES = ['en', 'zh', 'ja']
 const STORAGE_KEY = 'qb-biz-lang'
@@ -52,8 +54,11 @@ export function isPhone(win) {
   }
 }
 
-/** The window features of the phone-sized window the taker sign-up opens on a desktop. */
-export const PHONE_WINDOW = 'popup=yes,width=390,height=844,resizable=yes,scrollbars=yes,noopener=yes'
+/**
+ * The window features of the phone-sized window the taker sign-up opens on a desktop. No `noopener`: with it
+ * `window.open` returns null even when the window opened, which would make the blocked-popup fallback fire too.
+ */
+export const PHONE_WINDOW = 'popup=yes,width=390,height=844,resizable=yes,scrollbars=yes'
 
 /**
  * Opens a sign-up: a taker on a desktop gets a separate phone-sized window (a new tab when the browser blocks it),
@@ -80,23 +85,44 @@ function storage(win) {
   }
 }
 
+/** Whether the visitor came from a page of this site: following its own links is a choice, not a first visit. */
+export function cameFromThisSite(referrer, origin) {
+  try {
+    return Boolean(referrer) && new URL(referrer).origin === origin
+  } catch {
+    return false
+  }
+}
+
+/** The click of a sign-up button that the script should leave to the browser (a new tab or window asked by a modifier). */
+export function isModifiedClick(event) {
+  return Boolean(event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || (event.button ?? 0) !== 0)
+}
+
 function install(win) {
   const doc = win.document
   const base = doc.documentElement.dataset.base ?? '/biz/'
-  const here = parsePath(win.location.pathname, base)
+  // The page's own language (the server may answer an unknown directory with the English home).
+  const language = doc.documentElement.dataset.language ?? 'en'
   const store = storage(win)
   let stored = null
   try { stored = store?.getItem(STORAGE_KEY) ?? null } catch { stored = null }
-  const target = redirectTarget({ pathname: win.location.pathname, base, stored,
-    browserLanguages: win.navigator.languages ?? [win.navigator.language] })
+  const target = cameFromThisSite(doc.referrer, win.location.origin) ? null
+    : redirectTarget({ pathname: win.location.pathname, base, stored,
+      browserLanguages: win.navigator.languages ?? [win.navigator.language] })
   if (target) {
     win.location.replace(target + win.location.search + win.location.hash)
     return
   }
   // The visible switch remembers the choice; a direct visit of a language page counts as a choice too.
-  if (here && store) {
-    try { store.setItem(STORAGE_KEY, here.language) } catch { /* private mode: nothing to remember */ }
+  if (store) {
+    try { store.setItem(STORAGE_KEY, language) } catch { /* private mode: nothing to remember */ }
   }
+  if (doc.readyState === 'loading') doc.addEventListener('DOMContentLoaded', () => wire(win, doc, store))
+  else wire(win, doc, store)
+}
+
+function wire(win, doc, store) {
   for (const link of doc.querySelectorAll('[data-lang]')) {
     link.addEventListener('click', () => {
       try { store?.setItem(STORAGE_KEY, link.dataset.lang) } catch { /* ignore */ }
@@ -104,6 +130,7 @@ function install(win) {
   }
   for (const button of doc.querySelectorAll('[data-signup]')) {
     button.addEventListener('click', (event) => {
+      if (isModifiedClick(event)) return
       event.preventDefault()
       openSignUp(button.dataset.signup, button.getAttribute('href'), win)
     })

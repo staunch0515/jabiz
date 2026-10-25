@@ -52,7 +52,7 @@ function header({ language, page, content, base }) {
     <button class="menu-toggle" type="button" data-menu-toggle aria-expanded="false" aria-controls="site-menu" aria-label="${esc(content.menu)}"><span></span><span></span><span></span></button>
     <nav id="site-menu" class="menu" data-menu aria-label="${esc(content.navLabel)}">
       <div class="links">${nav}</div>
-      <div class="lang" aria-label="${esc(content.languageLabel)}">${languages}</div>
+      <div class="lang" role="group" aria-label="${esc(content.languageLabel)}">${languages}</div>
       <div class="actions">
         <a class="button ghost" href="/taker/signup" data-signup="taker">${esc(content.cta.taker)}</a>
         <a class="button primary" href="/sponsor/signup" data-signup="sponsor" target="_blank" rel="noopener">${esc(content.cta.sponsor)}</a>
@@ -84,7 +84,7 @@ function footer({ language, content, base }) {
       <li><a href="/taker/legal/sponsor-terms">${esc(f.sponsorTerms)}</a></li>
       <li><a href="/taker/legal/privacy">${esc(f.privacy)}</a></li></ul></div>
   </div>
-  <div class="wrap fine"><span>© ${new Date().getUTCFullYear()} QuizBuks</span><span>${esc(f.rights)}</span></div>
+  <div class="wrap fine"><span>© 2026 QuizBuks</span><span>${esc(f.rights)}</span></div>
 </footer>`
 }
 
@@ -145,7 +145,7 @@ function home(ctx) {
           <div class="opt">${esc(h.mock.a)}</div><div class="opt selected">${esc(h.mock.b)}</div><div class="opt">${esc(h.mock.c)}</div>
           <div class="reward">${icon('gift', 'icon small')} ${esc(h.mock.reward)}</div></div>
       </div>
-      <div class="stat-card"><span class="stat-label">${esc(h.mock.statLabel)}</span><span class="stat-value">${esc(h.mock.statValue)}</span><span class="bar"><i></i></span></div>
+      <div class="stat-card"><span class="stat-label">${esc(h.mock.statLabel)}</span><span class="stat-value">${esc(h.mock.statValue)}</span><span class="meter"><i></i></span></div>
     </div>
   </div>
 </section>
@@ -234,13 +234,14 @@ function pricing(ctx) {
 </section>
 <section class="wrap section" aria-labelledby="plans">
   <h2 id="plans" class="visually-hidden">${esc(p.plansTitle)}</h2>
+  <p class="muted small center">${esc(p.currencyNote)}</p>
   <div class="plans">${p.plans.map((plan) => `<div class="plan${plan.highlight ? ' highlight' : ''}">
     ${plan.badge ? `<span class="chip">${esc(plan.badge)}</span>` : ''}
     <h3>${esc(plan.name)}</h3>
     <p class="price"><span class="amount">${esc(plan.price)}</span>${plan.unit ? `<span class="unit">${esc(plan.unit)}</span>` : ''}</p>
     <p class="muted">${esc(plan.note)}</p>
     ${list(plan.features)}
-    <a class="button ${plan.highlight ? 'primary' : 'ghost'}" href="${esc(plan.href)}"${plan.signup ? ` data-signup="${plan.signup}"` : ''}${plan.signup === 'sponsor' ? ' target="_blank" rel="noopener"' : ''}>${esc(plan.cta)}</a>
+    <a class="button ${plan.highlight ? 'primary' : 'ghost'}" href="${plan.page ? pagePath(ctx.language, plan.page, ctx.base) : esc(plan.href)}"${plan.signup ? ` data-signup="${plan.signup}"` : ''}${plan.signup === 'sponsor' ? ' target="_blank" rel="noopener"' : ''}>${esc(plan.cta)}</a>
   </div>`).join('')}</div>
 </section>
 <section class="wrap section" aria-labelledby="usage">
@@ -283,11 +284,12 @@ const BODIES = { home, merchants: (ctx) => featurePage(ctx, 'merchants'), takers
 
 export function renderPage(ctx) {
   const { language, page, content, base, assets } = ctx
+  const siteUrl = (ctx.siteUrl ?? '').replace(/\/$/, '')
   const meta = content.meta[page]
   const alternates = ['en', 'zh', 'ja'].map((lang) =>
-    `<link rel="alternate" hreflang="${LOCALES[lang]}" href="${pagePath(lang, page, base)}" />`).join('\n    ')
+    `<link rel="alternate" hreflang="${LOCALES[lang]}" href="${siteUrl}${pagePath(lang, page, base)}" />`).join('\n    ')
   return `<!doctype html>
-<html lang="${LOCALES[language]}" data-base="${base}" data-page="${page}">
+<html lang="${LOCALES[language]}" data-base="${base}" data-page="${page}" data-language="${language}">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -296,12 +298,16 @@ export function renderPage(ctx) {
     <meta property="og:title" content="${esc(meta.title)}" />
     <meta property="og:description" content="${esc(meta.description)}" />
     <meta property="og:type" content="website" />
+    <meta property="og:url" content="${siteUrl}${pagePath(language, page, base)}" />
+    <meta property="og:locale" content="${{ en: 'en_US', zh: 'zh_CN', ja: 'ja_JP' }[language]}" />
+    <meta property="og:image" content="${siteUrl}${base}icon-512.png" />
+    <link rel="canonical" href="${siteUrl}${pagePath(language, page, base)}" />
     <link rel="icon" type="image/png" href="${base}icon-192.png" />
     <link rel="apple-touch-icon" href="${base}icon-192.png" />
     ${alternates}
-    <link rel="alternate" hreflang="x-default" href="${pagePath('en', page, base)}" />
+    <link rel="alternate" hreflang="x-default" href="${siteUrl}${pagePath('en', page, base)}" />
     <link rel="stylesheet" href="${assets.css}" />
-    <script type="module" src="${assets.js}"></script>
+    <script src="${assets.js}"></script>
     <title>${esc(meta.title)}</title>
   </head>
   <body>

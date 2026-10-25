@@ -411,5 +411,5 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 
 `/biz/` 是静态站点（`quizbuks-web/biz`），随 jar 一起构建与发布，没有后台数据。要改文案改 `src/content/{en,zh,ja}.mjs`（三种语言结构必须一致，`pnpm test` 检查）；
 首页的"试答"区在 `src/content/try-quizzes.json` 里填每种语言的分享链接（`https://quizbuks.com/taker/p/<发布>`）与二维码图片（放到 `public/`，填相对路径），为空即显示"即将推出"。
-价格页的数字是推广期估价，改动前先在 `docs/quizbuks/plans/Q31-biz-site.md` 记下新值。裸域名 302 到 `/biz/`；中文与日文在 `/biz/zh/…`、`/biz/ja/…`，首次访问按浏览器语言转向（`localStorage` 记住切换）。
+价格页的数字是推广期估价，标"计划中"的套餐与费用尚未开售、尚未计费，改动前先在 `docs/quizbuks/plans/Q31-biz-site.md` 记下新值。链接只接受 `https://`、二维码只接受 `public/` 下的 PNG/SVG，否则构建失败。页面的 `canonical`、`hreflang` 与 `sitemap.xml` 用完整地址，源自构建时的 `SITE_URL`（缺省 `https://quizbuks.com`，换域名时在构建环境设置）。裸域名 302 到 `/biz/`；中文与日文在 `/biz/zh/…`、`/biz/ja/…`，从站外首次访问按浏览器语言转向（`localStorage` 记住切换；站内点击的语言从不被改）。
 

@@ -29,16 +29,20 @@ describe('the three languages', () => {
 
 describe('the rendered pages', () => {
   const assets = { css: '/biz/assets/site-x.css', js: '/biz/assets/site-x.js' }
+  const siteUrl = 'https://quizbuks.com'
   const tryQuizzes = { en: { url: '', qr: '' }, zh: { url: 'https://quizbuks.com/taker/p/abc', qr: 'qr-zh.png' },
     ja: { url: '', qr: '' } }
 
   it('render every page of every language with its language, alternates and no inline script', () => {
     for (const language of LANGUAGES) {
       for (const page of PAGES) {
-        const html = renderPage({ language, page, content: contentOf(language), base: '/biz/', tryQuizzes, assets })
-        expect(html).toContain(`<html lang="${{ en: 'en', zh: 'zh-Hans', ja: 'ja' }[language]}"`)
-        expect(html).toContain(`hreflang="x-default" href="${pagePath('en', page, '/biz/')}"`)
-        expect(html).toContain(`<script type="module" src="${assets.js}"></script>`)
+        const html = renderPage({ language, page, content: contentOf(language), base: '/biz/', tryQuizzes, assets, siteUrl })
+        expect(html).toContain(`<html lang="${{ en: 'en', zh: 'zh-Hans', ja: 'ja' }[language]}" data-base="/biz/" data-page="${page}" data-language="${language}"`)
+        // Search engines want absolute canonical and alternate links.
+        expect(html).toContain(`hreflang="x-default" href="${siteUrl}${pagePath('en', page, '/biz/')}"`)
+        expect(html).toContain(`<link rel="canonical" href="${siteUrl}${pagePath(language, page, '/biz/')}" />`)
+        // A classic script in the head: the language redirect runs before the page is painted.
+        expect(html).toContain(`<script src="${assets.js}"></script>`)
         expect(html).not.toMatch(/<script>[^<]/)
         expect(html.replace(/ style="--w:\d+%"/g, '')).not.toMatch(/ style="/)
         expect(html).not.toMatch(/ on[a-z]+="/)
@@ -52,16 +56,19 @@ describe('the rendered pages', () => {
   it('escape the content and link the languages to the same page', () => {
     const content = structuredClone(contentOf('en'))
     content.home.title = 'Fish & <chips>'
-    const html = renderPage({ language: 'en', page: 'home', content, base: '/biz/', tryQuizzes, assets })
+    const html = renderPage({ language: 'en', page: 'home', content, base: '/biz/', tryQuizzes, assets, siteUrl })
     expect(html).toContain('Fish &amp; &lt;chips&gt;')
     const pricing = renderPage({ language: 'zh', page: 'pricing', content: contentOf('zh'), base: '/biz/', tryQuizzes,
-      assets })
+      assets, siteUrl })
     expect(pricing).toContain('href="/biz/pricing/" lang="en" hreflang="en" data-lang="en"')
     expect(pricing).toContain('href="/biz/ja/pricing/" lang="ja" hreflang="ja" data-lang="ja"')
+    // A plan's "talk to us" goes to the contact page of the same language under the base, not a hard-coded path.
+    expect(pricing).toContain('href="/biz/zh/contact/">联系我们</a>')
+    expect(pricing).not.toContain('href="/biz/contact/"')
   })
 
   it('show the try-it quiz as a button and a QR code when given, a placeholder otherwise', () => {
-    const html = renderPage({ language: 'en', page: 'home', content: contentOf('en'), base: '/biz/', tryQuizzes, assets })
+    const html = renderPage({ language: 'en', page: 'home', content: contentOf('en'), base: '/biz/', tryQuizzes, assets, siteUrl })
     expect(html).toContain('href="https://quizbuks.com/taker/p/abc"')
     expect(html).toContain('src="/biz/qr-zh.png"')
     expect(html.match(/QR code coming soon/g)!.length).toBeGreaterThanOrEqual(2)

@@ -1,5 +1,4 @@
-import { expectAccessible, setAppearance } from '@jabiz/ui/testing/playwright'
-import { expect, test } from './support'
+import { expect, expectAccessible, setAppearance, test } from './support'
 
 /**
  * The business site at /biz/ (docs/quizbuks/plans/Q31-biz-site.md): every page in three languages with the same
@@ -19,12 +18,16 @@ test('every page of every language is served with its own text and alternates', 
       const html = await response.text()
       expect(html, `/biz/${prefix}${page}`).toContain(`<html lang="${lang}"`)
       expect(html).toContain('hreflang="x-default"')
+      expect(html).toContain('<link rel="canonical" href="https://')
       expect(response.headers()['content-security-policy']).toContain("default-src 'self'")
     }
   }
   // Without a trailing slash, and a directory that is no page falls back to the English home.
   expect(await (await request.get('/biz/zh/pricing')).text()).toContain('<html lang="zh-Hans"')
   expect(await (await request.get('/biz/zh/nothing-here')).text()).toContain('<html lang="en"')
+  const sitemap = await request.get('/biz/sitemap.xml')
+  expect(sitemap.status()).toBe(200)
+  expect(await sitemap.text()).toContain('<loc>https://quizbuks.com/biz/ja/pricing/</loc>')
 })
 
 test('a Chinese browser is sent to the Chinese page, keeps the page, and the switch is remembered', async ({
@@ -36,6 +39,13 @@ test('a Chinese browser is sent to the Chinese page, keeps the page, and the swi
   await expect(page).toHaveURL(/\/biz\/zh\/pricing\/$/)
   await expect(page.locator('html')).toHaveAttribute('lang', 'zh-Hans')
   // The visible switch to Japanese is remembered: the English root now goes to Japanese.
+  await page.getByRole('link', { name: '日本語' }).click()
+  await expect(page).toHaveURL(/\/biz\/ja\/pricing\/$/)
+  // Following the site's own links is a choice: English chosen on the page stays English, whatever the browser says.
+  await page.getByRole('link', { name: 'English' }).click()
+  await expect(page).toHaveURL(/\/biz\/pricing\/$/)
+  await page.waitForLoadState('networkidle')
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en')
   await page.getByRole('link', { name: '日本語' }).click()
   await expect(page).toHaveURL(/\/biz\/ja\/pricing\/$/)
   await page.goto('/biz/')
@@ -68,8 +78,10 @@ test('the taker button opens a phone-sized window on a desktop, the merchant but
   ])
   await phone.waitForLoadState()
   expect(new URL(phone.url()).pathname).toBe('/taker/signup')
-  const size = await phone.evaluate(() => ({ width: window.innerWidth, height: window.innerHeight }))
-  expect(size.width).toBeLessThanOrEqual(420)
+  // Playwright gives a popup the context's viewport, so the window features are not observable here: the named
+  // window is the one `window.open` was asked for, and it is the only one (no blocked-popup fallback fired too).
+  expect(await phone.evaluate(() => window.name)).toBe('quizbuks-taker')
+  expect(context.pages()).toHaveLength(2)
   await expect(phone.getByRole('button', { name: 'Create the account' })).toBeVisible()
   await phone.close()
 
@@ -102,8 +114,9 @@ for (const appearance of ['light', 'dark'] as const) {
         await expect(page.locator('h1')).toBeVisible()
         if (width < 1180) {
           await page.getByRole('button', { name: /menu|菜单|メニュー/i }).click()
+          await expect(page.getByRole('navigation', { name: /^(Site|站点|サイト)$/ })).toBeVisible()
         }
-        await expectAccessible(page, `biz ${path} ${width}px (${appearance})`, { expect })
+        await expectAccessible(page, `biz ${path} ${width}px (${appearance})`)
       }
     }
   })

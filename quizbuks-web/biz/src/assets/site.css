@@ -124,8 +124,8 @@ p { margin: 0 0 1rem; }
 .stat-card { position: absolute; right: 0; top: 26rem; width: 13rem; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 1rem 1.1rem; display: flex; flex-direction: column; gap: .35rem; }
 .stat-label { font-size: .8rem; color: var(--muted); }
 .stat-value { font-size: 1.8rem; font-weight: 800; letter-spacing: -.02em; }
-.bar { height: .5rem; background: var(--card-soft); border-radius: 99px; overflow: hidden; }
-.bar i { display: block; height: 100%; width: 78%; background: linear-gradient(90deg, var(--accent), var(--accent-strong)); border-radius: 99px; }
+.meter { height: .5rem; background: var(--card-soft); border-radius: 99px; overflow: hidden; }
+.meter i { display: block; height: 100%; width: 78%; background: linear-gradient(90deg, var(--accent), var(--accent-strong)); border-radius: 99px; }
 
 /* sections */
 .section { padding: 3.5rem 0; }

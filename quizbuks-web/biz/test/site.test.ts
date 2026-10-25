@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
-import { isPhone, openSignUp, parsePath, pathFor, pickLanguage, redirectTarget, PHONE_WINDOW } from '../src/assets/site.js'
+import { cameFromThisSite, isModifiedClick, isPhone, openSignUp, parsePath, pathFor, pickLanguage, redirectTarget,
+  PHONE_WINDOW } from '../src/assets/site.js'
+import { readTryQuizzes } from '../scripts/build.mjs'
 
 describe('language from the browser', () => {
   it('takes zh and ja by their primary tag, English otherwise', () => {
@@ -72,6 +74,9 @@ describe('sign-up buttons', () => {
     expect(win.open).toHaveBeenCalledWith('/taker/signup', 'quizbuks-taker', PHONE_WINDOW)
     expect(PHONE_WINDOW).toContain('width=390')
     expect(PHONE_WINDOW).toContain('height=844')
+    // With noopener the browser returns null for a window it did open, and the fallback would open a second tab.
+    expect(PHONE_WINDOW).not.toContain('noopener')
+    expect(win.open).toHaveBeenCalledTimes(1)
     expect(win.location.assign).not.toHaveBeenCalled()
   })
 
@@ -91,10 +96,39 @@ describe('sign-up buttons', () => {
     expect(isPhone(narrow as never)).toBe(true)
   })
 
+  it('leave a modifier click to the browser', () => {
+    expect(isModifiedClick({ ctrlKey: true, button: 0 })).toBe(true)
+    expect(isModifiedClick({ metaKey: true })).toBe(true)
+    expect(isModifiedClick({ button: 1 })).toBe(true)
+    expect(isModifiedClick({ button: 0 })).toBe(false)
+    expect(isModifiedClick({})).toBe(false)
+  })
+
   it('always give a merchant a new tab', () => {
     for (const win of [fakeWindow(), fakeWindow({ coarse: true })]) {
       openSignUp('sponsor', '/sponsor/signup', win as never)
       expect(win.open).toHaveBeenCalledWith('/sponsor/signup', '_blank', 'noopener')
     }
+  })
+})
+
+describe('following the site’s own links', () => {
+  it('counts as a choice: only an arrival from elsewhere is redirected', () => {
+    expect(cameFromThisSite('https://quizbuks.com/biz/ja/', 'https://quizbuks.com')).toBe(true)
+    expect(cameFromThisSite('https://quizbuks.com/taker/', 'https://quizbuks.com')).toBe(true)
+    expect(cameFromThisSite('https://www.google.com/', 'https://quizbuks.com')).toBe(false)
+    expect(cameFromThisSite('', 'https://quizbuks.com')).toBe(false)
+    expect(cameFromThisSite('not a url', 'https://quizbuks.com')).toBe(false)
+  })
+})
+
+describe('the try-it quizzes file', () => {
+  it('accepts https links and images under public/, rejects anything else', () => {
+    expect(readTryQuizzes('{"en":{"url":"","qr":""},"zh":{"url":"https://quizbuks.com/taker/p/abc","qr":"qr-zh.png"},"ja":{}}').zh.qr)
+      .toBe('qr-zh.png')
+    expect(() => readTryQuizzes('{"en":{"url":"javascript:alert(1)","qr":""}}')).toThrow(/en.url/)
+    expect(() => readTryQuizzes('{"en":{"url":"http://quizbuks.com/x","qr":""}}')).toThrow(/en.url/)
+    expect(() => readTryQuizzes('{"en":{"url":"","qr":"../secret.png"}}')).toThrow(/en.qr/)
+    expect(() => readTryQuizzes('{"en":{"url":"","qr":"qr.txt"}}')).toThrow(/en.qr/)
   })
 })
