@@ -1,7 +1,9 @@
 package com.jabiz.runtime.mail;
 
+import com.jabiz.entity.EntityDefinition;
 import com.jabiz.i18n.MessageCatalog;
 import com.jabiz.mail.MailCategory;
+import com.jabiz.mail.MailSenderSource;
 import com.jabiz.mail.MailTemplate;
 import com.jabiz.runtime.check.CheckProblem;
 import org.junit.jupiter.api.Test;
@@ -12,6 +14,8 @@ import org.springframework.mail.javamail.JavaMailSenderImpl;
 import java.time.Duration;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -221,5 +225,66 @@ class MailChecksTest {
         assertThat(messages).contains("its sign-in link is valid for PT744H, longer than "
             + "jabiz.security.email-link.max-ttl (PT720H)");
         assertThat(messages).noneMatch(message -> message.contains("valid for PT168H"));
+    }
+
+    private static final EntityDefinition SERVER = EntityDefinition.define("MailServer", eb -> {
+        eb.physicalTable("mail_server");
+        eb.primaryKey("key");
+        eb.field("key", f -> f.physicalColumn("f_key").asText(64));
+    });
+
+    /** Decision D56: the checks of an application's mail sender source. */
+    private static List<CheckProblem> senderChecks(boolean sealKey, boolean trustAll, boolean development,
+        MailSenderSource... sources) {
+        StaticListableBeanFactory beans = new StaticListableBeanFactory();
+        beans.addBean("mail", new JavaMailSenderImpl());
+        return new MailChecks(true, "jabiz@example.com", "", beans.getBeanProvider(JavaMailSender.class),
+            beans.getBeanProvider(MailTemplate.class), catalog(Locale.ENGLISH), name -> false, name -> true, Map.of(),
+            name -> Optional.empty(), path -> true, Duration.ofDays(30), List.of(sources),
+            name -> name.equals("MailServer") ? Optional.of(SERVER) : Optional.empty(), sealKey, trustAll, development)
+            .check();
+    }
+
+    @Test
+    void aMailSenderSourceNamesADeclaredEntityAndFieldAndNeedsTheSealKey() {
+        MailSenderSource good = MailSenderSource.of("MailServer", "key", row -> Optional.empty());
+        assertThat(senderChecks(true, false, false)).isEmpty();
+        assertThat(senderChecks(true, false, false, good)).isEmpty();
+
+        assertThat(senderChecks(true, false, false, MailSenderSource.of("Nowhere", "key", row -> Optional.empty())))
+            .singleElement().satisfies(problem -> {
+                assertThat(problem.severity()).isEqualTo(CheckProblem.Severity.ERROR);
+                assertThat(problem.location()).isEqualTo("MailSenderSource Nowhere.key");
+                assertThat(problem.message()).isEqualTo("names an entity that is not declared");
+            });
+        assertThat(senderChecks(true, false, false, MailSenderSource.of("MailServer", "host", row -> Optional.empty())))
+            .singleElement().extracting(CheckProblem::message).isEqualTo("names a field the entity does not have");
+        assertThat(senderChecks(false, false, false, good)).singleElement().satisfies(problem -> {
+            assertThat(problem.severity()).isEqualTo(CheckProblem.Severity.ERROR);
+            assertThat(problem.message()).contains("JABIZ_SEAL_KEY");
+        });
+        // No source: no secrets to open, no key needed.
+        assertThat(senderChecks(false, false, false)).isEmpty();
+    }
+
+    @Test
+    void onlyOneMailSenderSourceMayBeDeclared() {
+        MailSenderSource a = MailSenderSource.of("MailServer", "key", row -> Optional.empty());
+        MailSenderSource b = MailSenderSource.of("MailServer", "key", row -> Optional.empty());
+        assertThat(senderChecks(true, false, false, a, b)).singleElement().satisfies(problem -> {
+            assertThat(problem.severity()).isEqualTo(CheckProblem.Severity.ERROR);
+            assertThat(problem.location()).isEqualTo("MailSenderSource");
+            assertThat(problem.message()).startsWith("is declared 2 times");
+        });
+    }
+
+    @Test
+    void theTestSwitchOfMailSendersIsAWarningOutsideDevelopment() {
+        assertThat(senderChecks(true, true, true)).isEmpty();
+        assertThat(senderChecks(true, true, false)).singleElement().satisfies(problem -> {
+            assertThat(problem.severity()).isEqualTo(CheckProblem.Severity.WARNING);
+            assertThat(problem.location()).isEqualTo("jabiz.mail.senders.trust-all-for-tests");
+            assertThat(problem.message()).contains("this machine");
+        });
     }
 }

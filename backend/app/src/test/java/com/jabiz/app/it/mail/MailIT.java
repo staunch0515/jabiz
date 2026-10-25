@@ -191,11 +191,15 @@ class MailIT extends SecurityItSupport {
 
     /** Records a server of the shop's through IT_MAIL_SERVER_SET; the password is sealed on the way. */
     private void shopServer(String key, String password, boolean verified) {
+        shopServer(key, 3465, "SMTPS", password, verified);
+    }
+
+    private void shopServer(String key, int port, String tls, String password, boolean verified) {
         Map<String, Object> input = new LinkedHashMap<>();
         input.put("key", key);
         input.put("host", "localhost");
-        input.put("port", 3465);
-        input.put("tls", "SMTPS");
+        input.put("port", port);
+        input.put("tls", tls);
         input.put("username", "shop");
         input.put("password", password);
         input.put("fromAddress", "shop@example.com");
@@ -367,6 +371,26 @@ class MailIT extends SecurityItSupport {
             assertThat(received(SHOP_MAIL, address)).hasSize(1);
             assertThat(to(address)).isEmpty();
         }
+    }
+
+    /** TLS is required: a server that offers only plaintext (the platform's test server here) gets no credentials. */
+    @Test
+    void aServerWithoutTlsIsRefusedBeforeAnyCredentialIsSent() throws Exception {
+        shopServer("shop-plain", 3027, "STARTTLS", "shop-secret-1", true);
+        String address = address("via-plain");
+        sendVia(address, "shop-plain", 200);
+
+        deliver();
+        assertThat(attempts(address)).singleElement().satisfies(row -> assertThat(row)
+            .containsEntry("outcome", "FAILED").extractingByKey("detail").asString().containsIgnoringCase("STARTTLS"));
+        assertThat(to(address)).isEmpty();
+
+        // Moved to a server with TLS, the retry goes out.
+        shopServer("shop-plain", 3465, "SMTPS", "shop-secret-1", true);
+        clock.advance(Duration.ofMinutes(1));
+        deliver();
+        assertThat(attempts(address)).extracting(row -> row.get("outcome")).containsExactly("FAILED", "SENT");
+        assertThat(received(SHOP_MAIL, address)).hasSize(1);
     }
 
     @Test

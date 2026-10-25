@@ -14,7 +14,7 @@ import java.util.regex.Pattern;
  *
  * <p>{@link #problems} says what the platform refuses to send through: a host that is no public name, a port other
  * than the mail ports, no TLS, no credentials, or a sender address that is none. A lenient check (tests only) allows
- * local hosts and any port.
+ * a mail server on this machine ({@link #onThisMachine()}) on any port; every other host is checked as usual.
  *
  * @param host           the server's host name (a public DNS name; never an address)
  * @param port           one of {@link #PORTS}
@@ -35,8 +35,8 @@ public record MailSenderSettings(String host, int port, Tls tls, String username
 
     private static final Pattern HOST = Pattern.compile("(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,63}");
     private static final Pattern LOCAL_HOST = Pattern.compile("localhost|[a-z0-9.-]*\\.(local|localhost|internal|lan|home|test|example|invalid)");
-    /** Any host name, with or without a domain: what a lenient check (tests) accepts. */
-    private static final Pattern ANY_HOST = Pattern.compile("[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*");
+    /** This machine: what a lenient check (tests) accepts besides public names. */
+    private static final Pattern THIS_MACHINE = Pattern.compile("localhost|127\\.0\\.0\\.1|::1|\\[::1\\]");
     private static final Pattern ADDRESS = Pattern.compile("[^\\s@<>()\\[\\],;:\"]{1,64}@[a-z0-9.-]{1,253}");
     public static final int MAX_NAME = 100;
 
@@ -50,17 +50,17 @@ public record MailSenderSettings(String host, int port, Tls tls, String username
     /**
      * Why the platform will not send through these settings; none when it will.
      *
-     * @param lenient whether a local host and any port (tests against a mail server on this machine) pass
+     * @param lenient whether a mail server on this machine, on any port, passes (tests)
      */
     public List<String> problems(boolean lenient) {
         List<String> problems = new ArrayList<>();
+        boolean local = lenient && onThisMachine();
         if (host == null || host.isBlank()) {
             problems.add("host is required");
-        } else if (lenient ? !ANY_HOST.matcher(host).matches()
-            : !HOST.matcher(host).matches() || LOCAL_HOST.matcher(host).matches()) {
+        } else if (!local && (!HOST.matcher(host).matches() || LOCAL_HOST.matcher(host).matches())) {
             problems.add("host must be a public host name, not " + host);
         }
-        if (lenient ? port < 1 || port > 65535 : !PORTS.contains(port)) {
+        if (local ? port < 1 || port > 65535 : !PORTS.contains(port)) {
             problems.add("port must be one of " + PORTS.stream().sorted().toList() + ", not " + port);
         }
         if (tls == null) {
@@ -87,6 +87,11 @@ public record MailSenderSettings(String host, int port, Tls tls, String username
     }
 
     /** The sealed password is a secret of the delivery: shown as such. */
+    /** Whether the host is this machine (localhost or a loopback address): only tests send there. */
+    public boolean onThisMachine() {
+        return host != null && THIS_MACHINE.matcher(host).matches();
+    }
+
     @Override
     public String toString() {
         return "MailSenderSettings[host=" + host + ", port=" + port + ", tls=" + tls + ", username=" + username

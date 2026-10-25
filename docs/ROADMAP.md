@@ -4402,7 +4402,9 @@ L4 共享仪表的注释；L5 13 写明每个键每次轮询多一个查询观�
 来源：需求方 2026-10-25（QuizBuks Q29：商家用自己的 SMTP 服务器发邀请，平台的服务器只发平台自己的邮件）。分支 `1.2/phase-16zg-mail-sender`。决策 D56。
 核心 `MailSenderSettings`（主机、端口、TLS、用户名、密封的密码、发件地址与名称，`problems()` 给出平台拒绝的理由）与 `MailSenderSource`（应用声明的实体与键字段，同步地把一行换成设置）；
 核心 `SealedSecrets`（AES-GCM，`JABIZ_SEAL_KEY`），运行时 `SecretSealer` 与步骤 `SealSecret`；`SendMail.via(ctx -> 键)`，`sys_mail_message.sender_key`（V45）；投递经 `MailSenders` 为每次发送建发送器（超时、认证、TLS、证书校验），
-失败记服务器的理由、绝不回退到平台的服务器；启动检查 `MAIL`（一个来源、实体与字段存在、有密封密钥；测试开关在非 dev 告警）。设计 18 §5.6、10 §6。
-测试：`MailSenderSettingsTest`、`SealedSecretsTest`、`MailChecksTest`；`MailIT` 以第二个本地 SMTPS 服务器（要登录）：以商家名义到达、密码错 / 键不存在 / 未验证都 `FAILED` 且平台的服务器收不到。
+失败记服务器的理由、绝不回退到平台的服务器；启动检查 `MAIL`（一个来源、实体与字段存在、有密封密钥；测试开关在非 dev 告警，且只对本机的服务器生效）。设计 18 §5.6、10 §6。
+测试：`MailSenderSettingsTest`、`MailSenderSourceTest`、`SealedSecretsTest`、`MailChecksTest`（来源的检查）；`MailIT` 以第二个本地 SMTPS 服务器（要登录）：以商家名义到达、
+密码错 / 键不存在 / 未验证 / 只有明文的服务器都 `FAILED` 且平台的服务器收不到，改正后重试经商家的服务器发出。
+独立评审之后：测试开关只放宽本机的服务器（误开在生产不削弱商家服务器的校验）；两个来源经 `SendMail.problems` 不再抛异常而由 `MailChecks` 一次报告；D56 的剩余风险写明可达性探测、`sensitive()` 由应用声明、`SealSecret` 的密钥检查只覆盖邮件来源。
 
 **16zg 状态**：✅ 已实施（PR 待建）。

@@ -410,9 +410,9 @@ HTML 部分转义全部文本与正文中的原始 HTML，纯文本部分为原�
   按主机名校验服务器证书；发件地址与名称来自设置。平台拒绝的设置（`MailSenderSettings.problems`：主机不是公开的域名（本机、`.local` / `.internal` 等、IP），端口不在 25 / 465 / 587 / 2525，
   没有 TLS、用户名、密码或发件地址）、没有来源、键找不到、不可用、密码打不开、服务器拒绝——都作为该次尝试的 `FAILED` 记下（服务器的回答原文，截断 2000），**绝不改经平台的服务器发出**；
   Outbox 照常重试。配额与限流仍是应用的事（平台不计发件数）。
-- `jabiz.mail.senders.trust-all-for-tests=true` 只给测试（接受本机与任何证书；非 dev 时启动告警）。应用要"保存即发测试邮件"时，在 `BlockingStep` 中调用 `MailSenders.send(设置, 密码明文, MailMessage)`。
+- `jabiz.mail.senders.trust-all-for-tests=true` 只给测试：只对本机（`localhost`、回环地址）的服务器接受任何端口与证书，其他主机照常检查（误开在生产也无害于商家服务器的校验）；非 dev 时启动告警。应用要"保存即发测试邮件"时，在 `BlockingStep` 中调用 `MailSenders.send(设置, 密码明文, MailMessage)`。
 - 示范：`backend/app` 的测试夹具 `ItMailFixtures`（实体 `ItMailServer`、流程 `IT_MAIL_SERVER_SET` 用 `SealSecret`、模板 `it.via` 经 `SendMail.via`），`MailIT` 以第二个本地服务器（SMTPS、要登录）验证：
-  邮件只到应用的服务器、以其名义；密码错、键不存在、未验证都是 `FAILED` 而平台的服务器收不到。
+  邮件只到应用的服务器、以其名义；密码错、键不存在、未验证、只有明文的服务器都是 `FAILED` 而平台的服务器收不到；服务器改正后 Outbox 的重试经它发出。
 
 **启动检查 `MAIL`**（`com.jabiz.runtime.mail.MailChecks`，含 §5.4 的检查）：模板名唯一；每种语言都有标题与正文（NOTIFICATION 缺显示名 `mail.<名>.name` 为告警，16s）；模板声明的入口须为可用入口（16s）；占位符与声明一致（未声明的占位符、未使用的参数或令牌、
 NOTIFICATION 缺 `{unsubscribeUrl}`；`{entryUrl}` 而模板没有参数 `entry`）；`{entryUrl.<入口>}` 的入口不是可用的登录入口；开启邮件时需 `jabiz.mail.from`、

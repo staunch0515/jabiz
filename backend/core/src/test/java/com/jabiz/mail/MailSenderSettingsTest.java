@@ -38,11 +38,17 @@ class MailSenderSettingsTest {
     }
 
     @Test
-    void aLenientCheckAllowsALocalHostAndAnyPortForTests() {
+    void aLenientCheckAllowsThisMachineOnAnyPortForTestsAndNothingElse() {
         assertThat(settings("localhost", 465, MailSenderSettings.Tls.SMTPS).problems(true)).isEmpty();
         assertThat(settings("localhost", 3465, MailSenderSettings.Tls.SMTPS).problems(true)).isEmpty();
+        assertThat(settings("127.0.0.1", 3025, MailSenderSettings.Tls.STARTTLS).problems(true)).isEmpty();
         assertThat(settings("localhost", 0, MailSenderSettings.Tls.SMTPS).problems(true)).hasSize(1);
         assertThat(settings("", 465, MailSenderSettings.Tls.SMTPS).problems(true)).hasSize(1);
+        // Lenient is not "anything goes": other hosts keep the public-name and port rules.
+        assertThat(settings("mail.corp.internal", 587, MailSenderSettings.Tls.STARTTLS).problems(true)).hasSize(1);
+        assertThat(settings("smtp.example.com", 3465, MailSenderSettings.Tls.SMTPS).problems(true)).hasSize(1);
+        assertThat(settings("smtp.example.com", 587, MailSenderSettings.Tls.SMTPS).onThisMachine()).isFalse();
+        assertThat(settings("localhost", 587, MailSenderSettings.Tls.SMTPS).onThisMachine()).isTrue();
     }
 
     @Test

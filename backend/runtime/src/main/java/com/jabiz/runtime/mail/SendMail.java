@@ -284,7 +284,8 @@ public class SendMail<C extends ProcessContext> implements StepHandler<SendMail.
         if (publisher.getIfUnique() == null) {
             problems.add("sends mail but no EventPublisher is configured");
         }
-        if (metadata.sender() != null && sources.getIfAvailable() == null) {
+        // Not getIfAvailable(): two sources must reach MailChecks as a problem, not fail here with an exception.
+        if (metadata.sender() != null && sources.orderedStream().findAny().isEmpty()) {
             problems.add("sends mail " + template.name() + " via a sender, but no MailSenderSource bean is declared");
         }
         return problems;

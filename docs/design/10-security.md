@@ -204,7 +204,8 @@ BCrypt 有意很慢（每次数十到数百毫秒 CPU）。登录洪峰时若不
   - `op_process_result.output`（幂等重放）与流程 API 的响应：秘密替换为 `null`。
   - 日志：`EntityInstance`、`ChangeSet.Change / Saved` 的 `toString()` 只输出字段名；平台不记录请求体。
 - **应用保存的秘密**（16zg，决策 D56）：应用要保存第三方凭据（商家邮件服务器的密码）时，只以核心 `SealedSecrets` 密封保存（AES-256-GCM，附加数据为所属行的键，密钥 `jabiz.security.seal.key` /
-  `JABIZ_SEAL_KEY`，与 `JABIZ_MFA_KEY` 同样的要求、各自导出），流程中用步骤 `SealSecret`，打开只在平台用到它的地方（邮件投递）；字段照常 `sensitive()`。不存秘密的应用不需要密钥。
+  `JABIZ_SEAL_KEY`，与 `JABIZ_MFA_KEY` 同样的要求、各自导出），流程中用步骤 `SealSecret`，打开只在平台用到它的地方（邮件投递）；字段照常 `sensitive()`（应用自己声明，平台不检查）。不存秘密的应用不需要密钥；
+  声明了 `MailSenderSource` 而没有密钥是启动错误，其他用 `SealSecret` 的流程没有密钥时在运行时失败。
 - 密码规则：至少 10 个字符（`jabiz.security.password.min-length`），至多 72 字节（BCrypt 只看前 72 字节）：`PASSWORD_TOO_SHORT` / `PASSWORD_TOO_LONG`（400）。
   BCrypt 强度默认 12（`…password.bcrypt-strength`；测试用 4）。
 

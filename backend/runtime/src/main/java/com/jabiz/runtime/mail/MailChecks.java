@@ -306,7 +306,7 @@ public class MailChecks implements PlatformCheck {
         }
         if (trustAllForTests && !development) {
             problems.add(CheckProblem.warning(CATEGORY, "jabiz.mail.senders.trust-all-for-tests",
-                "is on: mail servers' certificates and local hosts are not checked; for tests only"));
+                "is on: a mail server on this machine is accepted on any port with any certificate; for tests only"));
         }
         return problems;
     }

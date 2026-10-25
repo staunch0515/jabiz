@@ -29,7 +29,7 @@ public class MailSenders {
         this.trustAllForTests = trustAllForTests;
     }
 
-    /** Whether local hosts and any certificate are accepted (tests only). */
+    /** Whether a server on this machine, on any port and with any certificate, is accepted (tests only). */
     public boolean lenient() {
         return trustAllForTests;
     }
@@ -59,11 +59,14 @@ public class MailSenders {
         sender.setPassword(password);
         sender.setDefaultEncoding("UTF-8");
         Properties properties = sender.getJavaMailProperties();
+        // The test switch trusts any certificate of a server on this machine only: set in production by mistake, it
+        // cannot weaken the check of a merchant's server.
+        boolean trustAll = trustAllForTests && settings.onThisMachine();
         if (settings.tls() == MailSenderSettings.Tls.SMTPS) {
             sender.setProtocol("smtps");
             properties.put("mail.smtps.auth", "true");
-            properties.put("mail.smtps.ssl.checkserveridentity", trustAllForTests ? "false" : "true");
-            if (trustAllForTests) {
+            properties.put("mail.smtps.ssl.checkserveridentity", trustAll ? "false" : "true");
+            if (trustAll) {
                 properties.put("mail.smtps.ssl.trust", "*");
             }
         } else {
@@ -71,8 +74,8 @@ public class MailSenders {
             properties.put("mail.smtp.auth", "true");
             properties.put("mail.smtp.starttls.enable", "true");
             properties.put("mail.smtp.starttls.required", "true");
-            properties.put("mail.smtp.ssl.checkserveridentity", trustAllForTests ? "false" : "true");
-            if (trustAllForTests) {
+            properties.put("mail.smtp.ssl.checkserveridentity", trustAll ? "false" : "true");
+            if (trustAll) {
                 properties.put("mail.smtp.ssl.trust", "*");
             }
         }
