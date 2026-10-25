@@ -80,6 +80,8 @@ LEFT JOIN {{QbWallet}} w ON w.{{QbWallet.ownerId}} = c.{{QbPublicationCard.spons
 LEFT JOIN {{QbSponsor}} sp ON sp.{{QbSponsor.userId}} = c.{{QbPublicationCard.sponsorId}}
     AND sp.{{QbSponsor.reviewStatus}} = 'APPROVED'
 WHERE c.{{QbPublicationCard.status}} = 'LIVE'
+  -- Q25: an invited publication is reached from its mail only, never listed.
+  AND c.{{QbPublicationCard.audience}} = 'PUBLIC'
   AND c.{{QbPublicationCard.startAt}} <= :at AND :at < c.{{QbPublicationCard.endAt}}
   AND string_to_array(c.{{QbPublicationCard.regions}}, ',') && string_to_array(coalesce(
       (SELECT co.{{QbCountry.regions}} FROM {{QbCountry}} co WHERE co.{{QbCountry.code}} = CAST(:country AS text)),

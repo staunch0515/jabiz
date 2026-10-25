@@ -12,6 +12,8 @@ public final class PlayCodes {
     // Starting an attempt.
     public static final String NOT_OPEN = "QB_PUBLICATION_NOT_OPEN";
     public static final String NOT_VISIBLE = "QB_PUBLICATION_NOT_VISIBLE";
+    /** Q25: the publication is for its invitation list and the caller is not on it. */
+    public static final String NOT_INVITED = com.jabiz.quizbuks.invitation.InvitationCodes.NOT_INVITED;
     public static final String BUDGET_FULL = "QB_PUBLICATION_BUDGET_FULL";
     public static final String QUOTA_FULL = "QB_PUBLICATION_QUOTA_FULL";
     public static final String FUNDS_SHORT = "QB_SPONSOR_FUNDS_SHORT";

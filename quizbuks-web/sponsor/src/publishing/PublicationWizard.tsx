@@ -45,6 +45,8 @@ import {
   savePublication,
   submitPublication,
   surveyReward,
+  AUDIENCES,
+  type Audience,
   type FormErrors,
   type Problem,
   type PublicationDetail,
@@ -54,7 +56,7 @@ import {
   type SaveOutput,
 } from './api'
 import { publicationPath, PUBLICATIONS_QUERY } from './paths'
-import { LabelledProblems, PublicationSummary, useDebounced, useRegionLabel, useRewardMethodLabel, useVersionOf } from './shared'
+import { LabelledProblems, PublicationSummary, useAudienceLabel, useDebounced, useRegionLabel, useRewardMethodLabel, useVersionOf } from './shared'
 import { TiersEditor } from './TiersEditor'
 
 export const STEP_COUNT = 3
@@ -108,6 +110,7 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
   const queryClient = useQueryClient()
   const id = useId()
   const regionLabel = useRegionLabel()
+  const audienceLabel = useAudienceLabel()
   const publicationId = detail?.publication.publicationId ?? null
   const [form, setForm] = useState<PublicationForm>(() => formOf(detail))
   const [step, setStep] = useState(Math.min(Math.max(initialStep, 0), STEP_COUNT - 1))
@@ -322,6 +325,30 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
           )}
         </Field>
       )}
+      <fieldset className="flex flex-col gap-2" data-testid="publication-audience"
+        aria-describedby={[`${id}-audience-hint`, problemOf('audience') ? `${id}-audience-error` : undefined]
+          .filter(Boolean).join(' ')}>
+        <legend className="text-sm font-medium">{t('publishing.field.audience')}</legend>
+        <p id={`${id}-audience-hint`} className="text-muted-foreground text-sm">{t('publishing.field.audienceHint')}</p>
+        <RadioGroup value={form.audience} disabled={locked} onValueChange={(value) => set('audience', value as Audience)}>
+          {AUDIENCES.map((audience) => (
+            <div key={audience} className="flex items-start gap-2">
+              <RadioGroupItem id={`${id}-audience-${audience}`} value={audience}
+                aria-describedby={`${id}-audience-${audience}-hint`} data-testid={`publication-audience-${audience}`} />
+              <div className="flex flex-col">
+                <Label htmlFor={`${id}-audience-${audience}`} className="font-normal">{audienceLabel(audience)}</Label>
+                <span id={`${id}-audience-${audience}-hint`} className="text-muted-foreground text-xs">
+                  {t(`publishing.audiences.${audience}`)}
+                </span>
+              </div>
+            </div>
+          ))}
+        </RadioGroup>
+        {problemOf('audience') && (
+          <p id={`${id}-audience-error`} className="text-destructive text-sm">{problemOf('audience')}</p>
+        )}
+      </fieldset>
+      {form.audience === 'PUBLIC' && (
       <fieldset className="flex flex-col gap-2" aria-describedby={[`${id}-regions-hint`,
         problemOf('regions') ? `${id}-regions-error` : undefined].filter(Boolean).join(' ')} data-testid="publication-regions">
         <legend className="text-sm font-medium">{t('publishing.field.regions')}</legend>
@@ -342,6 +369,7 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
           <p id={`${id}-regions-error`} className="text-destructive text-sm">{problemOf('regions')}</p>
         )}
       </fieldset>
+      )}
       <div className="grid gap-4 md:grid-cols-2">
         <Field id={`${id}-start`} label={t('publishing.field.startAt')} problem={problemOf('startAt')}
           hint={t('publishing.field.periodHint')}>
@@ -436,7 +464,8 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
         name: form.name,
         quizTitle,
         versionLabel: version?.label ?? detail?.publication.versionLabel ?? null,
-        regions: REGIONS.filter((region) => form.regions.includes(region)),
+        regions: form.audience === 'INVITED' ? [] : REGIONS.filter((region) => form.regions.includes(region)),
+        audience: form.audience,
         startAt: form.startAt,
         endAt: form.endAt,
         // Left empty, the time limit is the version's: the server wrote it with the last save.

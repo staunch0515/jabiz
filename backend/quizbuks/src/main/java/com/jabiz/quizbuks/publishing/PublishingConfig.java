@@ -131,7 +131,8 @@ public class PublishingConfig {
     DatasetDefinition qbPublicPublicationCardDataset() {
         return DatasetDefinition.define(QbPublications.PUBLIC_CARDS, d -> d
             .targetEntityType(QbPublications.CARD)
-            .scope(s -> s.fixed("status", PublicationStatus.LIVE))
+            // Q25: an invited publication has no public page; its link carries the invitee's sign-in.
+            .scope(s -> s.fixed("status", PublicationStatus.LIVE).fixed("audience", Audience.PUBLIC))
             .publicRead(p -> p.fields("publicationId", "sponsorId", "name", "quizTitle", "kind", "startAt", "endAt",
                 "timeLimitSec", "questionCount", "fullScore", "passScore", "maxReward", "rewardMethod",
                 "redeemDescription"))
@@ -217,6 +218,14 @@ public class PublishingConfig {
     }
 
     /** Q22: how a reward reaches the taker. */
+    @Bean
+    StaticDictionary qbPublicationAudienceDictionary() {
+        return StaticDictionary.define(Audience.DICTIONARY, d -> d
+            .item(Audience.PUBLIC, "en", "Everyone in the regions", "zh", "地区内的所有人", "ja", "地域内の全員")
+            .item(Audience.INVITED, "en", "Invited e-mail addresses only", "zh", "只许指定的邮箱",
+                "ja", "招待したメールアドレスのみ"));
+    }
+
     @Bean
     StaticDictionary qbRewardMethodDictionary() {
         return StaticDictionary.define(RewardMethod.DICTIONARY, d -> d

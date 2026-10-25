@@ -14,8 +14,8 @@ import {
   TableRow,
 } from '@jabiz/ui'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft, MailWarning, Play } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { ArrowLeft, MailCheck, MailWarning, Play } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
 import { playProblemText } from '../play/busy'
@@ -156,9 +156,20 @@ export function PublicationPage({ publicationId, country }: { publicationId: str
     enabled: !!publication.data })
 
   // The funnel's first view; a failure (a banned caller, a publication gone) changes nothing on the page.
+  const [viewed, setViewed] = useState(false)
   useEffect(() => {
-    if (emailVerified) recordView(publicationId).catch(() => undefined)
+    if (emailVerified) recordView(publicationId).then(() => setViewed(true)).catch(() => undefined)
   }, [publicationId, emailVerified])
+  // The view also claims an invitation addressed to the caller (Q25): a page the first read did not find is read once
+  // more after it, and an invited publication is shown to the invitee from then on.
+  const readAgain = useRef(false)
+  const { data: found, fetchStatus, refetch } = publication
+  useEffect(() => {
+    if (viewed && !readAgain.current && found === null && fetchStatus === 'idle') {
+      readAgain.current = true
+      void refetch()
+    }
+  }, [viewed, found, fetchStatus, refetch])
 
   if (publication.isPending) return <PageState kind="loading" />
   if (publication.isError) {
@@ -167,7 +178,8 @@ export function PublicationPage({ publicationId, country }: { publicationId: str
   }
   const p = publication.data
   if (!p) {
-    return <PageState kind="notFound" titleAs="h1" title={t('detail.notFound')} description={t('detail.notFoundHint')}
+    return <PageState kind="notFound" titleAs="h1" title={t('detail.notFound')}
+      description={`${t('detail.notFoundHint')} ${t('detail.invitedHint')}`}
       action={<Button asChild variant="outline"><Link to="/">{t('detail.backHome')}</Link></Button>}
       data-testid="detail-not-found" />
   }
@@ -191,6 +203,12 @@ export function PublicationPage({ publicationId, country }: { publicationId: str
           </p>
         )}
       </header>
+      {p.audience === 'INVITED' && (
+        <p className="text-muted-foreground flex items-center gap-2 text-sm" data-testid="detail-invited">
+          <MailCheck aria-hidden className="size-4" />
+          {t('detail.invitedOnly')}
+        </p>
+      )}
       <Materials materials={p.materials} />
       {p.intro && (
         <section aria-labelledby="intro-title" className="flex flex-col gap-2">

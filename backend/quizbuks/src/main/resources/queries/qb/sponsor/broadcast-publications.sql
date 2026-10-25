@@ -40,3 +40,5 @@ SELECT
 FROM {{QbPublicationCard}} c
 JOIN {{QbPublicationOwner}} own ON own.{{QbPublicationOwner.publicationId}} = c.{{QbPublicationCard.publicationId}}
 WHERE c.{{QbPublicationCard.status}} IN ('SCHEDULED', 'LIVE') AND :at < c.{{QbPublicationCard.endAt}}
+  -- Q25: an invited publication is reached from its mail only, never announced.
+  AND c.{{QbPublicationCard.audience}} = 'PUBLIC'
