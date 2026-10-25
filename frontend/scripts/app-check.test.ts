@@ -144,6 +144,19 @@ describe('app:check (decision D34 item 5)', () => {
     expect(checkApp(spa(alone, { pnpm: alone }), frontend)).toEqual([])
   })
 
+  it('asks a static site (none of the shared packages but the build tool) only for that tool (16zf-a)', () => {
+    const site = { vite: platform.shared.get('vite')!, typescript: '6.0.3' }
+    expect(checkApp(spa(site, { pnpm: site }), frontend)).toEqual([])
+    const stale = { vite: '7.0.0' }
+    expect(checkApp(spa(stale, { pnpm: stale }), frontend)).toEqual([
+      `vite: 7.0.0, the platform has ${platform.shared.get('vite')}`,
+    ])
+    // With React it is an application again, and every shared package is required.
+    const reactOnly = { react: platform.shared.get('react')! }
+    expect(checkApp(spa(reactOnly, { pnpm: reactOnly }), frontend).some((p) => p.startsWith('react-dom: not a dependency')))
+      .toBe(true)
+  })
+
   it('names what is missing', () => {
     const { react: _react, ...rest } = platformDeps(false)
     void _react
