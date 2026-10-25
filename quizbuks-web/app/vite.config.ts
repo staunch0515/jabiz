@@ -25,7 +25,7 @@ export default defineConfig({
         name: 'QuizBuks',
         shortName: 'QuizBuks',
         description: 'Answer quizzes, earn Kudos',
-        themeColor: '#0f172a',
+        themeColor: '#047857',
         backgroundColor: '#ffffff',
         icons: [
           { src: 'icon-192.png', sizes: '192x192' },

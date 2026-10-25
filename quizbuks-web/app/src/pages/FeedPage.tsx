@@ -30,6 +30,7 @@ import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
 import { playProblemText } from '../play/busy'
 import { LazyImage } from '../play/LazyImage'
+import { CoverPlaceholder, EmptyArt, QuizArt } from '../art/Illustrations'
 import { useStartAttempt } from '../play/useStartAttempt'
 import { VideoPlayer } from '../play/VideoPlayer'
 import { readCountries } from '../qb/api'
@@ -118,20 +119,30 @@ export function feedFilters(filters: FeedFilters): Filter[] {
   return result
 }
 
-/** One compact card (U-10: at least six on a phone's screen without scrolling). */
+/**
+ * One card of the cover grid (Q32; U-10: six on a phone's screen): the cover (a drawn placeholder without one) with
+ * the reward on it, the name, the sponsor and how many answered.
+ */
 function Card({ card }: { card: FeedCard }) {
   const { t } = useTranslation(APP)
   const sponsor = card.sponsorCompany ?? card.sponsorName
   return (
     <li>
       <Link to={`/p/${card.publicationId}`} data-testid="feed-card"
-        className="hover:bg-accent focus-visible:ring-ring/50 flex items-center gap-3 rounded-lg border p-2 outline-none focus-visible:ring-[3px]">
-        {card.cover
-          ? <LazyImage fileId={card.cover} variant="w320" alt="" className="size-16 shrink-0 rounded-md" />
-          : <span aria-hidden className="bg-muted size-16 shrink-0 rounded-md" />}
-        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span className="flex min-w-0 items-center gap-2">
-            <span className="truncate font-medium" data-testid="feed-card-name">{card.name}</span>
+        className="bg-card focus-visible:ring-ring/50 flex h-full flex-col overflow-hidden rounded-xl border shadow-sm outline-none transition-shadow hover:shadow-md focus-visible:ring-[3px]">
+        <span className="relative block">
+          {card.cover
+            ? <LazyImage fileId={card.cover} variant="w320" alt="" className="h-24 w-full" />
+            : <CoverPlaceholder seed={card.publicationId} className="h-24 w-full" />}
+          <span className="bg-primary text-primary-foreground absolute top-2 right-2 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold shadow-sm">
+            <Trophy aria-hidden className="size-3" />
+            {card.kind === 'SURVEY' ? t('feed.surveyReward', { amount: formatKudos(card.maxReward) })
+              : t('feed.upTo', { amount: formatKudos(card.maxReward) })}
+          </span>
+        </span>
+        <span className="flex min-w-0 flex-1 flex-col gap-1 p-2.5">
+          <span className="flex min-w-0 flex-wrap items-center gap-1.5">
+            <span className="line-clamp-2 text-sm leading-tight font-medium" data-testid="feed-card-name">{card.name}</span>
             {card.kind === 'SURVEY' && (
               <Badge variant="secondary" className="shrink-0" data-testid="feed-card-survey">{t('feed.survey')}</Badge>
             )}
@@ -139,22 +150,17 @@ function Card({ card }: { card: FeedCard }) {
           </span>
           {sponsor && (
             <span className="text-muted-foreground flex items-center gap-1.5 truncate text-xs">
-              {card.sponsorAvatar && (
-                <LazyImage fileId={card.sponsorAvatar} variant="w128" alt="" className="size-4 shrink-0 rounded-full" />
-              )}
+              {card.sponsorAvatar
+                ? <LazyImage fileId={card.sponsorAvatar} variant="w128" alt="" className="size-4 shrink-0 rounded-full" />
+                : <span aria-hidden className="bg-accent text-accent-foreground inline-flex size-4 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold">
+                  {sponsor.slice(0, 1).toUpperCase()}
+                </span>}
               <span className="truncate">{sponsor}</span>
             </span>
           )}
-          <span className="flex items-center gap-3 text-xs">
-            <span className="text-primary flex items-center gap-1 font-semibold">
-              <Trophy aria-hidden className="size-3.5" />
-              {card.kind === 'SURVEY' ? t('feed.surveyReward', { amount: formatKudos(card.maxReward) })
-                : t('feed.upTo', { amount: formatKudos(card.maxReward) })}
-            </span>
-            <span className="text-muted-foreground flex items-center gap-1">
-              <Users aria-hidden className="size-3.5" />
-              {t('feed.completions', { count: card.completions })}
-            </span>
+          <span className="text-muted-foreground mt-auto flex items-center gap-1 text-xs">
+            <Users aria-hidden className="size-3.5" />
+            {t('feed.completions', { count: card.completions })}
           </span>
         </span>
       </Link>
@@ -172,7 +178,7 @@ function VideoCard({ card, player }: { card: FeedCard; player: string }) {
   const start = useStartAttempt()
   const hint = `feed-video-hint-${card.publicationId}`
   return (
-    <li className="flex flex-col gap-2 rounded-lg border p-2" data-testid="feed-video-card">
+    <li className="bg-card col-span-2 flex flex-col gap-2 rounded-xl border p-2 shadow-sm" data-testid="feed-video-card">
       <VideoPlayer player={player} title={t('feed.videoTitle', { name: card.name })} />
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex min-w-0 flex-col gap-0.5">
@@ -327,7 +333,14 @@ export function FeedPage({ name, country }: { name: string; country: string | nu
 
   return (
     <section className="flex flex-col gap-4" aria-labelledby="home-title" data-testid="home">
-      <h1 id="home-title" className="text-xl font-semibold">{t('home.greeting', { name })}</h1>
+      <div className="from-qb-hero-from to-qb-hero-to text-qb-hero-foreground relative overflow-hidden rounded-2xl bg-linear-to-br p-4 shadow-sm"
+        data-testid="home-hero">
+        <div className="relative z-10 flex flex-col gap-1 pr-24">
+          <h1 id="home-title" className="text-xl font-semibold">{t('home.greeting', { name })}</h1>
+          <p className="text-qb-hero-muted text-sm">{t('home.tagline')}</p>
+        </div>
+        <QuizArt className="absolute -right-4 -bottom-6 h-32 w-40 opacity-95" />
+      </div>
       {openCash.length > 0 && (
         <Alert variant={openCash.some((r) => r.status === 'OVERDUE') ? 'warning' : 'default'} data-testid="home-cash">
           <HandCoins aria-hidden />
@@ -405,12 +418,15 @@ export function FeedPage({ name, country }: { name: string; country: string | nu
         <PageState kind="error" description={problemText(feed.error)}
           action={<Button variant="outline" onClick={() => void feed.refetch()}>{tQb('retry')}</Button>} />
       ) : cards.length === 0 ? (
-        <PageState kind="empty" title={t('home.title')}
-          description={q || filterList.length > 0 ? t('feed.noMatch') : t('home.empty')} data-testid="home-empty" />
+        <div className="flex flex-col items-center gap-2">
+          <EmptyArt className="h-32 w-40" />
+          <PageState kind="empty" title={t('home.title')} className="py-2"
+            description={q || filterList.length > 0 ? t('feed.noMatch') : t('home.empty')} data-testid="home-empty" />
+        </div>
       ) : (
         <>
           <h2 className="sr-only">{t('feed.listTitle')}</h2>
-          <ul className="flex flex-col gap-2" data-testid="feed-list">
+          <ul className="grid grid-cols-2 gap-3" data-testid="feed-list">
             {cards.map((card) => (card.video
               ? <VideoCard key={card.publicationId} card={card} player={card.video} />
               : <Card key={card.publicationId} card={card} />))}

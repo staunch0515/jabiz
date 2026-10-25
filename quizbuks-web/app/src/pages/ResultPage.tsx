@@ -21,6 +21,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Banknote, CircleCheck, CircleX, Clock, Gift, Hourglass, ListChecks, Trophy } from 'lucide-react'
 import { useId, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
+import { CelebrateArt } from '../art/Illustrations'
 import { APP } from '../messages'
 import { autoSubmitted, storedResult, storedStart } from '../play/storage'
 import { formatKudos } from '../qb/kudos'
@@ -380,7 +381,8 @@ export function ResultPage({ attemptId }: { attemptId: string }) {
           <p className="font-medium">{outcome.passed ? t('result.surveyDone') : t('result.surveyIncomplete')}</p>
         </div>
       ) : (
-      <div className="flex items-center gap-4 rounded-lg border p-4">
+      <div className={outcome.passed ? 'bg-accent flex items-center gap-4 rounded-xl border p-4' : 'flex items-center gap-4 rounded-xl border p-4'}>
+        {outcome.passed && <CelebrateArt className="h-20 w-24 shrink-0" />}
         <p className="flex flex-col">
           <span className="text-muted-foreground text-sm">{t('result.score')}</span>
           <span className="text-3xl font-bold tabular-nums" data-testid="result-score">

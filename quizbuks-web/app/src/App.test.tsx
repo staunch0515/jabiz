@@ -1,4 +1,5 @@
 import { changeLanguage, configureClient, session } from '@jabiz/client'
+import { expectAccessible } from '@jabiz/ui/testing'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -87,6 +88,7 @@ function server(me?: Me) {
 beforeAll(() => configureClient({ entry: 'app' }))
 beforeEach(() => {
   session.clear()
+  window.localStorage.clear()
   window.history.replaceState(null, '', '/')
   // The browser's hints for the country: Japanese in Japan.
   vi.spyOn(navigator, 'languages', 'get').mockReturnValue(['ja-JP', 'en'])
@@ -98,7 +100,36 @@ afterEach(async () => {
 })
 
 describe('a visitor', () => {
+  it('sees the introduction once, then the sign-in (Q32)', async () => {
+    server()
+    render(<App />)
+    const intro = await screen.findByTestId('intro')
+    expect(intro).toHaveAttribute('data-slide', 'answer')
+    await expectAccessible()
+    await userEvent.click(screen.getByTestId('intro-next'))
+    expect(screen.getByTestId('intro')).toHaveAttribute('data-slide', 'earn')
+    await userEvent.click(screen.getByRole('button', { name: 'Slide 3 of 3' }))
+    expect(screen.getByTestId('intro')).toHaveAttribute('data-slide', 'collect')
+    expect(screen.getByTestId('intro-next')).toHaveTextContent('Get started')
+    await userEvent.click(screen.getByTestId('intro-next'))
+    await waitFor(() => expect(window.location.pathname).toBe('/login'))
+    // Seen: the root leads straight to the sign-in from now on.
+    expect(window.localStorage.getItem('qb.intro.seen')).toBe('1')
+    window.history.replaceState(null, '', '/')
+    render(<App />)
+    await waitFor(() => expect(window.location.pathname).toBe('/login'))
+  })
+
+  it('skips the introduction to the sign-in', async () => {
+    server()
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('intro-skip'))
+    await waitFor(() => expect(window.location.pathname).toBe('/login'))
+    expect(window.localStorage.getItem('qb.intro.seen')).toBe('1')
+  })
+
   it('goes to the sign-in of the app\'s own entry, with sign-up and password reset', async () => {
+    window.localStorage.setItem('qb.intro.seen', '1')
     const { asked } = server()
     render(<App />)
     await waitFor(() => expect(window.location.pathname).toBe('/login'))
