@@ -68,6 +68,22 @@ class SpaConfigCheck implements PlatformCheck {
                     + "sign-in entry " + spa.entry() + " (jabiz.security.entries." + spa.entry() + ")"));
             }
         }
+        // A valid target nothing serves: every visit of the bare address would end in 404 (a warning: a static site
+        // or a reverse proxy may serve it).
+        String target = properties.rootRedirect();
+        if (target != null && properties.problems().isEmpty() && properties.spaFor(target).isEmpty()
+            && !target.equals("/")) {
+            problems.add(CheckProblem.warning(CATEGORY, "jabiz.web.root-redirect", "\"" + target + "\" is under "
+                + "none of the single-page applications served (jabiz.web.spa): make sure something answers it"));
+        }
+        for (int i = 0; i < properties.redirects().size(); i++) {
+            var moved = properties.redirects().get(i);
+            if (moved.to() != null && properties.problems().isEmpty() && properties.spaFor(moved.to()).isEmpty()) {
+                problems.add(CheckProblem.warning(CATEGORY, "jabiz.web.redirects[" + i + "].to", "\"" + moved.to()
+                    + "\" is under none of the single-page applications served (jabiz.web.spa): make sure something "
+                    + "answers it"));
+            }
+        }
         if (!declared.isEmpty()) {
             problems.addAll(differences(configured));
         }
