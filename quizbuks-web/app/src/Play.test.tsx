@@ -3,6 +3,7 @@ import { act, cleanup, render, screen, waitFor, within } from '@testing-library/
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
+import { placeholderIndex } from './art/Illustrations'
 import './messages'
 import { containsPattern, feedFilters, NO_FILTERS } from './pages/FeedPage'
 import { forgetAttempts, storeResult, storeStart } from './play/storage'
@@ -180,6 +181,31 @@ describe('the feed', () => {
     const feed = calls.find((c) => c.path === '/api/queries/qb.app.feed')!.body as { params: Record<string, unknown> }
     expect(feed.params).toMatchObject({ country: 'JP', q: null })
     expect(screen.getByTestId('nav-history')).toBeInTheDocument()
+  })
+
+  it('shows a cover grid with a placeholder pattern, the reward badge, the sponsor and the completions (Q32)', async () => {
+    server({ feed: [CARD, { ...CARD, publicationId: 'pub-2', name: 'Rivers', cover: 'file-1', sponsorAvatar: null }] })
+    render(<App />)
+    const cards = await screen.findAllByTestId('feed-card')
+    expect(screen.getByTestId('home-hero')).toHaveTextContent('Answer a quiz, earn Kudos and prizes.')
+    expect(screen.getByTestId('feed-list')).toHaveClass('grid-cols-2')
+    // No cover: a pattern chosen by the publication's id, decorative.
+    expect(within(cards[0]).getByTestId('feed-card-placeholder')).toHaveAttribute('aria-hidden', 'true')
+    expect(cards[0]).toHaveTextContent('100 Kudos')
+    expect(cards[0]).toHaveTextContent('Capitals Inc')
+    expect(within(cards[0]).getByTestId('feed-card-name')).toHaveTextContent('Capitals week')
+    // A cover: the image (loaded lazily), no placeholder.
+    expect(within(cards[1]).queryByTestId('feed-card-placeholder')).toBeNull()
+    expect(placeholderIndex('pub-1')).toBe(placeholderIndex('pub-1'))
+    expect(new Set(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].map(placeholderIndex)).size).toBeGreaterThan(1)
+  })
+
+  it('shows the empty state with its illustration when nothing matches', async () => {
+    server({ feed: [] })
+    render(<App />)
+    const empty = await screen.findByTestId('home-empty')
+    expect(empty).toBeInTheDocument()
+    expect(screen.queryByTestId('feed-list')).not.toBeInTheDocument()
   })
 
   it('searches by text and turns the filters into the template\'s conditions', async () => {

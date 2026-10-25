@@ -132,15 +132,15 @@ function Card({ card }: { card: FeedCard }) {
         className="bg-card focus-visible:ring-ring/50 flex h-full flex-col overflow-hidden rounded-xl border shadow-sm outline-none transition-shadow hover:shadow-md focus-visible:ring-[3px]">
         <span className="relative block">
           {card.cover
-            ? <LazyImage fileId={card.cover} variant="w320" alt="" className="h-24 w-full" />
-            : <CoverPlaceholder seed={card.publicationId} className="h-24 w-full" />}
+            ? <LazyImage fileId={card.cover} variant="w320" alt="" className="h-20 w-full" />
+            : <CoverPlaceholder seed={card.publicationId} className="h-20 w-full" data-testid="feed-card-placeholder" />}
           <span className="bg-primary text-primary-foreground absolute top-2 right-2 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold shadow-sm">
             <Trophy aria-hidden className="size-3" />
             {card.kind === 'SURVEY' ? t('feed.surveyReward', { amount: formatKudos(card.maxReward) })
               : t('feed.upTo', { amount: formatKudos(card.maxReward) })}
           </span>
         </span>
-        <span className="flex min-w-0 flex-1 flex-col gap-1 p-2.5">
+        <span className="flex min-w-0 flex-1 flex-col gap-0.5 p-2">
           <span className="flex min-w-0 flex-wrap items-center gap-1.5">
             <span className="line-clamp-2 text-sm leading-tight font-medium" data-testid="feed-card-name">{card.name}</span>
             {card.kind === 'SURVEY' && (
@@ -335,11 +335,12 @@ export function FeedPage({ name, country }: { name: string; country: string | nu
     <section className="flex flex-col gap-4" aria-labelledby="home-title" data-testid="home">
       <div className="from-qb-hero-from to-qb-hero-to text-qb-hero-foreground relative overflow-hidden rounded-2xl bg-linear-to-br p-4 shadow-sm"
         data-testid="home-hero">
-        <div className="relative z-10 flex flex-col gap-1 pr-24">
+        {/* The text column ends where the illustration begins (pr-32 ≥ its 128px), so words never sit on it. */}
+        <div className="relative z-10 flex flex-col gap-1 pr-32">
           <h1 id="home-title" className="text-xl font-semibold">{t('home.greeting', { name })}</h1>
           <p className="text-qb-hero-muted text-sm">{t('home.tagline')}</p>
         </div>
-        <QuizArt className="absolute -right-4 -bottom-6 h-32 w-40 opacity-95" />
+        <QuizArt className="absolute -right-3 -bottom-5 h-28 w-35 opacity-95" />
       </div>
       {openCash.length > 0 && (
         <Alert variant={openCash.some((r) => r.status === 'OVERDUE') ? 'warning' : 'default'} data-testid="home-cash">

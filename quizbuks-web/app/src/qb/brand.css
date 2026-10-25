@@ -15,7 +15,12 @@
   --sidebar-primary: #047857;
   --sidebar-primary-foreground: #ffffff;
   --sidebar-ring: #047857;
+  --sidebar-accent: #ecfdf5;
+  --sidebar-accent-foreground: #064e3b;
+  /* The first chart series is the brand green; the second the coin amber, so two series stay apart (also for
+     colour-vision deficiency, where the platform's two greens would not). */
   --chart-1: #047857;
+  --chart-2: #fbbf24;
   /* The hero band: a gradient dark enough for white text (≥ 5.3:1 at its lightest). */
   --qb-hero-from: #065f46;
   --qb-hero-to: #047857;
@@ -34,12 +39,16 @@
   --primary: #6ee7b7;
   --primary-foreground: #052e16;
   --ring: #6ee7b7;
-  --accent: #10291f;
+  /* Lighter than the platform's dark accent so a ghost button's hover (accent at 50%) stays visible. */
+  --accent: #123b2d;
   --accent-foreground: #d1fae5;
   --sidebar-primary: #6ee7b7;
   --sidebar-primary-foreground: #052e16;
   --sidebar-ring: #6ee7b7;
+  --sidebar-accent: #123b2d;
+  --sidebar-accent-foreground: #d1fae5;
   --chart-1: #6ee7b7;
+  --chart-2: #b45309;
   --qb-hero-from: #064e3b;
   --qb-hero-to: #065f46;
   --qb-hero-foreground: #ffffff;
@@ -48,7 +57,7 @@
   --qb-leaf-deep: #10b981;
   --qb-coin: #fbbf24;
   --qb-coin-deep: #f59e0b;
-  --qb-sky: #10291f;
+  --qb-sky: #123b2d;
   --qb-ink: #d1fae5;
 }
 

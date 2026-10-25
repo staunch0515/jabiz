@@ -60,22 +60,26 @@ export function IntroPage() {
             {t('intro.skip')}
           </Button>
         </div>
-        <div className="mx-auto max-w-md px-6 pt-2 pb-8" aria-live="polite">
+        <div className="mx-auto max-w-md px-6 pt-2 pb-8">
           {slide.art}
         </div>
       </div>
       <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-5 px-6 py-6">
-        <h1 className="text-2xl font-semibold tracking-tight" data-testid="intro-title">{t(`intro.${slide.key}.title`)}</h1>
-        <p className="text-muted-foreground">{t(`intro.${slide.key}.text`)}</p>
+        {/* The live region holds the words that change with the slide, so a screen reader announces them. */}
+        <div className="flex flex-col gap-5" aria-live="polite">
+          <h1 className="text-2xl font-semibold tracking-tight" data-testid="intro-title">{t(`intro.${slide.key}.title`)}</h1>
+          <p className="text-muted-foreground">{t(`intro.${slide.key}.text`)}</p>
+        </div>
         <ol className="flex items-center gap-2" aria-label={t('intro.steps')}>
           {SLIDES.map((s, i) => (
             <li key={s.key}>
               {/* A 24px touch target (WCAG 2.5.8) around a small dot. */}
               <button type="button" aria-label={t('intro.step', { n: i + 1, total: SLIDES.length })}
                 aria-current={i === index ? 'step' : undefined} onClick={() => setIndex(i)}
-                className="flex h-6 min-w-6 items-center justify-center rounded-full">
+                className="focus-visible:ring-ring/50 flex h-6 min-w-6 items-center justify-center rounded-full outline-none focus-visible:ring-[3px]">
+                {/* The inactive dot is muted-foreground, not border: 3:1 against the page (WCAG 1.4.11). */}
                 <span aria-hidden className={cn('block h-2 rounded-full transition-all',
-                  i === index ? 'bg-primary w-8' : 'bg-border w-2')} />
+                  i === index ? 'bg-primary w-8' : 'bg-muted-foreground w-2')} />
               </button>
             </li>
           ))}
@@ -87,10 +91,9 @@ export function IntroPage() {
           </Button>
           <p className="text-muted-foreground text-center text-sm">
             {t('intro.haveAccount')}{' '}
-            <button type="button" className="text-primary font-medium underline underline-offset-4"
-              data-testid="intro-sign-in" onClick={done}>
+            <Button variant="link" className="h-auto p-0" data-testid="intro-sign-in" onClick={done}>
               {t('public.signIn')}
-            </button>
+            </Button>
           </p>
         </div>
       </main>

@@ -460,7 +460,7 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 - 测试系统的标志（平台 16zd，2026-10-24）：三个前端的每一页顶部都显示 `@jabiz/ui` 的 `EnvironmentBanner`（警示色通栏："STAGING · 测试环境，不是正式版"，标题前加 `[STAGING]`），
   正式环境的 `.env` 以 `JABIZ_WEB_ENVIRONMENT=production` 关掉它（`deploy/quizbuks/DEPLOY.md`、`operations.md` §1.1、上线检查清单）。商家后台与管理后台经 `AppShell` / `AuthFrame` 自动得到，
   App 的两个外框（登录后的页头与公开页的页头）自己放置；登录、注册等页面经平台积木自动得到。
-- 宽度 ≤ 430px 设计，底部导航（QP1：首页、账户；QP2 加历史，QP4 加钱包，Q7 加收件箱，Q-8）；卡片紧凑，一屏 ≥ 6 张（U-10）。
+- 宽度 ≤ 430px 设计，底部导航（QP1：首页、账户；QP2 加历史，QP4 加钱包，Q7 加收件箱，Q-8）；卡片紧凑：首页在问候横幅之下以两列封面网格列出，390×844 一屏 ≥ 4 张完整可见（U-10；Q32 之前是单列 6 张，横幅与封面换来可见张数）。
 - 登录、注册、邮件链接（`/auth/…`）、找回密码、Google 登录的回调（`/login/oidc`）、step-up、账户页的改密码、两步验证、会话与外部账号都用平台的积木（G12）；
   注册的第二步是 `/welcome`（资料，国家按浏览器的语言区域与时区预填，Q2-9）。
 - 页面分阶段：QP1 账户与欢迎页，QP2 首页、详情、答题、结果、历史，QP4 钱包与开通收款（`plans/QP-pages.md`）。

@@ -343,6 +343,8 @@ function Routes() {
     return frame(<SignInForm {...navigation} brand={brand} returnTo={afterSignIn} initialStep={pendingStep}
       onSignedIn={(to) => {
         pendingStep = undefined
+        // Someone who signed in knows the app: no introduction when the session later expires (Q32).
+        rememberSeen()
         navigate(to, { replace: true })
       }} passwordResetPath="/password-reset" signUpPath="/signup" />)
   }

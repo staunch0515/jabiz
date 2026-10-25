@@ -1,6 +1,6 @@
 import { changeLanguage, configureClient, session } from '@jabiz/client'
 import { expectAccessible } from '@jabiz/ui/testing'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
@@ -115,6 +115,7 @@ describe('a visitor', () => {
     await waitFor(() => expect(window.location.pathname).toBe('/login'))
     // Seen: the root leads straight to the sign-in from now on.
     expect(window.localStorage.getItem('qb.intro.seen')).toBe('1')
+    cleanup()
     window.history.replaceState(null, '', '/')
     render(<App />)
     await waitFor(() => expect(window.location.pathname).toBe('/login'))
