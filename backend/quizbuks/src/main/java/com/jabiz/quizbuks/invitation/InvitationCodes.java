@@ -21,8 +21,11 @@ public final class InvitationCodes {
     public static final String EMAIL = "QB_INVITATION_EMAIL";
     /** The publication is not live, so its invitations cannot be sent. */
     public static final String NOT_OPEN = "QB_INVITATION_NOT_OPEN";
+    /** The sponsor has no verified mail server of their own (Q29): invitations leave through it only. */
+    public static final String NO_MAIL_SERVER = "QB_INVITATION_NO_MAIL_SERVER";
 
-    public static final List<String> ALL = List.of(NOT_INVITED, AUDIENCE, STATE, LIMIT, QUOTA, NONE, EMAIL, NOT_OPEN);
+    public static final List<String> ALL = List.of(NOT_INVITED, AUDIENCE, STATE, LIMIT, QUOTA, NONE, EMAIL, NOT_OPEN,
+        NO_MAIL_SERVER);
 
     private InvitationCodes() {}
 }

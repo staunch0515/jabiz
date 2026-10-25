@@ -6,6 +6,7 @@ import {
   expectAccessible,
   linkIn,
   mailTo,
+  MERCHANT_MAIL,
   prepareQuizbuks,
   run,
   signIn,
@@ -42,6 +43,11 @@ async function invitedPublication(request: APIRequestContext) {
       { fromScore: 1, toScore: 1, reward: Math.min(sponsor.balance, 100) }],
   })
   const publicationId = saved.publicationId as string
+  // Invitations leave through the sponsor's own mail server (Q29): the tests' Mailpit with STARTTLS and any login.
+  const server = await run(request, sponsor.token, 'QB_MAIL_SERVER_SET', { host: 'localhost',
+    port: MERCHANT_MAIL.smtpPort, tls: 'STARTTLS', username: 'sora', password: 'sora-mail-password-1',
+    fromAddress: 'sora@example.com', fromName: 'Sora Co' })
+  expect(server.verified, `the sponsor's mail server: ${server.error}`).toBe(true)
   const submitted = await run(request, sponsor.token, 'QB_PUBLICATION_SUBMIT', { publicationId })
   if (submitted.approval === 'PENDING') {
     await run(request, await adminToken(request), 'APPROVAL_DECIDE', { requestId: submitted.approvalRequestId,
@@ -52,12 +58,15 @@ async function invitedPublication(request: APIRequestContext) {
   return { sponsor, publicationId, name }
 }
 
-/** The invitation mail: the job sends queued mail every minute, so this waits longer than one mail usually takes. */
+/**
+ * The invitation mail, at the sponsor's own mail server (Q29): the job sends queued mail every minute, so this waits
+ * longer than one mail usually takes.
+ */
 async function invitationMail(request: APIRequestContext, to: string) {
   let last: unknown
   for (let attempt = 0; attempt < 4; attempt++) {
     try {
-      return await mailTo(request, to, /invites you/i)
+      return await mailTo(request, to, /invites you/i, MERCHANT_MAIL.api)
     } catch (error) {
       last = error
     }
@@ -104,6 +113,10 @@ test('an invited address answers through its mailed link; nobody else sees the p
   // The invitee opens the mailed link: signed in with the address, back on the publication, able to start.
   const mail = await invitationMail(request, invitee)
   expect(mail.subject).toContain('Invited capitals')
+  // In the sponsor's name: the mail came from their server, never from the platform's.
+  expect(mail.subject).toContain('Sora Co')
+  await expect(request.get(`${process.env.E2E_MAILPIT_URL ?? 'http://localhost:8025'}/api/v1/search`,
+    { params: { query: `to:"${invitee}"` } }).then((r) => r.json())).resolves.toMatchObject({ messages: [] })
   const link = linkIn(mail.text, '/auth/email-link')
   expect(link.searchParams.get('to')).toBe(`/taker/p/${publicationId}`)
   await page.context().clearCookies()

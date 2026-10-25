@@ -152,6 +152,7 @@ jobs:
           export JABIZ_JWT_SECRET=$(openssl rand -base64 48)
           export JABIZ_INTEGRITY_KEY=$(openssl rand -base64 48)
           export JABIZ_MFA_KEY=$(openssl rand -base64 48)
+          export JABIZ_SEAL_KEY=$(openssl rand -base64 48)
           # Stripe (Q6a): startup refuses a missing webhook secret or API key; a test-mode key passes the mode check.
           export STRIPE_WEBHOOK_SECRET=whsec_$(openssl rand -hex 24)
           export STRIPE_CONNECT_WEBHOOK_SECRET=whsec_$(openssl rand -hex 24)
@@ -237,6 +238,9 @@ jobs:
       E2E_ADMIN_PASSWORD: e2e-admin-password
       E2E_BASE_URL: http://localhost:8080
       E2E_MAILPIT_URL: http://localhost:8025
+      # The sponsors' mail server of the tests (Q29): its SMTP port for the console's form, its API for the mail.
+      E2E_MERCHANT_SMTP_PORT: '1026'
+      E2E_MERCHANT_MAILPIT_URL: http://localhost:8026
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-java@v5
@@ -251,6 +255,21 @@ jobs:
         working-directory: backend
       # Japanese and Chinese in the PDFs (receipts, reports; Q9d): the fonts the image installs (deploy/quizbuks/Dockerfile).
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends fonts-ipafont-gothic fonts-droid-fallback
+      # The sponsors' own mail server (Q29): a second Mailpit that offers STARTTLS (a throwaway certificate) and takes
+      # any login, as a merchant's SMTP server would; the application trusts a server on this machine only
+      # (JABIZ_MAIL_SENDERS_TRUST_ALL_FOR_TESTS, platform decision D56 item 5). A step, not a service: a service
+      # starts before the certificate can be made.
+      - name: Start the sponsors' mail server
+        run: |
+          mkdir -p "$RUNNER_TEMP/merchant-mail"
+          openssl req -x509 -newkey rsa:2048 -nodes -days 2 -subj /CN=localhost \
+            -keyout "$RUNNER_TEMP/merchant-mail/key.pem" -out "$RUNNER_TEMP/merchant-mail/cert.pem"
+          chmod 644 "$RUNNER_TEMP/merchant-mail/key.pem" "$RUNNER_TEMP/merchant-mail/cert.pem"
+          docker run -d --name merchant-mail -p 1026:1025 -p 8026:8025 -v "$RUNNER_TEMP/merchant-mail:/certs:ro" \
+            -e MP_SMTP_TLS_CERT=/certs/cert.pem -e MP_SMTP_TLS_KEY=/certs/key.pem -e MP_SMTP_AUTH_ACCEPT_ANY=1 \
+            axllent/mailpit:v1.27.10
+          for i in $(seq 1 30); do curl -sf localhost:8026/api/v1/info && exit 0; sleep 1; done
+          docker logs merchant-mail; exit 1
       - name: Start the Stripe stub and the application
         working-directory: backend
         run: |
@@ -258,6 +277,7 @@ jobs:
           export JABIZ_JWT_SECRET=$(openssl rand -base64 48)
           export JABIZ_INTEGRITY_KEY=$(openssl rand -base64 48)
           export JABIZ_MFA_KEY=$(openssl rand -base64 48)
+          export JABIZ_SEAL_KEY=$(openssl rand -base64 48)
           export STRIPE_WEBHOOK_SECRET=whsec_$(openssl rand -hex 24)
           export STRIPE_CONNECT_WEBHOOK_SECRET=whsec_$(openssl rand -hex 24)
           export STRIPE_API_KEY=sk_test_e2e_throwaway
@@ -307,6 +327,8 @@ jobs:
           JABIZ_MAIL_BASE_URL: http://localhost:8080
           SPRING_MAIL_HOST: localhost
           SPRING_MAIL_PORT: '1025'
+          # The sponsors' mail servers of the tests are on this machine, with a throwaway certificate (Q29).
+          JABIZ_MAIL_SENDERS_TRUST_ALL_FOR_TESTS: 'true'
           # Stripe is the stub on this machine (PayoutSettings and CheckoutRequest accept localhost).
           QB_STRIPE_API_URL: http://localhost:8093
           QB_STRIPE_API_HOSTS: localhost

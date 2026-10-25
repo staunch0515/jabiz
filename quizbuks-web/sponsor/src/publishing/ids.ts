@@ -11,6 +11,9 @@ export const PUBLISHING_PROCESS = {
   invitationAdd: 'QB_INVITATION_ADD',
   invitationRemove: 'QB_INVITATION_REMOVE',
   invitationSend: 'QB_INVITATION_SEND',
+  /** The sponsor's own mail server, which the invitations leave through (Q29). */
+  mailServerSet: 'QB_MAIL_SERVER_SET',
+  mailServerRemove: 'QB_MAIL_SERVER_REMOVE',
   /** The sponsor says they handed the taker a cash reward (Q22). */
   cashMarkPaid: 'QB_CASH_REWARD_MARK_PAID',
   /** The codes takers scan to collect a prize, and the sponsor's answer to a claim from the printed one (Q22b). */
@@ -37,6 +40,8 @@ export const PUBLISHING_TEMPLATE = {
   invitationSummary: 'qb.sponsor.invitation-summary',
   /** The methods the sponsor may publish with now and the highest reward per attempt (Q28). */
   rewardMethods: 'qb.sponsor.reward-methods',
+  /** The sponsor's own mail server as the console shows it, never its password (Q29). */
+  mailServer: 'qb.sponsor.mail-server',
 } as const
 
 /** The sponsor's own rows of the publishing entities (read only; writing is the processes'). */
