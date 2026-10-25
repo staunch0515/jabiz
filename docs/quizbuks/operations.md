@@ -407,3 +407,9 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 - **邮件发不出**：`jabiz.mail` 的失败、发件服务商的退信；用户可在登录页重新请求验证邮件。
 - **启动失败**：日志中的 `Platform check failed` 后列出全部问题（`类别 | 定位 | 描述`），逐项修正环境；`QUIZBUKS` 类别是本应用的检查（§4）。
 - **证书、域名更换**：同时改 `JABIZ_MAIL_BASE_URL`、`QB_SPONSOR_LINK`、`QB_APP_LINK`、`QB_OIDC_REDIRECT_APP`（与 Google 控制台）与两个 Stripe 端点的地址。
+### 7.10 招商网站（Q31）
+
+`/biz/` 是静态站点（`quizbuks-web/biz`），随 jar 一起构建与发布，没有后台数据。要改文案改 `src/content/{en,zh,ja}.mjs`（三种语言结构必须一致，`pnpm test` 检查）；
+首页的"试答"区在 `src/content/try-quizzes.json` 里填每种语言的分享链接（`https://quizbuks.com/taker/p/<发布>`）与二维码图片（放到 `public/`，填相对路径），为空即显示"即将推出"。
+价格页的数字是推广期估价，改动前先在 `docs/quizbuks/plans/Q31-biz-site.md` 记下新值。裸域名 302 到 `/biz/`；中文与日文在 `/biz/zh/…`、`/biz/ja/…`，首次访问按浏览器语言转向（`localStorage` 记住切换）。
+

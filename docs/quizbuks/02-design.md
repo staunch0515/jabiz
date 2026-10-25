@@ -511,7 +511,7 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 | 地址 | 内容 |
 |---|---|
 | `/` | 302 到 `/biz/`（`jabiz.web.root-redirect`，平台 16zf-a；查询串保留） |
-| `/biz/`、`/biz/zh.html`、`/biz/ja.html` | 招商网站（`quizbuks-web/biz`，静态页面，三语 `hreflang` 互指） |
+| `/biz/<页>/`、`/biz/zh/<页>/`、`/biz/ja/<页>/` | 招商网站（`quizbuks-web/biz`，Q31：6 页 × 3 语言的静态页面，`scripts/build.mjs` 渲染，`hreflang` 互指；没有入口的站点每个目录一页，平台 16zf-b；按浏览器语言转向，记住切换） |
 | `/taker/` | 答题人 PWA（入口 `app`，`app-path: /taker/`；manifest 与 Service Worker 在其下） |
 | `/sponsor/` | 商家后台（入口 `sponsor`） |
 | `/admin/` | 管理后台（入口 `admin`） |
