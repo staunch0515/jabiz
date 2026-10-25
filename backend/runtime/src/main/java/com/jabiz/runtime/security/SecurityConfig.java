@@ -9,6 +9,8 @@ import com.jabiz.runtime.entity.EntityDefinitionRegistry;
 import com.jabiz.runtime.storage.StorageAdapterRegistry;
 import com.jabiz.security.LoginAttemptPolicy;
 import com.jabiz.security.MfaSecretCipher;
+import com.jabiz.security.SealedSecrets;
+import com.jabiz.runtime.security.secret.SecretSealer;
 import com.jabiz.runtime.mail.MailUnsubscribeController;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -183,6 +185,21 @@ public class SecurityConfig {
     MfaSecretCipher mfaSecretCipher(Environment environment, @Value("${jabiz.security.mfa.key:}") String key) {
         return new MfaSecretCipher(key(key, "jabiz.security.mfa.key", "JABIZ_MFA_KEY",
             MfaSecretCipher.MIN_KEY_BYTES, environment.acceptsProfiles(Profiles.of("dev"))));
+    }
+
+    /**
+     * Seals the secrets an application stores (decision D56). The key comes from {@code JABIZ_SEAL_KEY}; without one
+     * the sealer is unusable (an application that stores no secret needs none; {@code MailChecks} refuses a
+     * {@code MailSenderSource} without it), except in the dev profile, which makes one up.
+     */
+    @Bean
+    SecretSealer secretSealer(Environment environment, @Value("${jabiz.security.seal.key:}") String key) {
+        boolean development = environment.acceptsProfiles(Profiles.of("dev"));
+        if ((key == null || key.isBlank()) && !development) {
+            return new SecretSealer(null);
+        }
+        return new SecretSealer(new SealedSecrets(key(key, "jabiz.security.seal.key", "JABIZ_SEAL_KEY",
+            SealedSecrets.MIN_KEY_BYTES, development)));
     }
 
     @Bean

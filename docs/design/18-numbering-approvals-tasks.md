@@ -396,6 +396,24 @@ HTML 部分转义全部文本与正文中的原始 HTML，纯文本部分为原�
 **查询**：平台实体 `MailMessage`（`sys_mail_message`，`mail.read`，`processOnlyWrites()`，经变更集写入并审计）与 `MailAttempt`
 （`sys_mail_attempt`，每次尝试一条；最新一条即消息的状态；数据视图 `readOnly`）。尝试与令牌是投递日志，由平台直接插入，不进审计（21 §1），靠封存防篡改。实体不能连接其他表，所以"最近一次尝试的结果"是 `MailAttempt` 中按 `messageId` 筛选的最新一行；场景回放把两者列入快照即可看到。
 
+**指定发件服务器**（16zg，决策 D56）：应用的邮件可以经应用自己登记的 SMTP 服务器发出（商家自己的服务器：邀请以商家的名义、从商家的地址寄出），而不是平台的服务器。
+
+- 设置是核心的 `MailSenderSettings`（主机、端口、TLS 方式 `SMTPS` / `STARTTLS`、用户名、**密封的**密码、发件地址与名称），由应用自己的实体保存；平台不认识那个实体，只经应用声明的一个
+  `MailSenderSource` Bean（`MailSenderSource.of(实体, 键字段, 属性 -> Optional<MailSenderSettings>)`，同步、纯函数）把发件键换成设置：投递按键字段读该实体的最新版本
+  （以文本比较；时态实体取最新版本，已删除的视为不存在），把各字段按名交给它；返回空即"不可用"（如尚未验证）。只能声明一个（启动检查 `MAIL`）。
+- 密码只以密封形式保存：核心 `SealedSecrets`（AES-256-GCM，附加数据为该行的键，密钥 `jabiz.security.seal.key` / 环境变量 `JABIZ_SEAL_KEY`，Base64 ≥ 32 字节，与 `JABIZ_MFA_KEY` 各自按标签导出；
+  存放格式 `s1:<密钥标识>:<IV>:<密文>`），运行时经 Bean `SecretSealer` 与流程步骤 `SealSecret.of(ctx -> 明文, ctx -> 行的键, 目标键)`（阻塞步骤，取随机 IV）密封，应用把密封值写进自己的实体；
+  投递在 `boundedElastic` 上打开。没有密钥时 `SecretSealer` 不可用（不存秘密的应用不需要），声明了 `MailSenderSource` 而没有密钥是启动错误；dev 随机生成。
+- 发送：`SendMail.via(ctx -> 发件键).of(模板, 收件人, 参数)` / `.when(条件, …)`；键随消息记在 `sys_mail_message.sender_key`（V45）；空白的键为 422 `MAIL_SENDER_MISSING`。
+  启动检查：带 `via` 的步骤要求有 `MailSenderSource`。
+- 投递（`MAIL_SEND`）：有发件键的消息经 `MailSenders`（运行时）为这一次发送建一个 `JavaMailSenderImpl`：平台的超时（`jabiz.mail.timeout`）、要求认证、TLS（`SMTPS`，或 `STARTTLS` 且必须成功）、
+  按主机名校验服务器证书；发件地址与名称来自设置。平台拒绝的设置（`MailSenderSettings.problems`：主机不是公开的域名（本机、`.local` / `.internal` 等、IP），端口不在 25 / 465 / 587 / 2525，
+  没有 TLS、用户名、密码或发件地址）、没有来源、键找不到、不可用、密码打不开、服务器拒绝——都作为该次尝试的 `FAILED` 记下（服务器的回答原文，截断 2000），**绝不改经平台的服务器发出**；
+  Outbox 照常重试。配额与限流仍是应用的事（平台不计发件数）。
+- `jabiz.mail.senders.trust-all-for-tests=true` 只给测试：只对本机（`localhost`、回环地址）的服务器接受任何端口与证书，其他主机照常检查（误开在生产也无害于商家服务器的校验）；非 dev 时启动告警。应用要"保存即发测试邮件"时，在 `BlockingStep` 中调用 `MailSenders.send(设置, 密码明文, MailMessage)`。
+- 示范：`backend/app` 的测试夹具 `ItMailFixtures`（实体 `ItMailServer`、流程 `IT_MAIL_SERVER_SET` 用 `SealSecret`、模板 `it.via` 经 `SendMail.via`），`MailIT` 以第二个本地服务器（SMTPS、要登录）验证：
+  邮件只到应用的服务器、以其名义；密码错、键不存在、未验证、只有明文的服务器都是 `FAILED` 而平台的服务器收不到；服务器改正后 Outbox 的重试经它发出。
+
 **启动检查 `MAIL`**（`com.jabiz.runtime.mail.MailChecks`，含 §5.4 的检查）：模板名唯一；每种语言都有标题与正文（NOTIFICATION 缺显示名 `mail.<名>.name` 为告警，16s）；模板声明的入口须为可用入口（16s）；占位符与声明一致（未声明的占位符、未使用的参数或令牌、
 NOTIFICATION 缺 `{unsubscribeUrl}`；`{entryUrl}` 而模板没有参数 `entry`）；`{entryUrl.<入口>}` 的入口不是可用的登录入口；开启邮件时需 `jabiz.mail.from`、
 邮件服务器，以及有模板链接到应用（`{baseUrl}`、`{entryUrl…}`、NOTIFICATION）时的 `jabiz.mail.base-url`。
