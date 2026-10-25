@@ -40,6 +40,8 @@ export const TEMPLATE = {
   cashRewards: 'qb.admin.cash-rewards',
   /** Every prize to collect at a sponsor's place (Q22b). */
   redemptions: 'qb.admin.redemptions',
+  /** Every digital prize (Q33): codes, vouchers and links, with the disputes to decide (`qb.admin.publication.read`). */
+  digitalPrizes: 'qb.admin.digital-prizes',
   /** Every sponsor's quizzes and a quiz's versions, without the versions' content (Q17; `qb.admin.quiz.read`). */
   quizzes: 'qb.admin.quizzes',
   quizVersions: 'qb.admin.quiz-versions',
@@ -144,6 +146,8 @@ export const PROCESS = {
   cashResolve: 'QB_CASH_REWARD_RESOLVE',
   /** An administrator voids a prize not yet collected (Q22b). */
   redemptionVoid: 'QB_REDEMPTION_VOID',
+  /** Decides a disputed digital prize, or voids one still open (Q33; `qb.digital.resolve`). */
+  digitalResolve: 'QB_DIGITAL_PRIZE_RESOLVE',
 } as const
 
 /** The platform's controlled changes (four eyes, decision D40): the mapping changes only through them. */
@@ -193,6 +197,9 @@ export const DICTIONARY = {
   cashStatus: 'urn:jabiz:dict:quizbuks:cash-reward-status',
   cashResolution: 'urn:jabiz:dict:quizbuks:cash-reward-resolution',
   redemptionStatus: 'urn:jabiz:dict:quizbuks:redemption-status',
+  digitalStatus: 'urn:jabiz:dict:quizbuks:digital-prize-status',
+  digitalResolution: 'urn:jabiz:dict:quizbuks:digital-prize-resolution',
+  digitalDelivery: 'urn:jabiz:dict:quizbuks:digital-delivery',
   topUpManualKind: 'urn:jabiz:dict:quizbuks:topup-manual-kind',
   transferStatus: 'urn:jabiz:dict:quizbuks:transfer-status',
   topUpStatus: 'urn:jabiz:dict:quizbuks:topup-status',
@@ -242,6 +249,8 @@ export const PERMISSION = {
   rewardMethods: 'qb.admin.reward-methods',
   cashResolve: 'qb.cash.resolve',
   redemptionVoid: 'qb.redemption.void',
+  /** Q33: deciding disputed digital prizes and voiding open ones. */
+  digitalResolve: 'qb.digital.resolve',
   /** Bank withdrawals (Q13b): paying them, and the account number in plain text to do so. */
   withdrawalPay: 'qb.withdrawal.pay',
   bankReveal: 'qb.payout.bank.reveal',
@@ -296,6 +305,8 @@ export const PATH = {
   /** Every cash reward (Q22): disputes to decide, late sponsors. */
   cashRewards: '/qb/cash-rewards',
   redemptions: '/qb/redemptions',
+  /** Every digital prize (Q33): disputes to decide, late sponsors. */
+  digitalPrizes: '/qb/digital-prizes',
   publicationsWhere: (filter: Record<string, string>) => `/qb/publications?${new URLSearchParams(filter)}`,
   finance: '/qb/finance',
   transfers: '/qb/finance/transfers',

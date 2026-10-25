@@ -4,11 +4,13 @@ import { DATASET, PROCESS, TEMPLATE } from './ids'
 /*
  * The reward methods and cash rewards (docs/quizbuks/plans/Q22-reward-methods.md): the setting of a sponsor's
  * methods, read from its dataset and written by `QB_SPONSOR_REWARD_METHODS_SET`; the cash rewards of every sponsor from
- * `qb.admin.cash-rewards`, a disputed one decided by `QB_CASH_REWARD_RESOLVE`.
+ * `qb.admin.cash-rewards`, a disputed one decided by `QB_CASH_REWARD_RESOLVE`. Digital prizes (Q33) follow the same
+ * shape: `qb.admin.digital-prizes` and `QB_DIGITAL_PRIZE_RESOLVE`.
  */
 
-export type RewardMethod = 'PLATFORM' | 'SPONSOR_CASH' | 'OFFLINE_REDEEM'
-export const REWARD_METHODS: readonly RewardMethod[] = ['PLATFORM', 'SPONSOR_CASH', 'OFFLINE_REDEEM']
+export type RewardMethod = 'PLATFORM' | 'SPONSOR_CASH' | 'OFFLINE_REDEEM' | 'DIGITAL_PRIZE'
+/** In the order the setting's `methods` text is written on the server. */
+export const REWARD_METHODS: readonly RewardMethod[] = ['PLATFORM', 'SPONSOR_CASH', 'OFFLINE_REDEEM', 'DIGITAL_PRIZE']
 
 export type CashStatus = 'DUE' | 'MARKED_PAID' | 'CONFIRMED' | 'DISPUTED' | 'OVERDUE' | 'VOID'
 export const CASH_STATUSES: readonly CashStatus[] = ['DUE', 'MARKED_PAID', 'CONFIRMED', 'DISPUTED', 'OVERDUE', 'VOID']
@@ -208,3 +210,91 @@ export async function readRedemptions(status: string | null, q: string, offset: 
 export const voidRedemption = (redemptionId: string, note: string) =>
   runProcess<{ redemptionId: string; status: RedemptionStatus; revision: number }>(PROCESS.redemptionVoid,
     { redemptionId, note: note.trim() || null })
+
+// ---- digital prizes: codes, vouchers and links (Q33) --------------------------------------------------------------
+
+export type DigitalStatus = 'DUE' | 'DELIVERED' | 'CONFIRMED' | 'DISPUTED' | 'OVERDUE' | 'VOID'
+export const DIGITAL_STATUSES: readonly DigitalStatus[] = ['DUE', 'DELIVERED', 'CONFIRMED', 'DISPUTED', 'OVERDUE', 'VOID']
+
+export type DigitalResolution = 'DELIVERED' | 'UNDELIVERED' | 'VOID'
+export const DIGITAL_RESOLUTIONS: readonly DigitalResolution[] = ['DELIVERED', 'UNDELIVERED', 'VOID']
+
+/** How the winner gets the content: at once from the sponsor's pool or a shared code, or sent by the sponsor by hand. */
+export type DigitalDelivery = 'POOL' | 'SHARED' | 'SPONSOR_SENT'
+
+/** A row of `qb.admin.digital-prizes`; the content itself is the winner's alone and never in it. */
+export interface DigitalPrize {
+  digitalPrizeId: string
+  attemptId: string
+  publicationId: string
+  publicationName: string
+  sponsorId: string
+  sponsorCompany: string | null
+  userId: string
+  takerName: string | null
+  amount: string
+  description: string
+  delivery: DigitalDelivery
+  /** The last four characters of a pool code, behind an ellipsis; null for the other deliveries. */
+  hint: string | null
+  status: DigitalStatus
+  dueAt: string
+  sendBy: string | null
+  deliveredAt: string | null
+  deliveredBy: 'SYSTEM' | 'SPONSOR' | null
+  openedAt: string | null
+  confirmBy: string | null
+  confirmedAt: string | null
+  disputedAt: string | null
+  disputeNote: string | null
+  resolvedAt: string | null
+  resolution: string | null
+  resolveNote: string | null
+}
+
+function digitalPrize(row: Row): DigitalPrize {
+  const deliveredBy = str(row.deliveredBy)
+  return {
+    digitalPrizeId: String(row.digitalPrizeId),
+    attemptId: String(row.attemptId ?? ''),
+    publicationId: String(row.publicationId ?? ''),
+    publicationName: String(row.publicationName ?? ''),
+    sponsorId: String(row.sponsorId ?? ''),
+    sponsorCompany: str(row.sponsorCompany),
+    userId: String(row.userId ?? ''),
+    takerName: str(row.takerName),
+    amount: String(row.amount ?? '0'),
+    description: String(row.description ?? ''),
+    delivery: row.delivery === 'POOL' || row.delivery === 'SHARED' ? row.delivery : 'SPONSOR_SENT',
+    hint: str(row.hint),
+    status: (DIGITAL_STATUSES as readonly string[]).includes(String(row.status)) ? (row.status as DigitalStatus) : 'DUE',
+    dueAt: String(row.dueAt ?? ''),
+    sendBy: str(row.sendBy),
+    deliveredAt: str(row.deliveredAt),
+    deliveredBy: deliveredBy === 'SYSTEM' || deliveredBy === 'SPONSOR' ? deliveredBy : null,
+    openedAt: str(row.openedAt),
+    confirmBy: str(row.confirmBy),
+    confirmedAt: str(row.confirmedAt),
+    disputedAt: str(row.disputedAt),
+    disputeNote: str(row.disputeNote),
+    resolvedAt: str(row.resolvedAt),
+    resolution: str(row.resolution),
+    resolveNote: str(row.resolveNote),
+  }
+}
+
+export async function readDigitalPrizes(status: string | null, q: string, offset: number, limit: number):
+  Promise<{ items: DigitalPrize[]; total?: number }> {
+  const page = await runQuery<Row>(TEMPLATE.digitalPrizes, {
+    params: q.trim() ? { q: q.trim() } : {},
+    filters: status ? [{ field: 'status', op: 'eq', value: status }] : [],
+    offset,
+    limit,
+    count: true,
+  })
+  return { items: page.items.map(digitalPrize), total: page.total }
+}
+
+export const resolveDigitalPrize = (digitalPrizeId: string, resolution: DigitalResolution, note: string) =>
+  runProcess<{ digitalPrizeId: string; status: DigitalStatus; revision: number }>(PROCESS.digitalResolve,
+    { digitalPrizeId, resolution, note: note.trim() || null })

@@ -17,6 +17,7 @@ import {
   Settings,
   TrendingUp,
   Sparkles,
+  Ticket,
   Users,
   Wallet,
 } from 'lucide-react'
@@ -46,6 +47,7 @@ import InvestorMetricsPage from './InvestorMetricsPage'
 import ReviewsPage from './ReviewsPage'
 import SponsorReviewPage from './SponsorReviewPage'
 import CashRewardsPage from './CashRewardsPage'
+import DigitalPrizesPage from './DigitalPrizesPage'
 import TopUpsPage from './TopUpsPage'
 import TransferReviewPage from './TransferReviewPage'
 import TransfersPage from './TransfersPage'
@@ -75,6 +77,7 @@ export default defineExtension({
     { path: PATH.publications, element: <PublicationsPage /> },
     { path: PATH.cashRewards, element: <CashRewardsPage /> },
     { path: PATH.redemptions, element: <RedemptionsPage /> },
+    { path: PATH.digitalPrizes, element: <DigitalPrizesPage /> },
     { path: PATH.finance, element: <FinanceOverviewPage /> },
     { path: PATH.transfers, element: <TransfersPage /> },
     { path: '/qb/finance/transfers/:transferId/review', element: <TransferReviewPage /> },
@@ -117,6 +120,9 @@ export default defineExtension({
           permission: PERMISSION.publicationRead },
         // Q22b: the prizes takers collect at a sponsor's place.
         { key: 'qb-redemptions', label: 'menu.redemptions', path: PATH.redemptions, icon: Gift,
+          permission: PERMISSION.publicationRead },
+        // Q33: codes, vouchers and links sponsors give winners, with the disputes to decide.
+        { key: 'qb-digital-prizes', label: 'menu.digitalPrizes', path: PATH.digitalPrizes, icon: Ticket,
           permission: PERMISSION.publicationRead },
         { key: 'qb-attempts', label: 'menu.attempts', path: PATH.attempts, icon: ListChecks,
           permission: PERMISSION.usersRead },
