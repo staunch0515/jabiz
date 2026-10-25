@@ -124,13 +124,19 @@ export function platformVersions(frontendRoot) {
   }
 }
 
-/** Every difference between the SPA and the platform, one line each; empty when they agree. */
+/**
+ * Every difference between the SPA and the platform, one line each; empty when they agree. A static site (none of the
+ * platform's packages and none of the shared ones but the build tool; phase 16zf-a) must have the platform's version of
+ * vite when it declares it, and need not declare the others.
+ */
 export function appCheckProblems(app, platform) {
   const problems = []
   const usesUi = '@jabiz/ui' in app.declared
   // @jabiz/ui builds on @jabiz/client, so an SPA with the former has the latter's dependencies too.
   const usesClient = usesUi || '@jabiz/client' in app.declared
-  const wanted = new Map([...platform.shared, ...(usesClient ? platform.client : []), ...(usesUi ? platform.ui : [])])
+  const staticSite = !usesClient && [...platform.shared.keys()].every((name) => name === 'vite' || !(name in app.declared))
+  const shared = staticSite ? [...platform.shared].filter(([name]) => name in app.declared) : [...platform.shared]
+  const wanted = new Map([...shared, ...(usesClient ? platform.client : []), ...(usesUi ? platform.ui : [])])
   for (const [name, version] of wanted) {
     if (!version) {
       problems.push(`${name}: the platform's frontend does not resolve it (run pnpm install in frontend/)`)

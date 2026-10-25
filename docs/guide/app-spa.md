@@ -21,6 +21,7 @@ backend/<应用>/
 - **共享的包版本必须与平台前端一致**：`react`、`react-dom`、`tailwindcss`、`@tanstack/react-query`、`i18next`、`react-i18next`、`vite`，以及两个包的运行时依赖
   （`dayjs`、`openapi-fetch`、`radix-ui`、`react-hook-form`、`lucide-react`、`qrcode`、`react-markdown`（16n 起）等）都写成平台前端 lockfile 中的确切版本。
   `pnpm app:check <目录>`（在 `frontend/` 下）逐项比对；Gradle 构建中它是 `spaCheck<名>`，挂在 `check` 上，不一致即构建失败。
+  没有 React、也不用平台包的静态站点（只有 HTML 与样式，16zf-a）只须声明的构建工具（`vite`）与平台同版本，不必声明其他共用包。
 - 平台前端须先 `pnpm install`（被 `link:` 的包从它们自己的 `node_modules` 解析依赖）；Gradle 构建自动安排（`pnpmInstallPlatformFrontend`）。
 - 应用分支上，应用目录列入 `.jabiz-app-paths`；`node_modules/` 不提交。
 

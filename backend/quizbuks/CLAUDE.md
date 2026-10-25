@@ -98,6 +98,7 @@
   `qb.invitation`（`signInLink`，平台决策 D55；收件人 `MailRecipient.address`）。答题流程读调用者的邀请只经 `Invitations.loadForTaker` / `mine`（公开的卡片一条语句也不读，预算不变）：
   `QB_VIEW` 认领、开始写 `STARTED` 与 `attemptId`、完成写 `ANSWERED` 与分数、奖励；不另写认领接口或事件消费者。读卡片地区的其他地方（通告、档位模板）要先排除 `INVITED`（其卡片的地区是占位的 `GLOBAL`）；管理员只看人数，地址只给商家。
 - **业务参数的存在**由启动检查 `setup.SetupParamsCheck` 保证（Q26）：新增参数只加进 `QbParams.ALL`（受控的还加进 `CONTROLLED`），部署后执行 `QB_SETUP`；缺少即启动警告，不在流程里自己给缺省值。
+- **投资人指标**（`queries/qb/admin/investor-metrics.sql`、`investor-sponsors.sql`，`docs/quizbuks/plans/Q27-investor-metrics.md`）：只是两个带 `report: period` 的财务模板（UTC 月，各数字按发生时间归月，读时态实体的当前版本）与后台扩展的页面 `InvestorMetricsPage`（导出 / 签发 / 存档复用 `ReportsPage` 的 `ReportActions` / `Issued`）；不存数字、不建表、不建任务。新加一列先改模板与 `InvestorMetricsIT`，再改页面与三语消息。
 - **奖励的支付方式**（`publishing.RewardMethod`、`reward`，`docs/quizbuks/plans/Q22-reward-methods.md`）：`PLATFORM`（平台经账本付）、`SPONSOR_CASH`（商家付现金）、
   `OFFLINE_REDEEM`（商家处兑换）。商家允许的方式只经 `QB_SPONSOR_REWARD_METHODS_SET` 写 `QbSponsorRewardMethods`（没有记录 = 只有 `PLATFORM`）；发布的 `rewardMethod` 在保存、复制、提交时都经
   `PublicationEditing.methodProblems` 核对，兑换须有 `redeemDescription`。不是 `PLATFORM` 的结算**不取钱包锁、不读钱包、不过账**（`AttemptFinishing`、`AttemptRules`），只插入 `QbCashReward` / `QbRedemption`

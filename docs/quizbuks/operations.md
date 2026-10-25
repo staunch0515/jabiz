@@ -407,7 +407,11 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 - **邮件发不出**：`jabiz.mail` 的失败、发件服务商的退信；用户可在登录页重新请求验证邮件。
 - **启动失败**：日志中的 `Platform check failed` 后列出全部问题（`类别 | 定位 | 描述`），逐项修正环境；`QUIZBUKS` 类别是本应用的检查（§4）。
 - **证书、域名更换**：同时改 `JABIZ_MAIL_BASE_URL`、`QB_SPONSOR_LINK`、`QB_APP_LINK`、`QB_OIDC_REDIRECT_APP`（与 Google 控制台）与两个 Stripe 端点的地址。
-### 7.10 招商网站（Q31）
+### 7.10 投资人指标（Q27）
+
+后台「QuizBuks 财务 → 投资人指标」（`/admin/qb/finance/investor-metrics`，`qb.admin.finance.read`）按 UTC 月给出商户、答题人、答题、奖品、邀请与资金的数字，起止月在地址中（缺省最近六个月，至多 36 个月；直接调用模板时超过 36 个月的部分不出现）。给投资人的数字每月初**签发**一次（页面上的「签发」，`REPORT_ISSUE`，带内容哈希存档），之后发出去的都取存档的那一份；临时查看用导出（CSV / XLSX / PDF）即可。数字按发生时间归月（商户按审核通过、答题按开始、完成按提交、奖品按获得与领取、充值与奖励按支付），与 `qb.admin.monthly`（按过账时间）的资金列可能差几笔月边上的记录，口径见 `plans/Q27-investor-metrics.md`。
+
+### 7.11 招商网站（Q31）
 
 `/biz/` 是静态站点（`quizbuks-web/biz`），随 jar 一起构建与发布，没有后台数据。要改文案改 `src/content/{en,zh,ja}.mjs`（三种语言结构必须一致，`pnpm test` 检查）；
 首页的"试答"区在 `src/content/try-quizzes.json` 里填每种语言的分享链接（`https://quizbuks.com/taker/p/<发布>`）与二维码图片（放到 `public/`，填相对路径），为空即显示"即将推出"。
