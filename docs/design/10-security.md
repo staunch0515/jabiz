@@ -198,6 +198,9 @@ BCrypt 有意很慢（每次数十到数百毫秒 CPU）。登录洪峰时若不
     SQL 模板不得用占位符读取它、不得 `from` 它（启动检查报错）。
   - 元模型导出 `sensitive: true`，JSON Schema 为 `writeOnly: true`。
 - **`@Sensitive`**（core `com.jabiz.security.Sensitive`）：标在流程输入 / 输出 record 的组件上（如登录的 `password`）；这些 record 的 `toString()` 也自行遮蔽。
+  遮蔽按组件**名**在整个 JSON 中进行，名字要有辨识度（`code`、`lines` 这类常用词会把别的流程的输出一并遮掉）。
+  **只给调用者、不留记录**的秘密（为本人生成的一次性秘密、获奖者打开的奖品码）标 `@Sensitive(returned = true)`：
+  `input_summary`、`op_process_result`、事件载荷中仍遮蔽，流程 API 的响应中原样返回；幂等重放得到 `null`。同名组件在别处标为普通 `@Sensitive` 时从严。
 - **遮蔽器**（`SensitiveDataMasker`）按**属性名**遮蔽 JSON 的任意深度：敏感字段名、`@Sensitive` 组件名、以及包含配置片段的名字
   （`jabiz.security.sensitive-name-fragments`，默认 `password,passwd,secret,token,credential`，不区分大小写）。
   - `op_process.input_summary`：流程输入的 JSON，秘密替换为 `"***"`，超过 16 KB 只记长度；数据视图 `commit` 只记动作、实体、主键与字段**名**，不记值。
