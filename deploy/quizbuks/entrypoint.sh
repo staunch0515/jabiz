@@ -4,7 +4,7 @@
 # (docker/app-entrypoint.sh, unchanged).
 #
 # Secrets (Q10b, review M5). The platform's entrypoint generates a missing JABIZ_JWT_SECRET, JABIZ_INTEGRITY_KEY,
-# JABIZ_MFA_KEY and first-administrator password into the secrets volume, which is meant for a local demonstration
+# JABIZ_MFA_KEY and first-administrator password (this script a missing JABIZ_SEAL_KEY, Q29) into the secrets volume, which is meant for a local demonstration
 # only. So unless QB_LOCAL_SECRETS=true (the local compose and tools/quizbuks/local-demo.sh set it, nothing else), a
 # missing key refuses the start, as does a missing JABIZ_BOOTSTRAP_ADMIN_PASSWORD unless QB_BOOTSTRAP_ADMIN_DONE=true
 # says the first administrator exists (the platform creates it only in an empty database; the password is then given
@@ -75,6 +75,7 @@ missing=""
 if [ -z "${JABIZ_JWT_SECRET:-}" ]; then missing="$missing JABIZ_JWT_SECRET"; fi
 if [ -z "${JABIZ_INTEGRITY_KEY:-}" ]; then missing="$missing JABIZ_INTEGRITY_KEY"; fi
 if [ -z "${JABIZ_MFA_KEY:-}" ]; then missing="$missing JABIZ_MFA_KEY"; fi
+if [ -z "${JABIZ_SEAL_KEY:-}" ]; then missing="$missing JABIZ_SEAL_KEY"; fi
 if [ -z "${JABIZ_BOOTSTRAP_ADMIN_PASSWORD:-}" ]; then
     if $local_secrets; then
         if [ ! -s "$SECRETS/admin-password" ]; then
@@ -100,8 +101,20 @@ if [ -n "$missing" ] && ! $local_secrets; then
         "QB_BOOTSTRAP_ADMIN_DONE=true once the first administrator exists) ($SECRETS_README)" >&2
     exit 1
 fi
-# The platform's entrypoint makes the missing keys (local only, as checked above).
+# The platform's entrypoint makes the missing keys (local only, as checked above), except the key sealing the
+# sponsors' mail server passwords (Q29, platform decision D56), which the platform's entrypoint does not know: it is
+# generated here, once, into the secrets volume.
 if [ -n "$missing" ]; then generated=true; fi
+if $local_secrets && [ -z "${JABIZ_SEAL_KEY:-}" ]; then
+    if [ ! -s "$SECRETS/seal-key" ]; then
+        (umask 077 && head -c 48 /dev/urandom | base64 | tr -d '\n' > "$SECRETS/seal-key")
+        chmod 400 "$SECRETS/seal-key"
+        echo "quizbuks: generated the secret-sealing key in the jabiz-secrets volume (keep a copy: the sponsors'" \
+            "mail server passwords need it)"
+    fi
+    JABIZ_SEAL_KEY=$(cat "$SECRETS/seal-key")
+    export JABIZ_SEAL_KEY
+fi
 if $generated; then
     QB_SECRETS_GENERATED=true
     export QB_SECRETS_GENERATED

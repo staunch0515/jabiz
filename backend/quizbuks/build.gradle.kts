@@ -54,6 +54,9 @@ tasks.named<JavaExec>("platformCheck") {
     environment("STRIPE_CONNECT_WEBHOOK_SECRET", "whsec_platform_check_throwaway_connect_000")
     // Q8a: Claude's key, which also comes from the environment only.
     environment("ANTHROPIC_API_KEY", "platform-check-throwaway-not-a-claude-key")
+    // Q29: the key sealing the sponsors' mail server passwords (platform decision D56): declared a MailSenderSource,
+    // the application refuses to start without it; a throwaway value here, as the launcher's own keys.
+    environment("JABIZ_SEAL_KEY", "cGxhdGZvcm0tY2hlY2stdGhyb3dhd2F5LXNlYWwta2V5LW5vdC1mb3ItYW55LXVzZS0wMA==")
 }
 
 tasks.register<Test>("perfTest") {

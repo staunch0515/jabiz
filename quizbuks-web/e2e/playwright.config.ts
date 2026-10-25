@@ -6,6 +6,9 @@ import { defineConfig, devices } from '@playwright/test'
  *
  * - E2E_BASE_URL: the application (default http://localhost:8080); its mail goes to Mailpit, read through
  *   E2E_MAILPIT_URL (default http://localhost:8025).
+ * - E2E_MERCHANT_SMTP_PORT / E2E_MERCHANT_MAILPIT_URL (defaults 1026 and http://localhost:8026): the sponsors' own mail
+ *   server of the tests (Q29), a Mailpit offering STARTTLS and taking any login on this machine; the application runs
+ *   with JABIZ_MAIL_SENDERS_TRUST_ALL_FOR_TESTS=true.
  * - E2E_ADMIN_USER / E2E_ADMIN_PASSWORD: the first administrator (JABIZ_BOOTSTRAP_ADMIN_* on the server).
  * - E2E_CHROMIUM: a preinstalled Chromium instead of Playwright's own.
  *

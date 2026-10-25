@@ -52,6 +52,8 @@ interface Server {
   redemptions?: Record<string, unknown>[]
   /** The invitation list of an invited publication (Q25), answered to every search and summed up. */
   invitations?: Record<string, unknown>[]
+  /** The sponsor's own mail server (Q29); none before one is saved. */
+  mailServer?: Record<string, unknown> | null
 }
 
 /** The server as the console sees it, for a signed-in, approved sponsor. Records what was posted. */
@@ -117,6 +119,14 @@ function server(options: Server = {}) {
           { code: 'SENT', label: 'Sent' }, { code: 'STARTED', label: 'Started' }, { code: 'ANSWERED', label: 'Answered' }])
       case '/api/queries/qb.sponsor.invitations':
         return json(200, { items: options.invitations ?? [], offset: 0, limit: 20, total: options.invitations?.length ?? 0 })
+      case '/api/queries/qb.sponsor.mail-server': {
+        // Once saved, the row exists (as it does in the system), whatever the test started with.
+        const set = posted.find((c) => c.path === '/api/processes/QB_MAIL_SERVER_SET/latest')?.body as
+          { input?: Record<string, unknown> } | undefined
+        const row = options.mailServer ?? (set ? { ...VERIFIED_SERVER, ...set.input, verifiedAt: null, lastError: 'Could not connect to host',
+          testedAt: '2026-10-21T00:00:00Z' } : null)
+        return json(200, { items: row ? [row] : [], offset: 0, limit: 1 })
+      }
       case '/api/queries/qb.sponsor.invitation-summary': {
         const rows = options.invitations ?? []
         const count = (status: string) => rows.filter((row) => row.status === status).length
@@ -149,6 +159,10 @@ function server(options: Server = {}) {
     posted.filter((p) => p.path === `/api/processes/${name}/latest`).map((p) => p.body)
   return { posted, processCalls, publication }
 }
+
+const VERIFIED_SERVER = { sponsorId: 'u2', host: 'smtp.example.com', port: 587, tls: 'STARTTLS', username: 'shop',
+  fromAddress: 'shop@example.com', fromName: 'The Shop', verifiedAt: '2026-10-20T00:00:00Z',
+  testedAt: '2026-10-20T00:00:00Z', lastError: null }
 
 const saved = (revision: number, extra: Record<string, unknown> = {}) =>
   ({ status: 200, body: { output: { publicationId: 'p1', status: 'DRAFT', revision, editedAt: '2026-10-14T02:00:00Z',
@@ -615,6 +629,7 @@ describe('invitation-only publications (Q25)', () => {
     const live = { ...DRAFT, status: 'LIVE', audience: 'INVITED', regions: 'GLOBAL', approvedAt: '2026-10-15T00:00:00Z' }
     const { processCalls } = server({
       publication: live,
+      mailServer: VERIFIED_SERVER,
       invitations: [
         { invitationId: 'i1', email: 'alice@example.com', status: 'SENT', addedAt: '2026-10-15T01:00:00Z', sentCount: 1,
           lastSentAt: '2026-10-15T02:00:00Z', startedAt: null, answeredAt: null, score: null, reward: null },
@@ -658,5 +673,101 @@ describe('invitation-only publications (Q25)', () => {
     await userEvent.click(within(rows[2]).getByTestId('invitation-remove'))
     await userEvent.click(await screen.findByRole('button', { name: 'Remove' }))
     await waitFor(() => expect(processCalls('QB_INVITATION_REMOVE')).toEqual([{ invitationId: 'i3' }]))
+  })
+})
+
+describe('the mail server (Q29)', () => {
+  it('saves the settings, sends the test mail and shows the server verified', async () => {
+    const { processCalls } = server({ mailServer: null, processes: {
+      QB_MAIL_SERVER_SET: [{ status: 200, body: { output: { sponsorId: 'u2', verified: true, error: null,
+        testedAt: '2026-10-20T00:00:00Z', sentTo: 'sara@example.com' } } }],
+    } })
+    window.history.replaceState(null, '', '/mail-server')
+    render(<App />)
+    expect(await screen.findByTestId('mail-server-status')).toHaveAttribute('data-status', 'NONE')
+    await userEvent.type(screen.getByTestId('mail-server-host'), 'smtp.example.com')
+    await userEvent.type(screen.getByTestId('mail-server-username'), 'shop')
+    await userEvent.type(screen.getByTestId('mail-server-password'), 'secret-1')
+    await userEvent.type(screen.getByTestId('mail-server-from'), 'shop@example.com')
+    await userEvent.type(screen.getByTestId('mail-server-from-name'), 'The Shop')
+    await userEvent.click(screen.getByTestId('mail-server-save'))
+    await waitFor(() => expect(processCalls('QB_MAIL_SERVER_SET')).toEqual([{ host: 'smtp.example.com', port: 587,
+      tls: 'STARTTLS', username: 'shop', password: 'secret-1', fromAddress: 'shop@example.com', fromName: 'The Shop' }]))
+    expect(await screen.findByTestId('mail-server-result')).toHaveAttribute('data-verified', 'true')
+    expect(screen.getByTestId('mail-server-result')).toHaveTextContent('sent to sara@example.com')
+    // The password is never kept on the page.
+    expect(screen.getByTestId('mail-server-password')).toHaveValue('')
+  })
+
+  it('shows the first save\'s answer when the test mail did not leave (the row appears with the save)', async () => {
+    const { processCalls } = server({ mailServer: null, processes: {
+      QB_MAIL_SERVER_SET: [{ status: 200, body: { output: { sponsorId: 'u2', verified: false,
+        error: 'Could not connect to host', testedAt: '2026-10-21T00:00:00Z', sentTo: null } } }],
+    } })
+    window.history.replaceState(null, '', '/mail-server')
+    render(<App />)
+    expect(await screen.findByTestId('mail-server-status')).toHaveAttribute('data-status', 'NONE')
+    await userEvent.type(screen.getByTestId('mail-server-host'), 'smtp.example.com')
+    await userEvent.type(screen.getByTestId('mail-server-username'), 'shop')
+    await userEvent.type(screen.getByTestId('mail-server-password'), 'secret-1')
+    await userEvent.type(screen.getByTestId('mail-server-from'), 'shop@example.com')
+    await userEvent.click(screen.getByTestId('mail-server-save'))
+    await waitFor(() => expect(processCalls('QB_MAIL_SERVER_SET')).toHaveLength(1))
+    // The row now exists, so the status changes; the answer to this save stays on the page.
+    expect(await screen.findByTestId('mail-server-status')).toHaveAttribute('data-status', 'FAILED')
+    expect(await screen.findByTestId('mail-server-result')).toHaveAttribute('data-verified', 'false')
+    expect(screen.getByTestId('mail-server-result')).toHaveTextContent('Could not connect to host')
+    // The settings typed stay in the form, the password field is blank: the stored one is kept.
+    expect(screen.getByTestId('mail-server-host')).toHaveValue('smtp.example.com')
+    expect(screen.getByTestId('mail-server-password')).toHaveValue('')
+  })
+
+  it('shows the server\'s answer when the test mail did not leave, and the refusal of a setting on its field', async () => {
+    server({ mailServer: { ...VERIFIED_SERVER, verifiedAt: null, lastError: '535 Authentication failed' },
+      processes: { QB_MAIL_SERVER_SET: [
+        { status: 422, body: { violations: [{ field: 'host', ruleCode: 'QB_MAIL_SERVER_INVALID',
+          message: 'The platform cannot use this setting: host must be a public host name, not localhost.' }] } },
+        { status: 200, body: { output: { sponsorId: 'u2', verified: false, error: 'Could not connect to host',
+          testedAt: '2026-10-21T00:00:00Z', sentTo: null } } },
+      ] } })
+    window.history.replaceState(null, '', '/mail-server')
+    render(<App />)
+    expect(await screen.findByTestId('mail-server-status')).toHaveAttribute('data-status', 'FAILED')
+    expect(screen.getByTestId('mail-server-status')).toHaveTextContent('535 Authentication failed')
+    // The stored settings are shown; the password is not asked again.
+    expect(screen.getByTestId('mail-server-host')).toHaveValue('smtp.example.com')
+    expect(screen.getByTestId('mail-server-password')).not.toBeRequired()
+    await userEvent.click(screen.getByTestId('mail-server-save'))
+    const host = screen.getByTestId('mail-server-host')
+    await waitFor(() => expect(host).toHaveAttribute('aria-invalid', 'true'))
+    expect(host).toHaveAccessibleDescription(/public host name/)
+    await userEvent.click(screen.getByTestId('mail-server-save'))
+    expect(await screen.findByTestId('mail-server-result')).toHaveAttribute('data-verified', 'false')
+    expect(screen.getByTestId('mail-server-result')).toHaveTextContent('Could not connect to host')
+  })
+
+  it('removes the server after confirming', async () => {
+    const { processCalls } = server({ mailServer: VERIFIED_SERVER, processes: {
+      QB_MAIL_SERVER_REMOVE: [{ status: 200, body: { output: { sponsorId: 'u2' } } }] } })
+    window.history.replaceState(null, '', '/mail-server')
+    render(<App />)
+    expect(await screen.findByTestId('mail-server-status')).toHaveAttribute('data-status', 'VERIFIED')
+    await userEvent.click(screen.getByTestId('mail-server-remove'))
+    await userEvent.click(await screen.findByRole('button', { name: 'Remove the mail server' }))
+    await waitFor(() => expect(processCalls('QB_MAIL_SERVER_REMOVE')).toEqual([{}]))
+  })
+
+  it('holds the invitations of a live publication until a server is verified', async () => {
+    const live = { ...DRAFT, status: 'LIVE', audience: 'INVITED', regions: 'GLOBAL', approvedAt: '2026-10-15T00:00:00Z' }
+    server({ publication: live, mailServer: null, invitations: [
+      { invitationId: 'i3', email: 'carol@example.com', status: 'ADDED', addedAt: '2026-10-17T01:00:00Z', sentCount: 0,
+        lastSentAt: null, startedAt: null, answeredAt: null, score: null, reward: null }] })
+    window.history.replaceState(null, '', '/publications/p1')
+    render(<App />)
+    const section = await screen.findByTestId('invitations')
+    expect(await within(section).findByTestId('invitations-needs-server')).toHaveTextContent('own mail server')
+    expect(within(section).getByTestId('invitations-send')).toBeDisabled()
+    await userEvent.click(within(section).getByRole('link', { name: 'Set up the mail server' }))
+    expect(window.location.pathname).toBe('/mail-server')
   })
 })
