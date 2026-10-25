@@ -208,11 +208,6 @@ public final class QbParams {
         new Param(TRANSFER_ENABLED, BOOL, false, "Whether the daily automatic transfers run"),
         new Param(REVIEW_SPONSOR_AUTO, BOOL, false, "Approve sponsor onboarding without review"),
         new Param(REVIEW_PUBLICATION_AUTO, BOOL, false, "Approve publications without review"),
-        // The declared value keeps what the platform did before Q28; the launch phase publishes OFFLINE_REDEEM.
-        new Param(REWARD_DEFAULT_METHODS, Map.of("type", "text", "maxLength", 50), "PLATFORM",
-            "Reward methods a sponsor without a setting of their own may publish with: PLATFORM, SPONSOR_CASH, "
-                + "OFFLINE_REDEEM, comma-separated"),
-        new Param(REWARD_MAX_PER_ATTEMPT, KUDOS, "0", "The highest reward one attempt may win, in Kudos (0: no cap)"),
         new Param(APP_MIN_VERSION, Map.of("type", "text", "maxLength", 20), "1.0.0",
             "Oldest app version that may still be used"),
         new Param(STATS_MIN_GROUP, Map.of("type", "numeric", "precision", 3, "scale", 0), "5",
@@ -226,6 +221,11 @@ public final class QbParams {
             "Days from a sponsor's first paid top-up during which the new sponsors' limit applies"),
         new Param(TOPUP_NEW_SPONSOR_MAX_TOTAL, KUDOS, "100000",
             "What a new sponsor may top up in all during that time, in Kudos"),
+        // The declared value keeps what the platform did before Q28; the launch phase publishes OFFLINE_REDEEM.
+        new Param(REWARD_DEFAULT_METHODS, Map.of("type", "text", "maxLength", 50), "PLATFORM",
+            "Reward methods a sponsor without a setting of their own may publish with: PLATFORM, SPONSOR_CASH, "
+                + "OFFLINE_REDEEM, comma-separated"),
+        new Param(REWARD_MAX_PER_ATTEMPT, KUDOS, "0", "The highest reward one attempt may win, in Kudos (0: no cap)"),
         journal(JOURNAL_ACCOUNT_1110, "1110 Stripe balance"),
         journal(JOURNAL_ACCOUNT_1120, "1120 Bank deposits"),
         journal(JOURNAL_ACCOUNT_2110, "2110 Sponsor prepayments"),

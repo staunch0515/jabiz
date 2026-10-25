@@ -346,7 +346,8 @@ export interface RewardSettings {
  */
 export async function readRewardSettings(): Promise<RewardSettings> {
   const row = (await runQuery<Row>(PUBLISHING_TEMPLATE.rewardMethods, { limit: 1 })).items[0] ?? {}
-  const named = String(row.methods ?? '').split(',').map(methodOf)
+  // Names that are no method are dropped, as the server drops them (a typo allows less, never more).
+  const named = String(row.methods ?? '').split(',').map((name) => name.trim())
   const max = row.maxRewardPerAttempt == null || row.maxRewardPerAttempt === '' ? null : Number(row.maxRewardPerAttempt)
   return {
     methods: REWARD_METHODS.filter((method) => named.includes(method)),
@@ -354,9 +355,6 @@ export async function readRewardSettings(): Promise<RewardSettings> {
     maxRewardPerAttempt: max != null && Number.isFinite(max) && max > 0 ? max : null,
   }
 }
-
-/** The methods the sponsor may publish with (see {@link readRewardSettings}). */
-export const readAllowedMethods = async (): Promise<RewardMethod[]> => (await readRewardSettings()).methods
 
 /** The query key of {@link readRewardSettings}: the wizard and the console's frame share one read. */
 export const REWARD_SETTINGS_QUERY = ['qb', 'reward-methods', 'allowed'] as const

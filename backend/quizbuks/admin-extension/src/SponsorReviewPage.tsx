@@ -66,6 +66,9 @@ function RewardMethods({ userId }: { userId: string }) {
   const toggle = (method: RewardMethod, on: boolean) =>
     setChosen(REWARD_METHODS.filter((m) => (m === method ? on : methods.includes(m))))
   if (setting.isError) return <LoadFailed error={setting.error} onRetry={() => void setting.refetch()} />
+  if (setting.isPending || defaults.isPending) {
+    return <Section title={t('reward.methods.title')} testId="sponsor-methods" children={null} />
+  }
   return (
     <Section title={t('reward.methods.title')} testId="sponsor-methods">
       <p className="text-muted-foreground text-sm">{t('reward.methods.hint')}</p>

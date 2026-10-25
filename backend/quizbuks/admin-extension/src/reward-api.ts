@@ -33,7 +33,9 @@ export async function readRewardDefaults(): Promise<RewardDefaults> {
   const rows = new Map(page.items.map((row) => [String(row.paramKey), row]))
   const methods = rows.get('qb.reward.default-methods')
   const cap = rows.get('qb.reward.max-per-attempt')
-  const named = methods?.paramExists ? String(methods.value ?? '').split(',').map((m) => m.trim()) : ['PLATFORM']
+  // Missing or blank: the platform's Kudos only, as the processes read it (RewardMethod.defaultMethods).
+  const text = methods?.paramExists ? String(methods.value ?? '').trim() : ''
+  const named = text === '' ? ['PLATFORM'] : text.split(',').map((m) => m.trim())
   const max = cap?.paramExists && cap.value != null && cap.value !== '' ? Number(cap.value) : null
   return {
     methods: REWARD_METHODS.filter((m) => named.includes(m)),
