@@ -25,6 +25,11 @@ class SensitiveDataMaskerTest {
 
     record Output(String userId, @Sensitive String apiKey) {}
 
+    /** A secret made for the caller: in the answer, in no record. */
+    record Opened(String userId, @Sensitive(returned = true) String prizeContent) {}
+
+    record OpenInput(String prizeId) {}
+
     static final EntityDefinition ACCOUNT = EntityDefinition.define("Account", eb -> {
         eb.physicalTable("t_account");
         eb.primaryKey("accountId");
@@ -36,6 +41,9 @@ class SensitiveDataMaskerTest {
     static final ProcessDefinition<Input, Output, ProcessContext> PROCESS = ProcessDefinition.single(
         "P", 1, Input.class, Output.class, (input, ctx) -> new Output("u", "k"));
 
+    static final ProcessDefinition<OpenInput, Opened, ProcessContext> OPEN = ProcessDefinition.single(
+        "OPEN", 1, OpenInput.class, Opened.class, (input, ctx) -> new Opened("u", "c"));
+
     private final JsonMapper json = JsonMapper.builder().build();
     private final SensitiveDataMasker masker = masker();
 
@@ -43,7 +51,22 @@ class SensitiveDataMaskerTest {
         StaticListableBeanFactory beans = new StaticListableBeanFactory();
         beans.addBean("account", ACCOUNT);
         return new SensitiveDataMasker(json, new EntityDefinitionRegistry(beans.getBeanProvider(EntityDefinition.class)),
-            List.of(PROCESS), List.of("password", "token"));
+            List.of(PROCESS, OPEN), List.of("password", "token"));
+    }
+
+    @Test
+    void aSecretReturnedToTheCallerIsKeptFromEveryRecordOnly() {
+        assertThat(masker.isSensitive("prizeContent")).isFalse();
+        assertThat(masker.isRecordedSecret("prizeContent")).isTrue();
+        assertThat(masker.isRecordedSecret("apiKey")).isTrue();
+        assertThat(masker.hidesByName("PRIZECONTENT")).isTrue();
+        Opened opened = new Opened("u1", "GIFT-0001");
+        assertThat(masker.withoutSecrets(opened)).isEqualTo("{\"userId\":\"u1\",\"prizeContent\":null}");
+        assertThat(masker.summary(Map.of("prizeContent", "GIFT-0001"))).isEqualTo("{\"prizeContent\":\"***\"}");
+        Map<String, Object> expected = new java.util.LinkedHashMap<>();
+        expected.put("userId", "u1");
+        expected.put("prizeContent", "GIFT-0001");
+        assertThat(masker.toJsonWithoutSecrets(opened)).isEqualTo(expected);
     }
 
     @Test
