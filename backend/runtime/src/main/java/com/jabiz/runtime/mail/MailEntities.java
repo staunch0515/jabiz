@@ -55,10 +55,13 @@ public class MailEntities {
             .asTemporal(TemporalRole.SYSTEM_RECORDED));
         eb.field("processSeqId", f -> f.physicalColumn("process_seq_id").immutable(true).required(true)
             .asNumeric(19, 0));
+        // The sender the mail leaves through (decision D56): a key of the application's MailSenderSource; none for
+        // the platform's server.
+        eb.field("senderKey", f -> f.physicalColumn("sender_key").immutable(true).asText(100));
         eb.field("version", f -> f.physicalColumn("version").immutable(true).asVersion());
         eb.listView("default", lv -> lv
-            .columns("template", "category", "address", "locale", "createdTime")
-            .filters("template", "category", "userId", "address", "createdTime")
+            .columns("template", "category", "address", "locale", "senderKey", "createdTime")
+            .filters("template", "category", "userId", "address", "senderKey", "createdTime")
             .sorts("createdTime")
             .defaultSort("createdTime", false));
     });

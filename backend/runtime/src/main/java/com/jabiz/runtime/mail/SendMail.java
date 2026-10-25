@@ -4,6 +4,7 @@ import com.jabiz.entity.Violation;
 import com.jabiz.i18n.MessageCatalog;
 import com.jabiz.i18n.PlatformErrorCodes;
 import com.jabiz.mail.MailRecipient;
+import com.jabiz.mail.MailSenderSource;
 import com.jabiz.mail.MailTemplate;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.StepSpec;
@@ -53,6 +54,10 @@ import java.util.function.Predicate;
  * a parameter named like a secret or a masked field is refused at startup ({@code MailChecks}) and an {@code @Sensitive}
  * value with {@code MAIL_PARAM_SECRET}; parameters longer than {@value #MAX_PARAMS} characters as JSON are refused
  * ({@code MAIL_PARAMS_TOO_LARGE}), never cut.
+ *
+ * <p>{@code SendMail.via(ctx -> key).of(…)} sends through a server of the application's naming instead of the
+ * platform's (decision D56): the key is recorded with the message and resolved by the delivery through the
+ * application's {@link MailSenderSource}; a blank key is a violation ({@code MAIL_SENDER_MISSING}).
  */
 @Component
 public class SendMail<C extends ProcessContext> implements StepHandler<SendMail.Metadata<C>, C>,
@@ -70,13 +75,19 @@ public class SendMail<C extends ProcessContext> implements StepHandler<SendMail.
     /**
      * @param params    the values of the template's parameters by name, computed on the context
      * @param condition whether to send at all (null: always)
+     * @param sender    the key of the server to send through (decision D56); null: the platform's server
      */
     public record Metadata<C>(MailTemplate template, Function<C, MailRecipient> recipient,
-        Map<String, Function<C, ?>> params, Predicate<C> condition) {
+        Map<String, Function<C, ?>> params, Predicate<C> condition, Function<C, String> sender) {
         public Metadata {
             Objects.requireNonNull(template, "template must not be null");
             Objects.requireNonNull(recipient, "recipient must not be null");
             params = Map.copyOf(Objects.requireNonNull(params, "params must not be null"));
+        }
+
+        public Metadata(MailTemplate template, Function<C, MailRecipient> recipient, Map<String, Function<C, ?>> params,
+            Predicate<C> condition) {
+            this(template, recipient, params, condition, null);
         }
     }
 
@@ -92,23 +103,49 @@ public class SendMail<C extends ProcessContext> implements StepHandler<SendMail.
             Objects.requireNonNull(condition, "condition must not be null")));
     }
 
+    /**
+     * Sends through the server the application's {@link MailSenderSource} finds by {@code sender}'s key (decision
+     * D56), never through the platform's: {@code SendMail.via(ctx -> sponsorId(ctx)).of(template, recipient, params)}.
+     */
+    public static <C extends ProcessContext> Via<C> via(Function<C, String> sender) {
+        return new Via<>(Objects.requireNonNull(sender, "sender must not be null"));
+    }
+
+    /** The steps of {@link #via}. */
+    public record Via<C extends ProcessContext>(Function<C, String> sender) {
+
+        public StepSpec<Metadata<C>, C> of(MailTemplate template, Function<C, MailRecipient> recipient,
+            Map<String, Function<C, ?>> params) {
+            return StepSpec.of(SendMail.class, new Metadata<>(template, recipient, params, null, sender));
+        }
+
+        public StepSpec<Metadata<C>, C> when(Predicate<C> condition, MailTemplate template,
+            Function<C, MailRecipient> recipient, Map<String, Function<C, ?>> params) {
+            return StepSpec.of(SendMail.class, new Metadata<>(template, recipient, params,
+                Objects.requireNonNull(condition, "condition must not be null"), sender));
+        }
+    }
+
     private final MailTemplates templates;
     private final MessageCatalog messages;
     private final JsonMapper json;
     private final ObjectProvider<EventPublisher> publisher;
     private final StorageAdapterRegistry storages;
     private final ObjectProvider<SignInEntries> entries;
+    private final ObjectProvider<MailSenderSource> sources;
     private final String poolRef;
 
     public SendMail(MailTemplates templates, MessageCatalog messages, JsonMapper json,
         ObjectProvider<EventPublisher> publisher, StorageAdapterRegistry storages,
-        ObjectProvider<SignInEntries> entries, @Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
+        ObjectProvider<SignInEntries> entries, ObjectProvider<MailSenderSource> sources,
+        @Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
         this.templates = templates;
         this.messages = messages;
         this.json = json;
         this.publisher = publisher;
         this.storages = storages;
         this.entries = entries;
+        this.sources = sources;
         this.poolRef = poolRef;
     }
 
@@ -153,6 +190,14 @@ public class SendMail<C extends ProcessContext> implements StepHandler<SendMail.
                     return Mono.empty();
                 }
             }
+            String senderKey = metadata.sender() == null ? null : metadata.sender().apply(ctx);
+            if (metadata.sender() != null) {
+                if (senderKey == null || senderKey.isBlank() || senderKey.length() > 100) {
+                    ctx.reject(new Violation(null, PlatformErrorCodes.MAIL_SENDER_MISSING, "Mail " + template.name()
+                        + " names no server to send through", Map.of()));
+                    return Mono.empty();
+                }
+            }
             String params = json.writeValueAsString(values);
             if (params.length() > MAX_PARAMS) {
                 ctx.reject(new Violation(null, PlatformErrorCodes.MAIL_PARAMS_TOO_LARGE, "The parameters of mail "
@@ -180,6 +225,7 @@ public class SendMail<C extends ProcessContext> implements StepHandler<SendMail.
                 row.put("params", params);
                 row.put("createdTime", ctx.opTime());
                 row.put("processSeqId", BigDecimal.valueOf(ctx.processSeqId()));
+                row.put("senderKey", senderKey);
                 Object id = ctx.changes().insert(MailEntities.MESSAGE, row);
                 EventPublisher target = publisher.getIfUnique();
                 if (target == null) {
@@ -237,6 +283,9 @@ public class SendMail<C extends ProcessContext> implements StepHandler<SendMail.
         }
         if (publisher.getIfUnique() == null) {
             problems.add("sends mail but no EventPublisher is configured");
+        }
+        if (metadata.sender() != null && sources.getIfAvailable() == null) {
+            problems.add("sends mail " + template.name() + " via a sender, but no MailSenderSource bean is declared");
         }
         return problems;
     }

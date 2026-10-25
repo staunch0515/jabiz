@@ -4396,3 +4396,13 @@ L4 共享仪表的注释；L5 13 写明每个键每次轮询多一个查询观�
 测试：`SpaFallbackFilterTest`、`StaticPagesTest`（含 jar、嵌套 jar 与展开目录的地址）。
 
 **16zf-b 状态**：✅ 已实施（PR 待建）。
+
+### 16zg 经应用自己的邮件服务器发信（1 天）
+
+来源：需求方 2026-10-25（QuizBuks Q29：商家用自己的 SMTP 服务器发邀请，平台的服务器只发平台自己的邮件）。分支 `1.2/phase-16zg-mail-sender`。决策 D56。
+核心 `MailSenderSettings`（主机、端口、TLS、用户名、密封的密码、发件地址与名称，`problems()` 给出平台拒绝的理由）与 `MailSenderSource`（应用声明的实体与键字段，同步地把一行换成设置）；
+核心 `SealedSecrets`（AES-GCM，`JABIZ_SEAL_KEY`），运行时 `SecretSealer` 与步骤 `SealSecret`；`SendMail.via(ctx -> 键)`，`sys_mail_message.sender_key`（V45）；投递经 `MailSenders` 为每次发送建发送器（超时、认证、TLS、证书校验），
+失败记服务器的理由、绝不回退到平台的服务器；启动检查 `MAIL`（一个来源、实体与字段存在、有密封密钥；测试开关在非 dev 告警）。设计 18 §5.6、10 §6。
+测试：`MailSenderSettingsTest`、`SealedSecretsTest`、`MailChecksTest`；`MailIT` 以第二个本地 SMTPS 服务器（要登录）：以商家名义到达、密码错 / 键不存在 / 未验证都 `FAILED` 且平台的服务器收不到。
+
+**16zg 状态**：✅ 已实施（PR 待建）。

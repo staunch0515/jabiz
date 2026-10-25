@@ -62,7 +62,8 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
 - **待办与通知**（见 18 §5）：需要人去做的事用步骤 `CreateTask`（指派给用户或权限，带来源键）登记、`CloseTasks` 关闭；不另建待办表。
   邮件只经待办的通知、单据的发送（`DOCUMENT_SEND`，22 §5）与事务邮件（流程步骤 `SendMail`，模板为 `MailTemplate` Bean 与消息 `mail.<名>.subject|body`，
   验证与重置链接用发送时才生成的一次性令牌：模板 `.token(用途, 有效期)`、流程中以 `MailTokens.consume` 使用，18 §5.6、决策 D35）；
-  `jabiz.mail.enabled` 缺省关闭；不在流程中直接发邮件。可退订的模板（`NOTIFICATION`）以 `.entries(入口…)` 声明给哪些登录入口的用户（缺省全部，偏好只列令牌入口的），
+  `jabiz.mail.enabled` 缺省关闭；不在流程中直接发邮件。要经应用自己登记的服务器发出的邮件用 `SendMail.via(ctx -> 键)`，服务器由应用的一个 `MailSenderSource` Bean 给出（18 §5.6、决策 D56），
+  其密码只以 `SealedSecrets` 密封保存（步骤 `SealSecret`，密钥 `JABIZ_SEAL_KEY`），失败绝不改经平台的服务器。可退订的模板（`NOTIFICATION`）以 `.entries(入口…)` 声明给哪些登录入口的用户（缺省全部，偏好只列令牌入口的），
   显示名写在消息 `mail.<名>.name`；收件偏好与邮件语言只经平台接口与积木 `MailPreferences`，切换界面语言只询问、不静默改邮件语言（`offerMailLanguage`，18 §5.6、决策 D49）。
   应用的前端要有自己的退订页时，挂载积木 `MailUnsubscribe` 并配置 `jabiz.mail.unsubscribe-paths.<入口>`（相对该入口 `app-path`；声明了该入口的通知链接到它，D52 第 3 条），
   不自写退订页或拼退订链接。

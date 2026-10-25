@@ -2,7 +2,13 @@ package com.jabiz.runtime.mail;
 
 import com.jabiz.i18n.MessageCatalog;
 import com.jabiz.mail.MailPlaceholders;
+import com.jabiz.entity.EntityDefinition;
+import com.jabiz.mail.MailSenderSource;
 import com.jabiz.mail.MailTemplate;
+import com.jabiz.runtime.entity.EntityDefinitionRegistry;
+import com.jabiz.runtime.security.secret.SecretSealer;
+import org.springframework.core.env.Environment;
+import org.springframework.core.env.Profiles;
 import com.jabiz.runtime.check.CheckProblem;
 import com.jabiz.runtime.check.PlatformCheck;
 import com.jabiz.runtime.security.SensitiveDataMasker;
@@ -67,6 +73,12 @@ public class MailChecks implements PlatformCheck {
     private final Duration maxSignInLink;
     private final Function<String, Optional<String>> appPathOf;
     private final Predicate<String> served;
+    /** Decision D56: the application's mail sender sources, the entities they name, and whether secrets can be sealed. */
+    private final List<MailSenderSource> sources;
+    private final Function<String, Optional<EntityDefinition>> entityOf;
+    private final boolean sealKeyConfigured;
+    private final boolean trustAllForTests;
+    private final boolean development;
 
     /** The checks as before decision D52, without the entries' unsubscribe pages. */
     public MailChecks(boolean enabled, String from, String baseUrl, ObjectProvider<JavaMailSender> mail,
@@ -85,7 +97,10 @@ public class MailChecks implements PlatformCheck {
         @Value("${jabiz.mail.base-url:}") String baseUrl, ObjectProvider<JavaMailSender> mail,
         ObjectProvider<MailTemplate> templates, MessageCatalog messages, SensitiveDataMasker masker,
         SignInEntries entries, MailTemplates settings, ObjectProvider<JabizWebProperties> web,
-        @Value("${jabiz.security.email-link.max-ttl:P30D}") Duration maxSignInLink) {
+        @Value("${jabiz.security.email-link.max-ttl:P30D}") Duration maxSignInLink,
+        ObjectProvider<MailSenderSource> sources, ObjectProvider<EntityDefinitionRegistry> entityRegistry,
+        SecretSealer sealer, @Value("${jabiz.mail.senders.trust-all-for-tests:false}") boolean trustAllForTests,
+        Environment environment) {
         this(enabled, from, baseUrl, mail, templates, messages, masker::hidesByName,
             name -> entries.find(name).filter(entry -> entry.name().equals(name)).isPresent(),
             settings.unsubscribePaths(),
@@ -93,7 +108,10 @@ public class MailChecks implements PlatformCheck {
             path -> {
                 JabizWebProperties spas = web.getIfAvailable();
                 return spas == null || spas.spaFor(path).isPresent();
-            }, maxSignInLink);
+            }, maxSignInLink, sources.orderedStream().toList(), name -> {
+                EntityDefinitionRegistry registry = entityRegistry.getIfAvailable();
+                return registry == null ? Optional.empty() : registry.find(name);
+            }, sealer.configured(), trustAllForTests, environment.acceptsProfiles(Profiles.of("dev")));
     }
 
     /** @param hidden whether values under a name are hidden (secrets, masked fields) */
@@ -131,6 +149,28 @@ public class MailChecks implements PlatformCheck {
         ObjectProvider<MailTemplate> templates, MessageCatalog messages, Predicate<String> hidden,
         Predicate<String> entryExists, Map<String, String> unsubscribePaths,
         Function<String, Optional<String>> appPathOf, Predicate<String> served, Duration maxSignInLink) {
+        this(enabled, from, baseUrl, mail, templates, messages, hidden, entryExists, unsubscribePaths, appPathOf, served,
+            maxSignInLink, List.of(), name -> Optional.empty(), true, false, true);
+    }
+
+    /**
+     * @param sources           the application's mail sender sources (decision D56)
+     * @param entityOf          the entity of a name, if declared
+     * @param sealKeyConfigured whether {@code jabiz.security.seal.key} is set
+     * @param trustAllForTests  {@code jabiz.mail.senders.trust-all-for-tests}
+     * @param development       whether the dev profile is active
+     */
+    MailChecks(boolean enabled, String from, String baseUrl, ObjectProvider<JavaMailSender> mail,
+        ObjectProvider<MailTemplate> templates, MessageCatalog messages, Predicate<String> hidden,
+        Predicate<String> entryExists, Map<String, String> unsubscribePaths,
+        Function<String, Optional<String>> appPathOf, Predicate<String> served, Duration maxSignInLink,
+        List<MailSenderSource> sources, Function<String, Optional<EntityDefinition>> entityOf,
+        boolean sealKeyConfigured, boolean trustAllForTests, boolean development) {
+        this.sources = List.copyOf(sources);
+        this.entityOf = entityOf;
+        this.sealKeyConfigured = sealKeyConfigured;
+        this.trustAllForTests = trustAllForTests;
+        this.development = development;
         this.unsubscribePaths = Map.copyOf(unsubscribePaths);
         this.appPathOf = appPathOf;
         this.maxSignInLink = maxSignInLink;
@@ -148,6 +188,7 @@ public class MailChecks implements PlatformCheck {
     @Override
     public List<CheckProblem> check() {
         List<CheckProblem> problems = new ArrayList<>();
+        problems.addAll(senderProblems());
         Set<String> names = new HashSet<>();
         boolean links = false;
         for (MailTemplate template : templates) {
@@ -243,6 +284,33 @@ public class MailChecks implements PlatformCheck {
      * Each entry's unsubscribe page (decision D52 item 3) is a relative path, of a usable entry, and lies under an SPA
      * served here, as an entry's own pages should ({@code SignInEntries}): otherwise the mailed links lead nowhere.
      */
+    /** Decision D56: one source at most, naming an entity and a field it has, with a key to open the passwords. */
+    private List<CheckProblem> senderProblems() {
+        List<CheckProblem> problems = new ArrayList<>();
+        if (sources.size() > 1) {
+            problems.add(CheckProblem.error(CATEGORY, "MailSenderSource", "is declared " + sources.size()
+                + " times; the delivery resolves sender keys through one source"));
+        }
+        for (MailSenderSource source : sources) {
+            String location = "MailSenderSource " + source.entity() + "." + source.keyField();
+            Optional<EntityDefinition> entity = entityOf.apply(source.entity());
+            if (entity.isEmpty()) {
+                problems.add(CheckProblem.error(CATEGORY, location, "names an entity that is not declared"));
+            } else if (!entity.get().fields.containsKey(source.keyField())) {
+                problems.add(CheckProblem.error(CATEGORY, location, "names a field the entity does not have"));
+            }
+            if (!sealKeyConfigured) {
+                problems.add(CheckProblem.error(CATEGORY, location, "needs jabiz.security.seal.key (JABIZ_SEAL_KEY) "
+                    + "to open the servers' passwords"));
+            }
+        }
+        if (trustAllForTests && !development) {
+            problems.add(CheckProblem.warning(CATEGORY, "jabiz.mail.senders.trust-all-for-tests",
+                "is on: mail servers' certificates and local hosts are not checked; for tests only"));
+        }
+        return problems;
+    }
+
     private List<CheckProblem> unsubscribePageProblems() {
         List<CheckProblem> problems = new ArrayList<>();
         new TreeMap<>(unsubscribePaths).forEach((entry, path) -> {

@@ -1,24 +1,33 @@
 package com.jabiz.runtime.mail;
 
+import com.jabiz.entity.EntityDefinition;
+import com.jabiz.entity.FieldDefinition;
 import com.jabiz.i18n.MessageCatalog;
+import com.jabiz.mail.MailSenderSettings;
+import com.jabiz.mail.MailSenderSource;
 import com.jabiz.mail.MailPlaceholders;
 import com.jabiz.mail.MailRenderer;
 import com.jabiz.mail.MailTemplate;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.StepSpec;
 import com.jabiz.query.BoundValue;
+import com.jabiz.query.SqlIdentifiers;
+import com.jabiz.runtime.entity.EntityDefinitionRegistry;
 import com.jabiz.runtime.process.StepHandler;
 import com.jabiz.runtime.process.entity.EntityIdGenerator;
 import com.jabiz.runtime.security.JwtService;
+import com.jabiz.runtime.security.secret.SecretSealer;
 import com.jabiz.runtime.security.secret.SingleUseSecrets;
 import com.jabiz.runtime.storage.Rows;
 import com.jabiz.runtime.storage.StorageAdapterRegistry;
 import com.jabiz.runtime.storage.StorageEngine;
 import com.jabiz.runtime.storage.UniqueKeyViolationException;
 import com.jabiz.runtime.task.MailMessage;
+import com.jabiz.runtime.task.MailSenders;
 import com.jabiz.runtime.task.NotificationSender;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
@@ -38,6 +47,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -52,6 +62,11 @@ import java.util.UUID;
  * commit) can therefore neither send the mail again (the retry finds it {@code SENT}) nor lose the tokens of a mail
  * that went out. A failure before or during the send is recorded as {@code FAILED}, again in a transaction of its own,
  * and fails the delivery, which the outbox retries with new tokens (the earlier ones are superseded).
+ *
+ * <p>A message with a sender key (decision D56) leaves through the server the application's {@link MailSenderSource}
+ * resolves the key to, with the password opened here; whatever is wrong with it (no source, no such sender, settings
+ * the platform refuses, the server's answer) is recorded as the attempt's failure, never sent through the platform's
+ * server instead.
  */
 @Component
 class DeliverMail implements StepHandler<DeliverMail.Metadata, ProcessContext> {
@@ -74,7 +89,7 @@ class DeliverMail implements StepHandler<DeliverMail.Metadata, ProcessContext> {
 
     /** What a message is to the delivery. */
     private record Pending(String messageId, MailTemplate template, String templateName, UUID userId, String address,
-        Locale locale, Map<String, Object> params, int attempt, boolean done, boolean unsubscribed) {}
+        Locale locale, Map<String, Object> params, int attempt, boolean done, boolean unsubscribed, String senderKey) {}
 
     private final MailTemplates templates;
     private final MessageCatalog messages;
@@ -85,11 +100,20 @@ class DeliverMail implements StepHandler<DeliverMail.Metadata, ProcessContext> {
     private final JsonMapper json;
     private final Clock clock;
     private final String poolRef;
+    private final ObjectProvider<MailSenderSource> sources;
+    private final EntityDefinitionRegistry entities;
+    private final MailSenders senders;
+    private final SecretSealer sealer;
     private final SecureRandom random = new SecureRandom();
 
     DeliverMail(MailTemplates templates, MessageCatalog messages, NotificationSender sender, JwtService tokens,
         StorageAdapterRegistry storages, EntityIdGenerator ids, JsonMapper json, Clock clock,
-        @Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
+        @Value("${jabiz.storage.default-pool-ref:default}") String poolRef, ObjectProvider<MailSenderSource> sources,
+        EntityDefinitionRegistry entities, MailSenders senders, SecretSealer sealer) {
+        this.sources = sources;
+        this.entities = entities;
+        this.senders = senders;
+        this.sealer = sealer;
         this.templates = templates;
         this.messages = messages;
         this.sender = sender;
@@ -127,7 +151,7 @@ class DeliverMail implements StepHandler<DeliverMail.Metadata, ProcessContext> {
 
     private Mono<Pending> load(String messageId) {
         return engine().select("""
-                SELECT m.template, m.user_id, m.address, m.locale, m.params,
+                SELECT m.template, m.user_id, m.address, m.locale, m.params, m.sender_key,
                        (SELECT count(*) FROM sys_mail_attempt a WHERE a.message_id = m.message_id) AS attempts,
                        EXISTS (SELECT 1 FROM sys_mail_attempt a WHERE a.message_id = m.message_id
                                AND a.outcome IN ('SENT', 'SKIPPED')) AS done,
@@ -146,7 +170,8 @@ class DeliverMail implements StepHandler<DeliverMail.Metadata, ProcessContext> {
                     Rows.string(row.get("address")), Locale.of(Rows.string(row.get("locale"))),
                     json.readValue(Rows.string(row.get("params")), PARAMS),
                     Math.toIntExact(Rows.longValue(row.get("attempts"))) + 1,
-                    Boolean.TRUE.equals(row.get("done")), Boolean.TRUE.equals(row.get("unsubscribed")));
+                    Boolean.TRUE.equals(row.get("done")), Boolean.TRUE.equals(row.get("unsubscribed")),
+                    Rows.string(row.get("sender_key")));
             });
     }
 
@@ -195,13 +220,60 @@ class DeliverMail implements StepHandler<DeliverMail.Metadata, ProcessContext> {
             MailRenderer.Rendered mail = render(template, pending.locale(), values);
             MailMessage message = new MailMessage(pending.address(), mail.subject(), mail.text(), mail.html(),
                 List.of());
-            return engine().inNewTransaction(stored.then()).then(Mono.fromCallable(() -> {
-                    sender.send(message);
-                    return true;
-                })
-                .subscribeOn(Schedulers.boundedElastic()))
+            Mono<Boolean> delivery = pending.senderKey() == null ? Mono.fromCallable(() -> {
+                sender.send(message);
+                return true;
+            }) : sendVia(pending, message);
+            return engine().inNewTransaction(stored.then()).then(delivery.subscribeOn(Schedulers.boundedElastic()))
                 .then();
         });
+    }
+
+    /**
+     * Through the server the application's source resolves the key to (decision D56). The row is read as the latest
+     * version by the key field (its value compared as text); a deleted row is no sender.
+     */
+    private Mono<Boolean> sendVia(Pending pending, MailMessage message) {
+        String key = pending.senderKey();
+        MailSenderSource source = sources.getIfAvailable();
+        if (source == null) {
+            return Mono.error(new IllegalStateException("The mail names the sender " + key
+                + ", but no MailSenderSource is declared"));
+        }
+        EntityDefinition entity = entities.getOrThrow(source.entity());
+        FieldDefinition keyField = entity.fields.get(source.keyField());
+        if (keyField == null) {
+            return Mono.error(new IllegalStateException("MailSenderSource names " + source.entity() + "."
+                + source.keyField() + ", which the entity does not have"));
+        }
+        String sql = "SELECT * FROM " + SqlIdentifiers.require(entity.physicalTable) + " WHERE CAST("
+            + SqlIdentifiers.require(keyField.physicalColumn()) + " AS text) = :key"
+            + (entity.temporal ? " ORDER BY version_no DESC" : "") + " LIMIT 1";
+        return engine().select(sql, Map.of("key", BoundValue.of(key))).next()
+            .filter(row -> !Boolean.TRUE.equals(row.get("is_deleted")))
+            .map(row -> {
+                Map<String, Object> attributes = new LinkedHashMap<>();
+                entity.fields.values().forEach(field -> attributes.put(field.name(),
+                    row.get(field.physicalColumn())));
+                return attributes;
+            })
+            .switchIfEmpty(Mono.error(() -> new IllegalStateException("The mail names the sender " + key
+                + ", which does not exist")))
+            .flatMap(attributes -> Mono.fromCallable(() -> {
+                Optional<MailSenderSettings> settings = source.settings(attributes);
+                if (settings.isEmpty()) {
+                    throw new IllegalStateException("The sender " + key + " is not usable (" + source + ")");
+                }
+                List<String> problems = senders.problems(settings.get());
+                if (!problems.isEmpty()) {
+                    throw new IllegalStateException("The sender " + key + " has settings the platform refuses: "
+                        + String.join("; ", problems));
+                }
+                String password = sealer.open(settings.get().sealedPassword(), key);
+                senders.send(settings.get(), password, message);
+                return true;
+            // Off the event loop that delivered the row: opening the password and the SMTP session block.
+            }).subscribeOn(Schedulers.boundedElastic()));
     }
 
     private MailRenderer.Rendered render(MailTemplate template, Locale locale, Map<String, String> values) {

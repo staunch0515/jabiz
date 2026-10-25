@@ -49,11 +49,24 @@ public class SmtpNotificationSender implements NotificationSender {
     /** Plain text, with its HTML alternative and the attachments as parts of their own, in UTF-8. */
     @Override
     public void send(MailMessage message) throws MessagingException {
-        JavaMailSender sender = sender();
+        send(sender(), from, null, message);
+    }
+
+    /** Composes and sends through any sender, from an address with an optional name ({@link MailSenders} too). */
+    static void send(JavaMailSender sender, String from, String fromName, MailMessage message)
+        throws MessagingException {
         MimeMessage mime = sender.createMimeMessage();
         boolean multipart = !message.attachments().isEmpty() || message.htmlBody() != null;
         MimeMessageHelper helper = new MimeMessageHelper(mime, multipart, "UTF-8");
-        helper.setFrom(from);
+        if (fromName == null || fromName.isBlank()) {
+            helper.setFrom(from);
+        } else {
+            try {
+                helper.setFrom(from, fromName);
+            } catch (java.io.UnsupportedEncodingException e) {
+                throw new MessagingException("The sender's name cannot be encoded", e);
+            }
+        }
         helper.setTo(message.to());
         helper.setSubject(message.subject());
         if (message.htmlBody() != null) {

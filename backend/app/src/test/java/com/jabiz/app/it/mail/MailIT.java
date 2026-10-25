@@ -1,5 +1,6 @@
 package com.jabiz.app.it.mail;
 
+import com.icegreen.greenmail.configuration.GreenMailConfiguration;
 import com.icegreen.greenmail.junit5.GreenMailExtension;
 import com.icegreen.greenmail.util.ServerSetup;
 import com.jabiz.app.it.fixture.ItMailFixtures;
@@ -52,11 +53,19 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
     // The portal signs in by mailed link and opens accounts (decision D54): an application's invitation (D55) uses it.
     // With registration open, the administration must name its roles (SignInEntries).
     "jabiz.security.entries.portal.self-registration=true", "jabiz.security.entries.portal.email-link=true",
-    "jabiz.security.entries.admin.accepted-roles=IT_BACK_OFFICE"})
+    "jabiz.security.entries.admin.accepted-roles=IT_BACK_OFFICE",
+    // The shop's own server (decision D56) is a second local server with a self-signed certificate: tests only.
+    "jabiz.mail.senders.trust-all-for-tests=true"})
 class MailIT extends SecurityItSupport {
 
     @RegisterExtension
     static final GreenMailExtension MAIL = new GreenMailExtension(new ServerSetup(3027, null, ServerSetup.PROTOCOL_SMTP));
+
+    /** The shop's own server (decision D56): SMTPS with a login the shop knows. */
+    @RegisterExtension
+    static final GreenMailExtension SHOP_MAIL = new GreenMailExtension(new ServerSetup(3465, null,
+        ServerSetup.PROTOCOL_SMTPS)).withConfiguration(GreenMailConfiguration.aConfig()
+        .withUser("shop@example.com", "shop", "shop-secret-1"));
 
     private static final Pattern VERIFY_LINK = Pattern.compile("/verify\\?token=([A-Za-z0-9_-]+)");
     private static final Pattern RESET_LINK = Pattern.compile("/reset\\?token=([A-Za-z0-9_-]+)");
@@ -180,6 +189,43 @@ class MailIT extends SecurityItSupport {
             .expectStatus().isEqualTo(status).expectBody(MAP).returnResult().getResponseBody();
     }
 
+    /** Records a server of the shop's through IT_MAIL_SERVER_SET; the password is sealed on the way. */
+    private void shopServer(String key, String password, boolean verified) {
+        Map<String, Object> input = new LinkedHashMap<>();
+        input.put("key", key);
+        input.put("host", "localhost");
+        input.put("port", 3465);
+        input.put("tls", "SMTPS");
+        input.put("username", "shop");
+        input.put("password", password);
+        input.put("fromAddress", "shop@example.com");
+        input.put("fromName", "The Shop");
+        input.put("verified", verified);
+        post("/api/processes/IT_MAIL_SERVER_SET/latest", caller(), input).expectStatus().isOk();
+    }
+
+    /** A mail of it.via to {@code address}, through the shop's server {@code via}. */
+    private Map<String, Object> sendVia(String address, String via, int status) {
+        Map<String, Object> input = new LinkedHashMap<>();
+        input.put("template", "via");
+        input.put("address", address);
+        input.put("locale", "en");
+        input.put("value", "the autumn menu");
+        input.put("via", via);
+        return post("/api/processes/IT_MAIL_SEND/latest", caller(), input)
+            .expectStatus().isEqualTo(status).expectBody(MAP).returnResult().getResponseBody();
+    }
+
+    private static List<MimeMessage> received(GreenMailExtension server, String address) {
+        return Arrays.stream(server.getReceivedMessages()).filter(message -> {
+            try {
+                return message.getAllRecipients()[0].toString().equals(address);
+            } catch (Exception e) {
+                throw new IllegalStateException(e);
+            }
+        }).toList();
+    }
+
     private static List<MimeMessage> to(String address) {
         return Arrays.stream(MAIL.getReceivedMessages()).filter(message -> {
             try {
@@ -257,6 +303,70 @@ class MailIT extends SecurityItSupport {
         deliver();
         assertThat(to(other)).singleElement().satisfies(message ->
             assertThat(message.getSubject()).isEqualTo("Verify your address, Ann"));
+    }
+
+    @Test
+    void aMailLeavesThroughTheApplicationsOwnServerInItsName() throws Exception {
+        // Decision D56: the password is stored sealed, never as given.
+        shopServer("shop-ok", "shop-secret-1", true);
+        assertThat(query("SELECT f_secret FROM it_mail_server WHERE f_key = ?", "shop-ok")).singleElement()
+            .satisfies(row -> assertThat(String.valueOf(row.get("f_secret"))).startsWith("s1:")
+                .doesNotContain("shop-secret-1"));
+        String address = address("via");
+        sendVia(address, "shop-ok", 200);
+        assertThat(query("SELECT sender_key FROM sys_mail_message WHERE address = ?", address)).singleElement()
+            .satisfies(row -> assertThat(row).containsEntry("sender_key", "shop-ok"));
+
+        deliver();
+        assertThat(attempts(address)).extracting(row -> row.get("outcome")).containsExactly("SENT");
+        assertThat(to(address)).as("nothing through the platform's server").isEmpty();
+        MimeMessage mail = received(SHOP_MAIL, address).getFirst();
+        assertThat(mail.getFrom()[0].toString()).isEqualTo("The Shop <shop@example.com>");
+        assertThat(mail.getSubject()).isEqualTo("From the shop: the autumn menu");
+        assertThat(part(mail, "text/plain")).contains("The shop writes about the autumn menu.");
+
+        // A blank key is a violation of the process, not a mail through the platform's server.
+        assertThat(ruleCode(sendVia(address("via-none"), " ", 422))).isEqualTo("MAIL_SENDER_MISSING");
+    }
+
+    @Test
+    void aServerThatRefusesOrIsUnknownFailsTheAttemptAndNeverFallsBackToThePlatforms() throws Exception {
+        shopServer("shop-wrong", "not-the-password", true);
+        shopServer("shop-unverified", "shop-secret-1", false);
+        String wrong = address("via-wrong");
+        String unknown = address("via-unknown");
+        String unverified = address("via-unverified");
+        sendVia(wrong, "shop-wrong", 200);
+        sendVia(unknown, "shop-nowhere", 200);
+        sendVia(unverified, "shop-unverified", 200);
+
+        // The outbox stops a consumer's batch at its first failure: one delivery per refused mail.
+        deliver();
+        deliver();
+        deliver();
+        // The server's own answer is the attempt's detail: the shop sees why.
+        assertThat(attempts(wrong)).singleElement().satisfies(row -> assertThat(row)
+            .containsEntry("outcome", "FAILED").extractingByKey("detail").asString().containsIgnoringCase("auth"));
+        assertThat(attempts(unknown)).singleElement().satisfies(row -> assertThat(row)
+            .containsEntry("outcome", "FAILED").extractingByKey("detail").asString().contains("does not exist"));
+        assertThat(attempts(unverified)).singleElement().satisfies(row -> assertThat(row)
+            .containsEntry("outcome", "FAILED").extractingByKey("detail").asString().contains("not usable"));
+        assertThat(to(wrong)).isEmpty();
+        assertThat(to(unknown)).isEmpty();
+        assertThat(to(unverified)).isEmpty();
+        assertThat(received(SHOP_MAIL, wrong)).isEmpty();
+
+        // Corrected, the outbox's retries go through the shop's server; the mails were never lost.
+        shopServer("shop-wrong", "shop-secret-1", true);
+        shopServer("shop-nowhere", "shop-secret-1", true);
+        shopServer("shop-unverified", "shop-secret-1", true);
+        clock.advance(Duration.ofMinutes(1));
+        deliver();
+        for (String address : List.of(wrong, unknown, unverified)) {
+            assertThat(attempts(address)).extracting(row -> row.get("outcome")).containsExactly("FAILED", "SENT");
+            assertThat(received(SHOP_MAIL, address)).hasSize(1);
+            assertThat(to(address)).isEmpty();
+        }
     }
 
     @Test

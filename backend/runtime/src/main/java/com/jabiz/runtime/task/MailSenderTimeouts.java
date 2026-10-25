@@ -47,9 +47,14 @@ public class MailSenderTimeouts implements BeanPostProcessor {
     @Override
     public Object postProcessAfterInitialization(Object bean, String beanName) {
         if (bean instanceof JavaMailSenderImpl sender) {
-            Properties properties = sender.getJavaMailProperties();
-            PROPERTIES.forEach(name -> properties.putIfAbsent(name, timeoutMillis));
+            apply(sender);
         }
         return bean;
+    }
+
+    /** Sets the timeouts on a sender made for one send ({@link MailSenders}); properties set already win. */
+    public void apply(JavaMailSenderImpl sender) {
+        Properties properties = sender.getJavaMailProperties();
+        PROPERTIES.forEach(name -> properties.putIfAbsent(name, timeoutMillis));
     }
 }
