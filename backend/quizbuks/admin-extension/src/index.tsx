@@ -15,6 +15,7 @@ import {
   Scale,
   ScrollText,
   Settings,
+  TrendingUp,
   Sparkles,
   Users,
   Wallet,
@@ -41,6 +42,7 @@ import QuizDetailPage from './QuizDetailPage'
 import QuizzesPage from './QuizzesPage'
 import ReconciliationPage from './ReconciliationPage'
 import ReportsPage from './ReportsPage'
+import InvestorMetricsPage from './InvestorMetricsPage'
 import ReviewsPage from './ReviewsPage'
 import SponsorReviewPage from './SponsorReviewPage'
 import CashRewardsPage from './CashRewardsPage'
@@ -85,6 +87,7 @@ export default defineExtension({
     { path: '/qb/finance/manual-credits/:topUpId', element: <ManualCreditPage /> },
     { path: PATH.reconciliation, element: <ReconciliationPage /> },
     { path: PATH.reports, element: <ReportsPage /> },
+    { path: PATH.investorMetrics, element: <InvestorMetricsPage /> },
     { path: PATH.journal, element: <JournalPage /> },
     { path: PATH.journalMapping, element: <JournalMappingPage /> },
     { path: PATH.legal, element: <LegalPage /> },
@@ -148,6 +151,9 @@ export default defineExtension({
         { key: 'qb-reconciliation', label: 'menu.reconciliation', path: PATH.reconciliation, icon: Scale,
           permission: PERMISSION.reconcile },
         { key: 'qb-reports', label: 'menu.reports', path: PATH.reports, icon: FileSpreadsheet,
+          permission: PERMISSION.financeRead },
+        // Q27: the figures investors ask for, by month.
+        { key: 'qb-investor-metrics', label: 'menu.investorMetrics', path: PATH.investorMetrics, icon: TrendingUp,
           permission: PERMISSION.financeRead },
         { key: 'qb-journal', label: 'menu.journal', path: PATH.journal, icon: BookOpenCheck,
           permission: PERMISSION.financeRead },

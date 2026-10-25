@@ -4378,3 +4378,12 @@ L4 共享仪表的注释；L5 13 写明每个键每次轮询多一个查询观�
 测试：`MailTemplateTest`、`MailChecksTest`、`JwtServiceTest`、`MailIT`（应用邮件的链接开户与登录、入口与路径的拒绝、地址退订与大小写）、`ProcessAccessIT`。
 
 **16ze 状态**：✅ 已实施（PR 待建）。
+
+### 16zf-a 裸域名转向到一个路径（0.2 天）
+
+来源：需求方 2026-10-25（QuizBuks：答题人前端移到 `/taker/`、招商网站在 `/biz/`，裸域名 `https://{host}` 缺省转到 `/biz/`）。分支 `1.2/phase-16zf-a-root-redirect`。
+`jabiz.web.root-redirect`（环境变量 `JABIZ_WEB_ROOT_REDIRECT`）：对恰好 `/` 的 `GET` / `HEAD` 在查找 SPA 之前 302 到该路径；只能是本主机的绝对路径（`SpaConfigCheck`）。
+`jabiz.web.redirects[i].from` / `.to`：搬走的前缀，其下路径 301 到新前缀下的同一路径（此前印出、寄出的链接仍有效）。两者都保留查询串。不设时与从前相同。设计 17 §3.2。
+测试：`SpaFallbackFilterTest`、`SpaConfigCheckTest`。
+
+**16zf-a 状态**：✅ 已实施（PR 待建）。

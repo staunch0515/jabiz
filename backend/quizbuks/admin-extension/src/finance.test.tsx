@@ -7,13 +7,15 @@ import { initReactI18next } from 'react-i18next'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, AppearanceProvider, EXTENSION_NAMESPACE, Toaster } from '@jabiz/admin'
+import { expectAccessible } from '@jabiz/admin/testing'
 import FinanceOverviewPage from './FinanceOverviewPage'
 import { byCheck, transferFilterOf } from './finance'
-import { monthPeriod, previousMonth, type ReconItem } from './finance-api'
+import { monthPeriod, monthRange, previousMonth, type ReconItem } from './finance-api'
 import { TEMPLATE } from './ids'
 import { messages } from './messages'
 import ReconciliationPage from './ReconciliationPage'
 import ReportsPage from './ReportsPage'
+import InvestorMetricsPage from './InvestorMetricsPage'
 import TransferReviewPage from './TransferReviewPage'
 import TransfersPage from './TransfersPage'
 
@@ -96,6 +98,15 @@ beforeEach(() => {
     ]],
     [TEMPLATE.monthly, [{ seq: 1, category: 'TOPUP', transactionCount: 1, amount: 10000, stripeBalance: 10000,
       sponsorWallets: -10000 }]],
+    [TEMPLATE.investorMetrics, [
+      { month: '2026-09', newSponsors: 2, activeSponsors: 1, retainedSponsors: 0, publicationsWentOn: 1, newTakers: 5,
+        activeTakers: 4, attempts: 10, completions: 8, passes: 4, prizesWon: 4, prizesClaimed: 3, prizesRedeemed: 2,
+        invitationsSent: 6, invitationsAnswered: 3, topUps: 0, topUpAmount: 0, rewardsPaid: 0, commission: 0 },
+      { month: '2026-10', newSponsors: 1, activeSponsors: 3, retainedSponsors: 1, publicationsWentOn: 2, newTakers: 7,
+        activeTakers: 9, attempts: 20, completions: 12, passes: 6, prizesWon: 6, prizesClaimed: 5, prizesRedeemed: 4,
+        invitationsSent: 0, invitationsAnswered: 0, topUps: 1, topUpAmount: 10000, rewardsPaid: 1000, commission: 200 }]],
+    [TEMPLATE.investorSponsors, [{ sponsorId: 's-1', company: 'Kissa Kudos', takers: 9, attempts: 20, completions: 12,
+      passes: 6, prizesWon: 6, prizesRedeemed: 4, invitationsSent: 6, invitationsAnswered: 3 }]],
     [TEMPLATE.balances, [{ seq: 1, rowKind: 'ACCOUNT', code: '1110', name: 'Stripe balance', opening: 0, debit: 10000,
       credit: 0, closing: 10000 }, { seq: 901, rowKind: 'CHECK', code: 'SPONSOR_WALLETS', name: 'Sponsor wallets',
       opening: 0, debit: 0, credit: 10000, closing: -10000, partyTotal: -10000, matches: true }]],
@@ -365,7 +376,77 @@ describe('ReportsPage', () => {
   })
 })
 
+describe('InvestorMetricsPage', () => {
+  it('shows the months of the period in the address with a total, the merchants, and exports through the platform',
+    async () => {
+      renderAt('/qb/finance/investor-metrics?from=2026-09&to=2026-10', '/qb/finance/investor-metrics',
+        <InvestorMetricsPage />)
+      expect(await screen.findByTestId('investor-from')).toHaveValue('2026-09')
+      expect(screen.getByTestId('investor-to')).toHaveValue('2026-10')
+      const months = screen.getByTestId('investor-months')
+      const rows = await within(months).findAllByTestId('investor-month')
+      expect(rows.map((row) => row.dataset.month)).toEqual(['2026-09', '2026-10'])
+      // The pass rate and the redemption rate are derived: October passed 6 of 12, collected 4 of 6.
+      expect(within(rows[1]).getAllByRole('cell').map((cell) => cell.textContent)).toContain('50.0%')
+      expect(within(rows[1]).getAllByRole('cell').map((cell) => cell.textContent)).toContain('66.7%')
+      // The total sums events; the counts of people (active, retained) have none.
+      const total = within(months).getByTestId('investor-total')
+      expect(within(total).getAllByRole('cell').map((cell) => cell.textContent)).toEqual(['Total', '3', '', '', '3',
+        '12', '', '30', '20', '10', '50.0%', '10', '8', '6', '60.0%', '6', '3', '1', '¥10,000', '¥1,000', '¥200'])
+      expect(calledWith(TEMPLATE.investorMetrics).at(-1)![1].params).toEqual({ from: '2026-09-01T00:00:00.000Z',
+        to: '2026-11-01T00:00:00.000Z' })
+
+      const sponsors = screen.getByTestId('investor-sponsors')
+      expect(await within(sponsors).findByTestId('investor-sponsor')).toHaveAttribute('data-sponsor', 's-1')
+      expect(within(sponsors).getByText('Kissa Kudos')).toBeInTheDocument()
+      await expectAccessible()
+
+      await userEvent.click(within(months).getByTestId('export-csv'))
+      await waitFor(() => expect(server.sessionFetch).toHaveBeenCalled())
+      const [url, init] = server.sessionFetch.mock.calls[0]
+      expect(url).toBe('/api/queries/qb.admin.investor-metrics/export?format=csv')
+      expect(JSON.parse(init.body)).toEqual({ params: { from: '2026-09-01T00:00:00.000Z',
+        to: '2026-11-01T00:00:00.000Z' } })
+      expect(within(months).getByTestId('report-issue')).toBeInTheDocument()
+    })
+
+  it('puts the chosen months in the address and refuses a period that is not one', async () => {
+    renderAt('/qb/finance/investor-metrics?from=2026-09&to=2026-10', '/qb/finance/investor-metrics',
+      <InvestorMetricsPage />)
+    fireEvent.change(await screen.findByTestId('investor-to'), { target: { value: '2026-12' } })
+    await waitFor(() => expect(calledWith(TEMPLATE.investorMetrics).at(-1)![1].params).toEqual({
+      from: '2026-09-01T00:00:00.000Z', to: '2027-01-01T00:00:00.000Z' }))
+    fireEvent.change(screen.getByTestId('investor-from'), { target: { value: '2027-01' } })
+    expect(await screen.findByText('Choose a period of one to 36 months, the first month not after the last.'))
+      .toBeInTheDocument()
+    expect(screen.queryByTestId('investor-months')).not.toBeInTheDocument()
+  })
+
+  it('shows the last six months without an address, and no issue without the permission', async () => {
+    server.permissions = new Set(['qb.admin.finance.read'])
+    renderAt('/qb/finance/investor-metrics', '/qb/finance/investor-metrics', <InvestorMetricsPage />)
+    expect(await screen.findByTestId('investor-to')).toHaveValue(previousMonth())
+    const [from, to] = [screen.getByTestId('investor-from'), screen.getByTestId('investor-to')]
+      .map((input) => (input as HTMLInputElement).value)
+    expect(monthRange(from, to)).not.toBeNull()
+    const months = (Number(to.slice(0, 4)) - Number(from.slice(0, 4))) * 12 + Number(to.slice(5)) - Number(from.slice(5))
+    expect(months).toBe(5)
+    await screen.findAllByTestId('export-pdf')
+    expect(screen.queryByTestId('report-issue')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('issued-runs')).not.toBeInTheDocument()
+  })
+})
+
 describe('finance helpers', () => {
+  it('makes a range of months UTC, the end excluded, and refuses a backwards or too long one', () => {
+    expect(monthRange('2026-09', '2026-10')).toEqual({ from: '2026-09-01T00:00:00.000Z', to: '2026-11-01T00:00:00.000Z' })
+    expect(monthRange('2026-10', '2026-10')).toEqual({ from: '2026-10-01T00:00:00.000Z', to: '2026-11-01T00:00:00.000Z' })
+    expect(monthRange('2026-11', '2026-10')).toBeNull()
+    expect(monthRange('2023-10', '2026-10')).toBeNull()
+    expect(monthRange('2023-11', '2026-10')).not.toBeNull()
+    expect(monthRange('x', '2026-10')).toBeNull()
+  })
+
   it('makes a month UTC, the next month excluded', () => {
     expect(monthPeriod('2026-12')).toEqual({ from: '2026-12-01T00:00:00.000Z', to: '2027-01-01T00:00:00.000Z' })
     expect(monthPeriod('2026-13')).toBeNull()
