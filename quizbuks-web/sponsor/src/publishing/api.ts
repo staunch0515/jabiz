@@ -864,3 +864,67 @@ export const removeInvitation = (invitationId: string) =>
   runProcess<{ invitationId: string }>(PUBLISHING_PROCESS.invitationRemove, { invitationId })
 export const sendInvitations = (publicationId: string) =>
   runProcess<SendInvitationsOutput>(PUBLISHING_PROCESS.invitationSend, { publicationId })
+
+// ---- the sponsor's own mail server (Q29) -----------------------------------------------------------------------------
+
+export type MailServerTls = 'SMTPS' | 'STARTTLS'
+export const MAIL_SERVER_TLS: readonly MailServerTls[] = ['SMTPS', 'STARTTLS']
+
+/** A row of `qb.sponsor.mail-server`: the settings without the password, and whether the last test mail left. */
+export interface MailServer {
+  host: string
+  port: number
+  tls: MailServerTls
+  username: string
+  fromAddress: string
+  fromName: string | null
+  /** Set while the server is verified: the invitations leave through it. */
+  verifiedAt: string | null
+  testedAt: string | null
+  /** The server's or the connection's answer when the last test mail did not leave. */
+  lastError: string | null
+}
+
+/** `MailServerProcesses.SetInput`: the password is blank to keep the stored one. */
+export interface MailServerInput {
+  host: string
+  port: number
+  tls: MailServerTls
+  username: string
+  password: string | null
+  fromAddress: string
+  fromName: string | null
+}
+
+/** `MailServerProcesses.SetOutput`. */
+export interface MailServerOutput {
+  sponsorId: string
+  verified: boolean
+  error: string | null
+  testedAt: string
+  sentTo: string | null
+}
+
+/** The sponsor's server, or null before one is saved. */
+export async function readMailServer(): Promise<MailServer | null> {
+  const row = (await runQuery<Row>(PUBLISHING_TEMPLATE.mailServer, { limit: 1 })).items[0]
+  if (!row) return null
+  return {
+    host: String(row.host ?? ''),
+    port: num(row.port),
+    tls: (String(row.tls ?? 'SMTPS') as MailServerTls),
+    username: String(row.username ?? ''),
+    fromAddress: String(row.fromAddress ?? ''),
+    fromName: row.fromName == null ? null : String(row.fromName),
+    verifiedAt: row.verifiedAt == null ? null : String(row.verifiedAt),
+    testedAt: row.testedAt == null ? null : String(row.testedAt),
+    lastError: row.lastError == null ? null : String(row.lastError),
+  }
+}
+
+/** Saves the server after a test mail through it; the output says whether the mail left. */
+export const saveMailServer = (input: MailServerInput) =>
+  runProcess<MailServerOutput>(PUBLISHING_PROCESS.mailServerSet, { ...input })
+
+export const removeMailServer = () =>
+  runProcess<{ sponsorId: string }>(PUBLISHING_PROCESS.mailServerRemove, {})

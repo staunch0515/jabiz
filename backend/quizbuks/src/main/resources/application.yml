@@ -52,6 +52,8 @@ jabiz:
       "[QB_PAYOUT_ONBOARD]": { per-user: 5, period: 1h }
       # Q13b: saving a bank account tells whether it is another user's (and tells finance): not a way to look many up.
       "[QB_BANK_ACCOUNT_SAVE]": { per-user: 10, period: 1h }
+      # Q29: saving the mail server opens an SMTP connection to the host typed (a test mail): not a probe to loop.
+      "[QB_MAIL_SERVER_SET]": { per-user: 10, period: 1h }
       "[QB_WITHDRAWAL_REQUEST]": { per-user: 20, period: 1h }
       # Q16: importing a quiz file makes a whole draft (up to 100 questions) in one transaction.
       "[QB_QUIZ_IMPORT_CHECK]": { per-user: 60, period: 1h }
@@ -99,6 +101,11 @@ jabiz:
     # Base64, at least 32 bytes. Startup fails without it; without it, enrolled users cannot pass their second factor.
     mfa:
       key: ${JABIZ_MFA_KEY:}
+    # The key sealing the secrets the application stores (the sponsors' mail server passwords, Q29; platform decision
+    # D56), from the environment only: Base64, at least 32 bytes. Startup fails without it (a MailSenderSource is
+    # declared). Keep a copy: without it the stored passwords cannot be opened and every sponsor sets theirs again.
+    seal:
+      key: ${JABIZ_SEAL_KEY:}
     # Sign-in entries (docs/design/10-security.md section 15; decision D36; docs/quizbuks/plans/Q2-accounts.md, D-Q2-1).
     # The administration accepts the administrators' roles only (QB_ADMIN_ROLES, comma-separated; ADMIN is the first
     # administrator's): never QB_TAKER or QB_SPONSOR, which anybody can get by registering (the startup check refuses
@@ -161,6 +168,11 @@ jabiz:
     unsubscribe-paths:
       sponsor: mail/unsubscribe
       app: mail/unsubscribe
+    # The sponsors' own mail servers (Q29, platform decision D56): the platform checks a public host, a mail port and
+    # TLS. The switch accepts a server on this machine with any certificate: for the end-to-end tests only, never set
+    # in production (docs/quizbuks/operations.md section 1.4; a startup warning outside dev).
+    senders:
+      trust-all-for-tests: ${JABIZ_MAIL_SENDERS_TRUST_ALL_FOR_TESTS:false}
   files:
     # Uploaded files (docs/design/14-files.md section 6): a directory of this host, a volume in containers.
     local:

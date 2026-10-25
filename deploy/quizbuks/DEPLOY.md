@@ -71,10 +71,12 @@ SPRING_FLYWAY_URL=jdbc:postgresql://postgres:5432/quizbuks
 SPRING_FLYWAY_USER=quizbuks
 SPRING_FLYWAY_PASSWORD=<数据库密码>
 
-# 平台密钥：各自 openssl rand -base64 48 生成；JABIZ_INTEGRITY_KEY 与 JABIZ_MFA_KEY 另存离线副本，丢失不能恢复
+# 平台密钥：各自 openssl rand -base64 48 生成；JABIZ_INTEGRITY_KEY、JABIZ_MFA_KEY 与 JABIZ_SEAL_KEY 另存离线副本，丢失不能恢复
 JABIZ_JWT_SECRET=<base64>
 JABIZ_INTEGRITY_KEY=<base64>
 JABIZ_MFA_KEY=<base64>
+# 商家邮件服务器密码的密封密钥（Q29）：丢失或更换后商家要重新输入密码
+JABIZ_SEAL_KEY=<base64>
 
 # 首个管理员：只在第一次启动（空库）时需要，见下文"首次启动之后"
 JABIZ_BOOTSTRAP_ADMIN_USER=admin
@@ -188,7 +190,7 @@ Run workflow，分支选该环境的分支，`image-tag` 留空。第一次启�
 
    - **`APP_NAME` 必须是 `quizbuks-staging`**：它决定 compose 的项目名与容器名。从 production 复制 `.env` 而忘了改它时，compose 会替换 production 的容器；
      workflow 在部署前检查这一行，不一致即停止。
-   - 平台密钥（`JABIZ_JWT_SECRET`、`JABIZ_INTEGRITY_KEY`、`JABIZ_MFA_KEY`）与首个管理员的密码都**另外生成**，不与 production 共用。
+   - 平台密钥（`JABIZ_JWT_SECRET`、`JABIZ_INTEGRITY_KEY`、`JABIZ_MFA_KEY`、`JABIZ_SEAL_KEY`）与首个管理员的密码都**另外生成**，不与 production 共用。
    - Stripe 只用测试模式的密钥（`sk_test_` / `rk_test_`）。在 Stripe 后台（测试模式）建两个端点 `https://staging.quizbuks.com/api/inbound/stripe` 与
      `/api/inbound/stripe-connect`（订阅的事件见 `docs/quizbuks/stripe-test-mode.md` §4.2），`STRIPE_WEBHOOK_SECRET` / `STRIPE_CONNECT_WEBHOOK_SECRET` 是
      **这两个端点各自的签名密钥**（`whsec_…`，由 Stripe 给出，不能自己生成：签名对不上时每个事件都被拒绝，充值停在 `OPEN`）。经 Cloudflare 时先做"3a. Cloudflare"。
@@ -214,5 +216,5 @@ Run workflow，分支选该环境的分支，`image-tag` 留空。第一次启�
 
 ## 备份
 
-production 的数据库 `quizbuks` 按服务器的方案备份；另外备份数据卷 `quizbuks_files`（上传的文件不在数据库中），并离线保存 `JABIZ_INTEGRITY_KEY` 与 `JABIZ_MFA_KEY`。
+production 的数据库 `quizbuks` 按服务器的方案备份；另外备份数据卷 `quizbuks_files`（上传的文件不在数据库中），并离线保存 `JABIZ_INTEGRITY_KEY`、`JABIZ_MFA_KEY` 与 `JABIZ_SEAL_KEY`。
 staging 是否备份按需要决定（`quizbuks_staging`、`quizbuks-staging_files`）。恢复演练见 `docs/quizbuks/operations.md` §2。

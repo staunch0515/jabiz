@@ -81,6 +81,8 @@ function server(me?: Me) {
         return new Response(null, { status: 204 })
       case '/api/queries/qb.me.consents':
         return json(200, { items: consents, offset: 0, limit: 20 })
+      case '/api/queries/qb.sponsor.mail-server':
+        return json(200, { items: [], offset: 0, limit: 1 })
       case '/api/queries/qb.sponsor.reward-methods':
         return json(200, { items: [{ methods: me?.rewardMethods ?? 'PLATFORM', own: false, maxRewardPerAttempt: null }],
           offset: 0, limit: 1 })
@@ -260,6 +262,8 @@ describe('a signed-in sponsor', () => {
     expect(screen.getByTestId('dashboard-hero')).toHaveTextContent('Hello, Acme')
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Hello, Acme')
     expect(screen.getByTestId('wordmark')).toHaveTextContent('QuizBuks')
+    // The mail server page (Q29) is in the navigation of an approved sponsor.
+    expect(screen.getByRole('link', { name: 'Mail server' })).toHaveAttribute('href', '/mail-server')
     await userEvent.click(screen.getByRole('link', { name: 'Sponsor profile' }))
     expect(window.location.pathname).toBe('/onboarding')
     expect(await screen.findByTestId('onboarding-submit')).toHaveTextContent('Save')

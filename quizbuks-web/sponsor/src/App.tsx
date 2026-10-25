@@ -22,6 +22,7 @@ import { CircleHelp, FileQuestion, LayoutDashboard, Megaphone, MessagesSquare, R
   Wallet,
   HandCoins,
   Gift,
+  Mail,
 } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -38,6 +39,8 @@ import { PublicationListPage } from './publishing/PublicationListPage'
 import { PublicationPage } from './publishing/PublicationPage'
 import { CASH_REWARDS_PATH, CashRewardsPage } from './publishing/CashRewardsPage'
 import { REDEEM_PATH, RedeemPage } from './publishing/RedeemPage'
+import { MailServerPage } from './publishing/MailServerPage'
+import { MAIL_SERVER_PATH } from './publishing/paths'
 import { publicationIdOf, PUBLICATIONS_PATH } from './publishing/paths'
 import { OnboardingPage, useMySponsor } from './pages/OnboardingPage'
 import { MESSAGES_PATH } from './notices/api'
@@ -142,6 +145,7 @@ function SignedIn({ path }: { path: string }) {
   else if (path === WALLET_PATH && kudos) page = <WalletPage />
   else if (topUpId && kudos) page = <TopUpPage key={topUpId} topUpId={topUpId} />
   else if (bankTopUpId && kudos) page = <BankTopUpPage key={bankTopUpId} topUpId={bankTopUpId} />
+  else if (path === MAIL_SERVER_PATH) page = <MailServerPage />
   else if (path === TRANSACTIONS_PATH) page = <TransactionsPage key={search} />
   else if (path === MESSAGES_PATH) page = <MessagesPage />
   else if (path === ACCOUNT_PATH) page = <AccountPage />
@@ -153,6 +157,7 @@ function SignedIn({ path }: { path: string }) {
     { key: 'publications', label: t('publishing.nav'), path: PUBLICATIONS_PATH, icon: Megaphone },
     { key: 'cash', label: t('publishing.cash.nav'), path: CASH_REWARDS_PATH, icon: HandCoins },
     { key: 'redeem', label: t('publishing.redeem.nav'), path: REDEEM_PATH, icon: Gift },
+    { key: 'mailServer', label: t('publishing.mailServer.nav'), path: MAIL_SERVER_PATH, icon: Mail },
     { key: 'onboarding', label: t('nav.onboarding'), path: ONBOARDING, icon: Store },
     ...(kudos ? [{ key: 'wallet', label: t('wallet.nav'), path: WALLET_PATH, icon: Wallet }] : []),
     { key: 'transactions', label: t('transactions.nav'), path: TRANSACTIONS_PATH, icon: ReceiptText },

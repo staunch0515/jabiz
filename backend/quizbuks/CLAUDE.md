@@ -97,6 +97,9 @@
   （都先 `CallerChecks::refuseBanned`，都在列表锁 `qb.invitation-list:<发布>` 内，发送再取配额锁 `qb.invitation-quota:<商家>`；上限与每日配额在配置 `quizbuks.invitations.*`，不是业务参数；寄送只在 `LIVE` 时）与内部 `QB_INVITATION_MAIL`（任务 `qb.invitation-mail`）写入；邀请邮件是模板
   `qb.invitation`（`signInLink`，平台决策 D55；收件人 `MailRecipient.address`）。答题流程读调用者的邀请只经 `Invitations.loadForTaker` / `mine`（公开的卡片一条语句也不读，预算不变）：
   `QB_VIEW` 认领、开始写 `STARTED` 与 `attemptId`、完成写 `ANSWERED` 与分数、奖励；不另写认领接口或事件消费者。读卡片地区的其他地方（通告、档位模板）要先排除 `INVITED`（其卡片的地区是占位的 `GLOBAL`）；管理员只看人数，地址只给商家。
+- **商家自己的邮件服务器**（包 `mailserver`，`docs/quizbuks/plans/Q29-merchant-mail-server.md`，平台 D56）：实体 `QbSponsorMailServer`（每个商家一行）只经 `QB_MAIL_SERVER_SET`（平台步骤 `SealSecret` 密封密码，阻塞步骤 `TestMailServer` 用平台的 `MailSenders` 检查设置并给商家自己的地址发测试邮件，结果写 `verifiedAt` / `lastError`）与 `QB_MAIL_SERVER_REMOVE` 写入；
+  平台的 `MailSenderSource` Bean（`MailServerConfig`）只交出验证过的行。邀请只经 `SendMail.via(商家编号)` 发出（`QB_INVITATION_SEND` 没有验证过的服务器即 422 `QB_INVITATION_NO_MAIL_SERVER`；`QB_INVITATION_MAIL` 发现服务器不可用即退回 `ADDED`），绝不回退到平台的服务器；
+  平台自己的邮件照旧。模板 `qb.sponsor.mail-server` 从不返回密码。`JABIZ_SEAL_KEY` 是部署必需（入口脚本检查、本机演示自己生成）；`jabiz.mail.senders.trust-all-for-tests` 只在测试配置与 e2e 中开。
 - **业务参数的存在**由启动检查 `setup.SetupParamsCheck` 保证（Q26）：新增参数只加进 `QbParams.ALL`（受控的还加进 `CONTROLLED`），部署后执行 `QB_SETUP`；缺少即启动警告，不在流程里自己给缺省值。
 - **投资人指标**（`queries/qb/admin/investor-metrics.sql`、`investor-sponsors.sql`，`docs/quizbuks/plans/Q27-investor-metrics.md`）：只是两个带 `report: period` 的财务模板（UTC 月，各数字按发生时间归月，读时态实体的当前版本）与后台扩展的页面 `InvestorMetricsPage`（导出 / 签发 / 存档复用 `ReportsPage` 的 `ReportActions` / `Issued`）；不存数字、不建表、不建任务。新加一列先改模板与 `InvestorMetricsIT`，再改页面与三语消息。
 - **奖励的支付方式**（`publishing.RewardMethod`、`reward`，`docs/quizbuks/plans/Q22-reward-methods.md`）：`PLATFORM`（平台经账本付）、`SPONSOR_CASH`（商家付现金）、

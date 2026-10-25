@@ -39,6 +39,9 @@ import {
   type InvitationStatus,
   type PublicationStatus,
 } from './api'
+import { useMailServer } from './MailServerPage'
+import { MAIL_SERVER_PATH } from './paths'
+import { hrefOf, navigate } from '../qb/router'
 import { useInvitationStatusLabel } from './shared'
 
 const PAGE_SIZE = 20
@@ -108,7 +111,10 @@ export function InvitationsSection({ publicationId, status }: { publicationId: s
     },
     onError: (error) => notify.error(problemText(error)),
   })
-  const sendable = status === 'LIVE'
+  // Invitations leave through the sponsor's own mail server (Q29): none verified, nothing can be sent.
+  const mailServer = useMailServer()
+  const serverReady = Boolean(mailServer.data?.verifiedAt)
+  const sendable = status === 'LIVE' && serverReady
 
   const columns = useMemo<ColumnDef<InvitationRow, unknown>[]>(() => [
     { id: 'email', header: t('publishing.invitations.email'), enableSorting: false,
@@ -182,7 +188,18 @@ export function InvitationsSection({ publicationId, status }: { publicationId: s
             {t('publishing.invitations.send')}
           </Button>
         </div>
-        {!sendable && <p className="text-muted-foreground text-sm">{t('publishing.invitations.notLive')}</p>}
+        {status !== 'LIVE' && <p className="text-muted-foreground text-sm">{t('publishing.invitations.notLive')}</p>}
+        {status === 'LIVE' && mailServer.isSuccess && !serverReady && (
+          <p className="text-sm" data-testid="invitations-needs-server">
+            {t('publishing.invitations.needsServer')}{' '}
+            <a href={hrefOf(MAIL_SERVER_PATH)} className="text-primary underline" onClick={(event) => {
+              event.preventDefault()
+              navigate(MAIL_SERVER_PATH)
+            }}>
+              {t('publishing.invitations.setUpServer')}
+            </a>
+          </p>
+        )}
       </form>
       <div className="flex flex-wrap items-end gap-2">
         <form role="search" onSubmit={search} className="flex gap-2">

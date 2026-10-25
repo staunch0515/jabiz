@@ -1,5 +1,6 @@
 package com.jabiz.quizbuks.it;
 
+import com.icegreen.greenmail.configuration.GreenMailConfiguration;
 import com.icegreen.greenmail.junit5.GreenMailExtension;
 import com.icegreen.greenmail.util.GreenMailUtil;
 import com.icegreen.greenmail.util.ServerSetup;
@@ -44,6 +45,12 @@ class InvitationIT extends PlayItSupport {
     static final GreenMailExtension MAIL = new GreenMailExtension(new ServerSetup(3048, null,
         ServerSetup.PROTOCOL_SMTP));
 
+    /** The sponsors' own server (Q29): invitations leave through it, never through the platform's. */
+    @RegisterExtension
+    static final GreenMailExtension SHOP = new GreenMailExtension(new ServerSetup(3467, null,
+        ServerSetup.PROTOCOL_SMTPS)).withConfiguration(GreenMailConfiguration.aConfig()
+        .withUser("shop@example.com", "shop", "shop-secret-1"));
+
     static final Pattern LINK = Pattern.compile(
         "https://quizbuks\\.example\\.com/taker/auth/email-link\\?entry=app&token=([A-Za-z0-9_-]+)&to=([^)\\s]*)");
     static final Pattern UNSUBSCRIBE = Pattern.compile(
@@ -74,6 +81,26 @@ class InvitationIT extends PlayItSupport {
         return run("QB_INVITATION_SEND", sponsorToken(sponsorId), body("publicationId", publicationId));
     }
 
+    /** The sponsor's verified mail server (Q29), which the invitations need. */
+    private void shopServer(String sponsorId) {
+        Map<String, Object> input = new java.util.LinkedHashMap<>();
+        input.put("host", "localhost");
+        input.put("port", 3467);
+        input.put("tls", "SMTPS");
+        input.put("username", "shop");
+        input.put("password", "shop-secret-1");
+        input.put("fromAddress", "shop@example.com");
+        input.put("fromName", "The Shop");
+        assertThat(run("QB_MAIL_SERVER_SET", sponsorToken(sponsorId), input)).containsEntry("verified", true);
+    }
+
+    /** Every mail received by either server (the platform's and the shop's). */
+    private static List<MimeMessage> received() {
+        List<MimeMessage> all = new java.util.ArrayList<>(Arrays.asList(MAIL.getReceivedMessages()));
+        all.addAll(Arrays.asList(SHOP.getReceivedMessages()));
+        return all;
+    }
+
     /** Runs the mail job once and delivers the mail it records. */
     private JobRunner.JobRun runMailJob() {
         execute("UPDATE jabiz_shedlock SET lock_until = locked_at");
@@ -94,7 +121,7 @@ class InvitationIT extends PlayItSupport {
 
     /** The text of the newest mail to an address. */
     private static String textTo(String address) {
-        List<MimeMessage> mails = Arrays.stream(MAIL.getReceivedMessages()).filter(m -> {
+        List<MimeMessage> mails = received().stream().filter(m -> {
             try {
                 return m.getAllRecipients()[0].toString().equalsIgnoreCase(address);
             } catch (Exception e) {
@@ -106,7 +133,7 @@ class InvitationIT extends PlayItSupport {
     }
 
     private static int mailsTo(String address) {
-        return (int) Arrays.stream(MAIL.getReceivedMessages()).filter(m -> {
+        return (int) received().stream().filter(m -> {
             try {
                 return m.getAllRecipients()[0].toString().equalsIgnoreCase(address);
             } catch (Exception e) {
@@ -142,6 +169,7 @@ class InvitationIT extends PlayItSupport {
     void anInvitedPublicationIsAnsweredByItsInviteesOnly() {
         String sponsor = sponsorA();
         credit(sponsor, 100_000);
+        shopServer(sponsor);
         String publicationId = invitedPublication(sponsor, "Invited");
         assertThat(card(publicationId)).containsEntry("audience", "INVITED").containsEntry("regions", "GLOBAL");
         String alice = email("alice");
@@ -254,6 +282,7 @@ class InvitationIT extends PlayItSupport {
     @Test
     void theListAndTheDailySendsAreLimited() {
         String sponsor = newSponsor(unique("s-limits"));
+        shopServer(sponsor);
         credit(sponsor, 100_000);
         String publicationId = invitedPublication(sponsor, "Limited");
         // Sent while live only: a scheduled publication's page shows nobody anything yet.
