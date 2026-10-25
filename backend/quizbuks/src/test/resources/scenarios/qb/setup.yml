@@ -22,6 +22,7 @@ steps:
       paramsProposed: [qb.creator-fee-rate, qb.transfer.threshold, qb.transfer.review-above, qb.transfer.enabled,
         qb.review.sponsor.auto, qb.review.publication.auto, qb.topup.min, qb.topup.max, qb.transfer.fee,
         qb.transfer.hold-days, qb.topup.new-sponsor.days, qb.topup.new-sponsor.max-total,
+        qb.reward.default-methods, qb.reward.max-per-attempt,
         qb.journal.account.1110, qb.journal.account.1120, qb.journal.account.2110, qb.journal.account.2120,
         qb.journal.account.2130, qb.journal.account.4110, qb.journal.account.5110,
         qb.journal.account.5120, qb.issuer.name, qb.issuer.address,
@@ -44,7 +45,8 @@ steps:
       p32: "$.proposals[31]", p33: "$.proposals[32]", p34: "$.proposals[33]",
       p35: "$.proposals[34]", p36: "$.proposals[35]", p37: "$.proposals[36]", p38: "$.proposals[37]",
       p39: "$.proposals[38]", p40: "$.proposals[39]", p41: "$.proposals[40]", p42: "$.proposals[41]",
-      p43: "$.proposals[42]", p44: "$.proposals[43]", p45: "$.proposals[44]", p46: "$.proposals[45]", p47: "$.proposals[46]" }
+      p43: "$.proposals[42]", p44: "$.proposals[43]", p45: "$.proposals[44]", p46: "$.proposals[45]", p47: "$.proposals[46]",
+      p48: "$.proposals[47]", p49: "$.proposals[48]" }
   - note: A second administrator publishes the parameters (the journal mapping and issuer empty) and the review rules.
     process: CONTROL_CHANGE_PUBLISH@latest
     actor: { id: publisher, permissions: [control.publish] }
@@ -187,6 +189,12 @@ steps:
   - process: CONTROL_CHANGE_PUBLISH@latest
     actor: { id: publisher, permissions: [control.publish] }
     input: { changeId: "${p47}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p48}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p49}" }
   - expect: { param: qb.creator-fee-rate, value: 0 }
   - expect: { param: qb.transfer.threshold, value: 1000 }
   - expect: { param: qb.transfer.enabled, value: false }

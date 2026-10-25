@@ -52,6 +52,15 @@ public final class PublicationReadiness {
      */
     public static List<Violation> check(Draft draft, List<TierCoverage.Tier> tiers, QuizSnapshot version,
         Instant now) {
+        return check(draft, tiers, version, now, null);
+    }
+
+    /**
+     * As {@link #check(Draft, List, QuizSnapshot, Instant)}, with the highest reward one attempt may win (Q28, the
+     * parameter {@code qb.reward.max-per-attempt}; null for no cap): a tier paying more is a problem of that tier.
+     */
+    public static List<Violation> check(Draft draft, List<TierCoverage.Tier> tiers, QuizSnapshot version,
+        Instant now, BigDecimal maxRewardPerAttempt) {
         List<Violation> problems = new ArrayList<>();
         Integer fullScore = version == null ? null : version.fullScore();
         if (draft.versionId() == null || version == null) {
@@ -110,6 +119,16 @@ public final class PublicationReadiness {
             problems.add(new Violation("maxWinners", PublishingCodes.SPEND_RANGE, "The winners times the highest "
                 + "reward come to more than " + PublishingLimits.MAX_MONEY + "; set a budget or fewer winners",
                 Map.of("max", PublishingLimits.MAX_MONEY)));
+        }
+        if (maxRewardPerAttempt != null && maxRewardPerAttempt.signum() > 0) {
+            for (int i = 0; i < tiers.size(); i++) {
+                BigDecimal reward = tiers.get(i).reward();
+                if (reward != null && reward.compareTo(maxRewardPerAttempt) > 0) {
+                    problems.add(new Violation("tiers[" + i + "].reward", PublishingCodes.REWARD_ABOVE_MAX, "Tier "
+                        + (i + 1) + " pays " + reward + ", more than the highest reward allowed, " + maxRewardPerAttempt,
+                        Map.of("tier", i + 1, "reward", reward, "max", maxRewardPerAttempt)));
+                }
+            }
         }
         if (version != null && version.survey()) {
             problems.addAll(survey(draft, tiers, fullScore));

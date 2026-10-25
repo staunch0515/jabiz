@@ -329,19 +329,35 @@ export const readAudiences = (): Promise<DictionaryItem[]> => readDictionary(PUB
 export const readInvitationStatuses = (): Promise<DictionaryItem[]> =>
   readDictionary(PUBLISHING_DICTIONARY.invitationStatus)
 
-/**
- * The reward methods an administrator allowed the sponsor (Q22): their own row of the setting, or the platform's
- * Kudos alone without one. The server checks again when a draft is saved and submitted.
- */
-export async function readAllowedMethods(): Promise<RewardMethod[]> {
-  const page = await unwrap(api.POST('/api/datasets/{resourceId}/query', {
-    params: { path: { resourceId: PUBLISHING_DATASET.rewardMethods } },
-    body: { limit: 1 },
-  }))
-  const row = (page.items ?? [])[0]?.attributes as Row | undefined
-  const methods = row ? String(row.methods ?? '').split(',').map(methodOf) : []
-  return methods.length > 0 ? REWARD_METHODS.filter((method) => methods.includes(method)) : ['PLATFORM']
+/** What the sponsor may publish with now (Q22, Q28), from `qb.sponsor.reward-methods`. */
+export interface RewardSettings {
+  /** The methods, in the fixed order; empty when nothing is allowed yet. */
+  methods: RewardMethod[]
+  /** Whether an administrator set them for this sponsor (otherwise the platform's default applies). */
+  own: boolean
+  /** The highest reward one attempt may win, in Kudos; null for no cap. */
+  maxRewardPerAttempt: number | null
 }
+
+/**
+ * The reward methods the sponsor may publish with (Q22): their own row of the setting, or without one the platform's
+ * default parameter (Q28), and the highest reward per attempt. The server checks again when a draft is saved and
+ * submitted.
+ */
+export async function readRewardSettings(): Promise<RewardSettings> {
+  const row = (await runQuery<Row>(PUBLISHING_TEMPLATE.rewardMethods, { limit: 1 })).items[0] ?? {}
+  // Names that are no method are dropped, as the server drops them (a typo allows less, never more).
+  const named = String(row.methods ?? '').split(',').map((name) => name.trim())
+  const max = row.maxRewardPerAttempt == null || row.maxRewardPerAttempt === '' ? null : Number(row.maxRewardPerAttempt)
+  return {
+    methods: REWARD_METHODS.filter((method) => named.includes(method)),
+    own: row.own === true || row.own === 'true',
+    maxRewardPerAttempt: max != null && Number.isFinite(max) && max > 0 ? max : null,
+  }
+}
+
+/** The query key of {@link readRewardSettings}: the wizard and the console's frame share one read. */
+export const REWARD_SETTINGS_QUERY = ['qb', 'reward-methods', 'allowed'] as const
 
 // ---- cash rewards (Q22) -------------------------------------------------------------------------------------------
 

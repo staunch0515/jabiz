@@ -100,7 +100,7 @@
 - **业务参数的存在**由启动检查 `setup.SetupParamsCheck` 保证（Q26）：新增参数只加进 `QbParams.ALL`（受控的还加进 `CONTROLLED`），部署后执行 `QB_SETUP`；缺少即启动警告，不在流程里自己给缺省值。
 - **投资人指标**（`queries/qb/admin/investor-metrics.sql`、`investor-sponsors.sql`，`docs/quizbuks/plans/Q27-investor-metrics.md`）：只是两个带 `report: period` 的财务模板（UTC 月，各数字按发生时间归月，读时态实体的当前版本）与后台扩展的页面 `InvestorMetricsPage`（导出 / 签发 / 存档复用 `ReportsPage` 的 `ReportActions` / `Issued`）；不存数字、不建表、不建任务。新加一列先改模板与 `InvestorMetricsIT`，再改页面与三语消息。
 - **奖励的支付方式**（`publishing.RewardMethod`、`reward`，`docs/quizbuks/plans/Q22-reward-methods.md`）：`PLATFORM`（平台经账本付）、`SPONSOR_CASH`（商家付现金）、
-  `OFFLINE_REDEEM`（商家处兑换）。商家允许的方式只经 `QB_SPONSOR_REWARD_METHODS_SET` 写 `QbSponsorRewardMethods`（没有记录 = 只有 `PLATFORM`）；发布的 `rewardMethod` 在保存、复制、提交时都经
+  `OFFLINE_REDEEM`（商家处兑换）。商家允许的方式只经 `QB_SPONSOR_REWARD_METHODS_SET` 写 `QbSponsorRewardMethods`（没有记录 = 受控参数 `qb.reward.default-methods`，声明值 `PLATFORM`，推广期发布 `OFFLINE_REDEEM`；每次答题的最高奖励 `qb.reward.max-per-attempt`，0 为不限；`plans/Q28-phase1-defaults.md`。商家后台经模板 `qb.sponsor.reward-methods` 读当前允许的方式，不自己猜缺省）；发布的 `rewardMethod` 在保存、复制、提交时都经
   `PublicationEditing.methodProblems` 核对，兑换须有 `redeemDescription`。不是 `PLATFORM` 的结算**不取钱包锁、不读钱包、不过账**（`AttemptFinishing`、`AttemptRules`），只插入 `QbCashReward` / `QbRedemption`
   （都是时态实体，状态在 `QbRewards.TRANSITIONS`，流程在现金记录锁 `qb.cash:<记录>` 内）并记计数；现金的状态只经 `QB_CASH_REWARD_*` 流程改变，逾期禁止开始只在 `CashRewardChecks.refuseOverdue`。
   期限 `qb.reward.cash.confirm-days` / `cash.pay-days` / `redeem-days` 是普通参数（`LoadParams` 读，不受控）。

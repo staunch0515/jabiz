@@ -18,7 +18,10 @@ import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.EntityNotFoundException;
 import com.jabiz.runtime.approval.ApprovalCase;
 import com.jabiz.runtime.process.steps.HoldLock;
+import com.jabiz.param.ParamValues;
+import com.jabiz.quizbuks.setup.QbParams;
 import com.jabiz.runtime.process.steps.LoadEntity;
+import com.jabiz.runtime.process.steps.LoadParams;
 import com.jabiz.runtime.process.steps.QueryEntities;
 
 import java.math.BigDecimal;
@@ -180,22 +183,37 @@ final class PublicationEditing {
 
     /** The caller's reward methods setting (Q22), for {@link #allowedMethods}. */
     static final String SPONSOR_METHODS = "sponsorMethods";
+    /** The reward parameters (Q28): the default methods and the highest reward per attempt, at the operation time. */
+    static final String REWARD_PARAMS = "rewardParams";
 
     /**
      * Loads the setting of the methods the caller may publish with (Q22, {@code QbSponsorRewardMethods}; none means
-     * {@link RewardMethod#DEFAULT}). By the immutable user, read only: a setting changed meanwhile is caught by the
-     * next action, as the ban is.
+     * the parameter's default, Q28) and the reward parameters. By the immutable user, read only: a setting changed
+     * meanwhile is caught by the next action, as the ban is.
      */
     static <I, O> void loadSponsorMethods(ProcessDefinitionBuilder<I, O, ProcessContext> pb) {
         pb.step("Load the sponsor's reward methods", QueryEntities.<ProcessContext>of(
-            QbPublications.defaultDataset(QbPublications.SPONSOR_METHODS), ctx -> EntityQuery.builder()
-                .where(new QueryPredicate.Eq("userId", ctx.request().actorId())).limit(1).build(), SPONSOR_METHODS));
+                QbPublications.defaultDataset(QbPublications.SPONSOR_METHODS), ctx -> EntityQuery.builder()
+                    .where(new QueryPredicate.Eq("userId", ctx.request().actorId())).limit(1).build(), SPONSOR_METHODS))
+            // Optional: before setup the parameters are missing and their declared values apply (a draft is saved).
+            .step("Load the reward parameters", LoadParams.<ProcessContext>optional(ProcessContext::opTime, REWARD_PARAMS,
+                QbParams.REWARD_DEFAULT_METHODS, QbParams.REWARD_MAX_PER_ATTEMPT));
     }
 
-    /** The methods the caller may publish with, from {@link #loadSponsorMethods}. */
+    private static ParamValues rewardParams(ProcessContext ctx) {
+        return ctx.contains(REWARD_PARAMS) ? ctx.get(REWARD_PARAMS, ParamValues.class) : null;
+    }
+
+    /** The methods the caller may publish with, from {@link #loadSponsorMethods}: their own setting, or the default. */
     static List<String> allowedMethods(ProcessContext ctx) {
         EntityInstance setting = first(ctx, SPONSOR_METHODS);
-        return RewardMethod.parse(setting == null ? null : setting.get("methods"));
+        return setting == null ? RewardMethod.defaultMethods(rewardParams(ctx)) : RewardMethod.parse(setting.get("methods"));
+    }
+
+    /** The highest reward one attempt may win (Q28), from {@link #loadSponsorMethods}; null for no cap. */
+    static BigDecimal maxRewardPerAttempt(ProcessContext ctx) {
+        BigDecimal cap = QbParams.kudos(rewardParams(ctx), QbParams.REWARD_MAX_PER_ATTEMPT);
+        return cap.signum() > 0 ? cap : null;
     }
 
     /**

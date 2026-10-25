@@ -169,8 +169,8 @@ public final class PublicationLifecycle {
             return;
         }
         PublicationReadiness.check(PublicationEditing.draftOf(publication),
-            PublicationEditing.tiersOf(list(ctx, TIERS)), PublicationEditing.snapshot(version), ctx.opTime())
-            .forEach(ctx::reject);
+            PublicationEditing.tiersOf(list(ctx, TIERS)), PublicationEditing.snapshot(version), ctx.opTime(),
+            PublicationEditing.maxRewardPerAttempt(ctx)).forEach(ctx::reject);
         PublicationEditing.sponsorProblems(ctx).forEach(ctx::reject);
         PublicationEditing.methodProblems(ctx, PublicationEditing.methodOf(publication.attributes()))
             .forEach(ctx::reject);

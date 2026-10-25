@@ -9,6 +9,7 @@ import com.jabiz.quizbuks.publishing.RewardMethod;
 import com.jabiz.quizbuks.reward.CashRewardProcesses;
 import com.jabiz.quizbuks.reward.CashRewardStatus;
 import com.jabiz.quizbuks.reward.RewardCodes;
+import com.jabiz.quizbuks.setup.QbParams;
 import com.jabiz.quizbuks.setup.QbRoles;
 import com.jabiz.runtime.test.TestTokens;
 import org.junit.jupiter.api.Test;
@@ -51,6 +52,13 @@ class RewardMethodsIT extends PlayItSupport {
             List.of(methods), "note", "Q22 test"));
     }
 
+    /** Sets one of the controlled reward parameters (Q28), with four eyes. */
+    private void rewardParam(String key, String value) {
+        Map<String, Object> change = run("CONTROL_CHANGE_PROPOSE", proposer(), body("targetEntity", "SysParam",
+            "values", Map.of("paramKey", key, "value", value), "reason", "Q28 test"));
+        run("CONTROL_CHANGE_PUBLISH", financeAdmin(), body("changeId", change.get("changeId")));
+    }
+
     private Map<String, Object> cashReward(String attemptId) {
         return latest("qb_cash_reward_version", "cash_reward_id", "attempt_id = '" + attemptId + "'").getFirst();
     }
@@ -89,6 +97,47 @@ class RewardMethodsIT extends PlayItSupport {
         overrides.put("regions", List.of("GLOBAL"));
         overrides.put("rewardMethod", RewardMethod.SPONSOR_CASH);
         return Map.of("publicationId", livePublication(sponsor, name, overrides));
+    }
+
+    /**
+     * Q28: a sponsor without a setting of their own has the methods of {@code qb.reward.default-methods} (the launch
+     * phase: prizes only), which the console reads from {@code qb.sponsor.reward-methods}; a tier paying more than
+     * {@code qb.reward.max-per-attempt} is a problem of the draft and refuses the submission.
+     */
+    @Test
+    void theDefaultMethodsAndTheHighestRewardComeFromTheParameters() {
+        String sponsor = newSponsor("s-q28-defaults");
+        String token = sponsorToken(sponsor);
+        String versionId = version(token, "Defaults quiz");
+        Instant now = clock.instant();
+        rewardParam(QbParams.REWARD_DEFAULT_METHODS, "OFFLINE_REDEEM, NOT_A_METHOD");
+        rewardParam(QbParams.REWARD_MAX_PER_ATTEMPT, "50");
+        try {
+            assertThat(rows("qb.sponsor.reward-methods", token, Map.of())).singleElement().satisfies(row -> {
+                assertThat(row).containsEntry("methods", "OFFLINE_REDEEM, NOT_A_METHOD").containsEntry("own", false);
+                assertThat(new BigDecimal(String.valueOf(row.get("maxRewardPerAttempt")))).isEqualByComparingTo("50");
+            });
+            Map<String, Object> save = complete(versionId, "Prize week", now, now.plus(Duration.ofDays(7)));
+            assertThat(codes(refused("QB_PUBLICATION_SAVE", token, save, 422)))
+                .containsExactly(PublishingCodes.REWARD_METHOD_NOT_ALLOWED);
+            save.put("rewardMethod", RewardMethod.OFFLINE_REDEEM);
+            save.put("redeemDescription", "A coffee at the counter");
+            Map<String, Object> saved = run("QB_PUBLICATION_SAVE", token, save);
+            // The top tier pays 100: above the cap until it is raised.
+            assertThat(problemCodes(saved)).containsExactly(PublishingCodes.REWARD_ABOVE_MAX);
+            String publicationId = (String) saved.get("publicationId");
+            assertThat(codes(refused("QB_PUBLICATION_SUBMIT", token, body("publicationId", publicationId), 422)))
+                .containsExactly(PublishingCodes.REWARD_ABOVE_MAX);
+            rewardParam(QbParams.REWARD_MAX_PER_ATTEMPT, "100");
+            assertThat(submit(token, publicationId)).containsEntry("status", "LIVE");
+            // An administrator's own setting replaces the default.
+            allow(sponsor, RewardMethod.PLATFORM);
+            assertThat(rows("qb.sponsor.reward-methods", token, Map.of())).singleElement().satisfies(row ->
+                assertThat(row).containsEntry("methods", "PLATFORM").containsEntry("own", true));
+        } finally {
+            rewardParam(QbParams.REWARD_DEFAULT_METHODS, QbParams.defaultOf(QbParams.REWARD_DEFAULT_METHODS));
+            rewardParam(QbParams.REWARD_MAX_PER_ATTEMPT, QbParams.defaultOf(QbParams.REWARD_MAX_PER_ATTEMPT));
+        }
     }
 
     @Test

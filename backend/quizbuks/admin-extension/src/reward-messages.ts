@@ -12,8 +12,9 @@ export const rewardMessages = {
   en: {
     methods: {
       title: 'Reward methods',
-      hint: 'Which ways this sponsor may pay rewards. Kudos from the wallet are always paid by QuizBuks; cash and prizes the sponsor hands over themselves, so allow them only to sponsors you trust. Running publications are not changed.',
+      hint: 'Which ways this sponsor may pay rewards. Kudos from the wallet are paid by QuizBuks; cash and prizes the sponsor hands over themselves, so allow them only to sponsors you trust. Without a setting of their own, the parameter qb.reward.default-methods applies (prizes only in the launch phase). Running publications are not changed.',
       current: 'Allowed now: {{methods}}',
+      byDefault: 'Allowed now, by the platform\'s default: {{methods}}',
       note: 'Note',
       noteHint: 'Why, for the record.',
       save: 'Save methods',
@@ -88,8 +89,9 @@ export const rewardMessages = {
   zh: {
     methods: {
       title: '奖励支付方式',
-      hint: '这个商家可以用哪些方式支付奖励。钱包里的 Kudos 始终由 QuizBuks 支付；现金和奖品由商家自己交付，只允许你信任的商家使用。进行中的发布不受影响。',
+      hint: '这个商家可以用哪些方式支付奖励。钱包里的 Kudos 由 QuizBuks 支付；现金和奖品由商家自己交付，只允许你信任的商家使用。没有单独设定的商家按参数 qb.reward.default-methods（推广期只有线下奖品）。进行中的发布不受影响。',
       current: '当前允许：{{methods}}',
+      byDefault: '当前允许（平台缺省）：{{methods}}',
       note: '说明',
       noteHint: '原因，供记录。',
       save: '保存方式',
@@ -164,8 +166,9 @@ export const rewardMessages = {
   ja: {
     methods: {
       title: '報酬の支払い方法',
-      hint: 'このスポンサーが報酬を支払える方法です。ウォレットの Kudos は常に QuizBuks が支払います。現金と賞品はスポンサー自身が渡すので、信頼できるスポンサーにだけ許可してください。実施中の公開は変わりません。',
+      hint: 'このスポンサーが報酬を支払える方法です。ウォレットの Kudos は QuizBuks が支払います。現金と賞品はスポンサー自身が渡すので、信頼できるスポンサーにだけ許可してください。個別の設定がないスポンサーにはパラメータ qb.reward.default-methods（立ち上げ期間は店頭の景品のみ）が適用されます。実施中の公開は変わりません。',
       current: '現在の許可：{{methods}}',
+      byDefault: '現在の許可（プラットフォームの既定）：{{methods}}',
       note: 'メモ',
       noteHint: '理由を記録用に。',
       save: '方法を保存',

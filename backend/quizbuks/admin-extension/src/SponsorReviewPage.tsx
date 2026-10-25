@@ -24,7 +24,7 @@ import {
   type DescriptionItem,
 } from '@jabiz/admin'
 import { readSponsor, readUser } from './api'
-import { readSponsorMethods, REWARD_METHODS, setSponsorMethods, type RewardMethod } from './reward-api'
+import { readRewardDefaults, readSponsorMethods, REWARD_METHODS, setSponsorMethods, type RewardMethod } from './reward-api'
 import { AVATAR_VARIANTS, DICTIONARY, isUserId, PATH, PERMISSION, SPONSOR_PENDING } from './ids'
 import { AfterDecision, LoadFailed, Section } from './components'
 import { QUEUE, useAfterDecision, useLabels, when } from './hooks'
@@ -44,7 +44,9 @@ function RewardMethods({ userId }: { userId: string }) {
   const queryClient = useQueryClient()
   const methodLabel = useLabels(DICTIONARY.rewardMethod)
   const setting = useQuery({ queryKey: ['qb-ext', 'sponsor-methods', userId], queryFn: () => readSponsorMethods(userId) })
-  const current = setting.data?.methods ?? ['PLATFORM']
+  // Q28: without a setting of their own, the sponsor has the parameter's methods.
+  const defaults = useQuery({ queryKey: ['qb-ext', 'reward-defaults'], queryFn: readRewardDefaults, staleTime: 60_000 })
+  const current = setting.data?.methods ?? defaults.data?.methods ?? ['PLATFORM']
   const [chosen, setChosen] = useState<RewardMethod[] | null>(null)
   const [note, setNote] = useState('')
   const methods = chosen ?? current
@@ -64,11 +66,14 @@ function RewardMethods({ userId }: { userId: string }) {
   const toggle = (method: RewardMethod, on: boolean) =>
     setChosen(REWARD_METHODS.filter((m) => (m === method ? on : methods.includes(m))))
   if (setting.isError) return <LoadFailed error={setting.error} onRetry={() => void setting.refetch()} />
+  if (setting.isPending || defaults.isPending) {
+    return <Section title={t('reward.methods.title')} testId="sponsor-methods" children={null} />
+  }
   return (
     <Section title={t('reward.methods.title')} testId="sponsor-methods">
       <p className="text-muted-foreground text-sm">{t('reward.methods.hint')}</p>
       <p className="text-sm" data-testid="sponsor-methods-current">
-        {t('reward.methods.current', { methods: current.map(methodLabel).join(', ') })}
+        {t(setting.data ? 'reward.methods.current' : 'reward.methods.byDefault', { methods: current.map(methodLabel).join(', ') })}
         {setting.data?.setBy && (
           <span className="text-muted-foreground"> · {t('reward.methods.setBy')} <UserName id={setting.data.setBy} />
             {setting.data.setAt ? `, ${when(setting.data.setAt)}` : ''}</span>

@@ -35,13 +35,15 @@ export const PUBLISHING_TEMPLATE = {
   /** An invited publication's list and its counts (Q25). */
   invitations: 'qb.sponsor.invitations',
   invitationSummary: 'qb.sponsor.invitation-summary',
+  /** The methods the sponsor may publish with now and the highest reward per attempt (Q28). */
+  rewardMethods: 'qb.sponsor.reward-methods',
 } as const
 
 /** The sponsor's own rows of the publishing entities (read only; writing is the processes'). */
 export const PUBLISHING_DATASET = {
   publication: 'urn:jabiz:dataset:sponsor:QbPublication',
   tier: 'urn:jabiz:dataset:sponsor:QbRewardTier',
-  /** The reward methods an administrator allowed the sponsor (Q22); no row means the platform's Kudos only. */
+  /** The reward methods an administrator allowed the sponsor (Q22); no row means the parameter's default (Q28). */
   rewardMethods: 'urn:jabiz:dataset:sponsor:QbSponsorRewardMethods',
 } as const
 

@@ -183,6 +183,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
    - **科目映射** `qb.journal.account.1110 … 5110`（会计系统中的科目代码；后台"QuizBuks 财务 → 分录导出 → 科目映射"只读显示，修改走受控变更）；没映射的科目使分录导出被拒；
    - 金额参数按业务确认：`qb.creator-fee-rate`、`qb.transfer.threshold`、`qb.transfer.review-above`、`qb.transfer.fee`、`qb.topup.min` / `max`；
    - `qb.transfer.enabled` **保持 false**，直到取得法务意见（§4）；
+   - **奖励的缺省**（Q28）：`qb.reward.default-methods`（没有单独设定的商家可用的支付方式，逗号分隔；声明值 `PLATFORM`，推广期发布 `OFFLINE_REDEEM`，见下文"阶段一的设置"）与 `qb.reward.max-per-attempt`（每次答题可得的最高奖励，Kudos；`0` 不限；景品表示法的上限由法务给出）；
    - 法律文本的最长预告期 `qb.legal.max-announce-days`（缺省 180 天；未发布时同样按 180 天）。
    - `qb.ai.enabled` 由 `QB_SETUP` 提出 `false`，**照样发布**（AI 在上线检查清单的条件满足后才开启）。发布之前参数不存在：启动检查 `EXTERNAL` 对 `job qb.ai.questions` 与 `job qb.ai.cover` 各报一条**警告**
      `enabledBy: parameter qb.ai.enabled has no value in effect now; the type is paused …`，执行器第一次轮询时也记一条 WARN。这在新安装上是预期的（参数缺失与 `false` 一样：请求被拒、没有作业），
@@ -203,6 +204,14 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
    `qb.broadcast-stats`（每日 04:47 UTC，商家通知统计的快照；`quizbuks.messaging.stats-cron`）、`qb.payout-reminder`（每日 03:17 UTC；`quizbuks.messaging.payout-reminder-cron`）。
    商家看到的统计的下限 `qb.broadcast.stats.min-audience`（50，普通参数）：到达不足它时不显示点击与开始答题（评审 M2）。
    限流（`application.yml` 的 `jabiz.process.rate-limits`）：已读与点击每人每分钟 120 次、全部已读与推广开关各 30 次、商家保存通知 60 次、发送每小时 10 次。
+
+**阶段一（推广期）的设置（Q28，`plans/Q28-phase1-defaults.md`）**：推广期只有线下奖品、商家免费、不经手资金（招商网站 §7.11 的承诺）。由超级管理员提出、财务管理员发布（都是受控参数，四眼），按顺序：
+
+- [ ] `qb.reward.default-methods` = `OFFLINE_REDEEM`：没有单独设定的商家只能以线下奖品作奖励；商家后台随之不显示钱包与充值。要让某个商家付 Kudos 或现金，在后台"商家审核"页单独允许（`QB_SPONSOR_REWARD_METHODS_SET`，单个管理员）。
+- [ ] `qb.reward.max-per-attempt` = 法务给出的上限（Kudos 等值）。按答对与否给奖是景品表示法的"懸賞"而不是"総付"：与购买或到店挂钩的一般懸賞，单个景品至多交易额的 20 倍（交易额不足 5,000 日元）或 10 万日元（5,000 日元以上），总额不超过预计销售额的 2%；不要求购买的开放式懸賞没有上限（填 `0`）。线下兑换是否算与购买挂钩由法务认定。高于它的奖励档在保存时报 `QB_REWARD_ABOVE_MAX`、提交被拒。
+- [ ] `qb.review.sponsor.auto` = `true`、`qb.review.publication.auto` = `true`：推广期不逐个人工审核（线下奖品不经手资金；封禁与下架照常可用）。有人工审核能力后改回 `false`。
+- [ ] `qb.transfer.enabled` 保持 `false`、`qb.ai.enabled` 按上线检查清单。
+- [ ] 开始收费（招商网站价格页的"计划中"项）前：把 `qb.reward.default-methods` 改为所售套餐的方式，发布 `qb.creator-fee-rate`，并在网站去掉"计划中"。
 
 **受保护的授权（平台 16r / 16u，决策 D48、D51；10 §16）**：分配或增加 `security.user-role.write`、`security.role.write`、`security.protected-change.decide`、`approval.decide`、`control.publish`、`ledger.*`、
 `platform.param.write`、`*`，以及对持有它们的用户重设密码、二次验证、邮箱或关联外部账号，平台要求**另一位管理员审批**——但只在建立期结束之后。

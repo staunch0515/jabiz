@@ -39,7 +39,8 @@ import {
   inputOf,
   isStale,
   PUBLISHING_LIMITS,
-  readAllowedMethods,
+  readRewardSettings,
+  REWARD_SETTINGS_QUERY,
   REDEEM_DESCRIPTION_LENGTH,
   REGIONS,
   savePublication,
@@ -149,14 +150,14 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
   const survey = (version?.kind ?? quizzes.data?.items.find((quiz) => quiz.quizId === form.quizId)?.kind) === 'SURVEY'
 
   // Q22: the methods an administrator allowed this sponsor; the choice is shown only when there is one to make.
-  const allowed = useQuery({ queryKey: ['qb', 'reward-methods', 'allowed'], queryFn: readAllowedMethods,
-    staleTime: 60_000 })
+  const settings = useQuery({ queryKey: REWARD_SETTINGS_QUERY, queryFn: readRewardSettings, staleTime: 60_000 })
+  const allowed = settings.data?.methods
   const methodLabel = useRewardMethodLabel()
-  const methodChoices: RewardMethod[] = allowed.data ?? ['PLATFORM']
+  const methodChoices: RewardMethod[] = allowed ?? ['PLATFORM']
   // A new draft starts with the first method allowed (the platform's is not always among them) until the sponsor
   // picks one; a draft already saved keeps its own, which the choice then shows as not allowed any more.
-  const rewardMethod: RewardMethod = !detail && allowed.data && !allowed.data.includes(form.rewardMethod)
-    ? allowed.data[0] : form.rewardMethod
+  const rewardMethod: RewardMethod = !detail && allowed && allowed.length > 0 && !allowed.includes(form.rewardMethod)
+    ? allowed[0] : form.rewardMethod
   const showMethods = methodChoices.length > 1 || !methodChoices.includes(rewardMethod)
 
   const set = <K extends keyof PublicationForm>(field: K, value: PublicationForm[K]) =>
@@ -289,6 +290,11 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
 
     // 2. Who sees it and when, the marks, the rewards and the money.
     <div key="policy" className="flex flex-col gap-6">
+      {settings.data?.maxRewardPerAttempt != null && (
+        <p className="text-muted-foreground text-sm" data-testid="publication-reward-cap">
+          {t('publishing.field.rewardCap', { max: settings.data.maxRewardPerAttempt.toLocaleString() })}
+        </p>
+      )}
       {showMethods && (
         <fieldset className="flex flex-col gap-2" data-testid="publication-method"
           aria-describedby={[`${id}-method-hint`, problemOf('rewardMethod') ? `${id}-method-error` : undefined]

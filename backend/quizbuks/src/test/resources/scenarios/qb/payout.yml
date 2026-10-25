@@ -23,7 +23,8 @@ steps:
       p32: "$.proposals[31]", p33: "$.proposals[32]", p34: "$.proposals[33]",
       p35: "$.proposals[34]", p36: "$.proposals[35]", p37: "$.proposals[36]", p38: "$.proposals[37]",
       p39: "$.proposals[38]", p40: "$.proposals[39]", p41: "$.proposals[40]", p42: "$.proposals[41]",
-      p43: "$.proposals[42]", p44: "$.proposals[43]", p45: "$.proposals[44]", p46: "$.proposals[45]", p47: "$.proposals[46]" }
+      p43: "$.proposals[42]", p44: "$.proposals[43]", p45: "$.proposals[44]", p46: "$.proposals[45]", p47: "$.proposals[46]",
+      p48: "$.proposals[47]", p49: "$.proposals[48]" }
   - process: CONTROL_CHANGE_PUBLISH@latest
     actor: { id: publisher, permissions: [control.publish] }
     input: { changeId: "${p1}" }
@@ -165,6 +166,12 @@ steps:
   - process: CONTROL_CHANGE_PUBLISH@latest
     actor: { id: publisher, permissions: [control.publish] }
     input: { changeId: "${p47}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p48}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p49}" }
   - expect: { param: qb.transfer.fee, value: 0 }
   - note: Transfers on, from 10 Kudos, reviewed above 50; publications without a review (all four eyes).
     actor: { id: super-admin, permissions: [control.propose] }
@@ -293,7 +300,7 @@ steps:
     save: { t3: $.attemptId }
   - actor: { id: "${u3}", permissions: [qb.play, qb.me] }
     process: QB_ATTEMPT_SUBMIT@latest
-    input: { attemptId: "${t3}", publicationId: "${pub}", answers: [{ questionNo: 1, selected: [2] }, { questionNo: 2, selected: [2] }] }
+    input: { attemptId: "${t3}", publicationId: "${pub}", answers: [{ questionNo: 1, selected: [1] }, { questionNo: 2, selected: [1] }] }
     expectOutput: { reward: 10, rewardStatus: PAID }
   - deliverEvents: true
 
