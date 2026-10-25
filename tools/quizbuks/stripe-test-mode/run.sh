@@ -72,6 +72,7 @@ environment() {
 JABIZ_JWT_SECRET=$(openssl rand -base64 48 | tr -d '\n')
 JABIZ_INTEGRITY_KEY=$(openssl rand -base64 48 | tr -d '\n')
 JABIZ_MFA_KEY=$(openssl rand -base64 48 | tr -d '\n')
+JABIZ_SEAL_KEY=$(openssl rand -base64 48 | tr -d '\n')
 JABIZ_BOOTSTRAP_ADMIN_PASSWORD=$(openssl rand -hex 16)
 STUB_WEBHOOK_SECRET=whsec_$(openssl rand -hex 24)
 STUB_CONNECT_WEBHOOK_SECRET=whsec_$(openssl rand -hex 24)

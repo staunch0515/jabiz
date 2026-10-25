@@ -32,6 +32,16 @@ export const ADMIN = {
 /** Where the server's mail is caught (Mailpit's API). */
 const MAILPIT = (process.env.E2E_MAILPIT_URL ?? 'http://localhost:8025').replace(/\/+$/, '')
 
+/**
+ * The sponsors' own mail server of the tests (Q29): a Mailpit offering STARTTLS and taking any login, on this machine
+ * (the application trusts a server on this machine only, JABIZ_MAIL_SENDERS_TRUST_ALL_FOR_TESTS). The console's form
+ * names its SMTP port; the mail it receives is read through its API.
+ */
+export const MERCHANT_MAIL = {
+  smtpPort: Number(process.env.E2E_MERCHANT_SMTP_PORT ?? '1026'),
+  api: (process.env.E2E_MERCHANT_MAILPIT_URL ?? 'http://localhost:8026').replace(/\/+$/, ''),
+}
+
 /** The password of every account the tests register. */
 export const PASSWORD = 'quizbuks-e2e-password-1'
 
@@ -199,21 +209,23 @@ interface MailSummary {
   To: { Address: string }[]
 }
 
-/** The newest mail to an address whose subject matches, waiting for it to arrive. */
-export async function mailTo(request: APIRequestContext, to: string, subject: RegExp): Promise<{ subject: string;
-  text: string }> {
+/** The newest mail to an address whose subject matches, waiting for it to arrive (at the platform's Mailpit unless told). */
+export async function mailTo(request: APIRequestContext, to: string, subject: RegExp,
+  mailpit: string = MAILPIT): Promise<{ subject: string; text: string; from: string }> {
   let found: MailSummary | undefined
   await expect.poll(async () => {
-    const response = await request.get(`${MAILPIT}/api/v1/search`, { params: { query: `to:"${to}"` } })
+    const response = await request.get(`${mailpit}/api/v1/search`, { params: { query: `to:"${to}"` } })
     if (!response.ok()) return false
     const messages = ((await response.json()).messages ?? []) as MailSummary[]
     found = messages.find((m) => subject.test(m.Subject))
     return !!found
   }, { message: `a mail to ${to} with a subject like ${subject}`, timeout: 30_000 }).toBe(true)
-  const message = await request.get(`${MAILPIT}/api/v1/message/${found!.ID}`)
+  const message = await request.get(`${mailpit}/api/v1/message/${found!.ID}`)
   expect(message.ok()).toBe(true)
   const body = await message.json()
-  return { subject: body.Subject as string, text: `${body.Text ?? ''}\n${body.HTML ?? ''}` }
+  const from = body.From as { Name?: string; Address?: string } | undefined
+  return { subject: body.Subject as string, text: `${body.Text ?? ''}\n${body.HTML ?? ''}`,
+    from: `${from?.Name ?? ''} <${from?.Address ?? ''}>` }
 }
 
 /** The first address in a mail that leads to `path` (`/auth/verify-email`), as a URL. */

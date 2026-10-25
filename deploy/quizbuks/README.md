@@ -29,7 +29,7 @@ docker compose -f deploy/quizbuks/compose.dev.yaml exec app cat /var/lib/jabiz/s
 
 安全审查（`docs/quizbuks/plans/Q10b-security-fixes.md`）之后，镜像与启动检查拒绝不安全的部署。运维手册（另一分支）合并后，本节移入其中。
 
-- **密钥**（M5）：入口脚本 `deploy/quizbuks/entrypoint.sh` 在 `JABIZ_JWT_SECRET`、`JABIZ_INTEGRITY_KEY`、`JABIZ_MFA_KEY` 任一缺少时拒绝启动，
+- **密钥**（M5）：入口脚本 `deploy/quizbuks/entrypoint.sh` 在 `JABIZ_JWT_SECRET`、`JABIZ_INTEGRITY_KEY`、`JABIZ_MFA_KEY`、`JABIZ_SEAL_KEY`（Q29）任一缺少时拒绝启动，
   首个管理员的密码 `JABIZ_BOOTSTRAP_ADMIN_PASSWORD` 缺少时也拒绝，除非已设 `QB_BOOTSTRAP_ADMIN_DONE=true`（首个管理员已存在：平台只在空库时建它，
   脚本给一个谁也看不到的随机值，不让平台脚本生成并打印）。只有 `QB_LOCAL_SECRETS=true`（本机演示自己设置：compose 缺省 `false`，`tools/quizbuks/local-demo.sh`
   与 CI 的 `deploy` 作业设置它）才让平台脚本把缺少的密钥生成到 secrets 卷；**正式模式**（`QB_STRIPE_LIVEMODE` 或 `QUIZBUKS_STRIPE_LIVEMODE` 不是 `false`，
@@ -249,6 +249,7 @@ tools/quizbuks/local-demo.sh status | logs | seed
 | `JABIZ_JWT_SECRET` | 是 | 访问令牌签名密钥。本机首次启动时入口脚本自动生成到 secrets 卷 |
 | `JABIZ_INTEGRITY_KEY` | 是 | 只追加表的封存密钥（平台 21 §2）。**保留副本**：没有它无法核验已有封存 |
 | `JABIZ_MFA_KEY` | 是 | TOTP 密钥的加密密钥（平台 10 §9）。**保留副本**：没有它已绑定的用户无法二次验证 |
+| `JABIZ_SEAL_KEY` | 是 | 商家邮件服务器密码的密封密钥（Q29，平台 D56）。**保留副本**：没有它商家要重新输入密码。本机（`QB_LOCAL_SECRETS=true`）由应用的入口脚本生成到 secrets 卷 |
 | `JABIZ_BOOTSTRAP_ADMIN_USER` / `JABIZ_BOOTSTRAP_ADMIN_PASSWORD` | 首次启动 | 第一个管理员（拥有全部权限）；本机（`QB_LOCAL_SECRETS=true`）未给密码时生成到卷内只读文件，不打印 |
 | `QB_LOCAL_SECRETS` | 否 | 缺省 `false`（Q10b 评审 L5）：缺少任一平台密钥即拒绝启动。只在本机演示设 `true`：缺少的平台密钥与管理员密码生成到 secrets 卷（并导出 `QB_SECRETS_GENERATED=true`）；正式模式下无效 |
 | `QB_BOOTSTRAP_ADMIN_DONE` | 首个管理员建好后 | `true`：首个管理员已存在，不再需要 `JABIZ_BOOTSTRAP_ADMIN_PASSWORD` |

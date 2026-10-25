@@ -1,5 +1,6 @@
 package com.jabiz.quizbuks.it;
 
+import com.icegreen.greenmail.configuration.GreenMailConfiguration;
 import com.icegreen.greenmail.junit5.GreenMailExtension;
 import com.icegreen.greenmail.util.ServerSetup;
 import com.jabiz.job.JobDefinition;
@@ -47,6 +48,12 @@ class InvestorMetricsIT extends PayoutItSupport {
     @RegisterExtension
     static final GreenMailExtension MAIL = new GreenMailExtension(new ServerSetup(3049, null,
         ServerSetup.PROTOCOL_SMTP));
+
+    /** The sponsor's own mail server (Q29): invitations leave through it only. */
+    @RegisterExtension
+    static final GreenMailExtension SHOP = new GreenMailExtension(new ServerSetup(3468, null,
+        ServerSetup.PROTOCOL_SMTPS)).withConfiguration(GreenMailConfiguration.aConfig()
+        .withUser("shop@example.com", "shop", "shop-secret-1"));
 
     @Autowired
     @Qualifier("qbInvitationMailJob")
@@ -135,6 +142,14 @@ class InvestorMetricsIT extends PayoutItSupport {
             "regions", List.of()));
         run("QB_INVITATION_ADD", sponsorToken(sponsorB), body("publicationId", invitedPublication, "emails",
             List.of("q27-invitee@example.com")));
+        Map<String, Object> shop = new java.util.LinkedHashMap<>();
+        shop.put("host", "localhost");
+        shop.put("port", 3468);
+        shop.put("tls", "SMTPS");
+        shop.put("username", "shop");
+        shop.put("password", "shop-secret-1");
+        shop.put("fromAddress", "shop@example.com");
+        assertThat(run("QB_MAIL_SERVER_SET", sponsorToken(sponsorB), shop)).containsEntry("verified", true);
         run("QB_INVITATION_SEND", sponsorToken(sponsorB), body("publicationId", invitedPublication));
         execute("UPDATE jabiz_shedlock SET lock_until = locked_at");
         jobs.execute(mailJob, clock.instant());

@@ -10,6 +10,7 @@ import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.quizbuks.identity.CallerChecks;
 import com.jabiz.quizbuks.identity.QbAccounts;
+import com.jabiz.quizbuks.mailserver.QbMailServers;
 import com.jabiz.quizbuks.messaging.MailValues;
 import com.jabiz.quizbuks.publishing.Audience;
 import com.jabiz.quizbuks.publishing.PublicationStatus;
@@ -43,9 +44,11 @@ import java.util.UUID;
  *       within {@code quizbuks.invitations.max-per-publication};</li>
  *   <li>{@code QB_INVITATION_REMOVE}: removes an invitation nobody started;</li>
  *   <li>{@code QB_INVITATION_SEND}: queues the mail of every invitation not yet sent, within the sponsor's daily quota
- *       ({@code quizbuks.invitations.sends-per-day}, days in {@code jabiz.fiscal-year-zone});</li>
+ *       ({@code quizbuks.invitations.sends-per-day}, days in {@code jabiz.fiscal-year-zone}); refused without a
+ *       verified mail server of the sponsor's own (Q29, {@code QB_INVITATION_NO_MAIL_SERVER});</li>
  *   <li>{@code QB_INVITATION_MAIL} (internal, the job {@code qb.invitation-mail}, one transaction per invitation):
- *       sends one queued invitation's mail with its one-time sign-in link (platform decision D55).</li>
+ *       sends one queued invitation's mail with its one-time sign-in link (platform decision D55) through the
+ *       sponsor's own server ({@code SendMail.via}, platform decision D56), never the platform's.</li>
  * </ul>
  * The invitee's side (claiming, starting, answering) is in the answering processes through {@link Invitations}.
  */
@@ -90,6 +93,7 @@ public final class InvitationProcesses {
     static final String CARD = "invitation.card";
     static final String SPONSOR = "invitation.sponsor";
     static final String SENDING = "invitation.sending";
+    static final String MAIL_SERVER = "invitation.mailServer";
 
     /** The entry the mailed link signs in at and the page it leads to: the publication's in the app. */
     static final String ENTRY = "app";
@@ -243,6 +247,9 @@ public final class InvitationProcesses {
                         new QueryPredicate.Eq("publicationId", ctx.get(PUBLICATION_ID)),
                         new QueryPredicate.Eq("status", InvitationStatus.ADDED))))
                         .limit(limits.maxPerPublication()).build(), LIST))
+                .step("Load the sponsor's mail server", QueryEntities.<ProcessContext>of(
+                    QbMailServers.DEFAULT_DATASET, ctx -> QbMailServers.bySponsor(ctx.request().actorId()),
+                    MAIL_SERVER))
                 .compute("Queue the mail", (metadata, ctx) -> send(ctx, limits));
         });
     }
@@ -257,6 +264,12 @@ public final class InvitationProcesses {
             // Live only: the mailed link opens the page, which a scheduled publication does not show yet.
             ctx.reject(new Violation("publicationId", InvitationCodes.NOT_OPEN, "The publication is " + status
                 + ": invitations are sent while it is live", Map.of("status", String.valueOf(status))));
+            return;
+        }
+        if (!QbMailServers.usable(Invitations.first(ctx, MAIL_SERVER))) {
+            // Q29: invitations leave through the sponsor's own server only; none, or one that failed its test.
+            ctx.reject(new Violation("publicationId", InvitationCodes.NO_MAIL_SERVER, "The sponsor has no verified "
+                + "mail server: invitations are sent through it", Map.of()));
             return;
         }
         List<EntityInstance> waiting = Invitations.list(ctx, LIST);
@@ -328,12 +341,18 @@ public final class InvitationProcesses {
                 QueryEntities.query(QbAccounts.defaultDataset(QbAccounts.SPONSOR), ctx -> EntityQuery.builder()
                     .where(new QueryPredicate.In("userId", sending(ctx)
                         ? one(Invitations.first(ctx, LIST).get("sponsorId")) : List.of()))
-                    .limit(1).build(), SPONSOR)))
-            // The publication may have been paused, ended or taken down since the sponsor queued the mail: then no
-            // link goes out and the row waits as ADDED for the sponsor to send again.
-            .step("Send the invitation", SendMail.<ProcessContext>when(ctx -> sending(ctx) && live(ctx),
-                InvitationMails.INVITATION,
-                ctx -> MailRecipient.address(Invitations.first(ctx, LIST).get("email"), null), mailParams(values, appPath)))
+                    .limit(1).build(), SPONSOR),
+                QueryEntities.query(QbMailServers.DEFAULT_DATASET, ctx -> QbMailServers.bySponsor(sending(ctx)
+                    ? Invitations.first(ctx, LIST).get("sponsorId") : null), MAIL_SERVER)))
+            // The publication may have been paused, ended or taken down since the sponsor queued the mail, or the
+            // sponsor's mail server removed or found failing (Q29): then no link goes out and the row waits as ADDED
+            // for the sponsor to send again. The mail leaves through the sponsor's server (decision D56), never the
+            // platform's.
+            .step("Send the invitation", SendMail.<ProcessContext>via(ctx -> sending(ctx)
+                    ? String.valueOf((Object) Invitations.first(ctx, LIST).get("sponsorId")) : null)
+                .when(ctx -> sending(ctx) && live(ctx) && serverUsable(ctx), InvitationMails.INVITATION,
+                    ctx -> MailRecipient.address(Invitations.first(ctx, LIST).get("email"), null),
+                    mailParams(values, appPath)))
             .compute("Record the send", (metadata, ctx) -> recordSend(ctx)));
     }
 
@@ -350,6 +369,11 @@ public final class InvitationProcesses {
 
     private static boolean sending(ProcessContext ctx) {
         return Boolean.TRUE.equals(ctx.get(SENDING)) && !ctx.hasViolations();
+    }
+
+    /** Whether the sponsor still has a verified mail server of their own (Q29). */
+    private static boolean serverUsable(ProcessContext ctx) {
+        return QbMailServers.usable(Invitations.first(ctx, MAIL_SERVER));
     }
 
     private static Map<String, java.util.function.Function<ProcessContext, ?>> mailParams(MailValues values, String appPath) {
@@ -378,7 +402,7 @@ public final class InvitationProcesses {
         }
         if (sending(ctx)) {
             Map<String, Object> next = new LinkedHashMap<>();
-            if (live(ctx)) {
+            if (live(ctx) && serverUsable(ctx)) {
                 next.put("status", InvitationStatus.SENT);
                 next.put("sentCount", BigDecimal.valueOf(number(invitation.get("sentCount")) + 1));
                 next.put("lastSentAt", ctx.opTime());

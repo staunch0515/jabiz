@@ -15,6 +15,7 @@
 | `JABIZ_JWT_SECRET` | 是 | 生成，只放密钥库 | 随时可换：已签发的访问令牌（15 分钟）失效、所有人重新登录（刷新令牌不受影响，平台 10 §15.9）。泄露时立即换 | 启动失败 |
 | `JABIZ_INTEGRITY_KEY` | 是 | 生成；**另存离线副本**（与数据库备份分开保管） | 不能随便换：已有的封存要用原密钥核验（平台 21 §2）。只在泄露时按平台的密钥轮换步骤换，并保留旧密钥 | 启动失败；丢失 = 已有封存无法核验 |
 | `JABIZ_MFA_KEY` | 是 | 生成；**另存离线副本** | 不能随便换：已绑定的 TOTP 密钥以它加密，换了全部用户要重新绑定（`SEC_MFA_RESET`） | 启动失败；丢失 = 所有人的二次验证失效 |
+| `JABIZ_SEAL_KEY` | 是（Q29） | 生成；**另存离线副本** | 不能随便换：商家邮件服务器的密码以它密封（平台 D56），换了或丢了全部商家要在「邮件服务器」页重新输入密码（在此之前邀请投递失败、平台自己的邮件不受影响） | 启动失败（应用声明了 `MailSenderSource`） |
 | `JABIZ_BOOTSTRAP_ADMIN_USER` / `_PASSWORD` | 只首次启动 | 运维 | 首个管理员建好后从环境中**删去**（它只在库中没有用户时起作用） | 没有用户时无人能登录 |
 | `JABIZ_FILES_LOCAL_ROOT` | 是 | 镜像已设 `/var/lib/jabiz/files`（卷） | — | 启动失败；卷丢失 = 上传的图片、PDF 丢失（备份见 §2.3） |
 | `SPRING_R2DBC_URL` / `_USERNAME`、`SPRING_FLYWAY_URL` / `_USER`、`DB_PASSWORD`（或 `SPRING_R2DBC_PASSWORD` / `SPRING_FLYWAY_PASSWORD`） | 是 | 数据库 | 换密码：先在库中加新密码可用的窗口（`ALTER ROLE`），改环境变量、滚动重启 | 连不上库，启动失败 |
@@ -111,7 +112,7 @@
 | 开发入账 `quizbuks.wallet.dev-credit.enabled`（`dev` 配置开启） | 不付款给商家钱包入账 | `StripeModeCheck` |
 | `QB_STRIPE_CHECKOUT_URL_PREFIX` / `QB_STRIPE_CONNECT_URL_PREFIX` 不是 Stripe 的地址 | 指向本地桩 | `StripeSettings` / `PayoutSettings`（启动检查） |
 
-不会被拒、但生产**绝不能**设的：`JABIZ_SECURITY_MFA_ADMINISTRATION=false`、`JABIZ_SECURITY_SIGN_UP_RATE_LIMIT_PER_ADDRESS`（e2e 放宽的注册限流）、`JABIZ_SECURITY_SIGN_IN_RATE_LIMIT_PER_USER_ADDRESS` / `JABIZ_SECURITY_SIGN_IN_RATE_LIMIT_USER_BURST`（e2e 放宽的登录限流）、`QB_STRIPE_API_URL` / `QB_STRIPE_API_HOSTS`（指向桩）、`SPRING_PROFILES_ACTIVE` 含 `dev`、`QB_STM_PUBLISHER` / `QB_DEMO_PUBLISHER` 等演示与测试的角色。上线检查清单逐项核对。
+不会被拒、但生产**绝不能**设的：`JABIZ_MAIL_SENDERS_TRUST_ALL_FOR_TESTS=true`（e2e：接受本机上任何端口与证书的商家邮件服务器；非 dev 启动告警，Q29）、`JABIZ_SECURITY_MFA_ADMINISTRATION=false`、`JABIZ_SECURITY_SIGN_UP_RATE_LIMIT_PER_ADDRESS`（e2e 放宽的注册限流）、`JABIZ_SECURITY_SIGN_IN_RATE_LIMIT_PER_USER_ADDRESS` / `JABIZ_SECURITY_SIGN_IN_RATE_LIMIT_USER_BURST`（e2e 放宽的登录限流）、`QB_STRIPE_API_URL` / `QB_STRIPE_API_HOSTS`（指向桩）、`SPRING_PROFILES_ACTIVE` 含 `dev`、`QB_STM_PUBLISHER` / `QB_DEMO_PUBLISHER` 等演示与测试的角色。上线检查清单逐项核对。
 
 ### 1.5 可观测性
 
@@ -146,7 +147,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 ### 2.3 备份与时间点恢复
 
 - **连续归档 + 定期基础备份**：WAL 归档（`archive_mode on`，用 pgBackRest、WAL-G，或托管服务的时间点恢复），基础备份每天一次，保留至少 14 天的时间点恢复窗口；另按会计要求保留月末的全量备份（凭证与分录是 10 年，L-4）。
-- **一起备份的**：上传文件卷（`/var/lib/jabiz/files`：与库同一时刻的快照或每日同步）、`JABIZ_INTEGRITY_KEY` 与 `JABIZ_MFA_KEY` 的离线副本（**不与备份放在一起**：拿到备份的人不应同时拿到密钥）。生成的文件（导出 CSV、收据 PDF）在库中（`sys_generated_file`、`sys_document_run`），随库备份。
+- **一起备份的**：上传文件卷（`/var/lib/jabiz/files`：与库同一时刻的快照或每日同步）、`JABIZ_INTEGRITY_KEY`、`JABIZ_MFA_KEY` 与 `JABIZ_SEAL_KEY` 的离线副本（**不与备份放在一起**：拿到备份的人不应同时拿到密钥）。生成的文件（导出 CSV、收据 PDF）在库中（`sys_generated_file`、`sys_document_run`），随库备份。
 - 备份加密、异地（另一区域或账户）、只追加或带对象锁，防误删与勒索。
 - 监控：最近一次成功的基础备份与 WAL 归档的延迟（§5）。
 
@@ -155,7 +156,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 在**隔离的环境**中做（不能连 Stripe 正式环境、不能发邮件，否则恢复出的实例会转账、发信）：
 
 1. 选一个时刻 T（如昨天 12:00 UTC），把备份恢复到新的 PostgreSQL 实例（时间点恢复到 T），记录用时（RTO）与 T 到最后一条 WAL 的差（RPO）。
-2. 以同一版本的镜像启动应用，指向恢复的库，并且：`JABIZ_INTEGRITY_KEY`、`JABIZ_MFA_KEY` 用生产的值（从离线副本取）；`QB_STRIPE_LIVEMODE=false`、`STRIPE_API_KEY=sk_test_restore_drill`、两个签名密钥随机生成；
+2. 以同一版本的镜像启动应用，指向恢复的库，并且：`JABIZ_INTEGRITY_KEY`、`JABIZ_MFA_KEY`、`JABIZ_SEAL_KEY` 用生产的值（从离线副本取）；`QB_STRIPE_LIVEMODE=false`、`STRIPE_API_KEY=sk_test_restore_drill`、两个签名密钥随机生成；
    `JABIZ_MAIL_ENABLED=false`；关掉后台工作：`JABIZ_JOBS_SCHEDULER_ENABLED=false`、`JABIZ_EVENTS_DELIVERY_ENABLED=false`、`JABIZ_EXTERNALJOBS_EXECUTOR_ENABLED=false`；网络上禁止对外连接。
    （正式数据在测试模式下启动不被拒绝；反过来"正式模式 + 测试数据"才被拒。）
 3. 核对：启动检查通过（没有 `Platform check failed`）；管理员能登录并通过二次验证（`JABIZ_MFA_KEY` 正确）；运行 `INTEGRITY_VERIFY`（封存链完整，`JABIZ_INTEGRITY_KEY` 正确）；
@@ -426,3 +427,12 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 首页的"试答"区在 `src/content/try-quizzes.json` 里填每种语言的分享链接（`https://quizbuks.com/taker/p/<发布>`）与二维码图片（放到 `public/`，填相对路径），为空即显示"即将推出"。
 价格页的数字是推广期估价，标"计划中"的套餐与费用尚未开售、尚未计费，改动前先在 `docs/quizbuks/plans/Q31-biz-site.md` 记下新值。链接只接受 `https://`、二维码只接受 `public/` 下的 PNG/SVG，否则构建失败。页面的 `canonical`、`hreflang` 与 `sitemap.xml` 用完整地址，源自构建时的 `SITE_URL`（缺省 `https://quizbuks.com`，换域名时在构建环境设置）。裸域名 302 到 `/biz/`；中文与日文在 `/biz/zh/…`、`/biz/ja/…`，从站外首次访问按浏览器语言转向（`localStorage` 记住切换；站内点击的语言从不被改）。
 
+### 7.12 商家的邮件服务器（Q29）
+
+邀请邮件只经商家在后台「邮件服务器」页验证过的 SMTP 服务器、以商家的名义发出（平台决策 D56）；平台自己的邮件（验证、重置、欢迎、给商家的通知）仍经 `SPRING_MAIL_*`。
+保存即经该服务器给商家自己的地址发测试邮件：寄出即"已验证"，否则页面显示服务器或连接的回答（`qb_sponsor_mail_server.last_error`），邀请在验证之前被拒（422 `QB_INVITATION_NO_MAIL_SERVER`）。
+平台拒绝的设置（主机不是公开域名、端口不在 25 / 465 / 587 / 2525、没有 TLS）在保存时按字段报错，不会保存。
+
+- **商家说邀请没寄到**：先看页面是否"已验证"；验证过的服务器在投递时拒收，是平台邮件尝试的 `FAILED`（`sys_mail_attempt.detail` 是服务器的回答，`sys_mail_message.sender_key` 是商家的用户编号），Outbox 照常重试，绝不改经平台的服务器；邀请行此时已是 `SENT`。让商家重新保存（再发一封测试邮件）或检查服务商的限制（发信配额、SPF / DKIM）。
+- **`JABIZ_SEAL_KEY` 换了或丢了**：已存的密码打不开，投递记 `FAILED`（"cannot be opened"）；每个商家重新输入密码并保存即可（页面照常），不需要运维介入。
+- **商家的服务器很慢**：投递事务等到平台的超时（`jabiz.mail.timeout`）；一次失败只让该轮投递停在它那里，下一轮继续其他邮件。

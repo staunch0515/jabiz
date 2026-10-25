@@ -98,6 +98,12 @@ class MessagesTest {
             "query.qb.admin.publication-funds.fundsShort", "query.qb.admin.attempt-rewards",
             "query.qb.admin.attempt-rewards.reward")
             .doesNotContain("query.qb.admin.publications.fundsShort", "query.qb.admin.attempts.reward");
+        // Q29: the sponsor's mail server, its processes and codes, the template and the test mail's texts.
+        assertThat(en.stringPropertyNames()).containsAll(com.jabiz.quizbuks.mailserver.MailServerCodes.ALL)
+            .contains("entity.QbSponsorMailServer", "entity.QbSponsorMailServer.sealedPassword",
+                "process.QB_MAIL_SERVER_SET", "process.QB_MAIL_SERVER_REMOVE", "QB_INVITATION_NO_MAIL_SERVER",
+                "query.qb.sponsor.mail-server", "query.qb.sponsor.mail-server.lastError",
+                "qb.mail-server.test.subject", "qb.mail-server.test.body");
         // Q9c: finance's pages and the monthly reports (titles and every column: the exports' headings).
         assertThat(en.stringPropertyNames()).contains("query.qb.admin.monthly", "query.qb.admin.monthly.category",
             "query.qb.admin.monthly.transactionCount", "query.qb.admin.monthly.sponsorWallets",
