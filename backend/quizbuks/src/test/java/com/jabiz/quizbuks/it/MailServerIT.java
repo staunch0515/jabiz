@@ -124,7 +124,9 @@ class MailServerIT extends PlayItSupport {
         });
         // The platform's server carried nothing of it (only the platform's own mail to the sponsor, if any).
         assertThat(to(MAIL, sponsorAddress)).noneSatisfy(mail -> assertThat(mail.getSubject()).contains("localhost"));
-        // The password is stored sealed (decision D56), and no read path returns it.
+        // The password is stored sealed (decision D56), and no read path returns it: not the operation record either.
+        assertThat(query("SELECT input_summary::text AS s FROM op_process WHERE process_name = 'QB_MAIL_SERVER_SET'"))
+            .isNotEmpty().allSatisfy(op -> assertThat(String.valueOf(op.get("s"))).doesNotContain(SHOP_PASSWORD));
         Map<String, Object> row = server(sponsor);
         assertThat(String.valueOf(row.get("sealed_password"))).startsWith("s1:").doesNotContain(SHOP_PASSWORD);
         assertThat(row.get("verified_at")).isNotNull();

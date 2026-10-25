@@ -10,6 +10,7 @@ import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.security.secret.SecretSealer;
 import com.jabiz.runtime.task.MailMessage;
 import com.jabiz.runtime.task.MailSenders;
+import com.jabiz.security.SealedSecrets;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -65,10 +66,18 @@ public class TestMailServer implements BlockingStep<NoMetadata, ProcessContext> 
         Locale locale = messages.supported(ctx.request().locale());
         String subject = text(SUBJECT, locale, settings.host());
         String body = text(BODY, locale, settings.host());
+        // The password as typed, else the stored one opened for this sponsor's row: one sealed under another key (the
+        // sealing key was changed) cannot be opened, and the sponsor types it again.
+        String password;
         try {
-            // The password as typed, else the stored one opened for this sponsor's row.
-            String password = input.password() != null && !input.password().isBlank() ? input.password()
+            password = input.password() != null && !input.password().isBlank() ? input.password()
                 : sealer.open(sealed, sponsorId);
+        } catch (SealedSecrets.UnreadableSecretException e) {
+            ctx.reject(new Violation("password", MailServerCodes.PASSWORD, "The stored password cannot be opened: "
+                + "enter it again", Map.of()));
+            return;
+        }
+        try {
             senders.send(settings, password, new MailMessage(address, subject, body, null, List.of()));
             ctx.put(MailServerProcesses.SENT_TO, address);
         } catch (Exception e) {

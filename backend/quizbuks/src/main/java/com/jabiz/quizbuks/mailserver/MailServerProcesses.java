@@ -37,7 +37,9 @@ import java.util.UUID;
  *       when the mail left, otherwise it keeps the server's reason and invitations stay refused;</li>
  *   <li>{@code QB_MAIL_SERVER_REMOVE}: removes the sponsor's server.</li>
  * </ul>
- * Both take the sponsor's lock, so that the mail of an invitation (which reads the server) never sees half a change.
+ * Both take the sponsor's lock, which serialises saving and removing; the invitation processes only read the row, in
+ * their own transactions, and act on what they find (a server gone or failing meanwhile returns the invitation to
+ * ADDED, decision D-Q29-4).
  */
 public final class MailServerProcesses {
 
