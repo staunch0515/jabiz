@@ -149,6 +149,35 @@ class SpaFallbackFilterTest {
         assertThat(new JabizWebProperties(null, null, " ").rootRedirect()).isNull();
     }
 
+    /** A static site (no entry) has a page per directory; other routes fall back to its root page (16zf-b). */
+    @ParameterizedTest
+    @CsvSource({
+        "/biz, /biz/index.html",
+        "/biz/, /biz/index.html",
+        "/biz/zh, /biz/zh/index.html",
+        "/biz/zh/, /biz/zh/index.html",
+        "/biz/zh/pricing/, /biz/zh/pricing/index.html",
+        "/biz/zh/unknown, /biz/index.html",
+        "/biz/assets/a.css, /biz/assets/a.css",
+        "/taker/zh, /taker/index.html",
+    })
+    void aStaticSiteServesThePageOfADirectory(String path, String forwarded) {
+        var site = new JabizWebProperties(List.of(new Spa("/biz", null, null),
+            new Spa("/taker", null, null, "app", null)));
+        var pages = new StaticPages(java.util.Map.of("/biz", java.util.Set.of("/biz/zh", "/biz/zh/pricing", "/biz/ja"),
+            "/taker", java.util.Set.of("/taker/zh")));
+        var exchange = MockServerWebExchange.from(MockServerHttpRequest.get(path));
+        AtomicReference<String> seen = new AtomicReference<>();
+        new SpaFallbackFilter(site, pages).filter(exchange, e -> {
+            seen.set(e.getRequest().getPath().value());
+            return e.getResponse().setComplete();
+        }).block();
+        assertThat(seen.get()).isEqualTo(forwarded);
+        if (forwarded.endsWith("index.html")) {
+            assertThat(exchange.getResponse().getHeaders().getCacheControl()).isEqualTo("no-cache");
+        }
+    }
+
     @Test
     void anExplicitIndexIsUsed() {
         var custom = new JabizWebProperties(List.of(new Spa("/admin", "/admin/app.html", null)));
