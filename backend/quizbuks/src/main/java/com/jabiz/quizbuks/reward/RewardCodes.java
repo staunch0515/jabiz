@@ -35,9 +35,9 @@ public final class RewardCodes {
     /** Q33: the prize's content was sealed under another key: the sponsor sends it again. */
     public static final String DIGITAL_UNREADABLE = "QB_DIGITAL_UNREADABLE";
     /** Q33: a dispute needs a note saying what is wrong. */
-    public static final String DIGITAL_DISPUTE_NOTE = "QB_DIGITAL_PRIZE_DISPUTE_NOTE";
+    public static final String DIGITAL_DISPUTE_NOTE = "QB_DIGITAL_DISPUTE_NOTE";
     /** Q33: an unknown resolution of a dispute. */
-    public static final String DIGITAL_RESOLUTION = "QB_DIGITAL_PRIZE_RESOLUTION";
+    public static final String DIGITAL_RESOLUTION = "QB_DIGITAL_RESOLUTION";
     /** Q33: a load of codes with no usable line. */
     public static final String DIGITAL_CODES_EMPTY = "QB_DIGITAL_CODES_EMPTY";
     /** Q33: a load of more lines than allowed, or a line longer than allowed. */
@@ -47,11 +47,13 @@ public final class RewardCodes {
     public static final String DIGITAL_NOT_POOLED = "QB_DIGITAL_NOT_POOLED";
     /** Q33: codes cannot be revoked while the publication is running (end it first). */
     public static final String DIGITAL_POOL_LOCKED = "QB_DIGITAL_POOL_LOCKED";
+    /** Q33: an ended publication takes no more codes. */
+    public static final String DIGITAL_POOL_ENDED = "QB_DIGITAL_POOL_ENDED";
 
     public static final List<String> ALL = List.of(CASH_STATE, CASH_DISPUTE_NOTE, CASH_RESOLUTION, CASH_CONFIRM_DUE,
         REDEMPTION_STATE, REDEEM_TOKEN_INVALID, REDEEM_TOKEN_SPONSOR, REDEEM_TOKEN_KIND, REDEMPTION_CLAIM_LAPSED,
         DIGITAL_STATE, DIGITAL_UNREADABLE, DIGITAL_DISPUTE_NOTE, DIGITAL_RESOLUTION, DIGITAL_CODES_EMPTY,
-        DIGITAL_CODES_TOO_MANY, DIGITAL_CODE_TOO_LONG, DIGITAL_NOT_POOLED, DIGITAL_POOL_LOCKED);
+        DIGITAL_CODES_TOO_MANY, DIGITAL_CODE_TOO_LONG, DIGITAL_NOT_POOLED, DIGITAL_POOL_LOCKED, DIGITAL_POOL_ENDED);
 
     private RewardCodes() {}
 }

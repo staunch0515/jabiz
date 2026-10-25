@@ -10,6 +10,7 @@ import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.quizbuks.identity.CallerChecks;
 import com.jabiz.quizbuks.publishing.DigitalDelivery;
+import com.jabiz.quizbuks.publishing.PublicationMoves;
 import com.jabiz.quizbuks.publishing.PublicationStatus;
 import com.jabiz.quizbuks.publishing.PublishingLimits;
 import com.jabiz.quizbuks.publishing.QbPublications;
@@ -149,6 +150,12 @@ public final class DigitalCodeProcesses {
         if (!pooled(ctx)) {
             return;
         }
+        // An ended publication hands out nothing more: its codes would only wait for a revoke.
+        if (PublicationStatus.ENDED.equals(publication(ctx).get("status"))) {
+            ctx.reject(new Violation("publicationId", RewardCodes.DIGITAL_POOL_ENDED, "The publication has ended: "
+                + "its pool takes no more codes", Map.of()));
+            return;
+        }
         LoadInput input = ctx.get(INPUT, LoadInput.class);
         Set<String> lines = new LinkedHashSet<>();
         for (String raw : input.pastedCodes().split("\\R")) {
@@ -187,6 +194,14 @@ public final class DigitalCodeProcesses {
         EntityInstance publication = publication(ctx);
         List<EntityInstance> last = ctx.get(LAST, List.class);
         long seq = last.isEmpty() ? 0 : new BigDecimal(String.valueOf((Object) last.getFirst().get("seq"))).longValue();
+        // A pool holds at most what it may cover (the sequence counts every code ever loaded): the reads of the pool
+        // are paged to that many, so a revoke or a count never misses a code.
+        if (seq + lines.size() > PublishingLimits.MAX_POOL_WINNERS) {
+            ctx.reject(new Violation("pastedCodes", RewardCodes.DIGITAL_CODES_TOO_MANY, "A pool holds at most "
+                + PublishingLimits.MAX_POOL_WINNERS + " codes", Map.of("max", PublishingLimits.MAX_POOL_WINNERS,
+                    "given", seq + lines.size())));
+            return;
+        }
         for (int i = 0; i < lines.size(); i++) {
             Map<String, Object> values = new LinkedHashMap<>();
             values.put("publicationId", publication.id());
@@ -214,6 +229,10 @@ public final class DigitalCodeProcesses {
                 .actsOn(QbPublications.PUBLICATION, "publicationId")
                 .contextFactory((s, input) -> start(s, input, input.publicationId()))
                 .outputMapper(ctx -> ctx.get(OUTPUT, RevokeOutput.class))
+                // The publication's lock first (the order of the settlement): a submission counting the pool under it
+                // cannot be overtaken by a revoke, which would leave a live publication without codes.
+                .step("Lock the publication", HoldLock.<ProcessContext>exclusive(
+                    ctx -> PublicationMoves.lockName(ctx.get(PUB_ID))))
                 .step("Lock the pool", HoldLock.<ProcessContext>exclusive(
                     ctx -> QbDigitalPrizes.poolLockName(ctx.get(PUB_ID))))
                 .step("Load the publication", LoadEntity.by(QbPublications.sponsorDataset(QbPublications.PUBLICATION),

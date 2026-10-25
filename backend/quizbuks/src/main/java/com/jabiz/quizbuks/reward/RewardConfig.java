@@ -33,11 +33,16 @@ public class RewardConfig {
     }
 
     private DatasetDefinition defaultDataset(String entity) {
+        return defaultDataset(entity, 100);
+    }
+
+    /** @param maxWriteBatch the most changes one process commits: a load of codes (Q33) writes a thousand at once */
+    private DatasetDefinition defaultDataset(String entity, int maxWriteBatch) {
         return DatasetDefinition.define(QbRewards.defaultDataset(entity), d -> d
             .targetEntityType(entity)
             .asDefault()
             .permissions(QbPermissions.ADMIN_PUBLICATION_READ, QbPermissions.SPONSOR_VIEW_WRITE)
-            .policy(p -> p.processOnlyWrites().maxWriteBatchSize(100))
+            .policy(p -> p.processOnlyWrites().maxWriteBatchSize(maxWriteBatch))
             .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
     }
 
@@ -98,7 +103,8 @@ public class RewardConfig {
     /** The pool: written by the processes only; the sponsor sees their own (never a code's content). */
     @Bean
     DatasetDefinition qbDigitalCodeDataset() {
-        return defaultDataset(QbDigitalPrizes.DIGITAL_CODE);
+        return defaultDataset(QbDigitalPrizes.DIGITAL_CODE,
+            com.jabiz.quizbuks.publishing.PublishingLimits.DIGITAL_CODES_PER_LOAD);
     }
 
     @Bean

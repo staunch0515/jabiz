@@ -188,7 +188,9 @@ class DigitalPrizeIT extends PlayItSupport {
         refused(DigitalPrizeProcesses.OPEN, sponsorToken, body("digitalPrizeId", digitalPrizeId), 404);
         refused(DigitalPrizeProcesses.OPEN, token, body("digitalPrizeId", UUID.randomUUID().toString()), 404);
         clock.advance(Duration.ofMinutes(1));
-        Map<String, Object> opened = run(DigitalPrizeProcesses.OPEN, token, body("digitalPrizeId", digitalPrizeId));
+        // As the App calls it: with an idempotency key, so that the output is kept for a replay.
+        Map<String, Object> opened = (Map<String, Object>) runWithKey(DigitalPrizeProcesses.OPEN, token,
+            body("digitalPrizeId", digitalPrizeId), UUID.randomUUID().toString()).get("output");
         assertThat(opened).containsEntry("prizeContent", LINK).containsEntry("status", "DELIVERED")
             .containsEntry("description", "A month of Premium, on us");
         assertThat(at(opened.get("openedAt"))).isEqualTo(clock.instant());
@@ -199,6 +201,10 @@ class DigitalPrizeIT extends PlayItSupport {
         assertThat(at(again.get("openedAt"))).isEqualTo(clock.instant().minus(Duration.ofMinutes(1)));
         assertThat(summaries(DigitalPrizeProcesses.OPEN)).isNotEmpty()
             .allSatisfy(s -> assertThat(s).doesNotContain("WELCOME"));
+        // The client sends an idempotency key, so the output is kept for a replay: without the content.
+        assertThat(query("SELECT r.output::text AS s FROM op_process_result r JOIN op_process p "
+            + "ON p.process_seq_id = r.process_seq_id WHERE p.process_name = ?", DigitalPrizeProcesses.OPEN))
+            .isNotEmpty().allSatisfy(row -> assertThat((String) row.get("s")).doesNotContain("WELCOME"));
 
         assertThat(run(DigitalPrizeProcesses.CONFIRM, token, body("digitalPrizeId", digitalPrizeId)))
             .containsEntry("status", "CONFIRMED");
@@ -382,6 +388,17 @@ class DigitalPrizeIT extends PlayItSupport {
             .singleElement().satisfies(row -> assertThat(row).containsEntry("revoked", 3));
         // Short codes show no hint.
         assertThat(codesOf(spare)).allSatisfy(code -> assertThat(code.get("hint")).isNull());
+        // A pool holds at most what it may cover: the sequence counts the revoked ones too.
+        String thousand = java.util.stream.IntStream.rangeClosed(1, 1000).mapToObj(i -> "K-" + i)
+            .collect(java.util.stream.Collectors.joining("\n"));
+        for (int load = 0; load < 9; load++) {
+            run(DigitalCodeProcesses.LOAD, sponsorToken, body("publicationId", spare, "pastedCodes", thousand));
+        }
+        assertThat(run(DigitalCodeProcesses.LOAD, sponsorToken, body("publicationId", spare, "pastedCodes",
+            java.util.stream.IntStream.rangeClosed(1, 997).mapToObj(i -> "L-" + i)
+                .collect(java.util.stream.Collectors.joining("\n"))))).containsEntry("available", 9997);
+        assertThat(codes(refused(DigitalCodeProcesses.LOAD, sponsorToken, body("publicationId", spare, "pastedCodes",
+            "M-1\nM-2"), 422))).containsExactly(RewardCodes.DIGITAL_CODES_TOO_MANY);
         assertBooksBalance();
     }
 }

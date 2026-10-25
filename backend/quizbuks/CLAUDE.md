@@ -109,7 +109,7 @@
   期限 `qb.reward.cash.confirm-days` / `cash.pay-days` / `redeem-days` / `digital.send-days` 是普通参数（`LoadParams` 读，不受控）。
   电子奖品（Q33，`plans/Q33-digital-prize.md`，`reward.QbDigitalPrizes`、`DigitalCodeProcesses`、`DigitalPrizeProcesses`）：第四种方式 `DIGITAL_PRIZE`，发布上 `digitalDelivery`（`POOL`/`SHARED`/`SPONSOR_SENT`）、
   `digitalDescription`、`digitalSendDays`，共用码 `sealedDigitalContent` 经 `SealSecret` 以**商户编号**为上下文密封（码池 `QbDigitalCode.sealedContent`、奖品 `QbDigitalPrize.sealedContent` 同一上下文），
-  字段 `sensitive()`（不再加 `processOnly()`：敏感已含）；明文只在 `QB_DIGITAL_PRIZE_OPEN` 的输出 `prizeContent` 中（不标 `@Sensitive`：通用接口会把它置空），输出 record 的 `toString()` 遮蔽；
+  字段 `sensitive()`（不再加 `processOnly()`：敏感已含）；明文只在 `QB_DIGITAL_PRIZE_OPEN` 的输出 `prizeContent` 中（标 `@Sensitive(returned = true)`：响应中返回，`op_process_result`、事件与摘要中遮蔽），输出 record 的 `toString()` 遮蔽；
   码池只经 `QB_DIGITAL_CODES_LOAD`/`REVOKE` 写、结算在池锁 `qb.digital-pool:<发布>` 内按 `seq` 取码；`POOL` 的提交在 `PublicationLifecycle.submit` 数可用码（`PublicationReadiness.pool`）。
   列表与结果只给 `hint`（末 4 位，共用码没有）。
   到店领取（Q22b，`reward.RedemptionProcesses`）：商家的码只经 `QB_REDEEM_CODE_ISSUE` 签发（随机数经平台 `RandomBytesStep`，值只在输出 `redeemKey` 中；实体字段 `tokenValue` 敏感且含 token，
