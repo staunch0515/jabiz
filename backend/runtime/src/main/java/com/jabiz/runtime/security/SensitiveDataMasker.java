@@ -49,6 +49,8 @@ public class SensitiveDataMasker {
     private final JsonMapper json;
     private final EntityDefinitionRegistry entities;
     private final Set<String> names;
+    /** Names of {@code @Sensitive(returned = true)} components: masked in records, given back in answers. */
+    private final Set<String> returnedNames;
     /**
      * Styles of masked entity fields by lower-case name: values under these names are kept out of operation records
      * and import reports, which their readers may not see in plain (the first entity declaring a name decides).
@@ -61,14 +63,18 @@ public class SensitiveDataMasker {
         this.json = Objects.requireNonNull(json, "json must not be null");
         this.entities = Objects.requireNonNull(entities, "entities must not be null");
         Set<String> found = new HashSet<>();
+        Set<String> returned = new HashSet<>();
         for (EntityDefinition def : entities.all()) {
             def.sensitiveFields().forEach(name -> found.add(name.toLowerCase(Locale.ROOT)));
         }
         for (ProcessDefinition<?, ?, ?> process : processes) {
-            collectSensitive(process.inputType(), found, 0);
-            collectSensitive(process.outputType(), found, 0);
+            collectSensitive(process.inputType(), found, returned, 0);
+            collectSensitive(process.outputType(), found, returned, 0);
         }
+        // A name both kept from the answer somewhere and returned elsewhere is kept from the answer: the stricter wins.
+        returned.removeAll(found);
         this.names = Set.copyOf(found);
+        this.returnedNames = Set.copyOf(returned);
         Map<String, com.jabiz.entity.MaskStyle> masked = new LinkedHashMap<>();
         for (EntityDefinition def : entities.all()) {
             def.maskedFields().forEach(field -> masked.putIfAbsent(field.name().toLowerCase(Locale.ROOT),
@@ -79,9 +85,18 @@ public class SensitiveDataMasker {
             .map(f -> f.trim().toLowerCase(Locale.ROOT)).distinct().toList();
     }
 
-    /** Whether values held under this property name are masked. */
+    /** Whether values held under this property name are masked everywhere, the process API's answers included. */
     public boolean isSensitive(String name) {
         return isSecretName(name);
+    }
+
+    /**
+     * Whether values held under this property name are masked in what the platform records (input summaries, the
+     * outputs kept for a replay, events): the secrets of {@link #isSensitive} and the components returned to the
+     * caller only ({@code @Sensitive(returned = true)}).
+     */
+    public boolean isRecordedSecret(String name) {
+        return isSecretName(name) || (name != null && returnedNames.contains(name.toLowerCase(Locale.ROOT)));
     }
 
     /**
@@ -89,7 +104,7 @@ public class SensitiveDataMasker {
      * fields. Mail parameters may not be named so (docs/design/18-numbering-approvals-tasks.md section 5.6).
      */
     public boolean hidesByName(String name) {
-        return isSecretName(name) || (name != null && maskedNames.containsKey(name.toLowerCase(Locale.ROOT)));
+        return isRecordedSecret(name) || (name != null && maskedNames.containsKey(name.toLowerCase(Locale.ROOT)));
     }
 
     private boolean isSecretName(String name) {
@@ -111,7 +126,7 @@ public class SensitiveDataMasker {
         }
         value = externalJobSummary(value);
         String text = json.writeValueAsString(mask(json.valueToTree(value), json.getNodeFactory().stringNode(MASK),
-            name -> isSensitive(name) || maskedNames.containsKey(name.toLowerCase(Locale.ROOT))));
+            name -> isRecordedSecret(name) || maskedNames.containsKey(name.toLowerCase(Locale.ROOT))));
         if (text.length() <= MAX_SUMMARY_LENGTH) {
             return text;
         }
@@ -162,15 +177,18 @@ public class SensitiveDataMasker {
     }
 
     /**
-     * The value as JSON with secrets replaced by null: outputs kept for idempotent replay ({@code op_process_result})
-     * still convert back to their type.
+     * The value as JSON with secrets replaced by null, the ones returned to the caller included: outputs kept for
+     * idempotent replay ({@code op_process_result}) and event payloads still convert back to their type.
      */
     public String withoutSecrets(Object value) {
         return json.writeValueAsString(
-            mask(json.valueToTree(value), json.getNodeFactory().nullNode(), this::isSensitive));
+            mask(json.valueToTree(value), json.getNodeFactory().nullNode(), this::isRecordedSecret));
     }
 
-    /** The value converted to JSON types with secrets removed (null), for responses of generic endpoints. */
+    /**
+     * The value converted to JSON types with secrets removed (null), for responses of generic endpoints; a component
+     * returned to the caller ({@code @Sensitive(returned = true)}) stays.
+     */
     public Object toJsonWithoutSecrets(Object value) {
         if (value == null) {
             return null;
@@ -277,21 +295,22 @@ public class SensitiveDataMasker {
         return node;
     }
 
-    private static void collectSensitive(Type type, Set<String> found, int depth) {
+    private static void collectSensitive(Type type, Set<String> found, Set<String> returned, int depth) {
         if (depth > MAX_TYPE_DEPTH) {
             return;
         }
         if (type instanceof ParameterizedType parameterized) {
             for (Type argument : parameterized.getActualTypeArguments()) {
-                collectSensitive(argument, found, depth + 1);
+                collectSensitive(argument, found, returned, depth + 1);
             }
-            collectSensitive(parameterized.getRawType(), found, depth + 1);
+            collectSensitive(parameterized.getRawType(), found, returned, depth + 1);
         } else if (type instanceof Class<?> cls && cls.isRecord()) {
             for (RecordComponent component : cls.getRecordComponents()) {
-                if (component.isAnnotationPresent(Sensitive.class)) {
-                    found.add(component.getName().toLowerCase(Locale.ROOT));
+                Sensitive sensitive = component.getAnnotation(Sensitive.class);
+                if (sensitive != null) {
+                    (sensitive.returned() ? returned : found).add(component.getName().toLowerCase(Locale.ROOT));
                 }
-                collectSensitive(component.getGenericType(), found, depth + 1);
+                collectSensitive(component.getGenericType(), found, returned, depth + 1);
             }
         }
     }
