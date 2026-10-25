@@ -32,6 +32,31 @@ const ICONS = {
   arrow: '<path d="M5 12h14M13 6l6 6-6 6"/>',
 }
 
+/*
+ * The brand's drawings (Q32, the same shapes as the apps' qb/Illustrations.tsx), in the site's tokens: the coin of the
+ * wordmark and the illustrations of the hero, the steps and the feature pages. All decorative (aria-hidden).
+ */
+const COIN = `<circle cx="24" cy="24" r="22" fill="var(--coin)"/><circle cx="24" cy="24" r="17" fill="none" stroke="var(--coin-deep)" stroke-width="2.5"/><path d="M24 34c-7 0-9-7-9-11 7 0 11 3 11 9 0 .7 0 1.4-.2 2H24z" fill="var(--leaf-deep)"/><path d="M24 34c7 0 9-7 9-11-7 0-11 3-11 9 0 .7 0 1.4.2 2H24z" fill="var(--leaf)"/><path d="M24 33V22" stroke="var(--ink)" stroke-width="1.6" stroke-linecap="round"/>`
+
+const ART = {
+  quiz: `<ellipse cx="120" cy="150" rx="92" ry="14" fill="var(--sky)"/><rect x="52" y="30" width="136" height="110" rx="14" fill="var(--card)" stroke="var(--line)" stroke-width="2"/><rect x="68" y="48" width="78" height="10" rx="5" fill="var(--ink)" opacity=".85"/><rect x="68" y="66" width="104" height="8" rx="4" fill="var(--muted)" opacity=".5"/><rect x="68" y="88" width="104" height="16" rx="8" fill="var(--sky)" stroke="var(--leaf-deep)" stroke-width="2"/><path d="M76 96l5 5 9-10" fill="none" stroke="var(--leaf-deep)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><rect x="68" y="112" width="104" height="16" rx="8" fill="none" stroke="var(--line)" stroke-width="2"/><circle cx="190" cy="42" r="22" fill="var(--coin)"/><circle cx="190" cy="42" r="15" fill="none" stroke="var(--coin-deep)" stroke-width="2.5"/><path d="M186 36l4 12 4-12" fill="none" stroke="var(--ink)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M26 118c10-18 30-18 40 0" fill="none" stroke="var(--leaf)" stroke-width="4" stroke-linecap="round"/><path d="M46 118V96" stroke="var(--leaf-deep)" stroke-width="4" stroke-linecap="round"/>`,
+  reward: `<ellipse cx="120" cy="152" rx="92" ry="14" fill="var(--sky)"/>${[0, 1, 2, 3].map((i) => `<g transform="translate(0 ${-i * 16})"><ellipse cx="110" cy="136" rx="46" ry="14" fill="var(--coin-deep)"/><ellipse cx="110" cy="130" rx="46" ry="14" fill="var(--coin)"/></g>`).join('')}<ellipse cx="110" cy="82" rx="30" ry="8" fill="none" stroke="var(--coin-deep)" stroke-width="2"/><path d="M150 90c22-26 48-30 64-28-4 22-22 42-50 44" fill="var(--leaf)" stroke="var(--leaf-deep)" stroke-width="2"/><path d="M152 104c14-14 30-26 54-36" fill="none" stroke="var(--leaf-deep)" stroke-width="2" stroke-linecap="round"/><circle cx="40" cy="48" r="4" fill="var(--coin)"/><circle cx="200" cy="140" r="5" fill="var(--leaf)"/><circle cx="60" cy="110" r="3" fill="var(--leaf-deep)"/>`,
+  prize: `<ellipse cx="120" cy="152" rx="92" ry="14" fill="var(--sky)"/><rect x="40" y="100" width="160" height="44" rx="8" fill="var(--card)" stroke="var(--line)" stroke-width="2"/><path d="M36 100h168l-10-22H46z" fill="var(--leaf-deep)"/><path d="M46 78h148l-6 14H52z" fill="var(--leaf)"/><rect x="92" y="56" width="56" height="44" rx="6" fill="var(--coin)"/><rect x="92" y="56" width="56" height="12" rx="4" fill="var(--coin-deep)"/><rect x="116" y="56" width="8" height="44" fill="var(--ink)" opacity=".7"/><path d="M120 56c-10-14-24-10-18 0 4 6 12 4 18 0zm0 0c10-14 24-10 18 0-4 6-12 4-18 0z" fill="var(--leaf)" stroke="var(--leaf-deep)" stroke-width="1.5"/><rect x="150" y="110" width="36" height="24" rx="4" fill="var(--bg)" stroke="var(--line)" stroke-width="2"/>${[154, 160, 165, 171, 176, 181].map((x, i) => `<rect x="${x}" y="114" width="${i % 2 ? 2 : 3}" height="16" fill="var(--ink)"/>`).join('')}`,
+  share: `<ellipse cx="120" cy="152" rx="92" ry="14" fill="var(--sky)"/><rect x="84" y="24" width="72" height="124" rx="12" fill="var(--card)" stroke="var(--line)" stroke-width="2"/><rect x="102" y="32" width="36" height="4" rx="2" fill="var(--line)"/><rect x="98" y="52" width="44" height="44" rx="4" fill="var(--bg)" stroke="var(--line)" stroke-width="2"/><rect x="104" y="58" width="12" height="12" rx="2" fill="var(--ink)"/><rect x="124" y="58" width="12" height="12" rx="2" fill="var(--ink)"/><rect x="104" y="78" width="12" height="12" rx="2" fill="var(--ink)"/><path d="M124 78h5v5h-5zM131 78h5v5h-5zM124 85h5v5h-5zM131 85h5v5h-5z" fill="var(--leaf-deep)"/><rect x="98" y="106" width="44" height="12" rx="6" fill="var(--leaf)"/><path d="M40 60c20-10 40-6 52 18M200 60c-20-10-40-6-52 18" fill="none" stroke="var(--leaf-deep)" stroke-width="3" stroke-linecap="round" stroke-dasharray="6 8"/><circle cx="40" cy="60" r="7" fill="var(--coin)"/><circle cx="200" cy="60" r="7" fill="var(--coin)"/>`,
+  plan: `<ellipse cx="120" cy="152" rx="92" ry="14" fill="var(--sky)"/><rect x="70" y="26" width="100" height="120" rx="10" fill="var(--leaf-deep)"/><rect x="82" y="42" width="76" height="92" rx="5" fill="var(--card)"/><rect x="100" y="16" width="40" height="18" rx="6" fill="var(--coin)"/><path d="M94 66h52M94 84h52M94 102h32" stroke="var(--ink)" stroke-width="5" stroke-linecap="round" opacity=".35"/><circle cx="152" cy="118" r="18" fill="var(--leaf)"/><path d="M143 118l6 6 12-13" stroke="var(--hero-fg)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>`,
+  growth: `<ellipse cx="120" cy="152" rx="92" ry="14" fill="var(--sky)"/><rect x="52" y="100" width="30" height="46" rx="5" fill="var(--leaf-deep)"/><rect x="94" y="74" width="30" height="72" rx="5" fill="var(--leaf)"/><rect x="136" y="48" width="30" height="98" rx="5" fill="var(--coin)"/><circle cx="151" cy="30" r="14" fill="var(--coin-deep)"/><path d="M151 30V10" stroke="var(--leaf-deep)" stroke-width="3" stroke-linecap="round"/><path d="M151 22c-12-1-19-9-20-21 12 0 19 7 20 21z" fill="var(--leaf)"/><path d="M151 16c12-1 19-9 20-21-12 0-19 7-20 21z" fill="var(--leaf-deep)"/><path d="M46 146h130" stroke="var(--ink)" stroke-width="2" stroke-linecap="round" opacity=".3"/>`,
+}
+
+/** An illustration, decorative. */
+export function art(name, className = 'art') {
+  return `<svg class="${className}" viewBox="0 0 240 180" aria-hidden="true" focusable="false">${ART[name] ?? ''}</svg>`
+}
+
+/** The wordmark: the coin with a leaf, then the name. */
+export function wordmark(href) {
+  return `<a class="brand" href="${href}"><svg class="coin" viewBox="0 0 48 48" aria-hidden="true" focusable="false">${COIN}</svg><span>QuizBuks</span></a>`
+}
+
 export function icon(name, className = 'icon') {
   return `<svg class="${className}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] ?? ''}</svg>`
 }
@@ -48,7 +73,7 @@ function header({ language, page, content, base }) {
     : `<a href="${pagePath(lang, page, base)}" lang="${LOCALES[lang]}" hreflang="${LOCALES[lang]}" data-lang="${lang}">${LANGUAGE_NAMES[lang]}</a>`).join('')
   return `<header class="top">
   <div class="wrap bar">
-    <a class="brand" href="${pagePath(language, 'home', base)}"><img src="${base}icon-192.png" alt="" width="32" height="32" /><span>QuizBuks</span></a>
+    ${wordmark(pagePath(language, 'home', base))}
     <button class="menu-toggle" type="button" data-menu-toggle aria-expanded="false" aria-controls="site-menu" aria-label="${esc(content.menu)}"><span></span><span></span><span></span></button>
     <nav id="site-menu" class="menu" data-menu aria-label="${esc(content.navLabel)}">
       <div class="links">${nav}</div>
@@ -67,7 +92,7 @@ function footer({ language, content, base }) {
   return `<footer class="foot">
   <div class="wrap grid4">
     <div>
-      <a class="brand" href="${pagePath(language, 'home', base)}"><img src="${base}icon-192.png" alt="" width="28" height="28" /><span>QuizBuks</span></a>
+      ${wordmark(pagePath(language, 'home', base))}
       <p class="muted">${esc(f.tagline)}</p>
     </div>
     <div><h3>${esc(f.product)}</h3><ul class="plain">
@@ -92,8 +117,11 @@ function cards(items, cols = 'grid3') {
   return `<div class="${cols}">${items.map((c) => `<div class="card">${c.icon ? icon(c.icon, 'icon accent') : ''}<h3>${esc(c.title)}</h3><p>${esc(c.text)}</p></div>`).join('')}</div>`
 }
 
-function steps(items) {
-  return `<ol class="steps">${items.map((s, i) => `<li><span class="num" aria-hidden="true">${i + 1}</span><div><h3>${esc(s.title)}</h3><p>${esc(s.text)}</p></div></li>`).join('')}</ol>`
+const STEP_ART = ['plan', 'share', 'quiz', 'prize']
+
+/** Steps in order; the home page's four get a drawing each (`illustrated`). */
+function steps(items, illustrated = false) {
+  return `<ol class="steps">${items.map((s, i) => `<li>${illustrated && STEP_ART[i] ? art(STEP_ART[i]) : ''}<span class="num" aria-hidden="true">${i + 1}</span><div><h3>${esc(s.title)}</h3><p>${esc(s.text)}</p></div></li>`).join('')}</ol>`
 }
 
 function cta(content) {
@@ -139,6 +167,7 @@ function home(ctx) {
       <p class="muted small">${esc(h.heroNote)}</p>
     </div>
     <div class="mock" aria-hidden="true">
+      ${art('reward')}
       <div class="phone">
         <div class="phone-bar"></div>
         <div class="phone-card"><span class="chip">${esc(h.mock.chip)}</span><strong>${esc(h.mock.question)}</strong>
@@ -175,7 +204,7 @@ function home(ctx) {
 </section>
 <section class="wrap section" aria-labelledby="how">
   <h2 id="how" class="center">${esc(h.how.title)}</h2>
-  ${steps(h.how.steps)}
+  ${steps(h.how.steps, true)}
 </section>
 <section class="wrap section split" aria-labelledby="surveys">
   <div>
@@ -203,14 +232,19 @@ ${tryIt(ctx)}
 </section>`
 }
 
+const PAGE_ART = { merchants: 'growth', takers: 'quiz', surveys: 'plan' }
+
 function featurePage(ctx, key) {
   const p = ctx.content[key]
   return `<section class="hero compact">
-  <div class="wrap">
-    <p class="eyebrow">${esc(p.eyebrow)}</p>
-    <h1>${esc(p.title)}</h1>
-    <p class="lead">${esc(p.lead)}</p>
-    ${cta(ctx.content)}
+  <div class="wrap hero-split">
+    <div>
+      <p class="eyebrow">${esc(p.eyebrow)}</p>
+      <h1>${esc(p.title)}</h1>
+      <p class="lead">${esc(p.lead)}</p>
+      ${cta(ctx.content)}
+    </div>
+    ${art(PAGE_ART[key], 'hero-art')}
   </div>
 </section>
 ${p.sections.map((s, i) => `<section class="wrap section${i % 2 ? ' alt' : ''}" aria-labelledby="s${i}">
