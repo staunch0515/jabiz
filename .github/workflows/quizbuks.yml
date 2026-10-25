@@ -171,25 +171,32 @@ jobs:
           JABIZ_BOOTSTRAP_ADMIN_USER: admin
           JABIZ_BOOTSTRAP_ADMIN_PASSWORD: smoke-admin-password
           JABIZ_FILES_LOCAL_ROOT: ${{ runner.temp }}/quizbuks-files
-      - name: The three front ends are served
+      - name: The front ends are served
         run: |
-          # The app at / (docs/quizbuks/plans/QP-pages.md), the sponsor console at /sponsor/, the admin frontend at
-          # /admin/; a client-side route of each falls back to its own page.
-          curl -sf localhost:8080/ | grep -q 'id="root"'
-          curl -sf localhost:8080/welcome | grep -q '<title>QuizBuks</title>'
+          # The app at /taker/ (docs/quizbuks/plans/QP-pages.md, Q30), the sponsor console at /sponsor/, the admin
+          # frontend at /admin/, the business site at /biz/; a client-side route of each falls back to its own page.
+          # The bare address opens the business site; the app's old addresses go on to /taker/ (platform 16zf-a).
+          curl -sf localhost:8080/taker/ | grep -q 'id="root"'
+          curl -sf localhost:8080/taker/welcome | grep -q '<title>QuizBuks</title>'
+          curl -sf localhost:8080/biz/ | grep -q 'QuizBuks'
+          test "$(curl -s -o /dev/null -w '%{http_code}' localhost:8080/)" = 302
+          curl -sI 'localhost:8080/?ref=card' | tr -d '\r' | grep -qi '^location: /biz/?ref=card$'
+          test "$(curl -s -o /dev/null -w '%{http_code}' localhost:8080/p/some-id)" = 301
+          curl -sI localhost:8080/p/some-id | tr -d '\r' | grep -qi '^location: /taker/p/some-id$'
           curl -sf localhost:8080/sponsor/ | grep -q '<title>QuizBuks Sponsor</title>'
           curl -sf localhost:8080/sponsor/wallet | grep -q '<title>QuizBuks Sponsor</title>'
           curl -sf localhost:8080/admin/ | grep -q 'id="root"'
           curl -sf localhost:8080/admin/datasets | grep -q 'id="root"'
           # The app is a PWA: its manifest and the site's only Service Worker.
-          curl -sf localhost:8080/manifest.webmanifest | grep -q '"start_url": "/"'
-          test "$(curl -s -o /dev/null -w '%{http_code}' -H 'Service-Worker: script' localhost:8080/sw.js)" = 200
+          curl -sf localhost:8080/taker/manifest.webmanifest | grep -q '"start_url": "/taker/"'
+          test "$(curl -s -o /dev/null -w '%{http_code}' -H 'Service-Worker: script' localhost:8080/taker/sw.js)" = 200
           test "$(curl -s -o /dev/null -w '%{http_code}' -H 'Service-Worker: script' localhost:8080/sponsor/sw.js)" = 404
+          test "$(curl -s -o /dev/null -w '%{http_code}' -H 'Service-Worker: script' localhost:8080/sw.js)" = 404
       - name: Each front end carries the content security policy
         run: |
           # The platform's default policy (docs/design/17-apps-and-branches.md section 3.2) on every SPA's pages,
           # client routes included: everything from this origin only (no inline scripts), workers too.
-          for path in / /welcome /sponsor/ /admin/; do
+          for path in /taker/ /taker/welcome /sponsor/ /admin/ /biz/; do
             policy=$(curl -sI "localhost:8080$path" | tr -d '\r' | grep -i '^content-security-policy:')
             echo "$path: $policy"
             echo "$policy" | grep -q "default-src 'self'"
@@ -308,7 +315,7 @@ jobs:
           QB_ANTHROPIC_API_URL: http://localhost:8094
           QB_ANTHROPIC_API_HOSTS: localhost
           QB_SPONSOR_LINK: http://localhost:8080/sponsor/
-          QB_APP_LINK: http://localhost:8080/
+          QB_APP_LINK: http://localhost:8080/taker/
       - uses: pnpm/action-setup@v5
         with:
           package_json_file: quizbuks-web/e2e/package.json

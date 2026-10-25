@@ -47,13 +47,13 @@ class AccountSignUpIT extends AccountItSupport {
     static final GreenMailExtension MAIL = new GreenMailExtension(new ServerSetup(3041, null,
         ServerSetup.PROTOCOL_SMTP));
 
-    // Links go to the frontend of the entry they belong to (decision D43 item 4): the app at /, sponsors at /sponsor/,
+    // Links go to the frontend of the entry they belong to (decision D43 item 4): the app at /taker/, sponsors at /sponsor/,
     // the administration at /admin/.
     private static final Pattern VERIFY_LINK = Pattern.compile(
-        "https://quizbuks\\.example\\.com/((?:admin/|sponsor/)?)auth/verify-email\\?entry=([a-z0-9-]+)&token=([A-Za-z0-9_-]+)");
+        "https://quizbuks\\.example\\.com/((?:admin/|sponsor/|taker/)?)auth/verify-email\\?entry=([a-z0-9-]+)&token=([A-Za-z0-9_-]+)");
     private static final Pattern JOIN_LINK = Pattern.compile(
-        "https://quizbuks\\.example\\.com/((?:admin/|sponsor/)?)auth/join\\?entry=([a-z0-9-]+)&token=([A-Za-z0-9_-]+)");
-    private static final Map<String, String> ENTRY_ROOTS = Map.of("app", "", "sponsor", "sponsor/", "admin", "admin/");
+        "https://quizbuks\\.example\\.com/((?:admin/|sponsor/|taker/)?)auth/join\\?entry=([a-z0-9-]+)&token=([A-Za-z0-9_-]+)");
+    private static final Map<String, String> ENTRY_ROOTS = Map.of("app", "taker/", "sponsor", "sponsor/", "admin", "admin/");
     private static final AtomicInteger ADDRESSES = new AtomicInteger();
 
     /** Anonymous requests, each from an address of its own (the mock server has no connections). */
@@ -209,7 +209,7 @@ class AccountSignUpIT extends AccountItSupport {
         assertThat(received(email)).extracting(AccountSignUpIT::subject).contains("Welcome, Tom");
         // The welcome mail is the app's (entries("app")): it unsubscribes on the app's own page (decision D52).
         assertThat(received(email).getLast()).satisfies(mail -> assertThat(text(mail))
-            .contains("https://quizbuks.example.com/mail/unsubscribe?token=").doesNotContain("/admin/"));
+            .contains("https://quizbuks.example.com/taker/mail/unsubscribe?token=").doesNotContain("/admin/"));
         // By the verified address as well as by the user name.
         sessionAt(email.toUpperCase(), "app");
     }

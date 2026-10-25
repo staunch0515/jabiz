@@ -98,7 +98,7 @@ for (const appearance of ['light', 'dark'] as const) {
     const other = await taker(request, 'Ben')
     await untilLive(request, me.token, seeded.publicationId)
 
-    await signIn(page, '/', me.email)
+    await signIn(page, '/taker/', me.email)
     await expect(page.getByTestId('home')).toBeVisible()
     await openFromFeed(page, seeded.name)
     await expectAccessible(page, at('app feed'))
@@ -169,12 +169,12 @@ for (const appearance of ['light', 'dark'] as const) {
     await expectAccessible(page, at('app history'))
     // Q20: the result read later shows the questions and the answers, from the server (this tab kept nothing).
     await page.evaluate(() => window.sessionStorage.clear())
-    await row.locator('a[href^="/result/"]').first().click()
+    await row.locator('a[href^="/taker/result/"]').first().click()
     await expect(page).toHaveURL(/\/result\/[^/]+$/)
     await expect(page.getByTestId('result-question')).toHaveCount(2)
     await expect(page.getByTestId('result-mine').first()).toContainText('Paris')
     await expect(page.getByTestId('result-correct').first()).toContainText('Paris')
-    await page.goto(`/p/${seeded.publicationId}`)
+    await page.goto(`/taker/p/${seeded.publicationId}`)
     await expect(page.getByTestId('detail-answered')).toBeVisible()
     await expect(page.getByTestId('detail-start')).toHaveCount(0)
   })
@@ -191,7 +191,7 @@ test('the time runs out: the answers are submitted by themselves, after continui
   const me = await taker(request, 'Chie')
   await untilLive(request, me.token, seeded.publicationId)
 
-  await signIn(page, '/', me.email)
+  await signIn(page, '/taker/', me.email)
   await expect(page.getByTestId('home')).toBeVisible()
   await openFromFeed(page, seeded.name)
   await page.getByTestId('detail-start').click()
@@ -199,7 +199,7 @@ test('the time runs out: the answers are submitted by themselves, after continui
   await choose(page, 'Lyon')
 
   // The history continues it at the question and answer saved.
-  await page.goto('/history')
+  await page.goto('/taker/history')
   const row = page.getByTestId('history-row').filter({ hasText: seeded.name })
   await expect(row).toHaveAttribute('data-category', 'IN_PROGRESS')
   await row.getByTestId('history-continue').click()

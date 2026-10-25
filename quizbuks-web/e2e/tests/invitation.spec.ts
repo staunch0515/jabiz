@@ -105,7 +105,7 @@ test('an invited address answers through its mailed link; nobody else sees the p
   const mail = await invitationMail(request, invitee)
   expect(mail.subject).toContain('Invited capitals')
   const link = linkIn(mail.text, '/auth/email-link')
-  expect(link.searchParams.get('to')).toBe(`/p/${publicationId}`)
+  expect(link.searchParams.get('to')).toBe(`/taker/p/${publicationId}`)
   await page.context().clearCookies()
   await page.goto(link.pathname + link.search)
   await page.getByTestId('email-link-start').click()

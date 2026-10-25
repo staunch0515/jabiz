@@ -6,7 +6,7 @@ import { APP } from '../messages'
 import { useDuration } from '../pages/PublicationPage'
 import { formatKudos } from '../qb/kudos'
 import { QB } from '../qb/messages'
-import { Link } from '../qb/router'
+import { hrefOf, Link } from '../qb/router'
 import { readSharedPublication, sharePath } from './share'
 
 /**
@@ -58,7 +58,8 @@ export function SharePage({ publicationId }: { publicationId: string }) {
         {entry.data?.emailLink ? <>
           <h2 id="share-start" className="text-lg font-semibold">{t('share.start')}</h2>
           <p className="text-muted-foreground text-sm">{t('share.startHint')}</p>
-          <EmailLinkForm to={here} submitLabel={t('share.start')} />
+          {/* The link's return path is a path of this site: the page under the app's base (/taker/p/<id>, Q30). */}
+          <EmailLinkForm to={hrefOf(here)} submitLabel={t('share.start')} />
           <p className="text-muted-foreground text-sm">{t('share.delay')}</p>
         </> : <h2 id="share-start" className="text-lg font-semibold">{t('share.signIn')}</h2>}
         <Link to={signIn} className="text-primary self-center text-sm underline" data-testid="share-password">

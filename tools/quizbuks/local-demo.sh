@@ -83,7 +83,7 @@ EOF
   QB_STRIPE_CHECKOUT_URL_PREFIX=http://localhost:$STUB_PORT/
   QB_STRIPE_CONNECT_URL_PREFIX=http://localhost:$STUB_PORT/
   QB_SPONSOR_LINK=http://localhost:$PORT/sponsor/
-  QB_APP_LINK=http://localhost:$PORT/
+  QB_APP_LINK=http://localhost:$PORT/taker/
   QB_DEMO_BASE_URL=http://localhost:$PORT
   QB_DEMO_MAILPIT_URL=http://localhost:$MAILPIT_PORT
   set +a
@@ -163,7 +163,8 @@ summary() {
   cat <<EOF
 
 QuizBuks is running (local demo; never expose it):
-  App (takers)        http://localhost:$PORT/
+  App (takers)        http://localhost:$PORT/taker/
+  Business site       http://localhost:$PORT/biz/  (the bare address opens it)
   Sponsor console     http://localhost:$PORT/sponsor/
   Administration      http://localhost:$PORT/admin/     admin / $JABIZ_BOOTSTRAP_ADMIN_PASSWORD
   Mail (Mailpit)      http://localhost:$MAILPIT_PORT/

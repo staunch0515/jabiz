@@ -10,9 +10,10 @@ import { buildTime } from './build-time.ts'
 const version = (JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as { version: string })
   .version
 
-// The takers' app (docs/quizbuks/plans/QP-pages.md): jabizApp { spa("/", "../../quizbuks-web/app", entry = "app",
-// pwa = Pwa.ON) } builds it with VITE_BASE=/, VITE_JABIZ_ENTRY=app, VITE_JABIZ_PWA=on and the other SPAs' prefixes
-// (/sponsor/, /admin/), which its Service Worker leaves alone; the preset takes them from there.
+// The takers' app (docs/quizbuks/plans/QP-pages.md): jabizApp { spa("/taker", "../../quizbuks-web/app", entry = "app",
+// pwa = Pwa.ON) } builds it with VITE_BASE=/taker/, VITE_JABIZ_ENTRY=app, VITE_JABIZ_PWA=on and the other SPAs' prefixes
+// (/sponsor/, /admin/, /biz/), which its Service Worker leaves alone; the preset takes them from there (Q30 moved the
+// app from the root; the server redirects the old addresses).
 export default defineConfig({
   define: {
     __QB_APP_VERSION__: JSON.stringify(version),

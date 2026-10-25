@@ -133,8 +133,9 @@ public class InvitationConfig {
 
     @Bean
     ProcessDefinition<InvitationProcesses.InvitationRef, InvitationProcesses.MailOutput, ProcessContext>
-        qbInvitationMailProcess(MailValues values) {
-        return InvitationProcesses.mail(values);
+        qbInvitationMailProcess(MailValues values,
+            @Value("${jabiz.security.entries.app.app-path:/}") String appPath) {
+        return InvitationProcesses.mail(values, appPath);
     }
 
     /** Every minute: the queued invitations, each mail in a transaction of its own (platform decision D42). */

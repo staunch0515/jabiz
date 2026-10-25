@@ -57,7 +57,7 @@ test('a visitor starts from a share link with an e-mail address only', async ({ 
     params: { 'p.publicationId': shared.publicationId } })).json()
     .then((page) => page.items?.length ?? 0), { timeout: 60_000 }).toBe(1)
 
-  await page.goto(`/p/${shared.publicationId}`)
+  await page.goto(`/taker/p/${shared.publicationId}`)
   await expect(page.getByRole('heading', { name: shared.name })).toBeVisible()
   await expectAccessible(page, 'share page')
   const email = address('shared')
@@ -67,7 +67,7 @@ test('a visitor starts from a share link with an e-mail address only', async ({ 
 
   const mail = await mailTo(request, email, /sign-in link/i)
   const link = linkIn(mail.text, '/auth/email-link')
-  expect(link.searchParams.get('to')).toBe(`/p/${shared.publicationId}`)
+  expect(link.searchParams.get('to')).toBe(`/taker/p/${shared.publicationId}`)
   await page.goto(link.pathname + link.search)
   await page.getByTestId('email-link-start').click()
 
@@ -85,6 +85,6 @@ test('a visitor starts from a share link with an e-mail address only', async ({ 
   await expect(page.getByTestId('detail-start')).toBeVisible()
 
   // The name sponsors may see is the address's part before the @, never the address.
-  await page.goto('/account')
+  await page.goto('/taker/account')
   await expect(page.getByTestId('profile-name')).toHaveValue(email.split('@')[0])
 })

@@ -91,6 +91,7 @@
   `qb_wallet.balance >= 0` 由检查约束兜底。评分、档位、抽成、打乱、时限与开始条件是纯 Java 的 `Scoring`、`TierPick`、`RewardSplit`、`OptionShuffle`、`AttemptRules`；
   上限在 `PlayLimits`，错误码在 `PlayCodes`。系统流程的权限 `qb.play.system` 不授予任何角色。**开发入账** `QB_WALLET_DEV_CREDIT` 只在
   `quizbuks.wallet.dev-credit.enabled=true`（`dev` 与测试）时注册，权限 `qb.wallet.dev-credit` 不授予任何角色，生产不开（启动检查 `StripeModeCheck` 拒绝它与正式模式或 Stripe 正式密钥同时出现）。它是开放流程，补发经事件 `qb.sponsor.settle-pending` 由系统运行（`QB_PENDING_SETTLE` 等答题的系统流程都是 `internal()`，D41）。
+- **地址**（`docs/quizbuks/plans/Q30-paths.md`）：App 在 `/taker/`（入口 `app` 的 `app-path`）、商家后台 `/sponsor/`、管理后台 `/admin/`、招商站 `/biz/`（`quizbuks-web/biz`，静态页面，无脚本）；裸域名由 `jabiz.web.root-redirect` 转到 `/biz/`，App 搬走前的根下路径由 `jabiz.web.redirects` 301 到 `/taker/`（清单在 `application.yml`，招商站新页面不得与之重名）。商家后台生成的 App 链接只经 `publishing/paths.ts` 的 `APP_BASE`；登录链接的返回路径是站点路径（App 用 `hrefOf`，邀请邮件用入口的 `app-path`），不写死 `/taker`。
 - **指定邮箱回答的发布**（`publishing.Audience`、包 `invitation`，`docs/quizbuks/plans/Q25-invitations.md`）：受众是发布的字段 `audience`（`PUBLIC` / `INVITED`，上架时冻结到卡片），
   `INVITED` 的发布不要求地区（`PublicationReadiness`）、不进首页与公开模板、`qb.app.publication` 只对有邀请行的账号返回。清单 `QbInvitation` 只经 `QB_INVITATION_ADD` / `REMOVE` / `SEND`
   （都先 `CallerChecks::refuseBanned`，都在列表锁 `qb.invitation-list:<发布>` 内，发送再取配额锁 `qb.invitation-quota:<商家>`；上限与每日配额在配置 `quizbuks.invitations.*`，不是业务参数；寄送只在 `LIVE` 时）与内部 `QB_INVITATION_MAIL`（任务 `qb.invitation-mail`）写入；邀请邮件是模板
@@ -288,7 +289,7 @@
 
 ## 7. 运行
 
-- 本地：`QB_LOCAL_SECRETS=true docker compose -f deploy/quizbuks/compose.dev.yaml up -d --build`（compose 缺省不生成密钥，Q10b L5；数据库端口 5440、应用 8080：App 在 `/`、商家后台在 `/sponsor/`、后台在 `/admin/`）；
+- 本地：`QB_LOCAL_SECRETS=true docker compose -f deploy/quizbuks/compose.dev.yaml up -d --build`（compose 缺省不生成密钥，Q10b L5；数据库端口 5440、应用 8080：App 在 `/taker/`、商家后台在 `/sponsor/`、后台在 `/admin/`、招商站在 `/biz/`，裸域名转到 `/biz/`）；
   或只起数据库（`… up -d db`）后在 `backend/` 下 `./gradlew :quizbuks:bootRun --args='--spring.profiles.active=dev'`，前端开发时在 `quizbuks-web/app` 或 `sponsor` 下 `pnpm dev`
   （端口 5175 / 5176，`/api` 代理到 8080）。
   compose 没有 `.env` 时 Stripe 未配置：镜像的入口脚本 `deploy/quizbuks/entrypoint.sh`（再交给平台的 `docker/app-entrypoint.sh`，不改平台脚本）只在测试模式、

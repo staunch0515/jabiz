@@ -84,7 +84,7 @@ for (const appearance of ['light', 'dark'] as const) {
     await untilLive(request, me.token, seeded.publicationId)
 
     await page.setViewportSize({ width: 390, height: 844 })
-    await signIn(page, '/', me.email)
+    await signIn(page, '/taker/', me.email)
     await expect(page.getByTestId('home')).toBeVisible()
     await page.getByTestId('feed-search').fill(seeded.name)
     await page.getByTestId('feed-search-submit').click()

@@ -24,7 +24,7 @@ import static org.assertj.core.api.Assertions.assertThat;
     "spring.profiles.active=google",
     "JABIZ_OIDC_GOOGLE_CLIENT_ID=test-only-client.apps.googleusercontent.com",
     "JABIZ_OIDC_GOOGLE_CLIENT_SECRET=test-only-google-secret",
-    "QB_OIDC_REDIRECT_APP=https://quizbuks.example.com/login/oidc",
+    "QB_OIDC_REDIRECT_APP=https://quizbuks.example.com/taker/login/oidc",
     "jabiz.security.entries.app.self-registration=true"})
 class GoogleProfileIT extends PostgresIntegrationTest {
 

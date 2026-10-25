@@ -86,7 +86,7 @@ JABIZ_TRUSTED_PROXIES=<如 172.18.0.2/32>
 
 # 地址（本环境的域名）
 JABIZ_MAIL_BASE_URL=https://quizbuks.com
-QB_APP_LINK=https://quizbuks.com/
+QB_APP_LINK=https://quizbuks.com/taker/
 QB_SPONSOR_LINK=https://quizbuks.com/sponsor/
 
 # 邮件（注册验证、找回密码）
@@ -182,7 +182,7 @@ Run workflow，分支选该环境的分支，`image-tag` 留空。第一次启�
    JABIZ_WEB_ENVIRONMENT=staging
    SPRING_PROFILES_ACTIVE=staging
    JABIZ_MAIL_BASE_URL=https://staging.quizbuks.com
-   QB_APP_LINK=https://staging.quizbuks.com/
+   QB_APP_LINK=https://staging.quizbuks.com/taker/
    QB_SPONSOR_LINK=https://staging.quizbuks.com/sponsor/
    ```
 

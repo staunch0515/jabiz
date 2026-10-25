@@ -17,16 +17,18 @@ export const publicationQuery = (publicationId: string) => [...PUBLICATIONS_QUER
 
 /**
  * The link a sponsor shares (Q15): the app's page of the publication, which anybody can open; before signing in it
- * shows the quiz and asks for an e-mail address only. The app is at this site's root.
+ * shows the quiz and asks for an e-mail address only. The app is under this site's /taker/ (Q30).
  */
+export const APP_BASE = '/taker/'
+
 export function shareLink(publicationId: string, origin: string = window.location.origin): string {
-  return `${origin}/p/${encodeURIComponent(publicationId)}`
+  return `${origin}${APP_BASE}p/${encodeURIComponent(publicationId)}`
 }
 
 /**
  * The link in a redeem code (Q22b): the app's page that collects the caller's prize at the sponsor whose code it is.
- * The key is the secret the server issued; the app is at this site's root.
+ * The key is the secret the server issued; the app is under this site's /taker/ (Q30).
  */
 export function redeemLink(redeemKey: string, origin: string = window.location.origin): string {
-  return `${origin}/redeem/${encodeURIComponent(redeemKey)}`
+  return `${origin}${APP_BASE}redeem/${encodeURIComponent(redeemKey)}`
 }

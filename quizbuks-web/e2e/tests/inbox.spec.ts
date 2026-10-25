@@ -36,7 +36,7 @@ test('a paid reward is a message in the inbox; the badge counts it until it is r
     { message: 'the reward message arrives', timeout: 30_000 }).toBe(1)
 
   await page.setViewportSize({ width: 390, height: 844 })
-  await signIn(page, '/', taker.email)
+  await signIn(page, '/taker/', taker.email)
   await expect(page.getByTestId('home')).toBeVisible()
   await expect(page.getByTestId('nav-inbox-badge')).toHaveText('1')
   await expect(page.getByTestId('nav-inbox')).toHaveAccessibleName(/1 unread/)
@@ -80,7 +80,7 @@ test('a sponsor\'s notice reaches its takers and counts readers without naming t
     // The taker reads it and follows "View quiz" to the publication.
     const takerContext = await browser.newContext({ viewport: { width: 390, height: 844 } })
     const app = await takerContext.newPage()
-    await signIn(app, '/', taker.email)
+    await signIn(app, '/taker/', taker.email)
     await expect(app.getByTestId('home')).toBeVisible()
     await app.getByTestId('nav-inbox').click()
     const row = app.getByTestId('inbox-row').and(app.locator(`[data-id="${broadcastId}"]`))
@@ -109,7 +109,7 @@ test('a sponsor\'s notice reaches its takers and counts readers without naming t
     await expect(adminRow).toHaveAttribute('data-status', 'WITHDRAWN')
 
     // It leaves the inbox; the sponsor reads why.
-    await app.goto('/inbox')
+    await app.goto('/taker/inbox')
     await expect(app.getByTestId('inbox-list').or(app.getByTestId('inbox-empty'))).toBeVisible()
     await expect(app.locator(`[data-testid="inbox-row"][data-id="${broadcastId}"]`)).toHaveCount(0)
     await page.reload()

@@ -41,7 +41,8 @@
 | `SPRING_MAIL_HOST` / `_PORT` / `_USERNAME` / `_PASSWORD` | 是 | 邮件服务商（SMTP） | 按服务商；改环境变量、重启 | 投递失败 |
 | `SPRING_PROFILES_ACTIVE` | 否 | `google` 开启 App 的 Google 登录。**绝不能含 `dev`**（`dev` 的签名密钥与操作人请求头是公开的） | — | 无 Google 登录 |
 | `JABIZ_OIDC_GOOGLE_CLIENT_ID` / `_CLIENT_SECRET` | 开 Google 时 | Google Cloud 控制台 | 在控制台建新密钥、改环境变量、重启、删旧密钥 | Google 登录启动失败 |
-| `QB_OIDC_REDIRECT_APP` | 开 Google 时 | `https://<主机>/login/oidc`（与控制台登记的完全相同） | 换域名时 | Google 拒绝回调 |
+| `QB_OIDC_REDIRECT_APP` | 开 Google 时 | `https://<主机>/taker/login/oidc`（与控制台登记的完全相同；Q30 之前没有 `/taker`） | 换域名时 | Google 拒绝回调 |
+| `JABIZ_WEB_ROOT_REDIRECT` | 否 | 裸域名转到的路径，缺省 `/biz/`（招商网站，Q30）；`QB_APP_LINK` 须以 `/taker/` 结尾 | — | 裸域名打开招商站 |
 | `JABIZ_SECURITY_MFA_ADMINISTRATION` | **不设** | — | — | 缺省 `true`：管理操作要求二次验证。`false` 只给本机演示、e2e 与 Stripe 测试模式的本机运行 |
 
 **应用的邮件**（Q7a，`plans/Q7-messages-legal.md` D-Q7-1）：除注册、验证、找回密码与入驻结果外，QuizBuks 在以下事件后发信（都由事件的消费者以系统身份发出，不在答题与支付的提交路径上）：

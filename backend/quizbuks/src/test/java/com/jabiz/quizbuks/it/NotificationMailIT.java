@@ -55,7 +55,7 @@ class NotificationMailIT extends PayoutItSupport {
     static final GreenMailExtension MAIL = new GreenMailExtension(new ServerSetup(3047, null,
         ServerSetup.PROTOCOL_SMTP));
 
-    private static final String APP = "https://quizbuks.example.com/";
+    private static final String APP = "https://quizbuks.example.com/taker/";
     private static final String SPONSOR = "https://quizbuks.example.com/sponsor/";
 
     // ---- helpers ---------------------------------------------------------------------------------------------------

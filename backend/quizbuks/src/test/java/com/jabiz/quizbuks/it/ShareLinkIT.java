@@ -40,7 +40,7 @@ class ShareLinkIT extends PlayItSupport {
     static final String TEMPLATE = "qb.public.publication";
 
     static final Pattern LINK = Pattern.compile(
-        "https://quizbuks\\.example\\.com/auth/email-link\\?entry=app&token=([A-Za-z0-9_-]+)&to=([^)\\s]*)");
+        "https://quizbuks\\.example\\.com/taker/auth/email-link\\?entry=app&token=([A-Za-z0-9_-]+)&to=([^)\\s]*)");
 
     /** Anonymous: the public template's answer (no token). */
     private WebTestClient.ResponseSpec publicQuery(String query) {
@@ -94,12 +94,12 @@ class ShareLinkIT extends PlayItSupport {
 
         String email = unique("shared").toLowerCase() + "@example.com";
         client.post().uri("/api/auth/email-link").contentType(MediaType.APPLICATION_JSON)
-            .bodyValue(Map.of("entry", "app", "email", email, "to", "/p/" + publicationId)).exchange()
+            .bodyValue(Map.of("entry", "app", "email", email, "to", "/taker/p/" + publicationId)).exchange()
             .expectStatus().isAccepted();
         deliverEvents();
         Matcher link = LINK.matcher(textTo(email));
         assertThat(link.find()).as("a sign-in link").isTrue();
-        assertThat(link.group(2)).isEqualTo("%2Fp%2F" + publicationId);
+        assertThat(link.group(2)).isEqualTo("%2Ftaker%2Fp%2F" + publicationId);
 
         Map<String, Object> session = client.post().uri("/api/auth/email-link/confirm")
             .contentType(MediaType.APPLICATION_JSON).bodyValue(Map.of("token", link.group(1))).exchange()

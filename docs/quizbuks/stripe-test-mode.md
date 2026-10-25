@@ -122,7 +122,7 @@ tools/quizbuks/stripe-test-mode/run.sh stop
 5. **两位管理员**：`STRIPE_TM_ADMIN_*` 是提出变更、批准入驻与发布的管理员（如首个管理员 `admin`），`STRIPE_TM_PUBLISHER_*` 是持 `control.publish` 的另一位
    （财务管理员）。staging 的管理要求二次验证，所以两人都要给 `_TOTP`：**绑定二次验证时显示的密钥**（Base32），不是 6 位验证码。绑定时没有记下密钥的，
    在后台"安全设置"中重新绑定一次并记下。
-6. **商家与答题人**：staging 发真实邮件、没有 Mailpit，脚本不能替它们验证邮箱：事先在 `https://staging.quizbuks.com/sponsor/` 与 `/` 各注册一个、点邮件中的链接验证。
+6. **商家与答题人**：staging 发真实邮件、没有 Mailpit，脚本不能替它们验证邮箱：事先在 `https://staging.quizbuks.com/sponsor/` 与 `/taker/` 各注册一个、点邮件中的链接验证。
    Gmail 的别名很方便（`you+qb-sponsor-1@gmail.com`、`you+qb-taker-1@gmail.com`，邮件都到同一个信箱）。
    **每次运行用新的商家**：新商家首次充值成功前与之后 30 天内累计充值至多 100 000（`qb.topup.new-sponsor.max-total`），几次运行（每次 10 000 + 争议的 2 000，
    加上手工试过的充值）就会用完，之后充值一律 422 `QB_TOPUP_NEW_SPONSOR_LIMIT`。答题人也尽量新建（见下）。
