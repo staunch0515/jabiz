@@ -45,6 +45,8 @@ interface Server {
   versions?: Record<string, unknown>[]
   /** The sponsor's reward methods setting (Q22); none means the platform's Kudos only. */
   methods?: string
+  /** The highest reward one attempt may win (`qb.sponsor.reward-methods`); none for no cap. */
+  maxReward?: number
   cashRewards?: Record<string, unknown>[]
   /** The prizes of the redeem page (Q22b), answered to every search of `qb.sponsor.redemptions`. */
   redemptions?: Record<string, unknown>[]
@@ -89,8 +91,9 @@ function server(options: Server = {}) {
           : json(404, { detail: 'Not found' })
       case '/api/datasets/urn:jabiz:dataset:sponsor:QbRewardTier/query':
         return rows(options.tiers ?? [])
-      case '/api/datasets/urn:jabiz:dataset:sponsor:QbSponsorRewardMethods/query':
-        return rows(options.methods ? [{ methods: options.methods, note: null }] : [])
+      case '/api/queries/qb.sponsor.reward-methods':
+        return json(200, { items: [{ methods: options.methods ?? 'PLATFORM', own: Boolean(options.methods),
+          maxRewardPerAttempt: options.maxReward ?? null }], offset: 0, limit: 1 })
       case '/api/dictionaries/urn:jabiz:dict:quizbuks:reward-method':
         return json(200, [{ code: 'PLATFORM', label: 'Kudos paid by QuizBuks' },
           { code: 'SPONSOR_CASH', label: 'Cash from the sponsor' },
@@ -388,6 +391,14 @@ describe('the reward method (Q22)', () => {
       redeemDescription: 'A coffee at our counter' })
     await waitFor(() => expect(screen.getByTestId('summary-reward-method')).toHaveTextContent("Prize at the sponsor's place"))
     expect(screen.getByTestId('summary-redeem')).toHaveTextContent('A coffee at our counter')
+  })
+
+  it('shows the highest reward one attempt may win when the platform caps it (Q28)', async () => {
+    server({ methods: 'PLATFORM', maxReward: 500, processes: { QB_PUBLICATION_SAVE: [saved(4)] } })
+    window.history.replaceState(null, '', '/publications/p1?step=1')
+    render(<App />)
+    expect(await screen.findByTestId('publication-reward-cap')).toHaveTextContent('The highest reward one attempt may win is 500 Kudos.')
+    expect(screen.queryByTestId('publication-method')).toBeNull()
   })
 
   it('starts a new draft with the first method allowed when the platform\'s is not', async () => {

@@ -1,5 +1,8 @@
 package com.jabiz.quizbuks.publishing;
 
+import com.jabiz.param.ParamValues;
+import com.jabiz.quizbuks.setup.QbParams;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -9,7 +12,8 @@ import java.util.List;
  * taker, recorded as a cash reward both confirm ({@link #SPONSOR_CASH}); or a prize the taker collects at the
  * sponsor's place ({@link #OFFLINE_REDEEM}). Only {@link #PLATFORM} moves money: the others never lock the sponsor's
  * wallet nor post to the ledger, and their reward figure is the prize's value in Kudos. Which methods a sponsor may
- * publish with is set by an administrator ({@code QbSponsorRewardMethods}; {@link #PLATFORM} alone without a row).
+ * publish with is set by an administrator ({@code QbSponsorRewardMethods}); without a row the parameter
+ * {@code qb.reward.default-methods} decides ({@link #defaultMethods}, Q28).
  */
 public final class RewardMethod {
 
@@ -21,8 +25,19 @@ public final class RewardMethod {
 
     public static final String DICTIONARY = "urn:jabiz:dict:quizbuks:reward-method";
 
-    /** The methods a sponsor without a setting may use. */
+    /** The methods a sponsor without a setting may use when the parameter is not readable: the platform's only. */
     public static final List<String> DEFAULT = List.of(PLATFORM);
+
+    /**
+     * The methods a sponsor without a setting of their own may use (Q28): the parameter
+     * {@code qb.reward.default-methods} as read at the operation time, its declared value before setup; names that
+     * are no method are ignored, so a mistyped value allows less, never more (none of them: the sponsor publishes
+     * once an administrator sets their methods); blank, as before setup, means the platform's Kudos only.
+     */
+    public static List<String> defaultMethods(ParamValues params) {
+        List<String> named = parse(QbParams.text(params, QbParams.REWARD_DEFAULT_METHODS));
+        return ALL.stream().filter(named::contains).toList();
+    }
 
     /** Whether the method is {@link #PLATFORM} (null, as a publication from before Q22 is read, counts as it). */
     public static boolean platform(Object method) {

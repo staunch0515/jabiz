@@ -71,6 +71,14 @@ public final class QbParams {
     /** Whether publications are approved without a person's review. */
     public static final String REVIEW_PUBLICATION_AUTO = "qb.review.publication.auto";
     /**
+     * The reward methods a sponsor without a setting of their own may publish with (Q28, docs/quizbuks/plans/
+     * Q28-phase1-defaults.md): the methods' names, comma-separated. The launch phase publishes {@code OFFLINE_REDEEM}.
+     */
+    public static final String REWARD_DEFAULT_METHODS = "qb.reward.default-methods";
+    /** The highest reward one attempt may win, in Kudos; 0 for no cap (Q28: the premiums law's limit). */
+    public static final String REWARD_MAX_PER_ATTEMPT = "qb.reward.max-per-attempt";
+    public static final List<String> REWARD = List.of(REWARD_DEFAULT_METHODS, REWARD_MAX_PER_ATTEMPT);
+    /**
      * AI generation (Q8a, docs/quizbuks/plans/Q8-ai.md, A-2, A-7, A-9): the switch (off until the deployment has a key
      * and the AI notice is published), Claude's model and effort (one of the listed values only: the parameters' kind
      * allows nothing else, and each request checks again), and the cost limits. They spend money, so they are controlled
@@ -171,7 +179,7 @@ public final class QbParams {
     public static final List<String> CONTROLLED = java.util.stream.Stream.of(List.of(CREATOR_FEE_RATE,
         TRANSFER_THRESHOLD, TRANSFER_REVIEW_ABOVE, TRANSFER_ENABLED, REVIEW_SPONSOR_AUTO, REVIEW_PUBLICATION_AUTO,
         TOPUP_MIN, TOPUP_MAX, TRANSFER_FEE, TRANSFER_HOLD_DAYS, TOPUP_NEW_SPONSOR_DAYS, TOPUP_NEW_SPONSOR_MAX_TOTAL),
-        JOURNAL_ACCOUNTS, ISSUER, List.of(LEGAL_MAX_ANNOUNCE_DAYS), AI_CONTROLLED,
+        REWARD, JOURNAL_ACCOUNTS, ISSUER, List.of(LEGAL_MAX_ANNOUNCE_DAYS), AI_CONTROLLED,
         List.of(TOPUP_BANK_MIN, TOPUP_BANK_MAX), BANK_RECEIVING, WITHDRAWAL_BANK).flatMap(List::stream).toList();
 
     /** A parameter: its key, kind (as the platform writes kinds) and first value. */
@@ -200,6 +208,11 @@ public final class QbParams {
         new Param(TRANSFER_ENABLED, BOOL, false, "Whether the daily automatic transfers run"),
         new Param(REVIEW_SPONSOR_AUTO, BOOL, false, "Approve sponsor onboarding without review"),
         new Param(REVIEW_PUBLICATION_AUTO, BOOL, false, "Approve publications without review"),
+        // The declared value keeps what the platform did before Q28; the launch phase publishes OFFLINE_REDEEM.
+        new Param(REWARD_DEFAULT_METHODS, Map.of("type", "text", "maxLength", 50), "PLATFORM",
+            "Reward methods a sponsor without a setting of their own may publish with: PLATFORM, SPONSOR_CASH, "
+                + "OFFLINE_REDEEM, comma-separated"),
+        new Param(REWARD_MAX_PER_ATTEMPT, KUDOS, "0", "The highest reward one attempt may win, in Kudos (0: no cap)"),
         new Param(APP_MIN_VERSION, Map.of("type", "text", "maxLength", 20), "1.0.0",
             "Oldest app version that may still be used"),
         new Param(STATS_MIN_GROUP, Map.of("type", "numeric", "precision", 3, "scale", 0), "5",
@@ -303,6 +316,27 @@ public final class QbParams {
             days = new BigDecimal(defaultOf(key));
         }
         return Math.clamp(days.setScale(0, RoundingMode.DOWN).longValue(), 0, 3650);
+    }
+
+    /**
+     * An amount of Kudos a parameter gives, as read at a time: the declared value when the parameter is not there yet
+     * (before setup); never negative.
+     */
+    public static BigDecimal kudos(ParamValues params, String key) {
+        BigDecimal amount = params == null ? null : params.find(key, BigDecimal.class).orElse(null);
+        if (amount == null) {
+            amount = new BigDecimal(defaultOf(key));
+        }
+        return amount.max(BigDecimal.ZERO);
+    }
+
+    /**
+     * A text a parameter gives, as read at a time: the declared value when the parameter is not there yet (before
+     * setup).
+     */
+    public static String text(ParamValues params, String key) {
+        String value = params == null ? null : params.find(key, String.class).orElse(null);
+        return value == null ? defaultOf(key) : value;
     }
 
     private static Param journal(String key, String account) {

@@ -106,6 +106,8 @@ beforeEach(() => {
   ])
   server.templates = new Map<string, Row[] | Error>([
     [TEMPLATE.publications, [{ ...publication(), quizTitle: 'World capitals' }]],
+    [TEMPLATE.rewardDefaults, [{ paramKey: 'qb.reward.default-methods', value: 'OFFLINE_REDEEM', paramExists: true,
+      seq: 1 }, { paramKey: 'qb.reward.max-per-attempt', value: '0', paramExists: true, seq: 2 }]],
     [TEMPLATE.quizTakedowns, []],
     [TEMPLATE.publicationFunds, [{ publicationId: PUBLICATION_ID, fundsShort: true, pendingCount: 2,
       pendingAmount: 300 }]],
@@ -459,19 +461,21 @@ describe('SponsorReviewPage', () => {
     renderAt(`/qb/reviews/sponsors/${SPONSOR_ID}`, '/qb/reviews/sponsors/:userId', <SponsorReviewPage />)
     expect(await screen.findByText('Deciding needs the permission to review sponsors.')).toBeInTheDocument()
     expect(screen.queryByTestId('approval-panel')).not.toBeInTheDocument()
-    // Q22: the methods are shown to everyone, changed only with the permission.
-    expect(await screen.findByTestId('sponsor-methods-current')).toHaveTextContent('Allowed now: PLATFORM')
+    // Q22: the methods are shown to everyone, changed only with the permission; without a setting of their own the
+    // parameter's default (Q28).
+    expect(await screen.findByTestId('sponsor-methods-current'))
+      .toHaveTextContent("Allowed now, by the platform's default: OFFLINE_REDEEM")
     expect(screen.queryByTestId('sponsor-methods-save')).toBeNull()
   })
 
-  it('lets an administrator allow cash rewards, keeping the platform\'s Kudos (Q22)', async () => {
+  it('lets an administrator allow cash rewards, keeping the default\'s prize (Q22, Q28)', async () => {
     server.permissions.add('qb.admin.reward-methods')
     renderAt(`/qb/reviews/sponsors/${SPONSOR_ID}`, '/qb/reviews/sponsors/:userId', <SponsorReviewPage />)
     await userEvent.click(await screen.findByTestId('sponsor-method-SPONSOR_CASH'))
     await userEvent.type(screen.getByTestId('sponsor-methods-note'), 'Trusted shop')
     await userEvent.click(screen.getByTestId('sponsor-methods-save'))
     await waitFor(() => expect(server.runProcess).toHaveBeenCalledWith(PROCESS.rewardMethodsSet,
-      { userId: SPONSOR_ID, methods: ['PLATFORM', 'SPONSOR_CASH'], note: 'Trusted shop' }))
+      { userId: SPONSOR_ID, methods: ['SPONSOR_CASH', 'OFFLINE_REDEEM'], note: 'Trusted shop' }))
   })
 })
 

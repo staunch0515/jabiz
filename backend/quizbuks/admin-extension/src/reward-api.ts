@@ -19,7 +19,30 @@ export const CASH_RESOLUTIONS: readonly CashResolution[] = ['PAID', 'UNPAID', 'V
 type Row = Record<string, unknown>
 const str = (value: unknown): string | null => (value == null ? null : String(value))
 
-/** The methods a sponsor may publish with: their setting's, or the platform's Kudos alone without one. */
+/** The reward parameters in force (Q28, `qb.admin.reward-defaults`): what a sponsor without a setting may use. */
+export interface RewardDefaults {
+  methods: RewardMethod[]
+  /** Whether `qb.reward.default-methods` has been published yet (otherwise the platform's Kudos alone apply). */
+  published: boolean
+  /** The highest reward one attempt may win, in Kudos; null for no cap. */
+  maxRewardPerAttempt: number | null
+}
+
+export async function readRewardDefaults(): Promise<RewardDefaults> {
+  const page = await runQuery<Row>(TEMPLATE.rewardDefaults, { limit: 2 })
+  const rows = new Map(page.items.map((row) => [String(row.paramKey), row]))
+  const methods = rows.get('qb.reward.default-methods')
+  const cap = rows.get('qb.reward.max-per-attempt')
+  const named = methods?.paramExists ? String(methods.value ?? '').split(',').map((m) => m.trim()) : ['PLATFORM']
+  const max = cap?.paramExists && cap.value != null && cap.value !== '' ? Number(cap.value) : null
+  return {
+    methods: REWARD_METHODS.filter((m) => named.includes(m)),
+    published: methods?.paramExists === true,
+    maxRewardPerAttempt: max != null && Number.isFinite(max) && max > 0 ? max : null,
+  }
+}
+
+/** The methods a sponsor may publish with: their setting's; null without one (the defaults apply, Q28). */
 export async function readSponsorMethods(userId: string): Promise<{ methods: RewardMethod[]; note: string | null;
   setBy: string | null; setAt: string | null } | null> {
   const page = await unwrap(api.POST('/api/datasets/{resourceId}/query', {

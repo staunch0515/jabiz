@@ -150,6 +150,21 @@ class PublicationReadinessTest {
     }
 
     @Test
+    void aTierAboveTheHighestRewardAllowedIsAProblemOfThatTier() {
+        // Q28: the parameter qb.reward.max-per-attempt; the top tier pays 100.
+        assertThat(PublicationReadiness.check(ready(), tiers(), quiz(), NOW, BigDecimal.valueOf(50))).singleElement()
+            .satisfies(problem -> {
+                assertThat(problem.ruleCode()).isEqualTo(PublishingCodes.REWARD_ABOVE_MAX);
+                assertThat(problem.field()).isEqualTo("tiers[2].reward");
+                assertThat(problem.params()).containsEntry("tier", 3).containsEntry("max", BigDecimal.valueOf(50));
+            });
+        assertThat(PublicationReadiness.check(ready(), tiers(), quiz(), NOW, BigDecimal.valueOf(100))).isEmpty();
+        // No cap: zero, or none given.
+        assertThat(PublicationReadiness.check(ready(), tiers(), quiz(), NOW, BigDecimal.ZERO)).isEmpty();
+        assertThat(PublicationReadiness.check(ready(), tiers(), quiz(), NOW, null)).isEmpty();
+    }
+
+    @Test
     void aPrizeAtTheSponsorsPlaceIsDescribed() {
         // Q22: OFFLINE_REDEEM needs the description; the other methods never do.
         PublicationReadiness.Draft base = ready();

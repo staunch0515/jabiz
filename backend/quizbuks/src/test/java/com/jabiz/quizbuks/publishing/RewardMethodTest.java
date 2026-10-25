@@ -1,8 +1,12 @@
 package com.jabiz.quizbuks.publishing;
 
+import com.jabiz.param.ParamValues;
+import com.jabiz.quizbuks.setup.QbParams;
 import org.junit.jupiter.api.Test;
 
+import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -20,8 +24,28 @@ class RewardMethodTest {
     void withoutASettingOnlyThePlatformPays() {
         assertThat(RewardMethod.parse(null)).containsExactly("PLATFORM");
         assertThat(RewardMethod.parse("  ")).containsExactly("PLATFORM");
+    }
+
+    @Test
+    void theDefaultComesFromTheParameterKnownMethodsOnlyInTheFixedOrder() {
+        assertThat(RewardMethod.defaultMethods(null)).containsExactly("PLATFORM");
+        assertThat(RewardMethod.defaultMethods(values(Map.of()))).containsExactly("PLATFORM");
+        assertThat(RewardMethod.defaultMethods(values(Map.of(QbParams.REWARD_DEFAULT_METHODS, " "))))
+            .containsExactly("PLATFORM");
+        assertThat(RewardMethod.defaultMethods(values(Map.of(QbParams.REWARD_DEFAULT_METHODS,
+            "OFFLINE_REDEEM, bogus, PLATFORM")))).containsExactly("PLATFORM", "OFFLINE_REDEEM");
+        // A value naming no method allows nothing: less, never more.
+        assertThat(RewardMethod.defaultMethods(values(Map.of(QbParams.REWARD_DEFAULT_METHODS, "bogus")))).isEmpty();
+    }
+
+    @Test
+    void nullIsThePlatformsMethod() {
         assertThat(RewardMethod.platform(null)).isTrue();
         assertThat(RewardMethod.platform("PLATFORM")).isTrue();
         assertThat(RewardMethod.platform("SPONSOR_CASH")).isFalse();
+    }
+
+    private static ParamValues values(Map<String, Object> values) {
+        return new ParamValues(Instant.EPOCH, values);
     }
 }

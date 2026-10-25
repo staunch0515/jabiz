@@ -319,7 +319,7 @@ public final class PublicationProcesses {
         List<UUID> tierIds) {
         List<TierCoverage.Tier> ranges = tiers.stream().map(TierPlan::tier).toList();
         List<Violation> problems = new ArrayList<>(PublicationReadiness.check(PublicationEditing.draftOf(values),
-            ranges, PublicationEditing.snapshot(version), ctx.opTime()));
+            ranges, PublicationEditing.snapshot(version), ctx.opTime(), PublicationEditing.maxRewardPerAttempt(ctx)));
         // What submitting would also say: the caller is no approved sponsor, or is banned (D-Q2-6); the method is
         // one they may not use (Q22: a copy of a publication made before the method was taken away).
         problems.addAll(PublicationEditing.sponsorProblems(ctx));

@@ -30,6 +30,8 @@ export const DATASET = {
 
 /** SQL templates (`queries/qb/admin`). */
 export const TEMPLATE = {
+  /** The reward parameters in force (Q28): the default methods and the highest reward per attempt. */
+  rewardDefaults: 'qb.admin.reward-defaults',
   /** The review queue: no money (the content administrators read it). */
   publications: 'qb.admin.publications',
   /** How many addresses an invited publication invited, wrote to and answered (Q25); the addresses are the sponsor's alone. */

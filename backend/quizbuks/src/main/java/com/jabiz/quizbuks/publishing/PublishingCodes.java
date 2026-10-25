@@ -74,6 +74,8 @@ public final class PublishingCodes {
     public static final String REWARD_METHOD_NOT_ALLOWED = "QB_REWARD_METHOD_NOT_ALLOWED";
     /** Q22: a setting's methods are not written as {@code RewardMethod.format} writes them (400). */
     public static final String REWARD_METHODS_FORMAT = "QB_REWARD_METHODS_FORMAT";
+    /** A tier pays more than the highest reward one attempt may win (Q28). */
+    public static final String REWARD_ABOVE_MAX = "QB_REWARD_ABOVE_MAX";
     /** Every code above that is publishing's own (not the shared review and account codes). */
 
     public static final List<String> ALL = List.of(NAME_BLANK, REGIONS_FORMAT, AUDIENCE_INVALID, TIME_LIMIT_RANGE, SCORE_RANGE,
@@ -82,7 +84,7 @@ public final class PublishingCodes {
         FIELD_REQUIRED, END_PASSED, TOO_LONG, PASS_SCORE_RANGE, BUDGET_BELOW_MAX_REWARD, SPEND_RANGE, TIER_NOT_FROM_ZERO,
         TIER_RANGE, TIER_GAP, TIER_OVERLAP, TIER_NOT_TO_FULL, TIER_NO_REWARD, SURVEY_PASS_SCORE, SURVEY_TIERS,
         ADMIN_PAUSED, NOT_ADMIN_PAUSED, SPONSOR_BANNED, TAKEN_DOWN, REVIEW_REQUIRED, REWARD_METHOD_NOT_ALLOWED,
-        REWARD_METHODS_FORMAT);
+        REWARD_METHODS_FORMAT, REWARD_ABOVE_MAX);
 
     private PublishingCodes() {}
 }

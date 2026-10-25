@@ -17,7 +17,7 @@ import {
   Toaster,
   type ShellMenuItem,
 } from '@jabiz/ui'
-import { QueryClientProvider } from '@tanstack/react-query'
+import { QueryClientProvider, useQuery } from '@tanstack/react-query'
 import { CircleHelp, FileQuestion, LayoutDashboard, Megaphone, MessagesSquare, ReceiptText, Store, UserRound,
   Wallet,
   HandCoins,
@@ -33,6 +33,7 @@ import { quizIdOf, QUIZZES_PATH } from './content/paths'
 import { SPONSOR } from './messages'
 import { ACCOUNT_PATH, AccountPage } from './pages/AccountPage'
 import { DashboardPage } from './pages/DashboardPage'
+import { readRewardSettings, REWARD_SETTINGS_QUERY } from './publishing/api'
 import { PublicationListPage } from './publishing/PublicationListPage'
 import { PublicationPage } from './publishing/PublicationPage'
 import { CASH_REWARDS_PATH, CashRewardsPage } from './publishing/CashRewardsPage'
@@ -108,6 +109,10 @@ function SignedIn({ path }: { path: string }) {
   const { displayName, signOut, userId } = useAuth()
   useSessionLock(lockIdle)
   const sponsor = useMySponsor()
+  // Q28: a sponsor who may not pay in the platform's Kudos has no use for the wallet and its top-ups; the server
+  // decides what they may publish, this only hides the pages. Until the answer is in (or without one) they show.
+  const rewards = useQuery({ queryKey: REWARD_SETTINGS_QUERY, queryFn: readRewardSettings, staleTime: 60_000 })
+  const kudos = rewards.data ? rewards.data.methods.includes('PLATFORM') : true
   // The transactions page starts from its address's filters: another address (the nav, back, forward) starts it anew.
   const { search } = useLocation()
   // The pages start from who is signed in (the sign-up name prefills the onboarding): wait until the server said so.
@@ -133,9 +138,9 @@ function SignedIn({ path }: { path: string }) {
   else if (analyticsIdOf(path)) page = <PublicationAnalyticsPage key={path} publicationId={analyticsIdOf(path)!} />
   else if (publicationIdOf(path)) page = <PublicationPage key={path} publicationId={publicationIdOf(path)!} />
   else if (path === ONBOARDING) page = <OnboardingPage />
-  else if (path === WALLET_PATH) page = <WalletPage />
-  else if (topUpId) page = <TopUpPage key={topUpId} topUpId={topUpId} />
-  else if (bankTopUpId) page = <BankTopUpPage key={bankTopUpId} topUpId={bankTopUpId} />
+  else if (path === WALLET_PATH && kudos) page = <WalletPage />
+  else if (topUpId && kudos) page = <TopUpPage key={topUpId} topUpId={topUpId} />
+  else if (bankTopUpId && kudos) page = <BankTopUpPage key={bankTopUpId} topUpId={bankTopUpId} />
   else if (path === TRANSACTIONS_PATH) page = <TransactionsPage key={search} />
   else if (path === MESSAGES_PATH) page = <MessagesPage />
   else if (path === ACCOUNT_PATH) page = <AccountPage />
@@ -148,7 +153,7 @@ function SignedIn({ path }: { path: string }) {
     { key: 'cash', label: t('publishing.cash.nav'), path: CASH_REWARDS_PATH, icon: HandCoins },
     { key: 'redeem', label: t('publishing.redeem.nav'), path: REDEEM_PATH, icon: Gift },
     { key: 'onboarding', label: t('nav.onboarding'), path: ONBOARDING, icon: Store },
-    { key: 'wallet', label: t('wallet.nav'), path: WALLET_PATH, icon: Wallet },
+    ...(kudos ? [{ key: 'wallet', label: t('wallet.nav'), path: WALLET_PATH, icon: Wallet }] : []),
     { key: 'transactions', label: t('transactions.nav'), path: TRANSACTIONS_PATH, icon: ReceiptText },
     { key: 'messages', label: t('notices.nav'), path: MESSAGES_PATH, icon: MessagesSquare },
     { key: 'account', label: t('nav.account'), path: ACCOUNT_PATH, icon: UserRound },

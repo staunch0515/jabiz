@@ -13,6 +13,8 @@ const ENTRY = { name: 'sponsor', selfRegistration: true, requireVerifiedEmail: t
   sessionPersistence: 'tab' }
 
 interface Me {
+  /** The methods of `qb.sponsor.reward-methods` (Q28); the platform's Kudos when not given. */
+  rewardMethods?: string
   sponsor?: Record<string, unknown> | null
   idleTimeoutSeconds?: number
   /** The answer to applying. */
@@ -79,6 +81,9 @@ function server(me?: Me) {
         return new Response(null, { status: 204 })
       case '/api/queries/qb.me.consents':
         return json(200, { items: consents, offset: 0, limit: 20 })
+      case '/api/queries/qb.sponsor.reward-methods':
+        return json(200, { items: [{ methods: me?.rewardMethods ?? 'PLATFORM', own: false, maxRewardPerAttempt: null }],
+          offset: 0, limit: 1 })
       case '/api/processes/QB_CONSENT_ACCEPT/latest':
         consents = consents.map((row) => ({ ...row, accepted: row.versionNo, mustAccept: false }))
         return json(200, { output: { recorded: ['TERMS_SPONSOR'] } })
@@ -252,6 +257,16 @@ describe('a signed-in sponsor', () => {
     expect(window.location.pathname).toBe('/onboarding')
     expect(await screen.findByTestId('onboarding-submit')).toHaveTextContent('Save')
     expect(screen.queryByTestId('onboarding-terms')).toBeNull()
+  })
+
+  it('hides the wallet and its top-ups from a sponsor who may not pay in Kudos (Q28)', async () => {
+    server({ sponsor: { contactName: 'Sara', company: 'Acme', intro: null, avatar: null, reviewStatus: 'APPROVED',
+      approvedAt: '2026-10-14T00:00:00Z', revision: 3 }, rewardMethods: 'OFFLINE_REDEEM' })
+    window.history.replaceState(null, '', '/wallet')
+    render(<App />)
+    await screen.findByRole('link', { name: 'Transactions' })
+    await waitFor(() => expect(screen.queryByRole('link', { name: 'Wallet' })).toBeNull())
+    expect(await screen.findByText('This page does not exist.')).toBeInTheDocument()
   })
 
   it('is signed out after the entry\'s idle time and told why', async () => {
