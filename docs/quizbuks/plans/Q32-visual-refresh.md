@@ -20,7 +20,7 @@
 |---|---|
 | 共用 | `app/src/qb/brand.css` = `sponsor/src/qb/brand.css`，两个 `index.css` 引入 |
 | App | `art/Illustrations.tsx`、`pages/IntroPage.tsx`、`App.tsx`（字标、轮播路由、底部导航）、`pages/FeedPage.tsx`（横幅、网格卡片、空状态）、`pages/ResultPage.tsx`（奖杯）、`messages.ts`（`intro.*`、`home.tagline`，三语）、`vite.config.ts`（`themeColor`）、`public/icon-*.png`；`package.json` 加 `vitest-axe`（同商家后台，页面测试过 axe） |
-| 测试 | `App.test.tsx`（轮播：翻页、开始、跳过、看过即直达登录，axe）；e2e `a11y.spec.ts` 加轮播两页 |
+| 测试 | `App.test.tsx`（轮播：翻页、开始、跳过、看过即直达登录，axe）；`Play.test.tsx`（封面网格、占位图案、空状态）；`qb/brand.test.ts`（两种外观下品牌 token 的对比度，两个 SPA 相同）；e2e `a11y.spec.ts` 加轮播两页 |
 
 ## 3. 风险
 
