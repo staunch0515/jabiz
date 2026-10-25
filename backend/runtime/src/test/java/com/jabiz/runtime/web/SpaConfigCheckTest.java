@@ -95,6 +95,65 @@ class SpaConfigCheckTest {
         assertThat(new SpaConfigCheck(new JabizWebProperties(null, "UAT 2")).check()).isEmpty();
     }
 
+    private static final List<JabizWebProperties.Spa> MOVED = List.of(
+        new JabizWebProperties.Spa("/taker", null, null), new JabizWebProperties.Spa("/biz", null, null));
+
+    /** The root redirect is a path of this host, never the root itself, a URL or a protocol-relative address. */
+    @Test
+    void theRootRedirectMustBeAPathOfThisHost() {
+        for (String ok : List.of("/biz/", "/biz", "/taker/p/1", "/biz/index.html")) {
+            assertThat(new SpaConfigCheck(new JabizWebProperties(MOVED, null, ok)).check()).as(ok).isEmpty();
+        }
+        for (String bad : List.of("/", "//evil.example/", "https://evil.example/", "biz/", "/Biz/", "/a b", "/api/x",
+            "/actuator")) {
+            assertThat(new SpaConfigCheck(new JabizWebProperties(null, null, bad)).check()).as(bad).singleElement()
+                .satisfies(problem -> {
+                    assertThat(problem.location()).isEqualTo("jabiz.web.root-redirect");
+                    assertThat(problem.severity()).isEqualTo(CheckProblem.Severity.ERROR);
+                });
+        }
+        // A target nothing serves is a warning: a static site or a proxy may answer it (an SPA at / serves everything).
+        assertThat(new SpaConfigCheck(new JabizWebProperties(null, null, "/biz/")).check()).isEmpty();
+        assertThat(new SpaConfigCheck(new JabizWebProperties(List.of(MOVED.getFirst()), null, "/biz/")).check())
+            .singleElement()
+            .satisfies(problem -> {
+                assertThat(problem.severity()).isEqualTo(CheckProblem.Severity.WARNING);
+                assertThat(problem.message()).contains("none of the single-page applications");
+            });
+    }
+
+    /** A moved prefix goes to another prefix of this host, never to itself or under itself. */
+    @Test
+    void aMovedPrefixIsCheckedLikeASpaPath() {
+        var fine = new JabizWebProperties(MOVED, null, "/biz/", List.of(
+            new JabizWebProperties.Redirect("/p", "/taker/p"), new JabizWebProperties.Redirect("/auth", "/taker/auth")));
+        assertThat(new SpaConfigCheck(fine).check()).isEmpty();
+        assertThat(fine.redirectFor("/p/abc")).map(JabizWebProperties.Redirect::to).contains("/taker/p");
+        assertThat(fine.redirectFor("/p")).isPresent();
+        assertThat(fine.redirectFor("/profile")).isEmpty();
+        assertThat(fine.redirectFor("/auth/verify-email").orElseThrow().target("/auth/verify-email"))
+            .isEqualTo("/taker/auth/verify-email");
+
+        List<JabizWebProperties.Redirect> bad = List.of(
+            new JabizWebProperties.Redirect("/", "/taker"),
+            new JabizWebProperties.Redirect("/p/", "/taker/p"),
+            new JabizWebProperties.Redirect("/api/x", "/taker/x"),
+            new JabizWebProperties.Redirect("/q", "https://evil.example/"),
+            new JabizWebProperties.Redirect("/r", "/r/new"),
+            new JabizWebProperties.Redirect("/s", "/taker/s"),
+            new JabizWebProperties.Redirect("/s", "/taker/t"),
+            new JabizWebProperties.Redirect(null, null));
+        List<String> locations = new SpaConfigCheck(new JabizWebProperties(MOVED, null, null, bad)).check().stream()
+            .map(CheckProblem::location).toList();
+        assertThat(locations).containsExactly("jabiz.web.redirects[0].from", "jabiz.web.redirects[1].from",
+            "jabiz.web.redirects[2].from", "jabiz.web.redirects[3].to", "jabiz.web.redirects[4].to",
+            "jabiz.web.redirects[6].from", "jabiz.web.redirects[7].from", "jabiz.web.redirects[7].to");
+        // A valid target nothing serves is a warning.
+        assertThat(new SpaConfigCheck(new JabizWebProperties(MOVED, null, null, List.of(
+            new JabizWebProperties.Redirect("/old", "/elsewhere")))).check()).singleElement()
+            .satisfies(problem -> assertThat(problem.severity()).isEqualTo(CheckProblem.Severity.WARNING));
+    }
+
     @Test
     void anEnvironmentNameThatCouldNotBeShownIsReported() {
         List<CheckProblem> problems = new SpaConfigCheck(new JabizWebProperties(null, "<b>prod</b>")).check();

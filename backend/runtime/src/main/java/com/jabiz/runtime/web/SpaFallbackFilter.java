@@ -2,6 +2,7 @@ package com.jabiz.runtime.web;
 
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
 import org.springframework.http.server.reactive.ServerHttpResponse;
@@ -10,6 +11,7 @@ import org.springframework.web.server.ServerWebExchange;
 import org.springframework.web.server.WebFilter;
 import org.springframework.web.server.WebFilterChain;
 import reactor.core.publisher.Mono;
+
 
 /**
  * Serves the single-page applications of {@link JabizWebProperties} (docs/design/17-apps-and-branches.md section
@@ -23,6 +25,12 @@ import reactor.core.publisher.Mono;
  * on every response, which would also make each page load fetch every file again. A manifest is
  * {@code application/manifest+json}. Requests for a Service Worker script are answered by
  * {@link ServiceWorkerScriptGuard} first.
+ *
+ * <p>Redirects (phase 16zf-a), before any SPA is looked up: a {@code GET} or {@code HEAD} of exactly {@code /} goes
+ * (302) to {@code jabiz.web.root-redirect} when one is configured; one of a prefix in {@code jabiz.web.redirects}, or
+ * of a path under it, goes (301) to the same path under its new prefix. Both keep the query string, carry no page
+ * policy, and are revalidated on every use ({@code no-cache}, set before the response completes so that Spring
+ * Security adds neither {@code no-store} nor {@code Pragma}), so a changed target reaches the browser.
  */
 @Component
 class SpaFallbackFilter implements WebFilter {
@@ -39,6 +47,16 @@ class SpaFallbackFilter implements WebFilter {
         String path = req.getPath().value();
         if (excluded(path)) {
             return chain.filter(exchange);
+        }
+        boolean read = HttpMethod.GET.equals(req.getMethod()) || HttpMethod.HEAD.equals(req.getMethod());
+        if (read && properties.rootRedirect() != null && "/".equals(path)) {
+            return redirect(exchange, HttpStatus.FOUND, properties.rootRedirect());
+        }
+        if (read) {
+            var moved = properties.redirectFor(path).orElse(null);
+            if (moved != null) {
+                return redirect(exchange, HttpStatus.MOVED_PERMANENTLY, moved.target(path));
+            }
         }
         var spa = properties.spaFor(path).orElse(null);
         if (spa == null) {
@@ -58,6 +76,20 @@ class SpaFallbackFilter implements WebFilter {
             return chain.filter(exchange.mutate().request(req.mutate().path(spa.index()).build()).build());
         }
         return chain.filter(exchange);
+    }
+
+    /**
+     * Answers with a redirect to {@code target} (a path of this host, validated by the configuration), the request's
+     * raw query kept. The header is written as text: a raw query may hold characters {@code URI.create} rejects, and
+     * it cannot hold a line break (the server refuses such request lines), so no header is injected.
+     */
+    private static Mono<Void> redirect(ServerWebExchange exchange, HttpStatus status, String target) {
+        String query = exchange.getRequest().getURI().getRawQuery();
+        var response = exchange.getResponse();
+        response.setStatusCode(status);
+        response.getHeaders().set(HttpHeaders.LOCATION, query == null || query.isEmpty() ? target : target + "?" + query);
+        response.getHeaders().setCacheControl(NO_CACHE);
+        return response.setComplete();
     }
 
     /** Cache headers and the manifest's type of a file of {@code spa} that was answered successfully. */

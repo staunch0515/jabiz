@@ -84,6 +84,71 @@ class SpaFallbackFilterTest {
         assertThat(result.csp()).isNull();
     }
 
+    private static final JabizWebProperties REDIRECTED = new JabizWebProperties(List.of(
+        new Spa("/taker", null, null, "app", JabizWebProperties.Pwa.ON),
+        new Spa("/sponsor", null, null, "sponsor", null)), null, "/biz/", List.of(
+        new JabizWebProperties.Redirect("/p", "/taker/p"), new JabizWebProperties.Redirect("/auth", "/taker/auth")));
+
+    /** A link printed or mailed before the app moved still opens (301 to the same path under the new prefix). */
+    @ParameterizedTest
+    @CsvSource({
+        "/p/abc, /taker/p/abc",
+        "/p, /taker/p",
+        "/auth/email-link?entry=app&token=t&to=%2Fp%2F1, /taker/auth/email-link?entry=app&token=t&to=%2Fp%2F1",
+        "/?utm_source=x&ref=y, /biz/?utm_source=x&ref=y",
+    })
+    void aMovedPrefixAndTheRootKeepTheQuery(String request, String location) {
+        // The request as the server receives it (the mock's template form would encode the query a second time).
+        var exchange = MockServerWebExchange.from(MockServerHttpRequest.method(HttpMethod.GET,
+            java.net.URI.create(request)));
+        new SpaFallbackFilter(REDIRECTED).filter(exchange, e -> e.getResponse().setComplete()).block();
+        boolean root = request.startsWith("/?");
+        assertThat(exchange.getResponse().getStatusCode())
+            .isEqualTo(root ? org.springframework.http.HttpStatus.FOUND : org.springframework.http.HttpStatus.MOVED_PERMANENTLY);
+        assertThat(exchange.getResponse().getHeaders().getFirst("Location")).isEqualTo(location);
+        assertThat(exchange.getResponse().getHeaders().getCacheControl()).isEqualTo("no-cache");
+    }
+
+    /** The bare address opens the configured path; everything else is untouched (phase 16zf-a). */
+    @ParameterizedTest
+    @CsvSource({"GET", "HEAD"})
+    void theRootIsRedirectedWhenConfigured(String method) {
+        var exchange = MockServerWebExchange.from(MockServerHttpRequest.method(HttpMethod.valueOf(method), "/"));
+        AtomicReference<Boolean> reached = new AtomicReference<>(false);
+        new SpaFallbackFilter(REDIRECTED).filter(exchange, e -> {
+            reached.set(true);
+            return e.getResponse().setComplete();
+        }).block();
+        assertThat(reached.get()).isFalse();
+        assertThat(exchange.getResponse().getStatusCode()).isEqualTo(org.springframework.http.HttpStatus.FOUND);
+        assertThat(exchange.getResponse().getHeaders().getLocation()).hasToString("/biz/");
+        assertThat(exchange.getResponse().getHeaders().getCacheControl()).isEqualTo("no-cache");
+        assertThat(exchange.getResponse().getHeaders().getFirst("Content-Security-Policy")).isNull();
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+        "GET, /taker, /taker/index.html",
+        "GET, /taker/p/abc, /taker/index.html",
+        "GET, /sponsor/quizzes, /sponsor/index.html",
+        "GET, /biz/, /biz/",
+        "GET, /index.html, /index.html",
+        "GET, /profile, /profile",
+        "GET, /pages, /pages",
+        "POST, /, /",
+        "POST, /p/abc, /p/abc",
+    })
+    void onlyTheBareRootIsRedirected(String method, String path, String forwarded) {
+        Result result = run(REDIRECTED, method, path);
+        assertThat(result.forwardedPath()).isEqualTo(forwarded);
+    }
+
+    @Test
+    void withoutTheSettingTheRootIsServedAsBefore() {
+        assertThat(run(TWO, "GET", "/").forwardedPath()).isEqualTo("/index.html");
+        assertThat(new JabizWebProperties(null, null, " ").rootRedirect()).isNull();
+    }
+
     @Test
     void anExplicitIndexIsUsed() {
         var custom = new JabizWebProperties(List.of(new Spa("/admin", "/admin/app.html", null)));
