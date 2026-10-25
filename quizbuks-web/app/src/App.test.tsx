@@ -120,6 +120,17 @@ describe('a visitor', () => {
     await waitFor(() => expect(window.location.pathname).toBe('/login'))
   })
 
+  it('shows no introduction to a visitor who came from a sign-up or mailed-link page', async () => {
+    server()
+    window.history.replaceState(null, '', '/auth/verify-email?entry=app&token=abc')
+    render(<App />)
+    expect(await screen.findByTestId('verify-email')).toBeInTheDocument()
+    expect(window.localStorage.getItem('qb.intro.seen')).toBe('1')
+    window.history.replaceState(null, '', '/')
+    render(<App />)
+    await waitFor(() => expect(window.location.pathname).toBe('/login'))
+  })
+
   it('skips the introduction to the sign-in', async () => {
     server()
     render(<App />)

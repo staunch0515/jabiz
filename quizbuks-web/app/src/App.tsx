@@ -33,7 +33,7 @@ import { ResultPage } from './pages/ResultPage'
 import { RedeemPage } from './pages/RedeemPage'
 import { WelcomePage } from './pages/WelcomePage'
 import { AboutPage } from './pages/AboutPage'
-import { IntroPage, introSeen } from './pages/IntroPage'
+import { IntroPage, introSeen, rememberSeen } from './pages/IntroPage'
 import { Wordmark } from './art/Illustrations'
 import { badgeText, inboxItemOf, INBOX_PATH } from './inbox/api'
 import { InboxItemPage } from './inbox/InboxItemPage'
@@ -285,6 +285,10 @@ function Routes() {
     </div>
   )
 
+  // Whoever reaches a sign-in, sign-up or mailed-link page knows the app: no introduction afterwards (a verified
+  // address continues to the root and must land on the sign-in, as before Q32).
+  if (path === '/login' || path === '/signup' || path === '/password-reset' || MAIL_PAGES.has(path)
+    || path === UNSUBSCRIBE_PATH) rememberSeen()
   // The blocks of mailed links and of the identity provider's return read the address themselves, once: the token
   // and the code are removed from it right away.
   if (path === UNSUBSCRIBE_PATH) return frame(<MailUnsubscribe brand={brand} search={search} />)

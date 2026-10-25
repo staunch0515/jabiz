@@ -18,7 +18,8 @@ export function introSeen(): boolean {
   }
 }
 
-function rememberSeen() {
+/** Remembers that the introduction is not needed: seen, skipped, or the visitor already knows the app (a sign-in or mailed-link page). */
+export function rememberSeen() {
   try {
     window.localStorage.setItem(SEEN_KEY, '1')
   } catch {
@@ -69,9 +70,13 @@ export function IntroPage() {
         <ol className="flex items-center gap-2" aria-label={t('intro.steps')}>
           {SLIDES.map((s, i) => (
             <li key={s.key}>
+              {/* A 24px touch target (WCAG 2.5.8) around a small dot. */}
               <button type="button" aria-label={t('intro.step', { n: i + 1, total: SLIDES.length })}
                 aria-current={i === index ? 'step' : undefined} onClick={() => setIndex(i)}
-                className={cn('block h-2 rounded-full transition-all', i === index ? 'bg-primary w-8' : 'bg-border w-2')} />
+                className="flex h-6 min-w-6 items-center justify-center rounded-full">
+                <span aria-hidden className={cn('block h-2 rounded-full transition-all',
+                  i === index ? 'bg-primary w-8' : 'bg-border w-2')} />
+              </button>
             </li>
           ))}
         </ol>
