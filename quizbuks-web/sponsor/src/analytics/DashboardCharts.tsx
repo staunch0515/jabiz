@@ -1,4 +1,5 @@
 import { Button, PageState, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@jabiz/ui'
+import { Coins, HandCoins, Hourglass, Megaphone, PiggyBank, Users } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { AiUsageMetric } from '../ai/AiUsageMetric'
 import { SPONSOR } from '../messages'
@@ -35,7 +36,7 @@ function Metrics({ d }: { d: Dashboard }) {
   return (
     <section aria-label={t('analytics.metrics.label')}
       className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3" data-testid="dashboard-metrics">
-      <Metric testId="metric-publications" label={t('analytics.metrics.publications')}
+      <Metric testId="metric-publications" label={t('analytics.metrics.publications')} icon={Megaphone}
         value={<span className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-base font-normal">
           <span data-testid="metric-live"><strong className="text-2xl font-semibold">{n(d.live)}</strong>{' '}
             {t('analytics.metrics.live')}</span>
@@ -44,15 +45,15 @@ function Metrics({ d }: { d: Dashboard }) {
           <span data-testid="metric-funds-short"><strong className="text-lg font-semibold">{n(d.fundsShort)}</strong>{' '}
             {t('analytics.metrics.fundsShort')}</span>
         </span>} />
-      <Metric testId="metric-answering" label={t('analytics.metrics.answering')} value={n(d.answering)}
+      <Metric testId="metric-answering" label={t('analytics.metrics.answering')} value={n(d.answering)} icon={Users}
         hint={t('analytics.live')} />
-      <Metric testId="metric-spent-today" label={t('analytics.metrics.spentToday')} value={formatKudos(d.spentToday)}
+      <Metric testId="metric-spent-today" label={t('analytics.metrics.spentToday')} value={formatKudos(d.spentToday)} icon={HandCoins}
         hint={d.dayStart ? t('analytics.metrics.spentTodayHint', { time: zoneTime(d.dayStart, d.zone, locale),
           zone: d.zone }) : undefined} />
-      <Metric testId="metric-available" label={t('analytics.metrics.available')} value={formatKudos(d.available)} />
-      <Metric testId="metric-pending" label={t('analytics.metrics.pending')}
+      <Metric testId="metric-available" label={t('analytics.metrics.available')} value={formatKudos(d.available)} icon={Coins} />
+      <Metric testId="metric-pending" label={t('analytics.metrics.pending')} icon={Hourglass}
         value={t('analytics.metrics.pendingValue', { amount: formatKudos(d.pendingAmount), n: n(d.pendingCount) })} />
-      <Metric testId="metric-budget" label={t('analytics.metrics.budgetRemaining')}
+      <Metric testId="metric-budget" label={t('analytics.metrics.budgetRemaining')} icon={PiggyBank}
         value={formatKudos(d.budgetRemaining)} hint={t('analytics.metrics.budgetRemainingHint')} />
       {/* Q8a: the AI usage (tokens) of the month (M-10). */}
       <AiUsageMetric zone={d.zone} />

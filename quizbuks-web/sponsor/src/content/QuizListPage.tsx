@@ -26,6 +26,7 @@ import { Plus } from 'lucide-react'
 import { useEffect, useId, useMemo, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { SPONSOR } from '../messages'
+import { EmptyState } from '../EmptyState'
 import { QB } from '../qb/messages'
 import { fieldProblem, generalProblem } from '../qb/problems'
 import { Link, navigate } from '../qb/router'
@@ -238,7 +239,7 @@ export function QuizListPage() {
   ], [t, statusLabel])
 
   const rows = quizzes.data?.items ?? []
-  const empty = q ? t('quizzes.noMatch') : t('quizzes.none')
+  const empty = q ? t('quizzes.noMatch') : <EmptyState testId="quizzes-empty">{t('quizzes.none')}</EmptyState>
 
   return (
     <section className="flex flex-col gap-4" data-testid="quiz-list">

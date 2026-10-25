@@ -43,6 +43,7 @@ import { OnboardingPage, useMySponsor } from './pages/OnboardingPage'
 import { MESSAGES_PATH } from './notices/api'
 import { MessagesPage } from './notices/MessagesPage'
 import { ConsentGate, LegalLink, newQbQueryClient } from './qb/ConsentGate'
+import { Wordmark } from './qb/Illustrations'
 import { HelpPage } from './qb/HelpPage'
 import { LEGAL } from './qb/ids'
 import { legalKindOf, type LegalKind } from './qb/legal'
@@ -161,7 +162,7 @@ function SignedIn({ path }: { path: string }) {
   ]
   const shell = (
     <AppShell
-      brand={<span className="px-2 py-1 font-semibold">{t('brand')}</span>}
+      brand={<Wordmark name={t('brand')} compact className="px-2 py-1" />}
       navigation={
         <ShellNav label={t('nav.label')} items={items} isActive={(p) => path === p || path.startsWith(`${p}/`)}
           renderLink={(item, props) => (
@@ -231,7 +232,7 @@ function Routes() {
   const { t } = useTranslation(SPONSOR)
   const { ready, signedIn } = useAuth()
   const { path, search } = useLocation()
-  const brand = t('brand')
+  const brand = <Wordmark name={t('brand')} className="justify-center" />
   const frame = (content: ReactNode) => (
     <div className="flex min-h-full flex-col">
       <div className="mx-auto w-full max-w-md px-4 pt-4 empty:hidden">

@@ -152,6 +152,8 @@ describe('the dashboard', () => {
     const user = userEvent.setup()
     render(<App />)
     expect(await screen.findByTestId('metric-answering-value')).toHaveTextContent('3')
+    // Each figure carries a decorative picture (Q32).
+    expect(screen.getByTestId('metric-answering').querySelector('svg')?.closest('[aria-hidden="true"]')).not.toBeNull()
     expect(screen.getByTestId('metric-live')).toHaveTextContent('2 Running')
     expect(screen.getByTestId('metric-paused')).toHaveTextContent('1 Paused')
     expect(screen.getByTestId('metric-funds-short')).toHaveTextContent('0 Wallet too low')

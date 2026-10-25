@@ -33,6 +33,8 @@ const MATERIALS = [
 type Answer = { status: number; body: unknown }
 
 interface Server {
+  /** The sponsor has no quiz yet. */
+  noQuizzes?: boolean
   /** Answers to processes by name, in turn (the last one repeats). */
   processes?: Record<string, Answer[]>
   quiz?: Record<string, unknown> | null
@@ -87,7 +89,8 @@ function server(options: Server = {}) {
         return json(200, ['ARTICLE', 'LINK', 'VIDEO_LINK', 'PDF', 'IMAGES', 'AUDIO']
           .map((code) => ({ code, label: code === 'LINK' ? 'Web link' : code })))
       case '/api/queries/qb.sponsor.quizzes':
-        return json(200, { items: [{ ...QUIZ, publicationCount: 0, published: false }], offset: 0, limit: 20, total: 1 })
+        return options.noQuizzes ? json(200, { items: [], offset: 0, limit: 20, total: 0 })
+          : json(200, { items: [{ ...QUIZ, publicationCount: 0, published: false }], offset: 0, limit: 20, total: 1 })
       case '/api/queries/qb.sponsor.quiz-versions':
         return json(200, { items: [], offset: 0, limit: 100 })
       default:
@@ -128,6 +131,15 @@ describe('the quiz list', () => {
     await waitFor(() => expect(window.location.pathname).toBe('/quizzes/q9'))
     expect(processCalls('QB_QUIZ_SAVE')).toEqual([{ title: 'Tea time', intro: null, cover: null,
       timeLimitSec: null, kind: 'QUIZ' }])
+  })
+
+  it('shows an illustrated empty state when the sponsor has no quiz yet (Q32)', async () => {
+    server({ noQuizzes: true })
+    window.history.replaceState(null, '', '/quizzes')
+    render(<App />)
+    const empty = await screen.findByTestId('quizzes-empty')
+    expect(empty).toHaveTextContent('No quizzes yet')
+    expect(empty.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
   })
 
   it('makes a survey when the sponsor chooses one (Q12)', async () => {

@@ -126,6 +126,9 @@ describe('a visitor', () => {
     await waitFor(() => expect(window.location.pathname).toBe('/login'))
     await waitFor(() => expect(document.querySelector('a[href="/signup"]')).not.toBeNull())
     expect(document.querySelector('a[href="/password-reset"]')).not.toBeNull()
+    // The brand is the wordmark (Q32): the coin is decorative, the name is the heading.
+    expect(screen.getByTestId('wordmark')).toHaveTextContent('QuizBuks')
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('QuizBuks')
     await waitFor(() => expect(asked).toContain('/api/auth/oidc/providers?entry=sponsor'))
   })
 
@@ -253,6 +256,10 @@ describe('a signed-in sponsor', () => {
     render(<App />)
     await waitFor(() => expect(window.location.pathname).toBe('/dashboard'))
     expect(await screen.findByTestId('dashboard-status')).toHaveAttribute('data-status', 'APPROVED')
+    // The hero greets the company (Q32); the wordmark sits in the sidebar.
+    expect(screen.getByTestId('dashboard-hero')).toHaveTextContent('Hello, Acme')
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Hello, Acme')
+    expect(screen.getByTestId('wordmark')).toHaveTextContent('QuizBuks')
     await userEvent.click(screen.getByRole('link', { name: 'Sponsor profile' }))
     expect(window.location.pathname).toBe('/onboarding')
     expect(await screen.findByTestId('onboarding-submit')).toHaveTextContent('Save')

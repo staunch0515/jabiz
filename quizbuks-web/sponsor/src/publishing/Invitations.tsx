@@ -22,6 +22,7 @@ import { Search, Send, Trash2, UserPlus } from 'lucide-react'
 import { useId, useMemo, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { SPONSOR } from '../messages'
+import { EmptyState } from '../EmptyState'
 import { QB } from '../qb/messages'
 import { formatKudos } from '../qb/kudos'
 import { problemText } from '../qb/problems'
@@ -214,7 +215,8 @@ export function InvitationsSection({ publicationId, status }: { publicationId: s
       ) : (
         <DataTable label={t('publishing.invitations.title')} columns={columns} data={list.data?.items ?? []}
           getRowId={(row) => row.invitationId} loading={list.isPending} stale={list.isPlaceholderData}
-          empty={q || filter ? t('publishing.invitations.noMatch') : t('publishing.invitations.none')}
+          empty={q || filter ? t('publishing.invitations.noMatch')
+            : <EmptyState testId="invitations-empty">{t('publishing.invitations.none')}</EmptyState>}
           pagination={pagination} onPaginationChange={setPagination} rowCount={list.data?.total}
           rowProps={(row) => ({ 'data-testid': 'invitation-row', 'data-status': row.status })} />
       )}
