@@ -7,10 +7,22 @@ import { PUBLISHING_CODE, PUBLISHING_DATASET, PUBLISHING_DICTIONARY, PUBLISHING_
  * no OpenAPI types of their own). The end-to-end test `sponsor.spec.ts` runs every one of them against the server.
  */
 
-/** `publishing.RewardMethod` (Q22, dictionary `reward-method`): how the reward reaches the taker. */
-export type RewardMethod = 'PLATFORM' | 'SPONSOR_CASH' | 'OFFLINE_REDEEM'
-export const REWARD_METHODS: readonly RewardMethod[] = ['PLATFORM', 'SPONSOR_CASH', 'OFFLINE_REDEEM']
+/** `publishing.RewardMethod` (Q22, Q33, dictionary `reward-method`): how the reward reaches the taker. */
+export type RewardMethod = 'PLATFORM' | 'SPONSOR_CASH' | 'OFFLINE_REDEEM' | 'DIGITAL_PRIZE'
+export const REWARD_METHODS: readonly RewardMethod[] = ['PLATFORM', 'SPONSOR_CASH', 'OFFLINE_REDEEM', 'DIGITAL_PRIZE']
 export const REDEEM_DESCRIPTION_LENGTH = 500
+
+/**
+ * `publishing.DigitalDelivery` (Q33, dictionary `digital-delivery`): how a digital prize reaches the winner. A pool
+ * of one-time codes the sponsor loads (one each), one code or link every winner gets, or the sponsor sends it by
+ * hand within a number of days.
+ */
+export type DigitalDelivery = 'POOL' | 'SHARED' | 'SPONSOR_SENT'
+export const DIGITAL_DELIVERIES: readonly DigitalDelivery[] = ['POOL', 'SHARED', 'SPONSOR_SENT']
+export const DIGITAL_DESCRIPTION_LENGTH = 500
+export const DIGITAL_CONTENT_LENGTH = 500
+export const deliveryOf = (value: unknown): DigitalDelivery | null =>
+  (DIGITAL_DELIVERIES as readonly string[]).includes(String(value)) ? (value as DigitalDelivery) : null
 
 /**
  * `publishing.Audience` (Q25, dictionary `publication-audience`): everybody in the regions, or the invitation list
@@ -63,6 +75,10 @@ export interface Publication {
   /** How the reward reaches the taker (Q22); a prize at the sponsor's place is described. */
   rewardMethod: RewardMethod
   redeemDescription: string | null
+  /** A digital prize (Q33): how it reaches the winner, what it is, and the days a sponsor has to send one by hand. */
+  digitalDelivery: DigitalDelivery | null
+  digitalDescription: string | null
+  digitalSendDays: number | null
   /** Who may answer (Q25). */
   audience: Audience
   fullScore: number | null
@@ -143,6 +159,14 @@ export interface SaveInput {
   baseRevision: number | null
   rewardMethod: RewardMethod
   redeemDescription: string | null
+  /**
+   * Q33, with a digital prize only. The shared content is a secret the server seals and never reads back: left out
+   * (blank in the form), the one saved stays.
+   */
+  digitalDelivery?: DigitalDelivery | null
+  digitalDescription?: string | null
+  digitalSendDays?: number | null
+  digitalContent?: string
   audience: Audience
 }
 
@@ -211,6 +235,9 @@ export function toPublication(row: Row): Publication {
     maxWinners: numOrNull(row.maxWinners),
     rewardMethod: methodOf(row.rewardMethod),
     redeemDescription: str(row.redeemDescription),
+    digitalDelivery: deliveryOf(row.digitalDelivery),
+    digitalDescription: str(row.digitalDescription),
+    digitalSendDays: numOrNull(row.digitalSendDays),
     audience: audienceOf(row.audience),
     fullScore: numOrNull(row.fullScore),
     maxReward: str(row.maxReward),
@@ -325,6 +352,11 @@ export const readEndReasons = (): Promise<DictionaryItem[]> => readDictionary(PU
 export const readRegions = (): Promise<DictionaryItem[]> => readDictionary(PUBLISHING_DICTIONARY.region)
 export const readRewardMethods = (): Promise<DictionaryItem[]> => readDictionary(PUBLISHING_DICTIONARY.rewardMethod)
 export const readCashStatuses = (): Promise<DictionaryItem[]> => readDictionary(PUBLISHING_DICTIONARY.cashStatus)
+export const readDigitalDeliveries = (): Promise<DictionaryItem[]> =>
+  readDictionary(PUBLISHING_DICTIONARY.digitalDelivery)
+export const readDigitalStatuses = (): Promise<DictionaryItem[]> => readDictionary(PUBLISHING_DICTIONARY.digitalStatus)
+export const readDigitalCodeStatuses = (): Promise<DictionaryItem[]> =>
+  readDictionary(PUBLISHING_DICTIONARY.digitalCodeStatus)
 export const readAudiences = (): Promise<DictionaryItem[]> => readDictionary(PUBLISHING_DICTIONARY.audience)
 export const readInvitationStatuses = (): Promise<DictionaryItem[]> =>
   readDictionary(PUBLISHING_DICTIONARY.invitationStatus)
@@ -430,6 +462,159 @@ export async function searchCashRewards({ q, status, offset, limit }: CashReward
 export const markCashPaid = (cashRewardId: string, note: string) =>
   runProcess<{ cashRewardId: string; status: CashStatus; revision: number }>(PUBLISHING_PROCESS.cashMarkPaid,
     { cashRewardId, note: note.trim() || null })
+
+// ---- digital prizes (Q33) -----------------------------------------------------------------------------------------
+
+/** `reward.DigitalPrizeStatus` (dictionary `digital-prize-status`). */
+export type DigitalStatus = 'DUE' | 'DELIVERED' | 'CONFIRMED' | 'DISPUTED' | 'OVERDUE' | 'VOID'
+export const DIGITAL_STATUSES: readonly DigitalStatus[] = ['DUE', 'DELIVERED', 'CONFIRMED', 'DISPUTED', 'OVERDUE', 'VOID']
+
+/** `reward.DigitalCodeStatus` (dictionary `digital-code-status`): a code of a pool. */
+export type DigitalCodeStatus = 'AVAILABLE' | 'ISSUED' | 'REVOKED'
+export const DIGITAL_CODE_STATUSES: readonly DigitalCodeStatus[] = ['AVAILABLE', 'ISSUED', 'REVOKED']
+
+/** How many codes one call of `QB_DIGITAL_CODES_LOAD` takes, and how long each may be. */
+export const DIGITAL_CODES_PER_LOAD = 1000
+export const DIGITAL_CODE_LENGTH = 200
+
+/** The counts of a publication's code pool (`qb.sponsor.digital-pool-summary`). */
+export interface DigitalPoolSummary {
+  available: number
+  issued: number
+  revoked: number
+}
+
+/**
+ * A row of `qb.sponsor.digital-codes`: a code of the pool without the code itself, which is sealed on the server;
+ * the hint is its last four characters (none for a short code).
+ */
+export interface DigitalCodeRow {
+  codeId: string
+  seq: number
+  hint: string | null
+  status: DigitalCodeStatus
+  loadedAt: string
+  issuedAt: string | null
+  revokedAt: string | null
+}
+
+/** A row of `qb.sponsor.digital-prizes`: what a taker won from the sponsor, and where it stands. */
+export interface DigitalPrizeRow {
+  digitalPrizeId: string
+  publicationId: string
+  publicationName: string
+  takerName: string | null
+  amount: string
+  description: string | null
+  delivery: DigitalDelivery | null
+  hint: string | null
+  status: DigitalStatus
+  dueAt: string
+  sendBy: string | null
+  deliveredAt: string | null
+  /** 'SYSTEM' when the platform handed over a code, 'SPONSOR' when the sponsor sent it. */
+  deliveredBy: string | null
+  openedAt: string | null
+  confirmBy: string | null
+  confirmedAt: string | null
+  disputedAt: string | null
+  disputeNote: string | null
+  resolution: string | null
+  resolveNote: string | null
+}
+
+export async function readDigitalPoolSummary(publicationId: string): Promise<DigitalPoolSummary> {
+  const page = await runQuery<Row>(PUBLISHING_TEMPLATE.digitalPoolSummary, { params: { publicationId }, limit: 1 })
+  const row = page.items[0] ?? {}
+  return { available: num(row.available), issued: num(row.issued), revoked: num(row.revoked) }
+}
+
+export interface DigitalCodeSearch {
+  publicationId: string
+  status?: DigitalCodeStatus | null
+  offset: number
+  limit: number
+}
+
+export async function searchDigitalCodes({ publicationId, status, offset, limit }: DigitalCodeSearch) {
+  const page = await runQuery<Row>(PUBLISHING_TEMPLATE.digitalCodes, {
+    params: { publicationId },
+    filters: status ? [{ field: 'status', op: 'eq', value: status }] : [],
+    offset,
+    limit,
+    count: true,
+  })
+  return {
+    total: page.total,
+    items: page.items.map((row): DigitalCodeRow => ({
+      codeId: String(row.codeId),
+      seq: num(row.seq),
+      hint: str(row.hint),
+      status: (DIGITAL_CODE_STATUSES as readonly string[]).includes(String(row.status))
+        ? (row.status as DigitalCodeStatus) : 'AVAILABLE',
+      loadedAt: String(row.loadedAt ?? ''),
+      issuedAt: str(row.issuedAt),
+      revokedAt: str(row.revokedAt),
+    })),
+  }
+}
+
+/** The codes typed or pasted, one a line; the server drops blank lines and repeats. */
+export const countCodeLines = (lines: string): number => lines.split(/\r?\n/).filter((line) => line.trim()).length
+
+export interface LoadDigitalCodesOutput { publicationId: string; loaded: number; available: number }
+export interface RevokeDigitalCodesOutput { publicationId: string; revoked: number; available: number }
+
+/** Adds codes to the pool (`QB_DIGITAL_CODES_LOAD`): the lines as one text, which the server seals one by one. */
+export const loadDigitalCodes = (publicationId: string, lines: string) =>
+  runProcess<LoadDigitalCodesOutput>(PUBLISHING_PROCESS.digitalCodesLoad, { publicationId, lines })
+
+/** Takes back every code not yet handed to a winner (`QB_DIGITAL_CODES_REVOKE`). */
+export const revokeDigitalCodes = (publicationId: string) =>
+  runProcess<RevokeDigitalCodesOutput>(PUBLISHING_PROCESS.digitalCodesRevoke, { publicationId })
+
+export interface DigitalPrizeSearch {
+  q?: string
+  status?: DigitalStatus | null
+  offset: number
+  limit: number
+}
+
+export async function searchDigitalPrizes({ q, status, offset, limit }: DigitalPrizeSearch) {
+  const text = q?.trim()
+  const page = await runQuery<Row>(PUBLISHING_TEMPLATE.digitalPrizes, {
+    params: text ? { q: text } : {},
+    filters: status ? [{ field: 'status', op: 'eq', value: status }] : [],
+    offset,
+    limit,
+    count: true,
+  })
+  return {
+    total: page.total,
+    items: page.items.map((row): DigitalPrizeRow => ({
+      digitalPrizeId: String(row.digitalPrizeId),
+      publicationId: String(row.publicationId),
+      publicationName: String(row.publicationName ?? ''),
+      takerName: str(row.takerName),
+      amount: String(row.amount ?? '0'),
+      description: str(row.description),
+      delivery: deliveryOf(row.delivery),
+      hint: str(row.hint),
+      status: (DIGITAL_STATUSES as readonly string[]).includes(String(row.status)) ? (row.status as DigitalStatus) : 'DUE',
+      dueAt: String(row.dueAt ?? ''),
+      sendBy: str(row.sendBy),
+      deliveredAt: str(row.deliveredAt),
+      deliveredBy: str(row.deliveredBy),
+      openedAt: str(row.openedAt),
+      confirmBy: str(row.confirmBy),
+      confirmedAt: str(row.confirmedAt),
+      disputedAt: str(row.disputedAt),
+      disputeNote: str(row.disputeNote),
+      resolution: str(row.resolution),
+      resolveNote: str(row.resolveNote),
+    })),
+  }
+}
 
 function toSaveOutput(output: Row): SaveOutput {
   return {
@@ -545,6 +730,12 @@ export interface PublicationForm {
   tiers: TierDraft[]
   rewardMethod: RewardMethod
   redeemDescription: string
+  /** Q33: the digital prize's delivery, description and send days as typed; the shared content as typed now only. */
+  digitalDelivery: DigitalDelivery | null
+  digitalDescription: string
+  digitalSendDays: string
+  /** Never filled from the server (it is sealed there); blank keeps the one saved. */
+  digitalContent: string
   audience: Audience
 }
 
@@ -570,6 +761,10 @@ export function formOf(detail: PublicationDetail | null): PublicationForm {
     maxWinners: text(p?.maxWinners),
     rewardMethod: p?.rewardMethod ?? 'PLATFORM',
     redeemDescription: p?.redeemDescription ?? '',
+    digitalDelivery: p?.digitalDelivery ?? null,
+    digitalDescription: p?.digitalDescription ?? '',
+    digitalSendDays: text(p?.digitalSendDays),
+    digitalContent: '',
     audience: p?.audience ?? 'PUBLIC',
     tiers: (detail?.tiers ?? []).map((tier) => ({ key: tierKey(), tierId: tier.tierId,
       fromScore: String(tier.fromScore), toScore: String(tier.toScore), reward: tier.reward })),
@@ -602,6 +797,9 @@ export function inputOf(form: PublicationForm, publicationId: string | null, bas
   const passScore = read('passScore', form.passScore)
   const budgetCap = read('budgetCap', form.budgetCap)
   const maxWinners = read('maxWinners', form.maxWinners)
+  const digital = form.rewardMethod === 'DIGITAL_PRIZE'
+  const digitalSendDays = digital && form.digitalDelivery === 'SPONSOR_SENT'
+    ? read('digitalSendDays', form.digitalSendDays) : null
   const tiers: TierInput[] = form.tiers.map((tier, i) => {
     const values = (['fromScore', 'toScore', 'reward'] as const).map((part) => {
       const field = `tiers[${i}].${part}`
@@ -630,6 +828,14 @@ export function inputOf(form: PublicationForm, publicationId: string | null, bas
       rewardMethod: form.rewardMethod,
       redeemDescription: form.rewardMethod === 'OFFLINE_REDEEM' && form.redeemDescription.trim()
         ? form.redeemDescription.trim() : null,
+      // The digital fields travel only with a digital prize; what another method left behind is not sent (Q33).
+      ...(digital ? {
+        digitalDelivery: form.digitalDelivery,
+        digitalDescription: form.digitalDescription.trim() || null,
+        digitalSendDays,
+        ...(form.digitalDelivery === 'SHARED' && form.digitalContent.trim()
+          ? { digitalContent: form.digitalContent.trim() } : {}),
+      } : {}),
       audience: form.audience,
     },
   }
@@ -667,7 +873,8 @@ export function nextTier(tiers: readonly TierDraft[], fullScore: number | null):
 
 /** The fields of the publication the pages name (`entity.QbPublication.<field>` on the server). */
 export const PUBLICATION_FIELDS = ['name', 'versionId', 'regions', 'startAt', 'endAt', 'timeLimitSec', 'passScore',
-  'budgetCap', 'maxWinners', 'rewardMethod', 'redeemDescription', 'audience'] as const
+  'budgetCap', 'maxWinners', 'rewardMethod', 'redeemDescription', 'digitalDelivery', 'digitalDescription',
+  'digitalSendDays', 'digitalContent', 'audience'] as const
 export type PublicationField = (typeof PUBLICATION_FIELDS)[number]
 
 /**

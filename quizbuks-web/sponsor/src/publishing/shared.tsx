@@ -27,8 +27,12 @@ import {
   readRegions,
   readRewardMethods,
   readCashStatuses,
+  readDigitalCodeStatuses,
+  readDigitalDeliveries,
+  readDigitalStatuses,
   readRedemptionStatuses,
   timeNote,
+  type DigitalDelivery,
   type Problem,
   type PublicationStatus,
   type Tier,
@@ -57,6 +61,9 @@ export const useRegionLabel = () => useLabels('region', readRegions)
 export const useRewardMethodLabel = () => useLabels('reward-method', readRewardMethods)
 export const useCashStatusLabel = () => useLabels('cash-reward-status', readCashStatuses)
 export const useRedemptionStatusLabel = () => useLabels('redemption-status', readRedemptionStatuses)
+export const useDigitalDeliveryLabel = () => useLabels('digital-delivery', readDigitalDeliveries)
+export const useDigitalStatusLabel = () => useLabels('digital-prize-status', readDigitalStatuses)
+export const useDigitalCodeStatusLabel = () => useLabels('digital-code-status', readDigitalCodeStatuses)
 export const useAudienceLabel = () => useLabels('publication-audience', readAudiences)
 export const useInvitationStatusLabel = () => useLabels('invitation-status', readInvitationStatuses)
 
@@ -166,6 +173,10 @@ export interface SummaryValues {
   /** Q22: how the reward reaches the taker, and the prize when it is collected at the sponsor's place. */
   rewardMethod?: RewardMethod
   redeemDescription?: string | null
+  /** Q33: a digital prize's delivery, what the winner gets, and the days a sponsor has to send one by hand. */
+  digitalDelivery?: DigitalDelivery | null
+  digitalDescription?: string | null
+  digitalSendDays?: number | null
   /** Q25: who may answer; an invited publication shows no regions. */
   audience?: Audience
 }
@@ -179,7 +190,9 @@ export function PublicationSummary({ values }: { values: SummaryValues }) {
   const noLimit = t('publishing.noLimit')
   const methodLabel = useRewardMethodLabel()
   const audienceLabel = useAudienceLabel()
+  const deliveryLabel = useDigitalDeliveryLabel()
   const method = values.rewardMethod ?? 'PLATFORM'
+  const delivery = values.digitalDelivery ?? null
   const audience = values.audience ?? 'PUBLIC'
   const items: DescriptionItem[] = [
     { key: 'name', label: t('publishing.field.name'), value: values.name || notSet },
@@ -209,6 +222,15 @@ export function PublicationSummary({ values }: { values: SummaryValues }) {
       value: <span data-testid="summary-reward-method">{methodLabel(method)}</span> },
     ...(method === 'OFFLINE_REDEEM' ? [{ key: 'redeemDescription', label: t('publishing.field.redeemDescription'),
       value: <span className="whitespace-pre-line" data-testid="summary-redeem">{values.redeemDescription || notSet}</span> }] : []),
+    ...(method === 'DIGITAL_PRIZE' ? [
+      { key: 'digitalDelivery', label: t('publishing.field.digitalDelivery'),
+        value: <span data-testid="summary-digital-delivery">{delivery ? deliveryLabel(delivery) : notSet}</span> },
+      { key: 'digitalDescription', label: t('publishing.field.digitalDescription'),
+        value: <span className="whitespace-pre-line" data-testid="summary-digital">{values.digitalDescription || notSet}</span> },
+      ...(delivery === 'SPONSOR_SENT' ? [{ key: 'digitalSendDays', label: t('publishing.field.digitalSendDays'),
+        value: <span data-testid="summary-digital-send-days">{values.digitalSendDays == null
+          ? t('publishing.field.digitalSendDaysDefault') : t('publishing.summary.days', { days: values.digitalSendDays })}</span> }] : []),
+    ] : []),
     { key: 'maxReward', label: t('publishing.summary.maxReward'),
       value: values.maxReward === null ? notSet : formatKudos(values.maxReward) },
     { key: 'maxSpend', label: t('publishing.summary.maxSpend'),

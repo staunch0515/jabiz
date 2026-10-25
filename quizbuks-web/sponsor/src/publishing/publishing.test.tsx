@@ -1,4 +1,5 @@
 import { configureClient, session } from '@jabiz/client'
+import { expectAccessible } from '@jabiz/ui/testing'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -48,6 +49,10 @@ interface Server {
   /** The highest reward one attempt may win (`qb.sponsor.reward-methods`); none for no cap. */
   maxReward?: number
   cashRewards?: Record<string, unknown>[]
+  /** The digital prizes (Q33), and a publication's code pool: its counts and its codes. */
+  digitalPrizes?: Record<string, unknown>[]
+  digitalPool?: { available: number; issued: number; revoked: number }
+  digitalCodes?: Record<string, unknown>[]
   /** The prizes of the redeem page (Q22b), answered to every search of `qb.sponsor.redemptions`. */
   redemptions?: Record<string, unknown>[]
   /** The invitation list of an invited publication (Q25), answered to every search and summed up. */
@@ -99,7 +104,24 @@ function server(options: Server = {}) {
       case '/api/dictionaries/urn:jabiz:dict:quizbuks:reward-method':
         return json(200, [{ code: 'PLATFORM', label: 'Kudos paid by QuizBuks' },
           { code: 'SPONSOR_CASH', label: 'Cash from the sponsor' },
-          { code: 'OFFLINE_REDEEM', label: "Prize at the sponsor's place" }])
+          { code: 'OFFLINE_REDEEM', label: "Prize at the sponsor's place" },
+          { code: 'DIGITAL_PRIZE', label: 'Digital prize' }])
+      case '/api/dictionaries/urn:jabiz:dict:quizbuks:digital-delivery':
+        return json(200, [{ code: 'POOL', label: 'One code each from a pool' },
+          { code: 'SHARED', label: 'One code for everyone' }, { code: 'SPONSOR_SENT', label: 'Sent by the sponsor' }])
+      case '/api/dictionaries/urn:jabiz:dict:quizbuks:digital-prize-status':
+        return json(200, [{ code: 'DUE', label: 'To be sent by the sponsor' }, { code: 'DELIVERED', label: 'Delivered' },
+          { code: 'CONFIRMED', label: 'Confirmed' }, { code: 'DISPUTED', label: 'Disputed' }])
+      case '/api/dictionaries/urn:jabiz:dict:quizbuks:digital-code-status':
+        return json(200, [{ code: 'AVAILABLE', label: 'Available' }, { code: 'ISSUED', label: 'Handed out' },
+          { code: 'REVOKED', label: 'Taken back' }])
+      case '/api/queries/qb.sponsor.digital-prizes':
+        return json(200, { items: options.digitalPrizes ?? [], offset: 0, limit: 20, total: options.digitalPrizes?.length ?? 0 })
+      case '/api/queries/qb.sponsor.digital-pool-summary':
+        return json(200, { items: [{ publicationId: 'p1', ...(options.digitalPool ?? { available: 0, issued: 0, revoked: 0 }) }],
+          offset: 0, limit: 1 })
+      case '/api/queries/qb.sponsor.digital-codes':
+        return json(200, { items: options.digitalCodes ?? [], offset: 0, limit: 20, total: options.digitalCodes?.length ?? 0 })
       case '/api/dictionaries/urn:jabiz:dict:quizbuks:cash-reward-status':
         return json(200, [{ code: 'DUE', label: 'To be paid by the sponsor' }, { code: 'MARKED_PAID', label: 'Paid, awaiting confirmation' },
           { code: 'CONFIRMED', label: 'Confirmed' }, { code: 'DISPUTED', label: 'Disputed' }])
@@ -445,6 +467,166 @@ describe('the reward method (Q22)', () => {
     await userEvent.click(screen.getByTestId('cash-mark-confirm'))
     await waitFor(() => expect(processCalls('QB_CASH_REWARD_MARK_PAID')).toEqual([{ cashRewardId: 'c1', note: 'Receipt 17' }]))
     await waitFor(() => expect(screen.queryByTestId('cash-mark-dialog')).toBeNull())
+  })
+})
+
+describe('digital prizes (Q33)', () => {
+  it('asks a digital prize for its delivery and description, sends the shared content once typed, and sums it up', async () => {
+    const { processCalls } = server({ methods: 'PLATFORM,DIGITAL_PRIZE', processes: { QB_PUBLICATION_SAVE: [saved(4)] } })
+    window.history.replaceState(null, '', '/publications/p1?step=1')
+    render(<App />)
+    const choice = await screen.findByTestId('publication-method')
+    expect(screen.queryByTestId('publication-digital-delivery')).toBeNull()
+    await userEvent.click(within(choice).getByTestId('publication-method-DIGITAL_PRIZE'))
+    const delivery = await screen.findByTestId('publication-digital-delivery')
+    expect(within(delivery).getAllByRole('radio')).toHaveLength(3)
+    await waitFor(() => expect(delivery).toHaveTextContent('One code for everyone'))
+    expect(screen.queryByTestId('publication-digital-content')).toBeNull()
+    // A pool says what it needs; the shared way asks for the content, which is a secret.
+    await userEvent.click(within(delivery).getByTestId('publication-digital-delivery-POOL'))
+    expect(screen.getByTestId('publication-digital-pool-note')).toBeInTheDocument()
+    await userEvent.click(within(delivery).getByTestId('publication-digital-delivery-SHARED'))
+    expect(screen.queryByTestId('publication-digital-pool-note')).toBeNull()
+    await userEvent.type(screen.getByTestId('publication-digital-description'), 'A month of streaming')
+    const content = screen.getByTestId('publication-digital-content')
+    expect(content).toHaveAttribute('autocomplete', 'off')
+    expect(content).toHaveAccessibleDescription(/never shown again/)
+    await userEvent.type(content, 'STREAM-2026')
+    await expectAccessible()
+    await userEvent.click(screen.getByTestId('publication-next'))
+    await waitFor(() => expect(processCalls('QB_PUBLICATION_SAVE')).toHaveLength(1))
+    expect(processCalls('QB_PUBLICATION_SAVE')[0]).toMatchObject({ rewardMethod: 'DIGITAL_PRIZE', digitalDelivery: 'SHARED',
+      digitalDescription: 'A month of streaming', digitalContent: 'STREAM-2026', digitalSendDays: null })
+    await waitFor(() => expect(screen.getByTestId('summary-reward-method')).toHaveTextContent('Digital prize'))
+    expect(screen.getByTestId('summary-digital-delivery')).toHaveTextContent('One code for everyone')
+    expect(screen.getByTestId('summary-digital')).toHaveTextContent('A month of streaming')
+    expect(screen.queryByTestId('summary-digital-send-days')).toBeNull()
+  })
+
+  it('leaves the sealed content alone when nothing is typed, and asks the days of a prize the sponsor sends', async () => {
+    const { processCalls } = server({ methods: 'DIGITAL_PRIZE', processes: { QB_PUBLICATION_SAVE: [saved(4), saved(5)] },
+      publication: { ...DRAFT, rewardMethod: 'DIGITAL_PRIZE', digitalDelivery: 'SHARED', digitalDescription: 'A month' } })
+    window.history.replaceState(null, '', '/publications/p1?step=1')
+    render(<App />)
+    const content = await screen.findByTestId('publication-digital-content')
+    expect(content).toHaveValue('')
+    await userEvent.click(screen.getByTestId('publication-save'))
+    await waitFor(() => expect(processCalls('QB_PUBLICATION_SAVE')).toHaveLength(1))
+    expect(processCalls('QB_PUBLICATION_SAVE')[0]).toMatchObject({ digitalDelivery: 'SHARED', digitalDescription: 'A month' })
+    expect(processCalls('QB_PUBLICATION_SAVE')[0]).not.toHaveProperty('digitalContent')
+
+    await userEvent.click(screen.getByTestId('publication-digital-delivery-SPONSOR_SENT'))
+    expect(screen.queryByTestId('publication-digital-content')).toBeNull()
+    await userEvent.type(screen.getByTestId('publication-digital-send-days'), '7')
+    await userEvent.click(screen.getByTestId('publication-next'))
+    await waitFor(() => expect(processCalls('QB_PUBLICATION_SAVE')).toHaveLength(2))
+    expect(processCalls('QB_PUBLICATION_SAVE')[1]).toMatchObject({ digitalDelivery: 'SPONSOR_SENT', digitalSendDays: 7 })
+    expect(await screen.findByTestId('summary-digital-send-days')).toHaveTextContent('7 days')
+  })
+
+  it('shows the code pool of a pooled prize: loads codes, lists their hints and takes the unused back', async () => {
+    const codes = [
+      { codeId: 'k1', seq: 1, hint: '…AAAA', status: 'ISSUED', loadedAt: '2026-10-20T01:00:00Z', issuedAt: '2026-10-21T01:00:00Z', revokedAt: null },
+      { codeId: 'k2', seq: 2, hint: '…BBBB', status: 'AVAILABLE', loadedAt: '2026-10-20T01:00:00Z', issuedAt: null, revokedAt: null },
+      { codeId: 'k3', seq: 3, hint: null, status: 'REVOKED', loadedAt: '2026-10-20T01:00:00Z', issuedAt: null, revokedAt: '2026-10-22T01:00:00Z' },
+    ]
+    const { processCalls } = server({
+      publication: { ...DRAFT, status: 'ENDED', endedAt: '2026-10-23T00:00:00Z', endReason: 'EXPIRED',
+        rewardMethod: 'DIGITAL_PRIZE', digitalDelivery: 'POOL', digitalDescription: 'A coffee voucher', maxWinners: 2 },
+      digitalPool: { available: 1, issued: 1, revoked: 1 },
+      digitalCodes: codes,
+      processes: {
+        QB_DIGITAL_CODES_LOAD: [{ status: 200, body: { output: { publicationId: 'p1', loaded: 2, available: 3 } } }],
+        QB_DIGITAL_CODES_REVOKE: [{ status: 200, body: { output: { publicationId: 'p1', revoked: 3, available: 0 } } }],
+      },
+    })
+    window.history.replaceState(null, '', '/publications/p1')
+    render(<App />)
+    const pool = await screen.findByTestId('digital-pool')
+    expect(await within(pool).findByTestId('digital-pool-available')).toHaveTextContent('1')
+    expect(within(pool).getByTestId('digital-pool-issued')).toHaveTextContent('1')
+    expect(within(pool).getByTestId('digital-pool-revoked')).toHaveTextContent('1')
+    await waitFor(() => expect(screen.getByTestId('summary-digital-delivery')).toHaveTextContent('One code each from a pool'))
+    expect(screen.getByTestId('summary-digital')).toHaveTextContent('A coffee voucher')
+    const rows = await within(pool).findAllByTestId('digital-code-row')
+    expect(rows.map((row) => row.getAttribute('data-status'))).toEqual(['ISSUED', 'AVAILABLE', 'REVOKED'])
+    expect(within(rows[0]).getByTestId('digital-code-hint')).toHaveTextContent('…AAAA')
+    await waitFor(() => expect(within(rows[1]).getByTestId('digital-code-status')).toHaveTextContent('Available'))
+    expect(within(rows[2]).queryByTestId('digital-code-hint')).toBeNull()
+    await expectAccessible()
+
+    // Nothing to load until something is typed; the lines go as one text.
+    expect(within(pool).getByTestId('digital-pool-load')).toBeDisabled()
+    await userEvent.type(within(pool).getByTestId('digital-pool-lines'), 'CODE-1\n\nCODE-2')
+    await userEvent.click(within(pool).getByTestId('digital-pool-load'))
+    await waitFor(() => expect(processCalls('QB_DIGITAL_CODES_LOAD')).toEqual([{ publicationId: 'p1', lines: 'CODE-1\n\nCODE-2' }]))
+    await waitFor(() => expect(within(pool).getByTestId('digital-pool-lines')).toHaveValue(''))
+    expect(await screen.findByText('2 codes loaded; 3 available.')).toBeInTheDocument()
+
+    await userEvent.click(within(pool).getByTestId('digital-pool-revoke'))
+    await userEvent.click(await screen.findByRole('button', { name: 'Take back the unused codes' }))
+    await waitFor(() => expect(processCalls('QB_DIGITAL_CODES_REVOKE')).toEqual([{ publicationId: 'p1' }]))
+    expect(await screen.findByText('3 codes taken back.')).toBeInTheDocument()
+  })
+
+  it('offers no taking back while the publication runs, and shows the pool under a draft\'s wizard', async () => {
+    server({ publication: { ...DRAFT, status: 'LIVE', rewardMethod: 'DIGITAL_PRIZE', digitalDelivery: 'POOL',
+      digitalDescription: 'A coffee voucher', maxWinners: 2 }, digitalPool: { available: 2, issued: 0, revoked: 0 } })
+    window.history.replaceState(null, '', '/publications/p1')
+    render(<App />)
+    const pool = await screen.findByTestId('digital-pool')
+    expect(await within(pool).findByTestId('digital-pool-available')).toHaveTextContent('2')
+    expect(within(pool).queryByTestId('digital-pool-revoke')).toBeNull()
+  })
+
+  it('shows the pool below a draft\'s wizard with the way to take codes back', async () => {
+    server({ methods: 'DIGITAL_PRIZE', publication: { ...DRAFT, rewardMethod: 'DIGITAL_PRIZE', digitalDelivery: 'POOL',
+      digitalDescription: 'A coffee voucher' }, digitalPool: { available: 2, issued: 0, revoked: 0 } })
+    window.history.replaceState(null, '', '/publications/p1?step=1')
+    render(<App />)
+    expect(await screen.findByTestId('publication-wizard')).toBeInTheDocument()
+    const pool = await screen.findByTestId('digital-pool')
+    expect(await within(pool).findByTestId('digital-pool-revoke')).toBeEnabled()
+  })
+
+  it('lists the digital prizes with their states, searched and filtered on the server', async () => {
+    const prize = (over: Record<string, unknown>) => ({ digitalPrizeId: 'd1', publicationId: 'p1', publicationName: 'Coffee week',
+      takerName: 'Mei', amount: '100', description: 'A coffee voucher', delivery: 'POOL', hint: '…AAAA', status: 'DELIVERED',
+      dueAt: '2026-10-20T01:00:00Z', sendBy: null, deliveredAt: '2026-10-20T01:00:00Z', deliveredBy: 'SYSTEM',
+      openedAt: '2026-10-20T02:00:00Z', confirmBy: '2026-11-03T01:00:00Z', confirmedAt: null, disputedAt: null,
+      disputeNote: null, resolution: null, resolveNote: null, ...over })
+    const { posted } = server({ digitalPrizes: [
+      prize({}),
+      prize({ digitalPrizeId: 'd2', takerName: 'Ken', delivery: 'SPONSOR_SENT', hint: null, status: 'DUE', deliveredAt: null,
+        deliveredBy: null, openedAt: null, confirmBy: null, sendBy: '2026-10-23T01:00:00Z' }),
+      prize({ digitalPrizeId: 'd3', takerName: 'Lee', status: 'DISPUTED', disputedAt: '2026-10-21T01:00:00Z',
+        disputeNote: 'The code was already used.' }),
+    ] })
+    window.history.replaceState(null, '', '/digital-prizes')
+    render(<App />)
+    const rows = await screen.findAllByTestId('digital-row')
+    expect(rows.map((row) => row.getAttribute('data-status'))).toEqual(['DELIVERED', 'DUE', 'DISPUTED'])
+    expect(rows[0]).toHaveTextContent('Mei')
+    expect(within(rows[0]).getByRole('link', { name: 'Coffee week' })).toHaveAttribute('href', '/publications/p1')
+    expect(within(rows[0]).getByTestId('digital-description')).toHaveTextContent('A coffee voucher')
+    expect(within(rows[0]).getByTestId('digital-hint')).toHaveTextContent('…AAAA')
+    expect(rows[0]).toHaveTextContent('100 Kudos')
+    await waitFor(() => expect(within(rows[0]).getByTestId('digital-delivery')).toHaveTextContent('One code each from a pool'))
+    await waitFor(() => expect(within(rows[0]).getByTestId('digital-status')).toHaveTextContent('Delivered'))
+    expect(rows[0]).toHaveTextContent('Taker confirms by')
+    expect(within(rows[0]).getByTestId('digital-opened')).toHaveTextContent('First shown')
+    expect(rows[1]).toHaveTextContent('Send by')
+    expect(within(rows[1]).queryByTestId('digital-hint')).toBeNull()
+    expect(within(rows[2]).getByTestId('digital-dispute-note')).toHaveTextContent('Taker: The code was already used.')
+    await expectAccessible()
+
+    await userEvent.type(screen.getByTestId('digital-search'), 'mei{Enter}')
+    await waitFor(() => expect(posted.some((p) => p.path === '/api/queries/qb.sponsor.digital-prizes'
+      && (p.body.params as Record<string, unknown>)?.q === 'mei')).toBe(true))
+    await userEvent.click(screen.getByTestId('digital-status-filter'))
+    await userEvent.click(await screen.findByRole('option', { name: 'Disputed' }))
+    await waitFor(() => expect(posted.some((p) => p.path === '/api/queries/qb.sponsor.digital-prizes'
+      && JSON.stringify(p.body.filters) === JSON.stringify([{ field: 'status', op: 'eq', value: 'DISPUTED' }]))).toBe(true))
   })
 })
 
