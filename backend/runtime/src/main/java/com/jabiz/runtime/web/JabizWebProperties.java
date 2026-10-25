@@ -22,11 +22,23 @@ import java.util.regex.Pattern;
  * Unset means {@value #TEST}: a system that does not say it is production never looks like it. The front ends read it
  * before signing in ({@code GET /api/auth/entries/{name}}).
  *
- * @param spa         the single-page applications served
- * @param environment the system's name: {@value #PRODUCTION} or a test system's
+ * <p>{@code jabiz.web.root-redirect} (phase 16zf-a) sends a {@code GET} or {@code HEAD} of exactly {@code /} to another
+ * path of the same host with a 302, before any SPA is looked up: a host whose front ends all live under prefixes
+ * ({@code /taker/}, {@code /biz/}) names the one a bare address opens; the query string is kept. Unset, the root is
+ * served as before (by the SPA at {@code /} when there is one).
+ *
+ * <p>{@code jabiz.web.redirects[i].from} / {@code .to} (phase 16zf-a) move a prefix for good: a {@code GET} or
+ * {@code HEAD} of {@code from} or of a path under it is answered with a 301 to the same path under {@code to}, the
+ * query string kept, before any SPA is looked up. This is how links that were printed or mailed before a front end
+ * moved ({@code /p/<id>} → {@code /taker/p/<id>}) keep working; it is not a general rewriting facility.
+ *
+ * @param spa          the single-page applications served
+ * @param environment  the system's name: {@value #PRODUCTION} or a test system's
+ * @param rootRedirect the path a request for exactly {@code /} is redirected to; none by default
+ * @param redirects    the prefixes moved for good, each to another prefix of this host; none by default
  */
 @ConfigurationProperties("jabiz.web")
-public record JabizWebProperties(List<Spa> spa, String environment) {
+public record JabizWebProperties(List<Spa> spa, String environment, String rootRedirect, List<Redirect> redirects) {
 
     /** The environment of the real system: the only one the pages show no banner for. */
     public static final String PRODUCTION = "production";
@@ -59,11 +71,53 @@ public record JabizWebProperties(List<Spa> spa, String environment) {
             ? List.of(new Spa("/", null, null))
             : List.copyOf(spa.stream().map(s -> s == null ? new Spa(null, null, null) : s).toList());
         environment = environment == null || environment.isBlank() ? TEST : environment.trim();
+        rootRedirect = rootRedirect == null || rootRedirect.isBlank() ? null : rootRedirect.trim();
+        redirects = redirects == null ? List.of()
+            : List.copyOf(redirects.stream().map(r -> r == null ? new Redirect(null, null) : r).toList());
     }
 
-    /** The SPAs, on a test system. */
+    /** The SPAs, on a test system, without redirects. */
     public JabizWebProperties(List<Spa> spa) {
-        this(spa, null);
+        this(spa, null, null, null);
+    }
+
+    /** The SPAs on the named system, without redirects. */
+    public JabizWebProperties(List<Spa> spa, String environment) {
+        this(spa, environment, null, null);
+    }
+
+    /** The SPAs with a root redirect, on a test system, without moved prefixes. */
+    public JabizWebProperties(List<Spa> spa, String environment, String rootRedirect) {
+        this(spa, environment, rootRedirect, null);
+    }
+
+    /**
+     * The redirect a request path falls under, if any: the longest {@code from} that matches whole path segments.
+     */
+    public Optional<Redirect> redirectFor(String requestPath) {
+        return redirects.stream()
+            .filter(r -> r.from() != null && (requestPath.equals(r.from()) || requestPath.startsWith(r.from() + "/")))
+            .max(Comparator.comparingInt(r -> r.from().length()));
+    }
+
+    /**
+     * A prefix moved for good (phase 16zf-a).
+     *
+     * @param from the old prefix, like {@code /p} (no trailing slash; never {@code /})
+     * @param to   the new prefix of this host, like {@code /taker/p}
+     */
+    public record Redirect(String from, String to) {
+
+        @ConstructorBinding
+        public Redirect {
+            from = from == null || from.isBlank() ? null : from.trim();
+            to = to == null || to.isBlank() ? null : to.trim();
+        }
+
+        /** The address a request path under {@link #from} moves to. */
+        public String target(String requestPath) {
+            return to + requestPath.substring(from.length());
+        }
     }
 
     /** Whether this is the real system ({@value #PRODUCTION}, whatever its case). */
@@ -153,6 +207,36 @@ public record JabizWebProperties(List<Spa> spa, String environment) {
             problems.add("jabiz.web.environment: must be \"" + PRODUCTION + "\" or a short name of a test system "
                 + "(letters, digits, spaces, hyphens, up to 32 characters), was " + quoted(environment));
         }
+        if (rootRedirect != null && (!ROOT_REDIRECT.matcher(rootRedirect).matches()
+            || SpaFallbackFilter.excluded(rootRedirect))) {
+            problems.add("jabiz.web.root-redirect: must be an absolute path of this host other than \"/\", like "
+                + "\"/biz/\" (lower-case segments, no scheme or host, not under /api or /actuator), was "
+                + quoted(rootRedirect));
+        }
+        List<String> moved = new ArrayList<>();
+        for (int i = 0; i < redirects.size(); i++) {
+            Redirect r = redirects.get(i);
+            String where = "jabiz.web.redirects[" + i + "]";
+            boolean validFrom = r.from() != null && !"/".equals(r.from()) && PATH.matcher(r.from()).matches()
+                && !SpaFallbackFilter.excluded(r.from());
+            if (!validFrom) {
+                problems.add(where + ".from: must be a prefix like \"/p\" (lower-case segments, no trailing slash, not "
+                    + "\"/\", not under /api or /actuator), was " + quoted(r.from()));
+            } else if (moved.contains(r.from())) {
+                problems.add(where + ".from: " + quoted(r.from()) + " is configured more than once");
+            } else {
+                moved.add(r.from());
+            }
+            boolean validTo = r.to() != null && PATH.matcher(r.to()).matches() && !"/".equals(r.to())
+                && !SpaFallbackFilter.excluded(r.to());
+            if (!validTo) {
+                problems.add(where + ".to: must be a prefix of this host like \"/taker/p\" (lower-case segments, no "
+                    + "trailing slash, no scheme or host, not under /api or /actuator), was " + quoted(r.to()));
+            } else if (validFrom && (r.to().equals(r.from()) || r.to().startsWith(r.from() + "/"))) {
+                problems.add(where + ".to: " + quoted(r.to()) + " lies under its own from " + quoted(r.from())
+                    + ": the redirect would loop");
+            }
+        }
         List<String> seen = new ArrayList<>();
         for (int i = 0; i < spa.size(); i++) {
             Spa s = spa.get(i);
@@ -192,6 +276,8 @@ public record JabizWebProperties(List<Spa> spa, String environment) {
     }
 
     private static final Pattern PATH = Pattern.compile("/|(/[a-z0-9][a-z0-9-]*)+");
+    /** A path of this host (so never a scheme, a host or {@code //}), with or without a trailing slash. */
+    private static final Pattern ROOT_REDIRECT = Pattern.compile("(/[a-z0-9][a-z0-9._-]*)+/?");
     private static final Pattern INDEX =
         Pattern.compile("(/[A-Za-z0-9][A-Za-z0-9._-]*)*/[A-Za-z0-9._-]+\\.html");
     private static final Pattern ENTRY = Pattern.compile("[a-z][a-z0-9-]{0,39}");
