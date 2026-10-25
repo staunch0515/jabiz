@@ -106,7 +106,12 @@
   `OFFLINE_REDEEM`（商家处兑换）。商家允许的方式只经 `QB_SPONSOR_REWARD_METHODS_SET` 写 `QbSponsorRewardMethods`（没有记录 = 受控参数 `qb.reward.default-methods`，声明值 `PLATFORM`，推广期发布 `OFFLINE_REDEEM`；每次答题的最高奖励 `qb.reward.max-per-attempt`，0 为不限；`plans/Q28-phase1-defaults.md`。商家后台经模板 `qb.sponsor.reward-methods` 读当前允许的方式，不自己猜缺省）；发布的 `rewardMethod` 在保存、复制、提交时都经
   `PublicationEditing.methodProblems` 核对，兑换须有 `redeemDescription`。不是 `PLATFORM` 的结算**不取钱包锁、不读钱包、不过账**（`AttemptFinishing`、`AttemptRules`），只插入 `QbCashReward` / `QbRedemption`
   （都是时态实体，状态在 `QbRewards.TRANSITIONS`，流程在现金记录锁 `qb.cash:<记录>` 内）并记计数；现金的状态只经 `QB_CASH_REWARD_*` 流程改变，逾期禁止开始只在 `CashRewardChecks.refuseOverdue`。
-  期限 `qb.reward.cash.confirm-days` / `cash.pay-days` / `redeem-days` 是普通参数（`LoadParams` 读，不受控）。
+  期限 `qb.reward.cash.confirm-days` / `cash.pay-days` / `redeem-days` / `digital.send-days` 是普通参数（`LoadParams` 读，不受控）。
+  电子奖品（Q33，`plans/Q33-digital-prize.md`，`reward.QbDigitalPrizes`、`DigitalCodeProcesses`、`DigitalPrizeProcesses`）：第四种方式 `DIGITAL_PRIZE`，发布上 `digitalDelivery`（`POOL`/`SHARED`/`SPONSOR_SENT`）、
+  `digitalDescription`、`digitalSendDays`，共用码 `sealedDigitalContent` 经 `SealSecret` 以**商户编号**为上下文密封（码池 `QbDigitalCode.sealedContent`、奖品 `QbDigitalPrize.sealedContent` 同一上下文），
+  字段 `sensitive()`（不再加 `processOnly()`：敏感已含）；明文只在 `QB_DIGITAL_PRIZE_OPEN` 的输出 `prizeContent` 中（不标 `@Sensitive`：通用接口会把它置空），输出 record 的 `toString()` 遮蔽；
+  码池只经 `QB_DIGITAL_CODES_LOAD`/`REVOKE` 写、结算在池锁 `qb.digital-pool:<发布>` 内按 `seq` 取码；`POOL` 的提交在 `PublicationLifecycle.submit` 数可用码（`PublicationReadiness.pool`）。
+  列表与结果只给 `hint`（末 4 位，共用码没有）。
   到店领取（Q22b，`reward.RedemptionProcesses`）：商家的码只经 `QB_REDEEM_CODE_ISSUE` 签发（随机数经平台 `RandomBytesStep`，值只在输出 `redeemKey` 中；实体字段 `tokenValue` 敏感且含 token，
   平台按名遮蔽，输入组件叫 `scannedKey` 并标 `@Sensitive`——不要给输出组件起含 password / secret / token / credential 的名字，否则接口返回被遮蔽）；
   领取只经 `QB_REDEEM_TOKEN_CHECK` / `QB_REDEMPTION_CLAIM`（轮换码即时 `REDEEMED`，固定码 `CLAIMED` 由 `QB_REDEMPTION_CONFIRM` / `DECLINE` 结束），不在 App 里扫码（相机打开链接 `/redeem/<key>`）。
