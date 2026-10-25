@@ -60,7 +60,6 @@ describe('the rendered pages', () => {
     expect(home).not.toContain('icon-192.png" alt=""')
     // The four steps and the hero carry a drawing each; every drawing is hidden from assistive technology.
     expect(home.match(/<svg class="art"/g)).toHaveLength(5)
-    expect(home.match(/<svg class="(art|hero-art|coin)"/g)?.every(() => true)).toBe(true)
     expect(home).not.toMatch(/<svg class="(art|hero-art|coin)"(?![^>]*aria-hidden="true")/)
     for (const page of ['merchants', 'takers', 'surveys'] as const) {
       const html = renderPage({ language: 'ja', page, content: contentOf('ja'), base: '/biz/', tryQuizzes, assets, siteUrl })

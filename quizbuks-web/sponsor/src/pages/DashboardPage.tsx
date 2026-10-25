@@ -24,7 +24,7 @@ export function DashboardPage() {
   return (
     <section className="flex flex-col gap-4" aria-labelledby="dashboard-title" data-testid="dashboard">
       {/* The hero band (Q32): the greeting and where the sponsor stands, the illustration beside the text. */}
-      <div className="from-qb-hero-from to-qb-hero-to text-qb-hero-foreground relative overflow-hidden rounded-2xl bg-linear-to-br p-5 shadow-sm sm:p-6"
+      <div className="from-qb-hero-from to-qb-hero-to text-qb-hero-foreground relative min-h-32 overflow-hidden rounded-2xl bg-linear-to-br p-5 shadow-sm sm:min-h-40 sm:p-6"
         data-testid="dashboard-hero">
         <div className="relative z-10 flex max-w-xl flex-col gap-2 pr-28 sm:pr-40">
           <h1 id="dashboard-title" className="text-xl font-semibold sm:text-2xl">
@@ -33,8 +33,11 @@ export function DashboardPage() {
           {sponsor.isSuccess && (
             <p className="text-qb-hero-muted text-sm" data-testid="dashboard-status" data-status={status}>{message}</p>
           )}
+          {/* On the band in the brand's own colours: a white button reads in both appearances (a secondary one is
+              dark on dark green in the dark appearance). */}
           {sponsor.isSuccess && status !== 'APPROVED' && (
-            <Button size="sm" variant="secondary" className="self-start" onClick={() => navigate('/onboarding')}>
+            <Button size="sm" className="bg-qb-hero-foreground text-qb-ink hover:bg-qb-hero-muted self-start"
+              onClick={() => navigate('/onboarding')}>
               {t('dashboard.toOnboarding')}
             </Button>
           )}

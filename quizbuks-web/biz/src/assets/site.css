@@ -1,8 +1,8 @@
 /* QuizBuks business site (docs/quizbuks/plans/Q31-biz-site.md). One stylesheet, design tokens for light and dark,
    no framework. Colours follow the apps' brand (Q32, qb/brand.css): slate with the emerald accent; every text pair
-   passes WCAG AA (light: accent on white 5.5:1, white on accent 5.5:1, --chip-fg on --accent-soft 9:1; dark: accent
-   on --bg 13:1, --accent-fg on accent 9.8:1). The --leaf/--coin/--sky/--ink tokens colour the illustrations
-   (decorative) and the hero band. */
+   passes WCAG AA (light: accent on white 5.5:1, white on accent 5.5:1, --chip-fg on --accent-soft 8.6:1; dark: accent
+   on --bg 12.3:1, --accent-fg on accent 9.8:1). The --leaf/--coin/--sky/--ink/--paper tokens colour the
+   illustrations (decorative). */
 :root {
   color-scheme: light dark;
   --bg: #ffffff;
@@ -18,10 +18,7 @@
   --accent-fg: #ffffff;
   --chip-fg: #064e3b;
   --ok: #047857;
-  --hero-from: #065f46;
-  --hero-to: #047857;
-  --hero-fg: #ffffff;
-  --hero-muted: #d1fae5;
+  --paper: #ffffff;
   --leaf: #34d399;
   --leaf-deep: #059669;
   --coin: #fbbf24;
@@ -47,10 +44,7 @@
     --accent-fg: #052e16;
     --chip-fg: #d1fae5;
     --ok: #34d399;
-    --hero-from: #064e3b;
-    --hero-to: #065f46;
-    --hero-fg: #ffffff;
-    --hero-muted: #a7f3d0;
+    --paper: #ffffff;
     --leaf: #34d399;
     --leaf-deep: #10b981;
     --coin: #fbbf24;
@@ -143,6 +137,8 @@ p { margin: 0 0 1rem; }
 @media (max-width: 900px) { .hero-grid { grid-template-columns: 1fr; } .mock { display: none; } }
 .mock { position: relative; min-height: 36rem; }
 .mock .art { position: absolute; right: -1rem; top: -1.5rem; width: 15rem; height: auto; opacity: .95; }
+/* A narrower column: the drawing would slide behind the phone, so it shrinks and sits above the stat card instead. */
+@media (max-width: 1180px) { .mock .art { width: 11rem; top: auto; bottom: 0; right: 0; } }
 .phone { position: absolute; left: 0; top: 0; width: 16.5rem; height: 30rem; border-radius: 2rem; background: var(--card); border: 1px solid var(--line); box-shadow: var(--shadow); padding: 1rem; }
 .phone-bar { width: 5rem; height: .4rem; background: var(--line); border-radius: 99px; margin: .25rem auto 1.25rem; }
 .phone-card strong { display: block; margin: .6rem 0 .8rem; font-size: 1.05rem; line-height: 1.35; }

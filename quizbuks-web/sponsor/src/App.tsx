@@ -207,7 +207,7 @@ function PublicPage({ page }: { page: ReactNode }) {
     <div className="flex min-h-full flex-col">
       <header className="bg-background border-b">
         <div className="mx-auto flex max-w-3xl items-center gap-2 px-4 py-2">
-          <span className="mr-auto font-semibold">{t('brand')}</span>
+          <Wordmark name={t('brand')} compact className="mr-auto" />
           <ThemeToggle />
           <a href={hrefOf('/login')} className="text-primary text-sm underline" data-testid="public-back"
             onClick={(event) => {
