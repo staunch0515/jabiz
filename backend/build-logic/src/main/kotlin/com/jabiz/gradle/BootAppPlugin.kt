@@ -242,8 +242,9 @@ class BootAppPlugin : Plugin<Project> {
                 // @jabiz/client and @jabiz/ui, built from source, linked by an application's own SPA.
                 project.fileTree(platformDir.dir("packages")) { exclude("**/node_modules/**") },
                 project.fileTree(sourceDir) {
+                    // Every page at the root: a static site has one per language beside index.html (16zf-a).
                     include(
-                        "index.html", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "vite.config.ts",
+                        "*.html", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "vite.config.ts",
                         "tsconfig*.json", "scripts/**",
                     )
                 },
