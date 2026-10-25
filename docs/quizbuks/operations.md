@@ -187,7 +187,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
      `enabledBy: parameter qb.ai.enabled has no value in effect now; the type is paused …`，执行器第一次轮询时也记一条 WARN。这在新安装上是预期的（参数缺失与 `false` 一样：请求被拒、没有作业），
      发布 `false` 之后不再出现；已发布之后仍出现即参数被删或读不出来，应调查（§5"AI 作业暂停"）。
 7. 在测试模式下做一次 Stripe 测试模式全流程（`stripe-test-mode.md`），并按 §2.4 做一次恢复演练。
-8. 每次部署新版本后：再执行一次 `QB_SETUP`，发布它的新提案（README 各阶段的"部署后"）。
+8. 每次部署新版本后：再执行一次 `QB_SETUP`，发布它的新提案（README 各阶段的"部署后"）。忘了的话，启动日志与 `platformCheck` 对每个没有生效值的业务参数各报一条警告 `QUIZBUKS | parameter <键>`（从未执行过设置的数据库只报一条 `QB_SETUP has not run yet`）；读这些参数的流程在那之前一律失败（`PARAM_NOT_FOUND`）。
 9. **条款、隐私政策与帮助**（Q7b）：`QB_SETUP` 为四种法律文本（答题人条款、商家条款、隐私政策、特定商取引法表记）各建一份**明确标注 `[TEST PLACEHOLDER]` 的草稿**，什么也不发布。
    正式文本由需求方或律师提供（日文为准据文本，英文须一并提供；中文可缺，页面显示英文并注明）。内容管理员在后台的"法律文本（草稿）"中把草稿换成正式文本（标题、正文，第二版起还有"改定的概要"，日英必填），
    再在后台扩展的"QuizBuks → 规约类"页（`/qb/legal`）预览草稿并"发布"（`QB_LEGAL_PUBLISH`，每次要求二次验证，留审计；发布的是页面读到的草稿版本，期间被改即拒绝）：生效时间留空即立即生效，或填以后的时间作预告（至多 `qb.legal.max-announce-days` 天；预告期间不能再发布同一种文本）；
