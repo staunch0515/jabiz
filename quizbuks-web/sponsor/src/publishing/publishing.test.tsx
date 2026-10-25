@@ -559,7 +559,7 @@ describe('digital prizes (Q33)', () => {
     expect(within(pool).getByTestId('digital-pool-load')).toBeDisabled()
     await userEvent.type(within(pool).getByTestId('digital-pool-lines'), 'CODE-1\n\nCODE-2')
     await userEvent.click(within(pool).getByTestId('digital-pool-load'))
-    await waitFor(() => expect(processCalls('QB_DIGITAL_CODES_LOAD')).toEqual([{ publicationId: 'p1', lines: 'CODE-1\n\nCODE-2' }]))
+    await waitFor(() => expect(processCalls('QB_DIGITAL_CODES_LOAD')).toEqual([{ publicationId: 'p1', pastedCodes: 'CODE-1\n\nCODE-2' }]))
     await waitFor(() => expect(within(pool).getByTestId('digital-pool-lines')).toHaveValue(''))
     expect(await screen.findByText('2 codes loaded; 3 available.')).toBeInTheDocument()
 

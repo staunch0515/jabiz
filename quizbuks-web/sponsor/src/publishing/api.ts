@@ -567,7 +567,7 @@ export interface RevokeDigitalCodesOutput { publicationId: string; revoked: numb
 
 /** Adds codes to the pool (`QB_DIGITAL_CODES_LOAD`): the lines as one text, which the server seals one by one. */
 export const loadDigitalCodes = (publicationId: string, lines: string) =>
-  runProcess<LoadDigitalCodesOutput>(PUBLISHING_PROCESS.digitalCodesLoad, { publicationId, lines })
+  runProcess<LoadDigitalCodesOutput>(PUBLISHING_PROCESS.digitalCodesLoad, { publicationId, pastedCodes: lines })
 
 /** Takes back every code not yet handed to a winner (`QB_DIGITAL_CODES_REVOKE`). */
 export const revokeDigitalCodes = (publicationId: string) =>
