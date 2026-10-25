@@ -124,7 +124,7 @@ jabiz:
         registration-roles: QB_TAKER
         require-verified-email: false
         email-link: ${QB_APP_EMAIL_LINK:true}
-        app-path: /
+        app-path: /taker/
         session:
           persistence: device
           refresh-token-ttl: P30D
@@ -150,7 +150,7 @@ jabiz:
   # server is spring.mail.* (SPRING_MAIL_HOST, SPRING_MAIL_PORT, SPRING_MAIL_USERNAME, SPRING_MAIL_PASSWORD). The
   # base address is the host's root: the platform's links go to each entry's own frontend (its app-path, decision
   # D43 item 4). So do the unsubscribe links (decision D52 item 3): the notifications declared for the sponsor console
-  # (NotificationMails) lead to /sponsor/mail/unsubscribe, those for the app (the welcome mail) to /mail/unsubscribe,
+  # (NotificationMails) lead to /sponsor/mail/unsubscribe, those for the app (the welcome mail) to /taker/mail/unsubscribe,
   # where each SPA mounts @jabiz/ui's MailUnsubscribe; takers and sponsors never need the administration. Any other
   # notification keeps the administration's page (unsubscribe-path), which also keeps the links mailed before working.
   mail:
@@ -213,13 +213,34 @@ jabiz:
     # Error messages in English when Accept-Language names none of the application's languages.
     default-locale: en
     bundles: messages
-  # The three front ends (/, /sponsor/, /admin/), as jabizApp in build.gradle.kts declares them (the startup check WEB
-  # compares this list with the jar's). Written here as a whole because the App has a content security policy of its
-  # own (docs/guide/app-spa.md section 2): the platform's default plus frame-src for the two video players it shows
-  # (Q19, content.VideoEmbeds; YouTube without cookies). The sponsor console and the administration keep the default.
+  # The front ends (/taker/, /sponsor/, /admin/ and the business site /biz/), as jabizApp in build.gradle.kts declares
+  # them (the startup check WEB compares this list with the jar's). Written here as a whole because the App has a content
+  # security policy of its own (docs/guide/app-spa.md section 2): the platform's default plus frame-src for the two video
+  # players it shows (Q19, content.VideoEmbeds; YouTube without cookies). The others keep the default.
+  # Q30 (docs/quizbuks/plans/Q30-paths.md): the bare address opens the business site (root-redirect, platform 16zf-a),
+  # and the app's old addresses at the root (printed QR codes, mailed links from before the move) go on to /taker/.
   web:
+    root-redirect: ${JABIZ_WEB_ROOT_REDIRECT:/biz/}
+    redirects:
+      - { from: /p, to: /taker/p }
+      - { from: /play, to: /taker/play }
+      - { from: /result, to: /taker/result }
+      - { from: /redeem, to: /taker/redeem }
+      - { from: /auth, to: /taker/auth }
+      - { from: /mail, to: /taker/mail }
+      - { from: /login, to: /taker/login }
+      - { from: /signup, to: /taker/signup }
+      - { from: /password-reset, to: /taker/password-reset }
+      - { from: /welcome, to: /taker/welcome }
+      - { from: /wallet, to: /taker/wallet }
+      - { from: /history, to: /taker/history }
+      - { from: /account, to: /taker/account }
+      - { from: /inbox, to: /taker/inbox }
+      - { from: /legal, to: /taker/legal }
+      - { from: /help, to: /taker/help }
+      - { from: /about, to: /taker/about }
     spa:
-      - path: /
+      - path: /taker
         entry: app
         pwa: "on"
         content-security-policy: "default-src 'self'; img-src 'self' blob: data:; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'; worker-src 'self'; manifest-src 'self'; frame-src https://www.youtube-nocookie.com https://player.vimeo.com"
@@ -229,6 +250,7 @@ jabiz:
       - path: /admin
         entry: admin
         pwa: "off"
+      - path: /biz
 
 logging:
   pattern:

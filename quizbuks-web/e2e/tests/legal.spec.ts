@@ -36,7 +36,7 @@ test('anybody reads the help centre and the texts in effect, never a question no
   await insert(request, admin, FAQ, { audience: 'SPONSOR', category: 'BILLING', question: { en: sponsorOnly },
     answer: { en: 'From the wallet.' }, seq: 1, published: true })
 
-  await page.goto('/help')
+  await page.goto('/taker/help')
   await page.getByTestId('help-search').fill(shown)
   const entry = page.getByTestId('faq-entry').filter({ hasText: shown })
   await expect(entry).toBeVisible()
@@ -69,7 +69,7 @@ test('anybody reads the help centre and the texts in effect, never a question no
 
 test('a new taker accepts the terms in effect on the welcome step', async ({ page, request }) => {
   const email = await verifiedUser(request, 'app', 'Nao')
-  await signIn(page, '/', email)
+  await signIn(page, '/taker/', email)
   await expect(page).toHaveURL(/\/welcome$/)
   await expect(page.getByTestId('profile-save')).toBeDisabled()
   await page.getByTestId('profile-terms').click()
@@ -89,7 +89,7 @@ test('after a change of substance a taker accepts again on signing in; a rewordi
   const { token: content } = await legalAdmin(request)
 
   await publishVersion(request, content, 'TERMS_APP', false, unique('wording '))
-  await signIn(page, '/', email)
+  await signIn(page, '/taker/', email)
   await expect(page.getByTestId('home')).toBeVisible()
   await expect(page.getByTestId('consent-gate')).toHaveCount(0)
 

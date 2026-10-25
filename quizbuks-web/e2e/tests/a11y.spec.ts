@@ -33,7 +33,7 @@ async function takerWithProfile(page: Page, request: APIRequestContext) {
   const email = await verifiedUser(request, 'app', 'Aiko')
   const token = await tokenOf(request, email, PASSWORD, 'app')
   await run(request, token, 'QB_PROFILE_SAVE', { displayName: 'Aiko', countryCode: 'JP', preferredCurrency: 'JPY' })
-  await signIn(page, '/', email)
+  await signIn(page, '/taker/', email)
   await expect(page.getByTestId('home')).toBeVisible()
 }
 
@@ -45,7 +45,7 @@ for (const appearance of ['light', 'dark'] as const) {
     for (const width of [390, 1280]) {
       await page.setViewportSize({ width, height: 844 })
       const size = `${width}px`
-      await page.goto('/login')
+      await page.goto('/taker/login')
       await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeVisible()
       if (appearance === 'dark') await expect(page.locator('html')).toHaveClass(/dark/)
       else await expect(page.locator('html')).not.toHaveClass(/dark/)
@@ -53,17 +53,17 @@ for (const appearance of ['light', 'dark'] as const) {
       await expect(page.getByTestId('environment-banner')).toContainText('Test system, not the production system')
       await expect(page).toHaveTitle(/^\[TEST\] /)
       await expectAccessible(page, at(`app sign-in ${size}`))
-      await page.goto('/signup')
+      await page.goto('/taker/signup')
       await expect(page.getByRole('button', { name: 'Create the account' })).toBeVisible()
       await expectAccessible(page, at(`app sign-up ${size}`))
-      await page.goto('/password-reset')
+      await page.goto('/taker/password-reset')
       await expect(page.getByPlaceholder('E-mail address', { exact: true })).toBeVisible()
       await expectAccessible(page, at(`app password reset ${size}`))
-      await page.goto('/auth/verify-email?entry=app&token=not-a-real-token')
+      await page.goto('/taker/auth/verify-email?entry=app&token=not-a-real-token')
       await expect(page.getByTestId('verify-start')).toBeVisible()
       await expectAccessible(page, at(`app verification link ${size}`))
       // The app's own unsubscribe page (platform decision D52); without a token it says the link is no good.
-      await page.goto('/mail/unsubscribe')
+      await page.goto('/taker/mail/unsubscribe')
       await expect(page.getByTestId('unsubscribe-state')).toHaveAttribute('data-state', 'invalid')
       await expectAccessible(page, at(`app unsubscribe ${size}`))
     }
@@ -71,7 +71,7 @@ for (const appearance of ['light', 'dark'] as const) {
     // Signed in without a profile: the welcome page (the address is verified, so the form is open).
     await page.setViewportSize({ width: 390, height: 844 })
     const email = await verifiedUser(request, 'app', 'Ren')
-    await signIn(page, '/', email)
+    await signIn(page, '/taker/', email)
     await expect(page.getByTestId('profile-form')).toBeVisible()
     await expect(page.getByTestId('profile-country')).not.toBeEmpty()
     await expectAccessible(page, at('app welcome'))
@@ -456,14 +456,14 @@ for (const appearance of ['light', 'dark'] as const) {
     for (const width of [390, 1280]) {
       await page.setViewportSize({ width, height: 844 })
       const size = `${width}px`
-      await page.goto('/help')
+      await page.goto('/taker/help')
       await expect(page.getByTestId('help')).toBeVisible()
       await expect(page.locator('[data-state="loading"]')).toHaveCount(0)
       await expectAccessible(page, at(`app help ${size}`))
-      await page.goto('/legal/terms')
+      await page.goto('/taker/legal/terms')
       await expect(page.getByTestId('legal-text')).toBeVisible()
       await expectAccessible(page, at(`app terms ${size}`))
-      await page.goto('/about')
+      await page.goto('/taker/about')
       await expect(page.getByTestId('about-version')).toBeVisible()
       await expectAccessible(page, at(`app about ${size}`))
     }
@@ -483,7 +483,7 @@ for (const appearance of ['light', 'dark'] as const) {
     await run(request, token, 'QB_PROFILE_SAVE', { displayName: 'Yui', countryCode: 'JP', preferredCurrency: 'JPY' })
     const { token: content } = await legalAdmin(request)
     await publishVersion(request, content, 'PRIVACY', true, `a11y ${appearance} ${Date.now()}`)
-    await signIn(page, '/', email)
+    await signIn(page, '/taker/', email)
     await expect(page.getByTestId('consent-gate')).toBeVisible()
     await expectAccessible(page, at('app consent prompt'))
     await page.getByTestId('consent-agree').click()
@@ -510,7 +510,7 @@ for (const appearance of ['light', 'dark'] as const) {
       baseRevision: saved.revision })
 
     await page.setViewportSize({ width: 390, height: 844 })
-    await signIn(page, '/', taker.email)
+    await signIn(page, '/taker/', taker.email)
     await expect(page.getByTestId('home')).toBeVisible()
     await page.getByTestId('nav-inbox').click()
     // The reward's message comes from the event's consumer: wait for both rows (and the network) before checking.

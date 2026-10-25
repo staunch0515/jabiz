@@ -1,9 +1,10 @@
 import com.jabiz.gradle.Pwa
 
 // QuizBuks (docs/quizbuks/02-design.md): the runtime with the QuizBuks declarations in one jar, serving three front
-// ends (docs/quizbuks/plans/QP-pages.md): the takers' app at / (a PWA), the sponsor console at /sponsor/ and the
-// platform's admin frontend at /admin/, each signing in to its own entry. The two QuizBuks SPAs are pnpm projects of
-// their own linking the platform's packages; spaCheckRoot and spaCheckSponsor (part of check) keep their versions the
+// ends (docs/quizbuks/plans/QP-pages.md): the takers' app at /taker/ (a PWA; Q30 moved it from /), the sponsor console
+// at /sponsor/ and the platform's admin frontend at /admin/, each signing in to its own entry, and the business site at
+// /biz/ (static pages, no sign-in; the bare address opens it, jabiz.web.root-redirect). The two QuizBuks SPAs are pnpm projects of
+// their own linking the platform's packages; spaCheckTaker, spaCheckSponsor and spaCheckBiz (part of check) keep their versions the
 // platform's. The admin frontend carries QuizBuks's own pages (admin-extension: reviews and the user summary,
 // docs/quizbuks/plans/Q9a-admin-extension.md), type-checked and compiled in when the jar is built.
 plugins {
@@ -12,7 +13,8 @@ plugins {
 
 jabizApp {
     mainClass = "com.jabiz.quizbuks.QuizbuksApp"
-    spa("/", "../../quizbuks-web/app", entry = "app", pwa = Pwa.ON)
+    spa("/taker", "../../quizbuks-web/app", entry = "app", pwa = Pwa.ON)
+    spa("/biz", "../../quizbuks-web/biz")
     spa("/sponsor", "../../quizbuks-web/sponsor", entry = "sponsor")
     spa("/admin", "../../frontend", extension = "admin-extension", entry = "admin")
     languages("en", "zh", "ja")

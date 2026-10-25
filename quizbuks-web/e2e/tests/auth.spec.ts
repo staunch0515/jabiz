@@ -30,13 +30,13 @@ test('a taker registers, verifies at the app\'s own page, completes the profile 
   context,
 }) => {
   const email = address('taker')
-  await signUp(page, '/', email, 'Mei')
+  await signUp(page, '/taker/', email, 'Mei')
   // The link leads to the app's own page (/auth/…, decision D43 item 4).
-  await verifyByMail(page, email, '/')
+  await verifyByMail(page, email, '/taker/')
   await page.getByTestId('auth-continue').click()
   await expect(page).toHaveURL(/\/login$/)
 
-  await signIn(page, '/', email)
+  await signIn(page, '/taker/', email)
   // Registration's second step: the profile, starting from the sign-up name and the browser's country (en-US).
   await expect(page).toHaveURL(/\/welcome$/)
   await expect(page.getByTestId('profile-name')).toHaveValue('Mei')
@@ -44,7 +44,7 @@ test('a taker registers, verifies at the app\'s own page, completes the profile 
   await page.getByTestId('profile-city').fill('Seattle')
   // The terms and the privacy policy in effect are accepted here (Q7b), each linked to its text.
   await expect(page.getByTestId('profile-save')).toBeDisabled()
-  await expect(page.getByTestId('legal-link-TERMS_APP')).toHaveAttribute('href', '/legal/terms')
+  await expect(page.getByTestId('legal-link-TERMS_APP')).toHaveAttribute('href', '/taker/legal/terms')
   await page.getByTestId('profile-terms').click()
   await page.getByTestId('profile-save').click()
   await expect(page.getByTestId('home')).toContainText('Mei')
@@ -57,7 +57,7 @@ test('a taker registers, verifies at the app\'s own page, completes the profile 
   await page.reload()
   await expect(page.getByTestId('home')).toBeVisible()
   const again = await context.newPage()
-  await again.goto('/account')
+  await again.goto('/taker/account')
   await expect(again.getByTestId('profile-city')).toHaveValue('Seattle')
   await expect(again.getByTestId('sign-in').first()).toBeVisible()
   await expect(again.getByTestId('account-email')).toContainText(email)
@@ -72,12 +72,12 @@ test('a taker registers, verifies at the app\'s own page, completes the profile 
 
 test('a taker who has not verified the address yet browses the app and is told to verify', async ({ page }) => {
   const email = address('unverified')
-  await signUp(page, '/', email, 'Yui')
-  await signIn(page, '/', email)
+  await signUp(page, '/taker/', email, 'Yui')
+  await signIn(page, '/taker/', email)
   // Not held at the welcome page: the app lets unverified takers browse (D-Q2-1); every write waits for the address.
   await expect(page.getByTestId('home')).toContainText('Yui')
   await expect(page.getByTestId('verify-email-banner')).toContainText(email)
-  await page.goto('/welcome')
+  await page.goto('/taker/welcome')
   await expect(page.getByTestId('profile-verify-first')).toBeVisible()
   await expect(page.getByTestId('profile-save')).toBeDisabled()
 })
@@ -86,17 +86,17 @@ test('a taker who forgot the password gets a link to the app\'s own page and sig
   page,
 }) => {
   const email = address('forgot')
-  await signUp(page, '/', email, 'Ken')
-  await verifyByMail(page, email, '/')
+  await signUp(page, '/taker/', email, 'Ken')
+  await verifyByMail(page, email, '/taker/')
 
-  await page.goto('/login')
+  await page.goto('/taker/login')
   await page.getByTestId('forgot-password').click()
   await expect(page).toHaveURL(/\/password-reset$/)
   await page.getByPlaceholder('E-mail address', { exact: true }).fill(email)
   await page.getByRole('button', { name: /send|link/i }).click()
   const mail = await mailTo(page.request, email, /password/i)
   const link = linkIn(mail.text, '/auth/password-reset')
-  expect(link.pathname).toBe('/auth/password-reset')
+  expect(link.pathname).toBe('/taker/auth/password-reset')
   await page.goto(link.pathname + link.search)
   const fresh = `${PASSWORD}-new`
   await page.getByPlaceholder('New password', { exact: true }).fill(fresh)
@@ -104,7 +104,7 @@ test('a taker who forgot the password gets a link to the app\'s own page and sig
   await page.getByRole('button', { name: /password/i }).click()
   await expect(page.getByTestId('auth-continue')).toBeVisible()
 
-  await page.goto('/login')
+  await page.goto('/taker/login')
   await page.getByPlaceholder('User name', { exact: true }).fill(email)
   await page.getByPlaceholder('Password', { exact: true }).fill(fresh)
   await page.getByRole('button', { name: 'Sign in', exact: true }).click()

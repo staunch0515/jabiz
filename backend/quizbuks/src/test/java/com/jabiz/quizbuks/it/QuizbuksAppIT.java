@@ -67,7 +67,7 @@ class QuizbuksAppIT extends PostgresIntegrationTest {
         java.util.Map<String, Object> app = client.get().uri("/api/auth/entries/app").exchange().expectStatus().isOk()
             .expectBody(java.util.Map.class).returnResult().getResponseBody();
         assertThat(app).containsEntry("requireVerifiedEmail", false).containsEntry("selfRegistration", false)
-            .containsEntry("appPath", "/").containsEntry("sessionPersistence", "device");
+            .containsEntry("appPath", "/taker/").containsEntry("sessionPersistence", "device");
         java.util.Map<String, Object> sponsor = client.get().uri("/api/auth/entries/sponsor").exchange().expectStatus()
             .isOk().expectBody(java.util.Map.class).returnResult().getResponseBody();
         assertThat(sponsor).containsEntry("requireVerifiedEmail", true).containsEntry("appPath", "/sponsor/")
@@ -79,18 +79,22 @@ class QuizbuksAppIT extends PostgresIntegrationTest {
     }
 
     /**
-     * The three front ends (docs/quizbuks/plans/QP-pages.md section 2): the app at / as a PWA signing in to "app", the
-     * sponsor console at /sponsor and the administration at /admin, each with its own entry. application.yml writes the
-     * list as the jar has it, for the App's own content security policy (Q19).
+     * The front ends (docs/quizbuks/plans/QP-pages.md section 2, Q30): the app at /taker as a PWA signing in to "app",
+     * the sponsor console at /sponsor and the administration at /admin, each with its own entry, and the business site
+     * at /biz with no entry. application.yml writes the list as the jar has it, for the App's own content security
+     * policy (Q19).
      */
     @Test
-    void servesTheThreeFrontEndsOfTheJar() {
+    void servesTheFrontEndsOfTheJar() {
         assertThat(web.spa()).extracting(JabizWebProperties.Spa::path, JabizWebProperties.Spa::entry,
                 JabizWebProperties.Spa::pwa)
             .containsExactlyInAnyOrder(
-                org.assertj.core.groups.Tuple.tuple("/", "app", JabizWebProperties.Pwa.ON),
+                org.assertj.core.groups.Tuple.tuple("/taker", "app", JabizWebProperties.Pwa.ON),
                 org.assertj.core.groups.Tuple.tuple("/sponsor", "sponsor", JabizWebProperties.Pwa.OFF),
-                org.assertj.core.groups.Tuple.tuple("/admin", "admin", JabizWebProperties.Pwa.OFF));
+                org.assertj.core.groups.Tuple.tuple("/admin", "admin", JabizWebProperties.Pwa.OFF),
+                org.assertj.core.groups.Tuple.tuple("/biz", null, JabizWebProperties.Pwa.OFF));
+        // The bare address goes to the business site (Q30).
+        assertThat(web.rootRedirect()).isEqualTo("/biz/");
     }
 
     /**
@@ -102,9 +106,10 @@ class QuizbuksAppIT extends PostgresIntegrationTest {
         // The policy each SPA's responses carry (SpaFallbackFilter); the test has no built pages to fetch.
         java.util.Map<String, String> policies = web.spa().stream().collect(java.util.stream.Collectors.toMap(
             JabizWebProperties.Spa::path, JabizWebProperties.Spa::contentSecurityPolicy));
-        assertThat(policies.get("/")).isEqualTo(JabizWebProperties.DEFAULT_CONTENT_SECURITY_POLICY
+        assertThat(policies.get("/taker")).isEqualTo(JabizWebProperties.DEFAULT_CONTENT_SECURITY_POLICY
             + "; frame-src https://www.youtube-nocookie.com https://player.vimeo.com");
         assertThat(policies.get("/sponsor")).isEqualTo(JabizWebProperties.DEFAULT_CONTENT_SECURITY_POLICY);
         assertThat(policies.get("/admin")).isEqualTo(JabizWebProperties.DEFAULT_CONTENT_SECURITY_POLICY);
+        assertThat(policies.get("/biz")).isEqualTo(JabizWebProperties.DEFAULT_CONTENT_SECURITY_POLICY);
     }
 }

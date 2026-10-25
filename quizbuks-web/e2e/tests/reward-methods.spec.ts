@@ -91,7 +91,7 @@ test('the sponsor marks a cash reward paid and the taker confirms it', async ({ 
     window.localStorage.clear()
     window.sessionStorage.clear()
   })
-  await signIn(page, '/', owed.taker.email)
+  await signIn(page, '/taker/', owed.taker.email)
   await expect(page.getByTestId('home')).toBeVisible()
   const notice = page.getByTestId('home-cash')
   await expect(notice).toBeVisible()

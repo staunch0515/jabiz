@@ -59,7 +59,7 @@ test('a video to watch is shown on the home with its reward and starts the quiz'
 
   await page.context().clearCookies()
   await page.setViewportSize({ width: 390, height: 844 })
-  await signIn(page, '/', me.email)
+  await signIn(page, '/taker/', me.email)
   await expect(page.getByTestId('home')).toBeVisible()
   await page.getByTestId('feed-search').fill(name)
   await page.getByTestId('feed-search-submit').click()

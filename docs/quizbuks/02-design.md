@@ -507,6 +507,19 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 
 账本与接口中的币种是 JPY；三个前端都把金额显示为 `1,234 Kudos`（格式化函数一处），参考汇率只用于"约合 X USD"。平台通用后台对管理员仍显示 JPY（管理员需要知道真实币种）。
 
+### 7.5 地址（Q30，`plans/Q30-paths.md`）
+
+| 地址 | 内容 |
+|---|---|
+| `/` | 302 到 `/biz/`（`jabiz.web.root-redirect`，平台 16zf-a；查询串保留） |
+| `/biz/`、`/biz/zh.html`、`/biz/ja.html` | 招商网站（`quizbuks-web/biz`，静态页面，三语 `hreflang` 互指） |
+| `/taker/` | 答题人 PWA（入口 `app`，`app-path: /taker/`；manifest 与 Service Worker 在其下） |
+| `/sponsor/` | 商家后台（入口 `sponsor`） |
+| `/admin/` | 管理后台（入口 `admin`） |
+| `/p`、`/play`、`/result`、`/redeem`、`/auth`、`/mail`、`/login`、`/signup`、`/password-reset`、`/welcome`、`/wallet`、`/history`、`/account`、`/inbox`、`/legal`、`/help`、`/about` 及其下 | App 搬走前的地址：301 到 `/taker/` 下的同一路径（`jabiz.web.redirects`），印出的二维码与寄出的邮件仍可用 |
+
+商家后台生成的 App 链接（分享、二维码、兑奖码）只经 `publishing/paths.ts` 的 `APP_BASE`；登录链接的返回路径是站点路径（`/taker/p/<id>`：App 用 `hrefOf`，邀请邮件由入口的 `app-path` 拼出）。
+
 ## 8. 外部系统
 
 | 系统 | 用途 | 接入方式 | 配置 |

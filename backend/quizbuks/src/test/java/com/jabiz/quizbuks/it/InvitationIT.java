@@ -45,9 +45,9 @@ class InvitationIT extends PlayItSupport {
         ServerSetup.PROTOCOL_SMTP));
 
     static final Pattern LINK = Pattern.compile(
-        "https://quizbuks\\.example\\.com/auth/email-link\\?entry=app&token=([A-Za-z0-9_-]+)&to=([^)\\s]*)");
+        "https://quizbuks\\.example\\.com/taker/auth/email-link\\?entry=app&token=([A-Za-z0-9_-]+)&to=([^)\\s]*)");
     static final Pattern UNSUBSCRIBE = Pattern.compile(
-        "https://quizbuks\\.example\\.com/mail/unsubscribe\\?token=([A-Za-z0-9_.-]+)");
+        "https://quizbuks\\.example\\.com/taker/mail/unsubscribe\\?token=([A-Za-z0-9_.-]+)");
 
     @Autowired
     @Qualifier("qbInvitationMailJob")
@@ -196,7 +196,7 @@ class InvitationIT extends PlayItSupport {
         assertThat(UNSUBSCRIBE.matcher(mail).find()).as("an unsubscribe link").isTrue();
         Matcher link = LINK.matcher(mail);
         assertThat(link.find()).isTrue();
-        assertThat(link.group(2)).isEqualTo("%2Fp%2F" + publicationId);
+        assertThat(link.group(2)).isEqualTo("%2Ftaker%2Fp%2F" + publicationId);
         // Nothing waits any more: the job has nothing to do.
         assertThat(runMailJob().items().selected()).isZero();
 

@@ -26,7 +26,7 @@ for (const appearance of ['light', 'dark'] as const) {
     const reward = 500
     const name = await earnReward(request, me.token, reward)
 
-    await signIn(page, '/', me.email)
+    await signIn(page, '/taker/', me.email)
     await expect(page.getByTestId('home')).toBeVisible()
     await page.getByTestId('nav-wallet').click()
     await expect(page).toHaveURL(/\/wallet$/)
@@ -72,11 +72,11 @@ test('an expired onboarding link leads to a new one', async ({ page, request }) 
   test.setTimeout(120_000)
   await page.setViewportSize({ width: 390, height: 844 })
   const me = await takerInJapan(request, 'Ben')
-  await signIn(page, '/', me.email)
+  await signIn(page, '/taker/', me.email)
   await expect(page.getByTestId('home')).toBeVisible()
 
   // Stripe sends the taker to the refresh address when a link expired or was used: the page offers a new one.
-  await page.goto('/wallet/payout?onboarding=refresh')
+  await page.goto('/taker/wallet/payout?onboarding=refresh')
   await expect(page.getByTestId('payout-state')).toHaveAttribute('data-state', 'refresh')
   await expectAccessible(page, 'app payout refresh')
   await page.getByTestId('payout-onboard').click()
@@ -84,7 +84,7 @@ test('an expired onboarding link leads to a new one', async ({ page, request }) 
   const first = page.url()
 
   // Back without finishing: the account is being set up; continuing asks Stripe for a fresh link to the same account.
-  await page.goto('/wallet/payout')
+  await page.goto('/taker/wallet/payout')
   await expect(page.getByTestId('payout-status')).toHaveAttribute('data-status', 'PENDING')
   await expect(page.getByTestId('payout-state')).toHaveAttribute('data-state', 'unfinished')
   await expectAccessible(page, 'app payout unfinished')

@@ -101,7 +101,7 @@ EOF
   SPRING_MAIL_HOST=127.0.0.1
   SPRING_MAIL_PORT=$SMTP_PORT
   QB_SPONSOR_LINK=http://localhost:$PORT/sponsor/
-  QB_APP_LINK=http://localhost:$PORT/
+  QB_APP_LINK=http://localhost:$PORT/taker/
   # Test mode only (TransferScheduleCheck refuses them next to live mode or a live key): the daily transfers and the
   # daily reconciliation every minute, so that a run sees both.
   QB_STRIPE_LIVEMODE=false

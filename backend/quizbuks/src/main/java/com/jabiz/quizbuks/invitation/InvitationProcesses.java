@@ -94,8 +94,13 @@ public final class InvitationProcesses {
     /** The entry the mailed link signs in at and the page it leads to: the publication's in the app. */
     static final String ENTRY = "app";
 
-    static String returnPath(Object publicationId) {
-        return "/p/" + publicationId;
+    /**
+     * Where the mailed link leads: the publication's page under the app's front end, as a path of the site (the
+     * entry's app-path, {@code /taker/} since Q30, plus {@code p/<id>}); the platform refuses a path outside it.
+     */
+    static String returnPath(String appPath, Object publicationId) {
+        String root = appPath == null || appPath.isBlank() ? "/" : appPath.endsWith("/") ? appPath : appPath + "/";
+        return root + "p/" + publicationId;
     }
 
     /** The limits of the lists (configuration {@code quizbuks.invitations.*}) and the zone the daily quota's days are in. */
@@ -290,7 +295,7 @@ public final class InvitationProcesses {
 
     // ---- mail (the job's item) ---------------------------------------------------------------------------------------
 
-    public static ProcessDefinition<InvitationRef, MailOutput, ProcessContext> mail(MailValues values) {
+    public static ProcessDefinition<InvitationRef, MailOutput, ProcessContext> mail(MailValues values, String appPath) {
         return ProcessDefinition.define(MAIL, 1, InvitationRef.class, MailOutput.class, ProcessContext.class, pb -> pb
             .description("Sends one queued invitation's mail with its sign-in link.")
             .permissions(QbPermissions.PUBLICATION_SYSTEM)
@@ -328,7 +333,7 @@ public final class InvitationProcesses {
             // link goes out and the row waits as ADDED for the sponsor to send again.
             .step("Send the invitation", SendMail.<ProcessContext>when(ctx -> sending(ctx) && live(ctx),
                 InvitationMails.INVITATION,
-                ctx -> MailRecipient.address(Invitations.first(ctx, LIST).get("email"), null), mailParams(values)))
+                ctx -> MailRecipient.address(Invitations.first(ctx, LIST).get("email"), null), mailParams(values, appPath)))
             .compute("Record the send", (metadata, ctx) -> recordSend(ctx)));
     }
 
@@ -347,7 +352,7 @@ public final class InvitationProcesses {
         return Boolean.TRUE.equals(ctx.get(SENDING)) && !ctx.hasViolations();
     }
 
-    private static Map<String, java.util.function.Function<ProcessContext, ?>> mailParams(MailValues values) {
+    private static Map<String, java.util.function.Function<ProcessContext, ?>> mailParams(MailValues values, String appPath) {
         Map<String, java.util.function.Function<ProcessContext, ?>> params = new LinkedHashMap<>();
         params.put("company", ctx -> {
             EntityInstance sponsor = Invitations.first(ctx, SPONSOR);
@@ -358,7 +363,7 @@ public final class InvitationProcesses {
         params.put("maxReward", ctx -> MailValues.kudos(Invitations.first(ctx, CARD).get("maxReward")));
         params.put("endAt", ctx -> values.time(Invitations.first(ctx, CARD).get("endAt")));
         params.put("entry", ctx -> ENTRY);
-        params.put("to", ctx -> returnPath(Invitations.first(ctx, LIST).get("publicationId")));
+        params.put("to", ctx -> returnPath(appPath, Invitations.first(ctx, LIST).get("publicationId")));
         return params;
     }
 

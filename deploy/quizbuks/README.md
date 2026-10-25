@@ -88,7 +88,7 @@ tools/quizbuks/local-demo.sh status | logs | seed
 
 ## 前端（QP1）
 
-- **三个前端在同一个 jar 中**（`docs/quizbuks/plans/QP-pages.md`）：答题 App 在 `/`（`quizbuks-web/app`，PWA，入口 `app`）、商家后台在 `/sponsor/`
+- **三个前端在同一个 jar 中**（`docs/quizbuks/plans/QP-pages.md`）：答题 App 在 `/taker/`（`quizbuks-web/app`，PWA，入口 `app`；Q30 从 `/` 搬来，旧地址 301）、招商网站在 `/biz/`（`quizbuks-web/biz`，静态页面；裸域名 302 到它）、商家后台在 `/sponsor/`
   （`quizbuks-web/sponsor`，入口 `sponsor`）、管理员后台在 `/admin/`（平台通用后台，入口 `admin`）。三者分开登录：一个入口的会话不会登录另一个。
 - **会话**：App 的会话保存在设备上（关闭浏览器后仍登录，30 天，不按闲置锁定）；商家后台与管理员后台只在当前标签页中，闲置 30 分钟锁定。
 - **已知限制（D43）**：App 的刷新令牌存在设备上（`localStorage` 与 IndexedDB），而三个前端同源：同源的任何页面（含被注入的脚本）都能读到它；
@@ -96,8 +96,8 @@ tools/quizbuks/local-demo.sh status | logs | seed
 - **生产必须是 HTTPS**：PWA（Service Worker、安装到主屏幕）只在安全来源上工作（本机 `localhost` 除外）；Stripe 支付与开通后跳回的地址（`QB_SPONSOR_LINK`、`QB_APP_LINK`）同样用 HTTPS。
 - **PWA 的作用域是整个主机**（`/`）：App 的 Service Worker 只缓存 App 的外壳，放过 `/sponsor/`、`/admin/`、`/api/`；要撤下 PWA，先以 `Pwa.REMOVE` 发布一个版本
   （注销已安装的 Service Worker），至少一个发布周期后再改为 `OFF`（平台指南 `docs/guide/app-spa.md` 第 3 节）。
-- **邮件链接**按入口指向各自的前端：App 的验证、找回密码链接在 `/auth/…`，商家后台的在 `/sponsor/auth/…`。`JABIZ_MAIL_BASE_URL` 必须是主机的根地址。
-- **Google 登录（只给 App）**：在 Google Cloud 控制台建 OAuth 客户端（Web 应用），把 `https://<主机>/login/oidc` 登记为已授权的重定向 URI，然后设置
+- **邮件链接**按入口指向各自的前端：App 的验证、找回密码链接在 `/taker/auth/…`，商家后台的在 `/sponsor/auth/…`。`JABIZ_MAIL_BASE_URL` 必须是主机的根地址。
+- **Google 登录（只给 App）**：在 Google Cloud 控制台建 OAuth 客户端（Web 应用），把 `https://<主机>/taker/login/oidc` 登记为已授权的重定向 URI，然后设置
   `SPRING_PROFILES_ACTIVE=google`、`JABIZ_OIDC_GOOGLE_CLIENT_ID`、`JABIZ_OIDC_GOOGLE_CLIENT_SECRET` 与 `QB_OIDC_REDIRECT_APP`（同一地址）。
   首次用 Google 登录且邮箱未被使用时自动开户（答题人）；邮箱已被使用的人先用原来的方式登录，再在 App 的账户页关联 Google。商家后台不提供 Google 登录。
 - **Stripe 的返回地址**由配置决定，不在 Stripe 后台设置：充值跳回 `QB_SPONSOR_LINK` 下的 `wallet/topups/<编号>`，开通收款账户跳回 `QB_APP_LINK` 下的 `wallet/payout`。
@@ -113,7 +113,7 @@ tools/quizbuks/local-demo.sh status | logs | seed
 - **邮件必须开启**才能激活：`JABIZ_MAIL_ENABLED=true` 并配置发件人与邮件服务器（`JABIZ_MAIL_FROM`、`SPRING_MAIL_*`）；
   否则注册的用户收不到验证邮件，永远"待激活"（启动告警）。`JABIZ_MAIL_BASE_URL` 是**主机的根地址**（如 `https://quizbuks.example.com`，不带 `/admin`）：
   平台 16c 之后，验证、找回密码等链接指向各入口自己的前端（App `/auth/…`、商家后台 `/sponsor/auth/…`、后台 `/admin/auth/…`，D43），
-  退订链接同样指向邮件所属入口的前端（平台 16v-1：商家通知 `/sponsor/mail/unsubscribe`、欢迎邮件 `/mail/unsubscribe`，答题人与商家不需要打开 `/admin/`）；此前发出的 `/admin/auth/…` 与 `/admin/mail/unsubscribe` 旧链接仍可用。升级说明：把 `JABIZ_MAIL_BASE_URL` 从 `…/admin` 改为主机的根地址。
+  退订链接同样指向邮件所属入口的前端（平台 16v-1：商家通知 `/sponsor/mail/unsubscribe`、欢迎邮件 `/taker/mail/unsubscribe`，答题人与商家不需要打开 `/admin/`）；此前发出的 `/admin/auth/…` 与 `/admin/mail/unsubscribe` 旧链接仍可用。升级说明：把 `JABIZ_MAIL_BASE_URL` 从 `…/admin` 改为主机的根地址。
   商家邮件（入驻通过、驳回）中的商家后台链接同样取自它（`{entryUrl.sponsor}`，即该主机上的 `/sponsor/`），不再取 `QB_SPONSOR_LINK`。
 - **在反向代理之后**运行时设置 `JABIZ_TRUSTED_PROXIES`（代理的地址或网段），否则登录记录中的 IP 都是代理的地址。不要同时设置 `server.forward-headers-strategy`（启动错误）。
 - **商家入驻**：商家注册、验证邮箱后在商家后台申请入驻，由内容管理员在 `/tasks` 的审批面板中审核；通过后才能提交发布。
@@ -267,7 +267,7 @@ tools/quizbuks/local-demo.sh status | logs | seed
 | `QB_SPONSOR_LINK` | 否 | 商家后台的绝对地址，Stripe 支付后跳回（`…/wallet/topups/…`）；缺省为 `JABIZ_MAIL_BASE_URL` 主机上的 `/sponsor/` |
 | `SPRING_PROFILES_ACTIVE` | 否 | `google` 开启 App 的 Google 登录（`application-google.yml`，见"前端"） |
 | `JABIZ_OIDC_GOOGLE_CLIENT_ID` / `JABIZ_OIDC_GOOGLE_CLIENT_SECRET` | 开启 Google 时 | Google OAuth 客户端（Web 应用）；密钥只放在环境变量中 |
-| `QB_OIDC_REDIRECT_APP` | 开启 Google 时 | App 的回调地址 `https://<主机>/login/oidc`，与 Google 控制台中登记的完全相同 |
+| `QB_OIDC_REDIRECT_APP` | 开启 Google 时 | App 的回调地址 `https://<主机>/taker/login/oidc`，与 Google 控制台中登记的完全相同 |
 | `JABIZ_TRUSTED_PROXIES` | 在代理之后 | 可信代理的地址或网段（逗号分隔），登录记录与限流据此取客户端地址；不得含 `0.0.0.0/0`、`::/0`（启动错误），见"密钥与部署" |
 
 外部服务（Q6a 起 Stripe 为必需；见上节"充值与核对"）：

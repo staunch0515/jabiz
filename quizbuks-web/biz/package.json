@@ -1,0 +1,17 @@
+{
+  "name": "quizbuks-biz",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "QuizBuks: the business site at /biz/ for merchants (docs/quizbuks/plans/Q30-paths.md): static pages, no sign-in, built with Vite.",
+  "packageManager": "pnpm@10.18.0",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "typescript": "6.0.3",
+    "vite": "8.3.1"
+  }
+}
