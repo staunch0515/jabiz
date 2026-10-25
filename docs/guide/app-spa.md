@@ -198,7 +198,7 @@ export default defineConfig({
 
 ## 6. 服务端为 SPA 做的事（17 §3.2）
 
-- 客户端路由回退到该 SPA 的 `index.html`；`index.html`、`sw.js`、`manifest.webmanifest` 为 `Cache-Control: no-cache`，`assets/*` 一年且 `immutable`；
+- 客户端路由回退到该 SPA 的 `index.html`（没有入口的静态站点例外：命中有自己 `index.html` 的目录即交出该页，17 §3.2，16zf-b）；`index.html`、`sw.js`、`manifest.webmanifest` 为 `Cache-Control: no-cache`，`assets/*` 一年且 `immutable`；
   manifest 的类型为 `application/manifest+json`。
 - 只为声明了 PWA 的 SPA 的 `<前缀>/sw.js` 回答 Service Worker 脚本请求，其他一律 404；从不发送 `Service-Worker-Allowed`。
 - 缺省的内容安全策略不允许内联脚本、插件、外部表单目标与外部 base；`worker-src` / `manifest-src` 只允许本源。

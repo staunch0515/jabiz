@@ -26,6 +26,10 @@ import reactor.core.publisher.Mono;
  * {@code application/manifest+json}. Requests for a Service Worker script are answered by
  * {@link ServiceWorkerScriptGuard} first.
  *
+ * <p>A static site (an SPA without a sign-in entry) may hold a page per directory ({@link StaticPages}, phase 16zf-b):
+ * a route that names such a directory is answered with that directory's {@code index.html} instead of the site's root
+ * page.
+ *
  * <p>Redirects (phase 16zf-a), before any SPA is looked up: a {@code GET} or {@code HEAD} of exactly {@code /} goes
  * (302) to {@code jabiz.web.root-redirect} when one is configured; one of a prefix in {@code jabiz.web.redirects}, or
  * of a path under it, goes (301) to the same path under its new prefix. Both keep the query string, carry no page
@@ -36,9 +40,17 @@ import reactor.core.publisher.Mono;
 class SpaFallbackFilter implements WebFilter {
 
     private final JabizWebProperties properties;
+    private final StaticPages pages;
 
-    SpaFallbackFilter(JabizWebProperties properties) {
+    @org.springframework.beans.factory.annotation.Autowired
+    SpaFallbackFilter(JabizWebProperties properties, StaticPages pages) {
         this.properties = properties;
+        this.pages = pages;
+    }
+
+    /** Without static pages: every route of an SPA is answered with its index. */
+    SpaFallbackFilter(JabizWebProperties properties) {
+        this(properties, StaticPages.none());
     }
 
     @Override
@@ -63,17 +75,19 @@ class SpaFallbackFilter implements WebFilter {
             return chain.filter(exchange);
         }
         boolean route = HttpMethod.GET.equals(req.getMethod()) && !path.contains(".");
+        // A static site's own page for the directory asked for (phase 16zf-b), else the SPA's index.
+        String page = route ? pages.pageFor(spa, path).orElse(spa.index()) : path;
         var response = exchange.getResponse();
         response.beforeCommit(() -> {
             HttpHeaders headers = response.getHeaders();
             headers.set(CONTENT_SECURITY_POLICY, spa.contentSecurityPolicy());
             // Only for the scope the browser derives from the script's own directory, never wider (decision D43 item 6).
             headers.remove(SERVICE_WORKER_ALLOWED);
-            cacheHeaders(response, spa, route ? spa.index() : path);
+            cacheHeaders(response, spa, page);
             return Mono.empty();
         });
         if (route) {
-            return chain.filter(exchange.mutate().request(req.mutate().path(spa.index()).build()).build());
+            return chain.filter(exchange.mutate().request(req.mutate().path(page).build()).build());
         }
         return chain.filter(exchange);
     }
@@ -101,7 +115,8 @@ class SpaFallbackFilter implements WebFilter {
         }
         HttpHeaders headers = response.getHeaders();
         String cacheControl = null;
-        if (file.equals(spa.index()) || file.equals(spa.base() + JabizWebProperties.SERVICE_WORKER)
+        // Every page (the index and a static site's directory pages) says what the current version is.
+        if (file.equals(spa.index()) || file.endsWith("/index.html") || file.equals(spa.base() + JabizWebProperties.SERVICE_WORKER)
             || file.equals(spa.base() + JabizWebProperties.MANIFEST)) {
             cacheControl = NO_CACHE;
         } else if (file.startsWith(spa.base() + JabizWebProperties.ASSETS) && ok) {
