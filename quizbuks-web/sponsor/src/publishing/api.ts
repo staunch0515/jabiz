@@ -12,6 +12,14 @@ export type RewardMethod = 'PLATFORM' | 'SPONSOR_CASH' | 'OFFLINE_REDEEM'
 export const REWARD_METHODS: readonly RewardMethod[] = ['PLATFORM', 'SPONSOR_CASH', 'OFFLINE_REDEEM']
 export const REDEEM_DESCRIPTION_LENGTH = 500
 
+/**
+ * `publishing.Audience` (Q25, dictionary `publication-audience`): everybody in the regions, or the invitation list
+ * only (then the regions are not asked and the publication is reached from its mail alone).
+ */
+export type Audience = 'PUBLIC' | 'INVITED'
+export const AUDIENCES: readonly Audience[] = ['PUBLIC', 'INVITED']
+export const audienceOf = (value: unknown): Audience => (value === 'INVITED' ? 'INVITED' : 'PUBLIC')
+
 /** `publishing.PublicationStatus` (dictionary `publication-status`). */
 export type PublicationStatus = 'DRAFT' | 'PENDING_REVIEW' | 'SCHEDULED' | 'LIVE' | 'PAUSED' | 'FUNDS_SHORT' | 'ENDED'
 export const PUBLICATION_STATUSES: readonly PublicationStatus[] = ['DRAFT', 'PENDING_REVIEW', 'SCHEDULED', 'LIVE',
@@ -55,6 +63,8 @@ export interface Publication {
   /** How the reward reaches the taker (Q22); a prize at the sponsor's place is described. */
   rewardMethod: RewardMethod
   redeemDescription: string | null
+  /** Who may answer (Q25). */
+  audience: Audience
   fullScore: number | null
   maxReward: string | null
   maxSpend: string | null
@@ -90,6 +100,7 @@ export interface PublicationRow {
   versionLabel: string | null
   status: PublicationStatus
   rewardMethod: RewardMethod
+  audience: Audience
   regions: string[]
   starts: number
   completions: number
@@ -132,6 +143,7 @@ export interface SaveInput {
   baseRevision: number | null
   rewardMethod: RewardMethod
   redeemDescription: string | null
+  audience: Audience
 }
 
 /** One problem submitting would be refused for, in the caller's language (`SaveOutput.Problem`). */
@@ -199,6 +211,7 @@ export function toPublication(row: Row): Publication {
     maxWinners: numOrNull(row.maxWinners),
     rewardMethod: methodOf(row.rewardMethod),
     redeemDescription: str(row.redeemDescription),
+    audience: audienceOf(row.audience),
     fullScore: numOrNull(row.fullScore),
     maxReward: str(row.maxReward),
     maxSpend: str(row.maxSpend),
@@ -287,6 +300,7 @@ export async function searchPublications({ q, status, sorts, offset, limit }: Pu
       versionLabel: str(row.versionLabel),
       status: (row.status as PublicationStatus) ?? 'DRAFT',
       rewardMethod: methodOf(row.rewardMethod),
+      audience: audienceOf(row.audience),
       regions: regionsOf(row.regions),
       starts: num(row.starts),
       completions: num(row.completions),
@@ -311,6 +325,9 @@ export const readEndReasons = (): Promise<DictionaryItem[]> => readDictionary(PU
 export const readRegions = (): Promise<DictionaryItem[]> => readDictionary(PUBLISHING_DICTIONARY.region)
 export const readRewardMethods = (): Promise<DictionaryItem[]> => readDictionary(PUBLISHING_DICTIONARY.rewardMethod)
 export const readCashStatuses = (): Promise<DictionaryItem[]> => readDictionary(PUBLISHING_DICTIONARY.cashStatus)
+export const readAudiences = (): Promise<DictionaryItem[]> => readDictionary(PUBLISHING_DICTIONARY.audience)
+export const readInvitationStatuses = (): Promise<DictionaryItem[]> =>
+  readDictionary(PUBLISHING_DICTIONARY.invitationStatus)
 
 /**
  * The reward methods an administrator allowed the sponsor (Q22): their own row of the setting, or the platform's
@@ -512,6 +529,7 @@ export interface PublicationForm {
   tiers: TierDraft[]
   rewardMethod: RewardMethod
   redeemDescription: string
+  audience: Audience
 }
 
 let keys = 0
@@ -536,6 +554,7 @@ export function formOf(detail: PublicationDetail | null): PublicationForm {
     maxWinners: text(p?.maxWinners),
     rewardMethod: p?.rewardMethod ?? 'PLATFORM',
     redeemDescription: p?.redeemDescription ?? '',
+    audience: p?.audience ?? 'PUBLIC',
     tiers: (detail?.tiers ?? []).map((tier) => ({ key: tierKey(), tierId: tier.tierId,
       fromScore: String(tier.fromScore), toScore: String(tier.toScore), reward: tier.reward })),
   }
@@ -582,7 +601,8 @@ export function inputOf(form: PublicationForm, publicationId: string | null, bas
       publicationId,
       versionId: form.versionId,
       name: form.name.trim(),
-      regions: REGIONS.filter((region) => form.regions.includes(region)),
+      // An invited publication has no regions: its list stands in for them (Q25).
+      regions: form.audience === 'INVITED' ? [] : REGIONS.filter((region) => form.regions.includes(region)),
       startAt: form.startAt,
       endAt: form.endAt,
       timeLimitSec,
@@ -594,6 +614,7 @@ export function inputOf(form: PublicationForm, publicationId: string | null, bas
       rewardMethod: form.rewardMethod,
       redeemDescription: form.rewardMethod === 'OFFLINE_REDEEM' && form.redeemDescription.trim()
         ? form.redeemDescription.trim() : null,
+      audience: form.audience,
     },
   }
 }
@@ -630,7 +651,7 @@ export function nextTier(tiers: readonly TierDraft[], fullScore: number | null):
 
 /** The fields of the publication the pages name (`entity.QbPublication.<field>` on the server). */
 export const PUBLICATION_FIELDS = ['name', 'versionId', 'regions', 'startAt', 'endAt', 'timeLimitSec', 'passScore',
-  'budgetCap', 'maxWinners', 'rewardMethod', 'redeemDescription'] as const
+  'budgetCap', 'maxWinners', 'rewardMethod', 'redeemDescription', 'audience'] as const
 export type PublicationField = (typeof PUBLICATION_FIELDS)[number]
 
 /**
@@ -743,3 +764,87 @@ export const confirmRedemption = (redemptionId: string) =>
 /** The claim is not the person at the counter: the prize is due again. */
 export const declineRedemption = (redemptionId: string) =>
   runProcess<RedemptionOutput>(PUBLISHING_PROCESS.redemptionDecline, { redemptionId })
+
+// ---- the invitation list (Q25) -------------------------------------------------------------------------------------
+
+/** `invitation.InvitationStatus`. */
+export type InvitationStatus = 'ADDED' | 'QUEUED' | 'SENT' | 'STARTED' | 'ANSWERED'
+export const INVITATION_STATUSES: readonly InvitationStatus[] = ['ADDED', 'QUEUED', 'SENT', 'STARTED', 'ANSWERED']
+/** How many addresses one call of `QB_INVITATION_ADD` takes (`QbInvitations.MAX_PER_CALL`). */
+export const INVITATIONS_PER_CALL = 500
+
+/** A row of `qb.sponsor.invitations`. */
+export interface InvitationRow {
+  invitationId: string
+  email: string
+  status: InvitationStatus
+  addedAt: string
+  sentCount: number
+  lastSentAt: string | null
+  startedAt: string | null
+  answeredAt: string | null
+  score: number | null
+  reward: string | null
+}
+
+export interface InvitationSummary {
+  total: number
+  added: number
+  queued: number
+  sent: number
+  started: number
+  answered: number
+}
+
+export interface InvitationSearch {
+  publicationId: string
+  q?: string
+  status?: InvitationStatus | null
+  offset: number
+  limit: number
+}
+
+export async function searchInvitations({ publicationId, q, status, offset, limit }: InvitationSearch) {
+  const params: Record<string, unknown> = { publicationId }
+  const text = q?.trim()
+  if (text) params.q = text
+  if (status) params.status = status
+  const page = await runQuery<Row>(PUBLISHING_TEMPLATE.invitations, { params, offset, limit, count: true })
+  return {
+    total: page.total,
+    items: page.items.map((row): InvitationRow => ({
+      invitationId: String(row.invitationId),
+      email: String(row.email ?? ''),
+      status: String(row.status) as InvitationStatus,
+      addedAt: String(row.addedAt),
+      sentCount: num(row.sentCount),
+      lastSentAt: str(row.lastSentAt),
+      startedAt: str(row.startedAt),
+      answeredAt: str(row.answeredAt),
+      score: numOrNull(row.score),
+      reward: str(row.reward),
+    })),
+  }
+}
+
+export async function readInvitationSummary(publicationId: string): Promise<InvitationSummary> {
+  const page = await runQuery<Row>(PUBLISHING_TEMPLATE.invitationSummary, { params: { publicationId }, limit: 1 })
+  const row = page.items[0] ?? {}
+  return { total: num(row.total), added: num(row.added), queued: num(row.queued), sent: num(row.sent),
+    started: num(row.started), answered: num(row.answered) }
+}
+
+/** The addresses typed or pasted, one per line or separated by commas, semicolons or spaces; duplicates kept once. */
+export function splitAddresses(text: string): string[] {
+  return [...new Set(text.split(/[\s,;]+/).map((part) => part.trim()).filter(Boolean))]
+}
+
+export interface AddInvitationsOutput { publicationId: string; added: number; skipped: number; total: number }
+export interface SendInvitationsOutput { publicationId: string; queued: number; remainingToday: number }
+
+export const addInvitations = (publicationId: string, emails: string[]) =>
+  runProcess<AddInvitationsOutput>(PUBLISHING_PROCESS.invitationAdd, { publicationId, emails })
+export const removeInvitation = (invitationId: string) =>
+  runProcess<{ invitationId: string }>(PUBLISHING_PROCESS.invitationRemove, { invitationId })
+export const sendInvitations = (publicationId: string) =>
+  runProcess<SendInvitationsOutput>(PUBLISHING_PROCESS.invitationSend, { publicationId })

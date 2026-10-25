@@ -17,6 +17,7 @@ results:
   versionLabel:  { from: QbPublication.versionLabel }
   status:        { from: QbPublication.status }
   rewardMethod:  { from: QbPublication.rewardMethod }
+  audience:      { from: QbPublication.audience }
   regions:       { from: QbPublication.regions }
   starts:        { from: QbPublicationStartCounter.starts }
   completions:       { from: QbPublicationCounter.completions }
@@ -51,6 +52,7 @@ SELECT
     p.{{QbPublication.versionLabel}}        AS versionLabel,
     p.{{QbPublication.status}}              AS status,
     p.{{QbPublication.rewardMethod}}        AS rewardMethod,
+    p.{{QbPublication.audience}}            AS audience,
     p.{{QbPublication.regions}}             AS regions,
     coalesce(s.{{QbPublicationStartCounter.starts}}, 0) AS starts,
     coalesce(c.{{QbPublicationCounter.completions}}, 0) AS completions,

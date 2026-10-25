@@ -665,8 +665,9 @@ class NotificationMailIT extends PayoutItSupport {
         Map<String, Object> atApp = client.get().uri("/api/auth/mail/preferences")
             .header(HttpHeaders.AUTHORIZATION, entryToken(taker, "app")).exchange().expectStatus().isOk()
             .expectBody(MAP).returnResult().getResponseBody();
+        // Q25: a taker may also turn off quiz invitations (the mail an address gets before it has an account).
         assertThat((List<Map<String, Object>>) atApp.get("templates")).extracting(row -> row.get("template"))
-            .containsExactly("qb.welcome");
+            .containsExactlyInAnyOrder("qb.invitation", "qb.welcome");
         // A taker cannot set a sponsor's notification (the same refusal as for a name that does not exist).
         client.post().uri("/api/auth/mail/preferences").contentType(MediaType.APPLICATION_JSON)
             .header(HttpHeaders.AUTHORIZATION, entryToken(taker, "app"))

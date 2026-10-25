@@ -73,12 +73,24 @@ public final class PublicationProcesses {
      *                          given; one the sponsor may use, or 422 {@code QB_REWARD_METHOD_NOT_ALLOWED}
      * @param redeemDescription for {@code OFFLINE_REDEEM}, what the prize is and where to collect it
      * @param baseRevision      the revision the caller edited; when given and no longer current, 422
+     * @param audience          who may answer (Q25, {@link Audience}): {@code PUBLIC} when not given; {@code INVITED}
+     *                          needs no regions
      */
     public record SaveInput(UUID publicationId, UUID versionId, @NotNull String name, List<@NotNull String> regions,
         Instant startAt, Instant endAt, Integer timeLimitSec, Integer passScore, BigDecimal budgetCap,
         Integer maxWinners, @Size(max = PublishingLimits.MAX_TIERS) List<@Valid @NotNull TierInput> tiers,
         Long baseRevision, @Size(max = 20) String rewardMethod,
-        @Size(max = PublishingLimits.REDEEM_DESCRIPTION_LENGTH) String redeemDescription) {}
+        @Size(max = PublishingLimits.REDEEM_DESCRIPTION_LENGTH) String redeemDescription,
+        @Size(max = 10) String audience) {
+
+        /** As before Q25: everybody in the regions. */
+        public SaveInput(UUID publicationId, UUID versionId, String name, List<String> regions, Instant startAt,
+            Instant endAt, Integer timeLimitSec, Integer passScore, BigDecimal budgetCap, Integer maxWinners,
+            List<TierInput> tiers, Long baseRevision, String rewardMethod, String redeemDescription) {
+            this(publicationId, versionId, name, regions, startAt, endAt, timeLimitSec, passScore, budgetCap,
+                maxWinners, tiers, baseRevision, rewardMethod, redeemDescription, null);
+        }
+    }
 
     public record PublicationRef(@NotNull UUID publicationId, Long baseRevision) {}
 
@@ -139,12 +151,18 @@ public final class PublicationProcesses {
         String method = input.rewardMethod() == null || input.rewardMethod().isBlank() ? RewardMethod.PLATFORM
             : input.rewardMethod();
         PublicationEditing.methodProblems(ctx, method).forEach(ctx::reject);
+        String audience = Audience.of(input.audience());
+        if (!Audience.ALL.contains(audience)) {
+            ctx.reject(new Violation("audience", PublishingCodes.AUDIENCE_INVALID, "Unknown audience " + audience,
+                Map.of("audience", audience)));
+        }
         if (ctx.hasViolations()) {
             return;
         }
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("name", input.name());
         values.put("regions", regions);
+        values.put("audience", audience);
         values.put("rewardMethod", method);
         // Only a prize at the sponsor's place has a description; blank is none.
         values.put("redeemDescription", !RewardMethod.OFFLINE_REDEEM.equals(method)
@@ -388,6 +406,8 @@ public final class PublicationProcesses {
             values.put(field, source.get(field));
         }
         values.put("rewardMethod", PublicationEditing.methodOf(source.attributes()));
+        // Q25: the audience is copied, the invitation list is not (a copy invites its own people).
+        values.put("audience", Audience.of(source.get("audience")));
         if (input.startAt() != null) {
             values.put("startAt", input.startAt());
         }

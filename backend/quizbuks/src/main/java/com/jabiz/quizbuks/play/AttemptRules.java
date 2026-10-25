@@ -85,22 +85,29 @@ public final class AttemptRules {
 
     /** The publication as a taker sees it at {@code now}: the facts of every condition of the feed. */
     public record Card(String sponsorId, String status, String regions, Instant startAt, Instant endAt,
-        Limits limits, String rewardMethod) {
+        Limits limits, String rewardMethod, boolean invited) {
 
         /** A card paid by the platform (Q22): what every card was before. */
         public Card(String sponsorId, String status, String regions, Instant startAt, Instant endAt, Limits limits) {
-            this(sponsorId, status, regions, startAt, endAt, limits, RewardMethod.PLATFORM);
+            this(sponsorId, status, regions, startAt, endAt, limits, RewardMethod.PLATFORM, false);
+        }
+
+        /** A card open to everybody in its regions (what every card was before Q25). */
+        public Card(String sponsorId, String status, String regions, Instant startAt, Instant endAt, Limits limits,
+            String rewardMethod) {
+            this(sponsorId, status, regions, startAt, endAt, limits, rewardMethod, false);
         }
     }
 
     /**
      * Why the caller cannot start an attempt of the publication, or null when they can: their own publication, closed
-     * (not live or not within its time), not aimed at their regions, budget or winners used up, or a sponsor who cannot
-     * pay. The first that applies.
+     * (not live or not within its time), not aimed at their regions (or, for an invited publication, Q25, the caller
+     * not invited), budget or winners used up, or a sponsor who cannot pay. The first that applies.
      *
      * @param userRegions the regions of the caller's country; {@code GLOBAL} without one
+     * @param invited     whether the caller holds an invitation of the publication (only read when the card is invited)
      */
-    public static String startRefusal(String userId, String userRegions, Card card, Counts counts,
+    public static String startRefusal(String userId, String userRegions, boolean invited, Card card, Counts counts,
         BigDecimal sponsorBalance, long sponsorPending, Instant now) {
         if (card.sponsorId().equals(userId)) {
             return PlayCodes.OWN_PUBLICATION;
@@ -108,7 +115,12 @@ public final class AttemptRules {
         if (!PublicationRules.acceptsNewAttempts(card.status(), card.startAt(), card.endAt(), now)) {
             return PlayCodes.NOT_OPEN;
         }
-        if (!Regions.overlaps(userRegions, card.regions())) {
+        if (card.invited()) {
+            // The invitation list instead of the regions: the invitee answers from anywhere.
+            if (!invited) {
+                return PlayCodes.NOT_INVITED;
+            }
+        } else if (!Regions.overlaps(userRegions, card.regions())) {
             return PlayCodes.NOT_VISIBLE;
         }
         String limit = limitRefusal(card.limits(), counts);
@@ -121,6 +133,12 @@ public final class AttemptRules {
             return PlayCodes.FUNDS_SHORT;
         }
         return null;
+    }
+
+    /** As before Q25: the caller holds no invitation (a public card never asks). */
+    public static String startRefusal(String userId, String userRegions, Card card, Counts counts,
+        BigDecimal sponsorBalance, long sponsorPending, Instant now) {
+        return startRefusal(userId, userRegions, false, card, counts, sponsorBalance, sponsorPending, now);
     }
 
     private AttemptRules() {}

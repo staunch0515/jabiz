@@ -8,6 +8,9 @@ import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.quizbuks.content.ContentLimits;
 import com.jabiz.quizbuks.content.QuizSnapshot;
 import com.jabiz.quizbuks.identity.CallerChecks;
+import com.jabiz.quizbuks.invitation.InvitationStatus;
+import com.jabiz.quizbuks.invitation.Invitations;
+import com.jabiz.quizbuks.invitation.QbInvitations;
 import com.jabiz.quizbuks.reward.CashRewardChecks;
 import com.jabiz.quizbuks.country.Regions;
 import com.jabiz.quizbuks.publishing.PublicationMoves;
@@ -127,6 +130,9 @@ public final class AttemptProcesses {
                 .step("Load the caller's attempt", QueryEntities.<ProcessContext>of(QbPlay.TAKER_ATTEMPTS,
                     ctx -> mine(ctx.get(PUB_KEY)), MINE))
                 .steps(b -> PlaySteps.loadRegions(b, ctx -> ctx.request().actorId()))
+                // Q25: an invited card only (no statement otherwise): the caller's invitation, by account or address.
+                .steps(b -> Invitations.loadForTaker(b,
+                    ctx -> PlaySteps.invited(first(ctx, CARD)) ? ctx.get(PUB_KEY) : null))
                 .step("Load an earlier view", QueryEntities.<ProcessContext>of(QbPlay.defaultDataset(QbPlay.VIEW),
                     ctx -> EntityQuery.builder().where(new QueryPredicate.And(List.of(
                         new QueryPredicate.Eq("userId", ctx.request().actorId()),
@@ -149,18 +155,28 @@ public final class AttemptProcesses {
             values.put("firstViewedAt", ctx.opTime());
             ctx.changes().insert(QbPlay.VIEW, values);
         }
+        // Q25: the view claims an invitation addressed to the caller's verified address, so that the page (which reads
+        // the invitations of the caller's account) shows the publication from now on.
+        EntityInstance invitation = PlaySteps.invited(card) ? Invitations.mine(ctx) : null;
+        if (invitation != null) {
+            Map<String, Object> claim = Invitations.claim(ctx, invitation);
+            if (!claim.isEmpty()) {
+                ctx.changes().update(QbInvitations.INVITATION, invitation.id(), invitation.version(), claim);
+            }
+        }
         ctx.put(OUTPUT, new ViewOutput(publicationId, first));
     }
 
     /**
      * Whether the publication's page is shown to the caller, as {@code qb.app.publication} decides (an attempt of
-     * theirs aside): live, within its time and aimed at a region of their country. Its winners, budget and sponsor's
-     * funds decide only whether an attempt can start.
+     * theirs aside): live, within its time and aimed at a region of their country, or, for an invited publication
+     * (Q25), the caller invited. Its winners, budget and sponsor's funds decide only whether an attempt can start.
      */
     private static boolean shown(ProcessContext ctx, EntityInstance card) {
         return PublicationRules.acceptsNewAttempts(card.get("status"), PlaySteps.instant(card.get("startAt")),
             PlaySteps.instant(card.get("endAt")), ctx.opTime())
-            && Regions.overlaps(PlaySteps.userRegions(ctx), card.get("regions"));
+            && (PlaySteps.invited(card) ? Invitations.mine(ctx) != null
+                : Regions.overlaps(PlaySteps.userRegions(ctx), card.get("regions")));
     }
 
     private static Object sponsorOf(EntityInstance card) {
@@ -226,6 +242,10 @@ public final class AttemptProcesses {
                     PlaySteps.card(ctx -> starting(ctx) ? ctx.get(PUB_KEY) : null, CARD),
                     PlaySteps.startCounter(ctx -> starting(ctx) ? ctx.get(PUB_KEY) : null, START_COUNTER),
                     PlaySteps.counter(ctx -> starting(ctx) ? ctx.get(PUB_KEY) : null, COUNTER)))
+                // Q25: an invited card only (no statement otherwise): the caller's invitation, under the start lock
+                // (the start writes it), by their account or their verified address.
+                .steps(b -> Invitations.loadForTaker(b,
+                    ctx -> starting(ctx) && PlaySteps.invited(first(ctx, CARD_BEFORE)) ? ctx.get(PUB_KEY) : null))
                 .compute("Start the attempt", (metadata, ctx) -> start(ctx, shuffle)));
     }
 
@@ -286,9 +306,10 @@ public final class AttemptProcesses {
         }
         String userId = ctx.request().actorId();
         EntityInstance wallet = first(ctx, WALLET);
-        String refusal = AttemptRules.startRefusal(userId, PlaySteps.userRegions(ctx), PlaySteps.cardOf(card),
-            PlaySteps.counts(starts, counter), QbWallets.available(wallet), QbWallets.pendingCount(wallet),
-            ctx.opTime());
+        EntityInstance invitation = PlaySteps.invited(card) ? Invitations.mine(ctx) : null;
+        String refusal = AttemptRules.startRefusal(userId, PlaySteps.userRegions(ctx), invitation != null,
+            PlaySteps.cardOf(card), PlaySteps.counts(starts, counter), QbWallets.available(wallet),
+            QbWallets.pendingCount(wallet), ctx.opTime());
         if (refusal != null) {
             ctx.reject(new com.jabiz.entity.Violation("publicationId", refusal, "The attempt cannot start: "
                 + refusal, Map.of("publicationId", String.valueOf(ctx.get(PUB_KEY)))));
@@ -316,6 +337,14 @@ public final class AttemptProcesses {
         counts.put("starts", BigDecimal.valueOf(PlaySteps.number(starts.get("starts")) + 1));
         counts.put("reservedTotal", PlaySteps.money(starts.get("reservedTotal")).add(maxReward));
         ctx.changes().update(QbPublications.START_COUNTER, starts.id(), starts.version(), counts);
+        if (invitation != null) {
+            // Q25: the invitation carries the attempt from now on (its answer is recorded on it when it finishes).
+            Map<String, Object> claimed = new LinkedHashMap<>(Invitations.claim(ctx, invitation));
+            claimed.put("status", InvitationStatus.STARTED);
+            claimed.put("attemptId", String.valueOf(attemptId));
+            claimed.put("startedAt", ctx.opTime());
+            ctx.changes().update(QbInvitations.INVITATION, invitation.id(), invitation.version(), claimed);
+        }
         ctx.put(OUTPUT, new StartOutput(String.valueOf(attemptId), PlaySteps.uuid(publicationId),
             AttemptStatus.IN_PROGRESS, ctx.opTime(), deadline, ctx.opTime(),
             PlaySteps.integer(card.get("timeLimitSec")), 0, false, questions(snapshot, order),

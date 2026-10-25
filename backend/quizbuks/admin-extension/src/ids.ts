@@ -32,6 +32,8 @@ export const DATASET = {
 export const TEMPLATE = {
   /** The review queue: no money (the content administrators read it). */
   publications: 'qb.admin.publications',
+  /** How many addresses an invited publication invited, wrote to and answered (Q25); the addresses are the sponsor's alone. */
+  invitationSummary: 'qb.admin.invitation-summary',
   /** Every cash reward (Q22): disputes and late sponsors (`qb.admin.publication.read`). */
   cashRewards: 'qb.admin.cash-rewards',
   /** Every prize to collect at a sponsor's place (Q22b). */
@@ -174,6 +176,7 @@ export const TRANSFER_REVIEW = 'REVIEW'
 /** Dictionaries, labelled by the server in the request's language. */
 export const DICTIONARY = {
   region: 'urn:jabiz:dict:quizbuks:region',
+  audience: 'urn:jabiz:dict:quizbuks:publication-audience',
   publicationStatus: 'urn:jabiz:dict:quizbuks:publication-status',
   quizStatus: 'urn:jabiz:dict:quizbuks:quiz-status',
   quizKind: 'urn:jabiz:dict:quizbuks:quiz-kind',

@@ -24,6 +24,7 @@ import {
   type DescriptionItem,
 } from '@jabiz/admin'
 import {
+  readInvitationSummary,
   readPublication,
   readPublicationFunds,
   readPublicationRow,
@@ -125,14 +126,19 @@ function Settings({ publication, tiers, quiz, finance }: {
 }) {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
   const region = useLabels(DICTIONARY.region)
+  const audience = useLabels(DICTIONARY.audience)
   const notSet = t('common.notSet')
+  const invited = publication.audience === 'INVITED'
   const items: DescriptionItem[] = [
     { key: 'quiz', label: t('publication.quiz'), value: quiz ?? notSet },
-    {
+    { key: 'audience', label: t('publication.audience'),
+      value: <span data-testid="publication-audience">{audience(publication.audience)}</span> },
+    // Q25: an invited publication's list stands in for its regions.
+    ...(invited ? [] : [{
       key: 'regions',
       label: t('publication.regions'),
       value: publication.regions.length > 0 ? publication.regions.map(region).join(', ') : notSet,
-    },
+    }]),
     {
       key: 'period',
       label: t('publication.period'),
@@ -190,8 +196,43 @@ function Settings({ publication, tiers, quiz, finance }: {
         <h3 className="font-semibold">{t('publication.tiers')}</h3>
         {tierTable}
       </div>
+      {invited && <Invitations publicationId={publication.publicationId} />}
       {finance && <Funds publicationId={publication.publicationId} />}
     </Section>
+  )
+}
+
+/**
+ * How an invited publication's list stands (Q25, `qb.admin.invitation-summary`): the counts only. The addresses are
+ * the sponsor's alone (D-Q25-8); support reads them with the sponsor if ever needed.
+ */
+function Invitations({ publicationId }: { publicationId: string }) {
+  const { t } = useTranslation(EXTENSION_NAMESPACE)
+  const summary = useQuery({
+    queryKey: ['qb-ext', 'invitation-summary', publicationId],
+    queryFn: () => readInvitationSummary(publicationId),
+  })
+  let body
+  if (summary.isError) body = <LoadFailed error={summary.error} onRetry={() => void summary.refetch()} />
+  else if (summary.isPending) body = <PageState kind="loading" />
+  else {
+    const counts = summary.data
+    body = (
+      <DescriptionList columns={3} data-testid="publication-invitations" items={[
+        { key: 'total', label: t('publication.invitationsTotal'), value: counts.total.toLocaleString() },
+        { key: 'added', label: t('publication.invitationsAdded'), value: counts.added.toLocaleString() },
+        { key: 'sent', label: t('publication.invitationsSent'), value: (counts.queued + counts.sent).toLocaleString() },
+        { key: 'started', label: t('publication.invitationsStarted'), value: counts.started.toLocaleString() },
+        { key: 'answered', label: t('publication.invitationsAnswered'), value: counts.answered.toLocaleString() },
+      ]} />
+    )
+  }
+  return (
+    <div className="flex flex-col gap-2">
+      <h3 className="font-semibold">{t('publication.invitations')}</h3>
+      <p className="text-muted-foreground text-sm">{t('publication.invitationsNote')}</p>
+      {body}
+    </div>
   )
 }
 

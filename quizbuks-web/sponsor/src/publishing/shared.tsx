@@ -19,7 +19,10 @@ import { SPONSOR } from '../messages'
 import { formatKudos } from '../qb/kudos'
 import {
   problemPlace,
+  readAudiences,
   readEndReasons,
+  readInvitationStatuses,
+  type Audience,
   readPublicationStatuses,
   readRegions,
   readRewardMethods,
@@ -54,6 +57,8 @@ export const useRegionLabel = () => useLabels('region', readRegions)
 export const useRewardMethodLabel = () => useLabels('reward-method', readRewardMethods)
 export const useCashStatusLabel = () => useLabels('cash-reward-status', readCashStatuses)
 export const useRedemptionStatusLabel = () => useLabels('redemption-status', readRedemptionStatuses)
+export const useAudienceLabel = () => useLabels('publication-audience', readAudiences)
+export const useInvitationStatusLabel = () => useLabels('invitation-status', readInvitationStatuses)
 
 const VARIANT: Record<PublicationStatus, 'outline' | 'secondary' | 'success' | 'warning'> = {
   DRAFT: 'outline',
@@ -161,6 +166,8 @@ export interface SummaryValues {
   /** Q22: how the reward reaches the taker, and the prize when it is collected at the sponsor's place. */
   rewardMethod?: RewardMethod
   redeemDescription?: string | null
+  /** Q25: who may answer; an invited publication shows no regions. */
+  audience?: Audience
 }
 
 /** What a publication is: its version, audience, time, marks and money, and its tiers. Amounts in Kudos. */
@@ -171,7 +178,9 @@ export function PublicationSummary({ values }: { values: SummaryValues }) {
   const notSet = t('publishing.notSet')
   const noLimit = t('publishing.noLimit')
   const methodLabel = useRewardMethodLabel()
+  const audienceLabel = useAudienceLabel()
   const method = values.rewardMethod ?? 'PLATFORM'
+  const audience = values.audience ?? 'PUBLIC'
   const items: DescriptionItem[] = [
     { key: 'name', label: t('publishing.field.name'), value: values.name || notSet },
     {
@@ -181,7 +190,10 @@ export function PublicationSummary({ values }: { values: SummaryValues }) {
         ? t('publishing.summary.quizValue', { title: values.quizTitle ?? '', label: values.versionLabel })
         : notSet,
     },
-    { key: 'regions', label: t('publishing.field.regions'), value: regionsText(values.regions) },
+    { key: 'audience', label: t('publishing.field.audience'),
+      value: <span data-testid="summary-audience">{audienceLabel(audience)}</span> },
+    ...(audience === 'PUBLIC'
+      ? [{ key: 'regions', label: t('publishing.field.regions'), value: regionsText(values.regions) }] : []),
     { key: 'period', label: t('publishing.list.period'), value: <Period startAt={values.startAt} endAt={values.endAt} /> },
     {
       key: 'timeLimit',

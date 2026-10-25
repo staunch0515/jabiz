@@ -48,6 +48,8 @@ interface Server {
   cashRewards?: Record<string, unknown>[]
   /** The prizes of the redeem page (Q22b), answered to every search of `qb.sponsor.redemptions`. */
   redemptions?: Record<string, unknown>[]
+  /** The invitation list of an invited publication (Q25), answered to every search and summed up. */
+  invitations?: Record<string, unknown>[]
 }
 
 /** The server as the console sees it, for a signed-in, approved sponsor. Records what was posted. */
@@ -103,6 +105,20 @@ function server(options: Server = {}) {
         const filter = (body as { filters?: { field: string; value: string }[] } | null)?.filters?.find((f) => f.field === 'status')
         const items = (options.redemptions ?? []).filter((row) => !filter || row.status === filter.value)
         return json(200, { items, offset: 0, limit: 20, total: items.length })
+      }
+      case '/api/dictionaries/urn:jabiz:dict:quizbuks:publication-audience':
+        return json(200, [{ code: 'PUBLIC', label: 'Everyone in the regions' },
+          { code: 'INVITED', label: 'Invited e-mail addresses only' }])
+      case '/api/dictionaries/urn:jabiz:dict:quizbuks:invitation-status':
+        return json(200, [{ code: 'ADDED', label: 'Added' }, { code: 'QUEUED', label: 'Sending' },
+          { code: 'SENT', label: 'Sent' }, { code: 'STARTED', label: 'Started' }, { code: 'ANSWERED', label: 'Answered' }])
+      case '/api/queries/qb.sponsor.invitations':
+        return json(200, { items: options.invitations ?? [], offset: 0, limit: 20, total: options.invitations?.length ?? 0 })
+      case '/api/queries/qb.sponsor.invitation-summary': {
+        const rows = options.invitations ?? []
+        const count = (status: string) => rows.filter((row) => row.status === status).length
+        return json(200, { items: [{ publicationId: 'p1', total: rows.length, added: count('ADDED'), queued: count('QUEUED'),
+          sent: count('SENT'), started: count('STARTED'), answered: count('ANSWERED') }], offset: 0, limit: 1 })
       }
       case '/api/queries/qb.sponsor.cash-rewards':
         return json(200, { items: options.cashRewards ?? [], offset: 0, limit: 20, total: options.cashRewards?.length ?? 0 })
@@ -174,7 +190,7 @@ describe('the publication wizard', () => {
     expect(window.location.search).toBe('?step=1')
     expect(processCalls('QB_PUBLICATION_SAVE')).toEqual([{ publicationId: null, versionId: null, name: 'Tea week',
       regions: [], startAt: null, endAt: null, timeLimitSec: null, passScore: null, budgetCap: null,
-      maxWinners: null, tiers: [], baseRevision: null, rewardMethod: 'PLATFORM', redeemDescription: null }])
+      maxWinners: null, tiers: [], baseRevision: null, rewardMethod: 'PLATFORM', redeemDescription: null, audience: 'PUBLIC' }])
   })
 
   it('chooses the newest version with the quiz', async () => {
@@ -236,7 +252,7 @@ describe('the publication wizard', () => {
     expect(document.activeElement).toBe(screen.getByTestId('publication-step-title'))
     expect(processCalls('QB_PUBLICATION_SAVE')).toEqual([{ publicationId: 'p1', versionId: 'v1', name: 'Coffee week',
       regions: ['GLOBAL', 'JP'], startAt: '2026-11-01T00:00:00Z', endAt: '2026-11-08T00:00:00Z', timeLimitSec: 300,
-      passScore: 2, budgetCap: null, maxWinners: null, baseRevision: 3, rewardMethod: 'PLATFORM', redeemDescription: null,
+      passScore: 2, budgetCap: null, maxWinners: null, baseRevision: 3, rewardMethod: 'PLATFORM', redeemDescription: null, audience: 'PUBLIC',
       tiers: [{ tierId: null, fromScore: 0, toScore: 2, reward: 100 }] }])
   })
 
@@ -353,7 +369,7 @@ describe('the reward method (Q22)', () => {
     expect(screen.queryByTestId('publication-method')).toBeNull()
     await userEvent.click(screen.getByTestId('publication-next'))
     await waitFor(() => expect(processCalls('QB_PUBLICATION_SAVE')).toHaveLength(1))
-    expect(processCalls('QB_PUBLICATION_SAVE')[0]).toMatchObject({ rewardMethod: 'PLATFORM', redeemDescription: null })
+    expect(processCalls('QB_PUBLICATION_SAVE')[0]).toMatchObject({ rewardMethod: 'PLATFORM', redeemDescription: null, audience: 'PUBLIC' })
   })
 
   it('offers the allowed methods, asks a prize for its description, and shows both in the summary', async () => {
@@ -565,5 +581,71 @@ describe('a submitted publication', () => {
     window.history.replaceState(null, '', '/publications/p1')
     render(<App />)
     expect(await screen.findByText('This publication does not exist or is not yours.')).toBeInTheDocument()
+  })
+})
+
+describe('invitation-only publications (Q25)', () => {
+  it('asks for the list instead of the regions and saves the audience', async () => {
+    const { processCalls } = server({ processes: { QB_PUBLICATION_SAVE: [saved(4, { tierIds: ['t1'] })] } })
+    window.history.replaceState(null, '', '/publications/p1?step=1')
+    render(<App />)
+    expect(await screen.findByTestId('publication-regions')).toBeInTheDocument()
+    await userEvent.click(screen.getByTestId('publication-audience-INVITED'))
+    expect(screen.queryByTestId('publication-regions')).toBeNull()
+    await userEvent.click(screen.getByTestId('tier-add'))
+    await userEvent.type(within(screen.getByTestId('tier')).getByTestId('tier-reward'), '100')
+    await userEvent.click(screen.getByTestId('publication-next'))
+    await waitFor(() => expect(processCalls('QB_PUBLICATION_SAVE')).toHaveLength(1))
+    expect(processCalls('QB_PUBLICATION_SAVE')[0]).toMatchObject({ audience: 'INVITED', regions: [] })
+    expect(await screen.findByTestId('summary-audience')).toHaveTextContent('Invited e-mail addresses only')
+  })
+
+  it('shows the list of a live invited publication, adds addresses, sends and removes', async () => {
+    const live = { ...DRAFT, status: 'LIVE', audience: 'INVITED', regions: 'GLOBAL', approvedAt: '2026-10-15T00:00:00Z' }
+    const { processCalls } = server({
+      publication: live,
+      invitations: [
+        { invitationId: 'i1', email: 'alice@example.com', status: 'SENT', addedAt: '2026-10-15T01:00:00Z', sentCount: 1,
+          lastSentAt: '2026-10-15T02:00:00Z', startedAt: null, answeredAt: null, score: null, reward: null },
+        { invitationId: 'i2', email: 'bob@example.com', status: 'ANSWERED', addedAt: '2026-10-15T01:00:00Z', sentCount: 1,
+          lastSentAt: '2026-10-15T02:00:00Z', startedAt: '2026-10-16T01:00:00Z', answeredAt: '2026-10-16T01:05:00Z',
+          score: 2, reward: '100' },
+        { invitationId: 'i3', email: 'carol@example.com', status: 'ADDED', addedAt: '2026-10-17T01:00:00Z', sentCount: 0,
+          lastSentAt: null, startedAt: null, answeredAt: null, score: null, reward: null },
+      ],
+      processes: {
+        QB_INVITATION_ADD: [{ status: 200, body: { output: { publicationId: 'p1', added: 2, skipped: 1, total: 5 } } }],
+        QB_INVITATION_SEND: [{ status: 200, body: { output: { publicationId: 'p1', queued: 3, remainingToday: 1997 } } }],
+        QB_INVITATION_REMOVE: [{ status: 200, body: { output: { invitationId: 'i3' } } }],
+      },
+    })
+    window.history.replaceState(null, '', '/publications/p1')
+    render(<App />)
+    const section = await screen.findByTestId('invitations')
+    // The dictionary's label replaces the code once the server answered.
+    await waitFor(() => expect(screen.getByTestId('summary-audience')).toHaveTextContent('Invited e-mail addresses only'))
+    expect(screen.queryByText('Regions')).toBeNull()
+    expect(await within(section).findByTestId('invitations-summary'))
+      .toHaveTextContent('3 invited · 1 not yet sent · 1 sent · 0 started · 1 answered')
+    const rows = await within(section).findAllByTestId('invitation-row')
+    expect(rows.map((row) => row.getAttribute('data-status'))).toEqual(['SENT', 'ANSWERED', 'ADDED'])
+    expect(within(rows[1]).getByTestId('invitation-answer')).toHaveTextContent('score 2')
+    // An answered or started invitation stays; the others may go.
+    expect(within(rows[1]).queryByTestId('invitation-remove')).toBeNull()
+    expect(within(rows[2]).getByTestId('invitation-remove')).toBeInTheDocument()
+
+    await userEvent.type(within(section).getByTestId('invitations-addresses'), 'Dan@example.com, eve@example.com\nalice@example.com')
+    await userEvent.click(within(section).getByTestId('invitations-add'))
+    await waitFor(() => expect(processCalls('QB_INVITATION_ADD')).toEqual([{ publicationId: 'p1',
+      emails: ['Dan@example.com', 'eve@example.com', 'alice@example.com'] }]))
+    expect(within(section).getByTestId('invitations-addresses')).toHaveValue('')
+
+    await userEvent.click(within(section).getByTestId('invitations-send'))
+    await userEvent.click(await screen.findByRole('button', { name: 'Send the invitations' }))
+    await waitFor(() => expect(processCalls('QB_INVITATION_SEND')).toEqual([{ publicationId: 'p1' }]))
+
+    await userEvent.click(within(rows[2]).getByTestId('invitation-remove'))
+    await userEvent.click(await screen.findByRole('button', { name: 'Remove' }))
+    await waitFor(() => expect(processCalls('QB_INVITATION_REMOVE')).toEqual([{ invitationId: 'i3' }]))
   })
 })

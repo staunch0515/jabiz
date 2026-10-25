@@ -81,6 +81,9 @@ public final class QbPublications {
             .apply(Rules.notBlank(PublishingCodes.NAME_BLANK)));
         eb.field("regions", f -> f.physicalColumn("regions").asText(Regions.MAX_LENGTH)
             .apply(Rules.pattern(PublishingCodes.REGIONS_FORMAT, Regions.TARGETS.pattern())));
+        // Q25: everybody in the regions, or the invitation list only (then the regions are not asked).
+        eb.field("audience", f -> f.physicalColumn("audience").required(true)
+            .asCode(Audience.DICTIONARY, Audience.ALL.toArray(String[]::new)));
         eb.field("startAt", f -> f.physicalColumn("start_at").asTemporal(TemporalRole.EVENT_TIME));
         eb.field("endAt", f -> f.physicalColumn("end_at").asTemporal(TemporalRole.EVENT_TIME));
         eb.field("timeLimitSec", f -> f.physicalColumn("time_limit_sec").asNumeric(5, 0)
@@ -140,7 +143,7 @@ public final class QbPublications {
         eb.display("name");
         eb.temporal(t -> t.allowScheduled(false));
         eb.listView("default", lv -> lv
-            .columns("name", "sponsorId", "versionLabel", "status", "rewardMethod", "regions", "startAt", "endAt",
+            .columns("name", "sponsorId", "versionLabel", "status", "rewardMethod", "audience", "regions", "startAt", "endAt",
                 "maxReward", "maxSpend", "submittedAt", "editedAt")
             .filters("name", "sponsorId", "quizId", "versionId", "status", "rewardMethod", "startAt", "endAt",
                 "editedAt")
@@ -277,6 +280,9 @@ public final class QbPublications {
             .asCode(STATUS_DICTIONARY, PublicationStatus.ALL.toArray(String[]::new)));
         eb.field("regions", f -> f.physicalColumn("regions").immutable(true).required(true)
             .asText(Regions.MAX_LENGTH));
+        // Q25: an invited publication is left out of the feed and the public page; only invitees start it.
+        eb.field("audience", f -> f.physicalColumn("audience").immutable(true).required(true)
+            .asCode(Audience.DICTIONARY, Audience.ALL.toArray(String[]::new)));
         eb.field("startAt", f -> f.physicalColumn("start_at").immutable(true).required(true)
             .asTemporal(TemporalRole.EVENT_TIME));
         eb.field("endAt", f -> f.physicalColumn("end_at").immutable(true).required(true)
@@ -322,8 +328,8 @@ public final class QbPublications {
         eb.field("endedAt", f -> f.physicalColumn("ended_at").asTemporal(TemporalRole.EVENT_TIME));
         eb.field("version", f -> f.physicalColumn("version").asVersion());
         eb.listView("default", lv -> lv
-            .columns("name", "quizTitle", "sponsorId", "status", "rewardMethod", "regions", "startAt", "endAt",
-                "maxReward")
+            .columns("name", "quizTitle", "sponsorId", "status", "rewardMethod", "audience", "regions", "startAt",
+                "endAt", "maxReward")
             .filters("sponsorId", "status", "rewardMethod", "startAt", "endAt", "endedAt")
             .sorts("startAt", "endAt", "wentOnAt", "publicationId")
             .defaultSort("wentOnAt", false));

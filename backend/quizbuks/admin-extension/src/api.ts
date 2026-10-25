@@ -179,6 +179,8 @@ export interface Publication {
   versionLabel: string | null
   name: string
   regions: string[]
+  /** Q25: everybody in the regions (PUBLIC) or the invitation list only (INVITED). */
+  audience: string
   startAt: string | null
   endAt: string | null
   timeLimitSec: number | null
@@ -208,6 +210,7 @@ export async function readPublication(publicationId: string): Promise<Publicatio
     versionLabel: str(row.versionLabel),
     name: String(row.name ?? ''),
     regions: (str(row.regions) ?? '').split(',').map((r) => r.trim()).filter(Boolean),
+    audience: str(row.audience) ?? 'PUBLIC',
     startAt: str(row.startAt),
     endAt: str(row.endAt),
     timeLimitSec: num(row.timeLimitSec),
@@ -549,4 +552,22 @@ export interface DictionaryItem {
 export async function readDictionary(urn: string): Promise<DictionaryItem[]> {
   const items = await unwrap(api.GET('/api/dictionaries/{urn}', { params: { path: { urn } } }))
   return (items ?? []).map((item) => ({ code: String(item.code), label: String(item.label ?? item.code) }))
+}
+
+/** The counts of an invited publication's list (`qb.admin.invitation-summary`, Q25): never the addresses. */
+export interface InvitationSummary {
+  total: number
+  added: number
+  queued: number
+  sent: number
+  started: number
+  answered: number
+}
+
+export async function readInvitationSummary(publicationId: string): Promise<InvitationSummary> {
+  const answer = await runQuery<Row>(TEMPLATE.invitationSummary, { params: { publicationId }, limit: 1 })
+  const row = answer.items[0] ?? {}
+  const count = (value: unknown) => num(value) ?? 0
+  return { total: count(row.total), added: count(row.added), queued: count(row.queued), sent: count(row.sent),
+    started: count(row.started), answered: count(row.answered) }
 }

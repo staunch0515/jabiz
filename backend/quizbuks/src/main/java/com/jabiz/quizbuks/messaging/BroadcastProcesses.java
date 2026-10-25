@@ -1007,7 +1007,9 @@ public final class BroadcastProcesses {
      */
     private static BroadcastRules.Publication publication(ProcessContext ctx, Object sponsorId) {
         EntityInstance card = first(ctx, CARD);
-        if (card == null || sponsorId == null || !String.valueOf(sponsorId).equals(card.get("sponsorId"))) {
+        if (card == null || sponsorId == null || !String.valueOf(sponsorId).equals(card.get("sponsorId"))
+            || com.jabiz.quizbuks.publishing.Audience.invited(card.get("audience"))) {
+            // Q25: an invited publication's card says GLOBAL, which a notice would take for everybody: not a subject.
             return null;
         }
         return new BroadcastRules.Publication(String.valueOf(card.id()), card.get("sponsorId"), card.get("status"),

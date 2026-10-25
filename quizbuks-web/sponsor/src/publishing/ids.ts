@@ -7,6 +7,10 @@
 /** Processes (`publishing.PublicationProcesses`, `PublicationLifecycle`). */
 export const PUBLISHING_PROCESS = {
   save: 'QB_PUBLICATION_SAVE',
+  /** The invitation list of an invited publication (Q25). */
+  invitationAdd: 'QB_INVITATION_ADD',
+  invitationRemove: 'QB_INVITATION_REMOVE',
+  invitationSend: 'QB_INVITATION_SEND',
   /** The sponsor says they handed the taker a cash reward (Q22). */
   cashMarkPaid: 'QB_CASH_REWARD_MARK_PAID',
   /** The codes takers scan to collect a prize, and the sponsor's answer to a claim from the printed one (Q22b). */
@@ -28,6 +32,9 @@ export const PUBLISHING_TEMPLATE = {
   cashRewards: 'qb.sponsor.cash-rewards',
   /** The prizes takers collect at the sponsor's place (Q22b). */
   redemptions: 'qb.sponsor.redemptions',
+  /** An invited publication's list and its counts (Q25). */
+  invitations: 'qb.sponsor.invitations',
+  invitationSummary: 'qb.sponsor.invitation-summary',
 } as const
 
 /** The sponsor's own rows of the publishing entities (read only; writing is the processes'). */
@@ -46,6 +53,8 @@ export const PUBLISHING_DICTIONARY = {
   rewardMethod: 'urn:jabiz:dict:quizbuks:reward-method',
   cashStatus: 'urn:jabiz:dict:quizbuks:cash-reward-status',
   redemptionStatus: 'urn:jabiz:dict:quizbuks:redemption-status',
+  audience: 'urn:jabiz:dict:quizbuks:publication-audience',
+  invitationStatus: 'urn:jabiz:dict:quizbuks:invitation-status',
 } as const
 
 /** Error codes the pages react to (`publishing.PublishingCodes`). */

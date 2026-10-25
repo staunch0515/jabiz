@@ -14,6 +14,8 @@ public final class PublishingCodes {
     // Field rules (400).
     public static final String NAME_BLANK = "QB_PUBLICATION_NAME_BLANK";
     public static final String REGIONS_FORMAT = "QB_PUBLICATION_REGIONS_FORMAT";
+    /** Q25: an audience that is neither {@code PUBLIC} nor {@code INVITED}. */
+    public static final String AUDIENCE_INVALID = "QB_PUBLICATION_AUDIENCE_INVALID";
     public static final String TIME_LIMIT_RANGE = "QB_PUBLICATION_TIME_LIMIT_RANGE";
     public static final String SCORE_RANGE = "QB_PUBLICATION_SCORE_RANGE";
     public static final String BUDGET_RANGE = "QB_PUBLICATION_BUDGET_RANGE";
@@ -74,7 +76,7 @@ public final class PublishingCodes {
     public static final String REWARD_METHODS_FORMAT = "QB_REWARD_METHODS_FORMAT";
     /** Every code above that is publishing's own (not the shared review and account codes). */
 
-    public static final List<String> ALL = List.of(NAME_BLANK, REGIONS_FORMAT, TIME_LIMIT_RANGE, SCORE_RANGE,
+    public static final List<String> ALL = List.of(NAME_BLANK, REGIONS_FORMAT, AUDIENCE_INVALID, TIME_LIMIT_RANGE, SCORE_RANGE,
         BUDGET_RANGE, MAX_WINNERS_RANGE, TIER_REWARD_RANGE, TIME_ORDER, NOT_DRAFT, CHANGED, QUIZ_REMOVED,
         TIER_NOT_IN_PUBLICATION, EXPIRED_IN_REVIEW, NO_VERSION,
         FIELD_REQUIRED, END_PASSED, TOO_LONG, PASS_SCORE_RANGE, BUDGET_BELOW_MAX_REWARD, SPEND_RANGE, TIER_NOT_FROM_ZERO,
