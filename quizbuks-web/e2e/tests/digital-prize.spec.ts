@@ -130,7 +130,7 @@ test('codes are loaded into the pool in the console and handed out one each', as
   const draft = await digitalDraft(request, 'POOL')
   // Submitting an empty pool is refused with how short it is.
   const refused = await request.post('/api/processes/QB_PUBLICATION_SUBMIT/latest', {
-    headers: { Authorization: `Bearer ${draft.sponsor.token}` }, data: { input: { publicationId: draft.publicationId } } })
+    headers: { Authorization: `Bearer ${draft.sponsor.token}` }, data: { publicationId: draft.publicationId } })
   expect(refused.status()).toBe(422)
   expect(JSON.stringify(await refused.json())).toContain('QB_DIGITAL_POOL_SHORT')
 

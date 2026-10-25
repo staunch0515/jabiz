@@ -121,7 +121,7 @@ test('a taker collects a prize by scanning the code on the sponsor\'s screen', a
   // The console's redeem page: the rotating code, as a link the phone's camera would open.
   await signIn(page, '/sponsor/', owed.sponsor.email)
   await expect(page.getByTestId('dashboard-status')).toBeVisible()
-  await page.getByRole('link', { name: 'Prizes' }).click()
+  await page.getByRole('link', { name: 'Prizes', exact: true }).click()
   await expect(page).toHaveURL(/\/sponsor\/redeem$/)
   await expect(page.getByTestId('redeem-rotating-image')).toBeVisible()
   const link = (await page.getByTestId('redeem-rotating-link').textContent())!.trim()
