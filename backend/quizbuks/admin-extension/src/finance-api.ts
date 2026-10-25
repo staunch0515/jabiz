@@ -574,3 +574,97 @@ export function todayInJapan(now = new Date()): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit',
     day: '2-digit' }).format(now)
 }
+
+/** A row of `qb.admin.investor-metrics` (Q27): the platform's figures of one UTC month. */
+export interface InvestorMonth {
+  month: string
+  newSponsors: number
+  activeSponsors: number
+  retainedSponsors: number
+  publicationsWentOn: number
+  newTakers: number
+  activeTakers: number
+  attempts: number
+  completions: number
+  passes: number
+  prizesWon: number
+  prizesClaimed: number
+  prizesRedeemed: number
+  invitationsSent: number
+  invitationsAnswered: number
+  topUps: number
+  topUpAmount: string
+  rewardsPaid: string
+  commission: string
+}
+
+/** A row of `qb.admin.investor-sponsors` (Q27): one merchant's figures over the period. */
+export interface InvestorSponsor {
+  sponsorId: string
+  company: string
+  takers: number
+  attempts: number
+  completions: number
+  passes: number
+  prizesWon: number
+  prizesRedeemed: number
+  invitationsSent: number
+  invitationsAnswered: number
+}
+
+/** The longest period the investors' report takes (its template stops there too). */
+export const INVESTOR_MAX_MONTHS = 36
+
+/**
+ * The period of the months `from` to `to` (both `YYYY-MM`, UTC, the end's next month excluded); null when either is
+ * not a month, the first is after the last, or the period is longer than {@link INVESTOR_MAX_MONTHS}.
+ */
+export function monthRange(from: string, to: string): Period | null {
+  const first = monthPeriod(from)
+  const last = monthPeriod(to)
+  if (!first || !last || first.from > last.from) return null
+  const months = (Number(to.slice(0, 4)) - Number(from.slice(0, 4))) * 12 + Number(to.slice(5)) - Number(from.slice(5)) + 1
+  if (months > INVESTOR_MAX_MONTHS) return null
+  return { from: first.from, to: last.to }
+}
+
+export async function readInvestorMetrics(period: Period): Promise<InvestorMonth[]> {
+  const page = await runQuery<Row>(TEMPLATE.investorMetrics, { params: { ...period }, limit: INVESTOR_MAX_MONTHS })
+  return page.items.map((row) => ({
+    month: String(row.month ?? ''),
+    newSponsors: num(row.newSponsors),
+    activeSponsors: num(row.activeSponsors),
+    retainedSponsors: num(row.retainedSponsors),
+    publicationsWentOn: num(row.publicationsWentOn),
+    newTakers: num(row.newTakers),
+    activeTakers: num(row.activeTakers),
+    attempts: num(row.attempts),
+    completions: num(row.completions),
+    passes: num(row.passes),
+    prizesWon: num(row.prizesWon),
+    prizesClaimed: num(row.prizesClaimed),
+    prizesRedeemed: num(row.prizesRedeemed),
+    invitationsSent: num(row.invitationsSent),
+    invitationsAnswered: num(row.invitationsAnswered),
+    topUps: num(row.topUps),
+    topUpAmount: amount(row.topUpAmount),
+    rewardsPaid: amount(row.rewardsPaid),
+    commission: amount(row.commission),
+  }))
+}
+
+export async function readInvestorSponsors(period: Period): Promise<InvestorSponsor[]> {
+  const page = await runQuery<Row>(TEMPLATE.investorSponsors, { params: { ...period }, limit: 500 })
+  return page.items.map((row) => ({
+    sponsorId: String(row.sponsorId ?? ''),
+    company: String(row.company ?? ''),
+    takers: num(row.takers),
+    attempts: num(row.attempts),
+    completions: num(row.completions),
+    passes: num(row.passes),
+    prizesWon: num(row.prizesWon),
+    prizesRedeemed: num(row.prizesRedeemed),
+    invitationsSent: num(row.invitationsSent),
+    invitationsAnswered: num(row.invitationsAnswered),
+  }))
+}
