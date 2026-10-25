@@ -111,6 +111,9 @@ jabizApp {
 - **根地址的转向**（16zf-a）：`jabiz.web.root-redirect`（环境变量 `JABIZ_WEB_ROOT_REDIRECT`）设了本主机的一个路径（如 `/biz/`）时，对恰好 `/` 的 `GET` / `HEAD`
   在查找 SPA 之前即 302 到该路径（查询串保留；`Cache-Control: no-cache`，不带页面策略）；只能是本主机的绝对路径（不能是 `/` 自身、带协议或主机的地址、`//…`、`/api` 或 `/actuator` 之下），
   `SpaConfigCheck` 检查（目标不在任何 SPA 之下时告警：须另有东西应答它）。前端都挂在前缀下（`/taker/`、`/biz/`）的主机用它决定裸域名打开哪一个；不设时根照旧由 `/` 上的 SPA（若有）提供。`/index.html` 等其他路径不转向。
+- **静态站点的多页**（16zf-b，`StaticPages`）：没有登录入口的 SPA 可以每个目录一页（`static/biz/zh/index.html`、`static/biz/zh/pricing/index.html`，由 Vite 的多页构建产生）；
+  启动时扫描 jar 中该前缀下的 `**/index.html` 一次，请求命中这样的目录（带不带尾部斜杠都行）即交出该目录的页面而不是站点首页，其他客户端路由照旧回退到首页；
+  这些页面与首页一样 `Cache-Control: no-cache`。带入口的 SPA 不受影响（路由全部回退到它的 `index.html`）。
 - **搬走的前缀**（16zf-a）：`jabiz.web.redirects[i].from` / `.to`：对 `from`（如 `/p`）或其下路径的 `GET` / `HEAD` 在查找 SPA 之前 301 到 `to`（如 `/taker/p`）之下的同一路径（查询串保留；
   `no-cache`），最长的 `from` 优先。用于前端搬到新前缀后，此前印出或寄出的链接仍然有效；不是通用的改写机制。`from` 与 `to` 都是本主机的前缀（不能是 `/`、不带尾部斜杠、不在 `/api` 与 `/actuator` 之下），
   `to` 不能在自己的 `from` 之下（会循环），同一 `from` 只能出现一次；`to` 不在任何 SPA 之下时告警。
