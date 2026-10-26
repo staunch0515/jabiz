@@ -17,6 +17,7 @@ import { useId, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { neutralName } from '../content/api'
 import { SPONSOR } from '../messages'
+import { ShownAt } from '../content/ShownAt'
 import { applyAsSponsor, readMySponsor, saveSponsorProfile, type Sponsor, type SponsorOutput } from '../qb/api'
 import { FileImage } from '../qb/FileImage'
 import { CONSENTS_QUERY, useMyConsents } from '../qb/ConsentGate'
@@ -180,6 +181,7 @@ function OnboardingForm({ sponsor }: { sponsor: Sponsor | null }) {
           data-testid="onboarding-intro" onChange={(event) => setIntro(event.target.value)} />
         <p id={`${id}-intro-hint`} className="text-muted-foreground text-sm">{t('onboarding.introHint')}</p>
         {errorOf('intro')}
+        <ShownAt field="sponsorIntro" />
       </div>
       <div className="flex flex-col gap-2">
         <Label htmlFor={`${id}-avatar`}>{t('onboarding.avatar')}</Label>

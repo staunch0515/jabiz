@@ -25,6 +25,7 @@ import { ArrowDown, ArrowUp, ExternalLink, Pencil, Plus, Trash2, X } from 'lucid
 import { useId, useRef, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { SPONSOR } from '../messages'
+import { ShownAt } from './ShownAt'
 import { fieldProblem } from '../qb/problems'
 import {
   contentFieldOf,
@@ -190,6 +191,7 @@ function MaterialDialog({ material, number, open, onOpenChange }: {
               aria-describedby={problem('title') ? `${id}-title-error` : undefined}
               data-testid="material-title" onChange={(event) => setTitle(event.target.value)} />
             {problem('title') && <p id={`${id}-title-error`} className="text-destructive text-sm">{problem('title')}</p>}
+            <ShownAt field="materialTitle" />
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor={`${id}-description`}>{t('materials.description')}</Label>
@@ -200,10 +202,14 @@ function MaterialDialog({ material, number, open, onOpenChange }: {
             {problem('description') && (
               <p id={`${id}-description-error`} className="text-destructive text-sm">{problem('description')}</p>
             )}
+            <ShownAt field="materialDescription" />
           </div>
           {field === 'body' && (
-            <MarkdownField label={t('materials.body')} value={body} onChange={setBody} maxLength={LIMITS.materialBody}
-              rows={10} error={problem('body')} testId="material-body" />
+            <div className="flex flex-col gap-2">
+              <MarkdownField label={t('materials.body')} value={body} onChange={setBody} maxLength={LIMITS.materialBody}
+                rows={10} error={problem('body')} testId="material-body" />
+              <ShownAt field="materialBody" />
+            </div>
           )}
           {field === 'url' && (
             <div className="flex flex-col gap-2">
