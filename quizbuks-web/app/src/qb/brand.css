@@ -61,7 +61,20 @@
   --qb-ink: #d1fae5;
 }
 
+/*
+ * Square corners (Q34): every radius step of the theme is zero, so the platform's components (cards, buttons, inputs,
+ * dialogs) and the pages' own `rounded-*` lose their corners alike; `rounded-full` (avatars, badges, switches) keeps
+ * its circle. Only the theme's steps change, so the platform's `--radius` and its other users stay as they are.
+ */
 @theme inline {
+  --radius-xs: 0px;
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
+  --radius-2xl: 0px;
+  --radius-3xl: 0px;
+  --radius-4xl: 0px;
   --color-qb-hero-from: var(--qb-hero-from);
   --color-qb-hero-to: var(--qb-hero-to);
   --color-qb-hero-foreground: var(--qb-hero-foreground);

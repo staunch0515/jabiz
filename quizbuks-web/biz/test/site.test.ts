@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { cameFromThisSite, isModifiedClick, isPhone, openSignUp, parsePath, pathFor, pickLanguage, redirectTarget,
-  PHONE_WINDOW } from '../src/assets/site.js'
+  phoneWindow, PHONE_HEIGHT, PHONE_WIDTH } from '../src/assets/site.js'
 import { readTryQuizzes } from '../scripts/build.mjs'
 
 describe('language from the browser', () => {
@@ -58,10 +58,11 @@ describe('the first visit', () => {
   })
 })
 
-function fakeWindow({ coarse = false, width = 1280 } = {}) {
+function fakeWindow({ coarse = false, width = 1280, screen = { availWidth: 1920, availHeight: 1080 } as Record<string, number> } = {}) {
   return {
     matchMedia: (query: string) => ({ matches: query.includes('coarse') ? coarse : false }),
     innerWidth: width,
+    screen,
     open: vi.fn(() => ({})),
     location: { assign: vi.fn() },
   }
@@ -71,13 +72,28 @@ describe('sign-up buttons', () => {
   it('open a phone-sized window for a taker on a desktop', () => {
     const win = fakeWindow()
     openSignUp('taker', '/taker/signup', win as never)
-    expect(win.open).toHaveBeenCalledWith('/taker/signup', 'quizbuks-taker', PHONE_WINDOW)
-    expect(PHONE_WINDOW).toContain('width=390')
-    expect(PHONE_WINDOW).toContain('height=844')
+    const features = phoneWindow(win)
+    expect(win.open).toHaveBeenCalledWith('/taker/signup', 'quizbuks-taker', features)
+    // A phone's 390 widened by a fifth (Q34), centred on the 1920 × 1080 screen.
+    expect(PHONE_WIDTH).toBe(468)
+    expect(features).toContain('width=468')
+    expect(features).toContain(`height=${PHONE_HEIGHT}`)
+    expect(features).toContain(`left=${(1920 - 468) / 2}`)
+    expect(features).toContain(`top=${Math.round((1080 - 844) / 2)}`)
     // With noopener the browser returns null for a window it did open, and the fallback would open a second tab.
-    expect(PHONE_WINDOW).not.toContain('noopener')
+    expect(features).not.toContain('noopener')
     expect(win.open).toHaveBeenCalledTimes(1)
     expect(win.location.assign).not.toHaveBeenCalled()
+  })
+
+  it('fit the window on a small screen and centre it on a second monitor', () => {
+    const small = phoneWindow(fakeWindow({ screen: { availWidth: 1366, availHeight: 728 } }) as never)
+    expect(small).toContain('height=688')
+    expect(small).toContain('top=20')
+    const second = phoneWindow(fakeWindow({ screen: { availWidth: 1920, availHeight: 1080, availLeft: 1920, availTop: 0 } }) as never)
+    expect(second).toContain(`left=${1920 + (1920 - 468) / 2}`)
+    // No screen known (a test or an odd browser): the window still opens at its size.
+    expect(phoneWindow(fakeWindow({ screen: {} }) as never)).toContain('width=468')
   })
 
   it('fall back to a new tab when the browser blocks the window', () => {

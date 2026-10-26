@@ -6,7 +6,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import App from './App'
 import { placeholderIndex } from './qb/Illustrations'
 import './messages'
-import { containsPattern, feedFilters, NO_FILTERS } from './pages/FeedPage'
+import { activeFilterCount, containsPattern, feedFilters, GREETING_MS, NO_FILTERS } from './pages/FeedPage'
 import { forgetAttempts, storeResult, storeStart } from './play/storage'
 import type { StartOutput, SubmitOutput } from './qb/play'
 
@@ -197,6 +197,7 @@ describe('the feed', () => {
   })
 
   it('shows a cover grid with a placeholder pattern, the reward badge, the sponsor and the completions (Q32)', async () => {
+    window.sessionStorage.clear()
     server({ feed: [CARD, { ...CARD, publicationId: 'pub-2', name: 'Rivers', cover: 'file-1', sponsorAvatar: null }] })
     render(<App />)
     const cards = await screen.findAllByTestId('feed-card')
@@ -211,6 +212,44 @@ describe('the feed', () => {
     expect(within(cards[1]).queryByTestId('feed-card-placeholder')).toBeNull()
     expect(placeholderIndex('pub-1')).toBe(placeholderIndex('pub-1'))
     expect(new Set(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].map(placeholderIndex)).size).toBeGreaterThan(1)
+  })
+
+  it('greets once a session for two seconds, then folds the greeting away (Q34)', async () => {
+    window.sessionStorage.clear()
+    server()
+    const { unmount } = render(<App />)
+    await screen.findByTestId('feed-card')
+    const hero = screen.getByTestId('home-hero')
+    expect(hero).not.toHaveAttribute('data-folding')
+    await waitFor(() => expect(hero).toHaveAttribute('data-folding', 'true'), { timeout: GREETING_MS + 2000 })
+    unmount()
+    // Back on the home in the same session: no greeting, the heading stays for assistive technology.
+    render(<App />)
+    await screen.findByTestId('feed-card')
+    expect(screen.queryByTestId('home-hero')).toBeNull()
+    expect(screen.getByRole('heading', { level: 1 })).toHaveClass('sr-only')
+  })
+
+  it('keeps the search on one line and moves the order and the answered ones into the filters (Q34)', async () => {
+    const { calls } = server()
+    render(<App />)
+    await screen.findByTestId('feed-card')
+    const search = screen.getByRole('search')
+    // The reward menu, the box, the search and the advanced filters, in this order.
+    expect([...search.querySelectorAll('[data-testid]')].map((e) => e.getAttribute('data-testid')))
+      .toEqual(['feed-method', 'feed-search', 'feed-search-submit', 'feed-filters-open'])
+    expect(screen.queryByTestId('feed-sort')).toBeNull()
+    // By default the answered ones are left out.
+    expect(calls.some((c) => c.path === '/api/queries/qb.app.feed'
+      && (c.body as { params: { includeAnswered?: boolean } }).params.includeAnswered === false)).toBe(true)
+    await userEvent.click(screen.getByTestId('feed-filters-open'))
+    await userEvent.click(await screen.findByTestId('feed-filter-answered'))
+    await userEvent.click(screen.getByTestId('feed-filters-apply'))
+    await waitFor(() => expect(calls.some((c) => c.path === '/api/queries/qb.app.feed'
+      && (c.body as { params: { includeAnswered?: boolean } }).params.includeAnswered === true)).toBe(true))
+    expect(screen.getByTestId('feed-filters-count')).toHaveTextContent('1')
+    expect(screen.getByTestId('feed-filters-open')).toHaveAccessibleName('Filters, Filters on: 1')
+    expect(activeFilterCount({ ...NO_FILTERS, sort: 'popular', includeAnswered: true, minCompletions: '3' })).toBe(3)
   })
 
   it('shows the empty state with its illustration when nothing matches', async () => {
@@ -249,7 +288,12 @@ describe('the ways a reward is paid (Q22)', () => {
     render(<App />)
     const card = await screen.findByTestId('feed-card')
     expect(within(card).getByTestId('feed-card-method')).toHaveAttribute('data-method', 'SPONSOR_CASH')
-    await userEvent.click(screen.getByRole('radio', { name: 'Prize' }))
+    // Q34: the reward menu in front of the search box; its button names the choice.
+    expect(screen.getByTestId('feed-method')).toHaveAccessibleName('Reward type: All')
+    await userEvent.click(screen.getByTestId('feed-method'))
+    await userEvent.click(await screen.findByRole('menuitemradio', { name: "Prize at the sponsor's place" }))
+    await waitFor(() => expect(screen.getByTestId('feed-method')).toHaveAttribute('data-method', 'OFFLINE_REDEEM'))
+    expect(screen.getByTestId('feed-method')).toHaveAccessibleName("Reward type: Prize at the sponsor's place")
     await waitFor(() => expect(calls.some((c) => c.path === '/api/queries/qb.app.feed'
       && (c.body as { params: { method?: string } }).params.method === 'OFFLINE_REDEEM')).toBe(true))
     expect(window.localStorage.getItem('qb.feed.method')).toBe('OFFLINE_REDEEM')
@@ -464,9 +508,10 @@ describe('a digital prize (Q33)', () => {
     render(<App />)
     const card = await screen.findByTestId('feed-card')
     expect(within(card).getByTestId('feed-card-method')).toHaveAttribute('data-method', 'DIGITAL_PRIZE')
-    expect(within(card).getByTestId('feed-card-method')).toHaveTextContent('Digital prize')
+    expect(within(card).getByTestId('feed-card-method')).toHaveTextContent('Digital')
     await expectAccessible()
-    await userEvent.click(screen.getByRole('radio', { name: 'Digital' }))
+    await userEvent.click(screen.getByTestId('feed-method'))
+    await userEvent.click(await screen.findByRole('menuitemradio', { name: 'Digital prize' }))
     await waitFor(() => expect(calls.some((c) => c.path === '/api/queries/qb.app.feed'
       && (c.body as { params: { method?: string } }).params.method === 'DIGITAL_PRIZE')).toBe(true))
     window.localStorage.removeItem('qb.feed.method')

@@ -78,6 +78,10 @@ function header({ language, page, content, base }) {
     <nav id="site-menu" class="menu" data-menu aria-label="${esc(content.navLabel)}">
       <div class="links">${nav}</div>
       <div class="lang" role="group" aria-label="${esc(content.languageLabel)}">${languages}</div>
+      <div class="signin" role="group" aria-label="${esc(content.signIn.label)}">
+        <a href="/taker/login" data-signup="taker" data-testid="signin-taker">${esc(content.signIn.taker)}</a>
+        <a href="/sponsor/login" data-signup="sponsor" target="_blank" rel="noopener" data-testid="signin-sponsor">${esc(content.signIn.sponsor)}</a>
+      </div>
       <div class="actions">
         <a class="button ghost" href="/taker/signup" data-signup="taker">${esc(content.cta.taker)}</a>
         <a class="button primary" href="/sponsor/signup" data-signup="sponsor" target="_blank" rel="noopener">${esc(content.cta.sponsor)}</a>
@@ -101,8 +105,8 @@ function footer({ language, content, base }) {
       <li><a href="${pagePath(language, 'surveys', base)}">${esc(content.nav.surveys)}</a></li>
       <li><a href="${pagePath(language, 'pricing', base)}">${esc(content.nav.pricing)}</a></li></ul></div>
     <div><h3>${esc(f.open)}</h3><ul class="plain">
-      <li><a href="/taker/">${esc(f.app)}</a></li>
-      <li><a href="/sponsor/">${esc(f.console)}</a></li>
+      <li><a href="/taker/login" data-signup="taker">${esc(content.signIn.taker)}</a></li>
+      <li><a href="/sponsor/login" data-signup="sponsor" target="_blank" rel="noopener">${esc(content.signIn.sponsor)}</a></li>
       <li><a href="${pagePath(language, 'contact', base)}">${esc(content.nav.contact)}</a></li></ul></div>
     <div><h3>${esc(f.legal)}</h3><ul class="plain">
       <li><a href="/taker/legal/terms">${esc(f.terms)}</a></li>

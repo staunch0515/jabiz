@@ -1,7 +1,7 @@
 /*---
 id: qb.app.feed
 description: The publications a taker can answer now (U-10 – U-14), newest first; searched by name and title
-entities: [QbPublicationCard, QbPublicationCounter, QbPublicationStartCounter, QbWallet, QbCountry, QbSponsor, QbPublicationOwner]
+entities: [QbPublicationCard, QbPublicationCounter, QbPublicationStartCounter, QbWallet, QbCountry, QbSponsor, QbPublicationOwner, QbAttempt]
 datasets:
   QbPublicationCard: urn:jabiz:dataset:default:QbPublicationCard
   QbPublicationCounter: urn:jabiz:dataset:default:QbPublicationCounter
@@ -10,10 +10,12 @@ datasets:
   QbCountry: urn:jabiz:dataset:default:QbCountry
   QbSponsor: urn:jabiz:dataset:default:QbSponsor
   QbPublicationOwner: urn:jabiz:dataset:me:QbPublicationOwner
+  QbAttempt: urn:jabiz:dataset:taker:QbAttempt
 params:
   at:      { kind: { type: temporal, role: EVENT_TIME }, required: true, description: The time the feed is for (the client's now) }
   country: { kind: { type: text, maxLength: 2 }, description: "The taker's country (QbCountry.code); without one only publications aimed at GLOBAL" }
   q:       { kind: { type: text, maxLength: 100 }, description: Only publications whose name or quiz title contains this text }
+  includeAnswered: { kind: { type: bool }, description: "If true, also the publications the caller has answered (Q34); by default those are left out" }
   method:  { like: QbPublicationCard.rewardMethod, description: "Only publications whose reward comes this way (Q22, Q33): PLATFORM, SPONSOR_CASH, OFFLINE_REDEEM or DIGITAL_PRIZE" }
 results:
   publicationId:  { from: QbPublicationCard.publicationId }
@@ -100,6 +102,12 @@ WHERE c.{{QbPublicationCard.status}} = 'LIVE'
        OR (coalesce(w.{{QbWallet.pendingCount}}, 0) = 0
            AND coalesce(w.{{QbWallet.balance}} - w.{{QbWallet.held}}, 0) >= c.{{QbPublicationCard.maxReward}}))
   AND (CAST(:method AS text) IS NULL OR c.{{QbPublicationCard.rewardMethod}} = CAST(:method AS text))
+  -- Q34: what the caller answered is done; one still in progress stays, so that it can be resumed from here. The view
+  -- holds the caller's own attempts only (taker), found by qb_attempt_user_idx.
+  AND (CAST(:includeAnswered AS boolean) IS TRUE
+       OR NOT EXISTS (SELECT 1 FROM {{QbAttempt}} a
+                      WHERE a.{{QbAttempt.publicationId}} = c.{{QbPublicationCard.publicationId}}
+                        AND a.{{QbAttempt.status}} <> 'IN_PROGRESS'))
   AND NOT EXISTS (SELECT 1 FROM {{QbPublicationOwner}} own
                   WHERE own.{{QbPublicationOwner.publicationId}} = c.{{QbPublicationCard.publicationId}})
   AND (CAST(:q AS text) IS NULL

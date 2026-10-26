@@ -57,6 +57,7 @@ import { rememberShareNext } from './share/share'
 import { SharePage } from './share/SharePage'
 import { PayoutPage } from './wallet/PayoutPage'
 import { WalletPage } from './wallet/WalletPage'
+import { ONE_LINE_BANNER } from './banner'
 
 /** Where a signed-in taker starts. */
 const HOME = '/'
@@ -99,7 +100,7 @@ function Header() {
   return (
     <header className="bg-background sticky top-0 z-10 border-b">
       {/* A test system says so on every page (platform 16zd); the app's frame is its own, so it places the banner. */}
-      <EnvironmentBanner />
+      <EnvironmentBanner className={ONE_LINE_BANNER} />
       <div className="mx-auto flex max-w-md items-center gap-2 px-4 py-2">
         <Wordmark name={t('brand')} compact className="text-primary mr-auto" />
         <ThemeToggle />
@@ -244,7 +245,7 @@ function PublicPage({ path, signedIn, children }: { path: string; signedIn: bool
   return (
     <div className="flex min-h-full flex-col">
       <header className="bg-background sticky top-0 z-10 border-b">
-        <EnvironmentBanner />
+        <EnvironmentBanner className={ONE_LINE_BANNER} />
         <div className="mx-auto flex max-w-md items-center gap-2 px-4 py-2">
           <Wordmark name={t('brand')} compact className="text-primary mr-auto" />
           <ThemeToggle />

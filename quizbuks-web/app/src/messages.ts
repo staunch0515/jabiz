@@ -39,6 +39,7 @@ const en = {
   },
   methods: {
     choose: 'How the reward is paid',
+    menu: 'Reward type: {{method}}',
     all: 'All',
     PLATFORM: 'Kudos paid by QuizBuks',
     PLATFORMShort: 'Kudos',
@@ -148,6 +149,8 @@ const en = {
   },
   feed: {
     listTitle: 'Quizzes you can answer',
+    includeAnswered: 'Show quizzes I answered',
+    includeAnsweredHint: 'Hidden by default; one you have started stays.',
     search: 'Search quizzes',
     searchButton: 'Search',
     sort: 'Sort',
@@ -420,6 +423,7 @@ const zh: typeof en = {
   },
   methods: {
     choose: '奖励支付方式',
+    menu: '奖励类型：{{method}}',
     all: '全部',
     PLATFORM: '平台支付 Kudos',
     PLATFORMShort: 'Kudos',
@@ -529,6 +533,8 @@ const zh: typeof en = {
   },
   feed: {
     listTitle: '可以参加的 Quiz',
+    includeAnswered: '显示已答过的 Quiz',
+    includeAnsweredHint: '默认隐藏；进行中的仍会显示。',
     search: '搜索 Quiz',
     searchButton: '搜索',
     sort: '排序',
@@ -801,6 +807,7 @@ const ja: typeof en = {
   },
   methods: {
     choose: '報酬の支払い方法',
+    menu: '報酬の種類：{{method}}',
     all: 'すべて',
     PLATFORM: 'QuizBuks が Kudos を支払う',
     PLATFORMShort: 'Kudos',
@@ -910,6 +917,8 @@ const ja: typeof en = {
   },
   feed: {
     listTitle: '回答できるクイズ',
+    includeAnswered: '回答済みのクイズも表示',
+    includeAnsweredHint: '既定では非表示。回答中のものは表示されます。',
     search: 'クイズを検索',
     searchButton: '検索',
     sort: '並べ替え',
