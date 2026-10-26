@@ -4408,3 +4408,12 @@ L4 共享仪表的注释；L5 13 写明每个键每次轮询多一个查询观�
 独立评审之后：测试开关只放宽本机的服务器（误开在生产不削弱商家服务器的校验）；两个来源经 `SendMail.problems` 不再抛异常而由 `MailChecks` 一次报告；D56 的剩余风险写明可达性探测、`sensitive()` 由应用声明、`SealSecret` 的密钥检查只覆盖邮件来源。
 
 **16zg 状态**：✅ 已实施（PR 待建）。
+
+### 16zi 菜单分节（0.5 天）
+
+来源：需求方 2026-10-26（QuizBuks Q34b：商户后台的左边菜单按业务分组、组间加分割线）。分支 `1.2/phase-16zi-nav-groups`。兼容的新增，向前合并到 1.3。
+`@jabiz/ui` 的 `ShellNav` 新属性 `groups`（`ShellMenuGroup`：`key`、可选的 `label`、`items`），代替 `items` 使用：每节一个 `SidebarGroup`，
+有标题的节以 `role="group"` 与标题命名，第二节起前面一条 `SidebarSeparator`，空节不显示；`items` 的用法不变。设计 12 §12。
+测试：`app-shell.test.tsx` 的分节（空节不显示、两条分割线、带标题的节是有名称的组且包含其项、没有标题的节不是组、当前页标记、axe）。
+
+**16zi 状态**：✅ 已实施（PR 待建）。

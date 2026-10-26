@@ -119,7 +119,8 @@ export type { MarkdownViewProps } from './components/markdown-view'
 export { FilePreview } from './components/file-preview'
 export type { FilePreviewField, FilePreviewProps } from './components/file-preview'
 export { downloadFile, useFileUrl } from './lib/file-content'
-export type { AppShellProps, ShellMenuItem, ShellNavProps, LinkProps as ShellLinkProps } from './components/app-shell'
+export type { AppShellProps, ShellMenuGroup, ShellMenuItem, ShellNavProps, LinkProps as ShellLinkProps }
+  from './components/app-shell'
 
 // Signing in and the account (decision D43): pages and parts of pages, without a router, texts in namespace `auth`.
 export * from './auth'

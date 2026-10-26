@@ -10,6 +10,7 @@ import {
   SidebarContent,
   SidebarFooter,
   SidebarGroup,
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarInset,
   SidebarMenu,
@@ -21,6 +22,7 @@ import {
   SidebarMenuSubItem,
   SidebarProvider,
   SidebarRail,
+  SidebarSeparator,
   SidebarTrigger,
   useSidebar,
 } from './ui/sidebar'
@@ -38,6 +40,17 @@ export interface ShellMenuItem {
   /** A count shown at the end of the entry (open tasks). */
   badge?: number
   children?: ShellMenuItem[]
+}
+
+/**
+ * A section of the menu (phase 16zi): entries that belong together by what they are for, with an optional heading;
+ * a rule separates one section from the next.
+ */
+export interface ShellMenuGroup {
+  key: string
+  /** The section's heading; a section without one is only set apart by the rules. */
+  label?: string
+  items: ShellMenuItem[]
 }
 
 export interface AppShellProps {
@@ -96,7 +109,10 @@ export function AppShell({ brand, navigation, sidebarFooter, header, children, c
 }
 
 export interface ShellNavProps {
-  items: ShellMenuItem[]
+  /** The entries, in one section. */
+  items?: ShellMenuItem[]
+  /** The entries in sections, separated by rules (phase 16zi); used instead of `items`. Empty sections are left out. */
+  groups?: ShellMenuGroup[]
   /** Whether an entry's path is the current page (or a page under it). */
   isActive: (path: string) => boolean
   /**
@@ -122,17 +138,31 @@ function defaultLink(item: ShellMenuItem & { path: string }, props: LinkProps) {
   return <a href={item.path} {...props} />
 }
 
-/** The sidebar's menu tree: links, groups that open and close (open when they hold the current page), badges. */
-export function ShellNav({ items, isActive, renderLink = defaultLink, label }: ShellNavProps) {
+/**
+ * The sidebar's menu tree: links, groups that open and close (open when they hold the current page), badges; in
+ * sections with rules between them when given `groups`. A section with a heading is a named group for assistive
+ * technology.
+ */
+export function ShellNav({ items, groups, isActive, renderLink = defaultLink, label }: ShellNavProps) {
+  const sections = (groups ?? [{ key: 'menu', items: items ?? [] }]).filter((group) => group.items.length > 0)
   return (
     <nav aria-label={label}>
-      <SidebarGroup>
-        <SidebarMenu>
-          {items.map((item) => (
-            <ShellNavItem key={item.key} item={item} isActive={isActive} renderLink={renderLink} />
-          ))}
-        </SidebarMenu>
-      </SidebarGroup>
+      {sections.map((group, index) => {
+        const headingId = group.label ? `shell-nav-${group.key}` : undefined
+        return (
+          <div key={group.key} data-testid={groups ? `menu-group-${group.key}` : undefined}>
+            {index > 0 && <SidebarSeparator data-testid="menu-separator" />}
+            <SidebarGroup role={group.label ? 'group' : undefined} aria-labelledby={headingId}>
+              {group.label && <SidebarGroupLabel id={headingId}>{group.label}</SidebarGroupLabel>}
+              <SidebarMenu>
+                {group.items.map((item) => (
+                  <ShellNavItem key={item.key} item={item} isActive={isActive} renderLink={renderLink} />
+                ))}
+              </SidebarMenu>
+            </SidebarGroup>
+          </div>
+        )
+      })}
     </nav>
   )
 }

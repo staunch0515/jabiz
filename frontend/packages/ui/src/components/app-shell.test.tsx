@@ -4,7 +4,7 @@ import { forgetEnvironment, i18n, setEnvironment } from '@jabiz/client'
 import { DatabaseIcon } from 'lucide-react'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { expectAccessible } from '@jabiz/ui/testing'
-import { AppShell, ShellNav, type ShellMenuItem } from './app-shell'
+import { AppShell, ShellNav, type ShellMenuGroup, type ShellMenuItem } from './app-shell'
 import { PageHeader } from './page-header'
 import { Button } from './ui/button'
 
@@ -76,6 +76,32 @@ describe('AppShell and ShellNav', () => {
     expect(document.querySelector('[data-slot="sidebar-container"]')).toHaveAttribute('inert')
     await userEvent.click(toggle)
     expect(document.querySelector('[data-slot="sidebar-container"]')).not.toHaveAttribute('inert')
+  })
+
+  it('shows the menu in sections with rules between them, a headed section as a named group (phase 16zi)', async () => {
+    const groups: ShellMenuGroup[] = [
+      { key: 'overview', items: [{ key: 'home', label: 'Home', path: '/' }] },
+      { key: 'content', label: 'Content', items: [{ key: 'data', label: 'Data', path: '/data', icon: DatabaseIcon },
+        { key: 'tasks', label: 'Tasks', path: '/tasks', badge: 3 }] },
+      { key: 'empty', label: 'Nothing yet', items: [] },
+      { key: 'settings', label: 'Settings', items: [{ key: 'account', label: 'Account', path: '/account' }] },
+    ]
+    render(
+      <AppShell brand={<span>jabiz</span>}
+        navigation={<ShellNav label="Main" groups={groups} isActive={(path) => path === '/data'} />}>
+        <p>page</p>
+      </AppShell>,
+    )
+    const nav = screen.getByRole('navigation', { name: 'Main' })
+    // An empty section is left out; a rule before every section but the first.
+    expect(within(nav).queryByTestId('menu-group-empty')).toBeNull()
+    expect(within(nav).getAllByTestId('menu-separator')).toHaveLength(2)
+    expect(within(nav).getByRole('group', { name: 'Content' })).toContainElement(screen.getByTestId('menu-data'))
+    expect(within(nav).getByRole('group', { name: 'Settings' })).toContainElement(screen.getByTestId('menu-account'))
+    // The section without a heading is no group of its own.
+    expect(within(nav).getAllByRole('group')).toHaveLength(2)
+    expect(within(screen.getByTestId('menu-data')).getByRole('link')).toHaveAttribute('aria-current', 'page')
+    await expectAccessible()
   })
 
   it('uses the router link it is given', () => {
