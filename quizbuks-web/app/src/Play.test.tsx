@@ -6,7 +6,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import App from './App'
 import { placeholderIndex } from './qb/Illustrations'
 import './messages'
-import { containsPattern, feedFilters, NO_FILTERS } from './pages/FeedPage'
+import { activeFilterCount, containsPattern, feedFilters, GREETING_MS, NO_FILTERS } from './pages/FeedPage'
 import { forgetAttempts, storeResult, storeStart } from './play/storage'
 import type { StartOutput, SubmitOutput } from './qb/play'
 
@@ -26,7 +26,7 @@ const CARD = { publicationId: PUB, name: 'Capitals week', quizTitle: 'World capi
   fullScore: 5 }
 
 const MATERIALS = JSON.stringify([
-  { no: 1, kind: 'ARTICLE', title: 'Read first', description: null, body: 'Paris is **the capital**.', url: null,
+  { no: 1, kind: 'ARTICLE', title: 'Read first', description: 'Two lines on France', body: 'Paris is **the capital**.', url: null,
     pdf: null, audio: null, images: [] },
   { no: 2, kind: 'VIDEO_LINK', title: 'A tour', description: null, body: null, url: 'https://video.example.com/tour',
     pdf: null, audio: null, images: [] },
@@ -197,6 +197,7 @@ describe('the feed', () => {
   })
 
   it('shows a cover grid with a placeholder pattern, the reward badge, the sponsor and the completions (Q32)', async () => {
+    window.sessionStorage.clear()
     server({ feed: [CARD, { ...CARD, publicationId: 'pub-2', name: 'Rivers', cover: 'file-1', sponsorAvatar: null }] })
     render(<App />)
     const cards = await screen.findAllByTestId('feed-card')
@@ -206,6 +207,8 @@ describe('the feed', () => {
     expect(within(cards[0]).getByTestId('feed-card-placeholder')).toHaveAttribute('aria-hidden', 'true')
     expect(cards[0]).toHaveTextContent('100 Kudos')
     expect(cards[0]).toHaveTextContent('Capitals Inc')
+    // The count is part of the card link's name, not only a number for the eye.
+    expect(cards[0]).toHaveAccessibleName(expect.stringContaining('Completed: 2'))
     expect(within(cards[0]).getByTestId('feed-card-name')).toHaveTextContent('Capitals week')
     // A cover: the image (loaded lazily), no placeholder.
     expect(within(cards[1]).queryByTestId('feed-card-placeholder')).toBeNull()
@@ -213,12 +216,59 @@ describe('the feed', () => {
     expect(new Set(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].map(placeholderIndex)).size).toBeGreaterThan(1)
   })
 
+  it('greets once a session for two seconds, then folds the greeting away (Q34)', async () => {
+    window.sessionStorage.clear()
+    server()
+    const { unmount } = render(<App />)
+    await screen.findByTestId('feed-card')
+    const hero = screen.getByTestId('home-hero')
+    expect(hero).not.toHaveAttribute('data-folding')
+    await waitFor(() => expect(hero).toHaveAttribute('data-folding', 'true'), { timeout: GREETING_MS + 2000 })
+    // jsdom tells no end of the transition: the band goes all the same, the heading stays.
+    await waitFor(() => expect(screen.queryByTestId('home-hero')).toBeNull(), { timeout: 2000 })
+    expect(screen.getByRole('heading', { level: 1 })).toHaveClass('sr-only')
+    unmount()
+    // Back on the home in the same session: no greeting, the heading stays for assistive technology.
+    render(<App />)
+    await screen.findByTestId('feed-card')
+    expect(screen.queryByTestId('home-hero')).toBeNull()
+    expect(screen.getByRole('heading', { level: 1 })).toHaveClass('sr-only')
+  })
+
+  it('keeps the search on one line and moves the order and the answered ones into the filters (Q34)', async () => {
+    const { calls } = server()
+    render(<App />)
+    await screen.findByTestId('feed-card')
+    const search = screen.getByRole('search')
+    // The reward menu, the box, the search and the advanced filters, in this order.
+    expect([...search.querySelectorAll('[data-testid]')].map((e) => e.getAttribute('data-testid')))
+      .toEqual(['feed-method', 'feed-search', 'feed-search-submit', 'feed-filters-open'])
+    expect(screen.queryByTestId('feed-sort')).toBeNull()
+    // By default the answered ones are left out.
+    expect(calls.some((c) => c.path === '/api/queries/qb.app.feed'
+      && (c.body as { params: { includeAnswered?: boolean } }).params.includeAnswered === false)).toBe(true)
+    await userEvent.click(screen.getByTestId('feed-filters-open'))
+    await userEvent.click(await screen.findByTestId('feed-filter-answered'))
+    await userEvent.click(screen.getByTestId('feed-filters-apply'))
+    await waitFor(() => expect(calls.some((c) => c.path === '/api/queries/qb.app.feed'
+      && (c.body as { params: { includeAnswered?: boolean } }).params.includeAnswered === true)).toBe(true))
+    expect(screen.getByTestId('feed-filters-count')).toHaveTextContent('1')
+    expect(screen.getByTestId('feed-filters-open')).toHaveAccessibleName('Filters, Filters on: 1')
+    expect(activeFilterCount({ ...NO_FILTERS, sort: 'popular', includeAnswered: true, minCompletions: '3' })).toBe(3)
+  })
+
   it('shows the empty state with its illustration when nothing matches', async () => {
-    server({ feed: [] })
+    const { calls } = server({ feed: [] })
     render(<App />)
     const empty = await screen.findByTestId('home-empty')
     expect(empty).toBeInTheDocument()
     expect(screen.queryByTestId('feed-list')).not.toBeInTheDocument()
+    // Q34: the answered ones are hidden; the empty home says so and offers them.
+    expect(screen.getByTestId('home-answered-hidden')).toHaveTextContent('Quizzes you have answered are not shown here.')
+    await userEvent.click(screen.getByTestId('home-show-answered'))
+    await waitFor(() => expect(calls.some((c) => c.path === '/api/queries/qb.app.feed'
+      && (c.body as { params: { includeAnswered?: boolean } }).params.includeAnswered === true)).toBe(true))
+    expect(screen.queryByTestId('home-answered-hidden')).toBeNull()
   })
 
   it('searches by text and turns the filters into the template\'s conditions', async () => {
@@ -249,7 +299,12 @@ describe('the ways a reward is paid (Q22)', () => {
     render(<App />)
     const card = await screen.findByTestId('feed-card')
     expect(within(card).getByTestId('feed-card-method')).toHaveAttribute('data-method', 'SPONSOR_CASH')
-    await userEvent.click(screen.getByRole('radio', { name: 'Prize' }))
+    // Q34: the reward menu in front of the search box; its button names the choice.
+    expect(screen.getByTestId('feed-method')).toHaveAccessibleName('Reward type: All')
+    await userEvent.click(screen.getByTestId('feed-method'))
+    await userEvent.click(await screen.findByRole('menuitemradio', { name: "Prize at the sponsor's place" }))
+    await waitFor(() => expect(screen.getByTestId('feed-method')).toHaveAttribute('data-method', 'OFFLINE_REDEEM'))
+    expect(screen.getByTestId('feed-method')).toHaveAccessibleName("Reward type: Prize at the sponsor's place")
     await waitFor(() => expect(calls.some((c) => c.path === '/api/queries/qb.app.feed'
       && (c.body as { params: { method?: string } }).params.method === 'OFFLINE_REDEEM')).toBe(true))
     expect(window.localStorage.getItem('qb.feed.method')).toBe('OFFLINE_REDEEM')
@@ -464,9 +519,10 @@ describe('a digital prize (Q33)', () => {
     render(<App />)
     const card = await screen.findByTestId('feed-card')
     expect(within(card).getByTestId('feed-card-method')).toHaveAttribute('data-method', 'DIGITAL_PRIZE')
-    expect(within(card).getByTestId('feed-card-method')).toHaveTextContent('Digital prize')
+    expect(within(card).getByTestId('feed-card-method')).toHaveTextContent('Digital')
     await expectAccessible()
-    await userEvent.click(screen.getByRole('radio', { name: 'Digital' }))
+    await userEvent.click(screen.getByTestId('feed-method'))
+    await userEvent.click(await screen.findByRole('menuitemradio', { name: 'Digital prize' }))
     await waitFor(() => expect(calls.some((c) => c.path === '/api/queries/qb.app.feed'
       && (c.body as { params: { method?: string } }).params.method === 'DIGITAL_PRIZE')).toBe(true))
     window.localStorage.removeItem('qb.feed.method')
@@ -541,7 +597,20 @@ describe('a publication\'s page', () => {
     render(<App />)
     expect(await screen.findByTestId('detail-name')).toHaveTextContent('Capitals week')
     const materials = screen.getByTestId('materials')
-    expect(within(materials).getByText('the capital').tagName).toBe('STRONG')
+    // Q34: a row per material with its title and its description on one line; the article opens on a sheet.
+    const rows = within(materials).getAllByTestId('material')
+    expect(rows.map((row) => row.getAttribute('data-kind'))).toEqual(['VIDEO_LINK', 'ARTICLE', 'VIDEO_LINK'])
+    expect(within(rows[1]).getByTestId('material-title')).toHaveTextContent('Read first')
+    expect(within(rows[1]).getByTestId('material-description')).toHaveTextContent('Two lines on France')
+    expect(within(materials).queryByText('the capital')).toBeNull()
+    await userEvent.click(within(rows[1]).getByTestId('material-open'))
+    const sheet = await screen.findByTestId('material-sheet')
+    expect(within(sheet).getByRole('heading', { name: 'Read first' })).toBeInTheDocument()
+    expect(within(sheet).getByText('the capital').tagName).toBe('STRONG')
+    await expectAccessible()
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByTestId('material-sheet')).toBeNull())
+    // A video the app cannot play is a row that goes to its site in a new tab.
     const link = within(materials).getByTestId('material-link')
     expect(link).toHaveAttribute('href', 'https://video.example.com/tour')
     expect(link).toHaveAttribute('target', '_blank')
@@ -551,6 +620,60 @@ describe('a publication\'s page', () => {
       .toHaveAttribute('src', 'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ')
     expect(await screen.findByTestId('detail-tiers')).toHaveTextContent('100 Kudos')
     await waitFor(() => expect(posted('QB_VIEW')).toEqual([{ publicationId: PUB }]))
+  })
+
+  it('opens a long introduction in place, and a link with a description on the sheet (Q34)', async () => {
+    // jsdom lays nothing out: the introduction's content says it is taller than three lines.
+    const height = vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(400)
+    try {
+      server({ publicationPage: () => json(200, { items: [publication({ materials: JSON.stringify([
+        { no: 1, kind: 'LINK', title: 'Origins', description: 'Where the beans grow.\nAnd who grows them.', body: null,
+          url: 'https://example.com/origins', pdf: null, audio: null, images: [] }]) })], offset: 0, limit: 1 }) })
+      window.history.replaceState(null, '', `/p/${PUB}`)
+      render(<App />)
+      const toggle = await screen.findByTestId('detail-intro-text-toggle')
+      expect(toggle).toHaveAttribute('aria-expanded', 'false')
+      expect(toggle).toHaveAttribute('aria-controls')
+      await userEvent.click(toggle)
+      expect(toggle).toHaveAttribute('aria-expanded', 'true')
+      expect(toggle).toHaveTextContent('Show less')
+      await userEvent.click(toggle)
+      // Still more to show after closing it again.
+      expect(toggle).toHaveTextContent('Show more')
+      // The link has a description: its row opens the sheet with the description in full and the link.
+      await userEvent.click(screen.getByTestId('material-open'))
+      const sheet = await screen.findByTestId('material-sheet')
+      expect(within(sheet).getByText(/And who grows them/)).toBeInTheDocument()
+      expect(within(sheet).getByTestId('material-link')).toHaveAttribute('href', 'https://example.com/origins')
+    } finally {
+      height.mockRestore()
+    }
+  })
+
+  it('lays the page out as a picture, one row of facts and titled cards (Q34)', async () => {
+    // Without the embedded video: axe cannot look into a frame in jsdom.
+    server({ publicationPage: () => json(200, { items: [publication({ quizTitle: 'World capitals',
+      sponsorIntro: 'A shop by the river.', materials: JSON.stringify(JSON.parse(MATERIALS).slice(0, 2)) })],
+      offset: 0, limit: 1 }) })
+    window.history.replaceState(null, '', `/p/${PUB}`)
+    render(<App />)
+    const hero = await screen.findByTestId('detail-hero')
+    expect(within(hero).getByRole('heading', { level: 1 })).toHaveTextContent('Capitals week')
+    expect(within(hero).getByTestId('detail-quiz-title')).toHaveTextContent('World capitals')
+    expect(within(hero).getByTestId('detail-sponsor')).toHaveTextContent('Capitals Inc')
+    // Six facts in one block of three columns: each a term and its value.
+    const facts = screen.getByTestId('detail-facts')
+    expect(facts.querySelectorAll('dt')).toHaveLength(6)
+    expect(facts).toHaveTextContent('3 / 5')
+    // The cards have a title bar of their own.
+    expect(within(screen.getByTestId('detail-intro')).getByRole('heading', { name: 'About this quiz' }).parentElement)
+      .toHaveClass('bg-muted')
+    expect(screen.getByTestId('detail-reward')).toHaveTextContent('Kudos paid by QuizBuks')
+    // The counts in one line, the details and the sponsor folded.
+    expect(screen.getByTestId('detail-stats-line')).toHaveTextContent('2 in the last 24 hours · 2 in total')
+    expect(screen.getByTestId('detail-stats')).not.toHaveAttribute('open')
+    expect(screen.getByTestId('detail-sponsor-intro')).not.toHaveAttribute('open')
+    await expectAccessible()
   })
 
   it('shows an invited publication once the view claimed the invitation (Q25)', async () => {

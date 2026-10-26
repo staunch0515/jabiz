@@ -4,6 +4,7 @@ export const en = {
   menu: 'Menu',
   navLabel: 'Site',
   languageLabel: 'Language',
+  signIn: { label: 'Sign in', taker: 'Taker sign-in', sponsor: 'Merchant sign-in' },
   nav: { home: 'Home', merchants: 'For merchants', takers: 'For takers', surveys: 'Surveys', pricing: 'Pricing',
     contact: 'Contact' },
   cta: { taker: 'Start answering', sponsor: 'Register your business', takerLong: 'Start answering — it’s free',
@@ -217,7 +218,7 @@ export const en = {
   },
   footer: {
     tagline: 'Quizzes, surveys and rewards for local business, in English, Chinese and Japanese.',
-    product: 'Product', open: 'Open', app: 'Takers’ app', console: 'Merchant console', legal: 'Legal',
+    product: 'Product', open: 'Open', legal: 'Legal',
     terms: 'Terms for takers', sponsorTerms: 'Terms for merchants', privacy: 'Privacy', rights: 'All rights reserved.',
   },
 }

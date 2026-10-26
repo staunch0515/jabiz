@@ -15,17 +15,16 @@ export function Metric({ label, value, hint, icon: Icon, testId }: {
   testId: string
 }) {
   return (
-    <Card className="relative gap-2 py-4" data-testid={testId}>
-      {Icon && (
-        <span aria-hidden className="bg-accent text-accent-foreground absolute top-4 right-4 flex size-9 items-center justify-center rounded-full">
-          <Icon className="size-4" />
-        </span>
-      )}
-      <CardHeader className="px-4 pr-16">
-        <CardDescription>{label}</CardDescription>
-        <CardTitle className="text-2xl tabular-nums" data-testid={`${testId}-value`}>{value}</CardTitle>
+    // Q34b: the name on the card's title bar with its picture, the value large in the card's body.
+    <Card className="gap-2 pb-4" data-testid={testId}>
+      <CardHeader className="flex items-center gap-2 px-4">
+        {Icon && <Icon aria-hidden className="text-primary size-4 shrink-0" />}
+        <CardDescription className="text-foreground font-medium">{label}</CardDescription>
       </CardHeader>
-      {hint && <CardContent className="text-muted-foreground px-4 text-xs">{hint}</CardContent>}
+      <CardContent className="flex flex-col gap-1 px-4">
+        <CardTitle className="text-2xl tabular-nums" data-testid={`${testId}-value`}>{value}</CardTitle>
+        {hint && <p className="text-muted-foreground text-xs">{hint}</p>}
+      </CardContent>
     </Card>
   )
 }

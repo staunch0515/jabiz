@@ -4,6 +4,7 @@ export const ja = {
   menu: 'メニュー',
   navLabel: 'サイト',
   languageLabel: '言語',
+  signIn: { label: 'ログイン', taker: '回答者ログイン', sponsor: '加盟店ログイン' },
   nav: { home: 'ホーム', merchants: '加盟店の方へ', takers: '回答者の方へ', surveys: 'アンケート', pricing: '料金', contact: 'お問い合わせ' },
   cta: { taker: '回答を始める', sponsor: '加盟店登録', takerLong: '回答を始める — 無料', sponsorLong: 'お店を登録する' },
   meta: {
@@ -215,7 +216,7 @@ export const ja = {
   },
   footer: {
     tagline: '地域のお店のためのクイズ・アンケート・報酬。英語・中国語・日本語に対応。',
-    product: 'プロダクト', open: '開く', app: '回答者アプリ', console: '加盟店コンソール', legal: '法的情報',
+    product: 'プロダクト', open: '開く', legal: '法的情報',
     terms: '回答者向け利用規約', sponsorTerms: '加盟店向け利用規約', privacy: 'プライバシー', rights: 'All rights reserved.',
   },
 }

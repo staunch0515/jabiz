@@ -15,6 +15,7 @@
       正式模式启动日志中没有 `legal:TERMS_APP` / `legal:TERMS_SPONSOR` / `legal:PRIVACY` 的告警（`operations.md` §3 第 9 步）
 - [ ] **AI 说明**（法律文本种类 `AI_NOTICE`：发送给 AI 提供方的内容、提供方的数据使用与保留、处理地域）由需求方或律师提供正式文本并发布，Anthropic 的商业条款（是否用于训练、保留期）已由法务确认（`plans/Q8-ai.md` A-11）；未完成时 `qb.ai.enabled` 保持 false 上线
 - [ ] 帮助中心的问答（账号、答题规则、奖励与转账；商家的入驻、发布、充值与费用）已发布，支持邮箱 `qb.support.email` 已设；`JABIZ_PUBLIC_ENABLED` 未设为 `false`
+- [ ] **上线的内容**（Q36，`tools/quizbuks/content/README.md`）：需求方的商户账号（与管理员不同的邮箱）在正式系统自助注册、通过入驻审核并充值；测试系统中整理好的内容包（私有仓库）以 `apply` 写入、管理员审核发布；至少一个长期的公开发布（欢迎问卷），`renew` 的运行日期已记入日程；不从测试系统复制数据库
 - [ ] 保留期：导出文件、汇总凭证与收据的保留（L-4：10 年）已实施或已有书面的替代做法（`backend/quizbuks/CLAUDE.md`"导出文件与收据还没有 `RetentionPolicy`"）
 
 ## 性能

@@ -272,6 +272,42 @@ class FeedIT extends PlayItSupport {
     }
 
     @Test
+    void whatTheTakerAnsweredLeavesTheFeedUnlessAsked() {
+        String sponsor = newSponsor("s-answered");
+        credit(sponsor, 10_000);
+        String token = taker(newTaker("t-answered", null));
+        String done = livePublication(sponsor, "Answered done", Map.of("regions", List.of("GLOBAL")));
+        String failed = livePublication(sponsor, "Answered failed", Map.of("regions", List.of("GLOBAL")));
+        String open = livePublication(sponsor, "Answered open", Map.of("regions", List.of("GLOBAL")));
+        String fresh = livePublication(sponsor, "Answered fresh", Map.of("regions", List.of("GLOBAL")));
+        Set<String> mine = Set.of(done, failed, open, fresh);
+        submit(token, (String) start(token, done).get("attemptId"), answers(true, true));
+        submit(token, (String) start(token, failed).get("attemptId"), answers(false, false));
+        start(token, open);
+
+        // By default only what is still to do: the one in progress stays, so that it can be resumed from the feed.
+        assertThat(ids(feed(token, null, Map.of()))).filteredOn(mine::contains).containsExactlyInAnyOrder(open, fresh);
+        assertThat(ids(feed(token, null, Map.of("includeAnswered", false))))
+            .filteredOn(mine::contains).containsExactlyInAnyOrder(open, fresh);
+        // Asked for, everything again.
+        assertThat(ids(feed(token, null, Map.of("includeAnswered", true))))
+            .filteredOn(mine::contains).containsExactlyInAnyOrder(done, failed, open, fresh);
+        // Another taker's answers are not this one's: they still see all four.
+        assertThat(ids(feed(taker(u2()), "US", Map.of()))).filteredOn(mine::contains)
+            .containsExactlyInAnyOrder(done, failed, open, fresh);
+
+        // An attempt whose time ran out is done before the expiry job closes it (its page says "see your result").
+        String later = taker(newTaker("t-answered-late", null));
+        String quick = livePublication(sponsor, "Answered quick", Map.of("regions", List.of("GLOBAL"),
+            "timeLimitSec", 60));
+        start(later, quick);
+        assertThat(ids(feed(later, null, Map.of()))).contains(quick);
+        clock.advance(Duration.ofSeconds(61));
+        assertThat(ids(feed(later, null, Map.of()))).doesNotContain(quick);
+        assertThat(ids(feed(later, null, Map.of("includeAnswered", true)))).contains(quick);
+    }
+
+    @Test
     void theSponsorsListShowsCountsAndFundsShort() {
         String sponsor = newSponsor("s-list");
         String publicationId = livePublication(sponsor, "List counts", Map.of("regions", List.of("GLOBAL")));
@@ -296,8 +332,10 @@ class FeedIT extends PlayItSupport {
         livePublication(sponsor, "Plan", Map.of("regions", List.of("GLOBAL")));
         // A backend reports its table statistics within ten seconds of going idle: let the setup's arrive first.
         Thread.sleep(11_000);
+        // qb_attempt is read since Q34, but only the caller's own rows (the taker view, by qb_attempt_once's user_id):
+        // what they answered leaves the feed.
         List<String> large = List.of("qb_publication_version", "qb_reward_tier_version", "qb_quiz_version_version",
-            "qb_profile_version", "qb_attempt");
+            "qb_profile_version");
         Map<String, Long> before = scans(large);
         long cards = scans(List.of("qb_publication_card")).get("qb_publication_card");
         assertThat(feed(taker(u1()), "JP", Map.of())).isNotEmpty();

@@ -29,9 +29,66 @@ import { PUBLICATION_STATUSES, PUBLISHING_LIMITS, searchPublications, type Publi
   type PublicationStatus } from './api'
 import { NEW_PUBLICATION, publicationPath, PUBLICATIONS_QUERY } from './paths'
 import { Period, StatusBadge, useDebounced, useRegionsText, useStatusLabel, useRewardMethodLabel } from './shared'
+import { CardGrid, Pager, useListView, ViewSwitch } from '../ListView'
+import { CoverPlaceholder } from '../qb/Illustrations'
+import { Thumbnail } from '../content/ContentImage'
 
 const PAGE_SIZE = 20
 const ALL = 'all'
+
+/**
+ * A publication as a card (Q34b): its quiz's cover large on top with the state and the way it pays, the name and the
+ * quiz, then what it reached (takers, winners, spent) and its period. The same test ids and data as a row of the table.
+ */
+function PublicationCard({ publication: p, methodLabel, regionsText }: { publication: PublicationRow;
+  methodLabel: (method: PublicationRow['rewardMethod']) => string; regionsText: (regions: string[]) => string }) {
+  const { t } = useTranslation(SPONSOR)
+  const cap = p.budgetCap ?? p.maxSpend
+  return (
+    <li className="bg-card group relative flex flex-col overflow-hidden border shadow-xs transition-shadow hover:shadow-md"
+      data-testid="publication-row" data-publication={p.publicationId} data-status={p.status}>
+      <div className="relative block aspect-video overflow-hidden">
+        {p.cover
+          ? <Thumbnail fileId={p.cover} width={480} className="size-full transition-transform duration-300 group-hover:scale-105" />
+          : <CoverPlaceholder seed={p.publicationId} className="size-full" />}
+        <span className="absolute top-2 left-2 flex flex-wrap gap-1">
+          <StatusBadge status={p.status} startAt={p.startAt} endAt={p.endAt} />
+          {p.fundsShort && <Badge variant="warning" data-testid="publication-funds-short">{t('publishing.list.fundsShort')}</Badge>}
+        </span>
+        {p.rewardMethod !== 'PLATFORM' && (
+          <Badge variant="outline" className="bg-background/90 absolute top-2 right-2" data-testid="publication-method-badge"
+            data-method={p.rewardMethod}>
+            {methodLabel(p.rewardMethod)}
+          </Badge>
+        )}
+      </div>
+      <div className="flex flex-1 flex-col gap-1.5 p-3">
+        <Link to={publicationPath(p.publicationId)} className="line-clamp-2 font-semibold underline-offset-4 after:absolute after:inset-0 hover:underline"
+          data-testid="publication-link">
+          {p.name}
+        </Link>
+        <span className="text-muted-foreground truncate text-sm">
+          {p.versionLabel ? `${p.quizTitle} (${p.versionLabel})` : t('publishing.list.noQuiz')}
+        </span>
+        {p.status === 'DRAFT' && (p.rejectReason || p.rejectCode) && (
+          <Badge variant="destructive" className="w-fit" data-testid="publication-sent-back">{t('publishing.list.sentBack')}</Badge>
+        )}
+        <dl className="text-muted-foreground mt-auto grid grid-cols-3 gap-2 border-t pt-2 text-xs">
+          <div><dt>{t('publishing.list.takers')}</dt><dd className="text-foreground font-medium">{p.starts.toLocaleString()}</dd></div>
+          <div><dt>{t('publishing.list.winners')}</dt><dd className="text-foreground font-medium">{p.maxWinners === null
+            ? p.winners.toLocaleString()
+            : t('publishing.list.winnersOf', { winners: p.winners.toLocaleString(), max: p.maxWinners.toLocaleString() })}</dd></div>
+          <div><dt>{t('publishing.list.spent')}</dt><dd className="text-foreground font-medium">{cap === null ? formatKudos(p.spent)
+            : t('publishing.list.spentOf', { spent: formatKudos(p.spent), max: formatKudos(cap) })}</dd></div>
+        </dl>
+        <span className="text-muted-foreground flex flex-wrap justify-between gap-x-3 text-xs">
+          <span><Period startAt={p.startAt} endAt={p.endAt} /></span>
+          <span>{regionsText(p.regions)}</span>
+        </span>
+      </div>
+    </li>
+  )
+}
 
 /**
  * The sponsor's publications (M-34): the quiz version, state, regions, takers, winners of the most allowed and Kudos
@@ -63,6 +120,7 @@ export function PublicationListPage() {
     placeholderData: keepPreviousData,
   })
 
+  const [view, setView] = useListView('publications')
   const columns = useMemo<ColumnDef<PublicationRow, unknown>[]>(() => [
     {
       id: 'name',
@@ -193,11 +251,25 @@ export function PublicationListPage() {
             </SelectContent>
           </Select>
         </div>
+        <ViewSwitch value={view} onChange={setView} testId="publication-view-switch" />
       </form>
       {publications.isError
         ? <PageState kind="error" description={tQb('failed')}
           action={<Button variant="outline" onClick={() => void publications.refetch()}>{tQb('retry')}</Button>} />
-        : (
+        : view === 'cards' ? (
+          publications.isPending ? <PageState kind="loading" />
+            : rows.length === 0 ? <div className="py-6 text-center">{empty}</div>
+            : (
+              <>
+                <CardGrid label={t('publishing.list.table')} testId="publication-cards">
+                  {rows.map((row) => <PublicationCard key={row.publicationId} publication={row} methodLabel={methodLabel}
+                    regionsText={regionsText} />)}
+                </CardGrid>
+                <Pager pageIndex={pagination.pageIndex} pageSize={pagination.pageSize} total={publications.data?.total}
+                  onPage={(pageIndex) => setPagination((p) => ({ ...p, pageIndex }))} />
+              </>
+            )
+        ) : (
           <DataTable label={t('publishing.list.table')} columns={columns} data={rows}
             getRowId={(row) => row.publicationId} loading={publications.isPending}
             stale={publications.isPlaceholderData} empty={empty}

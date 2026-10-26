@@ -1,0 +1,24 @@
+{
+  "format": "quizbuks.content",
+  "formatVersion": 1,
+  "sponsor": null,
+  "publications": [
+    {
+      "name": "Welcome survey",
+      "quiz": "quizzes/welcome-survey.quizbuks.json",
+      "durationDays": 366,
+      "regions": ["GLOBAL"],
+      "audience": "PUBLIC",
+      "timeLimitSec": 300,
+      "passScore": 3,
+      "budgetCap": 3000,
+      "maxWinners": 300,
+      "rewardMethod": "PLATFORM",
+      "redeemDescription": null,
+      "tiers": [
+        { "fromScore": 0, "toScore": 2, "reward": 0 },
+        { "fromScore": 3, "toScore": 3, "reward": 10 }
+      ]
+    }
+  ]
+}

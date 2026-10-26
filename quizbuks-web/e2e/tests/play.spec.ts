@@ -102,8 +102,14 @@ for (const appearance of ['light', 'dark'] as const) {
     await expect(page.getByTestId('home')).toBeVisible()
     await openFromFeed(page, seeded.name)
     await expectAccessible(page, at('app feed'))
-    // The materials under the title: Markdown and a link opening in a new tab; the tiers in Kudos.
-    await expect(page.getByTestId('materials').locator('strong')).toHaveText('the capital')
+    // The materials under the title (Q34: a row each): the article opens on a sheet as Markdown, a link in a new tab;
+    // the tiers in Kudos.
+    await page.getByTestId('materials').locator('[data-kind="ARTICLE"]').getByTestId('material-open').click()
+    const sheet = page.getByTestId('material-sheet')
+    await expect(sheet.locator('strong')).toHaveText('the capital')
+    await expectAccessible(page, at('app material'))
+    await page.keyboard.press('Escape')
+    await expect(sheet).toHaveCount(0)
     await expect(page.getByTestId('material-link')).toHaveAttribute('target', '_blank')
     await expect(page.getByTestId('detail-tiers')).toContainText(`${seeded.reward.toLocaleString('en-US')} Kudos`)
     await expect(page.getByTestId('detail-tiers')).not.toContainText('JPY')

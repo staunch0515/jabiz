@@ -113,6 +113,8 @@ export interface PublicationRow {
   publicationId: string
   name: string
   quizTitle: string | null
+  /** The quiz's cover as its version keeps it (Q34b); none for a draft without a version. */
+  cover: string | null
   versionLabel: string | null
   status: PublicationStatus
   rewardMethod: RewardMethod
@@ -324,6 +326,7 @@ export async function searchPublications({ q, status, sorts, offset, limit }: Pu
       publicationId: String(row.publicationId),
       name: String(row.name ?? ''),
       quizTitle: str(row.quizTitle),
+      cover: str(row.cover),
       versionLabel: str(row.versionLabel),
       status: (row.status as PublicationStatus) ?? 'DRAFT',
       rewardMethod: methodOf(row.rewardMethod),

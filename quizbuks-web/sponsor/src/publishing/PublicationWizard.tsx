@@ -29,6 +29,7 @@ import { useTranslation } from 'react-i18next'
 import { readVersions, searchQuizzes } from '../content/api'
 import { QUIZZES_QUERY, versionsQuery } from '../content/paths'
 import { SPONSOR } from '../messages'
+import { ShownAt, type ShownField } from '../content/ShownAt'
 import { KUDOS } from '../qb/kudos'
 import { noticeConsentProblem } from '../qb/ConsentGate'
 import { fieldProblem, problemText } from '../qb/problems'
@@ -68,11 +69,13 @@ import { TiersEditor } from './TiersEditor'
 export const STEP_COUNT = 3
 
 /** A field with its label, hint and problem, the problem tied to it by `aria-describedby`. */
-function Field({ id, label, hint, problem, children }: {
+function Field({ id, label, hint, problem, shown, children }: {
   id: string
   label: ReactNode
   hint?: ReactNode
   problem?: string
+  /** Where takers see the field (Q34b). */
+  shown?: ShownField
   children: (aria: { id: string; 'aria-invalid'?: true; 'aria-describedby'?: string }) => ReactNode
 }) {
   const describedBy = [hint ? `${id}-hint` : undefined, problem ? `${id}-error` : undefined].filter(Boolean).join(' ')
@@ -82,6 +85,7 @@ function Field({ id, label, hint, problem, children }: {
       {children({ id, 'aria-invalid': problem ? true : undefined, 'aria-describedby': describedBy || undefined })}
       {hint && <p id={`${id}-hint`} className="text-muted-foreground text-sm">{hint}</p>}
       {problem && <p id={`${id}-error`} className="text-destructive text-sm">{problem}</p>}
+      {shown && <ShownAt field={shown} />}
     </div>
   )
 }
@@ -250,7 +254,7 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
   const steps: ReactNode[] = [
     // 1. The quiz version and the name.
     <div key="content" className="flex flex-col gap-4">
-      <Field id={`${id}-name`} label={t('publishing.field.name')} problem={problemOf('name')}
+      <Field id={`${id}-name`} label={t('publishing.field.name')} problem={problemOf('name')} shown="publicationName"
         hint={t('publishing.field.nameHint', { max: PUBLISHING_LIMITS.name })}>
         {(aria) => (
           <Input {...aria} value={form.name} maxLength={PUBLISHING_LIMITS.name} autoComplete="off" required
@@ -333,6 +337,7 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
       )}
       {rewardMethod === 'OFFLINE_REDEEM' && (
         <Field id={`${id}-redeem`} label={t('publishing.field.redeemDescription')} problem={problemOf('redeemDescription')}
+          shown="prizeDescription"
           hint={t('publishing.field.redeemDescriptionHint', { max: REDEEM_DESCRIPTION_LENGTH })}>
           {(aria) => (
             <Textarea {...aria} value={form.redeemDescription} rows={3} maxLength={REDEEM_DESCRIPTION_LENGTH}
@@ -370,7 +375,7 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
             )}
           </fieldset>
           <Field id={`${id}-digital-description`} label={t('publishing.field.digitalDescription')}
-            problem={problemOf('digitalDescription')}
+            problem={problemOf('digitalDescription')} shown="prizeDescription"
             hint={t('publishing.field.digitalDescriptionHint', { max: DIGITAL_DESCRIPTION_LENGTH })}>
             {(aria) => (
               <Textarea {...aria} value={form.digitalDescription} rows={3} maxLength={DIGITAL_DESCRIPTION_LENGTH}

@@ -215,6 +215,8 @@ export interface Snapshot {
     pdf: string | null
     audio: string | null
     images: { no: number; image: string; caption: string | null }[]
+    /** Q19: present (true) only on the video watching which is enough to answer. */
+    watchToAnswer?: boolean
   }[]
   questions: {
     no: number

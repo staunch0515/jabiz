@@ -17,6 +17,9 @@ import { InvitationsSection } from './Invitations'
 import { PublicationActions } from './PublicationActions'
 import { StaleBanner, PublicationWizard } from './PublicationWizard'
 import { PublicationSummary, StatusBadge, useEndReasonLabel, useVersionOf } from './shared'
+import { PreviewButton } from '../preview/PreviewButton'
+import { previewOfPublication } from '../preview/paths'
+import { VersionNotice } from './VersionNotice'
 
 /** The way back to the list, above a publication's title. */
 function Breadcrumb() {
@@ -110,8 +113,11 @@ function PublicationView({ detail, stale, onStale }: {
             </span>
           </span>
         }
-        actions={<PublicationActions publication={publication} revision={publication.revision} disabled={stale}
-          onStale={onStale} />} />
+        actions={<div className="flex flex-wrap gap-2">
+          <PreviewButton to={previewOfPublication(publication.publicationId)} />
+          <PublicationActions publication={publication} revision={publication.revision} disabled={stale}
+            onStale={onStale} />
+        </div>} />
       <p className="text-muted-foreground text-sm">
         {publication.status === 'PENDING_REVIEW' ? t('publishing.detail.inReview') : t('publishing.detail.frozen')}
       </p>
@@ -131,6 +137,7 @@ function PublicationView({ detail, stale, onStale }: {
         <Alert variant="warning"><AlertDescription>{t('publishing.detail.fundsShort')}</AlertDescription></Alert>
       )}
       <AdminNotice publication={publication} />
+      <VersionNotice quizId={publication.quizId} versionId={publication.versionId} versionLabel={publication.versionLabel} />
       <PublicationSummary values={{
         ...publication,
         quizTitle: version?.title ?? null,
@@ -195,8 +202,11 @@ export function PublicationPage({ publicationId }: { publicationId: string }) {
             </span>
           </span>
         )}
-        actions={detail && <PublicationActions publication={detail.publication} revision={revision}
-          disabled={stale} onStale={() => setStale(true)} />} />
+        actions={detail && <div className="flex flex-wrap gap-2">
+          <PreviewButton to={previewOfPublication(detail.publication.publicationId)} />
+          <PublicationActions publication={detail.publication} revision={revision}
+            disabled={stale} onStale={() => setStale(true)} />
+        </div>} />
       {banner}
       {detail && <SentBack publication={detail.publication} />}
     </>
