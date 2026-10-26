@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import {
-  MAX_RUNNING_DAYS, PACK_FORMAT, PACK_VERSION, packProblems, publicationAction, publicationSpecOf, quizFileName,
+  MAX_RUNNING_DAYS, PACK_FORMAT, PACK_VERSION, missingContent, packProblems, publicationAction, publicationSpecOf, quizFileName,
   quizFileOf, saveInputOf, withoutData,
 } from './lib.mjs'
 
@@ -81,13 +81,27 @@ test('apply makes a publication only when none of that name runs; renew one that
   const now = new Date('2026-10-26T00:00:00Z')
   assert.deepEqual(publicationAction([], { now }), { action: 'create' })
   assert.deepEqual(publicationAction([{ status: 'ENDED' }], { now }), { action: 'create' })
-  const live = { status: 'LIVE', startAt: '2026-01-01T00:00:00Z', endAt: '2026-11-10T00:00:00Z' }
+  const live = { status: 'LIVE', versionId: 'v3', startAt: '2026-01-01T00:00:00Z', endAt: '2026-11-10T00:00:00Z' }
   assert.deepEqual(publicationAction([live], { now }), { action: 'skip', status: 'LIVE' })
-  assert.deepEqual(publicationAction([live], { now, renewDays: 30 }), { action: 'renew', after: new Date(live.endAt) })
+  // The next period keeps the running one's version.
+  assert.deepEqual(publicationAction([live], { now, renewDays: 30 }),
+    { action: 'renew', after: new Date(live.endAt), versionId: 'v3' })
   assert.equal(publicationAction([live], { now, renewDays: 7 }).action, 'skip')
   // Already renewed: the next period waits to start.
   const next = { status: 'SCHEDULED', startAt: '2026-11-10T00:00:00Z', endAt: '2027-11-10T00:00:00Z' }
   assert.equal(publicationAction([live, next], { now, renewDays: 30 }).action, 'skip')
+  // An old draft ending far later neither is the period renewed from nor stops the renewal.
+  const draft = { status: 'DRAFT', startAt: '2026-01-01T00:00:00Z', endAt: '2027-12-31T00:00:00Z' }
+  assert.equal(publicationAction([live, draft], { now, renewDays: 30 }).after.toISOString(), live.endAt.replace('Z', '.000Z'))
+  assert.equal(publicationAction([draft], { now, renewDays: 30 }).action, 'skip')
+})
+
+test('a shared prize whose environment variable is not set is found before anything is written', () => {
+  const pack = { publications: [{ name: 'P', rewardMethod: 'DIGITAL_PRIZE', digitalDelivery: 'SHARED', digitalContentEnv: 'CODE' }] }
+  assert.equal(missingContent(pack, {}).length, 1)
+  assert.equal(missingContent(pack, { CODE: '  ' }).length, 1)
+  assert.deepEqual(missingContent(pack, { CODE: 'SAVE10' }), [])
+  assert.throws(() => saveInputOf({ ...pack.publications[0], durationDays: 1 }, 'v', new Date(), {}), /CODE is not set/)
 })
 
 test('the example pack is a pack this tool applies, its survey rewarding only a complete response', async () => {

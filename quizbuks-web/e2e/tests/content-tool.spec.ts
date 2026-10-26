@@ -73,8 +73,12 @@ test('the content tool exports a sponsor\'s content and applies it to another ac
   // Invented takers (a test system only) answer what is live of the pack.
   const someone = await taker(request, 'Probe')
   await untilLive(request, someone.token, made[0].id)
-  expect(await tool('takers', '--base', BASE, '--count', '1', '--mailpit', MAILPIT, '--pack', pack))
-    .toMatch(/answered [12]/)
+  // The operator names the test system; another name (or production) is refused before anyone is registered.
+  const environment = (await (await request.get('/api/auth/entries/app')).json()).environment as string
+  await expect(tool('takers', '--base', BASE, '--environment', 'production', '--count', '1', '--mailpit', MAILPIT,
+    '--pack', pack)).rejects.toThrow(/refused/)
+  expect(await tool('takers', '--base', BASE, '--environment', environment, '--count', '1', '--mailpit', MAILPIT,
+    '--pack', pack)).toMatch(/answered [12]/)
 })
 
 test('the example pack (a year-long welcome survey) applies to a funded sponsor', async ({ request }) => {

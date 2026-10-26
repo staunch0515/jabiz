@@ -21,7 +21,8 @@ node qbcontent.mjs apply  --base https://quizbuks.example.com --user me@example.
 node qbcontent.mjs renew  --base https://quizbuks.example.com --user me@example.com --pack ~/qb-content --renew-days 30
 
 # 只限测试系统：5 个虚构的答题者注册（经 Mailpit 验证邮箱）并作答内容包中的发布
-node qbcontent.mjs takers --base https://test.example.com --count 5 --mailpit https://mail.test.example.com --pack ~/qb-content
+# --environment 写测试系统的名字（JABIZ_WEB_ENVIRONMENT，页面顶部横条上的名字），须与服务器自报的相同
+node qbcontent.mjs takers --base https://test.example.com --environment staging --count 5 --mailpit https://mail.test.example.com --pack ~/qb-content
 ```
 
 ## 内容包
@@ -41,11 +42,13 @@ qb-content/
 | `durationDays` | 1–366；从应用的时刻起算 |
 | `regions`、`audience`、`timeLimitSec`、`passScore`、`budgetCap`、`maxWinners`、`tiers` | 与后台的发布设置相同 |
 | `rewardMethod` | `PLATFORM`（Kudos）、`SPONSOR_CASH`、`OFFLINE_REDEEM`、`DIGITAL_PRIZE`；商户须已被允许该方式 |
-| `digitalContentEnv` | 共用码（`DIGITAL_PRIZE` + `SHARED`）的内容所在的环境变量名：码本身从不写进内容包 |
+| `digitalContentEnv` | 共用码（`DIGITAL_PRIZE` + `SHARED`）的内容所在的环境变量名：码本身从不写进内容包；变量没有设置时，工具在写入任何东西之前就停下 |
 
 注意：
 
 - 测验按**标题**、发布按**名称**认定。改了内容想重新写入时，改标题或名称，或在后台处理旧的。
+- 新的发布用测验**已有的最新版本**；只有刚导入、还没有版本的测验才由工具存一个版本。后台正在修改、还没存成版本的内容不会被发布。
+  续期沿用正在运行的那一期的版本。
 - 保存时有问题的发布会留作**草稿**并列出字段与原因；在后台改好提交，或删掉草稿、改内容包后再运行。
 - 服务器要求同意新版条款时，工具会停下：请本人在后台同意后再运行（工具从不替人同意）。
 - 内容包放在自己的**私有仓库**，不要放进 jabiz 仓库。

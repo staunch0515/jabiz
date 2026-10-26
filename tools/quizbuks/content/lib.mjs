@@ -161,13 +161,26 @@ export function saveInputOf(spec, versionId, now, env = {}) {
     input.digitalDelivery = spec.digitalDelivery ?? null
     input.digitalDescription = spec.digitalDescription ?? null
     input.digitalSendDays = spec.digitalSendDays ?? null
-    if (spec.digitalContentEnv) input.digitalContent = env[spec.digitalContentEnv] ?? ''
+    if (spec.digitalContentEnv) {
+      const content = env[spec.digitalContentEnv]
+      if (!content?.trim()) throw new Error(`publication ${JSON.stringify(spec.name)}: the environment variable ${spec.digitalContentEnv} is not set`)
+      input.digitalContent = content
+    }
   }
   return input
 }
 
-/** The statuses in which a publication still runs or will (a pack's publication of that name is not made again). */
-export const RUNNING = ['DRAFT', 'PENDING_REVIEW', 'APPROVED', 'SCHEDULED', 'LIVE', 'PAUSED', 'FUNDS_SHORT', 'REJECTED']
+/**
+ * The statuses in which a publication still runs or will (a pack's publication of that name is not made again); a
+ * rejected publication goes back to DRAFT, an ended one is ENDED.
+ */
+export const RUNNING = ['DRAFT', 'PENDING_REVIEW', 'SCHEDULED', 'LIVE', 'PAUSED', 'FUNDS_SHORT']
+
+/** The pack's publications whose shared digital prize names an environment variable that is not set (checked before any write). */
+export function missingContent(pack, env) {
+  return (pack.publications ?? []).filter((p) => p.rewardMethod === 'DIGITAL_PRIZE' && p.digitalContentEnv
+    && !env[p.digitalContentEnv]?.trim()).map((p) => `publication ${JSON.stringify(p.name)}: the environment variable ${p.digitalContentEnv} is not set`)
+}
 
 /**
  * What `apply` does with a pack's publication, given the sponsor's publications of that name: nothing when one
@@ -176,11 +189,16 @@ export const RUNNING = ['DRAFT', 'PENDING_REVIEW', 'APPROVED', 'SCHEDULED', 'LIV
 export function publicationAction(existing, { now, renewDays = 0 } = {}) {
   const running = existing.filter((p) => RUNNING.includes(p.status))
   if (running.length === 0) return { action: 'create' }
-  if (renewDays > 0) {
-    const ends = Math.max(...running.map((p) => Date.parse(p.endAt ?? '') || 0))
+  // A draft (one a save left with problems, or the sponsor's own) never counts as the period to renew from, but a
+  // draft starting later still stops a second next period.
+  const submitted = running.filter((p) => p.status !== 'DRAFT')
+  if (renewDays > 0 && submitted.length > 0) {
+    const last = submitted.reduce((top, p) => ((Date.parse(p.endAt ?? '') || 0) > (Date.parse(top.endAt ?? '') || 0) ? p : top))
+    const ends = Date.parse(last.endAt ?? '') || 0
     const later = running.some((p) => (p.status === 'SCHEDULED' || p.status === 'PENDING_REVIEW' || p.status === 'DRAFT')
       && Date.parse(p.startAt ?? '') > now.getTime())
-    if (!later && ends - now.getTime() <= renewDays * DAY) return { action: 'renew', after: new Date(ends) }
+    // The next period uses the version the running one does: never a version made of the sponsor's unfinished edits.
+    if (!later && ends - now.getTime() <= renewDays * DAY) return { action: 'renew', after: new Date(ends), versionId: last.versionId }
   }
   return { action: 'skip', status: running[0].status }
 }

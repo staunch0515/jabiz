@@ -6,7 +6,7 @@
 //   node qbcontent.mjs export --base URL --user EMAIL --pack DIR      a sponsor's quizzes and publications into a pack
 //   node qbcontent.mjs apply  --base URL --user EMAIL --pack DIR      the pack into the sponsor's account (skips what exists)
 //   node qbcontent.mjs renew  --base URL --user EMAIL --pack DIR      a new period for publications ending soon
-//   node qbcontent.mjs takers --base URL --count N --mailpit URL --pack DIR   test systems only: invented takers answer
+//   node qbcontent.mjs takers --base URL --environment NAME --count N --mailpit URL --pack DIR   test systems only: invented takers answer
 //
 // The password is read from the environment variable QB_PASSWORD (never an argument: it would stay in the shell's
 // history). --dry-run says what would be done and writes nothing.
@@ -14,7 +14,7 @@ import { randomUUID } from 'node:crypto'
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import {
-  PACK_FORMAT, PACK_VERSION, neutralName, packProblems, publicationAction, publicationSpecOf, quizFileName, quizFileOf,
+  PACK_FORMAT, PACK_VERSION, missingContent, neutralName, packProblems, publicationAction, publicationSpecOf, quizFileName, quizFileOf,
   saveInputOf, withoutData,
 } from './lib.mjs'
 
@@ -160,7 +160,7 @@ async function exportPack(options) {
   const client = await signedIn(options)
   const sponsor = await sponsorOf(client)
   const quizzes = await client.query('qb.sponsor.quizzes')
-  await mkdir(join(options.pack, 'quizzes'), { recursive: true })
+  if (!options.dryRun) await mkdir(join(options.pack, 'quizzes'), { recursive: true })
   const fileOfQuiz = new Map()
   const used = new Set()
   for (const row of quizzes) {
@@ -184,7 +184,8 @@ async function exportPack(options) {
     log(`quiz      ${document.quiz.title}  →  quizzes/${name}  (${files.length} files)`)
   }
   const publications = []
-  for (const row of await client.rows(DATASET.publication, [], [{ field: 'editedAt', asc: true }])) {
+  // Newest first: of several publications of a name (renewed periods, a corrected copy) the pack keeps the latest settings.
+  for (const row of await client.rows(DATASET.publication, [], [{ field: 'editedAt', asc: false }])) {
     const file = row.quizId ? fileOfQuiz.get(String(row.quizId)) : null
     if (!file) {
       log(`skipped   publication ${row.name}: its quiz is not in the pack`)
@@ -238,20 +239,28 @@ async function quizOf(client, dir, file, known, dryRun) {
   return { quizId: String(imported.quizId), title, created: true }
 }
 
-/** The quiz's newest version, saving one first when the quiz has none or changed since. */
-async function versionOf(client, quizId) {
-  const row = (await client.query('qb.sponsor.quizzes')).find((q) => String(q.quizId) === quizId)
-  if (!row?.versionLabel || row.changedSinceVersion === true) {
-    await client.process('QB_QUIZ_PUBLISH_VERSION', { quizId })
+/**
+ * The version a new publication of the quiz uses: its newest existing one. A version is saved only for a quiz with
+ * none (one the tool just imported): never from edits the sponsor has under way in the console.
+ */
+async function versionOf(client, quiz) {
+  const newest = async () => (await client.query('qb.sponsor.quiz-versions', { quizId: quiz.quizId }))
+    .reduce((top, v) => (!top || Number(v.versionNo) > Number(top.versionNo) ? v : top), null)
+  let version = await newest()
+  if (!version) {
+    await client.process('QB_QUIZ_PUBLISH_VERSION', { quizId: quiz.quizId })
+    log(`versioned quiz ${quiz.title}`)
+    version = await newest()
   }
-  const versions = await client.query('qb.sponsor.quiz-versions', { quizId })
-  const newest = versions.reduce((top, v) => (!top || Number(v.versionNo) > Number(top.versionNo) ? v : top), null)
-  return String(newest.versionId)
+  return String(version.versionId)
 }
 
 async function applyPack(options, { renew = false } = {}) {
   if (!options.pack) throw new Error('--pack is required (the folder of the pack)')
-  const { pack } = await readPack(options.pack)
+  const { pack, files } = await readPack(options.pack)
+  // A shared prize's code comes from the environment: all of them are there before anything is written.
+  const missing = missingContent(pack, process.env)
+  if (missing.length) throw new Error(`the pack cannot be applied:\n - ${missing.join('\n - ')}`)
   const client = await signedIn(options)
   const sponsor = await sponsorOf(client)
   if (sponsor?.reviewStatus !== 'APPROVED') {
@@ -261,7 +270,13 @@ async function applyPack(options, { renew = false } = {}) {
   const now = new Date()
   const known = await client.query('qb.sponsor.quizzes')
   const mine = await client.rows(DATASET.publication, [], [{ field: 'editedAt', asc: true }])
+  // Every quiz of the pack, with or without a publication.
   const quizzes = new Map()
+  for (const file of files) {
+    const quiz = await quizOf(client, options.pack, file, known, options.dryRun)
+    if (quiz.created) log(`${options.dryRun ? 'would import' : 'imported'}  quiz ${quiz.title}`)
+    quizzes.set(file, quiz)
+  }
   let made = 0
   for (const spec of pack.publications) {
     const action = publicationAction(mine.filter((p) => p.name === spec.name), { now, renewDays })
@@ -269,15 +284,14 @@ async function applyPack(options, { renew = false } = {}) {
       log(`skipped   ${spec.name} (${action.status})`)
       continue
     }
-    if (!quizzes.has(spec.quiz)) quizzes.set(spec.quiz, await quizOf(client, options.pack, spec.quiz, known, options.dryRun))
     const quiz = quizzes.get(spec.quiz)
-    if (quiz.created) log(`${options.dryRun ? 'would import' : 'imported'}  quiz ${quiz.title}`)
     const startAt = action.action === 'renew' ? action.after.toISOString() : undefined
     if (options.dryRun) {
       log(`would ${action.action === 'renew' ? 'renew' : 'publish'}  ${spec.name}${startAt ? ` from ${startAt}` : ''}`)
       continue
     }
-    const versionId = await versionOf(client, quiz.quizId)
+    // A renewal keeps the running period's version (lib.publicationAction).
+    const versionId = action.versionId ? String(action.versionId) : await versionOf(client, quiz)
     const input = saveInputOf(startAt ? { ...spec, startAt } : spec, versionId, now, process.env)
     const saved = await client.process('QB_PUBLICATION_SAVE', input)
     const problems = saved.problems ?? []
@@ -330,9 +344,14 @@ async function takers(options) {
   const count = Number(options.count ?? 5)
   const probe = new Client(options.base)
   const environment = await probe.environment('app')
-  // Invented people never go into the real system: the server must say it is a test system.
-  if (!environment || environment === 'production') {
-    throw new Error('refused: the server does not say it is a test system (jabiz.web.environment); invented takers are for test systems only')
+  // Invented people never go into the real system. A server without a name says `test`, so the name alone does not
+  // tell a test system from a real one set up without it: the operator names the system and it must match.
+  if (!options.environment) {
+    throw new Error(`--environment is required: the name of the test system (this server says ${JSON.stringify(environment)})`)
+  }
+  if (!environment || environment.toLowerCase() === 'production' || options.environment.toLowerCase() === 'production'
+    || environment !== options.environment) {
+    throw new Error(`refused: the server says it is ${JSON.stringify(environment)}, not the test system ${JSON.stringify(options.environment)}; invented takers are for test systems only`)
   }
   const names = options.pack ? (JSON.parse(await readFile(join(options.pack, 'content.json'), 'utf8')).publications ?? [])
     .map((p) => p.name) : null
