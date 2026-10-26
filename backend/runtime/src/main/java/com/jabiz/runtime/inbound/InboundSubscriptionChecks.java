@@ -65,7 +65,9 @@ public class InboundSubscriptionChecks implements PlatformCheck {
                 continue;
             }
             consumed.add(type);
-            if (!configured.eventTypes().contains(external)) {
+            // Compared as event types: a listed orders/paid is consumed as ...orders.paid (decision D57).
+            if (configured.eventTypes().stream()
+                    .noneMatch(listed -> listed != null && InboundEvents.type(provider, listed).equals(type))) {
                 problems.add(CheckProblem.error(InboundWebhookChecks.CATEGORY, "EventSubscription "
                     + subscription.consumer(), "subscribes to " + type + " but provider " + provider
                     + " does not list " + external + ": such events are answered and dropped"));

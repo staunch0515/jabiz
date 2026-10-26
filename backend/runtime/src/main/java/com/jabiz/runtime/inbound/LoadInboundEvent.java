@@ -83,22 +83,34 @@ public class LoadInboundEvent<C extends ProcessContext> implements StepHandler<L
             }
             String id = Objects.requireNonNull(metadata.id().apply(ctx), "the inbound event id must not be null");
             return storages.getEngine(poolRef).select("SELECT e.inbound_event_id, e.provider, e.external_event_id,"
-                    + " e.event_type, e.livemode, e.signed_time, e.received_time, b.body FROM " + InboundEntities.TABLE
+                    + " e.event_type, e.livemode, e.signed_time, e.received_time, e.metadata::text AS metadata, b.body FROM " + InboundEntities.TABLE
                     + " e JOIN " + InboundEntities.BODY_TABLE + " b ON b.inbound_event_id = e.inbound_event_id"
                     + " WHERE e.inbound_event_id = :id", Map.of("id", BoundValue.of(id)))
                 .next()
                 .switchIfEmpty(Mono.error(() -> new EntityNotFoundException("Inbound event " + id + " not found")))
                 .filter(row -> metadata.provider().equals(Rows.string(row.get("provider")))
-                    && metadata.eventType().equals(Rows.string(row.get("event_type"))))
+                    // The provider's type or its event type's spelling (orders/paid, orders.paid; decision D57).
+                    && InboundEvents.type(metadata.provider(), metadata.eventType())
+                        .equals(InboundEvents.type(metadata.provider(), Rows.string(row.get("event_type")))))
                 .switchIfEmpty(Mono.error(() -> new IllegalStateException("Inbound event " + id + " is not a "
                     + metadata.eventType() + " event of " + metadata.provider())))
                 .doOnNext(row -> ctx.put(metadata.targetKey(), new ReceivedEvent(Rows.string(row.get("inbound_event_id")),
                     Rows.string(row.get("provider")), Rows.string(row.get("external_event_id")),
                     Rows.string(row.get("event_type")), (Boolean) row.get("livemode"),
                     Rows.instant(row.get("signed_time")), Rows.instant(row.get("received_time")),
-                    parse(json, Rows.string(row.get("body"))))))
+                    parse(json, Rows.string(row.get("body"))), metadata(Rows.string(row.get("metadata"))))))
                 .then();
         });
+    }
+
+    /** The metadata headers as stored: a JSON object of text values, or nothing. */
+    private Map<String, String> metadata(String text) {
+        if (text == null) {
+            return Map.of();
+        }
+        Map<String, String> values = new LinkedHashMap<>();
+        json.readTree(text).properties().forEach(entry -> values.put(entry.getKey(), entry.getValue().asString()));
+        return values;
     }
 
     /**

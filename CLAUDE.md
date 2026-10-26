@@ -130,7 +130,8 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
   消费者（`EventSubscription`）与定时任务（`JobDefinition`）都只调用流程，不写 `@Scheduled` 方法。
   需要逐项提交的批量任务用 `JobDefinition.forEach`（每项一个事务、每项流程为 `internal()`），不用 `CallProcess.forEach` 做批量（11 §4.1、决策 D42）。
   送给其他系统的事件用 webhook（11 §2.4 与决策 D33）：订阅只写在 `jabiz.webhooks.subscriptions`（密钥以占位符取自环境变量，主机须在 `allowed-hosts` 中；有订阅的事件不放遮蔽字段的值），
-  由平台签名投递并重试。接收外部回调只经入站 Webhook（`/api/inbound/{提供方}`，验签、存档、去重后以事件交给流程，D37），不自写接收接口。
+  由平台签名投递并重试。接收外部回调只经入站 Webhook（`/api/inbound/{提供方}`，验签、存档、去重后以事件交给流程，D37；只签正文的发送方用方案 `body-hmac-sha256`，
+  其请求头中的事件号、主题与元数据不签名，只用于去重与路由，内容以签名的正文为准，D57），不自写接收接口。
   业务的出站调用只在 `BlockingStep` 中经声明的 `ExternalService` 进行（有副作用的放提交后或带幂等键）；耗时的调用用异步外部作业 `StartExternalJob`（决策 D38）。
   作业的输入上限按类型 `maxInputSize`（缺省 64 KiB，至多 1 MiB；输入永久保存，只放需要的内容）；作业要读文件，类型声明 `inputFiles`、流程以 `StartExternalJob…files(…)` 给出（按请求人的读取权限检查），
   处理器只经 `ExternalJobContext.files()` 读；要产生文件，类型声明 `outputFiles(策略, …)`、处理器以 `ExternalJobResult…file(键, 名称, 字节)` 返回，完成流程以 `ExternalJobCompletion.file(键)` 取得编号（D50）。处理器不接触 `com.jabiz.runtime.file`。

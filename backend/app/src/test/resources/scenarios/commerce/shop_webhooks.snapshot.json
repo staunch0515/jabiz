@@ -1,0 +1,29 @@
+{
+  "scenario" : "Body-signed webhooks of a shop",
+  "asOf" : "2026-10-26T00:01:00Z",
+  "entities" : {
+    "InboundEvent" : [ {
+      "inboundEventId" : "#uuid:1",
+      "provider" : "demo-shop",
+      "externalEventId" : "ev-1001",
+      "eventType" : "orders/paid",
+      "livemode" : null,
+      "signedTime" : null,
+      "receivedTime" : "2026-10-26T00:00:00Z",
+      "contentType" : "application/json",
+      "bodySha256" : "74c14d5a37a28f89e0b31b45acfa78b9a161e67692d748ae972ed1b6268710bd",
+      "processSeqId" : "#op:1"
+    }, {
+      "inboundEventId" : "#uuid:2",
+      "provider" : "demo-shop",
+      "externalEventId" : "ev-1001",
+      "eventType" : "app/uninstalled",
+      "livemode" : null,
+      "signedTime" : null,
+      "receivedTime" : "2026-10-26T00:01:00Z",
+      "contentType" : "application/json",
+      "bodySha256" : "d81f81e0d8241a17872b8225a9a0da9dc332774dc813a56ab0e37699725c4944",
+      "processSeqId" : "#op:2"
+    } ]
+  }
+}

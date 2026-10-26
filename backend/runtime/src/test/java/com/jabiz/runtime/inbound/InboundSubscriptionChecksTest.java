@@ -59,4 +59,13 @@ class InboundSubscriptionChecksTest {
                 "WARNING INBOUND jabiz.inbound-webhooks.providers.pay.event-types: charge.refunded is accepted and"
                     + " stored but no subscription consumes jabiz.inbound.pay.charge.refunded");
     }
+
+    @Test
+    void aTypeWithASlashIsSubscribedToWithADot() {
+        InboundWebhookProperties properties = new InboundWebhookProperties(Map.of(
+            "shop", InboundWebhookChecksTest.bodyOnly(null, null, null, null, List.of("orders/paid"))));
+        assertThat(new InboundSubscriptionChecks(properties, List.of(subscription("paid",
+            InboundEvents.type("shop", "orders/paid")))).check()).isEmpty();
+        assertThat(InboundEvents.type("shop", "orders/paid")).isEqualTo("jabiz.inbound.shop.orders.paid");
+    }
 }

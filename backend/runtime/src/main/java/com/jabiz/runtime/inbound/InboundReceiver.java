@@ -2,7 +2,6 @@ package com.jabiz.runtime.inbound;
 
 import com.jabiz.context.RequestContext;
 import com.jabiz.inbound.InboundHeaders;
-import com.jabiz.inbound.InboundSchemes;
 import com.jabiz.inbound.InboundSignatureScheme;
 import com.jabiz.inbound.InboundVerification;
 import com.jabiz.query.BoundValue;
@@ -22,9 +21,12 @@ import reactor.core.publisher.Mono;
 
 import java.time.Clock;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  * Receives one inbound webhook request (docs/design/11-ledger-events-jobs.md section 2.5; decision D37), for the HTTP
@@ -34,13 +36,15 @@ import java.util.Objects;
  *   <li>the body, at most the provider's size, is verified by the provider's scheme against its secrets, at the time
  *       of the injected clock;</li>
  *   <li>only then is it read: strict UTF-8, one JSON object, naming its event ({@link InboundEventExtractor});</li>
- *   <li>an event type outside the provider's list is {@link Outcome#IGNORED}, not stored; an event stored before is a
+ *   <li>an event type outside the provider's list is {@link Outcome#IGNORED}, not stored; an event stored before (its
+ *       id within its type, and for a body-only scheme also the same body of the type, decision D57) is a
  *       {@link Outcome#DUPLICATE};</li>
  *   <li>otherwise {@code INBOUND_RECEIVE} runs as the system and stores it with its outbox event in one transaction
  *       ({@link Outcome#ACCEPTED}); a concurrent arrival of the same event waits on the unique key, then fails and is
  *       a duplicate too.</li>
  * </ol>
- * Any failure of steps 2 and 3 is an {@link InboundRejectedException} (400, the same answer whatever went wrong); its
+ * Any failure of steps 2 and 3 is an {@link InboundRejectedException} (400, or the provider's {@code reject-status}
+ * for a failed signature, decision D57; the same answer whatever went wrong); its
  * reason is logged and tagged, never stored. Nothing of the body, the signature or the secrets is logged or tagged:
  * the observation {@code jabiz.inbound.receive} carries the provider, the result ({@code ACCEPTED}, {@code DUPLICATE},
  * {@code IGNORED}, {@code REJECTED}, or {@code FAILED} for an unexpected error) and the reason ({@code none}, the
@@ -138,31 +142,84 @@ public class InboundReceiver {
         if (body.length > configuration.maxBodySize().toBytes()) {
             return Mono.error(new InboundRejectedException("too_large"));
         }
-        InboundSignatureScheme scheme = InboundSchemes.of(configuration.scheme()).orElseThrow();
+        InboundSignatureScheme scheme = configuration.signatureScheme().orElseThrow();
         InboundVerification verification = scheme.verify(headers, body, configuration.secrets(), clock.instant(),
-            configuration.tolerance());
+            configuration.toleranceOrDefault());
         if (!verification.accepted()) {
-            return Mono.error(new InboundRejectedException(verification.reason().name().toLowerCase(Locale.ROOT)));
+            return Mono.error(new InboundRejectedException(verification.reason().name().toLowerCase(Locale.ROOT),
+                SIGNATURE_FAILURES.contains(verification.reason()) ? configuration.rejectStatus() : 400));
         }
-        InboundEventExtractor.Extracted event = InboundEventExtractor.extract(scheme.name(), headers, body);
+        if (scheme.signsTime() && verification.signedTime() == null) {
+            // A scheme that signs a time must say which, or its tolerance guarded nothing.
+            return Mono.error(new IllegalStateException("Scheme " + scheme.name() + " accepted without a signed time"));
+        }
+        InboundEventExtractor.Extracted event = configuration.bodyOnly()
+            ? InboundEventExtractor.extractFromHeaders(configuration.signedBodyOrDefault(), headers, body)
+            : InboundEventExtractor.extract(scheme.name(), headers, body);
         if (!configuration.eventTypes().contains(event.eventType())) {
             log.debug("Inbound webhook event of {} ignored: its type is not accepted", provider);
             return Mono.just(Outcome.IGNORED);
         }
+        Map<String, String> metadata = metadata(configuration.metadataHeaders(), headers);
+        // Decision D57: where the event's id is not signed, a request captured once could come again with another id;
+        // the same body of the same type is then a duplicate too.
+        boolean replayGuard = configuration.bodyOnly();
         InboundProcesses.ReceiveInput input = new InboundProcesses.ReceiveInput(provider, event.externalEventId(),
-            event.eventType(), event.livemode(), verification.signedTime(), contentType(contentType), event.text());
-        return stored(provider, event.externalEventId())
+            event.eventType(), event.livemode(), verification.signedTime(), contentType(contentType), event.text(),
+            metadata, replayGuard);
+        return stored(provider, event.eventType(), event.externalEventId(),
+                replayGuard ? RecordInboundEvent.sha256(event.text()) : null)
             .flatMap(found -> found ? Mono.just(Outcome.DUPLICATE) : record(input));
     }
 
-    /** Whether the event was stored before: a repeated delivery then costs no operation and no sequence number. */
-    private Mono<Boolean> stored(String provider, String externalEventId) {
+    /** The failures of the signature itself, answered with the provider's status (decision D57); the rest 400. */
+    private static final Set<InboundVerification.Reason> SIGNATURE_FAILURES = Set.of(
+        InboundVerification.Reason.MISSING_HEADER, InboundVerification.Reason.MALFORMED,
+        InboundVerification.Reason.NO_MATCH);
+
+    /** The largest value of a metadata header kept (decision D57). */
+    static final int MAX_METADATA_VALUE = 255;
+    private static final Pattern METADATA_VALUE = Pattern.compile(
+        "[\\x20-\\x7E]{1," + MAX_METADATA_VALUE + "}");
+
+    /**
+     * The configured metadata headers of the request (decision D57), by their configured names: each at most once, of
+     * printable ASCII, at most {@value #MAX_METADATA_VALUE} characters; an absent one is left out. Not signed.
+     */
+    static Map<String, String> metadata(List<String> names, InboundHeaders headers) {
+        Map<String, String> kept = new LinkedHashMap<>();
+        for (String name : names) {
+            List<String> values = headers.values(name);
+            if (values.isEmpty()) {
+                continue;
+            }
+            String value = values.size() == 1 && values.getFirst() != null ? values.getFirst().trim() : null;
+            if (value == null || !METADATA_VALUE.matcher(value).matches()) {
+                throw new InboundRejectedException("metadata_header");
+            }
+            kept.put(name, value);
+        }
+        return kept;
+    }
+
+    /**
+     * Whether the event was stored before: a repeated delivery then costs no operation and no sequence number. An event
+     * is the provider's id of it within its type (decision D57: one action of a sender may give several types the
+     * same id); with {@code bodySha256}, the same body of the same type also counts.
+     */
+    private Mono<Boolean> stored(String provider, String eventType, String externalEventId, String bodySha256) {
         Map<String, BoundValue> params = new LinkedHashMap<>();
         params.put("provider", BoundValue.of(provider));
+        params.put("type", BoundValue.of(eventType));
         params.put("id", BoundValue.of(externalEventId));
-        return storages.getEngine(poolRef).select("SELECT 1 AS found FROM " + InboundEntities.TABLE
-                + " WHERE provider = :provider AND external_event_id = :id", params)
-            .hasElements();
+        String sql = "SELECT 1 AS found FROM " + InboundEntities.TABLE
+            + " WHERE provider = :provider AND event_type = :type AND external_event_id = :id";
+        if (bodySha256 != null) {
+            params.put("sha", BoundValue.of(bodySha256));
+            sql += " UNION ALL SELECT 1 AS found FROM " + InboundEntities.TABLE
+                + " WHERE provider = :provider AND event_type = :type AND body_sha256 = :sha AND replay_guard";
+        }
+        return storages.getEngine(poolRef).select(sql, params).hasElements();
     }
 
     private Mono<Outcome> record(InboundProcesses.ReceiveInput input) {
@@ -173,7 +230,8 @@ public class InboundReceiver {
             return executor.run(InboundProcesses.RECEIVE_PROCESS, input, ExecutionOptions.NONE)
                 .thenReturn(Outcome.ACCEPTED)
                 .onErrorResume(error -> error instanceof UniqueKeyViolationException unique
-                        && InboundEntities.EXTERNAL_KEY.equals(unique.constraintName()),
+                        && (InboundEntities.EXTERNAL_KEY.equals(unique.constraintName())
+                            || InboundEntities.BODY_KEY.equals(unique.constraintName())),
                     duplicate -> Mono.just(Outcome.DUPLICATE))
                 .contextWrite(context -> RequestContexts.put(context, system));
         });

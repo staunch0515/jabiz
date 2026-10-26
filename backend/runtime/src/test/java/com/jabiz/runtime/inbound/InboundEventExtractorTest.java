@@ -112,4 +112,49 @@ class InboundEventExtractorTest {
         assertThatThrownBy(() -> InboundEventExtractor.extract("slack", NONE, new byte[0]))
             .isInstanceOf(IllegalArgumentException.class);
     }
+
+    private static final InboundWebhookProperties.SignedBody SHOPIFY = new InboundWebhookProperties.SignedBody(null,
+        null, null, null);
+
+    private static InboundEventExtractor.Extracted fromHeaders(Map<String, List<String>> headers, String body) {
+        return InboundEventExtractor.extractFromHeaders(SHOPIFY, InboundHeaders.of(headers),
+            body.getBytes(StandardCharsets.UTF_8));
+    }
+
+    @Test
+    void aBodyOnlySchemeTakesTheIdAndTypeFromItsHeaders() {
+        InboundEventExtractor.Extracted extracted = fromHeaders(Map.of("X-Shopify-Event-Id", List.of(" 98880550-7158 "),
+            "x-shopify-topic", List.of("orders/paid")), "{\"id\":820982911946154508}");
+        assertThat(extracted.externalEventId()).isEqualTo("98880550-7158");
+        assertThat(extracted.eventType()).isEqualTo("orders/paid");
+        assertThat(extracted.livemode()).isNull();
+        assertThat(extracted.text()).isEqualTo("{\"id\":820982911946154508}");
+        // Configured names of other headers.
+        assertThat(InboundEventExtractor.extractFromHeaders(new InboundWebhookProperties.SignedBody(null, null,
+                "X-Event", "X-Kind"), InboundHeaders.of(Map.of("X-Event", List.of("e1"), "X-Kind", List.of("k"))),
+            "{}".getBytes(StandardCharsets.UTF_8)).eventType()).isEqualTo("k");
+    }
+
+    @Test
+    void theIdAndTypeHeadersMustBeThereOnceAndTheBodyAnObject() {
+        List<String> topic = List.of("orders/paid");
+        assertThat(reason(() -> fromHeaders(Map.of("X-Shopify-Topic", topic), "{}"))).isEqualTo("no_event_id");
+        assertThat(reason(() -> fromHeaders(Map.of("X-Shopify-Event-Id", List.of("a", "b"), "X-Shopify-Topic", topic),
+            "{}"))).isEqualTo("no_event_id");
+        assertThat(reason(() -> fromHeaders(Map.of("X-Shopify-Event-Id", List.of("has space"), "X-Shopify-Topic",
+            topic), "{}"))).isEqualTo("no_event_id");
+        assertThat(reason(() -> fromHeaders(Map.of("X-Shopify-Event-Id", List.of("x".repeat(256)), "X-Shopify-Topic",
+            topic), "{}"))).isEqualTo("no_event_id");
+        assertThat(reason(() -> fromHeaders(Map.of("X-Shopify-Event-Id", List.of("e1")), "{}")))
+            .isEqualTo("no_event_type");
+        assertThat(reason(() -> fromHeaders(Map.of("X-Shopify-Event-Id", List.of("e1"), "X-Shopify-Topic",
+            List.of(" ")), "{}"))).isEqualTo("no_event_type");
+        assertThat(reason(() -> fromHeaders(Map.of("X-Shopify-Event-Id", List.of("e1"), "X-Shopify-Topic",
+            List.of("a", "b")), "{}"))).isEqualTo("no_event_type");
+        Map<String, List<String>> named = Map.of("X-Shopify-Event-Id", List.of("e1"), "X-Shopify-Topic", topic);
+        assertThat(reason(() -> fromHeaders(named, "[1]"))).isNotNull();
+        assertThat(reason(() -> fromHeaders(named, "{} {}"))).isNotNull();
+        assertThat(reason(() -> InboundEventExtractor.extractFromHeaders(SHOPIFY, InboundHeaders.of(named),
+            new byte[] {'{', '"', (byte) 0xC3, '"', ':', '1', '}'}))).isNotNull();
+    }
 }

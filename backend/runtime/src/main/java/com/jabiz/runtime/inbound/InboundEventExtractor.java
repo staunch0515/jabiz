@@ -26,7 +26,8 @@ import java.util.regex.Pattern;
  *       Its headers {@code X-Jabiz-Event-Id} and {@code X-Jabiz-Event-Type} are not covered by the signature: when
  *       sent, they must say the same, or the request is rejected.</li>
  * </ul>
- * An event id is 1 to {@value #MAX_ID} visible ASCII characters.
+ * An event id is 1 to {@value #MAX_ID} visible ASCII characters. The body-only scheme of decision D57 names the event
+ * in headers instead ({@link #extractFromHeaders}).
  */
 final class InboundEventExtractor {
 
@@ -76,18 +77,7 @@ final class InboundEventExtractor {
             default -> throw new IllegalArgumentException("Unknown signature scheme " + scheme);
         }
         String text = utf8(body);
-        JsonNode root;
-        try {
-            root = STRICT.readTree(text);
-        } catch (JacksonException e) {
-            throw new InboundRejectedException("not_json");
-        }
-        if (root == null || !root.isObject()) {
-            throw new InboundRejectedException("not_json");
-        }
-        if (!withinRange(root)) {
-            throw new InboundRejectedException("number_out_of_range");
-        }
+        JsonNode root = object(text);
         JsonNode id = root.get(idField);
         if (id == null || !id.isString() || !ID.matcher(id.asString()).matches()) {
             throw new InboundRejectedException("no_event_id");
@@ -108,6 +98,51 @@ final class InboundEventExtractor {
             agrees(headers.values("X-Jabiz-Event-Type"), type.asString());
         }
         return new Extracted(id.asString(), type.asString(), livemode, text);
+    }
+
+    /**
+     * Decision D57: a body-only scheme names the event in headers its signature does not cover. They are read as the
+     * signed ones are read (an id of visible ASCII, a type that is not blank, each header exactly once) and serve to
+     * find duplicates and to route only: what the event says is in the signed body. The body is still one strict JSON
+     * object.
+     */
+    static Extracted extractFromHeaders(InboundWebhookProperties.SignedBody headerNames, InboundHeaders headers,
+        byte[] body) {
+        String text = utf8(body);
+        object(text);
+        String id = single(headers.values(headerNames.eventIdHeader()), "no_event_id");
+        if (!ID.matcher(id).matches()) {
+            throw new InboundRejectedException("no_event_id");
+        }
+        String type = single(headers.values(headerNames.eventTypeHeader()), "no_event_type");
+        if (type.isBlank()) {
+            throw new InboundRejectedException("no_event_type");
+        }
+        return new Extracted(id, type, null, text);
+    }
+
+    private static String single(List<String> values, String reason) {
+        if (values.size() != 1 || values.getFirst() == null) {
+            throw new InboundRejectedException(reason);
+        }
+        return values.getFirst().trim();
+    }
+
+    /** The body as one JSON object, without repeated keys, anything after it or numbers out of range. */
+    private static JsonNode object(String text) {
+        JsonNode root;
+        try {
+            root = STRICT.readTree(text);
+        } catch (JacksonException e) {
+            throw new InboundRejectedException("not_json");
+        }
+        if (root == null || !root.isObject()) {
+            throw new InboundRejectedException("not_json");
+        }
+        if (!withinRange(root)) {
+            throw new InboundRejectedException("number_out_of_range");
+        }
+        return root;
     }
 
     /** Whether every number in the tree has a power of ten within {@value #MAX_EXPONENT} either way. */

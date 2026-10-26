@@ -7,6 +7,7 @@ import tools.jackson.dataformat.yaml.YAMLMapper;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -127,10 +128,21 @@ public record Scenario(String name, String source, Instant clock, Actor actor, L
      * An inbound webhook request (docs/design/11-ledger-events-jobs.md section 2.5): {@code body} (a mapping, sent as
      * JSON, or a text sent as it is) signed with the provider's first configured secret at {@code at} (default: now)
      * and received as the endpoint receives it; the outcome must be {@code outcome} ({@code ACCEPTED} by default,
-     * {@code DUPLICATE}, {@code IGNORED}, or {@code REJECTED}). The processes it leads to run at the next
-     * {@code deliverEvents}.
+     * {@code DUPLICATE}, {@code IGNORED}, or {@code REJECTED}). {@code headers} are sent besides the signature's, as
+     * they are (values may refer to saved variables): the unsigned headers of a scheme that signs only the body, such
+     * as the event's id and type (decision D57). The processes it leads to run at the next {@code deliverEvents}.
      */
-    public record InboundStep(int number, String provider, Object body, Instant at, String outcome) implements Step {}
+    public record InboundStep(int number, String provider, Object body, Instant at, String outcome,
+                              Map<String, Object> headers) implements Step {
+
+        public InboundStep {
+            headers = headers == null ? Map.of() : Collections.unmodifiableMap(new LinkedHashMap<>(headers));
+        }
+
+        public InboundStep(int number, String provider, Object body, Instant at, String outcome) {
+            this(number, provider, body, at, outcome, Map.of());
+        }
+    }
 
     /**
      * Runs the due external jobs' handlers until nothing is due (docs/design/11-ledger-events-jobs.md section 4a);
@@ -351,14 +363,15 @@ public record Scenario(String name, String source, Instant clock, Actor actor, L
     }
 
     private static InboundStep inbound(int number, Map<String, Object> inbound, String where) {
-        onlyKeys(inbound, where, Set.of("provider", "body", "at", "outcome"));
+        onlyKeys(inbound, where, Set.of("provider", "body", "at", "outcome", "headers"));
         Object at = inbound.get("at");
         String outcome = text(inbound, "outcome", false);
         if (outcome != null && !Set.of("ACCEPTED", "DUPLICATE", "IGNORED", "REJECTED").contains(outcome)) {
             throw new IllegalArgumentException(where + ".outcome must be ACCEPTED, DUPLICATE, IGNORED or REJECTED");
         }
         return new InboundStep(number, text(inbound, "provider", true), required(inbound, "body", where),
-            at == null ? null : instant(at, where + ".at"), outcome == null ? "ACCEPTED" : outcome);
+            at == null ? null : instant(at, where + ".at"), outcome == null ? "ACCEPTED" : outcome,
+            inbound.get("headers") == null ? Map.of() : map(inbound.get("headers"), where + ".headers"));
     }
 
     private static CompleteExternalJob completeExternalJob(int number, Map<String, Object> job, String where) {
