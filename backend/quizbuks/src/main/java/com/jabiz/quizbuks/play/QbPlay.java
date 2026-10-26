@@ -4,6 +4,7 @@ import com.jabiz.entity.EntityDefinition;
 import com.jabiz.entity.TemporalRole;
 import com.jabiz.quizbuks.content.QbContent;
 import com.jabiz.quizbuks.publishing.QbPublications;
+import com.jabiz.quizbuks.publishing.PublisherKind;
 
 /**
  * The entities of answering (docs/quizbuks/plans/Q5-answering.md, 实体与迁移), all ordinary tables: an attempt
@@ -50,8 +51,7 @@ public final class QbPlay {
         eb.field("userId", f -> f.physicalColumn("user_id").immutable(true).required(true).asText(128));
         eb.field("publicationId", f -> f.physicalColumn("publication_id").immutable(true).required(true)
             .asReference(QbPublications.PUBLICATION));
-        eb.field("sponsorId", f -> f.physicalColumn("sponsor_id").immutable(true).required(true).processOnly()
-            .asText(128));
+        PublisherKind.declare(eb, true);
         eb.field("versionId", f -> f.physicalColumn("version_id").immutable(true).required(true).processOnly()
             .asReference(QbContent.VERSION));
         eb.field("startedAt", f -> f.physicalColumn("started_at").immutable(true).required(true).processOnly()
@@ -88,7 +88,8 @@ public final class QbPlay {
         eb.listView("default", lv -> lv
             .columns("userId", "publicationId", "status", "startedAt", "deadline", "submittedAt", "score", "reward",
                 "rewardStatus")
-            .filters("userId", "publicationId", "sponsorId", "status", "rewardStatus", "startedAt", "submittedAt")
+            .filters("userId", "publicationId", "publisherKind", "publisherId", "status", "rewardStatus", "startedAt",
+                "submittedAt")
             .sorts("startedAt", "submittedAt", "score", "reward", "attemptId")
             .defaultSort("startedAt", false));
     });

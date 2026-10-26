@@ -1,6 +1,7 @@
 package com.jabiz.quizbuks.play;
 
 import com.jabiz.quizbuks.country.Regions;
+import com.jabiz.quizbuks.publishing.PublisherKind;
 import com.jabiz.quizbuks.publishing.PublicationRules;
 import com.jabiz.quizbuks.publishing.RewardMethod;
 
@@ -84,18 +85,24 @@ public final class AttemptRules {
     }
 
     /** The publication as a taker sees it at {@code now}: the facts of every condition of the feed. */
-    public record Card(String sponsorId, String status, String regions, Instant startAt, Instant endAt,
-        Limits limits, String rewardMethod, boolean invited) {
+    public record Card(String publisherId, String status, String regions, Instant startAt, Instant endAt,
+        Limits limits, String rewardMethod, boolean invited, String publisherKind) {
 
         /** A card paid by the platform (Q22): what every card was before. */
-        public Card(String sponsorId, String status, String regions, Instant startAt, Instant endAt, Limits limits) {
-            this(sponsorId, status, regions, startAt, endAt, limits, RewardMethod.PLATFORM, false);
+        public Card(String publisherId, String status, String regions, Instant startAt, Instant endAt, Limits limits) {
+            this(publisherId, status, regions, startAt, endAt, limits, RewardMethod.PLATFORM, false);
         }
 
         /** A card open to everybody in its regions (what every card was before Q25). */
-        public Card(String sponsorId, String status, String regions, Instant startAt, Instant endAt, Limits limits,
+        public Card(String publisherId, String status, String regions, Instant startAt, Instant endAt, Limits limits,
             String rewardMethod) {
-            this(sponsorId, status, regions, startAt, endAt, limits, rewardMethod, false);
+            this(publisherId, status, regions, startAt, endAt, limits, rewardMethod, false);
+        }
+
+        /** A sponsor's card (what every card was before S0). */
+        public Card(String publisherId, String status, String regions, Instant startAt, Instant endAt, Limits limits,
+            String rewardMethod, boolean invited) {
+            this(publisherId, status, regions, startAt, endAt, limits, rewardMethod, invited, PublisherKind.SPONSOR);
         }
     }
 
@@ -109,7 +116,8 @@ public final class AttemptRules {
      */
     public static String startRefusal(String userId, String userRegions, boolean invited, Card card, Counts counts,
         BigDecimal sponsorBalance, long sponsorPending, Instant now) {
-        if (card.sponsorId().equals(userId)) {
+        // Only a sponsor answers as a user; a shop (S1) has no account of its own to refuse.
+        if (PublisherKind.sponsor(card.publisherKind()) && card.publisherId().equals(userId)) {
             return PlayCodes.OWN_PUBLICATION;
         }
         if (!PublicationRules.acceptsNewAttempts(card.status(), card.startAt(), card.endAt(), now)) {

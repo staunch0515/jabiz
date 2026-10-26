@@ -60,7 +60,7 @@ class PlayConcurrencyIT extends PlayItSupport {
                 answers(true, true))));
         }
         assertThat(atOnce(submissions)).containsOnly(200);
-        assertThat(query("SELECT reward_status, count(*) AS n FROM qb_attempt WHERE sponsor_id = ? "
+        assertThat(query("SELECT reward_status, count(*) AS n FROM qb_attempt WHERE publisher_id = ? "
             + "GROUP BY reward_status ORDER BY reward_status", sponsor))
             .containsExactly(Map.of("reward_status", "PAID", "n", 5L), Map.of("reward_status", "PENDING", "n", 35L));
         assertThat(balance(sponsor)).isZero();

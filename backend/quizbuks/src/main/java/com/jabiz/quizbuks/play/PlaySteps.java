@@ -143,10 +143,10 @@ final class PlaySteps {
     }
 
     static AttemptRules.Card cardOf(EntityInstance card) {
-        return new AttemptRules.Card(card.get("sponsorId"), card.get("status"), card.get("regions"),
+        return new AttemptRules.Card(card.get("publisherId"), card.get("status"), card.get("regions"),
             instant(card.get("startAt")), instant(card.get("endAt")), limits(card),
             card.get("rewardMethod") == null ? com.jabiz.quizbuks.publishing.RewardMethod.PLATFORM
-                : card.get("rewardMethod"), invited(card));
+                : card.get("rewardMethod"), invited(card), card.get("publisherKind"));
     }
 
     /** Whether the card is for an invitation list (Q25); a card from before is public. */

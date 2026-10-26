@@ -43,7 +43,7 @@ const TAKER = '0192f0a0-0000-7000-8000-00000000bb01'
 
 function reward(change: Row = {}): Row {
   return { cashRewardId: 'c1', code: 'C-ABCD1234', attemptId: 'a1', publicationId: 'p1', publicationName: 'Coffee week',
-    sponsorId: SPONSOR, sponsorCompany: 'Acme', userId: TAKER, takerName: 'Mei', amount: 100, status: 'DISPUTED',
+    publisherKind: 'SPONSOR', publisherId: SPONSOR, sponsorCompany: 'Acme', userId: TAKER, takerName: 'Mei', amount: 100, status: 'DISPUTED',
     dueAt: '2026-10-20T01:00:00Z', payBy: '2026-11-03T01:00:00Z', remindedAt: null, markedPaidAt: '2026-10-21T01:00:00Z',
     markedPaidNote: 'Receipt 17', confirmBy: '2026-10-28T01:00:00Z', confirmedAt: null, disputedAt: '2026-10-22T01:00:00Z',
     disputeNote: 'I got 50, not 100', overdueAt: null, resolvedAt: null, resolution: null, resolveNote: null, ...change }
@@ -122,7 +122,7 @@ describe('CashRewardsPage', () => {
 describe('RedemptionsPage (Q22b)', () => {
   function prize(change: Row = {}): Row {
     return { redemptionId: 'r1', code: 'C-ABCD1234', attemptId: 'a1', publicationId: 'p1', publicationName: 'Coffee week',
-      sponsorId: SPONSOR, sponsorCompany: 'Acme', userId: TAKER, takerName: 'Mei', amount: 100,
+      publisherKind: 'SPONSOR', publisherId: SPONSOR, sponsorCompany: 'Acme', userId: TAKER, takerName: 'Mei', amount: 100,
       description: 'A coffee at our counter', status: 'CLAIMED', dueAt: '2026-10-20T01:00:00Z',
       expiresAt: '2026-11-19T01:00:00Z', claimKind: 'PRINTED', claimedAt: '2026-10-21T01:00:00Z',
       confirmBy: '2026-10-21T01:10:00Z', redeemedAt: null, redeemedBy: null, voidedBy: null, voidNote: null, ...change }
@@ -164,7 +164,7 @@ describe('RedemptionsPage (Q22b)', () => {
 describe('DigitalPrizesPage (Q33)', () => {
   function digital(change: Row = {}): Row {
     return { digitalPrizeId: 'd1', attemptId: 'a1', publicationId: 'p1', publicationName: 'Coffee week',
-      sponsorId: SPONSOR, sponsorCompany: 'Acme', userId: TAKER, takerName: 'Mei', amount: 100,
+      publisherKind: 'SPONSOR', publisherId: SPONSOR, sponsorCompany: 'Acme', userId: TAKER, takerName: 'Mei', amount: 100,
       description: 'A streaming voucher', delivery: 'POOL', hint: '…7Q2X', status: 'DISPUTED',
       dueAt: '2026-10-20T01:00:00Z', sendBy: null, deliveredAt: '2026-10-20T01:00:00Z', deliveredBy: 'SYSTEM',
       openedAt: '2026-10-20T02:00:00Z', confirmBy: '2026-10-27T01:00:00Z', confirmedAt: null,

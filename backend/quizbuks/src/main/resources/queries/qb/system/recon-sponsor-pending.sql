@@ -31,9 +31,10 @@ FROM (
     FROM {{QbWallet}} x
     WHERE x.{{QbWallet.kind}} = 'SPONSOR') w
 FULL OUTER JOIN (
-    SELECT m.{{QbAttempt.sponsorId}} AS p_sponsor, count(*) AS p_count, sum(m.{{QbAttempt.reward}}) AS p_amount
+    SELECT m.{{QbAttempt.publisherId}} AS p_sponsor, count(*) AS p_count, sum(m.{{QbAttempt.reward}}) AS p_amount
     FROM {{QbAttempt}} m
-    WHERE m.{{QbAttempt.rewardStatus}} = 'PENDING'
-    GROUP BY m.{{QbAttempt.sponsorId}}) p ON p.p_sponsor = w.w_owner
+    -- S0: the pending rewards of sponsors' wallets (a shop has no wallet).
+    WHERE m.{{QbAttempt.rewardStatus}} = 'PENDING' AND m.{{QbAttempt.publisherKind}} = 'SPONSOR'
+    GROUP BY m.{{QbAttempt.publisherId}}) p ON p.p_sponsor = w.w_owner
 WHERE coalesce(p.p_count, 0) <> coalesce(w.w_count, 0)
    OR coalesce(p.p_amount, 0) <> coalesce(w.w_amount, 0)

@@ -316,7 +316,8 @@ public final class DigitalPrizeProcesses {
         payload.put("attemptId", prize.get("attemptId"));
         payload.put("publicationId", String.valueOf((Object) prize.get("publicationId")));
         payload.put("userId", prize.get("userId"));
-        payload.put("sponsorId", prize.get("sponsorId"));
+        payload.put("publisherKind", prize.get("publisherKind"));
+        payload.put("publisherId", prize.get("publisherId"));
         payload.put("amount", prize.get("amount"));
         payload.put("status", status);
         return payload;

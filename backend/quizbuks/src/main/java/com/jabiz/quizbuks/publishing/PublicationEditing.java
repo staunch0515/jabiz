@@ -162,7 +162,7 @@ final class PublicationEditing {
             QbAccounts.defaultDataset(QbAccounts.PROFILE), ctx -> {
                 EntityInstance found = publication.apply(ctx);
                 return EntityQuery.builder().where(new QueryPredicate.In("userId",
-                    ids(found == null ? null : found.get("sponsorId")))).limit(1).build();
+                    ids(found == null ? null : found.get("publisherId")))).limit(1).build();
             }, SPONSOR_PROFILE));
     }
 
@@ -248,7 +248,7 @@ final class PublicationEditing {
             .step("Lock the sponsor's account", HoldLock.<ProcessContext>exclusive(ctx -> {
                 EntityInstance before = first(ctx, BEFORE);
                 return before == null ? null : com.jabiz.quizbuks.identity.QbAccounts.lockName(
-                    before.get("sponsorId"));
+                    before.get("publisherId"));
             }));
     }
 
@@ -264,9 +264,11 @@ final class PublicationEditing {
         pb.step("Load the sponsor's publications", QueryEntities.<ProcessContext>of(
             QbPublications.defaultDataset(QbPublications.PUBLICATION), ctx -> {
                 EntityInstance found = publication.apply(ctx);
-                Object sponsor = found == null ? null : found.get("sponsorId");
-                return EntityQuery.builder().where(new QueryPredicate.Eq("sponsorId", sponsor == null ? ""
-                    : String.valueOf(sponsor))).limit(Integer.MAX_VALUE).build();
+                Object publisher = found == null ? null : found.get("publisherId");
+                return EntityQuery.builder().where(new QueryPredicate.And(List.of(
+                        new QueryPredicate.Eq("publisherKind", found == null ? "" : found.get("publisherKind")),
+                        new QueryPredicate.Eq("publisherId", publisher == null ? "" : String.valueOf(publisher)))))
+                    .limit(Integer.MAX_VALUE).build();
             }, SPONSOR_PUBLICATIONS));
     }
 
@@ -295,7 +297,7 @@ final class PublicationEditing {
             QbAccounts.defaultDataset(QbAccounts.BAN), ctx -> {
                 EntityInstance found = publication.apply(ctx);
                 return EntityQuery.builder().where(new QueryPredicate.In("userId",
-                    userIds(found == null ? null : found.get("sponsorId")))).limit(1).build();
+                    userIds(found == null ? null : found.get("publisherId")))).limit(1).build();
             }, BAN_ROWS));
     }
 
@@ -556,7 +558,8 @@ final class PublicationEditing {
         EntityInstance profile = first(ctx, SPONSOR_PROFILE);
         Map<String, Object> card = new LinkedHashMap<>();
         card.put("publicationId", publication.id());
-        card.put("sponsorId", publication.get("sponsorId"));
+        card.put("publisherKind", publication.get("publisherKind"));
+        card.put("publisherId", publication.get("publisherId"));
         card.put("status", status);
         for (String field : List.of("regions", "startAt", "endAt", "name", "versionId", "maxReward", "fullScore",
             "passScore", "timeLimitSec", "budgetCap", "maxWinners", "redeemDescription", "digitalDelivery",
@@ -637,8 +640,8 @@ final class PublicationEditing {
         boolean autoApprove, boolean takenDown) {
         List<TierCoverage.Tier> ranges = tiersOf(tiers);
         Map<String, Object> facts = PublicationApprovals.facts(autoApprove && !takenDown,
-            money(publication.get("maxReward")), money(publication.get("maxSpend")), publication.get("sponsorId"),
-            publication.get("regions"), takenDown, methodOf(publication.attributes()));
+            money(publication.get("maxReward")), money(publication.get("maxSpend")), publication.get("publisherKind"),
+            publication.get("publisherId"), publication.get("regions"), takenDown, methodOf(publication.attributes()));
         Map<String, Object> content = PublicationApprovals.content(draftOf(publication),
             version == null ? null : version.get("contentHash"), ranges);
         return ApprovalCase.of(publication.id(), facts, content).reference(publication.get("name"));

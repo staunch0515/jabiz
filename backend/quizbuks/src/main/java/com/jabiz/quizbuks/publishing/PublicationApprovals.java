@@ -14,7 +14,7 @@ import java.util.Map;
  * The facts are what the approval rules test: whether publications go without review (the controlled parameter
  * {@code qb.review.publication.auto}, read at each submission; false whatever it says when an administrator took
  * down a publication of the same quiz), whether that is so ({@code takenDown}, Q10b review M-d), the highest reward,
- * the most it can pay out, the sponsor and the regions. The content is everything the reviewer approves: the version (by its content hash) and
+ * the most it can pay out, the publisher (kind and id) and the regions. The content is everything the reviewer approves: the version (by its content hash) and
  * every part of the policy. An approval stays valid while the content hashes the same ({@link ContentHash}: key order
  * and number scale do not count), and a policy is frozen once submitted, so what goes live is what was approved.
  */
@@ -27,20 +27,25 @@ public final class PublicationApprovals {
 
     /** The facts of a submission, as the subject declares them. */
     public static Map<String, Object> facts(boolean autoApprove, BigDecimal maxReward, BigDecimal maxSpend,
-        String sponsorId, String regions, boolean takenDown) {
-        return facts(autoApprove, maxReward, maxSpend, sponsorId, regions, takenDown, RewardMethod.PLATFORM);
+        String publisherId, String regions, boolean takenDown) {
+        return facts(autoApprove, maxReward, maxSpend, PublisherKind.SPONSOR, publisherId, regions, takenDown,
+            RewardMethod.PLATFORM);
     }
 
-    /** @param rewardMethod how the reward reaches the taker (Q22): a rule may review cash and prizes differently */
+    /**
+     * @param publisherKind who published (S0, {@link PublisherKind}): a rule may review each merchant system differently
+     * @param rewardMethod  how the reward reaches the taker (Q22): a rule may review cash and prizes differently
+     */
     public static Map<String, Object> facts(boolean autoApprove, BigDecimal maxReward, BigDecimal maxSpend,
-        String sponsorId, String regions, boolean takenDown, String rewardMethod) {
+        String publisherKind, String publisherId, String regions, boolean takenDown, String rewardMethod) {
         Map<String, Object> facts = new LinkedHashMap<>();
         facts.put("rewardMethod", rewardMethod);
         facts.put("autoApprove", autoApprove);
         facts.put("takenDown", takenDown);
         facts.put("maxReward", maxReward);
         facts.put("maxSpend", maxSpend);
-        facts.put("sponsorId", sponsorId);
+        facts.put("publisherKind", publisherKind);
+        facts.put("publisherId", publisherId);
         facts.put("regions", regions);
         return facts;
     }

@@ -113,7 +113,7 @@ public final class AttemptResults {
                         ctx -> byAttempt(ctx, RewardStatus.DIGITAL), DIGITAL),
                     QueryEntities.query(QbAccounts.defaultDataset(QbAccounts.SPONSOR), ctx -> EntityQuery.builder()
                         .where(new QueryPredicate.In("userId", external(ctx)
-                            ? List.of(String.valueOf((Object) ctx.get(ATTEMPT, EntityInstance.class).get("sponsorId")))
+                            ? List.of(String.valueOf((Object) ctx.get(ATTEMPT, EntityInstance.class).get("publisherId")))
                             : List.of())).limit(1).build(), SPONSOR)))
                 .compute("Read the result", (metadata, ctx) -> read(ctx)));
     }

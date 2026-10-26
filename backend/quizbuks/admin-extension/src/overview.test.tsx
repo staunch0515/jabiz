@@ -58,7 +58,8 @@ const quizRow = (overrides: Row = {}): Row => ({
 })
 
 const publicationRow = (overrides: Row = {}): Row => ({
-  publicationId: PUBLICATION, sponsorId: SPONSOR, quizId: QUIZ, name: 'Spring run', quizTitle: 'World capitals',
+  publicationId: PUBLICATION, publisherKind: 'SPONSOR', publisherId: SPONSOR, quizId: QUIZ, name: 'Spring run',
+  quizTitle: 'World capitals',
   versionLabel: 'v1.0', status: 'LIVE', starts: 12, completions: 10, winners: 3, startAt: '2026-10-01T00:00:00Z',
   endAt: '2026-11-01T00:00:00Z', editedAt: '2026-10-02T00:00:00Z', rejectReason: null, ...overrides,
 })
@@ -254,7 +255,7 @@ describe('PublicationsPage', () => {
       <PublicationsPage />)
     await screen.findAllByTestId('publication-row')
     expect(lastCall(TEMPLATE.publications)).toMatchObject({ filters: [
-      { field: 'status', op: 'eq', value: 'ENDED' }, { field: 'sponsorId', op: 'eq', value: SPONSOR },
+      { field: 'status', op: 'eq', value: 'ENDED' }, { field: 'publisherId', op: 'eq', value: SPONSOR },
       { field: 'quizId', op: 'eq', value: QUIZ }] })
     await userEvent.click(screen.getByTestId('publications-all'))
     await waitFor(() => expect(lastCall(TEMPLATE.publications)).toMatchObject({ filters: [] }))
@@ -277,8 +278,8 @@ describe('PublicationsPage', () => {
   })
 
   it('opens a publication that goes back to the list it came from', async () => {
-    server.entities.set(`${DATASET.publication}/${PUBLICATION}`, { publicationId: PUBLICATION, sponsorId: SPONSOR,
-      quizId: QUIZ, versionId: VERSION, versionLabel: 'v1.0', name: 'Spring run', regions: 'JP', status: 'LIVE',
+    server.entities.set(`${DATASET.publication}/${PUBLICATION}`, { publicationId: PUBLICATION,
+      publisherKind: 'SPONSOR', publisherId: SPONSOR, quizId: QUIZ, versionId: VERSION, versionLabel: 'v1.0', name: 'Spring run', regions: 'JP', status: 'LIVE',
       approvalRequestId: null })
     server.datasets.set(DATASET.tier, [])
     server.datasets.set(DATASET.sponsor, [])

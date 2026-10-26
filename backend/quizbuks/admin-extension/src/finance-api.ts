@@ -600,7 +600,8 @@ export interface InvestorMonth {
 
 /** A row of `qb.admin.investor-sponsors` (Q27): one merchant's figures over the period. */
 export interface InvestorSponsor {
-  sponsorId: string
+  /** The merchant's key: a sponsor's user id (S0: the publisher's id). */
+  publisherId: string
   company: string
   takers: number
   attempts: number
@@ -656,7 +657,7 @@ export async function readInvestorMetrics(period: Period): Promise<InvestorMonth
 export async function readInvestorSponsors(period: Period): Promise<InvestorSponsor[]> {
   const page = await runQuery<Row>(TEMPLATE.investorSponsors, { params: { ...period }, limit: 500 })
   return page.items.map((row) => ({
-    sponsorId: String(row.sponsorId ?? ''),
+    publisherId: String(row.publisherId ?? ''),
     company: String(row.company ?? ''),
     takers: num(row.takers),
     attempts: num(row.attempts),

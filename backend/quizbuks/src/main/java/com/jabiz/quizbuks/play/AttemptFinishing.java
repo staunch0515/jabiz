@@ -350,13 +350,13 @@ public final class AttemptFinishing {
             .step("Lock the sponsor's wallet", HoldLock.<ProcessContext>exclusive(ctx -> {
                 Plan plan = plan(ctx);
                 return plan != null && plan.fromWallet() ? QbWallets.lockName(QbWallets.SPONSOR,
-                    plan.attempt().get("sponsorId")) : null;
+                    plan.attempt().get("publisherId")) : null;
             }))
             .step("Load the sponsor's wallet", QueryEntities.<ProcessContext>of(
                 QbWallets.defaultDataset(QbWallets.WALLET), ctx -> {
                     Plan plan = plan(ctx);
                     return QbWallets.query(QbWallets.SPONSOR, plan != null && plan.fromWallet()
-                        ? plan.attempt().get("sponsorId") : null);
+                        ? plan.attempt().get("publisherId") : null);
                 }, WALLET))
             .compute("Settle the reward", (metadata, ctx) -> settle(ctx))
             .step("Post the reward", CallProcess.<ProcessContext>when(
@@ -505,7 +505,7 @@ public final class AttemptFinishing {
             return;
         }
         EntityInstance wallet = first(ctx, WALLET);
-        Object sponsorId = plan.attempt().get("sponsorId");
+        Object sponsorId = plan.attempt().get("publisherId");
         if (QbWallets.pays(wallet, plan.reward())) {
             BigDecimal rate = ctx.get(PARAMS, ParamValues.class).get(QbParams.CREATOR_FEE_RATE, BigDecimal.class);
             if (!RewardSplit.validRate(rate)) {
@@ -622,7 +622,8 @@ public final class AttemptFinishing {
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("attemptId", String.valueOf(attempt.id()));
         values.put("publicationId", attempt.get("publicationId"));
-        values.put("sponsorId", attempt.get("sponsorId"));
+        values.put("publisherKind", attempt.get("publisherKind"));
+        values.put("publisherId", attempt.get("publisherId"));
         values.put("userId", attempt.get("userId"));
         values.put("amount", plan.reward());
         values.put("code", QbRewards.codeOf(attempt.id()));

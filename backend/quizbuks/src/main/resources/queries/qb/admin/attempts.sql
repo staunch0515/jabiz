@@ -10,7 +10,8 @@ results:
   userId:              { from: QbAttempt.userId }
   publicationId:       { from: QbAttempt.publicationId }
   name:                { from: QbPublicationCard.name }
-  sponsorId:           { from: QbAttempt.sponsorId }
+  publisherKind:       { from: QbAttempt.publisherKind }
+  publisherId:         { from: QbAttempt.publisherId }
   status:              { from: QbAttempt.status }
   startedAt:           { from: QbAttempt.startedAt }
   deadline:            { from: QbAttempt.deadline }
@@ -21,7 +22,7 @@ results:
   rewardStatus:        { from: QbAttempt.rewardStatus }
   rewardPaidAt:        { from: QbAttempt.rewardPaidAt }
 list:
-  filters: [userId, publicationId, sponsorId, status, rewardStatus, startedAt, submittedAt]
+  filters: [userId, publicationId, publisherKind, publisherId, status, rewardStatus, startedAt, submittedAt]
   sorts:   [startedAt, submittedAt]
   defaultSort: { field: startedAt, asc: false }
   key: [attemptId]
@@ -33,7 +34,8 @@ SELECT
     m.{{QbAttempt.userId}}              AS userId,
     m.{{QbAttempt.publicationId}}       AS publicationId,
     c.{{QbPublicationCard.name}}        AS name,
-    m.{{QbAttempt.sponsorId}}           AS sponsorId,
+    m.{{QbAttempt.publisherKind}}         AS publisherKind,
+    m.{{QbAttempt.publisherId}}           AS publisherId,
     m.{{QbAttempt.status}}              AS status,
     m.{{QbAttempt.startedAt}}           AS startedAt,
     m.{{QbAttempt.deadline}}            AS deadline,

@@ -105,7 +105,7 @@ beforeEach(() => {
       { month: '2026-10', newSponsors: 1, activeSponsors: 3, retainedSponsors: 1, publicationsWentOn: 2, newTakers: 7,
         activeTakers: 9, attempts: 20, completions: 12, passes: 6, prizesWon: 6, prizesClaimed: 5, prizesRedeemed: 4,
         invitationsSent: 0, invitationsAnswered: 0, topUps: 1, topUpAmount: 10000, rewardsPaid: 1000, commission: 200 }]],
-    [TEMPLATE.investorSponsors, [{ sponsorId: 's-1', company: 'Kissa Kudos', takers: 9, attempts: 20, completions: 12,
+    [TEMPLATE.investorSponsors, [{ publisherId: 's-1', company: 'Kissa Kudos', takers: 9, attempts: 20, completions: 12,
       passes: 6, prizesWon: 6, prizesRedeemed: 4, invitationsSent: 6, invitationsAnswered: 3 }]],
     [TEMPLATE.balances, [{ seq: 1, rowKind: 'ACCOUNT', code: '1110', name: 'Stripe balance', opening: 0, debit: 10000,
       credit: 0, closing: 10000 }, { seq: 901, rowKind: 'CHECK', code: 'SPONSOR_WALLETS', name: 'Sponsor wallets',

@@ -67,13 +67,14 @@ class ShareLinkIT extends PlayItSupport {
         // Nothing of the sponsor or the regions in the answer, whatever is asked.
         String raw = publicQuery("p.publicationId=" + publicationId)
             .expectStatus().isOk().expectBody(String.class).returnResult().getResponseBody();
-        assertThat(raw).doesNotContain("sponsorId").doesNotContain("regions").doesNotContain("GLOBAL")
+        assertThat(raw).doesNotContain("publisherId").doesNotContain("publisherKind").doesNotContain("regions")
+            .doesNotContain("GLOBAL")
             .doesNotContain("tiers").doesNotContain("budget");
 
         // Neither the sponsor's id nor the regions can be filtered or sorted on: they are not results.
-        publicQuery("p.publicationId=" + publicationId + "&filter=sponsorId:eq:" + sponsorA()).expectStatus()
+        publicQuery("p.publicationId=" + publicationId + "&filter=publisherId:eq:" + sponsorA()).expectStatus()
             .isBadRequest();
-        publicQuery("p.publicationId=" + publicationId + "&sort=sponsorId").expectStatus().isBadRequest();
+        publicQuery("p.publicationId=" + publicationId + "&sort=publisherId").expectStatus().isBadRequest();
         // Scheduled, unknown, or paused: no row.
         String later = livePublication(sponsorA(), "Later",
             Map.of("startAt", clock.instant().plus(Duration.ofDays(1))));

@@ -46,7 +46,7 @@ today AS (
     SELECT (date_trunc('day', CAST(:at AS timestamptz) AT TIME ZONE run.z) AT TIME ZONE run.z) AS day_start
     FROM run),
 mine AS (
-    SELECT p.{{QbPublicationCard.publicationId}} AS pid, p.{{QbPublicationCard.sponsorId}} AS sponsor,
+    SELECT p.{{QbPublicationCard.publicationId}} AS pid, p.{{QbPublicationCard.publisherId}} AS sponsor,
            p.{{QbPublicationCard.status}} AS v_status, p.{{QbPublicationCard.budgetCap}} AS cap,
            p.{{QbPublicationCard.wentOnAt}} AS went_on
     FROM {{QbPublicationCard}} p),
@@ -75,7 +75,7 @@ bucketed AS (
     SELECT coalesce(sum(h.{{QbAnalyticsHour.spent}}), 0) AS v_spent
     FROM {{QbAnalyticsHour}} h
     CROSS JOIN today t
-    WHERE h.{{QbAnalyticsHour.sponsorId}} IN (SELECT m.sponsor FROM mine m)
+    WHERE h.{{QbAnalyticsHour.publisherId}} IN (SELECT m.sponsor FROM mine m)
       AND h.{{QbAnalyticsHour.publicationId}} IN (SELECT m.pid FROM mine m)
       AND h.{{QbAnalyticsHour.hourStart}} >= t.day_start
       AND h.{{QbAnalyticsHour.hourStart}} <= CAST(:at AS timestamptz)),

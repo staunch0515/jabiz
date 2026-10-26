@@ -20,7 +20,8 @@ params:
   viewsTo: { kind: { type: temporal, role: EVENT_TIME }, required: true, description: First views up to this time are counted }
 results:
   publicationId:   { from: QbPublicationCard.publicationId }
-  sponsorId:       { from: QbPublicationCard.sponsorId }
+  publisherKind:   { from: QbPublicationCard.publisherKind }
+  publisherId:     { from: QbPublicationCard.publisherId }
   status:          { from: QbPublicationCard.status }
   endedAt:         { from: QbPublicationCard.endedAt }
   wentOnAt:        { from: QbPublicationCard.wentOnAt }
@@ -71,7 +72,8 @@ WITH params AS (
     FROM {{SysParam}} p
     WHERE p.{{SysParam.paramKey}} = 'qb.stats.min-group'),
 chunk AS (
-    SELECT k.{{QbPublicationCard.publicationId}} AS pid, k.{{QbPublicationCard.sponsorId}} AS sponsor,
+    SELECT k.{{QbPublicationCard.publicationId}} AS pid, k.{{QbPublicationCard.publisherKind}} AS publisher_kind,
+           k.{{QbPublicationCard.publisherId}} AS publisher,
            k.{{QbPublicationCard.status}} AS status, k.{{QbPublicationCard.endedAt}} AS ended,
            k.{{QbPublicationCard.wentOnAt}} AS went_on,
            greatest(CAST(:bucket AS timestamptz),
@@ -86,7 +88,8 @@ chunk AS (
                         AND f.{{QbAnalyticsCursor.finalizedAt}} IS NULL)))))
 SELECT
     x.pid                                   AS publicationId,
-    x.sponsor                               AS sponsorId,
+    x.publisher_kind                        AS publisherKind,
+    x.publisher                             AS publisherId,
     x.status                                AS status,
     x.ended                                 AS endedAt,
     x.went_on                               AS wentOnAt,

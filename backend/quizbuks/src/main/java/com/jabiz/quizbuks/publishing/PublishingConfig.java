@@ -29,7 +29,8 @@ import java.util.UUID;
  *
  * <p>Each entity has a default dataset, read only by administrators ({@code qb.admin.publication.read}) and written
  * by the processes only ({@code processOnlyWrites}; its write permission is one no role holds). A sponsor reads their own publications and tiers through the
- * sponsor datasets ({@code sponsorId} = the caller), read only and without history; counters through the templates.
+ * sponsor datasets (published as a sponsor, {@code publisherId} = the caller, S0), read only and without history;
+ * counters through the templates.
  */
 @Configuration
 public class PublishingConfig {
@@ -56,7 +57,16 @@ public class PublishingConfig {
             .permissions(QbPermissions.PUBLICATION_WRITE, QbPermissions.SPONSOR_VIEW_WRITE)
             .policy(p -> p.readOnly(true).allowTimeTravel(false))
             .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef))
-            .scope(s -> s.fromContext("sponsorId", "actorId", RequestContext::actorId)));
+            .scope(s -> s.fromContext("publisherId", "actorId", RequestContext::actorId)
+                .fixed("publisherKind", PublisherKind.SPONSOR)));
+    }
+
+    /** Who may publish (S0, D-S0-1): the merchant systems a publication's owner can belong to. */
+    @Bean
+    StaticDictionary qbPublisherKindDictionary() {
+        return StaticDictionary.define(PublisherKind.DICTIONARY, d -> d
+            .item(PublisherKind.SPONSOR, "en", "Sponsor", "zh", "商家", "ja", "スポンサー")
+            .item(PublisherKind.SHOPIFY_SHOP, "en", "Shopify shop", "zh", "Shopify 店铺", "ja", "Shopify ストア"));
     }
 
     @Bean
@@ -132,8 +142,10 @@ public class PublishingConfig {
         return DatasetDefinition.define(QbPublications.PUBLIC_CARDS, d -> d
             .targetEntityType(QbPublications.CARD)
             // Q25: an invited publication has no public page; its link carries the invitee's sign-in.
-            .scope(s -> s.fixed("status", PublicationStatus.LIVE).fixed("audience", Audience.PUBLIC))
-            .publicRead(p -> p.fields("publicationId", "sponsorId", "name", "quizTitle", "kind", "startAt", "endAt",
+            // S0 (D-S0-4): the share page is the sponsors' system's; a shop's publication (S2) has its own storefront.
+            .scope(s -> s.fixed("status", PublicationStatus.LIVE).fixed("audience", Audience.PUBLIC)
+                .fixed("publisherKind", PublisherKind.SPONSOR))
+            .publicRead(p -> p.fields("publicationId", "publisherId", "name", "quizTitle", "kind", "startAt", "endAt",
                 "timeLimitSec", "questionCount", "fullScore", "passScore", "maxReward", "rewardMethod",
                 "redeemDescription", "digitalDelivery", "digitalDescription"))
             .permissions(QbPermissions.ADMIN_PUBLICATION_READ, QbPermissions.SPONSOR_VIEW_WRITE)
@@ -155,7 +167,8 @@ public class PublishingConfig {
             .permissions(QbPermissions.PLAY, QbPermissions.SPONSOR_VIEW_WRITE)
             .policy(p -> p.readOnly(true).allowTimeTravel(false))
             .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef))
-            .scope(s -> s.fromContext("sponsorId", "actorId", RequestContext::actorId)));
+            .scope(s -> s.fromContext("publisherId", "actorId", RequestContext::actorId)
+                .fixed("publisherKind", PublisherKind.SPONSOR)));
     }
 
     @Bean

@@ -48,6 +48,6 @@ SELECT
     r.{{QbCashReward.resolution}}    AS resolution
 FROM {{QbCashReward}} r
 JOIN {{QbPublicationCard}} c ON c.{{QbPublicationCard.publicationId}} = r.{{QbCashReward.publicationId}}
-LEFT JOIN {{QbSponsor}} sp ON sp.{{QbSponsor.userId}} = r.{{QbCashReward.sponsorId}}
+LEFT JOIN {{QbSponsor}} sp ON sp.{{QbSponsor.userId}} = r.{{QbCashReward.publisherId}}
 WHERE (CAST(:open AS boolean) IS NULL OR CAST(:open AS boolean) = false
        OR r.{{QbCashReward.status}} IN ('DUE', 'MARKED_PAID', 'OVERDUE', 'DISPUTED'))

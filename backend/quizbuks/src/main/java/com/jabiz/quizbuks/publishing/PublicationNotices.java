@@ -87,7 +87,8 @@ public final class PublicationNotices {
         }
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("publicationId", String.valueOf(publication.id()));
-        payload.put("sponsorId", publication.get("sponsorId"));
+        payload.put("publisherKind", publication.get("publisherKind"));
+        payload.put("publisherId", publication.get("publisherId"));
         payload.put("from", from);
         Object to = values.get("status");
         payload.put("to", to == null ? from : to.toString());

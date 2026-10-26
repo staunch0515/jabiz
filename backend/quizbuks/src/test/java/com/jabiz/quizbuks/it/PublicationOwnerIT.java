@@ -134,7 +134,7 @@ class PublicationOwnerIT extends PublicationItSupport {
     }
 
     private static Object sponsorOf(Map<String, Object> item) {
-        return ((Map<?, ?>) item.get("attributes")).get("sponsorId");
+        return ((Map<?, ?>) item.get("attributes")).get("publisherId");
     }
 
     /** The rows of a dataset as the caller reads them. */

@@ -25,7 +25,7 @@ import {
   type ColumnDef,
 } from '@jabiz/admin'
 import { StatusFilter } from './finance-components'
-import { LoadFailed } from './components'
+import { LoadFailed, PublisherLink } from './components'
 import { money, useLabels, usePaged, when } from './hooks'
 import { DICTIONARY, PATH, PERMISSION } from './ids'
 import { readRedemptions, voidRedemption, type Redemption } from './reward-api'
@@ -117,9 +117,8 @@ export default function RedemptionsPage() {
       cell: ({ row }) => <code className="font-mono" data-testid="redeem-row-code">{row.original.code}</code> },
     { id: 'sponsor', header: t('reward.redeem.sponsor'),
       cell: ({ row }) => (
-        <Link to={PATH.user(row.original.sponsorId)} className={linkClass}>
-          {row.original.sponsorCompany ?? <UserName id={row.original.sponsorId} />}
-        </Link>
+        <PublisherLink kind={row.original.publisherKind} id={row.original.publisherId}
+          label={row.original.sponsorCompany} />
       ) },
     { id: 'taker', header: t('reward.redeem.taker'),
       cell: ({ row }) => (

@@ -62,7 +62,7 @@ slots AS (
 bounds AS (
     SELECT min(slot_start) AS lo, max(slot_end) AS hi FROM slots),
 mine AS (
-    SELECT p.{{QbPublicationCard.publicationId}} AS pid, p.{{QbPublicationCard.sponsorId}} AS sponsor
+    SELECT p.{{QbPublicationCard.publicationId}} AS pid, p.{{QbPublicationCard.publisherId}} AS sponsor
     FROM {{QbPublicationCard}} p
     WHERE CAST(:publicationId AS uuid) IS NULL OR p.{{QbPublicationCard.publicationId}} = CAST(:publicationId AS uuid)),
 hours AS (
@@ -73,7 +73,7 @@ hours AS (
     FROM {{QbAnalyticsHour}} h
     JOIN mine m ON m.pid = h.{{QbAnalyticsHour.publicationId}}
     CROSS JOIN bounds b
-    WHERE h.{{QbAnalyticsHour.sponsorId}} IN (SELECT m2.sponsor FROM mine m2)
+    WHERE h.{{QbAnalyticsHour.publisherId}} IN (SELECT m2.sponsor FROM mine m2)
       AND h.{{QbAnalyticsHour.hourStart}} >= b.lo AND h.{{QbAnalyticsHour.hourStart}} < b.hi)
 SELECT
     s.slot_start                                                  AS bucketStart,

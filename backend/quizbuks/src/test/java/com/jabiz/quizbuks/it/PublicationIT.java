@@ -42,7 +42,8 @@ class PublicationIT extends PublicationItSupport {
         Map<String, Object> first = ((List<Map<String, Object>>) saved.get("problems")).getFirst();
         assertThat(first).containsEntry("field", "versionId").containsEntry("message", "Choose a version of a quiz.");
         String id = (String) saved.get("publicationId");
-        assertThat(row(id)).containsEntry("sponsor_id", "sponsor-a").containsEntry("status", "DRAFT");
+        assertThat(row(id)).containsEntry("publisher_kind", "SPONSOR")
+            .containsEntry("publisher_id", "sponsor-a").containsEntry("status", "DRAFT");
 
         // The whole policy: the time limit is the version's, the derived values follow the tiers.
         String versionId = version(sponsorA(), "Capitals");
@@ -313,9 +314,9 @@ class PublicationIT extends PublicationItSupport {
             .doesNotContain(row(spring).get("quiz_id").toString());
 
         // The administrators see every sponsor's.
-        assertThat(items("qb.admin.publications", reviewer(), body("filters", List.of(Map.of("field", "sponsorId",
+        assertThat(items("qb.admin.publications", reviewer(), body("filters", List.of(Map.of("field", "publisherId",
             "op", "eq", "value", "sponsor-b"))))).hasSize(2).allSatisfy(item -> assertThat(item)
-                .containsEntry("sponsorId", "sponsor-b"));
+                .containsEntry("publisherKind", "SPONSOR").containsEntry("publisherId", "sponsor-b"));
     }
 
     @Test

@@ -9,6 +9,7 @@ import com.jabiz.job.JobItems;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.publishing.PublisherKind;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -46,14 +47,22 @@ public class RewardConfig {
             .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
     }
 
-    /** One side's own records: read only, without history, limited to the caller by {@code field}. */
+    /**
+     * One side's own records: read only, without history, limited to the caller by {@code field}. A sponsor's records
+     * are those published as a sponsor (S0: the publisher's id alone could be a shop's).
+     */
     private DatasetDefinition ownDataset(String id, String entity, String field, String readPermission) {
         return DatasetDefinition.define(id, d -> d
             .targetEntityType(entity)
             .permissions(readPermission, QbPermissions.SPONSOR_VIEW_WRITE)
             .policy(p -> p.readOnly(true).allowTimeTravel(false))
             .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef))
-            .scope(s -> s.fromContext(field, "actorId", RequestContext::actorId)));
+            .scope(s -> {
+                s.fromContext(field, "actorId", RequestContext::actorId);
+                if (PublisherKind.ID_FIELD.equals(field)) {
+                    s.fixed(PublisherKind.KIND_FIELD, PublisherKind.SPONSOR);
+                }
+            }));
     }
 
     @Bean
@@ -91,7 +100,7 @@ public class RewardConfig {
     @Bean
     DatasetDefinition qbSponsorDigitalPrizeDataset() {
         return ownDataset(QbDigitalPrizes.sponsorDataset(QbDigitalPrizes.DIGITAL_PRIZE),
-            QbDigitalPrizes.DIGITAL_PRIZE, "sponsorId", QbPermissions.PUBLICATION_WRITE);
+            QbDigitalPrizes.DIGITAL_PRIZE, PublisherKind.ID_FIELD, QbPermissions.PUBLICATION_WRITE);
     }
 
     @Bean
@@ -110,7 +119,7 @@ public class RewardConfig {
     @Bean
     DatasetDefinition qbSponsorDigitalCodeDataset() {
         return ownDataset(QbDigitalPrizes.sponsorDataset(QbDigitalPrizes.DIGITAL_CODE), QbDigitalPrizes.DIGITAL_CODE,
-            "sponsorId", QbPermissions.PUBLICATION_WRITE);
+            PublisherKind.ID_FIELD, QbPermissions.PUBLICATION_WRITE);
     }
 
     @Bean
@@ -207,7 +216,7 @@ public class RewardConfig {
 
     @Bean
     DatasetDefinition qbSponsorCashRewardDataset() {
-        return ownDataset(QbRewards.sponsorDataset(QbRewards.CASH_REWARD), QbRewards.CASH_REWARD, "sponsorId",
+        return ownDataset(QbRewards.sponsorDataset(QbRewards.CASH_REWARD), QbRewards.CASH_REWARD, PublisherKind.ID_FIELD,
             QbPermissions.PUBLICATION_WRITE);
     }
 
@@ -224,7 +233,7 @@ public class RewardConfig {
 
     @Bean
     DatasetDefinition qbSponsorRedemptionDataset() {
-        return ownDataset(QbRewards.sponsorDataset(QbRewards.REDEMPTION), QbRewards.REDEMPTION, "sponsorId",
+        return ownDataset(QbRewards.sponsorDataset(QbRewards.REDEMPTION), QbRewards.REDEMPTION, PublisherKind.ID_FIELD,
             QbPermissions.PUBLICATION_WRITE);
     }
 

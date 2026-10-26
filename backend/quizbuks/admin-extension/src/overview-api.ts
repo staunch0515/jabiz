@@ -222,6 +222,7 @@ export interface PublicationListRow extends PublicationRow {
 export interface PublicationFilter {
   q: string | null
   status: string | null
+  /** A sponsor's user id (the address says `sponsor`): the publisher of the sponsors' console. */
   sponsorId: string | null
   quizId: string | null
 }
@@ -236,7 +237,7 @@ export async function readPublications(filter: PublicationFilter, offset: number
   limit: number): Promise<Page<PublicationListRow>> {
   const filters: Filter[] = []
   if (filter.status) filters.push({ field: 'status', op: 'eq', value: filter.status })
-  if (filter.sponsorId) filters.push({ field: 'sponsorId', op: 'eq', value: filter.sponsorId })
+  if (filter.sponsorId) filters.push({ field: 'publisherId', op: 'eq', value: filter.sponsorId })
   if (filter.quizId) filters.push({ field: 'quizId', op: 'eq', value: filter.quizId })
   const answer = await runQuery<Row>(TEMPLATE.publications, { params: { q: filter.q }, filters, offset, limit,
     count: true })

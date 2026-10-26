@@ -13,7 +13,7 @@ import {
   useAuth,
   type ColumnDef,
 } from '@jabiz/admin'
-import { LoadFailed } from './components'
+import { LoadFailed, PublisherLink } from './components'
 import { StatusFilter } from './finance-components'
 import { useLabels, usePaged, when } from './hooks'
 import { DICTIONARY, PATH, PERMISSION } from './ids'
@@ -85,9 +85,7 @@ export default function PublicationsPage() {
       id: 'sponsor',
       header: t('publications.sponsor'),
       cell: ({ row }) => (
-        <Link to={PATH.user(row.original.sponsorId)} className={linkClass}>
-          <UserName id={row.original.sponsorId} />
-        </Link>
+        <PublisherLink kind={row.original.publisherKind} id={row.original.publisherId} />
       ),
     },
     {

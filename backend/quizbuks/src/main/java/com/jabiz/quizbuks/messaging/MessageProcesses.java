@@ -281,7 +281,7 @@ public final class MessageProcesses {
         boolean sponsors = QbInbox.CASH_CONFIRMED.equals(input.kind()) || QbInbox.CASH_DISPUTED.equals(input.kind())
             || QbInbox.CASH_RESOLVED_SPONSOR.equals(input.kind());
         return sponsors
-            ? new Draft(cash.get("sponsorId"), QbInbox.TYPE_SYSTEM, input.kind(), card.id(), QbInbox.ACTION_CASH,
+            ? new Draft(cash.get("publisherId"), QbInbox.TYPE_SYSTEM, input.kind(), card.id(), QbInbox.ACTION_CASH,
                 String.valueOf(cash.id()))
             : new Draft(cash.get("userId"), QbInbox.TYPE_REWARD, input.kind(), card.id(), QbInbox.ACTION_RESULT,
                 cash.get("attemptId"));
@@ -318,7 +318,7 @@ public final class MessageProcesses {
         params.put("expiresAt", MessageTexts.Value.of(expires == null ? "" : String.valueOf(expires).substring(0,
             Math.min(10, String.valueOf(expires).length()))));
         if (QbInbox.REDEEM_CLAIMED.equals(input.kind())) {
-            return new Draft(redemption.get("sponsorId"), QbInbox.TYPE_SYSTEM, input.kind(), card.id(),
+            return new Draft(redemption.get("publisherId"), QbInbox.TYPE_SYSTEM, input.kind(), card.id(),
                 QbInbox.ACTION_REDEEM, String.valueOf(redemption.id()));
         }
         return new Draft(redemption.get("userId"), QbInbox.TYPE_REWARD, input.kind(), card.id(),
@@ -360,7 +360,7 @@ public final class MessageProcesses {
             || QbInbox.DIGITAL_DISPUTED.equals(input.kind()) || QbInbox.DIGITAL_OVERDUE.equals(input.kind())
             || QbInbox.DIGITAL_RESOLVED_SPONSOR.equals(input.kind());
         return sponsors
-            ? new Draft(prize.get("sponsorId"), QbInbox.TYPE_SYSTEM, input.kind(), card.id(),
+            ? new Draft(prize.get("publisherId"), QbInbox.TYPE_SYSTEM, input.kind(), card.id(),
                 QbInbox.ACTION_DIGITAL, String.valueOf(prize.id()))
             : new Draft(prize.get("userId"), QbInbox.TYPE_REWARD, input.kind(), card.id(), QbInbox.ACTION_RESULT,
                 prize.get("attemptId"));

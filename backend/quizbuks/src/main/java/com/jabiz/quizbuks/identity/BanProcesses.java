@@ -6,6 +6,7 @@ import com.jabiz.process.ProcessDefinition;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.publishing.PublisherKind;
 import com.jabiz.quizbuks.messaging.BroadcastProcesses;
 import com.jabiz.quizbuks.publishing.PublicationAdmin;
 import com.jabiz.quizbuks.publishing.PublicationStatus;
@@ -94,7 +95,9 @@ public final class BanProcesses {
             // as an administrator's, so the sponsor cannot resume it. Read by the immutable sponsor, filtered here.
             pb.step("Load the sponsor's publications", QueryEntities.<ProcessContext>of(
                 QbPublications.defaultDataset(QbPublications.PUBLICATION), ctx -> EntityQuery.builder()
-                    .where(new QueryPredicate.Eq("sponsorId", AccountEditing.userId(ctx)))
+                    .where(new QueryPredicate.And(List.of(
+                        new QueryPredicate.Eq("publisherKind", PublisherKind.SPONSOR),
+                        new QueryPredicate.Eq("publisherId", AccountEditing.userId(ctx)))))
                     .limit(Integer.MAX_VALUE).build(), PUBLICATIONS));
             pb.compute("Ban", (metadata, ctx) -> ban(ctx, admins));
             // Lock order: the account's lock (held) before the publications' pairs, in the order of their ids.

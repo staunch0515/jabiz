@@ -21,7 +21,8 @@ const ENTRY = { name: 'sponsor', selfRegistration: true, requireVerifiedEmail: t
   sessionPersistence: 'tab' }
 
 const DRAFT = {
-  publicationId: 'p1', sponsorId: 'u2', quizId: 'q1', versionId: 'v1', versionLabel: 'v1.0', name: 'Coffee week',
+  publicationId: 'p1', publisherKind: 'SPONSOR', publisherId: 'u2', quizId: 'q1', versionId: 'v1', versionLabel: 'v1.0',
+  name: 'Coffee week',
   regions: 'GLOBAL', startAt: '2026-11-01T00:00:00Z', endAt: '2026-11-08T00:00:00Z', timeLimitSec: 300,
   passScore: 2, budgetCap: null, maxWinners: null, fullScore: 2, maxReward: null, maxSpend: null, tierCount: 0,
   status: 'DRAFT', rejectReason: null, rejectCode: null, revision: 3, editedAt: '2026-10-14T01:00:00Z',

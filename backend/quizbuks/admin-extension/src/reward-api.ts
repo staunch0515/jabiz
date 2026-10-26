@@ -1,5 +1,5 @@
 import { api, runProcess, runQuery, unwrap } from '@jabiz/admin'
-import { DATASET, PROCESS, TEMPLATE } from './ids'
+import { DATASET, PROCESS, SPONSOR_KIND, TEMPLATE } from './ids'
 
 /*
  * The reward methods and cash rewards (docs/quizbuks/plans/Q22-reward-methods.md): the setting of a sponsor's
@@ -72,7 +72,8 @@ export interface CashReward {
   attemptId: string
   publicationId: string
   publicationName: string
-  sponsorId: string
+  publisherKind: string
+  publisherId: string
   sponsorCompany: string | null
   userId: string
   takerName: string | null
@@ -100,7 +101,8 @@ function cashReward(row: Row): CashReward {
     attemptId: String(row.attemptId ?? ''),
     publicationId: String(row.publicationId ?? ''),
     publicationName: String(row.publicationName ?? ''),
-    sponsorId: String(row.sponsorId ?? ''),
+    publisherKind: String(row.publisherKind ?? SPONSOR_KIND),
+    publisherId: String(row.publisherId ?? ''),
     sponsorCompany: str(row.sponsorCompany),
     userId: String(row.userId ?? ''),
     takerName: str(row.takerName),
@@ -150,7 +152,8 @@ export interface Redemption {
   attemptId: string
   publicationId: string
   publicationName: string
-  sponsorId: string
+  publisherKind: string
+  publisherId: string
   sponsorCompany: string | null
   userId: string
   takerName: string | null
@@ -175,7 +178,8 @@ function redemption(row: Row): Redemption {
     attemptId: String(row.attemptId ?? ''),
     publicationId: String(row.publicationId ?? ''),
     publicationName: String(row.publicationName ?? ''),
-    sponsorId: String(row.sponsorId ?? ''),
+    publisherKind: String(row.publisherKind ?? SPONSOR_KIND),
+    publisherId: String(row.publisherId ?? ''),
     sponsorCompany: str(row.sponsorCompany),
     userId: String(row.userId ?? ''),
     takerName: str(row.takerName),
@@ -228,7 +232,8 @@ export interface DigitalPrize {
   attemptId: string
   publicationId: string
   publicationName: string
-  sponsorId: string
+  publisherKind: string
+  publisherId: string
   sponsorCompany: string | null
   userId: string
   takerName: string | null
@@ -259,7 +264,8 @@ function digitalPrize(row: Row): DigitalPrize {
     attemptId: String(row.attemptId ?? ''),
     publicationId: String(row.publicationId ?? ''),
     publicationName: String(row.publicationName ?? ''),
-    sponsorId: String(row.sponsorId ?? ''),
+    publisherKind: String(row.publisherKind ?? SPONSOR_KIND),
+    publisherId: String(row.publisherId ?? ''),
     sponsorCompany: str(row.sponsorCompany),
     userId: String(row.userId ?? ''),
     takerName: str(row.takerName),

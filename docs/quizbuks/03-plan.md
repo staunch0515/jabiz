@@ -3,6 +3,8 @@
 依据：`01-requirements-analysis.md`、`02-design.md`。本文件给出**阶段划分、顺序与依赖**；每个阶段开工前按 CLAUDE.md 第 7 节
 另出该阶段的实施计划（要改的类、表与迁移、测试清单、风险）并等待确认。
 
+本文件是线 1.2 的计划（Q1–Q33，已冻结）。线 1.3 上的 Shopify 集成（S0–S4 与平台 17a）在 `shopify/00-overview.md` 中，各阶段的实施计划在 `shopify/S<N>-….md`。
+
 两条线并行：
 
 - **平台**（`1.2/platform`，工作分支 `1.2/phase-<N><x>-<名>`）：阶段 15（shadcn/ui，D34）与阶段 16（QuizBuks 需要的通用能力 G*）。

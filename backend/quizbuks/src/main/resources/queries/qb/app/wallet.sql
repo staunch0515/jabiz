@@ -89,7 +89,7 @@ kinds AS (
         ON l.l_direction = 'CREDIT' AND l.source = 'QbAttempt'
        AND c.{{QbPublicationCard.publicationId}} = CASE WHEN l.publication ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
                                                         THEN CAST(l.publication AS uuid) END
-    LEFT JOIN disputed d ON d.sponsor = c.{{QbPublicationCard.sponsorId}}),
+    LEFT JOIN disputed d ON d.sponsor = c.{{QbPublicationCard.publisherId}}),
 running AS (
     SELECT k.kind, k.l_amount, k.booked,
            sum(CASE WHEN k.kind = 'DEBIT' THEN k.l_amount ELSE 0 END) OVER w

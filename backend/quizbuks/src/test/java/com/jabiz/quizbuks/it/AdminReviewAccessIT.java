@@ -140,7 +140,7 @@ class AdminReviewAccessIT extends AccountItSupport {
 
         Map<String, Object> publication = read(PUBLICATIONS, pending.publicationId(), admin);
         assertThat(publication).containsEntry("status", PublicationStatus.PENDING_REVIEW)
-            .containsEntry("sponsorId", pending.sponsorId())
+            .containsEntry("publisherKind", "SPONSOR").containsEntry("publisherId", pending.sponsorId())
             .containsEntry("approvalRequestId", pending.requestId());
         Map<String, Object> version = read(VERSIONS, (String) publication.get("versionId"), admin);
         String content = (String) version.get("content");

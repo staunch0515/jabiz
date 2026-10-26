@@ -335,7 +335,7 @@ public final class CashRewardProcesses {
                         ctx -> TaskSpec.forUser(QbRewards.PAY_TASK, QbRewards.PAY_TASK_TITLE,
                                 Map.of("code", reward(ctx).get("code"),
                                     "amount", String.valueOf((Object) reward(ctx).get("amount"))),
-                                reward(ctx).get("sponsorId"))
+                                reward(ctx).get("publisherId"))
                             .about(QbRewards.CASH_REWARD, reward(ctx).id())
                             .source(QbRewards.payTaskSource(reward(ctx).id()))));
             });
@@ -384,7 +384,8 @@ public final class CashRewardProcesses {
         payload.put("attemptId", reward.get("attemptId"));
         payload.put("publicationId", String.valueOf((Object) reward.get("publicationId")));
         payload.put("userId", reward.get("userId"));
-        payload.put("sponsorId", reward.get("sponsorId"));
+        payload.put("publisherKind", reward.get("publisherKind"));
+        payload.put("publisherId", reward.get("publisherId"));
         payload.put("amount", reward.get("amount"));
         payload.put("code", reward.get("code"));
         payload.put("status", status);

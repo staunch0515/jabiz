@@ -5,7 +5,8 @@
     "QbAnalyticsHour" : [ {
       "hourId" : "#uuid:1",
       "publicationId" : "#uuid:2",
-      "sponsorId" : "#uuid:3",
+      "publisherKind" : "SPONSOR",
+      "publisherId" : "#uuid:3",
       "hourStart" : "2026-10-01T01:00:00Z",
       "views" : "3",
       "starts" : "2",
@@ -18,7 +19,8 @@
     } ],
     "QbAnalyticsCursor" : [ {
       "publicationId" : "#uuid:2",
-      "sponsorId" : "#uuid:3",
+      "publisherKind" : "SPONSOR",
+      "publisherId" : "#uuid:3",
       "views" : "3",
       "starts" : "2",
       "completions" : "2",

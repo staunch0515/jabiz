@@ -341,3 +341,6 @@ export const PATH = {
   /** The platform's own pages. */
   tasks: '/tasks',
 } as const
+
+/** The publisher kind of the sponsors' console (S0, `PublisherKind.SPONSOR`); other kinds come with their modules. */
+export const SPONSOR_KIND = 'SPONSOR'

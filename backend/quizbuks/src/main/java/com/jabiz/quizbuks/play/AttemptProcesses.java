@@ -180,7 +180,7 @@ public final class AttemptProcesses {
     }
 
     private static Object sponsorOf(EntityInstance card) {
-        return card == null ? null : card.get("sponsorId");
+        return card == null ? null : card.get("publisherId");
     }
 
     // ---- start -----------------------------------------------------------------------------------------------------
@@ -322,7 +322,8 @@ public final class AttemptProcesses {
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("userId", userId);
         values.put("publicationId", publicationId);
-        values.put("sponsorId", card.get("sponsorId"));
+        values.put("publisherKind", card.get("publisherKind"));
+        values.put("publisherId", card.get("publisherId"));
         values.put("versionId", card.get("versionId"));
         values.put("startedAt", ctx.opTime());
         values.put("deadline", deadline);

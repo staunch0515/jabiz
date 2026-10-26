@@ -5,7 +5,7 @@ entities: [QbPublication]
 datasets:
   QbPublication: urn:jabiz:dataset:default:QbPublication
 params:
-  sponsorId: { like: QbPublication.sponsorId, required: true, description: The quiz's owner }
+  publisherId: { like: QbPublication.publisherId, required: true, description: The quiz's owner (a sponsor's user id) }
   quizId:    { like: QbPublication.quizId, required: true, description: The quiz }
 results:
   publicationId: { from: QbPublication.publicationId }
@@ -32,6 +32,6 @@ SELECT
     p.{{QbPublication.endedAt}}       AS endedAt,
     p.{{QbPublication.adminReason}}   AS adminReason
 FROM {{QbPublication}} p
-WHERE p.{{QbPublication.sponsorId}} = :sponsorId
+WHERE p.{{QbPublication.publisherKind}} = 'SPONSOR' AND p.{{QbPublication.publisherId}} = :publisherId
   AND p.{{QbPublication.quizId}} = :quizId
   AND (p.{{QbPublication.pausedBy}} = 'ADMIN' OR p.{{QbPublication.endReason}} = 'ADMIN')

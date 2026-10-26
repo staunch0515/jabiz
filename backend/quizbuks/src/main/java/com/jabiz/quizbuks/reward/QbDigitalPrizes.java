@@ -5,6 +5,7 @@ import com.jabiz.entity.TemporalRole;
 import com.jabiz.quizbuks.publishing.DigitalDelivery;
 import com.jabiz.quizbuks.publishing.PublishingLimits;
 import com.jabiz.quizbuks.publishing.QbPublications;
+import com.jabiz.quizbuks.publishing.PublisherKind;
 
 import static com.jabiz.quizbuks.reward.DigitalPrizeStatus.CONFIRMED;
 import static com.jabiz.quizbuks.reward.DigitalPrizeStatus.DELIVERED;
@@ -89,7 +90,7 @@ public final class QbDigitalPrizes {
         eb.field("attemptId", f -> f.physicalColumn("attempt_id").immutable(true).required(true).asText(36));
         eb.field("publicationId", f -> f.physicalColumn("publication_id").immutable(true).required(true)
             .asReference(QbPublications.PUBLICATION));
-        eb.field("sponsorId", f -> f.physicalColumn("sponsor_id").immutable(true).required(true).asText(128));
+        PublisherKind.declare(eb, false);
         eb.field("userId", f -> f.physicalColumn("user_id").immutable(true).required(true).asText(128));
         eb.field("amount", f -> f.physicalColumn("amount").immutable(true).required(true).asMonetary("JPY", 0));
         // What the prize is, as the card said when the attempt finished; how it is delivered.
@@ -144,10 +145,10 @@ public final class QbDigitalPrizes {
         eb.display("attemptId");
         eb.temporal(t -> t.allowScheduled(false));
         eb.listView("default", lv -> lv
-            .columns("attemptId", "publicationId", "sponsorId", "userId", "amount", "delivery", "status", "dueAt",
-                "deliveredAt", "confirmBy", "confirmedAt", "disputedAt")
-            .filters("publicationId", "sponsorId", "userId", "delivery", "status", "dueAt", "deliveredAt",
-                "sendBy", "confirmBy")
+            .columns("attemptId", "publicationId", "publisherKind", "publisherId", "userId", "amount", "delivery",
+                "status", "dueAt", "deliveredAt", "confirmBy", "confirmedAt", "disputedAt")
+            .filters("publicationId", "publisherKind", "publisherId", "userId", "delivery", "status", "dueAt",
+                "deliveredAt", "sendBy", "confirmBy")
             .sorts("dueAt", "deliveredAt", "amount", "status")
             .defaultSort("dueAt", false));
     });
@@ -159,7 +160,7 @@ public final class QbDigitalPrizes {
             .asSemanticIdentity("urn:jabiz:entity:quizbuks:digital-code"));
         eb.field("publicationId", f -> f.physicalColumn("publication_id").immutable(true).required(true)
             .asReference(QbPublications.PUBLICATION));
-        eb.field("sponsorId", f -> f.physicalColumn("sponsor_id").immutable(true).required(true).asText(128));
+        PublisherKind.declare(eb, false);
         // The order loaded: issued from the lowest.
         eb.field("seq", f -> f.physicalColumn("seq").immutable(true).required(true).asNumeric(9, 0));
         eb.field("sealedContent", f -> f.physicalColumn("sealed_content").immutable(true).required(true)
@@ -181,8 +182,9 @@ public final class QbDigitalPrizes {
         eb.unique("uk_qb_digital_code_seq", "publicationId", "seq");
         eb.display("hint");
         eb.listView("default", lv -> lv
-            .columns("publicationId", "sponsorId", "seq", "hint", "status", "loadedAt", "issuedAt", "revokedAt")
-            .filters("publicationId", "sponsorId", "status", "loadedAt")
+            .columns("publicationId", "publisherKind", "publisherId", "seq", "hint", "status", "loadedAt", "issuedAt",
+                "revokedAt")
+            .filters("publicationId", "publisherKind", "publisherId", "status", "loadedAt")
             .sorts("seq", "loadedAt")
             .defaultSort("seq", true));
     });

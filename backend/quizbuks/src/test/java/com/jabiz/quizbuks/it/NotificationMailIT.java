@@ -107,7 +107,8 @@ class NotificationMailIT extends PayoutItSupport {
     private Object notify(String publicationId, String sponsorId, String kind, String reason, Instant occurredAt) {
         Map<String, Object> input = new HashMap<>();
         input.put("publicationId", publicationId);
-        input.put("sponsorId", sponsorId);
+        input.put("publisherKind", "SPONSOR");
+        input.put("publisherId", sponsorId);
         input.put("kind", kind);
         if (reason != null) {
             input.put("reason", reason);
@@ -710,8 +711,8 @@ class NotificationMailIT extends PayoutItSupport {
         refusedAsInternal(MailProcesses.TRANSFER, admin(), body("transferId", "x", "kind", "SENT", "occurredAt", now));
         refusedAsInternal(MailProcesses.PAYOUT_ACCOUNT, admin(), body("userId", sponsor, "occurredAt", now));
         refusedAsInternal(MailProcesses.TOPUP, admin(), body("topUpId", topUpId, "occurredAt", now));
-        refusedAsInternal(MailProcesses.PUBLICATION, admin(), body("publicationId", "x", "sponsorId", sponsor,
-            "kind", "APPROVED", "occurredAt", now));
+        refusedAsInternal(MailProcesses.PUBLICATION, admin(), body("publicationId", "x", "publisherKind", "SPONSOR",
+            "publisherId", sponsor, "kind", "APPROVED", "occurredAt", now));
         refusedAsInternal(MailProcesses.FUNDS_SHORT_DUE, admin(), body("sponsorId", sponsor));
     }
 }
