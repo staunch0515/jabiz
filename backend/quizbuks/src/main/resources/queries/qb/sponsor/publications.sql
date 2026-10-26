@@ -14,7 +14,7 @@ results:
   publicationId: { from: QbPublication.publicationId }
   name:          { from: QbPublication.name }
   quizTitle:     { from: QbQuizVersion.title }
-  cover:         { kind: { type: text, maxLength: 36 }, description: "The quiz's cover as the version keeps it (Q34b: the list's cards)" }
+  cover:         { kind: { type: text, maxLength: 36 } }
   versionLabel:  { from: QbPublication.versionLabel }
   status:        { from: QbPublication.status }
   rewardMethod:  { from: QbPublication.rewardMethod }
