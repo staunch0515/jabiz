@@ -35,6 +35,8 @@ import { Thumbnail } from './ContentImage'
 import { LIMITS } from './limits'
 import { quizPath, QUIZZES_QUERY } from './paths'
 import { ExportQuizButton, ImportQuizButton } from './QuizTransfer'
+import { CardGrid, Pager, useListView, ViewSwitch } from '../ListView'
+import { CoverPlaceholder } from '../qb/Illustrations'
 
 /** The labels of the quiz states, from the server's dictionary (the code until it answered). */
 export function useQuizStatusLabel() {
@@ -135,6 +137,51 @@ const PAGE_SIZE = 20
  * The sponsor's quizzes (M-20): cover, title, version, number of questions, state and last change, searched by title
  * and sorted by the server (`qb.sponsor.quizzes`, the sponsor's own and not removed). "New quiz" starts a draft.
  */
+/**
+ * A quiz as a card (Q34b): the cover large on top (the brand's pattern without one), the title, its badges, and the
+ * version, questions and materials under it. The same test ids and data as a row of the table.
+ */
+function QuizCard({ quiz, statusLabel }: { quiz: QuizRow; statusLabel: (status: QuizRow['status']) => string }) {
+  const { t } = useTranslation(SPONSOR)
+  return (
+    <li className="bg-card group relative flex flex-col overflow-hidden border shadow-xs transition-shadow hover:shadow-md"
+      data-testid="quiz-row" data-quiz={quiz.quizId}>
+      <div className="relative block aspect-video overflow-hidden">
+        {quiz.cover
+          ? <Thumbnail fileId={quiz.cover} width={480} className="size-full transition-transform duration-300 group-hover:scale-105" />
+          : <CoverPlaceholder seed={quiz.quizId} className="size-full" />}
+        <span className="absolute top-2 left-2 flex flex-wrap gap-1">
+          <Badge variant={quiz.status === 'VERSIONED' ? 'secondary' : 'outline'} className="bg-background/90">
+            {statusLabel(quiz.status)}
+          </Badge>
+          {quiz.published && <Badge variant="success">{t('quizzes.published')}</Badge>}
+        </span>
+      </div>
+      <div className="flex flex-1 flex-col gap-2 p-3">
+        <Link to={quizPath(quiz.quizId)} className="line-clamp-2 font-semibold underline-offset-4 after:absolute after:inset-0 hover:underline"
+          data-testid="quiz-link">
+          {quiz.title}
+        </Link>
+        <span className="flex flex-wrap gap-1 empty:hidden">
+          {quiz.kind === 'SURVEY' && <Badge variant="secondary" data-testid="quiz-survey">{t('quizzes.kinds.SURVEY')}</Badge>}
+          {quiz.aiGenerated && <Badge variant="outline">{t('quizzes.ai')}</Badge>}
+          {quiz.versionLabel && quiz.changedSinceVersion && <Badge variant="outline">{t('quizzes.changedSinceVersion')}</Badge>}
+        </span>
+        <dl className="text-muted-foreground mt-auto grid grid-cols-3 gap-2 border-t pt-2 text-xs">
+          <div><dt>{t('quizzes.version')}</dt><dd className="text-foreground font-medium">{quiz.versionLabel ?? t('quizzes.noVersion')}</dd></div>
+          <div><dt>{t('quizzes.questions')}</dt><dd className="text-foreground font-medium">{quiz.questionCount}</dd></div>
+          <div><dt>{t('quizzes.materials')}</dt><dd className="text-foreground font-medium">{quiz.materialCount}</dd></div>
+        </dl>
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-muted-foreground text-xs">{formatDateTime(quiz.editedAt)}</span>
+          {/* Above the card's link, which covers the whole card. */}
+          <span className="relative z-10"><ExportQuizButton quizId={quiz.quizId} title={quiz.title} /></span>
+        </div>
+      </div>
+    </li>
+  )
+}
+
 export function QuizListPage() {
   const { t } = useTranslation(SPONSOR)
   const { t: tQb } = useTranslation(QB)
@@ -145,6 +192,7 @@ export function QuizListPage() {
   const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: PAGE_SIZE })
   const [sorting, setSorting] = useState<SortingState>([{ id: 'editedAt', desc: true }])
   const [creating, setCreating] = useState(false)
+  const [view, setView] = useListView('quizzes')
 
   const quizzes = useQuery({
     queryKey: [...QUIZZES_QUERY, 'list', q, pagination, sorting],
@@ -253,7 +301,8 @@ export function QuizListPage() {
             </Button>
           </div>
         } />
-      <form role="search" className="flex max-w-sm flex-col gap-2" onSubmit={(event) => event.preventDefault()}>
+      <div className="flex flex-wrap items-end justify-between gap-4">
+      <form role="search" className="flex w-full max-w-sm flex-col gap-2" onSubmit={(event) => event.preventDefault()}>
         <Label htmlFor={`${id}-search`}>{t('quizzes.search')}</Label>
         <Input id={`${id}-search`} type="search" value={search} maxLength={LIMITS.title} autoComplete="off"
           data-testid="quiz-search" onChange={(event) => {
@@ -262,10 +311,24 @@ export function QuizListPage() {
             setPagination((p) => (p.pageIndex === 0 ? p : { ...p, pageIndex: 0 }))
           }} />
       </form>
+      <ViewSwitch value={view} onChange={setView} testId="quiz-view" />
+      </div>
       {quizzes.isError
         ? <PageState kind="error" description={tQb('failed')}
           action={<Button variant="outline" onClick={() => void quizzes.refetch()}>{tQb('retry')}</Button>} />
-        : (
+        : view === 'cards' ? (
+          quizzes.isPending ? <PageState kind="loading" />
+            : rows.length === 0 ? <div className="py-6 text-center">{empty}</div>
+            : (
+              <>
+                <CardGrid label={t('quizzes.table')} testId="quiz-cards">
+                  {rows.map((quiz) => <QuizCard key={quiz.quizId} quiz={quiz} statusLabel={statusLabel} />)}
+                </CardGrid>
+                <Pager pageIndex={pagination.pageIndex} pageSize={pagination.pageSize} total={quizzes.data?.total}
+                  onPage={(pageIndex) => setPagination((p) => ({ ...p, pageIndex }))} />
+              </>
+            )
+        ) : (
           <DataTable label={t('quizzes.table')} columns={columns} data={rows}
             getRowId={(row) => row.quizId} loading={quizzes.isPending}
             stale={quizzes.isPlaceholderData} empty={empty}

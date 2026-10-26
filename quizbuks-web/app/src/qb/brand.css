@@ -84,3 +84,33 @@
   --color-qb-sky: var(--qb-sky);
   --color-qb-ink: var(--qb-ink);
 }
+
+/*
+ * Labels apart from their values (Q34b): in the platform's description lists (a publication's summary, its dates, a
+ * payout's details) the label column has the muted background and each value the card's, so a label never reads as
+ * part of the value next to it; the same for the title bar of a card with a header. Tokens only, both appearances.
+ */
+[data-slot='description-list'] > [data-slot='description-item'] {
+  padding: 0;
+  gap: 0;
+}
+[data-slot='description-list'] > [data-slot='description-item'] > dt {
+  background: var(--muted);
+  color: var(--foreground);
+  padding: 0.5rem 0.75rem;
+}
+[data-slot='description-list'] > [data-slot='description-item'] > dd {
+  background: var(--card);
+  padding: 0.5rem 0.75rem;
+}
+/* Not the platform's sign-in card (AuthFrame, a card straight in <main>): its heading is the product's name. */
+[data-slot='card']:not(main > [data-slot='card']):has(> [data-slot='card-header']) {
+  padding-top: 0;
+}
+[data-slot='card']:not(main > [data-slot='card']) > [data-slot='card-header'] {
+  background: var(--muted);
+  border-bottom: 1px solid var(--border);
+  padding-top: 0.75rem;
+  padding-bottom: 0.75rem;
+}
+
