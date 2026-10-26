@@ -4,12 +4,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-/** The signature schemes the platform knows, by name (decision D37 item 1). */
+/**
+ * The signature schemes the platform knows, by name (decision D37 item 1, D57). {@link BodyHmacSignature} is given here
+ * with its default header and encoding; a provider configuring others builds its own ({@link BodyHmacSignature#of}).
+ */
 public final class InboundSchemes {
 
     private static final Map<String, InboundSignatureScheme> SCHEMES = Map.of(
         StripeSignature.NAME, new StripeSignature(),
-        HmacSha256Signature.NAME, new HmacSha256Signature());
+        HmacSha256Signature.NAME, new HmacSha256Signature(),
+        BodyHmacSignature.NAME, BodyHmacSignature.DEFAULT);
 
     private InboundSchemes() {
     }

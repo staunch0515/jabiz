@@ -179,7 +179,7 @@ Spring Modulith 的事件发布注册表只支持 JPA、JDBC、MongoDB、Neo4j�
 
 ### 2.5 入站 Webhook：接收其他系统的回调【D37】
 
-- **提供方是配置**（`jabiz.inbound-webhooks.providers.<名>`，名字 `[a-z][a-z0-9-]{0,39}`）：`scheme`（`stripe` 或 `hmac-sha256`）、`secrets`
+- **提供方是配置**（`jabiz.inbound-webhooks.providers.<名>`，名字 `[a-z][a-z0-9-]{0,39}`）：`scheme`（`stripe`、`hmac-sha256`，或只签正文的 `body-hmac-sha256`，见 2.5.1）、`secrets`
   （每个至少 32 字符，以占位符取自环境变量；可同时配置新旧两个以换密钥）、`event-types`（接受的外部事件类型白名单）、`tolerance`（缺省 5 分钟，上限 1 小时）、
   `max-body-size`（缺省且最大 1 MB，只能调低）、`rate-limit.per-minute`（缺省每地址每分钟 120）/ `max-clients`。缺省没有提供方，即所有入站请求 404。
   启动检查（类别 `INBOUND`）一次报告名字、方案、密钥、白名单（及拼出的事件类型是否合法、不超过 100 字符）、容差、大小与限流的全部问题；有问题的提供方即使不阻止启动也不提供服务。
@@ -199,15 +199,15 @@ Spring Modulith 的事件发布注册表只支持 JPA、JDBC、MongoDB、Neo4j�
      超过即拒绝，避免消费者对 `1e999999999` 之类的精确小数做运算时耗尽资源）→ 取事件号与类型（只取已签名的正文）：
      `stripe` 取顶层 `id`、`type` 与 `livemode`；`hmac-sha256` 取顶层 `eventId`、`eventType`，其请求头 `X-Jabiz-Event-Id` / `X-Jabiz-Event-Type` 不在签名范围内，
      若出现必须与正文一致。事件号为 1–255 个可见 ASCII 字符。
-  4. 类型不在白名单 → 200，不存储（`result=ignored`）；同一提供方的事件号已存在 → 200（`duplicate`）。
+  4. 类型不在白名单 → 200，不存储（`result=ignored`）；同一提供方、同一类型的事件号已存在 → 200（`duplicate`；一次动作可能给几个类型同一个事件号，D57）。
   5. 否则以系统身份执行内部流程 `INBOUND_RECEIVE`（权限 `inbound.receive`，不授予任何人；其步骤 `RecordInboundEvent` 只在系统身份下执行，管理员经流程接口调用得到 403）：
      在一个事务中直接插入只追加的 `sys_inbound_event`（元数据与 `body_sha256`）与 `sys_inbound_event_body`（原样正文 `text`，单独一张表，
      列表、导出与到期报告读事件时都不会带上每行至多 1 MB 的正文；都不经变更集、不进审计，同 `MailAttempt`）并经 Outbox 发布
-     `jabiz.inbound.<提供方>.<外部类型>`；提交后答 200 `{"received":true}`。并发的同一事件在唯一键 `(provider, external_event_id)` 上等待，之后失败、整体回滚，答 200。
-  - 签名错、过期或过于靠后、缺头、超过大小、不是 UTF-8 或 JSON、缺少事件号或类型：一律 400，同一个 problem `INBOUND_REJECTED`（响应正文相同，`Cache-Control: no-store`）；
+     `jabiz.inbound.<提供方>.<外部类型>`；提交后答 200 `{"received":true}`。并发的同一事件在唯一键 `(provider, event_type, external_event_id)` 上等待，之后失败、整体回滚，答 200。
+  - 签名错、过期或过于靠后、缺头、超过大小、不是 UTF-8 或 JSON、缺少事件号或类型：一律 400（签名本身的失败可按提供方改为 401，见 2.5.1），同一个 problem `INBOUND_REJECTED`（响应正文相同，`Cache-Control: no-store`）；
     原因只进日志（info，只有提供方与原因）与观测标签 `reason`，不存储，不写 `op_process`。
   - 流程输入的正文组件 `rawBody` 标 `@Sensitive`：`op_process.input_summary` 中为 `***`；正文不进日志、观测与 Outbox。
-- **事件载荷只带引用**：`{inboundEventId, provider, externalEventId, eventType, receivedTime}`（`InboundEvents.ref(event)`）。正文不复制进 `sys_outbox_event`
+- **事件载荷只带引用**：`{inboundEventId, provider, externalEventId, eventType, receivedTime}`，配置了元数据头时另有 `metadata`（`InboundEvents.ref(event)`）。正文不复制进 `sys_outbox_event`
   （那里不受 `inbound.read` 保护，还可能被出站订阅转发）。
 - **处理**是应用的普通事件订阅（2.3 的全部规则：系统身份、只处理一次、失败退避重试；请求中不执行业务流程）：
   ```java
@@ -230,11 +230,39 @@ Spring Modulith 的事件发布注册表只支持 JPA、JDBC、MongoDB、Neo4j�
 - 观测：`jabiz.inbound.receive`（标签 `provider`、`result` = `ACCEPTED` / `DUPLICATE` / `IGNORED` / `REJECTED` / `FAILED`（与 `jabiz.outbox.delivery` 同样大写）、
   `reason` = `none`、拒绝原因或意外错误时的 `error`，以及平台观测共有的 `outcome` / `status`）、
   `jabiz.inbound.rate_limited`（无标签）。未知提供方不产生观测；不记录客户端地址。
-- 场景回放步骤 `inbound: {provider, body, at?, outcome?}`（07 §3.1）以配置的第一个密钥签名后交给 `InboundReceiver`，之后用 `deliverEvents: true` 运行消费者。
+- 场景回放步骤 `inbound: {provider, body, at?, outcome?, headers?}`（07 §3.1）以配置的第一个密钥签名后交给 `InboundReceiver`（`headers` 是签名之外的请求头，如只签正文的方案的事件号与类型），之后用 `deliverEvents: true` 运行消费者。
 - 示范：`app` 的提供方 `demo-pay`（`stripe`，只在 dev 与测试配置中）→ 消费者 `commerce.payment-received` → `ORDER_RECORD_PAYMENT`（`CommercePayments`：
   只由投递运行；付款编号与订单号的格式、模式（`commerce.payments.accept-test-mode`，示范接受测试模式）、币种 `jpy`、金额（Stripe 以最小货币单位表示，日元即元）、
   订单状态都核对，不成立时待办写明金额、币种与原因代码，指向订单（找到时），来源键 `payment:<提供方>:<外部事件号>`），
   手工演示 `tools/demo/inbound-demo.sh`。
+
+#### 2.5.1 只签正文的发送方【D57】
+
+商店平台一类的发送方（如 Shopify）只对**原样正文**签名，时间、事件号、主题与账户都在**不签名的请求头**里，正文多数不含事件号与主题；其应用审核还要求验签失败答 401。
+
+- **方案 `body-hmac-sha256`**（core `BodyHmacSignature`）：签名头 = Base64（或 hex）的 HMAC-SHA256(密钥, 原样正文)。提供方的 `signed-body` 给出头名与编码：
+  `signature-header`（缺省 `X-Shopify-Hmac-Sha256`）、`encoding`（`base64` 缺省 / `hex`）、`event-id-header`（缺省 `X-Shopify-Event-Id`）、`event-type-header`（缺省 `X-Shopify-Topic`）；
+  方案名中性，缺省值是 Shopify 的。签名头缺失 → `MISSING_HEADER`；重复、不是干净的编码（Base64 须带填充且规范）或长度不是 32 字节 → `MALFORMED`；任一密钥匹配即通过（常量时间比较，逐个都试）。
+- **没有签名的时间**：`signedTime` 为空（`sys_inbound_event.signed_time` 可空），消费者只有接收时间；给这种方案配置 `tolerance` 是启动错误（不能给出它做不到的保证），
+  其他方案配置 `signed-body` 也是启动错误。
+- **事件号与类型取自请求头**：各须恰好出现一次；事件号同样是 1–255 个可见 ASCII，类型非空并过白名单；缺失即 400。**它们不签名**：只用于去重与路由，
+  消费者以已签名的正文核对内容（同"签名不等于内容可信"），不能凭主题判断业务含义（如"取消"），而要看正文的字段。
+- **事件按类型区分**：发送方的一次动作可能给几个主题同一个事件号，所以事件是"提供方 + 类型 + 事件号"，唯一键 `(provider, event_type, external_event_id)`（对所有方案）。
+- **重放护栏**：事件号不签名，截获一次请求的人可以换个事件号再送。这种方案的事件标 `replay_guard`，另有部分唯一索引
+  `sys_inbound_event_body_key (provider, event_type, body_sha256) WHERE replay_guard`：同一类型的同一正文只存一次，再来答 200 `DUPLICATE`（发送方的重试本就是同一正文）。
+  按类型而不是跨类型：同一正文以不同主题合法地到达（下单时的 `orders/create` 与 `orders/updated`）不被吞掉；代价是截获者能以另一个**已列出**的主题再送一次同一正文，
+  所以主题不可信（上一条）。两个字节完全相同的不同事件会被当成一个：同一正文的重复事件对消费者本应是幂等的。
+- **元数据头**：提供方可列出 `metadata-headers`（至多 8 个；名字合法、不重复，含 `hmac`、`signature`、`authorization`、`cookie`、`token`、`secret`、`password`、`key` 的名字与本提供方的签名头是启动错误），
+  出现的按配置的名字原样存进 `sys_inbound_event.metadata`（jsonb）：每个须恰好出现一次、是 1–255 个可见 ASCII，否则 400（`metadata_header`；白名单外的类型先答 200 `IGNORED`，不看元数据）；没有出现的不记。
+  读取时名字不分大小写。
+  事件载荷（`metadata`）与 `ReceivedEvent.metadata()` 给出；同样**不签名**，用于路由（如哪个商店）时消费者要以正文或自己的数据核对。所有方案都可配置。
+  平台实体 `InboundEvent` 不含它（平台没有 JSON 字段类型）。
+- **拒绝的状态码**：`reject-status`（`400` 缺省，或 `401`）只用于签名本身的失败（`MISSING_HEADER`、`MALFORMED`、`NO_MATCH`）；过期、过于靠后、大小、编码、JSON、事件号、类型与元数据头仍是 400。
+  正文仍是同一个 `INBOUND_REJECTED`，原因不回给发送方。
+- **事件类型里的 `/`**：主题 `orders/paid` 的 Outbox 事件类型是 `jabiz.inbound.<提供方>.orders.paid`（`InboundEvents.type` 把 `/` 换成 `.`）；`ReceivedEvent.eventType()`、
+  `LoadInboundEvent.of(提供方, "orders/paid", …)` 与存储都用提供方的原名。同一提供方列出的两个类型换出同一个事件类型是启动错误。
+- 示范：提供方 `demo-shop`（只在 dev 与测试配置中，`reject-status: 401`，元数据头 `X-Shopify-Shop-Domain`），场景 `scenarios/commerce/shop_webhooks.yml`，
+  手工演示 `tools/demo/inbound-demo.sh shop <订单号>`。
 
 ## 3. 审计视图
 

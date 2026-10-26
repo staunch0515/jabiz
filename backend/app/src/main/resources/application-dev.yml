@@ -23,3 +23,11 @@ jabiz:
         scheme: stripe
         secrets: ["${JABIZ_DEMO_PAY_WEBHOOK_SECRET:whsec_development_only_demo_pay_secret_0000}"]
         event-types: [payment_intent.succeeded]
+      # A sender that signs the body only, as a shop platform does (decision D57): the event's id and topic, the shop
+      # and the time come in headers nobody signed. tools/demo/inbound-demo.sh shop signs with the same secret.
+      demo-shop:
+        scheme: body-hmac-sha256
+        secrets: ["${JABIZ_DEMO_SHOP_WEBHOOK_SECRET:development_only_demo_shop_secret_000000}"]
+        event-types: [orders/paid, app/uninstalled]
+        reject-status: 401
+        metadata-headers: [X-Shopify-Shop-Domain]

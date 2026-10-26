@@ -28,7 +28,6 @@ import com.jabiz.runtime.imports.ImportRegistry;
 import com.jabiz.runtime.imports.ImportReport;
 import com.jabiz.runtime.imports.ImportService;
 import com.jabiz.inbound.InboundHeaders;
-import com.jabiz.inbound.InboundSchemes;
 import com.jabiz.runtime.external.ExternalJobExecutor;
 import com.jabiz.runtime.external.ExternalJobTypeHeldException;
 import com.jabiz.runtime.inbound.InboundReceiver;
@@ -267,7 +266,10 @@ public final class ScenarioRunner {
         }
     }
 
-    /** Signs the body as the provider would, with its first secret, and receives it as the endpoint does. */
+    /**
+     * Signs the body as the provider would, with its first secret, and receives it as the endpoint does, with the
+     * step's other headers.
+     */
     private void inbound(Scenario scenario, Scenario.InboundStep step, Map<String, Object> variables) {
         InboundWebhookProperties.Provider provider = inboundProviders.find(step.provider())
             .orElseThrow(() -> failure(scenario, step, "unknown inbound webhook provider " + step.provider(), null));
@@ -276,7 +278,9 @@ public final class ScenarioRunner {
             .getBytes(java.nio.charset.StandardCharsets.UTF_8);
         long signedAt = (step.at() == null ? clock.instant() : step.at()).getEpochSecond();
         Map<String, List<String>> headers = new LinkedHashMap<>();
-        InboundSchemes.of(provider.scheme()).orElseThrow()
+        step.headers().forEach((name, value) ->
+            headers.put(name, List.of(String.valueOf(ScenarioValues.resolve(value, variables)))));
+        provider.signatureScheme().orElseThrow()
             .sign(provider.secrets().getFirst(), signedAt, bytes)
             .forEach((name, value) -> headers.put(name, List.of(value)));
         String outcome;

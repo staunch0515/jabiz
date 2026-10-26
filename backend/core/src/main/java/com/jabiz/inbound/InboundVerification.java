@@ -5,11 +5,12 @@ import java.time.Instant;
 /**
  * What a signature scheme made of an inbound webhook request: accepted, with the time the sender signed it, or
  * rejected for a reason. The reason is for logs and metrics only; the sender is told nothing but that the request
- * was not accepted (decision D37).
+ * was not accepted (decision D37). A scheme that signs the body only (decision D57) accepts without a signed time:
+ * nothing the sender says about time is covered by its signature.
  *
- * @param accepted   whether the signature is valid and within the time tolerance
+ * @param accepted   whether the signature is valid and, when the scheme signs a time, within the tolerance
  * @param reason     why not; null when accepted
- * @param signedTime the time the sender signed it; null when rejected
+ * @param signedTime the time the sender signed it; null when rejected, or accepted by a scheme that signs no time
  */
 public record InboundVerification(boolean accepted, Reason reason, Instant signedTime) {
 
@@ -28,14 +29,20 @@ public record InboundVerification(boolean accepted, Reason reason, Instant signe
     }
 
     public InboundVerification {
-        if (accepted == (reason != null) || accepted == (signedTime == null)) {
-            throw new IllegalArgumentException("An accepted verification has a signed time and no reason; "
-                + "a rejected one a reason and no time");
+        if (accepted == (reason != null) || (!accepted && signedTime != null)) {
+            throw new IllegalArgumentException("An accepted verification has no reason; a rejected one a reason and "
+                + "no time");
         }
     }
 
     public static InboundVerification accepted(Instant signedTime) {
-        return new InboundVerification(true, null, signedTime);
+        return new InboundVerification(true, null, java.util.Objects.requireNonNull(signedTime,
+            "signedTime must not be null; a scheme that signs no time accepts withoutSignedTime()"));
+    }
+
+    /** Accepted by a scheme that signs the body only (decision D57): there is no signed time. */
+    public static InboundVerification withoutSignedTime() {
+        return new InboundVerification(true, null, null);
     }
 
     public static InboundVerification rejected(Reason reason) {
