@@ -185,6 +185,10 @@ const en = {
     more: 'Show more',
   },
   detail: {
+    readMore: 'Show more',
+    readLess: 'Show less',
+    rewardTitle: 'Your reward',
+    statsLine: '{{recent}} in the last 24 hours · {{total}} in total',
     back: 'All quizzes',
     backHome: 'Back to the quizzes',
     notFound: 'Quiz not available',
@@ -569,6 +573,10 @@ const zh: typeof en = {
     more: '显示更多',
   },
   detail: {
+    readMore: '展开全文',
+    readLess: '收起',
+    rewardTitle: '你的奖励',
+    statsLine: '24 小时内 {{recent}} 人完成 · 共 {{total}} 人',
     back: '全部 Quiz',
     backHome: '返回 Quiz 列表',
     notFound: '无法参加此 Quiz',
@@ -953,6 +961,10 @@ const ja: typeof en = {
     more: 'さらに表示',
   },
   detail: {
+    readMore: 'もっと見る',
+    readLess: '閉じる',
+    rewardTitle: 'あなたの報酬',
+    statsLine: '24 時間で {{recent}} 人が完了 · 合計 {{total}} 人',
     back: 'すべてのクイズ',
     backHome: 'クイズ一覧へ戻る',
     notFound: 'このクイズには回答できません',

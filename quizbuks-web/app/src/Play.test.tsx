@@ -26,7 +26,7 @@ const CARD = { publicationId: PUB, name: 'Capitals week', quizTitle: 'World capi
   fullScore: 5 }
 
 const MATERIALS = JSON.stringify([
-  { no: 1, kind: 'ARTICLE', title: 'Read first', description: null, body: 'Paris is **the capital**.', url: null,
+  { no: 1, kind: 'ARTICLE', title: 'Read first', description: 'Two lines on France', body: 'Paris is **the capital**.', url: null,
     pdf: null, audio: null, images: [] },
   { no: 2, kind: 'VIDEO_LINK', title: 'A tour', description: null, body: null, url: 'https://video.example.com/tour',
     pdf: null, audio: null, images: [] },
@@ -586,7 +586,20 @@ describe('a publication\'s page', () => {
     render(<App />)
     expect(await screen.findByTestId('detail-name')).toHaveTextContent('Capitals week')
     const materials = screen.getByTestId('materials')
-    expect(within(materials).getByText('the capital').tagName).toBe('STRONG')
+    // Q34: a row per material with its title and its description on one line; the article opens on a sheet.
+    const rows = within(materials).getAllByTestId('material')
+    expect(rows.map((row) => row.getAttribute('data-kind'))).toEqual(['VIDEO_LINK', 'ARTICLE', 'VIDEO_LINK'])
+    expect(within(rows[1]).getByTestId('material-title')).toHaveTextContent('Read first')
+    expect(within(rows[1]).getByTestId('material-description')).toHaveTextContent('Two lines on France')
+    expect(within(materials).queryByText('the capital')).toBeNull()
+    await userEvent.click(within(rows[1]).getByTestId('material-open'))
+    const sheet = await screen.findByTestId('material-sheet')
+    expect(within(sheet).getByRole('heading', { name: 'Read first' })).toBeInTheDocument()
+    expect(within(sheet).getByText('the capital').tagName).toBe('STRONG')
+    await expectAccessible()
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByTestId('material-sheet')).toBeNull())
+    // A video the app cannot play is a row that goes to its site in a new tab.
     const link = within(materials).getByTestId('material-link')
     expect(link).toHaveAttribute('href', 'https://video.example.com/tour')
     expect(link).toHaveAttribute('target', '_blank')
@@ -596,6 +609,32 @@ describe('a publication\'s page', () => {
       .toHaveAttribute('src', 'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ')
     expect(await screen.findByTestId('detail-tiers')).toHaveTextContent('100 Kudos')
     await waitFor(() => expect(posted('QB_VIEW')).toEqual([{ publicationId: PUB }]))
+  })
+
+  it('lays the page out as a picture, one row of facts and titled cards (Q34)', async () => {
+    // Without the embedded video: axe cannot look into a frame in jsdom.
+    server({ publicationPage: () => json(200, { items: [publication({ quizTitle: 'World capitals',
+      sponsorIntro: 'A shop by the river.', materials: JSON.stringify(JSON.parse(MATERIALS).slice(0, 2)) })],
+      offset: 0, limit: 1 }) })
+    window.history.replaceState(null, '', `/p/${PUB}`)
+    render(<App />)
+    const hero = await screen.findByTestId('detail-hero')
+    expect(within(hero).getByRole('heading', { level: 1 })).toHaveTextContent('Capitals week')
+    expect(within(hero).getByTestId('detail-quiz-title')).toHaveTextContent('World capitals')
+    expect(within(hero).getByTestId('detail-sponsor')).toHaveTextContent('Capitals Inc')
+    // Six facts in one block of three columns: each a term and its value.
+    const facts = screen.getByTestId('detail-facts')
+    expect(facts.querySelectorAll('dt')).toHaveLength(6)
+    expect(facts).toHaveTextContent('3 / 5')
+    // The cards have a title bar of their own.
+    expect(within(screen.getByTestId('detail-intro')).getByRole('heading', { name: 'About this quiz' }).parentElement)
+      .toHaveClass('bg-muted')
+    expect(screen.getByTestId('detail-reward')).toHaveTextContent('Kudos paid by QuizBuks')
+    // The counts in one line, the details and the sponsor folded.
+    expect(screen.getByTestId('detail-stats-line')).toHaveTextContent('2 in the last 24 hours · 2 in total')
+    expect(screen.getByTestId('detail-stats')).not.toHaveAttribute('open')
+    expect(screen.getByTestId('detail-sponsor-intro')).not.toHaveAttribute('open')
+    await expectAccessible()
   })
 
   it('shows an invited publication once the view claimed the invitation (Q25)', async () => {
