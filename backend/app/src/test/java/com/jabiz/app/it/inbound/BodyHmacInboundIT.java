@@ -256,8 +256,8 @@ class BodyHmacInboundIT extends SecurityItSupport {
 
     @Test
     void theKeysThatMakeDuplicatesAreTheOnesTheReceiverKnows() {
-        assertThat(query("SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint WHERE conname = ?",
-            InboundEntities.EXTERNAL_KEY)).singleElement().satisfies(row -> assertThat(row.get("def"))
+        assertThat(query("SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint WHERE conname = ?"
+            + " AND conrelid = 'sys_inbound_event'::regclass", InboundEntities.EXTERNAL_KEY)).singleElement().satisfies(row -> assertThat(row.get("def"))
             .isEqualTo("UNIQUE (provider, event_type, external_event_id)"));
         assertThat(query("SELECT indexdef FROM pg_indexes WHERE schemaname = current_schema() AND indexname = ?",
             InboundEntities.BODY_KEY)).singleElement().satisfies(row -> assertThat((String) row.get("indexdef"))
