@@ -9,9 +9,9 @@
 
 ## 2. 边界
 
-- 分支按平台版本线（平台决策 D21、`docs/guide/version-lines.md`）：`<线>/quizbuks`，工作分支 `<线>/quizbuks-<N>-<名>`。现在是线 1.2（`1.2/quizbuks`）。
+- 分支按平台版本线（平台决策 D21、`docs/guide/version-lines.md`）：`<线>/quizbuks`，工作分支 `<线>/quizbuks-<N>-<名>`（Shopify 集成的阶段为 `<线>/quizbuks-S<N>-<名>`）。现在是线 1.3（`1.3/quizbuks`，Shopify 集成，`docs/quizbuks/shopify/00-overview.md`）；`1.2/quizbuks` 已冻结，只修 bug、继续测试与部署，不在 1.2 上加迁移。
 - 本分支只改 `.jabiz-app-paths` 中的路径（`tools/check-app-paths.sh`，基准为本线的平台分支），不改 `.jabiz-platform-line`。平台缺能力时，
-  先在 `1.2/platform` 的工作分支上补（带平台自己的测试与 `app` 中的示范，不提 QuizBuks），合入后再合并到 `1.2/quizbuks`。计划中的平台阶段见 `docs/quizbuks/03-plan.md` 第 1 节。
+  先在 `1.3/platform` 的工作分支上补（带平台自己的测试与 `app` 中的示范，不提 QuizBuks），合入后再合并到 `1.3/quizbuks`。计划中的平台阶段见 `docs/quizbuks/03-plan.md` 第 1 节与 `docs/quizbuks/shopify/00-overview.md` §4。
 
 ## 3. 命名
 
@@ -51,6 +51,12 @@
   版本由"保存版本"显式生成，快照是 `QuizSnapshots` 的规范 JSON（哈希用平台 `ContentHash`），快照引用的文件另登记 `QbVersionFile`。业务流程不调用 `FILE_DELETE`：不再引用的文件由平台清扫。
   新放入内容的文件必须由模版所有者上传（`QuizEditing.requireOwnFile`，经平台文件数据视图读 `uploadedBy`）。子项列表（选项、图片）给出即完整列表，不给（null）即不动。
   版本与版本文件没有商家数据视图（版本含正确答案）：商家只经连接本人未移除模版的模板读取。商家视图的写权限 `qb.content.view.write` 不授予任何角色。
+- **发布方**（S0，`publishing.PublisherKind`，`docs/quizbuks/shopify/S0-publisher.md`）：引擎里"谁发布的"是一对不可变、必填的字段 `publisherKind`（`SPONSOR` / `SHOPIFY_SHOP`，字典 `urn:jabiz:dict:quizbuks:publisher-kind`）+ `publisherId`（`SPONSOR` 的编号就是商家的用户编号），
+  以 `PublisherKind.declare(eb, processOnly)` 声明。**一条规则定范围**：凡是"发布的所有者的副本"（发布、档位、卡片、`QbPublicationOwner`、会话、分析的三张表、现金 / 兑换 / 电子奖品与码池、邀请）带这一对；
+  商家账户自己的记录（充值、收据、邮件服务器、邀请配额、领奖码、AI 作业与用量、`QbSponsorRewardMethods.userId`、钱包、账本维度）保持 `sponsorId` / `userId`。新写入处必须显式给出类型（表上没有缺省，商家后台的流程写 `PublisherKind.SPONSOR` + 操作人）；
+  商家的数据视图一律 `fromContext("publisherId", actorId)` **且** `fixed("publisherKind", SPONSOR)`（`RewardConfig.ownDataset` 按字段名自动加）；答题人的首页、详情与公开卡片视图只看 `SPONSOR` 的发布（店面流量在 S2 走 Shopify 模块自己的模板）。
+  审批事实是 `publisherKind` + `publisherId`；事件 `qb.publication.status` 的载荷同样是这一对，消费者 `QB_MAIL_PUBLICATION` 只对 `SPONSOR` 发邮件、对没有发布方的事件什么也不做；钱包事件（`qb.sponsor.*`）的 `sponsorId` 不变。
+  内容的 `ownerId` 与 AI 的 `sponsorId` 记的是**操作人**，不是发布方，S0 不改（店铺怎样成为操作人由 S1 决定）。界面文字仍叫"商家"，后台扩展以 `PublisherLink` 按类型显示（`SPONSOR` 链到用户页，其他显示编号）；地址参数仍是 `?sponsor=`。
 - **发布**（`publishing`，`docs/quizbuks/plans/Q4-publishing.md`）：写入只经 `QB_PUBLICATION_*` 流程（默认数据视图 `processOnlyWrites`，商家视图只读，
   写权限同样是不授予任何角色的 `qb.content.view.write`）。**锁的顺序固定**：（`qb.account:<商家>`，封禁、发布的审批结果与管理员恢复取，Q10b 评审 L1）→ `qb.quiz:<quizId>`（只有提交时取，共享）→ 按发布编号升序 [`qb.pub:<publicationId>`（独占）→ `qb.pub-start:<publicationId>`（开始锁，Q10a4）] → 平台审批的 `jabiz.approval:*` → Q5 的 `qb.wallet:<种类>:<所有者>`；
   写一个发布的流程先取发布锁再读取；**改变已上架发布状态的流程**（暂停、恢复、`ADVANCE`、`FUNDED`）在发布锁之后、读取之前再取开始锁（`PublicationEditing.lockStarts` / `lockStatesAndLoad`），其他发布流程不取。**提交即冻结**：只有 `DRAFT` 可改（`QB_PUBLICATION_NOT_DRAFT`），要改就复制。

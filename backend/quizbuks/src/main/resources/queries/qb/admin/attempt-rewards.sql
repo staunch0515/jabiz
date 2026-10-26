@@ -10,7 +10,8 @@ results:
   userId:              { from: QbAttempt.userId }
   publicationId:       { from: QbAttempt.publicationId }
   name:                { from: QbPublicationCard.name }
-  sponsorId:           { from: QbAttempt.sponsorId }
+  publisherKind:       { from: QbAttempt.publisherKind }
+  publisherId:         { from: QbAttempt.publisherId }
   submittedAt:         { from: QbAttempt.submittedAt }
   reward:              { from: QbAttempt.reward }
   fee:                 { from: QbAttempt.fee }
@@ -18,7 +19,7 @@ results:
   rewardPaidAt:        { from: QbAttempt.rewardPaidAt }
   ledgerTransactionId: { from: QbAttempt.ledgerTransactionId }
 list:
-  filters: [attemptId, userId, publicationId, sponsorId, rewardStatus, submittedAt]
+  filters: [attemptId, userId, publicationId, publisherKind, publisherId, rewardStatus, submittedAt]
   sorts:   [submittedAt, reward]
   defaultSort: { field: submittedAt, asc: false }
   key: [attemptId]
@@ -31,7 +32,8 @@ SELECT
     m.{{QbAttempt.userId}}              AS userId,
     m.{{QbAttempt.publicationId}}       AS publicationId,
     c.{{QbPublicationCard.name}}        AS name,
-    m.{{QbAttempt.sponsorId}}           AS sponsorId,
+    m.{{QbAttempt.publisherKind}}         AS publisherKind,
+    m.{{QbAttempt.publisherId}}           AS publisherId,
     m.{{QbAttempt.submittedAt}}         AS submittedAt,
     m.{{QbAttempt.reward}}              AS reward,
     m.{{QbAttempt.fee}}                 AS fee,

@@ -29,7 +29,8 @@ import static com.jabiz.quizbuks.publishing.PublicationStatus.SCHEDULED;
  * that is on (two ordinary tables, Q10a4: the starts' side under the start lock, the completions' side under the
  * publication's lock; every attempt updates each once) and the schedule of a
  * submitted publication (an ordinary table the tick and the removal of a quiz read). Each publication and tier
- * carries the sponsor ({@code sponsorId}), so a sponsor's dataset is limited without a join. Only the processes of
+ * carries its publisher ({@link PublisherKind}: kind and id, S0), so a sponsor's dataset is limited without a join. Only
+ * the processes of
  * {@link PublicationProcesses} and {@link PublicationLifecycle} write them.
  */
 public final class QbPublications {
@@ -72,7 +73,7 @@ public final class QbPublications {
         eb.primaryKey("publicationId");
         eb.field("publicationId", f -> f.physicalColumn("publication_id").immutable(true).required(true)
             .generated(true).asSemanticIdentity("urn:jabiz:entity:quizbuks:publication"));
-        eb.field("sponsorId", f -> f.physicalColumn("sponsor_id").immutable(true).required(true).asText(128));
+        PublisherKind.declare(eb, false);
         // The quiz of the version, kept with it: removing a quiz looks up the publications that use it.
         eb.field("quizId", f -> f.physicalColumn("quiz_id").asReference(QbContent.QUIZ));
         eb.field("versionId", f -> f.physicalColumn("version_id").asReference(QbContent.VERSION));
@@ -154,10 +155,10 @@ public final class QbPublications {
         eb.display("name");
         eb.temporal(t -> t.allowScheduled(false));
         eb.listView("default", lv -> lv
-            .columns("name", "sponsorId", "versionLabel", "status", "rewardMethod", "audience", "regions", "startAt", "endAt",
-                "maxReward", "maxSpend", "submittedAt", "editedAt")
-            .filters("name", "sponsorId", "quizId", "versionId", "status", "rewardMethod", "startAt", "endAt",
-                "editedAt")
+            .columns("name", "publisherKind", "publisherId", "versionLabel", "status", "rewardMethod", "audience",
+                "regions", "startAt", "endAt", "maxReward", "maxSpend", "submittedAt", "editedAt")
+            .filters("name", "publisherKind", "publisherId", "quizId", "versionId", "status", "rewardMethod",
+                "startAt", "endAt", "editedAt")
             .sorts("publicationId", "name", "startAt", "endAt", "editedAt", "submittedAt")
             .defaultSort("editedAt", false));
     });
@@ -185,7 +186,7 @@ public final class QbPublications {
             .asSemanticIdentity("urn:jabiz:entity:quizbuks:reward-tier"));
         eb.field("publicationId", f -> f.physicalColumn("publication_id").immutable(true).required(true)
             .asReference(PUBLICATION));
-        eb.field("sponsorId", f -> f.physicalColumn("sponsor_id").immutable(true).required(true).asText(128));
+        PublisherKind.declare(eb, false);
         eb.field("seq", f -> f.physicalColumn("seq").required(true).asNumeric(2, 0));
         eb.field("fromScore", f -> f.physicalColumn("from_score").required(true).asNumeric(6, 0)
             .apply(Rules.range(PublishingCodes.SCORE_RANGE, BigDecimal.ZERO, decimal(PublishingLimits.MAX_SCORE))));
@@ -196,7 +197,7 @@ public final class QbPublications {
         eb.temporal(t -> t.allowScheduled(false));
         eb.listView("default", lv -> lv
             .columns("publicationId", "seq", "fromScore", "toScore", "reward")
-            .filters("publicationId", "sponsorId")
+            .filters("publicationId", "publisherKind", "publisherId")
             .sorts("seq", "fromScore")
             .defaultSort("seq", true));
     });
@@ -286,7 +287,7 @@ public final class QbPublications {
         eb.primaryKey("publicationId");
         eb.field("publicationId", f -> f.physicalColumn("publication_id").immutable(true).required(true)
             .asReference(PUBLICATION));
-        eb.field("sponsorId", f -> f.physicalColumn("sponsor_id").immutable(true).required(true).asText(128));
+        PublisherKind.declare(eb, false);
         eb.field("status", f -> f.physicalColumn("status").required(true)
             .asCode(STATUS_DICTIONARY, PublicationStatus.ALL.toArray(String[]::new)));
         eb.field("regions", f -> f.physicalColumn("regions").immutable(true).required(true)
@@ -347,9 +348,9 @@ public final class QbPublications {
         eb.field("endedAt", f -> f.physicalColumn("ended_at").asTemporal(TemporalRole.EVENT_TIME));
         eb.field("version", f -> f.physicalColumn("version").asVersion());
         eb.listView("default", lv -> lv
-            .columns("name", "quizTitle", "sponsorId", "status", "rewardMethod", "audience", "regions", "startAt",
-                "endAt", "maxReward")
-            .filters("sponsorId", "status", "rewardMethod", "startAt", "endAt", "endedAt")
+            .columns("name", "quizTitle", "publisherKind", "publisherId", "status", "rewardMethod", "audience",
+                "regions", "startAt", "endAt", "maxReward")
+            .filters("publisherKind", "publisherId", "status", "rewardMethod", "startAt", "endAt", "endedAt")
             .sorts("startAt", "endAt", "wentOnAt", "publicationId")
             .defaultSort("wentOnAt", false));
     });
@@ -364,9 +365,9 @@ public final class QbPublications {
         eb.primaryKey("publicationId");
         eb.field("publicationId", f -> f.physicalColumn("publication_id").immutable(true).required(true)
             .asReference(PUBLICATION));
-        eb.field("sponsorId", f -> f.physicalColumn("sponsor_id").immutable(true).required(true).asText(128));
+        PublisherKind.declare(eb, false);
         eb.listView("default", lv -> lv
-            .columns("publicationId", "sponsorId")
+            .columns("publicationId", "publisherKind", "publisherId")
             .filters("publicationId")
             .sorts("publicationId")
             .defaultSort("publicationId", true));
@@ -410,7 +411,8 @@ public final class QbPublications {
     public static ApprovalSubject approvalSubject() {
         return ApprovalSubject.define(PublicationApprovals.SUBJECT, s -> s.entity(PUBLICATION).bool("autoApprove")
             .bool("takenDown")
-            .number("maxReward").number("maxSpend").text("sponsorId").text("regions").text("rewardMethod"));
+            .number("maxReward").number("maxSpend").text("publisherKind").text("publisherId").text("regions")
+            .text("rewardMethod"));
     }
 
     private QbPublications() {}

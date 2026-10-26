@@ -309,7 +309,8 @@ public final class AnalyticsJob {
         List<Map<String, Object>> state = rows(ctx, STATE);
         for (Map<String, Object> row : state) {
             UUID id = uuid(column(row, "publicationId"));
-            String sponsorId = text(column(row, "sponsorId"));
+            String publisherKind = text(column(row, "publisherKind"));
+            String publisherId = text(column(row, "publisherId"));
             boolean hasCursor = column(row, "cursorVersion") != null;
             Map<String, Object> cursor = new LinkedHashMap<>();
 
@@ -331,7 +332,7 @@ public final class AnalyticsJob {
                     continue;
                 }
                 if (!increments.isZero()) {
-                    written += addToBucket(ctx, row, id, sponsorId, increments, hasCursor, at);
+                    written += addToBucket(ctx, row, id, publisherKind, publisherId, increments, hasCursor, at);
                     cursor.putAll(bucketValues(now));
                     cursor.put("viewsUntil", viewsTo);
                 }
@@ -368,7 +369,7 @@ public final class AnalyticsJob {
                 }
                 if (read != null) {
                     attempts += (int) read.attempts();
-                    written += addAttempts(ctx, row, id, sponsorId, read, replace, hasCursor,
+                    written += addAttempts(ctx, row, id, publisherKind, publisherId, read, replace, hasCursor,
                         shownRows.getOrDefault(id, Map.of()), cursor, at);
                 }
             }
@@ -378,7 +379,7 @@ public final class AnalyticsJob {
                     ctx.changes().update(QbAnalytics.CURSOR, id, number(column(row, "cursorVersion")), cursor);
                 } else {
                     // A first cursor written by a recount counts the buckets from zero: the next chunk adds them all.
-                    Map<String, Object> values = newCursor(id, sponsorId);
+                    Map<String, Object> values = newCursor(id, publisherKind, publisherId);
                     values.putAll(cursor);
                     ctx.changes().insert(QbAnalytics.CURSOR, values);
                 }
@@ -393,8 +394,8 @@ public final class AnalyticsJob {
      * for a publication that went on before the run's bucket, its history goes to the hour it went on (a gap), not to
      * the hour of the run (review L1: it would count as that hour's, today's, spending).
      */
-    private static int addToBucket(ProcessContext ctx, Map<String, Object> row, UUID id, String sponsorId,
-        AnalyticsBuckets.Totals increments, boolean hasCursor, Instant at) {
+    private static int addToBucket(ProcessContext ctx, Map<String, Object> row, UUID id, String publisherKind,
+        String publisherId, AnalyticsBuckets.Totals increments, boolean hasCursor, Instant at) {
         Instant bucket = instant(column(row, "bucketStart"));
         Instant wentOn = instant(column(row, "wentOnAt"));
         boolean gap = AnalyticsBuckets.gap(at, bucket, wentOn, !hasCursor);
@@ -406,7 +407,8 @@ public final class AnalyticsJob {
         if (hourId == null) {
             Map<String, Object> values = bucketValues(increments);
             values.put("publicationId", id);
-            values.put("sponsorId", sponsorId);
+            values.put("publisherKind", publisherKind);
+            values.put("publisherId", publisherId);
             values.put("hourStart", bucket);
             values.put("gap", gap);
             ctx.changes().insert(QbAnalytics.HOUR, values);
@@ -423,7 +425,8 @@ public final class AnalyticsJob {
     }
 
     /** Adds (or, for a recount, replaces) the attempts read in the cursor's totals; returns the stat rows written. */
-    private static int addAttempts(ProcessContext ctx, Map<String, Object> row, UUID id, String sponsorId, Read read,
+    private static int addAttempts(ProcessContext ctx, Map<String, Object> row, UUID id, String publisherKind,
+        String publisherId, Read read,
         boolean replace, boolean hasCursor, Map<Integer, Map<String, Object>> shownRows, Map<String, Object> cursor,
         Instant at) {
         boolean fresh = replace || !hasCursor;
@@ -450,7 +453,7 @@ public final class AnalyticsJob {
             cursor.put("shownAnalysed", analysed);
             cursor.put("shownExpired", expired);
             cursor.put("shownAt", at);
-            written += showQuestions(ctx, id, sponsorId, questions, shownRows, at);
+            written += showQuestions(ctx, id, publisherKind, publisherId, questions, shownRows, at);
         }
         // The average time is over the attempts submitted in time only: it changes after k new ones of those, or k
         // new completions of which one was submitted would tell that one's time.
@@ -482,7 +485,7 @@ public final class AnalyticsJob {
     }
 
     /** Writes the question figures the sponsor is shown; returns the rows written. */
-    private static int showQuestions(ProcessContext ctx, UUID publicationId, String sponsorId,
+    private static int showQuestions(ProcessContext ctx, UUID publicationId, String publisherKind, String publisherId,
         Map<Integer, QuestionTotals.Count> questions, Map<Integer, Map<String, Object>> existing, Instant at) {
         int written = 0;
         for (Map.Entry<Integer, QuestionTotals.Count> question : questions.entrySet()) {
@@ -494,7 +497,8 @@ public final class AnalyticsJob {
             values.put("shownAt", at);
             if (row == null) {
                 values.put("publicationId", publicationId);
-                values.put("sponsorId", sponsorId);
+                values.put("publisherKind", publisherKind);
+                values.put("publisherId", publisherId);
                 values.put("questionNo", question.getKey());
                 ctx.changes().insert(QbAnalytics.QUESTION_STAT, values);
                 written++;
@@ -519,10 +523,11 @@ public final class AnalyticsJob {
         return values;
     }
 
-    private static Map<String, Object> newCursor(UUID publicationId, String sponsorId) {
+    private static Map<String, Object> newCursor(UUID publicationId, String publisherKind, String publisherId) {
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("publicationId", publicationId);
-        values.put("sponsorId", sponsorId);
+        values.put("publisherKind", publisherKind);
+        values.put("publisherId", publisherId);
         values.putAll(bucketValues(AnalyticsBuckets.Totals.ZERO));
         values.put("analysed", 0L);
         values.put("submitted", 0L);

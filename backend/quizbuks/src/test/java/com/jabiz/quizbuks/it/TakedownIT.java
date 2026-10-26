@@ -118,12 +118,12 @@ class TakedownIT extends PlayItSupport {
             next).getLast().get("facts").toString()).contains("\"takenDown\":true").contains("\"autoApprove\":false");
         // The reviewer reads the takedown and its reason.
         Map<String, Object> row = publication(next);
-        assertThat(items("qb.admin.quiz-takedowns", takedownAdmin(), Map.of("params", Map.of("sponsorId",
-            row.get("sponsor_id"), "quizId", String.valueOf(row.get("quiz_id")))))).singleElement()
+        assertThat(items("qb.admin.quiz-takedowns", takedownAdmin(), Map.of("params", Map.of("publisherId",
+            row.get("publisher_id"), "quizId", String.valueOf(row.get("quiz_id")))))).singleElement()
             .satisfies(takedown -> assertThat(takedown).containsEntry("publicationId", first)
                 .containsEntry("endReason", "ADMIN").containsEntry("adminReason", "Copied answers"));
-        assertThat(items("qb.admin.quiz-takedowns", takedownAdmin(), Map.of("params", Map.of("sponsorId",
-            row.get("sponsor_id"), "quizId", UUID.randomUUID().toString())))).isEmpty();
+        assertThat(items("qb.admin.quiz-takedowns", takedownAdmin(), Map.of("params", Map.of("publisherId",
+            row.get("publisher_id"), "quizId", UUID.randomUUID().toString())))).isEmpty();
         // A person approves it: it goes on.
         decide((String) submitted.get("approvalRequestId"), "APPROVE", null);
         assertThat(publication(next)).containsEntry("status", "SCHEDULED");
@@ -153,8 +153,8 @@ class TakedownIT extends PlayItSupport {
             .containsExactly(PublishingCodes.TAKEN_DOWN);
         assertThat(submit(token, draft(token, versionId, "After expiry"))).containsEntry("status", "PENDING_REVIEW");
         Map<String, Object> row = publication(first);
-        assertThat(items("qb.admin.quiz-takedowns", takedownAdmin(), Map.of("params", Map.of("sponsorId",
-            row.get("sponsor_id"), "quizId", String.valueOf(row.get("quiz_id")))))).singleElement()
+        assertThat(items("qb.admin.quiz-takedowns", takedownAdmin(), Map.of("params", Map.of("publisherId",
+            row.get("publisher_id"), "quizId", String.valueOf(row.get("quiz_id")))))).singleElement()
             .satisfies(takedown -> assertThat(takedown).containsEntry("publicationId", first)
                 .containsEntry("pausedBy", "ADMIN").containsEntry("adminReason", "Fraudulent"));
     }
@@ -195,7 +195,7 @@ class TakedownIT extends PlayItSupport {
         values.put("ruleCode", "it.takedown.exempt");
         values.put("subject", PublicationApprovals.SUBJECT);
         // Only this sponsor's: the class's other tests share the rules.
-        values.put("condition", Map.of("fact", "sponsorId", "op", "eq", "value", sponsor));
+        values.put("condition", Map.of("fact", "publisherId", "op", "eq", "value", sponsor));
         values.put("levels", List.of());
         values.put("priority", 1);
         values.put("enabled", true);

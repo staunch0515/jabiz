@@ -47,6 +47,6 @@ SELECT
     r.{{QbRedemption.redeemedAt}}    AS redeemedAt
 FROM {{QbRedemption}} r
 JOIN {{QbPublicationCard}} c ON c.{{QbPublicationCard.publicationId}} = r.{{QbRedemption.publicationId}}
-LEFT JOIN {{QbSponsor}} sp ON sp.{{QbSponsor.userId}} = r.{{QbRedemption.sponsorId}}
+LEFT JOIN {{QbSponsor}} sp ON sp.{{QbSponsor.userId}} = r.{{QbRedemption.publisherId}}
 WHERE (CAST(:open AS boolean) IS NULL OR CAST(:open AS boolean) = false
        OR r.{{QbRedemption.status}} IN ('DUE', 'CLAIMED'))

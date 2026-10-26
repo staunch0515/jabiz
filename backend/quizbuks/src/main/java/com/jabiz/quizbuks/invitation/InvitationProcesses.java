@@ -180,7 +180,8 @@ public final class InvitationProcesses {
         for (String address : fresh) {
             Map<String, Object> values = new LinkedHashMap<>();
             values.put("publicationId", publication.id());
-            values.put("sponsorId", publication.get("sponsorId"));
+            values.put("publisherKind", publication.get("publisherKind"));
+            values.put("publisherId", publication.get("publisherId"));
             values.put("email", address);
             values.put("status", InvitationStatus.ADDED);
             values.put("addedAt", ctx.opTime());
@@ -340,16 +341,16 @@ public final class InvitationProcesses {
                     .limit(1).build(), CARD),
                 QueryEntities.query(QbAccounts.defaultDataset(QbAccounts.SPONSOR), ctx -> EntityQuery.builder()
                     .where(new QueryPredicate.In("userId", sending(ctx)
-                        ? one(Invitations.first(ctx, LIST).get("sponsorId")) : List.of()))
+                        ? one(Invitations.first(ctx, LIST).get("publisherId")) : List.of()))
                     .limit(1).build(), SPONSOR),
                 QueryEntities.query(QbMailServers.DEFAULT_DATASET, ctx -> QbMailServers.bySponsor(sending(ctx)
-                    ? Invitations.first(ctx, LIST).get("sponsorId") : null), MAIL_SERVER)))
+                    ? Invitations.first(ctx, LIST).get("publisherId") : null), MAIL_SERVER)))
             // The publication may have been paused, ended or taken down since the sponsor queued the mail, or the
             // sponsor's mail server removed or found failing (Q29): then no link goes out and the row waits as ADDED
             // for the sponsor to send again. The mail leaves through the sponsor's server (decision D56), never the
             // platform's.
             .step("Send the invitation", SendMail.<ProcessContext>via(ctx -> sending(ctx)
-                    ? String.valueOf((Object) Invitations.first(ctx, LIST).get("sponsorId")) : null)
+                    ? String.valueOf((Object) Invitations.first(ctx, LIST).get("publisherId")) : null)
                 .when(ctx -> sending(ctx) && live(ctx) && serverUsable(ctx), InvitationMails.INVITATION,
                     ctx -> MailRecipient.address(Invitations.first(ctx, LIST).get("email"), null),
                     mailParams(values, appPath)))

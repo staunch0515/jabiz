@@ -54,5 +54,5 @@ SELECT
     c.{{QbPublicationCard.digitalDescription}} AS digitalDescription,
     sp.{{QbSponsor.company}}              AS sponsorCompany
 FROM {{QbPublicationCard}} c
-LEFT JOIN {{QbSponsor}} sp ON sp.{{QbSponsor.userId}} = c.{{QbPublicationCard.sponsorId}}
+LEFT JOIN {{QbSponsor}} sp ON sp.{{QbSponsor.userId}} = c.{{QbPublicationCard.publisherId}}
 WHERE c.{{QbPublicationCard.publicationId}} = :publicationId

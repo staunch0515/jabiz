@@ -79,11 +79,13 @@ FROM {{QbPublicationCard}} c
 JOIN {{QbPublicationCounter}} n ON n.{{QbPublicationCounter.publicationId}} = c.{{QbPublicationCard.publicationId}}
 JOIN {{QbPublicationStartCounter}} s
     ON s.{{QbPublicationStartCounter.publicationId}} = c.{{QbPublicationCard.publicationId}}
-LEFT JOIN {{QbWallet}} w ON w.{{QbWallet.ownerId}} = c.{{QbPublicationCard.sponsorId}}
+LEFT JOIN {{QbWallet}} w ON w.{{QbWallet.ownerId}} = c.{{QbPublicationCard.publisherId}}
     AND w.{{QbWallet.kind}} = 'SPONSOR'
-LEFT JOIN {{QbSponsor}} sp ON sp.{{QbSponsor.userId}} = c.{{QbPublicationCard.sponsorId}}
+LEFT JOIN {{QbSponsor}} sp ON sp.{{QbSponsor.userId}} = c.{{QbPublicationCard.publisherId}}
     AND sp.{{QbSponsor.reviewStatus}} = 'APPROVED'
 WHERE c.{{QbPublicationCard.status}} = 'LIVE'
+  -- S0 (D-S0-4): the App lists the sponsors' publications; a shop's (S2) are answered in its storefront.
+  AND c.{{QbPublicationCard.publisherKind}} = 'SPONSOR'
   -- Q25: an invited publication is reached from its mail only, never listed.
   AND c.{{QbPublicationCard.audience}} = 'PUBLIC'
   AND c.{{QbPublicationCard.startAt}} <= :at AND :at < c.{{QbPublicationCard.endAt}}

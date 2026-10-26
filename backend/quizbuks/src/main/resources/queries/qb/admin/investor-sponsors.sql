@@ -22,11 +22,11 @@ results:
   prizesRedeemed:      { kind: { type: numeric, precision: 9, scale: 0 } }
   invitationsSent:     { kind: { type: numeric, precision: 9, scale: 0 } }
   invitationsAnswered: { kind: { type: numeric, precision: 9, scale: 0 } }
-  sponsorId:           { from: QbAttempt.sponsorId }
+  publisherId:         { from: QbAttempt.publisherId }
 list:
   sorts: [attempts, company]
   defaultSort: { field: attempts, asc: false }
-  key: [sponsorId]
+  key: [publisherId]
 permissions: [qb.admin.finance.read]
 report:
   period: { from: from, to: to }
@@ -37,7 +37,7 @@ report:
 -- appears when any of these fell in the period; the company name is the sponsor record's current one (the id when
 -- there is none). The merchant's id is the last column, for the key only: the admin page does not show it.
 WITH per AS (
-    SELECT a.{{QbAttempt.sponsorId}} AS s,
+    SELECT a.{{QbAttempt.publisherId}} AS s,
            count(DISTINCT a.{{QbAttempt.userId}}) FILTER (WHERE a.{{QbAttempt.startedAt}} >= :from
                AND a.{{QbAttempt.startedAt}} < :to) AS takers,
            count(*) FILTER (WHERE a.{{QbAttempt.startedAt}} >= :from AND a.{{QbAttempt.startedAt}} < :to) AS attempts,
@@ -46,24 +46,28 @@ WITH per AS (
            count(*) FILTER (WHERE a.{{QbAttempt.passed}} = true AND a.{{QbAttempt.submittedAt}} >= :from
                AND a.{{QbAttempt.submittedAt}} < :to) AS passes
     FROM {{QbAttempt}} a
-    GROUP BY a.{{QbAttempt.sponsorId}}
+    -- S0: the sponsors' system's merchants; a shop (S1) is reported by its own module.
+    WHERE a.{{QbAttempt.publisherKind}} = 'SPONSOR'
+    GROUP BY a.{{QbAttempt.publisherId}}
 ),
 prizes AS (
-    SELECT r.{{QbRedemption.sponsorId}} AS s,
+    SELECT r.{{QbRedemption.publisherId}} AS s,
            count(*) FILTER (WHERE r.{{QbRedemption.dueAt}} >= :from AND r.{{QbRedemption.dueAt}} < :to) AS won,
            count(*) FILTER (WHERE r.{{QbRedemption.redeemedAt}} >= :from AND r.{{QbRedemption.redeemedAt}} < :to)
                AS redeemed
     FROM {{QbRedemption}} r
-    GROUP BY r.{{QbRedemption.sponsorId}}
+    WHERE r.{{QbRedemption.publisherKind}} = 'SPONSOR'
+    GROUP BY r.{{QbRedemption.publisherId}}
 ),
 inv AS (
-    SELECT i.{{QbInvitation.sponsorId}} AS s,
+    SELECT i.{{QbInvitation.publisherId}} AS s,
            count(*) FILTER (WHERE i.{{QbInvitation.lastSentAt}} >= :from AND i.{{QbInvitation.lastSentAt}} < :to)
                AS sent,
            count(*) FILTER (WHERE i.{{QbInvitation.answeredAt}} >= :from AND i.{{QbInvitation.answeredAt}} < :to)
                AS answered
     FROM {{QbInvitation}} i
-    GROUP BY i.{{QbInvitation.sponsorId}}
+    WHERE i.{{QbInvitation.publisherKind}} = 'SPONSOR'
+    GROUP BY i.{{QbInvitation.publisherId}}
 ),
 ids AS (
     SELECT s FROM per UNION SELECT s FROM prizes UNION SELECT s FROM inv
@@ -78,7 +82,7 @@ SELECT
     coalesce(prizes.redeemed, 0)    AS prizesRedeemed,
     coalesce(inv.sent, 0)           AS invitationsSent,
     coalesce(inv.answered, 0)       AS invitationsAnswered,
-    ids.s                           AS sponsorId
+    ids.s                           AS publisherId
 FROM ids
 LEFT JOIN per ON per.s = ids.s
 LEFT JOIN prizes ON prizes.s = ids.s

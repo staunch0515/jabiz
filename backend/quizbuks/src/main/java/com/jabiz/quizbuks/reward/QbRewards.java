@@ -4,6 +4,7 @@ import com.jabiz.entity.EntityDefinition;
 import com.jabiz.entity.TemporalRole;
 import com.jabiz.quizbuks.publishing.PublishingLimits;
 import com.jabiz.quizbuks.publishing.QbPublications;
+import com.jabiz.quizbuks.publishing.PublisherKind;
 
 import java.math.BigDecimal;
 
@@ -107,7 +108,7 @@ public final class QbRewards {
         eb.field("attemptId", f -> f.physicalColumn("attempt_id").immutable(true).required(true).asText(36));
         eb.field("publicationId", f -> f.physicalColumn("publication_id").immutable(true).required(true)
             .asReference(QbPublications.PUBLICATION));
-        eb.field("sponsorId", f -> f.physicalColumn("sponsor_id").immutable(true).required(true).asText(128));
+        PublisherKind.declare(eb, false);
         eb.field("userId", f -> f.physicalColumn("user_id").immutable(true).required(true).asText(128));
         eb.field("amount", f -> f.physicalColumn("amount").immutable(true).required(true).asMonetary("JPY", 0));
         eb.field("code", f -> f.physicalColumn("code").immutable(true).required(true).asText(CODE_LENGTH));
@@ -153,9 +154,10 @@ public final class QbRewards {
         eb.display("code");
         eb.temporal(t -> t.allowScheduled(false));
         eb.listView("default", lv -> lv
-            .columns("code", "publicationId", "sponsorId", "userId", "amount", "status", "dueAt", "markedPaidAt",
-                "confirmBy", "confirmedAt", "disputedAt")
-            .filters("publicationId", "sponsorId", "userId", "status", "dueAt", "markedPaidAt", "confirmBy")
+            .columns("code", "publicationId", "publisherKind", "publisherId", "userId", "amount", "status", "dueAt",
+                "markedPaidAt", "confirmBy", "confirmedAt", "disputedAt")
+            .filters("publicationId", "publisherKind", "publisherId", "userId", "status", "dueAt", "markedPaidAt",
+                "confirmBy")
             .sorts("dueAt", "markedPaidAt", "amount", "status")
             .defaultSort("dueAt", false));
     });
@@ -168,7 +170,7 @@ public final class QbRewards {
         eb.field("attemptId", f -> f.physicalColumn("attempt_id").immutable(true).required(true).asText(36));
         eb.field("publicationId", f -> f.physicalColumn("publication_id").immutable(true).required(true)
             .asReference(QbPublications.PUBLICATION));
-        eb.field("sponsorId", f -> f.physicalColumn("sponsor_id").immutable(true).required(true).asText(128));
+        PublisherKind.declare(eb, false);
         eb.field("userId", f -> f.physicalColumn("user_id").immutable(true).required(true).asText(128));
         // The prize's value in Kudos (the tier's reward) and what it is, as the card said when the attempt finished.
         eb.field("amount", f -> f.physicalColumn("amount").immutable(true).required(true).asMonetary("JPY", 0));
@@ -208,9 +210,10 @@ public final class QbRewards {
         eb.display("code");
         eb.temporal(t -> t.allowScheduled(false));
         eb.listView("default", lv -> lv
-            .columns("code", "publicationId", "sponsorId", "userId", "amount", "status", "dueAt", "expiresAt",
-                "claimedAt", "redeemedAt")
-            .filters("publicationId", "sponsorId", "userId", "status", "dueAt", "expiresAt", "confirmBy")
+            .columns("code", "publicationId", "publisherKind", "publisherId", "userId", "amount", "status", "dueAt",
+                "expiresAt", "claimedAt", "redeemedAt")
+            .filters("publicationId", "publisherKind", "publisherId", "userId", "status", "dueAt", "expiresAt",
+                "confirmBy")
             .sorts("dueAt", "expiresAt", "amount", "status")
             .defaultSort("dueAt", false));
     });

@@ -11,7 +11,8 @@ params:
   q: { kind: { type: text, maxLength: 100 }, description: Only publications whose name contains this text }
 results:
   publicationId:     { from: QbPublication.publicationId }
-  sponsorId:         { from: QbPublication.sponsorId }
+  publisherKind:     { from: QbPublication.publisherKind }
+  publisherId:       { from: QbPublication.publisherId }
   quizId:            { from: QbPublication.quizId }
   name:              { from: QbPublication.name }
   quizTitle:         { from: QbQuizVersion.title }
@@ -35,7 +36,7 @@ results:
   rejectCode:        { from: QbPublication.rejectCode }
   editedAt:          { from: QbPublication.editedAt }
 list:
-  filters: [publicationId, sponsorId, quizId, status, startAt, submittedAt]
+  filters: [publicationId, publisherKind, publisherId, quizId, status, startAt, submittedAt]
   sorts:   [editedAt, submittedAt, startAt, name]
   defaultSort: { field: editedAt, asc: false }
   key: [publicationId]
@@ -46,7 +47,8 @@ permissions: [qb.admin.publication.read]
 -- counters in this one statement (Q10a4).
 SELECT
     p.{{QbPublication.publicationId}}       AS publicationId,
-    p.{{QbPublication.sponsorId}}           AS sponsorId,
+    p.{{QbPublication.publisherKind}}         AS publisherKind,
+    p.{{QbPublication.publisherId}}           AS publisherId,
     p.{{QbPublication.quizId}}              AS quizId,
     p.{{QbPublication.name}}                AS name,
     v.{{QbQuizVersion.title}}               AS quizTitle,

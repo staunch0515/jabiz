@@ -60,7 +60,7 @@ Shopify 强制应用费用经 Billing API 收取，QuizBuks 不接触卡号。
 
 | 步骤 | 线 | 内容 | 估计 |
 |---|---|---|---|
-| S0 | 1.3/quizbuks | 引擎"发布方"抽象 + 全部场景回放 | 2–3 天 |
+| S0 | 1.3/quizbuks | 引擎"发布方"抽象 + 全部场景回放（计划 `S0-publisher.md`，2026-10-26 确认方案 B；已实现，分支 `1.3/quizbuks-S0-publisher`，迁移 V29，待评审） | 2–3 天 |
 | 17a | 1.3/platform → 同步 PR | 入站 webhook 验签（已有 `/api/inbound/**`，补 Shopify 的 HMAC 形式与去重）、公开接口的限流 | 2 天 |
 | S1 | 1.3/quizbuks | 安装 / OAuth、会话令牌登录入口、内嵌后台骨架、GDPR 三个 webhook、卸载 webhook | 3–4 天 |
 | S2 | 1.3/quizbuks | 店面组件（Theme App Extension）：视频 + 答题 + 领折扣码（**预生成池**，Admin GraphQL `discountCode`，`usageLimit 1`、有效期）、刷码限制 | 3–4 天 |

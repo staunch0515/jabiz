@@ -15,7 +15,7 @@ import {
   type ColumnDef,
 } from '@jabiz/admin'
 import { readPendingPublications, readPendingSponsors, type PublicationRow, type SponsorRow } from './api'
-import { LoadFailed } from './components'
+import { LoadFailed, PublisherLink } from './components'
 import { money, QUEUE, usePaged, when } from './hooks'
 import { PATH, PERMISSION } from './ids'
 
@@ -40,7 +40,8 @@ function PublicationQueue() {
       header: t('reviews.quiz'),
       cell: ({ row }) => [row.original.quizTitle, row.original.versionLabel].filter(Boolean).join(' · '),
     },
-    { id: 'sponsor', header: t('reviews.sponsor'), cell: ({ row }) => <UserName id={row.original.sponsorId} /> },
+    { id: 'sponsor', header: t('reviews.sponsor'),
+      cell: ({ row }) => <PublisherLink kind={row.original.publisherKind} id={row.original.publisherId} /> },
     { id: 'submittedAt', header: t('reviews.submittedAt'), cell: ({ row }) => when(row.original.submittedAt) },
     {
       id: 'budget',

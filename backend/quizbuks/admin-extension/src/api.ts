@@ -1,5 +1,5 @@
 import { api, ApiError, runQuery, unwrap, type Filter } from '@jabiz/admin'
-import { DATASET, PAGE_LIMIT, TEMPLATE } from './ids'
+import { DATASET, PAGE_LIMIT, SPONSOR_KIND, TEMPLATE } from './ids'
 import { parseSnapshot, type Snapshot } from './snapshot'
 
 /*
@@ -45,7 +45,9 @@ async function page<T>(template: string, map: (row: Row) => T, options: {
 /** A row of `qb.admin.publications`: the review queue, and a publication's counts and its sponsor's funds. */
 export interface PublicationRow {
   publicationId: string
-  sponsorId: string
+  /** Who published (S0): the kind (SPONSOR, SHOPIFY_SHOP) and the publisher's id in that system. */
+  publisherKind: string
+  publisherId: string
   name: string
   quizTitle: string | null
   versionLabel: string | null
@@ -64,7 +66,8 @@ export interface PublicationRow {
 export function toPublicationRow(row: Row): PublicationRow {
   return {
     publicationId: String(row.publicationId),
-    sponsorId: String(row.sponsorId ?? ''),
+    publisherKind: String(row.publisherKind ?? SPONSOR_KIND),
+    publisherId: String(row.publisherId ?? ''),
     name: String(row.name ?? ''),
     quizTitle: str(row.quizTitle),
     versionLabel: str(row.versionLabel),
@@ -172,7 +175,9 @@ async function readRows(dataset: string, filters: Filter[]): Promise<Row[]> {
 /** A publication as it was submitted (frozen from then on), with the facts of its review. */
 export interface Publication {
   publicationId: string
-  sponsorId: string
+  /** Who published (S0): the kind (SPONSOR, SHOPIFY_SHOP) and the publisher's id in that system. */
+  publisherKind: string
+  publisherId: string
   /** Its quiz: a publication of a quiz taken down goes to a person's review (Q10b, M-d). */
   quizId: string | null
   versionId: string | null
@@ -204,7 +209,8 @@ export async function readPublication(publicationId: string): Promise<Publicatio
   if (!row) return null
   return {
     publicationId: String(row.publicationId ?? publicationId),
-    sponsorId: String(row.sponsorId ?? ''),
+    publisherKind: String(row.publisherKind ?? SPONSOR_KIND),
+    publisherId: String(row.publisherId ?? ''),
     quizId: str(row.quizId),
     versionId: str(row.versionId),
     versionLabel: str(row.versionLabel),
@@ -241,8 +247,8 @@ export interface Takedown {
   at: string | null
 }
 
-export async function readTakedowns(sponsorId: string, quizId: string): Promise<Takedown[]> {
-  const answer = await runQuery<Row>(TEMPLATE.quizTakedowns, { params: { sponsorId, quizId }, limit: 100 })
+export async function readTakedowns(publisherId: string, quizId: string): Promise<Takedown[]> {
+  const answer = await runQuery<Row>(TEMPLATE.quizTakedowns, { params: { publisherId, quizId }, limit: 100 })
   return answer.items.map((row) => ({
     publicationId: String(row.publicationId ?? ''),
     name: String(row.name ?? ''),

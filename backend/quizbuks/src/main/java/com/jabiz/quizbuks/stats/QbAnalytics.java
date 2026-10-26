@@ -3,6 +3,7 @@ package com.jabiz.quizbuks.stats;
 import com.jabiz.entity.EntityDefinition;
 import com.jabiz.entity.TemporalRole;
 import com.jabiz.quizbuks.publishing.QbPublications;
+import com.jabiz.quizbuks.publishing.PublisherKind;
 
 /**
  * The entities of the sponsors' analytics (docs/quizbuks/plans/Q9e-analytics.md, Q9e1), all ordinary tables written
@@ -44,7 +45,7 @@ public final class QbAnalytics {
             .asSemanticIdentity("urn:jabiz:entity:quizbuks:analytics-hour"));
         eb.field("publicationId", f -> f.physicalColumn("publication_id").immutable(true).required(true)
             .asReference(QbPublications.PUBLICATION));
-        eb.field("sponsorId", f -> f.physicalColumn("sponsor_id").immutable(true).required(true).asText(128));
+        PublisherKind.declare(eb, false);
         eb.field("hourStart", f -> f.physicalColumn("hour_start").immutable(true).required(true)
             .asTemporal(TemporalRole.EVENT_TIME));
         count(eb, "views", "views");
@@ -58,7 +59,7 @@ public final class QbAnalytics {
         eb.listView("default", lv -> lv
             .columns("publicationId", "hourStart", "views", "starts", "completions", "passes", "winners", "spent",
                 "gap")
-            .filters("publicationId", "sponsorId", "hourStart")
+            .filters("publicationId", "publisherKind", "publisherId", "hourStart")
             .sorts("hourStart")
             .defaultSort("hourStart", false));
     });
@@ -77,7 +78,7 @@ public final class QbAnalytics {
         eb.primaryKey("publicationId");
         eb.field("publicationId", f -> f.physicalColumn("publication_id").immutable(true).required(true)
             .asReference(QbPublications.PUBLICATION));
-        eb.field("sponsorId", f -> f.physicalColumn("sponsor_id").immutable(true).required(true).asText(128));
+        PublisherKind.declare(eb, false);
         count(eb, "views", "views");
         count(eb, "starts", "starts");
         count(eb, "completions", "completions");
@@ -105,7 +106,7 @@ public final class QbAnalytics {
         eb.listView("default", lv -> lv
             .columns("publicationId", "views", "starts", "completions", "analysed", "shownAnalysed", "shownAt",
                 "finalizedAt")
-            .filters("publicationId", "sponsorId", "finalizedAt")
+            .filters("publicationId", "publisherKind", "publisherId", "finalizedAt")
             .sorts("shownAt", "finalizedAt")
             .defaultSort("shownAt", false));
     });
@@ -121,7 +122,7 @@ public final class QbAnalytics {
             .asSemanticIdentity("urn:jabiz:entity:quizbuks:question-stat"));
         eb.field("publicationId", f -> f.physicalColumn("publication_id").immutable(true).required(true)
             .asReference(QbPublications.PUBLICATION));
-        eb.field("sponsorId", f -> f.physicalColumn("sponsor_id").immutable(true).required(true).asText(128));
+        PublisherKind.declare(eb, false);
         eb.field("questionNo", f -> f.physicalColumn("question_no").immutable(true).required(true)
             .asNumeric(4, 0));
         count(eb, "completions", "completions");
@@ -130,7 +131,7 @@ public final class QbAnalytics {
         eb.field("version", f -> f.physicalColumn("version").asVersion());
         eb.listView("default", lv -> lv
             .columns("publicationId", "questionNo", "completions", "correct", "shownAt")
-            .filters("publicationId", "sponsorId")
+            .filters("publicationId", "publisherKind", "publisherId")
             .sorts("questionNo", "shownAt")
             .defaultSort("questionNo", true));
     });

@@ -27,14 +27,14 @@ permissions: [qb.stats.read]
 -- job's, every ten minutes); the total is the counter's, live. Aggregates only. The buckets are found by the
 -- sponsor's index (their publications all carry the caller as sponsor), and joined to their publications.
 WITH mine AS (
-    SELECT p.{{QbPublicationCard.publicationId}} AS pid, p.{{QbPublicationCard.sponsorId}} AS sponsor,
+    SELECT p.{{QbPublicationCard.publicationId}} AS pid, p.{{QbPublicationCard.publisherId}} AS sponsor,
            p.{{QbPublicationCard.name}} AS v_name, p.{{QbPublicationCard.status}} AS v_status
     FROM {{QbPublicationCard}} p),
 recent AS (
     SELECT h.{{QbAnalyticsHour.publicationId}} AS pid, sum(h.{{QbAnalyticsHour.completions}}) AS v_completions,
            sum(h.{{QbAnalyticsHour.spent}}) AS v_spent
     FROM {{QbAnalyticsHour}} h
-    WHERE h.{{QbAnalyticsHour.sponsorId}} IN (SELECT m.sponsor FROM mine m)
+    WHERE h.{{QbAnalyticsHour.publisherId}} IN (SELECT m.sponsor FROM mine m)
       AND h.{{QbAnalyticsHour.hourStart}} >= CAST(:at AS timestamptz) - interval '7 days'
       AND h.{{QbAnalyticsHour.hourStart}} < CAST(:at AS timestamptz)
     GROUP BY h.{{QbAnalyticsHour.publicationId}}

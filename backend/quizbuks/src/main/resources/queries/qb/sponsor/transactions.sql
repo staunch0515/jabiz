@@ -57,7 +57,7 @@ FROM (
              THEN m.{{QbAttempt.rewardPaidAt}} ELSE m.{{QbAttempt.submittedAt}} END AS occurredAt,
         p.{{QbPublication.publicationId}}              AS publicationId,
         p.{{QbPublication.name}}                       AS publicationName,
-        CAST(md5(p.{{QbPublication.sponsorId}} || ':' || m.{{QbAttempt.userId}}) AS varchar(32)) AS userKey,
+        CAST(md5(p.{{QbPublication.publisherId}} || ':' || m.{{QbAttempt.userId}}) AS varchar(32)) AS userKey,
         u.{{QbProfile.displayName}}                    AS userName,
         m.{{QbAttempt.score}}                          AS score,
         m.{{QbAttempt.fullScore}}                      AS fullScore

@@ -238,18 +238,20 @@ public final class PublicationProcesses {
         Instant editedAt;
         List<UUID> tierIds = new ArrayList<>();
         if (publication == null) {
-            values.put("sponsorId", ctx.request().actorId());
+            // The sponsors' console publishes as a sponsor (S0): the publisher is the caller.
+            values.put("publisherKind", PublisherKind.SPONSOR);
+            values.put("publisherId", ctx.request().actorId());
             values.put("status", PublicationStatus.DRAFT);
             values.put("revision", BigDecimal.ONE);
             values.put("editedAt", ctx.opTime());
             publicationId = uuid(ctx.changes().insert(QbPublications.PUBLICATION, values));
-            writeTiers(ctx, publicationId, ctx.request().actorId(), List.of(), tiers, tierIds);
+            writeTiers(ctx, publicationId, PublisherKind.SPONSOR, ctx.request().actorId(), List.of(), tiers, tierIds);
             revision = 1;
             editedAt = ctx.opTime();
         } else {
             publicationId = uuid(publication.id());
-            boolean tiersChanged = writeTiers(ctx, publicationId, publication.get("sponsorId"),
-                list(ctx, TIERS), tiers, tierIds);
+            boolean tiersChanged = writeTiers(ctx, publicationId, publication.get("publisherKind"),
+                publication.get("publisherId"), list(ctx, TIERS), tiers, tierIds);
             Map<String, Object> changed = PublicationEditing.differences(publication, values);
             if (changed.isEmpty() && !tiersChanged) {
                 revision = number(publication.get("revision"));
@@ -333,7 +335,7 @@ public final class PublicationProcesses {
      * Writes the tiers as planned, in their order: existing ones left out are deleted, changed ones updated, new ones
      * inserted. Returns whether anything changed; {@code ids} receives the tiers' keys in their order.
      */
-    private static boolean writeTiers(ProcessContext ctx, UUID publicationId, Object sponsorId,
+    private static boolean writeTiers(ProcessContext ctx, UUID publicationId, Object publisherKind, Object publisherId,
         List<EntityInstance> existing, List<TierPlan> plan, List<UUID> ids) {
         boolean changed = false;
         Set<String> kept = new HashSet<>();
@@ -353,7 +355,8 @@ public final class PublicationProcesses {
             values.put("reward", tier.tier().reward());
             if (tier.existing() == null) {
                 values.put("publicationId", publicationId);
-                values.put("sponsorId", sponsorId);
+                values.put("publisherKind", publisherKind);
+                values.put("publisherId", publisherId);
                 ids.add(uuid(ctx.changes().insert(QbPublications.TIER, values)));
                 changed = true;
             } else {
@@ -474,14 +477,15 @@ public final class PublicationProcesses {
         List<TierPlan> tiers = PublicationEditing.ordered(list(ctx, TIERS)).stream()
             .map(row -> new TierPlan(null, PublicationEditing.tiersOf(List.of(row)).getFirst())).toList();
         putDerived(values, tiers);
-        values.put("sponsorId", ctx.request().actorId());
+        values.put("publisherKind", PublisherKind.SPONSOR);
+        values.put("publisherId", ctx.request().actorId());
         values.put("status", PublicationStatus.DRAFT);
         values.put("revision", BigDecimal.ONE);
         values.put("editedAt", ctx.opTime());
         values.put("copiedFrom", String.valueOf(source.id()));
         UUID publicationId = uuid(ctx.changes().insert(QbPublications.PUBLICATION, values));
         List<UUID> tierIds = new ArrayList<>();
-        writeTiers(ctx, publicationId, ctx.request().actorId(), List.of(), tiers, tierIds);
+        writeTiers(ctx, publicationId, PublisherKind.SPONSOR, ctx.request().actorId(), List.of(), tiers, tierIds);
         ctx.put(OUTPUT, output(ctx, messages, publicationId, 1, ctx.opTime(), values, tiers, version, tierIds));
     }
 

@@ -8,6 +8,7 @@ import com.jabiz.job.JobItems;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.publishing.PublisherKind;
 import com.jabiz.quizbuks.play.QbPlay;
 import com.jabiz.quizbuks.publishing.QbPublications;
 import org.springframework.beans.factory.annotation.Value;
@@ -134,7 +135,8 @@ public class AnalyticsConfig {
     }
 
     /**
-     * The caller's own publication cards ({@code sponsorId} = the caller), read only, for the analytics templates:
+     * The caller's own publication cards (a sponsor's, {@code publisherId} = the caller), read only, for the analytics
+     * templates:
      * a plain table read through its sponsor index, where the sponsor's dataset of the temporal publications reads the
      * latest version of every publication on the platform before it filters (review M2). A card exists from the
      * publication's going on, which is when it has figures. Its read permission is one no role holds: the generic API
@@ -147,7 +149,8 @@ public class AnalyticsConfig {
             .permissions(QbPermissions.STATS_SYSTEM, QbPermissions.SPONSOR_VIEW_WRITE)
             .policy(p -> p.readOnly(true).allowTimeTravel(false))
             .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef))
-            .scope(s -> s.fromContext("sponsorId", "actorId", RequestContext::actorId)));
+            .scope(s -> s.fromContext("publisherId", "actorId", RequestContext::actorId)
+                .fixed("publisherKind", PublisherKind.SPONSOR)));
     }
 
     @Bean

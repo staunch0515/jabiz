@@ -11,6 +11,7 @@ import com.jabiz.process.StepSpec;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.publishing.PublisherKind;
 import com.jabiz.quizbuks.identity.BanRules;
 import com.jabiz.quizbuks.identity.QbAccounts;
 import com.jabiz.quizbuks.publishing.PublicationAdmin;
@@ -109,8 +110,11 @@ public final class MailProcesses {
 
     public record TopUpMailInput(@NotBlank String topUpId, @NotNull Instant occurredAt) {}
 
-    /** The payload of {@link PublicationNotices#EVENT}, and when it was published. */
-    public record PublicationMailInput(@NotBlank String publicationId, @NotBlank String sponsorId,
+    /**
+     * The payload of {@link PublicationNotices#EVENT}, and when it was published. The publisher is not validated: an
+     * event of another publisher kind, or one from before S0 without a publisher, mails nobody rather than fail.
+     */
+    public record PublicationMailInput(@NotBlank String publicationId, String publisherKind, String publisherId,
         @NotBlank String kind, String reason, String name, String startAt, @NotNull Instant occurredAt) {}
 
     /** The input of {@value #FUNDS_SHORT_DUE}: the sponsor, from the job's template. */
@@ -237,28 +241,33 @@ public final class MailProcesses {
                 // Only the throttled kind needs the lock and its row, both the sponsor's (one mail a day for all their
                 // publications): the others are mailed once per event. Never a publication's lock.
                 .step("Lock the sponsor's notices", HoldLock.<ProcessContext>exclusive(ctx -> fundsShort(ctx)
-                    ? QbMessaging.noticeLock(input(ctx, PublicationMailInput.class).sponsorId()) : null))
+                    ? QbMessaging.noticeLock(input(ctx, PublicationMailInput.class).publisherId()) : null))
                 .step("Load the last notice", loadNotice(ctx -> fundsShort(ctx)
-                    ? input(ctx, PublicationMailInput.class).sponsorId() : null, FUNDS_SHORT_NOTICE))
+                    ? input(ctx, PublicationMailInput.class).publisherId() : null, FUNDS_SHORT_NOTICE))
                 // The recipient, the name and the start come from the publication itself, not from the event.
                 .step("Load the publication", QueryEntities.<ProcessContext>of(
                     QbPublications.defaultDataset(QbPublications.PUBLICATION), ctx -> byId("publicationId",
                         uuid(input(ctx, PublicationMailInput.class).publicationId())), RECORD))
                 .step("Load the short publications", loadShort(ctx -> fundsShort(ctx)
-                    ? input(ctx, PublicationMailInput.class).sponsorId() : null))
+                    ? input(ctx, PublicationMailInput.class).publisherId() : null))
                 .step("Load the wallet", loadWallet(ctx -> fundsShort(ctx) && record(ctx) != null
-                    ? record(ctx).get("sponsorId") : null))
+                    ? record(ctx).get("publisherId") : null))
                 .step("Load the counter", QueryEntities.<ProcessContext>of(
                     QbPublications.defaultDataset(QbPublications.COUNTER), ctx -> byId("publicationId",
                         ended(ctx) ? uuid(input(ctx, PublicationMailInput.class).publicationId()) : null), COUNTER))
                 .step("Load the sponsor's ban", QueryEntities.<ProcessContext>of(
                     QbAccounts.defaultDataset(QbAccounts.BAN), ctx -> byId("userId", ended(ctx)
-                        ? uuid(input(ctx, PublicationMailInput.class).sponsorId()) : null), BAN))
+                        ? uuid(input(ctx, PublicationMailInput.class).publisherId()) : null), BAN))
                 .step("Load the sponsor", loadUser(ctx -> record(ctx) == null ? null
-                    : record(ctx).get("sponsorId"))),
+                    : record(ctx).get("publisherId"))),
             ctx -> publicationMail(ctx, messages, values), messages, NotificationMails.PUBLICATION_APPROVED,
             NotificationMails.PUBLICATION_REJECTED, NotificationMails.PUBLICATION_TAKEN_DOWN,
             NotificationMails.PUBLICATION_FUNDS_SHORT, NotificationMails.PUBLICATION_ENDED);
+    }
+
+    /** Whether the event names a sponsor's publication (S0): only sponsors have a mailbox with the platform. */
+    private static boolean sponsors(PublicationMailInput input) {
+        return input.publisherId() != null && PublisherKind.sponsor(input.publisherKind());
     }
 
     private static boolean fundsShort(ProcessContext ctx) {
@@ -272,7 +281,8 @@ public final class MailProcesses {
     static void publicationMail(ProcessContext ctx, MessageCatalog messages, MailValues values) {
         PublicationMailInput input = input(ctx, PublicationMailInput.class);
         EntityInstance publication = record(ctx);
-        if (publication == null || !String.valueOf((Object) publication.get("sponsorId")).equals(input.sponsorId())) {
+        if (publication == null || !sponsors(input) || !PublisherKind.sponsor(publication.get("publisherKind"))
+            || !String.valueOf((Object) publication.get("publisherId")).equals(input.publisherId())) {
             return;
         }
         Map<String, Object> params = new LinkedHashMap<>();
@@ -296,7 +306,7 @@ public final class MailProcesses {
             }
             case PublicationNotices.FUNDS_SHORT -> {
                 if (freshNotification(ctx) && addressed(ctx)) {
-                    fundsShortMail(ctx, input.sponsorId());
+                    fundsShortMail(ctx, input.publisherId());
                 }
             }
             case PublicationNotices.ENDED -> {
@@ -349,7 +359,8 @@ public final class MailProcesses {
     }
 
     static PublicationMailInput publicationInput(DomainEvent event) {
-        return new PublicationMailInput(text(event, "publicationId"), text(event, "sponsorId"), text(event, "kind"),
+        return new PublicationMailInput(text(event, "publicationId"), text(event, "publisherKind"),
+            text(event, "publisherId"), text(event, "kind"),
             text(event, "reason"), text(event, "name"), text(event, "startAt"), event.createdTime());
     }
 
@@ -521,7 +532,8 @@ public final class MailProcesses {
                 sponsors.add(String.valueOf(id));
             }
             return EntityQuery.builder().where(new QueryPredicate.And(List.of(
-                    new QueryPredicate.In("sponsorId", sponsors),
+                    new QueryPredicate.Eq("publisherKind", PublisherKind.SPONSOR),
+                    new QueryPredicate.In("publisherId", sponsors),
                     new QueryPredicate.Eq("status", PublicationStatus.FUNDS_SHORT))))
                 .orderBy("name", true).limit(MAX_LISTED + 1).build();
         }, CARD);

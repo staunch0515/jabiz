@@ -15,7 +15,8 @@ results:
   attemptId:       { from: QbCashReward.attemptId }
   publicationId:   { from: QbCashReward.publicationId }
   publicationName: { from: QbPublicationCard.name }
-  sponsorId:       { from: QbCashReward.sponsorId }
+  publisherKind:   { from: QbCashReward.publisherKind }
+  publisherId:     { from: QbCashReward.publisherId }
   sponsorCompany:  { from: QbSponsor.company }
   userId:          { from: QbCashReward.userId }
   takerName:       { from: QbProfile.displayName }
@@ -35,7 +36,7 @@ results:
   resolution:      { from: QbCashReward.resolution }
   resolveNote:     { from: QbCashReward.resolveNote }
 list:
-  filters: [status, sponsorId, userId, publicationId, dueAt, payBy, amount]
+  filters: [status, publisherKind, publisherId, userId, publicationId, dueAt, payBy, amount]
   sorts:   [dueAt, payBy, amount, status, disputedAt]
   defaultSort: { field: dueAt, asc: false }
   key: [cashRewardId]
@@ -48,7 +49,8 @@ SELECT
     r.{{QbCashReward.attemptId}}      AS attemptId,
     r.{{QbCashReward.publicationId}}  AS publicationId,
     c.{{QbPublicationCard.name}}      AS publicationName,
-    r.{{QbCashReward.sponsorId}}      AS sponsorId,
+    r.{{QbCashReward.publisherKind}}    AS publisherKind,
+    r.{{QbCashReward.publisherId}}      AS publisherId,
     sp.{{QbSponsor.company}}          AS sponsorCompany,
     r.{{QbCashReward.userId}}         AS userId,
     p.{{QbProfile.displayName}}       AS takerName,
@@ -69,7 +71,7 @@ SELECT
     r.{{QbCashReward.resolveNote}}    AS resolveNote
 FROM {{QbCashReward}} r
 JOIN {{QbPublicationCard}} c ON c.{{QbPublicationCard.publicationId}} = r.{{QbCashReward.publicationId}}
-LEFT JOIN {{QbSponsor}} sp ON sp.{{QbSponsor.userId}} = r.{{QbCashReward.sponsorId}}
+LEFT JOIN {{QbSponsor}} sp ON sp.{{QbSponsor.userId}} = r.{{QbCashReward.publisherId}}
 LEFT JOIN {{QbProfile}} p ON p.{{QbProfile.userId}} = r.{{QbCashReward.userId}}
 WHERE (CAST(:q AS text) IS NULL
        OR strpos(lower(r.{{QbCashReward.code}}), lower(CAST(:q AS text))) > 0

@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Link } from 'react-router'
 import {
   Alert,
   AlertDescription,
@@ -11,7 +12,31 @@ import {
   CardTitle,
   EXTENSION_NAMESPACE,
   PageState,
+  UserName,
 } from '@jabiz/admin'
+import { PATH, SPONSOR_KIND } from './ids'
+
+const linkClass = 'text-primary font-medium underline-offset-4 hover:underline'
+
+/**
+ * Who published (S0): a sponsor is a user with a page, linked and named (`label`, else their name); a publisher of
+ * another kind has no user page here and shows its label or id.
+ */
+export function PublisherLink({ kind, id, label, testId }: {
+  kind: string | null | undefined
+  id: string
+  label?: ReactNode | null
+  testId?: string
+}) {
+  if (!kind || kind === SPONSOR_KIND) {
+    return (
+      <Link to={PATH.user(id)} className={linkClass} data-testid={testId}>
+        {label ?? <UserName id={id} />}
+      </Link>
+    )
+  }
+  return <span data-testid={testId}>{label ?? <code className="font-mono">{id}</code>}</span>
+}
 
 /** A titled card of a page (its heading is the section's `<h2>`). */
 export function Section({ title, children, testId, actions }: {

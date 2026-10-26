@@ -7,6 +7,7 @@ import com.jabiz.process.ProcessDefinition;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.publishing.PublisherKind;
 import com.jabiz.quizbuks.setup.QbParams;
 import com.jabiz.quizbuks.wallet.QbWallets;
 import com.jabiz.runtime.EntityInstance;
@@ -78,7 +79,8 @@ public final class PendingSettlement {
     /** The pending rewards of a sponsor in their order: by submission, then by attempt. */
     static EntityQuery queue(Object sponsorId, int limit) {
         return EntityQuery.builder().where(new QueryPredicate.And(List.of(
-                new QueryPredicate.In("sponsorId", PlaySteps.ids(sponsorId)),
+                new QueryPredicate.Eq("publisherKind", PublisherKind.SPONSOR),
+                new QueryPredicate.In("publisherId", PlaySteps.ids(sponsorId)),
                 new QueryPredicate.Eq("rewardStatus", RewardStatus.PENDING))))
             .orderBy("submittedAt", true).orderBy("attemptId", true).limit(limit).build();
     }

@@ -7,6 +7,7 @@ import com.jabiz.process.ProcessDefinitionBuilder;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.publishing.PublisherKind;
 import com.jabiz.quizbuks.identity.CallerChecks;
 import com.jabiz.quizbuks.identity.QbAccounts;
 import com.jabiz.quizbuks.publishing.QbPublications;
@@ -264,7 +265,8 @@ public final class RedemptionProcesses {
                     QueryEntities.query(QbRewards.takerDataset(QbRewards.REDEMPTION), ctx -> EntityQuery.builder()
                         .where(new QueryPredicate.And(List.of(
                             new QueryPredicate.In("userId", List.of(ctx.request().actorId())),
-                            new QueryPredicate.In("sponsorId", List.of(ctx.get(SPONSOR_ID))),
+                            new QueryPredicate.Eq("publisherKind", PublisherKind.SPONSOR),
+                            new QueryPredicate.In("publisherId", List.of(ctx.get(SPONSOR_ID))),
                             new QueryPredicate.In("status", List.<Object>copyOf(RedemptionStatus.OPEN)))))
                         .limit(50).build(), PRIZES),
                     QueryEntities.query(QbAccounts.defaultDataset(QbAccounts.SPONSOR), ctx -> EntityQuery.builder()
@@ -342,7 +344,8 @@ public final class RedemptionProcesses {
     static void claim(ProcessContext ctx) {
         EntityInstance redemption = redemption(ctx);
         EntityInstance token = validToken(ctx);
-        if (!String.valueOf((Object) token.get("sponsorId")).equals(String.valueOf((Object) redemption.get("sponsorId")))) {
+        if (!PublisherKind.sponsor(redemption.get("publisherKind")) || !String.valueOf((Object) token.get("sponsorId"))
+            .equals(String.valueOf((Object) redemption.get("publisherId")))) {
             ctx.reject(new Violation("scannedKey", RewardCodes.REDEEM_TOKEN_SPONSOR, "The prize is another sponsor's",
                 Map.of()));
             return;
@@ -572,7 +575,8 @@ public final class RedemptionProcesses {
         payload.put("attemptId", redemption.get("attemptId"));
         payload.put("publicationId", String.valueOf((Object) redemption.get("publicationId")));
         payload.put("userId", redemption.get("userId"));
-        payload.put("sponsorId", redemption.get("sponsorId"));
+        payload.put("publisherKind", redemption.get("publisherKind"));
+        payload.put("publisherId", redemption.get("publisherId"));
         payload.put("amount", redemption.get("amount"));
         payload.put("code", redemption.get("code"));
         payload.put("status", status(ctx));

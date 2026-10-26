@@ -65,7 +65,8 @@ const REQUEST_ID = '0192f0a0-0000-7000-8000-0000000000a1'
 
 function publication(status = 'PENDING_REVIEW'): Row {
   return {
-    publicationId: PUBLICATION_ID, sponsorId: SPONSOR_ID, quizId: 'quiz-1', versionId: VERSION_ID, versionLabel: 'v1',
+    publicationId: PUBLICATION_ID, publisherKind: 'SPONSOR', publisherId: SPONSOR_ID, quizId: 'quiz-1',
+    versionId: VERSION_ID, versionLabel: 'v1',
     name: 'Spring run', regions: 'JP,ASIA', startAt: '2026-11-01T00:00:00Z', endAt: '2026-11-08T00:00:00Z',
     timeLimitSec: 300, passScore: 3, fullScore: 5, budgetCap: 10000, maxReward: 100, maxSpend: 5000, maxWinners: 50,
     status, approvalRequestId: REQUEST_ID, submittedAt: '2026-10-15T01:00:00Z',

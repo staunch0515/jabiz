@@ -64,7 +64,9 @@ public final class PublicationFunds {
                 .outputMapper(ctx -> new RestoredOutput(sponsorId(ctx), list(ctx, SHORT).size()))
                 .step("Find the underfunded publications", QueryEntities.<ProcessContext>of(
                     QbPublications.defaultDataset(QbPublications.CARD), ctx -> EntityQuery.builder()
-                        .where(new QueryPredicate.And(List.of(new QueryPredicate.Eq("sponsorId", sponsorId(ctx)),
+                        .where(new QueryPredicate.And(List.of(
+                            new QueryPredicate.Eq("publisherKind", PublisherKind.SPONSOR),
+                            new QueryPredicate.Eq("publisherId", sponsorId(ctx)),
                             new QueryPredicate.Eq("status", PublicationStatus.FUNDS_SHORT))))
                         .orderBy("publicationId", true).limit(BATCH).build(), SHORT))
                 // By key, as the minute's tick takes them: the same order everywhere.
@@ -95,7 +97,7 @@ public final class PublicationFunds {
                 .step("Read the sponsor's wallet", QueryEntities.<ProcessContext>of(
                     QbWallets.defaultDataset(QbWallets.WALLET), ctx -> {
                         EntityInstance found = first(ctx, FOUND);
-                        return QbWallets.query(QbWallets.SPONSOR, found == null ? null : found.get("sponsorId"));
+                        return QbWallets.query(QbWallets.SPONSOR, found == null ? null : found.get("publisherId"));
                     }, WALLET))
                 .compute("Put it back on", (metadata, ctx) -> funded(ctx))
                 .steps(PublicationNotices::announce));

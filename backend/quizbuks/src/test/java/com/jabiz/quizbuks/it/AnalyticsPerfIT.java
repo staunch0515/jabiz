@@ -35,11 +35,12 @@ class AnalyticsPerfIT extends AnalyticsItSupport {
 
     /** Finished attempts {@code from}..{@code to} of a publication, submitted evenly between two times. */
     void attempts(String publicationId, int from, int to, Instant first, Instant last) {
-        execute("INSERT INTO qb_attempt (attempt_id, user_id, publication_id, sponsor_id, version_id, started_at, "
+        execute("INSERT INTO qb_attempt (attempt_id, user_id, publication_id, publisher_kind, publisher_id, version_id, "
+            + "started_at, "
             + "deadline, status, current_index, option_order, answers, result, submitted_at, score, full_score, passed, "
             + "reward, fee, reward_status, version) "
             + "SELECT lpad(to_hex(n), 12, '0') || '-perf-' || substr(md5(?), 1, 18), 'perf-u-' || n, ?::uuid, "
-            + "c.sponsor_id, c.version_id, s.at - interval '90 seconds', s.at + interval '210 seconds', "
+            + "c.publisher_kind, c.publisher_id, c.version_id, s.at - interval '90 seconds', s.at + interval '210 seconds', "
             + "CASE WHEN n % 20 = 0 THEN 'EXPIRED' ELSE 'SUBMITTED' END, 0, '[]', '[]', "
             + "(SELECT CAST(jsonb_agg(jsonb_build_object('no', q, 'selected', jsonb_build_array(1), 'correct', "
             + "jsonb_build_array(1), 'points', 1, 'earned', CASE WHEN (n + q) % 3 = 0 THEN 0 ELSE 1 END) ORDER BY q) "
@@ -99,10 +100,17 @@ class AnalyticsPerfIT extends AnalyticsItSupport {
         execute("CREATE TABLE perf_ids AS SELECT gen_random_uuid() AS id FROM generate_series(1, ?)", OTHERS);
         execute("INSERT INTO entity_registry (entity_id, entity_type, created_seq_id) SELECT id, 'QbPublication', ? "
             + "FROM perf_ids", seq);
-        execute("INSERT INTO qb_publication_card SELECT p.id, c.sponsor_id, c.status, c.regions, c.start_at, c.end_at, "
-            + "c.name, c.quiz_title, c.cover, c.version_id, c.max_reward, c.full_score, c.pass_score, c.time_limit_sec, "
-            + "c.question_count, c.budget_cap, c.max_winners, c.tiers, c.sponsor_country, c.went_on_at, c.ended_at, 1 "
-            + "FROM perf_ids p CROSS JOIN qb_publication_card c WHERE c.publication_id = ?::uuid", hot);
+        // By name: the card's columns grew with the phases (S0 added the publisher's kind at the end, without default).
+        List<String> cardColumns = query("SELECT column_name FROM information_schema.columns WHERE table_schema = "
+            + "current_schema() AND table_name = 'qb_publication_card' ORDER BY ordinal_position").stream()
+            .map(row -> String.valueOf(row.get("column_name"))).toList();
+        execute("INSERT INTO qb_publication_card (" + String.join(", ", cardColumns) + ") SELECT "
+            + String.join(", ", cardColumns.stream().map(c -> switch (c) {
+                case "publication_id" -> "p.id";
+                case "version" -> "1";
+                default -> "c." + c;
+            }).toList())
+            + " FROM perf_ids p CROSS JOIN qb_publication_card c WHERE c.publication_id = ?::uuid", hot);
         // And of its versions, which the analytics tables refer to (and the sponsor's templates read).
         List<String> columns = query("SELECT column_name FROM information_schema.columns WHERE table_schema = "
             + "current_schema() AND table_name = 'qb_publication_version' AND column_name <> 'row_id' "
@@ -124,15 +132,20 @@ class AnalyticsPerfIT extends AnalyticsItSupport {
             + "FROM generate_series(1, ?) n", PLATFORM);
         execute("INSERT INTO entity_registry (entity_id, entity_type, created_seq_id) SELECT id, 'QbPublication', ? "
             + "FROM perf_others", seq);
-        execute("INSERT INTO qb_publication_card SELECT p.id, p.sponsor, 'ENDED', c.regions, c.start_at, c.end_at, "
-            + "c.name, c.quiz_title, c.cover, c.version_id, c.max_reward, c.full_score, c.pass_score, c.time_limit_sec, "
-            + "c.question_count, c.budget_cap, c.max_winners, c.tiers, c.sponsor_country, c.went_on_at, "
-            + "c.went_on_at - interval '400 days', 1 "
-            + "FROM perf_others p CROSS JOIN qb_publication_card c WHERE c.publication_id = ?::uuid", hot);
+        execute("INSERT INTO qb_publication_card (" + String.join(", ", cardColumns) + ") SELECT "
+            + String.join(", ", cardColumns.stream().map(c -> switch (c) {
+                case "publication_id" -> "p.id";
+                case "publisher_id" -> "p.sponsor";
+                case "status" -> "'ENDED'";
+                case "ended_at" -> "c.went_on_at - interval '400 days'";
+                case "version" -> "1";
+                default -> "c." + c;
+            }).toList())
+            + " FROM perf_others p CROSS JOIN qb_publication_card c WHERE c.publication_id = ?::uuid", hot);
         execute("INSERT INTO qb_publication_version (" + String.join(", ", columns) + ") SELECT "
             + String.join(", ", columns.stream().map(c -> switch (c) {
                 case "publication_id" -> "p.id";
-                case "sponsor_id" -> "p.sponsor";
+                case "publisher_id" -> "p.sponsor";
                 default -> "v." + c;
             }).toList())
             + " FROM perf_others p CROSS JOIN qb_publication_version v WHERE v.publication_id = ?::uuid", hot);

@@ -118,11 +118,11 @@ class PendingIT extends PlayItSupport {
         long runs = settlementRuns();
         credit(sponsor, 100L * pendingCount);
         assertThat(settlementRuns() - runs).isEqualTo(2);
-        assertThat(query("SELECT count(*) AS n FROM qb_attempt WHERE sponsor_id = ? AND reward_status = 'PAID'",
+        assertThat(query("SELECT count(*) AS n FROM qb_attempt WHERE publisher_id = ? AND reward_status = 'PAID'",
             sponsor).getFirst()).containsEntry("n", (long) pendingCount + 1);
         assertThat(query("SELECT count(*) AS n, count(DISTINCT t.source_id) AS attempts "
             + "FROM ledger_transaction_version t JOIN qb_attempt a ON a.attempt_id = t.source_id "
-            + "WHERE a.sponsor_id = ?", sponsor).getFirst()).containsEntry("n", (long) pendingCount + 1)
+            + "WHERE a.publisher_id = ?", sponsor).getFirst()).containsEntry("n", (long) pendingCount + 1)
             .containsEntry("attempts", (long) pendingCount + 1);
         assertThat(balance(sponsor)).isZero();
         assertThat(status(publicationId)).isEqualTo("LIVE");

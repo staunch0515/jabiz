@@ -4,7 +4,8 @@
   "entities" : {
     "QbPublication" : [ {
       "publicationId" : "#uuid:1",
-      "sponsorId" : "sponsor-a",
+      "publisherKind" : "SPONSOR",
+      "publisherId" : "sponsor-a",
       "quizId" : "#uuid:2",
       "versionId" : "#uuid:3",
       "versionLabel" : "v1.0",
@@ -46,7 +47,8 @@
       "processSeqId" : "#op:7"
     }, {
       "publicationId" : "#uuid:5",
-      "sponsorId" : "sponsor-a",
+      "publisherKind" : "SPONSOR",
+      "publisherId" : "sponsor-a",
       "quizId" : "#uuid:2",
       "versionId" : "#uuid:3",
       "versionLabel" : "v1.0",
@@ -90,7 +92,8 @@
     "QbRewardTier" : [ {
       "tierId" : "#uuid:6",
       "publicationId" : "#uuid:1",
-      "sponsorId" : "sponsor-a",
+      "publisherKind" : "SPONSOR",
+      "publisherId" : "sponsor-a",
       "seq" : "1",
       "fromScore" : "0",
       "toScore" : "2",
@@ -102,7 +105,8 @@
     }, {
       "tierId" : "#uuid:7",
       "publicationId" : "#uuid:1",
-      "sponsorId" : "sponsor-a",
+      "publisherKind" : "SPONSOR",
+      "publisherId" : "sponsor-a",
       "seq" : "2",
       "fromScore" : "3",
       "toScore" : "4",
@@ -114,7 +118,8 @@
     }, {
       "tierId" : "#uuid:8",
       "publicationId" : "#uuid:1",
-      "sponsorId" : "sponsor-a",
+      "publisherKind" : "SPONSOR",
+      "publisherId" : "sponsor-a",
       "seq" : "3",
       "fromScore" : "5",
       "toScore" : "5",
@@ -126,7 +131,8 @@
     }, {
       "tierId" : "#uuid:9",
       "publicationId" : "#uuid:5",
-      "sponsorId" : "sponsor-a",
+      "publisherKind" : "SPONSOR",
+      "publisherId" : "sponsor-a",
       "seq" : "1",
       "fromScore" : "0",
       "toScore" : "2",
@@ -138,7 +144,8 @@
     }, {
       "tierId" : "#uuid:10",
       "publicationId" : "#uuid:5",
-      "sponsorId" : "sponsor-a",
+      "publisherKind" : "SPONSOR",
+      "publisherId" : "sponsor-a",
       "seq" : "2",
       "fromScore" : "3",
       "toScore" : "4",
@@ -150,7 +157,8 @@
     }, {
       "tierId" : "#uuid:11",
       "publicationId" : "#uuid:5",
-      "sponsorId" : "sponsor-a",
+      "publisherKind" : "SPONSOR",
+      "publisherId" : "sponsor-a",
       "seq" : "3",
       "fromScore" : "5",
       "toScore" : "5",
@@ -210,7 +218,7 @@
       "contentHash" : "ab2a66713318e35b9f489e8d50b543968bf074c5ecc8898c50edd7cbd77a1a88",
       "levels" : "[{\"permission\":\"qb.review.publication\"}]",
       "currentLevel" : "1",
-      "facts" : "{\"rewardMethod\":\"PLATFORM\",\"autoApprove\":false,\"takenDown\":false,\"maxReward\":300,\"maxSpend\":20000,\"sponsorId\":\"sponsor-a\",\"regions\":\"JP,ASIA\"}",
+      "facts" : "{\"rewardMethod\":\"PLATFORM\",\"autoApprove\":false,\"takenDown\":false,\"maxReward\":300,\"maxSpend\":20000,\"publisherKind\":\"SPONSOR\",\"publisherId\":\"sponsor-a\",\"regions\":\"JP,ASIA\"}",
       "reference" : "Capitals week",
       "versionNo" : 2,
       "effectStartTime" : "2026-10-01T03:00:00Z",
@@ -227,7 +235,7 @@
       "contentHash" : "604f28991f8b7e7e1bafd85d67938e0f2541e254d93dd6d6136021206555a217",
       "levels" : "[{\"permission\":\"qb.review.publication\"}]",
       "currentLevel" : "1",
-      "facts" : "{\"rewardMethod\":\"PLATFORM\",\"autoApprove\":false,\"takenDown\":false,\"maxReward\":100,\"maxSpend\":10000,\"sponsorId\":\"sponsor-a\",\"regions\":\"JP,ASIA\"}",
+      "facts" : "{\"rewardMethod\":\"PLATFORM\",\"autoApprove\":false,\"takenDown\":false,\"maxReward\":100,\"maxSpend\":10000,\"publisherKind\":\"SPONSOR\",\"publisherId\":\"sponsor-a\",\"regions\":\"JP,ASIA\"}",
       "reference" : "Capitals week",
       "versionNo" : 2,
       "effectStartTime" : "2026-10-01T05:00:00Z",

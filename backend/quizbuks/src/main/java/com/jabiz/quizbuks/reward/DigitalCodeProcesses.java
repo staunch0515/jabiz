@@ -205,7 +205,8 @@ public final class DigitalCodeProcesses {
         for (int i = 0; i < lines.size(); i++) {
             Map<String, Object> values = new LinkedHashMap<>();
             values.put("publicationId", publication.id());
-            values.put("sponsorId", publication.get("sponsorId"));
+            values.put("publisherKind", publication.get("publisherKind"));
+            values.put("publisherId", publication.get("publisherId"));
             values.put("seq", BigDecimal.valueOf(++seq));
             values.put("sealedContent", sealed.get(i));
             values.put("hint", QbDigitalPrizes.hintOf(lines.get(i)));

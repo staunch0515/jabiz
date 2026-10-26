@@ -284,7 +284,7 @@ steps:
   - expect:
       query: qb.admin.publications
       rows: 1
-      values: [{ sponsorId: sponsor-a, name: Capitals week, quizTitle: World capitals, status: SCHEDULED,
+      values: [{ publisherKind: SPONSOR, publisherId: sponsor-a, name: Capitals week, quizTitle: World capitals, status: SCHEDULED,
         starts: 0, maxSpend: 10000 }]
 
   - note: The minute's job puts it live at its start.

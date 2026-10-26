@@ -3,6 +3,7 @@ package com.jabiz.quizbuks.invitation;
 import com.jabiz.entity.EntityDefinition;
 import com.jabiz.entity.TemporalRole;
 import com.jabiz.quizbuks.publishing.QbPublications;
+import com.jabiz.quizbuks.publishing.PublisherKind;
 
 import java.util.Locale;
 import java.util.regex.Pattern;
@@ -58,7 +59,7 @@ public final class QbInvitations {
             .asSemanticIdentity("urn:jabiz:entity:quizbuks:invitation"));
         eb.field("publicationId", f -> f.physicalColumn("publication_id").immutable(true).required(true)
             .asReference(QbPublications.PUBLICATION));
-        eb.field("sponsorId", f -> f.physicalColumn("sponsor_id").immutable(true).required(true).asText(128));
+        PublisherKind.declare(eb, false);
         eb.field("email", f -> f.physicalColumn("email").immutable(true).required(true).asText(EMAIL_LENGTH));
         eb.field("status", f -> f.physicalColumn("status").required(true).processOnly()
             .asCode(STATUS_DICTIONARY, InvitationStatus.ALL.toArray(String[]::new)));
@@ -81,7 +82,8 @@ public final class QbInvitations {
         eb.listView("default", lv -> lv
             .columns("publicationId", "email", "status", "addedAt", "sentCount", "lastSentAt", "userId", "startedAt",
                 "answeredAt", "score", "reward")
-            .filters("publicationId", "sponsorId", "email", "status", "userId", "attemptId", "addedAt")
+            .filters("publicationId", "publisherKind", "publisherId", "email", "status", "userId", "attemptId",
+                "addedAt")
             .sorts("addedAt", "answeredAt", "email")
             .defaultSort("addedAt", false));
     });

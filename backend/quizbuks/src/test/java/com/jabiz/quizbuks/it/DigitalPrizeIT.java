@@ -152,7 +152,7 @@ class DigitalPrizeIT extends PlayItSupport {
         Map<String, Object> prize = prize(attemptId);
         assertThat(prize).containsEntry("status", "DELIVERED").containsEntry("delivery", "SHARED")
             .containsEntry("delivered_by", DigitalPrizeStatus.BY_SYSTEM).containsEntry("user_id", takerId)
-            .containsEntry("sponsor_id", sponsor).containsEntry("amount", new BigDecimal("100"))
+            .containsEntry("publisher_id", sponsor).containsEntry("amount", new BigDecimal("100"))
             .containsEntry("hint", null).containsEntry("opened_at", null).containsEntry("send_by", null);
         assertThat((String) prize.get("sealed_content")).isNotBlank().doesNotContain("WELCOME");
         assertThat(at(prize.get("delivered_at"))).isEqualTo(clock.instant());
@@ -181,7 +181,7 @@ class DigitalPrizeIT extends PlayItSupport {
                 .containsEntry("hint", null).containsEntry("publicationName", "Shared week")
                 .doesNotContainKey("sealedContent"));
         assertThat(rows("qb.admin.digital-prizes", digitalAdmin(), Map.of("q", "Taker JP"))).singleElement()
-            .satisfies(row -> assertThat(row).containsEntry("sponsorId", sponsor).doesNotContainKey("sealedContent"));
+            .satisfies(row -> assertThat(row).containsEntry("publisherId", sponsor).doesNotContainKey("sealedContent"));
 
         // Nobody else opens it: another taker, the sponsor (404, as if it were not there).
         refused(DigitalPrizeProcesses.OPEN, taker(u2()), body("digitalPrizeId", digitalPrizeId), 404);

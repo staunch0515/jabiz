@@ -185,9 +185,9 @@ class AnalyticsJobIT extends AnalyticsItSupport {
         String publication = analysedPublication(sponsor, "Purge " + run);
         Instant at = h.plus(Duration.ofMinutes(10));
         for (int days : List.of(401, 400, 399)) {
-            execute("INSERT INTO qb_analytics_hour (hour_id, publication_id, sponsor_id, hour_start, views, starts, "
-                + "completions, passes, winners, spent, gap, version) VALUES (?, ?::uuid, ?, ?::timestamptz, 1, 1, 1, "
-                + "0, 0, 0, false, 1)", UUID.randomUUID().toString(), publication, sponsor,
+            execute("INSERT INTO qb_analytics_hour (hour_id, publication_id, publisher_kind, publisher_id, hour_start, "
+                + "views, starts, completions, passes, winners, spent, gap, version) VALUES (?, ?::uuid, 'SPONSOR', ?, "
+                + "?::timestamptz, 1, 1, 1, 0, 0, 0, false, 1)", UUID.randomUUID().toString(), publication, sponsor,
                 h.minus(Duration.ofDays(days)).toString());
         }
         runAnalytics(at);

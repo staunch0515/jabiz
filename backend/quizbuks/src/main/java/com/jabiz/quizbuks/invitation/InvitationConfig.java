@@ -9,6 +9,7 @@ import com.jabiz.dictionary.StaticDictionary;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.publishing.PublisherKind;
 import com.jabiz.quizbuks.messaging.MailValues;
 import com.jabiz.context.RequestContext;
 import org.springframework.beans.factory.annotation.Value;
@@ -75,7 +76,8 @@ public class InvitationConfig {
             .permissions(QbPermissions.PUBLICATION_WRITE, QbPermissions.SPONSOR_VIEW_WRITE)
             .policy(p -> p.readOnly(true).allowTimeTravel(false))
             .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef))
-            .scope(s -> s.fromContext("sponsorId", "actorId", RequestContext::actorId)));
+            .scope(s -> s.fromContext("publisherId", "actorId", RequestContext::actorId)
+                .fixed("publisherKind", PublisherKind.SPONSOR)));
     }
 
     /** The invitations a taker's account claimed, read only: the publication page shows an invited publication by them. */

@@ -18,7 +18,6 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-  UserName,
   paths,
   useAuth,
   type DescriptionItem,
@@ -37,7 +36,7 @@ import {
   type Tier,
   type Version,
 } from './api'
-import { AfterDecision, LoadFailed, Section } from './components'
+import { AfterDecision, LoadFailed, PublisherLink, Section } from './components'
 import type { BackTo } from './PublicationsPage'
 import { forbidden, money, QUEUE, useAfterDecision, useLabels, when } from './hooks'
 import { ACCOUNT_SUSPENDED, DICTIONARY, PATH, PENDING_REVIEW, PERMISSION, PUBLICATION_ADMIN } from './ids'
@@ -306,7 +305,7 @@ export default function PublicationReviewPage() {
     refetchOnWindowFocus: false,
     retry: (count, error) => !forbidden(error) && count < 2,
   })
-  const sponsorId = publication.data?.sponsorId
+  const sponsorId = publication.data?.publisherId
   const quizId = publication.data?.quizId ?? null
   const takedowns = useQuery({
     queryKey: ['qb-ext', 'takedowns', sponsorId, quizId],
@@ -402,9 +401,7 @@ export default function PublicationReviewPage() {
           <span className="flex flex-wrap items-center gap-x-4 gap-y-1">
             <span>
               {t('publication.sponsor')}:{' '}
-              <Link to={PATH.user(p.sponsorId)} className={linkClass} data-testid="publication-sponsor">
-                {company ?? <UserName id={p.sponsorId} />}
-              </Link>
+              <PublisherLink kind={p.publisherKind} id={p.publisherId} label={company} testId="publication-sponsor" />
             </span>
             {p.submittedAt && <span>{t('publication.submittedAt')}: {when(p.submittedAt)}</span>}
             {p.quizId && can(PERMISSION.quizRead) && (

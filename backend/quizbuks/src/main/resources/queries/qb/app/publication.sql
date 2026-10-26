@@ -164,14 +164,16 @@ JOIN {{QbPublicationStartCounter}} s
 JOIN {{QbQuizVersion}} v ON v.{{QbQuizVersion.versionId}} = c.{{QbPublicationCard.versionId}}
 LEFT JOIN {{QbPublicationStats}} st ON st.{{QbPublicationStats.publicationId}} = c.{{QbPublicationCard.publicationId}}
 LEFT JOIN {{QbStatsRun}} sr ON sr.{{QbStatsRun.job}} = 'qb.publication-stats'
-LEFT JOIN {{QbWallet}} w ON w.{{QbWallet.ownerId}} = c.{{QbPublicationCard.sponsorId}}
+LEFT JOIN {{QbWallet}} w ON w.{{QbWallet.ownerId}} = c.{{QbPublicationCard.publisherId}}
     AND w.{{QbWallet.kind}} = 'SPONSOR'
-LEFT JOIN {{QbSponsor}} sp ON sp.{{QbSponsor.userId}} = c.{{QbPublicationCard.sponsorId}}
+LEFT JOIN {{QbSponsor}} sp ON sp.{{QbSponsor.userId}} = c.{{QbPublicationCard.publisherId}}
     AND sp.{{QbSponsor.reviewStatus}} = 'APPROVED'
 LEFT JOIN {{QbAttempt}} m ON m.{{QbAttempt.publicationId}} = c.{{QbPublicationCard.publicationId}}
 LEFT JOIN {{QbPublicationOwner}} own
     ON own.{{QbPublicationOwner.publicationId}} = c.{{QbPublicationCard.publicationId}}
 LEFT JOIN {{QbInvitation}} inv ON inv.{{QbInvitation.publicationId}} = c.{{QbPublicationCard.publicationId}}
 WHERE c.{{QbPublicationCard.publicationId}} = :publicationId
+  -- S0 (D-S0-4): a shop's publication (S2) is not a page of the App.
+  AND c.{{QbPublicationCard.publisherKind}} = 'SPONSOR'
 ) d
 WHERE d.shown OR d.myAttemptId IS NOT NULL

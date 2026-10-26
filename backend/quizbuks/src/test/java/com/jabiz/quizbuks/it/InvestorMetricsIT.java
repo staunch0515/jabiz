@@ -209,7 +209,7 @@ class InvestorMetricsIT extends PayoutItSupport {
 
         // By merchant for month B: the prize merchant first (two attempts), then the first merchant (one).
         List<Map<String, Object>> sponsors = report(SPONSORS, monthB, end);
-        assertThat(sponsors).extracting(row -> row.get("sponsorId")).containsExactly(sponsorB, sponsorA);
+        assertThat(sponsors).extracting(row -> row.get("publisherId")).containsExactly(sponsorB, sponsorA);
         Map<String, Object> second = sponsors.get(0);
         assertThat(second.get("company")).isNotNull();
         assertThat(n(second, "takers")).isEqualTo(2);
@@ -224,7 +224,7 @@ class InvestorMetricsIT extends PayoutItSupport {
         assertThat(n(first, "passes")).isEqualTo(1);
         assertThat(n(first, "prizesWon")).isZero();
         // Month A alone has the first merchant only.
-        assertThat(report(SPONSORS, monthA, monthStart(monthA, 1))).extracting(row -> row.get("sponsorId"))
+        assertThat(report(SPONSORS, monthA, monthStart(monthA, 1))).extracting(row -> row.get("publisherId"))
             .containsExactly(sponsorA);
 
         // A `to` inside month B still yields month B (the end is exclusive, the month is whole); a period of more than

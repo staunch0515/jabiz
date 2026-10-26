@@ -14,7 +14,8 @@ results:
   attemptId:       { from: QbDigitalPrize.attemptId }
   publicationId:   { from: QbDigitalPrize.publicationId }
   publicationName: { from: QbPublicationCard.name }
-  sponsorId:       { from: QbDigitalPrize.sponsorId }
+  publisherKind:   { from: QbDigitalPrize.publisherKind }
+  publisherId:     { from: QbDigitalPrize.publisherId }
   sponsorCompany:  { from: QbSponsor.company }
   userId:          { from: QbDigitalPrize.userId }
   takerName:       { from: QbProfile.displayName }
@@ -36,7 +37,7 @@ results:
   resolution:      { from: QbDigitalPrize.resolution }
   resolveNote:     { from: QbDigitalPrize.resolveNote }
 list:
-  filters: [status, delivery, sponsorId, userId, publicationId, dueAt, amount]
+  filters: [status, delivery, publisherKind, publisherId, userId, publicationId, dueAt, amount]
   sorts:   [dueAt, deliveredAt, amount, status]
   defaultSort: { field: dueAt, asc: false }
   key: [digitalPrizeId]
@@ -48,7 +49,8 @@ SELECT
     g.{{QbDigitalPrize.attemptId}}      AS attemptId,
     g.{{QbDigitalPrize.publicationId}}  AS publicationId,
     c.{{QbPublicationCard.name}}        AS publicationName,
-    g.{{QbDigitalPrize.sponsorId}}      AS sponsorId,
+    g.{{QbDigitalPrize.publisherKind}}    AS publisherKind,
+    g.{{QbDigitalPrize.publisherId}}      AS publisherId,
     sp.{{QbSponsor.company}}            AS sponsorCompany,
     g.{{QbDigitalPrize.userId}}         AS userId,
     p.{{QbProfile.displayName}}         AS takerName,
@@ -71,7 +73,7 @@ SELECT
     g.{{QbDigitalPrize.resolveNote}}    AS resolveNote
 FROM {{QbDigitalPrize}} g
 LEFT JOIN {{QbPublicationCard}} c ON c.{{QbPublicationCard.publicationId}} = g.{{QbDigitalPrize.publicationId}}
-LEFT JOIN {{QbSponsor}} sp ON sp.{{QbSponsor.userId}} = g.{{QbDigitalPrize.sponsorId}}
+LEFT JOIN {{QbSponsor}} sp ON sp.{{QbSponsor.userId}} = g.{{QbDigitalPrize.publisherId}}
 LEFT JOIN {{QbProfile}} p ON p.{{QbProfile.userId}} = g.{{QbDigitalPrize.userId}}
 WHERE (CAST(:q AS text) IS NULL
        OR strpos(lower(coalesce(sp.{{QbSponsor.company}}, '')), lower(CAST(:q AS text))) > 0

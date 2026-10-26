@@ -15,7 +15,8 @@ results:
   attemptId:       { from: QbRedemption.attemptId }
   publicationId:   { from: QbRedemption.publicationId }
   publicationName: { from: QbPublicationCard.name }
-  sponsorId:       { from: QbRedemption.sponsorId }
+  publisherKind:   { from: QbRedemption.publisherKind }
+  publisherId:     { from: QbRedemption.publisherId }
   sponsorCompany:  { from: QbSponsor.company }
   userId:          { from: QbRedemption.userId }
   takerName:       { from: QbProfile.displayName }
@@ -32,7 +33,7 @@ results:
   voidedBy:        { from: QbRedemption.voidedBy }
   voidNote:        { from: QbRedemption.voidNote }
 list:
-  filters: [status, sponsorId, userId, publicationId, dueAt, expiresAt, amount]
+  filters: [status, publisherKind, publisherId, userId, publicationId, dueAt, expiresAt, amount]
   sorts:   [dueAt, expiresAt, redeemedAt, amount, status]
   defaultSort: { field: dueAt, asc: false }
   key: [redemptionId]
@@ -45,7 +46,8 @@ SELECT
     r.{{QbRedemption.attemptId}}      AS attemptId,
     r.{{QbRedemption.publicationId}}  AS publicationId,
     c.{{QbPublicationCard.name}}      AS publicationName,
-    r.{{QbRedemption.sponsorId}}      AS sponsorId,
+    r.{{QbRedemption.publisherKind}}    AS publisherKind,
+    r.{{QbRedemption.publisherId}}      AS publisherId,
     sp.{{QbSponsor.company}}          AS sponsorCompany,
     r.{{QbRedemption.userId}}         AS userId,
     p.{{QbProfile.displayName}}       AS takerName,
@@ -63,7 +65,7 @@ SELECT
     r.{{QbRedemption.voidNote}}       AS voidNote
 FROM {{QbRedemption}} r
 JOIN {{QbPublicationCard}} c ON c.{{QbPublicationCard.publicationId}} = r.{{QbRedemption.publicationId}}
-LEFT JOIN {{QbSponsor}} sp ON sp.{{QbSponsor.userId}} = r.{{QbRedemption.sponsorId}}
+LEFT JOIN {{QbSponsor}} sp ON sp.{{QbSponsor.userId}} = r.{{QbRedemption.publisherId}}
 LEFT JOIN {{QbProfile}} p ON p.{{QbProfile.userId}} = r.{{QbRedemption.userId}}
 WHERE (CAST(:q AS text) IS NULL
        OR strpos(lower(r.{{QbRedemption.code}}), lower(CAST(:q AS text))) > 0

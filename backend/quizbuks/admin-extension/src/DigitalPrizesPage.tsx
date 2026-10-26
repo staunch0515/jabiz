@@ -27,7 +27,7 @@ import {
   type ColumnDef,
 } from '@jabiz/admin'
 import { StatusFilter } from './finance-components'
-import { LoadFailed } from './components'
+import { LoadFailed, PublisherLink } from './components'
 import { money, useLabels, usePaged, when } from './hooks'
 import { DICTIONARY, PATH, PERMISSION } from './ids'
 import { DIGITAL_RESOLUTIONS, readDigitalPrizes, resolveDigitalPrize, type DigitalPrize, type DigitalResolution }
@@ -148,9 +148,8 @@ export default function DigitalPrizesPage() {
     { id: 'dueAt', header: t('reward.digital.dueAt'), cell: ({ row }) => when(row.original.dueAt) },
     { id: 'sponsor', header: t('reward.digital.sponsor'),
       cell: ({ row }) => (
-        <Link to={PATH.user(row.original.sponsorId)} className={linkClass}>
-          {row.original.sponsorCompany ?? <UserName id={row.original.sponsorId} />}
-        </Link>
+        <PublisherLink kind={row.original.publisherKind} id={row.original.publisherId}
+          label={row.original.sponsorCompany} />
       ) },
     { id: 'taker', header: t('reward.digital.taker'),
       cell: ({ row }) => (

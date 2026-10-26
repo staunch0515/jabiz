@@ -135,7 +135,7 @@ function Sponsors({ period }: { period: Period }) {
           </TableHeader>
           <TableBody>
             {rows.data.map((row) => (
-              <TableRow key={row.sponsorId} data-testid="investor-sponsor" data-sponsor={row.sponsorId}>
+              <TableRow key={row.publisherId} data-testid="investor-sponsor" data-sponsor={row.publisherId}>
                 <TableCell>{row.company}</TableCell>
                 <TableCell className={right}>{row.takers.toLocaleString()}</TableCell>
                 <TableCell className={right}>{row.attempts.toLocaleString()}</TableCell>

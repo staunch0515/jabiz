@@ -65,9 +65,11 @@ WITH months AS (
     WHERE m < date_trunc('month', CAST(:from AS timestamptz) AT TIME ZONE 'UTC') + interval '36 months'
 ),
 active AS (
-    SELECT DISTINCT date_trunc('month', a.{{QbAttempt.startedAt}} AT TIME ZONE 'UTC') AS m, a.{{QbAttempt.sponsorId}} AS s
+    SELECT DISTINCT date_trunc('month', a.{{QbAttempt.startedAt}} AT TIME ZONE 'UTC') AS m, a.{{QbAttempt.publisherId}} AS s
     FROM {{QbAttempt}} a
-    WHERE a.{{QbAttempt.startedAt}} >= (date_trunc('month', CAST(:from AS timestamptz) AT TIME ZONE 'UTC')
+    -- S0: active merchants of the sponsors' system only.
+    WHERE a.{{QbAttempt.publisherKind}} = 'SPONSOR'
+      AND a.{{QbAttempt.startedAt}} >= (date_trunc('month', CAST(:from AS timestamptz) AT TIME ZONE 'UTC')
         - interval '3 months') AT TIME ZONE 'UTC'
       AND a.{{QbAttempt.startedAt}} < :to
 )
