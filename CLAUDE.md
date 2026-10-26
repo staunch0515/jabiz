@@ -167,7 +167,8 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
 - **审计**（见 21 §1 与决策 D27）：实体写入的前后值由平台在 `DatasetEntityManager` / `VersionAppender` 中记入只追加的 `sys_audit_record`（敏感字段只存 `***`），
   业务代码不自己写审计表或"修改日志"；新的写入路径必须经过这两处之一（普通表只经 `DatasetEntityManager` 写入：按已知版本的更新依赖于此，D46）。可读但不应留在审计中的值（如文件名）用 `f.auditMasked()`。查询只经 `GET /api/audit/records`（`audit.read`）。
   只追加表由平台逐行封存（21 §2：`INTEGRITY_SEAL` / `INTEGRITY_VERIFY`，HMAC 链，密钥只来自 `JABIZ_INTEGRITY_KEY`，非 dev 缺少即启动失败）；
-  新的只追加表必须有主键（启动检查 `INTEGRITY`），不需要另外声明。
+  新的只追加表必须有主键（启动检查 `INTEGRITY`），不需要另外声明。迁移只能给只追加表加列，不改名、不删列、不改类型、不删表（封存过的列会被报告为被改，D58）：
+  平台与每个应用以测试夹具 `SealedColumnsHistory` 检查自己的迁移，启动检查对封存过、已不存在的列给出警告。
 - **保留、保全与导出**（见 21 §3–§4 与决策 D27）：保留期只以 `RetentionPolicy` Bean 声明（自时间字段或会计年度末 `jabiz.fiscal-year-end` 起算，日期按 `jabiz.fiscal-year-zone`，缺省 UTC，D48），法律保全只经
   `LEGAL_HOLD_PLACE` / `LEGAL_HOLD_RELEASE`；删除拦截由平台在删除路径中做（422 `RETENTION_ACTIVE` / `LEGAL_HOLD`），业务代码不自己判断。
   归档导出只经 `POST /api/exports/data`（CSV + `schema.json` + `manifest.json` + 报表 PDF），不另写导出。
