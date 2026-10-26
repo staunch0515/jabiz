@@ -19,6 +19,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 /**
@@ -32,7 +33,7 @@ import java.util.stream.Collectors;
 public class IntegrityStore {
 
     /** The seal tables themselves: covered by the chain, never sealed as rows (that would never end). */
-    static final Set<String> OWN_TABLES = Set.of("sys_integrity_seal", "sys_integrity_item",
+    public static final Set<String> OWN_TABLES = Set.of("sys_integrity_seal", "sys_integrity_item",
         "sys_integrity_seal_table", "sys_integrity_check");
 
     /** How many sealed rows one insert statement takes. */
@@ -125,6 +126,51 @@ public class IntegrityStore {
                 Map.of("table", BoundValue.of(table.quotedName())))
             .next()
             .map(row -> List.copyOf(Rows.strings(row.get("columns"))));
+    }
+
+    /**
+     * A column a block recorded for a table (docs/design/21-audit-retention.md section 2.1).
+     *
+     * @param firstSeal the first block that recorded it
+     */
+    public record SealedColumn(String table, String column, long firstSeal) {}
+
+    /**
+     * Every column the blocks recorded, each table's and each column once, with the first block that recorded it.
+     * The recorded lists differ only where a migration changed a table, so the query skips from one distinct
+     * (table, list) to the next on the index {@code sys_integrity_seal_table_columns_idx} rather than reading every
+     * block's row: a few rows read whatever the number of blocks.
+     */
+    public Flux<SealedColumn> sealedColumns(StorageEngine engine) {
+        return engine.select("""
+                WITH RECURSIVE lists AS (
+                    (SELECT table_name, columns, seal_no FROM sys_integrity_seal_table
+                     ORDER BY table_name, columns, seal_no LIMIT 1)
+                    UNION ALL
+                    SELECT next.table_name, next.columns, next.seal_no FROM lists
+                    CROSS JOIN LATERAL (
+                        SELECT s.table_name, s.columns, s.seal_no FROM sys_integrity_seal_table s
+                        WHERE (s.table_name, s.columns) > (lists.table_name, lists.columns)
+                        ORDER BY s.table_name, s.columns, s.seal_no LIMIT 1) AS next)
+                SELECT table_name::text AS table_name, column_name, min(seal_no) AS first_seal
+                FROM lists CROSS JOIN LATERAL unnest(columns) AS c(column_name)
+                GROUP BY table_name, column_name
+                ORDER BY table_name, column_name""", Map.of())
+            .map(row -> new SealedColumn(Rows.string(row.get("table_name")), Rows.string(row.get("column_name")),
+                Rows.longValue(row.get("first_seal"))));
+    }
+
+    /** The columns the tables of these names have now in the schema, by table; a table not there is left out. */
+    public Mono<Map<String, Set<String>>> currentColumns(StorageEngine engine, Set<String> tables) {
+        return engine.select("""
+                SELECT c.relname::text AS table_name, a.attname::text AS column_name FROM pg_class c
+                JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = current_schema()
+                JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped
+                WHERE c.relkind IN ('r', 'p') AND c.relname = ANY(:tables)""",
+                Map.of("tables", BoundValue.of(tables.toArray(String[]::new))))
+            .collect(LinkedHashMap::new, (Map<String, Set<String>> map, Map<String, Object> row) -> map
+                .computeIfAbsent(Rows.string(row.get("table_name")), t -> new TreeSet<>())
+                .add(Rows.string(row.get("column_name"))));
     }
 
     /** Pins, for this transaction, the settings the text of a row depends on. */

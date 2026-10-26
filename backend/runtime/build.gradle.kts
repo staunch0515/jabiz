@@ -53,6 +53,9 @@ dependencies {
     testFixturesApi("org.testcontainers:testcontainers-postgresql")
     testFixturesApi("org.testcontainers:testcontainers-junit-jupiter")
     testFixturesApi("org.postgresql:postgresql")
+    // SealedColumnsHistory runs the migrations version by version (decision D58).
+    testFixturesImplementation("org.flywaydb:flyway-core")
+    testFixturesRuntimeOnly("org.flywaydb:flyway-database-postgresql")
     // Signs the ID tokens of the test identity provider (TestOidcProvider).
     testFixturesApi("com.nimbusds:nimbus-jose-jwt:10.10")
     // On the test classpath, blockhound-junit-platform installs BlockHound before any test runs.
