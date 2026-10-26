@@ -102,12 +102,13 @@ WHERE c.{{QbPublicationCard.status}} = 'LIVE'
        OR (coalesce(w.{{QbWallet.pendingCount}}, 0) = 0
            AND coalesce(w.{{QbWallet.balance}} - w.{{QbWallet.held}}, 0) >= c.{{QbPublicationCard.maxReward}}))
   AND (CAST(:method AS text) IS NULL OR c.{{QbPublicationCard.rewardMethod}} = CAST(:method AS text))
-  -- Q34: what the caller answered is done; one still in progress stays, so that it can be resumed from here. The view
-  -- holds the caller's own attempts only (taker), found by qb_attempt_user_idx.
+  -- Q34: what the caller answered is done, and so is an attempt whose time ran out before the expiry job closed it;
+  -- one still in progress stays, so that it can be resumed from here. The view holds the caller's own attempts only
+  -- (taker), found by qb_attempt_once (user_id, publication_id).
   AND (CAST(:includeAnswered AS boolean) IS TRUE
        OR NOT EXISTS (SELECT 1 FROM {{QbAttempt}} a
                       WHERE a.{{QbAttempt.publicationId}} = c.{{QbPublicationCard.publicationId}}
-                        AND a.{{QbAttempt.status}} <> 'IN_PROGRESS'))
+                        AND (a.{{QbAttempt.status}} <> 'IN_PROGRESS' OR a.{{QbAttempt.deadline}} <= :at)))
   AND NOT EXISTS (SELECT 1 FROM {{QbPublicationOwner}} own
                   WHERE own.{{QbPublicationOwner.publicationId}} = c.{{QbPublicationCard.publicationId}})
   AND (CAST(:q AS text) IS NULL

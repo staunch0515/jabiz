@@ -69,8 +69,11 @@ export function phoneWindow(win) {
   const availHeight = Number(screen.availHeight) || PHONE_HEIGHT
   const width = Math.min(PHONE_WIDTH, availWidth)
   const height = Math.min(PHONE_HEIGHT, availHeight - 40)
-  const left = Math.max(0, Math.round((Number(screen.availLeft) || 0) + (availWidth - width) / 2))
-  const top = Math.max(0, Math.round((Number(screen.availTop) || 0) + (availHeight - height) / 2))
+  // A screen left of or above the primary one has a negative origin, a valid position: clamp to the screen's own.
+  const originLeft = Number(screen.availLeft) || 0
+  const originTop = Number(screen.availTop) || 0
+  const left = Math.max(originLeft, Math.round(originLeft + (availWidth - width) / 2))
+  const top = Math.max(originTop, Math.round(originTop + (availHeight - height) / 2))
   return `popup=yes,width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes`
 }
 

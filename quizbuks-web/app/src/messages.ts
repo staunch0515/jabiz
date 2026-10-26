@@ -149,6 +149,7 @@ const en = {
   },
   feed: {
     listTitle: 'Quizzes you can answer',
+    answeredHidden: 'Quizzes you have answered are not shown here.',
     includeAnswered: 'Show quizzes I answered',
     includeAnsweredHint: 'Hidden by default; one you have started stays.',
     search: 'Search quizzes',
@@ -537,6 +538,7 @@ const zh: typeof en = {
   },
   feed: {
     listTitle: '可以参加的 Quiz',
+    answeredHidden: '已答过的 Quiz 不在这里显示。',
     includeAnswered: '显示已答过的 Quiz',
     includeAnsweredHint: '默认隐藏；进行中的仍会显示。',
     search: '搜索 Quiz',
@@ -925,6 +927,7 @@ const ja: typeof en = {
   },
   feed: {
     listTitle: '回答できるクイズ',
+    answeredHidden: '回答済みのクイズはここに表示されません。',
     includeAnswered: '回答済みのクイズも表示',
     includeAnsweredHint: '既定では非表示。回答中のものは表示されます。',
     search: 'クイズを検索',

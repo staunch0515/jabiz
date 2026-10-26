@@ -207,6 +207,8 @@ describe('the feed', () => {
     expect(within(cards[0]).getByTestId('feed-card-placeholder')).toHaveAttribute('aria-hidden', 'true')
     expect(cards[0]).toHaveTextContent('100 Kudos')
     expect(cards[0]).toHaveTextContent('Capitals Inc')
+    // The count is part of the card link's name, not only a number for the eye.
+    expect(cards[0]).toHaveAccessibleName(expect.stringContaining('Completed: 2'))
     expect(within(cards[0]).getByTestId('feed-card-name')).toHaveTextContent('Capitals week')
     // A cover: the image (loaded lazily), no placeholder.
     expect(within(cards[1]).queryByTestId('feed-card-placeholder')).toBeNull()
@@ -222,6 +224,9 @@ describe('the feed', () => {
     const hero = screen.getByTestId('home-hero')
     expect(hero).not.toHaveAttribute('data-folding')
     await waitFor(() => expect(hero).toHaveAttribute('data-folding', 'true'), { timeout: GREETING_MS + 2000 })
+    // jsdom tells no end of the transition: the band goes all the same, the heading stays.
+    await waitFor(() => expect(screen.queryByTestId('home-hero')).toBeNull(), { timeout: 2000 })
+    expect(screen.getByRole('heading', { level: 1 })).toHaveClass('sr-only')
     unmount()
     // Back on the home in the same session: no greeting, the heading stays for assistive technology.
     render(<App />)
@@ -253,11 +258,17 @@ describe('the feed', () => {
   })
 
   it('shows the empty state with its illustration when nothing matches', async () => {
-    server({ feed: [] })
+    const { calls } = server({ feed: [] })
     render(<App />)
     const empty = await screen.findByTestId('home-empty')
     expect(empty).toBeInTheDocument()
     expect(screen.queryByTestId('feed-list')).not.toBeInTheDocument()
+    // Q34: the answered ones are hidden; the empty home says so and offers them.
+    expect(screen.getByTestId('home-answered-hidden')).toHaveTextContent('Quizzes you have answered are not shown here.')
+    await userEvent.click(screen.getByTestId('home-show-answered'))
+    await waitFor(() => expect(calls.some((c) => c.path === '/api/queries/qb.app.feed'
+      && (c.body as { params: { includeAnswered?: boolean } }).params.includeAnswered === true)).toBe(true))
+    expect(screen.queryByTestId('home-answered-hidden')).toBeNull()
   })
 
   it('searches by text and turns the filters into the template\'s conditions', async () => {
@@ -609,6 +620,34 @@ describe('a publication\'s page', () => {
       .toHaveAttribute('src', 'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ')
     expect(await screen.findByTestId('detail-tiers')).toHaveTextContent('100 Kudos')
     await waitFor(() => expect(posted('QB_VIEW')).toEqual([{ publicationId: PUB }]))
+  })
+
+  it('opens a long introduction in place, and a link with a description on the sheet (Q34)', async () => {
+    // jsdom lays nothing out: the introduction's content says it is taller than three lines.
+    const height = vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(400)
+    try {
+      server({ publicationPage: () => json(200, { items: [publication({ materials: JSON.stringify([
+        { no: 1, kind: 'LINK', title: 'Origins', description: 'Where the beans grow.\nAnd who grows them.', body: null,
+          url: 'https://example.com/origins', pdf: null, audio: null, images: [] }]) })], offset: 0, limit: 1 }) })
+      window.history.replaceState(null, '', `/p/${PUB}`)
+      render(<App />)
+      const toggle = await screen.findByTestId('detail-intro-text-toggle')
+      expect(toggle).toHaveAttribute('aria-expanded', 'false')
+      expect(toggle).toHaveAttribute('aria-controls')
+      await userEvent.click(toggle)
+      expect(toggle).toHaveAttribute('aria-expanded', 'true')
+      expect(toggle).toHaveTextContent('Show less')
+      await userEvent.click(toggle)
+      // Still more to show after closing it again.
+      expect(toggle).toHaveTextContent('Show more')
+      // The link has a description: its row opens the sheet with the description in full and the link.
+      await userEvent.click(screen.getByTestId('material-open'))
+      const sheet = await screen.findByTestId('material-sheet')
+      expect(within(sheet).getByText(/And who grows them/)).toBeInTheDocument()
+      expect(within(sheet).getByTestId('material-link')).toHaveAttribute('href', 'https://example.com/origins')
+    } finally {
+      height.mockRestore()
+    }
   })
 
   it('lays the page out as a picture, one row of facts and titled cards (Q34)', async () => {

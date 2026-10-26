@@ -225,9 +225,10 @@ function Card({ card }: { card: FeedCard }) {
                 <span className="truncate">{sponsor}</span>
               </span>
             )}
-            <span className="ml-auto flex shrink-0 items-center gap-0.5" aria-label={t('feed.completions', { count: card.completions })}>
+            <span className="ml-auto flex shrink-0 items-center gap-0.5" data-testid="feed-card-completions">
               <Users aria-hidden className="size-3" />
               <span aria-hidden>{card.completions}</span>
+              <span className="sr-only">{t('feed.completions', { count: card.completions })}</span>
             </span>
           </span>
         </span>
@@ -379,6 +380,8 @@ function FiltersSheet({ open, onOpenChange, value, onApply }: {
 
 /** How long the greeting stays before it folds away (Q34). */
 export const GREETING_MS = 2000
+/** How long the fold takes (the band's `duration-500`). */
+const FOLD_MS = 500
 const GREETED_KEY = 'qb.home.greeted'
 
 function greetedAlready(): boolean {
@@ -421,7 +424,12 @@ function Greeting({ name }: { name: string }) {
       if (reducedMotion()) setShown(false)
       else setFolding(true)
     }, GREETING_MS)
-    return () => window.clearTimeout(timer)
+    // Should the end of the fold never be told (no transitions, a hidden tab), the band goes all the same.
+    const fallback = window.setTimeout(() => setShown(false), GREETING_MS + FOLD_MS + 100)
+    return () => {
+      window.clearTimeout(timer)
+      window.clearTimeout(fallback)
+    }
   }, [shown])
   if (!shown) return <h1 id="home-title" className="sr-only">{t('home.greeting', { name })}</h1>
   return (
@@ -555,7 +563,18 @@ export function FeedPage({ name, country }: { name: string; country: string | nu
         <div className="flex flex-col items-center gap-2">
           <EmptyArt className="h-32 w-40" />
           <PageState kind="empty" title={t('home.title')} className="py-2"
-            description={q || filterList.length > 0 ? t('feed.noMatch') : t('home.empty')} data-testid="home-empty" />
+            description={q || active > 0 || method !== 'ALL' ? t('feed.noMatch') : t('home.empty')}
+            data-testid="home-empty" />
+          {/* Q34: the answered ones are left out by default; say so where nothing is left, and offer them. */}
+          {!filters.includeAnswered && (
+            <div className="flex flex-col items-center gap-2 text-center" data-testid="home-answered-hidden">
+              <p className="text-muted-foreground text-sm">{t('feed.answeredHidden')}</p>
+              <Button variant="outline" size="sm" data-testid="home-show-answered"
+                onClick={() => setFilters((current) => ({ ...current, includeAnswered: true }))}>
+                {t('feed.includeAnswered')}
+              </Button>
+            </div>
+          )}
         </div>
       ) : (
         <>

@@ -295,6 +295,16 @@ class FeedIT extends PlayItSupport {
         // Another taker's answers are not this one's: they still see all four.
         assertThat(ids(feed(taker(u2()), "US", Map.of()))).filteredOn(mine::contains)
             .containsExactlyInAnyOrder(done, failed, open, fresh);
+
+        // An attempt whose time ran out is done before the expiry job closes it (its page says "see your result").
+        String later = taker(newTaker("t-answered-late", null));
+        String quick = livePublication(sponsor, "Answered quick", Map.of("regions", List.of("GLOBAL"),
+            "timeLimitSec", 60));
+        start(later, quick);
+        assertThat(ids(feed(later, null, Map.of()))).contains(quick);
+        clock.advance(Duration.ofSeconds(61));
+        assertThat(ids(feed(later, null, Map.of()))).doesNotContain(quick);
+        assertThat(ids(feed(later, null, Map.of("includeAnswered", true)))).contains(quick);
     }
 
     @Test

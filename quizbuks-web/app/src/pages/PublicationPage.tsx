@@ -16,7 +16,7 @@ import {
 import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft, BookOpen, CalendarClock, ChevronDown, ListChecks, MailCheck, MailWarning, Play, Store, Target,
   Timer, TrendingUp, Trophy, type LucideIcon } from 'lucide-react'
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
 import { playProblemText } from '../play/busy'
@@ -153,28 +153,45 @@ function Fact({ icon: Icon, label, value, testId }: { icon: LucideIcon; label: s
   )
 }
 
+/** How high the folded text is: three lines of the body's type (`max-h-[4.5rem]`). */
+const FOLDED_REM = 4.5
+
 /**
  * Text that shows its first three lines and opens in place (Q34): the introduction of a quiz can be long, and the
- * start button should stay near. The button appears only when there is more to show.
+ * start button should stay near. The button appears only when there is more to show; the content's own height is
+ * watched (images and fonts that arrive later, a phone turned), never the clipped box's. A link below the fold that
+ * gets the keyboard's focus opens the text, so nothing focused is out of sight.
  */
 function Expandable({ children, testId }: { children: ReactNode; testId?: string }) {
   const { t } = useTranslation(APP)
-  const ref = useRef<HTMLDivElement>(null)
+  const id = useId()
+  const inner = useRef<HTMLDivElement>(null)
   const [open, setOpen] = useState(false)
   const [more, setMore] = useState(false)
   useLayoutEffect(() => {
-    const element = ref.current
-    if (element) setMore(element.scrollHeight > element.clientHeight + 1)
-  }, [children])
+    const element = inner.current
+    if (!element) return undefined
+    const measure = () => {
+      const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16
+      setMore(element.scrollHeight > FOLDED_REM * rem + 1)
+    }
+    measure()
+    if (typeof ResizeObserver === 'undefined') return undefined
+    const observer = new ResizeObserver(measure)
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [])
   return (
     <div className="flex flex-col gap-1" data-testid={testId}>
-      <div ref={ref} className={cn('relative', !open && 'max-h-[4.5rem] overflow-hidden')}>
-        {children}
+      <div id={id} className={cn('relative', !open && 'max-h-[4.5rem] overflow-hidden')}
+        onFocusCapture={() => { if (more) setOpen(true) }}>
+        <div ref={inner}>{children}</div>
         {!open && more && <span aria-hidden className="from-card absolute inset-x-0 bottom-0 h-6 bg-linear-to-t to-transparent" />}
       </div>
-      {(more || open) && (
+      {more && (
         <button type="button" className="text-primary inline-flex items-center gap-1 self-start text-sm font-medium"
-          aria-expanded={open} onClick={() => setOpen(!open)} data-testid={testId && `${testId}-toggle`}>
+          aria-expanded={open} aria-controls={id} onClick={() => setOpen(!open)}
+          data-testid={testId && `${testId}-toggle`}>
           {open ? t('detail.readLess') : t('detail.readMore')}
           <ChevronDown aria-hidden className={cn('size-4 transition-transform', open && 'rotate-180')} />
         </button>

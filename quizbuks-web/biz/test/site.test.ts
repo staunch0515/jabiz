@@ -92,6 +92,9 @@ describe('sign-up buttons', () => {
     expect(small).toContain('top=20')
     const second = phoneWindow(fakeWindow({ screen: { availWidth: 1920, availHeight: 1080, availLeft: 1920, availTop: 0 } }) as never)
     expect(second).toContain(`left=${1920 + (1920 - 468) / 2}`)
+    const left = phoneWindow(fakeWindow({ screen: { availWidth: 1920, availHeight: 1080, availLeft: -1920, availTop: -200 } }) as never)
+    expect(left).toContain(`left=${-1920 + (1920 - 468) / 2}`)
+    expect(left).toContain(`top=${-200 + Math.round((1080 - 844) / 2)}`)
     // No screen known (a test or an odd browser): the window still opens at its size.
     expect(phoneWindow(fakeWindow({ screen: {} }) as never)).toContain('width=468')
   })

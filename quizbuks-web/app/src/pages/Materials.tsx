@@ -107,9 +107,16 @@ function hasContent(m: Material): boolean {
  */
 export function Materials({ materials }: { materials: Material[] }) {
   const { t } = useTranslation(APP)
-  const [open, setOpen] = useState<Material | null>(null)
+  // The material shown stays while the sheet slides away, so it does not empty before it is gone.
+  const [shown, setShown] = useState<Material | null>(null)
+  const [sheetOpen, setSheetOpen] = useState(false)
+  const show = (m: Material) => {
+    setShown(m)
+    setSheetOpen(true)
+  }
   if (materials.length === 0) return null
-  const titleOf = (m: Material) => m.title ?? t(`detail.kinds.${m.kind}`, { defaultValue: t('detail.material') })
+  const kindName = (m: Material) => t(`detail.kinds.${m.kind}`, { defaultValue: t('detail.material') })
+  const titleOf = (m: Material) => m.title ?? kindName(m)
   const playable = (m: Material) => m.kind === 'VIDEO_LINK' && !!m.url && !!videoPlayer(m.url)
   const videos = materials.filter(playable)
   const rows = materials.filter((m) => !playable(m))
@@ -120,7 +127,7 @@ export function Materials({ materials }: { materials: Material[] }) {
           data-kind={m.kind}>
           <MaterialContent material={m} title={titleOf(m)} />
           <p className="text-sm font-medium">{titleOf(m)}</p>
-          {m.description && <p className="text-muted-foreground line-clamp-2 text-xs">{m.description}</p>}
+          {m.description && <p className="text-muted-foreground text-xs whitespace-pre-line">{m.description}</p>}
         </div>
       ))}
       {rows.length > 0 && (
@@ -128,7 +135,9 @@ export function Materials({ materials }: { materials: Material[] }) {
           {rows.map((m) => {
             const Icon = MATERIAL_ICONS[m.kind] ?? FileText
             const title = titleOf(m)
-            const link = m.kind === 'LINK' || m.kind === 'VIDEO_LINK' ? safeLink(m.url) : null
+            // A link without more to say goes straight to its site; one with a description opens the sheet first, so
+            // the description can be read in full there (the row shows one line of it).
+            const link = (m.kind === 'LINK' || m.kind === 'VIDEO_LINK') && !m.description ? safeLink(m.url) : null
             const inner = (
               <>
                 <span aria-hidden className="bg-accent text-accent-foreground flex size-9 shrink-0 items-center justify-center">
@@ -155,8 +164,8 @@ export function Materials({ materials }: { materials: Material[] }) {
                     {inner}
                     <span className="sr-only">{t('detail.newTab')}</span>
                   </a>
-                ) : hasContent(m) ? (
-                  <button type="button" className={row} onClick={() => setOpen(m)} data-testid="material-open"
+                ) : hasContent(m) || m.description ? (
+                  <button type="button" className={row} onClick={() => show(m)} data-testid="material-open"
                     aria-haspopup="dialog">
                     {inner}
                   </button>
@@ -168,19 +177,20 @@ export function Materials({ materials }: { materials: Material[] }) {
           })}
         </ul>
       )}
-      <Sheet open={open !== null} onOpenChange={(value) => { if (!value) setOpen(null) }}>
-        <SheetContent side="bottom" className="mx-auto h-[100dvh] max-w-md gap-0 overflow-y-auto"
+      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+        {/* The header with the close button stays; only the content under it scrolls (a long article or PDF). */}
+        <SheetContent side="bottom" className="mx-auto flex h-[100dvh] max-w-md flex-col gap-0 overflow-hidden"
           data-testid="material-sheet">
-          {open && (
+          {shown && (
             <>
-              <SheetHeader className="bg-muted border-b">
-                <SheetTitle>{titleOf(open)}</SheetTitle>
-                {open.description
-                  ? <SheetDescription className="whitespace-pre-line">{open.description}</SheetDescription>
-                  : <SheetDescription className="sr-only">{t(`detail.kinds.${open.kind}`)}</SheetDescription>}
+              <SheetHeader className="bg-muted shrink-0 border-b pr-12">
+                <SheetTitle>{titleOf(shown)}</SheetTitle>
+                {shown.description
+                  ? <SheetDescription className="whitespace-pre-line">{shown.description}</SheetDescription>
+                  : <SheetDescription className="sr-only">{kindName(shown)}</SheetDescription>}
               </SheetHeader>
-              <div className="flex flex-col gap-3 p-4" data-testid="material-content">
-                <MaterialContent material={open} title={titleOf(open)} />
+              <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4" data-testid="material-content">
+                <MaterialContent material={shown} title={titleOf(shown)} />
               </div>
             </>
           )}
