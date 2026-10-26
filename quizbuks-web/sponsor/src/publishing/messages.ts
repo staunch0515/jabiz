@@ -5,6 +5,7 @@
  */
 export const publishingEn = {
   publishing: {
+    version: { uses: 'Takers see version {{label}} of the quiz: its title, introduction, materials and questions stay as they were while it runs.', newer: 'The quiz now has version {{label}}, which this publication does not show; publish again to use it.', openQuiz: 'Open the quiz' },
     nav: 'Publications',
     list: {
       title: 'Publications',
@@ -403,6 +404,7 @@ export const publishingEn = {
 
 export const publishingZh: typeof publishingEn = {
   publishing: {
+    version: { uses: '答题者看到的是测验第 {{label}} 版：标题、简介、材料与题目在发布期间保持不变。', newer: '测验现在有第 {{label}} 版，本发布不会显示它；要使用新版本请重新发布。', openQuiz: '打开测验' },
     nav: '发布',
     list: {
       title: '发布',
@@ -801,6 +803,7 @@ export const publishingZh: typeof publishingEn = {
 
 export const publishingJa: typeof publishingEn = {
   publishing: {
+    version: { uses: '回答者にはクイズのバージョン {{label}} が表示されます。掲載中はタイトル、紹介文、資料、問題は変わりません。', newer: 'クイズには新しいバージョン {{label}} がありますが、この掲載には表示されません。使うには掲載し直してください。', openQuiz: 'クイズを開く' },
     nav: '公開',
     list: {
       title: '公開',

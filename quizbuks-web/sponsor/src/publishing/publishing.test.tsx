@@ -248,6 +248,21 @@ describe('the list views (Q34b)', () => {
   })
 })
 
+describe('the version a publication shows (Q34b)', () => {
+  it('names it, and says when the quiz has a newer one this publication does not show', async () => {
+    server({ publication: { ...DRAFT, status: 'LIVE' }, versions: [
+      { versionId: 'v2', versionNo: 2, label: 'v2.0', title: 'Coffee basics', questionCount: 2, fullScore: 2,
+        versionedAt: '2026-10-20T00:00:00Z', contentHash: 'b' },
+      { versionId: 'v1', versionNo: 1, label: 'v1.0', title: 'Coffee basics', questionCount: 2, fullScore: 2,
+        versionedAt: '2026-10-10T00:00:00Z', contentHash: 'a' }] })
+    window.history.replaceState(null, '', '/publications/p1')
+    render(<App />)
+    const notice = await screen.findByTestId('publication-version')
+    expect(notice).toHaveTextContent('Takers see version v1.0 of the quiz')
+    expect(await within(notice).findByTestId('publication-version-newer')).toHaveTextContent('version v2.0')
+  })
+})
+
 describe('the preview (Q34b)', () => {
   it('draws the card, the quiz page and the questions as takers see them, without the right answers', async () => {
     server({ publication: { ...DRAFT, status: 'LIVE', rewardMethod: 'OFFLINE_REDEEM', redeemDescription: 'A free espresso' } })

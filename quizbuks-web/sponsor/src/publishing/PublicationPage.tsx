@@ -19,6 +19,7 @@ import { StaleBanner, PublicationWizard } from './PublicationWizard'
 import { PublicationSummary, StatusBadge, useEndReasonLabel, useVersionOf } from './shared'
 import { PreviewButton } from '../preview/PreviewButton'
 import { previewOfPublication } from '../preview/paths'
+import { VersionNotice } from './VersionNotice'
 
 /** The way back to the list, above a publication's title. */
 function Breadcrumb() {
@@ -136,6 +137,7 @@ function PublicationView({ detail, stale, onStale }: {
         <Alert variant="warning"><AlertDescription>{t('publishing.detail.fundsShort')}</AlertDescription></Alert>
       )}
       <AdminNotice publication={publication} />
+      <VersionNotice quizId={publication.quizId} versionId={publication.versionId} versionLabel={publication.versionLabel} />
       <PublicationSummary values={{
         ...publication,
         quizTitle: version?.title ?? null,
