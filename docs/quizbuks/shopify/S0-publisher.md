@@ -17,7 +17,7 @@ PR 合回 `1.3/quizbuks`。**S0 不需要平台改动**，不动 `1.3/platform`�
 | D-S0-2 | **改名的范围由一条规则决定**：凡是"**发布的所有者的副本**"的字段（随发布、卡片、会话、统计复制下来的那个 `sponsorId`）改为发布方；凡是"**商户账户自己的**"记录（充值、收据、邮件服务器、邀请配额、领奖码、AI 作业与用量、允许的奖励方式）保持 `sponsorId` / `userId`，因为它们本来就只属于普通商户系统。按此规则改名的实体见 §3 |
 | D-S0-3 | **商户的数据视图**（`urn:jabiz:dataset:sponsor:*`、`urn:jabiz:dataset:me:QbPublicationOwner`、分析的商户视图）范围改为 `fromContext("publisherId", actorId)` **且** `fixed("publisherKind", SPONSOR)`。Shopify 模块（S1）为店铺另建自己的数据视图，不复用商户视图 |
 | D-S0-4 | **答题人与公开读取只看 `SPONSOR` 的发布**：公开卡片视图 `urn:jabiz:dataset:public:QbPublicationCard` 的固定范围加 `publisherKind = SPONSOR`；`qb.app.feed`、`qb.app.publication` 加同一条件。店面流量在 S2 用 Shopify 模块自己的模板与匿名接口，不进 App 的首页。现在没有店铺的行，所以行为不变，只是把边界先画出来（默认拒绝） |
-| D-S0-5 | **迁移一步到位**（同 V10 的 LS-6：单实例、停机升级，旧 jar 不能跑新表、新 jar 不能跑旧表）：V29 对 §3 的表 `RENAME COLUMN sponsor_id TO publisher_id`、`ADD COLUMN publisher_kind … NOT NULL DEFAULT 'SPONSOR'` 再 `DROP DEFAULT`（之后每条写入都必须显式给出类型）并加 `CHECK (publisher_kind IN ('SPONSOR', 'SHOPIFY_SHOP'))`；索引随列改名；视图 `qb_publication_owner` 重建为三列。只追加表的触发器只拦 UPDATE / DELETE / TRUNCATE，不拦 DDL；行不被改写。PostgreSQL 16 对带常量缺省的 `ADD COLUMN NOT NULL` 只改目录、不重写表，`qb_attempt` 再大也只是短暂的排他锁 |
+| D-S0-5 | **迁移一步到位**（同 V10 的 LS-6：单实例、停机升级，旧 jar 不能跑新表、新 jar 不能跑旧表）：V29 对 §3 的表 `RENAME COLUMN sponsor_id TO publisher_id`、`ADD COLUMN publisher_kind … NOT NULL DEFAULT 'SPONSOR'` 再 `DROP DEFAULT`（之后每条写入都必须显式给出类型）并加 `CHECK (publisher_kind IN ('SPONSOR', 'SHOPIFY_SHOP'))`；索引随列改名；视图 `qb_publication_owner` 重建为三列。只追加表的触发器只拦 UPDATE / DELETE / TRUNCATE，不拦 DDL；行不被改写。PostgreSQL 16 对带常量缺省的 `ADD COLUMN NOT NULL` 只改目录、不重写表，`qb_attempt` 再大也只是短暂的排他锁。**修正（S0b，V30）**：五张只追加表（`qb_publication_version`、`qb_reward_tier_version`、`qb_cash_reward_version`、`qb_redemption_version`、`qb_digital_prize_version`）的列改回 `sponsor_id`，字段仍叫 `publisherId`（`PublisherKind.declareSealed`），见 §10 |
 | D-S0-6 | **审批事实**改为 `publisherKind` + `publisherId`（`ApprovalSubject` 的声明与 `PublicationApprovals.facts`）。审批**绑定的内容**（`content()`）从来不含 `sponsorId`，所以升级时待审核的请求的哈希不变、照常生效；`QB_SETUP` 的审批规则不引用 `sponsorId` |
 | D-S0-7 | **事件 `qb.publication.status`** 的载荷 `sponsorId` 改为 `publisherKind` + `publisherId`；消费者 `QB_MAIL_PUBLICATION` 只对 `SPONSOR` 发邮件（店铺的通知在 S1 另定）。钱包事件 `qb.sponsor.settle-pending`、`qb.sponsor.funds-restored` 是商户账户自己的，载荷不变 |
 | D-S0-8 | **对外名字不变**：三个前端的界面文字仍叫"商家 / Sponsor"，后台扩展地址中的筛选参数仍是 `?sponsor=`（映射到 `publisherId`）；`UserName` 只对 `SPONSOR` 显示名字，其他类型显示编号（S1 决定店铺怎样显示）。`userKey = md5(发布方编号 : 用户编号)` 的值对现有数据不变 |
@@ -135,3 +135,21 @@ PR 合回 `1.3/quizbuks`。**S0 不需要平台改动**，不动 `1.3/platform`�
 ## 9. 工作量
 
 方案 B：实体与写入处 1 天，模板与消息 0.5 天，迁移与 `PublisherMigrationIT` 0.5 天，后台扩展与测试夹具 0.5 天，回放核对、文档、自查与 PR 0.5 天，合计 **2.5–3 天**；方案 A 约 1.5–2 天。
+
+## 10. 修正：只追加表保留 `sponsor_id`（S0b，迁移 V30）
+
+**问题**：平台的完整性封存（设计 21 §2.1）为每个块记下各表封存时的列，校验时按这些列重算摘要；**已封存的列被改名即报告为被改**，列只能增加。
+V29 把五张只追加表的 `sponsor_id` 改名为 `publisher_id`：1.2 的环境（停在 V28）升级到 1.3 后，`INTEGRITY_VERIFY` 会把这五张表此前封存的每一行报告为 `MODIFIED`。
+
+**修正**：
+- 迁移 V30 把这五张表的列改回 `sponsor_id`，索引名也改回 `…_sponsor_idx`（索引名不在封存范围内，改回只为与列名一致）；`publisher_kind` 与它的检查照 V29（加列不影响封存）。普通表（卡片、会话、分析、码池、邀请）不被封存，仍是 `publisher_id`。
+- 实体字段名不变，仍是 `publisherId`：`PublisherKind.declareSealed(eb, …)` 把它映射到 `sponsor_id`（常量 `SEALED_ID_COLUMN`），只用于这五张表；其他表（包括以后新建的只追加表）照旧用 `declare`。模板只写占位符，不受影响；直接写 SQL 的测试按表读 `sponsor_id` 或 `publisher_id`。
+- V29 与 V30 在同一次停机升级中连续执行，其间不会封存，所以没有任何块记下 `publisher_id`。1.3 没有部署过（部署工作流只针对 1.2 的两个分支）。
+  只在开发库与测试库中单独执行过 V29 并封存过的，那些块（开发密钥，不证明任何东西）在 V30 之后会报告被改：重建开发库即可。
+
+**测试**：`SealedColumnsMigrationIT` 逐个版本迁移，断言每张只追加表在任何已发布版本的列都以同样的类型（含长度与小数位）留在最新版本中、表本身也还在（V29 列为"从未发布"的例外，理由写在测试中）；`PublisherKindTest` 检查五个实体映射到 `sponsor_id`、其他映射到 `publisher_id`；
+没有 V30 时它报出 V28 的五个 `sponsor_id`。`PublisherMigrationIT` 改为分别检查只追加表（`sponsor_id` + `publisher_kind`）与普通表（`publisher_id` + `publisher_kind`）。
+
+**不在本修正中（建议的平台后续）**：平台本身的迁移（`db/jabiz`）与其他应用没有同样的检查。可以在平台加一个启动检查，比较 `sys_integrity_seal_table` 记下的列与当前表结构，
+对平台、所有应用与真实数据库都在启动时报告"封存过的列已不存在"；需要先在 `1.3/platform` 上做。
+

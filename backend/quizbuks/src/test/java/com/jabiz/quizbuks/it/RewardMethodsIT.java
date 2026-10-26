@@ -222,7 +222,7 @@ class RewardMethodsIT extends PlayItSupport {
         assertThat(code).startsWith("C-").hasSize(10);
         assertThat((String) submitted.get("message")).contains(code);
         assertThat(reward).containsEntry("status", "DUE").containsEntry("user_id", takerId)
-            .containsEntry("publisher_id", sponsor).containsEntry("amount", new BigDecimal("100"));
+            .containsEntry("sponsor_id", sponsor).containsEntry("amount", new BigDecimal("100"));
         assertThat(at(reward.get("pay_by")))
             .isEqualTo(clock.instant().plus(Duration.ofDays(14)));
         String cashRewardId = String.valueOf(reward.get("cash_reward_id"));

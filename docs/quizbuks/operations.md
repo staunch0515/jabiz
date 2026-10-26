@@ -437,16 +437,18 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 - **`JABIZ_SEAL_KEY` 换了或丢了**：已存的密码打不开，投递记 `FAILED`（"cannot be opened"）；每个商家重新输入密码并保存即可（页面照常），不需要运维介入。
 - **商家的服务器很慢**：投递事务等到平台的超时（`jabiz.mail.timeout`）；一次失败只让该轮投递停在它那里，下一轮继续其他邮件。
 
-## 8. 升级到线 1.3（S0 的迁移 V29）
+## 8. 升级到线 1.3（S0 的迁移 V29、V30）
 
-S0（`shopify/S0-publisher.md`）把发布、档位、卡片、会话、分析、现金 / 兑换 / 电子奖品与码池、邀请的 `sponsor_id` 列改名为 `publisher_id`，并加上 `publisher_kind`（已有的行全部为 `SPONSOR`）。
+S0（`shopify/S0-publisher.md`）给发布、档位、卡片、会话、分析、现金 / 兑换 / 电子奖品与码池、邀请加上 `publisher_kind`（已有的行全部为 `SPONSOR`），并把普通表的 `sponsor_id` 列改名为 `publisher_id`。
+五张只追加表（发布、档位、现金、兑换、电子奖品的 `*_version`）由 V29 改名、V30 改回 `sponsor_id`：它们的行已被完整性封存，封存过的列不能改名（设计 21 §2.1，S0 §10）。
 迁移只有 DDL、不改写行，但旧 jar 不能在新表上运行、新 jar 不能在旧表上运行（一步到位，同 V10 的锁拆分），所以**停机升级**：
 
 1. 停止应用（`docker compose stop app` 或服务器的 `deploy-app.sh` 之前先停旧容器）。
 2. 确认 Outbox 已投递完：`SELECT count(*) FROM sys_outbox WHERE delivered_time IS NULL`（表名以平台 `db/jabiz` 为准）为 0。
    事件 `qb.publication.status` 的载荷从 `sponsorId` 改为 `publisherKind` + `publisherId`：升级前未投递的这类事件，新版本的消费者读不到发布方，**什么也不做**（最坏丢一封发布状态的通知邮件，不影响数据）；钱包事件的载荷不变。
-3. 启动新 jar：Flyway 执行 V29（`ALTER TABLE … RENAME COLUMN`、`ADD COLUMN … DEFAULT 'SPONSOR'` 再 `DROP DEFAULT`、`CHECK`、索引改名、重建视图 `qb_publication_owner`），`qb_attempt` 很大时 `CHECK` 的校验扫一遍表，秒级。
-4. 启动检查无新告警；待审核的发布照常（审批绑定的内容不含发布方）；后台「发布」列表多出"发布方类型"一列。
-5. 不需要再执行 `QB_SETUP`（没有新参数、新权限、新科目）。
+3. 启动新 jar：Flyway 依次执行 V29 与 V30（**一起执行，不要停在 V29**：只停在 V29 时一旦封存运行，V30 之后这些块会报告被改）。V29 做 `ALTER TABLE … RENAME COLUMN`、`ADD COLUMN … DEFAULT 'SPONSOR'` 再 `DROP DEFAULT`、`CHECK`、索引改名、重建视图 `qb_publication_owner`；V30 把五张只追加表的列名改回。`qb_attempt` 很大时 `CHECK` 的校验扫一遍表，秒级。
+4. 升级后运行一次 `INTEGRITY_VERIFY`（或等每日的校验）：应当完好，升级前封存的行不报告 `MODIFIED`。
+5. 启动检查无新告警；待审核的发布照常（审批绑定的内容不含发布方）；后台「发布」列表多出"发布方类型"一列。
+6. 不需要再执行 `QB_SETUP`（没有新参数、新权限、新科目）。
 
 回滚：恢复升级前的备份（§2.3）并启动旧 jar；没有反向迁移。

@@ -43,7 +43,7 @@ class PublicationIT extends PublicationItSupport {
         assertThat(first).containsEntry("field", "versionId").containsEntry("message", "Choose a version of a quiz.");
         String id = (String) saved.get("publicationId");
         assertThat(row(id)).containsEntry("publisher_kind", "SPONSOR")
-            .containsEntry("publisher_id", "sponsor-a").containsEntry("status", "DRAFT");
+            .containsEntry("sponsor_id", "sponsor-a").containsEntry("status", "DRAFT");
 
         // The whole policy: the time limit is the version's, the derived values follow the tiers.
         String versionId = version(sponsorA(), "Capitals");

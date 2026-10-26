@@ -25,12 +25,34 @@ public final class PublisherKind {
     public static final String KIND_FIELD = "publisherKind";
     public static final String ID_FIELD = "publisherId";
 
+    /** The id's column on an ordinary table, renamed from {@code sponsor_id} by V29. */
+    public static final String ID_COLUMN = "publisher_id";
     /**
-     * Declares the pair on an entity: both immutable and required, the id a text of 128 like the user ids it held.
+     * The id's column on an append-only (temporal) table: still {@code sponsor_id}. The platform's integrity seal
+     * records each table's columns and digests them again when verifying, so renaming a sealed column would report
+     * every row sealed before as modified (docs/design/21-audit-retention.md section 2.1); V30 renamed it back.
+     */
+    public static final String SEALED_ID_COLUMN = "sponsor_id";
+
+    /**
+     * Declares the pair on an ordinary table: both immutable and required, the id a text of 128 like the user ids it
+     * held, in {@link #ID_COLUMN}.
      *
      * @param processOnly whether the generic API may not write them (the record is written by the processes only)
      */
     public static void declare(EntityBuilder eb, boolean processOnly) {
+        declare(eb, processOnly, ID_COLUMN);
+    }
+
+    /**
+     * Declares the pair on an append-only (temporal) table, whose id stays in {@link #SEALED_ID_COLUMN}: its field is
+     * {@code publisherId} all the same.
+     */
+    public static void declareSealed(EntityBuilder eb, boolean processOnly) {
+        declare(eb, processOnly, SEALED_ID_COLUMN);
+    }
+
+    private static void declare(EntityBuilder eb, boolean processOnly, String idColumn) {
         eb.field(KIND_FIELD, f -> {
             f.physicalColumn("publisher_kind").immutable(true).required(true);
             if (processOnly) {
@@ -39,7 +61,7 @@ public final class PublisherKind {
             f.asCode(DICTIONARY, ALL.toArray(String[]::new));
         });
         eb.field(ID_FIELD, f -> {
-            f.physicalColumn("publisher_id").immutable(true).required(true);
+            f.physicalColumn(idColumn).immutable(true).required(true);
             if (processOnly) {
                 f.processOnly();
             }

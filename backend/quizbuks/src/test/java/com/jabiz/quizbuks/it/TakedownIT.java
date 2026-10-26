@@ -119,11 +119,11 @@ class TakedownIT extends PlayItSupport {
         // The reviewer reads the takedown and its reason.
         Map<String, Object> row = publication(next);
         assertThat(items("qb.admin.quiz-takedowns", takedownAdmin(), Map.of("params", Map.of("publisherId",
-            row.get("publisher_id"), "quizId", String.valueOf(row.get("quiz_id")))))).singleElement()
+            row.get("sponsor_id"), "quizId", String.valueOf(row.get("quiz_id")))))).singleElement()
             .satisfies(takedown -> assertThat(takedown).containsEntry("publicationId", first)
                 .containsEntry("endReason", "ADMIN").containsEntry("adminReason", "Copied answers"));
         assertThat(items("qb.admin.quiz-takedowns", takedownAdmin(), Map.of("params", Map.of("publisherId",
-            row.get("publisher_id"), "quizId", UUID.randomUUID().toString())))).isEmpty();
+            row.get("sponsor_id"), "quizId", UUID.randomUUID().toString())))).isEmpty();
         // A person approves it: it goes on.
         decide((String) submitted.get("approvalRequestId"), "APPROVE", null);
         assertThat(publication(next)).containsEntry("status", "SCHEDULED");
@@ -154,7 +154,7 @@ class TakedownIT extends PlayItSupport {
         assertThat(submit(token, draft(token, versionId, "After expiry"))).containsEntry("status", "PENDING_REVIEW");
         Map<String, Object> row = publication(first);
         assertThat(items("qb.admin.quiz-takedowns", takedownAdmin(), Map.of("params", Map.of("publisherId",
-            row.get("publisher_id"), "quizId", String.valueOf(row.get("quiz_id")))))).singleElement()
+            row.get("sponsor_id"), "quizId", String.valueOf(row.get("quiz_id")))))).singleElement()
             .satisfies(takedown -> assertThat(takedown).containsEntry("publicationId", first)
                 .containsEntry("pausedBy", "ADMIN").containsEntry("adminReason", "Fraudulent"));
     }

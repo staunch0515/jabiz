@@ -52,7 +52,7 @@
   新放入内容的文件必须由模版所有者上传（`QuizEditing.requireOwnFile`，经平台文件数据视图读 `uploadedBy`）。子项列表（选项、图片）给出即完整列表，不给（null）即不动。
   版本与版本文件没有商家数据视图（版本含正确答案）：商家只经连接本人未移除模版的模板读取。商家视图的写权限 `qb.content.view.write` 不授予任何角色。
 - **发布方**（S0，`publishing.PublisherKind`，`docs/quizbuks/shopify/S0-publisher.md`）：引擎里"谁发布的"是一对不可变、必填的字段 `publisherKind`（`SPONSOR` / `SHOPIFY_SHOP`，字典 `urn:jabiz:dict:quizbuks:publisher-kind`）+ `publisherId`（`SPONSOR` 的编号就是商家的用户编号），
-  以 `PublisherKind.declare(eb, processOnly)` 声明。**一条规则定范围**：凡是"发布的所有者的副本"（发布、档位、卡片、`QbPublicationOwner`、会话、分析的三张表、现金 / 兑换 / 电子奖品与码池、邀请）带这一对；
+  以 `PublisherKind.declare(eb, processOnly)` 声明；S0 之前就有行被封存的五张只追加表（发布、档位、现金、兑换、电子奖品的 `*_version`）用 `declareSealed`：列仍叫 `sponsor_id`（V30，被完整性封存的列只能增加、不能改名，平台 21 §2.1，`SealedColumnsMigrationIT`）；其他表，包括以后新建的只追加表，用 `declare`，列是 `publisher_id`。**一条规则定范围**：凡是"发布的所有者的副本"（发布、档位、卡片、`QbPublicationOwner`、会话、分析的三张表、现金 / 兑换 / 电子奖品与码池、邀请）带这一对；
   商家账户自己的记录（充值、收据、邮件服务器、邀请配额、领奖码、AI 作业与用量、`QbSponsorRewardMethods.userId`、钱包、账本维度）保持 `sponsorId` / `userId`。新写入处必须显式给出类型（表上没有缺省，商家后台的流程写 `PublisherKind.SPONSOR` + 操作人）；
   商家的数据视图一律 `fromContext("publisherId", actorId)` **且** `fixed("publisherKind", SPONSOR)`（`RewardConfig.ownDataset` 按字段名自动加）；答题人的首页、详情与公开卡片视图只看 `SPONSOR` 的发布（店面流量在 S2 走 Shopify 模块自己的模板）。
   审批事实是 `publisherKind` + `publisherId`；事件 `qb.publication.status` 的载荷同样是这一对，消费者 `QB_MAIL_PUBLICATION` 只对 `SPONSOR` 发邮件、对没有发布方的事件什么也不做；钱包事件（`qb.sponsor.*`）的 `sponsorId` 不变。
