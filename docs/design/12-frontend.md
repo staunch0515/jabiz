@@ -287,7 +287,7 @@ jabizApp {
 - **两个包**（源码形式，`exports` 指向 `src/index.ts`，不发布）：`@jabiz/client`（登录与令牌刷新、闲置锁定、step-up、API 客户端、
   `runQuery` / `runProcess`、i18n 初始化（各部分以 `addMessages(命名空间, …)` 加入文案）、金额 / 日期 / 数字格式化（`setAmountUnit(币种, 标签)` 让应用的账本币种显示为标签，如 JPY 显示为 "Kudos"；无币种的数字与其他币种不变）、`UserName`）；
   `@jabiz/ui`（shadcn 组件与组合组件 `DataTable`、`ConfirmDialog`、`notify`、`DatePicker` / `DateTimePicker`、`DecimalInput` / `MoneyInput`、
-  `ThemeToggle`、`PageHeader`、`AppShell` / `ShellNav`，15b-1 起另有 `Combobox`、`FilterBar`、`FileUpload`、`Timeline`、`DescriptionList`、`TagsInput`、
+  `ThemeToggle`、`PageHeader`、`AppShell` / `ShellNav`（16zi 起 `ShellNav` 另可按 `groups` 分节：每节可有标题（带标题的节是有名称的 `group`），节与节之间一条分割线，空节不显示），15b-1 起另有 `Combobox`、`FilterBar`、`FileUpload`、`Timeline`、`DescriptionList`、`TagsInput`、
   `CopyButton`、`PageState`、`Spinner`，日期控件可键入并可限定范围；15c-1 起另有 `Steps`、`SegmentedControl`（shadcn 的 toggle-group 之上的单选组）、
   `FileUpload` 的拖放区（`variant="dropzone"`）、`PageState` 的空状态（`kind` 即 `data-state`）、`DescriptionList` 的多列与复制按钮；16n 起另有内容显示的 `MarkdownView`（`react-markdown`，`skipHtml`、不启用 `rehype-raw`：原始 HTML 一律不渲染，D20；样式为 `markdown.css`）与 `FilePreview`（以会话取文件内容（`@jabiz/client` 的 `fetchFileContent` / `fetchFileDownload`）：图片为缩略图、点击在 `Dialog` 中放大，其余为下载按钮，`blob:` 卸载时释放；`field` 只需 `image` 与 `variants`），以及其下的 `useFileUrl` / `downloadFile`，原在后台 `src/components`，`@jabiz/admin` 照旧以同名、同属性再导出；表单状态 react-hook-form 由该包再导出；文案命名空间 `ui`）。`@jabiz/admin` 在两者之上导出（第 9 节）。平台前端、两个包与扩展的 lint 都不允许 antd 与 `@ant-design/*`
   （同一条规则 `NO_ANT_DESIGN`）。shadcn 组件只在 `packages/ui` 中生成或修改。
