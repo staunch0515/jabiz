@@ -1,6 +1,7 @@
 package com.jabiz.runtime.test;
 
 import com.jabiz.runtime.integrity.IntegrityStore;
+import com.jabiz.runtime.config.PlatformSchemaMigration;
 import org.flywaydb.core.Flyway;
 import org.flywaydb.core.api.callback.Callback;
 import org.flywaydb.core.api.callback.Context;
@@ -8,6 +9,7 @@ import org.flywaydb.core.api.callback.Event;
 import org.flywaydb.core.api.configuration.FluentConfiguration;
 
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -19,12 +21,14 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.UUID;
+import java.util.function.Consumer;
 
 /**
  * The migrations keep every sealed column (decision D58; docs/design/21-audit-retention.md section 2.1). A block of
  * the integrity seal records the columns of each append-only table as it was sealed and verifying digests the rows
- * over those columns again, so a column renamed, dropped or given another type (a numeric's scale included) makes the
- * rows sealed before report as MODIFIED, a dropped table its rows as MISSING. Columns may only be added.
+ * over those columns again, so a column renamed, dropped or given another type (a numeric's scale included; text of
+ * another length and integers of another width read the same) makes the rows sealed before report as MODIFIED, a
+ * dropped table its rows as MISSING. Columns may only be added.
  *
  * <p>This runs a set of migrations version by version in a schema of its own and records, after each, the columns and
  * types of every append-only table, found as the seal finds them; whatever version an installation was sealed at,
@@ -39,8 +43,6 @@ import java.util.UUID;
  */
 public final class SealedColumnsHistory {
 
-    private static final String PLATFORM = "classpath:db/jabiz";
-    private static final String PLATFORM_HISTORY = "jabiz_schema_history";
 
     /**
      * What the run found.
@@ -53,6 +55,7 @@ public final class SealedColumnsHistory {
     private final PostgresTestDatabase db;
     private final String location;
     private final Map<String, String> neverReleased = new LinkedHashMap<>();
+    private Consumer<FluentConfiguration> settings = configuration -> { };
 
     private SealedColumnsHistory(PostgresTestDatabase db, String location) {
         this.db = Objects.requireNonNull(db, "db must not be null");
@@ -75,6 +78,15 @@ public final class SealedColumnsHistory {
             throw new IllegalArgumentException("Say why version " + version + " was never released");
         }
         neverReleased.put(version, reason);
+        return this;
+    }
+
+    /**
+     * The application's own Flyway settings, where it has any (placeholders, another prefix or history table): the
+     * migrations run as they run deployed. The platform's location and history table are not changed.
+     */
+    public SealedColumnsHistory flyway(Consumer<FluentConfiguration> settings) {
+        this.settings = Objects.requireNonNull(settings, "settings must not be null");
         return this;
     }
 
@@ -111,18 +123,43 @@ public final class SealedColumnsHistory {
                 return "sealed-columns-history";
             }
         };
+        // As PlatformSchemaMigration runs them: the platform's, then the application's.
+        RuntimeException failure = null;
         try {
-            FluentConfiguration platform = configure(schema).createSchemas(true).locations(PLATFORM)
-                .table(PLATFORM_HISTORY);
+            FluentConfiguration platform = configure(schema).createSchemas(true)
+                .locations(PlatformSchemaMigration.PLATFORM_LOCATION)
+                .table(PlatformSchemaMigration.PLATFORM_HISTORY_TABLE);
             if (location == null) {
                 platform.callbacks(snapshot);
             }
             platform.load().migrate();
             if (location != null) {
-                configure(schema).locations(location).callbacks(snapshot).load().migrate();
+                FluentConfiguration application = configure(schema).locations(location);
+                settings.accept(application);
+                application.callbacks(snapshot).load().migrate();
             }
+        } catch (RuntimeException e) {
+            failure = e;
         } finally {
-            db.dropSchema(schema);
+            try {
+                db.dropSchema(schema);
+            } catch (RuntimeException e) {
+                // The migration's own failure says what went wrong; a schema left behind does not.
+                if (failure == null) {
+                    failure = e;
+                } else {
+                    failure.addSuppressed(e);
+                }
+            }
+        }
+        if (failure != null) {
+            throw failure;
+        }
+        Set<String> unknown = new TreeSet<>(neverReleased.keySet());
+        unknown.removeAll(byVersion.keySet());
+        if (!unknown.isEmpty()) {
+            throw new IllegalArgumentException("No migration has the version(s) " + unknown + " left out as never"
+                + " released (versions as Flyway writes them: 29, not V29); known: " + byVersion.keySet());
         }
         if (byVersion.isEmpty()) {
             return new Result(List.of(), Set.of());
@@ -137,7 +174,7 @@ public final class SealedColumnsHistory {
                 return;
             }
             columns.forEach((column, type) -> {
-                if (!type.equals(now.get(column))) {
+                if (!sameDigest(type, now.get(column))) {
                     lost.add(table + "." + column + " (" + type + ") of V" + version + " is "
                         + (now.containsKey(column) ? now.get(column) : "gone"));
                 }
@@ -146,29 +183,55 @@ public final class SealedColumnsHistory {
         return new Result(List.copyOf(lost), Set.copyOf(latest.keySet()));
     }
 
+    /**
+     * Whether a column's values read the same in {@code to_jsonb} after its type changed from {@code before} to
+     * {@code after}: text of any length (a narrower one would have failed on longer values), and integers of any
+     * width. Everything else must stay as it was: a numeric's scale or a timestamp's precision changes the value.
+     */
+    static boolean sameDigest(String before, String after) {
+        return after != null && (before.equals(after) || family(before) != null && family(before).equals(family(after)));
+    }
+
+    private static String family(String type) {
+        if (type.equals("text") || type.startsWith("character varying")) {
+            return "text";
+        }
+        return Set.of("smallint", "integer", "bigint").contains(type) ? "integer" : null;
+    }
+
     private FluentConfiguration configure(String schema) {
         return Flyway.configure().dataSource(db.jdbcUrl(), db.username(), db.password()).schemas(schema)
             .defaultSchema(schema).baselineOnMigrate(true).baselineVersion("0");
     }
 
-    /** Each append-only table (as the seal finds them, its own tables aside), its columns and their types. */
+    /**
+     * Each table the seal seals (its own query: append-only with a primary key, its own tables aside), its columns
+     * and their types.
+     */
     private static Map<String, Map<String, String>> appendOnlyColumns(Connection connection) throws SQLException {
-        Map<String, Map<String, String>> tables = new TreeMap<>();
+        Set<String> sealed = new TreeSet<>();
         try (Statement statement = connection.createStatement();
-             ResultSet rs = statement.executeQuery("""
+             ResultSet rs = statement.executeQuery(IntegrityStore.TABLES)) {
+            while (rs.next()) {
+                String table = rs.getString("table_name");
+                if (rs.getBoolean("append_only") && ((String[]) rs.getArray("key_columns").getArray()).length > 0
+                    && !IntegrityStore.OWN_TABLES.contains(table)) {
+                    sealed.add(table);
+                }
+            }
+        }
+        Map<String, Map<String, String>> tables = new TreeMap<>();
+        try (PreparedStatement statement = connection.prepareStatement("""
                  SELECT c.relname AS table_name, a.attname AS column_name,
                         format_type(a.atttypid, a.atttypmod) AS column_type
                  FROM pg_class c
                  JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = current_schema()
                  JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped
-                 WHERE c.relkind IN ('r', 'p')
-                   AND EXISTS (SELECT 1 FROM pg_trigger t JOIN pg_proc p ON p.oid = t.tgfoid
-                               WHERE t.tgrelid = c.oid AND NOT t.tgisinternal
-                                 AND p.proname = 'jabiz_reject_mutation' AND (t.tgtype & 1) <> 0)""")) {
-            while (rs.next()) {
-                String table = rs.getString("table_name");
-                if (!IntegrityStore.OWN_TABLES.contains(table)) {
-                    tables.computeIfAbsent(table, t -> new TreeMap<>())
+                 WHERE c.relname = ANY(?)""")) {
+            statement.setArray(1, connection.createArrayOf("text", sealed.toArray()));
+            try (ResultSet rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    tables.computeIfAbsent(rs.getString("table_name"), t -> new TreeMap<>())
                         .put(rs.getString("column_name"), rs.getString("column_type"));
                 }
             }

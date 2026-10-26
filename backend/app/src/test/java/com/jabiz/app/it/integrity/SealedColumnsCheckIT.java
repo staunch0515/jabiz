@@ -57,13 +57,19 @@ class SealedColumnsCheckIT extends SecurityItSupport {
             "Table it_sc_renamed: has lost sealed columns amount (sealed from block " + first + "), note (sealed"
                 + " from block " + first + "): verifying reports every row sealed with them as MODIFIED. A migration"
                 + " renamed or dropped them; sealed columns may only be added"
-                + " (docs/design/21-audit-retention.md section 2.1), so a migration giving them back mends it");
+                + " (docs/design/21-audit-retention.md section 2.1). A renamed column is mended by a migration naming"
+                + " it back; a dropped one only by restoring its values (a column added again under its name is"
+                + " empty, and this warning stops while the rows still do not verify)");
         assertThat(checks.check()).filteredOn(p -> p.location().startsWith("Table it_sc_"))
             .allMatch(p -> p.severity() == CheckProblem.Severity.WARNING);
 
-        // Giving the column back mends the warning (the dropped one stays lost).
-        ddl("ALTER TABLE it_sc_renamed RENAME COLUMN remark TO note",
-            "ALTER TABLE it_sc_renamed ADD COLUMN amount numeric(12, 2)");
+        // Naming the column back ends the warning for it; the dropped column stays named.
+        ddl("ALTER TABLE it_sc_renamed RENAME COLUMN remark TO note");
+        assertThat(warnings()).hasSize(2).anySatisfy(w -> assertThat(w).startsWith("Table it_sc_renamed: has lost"
+            + " sealed columns amount (sealed from block " + first + "): "));
+        // A column added again under the dropped one's name ends the warning, as the message says, though the values
+        // the rows were sealed with are gone (they were null here, so these rows happen to verify).
+        ddl("ALTER TABLE it_sc_renamed ADD COLUMN amount numeric(12, 2)");
         assertThat(warnings()).singleElement().asString().startsWith("Table it_sc_dropped:");
     }
 

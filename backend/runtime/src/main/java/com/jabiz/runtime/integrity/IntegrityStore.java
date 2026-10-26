@@ -59,7 +59,12 @@ public class IntegrityStore {
         }
     }
 
-    private static final String TABLES = """
+    /**
+     * The tables of the schema with their primary key ({@code key_columns}), whether they are append-only
+     * ({@code append_only}: a row trigger of {@code jabiz_reject_mutation()}) and guarded. The seal seals the
+     * append-only ones with a key, except {@link #OWN_TABLES}; tests that judge what the seal covers read it too.
+     */
+    public static final String TABLES = """
         SELECT c.relname::text AS table_name,
                ARRAY(SELECT a.attname::text
                      FROM pg_index i

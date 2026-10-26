@@ -51,6 +51,11 @@ class SealedColumnsHistoryIT {
     }
 
     @Test
+    void textOfAnotherLengthAndIntegersOfAnotherWidthReadTheSame() {
+        assertThat(crafted("widened").check().lost()).isEmpty();
+    }
+
+    @Test
     void aSealedTableDroppedIsLostToo() {
         assertThat(crafted("table-dropped").check().lost())
             .containsExactly("it_sh_sealed of V1 is gone (or no longer append-only)");
@@ -64,6 +69,9 @@ class SealedColumnsHistoryIT {
         assertThat(crafted("undone").neverReleased("2", "shipped with V3 in one release").check().lost()).isEmpty();
         assertThatThrownBy(() -> crafted("undone").neverReleased("2", " "))
             .isInstanceOf(IllegalArgumentException.class);
+        // A version no migration has (written V2, say) is not silently left out.
+        assertThatThrownBy(() -> crafted("undone").neverReleased("V2", "a typo").check())
+            .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("[V2]");
     }
 
     private static SealedColumnsHistory crafted(String set) {

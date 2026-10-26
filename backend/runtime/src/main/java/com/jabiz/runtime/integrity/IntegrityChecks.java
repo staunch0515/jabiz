@@ -81,8 +81,10 @@ public class IntegrityChecks implements PlatformCheck {
                     + gone.stream().map(c -> c.column() + " (sealed from block " + c.firstSeal() + ")")
                         .collect(Collectors.joining(", "))
                     + ": verifying reports every row sealed with them as MODIFIED. A migration renamed or dropped"
-                    + " them; sealed columns may only be added (docs/design/21-audit-retention.md section 2.1), so a"
-                    + " migration giving them back mends it"));
+                    + " them; sealed columns may only be added (docs/design/21-audit-retention.md section 2.1). A"
+                    + " renamed column is mended by a migration naming it back; a dropped one only by restoring its"
+                    + " values (a column added again under its name is empty, and this warning stops while the rows"
+                    + " still do not verify)"));
             }
         });
         return problems;
