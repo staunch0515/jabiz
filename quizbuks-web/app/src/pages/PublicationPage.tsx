@@ -147,7 +147,7 @@ function Fact({ icon: Icon, label, value, testId }: { icon: LucideIcon; label: s
       <dt className="text-muted-foreground order-last w-full truncate text-[11px] leading-tight">{label}</dt>
       <dd className="flex w-full min-w-0 flex-col items-center gap-0.5">
         <Icon aria-hidden className="text-primary size-4" />
-        <span className="w-full truncate text-sm font-semibold">{value}</span>
+        <span className="w-full text-sm leading-tight font-semibold break-words">{value}</span>
       </dd>
     </div>
   )
