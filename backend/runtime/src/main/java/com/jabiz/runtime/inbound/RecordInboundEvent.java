@@ -31,7 +31,8 @@ import java.util.Objects;
  * {@code jabiz.inbound.<provider>.<type>} that refers to it, both in the process's transaction. The row is written
  * directly, not through the change set: it is a log of what arrived, like the mail attempts, so it has no audit record
  * (docs/design/21-audit-retention.md section 1). A second arrival of the same event fails on the unique key of
- * (provider, external event id), and the receiver answers it as a duplicate.
+ * (provider, event type, external event id), or for a replay-guarded event also on (provider, event type, body hash)
+ * (decision D57), and the receiver answers it as a duplicate.
  *
  * <p>Only the platform's receiver runs it, as the system: anyone else, an administrator holding every permission
  * included, is refused, so that no caller can make the platform record an event no provider signed. The process is
@@ -93,6 +94,8 @@ class RecordInboundEvent implements StepHandler<RecordInboundEvent.Metadata, Pro
             row.put("received_time", received);
             row.put("content_type", input.contentType());
             row.put("body_sha256", sha256(input.rawBody()));
+            row.put("metadata", input.metadata().isEmpty() ? null : input.metadata());
+            row.put("replay_guard", input.replayGuard());
             row.put("process_seq_id", ctx.processSeqId());
             // Only a reference: the body is not copied into the outbox, which inbound.read does not guard and whose
             // events outbound webhooks may forward.
@@ -101,6 +104,9 @@ class RecordInboundEvent implements StepHandler<RecordInboundEvent.Metadata, Pro
             payload.put("provider", input.provider());
             payload.put("externalEventId", input.externalEventId());
             payload.put("eventType", input.eventType());
+            if (!input.metadata().isEmpty()) {
+                payload.put("metadata", input.metadata());
+            }
             payload.put("receivedTime", received.toString());
             Map<String, Object> body = new LinkedHashMap<>();
             body.put("inbound_event_id", id);

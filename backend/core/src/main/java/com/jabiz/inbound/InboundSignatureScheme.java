@@ -28,6 +28,14 @@ public interface InboundSignatureScheme {
      */
     Map<String, String> sign(String secret, long timestamp, byte[] body);
 
+    /**
+     * Whether the scheme signs a time, so that a tolerance applies and a replay is bounded by it. A scheme that signs
+     * the body only (decision D57) does not: its tolerance is meaningless and its replays are stopped otherwise.
+     */
+    default boolean signsTime() {
+        return true;
+    }
+
     /** Whether {@code signedAt} (seconds since the epoch) is within {@code tolerance} of {@code now}. */
     static InboundVerification inTime(long signedAt, Instant now, Duration tolerance) {
         long nowSeconds = now.getEpochSecond();

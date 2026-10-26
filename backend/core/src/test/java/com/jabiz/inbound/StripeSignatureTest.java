@@ -135,6 +135,6 @@ class StripeSignatureTest {
         assertThat(InboundSchemes.of("hmac-sha256")).containsInstanceOf(HmacSha256Signature.class);
         assertThat(InboundSchemes.of("slack")).isEmpty();
         assertThat(InboundSchemes.of(null)).isEmpty();
-        assertThat(InboundSchemes.names()).containsExactly("hmac-sha256", "stripe");
+        assertThat(InboundSchemes.names()).containsExactly("body-hmac-sha256", "hmac-sha256", "stripe");
     }
 }

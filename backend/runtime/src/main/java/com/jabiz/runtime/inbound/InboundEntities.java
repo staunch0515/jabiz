@@ -25,8 +25,10 @@ public class InboundEntities {
     static final String TABLE = "sys_inbound_event";
     /** The bodies, one row per event, apart so that nothing reading the events carries them. */
     static final String BODY_TABLE = "sys_inbound_event_body";
-    /** The unique key of (provider, external event id): a second arrival of an event fails on it. */
+    /** The unique key of (provider, event type, external event id): a second arrival of an event fails on it. */
     public static final String EXTERNAL_KEY = "sys_inbound_event_external_key";
+    /** The unique index of (provider, event type, body hash) over replay-guarded events (decision D57). */
+    public static final String BODY_KEY = "sys_inbound_event_body_key";
 
     static final int MAX_ROWS = 1000;
 
@@ -40,7 +42,8 @@ public class InboundEntities {
             .asText(255));
         eb.field("eventType", f -> f.physicalColumn("event_type").immutable(true).required(true).asText(100));
         eb.field("livemode", f -> f.physicalColumn("livemode").immutable(true).asBool());
-        eb.field("signedTime", f -> f.physicalColumn("signed_time").immutable(true).required(true)
+        // None for a scheme that signs only the body (decision D57).
+        eb.field("signedTime", f -> f.physicalColumn("signed_time").immutable(true)
             .asTemporal(TemporalRole.EVENT_TIME));
         eb.field("receivedTime", f -> f.physicalColumn("received_time").immutable(true).required(true)
             .asTemporal(TemporalRole.SYSTEM_RECORDED));

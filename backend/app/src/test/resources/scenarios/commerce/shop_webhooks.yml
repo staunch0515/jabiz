@@ -1,0 +1,49 @@
+# Webhooks of a sender that signs the body only (ROADMAP phase 17a, decision D57), as a shop platform does: the
+# provider demo-shop puts Base64(HMAC-SHA256(secret, body)) in X-Shopify-Hmac-Sha256, and the event's id, its topic
+# and the shop in headers nobody signed. The event is kept without a signed time; the same body of the same topic is
+# kept once whatever id it comes with, while one id under two topics is two events; topics not listed are dropped and
+# a request without its event id is refused.
+name: Body-signed webhooks of a shop
+clock: 2026-10-26T00:00:00Z
+actor: { id: shop-admin, permissions: ["*"] }
+steps:
+  - note: A paid order of the shop. Its id and topic come in headers; only the body is signed.
+    inbound:
+      provider: demo-shop
+      headers: { X-Shopify-Event-Id: ev-1001, X-Shopify-Topic: orders/paid, X-Shopify-Shop-Domain: demo.myshopify.com }
+      body: { id: 820982911946154508, name: "#1001", financial_status: paid, total_price: "1600.00", currency: JPY }
+  - note: The sender delivers it again, as it does until it hears back; kept once.
+    inbound:
+      provider: demo-shop
+      outcome: DUPLICATE
+      headers: { X-Shopify-Event-Id: ev-1001, X-Shopify-Topic: orders/paid, X-Shopify-Shop-Domain: demo.myshopify.com }
+      body: { id: 820982911946154508, name: "#1001", financial_status: paid, total_price: "1600.00", currency: JPY }
+  - note: >-
+      Someone who captured the request sends it again with an id of their choosing: the id is not signed, but the same
+      body of the same topic is kept once.
+    inbound:
+      provider: demo-shop
+      outcome: DUPLICATE
+      headers: { X-Shopify-Event-Id: ev-forged, X-Shopify-Topic: orders/paid, X-Shopify-Shop-Domain: demo.myshopify.com }
+      body: { id: 820982911946154508, name: "#1001", financial_status: paid, total_price: "1600.00", currency: JPY }
+  - advanceClock: PT1M
+  - note: The shop removes the app; the sender gives this topic an id another topic already had. Another event.
+    inbound:
+      provider: demo-shop
+      headers: { X-Shopify-Event-Id: ev-1001, X-Shopify-Topic: app/uninstalled, X-Shopify-Shop-Domain: demo.myshopify.com }
+      body: { id: 548380009, name: Demo shop, domain: demo.myshopify.com }
+  - note: A topic the provider is not listed for is answered and not kept.
+    inbound:
+      provider: demo-shop
+      outcome: IGNORED
+      headers: { X-Shopify-Event-Id: ev-2001, X-Shopify-Topic: products/update }
+      body: { id: 632910392, title: Tea cup }
+  - note: Signed, but without its event id, it is not an event.
+    inbound:
+      provider: demo-shop
+      outcome: REJECTED
+      headers: { X-Shopify-Topic: orders/paid }
+      body: { id: 820982911946154509, name: "#1002", financial_status: paid }
+snapshot:
+  entities: [InboundEvent]
+  asOf: end

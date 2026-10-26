@@ -4416,14 +4416,21 @@ L4 共享仪表的注释；L5 13 写明每个键每次轮询多一个查询观�
 
 线 1.3 的阶段（版本线表）：应用要作为第三方商店平台（Shopify 一类）的应用上架时，平台需要的通用能力。各阶段先出计划、经确认再实施。
 
-### 17a 入站 Webhook：只签正文的 HMAC 方案、不签名的事件号与重放、验签失败的状态码（实施计划，待确认）
+### 17a 入站 Webhook：只签正文的 HMAC 方案、不签名的事件号与重放、验签失败的状态码（已确认 2026-10-26，已实施，决策 D57）
 
 **缘由**：D37 的两种签名方案（`stripe`、`hmac-sha256`）都签了时间戳与事件号，所以"时间容差 + 按事件号去重"能挡住重放。
 Shopify 一类的发送方只对**原样正文**签名（`X-Shopify-Hmac-SHA256` = Base64(HMAC-SHA256(密钥, 正文))），时间（`X-Shopify-Triggered-At`）、
 主题（`X-Shopify-Topic`）、事件号（`X-Shopify-Event-Id`，同一事件的各次投递相同；`X-Shopify-Webhook-Id` 是投递号）与账户（`X-Shopify-Shop-Domain`）都在**不签名的请求头**里；
 正文本身多数不含事件号与主题。它的应用审核还要求验签失败答 **401**（D37 第 6 条是 400）。这三点都要改 D37，所以新增决策。
 
-**决定（待确认，确认后写成决策 D57，补充 D37，不取代）**
+**实施结果**（分支 `1.3/phase-17a-inbound-shopify`）：按下表实施，写成决策 D57（补充 D37），设计见 11 §2.5.1。与计划不同的两处（D57"实施中的细化"）：
+- 17a-4 的正文护栏与事件号唯一键都**按类型**：`(provider, event_type, external_event_id)` 与 `(provider, event_type, body_sha256) WHERE replay_guard`。
+  Shopify 的一次动作给几个主题同一个事件号，`orders/create` 与 `orders/updated` 的正文可以相同，跨类型的键会吞掉合法事件；因此不建 `sys_inbound_ignored`，白名单外的类型照旧不存储。
+  代价：截获者能以另一个已列出的主题再送一次同一正文，主题不可信（消费者以正文判断含义）。
+- 17a-5 的元数据不加到平台实体 `InboundEvent`（没有 JSON 字段类型），只经事件载荷与 `LoadInboundEvent` 给出。
+- 另：外部类型的 `/` 在 Outbox 事件类型中换成 `.`（`orders/paid` → `jabiz.inbound.<提供方>.orders.paid`，平台事件类型不允许 `/`）；拒绝状态码由 `InboundRejectedException` 带出，控制器不变。
+
+**决定（已确认，写成决策 D57，补充 D37，不取代）**
 
 | # | 决定 |
 |---|---|

@@ -57,7 +57,7 @@ public final class ProblemStatuses {
             case IdempotencyConflictException e -> 409;
             case BusinessRuleViolationException e -> 422;
             case PayloadTooLargeException e -> 413;
-            case InboundRejectedException e -> 400;
+            case InboundRejectedException e -> e.status();
             case RateLimitedException e -> 429;
             // Too much asked of the database just now: not the caller's mistake, and not a defect.
             case QueryTimeoutException e -> 503;

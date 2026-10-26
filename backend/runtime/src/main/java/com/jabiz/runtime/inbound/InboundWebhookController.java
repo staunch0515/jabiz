@@ -22,7 +22,7 @@ import java.util.Map;
  * let only a served provider's {@code POST} within its rate limit through. The body is read as raw bytes, never
  * decoded by a codec: a declared {@code Content-Length} above the provider's limit is refused before any of it is read,
  * and reading stops as soon as a chunked body passes the limit. Rejected requests are answered 400
- * {@code INBOUND_REJECTED}; accepted, repeated and ignored ones 200 {@code {"received":true}}, after the commit.
+ * {@code INBOUND_REJECTED} (a failed signature with the provider's {@code reject-status}, 400 or 401, decision D57); accepted, repeated and ignored ones 200 {@code {"received":true}}, after the commit.
  */
 @RestController
 class InboundWebhookController {
