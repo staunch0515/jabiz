@@ -13,6 +13,7 @@ const en = {
   ...contentEn,
   ...publishingEn,
   brand: 'QuizBuks Sponsor',
+  lists: { view: 'View', cards: 'Cards', table: 'Table', pages: 'Pages', previous: 'Previous page', next: 'Next page', page: 'Page {{page}} of {{pages}}' },
   nav: { label: 'Sponsor console', dashboard: 'Dashboard', quizzes: 'Quizzes', onboarding: 'Sponsor profile', account: 'Account',
     help: 'Help' },
   public: {
@@ -64,6 +65,7 @@ const zh: typeof en = {
   ...contentZh,
   ...publishingZh,
   brand: 'QuizBuks 商家后台',
+  lists: { view: '显示方式', cards: '卡片', table: '表格', pages: '分页', previous: '上一页', next: '下一页', page: '第 {{page}} / {{pages}} 页' },
   nav: { label: '商家后台', dashboard: '概览', quizzes: 'Quiz', onboarding: '商家资料', account: '账户', help: '帮助' },
   public: {
     signIn: '登录',
@@ -114,6 +116,7 @@ const ja: typeof en = {
   ...contentJa,
   ...publishingJa,
   brand: 'QuizBuks スポンサー',
+  lists: { view: '表示', cards: 'カード', table: '表', pages: 'ページ', previous: '前のページ', next: '次のページ', page: '{{page}} / {{pages}} ページ' },
   nav: { label: 'スポンサー管理画面', dashboard: 'ダッシュボード', quizzes: 'クイズ', onboarding: 'スポンサー情報', account: 'アカウント',
     help: 'ヘルプ' },
   public: {

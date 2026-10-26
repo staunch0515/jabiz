@@ -218,6 +218,27 @@ describe('the publication list', () => {
   })
 })
 
+describe('the list views (Q34b)', () => {
+  it('shows the publications as cards with their quiz\'s cover, and as the table when asked, remembered', async () => {
+    window.localStorage.removeItem('qb.sponsor.view.publications')
+    server()
+    window.history.replaceState(null, '', '/publications')
+    const { unmount } = render(<App />)
+    const cards = await screen.findByTestId('publication-cards')
+    const card = within(cards).getByTestId('publication-row')
+    // The whole card leads to the publication through its name.
+    expect(within(card).getByRole('link', { name: 'Coffee week' })).toHaveAttribute('href', '/publications/p1')
+    expect(screen.queryByRole('table')).toBeNull()
+    await userEvent.click(screen.getByRole('radio', { name: 'Table' }))
+    expect(await screen.findByRole('table')).toBeInTheDocument()
+    expect(window.localStorage.getItem('qb.sponsor.view.publications')).toBe('table')
+    unmount()
+    render(<App />)
+    expect(await screen.findByRole('table')).toBeInTheDocument()
+    window.localStorage.removeItem('qb.sponsor.view.publications')
+  })
+})
+
 describe('the publication wizard', () => {
   it('creates a draft by its first save and opens it at the next step', async () => {
     const { processCalls } = server({ processes: { QB_PUBLICATION_SAVE: [saved(1, { publicationId: 'p9' })] } })

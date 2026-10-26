@@ -14,6 +14,7 @@ results:
   publicationId: { from: QbPublication.publicationId }
   name:          { from: QbPublication.name }
   quizTitle:     { from: QbQuizVersion.title }
+  cover:         { kind: { type: text, maxLength: 36 }, description: "The quiz's cover as the version keeps it (Q34b: the list's cards)" }
   versionLabel:  { from: QbPublication.versionLabel }
   status:        { from: QbPublication.status }
   rewardMethod:  { from: QbPublication.rewardMethod }
@@ -49,6 +50,9 @@ SELECT
     p.{{QbPublication.publicationId}}       AS publicationId,
     p.{{QbPublication.name}}                AS name,
     v.{{QbQuizVersion.title}}               AS quizTitle,
+    -- Q34b: the card of the list shows the quiz's cover as the version's snapshot keeps it (a draft without a version
+    -- has none).
+    CAST(CAST(v.{{QbQuizVersion.content}} AS jsonb) ->> 'cover' AS text) AS cover,
     p.{{QbPublication.versionLabel}}        AS versionLabel,
     p.{{QbPublication.status}}              AS status,
     p.{{QbPublication.rewardMethod}}        AS rewardMethod,
