@@ -30,6 +30,7 @@
 | 1.0 | `1.0/platform` | 1–13f | `platform-v1.0.0` | `1.0/culture`、`1.0/finance` |
 | 1.1 | `1.1/platform`（从 `1.0/platform` 的 `platform-v1.0.0` 拉出，已开） | 14 | — | `1.1/finance`（14a–14c 合入后升级）；culture 需要时升级；finance 停在本线，需要时再升级 |
 | 1.2 | `1.2/platform`（从 `1.1/platform` 拉出，已开） | 15– | — | `1.2/quizbuks`（新应用） |
+| 1.3 | `1.3/platform`（从 `1.2/platform` 拉出，2026-10-26 开） | 17–（QuizBuks 的 Shopify 集成所需的通用能力：外部会话令牌换登录、访客身份、入站 webhook 的 HMAC 验签与限时回调、按成本限流的外部服务、宿主 UI 的例外、数据主体遮蔽） | — | `1.3/quizbuks`（从 `1.2/quizbuks` 升级；1.2 冻结） |
 
 ---
 
