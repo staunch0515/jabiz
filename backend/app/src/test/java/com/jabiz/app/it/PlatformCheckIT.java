@@ -46,10 +46,15 @@ class PlatformCheckIT {
         Outcome outcome = check();
 
         // The customer portal's role (ROADMAP phase 16b-2) is data, which a fresh database does not have. (The tests'
-        // configuration turns the portal's registration off, whose other warning, mail being off, is not raised.)
+        // configuration turns the portal's registration off, whose other warning, mail being off, is not raised.) The
+        // body-signed provider demo-shop (decision D57) only shows receiving: nothing of the sample consumes its events.
         assertThat(outcome.lines().stream().filter(line -> line.startsWith("WARNING")).toList()).containsExactly(
+            "WARNING INBOUND | jabiz.inbound-webhooks.providers.demo-shop.event-types | orders/paid is accepted and "
+                + "stored but no subscription consumes jabiz.inbound.demo-shop.orders.paid",
+            "WARNING INBOUND | jabiz.inbound-webhooks.providers.demo-shop.event-types | app/uninstalled is accepted and "
+                + "stored but no subscription consumes jabiz.inbound.demo-shop.app.uninstalled",
             "WARNING SECURITY | jabiz.security.entries | role CUSTOMER does not exist (yet)");
-        assertThat(outcome.lines()).last().isEqualTo("platformCheck: 0 error(s), 1 warning(s)");
+        assertThat(outcome.lines()).last().isEqualTo("platformCheck: 0 error(s), 3 warning(s)");
         assertThat(outcome.exitCode()).isZero();
     }
 

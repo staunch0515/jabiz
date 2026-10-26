@@ -131,10 +131,20 @@ class ScenarioParserTest {
             steps:
               - inbound: { provider: pay, body: { id: evt_1, type: t } }
               - inbound: { provider: pay, body: "{}", at: 2026-01-31T08:00:00Z, outcome: REJECTED }
+              - inbound: { provider: shop, body: {}, headers: { X-Shopify-Event-Id: e1, X-Shopify-Topic: orders/paid } }
             """, "scenarios/inbound.yml");
         assertThat(scenario.steps()).containsExactly(
             new Scenario.InboundStep(1, "pay", java.util.Map.of("id", "evt_1", "type", "t"), null, "ACCEPTED"),
-            new Scenario.InboundStep(2, "pay", "{}", Instant.parse("2026-01-31T08:00:00Z"), "REJECTED"));
+            new Scenario.InboundStep(2, "pay", "{}", Instant.parse("2026-01-31T08:00:00Z"), "REJECTED"),
+            new Scenario.InboundStep(3, "shop", java.util.Map.of(), null, "ACCEPTED",
+                java.util.Map.of("X-Shopify-Event-Id", "e1", "X-Shopify-Topic", "orders/paid")));
+        assertThatThrownBy(() -> Scenario.parse("""
+            name: Bad
+            clock: 2026-01-31T09:00:00Z
+            actor: { id: admin }
+            steps:
+              - inbound: { provider: shop, body: {}, headers: [X-Shopify-Topic] }
+            """, "scenarios/bad.yml")).hasMessageContaining("headers");
         assertThatThrownBy(() -> Scenario.parse("""
             name: Bad
             clock: 2026-01-31T09:00:00Z
