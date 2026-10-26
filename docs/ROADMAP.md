@@ -4409,3 +4409,59 @@ L4 共享仪表的注释；L5 13 写明每个键每次轮询多一个查询观�
 独立评审之后：测试开关只放宽本机的服务器（误开在生产不削弱商家服务器的校验）；两个来源经 `SendMail.problems` 不再抛异常而由 `MailChecks` 一次报告；D56 的剩余风险写明可达性探测、`sensitive()` 由应用声明、`SealSecret` 的密钥检查只覆盖邮件来源。
 
 **16zg 状态**：✅ 已实施（PR 待建）。
+
+---
+
+## 阶段 17：线 1.3 的通用能力（外部商店平台的接入）
+
+线 1.3 的阶段（版本线表）：应用要作为第三方商店平台（Shopify 一类）的应用上架时，平台需要的通用能力。各阶段先出计划、经确认再实施。
+
+### 17a 入站 Webhook：只签正文的 HMAC 方案、不签名的事件号与重放、验签失败的状态码（实施计划，待确认）
+
+**缘由**：D37 的两种签名方案（`stripe`、`hmac-sha256`）都签了时间戳与事件号，所以"时间容差 + 按事件号去重"能挡住重放。
+Shopify 一类的发送方只对**原样正文**签名（`X-Shopify-Hmac-SHA256` = Base64(HMAC-SHA256(密钥, 正文))），时间（`X-Shopify-Triggered-At`）、
+主题（`X-Shopify-Topic`）、事件号（`X-Shopify-Event-Id`，同一事件的各次投递相同；`X-Shopify-Webhook-Id` 是投递号）与账户（`X-Shopify-Shop-Domain`）都在**不签名的请求头**里；
+正文本身多数不含事件号与主题。它的应用审核还要求验签失败答 **401**（D37 第 6 条是 400）。这三点都要改 D37，所以新增决策。
+
+**决定（待确认，确认后写成决策 D57，补充 D37，不取代）**
+
+| # | 决定 |
+|---|---|
+| 17a-1 | **新签名方案 `body-hmac-sha256`**（core `com.jabiz.inbound`，同步纯函数）：签名头名、编码（`base64` / `hex`）与"事件号头""类型头""账户头"都写在提供方配置的 `signed-body` 下（缺省即 Shopify 的四个头名与 Base64），方案名不叫 `shopify`（平台不绑一家）。常量时间比较，多个密钥任一匹配即通过（换密钥）。签名头缺失或重复、不是合法 Base64 / hex 即 `MALFORMED` |
+| 17a-2 | **没有签名的时间**：`InboundVerification` 的 `signedTime` 对这种方案为空，`sys_inbound_event.signed_time` 改为可空（迁移）；配置 `tolerance` 对它是启动错误（不能给出它做不到的保证）。消费者见到的时间只有接收时间 |
+| 17a-3 | **事件号、类型取自不签名的请求头**（`signed-body` 方案专有）：格式照旧（事件号 1–255 个可见 ASCII，类型过白名单）；缺失即 400。文档与 `LoadInboundEvent` 的说明写明：**这两项不可信，只用来去重与路由**，消费者必须从已签名的正文核对内容（同 D37 第 2 条"签名不等于内容可信"）|
+| 17a-4 | **重放护栏**：因为事件号不签名，截获一次请求的人可以换个事件号再送同一正文。对这种方案另加唯一键 `(provider, body_sha256)`：同一提供方的同一正文只存一次，第二次答 200 并记 `DUPLICATE`（发送方的重试本就是同一正文，行为不变）。白名单外的类型也只记哈希（不存正文），使"以别的主题重放"同样落空 |
+| 17a-5 | **账户等元数据头**：提供方可列出 `metadata-headers`（至多 8 个，每个值至多 255 个可见 ASCII），按原样存进新列 `sys_inbound_event.metadata`（jsonb），事件载荷与 `LoadInboundEvent` 给出；同样标明**不签名**。不在列表中的头一概不存 |
+| 17a-6 | **拒绝的状态码按提供方配置**：`reject-status`（`400` 缺省、可选 `401`）只用于签名失败（`MISSING_HEADER`、`MALFORMED`、`NO_MATCH`）；其他拒绝（大小、编码、JSON）仍是 400。正文与原因照旧不回给发送方 |
+| 17a-7 | **示范与工具**：`app` 的 `application-dev.yml` 加一个 `demo-shop` 提供方（`body-hmac-sha256`、`reject-status: 401`、元数据头 `X-Shopify-Shop-Domain`），`tools/demo/inbound-demo.sh` 能为它签名；场景回放步骤 `inbound` 支持给出请求头（`headers:`）|
+
+**不在 17a（建议移到"宿主入口"阶段，17b）**：ROADMAP 版本线表与需求的 17a 写了"公开接口的限流"。现有公开接口只读，已按客户端地址限流（15 §5、D47）。
+商店前台对应用的匿名请求经商店平台的**应用代理**（App Proxy）到达：来源地址都是平台的代理，按地址的桶会把所有商店的访客挤进同一个桶；
+真正的客户端地址在不签名的 `X-Forwarded-For` 中，代理请求由查询参数 `signature`（hex HMAC，签全部查询参数）认证。
+所以前台的限流只能在"验签过的代理请求"这一入口上按（商店、访客键、转发的地址）做，与入口本身一起设计才有意义。
+
+**要改的模块与类**
+- core `com.jabiz.inbound`：新 `BodyHmacSignature`（实现 `InboundSignatureScheme`；`sign` 供测试与回放）、`InboundSchemes` 登记；`InboundVerification` 允许接受而无签名时间（构造检查随之放宽）。
+- runtime `com.jabiz.runtime.inbound`：`InboundWebhookProperties`（`signed-body`、`metadata-headers`、`reject-status` 与校验）、`InboundWebhookChecks`（新组合的启动检查：`tolerance` 与 `signed-body` 同时出现、头名重复或非法、元数据头过多）、
+  `InboundEventExtractor`（按方案从头或正文取事件号与类型）、`InboundReceiver`（`body_sha256` 去重、元数据）、`RecordInboundEvent` / `InboundEvents` / `LoadInboundEvent`（元数据，空的签名时间）、`InboundWebhookController`（按提供方的拒绝状态码）、`InboundEntities`（实体 `InboundEvent` 加 `metadata`）。
+- 迁移 `db/jabiz/V46__inbound_body_hmac.sql`：`signed_time` 去掉 NOT NULL；加 `metadata jsonb`；部分唯一索引 `(provider, body_sha256) WHERE replay_guard`（`replay_guard boolean NOT NULL DEFAULT false`，只有新方案的行为真）；白名单外的哈希另存 `sys_inbound_ignored`（`provider`、`body_sha256` 唯一、`received_time`，保留策略同 `InboundEvent`）。全部只追加（`jabiz_protect_append_only`），封存照常。
+- 文档：`11-ledger-events-jobs.md` §2.5、`09-decisions.md` D57、`07-quality.md`（回放步骤的 `headers`）、根 `CLAUDE.md` 入站 Webhook 一句（不新增规则，只补"不签名的头只用于去重与路由"）。
+
+**测试清单**
+- core：`BodyHmacSignatureTest`（Base64 与 hex、多密钥、篡改一字节、头缺失 / 重复 / 非法编码、常量时间比较的路径）、jqwik 性质测试（签名后必通过、任一字节变化必失败）。
+- runtime 单元：`InboundWebhookPropertiesTest` / `InboundWebhookChecksTest`（新配置的每个错误）、`InboundEventExtractorTest`（从头取事件号与类型、缺失、非法）、`InboundReceiverTest`（拒绝状态码按提供方）。
+- app 集成 `InboundWebhookIT` 新用例：`demo-shop` 的正确请求 → 存档、发布事件、元数据可读；签名错 → 401，大小超限 → 400；同一正文换事件号再送 → `DUPLICATE`、不再发布；白名单外的类型 → 200 且只记哈希，再以白名单内的类型送同一正文 → `DUPLICATE`；`signed_time` 为空；只追加表上没有 UPDATE / DELETE。原有 `stripe` 与 `hmac-sha256` 的用例不变。
+- 场景回放：一个 `demo-shop` 场景（带 `headers:`）与快照；已有场景快照不变。
+- `./gradlew check`（含 `platformCheck`、覆盖率门禁）、`StatementBudgetIT` 不变（入站不在其路径上）。
+
+**风险**
+- 不签名的事件号与账户头：靠"只用于去重与路由、内容以签名正文为准"的约定与 17a-4 的正文哈希护栏；截获请求需要攻破 TLS 或泄露日志，平台不记录正文与签名。
+- 正文哈希去重会把两个字节完全相同的不同事件当成一个：只对新方案启用；同一正文的重复事件对消费者本应是幂等的（在 D57 中写明）。
+- 迁移改的是 1.3 的平台表（1.3 是最新线，可以加迁移）。
+
+**工作量**：2 天（core 0.5、runtime 与迁移 0.75、测试与示范 0.5、文档 0.25）。
+
+**待确认的问题**
+1. 方案名用中性的 `body-hmac-sha256`（缺省按 Shopify 的头名），还是直接叫 `shopify`？建议中性名。
+2. 17a-4 的正文哈希护栏是否要（建议要：代价是一列与一个部分索引）。
+3. "公开接口的限流"移到 17b（应用代理入口）一起做，是否同意？
