@@ -136,7 +136,14 @@ function Disclosure({ summary, icon: Icon, testId, children }: {
  * the taker app draws it above the start button, the sponsor console's preview (Q34b) the same from the sponsor's
  * own data. Layout and the place of every text: docs/quizbuks/plans/Q34-ui-polish.md, D-Q34-11.
  */
-export function PublicationContent({ publication: p, tiers }: { publication: PublicationView; tiers: Tier[] }) {
+export function PublicationContent({ publication: p, tiers, titleAs: Title = 'h1', draft = false }: {
+  publication: PublicationView
+  tiers: Tier[]
+  /** The name's heading: the page's own on the taker's page, under the preview's heading in the console. */
+  titleAs?: 'h1' | 'h2'
+  /** A quiz before it is published (the console's preview): what only a publication sets reads "–". */
+  draft?: boolean
+}) {
   const { t } = useTranslation(QBVIEW)
   const duration = useDuration()
   const sponsor = p.sponsorCompany ?? p.sponsorName
@@ -152,13 +159,15 @@ export function PublicationContent({ publication: p, tiers }: { publication: Pub
         {p.cover
           ? <FileImage fileId={p.cover} variant="w640" alt="" className="absolute inset-0 size-full" />
           : <CoverPlaceholder seed={p.publicationId} className="absolute inset-0 size-full" />}
-        <span className="bg-primary text-primary-foreground absolute top-2 right-2 inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold shadow-sm">
-          <Trophy aria-hidden className="size-3.5" />
-          {survey ? t('feed.surveyReward', { amount: formatKudos(p.maxReward) })
-            : t('feed.upTo', { amount: formatKudos(p.maxReward) })}
-        </span>
+        {!draft && (
+          <span className="bg-primary text-primary-foreground absolute top-2 right-2 inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold shadow-sm">
+            <Trophy aria-hidden className="size-3.5" />
+            {survey ? t('feed.surveyReward', { amount: formatKudos(p.maxReward) })
+              : t('feed.upTo', { amount: formatKudos(p.maxReward) })}
+          </span>
+        )}
         <div className="from-qb-hero-from via-qb-hero-from/85 text-qb-hero-foreground absolute inset-x-0 bottom-0 flex flex-col gap-0.5 bg-linear-to-t to-transparent px-4 pt-10 pb-3">
-          <h1 id="detail-title" className="text-xl leading-tight font-semibold" data-testid="detail-name">{p.name}</h1>
+          <Title id="detail-title" className="text-xl leading-tight font-semibold" data-testid="detail-name">{p.name}</Title>
           {p.quizTitle && p.quizTitle !== p.name && (
             <p className="text-qb-hero-muted text-sm" data-testid="detail-quiz-title">{p.quizTitle}</p>
           )}
@@ -175,13 +184,13 @@ export function PublicationContent({ publication: p, tiers }: { publication: Pub
         <Fact icon={ListChecks} label={t('detail.questions')} value={p.questionCount} />
         {survey
           ? <Fact icon={BookOpen} label={t('detail.kind')} value={t('detail.survey')} />
-          : <Fact icon={Target} label={t('detail.passScore')} value={`${p.passScore} / ${p.fullScore}`} />}
+          : <Fact icon={Target} label={t('detail.passScore')} value={draft ? `– / ${p.fullScore}` : `${p.passScore} / ${p.fullScore}`} />}
         <Fact icon={Timer} label={t('detail.timeLimit')} value={duration(p.timeLimitSec)} />
         <Fact icon={Trophy} label={survey ? t('detail.surveyReward') : prize ? t('detail.prizeValue') : t('detail.maxReward')}
-          value={formatKudos(p.maxReward)} />
+          value={draft ? '–' : formatKudos(p.maxReward)} />
         <Fact icon={MethodIcon} label={t('detail.method')} testId="detail-method-fact"
-          value={<span data-testid="detail-method" data-method={p.rewardMethod}>{t(`methods.${p.rewardMethod}Short`)}</span>} />
-        <Fact icon={CalendarClock} label={t('detail.endAt')} value={formatDateTime(p.endAt)} />
+          value={draft ? '–' : <span data-testid="detail-method" data-method={p.rewardMethod}>{t(`methods.${p.rewardMethod}Short`)}</span>} />
+        <Fact icon={CalendarClock} label={t('detail.endAt')} value={draft ? '–' : formatDateTime(p.endAt)} />
       </dl>
       {p.audience === 'INVITED' && (
         <p className="text-muted-foreground flex items-center gap-2 text-sm" data-testid="detail-invited">
@@ -195,6 +204,7 @@ export function PublicationContent({ publication: p, tiers }: { publication: Pub
           <Expandable testId="detail-intro-text"><MarkdownView text={p.intro} /></Expandable>
         </DetailCard>
       )}
+      {!draft && (
       <DetailCard title={t('detail.rewardTitle')} titleId="reward-title" icon={MethodIcon} testId="detail-reward">
         {/* Q22: what the sponsor does after a pass, in their words for a prize. */}
         <p className="text-sm" data-testid="detail-method-name">{t(`methods.${p.rewardMethod}`)}</p>
@@ -208,6 +218,7 @@ export function PublicationContent({ publication: p, tiers }: { publication: Pub
         {survey && <p className="text-muted-foreground text-sm" data-testid="detail-survey">{t('detail.surveyHint')}</p>}
         {!survey && <Tiers tiers={tiers} />}
       </DetailCard>
+      )}
       <Disclosure icon={TrendingUp} testId="detail-stats" summary={
         <span data-testid="detail-stats-line">{t('detail.statsLine', { recent: p.last24h, total: p.completions })}</span>}>
         <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">

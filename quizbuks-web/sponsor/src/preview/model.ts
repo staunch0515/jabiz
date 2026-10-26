@@ -1,4 +1,5 @@
 import type { Material, PublicationView, Tier } from '../qb/play'
+import { videoPlayer } from '../qb/video'
 import type { Sponsor } from '../qb/api'
 import type { Draft, Snapshot } from '../content/api'
 import type { Publication, Tier as SponsorTier } from '../publishing/api'
@@ -15,6 +16,8 @@ export interface PreviewQuestion {
 /** What the preview draws: the publication as a taker's page reads it, its tiers, and the questions. */
 export interface Preview {
   view: PublicationView
+  /** The player of the video to watch (Q19), which makes the home's card a video card, as the server's card has it. */
+  video: string | null
   tiers: Tier[]
   questions: PreviewQuestion[]
   /** A quiz's draft has no publication yet: no reward, period or counts to show. */
@@ -30,7 +33,15 @@ function material(m: SnapshotMaterial | Draft['materials'][number], no: number):
   }
 }
 
-function base(sponsor: Sponsor | null) {
+/** The home card's video: the first video watching which is enough to answer, when the app can play it. */
+function videoOf(materials: { kind: string; url: string | null; watchToAnswer?: boolean }[]): string | null {
+  const watch = materials.find((m) => m.kind === 'VIDEO_LINK' && m.watchToAnswer && m.url)
+  return watch ? videoPlayer(watch.url!) : null
+}
+
+function base(given: Sponsor | null) {
+  // Takers see the sponsor's name, picture and introduction only once the sponsor is approved (qb.app.publication).
+  const sponsor = given?.reviewStatus === 'APPROVED' ? given : null
   return {
     sponsorName: sponsor?.contactName ?? null, sponsorCompany: sponsor?.company ?? null,
     sponsorIntro: sponsor?.intro ?? null, sponsorAvatar: sponsor?.avatar ?? null, sponsorCountry: null,
@@ -45,6 +56,7 @@ export function publicationPreview(p: Publication, tiers: SponsorTier[], snapsho
   const questions = snapshot?.questions ?? []
   return {
     draft: false,
+    video: videoOf(snapshot?.materials ?? []),
     tiers: tiers.map((tier, index) => ({ seq: index + 1, fromScore: tier.fromScore, toScore: tier.toScore,
       reward: tier.reward })),
     questions: questions.map((q) => ({ no: q.no, stem: q.stem, image: q.image, points: q.points,
@@ -80,6 +92,7 @@ export function draftPreview(draft: Draft, sponsor: Sponsor | null, now: Date = 
   const q = draft.quiz
   return {
     draft: true,
+    video: videoOf(draft.materials),
     tiers: [],
     questions: draft.questions.map((question, index) => ({ no: index + 1, stem: question.stem, image: question.image,
       points: question.points,

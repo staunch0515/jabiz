@@ -62,7 +62,8 @@ for (const appearance of ['light', 'dark'] as const) {
     const quizzes = await query(request, sponsor.token, 'qb.sponsor.quizzes', {})
     expect(quizzes.find((row) => row.quizId === quizId)?.aiGenerated).toBe(true)
     await page.goto('/sponsor/quizzes')
-    await expect(page.getByRole('row').filter({ hasText: title })).toContainText('AI generated')
+    // Q34b: a card by default (the table's row carries the same test id and data).
+    await expect(page.locator(`[data-testid="quiz-row"][data-quiz="${quizId}"]`)).toContainText('AI generated')
 
     // The dashboard counts the month's usage (M-10).
     await page.goto('/sponsor/')

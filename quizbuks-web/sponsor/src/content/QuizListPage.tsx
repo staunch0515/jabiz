@@ -146,7 +146,7 @@ function QuizCard({ quiz, statusLabel }: { quiz: QuizRow; statusLabel: (status: 
   return (
     <li className="bg-card group relative flex flex-col overflow-hidden border shadow-xs transition-shadow hover:shadow-md"
       data-testid="quiz-row" data-quiz={quiz.quizId}>
-      <div aria-hidden className="relative block aspect-video overflow-hidden">
+      <div className="relative block aspect-video overflow-hidden">
         {quiz.cover
           ? <Thumbnail fileId={quiz.cover} width={480} className="size-full transition-transform duration-300 group-hover:scale-105" />
           : <CoverPlaceholder seed={quiz.quizId} className="size-full" />}

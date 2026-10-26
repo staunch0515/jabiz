@@ -271,8 +271,10 @@ describe('the preview (Q34b)', () => {
     await userEvent.click(await screen.findByTestId('preview-open'))
     expect(window.location.pathname).toBe('/publications/p1/preview')
     const frame = await screen.findByTestId('preview-frame')
+    // One page heading (the preview's); the publication's name is a heading under it.
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
+    expect(within(frame).getByRole('heading', { level: 2, name: 'Coffee week' })).toBeInTheDocument()
     // The quiz page first: the taker app's own layout, from the version's snapshot and the sponsor's profile.
-    expect(within(frame).getByRole('heading', { level: 1 })).toHaveTextContent('Coffee week')
     expect(within(frame).getByTestId('detail-quiz-title')).toHaveTextContent('Coffee basics')
     expect(within(frame).getByTestId('detail-sponsor')).toHaveTextContent('Acme')
     expect(within(frame).getByTestId('material-title')).toHaveTextContent('Bean guide')

@@ -51,8 +51,8 @@ SELECT
     p.{{QbPublication.name}}                AS name,
     v.{{QbQuizVersion.title}}               AS quizTitle,
     -- Q34b: the card of the list shows the quiz's cover as the version's snapshot keeps it (a draft without a version
-    -- has none).
-    CAST(CAST(v.{{QbQuizVersion.content}} AS jsonb) ->> 'cover' AS text) AS cover,
+    -- has none); json, not jsonb: only parsed, never built, for each row read.
+    CAST(CAST(v.{{QbQuizVersion.content}} AS json) ->> 'cover' AS text) AS cover,
     p.{{QbPublication.versionLabel}}        AS versionLabel,
     p.{{QbPublication.status}}              AS status,
     p.{{QbPublication.rewardMethod}}        AS rewardMethod,

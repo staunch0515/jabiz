@@ -22,6 +22,7 @@ import { QB } from '../qb/messages'
 import { Link } from '../qb/router'
 import { FeedCardView } from '../qb/view/FeedCard'
 import { PublicationContent } from '../qb/view/PublicationContent'
+import { VideoCardView } from '../qb/view/VideoCard'
 import { draftPreview, publicationPreview, type Preview, type PreviewQuestion } from './model'
 import type { PreviewTarget } from './paths'
 
@@ -88,12 +89,14 @@ function Screens({ preview }: { preview: Preview }) {
         data-screen={screen}>
         {screen === 'home' && (
           <ul className="grid grid-cols-2 gap-3" aria-label={t('preview.home')}>
-            <FeedCardView card={{ ...preview.view, video: null }} href={null} />
+            {preview.video
+              ? <VideoCardView card={{ ...preview.view, video: preview.video }} player={preview.video} href={null} />
+              : <FeedCardView card={{ ...preview.view, video: null }} href={null} />}
           </ul>
         )}
         {screen === 'page' && (
           <article className="flex flex-col gap-3" aria-labelledby="detail-title" data-testid="detail">
-            <PublicationContent publication={preview.view} tiers={preview.tiers} />
+            <PublicationContent publication={preview.view} tiers={preview.tiers} titleAs="h2" draft={preview.draft} />
             <Button size="lg" className="w-full" disabled data-testid="preview-start">
               <Play aria-hidden />{t('preview.start')}
             </Button>

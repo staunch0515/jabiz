@@ -28,6 +28,18 @@ describe('the preview (Q34b)', () => {
     expect(JSON.stringify(preview.questions)).not.toContain('correct')
   })
 
+  it('shows the sponsor only once approved, and a watch-to-answer video as the home card\'s video', () => {
+    const approved = { contactName: 'Sara', company: 'Acme', intro: 'Hi', avatar: null, reviewStatus: 'APPROVED' }
+    const pending = { ...approved, reviewStatus: 'PENDING' }
+    expect(draftPreview(DRAFT, approved as never).view.sponsorCompany).toBe('Acme')
+    expect(draftPreview(DRAFT, pending as never).view).toMatchObject({ sponsorCompany: null, sponsorName: null,
+      sponsorIntro: null })
+    expect(draftPreview(DRAFT, null).video).toBeNull()
+    const withVideo = { ...DRAFT, materials: [{ ...DRAFT.materials[0], kind: 'VIDEO_LINK',
+      url: 'https://youtu.be/dQw4w9WgXcQ', watchToAnswer: true }] } as unknown as Draft
+    expect(draftPreview(withVideo, null).video).toBe('https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ')
+  })
+
   it('has its own addresses', () => {
     expect(previewOf(previewOfPublication('p 1'))).toEqual({ kind: 'publication', id: 'p 1' })
     expect(previewOf(previewOfQuiz('q1'))).toEqual({ kind: 'quiz', id: 'q1' })

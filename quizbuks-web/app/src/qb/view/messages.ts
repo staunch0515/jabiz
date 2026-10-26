@@ -92,6 +92,9 @@ const en = {
     DIGITAL_PRIZEHint: 'After passing you get a code, a voucher or a link right here in the app, nothing to collect:',
   },
   feed: {
+    videoTitle: 'Video: {{name}}',
+    videoReward: 'Answer correctly to earn up to {{amount}}',
+    videoSurveyReward: 'Answer to earn {{amount}}',
     upTo: 'Up to {{amount}}',
     survey: 'Survey',
     surveyReward: '{{amount}} for answering',
@@ -184,6 +187,9 @@ const zh: typeof en = {
     DIGITAL_PRIZEHint: '通过后直接在 App 里得到兑换码、券号或链接，无需到店领取：',
   },
   feed: {
+    videoTitle: '视频：{{name}}',
+    videoReward: '答对最多可得 {{amount}}',
+    videoSurveyReward: '作答即可得 {{amount}}',
     upTo: '最高 {{amount}}',
     survey: '问卷',
     surveyReward: '作答得 {{amount}}',
@@ -276,6 +282,9 @@ const ja: typeof en = {
     DIGITAL_PRIZEHint: '合格するとコード、クーポン番号またはリンクをこのアプリで受け取れます。店舗に行く必要はありません：',
   },
   feed: {
+    videoTitle: '動画：{{name}}',
+    videoReward: '正解すると最大 {{amount}} もらえます',
+    videoSurveyReward: '回答すると {{amount}} もらえます',
     upTo: '最高 {{amount}}',
     survey: 'アンケート',
     surveyReward: '回答で {{amount}}',

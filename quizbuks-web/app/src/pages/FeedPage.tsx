@@ -31,7 +31,7 @@ import {
   cn,
 } from '@jabiz/ui'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
-import { Gift, HandCoins, LayoutGrid, Play, Search, SlidersHorizontal, Trophy, type LucideIcon } from 'lucide-react'
+import { Gift, HandCoins, LayoutGrid, Play, Search, SlidersHorizontal, type LucideIcon } from 'lucide-react'
 import { useEffect, useId, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
@@ -39,7 +39,7 @@ import { playProblemText } from '../play/busy'
 import { EmptyArt, QuizArt } from '../qb/Illustrations'
 import { useStartAttempt } from '../play/useStartAttempt'
 import { FeedCardView, REWARD_METHOD_ICONS } from '../qb/view/FeedCard'
-import { VideoPlayer } from '../qb/view/VideoPlayer'
+import { VideoCardView } from '../qb/view/VideoCard'
 import { readCountries } from '../qb/api'
 import { formatKudos } from '../qb/kudos'
 import { QB } from '../qb/messages'
@@ -168,36 +168,23 @@ function VideoCard({ card, player }: { card: FeedCard; player: string }) {
   const { t } = useTranslation(APP)
   const { t: tQb } = useTranslation(QB)
   const start = useStartAttempt()
-  const hint = `feed-video-hint-${card.publicationId}`
   return (
-    <li className="bg-card col-span-2 flex flex-col gap-2 border p-2 shadow-sm" data-testid="feed-video-card">
-      <VideoPlayer player={player} title={t('feed.videoTitle', { name: card.name })} />
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex min-w-0 flex-col gap-0.5">
-          <Link to={`/p/${card.publicationId}`} className="truncate font-medium underline-offset-4 hover:underline"
-            data-testid="feed-card-name">
-            {card.name}
-          </Link>
-          <span id={hint} className="text-primary flex items-center gap-1 text-sm font-semibold"
-            data-testid="feed-video-reward">
-            <Trophy aria-hidden className="size-3.5" />
-            {card.kind === 'SURVEY' ? t('feed.videoSurveyReward', { amount: formatKudos(card.maxReward) })
-              : t('feed.videoReward', { amount: formatKudos(card.maxReward) })}
-          </span>
-        </div>
-        <Button disabled={start.isPending} aria-busy={start.isPending || undefined} aria-describedby={hint}
+    <VideoCardView card={card} player={player} href={`/p/${card.publicationId}`} action={
+      <div className="flex flex-col items-end gap-1">
+        <Button disabled={start.isPending} aria-busy={start.isPending || undefined}
+          aria-describedby={`feed-video-hint-${card.publicationId}`}
           data-testid="feed-video-start" onClick={() => start.mutate(card.publicationId)}>
           <Play aria-hidden />
           {t('detail.start')}
         </Button>
+        <p className="text-muted-foreground text-sm empty:hidden" role="status">{start.busy ? t('play.busy') : ''}</p>
+        {start.isError && (
+          <p className="text-destructive text-sm" role="alert" data-testid="feed-video-error">
+            {playProblemText(start.error) || tQb('failed')}
+          </p>
+        )}
       </div>
-      <p className="text-muted-foreground text-sm empty:hidden" role="status">{start.busy ? t('play.busy') : ''}</p>
-      {start.isError && (
-        <p className="text-destructive text-sm" role="alert" data-testid="feed-video-error">
-          {playProblemText(start.error) || tQb('failed')}
-        </p>
-      )}
-    </li>
+    } />
   )
 }
 

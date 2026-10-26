@@ -47,7 +47,7 @@ function PublicationCard({ publication: p, methodLabel, regionsText }: { publica
   return (
     <li className="bg-card group relative flex flex-col overflow-hidden border shadow-xs transition-shadow hover:shadow-md"
       data-testid="publication-row" data-publication={p.publicationId} data-status={p.status}>
-      <div aria-hidden className="relative block aspect-video overflow-hidden">
+      <div className="relative block aspect-video overflow-hidden">
         {p.cover
           ? <Thumbnail fileId={p.cover} width={480} className="size-full transition-transform duration-300 group-hover:scale-105" />
           : <CoverPlaceholder seed={p.publicationId} className="size-full" />}
