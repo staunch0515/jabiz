@@ -1,6 +1,6 @@
 import { cn } from '@jabiz/ui'
 import { useEffect, useRef, useState } from 'react'
-import { FileImage } from '../qb/FileImage'
+import { FileImage } from '../FileImage'
 
 /**
  * A file's image that is fetched only once it comes near the screen (docs/quizbuks/plans/QP-pages.md section 10:

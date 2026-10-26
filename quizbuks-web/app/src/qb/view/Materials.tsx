@@ -4,11 +4,11 @@ import { ChevronRight, ExternalLink, FileText, Headphones, Images, Link2, Newspa
   from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { APP } from '../messages'
-import { CONTENT_IMAGE_VARIANTS } from '../qb/ids'
-import { videoPlayer } from '../qb/video'
-import { VideoPlayer } from '../play/VideoPlayer'
-import type { Material, MaterialKind } from '../qb/play'
+import { QBVIEW } from './messages'
+import { CONTENT_IMAGE_VARIANTS } from '../ids'
+import { videoPlayer } from '../video'
+import { VideoPlayer } from './VideoPlayer'
+import type { Material, MaterialKind } from '../play'
 import { DetailCard } from './DetailCard'
 
 const IMAGE_FIELD = { image: true, variants: [...CONTENT_IMAGE_VARIANTS] }
@@ -26,7 +26,7 @@ export const MATERIAL_ICONS: Record<MaterialKind, LucideIcon> = {
 
 /** An audio material, fetched with the session and played from an object URL (released when it goes). */
 function Audio({ fileId, title }: { fileId: string; title: string }) {
-  const { t } = useTranslation(APP)
+  const { t } = useTranslation(QBVIEW)
   const { url, failed } = useFileUrl(fileId, undefined)
   if (failed) return <p className="text-muted-foreground text-sm">{t('detail.fileFailed')}</p>
   if (!url) return <Spinner label={t('detail.loadingFile')} />
@@ -46,7 +46,7 @@ export function safeLink(url: string | null): string | null {
 
 /** A link of a material: always to another site, opened in a new tab (a video the App cannot show, Q-3, Q19). */
 function OutLink({ url, label }: { url: string; label: string }) {
-  const { t } = useTranslation(APP)
+  const { t } = useTranslation(QBVIEW)
   const safe = safeLink(url)
   if (!safe) return null
   return (
@@ -61,7 +61,7 @@ function OutLink({ url, label }: { url: string; label: string }) {
 
 /** The one content a material's kind has, as it is read in full (the sheet; an in-page video). */
 function MaterialContent({ material, title }: { material: Material; title: string }) {
-  const { t } = useTranslation(APP)
+  const { t } = useTranslation(QBVIEW)
   const m = material
   return (
     <>
@@ -106,7 +106,7 @@ function hasContent(m: Material): boolean {
  * without raw HTML (`MarkdownView`); files fetched with the session.
  */
 export function Materials({ materials }: { materials: Material[] }) {
-  const { t } = useTranslation(APP)
+  const { t } = useTranslation(QBVIEW)
   // The material shown stays while the sheet slides away, so it does not empty before it is gone.
   const [shown, setShown] = useState<Material | null>(null)
   const [sheetOpen, setSheetOpen] = useState(false)

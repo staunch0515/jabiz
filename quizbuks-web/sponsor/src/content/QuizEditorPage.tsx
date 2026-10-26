@@ -41,6 +41,8 @@ import { draftQuery, quizPath, QUIZZES_PATH, QUIZZES_QUERY, versionsQuery } from
 import { QuestionsPanel } from './QuestionsPanel'
 import { useQuizStatusLabel } from './QuizListPage'
 import { VersionsPanel } from './VersionsPanel'
+import { PreviewButton } from '../preview/PreviewButton'
+import { previewOfQuiz } from '../preview/paths'
 
 /** A copy of the draft as a new quiz (M-28), under a title of the sponsor's choice. */
 function CopyDialog({ quiz, open, onOpenChange }: { quiz: Quiz; open: boolean; onOpenChange: (open: boolean) => void }) {
@@ -235,6 +237,7 @@ export function QuizEditorPage({ quizId }: { quizId: string }) {
                 <Save aria-hidden />
                 {t('editor.saveVersion')}
               </Button>
+              <PreviewButton to={previewOfQuiz(quiz.quizId)} />
               <Button variant="outline" disabled={stale} data-testid="copy-quiz" onClick={() => setCopying(true)}>
                 <Copy aria-hidden />
                 {t('editor.copy')}

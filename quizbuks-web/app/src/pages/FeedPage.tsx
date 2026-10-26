@@ -31,16 +31,15 @@ import {
   cn,
 } from '@jabiz/ui'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
-import { Banknote, Coins, Gift, HandCoins, LayoutGrid, Play, Search, SlidersHorizontal, Ticket, Trophy, Users, type LucideIcon }
-  from 'lucide-react'
+import { Gift, HandCoins, LayoutGrid, Play, Search, SlidersHorizontal, Trophy, type LucideIcon } from 'lucide-react'
 import { useEffect, useId, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
 import { playProblemText } from '../play/busy'
-import { LazyImage } from '../play/LazyImage'
-import { CoverPlaceholder, EmptyArt, QuizArt } from '../qb/Illustrations'
+import { EmptyArt, QuizArt } from '../qb/Illustrations'
 import { useStartAttempt } from '../play/useStartAttempt'
-import { VideoPlayer } from '../play/VideoPlayer'
+import { FeedCardView, REWARD_METHOD_ICONS } from '../qb/view/FeedCard'
+import { VideoPlayer } from '../qb/view/VideoPlayer'
 import { readCountries } from '../qb/api'
 import { formatKudos } from '../qb/kudos'
 import { QB } from '../qb/messages'
@@ -76,13 +75,7 @@ function storeMethod(choice: MethodChoice) {
 }
 
 /** The icon of each choice of the reward menu (Q34): the menu's button shows the chosen one. */
-export const METHOD_ICONS: Record<MethodChoice, LucideIcon> = {
-  ALL: LayoutGrid,
-  PLATFORM: Coins,
-  SPONSOR_CASH: Banknote,
-  OFFLINE_REDEEM: Gift,
-  DIGITAL_PRIZE: Ticket,
-}
+export const METHOD_ICONS: Record<MethodChoice, LucideIcon> = { ALL: LayoutGrid, ...REWARD_METHOD_ICONS }
 
 /**
  * The reward menu in front of the search box (Q34): an icon button that opens the five choices with their icons; the
@@ -165,76 +158,6 @@ export function feedFilters(filters: FeedFilters): Filter[] {
   const completions = wholeNumber(filters.minCompletions)
   if (completions !== null) result.push({ field: 'completions', op: 'gte', value: completions })
   return result
-}
-
-/** The reward on a card's picture: what passing earns (a survey: what answering earns). */
-function RewardTag({ card }: { card: FeedCard }) {
-  const { t } = useTranslation(APP)
-  return (
-    <span className="bg-primary text-primary-foreground inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold shadow-sm"
-      data-testid="feed-card-reward">
-      <Trophy aria-hidden className="size-3" />
-      {card.kind === 'SURVEY' ? t('feed.surveyReward', { amount: formatKudos(card.maxReward) })
-        : t('feed.upTo', { amount: formatKudos(card.maxReward) })}
-    </span>
-  )
-}
-
-/**
- * One card of the picture grid (Q34; U-10): the cover fills the whole card (a drawn placeholder without one), the
- * reward and the way it is paid sit on its top, the name, the sponsor and how many answered on a dark band at its
- * foot, so the feed reads as pictures.
- */
-function Card({ card }: { card: FeedCard }) {
-  const { t } = useTranslation(APP)
-  const sponsor = card.sponsorCompany ?? card.sponsorName
-  const MethodIcon = METHOD_ICONS[card.rewardMethod]
-  return (
-    <li>
-      <Link to={`/p/${card.publicationId}`} data-testid="feed-card"
-        className="group bg-card focus-visible:ring-ring/50 relative block aspect-[4/5] overflow-hidden border shadow-sm outline-none transition-shadow hover:shadow-md focus-visible:ring-[3px]">
-        {card.cover
-          ? <LazyImage fileId={card.cover} variant="w320" alt=""
-            className="absolute inset-0 size-full transition-transform duration-300 group-hover:scale-105" />
-          : <CoverPlaceholder seed={card.publicationId} className="absolute inset-0 size-full"
-            data-testid="feed-card-placeholder" />}
-        <span className="absolute inset-x-0 top-0 flex items-start justify-between gap-1 p-1.5">
-          <span className="flex flex-col items-start gap-1">
-            {card.rewardMethod !== 'PLATFORM' && (
-              <span className="bg-background/90 text-foreground inline-flex items-center gap-1 px-1.5 py-0.5 text-[11px] font-medium"
-                data-testid="feed-card-method" data-method={card.rewardMethod}>
-                <MethodIcon aria-hidden className="size-3" />
-                {t(`methods.${card.rewardMethod}Short`)}
-              </span>
-            )}
-            {card.kind === 'SURVEY' && (
-              <span className="bg-background/90 text-foreground px-1.5 py-0.5 text-[11px] font-medium"
-                data-testid="feed-card-survey">{t('feed.survey')}</span>
-            )}
-          </span>
-          <RewardTag card={card} />
-        </span>
-        <span className="from-qb-hero-from via-qb-hero-from/85 text-qb-hero-foreground absolute inset-x-0 bottom-0 flex flex-col gap-0.5 bg-linear-to-t to-transparent px-2 pt-8 pb-2">
-          <span className="line-clamp-2 text-sm leading-tight font-semibold" data-testid="feed-card-name">{card.name}</span>
-          <span className="text-qb-hero-muted flex min-w-0 items-center gap-2 text-[11px]">
-            {sponsor && (
-              <span className="flex min-w-0 items-center gap-1">
-                {card.sponsorAvatar && (
-                  <LazyImage fileId={card.sponsorAvatar} variant="w128" alt="" className="size-3.5 shrink-0 rounded-full" />
-                )}
-                <span className="truncate">{sponsor}</span>
-              </span>
-            )}
-            <span className="ml-auto flex shrink-0 items-center gap-0.5" data-testid="feed-card-completions">
-              <Users aria-hidden className="size-3" />
-              <span aria-hidden>{card.completions}</span>
-              <span className="sr-only">{t('feed.completions', { count: card.completions })}</span>
-            </span>
-          </span>
-        </span>
-      </Link>
-    </li>
-  )
 }
 
 /**
@@ -582,7 +505,7 @@ export function FeedPage({ name, country }: { name: string; country: string | nu
           <ul className="grid grid-cols-2 gap-3" data-testid="feed-list">
             {cards.map((card) => (card.video
               ? <VideoCard key={card.publicationId} card={card} player={card.video} />
-              : <Card key={card.publicationId} card={card} />))}
+              : <FeedCardView key={card.publicationId} card={card} href={`/p/${card.publicationId}`} />))}
           </ul>
           {feed.hasNextPage && (
             <Button variant="outline" disabled={feed.isFetchingNextPage} data-testid="feed-more"

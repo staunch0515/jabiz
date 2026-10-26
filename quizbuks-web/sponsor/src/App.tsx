@@ -44,6 +44,8 @@ import { REDEEM_PATH, RedeemPage } from './publishing/RedeemPage'
 import { MailServerPage } from './publishing/MailServerPage'
 import { MAIL_SERVER_PATH } from './publishing/paths'
 import { publicationIdOf, PUBLICATIONS_PATH } from './publishing/paths'
+import { PreviewPage } from './preview/PreviewPage'
+import { previewOf } from './preview/paths'
 import { OnboardingPage, useMySponsor } from './pages/OnboardingPage'
 import { MESSAGES_PATH } from './notices/api'
 import { MessagesPage } from './notices/MessagesPage'
@@ -134,7 +136,9 @@ function SignedIn({ path }: { path: string }) {
   const topUpId = topUpIdOf(path)
   const bankTopUpId = bankTopUpIdOf(path)
   const open = publicPage(path)
+  const preview = previewOf(path)
   if (open) page = open
+  else if (preview) page = <PreviewPage key={path} target={preview} />
   else if (path === DASHBOARD) page = <DashboardPage />
   else if (path === QUIZZES_PATH) page = <QuizListPage />
   else if (quizId) page = <QuizEditorPage key={quizId} quizId={quizId} />
