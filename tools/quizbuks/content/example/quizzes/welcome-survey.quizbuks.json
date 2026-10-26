@@ -1,0 +1,19 @@
+{
+ "format": "quizbuks.quiz",
+ "formatVersion": 1,
+ "exportedAt": "2026-10-26T00:00:00.000Z",
+ "quiz": { "kind": "SURVEY", "title": "Welcome to QuizBuks", "intro": "Three quick questions about how you found us. Every complete answer is rewarded.", "timeLimitSec": null, "cover": null },
+ "materials": [],
+ "questions": [
+  { "stem": "How did you hear about QuizBuks?", "image": null, "points": 1, "selection": "SINGLE",
+   "options": [ { "text": "A friend", "image": null, "correct": false }, { "text": "Social media", "image": null, "correct": false },
+    { "text": "A shop or brand", "image": null, "correct": false }, { "text": "Somewhere else", "image": null, "correct": false } ] },
+  { "stem": "Which topics would you like quizzes about?", "image": null, "points": 1, "selection": "MULTIPLE",
+   "options": [ { "text": "Food and drink", "image": null, "correct": false }, { "text": "Travel", "image": null, "correct": false },
+    { "text": "Technology", "image": null, "correct": false }, { "text": "Culture and history", "image": null, "correct": false } ] },
+  { "stem": "How often would you like new quizzes?", "image": null, "points": 1, "selection": "SINGLE",
+   "options": [ { "text": "Every day", "image": null, "correct": false }, { "text": "A few times a week", "image": null, "correct": false },
+    { "text": "Once a week", "image": null, "correct": false } ] }
+ ],
+ "files": {}
+}

@@ -54,19 +54,36 @@ export function isPhone(win) {
   }
 }
 
-/**
- * The window features of the phone-sized window the taker sign-up opens on a desktop. No `noopener`: with it
- * `window.open` returns null even when the window opened, which would make the blocked-popup fallback fire too.
- */
-export const PHONE_WINDOW = 'popup=yes,width=390,height=844,resizable=yes,scrollbars=yes'
+/** The phone-sized window's size: a phone's 390 × 844 widened by a fifth (Q34), so the app's bars fit on one line. */
+export const PHONE_WIDTH = 468
+export const PHONE_HEIGHT = 844
 
 /**
- * Opens a sign-up: a taker on a desktop gets a separate phone-sized window (a new tab when the browser blocks it),
- * a taker on a phone goes straight there, a merchant always gets a new tab.
+ * The window features of the phone-sized window a taker opens on a desktop: centred on the screen and never taller
+ * than it. No `noopener`: with it `window.open` returns null even when the window opened, which would make the
+ * blocked-popup fallback fire too. Browsers always show a popup's address bar (read-only); no feature hides it.
+ */
+export function phoneWindow(win) {
+  const screen = win.screen ?? {}
+  const availWidth = Number(screen.availWidth) || PHONE_WIDTH
+  const availHeight = Number(screen.availHeight) || PHONE_HEIGHT
+  const width = Math.min(PHONE_WIDTH, availWidth)
+  const height = Math.min(PHONE_HEIGHT, availHeight - 40)
+  // A screen left of or above the primary one has a negative origin, a valid position: clamp to the screen's own.
+  const originLeft = Number(screen.availLeft) || 0
+  const originTop = Number(screen.availTop) || 0
+  const left = Math.max(originLeft, Math.round(originLeft + (availWidth - width) / 2))
+  const top = Math.max(originTop, Math.round(originTop + (availHeight - height) / 2))
+  return `popup=yes,width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes`
+}
+
+/**
+ * Opens the app: a taker on a desktop gets a separate phone-sized window (a new tab when the browser blocks it), a
+ * taker on a phone goes straight there, a merchant always gets a new tab. Used by the sign-up and sign-in links.
  */
 export function openSignUp(kind, href, win) {
   if (kind === 'taker' && !isPhone(win)) {
-    const opened = win.open(href, 'quizbuks-taker', PHONE_WINDOW)
+    const opened = win.open(href, 'quizbuks-taker', phoneWindow(win))
     if (!opened) win.open(href, '_blank', 'noopener')
     return
   }

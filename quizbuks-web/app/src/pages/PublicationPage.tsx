@@ -1,48 +1,22 @@
-import { formatDateTime, i18n, useAuth } from '@jabiz/client'
-import {
-  Alert,
-  AlertDescription,
-  Button,
-  DescriptionList,
-  MarkdownView,
-  PageState,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@jabiz/ui'
+import { i18n, useAuth } from '@jabiz/client'
+import { Alert, AlertDescription, Button, PageState } from '@jabiz/ui'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft, MailCheck, MailWarning, Play } from 'lucide-react'
+import { ArrowLeft, MailWarning, Play } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
 import { playProblemText } from '../play/busy'
 import { useStartAttempt } from '../play/useStartAttempt'
-import { FileImage } from '../qb/FileImage'
-import { formatKudos } from '../qb/kudos'
 import { QB } from '../qb/messages'
-import { readPublication, readTiers, recordView, type PublicationView, type Tier } from '../qb/play'
+import { readPublication, readTiers, recordView, type PublicationView } from '../qb/play'
 import { problemText } from '../qb/problems'
 import { Link } from '../qb/router'
-import { Materials } from './Materials'
+import { PublicationContent, useDuration } from '../qb/view/PublicationContent'
 
 /** Whole minutes from now until a time, at least 0 (by the device's clock: a hint only). */
 export function minutesUntil(time: string | null, now: number = Date.now()): number {
   const end = time ? Date.parse(time) : NaN
   return Number.isFinite(end) ? Math.max(0, Math.ceil((end - now) / 60_000)) : 0
-}
-
-/** The time limit as people read it: minutes, with seconds when not whole. */
-export function useDuration() {
-  const { t } = useTranslation(APP)
-  return (seconds: number) => {
-    const minutes = Math.floor(seconds / 60)
-    const rest = seconds % 60
-    if (minutes === 0) return t('detail.seconds', { count: rest })
-    return rest === 0 ? t('detail.minutes', { count: minutes }) : t('detail.minutesSeconds', { minutes, seconds: rest })
-  }
 }
 
 /** What the caller can do: start, continue the attempt in progress, see their result, or nothing now. */
@@ -108,36 +82,6 @@ function Action({ publication }: { publication: PublicationView }) {
   )
 }
 
-function Tiers({ tiers }: { tiers: Tier[] }) {
-  const { t } = useTranslation(APP)
-  if (tiers.length === 0) return null
-  return (
-    <section aria-labelledby="tiers-title" className="flex flex-col gap-2">
-      <h2 id="tiers-title" className="text-lg font-semibold">{t('detail.tiers')}</h2>
-      <Table data-testid="detail-tiers">
-        <TableHeader>
-          <TableRow>
-            <TableHead scope="col">{t('detail.score')}</TableHead>
-            <TableHead scope="col" className="text-right">{t('detail.reward')}</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {tiers.map((tier) => (
-            <TableRow key={tier.seq}>
-              <TableCell>
-                {tier.fromScore === tier.toScore
-                  ? t('detail.points', { count: tier.fromScore })
-                  : t('detail.pointRange', { from: tier.fromScore, to: tier.toScore })}
-              </TableCell>
-              <TableCell className="text-right font-medium">{formatKudos(tier.reward)}</TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </section>
-  )
-}
-
 /**
  * A publication's page (U-20 – U-23; templates `qb.app.publication` and `qb.app.publication-tiers`): the materials
  * under the title, the introduction, the facts and reward tiers, the completions, and the big start button. Opening
@@ -147,7 +91,6 @@ export function PublicationPage({ publicationId, country }: { publicationId: str
   const { t } = useTranslation(APP)
   const { t: tQb } = useTranslation(QB)
   const { emailVerified } = useAuth()
-  const duration = useDuration()
   const [at] = useState(() => new Date().toISOString())
   const request = { publicationId, at, country }
   const publication = useQuery({ queryKey: ['qb', 'publication', request, i18n.language],
@@ -183,98 +126,13 @@ export function PublicationPage({ publicationId, country }: { publicationId: str
       action={<Button asChild variant="outline"><Link to="/">{t('detail.backHome')}</Link></Button>}
       data-testid="detail-not-found" />
   }
-  const sponsor = p.sponsorCompany ?? p.sponsorName
-  const survey = p.kind === 'SURVEY'
   return (
-    <article className="flex flex-col gap-5" aria-labelledby="detail-title" data-testid="detail">
+    <article className="flex flex-col gap-3" aria-labelledby="detail-title" data-testid="detail">
       <Link to="/" className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 self-start text-sm">
         <ArrowLeft aria-hidden className="size-4" />
         {t('detail.back')}
       </Link>
-      {p.cover && <FileImage fileId={p.cover} variant="w640" alt="" className="aspect-video w-full rounded-lg" />}
-      <header className="flex flex-col gap-1">
-        <h1 id="detail-title" className="text-xl font-semibold" data-testid="detail-name">{p.name}</h1>
-        {p.quizTitle && p.quizTitle !== p.name && <p className="text-muted-foreground">{p.quizTitle}</p>}
-        {sponsor && (
-          <p className="flex items-center gap-2 text-sm" data-testid="detail-sponsor">
-            {p.sponsorAvatar && <FileImage fileId={p.sponsorAvatar} variant="w128" alt=""
-              className="size-6 rounded-full" />}
-            <span>{t('detail.by', { sponsor })}</span>
-          </p>
-        )}
-      </header>
-      {p.audience === 'INVITED' && (
-        <p className="text-muted-foreground flex items-center gap-2 text-sm" data-testid="detail-invited">
-          <MailCheck aria-hidden className="size-4" />
-          {t('detail.invitedOnly')}
-        </p>
-      )}
-      <Materials materials={p.materials} />
-      {p.intro && (
-        <section aria-labelledby="intro-title" className="flex flex-col gap-2">
-          <h2 id="intro-title" className="text-lg font-semibold">{t('detail.intro')}</h2>
-          <MarkdownView text={p.intro} />
-        </section>
-      )}
-      <section aria-labelledby="facts-title" className="flex flex-col gap-2">
-        <h2 id="facts-title" className="text-lg font-semibold">{t('detail.facts')}</h2>
-        {/* A survey (Q12) has no score: one reward for answering every question. */}
-        <DescriptionList data-testid="detail-facts" items={survey ? [
-          { key: 'kind', label: t('detail.kind'), value: t('detail.survey') },
-          { key: 'questions', label: t('detail.questions'), value: p.questionCount },
-          { key: 'timeLimit', label: t('detail.timeLimit'), value: duration(p.timeLimitSec) },
-          { key: 'maxReward', label: t('detail.surveyReward'), value: formatKudos(p.maxReward) },
-          { key: 'method', label: t('detail.method'),
-            value: <span data-testid="detail-method" data-method={p.rewardMethod}>{t(`methods.${p.rewardMethod}`)}</span> },
-          { key: 'endAt', label: t('detail.endAt'), value: formatDateTime(p.endAt) },
-        ] : [
-          { key: 'questions', label: t('detail.questions'), value: p.questionCount },
-          { key: 'fullScore', label: t('detail.fullScore'), value: p.fullScore },
-          { key: 'passScore', label: t('detail.passScore'), value: p.passScore },
-          { key: 'timeLimit', label: t('detail.timeLimit'), value: duration(p.timeLimitSec) },
-          { key: 'maxReward', label: p.rewardMethod === 'OFFLINE_REDEEM' || p.rewardMethod === 'DIGITAL_PRIZE'
-            ? t('detail.prizeValue') : t('detail.maxReward'),
-            value: formatKudos(p.maxReward) },
-          { key: 'method', label: t('detail.method'),
-            value: <span data-testid="detail-method" data-method={p.rewardMethod}>{t(`methods.${p.rewardMethod}`)}</span> },
-          { key: 'endAt', label: t('detail.endAt'), value: formatDateTime(p.endAt) },
-        ]} />
-        {survey && <p className="text-muted-foreground text-sm" data-testid="detail-survey">{t('detail.surveyHint')}</p>}
-        {/* Q22: what the sponsor does after a pass, in their words for a prize. */}
-        {p.rewardMethod !== 'PLATFORM' && (
-          <Alert data-testid="detail-method-note" data-method={p.rewardMethod}>
-            <AlertDescription className="flex flex-col gap-1">
-              <span>{t(`methods.${p.rewardMethod}Hint`)}</span>
-              {p.rewardMethod === 'OFFLINE_REDEEM' && p.redeemDescription && (
-                <span className="whitespace-pre-line font-medium" data-testid="detail-prize">{p.redeemDescription}</span>
-              )}
-              {p.rewardMethod === 'DIGITAL_PRIZE' && p.digitalDescription && (
-                <span className="whitespace-pre-line font-medium" data-testid="detail-prize">{p.digitalDescription}</span>
-              )}
-            </AlertDescription>
-          </Alert>
-        )}
-      </section>
-      {!survey && <Tiers tiers={tiers.data ?? []} />}
-      <section aria-labelledby="stats-title" className="flex flex-col gap-2">
-        <h2 id="stats-title" className="text-lg font-semibold">{t('detail.completions')}</h2>
-        <DescriptionList layout="vertical" columns={2} data-testid="detail-stats" items={[
-          { key: 'last1h', label: t('detail.last1h'), value: p.last1h },
-          { key: 'last24h', label: t('detail.last24h'), value: p.last24h },
-          { key: 'last7d', label: t('detail.last7d'), value: p.last7d },
-          { key: 'last30d', label: t('detail.last30d'), value: p.last30d },
-          { key: 'total', label: t('detail.total'), value: p.completions },
-        ]} />
-        {p.statsAt && (
-          <p className="text-muted-foreground text-xs">{t('detail.statsAt', { time: formatDateTime(p.statsAt) })}</p>
-        )}
-      </section>
-      {p.sponsorIntro && (
-        <section aria-labelledby="sponsor-title" className="flex flex-col gap-2">
-          <h2 id="sponsor-title" className="text-lg font-semibold">{t('detail.aboutSponsor')}</h2>
-          <p className="text-sm whitespace-pre-line">{p.sponsorIntro}</p>
-        </section>
-      )}
+      <PublicationContent publication={p} tiers={tiers.data ?? []} />
       <div className="bg-background sticky bottom-20 -mx-4 border-t px-4 py-3">
         <Action publication={p} />
       </div>

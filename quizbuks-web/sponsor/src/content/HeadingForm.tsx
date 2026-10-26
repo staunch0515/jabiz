@@ -4,6 +4,7 @@ import { CircleCheck } from 'lucide-react'
 import { useId, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { SPONSOR } from '../messages'
+import { ShownAt } from './ShownAt'
 import { fieldProblem } from '../qb/problems'
 import { saveQuiz, type Quiz } from './api'
 import { FileField, formProblem, MarkdownField, ProblemList, textOrNull, useEditing, wholeOrNull } from './editing'
@@ -71,11 +72,18 @@ export function HeadingForm({ quiz }: { quiz: Quiz }) {
           aria-describedby={problem('title') ? `${id}-title-error` : undefined}
           data-testid="heading-title" onChange={(event) => setTitle(event.target.value)} />
         {problem('title') && <p id={`${id}-title-error`} className="text-destructive text-sm">{problem('title')}</p>}
+        <ShownAt field="quizTitle" />
       </div>
-      <MarkdownField label={t('editor.intro')} value={intro} onChange={setIntro} maxLength={LIMITS.intro}
-        error={problem('intro')} testId="heading-intro" />
-      <FileField kind="image" label={t('editor.cover')} uploadLabel={cover ? t('editor.replaceCover') : t('editor.uploadCover')}
-        value={cover} onChange={setCover} error={problem('cover')} testId="heading-cover" />
+      <div className="flex flex-col gap-2">
+        <MarkdownField label={t('editor.intro')} value={intro} onChange={setIntro} maxLength={LIMITS.intro}
+          error={problem('intro')} testId="heading-intro" />
+        <ShownAt field="intro" />
+      </div>
+      <div className="flex flex-col gap-2">
+        <FileField kind="image" label={t('editor.cover')} uploadLabel={cover ? t('editor.replaceCover') : t('editor.uploadCover')}
+          value={cover} onChange={setCover} error={problem('cover')} testId="heading-cover" />
+        <ShownAt field="cover" />
+      </div>
       <div className="flex flex-col gap-2">
         <Label htmlFor={`${id}-time`}>{t('editor.timeLimit')}</Label>
         <Input id={`${id}-time`} type="number" inputMode="numeric" className="w-40" value={timeLimit}

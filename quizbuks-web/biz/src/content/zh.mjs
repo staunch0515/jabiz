@@ -4,6 +4,7 @@ export const zh = {
   menu: '菜单',
   navLabel: '站点',
   languageLabel: '语言',
+  signIn: { label: '登录', taker: '答题者登录', sponsor: '商户登录' },
   nav: { home: '首页', merchants: '商户', takers: '答题人', surveys: '问卷调查', pricing: '价格', contact: '联系我们' },
   cta: { taker: '开始答题', sponsor: '商户注册', takerLong: '开始答题 — 免费', sponsorLong: '注册你的店铺' },
   meta: {
@@ -215,7 +216,7 @@ export const zh = {
   },
   footer: {
     tagline: '为本地商家而生的问卷、调查与奖励，支持英文、中文与日文。',
-    product: '产品', open: '打开', app: '答题人 App', console: '商户后台', legal: '法律',
+    product: '产品', open: '打开', legal: '法律',
     terms: '答题人条款', sponsorTerms: '商户条款', privacy: '隐私', rights: '保留所有权利。',
   },
 }

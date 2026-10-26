@@ -94,6 +94,30 @@ test('the taker button opens a phone-sized window on a desktop, the merchant but
   await context.close()
 })
 
+test('the header signs a taker in through the phone-sized window and a merchant in a new tab (Q34)', async ({
+  browser,
+}) => {
+  const context = await browser.newContext({ locale: 'en-US', viewport: { width: 1366, height: 800 } })
+  const page = await context.newPage()
+  await page.goto('/biz/')
+  const signIn = page.getByRole('group', { name: 'Sign in' })
+  const [phone] = await Promise.all([
+    context.waitForEvent('page'),
+    signIn.getByRole('link', { name: 'Taker sign-in' }).click(),
+  ])
+  await phone.waitForLoadState()
+  expect(new URL(phone.url()).pathname).toBe('/taker/login')
+  expect(await phone.evaluate(() => window.name)).toBe('quizbuks-taker')
+  await phone.close()
+  const [tab] = await Promise.all([
+    context.waitForEvent('page'),
+    signIn.getByRole('link', { name: 'Merchant sign-in' }).click(),
+  ])
+  await tab.waitForLoadState()
+  expect(new URL(tab.url()).pathname).toBe('/sponsor/login')
+  await context.close()
+})
+
 test('on a phone the taker button navigates in place', async ({ browser }) => {
   const context = await browser.newContext({ locale: 'en-US', viewport: { width: 390, height: 844 }, hasTouch: true,
     isMobile: true })

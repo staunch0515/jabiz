@@ -61,7 +61,20 @@
   --qb-ink: #d1fae5;
 }
 
+/*
+ * Square corners (Q34): every radius step of the theme is zero, so the platform's components (cards, buttons, inputs,
+ * dialogs) and the pages' own `rounded-*` lose their corners alike; `rounded-full` (avatars, badges, switches) keeps
+ * its circle. Only the theme's steps change, so the platform's `--radius` and its other users stay as they are.
+ */
 @theme inline {
+  --radius-xs: 0px;
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
+  --radius-2xl: 0px;
+  --radius-3xl: 0px;
+  --radius-4xl: 0px;
   --color-qb-hero-from: var(--qb-hero-from);
   --color-qb-hero-to: var(--qb-hero-to);
   --color-qb-hero-foreground: var(--qb-hero-foreground);
@@ -71,3 +84,33 @@
   --color-qb-sky: var(--qb-sky);
   --color-qb-ink: var(--qb-ink);
 }
+
+/*
+ * Labels apart from their values (Q34b): in the platform's description lists (a publication's summary, its dates, a
+ * payout's details) the label column has the muted background and each value the card's, so a label never reads as
+ * part of the value next to it; the same for the title bar of a card with a header. Tokens only, both appearances.
+ */
+[data-slot='description-list'] > [data-slot='description-item'] {
+  padding: 0;
+  gap: 0;
+}
+[data-slot='description-list'] > [data-slot='description-item'] > dt {
+  background: var(--muted);
+  color: var(--foreground);
+  padding: 0.5rem 0.75rem;
+}
+[data-slot='description-list'] > [data-slot='description-item'] > dd {
+  background: var(--card);
+  padding: 0.5rem 0.75rem;
+}
+/* Not the platform's sign-in card (AuthFrame, a card straight in <main>): its heading is the product's name. */
+[data-slot='card']:not(main > [data-slot='card']):has(> [data-slot='card-header']) {
+  padding-top: 0;
+}
+[data-slot='card']:not(main > [data-slot='card']) > [data-slot='card-header'] {
+  background: var(--muted);
+  border-bottom: 1px solid var(--border);
+  padding-top: 0.75rem;
+  padding-bottom: 0.75rem;
+}
+

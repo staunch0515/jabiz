@@ -60,6 +60,8 @@ jobs:
         working-directory: frontend
       - name: The shared folder is the same in both SPAs
         run: diff -r quizbuks-web/app/src/qb quizbuks-web/sponsor/src/qb
+      - name: The content tool (tools/quizbuks/content, Q36)
+        run: node --test tools/quizbuks/content/lib.test.mjs
       - name: App
         working-directory: quizbuks-web/app
         run: |

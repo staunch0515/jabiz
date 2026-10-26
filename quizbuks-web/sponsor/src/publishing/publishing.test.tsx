@@ -27,6 +27,11 @@ const DRAFT = {
   passScore: 2, budgetCap: null, maxWinners: null, fullScore: 2, maxReward: null, maxSpend: null, tierCount: 0,
   status: 'DRAFT', rejectReason: null, rejectCode: null, revision: 3, editedAt: '2026-10-14T01:00:00Z',
 }
+const SNAPSHOT = { title: 'Coffee basics', intro: 'Two **easy** questions about beans.', cover: null, timeLimitSec: 300,
+  materials: [{ no: 1, kind: 'ARTICLE', title: 'Bean guide', description: 'Arabica and robusta', body: 'Arabica is **sweet**.',
+    url: null, pdf: null, audio: null, images: [] }],
+  questions: [{ no: 1, stem: 'Which bean is sweeter?', image: null, points: 2,
+    options: [{ no: 1, text: 'Arabica', image: null, correct: true }, { no: 2, text: 'Robusta', image: null, correct: false }] }] }
 const VERSIONS = [{ versionId: 'v1', versionNo: 1, label: 'v1.0', title: 'Coffee basics', questionCount: 2,
   fullScore: 2, versionedAt: '2026-10-13T00:00:00Z', contentHash: 'h' }]
 const ROW = {
@@ -172,6 +177,10 @@ function server(options: Server = {}) {
         if ((body as { params?: { q?: string } } | null)?.params?.q) await options.quizSearch
         return json(200, { items: [{ quizId: 'q1', title: 'Coffee basics', versionLabel: 'v1.0', latestVersionNo: 1,
           status: 'VERSIONED' }], offset: 0, limit: 20, total: 1 })
+      case '/api/queries/qb.sponsor.quiz-version':
+        return json(200, { items: [{ versionId: 'v1', versionNo: 1, label: 'v1.0', title: 'Coffee basics',
+          questionCount: 1, quizId: 'q1', timeLimitSec: 300, materialCount: 1, content: JSON.stringify(SNAPSHOT) }],
+          offset: 0, limit: 1 })
       case '/api/queries/qb.sponsor.quiz-versions':
         return json(200, { items: options.versions ?? VERSIONS, offset: 0, limit: 100 })
       default:
@@ -216,6 +225,75 @@ describe('the publication list', () => {
     await userEvent.type(screen.getByTestId('publication-search'), 'cof')
     await waitFor(() => expect(posted.some((p) => p.path === '/api/queries/qb.sponsor.publications'
       && (p.body.params as Record<string, unknown>)?.q === 'cof')).toBe(true))
+  })
+})
+
+describe('the list views (Q34b)', () => {
+  it('shows the publications as cards with their quiz\'s cover, and as the table when asked, remembered', async () => {
+    window.localStorage.removeItem('qb.sponsor.view.publications')
+    server()
+    window.history.replaceState(null, '', '/publications')
+    const { unmount } = render(<App />)
+    const cards = await screen.findByTestId('publication-cards')
+    const card = within(cards).getByTestId('publication-row')
+    // The whole card leads to the publication through its name.
+    expect(within(card).getByRole('link', { name: 'Coffee week' })).toHaveAttribute('href', '/publications/p1')
+    expect(screen.queryByRole('table')).toBeNull()
+    await userEvent.click(screen.getByRole('radio', { name: 'Table' }))
+    expect(await screen.findByRole('table')).toBeInTheDocument()
+    expect(window.localStorage.getItem('qb.sponsor.view.publications')).toBe('table')
+    unmount()
+    render(<App />)
+    expect(await screen.findByRole('table')).toBeInTheDocument()
+    window.localStorage.removeItem('qb.sponsor.view.publications')
+  })
+})
+
+describe('the version a publication shows (Q34b)', () => {
+  it('names it, and says when the quiz has a newer one this publication does not show', async () => {
+    server({ publication: { ...DRAFT, status: 'LIVE' }, versions: [
+      { versionId: 'v2', versionNo: 2, label: 'v2.0', title: 'Coffee basics', questionCount: 2, fullScore: 2,
+        versionedAt: '2026-10-20T00:00:00Z', contentHash: 'b' },
+      { versionId: 'v1', versionNo: 1, label: 'v1.0', title: 'Coffee basics', questionCount: 2, fullScore: 2,
+        versionedAt: '2026-10-10T00:00:00Z', contentHash: 'a' }] })
+    window.history.replaceState(null, '', '/publications/p1')
+    render(<App />)
+    const notice = await screen.findByTestId('publication-version')
+    expect(notice).toHaveTextContent('Takers see version v1.0 of the quiz')
+    expect(await within(notice).findByTestId('publication-version-newer')).toHaveTextContent('version v2.0')
+  })
+})
+
+describe('the preview (Q34b)', () => {
+  it('draws the card, the quiz page and the questions as takers see them, without the right answers', async () => {
+    server({ publication: { ...DRAFT, status: 'LIVE', rewardMethod: 'OFFLINE_REDEEM', redeemDescription: 'A free espresso' } })
+    window.history.replaceState(null, '', '/publications/p1')
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('preview-open'))
+    expect(window.location.pathname).toBe('/publications/p1/preview')
+    const frame = await screen.findByTestId('preview-frame')
+    // One page heading (the preview's); the publication's name is a heading under it.
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
+    expect(within(frame).getByRole('heading', { level: 2, name: 'Coffee week' })).toBeInTheDocument()
+    // The quiz page first: the taker app's own layout, from the version's snapshot and the sponsor's profile.
+    expect(within(frame).getByTestId('detail-quiz-title')).toHaveTextContent('Coffee basics')
+    expect(within(frame).getByTestId('detail-sponsor')).toHaveTextContent('Acme')
+    expect(within(frame).getByTestId('material-title')).toHaveTextContent('Bean guide')
+    expect(within(frame).getByTestId('detail-prize')).toHaveTextContent('A free espresso')
+    expect(within(frame).getByText('easy').tagName).toBe('STRONG')
+    expect(within(frame).getByTestId('preview-start')).toBeDisabled()
+    await expectAccessible()
+    // The home's card leads nowhere here.
+    await userEvent.click(screen.getByRole('radio', { name: 'Home card' }))
+    const card = within(screen.getByTestId('preview-frame')).getByTestId('feed-card')
+    expect(card.tagName).toBe('DIV')
+    expect(card).toHaveTextContent('Coffee week')
+    // The questions: the options, never which is right.
+    await userEvent.click(screen.getByRole('radio', { name: 'Questions' }))
+    const question = within(screen.getByTestId('preview-frame')).getByTestId('preview-question')
+    expect(question).toHaveTextContent('Which bean is sweeter?')
+    expect(within(question).getAllByTestId('preview-option').map((o) => o.textContent)).toEqual(['AArabica', 'BRobusta'])
+    expect(question).not.toHaveTextContent(/correct/i)
   })
 })
 

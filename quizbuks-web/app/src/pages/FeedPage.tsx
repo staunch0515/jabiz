@@ -3,9 +3,15 @@ import {
   Alert,
   AlertDescription,
   AlertTitle,
-  Badge,
   Button,
   Combobox,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
   Input,
   Label,
   PageState,
@@ -14,7 +20,6 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-  SegmentedControl,
   Sheet,
   SheetContent,
   SheetDescription,
@@ -22,17 +27,19 @@ import {
   SheetHeader,
   SheetTitle,
   Spinner,
+  Switch,
+  cn,
 } from '@jabiz/ui'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
-import { Banknote, Gift, HandCoins, Play, Search, SlidersHorizontal, Ticket, Trophy, Users } from 'lucide-react'
-import { useId, useState, type FormEvent } from 'react'
+import { Gift, HandCoins, LayoutGrid, Play, Search, SlidersHorizontal, type LucideIcon } from 'lucide-react'
+import { useEffect, useId, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
 import { playProblemText } from '../play/busy'
-import { LazyImage } from '../play/LazyImage'
-import { CoverPlaceholder, EmptyArt, QuizArt } from '../qb/Illustrations'
+import { EmptyArt, QuizArt } from '../qb/Illustrations'
 import { useStartAttempt } from '../play/useStartAttempt'
-import { VideoPlayer } from '../play/VideoPlayer'
+import { FeedCardView, REWARD_METHOD_ICONS } from '../qb/view/FeedCard'
+import { VideoCardView } from '../qb/view/VideoCard'
 import { readCountries } from '../qb/api'
 import { formatKudos } from '../qb/kudos'
 import { QB } from '../qb/messages'
@@ -67,21 +74,50 @@ function storeMethod(choice: MethodChoice) {
   }
 }
 
-/** The badge of a reward paid otherwise than in Kudos by QuizBuks (Q22); none for the platform's Kudos. */
-export function MethodBadge({ method, testId }: { method: RewardMethod; testId?: string }) {
+/** The icon of each choice of the reward menu (Q34): the menu's button shows the chosen one. */
+export const METHOD_ICONS: Record<MethodChoice, LucideIcon> = { ALL: LayoutGrid, ...REWARD_METHOD_ICONS }
+
+/**
+ * The reward menu in front of the search box (Q34): an icon button that opens the five choices with their icons; the
+ * button shows the chosen one's icon and says its name to assistive technology.
+ */
+function MethodMenu({ value, onChange }: { value: MethodChoice; onChange: (choice: MethodChoice) => void }) {
   const { t } = useTranslation(APP)
-  if (method === 'PLATFORM') return null
-  const Icon = method === 'SPONSOR_CASH' ? Banknote : method === 'DIGITAL_PRIZE' ? Ticket : Gift
+  const label = (choice: MethodChoice) => (choice === 'ALL' ? t('methods.all') : t(`methods.${choice}`))
+  const Icon = METHOD_ICONS[value]
   return (
-    <Badge variant="outline" className="shrink-0" data-testid={testId ?? 'method-badge'} data-method={method}>
-      <Icon aria-hidden className="size-3" />
-      {t(`methods.${method}`)}
-    </Badge>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant={value === 'ALL' ? 'outline' : 'secondary'} size="icon" className="shrink-0"
+          aria-label={t('methods.menu', { method: label(value) })} data-testid="feed-method" data-method={value}>
+          <Icon aria-hidden />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="min-w-56">
+        <DropdownMenuLabel>{t('methods.choose')}</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuRadioGroup value={value} onValueChange={(choice) => onChange(choice as MethodChoice)}>
+          {METHOD_CHOICES.map((choice) => {
+            const ItemIcon = METHOD_ICONS[choice]
+            return (
+              <DropdownMenuRadioItem key={choice} value={choice} data-testid={`feed-method-${choice}`}>
+                <ItemIcon aria-hidden className="text-muted-foreground" />
+                {label(choice)}
+              </DropdownMenuRadioItem>
+            )
+          })}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
 
 /** The advanced filters (U-13); empty texts are no filter. */
 export interface FeedFilters {
+  /** The order (Q34: in the advanced filters, so that the search stays on one line). */
+  sort: FeedSort
+  /** Also the publications the taker answered (Q34: left out by default). */
+  includeAnswered: boolean
   sponsor: string
   sponsorCountry: string | null
   rewardMin: string
@@ -89,8 +125,13 @@ export interface FeedFilters {
   minCompletions: string
 }
 
-export const NO_FILTERS: FeedFilters = { sponsor: '', sponsorCountry: null, rewardMin: '', rewardMax: '',
+export const NO_FILTERS: FeedFilters = { sort: 'newest', includeAnswered: false, sponsor: '', sponsorCountry: null, rewardMin: '', rewardMax: '',
   minCompletions: '' }
+
+/** How many of the advanced filters differ from none (the button's count): the order and the answered count too. */
+export function activeFilterCount(filters: FeedFilters): number {
+  return feedFilters(filters).length + (filters.sort !== NO_FILTERS.sort ? 1 : 0) + (filters.includeAnswered ? 1 : 0)
+}
 
 /** A pattern of the template's LIKE that finds the text as written: % _ and \ match themselves. */
 export function containsPattern(text: string): string {
@@ -120,55 +161,6 @@ export function feedFilters(filters: FeedFilters): Filter[] {
 }
 
 /**
- * One card of the cover grid (Q32; U-10: six on a phone's screen): the cover (a drawn placeholder without one) with
- * the reward on it, the name, the sponsor and how many answered.
- */
-function Card({ card }: { card: FeedCard }) {
-  const { t } = useTranslation(APP)
-  const sponsor = card.sponsorCompany ?? card.sponsorName
-  return (
-    <li>
-      <Link to={`/p/${card.publicationId}`} data-testid="feed-card"
-        className="bg-card focus-visible:ring-ring/50 flex h-full flex-col overflow-hidden rounded-xl border shadow-sm outline-none transition-shadow hover:shadow-md focus-visible:ring-[3px]">
-        <span className="relative block">
-          {card.cover
-            ? <LazyImage fileId={card.cover} variant="w320" alt="" className="h-20 w-full" />
-            : <CoverPlaceholder seed={card.publicationId} className="h-20 w-full" data-testid="feed-card-placeholder" />}
-          <span className="bg-primary text-primary-foreground absolute top-2 right-2 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold shadow-sm">
-            <Trophy aria-hidden className="size-3" />
-            {card.kind === 'SURVEY' ? t('feed.surveyReward', { amount: formatKudos(card.maxReward) })
-              : t('feed.upTo', { amount: formatKudos(card.maxReward) })}
-          </span>
-        </span>
-        <span className="flex min-w-0 flex-1 flex-col gap-0.5 p-2">
-          <span className="flex min-w-0 flex-wrap items-center gap-1.5">
-            <span className="line-clamp-2 text-sm leading-tight font-medium" data-testid="feed-card-name">{card.name}</span>
-            {card.kind === 'SURVEY' && (
-              <Badge variant="secondary" className="shrink-0" data-testid="feed-card-survey">{t('feed.survey')}</Badge>
-            )}
-            <MethodBadge method={card.rewardMethod} testId="feed-card-method" />
-          </span>
-          {sponsor && (
-            <span className="text-muted-foreground flex items-center gap-1.5 truncate text-xs">
-              {card.sponsorAvatar
-                ? <LazyImage fileId={card.sponsorAvatar} variant="w128" alt="" className="size-4 shrink-0 rounded-full" />
-                : <span aria-hidden className="bg-accent text-accent-foreground inline-flex size-4 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold">
-                  {sponsor.slice(0, 1).toUpperCase()}
-                </span>}
-              <span className="truncate">{sponsor}</span>
-            </span>
-          )}
-          <span className="text-muted-foreground mt-auto flex items-center gap-1 text-xs">
-            <Users aria-hidden className="size-3.5" />
-            {t('feed.completions', { count: card.completions })}
-          </span>
-        </span>
-      </Link>
-    </li>
-  )
-}
-
-/**
  * A card whose quiz is answered by watching a video (Q19): the video's own player (it plays when the taker presses its
  * button, never by itself), what answering earns, and the start. The name still leads to the publication's page.
  */
@@ -176,36 +168,23 @@ function VideoCard({ card, player }: { card: FeedCard; player: string }) {
   const { t } = useTranslation(APP)
   const { t: tQb } = useTranslation(QB)
   const start = useStartAttempt()
-  const hint = `feed-video-hint-${card.publicationId}`
   return (
-    <li className="bg-card col-span-2 flex flex-col gap-2 rounded-xl border p-2 shadow-sm" data-testid="feed-video-card">
-      <VideoPlayer player={player} title={t('feed.videoTitle', { name: card.name })} />
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex min-w-0 flex-col gap-0.5">
-          <Link to={`/p/${card.publicationId}`} className="truncate font-medium underline-offset-4 hover:underline"
-            data-testid="feed-card-name">
-            {card.name}
-          </Link>
-          <span id={hint} className="text-primary flex items-center gap-1 text-sm font-semibold"
-            data-testid="feed-video-reward">
-            <Trophy aria-hidden className="size-3.5" />
-            {card.kind === 'SURVEY' ? t('feed.videoSurveyReward', { amount: formatKudos(card.maxReward) })
-              : t('feed.videoReward', { amount: formatKudos(card.maxReward) })}
-          </span>
-        </div>
-        <Button disabled={start.isPending} aria-busy={start.isPending || undefined} aria-describedby={hint}
+    <VideoCardView card={card} player={player} href={`/p/${card.publicationId}`} action={
+      <div className="flex flex-col items-end gap-1">
+        <Button disabled={start.isPending} aria-busy={start.isPending || undefined}
+          aria-describedby={`feed-video-hint-${card.publicationId}`}
           data-testid="feed-video-start" onClick={() => start.mutate(card.publicationId)}>
           <Play aria-hidden />
           {t('detail.start')}
         </Button>
+        <p className="text-muted-foreground text-sm empty:hidden" role="status">{start.busy ? t('play.busy') : ''}</p>
+        {start.isError && (
+          <p className="text-destructive text-sm" role="alert" data-testid="feed-video-error">
+            {playProblemText(start.error) || tQb('failed')}
+          </p>
+        )}
       </div>
-      <p className="text-muted-foreground text-sm empty:hidden" role="status">{start.busy ? t('play.busy') : ''}</p>
-      {start.isError && (
-        <p className="text-destructive text-sm" role="alert" data-testid="feed-video-error">
-          {playProblemText(start.error) || tQb('failed')}
-        </p>
-      )}
-    </li>
+    } />
   )
 }
 
@@ -230,6 +209,27 @@ function FiltersForm({ value, onApply }: { value: FeedFilters; onApply: (filters
         <SheetDescription>{t('feed.filtersHint')}</SheetDescription>
       </SheetHeader>
       <div className="flex flex-col gap-4 px-4">
+        <div className="flex flex-col gap-2">
+          <Label htmlFor={`${id}-sort`}>{t('feed.sort')}</Label>
+          <Select value={draft.sort} onValueChange={(sort) => set({ sort: sort as FeedSort })}>
+            <SelectTrigger id={`${id}-sort`} className="w-full" data-testid="feed-sort">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {(Object.keys(FEED_SORTS) as FeedSort[]).map((key) => (
+                <SelectItem key={key} value={key}>{t(`feed.sorts.${key}`)}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          <Label htmlFor={`${id}-answered`} className="flex flex-col items-start gap-0.5">
+            <span>{t('feed.includeAnswered')}</span>
+            <span className="text-muted-foreground text-xs font-normal">{t('feed.includeAnsweredHint')}</span>
+          </Label>
+          <Switch id={`${id}-answered`} checked={draft.includeAnswered} data-testid="feed-filter-answered"
+            onCheckedChange={(checked) => set({ includeAnswered: checked })} />
+        </div>
         <div className="flex flex-col gap-2">
           <Label htmlFor={`${id}-sponsor`}>{t('feed.sponsor')}</Label>
           <Input id={`${id}-sponsor`} value={draft.sponsor} maxLength={100} data-testid="feed-filter-sponsor"
@@ -288,6 +288,80 @@ function FiltersSheet({ open, onOpenChange, value, onApply }: {
   )
 }
 
+/** How long the greeting stays before it folds away (Q34). */
+export const GREETING_MS = 2000
+/** How long the fold takes (the band's `duration-500`). */
+const FOLD_MS = 500
+const GREETED_KEY = 'qb.home.greeted'
+
+function greetedAlready(): boolean {
+  try {
+    return window.sessionStorage.getItem(GREETED_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+function rememberGreeted() {
+  try {
+    window.sessionStorage.setItem(GREETED_KEY, '1')
+  } catch {
+    // Blocked storage: the greeting comes again on the next visit of the home, which does no harm.
+  }
+}
+
+function reducedMotion(): boolean {
+  try {
+    return window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  } catch {
+    return false
+  }
+}
+
+/**
+ * The greeting band (Q34): shown once per session (a return to the home does not repeat it), for two seconds, then it
+ * folds away so the quizzes take the screen; without the motion when the taker asked for less. The page's heading
+ * stays for assistive technology after the band is gone.
+ */
+function Greeting({ name }: { name: string }) {
+  const { t } = useTranslation(APP)
+  const [shown, setShown] = useState(() => !greetedAlready())
+  const [folding, setFolding] = useState(false)
+  useEffect(() => {
+    if (!shown) return undefined
+    rememberGreeted()
+    const timer = window.setTimeout(() => {
+      if (reducedMotion()) setShown(false)
+      else setFolding(true)
+    }, GREETING_MS)
+    // Should the end of the fold never be told (no transitions, a hidden tab), the band goes all the same.
+    const fallback = window.setTimeout(() => setShown(false), GREETING_MS + FOLD_MS + 100)
+    return () => {
+      window.clearTimeout(timer)
+      window.clearTimeout(fallback)
+    }
+  }, [shown])
+  if (!shown) return <h1 id="home-title" className="sr-only">{t('home.greeting', { name })}</h1>
+  return (
+    <div className={cn('grid transition-[grid-template-rows,opacity,margin] duration-500 ease-out',
+      folding ? '-mb-4 grid-rows-[0fr] opacity-0' : 'grid-rows-[1fr] opacity-100')}
+      onTransitionEnd={(event) => {
+        if (folding && event.target === event.currentTarget && event.propertyName === 'grid-template-rows') setShown(false)
+      }} data-testid="home-hero" data-folding={folding || undefined}>
+      <div className="overflow-hidden">
+        <div className="from-qb-hero-from to-qb-hero-to text-qb-hero-foreground relative overflow-hidden bg-linear-to-br p-4 shadow-sm">
+          {/* The text column ends where the illustration begins (pr-32 ≥ its 128px), so words never sit on it. */}
+          <div className="relative z-10 flex flex-col gap-1 pr-32">
+            <h1 id="home-title" className="text-xl font-semibold">{t('home.greeting', { name })}</h1>
+            <p className="text-qb-hero-muted text-sm">{t('home.tagline')}</p>
+          </div>
+          <QuizArt className="absolute -right-3 -bottom-5 h-28 w-35 opacity-95" />
+        </div>
+      </div>
+    </div>
+  )
+}
+
 /**
  * Home: the publications the taker can answer now (U-10 – U-14; template `qb.app.feed`), newest first, searched by
  * name and title, sorted and filtered; more on request. The country is the profile's: without one (an unverified
@@ -301,10 +375,10 @@ export function FeedPage({ name, country }: { name: string; country: string | nu
   const [at] = useState(() => new Date().toISOString())
   const [text, setText] = useState('')
   const [q, setQ] = useState('')
-  const [sort, setSort] = useState<FeedSort>('newest')
   const [filters, setFilters] = useState<FeedFilters>(NO_FILTERS)
   const [filtersOpen, setFiltersOpen] = useState(false)
   const filterList = feedFilters(filters)
+  const active = activeFilterCount(filters)
   // Q22: narrowed to one way of paying the reward; remembered on this device.
   const [method, setMethod] = useState<MethodChoice>(storedMethod)
   const chooseMethod = (choice: MethodChoice) => {
@@ -318,9 +392,9 @@ export function FeedPage({ name, country }: { name: string; country: string | nu
   const openPrizes = prizes.data ?? []
 
   const feed = useInfiniteQuery({
-    queryKey: ['qb', 'feed', at, country, q, sort, method, filterList, i18n.language],
-    queryFn: ({ pageParam }) => readFeed({ at, country, q, sort, method: method === 'ALL' ? null : method,
-      filters: filterList, offset: pageParam, limit: FEED_PAGE }),
+    queryKey: ['qb', 'feed', at, country, q, filters.sort, filters.includeAnswered, method, filterList, i18n.language],
+    queryFn: ({ pageParam }) => readFeed({ at, country, q, sort: filters.sort, method: method === 'ALL' ? null : method,
+      includeAnswered: filters.includeAnswered, filters: filterList, offset: pageParam, limit: FEED_PAGE }),
     initialPageParam: 0,
     getNextPageParam: (last) => (last.items.length < FEED_PAGE ? undefined : last.offset + FEED_PAGE),
   })
@@ -333,15 +407,7 @@ export function FeedPage({ name, country }: { name: string; country: string | nu
 
   return (
     <section className="flex flex-col gap-4" aria-labelledby="home-title" data-testid="home">
-      <div className="from-qb-hero-from to-qb-hero-to text-qb-hero-foreground relative overflow-hidden rounded-2xl bg-linear-to-br p-4 shadow-sm"
-        data-testid="home-hero">
-        {/* The text column ends where the illustration begins (pr-32 ≥ its 128px), so words never sit on it. */}
-        <div className="relative z-10 flex flex-col gap-1 pr-32">
-          <h1 id="home-title" className="text-xl font-semibold">{t('home.greeting', { name })}</h1>
-          <p className="text-qb-hero-muted text-sm">{t('home.tagline')}</p>
-        </div>
-        <QuizArt className="absolute -right-3 -bottom-5 h-28 w-35 opacity-95" />
-      </div>
+      <Greeting name={name} />
       {openCash.length > 0 && (
         <Alert variant={openCash.some((r) => r.status === 'OVERDUE') ? 'warning' : 'default'} data-testid="home-cash">
           <HandCoins aria-hidden />
@@ -377,41 +443,26 @@ export function FeedPage({ name, country }: { name: string; country: string | nu
           </AlertDescription>
         </Alert>
       )}
-      <form role="search" onSubmit={search} className="flex gap-2">
+      {/* Q34: one line, the reward menu in front of the box, the advanced filters (with the order) behind the search. */}
+      <form role="search" onSubmit={search} className="flex items-center gap-2">
+        <MethodMenu value={method} onChange={chooseMethod} />
         <Label htmlFor={`${id}-q`} className="sr-only">{t('feed.search')}</Label>
         <Input id={`${id}-q`} type="search" value={text} maxLength={100} placeholder={t('feed.search')}
-          data-testid="feed-search" onChange={(event) => setText(event.target.value)} />
-        <Button type="submit" variant="outline" size="icon" aria-label={t('feed.searchButton')}
+          className="min-w-0 flex-1" data-testid="feed-search" onChange={(event) => setText(event.target.value)} />
+        <Button type="submit" size="icon" className="shrink-0" aria-label={t('feed.searchButton')}
           data-testid="feed-search-submit">
           <Search aria-hidden />
         </Button>
-      </form>
-      <div className="flex items-center gap-2">
-        <Label htmlFor={`${id}-sort`} className="sr-only">{t('feed.sort')}</Label>
-        <Select value={sort} onValueChange={(value) => setSort(value as FeedSort)}>
-          <SelectTrigger id={`${id}-sort`} className="flex-1" data-testid="feed-sort">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {(Object.keys(FEED_SORTS) as FeedSort[]).map((key) => (
-              <SelectItem key={key} value={key}>{t(`feed.sorts.${key}`)}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Button variant="outline" onClick={() => setFiltersOpen(true)} data-testid="feed-filters-open">
+        <Button type="button" variant={active > 0 ? 'secondary' : 'outline'} size="icon" className="relative shrink-0"
+          aria-label={active > 0 ? `${t('feed.filters')}, ${t('feed.activeFilters', { count: active })}` : t('feed.filters')}
+          onClick={() => setFiltersOpen(true)} data-testid="feed-filters-open">
           <SlidersHorizontal aria-hidden />
-          {t('feed.filters')}
-          {filterList.length > 0 && (
-            <Badge variant="secondary">
-              <span aria-hidden>{filterList.length}</span>
-              <span className="sr-only">{t('feed.activeFilters', { count: filterList.length })}</span>
-            </Badge>
+          {active > 0 && (
+            <span aria-hidden className="bg-primary text-primary-foreground absolute -top-1.5 -right-1.5 inline-flex size-4 items-center justify-center rounded-full text-[10px] font-semibold"
+              data-testid="feed-filters-count">{active}</span>
           )}
         </Button>
-      </div>
-      <SegmentedControl value={method} onChange={chooseMethod} aria-label={t('methods.choose')}
-        data-testid="feed-method" className="w-full" options={METHOD_CHOICES.map((choice) => ({
-          value: choice, label: choice === 'ALL' ? t('methods.all') : t(`methods.${choice}Short`) }))} />
+      </form>
       <FiltersSheet open={filtersOpen} onOpenChange={setFiltersOpen} value={filters} onApply={setFilters} />
       {feed.isPending ? (
         <PageState kind="loading" />
@@ -422,7 +473,18 @@ export function FeedPage({ name, country }: { name: string; country: string | nu
         <div className="flex flex-col items-center gap-2">
           <EmptyArt className="h-32 w-40" />
           <PageState kind="empty" title={t('home.title')} className="py-2"
-            description={q || filterList.length > 0 ? t('feed.noMatch') : t('home.empty')} data-testid="home-empty" />
+            description={q || active > 0 || method !== 'ALL' ? t('feed.noMatch') : t('home.empty')}
+            data-testid="home-empty" />
+          {/* Q34: the answered ones are left out by default; say so where nothing is left, and offer them. */}
+          {!filters.includeAnswered && (
+            <div className="flex flex-col items-center gap-2 text-center" data-testid="home-answered-hidden">
+              <p className="text-muted-foreground text-sm">{t('feed.answeredHidden')}</p>
+              <Button variant="outline" size="sm" data-testid="home-show-answered"
+                onClick={() => setFilters((current) => ({ ...current, includeAnswered: true }))}>
+                {t('feed.includeAnswered')}
+              </Button>
+            </div>
+          )}
         </div>
       ) : (
         <>
@@ -430,7 +492,7 @@ export function FeedPage({ name, country }: { name: string; country: string | nu
           <ul className="grid grid-cols-2 gap-3" data-testid="feed-list">
             {cards.map((card) => (card.video
               ? <VideoCard key={card.publicationId} card={card} player={card.video} />
-              : <Card key={card.publicationId} card={card} />))}
+              : <FeedCardView key={card.publicationId} card={card} href={`/p/${card.publicationId}`} />))}
           </ul>
           {feed.hasNextPage && (
             <Button variant="outline" disabled={feed.isFetchingNextPage} data-testid="feed-more"
