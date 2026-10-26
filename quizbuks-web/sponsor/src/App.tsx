@@ -15,7 +15,7 @@ import {
   StepUpProvider,
   ThemeToggle,
   Toaster,
-  type ShellMenuItem,
+  type ShellMenuGroup,
 } from '@jabiz/ui'
 import { QueryClientProvider, useQuery } from '@tanstack/react-query'
 import { CircleHelp, FileQuestion, LayoutDashboard, Megaphone, MessagesSquare, ReceiptText, Store, UserRound,
@@ -158,26 +158,37 @@ function SignedIn({ path }: { path: string }) {
   else if (path === ACCOUNT_PATH) page = <AccountPage />
   else page = <PageState kind="notFound" titleAs="h1" description={tQb('notFound')} />
 
-  const items: ShellMenuItem[] = [
-    { key: 'dashboard', label: t('nav.dashboard'), path: DASHBOARD, icon: LayoutDashboard },
-    { key: 'quizzes', label: t('nav.quizzes'), path: QUIZZES_PATH, icon: FileQuestion },
-    { key: 'publications', label: t('publishing.nav'), path: PUBLICATIONS_PATH, icon: Megaphone },
-    { key: 'cash', label: t('publishing.cash.nav'), path: CASH_REWARDS_PATH, icon: HandCoins },
-    { key: 'digital', label: t('publishing.digital.nav'), path: DIGITAL_PRIZES_PATH, icon: Ticket },
-    { key: 'redeem', label: t('publishing.redeem.nav'), path: REDEEM_PATH, icon: Gift },
-    { key: 'mailServer', label: t('publishing.mailServer.nav'), path: MAIL_SERVER_PATH, icon: Mail },
-    { key: 'onboarding', label: t('nav.onboarding'), path: ONBOARDING, icon: Store },
-    ...(kudos ? [{ key: 'wallet', label: t('wallet.nav'), path: WALLET_PATH, icon: Wallet }] : []),
-    { key: 'transactions', label: t('transactions.nav'), path: TRANSACTIONS_PATH, icon: ReceiptText },
-    { key: 'messages', label: t('notices.nav'), path: MESSAGES_PATH, icon: MessagesSquare },
-    { key: 'account', label: t('nav.account'), path: ACCOUNT_PATH, icon: UserRound },
-    { key: 'help', label: t('nav.help'), path: HELP, icon: CircleHelp },
+  // Q34b: the menu in sections by what they are for, with a rule between them (platform 16zi).
+  const groups: ShellMenuGroup[] = [
+    { key: 'overview', label: t('nav.groups.overview'), items: [
+      { key: 'dashboard', label: t('nav.dashboard'), path: DASHBOARD, icon: LayoutDashboard },
+    ] },
+    { key: 'content', label: t('nav.groups.content'), items: [
+      { key: 'quizzes', label: t('nav.quizzes'), path: QUIZZES_PATH, icon: FileQuestion },
+      { key: 'publications', label: t('publishing.nav'), path: PUBLICATIONS_PATH, icon: Megaphone },
+    ] },
+    { key: 'rewards', label: t('nav.groups.rewards'), items: [
+      { key: 'cash', label: t('publishing.cash.nav'), path: CASH_REWARDS_PATH, icon: HandCoins },
+      { key: 'digital', label: t('publishing.digital.nav'), path: DIGITAL_PRIZES_PATH, icon: Ticket },
+      { key: 'redeem', label: t('publishing.redeem.nav'), path: REDEEM_PATH, icon: Gift },
+    ] },
+    { key: 'money', label: t('nav.groups.money'), items: [
+      ...(kudos ? [{ key: 'wallet', label: t('wallet.nav'), path: WALLET_PATH, icon: Wallet }] : []),
+      { key: 'transactions', label: t('transactions.nav'), path: TRANSACTIONS_PATH, icon: ReceiptText },
+    ] },
+    { key: 'settings', label: t('nav.groups.settings'), items: [
+      { key: 'onboarding', label: t('nav.onboarding'), path: ONBOARDING, icon: Store },
+      { key: 'mailServer', label: t('publishing.mailServer.nav'), path: MAIL_SERVER_PATH, icon: Mail },
+      { key: 'messages', label: t('notices.nav'), path: MESSAGES_PATH, icon: MessagesSquare },
+      { key: 'account', label: t('nav.account'), path: ACCOUNT_PATH, icon: UserRound },
+      { key: 'help', label: t('nav.help'), path: HELP, icon: CircleHelp },
+    ] },
   ]
   const shell = (
     <AppShell
       brand={<Wordmark name={t('brand')} compact className="px-2 py-1" />}
       navigation={
-        <ShellNav label={t('nav.label')} items={items} isActive={(p) => path === p || path.startsWith(`${p}/`)}
+        <ShellNav label={t('nav.label')} groups={groups} isActive={(p) => path === p || path.startsWith(`${p}/`)}
           renderLink={(item, props) => (
             <a href={hrefOf(item.path)} onClick={(event) => {
               props.onClick()

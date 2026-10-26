@@ -47,7 +47,7 @@ const en = {
     optionImage: 'Picture of option {{letter}}',
   },
   nav: { label: 'Sponsor console', dashboard: 'Dashboard', quizzes: 'Quizzes', onboarding: 'Sponsor profile', account: 'Account',
-    help: 'Help' },
+    help: 'Help', groups: { overview: 'Overview', content: 'Content', rewards: 'Rewards', money: 'Money', settings: 'Settings' } },
   public: {
     signIn: 'Sign in',
     signUpTerms: 'You accept these when you apply as a sponsor:',
@@ -130,7 +130,8 @@ const zh: typeof en = {
     questionImage: '题目图片',
     optionImage: '选项 {{letter}} 的图片',
   },
-  nav: { label: '商家后台', dashboard: '概览', quizzes: 'Quiz', onboarding: '商家资料', account: '账户', help: '帮助' },
+  nav: { label: '商家后台', dashboard: '概览', quizzes: 'Quiz', onboarding: '商家资料', account: '账户', help: '帮助',
+    groups: { overview: '概览', content: '内容', rewards: '奖励', money: '资金', settings: '设置' } },
   public: {
     signIn: '登录',
     signUpTerms: '申请入驻时，您将同意以下文本：',
@@ -214,7 +215,7 @@ const ja: typeof en = {
     optionImage: '選択肢 {{letter}} の画像',
   },
   nav: { label: 'スポンサー管理画面', dashboard: 'ダッシュボード', quizzes: 'クイズ', onboarding: 'スポンサー情報', account: 'アカウント',
-    help: 'ヘルプ' },
+    help: 'ヘルプ', groups: { overview: '概要', content: 'コンテンツ', rewards: '報酬', money: '資金', settings: '設定' } },
   public: {
     signIn: 'ログイン',
     signUpTerms: 'スポンサー申請の際に、以下へ同意していただきます：',

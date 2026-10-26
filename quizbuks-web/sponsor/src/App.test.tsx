@@ -268,6 +268,14 @@ describe('a signed-in sponsor', () => {
     const links = screen.getAllByRole('link').map((link) => link.textContent)
     expect(links.indexOf('Digital prizes')).toBe(links.indexOf('Cash rewards') + 1)
     expect(screen.getByRole('link', { name: 'Digital prizes' })).toHaveAttribute('href', '/digital-prizes')
+    // Q34b: the menu in five sections by what they are for, with rules between them.
+    const nav = screen.getByRole('navigation', { name: 'Sponsor console' })
+    expect(within(nav).getAllByRole('group').map((g) => g.getAttribute('aria-labelledby') && within(g).getAllByRole('link')
+      .map((link) => link.textContent))).toEqual([
+      ['Dashboard'], ['Quizzes', 'Publications'], ['Cash rewards', 'Digital prizes', 'Prizes'],
+      ['Wallet', 'Transactions'], ['Sponsor profile', 'Mail server', 'Messages', 'Account', 'Help']])
+    expect(within(nav).getByRole('group', { name: 'Rewards' })).toBeInTheDocument()
+    expect(within(nav).getAllByTestId('menu-separator')).toHaveLength(4)
     await userEvent.click(screen.getByRole('link', { name: 'Sponsor profile' }))
     expect(window.location.pathname).toBe('/onboarding')
     expect(await screen.findByTestId('onboarding-submit')).toHaveTextContent('Save')
