@@ -34,7 +34,7 @@ const privacy = { kind: 'PRIVACY', versionId: 'p1', versionNo: 1, title: { en: '
  * The server as the console sees it (built with the base / in tests): its entry, no identity providers, and for a
  * signed-in sponsor their identity and onboarding. Records what was asked and posted.
  */
-function server(me?: Me) {
+function server(me?: Me, providers: unknown[] = []) {
   const asked: string[] = []
   const posted: { path: string; body: unknown }[] = []
   let consents = me?.consents ?? []
@@ -50,7 +50,7 @@ function server(me?: Me) {
       case '/api/auth/entries/sponsor':
         return json(200, ENTRY)
       case '/api/auth/oidc/providers':
-        return json(200, [])
+        return json(200, providers)
       case '/api/auth/me':
         return me ? json(200, { userId: 'u2', displayName: 'Sara', email: 'sara@example.com', roles: ['QB_SPONSOR'],
           permissions: ['qb.sponsor.me', 'qb.account.read'], emailVerified: true,
@@ -132,6 +132,14 @@ describe('a visitor', () => {
     expect(screen.getByTestId('wordmark')).toHaveTextContent('QuizBuks')
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('QuizBuks')
     await waitFor(() => expect(asked).toContain('/api/auth/oidc/providers?entry=sponsor'))
+    // Someone who answers quizzes learns how the same account becomes a sponsor's (Q37).
+    expect(screen.getByTestId('signin-taker-account')).toHaveTextContent('Sign up here with the same email address')
+  })
+
+  it('signs in and signs up with Google when the server offers it to the console (Q37)', async () => {
+    server(undefined, [{ id: 'google', kind: 'google', label: 'Google' }])
+    render(<App />)
+    expect(await screen.findByTestId('oidc-google')).toHaveTextContent('Google')
   })
 
   it('opens the pages of mailed links without signing in', async () => {

@@ -1,13 +1,15 @@
-# Signing in to the app with Google (docs/quizbuks/plans/QP-pages.md section 2, A-2; platform decision D39), switched
-# on by the deployment with the Spring profile "google" (SPRING_PROFILES_ACTIVE=google): a deployment without a
-# Google client starts without it. Register an OAuth client (web application) in the Google Cloud console with the
-# app's callback, https://<host>/taker/login/oidc (the app's front end is at /taker/, Q30), as QB_OIDC_REDIRECT_APP. The client id and secret come from the
-# environment only.
+# Signing in with Google (docs/quizbuks/plans/QP-pages.md section 2, A-2; platform decision D39), switched on by the
+# deployment with the Spring profile "google" (SPRING_PROFILES_ACTIVE=google): a deployment without a Google client
+# starts without it. Register one OAuth client (web application) in the Google Cloud console with both callbacks:
+# the app's, https://<host>/taker/login/oidc (Q30), as QB_OIDC_REDIRECT_APP, and the sponsor console's,
+# https://<host>/sponsor/login/oidc, as QB_OIDC_REDIRECT_SPONSOR. The client id and secret come from the environment only.
 #
-# Takers only (Q2-16, Q-6): no redirect address for the sponsor console or the administration, so Google is offered
-# to the app's entry alone. auto-provision opens a taker's account at the first sign-in with an address Google vouches
-# for that nobody uses yet (the app's entry allows registration); an address in use answers OIDC_ACCOUNT_EXISTS, and
-# its owner links Google on the account page after signing in the usual way.
+# Takers and, since Q37 (docs/quizbuks/plans/Q37-sponsor-google.md), sponsors; no callback for the administration, so
+# Google is never offered there. auto-provision opens an account at the first sign-in with an address Google vouches
+# for that nobody uses yet, with the registration role of the entry it started at (both entries allow registration);
+# an address in use answers OIDC_ACCOUNT_EXISTS, and its owner links Google on the account page after signing in the
+# usual way. An account Google signs in but that lacks the entry's role (a taker at the console) is refused until it
+# joins by signing up there with its address.
 jabiz:
   security:
     oidc:
@@ -18,5 +20,6 @@ jabiz:
           client-secret: ${JABIZ_OIDC_GOOGLE_CLIENT_SECRET}
           redirect-uris:
             app: ${QB_OIDC_REDIRECT_APP}
+            sponsor: ${QB_OIDC_REDIRECT_SPONSOR}
           labels: { en: Google, zh: Google, ja: Google }
           auto-provision: true

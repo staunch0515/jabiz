@@ -307,12 +307,20 @@ function Routes() {
   if (path === '/login') {
     if (signedIn) return <Redirect to="/" />
     const notice = lockedIdle ? 'idle' : undefined
-    return frame(<SignInForm {...navigation} brand={brand} returnTo="/" initialStep={pendingStep} notice={notice}
-      onSignedIn={(to) => {
-        pendingStep = undefined
-        lockedIdle = false
-        navigate(to, { replace: true })
-      }} passwordResetPath="/password-reset" signUpPath="/signup" />)
+    return frame(<>
+      <SignInForm {...navigation} brand={brand} returnTo="/" initialStep={pendingStep} notice={notice}
+        onSignedIn={(to) => {
+          pendingStep = undefined
+          lockedIdle = false
+          navigate(to, { replace: true })
+        }} passwordResetPath="/password-reset" signUpPath="/signup" />
+      {/* A taker's account (with a password or Google alone) has no sponsor role yet: the console refuses it until
+          the account joins by signing up with its address (Q37). */}
+      <p className="text-muted-foreground mx-auto w-full max-w-md px-4 pb-6 text-center text-sm"
+        data-testid="signin-taker-account">
+        {t('public.takerAccount')}
+      </p>
+    </>)
   }
   if (!signedIn) return <Redirect to="/login" />
   return (
