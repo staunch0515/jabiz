@@ -73,7 +73,7 @@ public final class QbPublications {
         eb.primaryKey("publicationId");
         eb.field("publicationId", f -> f.physicalColumn("publication_id").immutable(true).required(true)
             .generated(true).asSemanticIdentity("urn:jabiz:entity:quizbuks:publication"));
-        PublisherKind.declare(eb, false);
+        PublisherKind.declareSealed(eb, false);
         // The quiz of the version, kept with it: removing a quiz looks up the publications that use it.
         eb.field("quizId", f -> f.physicalColumn("quiz_id").asReference(QbContent.QUIZ));
         eb.field("versionId", f -> f.physicalColumn("version_id").asReference(QbContent.VERSION));
@@ -186,7 +186,7 @@ public final class QbPublications {
             .asSemanticIdentity("urn:jabiz:entity:quizbuks:reward-tier"));
         eb.field("publicationId", f -> f.physicalColumn("publication_id").immutable(true).required(true)
             .asReference(PUBLICATION));
-        PublisherKind.declare(eb, false);
+        PublisherKind.declareSealed(eb, false);
         eb.field("seq", f -> f.physicalColumn("seq").required(true).asNumeric(2, 0));
         eb.field("fromScore", f -> f.physicalColumn("from_score").required(true).asNumeric(6, 0)
             .apply(Rules.range(PublishingCodes.SCORE_RANGE, BigDecimal.ZERO, decimal(PublishingLimits.MAX_SCORE))));

@@ -152,7 +152,7 @@ class DigitalPrizeIT extends PlayItSupport {
         Map<String, Object> prize = prize(attemptId);
         assertThat(prize).containsEntry("status", "DELIVERED").containsEntry("delivery", "SHARED")
             .containsEntry("delivered_by", DigitalPrizeStatus.BY_SYSTEM).containsEntry("user_id", takerId)
-            .containsEntry("publisher_id", sponsor).containsEntry("amount", new BigDecimal("100"))
+            .containsEntry("sponsor_id", sponsor).containsEntry("amount", new BigDecimal("100"))
             .containsEntry("hint", null).containsEntry("opened_at", null).containsEntry("send_by", null);
         assertThat((String) prize.get("sealed_content")).isNotBlank().doesNotContain("WELCOME");
         assertThat(at(prize.get("delivered_at"))).isEqualTo(clock.instant());

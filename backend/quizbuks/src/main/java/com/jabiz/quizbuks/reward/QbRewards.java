@@ -108,7 +108,7 @@ public final class QbRewards {
         eb.field("attemptId", f -> f.physicalColumn("attempt_id").immutable(true).required(true).asText(36));
         eb.field("publicationId", f -> f.physicalColumn("publication_id").immutable(true).required(true)
             .asReference(QbPublications.PUBLICATION));
-        PublisherKind.declare(eb, false);
+        PublisherKind.declareSealed(eb, false);
         eb.field("userId", f -> f.physicalColumn("user_id").immutable(true).required(true).asText(128));
         eb.field("amount", f -> f.physicalColumn("amount").immutable(true).required(true).asMonetary("JPY", 0));
         eb.field("code", f -> f.physicalColumn("code").immutable(true).required(true).asText(CODE_LENGTH));
@@ -170,7 +170,7 @@ public final class QbRewards {
         eb.field("attemptId", f -> f.physicalColumn("attempt_id").immutable(true).required(true).asText(36));
         eb.field("publicationId", f -> f.physicalColumn("publication_id").immutable(true).required(true)
             .asReference(QbPublications.PUBLICATION));
-        PublisherKind.declare(eb, false);
+        PublisherKind.declareSealed(eb, false);
         eb.field("userId", f -> f.physicalColumn("user_id").immutable(true).required(true).asText(128));
         // The prize's value in Kudos (the tier's reward) and what it is, as the card said when the attempt finished.
         eb.field("amount", f -> f.physicalColumn("amount").immutable(true).required(true).asMonetary("JPY", 0));

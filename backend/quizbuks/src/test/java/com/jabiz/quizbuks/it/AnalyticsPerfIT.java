@@ -145,7 +145,7 @@ class AnalyticsPerfIT extends AnalyticsItSupport {
         execute("INSERT INTO qb_publication_version (" + String.join(", ", columns) + ") SELECT "
             + String.join(", ", columns.stream().map(c -> switch (c) {
                 case "publication_id" -> "p.id";
-                case "publisher_id" -> "p.sponsor";
+                case "sponsor_id" -> "p.sponsor";
                 default -> "v." + c;
             }).toList())
             + " FROM perf_others p CROSS JOIN qb_publication_version v WHERE v.publication_id = ?::uuid", hot);
