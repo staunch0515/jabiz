@@ -1,0 +1,404 @@
+# Digital prizes (docs/quizbuks/plans/Q33-digital-prize.md, Q33a): the same start as the answering scenario (QB_SETUP
+# and its proposals, the review switch on, sponsor A onboarded and allowed the digital prize). A publishes a quiz whose
+# prize is one shared link: U1 wins and is handed it at once, shows it and confirms it. A second publication hands out
+# codes from a pool: submitting with an empty pool is refused, two codes are loaded, U2 and U3 each get one in the
+# order they were loaded, U3's is disputed and an administrator decides it delivered. Nothing is paid from a wallet.
+name: Digital prizes
+clock: 2026-10-01T00:00:00Z
+actor: { id: installer, permissions: ["*"] }
+steps:
+  - process: QB_SETUP@latest
+    input: {}
+    save: { p1: "$.proposals[0]", p2: "$.proposals[1]", p3: "$.proposals[2]", p4: "$.proposals[3]",
+      p5: "$.proposals[4]", p6: "$.proposals[5]", p7: "$.proposals[6]", p8: "$.proposals[7]", p9: "$.proposals[8]",
+      p10: "$.proposals[9]", p11: "$.proposals[10]", p12: "$.proposals[11]", p13: "$.proposals[12]",
+      p14: "$.proposals[13]", p15: "$.proposals[14]", p16: "$.proposals[15]", p17: "$.proposals[16]",
+      p18: "$.proposals[17]", p19: "$.proposals[18]", p20: "$.proposals[19]", p21: "$.proposals[20]",
+      p22: "$.proposals[21]", p23: "$.proposals[22]", p24: "$.proposals[23]",
+      p25: "$.proposals[24]", p26: "$.proposals[25]", p27: "$.proposals[26]", p28: "$.proposals[27]",
+      p29: "$.proposals[28]", p30: "$.proposals[29]", p31: "$.proposals[30]",
+      p32: "$.proposals[31]", p33: "$.proposals[32]", p34: "$.proposals[33]",
+      p35: "$.proposals[34]", p36: "$.proposals[35]", p37: "$.proposals[36]", p38: "$.proposals[37]",
+      p39: "$.proposals[38]", p40: "$.proposals[39]", p41: "$.proposals[40]", p42: "$.proposals[41]",
+      p43: "$.proposals[42]", p44: "$.proposals[43]", p45: "$.proposals[44]", p46: "$.proposals[45]", p47: "$.proposals[46]",
+      p48: "$.proposals[47]", p49: "$.proposals[48]" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p1}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p2}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p3}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p4}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p5}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p6}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p7}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p8}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p9}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p10}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p11}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p12}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p13}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p14}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p15}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p16}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p17}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p18}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p19}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p20}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p21}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p22}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p23}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p24}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p25}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p26}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p27}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p28}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p29}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p30}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p31}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p32}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p33}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p34}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p35}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p36}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p37}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p38}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p39}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p40}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p41}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p42}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p43}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p44}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p45}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p46}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p47}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p48}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p49}" }
+  - note: Publications go on without a review (the controlled switch, four eyes).
+    actor: { id: super-admin, permissions: [control.propose] }
+    process: CONTROL_CHANGE_PROPOSE@latest
+    input: { targetEntity: SysParam, values: { paramKey: qb.review.publication.auto, value: "true" },
+      reason: Review switch }
+    save: { auto: $.changeId }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${auto}" }
+
+  - note: The people, created by an administrator.
+    process: SEC_USER_CREATE@latest
+    input: { userName: alice, displayName: Alice, email: alice@example.com }
+    save: { a: $.userId }
+  - process: SEC_USER_CREATE@latest
+    input: { userName: u1, displayName: Ume, email: u1@example.com }
+    save: { u1: $.userId }
+  - process: SEC_USER_CREATE@latest
+    input: { userName: u2, displayName: Ken, email: u2@example.com }
+    save: { u2: $.userId }
+  - process: SEC_USER_CREATE@latest
+    input: { userName: u3, displayName: Mio, email: u3@example.com }
+    save: { u3: $.userId }
+  - actor: { id: "${u1}", permissions: [qb.me] }
+    process: QB_PROFILE_SAVE@latest
+    input: { displayName: Ume, countryCode: JP, preferredCurrency: JPY }
+  - actor: { id: "${u2}", permissions: [qb.me] }
+    process: QB_PROFILE_SAVE@latest
+    input: { displayName: Ken, countryCode: JP, preferredCurrency: JPY }
+  - actor: { id: "${u3}", permissions: [qb.me] }
+    process: QB_PROFILE_SAVE@latest
+    input: { displayName: Mio, countryCode: JP, preferredCurrency: JPY }
+
+  - note: Sponsor A is onboarded (Q2); a content administrator approves.
+    actor: { id: "${a}", permissions: [qb.sponsor.me] }
+    process: QB_SPONSOR_APPLY@latest
+    input: { displayName: Alice, company: Capitals Inc, acceptTerms: true }
+    save: { onboarding: $.approvalRequestId }
+  - actor: { id: content-admin, permissions: [qb.review.sponsor, approval.decide] }
+    process: APPROVAL_DECIDE@latest
+    input: { requestId: "${onboarding}", decision: APPROVE }
+  - deliverEvents: true
+  - note: An administrator allows A the digital prize (Q22's methods, Q33's fourth).
+    actor: { id: methods-admin, permissions: [qb.admin.reward-methods] }
+    process: QB_SPONSOR_REWARD_METHODS_SET@latest
+    input: { userId: "${a}", methods: [PLATFORM, DIGITAL_PRIZE], note: Digital prizes allowed }
+
+  - note: A's quiz (two questions, 2 and 3 points); the first publication hands every winner one shared link.
+    advanceClock: PT1H
+  - actor: { id: "${a}", permissions: [qb.content.write, qb.publication.write] }
+    process: QB_QUIZ_SAVE@latest
+    input: { title: World capitals, timeLimitSec: 300 }
+    save: { quiz: $.quizId }
+  - actor: { id: "${a}", permissions: [qb.content.write] }
+    process: QB_QUESTION_SAVE@latest
+    input: { quizId: "${quiz}", stem: Capital of France?, points: 2,
+      options: [{ text: Paris, correct: true }, { text: Lyon }] }
+  - actor: { id: "${a}", permissions: [qb.content.write] }
+    process: QB_QUESTION_SAVE@latest
+    input: { quizId: "${quiz}", stem: Capital of Japan?, points: 3,
+      options: [{ text: Tokyo, correct: true }, { text: Osaka }] }
+  - actor: { id: "${a}", permissions: [qb.content.write] }
+    process: QB_QUIZ_PUBLISH_VERSION@latest
+    input: { quizId: "${quiz}" }
+    save: { version: $.versionId }
+  - note: Without the delivery and the description the save says so; with them it is complete.
+    actor: { id: "${a}", permissions: [qb.publication.write] }
+    process: QB_PUBLICATION_SAVE@latest
+    input:
+      versionId: "${version}"
+      name: Shared link week
+      regions: [JP, ASIA]
+      startAt: 2026-10-01T01:00:00Z
+      endAt: 2026-10-08T00:00:00Z
+      passScore: 3
+      maxWinners: 100
+      rewardMethod: DIGITAL_PRIZE
+      tiers:
+        - { fromScore: 0, toScore: 2, reward: 0 }
+        - { fromScore: 3, toScore: 5, reward: 500 }
+    expectOutput: { problems: [{ field: digitalDelivery, code: QB_DIGITAL_DELIVERY_INVALID },
+      { field: digitalDescription, code: QB_PUBLICATION_FIELD_REQUIRED }] }
+    save: { shared: $.publicationId }
+  - actor: { id: "${a}", permissions: [qb.publication.write] }
+    process: QB_PUBLICATION_SAVE@latest
+    input:
+      publicationId: "${shared}"
+      versionId: "${version}"
+      name: Shared link week
+      regions: [JP, ASIA]
+      startAt: 2026-10-01T01:00:00Z
+      endAt: 2026-10-08T00:00:00Z
+      passScore: 3
+      maxWinners: 100
+      rewardMethod: DIGITAL_PRIZE
+      digitalDelivery: SHARED
+      digitalDescription: A month of Capitals Premium
+      digitalContent: https://capitals.example/premium?code=WELCOME-2026
+      tiers:
+        - { fromScore: 0, toScore: 2, reward: 0 }
+        - { fromScore: 3, toScore: 5, reward: 500 }
+    expectOutput: { problems: [] }
+  - actor: { id: "${a}", permissions: [qb.publication.write] }
+    process: QB_PUBLICATION_SUBMIT@latest
+    input: { publicationId: "${shared}" }
+    expectOutput: { status: LIVE, approval: NOT_REQUIRED }
+
+  - note: U1 wins; the prize is delivered at once, without a wallet; U1 shows it and confirms it.
+    advanceClock: PT5M
+  - actor: { id: "${u1}", permissions: [qb.play, qb.me] }
+    process: QB_ATTEMPT_START@latest
+    input: { publicationId: "${shared}" }
+    save: { t1: $.attemptId }
+  - advanceClock: PT1M
+  - actor: { id: "${u1}", permissions: [qb.play, qb.me] }
+    process: QB_ATTEMPT_SUBMIT@latest
+    input: { attemptId: "${t1}", publicationId: "${shared}",
+      answers: [{ questionNo: 1, selected: [2] }, { questionNo: 2, selected: [2] }] }
+    expectOutput: { status: SUBMITTED, score: 5, passed: true, reward: 500, rewardStatus: DIGITAL }
+  - deliverEvents: true
+  - actor: { id: "${u1}", permissions: [qb.play, qb.me] }
+    process: QB_ATTEMPT_RESULT@latest
+    input: { attemptId: "${t1}" }
+    expectOutput: { rewardStatus: DIGITAL, rewardMethod: DIGITAL_PRIZE,
+      digital: { status: DELIVERED, delivery: SHARED, description: A month of Capitals Premium, hint: null } }
+    save: { prize1: $.digital.digitalPrizeId }
+  - actor: { id: "${u1}", permissions: [qb.me] }
+    process: QB_DIGITAL_PRIZE_OPEN@latest
+    input: { digitalPrizeId: "${prize1}" }
+    expectOutput: { status: DELIVERED, prizeContent: https://capitals.example/premium?code=WELCOME-2026 }
+  - expectError:
+      actor: { id: "${u2}", permissions: [qb.me] }
+      process: QB_DIGITAL_PRIZE_OPEN@latest
+      input: { digitalPrizeId: "${prize1}" }
+      status: 404
+  - actor: { id: "${u1}", permissions: [qb.me] }
+    process: QB_DIGITAL_PRIZE_CONFIRM@latest
+    input: { digitalPrizeId: "${prize1}" }
+    expectOutput: { status: CONFIRMED }
+  - deliverEvents: true
+
+  - note: The second publication hands out codes from a pool; the pool must cover the winners before it goes live.
+    actor: { id: "${a}", permissions: [qb.publication.write] }
+    process: QB_PUBLICATION_SAVE@latest
+    input:
+      versionId: "${version}"
+      name: Code pool week
+      regions: [JP, ASIA]
+      startAt: 2026-10-01T01:00:00Z
+      endAt: 2026-10-08T00:00:00Z
+      passScore: 3
+      maxWinners: 2
+      rewardMethod: DIGITAL_PRIZE
+      digitalDelivery: POOL
+      digitalDescription: A 1000 yen gift code
+      tiers:
+        - { fromScore: 0, toScore: 2, reward: 0 }
+        - { fromScore: 3, toScore: 5, reward: 1000 }
+    expectOutput: { problems: [] }
+    save: { pool: $.publicationId }
+  - expectError:
+      actor: { id: "${a}", permissions: [qb.publication.write] }
+      process: QB_PUBLICATION_SUBMIT@latest
+      input: { publicationId: "${pool}" }
+      status: 422
+      ruleCode: QB_DIGITAL_POOL_SHORT
+  - actor: { id: "${a}", permissions: [qb.publication.write] }
+    process: QB_DIGITAL_CODES_LOAD@latest
+    input: { publicationId: "${pool}", pastedCodes: "GIFT-0001-AAAA\n\nGIFT-0002-BBBB\nGIFT-0001-AAAA\n" }
+    expectOutput: { loaded: 2, available: 2 }
+  - actor: { id: "${a}", permissions: [qb.publication.write] }
+    process: QB_PUBLICATION_SUBMIT@latest
+    input: { publicationId: "${pool}" }
+    expectOutput: { status: LIVE, approval: NOT_REQUIRED }
+  - expectError:
+      actor: { id: "${a}", permissions: [qb.publication.write] }
+      process: QB_DIGITAL_CODES_REVOKE@latest
+      input: { publicationId: "${pool}" }
+      status: 422
+      ruleCode: QB_DIGITAL_POOL_LOCKED
+
+  - note: "U2 then U3 win: the codes go out in the order loaded; U3's is disputed and found delivered."
+    actor: { id: "${u2}", permissions: [qb.play, qb.me] }
+    process: QB_ATTEMPT_START@latest
+    input: { publicationId: "${pool}" }
+    save: { t2: $.attemptId }
+  - advanceClock: PT1M
+  - actor: { id: "${u2}", permissions: [qb.play, qb.me] }
+    process: QB_ATTEMPT_SUBMIT@latest
+    input: { attemptId: "${t2}", publicationId: "${pool}",
+      answers: [{ questionNo: 1, selected: [2] }, { questionNo: 2, selected: [2] }] }
+    expectOutput: { rewardStatus: DIGITAL, reward: 1000 }
+  - actor: { id: "${u3}", permissions: [qb.play, qb.me] }
+    process: QB_ATTEMPT_START@latest
+    input: { publicationId: "${pool}" }
+    save: { t3: $.attemptId }
+  - advanceClock: PT1M
+  - actor: { id: "${u3}", permissions: [qb.play, qb.me] }
+    process: QB_ATTEMPT_SUBMIT@latest
+    input: { attemptId: "${t3}", publicationId: "${pool}",
+      answers: [{ questionNo: 1, selected: [2] }, { questionNo: 2, selected: [2] }] }
+    expectOutput: { rewardStatus: DIGITAL }
+  - deliverEvents: true
+  - actor: { id: "${u2}", permissions: [qb.play, qb.me] }
+    process: QB_ATTEMPT_RESULT@latest
+    input: { attemptId: "${t2}" }
+    expectOutput: { digital: { status: DELIVERED, delivery: POOL, hint: "…AAAA" } }
+  - actor: { id: "${u3}", permissions: [qb.play, qb.me] }
+    process: QB_ATTEMPT_RESULT@latest
+    input: { attemptId: "${t3}" }
+    expectOutput: { digital: { status: DELIVERED, delivery: POOL, hint: "…BBBB" } }
+    save: { prize3: $.digital.digitalPrizeId }
+  - actor: { id: "${u3}", permissions: [qb.me] }
+    process: QB_DIGITAL_PRIZE_OPEN@latest
+    input: { digitalPrizeId: "${prize3}" }
+    expectOutput: { prizeContent: GIFT-0002-BBBB }
+  - actor: { id: "${u3}", permissions: [qb.me] }
+    process: QB_DIGITAL_PRIZE_DISPUTE@latest
+    input: { digitalPrizeId: "${prize3}", note: The code says it was used already }
+    expectOutput: { status: DISPUTED }
+  - deliverEvents: true
+  - actor: { id: digital-admin, permissions: [qb.digital.resolve] }
+    process: QB_DIGITAL_PRIZE_RESOLVE@latest
+    input: { digitalPrizeId: "${prize3}", resolution: DELIVERED, note: The sponsor shows it unused }
+    expectOutput: { status: CONFIRMED }
+  - deliverEvents: true
+  - expect:
+      query: qb.admin.digital-prizes
+      params: {}
+      rows: 3
+snapshot:
+  entities: [QbPublicationCard, QbAttempt, QbDigitalPrize, QbDigitalCode, QbMessage]
+  asOf: end

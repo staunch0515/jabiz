@@ -26,6 +26,8 @@ results:
   maxReward:      { from: QbPublicationCard.maxReward }
   rewardMethod:   { from: QbPublicationCard.rewardMethod }
   redeemDescription: { from: QbPublicationCard.redeemDescription }
+  digitalDelivery: { from: QbPublicationCard.digitalDelivery }
+  digitalDescription: { from: QbPublicationCard.digitalDescription }
   sponsorCompany: { from: QbSponsor.company }
 list:
   key: [publicationId]
@@ -48,6 +50,8 @@ SELECT
     c.{{QbPublicationCard.maxReward}}     AS maxReward,
     c.{{QbPublicationCard.rewardMethod}}  AS rewardMethod,
     c.{{QbPublicationCard.redeemDescription}} AS redeemDescription,
+    c.{{QbPublicationCard.digitalDelivery}} AS digitalDelivery,
+    c.{{QbPublicationCard.digitalDescription}} AS digitalDescription,
     sp.{{QbSponsor.company}}              AS sponsorCompany
 FROM {{QbPublicationCard}} c
 LEFT JOIN {{QbSponsor}} sp ON sp.{{QbSponsor.userId}} = c.{{QbPublicationCard.sponsorId}}

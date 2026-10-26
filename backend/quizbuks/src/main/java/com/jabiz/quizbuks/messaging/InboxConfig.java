@@ -13,6 +13,7 @@ import com.jabiz.process.ProcessDefinition;
 import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.quizbuks.play.AttemptFinishing;
 import com.jabiz.quizbuks.reward.CashRewardProcesses;
+import com.jabiz.quizbuks.reward.DigitalPrizeProcesses;
 import com.jabiz.quizbuks.reward.RedemptionProcesses;
 import com.jabiz.quizbuks.wallet.PayoutProcesses;
 import com.jabiz.quizbuks.wallet.QbPayouts;
@@ -572,6 +573,52 @@ public class InboxConfig {
             qbMessageFromEvent) {
         return EventSubscription.of(MessageProcesses.REDEEM_VOID_CONSUMER, RedemptionProcesses.VOIDED_EVENT,
             qbMessageFromEvent, event -> MessageProcesses.redeemInput(event, QbInbox.REDEEM_VOID));
+    }
+
+    // Q33: the digital prize's steps.
+
+    @Bean
+    EventSubscription<MessageProcesses.EventInput> qbMessageDigitalWonSubscription(
+        ProcessDefinition<MessageProcesses.EventInput, MessageProcesses.MessageOutput, ProcessContext>
+            qbMessageFromEvent) {
+        return EventSubscription.of(MessageProcesses.DIGITAL_WON_CONSUMER, AttemptFinishing.DIGITAL_EVENT,
+            qbMessageFromEvent, MessageProcesses::digitalWonInput);
+    }
+
+    @Bean
+    EventSubscription<MessageProcesses.EventInput> qbMessageDigitalConfirmedSubscription(
+        ProcessDefinition<MessageProcesses.EventInput, MessageProcesses.MessageOutput, ProcessContext>
+            qbMessageFromEvent) {
+        return EventSubscription.of(MessageProcesses.DIGITAL_CONFIRMED_CONSUMER,
+            DigitalPrizeProcesses.CONFIRMED_EVENT, qbMessageFromEvent,
+            event -> MessageProcesses.digitalInput(event, QbInbox.DIGITAL_CONFIRMED));
+    }
+
+    @Bean
+    EventSubscription<MessageProcesses.EventInput> qbMessageDigitalDisputedSubscription(
+        ProcessDefinition<MessageProcesses.EventInput, MessageProcesses.MessageOutput, ProcessContext>
+            qbMessageFromEvent) {
+        return EventSubscription.of(MessageProcesses.DIGITAL_DISPUTED_CONSUMER,
+            DigitalPrizeProcesses.DISPUTED_EVENT, qbMessageFromEvent,
+            event -> MessageProcesses.digitalInput(event, QbInbox.DIGITAL_DISPUTED));
+    }
+
+    @Bean
+    EventSubscription<MessageProcesses.EventInput> qbMessageDigitalResolvedSubscription(
+        ProcessDefinition<MessageProcesses.EventInput, MessageProcesses.MessageOutput, ProcessContext>
+            qbMessageFromEvent) {
+        return EventSubscription.of(MessageProcesses.DIGITAL_RESOLVED_CONSUMER,
+            DigitalPrizeProcesses.RESOLVED_EVENT, qbMessageFromEvent,
+            event -> MessageProcesses.digitalInput(event, QbInbox.DIGITAL_RESOLVED));
+    }
+
+    @Bean
+    EventSubscription<MessageProcesses.EventInput> qbMessageDigitalResolvedSponsorSubscription(
+        ProcessDefinition<MessageProcesses.EventInput, MessageProcesses.MessageOutput, ProcessContext>
+            qbMessageFromEvent) {
+        return EventSubscription.of(MessageProcesses.DIGITAL_RESOLVED_SPONSOR_CONSUMER,
+            DigitalPrizeProcesses.RESOLVED_EVENT, qbMessageFromEvent,
+            event -> MessageProcesses.digitalInput(event, QbInbox.DIGITAL_RESOLVED_SPONSOR));
     }
 
     @Bean

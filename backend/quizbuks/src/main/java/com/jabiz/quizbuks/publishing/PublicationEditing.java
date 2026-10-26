@@ -559,7 +559,8 @@ final class PublicationEditing {
         card.put("sponsorId", publication.get("sponsorId"));
         card.put("status", status);
         for (String field : List.of("regions", "startAt", "endAt", "name", "versionId", "maxReward", "fullScore",
-            "passScore", "timeLimitSec", "budgetCap", "maxWinners", "redeemDescription")) {
+            "passScore", "timeLimitSec", "budgetCap", "maxWinners", "redeemDescription", "digitalDelivery",
+            "digitalDescription", "digitalSendDays", "sealedDigitalContent")) {
             card.put(field, publication.get(field));
         }
         if (card.get("regions") == null) {
@@ -589,7 +590,8 @@ final class PublicationEditing {
             (String) values.get("regions"), instant(values.get("startAt")), instant(values.get("endAt")),
             integer(values.get("timeLimitSec")), integer(values.get("passScore")), money(values.get("budgetCap")),
             integer(values.get("maxWinners")), methodOf(values), (String) values.get("redeemDescription"),
-            Audience.of(values.get("audience")));
+            Audience.of(values.get("audience")), DigitalDelivery.of(values.get("digitalDelivery")),
+            (String) values.get("digitalDescription"), values.get("sealedDigitalContent") != null);
     }
 
     /** The reward method of a publication's values; {@link RewardMethod#PLATFORM} when none is written (Q22). */

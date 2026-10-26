@@ -135,7 +135,7 @@ public class PublishingConfig {
             .scope(s -> s.fixed("status", PublicationStatus.LIVE).fixed("audience", Audience.PUBLIC))
             .publicRead(p -> p.fields("publicationId", "sponsorId", "name", "quizTitle", "kind", "startAt", "endAt",
                 "timeLimitSec", "questionCount", "fullScore", "passScore", "maxReward", "rewardMethod",
-                "redeemDescription"))
+                "redeemDescription", "digitalDelivery", "digitalDescription"))
             .permissions(QbPermissions.ADMIN_PUBLICATION_READ, QbPermissions.SPONSOR_VIEW_WRITE)
             .policy(p -> p.readOnly(true).allowTimeTravel(false))
             .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
@@ -234,7 +234,9 @@ public class PublishingConfig {
             .item(RewardMethod.SPONSOR_CASH, "en", "Cash from the sponsor", "zh", "商家直接付现金",
                 "ja", "スポンサーが現金で支払う")
             .item(RewardMethod.OFFLINE_REDEEM, "en", "Prize at the sponsor's place", "zh", "商家线下兑付",
-                "ja", "スポンサーの店舗で引き換え"));
+                "ja", "スポンサーの店舗で引き換え")
+            .item(RewardMethod.DIGITAL_PRIZE, "en", "Digital prize (a code or link)", "zh", "电子奖品（兑换码或链接）",
+                "ja", "デジタル景品（コードまたはリンク）"));
     }
 
     @Bean

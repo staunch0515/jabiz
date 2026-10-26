@@ -255,6 +255,8 @@ class SetupIT extends QbItSupport {
         expected.put(QbParams.CASH_CONFIRM_DAYS, "7");
         expected.put(QbParams.CASH_PAY_DAYS, "14");
         expected.put(QbParams.REDEEM_DAYS, "30");
+        // Q33: the days a sponsor has to send a digital prize by hand.
+        expected.put(QbParams.DIGITAL_SEND_DAYS, "3");
         // Q28: the default methods and the highest reward per attempt.
         expected.put(QbParams.REWARD_DEFAULT_METHODS, "PLATFORM");
         expected.put(QbParams.REWARD_MAX_PER_ATTEMPT, "0");

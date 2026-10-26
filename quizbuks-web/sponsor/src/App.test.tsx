@@ -264,6 +264,10 @@ describe('a signed-in sponsor', () => {
     expect(screen.getByTestId('wordmark')).toHaveTextContent('QuizBuks')
     // The mail server page (Q29) is in the navigation of an approved sponsor.
     expect(screen.getByRole('link', { name: 'Mail server' })).toHaveAttribute('href', '/mail-server')
+    // The digital prizes (Q33) follow the cash rewards in the navigation.
+    const links = screen.getAllByRole('link').map((link) => link.textContent)
+    expect(links.indexOf('Digital prizes')).toBe(links.indexOf('Cash rewards') + 1)
+    expect(screen.getByRole('link', { name: 'Digital prizes' })).toHaveAttribute('href', '/digital-prizes')
     await userEvent.click(screen.getByRole('link', { name: 'Sponsor profile' }))
     expect(window.location.pathname).toBe('/onboarding')
     expect(await screen.findByTestId('onboarding-submit')).toHaveTextContent('Save')

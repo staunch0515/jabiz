@@ -8,6 +8,7 @@ import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.quizbuks.content.QbContent;
 import com.jabiz.quizbuks.identity.QbAccounts;
 import com.jabiz.quizbuks.publishing.RewardMethod;
+import com.jabiz.quizbuks.reward.QbDigitalPrizes;
 import com.jabiz.quizbuks.reward.QbRewards;
 import com.jabiz.quizbuks.content.QuizSnapshot;
 import com.jabiz.runtime.EntityInstance;
@@ -50,7 +51,16 @@ public final class AttemptResults {
     public record ResultOutput(String attemptId, UUID publicationId, String name, String status, String kind,
         Instant deadline, Instant serverTime, Integer score, Integer fullScore, Integer passScore, Boolean passed, BigDecimal reward,
         String rewardStatus, List<AttemptProcesses.QuestionView> questions,
-        List<AttemptFinishing.QuestionOutput> result, String rewardMethod, CashView cash, RedeemView redeem) {}
+        List<AttemptFinishing.QuestionOutput> result, String rewardMethod, CashView cash, RedeemView redeem,
+        DigitalView digital) {}
+
+    /**
+     * Q33: the digital prize: delivered (the content is read by {@code QB_DIGITAL_PRIZE_OPEN}, never here), or owed
+     * by the sponsor until {@code sendBy}; the hint is the last characters of a pool code.
+     */
+    public record DigitalView(String digitalPrizeId, String status, String delivery, BigDecimal amount,
+        String description, String hint, Instant deliveredAt, Instant sendBy, Instant confirmBy, Instant openedAt,
+        Instant confirmedAt, String sponsorCompany) {}
 
     /** Q22: where the cash reward stands, for the result page's confirm and dispute. */
     public record CashView(String cashRewardId, String status, String code, BigDecimal amount, Instant markedPaidAt,
@@ -68,6 +78,7 @@ public final class AttemptResults {
     static final String CARD = "play.card";
     static final String CASH = "play.cash";
     static final String REDEEM = "play.redeem";
+    static final String DIGITAL = "play.digital";
     static final String SPONSOR = "play.sponsor";
 
     public static ProcessDefinition<ResultInput, ResultOutput, ProcessContext> result() {
@@ -98,6 +109,8 @@ public final class AttemptResults {
                         ctx -> byAttempt(ctx, RewardStatus.CASH), CASH),
                     QueryEntities.query(QbRewards.takerDataset(QbRewards.REDEMPTION),
                         ctx -> byAttempt(ctx, RewardStatus.REDEEM), REDEEM),
+                    QueryEntities.query(QbDigitalPrizes.takerDataset(QbDigitalPrizes.DIGITAL_PRIZE),
+                        ctx -> byAttempt(ctx, RewardStatus.DIGITAL), DIGITAL),
                     QueryEntities.query(QbAccounts.defaultDataset(QbAccounts.SPONSOR), ctx -> EntityQuery.builder()
                         .where(new QueryPredicate.In("userId", external(ctx)
                             ? List.of(String.valueOf((Object) ctx.get(ATTEMPT, EntityInstance.class).get("sponsorId")))
@@ -126,7 +139,8 @@ public final class AttemptResults {
             attempt.get("reward") == null ? null : PlaySteps.money(attempt.get("reward")),
             attempt.get("rewardStatus"), questions, result,
             card == null || card.get("rewardMethod") == null ? RewardMethod.PLATFORM : card.get("rewardMethod"),
-            cash(first(ctx, CASH), company(ctx)), redeem(first(ctx, REDEEM), company(ctx))));
+            cash(first(ctx, CASH), company(ctx)), redeem(first(ctx, REDEEM), company(ctx)),
+            digital(first(ctx, DIGITAL), company(ctx))));
     }
 
     private static EntityQuery byAttempt(ProcessContext ctx, String rewardStatus) {
@@ -156,6 +170,14 @@ public final class AttemptResults {
             redemption.get("status"), redemption.get("code"), PlaySteps.money(redemption.get("amount")),
             redemption.get("description"), PlaySteps.instant(redemption.get("expiresAt")), company,
             PlaySteps.instant(redemption.get("confirmBy")), PlaySteps.instant(redemption.get("redeemedAt")));
+    }
+
+    static DigitalView digital(EntityInstance prize, String company) {
+        return prize == null ? null : new DigitalView(String.valueOf(prize.id()), prize.get("status"),
+            prize.get("delivery"), PlaySteps.money(prize.get("amount")), prize.get("description"), prize.get("hint"),
+            PlaySteps.instant(prize.get("deliveredAt")), PlaySteps.instant(prize.get("sendBy")),
+            PlaySteps.instant(prize.get("confirmBy")), PlaySteps.instant(prize.get("openedAt")),
+            PlaySteps.instant(prize.get("confirmedAt")), company);
     }
 
     private static Integer number(Object value) {

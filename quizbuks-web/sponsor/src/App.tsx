@@ -23,6 +23,7 @@ import { CircleHelp, FileQuestion, LayoutDashboard, Megaphone, MessagesSquare, R
   HandCoins,
   Gift,
   Mail,
+  Ticket,
 } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -38,6 +39,7 @@ import { readRewardSettings, REWARD_SETTINGS_QUERY } from './publishing/api'
 import { PublicationListPage } from './publishing/PublicationListPage'
 import { PublicationPage } from './publishing/PublicationPage'
 import { CASH_REWARDS_PATH, CashRewardsPage } from './publishing/CashRewardsPage'
+import { DIGITAL_PRIZES_PATH, DigitalPrizesPage } from './publishing/DigitalPrizesPage'
 import { REDEEM_PATH, RedeemPage } from './publishing/RedeemPage'
 import { MailServerPage } from './publishing/MailServerPage'
 import { MAIL_SERVER_PATH } from './publishing/paths'
@@ -138,6 +140,7 @@ function SignedIn({ path }: { path: string }) {
   else if (quizId) page = <QuizEditorPage key={quizId} quizId={quizId} />
   else if (path === PUBLICATIONS_PATH) page = <PublicationListPage />
   else if (path === CASH_REWARDS_PATH) page = <CashRewardsPage />
+  else if (path === DIGITAL_PRIZES_PATH) page = <DigitalPrizesPage />
   else if (path === REDEEM_PATH) page = <RedeemPage />
   else if (analyticsIdOf(path)) page = <PublicationAnalyticsPage key={path} publicationId={analyticsIdOf(path)!} />
   else if (publicationIdOf(path)) page = <PublicationPage key={path} publicationId={publicationIdOf(path)!} />
@@ -156,6 +159,7 @@ function SignedIn({ path }: { path: string }) {
     { key: 'quizzes', label: t('nav.quizzes'), path: QUIZZES_PATH, icon: FileQuestion },
     { key: 'publications', label: t('publishing.nav'), path: PUBLICATIONS_PATH, icon: Megaphone },
     { key: 'cash', label: t('publishing.cash.nav'), path: CASH_REWARDS_PATH, icon: HandCoins },
+    { key: 'digital', label: t('publishing.digital.nav'), path: DIGITAL_PRIZES_PATH, icon: Ticket },
     { key: 'redeem', label: t('publishing.redeem.nav'), path: REDEEM_PATH, icon: Gift },
     { key: 'mailServer', label: t('publishing.mailServer.nav'), path: MAIL_SERVER_PATH, icon: Mail },
     { key: 'onboarding', label: t('nav.onboarding'), path: ONBOARDING, icon: Store },

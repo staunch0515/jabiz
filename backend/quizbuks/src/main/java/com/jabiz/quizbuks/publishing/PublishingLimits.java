@@ -46,4 +46,13 @@ public final class PublishingLimits {
     private PublishingLimits() {}
     /** Q22: what a prize collected at the sponsor's place is and where, as the taker reads it. */
     public static final int REDEEM_DESCRIPTION_LENGTH = 500;
+    /** Q33: a digital prize's content (a code or link) as typed, and its sealed form; days the sponsor has to send. */
+    public static final int DIGITAL_CONTENT_LENGTH = 500;
+    public static final int SEALED_LENGTH = 2000;
+    public static final int MAX_DIGITAL_SEND_DAYS = 365;
+    /** Q33: a pool is loaded in lines of at most this many characters, at most this many lines per load. */
+    public static final int DIGITAL_CODE_LENGTH = 200;
+    public static final int DIGITAL_CODES_PER_LOAD = 1_000;
+    /** Q33: the most winners a pool-delivered publication may name (the pool is checked to cover them). */
+    public static final int MAX_POOL_WINNERS = 10_000;
 }

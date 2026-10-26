@@ -88,10 +88,21 @@ public final class QbInbox {
         CASH_RESOLVED, CASH_RESOLVED_SPONSOR, CASH_OVERDUE);
     public static final List<String> REDEEM_KINDS = List.of(REDEEM_DUE, REDEEM_CLAIMED, REDEEM_REDEEMED,
         REDEEM_DECLINED, REDEEM_EXPIRED, REDEEM_VOID);
+    /** Q33: a digital prize delivered or owed (to the taker); confirmed or disputed (to the sponsor); decided. */
+    public static final String DIGITAL_DELIVERED = "DIGITAL_DELIVERED";
+    public static final String DIGITAL_DUE = "DIGITAL_DUE";
+    public static final String DIGITAL_CONFIRMED = "DIGITAL_CONFIRMED";
+    public static final String DIGITAL_DISPUTED = "DIGITAL_DISPUTED";
+    public static final String DIGITAL_RESOLVED = "DIGITAL_RESOLVED";
+    public static final String DIGITAL_RESOLVED_SPONSOR = "DIGITAL_RESOLVED_SPONSOR";
+    public static final String DIGITAL_OVERDUE = "DIGITAL_OVERDUE";
+    public static final List<String> DIGITAL_KINDS = List.of(DIGITAL_DELIVERED, DIGITAL_DUE, DIGITAL_CONFIRMED,
+        DIGITAL_DISPUTED, DIGITAL_RESOLVED, DIGITAL_RESOLVED_SPONSOR, DIGITAL_OVERDUE);
     public static final List<String> MESSAGE_KINDS = List.of(REWARD_PAID, REWARD_PENDING, TRANSFER_SENT,
         TRANSFER_FAILED, PAYOUT_ACTION_NEEDED, PAYOUT_REMINDER, CASH_DUE, CASH_MARKED_PAID, CASH_CONFIRMED,
         CASH_DISPUTED, CASH_RESOLVED, CASH_RESOLVED_SPONSOR, CASH_OVERDUE, REDEEM_DUE, REDEEM_CLAIMED,
-        REDEEM_REDEEMED, REDEEM_DECLINED, REDEEM_EXPIRED, REDEEM_VOID);
+        REDEEM_REDEEMED, REDEEM_DECLINED, REDEEM_EXPIRED, REDEEM_VOID, DIGITAL_DELIVERED, DIGITAL_DUE,
+        DIGITAL_CONFIRMED, DIGITAL_DISPUTED, DIGITAL_RESOLVED, DIGITAL_RESOLVED_SPONSOR, DIGITAL_OVERDUE);
 
     /** Where a message leads the app: an attempt's result, the wallet or the payout account. */
     public static final String ACTION_RESULT = "RESULT";
@@ -101,8 +112,10 @@ public final class QbInbox {
     public static final String ACTION_CASH = "CASH";
     /** Q22b: the sponsor console's redeem page (a claim to confirm). */
     public static final String ACTION_REDEEM = "REDEEM";
+    /** Q33: the sponsor console's digital prizes page. */
+    public static final String ACTION_DIGITAL = "DIGITAL";
     public static final List<String> ACTIONS = List.of(ACTION_RESULT, ACTION_WALLET, ACTION_PAYOUT, ACTION_CASH,
-        ACTION_REDEEM);
+        ACTION_REDEEM, ACTION_DIGITAL);
 
     // ---- broadcasts ------------------------------------------------------------------------------------------------
 

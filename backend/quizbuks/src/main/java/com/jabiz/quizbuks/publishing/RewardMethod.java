@@ -10,8 +10,10 @@ import java.util.List;
  * How a publication's reward reaches the taker (docs/quizbuks/plans/Q22-reward-methods.md): Kudos from the sponsor's
  * wallet, paid by the platform ({@link #PLATFORM}, what every publication did before Q22); cash the sponsor hands the
  * taker, recorded as a cash reward both confirm ({@link #SPONSOR_CASH}); or a prize the taker collects at the
- * sponsor's place ({@link #OFFLINE_REDEEM}). Only {@link #PLATFORM} moves money: the others never lock the sponsor's
- * wallet nor post to the ledger, and their reward figure is the prize's value in Kudos. Which methods a sponsor may
+ * sponsor's place ({@link #OFFLINE_REDEEM}); or, since Q33 (docs/quizbuks/plans/Q33-digital-prize.md), a digital
+ * prize (a code, a voucher number, a link) the system hands over or the sponsor sends ({@link #DIGITAL_PRIZE}). Only
+ * {@link #PLATFORM} moves money: the others never lock the sponsor's wallet nor post to the ledger, and their reward
+ * figure is the prize's value in Kudos. Which methods a sponsor may
  * publish with is set by an administrator ({@code QbSponsorRewardMethods}); without a row the parameter
  * {@code qb.reward.default-methods} decides ({@link #defaultMethods}, Q28).
  */
@@ -20,8 +22,9 @@ public final class RewardMethod {
     public static final String PLATFORM = "PLATFORM";
     public static final String SPONSOR_CASH = "SPONSOR_CASH";
     public static final String OFFLINE_REDEEM = "OFFLINE_REDEEM";
+    public static final String DIGITAL_PRIZE = "DIGITAL_PRIZE";
 
-    public static final List<String> ALL = List.of(PLATFORM, SPONSOR_CASH, OFFLINE_REDEEM);
+    public static final List<String> ALL = List.of(PLATFORM, SPONSOR_CASH, OFFLINE_REDEEM, DIGITAL_PRIZE);
 
     public static final String DICTIONARY = "urn:jabiz:dict:quizbuks:reward-method";
 

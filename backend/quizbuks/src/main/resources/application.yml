@@ -54,6 +54,8 @@ jabiz:
       "[QB_BANK_ACCOUNT_SAVE]": { per-user: 10, period: 1h }
       # Q29: saving the mail server opens an SMTP connection to the host typed (a test mail): not a probe to loop.
       "[QB_MAIL_SERVER_SET]": { per-user: 10, period: 1h }
+      # Q33: loading codes seals up to a thousand of them; not a loop.
+      "[QB_DIGITAL_CODES_LOAD]": { per-user: 30, period: 1h }
       "[QB_WITHDRAWAL_REQUEST]": { per-user: 20, period: 1h }
       # Q16: importing a quiz file makes a whole draft (up to 100 questions) in one transaction.
       "[QB_QUIZ_IMPORT_CHECK]": { per-user: 60, period: 1h }

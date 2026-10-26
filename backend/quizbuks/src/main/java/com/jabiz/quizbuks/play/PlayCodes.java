@@ -45,10 +45,15 @@ public final class PlayCodes {
     public static final String REWARD_CASH = "QB_REWARD_CASH";
     /** Q22: the notice that the prize is collected at the sponsor's place. */
     public static final String REWARD_REDEEM = "QB_REWARD_REDEEM";
+    /** Q33: the reward is a digital prize, delivered or to be sent by the sponsor. */
+    public static final String REWARD_DIGITAL = "QB_REWARD_DIGITAL";
+    /** Q33: the digital prize will be sent by the sponsor. */
+    public static final String REWARD_DIGITAL_DUE = "QB_REWARD_DIGITAL_DUE";
 
     public static final List<String> ALL = List.of(NOT_OPEN, NOT_VISIBLE, BUDGET_FULL, QUOTA_FULL, FUNDS_SHORT,
         ALREADY_TAKEN, OWN_PUBLICATION, EXPIRED, NOT_IN_PROGRESS, FINISHED, ANSWER_INVALID, INCOMPLETE, SINGLE_CHOICE, PUBLICATION_MISMATCH,
-        FEE_RATE_INVALID, REWARD_PENDING, REWARD_CASH, REWARD_REDEEM);
+        FEE_RATE_INVALID, REWARD_PENDING, REWARD_CASH, REWARD_REDEEM, REWARD_DIGITAL,
+        REWARD_DIGITAL_DUE);
 
     private PlayCodes() {}
 }

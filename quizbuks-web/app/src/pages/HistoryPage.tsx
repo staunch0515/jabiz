@@ -69,6 +69,12 @@ function Row({ row, onContinue, starting }: { row: HistoryRow; onContinue: () =>
               {t(`history.redeem.${row.redeemStatus ?? 'DUE'}`, { amount: formatKudos(row.reward) })}
             </span>
           )}
+          {row.rewardStatus === 'DIGITAL' && (
+            <span data-testid="history-digital" data-status={row.digitalStatus ?? ''}>
+              {t(`history.digital.${row.digitalStatus ?? 'DUE'}`, { amount: formatKudos(row.reward),
+                time: row.digitalSendBy ? formatDateTime(row.digitalSendBy) : '' })}
+            </span>
+          )}
         </p>
       )}
       {row.category === 'TIMED_OUT' && <p className="text-sm">{t('history.timedOut')}</p>}

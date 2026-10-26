@@ -12,6 +12,7 @@ import { analyticsPath } from '../analytics/api'
 import '../analytics/messages'
 import { transactionsOf } from '../transactions/api'
 import '../transactions/messages'
+import { DigitalPoolSection } from './DigitalPool'
 import { InvitationsSection } from './Invitations'
 import { PublicationActions } from './PublicationActions'
 import { StaleBanner, PublicationWizard } from './PublicationWizard'
@@ -78,6 +79,10 @@ function AdminNotice({ publication }: { publication: Publication }) {
   )
 }
 
+/** Whether the publication hands out digital prizes from a pool of codes (Q33): its page then carries the pool. */
+const pooled = (publication: Publication) =>
+  publication.rewardMethod === 'DIGITAL_PRIZE' && publication.digitalDelivery === 'POOL'
+
 /** A submitted publication: frozen (D-Q4-2), shown as it is with what can still be done in its state. */
 function PublicationView({ detail, stale, onStale }: {
   detail: PublicationDetail
@@ -134,6 +139,7 @@ function PublicationView({ detail, stale, onStale }: {
       {publication.audience === 'INVITED' && (
         <InvitationsSection publicationId={publication.publicationId} status={publication.status} />
       )}
+      {pooled(publication) && <DigitalPoolSection publicationId={publication.publicationId} status={publication.status} />}
       {dates.length > 0 && (
         <div className="flex flex-col gap-2">
           <h2 className="text-sm font-medium">{t('publishing.detail.dates')}</h2>
@@ -213,8 +219,17 @@ export function PublicationPage({ publicationId }: { publicationId: string }) {
   }
   const detail = found.data
   if (detail.publication.status === 'DRAFT') {
-    return <PublicationWizard key={generation} detail={detail} initialStep={initialStep} stale={stale}
-      onStale={() => setStale(true)} header={draftHeader(detail)} />
+    // A draft's codes are loaded below the wizard once the saved draft hands out prizes from a pool (Q33): the
+    // readiness check wants the pool to cover the winners before it is submitted.
+    return (
+      <div className="flex flex-col gap-8">
+        <PublicationWizard key={generation} detail={detail} initialStep={initialStep} stale={stale}
+          onStale={() => setStale(true)} header={draftHeader(detail)} />
+        {pooled(detail.publication) && (
+          <DigitalPoolSection publicationId={detail.publication.publicationId} status={detail.publication.status} />
+        )}
+      </div>
+    )
   }
   return (
     <div className="flex flex-col gap-4">

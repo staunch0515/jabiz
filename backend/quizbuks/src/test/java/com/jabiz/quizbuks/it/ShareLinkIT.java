@@ -59,7 +59,7 @@ class ShareLinkIT extends PlayItSupport {
         assertThat(page(publicationId)).singleElement().satisfies(row -> {
             assertThat(row).containsOnlyKeys("publicationId", "name", "quizTitle", "kind", "startAt", "endAt",
                 "timeLimitSec", "questionCount", "fullScore", "passScore", "maxReward", "rewardMethod",
-                "redeemDescription", "sponsorCompany");
+                "redeemDescription", "digitalDelivery", "digitalDescription", "sponsorCompany");
             assertThat(row).containsEntry("publicationId", publicationId).containsEntry("name", "Shared")
                 .containsEntry("kind", "QUIZ").containsEntry("questionCount", 2);
             assertThat(row.get("sponsorCompany")).isNotNull();

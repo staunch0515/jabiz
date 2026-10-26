@@ -16,6 +16,9 @@ export const PUBLISHING_PROCESS = {
   mailServerRemove: 'QB_MAIL_SERVER_REMOVE',
   /** The sponsor says they handed the taker a cash reward (Q22). */
   cashMarkPaid: 'QB_CASH_REWARD_MARK_PAID',
+  /** The pool of one-time codes of a digital prize (Q33): loaded a text at a time, the unused ones taken back. */
+  digitalCodesLoad: 'QB_DIGITAL_CODES_LOAD',
+  digitalCodesRevoke: 'QB_DIGITAL_CODES_REVOKE',
   /** The codes takers scan to collect a prize, and the sponsor's answer to a claim from the printed one (Q22b). */
   redeemIssue: 'QB_REDEEM_CODE_ISSUE',
   redemptionConfirm: 'QB_REDEMPTION_CONFIRM',
@@ -35,6 +38,10 @@ export const PUBLISHING_TEMPLATE = {
   cashRewards: 'qb.sponsor.cash-rewards',
   /** The prizes takers collect at the sponsor's place (Q22b). */
   redemptions: 'qb.sponsor.redemptions',
+  /** The digital prizes won from the sponsor, and a publication's code pool: its counts and its codes' hints (Q33). */
+  digitalPrizes: 'qb.sponsor.digital-prizes',
+  digitalPoolSummary: 'qb.sponsor.digital-pool-summary',
+  digitalCodes: 'qb.sponsor.digital-codes',
   /** An invited publication's list and its counts (Q25). */
   invitations: 'qb.sponsor.invitations',
   invitationSummary: 'qb.sponsor.invitation-summary',
@@ -60,6 +67,9 @@ export const PUBLISHING_DICTIONARY = {
   rewardMethod: 'urn:jabiz:dict:quizbuks:reward-method',
   cashStatus: 'urn:jabiz:dict:quizbuks:cash-reward-status',
   redemptionStatus: 'urn:jabiz:dict:quizbuks:redemption-status',
+  digitalDelivery: 'urn:jabiz:dict:quizbuks:digital-delivery',
+  digitalStatus: 'urn:jabiz:dict:quizbuks:digital-prize-status',
+  digitalCodeStatus: 'urn:jabiz:dict:quizbuks:digital-code-status',
   audience: 'urn:jabiz:dict:quizbuks:publication-audience',
   invitationStatus: 'urn:jabiz:dict:quizbuks:invitation-status',
 } as const

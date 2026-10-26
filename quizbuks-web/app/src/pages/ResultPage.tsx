@@ -18,7 +18,8 @@ import {
   cn,
 } from '@jabiz/ui'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Banknote, CircleCheck, CircleX, Clock, Gift, Hourglass, ListChecks, Trophy } from 'lucide-react'
+import { Banknote, CircleCheck, CircleX, Clock, Copy, ExternalLink, Gift, Hourglass, ListChecks, Ticket, Trophy }
+  from 'lucide-react'
 import { useId, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { CelebrateArt } from '../qb/Illustrations'
@@ -26,9 +27,9 @@ import { APP } from '../messages'
 import { autoSubmitted, storedResult, storedStart } from '../play/storage'
 import { formatKudos } from '../qb/kudos'
 import { QB } from '../qb/messages'
-import { confirmCashReward, disputeCashReward, readAttemptResult, type AttemptResult, type CashView,
-  type QuestionResult, type QuestionView, type RedeemView, type RewardStatus, type StartOutput, type SubmitOutput }
-  from '../qb/play'
+import { confirmCashReward, confirmDigitalPrize, disputeCashReward, disputeDigitalPrize, openDigitalPrize,
+  readAttemptResult, type AttemptResult, type CashView, type DigitalView, type QuestionResult, type QuestionView,
+  type RedeemView, type RewardStatus, type StartOutput, type SubmitOutput } from '../qb/play'
 import { problemText } from '../qb/problems'
 import { Link, Redirect } from '../qb/router'
 import { letter } from './PlayPage'
@@ -49,7 +50,8 @@ function fromSubmission(submitted: SubmitOutput, start: StartOutput | null): Att
     passed: submitted.passed, reward: submitted.reward, rewardStatus: submitted.rewardStatus,
     questions: start?.questions ?? [], result: submitted.questions,
     rewardMethod: submitted.rewardStatus === 'CASH' ? 'SPONSOR_CASH'
-      : submitted.rewardStatus === 'REDEEM' ? 'OFFLINE_REDEEM' : 'PLATFORM', cash: null, redeem: null }
+      : submitted.rewardStatus === 'REDEEM' ? 'OFFLINE_REDEEM'
+        : submitted.rewardStatus === 'DIGITAL' ? 'DIGITAL_PRIZE' : 'PLATFORM', cash: null, redeem: null, digital: null }
 }
 
 /** A finished attempt as the page shows it, from the server's result. */
@@ -67,6 +69,20 @@ interface Outcome {
   /** Q22: the cash reward's or the prize's record, once the server has it. */
   cash: CashView | null
   redeem: RedeemView | null
+  /** Q33: the digital prize's record, once the server has it. */
+  digital: DigitalView | null
+}
+
+/** The content as a web address to open, when it is one (http or https only, as the materials' links); else null. */
+export function prizeLink(content: string): string | null {
+  const text = content.trim()
+  if (!/^https?:\/\/\S+$/i.test(text)) return null
+  try {
+    new URL(text)
+    return text
+  } catch {
+    return null
+  }
 }
 
 /** The texts of a question's options, in the order they were shown (letters), for the chosen numbers. */
@@ -268,10 +284,173 @@ function Redemption({ redeem, outcome }: { redeem: RedeemView | null; outcome: O
   )
 }
 
+/** The winner says what is wrong with the digital prize (Q33): nothing came, the code does not work; an administrator decides. */
+function DigitalDisputeDialog({ digital, onDone }: { digital: DigitalView; onDone: () => void }) {
+  const { t } = useTranslation(APP)
+  const id = useId()
+  const [note, setNote] = useState('')
+  const dispute = useMutation({
+    mutationFn: () => disputeDigitalPrize(digital.digitalPrizeId, note),
+    onSuccess: () => {
+      notify.success(t('digital.disputed'))
+      onDone()
+    },
+  })
+  return (
+    <Dialog open onOpenChange={(open) => {
+      if (!open && !dispute.isPending) onDone()
+    }}>
+      <DialogContent data-testid="digital-dispute-dialog">
+        <form noValidate className="flex flex-col gap-4" onSubmit={(event: FormEvent) => {
+          event.preventDefault()
+          if (note.trim() && !dispute.isPending) dispute.mutate()
+        }}>
+          <DialogHeader>
+            <DialogTitle>{t('digital.disputeTitle')}</DialogTitle>
+            <DialogDescription>{t('digital.disputeText')}</DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor={`${id}-note`}>{t('digital.disputeNote')}</Label>
+            <Textarea id={`${id}-note`} value={note} rows={3} maxLength={500} required data-testid="digital-dispute-note"
+              onChange={(event) => setNote(event.target.value)} />
+          </div>
+          {dispute.isError && <p className="text-destructive text-sm" role="alert">{problemText(dispute.error)}</p>}
+          <DialogFooter>
+            <Button type="button" variant="outline" disabled={dispute.isPending} onClick={onDone}>{t('cash.cancel')}</Button>
+            <Button type="submit" variant="destructive" disabled={dispute.isPending || !note.trim()}
+              aria-busy={dispute.isPending || undefined} data-testid="digital-dispute-send">
+              {t('digital.disputeSend')}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+/**
+ * A digital prize (Q33): what it is and where it stands, and once it is delivered the winner's "Show prize". The
+ * content is read only then (`QB_DIGITAL_PRIZE_OPEN`, which records the opening; D-Q33-3), never with the result,
+ * and lives in this component alone: shown for the rest of the page's life, never kept in storage. While delivered
+ * the winner confirms it works or reports a problem; while due or overdue they can only report.
+ */
+function DigitalPrize({ digital, attemptId, outcome }: { digital: DigitalView | null; attemptId: string;
+  outcome: Outcome }) {
+  const { t } = useTranslation(APP)
+  const queryClient = useQueryClient()
+  const [disputing, setDisputing] = useState(false)
+  const [content, setContent] = useState<string | null>(null)
+  const open = useMutation({
+    mutationFn: () => openDigitalPrize(digital!.digitalPrizeId),
+    onSuccess: (opened) => setContent(opened.prizeContent),
+  })
+  const confirm = useMutation({
+    mutationFn: () => confirmDigitalPrize(digital!.digitalPrizeId),
+    onSuccess: async () => {
+      notify.success(t('digital.confirmed'))
+      await queryClient.invalidateQueries({ queryKey: ['qb', 'attempt-result', attemptId] })
+    },
+  })
+  const refresh = () => void queryClient.invalidateQueries({ queryKey: ['qb', 'attempt-result', attemptId] })
+  // The clipboard is denied in some browsers and insecure contexts: the content stays on screen to copy by hand.
+  const copy = async () => {
+    if (content === null) return
+    try {
+      await navigator.clipboard.writeText(content)
+      notify.success(t('digital.copied'))
+    } catch {
+      notify.error(t('digital.copyFailed'))
+    }
+  }
+  const status = digital?.status ?? null
+  const variant = status === 'CONFIRMED' || status === 'DELIVERED' ? 'success'
+    : status === 'OVERDUE' || status === 'DISPUTED' ? 'warning' : 'default'
+  const canShow = status === 'DELIVERED' || status === 'CONFIRMED' || status === 'DISPUTED'
+  const canConfirm = status === 'DELIVERED'
+  const canDispute = status === 'DUE' || status === 'DELIVERED' || status === 'OVERDUE'
+  const link = content === null ? null : prizeLink(content)
+  return (
+    <Alert variant={variant} data-testid="result-reward" data-status="DIGITAL" data-digital-status={status ?? ''}>
+      <Ticket aria-hidden />
+      <AlertTitle>{t('digital.title', { amount: formatKudos(outcome.reward) })}</AlertTitle>
+      <AlertDescription className="text-current flex flex-col gap-2">
+        {digital?.description && (
+          <span className="whitespace-pre-line font-medium" data-testid="digital-prize">{digital.description}</span>
+        )}
+        {digital && status && (
+          <span>{t(`digital.status.${status}`, { sponsor: digital.sponsorCompany ?? t('cash.theSponsor'),
+            time: formatDateTime(status === 'CONFIRMED' ? digital.confirmedAt ?? '' : digital.sendBy ?? '') })}</span>
+        )}
+        {digital?.hint && content === null && canShow && (
+          <span className="text-xs" data-testid="digital-hint">{t('digital.hint', { hint: digital.hint })}</span>
+        )}
+        {digital && canShow && content === null && (
+          <span className="flex flex-wrap gap-2">
+            <Button size="sm" disabled={open.isPending} aria-busy={open.isPending || undefined} data-testid="digital-show"
+              onClick={() => open.mutate()}>
+              <Ticket aria-hidden />
+              {t('digital.show')}
+            </Button>
+          </span>
+        )}
+        {open.isError && <span className="text-destructive" role="alert">{problemText(open.error)}</span>}
+        {content !== null && (
+          <span className="flex flex-col gap-2">
+            <span className="text-xs">{t('digital.shown')}</span>
+            <span className="rounded bg-muted px-2 py-1 font-mono text-base font-semibold break-all select-all"
+              data-testid="digital-content">
+              {content}
+            </span>
+            <span className="flex flex-wrap gap-2">
+              <Button size="sm" variant="outline" data-testid="digital-copy" onClick={() => void copy()}>
+                <Copy aria-hidden />
+                {t('digital.copy')}
+              </Button>
+              {link && (
+                <Button asChild size="sm" variant="outline">
+                  <a href={link} target="_blank" rel="noopener noreferrer" data-testid="digital-link">
+                    <ExternalLink aria-hidden />
+                    {t('digital.openLink')}
+                  </a>
+                </Button>
+              )}
+            </span>
+          </span>
+        )}
+        {outcome.message && !digital && <span>{outcome.message}</span>}
+        {digital && (canConfirm || canDispute) && (
+          <span className="flex flex-wrap gap-2">
+            {canConfirm && (
+              <Button size="sm" disabled={confirm.isPending} aria-busy={confirm.isPending || undefined}
+                data-testid="digital-confirm" onClick={() => confirm.mutate()}>
+                <CircleCheck aria-hidden />
+                {t('digital.confirm')}
+              </Button>
+            )}
+            {canDispute && (
+              <Button size="sm" variant="outline" data-testid="digital-dispute" onClick={() => setDisputing(true)}>
+                {t('digital.dispute')}
+              </Button>
+            )}
+          </span>
+        )}
+        {confirm.isError && <span className="text-destructive" role="alert">{problemText(confirm.error)}</span>}
+        {disputing && digital && <DigitalDisputeDialog digital={digital} onDone={() => {
+          setDisputing(false)
+          refresh()
+        }} />}
+      </AlertDescription>
+    </Alert>
+  )
+}
+
 function Reward({ outcome, survey, attemptId }: { outcome: Outcome; survey: boolean; attemptId: string }) {
   const { t } = useTranslation(APP)
   if (outcome.rewardStatus === 'CASH') return <CashReward cash={outcome.cash} attemptId={attemptId} outcome={outcome} />
   if (outcome.rewardStatus === 'REDEEM') return <Redemption redeem={outcome.redeem} outcome={outcome} />
+  if (outcome.rewardStatus === 'DIGITAL') {
+    return <DigitalPrize digital={outcome.digital} attemptId={attemptId} outcome={outcome} />
+  }
   if (outcome.rewardStatus === 'PENDING') {
     return (
       <Alert variant="warning" data-testid="result-reward" data-status="PENDING">
@@ -355,6 +534,7 @@ export function ResultPage({ attemptId }: { attemptId: string }) {
     questions: data.result,
     cash: data.cash ?? null,
     redeem: data.redeem ?? null,
+    digital: data.digital ?? null,
   }
   const automatic = outcome.status === 'EXPIRED' || autoSubmitted(attemptId)
   const byNo = new Map(data.questions.map((q) => [q.no, q]))

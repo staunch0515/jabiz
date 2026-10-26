@@ -4,13 +4,14 @@ description: >-
   The platform's monthly figures for investors (Q27): merchants, takers, attempts, prizes, invitations and money,
   one row per UTC month of the period, oldest first; a month with nothing is a row of zeros. At most 36 months: later
   months of a longer period are left out (the admin page refuses such a period)
-entities: [QbSponsor, QbProfile, QbAttempt, QbPublicationCard, QbRedemption, QbInvitation, QbTopUp]
+entities: [QbSponsor, QbProfile, QbAttempt, QbPublicationCard, QbRedemption, QbDigitalPrize, QbInvitation, QbTopUp]
 datasets:
   QbSponsor: urn:jabiz:dataset:default:QbSponsor
   QbProfile: urn:jabiz:dataset:default:QbProfile
   QbAttempt: urn:jabiz:dataset:default:QbAttempt
   QbPublicationCard: urn:jabiz:dataset:default:QbPublicationCard
   QbRedemption: urn:jabiz:dataset:default:QbRedemption
+  QbDigitalPrize: urn:jabiz:dataset:default:QbDigitalPrize
   QbInvitation: urn:jabiz:dataset:default:QbInvitation
   QbTopUp: urn:jabiz:dataset:default:QbTopUp
 params:
@@ -51,7 +52,7 @@ report:
 -- (the welcome step; a profile made by a merchant's application is not a taker's; one who applies later still was),
 -- active when they started an attempt; attempts by their start, completions and passes by their
 -- submission (a run-out attempt counts as a completion, not a pass unless it passed); prizes won by the redemption's
--- creation, collected by that time, claimed by the claim still standing or completed (a declined or lapsed claim is
+-- creation (and, Q33, a digital prize's), collected by that time (a digital prize by its delivery), claimed by the claim still standing or completed (a declined or lapsed claim is
 -- undone, RedemptionProcesses.dueAgain, and no longer counts); invitations by their last send and their answer; top-ups by their
 -- payment; rewards paid and the commission by the payment of the reward (Kudos rewards only; cash and prizes are the
 -- merchant's own money and are counted above as attempts and prizes). The current version of each temporal record.
@@ -104,13 +105,19 @@ SELECT
        AND a.{{QbAttempt.submittedAt}} < mo.month_end AT TIME ZONE 'UTC') AS passes,
     (SELECT count(*) FROM {{QbRedemption}} r
      WHERE r.{{QbRedemption.dueAt}} >= mo.month_start AT TIME ZONE 'UTC'
-       AND r.{{QbRedemption.dueAt}} < mo.month_end AT TIME ZONE 'UTC') AS prizesWon,
+       AND r.{{QbRedemption.dueAt}} < mo.month_end AT TIME ZONE 'UTC')
+    + (SELECT count(*) FROM {{QbDigitalPrize}} g
+       WHERE g.{{QbDigitalPrize.dueAt}} >= mo.month_start AT TIME ZONE 'UTC'
+         AND g.{{QbDigitalPrize.dueAt}} < mo.month_end AT TIME ZONE 'UTC') AS prizesWon,
     (SELECT count(*) FROM {{QbRedemption}} r
      WHERE r.{{QbRedemption.claimedAt}} >= mo.month_start AT TIME ZONE 'UTC'
        AND r.{{QbRedemption.claimedAt}} < mo.month_end AT TIME ZONE 'UTC') AS prizesClaimed,
     (SELECT count(*) FROM {{QbRedemption}} r
      WHERE r.{{QbRedemption.redeemedAt}} >= mo.month_start AT TIME ZONE 'UTC'
-       AND r.{{QbRedemption.redeemedAt}} < mo.month_end AT TIME ZONE 'UTC') AS prizesRedeemed,
+       AND r.{{QbRedemption.redeemedAt}} < mo.month_end AT TIME ZONE 'UTC')
+    + (SELECT count(*) FROM {{QbDigitalPrize}} g
+       WHERE g.{{QbDigitalPrize.deliveredAt}} >= mo.month_start AT TIME ZONE 'UTC'
+         AND g.{{QbDigitalPrize.deliveredAt}} < mo.month_end AT TIME ZONE 'UTC') AS prizesRedeemed,
     (SELECT count(*) FROM {{QbInvitation}} i
      WHERE i.{{QbInvitation.lastSentAt}} >= mo.month_start AT TIME ZONE 'UTC'
        AND i.{{QbInvitation.lastSentAt}} < mo.month_end AT TIME ZONE 'UTC') AS invitationsSent,

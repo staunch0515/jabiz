@@ -472,6 +472,8 @@ describe('SponsorReviewPage', () => {
     server.permissions.add('qb.admin.reward-methods')
     renderAt(`/qb/reviews/sponsors/${SPONSOR_ID}`, '/qb/reviews/sponsors/:userId', <SponsorReviewPage />)
     await userEvent.click(await screen.findByTestId('sponsor-method-SPONSOR_CASH'))
+    // Q33: the fourth method is offered too, and stays off unless chosen.
+    expect(screen.getByTestId('sponsor-method-DIGITAL_PRIZE')).toHaveAttribute('data-state', 'unchecked')
     await userEvent.type(screen.getByTestId('sponsor-methods-note'), 'Trusted shop')
     await userEvent.click(screen.getByTestId('sponsor-methods-save'))
     await waitFor(() => expect(server.runProcess).toHaveBeenCalledWith(PROCESS.rewardMethodsSet,

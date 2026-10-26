@@ -33,11 +33,16 @@ public class RewardConfig {
     }
 
     private DatasetDefinition defaultDataset(String entity) {
+        return defaultDataset(entity, 100);
+    }
+
+    /** @param maxWriteBatch the most changes one process commits: a load of codes (Q33) writes a thousand at once */
+    private DatasetDefinition defaultDataset(String entity, int maxWriteBatch) {
         return DatasetDefinition.define(QbRewards.defaultDataset(entity), d -> d
             .targetEntityType(entity)
             .asDefault()
             .permissions(QbPermissions.ADMIN_PUBLICATION_READ, QbPermissions.SPONSOR_VIEW_WRITE)
-            .policy(p -> p.processOnlyWrites().maxWriteBatchSize(100))
+            .policy(p -> p.processOnlyWrites().maxWriteBatchSize(maxWriteBatch))
             .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
     }
 
@@ -64,6 +69,123 @@ public class RewardConfig {
     @Bean
     EntityDefinition qbRedeemTokenEntity() {
         return QbRewards.REDEEM_TOKEN_ENTITY;
+    }
+
+    // ---- Q33: digital prizes ---------------------------------------------------------------------------------------
+
+    @Bean
+    EntityDefinition qbDigitalPrizeEntity() {
+        return QbDigitalPrizes.PRIZE_ENTITY;
+    }
+
+    @Bean
+    EntityDefinition qbDigitalCodeEntity() {
+        return QbDigitalPrizes.CODE_ENTITY;
+    }
+
+    @Bean
+    DatasetDefinition qbDigitalPrizeDataset() {
+        return defaultDataset(QbDigitalPrizes.DIGITAL_PRIZE);
+    }
+
+    @Bean
+    DatasetDefinition qbSponsorDigitalPrizeDataset() {
+        return ownDataset(QbDigitalPrizes.sponsorDataset(QbDigitalPrizes.DIGITAL_PRIZE),
+            QbDigitalPrizes.DIGITAL_PRIZE, "sponsorId", QbPermissions.PUBLICATION_WRITE);
+    }
+
+    @Bean
+    DatasetDefinition qbTakerDigitalPrizeDataset() {
+        return ownDataset(QbDigitalPrizes.takerDataset(QbDigitalPrizes.DIGITAL_PRIZE), QbDigitalPrizes.DIGITAL_PRIZE,
+            "userId", QbPermissions.ME);
+    }
+
+    /** The pool: written by the processes only; the sponsor sees their own (never a code's content). */
+    @Bean
+    DatasetDefinition qbDigitalCodeDataset() {
+        return defaultDataset(QbDigitalPrizes.DIGITAL_CODE,
+            com.jabiz.quizbuks.publishing.PublishingLimits.DIGITAL_CODES_PER_LOAD);
+    }
+
+    @Bean
+    DatasetDefinition qbSponsorDigitalCodeDataset() {
+        return ownDataset(QbDigitalPrizes.sponsorDataset(QbDigitalPrizes.DIGITAL_CODE), QbDigitalPrizes.DIGITAL_CODE,
+            "sponsorId", QbPermissions.PUBLICATION_WRITE);
+    }
+
+    @Bean
+    StaticDictionary qbDigitalDeliveryDictionary() {
+        return StaticDictionary.define(com.jabiz.quizbuks.publishing.DigitalDelivery.DICTIONARY, d -> d
+            .item(com.jabiz.quizbuks.publishing.DigitalDelivery.POOL, "en", "A code each, from a pool loaded in advance",
+                "zh", "码池：每位获奖者一个预先加载的码", "ja", "事前に登録したコードを1人1つ")
+            .item(com.jabiz.quizbuks.publishing.DigitalDelivery.SHARED, "en", "One shared code or link for everyone",
+                "zh", "共用：所有获奖者同一个码或链接", "ja", "全員共通のコードまたはリンク")
+            .item(com.jabiz.quizbuks.publishing.DigitalDelivery.SPONSOR_SENT, "en", "Sent by the sponsor to each winner",
+                "zh", "商家逐个发送", "ja", "スポンサーが個別に送付"));
+    }
+
+    @Bean
+    StaticDictionary qbDigitalPrizeStatusDictionary() {
+        return StaticDictionary.define(QbDigitalPrizes.STATUS_DICTIONARY, d -> d
+            .item(DigitalPrizeStatus.DUE, "en", "To be sent by the sponsor", "zh", "待商家发送", "ja", "スポンサーの送付待ち")
+            .item(DigitalPrizeStatus.DELIVERED, "en", "Delivered", "zh", "已发放", "ja", "送付済み")
+            .item(DigitalPrizeStatus.CONFIRMED, "en", "Confirmed", "zh", "已确认", "ja", "確認済み")
+            .item(DigitalPrizeStatus.DISPUTED, "en", "Disputed", "zh", "有争议", "ja", "異議あり")
+            .item(DigitalPrizeStatus.OVERDUE, "en", "Sending overdue", "zh", "发送逾期", "ja", "送付期限超過")
+            .item(DigitalPrizeStatus.VOID, "en", "Void", "zh", "已作废", "ja", "無効"));
+    }
+
+    @Bean
+    StaticDictionary qbDigitalPrizeResolutionDictionary() {
+        return StaticDictionary.define(QbDigitalPrizes.RESOLUTION_DICTIONARY, d -> d
+            .item(DigitalPrizeStatus.RESOLUTION_DELIVERED, "en", "Delivered", "zh", "已发放", "ja", "送付済み")
+            .item(DigitalPrizeStatus.RESOLUTION_UNDELIVERED, "en", "Not delivered: owed again", "zh", "未发放：重新待发送",
+                "ja", "未送付：再び送付待ち")
+            .item(DigitalPrizeStatus.RESOLUTION_VOID, "en", "Void", "zh", "作废", "ja", "無効"));
+    }
+
+    @Bean
+    StaticDictionary qbDigitalCodeStatusDictionary() {
+        return StaticDictionary.define(QbDigitalPrizes.CODE_STATUS_DICTIONARY, d -> d
+            .item(DigitalPrizeStatus.CODE_AVAILABLE, "en", "Available", "zh", "可用", "ja", "未発行")
+            .item(DigitalPrizeStatus.CODE_ISSUED, "en", "Issued to a winner", "zh", "已发给获奖者", "ja", "当選者に発行済み")
+            .item(DigitalPrizeStatus.CODE_REVOKED, "en", "Taken back", "zh", "已撤回", "ja", "取り消し済み"));
+    }
+
+    @Bean
+    ProcessDefinition<DigitalCodeProcesses.LoadInput, DigitalCodeProcesses.LoadOutput, ProcessContext>
+        qbDigitalCodesLoad() {
+        return DigitalCodeProcesses.load();
+    }
+
+    @Bean
+    ProcessDefinition<DigitalCodeProcesses.RevokeInput, DigitalCodeProcesses.RevokeOutput, ProcessContext>
+        qbDigitalCodesRevoke() {
+        return DigitalCodeProcesses.revoke();
+    }
+
+    @Bean
+    ProcessDefinition<DigitalPrizeProcesses.PrizeRef, DigitalPrizeProcesses.OpenOutput, ProcessContext>
+        qbDigitalPrizeOpen() {
+        return DigitalPrizeProcesses.open();
+    }
+
+    @Bean
+    ProcessDefinition<DigitalPrizeProcesses.PrizeRef, DigitalPrizeProcesses.PrizeOutput, ProcessContext>
+        qbDigitalPrizeConfirm() {
+        return DigitalPrizeProcesses.confirm();
+    }
+
+    @Bean
+    ProcessDefinition<DigitalPrizeProcesses.DisputeInput, DigitalPrizeProcesses.PrizeOutput, ProcessContext>
+        qbDigitalPrizeDispute() {
+        return DigitalPrizeProcesses.dispute();
+    }
+
+    @Bean
+    ProcessDefinition<DigitalPrizeProcesses.ResolveInput, DigitalPrizeProcesses.PrizeOutput, ProcessContext>
+        qbDigitalPrizeResolve() {
+        return DigitalPrizeProcesses.resolve();
     }
 
     /** The codes: written by the processes only; the sponsor sees their own (never the token's value). */

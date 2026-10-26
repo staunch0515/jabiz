@@ -109,6 +109,8 @@ public final class QbParams {
     public static final String CASH_CONFIRM_DAYS = "qb.reward.cash.confirm-days";
     public static final String CASH_PAY_DAYS = "qb.reward.cash.pay-days";
     public static final String REDEEM_DAYS = "qb.reward.redeem-days";
+    /** Q33: days a sponsor has to send a digital prize by hand when the publication names none. */
+    public static final String DIGITAL_SEND_DAYS = "qb.reward.digital.send-days";
     /** The oldest version of the app that may still be used. */
     public static final String APP_MIN_VERSION = "qb.app.min-version";
     /**
@@ -262,6 +264,8 @@ public final class QbParams {
         new Param(CASH_PAY_DAYS, DAYS, "14",
             "Days a sponsor has to pay a cash reward before they are reminded"),
         new Param(REDEEM_DAYS, DAYS, "30", "Days a prize may be collected at the sponsor's place after the quiz"),
+        new Param(DIGITAL_SEND_DAYS, DAYS, "3",
+            "Days a sponsor has to send a digital prize by hand unless the publication says otherwise"),
         // Q8a: AI generation (the controlled ones last, in the order of AI_CONTROLLED).
         new Param(AI_ENABLED, BOOL, false, "Whether sponsors may ask the AI for questions (Claude)"),
         new Param(AI_MODEL, Map.of("type", "code", "dictUrn", "urn:jabiz:dict:quizbuks:ai-model", "allowedValues",

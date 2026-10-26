@@ -42,12 +42,16 @@ import {
   readRewardSettings,
   REWARD_SETTINGS_QUERY,
   REDEEM_DESCRIPTION_LENGTH,
+  DIGITAL_CONTENT_LENGTH,
+  DIGITAL_DELIVERIES,
+  DIGITAL_DESCRIPTION_LENGTH,
   REGIONS,
   savePublication,
   submitPublication,
   surveyReward,
   AUDIENCES,
   type Audience,
+  type DigitalDelivery,
   type FormErrors,
   type Problem,
   type PublicationDetail,
@@ -57,7 +61,8 @@ import {
   type SaveOutput,
 } from './api'
 import { publicationPath, PUBLICATIONS_QUERY } from './paths'
-import { LabelledProblems, PublicationSummary, useAudienceLabel, useDebounced, useRegionLabel, useRewardMethodLabel, useVersionOf } from './shared'
+import { LabelledProblems, PublicationSummary, useAudienceLabel, useDebounced, useDigitalDeliveryLabel, useRegionLabel,
+  useRewardMethodLabel, useVersionOf } from './shared'
 import { TiersEditor } from './TiersEditor'
 
 export const STEP_COUNT = 3
@@ -153,6 +158,7 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
   const settings = useQuery({ queryKey: REWARD_SETTINGS_QUERY, queryFn: readRewardSettings, staleTime: 60_000 })
   const allowed = settings.data?.methods
   const methodLabel = useRewardMethodLabel()
+  const deliveryLabel = useDigitalDeliveryLabel()
   const methodChoices: RewardMethod[] = allowed ?? ['PLATFORM']
   // A new draft starts with the first method allowed (the platform's is not always among them) until the sponsor
   // picks one; a draft already saved keeps its own, which the choice then shows as not allowed any more.
@@ -335,6 +341,70 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
           )}
         </Field>
       )}
+      {rewardMethod === 'DIGITAL_PRIZE' && (
+        // Q33: how the prize reaches the winner, and what each way needs. The fields of another way keep what was
+        // typed but are not sent (`inputOf`).
+        <div className="flex flex-col gap-4">
+          <fieldset className="flex flex-col gap-2" data-testid="publication-digital-delivery"
+            aria-describedby={[`${id}-delivery-hint`, problemOf('digitalDelivery') ? `${id}-delivery-error` : undefined]
+              .filter(Boolean).join(' ')}>
+            <legend className="text-sm font-medium">{t('publishing.field.digitalDelivery')}</legend>
+            <p id={`${id}-delivery-hint`} className="text-muted-foreground text-sm">{t('publishing.field.digitalDeliveryHint')}</p>
+            <RadioGroup value={form.digitalDelivery ?? ''} disabled={locked}
+              onValueChange={(value) => set('digitalDelivery', value as DigitalDelivery)}>
+              {DIGITAL_DELIVERIES.map((delivery) => (
+                <div key={delivery} className="flex items-start gap-2">
+                  <RadioGroupItem id={`${id}-delivery-${delivery}`} value={delivery}
+                    aria-describedby={`${id}-delivery-${delivery}-hint`} data-testid={`publication-digital-delivery-${delivery}`} />
+                  <div className="flex flex-col">
+                    <Label htmlFor={`${id}-delivery-${delivery}`} className="font-normal">{deliveryLabel(delivery)}</Label>
+                    <span id={`${id}-delivery-${delivery}-hint`} className="text-muted-foreground text-xs">
+                      {t(`publishing.deliveries.${delivery}`)}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </RadioGroup>
+            {problemOf('digitalDelivery') && (
+              <p id={`${id}-delivery-error`} className="text-destructive text-sm">{problemOf('digitalDelivery')}</p>
+            )}
+          </fieldset>
+          <Field id={`${id}-digital-description`} label={t('publishing.field.digitalDescription')}
+            problem={problemOf('digitalDescription')}
+            hint={t('publishing.field.digitalDescriptionHint', { max: DIGITAL_DESCRIPTION_LENGTH })}>
+            {(aria) => (
+              <Textarea {...aria} value={form.digitalDescription} rows={3} maxLength={DIGITAL_DESCRIPTION_LENGTH}
+                disabled={locked} data-testid="publication-digital-description"
+                onChange={(event) => set('digitalDescription', event.target.value)} />
+            )}
+          </Field>
+          {form.digitalDelivery === 'SHARED' && (
+            <Field id={`${id}-digital-content`} label={t('publishing.field.digitalContent')}
+              problem={problemOf('digitalContent')} hint={t('publishing.field.digitalContentHint')}>
+              {(aria) => (
+                <Textarea {...aria} value={form.digitalContent} rows={2} maxLength={DIGITAL_CONTENT_LENGTH}
+                  autoComplete="off" spellCheck={false} disabled={locked} data-testid="publication-digital-content"
+                  onChange={(event) => set('digitalContent', event.target.value)} />
+              )}
+            </Field>
+          )}
+          {form.digitalDelivery === 'SPONSOR_SENT' && (
+            <Field id={`${id}-digital-send-days`} label={t('publishing.field.digitalSendDays')}
+              problem={problemOf('digitalSendDays')} hint={t('publishing.field.digitalSendDaysHint')}>
+              {(aria) => (
+                <Input {...aria} inputMode="numeric" value={form.digitalSendDays} autoComplete="off" disabled={locked}
+                  className="max-w-32" data-testid="publication-digital-send-days"
+                  onChange={(event) => set('digitalSendDays', event.target.value)} />
+              )}
+            </Field>
+          )}
+          {form.digitalDelivery === 'POOL' && (
+            <p className="text-muted-foreground text-sm" data-testid="publication-digital-pool-note">
+              {t('publishing.field.digitalPoolNote')}
+            </p>
+          )}
+        </div>
+      )}
       <fieldset className="flex flex-col gap-2" data-testid="publication-audience"
         aria-describedby={[`${id}-audience-hint`, problemOf('audience') ? `${id}-audience-error` : undefined]
           .filter(Boolean).join(' ')}>
@@ -491,6 +561,9 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
           reward: tier.reward })),
         rewardMethod,
         redeemDescription: form.redeemDescription.trim() || null,
+        digitalDelivery: form.digitalDelivery,
+        digitalDescription: form.digitalDescription.trim() || null,
+        digitalSendDays: form.digitalSendDays.trim() === '' ? null : Number(form.digitalSendDays),
       }} />
     </div>,
   ]

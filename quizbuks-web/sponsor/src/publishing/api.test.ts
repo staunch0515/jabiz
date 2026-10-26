@@ -28,6 +28,10 @@ const FORM: PublicationForm = {
     { key: 'b', tierId: null, fromScore: '2', toScore: '2', reward: '100' },
   ],
   rewardMethod: 'PLATFORM',
+  digitalDelivery: null,
+  digitalDescription: '',
+  digitalSendDays: '',
+  digitalContent: '',
   audience: 'PUBLIC',
   redeemDescription: '',
 }
@@ -51,6 +55,21 @@ describe('the wizard\'s form', () => {
         { tierId: 't1', fromScore: 0, toScore: 1, reward: 0 },
         { tierId: null, fromScore: 2, toScore: 2, reward: 100 },
       ], rewardMethod: 'PLATFORM', redeemDescription: null, audience: 'PUBLIC' } })
+  })
+
+  it('sends a digital prize\'s fields only with that method, the shared content only when typed (Q33)', () => {
+    const shared = { ...FORM, rewardMethod: 'DIGITAL_PRIZE' as const, digitalDelivery: 'SHARED' as const,
+      digitalDescription: ' A month of streaming ', digitalContent: ' CODE-1 ', digitalSendDays: '5' }
+    expect(inputOf(shared, 'p1', 4).input).toMatchObject({ rewardMethod: 'DIGITAL_PRIZE', digitalDelivery: 'SHARED',
+      digitalDescription: 'A month of streaming', digitalContent: 'CODE-1', digitalSendDays: null })
+    // Blank, the sealed content stays: the key is left out rather than sent empty.
+    expect(inputOf({ ...shared, digitalContent: '  ' }, 'p1', 4).input).not.toHaveProperty('digitalContent')
+    const sent = { ...shared, digitalDelivery: 'SPONSOR_SENT' as const }
+    expect(inputOf(sent, 'p1', 4).input).toMatchObject({ digitalDelivery: 'SPONSOR_SENT', digitalSendDays: 5 })
+    expect(inputOf(sent, 'p1', 4).input).not.toHaveProperty('digitalContent')
+    expect(inputOf({ ...sent, digitalSendDays: 'x' }, 'p1', 4)).toEqual({ errors: { digitalSendDays: 'wholeNumber' } })
+    // Another method leaves what was typed behind.
+    expect(inputOf({ ...shared, rewardMethod: 'SPONSOR_CASH' }, 'p1', 4).input).not.toHaveProperty('digitalDelivery')
   })
 
   it('marks what is not a whole number, and a tier\'s missing values, without sending', () => {
