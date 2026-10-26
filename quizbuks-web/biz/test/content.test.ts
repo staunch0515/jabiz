@@ -69,6 +69,18 @@ describe('the rendered pages', () => {
     expect(pricing).not.toContain('class="hero-art"')
   })
 
+  it('offer both sign-ins in the header and the footer of every language (Q34)', () => {
+    for (const language of LANGUAGES) {
+      const content = contentOf(language)
+      const html = renderPage({ language, page: 'home', content, base: '/biz/', tryQuizzes, assets, siteUrl })
+      // The taker's opens the phone-sized window, the merchant's a new tab, as the sign-ups do.
+      expect(html.match(/href="\/taker\/login" data-signup="taker"/g)).toHaveLength(2)
+      expect(html.match(/href="\/sponsor\/login" data-signup="sponsor" target="_blank" rel="noopener"/g)).toHaveLength(2)
+      expect(html).toContain(content.signIn.taker)
+      expect(html).toContain(content.signIn.sponsor)
+    }
+  })
+
   it('escape the content and link the languages to the same page', () => {
     const content = structuredClone(contentOf('en'))
     content.home.title = 'Fish & <chips>'

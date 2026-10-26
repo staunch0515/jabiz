@@ -103,6 +103,8 @@ export interface FeedRequest {
   q?: string
   /** Only publications whose reward comes this way (Q22); all when absent. */
   method?: RewardMethod | null
+  /** Also the publications the taker answered (Q34); left out when absent. */
+  includeAnswered?: boolean
   sort?: FeedSort
   filters?: Filter[]
   offset?: number
@@ -138,7 +140,7 @@ function feedCard(row: Record<string, unknown>): FeedCard {
 export async function readFeed(request: FeedRequest): Promise<QueryPage<FeedCard>> {
   const page = await runQuery<Record<string, unknown>>(PLAY.feed, {
     params: { at: request.at, country: request.country, q: request.q?.trim() || null,
-      method: request.method ?? null },
+      method: request.method ?? null, includeAnswered: request.includeAnswered ?? false },
     filters: request.filters,
     sorts: request.sort ? [FEED_SORTS[request.sort]] : undefined,
     offset: request.offset,

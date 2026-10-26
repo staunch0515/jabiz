@@ -39,6 +39,7 @@ const en = {
   },
   methods: {
     choose: 'How the reward is paid',
+    menu: 'Reward type: {{method}}',
     all: 'All',
     PLATFORM: 'Kudos paid by QuizBuks',
     PLATFORMShort: 'Kudos',
@@ -148,6 +149,9 @@ const en = {
   },
   feed: {
     listTitle: 'Quizzes you can answer',
+    answeredHidden: 'Quizzes you have answered are not shown here.',
+    includeAnswered: 'Show quizzes I answered',
+    includeAnsweredHint: 'Hidden by default; one you have started stays.',
     search: 'Search quizzes',
     searchButton: 'Search',
     sort: 'Sort',
@@ -182,6 +186,10 @@ const en = {
     more: 'Show more',
   },
   detail: {
+    readMore: 'Show more',
+    readLess: 'Show less',
+    rewardTitle: 'Your reward',
+    statsLine: '{{recent}} in the last 24 hours · {{total}} in total',
     back: 'All quizzes',
     backHome: 'Back to the quizzes',
     notFound: 'Quiz not available',
@@ -420,6 +428,7 @@ const zh: typeof en = {
   },
   methods: {
     choose: '奖励支付方式',
+    menu: '奖励类型：{{method}}',
     all: '全部',
     PLATFORM: '平台支付 Kudos',
     PLATFORMShort: 'Kudos',
@@ -529,6 +538,9 @@ const zh: typeof en = {
   },
   feed: {
     listTitle: '可以参加的 Quiz',
+    answeredHidden: '已答过的 Quiz 不在这里显示。',
+    includeAnswered: '显示已答过的 Quiz',
+    includeAnsweredHint: '默认隐藏；进行中的仍会显示。',
     search: '搜索 Quiz',
     searchButton: '搜索',
     sort: '排序',
@@ -563,6 +575,10 @@ const zh: typeof en = {
     more: '显示更多',
   },
   detail: {
+    readMore: '展开全文',
+    readLess: '收起',
+    rewardTitle: '你的奖励',
+    statsLine: '24 小时内 {{recent}} 人完成 · 共 {{total}} 人',
     back: '全部 Quiz',
     backHome: '返回 Quiz 列表',
     notFound: '无法参加此 Quiz',
@@ -801,6 +817,7 @@ const ja: typeof en = {
   },
   methods: {
     choose: '報酬の支払い方法',
+    menu: '報酬の種類：{{method}}',
     all: 'すべて',
     PLATFORM: 'QuizBuks が Kudos を支払う',
     PLATFORMShort: 'Kudos',
@@ -910,6 +927,9 @@ const ja: typeof en = {
   },
   feed: {
     listTitle: '回答できるクイズ',
+    answeredHidden: '回答済みのクイズはここに表示されません。',
+    includeAnswered: '回答済みのクイズも表示',
+    includeAnsweredHint: '既定では非表示。回答中のものは表示されます。',
     search: 'クイズを検索',
     searchButton: '検索',
     sort: '並べ替え',
@@ -944,6 +964,10 @@ const ja: typeof en = {
     more: 'さらに表示',
   },
   detail: {
+    readMore: 'もっと見る',
+    readLess: '閉じる',
+    rewardTitle: 'あなたの報酬',
+    statsLine: '24 時間で {{recent}} 人が完了 · 合計 {{total}} 人',
     back: 'すべてのクイズ',
     backHome: 'クイズ一覧へ戻る',
     notFound: 'このクイズには回答できません',
