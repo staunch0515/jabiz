@@ -97,9 +97,13 @@ tools/quizbuks/local-demo.sh status | logs | seed
 - **PWA 的作用域是整个主机**（`/`）：App 的 Service Worker 只缓存 App 的外壳，放过 `/sponsor/`、`/admin/`、`/api/`；要撤下 PWA，先以 `Pwa.REMOVE` 发布一个版本
   （注销已安装的 Service Worker），至少一个发布周期后再改为 `OFF`（平台指南 `docs/guide/app-spa.md` 第 3 节）。
 - **邮件链接**按入口指向各自的前端：App 的验证、找回密码链接在 `/taker/auth/…`，商家后台的在 `/sponsor/auth/…`。`JABIZ_MAIL_BASE_URL` 必须是主机的根地址。
-- **Google 登录（只给 App）**：在 Google Cloud 控制台建 OAuth 客户端（Web 应用），把 `https://<主机>/taker/login/oidc` 登记为已授权的重定向 URI，然后设置
-  `SPRING_PROFILES_ACTIVE=google`、`JABIZ_OIDC_GOOGLE_CLIENT_ID`、`JABIZ_OIDC_GOOGLE_CLIENT_SECRET` 与 `QB_OIDC_REDIRECT_APP`（同一地址）。
-  首次用 Google 登录且邮箱未被使用时自动开户（答题人）；邮箱已被使用的人先用原来的方式登录，再在 App 的账户页关联 Google。商家后台不提供 Google 登录。
+- **Google 登录（App 与商家后台，Q37）**：在 Google Cloud 控制台建一个 OAuth 客户端（Web 应用），把两个地址都登记为已授权的重定向 URI：
+  `https://<主机>/taker/login/oidc`（App）与 `https://<主机>/sponsor/login/oidc`（商家后台）；然后设置
+  `SPRING_PROFILES_ACTIVE=google`、`JABIZ_OIDC_GOOGLE_CLIENT_ID`、`JABIZ_OIDC_GOOGLE_CLIENT_SECRET`、`QB_OIDC_REDIRECT_APP` 与 `QB_OIDC_REDIRECT_SPONSOR`（各自同一地址）。
+  **已开着 Google 的部署升级时必须加上 `QB_OIDC_REDIRECT_SPONSOR` 并在控制台登记第二个地址**，否则应用不能启动（缺少该变量）。
+  首次用 Google 登录且邮箱未被使用时自动开户：在 App 开的是答题人，在商家后台开的是商家（随后照常申请入驻）。
+  邮箱已被使用的人先用原来的方式登录，再在账户页关联 Google。已是答题人的人要成为商家：在商家后台用同一邮箱注册、打开"你已有账号"邮件中的链接，
+  之后也能用 Google 登录商家后台。管理后台不提供 Google 登录。
 - **Stripe 的返回地址**由配置决定，不在 Stripe 后台设置：充值跳回 `QB_SPONSOR_LINK` 下的 `wallet/topups/<编号>`，开通收款账户跳回 `QB_APP_LINK` 下的 `wallet/payout`。
 - **本机注册**：`docker compose -f deploy/quizbuks/compose.dev.yaml --profile tools up -d` 另起 Mailpit（<http://localhost:8025> 查看邮件）；
   在 `.env` 中设 `JABIZ_MAIL_ENABLED=true`、`JABIZ_MAIL_FROM=noreply@quizbuks.local`、`SPRING_MAIL_HOST=mailpit`、`SPRING_MAIL_PORT=1025`。
@@ -266,9 +270,10 @@ tools/quizbuks/local-demo.sh status | logs | seed
 | `JABIZ_MAIL_BASE_URL` | 开启邮件时 | 主机的根地址，如 `https://quizbuks.example.com`（链接按入口指向各自的前端，退订页也是） |
 | `SPRING_MAIL_HOST` / `SPRING_MAIL_PORT` / `SPRING_MAIL_USERNAME` / `SPRING_MAIL_PASSWORD` | 开启邮件时 | 邮件服务器（SMTP） |
 | `QB_SPONSOR_LINK` | 否 | 商家后台的绝对地址，Stripe 支付后跳回（`…/wallet/topups/…`）；缺省为 `JABIZ_MAIL_BASE_URL` 主机上的 `/sponsor/` |
-| `SPRING_PROFILES_ACTIVE` | 否 | `google` 开启 App 的 Google 登录（`application-google.yml`，见"前端"） |
+| `SPRING_PROFILES_ACTIVE` | 否 | `google` 开启 App 与商家后台的 Google 登录（`application-google.yml`，见"前端"） |
 | `JABIZ_OIDC_GOOGLE_CLIENT_ID` / `JABIZ_OIDC_GOOGLE_CLIENT_SECRET` | 开启 Google 时 | Google OAuth 客户端（Web 应用）；密钥只放在环境变量中 |
 | `QB_OIDC_REDIRECT_APP` | 开启 Google 时 | App 的回调地址 `https://<主机>/taker/login/oidc`，与 Google 控制台中登记的完全相同 |
+| `QB_OIDC_REDIRECT_SPONSOR` | 开启 Google 时 | 商家后台的回调地址 `https://<主机>/sponsor/login/oidc`（Q37），与 Google 控制台中登记的完全相同 |
 | `JABIZ_TRUSTED_PROXIES` | 在代理之后 | 可信代理的地址或网段（逗号分隔），登录记录与限流据此取客户端地址；不得含 `0.0.0.0/0`、`::/0`（启动错误），见"密钥与部署" |
 
 外部服务（Q6a 起 Stripe 为必需；见上节"充值与核对"）：
