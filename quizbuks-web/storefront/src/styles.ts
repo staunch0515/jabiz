@@ -29,6 +29,7 @@ legend { font-weight: 600; margin-bottom: 0.5rem; }
 .clock { font-variant-numeric: tabular-nums; margin: 0; }
 .code { font-size: 1.5rem; font-weight: 700; letter-spacing: 0.05em; user-select: all; margin: 0.5rem 0; }
 .status { min-height: 1.25rem; }
+.badge { font-size: 0.75rem; margin: 1rem 0 0; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0);
   white-space: nowrap; }
 `

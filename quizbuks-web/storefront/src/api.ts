@@ -15,6 +15,8 @@ export interface Campaign {
   passScore: number
   percent: number
   codesToday: boolean
+  /** The free plan (S3b): the block says it is QuizBuks's. */
+  badge: boolean
 }
 
 export interface Option {
