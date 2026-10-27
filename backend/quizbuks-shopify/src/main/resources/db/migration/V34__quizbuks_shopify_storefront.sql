@@ -40,9 +40,10 @@ CREATE TABLE qbs_taker (
     CONSTRAINT uk_qbs_taker UNIQUE (shop_domain, customer_id)
 );
 
--- A batch of codes: one Shopify discount (a percentage off everything, until ends_at) and its codes. CREATING while
--- Shopify adds the codes; READY once they are added; RETIRED once seven days or fewer remain (no more codes are
--- handed out of it); DELETED once its end passed and the discount and its codes were deleted.
+-- A batch of codes: one Shopify discount (a percentage off everything, until ends_at) and its codes, of one campaign.
+-- CREATING while Shopify adds the codes; READY once they are added; RETIRED once seven days or fewer remain, its
+-- shop uninstalled the app or Shopify never finished adding them (no more codes are handed out of it). Deleted with
+-- its codes (and its discount from the shop) once its end passed: a shop holds about two weeks of batches.
 CREATE TABLE qbs_discount_batch (
     batch_id         varchar(36)   PRIMARY KEY,
     shop_domain      varchar(255)  NOT NULL,
@@ -50,7 +51,7 @@ CREATE TABLE qbs_discount_batch (
     percent          numeric(2, 0) NOT NULL,
     discount_id      varchar(255)  NOT NULL,
     bulk_creation_id varchar(255),
-    status           varchar(8)    NOT NULL CHECK (status IN ('CREATING', 'READY', 'RETIRED', 'DELETED')),
+    status           varchar(8)    NOT NULL CHECK (status IN ('CREATING', 'READY', 'RETIRED')),
     code_count       numeric(4, 0) NOT NULL,
     created_at       timestamptz   NOT NULL,
     ends_at          timestamptz   NOT NULL,
@@ -60,8 +61,7 @@ CREATE INDEX qbs_discount_batch_shop_idx ON qbs_discount_batch (shop_domain, sta
 
 -- A code of a batch, sealed (SealedSecrets under the shop's address). AVAILABLE once added (its batch says whether it
 -- can be handed out: READY and more than seven days left); ISSUED to one attempt (once: the attempt's code is the same
--- however often it is asked for); FAILED when Shopify did not add it. A batch's codes are deleted with its discount,
--- once its end passed: a shop holds about two weeks of codes.
+-- however often it is asked for); FAILED when Shopify did not add it. Deleted with its batch.
 CREATE TABLE qbs_discount_code (
     code_id     varchar(36)   PRIMARY KEY,
     batch_id    varchar(36)   NOT NULL,

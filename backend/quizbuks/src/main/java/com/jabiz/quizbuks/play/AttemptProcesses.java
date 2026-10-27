@@ -15,6 +15,7 @@ import com.jabiz.quizbuks.reward.CashRewardChecks;
 import com.jabiz.quizbuks.country.Regions;
 import com.jabiz.quizbuks.publishing.PublicationMoves;
 import com.jabiz.quizbuks.publishing.PublicationRules;
+import com.jabiz.quizbuks.publishing.PublisherKind;
 import com.jabiz.quizbuks.publishing.QbPublications;
 import com.jabiz.quizbuks.wallet.QbWallets;
 import com.jabiz.runtime.EntityInstance;
@@ -144,7 +145,9 @@ public final class AttemptProcesses {
         UUID publicationId = ctx.get(PUB_KEY, UUID.class);
         EntityInstance card = first(ctx, CARD);
         String userId = ctx.request().actorId();
-        if (card == null || !(first(ctx, MINE) != null || shown(ctx, card))) {
+        // S2: a channel's publication (a shop's storefront quiz) is no App taker's: as good as none.
+        if (card == null || !PublisherKind.sponsor(card.get("publisherKind"))
+            || !(first(ctx, MINE) != null || shown(ctx, card))) {
             throw new EntityNotFoundException(QbPublications.PUBLICATION + " " + publicationId + " not found");
         }
         boolean first = first(ctx, VIEWS) == null;
@@ -223,6 +226,15 @@ public final class AttemptProcesses {
                     EntityInstance card = first(ctx, CARD_BEFORE);
                     return card == null ? null : card.get("versionId");
                 }))
+                .compute("Refuse a channel's publication", (metadata, ctx) -> {
+                    // S2: a shop's storefront quiz is answered on the storefront only (ChannelPlay): an App taker
+                    // would read its correct options in their result. As good as none.
+                    EntityInstance card = first(ctx, CARD_BEFORE);
+                    if (card != null && !PublisherKind.sponsor(card.get("publisherKind"))) {
+                        throw new EntityNotFoundException(QbPublications.PUBLICATION + " " + ctx.get(PUB_KEY)
+                            + " not found");
+                    }
+                })
                 .compute("Continue an attempt in progress", (metadata, ctx) -> resume(ctx))
                 // Without the wallet's lock (D-Q5-5): a soft check, so before the publication's lock too (Q10a: one
                 // read less while it is held); a reward the sponsor cannot pay at the end is pending.

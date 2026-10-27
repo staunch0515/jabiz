@@ -14,7 +14,7 @@ import java.util.List;
  *       one runs (live or paused) per shop.</li>
  *   <li>{@value #TAKER}: a signed-in customer who answered; the engine knows them only as {@code qbs:<takerId>}
  *       ({@link #customerTaker}), and a visitor who is not signed in by a digest ({@link #visitorTaker}).</li>
- *   <li>{@value #BATCH}: a Shopify discount and the codes added to it.</li>
+ *   <li>{@value #BATCH}: a Shopify discount and the codes added to it; deleted with them once it ended.</li>
  *   <li>{@value #CODE}: a code of a batch, sealed, issued once to an attempt that passed; deleted with its batch's
  *       discount once the batch ended, so a shop holds about two weeks of codes.</li>
  * </ul>
@@ -42,8 +42,7 @@ public final class QbsStorefront {
     public static final String CREATING = "CREATING";
     public static final String READY = "READY";
     public static final String RETIRED = "RETIRED";
-    public static final String DELETED = "DELETED";
-    public static final List<String> BATCH_STATUSES = List.of(CREATING, READY, RETIRED, DELETED);
+    public static final List<String> BATCH_STATUSES = List.of(CREATING, READY, RETIRED);
 
     public static final String AVAILABLE = "AVAILABLE";
     public static final String ISSUED = "ISSUED";

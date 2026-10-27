@@ -1,12 +1,13 @@
 /*---
 id: qbs.system.pool-stats
-description: "A shop's pool of discount codes (S2a): the codes its storefront can still hand out, and those handed out today and over the week"
+description: "A shop's pool of discount codes (S2a): the codes of its live campaign its storefront can still hand out, and those handed out today and over the week"
 entities: [QbsDiscountCode, QbsDiscountBatch]
 datasets:
   QbsDiscountCode: urn:jabiz:dataset:default:QbsDiscountCode
   QbsDiscountBatch: urn:jabiz:dataset:default:QbsDiscountBatch
 params:
   shopDomain:  { like: QbsDiscountCode.shopDomain, required: true, description: The shop }
+  campaignId:  { like: QbsDiscountBatch.campaignId, required: true, description: "The live campaign (its batches only: another campaign's have another discount)" }
   usableUntil: { like: QbsDiscountBatch.endsAt, required: true, description: A code is handed out only when its batch ends after this }
   dayStart:    { like: QbsDiscountCode.issuedAt, required: true, description: "Today's start (UTC)" }
   weekStart:   { like: QbsDiscountCode.issuedAt, required: true, description: "The start of six days before today (UTC)" }
@@ -23,6 +24,7 @@ SELECT
     (SELECT count(*) FROM {{QbsDiscountCode}} c JOIN {{QbsDiscountBatch}} b
         ON b.{{QbsDiscountBatch.batchId}} = c.{{QbsDiscountCode.batchId}}
      WHERE c.{{QbsDiscountCode.shopDomain}} = :shopDomain AND c.{{QbsDiscountCode.status}} = 'AVAILABLE'
+       AND b.{{QbsDiscountBatch.campaignId}} = :campaignId
        AND b.{{QbsDiscountBatch.status}} = 'READY' AND b.{{QbsDiscountBatch.endsAt}} > :usableUntil) AS available,
     (SELECT count(*) FROM {{QbsDiscountCode}} c
      WHERE c.{{QbsDiscountCode.shopDomain}} = :shopDomain AND c.{{QbsDiscountCode.issuedAt}} >= :dayStart) AS issuedToday,

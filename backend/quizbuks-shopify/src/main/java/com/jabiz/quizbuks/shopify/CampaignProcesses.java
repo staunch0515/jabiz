@@ -56,6 +56,8 @@ public final class CampaignProcesses {
 
     /** The most campaigns the list shows. */
     public static final int LIST_LIMIT = 50;
+    /** The most campaigns of a shop ({@code shop/redact} deletes them all in one go). */
+    public static final int MAX_CAMPAIGNS = 10_000;
     /** The figures of the pool: codes issued today (UTC) and over the last seven days. */
     public static final String STATS_TEMPLATE = "qbs.system.pool-stats";
 
@@ -85,7 +87,8 @@ public final class CampaignProcesses {
         Instant createdAt, Instant editedAt, Instant publishedAt, Instant endedAt) {}
 
     /**
-     * @param available   codes the storefront can hand out (at least {@link Pool#MIN_DAYS_LEFT} days left)
+     * @param available   codes of the running campaign the storefront can hand out (at least
+     *                    {@link Pool#MIN_DAYS_LEFT} days left)
      * @param issuedToday codes handed out today (UTC), against {@code dailyCap}
      */
     public record Pool(long available, long issuedToday, long issuedWeek) {
@@ -350,6 +353,9 @@ public final class CampaignProcesses {
         Instant day = now.atOffset(ZoneOffset.UTC).toLocalDate().atStartOfDay().toInstant(ZoneOffset.UTC);
         Map<String, Object> params = new LinkedHashMap<>();
         params.put("shopDomain", domain == null ? "-" : domain);
+        params.put("campaignId", ShopProcesses.rows(ctx, CAMPAIGNS).stream()
+            .filter(row -> QbsStorefront.LIVE.equals(row.get("status")) || QbsStorefront.PAUSED.equals(row.get("status")))
+            .map(row -> String.valueOf(row.id())).findFirst().orElse("-"));
         params.put("usableUntil", now.plus(Pool.MIN_DAYS_LEFT));
         params.put("dayStart", day);
         params.put("weekStart", day.minus(Duration.ofDays(6)));

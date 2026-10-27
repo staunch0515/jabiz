@@ -74,7 +74,7 @@ public class ShopifyConfig {
 
     @Bean
     DatasetDefinition qbsCampaignDataset() {
-        return systemDataset(QbsStorefront.CAMPAIGN, ShopProcesses.MAX_MEMBERS);
+        return systemDataset(QbsStorefront.CAMPAIGN, CampaignProcesses.MAX_CAMPAIGNS);
     }
 
     /**
@@ -191,8 +191,7 @@ public class ShopifyConfig {
         return StaticDictionary.define(QbsStorefront.BATCH_STATUS_DICTIONARY, d -> d
             .item(QbsStorefront.CREATING, "en", "Being created", "zh", "创建中", "ja", "作成中")
             .item(QbsStorefront.READY, "en", "Ready", "zh", "可用", "ja", "利用可能")
-            .item(QbsStorefront.RETIRED, "en", "Retired", "zh", "已停发", "ja", "配布終了")
-            .item(QbsStorefront.DELETED, "en", "Deleted", "zh", "已删除", "ja", "削除済み"));
+            .item(QbsStorefront.RETIRED, "en", "Retired", "zh", "已停发", "ja", "配布終了"));
     }
 
     @Bean

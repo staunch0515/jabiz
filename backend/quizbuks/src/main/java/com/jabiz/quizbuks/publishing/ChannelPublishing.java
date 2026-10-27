@@ -38,7 +38,7 @@ import static com.jabiz.quizbuks.publishing.PublicationEditing.VERSIONS;
  *       publisher shows its own content on its own channel), no wallet (reward method {@link RewardMethod#CHANNEL}:
  *       the engine scores, the channel rewards), one tier of no reward, open to every visitor until
  *       {@link PublishingLimits#MAX_RUNNING} from now;</li>
- *   <li>{@value #MOVE}: pauses, resumes or ends such a publication.</li>
+ *   <li>{@value #MOVE}: pauses, resumes or ends such a publication; nothing for one already so, or ended.</li>
  * </ul>
  * A sponsor's processes never see these publications (their datasets are fixed to {@link PublisherKind#SPONSOR}), and
  * these never touch a sponsor's.
@@ -251,6 +251,13 @@ public final class ChannelPublishing {
             || !input.publisher().id().equals(publication.get("publisherId"))) {
             // Another publisher's is as good as none.
             throw new EntityNotFoundException(QbPublications.PUBLICATION + " " + input.publicationId() + " not found");
+        }
+        // An ended publication (by its time, by an administrator) or one already where it is asked to be: nothing to do,
+        // so that the channel's uninstall or erasure, which only wants it stopped, never fails on it.
+        String status = publication.get("status");
+        if (PublicationStatus.ENDED.equals(status) || input.to().equals(status)) {
+            PublicationEditing.unchanged(ctx, publication);
+            return;
         }
         Map<String, Object> values = new LinkedHashMap<>();
         switch (input.to()) {

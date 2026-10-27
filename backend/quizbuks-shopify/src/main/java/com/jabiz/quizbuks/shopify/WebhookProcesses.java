@@ -39,7 +39,8 @@ import java.util.UUID;
  *       platform's): a staff member who opens the app after a new install signs in as before and joins a new shop.</li>
  *   <li>{@value #DATA_REQUEST} and {@value #CUSTOMERS_REDACT} (S2): a customer who answered the storefront's quiz
  *       while signed in has a row; their attempts and codes are reported, or the row is deleted and the codes
- *       unlinked; a customer without one is recorded as {@code NO_DATA}.</li>
+ *       unlinked, and what earlier requests recorded of them is deleted (the erasure's own record names nobody); a
+ *       customer without one is recorded as {@code NO_DATA}.</li>
  * </ul>
  */
 public final class WebhookProcesses {
@@ -72,6 +73,7 @@ public final class WebhookProcesses {
     static final String CODES = "codes";
     static final String ATTEMPTS = "attempts";
     static final String CUSTOMER = "customer";
+    static final String EARLIER_REQUESTS = "earlierRequests";
     static final String REPORT = "report";
     static final String PAUSING = "pausing";
     static final String ENDING = "ending";
@@ -93,9 +95,14 @@ public final class WebhookProcesses {
             // The uninstalled shop's own object: its Shopify address is myshopify_domain.
             .compute("Read the shop", (metadata, ctx) -> ctx.put(DOMAIN, domain(ctx, "myshopify_domain")))
             .steps(WebhookProcesses::lockAndLoad)
-            .step("Load the running campaign", QueryEntities.<ProcessContext>of(
-                QbsShops.defaultDataset(QbsStorefront.CAMPAIGN),
-                ctx -> CampaignProcesses.running(ctx.get(DOMAIN, String.class)), CAMPAIGNS))
+            .step("Load the running campaign and the batches", QueryEntities.all(
+                QueryEntities.<ProcessContext>query(QbsShops.defaultDataset(QbsStorefront.CAMPAIGN),
+                    ctx -> CampaignProcesses.running(ctx.get(DOMAIN, String.class)), CAMPAIGNS),
+                QueryEntities.<ProcessContext>query(QbsShops.defaultDataset(QbsStorefront.BATCH),
+                    ctx -> com.jabiz.query.EntityQuery.builder().where(new com.jabiz.query.QueryPredicate.And(List.of(
+                        CampaignProcesses.domainIs(ctx.get(DOMAIN, String.class)),
+                        new com.jabiz.query.QueryPredicate.In("status", List.of(QbsStorefront.CREATING,
+                            QbsStorefront.READY))))).limit(DiscountPool.MAX_BATCHES).build(), BATCHES)))
             .compute("Mark the shop uninstalled", (metadata, ctx) -> uninstall(ctx))
             // S2: its storefront takes no more attempts (its codes stop working anyway: Shopify deletes the app's
             // discounts); a member resumes the campaign after installing it again.
@@ -124,6 +131,12 @@ public final class WebhookProcesses {
         if (tokens != null) {
             ctx.changes().delete(QbsShops.TOKEN, tokens.id(), tokens.version());
         }
+        // S2: Shopify deletes the app's discounts with the uninstall, so no batch's code works any more: none is handed
+        // out (after a new install the refill makes new ones).
+        for (EntityInstance batch : ShopProcesses.rows(ctx, BATCHES)) {
+            ctx.changes().update(QbsStorefront.BATCH, batch.id(), batch.version(),
+                Map.of("status", QbsStorefront.RETIRED));
+        }
         EntityInstance campaign = ShopProcesses.first(ctx, CAMPAIGNS);
         if (campaign != null && QbsStorefront.LIVE.equals(campaign.get("status"))) {
             Map<String, Object> paused = new LinkedHashMap<>();
@@ -151,7 +164,7 @@ public final class WebhookProcesses {
             .steps(WebhookProcesses::lockAndLoad)
             .step("Load the storefront's rows", QueryEntities.all(
                 QueryEntities.<ProcessContext>query(QbsShops.defaultDataset(QbsStorefront.CAMPAIGN),
-                    ctx -> ofShop(ctx, ShopProcesses.MAX_MEMBERS), CAMPAIGNS),
+                    ctx -> ofShop(ctx, CampaignProcesses.MAX_CAMPAIGNS), CAMPAIGNS),
                 QueryEntities.<ProcessContext>query(QbsShops.defaultDataset(QbsStorefront.TAKER),
                     ctx -> ofShop(ctx, ShopifyConfig.MAX_TAKERS), TAKERS),
                 QueryEntities.<ProcessContext>query(QbsShops.defaultDataset(QbsStorefront.BATCH),
@@ -268,9 +281,19 @@ public final class WebhookProcesses {
                         customer == null ? new com.jabiz.query.QueryPredicate.In("customerId", List.of())
                             : new com.jabiz.query.QueryPredicate.Eq("customerId", customer)))).limit(1).build();
                 }, TAKERS))
-            .step("Load their codes and attempts", QueryEntities.all(
+            .step("Load their codes, attempts and earlier requests", QueryEntities.all(
                 QueryEntities.<ProcessContext>query(QbsShops.defaultDataset(QbsStorefront.CODE),
                     ctx -> ShopProcesses.eq("taker", takerKey(ctx), MAX_CODES_OF_CUSTOMER), CODES),
+                // An erasure removes what the earlier requests recorded of the customer (a data request's report).
+                QueryEntities.<ProcessContext>query(QbsShops.defaultDataset(QbsShops.COMPLIANCE), ctx -> {
+                    String domain = ctx.get(DOMAIN, String.class);
+                    String customer = erase ? ctx.get(CUSTOMER, String.class) : null;
+                    return com.jabiz.query.EntityQuery.builder().where(new com.jabiz.query.QueryPredicate.And(List.of(
+                        new com.jabiz.query.QueryPredicate.Eq("shopDomain", domain == null ? "-" : domain),
+                        customer == null ? new com.jabiz.query.QueryPredicate.In("customerId", List.of())
+                            : new com.jabiz.query.QueryPredicate.Eq("customerId", customer))))
+                        .limit(ShopProcesses.MAX_MEMBERS).build();
+                }, EARLIER_REQUESTS),
                 QueryEntities.<ProcessContext>query(ENGINE_ATTEMPTS,
                     ctx -> ShopProcesses.eq("userId", erase ? null : takerKey(ctx), MAX_CODES_OF_CUSTOMER),
                     ATTEMPTS)))
@@ -280,8 +303,17 @@ public final class WebhookProcesses {
                     record(ctx, topic, null, QbsShops.MISMATCH);
                     return;
                 }
+                if (erase) {
+                    // What earlier requests recorded of the customer goes, and this one records nobody.
+                    for (EntityInstance earlier : ShopProcesses.rows(ctx, EARLIER_REQUESTS)) {
+                        ctx.changes().delete(QbsShops.COMPLIANCE, earlier.id(), earlier.version());
+                    }
+                    ctx.put(CUSTOMER, null);
+                }
                 EntityInstance taker = ShopProcesses.first(ctx, TAKERS);
                 if (taker == null) {
+                    // Nothing held of them: nor is their id, in the record either.
+                    ctx.put(CUSTOMER, null);
                     record(ctx, topic, domain, QbsShops.NO_DATA);
                     return;
                 }

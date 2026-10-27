@@ -31,7 +31,7 @@
       "shopDomain" : "demo.myshopify.com",
       "outcome" : "NO_DATA",
       "receivedAt" : "2026-10-27T03:00:00Z",
-      "customerId" : "191167",
+      "customerId" : null,
       "report" : null,
       "handledAt" : "2026-10-27T03:00:00Z",
       "version" : 1
@@ -42,7 +42,7 @@
       "shopDomain" : "demo.myshopify.com",
       "outcome" : "NO_DATA",
       "receivedAt" : "2026-10-27T03:00:00Z",
-      "customerId" : "191167",
+      "customerId" : null,
       "report" : null,
       "handledAt" : "2026-10-27T03:00:00Z",
       "version" : 1

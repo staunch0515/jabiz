@@ -134,6 +134,8 @@ class ShopifyStorefrontIT extends ShopifyItSupport {
         return answers;
     }
 
+    static final int DISCOUNT_BATCH = 250;
+
     static final Map<Integer, String> RIGHT = Map.of(1, "First option 2", 2, "Second option 3");
     static final Map<Integer, String> WRONG = Map.of(1, "First option 1", 2, "Second option 1");
 
@@ -287,6 +289,16 @@ class ShopifyStorefrontIT extends ShopifyItSupport {
             .expectStatus().isUnauthorized();
         // The process API runs none of them.
         refused("QBS_SF_CAMPAIGN", live.admin().bearer(), Map.of(), 403);
+        // An App taker cannot reach a shop's publication either (its result would show the correct options).
+        String taker = com.jabiz.runtime.test.TestTokens.bearer(tokens, UUID.randomUUID().toString(),
+            com.jabiz.quizbuks.QbPermissions.PLAY);
+        for (String process : List.of("QB_VIEW", "QB_ATTEMPT_START")) {
+            client.post().uri("/api/processes/" + process + "/latest").contentType(MediaType.APPLICATION_JSON)
+                .header("Authorization", taker)
+                .bodyValue(Map.of("publicationId", live.publicationId())).exchange().expectStatus()
+                .value(status -> assertThat(status).as(process).isIn(403, 404));
+        }
+        assertThat(query("SELECT 1 FROM qb_attempt WHERE publication_id = ?::uuid", live.publicationId())).isEmpty();
     }
 
     @Test
@@ -337,15 +349,17 @@ class ShopifyStorefrontIT extends ShopifyItSupport {
         refill();
         assertThat(query("SELECT status FROM qbs_discount_batch WHERE shop_domain = ? ORDER BY created_at",
             live.shop())).extracting(row -> row.get("status")).containsExactly("RETIRED", "CREATING");
-        // After its end, the retired batch's discount is deleted from the shop, and its codes here.
+        refill();
+        // After its end, the first batch's discount is deleted from the shop, and the batch and its codes here.
         later(Duration.ofDays(7));
         refill();
+        // (The second batch, seven days younger, has seven days or less left by now too: retired, and a third made.)
         assertThat(query("SELECT status FROM qbs_discount_batch WHERE shop_domain = ? ORDER BY created_at",
-            live.shop())).extracting(row -> row.get("status")).first().isEqualTo("DELETED");
+            live.shop())).extracting(row -> row.get("status")).containsExactly("RETIRED", "CREATING");
         assertThat(SHOPIFY.requests("/shops/" + live.shop() + "/admin/api/2026-10/graphql.json"))
             .anySatisfy(r -> assertThat(r.body()).contains("discountCodeDelete"));
-        assertThat(query("SELECT 1 FROM qbs_discount_code c JOIN qbs_discount_batch b ON b.batch_id = c.batch_id"
-            + " WHERE b.status = 'DELETED' AND b.shop_domain = ?", live.shop())).isEmpty();
+        assertThat(query("SELECT 1 FROM qbs_discount_code WHERE shop_domain = ?", live.shop()))
+            .hasSize(2 * DISCOUNT_BATCH);
     }
 
     @Test
@@ -370,6 +384,10 @@ class ShopifyStorefrontIT extends ShopifyItSupport {
         assertThat(query("SELECT outcome FROM qbs_compliance_request WHERE shop_domain = ? AND topic ="
             + " 'customers/redact'", live.shop())).extracting(row -> row.get("outcome")).containsExactly("REDACTED");
         assertThat(query("SELECT 1 FROM qbs_taker WHERE shop_domain = ?", live.shop())).isEmpty();
+        // What the data request recorded of them is gone too, and the erasure's record names nobody.
+        assertThat(query("SELECT topic, customer_id, report FROM qbs_compliance_request WHERE shop_domain = ?",
+            live.shop())).singleElement().satisfies(row -> assertThat(row).containsEntry("topic", "customers/redact")
+                .containsEntry("customer_id", null).containsEntry("report", null));
         assertThat(query("SELECT taker FROM qbs_discount_code WHERE status = 'ISSUED' AND shop_domain = ?",
             live.shop())).extracting(row -> row.get("taker")).containsOnlyNulls();
         // Nothing left of them: another data request finds nothing.
@@ -386,6 +404,9 @@ class ShopifyStorefrontIT extends ShopifyItSupport {
         assertThat(query("SELECT status FROM qb_publication_card WHERE publication_id = ?::uuid", live.publicationId()))
             .extracting(row -> row.get("status")).containsExactly("PAUSED");
         assertThat(ok(storefront("QBS_SF_CAMPAIGN", live.shop(), null, visitor(), null))).containsEntry("live", false);
+        // Shopify deleted the app's discounts: no code of the batches is handed out any more.
+        assertThat(query("SELECT DISTINCT status FROM qbs_discount_batch WHERE shop_domain = ?", live.shop()))
+            .extracting(row -> row.get("status")).containsExactly("RETIRED");
 
         deliver("shop/redact", live.shop(), privacy(live.shop()));
         for (String table : List.of("qbs_campaign", "qbs_discount_batch", "qbs_discount_code", "qbs_taker")) {
@@ -393,5 +414,87 @@ class ShopifyStorefrontIT extends ShopifyItSupport {
         }
         assertThat(query("SELECT status FROM qb_publication_card WHERE publication_id = ?::uuid", live.publicationId()))
             .extracting(row -> row.get("status")).containsExactly("ENDED");
+    }
+
+    @Test
+    void aNewCampaignHandsOutItsOwnDiscountOnly() {
+        LiveShop live = liveShop("switch");
+        refill();
+        refill();
+        // Ended with most of its codes left; the next campaign is 30 % off. (Signed in again: the clock moved on.)
+        live = new LiveShop(live.shop(), open(live.shop(), "1"), live.campaignId(), live.publicationId());
+        run("QBS_CAMPAIGN_MOVE", live.admin().bearer(), Map.of("campaignId", live.campaignId(), "to", "ENDED"));
+        Map<String, Object> draft = new LinkedHashMap<>(draft("Autumn quiz"));
+        draft.put("percent", 30);
+        later(Duration.ofSeconds(1));
+        Map<String, Object> saved = run("QBS_CAMPAIGN_SAVE", live.admin().bearer(), draft);
+        Map<String, Object> next = run("QBS_CAMPAIGN_PUBLISH", live.admin().bearer(), Map.of("campaignId",
+            saved.get("campaignId")));
+        LiveShop autumn = new LiveShop(live.shop(), live.admin(), (String) saved.get("campaignId"),
+            (String) next.get("publicationId"));
+        // None of the old campaign's codes: none until its own batch is made.
+        assertThat(ok(storefront("QBS_SF_CAMPAIGN", live.shop(), null, visitor(), null)))
+            .containsEntry("codesToday", false).containsEntry("percent", 30);
+        assertThat(play(autumn, null, visitor(), RIGHT)).containsEntry("outcome", "NONE_LEFT");
+        refill();
+        refill();
+        Map<String, Object> passed = play(autumn, null, visitor(), RIGHT);
+        assertThat(passed).containsEntry("outcome", "ISSUED").containsEntry("percent", 30);
+        assertThat(query("SELECT b.percent FROM qbs_discount_code c JOIN qbs_discount_batch b ON b.batch_id ="
+            + " c.batch_id WHERE c.attempt_id = ?", passed.get("attemptId"))).singleElement()
+            .satisfies(row -> assertThat(new java.math.BigDecimal(String.valueOf(row.get("percent"))))
+                .isEqualByComparingTo("30"));
+    }
+
+    @Test
+    void aSubmissionWithoutAVisitorKeyIsRefused() {
+        LiveShop live = liveShop("nokey");
+        refill();
+        refill();
+        String visitor = visitor();
+        Map<String, Object> passed = play(live, null, visitor, RIGHT);
+        // Asked again for the attempt's code, but without the key: refused as such, not a failure.
+        assertThat(ruleCode(storefront("QBS_SF_SUBMIT", live.shop(), null, visitor, Map.of("publicationId",
+            live.publicationId(), "attemptId", passed.get("attemptId"))).expectStatus().isEqualTo(422)
+            .expectBody(MAP).returnResult().getResponseBody())).isEqualTo("QBS_VISITOR_REQUIRED");
+    }
+
+    @Test
+    void aBulkCreationShopifyNeverFinishesIsGivenUp() {
+        LiveShop live = liveShop("stuck");
+        refill();
+        String graphql = "/shops/" + live.shop() + "/admin/api/2026-10/graphql.json";
+        SHOPIFY.script(graphql, StubHttpServer.Answer.json(200, "{\"data\":{\"discountRedeemCodeBulkCreation\":"
+            + "{\"done\":false,\"failedCount\":0,\"codes\":{\"nodes\":[]}}}}"));
+        refill();
+        assertThat(query("SELECT status FROM qbs_discount_batch WHERE shop_domain = ?", live.shop()))
+            .extracting(row -> row.get("status")).containsExactly("CREATING");
+        // An hour on, still not done: given up, and a new batch made in its place.
+        later(Duration.ofHours(1));
+        refill();
+        assertThat(query("SELECT status FROM qbs_discount_batch WHERE shop_domain = ? ORDER BY created_at",
+            live.shop())).extracting(row -> row.get("status")).containsExactly("RETIRED", "CREATING");
+    }
+
+    @Test
+    void aFailureAfterARefreshKeepsTheNewTokens() {
+        LiveShop live = liveShop("refreshed");
+        // The access token ends within minutes: the refill refreshes it, then Shopify fails the discount.
+        execute("UPDATE qbs_shop_token SET access_expires_at = ? WHERE shop_id = (SELECT shop_id FROM qbs_shop"
+            + " WHERE shop_domain = ?)", java.sql.Timestamp.from(clock.instant().plusSeconds(60)), live.shop());
+        SHOPIFY.script("/shops/" + live.shop() + "/admin/api/2026-10/graphql.json",
+            StubHttpServer.Answer.json(503, "{}"));
+        refill();
+        assertThat(SHOPIFY.requests("/shops/" + live.shop() + "/admin/oauth/access_token")).hasSize(2);
+        // Kept: the refreshed pair (Shopify made the old one useless); no batch yet, the next run makes it.
+        Instant ends = ((java.sql.Timestamp) query("SELECT t.access_expires_at FROM qbs_shop_token t JOIN qbs_shop s"
+            + " ON s.shop_id = t.shop_id WHERE s.shop_domain = ?", live.shop()).getFirst().get("access_expires_at"))
+            .toInstant();
+        assertThat(ends).isAfter(clock.instant().plus(Duration.ofMinutes(30)));
+        assertThat(query("SELECT 1 FROM qbs_discount_batch WHERE shop_domain = ?", live.shop())).isEmpty();
+        refill();
+        assertThat(query("SELECT status FROM qbs_discount_batch WHERE shop_domain = ?", live.shop()))
+            .extracting(row -> row.get("status")).containsExactly("CREATING");
+        assertThat(shopRows(live.shop()).getFirst()).containsEntry("connection", "CONNECTED");
     }
 }

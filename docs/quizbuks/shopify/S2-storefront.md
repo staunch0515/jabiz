@@ -92,20 +92,27 @@ S2 起有了顾客数据：答题记录中的顾客编号与访客键。
 | I-1 | Shopify 模块"以流程名调用"引擎的流程 | 新模块 **`backend/quizbuks-channel`**（`com.jabiz.quizbuks.channel.Channel`）只放四个流程的名字、输入输出记录与常量；引擎实现（`publishing.ChannelPublishing`、`play.ChannelPlay`，`subProcessOnly()`），Shopify 模块以这些记录调用。路径已加入 `.jabiz-app-paths` | 平台的 `CallProcess` 要求输入是被调用流程自己的类型；Shopify 模块仍不依赖引擎（编译期保证不碰钱包与普通商户表） |
 | I-2 | 匿名访客为 `qbs:<店铺>:v:<访客键>`，顾客为 `qbs:<店铺>:c:<顾客编号>` | 匿名访客：`qbs:v:` + SHA-256(店铺地址, 访客键) 的 base64url，**不建行**；已登录顾客：`QbsTaker` 一行（店铺、顾客编号），引擎只知道 `qbs:<行的编号>` | 引擎的答题人不可改（`userId` immutable）：`customers/redact` 只删这一行，引擎里剩下的键就不再指向任何人；访客不会有 Shopify 的数据请求，也不需要行（`shop/redact` 不必删海量访客行） |
 | I-3 | 每日上限一张表 `QbsDailyIssue` | 不另建表：在店铺的码锁 `qbs.shop-codes:<店铺>` 内数当天（UTC）已发的码（模板 `qbs.system.pool-stats`） | 少一张表，计数就是事实本身 |
-| I-4 | 码的状态 PENDING / AVAILABLE / ISSUED / FAILED / RETIRED | 码只有 AVAILABLE / ISSUED / FAILED；能否发由**批次**决定（`READY` 且剩余 > 7 天）；批次到期后连同它的码从 Shopify 与本地删除（批次行留作 `DELETED`） | 补码时不必逐行改 250 个码；一家店只留约两周的码，`shop/redact` 一次删得完 |
+| I-4 | 码的状态 PENDING / AVAILABLE / ISSUED / FAILED / RETIRED | 码只有 AVAILABLE / ISSUED / FAILED；能否发由**批次**决定：属于**进行中的活动**、`READY` 且剩余 > 7 天。批次 `RETIRED` 的时机：剩 ≤ 7 天、店铺卸载（Shopify 随卸载删除应用建的折扣）、或建批一小时仍未完成（`DiscountPool.CREATING_AT_MOST`）。到期后批次连同它的码从 Shopify 与本地删除（不留行） | 补码时不必逐行改 250 个码；一家店只留约两周的批次与码，`shop/redact` 一次删得完；换活动（改折扣）后不会发出旧活动的码 |
 | I-5 | 引擎新奖励方式 `CHANNEL` | 照做；`RewardMethod.ALL`（商户可被允许的）不含它，实体与字典用 `RewardMethod.CODES`；迁移 V33 只改 CHECK | 管理员不能把 `CHANNEL` 授给普通商户 |
 | I-6 | — | 店铺的发布**一建即 `LIVE`**：`QbPublication` 的初始状态改为 `DRAFT` 或 `LIVE`；结束原因新增 `PUBLISHER`（发布方结束，不发通知） | 没有草稿与审核；普通商户的流程照旧从 `DRAFT` 开始 |
 | I-7 | — | 店面交卷不早于开始后 3 秒（`PlayLimits.CHANNEL_MIN_ANSWER`，422 `QB_ATTEMPT_TOO_FAST`）在引擎的 `QB_CHANNEL_ATTEMPT_SUBMIT` 中检查 | 计划 §3 的"防机器人"一条，放在读到开始时刻的地方 |
 | I-8 | `QBS_DAILY_CODE_CAP` 列入受控参数 | 参数键 `qbs.storefront.daily-codes`，列入受控参数（`ControlledParams`，改动须四眼），但**不由 `QB_SETUP` 建立**：店面以可选参数读取，未建立时按 100；要改时管理员以受控变更建立它（平台允许受控参数以后再建，`ParamChecks`） | `QB_SETUP` 多一个参数会使它之后发出的全部编号后移，所有场景的选项顺序随之改变 |
 | I-9 | `shop/redact` 时把发布与题目"标为已删除并写墓碑" | 本店的活动、顾客行、批次与码全部删除；仍在进行（卸载时已暂停）的发布在引擎中**结束**。引擎的题目版本是只写一次的只追加表（`writeOnce`），不能再写新版本，所以**没有墓碑**；题目原文留在版本中，与 S1 的"平台账户删除"一起作为平台阶段再议 | 平台规则：只写一次的实体不能更新 |
 | I-10 | — | 店面流程**不声明排队**（`admission`）：每店的限流（`per-tenant`）已限住并发；引擎的子流程照常取发布锁与开始锁。锁顺序：店铺锁 → 令牌锁 → 引擎发布锁（开始锁）→ 店铺码锁 | 根流程的排队族名须与其最外层锁一致，而最外层锁在引擎的子流程中；压测后再定 |
-| I-11 | 补码任务处理"建批、异步完成、失败丢弃、过期批删除" | 照做，外加：批次剩 ≤ 7 天即 `RETIRED`（不再发其中的码）；店铺卸载或未连接时，过期批次只在本地删除 | 已发出的码在批次结束前仍要能用，所以退役不删折扣，过期后才删 |
+| I-11 | 补码任务处理"建批、异步完成、失败丢弃、过期批删除" | 照做，外加：批次剩 ≤ 7 天即 `RETIRED`（不再发其中的码）；店铺卸载或未连接时，过期批次只在本地删除；某一批的完成情况读不到时跳过它（不拖住别的批次）；**刷新令牌之后**再出错时保留新的一对、已做的部分照记，其余下次再做（同 S1 的连接检查） | 已发出的码在批次结束前仍要能用，所以退役不删折扣，过期后才删；Shopify 刷新后旧的一对即作废 |
+| I-12 | 限流：每访客 10 次/小时 | 平台的一条限流只有一个周期：`QBS_SF_START`、`QBS_SF_SUBMIT` 每访客 5 次/分钟、每店 600 / 300 次/分钟；`QBS_SF_CAMPAIGN` 每访客 60 次/分钟、每店 1200 次/分钟 | 每店的上限与每日发码上限才是真正的边界；按访客的只挡最粗的脚本 |
+| I-13 | — | App 的 `QB_VIEW` 与 `QB_ATTEMPT_START` 把店铺的发布当作不存在（404）；引擎的店铺暂停 / 结束对已结束或已在该状态的发布什么也不做（卸载与 `shop/redact` 不会因此失败） | App 的答题人若能答店铺的题，结果页会显示正确选项；引擎的发布可能已因时间或管理员结束 |
+| I-14 | `customers/redact` 删除顾客数据 | 另删除此前请求为该顾客留下的记录（数据请求的报告）；删除请求自己的记录不写顾客编号；没有任何数据（`NO_DATA`）的请求也不记顾客编号 | 报告中有该顾客的答题与码 |
+
+**`usageLimit: 1` 的含义（Q-S2-4，代码审查也提出）**：按对 Shopify 帮助中心的理解（批量生成的折扣码，总次数限制作用于每一个码；本环境访问不到 Shopify 的文档，**未核实**），按"每个码各用一次"写；
+若开发店铺上发现它限制的是整个折扣（250 个码共用一次），第一位用码的顾客之后其余码全部失效，须改为 `usageLimit` = 码数（靠 `appliesOncePerCustomer` 与随机码防滥用）。这是联调清单的第一项。
 
 **Shopify 的 GraphQL**（`ShopifyApi.createBatch` / `bulkStatus` / `deleteDiscount`）按 Admin API 的折扣文档写成（`discountCodeBasicCreate` 的 `context: {all: ALL}`、`customerGets`、`appliesOncePerCustomer`、`usageLimit: 1`；`discountRedeemCodeBulkAdd`；`discountRedeemCodeBulkCreation`；`discountCodeDelete`）。本环境访问不到 shopify.dev，**第一次在开发店铺上联调时核实**（Q-S2-4 与字段名）；测试中由本机桩回答。
 应用配置模板 `tools/quizbuks/shopify/shopify.app.toml` 加了 `read_discounts,write_discounts` 与 App Proxy（`/apps/quizbuks` → `https://<地址>/api/proxy/shopify`）。
 
 **已知问题**：
 - 店铺的发布在引擎中至多进行 366 天（`PublishingLimits.MAX_RUNNING`）；到期后引擎把它结束，活动行仍显示 `LIVE`，店面开始答题得 422 `QB_PUBLICATION_NOT_OPEN`。商户结束它再发布一个即可；S2b 的后台会显示引擎中的状态。
+- 同一访客同时发两个开始（或对同一答题同时再交）时，后到的一个得 409 / 422，而不是同样的答复；店面组件串行发请求，不会遇到。
 - 店面请求中查询参数 `visitor`（按访客限流用）与正文的访客键可以不同：换查询参数绕得过按访客的限流，绕不过按店铺的限流与每日上限（17d 已记）。
 
-**测试**：`ShopifyStorefrontIT`（8 例：发码与只发一次、未通过与交得太快、每日上限与次日恢复、已登录顾客与访客键、跨店与未签名、商户的活动管理、补码的退役与删除、卸载暂停与三个合规主题）；`StorefrontKeysTest`；S1 的 `ShopifyIT` 照旧通过。场景回放不另加：场景执行器不能以会话令牌登录，建不了店铺成员与活动（同 S1）。
+**测试**：`ShopifyStorefrontIT`（12 例：发码与只发一次、未通过与交得太快、每日上限与次日恢复、已登录顾客与访客键、跨店、未签名与 App 的答题人、商户的活动管理、补码的退役与删除、卸载暂停与三个合规主题、新活动只发自己的码、缺访客键、建批不完成即放弃、刷新后出错仍保留令牌）；`StorefrontKeysTest`；S1 的 `ShopifyIT` 照旧通过。场景回放不另加：场景执行器不能以会话令牌登录，建不了店铺成员与活动（同 S1）。

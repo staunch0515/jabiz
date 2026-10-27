@@ -204,6 +204,9 @@ public final class StorefrontProcesses {
                     ctx -> ShopProcesses.eq("attemptId", ctx.get(INPUT, SubmitInput.class).attemptId(), 1), EARLIER))
                 .compute("Check an earlier code", (metadata, ctx) -> {
                     EntityInstance earlier = ShopProcesses.first(ctx, EARLIER);
+                    if (ctx.hasViolations()) {
+                        return;
+                    }
                     if (earlier != null && (!ctx.get(TAKER, String.class).equals(earlier.get("taker"))
                         || !domain(ctx).equals(earlier.get("shopDomain")))) {
                         // Another person's attempt is as good as none.
@@ -252,8 +255,11 @@ public final class StorefrontProcesses {
         if (earlier != null && !ctx.hasViolations()) {
             return ShopProcesses.eq("batchId", earlier.get("batchId"), 1);
         }
+        // The live campaign's own: another campaign's codes have another discount.
+        EntityInstance campaign = ShopProcesses.first(ctx, CAMPAIGNS);
         return EntityQuery.builder().where(new QueryPredicate.And(List.of(
                 CampaignProcesses.domainIs(issuing(ctx) ? domain(ctx) : null),
+                new QueryPredicate.Eq("campaignId", campaign == null ? "-" : String.valueOf(campaign.id())),
                 new QueryPredicate.Eq("status", QbsStorefront.READY))))
             .limit(DiscountPool.MAX_BATCHES).build();
     }
@@ -435,6 +441,8 @@ public final class StorefrontProcesses {
         Instant day = now.atOffset(ZoneOffset.UTC).toLocalDate().atStartOfDay().toInstant(ZoneOffset.UTC);
         Map<String, Object> params = new LinkedHashMap<>();
         params.put("shopDomain", domain(ctx));
+        EntityInstance campaign = ShopProcesses.first(ctx, CAMPAIGNS);
+        params.put("campaignId", campaign == null ? "-" : String.valueOf(campaign.id()));
         params.put("usableUntil", now.plus(DiscountPool.MIN_LEFT));
         params.put("dayStart", day);
         params.put("weekStart", day);

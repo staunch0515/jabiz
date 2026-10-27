@@ -1,5 +1,6 @@
 package com.jabiz.quizbuks.shopify;
 
+import com.jabiz.external.ExternalCallException;
 import com.jabiz.process.BlockingStep;
 import com.jabiz.process.NoMetadata;
 import com.jabiz.process.ProcessContext;
@@ -36,8 +37,8 @@ import java.util.Set;
  *       codes Shopify did not add {@code FAILED};</li>
  *   <li>a ready batch with {@link #MIN_LEFT} or less left is {@code RETIRED}: no more codes are handed out of it, so a
  *       code always has at least that long to be used;</li>
- *   <li>a retired batch whose end passed is deleted from the shop (its codes no longer work) and here with its codes
- *       ({@code DELETED}): a shop holds about two weeks of codes;</li>
+ *   <li>a retired batch whose end passed is deleted from the shop (its codes no longer work) and here with its codes:
+ *       a shop holds about two weeks of batches and codes;</li>
  *   <li>for a live campaign, when fewer than {@link #LOW} codes can be handed out and no batch is being created, a new
  *       batch: a Shopify discount of the campaign's percentage off everything, once per customer, each code once,
  *       for {@link #LIFETIME}, with {@link #BATCH_CODES} codes made here and sealed under the shop's address.</li>
@@ -48,6 +49,8 @@ import java.util.Set;
  * transaction failed is unknown here: the next run creates another, and the lost discount ends by itself.
  */
 public final class DiscountPool {
+
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(DiscountPool.class);
 
     private DiscountPool() {}
 
@@ -63,6 +66,8 @@ public final class DiscountPool {
     public static final Duration LIFETIME = Duration.ofDays(14);
     /** The least time a handed-out code has left: a batch with this or less left is retired. */
     public static final Duration MIN_LEFT = CampaignProcesses.Pool.MIN_DAYS_LEFT;
+    /** How long a batch may stay {@code CREATING} before it is given up (retired). */
+    public static final Duration CREATING_AT_MOST = Duration.ofHours(1);
     /** The most batches of a shop read at once: about six live at a time (two weeks, two or three days each). */
     static final int MAX_BATCHES = 100;
 
@@ -122,6 +127,8 @@ public final class DiscountPool {
                     ctx -> {
                         Map<String, Object> params = new LinkedHashMap<>();
                         params.put("shopDomain", domain(ctx));
+                        EntityInstance campaign = ShopProcesses.first(ctx, CAMPAIGN);
+                        params.put("campaignId", campaign == null ? "-" : String.valueOf(campaign.id()));
                         params.put("usableUntil", ctx.opTime().plus(MIN_LEFT));
                         params.put("dayStart", ctx.opTime());
                         params.put("weekStart", ctx.opTime());
@@ -158,8 +165,14 @@ public final class DiscountPool {
             Instant ends = CampaignProcesses.instant(batch.get("endsAt"));
             switch ((String) batch.get("status")) {
                 case QbsStorefront.CREATING -> {
-                    creating = true;
-                    finish.add(batch);
+                    // Shopify finishes a bulk creation within minutes; one that never finishes (or that cannot be
+                    // asked about) is given up, so that it never stops the shop's pool.
+                    if (CampaignProcesses.instant(batch.get("createdAt")).isBefore(now.minus(CREATING_AT_MOST))) {
+                        retire.add(batch);
+                    } else {
+                        creating = true;
+                        finish.add(batch);
+                    }
                 }
                 case QbsStorefront.READY -> {
                     if (!ends.isAfter(now.plus(MIN_LEFT))) {
@@ -212,14 +225,36 @@ public final class DiscountPool {
             if (access == null) {
                 return;
             }
+            try {
+                call(ctx, plan, domain, access);
+            } catch (ExternalCallException e) {
+                if (ctx.get(ConnectionProcesses.OBTAINED) == null) {
+                    throw e;
+                }
+                // Refreshed already: Shopify has made the old pair useless, so the new one is kept with what was done
+                // so far; the rest is done by the next run.
+                log.warn("Refill of {} stopped after refreshing its tokens: {}", domain, e.getMessage());
+            }
+        }
+
+        private void call(ProcessContext ctx, Plan plan, String domain, String access) {
             Map<Object, Set<String>> done = new LinkedHashMap<>();
+            ctx.put(DONE, done);
             for (EntityInstance batch : plan.finish()) {
                 String bulk = batch.get("bulkCreationId");
                 if (bulk == null) {
                     done.put(batch.id(), Set.of());
                     continue;
                 }
-                ShopifyApi.Answer<ShopifyApi.BulkStatus> status = api.bulkStatus(domain, access, bulk);
+                ShopifyApi.Answer<ShopifyApi.BulkStatus> status;
+                try {
+                    status = api.bulkStatus(domain, access, bulk);
+                } catch (ExternalCallException e) {
+                    // This batch is asked about again next time (and given up after CREATING_AT_MOST): the others
+                    // are not held back by it.
+                    log.warn("Bulk creation of a batch of {} not read: {}", domain, e.getMessage());
+                    continue;
+                }
                 if (status.refused()) {
                     ctx.put(ConnectionProcesses.DROPPED, true);
                     return;
@@ -228,9 +263,9 @@ public final class DiscountPool {
                     done.put(batch.id(), status.value().failed());
                 }
             }
-            ctx.put(DONE, done);
             ctx.put(FAILED_CODES, failedRows(ctx, done, domain));
             List<Object> gone = new ArrayList<>();
+            ctx.put(GONE, gone);
             for (EntityInstance batch : plan.delete()) {
                 ShopifyApi.Answer<Boolean> deleted = api.deleteDiscount(domain, access, batch.get("discountId"));
                 if (deleted.refused()) {
@@ -239,7 +274,6 @@ public final class DiscountPool {
                 }
                 gone.add(batch.id());
             }
-            ctx.put(GONE, gone);
             EntityInstance campaign = plan.campaign();
             if (campaign != null) {
                 int percent = CampaignProcesses.integer(campaign.get("percent"));
@@ -318,7 +352,8 @@ public final class DiscountPool {
         Instant now = ctx.opTime();
         Map<Object, Set<String>> done = (Map<Object, Set<String>>) ctx.get(DONE);
         int finished = 0;
-        if (done != null) {
+        // Only once the failed codes are known: a batch is ready only with them set aside.
+        if (done != null && ctx.get(FAILED_CODES) != null) {
             for (EntityInstance batch : plan.finish()) {
                 if (done.containsKey(batch.id())) {
                     ctx.changes().update(QbsStorefront.BATCH, batch.id(), batch.version(),
@@ -336,7 +371,7 @@ public final class DiscountPool {
                 Map.of("status", QbsStorefront.RETIRED));
         }
         // Deleted from the shop just now, or, when the shop cannot be called (uninstalled, not connected), here only:
-        // the discount ended either way.
+        // the discount ended either way. (Not when the call stopped short: those left wait for the next run.)
         List<Object> gone = (List<Object>) ctx.get(GONE);
         int deleted = 0;
         if (gone != null || !plan.useApi()) {
@@ -349,8 +384,7 @@ public final class DiscountPool {
                         ctx.changes().delete(QbsStorefront.CODE, code.id(), code.version());
                     }
                 }
-                ctx.changes().update(QbsStorefront.BATCH, batch.id(), batch.version(),
-                    Map.of("status", QbsStorefront.DELETED));
+                ctx.changes().delete(QbsStorefront.BATCH, batch.id(), batch.version());
                 deleted++;
             }
         }
