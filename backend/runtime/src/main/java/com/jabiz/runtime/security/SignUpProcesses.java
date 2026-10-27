@@ -254,7 +254,7 @@ public class SignUpProcesses {
                 .entryOnly()
                 .contextFactory((start, input) -> new AccountContext(start, null, null, null, null, null,
                     input.token(), null))
-                .outputMapper(ctx -> new VerifyCheck(preClaimable(linked(ctx))))
+                .outputMapper(ctx -> new VerifyCheck(preClaimable(linked(ctx)) && !ownSession(ctx)))
                 .step("Use the link", MailTokens.<AccountContext>consumeAnyUnused(AuthMailTemplates.VERIFY,
                     AccountContext::token, CONSUMED))
                 .step("Load the user", QueryEntities.<AccountContext>of(SecurityEntities.USER_DATASET,
@@ -378,6 +378,17 @@ public class SignUpProcesses {
             && EmailVerification.verified(user.get("email"), user.get("registeredEmail"));
     }
 
+    /**
+     * Whether the link is used in the session of the account it is for (the request carries that user's access token):
+     * the registrant's own session stands for their current password, so verifying keeps the account (decision D61
+     * item 4). An account opened by an identity provider for an address it did not vouch for has no password, and
+     * could otherwise only be verified by being taken over.
+     */
+    static boolean ownSession(AccountContext ctx) {
+        EntityInstance user = linked(ctx);
+        return user != null && String.valueOf(user.id()).equals(ctx.request().actorId());
+    }
+
     /** An address a mailed link may stand for: verified, or that of a pre-claimable account. */
     static boolean trusted(EntityInstance user) {
         return SecurityEntities.emailVerified(user) || preClaimable(user);
@@ -490,7 +501,7 @@ public class SignUpProcesses {
             if (hash != null) {
                 changed.put("passwordHash", hash);
                 claim(ctx);
-            } else if (!Boolean.TRUE.equals(ctx.get(PASSWORD_MATCHES))) {
+            } else if (!ownSession(ctx) && !Boolean.TRUE.equals(ctx.get(PASSWORD_MATCHES))) {
                 ctx.reject(ctx.get(PASSWORD_MATCHES) == null
                     ? new Violation(PASSWORD, PlatformErrorCodes.REQUIRED, "Verifying this address needs the "
                         + "account's password or a new one", Map.of("field", PASSWORD))

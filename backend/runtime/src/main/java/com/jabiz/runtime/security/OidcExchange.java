@@ -42,6 +42,11 @@ class OidcExchange {
     /** Checks the ID token; reads the provider's keys again once when the token names a key not seen yet. */
     private Mono<IdTokenValidator.Identity> verify(OidcProvider provider, String idToken, String nonceHash) {
         SignedJWT token = IdTokenValidator.parse(idToken);
+        if (provider.acceptsHs256() && IdTokenValidator.hs256(token)) {
+            // Keyed with the client secret (LINE's web sign-in, decision D61 item 2): no keys to read.
+            return Mono.fromCallable(() -> IdTokenValidator.validate(token, new com.nimbusds.jose.jwk.JWKSet(),
+                provider.clientSecret(), provider.issuer(), provider.clientId(), nonceHash, clock.instant()));
+        }
         return client.keys(provider, false)
             .map(keys -> IdTokenValidator.validate(token, keys, provider.issuer(), provider.clientId(), nonceHash,
                 clock.instant()))
