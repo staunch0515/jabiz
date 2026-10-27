@@ -193,7 +193,9 @@ describe('QuizBuks for Shopify (S1)', () => {
     render(<App />)
     expect(await screen.findByText('Store: demo.myshopify.com')).toBeInTheDocument()
     // Refused as the other store's staff member, then signed in as this one, then joined.
-    expect(posted.filter((p) => p !== '/api/auth/logout')).toEqual(['/api/processes/QBS_SHOP_JOIN/latest',
+    // (The overview also reads the plan once the store is open: not part of signing in.)
+    expect(posted.filter((p) => p !== '/api/auth/logout' && p !== '/api/processes/QBS_PLAN_GET/latest'))
+      .toEqual(['/api/processes/QBS_SHOP_JOIN/latest',
       '/api/auth/external-token', '/api/processes/QBS_SHOP_JOIN/latest'])
   })
 

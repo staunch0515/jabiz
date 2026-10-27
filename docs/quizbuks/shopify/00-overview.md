@@ -64,7 +64,7 @@ Shopify 强制应用费用经 Billing API 收取，QuizBuks 不接触卡号。
 | 17a | 1.3/platform → 同步 PR | 入站 webhook 验签（已有 `/api/inbound/**`，补 Shopify 的 HMAC 形式与去重）、公开接口的限流 | 2 天 |
 | S1 | 1.3/quizbuks | 安装 / OAuth、会话令牌登录入口、内嵌后台骨架、GDPR 三个 webhook、卸载 webhook（平台 17b 先行；实施说明 `S1-install.md`，已实现，待评审） | 3–4 天 |
 | S2 | 1.3/quizbuks | 店面组件（Theme App Extension）：视频 + 答题 + 领折扣码（**预生成池**，Admin GraphQL `discountCode`，`usageLimit 1`、有效期）、刷码限制（平台 17d 先行；计划与 S2a 实施说明 `S2-storefront.md`，S2a 后端与 S2b 界面已实现（`S2b-ui.md`），待开发店铺联调） | 3–4 天 |
-| S3 | 1.3/quizbuks | Billing：试用、套餐、周期计数、超限拦截（计划 `S3-billing.md`，2026-10-27 确认：Shopify App Pricing；S3a 后端与店面拦截已实现，S3b 界面待做） | 2–3 天 |
+| S3 | 1.3/quizbuks | Billing：试用、套餐、周期计数、超限拦截（计划 `S3-billing.md`，2026-10-27 确认：Shopify App Pricing；S3a 后端与店面拦截、S3b 界面（`S3b-ui.md`）已实现，待开发店铺联调） | 2–3 天 |
 | S4 | 1.3/quizbuks | 上架收尾：隐私政策页、性能预算、Polaris 风格、支持邮箱 | 2–3 天 |
 
 合计约 15–20 个开发日；之后应用商店审核 1–3 周（期间可用自定义应用装到自己的店铺试运行）。

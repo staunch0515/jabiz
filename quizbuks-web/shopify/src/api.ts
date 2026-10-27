@@ -146,3 +146,34 @@ export function publishCampaign(campaignId: string): Promise<Campaign> {
 export function moveCampaign(campaignId: string, to: 'PAUSED' | 'LIVE' | 'ENDED'): Promise<Campaign> {
   return runProcess<Campaign>(CAMPAIGN_MOVE, { campaignId, to })
 }
+
+// ---- the plan (S3b, docs/quizbuks/shopify/S3b-ui.md) ---------------------------------------------------------------
+
+export const PLAN_GET = 'QBS_PLAN_GET'
+
+export type Plan = 'FREE' | 'STARTER' | 'GROWTH' | 'PRO'
+
+/** PlanProcesses.PlanOutput: the store's plan and what its storefront used of it this period. */
+export interface PlanState {
+  plan: Plan
+  /** The plan that follows at planUntil (after a move down); null when none is kept. */
+  nextPlan: Plan | null
+  planUntil: string | null
+  shopifyPlan: string | null
+  unknownPlan: boolean
+  test: boolean
+  trialEndsAt: string | null
+  periodStart: string
+  periodEnd: string
+  used: number
+  limit: number
+  checkedAt: string | null
+  connection: Connection
+  /** Shopify's page of the plans, opened at the top of the admin. */
+  pricingUrl: string
+}
+
+/** The store's plan; with refresh, read from Shopify now (else at most hourly). */
+export function getPlan(refresh: boolean): Promise<PlanState> {
+  return runProcess<PlanState>(PLAN_GET, { refresh })
+}

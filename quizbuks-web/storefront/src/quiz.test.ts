@@ -8,7 +8,7 @@ function json(status: number, body: unknown) {
 }
 
 const CAMPAIGN = { live: true, publicationId: 'p1', name: 'Spring quiz', video: 'https://www.youtube-nocookie.com/embed/abc',
-  questionCount: 2, timeLimitSec: 60, passScore: 2, percent: 15, codesToday: true }
+  questionCount: 2, timeLimitSec: 60, passScore: 2, percent: 15, codesToday: true, badge: false }
 
 const STARTED = {
   attemptId: 'a1', publicationId: 'p1', startedAt: '2026-10-27T00:00:00Z', deadline: '2026-10-27T00:01:00Z',
@@ -226,6 +226,27 @@ describe('the storefront quiz block (S2b)', () => {
     await vi.waitFor(() => expect(root.textContent).toContain('1 of 2 correct.'))
     expect(root.textContent).toContain('Not this time.')
     expect(sent.find((s) => s.process === 'QBS_SF_SUBMIT')!.body!.answers).toEqual([{ questionNo: 1, selected: [1] }])
+  })
+
+  it('says it is QuizBuks\'s at the end on the free plan only', async () => {
+    for (const badge of [true, false]) {
+      document.body.replaceChildren()
+      vi.restoreAllMocks()
+      proxy({ QBS_SF_CAMPAIGN: { status: 200, body: { ...CAMPAIGN, badge } }, QBS_SF_START: { status: 200, body: STARTED },
+        QBS_SF_SUBMIT: { status: 200, body: { ...PASSED, passed: false, score: 0, outcome: 'NOT_PASSED',
+          discountCode: null, percent: null, expiresAt: null } } })
+      const { root } = await mount()
+      await vi.waitFor(() => expect(root.querySelector('.open')).not.toBeNull())
+      button(root, 'Answer a quiz, get 15% off').click()
+      expect(root.textContent).not.toContain('Powered by QuizBuks')
+      button(root, 'Start the quiz').click()
+      await vi.waitFor(() => expect(root.querySelector('legend')).not.toBeNull())
+      expect(root.textContent).not.toContain('Powered by QuizBuks')
+      vi.advanceTimersByTime(61_000)
+      await vi.waitFor(() => expect(root.textContent).toContain('Not this time.'))
+      expect(root.querySelector('.badge')?.textContent ?? null).toBe(badge ? 'Powered by QuizBuks' : null)
+      if (badge) await expectAccessible(root.querySelector('dialog')!)
+    }
   })
 
   it('speaks the storefront\'s language', async () => {

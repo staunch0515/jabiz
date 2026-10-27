@@ -102,6 +102,12 @@ export class QuizElement extends HTMLElement {
     heading.focus()
   }
 
+  /** A screen that ends the quiz: on the free plan it says whose it is (S3b). */
+  private result(title: string, ...body: Node[]) {
+    if (this.campaign?.badge) body.push(h('p', { class: 'badge' }, 'Powered by QuizBuks'))
+    this.screen(title, ...body)
+  }
+
   // ---- the intro ------------------------------------------------------------------------------------------------
 
   private showIntro() {
@@ -245,7 +251,7 @@ export class QuizElement extends HTMLElement {
       if (code === 'QB_ATTEMPT_FINISHED' || code === 'QB_ATTEMPT_EXPIRED') {
         this.stopTimer()
         this.started = null
-        this.screen(this.t('dialog'), h('p', {}, refusalText(this.texts, code)))
+        this.result(this.t('dialog'), h('p', {}, refusalText(this.texts, code)))
         return
       }
       // Back to where the visitor was, its buttons as they were (the first question has no way back).
@@ -268,7 +274,7 @@ export class QuizElement extends HTMLElement {
       ? h('p', {}, this.t('score', { score: result.score, full: result.fullScore })) : null
     const text = { NOT_PASSED: 'failed', DAY_FULL: 'dayFull', NONE_LEFT: 'noneLeft', CAMPAIGN_OVER: 'over',
       ISSUED: 'error', AGAIN: 'error' }[result.outcome] as TextKey
-    this.screen(result.passed ? this.t('passed') : this.t('failed'), ...(score ? [score] : []),
+    this.result(result.passed ? this.t('passed') : this.t('failed'), ...(score ? [score] : []),
       ...(result.passed ? [h('p', {}, this.t(text))] : []))
   }
 
@@ -292,7 +298,7 @@ export class QuizElement extends HTMLElement {
       body.push(h('p', {}, this.t('until', { date: new Date(claim.expiresAt).toLocaleDateString(
         this.getAttribute('locale') ?? undefined) })))
     }
-    this.screen(this.t('passed'), ...body)
+    this.result(this.t('passed'), ...body)
   }
 }
 
