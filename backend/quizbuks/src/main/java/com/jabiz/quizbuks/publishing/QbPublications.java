@@ -100,7 +100,7 @@ public final class QbPublications {
         // Q22: how the reward reaches the taker (RewardMethod), and for a prize collected at the sponsor's place what
         // it is and where; both frozen with the policy.
         eb.field("rewardMethod", f -> f.physicalColumn("reward_method").required(true)
-            .asCode(RewardMethod.DICTIONARY, RewardMethod.ALL.toArray(String[]::new)));
+            .asCode(RewardMethod.DICTIONARY, RewardMethod.CODES.toArray(String[]::new)));
         eb.field("redeemDescription", f -> f.physicalColumn("redeem_description")
             .asText(PublishingLimits.REDEEM_DESCRIPTION_LENGTH, true));
         // Q33: a digital prize's delivery, what it is (as the winner reads it), the days the sponsor has to send one
@@ -142,9 +142,10 @@ public final class QbPublications {
             .asTemporal(TemporalRole.EVENT_TIME));
         // The source's key, not a reference: a draft that was copied can still be deleted.
         eb.field("copiedFrom", f -> f.physicalColumn("copied_from").immutable(true).asText(36));
-        // D-Q4-1. A rejected or withdrawn publication goes back to its draft, so the first state is declared.
+        // D-Q4-1. A rejected or withdrawn publication goes back to its draft, so the first state is declared. A channel's
+        // publication (S2, ChannelPublishing) is live as it is made: it has no draft and no review.
         eb.stateTransitions("status", st -> st
-            .initial(DRAFT)
+            .initial(DRAFT, LIVE)
             .from(DRAFT).to(PENDING_REVIEW, SCHEDULED, LIVE)
             .from(PENDING_REVIEW).to(DRAFT, SCHEDULED, LIVE)
             .from(SCHEDULED).to(LIVE, PAUSED, ENDED)
@@ -330,7 +331,7 @@ public final class QbPublications {
         // Q22: the reward method and, for a prize at the sponsor's place, what it is: the feed filters on the method
         // and the detail page shows the prize.
         eb.field("rewardMethod", f -> f.physicalColumn("reward_method").immutable(true).required(true)
-            .asCode(RewardMethod.DICTIONARY, RewardMethod.ALL.toArray(String[]::new)));
+            .asCode(RewardMethod.DICTIONARY, RewardMethod.CODES.toArray(String[]::new)));
         eb.field("redeemDescription", f -> f.physicalColumn("redeem_description").immutable(true)
             .asText(PublishingLimits.REDEEM_DESCRIPTION_LENGTH, true));
         // Q33: the digital prize's delivery and description, and the shared content sealed (copied to each winner).

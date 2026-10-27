@@ -15,6 +15,7 @@ import com.jabiz.quizbuks.reward.CashRewardChecks;
 import com.jabiz.quizbuks.country.Regions;
 import com.jabiz.quizbuks.publishing.PublicationMoves;
 import com.jabiz.quizbuks.publishing.PublicationRules;
+import com.jabiz.quizbuks.publishing.PublisherKind;
 import com.jabiz.quizbuks.publishing.QbPublications;
 import com.jabiz.quizbuks.wallet.QbWallets;
 import com.jabiz.runtime.EntityInstance;
@@ -144,7 +145,9 @@ public final class AttemptProcesses {
         UUID publicationId = ctx.get(PUB_KEY, UUID.class);
         EntityInstance card = first(ctx, CARD);
         String userId = ctx.request().actorId();
-        if (card == null || !(first(ctx, MINE) != null || shown(ctx, card))) {
+        // S2: a channel's publication (a shop's storefront quiz) is no App taker's: as good as none.
+        if (card == null || !PublisherKind.sponsor(card.get("publisherKind"))
+            || !(first(ctx, MINE) != null || shown(ctx, card))) {
             throw new EntityNotFoundException(QbPublications.PUBLICATION + " " + publicationId + " not found");
         }
         boolean first = first(ctx, VIEWS) == null;
@@ -223,6 +226,15 @@ public final class AttemptProcesses {
                     EntityInstance card = first(ctx, CARD_BEFORE);
                     return card == null ? null : card.get("versionId");
                 }))
+                .compute("Refuse a channel's publication", (metadata, ctx) -> {
+                    // S2: a shop's storefront quiz is answered on the storefront only (ChannelPlay): an App taker
+                    // would read its correct options in their result. As good as none.
+                    EntityInstance card = first(ctx, CARD_BEFORE);
+                    if (card != null && !PublisherKind.sponsor(card.get("publisherKind"))) {
+                        throw new EntityNotFoundException(QbPublications.PUBLICATION + " " + ctx.get(PUB_KEY)
+                            + " not found");
+                    }
+                })
                 .compute("Continue an attempt in progress", (metadata, ctx) -> resume(ctx))
                 // Without the wallet's lock (D-Q5-5): a soft check, so before the publication's lock too (Q10a: one
                 // read less while it is held); a reward the sponsor cannot pay at the end is pending.
@@ -249,12 +261,12 @@ public final class AttemptProcesses {
                 .compute("Start the attempt", (metadata, ctx) -> start(ctx, shuffle)));
     }
 
-    private static EntityQuery mine(Object publicationId) {
+    static EntityQuery mine(Object publicationId) {
         return EntityQuery.builder().where(new QueryPredicate.In("publicationId", ids(publicationId))).limit(1)
             .build();
     }
 
-    private static boolean starting(ProcessContext ctx) {
+    static boolean starting(ProcessContext ctx) {
         return Boolean.TRUE.equals(ctx.get(NEW)) && !ctx.hasViolations();
     }
 
@@ -288,6 +300,14 @@ public final class AttemptProcesses {
     }
 
     static void start(ProcessContext ctx, OptionShuffle shuffle) {
+        start(ctx, shuffle, ctx.request().actorId(), PlaySteps.userRegions(ctx));
+    }
+
+    /**
+     * Starts the attempt of {@code userId}, whose country is in {@code userRegions}: the caller for a taker of the
+     * App, the channel's taker for a channel's publication ({@link ChannelPlay}, S2).
+     */
+    static void start(ProcessContext ctx, OptionShuffle shuffle, String userId, String userRegions) {
         if (!starting(ctx)) {
             return;
         }
@@ -304,10 +324,9 @@ public final class AttemptProcesses {
             throw new IllegalStateException("A publication that went on has a card and both sides of its counters: "
                 + ctx.get(PUB_KEY));
         }
-        String userId = ctx.request().actorId();
         EntityInstance wallet = first(ctx, WALLET);
         EntityInstance invitation = PlaySteps.invited(card) ? Invitations.mine(ctx) : null;
-        String refusal = AttemptRules.startRefusal(userId, PlaySteps.userRegions(ctx), invitation != null,
+        String refusal = AttemptRules.startRefusal(userId, userRegions, invitation != null,
             PlaySteps.cardOf(card), PlaySteps.counts(starts, counter), QbWallets.available(wallet),
             QbWallets.pendingCount(wallet), ctx.opTime());
         if (refusal != null) {

@@ -24,7 +24,18 @@ public final class RewardMethod {
     public static final String OFFLINE_REDEEM = "OFFLINE_REDEEM";
     public static final String DIGITAL_PRIZE = "DIGITAL_PRIZE";
 
+    /**
+     * S2 (docs/quizbuks/shopify/S2-storefront.md, S2-2): the reward is the channel's own affair (a shop hands out a
+     * discount code): the engine scores and records whether the attempt passed, and settles nothing. Only a channel's
+     * publication has it ({@link ChannelPublishing}); no sponsor may be allowed it, so it is not in {@link #ALL}.
+     */
+    public static final String CHANNEL = "CHANNEL";
+
+    /** The methods a sponsor may be allowed (Q22). */
     public static final List<String> ALL = List.of(PLATFORM, SPONSOR_CASH, OFFLINE_REDEEM, DIGITAL_PRIZE);
+
+    /** Every method a publication may have: a sponsor's, and a channel's ({@link #CHANNEL}). */
+    public static final List<String> CODES = List.of(PLATFORM, SPONSOR_CASH, OFFLINE_REDEEM, DIGITAL_PRIZE, CHANNEL);
 
     public static final String DICTIONARY = "urn:jabiz:dict:quizbuks:reward-method";
 

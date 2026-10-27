@@ -5,12 +5,17 @@ import com.jabiz.dictionary.StaticDictionary;
 import com.jabiz.entity.EntityDefinition;
 import com.jabiz.event.EventSubscription;
 import com.jabiz.external.ExternalService;
+import com.jabiz.job.JobDefinition;
+import com.jabiz.job.JobItems;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.runtime.inbound.InboundEvents;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+
+import java.time.ZoneOffset;
+import java.util.Map;
 
 /**
  * The declarations of QuizBuks for Shopify (docs/quizbuks/shopify/S1-install.md): its entities and datasets, the
@@ -48,6 +53,54 @@ public class ShopifyConfig {
     }
 
     @Bean
+    EntityDefinition qbsCampaignEntity() {
+        return QbsStorefront.CAMPAIGN_ENTITY;
+    }
+
+    @Bean
+    EntityDefinition qbsTakerEntity() {
+        return QbsStorefront.TAKER_ENTITY;
+    }
+
+    @Bean
+    EntityDefinition qbsDiscountBatchEntity() {
+        return QbsStorefront.BATCH_ENTITY;
+    }
+
+    @Bean
+    EntityDefinition qbsDiscountCodeEntity() {
+        return QbsStorefront.CODE_ENTITY;
+    }
+
+    @Bean
+    DatasetDefinition qbsCampaignDataset() {
+        return systemDataset(QbsStorefront.CAMPAIGN, CampaignProcesses.MAX_CAMPAIGNS);
+    }
+
+    /**
+     * A shop's signed-in takers: {@code shop/redact} deletes them all in one transaction, so a batch holds every one
+     * of a shop that is unlikely to have more ({@link #MAX_TAKERS}).
+     */
+    @Bean
+    DatasetDefinition qbsTakerDataset() {
+        return systemDataset(QbsStorefront.TAKER, MAX_TAKERS);
+    }
+
+    @Bean
+    DatasetDefinition qbsDiscountBatchDataset() {
+        return systemDataset(QbsStorefront.BATCH, DiscountPool.MAX_BATCHES);
+    }
+
+    /** A shop's codes: a new batch inserts {@link DiscountPool#BATCH_CODES}; {@code shop/redact} deletes them all. */
+    @Bean
+    DatasetDefinition qbsDiscountCodeDataset() {
+        return systemDataset(QbsStorefront.CODE, DiscountPool.MAX_BATCHES * DiscountPool.BATCH_CODES);
+    }
+
+    /** The most signed-in takers of a shop that {@code shop/redact} deletes in one go. */
+    static final int MAX_TAKERS = 20_000;
+
+    @Bean
     DatasetDefinition qbsShopDataset() {
         return systemDataset(QbsShops.SHOP);
     }
@@ -68,11 +121,15 @@ public class ShopifyConfig {
     }
 
     private DatasetDefinition systemDataset(String entity) {
+        return systemDataset(entity, ShopProcesses.MAX_MEMBERS);
+    }
+
+    private DatasetDefinition systemDataset(String entity, int maxWriteBatch) {
         return DatasetDefinition.define(QbsShops.defaultDataset(entity), d -> d
             .targetEntityType(entity)
             .asDefault()
             .permissions(Shopify.SYSTEM, Shopify.SYSTEM)
-            .policy(p -> p.processOnlyWrites().maxWriteBatchSize(ShopProcesses.MAX_MEMBERS))
+            .policy(p -> p.processOnlyWrites().maxWriteBatchSize(maxWriteBatch))
             .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
     }
 
@@ -115,7 +172,93 @@ public class ShopifyConfig {
                 "ja", "保持：再インストール済み")
             .item(QbsShops.NOT_FOUND, "en", "No data of the shop", "zh", "没有该店铺的数据", "ja", "ストアのデータなし")
             .item(QbsShops.MISMATCH, "en", "Shop does not match: not acted on", "zh", "店铺不一致：未处理",
-                "ja", "ストア不一致：未処理"));
+                "ja", "ストア不一致：未処理")
+            .item(QbsShops.REPORTED, "en", "Reported", "zh", "已报告", "ja", "報告済み")
+            .item(QbsShops.REDACTED, "en", "Erased", "zh", "已删除", "ja", "削除済み"));
+    }
+
+    @Bean
+    StaticDictionary qbsCampaignStatusDictionary() {
+        return StaticDictionary.define(QbsStorefront.CAMPAIGN_STATUS_DICTIONARY, d -> d
+            .item(QbsStorefront.DRAFT, "en", "Draft", "zh", "草稿", "ja", "下書き")
+            .item(QbsStorefront.LIVE, "en", "Live", "zh", "进行中", "ja", "実施中")
+            .item(QbsStorefront.PAUSED, "en", "Paused", "zh", "已暂停", "ja", "一時停止")
+            .item(QbsStorefront.ENDED, "en", "Ended", "zh", "已结束", "ja", "終了"));
+    }
+
+    @Bean
+    StaticDictionary qbsDiscountBatchStatusDictionary() {
+        return StaticDictionary.define(QbsStorefront.BATCH_STATUS_DICTIONARY, d -> d
+            .item(QbsStorefront.CREATING, "en", "Being created", "zh", "创建中", "ja", "作成中")
+            .item(QbsStorefront.READY, "en", "Ready", "zh", "可用", "ja", "利用可能")
+            .item(QbsStorefront.RETIRED, "en", "Retired", "zh", "已停发", "ja", "配布終了"));
+    }
+
+    @Bean
+    StaticDictionary qbsDiscountCodeStatusDictionary() {
+        return StaticDictionary.define(QbsStorefront.CODE_STATUS_DICTIONARY, d -> d
+            .item(QbsStorefront.AVAILABLE, "en", "Available", "zh", "可发放", "ja", "配布可能")
+            .item(QbsStorefront.ISSUED, "en", "Issued", "zh", "已发放", "ja", "配布済み")
+            .item(QbsStorefront.FAILED, "en", "Not added by Shopify", "zh", "Shopify 未添加", "ja",
+                "Shopify が追加せず"));
+    }
+
+    @Bean
+    ProcessDefinition<CampaignProcesses.SaveInput, CampaignProcesses.Campaign, ProcessContext>
+        qbsCampaignSaveProcess() {
+        return CampaignProcesses.save();
+    }
+
+    @Bean
+    ProcessDefinition<CampaignProcesses.CampaignRef, CampaignProcesses.Campaign, ProcessContext>
+        qbsCampaignPublishProcess() {
+        return CampaignProcesses.publish();
+    }
+
+    @Bean
+    ProcessDefinition<CampaignProcesses.MoveInput, CampaignProcesses.Campaign, ProcessContext>
+        qbsCampaignMoveProcess() {
+        return CampaignProcesses.move();
+    }
+
+    @Bean
+    ProcessDefinition<CampaignProcesses.ListInput, CampaignProcesses.ListOutput, ProcessContext>
+        qbsCampaignListProcess() {
+        return CampaignProcesses.list();
+    }
+
+    @Bean
+    ProcessDefinition<StorefrontProcesses.CampaignInput, StorefrontProcesses.CampaignOutput, ProcessContext>
+        qbsStorefrontCampaignProcess() {
+        return StorefrontProcesses.campaign();
+    }
+
+    @Bean
+    ProcessDefinition<StorefrontProcesses.StartInput, com.jabiz.quizbuks.channel.Channel.StartOutput, ProcessContext>
+        qbsStorefrontStartProcess() {
+        return StorefrontProcesses.start();
+    }
+
+    @Bean
+    ProcessDefinition<StorefrontProcesses.SubmitInput, StorefrontProcesses.SubmitOutput, ProcessContext>
+        qbsStorefrontSubmitProcess() {
+        return StorefrontProcesses.submit();
+    }
+
+    @Bean
+    ProcessDefinition<DiscountPool.RefillInput, DiscountPool.RefillOutput, ProcessContext> qbsDiscountRefillProcess() {
+        return DiscountPool.refill();
+    }
+
+    /** Every ten minutes, one shop per transaction (S2a): the pools' batches and new codes. */
+    @Bean
+    JobDefinition<DiscountPool.RefillInput> qbsDiscountRefillJob(
+        ProcessDefinition<DiscountPool.RefillInput, DiscountPool.RefillOutput, ProcessContext>
+            qbsDiscountRefillProcess) {
+        return JobDefinition.forEach(DiscountPool.JOB, "0 */10 * * * *", ZoneOffset.UTC,
+            JobItems.template(DiscountPool.SHOPS_TEMPLATE, scheduledTime -> Map.of("at", scheduledTime), "shopDomain"),
+            qbsDiscountRefillProcess, (scheduledTime, row) -> new DiscountPool.RefillInput(
+                String.valueOf(row.get("shopDomain"))));
     }
 
     @Bean

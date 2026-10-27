@@ -361,12 +361,4 @@ class ShopifyIT extends ShopifyItSupport {
         return com.jabiz.runtime.test.TestTokens.bearer(tokens, java.util.UUID.randomUUID().toString(),
             com.jabiz.quizbuks.shopify.Shopify.USE);
     }
-
-    static String ruleCode(Map<String, Object> problem) {
-        Object violations = problem.get("violations");
-        if (violations instanceof List<?> list && !list.isEmpty() && list.getFirst() instanceof Map<?, ?> first) {
-            return String.valueOf(first.get("ruleCode"));
-        }
-        return String.valueOf(problem.get("code"));
-    }
 }

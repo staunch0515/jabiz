@@ -50,7 +50,10 @@ public final class PlayCodes {
     /** Q33: the digital prize will be sent by the sponsor. */
     public static final String REWARD_DIGITAL_DUE = "QB_REWARD_DIGITAL_DUE";
 
-    public static final List<String> ALL = List.of(NOT_OPEN, NOT_VISIBLE, BUDGET_FULL, QUOTA_FULL, FUNDS_SHORT,
+    /** S2: a channel's taker submits sooner after starting than anybody can answer ({@link PlayLimits#CHANNEL_MIN_ANSWER}). */
+    public static final String TOO_FAST = "QB_ATTEMPT_TOO_FAST";
+
+    public static final List<String> ALL = List.of(TOO_FAST, NOT_OPEN, NOT_VISIBLE, BUDGET_FULL, QUOTA_FULL, FUNDS_SHORT,
         ALREADY_TAKEN, OWN_PUBLICATION, EXPIRED, NOT_IN_PROGRESS, FINISHED, ANSWER_INVALID, INCOMPLETE, SINGLE_CHOICE, PUBLICATION_MISMATCH,
         FEE_RATE_INVALID, REWARD_PENDING, REWARD_CASH, REWARD_REDEEM, REWARD_DIGITAL,
         REWARD_DIGITAL_DUE);
