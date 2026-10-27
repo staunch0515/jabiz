@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
+import { AccountInstallEntry } from '../install'
 import { AccountSection, AccountSections } from '../qb/AccountSections'
 import { readMyProfile } from '../qb/api'
 import { LanguageSelect } from '../qb/LanguageSelect'
@@ -52,6 +53,7 @@ export function AccountPage() {
           <ProfileForm profile={profile.data} submitLabel={tApp('profile.save')} />
         )}
       </AccountSection>
+      <AccountInstallEntry />
       <AccountSections returnTo={ACCOUNT_PATH} linked={linked} mailHint={tApp('mail.hint')}
         onSignedOut={() => navigate('/login', { replace: true })} />
       <AccountSection title={tApp('account.info')} testId="account-info">

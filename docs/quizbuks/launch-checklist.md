@@ -18,6 +18,8 @@
 - [ ] **上线的内容**（Q36，`tools/quizbuks/content/README.md`）：需求方的商户账号（与管理员不同的邮箱）在正式系统自助注册、通过入驻审核并充值；测试系统中整理好的内容包（私有仓库）以 `apply` 写入、管理员审核发布；至少一个长期的公开发布（欢迎问卷），`renew` 的运行日期已记入日程；不从测试系统复制数据库
 - [ ] 保留期：导出文件、汇总凭证与收据的保留（L-4：10 年）已实施或已有书面的替代做法（`backend/quizbuks/CLAUDE.md`"导出文件与收据还没有 `RetentionPolicy`"）
 
+- [ ] **安装到主屏幕（Q38）**：iPhone Safari 与 Android Chrome 各装一次（账户页的入口、答完测验后的提示）；LINE 与微信中打开分享链接看到"在浏览器中打开"；iPhone 桌面 App 中邮件链接（验证、邮件登录）与 Google 登录的表现可以接受（`plans/Q38-install.md` §4）
+
 ## 性能
 
 - [ ] 在**上线所用的硬件**上重测（压测程序在另一台主机，读者按预期读取量限速；`./gradlew :quizbuks:loadTest`，`operations.md` §6）：预期峰值低于饱和点并有约 1.3 倍余量，应用与数据库 CPU < 60–70 %，结果写进 `perf/`
