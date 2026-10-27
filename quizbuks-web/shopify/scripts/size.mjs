@@ -1,19 +1,21 @@
-// The embedded pages' first load (docs/quizbuks/shopify/S4-launch.md F-2): the scripts index.html loads before the
-// overview shows (its module script and the chunks it preloads), gzipped, against a budget, so a dependency that
+// The embedded pages' first load (docs/quizbuks/shopify/S4-launch.md F-2): what index.html loads before the overview
+// shows (its module script, the chunks it preloads and its stylesheets), gzipped, against a budget, so a dependency that
 // grows them fails the check. The campaigns and the plan are chunks of their own, loaded when first shown. Run after
 // `pnpm build`, on dist/ (or the directory given).
 import { readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { gzipSync } from 'node:zlib'
 
-/** Measured at S4b: 172 KB (React, the platform's packages and the overview); a little room, not much. */
-export const BUDGET = 185 * 1024
+/** Measured at S4b: 186 KB (React, the platform's packages and the overview, 13 KB of it the stylesheet); a little room. */
+export const BUDGET = 200 * 1024
 
-/** The scripts a page loads at once: its module scripts and the modules it preloads, as paths under the base. */
+/** What a page loads at once from its own origin: module scripts, preloaded modules and stylesheets, by path. */
 export function firstLoad(html) {
   const paths = new Set()
-  for (const match of html.matchAll(/<script[^>]*type="module"[^>]*src="([^"]+)"|<link[^>]*rel="modulepreload"[^>]*href="([^"]+)"/g)) {
-    paths.add(match[1] ?? match[2])
+  const pattern = /<script[^>]*type="module"[^>]*src="([^"]+)"|<link[^>]*rel="(?:modulepreload|stylesheet)"[^>]*href="([^"]+)"/g
+  for (const match of html.matchAll(pattern)) {
+    const path = match[1] ?? match[2]
+    if (path.startsWith('/')) paths.add(path)
   }
   return [...paths]
 }

@@ -138,6 +138,9 @@ describe('QuizBuks for Shopify (S1)', () => {
     expect(await screen.findByText('Store: demo.myshopify.com')).toBeInTheDocument()
     expect(window.location.search).toBe('?shop=demo.myshopify.com')
     expect(container.querySelector('ui-title-bar')).toHaveAttribute('title', 'QuizBuks for Shopify')
+    // Moved by someone else's pushState (App Bridge's menu), the page follows the address too.
+    act(() => window.history.pushState(null, '', `${pathOf('plan')}?shop=demo.myshopify.com`))
+    expect(await screen.findByRole('heading', { level: 1, name: 'Plan and use' })).toBeInTheDocument()
   })
 
   it('points to help in the page\'s language and to the support address the server wrote in', async () => {

@@ -17,7 +17,7 @@ import {
   TableRow,
 } from '@jabiz/ui'
 import { QueryClient, QueryClientProvider, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
+import { Component, lazy, Suspense, useCallback, useEffect, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { check, connect, join, transferAdmin, type Shop } from './api'
 import { NotEmbeddedError, sessionToken } from './appBridge'
@@ -131,6 +131,7 @@ function ShopPage() {
         </Alert>
       )}
       {opened.data && (
+        <ChunkBoundary>
         <Suspense fallback={<p role="status">{t('loading')}</p>}>
           {page === 'overview' && (
             <div className="flex flex-col gap-4">
@@ -145,6 +146,7 @@ function ShopPage() {
           )}
           {page === 'plan' && <PlanPage userId={auth.userId} onShowOverview={() => show('overview')} />}
         </Suspense>
+        </ChunkBoundary>
       )}
       <Help />
     </div>
@@ -274,14 +276,44 @@ function Overview({ shop, userId, reload }: { shop: Shop; userId: string | null;
 }
 
 /**
- * The support address the server wrote into the page (S4a: index-values, platform 17g); none when the page was not
- * served by it (the dev server leaves the placeholder).
+ * A page's chunk that cannot be loaded (a new version was deployed while the app was open: the old files are gone):
+ * says so and offers a reload, instead of leaving Shopify's admin with an empty frame.
  */
+class ChunkBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false }
+
+  static getDerivedStateFromError() {
+    return { failed: true }
+  }
+
+  render() {
+    return this.state.failed ? <ChunkFailed /> : this.props.children
+  }
+}
+
+function ChunkFailed() {
+  const { t } = useTranslation(SHOPIFY)
+  return (
+    <Alert variant="destructive">
+      <AlertDescription className="flex flex-col gap-2">
+        <span>{t('outdated')}</span>
+        <Button variant="outline" className="self-start" onClick={() => window.location.reload()}>
+          {t('reload')}
+        </Button>
+      </AlertDescription>
+    </Alert>
+  )
+}
+
 /** A page's title: the app's name on the overview, the page's name on the others. */
 function pageTitle(t: (key: string) => string, page: Page): string {
   return page === 'overview' ? t('title') : t(`tabs.${page}`)
 }
 
+/**
+ * The support address the server wrote into the page (S4a: index-values, platform 17g); none when the page was not
+ * served by it (the dev server leaves the placeholder).
+ */
 export function supportEmail(): string | null {
   const value = document.querySelector<HTMLMetaElement>('meta[name="quizbuks-support-email"]')?.content ?? ''
   return /^[^\s@{}]+@[^\s@{}]+$/.test(value) ? value : null

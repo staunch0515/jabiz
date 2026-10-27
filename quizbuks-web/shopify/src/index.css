@@ -4,12 +4,12 @@
  *
  * S4b (docs/quizbuks/shopify/S4-launch.md P-2): the tokens are set to look at home in Shopify's admin (Polaris): its
  * grey page and white cards, dark buttons, its blue focus ring, rounder corners and the system font. Shopify's admin is
- * light; the dark appearance keeps the platform's tokens. Text pairs pass WCAG AA (#303030 on #f1f1f1 11.6:1, #616161
+ * light; the dark appearance keeps the platform's tokens (the overrides apply only without .dark). Text pairs pass WCAG AA (#303030 on #f1f1f1 11.6:1, #616161
  * on #f1f1f1 5.5:1 and on white 6.2:1, white on #303030 13.0:1).
  */
 @import '@jabiz/ui/theme.css';
 
-:root {
+:root:not(.dark) {
   --radius: 0.75rem;
   --background: #f1f1f1;
   --foreground: #303030;
