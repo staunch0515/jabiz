@@ -105,7 +105,7 @@ public final class WebhookProcesses {
     static ProcessDefinition<InboundRef, Outcome, ProcessContext> shopRedact() {
         return ProcessDefinition.define(SHOP_REDACT, 1, InboundRef.class, Outcome.class, ProcessContext.class, pb -> pb
             .description("Shopify asks to erase an uninstalled shop's data: the shop, its members and tokens are"
-                + " deleted, and the members' accounts disabled and unlinked.")
+                + " deleted; the members' platform accounts stay as the platform keeps them.")
             .permissions(Shopify.SYSTEM)
             .internal()
             .contextFactory(ShopProcesses::context)

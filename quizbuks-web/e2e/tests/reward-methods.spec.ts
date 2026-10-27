@@ -170,3 +170,64 @@ test('a taker collects a prize by scanning the code on the sponsor\'s screen', a
   await expect(page.getByTestId('redemption-row').filter({ hasText: owed.code })).toHaveAttribute('data-status',
     'REDEEMED')
 })
+
+test('a sponsor names a taker to the staff by their ID, who hands out a prize at the counter (Q39)',
+  async ({ page, request }) => {
+    test.setTimeout(240_000)
+    const owed = await rewardOwed(request, 'OFFLINE_REDEEM')
+    const kai = await takerInJapan(request, 'Kai')
+    const signOut = async () => {
+      await page.context().clearCookies()
+      await page.evaluate(() => {
+        window.localStorage.clear()
+        window.sessionStorage.clear()
+      })
+    }
+
+    // Kai reads their ID on the app's account page.
+    await signIn(page, '/taker/', kai.email)
+    await page.goto('/taker/account')
+    const kaiId = (await page.getByTestId('my-id').textContent())!.trim()
+    expect(kaiId).toMatch(/^[0-9a-f-]{36}$/)
+    await expect(page.getByTestId('account-staff')).toHaveCount(0)
+    await expectAccessible(page, 'app account page: my ID')
+
+    // The sponsor looks the ID up, sees Kai's name and adds them.
+    await signOut()
+    await signIn(page, '/sponsor/', owed.sponsor.email)
+    await expect(page.getByTestId('dashboard-status')).toBeVisible()
+    await page.getByRole('link', { name: 'Staff', exact: true }).click()
+    await expect(page).toHaveURL(/\/sponsor\/staff$/)
+    await page.getByTestId('staff-id').fill(kaiId)
+    await page.getByTestId('staff-find').click()
+    await expect(page.getByTestId('staff-candidate')).toContainText('Kai')
+    await page.getByTestId('staff-add-confirm').click()
+    await expect(page.getByTestId('staff-row').filter({ hasText: kaiId })).toBeVisible()
+    await expectAccessible(page, 'sponsor staff page')
+
+    // Kai opens the counter from the account page: the sponsor's code, in Kai's name.
+    await signOut()
+    await signIn(page, '/taker/', kai.email)
+    await page.goto('/taker/account')
+    await page.getByTestId('staff-desk-link').click()
+    await expect(page).toHaveURL(/\/taker\/staff$/)
+    await expect(page.getByTestId('staff-code-image')).toBeVisible()
+    const link = (await page.getByTestId('staff-code-link').textContent())!.trim()
+    expect(link).toMatch(/\/taker\/redeem\/[A-Za-z0-9_-]{30,}$/)
+    await expectAccessible(page, 'app staff counter')
+
+    // Mei scans it (through the processes): collected, handed over by Kai, as both pages show.
+    const scannedKey = decodeURIComponent(link.slice(link.lastIndexOf('/') + 1))
+    const checked = await run(request, owed.taker.token, 'QB_REDEEM_TOKEN_CHECK', { scannedKey })
+    const redemptionId = (checked.prizes as { redemptionId: string }[])[0].redemptionId
+    const claimed = await run(request, owed.taker.token, 'QB_REDEMPTION_CLAIM', { scannedKey, redemptionId })
+    expect(claimed.status).toBe('REDEEMED')
+    // The counter lists what Kai handed over today.
+    await expect(page.getByTestId('staff-today-item').filter({ hasText: owed.code })).toBeVisible()
+    await signOut()
+    await signIn(page, '/sponsor/', owed.sponsor.email)
+    await expect(page.getByTestId('dashboard-status')).toBeVisible()
+    await page.goto('/sponsor/redeem')
+    await expect(page.getByTestId('redemption-row').filter({ hasText: owed.code }).getByTestId('redemption-staff'))
+      .toContainText('Kai')
+  })

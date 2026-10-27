@@ -23,6 +23,10 @@ export const PUBLISHING_PROCESS = {
   redeemIssue: 'QB_REDEEM_CODE_ISSUE',
   redemptionConfirm: 'QB_REDEMPTION_CONFIRM',
   redemptionDecline: 'QB_REDEMPTION_DECLINE',
+  /** The sponsor's staff, who hand out prizes at the counter in the app (Q39): looked up by ID, named, removed. */
+  staffFind: 'QB_SPONSOR_STAFF_FIND',
+  staffAdd: 'QB_SPONSOR_STAFF_ADD',
+  staffRemove: 'QB_SPONSOR_STAFF_REMOVE',
   delete: 'QB_PUBLICATION_DELETE',
   copy: 'QB_PUBLICATION_COPY',
   submit: 'QB_PUBLICATION_SUBMIT',
@@ -38,6 +42,8 @@ export const PUBLISHING_TEMPLATE = {
   cashRewards: 'qb.sponsor.cash-rewards',
   /** The prizes takers collect at the sponsor's place (Q22b). */
   redemptions: 'qb.sponsor.redemptions',
+  /** The sponsor's staff (Q39). */
+  staff: 'qb.sponsor.staff',
   /** The digital prizes won from the sponsor, and a publication's code pool: its counts and its codes' hints (Q33). */
   digitalPrizes: 'qb.sponsor.digital-prizes',
   digitalPoolSummary: 'qb.sponsor.digital-pool-summary',

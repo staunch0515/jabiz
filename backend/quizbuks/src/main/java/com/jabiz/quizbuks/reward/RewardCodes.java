@@ -49,11 +49,26 @@ public final class RewardCodes {
     public static final String DIGITAL_POOL_LOCKED = "QB_DIGITAL_POOL_LOCKED";
     /** Q33: an ended publication takes no more codes. */
     public static final String DIGITAL_POOL_ENDED = "QB_DIGITAL_POOL_ENDED";
+    /** Q39: the person to name is not a taker (no profile, or a sponsor's account). */
+    public static final String STAFF_NOT_A_TAKER = "QB_STAFF_NOT_A_TAKER";
+    /** Q39: a sponsor does not name themselves. */
+    public static final String STAFF_SELF = "QB_STAFF_SELF";
+    /** Q39: the person is on another sponsor's staff. */
+    public static final String STAFF_ELSEWHERE = "QB_STAFF_ELSEWHERE";
+    /** Q39: the sponsor has as many staff as they may. */
+    public static final String STAFF_FULL = "QB_STAFF_FULL";
+    /** Q39: the caller is on no sponsor's staff. */
+    public static final String NOT_STAFF = "QB_NOT_STAFF";
+    /** Q39: the sponsor a staff member acts for is banned: their counter is closed. */
+    public static final String STAFF_SPONSOR_BANNED = "QB_STAFF_SPONSOR_BANNED";
+    /** Q39: a staff member does not hand over their own prize. */
+    public static final String STAFF_OWN_PRIZE = "QB_STAFF_OWN_PRIZE";
 
     public static final List<String> ALL = List.of(CASH_STATE, CASH_DISPUTE_NOTE, CASH_RESOLUTION, CASH_CONFIRM_DUE,
         REDEMPTION_STATE, REDEEM_TOKEN_INVALID, REDEEM_TOKEN_SPONSOR, REDEEM_TOKEN_KIND, REDEMPTION_CLAIM_LAPSED,
         DIGITAL_STATE, DIGITAL_UNREADABLE, DIGITAL_DISPUTE_NOTE, DIGITAL_RESOLUTION, DIGITAL_CODES_EMPTY,
-        DIGITAL_CODES_TOO_MANY, DIGITAL_CODE_TOO_LONG, DIGITAL_NOT_POOLED, DIGITAL_POOL_LOCKED, DIGITAL_POOL_ENDED);
+        DIGITAL_CODES_TOO_MANY, DIGITAL_CODE_TOO_LONG, DIGITAL_NOT_POOLED, DIGITAL_POOL_LOCKED, DIGITAL_POOL_ENDED,
+        STAFF_NOT_A_TAKER, STAFF_SELF, STAFF_ELSEWHERE, STAFF_FULL, NOT_STAFF, STAFF_OWN_PRIZE, STAFF_SPONSOR_BANNED);
 
     private RewardCodes() {}
 }
