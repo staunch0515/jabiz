@@ -227,7 +227,9 @@ public class PublishingConfig {
             .item(PublicationStatus.QUOTA, "en", "All winners rewarded", "zh", "名额已满", "ja", "当選枠に到達")
             .item(PublicationStatus.BUDGET, "en", "Budget spent", "zh", "预算已用完", "ja", "予算を使い切り")
             .item(PublicationStatus.ADMIN, "en", "Ended by an administrator", "zh", "已被管理员结束",
-                "ja", "管理者が終了"));
+                "ja", "管理者が終了")
+            .item(PublicationStatus.PUBLISHER, "en", "Ended by its publisher", "zh", "已被发布方结束",
+                "ja", "公開者が終了"));
     }
 
     /** Q22: how a reward reaches the taker. */
@@ -249,7 +251,9 @@ public class PublishingConfig {
             .item(RewardMethod.OFFLINE_REDEEM, "en", "Prize at the sponsor's place", "zh", "商家线下兑付",
                 "ja", "スポンサーの店舗で引き換え")
             .item(RewardMethod.DIGITAL_PRIZE, "en", "Digital prize (a code or link)", "zh", "电子奖品（兑换码或链接）",
-                "ja", "デジタル景品（コードまたはリンク）"));
+                "ja", "デジタル景品（コードまたはリンク）")
+            .item(RewardMethod.CHANNEL, "en", "Given by the channel (a shop's discount code)", "zh",
+                "由渠道发放（店铺的折扣码）", "ja", "チャネルが付与（ストアの割引コード）"));
     }
 
     @Bean
@@ -294,6 +298,19 @@ public class PublishingConfig {
     @Bean
     ProcessDefinition<PublicationProcesses.PublicationRef, PublicationOutput, ProcessContext> qbPublicationDelete() {
         return PublicationProcesses.delete();
+    }
+
+    /** S2: a channel's publisher publishes, pauses, resumes and ends (sub-processes of the channel's module). */
+    @Bean
+    ProcessDefinition<com.jabiz.quizbuks.channel.Channel.PublishInput,
+        com.jabiz.quizbuks.channel.Channel.PublishOutput, ProcessContext> qbChannelPublish() {
+        return ChannelPublishing.publish();
+    }
+
+    @Bean
+    ProcessDefinition<com.jabiz.quizbuks.channel.Channel.MoveInput, com.jabiz.quizbuks.channel.Channel.MoveOutput,
+        ProcessContext> qbChannelPublicationMove() {
+        return ChannelPublishing.move();
     }
 
     @Bean

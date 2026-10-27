@@ -68,6 +68,12 @@ jabiz:
       "[QB_REDEEM_CODE_ISSUE]": { per-user: 20, period: 1m }
       "[QB_REDEEM_TOKEN_CHECK]": { per-user: 60, period: 1m }
       "[QB_REDEMPTION_CLAIM]": { per-user: 30, period: 1m }
+      # S2 (docs/quizbuks/shopify/S2-storefront.md section 3): the storefront's quiz, through the shop's app proxy
+      # (D60): per shop and per visitor key, not per user (every visitor is the proxy's caller). A person reads the
+      # campaign on each product page and starts and submits once; a shop's whole storefront stays well within these.
+      "[QBS_SF_CAMPAIGN]": { per-tenant: 1200, per-visitor: 60, period: 1m }
+      "[QBS_SF_START]": { per-tenant: 600, per-visitor: 5, period: 1m }
+      "[QBS_SF_SUBMIT]": { per-tenant: 300, per-visitor: 5, period: 1m }
       # Q39: a staff member's App asks for the sponsor's rotating code once a minute, as the console does; looking an ID
       # up is a sponsor typing one, not a directory to walk.
       "[QB_STAFF_REDEEM_CODE_ISSUE]": { per-user: 20, period: 1m }
@@ -249,6 +255,14 @@ jabiz:
   # The image sets IPA Gothic (Japanese) and Droid Sans Fallback (Chinese) (deploy/quizbuks/Dockerfile); elsewhere
   # empty, and those characters print as "?" (CSV and Excel are not affected). A configured file that cannot be read
   # fails the startup.
+  # S2 (docs/quizbuks/shopify/S2-storefront.md section 3): the storefront's requests, forwarded by Shopify's app proxy
+  # (/apps/quizbuks → /api/proxy/shopify, platform decision D60) and signed in the query with the app's secret (from
+  # the environment only); the shop is the signed `shop`, a signed-in customer `logged_in_customer_id`. The block sends
+  # its visitor key as `visitor` in the query, for the per-visitor limits, and in the body, for the attempt.
+  app-proxies:
+    shopify:
+      secrets: ["${SHOPIFY_API_SECRET:}"]
+      tenant-pattern: '[a-z0-9][a-z0-9-]*\.myshopify\.com'
   reports:
     pdf:
       fonts: ${JABIZ_REPORTS_PDF_FONTS:}

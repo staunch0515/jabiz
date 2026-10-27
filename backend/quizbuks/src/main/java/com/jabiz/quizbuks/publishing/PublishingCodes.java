@@ -82,6 +82,12 @@ public final class PublishingCodes {
     public static final String REWARD_METHODS_FORMAT = "QB_REWARD_METHODS_FORMAT";
     /** A tier pays more than the highest reward one attempt may win (Q28). */
     public static final String REWARD_ABOVE_MAX = "QB_REWARD_ABOVE_MAX";
+    /** S2: a channel's publication names a sponsor (or no known kind) as its publisher. */
+    public static final String CHANNEL_PUBLISHER = "QB_CHANNEL_PUBLISHER";
+    /** S2: a channel's video to watch is not a YouTube or Vimeo link. */
+    public static final String CHANNEL_VIDEO = "QB_CHANNEL_VIDEO";
+    /** S2: a channel's quiz is too large to keep as a version. */
+    public static final String CHANNEL_TOO_LARGE = "QB_CHANNEL_TOO_LARGE";
     /** Every code above that is publishing's own (not the shared review and account codes). */
 
     public static final List<String> ALL = List.of(NAME_BLANK, REGIONS_FORMAT, AUDIENCE_INVALID, TIME_LIMIT_RANGE, SCORE_RANGE,
@@ -91,7 +97,7 @@ public final class PublishingCodes {
         TIER_RANGE, TIER_GAP, TIER_OVERLAP, TIER_NOT_TO_FULL, TIER_NO_REWARD, SURVEY_PASS_SCORE, SURVEY_TIERS,
         ADMIN_PAUSED, NOT_ADMIN_PAUSED, SPONSOR_BANNED, TAKEN_DOWN, REVIEW_REQUIRED, REWARD_METHOD_NOT_ALLOWED, DIGITAL_DELIVERY_INVALID,
         DIGITAL_SEND_DAYS_RANGE, DIGITAL_POOL_SHORT,
-        REWARD_METHODS_FORMAT, REWARD_ABOVE_MAX);
+        REWARD_METHODS_FORMAT, REWARD_ABOVE_MAX, CHANNEL_PUBLISHER, CHANNEL_VIDEO, CHANNEL_TOO_LARGE);
 
     private PublishingCodes() {}
 }

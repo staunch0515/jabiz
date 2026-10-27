@@ -34,7 +34,10 @@ public final class PublicationStatus {
     /** An administrator ended it (Q10b, review M2). */
     public static final String ADMIN = "ADMIN";
 
-    public static final List<String> END_REASONS = List.of(EXPIRED, QUOTA, BUDGET, ADMIN);
+    /** Its publisher ended it: a channel's publisher (S2), which ends a publication rather than withdrawing it. */
+    public static final String PUBLISHER = "PUBLISHER";
+
+    public static final List<String> END_REASONS = List.of(EXPIRED, QUOTA, BUDGET, ADMIN, PUBLISHER);
 
     /**
      * Who paused a paused publication ({@code pausedBy}, Q10b, review M2): its sponsor, who may resume it, or an

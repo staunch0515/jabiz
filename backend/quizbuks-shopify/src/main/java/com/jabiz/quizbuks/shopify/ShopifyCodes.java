@@ -24,6 +24,22 @@ public final class ShopifyCodes {
     /** The shop has as many members as it may ({@code ShopProcesses.MAX_MEMBERS}). */
     public static final String SHOP_FULL = "QBS_SHOP_FULL";
 
+    /** S2: the pass score is above the number of questions. */
+    public static final String PASS_SCORE = "QBS_PASS_SCORE";
+    /** S2: only a draft campaign can be edited or published. */
+    public static final String CAMPAIGN_NOT_DRAFT = "QBS_CAMPAIGN_NOT_DRAFT";
+    /** S2: the draft was changed since the editor read it. */
+    public static final String CAMPAIGN_CHANGED = "QBS_CAMPAIGN_CHANGED";
+    /** S2: another campaign is running (live or paused): end it first. */
+    public static final String CAMPAIGN_RUNNING = "QBS_CAMPAIGN_RUNNING";
+    /** S2: the campaign cannot make that move (resume a live one, end an ended one). */
+    public static final String CAMPAIGN_MOVE = "QBS_CAMPAIGN_MOVE";
+    /** S2: a visitor who is not signed in must send the key the storefront block keeps. */
+    public static final String VISITOR_REQUIRED = "QBS_VISITOR_REQUIRED";
+    /** S2: the discount code cannot be opened (sealed under another key). */
+    public static final String CODE_UNREADABLE = "QBS_CODE_UNREADABLE";
+
     public static final List<String> ALL = List.of(OTHER_SHOP, NOT_A_MEMBER, NOT_ADMIN, NOT_A_COLLEAGUE, UNINSTALLED,
-        EXCHANGE_REFUSED, NOT_CONNECTED, SHOP_FULL);
+        EXCHANGE_REFUSED, NOT_CONNECTED, SHOP_FULL, PASS_SCORE, CAMPAIGN_NOT_DRAFT, CAMPAIGN_CHANGED, CAMPAIGN_RUNNING,
+        CAMPAIGN_MOVE, VISITOR_REQUIRED, CODE_UNREADABLE);
 }

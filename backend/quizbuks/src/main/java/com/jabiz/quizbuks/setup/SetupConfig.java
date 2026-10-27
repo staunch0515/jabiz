@@ -19,6 +19,7 @@ class SetupConfig {
 
     @Bean
     ControlledParams qbControlledParams() {
-        return ControlledParams.of(QbParams.CONTROLLED.toArray(String[]::new));
+        return ControlledParams.of(java.util.stream.Stream.concat(QbParams.CONTROLLED.stream(),
+            java.util.stream.Stream.of(QbParams.SHOPIFY_DAILY_CODES)).toArray(String[]::new));
     }
 }

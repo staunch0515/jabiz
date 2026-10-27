@@ -249,12 +249,12 @@ public final class AttemptProcesses {
                 .compute("Start the attempt", (metadata, ctx) -> start(ctx, shuffle)));
     }
 
-    private static EntityQuery mine(Object publicationId) {
+    static EntityQuery mine(Object publicationId) {
         return EntityQuery.builder().where(new QueryPredicate.In("publicationId", ids(publicationId))).limit(1)
             .build();
     }
 
-    private static boolean starting(ProcessContext ctx) {
+    static boolean starting(ProcessContext ctx) {
         return Boolean.TRUE.equals(ctx.get(NEW)) && !ctx.hasViolations();
     }
 
@@ -288,6 +288,14 @@ public final class AttemptProcesses {
     }
 
     static void start(ProcessContext ctx, OptionShuffle shuffle) {
+        start(ctx, shuffle, ctx.request().actorId(), PlaySteps.userRegions(ctx));
+    }
+
+    /**
+     * Starts the attempt of {@code userId}, whose country is in {@code userRegions}: the caller for a taker of the
+     * App, the channel's taker for a channel's publication ({@link ChannelPlay}, S2).
+     */
+    static void start(ProcessContext ctx, OptionShuffle shuffle, String userId, String userRegions) {
         if (!starting(ctx)) {
             return;
         }
@@ -304,10 +312,9 @@ public final class AttemptProcesses {
             throw new IllegalStateException("A publication that went on has a card and both sides of its counters: "
                 + ctx.get(PUB_KEY));
         }
-        String userId = ctx.request().actorId();
         EntityInstance wallet = first(ctx, WALLET);
         EntityInstance invitation = PlaySteps.invited(card) ? Invitations.mine(ctx) : null;
-        String refusal = AttemptRules.startRefusal(userId, PlaySteps.userRegions(ctx), invitation != null,
+        String refusal = AttemptRules.startRefusal(userId, userRegions, invitation != null,
             PlaySteps.cardOf(card), PlaySteps.counts(starts, counter), QbWallets.available(wallet),
             QbWallets.pendingCount(wallet), ctx.opTime());
         if (refusal != null) {

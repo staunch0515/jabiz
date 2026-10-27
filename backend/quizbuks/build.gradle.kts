@@ -29,6 +29,8 @@ dependencies {
     implementation(project(":runtime"))
     // QuizBuks for Shopify (docs/quizbuks/shopify/S1-install.md): a library of its own, in this jar.
     implementation(project(":quizbuks-shopify"))
+    // The channel contract (S2): the inputs and outputs of the processes QuizBuks for Shopify calls.
+    implementation(project(":quizbuks-channel"))
     testImplementation(testFixtures(project(":runtime")))
     testImplementation("com.tngtech.archunit:archunit-junit5:1.5.0")
     testImplementation("net.jqwik:jqwik:1.9.3")

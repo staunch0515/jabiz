@@ -246,6 +246,64 @@ public final class ConnectionProcesses {
     }
 
     /**
+     * The shop's access token from its stored pair ({@link #TOKENS}), refreshed when it ends within
+     * {@link #REFRESH_BEFORE} (the new pair is put as {@link #OBTAINED}, to be sealed and kept); null, with
+     * {@link #DROPPED}, when the pair cannot be opened (sealed under another key) or Shopify refuses the refresh: the
+     * shop must connect again. For a blocking step, under the shop's token lock.
+     */
+    static String access(ProcessContext ctx, ShopifyApi api, SecretSealer sealer, String domain) {
+        EntityInstance stored = ShopProcesses.first(ctx, TOKENS);
+        String access;
+        String refresh;
+        try {
+            access = sealer.open(stored.get("sealedAccessToken"), domain);
+            refresh = sealer.open(stored.get("sealedRefreshToken"), domain);
+        } catch (SealedSecrets.UnreadableSecretException e) {
+            // Sealed under another key: useless, so the shop connects again.
+            ctx.put(DROPPED, true);
+            return null;
+        }
+        java.time.Instant accessEnds = stored.get("accessExpiresAt");
+        if (!ctx.opTime().plus(REFRESH_BEFORE).isBefore(accessEnds)) {
+            ShopifyApi.Answer<ShopifyApi.Tokens> pair = api.refresh(domain, refresh, ctx.opTime());
+            if (pair.refused()) {
+                ctx.put(DROPPED, true);
+                return null;
+            }
+            ctx.put(OBTAINED, pair.value());
+            access = pair.value().accessToken();
+        }
+        return access;
+    }
+
+    /**
+     * Keeps what a use of the tokens brought ({@link #access}): a refreshed pair, sealed; or, dropped, no tokens and
+     * the shop to connect again. Nothing when neither happened.
+     */
+    static void keepTokens(ProcessContext ctx) {
+        EntityInstance shop = ShopProcesses.first(ctx, SHOPS);
+        EntityInstance stored = ShopProcesses.first(ctx, TOKENS);
+        if (Boolean.TRUE.equals(ctx.get(DROPPED))) {
+            if (stored != null) {
+                ctx.changes().delete(QbsShops.TOKEN, stored.id(), stored.version());
+            }
+            ctx.changes().update(QbsShops.SHOP, shop.id(), shop.version(), Map.of("connection", QbsShops.RECONNECT));
+            return;
+        }
+        ShopifyApi.Tokens tokens = ctx.get(OBTAINED, ShopifyApi.Tokens.class);
+        if (tokens != null && stored != null) {
+            Map<String, Object> values = new LinkedHashMap<>();
+            values.put("sealedAccessToken", ctx.get(SEALED_ACCESS, String.class));
+            values.put("accessExpiresAt", tokens.accessExpiresAt());
+            values.put("sealedRefreshToken", ctx.get(SEALED_REFRESH, String.class));
+            values.put("refreshExpiresAt", tokens.refreshExpiresAt());
+            values.put("scope", tokens.scope());
+            values.put("obtainedAt", ctx.opTime());
+            ctx.changes().update(QbsShops.TOKEN, stored.id(), stored.version(), values);
+        }
+    }
+
+    /**
      * Opens the shop's tokens, refreshes them when the access token is about to end, and reads the shop's name. A
      * refresh or a read Shopify refuses drops the tokens ({@link #DROPPED}): the shop connects again.
      */
@@ -266,26 +324,9 @@ public final class ConnectionProcesses {
                 return;
             }
             String domain = shopDomain(ctx);
-            EntityInstance stored = ShopProcesses.first(ctx, TOKENS);
-            String access;
-            String refresh;
-            try {
-                access = sealer.open(stored.get("sealedAccessToken"), domain);
-                refresh = sealer.open(stored.get("sealedRefreshToken"), domain);
-            } catch (SealedSecrets.UnreadableSecretException e) {
-                // Sealed under another key: useless, so the shop connects again.
-                ctx.put(DROPPED, true);
+            String access = access(ctx, api, sealer, domain);
+            if (access == null) {
                 return;
-            }
-            java.time.Instant accessEnds = stored.get("accessExpiresAt");
-            if (!ctx.opTime().plus(REFRESH_BEFORE).isBefore(accessEnds)) {
-                ShopifyApi.Answer<ShopifyApi.Tokens> pair = api.refresh(domain, refresh, ctx.opTime());
-                if (pair.refused()) {
-                    ctx.put(DROPPED, true);
-                    return;
-                }
-                ctx.put(OBTAINED, pair.value());
-                access = pair.value().accessToken();
             }
             ShopifyApi.Answer<String> name;
             try {
