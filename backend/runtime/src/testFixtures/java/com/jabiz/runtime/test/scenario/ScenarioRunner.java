@@ -397,8 +397,11 @@ public final class ScenarioRunner {
     private <I, O, C extends ProcessContext> Mono<ProcessResult<O>> run(ProcessDefinition<I, O, C> definition,
         Map<String, Object> input) {
         // A step of an entryOnly() process stands for its platform entry point (the entity API, signing up...), which
-        // runs it as the caller; other steps stand for the process API (decision D41).
+        // runs it as the caller; a step of an appProxy() one for its app proxy, the step's actor standing for the
+        // proxy's caller (id app-proxy:<proxy>[:<customer>], the tenant, the proxy's permission; decision D60); other
+        // steps stand for the process API (decision D41).
         ExecutionOptions options = definition.access() == ProcessAccess.ENTRY_ONLY
+            || definition.access() == ProcessAccess.APP_PROXY
             ? ExecutionOptions.NONE.atEntryOf(definition) : ExecutionOptions.NONE;
         return executor.run(definition, inputs.convert(definition.inputType(), input), options);
     }

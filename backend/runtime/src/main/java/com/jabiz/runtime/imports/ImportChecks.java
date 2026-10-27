@@ -41,7 +41,7 @@ class ImportChecks implements PlatformCheck {
         com.jabiz.process.ProcessDefinition<?, ?, ?> process) {
         return switch (process.access()) {
             case OPEN, SUB_PROCESS_ONLY -> java.util.List.of();
-            case INTERNAL, ENTRY_ONLY -> java.util.List.of(CheckProblem.error(CATEGORY, location, "process "
+            case INTERNAL, ENTRY_ONLY, APP_PROXY -> java.util.List.of(CheckProblem.error(CATEGORY, location, "process "
                 + process.name() + " v" + process.version() + " is " + process.access() + ": rows run as "
                 + "sub-processes of the importing user, so the target must be open or subProcessOnly() (decision D41)"));
         };

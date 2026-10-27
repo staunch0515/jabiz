@@ -45,6 +45,14 @@ class ProcessAccessRulesTest {
             .doesNotThrowAnyException();
         assertThatThrownBy(() -> ProcessExecutor.requireStartable(process(ProcessAccess.SUB_PROCESS_ONLY), SYSTEM,
             none)).isInstanceOf(ProcessInternalException.class);
+        // An app proxy's process: from the proxy's entry only (decision D60).
+        ProcessDefinition<In, In, ProcessContext> proxied = process(ProcessAccess.APP_PROXY);
+        assertThatThrownBy(() -> ProcessExecutor.requireStartable(proxied, USER, none))
+            .isInstanceOf(ProcessInternalException.class).hasMessageContaining("app proxy");
+        assertThatThrownBy(() -> ProcessExecutor.requireStartable(proxied, SYSTEM, none))
+            .isInstanceOf(ProcessInternalException.class);
+        assertThatCode(() -> ProcessExecutor.requireStartable(proxied, USER, none.atEntryOf(proxied)))
+            .doesNotThrowAnyException();
     }
 
     @Test
@@ -54,6 +62,8 @@ class ProcessAccessRulesTest {
         assertThatCode(() -> ProcessExecutor.requireCallable(process(ProcessAccess.INTERNAL), SYSTEM))
             .doesNotThrowAnyException();
         assertThatThrownBy(() -> ProcessExecutor.requireCallable(process(ProcessAccess.ENTRY_ONLY), SYSTEM))
+            .isInstanceOf(ProcessInternalException.class);
+        assertThatThrownBy(() -> ProcessExecutor.requireCallable(process(ProcessAccess.APP_PROXY), SYSTEM))
             .isInstanceOf(ProcessInternalException.class);
         assertThatCode(() -> ProcessExecutor.requireCallable(process(ProcessAccess.SUB_PROCESS_ONLY), USER))
             .doesNotThrowAnyException();

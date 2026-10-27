@@ -249,6 +249,8 @@ public final class PlatformErrorCodes {
     public static final String UNAUTHENTICATED = "UNAUTHENTICATED";
     public static final String LOGIN_FAILED = "LOGIN_FAILED";
     public static final String INVALID_REFRESH_TOKEN = "INVALID_REFRESH_TOKEN";
+    /** A request through an app proxy whose signature, time or tenant does not hold (decision D60); never says which. */
+    public static final String APP_PROXY_REFUSED = "APP_PROXY_REFUSED";
 
     // Access (403)
     public static final String SCOPE_UNAVAILABLE = "SCOPE_UNAVAILABLE";
@@ -340,7 +342,7 @@ public final class PlatformErrorCodes {
         EMAIL_SET_BY_ANOTHER,
         MFA_CODE_INVALID, MFA_NOT_ENROLLED, MFA_ALREADY_ENROLLED,
         IDEMPOTENCY_KEY_REUSED,
-        UNAUTHENTICATED, LOGIN_FAILED, INVALID_REFRESH_TOKEN,
+        UNAUTHENTICATED, LOGIN_FAILED, INVALID_REFRESH_TOKEN, APP_PROXY_REFUSED,
         SCOPE_UNAVAILABLE, PERMISSION_DENIED, MFA_REQUIRED, EMAIL_NOT_VERIFIED, PROCESS_INTERNAL, SIGN_IN_REFUSED, SIGN_UP_DISABLED,
         FILE_TYPE_NOT_ALLOWED, FILE_TOO_LARGE, FILE_INVALID, FILE_NOT_FOUND, FILE_POLICY_MISMATCH, FILE_IN_USE,
         INBOUND_REJECTED, RATE_LIMITED, PROCESS_BUSY, AUTH_BUSY);

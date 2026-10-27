@@ -91,6 +91,29 @@ class ProcessRateLimitsTest {
     }
 
     @Test
+    void anAppProxysCallersCountPerTenantAndPerVisitorWithinIt() {
+        ProcessRateLimits limits = limits(new ProcessRateLimitProperties.Limit(null, null, null,
+            Duration.ofMinutes(1), 3, 1));
+        MockServerHttpRequest request = from("203.0.113.1");
+        RequestContext shopA = new RequestContext("app-proxy:shop", "a.shop.example", Locale.ENGLISH, "r", Set.of(),
+            Set.of("app-proxy.shop"));
+        RequestContext shopB = new RequestContext("app-proxy:shop", "b.shop.example", Locale.ENGLISH, "r", Set.of(),
+            Set.of("app-proxy.shop"));
+        limits.check(LIMITED, shopA, request, "v1");
+        assertThat(catchThrowableOfType(RateLimitedException.class,
+            () -> limits.check(LIMITED, shopA, request, "v1"))).isNotNull();
+        // The same key in another tenant is another visitor; the tenant's own allowance runs out after three.
+        limits.check(LIMITED, shopB, request, "v1");
+        limits.check(LIMITED, shopA, request, "v2");
+        limits.check(LIMITED, shopA, request, null);
+        assertThat(catchThrowableOfType(RateLimitedException.class,
+            () -> limits.check(LIMITED, shopA, request, "v3"))).isNotNull();
+        TestObservationRegistryAssert.assertThat(registry)
+            .hasObservationWithNameEqualTo(PlatformObservations.PROCESS_RATE_LIMITED)
+            .that().hasLowCardinalityKeyValue("scope", "visitor");
+    }
+
+    @Test
     void perAddressForwardedAddressesCountOnlyThroughTrustedProxies() {
         ProcessRateLimits limits = limits(new ProcessRateLimitProperties.Limit(null, 1, null, null));
         // Through the trusted proxy: the forwarded client.
