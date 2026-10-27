@@ -9,7 +9,7 @@ function json(status: number, body: unknown) {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 }
 
-const ENTRY = { name: 'sponsor', selfRegistration: true, requireVerifiedEmail: true, appPath: '/',
+const ENTRY = { name: 'sponsor', selfRegistration: true, requireVerifiedEmail: false, appPath: '/',
   sessionPersistence: 'tab' }
 
 interface Me {
@@ -21,6 +21,8 @@ interface Me {
   applied?: { status: number; body: unknown }
   /** The rows of `qb.me.consents` (the texts in effect and the caller's standing); none: nothing in effect. */
   consents?: Record<string, unknown>[]
+  /** Whether the address is verified; it is when not given. */
+  emailVerified?: boolean
 }
 
 const terms = (versionNo: number, mustAccept: boolean) => ({ kind: 'TERMS_SPONSOR', versionId: `v${versionNo}`,
@@ -31,7 +33,7 @@ const privacy = { kind: 'PRIVACY', versionId: 'p1', versionNo: 1, title: { en: '
   requiresConsent: true, effectiveAt: '2026-09-01T00:00:00Z', toAccept: 1, accepted: 1, mustAccept: false }
 
 /**
- * The server as the console sees it (built with the base / in tests): its entry, no identity providers, and for a
+ * The server as the console sees it (built with the base / in tests): its entry, the identity providers given, and for a
  * signed-in sponsor their identity and onboarding. Records what was asked and posted.
  */
 function server(me?: Me, providers: unknown[] = []) {
@@ -53,7 +55,7 @@ function server(me?: Me, providers: unknown[] = []) {
         return json(200, providers)
       case '/api/auth/me':
         return me ? json(200, { userId: 'u2', displayName: 'Sara', email: 'sara@example.com', roles: ['QB_SPONSOR'],
-          permissions: ['qb.sponsor.me', 'qb.account.read'], emailVerified: true,
+          permissions: ['qb.sponsor.me', 'qb.account.read'], emailVerified: me.emailVerified ?? true,
           idleTimeoutSeconds: me.idleTimeoutSeconds ?? 1800 }) : json(401, {})
       case '/api/auth/logout':
         return json(204, {})
@@ -136,10 +138,18 @@ describe('a visitor', () => {
     expect(screen.getByTestId('signin-taker-account')).toHaveTextContent('Sign up here with the same email address')
   })
 
-  it('signs in and signs up with Google when the server offers it to the console (Q37)', async () => {
-    server(undefined, [{ id: 'google', kind: 'google', label: 'Google' }])
+  it('signs in and signs up with Google, Facebook and LINE as a row of icons (Q37, Q40)', async () => {
+    server(undefined, [{ id: 'google', kind: 'google', label: 'Google' }, { id: 'facebook', kind: 'facebook',
+      label: 'Facebook' }, { id: 'line', kind: 'line', label: 'LINE' }])
     render(<App />)
-    expect(await screen.findByTestId('oidc-google')).toHaveTextContent('Google')
+    const row = await screen.findByTestId('oidc-icons')
+    expect(row).toHaveTextContent('Other ways to sign in')
+    expect(within(row).getAllByRole('button').map((b) => b.getAttribute('aria-label')))
+      .toEqual(['Google', 'Facebook', 'LINE'])
+    await userEvent.click(screen.getByTestId('sign-up-link'))
+    await waitFor(() => expect(window.location.pathname).toBe('/signup'))
+    const signUp = await screen.findByTestId('signup-providers')
+    expect(within(signUp).getByRole('button', { name: 'LINE' })).toHaveAttribute('data-kind', 'line')
   })
 
   it('opens the pages of mailed links without signing in', async () => {
@@ -164,6 +174,13 @@ describe('a visitor', () => {
 
 describe('a signed-in sponsor', () => {
   beforeEach(() => session.store('access', 'refresh'))
+
+  it('signed in with an unverified address is told so above the onboarding (Q40)', async () => {
+    server({ sponsor: null, emailVerified: false })
+    render(<App />)
+    await waitFor(() => expect(window.location.pathname).toBe('/onboarding'))
+    expect(await screen.findByTestId('verify-email-banner')).toHaveTextContent('sara@example.com')
+  })
 
   it('who has not applied is led to the onboarding and applies with the terms accepted', async () => {
     const { posted } = server({ sponsor: null, applied: { status: 200, body: { output: { userId: 'u2',

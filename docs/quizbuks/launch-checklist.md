@@ -8,7 +8,7 @@
 - [ ] **Q6b 转账的法务意见**（资金決済法：Kudos 与转账是否构成资金移动、前払式支付手段等；`03-plan.md` 第 4 节）已取得，结论允许按现设计开放转账；否则 `qb.transfer.enabled` 保持 false 上线
 - [ ] **收据**：登记号（`qb.issuer.registration-no`，适格请求书发行事业者登记号）与税的表述（收据不声称是适格请求书；日元金额与 Kudos 的写法）经财务或法务确认
 - [ ] 收据开具方的名称与地址（`qb.issuer.name`、`qb.issuer.address`）已以受控变更设好
-- [ ] **隐私政策**（个人信息的取得与利用目的、第三方提供：Stripe、邮件服务商、Google 登录；保存期间；海外传输）已发布，App 与商家后台可达
+- [ ] **隐私政策**（个人信息的取得与利用目的、第三方提供：Stripe、邮件服务商、Google、Facebook 与 LINE 登录；保存期间；海外传输）已发布，App 与商家后台可达
 - [ ] **利用条款**（答题人、商家各自的条款；商家入驻时同意的版本）已发布
 - [ ] 特定商取引法的表示（商家充值是有偿的）已发布
 - [ ] 上面四种文本都是需求方或律师提供的**正式文本**（日文为准据文本、英文一并提供），经 `QB_LEGAL_PUBLISH` 发布且已生效：页面上不再出现 `[TEST PLACEHOLDER]`；
@@ -18,6 +18,7 @@
 - [ ] **上线的内容**（Q36，`tools/quizbuks/content/README.md`）：需求方的商户账号（与管理员不同的邮箱）在正式系统自助注册、通过入驻审核并充值；测试系统中整理好的内容包（私有仓库）以 `apply` 写入、管理员审核发布；至少一个长期的公开发布（欢迎问卷），`renew` 的运行日期已记入日程；不从测试系统复制数据库
 - [ ] 保留期：导出文件、汇总凭证与收据的保留（L-4：10 年）已实施或已有书面的替代做法（`backend/quizbuks/CLAUDE.md`"导出文件与收据还没有 `RetentionPolicy`"）
 
+- [ ] **Facebook 与 LINE 登录（Q40，开 `social` 时）**：Facebook 应用已切换为正式模式、LINE 渠道已获准取得邮箱；用真实账号在 App 与商家后台各走一遍：首次登录开户、收到验证邮件、在登录着的浏览器中打开链接后能保存资料或申请入驻、退出后再用同一方式登录（平台 D60 的端点与签名只以存根测试过）
 - [ ] **安装到主屏幕（Q38）**：iPhone Safari 与 Android Chrome 各装一次（账户页的入口、答完测验后的提示）；LINE 与微信中打开分享链接看到"在浏览器中打开"；iPhone 桌面 App 中邮件链接（验证、邮件登录）与 Google 登录的表现可以接受（`plans/Q38-install.md` §4）
 
 ## 性能
@@ -52,7 +53,7 @@
 - [ ] 依赖与镜像的已知漏洞已评估（`gradle dependencies`、`pnpm audit`、镜像扫描）
 - [ ] **全部管理员都有二次验证**；管理员角色设了"要求二次验证"；没有共用账号；首个管理员的 `JABIZ_BOOTSTRAP_ADMIN_*` 已从环境中删去
 - [ ] **至少两位超级管理员**（`QB_ADMIN_SUPER`，平台 16u，D51）在职、各自二次验证，按 `operations.md` §3 第 4–5 步的顺序建立（`QB_SETUP` 与职责分离规则的发布在第二位之前）；建立期已结束（`sec_protected_grants_armed` 有一行），试过一次由一位申请、另一位审批的角色分配；`JABIZ_SECURITY_PROTECTEDGRANTS_ENABLED` 未设
-- [ ] **密钥已从任何演示或测试的值轮换**：`JABIZ_JWT_SECRET`、`JABIZ_INTEGRITY_KEY`、`JABIZ_MFA_KEY`、`JABIZ_SEAL_KEY`、数据库密码、Stripe 密钥与签名密钥、SMTP、Google 客户端密钥都是为生产新生成的，没有在本机演示、e2e、压测或测试服务器上用过；`JABIZ_INTEGRITY_KEY`、`JABIZ_MFA_KEY` 与 `JABIZ_SEAL_KEY` 的离线副本已保存
+- [ ] **密钥已从任何演示或测试的值轮换**：`JABIZ_JWT_SECRET`、`JABIZ_INTEGRITY_KEY`、`JABIZ_MFA_KEY`、`JABIZ_SEAL_KEY`、数据库密码、Stripe 密钥与签名密钥、SMTP、Google、Facebook 与 LINE 的客户端密钥都是为生产新生成的，没有在本机演示、e2e、压测或测试服务器上用过；`JABIZ_INTEGRITY_KEY`、`JABIZ_MFA_KEY` 与 `JABIZ_SEAL_KEY` 的离线副本已保存
 - [ ] `operations.md` §1.4 的测试开关一个都没设；`SPRING_PROFILES_ACTIVE` 不含 `dev`；`JABIZ_SECURITY_MFA_ADMINISTRATION` 未设；`QB_STRIPE_PLACEHOLDERS=false`
 - [ ] 只经 HTTPS 访问（HSTS），`JABIZ_TRUSTED_PROXIES` 已设；数据库与管理端口不对公网开放；指标不在应用端口上暴露
 - [ ] 正式环境的 `.env` 有 `JABIZ_WEB_ENVIRONMENT=production`（平台 16zd）：打开 App、商家后台与管理后台的登录页，顶部**没有**"测试环境"的横条、标题没有 `[TEST]`；
