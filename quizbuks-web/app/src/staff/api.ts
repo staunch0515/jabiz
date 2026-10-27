@@ -1,4 +1,5 @@
 import { ApiError, runProcess, runQuery } from '@jabiz/client'
+import { hrefOf } from '../qb/router'
 import { STAFF_CODE, STAFF_PROCESS, STAFF_TEMPLATE } from './ids'
 
 /*
@@ -7,11 +8,14 @@ import { STAFF_CODE, STAFF_PROCESS, STAFF_TEMPLATE } from './ids'
 
 /** The staff desk. */
 export const STAFF_PATH = '/staff'
-export const STAFF_QUERY = ['qb', 'staff'] as const
+/** The caller's place on a staff; the counter's lists; the rotating code (renewed on its own clock, never with them). */
+export const STAFF_QUERY = ['qb', 'staff-place'] as const
+export const COUNTER_QUERY = ['qb', 'staff-counter'] as const
+export const CODE_QUERY = ['qb', 'staff-code'] as const
 
-/** The site's address of the App's page a redeem code leads to (the app's own base: `/taker/` in production). */
-export function redeemLink(redeemKey: string, base: string, origin: string = window.location.origin): string {
-  return `${origin}${base}redeem/${encodeURIComponent(redeemKey)}`
+/** The address of the App's page a redeem code leads to (`/redeem/<key>`, under the app's base). */
+export function redeemLink(redeemKey: string, origin: string = window.location.origin): string {
+  return origin + hrefOf(`/redeem/${encodeURIComponent(redeemKey)}`)
 }
 
 /** A row of `qb.app.staff-of`. */
@@ -43,7 +47,7 @@ export const issueCode = () => runProcess<RedeemCode>(STAFF_PROCESS.issue, {})
 
 export type CounterStatus = 'CLAIMED' | 'REDEEMED' | 'DUE' | 'EXPIRED' | 'VOID'
 
-/** A row of `qb.app.staff-redemptions`. */
+/** A row of `qb.app.staff-redemptions`: a claim to answer, or a prize the caller handed over. */
 export interface CounterPrize {
   redemptionId: string
   code: string
@@ -54,7 +58,6 @@ export interface CounterPrize {
   claimedAt: string | null
   confirmBy: string | null
   redeemedAt: string | null
-  redeemedByName: string | null
 }
 
 export async function readCounter({ status, since }: { status: CounterStatus; since?: string }):
@@ -74,7 +77,6 @@ export async function readCounter({ status, since }: { status: CounterStatus; si
     claimedAt: text(row.claimedAt),
     confirmBy: text(row.confirmBy),
     redeemedAt: text(row.redeemedAt),
-    redeemedByName: text(row.redeemedByName),
   }))
 }
 

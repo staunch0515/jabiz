@@ -1,6 +1,6 @@
 /*---
 id: qb.app.staff-redemptions
-description: "The prizes of the sponsor whose staff the taker is on (Q39), newest first: the claims to answer and what was collected"
+description: "At the counter of the sponsor whose staff the taker is on (Q39), newest first: the claims to answer and the prizes the taker handed over"
 entities: [QbSponsorStaff, QbRedemption, QbPublicationCard, QbProfile]
 datasets:
   QbSponsorStaff: urn:jabiz:dataset:taker:QbSponsorStaff
@@ -19,7 +19,6 @@ results:
   claimedAt:       { from: QbRedemption.claimedAt }
   confirmBy:       { from: QbRedemption.confirmBy }
   redeemedAt:      { from: QbRedemption.redeemedAt }
-  redeemedByName:  { from: QbProfile.displayName }
 list:
   filters: [status, claimedAt, redeemedAt]
   sorts:   [claimedAt, redeemedAt]
@@ -27,9 +26,9 @@ list:
   key: [redemptionId]
 permissions: [qb.me]
 ---*/
--- The staff dataset is the caller's own place (none: no rows); the sponsor's prizes are read through it. Only prizes
--- claimed or collected: the open ones are the takers' business until they scan. Who handed a prize over is named when
--- a staff member did (none when the sponsor did).
+-- The staff dataset is the caller's own place (none: no rows, and s.userId is the caller); the sponsor's prizes are read
+-- through it. A staff member sees what the counter needs (D-Q39-3): the claims waiting for an answer, and the prizes they
+-- handed over themselves; not the sponsor's history, nor what others handed over.
 SELECT
     r.{{QbRedemption.redemptionId}}  AS redemptionId,
     r.{{QbRedemption.code}}          AS code,
@@ -39,15 +38,12 @@ SELECT
     r.{{QbRedemption.status}}        AS status,
     r.{{QbRedemption.claimedAt}}     AS claimedAt,
     r.{{QbRedemption.confirmBy}}     AS confirmBy,
-    r.{{QbRedemption.redeemedAt}}    AS redeemedAt,
-    b.{{QbProfile.displayName}}      AS redeemedByName
+    r.{{QbRedemption.redeemedAt}}    AS redeemedAt
 FROM {{QbSponsorStaff}} s
 JOIN {{QbRedemption}} r ON r.{{QbRedemption.publisherKind}} = 'SPONSOR'
                        AND r.{{QbRedemption.publisherId}} = s.{{QbSponsorStaff.sponsorId}}
 JOIN {{QbPublicationCard}} c ON c.{{QbPublicationCard.publicationId}} = r.{{QbRedemption.publicationId}}
 LEFT JOIN {{QbProfile}} p ON p.{{QbProfile.userId}} = r.{{QbRedemption.userId}}
-LEFT JOIN {{QbProfile}} b ON b.{{QbProfile.userId}} = r.{{QbRedemption.redeemedBy}}
-                         AND r.{{QbRedemption.redeemedBy}} <> r.{{QbRedemption.publisherId}}
-WHERE r.{{QbRedemption.claimedAt}} IS NOT NULL
+WHERE (r.{{QbRedemption.status}} = 'CLAIMED' OR r.{{QbRedemption.redeemedBy}} = s.{{QbSponsorStaff.userId}})
   AND (CAST(:since AS timestamptz) IS NULL
        OR r.{{QbRedemption.claimedAt}} >= :since OR r.{{QbRedemption.redeemedAt}} >= :since)

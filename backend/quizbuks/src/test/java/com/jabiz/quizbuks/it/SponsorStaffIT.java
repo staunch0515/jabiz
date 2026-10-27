@@ -150,7 +150,7 @@ class SponsorStaffIT extends PlayItSupport {
             assertThat(row).containsEntry("status", "REDEEMED").containsEntry("redeemedByName", "Taker JP"));
         assertThat(rows("qb.app.staff-redemptions", kai, Map.of("since", clock.instant().toString())))
             .singleElement().satisfies(row -> assertThat(row).containsEntry("status", "REDEEMED")
-                .containsEntry("takerName", "Taker JP").containsEntry("redeemedByName", "Taker JP"));
+                .containsEntry("takerName", "Taker JP").doesNotContainKey("redeemedByName"));
         // A taker on no staff reads nothing of anyone's counter.
         assertThat(rows("qb.app.staff-redemptions", mei.token(), Map.of())).isEmpty();
 
@@ -159,6 +159,9 @@ class SponsorStaffIT extends PlayItSupport {
         String own = (String) run(RedemptionProcesses.ISSUE, sponsorToken, body("kind", "ROTATING")).get("redeemKey");
         run(RedemptionProcesses.CLAIM, ren.token(), body("scannedKey", own, "redemptionId", prizeOf(ren, own)));
         assertThat(redemption(ren.attemptId())).containsEntry("redeemed_by", sponsor);
+        // The counter shows the claims to answer and what Kai handed over: not what the sponsor did.
+        assertThat(rows("qb.app.staff-redemptions", kai, Map.of())).extracting(row -> row.get("code"))
+            .containsExactly(redemption(mei.attemptId()).get("code"));
         assertThat(rows("qb.sponsor.redemptions", sponsorToken, Map.of()))
             .filteredOn(row -> row.get("redeemedByName") == null).singleElement()
             .satisfies(row -> assertThat(row).containsEntry("status", "REDEEMED"));
@@ -242,5 +245,22 @@ class SponsorStaffIT extends PlayItSupport {
             .containsExactly(RewardCodes.NOT_STAFF);
         assertThat(run(RedemptionProcesses.CONFIRM, sponsorToken, body("redemptionId", renPrize)))
             .containsEntry("status", "REDEEMED");
+    }
+
+    @Test
+    void aBannedSponsorsCounterIsClosed() {
+        String sponsor = newSponsor(unique("s-q39-banned"));
+        String kaiId = newTaker(unique("t-q39-banned-staff"), "JP");
+        run(StaffProcesses.ADD, sponsorToken(sponsor), body("userId", kaiId));
+        String kai = taker(kaiId);
+        run(StaffProcesses.ISSUE, kai, body());
+
+        String admin = userWithRole(unique("q39-boss"), com.jabiz.quizbuks.setup.QbRoles.ADMIN_SUPER);
+        run("QB_USER_BAN", tokenOf(admin, com.jabiz.quizbuks.setup.QbRoles.ADMIN_SUPER), body("userId", sponsor,
+            "reason", "Fraud"));
+        assertThat(codes(refused(StaffProcesses.ISSUE, kai, body(), 422)))
+            .containsExactly(RewardCodes.STAFF_SPONSOR_BANNED);
+        // Kai may still leave.
+        assertThat(run(StaffProcesses.LEAVE, kai, body())).containsEntry("changed", true);
     }
 }

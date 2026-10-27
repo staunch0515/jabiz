@@ -3,14 +3,15 @@ import { Alert, AlertDescription, AlertTitle, Button, notify, PageState } from '
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, Gift, X } from 'lucide-react'
 import QRCode from 'qrcode'
-import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
 import { QB } from '../qb/messages'
 import { problemText } from '../qb/problems'
-import { BASE, Link } from '../qb/router'
+import { Link } from '../qb/router'
 import {
+  CODE_QUERY,
   confirmClaim,
+  COUNTER_QUERY,
   declineClaim,
   issueCode,
   notStaff,
@@ -21,7 +22,6 @@ import {
 } from './api'
 import './messages'
 
-const COUNTER_QUERY = [...STAFF_QUERY, 'counter'] as const
 /** The page asks for a new rotating code every minute, as the sponsor's console does; the server's lasts two. */
 const ROTATE_EVERY = 60_000
 /** How often the claims and the day's prizes are read while the page is open. */
@@ -44,9 +44,19 @@ async function qrImageUrl(link: string): Promise<string> {
 function RotatingCode() {
   const { t } = useTranslation(APP)
   const { t: tQb } = useTranslation(QB)
-  const code = useQuery({ queryKey: [...COUNTER_QUERY, 'code'], queryFn: issueCode, refetchInterval: ROTATE_EVERY,
-    refetchIntervalInBackground: false, staleTime: ROTATE_EVERY })
-  const link = code.data ? redeemLink(code.data.redeemKey, BASE) : null
+  const queryClient = useQueryClient()
+  const code = useQuery({ queryKey: CODE_QUERY, refetchInterval: ROTATE_EVERY, refetchIntervalInBackground: false,
+    staleTime: ROTATE_EVERY,
+    queryFn: async () => {
+      try {
+        return await issueCode()
+      } catch (error) {
+        // Removed from the staff meanwhile: the page reads the place again and says so.
+        if (notStaff(error)) void queryClient.invalidateQueries({ queryKey: STAFF_QUERY })
+        throw error
+      }
+    } })
+  const link = code.data ? redeemLink(code.data.redeemKey) : null
   const image = useQuery({ queryKey: ['staff-qr', link], queryFn: () => qrImageUrl(link!), enabled: !!link,
     staleTime: Infinity })
   if (code.isError) {
@@ -89,7 +99,8 @@ function Claims() {
     },
     onError: async (error) => {
       notify.error(problemText(error))
-      await queryClient.invalidateQueries({ queryKey: STAFF_QUERY })
+      await queryClient.invalidateQueries({ queryKey: COUNTER_QUERY })
+      if (notStaff(error)) await queryClient.invalidateQueries({ queryKey: STAFF_QUERY })
     },
   })
   // A claim past its time to confirm is due again (the server refuses confirming it): the time is the reading's, so
@@ -137,12 +148,11 @@ function Claims() {
   )
 }
 
-/** The day's prizes handed over at the counter, as they happen. */
+/** The prizes the staff member handed over today, as they happen (the day is the device's, read at each poll). */
 function Today() {
   const { t } = useTranslation(APP)
-  const [since] = useState(startOfToday)
-  const today = useQuery({ queryKey: [...COUNTER_QUERY, 'today', since],
-    queryFn: () => readCounter({ status: 'REDEEMED', since }),
+  const today = useQuery({ queryKey: [...COUNTER_QUERY, 'today'],
+    queryFn: () => readCounter({ status: 'REDEEMED', since: startOfToday() }),
     refetchInterval: POLL_EVERY, refetchIntervalInBackground: false })
   const items = today.data ?? []
   return (
@@ -157,9 +167,6 @@ function Today() {
               <span className="font-mono">{row.code}</span>
               <span>{row.takerName ?? '?'}</span>
               <span className="text-muted-foreground">{row.redeemedAt ? formatDateTime(row.redeemedAt) : ''}</span>
-              {row.redeemedByName && (
-                <span className="text-muted-foreground">{t('staff.handedBy', { name: row.redeemedByName })}</span>
-              )}
             </li>
           ))}
         </ul>
@@ -170,8 +177,8 @@ function Today() {
 
 /**
  * The counter (docs/quizbuks/plans/Q39-sponsor-staff.md): a staff member hands out the sponsor's prizes with their
- * own phone. The sponsor's rotating code in their name, the claims from the sponsor's printed code, and what was
- * collected today. Someone on no staff (removed meanwhile) is told so.
+ * own phone. The sponsor's rotating code in their name, the claims from the sponsor's printed code, and what they
+ * handed over today. Someone on no staff (removed meanwhile) is told so.
  */
 export function StaffDeskPage() {
   const { t } = useTranslation(APP)

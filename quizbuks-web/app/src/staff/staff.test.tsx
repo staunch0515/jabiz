@@ -23,8 +23,7 @@ const USER = '01a0f4fe-4660-7000-8000-0000000000aa'
 
 const prize = (over: Record<string, unknown>) => ({ redemptionId: 'r1', code: 'C-ABCD1234',
   publicationName: 'Coffee week', takerName: 'Mei', description: 'A coffee at our counter', status: 'CLAIMED',
-  claimedAt: '2026-10-20T01:00:00Z', confirmBy: '2099-01-01T00:10:00Z', redeemedAt: null, redeemedByName: null,
-  ...over })
+  claimedAt: '2026-10-20T01:00:00Z', confirmBy: '2099-01-01T00:10:00Z', redeemedAt: null, ...over })
 
 interface Server {
   /** The sponsor whose staff the taker is on; none by default. */
@@ -79,7 +78,7 @@ function server(options: Server = {}) {
   })
   const processCalls = (name: string) =>
     posted.filter((p) => p.path === `/api/processes/${name}/latest`).map((p) => p.body)
-  return { processCalls }
+  return { processCalls, setStaffOf: (place: Record<string, unknown> | null) => { staffOf = place } }
 }
 
 const PLACE = { sponsorId: 's1', sponsorCompany: 'Capitals Inc', addedAt: '2026-10-20T00:00:00Z' }
@@ -101,7 +100,7 @@ describe('the staff texts', () => {
       expect(keyPaths(bundle(APP, lng)), lng).toEqual(expect.arrayContaining(english))
       expect(emptyTexts(APP, lng), lng).toEqual([])
     }
-    expect(redeemLink('a b', '/taker/', 'https://quizbuks.com')).toBe('https://quizbuks.com/taker/redeem/a%20b')
+    expect(redeemLink('a b', 'https://quizbuks.com')).toBe('https://quizbuks.com/redeem/a%20b')
   })
 })
 
@@ -137,7 +136,7 @@ describe('the counter (Q39)', () => {
   it('shows the sponsor\'s code in the staff member\'s name, the claims to answer and the day\'s prizes', async () => {
     const { processCalls } = server({ staffOf: PLACE, counter: [prize({}),
       prize({ redemptionId: 'r2', code: 'C-00000002', takerName: 'Aki', status: 'REDEEMED',
-        redeemedAt: new Date().toISOString(), redeemedByName: 'Kai' })],
+        redeemedAt: new Date().toISOString() })],
     processes: { QB_STAFF_REDEEM_CODE_ISSUE: ISSUED,
       QB_STAFF_REDEMPTION_CONFIRM: { status: 200, body: { output: { redemptionId: 'r1', status: 'REDEEMED',
         revision: 2 } } } } })
@@ -150,12 +149,28 @@ describe('the counter (Q39)', () => {
     const claim = await screen.findByTestId('staff-claim')
     expect(claim).toHaveTextContent('C-ABCD1234')
     expect(claim).toHaveTextContent('Mei')
-    expect(await screen.findByTestId('staff-today-item')).toHaveTextContent('by Kai')
+    expect(await screen.findByTestId('staff-today-item')).toHaveTextContent('C-00000002')
     // The counter belongs to the account in the navigation.
     expect(screen.getByTestId('nav-account')).toHaveAttribute('aria-current', 'page')
     await expectAccessible()
     await userEvent.click(within(claim).getByTestId('staff-claim-confirm'))
     await waitFor(() => expect(processCalls('QB_STAFF_REDEMPTION_CONFIRM')).toEqual([{ redemptionId: 'r1' }]))
+    // Answering a claim reads the lists again, never a new code.
+    expect(processCalls('QB_STAFF_REDEEM_CODE_ISSUE')).toEqual([{}])
+  })
+
+  it('says so when the staff member is removed while the counter is open', async () => {
+    const removed = { status: 422, body: { title: 'Rejected', status: 422, detail: 'You are not on a sponsor\'s staff.',
+      violations: [{ field: null, ruleCode: 'QB_NOT_STAFF', message: 'You are not on a sponsor\'s staff.' }] } }
+    const { setStaffOf } = server({ staffOf: PLACE, counter: [prize({})],
+      processes: { QB_STAFF_REDEEM_CODE_ISSUE: ISSUED, QB_STAFF_REDEMPTION_CONFIRM: removed } })
+    window.history.replaceState(null, '', '/staff')
+    render(<App />)
+    const claim = await screen.findByTestId('staff-claim')
+    setStaffOf(null)
+    await userEvent.click(within(claim).getByTestId('staff-claim-confirm'))
+    await waitFor(() => expect(screen.getByRole('heading', { level: 1 }))
+      .toHaveTextContent('You are not on a sponsor\'s staff'))
   })
 
   it('tells a taker on no staff so, and asks for no code', async () => {

@@ -147,7 +147,12 @@ public final class StaffProcesses {
                     QbRewards.defaultDataset(QbRewards.STAFF), ctx -> EntityQuery.builder().where(new QueryPredicate.And(
                         List.of(new QueryPredicate.In("sponsorId", List.of(ctx.request().actorId())),
                             new QueryPredicate.In("userId", List.of(target(ctx)))))).limit(1).build(), PLACE))
-                .compute("Whose codes", (metadata, ctx) -> ctx.put(SPONSOR_ID, ctx.request().actorId()));
+                .compute("Whose codes", (metadata, ctx) -> {
+                    // Nobody to remove: no codes to drop, no lock to take.
+                    if (RedemptionProcesses.first(ctx, PLACE) != null) {
+                        ctx.put(SPONSOR_ID, ctx.request().actorId());
+                    }
+                });
             dropPlace(pb);
         });
     }
@@ -318,7 +323,8 @@ public final class StaffProcesses {
 
     /**
      * The caller's place on a staff, held for the process (the shared lock): the sponsor's id under
-     * {@link #SPONSOR_ID}; otherwise 422 {@code QB_NOT_STAFF}.
+     * {@link #SPONSOR_ID}; otherwise 422 {@code QB_NOT_STAFF}; 422 {@code QB_STAFF_SPONSOR_BANNED} when the sponsor is
+     * banned.
      */
     private static <I, O> void staffPlace(ProcessDefinitionBuilder<I, O, ProcessContext> pb) {
         pb.step("Hold the caller's place", HoldLock.<ProcessContext>shared(
@@ -332,6 +338,9 @@ public final class StaffProcesses {
             }
             ctx.put(SPONSOR_ID, place.get("sponsorId"));
         });
+        // A banned sponsor's counter is closed, as the sponsor's own processes are.
+        CallerChecks.refuseBannedUser(pb, ctx -> ctx.get(SPONSOR_ID), new Violation(null,
+            RewardCodes.STAFF_SPONSOR_BANNED, "The sponsor is banned: their counter is closed", Map.of()));
     }
 
     /**

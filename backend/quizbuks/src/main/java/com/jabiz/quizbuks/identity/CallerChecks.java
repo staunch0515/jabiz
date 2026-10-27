@@ -10,6 +10,7 @@ import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.process.steps.QueryEntities;
 
 import java.util.Map;
+import java.util.function.Function;
 
 /**
  * Checks of the caller that QuizBuks writes share (docs/quizbuks/plans/Q2-accounts.md, D-Q2-4 and review S2). A ban
@@ -20,6 +21,7 @@ import java.util.Map;
 public final class CallerChecks {
 
     static final String CALLER_BAN = "callerBan";
+    static final String OTHER_BAN = "otherBan";
 
     /** Adds the steps that refuse a banned caller. Only platform users (UUIDs) can be banned. */
     public static <I, O> void refuseBanned(ProcessDefinitionBuilder<I, O, ProcessContext> pb) {
@@ -30,6 +32,23 @@ public final class CallerChecks {
                 EntityInstance ban = AccountEditing.first(ctx, CALLER_BAN);
                 if (BanRules.banned(ban == null ? null : ban.attributes())) {
                     throw new BusinessRuleViolationException(banned());
+                }
+            });
+    }
+
+    /**
+     * Adds the steps that refuse with {@code refusal} when the user {@code userId} names is banned: someone the caller
+     * acts for (Q39: the sponsor whose prizes a staff member hands out). Nothing is refused for no user.
+     */
+    public static <I, O> void refuseBannedUser(ProcessDefinitionBuilder<I, O, ProcessContext> pb,
+        Function<ProcessContext, Object> userId, Violation refusal) {
+        pb.step("Load their ban", QueryEntities.<ProcessContext>of(QbAccounts.defaultDataset(QbAccounts.BAN),
+                ctx -> EntityQuery.builder().where(new QueryPredicate.In("userId",
+                    AccountEditing.uuids(userId.apply(ctx)))).limit(1).build(), OTHER_BAN))
+            .compute("Refuse for a banned user", (metadata, ctx) -> {
+                EntityInstance ban = AccountEditing.first(ctx, OTHER_BAN);
+                if (BanRules.banned(ban == null ? null : ban.attributes())) {
+                    throw new BusinessRuleViolationException(refusal);
                 }
             });
     }
