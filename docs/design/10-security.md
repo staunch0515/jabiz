@@ -792,11 +792,11 @@ jabiz:
   security:
     external-tokens:
       shop:                                         # 提供方名：身份的提供方为 ext:shop
-        secrets: [ "${SHOP_APP_SECRET}" ]            # 只取自环境变量；更换时写两个
+        secrets: [ "${SHOP_APP_SECRET:}" ]           # 只取自环境变量（写空缺省值：缺失即启动失败）；更换时写两个
         audience: ${SHOP_APP_KEY}
         tenant-pattern: '[a-z0-9][a-z0-9-]*\.myshopify\.com'
         issuer-format: https://{tenant}/admin
-        destination-format: https://{tenant}
+        destination-format: https://{tenant}          # 租户的源（不带路径），内嵌时即 frame-ancestors
         auto-provision: true                        # 无人关联的身份首次登录即开户（入口须允许注册）
         frame-ancestors: [ https://admin.shopify.com ]
         tenant-parameter: shop                      # 平台打开页面时带的租户参数
@@ -810,12 +810,12 @@ jabiz:
 
 | 接口 | 作用 |
 |---|---|
-| `POST /api/auth/external-token` | `{token, entry}`，答复同登录（`SIGNED_IN` 或第二步）；一切拒绝都是 401 `LOGIN_FAILED`（守卫 403、开户过多 429） |
+| `POST /api/auth/external-token` | `{token, entry}`，答复同登录（`SIGNED_IN` 或第二步）；令牌与身份的一切拒绝都是 401 `LOGIN_FAILED`（守卫 403、开户过多 429）；服务器故障照常 5xx（17e） |
 
-- 验证（`ExternalTokenRules`）：HS256、任一密钥的签名（常量时间）、`exp` / `nbf`（容差）、`aud`、`iss` 与 `dest` 指向同一个匹配 `tenant-pattern` 的租户、`sub` 与 `jti`；`jti` 只用一次（`sec_external_token_use`）。
+- 验证（`ExternalTokenRules`）：HS256、任一密钥的签名（常量时间）、`exp` / `nbf`（容差）、`aud`、`iss` 与 `dest` 指向同一个匹配 `tenant-pattern` 的租户、`sub` 与 `jti`；`jti` 只用一次（`sec_external_token_use`；登记时已过最后时刻即拒绝，免得清理删掉第一次使用的记录，17e）。启动检查拒绝未解析的占位符密钥与带路径的 `destination-format`（17e）。
 - 身份是租户中的一个人：`SecUserIdentity(ext:<提供方>, <租户>/<sub>)`。之后照常是写登录记录的流程 `SPONSOR_EXTERNAL_TOKEN_SIGN_IN`（因素 `EXTERNAL_TOKEN`）：`SignInGuard`、入口角色、二次验证照旧。
 - 开户（`SPONSOR_EXTERNAL_TOKEN_SIGN_UP`）：提供方 `auto-provision` 且入口允许注册时，为无人关联的身份建无邮箱、无密码的用户（用户名即身份主体）与入口的注册角色；不能是 `admin` 或接受 `*` 的入口，也不能要求已验证的邮箱。
-- 业务流程以步骤 `VerifyExternalToken.of(提供方, ctx -> 令牌, 键)` 核对店员递来的令牌属于操作人（403 不说明原因），把租户、主体与令牌放进上下文，供阻塞步骤交给签发它的平台；不消耗 `jti`。
+- 业务流程以步骤 `VerifyExternalToken.of(提供方, ctx -> 令牌, 键)` 核对店员递来的令牌属于操作人（403 不说明原因：说明一律为 "External token refused"，原因只记日志），把租户、主体与令牌放进上下文，供阻塞步骤交给签发它的平台；不消耗 `jti`。
 - 页面：`@jabiz/client` 的 `signInWithExternalToken(令牌)`（向平台的脚本每次取新令牌）；SPA 声明 `embedding`（17 §3.2）才能被该租户内嵌。
 
 ## 16. 受保护的授权：四眼【决策 D48 第 1 条，阶段 16r】

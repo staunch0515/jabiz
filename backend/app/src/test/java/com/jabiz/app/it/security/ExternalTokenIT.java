@@ -6,9 +6,16 @@ import com.icegreen.greenmail.util.ServerSetup;
 import com.jabiz.app.it.fixture.SqlStatementLog;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
+import com.jabiz.runtime.security.ExternalTokenProvider;
+import com.jabiz.runtime.security.ExternalTokenProviders;
+import com.jabiz.runtime.security.ExternalTokens;
+import com.jabiz.runtime.test.MutableClock;
 import com.jabiz.runtime.test.TestTokens;
 import com.jabiz.runtime.security.VerifyExternalToken;
+import com.jabiz.security.ExternalTokenRules;
 import com.jabiz.security.Sensitive;
+import com.jabiz.security.SignInDecision;
+import com.jabiz.security.SignInGuard;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
@@ -23,7 +30,9 @@ import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -33,6 +42,7 @@ import java.util.UUID;
 import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Signing in with a token another platform signed (decision D59; docs/design/10-security.md section 15.12; ROADMAP
@@ -85,6 +95,12 @@ class ExternalTokenIT extends SignUpItSupport {
 
     @Autowired
     Clock clock;
+
+    @Autowired
+    ExternalTokenProviders providers;
+
+    @Autowired
+    ExternalTokens externalTokens;
 
     /** The application's time (fixed in tests): what the tokens' times are checked against. */
     static volatile Instant now;
@@ -196,6 +212,39 @@ class ExternalTokenIT extends SignUpItSupport {
     }
 
     @Test
+    void aTokenCheckedJustBeforeItExpiresIsStillUsedOnlyOnce() {
+        // Checked before its last moment (exp + skew), used after it: the clean-up of expired uses must not drop
+        // the first use and let the second in (phase 17e).
+        ExternalTokenProvider provider = providers.find(SHOP).orElseThrow();
+        String token = token(tenant("edge"), "1", c -> c.put("exp", now.getEpochSecond() + 1));
+        tokenSignIn(token, SHOP).expectStatus().isOk();
+        ExternalTokenRules.Verified replay = externalTokens.verify(provider, token);
+        MutableClock moving = (MutableClock) clock;
+        Instant before = moving.instant();
+        moving.advance(Duration.ofSeconds(1).plus(provider.skew()).plusMillis(1));
+        try {
+            assertThatThrownBy(() -> externalTokens.useOnce(provider, replay).block())
+                .isInstanceOf(ExternalTokenRules.RefusedException.class);
+        } finally {
+            // The other tests run on the fixed time.
+            moving.set(before);
+        }
+        assertThat(query("SELECT 1 FROM sec_external_token_use WHERE token_id = ?",
+            String.valueOf(replay.tokenId()))).hasSize(1);
+    }
+
+    @Test
+    void aServerFailureIsNoRefusedToken() {
+        // A failure of the server is a 5xx the client may retry, not 401 as for a bad token (phase 17e).
+        execute("ALTER TABLE sec_external_token_use RENAME TO sec_external_token_use_away");
+        try {
+            tokenSignIn(token(tenant("down"), "1"), SHOP).expectStatus().is5xxServerError();
+        } finally {
+            execute("ALTER TABLE sec_external_token_use_away RENAME TO sec_external_token_use");
+        }
+    }
+
+    @Test
     void everyBadTokenIsRefusedAlike() {
         String tenant = tenant("bad");
         long now = ExternalTokenIT.now.getEpochSecond();
@@ -240,6 +289,13 @@ class ExternalTokenIT extends SignUpItSupport {
     }
 
     @Test
+    void aGuardsRefusalStays403() {
+        // The sign-in guard refuses the person: 403 SIGN_IN_REFUSED as at any sign-in, not 401 (phase 17e).
+        assertThat(refusal(tokenSignIn(token(tenant("guard"), Processes.GUARDED), SHOP), 403))
+            .isEqualTo("SIGN_IN_REFUSED");
+    }
+
+    @Test
     void aDisabledUserIsRefused() {
         String tenant = tenant("disabled");
         String userId = (String) session(token(tenant, "1"), SHOP).get("userId");
@@ -265,14 +321,16 @@ class ExternalTokenIT extends SignUpItSupport {
         assertThat(query("SELECT input_summary FROM op_process WHERE process_name = ?", VERIFY)).allSatisfy(row ->
             assertThat(String.valueOf(row.get("input_summary"))).doesNotContain(token.substring(0, 20)));
 
-        // Somebody else's token, an unknown identity or a bad token: 403 alike.
+        // Somebody else's token, an unknown identity or a bad token: 403 alike, without the reason (phase 17e).
         String others = token(tenant, "8");
         session(others, SHOP);
+        List<String> details = new ArrayList<>();
         for (String refused : List.of(token(tenant, "8"), token(tenant, "9"), token(tenant, "7", c -> c.put("aud",
-            "x")))) {
-            post("/api/processes/" + VERIFY + "/latest", bearer, Map.of("sessionToken", refused))
-                .expectStatus().isForbidden();
+            "x")), token(tenant, "7", c -> c.put("exp", now.getEpochSecond() - 60)), "not-a-token")) {
+            details.add(String.valueOf(post("/api/processes/" + VERIFY + "/latest", bearer, Map.of("sessionToken",
+                refused)).expectStatus().isForbidden().expectBody(MAP).returnResult().getResponseBody().get("detail")));
         }
+        assertThat(details).containsOnly("External token refused");
     }
 
     @Test
@@ -309,6 +367,15 @@ class ExternalTokenIT extends SignUpItSupport {
 
     @TestConfiguration
     static class Processes {
+
+        /** The subject the test guard refuses. */
+        static final String GUARDED = "guarded";
+
+        @Bean
+        SignInGuard itExternalTokenGuard() {
+            return attempt -> attempt.userName() != null && attempt.userName().endsWith("/" + GUARDED)
+                ? SignInDecision.refuse("guarded") : SignInDecision.ALLOW;
+        }
 
         @Bean
         ProcessDefinition<VerifyInput, VerifyOutput, ProcessContext> itExternalTokenVerify() {

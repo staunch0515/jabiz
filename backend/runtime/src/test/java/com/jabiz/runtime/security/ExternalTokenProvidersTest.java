@@ -133,6 +133,38 @@ class ExternalTokenProvidersTest {
         assertThat(provider.identityProvider()).isEqualTo("ext:shop");
     }
 
+    @Test
+    void anUnresolvedPlaceholderIsNoSecret() {
+        // A placeholder without a default whose variable is not set stays as its text, long enough to pass as a
+        // secret: anyone who read the configuration could sign tokens with it.
+        MockEnvironment environment = new MockEnvironment()
+            .withProperty("jabiz.security.external-tokens.shop.secrets[0]", "${JABIZ_TEST_UNSET_EXTERNAL_TOKEN_SHOP_SECRET}")
+            .withProperty("jabiz.security.external-tokens.shop.audience", "${JABIZ_TEST_UNSET_APP_KEY}")
+            .withProperty("jabiz.security.external-tokens.shop.tenant-pattern", "[a-z]+\\.shop\\.example")
+            .withProperty("jabiz.security.external-tokens.shop.issuer-format", "https://{tenant}/admin")
+            .withProperty("jabiz.security.external-tokens.shop.destination-format", "https://{tenant}");
+        ExternalTokenProviders providers = new ExternalTokenProviders(environment, new StaticProvider<>(null),
+            new StaticProvider<>(null));
+        assertThat(providers.find("shop")).isEmpty();
+        assertThat(providers.check()).extracting(p -> p.location() + ": " + p.message()).containsExactly(
+            "jabiz.security.external-tokens.shop: secrets[0]: an unresolved placeholder (is its environment variable"
+                + " set?)",
+            "jabiz.security.external-tokens.shop: audience: an unresolved placeholder (is its environment variable"
+                + " set?)");
+    }
+
+    @Test
+    void theDestinationIsAnOrigin() {
+        // The destination is the tenant's origin, which an embedded page lets frame it: with a path, no page could
+        // ever be embedded, which the check says at startup rather than a blank frame later.
+        ExternalTokenProviders providers = new ExternalTokenProviders(Map.of("shop",
+            new ExternalTokenProviders.Config(List.of(SECRET), "app-key", "[a-z]+\\.shop\\.example",
+                "https://{tenant}/admin", "https://{tenant}/", null, null, List.of(), null)), () -> null, () -> null);
+        assertThat(providers.check()).extracting(p -> p.location() + ": " + p.message()).containsExactly(
+            "jabiz.security.external-tokens.shop: destination-format must be an https origin without path"
+                + " (https://{tenant})");
+    }
+
     // Reading tokens: the parts, their JSON and the length; the rules themselves are ExternalTokenRules'.
 
     static final JsonMapper JSON = JsonMapper.builder().build();
