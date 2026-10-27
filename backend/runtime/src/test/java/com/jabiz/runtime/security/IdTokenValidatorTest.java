@@ -122,7 +122,7 @@ class IdTokenValidatorTest {
 
     @Test
     void hs256IsAcceptedOnlyWithTheClientSecretOfAProviderThatSignsSo() {
-        // LINE's web sign-in (decision D60 item 2): keyed with the client secret.
+        // LINE's web sign-in (decision D61 item 2): keyed with the client secret.
         String token = TestOidcProvider.sign(claims(), JWSAlgorithm.HS256,
             SECRET.getBytes(java.nio.charset.StandardCharsets.UTF_8));
         assertThat(IdTokenValidator.hs256(IdTokenValidator.parse(token))).isTrue();

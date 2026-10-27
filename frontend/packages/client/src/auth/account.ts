@@ -91,7 +91,7 @@ function hasSession(): boolean {
 }
 
 /**
- * What a verification link needs (a dry run). With a session, asked in it (decision D60 item 4): the account's own
+ * What a verification link needs (a dry run). With a session, asked in it (decision D61 item 4): the account's own
  * session stands for its password, so an account opened through an identity provider (it has none) is verified and
  * kept. A session the server no longer takes (401) is no reason to fail the link: then asked anonymously.
  */
