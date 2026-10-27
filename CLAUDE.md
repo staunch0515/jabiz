@@ -85,6 +85,8 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
 - **登录入口与自助注册**（见 10 与决策 D36）：前端各自的登录入口（`jabiz.security.entries`）决定接受的角色，令牌只含该入口角色的权限；
   自助注册、邮箱验证、找回密码、本人改密码只经平台接口与流程（`SPONSOR_SIGN_UP` 等、`SEC_ACCOUNT_PASSWORD_CHANGE`），不另写；需要已验证邮箱的操作声明 `requiresVerifiedEmail()`；封禁等应用规则写成 `SignInGuard`。
   只凭邮箱登录（寄出一次性链接）只经入口的 `email-link` 与平台接口（`/api/auth/email-link`，前端积木 `EmailLinkForm` 与 `MailLinkPage` 的 `email-link` 页；`admin` 与接受 `*` 的入口不能开启，10 §15.11、决策 D54），不自写"输入邮箱即登录"。
+  被另一个平台内嵌、以其签发的短时令牌登录（如 Shopify 的会话令牌）只经入口的 `external-token` 与提供方 `jabiz.security.external-tokens.<名>`（密钥只取自环境变量）、平台接口 `/api/auth/external-token`（前端 `signInWithExternalToken`）；
+  身份是租户中的一个人（`SecUserIdentity(ext:<名>, <租户>/<sub>)`），流程中核对店员递来的令牌只用步骤 `VerifyExternalToken`；页面要被该租户内嵌时 SPA 声明 `embedding`，不自己改 CSP 或 `X-Frame-Options`（10 §15.12、决策 D59）。
   会话的有效期、闲置时长与存放方式按入口配置（`jabiz.security.entries.<名>.session.*`，D43）；`admin` 入口不能用 `device`。
 - **应用前端与 PWA**（见 17 §4.1、指南 `docs/guide/app-spa.md` 与决策 D43）：需要登录的应用前端放在应用目录中（自己的 lockfile，经 `link:` 用 `@jabiz/client` / `@jabiz/ui`，
   版本与平台一致：`app:check`），以 `jabizApp { spa(路径, 目录, entry = 入口, pwa = Pwa.ON) }` 构建、用预设 `@jabiz/client/vite`；页面用 `@jabiz/ui` 的登录与账户积木，

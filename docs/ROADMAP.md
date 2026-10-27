@@ -4419,6 +4419,17 @@ L4 共享仪表的注释；L5 13 写明每个键每次轮询多一个查询观�
 
 **16zi 状态**：✅ 已实施（线 1.2，PR #244），向前合并到 1.3。
 
+### 16zj 提示安装到主屏幕（1 天）
+
+来源：需求方 2026-10-27（QuizBuks Q38：引导答题者把 App 添加到手机桌面）。分支 `1.2/phase-16zj-pwa-install`。兼容的新增，向前合并到 1.3。
+浏览器不允许网页自动添加到主屏幕：`@jabiz/client` 的 `useInstallPrompt()`（纯函数 `installSituation`：`prompt` / `ios` / `menu` / `in-app` / `installed` / `none`；
+`registerServiceWorker` 一开始就接住 `beforeinstallprompt`）与 `@jabiz/ui` 的 `PwaInstallBanner`、`PwaInstallGuide`（iOS 的分步指引、主屏幕 App 须再登录；
+关掉后 30 天不再出现、3 次后不再出现，`localStorage`；`dismissible={false}` 作为固定入口）。示范门户在登录后的外框中显示。设计 12 §PWA。
+测试：`install.test.ts`（各浏览器与 App 内置浏览器的 UA、iPad 自称 Mac、已安装、事件只用一次、拒绝后再提供、`appinstalled`、关闭的记忆与存储不可用）、
+`install.test.tsx`（各情况的文字与按钮、iOS 指引、关闭规则、固定入口、亮暗 axe）。
+
+**16zj 状态**：✅ 已实施（线 1.2，PR #258），向前合并到 1.3。
+
 ---
 
 ## 阶段 17：线 1.3 的通用能力（外部商店平台的接入）
@@ -4501,4 +4512,23 @@ QuizBuks 的 S0 迁移正是如此（五张只追加表的 `sponsor_id` 被改�
 **测试**：`SealedColumnsHistoryIT`（6 例）、`SealedColumnsCheckIT`（改名、删列、删表的警告与改回后消失；跳跃查询与全表 `DISTINCT` 结果一致、经索引）、`IntegrityIT` 不变。
 
 **之后**：同步到 `1.3/quizbuks` 后，QuizBuks 的 `SealedColumnsMigrationIT` 改用夹具（保留 V29 的 `neverReleased`）。
+
+### 17b 凭外部平台签发的令牌登录、按入口放行内嵌（已确认 2026-10-27，已实施，待合并，决策 D59）
+
+**缘由**：商店平台（Shopify）的内嵌后台由平台后台以 iframe 打开，页面经平台的脚本取得**会话令牌**（HS256 的 JWT，以应用密钥签名，约 1 分钟有效，
+`iss` = `https://<店铺>/admin`、`dest` = `https://<店铺>`、`aud` = 应用的 API key、`sub` = 店员编号）。平台现在只有密码、邮件链接与 OIDC 三种登录，
+SPA 的 CSP 固定为 `frame-ancestors 'none'`，外部服务只按精确主机放行；这三点都挡住内嵌应用。原定 17b 的"应用代理与店面限流"顺延为 17d（需求方 2026-10-27 同意）。
+
+**决定（需求方 2026-10-27 确认）**
+
+| # | 决定 |
+|---|---|
+| 17b-1 | 新的登录方式**外部签名令牌**：入口 `jabiz.security.entries.<名>.external-token`（提供方名），提供方 `jabiz.security.external-tokens.<名>`：签名密钥（只取自环境变量，至少 32 字节）、`audience`、签发方形式（`https://{tenant}/admin`，`tenant` 须匹配提供方的 `tenant-pattern`，如 `[a-z0-9][a-z0-9-]*\.myshopify\.com`）、`dest` 形式、时钟容差（缺省 10 秒，至多 60 秒）。接口 `POST /api/auth/external-token`：HS256 验签（常量时间）、`exp` / `nbf`、`aud`、`iss` 与 `dest` 指向同一个租户、`jti` 只用一次；通过后签发平台自己的令牌。写登录记录的流程、`SignInGuard`、D47 的限流照常 |
+| 17b-2 | **身份 = 租户中的一个人**：外部主体 `(提供方, 租户, sub)` 经 `SecUserIdentity` 关联一个平台用户；入口允许注册时首次登录自动开户（无邮箱、无密码，角色只取入口接受的缺省角色）。同一个人在两个租户是两个用户。登录记录不另加租户列（实施时改：会话记下所用的身份，身份的主体即租户与人，D59 第 3 条） |
+| 17b-3 | 平台步骤 **`VerifyExternalToken.of(提供方, ctx -> 令牌, 键)`**：应用的流程以它核对店员递来的会话令牌（同样的验签与声明，并要求令牌的主体就是操作人），结果（租户、sub）放进上下文；不消耗 `jti`（同一令牌可在登录后再用于一次业务调用）。规则在 core（`ExternalTokenRules`：HS256 与声明，纯计算），JSON 由 runtime 解析 |
+| 17b-4 | 外部服务的 **`allowed-host-patterns`**：只允许"一个标签 + 固定后缀"（`*.myshopify.com`），照旧拒绝内网地址（实施时改：模式写在 `allowed-hosts` 中；平台原本就不按解析出的地址拒绝内网，D59 第 5 条） |
+| 17b-5 | SPA 的 **`embedding`**（实施为 `embedding: <提供方名>`）：`frame-ancestors-from-tenant`（提供方名）时，页面响应按请求的租户参数（`shop`，同样的形式）写 `frame-ancestors https://{tenant} <提供方的后台地址>`；参数不合格时仍是 `'none'`。不开 CORS、不用 Cookie |
+| 17b-6 | 示范与文档：`app` 的示范入口与 SPA 路径（不提具体应用）、决策 D59、设计 10 与 17、ROADMAP |
+
+**不做**：登录时交换外部平台的访问令牌（需求方：必须时才交换，由应用的流程以外部服务调用）；店员的角色细分（应用的成员关系决定）。
 

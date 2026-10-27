@@ -762,6 +762,17 @@
         },
         "type" : "object"
       },
+      "ExternalTokenRequest" : {
+        "properties" : {
+          "entry" : {
+            "type" : "string"
+          },
+          "token" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "FileInfo" : {
         "properties" : {
           "contentType" : {
@@ -3507,6 +3518,33 @@
           }
         },
         "tags" : [ "sign-up-controller" ]
+      }
+    },
+    "/api/auth/external-token" : {
+      "post" : {
+        "operationId" : "externalTokenSignIn",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ExternalTokenRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/TokenResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "external-token-controller" ]
       }
     },
     "/api/auth/join" : {

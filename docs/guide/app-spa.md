@@ -209,4 +209,5 @@ export default defineConfig({
 - `device` 的刷新令牌存在设备上（`localStorage` 与 IndexedDB）：XSS 能取走它。缓解：轮换与重用即吊销、不允许内联脚本、`admin` 不能用、只按入口开启。
 - 没有 Web Locks 的浏览器（Safari 15.4 之前）一律按 `tab`。"复制标签页"会复制 `sessionStorage`（`tab` 下原有问题）。
 - iOS 上安装到主屏幕的 PWA 与 Safari 的存储分开：在 Safari 中登录不会让 PWA 也登录。
+- 提示安装用 `@jabiz/ui` 的 `PwaInstallBanner`（12 §PWA，16zj），在用户做完一件有价值的事之后渲染；账户页放一个 `dismissible={false}` 的作为固定入口。不自己监听 `beforeinstallprompt` 或判断 iOS。
 - 不做推送、后台同步与数据离线；离线时只能打开外壳并提示离线。

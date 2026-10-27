@@ -45,7 +45,9 @@ public class SignUpRateLimits {
         /** A signed-in user starting to link a provider account (section 12): counted per user. */
         IDENTITY_LINK,
         /** Asking for a sign-in link (section 15.11; decision D54): counted per client address and per e-mail address. */
-        EMAIL_LINK
+        EMAIL_LINK,
+        /** An account opened by a sign-in with another platform's token (decision D59): counted per address. */
+        EXTERNAL_TOKEN_SIGN_UP
     }
 
     /** Default of {@code jabiz.security.account.rate-limit.per-user}. */

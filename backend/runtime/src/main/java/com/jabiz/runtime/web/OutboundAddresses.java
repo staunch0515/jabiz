@@ -4,11 +4,13 @@ import java.net.URI;
 import java.util.Collection;
 import java.util.Locale;
 import java.util.Set;
+import java.util.function.Predicate;
 
 /**
  * The one rule for every address the platform sends to (webhooks, decision D33; external services, decision D38):
  * absolute, https (http only to this machine), no credentials in the address, and a host on the caller's list of
- * allowed hosts (exact names, case ignored). Checked at startup and again before every request.
+ * allowed hosts (exact names, case ignored; an external service may name patterns {@code *.domain}, see
+ * {@link com.jabiz.external.ExternalService#allowsHost}). Checked at startup and again before every request.
  */
 public final class OutboundAddresses {
 
@@ -24,6 +26,16 @@ public final class OutboundAddresses {
      * @param hostsSetting where the list is set, named in the refusal
      */
     public static String refusal(URI url, Collection<String> allowedHosts, String hostsSetting) {
+        return refusal(url, (Predicate<String>) allowedHosts::contains, hostsSetting);
+    }
+
+    /**
+     * Why the platform will not send to {@code url}, or null when it may.
+     *
+     * @param allowed whether a host (lower case) is allowed
+     * @param hostsSetting where the list is set, named in the refusal
+     */
+    public static String refusal(URI url, Predicate<String> allowed, String hostsSetting) {
         if (url == null || url.getHost() == null) {
             return "missing or not an absolute address";
         }
@@ -35,7 +47,7 @@ public final class OutboundAddresses {
         if (url.getRawUserInfo() != null) {
             return "carries credentials";
         }
-        if (!allowedHosts.contains(host)) {
+        if (!allowed.test(host)) {
             return "host " + host + " is not in " + hostsSetting;
         }
         return null;
