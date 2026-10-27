@@ -1,7 +1,7 @@
 import type { IdentityLinked } from '@jabiz/client'
 import { PageState } from '@jabiz/ui'
 import { useQuery } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
 import { AccountInstallEntry } from '../install'
@@ -10,11 +10,15 @@ import { readMyProfile } from '../qb/api'
 import { LanguageSelect } from '../qb/LanguageSelect'
 import { QB } from '../qb/messages'
 import { legalPath } from '../qb/legal'
-import { Link, navigate } from '../qb/router'
+import { Link, navigate, useLocation } from '../qb/router'
+import { ProfileDetails } from './ProfileDetails'
 import { PROFILE_QUERY, ProfileForm } from './ProfileForm'
 
 /** The account page, where a round trip through an identity provider to link an account comes back to. */
 export const ACCOUNT_PATH = '/account'
+
+/** The account page opened at the details for matching (Q39), from a quiz the caller's profile does not match. */
+export const ACCOUNT_DETAILS_PATH = '/account?section=details'
 
 let justLinked: IdentityLinked | null = null
 
@@ -39,6 +43,12 @@ export function AccountPage() {
   const { t: tApp } = useTranslation(APP)
   const [linked] = useState(takeLinked)
   const profile = useQuery({ queryKey: PROFILE_QUERY, queryFn: readMyProfile })
+  const { search } = useLocation()
+  const details = useRef<HTMLDivElement>(null)
+  const toDetails = new URLSearchParams(search).get('section') === 'details'
+  useEffect(() => {
+    if (toDetails) details.current?.scrollIntoView?.({ block: 'start' })
+  }, [toDetails])
   return (
     <section className="flex flex-col gap-8" aria-labelledby="account-title" data-testid="account">
       <div className="flex items-center justify-between gap-2">
@@ -53,6 +63,11 @@ export function AccountPage() {
           <ProfileForm profile={profile.data} submitLabel={tApp('profile.save')} />
         )}
       </AccountSection>
+      <div ref={details}>
+        <AccountSection title={tApp('details.title')} testId="account-details">
+          <ProfileDetails />
+        </AccountSection>
+      </div>
       <AccountInstallEntry />
       <AccountSections returnTo={ACCOUNT_PATH} linked={linked} mailHint={tApp('mail.hint')}
         onSignedOut={() => navigate('/login', { replace: true })} />

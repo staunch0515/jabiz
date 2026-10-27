@@ -66,6 +66,20 @@ export const PLAY = {
   history: 'qb.app.history',
 } as const
 
+/**
+ * Customer matching (`audience.ProfileAttributeProcesses`, `publishing.PublicationAudience`, `audience.QbAudience`;
+ * docs/quizbuks/plans/Q39-audience.md): the taker's own answers, a draft's conditions and their rounded count.
+ */
+export const AUDIENCE = {
+  attributesSave: 'QB_PROFILE_ATTRIBUTES_SAVE',
+  myAttributes: 'urn:jabiz:dataset:me:QbProfileAttribute',
+  conditionsSave: 'QB_PUBLICATION_AUDIENCE_SAVE',
+  count: 'QB_AUDIENCE_COUNT',
+  sponsorConditions: 'urn:jabiz:dataset:sponsor:QbPublicationCriterion',
+  /** 422: the caller's profile does not meet the publication's conditions. */
+  notMatched: 'QB_AUDIENCE_NOT_MATCHED',
+} as const
+
 /** The widths the policy `qb.content.image` keeps of every image (covers, questions, options, materials). */
 export const CONTENT_IMAGE_VARIANTS = ['w320', 'w640', 'w1280'] as const
 

@@ -31,12 +31,19 @@
 
 - 迁移 V32：`qb_profile_attribute`（用户、条件键、选项码或数值；普通表，答题者可清空）、`qb_publication_criterion`（发布、条件键、选项码或上下限；随发布的草稿保存，提交后不再改）。
 - `com.jabiz.quizbuks.audience`：`AudienceCriterion`、`AudienceCriteria`（登记的四种）、`AudienceMatch`（纯函数：资料是否满足条件）、`AudienceCount`（取整与阈值）。
-- 流程：`QB_PROFILE_ATTRIBUTES_SAVE`（本人的资料）；`QB_PUBLICATION_SAVE` 带上条件并校验（键已登记、选项属于字典、范围在上下限内）；`QB_AUDIENCE_COUNT`（商户自己的发布：内部运行计数模板，只返回取整后的数）。
-- 模板：`qb.app.feed` 与开始答题的复查加同一条件判断；`qb.sponsor.audience-count`（权限不给任何商户，只在流程中运行）。
+- 流程：`QB_PROFILE_ATTRIBUTES_SAVE`（本人的资料，整体替换，账户锁内）；`QB_PUBLICATION_AUDIENCE_SAVE`（草稿的条件，整体替换，发布锁内，带 `baseRevision`、使发布的 revision + 1；校验键已登记、选项属于该条件、范围在上下限内且不颠倒；`INVITED` 不能有条件）；`QB_AUDIENCE_COUNT`（商户自己的发布：流程中运行计数模板，只返回取整后的数）。条件没有放进 `QB_PUBLICATION_SAVE`：那样要改它众多的输入构造与快照，单独的流程同样在发布锁内、同样只对草稿。
+- 模板：`qb.app.feed` 不列出不满足的；`qb.app.publication` 多一列 `matched` 并进入 `canStart`（页面照常显示，以便请答题者完善资料）；`qb.system.audience-count`（权限 `qb.audience.system` 不给任何角色，只在流程中运行）。开始答题在锁外既有的一条语句（`QueryEntities.all`）中多读条件与本人的回答，`AttemptStatementBudgetIT` 的确切值不变。
+- 复制发布时条件随之复制，删除草稿时一起删除。
+
+### 实施记录
+
+- 持有 `*` 的账号（只有首个管理员）照平台规则能读默认数据视图与运行计数模板，与 QuizBuks 其他"不授予任何角色"的权限相同；授予角色的权限中没有能读原始回答的。
+- 商户后台的向导由三步变为四步：内容 → 时间与奖励 → **客户匹配**（受众、地区、条件与计数按钮）→ 检查并提交。计数按钮先保存草稿（含条件），再按保存的地区与条件计数。
+- App 的账户页多一节"关于我"（`/account?section=details` 直接打开），发布页在 `matched = false` 时以提示与链接代替开始按钮。
 
 ## 4. 测试
 
 - 单元：`AudienceMatch`（选项"或"、条件"且"、没填即不满足、年龄换算的边界）、`AudienceCount`（阈值与取整）、条件定义的校验。
 - 集成：首页与开始答题按条件筛选；计数只给自己的发布、只返回取整后的数、直接调用模板被拒；SQL 与 `AudienceMatch` 对同一组数据结论相同。
-- 场景回放：带条件的发布、两位资料不同的答题者。
+- 场景回放：现有场景的快照不变（条件为空即所有人）；带条件的流程由 `AudienceIT` 与 e2e 覆盖。
 - 前端与 e2e：答题者填资料后看到原来看不到的发布；商户在"客户匹配"中选条件并查看人数。

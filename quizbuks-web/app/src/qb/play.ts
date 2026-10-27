@@ -232,6 +232,11 @@ export interface PublicationView {
   /** When the windows' counts were taken (every ten minutes); null before the first run. */
   statsAt: string | null
   canStart: boolean
+  /**
+   * Q39: whether the caller's profile meets the publication's matching conditions (an invited one: always); when not,
+   * the page asks for more of the profile instead of offering the start.
+   */
+  matched: boolean
   myAttemptId: string | null
   myStatus: string | null
   myDeadline: string | null
@@ -290,6 +295,7 @@ export async function readPublication(request: PublicationRequest): Promise<Publ
     last30d: numberOf(row.last30d),
     statsAt: textOrNull(row.statsAt),
     canStart: row.canStart === true || row.canStart === 'true',
+    matched: row.matched !== false && row.matched !== 'false',
     myAttemptId: textOrNull(row.myAttemptId),
     myStatus: textOrNull(row.myStatus),
     myDeadline: textOrNull(row.myDeadline),

@@ -201,6 +201,8 @@ const en = {
     answered: 'You have answered this quiz. Each person has one try.',
     seeResult: 'See your result',
     unavailable: 'Not open to new answers now',
+    notMatched: 'This quiz is for people whose profile matches what the sponsor is looking for. Telling more about yourself may let you answer it.',
+    completeProfile: 'Complete my profile',
     verifyFirst: 'Verify your e-mail address to answer quizzes: open the link we sent you.',
   },
   play: {
@@ -331,6 +333,14 @@ const en = {
     password: 'Sign in with a password instead',
     signIn: 'Sign in to start',
     home: 'See all quizzes',
+  },
+  details: {
+    title: 'About me',
+    hint: 'All optional. The more you tell, the more quizzes aimed at people like you you can answer.',
+    privacy: 'Sponsors never see your answers: they only learn roughly how many people match what they look for.',
+    notSet: 'Not set',
+    birthYearPlaceholder: 'e.g. 1995',
+    save: 'Save',
   },
   mail: { hint: 'Mail about your transfers and your payout account is always sent. You can choose here which other mail you get.' },
   profile: {
@@ -542,6 +552,8 @@ const zh: typeof en = {
     answered: '你已参加过此 Quiz。每人只有一次机会。',
     seeResult: '查看结果',
     unavailable: '现在不接受新的答题',
+    notMatched: '这份答卷面向资料符合商家条件的人。完善你的资料后，也许就能回答。',
+    completeProfile: '完善我的资料',
     verifyFirst: '验证邮箱后才能答题：请打开我们发送的链接。',
   },
   play: {
@@ -672,6 +684,14 @@ const zh: typeof en = {
     password: '改用密码登录',
     signIn: '登录后开始',
     home: '查看全部 Quiz',
+  },
+  details: {
+    title: '关于我',
+    hint: '全部可选。资料越完善，能回答的答卷越多。',
+    privacy: '商家看不到你填写的内容，只能知道大约有多少人符合他们的条件。',
+    notSet: '未填写',
+    birthYearPlaceholder: '例如 1995',
+    save: '保存',
   },
   mail: { hint: '关于转账与收款账户的邮件总会发送。其他邮件可以在这里选择是否接收。' },
   profile: {
@@ -883,6 +903,8 @@ const ja: typeof en = {
     answered: 'このクイズには回答済みです。回答は 1 人 1 回です。',
     seeResult: '結果を見る',
     unavailable: '現在は新しい回答を受け付けていません',
+    notMatched: 'このクイズは、スポンサーが求める条件にプロフィールが合う方向けです。プロフィールを充実させると回答できるかもしれません。',
+    completeProfile: 'プロフィールを充実させる',
     verifyFirst: 'クイズに回答するにはメールアドレスの確認が必要です。お送りしたリンクを開いてください。',
   },
   play: {
@@ -1013,6 +1035,14 @@ const ja: typeof en = {
     password: 'パスワードでログインする',
     signIn: 'ログインして始める',
     home: 'すべてのクイズを見る',
+  },
+  details: {
+    title: 'わたしについて',
+    hint: 'すべて任意です。詳しく入力するほど、あなたに向けたクイズに回答できるようになります。',
+    privacy: '入力内容がスポンサーに見えることはありません。スポンサーにわかるのは、条件に合う人のおおよその人数だけです。',
+    notSet: '未設定',
+    birthYearPlaceholder: '例：1995',
+    save: '保存',
   },
   mail: { hint: '送金と受取口座に関するメールは必ずお送りします。その他のメールはここで受け取るかどうかを選べます。' },
   profile: {

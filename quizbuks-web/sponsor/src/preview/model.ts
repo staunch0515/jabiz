@@ -46,7 +46,7 @@ function base(given: Sponsor | null) {
     sponsorName: sponsor?.contactName ?? null, sponsorCompany: sponsor?.company ?? null,
     sponsorIntro: sponsor?.intro ?? null, sponsorAvatar: sponsor?.avatar ?? null, sponsorCountry: null,
     completions: 0, last1h: 0, last24h: 0, last7d: 0, last30d: 0, statsAt: null,
-    canStart: false, myAttemptId: null, myStatus: null, myDeadline: null, invited: false,
+    canStart: false, matched: true, myAttemptId: null, myStatus: null, myDeadline: null, invited: false,
   }
 }
 

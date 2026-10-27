@@ -1,5 +1,7 @@
 import { api, ApiError, runProcess, runQuery, toApiError, unwrap, type Filter, type Sort } from '@jabiz/client'
 import { readDictionary, type DictionaryItem } from '../qb/api'
+import { CRITERIA, type Condition } from '../qb/audience'
+import { AUDIENCE } from '../qb/ids'
 import { PUBLISHING_CODE, PUBLISHING_DATASET, PUBLISHING_DICTIONARY, PUBLISHING_PROCESS, PUBLISHING_TEMPLATE } from './ids'
 
 /*
@@ -1138,3 +1140,52 @@ export const saveMailServer = (input: MailServerInput) =>
 
 export const removeMailServer = () =>
   runProcess<{ sponsorId: string }>(PUBLISHING_PROCESS.mailServerRemove, {})
+
+/** `AudienceCount`: never a small number; under the threshold only that it is fewer (Q39, D-Q39-5). */
+export interface AudienceCount {
+  /** The count rounded down to tens; null when fewer than `fewerThan`. */
+  count: number | null
+  fewerThan: number | null
+}
+
+/** The query of a publication's conditions: apart from the publications' (a draft's save sets it from what it sent). */
+export const conditionsQuery = (publicationId: string | null) => ['qb', 'publication-conditions', publicationId] as const
+
+/** A draft's (or a frozen publication's) matching conditions, one per criterion, in the criteria's order. */
+export async function readConditions(publicationId: string): Promise<Condition[]> {
+  const page = await unwrap(api.POST('/api/datasets/{resourceId}/query', {
+    params: { path: { resourceId: AUDIENCE.sponsorConditions } },
+    body: { limit: PAGE, filters: [{ field: 'publicationId', op: 'eq', value: publicationId }] },
+  }))
+  return conditionsOf((page.items ?? []).map((item) => (item.attributes ?? {}) as Row))
+}
+
+/** Stored rows (an option each, or a range) gathered into one condition per criterion. */
+export function conditionsOf(rows: readonly Row[]): Condition[] {
+  const byKey = new Map<string, Condition>()
+  for (const row of rows) {
+    const key = String(row.criterionKey)
+    const condition = byKey.get(key) ?? { key }
+    if (row.valueCode != null) condition.options = [...(condition.options ?? []), String(row.valueCode)]
+    else {
+      condition.min = numOrNull(row.minValue)
+      condition.max = numOrNull(row.maxValue)
+    }
+    byKey.set(key, condition)
+  }
+  return CRITERIA.flatMap((criterion) => {
+    const condition = byKey.get(criterion.key)
+    if (!condition) return []
+    return [condition.options
+      ? { ...condition, options: criterion.options.filter((option) => condition.options!.includes(option)) }
+      : condition]
+  })
+}
+
+/** Replaces a draft's conditions with these (none: everybody in its regions). */
+export const saveConditions = (publicationId: string, baseRevision: number | null, criteria: Condition[]) =>
+  runProcess<PublicationOutput>(AUDIENCE.conditionsSave, { publicationId, baseRevision, criteria })
+
+/** How many takers the saved regions and conditions reach now, rounded. */
+export const countAudience = (publicationId: string) =>
+  runProcess<AudienceCount>(AUDIENCE.count, { publicationId })

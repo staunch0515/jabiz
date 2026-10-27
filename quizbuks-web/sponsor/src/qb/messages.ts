@@ -95,6 +95,25 @@ const en = {
     entries: { app: 'App', sponsor: 'Sponsor console', admin: 'Administration' },
     unknownDevice: 'Unknown device',
   },
+  audience: {
+    gender: 'Gender',
+    age: 'Age',
+    birthYear: 'Year of birth',
+    occupation: 'Occupation',
+    interest: 'Interests',
+    genderOptions: { FEMALE: 'Female', MALE: 'Male', OTHER: 'Other', NO_ANSWER: 'Prefer not to say' },
+    occupationOptions: {
+      STUDENT: 'Student', EMPLOYEE: 'Company employee', CIVIL_SERVANT: 'Public servant',
+      SELF_EMPLOYED: 'Self-employed', PART_TIME: 'Part-time', HOMEMAKER: 'Homemaker', RETIRED: 'Retired',
+      OTHER: 'Other',
+    },
+    interestOptions: {
+      FOOD: 'Food', TRAVEL: 'Travel', TECHNOLOGY: 'Technology', CULTURE: 'Arts and culture', SPORTS: 'Sports',
+      FASHION: 'Fashion', BEAUTY: 'Beauty', FINANCE: 'Money and investing', PARENTING: 'Parenting', GAMES: 'Games',
+      MUSIC: 'Music', BOOKS: 'Books', OUTDOORS: 'Outdoors', PETS: 'Pets',
+    },
+    years: '{{min}}–{{max}} years',
+  },
 }
 
 const zh: typeof en = {
@@ -184,6 +203,24 @@ const zh: typeof en = {
     entries: { app: 'App', sponsor: '商家后台', admin: '管理后台' },
     unknownDevice: '未知设备',
   },
+  audience: {
+    gender: '性别',
+    age: '年龄',
+    birthYear: '出生年份',
+    occupation: '职业',
+    interest: '兴趣',
+    genderOptions: { FEMALE: '女', MALE: '男', OTHER: '其他', NO_ANSWER: '不回答' },
+    occupationOptions: {
+      STUDENT: '学生', EMPLOYEE: '公司职员', CIVIL_SERVANT: '公务员', SELF_EMPLOYED: '自营业者',
+      PART_TIME: '兼职', HOMEMAKER: '家庭主妇/主夫', RETIRED: '退休', OTHER: '其他',
+    },
+    interestOptions: {
+      FOOD: '美食', TRAVEL: '旅行', TECHNOLOGY: '科技', CULTURE: '文化艺术', SPORTS: '运动', FASHION: '时尚',
+      BEAUTY: '美容', FINANCE: '理财投资', PARENTING: '育儿', GAMES: '游戏', MUSIC: '音乐', BOOKS: '读书',
+      OUTDOORS: '户外', PETS: '宠物',
+    },
+    years: '{{min}}–{{max}} 岁',
+  },
 }
 
 const ja: typeof en = {
@@ -272,6 +309,24 @@ const ja: typeof en = {
     empty: 'ログイン記録はまだありません。',
     entries: { app: 'アプリ', sponsor: 'スポンサー管理画面', admin: '管理画面' },
     unknownDevice: '不明なデバイス',
+  },
+  audience: {
+    gender: '性別',
+    age: '年齢',
+    birthYear: '生まれ年',
+    occupation: '職業',
+    interest: '興味・関心',
+    genderOptions: { FEMALE: '女性', MALE: '男性', OTHER: 'その他', NO_ANSWER: '回答しない' },
+    occupationOptions: {
+      STUDENT: '学生', EMPLOYEE: '会社員', CIVIL_SERVANT: '公務員', SELF_EMPLOYED: '自営業',
+      PART_TIME: 'パート・アルバイト', HOMEMAKER: '専業主婦・主夫', RETIRED: '退職', OTHER: 'その他',
+    },
+    interestOptions: {
+      FOOD: 'グルメ', TRAVEL: '旅行', TECHNOLOGY: 'テクノロジー', CULTURE: '文化・芸術', SPORTS: 'スポーツ',
+      FASHION: 'ファッション', BEAUTY: '美容', FINANCE: 'お金・投資', PARENTING: '子育て', GAMES: 'ゲーム',
+      MUSIC: '音楽', BOOKS: '読書', OUTDOORS: 'アウトドア', PETS: 'ペット',
+    },
+    years: '{{min}}～{{max}} 歳',
   },
 }
 

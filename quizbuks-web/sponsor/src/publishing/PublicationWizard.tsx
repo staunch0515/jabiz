@@ -23,7 +23,8 @@ import {
   Textarea,
 } from '@jabiz/ui'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, ArrowRight, CircleCheck, FileText, RefreshCw, Save, Send, SlidersHorizontal, type LucideIcon } from 'lucide-react'
+import { ArrowLeft, ArrowRight, CircleCheck, FileText, RefreshCw, Save, Send, SlidersHorizontal, UsersRound,
+  type LucideIcon } from 'lucide-react'
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { readVersions, searchQuizzes } from '../content/api'
@@ -34,8 +35,14 @@ import { KUDOS } from '../qb/kudos'
 import { noticeConsentProblem } from '../qb/ConsentGate'
 import { fieldProblem, problemText } from '../qb/problems'
 import { navigate } from '../qb/router'
+import type { Condition } from '../qb/audience'
+import { AudienceConditions, AudienceCountPanel } from './AudienceConditions'
 import {
   asSurvey,
+  conditionsQuery,
+  countAudience,
+  readConditions,
+  saveConditions,
   formOf,
   inputOf,
   isStale,
@@ -52,6 +59,7 @@ import {
   surveyReward,
   AUDIENCES,
   type Audience,
+  type AudienceCount,
   type DigitalDelivery,
   type FormErrors,
   type Problem,
@@ -66,7 +74,7 @@ import { LabelledProblems, PublicationSummary, useAudienceLabel, useDebounced, u
   useRewardMethodLabel, useVersionOf } from './shared'
 import { TiersEditor } from './TiersEditor'
 
-export const STEP_COUNT = 3
+export const STEP_COUNT = 4
 
 /** A field with its label, hint and problem, the problem tied to it by `aria-describedby`. */
 function Field({ id, label, hint, problem, shown, children }: {
@@ -100,8 +108,9 @@ function refusalProblems(error: unknown): Pick<Problem, 'field' | 'message'>[] {
 }
 
 /**
- * The three steps of a draft publication (M-30, M-32, M-33): the quiz version and name; the audience, time, marks,
- * reward tiers and money; then everything at once with every problem submitting would be refused for (the save's
+ * The four steps of a draft publication (M-30, M-32, M-33): the quiz version and name; the time, marks, reward
+ * tiers and money; who it is for (Q39: public in regions or invited, and the matching conditions on the takers'
+ * profiles, with their rounded count); then everything at once with every problem submitting would be refused for (the save's
  * output) and "Submit". Each "Save and continue" saves the whole draft (`QB_PUBLICATION_SAVE`, with the revision the
  * page last saw); a draft may be incomplete. A new publication is created by its first save and opened at its address.
  * A survey's (Q12) asks for its one reward instead of a pass mark and tiers.
@@ -132,6 +141,15 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
   const [revision, setRevision] = useState<number | null>(detail?.publication.revision ?? null)
   const headingRef = useRef<HTMLHeadingElement>(null)
   const moved = useRef(false)
+  // Q39: the matching conditions, saved with each save of the draft once changed (their own process).
+  const savedConditions = useQuery({
+    queryKey: conditionsQuery(publicationId),
+    queryFn: () => readConditions(publicationId!),
+    enabled: publicationId !== null,
+  })
+  const [editedConditions, setEditedConditions] = useState<Condition[] | null>(null)
+  const conditions = editedConditions ?? savedConditions.data ?? []
+  const [count, setCount] = useState<AudienceCount | null>(null)
 
   // After moving between steps, focus goes to the new step's heading (its content replaced what had focus).
   useEffect(() => {
@@ -182,17 +200,34 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
   }
 
   const save = useMutation({
-    mutationFn: async ({ input }: { input: SaveInput; keys: string[]; then: 'stay' | 'next' }) =>
-      savePublication(input),
+    mutationFn: async ({ input, criteria }: { input: SaveInput; keys: string[]; then: 'stay' | 'next' | 'count';
+      criteria: Condition[] | null }) => {
+      const saved = await savePublication(input)
+      if (criteria === null) return { saved, counted: null }
+      // An invited publication takes its list: its conditions are cleared.
+      const out = await saveConditions(saved.publicationId, saved.revision, input.audience === 'INVITED' ? [] : criteria)
+      return { saved: { ...saved, revision: out.revision }, counted: null }
+    },
     onMutate: () => setSubmitError(null),
-    onSuccess: async (saved, { keys, then }) => {
+    onSuccess: async ({ saved }, { input, keys, then, criteria }) => {
+      const audienceOfSave = input.audience
       setRevision(saved.revision)
+      if (criteria !== null) {
+        // What was just stored, without waiting for a read (an invited one's are cleared).
+        queryClient.setQueryData(conditionsQuery(saved.publicationId),
+          audienceOfSave === 'INVITED' ? [] : criteria)
+        setEditedConditions(null)
+      }
       setOutput(saved)
       // New tiers get their keys: the next save sends them as the same tiers.
       const ids = new Map(keys.map((key, i) => [key, saved.tierIds[i]]))
       setForm((f) => ({ ...f, tiers: f.tiers.map((tier) => ({ ...tier, tierId: ids.get(tier.key) ?? tier.tierId })) }))
       await queryClient.invalidateQueries({ queryKey: PUBLICATIONS_QUERY })
       const nextStep = then === 'next' ? step + 1 : step
+      if (then === 'count') {
+        counter.mutate(saved.publicationId)
+        return
+      }
       if (!publicationId) {
         notify.success(t('publishing.wizard.created'))
         navigate(`${publicationPath(saved.publicationId)}?step=${nextStep}`, { replace: true })
@@ -206,8 +241,15 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
     },
   })
 
+  // Counts what was just saved: the regions and the conditions as stored.
+  const counter = useMutation({
+    mutationFn: countAudience,
+    onMutate: () => setCount(null),
+    onSuccess: setCount,
+  })
+
   /** Saves the whole draft when what is typed can be sent; marks what cannot. */
-  const run = (then: 'stay' | 'next') => {
+  const run = (then: 'stay' | 'next' | 'count') => {
     const chosen = rewardMethod === form.rewardMethod ? form : { ...form, rewardMethod }
     const shaped = survey && fullScore !== null ? asSurvey(chosen, fullScore, surveyReward(chosen)) : chosen
     if (shaped !== form) setForm(shaped)
@@ -217,7 +259,8 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
       notify.error(t('publishing.wizard.fixTyping'))
       return
     }
-    save.mutate({ input: built.input, keys: shaped.tiers.map((tier) => tier.key), then })
+    save.mutate({ input: built.input, keys: shaped.tiers.map((tier) => tier.key), then,
+      criteria: editedConditions ?? (shaped.audience === 'INVITED' && conditions.length > 0 ? [] : null) })
   }
 
   const submit = () => {
@@ -245,7 +288,8 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
   const locked = stale || save.isPending
   const saveProblems = refusalProblems(save.error)
   const problems = output?.problems ?? []
-  const stepTitles = [t('publishing.steps.content'), t('publishing.steps.policy'), t('publishing.steps.confirm')]
+  const stepTitles = [t('publishing.steps.content'), t('publishing.steps.policy'), t('publishing.steps.audience'),
+    t('publishing.steps.confirm')]
   /** A step's name with a picture of it (Q32); the picture is decorative. */
   const stepTitle = (Icon: LucideIcon, title: string) => (
     <span className="inline-flex items-center gap-1.5"><Icon aria-hidden className="size-4" />{title}</span>
@@ -410,51 +454,6 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
           )}
         </div>
       )}
-      <fieldset className="flex flex-col gap-2" data-testid="publication-audience"
-        aria-describedby={[`${id}-audience-hint`, problemOf('audience') ? `${id}-audience-error` : undefined]
-          .filter(Boolean).join(' ')}>
-        <legend className="text-sm font-medium">{t('publishing.field.audience')}</legend>
-        <p id={`${id}-audience-hint`} className="text-muted-foreground text-sm">{t('publishing.field.audienceHint')}</p>
-        <RadioGroup value={form.audience} disabled={locked} onValueChange={(value) => set('audience', value as Audience)}>
-          {AUDIENCES.map((audience) => (
-            <div key={audience} className="flex items-start gap-2">
-              <RadioGroupItem id={`${id}-audience-${audience}`} value={audience}
-                aria-describedby={`${id}-audience-${audience}-hint`} data-testid={`publication-audience-${audience}`} />
-              <div className="flex flex-col">
-                <Label htmlFor={`${id}-audience-${audience}`} className="font-normal">{audienceLabel(audience)}</Label>
-                <span id={`${id}-audience-${audience}-hint`} className="text-muted-foreground text-xs">
-                  {t(`publishing.audiences.${audience}`)}
-                </span>
-              </div>
-            </div>
-          ))}
-        </RadioGroup>
-        {problemOf('audience') && (
-          <p id={`${id}-audience-error`} className="text-destructive text-sm">{problemOf('audience')}</p>
-        )}
-      </fieldset>
-      {form.audience === 'PUBLIC' && (
-      <fieldset className="flex flex-col gap-2" aria-describedby={[`${id}-regions-hint`,
-        problemOf('regions') ? `${id}-regions-error` : undefined].filter(Boolean).join(' ')} data-testid="publication-regions">
-        <legend className="text-sm font-medium">{t('publishing.field.regions')}</legend>
-        <p id={`${id}-regions-hint`} className="text-muted-foreground text-sm">{t('publishing.field.regionsHint')}</p>
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-          {REGIONS.map((region) => (
-            <div key={region} className="flex items-center gap-2">
-              <Checkbox id={`${id}-region-${region}`} checked={form.regions.includes(region)} disabled={locked}
-                data-testid="publication-region" data-region={region}
-                onCheckedChange={(checked) => set('regions', checked === true
-                  ? [...form.regions.filter((r) => r !== region), region]
-                  : form.regions.filter((r) => r !== region))} />
-              <Label htmlFor={`${id}-region-${region}`} className="font-normal">{regionLabel(region)}</Label>
-            </div>
-          ))}
-        </div>
-        {problemOf('regions') && (
-          <p id={`${id}-regions-error`} className="text-destructive text-sm">{problemOf('regions')}</p>
-        )}
-      </fieldset>
-      )}
       <div className="grid gap-4 md:grid-cols-2">
         <Field id={`${id}-start`} label={t('publishing.field.startAt')} problem={problemOf('startAt')}
           hint={t('publishing.field.periodHint')}>
@@ -524,7 +523,73 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
       </div>
     </div>,
 
-    // 3. Everything at once, every problem, and submitting.
+    // 3. Who it is for (Q39): public in regions, or invited; and the takers' profiles it is aimed at.
+    <div key="audience" className="flex flex-col gap-6">
+      <fieldset className="flex flex-col gap-2" data-testid="publication-audience"
+        aria-describedby={[`${id}-audience-hint`, problemOf('audience') ? `${id}-audience-error` : undefined]
+          .filter(Boolean).join(' ')}>
+        <legend className="text-sm font-medium">{t('publishing.field.audience')}</legend>
+        <p id={`${id}-audience-hint`} className="text-muted-foreground text-sm">{t('publishing.field.audienceHint')}</p>
+        <RadioGroup value={form.audience} disabled={locked} onValueChange={(value) => set('audience', value as Audience)}>
+          {AUDIENCES.map((audience) => (
+            <div key={audience} className="flex items-start gap-2">
+              <RadioGroupItem id={`${id}-audience-${audience}`} value={audience}
+                aria-describedby={`${id}-audience-${audience}-hint`} data-testid={`publication-audience-${audience}`} />
+              <div className="flex flex-col">
+                <Label htmlFor={`${id}-audience-${audience}`} className="font-normal">{audienceLabel(audience)}</Label>
+                <span id={`${id}-audience-${audience}-hint`} className="text-muted-foreground text-xs">
+                  {t(`publishing.audiences.${audience}`)}
+                </span>
+              </div>
+            </div>
+          ))}
+        </RadioGroup>
+        {problemOf('audience') && (
+          <p id={`${id}-audience-error`} className="text-destructive text-sm">{problemOf('audience')}</p>
+        )}
+      </fieldset>
+      {form.audience === 'PUBLIC' && (
+      <fieldset className="flex flex-col gap-2" aria-describedby={[`${id}-regions-hint`,
+        problemOf('regions') ? `${id}-regions-error` : undefined].filter(Boolean).join(' ')} data-testid="publication-regions">
+        <legend className="text-sm font-medium">{t('publishing.field.regions')}</legend>
+        <p id={`${id}-regions-hint`} className="text-muted-foreground text-sm">{t('publishing.field.regionsHint')}</p>
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          {REGIONS.map((region) => (
+            <div key={region} className="flex items-center gap-2">
+              <Checkbox id={`${id}-region-${region}`} checked={form.regions.includes(region)} disabled={locked}
+                data-testid="publication-region" data-region={region}
+                onCheckedChange={(checked) => set('regions', checked === true
+                  ? [...form.regions.filter((r) => r !== region), region]
+                  : form.regions.filter((r) => r !== region))} />
+              <Label htmlFor={`${id}-region-${region}`} className="font-normal">{regionLabel(region)}</Label>
+            </div>
+          ))}
+        </div>
+        {problemOf('regions') && (
+          <p id={`${id}-regions-error`} className="text-destructive text-sm">{problemOf('regions')}</p>
+        )}
+      </fieldset>
+      )}
+      {form.audience === 'PUBLIC' && (
+        <div className="flex flex-col gap-3" data-testid="publication-conditions">
+          <div className="flex flex-col gap-1">
+            <h3 className="text-sm font-medium">{t('publishing.audience.title')}</h3>
+            <p className="text-muted-foreground text-sm">{t('publishing.audience.hint')}</p>
+          </div>
+          {publicationId && savedConditions.isPending
+            ? <p className="text-muted-foreground text-sm">{t('publishing.audience.loading')}</p>
+            : <AudienceConditions value={conditions} disabled={locked} onChange={(next) => {
+              setEditedConditions(next)
+              setCount(null)
+            }} />}
+          <AudienceCountPanel count={count} pending={counter.isPending || (save.isPending
+            && save.variables?.then === 'count')} disabled={locked} onCount={() => run('count')} />
+          {counter.isError && <p className="text-destructive text-sm" role="alert">{problemText(counter.error)}</p>}
+        </div>
+      )}
+    </div>,
+
+    // 4. Everything at once, every problem, and submitting.
     <div key="confirm" className="flex flex-col gap-4">
       {problems.length > 0
         ? (
@@ -551,6 +616,7 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
         versionLabel: version?.label ?? detail?.publication.versionLabel ?? null,
         regions: form.audience === 'INVITED' ? [] : REGIONS.filter((region) => form.regions.includes(region)),
         audience: form.audience,
+        conditions: form.audience === 'INVITED' ? [] : conditions,
         startAt: form.startAt,
         endAt: form.endAt,
         // Left empty, the time limit is the version's: the server wrote it with the last save.
@@ -579,7 +645,8 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
       <Steps current={step} aria-label={t('publishing.steps.label')} data-testid="publication-steps" items={[
         { key: 'content', title: stepTitle(FileText, stepTitles[0]), description: t('publishing.steps.contentHint') },
         { key: 'policy', title: stepTitle(SlidersHorizontal, stepTitles[1]), description: t('publishing.steps.policyHint') },
-        { key: 'confirm', title: stepTitle(CircleCheck, stepTitles[2]), description: t('publishing.steps.confirmHint') },
+        { key: 'audience', title: stepTitle(UsersRound, stepTitles[2]), description: t('publishing.steps.audienceHint') },
+        { key: 'confirm', title: stepTitle(CircleCheck, stepTitles[3]), description: t('publishing.steps.confirmHint') },
       ]} />
       <form noValidate className="flex flex-col gap-6" aria-labelledby={`${id}-step`} onSubmit={(event) => {
         event.preventDefault()
