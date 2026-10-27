@@ -123,6 +123,7 @@ export function format(text: string, values: Record<string, string | number> = {
 export function refusalText(texts: Texts, code: string | null): string {
   switch (code) {
     case 'QB_ATTEMPT_ALREADY_TAKEN':
+    case 'QB_ATTEMPT_FINISHED':
       return texts.already
     case 'QB_ATTEMPT_TOO_FAST':
       return texts.tooFast

@@ -34,6 +34,7 @@ import {
   type CampaignDraft,
   type Connection,
 } from './api'
+import { reasonOf } from './errors'
 import { SHOPIFY } from './messages'
 
 /**
@@ -203,10 +204,6 @@ function rank(status: Campaign['status']): number {
   return { LIVE: 0, PAUSED: 0, DRAFT: 1, ENDED: 2 }[status]
 }
 
-function reasonOf(error: unknown): string {
-  if (error instanceof ApiError && error.violations.length > 0) return error.violations.map((v) => v.message).join(' ')
-  return error instanceof Error ? error.message : String(error)
-}
 
 function emptyDraft(): CampaignDraft {
   return {
@@ -286,7 +283,25 @@ function CampaignEditor({ draft, onDone, onCancel }: {
     try {
       await onDone(await saveCampaign(fromForm(values, draft)))
     } catch (error) {
-      setProblem(error instanceof ApiError && error.status === 409 ? t('campaigns.form.changed') : reasonOf(error))
+      if (!(error instanceof ApiError)) {
+        setProblem(reasonOf(error))
+        return
+      }
+      // Changed by someone else since it was read: the server's rule (422), or a write that lost the race (409).
+      if (error.status === 409 || error.violations.some((v) => v.ruleCode === 'QBS_CAMPAIGN_CHANGED')) {
+        setProblem(t('campaigns.form.changed'))
+        return
+      }
+      // The server's refusals at their fields; the others for the whole form.
+      const general: string[] = []
+      for (const violation of error.violations) {
+        if (violation.field && FIELDS.includes(violation.field as (typeof FIELDS)[number])) {
+          form.setError(violation.field as (typeof FIELDS)[number], { type: 'server', message: violation.message })
+        } else {
+          general.push(violation.message)
+        }
+      }
+      if (general.length > 0 || error.violations.length === 0) setProblem(general.join(' ') || error.display)
     }
   }
 
@@ -351,6 +366,9 @@ function CampaignEditor({ draft, onDone, onCancel }: {
     </form>
   )
 }
+
+/** The fields a refusal of the server is shown at. */
+const FIELDS = ['name', 'video', 'timeLimitSec', 'passScore', 'percent'] as const
 
 const LIMITS_TIME = { min: LIMITS.minTimeLimitSec, max: LIMITS.maxTimeLimitSec }
 const LIMITS_PERCENT = { min: LIMITS.minPercent, max: LIMITS.maxPercent }

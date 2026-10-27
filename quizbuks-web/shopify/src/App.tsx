@@ -26,6 +26,7 @@ import { useTranslation } from 'react-i18next'
 import { check, connect, join, transferAdmin, type Shop } from './api'
 import { NotEmbeddedError, sessionToken } from './appBridge'
 import { CampaignsPage } from './CampaignsPage'
+import { reasonOf } from './errors'
 import { SHOPIFY } from './messages'
 
 /**
@@ -48,15 +49,13 @@ export default function App() {
   )
 }
 
-/** What the server said (its rule's text in the user's language), else the error's message. */
-function reasonOf(error: unknown): string {
-  if (error instanceof ApiError && error.violations.length > 0) return error.violations.map((v) => v.message).join(' ')
-  return error instanceof Error ? error.message : String(error)
-}
 
 function ShopPage() {
   const { t } = useTranslation(SHOPIFY)
   const auth = useAuth()
+  // The campaigns are read when first shown, then kept mounted (hidden when not shown) so an open editor keeps what
+  // was typed while the overview is shown.
+  const [campaignsShown, setCampaignsShown] = useState(false)
 
   // Signs in with a session token (each is used once) whenever the tab has no session.
   const signIn = useMutation({
@@ -117,7 +116,9 @@ function ShopPage() {
         </Alert>
       )}
       {opened.data && (
-        <Tabs defaultValue="overview">
+        <Tabs defaultValue="overview" onValueChange={(value) => {
+          if (value === 'campaigns') setCampaignsShown(true)
+        }}>
           <TabsList>
             <TabsTrigger value="overview">{t('tabs.overview')}</TabsTrigger>
             <TabsTrigger value="campaigns">{t('tabs.campaigns')}</TabsTrigger>
@@ -125,9 +126,11 @@ function ShopPage() {
           <TabsContent value="overview" className="flex flex-col gap-4">
             <Overview shop={opened.data} userId={auth.userId} reload={reload} />
           </TabsContent>
-          <TabsContent value="campaigns">
-            <CampaignsPage connection={opened.data.connection} />
-          </TabsContent>
+          {campaignsShown && (
+            <TabsContent value="campaigns" forceMount className="data-[state=inactive]:hidden">
+              <CampaignsPage connection={opened.data.connection} />
+            </TabsContent>
+          )}
         </Tabs>
       )}
     </div>

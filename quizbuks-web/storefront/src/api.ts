@@ -83,12 +83,20 @@ export interface Claim {
 
 const KEY = 'quizbuks:visitor'
 
+/** Whose attempts and codes are read and kept: the signed-in customer's, or the anonymous visitor's. */
+let owner = 'anon'
+
 /**
  * What the block keeps in the visitor's browser: its random key, the attempt it started of each publication (to ask
- * for its code again) and the code it got. Every access may fail (private windows, blocked storage): the block then
- * works for the page's life only.
+ * for its code again) and the code it got, apart for each customer signed in on it (a shared computer shows nobody
+ * another's code). Every access may fail (private windows, blocked storage): the block then works for the page's
+ * life only.
  */
 export const Store = {
+  /** @param customer the signed-in customer's id; null or empty when nobody is signed in */
+  signedIn(customer: string | null) {
+    owner = customer ? `c${customer}` : 'anon'
+  },
   visitor(): string {
     const existing = read(KEY)
     if (existing) return existing
@@ -97,13 +105,13 @@ export const Store = {
     return made
   },
   attempt(publicationId: string): string | null {
-    return read(`quizbuks:attempt:${publicationId}`)
+    return read(`quizbuks:attempt:${publicationId}:${owner}`)
   },
   rememberAttempt(publicationId: string, attemptId: string) {
-    write(`quizbuks:attempt:${publicationId}`, attemptId)
+    write(`quizbuks:attempt:${publicationId}:${owner}`, attemptId)
   },
   claim(publicationId: string): Claim | null {
-    const stored = read(`quizbuks:code:${publicationId}`)
+    const stored = read(`quizbuks:code:${publicationId}:${owner}`)
     if (!stored) return null
     try {
       const claim = JSON.parse(stored) as Claim
@@ -113,7 +121,7 @@ export const Store = {
     }
   },
   rememberClaim(publicationId: string, claim: Claim) {
-    write(`quizbuks:code:${publicationId}`, JSON.stringify(claim))
+    write(`quizbuks:code:${publicationId}:${owner}`, JSON.stringify(claim))
   },
 }
 

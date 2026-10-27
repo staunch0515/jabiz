@@ -142,8 +142,8 @@ describe('the quiz campaigns (S2b)', () => {
   })
 
   it('edits a draft with its revision, and says when someone changed it meanwhile', async () => {
-    const posted = server({ campaigns: [campaign()], answers: { QBS_CAMPAIGN_SAVE: { status: 409,
-      body: { status: 409, title: 'Conflict', violations: [{ field: 'baseRevision', ruleCode: 'QBS_CAMPAIGN_CHANGED',
+    const posted = server({ campaigns: [campaign()], answers: { QBS_CAMPAIGN_SAVE: { status: 422,
+      body: { status: 422, title: 'Unprocessable', violations: [{ field: 'baseRevision', ruleCode: 'QBS_CAMPAIGN_CHANGED',
         message: 'The draft was changed meanwhile: reload it.' }] } } } })
     const user = userEvent.setup()
     page()
@@ -185,6 +185,18 @@ describe('the quiz campaigns (S2b)', () => {
     await waitFor(() => expect(posted).toHaveLength(1))
     expect(posted[0].body).not.toHaveProperty('campaignId')
     expect(posted[0].body).toMatchObject({ name: 'Spring quiz', percent: 15 })
+  })
+
+  it('shows the server\'s refusal at its field', async () => {
+    server({ campaigns: [campaign()], answers: { QBS_CAMPAIGN_SAVE: { status: 422, body: { status: 422,
+      title: 'Unprocessable', violations: [{ field: 'passScore', ruleCode: 'QBS_PASS_SCORE',
+        message: 'The pass score is above the number of questions.' }] } } } })
+    const user = userEvent.setup()
+    page()
+    await user.click(await screen.findByRole('button', { name: 'Edit' }))
+    await user.click(screen.getByRole('button', { name: 'Save the draft' }))
+    const field = screen.getByLabelText('Correct answers to pass').parentElement!
+    expect(await within(field).findByText('The pass score is above the number of questions.')).toBeInTheDocument()
   })
 
   it('shows what the server refused', async () => {

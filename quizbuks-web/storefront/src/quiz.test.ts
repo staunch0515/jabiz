@@ -125,7 +125,7 @@ describe('the storefront quiz block (S2b)', () => {
   })
 
   it('shows the code it got again, even when today\'s codes are gone', async () => {
-    window.localStorage.setItem('quizbuks:code:p1', JSON.stringify({ code: 'QB-KEPT00000', percent: 15,
+    window.localStorage.setItem('quizbuks:code:p1:anon', JSON.stringify({ code: 'QB-KEPT00000', percent: 15,
       expiresAt: null }))
     const sent = proxy({ QBS_SF_CAMPAIGN: { status: 200, body: { ...CAMPAIGN, codesToday: false } } })
     const { root } = await mount()
@@ -135,8 +135,48 @@ describe('the storefront quiz block (S2b)', () => {
     expect(sent.map((s) => s.process)).toEqual(['QBS_SF_CAMPAIGN'])
   })
 
+  it('keeps each signed-in customer\'s code apart', async () => {
+    window.localStorage.setItem('quizbuks:code:p1:c7', JSON.stringify({ code: 'QB-SEVEN0000', percent: 15,
+      expiresAt: null }))
+    proxy({ QBS_SF_CAMPAIGN: { status: 200, body: CAMPAIGN } })
+    const { root } = await mount({ customer: '8' })
+    await vi.waitFor(() => expect(root.querySelector('.open')).not.toBeNull())
+    expect(button(root, 'Answer a quiz, get 15% off')).toBeTruthy()
+    document.body.replaceChildren()
+    const seven = await mount({ customer: '7' })
+    await vi.waitFor(() => expect(seven.root.querySelector('.open')).not.toBeNull())
+    button(seven.root, 'Your 15% discount code').click()
+    expect(seven.root.querySelector('.code')!.textContent).toBe('QB-SEVEN0000')
+  })
+
+  it('says it was answered when the attempt this browser started has ended without a code', async () => {
+    window.localStorage.setItem('quizbuks:attempt:p1:anon', 'a1')
+    proxy({ QBS_SF_CAMPAIGN: { status: 200, body: CAMPAIGN },
+      QBS_SF_START: { status: 422, body: { violations: [{ ruleCode: 'QB_ATTEMPT_ALREADY_TAKEN' }] } },
+      QBS_SF_SUBMIT: { status: 422, body: { violations: [{ ruleCode: 'QB_ATTEMPT_FINISHED' }] } } })
+    const { root } = await mount()
+    await vi.waitFor(() => expect(root.querySelector('.open')).not.toBeNull())
+    button(root, 'Answer a quiz, get 15% off').click()
+    button(root, 'Start the quiz').click()
+    await vi.waitFor(() => expect(root.textContent).toContain(MESSAGES.en.already))
+  })
+
+  it('goes back to the question, its buttons as they were, when a submission fails', async () => {
+    proxy({ QBS_SF_CAMPAIGN: { status: 200, body: CAMPAIGN }, QBS_SF_START: { status: 200, body: STARTED },
+      QBS_SF_SUBMIT: { status: 500, body: {} } })
+    const { root } = await mount()
+    await vi.waitFor(() => expect(root.querySelector('.open')).not.toBeNull())
+    button(root, 'Answer a quiz, get 15% off').click()
+    button(root, 'Start the quiz').click()
+    await vi.waitFor(() => expect(root.querySelector('legend')).not.toBeNull())
+    vi.advanceTimersByTime(61_000)
+    await vi.waitFor(() => expect(root.querySelector('.status')!.textContent).toBe(MESSAGES.en.error))
+    expect(root.querySelector('legend')!.textContent).toBe('First?')
+    expect(button(root, 'Back').disabled).toBe(true)
+  })
+
   it('asks again for the code of an attempt this browser started, when the server says it was answered', async () => {
-    window.localStorage.setItem('quizbuks:attempt:p1', 'a1')
+    window.localStorage.setItem('quizbuks:attempt:p1:anon', 'a1')
     const sent = proxy({ QBS_SF_CAMPAIGN: { status: 200, body: CAMPAIGN },
       QBS_SF_START: { status: 422, body: { violations: [{ ruleCode: 'QB_ATTEMPT_ALREADY_TAKEN' }] } },
       QBS_SF_SUBMIT: { status: 200, body: { ...PASSED, outcome: 'AGAIN', score: null, fullScore: null } } })

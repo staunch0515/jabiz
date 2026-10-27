@@ -86,11 +86,13 @@ jobs:
           pnpm lint
           pnpm typecheck
           pnpm test
-      # S2b: the storefront's block, a plain Web Component (no React, no @jabiz/ui); the build checks its size budget.
+      # S2b: the storefront's block, a plain Web Component (no React, no @jabiz/ui components); the build checks its
+      # size budget, `pnpm versions` its tools against the platform's (app:check is for SPAs on @jabiz/ui).
       - name: Shopify storefront block (S2b)
         working-directory: quizbuks-web/storefront
         run: |
           pnpm install --frozen-lockfile
+          pnpm versions
           pnpm lint
           pnpm typecheck
           pnpm test

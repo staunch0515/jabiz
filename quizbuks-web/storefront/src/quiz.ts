@@ -33,6 +33,7 @@ export class QuizElement extends HTMLElement {
   async connectedCallback() {
     this.texts = textsOf(this.getAttribute('locale') ?? document.documentElement.lang)
     this.api = new Api(this.getAttribute('proxy') ?? '/apps/quizbuks')
+    Store.signedIn(this.getAttribute('customer'))
     try {
       this.campaign = await this.api.campaign()
     } catch {
@@ -241,15 +242,15 @@ export class QuizElement extends HTMLElement {
       result = await this.api.submit(publicationId, attemptId, answers)
     } catch (error) {
       const code = error instanceof Refused ? error.code : null
-      if (code === 'QB_ATTEMPT_TOO_FAST' && this.started) {
-        this.showQuestion()
-      } else if (code === 'QB_ATTEMPT_FINISHED' || code === 'QB_ATTEMPT_EXPIRED') {
+      if (code === 'QB_ATTEMPT_FINISHED' || code === 'QB_ATTEMPT_EXPIRED') {
         this.stopTimer()
         this.started = null
         this.screen(this.t('dialog'), h('p', {}, refusalText(this.texts, code)))
         return
       }
-      this.dialog!.querySelectorAll<HTMLButtonElement>('button').forEach((b) => { b.disabled = false })
+      // Back to where the visitor was, its buttons as they were (the first question has no way back).
+      if (this.started) this.showQuestion()
+      else this.dialog!.querySelectorAll<HTMLButtonElement>('button').forEach((b) => { b.disabled = false })
       this.say(refusalText(this.texts, code))
       return
     }

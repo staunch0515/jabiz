@@ -11,7 +11,8 @@
     assign proxy = root | append: '/apps/quizbuks'
   endif
 -%}
-<quizbuks-quiz locale="{{ request.locale.iso_code }}" root="{{ root }}" proxy="{{ proxy }}"></quizbuks-quiz>
+<quizbuks-quiz locale="{{ request.locale.iso_code }}" root="{{ root }}" proxy="{{ proxy }}"
+  customer="{{ customer.id }}"></quizbuks-quiz>
 
 {% schema %}
 {
