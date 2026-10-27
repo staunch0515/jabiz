@@ -16,8 +16,10 @@ QuizBuks 是**一个镜像、一个服务**（`<APP_NAME>-app`，容器内端口
 
 - 镜像：`ghcr.io/staunch0515/jabiz-quizbuks:<提交 SHA>`（`linux/amd64`），两个环境用同一个镜像，只是部署的提交不同。
 - 仓库中的来源：`deploy/quizbuks/server/compose.yaml`（项目名与容器名取自 `.env` 的 `APP_NAME`）、`deploy/quizbuks/server/site.caddy.tpl`
-  （占位 `__DOMAIN__`、`__APP_NAME__`，由 workflow 按环境渲染）、`.github/workflows/quizbuks-deploy.yml`。
-- 服务器上每个环境的目录中：`compose.yaml`、`site.caddy`（由 workflow 上传）、`.env`（只在服务器上手工维护，workflow 从不改它）。
+  （占位 `__DOMAIN__`、`__APP_NAME__`、`__APP_DIR__`，由 workflow 按环境渲染）、`deploy/quizbuks/server/maintenance.html`（维护页）、
+  `.github/workflows/quizbuks-deploy.yml`。
+- 服务器上每个环境的目录中：`compose.yaml`、`site.caddy`、`maintenance/maintenance.html`（由 workflow 上传）、`.env`（只在服务器上手工维护，workflow 从不改它）；
+  维护期间另有手工建立的 `maintenance/maintenance.lock`（见"维护模式"）。
 - 网络：`proxy`（Caddy）、`db`（PostgreSQL），都是外部网络；不发布任何端口。
 - 本机开发用的 `deploy/quizbuks/compose.dev.yaml`（自带数据库）与服务器无关，部署不使用它。
 
@@ -257,6 +259,37 @@ Run workflow，分支选该环境的分支，`image-tag` 留空。第一次启�
     workflow 的登录只在它自己的临时 Docker 配置中，部署后即删除，不影响服务器上其他应用的登录。
   - **数据库迁移不随回滚撤销**：Flyway 只向前。回滚到更早的版本前确认其间没有新迁移（`backend/quizbuks/src/main/resources/db/migration` 与平台的 `db/jabiz`）：
     旧版本不认识新迁移改过的表结构，有新迁移时应修复后向前部署，而不是回滚。
+
+## 维护模式
+
+手工开关：本环境目录中存在 `maintenance/maintenance.lock` 时，Caddy 对**所有**请求直接返回维护页（`maintenance.html`，日、中、英三种语言），
+状态码 503、`Retry-After: 300`、`Cache-Control: no-store`，请求不到达应用；删掉这个文件即恢复正常代理。Caddy 每个请求都检查这个文件，开关不需要重新加载 Caddy，
+也不经过 workflow。
+
+```bash
+APP=quizbuks-staging          # production 为 quizbuks
+# 开启
+touch /opt/apps/$APP/maintenance/maintenance.lock
+# 关闭
+rm /opt/apps/$APP/maintenance/maintenance.lock
+```
+
+- 两个环境各有自己的开关，互不影响；同一服务器上的其他应用不受影响。
+- 维护页由每次部署上传（`maintenance/maintenance.html`），锁文件 workflow 从不创建或删除：维护期间照常部署（例如修复后重新部署），维护页一直显示到手工关闭，
+  可以先在服务器上确认应用健康（`docker logs "$APP-app"`）再关闭。
+- 维护期间 Stripe 等的 Webhook（`/api/inbound/**`）也得到 503；Stripe 会自动重试（正式模式下至多 3 天，测试模式下只有几次），维护不长时关闭后照常送达。
+  App 与商家后台的接口请求同样得到 503，页面显示请求失败，关闭后刷新即可。
+- 第一次使用前确认 Caddy 容器能看到这个目录（Caddy 读取的是它自己容器内的路径）。站点按 `/opt/apps/<APP_NAME>/maintenance` 渲染，
+  即假定服务器的 `/opt/apps` 在 Caddy 容器中也挂载在 `/opt/apps`：
+
+  ```bash
+  docker exec <Caddy 容器名> ls /opt/apps/$APP/maintenance/maintenance.html
+  ```
+
+  看不到时找出 Caddy 容器中的实际位置（`docker inspect <Caddy 容器名> -f '{{json .Mounts}}'`），把容器内对应 `/opt/apps` 的路径写入仓库变量
+  `QUIZBUKS_CADDY_APPS_DIR`（Settings → Secrets and variables → Actions → Variables）并重新部署；Caddy 容器根本没有挂载 `/opt/apps` 时，
+  在服务器的 Caddy 的 compose 中加上只读挂载（`/opt/apps:/opt/apps:ro`）。目录看不到时锁文件不起作用，网站照常代理，不会误显示维护页。
+- 开启后在浏览器（或 `curl -sI https://<本环境的域名>/`）确认返回 503 与维护页，再开始维护。
 
 ## 备份
 
