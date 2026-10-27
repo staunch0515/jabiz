@@ -40,9 +40,10 @@ public class ProcessRateLimits {
     static final int MAX_KEYS = 100_000;
 
     /** What a bucket counts by, the tag {@code scope} of {@value PlatformObservations#PROCESS_RATE_LIMITED}. */
-    public enum Scope { USER, ADDRESS, INSTANCE }
+    public enum Scope { USER, ADDRESS, INSTANCE, TENANT, VISITOR }
 
-    private record Buckets(TokenBucketLimiter perUser, TokenBucketLimiter perAddress, TokenBucketLimiter perInstance) {}
+    private record Buckets(TokenBucketLimiter perUser, TokenBucketLimiter perAddress, TokenBucketLimiter perInstance,
+        TokenBucketLimiter perTenant, TokenBucketLimiter perVisitor) {}
 
     private final Map<String, Buckets> buckets = new HashMap<>();
     private final ClientAddresses addresses;
@@ -66,7 +67,8 @@ public class ProcessRateLimits {
                 return;
             }
             buckets.put(process, new Buckets(bucket(limit.perUser(), period, nanoTime),
-                bucket(limit.perAddress(), period, nanoTime), bucket(limit.perInstance(), period, nanoTime)));
+                bucket(limit.perAddress(), period, nanoTime), bucket(limit.perInstance(), period, nanoTime),
+                bucket(limit.perTenant(), period, nanoTime), bucket(limit.perVisitor(), period, nanoTime)));
         });
     }
 
@@ -87,12 +89,22 @@ public class ProcessRateLimits {
      * @param http the request, for the client address; null for none (counted as {@code unknown})
      */
     public void check(ProcessDefinition<?, ?, ?> definition, RequestContext request, ServerHttpRequest http) {
+        check(definition, request, http, null);
+    }
+
+    /**
+     * As {@link #check(ProcessDefinition, RequestContext, ServerHttpRequest)}, for a request through an app proxy
+     * (decision D60): also per tenant ({@link RequestContext#tenantId()}) and per {@code visitor} key within it (null:
+     * counted as {@code none}).
+     */
+    public void check(ProcessDefinition<?, ?, ?> definition, RequestContext request, ServerHttpRequest http,
+        String visitor) {
         Buckets limits = buckets.get(definition.name());
         if (limits == null) {
             return;
         }
         String process = definition.name();
-        List<Counted> counted = new ArrayList<>(3);
+        List<Counted> counted = new ArrayList<>(5);
         if (limits.perUser() != null) {
             counted.add(new Counted(limits.perUser(), Scope.USER,
                 "user:" + Objects.requireNonNullElse(request.actorId(), "anonymous")));
@@ -104,6 +116,14 @@ public class ProcessRateLimits {
         }
         if (limits.perInstance() != null) {
             counted.add(new Counted(limits.perInstance(), Scope.INSTANCE, "instance"));
+        }
+        String tenant = Objects.requireNonNullElse(request.tenantId(), "none");
+        if (limits.perTenant() != null) {
+            counted.add(new Counted(limits.perTenant(), Scope.TENANT, "tenant:" + tenant));
+        }
+        if (limits.perVisitor() != null) {
+            counted.add(new Counted(limits.perVisitor(), Scope.VISITOR,
+                "visitor:" + tenant + "/" + Objects.requireNonNullElse(visitor, "none")));
         }
         // Every bucket first: a request one of them refuses takes nothing from the others.
         for (Counted bucket : counted) {

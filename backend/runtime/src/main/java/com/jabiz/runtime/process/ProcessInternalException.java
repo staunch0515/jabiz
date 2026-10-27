@@ -38,6 +38,7 @@ public class ProcessInternalException extends PermissionDeniedException {
             case INTERNAL -> "the platform runs it as the system, on events, schedules or callbacks";
             case ENTRY_ONLY -> "it runs through its own endpoint, as the caller";
             case SUB_PROCESS_ONLY -> "it runs only as part of another process";
+            case APP_PROXY -> "it runs through its app proxy, for another platform's visitors";
         };
     }
 }

@@ -24,7 +24,14 @@ public enum ProcessAccess {
     ENTRY_ONLY,
 
     /** Run only as a sub-process, under any top-level process (such as {@code FILE_ARCHIVE}). */
-    SUB_PROCESS_ONLY;
+    SUB_PROCESS_ONLY,
+
+    /**
+     * Run only through one app proxy, {@code /api/proxy/<proxy>/<process>} (decision D60): a request another platform
+     * forwarded and signed for an anonymous visitor of one of its tenants, run as that proxy's caller
+     * ({@link com.jabiz.security.AppProxyCaller}). Never through the process API or as a sub-process.
+     */
+    APP_PROXY;
 
     /** Whether the process is listed in the catalog and may be offered as an action. */
     public boolean listed() {

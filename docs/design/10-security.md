@@ -818,6 +818,41 @@ jabiz:
 - 业务流程以步骤 `VerifyExternalToken.of(提供方, ctx -> 令牌, 键)` 核对店员递来的令牌属于操作人（403 不说明原因：说明一律为 "External token refused"，原因只记日志），把租户、主体与令牌放进上下文，供阻塞步骤交给签发它的平台；不消耗 `jti`。
 - 页面：`@jabiz/client` 的 `signInWithExternalToken(令牌)`（向平台的脚本每次取新令牌）；SPA 声明 `embedding`（17 §3.2）才能被该租户内嵌。
 
+### 15.13 应用代理：另一个平台转发的访客请求（阶段 17d，决策 D60）
+
+商店平台把店面上的请求（店铺域名下的 `/apps/<子路径>/...`）转发给应用，并在查询中加上租户、已登录顾客的编号、时间与签名。平台以**应用代理**承接：
+验签之后以代理的调用者同步运行一个流程，答复即流程的输出。店面上的顾客匿名，与平台的用户无关。
+
+```yaml
+jabiz:
+  app-proxies:
+    shop:                                           # 代理名：路径 /api/proxy/shop/<流程>
+      secrets: [ "${SHOP_APP_SECRET:}" ]            # 即应用密钥，只取自环境变量（写空缺省值：缺失即启动失败）；更换时写两个
+      tenant-pattern: '[a-z0-9][a-z0-9-]*\.myshopify\.com'
+      # tenant-parameter: shop                      # 缺省值
+      # customer-parameter: logged_in_customer_id   # 缺省值；空即匿名访客
+      # visitor-parameter: visitor                  # 缺省值；店面自己生成的访客键，只用于限流
+      # max-age: 90s                                # 签名时间与现在之差，缺省 90 秒，至多 10 分钟
+  process:
+    rate-limits:
+      "[SHOP_QUIZ_ANSWER]": { per-tenant: 600, per-visitor: 10, period: 1m }
+```
+
+- 接口 `GET|POST /api/proxy/{代理}/{流程}`：未配置（或配置有问题）的代理 404，其他方法 405（`AppProxyWebFilter`，在安全链之前）；带来的凭据一概不看。
+- 签名（`AppProxySignature`，与 Shopify 自己的库相同）：查询中除 `signature` 外的全部参数（访客自己的也在内）按名排序，写成 `名=值`（同名多值以 `,` 相连），
+  不加分隔地连起来，以应用密钥作 HMAC-SHA256，小写十六进制，常量时间比较、每个密钥都试。时间 `timestamp` 须在 `max-age` 内；租户参数恰好一个且匹配 `tenant-pattern`；
+  顾客编号为空或是 `[A-Za-z0-9_-]{1,64}`。任一不符即 401 `APP_PROXY_REFUSED`，说明相同，原因只记日志与观测 `jabiz.app_proxy.refused`（标签 `proxy`、`reason`）。
+  查询按表单解码（`+` 是空格），与签名方一致。
+- 流程须是 `appProxy(代理)` 声明的最新版本（否则 404，不透露别的流程）；以 `AppProxyCaller` 运行：操作人 `app-proxy:<代理>[:<顾客>]`、
+  `RequestContext.tenantId` 为租户、权限只有 `app-proxy.<代理>`；流程以 `AppProxyCaller.of(ctx.request())` 读取。不写操作记录之外的东西，不签发会话。
+- 正文（POST 的 JSON）是流程的输入，**不在签名之内**：它与访客发来的任何东西一样不可信，由流程校验。签名过的地址在 `max-age` 内可被重放：代理流程本来就面向匿名访客，
+  伤害受限流与业务上的"一人一次"约束。
+- 限流（`jabiz.process.rate-limits`）：`per-tenant`（按租户）与 `per-visitor`（租户内按访客键；键由访客自己给出，不证明什么，只用于分摊租户的额度）只用于代理流程；
+  `per-user` 计操作人（代理 + 顾客），`per-address` 计 `ClientAddresses` 得出的地址（经商店平台转发时多为其出口地址）。超限 429 `RATE_LIMITED`。
+- 答复不缓存（`Cache-Control: no-store`），不读不写 Cookie，不开 CORS（请求由商店平台从它自己的域名发出）。
+- 启动检查（`AppProxies`，类别 `APP_PROXY`）：代理的名字、密钥（至少 32 字符、不是未解析的占位符）、租户形式、参数名、`max-age`；`appProxy()` 流程只持代理的权限、
+  所指的代理已配置、不要求二次验证、已验证邮箱或替代权限（调用者不是本平台的用户）。
+
 ## 16. 受保护的授权：四眼【决策 D48 第 1 条，阶段 16r】
 
 一个管理员不能独自让某人（包括自己或另一个账号）得到能改权限、能审批、能记账的权限，也不能独自接管持有这类权限的账号。

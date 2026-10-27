@@ -137,6 +137,19 @@ public final class ProcessDefinitionBuilder<I, O, C extends ProcessContext> {
     }
 
     /**
+     * Marks the process as run only through the app proxy {@code proxy} (decision D60; {@link ProcessAccess#APP_PROXY}):
+     * a request the other platform forwarded and signed, for an anonymous visitor of one of its tenants, as
+     * {@link com.jabiz.security.AppProxyCaller}. Its permission is that proxy's
+     * ({@link com.jabiz.security.AppProxyCaller#permission}), which only the proxy's callers hold; declare no other.
+     * The process API and sub-process calls get 403 {@code PROCESS_INTERNAL}. Left out of the process catalog.
+     */
+    public ProcessDefinitionBuilder<I, O, C> appProxy(String proxy) {
+        this.access = ProcessAccess.APP_PROXY;
+        this.permissions.add(com.jabiz.security.AppProxyCaller.permission(proxy));
+        return this;
+    }
+
+    /**
      * Top-level runs queue in the process before their transaction, at most a few of one key at a time per instance
      * (docs/design/06-process.md section 4.1; decision D45). Declare it for the process's outermost hot
      * {@code HoldLock}, with the same name: {@code family + ":" + key(input)}, built by the same helper as the lock's
