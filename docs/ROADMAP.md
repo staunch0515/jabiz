@@ -4431,7 +4431,7 @@ L4 共享仪表的注释；L5 13 写明每个键每次轮询多一个查询观�
 
 ### 16zk Facebook 与 LINE 登录（2 天）
 
-来源：需求方 2026-10-27（QuizBuks Q40：答题者与商户可用 Facebook、LINE 注册与登录，登录页参考淘宝，邮箱按方案 A）。分支 `1.2/phase-16zk-social-oidc`。兼容的新增，向前合并到 1.3。决策 D60。
+来源：需求方 2026-10-27（QuizBuks Q40：答题者与商户可用 Facebook、LINE 注册与登录，登录页参考淘宝，邮箱按方案 A）。分支 `1.2/phase-16zk-social-oidc`。兼容的新增，向前合并到 1.3。决策 D61。
 提供方的 `kind` 增加 `facebook` / `line`（缺省 issuer、`client_secret_post`、Facebook 的发现文档地址与令牌端点）；`IdTokenValidator` 只对 `line` 接受 HS256（client secret）；
 提供方设置 `sign-up-unverified-email`：不担保的邮箱照样开户（未验证、可预占、寄出验证邮件）；`SPONSOR_EMAIL_VERIFY` 在本账号的会话中（已登录的 `/api/auth/account/verify-email/check|confirm`）代替当前密码，`@jabiz/client` 的 `checkVerificationLink` / `confirmVerificationLink` 有会话时先在会话中问；
 `@jabiz/ui` 的 `FacebookMark`、`LineMark` 与 `OidcButtons` 的 `layout="icons"`（`SignInForm` 的 `oidcLayout`）。设计 10 §12、§15.7、12 §auth。

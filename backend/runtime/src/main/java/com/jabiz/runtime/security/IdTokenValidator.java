@@ -25,7 +25,7 @@ import java.util.Set;
 /**
  * Checks an OpenID Connect ID token (docs/design/10-security.md section 12, OpenID Connect Core 3.1.3.7): RS256 or
  * ES256 signature by a key of the provider's JWKS (or, for a provider whose tokens are keyed with the client secret,
- * HS256 by that secret: LINE's web sign-in, decision D60 item 2), issuer, audience and authorized party, expiry and
+ * HS256 by that secret: LINE's web sign-in, decision D61 item 2), issuer, audience and authorized party, expiry and
  * issue time with a little clock skew, and the nonce of the sign-in it answers. Pure apart from the signature library.
  */
 public final class IdTokenValidator {

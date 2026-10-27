@@ -231,7 +231,7 @@ class OidcController {
             String entry = source.entryOrDefault();
             String trusted = identity.trustedEmail(provider);
             // An address the provider does not vouch for opens an unverified, pre-claimable account where the provider
-            // allows it (decision D60 item 3); none without any address.
+            // allows it (decision D61 item 3); none without any address.
             String email = trusted != null ? trusted : provider.signUpUnverifiedEmail() ? identity.email() : null;
             boolean registering = entries.find(entry).filter(OidcController::opensAccounts).isPresent();
             if (!provider.autoProvision() || !registering || email == null) {

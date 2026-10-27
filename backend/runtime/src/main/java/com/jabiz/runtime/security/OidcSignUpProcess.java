@@ -28,7 +28,7 @@ import java.util.Map;
  * <p>The new user is named as a registration names it (the address in lower case, with a random suffix when taken), has
  * the address verified (the provider proved it) but not as {@code registeredEmail} (so it is never pre-claimable), no
  * password, the entry's registration roles and the link. A provider that opens accounts for addresses it does not vouch
- * for ({@link OidcProvider#signUpUnverifiedEmail}, decision D60 item 3) gets the address unverified and as
+ * for ({@link OidcProvider#signUpUnverifiedEmail}, decision D61 item 3) gets the address unverified and as
  * {@code registeredEmail} instead: pre-claimable as a self-registration is, so the mailbox's owner can always take the
  * account over (and its link goes with that), with the same verification mail. Nothing is opened when the address belongs to a user already,
  * whatever that user is ({@link Outcome#EMAIL_IN_USE}: the provider's word never takes over an account), when the
@@ -62,7 +62,7 @@ public class OidcSignUpProcess {
      * @param displayName   the name the token gave, cleaned; optional
      * @param locale        the language of the request, one of the platform's; optional
      * @param emailVerified whether the provider vouches for the address ({@link IdTokenValidator.Identity#trustedEmail});
-     *                      absent (inputs from before decision D60) means it does
+     *                      absent (inputs from before decision D61) means it does
      */
     public record Input(@NotBlank String entry, @NotBlank String provider, @NotBlank String subject,
         @NotBlank String email, String displayName, String locale, Boolean emailVerified) {
@@ -114,7 +114,7 @@ public class OidcSignUpProcess {
             .step("Draw a name suffix", SignUpProcesses.on(RandomBytesStep.class), new RandomBytesStep.Metadata(
                 SignUpProcesses.RANDOM, SignUpProcesses.SUFFIX_LENGTH))
             .compute("Open the account", (metadata, ctx) -> open(ctx, entries))
-            // An address the provider did not vouch for is verified by mail, as a self-registration's (D60 item 3).
+            // An address the provider did not vouch for is verified by mail, as a self-registration's (D61 item 3).
             .step("Send the verification", SendMail.<AccountContext>when(
                 ctx -> ctx.get(SignUpProcesses.NEW_USER) != null && !ctx.hasViolations(), mail.verifyEmail(),
                 ctx -> MailRecipient.user(ctx.get(SignUpProcesses.NEW_USER), ctx.email(),
@@ -159,7 +159,7 @@ public class OidcSignUpProcess {
             user.put("verifiedEmail", ctx.email());
             user.put("emailVerifiedAt", ctx.opTime());
         } else {
-            // Nobody proved the address (decision D60 item 3): pre-claimable, as a self-registration.
+            // Nobody proved the address (decision D61 item 3): pre-claimable, as a self-registration.
             user.put("registeredEmail", ctx.email());
         }
         user.put("locale", ctx.locale());

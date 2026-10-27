@@ -73,7 +73,7 @@ public class OidcClient {
             if (!provider.issuer().equals(document.get("issuer"))) {
                 throw new ProviderException("The discovery document names another issuer");
             }
-            // Facebook's document names no token endpoint: its Graph API's is the one (decision D60 item 1).
+            // Facebook's document names no token endpoint: its Graph API's is the one (decision D61 item 1).
             String tokenEndpoint = document.get("token_endpoint") == null && provider.defaultTokenEndpoint() != null
                 ? provider.defaultTokenEndpoint() : endpoint(document, "token_endpoint");
             Metadata found = new Metadata(endpoint(document, "authorization_endpoint"), tokenEndpoint,

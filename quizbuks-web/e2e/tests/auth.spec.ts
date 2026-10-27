@@ -118,7 +118,7 @@ test('a sponsor registers, verifies at the console\'s own page, applies and is a
   await signIn(page, '/sponsor/', email)
   await expect(page).toHaveURL(/\/sponsor\/onboarding$/)
   await expect(page.getByTestId('verify-email-banner')).toBeVisible()
-  // The link opened where the console is signed in verifies without a password (platform D60 item 4).
+  // The link opened where the console is signed in verifies without a password (platform D61 item 4).
   const mail = await mailTo(request, email, /verify|confirm|address/i)
   const link = linkIn(mail.text, '/auth/verify-email')
   expect(link.pathname).toBe('/sponsor/auth/verify-email')

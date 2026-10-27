@@ -189,7 +189,7 @@ class OidcProvidersTest {
 
     @Test
     void facebookAndLineHaveTheirIssuersAndTakeTheClientCredentialsInTheForm() {
-        // Decision D60 item 1.
+        // Decision D61 item 1.
         OidcProvider facebook = ofKind("facebook", "s", false, false);
         assertThat(facebook.issuer()).isEqualTo(OidcProvider.FACEBOOK_ISSUER);
         assertThat(facebook.discoveryUrl()).isEqualTo("https://www.facebook.com/.well-known/openid-configuration/");
