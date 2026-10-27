@@ -47,6 +47,7 @@ jobs:
             frontend/pnpm-lock.yaml
             quizbuks-web/app/pnpm-lock.yaml
             quizbuks-web/sponsor/pnpm-lock.yaml
+            quizbuks-web/shopify/pnpm-lock.yaml
             quizbuks-web/e2e/pnpm-lock.yaml
       # The SPAs link the platform's packages, which resolve their dependencies from the platform frontend.
       - run: pnpm install --frozen-lockfile
@@ -54,6 +55,7 @@ jobs:
       - run: |
           pnpm app:check ../quizbuks-web/app
           pnpm app:check ../quizbuks-web/sponsor
+          pnpm app:check ../quizbuks-web/shopify
         working-directory: frontend
       # The admin extension (backend/quizbuks/admin-extension, Q9a): types, lint and tests with the platform's tools.
       - run: JABIZ_ADMIN_EXTENSION=../backend/quizbuks/admin-extension pnpm ext:check
@@ -71,6 +73,13 @@ jobs:
           pnpm test
       - name: Sponsor console
         working-directory: quizbuks-web/sponsor
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm lint
+          pnpm typecheck
+          pnpm test
+      - name: Shopify embedded pages (S1)
+        working-directory: quizbuks-web/shopify
         run: |
           pnpm install --frozen-lockfile
           pnpm lint
@@ -161,6 +170,9 @@ jobs:
           export STRIPE_API_KEY=sk_test_ci_throwaway
           # Claude (Q8a): startup refuses a missing key; AI stays off, so nothing is sent.
           export ANTHROPIC_API_KEY=ci-throwaway-not-a-claude-key
+          # QuizBuks for Shopify (S1): startup refuses a missing app key or secret.
+          export SHOPIFY_API_KEY=ci-throwaway-shopify-key
+          export SHOPIFY_API_SECRET=ci_throwaway_shopify_$(openssl rand -hex 16)
           nohup java -Dreactor.schedulers.defaultBoundedElasticOnVirtualThreads=true \
             -jar quizbuks/build/libs/quizbuks-0.0.1-SNAPSHOT.jar > ../quizbuks.log 2>&1 &
           for i in $(seq 1 60); do curl -sf localhost:8080/actuator/health && exit 0; sleep 2; done
@@ -289,6 +301,9 @@ jobs:
             > ../stripe-stub.log 2>&1 &
           # Claude is the local stub too (Q8a): it answers from the request alone and never calls the network.
           export ANTHROPIC_API_KEY=e2e-throwaway-not-a-claude-key
+          # QuizBuks for Shopify (S1): the app's key and secret; nothing calls Shopify.
+          export SHOPIFY_API_KEY=e2e-throwaway-shopify-key
+          export SHOPIFY_API_SECRET=e2e_throwaway_shopify_$(openssl rand -hex 16)
           nohup java ../tools/quizbuks/claude-stub/ClaudeStub.java 8094 > ../claude-stub.log 2>&1 &
           # The tests' administrator has no second factor; the publisher of QB_SETUP's proposals and the accountant of
           # the journal export are roles of the tests' own (QB_E2E_PUBLISHER: control.publish only; QB_E2E_FINANCE:

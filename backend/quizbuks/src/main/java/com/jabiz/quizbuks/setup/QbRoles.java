@@ -20,6 +20,8 @@ public final class QbRoles {
     public static final String ADMIN_CONTENT = "QB_ADMIN_CONTENT";
     public static final String ADMIN_FINANCE = "QB_ADMIN_FINANCE";
     public static final String ADMIN_SUPER = "QB_ADMIN_SUPER";
+    /** A staff member of a Shopify shop (QuizBuks for Shopify, S1): the embedded pages only (entry shopify). */
+    public static final String SHOPIFY_SHOP = com.jabiz.quizbuks.shopify.Shopify.ROLE;
 
     /**
      * A role: its code, its name in each language, whether its holders must have passed a second factor, and its
@@ -114,6 +116,8 @@ public final class QbRoles {
             "document.archive.read",
             // Q9e: the analytics of their own publications (aggregates only).
             QbPermissions.STATS_READ));
+        add(SHOPIFY_SHOP, labels("Shopify shop staff", "Shopify 店铺员工", "Shopify ストアのスタッフ"), false,
+            List.of(com.jabiz.quizbuks.shopify.Shopify.USE));
         add(ADMIN_CONTENT, labels("Content administrator", "内容管理员", "コンテンツ管理者"), true, CONTENT);
         add(ADMIN_FINANCE, labels("Finance administrator", "财务管理员", "財務管理者"), true, FINANCE, PUBLISH,
             FINANCE_ONLY);

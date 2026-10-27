@@ -2,6 +2,7 @@
 # Everything else belongs to the platform branch and must not be changed here.
 .jabiz-app-paths
 backend/quizbuks/**
+backend/quizbuks-shopify/**
 quizbuks-web/**
 docs/quizbuks/**
 docs/quizbuks-requirements/**

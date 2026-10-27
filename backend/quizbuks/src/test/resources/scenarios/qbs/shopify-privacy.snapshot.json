@@ -1,0 +1,44 @@
+{
+  "scenario" : "QuizBuks for Shopify - Shopify's privacy webhooks (S1)",
+  "asOf" : "2026-10-27T03:00:00Z",
+  "entities" : {
+    "QbsComplianceRequest" : [ {
+      "requestId" : "#uuid:1",
+      "inboundEventId" : "#uuid:2",
+      "topic" : "shop/redact",
+      "shopDomain" : "demo.myshopify.com",
+      "outcome" : "NOT_FOUND",
+      "receivedAt" : "2026-10-27T03:00:00Z",
+      "handledAt" : "2026-10-27T03:00:00Z",
+      "version" : 1
+    }, {
+      "requestId" : "#uuid:3",
+      "inboundEventId" : "#uuid:4",
+      "topic" : "shop/redact",
+      "shopDomain" : null,
+      "outcome" : "MISMATCH",
+      "receivedAt" : "2026-10-27T03:00:00Z",
+      "handledAt" : "2026-10-27T03:00:00Z",
+      "version" : 1
+    }, {
+      "requestId" : "#uuid:5",
+      "inboundEventId" : "#uuid:6",
+      "topic" : "customers/data_request",
+      "shopDomain" : "demo.myshopify.com",
+      "outcome" : "NO_DATA",
+      "receivedAt" : "2026-10-27T03:00:00Z",
+      "handledAt" : "2026-10-27T03:00:00Z",
+      "version" : 1
+    }, {
+      "requestId" : "#uuid:7",
+      "inboundEventId" : "#uuid:8",
+      "topic" : "customers/redact",
+      "shopDomain" : "demo.myshopify.com",
+      "outcome" : "NO_DATA",
+      "receivedAt" : "2026-10-27T03:00:00Z",
+      "handledAt" : "2026-10-27T03:00:00Z",
+      "version" : 1
+    } ],
+    "QbsShop" : [ ]
+  }
+}

@@ -52,6 +52,10 @@ services:
       # Claude (README.md, "AI 生成题目"): ANTHROPIC_API_KEY from .env; without it a placeholder the provider refuses.
       # AI stays off until an administrator publishes qb.ai.enabled = true, so nothing is sent or spent before.
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-local-placeholder-not-a-claude-key}
+      # QuizBuks for Shopify (S1; README.md, "Shopify"): the app's key and secret from .env; without them placeholders
+      # Shopify never signs with, so no Shopify sign-in or webhook is taken until real ones are set.
+      SHOPIFY_API_KEY: ${SHOPIFY_API_KEY:-local-placeholder-shopify-key}
+      SHOPIFY_API_SECRET: ${SHOPIFY_API_SECRET:-local_placeholder_shopify_secret_not_real}
       # The platform's keys and the first administrator's password (README.md, "密钥与部署"): false unless set, so a
       # missing one refuses the start (review L5); a local demonstration sets QB_LOCAL_SECRETS=true, and the keys are
       # then made once into the secrets volume (and the startup check refuses them next to live mode).
