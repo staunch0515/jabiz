@@ -15,6 +15,7 @@ import java.util.Map;
 import java.util.function.UnaryOperator;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /** What the platform takes from an ID token for opening and linking accounts (phase 16f; decision D39). */
 class IdTokenValidatorTest {
@@ -105,5 +106,62 @@ class IdTokenValidatorTest {
         assertThat(identity.toString()).contains("s-1").doesNotContain("secret", "Ada");
         assertThat(identity.emailVerified()).isTrue();
         assertThat(new IdTokenValidator.Identity("s", List.of(), null).trustedEmail(provider(null))).isNull();
+    }
+    private static final String SECRET = "a-channel-secret-of-thirty-two-b";
+
+    private static JWTClaimsSet claims() {
+        return new JWTClaimsSet.Builder().issuer(ISSUER).subject("s-1").audience("client").issueTime(Date.from(NOW))
+            .expirationTime(Date.from(NOW.plusSeconds(300))).claim("nonce", "n").claim("email", "a@example.com")
+            .build();
+    }
+
+    private static IdTokenValidator.Identity validate(String token, String hmacSecret) {
+        return IdTokenValidator.validate(IdTokenValidator.parse(token), new JWKSet(KEY.toPublicJWK()), hmacSecret,
+            ISSUER, "client", OidcStateStore.hash("n"), NOW);
+    }
+
+    @Test
+    void hs256IsAcceptedOnlyWithTheClientSecretOfAProviderThatSignsSo() {
+        // LINE's web sign-in (decision D60 item 2): keyed with the client secret.
+        String token = TestOidcProvider.sign(claims(), JWSAlgorithm.HS256,
+            SECRET.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        assertThat(IdTokenValidator.hs256(IdTokenValidator.parse(token))).isTrue();
+        assertThat(validate(token, SECRET).email()).isEqualTo("a@example.com");
+        // Another secret verifies nothing; without a secret (every other provider) the algorithm is refused.
+        assertThatThrownBy(() -> validate(token, SECRET.replace('a', 'b')))
+            .isInstanceOf(IdTokenValidator.InvalidIdTokenException.class).hasMessageContaining("signature");
+        assertThatThrownBy(() -> validate(token, null))
+            .isInstanceOf(IdTokenValidator.InvalidIdTokenException.class).hasMessageContaining("algorithm");
+        // The other checks still apply to an HS256 token.
+        String expired = TestOidcProvider.sign(new JWTClaimsSet.Builder(claims())
+            .expirationTime(Date.from(NOW.minusSeconds(120))).build(), JWSAlgorithm.HS256,
+            SECRET.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        assertThatThrownBy(() -> validate(expired, SECRET)).hasMessageContaining("Expired");
+        String otherClient = TestOidcProvider.sign(new JWTClaimsSet.Builder(claims()).audience("other").build(),
+            JWSAlgorithm.HS256, SECRET.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        assertThatThrownBy(() -> validate(otherClient, SECRET)).hasMessageContaining("another client");
+    }
+
+    @Test
+    void anHmacKeyedWithThePublicKeyOrNoSignatureAtAllIsRefused() throws Exception {
+        // The classic confusion: HS256 keyed with the provider's public key, which anybody has.
+        byte[] publicKey = KEY.toRSAPublicKey().getEncoded();
+        String confused = TestOidcProvider.sign(claims(), JWSAlgorithm.HS256, publicKey);
+        assertThatThrownBy(() -> validate(confused, null)).hasMessageContaining("algorithm");
+        assertThatThrownBy(() -> validate(confused, SECRET)).hasMessageContaining("signature");
+        // An unsigned token is no signed JWT at all.
+        String none = new com.nimbusds.jwt.PlainJWT(claims()).serialize();
+        assertThatThrownBy(() -> IdTokenValidator.parse(none))
+            .isInstanceOf(IdTokenValidator.InvalidIdTokenException.class);
+        // A secret too short to be an HS256 key verifies nothing (RFC 7518 section 3.2).
+        String shortKeyed = TestOidcProvider.sign(claims(), JWSAlgorithm.HS256, SECRET.getBytes(
+            java.nio.charset.StandardCharsets.UTF_8));
+        assertThatThrownBy(() -> validate(shortKeyed, "short")).hasMessageContaining("signature");
+    }
+
+    @Test
+    void anRs256TokenOfALineProviderIsStillCheckedWithItsKeys() {
+        String token = TestOidcProvider.sign(claims(), JWSAlgorithm.RS256, KEY);
+        assertThat(validate(token, SECRET).subject()).isEqualTo("s-1");
     }
 }

@@ -40,6 +40,8 @@ export interface SignInFormProps extends AuthNavigation {
   signUpPath?: string
   /** The identity providers when the caller has them; loaded otherwise. */
   providers?: readonly OidcProvider[]
+  /** How the providers are offered: full-width buttons (the default) or a row of icons (decision D60 item 5). */
+  oidcLayout?: 'buttons' | 'icons'
   /** Starts signing in through a provider; `startProviderSignIn` of `@jabiz/client` by default. */
   startProvider?: (providerId: string, returnTo: string) => Promise<void>
   /** Signing in and the second step; the session's (`useAuth`) by default. */
@@ -215,6 +217,7 @@ export function SignInForm(props: SignInFormProps) {
         returnTo={returnTo}
         providers={props.providers}
         start={props.startProvider}
+        layout={props.oidcLayout}
         onError={(e) => (e === null ? setError(null) : failed(e))}
       />
     </AuthFrame>

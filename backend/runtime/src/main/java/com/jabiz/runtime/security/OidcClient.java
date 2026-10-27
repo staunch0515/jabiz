@@ -68,14 +68,16 @@ public class OidcClient {
         if (cached != null && fresh(cached, CACHE)) {
             return Mono.just(cached.value());
         }
-        String url = provider.issuer().replaceAll("/+$", "") + "/.well-known/openid-configuration";
-        return send(HttpRequest.newBuilder(URI.create(url)).GET(), "discovery").map(body -> {
+        return send(HttpRequest.newBuilder(URI.create(provider.discoveryUrl())).GET(), "discovery").map(body -> {
             Map<String, Object> document = json(body, "discovery");
             if (!provider.issuer().equals(document.get("issuer"))) {
                 throw new ProviderException("The discovery document names another issuer");
             }
-            Metadata found = new Metadata(endpoint(document, "authorization_endpoint"),
-                endpoint(document, "token_endpoint"), endpoint(document, "jwks_uri"));
+            // Facebook's document names no token endpoint: its Graph API's is the one (decision D60 item 1).
+            String tokenEndpoint = document.get("token_endpoint") == null && provider.defaultTokenEndpoint() != null
+                ? provider.defaultTokenEndpoint() : endpoint(document, "token_endpoint");
+            Metadata found = new Metadata(endpoint(document, "authorization_endpoint"), tokenEndpoint,
+                endpoint(document, "jwks_uri"));
             metadata.put(provider.id(), new Cached<>(found, clock.instant()));
             return found;
         });
@@ -114,21 +116,31 @@ public class OidcClient {
     }
 
     /**
-     * Exchanges an authorization code (client_secret_basic, PKCE) for the ID token, naming the callback the
-     * authorization request named ({@code redirectUri}), as the provider requires.
+     * Exchanges an authorization code (PKCE) for the ID token, naming the callback the authorization request named
+     * ({@code redirectUri}), as the provider requires. The client authenticates with Basic (client_secret_basic), or
+     * in the form for the providers that take only that ({@link OidcProvider#clientSecretPost}).
      */
     Mono<String> idToken(OidcProvider provider, String code, String codeVerifier, String redirectUri) {
-        String form = Map.of("grant_type", "authorization_code", "code", code,
-                "redirect_uri", redirectUri, "code_verifier", codeVerifier).entrySet().stream()
+        Map<String, String> fields = new java.util.LinkedHashMap<>(Map.of("grant_type", "authorization_code",
+            "code", code, "redirect_uri", redirectUri, "code_verifier", codeVerifier));
+        if (provider.clientSecretPost()) {
+            fields.put("client_id", provider.clientId());
+            fields.put("client_secret", provider.clientSecret());
+        }
+        String form = fields.entrySet().stream()
             .map(entry -> encode(entry.getKey()) + "=" + encode(entry.getValue()))
             .collect(Collectors.joining("&"));
-        // RFC 6749 section 2.3.1: client credentials are form-encoded before Basic authentication.
-        String basic = Base64.getEncoder().encodeToString((encode(provider.clientId()) + ":"
-            + encode(provider.clientSecret())).getBytes(StandardCharsets.UTF_8));
-        return metadata(provider).flatMap(found -> send(HttpRequest.newBuilder(URI.create(found.tokenEndpoint()))
-                .header("Authorization", "Basic " + basic)
+        return metadata(provider).flatMap(found -> {
+            HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(found.tokenEndpoint()))
                 .header("Content-Type", "application/x-www-form-urlencoded")
-                .POST(HttpRequest.BodyPublishers.ofString(form)), "token request"))
+                .POST(HttpRequest.BodyPublishers.ofString(form));
+            if (!provider.clientSecretPost()) {
+                // RFC 6749 section 2.3.1: client credentials are form-encoded before Basic authentication.
+                request.header("Authorization", "Basic " + Base64.getEncoder().encodeToString((encode(
+                    provider.clientId()) + ":" + encode(provider.clientSecret())).getBytes(StandardCharsets.UTF_8)));
+            }
+            return send(request, "token request");
+        })
             .map(body -> {
                 Object token = json(body, "token response").get("id_token");
                 if (!(token instanceof String text) || text.isBlank()) {

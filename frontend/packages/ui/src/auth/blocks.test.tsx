@@ -286,6 +286,35 @@ describe('MailLinkPage', () => {
     await expectAccessible()
   })
 
+  it("verifies in the account's own session when signed in, so an account without a password is kept", async () => {
+    session.store('access', 'refresh')
+    window.history.replaceState(null, '', '/portal/auth/verify-email?entry=portal&token=t2')
+    const posts = server({
+      '/api/auth/account/verify-email/check': { status: 200, body: { passwordRequired: false } },
+      '/api/auth/account/verify-email/confirm': { status: 204 },
+    })
+    render(<MailLinkPage brand="Portal" />)
+    await user().click(screen.getByTestId('verify-start'))
+    await waitFor(() => expect(screen.getByTestId('verify-state')).toHaveTextContent('is verified'))
+    expect(posts.map((p) => p.path)).toEqual(['/api/auth/account/verify-email/check', '/api/auth/account/verify-email/confirm'])
+    expect(posts[0].headers.get('Authorization')).toBe('Bearer access')
+  })
+
+  it('asks anonymously when the session is no longer taken, and says how to keep an account without a password', async () => {
+    session.store('stale', 'refresh')
+    window.history.replaceState(null, '', '/portal/auth/verify-email?entry=portal&token=t3')
+    const posts = server({
+      '/api/auth/refresh': { status: 401, body: { status: 401 } },
+      '/api/auth/account/verify-email/check': { status: 401, body: { status: 401 } },
+      '/api/auth/verify-email/check': { status: 200, body: { passwordRequired: true } },
+    })
+    render(<MailLinkPage brand="Portal" />)
+    await user().click(screen.getByTestId('verify-start'))
+    expect(await screen.findByTestId('verify-session-hint')).toHaveTextContent('Open this link in the browser')
+    expect(posts.map((p) => p.path)).toContain('/api/auth/verify-email/check')
+    await expectAccessible()
+  })
+
   it('asks for the link to reset a password without a token, leading back to the entry', async () => {
     window.history.replaceState(null, '', '/portal/auth/password-reset?entry=portal')
     const posts = server({ '/api/auth/password-reset/request': { status: 202 } })
@@ -419,6 +448,25 @@ describe('OidcButtons', () => {
     expect([...mark!.querySelectorAll('path')].map((path) => path.getAttribute('fill')))
       .toEqual(['#EA4335', '#4285F4', '#FBBC05', '#34A853'])
     expect(screen.getByTestId('oidc-corp').querySelector('svg')).toBeNull()
+    await expectAccessible()
+  })
+
+  it('offers a row of round icons named by their providers', async () => {
+    const start = vi.fn(async () => undefined)
+    const providers = [{ id: 'google', label: 'Google', kind: 'google' }, { id: 'fb', label: 'Facebook', kind: 'facebook' },
+      { id: 'line', label: 'LINE', kind: 'line' }, { id: 'corp', label: 'Corporate', kind: 'generic' }]
+    render(<OidcButtons returnTo="/portal/" layout="icons" providers={providers} start={start} />)
+    expect(screen.getByTestId('oidc-icons')).toHaveTextContent('Other ways to sign in')
+    expect(screen.getAllByRole('listitem')).toHaveLength(4)
+    for (const name of ['Google', 'Facebook', 'LINE', 'Corporate']) {
+      expect(screen.getByRole('button', { name })).toBeInTheDocument()
+    }
+    expect(screen.getByTestId('oidc-fb').querySelector('path[fill="#0866FF"]')).not.toBeNull()
+    expect(screen.getByTestId('oidc-line').querySelector('path[fill="#06C755"]')).not.toBeNull()
+    // A provider of no known brand still gets a mark, so that no button is empty.
+    expect(screen.getByTestId('oidc-corp').querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
+    await user().click(screen.getByRole('button', { name: 'LINE' }))
+    expect(start).toHaveBeenCalledWith('line', '/portal/')
     await expectAccessible()
   })
 })
