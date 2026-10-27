@@ -927,6 +927,28 @@ describe('customer matching (Q39)', () => {
     await userEvent.click(screen.getByTestId('publication-next'))
     expect(await screen.findByTestId('summary-conditions')).toHaveTextContent('Gender: Female, Prefer not to say')
   })
+
+  it('asks for an option before sending, and keeps the draft\'s revision when the conditions are refused', async () => {
+    const refused = { status: 422, body: { detail: 'Refused', violations: [{ field: 'criteria[0].options',
+      ruleCode: 'QB_AUDIENCE_OPTION', message: 'Not an option of this criterion.' }] } }
+    const { processCalls } = server({ processes: { QB_PUBLICATION_SAVE: [saved(4), saved(6)],
+      QB_PUBLICATION_AUDIENCE_SAVE: [refused, audienceSaved(7)] } })
+    window.history.replaceState(null, '', '/publications/p1?step=2')
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('audience-interest-on'))
+    await userEvent.click(screen.getByTestId('publication-save'))
+    // Switched on without an option: nothing is sent.
+    expect(processCalls('QB_PUBLICATION_SAVE')).toEqual([])
+    await userEvent.click(screen.getByTestId('audience-interest-PETS'))
+    await userEvent.click(screen.getByTestId('publication-save'))
+    await waitFor(() => expect(processCalls('QB_PUBLICATION_AUDIENCE_SAVE')).toHaveLength(1))
+    expect(await screen.findByTestId('publication-save-problems')).toBeInTheDocument()
+    await userEvent.click(screen.getByTestId('publication-save'))
+    await waitFor(() => expect(processCalls('QB_PUBLICATION_SAVE')).toHaveLength(2))
+    // The draft's save went through the first time: the second carries its revision, not a stale one.
+    expect(processCalls('QB_PUBLICATION_SAVE')[1]).toMatchObject({ baseRevision: 4 })
+    expect(screen.queryByTestId('publication-stale')).toBeNull()
+  })
 })
 
 describe('invitation-only publications (Q25)', () => {

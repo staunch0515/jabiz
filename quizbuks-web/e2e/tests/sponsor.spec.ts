@@ -30,6 +30,8 @@ async function toLastStep(page: Page) {
   await expect(page.getByTestId('publication-wizard')).toHaveAttribute('data-step', '1')
   await page.getByTestId('publication-next').click()
   await expect(page.getByTestId('publication-wizard')).toHaveAttribute('data-step', '2')
+  await page.getByTestId('publication-next').click()
+  await expect(page.getByTestId('publication-wizard')).toHaveAttribute('data-step', '3')
 }
 
 /** Submits the draft on the wizard's last step, confirming. */
@@ -63,10 +65,9 @@ test('a sponsor publishes a quiz version through review and runs the publication
   // The first save created the draft and opened it at its own address, on the second step.
   await expect(page).toHaveURL(/\/sponsor\/publications\/[^/]+\?step=1$/)
   const publicationId = publicationIdIn(page)
-  await expect(page.getByTestId('publication-step-title')).toHaveText('Audience and rewards')
+  await expect(page.getByTestId('publication-step-title')).toHaveText('Time and rewards')
 
-  // 2. Everyone, from a minute ago for a week, a pass mark of 2, and tiers with a gap at score 1.
-  await page.getByTestId('publication-regions').getByRole('checkbox', { name: 'Global' }).click()
+  // 2. From a minute ago for a week, a pass mark of 2, and tiers with a gap at score 1.
   await typeTime(page, 'publication-start', new Date(Date.now() - 60_000))
   await typeTime(page, 'publication-end', new Date(Date.now() + 7 * 86_400_000))
   await page.getByTestId('publication-pass-score').fill('2')
@@ -82,12 +83,19 @@ test('a sponsor publishes a quiz version through review and runs the publication
   await page.getByTestId('publication-max-winners').fill('10')
   await page.getByTestId('publication-next').click()
 
-  // 3. Every problem at once (here: the gap), and no submitting until it is gone.
+  // 3. Everyone, with no matching conditions (Q39).
+  await expect(page.getByTestId('publication-step-title')).toHaveText('Customer matching')
+  await page.getByTestId('publication-regions').getByRole('checkbox', { name: 'Global' }).click()
+  await page.getByTestId('publication-next').click()
+
+  // 4. Every problem at once (here: the gap), and no submitting until it is gone.
   await expect(page.getByTestId('publication-step-title')).toHaveText('Check and submit')
   await expect(page.getByTestId('publication-problems')).toContainText('No tier covers the scores 1 to 1')
   await expect(page.getByTestId('publication-submit')).toBeDisabled()
   await page.getByTestId('publication-back').click()
+  await page.getByTestId('publication-back').click()
   await tiers.nth(0).getByTestId('tier-to').fill('1')
+  await page.getByTestId('publication-next').click()
   await page.getByTestId('publication-next').click()
   await expect(page.getByTestId('publication-ready')).toBeVisible()
   const summary = page.getByTestId('publication-summary')

@@ -64,7 +64,9 @@ function DetailsForm({ answers }: { answers: Answer[] }) {
     })),
     onSuccess: async () => {
       setSaved(true)
-      await queryClient.invalidateQueries({ queryKey: ANSWERS_QUERY })
+      // What the taker can answer follows what they told (Q39): the feed and the pages read it again.
+      await Promise.all([ANSWERS_QUERY, ['qb', 'feed'], ['qb', 'publication']].map((queryKey) =>
+        queryClient.invalidateQueries({ queryKey })))
     },
   })
 

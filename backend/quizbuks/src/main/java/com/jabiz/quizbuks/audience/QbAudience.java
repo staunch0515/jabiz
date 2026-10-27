@@ -35,8 +35,10 @@ public final class QbAudience {
             .asSemanticIdentity("urn:jabiz:entity:quizbuks:profile-attribute"));
         eb.field("userId", f -> f.physicalColumn("user_id").immutable(true).required(true).asText(128));
         eb.field("criterionKey", f -> f.physicalColumn("criterion_key").immutable(true).required(true).asText(32));
-        eb.field("valueCode", f -> f.physicalColumn("value_code").immutable(true).asText(32));
-        eb.field("valueNumber", f -> f.physicalColumn("value_number").immutable(true).asNumeric(6, 0));
+        // What a taker told stays out of the audit trail (it is cleared at will, D-Q39-9); the key is enough there.
+        eb.field("valueCode", f -> f.physicalColumn("value_code").immutable(true).auditMasked().asText(32));
+        eb.field("valueNumber", f -> f.physicalColumn("value_number").immutable(true).auditMasked()
+            .asNumeric(6, 0));
         eb.field("version", f -> f.physicalColumn("version").asVersion());
         eb.unique("uk_qb_profile_attribute", "userId", "criterionKey", "valueCode");
         eb.listView("default", lv -> lv

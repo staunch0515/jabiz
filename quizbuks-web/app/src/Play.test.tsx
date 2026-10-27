@@ -124,7 +124,7 @@ function server(options: Options = {}) {
         return json(200, { items: (options.attributes ?? []).map((attributes, i) => ({ id: String(i), version: 1,
           attributes })), offset: 0, limit: 100 })
       case '/api/processes/QB_PROFILE_ATTRIBUTES_SAVE/latest':
-        return json(200, { output: { answered: (body as { answers: unknown[] }).answers.length } })
+        return json(200, { output: { answered: (body as { profileAnswers: unknown[] }).profileAnswers.length } })
       case '/api/queries/qb.app.feed':
         return json(200, { items: options.feed ?? [CARD], offset: 0, limit: 20 })
       case '/api/queries/qb.app.publication':
@@ -737,7 +737,7 @@ describe('customer matching (Q39)', () => {
     await expectAccessible()
     await userEvent.click(within(details).getByTestId('details-save'))
     expect(await within(details).findByTestId('details-saved')).toBeInTheDocument()
-    expect(posted('QB_PROFILE_ATTRIBUTES_SAVE')).toEqual([{ answers: [
+    expect(posted('QB_PROFILE_ATTRIBUTES_SAVE')).toEqual([{ profileAnswers: [
       { key: 'gender', options: ['FEMALE'] }, { key: 'age', number: 1995 }, { key: 'occupation', options: ['STUDENT'] },
       { key: 'interest', options: ['FOOD'] }] }])
   })

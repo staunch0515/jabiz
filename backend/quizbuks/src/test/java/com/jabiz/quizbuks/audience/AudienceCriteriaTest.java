@@ -61,13 +61,19 @@ class AudienceCriteriaTest {
             new AnswerInput("occupation", List.of("ASTRONAUT"), null),
             new AnswerInput("gender", List.of("FEMALE"), null)), 2026);
         assertThat(problems).extracting(Violation::field, Violation::ruleCode).contains(
-            org.assertj.core.groups.Tuple.tuple("answers[0].options", AudienceCodes.ONE_OPTION),
-            org.assertj.core.groups.Tuple.tuple("answers[1].number", AudienceCodes.BIRTH_YEAR),
-            org.assertj.core.groups.Tuple.tuple("answers[2].options", AudienceCodes.OPTION),
-            org.assertj.core.groups.Tuple.tuple("answers[3].key", AudienceCodes.REPEATED));
+            org.assertj.core.groups.Tuple.tuple("profileAnswers[0].options", AudienceCodes.ONE_OPTION),
+            org.assertj.core.groups.Tuple.tuple("profileAnswers[1].number", AudienceCodes.BIRTH_YEAR),
+            org.assertj.core.groups.Tuple.tuple("profileAnswers[2].options", AudienceCodes.OPTION),
+            org.assertj.core.groups.Tuple.tuple("profileAnswers[3].key", AudienceCodes.REPEATED));
         assertThat(AudienceCriteria.answerProblems(List.of(new AnswerInput("age", null, 2013)), 2026)).isEmpty();
         assertThat(AudienceCriteria.answerProblems(List.of(new AnswerInput("age", null, 1899)), 2026))
             .extracting(Violation::ruleCode).containsExactly(AudienceCodes.BIRTH_YEAR);
+        // An age is told by its birth year only; a null option is reported, not thrown.
+        assertThat(AudienceCriteria.answerProblems(List.of(new AnswerInput("age", List.of("X"), null)), 2026))
+            .extracting(Violation::ruleCode).containsExactly(AudienceCodes.BIRTH_YEAR);
+        assertThat(AudienceCriteria.answerProblems(List.of(new AnswerInput("interest",
+            java.util.Arrays.asList("FOOD", null), null)), 2026)).extracting(Violation::ruleCode)
+            .containsExactly(AudienceCodes.OPTION);
     }
 
     @Test

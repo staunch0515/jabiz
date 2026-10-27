@@ -48,6 +48,17 @@ class AudienceIT extends PlayItSupport {
             answer("religion", List.of("X"), null)), 422)))
             .containsExactlyInAnyOrder(AudienceCodes.ONE_OPTION, AudienceCodes.BIRTH_YEAR, AudienceCodes.UNKNOWN);
         assertThat(rows(QbAudience.MY_ATTRIBUTE_DATASET, token)).hasSize(2);
+        // An age is a birth year, never options; a null option is a problem, not an error.
+        assertThat(codes(refused("QB_PROFILE_ATTRIBUTES_SAVE", token, answers(answer("age", List.of("X"), null),
+            answer("interest", java.util.Arrays.asList("FOOD", null), null)), 422)))
+            .containsExactlyInAnyOrder(AudienceCodes.BIRTH_YEAR, AudienceCodes.OPTION);
+        // What was told stays out of the audit trail and the process's summary.
+        assertThat(query("SELECT changes FROM sys_audit_record WHERE entity_type = 'QbProfileAttribute' AND actor_id = ?",
+            taker)).isNotEmpty().allSatisfy(row -> assertThat(String.valueOf(row.get("changes")))
+                .doesNotContain("TRAVEL", "PETS", "FEMALE", "1995"));
+        assertThat(query("SELECT CAST(input_summary AS text) AS s FROM op_process WHERE process_name = ? AND actor_id = ?",
+            "QB_PROFILE_ATTRIBUTES_SAVE", taker)).isNotEmpty().allSatisfy(row -> assertThat(String.valueOf(
+                row.get("s"))).doesNotContain("TRAVEL", "PETS", "FEMALE"));
         // Another taker reads none of it; nobody reads the default dataset, nor writes either.
         assertThat(rows(QbAudience.MY_ATTRIBUTE_DATASET, taker(u2()))).noneMatch(row -> taker.equals(
             row.get("userId")));
@@ -100,11 +111,16 @@ class AudienceIT extends PlayItSupport {
         String sponsor = newSponsor("s-aud-invited");
         String token = sponsorToken(sponsor);
         String publicationId = draft(token, version(token, "Invited quiz"), "Invited");
+        run("QB_PUBLICATION_AUDIENCE_SAVE", token, conditions(publicationId,
+            condition("gender", List.of("FEMALE"), null, null)));
         Map<String, Object> save = complete(versionOf(publicationId), "Invited", clock.instant().plus(
             Duration.ofDays(1)), clock.instant().plus(Duration.ofDays(8)));
         save.put("publicationId", publicationId);
         save.put("audience", "INVITED");
         run("QB_PUBLICATION_SAVE", token, save);
+        // Switching to the list clears the conditions; a copy has none either.
+        assertThat(query("SELECT count(*) AS n FROM qb_publication_criterion WHERE publication_id = ?::uuid",
+            publicationId).getFirst()).containsEntry("n", 0L);
         assertThat(codes(refused("QB_PUBLICATION_AUDIENCE_SAVE", token, conditions(publicationId,
             condition("gender", List.of("FEMALE"), null, null)), 422))).containsExactly(AudienceCodes.INVITED);
         assertThat(codes(refused("QB_AUDIENCE_COUNT", token, body("publicationId", publicationId), 422)))
@@ -137,7 +153,8 @@ class AudienceIT extends PlayItSupport {
         assertThat(feedIds(token)).contains(publicationId, open);
         assertThat(detail(token, publicationId)).containsEntry("matched", true)
             .containsEntry("canStart", true);
-        assertThat(start(token, publicationId)).containsKey("attemptId");
+        // The answers of the attempt are not masked by the profile's sensitive input (a distinct component name).
+        assertThat(start(token, publicationId)).containsKey("attemptId").containsEntry("answers", List.of());
     }
 
     @Test
@@ -225,7 +242,7 @@ class AudienceIT extends PlayItSupport {
         long count = 0;
         for (Map<String, Object> profile : latest("qb_profile_version", "profile_id", "country_code IS NOT NULL")) {
             String userId = (String) profile.get("user_id");
-            if (userId.equals(sponsor)) {
+            if (userId.equals(sponsor) || !canAnswer(userId)) {
                 continue;
             }
             List<AudienceMatch.ProfileRow> rows = query("SELECT criterion_key, value_code, value_number "
@@ -237,6 +254,17 @@ class AudienceIT extends PlayItSupport {
             }
         }
         return count;
+    }
+
+    /** An enabled account with a verified address, as the count template asks. */
+    private static boolean canAnswer(String userId) {
+        List<Map<String, Object>> users = latest("sec_user_version", "user_id", "user_id = '" + userId + "'");
+        if (users.isEmpty()) {
+            return false;
+        }
+        Map<String, Object> user = users.getFirst();
+        return Boolean.TRUE.equals(user.get("enabled")) && user.get("verified_email") != null
+            && String.valueOf(user.get("verified_email")).equalsIgnoreCase(String.valueOf(user.get("email")));
     }
 
     private static Integer integer(Object value) {
@@ -283,7 +311,7 @@ class AudienceIT extends PlayItSupport {
 
     @SafeVarargs
     private static Map<String, Object> answers(Map<String, Object>... answers) {
-        return body("answers", List.of(answers));
+        return body("profileAnswers", List.of(answers));
     }
 
     private static Map<String, Object> answer(String key, List<String> options, Integer number) {

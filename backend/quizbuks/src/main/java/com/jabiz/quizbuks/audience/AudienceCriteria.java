@@ -2,7 +2,10 @@ package com.jabiz.quizbuks.audience;
 
 import com.jabiz.entity.Violation;
 
+import jakarta.validation.constraints.Size;
+
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -59,16 +62,17 @@ public final class AudienceCriteria {
      * A publication's condition as the processes take it: options of a {@link AudienceCriterion.Kind#SET} criterion,
      * or the bounds of a {@link AudienceCriterion.Kind#RANGE} one.
      */
-    public record ConditionInput(String key, List<String> options, Integer min, Integer max) {
+    public record ConditionInput(String key, @Size(max = 20) List<String> options, Integer min, Integer max) {
         public ConditionInput {
-            options = options == null ? null : List.copyOf(options);
+            // Not List.copyOf: a null option is the checks' to report (QB_AUDIENCE_OPTION), not an exception.
+            options = options == null ? null : Collections.unmodifiableList(new ArrayList<>(options));
         }
     }
 
     /** What a taker tells of one criterion: their options, or their number (a birth year). */
-    public record AnswerInput(String key, List<String> options, Integer number) {
+    public record AnswerInput(String key, @Size(max = 20) List<String> options, Integer number) {
         public AnswerInput {
-            options = options == null ? null : List.copyOf(options);
+            options = options == null ? null : Collections.unmodifiableList(new ArrayList<>(options));
         }
     }
 
@@ -101,7 +105,7 @@ public final class AudienceCriteria {
                         + "option", Map.of("key", criterion.get().key())));
                 }
                 for (String option : options) {
-                    if (!criterion.get().options().contains(option)) {
+                    if (option == null || !criterion.get().options().contains(option)) {
                         problems.add(violation(path + ".options", AudienceCodes.OPTION, "Not an option of the "
                             + "criterion", Map.of("key", criterion.get().key(), "option", String.valueOf(option))));
                     }
@@ -129,7 +133,7 @@ public final class AudienceCriteria {
         return List.copyOf(problems);
     }
 
-    /** Every problem of what a taker tells at once ({@code answers[0].number}); {@code year} bounds a birth year. */
+    /** Every problem of what a taker tells at once ({@code profileAnswers[0].number}); {@code year} bounds a birth year. */
     public static List<Violation> answerProblems(List<AnswerInput> answers, int year) {
         List<Violation> problems = new ArrayList<>();
         if (answers == null) {
@@ -138,7 +142,7 @@ public final class AudienceCriteria {
         Set<String> seen = new HashSet<>();
         for (int i = 0; i < answers.size(); i++) {
             AnswerInput answer = answers.get(i);
-            String path = "answers[" + i + "]";
+            String path = "profileAnswers[" + i + "]";
             Optional<AudienceCriterion> criterion = find(answer == null ? null : answer.key());
             if (criterion.isEmpty()) {
                 problems.add(violation(path + ".key", AudienceCodes.UNKNOWN, "No criterion of this name",
@@ -157,14 +161,15 @@ public final class AudienceCriteria {
                         Map.of("key", criterion.get().key())));
                 }
                 for (String option : options) {
-                    if (!criterion.get().options().contains(option)) {
+                    if (option == null || !criterion.get().options().contains(option)) {
                         problems.add(violation(path + ".options", AudienceCodes.OPTION, "Not an option of the "
                             + "criterion", Map.of("key", criterion.get().key(), "option", String.valueOf(option))));
                     }
                 }
-            } else if (answer.number() != null) {
+            } else if (answer.number() != null || (answer.options() != null && !answer.options().isEmpty())) {
+                // A range is told by a number only: options are never stored for it.
                 int latest = year - MIN_AGE;
-                if (answer.number() < EARLIEST_BIRTH_YEAR || answer.number() > latest
+                if (answer.number() == null || answer.number() < EARLIEST_BIRTH_YEAR || answer.number() > latest
                     || (answer.options() != null && !answer.options().isEmpty())) {
                     problems.add(violation(path + ".number", AudienceCodes.BIRTH_YEAR, "A birth year from "
                         + EARLIEST_BIRTH_YEAR + " to " + latest, Map.of("min", EARLIEST_BIRTH_YEAR, "max", latest)));

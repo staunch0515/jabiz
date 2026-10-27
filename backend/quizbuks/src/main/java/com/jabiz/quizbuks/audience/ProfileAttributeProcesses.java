@@ -7,6 +7,7 @@ import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.quizbuks.identity.CallerChecks;
 import com.jabiz.quizbuks.identity.QbAccounts;
+import com.jabiz.security.Sensitive;
 import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.process.steps.HoldLock;
 import com.jabiz.runtime.process.steps.QueryEntities;
@@ -38,8 +39,20 @@ public final class ProfileAttributeProcesses {
     static final String OUTPUT = "output";
     static final String MINE = "mine";
 
-    /** @param answers every criterion the taker tells; the others are cleared */
-    public record AttributesInput(@NotNull @Size(max = 20) List<AudienceCriteria.@Valid @NotNull AnswerInput> answers) {}
+    /**
+     * @param profileAnswers every criterion the taker tells; the others are cleared. Sensitive: kept out of the
+     *                       process's summary and records, as the rows are out of the audit trail. A distinctive
+     *                       name: the platform masks a sensitive component's name everywhere in JSON (not
+     *                       {@code answers}, which the attempts' outputs use).
+     */
+    public record AttributesInput(
+        @Sensitive @NotNull @Size(max = 20) List<AudienceCriteria.@Valid @NotNull AnswerInput> profileAnswers) {
+
+        @Override
+        public String toString() {
+            return "AttributesInput[profileAnswers=***]";
+        }
+    }
 
     /** @param answered how many criteria the profile now tells */
     public record AttributesOutput(int answered) {}
@@ -69,7 +82,7 @@ public final class ProfileAttributeProcesses {
     static void save(ProcessContext ctx) {
         AttributesInput input = ctx.get(INPUT, AttributesInput.class);
         int year = ctx.opTime().atZone(ZoneOffset.UTC).getYear();
-        AudienceCriteria.answerProblems(input.answers(), year).forEach(ctx::reject);
+        AudienceCriteria.answerProblems(input.profileAnswers(), year).forEach(ctx::reject);
         if (ctx.hasViolations()) {
             return;
         }
@@ -77,7 +90,7 @@ public final class ProfileAttributeProcesses {
         // The rows the answers make, keyed as the table's unique key (an option, or the criterion's one number).
         Map<String, Map<String, Object>> wanted = new LinkedHashMap<>();
         int answered = 0;
-        for (AudienceCriteria.AnswerInput answer : input.answers()) {
+        for (AudienceCriteria.AnswerInput answer : input.profileAnswers()) {
             List<String> options = answer.options() == null ? List.of() : answer.options();
             if (!options.isEmpty()) {
                 answered++;

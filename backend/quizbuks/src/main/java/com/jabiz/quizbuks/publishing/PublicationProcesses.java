@@ -144,6 +144,8 @@ public final class PublicationProcesses {
                     .where(new QueryPredicate.In("publicationId", PublicationEditing.ids(ctx.get(PUB_ID))))
                     .limit(1).build(), FOUND))
             .steps(PublicationEditing::loadTiers)
+            // Q39: an invited publication takes its list; switching to it clears the matching conditions.
+            .steps(PublicationAudience::loadCriteria)
             .steps(PublicationEditing::loadSponsor)
             .steps(PublicationEditing::loadSponsorMethods)
             .steps(b -> PublicationEditing.loadVersion(b, ctx -> {
@@ -263,6 +265,10 @@ public final class PublicationProcesses {
                 changed.put("editedAt", editedAt);
                 ctx.changes().update(QbPublications.PUBLICATION, publication.id(), publication.version(), changed);
             }
+        }
+        if (Audience.INVITED.equals(audience)) {
+            list(ctx, PublicationAudience.CRITERIA).forEach(row ->
+                ctx.changes().delete(com.jabiz.quizbuks.audience.QbAudience.CRITERION, row.id(), row.version()));
         }
         ctx.put(OUTPUT, output(ctx, messages, publicationId, revision, editedAt, values, tiers, version, tierIds));
     }
@@ -491,8 +497,9 @@ public final class PublicationProcesses {
         UUID publicationId = uuid(ctx.changes().insert(QbPublications.PUBLICATION, values));
         List<UUID> tierIds = new ArrayList<>();
         writeTiers(ctx, publicationId, PublisherKind.SPONSOR, ctx.request().actorId(), List.of(), tiers, tierIds);
-        // Q39: the conditions travel with the copy, as its policy does.
-        list(ctx, PublicationAudience.CRITERIA).forEach(row -> {
+        // Q39: the conditions travel with the copy, as its policy does (an invited one has none).
+        (Audience.INVITED.equals(source.get("audience")) ? List.<EntityInstance>of()
+            : list(ctx, PublicationAudience.CRITERIA)).forEach(row -> {
             Map<String, Object> condition = new LinkedHashMap<>(PublicationAudience.copyOf(row));
             condition.put("publicationId", publicationId);
             condition.put("publisherKind", PublisherKind.SPONSOR);

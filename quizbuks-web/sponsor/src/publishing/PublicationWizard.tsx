@@ -188,8 +188,11 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
     ? allowed[0] : form.rewardMethod
   const showMethods = methodChoices.length > 1 || !methodChoices.includes(rewardMethod)
 
-  const set = <K extends keyof PublicationForm>(field: K, value: PublicationForm[K]) =>
+  const set = <K extends keyof PublicationForm>(field: K, value: PublicationForm[K]) => {
+    // Q39: a count was of the regions and the audience it was made for.
+    if (field === 'regions' || field === 'audience') setCount(null)
     setForm((f) => ({ ...f, [field]: value }))
+  }
 
   const chooseQuiz = async (quizId: string | null) => {
     setForm((f) => ({ ...f, quizId, versionId: null }))
@@ -203,6 +206,8 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
     mutationFn: async ({ input, criteria }: { input: SaveInput; keys: string[]; then: 'stay' | 'next' | 'count';
       criteria: Condition[] | null }) => {
       const saved = await savePublication(input)
+      // The draft is saved whatever happens to its conditions next: the page knows its new revision.
+      setRevision(saved.revision)
       if (criteria === null) return { saved, counted: null }
       // An invited publication takes its list: its conditions are cleared.
       const out = await saveConditions(saved.publicationId, saved.revision, input.audience === 'INVITED' ? [] : criteria)
@@ -257,6 +262,12 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
     setTyped(built.errors ?? {})
     if (built.errors || badTimes.startAt || badTimes.endAt) {
       notify.error(t('publishing.wizard.fixTyping'))
+      return
+    }
+    // Q39: a criterion switched on needs an option or both bounds (the server would refuse it as well).
+    if (shaped.audience === 'PUBLIC' && editedConditions?.some((condition) => condition.options
+      ? condition.options.length === 0 : condition.min == null || condition.max == null)) {
+      notify.error(t('publishing.audience.incomplete'))
       return
     }
     save.mutate({ input: built.input, keys: shaped.tiers.map((tier) => tier.key), then,
@@ -553,7 +564,7 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
         problemOf('regions') ? `${id}-regions-error` : undefined].filter(Boolean).join(' ')} data-testid="publication-regions">
         <legend className="text-sm font-medium">{t('publishing.field.regions')}</legend>
         <p id={`${id}-regions-hint`} className="text-muted-foreground text-sm">{t('publishing.field.regionsHint')}</p>
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-4">
           {REGIONS.map((region) => (
             <div key={region} className="flex items-center gap-2">
               <Checkbox id={`${id}-region-${region}`} checked={form.regions.includes(region)} disabled={locked}

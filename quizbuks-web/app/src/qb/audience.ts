@@ -101,4 +101,4 @@ export async function readMyAnswers(): Promise<Answer[]> {
 
 /** Saves the whole of what the caller tells: a criterion left out is cleared. */
 export const saveMyAnswers = (answers: Answer[]) =>
-  runProcess<AttributesOutput>(AUDIENCE.attributesSave, { answers })
+  runProcess<AttributesOutput>(AUDIENCE.attributesSave, { profileAnswers: answers })

@@ -54,7 +54,7 @@ export function AudienceConditions({ value, onChange, disabled }: {
               </div>
             </div>
             {condition && criterion.kind === 'SET' && (
-              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="grid gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-4">
                 {criterion.options.map((option) => {
                   const chosen = condition.options ?? []
                   return (

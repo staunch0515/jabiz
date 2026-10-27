@@ -65,6 +65,7 @@ export const publishingEn = {
       countHint: 'Saves the draft, then counts the takers its regions and conditions reach now. Small numbers are not shown, so that nobody can be singled out.',
       fewer: 'Fewer than {{n}} takers',
       about: 'About {{n}} takers',
+      incomplete: 'Choose at least one option, or both ages, for each condition switched on.',
     },
     wizard: {
       newTitle: 'New publication',
@@ -482,6 +483,7 @@ export const publishingZh: typeof publishingEn = {
       countHint: '先保存草稿，再统计其地区与条件目前覆盖的答题者人数。人数较少时不显示具体数字，以免识别出个人。',
       fewer: '少于 {{n}} 人',
       about: '约 {{n}} 人',
+      incomplete: '已打开的条件请至少选择一项，或填写两个年龄。',
     },
     wizard: {
       newTitle: '新建发布',
@@ -899,6 +901,7 @@ export const publishingJa: typeof publishingEn = {
       countHint: '下書きを保存してから、その地域と条件に現在合う回答者の人数を数えます。個人を特定できないよう、少ない人数は表示しません。',
       fewer: '{{n}} 人未満',
       about: '約 {{n}} 人',
+      incomplete: 'オンにした条件では、選択肢を 1 つ以上選ぶか、年齢を両方入力してください。',
     },
     wizard: {
       newTitle: '新しい公開',
