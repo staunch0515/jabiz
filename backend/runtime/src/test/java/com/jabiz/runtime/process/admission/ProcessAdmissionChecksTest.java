@@ -96,6 +96,22 @@ class ProcessAdmissionChecksTest {
     }
 
     @Test
+    void anAppProxysProcessIsLimitedPerTenantAndVisitorAndOnlyIt() {
+        // Its callers come through the proxy, not the process API: its limits count there (decision D60).
+        assertThat(check(AdmissionSettings.DEFAULT, Map.of("PROXIED",
+                new ProcessRateLimitProperties.Limit(null, null, null, null, 10, 2)),
+            process("PROXIED", pb -> pb.appProxy("shop")))).isEmpty();
+        assertThat(messages(check(AdmissionSettings.DEFAULT, Map.of("OPEN",
+                new ProcessRateLimitProperties.Limit(null, null, null, null, 10, null)),
+            process("OPEN", pb -> { })))).containsExactly("ERROR jabiz.process.rate-limits.OPEN: per-tenant and"
+                + " per-visitor count the callers of an app proxy only (decision D60)");
+        assertThat(messages(check(AdmissionSettings.DEFAULT, Map.of("PROXIED",
+                new ProcessRateLimitProperties.Limit(5, null, null, null, 10, null)),
+            process("PROXIED", pb -> pb.appProxy("shop"))))).containsExactly("ERROR jabiz.process.rate-limits.PROXIED:"
+                + " per-user does not tell an app proxy's callers apart: use per-tenant and per-visitor (decision D60)");
+    }
+
+    @Test
     void settingsMergeOverTheDefaults() {
         AdmissionSettings settings = new AdmissionSettings(null, null, null, null,
             new AdmissionSettings.Family(3, null, null, null),
