@@ -22,6 +22,7 @@ import { Banknote, CircleCheck, CircleX, Clock, Copy, ExternalLink, Gift, Hourgl
   from 'lucide-react'
 import { useId, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
+import { ResultInstallOffer } from '../install'
 import { CelebrateArt } from '../qb/Illustrations'
 import { APP } from '../messages'
 import { autoSubmitted, storedResult, storedStart } from '../play/storage'
@@ -582,6 +583,7 @@ export function ResultPage({ attemptId }: { attemptId: string }) {
       </div>
       )}
       <Reward outcome={outcome} survey={survey} attemptId={attemptId} />
+      <ResultInstallOffer />
       {outcome.questions.length > 0 && (
         <section aria-labelledby="result-questions-title" className="flex flex-col gap-2">
           <h2 id="result-questions-title" className="text-lg font-semibold">

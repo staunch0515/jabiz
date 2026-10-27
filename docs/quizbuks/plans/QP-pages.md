@@ -178,7 +178,7 @@
 | Q-3 | 视频资料是否内嵌 | 不内嵌：新标签页打开外链，保持缺省 CSP。以后内嵌需要 `/` 的 `frame-src`，并在 `application.yml` 中写出完整的 `jabiz.web.spa`（**已由 Q19 取代**：YouTube / Vimeo 视频在页面中播放，`plans/Q19-embedded-video.md`） |
 | Q-4 | 商家后台只要中 / 英（设计 Q16） | 照常提供 en / zh / ja（文案都已有），不做 PG-2 |
 | Q-5 | 通用后台的扩展页（P-01 用户汇总、转账监控） | 不在这些阶段；生成的页面与 `qb.admin.*` 模板覆盖运营；与 Q9 一起做 `1.2/quizbuks-9-admin-extension` |
-| Q-6 | 商家是否可用 Google 登录（Q2-16） | 只给 App |
+| Q-6 | 商家是否可用 Google 登录（Q2-16） | 只给 App（2026-10-26 由 Q37 取代：商家后台也可用） |
 | Q-7 | 商家是否要求二次验证 | 可选，经 `MfaSettings` 自助开启；不强制 |
 | Q-8 | App 导航中的消息、收件箱、FAQ | 到 Q7 之前不留位置；底部导航现在 4 项，Q7 加第 5 项（收件箱） |
 | Q-9 | 参考金额"约合 X USD"（Q6-19） | 不显示，只显示 Kudos |

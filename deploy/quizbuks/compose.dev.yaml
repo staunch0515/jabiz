@@ -73,6 +73,7 @@ services:
       # Google sign-in for the app (README.md, "前端"): SPRING_PROFILES_ACTIVE=google with the client from .env.
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-}
       QB_OIDC_REDIRECT_APP: ${QB_OIDC_REDIRECT_APP:-}
+      QB_OIDC_REDIRECT_SPONSOR: ${QB_OIDC_REDIRECT_SPONSOR:-}
       JABIZ_OIDC_GOOGLE_CLIENT_ID: ${JABIZ_OIDC_GOOGLE_CLIENT_ID:-}
       JABIZ_OIDC_GOOGLE_CLIENT_SECRET: ${JABIZ_OIDC_GOOGLE_CLIENT_SECRET:-}
     volumes: [quizbuks-secrets:/var/lib/jabiz/secrets, quizbuks-files:/var/lib/jabiz/files]

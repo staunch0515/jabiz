@@ -335,3 +335,12 @@ jabizApp {
 - **PWA 的注册与更新**：`registerServiceWorker()`（`@jabiz/client`，按构建的 `VITE_JABIZ_PWA`；以前缀为作用域、`updateViaCache: 'none'`）；新版本安装后等待，
   `useServiceWorkerUpdate()` 给出应用它的函数，`@jabiz/ui` 的 `PwaUpdatePrompt` 据此提示"有新版本"与"刷新"按钮：用户同意后才 `SKIP_WAITING`，
   控制者切换后重新加载，从不自动重新加载；首次安装不提示。`REMOVE` 时页面一侧也注销本 SPA 的注册并删除自己的缓存。
+- **安装到主屏幕**（16zj）：浏览器不允许网页自己把图标放到主屏幕，只能由用户添加。`@jabiz/client` 的 `useInstallPrompt()` 给出这个浏览器的安装方式
+  （纯函数 `installSituation`）：`prompt`（Chrome、Edge、Samsung 的 `beforeinstallprompt`：`registerServiceWorker` 一开始就以 `captureInstallPrompt()`
+  接住并 `preventDefault`，不显示浏览器自己的横条；`install()` 弹出浏览器的确认框，只能用一次）、`ios`（iPhone、iPad 的 Safari 及 iOS 上的其他浏览器：
+  只能从"分享"菜单手动添加；iPadOS 自称 Mac，以触屏区分）、`menu`（Android 的 Firefox：浏览器菜单）、`in-app`（LINE、微信、Instagram、Facebook 等 App 内置浏览器：
+  不能安装，请在浏览器中打开）、`installed`（`display-mode: standalone` 或 Safari 的 `navigator.standalone`）、`none`（电脑，或浏览器没有提供）。
+  `@jabiz/ui` 的 `PwaInstallBanner`（`appName`）据此显示不打断操作的提示与 iOS 的分步指引 `PwaInstallGuide`（"分享"按钮在新版 Safari 中可能在"…"里；
+  主屏幕上的 App 与 Safari 的存储分开，须再登录一次）；用户关掉后 30 天内不再出现、关掉 3 次后不再出现（`snoozeDays`、`maxDismissals`，记在本浏览器的
+  `localStorage`，按 SPA 前缀分开，存储不可用时下次照常出现）；`dismissible={false}` 用于作为安装入口的页面（账户页）：没有关闭按钮，已安装时说明已安装。
+  何时显示由应用决定（不要放在首次访问或登录页：多半被直接关掉）。
