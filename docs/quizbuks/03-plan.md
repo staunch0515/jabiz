@@ -77,6 +77,7 @@
 | Q37 | 商户用 Google 注册与登录（`plans/Q37-sponsor-google.md`，2026-10-26，需求方要求直接实施）：Google 提供方加商家后台的回调 `QB_OIDC_REDIRECT_SPONSOR`，首次登录开商家账号；已是答题人的经"你已有账号"加入；取代 Q2-16 | 需求方 2026-10-26 | 0.5 天 | Q2 |
 | Q38 | 引导安装到主屏幕（`plans/Q38-install.md`，2026-10-27 确认）：答完第一份测验后在结果页、之后在首页提示，账户页固定入口；Android 用浏览器自己的确认，iOS 分步指引，App 内置浏览器提示在浏览器中打开（平台 16zj） | 需求方 2026-10-27 | 0.5 天 | 16zj |
 | Q39 | 普通商户的店员（`plans/Q39-sponsor-staff.md`，2026-10-27 确认，1.3 线）：店员先按答题人注册，商家以 App 账户页的 ID 把他们设为店员；店员在 App 的领奖台出示商家的轮换码、处理固定码的申请，经手人记为店员；只有商家管理店员 | 需求方 2026-10-27 | 1 天 | Q22b |
+| Q44 | 公开问卷页面（`plans/Q44-public-quiz-pages.md`，2026-10-27 记录，**待开发**，见第 5 节）：未登录可浏览正在进行的问卷（`/taker/explore`、详情补全、各处入口，Q44a）；服务器给出标题与社交预览、sitemap（平台 17f，Q44b）；封面公开（Q44c，迁移） | 需求方 2026-10-27 | 5.5 天 | Q15、17f |
 | Q26 | 启动检查：缺少业务参数时报警告（`plans/Q26-param-check.md`，2026-10-25 确认）：`QB_SETUP` 定义的参数此刻没有生效值即在启动日志与 `platformCheck` 中逐个警告（从未设置的数据库只报一条）；已完成，待评审 | 需求方 2026-10-25 新增 | 0.5 天 | 无 |
 | Q27 | 投资人指标月报（`plans/Q27-investor-metrics.md`，2026-10-25 确认）：模板 `qb.admin.investor-metrics`（每个 UTC 月一行：新增 / 活跃 / 留存商户、上线发布、新增 / 活跃答题人、答题、完成、通过、奖品获得 / 申领 / 领取、邀请寄出 / 应答、充值、已付 Kudos 奖励与佣金）与 `qb.admin.investor-sponsors`（期间内每个商户）；后台财务页「投资人指标」（起止月、合计、导出 / 签发 / 存档复用月报的）；不加表不加任务；已完成，待评审 | 需求方 2026-10-25 新增 | 1 天 | 无 |
 
@@ -133,3 +134,29 @@ Q2、Q5、Q6 的页面合为下列阶段（另含平台的 PG-1）；各阶段�
 | 阶段 15 的工作量（62 个文件、约 6 700 行 Ant Design 代码） | 15a 先定组件与封装，15b、15c 可并行；应用页面直接用新组件，不等 15d |
 | 热门发布的结算吞吐（4.3） | Q10 压测；不足时改为按发布预留预算 |
 | AI 生成质量与耗时 | 只作候选，必须人工校对；异步执行，不占流程事务 |
+
+## 5. 待开发（2026-10-27 记录）
+
+需求方 2026-10-27：急着做上线演练，下面两件事放到线 1.3，先完整记录，以后开发。开工前各自先给计划、经确认后实施（CLAUDE.md 第 7 节）。
+
+### 5.1 1.2/quizbuks 的改动向前合并到 1.3/quizbuks
+
+线内的合并方向是 `1.2/quizbuks` → `1.3/quizbuks`（只合并，不变基、不拣选；17 §2）。截至 2026-10-27，`1.2/quizbuks` 上有六次合并还没进 `1.3/quizbuks`（平台 16zk 已经经 `1.3/platform` 进来，staunch0515/jabiz#278、#280）：
+
+| PR | 内容 | 合并时要注意 |
+|---|---|---|
+| #259 | Q38 引导安装到主屏幕（`plans/Q38-install.md`） | 前端与文档；1.3 的 App 若改过同一页面（首页、结果页、账户页），合并冲突照两边的意图合起来 |
+| #269 | 平台 16zk 同步到 1.2/quizbuks | 平台目录在 1.3 上已有同样的内容（经 #278），合并应无内容变化；`.jabiz-platform-line` 必须仍为 `1.3`（`app-paths` 检查） |
+| #271 | Q40 答题者与商户用 Facebook、LINE 注册与登录（`plans/Q40-social-sign-in.md`） | profile `social`（`application-social.yml`）；**商家入口改为允许未验证的账号登录**（`entries.sponsor.require-verified-email: false`）；守护测试 `VerifiedEmailWritesIT`：1.3 新增的答题人与商户的流程、数据视图（Q39 商户员工、Shopify 店面 `docs/quizbuks/shopify/`）也必须要求已验证的邮箱，测试会逐一列出没有声明的，须补上或写明例外的理由；1.3 若有新的登录入口（外部令牌、店面），确认它们的 `require-verified-email` 与 Q40 的意图一致 |
+| #272 | Q41 招商网站语言下拉、"开始答题"打开已安装的 App、联系邮箱 `quizbuks@gmail.com`、`qb.support.email` 的缺省 | 招商网站与 App 的前端；`QbParams` 的缺省值与 `SetupIT`、场景快照 `setup.snapshot.json` |
+| #276 | 平台决策改号 D60 → D61 的 QuizBuks 引用 | 只有注释与文档；1.3 的 D60 是应用代理（17d），合并后 QuizBuks 文档中 "D61" 指 Facebook/LINE 的决策，"D60" 指应用代理 |
+| #279 | `deploy/quizbuks/DEPLOY.md`：演练前重置 staging | 只有文档；1.3 若改过部署文档的同一节，照两边合起来 |
+
+步骤：从 `1.3/quizbuks` 建 `1.3/quizbuks-sync-1.2`，`git merge origin/1.2/quizbuks`，解决冲突，跑 `./gradlew :quizbuks:check`（含 `platformCheck` 与 `VerifiedEmailWritesIT`）、两个前端与招商网站的检查，PR 到 `1.3/quizbuks`。
+没有迁移（这六次合并都不加迁移），不需要改迁移号。合并之后 1.2 上再有的修复照同样的方向继续合并。
+
+### 5.2 Q44 公开问卷页面
+
+计划：`plans/Q44-public-quiz-pages.md`（全部在 1.3：Q44a 列表与详情、平台 17f 服务器给出的预览信息与 sitemap、Q44b 预览与 robots、Q44c 封面公开，共约 5.5 天）。
+开发前确认计划第 3 节 D-Q44-2 起的决定；平台 17f 另写平台计划与决策（`1.3/platform` 的 ROADMAP 17f 已记录）。建议在 5.1 合并之后开工，以免与 Q40、Q41 的前端改动冲突。
+
