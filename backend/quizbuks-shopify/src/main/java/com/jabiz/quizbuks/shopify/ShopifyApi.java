@@ -229,6 +229,58 @@ public class ShopifyApi {
         return new Answer<>(true, 0);
     }
 
+    // ---- plans (S3a, docs/quizbuks/shopify/S3-billing.md section 2) --------------------------------------------------
+    //
+    // Shopify App Pricing makes the subscriptions (its plan page); the app only reads them. The shape follows the Admin
+    // GraphQL API as documented (currentAppInstallation.activeSubscriptions); the first run on a development store
+    // checks it (Q-S3-6).
+
+    /** A subscription of the app the shop pays: Shopify's plan name, its state and the end of its billing period. */
+    public record Subscription(String id, String name, String status, boolean test, int trialDays, Instant createdAt,
+        Instant currentPeriodEnd) {}
+
+    /** The app's subscriptions the shop has now (none on a free plan); refused when Shopify no longer takes the token. */
+    public Answer<java.util.List<Subscription>> activeSubscriptions(String shopDomain, String accessToken) {
+        JsonNode answer = graphql(shopDomain, accessToken, """
+            query plans {
+              currentAppInstallation {
+                activeSubscriptions { id name status test trialDays createdAt currentPeriodEnd }
+              }
+            }""", Map.of());
+        if (answer == null) {
+            return new Answer<>(null, 401);
+        }
+        JsonNode installation = answer.path("currentAppInstallation");
+        if (!installation.isObject() || !installation.path("activeSubscriptions").isArray()) {
+            throw new ExternalCallException(SERVICE, ExternalCallException.Kind.BAD_RESPONSE, "no subscriptions");
+        }
+        java.util.List<Subscription> subscriptions = new java.util.ArrayList<>();
+        for (JsonNode node : installation.path("activeSubscriptions")) {
+            String id = text(node, "id");
+            String name = text(node, "name");
+            String status = text(node, "status");
+            if (id == null || name == null || status == null) {
+                throw new ExternalCallException(SERVICE, ExternalCallException.Kind.BAD_RESPONSE, "a subscription"
+                    + " without id, name or status");
+            }
+            subscriptions.add(new Subscription(id, name, status, node.path("test").asBoolean(false),
+                node.path("trialDays").asInt(0), time(node, "createdAt"), time(node, "currentPeriodEnd")));
+        }
+        return new Answer<>(java.util.List.copyOf(subscriptions), 0);
+    }
+
+    private static Instant time(JsonNode node, String field) {
+        String value = text(node, field);
+        if (value == null) {
+            return null;
+        }
+        try {
+            return java.time.OffsetDateTime.parse(value).toInstant();
+        } catch (java.time.format.DateTimeParseException e) {
+            throw new ExternalCallException(SERVICE, ExternalCallException.Kind.BAD_RESPONSE, "not a time: " + field);
+        }
+    }
+
     /** The {@code data} of a GraphQL call; null when Shopify no longer takes the token. */
     private JsonNode graphql(String shopDomain, String accessToken, String query, Map<String, Object> variables) {
         ExternalHttp.Response response = services.http(SERVICE).send(ExternalHttp.Request

@@ -30,6 +30,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * engine; the refill job keeps its pool of discount codes on Shopify (stubbed here); the storefront's block, through the
  * signed app proxy, starts and submits an attempt per visitor or customer, and a pass gets the next code while the day's
  * limit lasts; an uninstall pauses the campaign, and Shopify's privacy requests report and erase a customer's data.
+ * S3a: each completed attempt counts in the shop's plan period, and at the plan's limit no new attempt starts.
  */
 class ShopifyStorefrontIT extends ShopifyItSupport {
 
@@ -252,6 +253,67 @@ class ShopifyStorefrontIT extends ShopifyItSupport {
         // The next day (UTC), codes again.
         later(Duration.ofDays(1));
         assertThat(play(live, null, visitor(), RIGHT)).containsEntry("outcome", "ISSUED");
+    }
+
+    static long completed(String shop) {
+        return query("SELECT completed FROM qbs_usage WHERE shop_domain = ?", shop).stream()
+            .mapToLong(row -> ((Number) row.get("completed")).longValue()).sum();
+    }
+
+    @Test
+    void thePlansLimitStopsNewAttemptsUntilTheShopMovesUp() {
+        LiveShop live = liveShop("limit");
+        // The free plan: the block says it is QuizBuks's.
+        assertThat(ok(storefront("QBS_SF_CAMPAIGN", live.shop(), null, visitor(), null)))
+            .containsEntry("live", true).containsEntry("badge", true);
+        // Each completed attempt counts once, passed or not; submitting it again counts nothing.
+        String visitor = visitor();
+        Map<String, Object> failed = play(live, null, visitor, WRONG);
+        assertThat(completed(live.shop())).isEqualTo(1);
+        storefront("QBS_SF_SUBMIT", live.shop(), null, visitor, Map.of("publicationId", live.publicationId(),
+            "visitor", visitor, "attemptId", failed.get("attemptId"))).expectStatus().isEqualTo(422);
+        assertThat(completed(live.shop())).isEqualTo(1);
+
+        // As if the period's 50 were nearly used: one more completes it.
+        execute("UPDATE qbs_usage SET completed = 49 WHERE shop_domain = ?", live.shop());
+        String early = visitor();
+        Map<String, Object> started = ok(storefront("QBS_SF_START", live.shop(), null, early,
+            Map.of("publicationId", live.publicationId(), "visitor", early)));
+        play(live, null, visitor(), WRONG);
+        assertThat(completed(live.shop())).isEqualTo(50);
+        // At the limit: no quiz on the storefront, no new attempt.
+        assertThat(ok(storefront("QBS_SF_CAMPAIGN", live.shop(), null, visitor(), null))).containsEntry("live", false);
+        String late = visitor();
+        assertThat(ruleCode(storefront("QBS_SF_START", live.shop(), null, late, Map.of("publicationId",
+            live.publicationId(), "visitor", late)).expectStatus().isEqualTo(422).expectBody(MAP).returnResult()
+            .getResponseBody())).isEqualTo("QBS_PLAN_LIMIT");
+        // One started before goes on: it starts again (resumed) and submits, and counts.
+        assertThat(ok(storefront("QBS_SF_START", live.shop(), null, early, Map.of("publicationId",
+            live.publicationId(), "visitor", early)))).containsEntry("resumed", true);
+        later(Duration.ofSeconds(10));
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("publicationId", live.publicationId());
+        body.put("visitor", early);
+        body.put("attemptId", started.get("attemptId"));
+        body.put("answers", answersAllRight(started, WRONG));
+        assertThat(ok(storefront("QBS_SF_SUBMIT", live.shop(), null, early, body))).containsEntry("passed", false);
+        assertThat(completed(live.shop())).isEqualTo(51);
+
+        // On a paid plan the quiz is back, without the badge.
+        SUBSCRIPTIONS.put(live.shop(), "[{\"id\":\"gid://shopify/AppSubscription/7\",\"name\":\"Starter\","
+            + "\"status\":\"ACTIVE\",\"test\":false,\"trialDays\":0,\"createdAt\":\"" + clock.instant()
+            + "\",\"currentPeriodEnd\":null}]");
+        try {
+            assertThat(run("QBS_PLAN_GET", live.admin().bearer(), Map.of("refresh", true)))
+                .containsEntry("plan", "STARTER").containsEntry("used", 51).containsEntry("limit", 500);
+        } finally {
+            SUBSCRIPTIONS.remove(live.shop());
+        }
+        assertThat(ok(storefront("QBS_SF_CAMPAIGN", live.shop(), null, visitor(), null)))
+            .containsEntry("live", true).containsEntry("badge", false);
+        // The visitor refused at the limit starts afresh: nothing of the refused start was kept.
+        assertThat(ok(storefront("QBS_SF_START", live.shop(), null, late, Map.of("publicationId",
+            live.publicationId(), "visitor", late)))).containsEntry("resumed", false);
     }
 
     @Test

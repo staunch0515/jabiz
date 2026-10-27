@@ -39,7 +39,10 @@ public final class ShopifyCodes {
     /** S2: the discount code cannot be opened (sealed under another key). */
     public static final String CODE_UNREADABLE = "QBS_CODE_UNREADABLE";
 
+    /** S3a: the shop's plan has no attempts left this period (the storefront shows nothing). */
+    public static final String PLAN_LIMIT = "QBS_PLAN_LIMIT";
+
     public static final List<String> ALL = List.of(OTHER_SHOP, NOT_A_MEMBER, NOT_ADMIN, NOT_A_COLLEAGUE, UNINSTALLED,
         EXCHANGE_REFUSED, NOT_CONNECTED, SHOP_FULL, PASS_SCORE, CAMPAIGN_NOT_DRAFT, CAMPAIGN_CHANGED, CAMPAIGN_RUNNING,
-        CAMPAIGN_MOVE, VISITOR_REQUIRED, CODE_UNREADABLE);
+        CAMPAIGN_MOVE, VISITOR_REQUIRED, CODE_UNREADABLE, PLAN_LIMIT);
 }

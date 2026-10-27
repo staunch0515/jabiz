@@ -26,6 +26,11 @@ api_version = "2026-10"
   topics = ["app/uninstalled"]
   uri = "https://<host>/api/inbound/shopify"
 
+  # S3a: a change of the shop's subscription (Shopify App Pricing) has its plan read again.
+  [[webhooks.subscriptions]]
+  topics = ["app_subscriptions/update"]
+  uri = "https://<host>/api/inbound/shopify"
+
   # The three privacy topics every public app must answer (signed like every webhook; a bad signature gets 401).
   [[webhooks.subscriptions]]
   compliance_topics = ["customers/data_request", "customers/redact", "shop/redact"]

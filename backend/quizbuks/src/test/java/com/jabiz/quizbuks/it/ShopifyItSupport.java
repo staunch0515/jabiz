@@ -29,7 +29,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * app's test secret as Shopify would sign them, sign-in at the entry {@code shopify}, webhooks signed over their body,
  * and a stub of the shops' Admin API on this machine (token exchange, refresh and the shop's name), which by default
  * grants a fresh expiring pair and names a shop after its address, and (S2a) creates discounts whose bulk creations are
- * done at once. QuizBuks is set up once (the role QBS_SHOP, the parameters published).
+ * done at once, and (S3a) answers each shop's subscriptions from {@link #SUBSCRIPTIONS} (none by default). QuizBuks is
+ * set up once (the role QBS_SHOP, the parameters published).
  */
 abstract class ShopifyItSupport extends ContentItSupport {
 
@@ -37,6 +38,9 @@ abstract class ShopifyItSupport extends ContentItSupport {
     static final String KEY = "test-only-quizbuks-shopify-key";
     static final JsonMapper JSON = JsonMapper.builder().build();
     static final AtomicInteger GRANTS = new AtomicInteger();
+
+    /** S3a: a shop's active subscriptions as Shopify answers them (the JSON array), by its address. */
+    static final Map<String, String> SUBSCRIPTIONS = new java.util.concurrent.ConcurrentHashMap<>();
 
     static final StubHttpServer SHOPIFY = StubHttpServer.start(ShopifyItSupport::shopify);
 
@@ -76,6 +80,10 @@ abstract class ShopifyItSupport extends ContentItSupport {
             if (body.contains("discountRedeemCodeBulkCreation")) {
                 return StubHttpServer.Answer.json(200, "{\"data\":{\"discountRedeemCodeBulkCreation\":{\"done\":true,"
                     + "\"failedCount\":0,\"codes\":{\"nodes\":[]}}}}");
+            }
+            if (body.contains("currentAppInstallation")) {
+                return StubHttpServer.Answer.json(200, "{\"data\":{\"currentAppInstallation\":{\"activeSubscriptions\":"
+                    + SUBSCRIPTIONS.getOrDefault(shop, "[]") + "}}}");
             }
             if (body.contains("discountCodeDelete")) {
                 return StubHttpServer.Answer.json(200, "{\"data\":{\"discountCodeDelete\":{\"deletedCodeDiscountId\":"

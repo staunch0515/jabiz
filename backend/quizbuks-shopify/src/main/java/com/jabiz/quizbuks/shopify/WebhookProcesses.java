@@ -26,14 +26,16 @@ import java.util.UUID;
  * What QuizBuks for Shopify does with Shopify's webhooks (docs/quizbuks/shopify/S1-install.md section 5), each the
  * consumer of one topic of the inbound provider {@value Shopify#WEBHOOKS}, run by the system only ({@code internal()}).
  * The shop is the one the signed body names; the unsigned header {@value Shopify#SHOP_HEADER} must name the same, or
- * nothing is done (a privacy request is recorded as {@code MISMATCH}).
+ * nothing is done (a privacy request is recorded as {@code MISMATCH}). (A change of a subscription, whose body names
+ * no shop's address, is {@link PlanProcesses#SUBSCRIPTIONS_UPDATE}.)
  *
  * <ul>
  *   <li>{@value #UNINSTALLED}: the shop is marked uninstalled and its access tokens are dropped; its members'
- *       sessions end at their next refresh (the sign-in guard); its live campaign is paused (S2). Its data is
- *       kept.</li>
+ *       sessions end at their next refresh (the sign-in guard); its live campaign is paused (S2); it is back on
+ *       the free plan (S3a: Shopify cancels the subscription). Its data is kept.</li>
  *   <li>{@value #SHOP_REDACT}: Shopify asks to erase the shop's data (48 hours after an uninstall): the shop, its
- *       members and tokens are deleted, and (S2) its campaigns, signed-in customers, batches and codes; a campaign still
+ *       members and tokens are deleted, and (S2) its campaigns, signed-in customers, batches and codes, and (S3a) its
+ *       plan and use; a campaign still
  *       running ends on the engine. A shop that was installed again meanwhile is kept. The members' platform
  *       accounts stay as the platform keeps them (its user records are append-only, and linking and unlinking are the
  *       platform's): a staff member who opens the app after a new install signs in as before and joins a new shop.</li>
@@ -75,6 +77,10 @@ public final class WebhookProcesses {
     static final String CUSTOMER = "customer";
     static final String EARLIER_REQUESTS = "earlierRequests";
     static final String REPORT = "report";
+    static final String PLANS = PlanProcesses.PLANS;
+    static final String USAGES = PlanProcesses.USAGES;
+    /** S3a: the most periods of a shop that {@code shop/redact} deletes (a row a month: decades). */
+    static final int MAX_USAGES = 1_000;
     static final String PAUSING = "pausing";
     static final String ENDING = "ending";
 
@@ -102,7 +108,9 @@ public final class WebhookProcesses {
                     ctx -> com.jabiz.query.EntityQuery.builder().where(new com.jabiz.query.QueryPredicate.And(List.of(
                         CampaignProcesses.domainIs(ctx.get(DOMAIN, String.class)),
                         new com.jabiz.query.QueryPredicate.In("status", List.of(QbsStorefront.CREATING,
-                            QbsStorefront.READY))))).limit(DiscountPool.MAX_BATCHES).build(), BATCHES)))
+                            QbsStorefront.READY))))).limit(DiscountPool.MAX_BATCHES).build(), BATCHES),
+                QueryEntities.<ProcessContext>query(QbsShops.defaultDataset(QbsBilling.PLAN),
+                    ctx -> ShopProcesses.eq("shopDomain", ctx.get(DOMAIN, String.class), 1), PLANS)))
             .compute("Mark the shop uninstalled", (metadata, ctx) -> uninstall(ctx))
             // S2: its storefront takes no more attempts (its codes stop working anyway: Shopify deletes the app's
             // discounts); a member resumes the campaign after installing it again.
@@ -137,6 +145,12 @@ public final class WebhookProcesses {
             ctx.changes().update(QbsStorefront.BATCH, batch.id(), batch.version(),
                 Map.of("status", QbsStorefront.RETIRED));
         }
+        // S3a: Shopify cancels the app's subscription with the uninstall: the shop is on the free plan until a new
+        // install has its plan read again (its use is kept).
+        EntityInstance plan = ShopProcesses.first(ctx, PLANS);
+        if (plan != null) {
+            ctx.changes().delete(QbsBilling.PLAN, plan.id(), plan.version());
+        }
         EntityInstance campaign = ShopProcesses.first(ctx, CAMPAIGNS);
         if (campaign != null && QbsStorefront.LIVE.equals(campaign.get("status"))) {
             Map<String, Object> paused = new LinkedHashMap<>();
@@ -170,7 +184,11 @@ public final class WebhookProcesses {
                 QueryEntities.<ProcessContext>query(QbsShops.defaultDataset(QbsStorefront.BATCH),
                     ctx -> ofShop(ctx, DiscountPool.MAX_BATCHES), BATCHES),
                 QueryEntities.<ProcessContext>query(QbsShops.defaultDataset(QbsStorefront.CODE),
-                    ctx -> ofShop(ctx, DiscountPool.MAX_BATCHES * DiscountPool.BATCH_CODES), CODES)))
+                    ctx -> ofShop(ctx, DiscountPool.MAX_BATCHES * DiscountPool.BATCH_CODES), CODES),
+                QueryEntities.<ProcessContext>query(QbsShops.defaultDataset(QbsBilling.PLAN),
+                    ctx -> ofShop(ctx, 1), PLANS),
+                QueryEntities.<ProcessContext>query(QbsShops.defaultDataset(QbsBilling.USAGE),
+                    ctx -> ofShop(ctx, MAX_USAGES), USAGES)))
             .compute("Erase the shop's data", (metadata, ctx) -> redact(ctx))
             // S2: the engine's publication of a campaign still running (paused at the uninstall) ends.
             .step("End the publication", CallProcess.<ProcessContext>when(ctx -> ctx.contains(ENDING),
@@ -206,11 +224,13 @@ public final class WebhookProcesses {
             // S2: the storefront's rows. The engine keeps its attempts (by keys that name nobody once the takers are
             // gone) and the shop's publications, quizzes and versions (append-only; docs/quizbuks/shopify/
             // S2-storefront.md, Q-S2-2).
-            for (String key : List.of(CODES, BATCHES, TAKERS, CAMPAIGNS)) {
+            for (String key : List.of(CODES, BATCHES, TAKERS, PLANS, USAGES, CAMPAIGNS)) {
                 String entity = switch (key) {
                     case CODES -> QbsStorefront.CODE;
                     case BATCHES -> QbsStorefront.BATCH;
                     case TAKERS -> QbsStorefront.TAKER;
+                    case PLANS -> QbsBilling.PLAN;
+                    case USAGES -> QbsBilling.USAGE;
                     default -> QbsStorefront.CAMPAIGN;
                 };
                 for (EntityInstance row : ShopProcesses.rows(ctx, key)) {

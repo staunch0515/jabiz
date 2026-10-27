@@ -244,10 +244,12 @@ jabiz:
       # Shopify's webhooks of QuizBuks for Shopify (S1; platform decision D57): signed over the body with the app's
       # secret; the shop is in the X-Shopify-Shop-Domain header (unsigned, checked against the body). Uninstalls and
       # the three privacy topics every public app must answer; Shopify's review wants a bad signature answered 401.
+      # S3a: a change of a shop's subscription (its body names no shop: the header says which, and the plan is read
+      # from Shopify again).
       shopify:
         scheme: body-hmac-sha256
         secrets: ["${SHOPIFY_API_SECRET:}"]
-        event-types: [app/uninstalled, customers/data_request, customers/redact, shop/redact]
+        event-types: [app/uninstalled, customers/data_request, customers/redact, shop/redact, app_subscriptions/update]
         reject-status: 401
         metadata-headers: [X-Shopify-Shop-Domain]
   # PDF reports and documents (the monthly reports, the top-up receipts in the sponsor's language; Q9d, D-5): Noto Sans
@@ -350,6 +352,17 @@ quizbuks:
   # tests point it at a local stub.
   shopify:
     shop-url: ${QB_SHOPIFY_SHOP_URL:https://{shop}}
+    # S3a (docs/quizbuks/shopify/S3-billing.md): the app's handle in Shopify (its plan page is
+    # admin.shopify.com/store/<store>/charges/<handle>/pricing_plans), and the names its plans have in the Partner
+    # Dashboard (Shopify App Pricing), compared without regard to case; the free plan makes no subscription.
+    app-handle: ${QB_SHOPIFY_APP_HANDLE:quizbuks}
+    plans:
+      starter:
+        name: ${QB_SHOPIFY_PLAN_STARTER:Starter}
+      growth:
+        name: ${QB_SHOPIFY_PLAN_GROWTH:Growth}
+      pro:
+        name: ${QB_SHOPIFY_PLAN_PRO:Pro}
   links:
     sponsor: ${QB_SPONSOR_LINK:}
     # The app's address, where Stripe sends a taker back after opening a payout account (Q6b); payout accounts are
