@@ -124,6 +124,16 @@ describe('the storefront quiz block (S2b)', () => {
     await expectAccessible(root.querySelector('dialog')!)
   })
 
+  it('asks for nothing but the campaign, and loads nothing of another site, until the shopper opens it', async () => {
+    const sent = proxy({ QBS_SF_CAMPAIGN: { status: 200, body: CAMPAIGN } })
+    const { root } = await mount()
+    await vi.waitFor(() => expect(root.querySelector('.open')).not.toBeNull())
+    // The page's first paint (S4b, F-1): one request through the shop's own proxy, no frame, image or script.
+    expect(sent.map((s) => s.process)).toEqual(['QBS_SF_CAMPAIGN'])
+    expect(root.querySelectorAll('iframe, img, script, link')).toHaveLength(0)
+    expect(document.querySelectorAll('iframe, script[src], link[rel="preconnect"]')).toHaveLength(0)
+  })
+
   it('shows the code it got again, even when today\'s codes are gone', async () => {
     window.localStorage.setItem('quizbuks:code:p1:anon', JSON.stringify({ code: 'QB-KEPT00000', percent: 15,
       expiresAt: null }))

@@ -1,9 +1,10 @@
 import { configureClient, session } from '@jabiz/client'
 import { expectAccessible } from '@jabiz/ui/testing'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import App, { supportEmail } from './App'
+import { navigate, pathOf } from './routes'
 import type { Shop } from './api'
 import './messages'
 
@@ -82,6 +83,8 @@ describe('QuizBuks for Shopify (S1)', () => {
     window.sessionStorage.clear()
     tokens = 0
     window.shopify = { idToken: vi.fn(async () => `session-token-${++tokens}`) }
+    // Every test opens the overview unless it says otherwise.
+    window.history.replaceState(null, '', pathOf('overview'))
   })
 
   afterEach(() => {
@@ -106,17 +109,35 @@ describe('QuizBuks for Shopify (S1)', () => {
     await expectAccessible()
   })
 
-  it('keeps a campaign being edited while the overview is shown', async () => {
+  it('keeps a campaign being edited while another page is shown', async () => {
     server({ joins: [shop({ connection: 'CONNECTED' })] })
     const user = userEvent.setup()
     render(<App />)
-    await user.click(await screen.findByRole('tab', { name: 'Quiz campaigns' }))
+    expect(await screen.findByText('Store: demo.myshopify.com')).toBeInTheDocument()
+    act(() => navigate('campaigns'))
     await user.click(await screen.findByRole('button', { name: 'New campaign' }))
     await user.type(screen.getByLabelText('Name'), 'Autumn quiz')
-    await user.click(screen.getByRole('tab', { name: 'Overview' }))
+    act(() => navigate('overview'))
     expect(await screen.findByText('Store: demo.myshopify.com')).toBeVisible()
-    await user.click(screen.getByRole('tab', { name: 'Quiz campaigns' }))
+    expect(screen.getByLabelText('Name')).not.toBeVisible()
+    act(() => navigate('campaigns'))
     expect(screen.getByLabelText('Name')).toHaveValue('Autumn quiz')
+  })
+
+  it('opens the page its address names, with Shopify\'s menu and title bar', async () => {
+    window.history.replaceState(null, '', `${pathOf('plan')}?shop=demo.myshopify.com`)
+    server({ joins: [shop()] })
+    const { container } = render(<App />)
+    expect(await screen.findByRole('heading', { level: 1, name: 'Plan and use' })).toBeInTheDocument()
+    expect(container.querySelector('ui-title-bar')).toHaveAttribute('title', 'Plan and use')
+    const menu = container.querySelector('ui-nav-menu')!
+    expect([...menu.querySelectorAll('a')].map((a) => [a.textContent, a.getAttribute('href')])).toEqual([
+      ['Overview', pathOf('overview')], ['Quiz campaigns', pathOf('campaigns')], ['Plan and use', pathOf('plan')]])
+    // Back to the overview: the address changes, Shopify's query stays.
+    act(() => navigate('overview'))
+    expect(await screen.findByText('Store: demo.myshopify.com')).toBeInTheDocument()
+    expect(window.location.search).toBe('?shop=demo.myshopify.com')
+    expect(container.querySelector('ui-title-bar')).toHaveAttribute('title', 'QuizBuks for Shopify')
   })
 
   it('points to help in the page\'s language and to the support address the server wrote in', async () => {

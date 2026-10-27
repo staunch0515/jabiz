@@ -15,27 +15,28 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
 } from '@jabiz/ui'
 import { QueryClient, QueryClientProvider, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useCallback, useEffect, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { check, connect, join, transferAdmin, type Shop } from './api'
 import { NotEmbeddedError, sessionToken } from './appBridge'
-import { CampaignsPage } from './CampaignsPage'
-import { PlanPage, planKey, UsageNotice } from './PlanPage'
+import { pathOf, usePage, type Page } from './routes'
+import { planKey, UsageNotice } from './usage'
 import { reasonOf } from './errors'
 import { SHOPIFY } from './messages'
+
+// The campaigns and the plan are chunks of their own, loaded when first shown (S4b, F-2): the overview opens first.
+const CampaignsPage = lazy(() => import('./CampaignsPage').then((module) => ({ default: module.CampaignsPage })))
+const PlanPage = lazy(() => import('./PlanPage'))
 
 /**
  * QuizBuks for Shopify's embedded pages (docs/quizbuks/shopify/S1-install.md section 6): sign in with Shopify's
  * session token (the platform's external token sign-in, decision D59), join the store (QBS_SHOP_JOIN, whose answer is
  * what the page shows), and the store's overview: its connection to Shopify and its members, the admin handing the
  * role on; (S2b, docs/quizbuks/shopify/S2b-ui.md) the store's quiz campaigns; and (S3b, docs/quizbuks/shopify/S3b-ui.md)
- * its plan and use, with a notice on the overview as the period's attempts run out. Every rule is the server's; the
+ * its plan and use, with a notice on the overview as the period's attempts run out. (S4b) Each page has its own
+ * address under /shopify/, which App Bridge's menu in Shopify's side bar opens; its title is App Bridge's title bar. Every rule is the server's; the
  * page only offers what it may.
  */
 export default function App() {
@@ -55,14 +56,11 @@ export default function App() {
 function ShopPage() {
   const { t } = useTranslation(SHOPIFY)
   const auth = useAuth()
-  // The campaigns are read when first shown, then kept mounted (hidden when not shown) so an open editor keeps what
-  // was typed while the overview is shown.
-  const [campaignsShown, setCampaignsShown] = useState(false)
-  const [tab, setTab] = useState('overview')
-  const show = (value: string) => {
-    setTab(value)
-    if (value === 'campaigns') setCampaignsShown(true)
-  }
+  // The page the address shows. The campaigns are read when first shown, then kept mounted (hidden when not shown) so
+  // an open editor keeps what was typed while another page is shown.
+  const [page, show] = usePage()
+  const [campaignsShown, setCampaignsShown] = useState(page === 'campaigns')
+  if (page === 'campaigns' && !campaignsShown) setCampaignsShown(true)
 
   // Signs in with a session token (each is used once) whenever the tab has no session.
   const signIn = useMutation({
@@ -105,7 +103,14 @@ function ShopPage() {
   const waiting = !error && !opened.data
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-2xl font-semibold">{t('title')}</h1>
+      <ui-nav-menu>
+        <a href={pathOf('overview')} rel="home">{t('tabs.overview')}</a>
+        <a href={pathOf('campaigns')}>{t('tabs.campaigns')}</a>
+        <a href={pathOf('plan')}>{t('tabs.plan')}</a>
+      </ui-nav-menu>
+      <ui-title-bar title={pageTitle(t, page)} />
+      {/* Shopify's title bar names the page; the page's own heading is for readers and when not embedded. */}
+      <h1 className="text-2xl font-semibold">{pageTitle(t, page)}</h1>
       {waiting && <p role="status">{t('starting')}</p>}
       {error instanceof NotEmbeddedError && (
         <Alert>
@@ -126,25 +131,20 @@ function ShopPage() {
         </Alert>
       )}
       {opened.data && (
-        <Tabs value={tab} onValueChange={show}>
-          <TabsList>
-            <TabsTrigger value="overview">{t('tabs.overview')}</TabsTrigger>
-            <TabsTrigger value="campaigns">{t('tabs.campaigns')}</TabsTrigger>
-            <TabsTrigger value="plan">{t('tabs.plan')}</TabsTrigger>
-          </TabsList>
-          <TabsContent value="overview" className="flex flex-col gap-4">
-            <UsageNotice userId={auth.userId} onShowPlan={() => show('plan')} />
-            <Overview shop={opened.data} userId={auth.userId} reload={reload} />
-          </TabsContent>
-          {campaignsShown && (
-            <TabsContent value="campaigns" forceMount className="data-[state=inactive]:hidden">
-              <CampaignsPage connection={opened.data.connection} />
-            </TabsContent>
+        <Suspense fallback={<p role="status">{t('loading')}</p>}>
+          {page === 'overview' && (
+            <div className="flex flex-col gap-4">
+              <UsageNotice userId={auth.userId} onShowPlan={() => show('plan')} />
+              <Overview shop={opened.data} userId={auth.userId} reload={reload} />
+            </div>
           )}
-          <TabsContent value="plan">
-            <PlanPage userId={auth.userId} onShowOverview={() => show('overview')} />
-          </TabsContent>
-        </Tabs>
+          {campaignsShown && (
+            <div hidden={page !== 'campaigns'}>
+              <CampaignsPage connection={opened.data.connection} />
+            </div>
+          )}
+          {page === 'plan' && <PlanPage userId={auth.userId} onShowOverview={() => show('overview')} />}
+        </Suspense>
       )}
       <Help />
     </div>
@@ -277,6 +277,11 @@ function Overview({ shop, userId, reload }: { shop: Shop; userId: string | null;
  * The support address the server wrote into the page (S4a: index-values, platform 17g); none when the page was not
  * served by it (the dev server leaves the placeholder).
  */
+/** A page's title: the app's name on the overview, the page's name on the others. */
+function pageTitle(t: (key: string) => string, page: Page): string {
+  return page === 'overview' ? t('title') : t(`tabs.${page}`)
+}
+
 export function supportEmail(): string | null {
   const value = document.querySelector<HTMLMetaElement>('meta[name="quizbuks-support-email"]')?.content ?? ''
   return /^[^\s@{}]+@[^\s@{}]+$/.test(value) ? value : null
