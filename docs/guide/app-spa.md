@@ -202,6 +202,10 @@ export default defineConfig({
   manifest 的类型为 `application/manifest+json`。
 - 只为声明了 PWA 的 SPA 的 `<前缀>/sw.js` 回答 Service Worker 脚本请求，其他一律 404；从不发送 `Service-Worker-Allowed`。
 - 缺省的内容安全策略不允许内联脚本、插件、外部表单目标与外部 base；`worker-src` / `manifest-src` 只允许本源。
+- 入口页里随部署而变的**公开**值（如别的平台脚本从 `<meta>` 读的应用 key）不在构建时写入：`index.html` 写
+  `<meta name="…" content="{{jabiz:名}}">`，部署配置 `jabiz.web.spa[i].index-values.名: ${环境变量}`，服务器启动时写进去（HTML 转义；17g）。
+  写在应用配置中该 SPA 的条目里（与 `path` 等同处；Spring 的列表按整体替换，不能只在环境里单补一项），值以 `${环境变量}` 取自部署。
+  占位只能是标签中双引号属性的完整值；没有值、写法不对时启动失败。Vite 的开发服务器不替换它（开发时照原样）。秘密不放入口页。
 - 只支持同源：不开 CORS，令牌只经 `Authorization` 头。
 
 ## 7. 已知限制
