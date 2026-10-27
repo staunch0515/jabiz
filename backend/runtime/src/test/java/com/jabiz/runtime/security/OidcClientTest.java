@@ -14,7 +14,7 @@ import java.time.ZoneOffset;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * The provider-specific parts of talking to an identity provider (decision D60 item 1): Facebook's discovery
+ * The provider-specific parts of talking to an identity provider (decision D61 item 1): Facebook's discovery
  * document at the path with a trailing slash, and its Graph API's token endpoint when the document names none; the
  * client's credentials in the token request's form for Facebook and LINE, Basic for everybody else.
  */

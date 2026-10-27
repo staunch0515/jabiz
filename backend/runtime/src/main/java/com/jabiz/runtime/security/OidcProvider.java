@@ -29,11 +29,11 @@ import java.util.regex.Pattern;
  *                      known kind has its issuer as the default; Google's addresses count as verified only where
  *                      Google vouches for them (gmail, or a Workspace domain); Facebook and LINE take the client's
  *                      credentials in the token request's form, and LINE's web sign-in signs its ID tokens with the
- *                      client secret (HS256, decision D60)
+ *                      client secret (HS256, decision D61)
  * @param autoProvision whether an unknown subject with a verified, unused address gets an account (default false)
  * @param signUpUnverifiedEmail with {@code autoProvision}: whether an address the provider does not vouch for opens
  *                      an account too, unverified and pre-claimable, with a verification mail (default false; decision
- *                      D60 item 3)
+ *                      D61 item 3)
  */
 public record OidcProvider(String id, String issuer, String clientId, String clientSecret, String redirectUri,
     List<String> scopes, Map<String, String> labels, List<String> mfaAmr, Map<String, String> redirectUris,
@@ -47,11 +47,11 @@ public record OidcProvider(String id, String issuer, String clientId, String cli
     public static final String GOOGLE = "google";
     /** Google's issuer, the default of a {@value #GOOGLE} provider. */
     public static final String GOOGLE_ISSUER = "https://accounts.google.com";
-    /** Facebook (Meta's OpenID Connect web flow, decision D60). */
+    /** Facebook (Meta's OpenID Connect web flow, decision D61). */
     public static final String FACEBOOK = "facebook";
     /** Facebook's issuer, the default of a {@value #FACEBOOK} provider. */
     public static final String FACEBOOK_ISSUER = "https://www.facebook.com";
-    /** LINE Login (OpenID Connect; HS256 ID tokens at web sign-in, decision D60). */
+    /** LINE Login (OpenID Connect; HS256 ID tokens at web sign-in, decision D61). */
     public static final String LINE = "line";
     /** LINE's issuer, the default of a {@value #LINE} provider. */
     public static final String LINE_ISSUER = "https://access.line.me";
@@ -79,7 +79,7 @@ public record OidcProvider(String id, String issuer, String clientId, String cli
         }
     }
 
-    /** A provider of a kind that opens accounts for verified addresses only (as before decision D60). */
+    /** A provider of a kind that opens accounts for verified addresses only (as before decision D61). */
     public OidcProvider(String id, String issuer, String clientId, String clientSecret, String redirectUri,
         List<String> scopes, Map<String, String> labels, List<String> mfaAmr, Map<String, String> redirectUris,
         String kind, boolean autoProvision) {
@@ -109,7 +109,7 @@ public record OidcProvider(String id, String issuer, String clientId, String cli
 
     /**
      * Whether the token request carries the client's credentials in its form ({@code client_secret_post}) rather than
-     * Basic authentication: Facebook and LINE take them only so (decision D60 item 1).
+     * Basic authentication: Facebook and LINE take them only so (decision D61 item 1).
      */
     public boolean clientSecretPost() {
         return FACEBOOK.equals(kind) || LINE.equals(kind);
@@ -117,19 +117,19 @@ public record OidcProvider(String id, String issuer, String clientId, String cli
 
     /**
      * Whether an HS256 ID token keyed with the client secret is accepted: LINE only, whose web sign-in signs so
-     * (decision D60 item 2). Every other provider's tokens must be RS256 or ES256 by a key of its JWKS.
+     * (decision D61 item 2). Every other provider's tokens must be RS256 or ES256 by a key of its JWKS.
      */
     public boolean acceptsHs256() {
         return LINE.equals(kind);
     }
 
-    /** Where the discovery document is: Facebook serves it at the path with a trailing slash (decision D60 item 1). */
+    /** Where the discovery document is: Facebook serves it at the path with a trailing slash (decision D61 item 1). */
     public String discoveryUrl() {
         String base = issuer.replaceAll("/+$", "") + "/.well-known/openid-configuration";
         return FACEBOOK.equals(kind) ? base + "/" : base;
     }
 
-    /** The token endpoint when the discovery document names none: Facebook's Graph API (decision D60 item 1). */
+    /** The token endpoint when the discovery document names none: Facebook's Graph API (decision D61 item 1). */
     public String defaultTokenEndpoint() {
         return FACEBOOK.equals(kind) ? "https://graph.facebook.com/oauth/access_token" : null;
     }

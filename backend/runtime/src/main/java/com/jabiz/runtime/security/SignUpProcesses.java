@@ -380,7 +380,7 @@ public class SignUpProcesses {
 
     /**
      * Whether the link is used in the session of the account it is for (the request carries that user's access token):
-     * the registrant's own session stands for their current password, so verifying keeps the account (decision D60
+     * the registrant's own session stands for their current password, so verifying keeps the account (decision D61
      * item 4). An account opened by an identity provider for an address it did not vouch for has no password, and
      * could otherwise only be verified by being taken over.
      */
