@@ -39,8 +39,9 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * An OpenID Connect provider for tests (docs/design/10-security.md section 12): discovery, JWKS and a token endpoint
  * on a local port. Tests make the ID token themselves ({@link #idToken}, any claims, any key) and register it for an
- * authorization code ({@link #code}); the token endpoint checks the client credentials, the redirect URI and the
- * PKCE verifier like a real provider, then hands the token out.
+ * authorization code ({@link #code}); the token endpoint checks the client credentials (Basic, or in the form as
+ * Facebook and LINE take them: {@link #clientAuthentication}), the redirect URI and the PKCE verifier like a real
+ * provider, then hands the token out.
  */
 public final class TestOidcProvider implements AutoCloseable {
 
@@ -57,9 +58,17 @@ public final class TestOidcProvider implements AutoCloseable {
     private final ECKey ec;
     private final List<JWK> published = new java.util.concurrent.CopyOnWriteArrayList<>();
     private final Map<String, Grant> grants = new ConcurrentHashMap<>();
+    private final String clientSecret;
     private volatile int jwksReads;
+    private volatile String clientAuthentication;
 
     public TestOidcProvider() {
+        this(CLIENT_SECRET);
+    }
+
+    /** A provider whose client has {@code clientSecret} (a LINE provider needs one of at least 32 bytes). */
+    public TestOidcProvider(String clientSecret) {
+        this.clientSecret = clientSecret;
         try {
             rsa = new RSAKeyGenerator(2048).keyID("rsa-1").generate();
             ec = new ECKeyGenerator(Curve.P_256).keyID("ec-1").generate();
@@ -85,6 +94,16 @@ public final class TestOidcProvider implements AutoCloseable {
 
     public String issuer() {
         return issuer;
+    }
+
+    /** The client's secret, the HS256 key of a LINE provider's ID tokens. */
+    public String clientSecret() {
+        return clientSecret;
+    }
+
+    /** How the last token request authenticated: {@code basic}, {@code post}, or null before any. */
+    public String clientAuthentication() {
+        return clientAuthentication;
     }
 
     /** How often the JWKS was read. */
@@ -177,7 +196,7 @@ public final class TestOidcProvider implements AutoCloseable {
     }
 
     private void token(HttpExchange exchange) throws IOException {
-        String expected = "Basic " + Base64.getEncoder().encodeToString((CLIENT_ID + ":" + CLIENT_SECRET)
+        String expected = "Basic " + Base64.getEncoder().encodeToString((CLIENT_ID + ":" + clientSecret)
             .getBytes(StandardCharsets.UTF_8));
         Map<String, String> form = new LinkedHashMap<>();
         for (String pair : new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8).split("&")) {
@@ -187,10 +206,16 @@ public final class TestOidcProvider implements AutoCloseable {
                     URLDecoder.decode(pair.substring(eq + 1), StandardCharsets.UTF_8));
             }
         }
-        if (!expected.equals(exchange.getRequestHeaders().getFirst("Authorization"))) {
+        String header = exchange.getRequestHeaders().getFirst("Authorization");
+        boolean basic = expected.equals(header);
+        // client_secret_post: the credentials in the form, and no Authorization header beside them.
+        boolean post = header == null && CLIENT_ID.equals(form.get("client_id"))
+            && clientSecret.equals(form.get("client_secret"));
+        if (!basic && !post) {
             json(exchange, 401, "{\"error\": \"invalid_client\"}");
             return;
         }
+        clientAuthentication = basic ? "basic" : "post";
         Grant grant = grants.remove(String.valueOf(form.get("code")));
         if (grant == null || !"authorization_code".equals(form.get("grant_type"))
             || !grant.redirectUri().equals(form.get("redirect_uri"))
