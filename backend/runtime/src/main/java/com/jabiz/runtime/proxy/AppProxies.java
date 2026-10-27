@@ -23,6 +23,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.function.Supplier;
+import java.util.regex.Pattern;
 
 /**
  * The configured app proxies (decision D60) and their startup check, every problem at once: a proxy with problems is
@@ -41,6 +42,8 @@ public class AppProxies implements PlatformCheck {
 
     private final Map<String, AppProxy> configured;
     private final Map<String, AppProxy> usable = new LinkedHashMap<>();
+    /** The usable proxies' tenant patterns, compiled once. */
+    private final Map<String, Pattern> tenants = new LinkedHashMap<>();
     private final Supplier<ProcessRegistry> processes;
 
     @Autowired
@@ -55,12 +58,21 @@ public class AppProxies implements PlatformCheck {
         configs.forEach((name, c) -> proxies.put(name, new AppProxy(name, c.secrets(), c.tenantParameter(),
             c.tenantPattern(), c.customerParameter(), c.visitorParameter(), c.maxAge())));
         this.configured = proxies;
-        proxies.values().stream().filter(p -> p.problems().isEmpty()).forEach(p -> usable.put(p.name(), p));
+        proxies.values().stream().filter(p -> p.problems().isEmpty()).forEach(p -> {
+            usable.put(p.name(), p);
+            tenants.put(p.name(), Pattern.compile(p.tenantPattern()));
+        });
     }
 
     /** The proxy of that name, if it is configured without problems. */
     public Optional<AppProxy> find(String name) {
         return Optional.ofNullable(name == null ? null : usable.get(name));
+    }
+
+    /** Whether {@code tenant} is one of the usable proxy {@code proxy}'s tenants. */
+    public boolean isTenant(String proxy, String tenant) {
+        Pattern pattern = tenants.get(proxy);
+        return pattern != null && tenant != null && pattern.matcher(tenant).matches();
     }
 
     /**
@@ -92,7 +104,12 @@ public class AppProxies implements PlatformCheck {
             String location = "process " + definition.name() + " v" + definition.version();
             List<String> proxies = definition.permissions().stream()
                 .map(permission -> AppProxyCaller.proxyOf(permission).orElse(null)).toList();
-            if (proxies.size() != 1 || proxies.getFirst() == null) {
+            boolean badName = definition.permissions().stream().anyMatch(permission ->
+                permission.startsWith(AppProxyCaller.PERMISSION_PREFIX) && AppProxyCaller.proxyOf(permission).isEmpty());
+            if (badName) {
+                problems.add(CheckProblem.error(CATEGORY, location, "appProxy() names no valid proxy (lower-case"
+                    + " letters, digits and '-', at most 30, starting with a letter)"));
+            } else if (proxies.size() != 1 || proxies.getFirst() == null) {
                 problems.add(CheckProblem.error(CATEGORY, location, "an appProxy() process holds its proxy's"
                     + " permission alone: its callers have no other (decision D60)"));
             } else if (!configured.containsKey(proxies.getFirst())) {

@@ -100,6 +100,8 @@ class AppProxySignatureTest {
         assertThat(AppProxyCaller.of(context(visitor.actorId(), null, "app-proxy.shop"))).isEmpty();
         assertThat(AppProxyCaller.of(context("user-1", "a.myshopify.com", "app-proxy.shop"))).isEmpty();
         assertThat(AppProxyCaller.of(context("app-proxy:shop:bad id", "a.myshopify.com", "app-proxy.shop"))).isEmpty();
+        // The longest actor id fits the actor columns.
+        assertThat(new AppProxyCaller("a".repeat(30), "t", "1".repeat(40)).actorId()).hasSizeLessThanOrEqualTo(100);
         assertThat(AppProxyCaller.of(null)).isEmpty();
     }
 

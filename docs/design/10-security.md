@@ -841,14 +841,18 @@ jabiz:
 - 接口 `GET|POST /api/proxy/{代理}/{流程}`：未配置（或配置有问题）的代理 404，其他方法 405（`AppProxyWebFilter`，在安全链之前）；带来的凭据一概不看。
 - 签名（`AppProxySignature`，与 Shopify 自己的库相同）：查询中除 `signature` 外的全部参数（访客自己的也在内）按名排序，写成 `名=值`（同名多值以 `,` 相连），
   不加分隔地连起来，以应用密钥作 HMAC-SHA256，小写十六进制，常量时间比较、每个密钥都试。时间 `timestamp` 须在 `max-age` 内；租户参数恰好一个且匹配 `tenant-pattern`；
-  顾客编号为空或是 `[A-Za-z0-9_-]{1,64}`。任一不符即 401 `APP_PROXY_REFUSED`，说明相同，原因只记日志与观测 `jabiz.app_proxy.refused`（标签 `proxy`、`reason`）。
+  顾客编号为空或是 `[A-Za-z0-9_-]{1,40}`。任一不符即 401 `APP_PROXY_REFUSED`，说明相同，原因只记观测 `jabiz.app_proxy.refused`（标签 `proxy`、`reason`）与 debug 日志（谁都能发未签名的请求，日志不应被灌满）。
+  验签之前不按地址限流：请求都来自商店平台的出口地址，按地址限流会挡住所有正常的顾客；验签本身不访问数据库。
   查询按表单解码（`+` 是空格），与签名方一致。
 - 流程须是 `appProxy(代理)` 声明的最新版本（否则 404，不透露别的流程）；以 `AppProxyCaller` 运行：操作人 `app-proxy:<代理>[:<顾客>]`、
-  `RequestContext.tenantId` 为租户、权限只有 `app-proxy.<代理>`；流程以 `AppProxyCaller.of(ctx.request())` 读取。不写操作记录之外的东西，不签发会话。
+  `RequestContext.tenantId` 为租户、权限只有 `app-proxy.<代理>`；流程以 `AppProxyCaller.of(ctx.request())` 读取。代理名至多 30 字符、顾客编号至多 40，操作人编号因此放得进各操作人列（100）。
+  输出若是实体实例，与读接口一样按权限遮蔽（`f.masked` 的字段对匿名访客总是遮蔽）。不写操作记录之外的东西，不签发会话。
 - 正文（POST 的 JSON）是流程的输入，**不在签名之内**：它与访客发来的任何东西一样不可信，由流程校验。签名过的地址在 `max-age` 内可被重放：代理流程本来就面向匿名访客，
   伤害受限流与业务上的"一人一次"约束。
-- 限流（`jabiz.process.rate-limits`）：`per-tenant`（按租户）与 `per-visitor`（租户内按访客键；键由访客自己给出，不证明什么，只用于分摊租户的额度）只用于代理流程；
-  `per-user` 计操作人（代理 + 顾客），`per-address` 计 `ClientAddresses` 得出的地址（经商店平台转发时多为其出口地址）。超限 429 `RATE_LIMITED`。
+- 限流（`jabiz.process.rate-limits`）：`per-tenant`（按租户）与 `per-visitor`（租户内按访客键；键由访客自己给出，不证明什么，只用于分摊租户的额度；
+  不是一个 `[A-Za-z0-9_-]{1,40}` 的键按"无键"计）只用于代理流程；代理流程不能用 `per-user`（所有店铺的匿名访客是同一个操作人，启动检查报错）；
+  `per-address` 计 `ClientAddresses` 得出的地址（经商店平台转发时多为其出口地址）。超限 429 `RATE_LIMITED`。
+- 场景回放（07 §3）：`appProxy()` 流程的步骤代表代理入口，步骤的操作人即代理的调用者：`{id: app-proxy:<代理>[:<顾客>], tenant: <租户>, permissions: [app-proxy.<代理>]}`。
 - 答复不缓存（`Cache-Control: no-store`），不读不写 Cookie，不开 CORS（请求由商店平台从它自己的域名发出）。
 - 启动检查（`AppProxies`，类别 `APP_PROXY`）：代理的名字、密钥（至少 32 字符、不是未解析的占位符）、租户形式、参数名、`max-age`；`appProxy()` 流程只持代理的权限、
   所指的代理已配置、不要求二次验证、已验证邮箱或替代权限（调用者不是本平台的用户）。

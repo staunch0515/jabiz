@@ -4544,7 +4544,7 @@ SPA 的 CSP 固定为 `frame-ancestors 'none'`，外部服务只按精确主机�
 | 17d-3 | 流程用途 `appProxy(名)`（`ProcessAccess.APP_PROXY`）：只经该代理，不经流程接口与子流程；权限 `app-proxy.<名>` 由声明带上；不能要求二次验证、已验证邮箱或替代权限 |
 | 17d-4 | 限流 `per-tenant`、`per-visitor`（`jabiz.process.rate-limits`），只用于代理流程；超限 429 |
 | 17d-5 | 观测 `jabiz.app_proxy.refused`（标签代理名与原因）；操作记录的操作人为代理身份 |
-| 17d-6 | 测试与文档：核心 `AppProxySignatureTest`（与 Shopify 的库同值、篡改、过期、格式）；`AppProxiesTest`（启动检查与绑定）；`ProcessAdmissionChecksTest`（代理的限流）；集成测试 `AppProxyIT`（签名的请求以代理调用者运行、旧密钥、`+` 与 `%2F` 的解码、带来的凭据不影响；各种不符一律 401 且流程未运行；别的代理、开放流程、未知流程、版本路径 404，PUT 405，流程接口 403；按访客与租户限流）；D60、10 §15.13、06 §8 |
+| 17d-6 | 测试与文档：核心 `AppProxySignatureTest`（与 Shopify 的库同值、篡改、过期、格式）；`AppProxiesTest`（启动检查与绑定）；`ProcessAdmissionChecksTest`（代理的限流）；集成测试 `AppProxyIT`（签名的请求以代理调用者运行、旧密钥、`+` 与 `%2F` 的解码、带来的凭据不影响；各种不符一律 401 且流程未运行；别的代理、开放流程、未知流程、版本路径 404，PUT 405，流程接口 403；按访客与租户限流）；`ProcessAccessRulesTest`、`ProcessChecksTest`、`ProcessRateLimitsTest` 的代理分支；场景回放把代理流程的步骤当作入口；D60、10 §15.13、06 §8、07 §3 |
 
 **不做**：示范应用中的代理流程（只在测试中声明，示范没有店面）；按地址限流时识别商店平台转发的真实顾客地址（未在开发店铺上核实是否转发，见 10 §15.13）。
 

@@ -142,6 +142,10 @@ public class ProcessAdmissionChecks implements PlatformCheck {
                 && (limit.perTenant() != null || limit.perVisitor() != null)) {
                 problems.add(error(location, "per-tenant and per-visitor count the callers of an app proxy only"
                     + " (decision D60)"));
+            } else if (found.get().access() == ProcessAccess.APP_PROXY && limit.perUser() != null) {
+                // Every anonymous visitor of every tenant is one actor: count per tenant and visitor instead.
+                problems.add(error(location, "per-user does not tell an app proxy's callers apart: use per-tenant"
+                    + " and per-visitor (decision D60)"));
             }
             if (limit.perUser() == null && limit.perAddress() == null && limit.perInstance() == null
                 && limit.perTenant() == null && limit.perVisitor() == null) {

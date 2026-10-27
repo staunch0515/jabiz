@@ -145,7 +145,8 @@ public final class ProcessDefinitionBuilder<I, O, C extends ProcessContext> {
      */
     public ProcessDefinitionBuilder<I, O, C> appProxy(String proxy) {
         this.access = ProcessAccess.APP_PROXY;
-        this.permissions.add(com.jabiz.security.AppProxyCaller.permission(proxy));
+        // Not checked here: a bad name is reported by the startup check with everything else.
+        this.permissions.add(com.jabiz.security.AppProxyCaller.PERMISSION_PREFIX + proxy);
         return this;
     }
 

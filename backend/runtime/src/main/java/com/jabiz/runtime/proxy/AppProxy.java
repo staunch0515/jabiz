@@ -44,16 +44,11 @@ public record AppProxy(String name, List<String> secrets, String tenantParameter
         maxAge = maxAge == null ? DEFAULT_MAX_AGE : maxAge;
     }
 
-    /** Whether {@code tenant} is one of this proxy's tenants. */
-    public boolean isTenant(String tenant) {
-        return tenant != null && Pattern.compile(tenantPattern).matcher(tenant).matches();
-    }
-
     /** Everything wrong with it, at once. */
     public List<String> problems() {
         List<String> found = new ArrayList<>();
         if (name == null || !AppProxyCaller.NAME.matcher(name).matches()) {
-            found.add("not a valid name (lower-case letters, digits and '-', at most 40, starting with a letter)");
+            found.add("not a valid name (lower-case letters, digits and '-', at most 30, starting with a letter)");
         }
         if (secrets.isEmpty()) {
             found.add("at least one secret is required");

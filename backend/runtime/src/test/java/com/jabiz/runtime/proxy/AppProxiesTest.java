@@ -58,6 +58,7 @@ class AppProxiesTest {
             process("NOWHERE", pb -> pb.appProxy("nowhere")),
             process("TWO", pb -> pb.appProxy("shop").permissions("other")),
             process("ASKS", pb -> pb.appProxy("shop").requiresVerifiedEmail()),
+            process("BADNAME", pb -> pb.appProxy("Bad Name")),
             process("OPEN", pb -> pb.permissions("p")));
         AppProxies proxies = new AppProxies(Map.of(
             "shop", shop(),
@@ -74,7 +75,7 @@ class AppProxiesTest {
         assertThat(proxies.process("shop", "OPEN")).isEmpty();
         assertThat(proxies.process("shop", "NONE")).isEmpty();
         assertThat(messages(proxies.check())).containsExactlyInAnyOrder(
-            "ERROR jabiz.app-proxies.Bad: not a valid name (lower-case letters, digits and '-', at most 40, starting"
+            "ERROR jabiz.app-proxies.Bad: not a valid name (lower-case letters, digits and '-', at most 30, starting"
                 + " with a letter)",
             "ERROR jabiz.app-proxies.broken: secrets[0]: missing or shorter than 32 characters",
             "ERROR jabiz.app-proxies.broken: secrets[1]: an unresolved placeholder (is its environment variable set?)",
@@ -82,6 +83,8 @@ class AppProxiesTest {
             "ERROR jabiz.app-proxies.broken: tenant-parameter is not a valid parameter name",
             "ERROR jabiz.app-proxies.broken: customer-parameter is not a valid parameter name",
             "ERROR jabiz.app-proxies.broken: max-age must be positive and at most PT10M",
+            "ERROR process BADNAME v1: appProxy() names no valid proxy (lower-case letters, digits and '-', at most 30,"
+                + " starting with a letter)",
             "ERROR process NOWHERE v1: names no configured app proxy: nowhere (jabiz.app-proxies.<name>)",
             "ERROR process TWO v1: an appProxy() process holds its proxy's permission alone: its callers have no other"
                 + " (decision D60)",
@@ -96,12 +99,15 @@ class AppProxiesTest {
             .withProperty("jabiz.app-proxies.shop.secrets[0]", SECRET)
             .withProperty("jabiz.app-proxies.shop.tenant-pattern", "[a-z]+\\.shop\\.example")
             .withProperty("jabiz.app-proxies.shop.max-age", "30s");
-        AppProxy proxy = new AppProxies(environment, new StaticListableBeanFactory()
-            .getBeanProvider(ProcessRegistry.class)).find("shop").orElseThrow();
+        AppProxies proxies = new AppProxies(environment, new StaticListableBeanFactory()
+            .getBeanProvider(ProcessRegistry.class));
+        AppProxy proxy = proxies.find("shop").orElseThrow();
         assertThat(proxy.maxAge()).isEqualTo(Duration.ofSeconds(30));
         assertThat(proxy.tenantParameter()).isEqualTo("shop");
         assertThat(proxy.customerParameter()).isEqualTo("logged_in_customer_id");
-        assertThat(proxy.isTenant("demo.shop.example")).isTrue();
-        assertThat(proxy.isTenant("demo.shop.example.evil")).isFalse();
+        assertThat(proxies.isTenant("shop", "demo.shop.example")).isTrue();
+        assertThat(proxies.isTenant("shop", "demo.shop.example.evil")).isFalse();
+        assertThat(proxies.isTenant("shop", null)).isFalse();
+        assertThat(proxies.isTenant("none", "demo.shop.example")).isFalse();
     }
 }

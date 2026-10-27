@@ -19,13 +19,17 @@ import java.util.regex.Pattern;
  */
 public record AppProxyCaller(String proxy, String tenant, String customerId) {
 
-    /** A proxy's name: as the path segment it is. */
-    public static final Pattern NAME = Pattern.compile("[a-z][a-z0-9-]{0,39}");
-    /** A customer id as it may be carried: letters, digits, '-' and '_'. */
-    public static final Pattern CUSTOMER = Pattern.compile("[A-Za-z0-9_-]{1,64}");
+    /**
+     * A proxy's name: as the path segment it is. Name and customer are short enough for the actor id
+     * ({@code app-proxy:<name>:<customer>}, at most 81 characters) to fit every actor column (100).
+     */
+    public static final Pattern NAME = Pattern.compile("[a-z][a-z0-9-]{0,29}");
+    /** A customer id as it may be carried: letters, digits, '-' and '_' (Shopify's are numbers). */
+    public static final Pattern CUSTOMER = Pattern.compile("[A-Za-z0-9_-]{1,40}");
 
     static final String ACTOR_PREFIX = "app-proxy:";
-    static final String PERMISSION_PREFIX = "app-proxy.";
+    /** What a proxy's permission starts with; the rest is the proxy's name. */
+    public static final String PERMISSION_PREFIX = "app-proxy.";
 
     public AppProxyCaller {
         Objects.requireNonNull(proxy, "proxy must not be null");
