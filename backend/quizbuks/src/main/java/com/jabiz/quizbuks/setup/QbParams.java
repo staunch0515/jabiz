@@ -242,7 +242,7 @@ public final class QbParams {
             "Address of the operator, as the top-up receipts show it"),
         new Param(ISSUER_REGISTRATION_NO, Map.of("type", "text", "maxLength", 50), "",
             "Registration number of the operator (such as the qualified invoice issuer number), on the receipts"),
-        new Param(SUPPORT_EMAIL, Map.of("type", "text", "maxLength", 200), "",
+        new Param(SUPPORT_EMAIL, Map.of("type", "text", "maxLength", 200), "quizbuks@gmail.com",
             "Support address shown to signed-in users in the help centre (empty: none)"),
         new Param(LEGAL_MAX_ANNOUNCE_DAYS, DAYS, String.valueOf(LEGAL_MAX_ANNOUNCE_DAYS_DEFAULT),
             "How many days ahead a new version of the terms or the privacy policy may be announced to take effect"),
