@@ -40,7 +40,7 @@ export interface OidcButtonsProps {
   onError?: (error: unknown) => void
   /**
    * `buttons` (the default): a full-width button per provider, its mark beside its label. `icons`: a row of round
-   * buttons under "Other ways to sign in", each named by its provider's label (decision D60 item 5).
+   * buttons under "Other ways to sign in", each named by its provider's label (decision D61 item 5).
    */
   layout?: 'buttons' | 'icons'
 }

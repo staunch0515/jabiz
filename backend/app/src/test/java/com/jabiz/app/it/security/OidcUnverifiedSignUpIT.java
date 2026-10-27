@@ -24,7 +24,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * A LINE provider and accounts opened for addresses a provider does not vouch for (docs/design/10-security.md
- * section 12; decision D60; ROADMAP phase 16zk): the ID token keyed with the client secret (HS256) and the client's
+ * section 12; decision D61; ROADMAP phase 16zk): the ID token keyed with the client secret (HS256) and the client's
  * credentials in the token request's form; the account unverified and pre-claimable, with a verification mail;
  * verifying in the account's own session keeps it and its link, a link used by anybody else takes it over and the link
  * goes. HS256 counts for LINE only.
@@ -120,7 +120,7 @@ class OidcUnverifiedSignUpIT extends OidcItSupport {
             .containsEntry("password_hash", null);
         assertThat(linkedUser(LINE, subject)).isEqualTo(userId);
         assertThat(rolesOf(userId)).containsExactly(CUSTOMER);
-        // LINE took the client's credentials in the form (decision D60 item 1).
+        // LINE took the client's credentials in the form (decision D61 item 1).
         assertThat(LINE_IDP.clientAuthentication()).isEqualTo("post");
         // The verification mail went out, as for a self-registration.
         deliver();

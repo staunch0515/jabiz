@@ -52,7 +52,7 @@ class SignUpController {
     static final String VERIFY_CHECK = "/api/auth/verify-email/check";
     static final String VERIFY_RESEND = "/api/auth/verify-email/resend";
     static final String ACCOUNT_VERIFY = "/api/auth/account/verify-email";
-    /** The same link's check and use in the signed-in user's own session (decision D60 item 4). */
+    /** The same link's check and use in the signed-in user's own session (decision D61 item 4). */
     static final String ACCOUNT_VERIFY_CHECK = "/api/auth/account/verify-email/check";
     static final String ACCOUNT_VERIFY_CONFIRM = "/api/auth/account/verify-email/confirm";
     static final String RESET_REQUEST = "/api/auth/password-reset/request";
@@ -272,7 +272,7 @@ class SignUpController {
     }
 
     /**
-     * The link of a verification mail used in a session (decision D60 item 4): when the session is the account's own,
+     * The link of a verification mail used in a session (decision D61 item 4): when the session is the account's own,
      * it stands for the account's current password, so a pre-claimable account is verified and kept (an account opened
      * through an identity provider has no password). In anybody else's session the link needs what it needs
      * anonymously. The anonymous endpoints never look at an access token, so a stale one cannot break a link.

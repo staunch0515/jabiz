@@ -131,7 +131,7 @@ export function VerifyEmailPanel({ link, brand, appearance }: PanelProps) {
   const { entry, token, appPath } = link
   const [state, setState] = useState<VerifyState>(token ? 'ready' : 'invalid')
   const [busy, setBusy] = useState(false)
-  // Checked in this frontend's session (decision D60 item 4): then used there too.
+  // Checked in this frontend's session (decision D61 item 4): then used there too.
   const [inSession, setInSession] = useState(false)
 
   const failed = (e: unknown) => setState(invalidLink(e) ? 'invalid' : 'failed')
@@ -231,7 +231,7 @@ function PasswordStep({ token, inSession, onDone, onFailed }: {
         <Info aria-hidden />
         <AlertDescription data-testid="verify-password-hint">{t('account.verifyPasswordHint')}</AlertDescription>
       </Alert>
-      {/* An account opened through Google, Facebook or LINE has no password (decision D60 item 4). */}
+      {/* An account opened through Google, Facebook or LINE has no password (decision D61 item 4). */}
       <p className="text-muted-foreground text-sm" data-testid="verify-session-hint">{t('account.verifySessionHint')}</p>
       {mode === 'current' ? (
         <form noValidate className="flex flex-col gap-4"
