@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react'
+import { captureInstallPrompt } from './install'
 import { shellCachePrefix, spaNameOf, staleCaches } from './route'
 import { SKIP_WAITING } from './worker'
 
@@ -82,6 +83,8 @@ export async function registerServiceWorker(options: ServiceWorkerOptions = {}):
     return null
   }
 
+  // The browser's offer to install can come any time after the worker is registered (16zj).
+  captureInstallPrompt()
   const registration = await container.register(`${base}sw.js`, { scope: base, updateViaCache: 'none' })
   let accepted = false
   const waitFor = (worker: ServiceWorker) => {
