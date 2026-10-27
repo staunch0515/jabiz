@@ -1,0 +1,38 @@
+# QuizBuks for Shopify (docs/quizbuks/shopify/S1-install.md section 8): the app's configuration for the Shopify CLI
+# (`shopify app deploy`), a template. Replace <client-id> with the app's Client ID (the same value as SHOPIFY_API_KEY;
+# public) and <host> with the address QuizBuks is served at. The Client secret is never written here: it goes into the
+# server's environment only (SHOPIFY_API_SECRET). staging and production are separate apps with their own copies.
+
+client_id = "<client-id>"
+name = "QuizBuks"
+# The embedded pages (/shopify/): Shopify opens them in its admin with ?shop=…&host=…; installing is managed by
+# Shopify (no OAuth redirect: the pages sign in with App Bridge's session token).
+application_url = "https://<host>/shopify/"
+embedded = true
+
+[access_scopes]
+# S1 reads the shop's name only, which needs no scope; S2 adds the discount scopes.
+scopes = ""
+use_legacy_install_flow = false
+
+[auth]
+redirect_urls = ["https://<host>/shopify/"]
+
+[webhooks]
+api_version = "2026-10"
+
+  # An uninstall marks the shop uninstalled and drops its tokens (data kept until shop/redact).
+  [[webhooks.subscriptions]]
+  topics = ["app/uninstalled"]
+  uri = "https://<host>/api/inbound/shopify"
+
+  # The three privacy topics every public app must answer (signed like every webhook; a bad signature gets 401).
+  [[webhooks.subscriptions]]
+  compliance_topics = ["customers/data_request", "customers/redact", "shop/redact"]
+  uri = "https://<host>/api/inbound/shopify"
+
+[pos]
+embedded = false
+
+[build]
+automatically_update_urls_on_dev = false
