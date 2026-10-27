@@ -73,6 +73,27 @@ public class ShopifyConfig {
     }
 
     @Bean
+    EntityDefinition qbsShopPlanEntity() {
+        return QbsBilling.PLAN_ENTITY;
+    }
+
+    @Bean
+    EntityDefinition qbsUsageEntity() {
+        return QbsBilling.USAGE_ENTITY;
+    }
+
+    @Bean
+    DatasetDefinition qbsShopPlanDataset() {
+        return systemDataset(QbsBilling.PLAN);
+    }
+
+    /** A shop's periods: {@code shop/redact} deletes them all. */
+    @Bean
+    DatasetDefinition qbsUsageDataset() {
+        return systemDataset(QbsBilling.USAGE, WebhookProcesses.MAX_USAGES);
+    }
+
+    @Bean
     DatasetDefinition qbsCampaignDataset() {
         return systemDataset(QbsStorefront.CAMPAIGN, CampaignProcesses.MAX_CAMPAIGNS);
     }
@@ -178,6 +199,15 @@ public class ShopifyConfig {
     }
 
     @Bean
+    StaticDictionary qbsPlanDictionary() {
+        return StaticDictionary.define(QbsBilling.PLAN_DICTIONARY, d -> d
+            .item(QbsBilling.FREE, "en", "Free", "zh", "免费", "ja", "無料")
+            .item(QbsBilling.STARTER, "en", "Starter", "zh", "入门", "ja", "スターター")
+            .item(QbsBilling.GROWTH, "en", "Growth", "zh", "成长", "ja", "グロース")
+            .item(QbsBilling.PRO, "en", "Pro", "zh", "专业", "ja", "プロ"));
+    }
+
+    @Bean
     StaticDictionary qbsCampaignStatusDictionary() {
         return StaticDictionary.define(QbsStorefront.CAMPAIGN_STATUS_DICTIONARY, d -> d
             .item(QbsStorefront.DRAFT, "en", "Draft", "zh", "草稿", "ja", "下書き")
@@ -258,6 +288,44 @@ public class ShopifyConfig {
         return JobDefinition.forEach(DiscountPool.JOB, "0 */10 * * * *", ZoneOffset.UTC,
             JobItems.template(DiscountPool.SHOPS_TEMPLATE, scheduledTime -> Map.of("at", scheduledTime), "shopDomain"),
             qbsDiscountRefillProcess, (scheduledTime, row) -> new DiscountPool.RefillInput(
+                String.valueOf(row.get("shopDomain"))));
+    }
+
+    @Bean
+    ProcessDefinition<PlanProcesses.SyncInput, PlanProcesses.SyncOutput, ProcessContext> qbsPlanSyncProcess() {
+        return PlanProcesses.sync();
+    }
+
+    @Bean
+    ProcessDefinition<PlanProcesses.GetInput, PlanProcesses.PlanOutput, ProcessContext> qbsPlanGetProcess(
+        ShopifyPlans plans) {
+        return PlanProcesses.get(plans);
+    }
+
+    @Bean
+    ProcessDefinition<WebhookProcesses.InboundRef, WebhookProcesses.Outcome, ProcessContext>
+        qbsShopifySubscriptionsUpdateProcess() {
+        return PlanProcesses.subscriptionsUpdate();
+    }
+
+    @Bean
+    EventSubscription<WebhookProcesses.InboundRef> qbsShopifySubscriptionsUpdateSubscription(
+        ProcessDefinition<WebhookProcesses.InboundRef, WebhookProcesses.Outcome, ProcessContext>
+            qbsShopifySubscriptionsUpdateProcess) {
+        return subscription("qbs.shopify-app-subscriptions-update", PlanProcesses.TOPIC,
+            qbsShopifySubscriptionsUpdateProcess);
+    }
+
+    /**
+     * Daily, one shop per transaction (S3a): each installed, connected shop's plan is read again, for a webhook that
+     * never came and for the period that moved on.
+     */
+    @Bean
+    JobDefinition<PlanProcesses.SyncInput> qbsPlanSyncJob(
+        ProcessDefinition<PlanProcesses.SyncInput, PlanProcesses.SyncOutput, ProcessContext> qbsPlanSyncProcess) {
+        return JobDefinition.forEach(PlanProcesses.JOB, "0 23 4 * * *", ZoneOffset.UTC,
+            JobItems.template(PlanProcesses.SHOPS_TEMPLATE, scheduledTime -> Map.of(), "shopDomain"),
+            qbsPlanSyncProcess, (scheduledTime, row) -> new PlanProcesses.SyncInput(
                 String.valueOf(row.get("shopDomain"))));
     }
 

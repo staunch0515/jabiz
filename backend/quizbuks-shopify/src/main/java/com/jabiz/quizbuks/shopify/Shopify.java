@@ -72,6 +72,14 @@ public final class Shopify {
     }
 
     /**
+     * The lock of a shop's use of its plan (S3a): its holder counts a completed attempt. Taken by a submission after the
+     * engine's publication lock and before {@link #codesLock}.
+     */
+    public static String usageLock(String shopDomain) {
+        return "qbs.shop-usage:" + shopDomain;
+    }
+
+    /**
      * The lock of a shop's access tokens: only its holder exchanges or refreshes them, since a refresh makes the
      * previous refresh token useless.
      */

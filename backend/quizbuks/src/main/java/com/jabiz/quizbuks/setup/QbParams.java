@@ -75,6 +75,12 @@ public final class QbParams {
      * key the setup hands out, and with them the order of every scenario's options.
      */
     public static final String SHOPIFY_DAILY_CODES = com.jabiz.quizbuks.shopify.Shopify.DAILY_CODES;
+    /**
+     * S3a (docs/quizbuks/shopify/S3-billing.md section 3): the attempts a Shopify shop's storefront completes a billing
+     * period on each plan. Controlled, read as optional and kept out of the setup like {@link #SHOPIFY_DAILY_CODES}
+     * (the defaults are {@code QbsBilling.DEFAULT_LIMITS}).
+     */
+    public static final List<String> SHOPIFY_PLAN_LIMITS = com.jabiz.quizbuks.shopify.QbsBilling.LIMIT_PARAMS;
     /** Whether sponsor onboarding is approved without a person's review. */
     public static final String REVIEW_SPONSOR_AUTO = "qb.review.sponsor.auto";
     /** Whether publications are approved without a person's review. */

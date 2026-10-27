@@ -42,10 +42,12 @@ class ShopifyMessagesTest {
                 "process." + CampaignProcesses.MOVE, "process." + CampaignProcesses.LIST,
                 "process." + StorefrontProcesses.CAMPAIGN, "process." + StorefrontProcesses.START,
                 "process." + StorefrontProcesses.SUBMIT, "process." + DiscountPool.REFILL,
-                "query." + CampaignProcesses.STATS_TEMPLATE, "query." + DiscountPool.SHOPS_TEMPLATE);
+                "query." + CampaignProcesses.STATS_TEMPLATE, "query." + DiscountPool.SHOPS_TEMPLATE,
+                "process." + PlanProcesses.SYNC, "process." + PlanProcesses.GET,
+                "process." + PlanProcesses.SUBSCRIPTIONS_UPDATE, "query." + PlanProcesses.SHOPS_TEMPLATE);
         for (var entity : List.of(QbsShops.SHOP_ENTITY, QbsShops.MEMBER_ENTITY, QbsShops.TOKEN_ENTITY,
             QbsShops.COMPLIANCE_ENTITY, QbsStorefront.CAMPAIGN_ENTITY, QbsStorefront.TAKER_ENTITY,
-            QbsStorefront.BATCH_ENTITY, QbsStorefront.CODE_ENTITY)) {
+            QbsStorefront.BATCH_ENTITY, QbsStorefront.CODE_ENTITY, QbsBilling.PLAN_ENTITY, QbsBilling.USAGE_ENTITY)) {
             assertThat(en.stringPropertyNames()).contains("entity." + entity.name);
             entity.fields.keySet().forEach(field -> assertThat(en.stringPropertyNames())
                 .contains("entity." + entity.name + "." + field));

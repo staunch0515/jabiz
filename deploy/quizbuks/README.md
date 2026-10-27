@@ -302,6 +302,8 @@ tools/quizbuks/local-demo.sh status | logs | seed
 | `ANTHROPIC_API_KEY` | 是（Q8a） | Claude（Anthropic API）的密钥，AI 生成题目；缺少即启动失败。还没有密钥时可设任意占位（如 `not-configured`）：AI 缺省关闭（`qb.ai.enabled`），关闭时什么也不发送；占位被打开后提供方拒绝（401，作业失败）。本机 compose 未设置时填占位 |
 | `SHOPIFY_API_KEY` / `SHOPIFY_API_SECRET` | 是（S1） | QuizBuks for Shopify 的应用的 Client ID 与 Client secret（Shopify Partner 后台）；会话令牌、webhook 与 Admin API 都用它们（`docs/quizbuks/shopify/S1-install.md`）。缺少即启动失败；还没有 Shopify 应用时设占位（密钥至少 32 个字符），本机 compose 未设置时填占位 |
 | `QB_SHOPIFY_SHOP_URL` | 否 | 店铺 Admin API 的地址形式，缺省 `https://{shop}`（只在测试中改指桩服务） |
+| `QB_SHOPIFY_APP_HANDLE` | 否（S3a） | Shopify 应用的 handle（Partner 后台的应用地址中的那一段），用于打开 Shopify 托管的套餐页 `admin.shopify.com/store/<店铺>/charges/<handle>/pricing_plans`；缺省 `quizbuks`。只能是小写字母、数字与 `-`，否则启动失败 |
+| `QB_SHOPIFY_PLAN_STARTER` / `_GROWTH` / `_PRO` | 否（S3a） | 套餐在 Partner 后台（Shopify App Pricing）中的名字，缺省 `Starter` / `Growth` / `Pro`（不分大小写）；Shopify 的订阅名对不上任何一个时按免费套餐计并在后台提示。名字不能为空或重复，否则启动失败（`docs/quizbuks/shopify/S3-billing.md`） |
 | `VITE_SHOPIFY_API_KEY`（构建参数） | 是（S1，构建镜像时） | **镜像构建参数**，不是运行时变量：Shopify 应用的 Client ID（公开值，与 `SHOPIFY_API_KEY` 相同），写进内嵌页供 App Bridge 使用（`docker build --build-arg VITE_SHOPIFY_API_KEY=…`）；不给时内嵌页无法在 Shopify 中打开。staging 与正式若是两个 Shopify 应用，镜像要各自构建（S4 再改为运行时给出） |
 | `QB_ANTHROPIC_API_URL` / `QB_ANTHROPIC_API_HOSTS` | 否 | Anthropic API 的地址与允许的主机，缺省 `https://api.anthropic.com` / `api.anthropic.com`（只在开发与 e2e 中改指本地桩 `tools/quizbuks/claude-stub`） |
 | `QB_AI_REQUEST_TIMEOUT` / `QB_AI_MAX_CONCURRENCY` | 否 | 等 Claude 整个回答的最长时间（缺省与上限 `PT2M`；没有回答的尝试按预估计入用量）；全实例同时运行的 AI 作业数，**每种作业各自计**（缺省 4：题目与封面合计至多 8 个同时的调用）。带 PDF 的题目作业每个约占 PDF 合计的 5–6 倍堆（20 MiB 时约 120 MiB）：JVM 堆至少给"512 MiB + 120 MiB × 并发"（缺省约 1 GiB 以上），内存紧张时降低并发或 `QB_AI_PDF_MAX_BYTES` |

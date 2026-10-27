@@ -48,7 +48,8 @@ import java.util.UUID;
  *       Asked again for the same attempt, it answers the same code.</li>
  * </ul>
  * The limits per shop and per visitor key are configured for them ({@code jabiz.process.rate-limits}); the day's limit
- * bounds what a script that keeps changing its key can take.
+ * bounds what a script that keeps changing its key can take. The shop's plan (S3a, {@link PlanProcesses}) bounds the
+ * attempts it completes a period: at its limit the block shows nothing and no attempt starts.
  */
 public final class StorefrontProcesses {
 
@@ -76,12 +77,13 @@ public final class StorefrontProcesses {
      *
      * @param video      the player to show (YouTube or Vimeo), none for a quiz alone
      * @param codesToday whether the shop may still hand out a code today
+     * @param badge      whether the block says it is QuizBuks's (the free plan, S3)
      */
     public record CampaignOutput(boolean live, String publicationId, String name, String video, int questionCount,
-        int timeLimitSec, int passScore, int percent, boolean codesToday) {
+        int timeLimitSec, int passScore, int percent, boolean codesToday, boolean badge) {
 
         static CampaignOutput none() {
-            return new CampaignOutput(false, null, null, null, 0, 0, 0, 0, false);
+            return new CampaignOutput(false, null, null, null, 0, 0, 0, 0, false, false);
         }
     }
 
@@ -125,6 +127,9 @@ public final class StorefrontProcesses {
     static final String ISSUE = "issue";
     static final String OPENED = "opened";
     static final String OUTPUT = ShopProcesses.OUTPUT;
+    /** The day's limit of codes and the plans' limits, loaded together. */
+    static final String[] LIMITS = java.util.stream.Stream.concat(java.util.stream.Stream.of(Shopify.DAILY_CODES),
+        QbsBilling.LIMIT_PARAMS.stream()).toArray(String[]::new);
 
     // ---- campaign --------------------------------------------------------------------------------------------------
 
@@ -136,13 +141,15 @@ public final class StorefrontProcesses {
                 .contextFactory(ShopProcesses::context)
                 .outputMapper(ctx -> ctx.get(OUTPUT, CampaignOutput.class))
                 .steps(b -> loadShopAndCampaign(b, ctx -> null))
-                .step("Load the day's limit", LoadParams.<ProcessContext>optional(ProcessContext::opTime, PARAMS,
-                    Shopify.DAILY_CODES))
+                // S3a: a shop whose plan has no attempts left this period shows no quiz.
+                .steps(b -> PlanProcesses.loadUse(b, ctx -> liveCampaign(ctx, null) == null ? null : domain(ctx)))
+                .step("Load the day's and the plans' limits", LoadParams.<ProcessContext>optional(
+                    ProcessContext::opTime, PARAMS, LIMITS))
                 .step("Count the pool", RunTemplate.<ProcessContext>of(CampaignProcesses.STATS_TEMPLATE,
                     StorefrontProcesses::statsParams, STATS))
                 .compute("Show the campaign", (metadata, ctx) -> {
                     EntityInstance campaign = liveCampaign(ctx, null);
-                    if (campaign == null) {
+                    if (campaign == null || PlanProcesses.overLimit(ctx, PARAMS)) {
                         ctx.put(OUTPUT, CampaignOutput.none());
                         return;
                     }
@@ -152,7 +159,8 @@ public final class StorefrontProcesses {
                             campaign.get("questions")).size(), CampaignProcesses.integer(campaign.get("timeLimitSec")),
                         CampaignProcesses.integer(campaign.get("passScore")),
                         CampaignProcesses.integer(campaign.get("percent")),
-                        pool.available() > 0 && pool.issuedToday() < dailyCodes(ctx)));
+                        pool.available() > 0 && pool.issuedToday() < dailyCodes(ctx),
+                        QbsBilling.FREE.equals(PlanProcesses.plan(ctx))));
                 }));
     }
 
@@ -166,6 +174,9 @@ public final class StorefrontProcesses {
                 .contextFactory(ShopProcesses::context)
                 .outputMapper(ctx -> ctx.get(OUTPUT, Channel.StartOutput.class))
                 .steps(b -> loadShopAndCampaign(b, ctx -> ctx.get(INPUT, StartInput.class).publicationId()))
+                .steps(b -> PlanProcesses.loadUse(b, StorefrontProcesses::domain))
+                .step("Load the plans' limits", LoadParams.<ProcessContext>optional(ProcessContext::opTime, PARAMS,
+                    QbsBilling.LIMIT_PARAMS.toArray(String[]::new)))
                 .compute("Find the person", (metadata, ctx) -> {
                     StartInput input = ctx.get(INPUT, StartInput.class);
                     if (liveCampaign(ctx, input.publicationId()) == null) {
@@ -177,7 +188,15 @@ public final class StorefrontProcesses {
                 .step("Start on the engine", CallProcess.<ProcessContext>when(ctx -> !ctx.hasViolations(),
                     Channel.START, 1, ctx -> new Channel.StartInput(CampaignProcesses.publisher(
                         ShopProcesses.first(ctx, SHOPS)), ctx.get(INPUT, StartInput.class).publicationId(),
-                        ctx.get(TAKER, String.class)), OUTPUT)));
+                        ctx.get(TAKER, String.class)), OUTPUT))
+                // S3a: no new attempt once the plan's period is used up; one started before goes on (refused, the
+                // engine's new attempt is not kept).
+                .compute("Check the plan", (metadata, ctx) -> {
+                    Channel.StartOutput started = ctx.get(OUTPUT, Channel.StartOutput.class);
+                    if (started != null && !started.resumed()) {
+                        PlanProcesses.refuseOverLimit(ctx, PARAMS);
+                    }
+                }));
     }
 
     // ---- submit ----------------------------------------------------------------------------------------------------
@@ -222,6 +241,15 @@ public final class StorefrontProcesses {
                             input.publicationId(), ctx.get(TAKER, String.class), input.attemptId(),
                             input.currentIndex(), input.answers());
                     }, SUBMITTED))
+                // S3a: each attempt completed now counts once in the plan's period.
+                .step("Lock the shop's use", HoldLock.<ProcessContext>exclusive(
+                    ctx -> counting(ctx) ? Shopify.usageLock(domain(ctx)) : null))
+                .steps(b -> PlanProcesses.loadUse(b, ctx -> counting(ctx) ? domain(ctx) : null))
+                .compute("Count the attempt", (metadata, ctx) -> {
+                    if (counting(ctx)) {
+                        PlanProcesses.count(ctx, domain(ctx));
+                    }
+                })
                 // Last of the locks (after the engine's publication lock): the day's count and the next code.
                 .step("Lock the shop's codes", HoldLock.<ProcessContext>exclusive(
                     ctx -> issuing(ctx) ? Shopify.codesLock(domain(ctx)) : null))
@@ -241,6 +269,11 @@ public final class StorefrontProcesses {
                 .compute("Hand out the code", (metadata, ctx) -> issue(ctx))
                 .step("Open the code", OpenCode.class, NoMetadata.INSTANCE)
                 .compute("Answer", (metadata, ctx) -> answer(ctx)));
+    }
+
+    /** Whether the engine completed the attempt now (not asked again for a code handed out before). */
+    static boolean counting(ProcessContext ctx) {
+        return !ctx.hasViolations() && ctx.get(SUBMITTED) != null;
     }
 
     /** Whether the submission passed now on a live campaign, so that a code may be handed out. */
@@ -371,6 +404,8 @@ public final class StorefrontProcesses {
                 return publicationId == null ? CampaignProcesses.running(domain(ctx))
                     : ShopProcesses.eq("publicationId", publicationId.toString(), 1);
             }, CAMPAIGNS),
+            // S3a: the shop's plan.
+            PlanProcesses.planQuery(StorefrontProcesses::domain),
             // A signed-in customer's row, if they have one (none is read for a visitor).
             QueryEntities.<ProcessContext>query(QbsShops.defaultDataset(QbsStorefront.TAKER), ctx -> {
                 String customer = AppProxyCaller.of(ctx.request()).map(AppProxyCaller::customerId).orElse(null);
