@@ -4575,3 +4575,25 @@ SPA 的 CSP 固定为 `frame-ancestors 'none'`，外部服务只按精确主机�
 **测试**：`ExternalTokenProvidersTest`（占位符密钥经环境绑定后被拒、目的地须为源）；`ExternalTokenIT`（最后时刻前核对、之后登记的重放被拒且只留一条记录；
 各种拒绝的 403 说明相同；服务器故障为 5xx；守卫的拒绝仍是 403 `SIGN_IN_REFUSED`）。先写的测试在修正前全部失败。
 
+
+### 17f 单页应用公开路由的服务器端标题与预览信息、按公开模板生成 sitemap（2026-10-27 记录，**待开发**，未确认）
+
+**缘由**：需求方 2026-10-27 要做 QuizBuks 的公开问卷页面（`docs/quizbuks/plans/Q44-public-quiz-pages.md`，在 `1.3/quizbuks`）：
+不登录也能浏览正在进行的问卷，搜索引擎与社交网络能收录、能显示预览。单页应用的 `index.html` 是静态的（`SpaFallbackFilter` 对前缀下没有扩展名的路径都返回同一份），
+社交网络的预览抓取不执行脚本，看到的只有应用的固定标题；平台没有为单页应用的某条路由按数据给出 `<title>` 与 Open Graph 信息的办法，也不能按数据生成 `sitemap.xml`。
+需求方决定这件事整体放在线 1.3，先记录，以后开发（当时急着做上线演练）。开工前先写本阶段的计划与决策（新决策号接 1.3 当时的最后一个）、经确认后实施。
+
+**设想**（细节在计划中确定）：
+- 单页应用（`jabiz.web.spa[i]`）声明**公开路由**：路径模式（如 `/taker/p/{publicationId}`、`/taker/explore`）→ 一个**公开模板**（设计 15，`access: public`）与参数的对应 →
+  结果的列到 `<title>`、`<meta name="description">`、`og:title`、`og:description`、`og:image`、`og:url`、`<link rel="canonical">` 的映射；固定文案的路由可以不用模板、按请求语言给出。
+- 返回该路由的 `index.html` 时，服务器把这些值写进 `<head>` 的固定位置（HTML 转义、按长度截断），其余原样；模板没有结果（数据已不公开、不存在）或参数不合格时返回原样的 `index.html`
+  并加 `<meta name="robots" content="noindex">`；只写 `<head>`，不渲染页面内容，不引入模板引擎。
+- 同一机制按公开模板生成 `sitemap.xml`（列出公开路由的全部 URL，有条数上限、超过时分页成 sitemap 索引），可与静态站点（如 QuizBuks 的 `/biz/`）已有的 sitemap 合并或互相引用；可选的根 `robots.txt`。
+- 缓存随公开模板的 `cacheSeconds`；出错（模板超时等）时退回原样的 `index.html`，从不让页面打不开；观测标签只有路由名与结果（13、D16）。
+- 启动检查（`PlatformCheck`）：公开路由引用的模板必须是公开模板，参数与映射的列必须存在于其参数与结果中，路径模式不与其他单页应用或接口冲突。
+
+**测试**：插入位置、转义与截断、没有结果时 `noindex`、参数不合格、缓存、出错时退回原样、未声明的路由不变、sitemap 的上限与分页、启动检查；示范应用 `app` 中一条公开路由。
+
+**使用者**：QuizBuks Q44b（`/taker/p/<id>` 与 `/taker/explore` 的预览信息与 sitemap）。
+
+**17f 状态**：📝 待开发（2026-10-27 记录，计划未写、未确认）。
