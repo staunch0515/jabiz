@@ -209,7 +209,7 @@ export const zh = {
     title: '和我们聊聊',
     lead: '关于套餐、合作，或者哪里不好用？写信给我们。',
     waysTitle: '联系方式',
-    email: { title: '电子邮件', text: '商户、合作伙伴与媒体。通常几个工作日内回复。', address: 'staunch0515@gmail.com' },
+    email: { title: '电子邮件', text: '商户、合作伙伴与媒体。通常几个工作日内回复。', address: 'quizbuks@gmail.com' },
     merchants: { title: '成为商户', text: '注册你的店铺；审核通常几天内完成。', cta: '注册你的店铺' },
     takers: { title: '答题人帮助', text: '关于问卷或奖品的问题？App 的帮助页有说明，你作答过的商户也能看到你的奖品。', cta: '打开帮助页' },
     note: 'QuizBuks 处于推广期。公司信息与日本法律要求的法定声明发布在 App 的法律页面。',

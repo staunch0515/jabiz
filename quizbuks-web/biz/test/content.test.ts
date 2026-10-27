@@ -22,7 +22,7 @@ describe('the three languages', () => {
 
   it('name the contact address once per language and the same one', () => {
     for (const language of LANGUAGES) {
-      expect(contentOf(language).contact.email.address).toBe('staunch0515@gmail.com')
+      expect(contentOf(language).contact.email.address).toBe('quizbuks@gmail.com')
     }
   })
 })
@@ -93,6 +93,18 @@ describe('the rendered pages', () => {
     // A plan's "talk to us" goes to the contact page of the same language under the base, not a hard-coded path.
     expect(pricing).toContain('href="/biz/zh/contact/">联系我们</a>')
     expect(pricing).not.toContain('href="/biz/contact/"')
+  })
+
+  it('offer the languages as a drop-down named by the current one (Q41)', () => {
+    const html = renderPage({ language: 'ja', page: 'pricing', content: contentOf('ja'), base: '/biz/', tryQuizzes,
+      assets, siteUrl })
+    const menu = html.slice(html.indexOf('<details class="lang"'), html.indexOf('</details>'))
+    expect(menu).toContain(`aria-label="${contentOf('ja').languageLabel}: 日本語"`)
+    // All three as links in the list; the current one marked, the others the alternates the switch remembers.
+    expect(menu.match(/<li>/g)).toHaveLength(3)
+    expect(menu).toContain('href="/biz/ja/pricing/" lang="ja" aria-current="true">日本語</a>')
+    expect(menu).toContain('href="/biz/pricing/" lang="en" hreflang="en" data-lang="en">English</a>')
+    expect(menu).toContain('href="/biz/zh/pricing/" lang="zh-Hans" hreflang="zh-Hans" data-lang="zh">中文</a>')
   })
 
   it('show the try-it quiz as a button and a QR code when given, a placeholder otherwise', () => {

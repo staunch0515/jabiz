@@ -152,6 +152,18 @@ function wire(win, doc, store) {
       openSignUp(button.dataset.signup, button.getAttribute('href'), win)
     })
   }
+  // The language drop-down closes on a click outside it and on Escape (it opens and closes by itself without this).
+  const languages = doc.querySelector('[data-lang-menu]')
+  if (languages) {
+    doc.addEventListener('click', (event) => {
+      if (languages.open && !languages.contains(event.target)) languages.open = false
+    })
+    languages.addEventListener('keydown', (event) => {
+      if (event.key !== 'Escape' || !languages.open) return
+      languages.open = false
+      languages.querySelector('summary')?.focus()
+    })
+  }
   const menu = doc.querySelector('[data-menu]')
   const toggle = doc.querySelector('[data-menu-toggle]')
   if (menu && toggle) {
