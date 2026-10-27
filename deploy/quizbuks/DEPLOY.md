@@ -203,6 +203,47 @@ Run workflow，分支选该环境的分支，`image-tag` 留空。第一次启�
 3. **DNS**：给 `staging.<基础域名>` 添加 A 记录（及 AAAA），指向同一台服务器。
 4. 第一次部署与首次启动之后的步骤同上（`https://staging.<基础域名>/admin/`）。
 
+## 重置 staging（演练前）
+
+上线演练要从"第一次部署"与"首次启动之后"走起时，先把 staging 清回空库。**只对 staging**：下面每一步都只用 `quizbuks-staging`、`quizbuks_staging`、
+`quizbuks-staging_files` 这几个名字，生产的 `quizbuks`、`quizbuks_files` 一律不碰。第 0 步的检查不通过就停下。
+
+0. **确认对象是 staging**（在服务器上；后面的命令都用这几个变量）：
+
+   ```sh
+   APP=quizbuks-staging; DB=quizbuks_staging; FILES=quizbuks-staging_files
+   grep -qx "APP_NAME=$APP" /opt/apps/$APP/.env && ! grep -q '^JABIZ_WEB_ENVIRONMENT=production' /opt/apps/$APP/.env \
+     && docker volume inspect "$FILES" >/dev/null && echo "OK: $APP / $DB / $FILES" || echo "停止：不是 staging 或名字不对"
+   ```
+
+1. **（可选）备份旧数据**：`docker exec postgres pg_dump -U postgres -Fc "$DB" > /root/$DB-$(date +%F).dump`
+   （`postgres` 是共用 PostgreSQL 的容器名与超级用户；不同时换成实际的名字。）
+2. **记下当前的镜像并停掉应用**：
+
+   ```sh
+   SHA=$(docker inspect "$APP-app" -f '{{.Config.Image}}' | cut -d: -f2); echo "$SHA"
+   docker stop "$APP-app"
+   ```
+
+3. **删库重建**（同一个角色、密码不变，`.env` 的数据库变量不用改；迁移不需要扩展与超级用户，下次启动在空库上建全部的表）：
+
+   ```sh
+   docker exec postgres psql -U postgres -v ON_ERROR_STOP=1 \
+     -c "DROP DATABASE \"$DB\" WITH (FORCE);" -c "CREATE DATABASE \"$DB\" OWNER \"$DB\";"
+   ```
+
+4. **清空上传的文件**（它们的记录已随库删除）：`docker run --rm -v "$FILES":/f alpine sh -c 'rm -rf /f/* /f/.[!.]*'`。
+   `quizbuks-staging_secrets` 不用动（服务器上不在其中生成密钥）。
+5. **让首个管理员重新创建**：在 `/opt/apps/quizbuks-staging/.env` 中写回 `JABIZ_BOOTSTRAP_ADMIN_USER` 与**新的** `JABIZ_BOOTSTRAP_ADMIN_PASSWORD`，
+   删去 `QB_BOOTSTRAP_ADMIN_DONE=true`。平台密钥可以不变（空库用原来的密钥没有问题），也可以按"`.env`"一节重新生成，顺便演练换密钥。
+6. **重新部署同一个版本**：`/opt/infra/scripts/deploy-app.sh "$APP" "$SHA"`（或 Run workflow，分支 `1.2/quizbuks`，`image-tag` 填 `$SHA`），
+   再 `docker logs -f "$APP-app"` 直到健康、没有 `Platform check failed`。
+7. **外部的旧测试数据**：Stripe（测试模式）中旧的顾客与 Connect 账户还在，可在 Developers 中"删除所有测试数据"（端点与签名密钥不受影响）；
+   登录过 staging 的浏览器与已安装的 App 的会话都已失效，清掉 `staging.<基础域名>` 的站点数据再开始。
+
+然后从"5. 首次启动之后"（`operations.md` §3）开始演练；首个管理员开启两步验证、`QB_SETUP` 的提案发布之后，照第 3 步改回 `.env`
+（删 `JABIZ_BOOTSTRAP_ADMIN_PASSWORD`、加 `QB_BOOTSTRAP_ADMIN_DONE=true`）并重新部署，这一步本身也是演练的一部分。
+
 ## 之后的部署
 
 - **自动**：每次推送 `1.2/quizbuks`（staging）或 `1.2/quizbuks-release`（production）：测试（`:quizbuks:check`、入口脚本的测试、两个前端与后台扩展的检查）
