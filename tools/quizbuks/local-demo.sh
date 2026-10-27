@@ -77,6 +77,9 @@ EOF
   STRIPE_API_KEY=sk_test_local_demo
   # Claude (Q8a): a placeholder key and an address nothing answers; AI stays off (qb.ai.enabled), nothing is sent.
   ANTHROPIC_API_KEY=local-demo-placeholder-not-a-claude-key
+  # QuizBuks for Shopify (S1): placeholders Shopify never signs with; no shop signs in or sends webhooks here.
+  SHOPIFY_API_KEY=local-demo-placeholder-shopify-key
+  SHOPIFY_API_SECRET=local_demo_placeholder_shopify_secret_00
   QB_ANTHROPIC_API_URL=http://localhost:9
   QB_ANTHROPIC_API_HOSTS=localhost
   QB_STRIPE_API_URL=http://localhost:$STUB_PORT

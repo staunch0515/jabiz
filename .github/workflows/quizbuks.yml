@@ -161,6 +161,9 @@ jobs:
           export STRIPE_API_KEY=sk_test_ci_throwaway
           # Claude (Q8a): startup refuses a missing key; AI stays off, so nothing is sent.
           export ANTHROPIC_API_KEY=ci-throwaway-not-a-claude-key
+          # QuizBuks for Shopify (S1): startup refuses a missing app key or secret.
+          export SHOPIFY_API_KEY=ci-throwaway-shopify-key
+          export SHOPIFY_API_SECRET=ci_throwaway_shopify_$(openssl rand -hex 16)
           nohup java -Dreactor.schedulers.defaultBoundedElasticOnVirtualThreads=true \
             -jar quizbuks/build/libs/quizbuks-0.0.1-SNAPSHOT.jar > ../quizbuks.log 2>&1 &
           for i in $(seq 1 60); do curl -sf localhost:8080/actuator/health && exit 0; sleep 2; done
@@ -289,6 +292,9 @@ jobs:
             > ../stripe-stub.log 2>&1 &
           # Claude is the local stub too (Q8a): it answers from the request alone and never calls the network.
           export ANTHROPIC_API_KEY=e2e-throwaway-not-a-claude-key
+          # QuizBuks for Shopify (S1): the app's key and secret; nothing calls Shopify.
+          export SHOPIFY_API_KEY=e2e-throwaway-shopify-key
+          export SHOPIFY_API_SECRET=e2e_throwaway_shopify_$(openssl rand -hex 16)
           nohup java ../tools/quizbuks/claude-stub/ClaudeStub.java 8094 > ../claude-stub.log 2>&1 &
           # The tests' administrator has no second factor; the publisher of QB_SETUP's proposals and the accountant of
           # the journal export are roles of the tests' own (QB_E2E_PUBLISHER: control.publish only; QB_E2E_FINANCE:

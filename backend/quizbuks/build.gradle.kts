@@ -25,6 +25,8 @@ jabizApp {
 
 dependencies {
     implementation(project(":runtime"))
+    // QuizBuks for Shopify (docs/quizbuks/shopify/S1-install.md): a library of its own, in this jar.
+    implementation(project(":quizbuks-shopify"))
     testImplementation(testFixtures(project(":runtime")))
     testImplementation("com.tngtech.archunit:archunit-junit5:1.5.0")
     testImplementation("net.jqwik:jqwik:1.9.3")
@@ -57,6 +59,9 @@ tasks.named<JavaExec>("platformCheck") {
     // Q29: the key sealing the sponsors' mail server passwords (platform decision D56): declared a MailSenderSource,
     // the application refuses to start without it; a throwaway value here, as the launcher's own keys.
     environment("JABIZ_SEAL_KEY", "cGxhdGZvcm0tY2hlY2stdGhyb3dhd2F5LXNlYWwta2V5LW5vdC1mb3ItYW55LXVzZS0wMA==")
+    // S1: the Shopify app's key and secret (session tokens, webhooks and the Admin API), from the environment only.
+    environment("SHOPIFY_API_KEY", "platform-check-throwaway-shopify-key")
+    environment("SHOPIFY_API_SECRET", "platform_check_throwaway_shopify_secret_00")
 }
 
 tasks.register<Test>("perfTest") {
