@@ -306,7 +306,7 @@ ProcessDefinition<In, Out, Ctx> p = ProcessDefinition.single("ORDER_CANCEL", 1, 
 - 流程输入以遮蔽后的 JSON 记入 `op_process.input_summary`，秘密（敏感字段、`@Sensitive` 组件）在流程 API 响应与 `op_process_result` 中为 `null`【D12】。
 - 同一流程执行器也被定时任务、事件消费者和场景测试调用（传输方式无关，11 §2.3、§4）。
 - 流程目录 `GET /api/meta/processes` 列出调用方可执行的流程及其输入的 JSON Schema（`ProcessInputSchemas`），前端据此生成表单（12 §2）。
-- **谁能启动流程**【D41】：不经流程接口的流程按用途三选一声明，都不进目录、不能作为行操作（声明 `actsOn` 即启动失败），权限照常声明。
+- **谁能启动流程**【D41、D60】：不经流程接口的流程按用途四选一声明，都不进目录、不能作为行操作（声明 `actsOn` 即启动失败），权限照常声明。
   执行器在启动根流程与子流程时统一检查（`ProcessExecutor.requireStartable` / 子流程同理；流程接口在转换输入之前先查），不符即 403 `PROCESS_INTERNAL`（三语），不论权限：
 
   | 声明 | 作为根流程 | 作为子流程（`CallProcess`） | 平台中的例子 |
@@ -314,14 +314,15 @@ ProcessDefinition<In, Out, Ctx> p = ProcessDefinition.single("ORDER_CANCEL", 1, 
   | `pb.internal()` | 只有系统身份（流程接口一律拒绝） | 只在系统身份的根流程下（调用方须也是 `internal()`，启动检查） | `MAIL_SEND`、`TASK_NOTIFY`、`INBOUND_RECEIVE`、`WEBHOOK_DELIVER`、`SEC_BOOTSTRAP_ADMIN`；应用的事件消费、定时任务、回调流程（示范 `ORDER_RECORD_PAYMENT`、`CERTIFICATION_APPROVAL_RESULT`、`FREIGHT_POST_REVENUE`） |
   | `pb.entryOnly()` | 只经平台自己的入口，以真实调用者运行（入口传执行选项 `ExecutionOptions.atEntryOf(流程)` / `ProcessExecutor.executeAtEntry`） | 一律拒绝（调用它在启动检查中报错） | 登录与二次验证（`SPONSOR_SIGN_IN`、`SPONSOR_MFA_VERIFY`、`SPONSOR_OIDC_SIGN_IN`）、通用实体流程（`ADD/UPDATE/DELETE_ENTITY`，实体接口）、`FILE_REGISTER`（上传）、`IMPORT_RUN` 与导入映射（`IMPORT_MAPPING_SAVE/REMOVE`）、自助注册与找回密码（`SPONSOR_SIGN_UP*`、`SPONSOR_EMAIL_VERIFY*`、`SPONSOR_PASSWORD_RESET_*`）、`SEC_MFA_ENROLL_*`、`SEC_USER_SET_LOCALE`、`SEC_MAIL_PREFERENCE_SET` |
   | `pb.subProcessOnly()` | 一律拒绝（系统身份也不行） | 任何根流程下都可以，权限由根流程的声明保证 | `FILE_ARCHIVE`（14 §10） |
+  | `pb.appProxy(代理)` | 只经该应用代理 `/api/proxy/<代理>/<流程>`，以代理的调用者运行（10 §15.13【D60】）；权限即代理的 `app-proxy.<代理>`，由声明自动加上，不再声明别的 | 一律拒绝（调用它在启动检查中报错） | 示范只在测试中（`AppProxyIT`） |
 
-  流程接口对三种流程一律 403 `PROCESS_INTERNAL`（不是 404：流程存在，只是不由这里运行；目录已隐去它们），消息说明它如何运行（由平台在事件、计划、回调中运行 / 经它自己的接口 / 只作另一流程的一部分）。
+  流程接口对这几种流程一律 403 `PROCESS_INTERNAL`（不是 404：流程存在，只是不由这里运行；目录已隐去它们），消息说明它如何运行（由平台在事件、计划、回调中运行 / 经它自己的接口 / 只作另一流程的一部分）。
   名字 `system`、`anonymous` 保留：开发请求头与访问令牌都不能以它们为操作人。业务代码不引用 `ProcessExecutor`、`ExecutionOptions`、`ActingUser`、`RequestContext.system`（`PlatformArchRules.noProcessMachinery`）。
   操作记录与审计中的操作人总是根流程的操作人：`entryOnly()` 流程保留真实的调用者，子流程沿用根流程的身份。
   新的平台流程按用途选择其一；应用的事件、定时任务、回调接续点用 `internal()`。
 - **过载与限流**（阶段 16o，D45）：声明了准入（§4.2）的流程，队满或排队超时即 503 `PROCESS_BUSY`（`Retry-After`，`violations[0]` 的参数与 ProblemDetail 的顶层属性 `reason`
   = `QUEUE_FULL` / `WAIT_TIMEOUT`、`retryAfter`，三语消息；不记错误日志），请求未读写任何数据，可以重试；通用后台与 `@jabiz/client` 不自动重试 503，显示消息。
-  流程接口可按 `jabiz.process.rate-limits.<流程>` 按用户、地址、实例限流（10 §15.10），超限 429 `RATE_LIMITED`。入口的检查顺序：
+  流程接口可按 `jabiz.process.rate-limits.<流程>` 按用户、地址、实例限流（10 §15.10），超限 429 `RATE_LIMITED`；应用代理的流程另可按租户（`per-tenant`）与访客键（`per-visitor`）限流（10 §15.13【D60】）。入口的检查顺序：
   进目录 → 权限 → 限流 → 二次验证 → 已验证邮箱 → 职责分离 → （执行器）幂等重放 → 准入 → 事务。
 - `ExecutionOptions`（平台内部）：`idempotencyKey`，`beforeSteps`——在流程事务内、记录操作之后、第一个步骤之前执行的平台工作
   （事件投递用它写消费标记，与消费效果同一事务）【D14】，`dryRun`（导入预览，20 §5），以及 `entry`——平台入口声明自己是哪个 `entryOnly()` 流程的入口（`atEntryOf`）【D41】；流程接口从不传它。
@@ -338,7 +339,7 @@ ProcessDefinition<In, Out, Ctx> p = ProcessDefinition.single("ORDER_CANCEL", 1, 
 - 进目录的流程的输入能被表单 Schema 完整描述（否则警告：该部分以原始 JSON 输入）。
 - 准入与限流（D45，`ProcessAdmissionChecks`，同为类别 `PROCESS`）：族名合法；`subProcessOnly()` 流程不能声明准入；配置了而没有流程声明的族告警；
   `concurrency` 1–16、`max-queue` 0–10 000、`max-wait` 大于 0 且不超过 `jabiz.process.lock-timeout`、`retry-after` 0–30 秒、`max-active` 0 或 1 到池大小 − 1、`max-keys` 与 `max-waiting` 为正；
-  `jabiz.process.rate-limits` 中的流程须已注册且进目录、数值为正、至少一种桶。
+  `jabiz.process.rate-limits` 中的流程须已注册且进目录（或是 `appProxy()` 流程）、数值为正、至少一种桶；`per-tenant` / `per-visitor` 只用于 `appProxy()` 流程。
 - 实现：`ProcessChecks`（`PlatformCheck`，类别 `PROCESS`）。
 
 ## 10. 与现有代码的衔接

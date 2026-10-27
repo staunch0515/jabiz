@@ -135,16 +135,28 @@ public class ProcessAdmissionChecks implements PlatformCheck {
             var found = registry.findLatest(entry.getKey());
             if (found.isEmpty()) {
                 problems.add(error(location, "names no registered process"));
-            } else if (!found.get().listed()) {
+            } else if (!found.get().listed() && found.get().access() != ProcessAccess.APP_PROXY) {
                 problems.add(error(location, entry.getKey() + " is " + found.get().access() + " (decision D41): "
-                    + "it never comes through the process API, which is all a rate limit counts"));
+                    + "it never comes through the process API or an app proxy, which is all a rate limit counts"));
+            } else if (found.get().access() != ProcessAccess.APP_PROXY
+                && (limit.perTenant() != null || limit.perVisitor() != null)) {
+                problems.add(error(location, "per-tenant and per-visitor count the callers of an app proxy only"
+                    + " (decision D60)"));
+            } else if (found.get().access() == ProcessAccess.APP_PROXY && limit.perUser() != null) {
+                // Every anonymous visitor of every tenant is one actor: count per tenant and visitor instead.
+                problems.add(error(location, "per-user does not tell an app proxy's callers apart: use per-tenant"
+                    + " and per-visitor (decision D60)"));
             }
-            if (limit.perUser() == null && limit.perAddress() == null && limit.perInstance() == null) {
-                problems.add(error(location, "declares none of per-user, per-address and per-instance"));
+            if (limit.perUser() == null && limit.perAddress() == null && limit.perInstance() == null
+                && limit.perTenant() == null && limit.perVisitor() == null) {
+                problems.add(error(location, "declares none of per-user, per-address, per-instance, per-tenant and"
+                    + " per-visitor"));
             }
             positive(location + ".per-user", limit.perUser(), problems);
             positive(location + ".per-address", limit.perAddress(), problems);
             positive(location + ".per-instance", limit.perInstance(), problems);
+            positive(location + ".per-tenant", limit.perTenant(), problems);
+            positive(location + ".per-visitor", limit.perVisitor(), problems);
             if (limit.period().isNegative() || limit.period().isZero()) {
                 problems.add(error(location + ".period", "must be positive, not " + limit.period()));
             }

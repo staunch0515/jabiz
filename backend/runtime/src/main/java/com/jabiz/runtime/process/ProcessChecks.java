@@ -133,6 +133,10 @@ public class ProcessChecks implements PlatformCheck {
                     problems.add(CheckProblem.error(CATEGORY, location, "calls " + key(target)
                         + ", which only its platform entry point runs (entryOnly, decision D41)"));
                 }
+                if (target.access() == ProcessAccess.APP_PROXY) {
+                    problems.add(CheckProblem.error(CATEGORY, location, "calls " + key(target)
+                        + ", which only its app proxy runs (appProxy, decision D60)"));
+                }
                 // Only a process the system runs may call a hand-off point. Whether an open process's root runs as the
                 // system is not known here; only internal() callers are taken to.
                 if (target.access() == ProcessAccess.INTERNAL && definition.access() != ProcessAccess.INTERNAL) {

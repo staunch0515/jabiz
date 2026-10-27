@@ -84,6 +84,8 @@ public class PlatformObservations {
      */
     public static final String INBOUND = "jabiz.inbound.receive";
     public static final String INBOUND_RATE_LIMITED = "jabiz.inbound.rate_limited";
+    /** A request through an app proxy refused before its process ran (decision D60): tags {@code proxy}, {@code reason}. */
+    public static final String APP_PROXY_REFUSED = "jabiz.app_proxy.refused";
     /**
      * The wait of a top-level process in the queue before its hot named lock (decision D45), nested in
      * {@link #PROCESS}: tags {@code family}, {@code process} and {@code result} ({@code ADMITTED}, {@code QUEUE_FULL},
