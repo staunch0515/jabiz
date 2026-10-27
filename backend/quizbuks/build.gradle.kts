@@ -27,6 +27,13 @@ jabizApp {
     publicQueriesSnapshot = rootProject.layout.projectDirectory.file("quizbuks/src/test/resources/public-queries.json")
 }
 
+// S4a: the public pages of QuizBuks for Shopify write the support address and the site's origin in at build time
+// (quizbuks-web/shopify-site/scripts/build.mjs), so a change of either builds them again.
+tasks.matching { it.name == "spaBuildShopifyApp" }.configureEach {
+    inputs.property("supportEmail", providers.environmentVariable("QB_SHOPIFY_SUPPORT_EMAIL").orElse(""))
+    inputs.property("siteUrl", providers.environmentVariable("SITE_URL").orElse(""))
+}
+
 dependencies {
     implementation(project(":runtime"))
     // QuizBuks for Shopify (docs/quizbuks/shopify/S1-install.md): a library of its own, in this jar.

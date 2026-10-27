@@ -56,7 +56,7 @@ S1 的已知问题：内嵌页的 `<meta name="shopify-api-key">` 在构建时�
 
 ## 6. 拆分与测试
 
-- **平台 17e**（若 Q-S4-4 选 A）：入口页占位、启动检查、示范与测试，然后同步到 `1.3/quizbuks`。
+- **平台 17g**（Q-S4-4 选了 A；17e、17f 的编号已被占用）：入口页占位、启动检查、示范与测试，然后同步到 `1.3/quizbuks`。
 - **S4a**：公开站点（W-1 到 W-4）、"Powered by" 链接（W-5）、支持邮箱配置。
   - 测试：静态站点的生成测试（三种语言的页面与链接都在）；
   - 内嵌页"帮助"链接的测试；
@@ -66,7 +66,7 @@ S1 的已知问题：内嵌页的 `<meta name="shopify-api-key">` 在构建时�
   - 亮、暗外观的 axe；
   - 店面组件的 Playwright 性能测试；
   - 入口包的体积门槛。
-- 都以 `/code-review` 自查。S4a 的公开页面没有新的接口；S4b 只改前端。若做 17e，要跑 `/security-review`：入口页注入涉及转义。
+- 都以 `/code-review` 自查。S4a 的公开页面没有新的接口；S4b 只改前端。17g 要跑 `/security-review`：入口页注入涉及转义。
 
 ## 7. 上架前还需要需求方准备（不属于代码）
 
@@ -82,7 +82,7 @@ S1 的已知问题：内嵌页的 `<meta name="shopify-api-key">` 在构建时�
 
 | # | 内容 |
 |---|---|
-| I-1 | 公开站点 `quizbuks-web/shopify-site/`（`/shopify-app/`）：首页、隐私政策、支持三页，英中日各一份，生成方式同 `biz` 但独立（没有脚本、没有内联样式）。支持邮箱在构建时写入（`QB_SHOPIFY_SUPPORT_EMAIL`，缺省 `shopify-support@quizbuks.com`） |
+| I-1 | 公开站点 `quizbuks-web/shopify-site/`（`/shopify-app/`）：首页、隐私政策、支持三页，英中日各一份，生成方式同 `biz` 但独立（没有脚本、没有内联样式）。支持邮箱在构建时写入（`QB_SHOPIFY_SUPPORT_EMAIL`，缺省 `shopify-support@quizbuks.com`；镜像构建参数同名，Gradle 以它为输入，改了即重建） |
 | I-2 | 内嵌页的 Client ID 与支持邮箱由平台 17g 在启动时写入（`jabiz.web.spa[].index-values`：`SHOPIFY_API_KEY`、`QB_SHOPIFY_SUPPORT_EMAIL`），镜像不再带 `VITE_SHOPIFY_API_KEY`（S1 的已知问题解决）。内嵌页底部是"帮助与常见问题"（按界面语言链到支持页，新标签）与支持邮箱 |
 | I-3 | 店面的 "Powered by QuizBuks" 链到落地页（按店面语言，新标签，`rel="noopener"`）；落地页的地址在构建时取 `SITE_URL`（缺省 `https://quizbuks.com`） |
 | I-4 | 应用商店资料草稿在 `S4-listing.md`（英文，附中文、日文对照） |
