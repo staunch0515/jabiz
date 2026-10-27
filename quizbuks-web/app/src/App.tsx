@@ -55,6 +55,8 @@ import { BANK_PATH, PAYOUT_PATH, WALLET_PATH } from './wallet/api'
 import { BankPage } from './wallet/BankPage'
 import { rememberShareNext } from './share/share'
 import { SharePage } from './share/SharePage'
+import { STAFF_PATH } from './staff/api'
+import { StaffDeskPage } from './staff/StaffDeskPage'
 import { PayoutPage } from './wallet/PayoutPage'
 import { WalletPage } from './wallet/WalletPage'
 import { ONE_LINE_BANNER } from './banner'
@@ -124,10 +126,10 @@ function BottomNav({ path }: { path: string }) {
   const { t } = useTranslation(APP)
   const unread = useUnread()
   // A publication's page belongs to home, an attempt's to the history, the payout account to the wallet, a message
-  // to the inbox.
+  // to the inbox, the staff's counter to the account (Q39).
   const item = itemPage(path)
   const section = item ? (item.page === 'p' ? HOME : HISTORY) : path === PAYOUT_PATH || path === BANK_PATH ? WALLET_PATH
-    : inboxItemOf(path) ? INBOX_PATH : path
+    : inboxItemOf(path) ? INBOX_PATH : path === STAFF_PATH ? ACCOUNT_PATH : path
   return (
     <nav aria-label={t('nav.label')}
       className="bg-card fixed inset-x-0 bottom-0 z-10 border-t pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_16px_-12px_var(--overlay)]">
@@ -199,6 +201,7 @@ function SignedIn({ path }: { path: string }) {
   else if (path === BANK_PATH) page = <BankPage />
   else if (path === ACCOUNT_PATH) page = <AccountPage />
   else if (path === INBOX_PATH) page = <InboxPage />
+  else if (path === STAFF_PATH) page = <StaffDeskPage />
   else if (inboxItemOf(path)) {
     const message = inboxItemOf(path)!
     page = <InboxItemPage key={`${message.kind}:${message.id}`} kind={message.kind} id={message.id} />

@@ -937,6 +937,8 @@ export interface RedemptionRow {
   claimedAt: string | null
   confirmBy: string | null
   redeemedAt: string | null
+  /** Who handed it over when one of the sponsor's staff did (Q39); null when the sponsor did. */
+  redeemedByName: string | null
 }
 
 export interface RedemptionSearch {
@@ -977,6 +979,7 @@ export async function searchRedemptions({ q, status, since, offset, limit }: Red
       claimedAt: row.claimedAt == null ? null : String(row.claimedAt),
       confirmBy: row.confirmBy == null ? null : String(row.confirmBy),
       redeemedAt: row.redeemedAt == null ? null : String(row.redeemedAt),
+      redeemedByName: row.redeemedByName == null ? null : String(row.redeemedByName),
     })),
   }
 }
@@ -990,6 +993,40 @@ export const confirmRedemption = (redemptionId: string) =>
 /** The claim is not the person at the counter: the prize is due again. */
 export const declineRedemption = (redemptionId: string) =>
   runProcess<RedemptionOutput>(PUBLISHING_PROCESS.redemptionDecline, { redemptionId })
+
+// ---- the staff (Q39) ------------------------------------------------------------------------------------------------
+
+/** `StaffProcesses.Candidate`: who an ID is before naming them. */
+export interface StaffCandidate {
+  userId: string
+  displayName: string | null
+  onStaff: boolean
+}
+
+/** A row of `qb.sponsor.staff`. */
+export interface StaffMember {
+  userId: string
+  displayName: string | null
+  addedAt: string
+}
+
+type StaffOutput = { userId: string; changed: boolean }
+
+/** Who the ID a taker gave is (refused when it is not a taker's who may be named). */
+export const findStaff = (userId: string) => runProcess<StaffCandidate>(PUBLISHING_PROCESS.staffFind, { userId })
+
+export const addStaff = (userId: string) => runProcess<StaffOutput>(PUBLISHING_PROCESS.staffAdd, { userId })
+
+export const removeStaff = (userId: string) => runProcess<StaffOutput>(PUBLISHING_PROCESS.staffRemove, { userId })
+
+export async function readStaff(): Promise<StaffMember[]> {
+  const page = await runQuery<Row>(PUBLISHING_TEMPLATE.staff, { limit: 100 })
+  return page.items.map((row) => ({
+    userId: String(row.userId),
+    displayName: row.displayName == null ? null : String(row.displayName),
+    addedAt: String(row.addedAt),
+  }))
+}
 
 // ---- the invitation list (Q25) -------------------------------------------------------------------------------------
 

@@ -24,6 +24,7 @@ results:
   claimedAt:       { from: QbRedemption.claimedAt }
   confirmBy:       { from: QbRedemption.confirmBy }
   redeemedAt:      { from: QbRedemption.redeemedAt }
+  redeemedByName:  { from: QbProfile.displayName }
 list:
   filters: [status, publicationId, dueAt, claimedAt, redeemedAt]
   sorts:   [dueAt, claimedAt, redeemedAt, amount, status]
@@ -32,7 +33,8 @@ list:
 permissions: [qb.publication.write]
 ---*/
 -- The taker's name as their profile gives it (none without a profile): what the sponsor sees at the counter next to
--- the code. The text is found as written: strpos takes it literally, so % _ and \ match themselves.
+-- the code; who handed it over when one of the sponsor's staff did (Q39; none when the sponsor did). The text is
+-- found as written: strpos takes it literally, so % _ and \ match themselves.
 SELECT
     r.{{QbRedemption.redemptionId}}   AS redemptionId,
     r.{{QbRedemption.code}}           AS code,
@@ -47,10 +49,13 @@ SELECT
     r.{{QbRedemption.claimKind}}      AS claimKind,
     r.{{QbRedemption.claimedAt}}      AS claimedAt,
     r.{{QbRedemption.confirmBy}}      AS confirmBy,
-    r.{{QbRedemption.redeemedAt}}     AS redeemedAt
+    r.{{QbRedemption.redeemedAt}}     AS redeemedAt,
+    b.{{QbProfile.displayName}}       AS redeemedByName
 FROM {{QbRedemption}} r
 JOIN {{QbPublicationCard}} c ON c.{{QbPublicationCard.publicationId}} = r.{{QbRedemption.publicationId}}
 LEFT JOIN {{QbProfile}} p ON p.{{QbProfile.userId}} = r.{{QbRedemption.userId}}
+LEFT JOIN {{QbProfile}} b ON b.{{QbProfile.userId}} = r.{{QbRedemption.redeemedBy}}
+                         AND r.{{QbRedemption.redeemedBy}} <> r.{{QbRedemption.publisherId}}
 WHERE (CAST(:q AS text) IS NULL
        OR strpos(lower(r.{{QbRedemption.code}}), lower(CAST(:q AS text))) > 0
        OR strpos(lower(coalesce(p.{{QbProfile.displayName}}, '')), lower(CAST(:q AS text))) > 0)

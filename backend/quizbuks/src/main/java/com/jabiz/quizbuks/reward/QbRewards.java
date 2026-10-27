@@ -31,6 +31,10 @@ public final class QbRewards {
     public static final String REDEMPTION = "QbRedemption";
     /** The codes a sponsor's console shows or prints for takers to scan (Q22b): an ordinary table. */
     public static final String REDEEM_TOKEN = "QbRedeemToken";
+    /** A sponsor's staff (Q39): takers the sponsor named to hand out prizes at the counter. An ordinary table. */
+    public static final String STAFF = "QbSponsorStaff";
+    /** The most staff a sponsor may name. */
+    public static final int MAX_STAFF = 50;
 
     public static final String CASH_STATUS_DICTIONARY = "urn:jabiz:dict:quizbuks:cash-reward-status";
     public static final String CASH_RESOLUTION_DICTIONARY = "urn:jabiz:dict:quizbuks:cash-reward-resolution";
@@ -50,6 +54,19 @@ public final class QbRewards {
     /** The taker's own records, read only. */
     public static String takerDataset(String entity) {
         return "urn:jabiz:dataset:taker:" + entity;
+    }
+
+    /** The lock of a sponsor's staff list: taken by naming and removing staff (the count, Q39). */
+    public static String staffListLockName(Object sponsorId) {
+        return sponsorId == null ? null : "qb.sponsor-staff:" + sponsorId;
+    }
+
+    /**
+     * The lock of one person's place on a staff (Q39): exclusive while they are named or removed, shared while they
+     * act for the sponsor, so a removal waits for the act in hand and every later act sees it.
+     */
+    public static String staffLockName(Object userId) {
+        return userId == null ? null : "qb.staff:" + userId;
     }
 
     /** The lock of a cash reward: taken by every process that writes it, before it is read. */
@@ -186,8 +203,8 @@ public final class QbRewards {
         eb.field("redeemedAt", f -> f.physicalColumn("redeemed_at").processOnly()
             .asTemporal(TemporalRole.EVENT_TIME));
         // Q22b: the scan. A printed code's claim waits for the sponsor until confirmBy; the console's rotating code
-        // completes the redemption at once. redeemedBy is the sponsor's user who confirmed, or the sponsor whose
-        // rotating code was scanned.
+        // completes the redemption at once. redeemedBy is who confirmed (the sponsor or, Q39, one of their staff),
+        // or who asked for the rotating code that was scanned.
         eb.field("claimKind", f -> f.physicalColumn("claim_kind").processOnly()
             .asCode(REDEEM_KIND_DICTIONARY, RedemptionStatus.KINDS.toArray(String[]::new)));
         eb.field("claimedAt", f -> f.physicalColumn("claimed_at").processOnly()
@@ -238,6 +255,8 @@ public final class QbRewards {
             .asTemporal(TemporalRole.EVENT_TIME));
         eb.field("expiresAt", f -> f.physicalColumn("expires_at").immutable(true).asTemporal(TemporalRole.EVENT_TIME));
         eb.field("revokedAt", f -> f.physicalColumn("revoked_at").processOnly().asTemporal(TemporalRole.EVENT_TIME));
+        // Q39: who asked for it, the sponsor or one of their staff; a rotating code redeems in their name.
+        eb.field("issuedBy", f -> f.physicalColumn("issued_by").immutable(true).asText(128));
         eb.field("version", f -> f.physicalColumn("version").asVersion());
         eb.unique("uk_qb_redeem_token", "tokenValue");
         eb.listView("default", lv -> lv
@@ -245,6 +264,30 @@ public final class QbRewards {
             .filters("sponsorId", "kind", "issuedAt")
             .sorts("issuedAt")
             .defaultSort("issuedAt", false));
+    });
+
+    /**
+     * A sponsor's staff member (Q39, docs/quizbuks/plans/Q39-sponsor-staff.md): a taker the sponsor named, who shows
+     * the sponsor's rotating code and answers claims from the printed one in the App. A person is on one sponsor's
+     * staff at most; the row goes when the sponsor removes them or they leave.
+     */
+    public static final EntityDefinition STAFF_ENTITY = EntityDefinition.define(STAFF, eb -> {
+        eb.physicalTable("qb_sponsor_staff");
+        eb.primaryKey("staffId");
+        eb.field("staffId", f -> f.physicalColumn("staff_id").immutable(true).required(true).generated(true)
+            .asSemanticIdentity("urn:jabiz:entity:quizbuks:sponsor-staff"));
+        eb.field("sponsorId", f -> f.physicalColumn("sponsor_id").immutable(true).required(true).asText(128));
+        eb.field("userId", f -> f.physicalColumn("user_id").immutable(true).required(true).asText(128));
+        eb.field("addedAt", f -> f.physicalColumn("added_at").immutable(true).required(true)
+            .asTemporal(TemporalRole.EVENT_TIME));
+        eb.field("addedBy", f -> f.physicalColumn("added_by").immutable(true).required(true).asText(128));
+        eb.field("version", f -> f.physicalColumn("version").asVersion());
+        eb.unique("uk_qb_sponsor_staff_user", "userId");
+        eb.listView("default", lv -> lv
+            .columns("sponsorId", "userId", "addedAt")
+            .filters("sponsorId", "userId", "addedAt")
+            .sorts("addedAt")
+            .defaultSort("addedAt", false));
     });
 
     static BigDecimal decimal(long value) {

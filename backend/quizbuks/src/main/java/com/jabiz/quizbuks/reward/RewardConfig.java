@@ -209,6 +209,65 @@ public class RewardConfig {
             QbPermissions.PUBLICATION_WRITE);
     }
 
+    /** Q39: a sponsor's staff, written by the processes only; the sponsor reads theirs, a staff member their place. */
+    @Bean
+    EntityDefinition qbSponsorStaffEntity() {
+        return QbRewards.STAFF_ENTITY;
+    }
+
+    @Bean
+    DatasetDefinition qbSponsorStaffDataset() {
+        return defaultDataset(QbRewards.STAFF);
+    }
+
+    @Bean
+    DatasetDefinition qbSponsorOwnStaffDataset() {
+        return ownDataset(QbRewards.sponsorDataset(QbRewards.STAFF), QbRewards.STAFF, "sponsorId",
+            QbPermissions.PUBLICATION_WRITE);
+    }
+
+    @Bean
+    DatasetDefinition qbTakerStaffDataset() {
+        return ownDataset(QbRewards.takerDataset(QbRewards.STAFF), QbRewards.STAFF, "userId", QbPermissions.ME);
+    }
+
+    @Bean
+    ProcessDefinition<StaffProcesses.StaffRef, StaffProcesses.Candidate, ProcessContext> qbSponsorStaffFind() {
+        return StaffProcesses.find();
+    }
+
+    @Bean
+    ProcessDefinition<StaffProcesses.StaffRef, StaffProcesses.StaffOutput, ProcessContext> qbSponsorStaffAdd() {
+        return StaffProcesses.add();
+    }
+
+    @Bean
+    ProcessDefinition<StaffProcesses.StaffRef, StaffProcesses.StaffOutput, ProcessContext> qbSponsorStaffRemove() {
+        return StaffProcesses.remove();
+    }
+
+    @Bean
+    ProcessDefinition<StaffProcesses.StaffInput, StaffProcesses.StaffOutput, ProcessContext> qbStaffLeave() {
+        return StaffProcesses.leave();
+    }
+
+    @Bean
+    ProcessDefinition<StaffProcesses.StaffInput, RedemptionProcesses.IssueOutput, ProcessContext> qbStaffRedeemCodeIssue() {
+        return StaffProcesses.issue();
+    }
+
+    @Bean
+    ProcessDefinition<RedemptionProcesses.RedemptionRef, RedemptionProcesses.RedemptionOutput, ProcessContext>
+        qbStaffRedemptionConfirm() {
+        return StaffProcesses.confirm();
+    }
+
+    @Bean
+    ProcessDefinition<RedemptionProcesses.RedemptionRef, RedemptionProcesses.RedemptionOutput, ProcessContext>
+        qbStaffRedemptionDecline() {
+        return StaffProcesses.decline();
+    }
+
     @Bean
     DatasetDefinition qbCashRewardDataset() {
         return defaultDataset(QbRewards.CASH_REWARD);

@@ -68,6 +68,10 @@ jabiz:
       "[QB_REDEEM_CODE_ISSUE]": { per-user: 20, period: 1m }
       "[QB_REDEEM_TOKEN_CHECK]": { per-user: 60, period: 1m }
       "[QB_REDEMPTION_CLAIM]": { per-user: 30, period: 1m }
+      # Q39: a staff member's App asks for the sponsor's rotating code once a minute, as the console does; looking an ID
+      # up is a sponsor typing one, not a directory to walk.
+      "[QB_STAFF_REDEEM_CODE_ISSUE]": { per-user: 20, period: 1m }
+      "[QB_SPONSOR_STAFF_FIND]": { per-user: 30, period: 1m }
       "[QB_ATTEMPT_SAVE]": { per-user: 120, period: 1m }
       "[QB_VIEW]": { per-user: 300, period: 1m }
       "[QB_PUBLICATION_SAVE]": { per-user: 60, period: 1m }
