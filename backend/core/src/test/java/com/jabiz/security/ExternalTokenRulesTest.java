@@ -125,6 +125,12 @@ class ExternalTokenRulesTest {
         assertThat(claim(c -> c.put("exp", "soon"))).isEqualTo(ExternalTokenRules.Failure.MALFORMED);
         assertThat(claim(c -> c.put("exp", new BigDecimal("1.5")))).isEqualTo(ExternalTokenRules.Failure.MALFORMED);
         assertThat(claim(c -> c.put("nbf", "now"))).isEqualTo(ExternalTokenRules.Failure.MALFORMED);
+        // Times no clock reaches are malformed, not an arithmetic failure.
+        for (Object time : List.of(Long.MAX_VALUE, Long.MIN_VALUE, -1L, new BigDecimal("31556889864403199"),
+            ExternalTokenRules.MAX_TIME + 1)) {
+            assertThat(claim(c -> c.put("exp", time))).as("exp " + time).isEqualTo(ExternalTokenRules.Failure.MALFORMED);
+            assertThat(claim(c -> c.put("nbf", time))).as("nbf " + time).isEqualTo(ExternalTokenRules.Failure.MALFORMED);
+        }
     }
 
     private static Map<String, Object> withNbf(long nbf) {

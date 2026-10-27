@@ -33,6 +33,8 @@ public class ExternalTokens {
     /** The longest token read: a session token is a few hundred bytes. */
     static final int MAX_TOKEN_LENGTH = 4096;
     static final int MAX_IDENTITY_SUBJECT = 255;
+    /** Expired uses removed by one sign-in at most: more than come in between two sign-ins. */
+    static final int CLEANUP_BATCH = 100;
     private static final Pattern PART = Pattern.compile("[A-Za-z0-9_-]+");
     private static final JsonMapper STRICT = JsonMapper.builder()
         .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
@@ -89,8 +91,12 @@ public class ExternalTokens {
             use.put("token_id", token.tokenId());
             use.put("used_at", now);
             use.put("expires_at", token.expiresAt().plus(provider.skew()));
+            // A few expired rows at a time, skipping those another sign-in is removing: sign-ins never wait on
+            // each other here.
             return engine.inTransaction(engine.select(
-                    "DELETE FROM sec_external_token_use WHERE expires_at < :now RETURNING token_id",
+                    "DELETE FROM sec_external_token_use WHERE (provider, token_id) IN (SELECT provider, token_id"
+                        + " FROM sec_external_token_use WHERE expires_at < :now LIMIT " + CLEANUP_BATCH
+                        + " FOR UPDATE SKIP LOCKED) RETURNING token_id",
                     Map.of("now", BoundValue.of(now)))
                 .then(engine.insert("sec_external_token_use", use)))
                 .onErrorMap(UniqueKeyViolationException.class,

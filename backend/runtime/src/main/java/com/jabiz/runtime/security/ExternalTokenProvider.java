@@ -57,7 +57,12 @@ public record ExternalTokenProvider(String name, List<String> secrets, String au
 
     /** The subject of the identity a token stands for: the person within the tenant. */
     public static String identitySubject(ExternalTokenRules.Verified token) {
-        return token.tenant() + "/" + token.subject();
+        return identitySubject(token.tenant(), token.subject());
+    }
+
+    /** The subject of the identity of {@code subject} in {@code tenant}: {@code <tenant>/<subject>}. */
+    public static String identitySubject(String tenant, String subject) {
+        return tenant + "/" + subject;
     }
 
     /**

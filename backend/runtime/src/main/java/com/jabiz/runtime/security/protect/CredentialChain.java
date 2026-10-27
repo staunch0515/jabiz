@@ -51,6 +51,8 @@ final class CredentialChain {
         "SPONSOR_SIGN_UP_JOIN");
     /** The process in which a signed-in user changes their own password. */
     static final String SELF_PASSWORD_CHANGE = "SEC_ACCOUNT_PASSWORD_CHANGE";
+    /** Processes that open an account for an identity a provider vouched for, linking it as they open it. */
+    static final Set<String> PROVIDER_SIGN_UP = Set.of("SPONSOR_OIDC_SIGN_UP", "SPONSOR_EXTERNAL_TOKEN_SIGN_UP");
     /** Processes in which a user links their own account at a provider. */
     static final Set<String> SELF_IDENTITY = Set.of("SEC_IDENTITY_LINK_SELF", "SPONSOR_OIDC_SIGN_UP",
         "SPONSOR_EXTERNAL_TOKEN_SIGN_UP");
@@ -262,7 +264,7 @@ final class CredentialChain {
 
         private void link(Event event) {
             if (!links.containsKey(event.key()) && !event.deleted()) {
-                boolean own = event.process() != null && (SELF_REGISTRATION.contains(event.process())
+                boolean own = event.process() != null && (PROVIDER_SIGN_UP.contains(event.process())
                     || SELF_IDENTITY.contains(event.process()) && byUser(event) && clean());
                 links.put(event.key(), own);
                 line(event, "linked to " + event.provider() + ", " + verdict(own ? State.OWN : State.FOREIGN));

@@ -322,6 +322,9 @@ class ExternalTokenIT extends SignUpItSupport {
                     })
                     .steps(VerifyExternalToken.of(SHOP, ctx -> ctx.get("in", VerifyInput.class).sessionToken(),
                         "verified"))
+                    // A second verification in the same process (its steps are named apart).
+                    .steps(VerifyExternalToken.of(SHOP, ctx -> ctx.get("in", VerifyInput.class).sessionToken(),
+                        "again"))
                     .outputMapper(ctx -> {
                         VerifyExternalToken.Verified verified = ctx.get("verified", VerifyExternalToken.Verified.class);
                         return new VerifyOutput(verified.tenant(), verified.subject());

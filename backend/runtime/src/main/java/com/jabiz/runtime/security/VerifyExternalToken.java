@@ -1,6 +1,6 @@
 package com.jabiz.runtime.security;
 
-import com.jabiz.process.BlockingStep;
+import com.jabiz.process.ComputeStep;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinitionBuilder;
 import com.jabiz.process.StepSpec;
@@ -22,6 +22,7 @@ import java.util.function.Function;
  * the operator's user. The context then holds the {@link Verified} token: its tenant, subject and the token itself, for
  * a blocking step that hands it on (such as exchanging it for an access token at the platform that signed it). It does
  * not use the token up: the platform that signed it is the one to judge reuse. Anything else is 403, whatever failed.
+ * The step names carry the target key, so that a process may verify more than one token.
  * <pre>{@code
  * .steps(VerifyExternalToken.of("shop", ctx -> input(ctx).sessionToken(), "verified"))
  * }</pre>
@@ -29,7 +30,7 @@ import java.util.function.Function;
  */
 @Component
 public class VerifyExternalToken<C extends ProcessContext>
-    implements BlockingStep<VerifyExternalToken.Metadata<C>, C> {
+    implements ComputeStep<VerifyExternalToken.Metadata<C>, C> {
 
     /** The verified token of the operator. {@code token} is the token as given, for handing on; never log it. */
     public record Verified(String provider, String tenant, String subject, String token) {
@@ -58,18 +59,18 @@ public class VerifyExternalToken<C extends ProcessContext>
         Metadata<C> metadata = new Metadata<>(provider, token, targetKey);
         String links = targetKey + ".links";
         return pb -> pb
-            .step("Verify the external token", StepSpec.of(VerifyExternalToken.class, metadata))
-            .step("Find whom the external identity is linked to", QueryEntities.<C>of(
+            .step("Verify the external token " + targetKey, StepSpec.of(VerifyExternalToken.class, metadata))
+            .step("Find whom the external identity " + targetKey + " is linked to", QueryEntities.<C>of(
                 SecurityEntities.USER_IDENTITY_DATASET, ctx -> Rbac.all(new QueryPredicate.And(List.of(
                     new QueryPredicate.Eq("provider", ExternalTokenProvider.IDENTITY_PREFIX + provider),
                     new QueryPredicate.Eq("subject", identitySubject(ctx.get(targetKey, Verified.class))))),
                     "provider"), links))
-            .compute("Require the operator's external identity", (none, ctx) -> requireOperator(ctx, targetKey,
-                links));
+            .compute("Require the operator's external identity " + targetKey, (none, ctx) -> requireOperator(ctx,
+                targetKey, links));
     }
 
     static String identitySubject(Verified verified) {
-        return verified.tenant() + "/" + verified.subject();
+        return ExternalTokenProvider.identitySubject(verified.tenant(), verified.subject());
     }
 
     @SuppressWarnings("unchecked")
@@ -97,7 +98,7 @@ public class VerifyExternalToken<C extends ProcessContext>
     }
 
     @Override
-    public void run(Metadata<C> metadata, C ctx) {
+    public void compute(Metadata<C> metadata, C ctx) {
         ExternalTokenProvider provider = providers.find(metadata.provider())
             .orElseThrow(() -> refused(metadata.provider(), "The external token provider is unavailable"));
         String token = metadata.token().apply(ctx);

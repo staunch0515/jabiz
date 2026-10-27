@@ -218,18 +218,26 @@ public final class ExternalTokenRules {
         return value instanceof String text && ID.matcher(text).matches() ? text : null;
     }
 
-    /** Seconds since the epoch as JSON gives them; null for anything else, fractions included. */
+    /** The latest time a token may name (the end of 9999 UTC): beyond it no clock is, and arithmetic would overflow. */
+    public static final long MAX_TIME = 253_402_300_799L;
+
+    /**
+     * Seconds since the epoch as JSON gives them, from 0 to {@link #MAX_TIME}; null for anything else, fractions
+     * included.
+     */
     private static Instant seconds(Object value) {
+        long seconds;
         if (value instanceof Integer || value instanceof Long) {
-            return Instant.ofEpochSecond(((Number) value).longValue());
-        }
-        if (value instanceof BigDecimal decimal) {
+            seconds = ((Number) value).longValue();
+        } else if (value instanceof BigDecimal decimal) {
             try {
-                return Instant.ofEpochSecond(decimal.longValueExact());
+                seconds = decimal.longValueExact();
             } catch (ArithmeticException e) {
                 return null;
             }
+        } else {
+            return null;
         }
-        return null;
+        return seconds < 0 || seconds > MAX_TIME ? null : Instant.ofEpochSecond(seconds);
     }
 }
