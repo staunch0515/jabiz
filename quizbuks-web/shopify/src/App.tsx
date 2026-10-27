@@ -15,19 +15,25 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
 } from '@jabiz/ui'
 import { QueryClient, QueryClientProvider, useMutation, useQuery } from '@tanstack/react-query'
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { check, connect, join, transferAdmin, type Shop } from './api'
 import { NotEmbeddedError, sessionToken } from './appBridge'
+import { CampaignsPage } from './CampaignsPage'
 import { SHOPIFY } from './messages'
 
 /**
  * QuizBuks for Shopify's embedded pages (docs/quizbuks/shopify/S1-install.md section 6): sign in with Shopify's
  * session token (the platform's external token sign-in, decision D59), join the store (QBS_SHOP_JOIN, whose answer is
  * what the page shows), and the store's overview: its connection to Shopify and its members, the admin handing the
- * role on. Every rule is the server's; the page only offers what it may.
+ * role on; and (S2b, docs/quizbuks/shopify/S2b-ui.md) the store's quiz campaigns. Every rule is the server's; the
+ * page only offers what it may.
  */
 export default function App() {
   const [queryClient] = useState(() => new QueryClient({ defaultOptions: { queries: { retry: false } } }))
@@ -110,7 +116,20 @@ function ShopPage() {
           </AlertDescription>
         </Alert>
       )}
-      {opened.data && <Overview shop={opened.data} userId={auth.userId} reload={reload} />}
+      {opened.data && (
+        <Tabs defaultValue="overview">
+          <TabsList>
+            <TabsTrigger value="overview">{t('tabs.overview')}</TabsTrigger>
+            <TabsTrigger value="campaigns">{t('tabs.campaigns')}</TabsTrigger>
+          </TabsList>
+          <TabsContent value="overview" className="flex flex-col gap-4">
+            <Overview shop={opened.data} userId={auth.userId} reload={reload} />
+          </TabsContent>
+          <TabsContent value="campaigns">
+            <CampaignsPage connection={opened.data.connection} />
+          </TabsContent>
+        </Tabs>
+      )}
     </div>
   )
 }
