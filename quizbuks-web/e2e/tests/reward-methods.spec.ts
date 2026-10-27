@@ -184,8 +184,9 @@ test('a sponsor names a taker to the staff by their ID, who hands out a prize at
       })
     }
 
-    // Kai reads their ID on the app's account page.
+    // Kai reads their ID on the app's account page (once signed in: the home is shown).
     await signIn(page, '/taker/', kai.email)
+    await expect(page.getByTestId('home')).toBeVisible()
     await page.goto('/taker/account')
     const kaiId = (await page.getByTestId('my-id').textContent())!.trim()
     expect(kaiId).toMatch(/^[0-9a-f-]{36}$/)
@@ -208,6 +209,7 @@ test('a sponsor names a taker to the staff by their ID, who hands out a prize at
     // Kai opens the counter from the account page: the sponsor's code, in Kai's name.
     await signOut()
     await signIn(page, '/taker/', kai.email)
+    await expect(page.getByTestId('home')).toBeVisible()
     await page.goto('/taker/account')
     await page.getByTestId('staff-desk-link').click()
     await expect(page).toHaveURL(/\/taker\/staff$/)
