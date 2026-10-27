@@ -180,8 +180,9 @@ class QbRolesTest {
     void noRoleWritesTheLedgerDirectly() {
         assertThat(QbRoles.all()).allSatisfy(role -> assertThat(role.permissions())
             .doesNotContainAnyElementsOf(List.of("ledger.post", "ledger.reverse", "ledger.account.write", "*")));
-        assertThat(QbRoles.all()).allSatisfy(role -> assertThat(role.permissions())
-            .contains(QbPermissions.COUNTRY_READ));
+        // Every QuizBuks role reads the countries; the Shopify staff's pages have none (S1).
+        assertThat(QbRoles.all()).filteredOn(role -> !role.code().equals(QbRoles.SHOPIFY_SHOP))
+            .allSatisfy(role -> assertThat(role.permissions()).contains(QbPermissions.COUNTRY_READ));
     }
 
     @Test

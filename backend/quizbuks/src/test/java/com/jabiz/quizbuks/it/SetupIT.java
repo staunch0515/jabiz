@@ -171,7 +171,7 @@ class SetupIT extends QbItSupport {
 
     private void assertRoles() {
         List<Map<String, Object>> roles = query("SELECT role_id, role_code, require_mfa FROM sec_role_version "
-            + "WHERE role_code LIKE 'QB\\_%' ORDER BY role_code");
+            + "WHERE role_code LIKE 'QB\\_%' OR role_code LIKE 'QBS\\_%' ORDER BY role_code");
         assertThat(roles).extracting(row -> row.get("role_code")).containsExactlyInAnyOrderElementsOf(
             QbRoles.all().stream().map(QbRoles.Role::code).toList());
         for (Map<String, Object> role : roles) {
