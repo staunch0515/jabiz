@@ -1,7 +1,7 @@
 /*---
 id: qb.app.publication
 description: One publication's page for a taker (U-20 – U-23) with the caller's own attempt; none when they cannot see it
-entities: [QbPublicationCard, QbPublicationCounter, QbPublicationStartCounter, QbPublicationStats, QbStatsRun, QbWallet, QbCountry, QbSponsor, QbQuizVersion, QbAttempt, QbPublicationOwner, QbInvitation]
+entities: [QbPublicationCard, QbPublicationCounter, QbPublicationStartCounter, QbPublicationStats, QbStatsRun, QbWallet, QbCountry, QbSponsor, QbQuizVersion, QbAttempt, QbPublicationOwner, QbInvitation, QbProfileAttribute, QbPublicationCriterion]
 datasets:
   QbPublicationCard: urn:jabiz:dataset:default:QbPublicationCard
   QbPublicationCounter: urn:jabiz:dataset:default:QbPublicationCounter
@@ -13,6 +13,8 @@ datasets:
   QbSponsor: urn:jabiz:dataset:default:QbSponsor
   QbQuizVersion: urn:jabiz:dataset:default:QbQuizVersion
   QbAttempt: urn:jabiz:dataset:taker:QbAttempt
+  QbProfileAttribute: urn:jabiz:dataset:me:QbProfileAttribute
+  QbPublicationCriterion: urn:jabiz:dataset:default:QbPublicationCriterion
   QbPublicationOwner: urn:jabiz:dataset:me:QbPublicationOwner
   QbInvitation: urn:jabiz:dataset:me:QbInvitation
 params:
@@ -53,6 +55,7 @@ results:
   last30d:        { from: QbPublicationStats.last30d }
   statsAt:        { from: QbStatsRun.refreshedAt }
   canStart:       { kind: { type: bool } }
+  matched:        { kind: { type: bool } }
   myAttemptId:    { from: QbAttempt.attemptId }
   myStatus:       { from: QbAttempt.status }
   myDeadline:     { from: QbAttempt.deadline }
@@ -63,7 +66,8 @@ permissions: [qb.play]
 -- Shown (the conditions QB_VIEW checks too): live, within its time and aimed at a region of the taker's country (for
 -- an invited publication, Q25: the caller's account holds an invitation of it, claimed by QB_VIEW or the start), or
 -- the caller has an attempt of it (to look at what they answered). canStart adds the feed's other conditions (winners
--- and budget not used up, a sponsor who can pay), no attempt yet, and not the caller's own publication. The
+-- and budget not used up, a sponsor who can pay), no attempt yet, not the caller's own publication, and (Q39) matched: the caller's
+-- profile meets the conditions (a shared link still shows the page, so the App can ask for the profile). The
 -- introduction and the materials come from the version's snapshot, never its questions (design section 9). The
 -- windows' counts and their time are the statistics job's (every ten minutes); the total is the counter's, live.
 -- The counters' two sides (Q10a4: starts s, completions n) are read in this one statement, as in qb.app.feed.
@@ -100,7 +104,8 @@ SELECT
     d.last7d AS last7d,
     d.last30d AS last30d,
     d.statsAt AS statsAt,
-    (d.shown AND d.startable AND d.myAttemptId IS NULL) AS canStart,
+    (d.shown AND d.startable AND d.matched AND d.myAttemptId IS NULL) AS canStart,
+    d.matched AS matched,
     d.myAttemptId AS myAttemptId,
     d.myStatus AS myStatus,
     d.myDeadline AS myDeadline
@@ -154,6 +159,21 @@ SELECT
          OR (coalesce(w.{{QbWallet.pendingCount}}, 0) = 0
              AND coalesce(w.{{QbWallet.balance}} - w.{{QbWallet.held}}, 0) >= c.{{QbPublicationCard.maxReward}}))
     AND own.{{QbPublicationOwner.publicationId}} IS NULL AS startable,
+    -- Q39: an invited publication takes its list; a public one the caller's profile meeting its conditions.
+    (c.{{QbPublicationCard.audience}} = 'INVITED' OR NOT EXISTS (
+         SELECT 1 FROM {{QbPublicationCriterion}} pc
+         WHERE pc.{{QbPublicationCriterion.publicationId}} = c.{{QbPublicationCard.publicationId}}
+         GROUP BY pc.{{QbPublicationCriterion.criterionKey}}
+         HAVING NOT bool_or(EXISTS (
+             SELECT 1 FROM {{QbProfileAttribute}} pa
+             WHERE pa.{{QbProfileAttribute.criterionKey}} = pc.{{QbPublicationCriterion.criterionKey}}
+               AND (pa.{{QbProfileAttribute.valueCode}} = pc.{{QbPublicationCriterion.valueCode}}
+                    OR (pc.{{QbPublicationCriterion.minValue}} IS NOT NULL
+                        AND CASE pc.{{QbPublicationCriterion.measure}}
+                                WHEN 'YEARS_SINCE' THEN EXTRACT(YEAR FROM CAST(:at AS timestamptz) AT TIME ZONE 'UTC')
+                                    - pa.{{QbProfileAttribute.valueNumber}}
+                                ELSE pa.{{QbProfileAttribute.valueNumber}} END
+                            BETWEEN pc.{{QbPublicationCriterion.minValue}} AND pc.{{QbPublicationCriterion.maxValue}})))))) AS matched,
     m.{{QbAttempt.attemptId}}              AS myAttemptId,
     m.{{QbAttempt.status}}                 AS myStatus,
     m.{{QbAttempt.deadline}}               AS myDeadline

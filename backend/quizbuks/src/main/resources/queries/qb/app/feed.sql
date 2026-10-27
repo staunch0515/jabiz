@@ -1,7 +1,7 @@
 /*---
 id: qb.app.feed
 description: The publications a taker can answer now (U-10 – U-14), newest first; searched by name and title
-entities: [QbPublicationCard, QbPublicationCounter, QbPublicationStartCounter, QbWallet, QbCountry, QbSponsor, QbPublicationOwner, QbAttempt]
+entities: [QbPublicationCard, QbPublicationCounter, QbPublicationStartCounter, QbWallet, QbCountry, QbSponsor, QbPublicationOwner, QbAttempt, QbProfileAttribute, QbPublicationCriterion]
 datasets:
   QbPublicationCard: urn:jabiz:dataset:default:QbPublicationCard
   QbPublicationCounter: urn:jabiz:dataset:default:QbPublicationCounter
@@ -11,6 +11,8 @@ datasets:
   QbSponsor: urn:jabiz:dataset:default:QbSponsor
   QbPublicationOwner: urn:jabiz:dataset:me:QbPublicationOwner
   QbAttempt: urn:jabiz:dataset:taker:QbAttempt
+  QbProfileAttribute: urn:jabiz:dataset:me:QbProfileAttribute
+  QbPublicationCriterion: urn:jabiz:dataset:default:QbPublicationCriterion
 params:
   at:      { kind: { type: temporal, role: EVENT_TIME }, required: true, description: The time the feed is for (the client's now) }
   country: { kind: { type: text, maxLength: 2 }, description: "The taker's country (QbCountry.code); without one only publications aimed at GLOBAL" }
@@ -111,6 +113,22 @@ WHERE c.{{QbPublicationCard.status}} = 'LIVE'
        OR NOT EXISTS (SELECT 1 FROM {{QbAttempt}} a
                       WHERE a.{{QbAttempt.publicationId}} = c.{{QbPublicationCard.publicationId}}
                         AND (a.{{QbAttempt.status}} <> 'IN_PROGRESS' OR a.{{QbAttempt.deadline}} <= :at)))
+  -- Q39: the caller's profile meets every condition of the publication (qb.system.audience-count, the same; the
+  -- view holds the caller's own attributes only).
+  AND NOT EXISTS (
+      SELECT 1 FROM {{QbPublicationCriterion}} pc
+      WHERE pc.{{QbPublicationCriterion.publicationId}} = c.{{QbPublicationCard.publicationId}}
+      GROUP BY pc.{{QbPublicationCriterion.criterionKey}}
+      HAVING NOT bool_or(EXISTS (
+          SELECT 1 FROM {{QbProfileAttribute}} pa
+          WHERE pa.{{QbProfileAttribute.criterionKey}} = pc.{{QbPublicationCriterion.criterionKey}}
+            AND (pa.{{QbProfileAttribute.valueCode}} = pc.{{QbPublicationCriterion.valueCode}}
+                 OR (pc.{{QbPublicationCriterion.minValue}} IS NOT NULL
+                     AND CASE pc.{{QbPublicationCriterion.measure}}
+                             WHEN 'YEARS_SINCE' THEN EXTRACT(YEAR FROM CAST(:at AS timestamptz) AT TIME ZONE 'UTC')
+                                 - pa.{{QbProfileAttribute.valueNumber}}
+                             ELSE pa.{{QbProfileAttribute.valueNumber}} END
+                         BETWEEN pc.{{QbPublicationCriterion.minValue}} AND pc.{{QbPublicationCriterion.maxValue}})))))
   AND NOT EXISTS (SELECT 1 FROM {{QbPublicationOwner}} own
                   WHERE own.{{QbPublicationOwner.publicationId}} = c.{{QbPublicationCard.publicationId}})
   AND (CAST(:q AS text) IS NULL

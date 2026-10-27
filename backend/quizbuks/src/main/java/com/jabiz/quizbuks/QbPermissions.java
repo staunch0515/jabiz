@@ -70,6 +70,12 @@ public final class QbPermissions {
      */
     public static final String PUBLICATION_SYSTEM = "qb.publication.system";
     /**
+     * Matching (Q39): reading every taker's profile attributes and counting them exactly. Granted to no role: the
+     * count process ({@code QB_AUDIENCE_COUNT}) runs the count template itself and gives the sponsor a rounded number
+     * only, so neither the template nor the attributes' default dataset is open to anybody directly.
+     */
+    public static final String AUDIENCE_SYSTEM = "qb.audience.system";
+    /**
      * The answering processes only the platform runs, as the system (Q5): finishing an attempt whose time ran out
      * ({@code QB_ATTEMPT_EXPIRE}), paying pending rewards ({@code QB_PENDING_SETTLE}, {@code QB_PENDING_PAY}) and
      * refreshing the completion counts ({@code QB_PUBLICATION_STATS_REFRESH}). Granted to no role, as

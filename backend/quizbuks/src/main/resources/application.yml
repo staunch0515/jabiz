@@ -56,6 +56,11 @@ jabiz:
       "[QB_MAIL_SERVER_SET]": { per-user: 10, period: 1h }
       # Q33: loading codes seals up to a thousand of them; not a loop.
       "[QB_DIGITAL_CODES_LOAD]": { per-user: 30, period: 1h }
+      # Q39: the audience count is rounded and floored, but narrowing conditions one at a time over many calls is how a
+      # count gives a person away: a sponsor checks a few drafts an hour, not hundreds.
+      "[QB_AUDIENCE_COUNT]": { per-user: 30, period: 1h }
+      "[QB_PUBLICATION_AUDIENCE_SAVE]": { per-user: 120, period: 1h }
+      "[QB_PROFILE_ATTRIBUTES_SAVE]": { per-user: 60, period: 1h }
       "[QB_WITHDRAWAL_REQUEST]": { per-user: 20, period: 1h }
       # Q16: importing a quiz file makes a whole draft (up to 100 questions) in one transaction.
       "[QB_QUIZ_IMPORT_CHECK]": { per-user: 60, period: 1h }

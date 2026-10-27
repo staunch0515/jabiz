@@ -188,4 +188,14 @@ class MessagesTest {
                 "query.qb.sponsor.ai-usage", "query.qb.admin.ai-usage", "query.qb.admin.ai-jobs",
                 "query.qb.admin.ai-settings", "query.qb.system.ai-expired", "param.qb.ai.candidates.expire-days");
     }
+
+    @Test
+    void matchingHasItsTexts() throws IOException {
+        // Q39: the codes, the processes and the two entities.
+        Properties en = load("en");
+        assertThat(en.stringPropertyNames()).containsAll(com.jabiz.quizbuks.audience.AudienceCodes.ALL)
+            .contains("process.QB_PROFILE_ATTRIBUTES_SAVE", "process.QB_PUBLICATION_AUDIENCE_SAVE",
+                "process.QB_AUDIENCE_COUNT", "entity.QbProfileAttribute", "entity.QbPublicationCriterion",
+                "query.qb.app.publication.matched");
+    }
 }
