@@ -81,23 +81,30 @@ public class ExternalTokens {
     /**
      * Uses a verified token once, in its own transaction; a second use fails with
      * {@link ExternalTokenRules.Failure#REPLAYED}. The row is kept until the token could no longer be used anyway.
+     * A token past its last moment by now fails with {@link ExternalTokenRules.Failure#EXPIRED} even if it was
+     * checked before it: the clean-up below may already have dropped its first use (phase 17e).
      */
     public Mono<Void> useOnce(ExternalTokenProvider provider, ExternalTokenRules.Verified token) {
         return Mono.defer(() -> {
             StorageEngine engine = storages.getEngine(poolRef);
             Instant now = clock.instant().truncatedTo(ChronoUnit.MICROS);
+            Instant last = token.expiresAt().plus(provider.skew());
+            if (!now.isBefore(last)) {
+                return Mono.error(new ExternalTokenRules.RefusedException(ExternalTokenRules.Failure.EXPIRED));
+            }
             Map<String, Object> use = new LinkedHashMap<>();
             use.put("provider", provider.name());
             use.put("token_id", token.tokenId());
             use.put("used_at", now);
-            use.put("expires_at", token.expiresAt().plus(provider.skew()));
+            use.put("expires_at", last);
             // A few expired rows at a time, skipping those another sign-in is removing: sign-ins never wait on
-            // each other here.
+            // each other here. Only rows past their last moment by the most two instances' clocks may differ, so that
+            // an instance whose clock is behind never takes a token as unused (phase 17e).
             return engine.inTransaction(engine.select(
                     "DELETE FROM sec_external_token_use WHERE (provider, token_id) IN (SELECT provider, token_id"
-                        + " FROM sec_external_token_use WHERE expires_at < :now LIMIT " + CLEANUP_BATCH
+                        + " FROM sec_external_token_use WHERE expires_at < :before LIMIT " + CLEANUP_BATCH
                         + " FOR UPDATE SKIP LOCKED) RETURNING token_id",
-                    Map.of("now", BoundValue.of(now)))
+                    Map.of("before", BoundValue.of(now.minus(ExternalTokenRules.MAX_SKEW))))
                 .then(engine.insert("sec_external_token_use", use)))
                 .onErrorMap(UniqueKeyViolationException.class,
                     e -> new ExternalTokenRules.RefusedException(ExternalTokenRules.Failure.REPLAYED));

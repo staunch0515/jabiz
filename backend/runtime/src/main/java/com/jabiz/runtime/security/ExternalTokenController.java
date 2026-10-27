@@ -4,8 +4,9 @@ import com.jabiz.entity.ValidationException;
 import com.jabiz.i18n.PlatformErrorCodes;
 import com.jabiz.i18n.PlatformLanguages;
 import com.jabiz.process.ProcessDefinition;
-import com.jabiz.runtime.AuthenticationFailedException;
-import com.jabiz.runtime.RateLimitedException;
+import com.jabiz.runtime.BusinessRuleViolationException;
+import com.jabiz.runtime.EntityNotFoundException;
+import com.jabiz.runtime.PermissionDeniedException;
 import com.jabiz.runtime.context.RequestContexts;
 import com.jabiz.runtime.observability.PlatformObservations;
 import com.jabiz.runtime.process.ProcessExecutor;
@@ -33,8 +34,9 @@ import java.util.UUID;
  * credential. Only an entry that names a provider ({@code jabiz.security.entries.<name>.external-token}) takes it. The
  * token is verified (signature, times, audience, one allowed tenant), used once ({@code jti}), and signs in whom
  * {@code ext:<provider>} / {@code <tenant>/<sub>} is linked to, like {@code POST /api/auth/login} answers; a provider with
- * {@code auto-provision} opens an account first at an entry that lets people register. Every refusal is 401
- * {@code LOGIN_FAILED}, the reason in the log only; a guard's refusal stays 403 and too many accounts opened 429.
+ * {@code auto-provision} opens an account first at an entry that lets people register. Every refusal of the token or
+ * the identity is 401 {@code LOGIN_FAILED}, the reason in the log only; a guard's refusal stays 403, too many accounts
+ * opened 429, and a failure of the server its own 5xx.
  */
 @RestController
 class ExternalTokenController {
@@ -106,11 +108,24 @@ class ExternalTokenController {
                     http, false)));
             return observations.mono(PlatformObservations.AUTH_EXTERNAL_TOKEN, "external token " + provider.name(),
                 KeyValues.of("provider", provider.name()), work);
-        }).onErrorMap(e -> !(e instanceof AuthenticationFailedException) && !(e instanceof SignInRefusedException)
-            && !(e instanceof EmailNotVerifiedException) && !(e instanceof RateLimitedException), e -> {
+        }).onErrorMap(ExternalTokenController::refusal, e -> {
             log.info("Sign-in with an external token refused: {}", e.getMessage());
             return AuthController.loginFailed("Sign-in with an external token refused");
         });
+    }
+
+    /**
+     * Whether a failure is the token's or the identity's: 401 alike. A failure of the server (the database, a busy
+     * process) keeps its own answer, which the client may retry with a fresh token (phase 17e).
+     */
+    private static boolean refusal(Throwable e) {
+        // A guard's refusal and an unverified address keep their 403 (they are permission denials too).
+        if (e instanceof SignInRefusedException || e instanceof EmailNotVerifiedException) {
+            return false;
+        }
+        return e instanceof ExternalTokenRules.RefusedException || e instanceof ValidationException
+            || e instanceof BusinessRuleViolationException || e instanceof PermissionDeniedException
+            || e instanceof EntityNotFoundException;
     }
 
     /**
