@@ -114,12 +114,22 @@ test('a taker who forgot the password gets a link to the app\'s own page and sig
 test('a sponsor registers, verifies at the console\'s own page, applies and is approved', async ({ page, request }) => {
   const email = address('sponsor')
   await signUp(page, '/sponsor/', email, 'Sara')
-  // The console takes verified addresses only, and offers the mail again.
+  // The console signs the sponsor in unverified (Q40) and says to verify; applying waits for it.
   await signIn(page, '/sponsor/', email)
-  await expect(page.getByTestId('login-email-not-verified')).toBeVisible()
-  await verifyByMail(page, email, '/sponsor/')
+  await expect(page).toHaveURL(/\/sponsor\/onboarding$/)
+  await expect(page.getByTestId('verify-email-banner')).toBeVisible()
+  // The link opened where the console is signed in verifies without a password (platform D60 item 4).
+  const mail = await mailTo(request, email, /verify|confirm|address/i)
+  const link = linkIn(mail.text, '/auth/verify-email')
+  expect(link.pathname).toBe('/sponsor/auth/verify-email')
+  await page.goto(link.pathname + link.search)
+  await page.getByTestId('verify-start').click()
+  await expect(page.getByTestId('verify-state').locator('[data-state]')).toHaveAttribute('data-state', 'done')
+  await expect(page.getByTestId('verify-password-hint')).toHaveCount(0)
 
-  await signIn(page, '/sponsor/', email)
+  // Back in the console, the session's next token knows the address is verified.
+  await page.goto('/sponsor/')
+  await expect(page.getByTestId('verify-email-banner')).toHaveCount(0)
   // Not applied yet: the console leads to the onboarding.
   await expect(page).toHaveURL(/\/sponsor\/onboarding$/)
   await expect(page.getByTestId('onboarding-status')).toHaveAttribute('data-status', 'NONE')

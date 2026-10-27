@@ -70,7 +70,7 @@ class QuizbuksAppIT extends PostgresIntegrationTest {
             .containsEntry("appPath", "/taker/").containsEntry("sessionPersistence", "device");
         java.util.Map<String, Object> sponsor = client.get().uri("/api/auth/entries/sponsor").exchange().expectStatus()
             .isOk().expectBody(java.util.Map.class).returnResult().getResponseBody();
-        assertThat(sponsor).containsEntry("requireVerifiedEmail", true).containsEntry("appPath", "/sponsor/")
+        assertThat(sponsor).containsEntry("requireVerifiedEmail", false).containsEntry("appPath", "/sponsor/")
             .containsEntry("sessionPersistence", "tab");
         java.util.Map<String, Object> admin = client.get().uri("/api/auth/entries/admin").exchange().expectStatus()
             .isOk().expectBody(java.util.Map.class).returnResult().getResponseBody();

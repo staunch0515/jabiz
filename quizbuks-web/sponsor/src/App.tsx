@@ -2,10 +2,13 @@ import { AuthProvider, useAuth, type SignInStep } from '@jabiz/client'
 import {
   AppearanceProvider,
   AppShell,
+  AUTH_NAMESPACE,
+  AuthError,
   Button,
   MailLinkPage,
   MailUnsubscribe,
   OfflineBanner,
+  OidcButtons,
   OidcCallback,
   PageState,
   PasswordResetRequest,
@@ -15,6 +18,7 @@ import {
   StepUpProvider,
   ThemeToggle,
   Toaster,
+  VerifyEmailBanner,
   type ShellMenuGroup,
 } from '@jabiz/ui'
 import { QueryClientProvider, useQuery } from '@tanstack/react-query'
@@ -212,6 +216,8 @@ function SignedIn({ path }: { path: string }) {
     >
       <div className="flex flex-col gap-4">
         <OfflineBanner />
+        {/* Signed in unverified (Q40): every write waits for the address, so say so and offer the mail again. */}
+        <VerifyEmailBanner />
         {page}
         <LegalLinks kinds={LINKED} className="mt-8 border-t pt-4" />
       </div>
@@ -291,12 +297,13 @@ function Routes() {
   if (path === '/password-reset') {
     return frame(<PasswordResetRequest {...navigation} brand={brand} signInPath="/login" />)
   }
-  // The form, then "look in your mailbox"; the console takes verified addresses only, so the onboarding follows the
-  // verification and the first sign-in.
+  // The form, then "look in your mailbox"; the console signs unverified sponsors in (Q40), but applying waits for the
+  // verification. Google, Facebook and LINE open an account at their first sign-in, so they are offered here too.
   // The sponsors' terms are accepted with the application (Q7b); signing up says where to read them.
   if (path === '/signup') {
     return frame(<>
       <SignUpForm {...navigation} brand={brand} signInPath="/login" />
+      <SignUpProviders returnTo="/" />
       <p className="text-muted-foreground mx-auto w-full max-w-md px-4 pb-6 text-center text-sm"
         data-testid="signup-terms">
         {t('public.signUpTerms')}{' '}
@@ -313,7 +320,7 @@ function Routes() {
           pendingStep = undefined
           lockedIdle = false
           navigate(to, { replace: true })
-        }} passwordResetPath="/password-reset" signUpPath="/signup" />
+        }} passwordResetPath="/password-reset" signUpPath="/signup" oidcLayout="icons" />
       {/* A taker's account (with a password or Google alone) has no sponsor role yet: the console refuses it until
           the account joins by signing up with its address (Q37). */}
       <p className="text-muted-foreground mx-auto w-full max-w-md px-4 pb-6 text-center text-sm"
@@ -327,6 +334,21 @@ function Routes() {
     <StepUpProvider {...navigation} securityPath={ACCOUNT_PATH}>
       <SignedIn path={path} />
     </StepUpProvider>
+  )
+}
+
+/**
+ * Signing up through an identity provider on the sign-up page (Q40, D-Q40-5): the same round icons as the sign-in page,
+ * since a provider's first sign-in opens the account. A failure to start says so above them.
+ */
+function SignUpProviders({ returnTo }: { returnTo: string }) {
+  const { t } = useTranslation(AUTH_NAMESPACE)
+  const [failed, setFailed] = useState(false)
+  return (
+    <div className="mx-auto flex w-full max-w-md flex-col gap-3 px-4 pb-4" data-testid="signup-providers">
+      {failed && <AuthError message={t('common.error')} testId="signup-providers-error" />}
+      <OidcButtons layout="icons" returnTo={returnTo} onError={(e) => setFailed(e !== null)} />
+    </div>
   )
 }
 

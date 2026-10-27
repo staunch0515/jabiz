@@ -40,8 +40,10 @@
 | `JABIZ_MAIL_FROM` | 是 | 发件域（配好 SPF / DKIM / DMARC） | — | 邮件发不出 |
 | `JABIZ_MAIL_BASE_URL` | 是 | 主机根地址 `https://<主机>`（不带 `/admin`） | 换域名时 | 邮件中的链接错误；也是商家后台地址的缺省来源 |
 | `SPRING_MAIL_HOST` / `_PORT` / `_USERNAME` / `_PASSWORD` | 是 | 邮件服务商（SMTP） | 按服务商；改环境变量、重启 | 投递失败 |
-| `SPRING_PROFILES_ACTIVE` | 否 | `google` 开启 App 的 Google 登录。**绝不能含 `dev`**（`dev` 的签名密钥与操作人请求头是公开的） | — | 无 Google 登录 |
+| `SPRING_PROFILES_ACTIVE` | 否 | `google` 开启 App 与商家后台的 Google 登录，`social` 开启 Google、Facebook 与 LINE（Q40）。**绝不能含 `dev`**（`dev` 的签名密钥与操作人请求头是公开的） | — | 无 Google 登录 |
 | `JABIZ_OIDC_GOOGLE_CLIENT_ID` / `_CLIENT_SECRET` | 开 Google 时 | Google Cloud 控制台 | 在控制台建新密钥、改环境变量、重启、删旧密钥 | Google 登录启动失败 |
+| `JABIZ_OIDC_FACEBOOK_CLIENT_ID` / `_CLIENT_SECRET` | 开 `social` 时 | Meta for Developers | 在控制台重置应用密钥、改环境变量、重启（重置即旧密钥失效，换的那一刻 Facebook 登录失败） | 启动失败 |
+| `JABIZ_OIDC_LINE_CLIENT_ID` / `_CLIENT_SECRET` | 开 `social` 时 | LINE Developers | 在控制台签发新 Channel secret、改环境变量、重启（旧的立即失效；它也是 ID 令牌的签名密钥） | 启动失败（不足 32 字节同样） |
 | `QB_OIDC_REDIRECT_APP` | 开 Google 时 | `https://<主机>/taker/login/oidc`（与控制台登记的完全相同；Q30 之前没有 `/taker`） | 换域名时 | Google 拒绝回调 |
 | `QB_OIDC_REDIRECT_SPONSOR` | 开 Google 时 | `https://<主机>/sponsor/login/oidc`（Q37；与控制台登记的完全相同） | 换域名时 | Google 拒绝回调；缺少即不能启动 |
 | `JABIZ_WEB_ROOT_REDIRECT` | 否 | 裸域名转到的路径，缺省 `/biz/`（招商网站，Q30）；`QB_APP_LINK` 须以 `/taker/` 结尾 | — | 裸域名打开招商站 |
