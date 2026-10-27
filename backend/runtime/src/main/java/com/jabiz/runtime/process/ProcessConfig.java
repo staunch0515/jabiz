@@ -26,6 +26,12 @@ class ProcessConfig {
     }
 
     @Bean
+    ProcessDefinition<com.jabiz.runtime.process.sponsor.SponsorOidcSignInInput, SponsorSignInOutput,
+        com.jabiz.runtime.process.sponsor.OidcContext> sponsorExternalTokenSignInProcess() {
+        return com.jabiz.runtime.process.sponsor.SponsorOidcSignInProcess.EXTERNAL_TOKEN_DEFINITION;
+    }
+
+    @Bean
     ProcessDefinition<com.jabiz.runtime.process.sponsor.SponsorEmailLinkSignInInput, SponsorSignInOutput,
         com.jabiz.runtime.process.sponsor.EmailLinkContext> sponsorEmailLinkSignInProcess() {
         return com.jabiz.runtime.process.sponsor.SponsorEmailLinkSignInProcess.DEFINITION;

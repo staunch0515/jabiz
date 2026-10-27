@@ -295,6 +295,63 @@ class SpaFallbackFilterTest {
 
     private record Result(String forwardedPath, String csp) {}
 
+    /** A provider "shop" whose tenants end in .shop.example, named by the parameter {@code shop}. */
+    private static final SpaEmbedding SHOPS = new SpaEmbedding() {
+        @Override
+        public java.util.Optional<String> frameAncestors(String provider, String tenant) {
+            return "shop".equals(provider) && tenant != null && tenant.matches("[a-z]+\\.shop\\.example")
+                ? java.util.Optional.of("https://" + tenant + " https://admin.shop.example") : java.util.Optional.empty();
+        }
+
+        @Override
+        public java.util.Optional<String> tenantParameter(String provider) {
+            return "shop".equals(provider) ? java.util.Optional.of("shop") : java.util.Optional.empty();
+        }
+    };
+
+    @Test
+    void anEmbeddedSpaIsFramedOnlyByTheTenantThatOpenedIt() {
+        JabizWebProperties embedded = new JabizWebProperties(List.of(
+            new Spa("/shop", null, null, "shop", null, "shop"), new Spa("/admin", null, null)));
+        String framed = "default-src 'self'; img-src 'self' blob: data:; style-src 'self' 'unsafe-inline'; "
+            + "base-uri 'self'; object-src 'none'; form-action 'self'; worker-src 'self'; manifest-src 'self'; "
+            + "frame-ancestors https://demo.shop.example https://admin.shop.example";
+        assertThat(framedRun(embedded, "/shop/settings?shop=demo.shop.example&host=x")).containsExactly(framed, null);
+        assertThat(framedRun(embedded, "/shop/assets/a.js?shop=demo.shop.example")).containsExactly(framed, null);
+        // No tenant, another form, or a tenant written to break out of the directive: never framed.
+        for (String query : List.of("", "?shop=", "?shop=evil.example", "?shop=demo.shop.example%3B%20script-src%20*",
+            "?shop=demo.shop.example%20https://evil.example", "?host=demo.shop.example")) {
+            assertThat(framedRun(embedded, "/shop/settings" + query)).as(query)
+                .containsExactly(JabizWebProperties.DEFAULT_CONTENT_SECURITY_POLICY, "DENY");
+        }
+        // Another SPA is never framed, whatever the query says.
+        assertThat(framedRun(embedded, "/admin/data?shop=demo.shop.example"))
+            .containsExactly(JabizWebProperties.DEFAULT_CONTENT_SECURITY_POLICY, "DENY");
+    }
+
+    @Test
+    void theFrameAncestorsDirectiveIsReplacedOrAdded() {
+        assertThat(SpaFallbackFilter.withFrameAncestors("default-src 'self'; Frame-Ancestors 'none' ;img-src *", "a b"))
+            .isEqualTo("default-src 'self'; img-src *; frame-ancestors a b");
+        assertThat(SpaFallbackFilter.withFrameAncestors("default-src 'self'", "a"))
+            .isEqualTo("default-src 'self'; frame-ancestors a");
+        assertThat(SpaFallbackFilter.withFrameAncestors("frame-ancestors-x y; default-src 'self'", "a"))
+            .isEqualTo("frame-ancestors-x y; default-src 'self'; frame-ancestors a");
+    }
+
+    /** The policy and X-Frame-Options of a response, the latter set DENY first as Spring Security does. */
+    private static List<String> framedRun(JabizWebProperties properties, String uri) {
+        var exchange = MockServerWebExchange.from(MockServerHttpRequest.get(uri));
+        exchange.getResponse().beforeCommit(() -> {
+            exchange.getResponse().getHeaders().set("X-Frame-Options", "DENY");
+            return reactor.core.publisher.Mono.empty();
+        });
+        new SpaFallbackFilter(properties, StaticPages.none(), SHOPS).filter(exchange,
+            e -> e.getResponse().setComplete()).block();
+        var headers = exchange.getResponse().getHeaders();
+        return java.util.Arrays.asList(headers.getFirst("Content-Security-Policy"), headers.getFirst("X-Frame-Options"));
+    }
+
     private static Result run(JabizWebProperties properties, String method, String path) {
         var exchange = MockServerWebExchange.from(MockServerHttpRequest.method(HttpMethod.valueOf(method), path));
         AtomicReference<ServerWebExchange> forwarded = new AtomicReference<>();

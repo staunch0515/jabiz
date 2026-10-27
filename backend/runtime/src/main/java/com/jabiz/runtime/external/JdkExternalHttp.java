@@ -101,7 +101,7 @@ final class JdkExternalHttp implements ExternalHttp, AutoCloseable {
             throw refused("not among the services of the running external job's type");
         }
         URI target = resolve(request.target());
-        String refusal = OutboundAddresses.refusal(target, service.allowedHosts(),
+        String refusal = OutboundAddresses.refusal(target, service::allowsHost,
             "the allowed hosts of external service " + service.name());
         if (refusal != null) {
             throw refused(refusal);

@@ -128,4 +128,23 @@ class ExternalServiceTest {
         assertThatThrownBy(() -> ExternalService.define("x", s -> s.baseUrl("https://bad host/")))
             .isInstanceOf(IllegalArgumentException.class);
     }
+
+    @Test
+    void aPatternTakesOneLabelInFrontOfItsDomain() {
+        ExternalService service = ExternalService.define("shop", s -> s.baseUrl("https://demo.myshopify.com")
+            .allowedHosts("*.MyShopify.com", "partners.example.com"));
+        assertThat(service.problems()).isEmpty();
+        assertThat(service.allowsHost("Demo.myshopify.com")).isTrue();
+        assertThat(service.allowsHost("partners.example.com")).isTrue();
+        assertThat(service.allowsHost("myshopify.com")).isFalse();
+        assertThat(service.allowsHost("a.b.myshopify.com")).isFalse();
+        assertThat(service.allowsHost("demo.myshopify.com.evil.example")).isFalse();
+        assertThat(service.allowsHost(".myshopify.com")).isFalse();
+        assertThat(service.allowsHost("x.example.com")).isFalse();
+        assertThat(service.allowsHost(null)).isFalse();
+        for (String pattern : List.of("*.com", "*", "*.*.example.com", "*.127.0.0.1", "a.*.example.com", "*.")) {
+            assertThat(ExternalService.define("shop", s -> s.baseUrl("https://x.example.com").allowedHosts(pattern))
+                .problems()).as(pattern).anySatisfy(p -> assertThat(p).startsWith("allowedHosts:"));
+        }
+    }
 }

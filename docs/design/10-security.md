@@ -783,6 +783,41 @@ jabiz:
   有效期至多 `jabiz.security.email-link.max-ttl`（缺省 30 天）。发送时检查入口开启了 `email-link`、`to` 在该入口前端之内（422 `MAIL_SIGN_IN_LINK`）；
   打开链接与上面完全相同（`SPONSOR_EMAIL_LINK_OPEN` 再 `SPONSOR_EMAIL_LINK_SIGN_IN`）。
 
+### 15.12 凭外部平台签发的令牌登录（阶段 17b，决策 D59）
+
+内嵌在另一个平台后台中的前端（如 Shopify 应用的内嵌页面）以该平台签发的短时令牌换取本平台的会话，不另设密码。
+
+```yaml
+jabiz:
+  security:
+    external-tokens:
+      shop:                                         # 提供方名：身份的提供方为 ext:shop
+        secrets: [ "${SHOP_APP_SECRET}" ]            # 只取自环境变量；更换时写两个
+        audience: ${SHOP_APP_KEY}
+        tenant-pattern: '[a-z0-9][a-z0-9-]*\.myshopify\.com'
+        issuer-format: https://{tenant}/admin
+        destination-format: https://{tenant}
+        auto-provision: true                        # 无人关联的身份首次登录即开户（入口须允许注册）
+        frame-ancestors: [ https://admin.shopify.com ]
+        tenant-parameter: shop                      # 平台打开页面时带的租户参数
+    entries:
+      shop:
+        accepted-roles: MERCHANT
+        self-registration: true
+        registration-roles: MERCHANT
+        external-token: shop
+```
+
+| 接口 | 作用 |
+|---|---|
+| `POST /api/auth/external-token` | `{token, entry}`，答复同登录（`SIGNED_IN` 或第二步）；一切拒绝都是 401 `LOGIN_FAILED`（守卫 403、开户过多 429） |
+
+- 验证（`ExternalTokenRules`）：HS256、任一密钥的签名（常量时间）、`exp` / `nbf`（容差）、`aud`、`iss` 与 `dest` 指向同一个匹配 `tenant-pattern` 的租户、`sub` 与 `jti`；`jti` 只用一次（`sec_external_token_use`）。
+- 身份是租户中的一个人：`SecUserIdentity(ext:<提供方>, <租户>/<sub>)`。之后照常是写登录记录的流程 `SPONSOR_EXTERNAL_TOKEN_SIGN_IN`（因素 `EXTERNAL_TOKEN`）：`SignInGuard`、入口角色、二次验证照旧。
+- 开户（`SPONSOR_EXTERNAL_TOKEN_SIGN_UP`）：提供方 `auto-provision` 且入口允许注册时，为无人关联的身份建无邮箱、无密码的用户（用户名即身份主体）与入口的注册角色；不能是 `admin` 或接受 `*` 的入口，也不能要求已验证的邮箱。
+- 业务流程以步骤 `VerifyExternalToken.of(提供方, ctx -> 令牌, 键)` 核对店员递来的令牌属于操作人（403 不说明原因），把租户、主体与令牌放进上下文，供阻塞步骤交给签发它的平台；不消耗 `jti`。
+- 页面：`@jabiz/client` 的 `signInWithExternalToken(令牌)`（向平台的脚本每次取新令牌）；SPA 声明 `embedding`（17 §3.2）才能被该租户内嵌。
+
 ## 16. 受保护的授权：四眼【决策 D48 第 1 条，阶段 16r】
 
 一个管理员不能独自让某人（包括自己或另一个账号）得到能改权限、能审批、能记账的权限，也不能独自接管持有这类权限的账号。

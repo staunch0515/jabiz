@@ -1,7 +1,6 @@
 package com.jabiz.runtime.process.sponsor;
 
 import com.jabiz.process.ProcessStart;
-import com.jabiz.runtime.security.SecurityEntities;
 
 import java.util.List;
 
@@ -15,7 +14,7 @@ public class OidcContext extends LoginContext {
     public OidcContext(ProcessStart start, SponsorOidcSignInInput input) {
         super(start, null, null, input.source());
         this.input = input;
-        setFactor(SecurityEntities.FACTOR_OIDC);
+        setFactor(input.factor());
     }
 
     public SponsorOidcSignInInput input() {

@@ -322,4 +322,42 @@ class SignInEntriesTest {
         assertThat(portal.requireVerifiedEmail()).isTrue();
         assertThat(entries.find("admin")).isPresent();
     }
+
+    @Test
+    void externalTokensNeverSignInToTheAdministrationNorWhereAnAddressIsRequired() {
+        SignInEntries entries = new SignInEntries(Map.of(
+            "admin", externalToken(List.of("ADMIN"), null),
+            "wild", externalToken(List.of("A", "*"), null),
+            "verified", externalToken(List.of("A"), true),
+            "shop", externalToken(List.of("A"), null)), false, null);
+
+        assertThat(entries.check()).filteredOn(CheckProblem::isError).extracting(p -> p.location() + ": "
+            + p.message()).containsExactlyInAnyOrder(
+                "jabiz.security.entries.admin: external-token cannot be set for the administration entry or an entry "
+                    + "accepting every role",
+                "jabiz.security.entries.wild: external-token cannot be set for the administration entry or an entry "
+                    + "accepting every role",
+                "jabiz.security.entries.verified: external-token users have no e-mail address: "
+                    + "require-verified-email cannot be on");
+        assertThat(entries.find("shop").orElseThrow().externalToken()).isEqualTo("shop");
+    }
+
+    private static SignInEntries.Config externalToken(List<String> accepted, Boolean verified) {
+        return new SignInEntries.Config(accepted, null, null, verified, null, null, null, "shop");
+    }
+
+    @Test
+    void theExternalTokenProviderIsBoundFromTheEnvironment() {
+        MockEnvironment environment = new MockEnvironment()
+            .withProperty("jabiz.security.entries.shop.accepted-roles", "MERCHANT")
+            .withProperty("jabiz.security.entries.shop.self-registration", "true")
+            .withProperty("jabiz.security.entries.shop.registration-roles", "MERCHANT")
+            .withProperty("jabiz.security.entries.shop.external-token", "shopify");
+        SignInEntries entries = new SignInEntries(environment, null);
+
+        SignInEntries.Entry shop = entries.find("shop").orElseThrow();
+        assertThat(shop.externalToken()).isEqualTo("shopify");
+        assertThat(shop.acceptedRoles()).containsExactly("MERCHANT");
+        assertThat(shop.selfRegistration()).isTrue();
+    }
 }
