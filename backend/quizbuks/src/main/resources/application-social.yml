@@ -1,4 +1,4 @@
-# Signing in with Google, Facebook and LINE (docs/quizbuks/plans/Q40-social-sign-in.md; platform decision D60),
+# Signing in with Google, Facebook and LINE (docs/quizbuks/plans/Q40-social-sign-in.md; platform decision D61),
 # switched on by the deployment with the Spring profile "social" (SPRING_PROFILES_ACTIVE=social) in place of "google":
 # Spring replaces a list set in two profiles as a whole, so this profile declares all three providers, Google's as the
 # profile "google" does. Each provider has one client with two callbacks, the same for all three: the app's,
@@ -7,7 +7,7 @@
 # administration, so none is offered there.
 #
 # Google vouches for addresses (D39): its accounts open verified. Facebook and LINE do not: their accounts open with the
-# address unverified and pre-claimable, and the verification mail goes out (D60 item 3); the account verifies in its own
+# address unverified and pre-claimable, and the verification mail goes out (D61 item 3); the account verifies in its own
 # session and keeps its link, and every QuizBuks write waits for that (VerifiedEmailWritesIT). An address in use answers
 # OIDC_ACCOUNT_EXISTS; a token without an address (the person declined it, or LINE has not approved the channel for
 # e-mail) opens nothing.

@@ -32,7 +32,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Signing up through LINE at the app and at the sponsor console (docs/quizbuks/plans/Q40-social-sign-in.md, D-Q40-2,
- * D-Q40-3; platform decision D60), against a local stand-in for LINE: LINE does not vouch for the address, so the
+ * D-Q40-3; platform decision D61), against a local stand-in for LINE: LINE does not vouch for the address, so the
  * account opens unverified with the entry's role and the verification mail goes out; the person is signed in at once
  * (both entries take unverified addresses), every QuizBuks write waits for the address, and the link verifies it in the
  * account's own session, keeping the account and its LINE link. An address in use opens nothing.
