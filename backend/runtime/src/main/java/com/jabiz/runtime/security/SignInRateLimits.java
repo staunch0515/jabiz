@@ -75,7 +75,9 @@ public class SignInRateLimits implements PlatformCheck {
          */
         SECOND_FACTOR(true),
         /** {@code POST /api/auth/refresh}: the refresh token names nobody before it is looked up. */
-        REFRESH(false);
+        REFRESH(false),
+        /** {@code POST /api/auth/external-token} (decision D59): nobody is named before the token is checked. */
+        EXTERNAL_TOKEN(false);
 
         private final boolean named;
 

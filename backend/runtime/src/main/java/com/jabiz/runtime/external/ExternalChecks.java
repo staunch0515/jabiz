@@ -41,7 +41,7 @@ public class ExternalChecks implements PlatformCheck {
             }
             service.problems().forEach(problem -> problems.add(CheckProblem.error(CATEGORY, at, problem)));
             if (service.baseUrl() != null) {
-                String refused = OutboundAddresses.refusal(service.baseUrl(), service.allowedHosts(),
+                String refused = OutboundAddresses.refusal(service.baseUrl(), service::allowsHost,
                     "the allowed hosts of external service " + at);
                 if (refused != null) {
                     problems.add(CheckProblem.error(CATEGORY, at, "baseUrl: " + refused));

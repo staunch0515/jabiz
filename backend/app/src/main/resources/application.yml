@@ -63,6 +63,22 @@ jabiz:
     #         portal: ${JABIZ_PUBLIC_URL:https://shop.example.com}/portal/login/oidc
     #       labels: { en: Google, zh: Google, ja: Google }
     #       auto-provision: true
+    # Signing in from inside another platform's administration with the short-lived token it signs (decision D59;
+    # docs/design/10-security.md section 15.12): an entry of its own, a provider with the application's key and secret
+    # there (from the environment only), and an SPA that the tenant may frame. Off in the sample: no platform is
+    # registered for it. To turn it on, add the entry and the SPA, and uncomment:
+    # external-tokens:
+    #   shop:
+    #     secrets: [ "${JABIZ_SHOP_APP_SECRET}" ]
+    #     audience: ${JABIZ_SHOP_APP_KEY}
+    #     tenant-pattern: '[a-z0-9][a-z0-9-]*\.myshopify\.com'
+    #     issuer-format: https://{tenant}/admin
+    #     destination-format: https://{tenant}
+    #     auto-provision: true
+    #     frame-ancestors: [ https://admin.shopify.com ]
+    # entries.shop: { accepted-roles: CUSTOMER, self-registration: true, registration-roles: CUSTOMER,
+    #                 external-token: shop }
+    # web.spa[i]: { path: /shop, entry: shop, embedding: shop }
     # The first administrator, created at startup when both are set and no user exists yet.
     bootstrap-admin:
       user-name: ${JABIZ_BOOTSTRAP_ADMIN_USER:}

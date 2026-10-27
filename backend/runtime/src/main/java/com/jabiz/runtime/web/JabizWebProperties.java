@@ -12,7 +12,8 @@ import java.util.regex.Pattern;
 
 /**
  * The single-page applications served by this application (docs/design/17-apps-and-branches.md section 3.2):
- * {@code jabiz.web.spa[i].path}, {@code .index}, {@code .content-security-policy}, {@code .entry} and {@code .pwa}.
+ * {@code jabiz.web.spa[i].path}, {@code .index}, {@code .content-security-policy}, {@code .entry}, {@code .pwa} and
+ * {@code .embedding}.
  * The build writes the SPAs of {@code jabizApp { spa(...) }} into the jar ({@code META-INF/jabiz-app.properties}) as the
  * lowest-priority default; an application's own {@code jabiz.web.spa} replaces that list as a whole. Without either,
  * the admin frontend is served at {@code /} as before. {@link SpaConfigCheck} reports invalid entries at startup.
@@ -166,8 +167,12 @@ public record JabizWebProperties(List<Spa> spa, String environment, String rootR
      * @param entry                 the sign-in entry it signs in to (decision D43 item 1); none for a site without
      *                              sign-in
      * @param pwa                   whether it is a progressive web app; {@link Pwa#OFF} by default
+     * @param embedding             the external token provider whose tenants may frame its pages (decision D59): a page
+     *                              opened with the provider's tenant parameter naming a valid tenant gets that tenant's
+     *                              {@code frame-ancestors}; none by default (never framed)
      */
-    public record Spa(String path, String index, String contentSecurityPolicy, String entry, Pwa pwa) {
+    public record Spa(String path, String index, String contentSecurityPolicy, String entry, Pwa pwa,
+        String embedding) {
 
         @ConstructorBinding
         public Spa {
@@ -183,6 +188,14 @@ public record JabizWebProperties(List<Spa> spa, String environment, String rootR
             if (pwa == null) {
                 pwa = Pwa.OFF;
             }
+            if (embedding != null && embedding.isBlank()) {
+                embedding = null;
+            }
+        }
+
+        /** An SPA that is never framed. */
+        public Spa(String path, String index, String contentSecurityPolicy, String entry, Pwa pwa) {
+            this(path, index, contentSecurityPolicy, entry, pwa, null);
         }
 
         /** An SPA without an entry and without a PWA. */
