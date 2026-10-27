@@ -48,6 +48,7 @@ jobs:
             quizbuks-web/app/pnpm-lock.yaml
             quizbuks-web/sponsor/pnpm-lock.yaml
             quizbuks-web/shopify/pnpm-lock.yaml
+            quizbuks-web/storefront/pnpm-lock.yaml
             quizbuks-web/e2e/pnpm-lock.yaml
       # The SPAs link the platform's packages, which resolve their dependencies from the platform frontend.
       - run: pnpm install --frozen-lockfile
@@ -85,6 +86,17 @@ jobs:
           pnpm lint
           pnpm typecheck
           pnpm test
+      # S2b: the storefront's block, a plain Web Component (no React, no @jabiz/ui components); the build checks its
+      # size budget, `pnpm versions` its tools against the platform's (app:check is for SPAs on @jabiz/ui).
+      - name: Shopify storefront block (S2b)
+        working-directory: quizbuks-web/storefront
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm versions
+          pnpm lint
+          pnpm typecheck
+          pnpm test
+          pnpm build
       - name: End-to-end tests (types only; they run in the e2e job)
         working-directory: quizbuks-web/e2e
         run: |

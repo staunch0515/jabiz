@@ -61,6 +61,8 @@ function server(options: Server) {
           : json(200, { output: { connection: 'CONNECTED', shopName: 'Demo' } })
       case '/api/processes/QBS_SHOP_CHECK/latest':
         return json(200, { output: { connection: 'RECONNECT', shopName: 'Demo' } })
+      case '/api/processes/QBS_CAMPAIGN_LIST/latest':
+        return json(200, { output: { campaigns: [], pool: { available: 0, issuedToday: 0, issuedWeek: 0 } } })
       case '/api/auth/logout':
         return json(204, {})
       default:
@@ -102,6 +104,19 @@ describe('QuizBuks for Shopify (S1)', () => {
     expect(within(rows[2]).getByRole('button', { name: 'Make admin' })).toBeInTheDocument()
     expect(within(rows[1]).queryByRole('button')).not.toBeInTheDocument()
     await expectAccessible()
+  })
+
+  it('keeps a campaign being edited while the overview is shown', async () => {
+    server({ joins: [shop({ connection: 'CONNECTED' })] })
+    const user = userEvent.setup()
+    render(<App />)
+    await user.click(await screen.findByRole('tab', { name: 'Quiz campaigns' }))
+    await user.click(await screen.findByRole('button', { name: 'New campaign' }))
+    await user.type(screen.getByLabelText('Name'), 'Autumn quiz')
+    await user.click(screen.getByRole('tab', { name: 'Overview' }))
+    expect(await screen.findByText('Store: demo.myshopify.com')).toBeVisible()
+    await user.click(screen.getByRole('tab', { name: 'Quiz campaigns' }))
+    expect(screen.getByLabelText('Name')).toHaveValue('Autumn quiz')
   })
 
   it('offers no hand-over to a member', async () => {
@@ -163,7 +178,9 @@ describe('QuizBuks for Shopify (S1)', () => {
           return json(200, { status: 'SIGNED_IN', accessToken: 'a2', refreshToken: 'r2' })
         case '/api/auth/me':
           return json(200, { userId: 'u1', roles: ['QBS_SHOP'], permissions: ['qbs.shop.use'] })
-        case '/api/auth/logout':
+        case '/api/processes/QBS_CAMPAIGN_LIST/latest':
+        return json(200, { output: { campaigns: [], pool: { available: 0, issuedToday: 0, issuedWeek: 0 } } })
+      case '/api/auth/logout':
           return new Response(null, { status: 204 })
         case '/api/processes/QBS_SHOP_JOIN/latest':
           joins += 1

@@ -57,7 +57,7 @@ S2 起有了顾客数据：答题记录中的顾客编号与访客键。
 - `customers/redact`：把该顾客的答题人键改写为不可逆的 `qbs:<店铺>:r:<随机>`（引擎的答题是普通表，经子流程改写），码保留但不再关联顾客。结论 `REDACTED`。
 - `shop/redact`：除 S1 已删除的，再删本店的活动、码池、每日计数；引擎中本店的答题记录按上条匿名化。**发布与题目是只追加表，删不掉**，见 §7 Q-S2-2。
 
-## 5. 界面（S2b）
+## 5. 界面（S2b；计划与实施说明另见 `S2b-ui.md`）
 
 - **内嵌后台**（`quizbuks-web/shopify`）：活动页（视频链接、题目与选项、及格分、时限、折扣百分比），发布 / 暂停 / 结束；今日已发、池中可用、近 7 天领取数。只用 `@jabiz/ui`（Polaris 风格在 S4）。
 - **Theme App Extension**（`quizbuks-web/shopify-extension/`，Shopify CLI 的工程结构，`shopify app deploy` 由需求方以自己的 Partner 账号执行）：
