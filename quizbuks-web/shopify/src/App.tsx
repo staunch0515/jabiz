@@ -1,4 +1,4 @@
-import { AuthProvider, useAuth } from '@jabiz/client'
+import { ApiError, AuthProvider, useAuth } from '@jabiz/client'
 import {
   Alert,
   AlertDescription,
@@ -16,8 +16,8 @@ import {
   TableHeader,
   TableRow,
 } from '@jabiz/ui'
-import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { QueryClient, QueryClientProvider, useMutation, useQuery } from '@tanstack/react-query'
+import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { check, connect, join, transferAdmin, type Shop } from './api'
 import { NotEmbeddedError, sessionToken } from './appBridge'
@@ -42,52 +42,69 @@ export default function App() {
   )
 }
 
+/** What the server said (its rule's text in the user's language), else the error's message. */
 function reasonOf(error: unknown): string {
+  if (error instanceof ApiError && error.violations.length > 0) return error.violations.map((v) => v.message).join(' ')
   return error instanceof Error ? error.message : String(error)
 }
 
 function ShopPage() {
   const { t } = useTranslation(SHOPIFY)
   const auth = useAuth()
-  // The latest auth state for the async work below (signing in changes it while that work runs).
-  const authRef = useRef(auth)
-  useEffect(() => {
-    authRef.current = auth
-  })
 
-  // Signs in when not yet (a session token is used once) and joins the store: its answer is the overview.
+  // Signs in with a session token (each is used once) whenever the tab has no session.
+  const signIn = useMutation({
+    mutationFn: async () => {
+      const step = await auth.signInWithExternalToken(await sessionToken())
+      if (step.status !== 'SIGNED_IN') throw new Error(step.status)
+    },
+  })
+  useEffect(() => {
+    if (auth.ready && !auth.signedIn && signIn.isIdle) signIn.mutate()
+  }, [auth.ready, auth.signedIn, signIn])
+
+  // Joins the store with a fresh session token: its answer is the overview. Opening runs a process: only when the
+  // page opens (or the user changes) and when asked, never on focus.
   const opened = useQuery({
-    queryKey: ['qbs.shop'],
-    enabled: auth.ready,
-    // Opening runs a process: only when the page opens and when asked, never on focus.
+    queryKey: ['qbs.shop', auth.userId],
+    enabled: auth.signedIn && auth.userId !== null,
+    queryFn: join,
     staleTime: Infinity,
     refetchOnWindowFocus: false,
-    queryFn: async (): Promise<Shop> => {
-      if (!authRef.current.signedIn) {
-        const step = await authRef.current.signInWithExternalToken(await sessionToken())
-        if (step.status !== 'SIGNED_IN') throw new Error(step.status)
-      }
-      return join()
-    },
   })
   const reload = useCallback(async () => {
     await opened.refetch()
   }, [opened])
 
+  // The tab's session is another store's staff member (the admin switched stores): sign in as this one, once.
+  const switchUser = useMutation({
+    mutationFn: () => auth.signOut(),
+    onSuccess: () => signIn.reset(),
+  })
+  const otherStore = opened.error instanceof ApiError && opened.error.status === 403 && switchUser.isIdle
+  useEffect(() => {
+    if (otherStore) switchUser.mutate()
+  }, [otherStore, switchUser])
+
+  const error = signIn.error ?? (otherStore ? null : opened.error)
+  const waiting = !error && !opened.data
   return (
     <div className="flex flex-col gap-4">
       <h1 className="text-2xl font-semibold">{t('title')}</h1>
-      {(opened.isPending || (opened.isFetching && !opened.data)) && <p role="status">{t('starting')}</p>}
-      {opened.error instanceof NotEmbeddedError && (
+      {waiting && <p role="status">{t('starting')}</p>}
+      {error instanceof NotEmbeddedError && (
         <Alert>
           <AlertDescription>{t('notEmbedded')}</AlertDescription>
         </Alert>
       )}
-      {opened.error && !(opened.error instanceof NotEmbeddedError) && !opened.isFetching && (
+      {error && !(error instanceof NotEmbeddedError) && (
         <Alert variant="destructive">
           <AlertDescription className="flex flex-col gap-2">
-            <span>{t('failed', { reason: reasonOf(opened.error) })}</span>
-            <Button variant="outline" className="self-start" onClick={() => void reload()}>
+            <span>{t('failed', { reason: reasonOf(error) })}</span>
+            <Button variant="outline" className="self-start" onClick={() => {
+              if (signIn.error) signIn.reset()
+              else void reload()
+            }}>
               {t('retry')}
             </Button>
           </AlertDescription>

@@ -3,21 +3,17 @@ package com.jabiz.quizbuks.shopify;
 import com.jabiz.event.DomainEvent;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
-import com.jabiz.query.EntityQuery;
-import com.jabiz.query.QueryPredicate;
 import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.inbound.InboundEvents;
 import com.jabiz.runtime.inbound.LoadInboundEvent;
 import com.jabiz.runtime.inbound.ReceivedEvent;
 import com.jabiz.runtime.process.steps.HoldLock;
 import com.jabiz.runtime.process.steps.QueryEntities;
-import com.jabiz.runtime.security.SecurityEntities;
 import jakarta.validation.constraints.NotBlank;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -30,8 +26,9 @@ import java.util.Map;
  *   <li>{@value #UNINSTALLED}: the shop is marked uninstalled and its access tokens are dropped; its members'
  *       sessions end at their next refresh (the sign-in guard). Its data is kept.</li>
  *   <li>{@value #SHOP_REDACT}: Shopify asks to erase the shop's data (48 hours after an uninstall): the shop, its
- *       members and tokens are deleted, the members' platform accounts are disabled and their Shopify identities
- *       unlinked. A shop that was installed again meanwhile is kept.</li>
+ *       members and tokens are deleted. A shop that was installed again meanwhile is kept. The members' platform
+ *       accounts stay as the platform keeps them (its user records are append-only, and linking and unlinking are the
+ *       platform's): a staff member who opens the app after a new install signs in as before and joins a new shop.</li>
  *   <li>{@value #DATA_REQUEST} and {@value #CUSTOMERS_REDACT}: the module keeps no data of a shop's customers, so the
  *       request is recorded as {@code NO_DATA}.</li>
  * </ul>
@@ -59,8 +56,6 @@ public final class WebhookProcesses {
     static final String SHOPS = ShopProcesses.SHOPS;
     static final String MEMBERS = ShopProcesses.MEMBERS;
     static final String TOKENS = ConnectionProcesses.TOKENS;
-    static final String USERS = "users";
-    static final String LINKS = "links";
     static final String OUTPUT = "output";
 
     static InboundRef input(DomainEvent event) {
@@ -119,11 +114,6 @@ public final class WebhookProcesses {
                 ctx -> ctx.get(INPUT, InboundRef.class).inboundEventId(), EVENT))
             .compute("Read the shop", (metadata, ctx) -> ctx.put(DOMAIN, domain(ctx, "shop_domain")))
             .steps(WebhookProcesses::lockAndLoad)
-            .step("Load the members' accounts and links", QueryEntities.all(
-                QueryEntities.<ProcessContext>query(SecurityEntities.USER_DATASET,
-                    ctx -> users(ctx, "userId"), USERS),
-                QueryEntities.<ProcessContext>query(SecurityEntities.USER_IDENTITY_DATASET,
-                    ctx -> users(ctx, "userId"), LINKS)))
             .compute("Erase the shop's data", (metadata, ctx) -> redact(ctx)));
     }
 
@@ -147,17 +137,6 @@ public final class WebhookProcesses {
                 ctx.changes().delete(QbsShops.MEMBER, member.id(), member.version());
             }
             ctx.changes().delete(QbsShops.SHOP, shop.id(), shop.version());
-            for (EntityInstance user : ShopProcesses.rows(ctx, USERS)) {
-                if (Boolean.TRUE.equals(user.get("enabled"))) {
-                    ctx.changes().update(SecurityEntities.USER, user.id(), user.version(), Map.of("enabled", false));
-                }
-            }
-            // Only the links of this provider: the identity of the person within this shop.
-            for (EntityInstance link : ShopProcesses.rows(ctx, LINKS)) {
-                if (("ext:" + Shopify.PROVIDER).equals(link.get("provider"))) {
-                    ctx.changes().delete(SecurityEntities.USER_IDENTITY, link.id(), link.version());
-                }
-            }
             outcome = QbsShops.DELETED;
         }
         record(ctx, QbsShops.SHOP_REDACT, domain, outcome);
@@ -216,27 +195,14 @@ public final class WebhookProcesses {
         ReceivedEvent event = ctx.get(EVENT, ReceivedEvent.class);
         Object named = event.at(field);
         String body = named instanceof String text ? Shopify.lower(text) : null;
-        String header = Shopify.lower(header(event.metadata(), Shopify.SHOP_HEADER));
+        // The platform's metadata map ignores the case of header names.
+        String header = Shopify.lower(event.metadata() == null ? null : event.metadata().get(Shopify.SHOP_HEADER));
         if (body == null || !Shopify.isShopDomain(body) || !body.equals(header)) {
             log.warn("Shopify webhook {} ({}) names shop {} in its body and {} in its header: not acted on",
                 event.inboundEventId(), event.eventType(), body, header);
             return null;
         }
         return body;
-    }
-
-    static String header(Map<String, String> metadata, String name) {
-        if (metadata == null) {
-            return null;
-        }
-        return metadata.entrySet().stream().filter(e -> e.getKey().equalsIgnoreCase(name)).map(Map.Entry::getValue)
-            .findFirst().orElse(null);
-    }
-
-    static EntityQuery users(ProcessContext ctx, String field) {
-        List<Object> ids = ShopProcesses.rows(ctx, MEMBERS).stream().map(m -> (Object) m.get("userId")).toList();
-        return EntityQuery.builder().where(new QueryPredicate.In(field, ids)).limit(ShopProcesses.MAX_MEMBERS * 4)
-            .build();
     }
 
     static void record(ProcessContext ctx, String topic, String domain, String outcome) {

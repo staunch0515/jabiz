@@ -149,6 +149,37 @@ describe('QuizBuks for Shopify (S1)', () => {
     await waitFor(() => expect(screen.getAllByText(/Shopify did not grant access/).length).toBeGreaterThan(0))
   })
 
+  it('signs in again when the tab\'s session is another store\'s', async () => {
+    let joins = 0
+    const posted: string[] = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
+      const request = input instanceof Request ? input : new Request(new URL(String(input), window.location.origin))
+      const path = decodeURIComponent(new URL(request.url, window.location.origin).pathname)
+      if (request.method === 'POST') posted.push(path)
+      switch (path) {
+        case '/api/auth/entries/shopify':
+          return json(200, ENTRY)
+        case '/api/auth/external-token':
+          return json(200, { status: 'SIGNED_IN', accessToken: 'a2', refreshToken: 'r2' })
+        case '/api/auth/me':
+          return json(200, { userId: 'u1', roles: ['QBS_SHOP'], permissions: ['qbs.shop.use'] })
+        case '/api/auth/logout':
+          return new Response(null, { status: 204 })
+        case '/api/processes/QBS_SHOP_JOIN/latest':
+          joins += 1
+          return joins === 1 ? json(403, { status: 403, title: 'Forbidden' }) : json(200, { output: shop() })
+        default:
+          return json(404, {})
+      }
+    })
+    session.store('a1', 'r1')
+    render(<App />)
+    expect(await screen.findByText('Store: demo.myshopify.com')).toBeInTheDocument()
+    // Refused as the other store's staff member, then signed in as this one, then joined.
+    expect(posted.filter((p) => p !== '/api/auth/logout')).toEqual(['/api/processes/QBS_SHOP_JOIN/latest',
+      '/api/auth/external-token', '/api/processes/QBS_SHOP_JOIN/latest'])
+  })
+
   it('tells where to open it when not inside the Shopify admin', async () => {
     delete window.shopify
     server({ joins: [shop()] })

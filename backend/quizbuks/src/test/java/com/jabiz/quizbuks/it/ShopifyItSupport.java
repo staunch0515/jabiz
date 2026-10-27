@@ -125,9 +125,13 @@ abstract class ShopifyItSupport extends ContentItSupport {
     }
 
     /** A staff member signed in as the embedded pages do; the platform's tokens. */
-    @SuppressWarnings("unchecked")
     Map<String, Object> session(String shop, String staff) {
-        Map<String, Object> session = signIn(sessionToken(shop, staff)).expectStatus().isOk().expectBody(MAP)
+        return session(shop, staff, claims -> { });
+    }
+
+    @SuppressWarnings("unchecked")
+    Map<String, Object> session(String shop, String staff, Consumer<Map<String, Object>> change) {
+        Map<String, Object> session = signIn(sessionToken(shop, staff, change)).expectStatus().isOk().expectBody(MAP)
             .returnResult().getResponseBody();
         assertThat(session).containsEntry("status", "SIGNED_IN");
         return session;
@@ -141,10 +145,21 @@ abstract class ShopifyItSupport extends ContentItSupport {
     record Staff(String bearer, String userId, Map<String, Object> joined) {}
 
     Staff open(String shop, String staff) {
-        Map<String, Object> session = session(shop, staff);
+        return open(shop, staff, claims -> { });
+    }
+
+    /** As {@link #open(String, String)}, with the tokens' claims changed (an {@code iat} after an uninstall). */
+    Staff open(String shop, String staff, Consumer<Map<String, Object>> change) {
+        Map<String, Object> session = session(shop, staff, change);
         Map<String, Object> joined = run("QBS_SHOP_JOIN", bearer(session),
-            Map.of("sessionToken", sessionToken(shop, staff)));
+            Map.of("sessionToken", sessionToken(shop, staff, change)));
         return new Staff(bearer(session), (String) session.get("userId"), joined);
+    }
+
+    /** Tokens issued a second after the tests' (unmoving) clock: after anything recorded now, such as an uninstall. */
+    Consumer<Map<String, Object>> issuedLater() {
+        long later = clock.instant().getEpochSecond() + 1;
+        return claims -> claims.put("iat", later);
     }
 
     /** Sends a webhook signed over its body, as Shopify does; answers the platform's response. */

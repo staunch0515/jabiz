@@ -38,7 +38,11 @@ public final class ShopProcesses {
     public static final String ADMIN_TRANSFER = "QBS_SHOP_ADMIN_TRANSFER";
 
     static final int MAX_TOKEN_LENGTH = 4096;
-    static final int MAX_MEMBERS = 1000;
+    /**
+     * The most members a shop has: every write of a shop (an uninstall, an erasure) stays within one batch of the
+     * datasets, and Shopify's plans give far fewer staff accounts than this.
+     */
+    public static final int MAX_MEMBERS = 100;
 
     /** A fresh session token of the operator, from App Bridge. */
     public record JoinInput(@Sensitive @NotBlank @Size(max = MAX_TOKEN_LENGTH) String sessionToken) {
@@ -124,6 +128,15 @@ public final class ShopProcesses {
         } else {
             shopId = shop.id();
             if (QbsShops.UNINSTALLED.equals(shop.get("status"))) {
+                // Only a token issued after the uninstall shows the app installed again: one App Bridge gave out
+                // just before it (still valid for its minute) must not undo the uninstall.
+                java.time.Instant issued = issuedAt(token.token());
+                java.time.Instant uninstalled = shop.get("uninstalledAt");
+                if (issued == null || uninstalled == null || !issued.isAfter(uninstalled)) {
+                    ctx.reject(new Violation("sessionToken", ShopifyCodes.UNINSTALLED,
+                        "The shop has uninstalled the app", Map.of()));
+                    return;
+                }
                 reinstalled = true;
                 Map<String, Object> values = new HashMap<>();
                 values.put("status", QbsShops.ACTIVE);
@@ -138,6 +151,11 @@ public final class ShopProcesses {
         List<Member> view = new java.util.ArrayList<>(members.stream()
             .map(m -> new Member(m.get("userId"), m.get("staffId"), m.get("role"), m.get("joinedAt"))).toList());
         String role;
+        if (mine == null && members.size() >= MAX_MEMBERS) {
+            ctx.reject(new Violation(null, ShopifyCodes.SHOP_FULL, "The shop has the most members it may have",
+                Map.of("max", MAX_MEMBERS)));
+            return;
+        }
         if (mine == null) {
             role = members.stream().anyMatch(m -> QbsShops.ADMIN.equals(m.get("role"))) ? QbsShops.MEMBER_ROLE
                 : QbsShops.ADMIN;
@@ -270,4 +288,23 @@ public final class ShopProcesses {
         List<EntityInstance> rows = rows(ctx, key);
         return rows.isEmpty() ? null : rows.getFirst();
     }
+
+    /**
+     * When the token (verified already) was issued, by its {@code iat}; null when it has none. Read from the token
+     * itself, which the platform has verified: the time is the issuer's word, as the token's other claims.
+     */
+    static java.time.Instant issuedAt(String token) {
+        try {
+            String payload = token.split("\\.")[1];
+            tools.jackson.databind.JsonNode iat = CLAIMS.readTree(java.util.Base64.getUrlDecoder().decode(payload))
+                .path("iat");
+            return iat.canConvertToExactIntegral() && iat.asLong() > 0
+                ? java.time.Instant.ofEpochSecond(iat.asLong()) : null;
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
+    private static final tools.jackson.databind.json.JsonMapper CLAIMS =
+        tools.jackson.databind.json.JsonMapper.builder().build();
 }

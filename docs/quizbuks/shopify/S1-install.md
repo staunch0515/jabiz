@@ -21,7 +21,8 @@
 
 - `QbsShop`（普通表）：`shopDomain` 唯一、不可变；`status` `ACTIVE` / `UNINSTALLED`；`installedAt`、`uninstalledAt`、`shopName`（连接检查时取得）、`connection` `NONE` / `CONNECTED` / `RECONNECT`。
 - `QbsShopMember`（普通表）：店铺、平台用户（唯一：一个用户只属于一家店）、店员编号、`role` `ADMIN` / `MEMBER`、加入时刻。每家店恰好一个 `ADMIN`（部分唯一索引兜底）。
-- `QBS_SHOP_JOIN`（每次打开内嵌页时调用，重复无副作用）：`VerifyExternalToken` 核对店员递来的会话令牌属于操作人 → 取锁 `qbs.shop:<店铺>` → 没有店铺即建（`ACTIVE`）、已卸载即恢复为 `ACTIVE`（重装，§5）→ 没有成员关系即加入，店铺没有成员时成为 `ADMIN`，否则 `MEMBER`。
+- `QBS_SHOP_JOIN`（每次打开内嵌页时调用，重复无副作用）：`VerifyExternalToken` 核对店员递来的会话令牌属于操作人 → 取锁 `qbs.shop:<店铺>` → 没有店铺即建（`ACTIVE`）、已卸载即恢复为 `ACTIVE`（重装，§5；只认卸载之后签发的令牌：`iat` 晚于卸载时刻，卸载前一刻签发、仍在一分钟有效期内的令牌不算）→ 没有成员关系即加入，店铺没有主管理员时成为 `ADMIN`，否则 `MEMBER`。
+- 每家店至多 `ShopProcesses.MAX_MEMBERS`（100）位成员（`QBS_SHOP_FULL`）：卸载、删除等一次写全店的流程都在数据视图的一批之内；Shopify 各套餐的员工账号远少于此。
 - `QBS_SHOP_ADMIN_TRANSFER`：主管理员把 `ADMIN` 交给本店另一位成员（同一锁内两行一起改）。
 - 读取：`QBS_SHOP_JOIN` 的输出就是页面所示的概况（店铺、连接状态、成员，主管理员在前）。不另写模板：模板中一个实体只能对应一个数据视图，
   "操作人自己的成员关系"与"同店的全部成员"要读同一张表的两种范围，平台的范围也表达不了"与我同店"。全部数据视图只给系统读（`qbs.system`），写入只经流程。
@@ -29,9 +30,10 @@
 ## 4. Shopify 的访问令牌（按需交换）
 
 - 外部服务 `shopify`：`allowed-hosts: "*.myshopify.com"`（17b 的主机模式），密钥 `SHOPIFY_API_KEY` / `SHOPIFY_API_SECRET`。
-- `QBS_SHOP_CONNECT`（任何成员）：核对会话令牌 → 锁 `qbs.shop-token:<店铺>` → 阻塞步骤以令牌交换（`grant_type=urn:ietf:params:oauth:grant-type:token-exchange`、`requested_token_type=…offline-access-token`、`expiring=1`）取得离线访问令牌与刷新令牌 →
+- `QBS_SHOP_CONNECT`（任何成员）：核对会话令牌 → 只取锁 `qbs.shop-token:<店铺>`（不取店铺锁：每次打开内嵌页的 `QBS_SHOP_JOIN` 都要取它，不能等外部调用；店铺行按读到的版本更新）→ 阻塞步骤以令牌交换（`grant_type=urn:ietf:params:oauth:grant-type:token-exchange`、`requested_token_type=…offline-access-token`、`expiring=1`）取得离线访问令牌与刷新令牌 →
   以 `SealSecret`（上下文为店铺域名）密封后写 `QbsShopToken`（每店一行）→ 以访问令牌查询店铺名（Admin GraphQL `shop { name }`）写 `QbsShop.shopName`，`connection = CONNECTED`。
 - 刷新：要用访问令牌的流程（S1 只有连接检查 `QBS_SHOP_CHECK`）在同一锁内，访问令牌 5 分钟内到期即以刷新令牌换新的一对（旧的随之作废，所以只在锁内刷新）；刷新被拒即 `connection = RECONNECT` 并删除令牌，下次有人打开内嵌页时重新交换。
+  刷新成功后读店铺名失败，照样保存新的一对（旧的已不能用）；只有刷新之后提交失败才会丢失它（Shopify 的令牌接口不接受幂等键），之后的检查即得到 `RECONNECT`，重新连接即可。
 - 外部调用在事务中、锁内同步进行（一次约一秒，只在连接与刷新时发生）：交换出的令牌只在提交后才存在，提交失败时下一次再交换即可。
 
 ## 5. Webhook 与生命周期
@@ -42,9 +44,11 @@
 |---|---|
 | `app/uninstalled` | 店铺与成员行上的店铺状态 `UNINSTALLED`、记卸载时刻；删除访问令牌；成员的会话在下一次刷新时结束（`ShopSignInGuard`）。**数据保留** |
 | `customers/data_request`、`customers/redact` | S1 没有顾客数据：登记 `QbsComplianceRequest`（主题、店铺、接收时刻、入站事件、结论 `NO_DATA`） |
-| `shop/redact` | 店铺仍是 `UNINSTALLED` 时才删除：本店的令牌、成员、店铺行；成员的平台账户停用并解除外部账号关联（审计照平台保留期留存）。店铺已重装（`ACTIVE`）即不删、登记 |
+| `shop/redact` | 店铺仍是 `UNINSTALLED` 时才删除：本店的令牌、成员、店铺行。店铺已重装（`ACTIVE`）即不删、登记。成员的平台账户不动（见下） |
 
-- **重装**：`shop/redact` 之前重装，下一次有人打开内嵌页时 `QBS_SHOP_JOIN` 把店铺恢复为 `ACTIVE`，成员与主管理员照旧，访问令牌按需重新交换；`shop/redact` 之后重装即新店（旧账户已停用、关联已解除，同一店员登录时另开新账户）。
+- **重装**：`shop/redact` 之前重装，下一次有人打开内嵌页时 `QBS_SHOP_JOIN` 把店铺恢复为 `ACTIVE`，成员与主管理员照旧，访问令牌按需重新交换；`shop/redact` 之后重装即新店（同一店员仍以原来的平台账户登录，加入新店，第一位成为主管理员）。
+- **与计划不同（平台账户）**：计划 S1-6 写 `shop/redact` 时"停用这些平台账户（解除外部账号关联）"。平台规则是外部账号只经平台的关联与解除（根 `CLAUDE.md`），应用不自己写 `SecUserIdentity`；
+  只停用而不解除，重装后的店员又会因账户被停用而进不来。所以 S1 不动平台账户：它们只有用户名 `<店铺>/<店员编号>`、没有邮箱与密码，记录是只追加的（真正抹去要平台的账户删除能力，S1 之外，待需求方决定是否开平台阶段）。
 - **与计划不同**：计划 S1-6 写"`SignInGuard` 拒绝已卸载店铺的成员登录"。照写会挡住重装：卸载之后再装，店员打开内嵌页时店铺仍是 `UNINSTALLED`，登录被拒就到不了把店铺恢复为 `ACTIVE` 的 `QBS_SHOP_JOIN`。
   Shopify 只给已安装的应用签发会话令牌，所以能以新令牌登录本身就说明已重装。因此守卫只拒绝**刷新**（`SignInAttempt.Factor.REFRESH`）：已卸载店铺的成员的会话在访问令牌到期时结束（同封禁），新的令牌登录照常放行；
   平台没有给应用直接吊销会话的步骤（`SEC_USER_SESSIONS_REVOKE` 是管理员的、要二次验证）。已卸载店铺的写入流程（转交、检查连接）照样拒绝（`QBS_SHOP_UNINSTALLED`）。

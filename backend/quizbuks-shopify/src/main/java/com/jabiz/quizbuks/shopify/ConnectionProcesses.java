@@ -32,8 +32,11 @@ import java.util.Map;
  * name is read. When Shopify no longer takes the tokens, they are dropped and the shop must connect again
  * ({@code RECONNECT}); that is saved, not refused.
  *
- * <p>Both call Shopify inside the transaction, under the lock: a second or two, and only when connecting or refreshing.
- * A pair obtained by a transaction that then fails is simply obtained again by the next one.
+ * <p>Both call Shopify inside the transaction, under the shop's token lock only (not the shop's lock, which every
+ * opening of the embedded pages takes): a second or two, only when connecting or refreshing; the shop's row is updated
+ * by the version read. An exchanged pair a failing transaction loses is simply exchanged again. A refreshed pair is
+ * kept even when reading the shop's name then fails (Shopify has made the old pair useless); only a failing commit
+ * after a refresh loses it, and the shop then connects again ({@code RECONNECT} at the next check).
  */
 public final class ConnectionProcesses {
 
@@ -77,8 +80,6 @@ public final class ConnectionProcesses {
                 .outputMapper(ctx -> ctx.get(OUTPUT, ConnectionOutput.class))
                 .steps(VerifyExternalToken.of(Shopify.PROVIDER,
                     ctx -> ctx.get(ShopProcesses.INPUT, ConnectInput.class).sessionToken(), ShopProcesses.VERIFIED))
-                .step("Lock the shop", HoldLock.<ProcessContext>shared(
-                    ctx -> Shopify.shopLock(ShopProcesses.verified(ctx).tenant())))
                 .step("Lock the shop's tokens", HoldLock.<ProcessContext>exclusive(
                     ctx -> Shopify.tokenLock(ShopProcesses.verified(ctx).tenant())))
                 .step("Load the shop and the operator's membership", QueryEntities.all(
@@ -118,7 +119,6 @@ public final class ConnectionProcesses {
                 .step("Find the operator's shop", QueryEntities.<ProcessContext>of(
                     QbsShops.defaultDataset(QbsShops.MEMBER),
                     ctx -> ShopProcesses.eq("userId", ctx.request().actorId(), 1), MINE))
-                .step("Lock the shop", HoldLock.<ProcessContext>shared(ShopProcesses::lockOfMine))
                 .step("Lock the shop's tokens", HoldLock.<ProcessContext>exclusive(ctx -> {
                     String domain = ShopProcesses.domainOfMine(ctx);
                     return domain == null ? null : Shopify.tokenLock(domain);
@@ -209,7 +209,7 @@ public final class ConnectionProcesses {
                 : name);
         }
         ctx.changes().update(QbsShops.SHOP, shop.id(), shop.version(), shopValues);
-        ctx.put(OUTPUT, new ConnectionOutput(QbsShops.CONNECTED, name));
+        ctx.put(OUTPUT, new ConnectionOutput(QbsShops.CONNECTED, name != null ? name : shop.get("shopName")));
     }
 
     /** Exchanges the operator's session token for the shop's token pair and reads the shop's name with it. */
@@ -287,7 +287,16 @@ public final class ConnectionProcesses {
                 ctx.put(OBTAINED, pair.value());
                 access = pair.value().accessToken();
             }
-            ShopifyApi.Answer<String> name = api.shopName(domain, access);
+            ShopifyApi.Answer<String> name;
+            try {
+                name = api.shopName(domain, access);
+            } catch (com.jabiz.external.ExternalCallException e) {
+                if (ctx.get(OBTAINED) == null) {
+                    throw e;
+                }
+                // Refreshed already: keep the new pair (the old one no longer works) and read the name next time.
+                return;
+            }
             if (name.refused()) {
                 ctx.put(DROPPED, true);
                 ctx.put(OBTAINED, null);

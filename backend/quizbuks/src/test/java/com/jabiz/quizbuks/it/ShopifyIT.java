@@ -196,8 +196,13 @@ class ShopifyIT extends ShopifyItSupport {
         // Delivered twice by Shopify: nothing more happens.
         deliver("app/uninstalled", shop, uninstalled(shop));
 
+        // A token App Bridge gave out before the uninstall (still valid for its minute) does not undo it.
+        assertThat(ruleCode(refused("QBS_SHOP_JOIN", adminBearer, Map.of("sessionToken", sessionToken(shop, "1")),
+            422))).isEqualTo("QBS_SHOP_UNINSTALLED");
+        assertThat(shopRows(shop).getFirst()).containsEntry("status", "UNINSTALLED");
+
         // Installed again: a staff member opens the app, the shop is active again, members and admin as before.
-        Staff back = open(shop, "1");
+        Staff back = open(shop, "1", issuedLater());
         assertThat(back.joined()).containsEntry("role", "ADMIN").containsEntry("reinstalled", true)
             .containsEntry("joined", false);
         assertThat(shopRows(shop).getFirst()).containsEntry("status", "ACTIVE").containsEntry("uninstalled_at", null);
@@ -207,7 +212,7 @@ class ShopifyIT extends ShopifyItSupport {
     }
 
     @Test
-    void shopRedactErasesAnUninstalledShopAndItsAccounts() {
+    void shopRedactErasesAnUninstalledShopAndLeavesTheAccountsToThePlatform() {
         String shop = shop("redact");
         Staff admin = open(shop, "1");
         Staff member = open(shop, "2");
@@ -217,19 +222,21 @@ class ShopifyIT extends ShopifyItSupport {
         deliver("shop/redact", shop, privacy(shop));
         assertThat(shopRows(shop)).isEmpty();
         assertThat(memberRows(shop)).isEmpty();
-        for (String userId : List.of(admin.userId(), member.userId())) {
-            assertThat(query("SELECT enabled FROM sec_user_version WHERE user_id = ?::uuid ORDER BY version_no DESC"
-                + " LIMIT 1", userId).getFirst()).containsEntry("enabled", false);
-        }
-        assertThat(query("SELECT 1 FROM (SELECT DISTINCT ON (user_identity_id) * FROM sec_user_identity_version"
-            + " ORDER BY user_identity_id, effect_start_time DESC, version_no DESC) i WHERE NOT i.is_deleted"
-            + " AND i.subject LIKE ?", shop + "/%")).isEmpty();
+        assertThat(query("SELECT 1 FROM qbs_shop_token t WHERE NOT EXISTS (SELECT 1 FROM qbs_shop s"
+            + " WHERE s.shop_id = t.shop_id)")).isEmpty();
+        assertThat(compliance(shop)).containsExactly("shop/redact:DELETED");
+        // Delivered again (Shopify retries with the same body): the platform takes it once.
+        deliver("shop/redact", shop, privacy(shop));
         assertThat(compliance(shop)).containsExactly("shop/redact:DELETED");
 
-        // The same staff member opening the app after a new install is a new account of a new shop.
-        Staff again = open(shop, "1");
-        assertThat(again.userId()).isNotEqualTo(admin.userId());
-        assertThat(again.joined()).containsEntry("role", "ADMIN").containsEntry("reinstalled", false);
+        // A new install: the shop starts afresh; the staff member signs in to the same platform account (the
+        // platform keeps it) and is the new shop's admin.
+        Staff again = open(shop, "2");
+        assertThat(again.userId()).isEqualTo(member.userId());
+        assertThat(again.joined()).containsEntry("role", "ADMIN").containsEntry("reinstalled", false)
+            .containsEntry("joined", true).containsEntry("connection", "NONE");
+        assertThat(shopRows(shop)).singleElement().satisfies(row -> assertThat(row).containsEntry("status", "ACTIVE"));
+        assertThat(admin.userId()).isNotNull();
     }
 
     @Test
@@ -237,7 +244,7 @@ class ShopifyIT extends ShopifyItSupport {
         String shop = shop("kept");
         open(shop, "1");
         deliver("app/uninstalled", shop, uninstalled(shop));
-        open(shop, "1");
+        open(shop, "1", issuedLater());
         deliver("shop/redact", shop, privacy(shop));
         assertThat(shopRows(shop)).singleElement().satisfies(row -> assertThat(row).containsEntry("status", "ACTIVE"));
         assertThat(compliance(shop)).containsExactly("shop/redact:KEPT_REINSTALLED");
@@ -297,6 +304,44 @@ class ShopifyIT extends ShopifyItSupport {
             .expectHeader().valueEquals("X-Frame-Options", "DENY")
             .expectHeader().value("Content-Security-Policy", csp -> assertThat(csp).contains("frame-ancestors 'none'"));
         client.get().uri("/sponsor/?shop=" + shop).exchange().expectHeader().valueEquals("X-Frame-Options", "DENY");
+    }
+
+    @Test
+    void aShopTakesAtMostItsLimitOfMembers() {
+        String shop = shop("full");
+        Staff admin = open(shop, "1");
+        String shopId = String.valueOf(shopRows(shop).getFirst().get("shop_id"));
+        for (int n = 2; n <= com.jabiz.quizbuks.shopify.ShopProcesses.MAX_MEMBERS; n++) {
+            execute("INSERT INTO qbs_shop_member (member_id, shop_id, shop_domain, user_id, staff_id, role, shop_status,"
+                + " joined_at, version) VALUES (?, ?, ?, ?, ?, 'MEMBER', 'ACTIVE', now(), 1)",
+                java.util.UUID.randomUUID().toString(), shopId, shop, "seeded-" + java.util.UUID.randomUUID(),
+                "s" + n);
+        }
+        Map<String, Object> session = session(shop, "999");
+        assertThat(ruleCode(refused("QBS_SHOP_JOIN", bearer(session), Map.of("sessionToken",
+            sessionToken(shop, "999")), 422))).isEqualTo("QBS_SHOP_FULL");
+        // Members already in still open the app.
+        assertThat(run("QBS_SHOP_JOIN", admin.bearer(), Map.of("sessionToken", sessionToken(shop, "1"))))
+            .containsEntry("role", "ADMIN");
+    }
+
+    @Test
+    void aRefreshedPairIsKeptWhenReadingTheNameThenFails() {
+        String shop = shop("keep");
+        Staff admin = open(shop, "1");
+        run("QBS_SHOP_CONNECT", admin.bearer(), Map.of("sessionToken", sessionToken(shop, "1")));
+        String before = String.valueOf(query("SELECT t.sealed_refresh_token FROM qbs_shop_token t JOIN qbs_shop s"
+            + " ON s.shop_id = t.shop_id WHERE s.shop_domain = ?", shop).getFirst().get("sealed_refresh_token"));
+        endsSoon(shop);
+        SHOPIFY.script("/shops/" + shop + "/admin/api/2026-10/graphql.json", StubHttpServer.Answer.json(503, "{}"));
+        assertThat(run("QBS_SHOP_CHECK", admin.bearer(), Map.of())).containsEntry("connection", "CONNECTED");
+        Map<String, Object> after = query("SELECT t.sealed_refresh_token, t.access_expires_at FROM qbs_shop_token t"
+            + " JOIN qbs_shop s ON s.shop_id = t.shop_id WHERE s.shop_domain = ?", shop).getFirst();
+        assertThat(String.valueOf(after.get("sealed_refresh_token"))).isNotEqualTo(before);
+        // Without a refresh, a failing read fails the check (nothing to keep).
+        SHOPIFY.script("/shops/" + shop + "/admin/api/2026-10/graphql.json", StubHttpServer.Answer.json(503, "{}"));
+        assertThat(call("QBS_SHOP_CHECK", admin.bearer(), Map.of()).expectBody(MAP).returnResult().getStatus()
+            .is2xxSuccessful()).isFalse();
     }
 
     /** Makes the shop's access token end within the refresh margin (the tests' clock does not move). */

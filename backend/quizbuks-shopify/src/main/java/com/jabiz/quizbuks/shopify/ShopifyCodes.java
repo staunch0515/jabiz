@@ -21,9 +21,9 @@ public final class ShopifyCodes {
     public static final String EXCHANGE_REFUSED = "QBS_EXCHANGE_REFUSED";
     /** The shop has no access token: connect first. */
     public static final String NOT_CONNECTED = "QBS_NOT_CONNECTED";
-    /** The stored tokens cannot be opened (the sealing key changed): connect again. */
-    public static final String TOKENS_UNREADABLE = "QBS_TOKENS_UNREADABLE";
+    /** The shop has as many members as it may ({@code ShopProcesses.MAX_MEMBERS}). */
+    public static final String SHOP_FULL = "QBS_SHOP_FULL";
 
     public static final List<String> ALL = List.of(OTHER_SHOP, NOT_A_MEMBER, NOT_ADMIN, NOT_A_COLLEAGUE, UNINSTALLED,
-        EXCHANGE_REFUSED, NOT_CONNECTED, TOKENS_UNREADABLE);
+        EXCHANGE_REFUSED, NOT_CONNECTED, SHOP_FULL);
 }
