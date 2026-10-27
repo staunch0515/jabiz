@@ -174,6 +174,7 @@ public class LoginContext extends ProcessContext {
             case SecurityEntities.FACTOR_RECOVERY_CODE -> SignInAttempt.Factor.RECOVERY_CODE;
             case SecurityEntities.FACTOR_OIDC -> SignInAttempt.Factor.OIDC;
             case SecurityEntities.FACTOR_EMAIL_LINK -> SignInAttempt.Factor.EMAIL_LINK;
+            case SecurityEntities.FACTOR_EXTERNAL_TOKEN -> SignInAttempt.Factor.EXTERNAL_TOKEN;
             default -> SignInAttempt.Factor.PASSWORD;
         };
     }

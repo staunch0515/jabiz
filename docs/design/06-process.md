@@ -73,6 +73,7 @@ LoadEntity(order) → LoadEntity(stock) → ComputeStep(扣减库存、计算金
   名字 `[a-z][a-z0-9-]{0,39}`；主机只写名字（小写，不带协议、端口）；环境变量名 `[A-Z][A-Z0-9_]*`；连接超时缺省 5 s、至多 30 s，
   请求超时缺省 30 s、至多 2 min（阻塞步骤占着流程的事务，更长的用作业）；响应上限缺省 1 MiB、至多 16 MiB。
   `jabiz.external-services.<名>.base-url | allowed-hosts` 按环境覆盖地址与主机（测试、开发指向本地桩服务），其他属性只在代码中。
+  地址随租户而变的提供方可在 `allowed-hosts` 中写模式 `*.domain`（决策 D59 第 5 条）：只放行该域名前的一个标签（`*.myshopify.com` 放行 `demo.myshopify.com`）；只写运营方信任其 DNS 的域名（平台不按解析出的地址拒绝内网）。
 - **调用**：注入 `ExternalServices`，`http(服务)` 得到同步的 `ExternalHttp`，`send(Request)` 返回 `Response`（状态、请求头、字节或文本）。
   `Request.post("/v1/moderate").header(…).json(…).timeout(…).idempotencyKey(…)`：目标是相对路径（按 RFC 3986 对基础地址解析），
   或白名单内主机上、与基础地址**协议和端口相同**的绝对地址；超时不超过服务的请求超时。请求头名不区分大小写（后写的替换先写的）；

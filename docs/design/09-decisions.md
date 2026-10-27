@@ -59,6 +59,7 @@
 | D55 | 应用的邮件可带一次性登录链接（`MailTemplate.signInLink`，有效期不超过 `jabiz.security.email-link.max-ttl`，发送时检查入口与返回路径）；通知可发给没有账号的地址，退订按地址（`sys_mail_address_optout`）（补充 D35 第 4 条与 D54，不取代） | 已确认（2026-10-24，需求方：QuizBuks 指定邮箱的发布选方案 B）；已实施（阶段 16ze） | 18 §5.6、10 §15.11 |
 | D57 | 入站 Webhook 的只签正文方案 `body-hmac-sha256`：没有签名的时间、事件号与类型取自不签名的请求头、事件按"提供方 + 类型 + 事件号"区分、同类型同正文的重放护栏、元数据头、签名失败可答 401（补充 D37，不取代） | 已确认（2026-10-26，需求方确认 17a 计划）；已实施（阶段 17a，第 4、5 条的细化见下） | 11 §2.5.1 |
 | D58 | 迁移只能给只追加表加列：测试夹具 `SealedColumnsHistory` 逐版本检查迁移，启动检查对封存过、已不存在的列与表给出警告（补充 D27，不取代） | 已确认（2026-10-26，需求方确认 17c 计划）；已实施（阶段 17c） | 21 §2.1 |
+| D59 | 凭外部平台签发的令牌登录（`external-token` 入口、`POST /api/auth/external-token`、身份 = 租户中的一个人）、流程步骤 `VerifyExternalToken`、外部服务的主机模式 `*.domain`、SPA 按租户放行内嵌（`embedding`） | 已确认（2026-10-27，需求方确认 17b 计划）；已实施（阶段 17b） | 10 §15.12、17 §3.2、06 §2.3 |
 
 ---
 
@@ -2068,3 +2069,36 @@ D54 的登录链接只由平台的 `POST /api/auth/email-link` 寄出（平台�
 
 **剩余风险**：直接在数据库上执行、不经迁移的 DDL 若只改类型，启动检查看不到（块只记列名），由每日校验发现；夹具只检查仓库中的迁移，不检查已部署的库（那是启动检查的事）。
 
+---
+
+## D59 凭外部平台签发的令牌登录、按租户放行内嵌
+
+**背景**：商店平台（Shopify）的内嵌后台由平台后台以 iframe 打开，页面经平台的脚本取得**会话令牌**（HS256 的 JWT，以应用密钥签名，约 1 分钟有效，`iss` = `https://<店铺>/admin`、
+`dest` = `https://<店铺>`、`aud` = 应用的 API key、`sub` = 店员编号、`jti`）。平台此前只有密码、邮件链接与 OIDC 三种登录；SPA 的 CSP 固定为 `frame-ancestors 'none'`（Spring Security 另写 `X-Frame-Options: DENY`）；
+外部服务只按精确主机放行，而店铺的接口地址随店铺而变。
+
+**决定**（需求方 2026-10-27 确认 17b 的计划与四个问题：一个商户可多人登录、必须时才交换访问令牌、收到删除通知再删、店面限流顺延 17d）
+1. **提供方** `jabiz.security.external-tokens.<名>`（名 `[a-z][a-z0-9-]{0,35}`）：`secrets`（只取自环境变量，每个至少 32 字节；可写两个以便更换）、`audience`、`tenant-pattern`（整体匹配）、
+   `issuer-format` / `destination-format`（https，`{tenant}` 恰好一次）、`skew`（缺省 10 秒，至多 60 秒）、`auto-provision`、`frame-ancestors`（租户自己的来源之外可内嵌的来源）、`tenant-parameter`（缺省 `shop`）。
+   有问题的提供方不用、启动检查（`SECURITY`）一次报告全部问题。规则在 core 的 `ExternalTokenRules`（纯计算：只认 HS256、`typ` 只可为 `JWT`、不认 `crit`；以常量时间比较每个密钥的签名；`exp` 必有、`nbf` 可有，都带容差；`aud` 为字符串或含应用的列表；
+   `iss` 与 `dest` 须指向同一个允许的租户；`sub`、`jti` 为 1–255 个可见 ASCII 字符），JSON 由 runtime 严格解析（重复的键、多余的内容、非规范的 base64url 一律拒绝；令牌至多 4096 字符）。
+2. **入口** `jabiz.security.entries.<名>.external-token: <提供方>`；不能是 `admin` 或接受 `*` 的入口，不能同时要求已验证的邮箱（这样的用户没有邮箱）。接口 `POST /api/auth/external-token` `{token, entry}`（公开）：
+   按客户端地址限流（D47 的 `EXTERNAL_TOKEN`）、验证、`jti` 在普通表 `sec_external_token_use` 中只用一次（行保留到令牌本来也不能再用为止）、再照常运行写登录记录的流程 `SPONSOR_EXTERNAL_TOKEN_SIGN_IN`
+   （与 OIDC 同一套步骤，因素 `EXTERNAL_TOKEN`：`SignInGuard`、入口角色、锁定照旧）。一切拒绝都是 401 `LOGIN_FAILED`（原因只进日志）；守卫的拒绝仍是 403，开户过多是 429。
+3. **身份 = 租户中的一个人**：`SecUserIdentity` 的提供方为 `ext:<名>`（与 OIDC 的提供方分开）、主体为 `<租户>/<sub>`。同一个人在两个租户是两个用户。没有关联的身份在提供方 `auto-provision` 且入口允许注册（不是 `admin`）时开户：
+   流程 `SPONSOR_EXTERNAL_TOKEN_SIGN_UP`（`entryOnly`）建无邮箱、无密码的用户（用户名即身份主体，被占用时加随机后缀）、入口的注册角色与关联；按客户端地址限流（`EXTERNAL_TOKEN_SIGN_UP`）；同时开户的竞争再试一次。
+   凭证所有权链（D48）把它当作本人注册与本人关联。登录记录不另加租户列：会话（刷新令牌）记下所用的身份（`identity_id`），身份的主体即租户与人。
+4. **流程步骤** `VerifyExternalToken.of(提供方, ctx -> 令牌, 键)`（以 `.steps(…)` 加入）：同样地验证、要求令牌的身份关联的正是操作人，把 `Verified(provider, tenant, subject, token)` 放进上下文，供提交前的阻塞步骤把令牌交给签发它的平台（如交换访问令牌）。
+   不消耗 `jti`：重放由签发它的平台判断。任何不成立都是 403（不说明原因）。输入中的令牌组件标 `@Sensitive`。
+5. **外部服务的主机模式**：`allowed-hosts` 中可写 `*.domain`（域名至少两个标签、末段不是数字），只放行该域名前的**一个**标签（`*.myshopify.com` 放行 `demo.myshopify.com`，不放行 `myshopify.com`、`a.b.myshopify.com`）；
+   其余规则（https、本机之外不用 http、不带凭据）照旧，`jabiz.webhooks.allowed-hosts` 仍只认精确主机。平台从来不按解析出的地址拒绝内网（计划中的"照旧拒绝内网地址"不成立）：模式只写运营方信任其 DNS 的域名。
+6. **按租户放行内嵌**：SPA 的 `jabiz.web.spa[i].embedding: <提供方>`（启动检查要求该 SPA 的入口以同一提供方登录）。请求带提供方的租户参数（`?shop=`）且是该提供方的租户、由 `dest` 得出的来源是单纯的 https 来源时，
+   该响应的 CSP 中 `frame-ancestors` 换成"该租户的来源 + 提供方的 `frame-ancestors`"，并去掉 `X-Frame-Options`；否则照旧（`'none'` 与 `DENY`）。不开 CORS、不用 Cookie：页面以 `@jabiz/client` 的 `signInWithExternalToken` 换取平台自己的令牌。
+7. 不做：登录时交换外部平台的访问令牌（必须时由应用的流程以第 4 条与外部服务进行）；店员的角色细分（由应用的成员关系决定）。
+
+**理由**：外部平台已经认证了店员，再要密码只会多一个凭据；以平台自己的会话承接，之后的一切（权限、审计、二次验证的声明、限流）照旧。身份带租户，使店员在别的店铺的身份不能读这家店的数据。
+
+**放弃的方案**：①在每个接口上直接接受外部令牌（1 分钟有效、每次都要验签，且权限、审计、会话管理都要另写）；②以店铺为用户、店员共用（看不出是谁做的，D27 的审计失去意义）；
+③按 `Referer` 或 `Origin` 放行内嵌（浏览器不总带，且可被伪造的页面利用）；④以单独的属性 `allowed-host-patterns` 写模式（同一个列表更不易漏配；计划中的名字因此未采用）。
+
+**剩余风险**：令牌在 1 分钟内被截获可登录一次（`jti` 只用一次、https）；`tenant-pattern` 写得过宽会让不该内嵌的来源内嵌（启动检查只查形式；放行前另查 `dest` 得出的是单纯的 https 来源）；更换应用密钥时须两个密钥并存一段时间。

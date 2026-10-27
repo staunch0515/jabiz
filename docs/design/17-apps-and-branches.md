@@ -108,6 +108,8 @@ jabizApp {
   未配置时用平台的缺省值（`JabizWebProperties.DEFAULT_CONTENT_SECURITY_POLICY`，阶段 16c-2 对所有 SPA 收紧，决策 D43 第 7 条）
   `default-src 'self'; img-src 'self' blob: data:; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'; worker-src 'self'; manifest-src 'self'`
   （Radix 的定位、滚动锁与通知仍需要内联样式，所以 `'unsafe-inline'` 保留在 `style-src`；脚本一律不允许内联）。公开网站在应用中配置自己的策略（例如允许嵌入视频的 `frame-src`）。
+- 被另一个平台内嵌的 SPA 声明 `jabiz.web.spa[i].embedding: <外部令牌提供方>`（决策 D59，10 §15.12）：请求带提供方的租户参数（如 `?shop=`）且是它的租户时，该响应的 `frame-ancestors`
+  换成该租户的来源与提供方的 `frame-ancestors`，并去掉 `X-Frame-Options`；其他请求照旧不能被内嵌。该 SPA 的入口须以同一提供方登录（启动检查）。
 - **根地址的转向**（16zf-a）：`jabiz.web.root-redirect`（环境变量 `JABIZ_WEB_ROOT_REDIRECT`）设了本主机的一个路径（如 `/biz/`）时，对恰好 `/` 的 `GET` / `HEAD`
   在查找 SPA 之前即 302 到该路径（查询串保留；`Cache-Control: no-cache`，不带页面策略）；只能是本主机的绝对路径（不能是 `/` 自身、带协议或主机的地址、`//…`、`/api` 或 `/actuator` 之下），
   `SpaConfigCheck` 检查（目标不在任何 SPA 之下时告警：须另有东西应答它）。前端都挂在前缀下（`/taker/`、`/biz/`）的主机用它决定裸域名打开哪一个；不设时根照旧由 `/` 上的 SPA（若有）提供。`/index.html` 等其他路径不转向。

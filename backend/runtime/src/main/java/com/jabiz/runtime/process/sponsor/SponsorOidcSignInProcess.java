@@ -19,15 +19,30 @@ import java.util.List;
  * up by a provider); a locked, disabled or role-less user is refused; then the second factor as for passwords, unless
  * the provider's authentication counts as one. No password is guessed here, so refusals do not count towards the
  * lock, but a lock in force applies.
+ *
+ * <p>{@link #EXTERNAL_TOKEN_DEFINITION} ({@value #EXTERNAL_TOKEN_NAME}) is the same sign-in for a token another platform
+ * signed (decision D59; section 15.12), recorded with {@code factor = EXTERNAL_TOKEN}: the identity is
+ * {@code ext:<provider>} / {@code <tenant>/<sub>}, and such a token never counts as a second factor.
  */
 public final class SponsorOidcSignInProcess {
 
     public static final String NAME = "SPONSOR_OIDC_SIGN_IN";
 
+    /** The same sign-in for a token another platform signed (decision D59): its own name in the operation log. */
+    public static final String EXTERNAL_TOKEN_NAME = "SPONSOR_EXTERNAL_TOKEN_SIGN_IN";
+
     public static final ProcessDefinition<SponsorOidcSignInInput, SponsorSignInOutput, OidcContext> DEFINITION =
-        ProcessDefinition.define(NAME, 1, SponsorOidcSignInInput.class, SponsorSignInOutput.class, OidcContext.class,
-            pb -> pb
-                .description("Sign-in through an identity provider: the linked user, the roles, and the attempt.")
+        define(NAME, "Sign-in through an identity provider: the linked user, the roles, and the attempt.");
+
+    public static final ProcessDefinition<SponsorOidcSignInInput, SponsorSignInOutput, OidcContext>
+        EXTERNAL_TOKEN_DEFINITION = define(EXTERNAL_TOKEN_NAME,
+            "Sign-in with a token another platform signed: the linked user, the roles, and the attempt.");
+
+    private static ProcessDefinition<SponsorOidcSignInInput, SponsorSignInOutput, OidcContext> define(String name,
+        String description) {
+        return ProcessDefinition.define(name, 1, SponsorOidcSignInInput.class, SponsorSignInOutput.class,
+            OidcContext.class, pb -> pb
+                .description(description)
                 .permissions(SecurityPermissions.SIGN_IN)
                 .entryOnly()
                 .contextFactory(OidcContext::new)
@@ -51,6 +66,7 @@ public final class SponsorOidcSignInProcess {
                 .steps(SponsorSignInProcess::entrySteps)
                 .steps(SponsorSignInProcess::secondFactorSteps)
                 .step("Create the login record", OidcLoginRecordStep.class, NoMetadata.INSTANCE));
+    }
 
     private SponsorOidcSignInProcess() {}
 

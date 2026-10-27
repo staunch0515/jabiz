@@ -41,16 +41,28 @@ class SpaFallbackFilter implements WebFilter {
 
     private final JabizWebProperties properties;
     private final StaticPages pages;
+    private final SpaEmbedding embedding;
 
     @org.springframework.beans.factory.annotation.Autowired
-    SpaFallbackFilter(JabizWebProperties properties, StaticPages pages) {
+    SpaFallbackFilter(JabizWebProperties properties, StaticPages pages,
+        org.springframework.beans.factory.ObjectProvider<SpaEmbedding> embedding) {
+        this(properties, pages, embedding.getIfAvailable(() -> SpaEmbedding.NONE));
+    }
+
+    SpaFallbackFilter(JabizWebProperties properties, StaticPages pages, SpaEmbedding embedding) {
         this.properties = properties;
         this.pages = pages;
+        this.embedding = embedding;
+    }
+
+    /** Never framed. */
+    SpaFallbackFilter(JabizWebProperties properties, StaticPages pages) {
+        this(properties, pages, SpaEmbedding.NONE);
     }
 
     /** Without static pages: every route of an SPA is answered with its index. */
     SpaFallbackFilter(JabizWebProperties properties) {
-        this(properties, StaticPages.none());
+        this(properties, StaticPages.none(), SpaEmbedding.NONE);
     }
 
     @Override
@@ -78,9 +90,19 @@ class SpaFallbackFilter implements WebFilter {
         // A static site's own page for the directory asked for (phase 16zf-b), else the SPA's index.
         String page = route ? pages.pageFor(spa, path).orElse(spa.index()) : path;
         var response = exchange.getResponse();
+        String ancestors = spa.embedding() == null ? null : embedding.tenantParameter(spa.embedding())
+            .map(parameter -> req.getQueryParams().getFirst(parameter))
+            .flatMap(tenant -> embedding.frameAncestors(spa.embedding(), tenant)).orElse(null);
         response.beforeCommit(() -> {
             HttpHeaders headers = response.getHeaders();
-            headers.set(CONTENT_SECURITY_POLICY, spa.contentSecurityPolicy());
+            if (ancestors == null) {
+                headers.set(CONTENT_SECURITY_POLICY, spa.contentSecurityPolicy());
+            } else {
+                // Framed by the tenant that opened it (decision D59): the policy names its origins, and the older
+                // X-Frame-Options Spring Security wrote (DENY; it cannot name an origin) goes.
+                headers.set(CONTENT_SECURITY_POLICY, withFrameAncestors(spa.contentSecurityPolicy(), ancestors));
+                headers.remove(X_FRAME_OPTIONS);
+            }
             // Only for the scope the browser derives from the script's own directory, never wider (decision D43 item 6).
             headers.remove(SERVICE_WORKER_ALLOWED);
             cacheHeaders(response, spa, page);
@@ -132,12 +154,26 @@ class SpaFallbackFilter implements WebFilter {
         }
     }
 
+    /** {@code policy} with its {@code frame-ancestors} directive replaced by (or, without one, added as) the given. */
+    static String withFrameAncestors(String policy, String sources) {
+        StringBuilder rewritten = new StringBuilder();
+        for (String directive : policy.split(";")) {
+            String trimmed = directive.strip();
+            if (trimmed.isEmpty() || trimmed.toLowerCase(java.util.Locale.ROOT).matches("frame-ancestors(\\s.*)?")) {
+                continue;
+            }
+            rewritten.append(trimmed).append("; ");
+        }
+        return rewritten.append("frame-ancestors ").append(sources).toString();
+    }
+
     /** The API and the actuator: never rewritten, and their responses carry no page policy. */
     static boolean excluded(String path) {
         return path.startsWith("/api") || path.startsWith("/actuator");
     }
 
     private static final String CONTENT_SECURITY_POLICY = "Content-Security-Policy";
+    static final String X_FRAME_OPTIONS = "X-Frame-Options";
     static final String SERVICE_WORKER_ALLOWED = "Service-Worker-Allowed";
     static final String NO_CACHE = "no-cache";
     static final String IMMUTABLE = "public, max-age=31536000, immutable";

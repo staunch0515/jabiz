@@ -86,6 +86,8 @@ public class SecurityConfig {
         ServerWebExchangeMatchers.pathMatchers(HttpMethod.GET, OidcController.BASE + "/providers"),
         ServerWebExchangeMatchers.pathMatchers(HttpMethod.POST, OidcController.BASE + "/*/start",
             OidcController.BASE + "/callback"),
+        // Signing in with another platform's signed token (decision D59): the token is the credential, used once.
+        ServerWebExchangeMatchers.pathMatchers(HttpMethod.POST, ExternalTokenController.PATH),
         // Inbound webhooks (decision D37): the provider's signature is the credential; credentials sent along are
         // not even looked at, so a stray Authorization header cannot turn a delivery into a 401.
         // InboundWebhookWebFilter has refused unknown providers, other methods and callers over the limit already.
