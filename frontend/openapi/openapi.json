@@ -3355,6 +3355,53 @@
         "tags" : [ "sign-up-controller" ]
       }
     },
+    "/api/auth/account/verify-email/check" : {
+      "post" : {
+        "operationId" : "verifyCheckOwn",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/TokenRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/VerifyCheck"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "sign-up-controller" ]
+      }
+    },
+    "/api/auth/account/verify-email/confirm" : {
+      "post" : {
+        "operationId" : "verifyOwn",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/VerifyRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "204" : {
+            "description" : "No Content"
+          }
+        },
+        "tags" : [ "sign-up-controller" ]
+      }
+    },
     "/api/auth/challenge/enroll" : {
       "post" : {
         "operationId" : "enrollUnderChallenge",
