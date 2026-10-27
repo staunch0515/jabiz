@@ -3,8 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <!-- App Bridge (Shopify's requirement): the app's public Client ID, then its script from Shopify's CDN, first and
-         loaded synchronously. -->
-    <meta name="shopify-api-key" content="%VITE_SHOPIFY_API_KEY%" />
+         loaded synchronously. The Client ID and the support address are the deployment's (platform 17g: the server
+         writes jabiz.web.spa[].index-values in at startup), so one image serves the staging and the live app. -->
+    <meta name="shopify-api-key" content="{{jabiz:shopify-api-key}}" />
+    <meta name="quizbuks-support-email" content="{{jabiz:support-email}}" />
     <script src="https://cdn.shopify.com/shopifycloud/app-bridge.js"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/png" href="/icon-192.png" />

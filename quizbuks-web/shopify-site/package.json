@@ -1,0 +1,18 @@
+{
+  "name": "quizbuks-shopify-site",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "QuizBuks for Shopify's public pages at /shopify-app/ (docs/quizbuks/shopify/S4-launch.md section 1): the landing page, the privacy policy and support, static pages in three languages rendered by scripts/build.mjs, no framework.",
+  "packageManager": "pnpm@10.18.0",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.3",
+    "typescript": "6.0.3",
+    "vitest": "5.0.2"
+  }
+}
