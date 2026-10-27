@@ -61,10 +61,11 @@ public class OidcSignUpProcess {
      * @param email         the address the token gave
      * @param displayName   the name the token gave, cleaned; optional
      * @param locale        the language of the request, one of the platform's; optional
-     * @param emailVerified whether the provider vouches for the address ({@link IdTokenValidator.Identity#trustedEmail})
+     * @param emailVerified whether the provider vouches for the address ({@link IdTokenValidator.Identity#trustedEmail});
+     *                      absent (inputs from before decision D60) means it does
      */
     public record Input(@NotBlank String entry, @NotBlank String provider, @NotBlank String subject,
-        @NotBlank String email, String displayName, String locale, boolean emailVerified) {
+        @NotBlank String email, String displayName, String locale, Boolean emailVerified) {
 
         /** An address the provider vouches for (decision D39). */
         public Input(String entry, String provider, String subject, String email, String displayName,
@@ -93,7 +94,7 @@ public class OidcSignUpProcess {
                     input.locale(), null, null, null);
                 ctx.put(PROVIDER, input.provider());
                 ctx.put(SUBJECT, input.subject());
-                ctx.put(VERIFIED, input.emailVerified());
+                ctx.put(VERIFIED, !Boolean.FALSE.equals(input.emailVerified()));
                 return ctx;
             })
             .outputMapper(ctx -> new Output(ctx.get(OUTCOME, Outcome.class)))
