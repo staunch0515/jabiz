@@ -122,7 +122,7 @@ class OidcProvidersTest {
             kind("apple", "apple", "https://appleid.apple.com", false, null, portal),
             kind("noemail", null, "https://idp.example.com", true, List.of("openid", "profile"), portal)));
         assertThat(providers.check()).extracting(CheckProblem::message).containsExactly(
-            "kind must be one of generic, google",
+            "kind must be one of generic, google, facebook, line",
             "auto-provision needs the scope email");
         assertThat(providers.all()).extracting(OidcProvider::id).containsExactly("google");
     }
@@ -181,5 +181,52 @@ class OidcProvidersTest {
         assertThat(OidcProvider.secureUrl("ftp://localhost")).isFalse();
         assertThat(OidcProvider.secureUrl("/relative")).isFalse();
         assertThat(OidcProvider.secureUrl("not a url")).isFalse();
+    }
+    private static OidcProvider ofKind(String kind, String secret, boolean autoProvision, boolean unverified) {
+        return new OidcProvider(kind.toLowerCase() + "-p", null, "client", secret, "https://erp.example.com/login/oidc", null, null,
+            null, null, kind, autoProvision, unverified);
+    }
+
+    @Test
+    void facebookAndLineHaveTheirIssuersAndTakeTheClientCredentialsInTheForm() {
+        // Decision D61 item 1.
+        OidcProvider facebook = ofKind("facebook", "s", false, false);
+        assertThat(facebook.issuer()).isEqualTo(OidcProvider.FACEBOOK_ISSUER);
+        assertThat(facebook.discoveryUrl()).isEqualTo("https://www.facebook.com/.well-known/openid-configuration/");
+        assertThat(facebook.defaultTokenEndpoint()).isEqualTo("https://graph.facebook.com/oauth/access_token");
+        assertThat(facebook.clientSecretPost()).isTrue();
+        assertThat(facebook.acceptsHs256()).isFalse();
+        OidcProvider line = ofKind("LINE", "x".repeat(32), false, false);
+        assertThat(line.kind()).isEqualTo("line");
+        assertThat(line.issuer()).isEqualTo(OidcProvider.LINE_ISSUER);
+        assertThat(line.discoveryUrl()).isEqualTo("https://access.line.me/.well-known/openid-configuration");
+        assertThat(line.defaultTokenEndpoint()).isNull();
+        assertThat(line.clientSecretPost()).isTrue();
+        assertThat(line.acceptsHs256()).isTrue();
+        assertThat(line.problems()).isEmpty();
+        // Everybody else: Basic, RS256 / ES256 only, as before.
+        for (OidcProvider other : List.of(good("corp"), ofKind("google", "s", false, false))) {
+            assertThat(other.clientSecretPost()).isFalse();
+            assertThat(other.acceptsHs256()).isFalse();
+            assertThat(other.defaultTokenEndpoint()).isNull();
+        }
+        // An explicit issuer stays (a local stub, a regional endpoint).
+        assertThat(new OidcProvider("l", "https://idp.example.com", "client", "x".repeat(32),
+            "https://erp.example.com/login/oidc", null, null, null, null, "line", false).issuer())
+            .isEqualTo("https://idp.example.com");
+    }
+
+    @Test
+    void aLineSecretMustBeLongEnoughToKeyHs256AndUnverifiedSignUpNeedsAutoProvision() {
+        assertThat(ofKind("line", "short", false, false).problems())
+            .containsExactly("client-secret of a line provider must be at least 32 bytes");
+        assertThat(ofKind("facebook", "s", false, true).problems())
+            .containsExactly("sign-up-unverified-email needs auto-provision");
+        assertThat(ofKind("facebook", "s", true, true).problems()).isEmpty();
+        // An unknown kind has no default issuer either.
+        assertThat(ofKind("unknown", "s", false, false).problems())
+            .contains("kind must be one of generic, google, facebook, line", "issuer is required");
+        assertThat(ofKind("line", "x".repeat(32), true, true).toString()).doesNotContain("xxxx")
+            .contains("signUpUnverifiedEmail=true");
     }
 }

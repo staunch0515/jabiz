@@ -25,13 +25,19 @@ import java.util.regex.Pattern;
  * @param redirectUri   the administration's callback ({@code admin}), as before entries had their own
  * @param mfaAmr        values of the ID token's {@code amr} claim that count as a second factor; empty trusts none
  * @param redirectUris  the callbacks of other entries (or the administration's), by entry name
- * @param kind          {@value #GENERIC} (the default) or {@value #GOOGLE}: Google's issuer is the default one, and its
- *                      addresses count as verified only where Google vouches for them (gmail, or a Workspace domain)
+ * @param kind          {@value #GENERIC} (the default), {@value #GOOGLE}, {@value #FACEBOOK} or {@value #LINE}: each
+ *                      known kind has its issuer as the default; Google's addresses count as verified only where
+ *                      Google vouches for them (gmail, or a Workspace domain); Facebook and LINE take the client's
+ *                      credentials in the token request's form, and LINE's web sign-in signs its ID tokens with the
+ *                      client secret (HS256, decision D61)
  * @param autoProvision whether an unknown subject with a verified, unused address gets an account (default false)
+ * @param signUpUnverifiedEmail with {@code autoProvision}: whether an address the provider does not vouch for opens
+ *                      an account too, unverified and pre-claimable, with a verification mail (default false; decision
+ *                      D61 item 3)
  */
 public record OidcProvider(String id, String issuer, String clientId, String clientSecret, String redirectUri,
     List<String> scopes, Map<String, String> labels, List<String> mfaAmr, Map<String, String> redirectUris,
-    String kind, boolean autoProvision) {
+    String kind, boolean autoProvision, boolean signUpUnverifiedEmail) {
 
     public static final List<String> DEFAULT_SCOPES = List.of("openid", "profile", "email");
 
@@ -41,7 +47,17 @@ public record OidcProvider(String id, String issuer, String clientId, String cli
     public static final String GOOGLE = "google";
     /** Google's issuer, the default of a {@value #GOOGLE} provider. */
     public static final String GOOGLE_ISSUER = "https://accounts.google.com";
-    private static final List<String> KINDS = List.of(GENERIC, GOOGLE);
+    /** Facebook (Meta's OpenID Connect web flow, decision D61). */
+    public static final String FACEBOOK = "facebook";
+    /** Facebook's issuer, the default of a {@value #FACEBOOK} provider. */
+    public static final String FACEBOOK_ISSUER = "https://www.facebook.com";
+    /** LINE Login (OpenID Connect; HS256 ID tokens at web sign-in, decision D61). */
+    public static final String LINE = "line";
+    /** LINE's issuer, the default of a {@value #LINE} provider. */
+    public static final String LINE_ISSUER = "https://access.line.me";
+    /** The shortest client secret an HS256 key may be (RFC 7518 section 3.2: the hash's size, 256 bits). */
+    static final int HS256_MIN_SECRET_BYTES = 32;
+    private static final List<String> KINDS = List.of(GENERIC, GOOGLE, FACEBOOK, LINE);
 
     private static final Pattern ID = Pattern.compile("[a-z0-9][a-z0-9-]{0,39}");
     private static final Pattern ENTRY = Pattern.compile("[a-z][a-z0-9-]{0,39}");
@@ -53,15 +69,28 @@ public record OidcProvider(String id, String issuer, String clientId, String cli
         mfaAmr = mfaAmr == null ? List.of() : List.copyOf(mfaAmr);
         redirectUris = redirectUris == null ? Map.of() : Map.copyOf(redirectUris);
         kind = kind == null || kind.isBlank() ? GENERIC : kind.strip().toLowerCase(Locale.ROOT);
-        if (GOOGLE.equals(kind) && (issuer == null || issuer.isBlank())) {
-            issuer = GOOGLE_ISSUER;
+        if (issuer == null || issuer.isBlank()) {
+            issuer = switch (kind) {
+                case GOOGLE -> GOOGLE_ISSUER;
+                case FACEBOOK -> FACEBOOK_ISSUER;
+                case LINE -> LINE_ISSUER;
+                default -> issuer;
+            };
         }
+    }
+
+    /** A provider of a kind that opens accounts for verified addresses only (as before decision D61). */
+    public OidcProvider(String id, String issuer, String clientId, String clientSecret, String redirectUri,
+        List<String> scopes, Map<String, String> labels, List<String> mfaAmr, Map<String, String> redirectUris,
+        String kind, boolean autoProvision) {
+        this(id, issuer, clientId, clientSecret, redirectUri, scopes, labels, mfaAmr, redirectUris, kind,
+            autoProvision, false);
     }
 
     /** A generic provider that opens no accounts. */
     public OidcProvider(String id, String issuer, String clientId, String clientSecret, String redirectUri,
         List<String> scopes, Map<String, String> labels, List<String> mfaAmr, Map<String, String> redirectUris) {
-        this(id, issuer, clientId, clientSecret, redirectUri, scopes, labels, mfaAmr, redirectUris, null, false);
+        this(id, issuer, clientId, clientSecret, redirectUri, scopes, labels, mfaAmr, redirectUris, null, false, false);
     }
 
     /** Whether this is Google ({@value #GOOGLE}). */
@@ -76,6 +105,33 @@ public record OidcProvider(String id, String issuer, String clientId, String cli
      */
     public boolean googleRules() {
         return google() || GOOGLE_ISSUER.equals(issuer);
+    }
+
+    /**
+     * Whether the token request carries the client's credentials in its form ({@code client_secret_post}) rather than
+     * Basic authentication: Facebook and LINE take them only so (decision D61 item 1).
+     */
+    public boolean clientSecretPost() {
+        return FACEBOOK.equals(kind) || LINE.equals(kind);
+    }
+
+    /**
+     * Whether an HS256 ID token keyed with the client secret is accepted: LINE only, whose web sign-in signs so
+     * (decision D61 item 2). Every other provider's tokens must be RS256 or ES256 by a key of its JWKS.
+     */
+    public boolean acceptsHs256() {
+        return LINE.equals(kind);
+    }
+
+    /** Where the discovery document is: Facebook serves it at the path with a trailing slash (decision D61 item 1). */
+    public String discoveryUrl() {
+        String base = issuer.replaceAll("/+$", "") + "/.well-known/openid-configuration";
+        return FACEBOOK.equals(kind) ? base + "/" : base;
+    }
+
+    /** The token endpoint when the discovery document names none: Facebook's Graph API (decision D61 item 1). */
+    public String defaultTokenEndpoint() {
+        return FACEBOOK.equals(kind) ? "https://graph.facebook.com/oauth/access_token" : null;
     }
 
     /** A provider with the administration's callback only. */
@@ -141,6 +197,14 @@ public record OidcProvider(String id, String issuer, String clientId, String cli
             // Without the address there is nothing to open an account with (decision D39 item 1).
             problems.add("auto-provision needs the scope email");
         }
+        if (signUpUnverifiedEmail && !autoProvision) {
+            problems.add("sign-up-unverified-email needs auto-provision");
+        }
+        if (acceptsHs256() && !blank(clientSecret)
+            && clientSecret.getBytes(java.nio.charset.StandardCharsets.UTF_8).length < HS256_MIN_SECRET_BYTES) {
+            // The secret is the HS256 key of LINE's ID tokens: a shorter one cannot verify them (RFC 7518 3.2).
+            problems.add("client-secret of a line provider must be at least " + HS256_MIN_SECRET_BYTES + " bytes");
+        }
         return problems;
     }
 
@@ -195,6 +259,7 @@ public record OidcProvider(String id, String issuer, String clientId, String cli
     @Override
     public String toString() {
         return "OidcProvider[id=" + id + ", kind=" + kind + ", issuer=" + issuer + ", clientId=" + clientId
-            + ", clientSecret=***, autoProvision=" + autoProvision + "]";
+            + ", clientSecret=***, autoProvision=" + autoProvision + ", signUpUnverifiedEmail=" + signUpUnverifiedEmail
+            + "]";
     }
 }
