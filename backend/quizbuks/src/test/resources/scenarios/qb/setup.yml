@@ -11,7 +11,7 @@ steps:
   - process: QB_SETUP@latest
     input: {}
     expectOutput:
-      rolesCreated: [QB_TAKER, QB_SPONSOR, QB_ADMIN_CONTENT, QB_ADMIN_FINANCE, QB_ADMIN_SUPER]
+      rolesCreated: [QB_TAKER, QB_SPONSOR, QBS_SHOP, QB_ADMIN_CONTENT, QB_ADMIN_FINANCE, QB_ADMIN_SUPER]
       accountsOpened: ["1110", "1120", "2110", "2120", "2130", "4110", "5110", "5120"]
       countriesAdded: 249
       paramsCreated: [qb.app.min-version, qb.stats.min-group, qb.support.email,

@@ -76,6 +76,7 @@
 | `QB_STRIPE_PLACEHOLDERS` | 服务器上 `false` | compose 缺省 `true`（只在测试模式填占位） | — | 用本仓库 compose 而没设 `false` 时，测试模式缺的密钥被填成占位（告警）而不是启动失败 |
 | `QB_STRIPE_ALLOW_LIVE_WITH_TEST_DATA` | **不设** | — | — | 缺省 `false`：库中有测试数据时正式模式启动失败（§4） |
 | `ANTHROPIC_API_KEY` | 是（Q8a；Q8b 的封面与 PDF 资料同一把） | Anthropic Console → API Keys：为本部署新建的密钥（建议单独的工作区，在 Console 设工作区的月支出上限作为最后一道防线） | Console 新建密钥、改环境变量、重启，再删除旧密钥。泄露时立即删除，并先以受控变更关闭 `qb.ai.enabled` | 启动失败（EXTERNAL）；没有密钥时设占位，AI 保持关闭 |
+| `SHOPIFY_API_KEY` / `SHOPIFY_API_SECRET` | 是（S1，QuizBuks for Shopify） | Shopify Partner → 应用 → 客户端凭据（Client ID / Client secret）；staging 与正式各用自己的应用 | 在 Partner 后台轮换密钥：新密钥生效后会话令牌与 webhook 都以它签名，先改环境变量并重启（平台的提供方与入站 webhook 都只认一把，S1 不支持两把并存，轮换时有短暂的拒绝） | 启动失败（SECURITY / INBOUND）；还没有 Shopify 应用时设占位（Shopify 从不以它签名，所以不会有店铺登录或 webhook） |
 
 ### 1.3a 银行转账充值（Q13a，`plans/Q13-bank-transfer.md`）
 

@@ -14,8 +14,11 @@ COPY spec spec
 # sign-in page shows it (platform 16z). The repository itself stays out of the build context.
 ARG JABIZ_BUILD_COMMIT=""
 # node-gradle downloads Node and pnpm and builds the single-page applications before packaging them.
+# QuizBuks for Shopify (S1): the app's public Client ID goes into the embedded pages for App Bridge at build time
+# (docs/quizbuks/shopify/S1-install.md section 6); without it they cannot open inside Shopify. Not a secret.
+ARG VITE_SHOPIFY_API_KEY=""
 RUN --mount=type=cache,target=/root/.gradle \
-    cd backend && JABIZ_BUILD_COMMIT="$JABIZ_BUILD_COMMIT" ./gradlew :quizbuks:bootJar --no-daemon --console=plain \
+    cd backend && JABIZ_BUILD_COMMIT="$JABIZ_BUILD_COMMIT" VITE_SHOPIFY_API_KEY="$VITE_SHOPIFY_API_KEY" ./gradlew :quizbuks:bootJar --no-daemon --console=plain \
     && cp quizbuks/build/libs/quizbuks-0.0.1-SNAPSHOT.jar /src/app.jar
 
 FROM eclipse-temurin:21-jre
