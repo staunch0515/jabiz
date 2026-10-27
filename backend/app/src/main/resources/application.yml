@@ -69,7 +69,7 @@ jabiz:
     # registered for it. To turn it on, add the entry and the SPA, and uncomment:
     # external-tokens:
     #   shop:
-    #     secrets: [ "${JABIZ_SHOP_APP_SECRET}" ]
+    #     secrets: [ "${JABIZ_SHOP_APP_SECRET:}" ]
     #     audience: ${JABIZ_SHOP_APP_KEY}
     #     tenant-pattern: '[a-z0-9][a-z0-9-]*\.myshopify\.com'
     #     issuer-format: https://{tenant}/admin

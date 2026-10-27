@@ -103,12 +103,18 @@ public record ExternalTokenProvider(String name, List<String> secrets, String au
             found.add("at least one secret is required");
         }
         for (int i = 0; i < secrets.size(); i++) {
-            if (secrets.get(i) == null || secrets.get(i).length() < MIN_SECRET_LENGTH) {
+            if (unresolved(secrets.get(i))) {
+                // A placeholder whose variable is not set stays as its text, which anyone who read the configuration
+                // could sign with (phase 17e).
+                found.add("secrets[" + i + "]: an unresolved placeholder (is its environment variable set?)");
+            } else if (secrets.get(i) == null || secrets.get(i).length() < MIN_SECRET_LENGTH) {
                 found.add("secrets[" + i + "]: missing or shorter than " + MIN_SECRET_LENGTH + " characters");
             }
         }
         if (audience == null || audience.isBlank()) {
             found.add("audience is required");
+        } else if (unresolved(audience)) {
+            found.add("audience: an unresolved placeholder (is its environment variable set?)");
         }
         if (tenantPattern == null || tenantPattern.isBlank()) {
             found.add("tenant-pattern is required");
@@ -125,6 +131,11 @@ public record ExternalTokenProvider(String name, List<String> secrets, String au
             if (value == null || !value.startsWith("https://") || value.indexOf(ExternalTokenRules.TENANT) < 0
                 || value.indexOf(ExternalTokenRules.TENANT) != value.lastIndexOf(ExternalTokenRules.TENANT)) {
                 found.add(form[0] + " must be an https address with " + ExternalTokenRules.TENANT + " exactly once");
+            } else if ("destination-format".equals(form[0])
+                && !origin(value.replace(ExternalTokenRules.TENANT, "tenant.example"))) {
+                // The destination is the tenant's origin, which an embedded page lets frame it (phase 17e).
+                found.add("destination-format must be an https origin without path (https://"
+                    + ExternalTokenRules.TENANT + ")");
             }
         }
         if (skew.isNegative() || skew.compareTo(ExternalTokenRules.MAX_SKEW) > 0) {
@@ -139,6 +150,11 @@ public record ExternalTokenProvider(String name, List<String> secrets, String au
             found.add("tenant-parameter is not a valid parameter name");
         }
         return found;
+    }
+
+    /** A placeholder whose variable was not set stays as its text (no default given). */
+    private static boolean unresolved(String value) {
+        return value != null && value.contains("${");
     }
 
     private static boolean origin(String value) {
