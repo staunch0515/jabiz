@@ -79,6 +79,42 @@ export async function resendVerification(email: string, entry: string = session.
   await unwrap(api.POST('/api/auth/verify-email/resend', { body: { email: email.trim(), entry } }))
 }
 
+/** What a verification link needs, and whether it is being used in the signed-in user's own session. */
+export interface VerificationCheck {
+  passwordRequired: boolean
+  /** The link was checked in this frontend's session: use it there too ({@link confirmVerificationLink}). */
+  inSession: boolean
+}
+
+function hasSession(): boolean {
+  return session.accessToken() !== null || session.refreshToken() !== null
+}
+
+/**
+ * What a verification link needs (a dry run). With a session, asked in it (decision D60 item 4): the account's own
+ * session stands for its password, so an account opened through an identity provider (it has none) is verified and
+ * kept. A session the server no longer takes (401) is no reason to fail the link: then asked anonymously.
+ */
+export async function checkVerificationLink(token: string): Promise<VerificationCheck> {
+  if (hasSession()) {
+    try {
+      const check = await unwrap(api.POST('/api/auth/account/verify-email/check', { body: { token } }))
+      return { passwordRequired: check.passwordRequired ?? false, inSession: true }
+    } catch (e) {
+      if (!(e instanceof ApiError && e.status === 401)) throw e
+    }
+  }
+  const check = await unwrap(api.POST('/api/auth/verify-email/check', { body: { token } }))
+  return { passwordRequired: check.passwordRequired ?? false, inSession: false }
+}
+
+/** Proves the address with a verification link, in the session when it was checked there. */
+export async function confirmVerificationLink(token: string, inSession: boolean,
+  passwords: { password?: string; newPassword?: string } = {}): Promise<void> {
+  await unwrap(api.POST(inSession ? '/api/auth/account/verify-email/confirm' : '/api/auth/verify-email',
+    { body: { token, ...passwords } }))
+}
+
 export interface EmailLinkRequest {
   /**
    * The path the link leads back to once signed in: from the site's root, within the entry's front end (`app-path`),

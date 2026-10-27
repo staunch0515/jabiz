@@ -4,6 +4,7 @@ import com.nimbusds.jose.JOSEException;
 import com.nimbusds.jose.JWSAlgorithm;
 import com.nimbusds.jose.JWSVerifier;
 import com.nimbusds.jose.crypto.ECDSAVerifier;
+import com.nimbusds.jose.crypto.MACVerifier;
 import com.nimbusds.jose.crypto.RSASSAVerifier;
 import com.nimbusds.jose.jwk.ECKey;
 import com.nimbusds.jose.jwk.JWK;
@@ -23,8 +24,9 @@ import java.util.Set;
 
 /**
  * Checks an OpenID Connect ID token (docs/design/10-security.md section 12, OpenID Connect Core 3.1.3.7): RS256 or
- * ES256 signature by a key of the provider's JWKS, issuer, audience and authorized party, expiry and issue time with a
- * little clock skew, and the nonce of the sign-in it answers. Pure apart from the signature library.
+ * ES256 signature by a key of the provider's JWKS (or, for a provider whose tokens are keyed with the client secret,
+ * HS256 by that secret: LINE's web sign-in, decision D60 item 2), issuer, audience and authorized party, expiry and
+ * issue time with a little clock skew, and the nonce of the sign-in it answers. Pure apart from the signature library.
  */
 public final class IdTokenValidator {
 
@@ -115,15 +117,34 @@ public final class IdTokenValidator {
      */
     public static Identity validate(SignedJWT token, JWKSet keys, String issuer, String clientId, String nonceHash,
         Instant now) {
+        return validate(token, keys, null, issuer, clientId, nonceHash, now);
+    }
+
+    /** Whether the token says it is HS256: to be checked with the client secret, not the provider's keys. */
+    public static boolean hs256(SignedJWT token) {
+        return JWSAlgorithm.HS256.equals(token.getHeader().getAlgorithm());
+    }
+
+    /**
+     * @param hmacSecret the client secret, for a provider whose ID tokens are HS256 keyed with it
+     *                   ({@link OidcProvider#acceptsHs256}); null for every other provider, whose HS256 tokens are
+     *                   refused
+     * @throws InvalidIdTokenException if the token must not be accepted
+     * @throws UnknownKeyException     if no key of {@code keys} can have signed it
+     */
+    public static Identity validate(SignedJWT token, JWKSet keys, String hmacSecret, String issuer, String clientId,
+        String nonceHash, Instant now) {
         JWSAlgorithm algorithm = token.getHeader().getAlgorithm();
-        // Only asymmetric signatures: never "none", never HMAC keyed with a public key.
-        if (!ALGORITHMS.contains(algorithm)) {
+        // Asymmetric signatures, or HS256 with the secret only this provider and the platform know: never "none",
+        // never HMAC keyed with a public key.
+        boolean hmac = JWSAlgorithm.HS256.equals(algorithm) && hmacSecret != null;
+        if (!hmac && !ALGORITHMS.contains(algorithm)) {
             throw new InvalidIdTokenException("Unexpected ID token algorithm " + algorithm);
         }
         // Without a key id, any of the provider's keys of the algorithm may have signed it (during a rotation there
         // are two): one of them must verify it.
         boolean verified = false;
-        for (JWSVerifier verifier : verifiers(token, keys)) {
+        for (JWSVerifier verifier : hmac ? macVerifier(hmacSecret) : verifiers(token, keys)) {
             try {
                 verified |= token.verify(verifier);
             } catch (JOSEException e) {
@@ -221,6 +242,15 @@ public final class IdTokenValidator {
             List<String> amr = claims.getStringListClaim("amr");
             return amr == null ? List.of() : amr.stream().filter(Objects::nonNull).toList();
         } catch (ParseException e) {
+            return List.of();
+        }
+    }
+
+    /** The secret as HS256 key; one too short to be a key (RFC 7518 section 3.2) verifies nothing. */
+    private static List<JWSVerifier> macVerifier(String secret) {
+        try {
+            return List.of(new MACVerifier(secret.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        } catch (JOSEException e) {
             return List.of();
         }
     }
