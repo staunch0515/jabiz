@@ -15,9 +15,11 @@ COPY spec spec
 ARG JABIZ_BUILD_COMMIT=""
 # node-gradle downloads Node and pnpm and builds the single-page applications before packaging them.
 # (QuizBuks for Shopify's Client ID is no longer built in: the server writes it into the embedded pages at startup
-# from SHOPIFY_API_KEY, S4a / platform 17g.)
+# from SHOPIFY_API_KEY, S4a / platform 17g.) Its public pages (/shopify-app/) name the support address, written in at
+# build time: the same value as the running server's QB_SHOPIFY_SUPPORT_EMAIL (empty: the default address).
+ARG QB_SHOPIFY_SUPPORT_EMAIL=""
 RUN --mount=type=cache,target=/root/.gradle \
-    cd backend && JABIZ_BUILD_COMMIT="$JABIZ_BUILD_COMMIT" ./gradlew :quizbuks:bootJar --no-daemon --console=plain \
+    cd backend && JABIZ_BUILD_COMMIT="$JABIZ_BUILD_COMMIT" QB_SHOPIFY_SUPPORT_EMAIL="$QB_SHOPIFY_SUPPORT_EMAIL" ./gradlew :quizbuks:bootJar --no-daemon --console=plain \
     && cp quizbuks/build/libs/quizbuks-0.0.1-SNAPSHOT.jar /src/app.jar
 
 FROM eclipse-temurin:21-jre

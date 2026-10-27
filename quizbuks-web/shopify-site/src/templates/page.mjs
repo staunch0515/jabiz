@@ -3,6 +3,8 @@
 // the template turns into a mail link. No scripts, no inline styles: the platform's content security policy allows
 // neither, and the pages need none.
 
+import { LANGUAGES } from '../content/index.mjs'
+
 const PAGE_PATH = { home: '', privacy: 'privacy/', support: 'support/' }
 const LANGUAGE_NAMES = { en: 'English', zh: '中文', ja: '日本語' }
 const LOCALES = { en: 'en', zh: 'zh-Hans', ja: 'ja' }
@@ -57,10 +59,10 @@ ${sections(text.sections, supportEmail)}`
 export function renderPage({ language, page, content, base, siteUrl, supportEmail, css }) {
   const nav = Object.entries(content.nav).map(([key, label]) =>
     `<a href="${pagePath(language, key, base)}"${key === page ? ' aria-current="page"' : ''}>${esc(label)}</a>`).join('')
-  const languages = ['en', 'zh', 'ja'].map((lang) => lang === language
+  const languages = LANGUAGES.map((lang) => lang === language
     ? `<span aria-current="true">${LANGUAGE_NAMES[lang]}</span>`
     : `<a href="${pagePath(lang, page, base)}" lang="${LOCALES[lang]}" hreflang="${LOCALES[lang]}">${LANGUAGE_NAMES[lang]}</a>`).join('')
-  const alternates = ['en', 'zh', 'ja'].map((lang) =>
+  const alternates = LANGUAGES.map((lang) =>
     `<link rel="alternate" hreflang="${LOCALES[lang]}" href="${siteUrl}${pagePath(lang, page, base)}">`).join('\n')
   const title = page === 'home' ? content.siteName : `${content[page].title} · ${content.siteName}`
   return `<!doctype html>
