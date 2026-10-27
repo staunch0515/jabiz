@@ -147,9 +147,8 @@ V29 把五张只追加表的 `sponsor_id` 改名为 `publisher_id`：1.2 的环�
 - V29 与 V30 在同一次停机升级中连续执行，其间不会封存，所以没有任何块记下 `publisher_id`。1.3 没有部署过（部署工作流只针对 1.2 的两个分支）。
   只在开发库与测试库中单独执行过 V29 并封存过的，那些块（开发密钥，不证明任何东西）在 V30 之后会报告被改：重建开发库即可。
 
-**测试**：`SealedColumnsMigrationIT` 逐个版本迁移，断言每张只追加表在任何已发布版本的列都以同样的类型（含长度与小数位）留在最新版本中、表本身也还在（V29 列为"从未发布"的例外，理由写在测试中）；`PublisherKindTest` 检查五个实体映射到 `sponsor_id`、其他映射到 `publisher_id`；
+**测试**：`SealedColumnsMigrationIT`（平台 17c 之后改用平台的夹具 `SealedColumnsHistory`，D58）逐个版本迁移，断言每张只追加表在任何已发布版本的列都以同样的类型（含长度与小数位）留在最新版本中、表本身也还在（V29 列为"从未发布"的例外，理由写在测试中）；`PublisherKindTest` 检查五个实体映射到 `sponsor_id`、其他映射到 `publisher_id`；
 没有 V30 时它报出 V28 的五个 `sponsor_id`。`PublisherMigrationIT` 改为分别检查只追加表（`sponsor_id` + `publisher_kind`）与普通表（`publisher_id` + `publisher_kind`）。
 
-**不在本修正中（建议的平台后续）**：平台本身的迁移（`db/jabiz`）与其他应用没有同样的检查。可以在平台加一个启动检查，比较 `sys_integrity_seal_table` 记下的列与当前表结构，
-对平台、所有应用与真实数据库都在启动时报告"封存过的列已不存在"；需要先在 `1.3/platform` 上做。
+**平台的后续（已做，17c，D58）**：平台的夹具 `SealedColumnsHistory` 检查平台自己与各应用的迁移；启动检查比较各块记下的列与当前表结构，封存过的列不在了即警告。
 

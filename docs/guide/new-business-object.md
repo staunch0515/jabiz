@@ -50,6 +50,9 @@ SELECT jabiz_protect_append_only('supplier_version');
 - 前七列与两个索引、唯一约束、最后一行的触发器是时态表的**固定写法**，只替换表名和主键列名（CLAUDE.md §4）。忘了任何一项，启动自检会指出。
 - 业务唯一性（供应商代码不重复）**不**建唯一索引（历史版本会冲突），在第 2 步用 `eb.unique` 声明（D6）；这里只建普通索引加速查找。
 - 金额列用 `numeric(19,s)`；时间用 `timestamptz`；引用其他时态实体用 `uuid REFERENCES entity_registry (entity_id)`。
+- **以后的迁移只能给时态表加列**（D58，21 §2.1）：它的行会被完整性封存，改名、删列、改类型或删表都会使此前封存的行在校验时报告为被改。
+  应用在自己的测试中用夹具检查自己的迁移（平台的示范见 `app` 的 `SealedColumnsHistoryIT`）：
+  `assertThat(SealedColumnsHistory.application(PostgresTestDatabase.get(), "classpath:db/migration").check().lost()).isEmpty();`
 
 ## 2. 实体声明
 
@@ -270,7 +273,7 @@ ProcessDefinition.define("CERTIFICATION_SUBMIT", ...)
 
 ## 检查清单
 
-- [ ] 迁移：时态表固定列、`UNIQUE(主键, version_no)`、两个索引、`jabiz_protect_append_only`
+- [ ] 迁移：时态表固定列、`UNIQUE(主键, version_no)`、两个索引、`jabiz_protect_append_only`；改已有的时态表只加列（`SealedColumnsHistory`）
 - [ ] 实体：逻辑名 / 物理列、语义类型、`Rules` 规则、唯一性、列表视图、`temporal`
 - [ ] 数据视图：唯一默认视图，读写权限码
 - [ ] 文案：规则代码与显示名，zh / ja / en

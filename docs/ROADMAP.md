@@ -4481,3 +4481,24 @@ Shopify 一类的发送方只对**原样正文**签名（`X-Shopify-Hmac-SHA256`
 1. 方案名用中性的 `body-hmac-sha256`（缺省按 Shopify 的头名），还是直接叫 `shopify`？建议中性名。
 2. 17a-4 的正文哈希护栏是否要（建议要：代价是一列与一个部分索引）。
 3. "公开接口的限流"移到 17b（应用代理入口）一起做，是否同意？
+
+### 17c 封存过的列不再存在时报告（已确认 2026-10-26，已实施，决策 D58）
+
+**缘由**：封存为每个块记下各表封存时的列，校验按这些列重算（21 §2.1）；封存过的列被改名、删除或改类型，此前封存的每一行都会在每日校验时报告为 `MODIFIED`。
+QuizBuks 的 S0 迁移正是如此（五张只追加表的 `sponsor_id` 被改名），CI 全部通过，要到部署后才会发现（应用以 S0b 的 V30 改回）。平台自己的迁移与其他应用同样没有保护。
+
+**决定（已确认：警告、夹具放在 runtime `testFixtures`、QuizBuks 同步后改用夹具）**
+
+| # | 决定 | 实施 |
+|---|---|---|
+| 17c-1 | 测试夹具 `SealedColumnsHistory` | runtime `testFixtures`：`platform(db)` / `application(db, 位置)` 逐版本执行迁移（Flyway `afterEachMigrate` 回调，一次执行），记下只追加表（判定同封存，封存自己的表除外）的列名与类型（含长度与小数位）；`check()` 给出不见了的列与表；`neverReleased(版本, 理由)` 只排除从未单独发布的版本，理由必填 |
+| 17c-2 | 平台自己的测试 | `app` 的 `SealedColumnsHistoryIT`：平台 `db/jabiz` 与示范应用的迁移都没有违规（风险中担心的历史违规不存在）；另以 `it/sealed-history/*` 的迁移演示改名、删列、改小数位、删表都报告，加列与普通表的改动不报告 |
+| 17c-3 | 启动检查 | `IntegrityChecks`（类别 `INTEGRITY`）比较 `IntegrityStore.sealedColumns`（各块记下的列与最早的块）与 `currentColumns`，封存过的列或表不在了即警告，写明列、块与修法 |
+| 17c-4 | 警告，不阻止启动 | 迁移已在检查之前执行，拒绝启动只会停机 |
+| 17c-5 | 读取成本 | 迁移 `V47__integrity_seal_columns_index.sql`：索引 `(table_name, columns, seal_no)`，跳跃查询只读不同的清单；100 万行约 2 毫秒（全表扫描约 240 毫秒），写入 21 §2.3 |
+| 17c-6 | 文档 | 21 §2.1、§2.3，D58，指南 `new-business-object.md`，根 `CLAUDE.md` 审计一条 |
+
+**测试**：`SealedColumnsHistoryIT`（6 例）、`SealedColumnsCheckIT`（改名、删列、删表的警告与改回后消失；跳跃查询与全表 `DISTINCT` 结果一致、经索引）、`IntegrityIT` 不变。
+
+**之后**：同步到 `1.3/quizbuks` 后，QuizBuks 的 `SealedColumnsMigrationIT` 改用夹具（保留 V29 的 `neverReleased`）。
+
