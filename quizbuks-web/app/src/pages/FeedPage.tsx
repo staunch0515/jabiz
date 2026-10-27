@@ -47,6 +47,7 @@ import { FEED_SORTS, readFeed, readOpenCashRewards, readOpenRedemptions, type Fe
   from '../qb/play'
 import { problemText } from '../qb/problems'
 import { Link } from '../qb/router'
+import { HomeInstallOffer } from '../install'
 
 /** Cards per page of the feed. */
 export const FEED_PAGE = 20
@@ -408,6 +409,7 @@ export function FeedPage({ name, country }: { name: string; country: string | nu
   return (
     <section className="flex flex-col gap-4" aria-labelledby="home-title" data-testid="home">
       <Greeting name={name} />
+      <HomeInstallOffer />
       {openCash.length > 0 && (
         <Alert variant={openCash.some((r) => r.status === 'OVERDUE') ? 'warning' : 'default'} data-testid="home-cash">
           <HandCoins aria-hidden />
