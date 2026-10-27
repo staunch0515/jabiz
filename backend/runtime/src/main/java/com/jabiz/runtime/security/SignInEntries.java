@@ -9,6 +9,7 @@ import com.jabiz.runtime.web.JabizWebProperties;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.context.properties.bind.Bindable;
 import org.springframework.boot.context.properties.bind.Binder;
+import org.springframework.boot.context.properties.bind.ConstructorBinding;
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
 
@@ -120,14 +121,23 @@ public class SignInEntries implements PlatformCheck {
      * @param requireVerifiedEmail whether only users with a verified e-mail address may sign in here
      * @param appPath              the root of the entry's frontend, which mailed links lead below (decision D43 item 4)
      * @param session              its sessions: lifetime, idle end and persistence (phase 16m)
+     * @param externalToken        the external token provider people sign in with here (decision D59); null: none
      */
     public record Entry(String name, Set<String> acceptedRoles, boolean selfRegistration, Set<String> registrationRoles,
-        boolean requireVerifiedEmail, String appPath, Session session, boolean emailLink) {
+        boolean requireVerifiedEmail, String appPath, Session session, boolean emailLink, String externalToken) {
 
         public Entry {
             acceptedRoles = Set.copyOf(acceptedRoles);
             registrationRoles = Set.copyOf(registrationRoles);
             Objects.requireNonNull(session, "session must not be null");
+            externalToken = externalToken == null || externalToken.isBlank() ? null : externalToken.trim();
+        }
+
+        /** An entry without sign-in by an external token (decision D59). */
+        public Entry(String name, Set<String> acceptedRoles, boolean selfRegistration, Set<String> registrationRoles,
+            boolean requireVerifiedEmail, String appPath, Session session, boolean emailLink) {
+            this(name, acceptedRoles, selfRegistration, registrationRoles, requireVerifiedEmail, appPath, session,
+                emailLink, null);
         }
 
         /** An entry without sign-in by e-mail link (decision D54). */
@@ -155,7 +165,19 @@ public class SignInEntries implements PlatformCheck {
 
     /** An entry as configured; every item optional. */
     public record Config(List<String> acceptedRoles, Boolean selfRegistration, List<String> registrationRoles,
-        Boolean requireVerifiedEmail, String appPath, SessionConfig session, Boolean emailLink) {}
+        Boolean requireVerifiedEmail, String appPath, SessionConfig session, Boolean emailLink, String externalToken) {
+
+        /** Binding takes this one (a second constructor would leave the binder without a choice). */
+        @ConstructorBinding
+        public Config {
+        }
+
+        public Config(List<String> acceptedRoles, Boolean selfRegistration, List<String> registrationRoles,
+            Boolean requireVerifiedEmail, String appPath, SessionConfig session, Boolean emailLink) {
+            this(acceptedRoles, selfRegistration, registrationRoles, requireVerifiedEmail, appPath, session, emailLink,
+                null);
+        }
+    }
 
     /**
      * The sessions of an entry as configured ({@code jabiz.security.entries.<name>.session.*}); each item optional,
@@ -378,6 +400,17 @@ public class SignInEntries implements PlatformCheck {
             || entry.acceptedRoles().contains(ALL_ROLES))) {
             errors.add("email-link cannot be on for the administration entry or an entry accepting every role");
         }
+        // Another platform's word for a person (decision D59): never for the administration nor every role; and its
+        // users have no address, so they could never pass a verified-address requirement.
+        if (entry.externalToken() != null) {
+            if (RequestContext.DEFAULT_ENTRY.equals(name) || entry.acceptedRoles().contains(ALL_ROLES)) {
+                errors.add("external-token cannot be set for the administration entry or an entry accepting every "
+                    + "role");
+            }
+            if (entry.requireVerifiedEmail()) {
+                errors.add("external-token users have no e-mail address: require-verified-email cannot be on");
+            }
+        }
         if (entry.appPath() == null || !APP_PATH.matcher(entry.appPath()).matches()
             || List.of(entry.appPath().split("/")).stream().anyMatch(s -> s.equals(".") || s.equals(".."))) {
             errors.add("app-path must be an absolute path such as /portal/ (letters, digits, . _ ~ -), not '"
@@ -425,14 +458,15 @@ public class SignInEntries implements PlatformCheck {
     }
 
     private Entry entry(String name, Config config) {
-        Config c = config == null ? new Config(null, null, null, null, null, null, null) : config;
+        Config c = config == null ? new Config(null, null, null, null, null, null, null, null) : config;
         SessionConfig s = c.session() == null ? new SessionConfig(null, null, null) : c.session();
         Session session = new Session(s.refreshTokenTtl() == null ? defaults.refreshTokenTtl() : s.refreshTokenTtl(),
             s.idleTimeout() == null ? defaults.idleTimeout() : s.idleTimeout(),
             Persistence.of(s.persistence()).orElse(Persistence.TAB));
         return new Entry(name, trimmed(c.acceptedRoles()), Boolean.TRUE.equals(c.selfRegistration()),
             trimmed(c.registrationRoles()), Boolean.TRUE.equals(c.requireVerifiedEmail()),
-            c.appPath() == null ? "/" : c.appPath().trim(), session, Boolean.TRUE.equals(c.emailLink()));
+            c.appPath() == null ? "/" : c.appPath().trim(), session, Boolean.TRUE.equals(c.emailLink()),
+            c.externalToken());
     }
 
     private static Set<String> trimmed(List<String> values) {

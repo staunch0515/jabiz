@@ -28,7 +28,7 @@ function server(options: { me: () => Me; persistence?: 'tab' | 'device'; secondF
       return json(200, { status: 'MFA_REQUIRED', challenge: 'c1' })
     }
     if (url.pathname === '/api/auth/login' || url.pathname === '/api/auth/refresh'
-      || url.pathname === '/api/auth/email-link/confirm') {
+      || url.pathname === '/api/auth/email-link/confirm' || url.pathname === '/api/auth/external-token') {
       issued += 1
       return json(200, { status: 'SIGNED_IN', accessToken: `a${issued}`, refreshToken: `r${issued}` })
     }
@@ -96,6 +96,17 @@ describe('AuthProvider with a sign-in entry (decision D43)', () => {
     await expect(act(() => result.current.signInWithEmailLink('t2')))
       .resolves.toEqual({ status: 'MFA_REQUIRED', challenge: 'c1' })
     expect(session.accessToken()).toBeNull()
+  })
+
+  it("signs in with another platform's token at its entry (decision D59)", async () => {
+    configureSession('shop')
+    const posts = server({ me: () => ({ userId: 'u4', entry: 'shop' }) })
+    const { result } = renderHook(() => useAuth(), { wrapper })
+    await waitFor(() => expect(result.current.ready).toBe(true))
+    await expect(act(() => result.current.signInWithExternalToken('jwt1'))).resolves.toEqual({ status: 'SIGNED_IN' })
+    await waitFor(() => expect(result.current.userId).toBe('u4'))
+    expect(posts.find((p) => p.path === '/api/auth/external-token')?.body).toEqual({ token: 'jwt1', entry: 'shop' })
+    expect(session.accessToken()).not.toBeNull()
   })
 
   it('ends a session that belongs to another entry', async () => {

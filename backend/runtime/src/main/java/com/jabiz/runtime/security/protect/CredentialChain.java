@@ -44,14 +44,16 @@ final class CredentialChain {
     private CredentialChain() {}
 
     /** Processes that create a user the person registered themselves. */
-    static final Set<String> SELF_REGISTRATION = Set.of("SPONSOR_SIGN_UP", "SPONSOR_OIDC_SIGN_UP");
+    static final Set<String> SELF_REGISTRATION = Set.of("SPONSOR_SIGN_UP", "SPONSOR_OIDC_SIGN_UP",
+        "SPONSOR_EXTERNAL_TOKEN_SIGN_UP");
     /** Processes in which a mailed one-time link to the user's address is used (they prove the address). */
     static final Set<String> MAIL_PROVEN = Set.of("SPONSOR_PASSWORD_RESET_CONFIRM", "SPONSOR_EMAIL_VERIFY",
         "SPONSOR_SIGN_UP_JOIN");
     /** The process in which a signed-in user changes their own password. */
     static final String SELF_PASSWORD_CHANGE = "SEC_ACCOUNT_PASSWORD_CHANGE";
     /** Processes in which a user links their own account at a provider. */
-    static final Set<String> SELF_IDENTITY = Set.of("SEC_IDENTITY_LINK_SELF", "SPONSOR_OIDC_SIGN_UP");
+    static final Set<String> SELF_IDENTITY = Set.of("SEC_IDENTITY_LINK_SELF", "SPONSOR_OIDC_SIGN_UP",
+        "SPONSOR_EXTERNAL_TOKEN_SIGN_UP");
     /** Processes in which a user enrols their own second factor. */
     static final Set<String> SELF_MFA = Set.of("SEC_MFA_ENROLL_BEGIN", "SEC_MFA_ENROLL_CONFIRM");
 
@@ -260,7 +262,7 @@ final class CredentialChain {
 
         private void link(Event event) {
             if (!links.containsKey(event.key()) && !event.deleted()) {
-                boolean own = event.process() != null && (event.process().equals("SPONSOR_OIDC_SIGN_UP")
+                boolean own = event.process() != null && (SELF_REGISTRATION.contains(event.process())
                     || SELF_IDENTITY.contains(event.process()) && byUser(event) && clean());
                 links.put(event.key(), own);
                 line(event, "linked to " + event.provider() + ", " + verdict(own ? State.OWN : State.FOREIGN));

@@ -26,7 +26,8 @@ import java.util.regex.Pattern;
  *
  * @param name              {@value #NAME_PATTERN}, unique within the application
  * @param baseUrl           what relative request targets are resolved against (RFC 3986)
- * @param allowedHosts      the only hosts requests may go to (lower case); every request is checked
+ * @param allowedHosts      the only hosts requests may go to (lower case), or patterns {@code *.domain} (see
+ *                          {@link #allowsHost}); every request is checked
  * @param secrets           secret name to the environment variable holding it, in declaration order
  * @param connectTimeout    the longest wait for a connection
  * @param requestTimeout    the longest wait for a whole exchange, and the upper bound of a request's own timeout
@@ -49,6 +50,9 @@ public record ExternalService(String name, URI baseUrl, Set<String> allowedHosts
     /** Host names and bracketed IPv6 literals, lower case; no scheme, port or path. */
     static final Pattern HOST = Pattern.compile(
         "\\[[0-9a-f:.]+]|[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*");
+    /** The domain of a host pattern {@code *.domain}: a name of two labels or more, the last not a number. */
+    static final Pattern PATTERN_DOMAIN = Pattern.compile(
+        "([a-z0-9]([a-z0-9-]*[a-z0-9])?\\.)+[a-z]([a-z0-9-]*[a-z0-9])?");
 
     public static final Duration DEFAULT_CONNECT_TIMEOUT = Duration.ofSeconds(5);
     public static final Duration DEFAULT_REQUEST_TIMEOUT = Duration.ofSeconds(30);
@@ -71,9 +75,21 @@ public record ExternalService(String name, URI baseUrl, Set<String> allowedHosts
         return builder.build();
     }
 
-    /** Whether requests may go to {@code host} (case ignored). */
+    /**
+     * Whether requests may go to {@code host} (case ignored): one of the hosts, or one label in front of the domain of
+     * a pattern {@code *.domain} (decision D59: a provider with an address per tenant, such as {@code *.myshopify.com},
+     * takes {@code demo.myshopify.com}, never {@code myshopify.com} or {@code a.b.myshopify.com}).
+     */
     public boolean allowsHost(String host) {
-        return host != null && allowedHosts.contains(host.toLowerCase(Locale.ROOT));
+        if (host == null) {
+            return false;
+        }
+        String lower = host.toLowerCase(Locale.ROOT);
+        if (allowedHosts.contains(lower)) {
+            return true;
+        }
+        int dot = lower.indexOf('.');
+        return dot > 0 && !lower.startsWith("[") && allowedHosts.contains("*" + lower.substring(dot));
     }
 
     /**
@@ -100,8 +116,10 @@ public record ExternalService(String name, URI baseUrl, Set<String> allowedHosts
             problems.add("allowedHosts: name at least one host");
         }
         for (String host : allowedHosts) {
-            if (!HOST.matcher(host).matches()) {
-                problems.add("allowedHosts: '" + host + "' is not a host name");
+            if (host.startsWith("*.") ? !PATTERN_DOMAIN.matcher(host.substring(2)).matches()
+                : !HOST.matcher(host).matches()) {
+                problems.add("allowedHosts: '" + host + "' is not a host name" + (host.startsWith("*")
+                    ? " pattern *.domain (a domain of two labels or more)" : ""));
             }
         }
         if (baseUrl == null) {

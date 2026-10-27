@@ -52,6 +52,8 @@ public class PlatformObservations {
     public static final String IMPORT = "jabiz.import.run";
     public static final String DATA_EXPORT = "jabiz.data.export";
     public static final String AUTH_OIDC = "jabiz.auth.oidc";
+    /** A sign-in with another platform's signed token (decision D59). */
+    public static final String AUTH_EXTERNAL_TOKEN = "jabiz.auth.external_token";
     public static final String PUBLIC_RATE_LIMITED = "jabiz.public.rate_limited";
     /** A sign-in guard refused a session at a refresh, which ended it (decision D36 item 6). */
     public static final String AUTH_REFRESH_REFUSED = "jabiz.auth.refresh.refused";
