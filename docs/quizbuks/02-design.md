@@ -475,7 +475,7 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 
 - 同一工具链与 `@jabiz/ui`；`AppShell` 的左侧导航（QP1：概览、商家资料、账户；QP3 加 Quiz 与发布，QP4 加钱包，Q9b 在钱包之后加交易（`/transactions`，可带 `?publication=`），Q9 的分析在概览中）；
   英 / 中 / 日（设计缺省 Q16 是中 / 英，按 Q-4 照常提供三种，平台不支持按 SPA 的语言）；深色模式（`@jabiz/ui` 的外观切换）；图表用平台选定的图表库（G11）。
-- 会话只在标签页中（`persistence: tab`），闲置 30 分钟锁定（缺省 Q12）；不提供 Google 登录（Q2-16）。未入驻通过的商家进入 `/onboarding`。
+- 会话只在标签页中（`persistence: tab`），闲置 30 分钟锁定（缺省 Q12）；开了 Google 时与 App 一样可用 Google 登录与开户（Q37，取代 Q2-16 的"只给 App"）。未入驻通过的商家进入 `/onboarding`。
 - 内容工坊是最重的页面：题目与选项的编辑、排序、图片、版本列表；发布向导三步。
 - 钱包页（Q9d）：已到账的充值行有"收据"：首次以当前界面语言签发（`QB_TOPUP_RECEIPT_ISSUE`），之后下载同一份存档 PDF。
 - 分析（Q9e2，`sponsor/src/analytics/`）：概览（`/dashboard`，入驻通过后）显示指标卡（各状态的发布数、正在答题、今日支出、可用余额与待支付、剩余预算、本月 AI 用量（Q8a））、近 7 天的趋势（完成人数折线与支出柱，上下两个小图，不用双 Y 轴）与近 7 天热门发布前 5；
