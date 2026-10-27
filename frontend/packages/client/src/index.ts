@@ -88,6 +88,13 @@ export { default as UserName, useUserName } from './components/UserName'
 // The PWA: the Service Worker's registration and its update (decision D43 items 6 and 10).
 export { registerServiceWorker, useServiceWorkerUpdate, onServiceWorkerUpdate } from './pwa/register'
 export type { PwaMode, ServiceWorkerOptions } from './pwa/register'
+export {
+  captureInstallPrompt, installOfferAllowed, installSituation, isIos, readInstallDismissals, rememberInstallDismissed,
+  useInstallPrompt,
+} from './pwa/install'
+export type {
+  InstallDismissals, InstallEnvironment, InstallOutcome, InstallPrompt, InstallSituation,
+} from './pwa/install'
 export type { UserNameProps } from './components/UserName'
 
 // Language and formatting.
