@@ -161,8 +161,8 @@ class PublicHelpIT extends LegalItSupport {
         publicQuery(QbLegal.PUBLIC_LEGAL_TEMPLATE, "p.kind=SECRET&p.at=" + clock.instant()).expectStatus()
             .isBadRequest();
         publicQuery(QbLegal.PUBLIC_FAQ_TEMPLATE, "").expectStatus().isBadRequest();
-        // The support address is for signed-in users only, from the parameter (empty: none).
+        // The support address is for signed-in users only, from the parameter (QB_SETUP's default since Q41).
         assertThat(items(QbLegal.MY_SUPPORT_TEMPLATE, taker(u1()), Map.of())).singleElement()
-            .satisfies(row -> assertThat(row).containsEntry("email", null));
+            .satisfies(row -> assertThat(row).containsEntry("email", "quizbuks@gmail.com"));
     }
 }

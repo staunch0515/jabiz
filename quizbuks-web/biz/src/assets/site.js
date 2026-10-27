@@ -77,6 +77,23 @@ export function phoneWindow(win) {
   return `popup=yes,width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes`
 }
 
+/** The key the app sets once it ran installed on this browser (quizbuks-web/app/src/install.tsx, Q41). */
+export const APP_INSTALLED = 'qb.app.installed'
+
+/**
+ * Whether a taker's link should simply be followed, to open in the installed app (Q41): on a desktop whose browser ran
+ * the app installed, a link into its scope opens the app's own window (desktop Chrome 139+ by default), which the
+ * phone-sized popup would bypass. Phones go to the app anyway; a merchant's link is never the app.
+ */
+export function opensInApp(kind, win) {
+  if (kind !== 'taker' || isPhone(win)) return false
+  try {
+    return win.localStorage.getItem(APP_INSTALLED) === 'true'
+  } catch {
+    return false
+  }
+}
+
 /**
  * Opens the app: a taker on a desktop gets a separate phone-sized window (a new tab when the browser blocks it), a
  * taker on a phone goes straight there, a merchant always gets a new tab. Used by the sign-up and sign-in links.
@@ -148,8 +165,26 @@ function wire(win, doc, store) {
   for (const button of doc.querySelectorAll('[data-signup]')) {
     button.addEventListener('click', (event) => {
       if (isModifiedClick(event)) return
+      if (opensInApp(button.dataset.signup, win)) {
+        // Followed as a link to a new browsing context: the browser hands it to the installed app's window.
+        button.target = '_blank'
+        button.rel = 'noopener'
+        return
+      }
       event.preventDefault()
       openSignUp(button.dataset.signup, button.getAttribute('href'), win)
+    })
+  }
+  // The language drop-down closes on a click outside it and on Escape (it opens and closes by itself without this).
+  const languages = doc.querySelector('[data-lang-menu]')
+  if (languages) {
+    doc.addEventListener('click', (event) => {
+      if (languages.open && !languages.contains(event.target)) languages.open = false
+    })
+    languages.addEventListener('keydown', (event) => {
+      if (event.key !== 'Escape' || !languages.open) return
+      languages.open = false
+      languages.querySelector('summary')?.focus()
     })
   }
   const menu = doc.querySelector('[data-menu]')
