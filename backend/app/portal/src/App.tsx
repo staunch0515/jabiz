@@ -8,6 +8,7 @@ import {
   OidcCallback,
   PageState,
   PasswordResetRequest,
+  PwaInstallBanner,
   PwaUpdatePrompt,
   SignInForm,
   SignUpForm,
@@ -96,6 +97,8 @@ function Shell({ path }: { path: string }) {
       <main className="mx-auto flex w-full max-w-4xl flex-col gap-4 px-4 py-6">
         <OfflineBanner />
         <PwaUpdatePrompt />
+        {/* Signed-in customers only: an offer to install before signing in is mostly closed unread (16zj). */}
+        <PwaInstallBanner appName={t('brand')} />
         {path !== '/order' && <VerifyEmailBanner />}
         {page}
       </main>

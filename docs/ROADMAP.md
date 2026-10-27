@@ -4417,3 +4417,14 @@ L4 共享仪表的注释；L5 13 写明每个键每次轮询多一个查询观�
 测试：`app-shell.test.tsx` 的分节（空节不显示、两条分割线、带标题的节是有名称的组且包含其项、没有标题的节不是组、当前页标记、axe）。
 
 **16zi 状态**：✅ 已实施（PR 待建）。
+
+### 16zj 提示安装到主屏幕（1 天）
+
+来源：需求方 2026-10-27（QuizBuks Q38：引导答题者把 App 添加到手机桌面）。分支 `1.2/phase-16zj-pwa-install`。兼容的新增，向前合并到 1.3。
+浏览器不允许网页自动添加到主屏幕：`@jabiz/client` 的 `useInstallPrompt()`（纯函数 `installSituation`：`prompt` / `ios` / `menu` / `in-app` / `installed` / `none`；
+`registerServiceWorker` 一开始就接住 `beforeinstallprompt`）与 `@jabiz/ui` 的 `PwaInstallBanner`、`PwaInstallGuide`（iOS 的分步指引、主屏幕 App 须再登录；
+关掉后 30 天不再出现、3 次后不再出现，`localStorage`；`dismissible={false}` 作为固定入口）。示范门户在登录后的外框中显示。设计 12 §PWA。
+测试：`install.test.ts`（各浏览器与 App 内置浏览器的 UA、iPad 自称 Mac、已安装、事件只用一次、拒绝后再提供、`appinstalled`、关闭的记忆与存储不可用）、
+`install.test.tsx`（各情况的文字与按钮、iOS 指引、关闭规则、固定入口、亮暗 axe）。
+
+**16zj 状态**：✅ 已实施（PR 待建）。
