@@ -149,7 +149,7 @@ describe('a visitor', () => {
     await userEvent.click(screen.getByTestId('sign-up-link'))
     await waitFor(() => expect(window.location.pathname).toBe('/signup'))
     const signUp = await screen.findByTestId('signup-providers')
-    expect(within(signUp).getByRole('button', { name: 'LINE' })).toHaveAttribute('data-kind', 'line')
+    expect(await within(signUp).findByRole('button', { name: 'LINE' })).toHaveAttribute('data-kind', 'line')
   })
 
   it('opens the pages of mailed links without signing in', async () => {

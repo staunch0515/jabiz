@@ -165,7 +165,7 @@ describe('a visitor', () => {
     window.history.replaceState(null, '', '/signup')
     render(<App />)
     const signUp = await screen.findByTestId('signup-providers')
-    expect(within(signUp).getByRole('button', { name: 'Facebook' })).toHaveAttribute('data-kind', 'facebook')
+    expect(await within(signUp).findByRole('button', { name: 'Facebook' })).toHaveAttribute('data-kind', 'facebook')
   })
 
   it('opens the pages of mailed links without signing in, and drops the token from the address', async () => {
