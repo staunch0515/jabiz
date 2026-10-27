@@ -1149,7 +1149,7 @@
         "maxLength" : 200,
         "type" : "text"
       },
-      "value" : "",
+      "value" : "quizbuks@gmail.com",
       "description" : "Support address shown to signed-in users in the help centre (empty: none)",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",

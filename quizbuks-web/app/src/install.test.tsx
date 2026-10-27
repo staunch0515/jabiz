@@ -1,7 +1,8 @@
 import { changeLanguage } from '@jabiz/client'
 import { render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { AccountInstallEntry, answeredOnce, HomeInstallOffer, ResultInstallOffer } from './install'
+import { AccountInstallEntry, answeredOnce, HomeInstallOffer, INSTALLED, rememberInstalled, ResultInstallOffer }
+  from './install'
 
 const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Mobile/15E148 Safari/604.1'
 
@@ -17,6 +18,25 @@ beforeEach(async () => {
 afterEach(() => {
   vi.restoreAllMocks()
   window.localStorage.clear()
+})
+
+describe('telling the business site the app is installed (Q41)', () => {
+  const standalone = (matches: boolean) => vi.spyOn(window, 'matchMedia').mockImplementation((query: string) =>
+    ({ matches: matches && query === '(display-mode: standalone)' }) as MediaQueryList)
+
+  it('notes it when the app runs installed', () => {
+    standalone(true)
+    rememberInstalled(window)
+    expect(window.localStorage.getItem(INSTALLED)).toBe('true')
+  })
+
+  it('notes it when the app is installed while open, and not before', () => {
+    standalone(false)
+    rememberInstalled(window)
+    expect(window.localStorage.getItem(INSTALLED)).toBeNull()
+    window.dispatchEvent(new Event('appinstalled'))
+    expect(window.localStorage.getItem(INSTALLED)).toBe('true')
+  })
 })
 
 describe('offering to add the app to the home screen (Q38)', () => {

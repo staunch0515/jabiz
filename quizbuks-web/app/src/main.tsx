@@ -6,6 +6,7 @@ import App from './App'
 import './index.css'
 import './messages'
 import './qb/kudos'
+import { rememberInstalled } from './install'
 
 // The app's sign-in entry (jabizApp passes it as VITE_JABIZ_ENTRY; named here as well for `pnpm dev`): its sessions,
 // kept on the device for 30 days, and its identity providers are the app's, apart from the sponsor console's and the
@@ -15,6 +16,8 @@ configureClient({ entry: 'app' })
 applyAppearance()
 // The PWA's Service Worker (VITE_JABIZ_PWA=on in the jar's build); a new version waits for PwaUpdatePrompt.
 void registerServiceWorker()
+// Installed (now or while open): the business site's "start answering" then opens the app's window (Q41).
+rememberInstalled()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

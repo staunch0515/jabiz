@@ -98,6 +98,9 @@ SPRING_MAIL_HOST=<SMTP 主机>
 SPRING_MAIL_PORT=587
 SPRING_MAIL_USERNAME=<SMTP 用户>
 SPRING_MAIL_PASSWORD=<SMTP 密码>
+# 用 Gmail（quizbuks@gmail.com，Q41）发信时：JABIZ_MAIL_FROM=quizbuks@gmail.com、SPRING_MAIL_HOST=smtp.gmail.com、
+# SPRING_MAIL_PORT=587、SPRING_MAIL_USERNAME=quizbuks@gmail.com、SPRING_MAIL_PASSWORD=<该账号的应用专用密码>（须先开启两步验证）。
+# 发件人必须就是登录的 Gmail 账号，否则被当作冒充；个人 Gmail 每天约 500 封的上限，注册一多就要换成自有域名的发信服务。
 # 587 端口要先 STARTTLS 才能认证（服务商只给 465 时改为 SPRING_MAIL_PORT=465 与 …_SMTP_SSL_ENABLE=true）
 SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH=true
 SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE=true
