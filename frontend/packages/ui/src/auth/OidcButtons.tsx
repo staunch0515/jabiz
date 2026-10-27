@@ -1,4 +1,5 @@
 import { api, session, sitePath, startProviderSignIn, unwrap, type components } from '@jabiz/client'
+import { KeyRound } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '../components/ui/button'
@@ -37,6 +38,11 @@ export interface OidcButtonsProps {
   start?: (providerId: string, returnTo: string) => Promise<void>
   /** Called when starting fails (refused, offline); `null` before each attempt. */
   onError?: (error: unknown) => void
+  /**
+   * `buttons` (the default): a full-width button per provider, its mark beside its label. `icons`: a row of round
+   * buttons under "Other ways to sign in", each named by its provider's label (decision D61 item 5).
+   */
+  layout?: 'buttons' | 'icons'
 }
 
 /**
@@ -54,19 +60,69 @@ export function GoogleMark({ className }: { className?: string }) {
   )
 }
 
-/** The mark drawn before a provider's label, by its kind; none for a provider of no known brand. */
+/** Facebook's round "f" in its blue, as Meta's brand guidelines draw it (decision D44): the "f" is the white behind. */
+export function FacebookMark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" className={className}>
+      <circle cx="12" cy="12" r="11" fill="#FFFFFF" />
+      <path fill="#0866FF" d="M24 12.07C24 5.41 18.63 0 12 0S0 5.4 0 12.07C0 18.1 4.39 23.1 10.13 24v-8.44H7.08v-3.49h3.04V9.41c0-3.02 1.8-4.7 4.54-4.7 1.31 0 2.68.24 2.68.24v2.97h-1.5c-1.5 0-1.96.93-1.96 1.89v2.26h3.32l-.53 3.5h-2.8V24C19.62 23.1 24 18.1 24 12.07" />
+    </svg>
+  )
+}
+
+/** LINE's speech bubble with its name, in LINE's green (decision D44): the letters are the white behind. */
+export function LineMark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" className={className}>
+      <path fill="#FFFFFF" d="M3 7h18v7H3z" />
+      <path fill="#06C755" d="M19.365 9.863c.349 0 .63.285.63.631 0 .345-.281.63-.63.63H17.61v1.125h1.755c.349 0 .63.283.63.63 0 .344-.281.629-.63.629h-2.386c-.345 0-.627-.285-.627-.629V8.108c0-.345.282-.63.63-.63h2.386c.346 0 .627.285.627.63 0 .349-.281.63-.63.63H17.61v1.125h1.755zm-3.855 3.016c0 .27-.174.51-.432.596-.064.021-.133.031-.199.031-.211 0-.391-.09-.51-.25l-2.443-3.317v2.94c0 .344-.279.629-.631.629-.346 0-.626-.285-.626-.629V8.108c0-.27.173-.51.43-.595.06-.023.136-.033.194-.033.195 0 .375.104.495.254l2.462 3.33V8.108c0-.345.282-.63.63-.63.345 0 .63.285.63.63v4.771zm-5.741 0c0 .344-.282.629-.631.629-.345 0-.627-.285-.627-.629V8.108c0-.345.282-.63.63-.63.346 0 .628.285.628.63v4.771zm-2.466.629H4.917c-.345 0-.63-.285-.63-.629V8.108c0-.345.285-.63.63-.63.348 0 .63.285.63.63v4.141h1.756c.348 0 .629.283.629.63 0 .344-.282.629-.629.629M24 10.314C24 4.943 18.615.572 12 .572S0 4.943 0 10.314c0 4.811 4.27 8.842 10.035 9.608.391.082.923.258 1.058.59.12.301.079.766.038 1.08l-.164 1.02c-.045.301-.24 1.186 1.049.645 1.291-.539 6.916-4.078 9.436-6.975C23.176 14.393 24 12.458 24 10.314" />
+    </svg>
+  )
+}
+
+/** The mark of a provider of a known brand, by its kind (`google`, `facebook`, `line`); none for any other. */
 export function ProviderMark({ kind, className = 'size-4' }: { kind?: string | null; className?: string }) {
-  return kind === 'google' ? <GoogleMark className={className} /> : null
+  if (kind === 'google') return <GoogleMark className={className} />
+  if (kind === 'facebook') return <FacebookMark className={className} />
+  if (kind === 'line') return <LineMark className={className} />
+  return null
 }
 
 /**
  * Signing in through an identity provider (docs/design/10-security.md section 12): a button per provider, under an
  * "or" separator; nothing when none is offered. A provider of a known kind (`google`) shows its mark beside its label.
  */
-export function OidcButtons({ returnTo, providers, start = startProviderSignIn, onError }: OidcButtonsProps) {
+export function OidcButtons({ returnTo, providers, start = startProviderSignIn, onError, layout = 'buttons' }:
+  OidcButtonsProps) {
   const { t } = useTranslation(AUTH_NAMESPACE)
   const offered = useOidcProviders(providers)
   if (offered.length === 0) return null
+  const go = (provider: OidcProvider) => {
+    onError?.(null)
+    start(provider.id!, sitePath(returnTo)).catch((e: unknown) => onError?.(e))
+  }
+  if (layout === 'icons') {
+    return (
+      <div className="flex flex-col gap-3" data-testid="oidc-icons">
+        <div className="text-muted-foreground flex items-center gap-3 text-sm">
+          <Separator className="flex-1" />
+          {t('login.otherWays')}
+          <Separator className="flex-1" />
+        </div>
+        <ul className="flex flex-wrap items-center justify-center gap-4">
+          {offered.map((provider) => (
+            <li key={provider.id}>
+              <Button variant="outline" size="icon" className="size-11 rounded-full" aria-label={provider.label}
+                title={provider.label} data-testid={`oidc-${provider.id}`} data-kind={provider.kind ?? 'generic'}
+                onClick={() => go(provider)}>
+                {ProviderMark({ kind: provider.kind, className: 'size-6' }) ?? <KeyRound aria-hidden className="size-5" />}
+              </Button>
+            </li>
+          ))}
+        </ul>
+      </div>
+    )
+  }
   return (
     <>
       <div className="text-muted-foreground flex items-center gap-3 text-sm">
@@ -82,10 +138,7 @@ export function OidcButtons({ returnTo, providers, start = startProviderSignIn, 
             className="w-full"
             data-testid={`oidc-${provider.id}`}
             data-kind={provider.kind ?? 'generic'}
-            onClick={() => {
-              onError?.(null)
-              start(provider.id!, sitePath(returnTo)).catch((e: unknown) => onError?.(e))
-            }}
+            onClick={() => go(provider)}
           >
             <ProviderMark kind={provider.kind} />
             {provider.label}
