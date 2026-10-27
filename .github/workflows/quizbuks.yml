@@ -47,6 +47,7 @@ jobs:
             frontend/pnpm-lock.yaml
             quizbuks-web/app/pnpm-lock.yaml
             quizbuks-web/sponsor/pnpm-lock.yaml
+            quizbuks-web/shopify/pnpm-lock.yaml
             quizbuks-web/e2e/pnpm-lock.yaml
       # The SPAs link the platform's packages, which resolve their dependencies from the platform frontend.
       - run: pnpm install --frozen-lockfile
@@ -54,6 +55,7 @@ jobs:
       - run: |
           pnpm app:check ../quizbuks-web/app
           pnpm app:check ../quizbuks-web/sponsor
+          pnpm app:check ../quizbuks-web/shopify
         working-directory: frontend
       # The admin extension (backend/quizbuks/admin-extension, Q9a): types, lint and tests with the platform's tools.
       - run: JABIZ_ADMIN_EXTENSION=../backend/quizbuks/admin-extension pnpm ext:check
@@ -71,6 +73,13 @@ jobs:
           pnpm test
       - name: Sponsor console
         working-directory: quizbuks-web/sponsor
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm lint
+          pnpm typecheck
+          pnpm test
+      - name: Shopify embedded pages (S1)
+        working-directory: quizbuks-web/shopify
         run: |
           pnpm install --frozen-lockfile
           pnpm lint

@@ -1,0 +1,35 @@
+name: QuizBuks for Shopify - Shopify's privacy webhooks (S1)
+# docs/quizbuks/shopify/S1-install.md section 5. Webhooks only: the scenario runner cannot sign in with Shopify's
+# session tokens, so joining, connecting, uninstalling and reinstalling a shop are in ShopifyIT. Here: the two customer
+# topics are recorded as NO_DATA, shop/redact of a shop that never installed the app as NOT_FOUND, a body naming
+# another shop than the (unsigned) header as MISMATCH, an uninstall of an unknown shop changes nothing.
+clock: 2026-10-27T03:00:00Z
+actor: { id: system }
+steps:
+  - note: A customer of the shop asks for their data (Shopify forwards it within 30 days).
+    inbound:
+      provider: shopify
+      headers: { X-Shopify-Event-Id: ev-dr-1, X-Shopify-Topic: customers/data_request, X-Shopify-Shop-Domain: demo.myshopify.com }
+      body: { shop_id: 954889, shop_domain: demo.myshopify.com, orders_requested: [299938], customer: { id: 191167, email: john@example.com }, data_request: { id: 9999 } }
+  - inbound:
+      provider: shopify
+      headers: { X-Shopify-Event-Id: ev-cr-1, X-Shopify-Topic: customers/redact, X-Shopify-Shop-Domain: demo.myshopify.com }
+      body: { shop_id: 954889, shop_domain: demo.myshopify.com, customer: { id: 191167 }, orders_to_redact: [299938] }
+  - note: Shopify asks to erase a shop that never opened the app.
+    inbound:
+      provider: shopify
+      headers: { X-Shopify-Event-Id: ev-sr-1, X-Shopify-Topic: shop/redact, X-Shopify-Shop-Domain: demo.myshopify.com }
+      body: { shop_id: 954889, shop_domain: demo.myshopify.com }
+  - note: The signed body names one shop, the unsigned header another.
+    inbound:
+      provider: shopify
+      headers: { X-Shopify-Event-Id: ev-sr-2, X-Shopify-Topic: shop/redact, X-Shopify-Shop-Domain: other.myshopify.com }
+      body: { shop_id: 1, shop_domain: demo.myshopify.com }
+  - inbound:
+      provider: shopify
+      headers: { X-Shopify-Event-Id: ev-un-1, X-Shopify-Topic: app/uninstalled, X-Shopify-Shop-Domain: demo.myshopify.com }
+      body: { id: 954889, name: Demo, myshopify_domain: demo.myshopify.com }
+  - deliverEvents: true
+snapshot:
+  entities: [QbsComplianceRequest, QbsShop]
+  asOf: end

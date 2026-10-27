@@ -16,6 +16,8 @@ jabizApp {
     spa("/taker", "../../quizbuks-web/app", entry = "app", pwa = Pwa.ON)
     spa("/biz", "../../quizbuks-web/biz")
     spa("/sponsor", "../../quizbuks-web/sponsor", entry = "sponsor")
+    // QuizBuks for Shopify's embedded pages (S1): framed by the shop that opened them (jabiz.web.spa[].embedding).
+    spa("/shopify", "../../quizbuks-web/shopify", entry = "shopify")
     spa("/admin", "../../frontend", extension = "admin-extension", entry = "admin")
     languages("en", "zh", "ja")
     // The snapshots stay in the application's directory: the platform's own (frontend/openapi) are not ours to write.
