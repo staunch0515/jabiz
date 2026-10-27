@@ -33,7 +33,8 @@ import java.util.UUID;
 
 /**
  * Self-registration, address verification and password reset over HTTP (docs/design/10-security.md section 15;
- * decision D36 items 2, 3 and 5). Anonymous, except {@value #ACCOUNT_VERIFY}; each runs one process of
+ * decision D36 items 2, 3 and 5). Anonymous, except {@value #ACCOUNT_VERIFY} and the use of a verification link in a
+ * session ({@value #ACCOUNT_VERIFY_CHECK}, {@value #ACCOUNT_VERIFY_CONFIRM}); each runs one process of
  * {@link SignUpProcesses}.
  *
  * <p>Nothing here tells whether an address belongs to an account: registering, resending a verification and asking
@@ -51,6 +52,9 @@ class SignUpController {
     static final String VERIFY_CHECK = "/api/auth/verify-email/check";
     static final String VERIFY_RESEND = "/api/auth/verify-email/resend";
     static final String ACCOUNT_VERIFY = "/api/auth/account/verify-email";
+    /** The same link's check and use in the signed-in user's own session (decision D60 item 4). */
+    static final String ACCOUNT_VERIFY_CHECK = "/api/auth/account/verify-email/check";
+    static final String ACCOUNT_VERIFY_CONFIRM = "/api/auth/account/verify-email/confirm";
     static final String RESET_REQUEST = "/api/auth/password-reset/request";
     static final String RESET_CONFIRM = "/api/auth/password-reset/confirm";
     static final String ENTRIES = "/api/auth/entries";
@@ -265,6 +269,26 @@ class SignUpController {
             return processes.executeAtEntry(verifySend, new SignUpProcesses.VerifySendInput(valid[1], valid[0], null))
                 .thenReturn(accepted());
         });
+    }
+
+    /**
+     * The link of a verification mail used in a session (decision D60 item 4): when the session is the account's own,
+     * it stands for the account's current password, so a pre-claimable account is verified and kept (an account opened
+     * through an identity provider has no password). In anybody else's session the link needs what it needs
+     * anonymously. The anonymous endpoints never look at an access token, so a stale one cannot break a link.
+     */
+    @PostMapping(ACCOUNT_VERIFY_CHECK)
+    Mono<SignUpProcesses.VerifyCheck> verifyCheckOwn(@RequestBody(required = false) TokenRequest request,
+        ServerHttpRequest http) {
+        return verifyCheck(request, http);
+    }
+
+    /** As {@value #VERIFY}, in a session: 204 (see {@link #verifyCheckOwn}). */
+    @PostMapping(ACCOUNT_VERIFY_CONFIRM)
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    Mono<ResponseEntity<Void>> verifyOwn(@RequestBody(required = false) VerifyRequest request,
+        ServerHttpRequest http) {
+        return verify(request, http);
     }
 
     /** The signed-in user's own request for a new verification mail, for the entry of the session; 202. */

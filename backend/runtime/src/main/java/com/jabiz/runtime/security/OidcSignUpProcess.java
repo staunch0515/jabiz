@@ -1,9 +1,11 @@
 package com.jabiz.runtime.security;
 
+import com.jabiz.mail.MailRecipient;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.runtime.EntityInstance;
+import com.jabiz.runtime.mail.SendMail;
 import com.jabiz.runtime.process.steps.QueryEntities;
 import jakarta.validation.constraints.NotBlank;
 import org.slf4j.Logger;
@@ -25,7 +27,10 @@ import java.util.Map;
  *
  * <p>The new user is named as a registration names it (the address in lower case, with a random suffix when taken), has
  * the address verified (the provider proved it) but not as {@code registeredEmail} (so it is never pre-claimable), no
- * password, the entry's registration roles and the link. Nothing is opened when the address belongs to a user already,
+ * password, the entry's registration roles and the link. A provider that opens accounts for addresses it does not vouch
+ * for ({@link OidcProvider#signUpUnverifiedEmail}, decision D60 item 3) gets the address unverified and as
+ * {@code registeredEmail} instead: pre-claimable as a self-registration is, so the mailbox's owner can always take the
+ * account over (and its link goes with that), with the same verification mail. Nothing is opened when the address belongs to a user already,
  * whatever that user is ({@link Outcome#EMAIL_IN_USE}: the provider's word never takes over an account), when the
  * subject is linked by now ({@link Outcome#EXISTS}), or when the entry no longer lets people register or its
  * registration roles are missing or disabled ({@link Outcome#DISABLED}).
@@ -53,12 +58,20 @@ public class OidcSignUpProcess {
      * @param entry       the sign-in entry the sign-in started in (its state's)
      * @param provider    the provider's id
      * @param subject     the provider's subject
-     * @param email       the address the provider vouches for
-     * @param displayName the name the token gave, cleaned; optional
-     * @param locale      the language of the request, one of the platform's; optional
+     * @param email         the address the token gave
+     * @param displayName   the name the token gave, cleaned; optional
+     * @param locale        the language of the request, one of the platform's; optional
+     * @param emailVerified whether the provider vouches for the address ({@link IdTokenValidator.Identity#trustedEmail})
      */
     public record Input(@NotBlank String entry, @NotBlank String provider, @NotBlank String subject,
-        @NotBlank String email, String displayName, String locale) {}
+        @NotBlank String email, String displayName, String locale, boolean emailVerified) {
+
+        /** An address the provider vouches for (decision D39). */
+        public Input(String entry, String provider, String subject, String email, String displayName,
+            String locale) {
+            this(entry, provider, subject, email, displayName, locale, true);
+        }
+    }
 
     public record Output(Outcome outcome) {}
 
@@ -67,8 +80,10 @@ public class OidcSignUpProcess {
     static final String SUBJECT = "subject";
     static final String LINKS = "links";
     static final String OUTCOME = "outcome";
+    static final String VERIFIED = "verified";
 
-    static ProcessDefinition<Input, Output, AccountContext> definition(SignInEntries entries) {
+    static ProcessDefinition<Input, Output, AccountContext> definition(SignInEntries entries,
+        AuthMailTemplates.Templates mail) {
         return ProcessDefinition.define(NAME, 1, Input.class, Output.class, AccountContext.class, pb -> pb
             .description("Opens an account for a provider's subject with a verified address nobody uses.")
             .permissions(SecurityPermissions.SIGN_UP)
@@ -78,6 +93,7 @@ public class OidcSignUpProcess {
                     input.locale(), null, null, null);
                 ctx.put(PROVIDER, input.provider());
                 ctx.put(SUBJECT, input.subject());
+                ctx.put(VERIFIED, input.emailVerified());
                 return ctx;
             })
             .outputMapper(ctx -> new Output(ctx.get(OUTCOME, Outcome.class)))
@@ -96,7 +112,13 @@ public class OidcSignUpProcess {
                 SignUpProcesses.ROLES))
             .step("Draw a name suffix", SignUpProcesses.on(RandomBytesStep.class), new RandomBytesStep.Metadata(
                 SignUpProcesses.RANDOM, SignUpProcesses.SUFFIX_LENGTH))
-            .compute("Open the account", (metadata, ctx) -> open(ctx, entries)));
+            .compute("Open the account", (metadata, ctx) -> open(ctx, entries))
+            // An address the provider did not vouch for is verified by mail, as a self-registration's (D60 item 3).
+            .step("Send the verification", SendMail.<AccountContext>when(
+                ctx -> ctx.get(SignUpProcesses.NEW_USER) != null && !ctx.hasViolations(), mail.verifyEmail(),
+                ctx -> MailRecipient.user(ctx.get(SignUpProcesses.NEW_USER), ctx.email(),
+                    SignUpProcesses.mailLocale(ctx)),
+                Map.of(AuthMailTemplates.ENTRY, AccountContext::entryName))));
     }
 
     /** Opens the account, or says why not. */
@@ -131,9 +153,14 @@ public class OidcSignUpProcess {
             : SignUpProcesses.suffixed(base, ctx.get(SignUpProcesses.RANDOM, byte[].class)));
         user.put("displayName", ctx.displayName());
         user.put("email", ctx.email());
-        // The provider proved the address: verified at once. Not registeredEmail: the account is never pre-claimable.
-        user.put("verifiedEmail", ctx.email());
-        user.put("emailVerifiedAt", ctx.opTime());
+        if (Boolean.TRUE.equals(ctx.get(VERIFIED))) {
+            // The provider proved the address: verified at once. Not registeredEmail: never pre-claimable.
+            user.put("verifiedEmail", ctx.email());
+            user.put("emailVerifiedAt", ctx.opTime());
+        } else {
+            // Nobody proved the address (decision D60 item 3): pre-claimable, as a self-registration.
+            user.put("registeredEmail", ctx.email());
+        }
         user.put("locale", ctx.locale());
         user.put("enabled", true);
         Object userId = ctx.changes().insert(SecurityEntities.USER, user);
@@ -146,11 +173,15 @@ public class OidcSignUpProcess {
         link.put("subject", ctx.get(SUBJECT, String.class));
         link.put("email", ctx.email());
         ctx.changes().insert(SecurityEntities.USER_IDENTITY, link);
+        if (!Boolean.TRUE.equals(ctx.get(VERIFIED))) {
+            ctx.put(SignUpProcesses.NEW_USER, userId);
+        }
         ctx.put(OUTCOME, Outcome.CREATED);
     }
 
     @Bean
-    ProcessDefinition<Input, Output, AccountContext> sponsorOidcSignUpProcess(SignInEntries entries) {
-        return definition(entries);
+    ProcessDefinition<Input, Output, AccountContext> sponsorOidcSignUpProcess(SignInEntries entries,
+        AuthMailTemplates.Templates mail) {
+        return definition(entries, mail);
     }
 }
