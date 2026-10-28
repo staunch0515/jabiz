@@ -110,6 +110,8 @@ jobs:
         with:
           fetch-depth: 0
       - run: tools/test/check-app-paths.test.sh
+      # The wiki's publishing scripts (docs/guide/wiki.md), tested on every branch like the script above.
+      - run: node --test tools/wiki/*.test.mjs && tools/test/wiki-publish.test.sh
       - name: Application paths and version line
         env:
           # HEAD is detached in CI; the script needs the branch's name for the line check.
