@@ -20,6 +20,7 @@
 
 - [ ] **Facebook 与 LINE 登录（Q40，开 `social` 时）**：Facebook 应用已切换为正式模式、LINE 渠道已获准取得邮箱；用真实账号在 App 与商家后台各走一遍：首次登录开户、收到验证邮件、在登录着的浏览器中打开链接后能保存资料或申请入驻、退出后再用同一方式登录（平台 D61 的端点与签名只以存根测试过）
 - [ ] **安装到主屏幕（Q38）**：iPhone Safari 与 Android Chrome 各装一次（账户页的入口、答完测验后的提示）；LINE 与微信中打开分享链接看到"在浏览器中打开"；iPhone 桌面 App 中邮件链接（验证、邮件登录）与 Google 登录的表现可以接受（`plans/Q38-install.md` §4）
+- [ ] **Android App（Q49b）**：封闭测试版装在一台 Android 手机上：打开后没有浏览器地址栏（`assetlinks.json` 验证通过）；首页、结果页、账户页都没有安装提示；验证与邮件登录的邮件链接在 App 中打开，`/sponsor/` 与 `/biz/` 的链接在浏览器打开；Google、Facebook、LINE 登录回到 App；返回键与断网时的表现可以接受（`plans/Q49b-android.md` §4）
 
 ## 性能
 
