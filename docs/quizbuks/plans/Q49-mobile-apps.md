@@ -29,6 +29,9 @@ Android（TWA）运行的是真正的 Chrome：登录照常可用，不需要 Ap
 ## 3. 阶段
 
 ### 第 0 步：部署切到 1.3（先于一切，约半天）
+
+**状态**（2026-10-28）：已实施，1.2 的部署改为确认后的手动运行（PR #301），1.3 的部署与文档（`DEPLOY.md`"从 1.2 切到 1.3"）；需求方按 `DEPLOY.md` 的顺序补 `.env`、重置 staging 后合并。
+
 `1.3/quizbuks` 上的 `.github/workflows/quizbuks-deploy.yml` 仍只认 `1.2/quizbuks` / `1.2/quizbuks-release`：
 - 改为 `1.3/quizbuks`（staging）与 `1.3/quizbuks-release`（production）；
 - 在 1.2 上停掉自动部署（只留手动），1.2 只作备份；

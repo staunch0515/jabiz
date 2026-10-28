@@ -1,7 +1,7 @@
 name: QuizBuks
 on:
-  # As the platform's ci.yml: pushes run only on the long-lived line branch ('1.2/quizbuks');
-  # work branches ('1.2/quizbuks-2-accounts') run as pull requests, so a commit is not checked twice.
+  # As the platform's ci.yml: pushes run only on the long-lived line branches ('1.3/quizbuks');
+  # work branches ('1.3/quizbuks-50-china-web') run as pull requests, so a commit is not checked twice.
   push:
     branches:
       - '[0-9]*.[0-9]*/*'
