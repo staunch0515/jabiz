@@ -326,8 +326,16 @@ jabiz:
         entry: shopify
         pwa: "off"
         embedding: shopify
+        # S4a (platform 17g): the deployment's values written into the pages at startup: the app's public Client ID for
+        # App Bridge (the same as the external service's, so staging and live each show their own app's) and the
+        # support address the pages name.
+        index-values:
+          shopify-api-key: ${SHOPIFY_API_KEY:}
+          support-email: ${QB_SHOPIFY_SUPPORT_EMAIL:quizbuks@gmail.com}
         content-security-policy: "default-src 'self'; script-src 'self' https://cdn.shopify.com; img-src 'self' blob: data:; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'; worker-src 'self'; manifest-src 'self'"
       - path: /biz
+      # S4a: QuizBuks for Shopify's public pages (landing, privacy policy, support): static, no sign-in.
+      - path: /shopify-app
 
 logging:
   pattern:

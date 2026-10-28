@@ -245,6 +245,12 @@ describe('the storefront quiz block (S2b)', () => {
       vi.advanceTimersByTime(61_000)
       await vi.waitFor(() => expect(root.textContent).toContain('Not this time.'))
       expect(root.querySelector('.badge')?.textContent ?? null).toBe(badge ? 'Powered by QuizBuks' : null)
+      if (badge) {
+        const link = root.querySelector<HTMLAnchorElement>('.badge a')!
+        expect(link.getAttribute('href')).toBe('https://quizbuks.com/shopify-app/')
+        expect(link.target).toBe('_blank')
+        expect(link.rel).toBe('noopener')
+      }
       if (badge) await expectAccessible(root.querySelector('dialog')!)
     }
   })

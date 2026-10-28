@@ -63,6 +63,7 @@
   流程中核对会话令牌只用平台步骤 `VerifyExternalToken`。Webhook 只经入站提供方 `shopify`（`app/uninstalled`、三个合规主题与 S3 的 `app_subscriptions/update`），消费者以签名的正文核对不签名的 `X-Shopify-Shop-Domain`（`app_subscriptions/update` 的正文没有店铺地址：只取请求头的店铺、只向 Shopify 重读它的订阅，不写入正文中的任何内容）；卸载保留数据（会话在下次刷新时由 `ShopSignInGuard` 结束），`shop/redact` 才删除（已重装的不删）。
   对 Shopify 的调用只经 `ShopifyApi`（外部服务 `shopify`，主机 `*.myshopify.com`）。内嵌页是第三个 SPA `quizbuks-web/shopify`（`/shopify/`，`embedding: shopify`，App Bridge 取自 Shopify 的 CDN）。
   店面（S2，`docs/quizbuks/shopify/S2-storefront.md`、`S2b-ui.md`）：活动、码池与店面流程（`QBS_SF_*`，只经应用代理 `shopify`，平台 D60）在本模块；引擎只判分（奖励方式 `CHANNEL`）。顾客编号与访客键不进引擎（`QbsStorefront.customerTaker` / `visitorTaker`）。
+  上架（S4，`docs/quizbuks/shopify/S4-launch.md`）：公开页面（落地页、隐私政策、支持）是静态站点 `quizbuks-web/shopify-site`（`/shopify-app/`，与 `biz` 分开）；隐私政策按代码实际保存的数据写，改了数据的保存或删除就同步改它。内嵌页的 Client ID 与支持邮箱在启动时写入（平台 17g 的 `index-values`），不在构建时写入。
   收费（S3，`docs/quizbuks/shopify/S3-billing.md`）：套餐由 Shopify App Pricing 出售，本模块**只读**订阅（`ShopifyApi.activeSubscriptions`，不调 `appSubscriptionCreate`），存于 `QbsShopPlan`；店面完成的答题只在 `QBS_SF_SUBMIT` 中、锁 `qbs.shop-usage:<店铺>` 内计入 `QbsUsage`，到套餐上限（受控参数 `qbs.plan.<套餐>.monthly-attempts`）即不能开始新的答题。
   店面组件是 `quizbuks-web/storefront`：原生 Web Component，**不用 React 与 `@jabiz/ui`**（只限这个组件：它跑在商户的主题里，压缩后 ≤ 15 KB，构建即检查），打包到 `tools/quizbuks/shopify/extensions/quizbuks-quiz/assets/quiz.js`（不提交，`deploy-extension.sh` 先构建再 `shopify app deploy`）；无障碍测试照样用 `@jabiz/ui/testing`。
 - **发布**（`publishing`，`docs/quizbuks/plans/Q4-publishing.md`）：写入只经 `QB_PUBLICATION_*` 流程（默认数据视图 `processOnlyWrites`，商家视图只读，

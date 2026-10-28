@@ -3,7 +3,7 @@ import { expectAccessible } from '@jabiz/ui/testing'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import App from './App'
+import App, { supportEmail } from './App'
 import type { Shop } from './api'
 import './messages'
 
@@ -117,6 +117,27 @@ describe('QuizBuks for Shopify (S1)', () => {
     expect(await screen.findByText('Store: demo.myshopify.com')).toBeVisible()
     await user.click(screen.getByRole('tab', { name: 'Quiz campaigns' }))
     expect(screen.getByLabelText('Name')).toHaveValue('Autumn quiz')
+  })
+
+  it('points to help in the page\'s language and to the support address the server wrote in', async () => {
+    const meta = document.createElement('meta')
+    meta.name = 'quizbuks-support-email'
+    meta.content = 'help@example.com'
+    document.head.append(meta)
+    try {
+      server({ joins: [shop()] })
+      render(<App />)
+      expect(await screen.findByText('Store: demo.myshopify.com')).toBeInTheDocument()
+      const help = screen.getByRole('link', { name: 'Help and frequently asked questions' })
+      expect(help).toHaveAttribute('href', '/shopify-app/support/')
+      expect(help).toHaveAttribute('target', '_blank')
+      expect(screen.getByRole('link', { name: 'help@example.com' })).toHaveAttribute('href', 'mailto:help@example.com')
+      // A page the server did not write into (the dev server) names no address.
+      meta.content = '{{jabiz:support-email}}'
+      expect(supportEmail()).toBeNull()
+    } finally {
+      meta.remove()
+    }
   })
 
   it('offers no hand-over to a member', async () => {

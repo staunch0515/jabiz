@@ -104,7 +104,13 @@ export class QuizElement extends HTMLElement {
 
   /** A screen that ends the quiz: on the free plan it says whose it is (S3b). */
   private result(title: string, ...body: Node[]) {
-    if (this.campaign?.badge) body.push(h('p', { class: 'badge' }, 'Powered by QuizBuks'))
+    if (this.campaign?.badge) {
+      // To the landing page in the shopper's language, in a new tab: the quiz and the product stay where they are.
+      const locale = this.getAttribute('locale') ?? ''
+      const language = locale.startsWith('zh') ? 'zh/' : locale.startsWith('ja') ? 'ja/' : ''
+      body.push(h('p', { class: 'badge' }, h('a', { href: `${__QUIZBUKS_SITE__}/shopify-app/${language}`,
+        target: '_blank', rel: 'noopener' }, 'Powered by QuizBuks')))
+    }
     this.screen(title, ...body)
   }
 
