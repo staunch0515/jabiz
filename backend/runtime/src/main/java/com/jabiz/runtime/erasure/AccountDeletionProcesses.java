@@ -304,8 +304,11 @@ public class AccountDeletionProcesses {
                 .step("One request at a time", HoldLock.<ProcessContext>exclusive(ctx -> LOCK + ctx.get(USER_ID)))
                 // Again under the lock: a withdrawal may have committed in between.
                 .step("Load the request", AccountDeletionStep.load())
+                // A protected role granted during the cooling-off period stops the erasure: the request stays pending
+                // (the item fails, every day, until an administrator withdraws it or the role goes).
+                .step("Check the user's permissions", AccountDeletionStep.guard())
                 .step("Erase the account", CallProcess.<ProcessContext>when(ctx -> ctx.get(PENDING) != null
-                        && ctx.get(ERASED) == null, AccountErasure.NAME, 1,
+                        && ctx.get(ERASED) == null && !ctx.hasViolations(), AccountErasure.NAME, 1,
                     ctx -> new AccountErasure.EraseInput(UUID.fromString((String) ctx.get(USER_ID)),
                         pending(ctx).requestedBy()), ERASED))
                 .step("End the request", AccountDeletionStep.end()));
@@ -382,7 +385,7 @@ public class AccountDeletionProcesses {
     @Component
     public static class AccountDeletionStep implements StepHandler<AccountDeletionStep.Metadata, ProcessContext> {
 
-        enum Mode { REQUEST, CANCEL, LOAD, END }
+        enum Mode { REQUEST, CANCEL, LOAD, GUARD, END }
 
         public record Metadata(Mode mode, Channel channel) {
             public Metadata {
@@ -400,6 +403,10 @@ public class AccountDeletionProcesses {
 
         static StepSpec<Metadata, ProcessContext> load() {
             return StepSpec.of(AccountDeletionStep.class, new Metadata(Mode.LOAD, null));
+        }
+
+        static StepSpec<Metadata, ProcessContext> guard() {
+            return StepSpec.of(AccountDeletionStep.class, new Metadata(Mode.GUARD, null));
         }
 
         static StepSpec<Metadata, ProcessContext> end() {
@@ -434,9 +441,30 @@ public class AccountDeletionProcesses {
                     case REQUEST -> request(ctx, metadata.channel());
                     case CANCEL -> cancel(ctx);
                     case LOAD -> load(ctx);
+                    case GUARD -> guard(ctx);
                     case END -> end(ctx);
                 };
             });
+        }
+
+        /** A due request of a user who holds a protected permission now (or is to): refused, kept pending. */
+        private Mono<Void> guard(ProcessContext ctx) {
+            if (pending(ctx) == null || ctx.get(ERASED) != null) {
+                return Mono.empty();
+            }
+            return protectedHoldings(ctx, pending(ctx).userId()).doOnNext(held -> {
+                if (!held.isEmpty()) {
+                    ctx.reject(new Violation(null, PlatformErrorCodes.ACCOUNT_DELETION_PROTECTED, "The user holds"
+                        + " protected permissions " + held + " since the request was made"));
+                }
+            }).then();
+        }
+
+        /** The protected permissions the user holds, now or by a change scheduled or pending (decision D48). */
+        private Mono<java.util.Set<String>> protectedHoldings(ProcessContext ctx, UUID userId) {
+            return grants.assess(new ProtectedGrants.Draft(ProtectedChangeEntities.PASSWORD, userId, null, null),
+                    ctx.request().actorId(), ctx.processSeqId(), ctx.opTime())
+                .map(ProtectedGrants.Assessment::gained);
         }
 
         private Mono<Void> request(ProcessContext ctx, Channel channel) {
@@ -447,12 +475,11 @@ public class AccountDeletionProcesses {
             }
             UUID userId = UUID.fromString(String.valueOf(user.id()));
             // The holdings now and those scheduled, as for a credential reset (decision D48).
-            return grants.assess(new ProtectedGrants.Draft(ProtectedChangeEntities.PASSWORD, userId, null, null),
-                    ctx.request().actorId(), ctx.processSeqId(), ctx.opTime())
-                .flatMap(assessment -> {
-                    if (assessment.protectedChange()) {
+            return protectedHoldings(ctx, userId)
+                .flatMap(held -> {
+                    if (!held.isEmpty()) {
                         ctx.reject(new Violation(null, PlatformErrorCodes.ACCOUNT_DELETION_PROTECTED, "The user holds"
-                            + " protected permissions " + assessment.gained()));
+                            + " protected permissions " + held));
                         return Mono.empty();
                     }
                     return deletions.pending(userId).flatMap(pending -> {

@@ -228,6 +228,22 @@ class AccountDeletionIT extends SignUpItSupport {
     }
 
     @Test
+    void aProtectedRoleGrantedDuringTheCoolingOffStopsTheErasure() {
+        String email = address("promoted");
+        String userId = customer(email);
+        run(AccountDeletionProcesses.SCHEDULE, Map.of("userId", userId)).expectStatus().isOk();
+        // In the setup window protected grants take effect at once.
+        assign(userId, createRole(unique("ROLE"), "*"), null);
+
+        clock.advance(Duration.ofDays(15));
+        assertThat(jobs.run(accountDeletionJob, clock.instant())).isNotEqualTo(JobRunner.Outcome.SUCCEEDED);
+        assertThat(query("SELECT erased_at FROM sec_user_version WHERE user_id = ?::uuid", userId))
+            .extracting(row -> row.get("erased_at")).containsOnlyNulls();
+        assertThat(query("SELECT * FROM sys_account_deletion_end e JOIN sys_account_deletion d USING (request_id)"
+            + " WHERE d.user_id = ?::uuid", userId)).isEmpty();
+    }
+
+    @Test
     void elsewhereNobodyAsks() {
         String email = address("looser");
         customer(email);
