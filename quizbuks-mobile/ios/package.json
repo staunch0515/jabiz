@@ -1,0 +1,19 @@
+{
+  "name": "quizbuks-ios",
+  "private": true,
+  "version": "1.0.0",
+  "description": "QuizBuks iOS app: a Capacitor shell opening the takers' app (docs/quizbuks/plans/Q49c-ios.md).",
+  "type": "module",
+  "packageManager": "pnpm@10.18.0",
+  "scripts": {
+    "sync": "cap sync ios",
+    "test": "node --test scripts/*.test.mjs"
+  },
+  "dependencies": {
+    "@capacitor/core": "8.5.3",
+    "@capacitor/ios": "8.5.3"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.5.3"
+  }
+}

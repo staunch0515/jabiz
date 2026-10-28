@@ -6,6 +6,6 @@
 | 目录 | 内容 | 计划 |
 |---|---|---|
 | `android/` | Trusted Web Activity（Chrome 打开 `/taker/`） | `docs/quizbuks/plans/Q49b-android.md` |
-| `ios/` | Capacitor（Q49c，待平台 17j、17k、17l） | — |
+| `ios/` | Capacitor（WKWebView 打开 `/taker/`） | `docs/quizbuks/plans/Q49c-ios.md` |
 
 App 中判断是否在商店 App 里只用 `quizbuks-web/app/src/shell.ts`。

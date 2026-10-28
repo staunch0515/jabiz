@@ -70,9 +70,9 @@ describe('offering to add the app to the home screen (Q38)', () => {
   })
 })
 
-describe('in the store app (Q49b)', () => {
+describe('in the store apps (Q49b, Q49c)', () => {
   it('offers nothing anywhere, the account page included', () => {
-    // A device that is offered it in a browser (shell.ts knows only the Android shell so far, the check is the same).
+    // A device that is offered it in a browser.
     onDevice(IPHONE)
     window.localStorage.setItem('qb.answeredOnce', 'true')
     const { unmount } = render(<AccountInstallEntry />)
@@ -83,5 +83,11 @@ describe('in the store app (Q49b)', () => {
     render(<><HomeInstallOffer /><ResultInstallOffer /><AccountInstallEntry /></>)
     expect(screen.queryByTestId('pwa-install')).toBeNull()
     window.history.replaceState(null, '', '/')
+  })
+  it('offers nothing in the iOS app, whose web view the platform would take for Safari (Q49c)', () => {
+    onDevice(`${IPHONE} QuizBuksApp/ios`)
+    window.localStorage.setItem('qb.answeredOnce', 'true')
+    render(<><HomeInstallOffer /><ResultInstallOffer /><AccountInstallEntry /></>)
+    expect(screen.queryByTestId('pwa-install')).toBeNull()
   })
 })

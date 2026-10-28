@@ -1,5 +1,5 @@
 import { animationsSettled } from '@jabiz/ui/testing/playwright'
-import type { APIRequestContext, Browser, Page } from '@playwright/test'
+import { webkit, type APIRequestContext, type Browser, type Page } from '@playwright/test'
 import { mkdirSync } from 'node:fs'
 import { deflateSync } from 'node:zlib'
 import { untilLive } from '../tests/play'
@@ -11,17 +11,18 @@ import { CONTENT, FEATURE, type Language, type StoreQuiz } from './content'
 /**
  * The store's screenshots of the takers' app (docs/quizbuks/plans/Q49d-store.md): for each language a sponsor of that
  * language publishes three quizzes rewarded with a prize at the sponsor's shop, as in the launch phase (operations.md
- * "阶段一": OFFLINE_REDEEM only, no money; Q28), a taker answers one of them through the API (a history to show),
- * then answers another in a phone, which is photographed page by page. The phone is the Android store app (`?shell=android`,
- * Q49b): no install offer in the pictures. Each language's publications are paused afterwards, so the next language's
+ * "阶段一": OFFLINE_REDEEM only, no money; Q28); then for each store's phone a new taker answers one of them through
+ * the API (a history to show) and another in the phone, which is photographed page by page: Play's Android phone in
+ * Chromium as the Android store app (`?shell=android`, Q49b) and the App Store's 6.9-inch iPhone in WebKit as the iOS
+ * app (`?shell=ios`, Q49c), so no install offer in the pictures. Each language's publications are paused afterwards, so the next language's
  * home shows only its own quizzes. Not part of the e2e suite (store.config.ts); the QuizBuks store workflow runs it
  * and keeps the pictures as its artifact, which are never committed.
  */
 
 const OUT = process.env.STORE_OUT ?? 'store-screenshots'
-/** 1080 × 1920 pictures: Play's phone screenshots (9:16, 320–3840 px a side). */
-const PHONE = { viewport: { width: 360, height: 640 }, deviceScaleFactor: 3 }
 const ANDROID_CHROME = 'Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Mobile Safari/537.36'
+/** The iOS app's web view: an iPhone's WebKit with the shell's mark (capacitor.config.json `ios.appendUserAgent`). */
+const IPHONE_APP = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 QuizBuksApp/ios'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -107,22 +108,102 @@ async function answerAll(request: APIRequestContext, token: string, publicationI
   await run(request, token, 'QB_ATTEMPT_SUBMIT', { attemptId: started.attemptId, publicationId, answers })
 }
 
-async function shoot(page: Page, language: Language, name: string) {
-  await animationsSettled(page)
-  // JPEG: Play takes no alpha channel in screenshots.
-  await page.screenshot({ path: `${OUT}/${language}/${name}.jpg`, type: 'jpeg', quality: 92, animations: 'disabled' })
+/** A store's phone: its size, its browser and the shell it plays (Q49b, Q49c). */
+interface Device {
+  name: 'android' | 'iphone'
+  shell: 'android' | 'ios'
+  /** Play's phone screenshots (9:16, 1080 × 1920); App Store's 6.9-inch iPhone (1320 × 2868). */
+  viewport: { width: number; height: number }
+  userAgent: string
+  /** The iPhone's pictures come from WebKit, the engine of the iOS app's web view. */
+  engine: 'chromium' | 'webkit'
 }
 
-async function phone(browser: Browser, language: Language) {
-  const context = await browser.newContext({ ...PHONE, isMobile: true, hasTouch: true, userAgent: ANDROID_CHROME,
-    locale: { ja: 'ja-JP', zh: 'zh-CN', en: 'en-US' }[language], timezoneId: 'Asia/Tokyo' })
-  return context.newPage()
+const DEVICES: Device[] = [
+  { name: 'android', shell: 'android', viewport: { width: 360, height: 640 }, userAgent: ANDROID_CHROME,
+    engine: 'chromium' },
+  { name: 'iphone', shell: 'ios', viewport: { width: 440, height: 956 }, userAgent: IPHONE_APP, engine: 'webkit' },
+]
+
+async function shoot(page: Page, dir: string, name: string) {
+  await animationsSettled(page)
+  // JPEG: neither store takes an alpha channel in screenshots.
+  await page.screenshot({ path: `${dir}/${name}.jpg`, type: 'jpeg', quality: 92, animations: 'disabled' })
+}
+
+/**
+ * One device's pictures: a new taker (one who has answered nothing) answers the second quiz through the API and the
+ * first in the phone, as the store app opens it (`?shell=…`).
+ */
+async function photograph(chromium: Browser, request: APIRequestContext, language: Language, publications: string[],
+  device: Device) {
+  const content = CONTENT[language]
+  const dir = `${OUT}/${language}/${device.name}`
+  mkdirSync(dir, { recursive: true })
+  const me = await takerInJapan(request, content.taker)
+  for (const id of publications) await untilLive(request, me.token, id)
+  await answerAll(request, me.token, publications[1], content.quizzes[1])
+
+  const browser = device.engine === 'webkit' ? await webkit.launch() : chromium
+  const context = await browser.newContext({ viewport: device.viewport, deviceScaleFactor: 3, isMobile: true,
+    hasTouch: true, userAgent: device.userAgent, locale: { ja: 'ja-JP', zh: 'zh-CN', en: 'en-US' }[language],
+    timezoneId: 'Asia/Tokyo', baseURL: test.info().project.use.baseURL })
+  const page = await context.newPage()
+  const home = `/taker/?shell=${device.shell}`
+
+  // The introduction a newcomer sees first (Q32), in the phone's language.
+  await page.goto(home)
+  await expect(page.getByTestId('intro')).toBeVisible()
+  await shoot(page, dir, '1-intro')
+
+  // The sign-in page is English (signIn's placeholders); the app is then switched to the language and reopened
+  // as the store app opens it.
+  await page.evaluate(() => window.localStorage.setItem('jabiz.language', 'en'))
+  await signIn(page, '/taker/', me.email)
+  await expect(page.getByTestId('home')).toBeVisible()
+  await page.evaluate((lang) => window.localStorage.setItem('jabiz.language', lang), language)
+  await page.goto(home)
+  await expect(page.getByTestId('feed-card').filter({ hasText: content.quizzes[0].title })).toBeVisible()
+  await expect(page.getByTestId('feed-card').filter({ hasText: content.quizzes[2].title })).toBeVisible()
+  await expect(page.getByTestId('pwa-install')).toHaveCount(0)
+  await shoot(page, dir, '2-home')
+
+  const quiz = content.quizzes[0]
+  await page.getByTestId('feed-card').filter({ hasText: quiz.title }).click()
+  await expect(page.getByTestId('detail-start')).toBeVisible()
+  await shoot(page, dir, '3-quiz')
+
+  await page.getByTestId('detail-start').click()
+  await expect(page).toHaveURL(/\/play\/[^/]+$/)
+  for (const [n, question] of quiz.questions.entries()) {
+    await expect(page.getByTestId('play-question')).toContainText(question.stem)
+    const saved = page.waitForResponse((r) => r.url().includes('/api/processes/QB_ATTEMPT_SAVE/') && r.ok())
+    await page.getByTestId('play-option').filter({ hasText: question.options[0] }).click()
+    await saved
+    if (n === 0) await shoot(page, dir, '4-answering')
+    if (n < quiz.questions.length - 1) await page.getByTestId('play-next').click()
+  }
+  const submit = page.getByTestId('play-submit')
+  const label = (await submit.innerText()).trim()
+  await submit.click()
+  await page.getByRole('alertdialog').getByRole('button', { name: label, exact: true }).click()
+  await expect(page).toHaveURL(/\/result\/[^/]+$/)
+  await expect(page.getByTestId('result-score')).toHaveText(`${quiz.questions.length} / ${quiz.questions.length}`)
+  await expect(page.getByTestId('redeem-prize')).toHaveText(quiz.prize)
+  await expect(page.getByTestId('redeem-code')).toBeVisible()
+  await page.evaluate(() => window.scrollTo(0, 0))
+  await shoot(page, dir, '5-result')
+
+  await page.getByTestId('nav-history').click()
+  await expect(page.getByTestId('history-row')).toHaveCount(2)
+  await shoot(page, dir, '6-history')
+  await context.close()
+  if (browser !== chromium) await browser.close()
 }
 
 for (const language of ['ja', 'zh', 'en'] as const) {
   test(`the store's screenshots in ${language}`, async ({ browser, request }) => {
-    test.setTimeout(300_000)
-    mkdirSync(`${OUT}/${language}`, { recursive: true })
+    test.setTimeout(420_000)
     const content = CONTENT[language]
     const sponsor = await approvedSponsor(request, content.contact, content.company)
     // The launch phase's one way to reward (qb.reward.default-methods = OFFLINE_REDEEM), allowed for this sponsor as
@@ -133,64 +214,14 @@ for (const language of ['ja', 'zh', 'en'] as const) {
       note: 'store screenshots' })
     const publications: string[] = []
     for (const quiz of content.quizzes) publications.push(await publish(request, sponsor.token, quiz))
-    const me = await takerInJapan(request, content.taker)
-    for (const id of publications) await untilLive(request, me.token, id)
-    await answerAll(request, me.token, publications[1], content.quizzes[1])
 
-    // The introduction a newcomer sees first (Q32), in the phone's language.
-    const page = await phone(browser, language)
-    await page.goto('/taker/?shell=android')
-    await expect(page.getByTestId('intro')).toBeVisible()
-    await shoot(page, language, '1-intro')
+    for (const device of DEVICES) await photograph(browser, request, language, publications, device)
 
-    // The sign-in page is English (signIn's placeholders); the app is then switched to the language and reopened
-    // as the store app opens it.
-    await page.evaluate(() => window.localStorage.setItem('jabiz.language', 'en'))
-    await signIn(page, '/taker/', me.email)
-    await expect(page.getByTestId('home')).toBeVisible()
-    await page.evaluate((lang) => window.localStorage.setItem('jabiz.language', lang), language)
-    await page.goto('/taker/?shell=android')
-    await expect(page.getByTestId('feed-card').filter({ hasText: content.quizzes[0].title })).toBeVisible()
-    await expect(page.getByTestId('feed-card').filter({ hasText: content.quizzes[2].title })).toBeVisible()
-    await expect(page.getByTestId('pwa-install')).toHaveCount(0)
-    await shoot(page, language, '2-home')
-
-    const quiz = content.quizzes[0]
-    await page.getByTestId('feed-card').filter({ hasText: quiz.title }).click()
-    await expect(page.getByTestId('detail-start')).toBeVisible()
-    await shoot(page, language, '3-quiz')
-
-    await page.getByTestId('detail-start').click()
-    await expect(page).toHaveURL(/\/play\/[^/]+$/)
-    for (const [n, question] of quiz.questions.entries()) {
-      await expect(page.getByTestId('play-question')).toContainText(question.stem)
-      const saved = page.waitForResponse((r) => r.url().includes('/api/processes/QB_ATTEMPT_SAVE/') && r.ok())
-      await page.getByTestId('play-option').filter({ hasText: question.options[0] }).click()
-      await saved
-      if (n === 0) await shoot(page, language, '4-answering')
-      if (n < quiz.questions.length - 1) await page.getByTestId('play-next').click()
-    }
-    const submit = page.getByTestId('play-submit')
-    const label = (await submit.innerText()).trim()
-    await submit.click()
-    await page.getByRole('alertdialog').getByRole('button', { name: label, exact: true }).click()
-    await expect(page).toHaveURL(/\/result\/[^/]+$/)
-    await expect(page.getByTestId('result-score')).toHaveText(`${quiz.questions.length} / ${quiz.questions.length}`)
-    await expect(page.getByTestId('redeem-prize')).toHaveText(quiz.prize)
-    await expect(page.getByTestId('redeem-code')).toBeVisible()
-    await page.evaluate(() => window.scrollTo(0, 0))
-    await shoot(page, language, '5-result')
-
-    await page.getByTestId('nav-history').click()
-    await expect(page.getByTestId('history-row')).toHaveCount(2)
-    await shoot(page, language, '6-history')
-
-    // The feature graphic (1024 × 500): the app's colours and the language's line.
-    const graphic = await page.context().browser()!.newPage({ viewport: { width: 1024, height: 500 } })
+    // Play's feature graphic (1024 × 500): the app's colours and the language's line.
+    const graphic = await browser.newPage({ viewport: { width: 1024, height: 500 } })
     await graphic.setContent(FEATURE(language))
     await graphic.screenshot({ path: `${OUT}/${language}/feature-graphic.jpg`, type: 'jpeg', quality: 92 })
     await graphic.close()
-    await page.context().close()
 
     for (const publicationId of publications) await run(request, sponsor.token, 'QB_PUBLICATION_PAUSE', { publicationId })
   })

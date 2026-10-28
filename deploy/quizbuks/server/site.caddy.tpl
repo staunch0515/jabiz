@@ -25,6 +25,23 @@ __DOMAIN__ {
 		file_server
 	}
 
+	# iOS Universal Links (docs/quizbuks/plans/Q49c-ios.md), the same way: well-known/apple-app-site-association
+	# written by the deploy workflow, served as JSON without a redirect (Apple's CDN follows none), until 17l.
+	@aasa {
+		path /.well-known/apple-app-site-association
+		file {
+			root __APP_DIR__/well-known
+			try_files /apple-app-site-association
+		}
+	}
+	handle @aasa {
+		header Content-Type application/json
+		header Cache-Control "public, max-age=300"
+		root * __APP_DIR__/well-known
+		rewrite * /apple-app-site-association
+		file_server
+	}
+
 	# Maintenance mode (DEPLOY.md "维护模式"): while the file maintenance/maintenance.lock exists in the environment's
 	# directory every request gets the static page maintenance/maintenance.html with 503, the application is not
 	# reached. The file is looked up on each request, so creating or removing it needs no reload. The root is given

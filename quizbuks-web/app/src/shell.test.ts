@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ANDROID_PACKAGE, nativeShell, rememberShell } from './shell'
+import { ANDROID_PACKAGE, IOS_USER_AGENT, nativeShell, rememberShell } from './shell'
 
 function at(address: string) {
   window.history.replaceState(null, '', address)
@@ -44,5 +44,22 @@ describe('telling the store app from a browser (Q49b)', () => {
     vi.spyOn(document, 'referrer', 'get').mockReturnValue(`android-app://${ANDROID_PACKAGE}`)
     expect(() => rememberShell(window)).not.toThrow()
     expect(nativeShell(window)).toBe('android')
+  })
+
+  it('takes the iOS shell\'s parameter, and its user agent on any page', () => {
+    at('/taker/?shell=ios')
+    rememberShell(window)
+    expect(window.location.search).toBe('')
+    expect(nativeShell(window)).toBe('ios')
+    window.sessionStorage.clear()
+    vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue(
+      `Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 ${IOS_USER_AGENT}`)
+    expect(nativeShell(window)).toBe('ios')
+  })
+
+  it('ignores an unknown shell in the address', () => {
+    at('/taker/?shell=desktop')
+    rememberShell(window)
+    expect(nativeShell(window)).toBeNull()
   })
 })
