@@ -6,7 +6,7 @@ import { useTranslation } from 'react-i18next'
 import { SPONSOR } from '../messages'
 import { QB } from '../qb/messages'
 import { Link, navigate, useLocation } from '../qb/router'
-import { readPublication, type Publication, type PublicationDetail } from './api'
+import { conditionsQuery, readConditions, readPublication, type Publication, type PublicationDetail } from './api'
 import { NEW_PUBLICATION, publicationQuery, PUBLICATIONS_PATH, PUBLICATIONS_QUERY } from './paths'
 import { analyticsPath } from '../analytics/api'
 import '../analytics/messages'
@@ -96,6 +96,9 @@ function PublicationView({ detail, stale, onStale }: {
   const endReason = useEndReasonLabel()
   const { publication, tiers } = detail
   const { version } = useVersionOf(publication.quizId, publication.versionId)
+  // Q47: the conditions it was submitted with (frozen with it).
+  const conditions = useQuery({ queryKey: conditionsQuery(publication.publicationId),
+    queryFn: () => readConditions(publication.publicationId), enabled: publication.audience === 'PUBLIC' })
   const dates = [
     { key: 'submittedAt', value: publication.submittedAt },
     { key: 'approvedAt', value: publication.approvedAt },
@@ -142,6 +145,7 @@ function PublicationView({ detail, stale, onStale }: {
         ...publication,
         quizTitle: version?.title ?? null,
         tiers,
+        conditions: conditions.data,
       }} />
       {publication.audience === 'INVITED' && (
         <InvitationsSection publicationId={publication.publicationId} status={publication.status} />

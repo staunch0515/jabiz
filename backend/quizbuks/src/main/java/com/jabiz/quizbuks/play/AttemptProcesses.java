@@ -9,6 +9,8 @@ import com.jabiz.quizbuks.content.ContentLimits;
 import com.jabiz.quizbuks.content.QuizSnapshot;
 import com.jabiz.quizbuks.identity.CallerChecks;
 import com.jabiz.quizbuks.invitation.InvitationStatus;
+import com.jabiz.quizbuks.audience.AudienceCodes;
+import com.jabiz.quizbuks.audience.AudienceRows;
 import com.jabiz.quizbuks.invitation.Invitations;
 import com.jabiz.quizbuks.invitation.QbInvitations;
 import com.jabiz.quizbuks.reward.CashRewardChecks;
@@ -107,6 +109,8 @@ public final class AttemptProcesses {
     static final String COUNTER = "play.counter";
     static final String START_COUNTER = "play.startCounter";
     static final String WALLET = "play.wallet";
+    static final String CONDITIONS = "play.conditions";
+    static final String ATTRIBUTES = "play.attributes";
     static final String VIEWS = "play.views";
     static final String ATTEMPT = "play.attempt";
     static final String NEW = "play.new";
@@ -220,7 +224,11 @@ public final class AttemptProcesses {
                     PlaySteps.card(ctx -> ctx.get(PUB_KEY), CARD_BEFORE),
                     QueryEntities.query(QbPublications.defaultDataset(QbPublications.PUBLICATION),
                         ctx -> EntityQuery.builder().where(new QueryPredicate.In("publicationId",
-                            ids(ctx.get(PUB_KEY)))).limit(1).build(), PUBLICATION)))
+                            ids(ctx.get(PUB_KEY)))).limit(1).build(), PUBLICATION),
+                    // Q47: the publication's conditions and the caller's attributes, in the same statement (the
+                    // statement budget stays); conditions are frozen with the publication, so not read again.
+                    AudienceRows.conditions(ctx -> ctx.get(PUB_KEY), CONDITIONS),
+                    AudienceRows.callers(ATTRIBUTES)))
                 .steps(b -> PlaySteps.loadRegions(b, ctx -> ctx.request().actorId()))
                 .steps(b -> PlaySteps.loadVersion(b, ctx -> {
                     EntityInstance card = first(ctx, CARD_BEFORE);
@@ -332,6 +340,15 @@ public final class AttemptProcesses {
         if (refusal != null) {
             ctx.reject(new com.jabiz.entity.Violation("publicationId", refusal, "The attempt cannot start: "
                 + refusal, Map.of("publicationId", String.valueOf(ctx.get(PUB_KEY)))));
+            return;
+        }
+        // Q47: an invited publication takes its list; a sponsor's public one only the takers whose profile meets it.
+        // A channel's publication has no conditions and its takers no profile (ChannelPlay reads neither): never asked.
+        if (PublisherKind.sponsor(card.get("publisherKind")) && !PlaySteps.invited(card) && !AudienceRows.matches(PlaySteps.list(ctx, CONDITIONS),
+            PlaySteps.list(ctx, ATTRIBUTES), ctx.opTime())) {
+            ctx.reject(new com.jabiz.entity.Violation("publicationId", AudienceCodes.NOT_MATCHED, "The caller's "
+                + "profile does not meet the publication's conditions", Map.of("publicationId",
+                String.valueOf(ctx.get(PUB_KEY)))));
             return;
         }
         QuizSnapshot snapshot = PlaySteps.snapshot(ctx);

@@ -208,7 +208,7 @@ for (const appearance of ['light', 'dark'] as const) {
     await expect(page.getByTestId('publication-status').first()).toContainText('Live')
     await expectAccessible(page, at('sponsor publications'))
 
-    // The wizard's three steps, the quiz chooser open, and the problems of an incomplete draft.
+    // The wizard's four steps, the quiz chooser open, and the problems of an incomplete draft.
     await page.getByTestId('new-publication').click()
     await expect(page.getByTestId('publication-name')).toBeVisible()
     await expectAccessible(page, at('sponsor new publication'))
@@ -226,7 +226,7 @@ for (const appearance of ['light', 'dark'] as const) {
     await page.getByRole('option', { name: new RegExp(quiz.title) }).click()
     await expect(page.getByTestId('publication-version')).toContainText(quiz.label)
     await page.getByTestId('publication-next').click()
-    await expect(page.getByTestId('publication-step-title')).toHaveText('Audience and rewards')
+    await expect(page.getByTestId('publication-step-title')).toHaveText('Time and rewards')
     await page.getByTestId('tier-add').click()
     await page.getByTestId('tier-reward').fill('10')
     await expectAccessible(page, at('sponsor publication audience and rewards'))
@@ -236,6 +236,12 @@ for (const appearance of ['light', 'dark'] as const) {
     await expect(page.getByTestId('publication-pass-score')).toHaveAttribute('aria-invalid', 'true')
     await expectAccessible(page, at('sponsor publication typed wrong'))
     await page.getByTestId('publication-pass-score').fill('')
+    await page.getByTestId('publication-next').click()
+    // Q47: who it is for, with a condition switched on.
+    await expect(page.getByTestId('publication-step-title')).toHaveText('Customer matching')
+    await page.getByTestId('audience-gender-on').click()
+    await expectAccessible(page, at('sponsor publication customer matching'))
+    await page.getByTestId('audience-gender-on').click()
     await page.getByTestId('publication-next').click()
     await expect(page.getByTestId('publication-problems')).toBeVisible()
     await expectAccessible(page, at('sponsor publication problems'))

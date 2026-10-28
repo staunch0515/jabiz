@@ -65,6 +65,8 @@ interface Server {
   invitations?: Record<string, unknown>[]
   /** The sponsor's own mail server (Q29); none before one is saved. */
   mailServer?: Record<string, unknown> | null
+  /** The draft's stored matching conditions (Q47), one row per option or range. */
+  conditions?: Record<string, unknown>[]
   /** The sponsor's staff (Q39). */
   staff?: Record<string, unknown>[]
 }
@@ -106,6 +108,8 @@ function server(options: Server = {}) {
           : json(404, { detail: 'Not found' })
       case '/api/datasets/urn:jabiz:dataset:sponsor:QbRewardTier/query':
         return rows(options.tiers ?? [])
+      case '/api/datasets/urn:jabiz:dataset:sponsor:QbPublicationCriterion/query':
+        return rows(options.conditions ?? [])
       case '/api/queries/qb.sponsor.reward-methods':
         return json(200, { items: [{ methods: options.methods ?? 'PLATFORM', own: Boolean(options.methods),
           maxRewardPerAttempt: options.maxReward ?? null }], offset: 0, limit: 1 })
@@ -355,13 +359,15 @@ describe('the publication wizard', () => {
     const { processCalls } = server({ processes: { QB_PUBLICATION_SAVE: [saved(4, { tierIds: ['t9'], problems })] } })
     window.history.replaceState(null, '', '/publications/p1?step=1')
     render(<App />)
-    const regions = await screen.findByTestId('publication-regions')
-    await userEvent.click(await within(regions).findByRole('checkbox', { name: 'Japan' }))
-    await userEvent.click(screen.getByTestId('tier-add'))
+    await userEvent.click(await screen.findByTestId('tier-add'))
     const tier = screen.getByTestId('tier')
     expect(within(tier).getByTestId('tier-from')).toHaveValue('0')
     expect(within(tier).getByTestId('tier-to')).toHaveValue('2')
     await userEvent.type(within(tier).getByTestId('tier-reward'), '100')
+    await userEvent.click(screen.getByTestId('publication-next'))
+    // Q47: who it is for is a step of its own.
+    const regions = await screen.findByTestId('publication-regions')
+    await userEvent.click(await within(regions).findByRole('checkbox', { name: 'Japan' }))
     await userEvent.click(screen.getByTestId('publication-next'))
 
     const listed = await screen.findByTestId('publication-problems')
@@ -372,10 +378,12 @@ describe('the publication wizard', () => {
     ])
     expect(screen.getByTestId('publication-submit')).toBeDisabled()
     expect(document.activeElement).toBe(screen.getByTestId('publication-step-title'))
-    expect(processCalls('QB_PUBLICATION_SAVE')).toEqual([{ publicationId: 'p1', versionId: 'v1', name: 'Coffee week',
+    expect(processCalls('QB_PUBLICATION_SAVE').at(-1)).toEqual({ publicationId: 'p1', versionId: 'v1', name: 'Coffee week',
       regions: ['GLOBAL', 'JP'], startAt: '2026-11-01T00:00:00Z', endAt: '2026-11-08T00:00:00Z', timeLimitSec: 300,
-      passScore: 2, budgetCap: null, maxWinners: null, baseRevision: 3, rewardMethod: 'PLATFORM', redeemDescription: null, audience: 'PUBLIC',
-      tiers: [{ tierId: null, fromScore: 0, toScore: 2, reward: 100 }] }])
+      passScore: 2, budgetCap: null, maxWinners: null, baseRevision: 4, rewardMethod: 'PLATFORM', redeemDescription: null, audience: 'PUBLIC',
+      tiers: [{ tierId: 't9', fromScore: 0, toScore: 2, reward: 100 }] })
+    // The conditions were not touched: not sent.
+    expect(processCalls('QB_PUBLICATION_AUDIENCE_SAVE')).toEqual([])
   })
 
   it('asks a survey for its one reward and sends the pass mark and tiers it stands for (Q12)', async () => {
@@ -413,7 +421,7 @@ describe('the publication wizard', () => {
     const tiers = [{ tierId: 't1', publicationId: 'p1', seq: 1, fromScore: 0, toScore: 2, reward: '100' }]
     const { processCalls, publication } = server({ tiers, processes: {
       QB_PUBLICATION_SAVE: [saved(4, { tierIds: ['t1'], maxSpend: null })], QB_PUBLICATION_SUBMIT: [pending] } })
-    window.history.replaceState(null, '', '/publications/p1?step=1')
+    window.history.replaceState(null, '', '/publications/p1?step=2')
     render(<App />)
     await userEvent.click(await screen.findByTestId('publication-next'))
     expect(await screen.findByTestId('publication-ready')).toBeInTheDocument()
@@ -436,7 +444,7 @@ describe('the publication wizard', () => {
       { field: null, ruleCode: 'QB_REVIEW_NOT_CONFIGURED', message: 'Publications cannot be reviewed yet.' },
     ] } }
     server({ processes: { QB_PUBLICATION_SAVE: [saved(4)], QB_PUBLICATION_SUBMIT: [refused] } })
-    window.history.replaceState(null, '', '/publications/p1?step=1')
+    window.history.replaceState(null, '', '/publications/p1?step=2')
     render(<App />)
     await userEvent.click(await screen.findByTestId('publication-next'))
     await userEvent.click(await screen.findByTestId('publication-submit'))
@@ -487,7 +495,7 @@ describe('the reward method (Q22)', () => {
     const { processCalls } = server({ processes: { QB_PUBLICATION_SAVE: [saved(4)] } })
     window.history.replaceState(null, '', '/publications/p1?step=1')
     render(<App />)
-    await screen.findByTestId('publication-regions')
+    await screen.findByTestId('publication-start')
     expect(screen.queryByTestId('publication-method')).toBeNull()
     await userEvent.click(screen.getByTestId('publication-next'))
     await waitFor(() => expect(processCalls('QB_PUBLICATION_SAVE')).toHaveLength(1))
@@ -508,6 +516,7 @@ describe('the reward method (Q22)', () => {
     await waitFor(() => expect(processCalls('QB_PUBLICATION_SAVE')).toHaveLength(1))
     expect(processCalls('QB_PUBLICATION_SAVE')[0]).toMatchObject({ rewardMethod: 'OFFLINE_REDEEM',
       redeemDescription: 'A coffee at our counter' })
+    await userEvent.click(await screen.findByTestId('publication-conditions').then(() => screen.getByTestId('publication-next')))
     await waitFor(() => expect(screen.getByTestId('summary-reward-method')).toHaveTextContent("Prize at the sponsor's place"))
     expect(screen.getByTestId('summary-redeem')).toHaveTextContent('A coffee at our counter')
   })
@@ -580,6 +589,7 @@ describe('digital prizes (Q33)', () => {
     await waitFor(() => expect(processCalls('QB_PUBLICATION_SAVE')).toHaveLength(1))
     expect(processCalls('QB_PUBLICATION_SAVE')[0]).toMatchObject({ rewardMethod: 'DIGITAL_PRIZE', digitalDelivery: 'SHARED',
       digitalDescription: 'A month of streaming', digitalContent: 'STREAM-2026', digitalSendDays: null })
+    await userEvent.click(await screen.findByTestId('publication-conditions').then(() => screen.getByTestId('publication-next')))
     await waitFor(() => expect(screen.getByTestId('summary-reward-method')).toHaveTextContent('Digital prize'))
     expect(screen.getByTestId('summary-digital-delivery')).toHaveTextContent('One code for everyone')
     expect(screen.getByTestId('summary-digital')).toHaveTextContent('A month of streaming')
@@ -604,6 +614,7 @@ describe('digital prizes (Q33)', () => {
     await userEvent.click(screen.getByTestId('publication-next'))
     await waitFor(() => expect(processCalls('QB_PUBLICATION_SAVE')).toHaveLength(2))
     expect(processCalls('QB_PUBLICATION_SAVE')[1]).toMatchObject({ digitalDelivery: 'SPONSOR_SENT', digitalSendDays: 7 })
+    await userEvent.click(await screen.findByTestId('publication-conditions').then(() => screen.getByTestId('publication-next')))
     expect(await screen.findByTestId('summary-digital-send-days')).toHaveTextContent('7 days')
   })
 
@@ -939,19 +950,92 @@ describe('a submitted publication', () => {
   })
 })
 
+describe('customer matching (Q47)', () => {
+  const audienceSaved = (revision: number) => ({ status: 200, body: { output: { publicationId: 'p1', status: 'DRAFT',
+    revision, approval: null, approvalRequestId: null } } })
+
+  it('shows the stored conditions, saves them with the draft, and counts the takers rounded', async () => {
+    const { processCalls } = server({
+      conditions: [{ publicationId: 'p1', criterionKey: 'age', minValue: 20, maxValue: 39 }],
+      processes: {
+        QB_PUBLICATION_SAVE: [saved(4), saved(6)],
+        QB_PUBLICATION_AUDIENCE_SAVE: [audienceSaved(5), audienceSaved(7)],
+        QB_AUDIENCE_COUNT: [{ status: 200, body: { output: { count: null, fewerThan: 20 } } },
+          { status: 200, body: { output: { count: 120, fewerThan: null } } }],
+      },
+    })
+    window.history.replaceState(null, '', '/publications/p1?step=2')
+    render(<App />)
+    const age = await screen.findByTestId('audience-age')
+    expect(await within(age).findByTestId('audience-age-min')).toHaveValue('20')
+    expect(within(age).getByTestId('audience-age-max')).toHaveValue('39')
+    // Nothing chosen of gender until it is switched on.
+    expect(screen.queryByTestId('audience-gender-FEMALE')).toBeNull()
+    await userEvent.click(screen.getByTestId('audience-gender-on'))
+    await userEvent.click(screen.getByTestId('audience-gender-NO_ANSWER'))
+    await userEvent.click(screen.getByTestId('audience-gender-FEMALE'))
+    await expectAccessible()
+
+    // Counting saves the draft and its conditions first, then counts what is stored.
+    await userEvent.click(screen.getByTestId('audience-count-button'))
+    expect(await screen.findByTestId('audience-count-result')).toHaveTextContent('Fewer than 20 takers')
+    expect(processCalls('QB_PUBLICATION_SAVE')).toHaveLength(1)
+    expect(processCalls('QB_PUBLICATION_AUDIENCE_SAVE')).toEqual([{ publicationId: 'p1', baseRevision: 4, criteria: [
+      { key: 'gender', options: ['FEMALE', 'NO_ANSWER'] }, { key: 'age', min: 20, max: 39 }] }])
+    expect(processCalls('QB_AUDIENCE_COUNT')).toEqual([{ publicationId: 'p1' }])
+
+    // A change clears the count; the next save carries the revision the conditions' save answered.
+    await userEvent.click(screen.getByTestId('audience-age-on'))
+    expect(screen.getByTestId('audience-count-result')).toBeEmptyDOMElement()
+    await userEvent.click(screen.getByTestId('audience-count-button'))
+    await waitFor(() => expect(screen.getByTestId('audience-count-result')).toHaveTextContent('About 120 takers'))
+    expect(processCalls('QB_PUBLICATION_SAVE')[1]).toMatchObject({ baseRevision: 5 })
+    expect(processCalls('QB_PUBLICATION_AUDIENCE_SAVE')[1]).toEqual({ publicationId: 'p1', baseRevision: 6, criteria: [
+      { key: 'gender', options: ['FEMALE', 'NO_ANSWER'] }] })
+
+    await userEvent.click(screen.getByTestId('publication-next'))
+    expect(await screen.findByTestId('summary-conditions')).toHaveTextContent('Gender: Female, Prefer not to say')
+  })
+
+  it('asks for an option before sending, and keeps the draft\'s revision when the conditions are refused', async () => {
+    const refused = { status: 422, body: { detail: 'Refused', violations: [{ field: 'criteria[0].options',
+      ruleCode: 'QB_AUDIENCE_OPTION', message: 'Not an option of this criterion.' }] } }
+    const { processCalls } = server({ processes: { QB_PUBLICATION_SAVE: [saved(4), saved(6)],
+      QB_PUBLICATION_AUDIENCE_SAVE: [refused, audienceSaved(7)] } })
+    window.history.replaceState(null, '', '/publications/p1?step=2')
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('audience-interest-on'))
+    await userEvent.click(screen.getByTestId('publication-save'))
+    // Switched on without an option: nothing is sent.
+    expect(processCalls('QB_PUBLICATION_SAVE')).toEqual([])
+    await userEvent.click(screen.getByTestId('audience-interest-PETS'))
+    await userEvent.click(screen.getByTestId('publication-save'))
+    await waitFor(() => expect(processCalls('QB_PUBLICATION_AUDIENCE_SAVE')).toHaveLength(1))
+    expect(await screen.findByTestId('publication-save-problems')).toBeInTheDocument()
+    await userEvent.click(screen.getByTestId('publication-save'))
+    await waitFor(() => expect(processCalls('QB_PUBLICATION_SAVE')).toHaveLength(2))
+    // The draft's save went through the first time: the second carries its revision, not a stale one.
+    expect(processCalls('QB_PUBLICATION_SAVE')[1]).toMatchObject({ baseRevision: 4 })
+    expect(screen.queryByTestId('publication-stale')).toBeNull()
+  })
+})
+
 describe('invitation-only publications (Q25)', () => {
   it('asks for the list instead of the regions and saves the audience', async () => {
     const { processCalls } = server({ processes: { QB_PUBLICATION_SAVE: [saved(4, { tierIds: ['t1'] })] } })
     window.history.replaceState(null, '', '/publications/p1?step=1')
     render(<App />)
-    expect(await screen.findByTestId('publication-regions')).toBeInTheDocument()
-    await userEvent.click(screen.getByTestId('publication-audience-INVITED'))
-    expect(screen.queryByTestId('publication-regions')).toBeNull()
-    await userEvent.click(screen.getByTestId('tier-add'))
+    await userEvent.click(await screen.findByTestId('tier-add'))
     await userEvent.type(within(screen.getByTestId('tier')).getByTestId('tier-reward'), '100')
     await userEvent.click(screen.getByTestId('publication-next'))
-    await waitFor(() => expect(processCalls('QB_PUBLICATION_SAVE')).toHaveLength(1))
-    expect(processCalls('QB_PUBLICATION_SAVE')[0]).toMatchObject({ audience: 'INVITED', regions: [] })
+    expect(await screen.findByTestId('publication-regions')).toBeInTheDocument()
+    expect(screen.getByTestId('publication-conditions')).toBeInTheDocument()
+    await userEvent.click(screen.getByTestId('publication-audience-INVITED'))
+    expect(screen.queryByTestId('publication-regions')).toBeNull()
+    expect(screen.queryByTestId('publication-conditions')).toBeNull()
+    await userEvent.click(screen.getByTestId('publication-next'))
+    await waitFor(() => expect(processCalls('QB_PUBLICATION_SAVE')).toHaveLength(2))
+    expect(processCalls('QB_PUBLICATION_SAVE')[1]).toMatchObject({ audience: 'INVITED', regions: [] })
     expect(await screen.findByTestId('summary-audience')).toHaveTextContent('Invited e-mail addresses only')
   })
 

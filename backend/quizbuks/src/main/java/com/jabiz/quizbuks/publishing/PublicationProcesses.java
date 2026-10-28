@@ -144,6 +144,8 @@ public final class PublicationProcesses {
                     .where(new QueryPredicate.In("publicationId", PublicationEditing.ids(ctx.get(PUB_ID))))
                     .limit(1).build(), FOUND))
             .steps(PublicationEditing::loadTiers)
+            // Q47: an invited publication takes its list; switching to it clears the matching conditions.
+            .steps(PublicationAudience::loadCriteria)
             .steps(PublicationEditing::loadSponsor)
             .steps(PublicationEditing::loadSponsorMethods)
             .steps(b -> PublicationEditing.loadVersion(b, ctx -> {
@@ -263,6 +265,10 @@ public final class PublicationProcesses {
                 changed.put("editedAt", editedAt);
                 ctx.changes().update(QbPublications.PUBLICATION, publication.id(), publication.version(), changed);
             }
+        }
+        if (Audience.INVITED.equals(audience)) {
+            list(ctx, PublicationAudience.CRITERIA).forEach(row ->
+                ctx.changes().delete(com.jabiz.quizbuks.audience.QbAudience.CRITERION, row.id(), row.version()));
         }
         ctx.put(OUTPUT, output(ctx, messages, publicationId, revision, editedAt, values, tiers, version, tierIds));
     }
@@ -402,6 +408,7 @@ public final class PublicationProcesses {
                 .outputMapper(ctx -> ctx.get(OUTPUT, PublicationOutput.class))
                 .steps(PublicationEditing::lockAndLoad)
                 .steps(PublicationEditing::loadTiers)
+                .steps(PublicationAudience::loadCriteria)
                 .compute("Delete the publication", (metadata, ctx) -> {
                     EntityInstance publication = PublicationEditing.publication(ctx);
                     if (!PublicationEditing.draft(ctx, publication) || !PublicationEditing.current(ctx,
@@ -411,6 +418,9 @@ public final class PublicationProcesses {
                     // Tiers before what they belong to: an instance still referred to cannot be deleted.
                     list(ctx, TIERS).forEach(tier -> ctx.changes().delete(QbPublications.TIER, tier.id(),
                         tier.version()));
+                    // Q47: the conditions too, for the same reason.
+                    list(ctx, PublicationAudience.CRITERIA).forEach(row -> ctx.changes().delete(
+                        com.jabiz.quizbuks.audience.QbAudience.CRITERION, row.id(), row.version()));
                     ctx.changes().delete(QbPublications.PUBLICATION, publication.id(), publication.version());
                     ctx.put(OUTPUT, new PublicationOutput(uuid(publication.id()), PublicationStatus.DRAFT,
                         number(publication.get("revision")), null, null));
@@ -432,6 +442,7 @@ public final class PublicationProcesses {
             .step("Load the publication", LoadEntity.by(QbPublications.sponsorDataset(QbPublications.PUBLICATION),
                 PUB_ID, PUBLICATION))
             .steps(PublicationEditing::loadTiers)
+            .steps(PublicationAudience::loadCriteria)
             .steps(PublicationEditing::loadSponsor)
             .steps(PublicationEditing::loadSponsorMethods)
             .steps(b -> PublicationEditing.loadVersion(b, ctx -> {
@@ -486,6 +497,15 @@ public final class PublicationProcesses {
         UUID publicationId = uuid(ctx.changes().insert(QbPublications.PUBLICATION, values));
         List<UUID> tierIds = new ArrayList<>();
         writeTiers(ctx, publicationId, PublisherKind.SPONSOR, ctx.request().actorId(), List.of(), tiers, tierIds);
+        // Q47: the conditions travel with the copy, as its policy does (an invited one has none).
+        (Audience.INVITED.equals(source.get("audience")) ? List.<EntityInstance>of()
+            : list(ctx, PublicationAudience.CRITERIA)).forEach(row -> {
+            Map<String, Object> condition = new LinkedHashMap<>(PublicationAudience.copyOf(row));
+            condition.put("publicationId", publicationId);
+            condition.put("publisherKind", PublisherKind.SPONSOR);
+            condition.put("publisherId", ctx.request().actorId());
+            ctx.changes().insert(com.jabiz.quizbuks.audience.QbAudience.CRITERION, condition);
+        });
         ctx.put(OUTPUT, output(ctx, messages, publicationId, 1, ctx.opTime(), values, tiers, version, tierIds));
     }
 

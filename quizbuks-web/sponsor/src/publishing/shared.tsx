@@ -16,7 +16,9 @@ import { useTranslation } from 'react-i18next'
 import { readVersions } from '../content/api'
 import { versionsQuery } from '../content/paths'
 import { SPONSOR } from '../messages'
+import { criterionOf, type Condition } from '../qb/audience'
 import { formatKudos } from '../qb/kudos'
+import { QB } from '../qb/messages'
 import {
   problemPlace,
   readAudiences,
@@ -157,6 +159,8 @@ export function useVersionOf(quizId: string | null, versionId: string | null) {
 
 export interface SummaryValues {
   name: string
+  /** Q47: the matching conditions of a public publication; undefined while unknown (not shown). */
+  conditions?: readonly Condition[]
   quizTitle: string | null
   versionLabel: string | null
   regions: readonly string[]
@@ -182,6 +186,19 @@ export interface SummaryValues {
 }
 
 /** What a publication is: its version, audience, time, marks and money, and its tiers. Amounts in Kudos. */
+/** The conditions in a line each criterion: "Gender: Female, Other · Age: 20–39 years"; none is everybody. */
+export function useConditionsText(): (conditions: readonly Condition[]) => string {
+  const { t } = useTranslation(SPONSOR)
+  const { t: tQb } = useTranslation(QB)
+  return (conditions) => conditions.length === 0 ? t('publishing.audience.everybody') : conditions.map((condition) => {
+    const label = tQb(`audience.${condition.key}`)
+    const shown = criterionOf(condition.key)?.kind === 'RANGE'
+      ? tQb('audience.years', { min: condition.min, max: condition.max })
+      : (condition.options ?? []).map((option) => tQb(`audience.${condition.key}Options.${option}`)).join(', ')
+    return `${label}: ${shown}`
+  }).join(' · ')
+}
+
 export function PublicationSummary({ values }: { values: SummaryValues }) {
   const { t } = useTranslation(SPONSOR)
   const regionsText = useRegionsText()
@@ -191,6 +208,7 @@ export function PublicationSummary({ values }: { values: SummaryValues }) {
   const methodLabel = useRewardMethodLabel()
   const audienceLabel = useAudienceLabel()
   const deliveryLabel = useDigitalDeliveryLabel()
+  const conditionsText = useConditionsText()
   const method = values.rewardMethod ?? 'PLATFORM'
   const delivery = values.digitalDelivery ?? null
   const audience = values.audience ?? 'PUBLIC'
@@ -207,6 +225,9 @@ export function PublicationSummary({ values }: { values: SummaryValues }) {
       value: <span data-testid="summary-audience">{audienceLabel(audience)}</span> },
     ...(audience === 'PUBLIC'
       ? [{ key: 'regions', label: t('publishing.field.regions'), value: regionsText(values.regions) }] : []),
+    ...(audience === 'PUBLIC' && values.conditions
+      ? [{ key: 'conditions', label: t('publishing.audience.title'),
+        value: <span data-testid="summary-conditions">{conditionsText(values.conditions)}</span> }] : []),
     { key: 'period', label: t('publishing.list.period'), value: <Period startAt={values.startAt} endAt={values.endAt} /> },
     {
       key: 'timeLimit',

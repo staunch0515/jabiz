@@ -96,6 +96,8 @@ interface Options {
   redeemClaim?: () => Response
   /** Q33: the answer to opening a digital prize's content. */
   digitalOpen?: () => Response
+  /** Q47: the taker's stored answers for matching (one row per option, or the birth year). */
+  attributes?: Record<string, unknown>[]
 }
 
 /** The server as the play pages see it; records every call (path and body). */
@@ -118,6 +120,11 @@ function server(options: Options = {}) {
       case '/api/datasets/urn:jabiz:dataset:me:QbProfile/query':
         return json(200, { items: [{ id: 'p1', version: 1, attributes: { displayName: 'Mei', countryCode: 'JP',
           city: null, preferredCurrency: 'JPY', revision: 1 } }], offset: 0, limit: 1 })
+      case '/api/datasets/urn:jabiz:dataset:me:QbProfileAttribute/query':
+        return json(200, { items: (options.attributes ?? []).map((attributes, i) => ({ id: String(i), version: 1,
+          attributes })), offset: 0, limit: 100 })
+      case '/api/processes/QB_PROFILE_ATTRIBUTES_SAVE/latest':
+        return json(200, { output: { answered: (body as { profileAnswers: unknown[] }).profileAnswers.length } })
       case '/api/queries/qb.app.feed':
         return json(200, { items: options.feed ?? [CARD], offset: 0, limit: 20 })
       case '/api/queries/qb.app.publication':
@@ -695,6 +702,44 @@ describe('a publication\'s page', () => {
     expect(await screen.findByTestId('detail-verify-first')).toBeInTheDocument()
     expect(screen.queryByTestId('detail-start')).toBeNull()
     expect(posted('QB_VIEW')).toEqual([])
+  })
+})
+
+describe('customer matching (Q47)', () => {
+  it('asks for more of the profile instead of the start when the quiz aims at other people', async () => {
+    const { posted } = server({ publicationPage: () => json(200, { items: [publication({ canStart: false,
+      matched: false })], offset: 0, limit: 1 }) })
+    window.history.replaceState(null, '', `/p/${PUB}`)
+    render(<App />)
+    const notice = await screen.findByTestId('detail-not-matched')
+    expect(notice).toHaveTextContent('Telling more about yourself may let you answer it.')
+    expect(screen.queryByTestId('detail-start')).toBeNull()
+    expect(screen.queryByTestId('detail-unavailable')).toBeNull()
+    await userEvent.click(screen.getByTestId('detail-complete-profile'))
+    await waitFor(() => expect(window.location.search).toBe('?section=details'))
+    expect(window.location.pathname).toMatch(/\/account$/)
+    expect(posted('QB_ATTEMPT_START')).toEqual([])
+  })
+
+  it('shows what the taker told and saves the whole of it, a criterion left empty cleared', async () => {
+    const { posted } = server({ attributes: [
+      { criterionKey: 'interest', valueCode: 'PETS' }, { criterionKey: 'gender', valueCode: 'FEMALE' },
+      { criterionKey: 'occupation', valueCode: 'STUDENT' }] })
+    window.history.replaceState(null, '', '/account?section=details')
+    render(<App />)
+    const details = await screen.findByTestId('profile-details')
+    expect(within(details).getByTestId('details-interest-PETS')).toBeChecked()
+    expect(within(details).getByTestId('details-gender')).toHaveTextContent('Female')
+    await userEvent.type(within(details).getByTestId('details-age'), '19x95')
+    expect(within(details).getByTestId('details-age')).toHaveValue('1995')
+    await userEvent.click(within(details).getByTestId('details-interest-FOOD'))
+    await userEvent.click(within(details).getByTestId('details-interest-PETS'))
+    await expectAccessible()
+    await userEvent.click(within(details).getByTestId('details-save'))
+    expect(await within(details).findByTestId('details-saved')).toBeInTheDocument()
+    expect(posted('QB_PROFILE_ATTRIBUTES_SAVE')).toEqual([{ profileAnswers: [
+      { key: 'gender', options: ['FEMALE'] }, { key: 'age', number: 1995 }, { key: 'occupation', options: ['STUDENT'] },
+      { key: 'interest', options: ['FOOD'] }] }])
   })
 })
 

@@ -1,12 +1,13 @@
 import { i18n, useAuth } from '@jabiz/client'
 import { Alert, AlertDescription, Button, PageState } from '@jabiz/ui'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft, MailWarning, Play } from 'lucide-react'
+import { ArrowLeft, MailWarning, Play, UserRoundSearch } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
 import { playProblemText } from '../play/busy'
 import { useStartAttempt } from '../play/useStartAttempt'
+import { ACCOUNT_DETAILS_PATH } from './AccountPage'
 import { QB } from '../qb/messages'
 import { readPublication, readTiers, recordView, type PublicationView } from '../qb/play'
 import { problemText } from '../qb/problems'
@@ -61,6 +62,19 @@ function Action({ publication }: { publication: PublicationView }) {
             : t('detail.start')}
         </Button>
       </>
+    )
+  } else if (!publication.matched) {
+    // Q47: aimed at people the caller's profile does not (yet) say they are.
+    action = (
+      <Alert data-testid="detail-not-matched">
+        <UserRoundSearch aria-hidden />
+        <AlertDescription className="text-current flex flex-col items-start gap-2">
+          <span>{t('detail.notMatched')}</span>
+          <Link to={ACCOUNT_DETAILS_PATH} className="text-primary underline" data-testid="detail-complete-profile">
+            {t('detail.completeProfile')}
+          </Link>
+        </AlertDescription>
+      </Alert>
     )
   } else {
     action = (

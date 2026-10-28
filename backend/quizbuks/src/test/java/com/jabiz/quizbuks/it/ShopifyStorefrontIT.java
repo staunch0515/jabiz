@@ -1,9 +1,11 @@
 package com.jabiz.quizbuks.it;
 
 import com.jabiz.job.JobDefinition;
+import com.jabiz.quizbuks.setup.QbRoles;
 import com.jabiz.runtime.job.JobRunner;
 import com.jabiz.runtime.test.MutableClock;
 import com.jabiz.runtime.test.StubHttpServer;
+import com.jabiz.runtime.test.TestTokens;
 import com.jabiz.security.AppProxySignature;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -214,6 +216,26 @@ class ShopifyStorefrontIT extends ShopifyItSupport {
         String other = visitor();
         storefront("QBS_SF_SUBMIT", live.shop(), null, other, Map.of("publicationId", live.publicationId(),
             "visitor", other, "attemptId", passed.get("attemptId"))).expectStatus().isNotFound();
+    }
+
+    /**
+     * Q47: matching is a sponsor's (docs/quizbuks/plans/Q47-audience.md section 5): a shop's publication takes no
+     * conditions through a sponsor's processes (none of theirs: 404), and the start never asks for a profile on the
+     * storefront, whose visitors have none, even if a condition row were there.
+     */
+    @Test
+    void aShopsPublicationIsNeverMatchedByProfile() {
+        LiveShop live = liveShop("audience");
+        refill();
+        String sponsor = TestTokens.bearer(tokens, "s-audience-" + UUID.randomUUID(),
+            QbRoles.of(QbRoles.SPONSOR).permissions().toArray(String[]::new));
+        refused("QB_PUBLICATION_AUDIENCE_SAVE", sponsor, body("publicationId", live.publicationId(), "criteria",
+            List.of()), 404);
+        refused("QB_AUDIENCE_COUNT", sponsor, body("publicationId", live.publicationId()), 404);
+        execute("INSERT INTO qb_publication_criterion (criterion_id, publication_id, publisher_kind, publisher_id, "
+            + "criterion_key, value_code, version) VALUES (?, CAST(? AS uuid), 'SHOPIFY_SHOP', ?, 'gender', 'FEMALE', 1)",
+            UUID.randomUUID().toString(), live.publicationId(), live.shop());
+        assertThat(play(live, null, visitor(), RIGHT)).containsEntry("passed", true);
     }
 
     @Test
