@@ -231,11 +231,15 @@ class SignInEntriesTest {
     void theAdministrationsUsersNeverAskForTheDeletionOfTheirAccountThemselves() {
         SignInEntries entries = new SignInEntries(Map.of(
             "admin", accountDeletion(List.of("ADMIN")),
+            "wild", accountDeletion(List.of("A", "*")),
             "portal", accountDeletion(List.of("A"))), false, null);
 
         assertThat(entries.check()).filteredOn(CheckProblem::isError).extracting(p -> p.location() + ": "
-            + p.message()).containsExactly(
-                "jabiz.security.entries.admin: account-deletion cannot be on for the administration entry");
+            + p.message()).containsExactlyInAnyOrder(
+                "jabiz.security.entries.admin: account-deletion cannot be on for the administration entry or an entry"
+                    + " accepting every role",
+                "jabiz.security.entries.wild: account-deletion cannot be on for the administration entry or an entry"
+                    + " accepting every role");
         assertThat(entries.find("portal").orElseThrow().accountDeletion()).isTrue();
         // Off unless said.
         assertThat(new SignInEntries(Map.of("plain", config(List.of("A"), null, null, null, null)), false, null)

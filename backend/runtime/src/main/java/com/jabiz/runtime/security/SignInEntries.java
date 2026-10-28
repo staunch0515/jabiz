@@ -418,9 +418,11 @@ public class SignInEntries implements PlatformCheck {
             || entry.acceptedRoles().contains(ALL_ROLES))) {
             errors.add("email-link cannot be on for the administration entry or an entry accepting every role");
         }
-        // The administration's users leave through an administrator (SEC_USER_DELETION_SCHEDULE), never on their own.
-        if (entry.accountDeletion() && RequestContext.DEFAULT_ENTRY.equals(name)) {
-            errors.add("account-deletion cannot be on for the administration entry");
+        // The administration's users leave through an administrator (SEC_USER_DELETION_SCHEDULE), never on their own
+        // (decision D62 item 1): not at the administration, nor at an entry taking every role.
+        if (entry.accountDeletion() && (RequestContext.DEFAULT_ENTRY.equals(name)
+            || entry.acceptedRoles().contains(ALL_ROLES))) {
+            errors.add("account-deletion cannot be on for the administration entry or an entry accepting every role");
         }
         // Another platform's word for a person (decision D59): never for the administration nor every role; and its
         // users have no address, so they could never pass a verified-address requirement.
