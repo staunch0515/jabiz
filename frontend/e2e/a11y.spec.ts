@@ -310,7 +310,8 @@ test.describe('accessibility', () => {
     test(`the portal's sign-in, sign-up and mailed-link pages, ${appearance}`, async ({ page }) => {
       await setAppearance(page, appearance)
       await page.goto('/portal/login')
-      await expect(page.getByPlaceholder('用户名')).toBeVisible()
+      await expect(page.getByTestId('email-link-form')).toBeVisible()
+      await expect(page.getByTestId('login-user-name')).toBeVisible()
       await expect(page.locator('html')).toHaveClass(appearance === 'dark' ? /dark/ : /^(?!.*dark)/)
       await expectAccessible(page, `portal sign-in (${appearance})`, { expect })
       await page.goto('/portal/signup')

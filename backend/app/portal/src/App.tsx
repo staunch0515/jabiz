@@ -32,7 +32,7 @@ const HOME = '/orders'
 /** The second step of a sign-in through an identity provider, handed from the callback to the sign-in page. */
 let pendingStep: SignInStep | undefined
 
-const MAIL_PAGES = new Set(['/auth/verify-email', '/auth/join', '/auth/password-reset'])
+const MAIL_PAGES = new Set(['/auth/verify-email', '/auth/join', '/auth/password-reset', '/auth/email-link'])
 
 /**
  * The unsubscribe page of the portal's notifications (decision D52): `jabiz.mail.unsubscribe-paths.portal` is
@@ -155,7 +155,7 @@ function Routes() {
         pendingStep = undefined
         navigate(to, { replace: true })
       }} passwordResetPath="/password-reset"
-      signUpPath="/signup" />)
+      signUpPath="/signup" emailLink userNameLabel="email" />)
   }
   if (!signedIn) return <Redirect to="/login" />
   if (path === '/' || path === '') return <Redirect to={HOME} />
