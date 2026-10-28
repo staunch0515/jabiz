@@ -1,5 +1,6 @@
 import { Api, Refused, Store, type Answer, type Campaign, type Claim, type Started, type Submitted } from './api'
 import { format, refusalText, textsOf, type TextKey } from './messages'
+import { languageOf } from './opener'
 import { STYLES } from './styles'
 
 /**
@@ -32,14 +33,16 @@ export class QuizPlayer {
    * @param root     its shadow root, holding the opener and its styles
    * @param campaign the campaign the element read (live, with a publication)
    * @param opener   the element's button, whose text says the code once there is one
+   * @param visitor  the visitor key the element used
    */
-  constructor(host: HTMLElement, root: ShadowRoot, campaign: Campaign, opener: HTMLButtonElement) {
+  constructor(host: HTMLElement, root: ShadowRoot, campaign: Campaign, opener: HTMLButtonElement, visitor: string) {
     this.host = host
     this.campaign = campaign
     this.opener = opener
     this.texts = textsOf(host.getAttribute('locale') ?? document.documentElement.lang)
     this.api = new Api(host.getAttribute('proxy') ?? '/apps/quizbuks')
     Store.signedIn(host.getAttribute('customer'))
+    Store.adopt(visitor)
     this.dialog = h('dialog', { 'aria-label': this.t('dialog') }) as HTMLDialogElement
     this.dialog.addEventListener('close', () => this.closed())
     root.append(h('style', {}, STYLES), this.dialog)
@@ -48,6 +51,11 @@ export class QuizPlayer {
   /** Stops the clock: the element left the page. */
   stop() {
     this.stopTimer()
+  }
+
+  /** Starts the clock again, if a quiz is under way: the element is back on the page. */
+  resume() {
+    if (this.started) this.startTimer()
   }
 
   private t(key: TextKey, values?: Record<string, string | number>): string {
@@ -96,9 +104,8 @@ export class QuizPlayer {
   private result(title: string, ...body: Node[]) {
     if (this.campaign?.badge) {
       // To the landing page in the shopper's language, in a new tab: the quiz and the product stay where they are.
-      const locale = this.host.getAttribute('locale') ?? ''
-      const language = locale.startsWith('zh') ? 'zh/' : locale.startsWith('ja') ? 'ja/' : ''
-      body.push(h('p', { class: 'badge' }, h('a', { href: `${__QUIZBUKS_SITE__}/shopify-app/${language}`,
+      const language = languageOf(this.host.getAttribute('locale'))
+      body.push(h('p', { class: 'badge' }, h('a', { href: `${__QUIZBUKS_SITE__}/shopify-app/${language === 'en' ? '' : `${language}/`}`,
         target: '_blank', rel: 'noopener' }, 'Powered by QuizBuks')))
     }
     this.screen(title, ...body)

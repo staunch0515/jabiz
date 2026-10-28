@@ -13,10 +13,11 @@ import { OPENER_STYLES } from './styles'
  * keeps under 10 000 bytes, and nothing more until the shopper asks. Everything is in its shadow root: the theme's
  * styles do not reach it, and its own do not leak; fonts and the text colour are the theme's.
  */
-export class QuizElement extends HTMLElement {
+class QuizElement extends HTMLElement {
   private readonly root: ShadowRoot
   private campaign: Campaign | null = null
   private player: QuizPlayer | null = null
+  private loadingPlayer = false
 
   constructor() {
     super()
@@ -24,6 +25,8 @@ export class QuizElement extends HTMLElement {
   }
 
   async connectedCallback() {
+    // Back on the page (a theme editor detaches and attaches blocks): as it was, the quiz where it was.
+    if (this.player) return this.player.resume()
     const api = new Api(this.getAttribute('proxy') ?? '/apps/quizbuks')
     Store.signedIn(this.getAttribute('customer'))
     try {
@@ -59,13 +62,18 @@ export class QuizElement extends HTMLElement {
     this.root.replaceChildren(style, opener, status)
   }
 
-  /** Opens the quiz, loading it the first time; says so when it cannot be loaded (the button stays to try again). */
+  /**
+   * Opens the quiz, loading it the first time; says so when it cannot be loaded (the button stays, focused, to try
+   * again). The button stays enabled while loading, so that it keeps the focus; a second click then does nothing.
+   */
   private async open(opener: HTMLButtonElement, status: HTMLElement, failed: string) {
     if (!this.player) {
       // Loaded already (another block on the page opened it): at once, as the click.
       let Player = window.QuizbuksPlayer
       if (!Player) {
-        opener.disabled = true
+        if (this.loadingPlayer) return
+        this.loadingPlayer = true
+        opener.setAttribute('aria-busy', 'true')
         try {
           Player = await loadPlayer(this.getAttribute('player'))
           status.textContent = ''
@@ -73,10 +81,13 @@ export class QuizElement extends HTMLElement {
           status.textContent = failed
           return
         } finally {
-          opener.disabled = false
+          this.loadingPlayer = false
+          opener.removeAttribute('aria-busy')
         }
+        // The block left the page, or was rendered afresh, while the script loaded: that button opens nothing.
+        if (!this.isConnected || !opener.isConnected || this.player) return
       }
-      this.player = new Player(this, this.root, this.campaign!, opener)
+      this.player = new Player(this, this.root, this.campaign!, opener, Store.visitor())
     }
     this.player.open()
   }
@@ -85,7 +96,7 @@ export class QuizElement extends HTMLElement {
 let loading: Promise<typeof QuizPlayer> | null = null
 
 /** The quiz's script, added to the page once (every block on it shares it); tried again after a failure. */
-export function loadPlayer(src: string | null): Promise<typeof QuizPlayer> {
+function loadPlayer(src: string | null): Promise<typeof QuizPlayer> {
   if (window.QuizbuksPlayer) return Promise.resolve(window.QuizbuksPlayer)
   if (!src) return Promise.reject(new Error('The block has no player address'))
   loading ??= new Promise<typeof QuizPlayer>((resolve, reject) => {

@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { BLOCK_SCRIPT_LIMIT, problems } from './extension.mjs'
+import { BLOCK_SCRIPT_LIMIT, definesPlayer, problems } from './extension.mjs'
 
 let dir
 
@@ -20,7 +20,10 @@ const BLOCK = '<quizbuks-quiz></quizbuks-quiz>\n{% schema %}\n{ "name": "t:name"
   + '"javascript": "quiz.js", "settings": [{ "type": "text", "id": "x", "label": "t:settings.x" }] }\n{% endschema %}'
 
 describe('the extension against what `shopify app deploy` refuses (S4c)', () => {
-  afterEach(() => rmSync(dir, { recursive: true, force: true }))
+  afterEach(() => {
+    if (dir) rmSync(dir, { recursive: true, force: true })
+    dir = undefined
+  })
 
   it('takes an extension as Shopify does', () => {
     expect(problems(extension({
@@ -45,6 +48,23 @@ describe('the extension against what `shopify app deploy` refuses (S4c)', () => 
       'blocks/quiz.liquid: "t:name" has no entry in locales/en.default.schema.json',
       'blocks/quiz.liquid: "t:settings.x" has no entry in locales/en.default.schema.json',
     ])
+  })
+
+  it('reports a schema that is not JSON, and a text that is not a text', () => {
+    expect(problems(extension({
+      'blocks/broken.liquid': '{% schema %}\n{ "name": "t:name", }\n{% endschema %}',
+      'blocks/quiz.liquid': BLOCK,
+      'assets/quiz.js': 'x',
+      'locales/en.default.schema.json': JSON.stringify({ name: 'Quiz', settings: { x: { y: 'X' } } }),
+    }))).toEqual([
+      expect.stringMatching(/^blocks\/broken\.liquid: its schema is not JSON/),
+      'blocks/quiz.liquid: "t:settings.x" has no entry in locales/en.default.schema.json',
+    ])
+  })
+
+  it('tells a player script that defines the player from one that does not', () => {
+    expect(definesPlayer('(function () { class QuizPlayer {} window.QuizbuksPlayer = QuizPlayer })()')).toBe(true)
+    expect(definesPlayer('var QuizbuksQuizPlayer = (function () { return {} })()')).toBe(false)
   })
 
   it('reports a block script that was not built', () => {

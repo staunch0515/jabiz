@@ -149,10 +149,15 @@ describe('the storefront quiz block (S2b)', () => {
       open.click()
       const failed = document.querySelector<HTMLScriptElement>('script[src]')!
       expect(failed.src).toBe('https://cdn.shopify.com/extensions/x/assets/quiz-player.js')
-      expect(open.disabled).toBe(true)
-      failed.dispatchEvent(new Event('error'))
-      await vi.waitFor(() => expect(root.querySelector('.opener-status')!.textContent).toBe(OPENER_TEXTS.en.loadFailed))
+      // Busy, not disabled (it keeps the focus); a second click while loading adds nothing.
+      expect(open.getAttribute('aria-busy')).toBe('true')
       expect(open.disabled).toBe(false)
+      open.click()
+      expect(document.querySelectorAll('script[src]')).toHaveLength(1)
+      failed.dispatchEvent(new Event('error'))
+      await vi.waitFor(() => expect(root.querySelector('.opener-status')!.textContent)
+        .toBe(OPENER_TEXTS.en.loadFailed))
+      expect(open.hasAttribute('aria-busy')).toBe(false)
       expect(document.querySelectorAll('script[src]')).toHaveLength(0)
       expect(root.querySelector('dialog')).toBeNull()
       // Again: loaded this time (the script defines the player as it runs), and the quiz opens.
@@ -173,6 +178,24 @@ describe('the storefront quiz block (S2b)', () => {
       document.head.querySelectorAll('script[src]').forEach((s) => s.remove())
       window.QuizbuksPlayer = QuizPlayer
     }
+  })
+
+  it('carries on after the theme editor takes the block off the page and puts it back', async () => {
+    const sent = proxy({ QBS_SF_CAMPAIGN: { status: 200, body: CAMPAIGN }, QBS_SF_START: { status: 200, body: STARTED },
+      QBS_SF_SUBMIT: { status: 200, body: PASSED } })
+    const { element, root } = await mount()
+    await vi.waitFor(() => expect(root.querySelector('.open')).not.toBeNull())
+    button(root, 'Answer a quiz, get 15% off').click()
+    button(root, 'Start the quiz').click()
+    await vi.waitFor(() => expect(root.querySelector('legend')!.textContent).toBe('First?'))
+    // Off the page the clock stops; back on it, the same quiz, its clock running again, nothing read again.
+    element.remove()
+    document.body.append(element)
+    expect(root.querySelectorAll('dialog')).toHaveLength(1)
+    expect(root.querySelector('legend')!.textContent).toBe('First?')
+    vi.advanceTimersByTime(61_000)
+    await vi.waitFor(() => expect(sent.map((s) => s.process)).toContain('QBS_SF_SUBMIT'))
+    expect(sent.filter((s) => s.process === 'QBS_SF_CAMPAIGN')).toHaveLength(1)
   })
 
   it('shows the code it got again, even when today\'s codes are gone', async () => {
