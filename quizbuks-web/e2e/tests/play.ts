@@ -11,11 +11,11 @@ const SPONSOR_WALLETS = 'urn:jabiz:dataset:sponsor:QbWallet'
 const SPONSOR_TOPUPS = 'urn:jabiz:dataset:sponsor:QbTopUp'
 
 /** An approved sponsor with a balance: a top-up paid at the Stripe stub's checkout. */
-export async function fundedSponsor(request: APIRequestContext) {
+export async function fundedSponsor(request: APIRequestContext, company = unique('Quiz Co ')) {
   const email = await verifiedUser(request, 'sponsor', 'Sora')
   const token = await tokenOf(request, email, PASSWORD, 'sponsor')
   const applied = await run(request, token, 'QB_SPONSOR_APPLY', { displayName: 'Sora',
-    company: unique('Quiz Co '), acceptTerms: true })
+    company, acceptTerms: true })
   if (applied.approval === 'PENDING') {
     await run(request, await adminToken(request), 'APPROVAL_DECIDE', { requestId: applied.approvalRequestId,
       decision: 'APPROVE' })

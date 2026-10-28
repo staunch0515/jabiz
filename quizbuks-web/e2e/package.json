@@ -7,7 +7,8 @@
   "packageManager": "pnpm@10.18.0",
   "scripts": {
     "e2e": "playwright test",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "store": "playwright test -c store.config.ts"
   },
   "devDependencies": {
     "@axe-core/playwright": "4.13.0",

@@ -1,0 +1,160 @@
+name: QuizBuks store
+# The store's pictures of the takers' app (docs/quizbuks/plans/Q49d-store.md): the packaged jar on a fresh database, as
+# the e2e job starts it (quizbuks.yml), and quizbuks-web/e2e/store/screenshots.spec.ts in a phone for each language.
+# The pictures are the run's artifact, never committed. By hand (Actions → QuizBuks store → Run workflow), and on pull
+# requests that change the script, so that it is known to work before it is needed.
+on:
+  workflow_dispatch:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - 'quizbuks-web/e2e/store/**'
+      - 'quizbuks-web/e2e/store.config.ts'
+      - '.github/workflows/quizbuks-store.yml'
+
+concurrency:
+  group: quizbuks-store-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  screenshots:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: quizbuks_e2e
+          POSTGRES_USER: quizbuks
+          POSTGRES_PASSWORD: quizbuks
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U quizbuks -d quizbuks_e2e" --health-interval 5s --health-timeout 5s --health-retries 10
+      mailpit:
+        image: axllent/mailpit:v1.27.10
+        ports: ['1025:1025', '8025:8025']
+    env:
+      E2E_ADMIN_USER: admin
+      E2E_ADMIN_PASSWORD: e2e-admin-password
+      E2E_BASE_URL: http://localhost:8080
+      E2E_MAILPIT_URL: http://localhost:8025
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v5
+        with:
+          cache-read-only: true
+      # Builds the three SPAs with pnpm and packages them into the boot jar.
+      - run: ./gradlew :quizbuks:bootJar
+        working-directory: backend
+      # Japanese and Chinese in the PDFs (receipts, reports; Q9d): the fonts the image installs (deploy/quizbuks/Dockerfile).
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends fonts-ipafont-gothic fonts-droid-fallback
+      - name: Start the Stripe stub and the application
+        working-directory: backend
+        run: |
+          # Throwaway keys and webhook secrets for this run only.
+          export JABIZ_JWT_SECRET=$(openssl rand -base64 48)
+          export JABIZ_INTEGRITY_KEY=$(openssl rand -base64 48)
+          export JABIZ_MFA_KEY=$(openssl rand -base64 48)
+          export JABIZ_SEAL_KEY=$(openssl rand -base64 48)
+          export STRIPE_WEBHOOK_SECRET=whsec_$(openssl rand -hex 24)
+          export STRIPE_CONNECT_WEBHOOK_SECRET=whsec_$(openssl rand -hex 24)
+          export STRIPE_API_KEY=sk_test_e2e_throwaway
+          # The stub answers Stripe's API and signs its events with the same secrets (QP4's tests use it).
+          nohup java ../tools/quizbuks/stripe-stub/StripeStub.java 8093 http://localhost:8080/api/inbound/stripe \
+            "$STRIPE_WEBHOOK_SECRET" http://localhost:8080/api/inbound/stripe-connect "$STRIPE_CONNECT_WEBHOOK_SECRET" \
+            > ../stripe-stub.log 2>&1 &
+          # Claude is the local stub too (Q8a): it answers from the request alone and never calls the network.
+          export ANTHROPIC_API_KEY=e2e-throwaway-not-a-claude-key
+          # QuizBuks for Shopify (S1): the app's key and secret; nothing calls Shopify.
+          export SHOPIFY_API_KEY=e2e-throwaway-shopify-key
+          export SHOPIFY_API_SECRET=e2e_throwaway_shopify_$(openssl rand -hex 16)
+          nohup java ../tools/quizbuks/claude-stub/ClaudeStub.java 8094 > ../claude-stub.log 2>&1 &
+          # The tests' administrator has no second factor; the publisher of QB_SETUP's proposals and the accountant of
+          # the journal export are roles of the tests' own (QB_E2E_PUBLISHER: control.publish only; QB_E2E_FINANCE:
+          # the export without a second factor, Q9d; QB_E2E_CONTENT: publishing the legal texts, with a TOTP set up by
+          # the tests, Q7b), which the administration therefore accepts here.
+          export JABIZ_SECURITY_MFA_ADMINISTRATION=false
+          export QB_ADMIN_ROLES=ADMIN,QB_ADMIN_SUPER,QB_ADMIN_CONTENT,QB_ADMIN_FINANCE,QB_E2E_PUBLISHER,QB_E2E_FINANCE,QB_E2E_CONTENT
+          # Every test registers from the same address.
+          export JABIZ_SECURITY_SIGN_UP_RATE_LIMIT_PER_ADDRESS=1000
+          # And signs in from it, the shared administrator dozens of times (platform 16q, D47): as the platform's e2e.
+          export JABIZ_SECURITY_SIGN_IN_RATE_LIMIT_PER_USER_ADDRESS=6000
+          export JABIZ_SECURITY_SIGN_IN_RATE_LIMIT_USER_BURST=1000
+          # The daily transfers every minute (Q9c): finance's test waits for a large transfer to need review.
+          export QB_TRANSFER_RUN_CRON='0 * * * * *'
+          # The daily reconciliation every minute (Q9d): the journal export waits for a clean run after its month.
+          export QB_RECONCILE_RUN_CRON='30 * * * * *'
+          # The sponsors' analytics every minute (Q9e2): the analytics test waits for its attempts to be counted.
+          # (a privacy control: another schedule needs the end-to-end switch, which live mode refuses).
+          export QB_ANALYTICS_RUN_CRON='15 * * * * *'
+          export QB_E2E_ENABLED=true
+          export JABIZ_REPORTS_PDF_FONTS=/usr/share/fonts/opentype/ipafont-gothic/ipag.ttf,/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf
+          nohup java -Dreactor.schedulers.defaultBoundedElasticOnVirtualThreads=true \
+            -jar quizbuks/build/libs/quizbuks-0.0.1-SNAPSHOT.jar > ../quizbuks.log 2>&1 &
+          for i in $(seq 1 60); do curl -sf localhost:8080/actuator/health && exit 0; sleep 2; done
+          cat ../quizbuks.log; exit 1
+        env:
+          SPRING_R2DBC_URL: r2dbc:postgresql://localhost:5432/quizbuks_e2e
+          SPRING_R2DBC_USERNAME: quizbuks
+          SPRING_FLYWAY_URL: jdbc:postgresql://localhost:5432/quizbuks_e2e
+          SPRING_FLYWAY_USER: quizbuks
+          DB_PASSWORD: quizbuks
+          JABIZ_BOOTSTRAP_ADMIN_USER: ${{ env.E2E_ADMIN_USER }}
+          JABIZ_BOOTSTRAP_ADMIN_PASSWORD: ${{ env.E2E_ADMIN_PASSWORD }}
+          JABIZ_FILES_LOCAL_ROOT: ${{ runner.temp }}/quizbuks-files
+          # Mail to Mailpit; links on this host's root, each entry's front end below it.
+          JABIZ_MAIL_ENABLED: 'true'
+          JABIZ_MAIL_FROM: noreply@quizbuks.test
+          JABIZ_MAIL_BASE_URL: http://localhost:8080
+          SPRING_MAIL_HOST: localhost
+          SPRING_MAIL_PORT: '1025'
+          # Stripe is the stub on this machine (PayoutSettings and CheckoutRequest accept localhost).
+          QB_STRIPE_API_URL: http://localhost:8093
+          QB_STRIPE_API_HOSTS: localhost
+          QB_STRIPE_CHECKOUT_URL_PREFIX: http://localhost:8093/
+          QB_STRIPE_CONNECT_URL_PREFIX: http://localhost:8093/
+          QB_ANTHROPIC_API_URL: http://localhost:8094
+          QB_ANTHROPIC_API_HOSTS: localhost
+          QB_SPONSOR_LINK: http://localhost:8080/sponsor/
+          QB_APP_LINK: http://localhost:8080/taker/
+      - uses: pnpm/action-setup@v5
+        with:
+          package_json_file: quizbuks-web/e2e/package.json
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: quizbuks-web/e2e/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+        working-directory: quizbuks-web/e2e
+      - run: pnpm exec playwright install --with-deps chromium
+        working-directory: quizbuks-web/e2e
+      # The pictures' Japanese and Chinese.
+      - run: sudo apt-get install -y --no-install-recommends fonts-noto-cjk
+      - run: pnpm store
+        working-directory: quizbuks-web/e2e
+        env:
+          STORE_OUT: ${{ runner.temp }}/store
+      # Play's high-resolution icon (512 × 512) is the app's own.
+      - run: cp quizbuks-web/app/public/icon-512.png "$RUNNER_TEMP/store/icon-512.png"
+      - uses: actions/upload-artifact@v6
+        with:
+          name: quizbuks-store-screenshots
+          path: ${{ runner.temp }}/store/
+          retention-days: 30
+      - if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: quizbuks-store-report
+          path: |
+            quizbuks-web/e2e/test-results/
+            quizbuks.log
+            stripe-stub.log
+          retention-days: 7

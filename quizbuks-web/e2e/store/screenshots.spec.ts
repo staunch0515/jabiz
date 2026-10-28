@@ -1,0 +1,191 @@
+import { animationsSettled } from '@jabiz/ui/testing/playwright'
+import type { APIRequestContext, Browser, Page } from '@playwright/test'
+import { mkdirSync } from 'node:fs'
+import { deflateSync } from 'node:zlib'
+import { fundedSponsor, taker, untilLive } from '../tests/play'
+import { adminToken, expect, prepareQuizbuks, run, signIn, test } from '../tests/support'
+import { CONTENT, FEATURE, type Language, type StoreQuiz } from './content'
+
+/**
+ * The store's screenshots of the takers' app (docs/quizbuks/plans/Q49d-store.md): for each language a sponsor of that
+ * language publishes three quizzes, a taker answers one of them through the API (history and Kudos to show), then
+ * answers another in a phone, which is photographed page by page. The phone is the Android store app (`?shell=android`,
+ * Q49b): no install offer in the pictures. Each language's publications are paused afterwards, so the next language's
+ * home shows only its own quizzes. Not part of the e2e suite (store.config.ts); the QuizBuks store workflow runs it
+ * and keeps the pictures as its artifact, which are never committed.
+ */
+
+const OUT = process.env.STORE_OUT ?? 'store-screenshots'
+/** 1080 × 1920 pictures: Play's phone screenshots (9:16, 320–3840 px a side). */
+const PHONE = { viewport: { width: 360, height: 640 }, deviceScaleFactor: 3 }
+const ANDROID_CHROME = 'Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Mobile Safari/537.36'
+
+test.describe.configure({ mode: 'serial' })
+
+test.beforeAll(async ({ request }) => {
+  await prepareQuizbuks(request)
+})
+
+/** A cover: a diagonal blend of the quiz's two colours, as a PNG. */
+function cover([from, to]: StoreQuiz['colours'], width = 960, height = 540): Buffer {
+  const raw = Buffer.alloc((width * 3 + 1) * height)
+  for (let y = 0; y < height; y++) {
+    const row = y * (width * 3 + 1)
+    for (let x = 0; x < width; x++) {
+      const t = (x + y) / (width + height)
+      for (let c = 0; c < 3; c++) raw[row + 1 + x * 3 + c] = Math.round(from[c] + (to[c] - from[c]) * t)
+    }
+  }
+  const crcTable = Array.from({ length: 256 }, (_, n) => {
+    let c = n
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1
+    return c >>> 0
+  })
+  const crc = (data: Buffer) => {
+    let c = 0xffffffff
+    for (const byte of data) c = crcTable[(c ^ byte) & 0xff] ^ (c >>> 8)
+    return (c ^ 0xffffffff) >>> 0
+  }
+  const chunk = (kind: string, data: Buffer) => {
+    const body = Buffer.concat([Buffer.from(kind, 'ascii'), data])
+    const length = Buffer.alloc(4)
+    length.writeUInt32BE(data.length)
+    const sum = Buffer.alloc(4)
+    sum.writeUInt32BE(crc(body))
+    return Buffer.concat([length, body, sum])
+  }
+  const header = Buffer.alloc(13)
+  header.writeUInt32BE(width, 0)
+  header.writeUInt32BE(height, 4)
+  header.set([8, 2, 0, 0, 0], 8)
+  return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk('IHDR', header),
+    chunk('IDAT', deflateSync(raw, { level: 9 })), chunk('IEND', Buffer.alloc(0))])
+}
+
+/** A live publication of a store quiz: three questions, a point each; two pass, three earn the most. */
+async function publish(request: APIRequestContext, token: string, quiz: StoreQuiz): Promise<string> {
+  const uploaded = await request.post(`/api/files?policy=${encodeURIComponent('qb.content.image')}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    multipart: { file: { name: 'cover.png', mimeType: 'image/png', buffer: cover(quiz.colours) } },
+  })
+  expect(uploaded.status(), await uploaded.text()).toBeLessThan(300)
+  const saved = await run(request, token, 'QB_QUIZ_SAVE', { title: quiz.title, intro: quiz.intro,
+    cover: (await uploaded.json()).fileId, timeLimitSec: 300 })
+  const quizId = saved.quizId as string
+  for (const question of quiz.questions) {
+    await run(request, token, 'QB_QUESTION_SAVE', { quizId, stem: question.stem, points: 1,
+      options: question.options.map((text, n) => ({ text, correct: n === 0 })) })
+  }
+  const version = await run(request, token, 'QB_QUIZ_PUBLISH_VERSION', { quizId })
+  const now = Date.now()
+  const publication = await run(request, token, 'QB_PUBLICATION_SAVE', {
+    versionId: version.versionId, name: quiz.title, regions: ['GLOBAL'],
+    startAt: new Date(now - 60_000).toISOString(), endAt: new Date(now + 14 * 86_400_000).toISOString(),
+    timeLimitSec: 300, passScore: 2,
+    tiers: [{ fromScore: 0, toScore: 1, reward: 0 }, { fromScore: 2, toScore: 2, reward: quiz.reward / 2 },
+      { fromScore: 3, toScore: 3, reward: quiz.reward }],
+  })
+  const publicationId = publication.publicationId as string
+  const submitted = await run(request, token, 'QB_PUBLICATION_SUBMIT', { publicationId })
+  if (submitted.approval === 'PENDING') {
+    await run(request, await adminToken(request), 'APPROVAL_DECIDE', { requestId: submitted.approvalRequestId,
+      decision: 'APPROVE' })
+  }
+  return publicationId
+}
+
+/** Full marks through the API, as the app would submit them. */
+async function answerAll(request: APIRequestContext, token: string, publicationId: string, quiz: StoreQuiz) {
+  const started = await run(request, token, 'QB_ATTEMPT_START', { publicationId })
+  const questions = started.questions as { no: number; stem: string; options: { no: number; text: string }[] }[]
+  const answers = questions.map((q) => {
+    const right = quiz.questions.find((mine) => mine.stem === q.stem)!.options[0]
+    return { questionNo: q.no, selected: q.options.filter((o) => o.text === right).map((o) => o.no) }
+  })
+  await run(request, token, 'QB_ATTEMPT_SUBMIT', { attemptId: started.attemptId, publicationId, answers })
+}
+
+async function shoot(page: Page, language: Language, name: string) {
+  await animationsSettled(page)
+  // JPEG: Play takes no alpha channel in screenshots.
+  await page.screenshot({ path: `${OUT}/${language}/${name}.jpg`, type: 'jpeg', quality: 92, animations: 'disabled' })
+}
+
+async function phone(browser: Browser, language: Language) {
+  const context = await browser.newContext({ ...PHONE, isMobile: true, hasTouch: true, userAgent: ANDROID_CHROME,
+    locale: { ja: 'ja-JP', zh: 'zh-CN', en: 'en-US' }[language], timezoneId: 'Asia/Tokyo' })
+  return context.newPage()
+}
+
+for (const language of ['ja', 'zh', 'en'] as const) {
+  test(`the store's screenshots in ${language}`, async ({ browser, request }) => {
+    test.setTimeout(300_000)
+    mkdirSync(`${OUT}/${language}`, { recursive: true })
+    const content = CONTENT[language]
+    const sponsor = await fundedSponsor(request, content.company)
+    const publications: string[] = []
+    for (const quiz of content.quizzes) publications.push(await publish(request, sponsor.token, quiz))
+    const me = await taker(request, content.taker)
+    for (const id of publications) await untilLive(request, me.token, id)
+    await answerAll(request, me.token, publications[1], content.quizzes[1])
+
+    // The introduction a newcomer sees first (Q32), in the phone's language.
+    const page = await phone(browser, language)
+    await page.goto('/taker/?shell=android')
+    await expect(page.getByTestId('intro')).toBeVisible()
+    await shoot(page, language, '1-intro')
+
+    // The sign-in page is English (signIn's placeholders); the app is then switched to the language and reopened
+    // as the store app opens it.
+    await page.evaluate(() => window.localStorage.setItem('jabiz.language', 'en'))
+    await signIn(page, '/taker/', me.email)
+    await expect(page.getByTestId('home')).toBeVisible()
+    await page.evaluate((lang) => window.localStorage.setItem('jabiz.language', lang), language)
+    await page.goto('/taker/?shell=android')
+    await expect(page.getByTestId('feed-card').filter({ hasText: content.quizzes[0].title })).toBeVisible()
+    await expect(page.getByTestId('feed-card').filter({ hasText: content.quizzes[2].title })).toBeVisible()
+    await expect(page.getByTestId('pwa-install')).toHaveCount(0)
+    await shoot(page, language, '2-home')
+
+    const quiz = content.quizzes[0]
+    await page.getByTestId('feed-card').filter({ hasText: quiz.title }).click()
+    await expect(page.getByTestId('detail-start')).toBeVisible()
+    await shoot(page, language, '3-quiz')
+
+    await page.getByTestId('detail-start').click()
+    await expect(page).toHaveURL(/\/play\/[^/]+$/)
+    for (const [n, question] of quiz.questions.entries()) {
+      await expect(page.getByTestId('play-question')).toContainText(question.stem)
+      const saved = page.waitForResponse((r) => r.url().includes('/api/processes/QB_ATTEMPT_SAVE/') && r.ok())
+      await page.getByTestId('play-option').filter({ hasText: question.options[0] }).click()
+      await saved
+      if (n === 0) await shoot(page, language, '4-answering')
+      if (n < quiz.questions.length - 1) await page.getByTestId('play-next').click()
+    }
+    const submit = page.getByTestId('play-submit')
+    const label = (await submit.innerText()).trim()
+    await submit.click()
+    await page.getByRole('alertdialog').getByRole('button', { name: label, exact: true }).click()
+    await expect(page).toHaveURL(/\/result\/[^/]+$/)
+    await expect(page.getByTestId('result-score')).toHaveText(`${quiz.questions.length} / ${quiz.questions.length}`)
+    await page.evaluate(() => window.scrollTo(0, 0))
+    await shoot(page, language, '5-result')
+
+    await page.getByTestId('nav-history').click()
+    await expect(page.getByTestId('history-row')).toHaveCount(2)
+    await shoot(page, language, '6-history')
+
+    await page.goto('/taker/wallet')
+    await expect(page.getByTestId('wallet-earned')).toBeVisible()
+    await shoot(page, language, '7-wallet')
+
+    // The feature graphic (1024 × 500): the app's colours and the language's line.
+    const graphic = await page.context().browser()!.newPage({ viewport: { width: 1024, height: 500 } })
+    await graphic.setContent(FEATURE(language))
+    await graphic.screenshot({ path: `${OUT}/${language}/feature-graphic.jpg`, type: 'jpeg', quality: 92 })
+    await graphic.close()
+    await page.context().close()
+
+    for (const publicationId of publications) await run(request, sponsor.token, 'QB_PUBLICATION_PAUSE', { publicationId })
+  })
+}
