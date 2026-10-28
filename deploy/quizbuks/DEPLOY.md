@@ -119,7 +119,14 @@ STRIPE_CONNECT_WEBHOOK_SECRET=<whsec_…>
 
 # Claude（AI 出题；开关 qb.ai.enabled 缺省关闭）
 ANTHROPIC_API_KEY=<sk-ant-…>
+
+# QuizBuks for Shopify（S1）：Shopify 应用的 API 密钥与密钥；还没有应用时填占位，密钥至少 32 个字符（openssl rand -hex 32）
+SHOPIFY_API_KEY=<API key 或占位>
+SHOPIFY_API_SECRET=<API secret 或占位>
 ```
+
+**部署前的检查**：workflow 在服务器上改动任何东西之前，按所部署提交的 `deploy/quizbuks/server/required-env` 检查 `.env`
+（`check-env.sh`，只列出缺少或过短的变量名，不显示值）：缺少即停止，镜像不拉取、数据库不迁移。新增必需变量的提交同时把它加进这个清单。
 
 `QB_LOCAL_SECRETS=false`、`QB_STRIPE_PLACEHOLDERS=false` 已写在 compose 中：缺少任何密钥时应用拒绝启动，不会自己生成。
 **关于可信代理**：`proxy` 网络上还有其他应用（包括另一个环境）的容器，它们能直接访问本环境的容器。只信任 Caddy 的地址，它们就不能伪造客户端地址；
@@ -256,6 +263,7 @@ Run workflow，分支选该环境的分支，`image-tag` 留空。第一次启�
 
 1. **1.2 停止自动部署**：合并 1.2 上的部署 PR（推送 `1.2/quizbuks` 不再部署，手动运行须填 `deploy-1.2`）。先做这一步，以免之后 1.2 的一次推送把 1.2 部署到已迁移的库上。
 2. **补齐 `.env`**：1.3 比 1.2 多出的必需变量只有 `SHOPIFY_API_KEY` 与 `SHOPIFY_API_SECRET`（缺少即启动失败；还没有 Shopify 应用时填占位，密钥至少 32 个字符）。
+   部署前的检查会拦下缺少它们的部署；在这个检查之前（2026-10-28 staging 的第一次 1.3 部署），缺少它们时新镜像已迁移了库才启动失败，回滚到 1.2 也起不来：补上变量后重新运行部署即可。
    其余 Shopify 变量（`QB_SHOPIFY_*`）都有缺省值，见 `README.md` 的环境变量表与 `operations.md` §1。
 3. **GitHub 的 Environments**：`staging`、`production` 若设了 Deployment branches，改为允许 `1.3/quizbuks`、`1.3/quizbuks-release`（原来的 1.2 分支可以删掉）。
 4. **重置 staging**：照上一节第 0–5 步（确认对象、可选备份、停应用、删库重建、清文件、首个管理员）。不做第 6 步：下一步的部署就是第一次部署 1.3。

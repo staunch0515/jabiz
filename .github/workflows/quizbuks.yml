@@ -133,6 +133,8 @@ jobs:
       - run: tools/quizbuks/test/entrypoint.test.sh
       # The Stripe test-mode script's guard and arguments, offline (the run itself: the stripe-test-mode job).
       - run: tools/quizbuks/test/stripe-test-mode.test.sh
+      # The deploy's check of the server's .env (deploy/quizbuks/server/check-env.sh), offline.
+      - run: tools/quizbuks/test/check-env.test.sh
       - run: $COMPOSE config --quiet
       - name: No .env
         run: test ! -e deploy/quizbuks/.env
