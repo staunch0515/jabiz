@@ -134,7 +134,7 @@ jobs:
           cache-dependency-path: quizbuks-web/e2e/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
         working-directory: quizbuks-web/e2e
-      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm exec playwright install --with-deps chromium webkit
         working-directory: quizbuks-web/e2e
       # The pictures' Japanese and Chinese.
       - run: sudo apt-get install -y --no-install-recommends fonts-noto-cjk
