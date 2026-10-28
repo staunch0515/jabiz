@@ -273,12 +273,12 @@ Run workflow，分支选该环境的分支，`image-tag` 留空。第一次启�
 
 ## 之后的部署
 
-- **自动**：每次推送 `1.3/quizbuks`（staging）或 `1.3/quizbuks-release`（production）：测试（`:quizbuks:check`、入口脚本的测试、两个前端与后台扩展的检查）
-  → 构建并推送镜像（标签为提交 SHA）→ 按分支渲染站点、上传 compose 与站点 → `deploy-app.sh <APP_NAME> <SHA>`。部署失败时 `deploy-app.sh` 自动回到上一个标签。
-  两个分支各自排队，互不等待。
-- **手动**：GitHub → Actions → **QuizBuks deploy** → Run workflow，分支选环境的分支，`image-tag` 留空即测试、构建并部署该分支的最新提交。从其他分支运行时不构建、不部署。
+- **自动**：每次推送 `1.3/quizbuks`（staging）或 `1.3/quizbuks-release`（production）：构建并推送镜像（标签为提交 SHA）→ 按分支渲染站点、上传 compose 与站点 → `deploy-app.sh <APP_NAME> <SHA>`。部署失败时 `deploy-app.sh` 自动回到上一个标签。
+  两个分支各自排队，互不等待。推送不再测试：合并进这两个分支的改动已在 PR 中检查（平台的 `ci.yml` 与 `quizbuks.yml`，两者都只对 PR 运行），
+  启动检查与 `deploy-app.sh` 的健康检查拦住起不来的版本。合并前 PR 落后于目标分支时，先把目标分支合并进 PR、等检查通过再合并。
+- **手动**：GitHub → Actions → **QuizBuks deploy** → Run workflow，分支选环境的分支，`image-tag` 留空即构建并部署该分支的最新提交。从其他分支运行时不构建、不部署。
 - **回滚**：
-  - Run workflow（分支选环境的分支）时在 `image-tag` 填旧的**完整** 40 位提交 SHA：跳过测试与构建，以该提交自己的 compose 与站点模板部署这个已有的镜像。
+  - Run workflow（分支选环境的分支）时在 `image-tag` 填旧的**完整** 40 位提交 SHA：跳过构建，以该提交自己的 compose 与站点模板部署这个已有的镜像。
     早于两个环境的提交（compose 中写死了 `quizbuks`、没有站点模板）一律拒绝，以免把 production 的容器当作 staging 替换；或者
   - 在服务器上 `/opt/infra/scripts/deploy-app.sh <APP_NAME> <旧 SHA>`（用的是服务器上现有的 compose 与站点）。镜像包是私有的时先登录 GHCR（有 `read:packages` 的个人令牌）：
     workflow 的登录只在它自己的临时 Docker 配置中，部署后即删除，不影响服务器上其他应用的登录。
