@@ -339,6 +339,31 @@ Settings → Environments → 新建 `play`（建议设 Required reviewers 与 D
 
 上传密钥丢失时不影响已上架的 App（用户安装的是 Google 以应用签名密钥签的包）：在 Play Console 申请重置上传密钥，并更新上面的 secrets 与 `QUIZBUKS_ANDROID_CERT_SHA256`。
 
+## iOS App 的 apple-app-site-association（Q49c）
+
+iOS App（`quizbuks-mobile/ios`，`docs/quizbuks/plans/Q49c-ios.md`）的 Universal Links 要域名上的 `https://<域名>/.well-known/apple-app-site-association`：没有它时邮件链接在 Safari 打开。
+平台 17l 合入前由 Caddy 站点提供，同 `assetlinks.json`：
+
+1. Settings → Environments → `production` → Variables：`QUIZBUKS_IOS_APP_ID` = `<Team ID>.com.quizbuks.app`（Team ID 在 Apple Developer 的 Membership 页）。
+2. 部署一次：workflow 以 `deploy/quizbuks/apple-app-site-association.sh` 生成（只认 `/taker/*`）并上传到 `/opt/apps/<APP_NAME>/well-known/apple-app-site-association`；变量没有时删除这个文件。
+3. 确认：`curl -sI https://<域名>/.well-known/apple-app-site-association` 为 200、`Content-Type: application/json`、没有转向；Apple 的 CDN 缓存它，改了之后新装的 App 才看到（`https://app-site-association.cdn-apple.com/a/v1/<域名>` 可查 CDN 上的版本）。
+
+## iOS App 的构建与上传（Q49c）
+
+workflow `QuizBuks iOS`（`.github/workflows/quizbuks-ios.yml`，macOS 运行器）：PR 与推送时检查并构建不签名的包；在 `1.3/quizbuks` 上手动运行（Actions → QuizBuks iOS → Run workflow）时
+以 App Store Connect API 密钥自动签名并上传，App Store Connect 处理完后出现在 TestFlight。构建号是运行编号加 100。
+
+Settings → Environments → 新建 `appstore`（建议 Required reviewers 与 Deployment branches 只允许 `1.3/quizbuks`）：
+
+| 名称 | 种类 | 内容 |
+|---|---|---|
+| `APP_STORE_CONNECT_KEY_ID` | secret | App Store Connect API 密钥的 Key ID |
+| `APP_STORE_CONNECT_ISSUER_ID` | secret | 同一页的 Issuer ID |
+| `APP_STORE_CONNECT_KEY_P8` | secret | 下载的 `AuthKey_<Key ID>.p8` 的全文（只能下载一次，自己另存一份） |
+| `APPLE_TEAM_ID` | 变量 | Membership 页的 Team ID（10 位） |
+
+密钥泄露或丢失时在 App Store Connect 吊销并新建，更新上面的 secrets；已上架的 App 不受影响。
+
 ## 备份
 
 production 的数据库 `quizbuks` 按服务器的方案备份；另外备份数据卷 `quizbuks_files`（上传的文件不在数据库中），并离线保存 `JABIZ_INTEGRITY_KEY`、`JABIZ_MFA_KEY` 与 `JABIZ_SEAL_KEY`。
