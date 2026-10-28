@@ -4613,3 +4613,19 @@ SPA 的 CSP 固定为 `frame-ancestors 'none'`，外部服务只按精确主机�
 **使用者**：被外部平台内嵌、入口页要给出应用 key 的应用前端。
 
 **17g 状态**：✅ 已实施。
+
+### 17h 文档发布到 GitHub Wiki（已确认 2026-10-28）
+
+**缘由**：需求方 2026-10-28 要求把文档自动同步到仓库的 GitHub Wiki（公开仓库，Wikis 已开启、首页已建）。文档分布在各线的平台与应用分支上，
+Wiki 只有一份；平台与应用各发布自己的一节，只发布最新的线。不改陈旧的 `main`，workflow 放在各自的线分支上（合并方向不变）。
+
+| # | 内容 |
+|---|---|
+| 17h-1 | `tools/wiki/sync.mjs`：按节写页面（节名 + 路径为页面名、重名即失败）、改写相对链接（文档 → Wiki 页面，其他文件 → GitHub，代码与占位不动）、每页注明来源、超过约 400 KB 的文档在标题前分页、节的目录页、`Home` 与 `_Sidebar` 中只替换本节的块 |
+| 17h-2 | `tools/wiki/publish.sh`：只有最新的线发布；克隆、同步、提交、推送，推送失败在新的 Wiki 上重做三次；Wiki 未开启或令牌无权时给出明确的错误 |
+| 17h-3 | `.github/workflows/wiki.yml`：推送到 `<线>/platform` 且改了 `docs/design`、`docs/guide`、`docs/perf`、`docs/ROADMAP.md` 或脚本时，或手动运行；`GITHUB_TOKEN`，可改用 secret `WIKI_TOKEN` |
+| 17h-4 | 测试 `tools/wiki/sync.test.mjs`（命名与重名、链接、代码与占位、标题、块、整节替换与删除、分页）与 `tools/test/wiki-publish.test.sh`（旧线不发布、工作分支拒绝、发布、没有变化不提交、推送被拒后重做），在 CI 的 `app-paths` 作业中运行；指南 `docs/guide/wiki.md`（含应用一节的写法） |
+
+**使用者**：平台文档；QuizBuks 在 `1.3/quizbuks` 上以自己的 workflow 发布 `docs/quizbuks/`（同步本阶段后另一个 PR）。
+
+**17h 状态**：✅ 已实施。
