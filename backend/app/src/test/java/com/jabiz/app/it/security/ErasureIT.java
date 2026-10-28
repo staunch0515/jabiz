@@ -209,6 +209,29 @@ class ErasureIT extends SecurityItSupport {
     }
 
     @Test
+    void anAddressTheUserOnlyEnteredKeepsItsOwnersOptOutAndMail() {
+        String name = unique("squatter");
+        String userId = create(name, "Squatter", name + "@example.com");
+        // The user entered someone else's address and never proved it.
+        String victim = unique("victim") + "@example.com";
+        bypassingTheGuard("UPDATE sec_user_version SET email = '" + victim + "', verified_email = NULL,"
+            + " registered_email = '" + victim + "' WHERE user_id = '" + userId + "'");
+        execute("INSERT INTO sys_mail_address_optout (opt_out_id, address, template, opted_out_time, version)"
+            + " VALUES (?, ?, 'it.notice', now(), 1)", UUID.randomUUID().toString(), victim);
+        execute("INSERT INTO sys_mail_message (message_id, template, category, user_id, address, locale, params,"
+            + " created_time, process_seq_id, version) SELECT ?, 'it.notice', 'TRANSACTIONAL', NULL, ?, 'en', '{}',"
+            + " now(), max(process_seq_id), 1 FROM op_process", UUID.randomUUID().toString(), victim);
+
+        erase(userId);
+        deliverer.deliverPending().block();
+
+        assertThat(query("SELECT * FROM sys_mail_address_optout WHERE address = ?", victim)).hasSize(1);
+        assertThat(query("SELECT * FROM sys_mail_message WHERE address = ?", victim)).hasSize(1);
+        assertThat(query("SELECT email FROM sec_user_version WHERE user_id = ?::uuid", userId))
+            .extracting(row -> row.get("email")).containsOnlyNulls();
+    }
+
+    @Test
     void aLegalHoldOnTheUserKeepsTheAccount() {
         String name = unique("held");
         String userId = create(name, "Held", name + "@example.com");
@@ -255,6 +278,8 @@ class ErasureIT extends SecurityItSupport {
         Map<String, Object> output = (Map<String, Object>) post("/api/processes/SEC_USER_CREATE/latest", admin(),
             input).expectStatus().isOk().expectBody(MAP).returnResult().getResponseBody().get("output");
         String userId = (String) output.get("userId");
+        // The address proven, as a mailed link would (only verified addresses are the user's to erase).
+        bypassingTheGuard("UPDATE sec_user_version SET verified_email = email WHERE user_id = '" + userId + "'");
         // A role, so that the entry accepts the user.
         assign(userId, createRole(unique("ROLE"), "audit.read"), null);
         return userId;
