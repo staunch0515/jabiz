@@ -222,6 +222,21 @@ jobs:
           else
             echo "no Android app configured for this environment"
           fi
+      # The iOS app's apple-app-site-association (docs/quizbuks/plans/Q49c-ios.md), the same way: only with the
+      # environment's variable QUIZBUKS_IOS_APP_ID (<Team ID>.com.quizbuks.app); without it the upload removes it.
+      - name: Render the iOS app's site association
+        env:
+          IOS_APP_ID: ${{ vars.QUIZBUKS_IOS_APP_ID }}
+        run: |
+          if [ ! -f deploy/quizbuks/apple-app-site-association.sh ]; then
+            # A commit from before Q49c (a rollback): its site does not serve the file, the server's is left as it is.
+            touch apple-app-site-association.keep
+          elif [ -n "$IOS_APP_ID" ]; then
+            bash deploy/quizbuks/apple-app-site-association.sh "$IOS_APP_ID" > apple-app-site-association
+            cat apple-app-site-association
+          else
+            echo "no iOS app configured for this environment"
+          fi
       # The site is imported by the server's shared Caddy: one that does not parse would break the reload for every
       # application on the server, so it is checked here before it is uploaded.
       - name: Validate the Caddy site
@@ -251,7 +266,7 @@ jobs:
             "$SERVER_USER@$SERVER_HOST:/opt/apps/$APP_NAME/deploy-check/"
           ssh "$SERVER_USER@$SERVER_HOST" "sh /opt/apps/$APP_NAME/deploy-check/check-env.sh /opt/apps/$APP_NAME/.env \
             /opt/apps/$APP_NAME/deploy-check/required-env"
-      # Only the compose file, the site, the maintenance page and the Android asset links; the server's .env and the
+      # Only the compose file, the site, the maintenance page and the store apps' statements; the server's .env and the
       # maintenance lock file are never touched. A commit from before the maintenance page (a rollback) leaves the page
       # on the server as it is.
       - name: Upload deploy files
@@ -267,6 +282,12 @@ jobs:
             scp assetlinks.json "$SERVER_USER@$SERVER_HOST:/opt/apps/$APP_NAME/well-known/assetlinks.json"
           elif [ ! -f assetlinks.keep ]; then
             ssh "$SERVER_USER@$SERVER_HOST" "rm -f /opt/apps/$APP_NAME/well-known/assetlinks.json"
+          fi
+          if [ -f apple-app-site-association ]; then
+            ssh "$SERVER_USER@$SERVER_HOST" "mkdir -p /opt/apps/$APP_NAME/well-known"
+            scp apple-app-site-association "$SERVER_USER@$SERVER_HOST:/opt/apps/$APP_NAME/well-known/apple-app-site-association"
+          elif [ ! -f apple-app-site-association.keep ]; then
+            ssh "$SERVER_USER@$SERVER_HOST" "rm -f /opt/apps/$APP_NAME/well-known/apple-app-site-association"
           fi
       # One session: the environment's .env must name this environment (a copied .env naming the other one would make
       # compose replace that environment's containers); the registry login goes into a Docker configuration of this

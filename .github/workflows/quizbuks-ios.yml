@@ -1,0 +1,137 @@
+name: QuizBuks iOS
+# The iOS store app of the takers' app (docs/quizbuks/plans/Q49c-ios.md, quizbuks-mobile/ios): pull requests and pushes
+# check the shell against the app and the site association and build it unsigned on macOS. A manual run on the line
+# branch archives it signed (automatic signing with the App Store Connect API key, no Mac or certificate by hand) and
+# uploads it to App Store Connect, where it appears in TestFlight.
+on:
+  push:
+    branches: ['[0-9]*.[0-9]*/quizbuks']
+    paths:
+      - 'quizbuks-mobile/ios/**'
+      - 'deploy/quizbuks/apple-app-site-association.sh'
+      - 'tools/quizbuks/test/apple-app-site-association.test.sh'
+      - 'quizbuks-web/app/src/shell.ts'
+      - 'quizbuks-mobile/android/twa-manifest.json'
+      - '.github/workflows/quizbuks-ios.yml'
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - 'quizbuks-mobile/ios/**'
+      - 'deploy/quizbuks/apple-app-site-association.sh'
+      - 'tools/quizbuks/test/apple-app-site-association.test.sh'
+      - 'quizbuks-web/app/src/shell.ts'
+      - 'quizbuks-mobile/android/twa-manifest.json'
+      - '.github/workflows/quizbuks-ios.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: quizbuks-ios-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  ios:
+    runs-on: macos-15
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: quizbuks-mobile/ios
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v5
+        with:
+          package_json_file: quizbuks-mobile/ios/package.json
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: quizbuks-mobile/ios/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - name: The shell agrees with the app and the Android shell
+        run: pnpm test
+      - name: The site association
+        run: ../../tools/quizbuks/test/apple-app-site-association.test.sh
+      # The newest Xcode on the image: App Store Connect takes uploads built with a recent SDK only.
+      - name: Choose Xcode
+        run: |
+          xcode="$(ls -d /Applications/Xcode_*.app | grep -vi beta | sort -V | tail -1)"
+          sudo xcode-select -s "$xcode"
+          xcodebuild -version
+      # The generated files (the web folder, capacitor.config.json in the app, the Swift package) are not committed.
+      - run: pnpm sync
+      - name: Build (unsigned)
+        if: github.event_name != 'workflow_dispatch'
+        run: |
+          xcodebuild -project xcode/App/App.xcodeproj -scheme App -configuration Release \
+            -destination 'generic/platform=iOS' -derivedDataPath "$RUNNER_TEMP/derived" \
+            CODE_SIGNING_ALLOWED=NO build
+
+  # Signed and uploaded, from the line branch only; the key and the team are the GitHub Environment "appstore"'s
+  # (deploy/quizbuks/DEPLOY.md "iOS"). The build number is the run number plus 100, larger at every upload.
+  release:
+    if: github.event_name == 'workflow_dispatch'
+    needs: ios
+    runs-on: macos-15
+    timeout-minutes: 40
+    environment: appstore
+    defaults:
+      run:
+        working-directory: quizbuks-mobile/ios
+    steps:
+      - name: Only from the line branch
+        if: github.ref != 'refs/heads/1.3/quizbuks'
+        working-directory: .
+        run: |
+          echo "::error::release builds only from 1.3/quizbuks, not ${{ github.ref_name }}"
+          exit 1
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v5
+        with:
+          package_json_file: quizbuks-mobile/ios/package.json
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: quizbuks-mobile/ios/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - name: Choose Xcode
+        run: |
+          xcode="$(ls -d /Applications/Xcode_*.app | grep -vi beta | sort -V | tail -1)"
+          sudo xcode-select -s "$xcode"
+          xcodebuild -version
+      - run: pnpm sync
+      - name: Archive and upload to App Store Connect
+        env:
+          KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          KEY_P8: ${{ secrets.APP_STORE_CONNECT_KEY_P8 }}
+          TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+        run: |
+          missing=
+          [ -n "$KEY_ID" ] || missing="$missing APP_STORE_CONNECT_KEY_ID"
+          [ -n "$ISSUER_ID" ] || missing="$missing APP_STORE_CONNECT_ISSUER_ID"
+          [ -n "$KEY_P8" ] || missing="$missing APP_STORE_CONNECT_KEY_P8"
+          [ -n "$TEAM_ID" ] || missing="$missing APPLE_TEAM_ID(variable)"
+          if [ -n "$missing" ]; then
+            echo "::error::not set for the environment appstore:$missing"
+            exit 1
+          fi
+          if [[ ! $TEAM_ID =~ ^[A-Z0-9]{10}$ ]]; then echo "::error::APPLE_TEAM_ID is not a Team ID"; exit 1; fi
+          # The key only in the runner's temporary directory, removed with the runner.
+          key="$RUNNER_TEMP/AuthKey.p8"
+          printf '%s\n' "$KEY_P8" > "$key"
+          auth=(-allowProvisioningUpdates -authenticationKeyPath "$key" -authenticationKeyID "$KEY_ID"
+            -authenticationKeyIssuerID "$ISSUER_ID")
+          build=$((GITHUB_RUN_NUMBER + 100))
+          xcodebuild -project xcode/App/App.xcodeproj -scheme App -configuration Release \
+            -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/QuizBuks.xcarchive" \
+            -derivedDataPath "$RUNNER_TEMP/derived" "${auth[@]}" \
+            DEVELOPMENT_TEAM="$TEAM_ID" CURRENT_PROJECT_VERSION="$build" archive
+          cp ExportOptions.plist "$RUNNER_TEMP/ExportOptions.plist"
+          /usr/libexec/PlistBuddy -c "Add :teamID string $TEAM_ID" "$RUNNER_TEMP/ExportOptions.plist"
+          xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/QuizBuks.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" -exportPath "$RUNNER_TEMP/export" "${auth[@]}"
+          rm -f "$key"
+          echo "build $build uploaded; it appears in TestFlight once App Store Connect has processed it"

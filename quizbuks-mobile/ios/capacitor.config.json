@@ -1,0 +1,16 @@
+{
+  "appId": "com.quizbuks.app",
+  "appName": "QuizBuks",
+  "webDir": "www",
+  "server": {
+    "url": "https://quizbuks.com/taker/?shell=ios",
+    "allowNavigation": []
+  },
+  "ios": {
+    "path": "xcode",
+    "appendUserAgent": "QuizBuksApp/ios",
+    "contentInset": "never",
+    "scheme": "QuizBuks",
+    "limitsNavigationsToAppBoundDomains": false
+  }
+}
