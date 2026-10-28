@@ -141,7 +141,7 @@ Q2、Q5、Q6 的页面合为下列阶段（另含平台的 PG-1）；各阶段�
 
 ### 5.1 1.2/quizbuks 的改动向前合并到 1.3/quizbuks
 
-线内的合并方向是 `1.2/quizbuks` → `1.3/quizbuks`（只合并，不变基、不拣选；17 §2）。截至 2026-10-27，`1.2/quizbuks` 上有六次合并还没进 `1.3/quizbuks`（平台 16zk 已经经 `1.3/platform` 进来，staunch0515/jabiz#278、#280）：
+线内的合并方向是 `1.2/quizbuks` → `1.3/quizbuks`（只合并，不变基、不拣选；17 §2）。截至 2026-10-27，`1.2/quizbuks` 上有八次合并还没进 `1.3/quizbuks`（平台 16zk 已经经 `1.3/platform` 进来，staunch0515/jabiz#278、#280）：
 
 | PR | 内容 | 合并时要注意 |
 |---|---|---|
@@ -151,9 +151,11 @@ Q2、Q5、Q6 的页面合为下列阶段（另含平台的 PG-1）；各阶段�
 | #272 | Q41 招商网站语言下拉、"开始答题"打开已安装的 App、联系邮箱 `quizbuks@gmail.com`、`qb.support.email` 的缺省 | 招商网站与 App 的前端；`QbParams` 的缺省值与 `SetupIT`、场景快照 `setup.snapshot.json` |
 | #276 | 平台决策改号 D60 → D61 的 QuizBuks 引用 | 只有注释与文档；1.3 的 D60 是应用代理（17d），合并后 QuizBuks 文档中 "D61" 指 Facebook/LINE 的决策，"D60" 指应用代理 |
 | #279 | `deploy/quizbuks/DEPLOY.md`：演练前重置 staging | 只有文档；1.3 若改过部署文档的同一节，照两边合起来 |
+| #283 | 维护模式：Caddy 站点按锁文件返回维护页，workflow 校验并上传维护页 | 部署文件与 DEPLOY.md；1.3 的部署 workflow 若改过同一步骤，照两边合起来 |
+| #286 | 隐私政策草稿 `docs/quizbuks/legal/` | 1.3 已以自己的版本加入（多了店员 Q39）：同名文件冲突时**保留 1.3 的版本**，再看 1.2 之后是否改过正文 |
 
 步骤：从 `1.3/quizbuks` 建 `1.3/quizbuks-sync-1.2`，`git merge origin/1.2/quizbuks`，解决冲突，跑 `./gradlew :quizbuks:check`（含 `platformCheck` 与 `VerifiedEmailWritesIT`）、两个前端与招商网站的检查，PR 到 `1.3/quizbuks`。
-没有迁移（这六次合并都不加迁移），不需要改迁移号。合并之后 1.2 上再有的修复照同样的方向继续合并。
+没有迁移（这八次合并都不加迁移），不需要改迁移号。合并之后 1.2 上再有的修复照同样的方向继续合并。
 
 ### 5.2 Q44 公开问卷页面
 
