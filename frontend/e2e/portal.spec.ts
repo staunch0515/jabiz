@@ -75,7 +75,7 @@ test('the portal accepts its own customers only, and its mailed links open at it
   await page.goto(`${PORTAL}login`)
   // A mailed link first, then the password with the address as the name (phase 17m).
   await expect(page.getByTestId('email-link-form')).toBeVisible()
-  await expect(page.getByTestId('login-user-name')).toHaveAttribute('placeholder', '邮箱')
+  await expect(page.getByTestId('login-user-name')).toHaveAttribute('placeholder', '电子邮箱')
   await page.getByTestId('login-user-name').fill(process.env.E2E_ADMIN_USER ?? 'admin')
   await page.getByPlaceholder('密码').fill(process.env.E2E_ADMIN_PASSWORD ?? 'admin-password-1')
   await page.getByRole('button', { name: '登录', exact: true }).click()
