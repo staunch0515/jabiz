@@ -187,14 +187,15 @@ public class AccountErasure {
                 .then(Mono.defer(() -> record(ctx, user)));
         }
 
-        /** The opt-outs of mail of the user's addresses (an ordinary table, kept by address): removed. */
+        /**
+         * The opt-outs of mail of the user's address (an ordinary table, kept by address): removed, when the user has
+         * proven the address is theirs. Not an address they only entered (anyone can register with someone else's,
+         * then delete the account), nor one they proved before moving to another (it may be someone else's now).
+         */
         private Flux<EntityInstance> optOuts(EntityInstance user) {
             List<Object> addresses = new java.util.ArrayList<>();
-            for (String field : List.of("email", "verifiedEmail", "registeredEmail")) {
-                Object address = user.get(field);
-                if (address != null && !addresses.contains(address.toString().toLowerCase(java.util.Locale.ROOT))) {
-                    addresses.add(address.toString().toLowerCase(java.util.Locale.ROOT));
-                }
+            if (SecurityEntities.emailVerified(user)) {
+                addresses.add(user.get("email").toString().toLowerCase(java.util.Locale.ROOT));
             }
             if (addresses.isEmpty()) {
                 return Flux.empty();

@@ -33,7 +33,7 @@ const en = {
       '3. Follow it under *My orders*.',
     ].join('\n'),
   },
-  account: { title: 'Account', mfa: 'Two-step verification' },
+  account: { title: 'Account', mfa: 'Two-step verification', deletion: 'Delete your account' },
   notFound: 'This page does not exist.',
   failed: 'Something went wrong. Please try again.',
 }
@@ -68,7 +68,7 @@ const zh: typeof en = {
       '3. 在*我的订单*中查看进度。',
     ].join('\n'),
   },
-  account: { title: '账户', mfa: '两步验证' },
+  account: { title: '账户', mfa: '两步验证', deletion: '删除账号' },
   notFound: '页面不存在。',
   failed: '出错了，请重试。',
 }
@@ -103,7 +103,7 @@ const ja: typeof en = {
       '3. *注文履歴*で状況を確認できます。',
     ].join('\n'),
   },
-  account: { title: 'アカウント', mfa: '2 段階認証' },
+  account: { title: 'アカウント', mfa: '2 段階認証', deletion: 'アカウントの削除' },
   notFound: 'このページは存在しません。',
   failed: 'エラーが発生しました。もう一度お試しください。',
 }

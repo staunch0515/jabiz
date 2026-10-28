@@ -122,15 +122,25 @@ public class SignInEntries implements PlatformCheck {
      * @param appPath              the root of the entry's frontend, which mailed links lead below (decision D43 item 4)
      * @param session              its sessions: lifetime, idle end and persistence (phase 16m)
      * @param externalToken        the external token provider people sign in with here (decision D59); null: none
+     * @param accountDeletion      whether users of this entry may ask for the deletion of their account here, signed
+     *                             in or from a mailed link (section 17.5; decision D62)
      */
     public record Entry(String name, Set<String> acceptedRoles, boolean selfRegistration, Set<String> registrationRoles,
-        boolean requireVerifiedEmail, String appPath, Session session, boolean emailLink, String externalToken) {
+        boolean requireVerifiedEmail, String appPath, Session session, boolean emailLink, String externalToken,
+        boolean accountDeletion) {
 
         public Entry {
             acceptedRoles = Set.copyOf(acceptedRoles);
             registrationRoles = Set.copyOf(registrationRoles);
             Objects.requireNonNull(session, "session must not be null");
             externalToken = externalToken == null || externalToken.isBlank() ? null : externalToken.trim();
+        }
+
+        /** An entry where nobody asks for the deletion of their account. */
+        public Entry(String name, Set<String> acceptedRoles, boolean selfRegistration, Set<String> registrationRoles,
+            boolean requireVerifiedEmail, String appPath, Session session, boolean emailLink, String externalToken) {
+            this(name, acceptedRoles, selfRegistration, registrationRoles, requireVerifiedEmail, appPath, session,
+                emailLink, externalToken, false);
         }
 
         /** An entry without sign-in by an external token (decision D59). */
@@ -165,11 +175,19 @@ public class SignInEntries implements PlatformCheck {
 
     /** An entry as configured; every item optional. */
     public record Config(List<String> acceptedRoles, Boolean selfRegistration, List<String> registrationRoles,
-        Boolean requireVerifiedEmail, String appPath, SessionConfig session, Boolean emailLink, String externalToken) {
+        Boolean requireVerifiedEmail, String appPath, SessionConfig session, Boolean emailLink, String externalToken,
+        Boolean accountDeletion) {
 
         /** Binding takes this one (a second constructor would leave the binder without a choice). */
         @ConstructorBinding
         public Config {
+        }
+
+        public Config(List<String> acceptedRoles, Boolean selfRegistration, List<String> registrationRoles,
+            Boolean requireVerifiedEmail, String appPath, SessionConfig session, Boolean emailLink,
+            String externalToken) {
+            this(acceptedRoles, selfRegistration, registrationRoles, requireVerifiedEmail, appPath, session, emailLink,
+                externalToken, null);
         }
 
         public Config(List<String> acceptedRoles, Boolean selfRegistration, List<String> registrationRoles,
@@ -400,6 +418,12 @@ public class SignInEntries implements PlatformCheck {
             || entry.acceptedRoles().contains(ALL_ROLES))) {
             errors.add("email-link cannot be on for the administration entry or an entry accepting every role");
         }
+        // The administration's users leave through an administrator (SEC_USER_DELETION_SCHEDULE), never on their own
+        // (decision D62 item 1): not at the administration, nor at an entry taking every role.
+        if (entry.accountDeletion() && (RequestContext.DEFAULT_ENTRY.equals(name)
+            || entry.acceptedRoles().contains(ALL_ROLES))) {
+            errors.add("account-deletion cannot be on for the administration entry or an entry accepting every role");
+        }
         // Another platform's word for a person (decision D59): never for the administration nor every role; and its
         // users have no address, so they could never pass a verified-address requirement.
         if (entry.externalToken() != null) {
@@ -458,7 +482,7 @@ public class SignInEntries implements PlatformCheck {
     }
 
     private Entry entry(String name, Config config) {
-        Config c = config == null ? new Config(null, null, null, null, null, null, null, null) : config;
+        Config c = config == null ? new Config(null, null, null, null, null, null, null, null, null) : config;
         SessionConfig s = c.session() == null ? new SessionConfig(null, null, null) : c.session();
         Session session = new Session(s.refreshTokenTtl() == null ? defaults.refreshTokenTtl() : s.refreshTokenTtl(),
             s.idleTimeout() == null ? defaults.idleTimeout() : s.idleTimeout(),
@@ -466,7 +490,7 @@ public class SignInEntries implements PlatformCheck {
         return new Entry(name, trimmed(c.acceptedRoles()), Boolean.TRUE.equals(c.selfRegistration()),
             trimmed(c.registrationRoles()), Boolean.TRUE.equals(c.requireVerifiedEmail()),
             c.appPath() == null ? "/" : c.appPath().trim(), session, Boolean.TRUE.equals(c.emailLink()),
-            c.externalToken());
+            c.externalToken(), Boolean.TRUE.equals(c.accountDeletion()));
     }
 
     private static Set<String> trimmed(List<String> values) {

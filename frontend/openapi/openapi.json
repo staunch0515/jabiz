@@ -289,6 +289,101 @@
         },
         "type" : "object"
       },
+      "DeletionCancelled" : {
+        "properties" : {
+          "requestId" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "DeletionLinkConfirm" : {
+        "properties" : {
+          "acknowledgedNotices" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "token" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "DeletionLinkRequest" : {
+        "properties" : {
+          "email" : {
+            "type" : "string"
+          },
+          "entry" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "DeletionPending" : {
+        "properties" : {
+          "channel" : {
+            "type" : "string"
+          },
+          "dueTime" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "requestId" : {
+            "type" : "string"
+          },
+          "requestedTime" : {
+            "format" : "date-time",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "DeletionRequest" : {
+        "properties" : {
+          "acknowledgedNotices" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "currentPassword" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "DeletionRequested" : {
+        "properties" : {
+          "dueTime" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "requestId" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "DeletionStatus" : {
+        "properties" : {
+          "available" : {
+            "type" : "boolean"
+          },
+          "notices" : {
+            "items" : {
+              "$ref" : "#/components/schemas/NoticeView"
+            },
+            "type" : "array"
+          },
+          "pending" : {
+            "$ref" : "#/components/schemas/DeletionPending"
+          }
+        },
+        "type" : "object"
+      },
       "Device" : {
         "properties" : {
           "browser" : {
@@ -1779,6 +1874,17 @@
         },
         "type" : "object"
       },
+      "NoticeView" : {
+        "properties" : {
+          "code" : {
+            "type" : "string"
+          },
+          "message" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "Options" : {
         "properties" : {
           "charset" : {
@@ -3143,6 +3249,114 @@
         "tags" : [ "audit-controller" ]
       }
     },
+    "/api/auth/account-deletion" : {
+      "post" : {
+        "operationId" : "requestLink",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/DeletionLinkRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "202" : {
+            "description" : "Accepted"
+          }
+        },
+        "tags" : [ "account-deletion-controller" ]
+      }
+    },
+    "/api/auth/account-deletion/confirm" : {
+      "post" : {
+        "operationId" : "confirmLink",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/DeletionLinkConfirm"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/DeletionRequested"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "account-deletion-controller" ]
+      }
+    },
+    "/api/auth/account/deletion" : {
+      "get" : {
+        "operationId" : "status",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/DeletionStatus"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "account-deletion-controller" ]
+      },
+      "post" : {
+        "operationId" : "requestDeletion",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/DeletionRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/DeletionRequested"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "account-deletion-controller" ]
+      }
+    },
+    "/api/auth/account/deletion/cancel" : {
+      "post" : {
+        "operationId" : "cancelDeletion",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/DeletionCancelled"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "account-deletion-controller" ]
+      }
+    },
     "/api/auth/account/identities" : {
       "get" : {
         "operationId" : "mine_2",
@@ -3765,7 +3979,7 @@
     },
     "/api/auth/mfa" : {
       "get" : {
-        "operationId" : "status",
+        "operationId" : "status_1",
         "responses" : {
           "200" : {
             "content" : {

@@ -84,6 +84,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/auth/account-deletion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["requestLink"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/account-deletion/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["confirmLink"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/account/deletion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["status"];
+        put?: never;
+        post: operations["requestDeletion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/account/deletion/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["cancelDeletion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/account/identities": {
         parameters: {
             query?: never;
@@ -507,7 +571,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["status"];
+        get: operations["status_1"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1843,6 +1907,39 @@ export interface components {
             writeRequiresMfa?: boolean;
             writeRequiresVerifiedEmail?: boolean;
         };
+        DeletionCancelled: {
+            requestId?: string;
+        };
+        DeletionLinkConfirm: {
+            acknowledgedNotices?: string[];
+            token?: string;
+        };
+        DeletionLinkRequest: {
+            email?: string;
+            entry?: string;
+        };
+        DeletionPending: {
+            channel?: string;
+            /** Format: date-time */
+            dueTime?: string;
+            requestId?: string;
+            /** Format: date-time */
+            requestedTime?: string;
+        };
+        DeletionRequest: {
+            acknowledgedNotices?: string[];
+            currentPassword?: string;
+        };
+        DeletionRequested: {
+            /** Format: date-time */
+            dueTime?: string;
+            requestId?: string;
+        };
+        DeletionStatus: {
+            available?: boolean;
+            notices?: components["schemas"]["NoticeView"][];
+            pending?: components["schemas"]["DeletionPending"];
+        };
         Device: {
             /** @enum {string} */
             browser?: "EDGE" | "OPERA" | "SAMSUNG" | "WECHAT" | "FIREFOX" | "CHROME" | "SAFARI" | "OTHER";
@@ -2422,6 +2519,10 @@ export interface components {
             /** Format: int64 */
             total?: number;
         };
+        NoticeView: {
+            code?: string;
+            message?: string;
+        };
         Options: {
             charset?: string;
             delimiter?: string;
@@ -2968,6 +3069,116 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RevealPage"];
+                };
+            };
+        };
+    };
+    requestLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["DeletionLinkRequest"];
+            };
+        };
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    confirmLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["DeletionLinkConfirm"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeletionRequested"];
+                };
+            };
+        };
+    };
+    status: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeletionStatus"];
+                };
+            };
+        };
+    };
+    requestDeletion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["DeletionRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeletionRequested"];
+                };
+            };
+        };
+    };
+    cancelDeletion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeletionCancelled"];
                 };
             };
         };
@@ -3588,7 +3799,7 @@ export interface operations {
             };
         };
     };
-    status: {
+    status_1: {
         parameters: {
             query?: never;
             header?: never;

@@ -40,7 +40,9 @@ public class AuthMailTemplates {
 
     /** The platform's templates, by name; applications declare none under {@code jabiz.} ({@code MailChecks}). */
     public static final java.util.Set<String> NAMES = java.util.Set.of(VERIFY_EMAIL, ACCOUNT_EXISTS, PASSWORD_RESET,
-        PASSWORD_CHANGED, IDENTITY_LINKED, EMAIL_CHANGED, EmailLinkProcesses.TEMPLATE);
+        PASSWORD_CHANGED, IDENTITY_LINKED, EMAIL_CHANGED, EmailLinkProcesses.TEMPLATE,
+        // The account deletion's (AccountDeletionProcesses, section 17.5).
+        "jabiz.auth.account-deletion", "jabiz.auth.account-deletion-requested");
 
     /**
      * Purposes of the tokens, which are also their placeholders: in the platform's namespace, so that no application

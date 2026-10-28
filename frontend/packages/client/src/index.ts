@@ -73,6 +73,22 @@ export type {
   LinkedIdentity,
   IdentityLinked,
 } from './auth/account'
+export {
+  getAccountDeletion,
+  requestAccountDeletion,
+  cancelAccountDeletion,
+  requestAccountDeletionLink,
+  confirmAccountDeletion,
+  unacknowledgedNotices,
+} from './auth/deletion'
+export type {
+  AccountDeletionStatus,
+  AccountDeletionPending,
+  AccountDeletionNotice,
+  AccountDeletionRequest,
+  AccountDeletionRequested,
+  AccountDeletionCancelled,
+} from './auth/deletion'
 export { useEnvironment, setEnvironment, forgetEnvironment, toEnvironment } from './auth/environment'
 export type { Environment } from './auth/environment'
 export {
