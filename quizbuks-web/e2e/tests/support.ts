@@ -285,10 +285,13 @@ export async function verifiedUser(request: APIRequestContext, entry: 'app' | 's
 /** Signs in on an entry's own sign-in page. */
 export async function signIn(page: Page, base: string, email: string) {
   await page.goto(`${base}login`)
-  // The app and the console ask for the address (Q50); a mailed link may come first, in Chinese.
-  await page.getByTestId('login-user-name').fill(email)
-  await page.getByPlaceholder('Password', { exact: true }).fill(PASSWORD)
-  await page.getByRole('button', { name: 'Sign in', exact: true }).click()
+  // The app and the console ask for the address (Q50); in Chinese a mailed link comes first, so the fields are found
+  // by the password form they belong to, in any interface language.
+  const name = page.getByTestId('login-user-name')
+  const form = page.locator('form').filter({ has: name })
+  await name.fill(email)
+  await form.locator('input[type="password"]').fill(PASSWORD)
+  await form.locator('button[type="submit"]').click()
 }
 
 /**
