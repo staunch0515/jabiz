@@ -10,11 +10,15 @@ const LANGUAGES = ['ja', 'zh', 'en']
 const LIMITS = { name: 30, short: 80, full: 4000 }
 const SECTIONS = { ja: ['アプリ名', '簡単な説明', '詳しい説明'], zh: ['应用名称', '简短说明', '完整说明'],
   en: ['App name', 'Short description', 'Full description'] }
-/** Words that would put the sponsor side, money-making or rankings into the listing. */
+/**
+ * Words that would put the sponsor side, money-making or rankings into the listing, and, in the launch phase
+ * (operations.md "阶段一": prizes at the shop only, no transfers; Q49d-1 D-Q49d-6), any payout or cash. When cash
+ * rewards start, the listing and these words change together.
+ */
 const FORBIDDEN = {
-  ja: [/スポンサー/, /チャージ/, /管理画面/, /稼/, /儲/, /No\.?\s*1/i, /無料で(お金|現金)/],
-  zh: [/充值/, /商家后台/, /赚钱/, /第一/, /最好/],
-  en: [/top[- ]?up/i, /sponsor console/i, /make money/i, /\bbest\b/i, /#1/, /\bfree money\b/i],
+  ja: [/スポンサー/, /チャージ/, /管理画面/, /稼/, /儲/, /No\.?\s*1/i, /お金|現金|振込|換金|出金/],
+  zh: [/充值/, /商家后台/, /赚钱/, /第一/, /最好/, /现金|提现|转账|兑现/],
+  en: [/top[- ]?up/i, /sponsor console/i, /make money/i, /\bbest\b/i, /#1/, /cash|bank|withdraw|payout|transfer/i],
 }
 const NOT_GOOGLE = { ja: /Google はこれらの主催者・提供者ではなく/, zh: /Google 不是这些活动的主办方/, en: /Google is not a sponsor/ }
 
