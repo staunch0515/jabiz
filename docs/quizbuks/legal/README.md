@@ -1,7 +1,7 @@
 # QuizBuks — 法律文本的草稿
 
 这里是隐私政策的正式草稿（日文 `privacy-policy.ja.md` 为准据文本，中文、英文供参考），按代码中实际收集与使用的数据写成（2026-10-27 盘点；1.3 另加店员 Q39）。
-适用于答题 App、商家后台与招商网站；QuizBuks for Shopify 有自己的隐私政策页（`shopify/00-overview.md` §2），上架前另写。
+适用于答题 App、商家后台与招商网站；QuizBuks for Shopify 有自己的隐私政策页：`/shopify-app/privacy/`，正文在 `quizbuks-web/shopify-site/src/content/`（S4a，`shopify/S4-launch.md` §1），随应用构建，不经 `QB_LEGAL_PUBLISH`；两份政策描述的数据有改动时各自同步。
 它们不进入代码：`QB_SETUP` 只建测试占位的草稿（`LegalDrafts`），正式文本由内容管理员在管理后台粘贴、发布（`operations.md`，`QB_LEGAL_PUBLISH`）。
 
 ## 发布前
