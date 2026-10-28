@@ -50,6 +50,8 @@ import java.util.Map;
 public class IdentityProcesses {
 
     public static final String LINK_BEGIN = "SEC_IDENTITY_LINK_BEGIN";
+    /** The current password checked before the user asks for the deletion of the account (section 17.5). */
+    public static final String REAUTHENTICATE = "SEC_ACCOUNT_REAUTHENTICATE";
     public static final String LINK_SELF = "SEC_IDENTITY_LINK_SELF";
     public static final String UNLINK_SELF = "SEC_IDENTITY_UNLINK_SELF";
 
@@ -106,9 +108,19 @@ public class IdentityProcesses {
     static final String LINKS_LOCK = "jabiz.platform.identity-links:";
 
     static ProcessDefinition<BeginInput, BeginOutput, ProcessContext> begin(LoginAttemptPolicy policy) {
-        return ProcessDefinition.define(LINK_BEGIN, 1, BeginInput.class, BeginOutput.class, ProcessContext.class,
+        return passwordCheck(LINK_BEGIN, "Checks the signed-in user's current password before a provider account is"
+            + " linked.", policy);
+    }
+
+    /**
+     * A check of the signed-in user's current password before something only the user may do ({@link #LINK_BEGIN},
+     * {@link #REAUTHENTICATE}): as at sign-in, a wrong one is recorded and counts towards the lock.
+     */
+    static ProcessDefinition<BeginInput, BeginOutput, ProcessContext> passwordCheck(String name, String description,
+        LoginAttemptPolicy policy) {
+        return ProcessDefinition.define(name, 1, BeginInput.class, BeginOutput.class, ProcessContext.class,
             pb -> pb
-                .description("Checks the signed-in user's current password before a provider account is linked.")
+                .description(description)
                 .permissions(SecurityPermissions.ACCOUNT)
                 .entryOnly()
                 .contextFactory((start, input) -> {
@@ -325,6 +337,13 @@ public class IdentityProcesses {
     @Bean
     ProcessDefinition<BeginInput, BeginOutput, ProcessContext> secIdentityLinkBeginProcess(LoginAttemptPolicy policy) {
         return begin(policy);
+    }
+
+    @Bean
+    ProcessDefinition<BeginInput, BeginOutput, ProcessContext> secAccountReauthenticateProcess(
+        LoginAttemptPolicy policy) {
+        return passwordCheck(REAUTHENTICATE, "Checks the signed-in user's current password before the user asks for"
+            + " the deletion of the account.", policy);
     }
 
     @Bean

@@ -227,6 +227,25 @@ class SignInEntriesTest {
             .find("plain").orElseThrow().emailLink()).isFalse();
     }
 
+    @Test
+    void theAdministrationsUsersNeverAskForTheDeletionOfTheirAccountThemselves() {
+        SignInEntries entries = new SignInEntries(Map.of(
+            "admin", accountDeletion(List.of("ADMIN")),
+            "portal", accountDeletion(List.of("A"))), false, null);
+
+        assertThat(entries.check()).filteredOn(CheckProblem::isError).extracting(p -> p.location() + ": "
+            + p.message()).containsExactly(
+                "jabiz.security.entries.admin: account-deletion cannot be on for the administration entry");
+        assertThat(entries.find("portal").orElseThrow().accountDeletion()).isTrue();
+        // Off unless said.
+        assertThat(new SignInEntries(Map.of("plain", config(List.of("A"), null, null, null, null)), false, null)
+            .find("plain").orElseThrow().accountDeletion()).isFalse();
+    }
+
+    private static SignInEntries.Config accountDeletion(List<String> accepted) {
+        return new SignInEntries.Config(accepted, null, null, null, null, null, null, null, true);
+    }
+
     private static SignInEntries.Config emailLink(List<String> accepted) {
         return new SignInEntries.Config(accepted, null, null, null, null, null, true);
     }
