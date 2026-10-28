@@ -3,14 +3,20 @@ name: QuizBuks deploy
 # Deploys QuizBuks to the shared Docker server (deploy/quizbuks/DEPLOY.md) in two environments from one repository:
 #   staging     the line branch 1.2/quizbuks          APP_NAME quizbuks-staging  staging.<base domain>
 #   production  the release branch 1.2/quizbuks-release  APP_NAME quizbuks          <base domain>
-# Every push to either branch is tested, built into one image (the backend with its three front ends) and deployed by
-# the server's deploy-app.sh under that environment's APP_NAME. A manual run with an image tag skips the tests and the
-# build and deploys that tag again (a rollback). Other branches never deploy: a manual run from one stops at once.
+# Line 1.2 is a backup only (2026-10-28, docs/quizbuks/03-plan.md): the environments are deployed from 1.3
+# (1.3/quizbuks, 1.3/quizbuks-release), so nothing here deploys on a push. A manual run must be confirmed by typing
+# deploy-1.2: once 1.3 has migrated an environment's database, 1.2 cannot start on it (Flyway only moves forward, and
+# 1.2 does not know 1.3's migrations), so a 1.2 deployment there only takes the environment down.
+# A manual run tests, builds one image (the backend with its three front ends) and deploys it by the server's
+# deploy-app.sh under that environment's APP_NAME; with an image tag it skips the tests and the build and deploys that
+# tag again. Other branches never deploy: a manual run from one stops at once.
 on:
-  push:
-    branches: ['1.2/quizbuks', '1.2/quizbuks-release']
   workflow_dispatch:
     inputs:
+      confirm:
+        description: Type deploy-1.2 to deploy line 1.2 (a backup; it cannot run on a database that 1.3 has migrated)
+        type: string
+        required: true
       image-tag:
         description: Deploy this existing image tag (a full 40-character commit SHA) instead of building; empty builds the branch
         type: string
@@ -35,9 +41,24 @@ env:
   DOMAIN_PREFIX: ${{ github.ref == 'refs/heads/1.2/quizbuks-release' && '' || 'staging.' }}
 
 jobs:
+  # Nothing runs unless the run was confirmed: line 1.2 is a backup (see the top of this file).
+  confirm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Confirm deploying line 1.2
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          if [ "$CONFIRM" != deploy-1.2 ]; then
+            echo "::error::line 1.2 is a backup and deploys only when confirmed: type deploy-1.2 (environments that 1.3 has migrated cannot run 1.2)"
+            exit 1
+          fi
+
   # The application's checks: the backend module with its startup checks (platformCheck) and integration tests
   # (Testcontainers postgres:16 on the runner, never the server's database), and the two front ends.
   test:
+    needs: confirm
     if: (github.ref == 'refs/heads/1.2/quizbuks' || github.ref == 'refs/heads/1.2/quizbuks-release') && inputs.image-tag == ''
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -121,10 +142,11 @@ jobs:
           cache-to: type=gha,mode=max,scope=quizbuks
 
   deploy:
-    needs: build
-    # After a successful build, or alone for a manual run with a tag (the build is then skipped).
+    needs: [confirm, build]
+    # After a successful build, or alone for a manual run with a tag (the build is then skipped); never unconfirmed.
     if: >-
-      !cancelled() && (github.ref == 'refs/heads/1.2/quizbuks' || github.ref == 'refs/heads/1.2/quizbuks-release') &&
+      !cancelled() && needs.confirm.result == 'success' &&
+      (github.ref == 'refs/heads/1.2/quizbuks' || github.ref == 'refs/heads/1.2/quizbuks-release') &&
       (needs.build.result == 'success' || (inputs.image-tag != '' && needs.build.result == 'skipped'))
     # Protection rules (required reviewers, branch restrictions) and environment-scoped secrets are set per
     # environment in the repository's settings.

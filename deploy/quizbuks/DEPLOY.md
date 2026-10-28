@@ -1,5 +1,9 @@
 # QuizBuks — 部署到共用的 Docker 服务器（production 与 staging）
 
+> **线 1.2 只作备份（2026-10-28）**：两个环境改由线 1.3 部署（`1.3/quizbuks` → staging，`1.3/quizbuks-release` → production，见 1.3 的本文件）。
+> 本分支推送时不再部署；手动运行部署 workflow 须在 `confirm` 中填 `deploy-1.2`。1.3 迁移过的数据库不能再运行 1.2（Flyway 只向前，1.2 不认识 1.3 的迁移，应用起不来），
+> 所以不要把 1.2 部署到已经跑过 1.3 的环境；修复只做在 1.3。
+
 QuizBuks 是**一个镜像、一个服务**（`<APP_NAME>-app`，容器内端口 8080）：后端与三个前端（App `/`、商家后台 `/sponsor/`、管理后台 `/admin/`）都在一个 jar 中。
 同一仓库、同一个镜像部署为两个互不相干的环境，各有自己的服务器目录、`.env`、数据库、数据卷与域名：
 
@@ -248,7 +252,7 @@ Run workflow，分支选该环境的分支，`image-tag` 留空。第一次启�
 
 ## 之后的部署
 
-- **自动**：每次推送 `1.2/quizbuks`（staging）或 `1.2/quizbuks-release`（production）：测试（`:quizbuks:check`、入口脚本的测试、两个前端与后台扩展的检查）
+- **自动**（1.2 只作备份后不再自动部署，手动运行须确认 `deploy-1.2`，见本文开头）：原先每次推送 `1.2/quizbuks`（staging）或 `1.2/quizbuks-release`（production）：测试（`:quizbuks:check`、入口脚本的测试、两个前端与后台扩展的检查）
   → 构建并推送镜像（标签为提交 SHA）→ 按分支渲染站点、上传 compose 与站点 → `deploy-app.sh <APP_NAME> <SHA>`。部署失败时 `deploy-app.sh` 自动回到上一个标签。
   两个分支各自排队，互不等待。
 - **手动**：GitHub → Actions → **QuizBuks deploy** → Run workflow，分支选环境的分支，`image-tag` 留空即测试、构建并部署该分支的最新提交。从其他分支运行时不构建、不部署。
