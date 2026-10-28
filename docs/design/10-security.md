@@ -1087,7 +1087,7 @@ SEC_PROTECTED_CHANGE_APPLY（internal，事件消费者）──► 再经 Requi
 | `sys_document_run` | 应用声明的版式、以用户的行为对象，且不在保留期内、不受保全的 | PDF、内容、参数、收件人（编号与标题保留） |
 
 - 保留：主键、用户编号、金额、编号、时间。账本行只覆盖应用声明的字段。普通表（文件的原名等）不经清除：要去掉用户上传的文件，应用的抹除声明删除引用它们的行，孤立文件随之由清理删除。保留期内的单据原样保留，到期后的清除不在 17i 范围（21 §3.4 的到期报告列出它们）。
-- 每改一行写一条 `sys_erasure_item`（21 §2.5），最后写 `sys_erasure_purge`（行数、时间、操作）。第三方（Stripe、邮件服务商、Shopify）处的副本不在平台范围内。
+- 每改一行写一条 `sys_erasure_item`（21 §2.5），最后写 `sys_erasure_purge`（行数、时间、操作，以及以封存密钥对全部条目的签名）。第三方（Stripe、邮件服务商、Shopify）处的副本不在平台范围内。
 
 ### 17.3 应用的声明：`PersonalDataEraser`
 
@@ -1114,6 +1114,6 @@ class CustomerPersonalData implements PersonalDataEraser {
 ### 17.4 测试
 
 `ErasureIT`（注册、登录、成为客户、封存、抹除：停用、清空、会话结束、不能再登录；清除后在当前 schema 的全部文本与 JSON 列中找不到用户名、邮箱、显示名与客户名；
-校验完好且有 `ERASED`，绕过守卫再改一行即 `MODIFIED`；再次清除什么都不做，再次抹除 `ACCOUNT_ERASED`，同一邮箱可重新注册；法律保全时拒绝；启动检查的各种错误）、
+校验完好且有 `ERASED`，绕过守卫再改一行即 `MODIFIED`，再插入连到它的伪造条目仍是 `MODIFIED`；再次清除什么都不做，再次抹除 `ACCOUNT_ERASED`，同一邮箱可重新注册；法律保全时拒绝；启动检查的各种错误）、
 `ErasureWithoutMaintenanceIT`（没有维护连接时抹除完成、清除 `ERASURE_PURGE_UNAVAILABLE`、历史仍在）、core `ErasedEntityTest`。
 

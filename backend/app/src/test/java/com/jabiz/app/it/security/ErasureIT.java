@@ -128,6 +128,23 @@ class ErasureIT extends SecurityItSupport {
         assertThat(tampered).containsEntry("intact", false);
         assertThat(problems(tampered)).extracting(p -> p.get("kind"), p -> p.get("table"), p -> p.get("key"))
             .contains(tuple("MODIFIED", "sec_user_version", "[" + rowId + "]"));
+        // Entries that lead to the changed row's digest - plain SHA-256, anyone can compute them - do not account for
+        // it without a purge signed with the integrity key.
+        String forged = UUID.randomUUID().toString();
+        withSealSettings(
+            "INSERT INTO sys_erasure (erasure_id, user_id, erased_time, requested_by, process_seq_id)"
+                + " SELECT '" + forged + "', '" + userId + "', now(), 'forger', max(process_seq_id) FROM op_process",
+            "INSERT INTO sys_erasure_purge (erasure_id, purged_time, row_count, process_seq_id, signature, key_id)"
+                + " VALUES ('" + forged + "', now(), 1, 1, repeat('0', 64), 'forged')",
+            "INSERT INTO sys_erasure_item (erasure_id, table_name, row_key, columns, digest_before, digest_after)"
+                + " SELECT '" + forged + "', i.table_name, i.row_key, ARRAY['display_name'], x.digest_after,"
+                + " " + com.jabiz.runtime.integrity.IntegrityStore.digest("t", "st.columns")
+                + " FROM sys_integrity_item i JOIN sys_integrity_seal_table st ON st.seal_no = i.seal_no"
+                + " AND st.table_name = i.table_name JOIN sys_erasure_item x ON x.table_name = i.table_name"
+                + " AND x.row_key = i.row_key JOIN sec_user_version t ON t.row_id = " + rowId
+                + " WHERE i.table_name = 'sec_user_version' AND i.row_key = '[" + rowId + "]'");
+        assertThat(problems(verify(sealNo))).extracting(p -> p.get("kind"), p -> p.get("table"), p -> p.get("key"))
+            .contains(tuple("MODIFIED", "sec_user_version", "[" + rowId + "]"));
         bypassingTheGuard("UPDATE sec_user_version SET display_name = NULL WHERE row_id = " + rowId);
 
         // Again: the purge has nothing left to do, the erasure is refused.
@@ -307,6 +324,19 @@ class ErasureIT extends SecurityItSupport {
         return (List<Map<String, Object>>) get("/api/integrity/checks/" + verified.get("checkNo"),
             bearer("integrity.read")).expectStatus().isOk().expectBody(MAP).returnResult().getResponseBody()
             .get("problems");
+    }
+
+    /** The statements on one connection with the settings the seal digests rows under. */
+    private static void withSealSettings(String... statements) {
+        try (java.sql.Connection connection = DB.connect(schema());
+             java.sql.Statement sql = connection.createStatement()) {
+            sql.execute("SET TimeZone = 'UTC'; SET IntervalStyle = 'iso_8601'; SET extra_float_digits = 1");
+            for (String statement : statements) {
+                assertThat(sql.executeUpdate(statement)).as(statement).isEqualTo(1);
+            }
+        } catch (java.sql.SQLException e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     private static void bypassingTheGuard(String statement) {

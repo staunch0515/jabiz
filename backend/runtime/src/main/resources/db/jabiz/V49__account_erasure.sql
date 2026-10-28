@@ -23,7 +23,11 @@ CREATE TABLE sys_erasure_purge (
     erasure_id     uuid         PRIMARY KEY REFERENCES sys_erasure (erasure_id),
     purged_time    timestamptz  NOT NULL,
     row_count      integer      NOT NULL,
-    process_seq_id bigint       NOT NULL
+    process_seq_id bigint       NOT NULL,
+    -- HMAC-SHA256 with the integrity key over the erasure, its row count and its entries (ErasureEvidence): the
+    -- digests in the entries are plain SHA-256, and only a signed purge's entries account for a changed row.
+    signature      char(64)     NOT NULL,
+    key_id         varchar(16)  NOT NULL
 );
 SELECT jabiz_protect_append_only('sys_erasure_purge');
 

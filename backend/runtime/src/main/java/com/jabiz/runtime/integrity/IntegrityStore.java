@@ -1,5 +1,6 @@
 package com.jabiz.runtime.integrity;
 
+import com.jabiz.integrity.IntegrityKey;
 import com.jabiz.integrity.IntegrityProblem;
 import com.jabiz.integrity.SealBlock;
 import com.jabiz.integrity.SealChain;
@@ -20,6 +21,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
@@ -186,7 +188,6 @@ public class IntegrityStore {
             .then();
     }
 
-    /** One seal at a time: the next block number and link come from the head. */
     /**
      * The transaction lock of the seal: one seal at a time, and the purge of an erasure (decision D62 item 6) takes it
      * too, so that no seal reads a row between the purge's reading and overwriting it.
@@ -309,16 +310,18 @@ public class IntegrityStore {
 
     /** Sealed rows of the table whose content now has another digest, or that are gone. */
     Flux<IntegrityProblem> changedRows(StorageEngine engine, Table table, int currentColumns, long fromSeal,
-        long toSeal) {
+        long toSeal, String[] authenticErasures) {
         // Each row is digested over the columns of its own block; a missing column list gives no digest at all
         // (the block's columns hash reports that). Columns are only ever added, so a list as long as the table's
         // columns now is all of them, and the whole row's text - four to six times cheaper - is the same digest.
         String firstKey = "t." + quote(table.keyColumns().getFirst());
-        // A changed row is ERASED when the purge's entries lead from the sealed digest to the current one: each entry
-        // was written with the digests over the same columns (decision D62 item 6).
+        // A changed row is ERASED when the entries of signed purges lead from the sealed digest to the current one:
+        // each entry was written with the digests over the same columns (decision D62 item 6). Entries of a purge
+        // whose signature does not hold count for nothing.
         return engine.select("SELECT seal_no, row_key, gone, NOT gone AND EXISTS (WITH RECURSIVE chain(d) AS ("
                     + "SELECT c.sealed::text UNION SELECT x.digest_after::text FROM sys_erasure_item x JOIN chain"
-                    + " ON x.digest_before::text = chain.d WHERE x.table_name = :table AND x.row_key = c.row_key)"
+                    + " ON x.digest_before::text = chain.d WHERE x.table_name = :table AND x.row_key = c.row_key"
+                    + " AND x.erasure_id::text = ANY(:authentic))"
                     + " SELECT 1 FROM chain WHERE chain.d = c.current) AS erased"
                     + " FROM (SELECT i.seal_no, i.row_key,"
                     + " i.digest AS sealed, CASE WHEN " + firstKey + " IS NULL THEN NULL"
@@ -330,7 +333,8 @@ public class IntegrityStore {
                     + " WHERE i.table_name = :table AND i.seal_no BETWEEN :from AND :to) AS c"
                     + " WHERE gone OR current IS DISTINCT FROM sealed ORDER BY seal_no, row_key",
                 Map.of("table", BoundValue.of(table.name()), "from", BoundValue.of(fromSeal),
-                    "to", BoundValue.of(toSeal), "current", BoundValue.of(currentColumns)))
+                    "to", BoundValue.of(toSeal), "current", BoundValue.of(currentColumns),
+                    "authentic", BoundValue.of(authenticErasures)))
             .map(row -> {
                 Long sealNo = Rows.longValue(row.get("seal_no"));
                 String key = Rows.string(row.get("row_key"));
@@ -344,6 +348,42 @@ public class IntegrityStore {
                     : new IntegrityProblem(IntegrityProblem.Kind.MODIFIED, sealNo, table.name(), key,
                         "Row " + key + " of " + table.name() + " was changed after it was sealed");
             });
+    }
+
+    /** The entries of one erasure's purge, as {@link ErasureEvidence} signs them. */
+    public Flux<ErasureEvidence.Item> erasureItems(StorageEngine engine, UUID erasureId) {
+        return engine.select("SELECT table_name, row_key, columns, digest_before, digest_after FROM sys_erasure_item"
+                + " WHERE erasure_id = :id", Map.of("id", BoundValue.of(erasureId)))
+            .map(IntegrityStore::item);
+    }
+
+    /**
+     * The erasures whose purge's signature holds under the key, as text: only their entries account for a changed
+     * row. Each purge's entries are read together, one purge at a time.
+     */
+    Mono<String[]> authenticErasures(StorageEngine engine, IntegrityKey key) {
+        return engine.select("SELECT p.erasure_id, p.row_count, p.signature, p.key_id, x.table_name, x.row_key,"
+                + " x.columns, x.digest_before, x.digest_after FROM sys_erasure_purge p"
+                + " LEFT JOIN sys_erasure_item x ON x.erasure_id = p.erasure_id ORDER BY p.erasure_id", Map.of())
+            .bufferUntilChanged(row -> Rows.uuid(row.get("erasure_id")))
+            .filter(rows -> {
+                Map<String, Object> first = rows.getFirst();
+                UUID erasureId = Rows.uuid(first.get("erasure_id"));
+                List<ErasureEvidence.Item> items = rows.stream().filter(row -> row.get("table_name") != null)
+                    .map(IntegrityStore::item).toList();
+                return key.id().equals(Rows.string(first.get("key_id")))
+                    && ErasureEvidence.sign(key, erasureId, Rows.intValue(first.get("row_count")), items)
+                        .equals(Rows.string(first.get("signature")));
+            })
+            .map(rows -> Rows.uuid(rows.getFirst().get("erasure_id")).toString())
+            .collectList()
+            .map(ids -> ids.toArray(String[]::new));
+    }
+
+    private static ErasureEvidence.Item item(Map<String, Object> row) {
+        return new ErasureEvidence.Item(Rows.string(row.get("table_name")), Rows.string(row.get("row_key")),
+            Rows.strings(row.get("columns")), Rows.string(row.get("digest_before")),
+            Rows.string(row.get("digest_after")));
     }
 
     /** Every sealed row of a table that no longer exists. */

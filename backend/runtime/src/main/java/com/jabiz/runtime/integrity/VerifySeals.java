@@ -59,7 +59,8 @@ public class VerifySeals implements StepHandler<NoMetadata, ProcessContext> {
                 Mono<Void> checks = blocks.isEmpty() ? Mono.empty()
                     : sealedRows(engine, blocks, from, to, problems)
                         .then(sealedColumns(engine, blocks, from, to, problems))
-                        .then(tables(engine, from, to, problems));
+                        .then(store.authenticErasures(engine, key))
+                        .flatMap(authentic -> tables(engine, from, to, authentic, problems));
                 return checks
                     .then(unsealed(engine))
                     .flatMap(unsealed -> record(engine, ctx, from, to, blocks.size(), rows, unsealed, problems));
@@ -107,7 +108,8 @@ public class VerifySeals implements StepHandler<NoMetadata, ProcessContext> {
     }
 
     /** Each table with sealed rows: still guarded, and its rows as sealed. */
-    private Mono<Void> tables(StorageEngine engine, long from, long to, Problems problems) {
+    private Mono<Void> tables(StorageEngine engine, long from, long to, String[] authenticErasures,
+        Problems problems) {
         // The list is read to its end first: each table's queries run on the same connection, and one sent while
         // the list is still being read would wait for it forever (the list waits for the table, the table for it).
         return store.sealedTables(engine, from, to).collectList()
@@ -125,7 +127,7 @@ public class VerifySeals implements StepHandler<NoMetadata, ProcessContext> {
                     Flux<IntegrityProblem> rows = table.keyColumns().isEmpty()
                         ? store.rowsOfMissingTable(engine, name, from, to)
                         : store.columns(engine, table).flatMapMany(columns ->
-                            store.changedRows(engine, table, columns.size(), from, to));
+                            store.changedRows(engine, table, columns.size(), from, to, authenticErasures));
                     return guard.concatWith(rows);
                 }))
             .doOnNext(problem -> {

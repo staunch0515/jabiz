@@ -5,6 +5,8 @@ import com.jabiz.entity.FieldDefinition;
 import com.jabiz.query.BoundValue;
 import com.jabiz.query.SqlIdentifiers;
 import com.jabiz.runtime.entity.EntityDefinitionRegistry;
+import com.jabiz.integrity.IntegrityKey;
+import com.jabiz.runtime.integrity.ErasureEvidence;
 import com.jabiz.runtime.integrity.IntegrityStore;
 import com.jabiz.runtime.retention.ArchiveEntities;
 import com.jabiz.runtime.retention.DeletionGuard;
@@ -47,13 +49,15 @@ public class ErasurePurger {
     private final PersonalDataErasers erasers;
     private final IntegrityStore integrity;
     private final DeletionGuard guard;
+    private final IntegrityKey key;
 
     public ErasurePurger(EntityDefinitionRegistry entities, PersonalDataErasers erasers, IntegrityStore integrity,
-        DeletionGuard guard) {
+        DeletionGuard guard, IntegrityKey key) {
         this.entities = entities;
         this.erasers = erasers;
         this.integrity = integrity;
         this.guard = guard;
+        this.key = key;
     }
 
     /**
@@ -79,14 +83,18 @@ public class ErasurePurger {
             .then(Mono.defer(() -> Flux.fromIterable(targets(run)).concatMap(target -> overwrite(run, target))
                 .then()))
             .then(Mono.defer(() -> documents(run)))
-            .then(Mono.defer(() -> {
+            // What the purge overwrote, signed: only signed entries account for a changed sealed row.
+            .then(Mono.defer(() -> integrity.erasureItems(engine, erasureId).collectList()))
+            .flatMap(items -> {
                 Map<String, Object> row = new LinkedHashMap<>();
                 row.put("erasure_id", erasureId);
                 row.put("purged_time", time);
                 row.put("row_count", run.count);
                 row.put("process_seq_id", processSeqId);
+                row.put("signature", ErasureEvidence.sign(key, erasureId, run.count, items));
+                row.put("key_id", key.id());
                 return engine.insert("sys_erasure_purge", row).thenReturn(run.count);
-            }));
+            });
     }
 
     /** One overwriting statement: the table, which rows, and what each column becomes (null: by its type). */

@@ -153,8 +153,12 @@
 - 清除取封存的事务锁（`IntegrityStore.LOCK`），不会有封存在清除读与写之间读到旧值。
 - 每改一行，同一语句写一条只追加的 `sys_erasure_item`：抹除编号、表、行标识、覆盖的列、覆盖前后的摘要。摘要按封存该行的块所记的列计算（与校验相同），
   尚未封存的行两个摘要为空（之后照常封存覆盖后的值）。条目本身照常封存。
-- 校验发现某行的摘要不同于封存时，若从封存时的摘要沿该行的条目（`digest_before` → `digest_after`）能连到当前的摘要，即为 `ERASED`：
-  不算问题，只计数（`sys_integrity_check.erased_count`、`VerifyOutput.erasedCount`）；连不上的照旧 `MODIFIED`。清除只覆盖、从不删除，所以不会产生 `MISSING`。
+- 摘要谁都能算，条目谁都能插入（只追加只拦更新与删除）。所以清除最后以封存的密钥对抹除编号、行数与本次全部条目（按表、行标识排序，各值带长度）
+  做 HMAC-SHA256，与密钥编号一起写入 `sys_erasure_purge`（`ErasureEvidence`）。
+- 校验先读出全部清除、逐个以当前密钥核对签名；发现某行的摘要不同于封存时，只沿**签名成立的清除**的条目（`digest_before` → `digest_after`）找，
+  能从封存时的摘要连到当前的摘要即为 `ERASED`：不算问题，只计数（`sys_integrity_check.erased_count`、`VerifyOutput.erasedCount`）；
+  连不上的照旧 `MODIFIED`。伪造的条目（没有清除记录、签名不对、或给已签名的清除添条目）都不算数。清除只覆盖、从不删除，所以不会产生 `MISSING`。
+  换密钥后旧的清除签名不再成立，其行报告为 `MODIFIED`，与以旧密钥签的块一样需要运维判断。
 - 条目只有摘要与列名。知道一行其余各列的人可以拿摘要验证"被抹除的值是否为某个值"，与已有的 `sys_integrity_item` 相同。
 
 ## 3. 保留期与法律保全（14f-3）

@@ -4661,17 +4661,17 @@ Wiki 只有一份；平台与应用各发布自己的一节，只发布最新的
 | # | 内容 | 阶段 |
 |---|---|---|
 | 17i-1 | 决策 D62；设计 10 §17、21 §2.5、04 §10；根 `CLAUDE.md` 一条 | 17i-a |
-| 17i-2 | 迁移 `V49__account_erasure.sql`：`sys_erasure`、`sys_erasure_purge`、`sys_erasure_item`（只追加）、`sec_user_version.erased_at`、`op_process.actor_id` 的索引、`sys_integrity_check.erased_count` | 17i-a |
+| 17i-2 | 迁移 `V49__account_erasure.sql`：`sys_erasure`、`sys_erasure_purge`、`sys_erasure_item`（只追加）、`sec_user_version.erased_at`、`sys_integrity_check.erased_count` | 17i-a |
 | 17i-3 | `ACCOUNT_ERASE`（`internal()`）：停用、`erasedAt`、清空、墓碑关联 / 二次验证 / 角色 / 收件偏好、结束会话、运行应用的抹除声明、保全与保留时拒绝；事件 `jabiz.account.erased` | 17i-a |
-| 17i-4 | 维护连接 `MaintenanceStorage`（`jabiz.erasure.datasource.*`）与 `ERASURE_PURGE`（事件的消费者）：在独立事务中按 10 §17.2 的范围覆盖，逐行写清除条目，取封存锁；没有维护连接时 422 `ERASURE_PURGE_UNAVAILABLE` | 17i-a |
-| 17i-5 | 校验的 `ERASED`：从封存的摘要沿清除条目连到当前摘要的行只计数，连不上的照旧 `MODIFIED` | 17i-a |
+| 17i-4 | 维护连接 `MaintenanceStorage`（`jabiz.erasure.datasource.*`）与 `ERASURE_PURGE`（事件的消费者）：在独立事务中按 10 §17.2 的范围覆盖，逐行写清除条目并以封存密钥签名，取封存锁；没有维护连接时 422 `ERASURE_PURGE_UNAVAILABLE`；每天的定时任务 `jabiz.erasure-purge` 对未清除的抹除再运行 | 17i-a |
+| 17i-5 | 校验的 `ERASED`：从封存的摘要沿签名成立的清除的条目连到当前摘要的行只计数，连不上的、伪造的条目照旧 `MODIFIED` | 17i-a |
 | 17i-6 | core `PersonalDataEraser`（`ErasedEntity`、`ErasureLoad`、`ErasureNotice`、`ErasureSubject`）与启动检查 `ERASURE`；示范 `CustomerPersonalData`（客户保留、名字覆盖） | 17i-a |
-| 17i-7 | 测试：`ErasureIT`（全表搜索找不到个人信息、校验 `ERASED` 与篡改、重复、法律保全、启动检查）、`ErasureWithoutMaintenanceIT`、core `ErasedEntityTest` | 17i-a |
+| 17i-7 | 测试：`ErasureIT`（全表搜索找不到个人信息、校验 `ERASED` 与篡改、伪造的条目、重复、他人后来使用的地址、退订与定时任务的再清除、法律保全、启动检查）、`ErasureWithoutMaintenanceIT`、core `ErasedEntityTest`、`ErasureEvidenceTest` | 17i-a |
 | 17i-8 | 申请：入口 `account-deletion`、本人在 App 中（近期身份确认）与凭邮件确认的网页申请、冷静期 `jabiz.security.account-deletion.cooling-off`（14 天）、撤回、申请邮件、到期申请的逐项定时任务、管理员代为安排、受保护权限的持有人不能自助、申请前的提示（`notices`） | 17i-b |
 | 17i-9 | 前端：`@jabiz/ui` 的账户页删除积木与网页申请页、邮件链接页；示范门户；三语；axe | 17i-b |
 
 **已知与未做**：保留期内保留原样的单据，到期后的清除不在本阶段（到期报告列出它们）；第三方处的副本不在平台范围内；
-清除的事件重试用尽后，没有维护连接的环境须在配置后重新投递（17i-b 的定时任务对已抹除未清除的抹除再发起清除）。
+没有维护连接的环境，抹除照常完成，清除等到配置维护连接后由每天的定时任务完成。
 
 **17i 状态**：17i-a 已实施；17i-b 待开发。
 
