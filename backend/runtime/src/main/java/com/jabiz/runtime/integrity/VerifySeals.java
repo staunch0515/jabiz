@@ -128,7 +128,15 @@ public class VerifySeals implements StepHandler<NoMetadata, ProcessContext> {
                             store.changedRows(engine, table, columns.size(), from, to));
                     return guard.concatWith(rows);
                 }))
-            .doOnNext(problems::add)
+            .doOnNext(problem -> {
+                // A row the purge of an erasure overwrote is accounted for (decision D62 item 6): counted, not a
+                // problem.
+                if (problem.kind() == IntegrityProblem.Kind.ERASED) {
+                    problems.erased();
+                } else {
+                    problems.add(problem);
+                }
+            })
             .then();
     }
 
@@ -154,9 +162,10 @@ public class VerifySeals implements StepHandler<NoMetadata, ProcessContext> {
         check.put("count", BoundValue.of(problems.count()));
         check.put("problems", BoundValue.of(json.writeValueAsString(problems.kept())));
         check.put("key", BoundValue.of(key.id()));
+        check.put("erased", BoundValue.of((long) problems.erasedCount()));
         return store.insertCheck(engine, check)
             .doOnNext(checkNo -> ctx.put(IntegrityProcesses.OUTPUT, new IntegrityProcesses.VerifyOutput(checkNo,
-                problems.count() == 0, problems.count(), seals, rows, unsealed)))
+                problems.count() == 0, problems.count(), seals, rows, unsealed, problems.erasedCount())))
             .then();
     }
 
@@ -165,6 +174,7 @@ public class VerifySeals implements StepHandler<NoMetadata, ProcessContext> {
         private final int max;
         private final List<IntegrityProblem> kept = new ArrayList<>();
         private final AtomicInteger count = new AtomicInteger();
+        private final AtomicInteger erased = new AtomicInteger();
 
         Problems(int max) {
             this.max = max;
@@ -178,6 +188,14 @@ public class VerifySeals implements StepHandler<NoMetadata, ProcessContext> {
 
         int count() {
             return count.get();
+        }
+
+        void erased() {
+            erased.incrementAndGet();
+        }
+
+        int erasedCount() {
+            return erased.get();
         }
 
         synchronized List<IntegrityProblem> kept() {
