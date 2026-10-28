@@ -105,7 +105,7 @@ test('a taker who forgot the password gets a link to the app\'s own page and sig
   await expect(page.getByTestId('auth-continue')).toBeVisible()
 
   await page.goto('/taker/login')
-  await page.getByPlaceholder('User name', { exact: true }).fill(email)
+  await page.getByTestId('login-user-name').fill(email)
   await page.getByPlaceholder('Password', { exact: true }).fill(fresh)
   await page.getByRole('button', { name: 'Sign in', exact: true }).click()
   await expect(page).toHaveURL(/\/welcome$/)

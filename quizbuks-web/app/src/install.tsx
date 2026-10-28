@@ -1,3 +1,4 @@
+import { useInstallPrompt } from '@jabiz/client'
 import { PwaInstallBanner } from '@jabiz/ui'
 import { useEffect } from 'react'
 
@@ -6,6 +7,10 @@ import { useEffect } from 'react'
  * on the result page and from then on at the top of home, never before (an offer on the first visit is closed unread);
  * the account page is the place to install at any time. Closing it anywhere counts (one key, "taker"), so a closed
  * offer stays away 30 days and for good after three closes (platform 16zj).
+ *
+ * Inside another app's browser (WeChat, QQ, LINE) installing is impossible and the sign-in stays in that app, so the
+ * way out to the phone's browser shows from the first visit, on the sign-in pages and a share link's page (Q50,
+ * amending D-Q38-1); the steps for WeChat and QQ are the platform's (17m).
  */
 
 const APP_NAME = 'QuizBuks'
@@ -74,4 +79,11 @@ export function HomeInstallOffer() {
 /** The account page's permanent entry: no close button; says so once installed. */
 export function AccountInstallEntry() {
   return <PwaInstallBanner appName={APP_NAME} rememberAs={KEY} dismissible={false} />
+}
+
+/** "Open this in your browser", from the first visit, inside another app's browser only (Q50). */
+export function InAppBrowserNotice() {
+  const { situation } = useInstallPrompt()
+  if (situation !== 'in-app') return null
+  return <PwaInstallBanner appName={APP_NAME} rememberAs={KEY} />
 }

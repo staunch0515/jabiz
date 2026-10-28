@@ -7,6 +7,7 @@ import { useDuration } from '../qb/view/PublicationContent'
 import { formatKudos } from '../qb/kudos'
 import { QB } from '../qb/messages'
 import { hrefOf, Link } from '../qb/router'
+import { InAppBrowserNotice } from '../install'
 import { readSharedPublication, sharePath } from './share'
 
 /**
@@ -37,6 +38,8 @@ export function SharePage({ publicationId }: { publicationId: string }) {
   const survey = p.kind === 'SURVEY'
   return (
     <article className="flex flex-col gap-6" aria-labelledby="share-title" data-testid="share">
+      {/* Shared in WeChat or LINE, the link opens inside it: the way out to the phone's browser first (Q50). */}
+      <InAppBrowserNotice />
       <header className="flex flex-col gap-1">
         <h1 id="share-title" className="text-xl font-semibold">{p.name}</h1>
         {p.quizTitle !== p.name && <p className="text-muted-foreground text-sm">{p.quizTitle}</p>}

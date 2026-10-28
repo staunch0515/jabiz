@@ -324,7 +324,7 @@ function Routes() {
           pendingStep = undefined
           lockedIdle = false
           navigate(to, { replace: true })
-        }} passwordResetPath="/password-reset" signUpPath="/signup" oidcLayout="icons" />
+        }} passwordResetPath="/password-reset" signUpPath="/signup" oidcLayout="icons" userNameLabel="email" />
       {/* A taker's account (with a password or Google alone) has no sponsor role yet: the console refuses it until
           the account joins by signing up with its address (Q37). */}
       <p className="text-muted-foreground mx-auto w-full max-w-md px-4 pb-6 text-center text-sm"

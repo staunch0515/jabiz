@@ -136,6 +136,9 @@ describe('a visitor', () => {
     await waitFor(() => expect(asked).toContain('/api/auth/oidc/providers?entry=sponsor'))
     // Someone who answers quizzes learns how the same account becomes a sponsor's (Q37).
     expect(screen.getByTestId('signin-taker-account')).toHaveTextContent('Sign up here with the same email address')
+    // Sponsors sign in with their address (Q50); the console offers no mailed link.
+    expect(screen.getByTestId('login-user-name')).toHaveAttribute('placeholder', 'E-mail address')
+    expect(screen.queryByTestId('email-link-form')).toBeNull()
   })
 
   it('signs in and signs up with Google, Facebook and LINE as a row of icons (Q37, Q40)', async () => {
