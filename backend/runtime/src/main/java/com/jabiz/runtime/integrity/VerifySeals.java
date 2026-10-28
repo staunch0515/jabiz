@@ -59,7 +59,8 @@ public class VerifySeals implements StepHandler<NoMetadata, ProcessContext> {
                 Mono<Void> checks = blocks.isEmpty() ? Mono.empty()
                     : sealedRows(engine, blocks, from, to, problems)
                         .then(sealedColumns(engine, blocks, from, to, problems))
-                        .then(tables(engine, from, to, problems));
+                        .then(store.authenticErasures(engine, key))
+                        .flatMap(authentic -> tables(engine, from, to, authentic, problems));
                 return checks
                     .then(unsealed(engine))
                     .flatMap(unsealed -> record(engine, ctx, from, to, blocks.size(), rows, unsealed, problems));
@@ -107,7 +108,8 @@ public class VerifySeals implements StepHandler<NoMetadata, ProcessContext> {
     }
 
     /** Each table with sealed rows: still guarded, and its rows as sealed. */
-    private Mono<Void> tables(StorageEngine engine, long from, long to, Problems problems) {
+    private Mono<Void> tables(StorageEngine engine, long from, long to, String[] authenticErasures,
+        Problems problems) {
         // The list is read to its end first: each table's queries run on the same connection, and one sent while
         // the list is still being read would wait for it forever (the list waits for the table, the table for it).
         return store.sealedTables(engine, from, to).collectList()
@@ -125,10 +127,18 @@ public class VerifySeals implements StepHandler<NoMetadata, ProcessContext> {
                     Flux<IntegrityProblem> rows = table.keyColumns().isEmpty()
                         ? store.rowsOfMissingTable(engine, name, from, to)
                         : store.columns(engine, table).flatMapMany(columns ->
-                            store.changedRows(engine, table, columns.size(), from, to));
+                            store.changedRows(engine, table, columns.size(), from, to, authenticErasures));
                     return guard.concatWith(rows);
                 }))
-            .doOnNext(problems::add)
+            .doOnNext(problem -> {
+                // A row the purge of an erasure overwrote is accounted for (decision D62 item 6): counted, not a
+                // problem.
+                if (problem.kind() == IntegrityProblem.Kind.ERASED) {
+                    problems.erased();
+                } else {
+                    problems.add(problem);
+                }
+            })
             .then();
     }
 
@@ -154,9 +164,10 @@ public class VerifySeals implements StepHandler<NoMetadata, ProcessContext> {
         check.put("count", BoundValue.of(problems.count()));
         check.put("problems", BoundValue.of(json.writeValueAsString(problems.kept())));
         check.put("key", BoundValue.of(key.id()));
+        check.put("erased", BoundValue.of((long) problems.erasedCount()));
         return store.insertCheck(engine, check)
             .doOnNext(checkNo -> ctx.put(IntegrityProcesses.OUTPUT, new IntegrityProcesses.VerifyOutput(checkNo,
-                problems.count() == 0, problems.count(), seals, rows, unsealed)))
+                problems.count() == 0, problems.count(), seals, rows, unsealed, problems.erasedCount())))
             .then();
     }
 
@@ -165,6 +176,7 @@ public class VerifySeals implements StepHandler<NoMetadata, ProcessContext> {
         private final int max;
         private final List<IntegrityProblem> kept = new ArrayList<>();
         private final AtomicInteger count = new AtomicInteger();
+        private final AtomicInteger erased = new AtomicInteger();
 
         Problems(int max) {
             this.max = max;
@@ -178,6 +190,14 @@ public class VerifySeals implements StepHandler<NoMetadata, ProcessContext> {
 
         int count() {
             return count.get();
+        }
+
+        void erased() {
+            erased.incrementAndGet();
+        }
+
+        int erasedCount() {
+            return erased.get();
         }
 
         synchronized List<IntegrityProblem> kept() {

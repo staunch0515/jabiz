@@ -1499,7 +1499,7 @@
             "type" : "string"
           },
           "kind" : {
-            "enum" : [ "MODIFIED", "MISSING", "CHAIN_BROKEN", "SEAL_ALTERED", "OTHER_KEY", "UNPROTECTED" ],
+            "enum" : [ "MODIFIED", "MISSING", "CHAIN_BROKEN", "SEAL_ALTERED", "OTHER_KEY", "UNPROTECTED", "ERASED" ],
             "type" : "string"
           },
           "sealNo" : {

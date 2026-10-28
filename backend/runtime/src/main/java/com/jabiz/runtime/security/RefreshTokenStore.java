@@ -108,6 +108,8 @@ public class RefreshTokenStore {
     public static final String REASON_SELF_REVOKE = "SELF_REVOKE";
     /** An administrator ended sessions of the user (section 15.9). */
     public static final String REASON_ADMIN_REVOKE = "ADMIN_REVOKE";
+    /** The account was erased (decision D62). */
+    public static final String REASON_ERASED = "ERASED";
 
     private static final int TOKEN_BYTES = 32;
     /**

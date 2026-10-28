@@ -84,6 +84,9 @@ public class SecurityEntities {
         eb.field("registeredEmail", f -> f.physicalColumn("registered_email").asText(320).processOnly());
         eb.field("emailVerifiedAt", f -> f.physicalColumn("email_verified_at").asTemporal(TemporalRole.EVENT_TIME)
             .processOnly());
+        // When the account was erased (docs/design/10-security.md section 17; decision D62): written by ACCOUNT_ERASE
+        // only. An erased user is disabled for good; its name, addresses and password are gone.
+        eb.field("erasedAt", f -> f.physicalColumn("erased_at").asTemporal(TemporalRole.EVENT_TIME).processOnly());
         eb.unique("uk_sec_user_name", "userName");
         // One user per address, regardless of case: the address may stand for the user name (decision D36 item 4).
         eb.uniqueIgnoreCase("uk_sec_user_email", "email");
