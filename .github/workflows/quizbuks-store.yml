@@ -138,12 +138,12 @@ jobs:
         working-directory: quizbuks-web/e2e
       # The pictures' Japanese and Chinese.
       - run: sudo apt-get install -y --no-install-recommends fonts-noto-cjk
-      - run: pnpm store
+      - run: pnpm screenshots
         working-directory: quizbuks-web/e2e
         env:
           STORE_OUT: ${{ runner.temp }}/store
       # Play's high-resolution icon (512 × 512) is the app's own.
-      - run: cp quizbuks-web/app/public/icon-512.png "$RUNNER_TEMP/store/icon-512.png"
+      - run: mkdir -p "$RUNNER_TEMP/store" && cp quizbuks-web/app/public/icon-512.png "$RUNNER_TEMP/store/icon-512.png"
       - uses: actions/upload-artifact@v6
         with:
           name: quizbuks-store-screenshots

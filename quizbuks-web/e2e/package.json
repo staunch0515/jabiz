@@ -8,7 +8,7 @@
   "scripts": {
     "e2e": "playwright test",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "store": "playwright test -c store.config.ts"
+    "screenshots": "playwright test -c store.config.ts"
   },
   "devDependencies": {
     "@axe-core/playwright": "4.13.0",

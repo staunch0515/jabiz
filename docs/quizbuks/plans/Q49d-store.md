@@ -20,7 +20,7 @@
 - `docs/quizbuks/store/play-data-safety.md`：数据安全表逐格对到隐私政策；删除账号的网址在 Q49a 之前填隐私政策的地址。
 - `docs/quizbuks/store/play-content-rating.md`：IARC 问卷、目标受众（18+）、广告、金融功能等声明。
 - `docs/quizbuks/store/play-review.md`：应用访问权限（审核账号只在 Console 中）、竞赛与 UGC 政策、发布前的核对。
-- 截图：`quizbuks-web/e2e/store/screenshots.spec.ts`（`pnpm store`，`store.config.ts`）对打包的 jar：每种语言一个商家发布三份该语言的问卷，
+- 截图：`quizbuks-web/e2e/store/screenshots.spec.ts`（`pnpm screenshots`，`store.config.ts`）对打包的 jar：每种语言一个商家发布三份该语言的问卷，
   答题者先以 API 答一份（历史与 Kudos），再在手机（360×640，3 倍，Android 的 Chrome，`?shell=android` 即商店 App）中答另一份。
   每种语言 7 张 1080×1920 的 JPEG（介绍、首页、问卷、答题中、结果、历史、钱包）与宣传图 1024×500；高清图标即 `quizbuks-web/app/public/icon-512.png`。
   workflow `quizbuks-store.yml`：手动运行，以及改了截图脚本的 PR；启动方式同 e2e 作业，产物 `quizbuks-store-screenshots` 保留 30 天。
