@@ -57,7 +57,7 @@ public final class PlatformSchemaMigration implements FlywayMigrationStrategy {
         "sec_user_mail_preference_version", "sys_inbound_event", "sys_job_item_failure",
         "sys_inbound_event_body", "sys_external_job", "sys_external_job_claim", "sys_external_job_attempt",
         "sys_external_job_usage", "sys_external_job_cancel", "sys_external_job_outcome", "sys_external_job_file",
-        "sys_mail_address_optout", "sec_external_token_use");
+        "sys_mail_address_optout", "sec_external_token_use", "sys_erasure", "sys_erasure_purge", "sys_erasure_item");
 
     @Override
     public void migrate(Flyway application) {
