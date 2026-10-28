@@ -56,7 +56,7 @@ jabiz:
       "[QB_MAIL_SERVER_SET]": { per-user: 10, period: 1h }
       # Q33: loading codes seals up to a thousand of them; not a loop.
       "[QB_DIGITAL_CODES_LOAD]": { per-user: 30, period: 1h }
-      # Q39: the audience count is rounded and floored, but narrowing conditions one at a time over many calls is how a
+      # Q47: the audience count is rounded and floored, but narrowing conditions one at a time over many calls is how a
       # count gives a person away: a sponsor checks a few drafts an hour, not hundreds.
       "[QB_AUDIENCE_COUNT]": { per-user: 30, period: 1h }
       "[QB_PUBLICATION_AUDIENCE_SAVE]": { per-user: 120, period: 1h }

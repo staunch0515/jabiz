@@ -225,7 +225,7 @@ public final class AttemptProcesses {
                     QueryEntities.query(QbPublications.defaultDataset(QbPublications.PUBLICATION),
                         ctx -> EntityQuery.builder().where(new QueryPredicate.In("publicationId",
                             ids(ctx.get(PUB_KEY)))).limit(1).build(), PUBLICATION),
-                    // Q39: the publication's conditions and the caller's attributes, in the same statement (the
+                    // Q47: the publication's conditions and the caller's attributes, in the same statement (the
                     // statement budget stays); conditions are frozen with the publication, so not read again.
                     AudienceRows.conditions(ctx -> ctx.get(PUB_KEY), CONDITIONS),
                     AudienceRows.callers(ATTRIBUTES)))
@@ -342,8 +342,9 @@ public final class AttemptProcesses {
                 + refusal, Map.of("publicationId", String.valueOf(ctx.get(PUB_KEY)))));
             return;
         }
-        // Q39: an invited publication takes its list; a public one only the takers whose profile meets it.
-        if (!PlaySteps.invited(card) && !AudienceRows.matches(PlaySteps.list(ctx, CONDITIONS),
+        // Q47: an invited publication takes its list; a sponsor's public one only the takers whose profile meets it.
+        // A channel's publication has no conditions and its takers no profile (ChannelPlay reads neither): never asked.
+        if (PublisherKind.sponsor(card.get("publisherKind")) && !PlaySteps.invited(card) && !AudienceRows.matches(PlaySteps.list(ctx, CONDITIONS),
             PlaySteps.list(ctx, ATTRIBUTES), ctx.opTime())) {
             ctx.reject(new com.jabiz.entity.Violation("publicationId", AudienceCodes.NOT_MATCHED, "The caller's "
                 + "profile does not meet the publication's conditions", Map.of("publicationId",

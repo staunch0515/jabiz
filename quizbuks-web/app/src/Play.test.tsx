@@ -96,7 +96,7 @@ interface Options {
   redeemClaim?: () => Response
   /** Q33: the answer to opening a digital prize's content. */
   digitalOpen?: () => Response
-  /** Q39: the taker's stored answers for matching (one row per option, or the birth year). */
+  /** Q47: the taker's stored answers for matching (one row per option, or the birth year). */
   attributes?: Record<string, unknown>[]
 }
 
@@ -705,7 +705,7 @@ describe('a publication\'s page', () => {
   })
 })
 
-describe('customer matching (Q39)', () => {
+describe('customer matching (Q47)', () => {
   it('asks for more of the profile instead of the start when the quiz aims at other people', async () => {
     const { posted } = server({ publicationPage: () => json(200, { items: [publication({ canStart: false,
       matched: false })], offset: 0, limit: 1 }) })

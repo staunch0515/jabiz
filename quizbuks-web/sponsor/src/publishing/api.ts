@@ -1178,7 +1178,7 @@ export const saveMailServer = (input: MailServerInput) =>
 export const removeMailServer = () =>
   runProcess<{ sponsorId: string }>(PUBLISHING_PROCESS.mailServerRemove, {})
 
-/** `AudienceCount`: never a small number; under the threshold only that it is fewer (Q39, D-Q39-5). */
+/** `AudienceCount`: never a small number; under the threshold only that it is fewer (Q47, D-Q47-5). */
 export interface AudienceCount {
   /** The count rounded down to tens; null when fewer than `fewerThan`. */
   count: number | null

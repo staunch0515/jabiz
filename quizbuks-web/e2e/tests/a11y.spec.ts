@@ -237,7 +237,7 @@ for (const appearance of ['light', 'dark'] as const) {
     await expectAccessible(page, at('sponsor publication typed wrong'))
     await page.getByTestId('publication-pass-score').fill('')
     await page.getByTestId('publication-next').click()
-    // Q39: who it is for, with a condition switched on.
+    // Q47: who it is for, with a condition switched on.
     await expect(page.getByTestId('publication-step-title')).toHaveText('Customer matching')
     await page.getByTestId('audience-gender-on').click()
     await expectAccessible(page, at('sponsor publication customer matching'))

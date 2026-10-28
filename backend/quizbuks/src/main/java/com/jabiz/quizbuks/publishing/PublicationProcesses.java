@@ -144,7 +144,7 @@ public final class PublicationProcesses {
                     .where(new QueryPredicate.In("publicationId", PublicationEditing.ids(ctx.get(PUB_ID))))
                     .limit(1).build(), FOUND))
             .steps(PublicationEditing::loadTiers)
-            // Q39: an invited publication takes its list; switching to it clears the matching conditions.
+            // Q47: an invited publication takes its list; switching to it clears the matching conditions.
             .steps(PublicationAudience::loadCriteria)
             .steps(PublicationEditing::loadSponsor)
             .steps(PublicationEditing::loadSponsorMethods)
@@ -418,7 +418,7 @@ public final class PublicationProcesses {
                     // Tiers before what they belong to: an instance still referred to cannot be deleted.
                     list(ctx, TIERS).forEach(tier -> ctx.changes().delete(QbPublications.TIER, tier.id(),
                         tier.version()));
-                    // Q39: the conditions too, for the same reason.
+                    // Q47: the conditions too, for the same reason.
                     list(ctx, PublicationAudience.CRITERIA).forEach(row -> ctx.changes().delete(
                         com.jabiz.quizbuks.audience.QbAudience.CRITERION, row.id(), row.version()));
                     ctx.changes().delete(QbPublications.PUBLICATION, publication.id(), publication.version());
@@ -497,7 +497,7 @@ public final class PublicationProcesses {
         UUID publicationId = uuid(ctx.changes().insert(QbPublications.PUBLICATION, values));
         List<UUID> tierIds = new ArrayList<>();
         writeTiers(ctx, publicationId, PublisherKind.SPONSOR, ctx.request().actorId(), List.of(), tiers, tierIds);
-        // Q39: the conditions travel with the copy, as its policy does (an invited one has none).
+        // Q47: the conditions travel with the copy, as its policy does (an invited one has none).
         (Audience.INVITED.equals(source.get("audience")) ? List.<EntityInstance>of()
             : list(ctx, PublicationAudience.CRITERIA)).forEach(row -> {
             Map<String, Object> condition = new LinkedHashMap<>(PublicationAudience.copyOf(row));

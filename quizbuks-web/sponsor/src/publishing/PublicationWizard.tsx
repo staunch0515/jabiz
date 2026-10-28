@@ -109,7 +109,7 @@ function refusalProblems(error: unknown): Pick<Problem, 'field' | 'message'>[] {
 
 /**
  * The four steps of a draft publication (M-30, M-32, M-33): the quiz version and name; the time, marks, reward
- * tiers and money; who it is for (Q39: public in regions or invited, and the matching conditions on the takers'
+ * tiers and money; who it is for (Q47: public in regions or invited, and the matching conditions on the takers'
  * profiles, with their rounded count); then everything at once with every problem submitting would be refused for (the save's
  * output) and "Submit". Each "Save and continue" saves the whole draft (`QB_PUBLICATION_SAVE`, with the revision the
  * page last saw); a draft may be incomplete. A new publication is created by its first save and opened at its address.
@@ -141,7 +141,7 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
   const [revision, setRevision] = useState<number | null>(detail?.publication.revision ?? null)
   const headingRef = useRef<HTMLHeadingElement>(null)
   const moved = useRef(false)
-  // Q39: the matching conditions, saved with each save of the draft once changed (their own process).
+  // Q47: the matching conditions, saved with each save of the draft once changed (their own process).
   const savedConditions = useQuery({
     queryKey: conditionsQuery(publicationId),
     queryFn: () => readConditions(publicationId!),
@@ -189,7 +189,7 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
   const showMethods = methodChoices.length > 1 || !methodChoices.includes(rewardMethod)
 
   const set = <K extends keyof PublicationForm>(field: K, value: PublicationForm[K]) => {
-    // Q39: a count was of the regions and the audience it was made for.
+    // Q47: a count was of the regions and the audience it was made for.
     if (field === 'regions' || field === 'audience') setCount(null)
     setForm((f) => ({ ...f, [field]: value }))
   }
@@ -264,7 +264,7 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
       notify.error(t('publishing.wizard.fixTyping'))
       return
     }
-    // Q39: a criterion switched on needs an option or both bounds (the server would refuse it as well).
+    // Q47: a criterion switched on needs an option or both bounds (the server would refuse it as well).
     if (shaped.audience === 'PUBLIC' && editedConditions?.some((condition) => condition.options
       ? condition.options.length === 0 : condition.min == null || condition.max == null)) {
       notify.error(t('publishing.audience.incomplete'))
@@ -534,7 +534,7 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
       </div>
     </div>,
 
-    // 3. Who it is for (Q39): public in regions, or invited; and the takers' profiles it is aimed at.
+    // 3. Who it is for (Q47): public in regions, or invited; and the takers' profiles it is aimed at.
     <div key="audience" className="flex flex-col gap-6">
       <fieldset className="flex flex-col gap-2" data-testid="publication-audience"
         aria-describedby={[`${id}-audience-hint`, problemOf('audience') ? `${id}-audience-error` : undefined]

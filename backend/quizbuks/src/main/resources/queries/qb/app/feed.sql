@@ -113,7 +113,7 @@ WHERE c.{{QbPublicationCard.status}} = 'LIVE'
        OR NOT EXISTS (SELECT 1 FROM {{QbAttempt}} a
                       WHERE a.{{QbAttempt.publicationId}} = c.{{QbPublicationCard.publicationId}}
                         AND (a.{{QbAttempt.status}} <> 'IN_PROGRESS' OR a.{{QbAttempt.deadline}} <= :at)))
-  -- Q39: the caller's profile meets every condition of the publication (qb.system.audience-count, the same; the
+  -- Q47: the caller's profile meets every condition of the publication (qb.system.audience-count, the same; the
   -- view holds the caller's own attributes only).
   AND NOT EXISTS (
       SELECT 1 FROM {{QbPublicationCriterion}} pc

@@ -21,6 +21,7 @@
 **Takers**
 
 - Profile: display name, country or region, city (optional), the currency used for display
+- About me (all optional): gender (including "prefer not to say"), year of birth, occupation and interests
 - Quiz attempts: your answers, start and submission times, score, pass or fail, and the rewards you earned
 - Your Kudos balance and history in the Service; cash rewards and digital prizes you receive, and any disputes about them
 - If you withdraw by bank transfer, the receiving account (bank and branch, account type, account number, account holder)
@@ -51,10 +52,11 @@ We do not collect your location (GPS or similar) or estimate it from your IP add
 
 1. To provide the Service: creating and authenticating accounts; publishing, answering and scoring quizzes; granting rewards and prizes; managing Kudos; and processing withdrawals and top-ups
 2. To show Takers the quizzes available in their country or region
-3. To verify identity, and to prevent and investigate unauthorised sign-ins, improperly obtained rewards and other misuse
-4. To meet legal obligations, such as issuing receipts and keeping accounting records
-5. To send notices about the Service, including changes to the terms and this policy, and to answer enquiries
-6. To produce statistics that do not identify individuals, and to improve the Service
+3. To show a quiz, and let a Taker answer it, only if what the Taker entered in About me meets the conditions the Sponsor set for it
+4. To verify identity, and to prevent and investigate unauthorised sign-ins, improperly obtained rewards and other misuse
+5. To meet legal obligations, such as issuing receipts and keeping accounting records
+6. To send notices about the Service, including changes to the terms and this policy, and to answer enquiries
+7. To produce statistics that do not identify individuals, and to improve the Service
 
 ## 4. What Sponsors see
 
@@ -65,6 +67,8 @@ When a Taker answers a Sponsor's quiz, that Sponsor can see:
 - **People the Sponsor invited:** the email address the Sponsor entered, and that person's progress, score and reward.
 
 **Staff:** to register a Taker as staff, a Sponsor can look up that Taker's display name with the ID the Taker gives them. The Sponsor can then see the prizes that staff member hands over.
+
+**About me:** what Takers enter in About me is not given to Sponsors. When setting conditions for a quiz, a Sponsor sees only how many Takers meet them: "fewer than 20" below 20, otherwise the number rounded down to the nearest 10.
 
 Per-question analysis, such as the share of correct answers, is shown only as totals, and only once a minimum number of people (5 by default) have answered.
 
@@ -107,6 +111,7 @@ The Takers' app also stores its page shell in the browser so that pages open off
 - Receipts, accounting records and notices from payment providers are kept for 10 years from the end of the fiscal year.
 - AI-suggested drafts are deleted 7 days after they are generated.
 - Uploaded files are fully deleted when the Sponsor deletes them.
+- What you entered in About me is deleted as soon as you change or clear it. After an account is closed, it is no longer used to match quizzes.
 
 ## 9. Security
 
@@ -133,6 +138,7 @@ Send your request from your registered email address to the contact in section 1
 You can also do the following yourself in the Service:
 
 - change your display name, profile, language, password, two-step verification and linked accounts
+- enter, change or clear About me
 - see the devices you are signed in on, and sign them out
 - choose which mail and notifications you receive
 

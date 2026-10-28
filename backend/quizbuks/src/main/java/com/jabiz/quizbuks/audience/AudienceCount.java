@@ -1,7 +1,7 @@
 package com.jabiz.quizbuks.audience;
 
 /**
- * What a sponsor is told of how many takers match their conditions (docs/quizbuks/plans/Q39-audience.md, D-Q39-5):
+ * What a sponsor is told of how many takers match their conditions (docs/quizbuks/plans/Q47-audience.md, D-Q47-5):
  * never a small number, which narrowing the conditions one at a time could tie to a person; under
  * {@link #THRESHOLD} only that it is fewer, otherwise the count rounded down to {@link #STEP}.
  *

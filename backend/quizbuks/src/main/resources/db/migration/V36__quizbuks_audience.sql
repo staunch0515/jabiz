@@ -1,4 +1,4 @@
--- Matching a publication's audience by the takers' profiles (docs/quizbuks/plans/Q39-audience.md). Both tables are
+-- Matching a publication's audience by the takers' profiles (docs/quizbuks/plans/Q47-audience.md). Both tables are
 -- ordinary: a taker may clear what they told, and a draft's conditions are replaced while it is a draft.
 
 -- What a taker told of themself, one row per registered criterion and option (several for a criterion that takes

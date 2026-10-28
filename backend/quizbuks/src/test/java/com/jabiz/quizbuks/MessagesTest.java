@@ -191,7 +191,7 @@ class MessagesTest {
 
     @Test
     void matchingHasItsTexts() throws IOException {
-        // Q39: the codes, the processes and the two entities.
+        // Q47: the codes, the processes and the two entities.
         Properties en = load("en");
         assertThat(en.stringPropertyNames()).containsAll(com.jabiz.quizbuks.audience.AudienceCodes.ALL)
             .contains("process.QB_PROFILE_ATTRIBUTES_SAVE", "process.QB_PUBLICATION_AUDIENCE_SAVE",

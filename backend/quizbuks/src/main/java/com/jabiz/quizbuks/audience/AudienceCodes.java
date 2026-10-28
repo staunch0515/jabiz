@@ -2,7 +2,7 @@ package com.jabiz.quizbuks.audience;
 
 import java.util.List;
 
-/** The matching rules' violation codes (Q39); their messages are in the three languages. */
+/** The matching rules' violation codes (Q47); their messages are in the three languages. */
 public final class AudienceCodes {
 
     /** No registered criterion has this name. */

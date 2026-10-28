@@ -83,7 +83,7 @@ test('a sponsor publishes a quiz version through review and runs the publication
   await page.getByTestId('publication-max-winners').fill('10')
   await page.getByTestId('publication-next').click()
 
-  // 3. Everyone, with no matching conditions (Q39).
+  // 3. Everyone, with no matching conditions (Q47).
   await expect(page.getByTestId('publication-step-title')).toHaveText('Customer matching')
   await page.getByTestId('publication-regions').getByRole('checkbox', { name: 'Global' }).click()
   await page.getByTestId('publication-next').click()

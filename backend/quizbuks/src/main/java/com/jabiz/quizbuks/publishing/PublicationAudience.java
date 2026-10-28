@@ -35,7 +35,7 @@ import static com.jabiz.quizbuks.publishing.PublicationEditing.PUBLICATION;
 import static com.jabiz.quizbuks.publishing.PublicationEditing.PUB_ID;
 
 /**
- * A publication's matching conditions (docs/quizbuks/plans/Q39-audience.md): {@code QB_PUBLICATION_AUDIENCE_SAVE}
+ * A publication's matching conditions (docs/quizbuks/plans/Q47-audience.md): {@code QB_PUBLICATION_AUDIENCE_SAVE}
  * replaces a draft's conditions (the wizard's step "Audience"), and {@code QB_AUDIENCE_COUNT} tells the sponsor how
  * many takers its conditions and regions reach, rounded ({@link AudienceCount}). The conditions are frozen with the
  * publication once it is submitted (only a draft is edited, D-Q4-2) and copied with it.
@@ -44,7 +44,7 @@ public final class PublicationAudience {
 
     public static final String SAVE = "QB_PUBLICATION_AUDIENCE_SAVE";
     public static final String COUNT = "QB_AUDIENCE_COUNT";
-    /** The exact count, run by {@link #COUNT} only (its permission is no role's, D-Q39-5). */
+    /** The exact count, run by {@link #COUNT} only (its permission is no role's, D-Q47-5). */
     public static final String COUNT_TEMPLATE = "qb.system.audience-count";
 
     static final String CRITERIA = "criteria";
@@ -180,7 +180,7 @@ public final class PublicationAudience {
             : integer(row.get("minValue")) + "-" + integer(row.get("maxValue")));
     }
 
-    /** The values of a stored condition row, for a copy of the publication (Q39: conditions travel with it). */
+    /** The values of a stored condition row, for a copy of the publication (Q47: conditions travel with it). */
     static Map<String, Object> copyOf(EntityInstance row) {
         return row(row.get("criterionKey"), row.get("valueCode"), integer(row.get("minValue")),
             integer(row.get("maxValue")), row.get("measure"));

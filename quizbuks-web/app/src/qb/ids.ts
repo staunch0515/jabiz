@@ -68,7 +68,7 @@ export const PLAY = {
 
 /**
  * Customer matching (`audience.ProfileAttributeProcesses`, `publishing.PublicationAudience`, `audience.QbAudience`;
- * docs/quizbuks/plans/Q39-audience.md): the taker's own answers, a draft's conditions and their rounded count.
+ * docs/quizbuks/plans/Q47-audience.md): the taker's own answers, a draft's conditions and their rounded count.
  */
 export const AUDIENCE = {
   attributesSave: 'QB_PROFILE_ATTRIBUTES_SAVE',

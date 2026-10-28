@@ -70,7 +70,7 @@ public final class QbPermissions {
      */
     public static final String PUBLICATION_SYSTEM = "qb.publication.system";
     /**
-     * Matching (Q39): reading every taker's profile attributes and counting them exactly. Granted to no role: the
+     * Matching (Q47): reading every taker's profile attributes and counting them exactly. Granted to no role: the
      * count process ({@code QB_AUDIENCE_COUNT}) runs the count template itself and gives the sponsor a rounded number
      * only, so neither the template nor the attributes' default dataset is open to anybody directly.
      */

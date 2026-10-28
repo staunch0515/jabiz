@@ -18,7 +18,7 @@ import { StaffAccount } from '../staff/StaffAccount'
 /** The account page, where a round trip through an identity provider to link an account comes back to. */
 export const ACCOUNT_PATH = '/account'
 
-/** The account page opened at the details for matching (Q39), from a quiz the caller's profile does not match. */
+/** The account page opened at the details for matching (Q47), from a quiz the caller's profile does not match. */
 export const ACCOUNT_DETAILS_PATH = '/account?section=details'
 
 let justLinked: IdentityLinked | null = null

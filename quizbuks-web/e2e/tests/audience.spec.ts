@@ -3,7 +3,7 @@ import { fundedSponsor, taker } from './play'
 import { expect, expectAccessible, prepareQuizbuks, run, signIn, test, unique } from './support'
 
 /**
- * Customer matching (docs/quizbuks/plans/Q39-audience.md): the sponsor aims a draft at takers who like pets in the
+ * Customer matching (docs/quizbuks/plans/Q47-audience.md): the sponsor aims a draft at takers who like pets in the
  * wizard's step "Customer matching" and counts them (a rounded number); a taker who has told nothing sees the quiz
  * but is asked for their profile, tells the app they like pets, and can then start it.
  */

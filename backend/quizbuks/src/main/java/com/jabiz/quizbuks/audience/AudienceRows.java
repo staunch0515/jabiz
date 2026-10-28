@@ -13,7 +13,7 @@ import java.util.List;
 import java.util.function.Function;
 
 /**
- * The stored rows of matching read by a process, for {@link AudienceMatch}: the start's check (Q39) reads a
+ * The stored rows of matching read by a process, for {@link AudienceMatch}: the start's check (Q47) reads a
  * publication's conditions and the caller's own attributes in the statement it reads the card with.
  */
 public final class AudienceRows {

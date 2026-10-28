@@ -96,7 +96,7 @@ function PublicationView({ detail, stale, onStale }: {
   const endReason = useEndReasonLabel()
   const { publication, tiers } = detail
   const { version } = useVersionOf(publication.quizId, publication.versionId)
-  // Q39: the conditions it was submitted with (frozen with it).
+  // Q47: the conditions it was submitted with (frozen with it).
   const conditions = useQuery({ queryKey: conditionsQuery(publication.publicationId),
     queryFn: () => readConditions(publication.publicationId), enabled: publication.audience === 'PUBLIC' })
   const dates = [

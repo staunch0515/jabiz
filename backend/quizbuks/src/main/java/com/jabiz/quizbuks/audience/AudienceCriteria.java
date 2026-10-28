@@ -14,8 +14,8 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * The registered criteria (docs/quizbuks/plans/Q39-audience.md, D-Q39-3) and the checks of what a publication sets
- * and what a taker tells. The four of Q39a ask nothing that Japan's APPI counts as requiring special care (health,
+ * The registered criteria (docs/quizbuks/plans/Q47-audience.md, D-Q47-3) and the checks of what a publication sets
+ * and what a taker tells. The four of Q47a ask nothing that Japan's APPI counts as requiring special care (health,
  * creed, record and the like); a new criterion must not either.
  */
 public final class AudienceCriteria {

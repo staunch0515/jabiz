@@ -8,7 +8,7 @@ import { SPONSOR } from '../messages'
 import type { AudienceCount } from './api'
 
 /**
- * A draft's matching conditions (Q39, the wizard's step "Customer matching"): per criterion, off (everybody) or the
+ * A draft's matching conditions (Q47, the wizard's step "Customer matching"): per criterion, off (everybody) or the
  * options or the age range a taker's profile must have. Within a criterion any option is enough; every criterion
  * switched on must hold. The page only offers values; the server checks them (`QB_AUDIENCE_*`).
  */

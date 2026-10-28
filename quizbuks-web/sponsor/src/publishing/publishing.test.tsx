@@ -65,7 +65,7 @@ interface Server {
   invitations?: Record<string, unknown>[]
   /** The sponsor's own mail server (Q29); none before one is saved. */
   mailServer?: Record<string, unknown> | null
-  /** The draft's stored matching conditions (Q39), one row per option or range. */
+  /** The draft's stored matching conditions (Q47), one row per option or range. */
   conditions?: Record<string, unknown>[]
   /** The sponsor's staff (Q39). */
   staff?: Record<string, unknown>[]
@@ -365,7 +365,7 @@ describe('the publication wizard', () => {
     expect(within(tier).getByTestId('tier-to')).toHaveValue('2')
     await userEvent.type(within(tier).getByTestId('tier-reward'), '100')
     await userEvent.click(screen.getByTestId('publication-next'))
-    // Q39: who it is for is a step of its own.
+    // Q47: who it is for is a step of its own.
     const regions = await screen.findByTestId('publication-regions')
     await userEvent.click(await within(regions).findByRole('checkbox', { name: 'Japan' }))
     await userEvent.click(screen.getByTestId('publication-next'))
@@ -950,7 +950,7 @@ describe('a submitted publication', () => {
   })
 })
 
-describe('customer matching (Q39)', () => {
+describe('customer matching (Q47)', () => {
   const audienceSaved = (revision: number) => ({ status: 200, body: { output: { publicationId: 'p1', status: 'DRAFT',
     revision, approval: null, approvalRequestId: null } } })
 

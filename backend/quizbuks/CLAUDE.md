@@ -111,11 +111,11 @@
   （都先 `CallerChecks::refuseBanned`，都在列表锁 `qb.invitation-list:<发布>` 内，发送再取配额锁 `qb.invitation-quota:<商家>`；上限与每日配额在配置 `quizbuks.invitations.*`，不是业务参数；寄送只在 `LIVE` 时）与内部 `QB_INVITATION_MAIL`（任务 `qb.invitation-mail`）写入；邀请邮件是模板
   `qb.invitation`（`signInLink`，平台决策 D55；收件人 `MailRecipient.address`）。答题流程读调用者的邀请只经 `Invitations.loadForTaker` / `mine`（公开的卡片一条语句也不读，预算不变）：
   `QB_VIEW` 认领、开始写 `STARTED` 与 `attemptId`、完成写 `ANSWERED` 与分数、奖励；不另写认领接口或事件消费者。读卡片地区的其他地方（通告、档位模板）要先排除 `INVITED`（其卡片的地区是占位的 `GLOBAL`）；管理员只看人数，地址只给商家。
-- **客户匹配**（Q39，包 `audience`、`publishing.PublicationAudience`，`docs/quizbuks/plans/Q39-audience.md`）：条件种类只在 `audience.AudienceCriteria.ALL`（键、选项、范围、计费键 `audience.<键>`；前端 `src/qb/audience.ts` 照抄，新增种类先改这两处与三语文案 `qb/messages.ts` 的 `audience.*`，不问 APPI 的需要特别注意的个人信息）。
+- **客户匹配**（Q47，包 `audience`、`publishing.PublicationAudience`，`docs/quizbuks/plans/Q47-audience.md`）：条件种类只在 `audience.AudienceCriteria.ALL`（键、选项、范围、计费键 `audience.<键>`；前端 `src/qb/audience.ts` 照抄，新增种类先改这两处与三语文案 `qb/messages.ts` 的 `audience.*`，不问 APPI 的需要特别注意的个人信息）。
   答题者自己的回答 `QbProfileAttribute`（每个选项或数值一行）只经 `QB_PROFILE_ATTRIBUTES_SAVE` 整体替换（账户锁内，全部可选）；发布的条件 `QbPublicationCriterion`（带发布方那一对）只经 `QB_PUBLICATION_AUDIENCE_SAVE` 在草稿时整体替换（发布锁内，`INVITED` 不能有条件，`QB_AUDIENCE_INVITED`），提交即冻结，复制时随发布复制，删除草稿时一起删除。
   **匹配的定义只有一个**：`AudienceMatch`（同一条件内任一选项即可，各条件都须满足，没有回答即不满足，年龄 = 当前 UTC 年 − 出生年）；模板 `qb.app.feed`（不列出）、`qb.app.publication`（`matched`，进入 `canStart`；页面照样显示，以便请人完善资料）与 `qb.system.audience-count` 写同一段 SQL（改一处即改四处，`AudienceIT` 比较模板与 Java），开始答题在锁外既有的 `QueryEntities.all` 中读条件与本人的回答（语句数不变）、`INVITED` 以外不满足即 422 `QB_AUDIENCE_NOT_MATCHED`。
   **原始回答谁也读不到**：默认数据视图的读权限 `qb.audience.system` 不授予任何角色（`*` 照平台规则例外，只有首个管理员），答题者只经 `me:` 读自己的；商家只经 `QB_AUDIENCE_COUNT`（本人的发布，不是本人的 404）得到取整的人数（`AudienceCount`：少于 20 只说"少于 20"，否则向下取整到 10），计数模板只由该流程运行。以后换成专用的匹配服务器时，替换的是这几个模板与开始的读取，不是 `AudienceMatch` 的含义。
-  按规则计费（Q39c：按发布、按所用条件种类、按有效期折算到天，从 Kudos 钱包扣）尚未实现，计费键已在条件种类上。
+  按规则计费（Q47c：按发布、按所用条件种类、按有效期折算到天，从 Kudos 钱包扣）尚未实现，计费键已在条件种类上。
 - **商家自己的邮件服务器**（包 `mailserver`，`docs/quizbuks/plans/Q29-merchant-mail-server.md`，平台 D56）：实体 `QbSponsorMailServer`（每个商家一行）只经 `QB_MAIL_SERVER_SET`（平台步骤 `SealSecret` 密封密码，阻塞步骤 `TestMailServer` 用平台的 `MailSenders` 检查设置并给商家自己的地址发测试邮件，结果写 `verifiedAt` / `lastError`）与 `QB_MAIL_SERVER_REMOVE` 写入；
   平台的 `MailSenderSource` Bean（`MailServerConfig`）只交出验证过的行。邀请只经 `SendMail.via(商家编号)` 发出（`QB_INVITATION_SEND` 没有验证过的服务器即 422 `QB_INVITATION_NO_MAIL_SERVER`；`QB_INVITATION_MAIL` 发现服务器不可用即退回 `ADDED`），绝不回退到平台的服务器；
   平台自己的邮件照旧。模板 `qb.sponsor.mail-server` 从不返回密码。`JABIZ_SEAL_KEY` 是部署必需（入口脚本检查、本机演示自己生成）；`jabiz.mail.senders.trust-all-for-tests` 只在测试配置与 e2e 中开。

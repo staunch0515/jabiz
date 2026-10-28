@@ -26,8 +26,8 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * {@code QB_PROFILE_ATTRIBUTES_SAVE}: what a taker tells of themself for matching (docs/quizbuks/plans/Q39-audience.md,
- * D-Q39-1, D-Q39-9). The caller is the taker; the answers given are the whole of it: a criterion not given is cleared,
+ * {@code QB_PROFILE_ATTRIBUTES_SAVE}: what a taker tells of themself for matching (docs/quizbuks/plans/Q47-audience.md,
+ * D-Q47-1, D-Q47-9). The caller is the taker; the answers given are the whole of it: a criterion not given is cleared,
  * so an empty list clears everything. Every answer is optional. Like every QuizBuks write it needs a verified address
  * and refuses a banned account; under the account's lock, as the profile.
  */

@@ -27,7 +27,7 @@ export const ANSWERS_QUERY = ['qb', 'audience', 'answers'] as const
 const NOT_SET = '-'
 
 /**
- * What a taker tells of themself for matching (Q39, `QB_PROFILE_ATTRIBUTES_SAVE`): every criterion is optional, and
+ * What a taker tells of themself for matching (Q47, `QB_PROFILE_ATTRIBUTES_SAVE`): every criterion is optional, and
  * the more they tell, the more quizzes aimed at people like them they can answer. One control per criterion of
  * `qb/audience.ts`: a single choice, several (interests), or a birth year for an age. Each save sends all of it.
  */
@@ -64,7 +64,7 @@ function DetailsForm({ answers }: { answers: Answer[] }) {
     })),
     onSuccess: async () => {
       setSaved(true)
-      // What the taker can answer follows what they told (Q39): the feed and the pages read it again.
+      // What the taker can answer follows what they told (Q47): the feed and the pages read it again.
       await Promise.all([ANSWERS_QUERY, ['qb', 'feed'], ['qb', 'publication']].map((queryKey) =>
         queryClient.invalidateQueries({ queryKey })))
     },

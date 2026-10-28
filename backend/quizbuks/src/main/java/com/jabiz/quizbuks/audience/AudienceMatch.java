@@ -8,8 +8,8 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Whether a taker's profile matches a publication's conditions (docs/quizbuks/plans/Q39-audience.md, D-Q39-2,
- * D-Q39-8): every criterion the publication sets holds; an option criterion holds when the profile has any of the
+ * Whether a taker's profile matches a publication's conditions (docs/quizbuks/plans/Q47-audience.md, D-Q47-2,
+ * D-Q47-8): every criterion the publication sets holds; an option criterion holds when the profile has any of the
  * options, a range when the profile's number, read by the criterion's measure at {@code year}, is within the bounds.
  * A criterion the profile tells nothing of does not hold. No condition at all matches everybody.
  *

@@ -159,7 +159,7 @@ export function useVersionOf(quizId: string | null, versionId: string | null) {
 
 export interface SummaryValues {
   name: string
-  /** Q39: the matching conditions of a public publication; undefined while unknown (not shown). */
+  /** Q47: the matching conditions of a public publication; undefined while unknown (not shown). */
   conditions?: readonly Condition[]
   quizTitle: string | null
   versionLabel: string | null

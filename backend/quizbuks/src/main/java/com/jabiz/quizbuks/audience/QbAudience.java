@@ -5,7 +5,7 @@ import com.jabiz.quizbuks.publishing.PublisherKind;
 import com.jabiz.quizbuks.publishing.QbPublications;
 
 /**
- * The entities of matching (docs/quizbuks/plans/Q39-audience.md): what takers tell of themselves
+ * The entities of matching (docs/quizbuks/plans/Q47-audience.md): what takers tell of themselves
  * ({@code QbProfileAttribute}) and the conditions of publications ({@code QbPublicationCriterion}). Both are ordinary
  * tables written by processes only: a taker clears what they told, and a draft's conditions are replaced while it is a
  * draft (frozen with the publication on submission).
@@ -35,7 +35,7 @@ public final class QbAudience {
             .asSemanticIdentity("urn:jabiz:entity:quizbuks:profile-attribute"));
         eb.field("userId", f -> f.physicalColumn("user_id").immutable(true).required(true).asText(128));
         eb.field("criterionKey", f -> f.physicalColumn("criterion_key").immutable(true).required(true).asText(32));
-        // What a taker told stays out of the audit trail (it is cleared at will, D-Q39-9); the key is enough there.
+        // What a taker told stays out of the audit trail (it is cleared at will, D-Q47-9); the key is enough there.
         eb.field("valueCode", f -> f.physicalColumn("value_code").immutable(true).auditMasked().asText(32));
         eb.field("valueNumber", f -> f.physicalColumn("value_number").immutable(true).auditMasked()
             .asNumeric(6, 0));

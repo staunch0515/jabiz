@@ -66,7 +66,7 @@ permissions: [qb.play]
 -- Shown (the conditions QB_VIEW checks too): live, within its time and aimed at a region of the taker's country (for
 -- an invited publication, Q25: the caller's account holds an invitation of it, claimed by QB_VIEW or the start), or
 -- the caller has an attempt of it (to look at what they answered). canStart adds the feed's other conditions (winners
--- and budget not used up, a sponsor who can pay), no attempt yet, not the caller's own publication, and (Q39) matched: the caller's
+-- and budget not used up, a sponsor who can pay), no attempt yet, not the caller's own publication, and (Q47) matched: the caller's
 -- profile meets the conditions (a shared link still shows the page, so the App can ask for the profile). The
 -- introduction and the materials come from the version's snapshot, never its questions (design section 9). The
 -- windows' counts and their time are the statistics job's (every ten minutes); the total is the counter's, live.
@@ -159,7 +159,7 @@ SELECT
          OR (coalesce(w.{{QbWallet.pendingCount}}, 0) = 0
              AND coalesce(w.{{QbWallet.balance}} - w.{{QbWallet.held}}, 0) >= c.{{QbPublicationCard.maxReward}}))
     AND own.{{QbPublicationOwner.publicationId}} IS NULL AS startable,
-    -- Q39: an invited publication takes its list; a public one the caller's profile meeting its conditions.
+    -- Q47: an invited publication takes its list; a public one the caller's profile meeting its conditions.
     (c.{{QbPublicationCard.audience}} = 'INVITED' OR NOT EXISTS (
          SELECT 1 FROM {{QbPublicationCriterion}} pc
          WHERE pc.{{QbPublicationCriterion.publicationId}} = c.{{QbPublicationCard.publicationId}}

@@ -1,6 +1,6 @@
 /*---
 id: qb.system.audience-count
-description: How many takers a publication's regions and matching conditions reach now (Q39), exactly; run by QB_AUDIENCE_COUNT only, which rounds it
+description: How many takers a publication's regions and matching conditions reach now (Q47), exactly; run by QB_AUDIENCE_COUNT only, which rounds it
 entities: [SecUser, QbProfile, QbCountry, QbUserBan, QbProfileAttribute, QbPublicationCriterion]
 datasets:
   QbProfile: urn:jabiz:dataset:default:QbProfile

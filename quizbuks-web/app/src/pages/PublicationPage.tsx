@@ -64,7 +64,7 @@ function Action({ publication }: { publication: PublicationView }) {
       </>
     )
   } else if (!publication.matched) {
-    // Q39: aimed at people the caller's profile does not (yet) say they are.
+    // Q47: aimed at people the caller's profile does not (yet) say they are.
     action = (
       <Alert data-testid="detail-not-matched">
         <UserRoundSearch aria-hidden />

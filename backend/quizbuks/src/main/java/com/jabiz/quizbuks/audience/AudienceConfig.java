@@ -13,7 +13,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-/** The beans of matching (Q39): entities, datasets and processes. */
+/** The beans of matching (Q47): entities, datasets and processes. */
 @Configuration
 public class AudienceConfig {
 
@@ -34,7 +34,7 @@ public class AudienceConfig {
     }
 
     /**
-     * Written by the process only and read by nobody directly (its read permission is no role's, D-Q39-5): the
+     * Written by the process only and read by nobody directly (its read permission is no role's, D-Q47-5): the
      * administration does not browse what takers told either.
      */
     @Bean

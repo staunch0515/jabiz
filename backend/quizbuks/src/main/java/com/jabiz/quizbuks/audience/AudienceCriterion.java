@@ -4,8 +4,8 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * One kind of condition a publication may set on the takers' profiles (docs/quizbuks/plans/Q39-audience.md,
- * D-Q39-2). A taker's profile holds, under the same key, the options they chose ({@link Kind#SET}) or one number
+ * One kind of condition a publication may set on the takers' profiles (docs/quizbuks/plans/Q47-audience.md,
+ * D-Q47-2). A taker's profile holds, under the same key, the options they chose ({@link Kind#SET}) or one number
  * ({@link Kind#RANGE}); a publication's condition names options (any of them matches) or bounds. A taker who told
  * nothing for the key never matches it: the more the profile tells, the more publications it opens.
  *
@@ -19,7 +19,7 @@ import java.util.Objects;
  * @param min        the lowest bound a publication may set ({@link Kind#RANGE})
  * @param max        the highest bound a publication may set ({@link Kind#RANGE})
  * @param measure    how a range reads the profile's number ({@link Kind#RANGE})
- * @param billingKey the item a publication using the criterion would be charged for (Q39c); null for a free one
+ * @param billingKey the item a publication using the criterion would be charged for (Q47c); null for a free one
  */
 public record AudienceCriterion(String key, Kind kind, List<String> options, boolean multiple, Integer min, Integer max,
     Measure measure, String billingKey) {

@@ -233,7 +233,7 @@ export interface PublicationView {
   statsAt: string | null
   canStart: boolean
   /**
-   * Q39: whether the caller's profile meets the publication's matching conditions (an invited one: always); when not,
+   * Q47: whether the caller's profile meets the publication's matching conditions (an invited one: always); when not,
    * the page asks for more of the profile instead of offering the start.
    */
   matched: boolean

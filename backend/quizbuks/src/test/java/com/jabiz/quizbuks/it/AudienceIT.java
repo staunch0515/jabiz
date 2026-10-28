@@ -21,7 +21,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Customer matching (docs/quizbuks/plans/Q39-audience.md): what takers tell of themselves, a draft's conditions, the
+ * Customer matching (docs/quizbuks/plans/Q47-audience.md): what takers tell of themselves, a draft's conditions, the
  * feed, the page and the start that follow them, and the count a sponsor is given: rounded, of their own drafts only,
  * agreeing with {@link AudienceMatch}.
  */

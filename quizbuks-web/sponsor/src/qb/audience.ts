@@ -2,7 +2,7 @@ import { api, runProcess, unwrap } from '@jabiz/client'
 import { AUDIENCE } from './ids'
 
 /*
- * Customer matching (docs/quizbuks/plans/Q39-audience.md): the criteria a taker may tell of themselves and a sponsor
+ * Customer matching (docs/quizbuks/plans/Q47-audience.md): the criteria a taker may tell of themselves and a sponsor
  * may aim a publication at. The list mirrors `audience.AudienceCriteria.ALL` in backend/quizbuks (keys, options,
  * bounds); the server checks every value again, the pages only offer them. Labels are in `qb/messages.ts` under
  * `audience.<key>` and `audience.<key>Options.<option>`.
