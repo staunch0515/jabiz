@@ -1,0 +1,4 @@
+# The storefront block's scripts, built from quizbuks-web/storefront (pnpm build) before each deployment: never
+# committed. Not in assets/ itself: Shopify refuses any file there but its asset types (S4c).
+extensions/quizbuks-quiz/assets/quiz.js
+extensions/quizbuks-quiz/assets/quiz-player.js

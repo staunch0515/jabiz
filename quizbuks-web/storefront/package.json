@@ -6,7 +6,7 @@
   "description": "QuizBuks for Shopify: the storefront's quiz block, a plain Web Component built into the Theme App Extension's quiz.js (docs/quizbuks/shopify/S2b-ui.md section 2). No React, no @jabiz/ui: it runs inside a merchant's theme within a size budget.",
   "packageManager": "pnpm@10.18.0",
   "scripts": {
-    "build": "tsc -b && vite build && node scripts/size.mjs",
+    "build": "tsc -b && vite build && vite build --mode player && node scripts/size.mjs && node scripts/extension.mjs",
     "typecheck": "tsc -b",
     "lint": "eslint .",
     "test": "vitest run",

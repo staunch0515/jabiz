@@ -99,6 +99,13 @@ export const Store = {
   signedIn(customer: string | null) {
     owner = customer ? `c${customer}` : 'anon'
   },
+  /**
+   * Takes the visitor key the block's element used (S4c: quiz-player.js has its own copy of this store; when the
+   * browser's storage cannot be used, each would otherwise make its own key for the page's life).
+   */
+  adopt(visitor: string) {
+    if (!read(KEY)) write(KEY, visitor)
+  },
   visitor(): string {
     const existing = read(KEY)
     if (existing) return existing

@@ -1,6 +1,8 @@
 import { expectAccessible } from '@jabiz/ui/testing'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { MESSAGES, textsOf } from './messages'
+import { OPENER_TEXTS } from './opener'
+import { QuizPlayer } from './player'
 import './quiz'
 
 function json(status: number, body: unknown) {
@@ -132,6 +134,68 @@ describe('the storefront quiz block (S2b)', () => {
     expect(sent.map((s) => s.process)).toEqual(['QBS_SF_CAMPAIGN'])
     expect(root.querySelectorAll('iframe, img, script, link')).toHaveLength(0)
     expect(document.querySelectorAll('iframe, script[src], link[rel="preconnect"]')).toHaveLength(0)
+  })
+
+  it('loads the quiz on the first opening only, once, and tries again after a failure (S4c)', async () => {
+    // As on a storefront: quiz.js alone on the page, the quiz in its own script among the extension's assets.
+    delete window.QuizbuksPlayer
+    try {
+      const sent = proxy({ QBS_SF_CAMPAIGN: { status: 200, body: CAMPAIGN } })
+      const { root } = await mount({ player: 'https://cdn.shopify.com/extensions/x/assets/quiz-player.js' })
+      await vi.waitFor(() => expect(root.querySelector('.open')).not.toBeNull())
+      expect(document.querySelectorAll('script[src]')).toHaveLength(0)
+      const open = root.querySelector<HTMLButtonElement>('.open')!
+      // The script cannot be loaded: said where the button is, which stays to try again.
+      open.click()
+      const failed = document.querySelector<HTMLScriptElement>('script[src]')!
+      expect(failed.src).toBe('https://cdn.shopify.com/extensions/x/assets/quiz-player.js')
+      // Busy, not disabled (it keeps the focus); a second click while loading adds nothing.
+      expect(open.getAttribute('aria-busy')).toBe('true')
+      expect(open.disabled).toBe(false)
+      open.click()
+      expect(document.querySelectorAll('script[src]')).toHaveLength(1)
+      failed.dispatchEvent(new Event('error'))
+      await vi.waitFor(() => expect(root.querySelector('.opener-status')!.textContent)
+        .toBe(OPENER_TEXTS.en.loadFailed))
+      expect(open.hasAttribute('aria-busy')).toBe(false)
+      expect(document.querySelectorAll('script[src]')).toHaveLength(0)
+      expect(root.querySelector('dialog')).toBeNull()
+      // Again: loaded this time (the script defines the player as it runs), and the quiz opens.
+      open.click()
+      const loaded = document.querySelector<HTMLScriptElement>('script[src]')!
+      window.QuizbuksPlayer = QuizPlayer
+      loaded.dispatchEvent(new Event('load'))
+      await vi.waitFor(() => expect(root.querySelector('dialog')?.hasAttribute('open')).toBe(true))
+      expect(root.querySelector('.opener-status')!.textContent).toBe('')
+      expect(root.querySelector('h2')!.textContent).toBe('Spring quiz')
+      expect(sent.map((s) => s.process)).toEqual(['QBS_SF_CAMPAIGN'])
+      // Opened again later: the same quiz, nothing loaded again.
+      button(root, 'Close').click()
+      open.click()
+      expect(document.querySelectorAll('script[src]')).toHaveLength(1)
+      await expectAccessible(root.querySelector('dialog')!)
+    } finally {
+      document.head.querySelectorAll('script[src]').forEach((s) => s.remove())
+      window.QuizbuksPlayer = QuizPlayer
+    }
+  })
+
+  it('carries on after the theme editor takes the block off the page and puts it back', async () => {
+    const sent = proxy({ QBS_SF_CAMPAIGN: { status: 200, body: CAMPAIGN }, QBS_SF_START: { status: 200, body: STARTED },
+      QBS_SF_SUBMIT: { status: 200, body: PASSED } })
+    const { element, root } = await mount()
+    await vi.waitFor(() => expect(root.querySelector('.open')).not.toBeNull())
+    button(root, 'Answer a quiz, get 15% off').click()
+    button(root, 'Start the quiz').click()
+    await vi.waitFor(() => expect(root.querySelector('legend')!.textContent).toBe('First?'))
+    // Off the page the clock stops; back on it, the same quiz, its clock running again, nothing read again.
+    element.remove()
+    document.body.append(element)
+    expect(root.querySelectorAll('dialog')).toHaveLength(1)
+    expect(root.querySelector('legend')!.textContent).toBe('First?')
+    vi.advanceTimersByTime(61_000)
+    await vi.waitFor(() => expect(sent.map((s) => s.process)).toContain('QBS_SF_SUBMIT'))
+    expect(sent.filter((s) => s.process === 'QBS_SF_CAMPAIGN')).toHaveLength(1)
   })
 
   it('shows the code it got again, even when today\'s codes are gone', async () => {
