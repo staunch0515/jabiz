@@ -146,6 +146,7 @@ function ShopPage() {
           </TabsContent>
         </Tabs>
       )}
+      <Help />
     </div>
   )
 }
@@ -269,5 +270,33 @@ function Overview({ shop, userId, reload }: { shop: Shop; userId: string | null;
         </Alert>
       )}
     </>
+  )
+}
+
+/**
+ * The support address the server wrote into the page (S4a: index-values, platform 17g); none when the page was not
+ * served by it (the dev server leaves the placeholder).
+ */
+export function supportEmail(): string | null {
+  const value = document.querySelector<HTMLMetaElement>('meta[name="quizbuks-support-email"]')?.content ?? ''
+  return /^[^\s@{}]+@[^\s@{}]+$/.test(value) ? value : null
+}
+
+/** Where to get help (S4a): the support page of the public site, in the page's language, and the support address. */
+function Help() {
+  const { t, i18n } = useTranslation(SHOPIFY)
+  const email = supportEmail()
+  const language = i18n.language.startsWith('zh') ? 'zh/' : i18n.language.startsWith('ja') ? 'ja/' : ''
+  return (
+    <footer className="flex flex-wrap gap-x-2 border-t pt-3 text-sm text-muted-foreground">
+      <a className="underline" href={`/shopify-app/${language}support/`} target="_blank" rel="noopener noreferrer">
+        {t('help.page')}
+      </a>
+      {email && (
+        <span>
+          {t('help.write')} <a className="underline" href={`mailto:${email}`}>{email}</a>
+        </span>
+      )}
+    </footer>
   )
 }

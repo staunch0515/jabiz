@@ -1,0 +1,48 @@
+/* QuizBuks for Shopify's public pages (docs/quizbuks/shopify/S4-launch.md section 1). One stylesheet, tokens for light
+   and dark, no framework; the text pairs pass WCAG AA (light: accent on white 5.5:1; dark: accent on --bg 12.3:1). */
+:root {
+  color-scheme: light dark;
+  --bg: #ffffff;
+  --fg: #0f172a;
+  --muted: #475569;
+  --line: #e2e8f0;
+  --soft: #f4faf7;
+  --accent: #047857;
+  --max: 46rem;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0b1220;
+    --fg: #f1f5f9;
+    --muted: #cbd5e1;
+    --line: #27354d;
+    --soft: #0f172a;
+    --accent: #6ee7b7;
+  }
+}
+* { box-sizing: border-box; }
+html { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", "Hiragino Sans", "Noto Sans CJK JP", "Noto Sans CJK SC", "PingFang SC", "Microsoft YaHei", sans-serif; }
+body { margin: 0; background: var(--bg); color: var(--fg); line-height: 1.65; font-size: 16px; }
+a { color: var(--accent); }
+a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.wrap { max-width: var(--max); margin: 0 auto; padding: 0 1rem; }
+.skip { position: absolute; left: -999px; }
+.skip:focus { left: 1rem; top: 1rem; background: var(--bg); padding: .5rem; z-index: 1; }
+.top { border-bottom: 1px solid var(--line); }
+.bar { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem 1.5rem; padding-top: .75rem; padding-bottom: .75rem; }
+.brand { font-weight: 700; color: var(--fg); text-decoration: none; }
+nav { display: flex; gap: 1rem; flex-wrap: wrap; }
+nav a { text-decoration: none; }
+nav a[aria-current="page"] { font-weight: 600; text-decoration: underline; }
+.lang { display: flex; gap: .75rem; margin-left: auto; font-size: .9rem; }
+.lang span { color: var(--muted); }
+main { padding-top: 1.5rem; padding-bottom: 2rem; }
+h1 { font-size: 1.9rem; line-height: 1.25; margin: .5rem 0 1rem; }
+h2 { font-size: 1.25rem; margin: 2rem 0 .5rem; }
+.hero { background: var(--soft); border-radius: 12px; padding: 1.5rem; }
+.lead { font-size: 1.1rem; color: var(--muted); }
+.steps { padding-left: 1.25rem; }
+.steps li { margin: .5rem 0; }
+.steps strong { display: block; }
+.updated { color: var(--muted); font-size: .9rem; }
+.foot { border-top: 1px solid var(--line); color: var(--muted); font-size: .9rem; padding-top: 1rem; padding-bottom: 2rem; }

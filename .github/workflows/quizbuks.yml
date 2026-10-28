@@ -49,6 +49,7 @@ jobs:
             quizbuks-web/sponsor/pnpm-lock.yaml
             quizbuks-web/shopify/pnpm-lock.yaml
             quizbuks-web/storefront/pnpm-lock.yaml
+            quizbuks-web/shopify-site/pnpm-lock.yaml
             quizbuks-web/e2e/pnpm-lock.yaml
       # The SPAs link the platform's packages, which resolve their dependencies from the platform frontend.
       - run: pnpm install --frozen-lockfile
@@ -94,6 +95,15 @@ jobs:
           pnpm install --frozen-lockfile
           pnpm versions
           pnpm lint
+          pnpm typecheck
+          pnpm test
+          pnpm build
+      # S4a: QuizBuks for Shopify's public pages (/shopify-app/): every page in every language, the privacy policy's
+      # required parts, no script or inline style.
+      - name: Shopify public pages (S4a)
+        working-directory: quizbuks-web/shopify-site
+        run: |
+          pnpm install --frozen-lockfile
           pnpm typecheck
           pnpm test
           pnpm build
@@ -206,6 +216,9 @@ jobs:
           curl -sf localhost:8080/taker/ | grep -q 'id="root"'
           curl -sf localhost:8080/taker/welcome | grep -q '<title>QuizBuks</title>'
           curl -sf localhost:8080/biz/ | grep -q 'QuizBuks'
+          curl -sf localhost:8080/shopify-app/privacy/ | grep -q 'Privacy policy'
+          # The embedded pages carry the deployment's Client ID, written in at startup (S4a, platform 17g).
+          curl -sf localhost:8080/shopify/ | grep -q 'content="ci-throwaway-shopify-key"'
           test "$(curl -s -o /dev/null -w '%{http_code}' localhost:8080/)" = 302
           curl -sI 'localhost:8080/?ref=card' | tr -d '\r' | grep -qi '^location: /biz/?ref=card$'
           test "$(curl -s -o /dev/null -w '%{http_code}' localhost:8080/p/some-id)" = 301

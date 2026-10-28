@@ -55,10 +55,10 @@
 
 ## 6. 前端（`quizbuks-web/shopify`）
 
-- `index.html` 第一个脚本是 Shopify CDN 上的 App Bridge（Shopify 要求同步加载、不能打包）；API key 以 `<meta name="shopify-api-key">` 给出，构建时取 `VITE_SHOPIFY_API_KEY`（公开值）。
+- `index.html` 第一个脚本是 Shopify CDN 上的 App Bridge（Shopify 要求同步加载、不能打包）；API key 以 `<meta name="shopify-api-key">` 给出：S1 在构建时取 `VITE_SHOPIFY_API_KEY`，S4a 起改为服务器启动时由 `SHOPIFY_API_KEY` 写入（平台 17g）。
   CSP：`script-src 'self' https://cdn.shopify.com`，`connect-src 'self'`；`frame-ancestors` 由平台按店铺写（`embedding`）。
 - 流程：`shopify.idToken()` → `signInWithExternalToken` → `QBS_SHOP_JOIN`（再取一个新令牌）→ 概况页（店铺、状态、成员、连接状态；主管理员可转交；"连接"按钮运行 `QBS_SHOP_CONNECT`）。界面只用 `@jabiz/ui`，Polaris 风格在 S4。
-- 已知问题：API key 在构建时写入，staging 与正式各用自己的 Shopify 应用时要各自构建；运行时注入要平台给 SPA 的入口页提供占位，留到 S4 再定。
+- 已知问题（S4a 已解决，平台 17g）：API key 在构建时写入，staging 与正式各用自己的 Shopify 应用时要各自构建。
 
 ## 7. 测试
 

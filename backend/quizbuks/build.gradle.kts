@@ -18,11 +18,20 @@ jabizApp {
     spa("/sponsor", "../../quizbuks-web/sponsor", entry = "sponsor")
     // QuizBuks for Shopify's embedded pages (S1): framed by the shop that opened them (jabiz.web.spa[].embedding).
     spa("/shopify", "../../quizbuks-web/shopify", entry = "shopify")
+    // Its public pages (S4a): the landing page, the privacy policy and support, static like the business site.
+    spa("/shopify-app", "../../quizbuks-web/shopify-site")
     spa("/admin", "../../frontend", extension = "admin-extension", entry = "admin")
     languages("en", "zh", "ja")
     // The snapshots stay in the application's directory: the platform's own (frontend/openapi) are not ours to write.
     openApiSnapshot = rootProject.layout.projectDirectory.file("quizbuks/src/test/resources/openapi.json")
     publicQueriesSnapshot = rootProject.layout.projectDirectory.file("quizbuks/src/test/resources/public-queries.json")
+}
+
+// S4a: the public pages of QuizBuks for Shopify write the support address and the site's origin in at build time
+// (quizbuks-web/shopify-site/scripts/build.mjs), so a change of either builds them again.
+tasks.matching { it.name == "spaBuildShopifyApp" }.configureEach {
+    inputs.property("supportEmail", providers.environmentVariable("QB_SHOPIFY_SUPPORT_EMAIL").orElse(""))
+    inputs.property("siteUrl", providers.environmentVariable("SITE_URL").orElse(""))
 }
 
 dependencies {

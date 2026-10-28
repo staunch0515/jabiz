@@ -25,6 +25,7 @@ const en = {
     lost: 'Shopify no longer accepts the connection: connect again.',
   },
   tabs: { overview: 'Overview', campaigns: 'Quiz campaigns', plan: 'Plan and use' },
+  help: { page: 'Help and frequently asked questions', write: 'or write to' },
   plan: {
     loading: 'Reading the plan…',
     names: { FREE: 'Free', STARTER: 'Starter', GROWTH: 'Growth', PRO: 'Pro' },
@@ -150,6 +151,7 @@ const zh: typeof en = {
     lost: 'Shopify 不再接受这个连接，请重新连接。',
   },
   tabs: { overview: '概况', campaigns: '答题活动', plan: '套餐与用量' },
+  help: { page: '帮助与常见问题', write: '或写信到' },
   plan: {
     loading: '正在读取套餐…',
     names: { FREE: '免费', STARTER: '入门', GROWTH: '成长', PRO: '专业' },
@@ -275,6 +277,7 @@ const ja: typeof en = {
     lost: 'Shopify はこの接続を受け付けなくなりました。もう一度接続してください。',
   },
   tabs: { overview: '概要', campaigns: 'クイズキャンペーン', plan: 'プランと利用量' },
+  help: { page: 'ヘルプとよくある質問', write: 'またはメール：' },
   plan: {
     loading: 'プランを読み込み中…',
     names: { FREE: '無料', STARTER: 'スターター', GROWTH: 'グロース', PRO: 'プロ' },
