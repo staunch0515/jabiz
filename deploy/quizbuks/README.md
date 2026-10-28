@@ -304,7 +304,7 @@ tools/quizbuks/local-demo.sh status | logs | seed
 | `QB_SHOPIFY_SHOP_URL` | 否 | 店铺 Admin API 的地址形式，缺省 `https://{shop}`（只在测试中改指桩服务） |
 | `QB_SHOPIFY_APP_HANDLE` | 否（S3a） | Shopify 应用的 handle（Partner 后台的应用地址中的那一段），用于打开 Shopify 托管的套餐页 `admin.shopify.com/store/<店铺>/charges/<handle>/pricing_plans`；缺省 `quizbuks`。只能是小写字母、数字与 `-`，否则启动失败 |
 | `QB_SHOPIFY_PLAN_STARTER` / `_GROWTH` / `_PRO` | 否（S3a） | 套餐在 Partner 后台（Shopify App Pricing）中的名字，缺省 `Starter` / `Growth` / `Pro`（不分大小写）；Shopify 的订阅名对不上任何一个时按免费套餐计并在后台提示。名字不能为空或重复，否则启动失败（`docs/quizbuks/shopify/S3-billing.md`） |
-| `QB_SHOPIFY_SUPPORT_EMAIL` | 否（S4a） | QuizBuks for Shopify 的支持邮箱，内嵌页（启动时写入，平台 17g）与公开页面 `/shopify-app/`（构建时写入）都显示它；缺省 `shopify-support@quizbuks.com`。两处要一致：改了它就以同一值构建镜像（构建时同名环境变量） |
+| `QB_SHOPIFY_SUPPORT_EMAIL` | 否（S4a） | QuizBuks for Shopify 的支持邮箱，内嵌页（启动时写入，平台 17g）与公开页面 `/shopify-app/`（构建时写入）都显示它；缺省 `quizbuks@gmail.com`。两处要一致：改了它就以同一值构建镜像（构建时同名环境变量） |
 | ~~`VITE_SHOPIFY_API_KEY`~~（构建参数，S4a 起不再使用） | — | 内嵌页的 Client ID 改为启动时由 `SHOPIFY_API_KEY` 写入（平台 17g），一个镜像可用于 staging 与正式两个 Shopify 应用 |
 | `QB_ANTHROPIC_API_URL` / `QB_ANTHROPIC_API_HOSTS` | 否 | Anthropic API 的地址与允许的主机，缺省 `https://api.anthropic.com` / `api.anthropic.com`（只在开发与 e2e 中改指本地桩 `tools/quizbuks/claude-stub`） |
 | `QB_AI_REQUEST_TIMEOUT` / `QB_AI_MAX_CONCURRENCY` | 否 | 等 Claude 整个回答的最长时间（缺省与上限 `PT2M`；没有回答的尝试按预估计入用量）；全实例同时运行的 AI 作业数，**每种作业各自计**（缺省 4：题目与封面合计至多 8 个同时的调用）。带 PDF 的题目作业每个约占 PDF 合计的 5–6 倍堆（20 MiB 时约 120 MiB）：JVM 堆至少给"512 MiB + 120 MiB × 并发"（缺省约 1 GiB 以上），内存紧张时降低并发或 `QB_AI_PDF_MAX_BYTES` |

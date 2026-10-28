@@ -64,7 +64,7 @@ describe('the built site', () => {
 describe('the settings', () => {
   it('refuses a bad base, origin or support address', () => {
     expect(settings({})).toEqual({ base: '/shopify-app/', siteUrl: 'https://quizbuks.com',
-      supportEmail: 'shopify-support@quizbuks.com' })
+      supportEmail: 'quizbuks@gmail.com' })
     expect(() => settings({ VITE_BASE: '/x' })).toThrow(/VITE_BASE/)
     expect(() => settings({ SITE_URL: 'http://example.com' })).toThrow(/SITE_URL/)
     expect(() => settings({ QB_SHOPIFY_SUPPORT_EMAIL: 'not an address"><x' })).toThrow(/email/)

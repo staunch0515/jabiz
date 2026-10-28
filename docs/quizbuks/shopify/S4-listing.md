@@ -12,7 +12,7 @@
 | 一句话介绍 | Shoppers watch your product video, pass a short quiz and get a one-time discount code. | 顾客看商品视频、答对几道题，就领到一次性折扣码。 | お客様が商品動画を見て短いクイズに合格すると、1 回限りの割引コードがもらえます。 |
 | 类别 | Marketing and conversion → Discounts（以 Dashboard 的分类为准） | 营销与转化 → 折扣 | マーケティングとコンバージョン → 割引 |
 | 隐私政策 | https://quizbuks.com/shopify-app/privacy/ | 同左 | 同左 |
-| 支持 | https://quizbuks.com/shopify-app/support/ · shopify-support@quizbuks.com | 同左 | 同左 |
+| 支持 | https://quizbuks.com/shopify-app/support/ · quizbuks@gmail.com | 同左 | 同左 |
 
 ## 2. 详细说明
 
