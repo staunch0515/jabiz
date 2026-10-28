@@ -299,6 +299,9 @@ touch /opt/apps/$APP/maintenance/maintenance.lock
 rm /opt/apps/$APP/maintenance/maintenance.lock
 ```
 
+- **应用不在时自动显示**：没有锁文件、但 Caddy 连不上应用（`docker stop "$APP-app"`、重启、部署中的替换、尚未开始监听、崩溃）时，
+  同样返回维护页（503、`Retry-After: 60`、`Cache-Control: no-store`）。只有 Caddy 连不上应用才算（它自己的 502）；应用自己回答的 503
+  （`PROCESS_BUSY`、`QUERY_TIMEOUT` 等）照原样转发。计划内的维护仍先建锁文件：锁文件期间应用健康也不接请求，且 `Retry-After` 更长。
 - 两个环境各有自己的开关，互不影响；同一服务器上的其他应用不受影响。
 - 维护页由每次部署上传（`maintenance/maintenance.html`），锁文件 workflow 从不创建或删除：维护期间照常部署（例如修复后重新部署），维护页一直显示到手工关闭，
   可以先在服务器上确认应用健康（`docker logs "$APP-app"`）再关闭。
