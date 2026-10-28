@@ -1045,16 +1045,16 @@ SEC_PROTECTED_CHANGE_APPLY（internal，事件消费者）──► 再经 Requi
 
 ## 17. 账号删除与个人信息抹除【决策 D62，阶段 17i】
 
-两家应用商店要求 App 内能删除账号，并有一个不装 App 也能申请的网页。删除分三段：**申请**（本人在 App 中或凭邮件确认的网页，冷静期，17i-b）、
-**抹除**（`ACCOUNT_ERASE`，普通事务）与**清除**（`ERASURE_PURGE`，维护连接上的独立事务）。抹除与清除在 17i-a 实施。
+两家应用商店要求 App 内能删除账号，并有一个不装 App 也能申请的网页。删除分三段：**申请**（本人在 App 中或凭邮件确认的网页、管理员代为安排，冷静期，17.5）、
+**抹除**（`ACCOUNT_ERASE`，普通事务）与**清除**（`ERASURE_PURGE`，维护连接上的独立事务）。抹除与清除在 17i-a 实施，申请在 17i-b。
 
 ### 17.1 抹除：`ACCOUNT_ERASE`
 
-`internal()`（权限 `security.user.erase`，只由系统运行；17i-b 由到期申请的定时任务运行），输入用户编号与安排人：
+`internal()`（权限 `security.user.erase`，只由系统运行；到期的申请由定时任务 `jabiz.account-deletion` 以子流程运行，17.5），输入用户编号与安排人：
 
 1. 用户已抹除即 422 `ACCOUNT_ERASED`；用户受法律保全或在保留期内（`DeletionGuard`）即拒绝（`LEGAL_HOLD` / `RETENTION_ACTIVE`），申请等待。
 2. 以新版本停用用户、记下 `erasedAt`、清空显示名、邮箱、已验证与注册的邮箱、语言与密码（同一邮箱可立即重新注册）；用户名不可改，由清除覆盖为 `erased-<编号>`。
-3. 墓碑外部账号的关联、二次验证、角色分配与收件偏好；删除用户当前地址的邮件退订（普通表）；结束全部会话（原因 `ERASED`）。
+3. 墓碑外部账号的关联、二次验证、角色分配与收件偏好；删除用户当前地址的邮件退订（普通表；只在该地址已验证时：任何人都能用别人的地址注册再删除账号）；结束全部会话（原因 `ERASED`）。
 4. 按声明的顺序运行应用的 `PersonalDataEraser`：`delete` 的行墓碑（普通实体删除），`clear` 的行清空所列字段，`keep` 的行此时不动。
    读取经实体的缺省数据视图，以系统身份，不受数据范围限制；一类行超过 10 万即拒绝（不只处理一部分）。删除照常经过引用检查与保全、保留检查。
 5. 写 `sys_erasure`（只追加：抹除编号、用户、时间、安排人、操作），发布事件 `jabiz.account.erased`（`erasureId`、`userId`）。
@@ -1116,4 +1116,33 @@ class CustomerPersonalData implements PersonalDataEraser {
 `ErasureIT`（注册、登录、成为客户、封存、抹除：停用、清空、会话结束、不能再登录；清除后在当前 schema 的全部文本与 JSON 列中找不到用户名、邮箱、显示名与客户名；
 校验完好且有 `ERASED`，绕过守卫再改一行即 `MODIFIED`，再插入连到它的伪造条目仍是 `MODIFIED`；再次清除什么都不做，再次抹除 `ACCOUNT_ERASED`，同一邮箱可重新注册；法律保全时拒绝；启动检查的各种错误）、
 `ErasureWithoutMaintenanceIT`（没有维护连接时抹除完成、清除 `ERASURE_PURGE_UNAVAILABLE`、历史仍在）、core `ErasedEntityTest`。
+`AccountDeletionIT`（17.5：门户中申请，身份确认、提示、冷静期、到期由定时任务抹除并清除；撤回后不执行；凭邮件链接申请，未验证的地址收不到链接，提示未确认时链接仍有效；
+管理员安排与撤回，受保护权限的持有人被拒；法律保全时申请保持待执行；没有维护连接时启动失败、加载声明有误的启动检查）、`SignInEntriesTest`（`admin` 与接受 `*` 的入口不能开启）。
+
+### 17.5 申请：冷静期与定时任务【阶段 17i-b】
+
+入口开启 `jabiz.security.entries.<名>.account-deletion` 后（`admin` 与接受 `*` 的入口不能开启），该入口的用户可以申请删除自己的账号。申请记在只追加的
+`sys_account_deletion`（申请编号、用户、时间、到期时间、途径 `APP` / `WEB` / `ADMIN`、申请人、操作），结束记在 `sys_account_deletion_end`
+（`CANCELLED` 或 `ERASED` 与抹除编号）；没有结束的申请即待执行。两张表只有编号与时间，不含个人信息。
+
+| 途径 | 接口与流程 | 说明 |
+|---|---|---|
+| 本人，已登录（`APP`） | `GET /api/auth/account/deletion`（状态与提示）、`POST /api/auth/account/deletion`（`SEC_ACCOUNT_DELETION_REQUEST`）、`POST …/cancel`（`SEC_ACCOUNT_DELETION_CANCEL`） | 申请前再次确认身份：近期的二次验证（`jabiz.security.mfa.step-up-max-age`），或当前密码（`SEC_ACCOUNT_REAUTHENTICATE`，错误的密码记入登录记录并计入锁定，同关联外部账号，`Reauthentication`）；撤回不需要 |
+| 本人，不装 App（`WEB`） | `POST /api/auth/account-deletion`（`SPONSOR_ACCOUNT_DELETION_MAIL`）、`POST /api/auth/account-deletion/confirm`（`SPONSOR_ACCOUNT_DELETION_CONFIRM`） | 只填入口与邮箱，任何地址都答 202；只有启用的、地址已验证的用户收到一次性链接（`jabiz.auth.account-deletion`，令牌 `jabiz.accountDeletion`，`jabiz.security.account-deletion.link-ttl` 缺省 1 小时，链接到 `{entryUrl}auth/account-deletion`）；用链接即申请 |
+| 管理员（`ADMIN`） | `SEC_USER_DELETION_SCHEDULE` / `SEC_USER_DELETION_CANCEL`（`security.user.erase`，`SecUser` 的行操作） | 不看提示；记下由谁安排 |
+| 执行 | 定时任务 `jabiz.account-deletion`（`jabiz.security.account-deletion.cron`，缺省每天 03:41 UTC，模板 `jabiz.account_deletion_due`）逐项运行 `SEC_ACCOUNT_DELETION_EXECUTE`（`internal()`） | 到期且未结束的申请：以子流程运行 `ACCOUNT_ERASE`，记 `ERASED`；用户已被别的途径抹除时记那次抹除 |
+
+- **冷静期** `jabiz.security.account-deletion.cooling-off`（缺省 `P14D`）：到期时间 = 申请时间 + 冷静期。期间账号照常可用，本人登录后撤回（不论哪种途径的申请），管理员也可撤回。
+  申请后寄 `jabiz.auth.account-deletion-requested`（执行日，UTC）；执行后不再寄信（地址已抹除）。
+- **提示**：本人申请时须列出已读的提示代码（`acknowledgedNotices`）。应用的提示（`PersonalDataEraser.notices`，按 `loads()` 读数据，`ErasureNotices`）
+  有未确认的即 422 `ACCOUNT_DELETION_NOTICES`，其后每条提示是一个违规（代码 `erasure.notice.<代码>`，文字即提示）；邮件链接此时仍然有效（拒绝即回滚，令牌未用）。
+- **拒绝**：持有受保护权限（含已安排生效的，同重设凭据，D48）的用户每条途径都 422 `ACCOUNT_DELETION_PROTECTED`，须先经四眼撤销这些权限；已有待执行的申请 422
+  `ACCOUNT_DELETION_PENDING`；入口未开启 422 `ACCOUNT_DELETION_UNAVAILABLE`；没有可撤回的申请 422 `ACCOUNT_DELETION_NONE`。
+- **法律保全与保留期**：到期时 `ACCOUNT_ERASE` 被 `DeletionGuard` 拒绝，该项失败（记入定时任务的失败记录），申请保持待执行，之后每天再试。
+- **一次一件**：同一用户的申请、撤回与执行以命名锁 `jabiz.platform.account-deletion:<用户>` 依次进行；执行在锁内再读一次申请。
+- **限流**：已登录按用户；邮件申请按客户端地址与邮箱；用链接按客户端地址（`SignUpRateLimits`）。
+- **启动检查**（类别 `ERASURE`）：有入口开启而没有维护连接（`jabiz.erasure.datasource.url`）即错误（`dev` 下为警告）：账号会被抹除而个人信息永不清除；
+  应用 `loads()` 的数据视图或字段不存在、同名加载含义不同也报告。
+- **前端**：`@jabiz/ui` 的 `AccountDeletion`（账户页：状态、提示、确认身份、申请与撤回）、`AccountDeletionRequest`（不装 App 的网页：填邮箱）与
+  `MailLinkPage` 的 `account-deletion` 页（用链接，必要时先确认提示）；示范门户挂在账户页与 `/portal/auth/account-deletion`。
 

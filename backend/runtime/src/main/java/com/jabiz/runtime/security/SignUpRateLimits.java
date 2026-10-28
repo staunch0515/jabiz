@@ -47,7 +47,12 @@ public class SignUpRateLimits {
         /** Asking for a sign-in link (section 15.11; decision D54): counted per client address and per e-mail address. */
         EMAIL_LINK,
         /** An account opened by a sign-in with another platform's token (decision D59): counted per address. */
-        EXTERNAL_TOKEN_SIGN_UP
+        EXTERNAL_TOKEN_SIGN_UP,
+        /**
+         * Asking for the deletion of one's account (section 17.5): signed in, counted per user; for a mailed link,
+         * per client address and per e-mail address.
+         */
+        ACCOUNT_DELETION
     }
 
     /** Default of {@code jabiz.security.account.rate-limit.per-user}. */
@@ -120,6 +125,11 @@ public class SignUpRateLimits {
      * Counts a signed-in user's start of linking a provider account, with the limit of password changes (in buckets
      * of its own): a start may check the current password.
      */
+    /** A signed-in user asking for, or withdrawing, the deletion of their account (section 17.5). */
+    public void accountDeletion(String userId) {
+        acquire(perUser, Kind.ACCOUNT_DELETION + " user:" + Objects.requireNonNull(userId, "userId"));
+    }
+
     public void identityLink(String userId) {
         acquire(perUser, Kind.IDENTITY_LINK + " user:" + Objects.requireNonNull(userId, "userId"));
     }

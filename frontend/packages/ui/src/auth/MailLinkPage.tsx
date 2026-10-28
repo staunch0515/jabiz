@@ -16,6 +16,7 @@ import {
   Outcome,
   type AuthNavigation,
 } from './frame'
+import { AccountDeletionConfirm, AccountDeletionRequest } from './AccountDeletionLink'
 import { EmailLinkPanel } from './EmailLink'
 import { AUTH_NAMESPACE } from './messages'
 import { PasswordResetRequest } from './PasswordResetRequest'
@@ -48,8 +49,8 @@ export interface MailLinkPageBase extends AuthNavigation {
 
 export interface MailLinkPageProps extends MailLinkPageBase {
   /**
-   * Which page of a link this is: `verify-email`, `join`, `password-reset` or `email-link`; the last segment of the address when
-   * absent (links are `{entryUrl}auth/<page>?entry=…&token=…`, decision D43 item 4).
+   * Which page of a link this is: `verify-email`, `join`, `password-reset`, `email-link` or `account-deletion`; the last
+   * segment of the address when absent (links are `{entryUrl}auth/<page>?entry=…&token=…`, decision D43 item 4).
    */
   page?: string
   /** The query of the address, when a router keeps its own location; the address bar's when absent. */
@@ -59,8 +60,9 @@ export interface MailLinkPageProps extends MailLinkPageBase {
 /**
  * The pages mailed links lead to (docs/design/10-security.md section 15.7; decisions D36 and D43): verifying an
  * address, joining an entry with an existing account, choosing a new password (or, without a token, asking for
- * the link) and signing in with a mailed link. The token is taken out of the address bar at once and the page sends no referrer while open; nothing is
- * sent before the person clicks, so that a mail scanner opening the link changes nothing.
+ * the link), signing in with a mailed link and confirming an account's deletion (or, without a token, asking for the
+ * link; decision D62). The token is taken out of the address bar at once and the page sends no referrer while open;
+ * nothing is sent before the person clicks, so that a mail scanner opening the link changes nothing.
  */
 export function MailLinkPage({ page, search, ...base }: MailLinkPageProps) {
   const { t } = useTranslation(AUTH_NAMESPACE)
@@ -75,6 +77,11 @@ export function MailLinkPage({ page, search, ...base }: MailLinkPageProps) {
     return link.token
       ? <PasswordResetConfirm {...base} link={link} />
       : <PasswordResetRequest {...base} entry={link.entry} />
+  }
+  if (which === 'account-deletion') {
+    return link.token
+      ? <AccountDeletionConfirm {...base} link={link} />
+      : <AccountDeletionRequest {...base} entry={link.entry} />
   }
   return (
     <AuthFrame brand={base.brand} appearance={base.appearance} title={t('account.continue')}>

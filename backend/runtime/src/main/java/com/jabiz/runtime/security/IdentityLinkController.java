@@ -19,10 +19,10 @@ import com.jabiz.runtime.dataset.DatasetRegistry;
 import com.jabiz.runtime.process.ProcessExecutor;
 import com.jabiz.runtime.storage.Rows;
 import com.jabiz.runtime.storage.StorageAdapterRegistry;
-import com.jabiz.runtime.web.ClientAddresses;
 import com.jabiz.security.Sensitive;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.server.reactive.ServerHttpRequest;
@@ -35,7 +35,6 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import reactor.core.publisher.Mono;
 
-import java.time.Clock;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -100,23 +99,23 @@ class IdentityLinkController {
     private final OidcStateStore states;
     private final ProcessExecutor processes;
     private final RefreshTokenStore refreshTokens;
-    private final MfaSettings mfa;
-    private final Clock clock;
     private final SignUpRateLimits limits;
-    private final ClientAddresses clients;
     private final DatasetEntityManager entities;
     private final DatasetRegistry datasets;
     private final StorageAdapterRegistry storages;
     private final String poolRef;
+    private final Reauthentication reauthentication;
     private final ProcessDefinition<IdentityProcesses.BeginInput, IdentityProcesses.BeginOutput, ProcessContext> begin;
     private final ProcessDefinition<IdentityProcesses.LinkInput, IdentityProcesses.LinkOutput, ProcessContext> link;
     private final ProcessDefinition<IdentityProcesses.UnlinkInput, IdentityProcesses.UnlinkOutput, ProcessContext>
         unlink;
 
     IdentityLinkController(OidcProviders providers, OidcClient client, OidcExchange exchange, OidcStateStore states,
-        ProcessExecutor processes, RefreshTokenStore refreshTokens, MfaSettings mfa, Clock clock,
-        SignUpRateLimits limits, ClientAddresses clients, DatasetEntityManager entities, DatasetRegistry datasets,
+        ProcessExecutor processes, RefreshTokenStore refreshTokens, SignUpRateLimits limits,
+        DatasetEntityManager entities, DatasetRegistry datasets,
         StorageAdapterRegistry storages, @Value("${jabiz.storage.default-pool-ref:default}") String poolRef,
+        Reauthentication reauthentication,
+        @Qualifier("secIdentityLinkBeginProcess")
         ProcessDefinition<IdentityProcesses.BeginInput, IdentityProcesses.BeginOutput, ProcessContext> begin,
         ProcessDefinition<IdentityProcesses.LinkInput, IdentityProcesses.LinkOutput, ProcessContext> link,
         ProcessDefinition<IdentityProcesses.UnlinkInput, IdentityProcesses.UnlinkOutput, ProcessContext> unlink) {
@@ -126,14 +125,12 @@ class IdentityLinkController {
         this.states = states;
         this.processes = processes;
         this.refreshTokens = refreshTokens;
-        this.mfa = mfa;
-        this.clock = clock;
         this.limits = limits;
-        this.clients = clients;
         this.entities = entities;
         this.datasets = datasets;
         this.storages = storages;
         this.poolRef = poolRef;
+        this.reauthentication = reauthentication;
         this.begin = begin;
         this.link = link;
         this.unlink = unlink;
@@ -239,47 +236,8 @@ class IdentityLinkController {
             })));
     }
 
-    /**
-     * Passes when the session's second factor is recent enough; otherwise checks the current password. Neither is
-     * 422 {@code REAUTHENTICATION_REQUIRED}, or {@code REAUTHENTICATION_UNAVAILABLE} for an account without a password
-     * (an account a provider opened): it can only step up with a second factor, once it has one, or set a password
-     * through the password reset. A wrong password is 422 {@code PASSWORD_INCORRECT}.
-     */
     private Mono<Void> reauthenticated(RequestContext context, UUID user, StartRequest body, ServerHttpRequest http) {
-        if (mfa.recent(context.mfaAt(), clock.instant())) {
-            return Mono.empty();
-        }
-        return hasPassword(user).flatMap(hasPassword -> {
-            if (!hasPassword) {
-                return Mono.error(new BusinessRuleViolationException(new Violation(null,
-                    PlatformErrorCodes.REAUTHENTICATION_UNAVAILABLE, "The account has no password: confirm with a "
-                        + "second factor (set one up first) or set a password through the password reset")));
-            }
-            if (body.currentPassword() == null || body.currentPassword().isEmpty()) {
-                return Mono.error(new BusinessRuleViolationException(new Violation("currentPassword",
-                    PlatformErrorCodes.REAUTHENTICATION_REQUIRED, "A recent second factor or the current password is "
-                        + "required", Map.of("field", "currentPassword"))));
-            }
-            return checkPassword(context, user, body, http);
-        });
-    }
-
-    /** Whether the user has a password to confirm with. */
-    private Mono<Boolean> hasPassword(UUID user) {
-        return entities.query(datasets.findById(SecurityEntities.USER_DATASET).orElseThrow(), SecurityEntities.SEC_USER,
-                EntityQuery.builder().where(new QueryPredicate.Eq("userId", user)).limit(1).build())
-            .next()
-            .map(found -> found.get("passwordHash") != null)
-            .defaultIfEmpty(false);
-    }
-
-    private Mono<Void> checkPassword(RequestContext context, UUID user, StartRequest body, ServerHttpRequest http) {
-        return processes.executeAtEntry(begin, new IdentityProcesses.BeginInput(user.toString(),
-                body.currentPassword(), AuthController.source(clients, http, context.entry())))
-            // Two attempts on one account at once: the later loses the race for the next login record.
-            .onErrorMap(IdentityLinkController::raceLost, e -> incorrect())
-            .flatMap(output -> output.outcome() == IdentityProcesses.Check.VERIFIED ? Mono.empty()
-                : Mono.error(incorrect()));
+        return reauthentication.require(context, user, body.currentPassword(), http, begin);
     }
 
     /** When each of the user's links was made: the start of its first version. */
@@ -301,11 +259,6 @@ class IdentityLinkController {
         OidcProvider provider = providers.find(id).orElse(null);
         return new IdentityView(String.valueOf(identity.id()), id, provider == null ? id : provider.label(language),
             provider == null ? null : provider.kind(), identity.get("email"), linkedAt);
-    }
-
-    private static BusinessRuleViolationException incorrect() {
-        return new BusinessRuleViolationException(new Violation("currentPassword",
-            PlatformErrorCodes.PASSWORD_INCORRECT, "The password is not correct", Map.of("field", "currentPassword")));
     }
 
     private static BusinessRuleViolationException linkFailed(String reason) {

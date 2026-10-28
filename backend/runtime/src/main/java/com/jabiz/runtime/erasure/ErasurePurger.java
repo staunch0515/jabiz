@@ -135,16 +135,15 @@ public class ErasurePurger {
     }
 
     /**
-     * Every address the user had, in any version, and that its provider links named, and its names; in lower case.
-     * An address or a name another user has, or had, is left out: their records are not the erased user's.
+     * Every address the user verified, in any version, and its names; in lower case. An address the user only entered
+     * (or that a provider link named) is left out: anyone can register with someone else's address and then delete the
+     * account. So is an address or a name another user has, or had: their records are not the erased user's.
      */
     private Mono<Void> addresses(Run run) {
         Map<String, BoundValue> user = Map.of("user", BoundValue.of(run.userId));
         return run.engine.select("""
                 SELECT array_agg(DISTINCT lower(a)) AS addresses FROM (
-                    SELECT unnest(ARRAY[email, verified_email, registered_email]) AS a FROM sec_user_version
-                    WHERE user_id = :user
-                    UNION ALL SELECT email FROM sec_user_identity_version WHERE user_id = :user) AS x
+                    SELECT verified_email AS a FROM sec_user_version WHERE user_id = :user) AS x
                 WHERE a IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sec_user_version o WHERE o.user_id <> :user
                     AND lower(a) IN (lower(o.email), lower(o.verified_email), lower(o.registered_email),
                         lower(o.user_name)))""", user)

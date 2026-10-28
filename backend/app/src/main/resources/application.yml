@@ -46,6 +46,10 @@ jabiz:
         require-verified-email: ${JABIZ_PORTAL_REQUIRE_VERIFIED_EMAIL:true}
         # Signing in by a mailed link, offered above the password on the portal's sign-in page (decision D54; phase 17m).
         email-link: ${JABIZ_PORTAL_EMAIL_LINK:true}
+        # Customers may ask for the deletion of their account, in the portal or from a mailed link (section 17.5;
+        # decision D62). Off by default: it needs the maintenance connection that purges personal data
+        # (JABIZ_ERASURE_DATASOURCE_*, a login of the role jabiz_maintenance), or the start fails outside dev.
+        account-deletion: ${JABIZ_PORTAL_ACCOUNT_DELETION:false}
         app-path: /portal/
         session:
           persistence: device

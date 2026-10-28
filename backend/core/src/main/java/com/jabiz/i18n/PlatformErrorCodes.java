@@ -195,6 +195,27 @@ public final class PlatformErrorCodes {
      * ({@code jabiz.erasure.datasource.*}, decision D62 item 3).
      */
     public static final String ERASURE_PURGE_UNAVAILABLE = "ERASURE_PURGE_UNAVAILABLE";
+
+    /** The sign-in entry does not let its users ask for the deletion of their account (section 17.5). 422. */
+    public static final String ACCOUNT_DELETION_UNAVAILABLE = "ACCOUNT_DELETION_UNAVAILABLE";
+
+    /**
+     * The user holds a protected permission (decision D48): the account is not deleted on a request; its protected
+     * roles are removed first, through the four-eyes change. 422.
+     */
+    public static final String ACCOUNT_DELETION_PROTECTED = "ACCOUNT_DELETION_PROTECTED";
+
+    /** A request to delete the account is pending already (section 17.5). 422. */
+    public static final String ACCOUNT_DELETION_PENDING = "ACCOUNT_DELETION_PENDING";
+
+    /** No request to delete the account is pending: nothing to withdraw (section 17.5). 422. */
+    public static final String ACCOUNT_DELETION_NONE = "ACCOUNT_DELETION_NONE";
+
+    /**
+     * The request did not acknowledge every notice of the application (decision D62 item 7); each notice follows as a
+     * violation of its own, with the code {@code erasure.notice.<code>}. 422.
+     */
+    public static final String ACCOUNT_DELETION_NOTICES = "ACCOUNT_DELETION_NOTICES";
     /** A mail parameter's value is a secret ({@code @Sensitive}); a mail carries no secret but its tokens. */
     public static final String MAIL_PARAM_SECRET = "MAIL_PARAM_SECRET";
     /** The parameters of a mail are larger than {limit} characters as JSON. */
@@ -341,7 +362,8 @@ public final class PlatformErrorCodes {
         REPORT_ALREADY_SUPERSEDED, DOCUMENT_NOT_SINGLE, DOCUMENT_TOO_LARGE,
         DOCUMENT_RECIPIENT_NOT_ALLOWED, DOCUMENT_NO_RECIPIENT, MAIL_DISABLED, MAIL_NO_ADDRESS, MAIL_SENDER_MISSING, TOKEN_INVALID, PASSWORD_INCORRECT, PASSWORD_NOT_SET, SESSION_NOT_FOUND, SESSION_UNKNOWN,
         OIDC_ACCOUNT_EXISTS, REAUTHENTICATION_REQUIRED, REAUTHENTICATION_UNAVAILABLE, IDENTITY_IN_USE, IDENTITY_PROVIDER_LINKED, IDENTITY_LINK_UNAVAILABLE,
-        IDENTITY_LINK_FAILED, LAST_SIGN_IN_METHOD, ACCOUNT_ERASED, ERASURE_PURGE_UNAVAILABLE, MAIL_PARAM_SECRET, MAIL_PARAMS_TOO_LARGE, MAIL_SIGN_IN_LINK,
+        IDENTITY_LINK_FAILED, LAST_SIGN_IN_METHOD, ACCOUNT_ERASED, ERASURE_PURGE_UNAVAILABLE, ACCOUNT_DELETION_UNAVAILABLE,
+        ACCOUNT_DELETION_PROTECTED, ACCOUNT_DELETION_PENDING, ACCOUNT_DELETION_NONE, ACCOUNT_DELETION_NOTICES, MAIL_PARAM_SECRET, MAIL_PARAMS_TOO_LARGE, MAIL_SIGN_IN_LINK,
         RETENTION_ACTIVE, LEGAL_HOLD, LEGAL_HOLD_NOT_ACTIVE,
         TASK_NOT_OPEN, TASK_CLOSED_BY_ITS_PROCESS, APPROVAL_NOT_PENDING, APPROVAL_OWN_REQUEST, APPROVAL_ALREADY_DECIDED, APPROVAL_LIMIT_EXCEEDED,
         CONTROL_CHANGE_INVALID, CONTROL_CHANGE_NOT_PROPOSED, CONTROL_SAME_PERSON, CONTROL_TARGET_CHANGED, SOD_CONFLICT,

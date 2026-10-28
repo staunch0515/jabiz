@@ -33,8 +33,8 @@ test('the commerce sample has generated pages and an order is placed from its ge
   await expect(dataRows(page)).toHaveCount(1)
   await expect(dataRows(page).first()).toContainText('250')
 
-  await page.goto('/processes')
-  await page.getByTestId('process-ORDER_PLACE-1').click()
+  // Straight to the form: the catalog pages its processes, and where one falls depends on how many there are.
+  await page.goto('/processes/ORDER_PLACE/1')
   await page.getByLabel('orderNo').fill(code)
   await page.getByLabel('customerCode').fill('E2E')
   await page.getByLabel('warehouseCode').fill(code)
@@ -52,8 +52,8 @@ test('a price change is scheduled from the generated process form', async ({ pag
   await insert(request, token, PRODUCTS, { sku: code, productName: `Product ${code}`, unitPrice: 100, active: true })
 
   await signIn(page)
-  await page.goto('/processes')
-  await page.getByTestId('process-PRODUCT_REPRICE-1').click()
+  // Straight to the form: the catalog pages its processes, and where one falls depends on how many there are.
+  await page.goto('/processes/PRODUCT_REPRICE/1')
   await page.getByLabel('sku').fill(code)
   await page.getByLabel('unitPrice').fill('120')
   await page.getByLabel('effectiveTime').fill('2031-04-01 00:00:00')
