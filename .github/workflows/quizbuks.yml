@@ -1,7 +1,7 @@
 name: QuizBuks
 on:
-  # As the platform's ci.yml: pushes run only on the long-lived line branch ('1.2/quizbuks');
-  # work branches ('1.2/quizbuks-2-accounts') run as pull requests, so a commit is not checked twice.
+  # As the platform's ci.yml: pushes run only on the long-lived line branches ('1.3/quizbuks');
+  # work branches ('1.3/quizbuks-50-china-web') run as pull requests, so a commit is not checked twice.
   push:
     branches:
       - '[0-9]*.[0-9]*/*'
@@ -66,6 +66,8 @@ jobs:
         run: diff -r quizbuks-web/app/src/qb quizbuks-web/sponsor/src/qb
       - name: The content tool (tools/quizbuks/content, Q36)
         run: node --test tools/quizbuks/content/lib.test.mjs
+      - name: The store listing texts (docs/quizbuks/store, Q49d)
+        run: node --test tools/quizbuks/store/listing.test.mjs
       - name: App
         working-directory: quizbuks-web/app
         run: |
@@ -131,6 +133,8 @@ jobs:
       - run: tools/quizbuks/test/entrypoint.test.sh
       # The Stripe test-mode script's guard and arguments, offline (the run itself: the stripe-test-mode job).
       - run: tools/quizbuks/test/stripe-test-mode.test.sh
+      # The deploy's check of the server's .env (deploy/quizbuks/server/check-env.sh), offline.
+      - run: tools/quizbuks/test/check-env.test.sh
       - run: $COMPOSE config --quiet
       - name: No .env
         run: test ! -e deploy/quizbuks/.env

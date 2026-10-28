@@ -113,6 +113,18 @@ describe('the share link before signing in', () => {
     expect(screen.getByTestId('share-password')).toHaveAttribute('href', '/login?next=%2Fp%2Fpub1')
   })
 
+  it('opened inside WeChat, says first how to open it in the phone\'s browser (Q50)', async () => {
+    vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue('Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) '
+      + 'AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 MicroMessenger/8.0.50(0x1800323c) NetType/WIFI')
+    server()
+    window.history.replaceState(null, '', '/p/pub1')
+    render(<App />)
+    const notice = await screen.findByTestId('pwa-install')
+    expect(notice).toHaveAttribute('data-situation', 'in-app')
+    expect(notice.compareDocumentPosition(screen.getByRole('heading', { name: 'Spring quiz' }))
+      & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
   it('says when the quiz is not open', async () => {
     server({ shared: null })
     window.history.replaceState(null, '', '/p/gone')
@@ -145,7 +157,7 @@ describe('the share link before signing in', () => {
       server({ me })
       window.history.replaceState(null, '', `/login?next=${next}`)
       const { unmount } = render(<App />)
-      await userEvent.type(await screen.findByRole('textbox', { name: 'User name' }), 'mei@example.com')
+      await userEvent.type(await screen.findByRole('textbox', { name: 'E-mail address' }), 'mei@example.com')
       await userEvent.type(screen.getByLabelText('Password'), 'secret{Enter}')
       await waitFor(() => expect(window.location.pathname).not.toBe('/login'))
       // A taker without a profile goes to the welcome step first, from the publication with it kept.

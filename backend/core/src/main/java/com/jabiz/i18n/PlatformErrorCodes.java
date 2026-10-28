@@ -188,6 +188,13 @@ public final class PlatformErrorCodes {
     public static final String IDENTITY_LINK_FAILED = "IDENTITY_LINK_FAILED";
     /** 422: removing the link would leave the account without a way to sign in (no password, no other link). */
     public static final String LAST_SIGN_IN_METHOD = "LAST_SIGN_IN_METHOD";
+    /** 422: the account was erased already (decision D62): there is nothing left to erase. */
+    public static final String ACCOUNT_ERASED = "ACCOUNT_ERASED";
+    /**
+     * 422: the purge of an erasure cannot run: no maintenance connection is configured
+     * ({@code jabiz.erasure.datasource.*}, decision D62 item 3).
+     */
+    public static final String ERASURE_PURGE_UNAVAILABLE = "ERASURE_PURGE_UNAVAILABLE";
     /** A mail parameter's value is a secret ({@code @Sensitive}); a mail carries no secret but its tokens. */
     public static final String MAIL_PARAM_SECRET = "MAIL_PARAM_SECRET";
     /** The parameters of a mail are larger than {limit} characters as JSON. */
@@ -334,7 +341,7 @@ public final class PlatformErrorCodes {
         REPORT_ALREADY_SUPERSEDED, DOCUMENT_NOT_SINGLE, DOCUMENT_TOO_LARGE,
         DOCUMENT_RECIPIENT_NOT_ALLOWED, DOCUMENT_NO_RECIPIENT, MAIL_DISABLED, MAIL_NO_ADDRESS, MAIL_SENDER_MISSING, TOKEN_INVALID, PASSWORD_INCORRECT, PASSWORD_NOT_SET, SESSION_NOT_FOUND, SESSION_UNKNOWN,
         OIDC_ACCOUNT_EXISTS, REAUTHENTICATION_REQUIRED, REAUTHENTICATION_UNAVAILABLE, IDENTITY_IN_USE, IDENTITY_PROVIDER_LINKED, IDENTITY_LINK_UNAVAILABLE,
-        IDENTITY_LINK_FAILED, LAST_SIGN_IN_METHOD, MAIL_PARAM_SECRET, MAIL_PARAMS_TOO_LARGE, MAIL_SIGN_IN_LINK,
+        IDENTITY_LINK_FAILED, LAST_SIGN_IN_METHOD, ACCOUNT_ERASED, ERASURE_PURGE_UNAVAILABLE, MAIL_PARAM_SECRET, MAIL_PARAMS_TOO_LARGE, MAIL_SIGN_IN_LINK,
         RETENTION_ACTIVE, LEGAL_HOLD, LEGAL_HOLD_NOT_ACTIVE,
         TASK_NOT_OPEN, TASK_CLOSED_BY_ITS_PROCESS, APPROVAL_NOT_PENDING, APPROVAL_OWN_REQUEST, APPROVAL_ALREADY_DECIDED, APPROVAL_LIMIT_EXCEEDED,
         CONTROL_CHANGE_INVALID, CONTROL_CHANGE_NOT_PROPOSED, CONTROL_SAME_PERSON, CONTROL_TARGET_CHANGED, SOD_CONFLICT,

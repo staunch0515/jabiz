@@ -11,7 +11,7 @@ function json(status: number, body: unknown) {
 }
 
 const ENTRY = { name: 'app', selfRegistration: true, requireVerifiedEmail: false, appPath: '/',
-  sessionPersistence: 'device', environment: 'staging' }
+  sessionPersistence: 'device', environment: 'staging', emailLink: true }
 
 interface Me {
   emailVerified?: boolean
@@ -166,6 +166,50 @@ describe('a visitor', () => {
     render(<App />)
     const signUp = await screen.findByTestId('signup-providers')
     expect(await within(signUp).findByRole('button', { name: 'Facebook' })).toHaveAttribute('data-kind', 'facebook')
+  })
+
+  it('asks for the address, and in Chinese offers the mailed link first, before Google, Facebook and LINE (Q50)',
+    async () => {
+      window.localStorage.setItem('qb.intro.seen', '1')
+      server(undefined, [{ id: 'google', kind: 'google', label: 'Google' }, { id: 'line', kind: 'line', label: 'LINE' }])
+      const { unmount } = render(<App />)
+      await screen.findByTestId('oidc-icons')
+      expect(screen.getByTestId('login-user-name')).toHaveAttribute('placeholder', 'E-mail address')
+      // Not in English: the password first, as before.
+      expect(screen.queryByTestId('email-link-form')).toBeNull()
+      unmount()
+      await changeLanguage('zh')
+      render(<App />)
+      const mailed = await screen.findByTestId('email-link-form')
+      const name = screen.getByTestId('login-user-name')
+      const icons = await screen.findByTestId('oidc-icons')
+      expect(mailed.compareDocumentPosition(name) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+      expect(name.compareDocumentPosition(icons) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+      expect(name).toHaveAttribute('placeholder', '电子邮箱')
+      expect(screen.getByTestId('login-or-password')).toHaveTextContent('或用密码登录')
+      // The buttons stay.
+      expect(within(icons).getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual(['Google', 'LINE'])
+      await expectAccessible()
+    })
+
+  it('says how to leave WeChat for the phone\'s browser from the first visit, and nothing in a browser (Q50)', async () => {
+    window.localStorage.setItem('qb.intro.seen', '1')
+    const agent = vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue('Mozilla/5.0 (Linux; Android 14; 23116PN5BC '
+      + 'Build/UKQ1.230804.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/116.0.0.0 Mobile '
+      + 'Safari/537.36 XWEB/1160117 MicroMessenger/8.0.49.2600(0x28003133) WeChat/arm64')
+    server()
+    const { unmount } = render(<App />)
+    const notice = await screen.findByTestId('pwa-install')
+    expect(notice).toHaveAttribute('data-situation', 'in-app')
+    expect(notice).toHaveTextContent('tap "···" at the top right')
+    await expectAccessible()
+    unmount()
+    agent.mockReturnValue('Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like '
+      + 'Gecko) Version/18.1 Mobile/15E148 Safari/604.1')
+    render(<App />)
+    await screen.findByTestId('login-user-name')
+    // In Safari the offer to install waits for a finished quiz (D-Q38-1).
+    expect(screen.queryByTestId('pwa-install')).toBeNull()
   })
 
   it('opens the pages of mailed links without signing in, and drops the token from the address', async () => {

@@ -41,9 +41,10 @@ public class IntegrityProcesses {
     /**
      * @param intact        whether nothing was found
      * @param unsealedCount rows of append-only tables no block holds yet (the next seal takes them)
+     * @param erasedCount   sealed rows the purge of an erasure overwrote, accounted for by its entries (decision D62)
      */
     public record VerifyOutput(long checkNo, boolean intact, int problemCount, int sealCount, long rowCount,
-        long unsealedCount) {}
+        long unsealedCount, int erasedCount) {}
 
     public static final ProcessDefinition<SealInput, SealOutput, ProcessContext> SEAL_PROCESS =
         ProcessDefinition.define(SEAL, 1, SealInput.class, SealOutput.class, ProcessContext.class, pb -> pb

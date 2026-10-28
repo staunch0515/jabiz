@@ -12,11 +12,10 @@ const SPONSOR_WALLETS = 'urn:jabiz:dataset:sponsor:QbWallet'
 const SPONSOR_TOPUPS = 'urn:jabiz:dataset:sponsor:QbTopUp'
 
 /** A sponsor whose onboarding an administrator approved; returns the address and a token at the console's entry. */
-export async function approvedSponsor(request: APIRequestContext, name = 'Sora') {
+export async function approvedSponsor(request: APIRequestContext, name = 'Sora', company = unique('Wallet Co ')) {
   const email = await verifiedUser(request, 'sponsor', name)
   const token = await tokenOf(request, email, PASSWORD, 'sponsor')
-  const applied = await run(request, token, 'QB_SPONSOR_APPLY', { displayName: name, company: unique('Wallet Co '),
-    acceptTerms: true })
+  const applied = await run(request, token, 'QB_SPONSOR_APPLY', { displayName: name, company, acceptTerms: true })
   if (applied.approval === 'PENDING') {
     await run(request, await adminToken(request), 'APPROVAL_DECIDE', { requestId: applied.approvalRequestId,
       decision: 'APPROVE' })

@@ -2321,7 +2321,7 @@ export interface components {
             detail?: string;
             key?: string;
             /** @enum {string} */
-            kind?: "MODIFIED" | "MISSING" | "CHAIN_BROKEN" | "SEAL_ALTERED" | "OTHER_KEY" | "UNPROTECTED";
+            kind?: "MODIFIED" | "MISSING" | "CHAIN_BROKEN" | "SEAL_ALTERED" | "OTHER_KEY" | "UNPROTECTED" | "ERASED";
             /** Format: int64 */
             sealNo?: number;
             table?: string;

@@ -283,3 +283,4 @@ ProcessDefinition.define("CERTIFICATION_SUBMIT", ...)
 - [ ] （如有流程）权限声明、违规累积、单元测试 + 集成测试；（如有跨时间的规则）场景回放与快照
 - [ ] （如有文件字段）策略及其权限、`uuid` 列与索引、文案；上传与写入检查的集成测试
 - [ ] （如有内容）多语言字段的列为 `jsonb`；被引用的实体声明 `display`；流程维护的字段 `processOnly()`；实体上的流程 `actsOn`
+- [ ] （如保存某个用户的个人信息）在应用的 `PersonalDataEraser` 中声明：指向用户的字段、个人字段、行的处理（`delete` / `clear` / `keep`），以用户的行为对象的单据版式（设计 10 §17.3、决策 D62）

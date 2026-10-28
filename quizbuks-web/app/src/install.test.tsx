@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AccountInstallEntry, answeredOnce, HomeInstallOffer, INSTALLED, rememberInstalled, ResultInstallOffer }
   from './install'
+import { rememberShell } from './shell'
 
 const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Mobile/15E148 Safari/604.1'
 
@@ -18,6 +19,7 @@ beforeEach(async () => {
 afterEach(() => {
   vi.restoreAllMocks()
   window.localStorage.clear()
+  window.sessionStorage.clear()
 })
 
 describe('telling the business site the app is installed (Q41)', () => {
@@ -64,6 +66,28 @@ describe('offering to add the app to the home screen (Q38)', () => {
   it('offers nothing on a computer', () => {
     onDevice('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36')
     render(<><ResultInstallOffer /><AccountInstallEntry /></>)
+    expect(screen.queryByTestId('pwa-install')).toBeNull()
+  })
+})
+
+describe('in the store apps (Q49b, Q49c)', () => {
+  it('offers nothing anywhere, the account page included', () => {
+    // A device that is offered it in a browser.
+    onDevice(IPHONE)
+    window.localStorage.setItem('qb.answeredOnce', 'true')
+    const { unmount } = render(<AccountInstallEntry />)
+    expect(screen.getByTestId('pwa-install')).toBeTruthy()
+    unmount()
+    window.history.replaceState(null, '', '/taker/?shell=android')
+    rememberShell(window)
+    render(<><HomeInstallOffer /><ResultInstallOffer /><AccountInstallEntry /></>)
+    expect(screen.queryByTestId('pwa-install')).toBeNull()
+    window.history.replaceState(null, '', '/')
+  })
+  it('offers nothing in the iOS app, whose web view the platform would take for Safari (Q49c)', () => {
+    onDevice(`${IPHONE} QuizBuksApp/ios`)
+    window.localStorage.setItem('qb.answeredOnce', 'true')
+    render(<><HomeInstallOffer /><ResultInstallOffer /><AccountInstallEntry /></>)
     expect(screen.queryByTestId('pwa-install')).toBeNull()
   })
 })

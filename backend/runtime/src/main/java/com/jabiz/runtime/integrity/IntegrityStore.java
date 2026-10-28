@@ -1,5 +1,6 @@
 package com.jabiz.runtime.integrity;
 
+import com.jabiz.integrity.IntegrityKey;
 import com.jabiz.integrity.IntegrityProblem;
 import com.jabiz.integrity.SealBlock;
 import com.jabiz.integrity.SealChain;
@@ -20,6 +21,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
@@ -49,12 +51,12 @@ public class IntegrityStore {
     public record Table(String name, List<String> keyColumns, boolean guarded) {
 
         /** The row's key as the seal keeps it: the primary key as a JSON array. */
-        String keyExpression(String alias) {
+        public String keyExpression(String alias) {
             return "jsonb_build_array(" + keyColumns.stream().map(column -> alias + "." + quote(column))
                 .collect(Collectors.joining(", ")) + ")::text";
         }
 
-        String quotedName() {
+        public String quotedName() {
             return quote(name);
         }
     }
@@ -112,7 +114,7 @@ public class IntegrityStore {
     }
 
     /** The table of that name in the schema, append-only or not; empty when there is none. */
-    Mono<Table> table(StorageEngine engine, String name) {
+    public Mono<Table> table(StorageEngine engine, String name) {
         return engine.select(TABLES + " AND c.relname = :name", Map.of("name", BoundValue.of(name)))
             .next()
             .map(IntegrityStore::table);
@@ -179,18 +181,22 @@ public class IntegrityStore {
     }
 
     /** Pins, for this transaction, the settings the text of a row depends on. */
-    Mono<Void> pin(StorageEngine engine) {
+    public Mono<Void> pin(StorageEngine engine) {
         return engine.select("""
                 SELECT set_config('TimeZone', 'UTC', true) AS tz, set_config('IntervalStyle', 'iso_8601', true) AS iv,
                        set_config('extra_float_digits', '1', true) AS fd""", Map.of())
             .then();
     }
 
-    /** One seal at a time: the next block number and link come from the head. */
+    /**
+     * The transaction lock of the seal: one seal at a time, and the purge of an erasure (decision D62 item 6) takes it
+     * too, so that no seal reads a row between the purge's reading and overwriting it.
+     */
+    public static final String LOCK = "SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(hashtextextended("
+        + "'jabiz.integrity.seal', 0))) AS l";
+
     Mono<Void> lock(StorageEngine engine) {
-        return engine.select("SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(hashtextextended("
-                + "'jabiz.integrity.seal', 0))) AS l", Map.of())
-            .then();
+        return engine.select(LOCK, Map.of()).then();
     }
 
     /** The last block, or empty before the first. */
@@ -304,12 +310,20 @@ public class IntegrityStore {
 
     /** Sealed rows of the table whose content now has another digest, or that are gone. */
     Flux<IntegrityProblem> changedRows(StorageEngine engine, Table table, int currentColumns, long fromSeal,
-        long toSeal) {
+        long toSeal, String[] authenticErasures) {
         // Each row is digested over the columns of its own block; a missing column list gives no digest at all
         // (the block's columns hash reports that). Columns are only ever added, so a list as long as the table's
         // columns now is all of them, and the whole row's text - four to six times cheaper - is the same digest.
         String firstKey = "t." + quote(table.keyColumns().getFirst());
-        return engine.select("SELECT seal_no, row_key, gone FROM (SELECT i.seal_no, i.row_key,"
+        // A changed row is ERASED when the entries of signed purges lead from the sealed digest to the current one:
+        // each entry was written with the digests over the same columns (decision D62 item 6). Entries of a purge
+        // whose signature does not hold count for nothing.
+        return engine.select("SELECT seal_no, row_key, gone, NOT gone AND EXISTS (WITH RECURSIVE chain(d) AS ("
+                    + "SELECT c.sealed::text UNION SELECT x.digest_after::text FROM sys_erasure_item x JOIN chain"
+                    + " ON x.digest_before::text = chain.d WHERE x.table_name = :table AND x.row_key = c.row_key"
+                    + " AND x.erasure_id::text = ANY(:authentic))"
+                    + " SELECT 1 FROM chain WHERE chain.d = c.current) AS erased"
+                    + " FROM (SELECT i.seal_no, i.row_key,"
                     + " i.digest AS sealed, CASE WHEN " + firstKey + " IS NULL THEN NULL"
                     + " WHEN cardinality(st.columns) = :current THEN " + fullDigest("t")
                     + " ELSE " + digest("t", "st.columns") + " END AS current, " + firstKey + " IS NULL AS gone"
@@ -319,16 +333,57 @@ public class IntegrityStore {
                     + " WHERE i.table_name = :table AND i.seal_no BETWEEN :from AND :to) AS c"
                     + " WHERE gone OR current IS DISTINCT FROM sealed ORDER BY seal_no, row_key",
                 Map.of("table", BoundValue.of(table.name()), "from", BoundValue.of(fromSeal),
-                    "to", BoundValue.of(toSeal), "current", BoundValue.of(currentColumns)))
+                    "to", BoundValue.of(toSeal), "current", BoundValue.of(currentColumns),
+                    "authentic", BoundValue.of(authenticErasures)))
             .map(row -> {
                 Long sealNo = Rows.longValue(row.get("seal_no"));
                 String key = Rows.string(row.get("row_key"));
-                return Boolean.TRUE.equals(row.get("gone"))
-                    ? new IntegrityProblem(IntegrityProblem.Kind.MISSING, sealNo, table.name(), key,
-                        "Row " + key + " of " + table.name() + " is gone")
+                if (Boolean.TRUE.equals(row.get("gone"))) {
+                    return new IntegrityProblem(IntegrityProblem.Kind.MISSING, sealNo, table.name(), key,
+                        "Row " + key + " of " + table.name() + " is gone");
+                }
+                return Boolean.TRUE.equals(row.get("erased"))
+                    ? new IntegrityProblem(IntegrityProblem.Kind.ERASED, sealNo, table.name(), key,
+                        "Row " + key + " of " + table.name() + " was overwritten by the purge of an erasure")
                     : new IntegrityProblem(IntegrityProblem.Kind.MODIFIED, sealNo, table.name(), key,
                         "Row " + key + " of " + table.name() + " was changed after it was sealed");
             });
+    }
+
+    /** The entries of one erasure's purge, as {@link ErasureEvidence} signs them. */
+    public Flux<ErasureEvidence.Item> erasureItems(StorageEngine engine, UUID erasureId) {
+        return engine.select("SELECT table_name, row_key, columns, digest_before, digest_after FROM sys_erasure_item"
+                + " WHERE erasure_id = :id", Map.of("id", BoundValue.of(erasureId)))
+            .map(IntegrityStore::item);
+    }
+
+    /**
+     * The erasures whose purge's signature holds under the key, as text: only their entries account for a changed
+     * row. Each purge's entries are read together, one purge at a time.
+     */
+    Mono<String[]> authenticErasures(StorageEngine engine, IntegrityKey key) {
+        return engine.select("SELECT p.erasure_id, p.row_count, p.signature, p.key_id, x.table_name, x.row_key,"
+                + " x.columns, x.digest_before, x.digest_after FROM sys_erasure_purge p"
+                + " LEFT JOIN sys_erasure_item x ON x.erasure_id = p.erasure_id ORDER BY p.erasure_id", Map.of())
+            .bufferUntilChanged(row -> Rows.uuid(row.get("erasure_id")))
+            .filter(rows -> {
+                Map<String, Object> first = rows.getFirst();
+                UUID erasureId = Rows.uuid(first.get("erasure_id"));
+                List<ErasureEvidence.Item> items = rows.stream().filter(row -> row.get("table_name") != null)
+                    .map(IntegrityStore::item).toList();
+                return key.id().equals(Rows.string(first.get("key_id")))
+                    && ErasureEvidence.sign(key, erasureId, Rows.intValue(first.get("row_count")), items)
+                        .equals(Rows.string(first.get("signature")));
+            })
+            .map(rows -> Rows.uuid(rows.getFirst().get("erasure_id")).toString())
+            .collectList()
+            .map(ids -> ids.toArray(String[]::new));
+    }
+
+    private static ErasureEvidence.Item item(Map<String, Object> row) {
+        return new ErasureEvidence.Item(Rows.string(row.get("table_name")), Rows.string(row.get("row_key")),
+            Rows.strings(row.get("columns")), Rows.string(row.get("digest_before")),
+            Rows.string(row.get("digest_after")));
     }
 
     /** Every sealed row of a table that no longer exists. */
@@ -343,8 +398,9 @@ public class IntegrityStore {
     Mono<Long> insertCheck(StorageEngine engine, Map<String, BoundValue> check) {
         return engine.select("""
                 INSERT INTO sys_integrity_check (process_seq_id, actor_id, checked_time, from_seal, to_seal,
-                    seal_count, row_count, unsealed_count, problem_count, problems, key_id)
-                VALUES (:seq, :actor, :time, :from, :to, :seals, :rows, :unsealed, :count, :problems::jsonb, :key)
+                    seal_count, row_count, unsealed_count, problem_count, problems, key_id, erased_count)
+                VALUES (:seq, :actor, :time, :from, :to, :seals, :rows, :unsealed, :count, :problems::jsonb, :key,
+                    :erased)
                 RETURNING check_no""", check)
             .next()
             .map(row -> Rows.longValue(row.get("check_no")));
@@ -384,7 +440,7 @@ public class IntegrityStore {
      * The row's SHA-256 over the named columns: {@code to_jsonb} of the row restricted to them. Over all of a table's
      * columns it is the text of {@code to_jsonb(row)} itself, jsonb keeping its keys in its own order.
      */
-    private static String digest(String alias, String columns) {
+    public static String digest(String alias, String columns) {
         // alias.* is the row even when the table has a column named like the alias.
         return "encode(pg_catalog.sha256(convert_to((SELECT jsonb_object_agg(e.key, e.value) FROM jsonb_each(to_jsonb("
             + alias + ".*)) AS e WHERE e.key = ANY(" + columns + "))::text, 'UTF8')), 'hex')";

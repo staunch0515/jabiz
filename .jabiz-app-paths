@@ -5,10 +5,14 @@ backend/quizbuks/**
 backend/quizbuks-shopify/**
 backend/quizbuks-channel/**
 quizbuks-web/**
+quizbuks-mobile/**
 docs/quizbuks/**
 docs/quizbuks-requirements/**
 deploy/quizbuks/**
 tools/quizbuks/**
 .github/workflows/quizbuks.yml
 .github/workflows/quizbuks-deploy.yml
+.github/workflows/quizbuks-mobile.yml
+.github/workflows/quizbuks-ios.yml
+.github/workflows/quizbuks-store.yml
 .github/workflows/quizbuks-wiki.yml

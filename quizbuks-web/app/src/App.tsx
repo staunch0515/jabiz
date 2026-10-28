@@ -44,6 +44,8 @@ import { InboxPage } from './inbox/InboxPage'
 import { useUnread } from './inbox/useUnread'
 import { forgetAttempts } from './play/storage'
 import { itemPage } from './routes'
+import { mailFirst } from './signin'
+import { InAppBrowserNotice } from './install'
 import { readMyProfile } from './qb/api'
 import { ConsentGate, LegalLink, newQbQueryClient } from './qb/ConsentGate'
 import { HelpPage } from './qb/HelpPage'
@@ -278,7 +280,7 @@ function isPublic(path: string): boolean {
 /** The app's pages by path: the sign-in pages for everyone, the rest for a signed-in taker only. */
 function Routes() {
   const { t } = useTranslation(QB)
-  const { t: tApp } = useTranslation(APP)
+  const { t: tApp, i18n } = useTranslation(APP)
   const { ready, signedIn } = useAuth()
   const { path, search } = useLocation()
   const brand = <Wordmark name={t('brand')} className="text-primary justify-center" />
@@ -287,6 +289,7 @@ function Routes() {
       <div className="mx-auto w-full max-w-md px-4 pt-4 empty:hidden">
         <OfflineBanner />
         <PwaUpdatePrompt />
+        <InAppBrowserNotice />
       </div>
       {content}
     </div>
@@ -354,7 +357,8 @@ function Routes() {
         // Someone who signed in knows the app: no introduction when the session later expires (Q32).
         rememberSeen()
         navigate(to, { replace: true })
-      }} passwordResetPath="/password-reset" signUpPath="/signup" oidcLayout="icons" />)
+      }} passwordResetPath="/password-reset" signUpPath="/signup" oidcLayout="icons"
+      emailLink={mailFirst(i18n.language)} userNameLabel="email" />)
   }
   // A visitor's first time at the root: the introduction (Q32), remembered on the device; then the sign-in.
   if (!signedIn && path === HOME && !introSeen()) return <IntroPage />

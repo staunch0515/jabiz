@@ -25,7 +25,12 @@ public record IntegrityProblem(Kind kind, Long sealNo, String table, String key,
         /** A block was signed with another key than the current one, so it cannot be checked. */
         OTHER_KEY,
         /** A table with sealed rows no longer refuses updates and deletions: its append-only guard is off or gone. */
-        UNPROTECTED
+        UNPROTECTED,
+        /**
+         * Not a problem: the row was overwritten by the purge of an erasure (decision D62 item 6), and its digest leads
+         * from the sealed one to the current one through the purge's sealed entries. Counted, never listed.
+         */
+        ERASED
     }
 
     public IntegrityProblem {

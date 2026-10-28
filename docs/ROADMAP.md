@@ -4629,3 +4629,49 @@ Wiki 只有一份；平台与应用各发布自己的一节，只发布最新的
 **使用者**：平台文档；QuizBuks 在 `1.3/quizbuks` 上以自己的 workflow 发布 `docs/quizbuks/`（同步本阶段后另一个 PR）。
 
 **17h 状态**：✅ 已实施。
+
+### 17m 登录页先给邮件链接、国产浏览器与内置浏览器的安装指引（已确认 2026-10-28）
+
+**缘由**：需求方 2026-10-28：有的地区打不开 Google、Facebook、LINE（应用只能经网页与"添加到主屏幕"的 PWA 到达那里的用户），登录页要让邮箱最显眼；
+那里的手机多用华为、小米、QQ、UC 的浏览器，它们不给出 `beforeinstallprompt`，16zj 因此什么都不提示；微信、QQ 的内置浏览器提示叫人用 Safari 或 Chrome 打开，
+而"在浏览器打开"其实在右上角的"···"里。17i–17l 已为另一组工作预留，本阶段用 17m。不改变约束，不新增决策。
+
+| # | 内容 |
+|---|---|
+| 17m-1 | `SignInForm` 的 `emailLink`：入口开启了 `email-link`（`GET /api/auth/entries/{name}` 的 `emailLink`）时，`EmailLinkForm` 在最上面（链接回到 `returnTo`），密码在"或用密码登录"之下；身份提供方照旧在最后。未开启或未要求即不显示 |
+| 17m-2 | `SignInForm` 的 `userNameLabel="email"`：名字一栏写作"邮箱"（`inputmode=email`，空时"请输入电子邮箱"）；服务端照旧接受用户名或邮箱，`autocomplete=username` 不变 |
+| 17m-3 | `installBrowser`（`@jabiz/client`，纯函数）与 `InstallPrompt.browser`：`wechat`、`qq-app`、`huawei`、`xiaomi`、`qq`、`uc`、`firefox`、`other`。没有事件的 Android 浏览器一律 `menu`（只有 Chrome 本身与 Samsung 仍等事件、为 `none`）；HarmonyOS（`OpenHarmony`）按 Android |
+| 17m-4 | 内置浏览器加入 QQ（` QQ/`，与 QQ 浏览器的 `MQQBrowser` 区分）、微博、钉钉、支付宝与 Android WebView（`; wv)`） |
+| 17m-5 | `PwaInstallGuide` 的 `situation="menu"`、`browser`：菜单按钮、"添加到桌面"（华为的"添加至"、小米 / QQ / UC 的"工具箱"）、确认三步，三语；除 Firefox 外提示开启浏览器的"桌面快捷方式"权限。横幅的 `menu` 有"查看步骤" |
+| 17m-6 | 内置浏览器的横幅为警示样式；微信、QQ 写明"点右上角的'···'，再选'在浏览器打开'"；中文的通用文案不再写 Safari / Chrome |
+| 17m-7 | 示范：门户入口开启 `email-link`（`JABIZ_PORTAL_EMAIL_LINK`，缺省开）、处理 `auth/email-link`，登录页用 `emailLink` 与 `userNameLabel="email"` |
+| 17m-8 | 测试：`install.test.ts`（一组真实 UA：华为含 HarmonyOS NEXT、小米、QQ 浏览器、UC、vivo、Edge、Samsung、平板 Chrome、微信 X5 与 iOS、QQ、支付宝、WebView）；`install.test.tsx`（各浏览器的步骤与权限提示、微信与 QQ 的文案与警示样式、三语，axe）；`blocks.test.tsx`（邮件链接在密码之上、`to`、"邮箱"标签、入口未开启时不显示，axe）；e2e `pwa.spec.ts`（华为浏览器的菜单指引、微信的"在浏览器打开"，axe）、`portal.spec.ts` |
+| 17m-9 | 文档：12"登录与账户的积木"与"安装到主屏幕"、10 §15.11、指南 `app-spa.md` |
+
+**不做**：按语言或地区自动改变登录方式的顺序（由应用按自己的界面语言传 `emailLink`）；国产浏览器的菜单文字随版本而变，步骤写的是常见的写法，须在真机上确认（应用的上线检查）。
+
+**17m 状态**：✅ 已实施。
+
+### 17i 账号删除与个人信息抹除（已确认 2026-10-28，决策 D62）
+
+**缘由**：上架 Google Play 与 App Store 要求 App 内能删除账号，并有不装 App 也能申请删除的网页（需求方 2026-10-28，QuizBuks Q49）。平台没有删除用户的途径
+（登录记录等引用用户，墓碑即 `STILL_REFERENCED`），个人信息还以副本留在审计、操作摘要、登录记录、邮件等只追加表中；D5 预留的受控清除从未实施。
+需求方 2026-10-28 全部按建议确认：冷静期 14 天、期间账号照常可用、保留期内的单据保留原样、另一个数据库登录作维护连接、执行后不再寄信。分两个 PR：
+
+| # | 内容 | 阶段 |
+|---|---|---|
+| 17i-1 | 决策 D62；设计 10 §17、21 §2.5、04 §10；根 `CLAUDE.md` 一条 | 17i-a |
+| 17i-2 | 迁移 `V49__account_erasure.sql`：`sys_erasure`、`sys_erasure_purge`、`sys_erasure_item`（只追加）、`sec_user_version.erased_at`、`sys_integrity_check.erased_count` | 17i-a |
+| 17i-3 | `ACCOUNT_ERASE`（`internal()`）：停用、`erasedAt`、清空、墓碑关联 / 二次验证 / 角色 / 收件偏好、结束会话、运行应用的抹除声明、保全与保留时拒绝；事件 `jabiz.account.erased` | 17i-a |
+| 17i-4 | 维护连接 `MaintenanceStorage`（`jabiz.erasure.datasource.*`）与 `ERASURE_PURGE`（事件的消费者）：在独立事务中按 10 §17.2 的范围覆盖，逐行写清除条目并以封存密钥签名，取封存锁；没有维护连接时 422 `ERASURE_PURGE_UNAVAILABLE`；每天的定时任务 `jabiz.erasure-purge` 对未清除的抹除再运行 | 17i-a |
+| 17i-5 | 校验的 `ERASED`：从封存的摘要沿签名成立的清除的条目连到当前摘要的行只计数，连不上的、伪造的条目照旧 `MODIFIED` | 17i-a |
+| 17i-6 | core `PersonalDataEraser`（`ErasedEntity`、`ErasureLoad`、`ErasureNotice`、`ErasureSubject`）与启动检查 `ERASURE`；示范 `CustomerPersonalData`（客户保留、名字覆盖） | 17i-a |
+| 17i-7 | 测试：`ErasureIT`（全表搜索找不到个人信息、校验 `ERASED` 与篡改、伪造的条目、重复、他人后来使用的地址、退订与定时任务的再清除、法律保全、启动检查）、`ErasureWithoutMaintenanceIT`、core `ErasedEntityTest`、`ErasureEvidenceTest` | 17i-a |
+| 17i-8 | 申请：入口 `account-deletion`、本人在 App 中（近期身份确认）与凭邮件确认的网页申请、冷静期 `jabiz.security.account-deletion.cooling-off`（14 天）、撤回、申请邮件、到期申请的逐项定时任务、管理员代为安排、受保护权限的持有人不能自助、申请前的提示（`notices`） | 17i-b |
+| 17i-9 | 前端：`@jabiz/ui` 的账户页删除积木与网页申请页、邮件链接页；示范门户；三语；axe | 17i-b |
+
+**已知与未做**：保留期内保留原样的单据，到期后的清除不在本阶段（到期报告列出它们）；第三方处的副本不在平台范围内；
+没有维护连接的环境，抹除照常完成，清除等到配置维护连接后由每天的定时任务完成。
+
+**17i 状态**：17i-a 已实施；17i-b 待开发。
+

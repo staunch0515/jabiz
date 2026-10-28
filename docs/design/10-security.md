@@ -788,6 +788,7 @@ jabiz:
 | `POST /api/auth/email-link` | `{entry, email, to?, locale?}`，任何地址都答 202（入口没有开启即 422 `SIGN_UP_DISABLED`，`to` 等不合格即 400）；可信地址上该入口会接受的用户、或（开放注册时）无人使用的地址收到链接 |
 | `POST /api/auth/email-link/confirm` | `{token}`，答复同登录（`SIGNED_IN` 或第二步）；无效即 422 `TOKEN_INVALID` |
 
+- 前端：`EmailLinkForm` 放在应用自己的页面上；登录页可用 `SignInForm` 的 `emailLink`，把它放在密码之上（入口开启时才显示；17m，见 12"登录与账户的积木"）。
 - 链接只寄往可信的地址：管理员设而本人没有验证过的地址收不到（同 §15.7 的验证链接）。
 - 打开链接：登录该用户；接管可预占的账号（清除密码等，同 §15.7）；或为无人使用的地址开已验证、无密码的账号（入口的注册角色）。
   之后照常是登录流程 `SPONSOR_EMAIL_LINK_SIGN_IN`：登录记录（因素 `EMAIL_LINK`）、`SignInGuard`、入口角色与二次验证都照旧。
@@ -1041,3 +1042,78 @@ SEC_PROTECTED_CHANGE_APPLY（internal，事件消费者）──► 再经 Requi
 `ProtectedGrantSetupIT`（首个管理员在建立期内直接授权、有了另一位管理员后永久退役而其他操作照旧、预定一年后删除的管理员现在仍算、第三位之后需要审批、
 停用管理员不重开建立期也不让首个管理员复职）、`ProtectedGrantAlwaysIT`（`always=true` 的首次启动与之后的审批）、`ProtectedGrantsOffIT`（关闭时与之前相同；
 建立期结束后关闭留有操作记录）；`SodIT`（撤销与取消预定同样受职责分离约束）；core `ProtectedPermissionsTest`、runtime `ApproverCoverageTest`（含生效时的 `mayDecide`）、`CredentialChainTest`（所有权链）、`PublishEventReservedTest`（`jabiz.*` 事件只由平台发出）。
+
+## 17. 账号删除与个人信息抹除【决策 D62，阶段 17i】
+
+两家应用商店要求 App 内能删除账号，并有一个不装 App 也能申请的网页。删除分三段：**申请**（本人在 App 中或凭邮件确认的网页，冷静期，17i-b）、
+**抹除**（`ACCOUNT_ERASE`，普通事务）与**清除**（`ERASURE_PURGE`，维护连接上的独立事务）。抹除与清除在 17i-a 实施。
+
+### 17.1 抹除：`ACCOUNT_ERASE`
+
+`internal()`（权限 `security.user.erase`，只由系统运行；17i-b 由到期申请的定时任务运行），输入用户编号与安排人：
+
+1. 用户已抹除即 422 `ACCOUNT_ERASED`；用户受法律保全或在保留期内（`DeletionGuard`）即拒绝（`LEGAL_HOLD` / `RETENTION_ACTIVE`），申请等待。
+2. 以新版本停用用户、记下 `erasedAt`、清空显示名、邮箱、已验证与注册的邮箱、语言与密码（同一邮箱可立即重新注册）；用户名不可改，由清除覆盖为 `erased-<编号>`。
+3. 墓碑外部账号的关联、二次验证、角色分配与收件偏好；删除用户当前地址的邮件退订（普通表）；结束全部会话（原因 `ERASED`）。
+4. 按声明的顺序运行应用的 `PersonalDataEraser`：`delete` 的行墓碑（普通实体删除），`clear` 的行清空所列字段，`keep` 的行此时不动。
+   读取经实体的缺省数据视图，以系统身份，不受数据范围限制；一类行超过 10 万即拒绝（不只处理一部分）。删除照常经过引用检查与保全、保留检查。
+5. 写 `sys_erasure`（只追加：抹除编号、用户、时间、安排人、操作），发布事件 `jabiz.account.erased`（`erasureId`、`userId`）。
+
+### 17.2 清除：`ERASURE_PURGE`
+
+`jabiz.account.erased` 的消费者（`jabiz.erasure-purge`）运行 `ERASURE_PURGE`（`internal()`），失败随事件重试；已清除的抹除什么都不做。
+
+- **维护连接**：`jabiz.erasure.datasource.url`（R2DBC，应用的库与 schema）、`.username`、`.password`，只来自环境变量（`JABIZ_ERASURE_DATASOURCE_*`）。
+  这个登录属于运维建立的角色 `jabiz_maintenance`，并能读写应用的表；应用自己的登录不属于它（D5 第 4 条）。没有配置时清除 422 `ERASURE_PURGE_UNAVAILABLE`，抹除照常完成。
+- 事务以空的上下文开在维护连接上（与运行它的操作无关），`set_config('jabiz.maintenance_mode', 'purge', true)`；先确认连接看得到这次抹除（URL 的 schema 不对即失败，不会"什么都没找到"就算完成），
+  固定封存与校验所用的会话设置（时区 UTC 等，行的文本因而相同），找出用户的地址、名字、行与操作，再取封存的事务锁（21 §2.5）后逐表覆盖。
+- **地址与名字只算这个用户的**：另一个用户有过或正在用的地址与名字不在其内，别人的邮件、登录记录不会被覆盖。
+- **重试**：事件的投递用尽后，定时任务 `jabiz.erasure-purge`（`jabiz.erasure.purge.cron`，缺省每天 03:23 UTC）对尚未清除的抹除（模板 `jabiz.erasure_pending`，实体 `Erasure`、`ErasurePurge`，只读，`audit.read`）逐项再运行。
+- 覆盖的范围（可空的置空，不可空的文本 `***`、JSON `{"erased": true}`，二进制为空）：
+
+| 表 | 哪些行 | 覆盖的列 |
+|---|---|---|
+| `sec_user_version` | 用户的全部版本 | 用户名（`erased-<编号>`）、显示名、邮箱、语言、密码、已验证与注册的邮箱 |
+| `sec_user_identity_version`、`sec_user_mfa_version` | 用户的 | 主体、邮箱；密钥、恢复码 |
+| `sec_login_record_version`、`sec_refresh_token` | 用户的 | 用户名副本、地址、浏览器 |
+| `sec_protected_change_version` | 针对用户的 | 邮箱、主体、密码 |
+| `sys_mail_message`、`sys_mail_token` | 用户的，或不属于任何用户、寄往用户地址的 | 地址、参数 |
+| `sys_notification` | 发给用户的 | 地址、标题、正文 |
+| `sys_document_delivery` | 寄往用户地址的 | 地址、标题、正文 |
+| `sys_external_job`、`sys_external_job_outcome` | 用户请求的 | 输入、结果 |
+| `op_process`、`op_process_result` | 用户运行的、写过用户的行的、匿名而输入以 `userName` 或 `email` 指名用户的（登录、注册与找回密码，不论成败；抹除与清除自己除外） | 输入摘要、输出 |
+| `sys_audit_record` | 用户、其关联、登录记录、二次验证、针对用户的受保护变更与应用声明实体的行的；用户地址的邮件退订的（按记录中的地址找到，退订已在抹除中删除） | 所列字段的前后值改为 `***`（原来为空的仍为空） |
+| 应用声明的实体 | 用户字段指向用户的全部版本 | 声明的字段 |
+| `sys_document_run` | 应用声明的版式、以用户的行为对象，且不在保留期内、不受保全的 | PDF、内容、参数、收件人（编号与标题保留） |
+
+- 保留：主键、用户编号、金额、编号、时间。账本行只覆盖应用声明的字段。普通表（文件的原名等）不经清除：要去掉用户上传的文件，应用的抹除声明删除引用它们的行，孤立文件随之由清理删除。保留期内的单据原样保留，到期后的清除不在 17i 范围（21 §3.4 的到期报告列出它们）。
+- 每改一行写一条 `sys_erasure_item`（21 §2.5），最后写 `sys_erasure_purge`（行数、时间、操作，以及以封存密钥对全部条目的签名）。第三方（Stripe、邮件服务商、Shopify）处的副本不在平台范围内。
+
+### 17.3 应用的声明：`PersonalDataEraser`
+
+core `com.jabiz.security.erasure`，同步、声明式：
+
+```java
+@Component
+class CustomerPersonalData implements PersonalDataEraser {
+    public List<ErasedEntity> entities() {
+        // 订单引用客户，客户保留，名字在每个版本中覆盖
+        return List.of(ErasedEntity.keep("Customer", "userId", "customerName"));
+    }
+    public List<ErasureLoad> loads() { return List.of(ErasureLoad.of("customers", CUSTOMER_DATASET, "userId")); }
+    public List<ErasureNotice> notices(ErasureSubject subject) {   // 申请前提示（17i-b）
+        return subject.rows("customers").isEmpty() ? List.of() : List.of(ErasureNotice.of("commerce.orders-kept"));
+    }
+}
+```
+
+- `ErasedEntity.delete(实体, 用户字段, 个人字段…)`、`clear(…)`、`keep(…)`，`.documents(版式…)`；提示的文案在消息 `erasure.notice.<代码>`。
+- 启动检查（类别 `ERASURE`）：实体只声明一次且存在；用户字段与个人字段是它的字段，个人字段不是主键；`clear` 的字段可空且可改；
+  不可空的个人字段须是能写下 `***` 的文本（或 JSON）；版式存在。
+
+### 17.4 测试
+
+`ErasureIT`（注册、登录、成为客户、封存、抹除：停用、清空、会话结束、不能再登录；清除后在当前 schema 的全部文本与 JSON 列中找不到用户名、邮箱、显示名与客户名；
+校验完好且有 `ERASED`，绕过守卫再改一行即 `MODIFIED`，再插入连到它的伪造条目仍是 `MODIFIED`；再次清除什么都不做，再次抹除 `ACCOUNT_ERASED`，同一邮箱可重新注册；法律保全时拒绝；启动检查的各种错误）、
+`ErasureWithoutMaintenanceIT`（没有维护连接时抹除完成、清除 `ERASURE_PURGE_UNAVAILABLE`、历史仍在）、core `ErasedEntityTest`。
+

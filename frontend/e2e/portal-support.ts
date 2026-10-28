@@ -83,7 +83,8 @@ export async function placeOrderFor(request: APIRequestContext, customer: Custom
 /** Signs in on the portal's own sign-in page and waits for "my orders". */
 export async function signInToPortal(page: Page, customer: Customer) {
   await page.goto(`${PORTAL}login`)
-  await page.getByPlaceholder('用户名').fill(customer.userName)
+  // The portal asks for the address (phase 17m); a user name is taken as well.
+  await page.getByTestId('login-user-name').fill(customer.userName)
   await page.getByPlaceholder('密码').fill(customer.password)
   await page.getByRole('button', { name: '登录', exact: true }).click()
   await page.waitForURL(`**${PORTAL}orders`)

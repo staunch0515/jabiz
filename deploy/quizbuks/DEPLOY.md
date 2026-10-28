@@ -1,11 +1,15 @@
 # QuizBuks — 部署到共用的 Docker 服务器（production 与 staging）
 
+> **部署在线 1.3 上（2026-10-28）**：`1.3/quizbuks` → staging，`1.3/quizbuks-release` → production。线 1.2 只作备份，推送不再部署，手动运行须确认（`deploy-1.2`）。
+> 1.3 迁移过的数据库不能再运行 1.2（Flyway 只向前），所以回滚只能回到 1.3 的提交；修复只做在 1.3。
+> 从 1.2 切到 1.3 的一次性步骤见下文"从 1.2 切到 1.3"。
+
 QuizBuks 是**一个镜像、一个服务**（`<APP_NAME>-app`，容器内端口 8080）：后端与三个前端（App `/`、商家后台 `/sponsor/`、管理后台 `/admin/`）都在一个 jar 中。
 同一仓库、同一个镜像部署为两个互不相干的环境，各有自己的服务器目录、`.env`、数据库、数据卷与域名：
 
 | | production | staging |
 |---|---|---|
-| 分支 | `1.2/quizbuks-release` | `1.2/quizbuks`（工作分支合入的线分支） |
+| 分支 | `1.3/quizbuks-release` | `1.3/quizbuks`（工作分支合入的线分支） |
 | APP_NAME | `quizbuks` | `quizbuks-staging` |
 | 域名 | `quizbuks.com` | `staging.quizbuks.com` |
 | 服务器目录 | `/opt/apps/quizbuks/` | `/opt/apps/quizbuks-staging/` |
@@ -23,7 +27,7 @@ QuizBuks 是**一个镜像、一个服务**（`<APP_NAME>-app`，容器内端口
 - 网络：`proxy`（Caddy）、`db`（PostgreSQL），都是外部网络；不发布任何端口。
 - 本机开发用的 `deploy/quizbuks/compose.dev.yaml`（自带数据库）与服务器无关，部署不使用它。
 
-**发布流程**：工作分支照常经 PR 合入 `1.2/quizbuks`，合入即部署到 staging；在 staging 上确认后，以 PR 把 `1.2/quizbuks` 合并进 `1.2/quizbuks-release`
+**发布流程**：工作分支照常经 PR 合入 `1.3/quizbuks`，合入即部署到 staging；在 staging 上确认后，以 PR 把 `1.3/quizbuks` 合并进 `1.3/quizbuks-release`
 （只合并，不变基、不拣选），合入即部署到 production。
 
 ## 一次性设置（GitHub）
@@ -32,8 +36,8 @@ QuizBuks 是**一个镜像、一个服务**（`<APP_NAME>-app`，容器内端口
    新建 `QUIZBUKS_BASE_DOMAIN`（小写、不带协议）。**服务器的 secrets**：同一页的 Secrets 中设 `SERVER_HOST`、`SERVER_USER`、`SERVER_SSH_KEY`、`SERVER_KNOWN_HOSTS`
    （仓库级，或在 Environments 的 `staging` / `production` 中各设一份），缺少任何一个时部署在第一步停止并列出缺少的名字。
 2. **Environments**：Settings → Environments 中的 `production` 与 `staging` 在第一次部署时自动建立；建议给 `production` 设 Required reviewers
-   与 Deployment branches（只允许 `1.2/quizbuks-release`）。服务器的 secrets（`SERVER_*`）可以留在仓库级，也可以按环境分别设置。
-3. **production 分支**：staging 部署正常之后，从 `1.2/quizbuks` 建 `1.2/quizbuks-release` 并推送（`git push origin origin/1.2/quizbuks:refs/heads/1.2/quizbuks-release`）。
+   与 Deployment branches（只允许 `1.3/quizbuks-release`）。服务器的 secrets（`SERVER_*`）可以留在仓库级，也可以按环境分别设置。
+3. **production 分支**：staging 部署正常之后，从 `1.3/quizbuks` 建 `1.3/quizbuks-release` 并推送（`git push origin origin/1.3/quizbuks:refs/heads/1.3/quizbuks-release`）。
    推送即第一次部署 production，所以先完成下面 production 的服务器设置。
 
 ## 首次部署前（在服务器上，每个环境各做一次）
@@ -115,7 +119,14 @@ STRIPE_CONNECT_WEBHOOK_SECRET=<whsec_…>
 
 # Claude（AI 出题；开关 qb.ai.enabled 缺省关闭）
 ANTHROPIC_API_KEY=<sk-ant-…>
+
+# QuizBuks for Shopify（S1）：Shopify 应用的 API 密钥与密钥；还没有应用时填占位，密钥至少 32 个字符（openssl rand -hex 32）
+SHOPIFY_API_KEY=<API key 或占位>
+SHOPIFY_API_SECRET=<API secret 或占位>
 ```
+
+**部署前的检查**：workflow 在服务器上改动任何东西之前，按所部署提交的 `deploy/quizbuks/server/required-env` 检查 `.env`
+（`check-env.sh`，只列出缺少或过短的变量名，不显示值）：缺少即停止，镜像不拉取、数据库不迁移。新增必需变量的提交同时把它加进这个清单。
 
 `QB_LOCAL_SECRETS=false`、`QB_STRIPE_PLACEHOLDERS=false` 已写在 compose 中：缺少任何密钥时应用拒绝启动，不会自己生成。
 **关于可信代理**：`proxy` 网络上还有其他应用（包括另一个环境）的容器，它们能直接访问本环境的容器。只信任 Caddy 的地址，它们就不能伪造客户端地址；
@@ -152,7 +163,7 @@ Cloudflare 的浏览器检查（Browser Integrity Check）与 Bot Fight Mode 把
 
 ### 4. 第一次部署
 
-production：推送 `1.2/quizbuks-release`（见上文"一次性设置"第 3 步）；staging：推送 `1.2/quizbuks`。或 GitHub → Actions → **QuizBuks deploy** →
+production：推送 `1.3/quizbuks-release`（见上文"一次性设置"第 3 步）；staging：推送 `1.3/quizbuks`。或 GitHub → Actions → **QuizBuks deploy** →
 Run workflow，分支选该环境的分支，`image-tag` 留空。第一次启动在空库上迁移并运行全部启动检查，需要一两分钟（健康检查的 `start_period` 为 180 秒）。
 日志：`docker logs -f quizbuks-app`（staging：`quizbuks-staging-app`）。
 
@@ -238,7 +249,7 @@ Run workflow，分支选该环境的分支，`image-tag` 留空。第一次启�
    `quizbuks-staging_secrets` 不用动（服务器上不在其中生成密钥）。
 5. **让首个管理员重新创建**：在 `/opt/apps/quizbuks-staging/.env` 中写回 `JABIZ_BOOTSTRAP_ADMIN_USER` 与**新的** `JABIZ_BOOTSTRAP_ADMIN_PASSWORD`，
    删去 `QB_BOOTSTRAP_ADMIN_DONE=true`。平台密钥可以不变（空库用原来的密钥没有问题），也可以按"`.env`"一节重新生成，顺便演练换密钥。
-6. **重新部署同一个版本**：`/opt/infra/scripts/deploy-app.sh "$APP" "$SHA"`（或 Run workflow，分支 `1.2/quizbuks`，`image-tag` 填 `$SHA`），
+6. **重新部署同一个版本**：`/opt/infra/scripts/deploy-app.sh "$APP" "$SHA"`（或 Run workflow，分支 `1.3/quizbuks`，`image-tag` 填 `$SHA`），
    再 `docker logs -f "$APP-app"` 直到健康、没有 `Platform check failed`。
 7. **外部的旧测试数据**：Stripe（测试模式）中旧的顾客与 Connect 账户还在，可在 Developers 中"删除所有测试数据"（端点与签名密钥不受影响）；
    登录过 staging 的浏览器与已安装的 App 的会话都已失效，清掉 `staging.<基础域名>` 的站点数据再开始。
@@ -246,9 +257,23 @@ Run workflow，分支选该环境的分支，`image-tag` 留空。第一次启�
 然后从"5. 首次启动之后"（`operations.md` §3）开始演练；首个管理员开启两步验证、`QB_SETUP` 的提案发布之后，照第 3 步改回 `.env`
 （删 `JABIZ_BOOTSTRAP_ADMIN_PASSWORD`、加 `QB_BOOTSTRAP_ADMIN_DONE=true`）并重新部署，这一步本身也是演练的一部分。
 
+## 从 1.2 切到 1.3（一次性，2026-10-28）
+
+1.3 第一次部署到某个环境时，Flyway 在那个库上执行 1.3 的迁移；之后那个库只能运行 1.3。按下面的顺序做，staging 先、production 后：
+
+1. **1.2 停止自动部署**：合并 1.2 上的部署 PR（推送 `1.2/quizbuks` 不再部署，手动运行须填 `deploy-1.2`）。先做这一步，以免之后 1.2 的一次推送把 1.2 部署到已迁移的库上。
+2. **补齐 `.env`**：1.3 比 1.2 多出的必需变量只有 `SHOPIFY_API_KEY` 与 `SHOPIFY_API_SECRET`（缺少即启动失败；还没有 Shopify 应用时填占位，密钥至少 32 个字符）。
+   部署前的检查会拦下缺少它们的部署；在这个检查之前（2026-10-28 staging 的第一次 1.3 部署），缺少它们时新镜像已迁移了库才启动失败，回滚到 1.2 也起不来：补上变量后重新运行部署即可。
+   其余 Shopify 变量（`QB_SHOPIFY_*`）都有缺省值，见 `README.md` 的环境变量表与 `operations.md` §1。
+3. **GitHub 的 Environments**：`staging`、`production` 若设了 Deployment branches，改为允许 `1.3/quizbuks`、`1.3/quizbuks-release`（原来的 1.2 分支可以删掉）。
+4. **重置 staging**：照上一节第 0–5 步（确认对象、可选备份、停应用、删库重建、清文件、首个管理员）。不做第 6 步：下一步的部署就是第一次部署 1.3。
+5. **部署 1.3 到 staging**：合并把部署改为 1.3 的 PR（推送 `1.3/quizbuks` 即部署）。`docker logs -f quizbuks-staging-app` 直到健康、没有 `Platform check failed`，
+   再照"首次启动之后"（`operations.md` §3）走一遍。
+6. **production**：staging 确认之后，在 production 的 `.env` 补上第 2 步的变量，从 `1.3/quizbuks` 建 `1.3/quizbuks-release` 并推送（"一次性设置"第 3 步），推送即第一次部署 production。
+
 ## 之后的部署
 
-- **自动**：每次推送 `1.2/quizbuks`（staging）或 `1.2/quizbuks-release`（production）：测试（`:quizbuks:check`、入口脚本的测试、两个前端与后台扩展的检查）
+- **自动**：每次推送 `1.3/quizbuks`（staging）或 `1.3/quizbuks-release`（production）：测试（`:quizbuks:check`、入口脚本的测试、两个前端与后台扩展的检查）
   → 构建并推送镜像（标签为提交 SHA）→ 按分支渲染站点、上传 compose 与站点 → `deploy-app.sh <APP_NAME> <SHA>`。部署失败时 `deploy-app.sh` 自动回到上一个标签。
   两个分支各自排队，互不等待。
 - **手动**：GitHub → Actions → **QuizBuks deploy** → Run workflow，分支选环境的分支，`image-tag` 留空即测试、构建并部署该分支的最新提交。从其他分支运行时不构建、不部署。
@@ -290,6 +315,62 @@ rm /opt/apps/$APP/maintenance/maintenance.lock
   `QUIZBUKS_CADDY_APPS_DIR`（Settings → Secrets and variables → Actions → Variables）并重新部署；Caddy 容器根本没有挂载 `/opt/apps` 时，
   在服务器的 Caddy 的 compose 中加上只读挂载（`/opt/apps:/opt/apps:ro`）。目录看不到时锁文件不起作用，网站照常代理，不会误显示维护页。
 - 开启后在浏览器（或 `curl -sI https://<本环境的域名>/`）确认返回 503 与维护页，再开始维护。
+
+## Android App 的 assetlinks（Q49b）
+
+Android App（`quizbuks-mobile/android`，`docs/quizbuks/plans/Q49b-android.md`）以 `https://<域名>/.well-known/assetlinks.json` 证明它属于这个域名：
+没有它（或指纹不对）时 App 照常可用，只是顶部显示浏览器的地址栏，邮件链接不直接打开 App。平台 17l 合入前由 Caddy 站点提供：
+
+1. Settings → Environments → `production` → Variables 中设两个变量（是公开的值，不是 secret）：
+   - `QUIZBUKS_ANDROID_PACKAGE`：`com.quizbuks.app`（`twa-manifest.json` 的 `packageId`）；
+   - `QUIZBUKS_ANDROID_CERT_SHA256`：Play Console →（本 App）→ 测试和发布 → 应用完整性 → 应用签名 中**应用签名密钥证书**与**上传密钥证书**的 SHA-256 指纹，以逗号分隔。
+2. 部署一次（推送或手动运行部署 workflow）：workflow 以 `deploy/quizbuks/assetlinks.sh` 生成并检查 JSON，上传到服务器的 `/opt/apps/<APP_NAME>/well-known/assetlinks.json`；
+   两个变量都没有时删除这个文件，只设了一个时部署失败。staging 缺省不设（App 只打开 production）。
+3. 确认：`curl -s https://<域名>/.well-known/assetlinks.json` 返回这份 JSON（维护模式中也返回）；再以 Google 的
+   [Statement List Tester](https://developers.google.com/digital-asset-links/tools/generator) 对包名与指纹测试一次。
+
+Caddy 容器须能看到 `/opt/apps/<APP_NAME>/well-known/`，与维护页同一前提（见上节 `QUIZBUKS_CADDY_APPS_DIR`）。17l 之后改由平台提供，本节与站点中的这一段随之删除。
+
+## Android App 的构建与上传（Q49b）
+
+workflow `QuizBuks mobile`（`.github/workflows/quizbuks-mobile.yml`）：PR 与推送时检查并构建未签名的包；在 `1.3/quizbuks` 上手动运行（Actions → QuizBuks mobile → Run workflow）时
+以上传密钥签名，`track` 为 `none` 时只把签名的 `.aab` 存为运行的产物（第一次上传要在 Play Console 手动做），为 `internal` / `alpha`（封闭测试）时上传到 Google Play。
+版本号（versionCode）是运行编号加 100，每次运行都更大。
+
+Settings → Environments → 新建 `play`（建议设 Required reviewers 与 Deployment branches 只允许 `1.3/quizbuks`），其 Secrets：
+
+| Secret | 内容 |
+|---|---|
+| `ANDROID_UPLOAD_KEYSTORE_B64` | 上传密钥库的 Base64（`base64 -w0 upload.keystore`） |
+| `ANDROID_UPLOAD_KEYSTORE_PASSWORD` / `ANDROID_UPLOAD_KEY_ALIAS` / `ANDROID_UPLOAD_KEY_PASSWORD` | 密钥库的密码、密钥别名与密钥密码 |
+| `PLAY_SERVICE_ACCOUNT_JSON` | Google Cloud 服务账号的 JSON 密钥（在 Play Console 的"用户和权限"中只授予本 App 的发布权限） |
+
+上传密钥丢失时不影响已上架的 App（用户安装的是 Google 以应用签名密钥签的包）：在 Play Console 申请重置上传密钥，并更新上面的 secrets 与 `QUIZBUKS_ANDROID_CERT_SHA256`。
+
+## iOS App 的 apple-app-site-association（Q49c）
+
+iOS App（`quizbuks-mobile/ios`，`docs/quizbuks/plans/Q49c-ios.md`）的 Universal Links 要域名上的 `https://<域名>/.well-known/apple-app-site-association`：没有它时邮件链接在 Safari 打开。
+平台 17l 合入前由 Caddy 站点提供，同 `assetlinks.json`：
+
+1. Settings → Environments → `production` → Variables：`QUIZBUKS_IOS_APP_ID` = `<Team ID>.com.quizbuks.app`（Team ID 在 Apple Developer 的 Membership 页）。
+2. 部署一次：workflow 以 `deploy/quizbuks/apple-app-site-association.sh` 生成（只认 `/taker/*`）并上传到 `/opt/apps/<APP_NAME>/well-known/apple-app-site-association`；变量没有时删除这个文件。
+3. 确认：`curl -sI https://<域名>/.well-known/apple-app-site-association` 为 200、`Content-Type: application/json`、没有转向；Apple 的 CDN 缓存它，改了之后新装的 App 才看到（`https://app-site-association.cdn-apple.com/a/v1/<域名>` 可查 CDN 上的版本）。
+
+## iOS App 的构建与上传（Q49c）
+
+workflow `QuizBuks iOS`（`.github/workflows/quizbuks-ios.yml`，macOS 运行器）：PR 与推送时检查并构建不签名的包；在 `1.3/quizbuks` 上手动运行（Actions → QuizBuks iOS → Run workflow）时
+以 App Store Connect API 密钥自动签名并上传，App Store Connect 处理完后出现在 TestFlight。构建号是运行编号加 100。
+
+Settings → Environments → 新建 `appstore`（建议 Required reviewers 与 Deployment branches 只允许 `1.3/quizbuks`）：
+
+| 名称 | 种类 | 内容 |
+|---|---|---|
+| `APP_STORE_CONNECT_KEY_ID` | secret | App Store Connect API 密钥的 Key ID |
+| `APP_STORE_CONNECT_ISSUER_ID` | secret | 同一页的 Issuer ID |
+| `APP_STORE_CONNECT_KEY_P8` | secret | 下载的 `AuthKey_<Key ID>.p8` 的全文（只能下载一次，自己另存一份） |
+| `APPLE_TEAM_ID` | 变量 | Membership 页的 Team ID（10 位） |
+
+密钥泄露或丢失时在 App Store Connect 吊销并新建，更新上面的 secrets；已上架的 App 不受影响。
 
 ## 备份
 

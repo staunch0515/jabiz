@@ -9,7 +9,7 @@
 
 ## 2. 边界
 
-- 分支按平台版本线（平台决策 D21、`docs/guide/version-lines.md`）：`<线>/quizbuks`，工作分支 `<线>/quizbuks-<N>-<名>`（Shopify 集成的阶段为 `<线>/quizbuks-S<N>-<名>`）。现在是线 1.3（`1.3/quizbuks`，Shopify 集成，`docs/quizbuks/shopify/00-overview.md`）；`1.2/quizbuks` 已冻结，只修 bug、继续测试与部署，不在 1.2 上加迁移。
+- 分支按平台版本线（平台决策 D21、`docs/guide/version-lines.md`）：`<线>/quizbuks`，工作分支 `<线>/quizbuks-<N>-<名>`（Shopify 集成的阶段为 `<线>/quizbuks-S<N>-<名>`）。现在是线 1.3（`1.3/quizbuks`，Shopify 集成，`docs/quizbuks/shopify/00-overview.md`）；`1.2/quizbuks` 只作备份（2026-10-28）：不再部署（手动运行须确认）、不再向前合并，修复只做在 1.3；1.3 迁移过的数据库不能再运行 1.2。
 - 本分支只改 `.jabiz-app-paths` 中的路径（`tools/check-app-paths.sh`，基准为本线的平台分支），不改 `.jabiz-platform-line`。平台缺能力时，
   先在 `1.3/platform` 的工作分支上补（带平台自己的测试与 `app` 中的示范，不提 QuizBuks），合入后再合并到 `1.3/quizbuks`。计划中的平台阶段见 `docs/quizbuks/03-plan.md` 第 1 节与 `docs/quizbuks/shopify/00-overview.md` §4。
 
@@ -314,6 +314,14 @@
   **站内信与公告**（Q7c）：后台扩展的写入要已验证的邮箱（首个管理员没有），测试以 `contentAdmin`（`tests/legal.ts`，角色 `QB_E2E_CONTENT`、不绑定二次验证）登录后台；每次要求二次验证的撤回经 API 以 `legalAdmin` 运行。e2e 的公告用推广（只到发送前注册的人），不让以后测试新建的答题人收到。
   启动方式与环境变量照 `.github/workflows/quizbuks.yml` 的 `e2e` 作业；然后 `E2E_BASE_URL=… E2E_ADMIN_USER=… E2E_ADMIN_PASSWORD=… pnpm e2e`。测试只增数据，可重复运行。
 
+- **商店 App 的外壳**（Q49，`quizbuks-mobile/`，`docs/quizbuks/plans/Q49b-android.md`）：只上架答题者的 App（`/taker/`），商家后台与充值不进 App。
+  Android 是 TWA（`quizbuks-mobile/android`，设置只在 `twa-manifest.json`，构建由它读取；App Links 只认 `/taker/` 前缀），启动地址与 App Links 都带 `shell=android`；
+  App 中只以 `src/shell.ts` 的 `nativeShell()` 判断是否在商店 App 中（参数或 Chrome 的 `android-app://` referrer，按标签页记住），在外壳中不显示任何安装提示（`install.tsx`）。
+  `assetlinks.json` 暂由 Caddy 站点提供（`deploy/quizbuks/assetlinks.sh`，环境变量 `QUIZBUKS_ANDROID_PACKAGE` / `QUIZBUKS_ANDROID_CERT_SHA256`），平台 17l 合入后改用平台的。
+  上传密钥与 Play 服务账号只在 GitHub Environment `play` 的 secrets 中（workflow `quizbuks-mobile.yml`）。改了 App 的前缀、包名或颜色时两边一起改（`scripts/consistency.test.mjs`）。
+  iOS 是 Capacitor（`quizbuks-mobile/ios`，设置只在 `capacitor.config.json`，Swift 的 `QuizBuksScope` 让网页只停在 `/taker/`、其他地址交给 Safari；User-Agent 带 `QuizBuksApp/ios`），`shell.ts` 同样认它；`apple-app-site-association` 暂由 Caddy 提供（`deploy/quizbuks/apple-app-site-association.sh`，变量 `QUIZBUKS_IOS_APP_ID`）；签名只在 workflow `quizbuks-ios.yml` 中以 App Store Connect API 密钥进行（Environment `appstore`）。
+  商店资料（Q49d，`docs/quizbuks/store/`）：说明文字三语同构并由 `tools/quizbuks/store/listing.test.mjs` 检查；数据安全表按隐私政策逐格写，政策或 App 收集的数据改了就同步；截图只由 `quizbuks-web/e2e/store`（workflow `quizbuks-store.yml`）生成，不提交。
+
 ## 6. 测试与命令（在 `backend/` 下）
 
 - `./gradlew :quizbuks:check`（测试 + `platformCheck`）；单个类：`./gradlew :quizbuks:test --tests '*SetupIT'`。
@@ -330,8 +338,8 @@
   compose 没有 `.env` 时 Stripe 未配置：镜像的入口脚本 `deploy/quizbuks/entrypoint.sh`（再交给平台的 `docker/app-entrypoint.sh`，不改平台脚本）只在测试模式、
   `QB_STRIPE_PLACEHOLDERS=true`（compose 缺省）时为未设置的 Stripe 密钥填占位并告警；改它时同步改 `tools/quizbuks/test/entrypoint.test.sh`（CI `deploy`）。
 - 首次启动后，管理员登录 `/admin/` 执行一次 `QB_SETUP`（流程页面）。
-- **服务器部署**（共用的 Docker 服务器，Caddy 为唯一入口，共用的 PostgreSQL）：`deploy/quizbuks/DEPLOY.md`。两个环境：推送 `1.2/quizbuks` 部署 **staging**（`APP_NAME=quizbuks-staging`、`staging.<基础域名>`、库 `quizbuks_staging`），
-  推送 `1.2/quizbuks-release`（只由 `1.2/quizbuks` 合并进来）部署 **production**（`APP_NAME=quizbuks`、基础域名 `vars.QUIZBUKS_BASE_DOMAIN`、库 `quizbuks`）；`.github/workflows/quizbuks-deploy.yml` 测试、构建镜像 `ghcr.io/<仓库>-quizbuks`、按分支（GitHub Environment `production` / `staging`）渲染站点并以服务器的 `deploy-app.sh <APP_NAME> <SHA>` 部署。
+- **服务器部署**（共用的 Docker 服务器，Caddy 为唯一入口，共用的 PostgreSQL）：`deploy/quizbuks/DEPLOY.md`。两个环境：推送 `1.3/quizbuks` 部署 **staging**（`APP_NAME=quizbuks-staging`、`staging.<基础域名>`、库 `quizbuks_staging`），
+  推送 `1.3/quizbuks-release`（只由 `1.3/quizbuks` 合并进来）部署 **production**（`APP_NAME=quizbuks`、基础域名 `vars.QUIZBUKS_BASE_DOMAIN`、库 `quizbuks`）；`.github/workflows/quizbuks-deploy.yml` 测试、构建镜像 `ghcr.io/<仓库>-quizbuks`、按分支（GitHub Environment `production` / `staging`）渲染站点并以服务器的 `deploy-app.sh <APP_NAME> <SHA>` 部署。
   服务器用的只有 `deploy/quizbuks/server/compose.yaml`（项目名与容器名只取 `.env` 的 `${APP_NAME}`，不写死；无端口、无数据库、外部网络 `proxy` 与 `db`）、模板 `site.caddy.tpl`（`__DOMAIN__`、`__APP_NAME__`、`__APP_DIR__`）与维护页 `maintenance.html`（维护模式只以服务器上的锁文件开关，DEPLOY.md）；环境的差异只在服务器上各自的 `.env` 中，应用配置中不写按环境的域名或密钥；`compose.dev.yaml` 只在本机。客户端地址照旧只经 `JABIZ_TRUSTED_PROXIES`（Caddy 在 `proxy` 网络中的地址，不是整个网段：网络上还有其他应用），不用 `server.forward-headers-strategy`。健康检查不含邮件服务器（`management.health.mail.enabled: false`）。
 - 本机试用：`tools/quizbuks/local-demo.sh start --seed`（构建、启动、首次设置与演示数据，只用于本机；`deploy/quizbuks/README.md` "本机演示"）。改了设置流程、入口或演示所用的流程输入时同步改它（CI `local-demo`）。
 - **生产运维**：`docs/quizbuks/operations.md`（密钥清单、备份与恢复演练、首次启动、切换正式模式、监控、容量、常见故障）与上线检查清单 `docs/quizbuks/launch-checklist.md`；
