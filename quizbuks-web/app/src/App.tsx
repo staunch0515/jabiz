@@ -1,11 +1,14 @@
 import { AuthProvider, useAuth, type SignInStep } from '@jabiz/client'
 import {
   AppearanceProvider,
+  AUTH_NAMESPACE,
+  AuthError,
   Button,
   EnvironmentBanner,
   MailLinkPage,
   MailUnsubscribe,
   OfflineBanner,
+  OidcButtons,
   OidcCallback,
   PageState,
   PasswordResetRequest,
@@ -335,6 +338,7 @@ function Routes() {
   if (path === '/signup') {
     return frame(<>
       <SignUpForm {...navigation} brand={brand} signInPath="/login" />
+      <SignUpProviders returnTo={HOME} />
       <p className="text-muted-foreground mx-auto w-full max-w-md px-4 pb-6 text-center text-sm"
         data-testid="signup-terms">
         {tApp('public.signUpTerms')}{' '}
@@ -350,7 +354,7 @@ function Routes() {
         // Someone who signed in knows the app: no introduction when the session later expires (Q32).
         rememberSeen()
         navigate(to, { replace: true })
-      }} passwordResetPath="/password-reset" signUpPath="/signup" />)
+      }} passwordResetPath="/password-reset" signUpPath="/signup" oidcLayout="icons" />)
   }
   // A visitor's first time at the root: the introduction (Q32), remembered on the device; then the sign-in.
   if (!signedIn && path === HOME && !introSeen()) return <IntroPage />
@@ -359,6 +363,21 @@ function Routes() {
     <StepUpProvider {...navigation} securityPath={ACCOUNT_PATH}>
       <SignedIn path={path} />
     </StepUpProvider>
+  )
+}
+
+/**
+ * Signing up through an identity provider on the sign-up page (Q40, D-Q40-5): the same round icons as the sign-in page,
+ * since a provider's first sign-in opens the account. A failure to start says so above them.
+ */
+function SignUpProviders({ returnTo }: { returnTo: string }) {
+  const { t } = useTranslation(AUTH_NAMESPACE)
+  const [failed, setFailed] = useState(false)
+  return (
+    <div className="mx-auto flex w-full max-w-md flex-col gap-3 px-4 pb-4" data-testid="signup-providers">
+      {failed && <AuthError message={t('common.error')} testId="signup-providers-error" />}
+      <OidcButtons layout="icons" returnTo={returnTo} onError={(e) => setFailed(e !== null)} />
+    </div>
   )
 }
 

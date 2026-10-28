@@ -16,8 +16,10 @@ QuizBuks 是**一个镜像、一个服务**（`<APP_NAME>-app`，容器内端口
 
 - 镜像：`ghcr.io/staunch0515/jabiz-quizbuks:<提交 SHA>`（`linux/amd64`），两个环境用同一个镜像，只是部署的提交不同。
 - 仓库中的来源：`deploy/quizbuks/server/compose.yaml`（项目名与容器名取自 `.env` 的 `APP_NAME`）、`deploy/quizbuks/server/site.caddy.tpl`
-  （占位 `__DOMAIN__`、`__APP_NAME__`，由 workflow 按环境渲染）、`.github/workflows/quizbuks-deploy.yml`。
-- 服务器上每个环境的目录中：`compose.yaml`、`site.caddy`（由 workflow 上传）、`.env`（只在服务器上手工维护，workflow 从不改它）。
+  （占位 `__DOMAIN__`、`__APP_NAME__`、`__APP_DIR__`，由 workflow 按环境渲染）、`deploy/quizbuks/server/maintenance.html`（维护页）、
+  `.github/workflows/quizbuks-deploy.yml`。
+- 服务器上每个环境的目录中：`compose.yaml`、`site.caddy`、`maintenance/maintenance.html`（由 workflow 上传）、`.env`（只在服务器上手工维护，workflow 从不改它）；
+  维护期间另有手工建立的 `maintenance/maintenance.lock`（见"维护模式"）。
 - 网络：`proxy`（Caddy）、`db`（PostgreSQL），都是外部网络；不发布任何端口。
 - 本机开发用的 `deploy/quizbuks/compose.dev.yaml`（自带数据库）与服务器无关，部署不使用它。
 
@@ -98,6 +100,9 @@ SPRING_MAIL_HOST=<SMTP 主机>
 SPRING_MAIL_PORT=587
 SPRING_MAIL_USERNAME=<SMTP 用户>
 SPRING_MAIL_PASSWORD=<SMTP 密码>
+# 用 Gmail（quizbuks@gmail.com，Q41）发信时：JABIZ_MAIL_FROM=quizbuks@gmail.com、SPRING_MAIL_HOST=smtp.gmail.com、
+# SPRING_MAIL_PORT=587、SPRING_MAIL_USERNAME=quizbuks@gmail.com、SPRING_MAIL_PASSWORD=<该账号的应用专用密码>（须先开启两步验证）。
+# 发件人必须就是登录的 Gmail 账号，否则被当作冒充；个人 Gmail 每天约 500 封的上限，注册一多就要换成自有域名的发信服务。
 # 587 端口要先 STARTTLS 才能认证（服务商只给 465 时改为 SPRING_MAIL_PORT=465 与 …_SMTP_SSL_ENABLE=true）
 SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH=true
 SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE=true
@@ -194,11 +199,52 @@ Run workflow，分支选该环境的分支，`image-tag` 留空。第一次启�
    - Stripe 只用测试模式的密钥（`sk_test_` / `rk_test_`）。在 Stripe 后台（测试模式）建两个端点 `https://staging.quizbuks.com/api/inbound/stripe` 与
      `/api/inbound/stripe-connect`（订阅的事件见 `docs/quizbuks/stripe-test-mode.md` §4.2），`STRIPE_WEBHOOK_SECRET` / `STRIPE_CONNECT_WEBHOOK_SECRET` 是
      **这两个端点各自的签名密钥**（`whsec_…`，由 Stripe 给出，不能自己生成：签名对不上时每个事件都被拒绝，充值停在 `OPEN`）。经 Cloudflare 时先做"3a. Cloudflare"。
-   - `SPRING_PROFILES_ACTIVE=staging` 只标出环境，应用中没有按环境写死的配置：环境的差异全部在这个 `.env` 中。同时开 Google 登录时写 `staging,google`，并设 Google 客户端与两个回调地址（`QB_OIDC_REDIRECT_APP`、`QB_OIDC_REDIRECT_SPONSOR`，见 README"前端"）。
+   - `SPRING_PROFILES_ACTIVE=staging` 只标出环境，应用中没有按环境写死的配置：环境的差异全部在这个 `.env` 中。同时开 Google 登录时写 `staging,google`（再加 Facebook、LINE 时写 `staging,social`，Q40），并设 Google 客户端与两个回调地址（`QB_OIDC_REDIRECT_APP`、`QB_OIDC_REDIRECT_SPONSOR`，见 README"前端"）。
    - `JABIZ_WEB_ENVIRONMENT=staging`（平台 16zd）让三个前端的每一页顶部都显示 "STAGING · 测试环境，不是正式版" 的横条，标题前加 `[STAGING]`；
      不写也一样（缺省 `test`）。**绝不能写 `production`**：workflow 部署前检查，staging 的 `.env` 写了 production 即停止。
 3. **DNS**：给 `staging.<基础域名>` 添加 A 记录（及 AAAA），指向同一台服务器。
 4. 第一次部署与首次启动之后的步骤同上（`https://staging.<基础域名>/admin/`）。
+
+## 重置 staging（演练前）
+
+上线演练要从"第一次部署"与"首次启动之后"走起时，先把 staging 清回空库。**只对 staging**：下面每一步都只用 `quizbuks-staging`、`quizbuks_staging`、
+`quizbuks-staging_files` 这几个名字，生产的 `quizbuks`、`quizbuks_files` 一律不碰。第 0 步的检查不通过就停下。
+
+0. **确认对象是 staging**（在服务器上；后面的命令都用这几个变量）：
+
+   ```sh
+   APP=quizbuks-staging; DB=quizbuks_staging; FILES=quizbuks-staging_files
+   grep -qx "APP_NAME=$APP" /opt/apps/$APP/.env && ! grep -q '^JABIZ_WEB_ENVIRONMENT=production' /opt/apps/$APP/.env \
+     && docker volume inspect "$FILES" >/dev/null && echo "OK: $APP / $DB / $FILES" || echo "停止：不是 staging 或名字不对"
+   ```
+
+1. **（可选）备份旧数据**：`docker exec postgres pg_dump -U postgres -Fc "$DB" > /root/$DB-$(date +%F).dump`
+   （`postgres` 是共用 PostgreSQL 的容器名与超级用户；不同时换成实际的名字。）
+2. **记下当前的镜像并停掉应用**：
+
+   ```sh
+   SHA=$(docker inspect "$APP-app" -f '{{.Config.Image}}' | cut -d: -f2); echo "$SHA"
+   docker stop "$APP-app"
+   ```
+
+3. **删库重建**（同一个角色、密码不变，`.env` 的数据库变量不用改；迁移不需要扩展与超级用户，下次启动在空库上建全部的表）：
+
+   ```sh
+   docker exec postgres psql -U postgres -v ON_ERROR_STOP=1 \
+     -c "DROP DATABASE \"$DB\" WITH (FORCE);" -c "CREATE DATABASE \"$DB\" OWNER \"$DB\";"
+   ```
+
+4. **清空上传的文件**（它们的记录已随库删除）：`docker run --rm -v "$FILES":/f alpine sh -c 'rm -rf /f/* /f/.[!.]*'`。
+   `quizbuks-staging_secrets` 不用动（服务器上不在其中生成密钥）。
+5. **让首个管理员重新创建**：在 `/opt/apps/quizbuks-staging/.env` 中写回 `JABIZ_BOOTSTRAP_ADMIN_USER` 与**新的** `JABIZ_BOOTSTRAP_ADMIN_PASSWORD`，
+   删去 `QB_BOOTSTRAP_ADMIN_DONE=true`。平台密钥可以不变（空库用原来的密钥没有问题），也可以按"`.env`"一节重新生成，顺便演练换密钥。
+6. **重新部署同一个版本**：`/opt/infra/scripts/deploy-app.sh "$APP" "$SHA"`（或 Run workflow，分支 `1.2/quizbuks`，`image-tag` 填 `$SHA`），
+   再 `docker logs -f "$APP-app"` 直到健康、没有 `Platform check failed`。
+7. **外部的旧测试数据**：Stripe（测试模式）中旧的顾客与 Connect 账户还在，可在 Developers 中"删除所有测试数据"（端点与签名密钥不受影响）；
+   登录过 staging 的浏览器与已安装的 App 的会话都已失效，清掉 `staging.<基础域名>` 的站点数据再开始。
+
+然后从"5. 首次启动之后"（`operations.md` §3）开始演练；首个管理员开启两步验证、`QB_SETUP` 的提案发布之后，照第 3 步改回 `.env`
+（删 `JABIZ_BOOTSTRAP_ADMIN_PASSWORD`、加 `QB_BOOTSTRAP_ADMIN_DONE=true`）并重新部署，这一步本身也是演练的一部分。
 
 ## 之后的部署
 
@@ -213,6 +259,37 @@ Run workflow，分支选该环境的分支，`image-tag` 留空。第一次启�
     workflow 的登录只在它自己的临时 Docker 配置中，部署后即删除，不影响服务器上其他应用的登录。
   - **数据库迁移不随回滚撤销**：Flyway 只向前。回滚到更早的版本前确认其间没有新迁移（`backend/quizbuks/src/main/resources/db/migration` 与平台的 `db/jabiz`）：
     旧版本不认识新迁移改过的表结构，有新迁移时应修复后向前部署，而不是回滚。
+
+## 维护模式
+
+手工开关：本环境目录中存在 `maintenance/maintenance.lock` 时，Caddy 对**所有**请求直接返回维护页（`maintenance.html`，日、中、英三种语言），
+状态码 503、`Retry-After: 300`、`Cache-Control: no-store`，请求不到达应用；删掉这个文件即恢复正常代理。Caddy 每个请求都检查这个文件，开关不需要重新加载 Caddy，
+也不经过 workflow。
+
+```bash
+APP=quizbuks-staging          # production 为 quizbuks
+# 开启
+touch /opt/apps/$APP/maintenance/maintenance.lock
+# 关闭
+rm /opt/apps/$APP/maintenance/maintenance.lock
+```
+
+- 两个环境各有自己的开关，互不影响；同一服务器上的其他应用不受影响。
+- 维护页由每次部署上传（`maintenance/maintenance.html`），锁文件 workflow 从不创建或删除：维护期间照常部署（例如修复后重新部署），维护页一直显示到手工关闭，
+  可以先在服务器上确认应用健康（`docker logs "$APP-app"`）再关闭。
+- 维护期间 Stripe 等的 Webhook（`/api/inbound/**`）也得到 503；Stripe 会自动重试（正式模式下至多 3 天，测试模式下只有几次），维护不长时关闭后照常送达。
+  App 与商家后台的接口请求同样得到 503，页面显示请求失败，关闭后刷新即可。
+- 第一次使用前确认 Caddy 容器能看到这个目录（Caddy 读取的是它自己容器内的路径）。站点按 `/opt/apps/<APP_NAME>/maintenance` 渲染，
+  即假定服务器的 `/opt/apps` 在 Caddy 容器中也挂载在 `/opt/apps`：
+
+  ```bash
+  docker exec <Caddy 容器名> ls /opt/apps/$APP/maintenance/maintenance.html
+  ```
+
+  看不到时找出 Caddy 容器中的实际位置（`docker inspect <Caddy 容器名> -f '{{json .Mounts}}'`），把容器内对应 `/opt/apps` 的路径写入仓库变量
+  `QUIZBUKS_CADDY_APPS_DIR`（Settings → Secrets and variables → Actions → Variables）并重新部署；Caddy 容器根本没有挂载 `/opt/apps` 时，
+  在服务器的 Caddy 的 compose 中加上只读挂载（`/opt/apps:/opt/apps:ro`）。目录看不到时锁文件不起作用，网站照常代理，不会误显示维护页。
+- 开启后在浏览器（或 `curl -sI https://<本环境的域名>/`）确认返回 503 与维护页，再开始维护。
 
 ## 备份
 

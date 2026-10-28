@@ -1,0 +1,51 @@
+# Signing in with Google, Facebook and LINE (docs/quizbuks/plans/Q40-social-sign-in.md; platform decision D61),
+# switched on by the deployment with the Spring profile "social" (SPRING_PROFILES_ACTIVE=social) in place of "google":
+# Spring replaces a list set in two profiles as a whole, so this profile declares all three providers, Google's as the
+# profile "google" does. Each provider has one client with two callbacks, the same for all three: the app's,
+# https://<host>/taker/login/oidc, as QB_OIDC_REDIRECT_APP, and the sponsor console's, https://<host>/sponsor/login/oidc,
+# as QB_OIDC_REDIRECT_SPONSOR. Client ids and secrets come from the environment only. No callback for the
+# administration, so none is offered there.
+#
+# Google vouches for addresses (D39): its accounts open verified. Facebook and LINE do not: their accounts open with the
+# address unverified and pre-claimable, and the verification mail goes out (D61 item 3); the account verifies in its own
+# session and keeps its link, and every QuizBuks write waits for that (VerifiedEmailWritesIT). An address in use answers
+# OIDC_ACCOUNT_EXISTS; a token without an address (the person declined it, or LINE has not approved the channel for
+# e-mail) opens nothing.
+jabiz:
+  security:
+    oidc:
+      providers:
+        - id: google
+          kind: google
+          client-id: ${JABIZ_OIDC_GOOGLE_CLIENT_ID}
+          client-secret: ${JABIZ_OIDC_GOOGLE_CLIENT_SECRET}
+          redirect-uris:
+            app: ${QB_OIDC_REDIRECT_APP}
+            sponsor: ${QB_OIDC_REDIRECT_SPONSOR}
+          labels: { en: Google, zh: Google, ja: Google }
+          auto-provision: true
+        # Meta for Developers: a Facebook Login app with "openid" and "email"; both callbacks as valid OAuth redirect URIs.
+        - id: facebook
+          kind: facebook
+          client-id: ${JABIZ_OIDC_FACEBOOK_CLIENT_ID}
+          client-secret: ${JABIZ_OIDC_FACEBOOK_CLIENT_SECRET}
+          scopes: [openid, email, public_profile]
+          redirect-uris:
+            app: ${QB_OIDC_REDIRECT_APP}
+            sponsor: ${QB_OIDC_REDIRECT_SPONSOR}
+          labels: { en: Facebook, zh: Facebook, ja: Facebook }
+          auto-provision: true
+          sign-up-unverified-email: true
+        # LINE Developers: a LINE Login channel (web app), its e-mail permission applied for and granted; the channel
+        # secret is the HS256 key of its ID tokens (at least 32 bytes, checked at startup).
+        - id: line
+          kind: line
+          client-id: ${JABIZ_OIDC_LINE_CLIENT_ID}
+          client-secret: ${JABIZ_OIDC_LINE_CLIENT_SECRET}
+          scopes: [openid, profile, email]
+          redirect-uris:
+            app: ${QB_OIDC_REDIRECT_APP}
+            sponsor: ${QB_OIDC_REDIRECT_SPONSOR}
+          labels: { en: LINE, zh: LINE, ja: LINE }
+          auto-provision: true
+          sign-up-unverified-email: true

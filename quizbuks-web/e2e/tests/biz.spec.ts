@@ -1,3 +1,4 @@
+import type { Page } from '@playwright/test'
 import { expect, expectAccessible, setAppearance, test } from './support'
 
 /**
@@ -30,6 +31,12 @@ test('every page of every language is served with its own text and alternates', 
   expect(await sitemap.text()).toContain('<loc>https://quizbuks.com/biz/ja/pricing/</loc>')
 })
 
+/** Picks a language in the header's drop-down (Q41): the links show once it is open. */
+async function chooseLanguage(page: Page, name: string) {
+  await page.getByTestId('lang-toggle').click()
+  await page.locator('[data-lang-menu]').getByRole('link', { name }).click()
+}
+
 test('a Chinese browser is sent to the Chinese page, keeps the page, and the switch is remembered', async ({
   browser,
 }) => {
@@ -39,14 +46,14 @@ test('a Chinese browser is sent to the Chinese page, keeps the page, and the swi
   await expect(page).toHaveURL(/\/biz\/zh\/pricing\/$/)
   await expect(page.locator('html')).toHaveAttribute('lang', 'zh-Hans')
   // The visible switch to Japanese is remembered: the English root now goes to Japanese.
-  await page.getByRole('link', { name: '日本語' }).click()
+  await chooseLanguage(page, '日本語')
   await expect(page).toHaveURL(/\/biz\/ja\/pricing\/$/)
   // Following the site's own links is a choice: English chosen on the page stays English, whatever the browser says.
-  await page.getByRole('link', { name: 'English' }).click()
+  await chooseLanguage(page, 'English')
   await expect(page).toHaveURL(/\/biz\/pricing\/$/)
   await page.waitForLoadState('networkidle')
   await expect(page.locator('html')).toHaveAttribute('lang', 'en')
-  await page.getByRole('link', { name: '日本語' }).click()
+  await chooseLanguage(page, '日本語')
   await expect(page).toHaveURL(/\/biz\/ja\/pricing\/$/)
   await page.goto('/biz/')
   await expect(page).toHaveURL(/\/biz\/ja\/$/)

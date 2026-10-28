@@ -234,7 +234,7 @@ class SetupIT extends QbItSupport {
             QbParams.AI_SPONSOR_MONTHLY_TOKENS, "2000000", QbParams.AI_GLOBAL_MONTHLY_TOKENS, "50000000",
             QbParams.AI_EXPIRE_DAYS, "7", QbParams.AI_PRICE_INPUT, "4.0000", QbParams.AI_PRICE_OUTPUT, "20.0000"));
         // Q7b: no support address until an administrator sets one.
-        expected.put(QbParams.SUPPORT_EMAIL, "");
+        expected.put(QbParams.SUPPORT_EMAIL, "quizbuks@gmail.com");
         // Q7b review M1: how far ahead a legal text may be announced.
         expected.put(QbParams.LEGAL_MAX_ANNOUNCE_DAYS, "180");
         // Q7c: the limits of the sponsors' notices, the announcements' default life and the payout reminders.

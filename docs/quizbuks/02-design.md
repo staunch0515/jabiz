@@ -50,7 +50,7 @@ docs/quizbuks/               本文件等
 | 路径 | 前端 | 登录入口（G1） | 接受的角色 | 自助注册（授予） | 要求已验证才能登录 |
 |---|---|---|---|---|---|
 | `/` | `quizbuks-web/app`（PWA） | `app` | `QB_TAKER` | 是（`QB_TAKER`，`QB_APP_SELF_REGISTRATION`） | 否：未验证可登录浏览，QuizBuks 的写入一律要求已验证 |
-| `/sponsor/` | `quizbuks-web/sponsor` | `sponsor` | `QB_SPONSOR`（且入驻已通过才能发布） | 是（`QB_SPONSOR`，`QB_SPONSOR_SELF_REGISTRATION`） | 是 |
+| `/sponsor/` | `quizbuks-web/sponsor` | `sponsor` | `QB_SPONSOR`（且入驻已通过才能发布） | 是（`QB_SPONSOR`，`QB_SPONSOR_SELF_REGISTRATION`） | 否（Q40 起；经 Facebook、LINE 开的账号在本人会话中验证）：写入一律要求已验证，`VerifiedEmailWritesIT` 守住 |
 | `/admin/` | 平台通用后台 + QuizBuks 扩展页 | `admin` | `ADMIN`（首个管理员）/ `QB_ADMIN_SUPER` / `QB_ADMIN_CONTENT` / `QB_ADMIN_FINANCE`（`QB_ADMIN_ROLES` 可改） | 否 | 否 |
 
 不用 pnpm 工作区：`pnpm app:check` 读每个 SPA 目录自己的 lockfile，Gradle 只把 SPA 自己的目录与平台的包作为构建输入（`plans/QP-pages.md` 第 1 节）。

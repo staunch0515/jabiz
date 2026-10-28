@@ -25,10 +25,13 @@ permissions:
   contents: read
 
 # The environment follows the branch. The base domain is quizbuks.com unless the repository variable
-# QUIZBUKS_BASE_DOMAIN (Settings → Secrets and variables → Actions → Variables) names another.
+# QUIZBUKS_BASE_DOMAIN (Settings → Secrets and variables → Actions → Variables) names another. The server's /opt/apps
+# appears in the Caddy container at the same path unless QUIZBUKS_CADDY_APPS_DIR names where it is mounted there
+# (the maintenance page and its lock file are read by Caddy, DEPLOY.md "维护模式").
 env:
   APP_NAME: ${{ github.ref == 'refs/heads/1.2/quizbuks-release' && 'quizbuks' || 'quizbuks-staging' }}
   BASE_DOMAIN: ${{ vars.QUIZBUKS_BASE_DOMAIN || 'quizbuks.com' }}
+  CADDY_APPS_DIR: ${{ vars.QUIZBUKS_CADDY_APPS_DIR || '/opt/apps' }}
   DOMAIN_PREFIX: ${{ github.ref == 'refs/heads/1.2/quizbuks-release' && '' || 'staging.' }}
 
 jobs:
@@ -158,7 +161,7 @@ jobs:
           fi
       # The tag goes into a command on the server: only a full commit SHA (the only tags the build pushes) is
       # accepted, matched as a whole string so that no second line can follow it.
-      - name: Check the image tag and the domain
+      - name: Check the image tag, the domain and Caddy's directory
         shell: bash
         run: |
           if [[ ! $IMAGE_TAG =~ ^[0-9a-f]{40}$ ]]; then
@@ -172,6 +175,11 @@ jobs:
             exit 1
           fi
           echo "DOMAIN=$domain" >> "$GITHUB_ENV"
+          # Also into sed and the site: an absolute path of plain segments only.
+          if [[ ! $CADDY_APPS_DIR =~ ^(/[A-Za-z0-9._-]+)+$ ]]; then
+            echo "not a plain absolute path: $CADDY_APPS_DIR" >&2
+            exit 1
+          fi
       # The compose file and site of the deployed commit itself, so that a rollback runs the old image with the files
       # it was released with.
       - uses: actions/checkout@v5
@@ -186,10 +194,14 @@ jobs:
             || { echo "the compose of $IMAGE_TAG does not take APP_NAME" >&2; exit 1; }
       - name: Render the Caddy site
         run: |
-          sed -e "s/__DOMAIN__/$DOMAIN/g" -e "s/__APP_NAME__/$APP_NAME/g" \
+          sed -e "s/__DOMAIN__/$DOMAIN/g" -e "s/__APP_NAME__/$APP_NAME/g" -e "s|__APP_DIR__|$CADDY_APPS_DIR/$APP_NAME|g" \
             deploy/quizbuks/server/site.caddy.tpl > site.caddy
           if grep -q '__[A-Z_]*__' site.caddy; then echo "unrendered placeholder in site.caddy" >&2; exit 1; fi
           cat site.caddy
+      # The site is imported by the server's shared Caddy: one that does not parse would break the reload for every
+      # application on the server, so it is checked here before it is uploaded.
+      - name: Validate the Caddy site
+        run: docker run --rm -v "$PWD/site.caddy:/etc/caddy/site.caddy:ro" caddy:2 caddy validate --adapter caddyfile --config /etc/caddy/site.caddy
       - name: Configure SSH
         env:
           SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
@@ -199,12 +211,16 @@ jobs:
           printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
           printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
-      # Only the compose file and the site; the server's .env is never touched.
+      # Only the compose file, the site and the maintenance page; the server's .env and the maintenance lock file are
+      # never touched. A commit from before the maintenance page (a rollback) leaves the page on the server as it is.
       - name: Upload deploy files
         run: |
-          ssh "$SERVER_USER@$SERVER_HOST" "mkdir -p /opt/apps/$APP_NAME"
+          ssh "$SERVER_USER@$SERVER_HOST" "mkdir -p /opt/apps/$APP_NAME/maintenance"
           scp deploy/quizbuks/server/compose.yaml "$SERVER_USER@$SERVER_HOST:/opt/apps/$APP_NAME/compose.yaml"
           scp site.caddy "$SERVER_USER@$SERVER_HOST:/opt/apps/$APP_NAME/site.caddy"
+          if [ -f deploy/quizbuks/server/maintenance.html ]; then
+            scp deploy/quizbuks/server/maintenance.html "$SERVER_USER@$SERVER_HOST:/opt/apps/$APP_NAME/maintenance/maintenance.html"
+          fi
       # One session: the environment's .env must name this environment (a copied .env naming the other one would make
       # compose replace that environment's containers); the registry login goes into a Docker configuration of this
       # deployment alone (other applications' logins on the shared server are neither replaced nor removed), the

@@ -104,6 +104,12 @@ tools/quizbuks/local-demo.sh status | logs | seed
   首次用 Google 登录且邮箱未被使用时自动开户：在 App 开的是答题人，在商家后台开的是商家（随后照常申请入驻）。
   邮箱已被使用的人先用原来的方式登录，再在账户页关联 Google。已是答题人的人要成为商家：在商家后台用同一邮箱注册、打开"你已有账号"邮件中的链接，
   之后也能用 Google 登录商家后台。管理后台不提供 Google 登录。
+- **Facebook 与 LINE 登录（App 与商家后台，Q40）**：改用 `SPRING_PROFILES_ACTIVE=social`（`application-social.yml`，代替 `google`：它同时声明 Google、Facebook、LINE，
+  三者都要设）。两个回调地址与 Google 相同（`QB_OIDC_REDIRECT_APP`、`QB_OIDC_REDIRECT_SPONSOR`），在各自的控制台登记：
+  - Meta for Developers：建应用并加 Facebook 登录，"有效 OAuth 重定向 URI"登记两个地址；权限要 `email`；应用编号与应用密钥设为 `JABIZ_OIDC_FACEBOOK_CLIENT_ID` / `_SECRET`；上线前切换为正式模式。
+  - LINE Developers：建 LINE Login 渠道（Web 应用），回调 URL 登记两个地址；在"OpenID Connect"中申请并获准取得邮箱；Channel ID 与 Channel secret 设为 `JABIZ_OIDC_LINE_CLIENT_ID` / `_SECRET`（secret 至少 32 字节，否则启动失败）。
+  Facebook、LINE 不担保邮箱：首次登录开的账号邮箱未验证，并寄出验证邮件；在登录着的浏览器中打开链接即完成验证（账号与关联都保留），之前不能写入任何东西
+  （答题人不能保存资料、商家不能申请入驻）。用户拒绝提供邮箱或 LINE 渠道未获准取得邮箱时不开户，请其用邮箱注册。邮箱已被使用的处理同 Google。
 - **Stripe 的返回地址**由配置决定，不在 Stripe 后台设置：充值跳回 `QB_SPONSOR_LINK` 下的 `wallet/topups/<编号>`，开通收款账户跳回 `QB_APP_LINK` 下的 `wallet/payout`。
 - **本机注册**：`docker compose -f deploy/quizbuks/compose.dev.yaml --profile tools up -d` 另起 Mailpit（<http://localhost:8025> 查看邮件）；
   在 `.env` 中设 `JABIZ_MAIL_ENABLED=true`、`JABIZ_MAIL_FROM=noreply@quizbuks.local`、`SPRING_MAIL_HOST=mailpit`、`SPRING_MAIL_PORT=1025`。
@@ -270,10 +276,12 @@ tools/quizbuks/local-demo.sh status | logs | seed
 | `JABIZ_MAIL_BASE_URL` | 开启邮件时 | 主机的根地址，如 `https://quizbuks.example.com`（链接按入口指向各自的前端，退订页也是） |
 | `SPRING_MAIL_HOST` / `SPRING_MAIL_PORT` / `SPRING_MAIL_USERNAME` / `SPRING_MAIL_PASSWORD` | 开启邮件时 | 邮件服务器（SMTP） |
 | `QB_SPONSOR_LINK` | 否 | 商家后台的绝对地址，Stripe 支付后跳回（`…/wallet/topups/…`）；缺省为 `JABIZ_MAIL_BASE_URL` 主机上的 `/sponsor/` |
-| `SPRING_PROFILES_ACTIVE` | 否 | `google` 开启 App 与商家后台的 Google 登录（`application-google.yml`，见"前端"） |
+| `SPRING_PROFILES_ACTIVE` | 否 | `google` 开启 App 与商家后台的 Google 登录（`application-google.yml`）；`social` 开启 Google、Facebook 与 LINE（`application-social.yml`，Q40），见"前端" |
 | `JABIZ_OIDC_GOOGLE_CLIENT_ID` / `JABIZ_OIDC_GOOGLE_CLIENT_SECRET` | 开启 Google 时 | Google OAuth 客户端（Web 应用）；密钥只放在环境变量中 |
 | `QB_OIDC_REDIRECT_APP` | 开启 Google 时 | App 的回调地址 `https://<主机>/taker/login/oidc`，与 Google 控制台中登记的完全相同 |
 | `QB_OIDC_REDIRECT_SPONSOR` | 开启 Google 时 | 商家后台的回调地址 `https://<主机>/sponsor/login/oidc`（Q37），与 Google 控制台中登记的完全相同 |
+| `JABIZ_OIDC_FACEBOOK_CLIENT_ID` / `JABIZ_OIDC_FACEBOOK_CLIENT_SECRET` | 开启 `social` 时 | Facebook 应用的编号与密钥（Q40） |
+| `JABIZ_OIDC_LINE_CLIENT_ID` / `JABIZ_OIDC_LINE_CLIENT_SECRET` | 开启 `social` 时 | LINE Login 渠道的 Channel ID 与 Channel secret（至少 32 字节，Q40） |
 | `JABIZ_TRUSTED_PROXIES` | 在代理之后 | 可信代理的地址或网段（逗号分隔），登录记录与限流据此取客户端地址；不得含 `0.0.0.0/0`、`::/0`（启动错误），见"密钥与部署" |
 
 外部服务（Q6a 起 Stripe 为必需；见上节"充值与核对"）：

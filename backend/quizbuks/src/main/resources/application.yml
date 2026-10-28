@@ -128,7 +128,8 @@ jabiz:
     # administrator's): never QB_TAKER or QB_SPONSOR, which anybody can get by registering (the startup check refuses
     # "*" or a registration role here while registration is on). The app (/) takes takers, who may sign in before
     # verifying their address (to browse; every QuizBuks write needs it verified). The sponsor console (/sponsor/)
-    # takes sponsors with a verified address only. Registration needs QB_SETUP to have run (the roles) and mail to be
+    # signs them in unverified too since Q40 (an account opened through Facebook or LINE verifies in its own session;
+    # every sponsor write needs the address verified, VerifiedEmailWritesIT). Registration needs QB_SETUP to have run (the roles) and mail to be
     # on (jabiz.mail.*), or nobody can verify their address.
     # Sessions per entry (design default Q12; docs/quizbuks/plans/QP-pages.md section 2): the app keeps its taker
     # signed in on the device for 30 days and never locks for idleness (an attempt has its own time limit); the
@@ -157,7 +158,7 @@ jabiz:
         accepted-roles: QB_SPONSOR
         self-registration: ${QB_SPONSOR_SELF_REGISTRATION:true}
         registration-roles: QB_SPONSOR
-        require-verified-email: true
+        require-verified-email: false
         app-path: /sponsor/
         session:
           persistence: tab
