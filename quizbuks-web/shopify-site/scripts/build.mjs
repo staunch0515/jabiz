@@ -19,7 +19,7 @@ export function settings(env) {
   const siteUrl = (env.SITE_URL ?? 'https://quizbuks.com').replace(/\/$/, '')
   if (!/^https:\/\/[a-z0-9.-]+(:\d+)?$/.test(siteUrl)) throw new Error(`SITE_URL must be an https origin, was "${siteUrl}"`)
   // Where merchants write to (the same address the embedded pages show, QB_SHOPIFY_SUPPORT_EMAIL).
-  const supportEmail = env.QB_SHOPIFY_SUPPORT_EMAIL || 'shopify-support@quizbuks.com'
+  const supportEmail = env.QB_SHOPIFY_SUPPORT_EMAIL || 'quizbuks@gmail.com'
   if (!/^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(supportEmail)) {
     throw new Error(`QB_SHOPIFY_SUPPORT_EMAIL must be an email address, was "${supportEmail}"`)
   }

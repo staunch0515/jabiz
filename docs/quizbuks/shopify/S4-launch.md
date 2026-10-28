@@ -49,7 +49,7 @@ S1 的已知问题：内嵌页的 `<meta name="shopify-api-key">` 在构建时�
 |---|---|---|
 | Q-S4-1 | 公开页面的路径与品牌名 | `/shopify-app/`，品牌 "QuizBuks for Shopify"（总体方案中待最终确认的名字）。要用单独的域名（如 `shopify.quizbuks.com`）就告诉我，路径不变、另配反向代理 |
 | Q-S4-2 | 外观：`@jabiz/ui` 加 Polaris 风格的 token（P-2），还是改用 Shopify 的 Polaris Web Components | 前者。后者要给根 `CLAUDE.md` 的"界面组件只用 `@jabiz/ui`"再开一个例外，而 Shopify 的审核并不强制用 Polaris，只要求界面清楚、与后台协调 |
-| Q-S4-3 | 支持邮箱地址 | 需求方给出（例如 `shopify-support@quizbuks.com`），收件由需求方安排 |
+| Q-S4-3 | 支持邮箱地址 | **已确定**（2026-10-28）：`quizbuks@gmail.com`，与招商网站的联系邮箱相同 |
 | Q-S4-4 | API key 的注入：方案 A（平台小阶段）还是 B | A |
 | Q-S4-5 | 隐私政策的法律审定 | 我按代码起草，需求方或其法律顾问审定后再提交审核 |
 | Q-S4-6 | 应用商店的资料（名称、简介、详细说明、关键词、截图说明）是否也由我起草 | 起草英文（中文、日文对照）放在 `docs/quizbuks/shopify/S4-listing.md`。截图与演示视频要等开发店铺联调后由需求方录制 |
@@ -82,11 +82,11 @@ S1 的已知问题：内嵌页的 `<meta name="shopify-api-key">` 在构建时�
 
 | # | 内容 |
 |---|---|
-| I-1 | 公开站点 `quizbuks-web/shopify-site/`（`/shopify-app/`）：首页、隐私政策、支持三页，英中日各一份，生成方式同 `biz` 但独立（没有脚本、没有内联样式）。支持邮箱在构建时写入（`QB_SHOPIFY_SUPPORT_EMAIL`，缺省 `shopify-support@quizbuks.com`；镜像构建参数同名，Gradle 以它为输入，改了即重建） |
+| I-1 | 公开站点 `quizbuks-web/shopify-site/`（`/shopify-app/`）：首页、隐私政策、支持三页，英中日各一份，生成方式同 `biz` 但独立（没有脚本、没有内联样式）。支持邮箱在构建时写入（`QB_SHOPIFY_SUPPORT_EMAIL`，缺省 `quizbuks@gmail.com`（2026-10-28 需求方确定，与招商网站的联系邮箱相同）；镜像构建参数同名，Gradle 以它为输入，改了即重建） |
 | I-2 | 内嵌页的 Client ID 与支持邮箱由平台 17g 在启动时写入（`jabiz.web.spa[].index-values`：`SHOPIFY_API_KEY`、`QB_SHOPIFY_SUPPORT_EMAIL`），镜像不再带 `VITE_SHOPIFY_API_KEY`（S1 的已知问题解决）。内嵌页底部是"帮助与常见问题"（按界面语言链到支持页，新标签）与支持邮箱 |
 | I-3 | 店面的 "Powered by QuizBuks" 链到落地页（按店面语言，新标签，`rel="noopener"`）；落地页的地址在构建时取 `SITE_URL`（缺省 `https://quizbuks.com`） |
 | I-4 | 应用商店资料草稿在 `S4-listing.md`（英文，附中文、日文对照） |
-| I-5 | **需要需求方注意（法律审定时）**：隐私政策照实写了 `shop/redact` 删不掉的记录：已发布答题的内容（引擎的只追加表，S2 Q-S2-2）、记录的变更日志（平台审计，个人字段已遮蔽）、店员的登录账户（以"商店地址/店员编号"命名，S1）。Shopify 要求收到 `shop/redact` 后删除商店数据；这几项是否可接受、要不要开平台阶段做真正的抹去，请在法律审定时一并决定 |
+| I-5 | **需要需求方注意（法律审定时）**：隐私政策照实写了 `shop/redact` 删不掉的记录：已发布答题的内容（引擎的只追加表，S2 Q-S2-2）、记录的变更日志（平台审计，个人字段已遮蔽）、店员的登录账户（以"商店地址/店员编号"命名，S1）。Shopify 要求收到 `shop/redact` 后删除商店数据；2026-10-28 需求方确定：**政策按实际写**，即照现在的实现说明这几项留存；以后实现改变（如开平台阶段做真正的抹去）时同时改政策 |
 | I-6 | 隐私政策写了"卸载时 Shopify 删除本应用建立的折扣"（S2 的前提），联调时核实；若不是，改为本应用在卸载时自己删除，或改写政策 |
 
 **测试**：`shopify-site` 的 `site.test.ts`（6 例）：三种语言内容键一致；每页每种语言都生成且互相链接、sitemap 条数；支持邮箱是邮件链接且页面没有脚本、内联样式与事件属性；隐私政策含必需的内容；构建设置的校验；转义。内嵌页 `App.test.tsx` 加 1 例（帮助链接、支持邮箱、开发服务器时不显示）；店面 `quiz.test.ts` 的 badge 用例加上链接的检查。CI：`quizbuks.yml` 加公开页面的步骤，冒烟检查 `/shopify-app/privacy/` 与内嵌页写入的 Client ID。
