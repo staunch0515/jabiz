@@ -339,7 +339,7 @@
   `QB_STRIPE_PLACEHOLDERS=true`（compose 缺省）时为未设置的 Stripe 密钥填占位并告警；改它时同步改 `tools/quizbuks/test/entrypoint.test.sh`（CI `deploy`）。
 - 首次启动后，管理员登录 `/admin/` 执行一次 `QB_SETUP`（流程页面）。
 - **服务器部署**（共用的 Docker 服务器，Caddy 为唯一入口，共用的 PostgreSQL）：`deploy/quizbuks/DEPLOY.md`。两个环境：推送 `1.3/quizbuks` 部署 **staging**（`APP_NAME=quizbuks-staging`、`staging.<基础域名>`、库 `quizbuks_staging`），
-  推送 `1.3/quizbuks-release`（只由 `1.3/quizbuks` 合并进来）部署 **production**（`APP_NAME=quizbuks`、基础域名 `vars.QUIZBUKS_BASE_DOMAIN`、库 `quizbuks`）；`.github/workflows/quizbuks-deploy.yml` 测试、构建镜像 `ghcr.io/<仓库>-quizbuks`、按分支（GitHub Environment `production` / `staging`）渲染站点并以服务器的 `deploy-app.sh <APP_NAME> <SHA>` 部署。
+  推送 `1.3/quizbuks-release`（只由 `1.3/quizbuks` 合并进来）部署 **production**（`APP_NAME=quizbuks`、基础域名 `vars.QUIZBUKS_BASE_DOMAIN`、库 `quizbuks`）；`.github/workflows/quizbuks-deploy.yml` 构建镜像 `ghcr.io/<仓库>-quizbuks`（不再测试：合并前 PR 已检查，`quizbuks.yml` 与平台的 `ci.yml` 只对 PR 运行）、按分支（GitHub Environment `production` / `staging`）渲染站点并以服务器的 `deploy-app.sh <APP_NAME> <SHA>` 部署。
   服务器用的只有 `deploy/quizbuks/server/compose.yaml`（项目名与容器名只取 `.env` 的 `${APP_NAME}`，不写死；无端口、无数据库、外部网络 `proxy` 与 `db`）、模板 `site.caddy.tpl`（`__DOMAIN__`、`__APP_NAME__`、`__APP_DIR__`）与维护页 `maintenance.html`（维护模式只以服务器上的锁文件开关，DEPLOY.md）；环境的差异只在服务器上各自的 `.env` 中，应用配置中不写按环境的域名或密钥；`compose.dev.yaml` 只在本机。客户端地址照旧只经 `JABIZ_TRUSTED_PROXIES`（Caddy 在 `proxy` 网络中的地址，不是整个网段：网络上还有其他应用），不用 `server.forward-headers-strategy`。健康检查不含邮件服务器（`management.health.mail.enabled: false`）。
 - 本机试用：`tools/quizbuks/local-demo.sh start --seed`（构建、启动、首次设置与演示数据，只用于本机；`deploy/quizbuks/README.md` "本机演示"）。改了设置流程、入口或演示所用的流程输入时同步改它（CI `local-demo`）。
 - **生产运维**：`docs/quizbuks/operations.md`（密钥清单、备份与恢复演练、首次启动、切换正式模式、监控、容量、常见故障）与上线检查清单 `docs/quizbuks/launch-checklist.md`；
