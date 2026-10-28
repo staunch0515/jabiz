@@ -1,14 +1,16 @@
 name: QuizBuks deploy
 
 # Deploys QuizBuks to the shared Docker server (deploy/quizbuks/DEPLOY.md) in two environments from one repository:
-#   staging     the line branch 1.2/quizbuks          APP_NAME quizbuks-staging  staging.<base domain>
-#   production  the release branch 1.2/quizbuks-release  APP_NAME quizbuks          <base domain>
+#   staging     the line branch 1.3/quizbuks          APP_NAME quizbuks-staging  staging.<base domain>
+#   production  the release branch 1.3/quizbuks-release  APP_NAME quizbuks          <base domain>
 # Every push to either branch is tested, built into one image (the backend with its three front ends) and deployed by
 # the server's deploy-app.sh under that environment's APP_NAME. A manual run with an image tag skips the tests and the
 # build and deploys that tag again (a rollback). Other branches never deploy: a manual run from one stops at once.
+# Line 1.3 deploys since 2026-10-28 (docs/quizbuks/03-plan.md); line 1.2 is a backup that deploys only by a confirmed
+# manual run. A rollback names a commit of line 1.3: 1.2 cannot start on a database that 1.3 has migrated.
 on:
   push:
-    branches: ['1.2/quizbuks', '1.2/quizbuks-release']
+    branches: ['1.3/quizbuks', '1.3/quizbuks-release']
   workflow_dispatch:
     inputs:
       image-tag:
@@ -29,16 +31,16 @@ permissions:
 # appears in the Caddy container at the same path unless QUIZBUKS_CADDY_APPS_DIR names where it is mounted there
 # (the maintenance page and its lock file are read by Caddy, DEPLOY.md "维护模式").
 env:
-  APP_NAME: ${{ github.ref == 'refs/heads/1.2/quizbuks-release' && 'quizbuks' || 'quizbuks-staging' }}
+  APP_NAME: ${{ github.ref == 'refs/heads/1.3/quizbuks-release' && 'quizbuks' || 'quizbuks-staging' }}
   BASE_DOMAIN: ${{ vars.QUIZBUKS_BASE_DOMAIN || 'quizbuks.com' }}
   CADDY_APPS_DIR: ${{ vars.QUIZBUKS_CADDY_APPS_DIR || '/opt/apps' }}
-  DOMAIN_PREFIX: ${{ github.ref == 'refs/heads/1.2/quizbuks-release' && '' || 'staging.' }}
+  DOMAIN_PREFIX: ${{ github.ref == 'refs/heads/1.3/quizbuks-release' && '' || 'staging.' }}
 
 jobs:
   # The application's checks: the backend module with its startup checks (platformCheck) and integration tests
   # (Testcontainers postgres:16 on the runner, never the server's database), and the two front ends.
   test:
-    if: (github.ref == 'refs/heads/1.2/quizbuks' || github.ref == 'refs/heads/1.2/quizbuks-release') && inputs.image-tag == ''
+    if: (github.ref == 'refs/heads/1.3/quizbuks' || github.ref == 'refs/heads/1.3/quizbuks-release') && inputs.image-tag == ''
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -90,7 +92,7 @@ jobs:
 
   build:
     needs: test
-    if: github.ref == 'refs/heads/1.2/quizbuks' || github.ref == 'refs/heads/1.2/quizbuks-release'
+    if: github.ref == 'refs/heads/1.3/quizbuks' || github.ref == 'refs/heads/1.3/quizbuks-release'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -124,14 +126,14 @@ jobs:
     needs: build
     # After a successful build, or alone for a manual run with a tag (the build is then skipped).
     if: >-
-      !cancelled() && (github.ref == 'refs/heads/1.2/quizbuks' || github.ref == 'refs/heads/1.2/quizbuks-release') &&
+      !cancelled() && (github.ref == 'refs/heads/1.3/quizbuks' || github.ref == 'refs/heads/1.3/quizbuks-release') &&
       (needs.build.result == 'success' || (inputs.image-tag != '' && needs.build.result == 'skipped'))
     # Protection rules (required reviewers, branch restrictions) and environment-scoped secrets are set per
     # environment in the repository's settings.
     environment:
-      name: ${{ github.ref == 'refs/heads/1.2/quizbuks-release' && 'production' || 'staging' }}
+      name: ${{ github.ref == 'refs/heads/1.3/quizbuks-release' && 'production' || 'staging' }}
       url: >-
-        https://${{ github.ref != 'refs/heads/1.2/quizbuks-release' && 'staging.' || ''
+        https://${{ github.ref != 'refs/heads/1.3/quizbuks-release' && 'staging.' || ''
         }}${{ vars.QUIZBUKS_BASE_DOMAIN || 'quizbuks.com' }}/
     runs-on: ubuntu-latest
     timeout-minutes: 20

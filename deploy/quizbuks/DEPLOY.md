@@ -1,11 +1,15 @@
 # QuizBuks — 部署到共用的 Docker 服务器（production 与 staging）
 
+> **部署在线 1.3 上（2026-10-28）**：`1.3/quizbuks` → staging，`1.3/quizbuks-release` → production。线 1.2 只作备份，推送不再部署，手动运行须确认（`deploy-1.2`）。
+> 1.3 迁移过的数据库不能再运行 1.2（Flyway 只向前），所以回滚只能回到 1.3 的提交；修复只做在 1.3。
+> 从 1.2 切到 1.3 的一次性步骤见下文"从 1.2 切到 1.3"。
+
 QuizBuks 是**一个镜像、一个服务**（`<APP_NAME>-app`，容器内端口 8080）：后端与三个前端（App `/`、商家后台 `/sponsor/`、管理后台 `/admin/`）都在一个 jar 中。
 同一仓库、同一个镜像部署为两个互不相干的环境，各有自己的服务器目录、`.env`、数据库、数据卷与域名：
 
 | | production | staging |
 |---|---|---|
-| 分支 | `1.2/quizbuks-release` | `1.2/quizbuks`（工作分支合入的线分支） |
+| 分支 | `1.3/quizbuks-release` | `1.3/quizbuks`（工作分支合入的线分支） |
 | APP_NAME | `quizbuks` | `quizbuks-staging` |
 | 域名 | `quizbuks.com` | `staging.quizbuks.com` |
 | 服务器目录 | `/opt/apps/quizbuks/` | `/opt/apps/quizbuks-staging/` |
@@ -23,7 +27,7 @@ QuizBuks 是**一个镜像、一个服务**（`<APP_NAME>-app`，容器内端口
 - 网络：`proxy`（Caddy）、`db`（PostgreSQL），都是外部网络；不发布任何端口。
 - 本机开发用的 `deploy/quizbuks/compose.dev.yaml`（自带数据库）与服务器无关，部署不使用它。
 
-**发布流程**：工作分支照常经 PR 合入 `1.2/quizbuks`，合入即部署到 staging；在 staging 上确认后，以 PR 把 `1.2/quizbuks` 合并进 `1.2/quizbuks-release`
+**发布流程**：工作分支照常经 PR 合入 `1.3/quizbuks`，合入即部署到 staging；在 staging 上确认后，以 PR 把 `1.3/quizbuks` 合并进 `1.3/quizbuks-release`
 （只合并，不变基、不拣选），合入即部署到 production。
 
 ## 一次性设置（GitHub）
@@ -32,8 +36,8 @@ QuizBuks 是**一个镜像、一个服务**（`<APP_NAME>-app`，容器内端口
    新建 `QUIZBUKS_BASE_DOMAIN`（小写、不带协议）。**服务器的 secrets**：同一页的 Secrets 中设 `SERVER_HOST`、`SERVER_USER`、`SERVER_SSH_KEY`、`SERVER_KNOWN_HOSTS`
    （仓库级，或在 Environments 的 `staging` / `production` 中各设一份），缺少任何一个时部署在第一步停止并列出缺少的名字。
 2. **Environments**：Settings → Environments 中的 `production` 与 `staging` 在第一次部署时自动建立；建议给 `production` 设 Required reviewers
-   与 Deployment branches（只允许 `1.2/quizbuks-release`）。服务器的 secrets（`SERVER_*`）可以留在仓库级，也可以按环境分别设置。
-3. **production 分支**：staging 部署正常之后，从 `1.2/quizbuks` 建 `1.2/quizbuks-release` 并推送（`git push origin origin/1.2/quizbuks:refs/heads/1.2/quizbuks-release`）。
+   与 Deployment branches（只允许 `1.3/quizbuks-release`）。服务器的 secrets（`SERVER_*`）可以留在仓库级，也可以按环境分别设置。
+3. **production 分支**：staging 部署正常之后，从 `1.3/quizbuks` 建 `1.3/quizbuks-release` 并推送（`git push origin origin/1.3/quizbuks:refs/heads/1.3/quizbuks-release`）。
    推送即第一次部署 production，所以先完成下面 production 的服务器设置。
 
 ## 首次部署前（在服务器上，每个环境各做一次）
@@ -152,7 +156,7 @@ Cloudflare 的浏览器检查（Browser Integrity Check）与 Bot Fight Mode 把
 
 ### 4. 第一次部署
 
-production：推送 `1.2/quizbuks-release`（见上文"一次性设置"第 3 步）；staging：推送 `1.2/quizbuks`。或 GitHub → Actions → **QuizBuks deploy** →
+production：推送 `1.3/quizbuks-release`（见上文"一次性设置"第 3 步）；staging：推送 `1.3/quizbuks`。或 GitHub → Actions → **QuizBuks deploy** →
 Run workflow，分支选该环境的分支，`image-tag` 留空。第一次启动在空库上迁移并运行全部启动检查，需要一两分钟（健康检查的 `start_period` 为 180 秒）。
 日志：`docker logs -f quizbuks-app`（staging：`quizbuks-staging-app`）。
 
@@ -238,7 +242,7 @@ Run workflow，分支选该环境的分支，`image-tag` 留空。第一次启�
    `quizbuks-staging_secrets` 不用动（服务器上不在其中生成密钥）。
 5. **让首个管理员重新创建**：在 `/opt/apps/quizbuks-staging/.env` 中写回 `JABIZ_BOOTSTRAP_ADMIN_USER` 与**新的** `JABIZ_BOOTSTRAP_ADMIN_PASSWORD`，
    删去 `QB_BOOTSTRAP_ADMIN_DONE=true`。平台密钥可以不变（空库用原来的密钥没有问题），也可以按"`.env`"一节重新生成，顺便演练换密钥。
-6. **重新部署同一个版本**：`/opt/infra/scripts/deploy-app.sh "$APP" "$SHA"`（或 Run workflow，分支 `1.2/quizbuks`，`image-tag` 填 `$SHA`），
+6. **重新部署同一个版本**：`/opt/infra/scripts/deploy-app.sh "$APP" "$SHA"`（或 Run workflow，分支 `1.3/quizbuks`，`image-tag` 填 `$SHA`），
    再 `docker logs -f "$APP-app"` 直到健康、没有 `Platform check failed`。
 7. **外部的旧测试数据**：Stripe（测试模式）中旧的顾客与 Connect 账户还在，可在 Developers 中"删除所有测试数据"（端点与签名密钥不受影响）；
    登录过 staging 的浏览器与已安装的 App 的会话都已失效，清掉 `staging.<基础域名>` 的站点数据再开始。
@@ -246,9 +250,22 @@ Run workflow，分支选该环境的分支，`image-tag` 留空。第一次启�
 然后从"5. 首次启动之后"（`operations.md` §3）开始演练；首个管理员开启两步验证、`QB_SETUP` 的提案发布之后，照第 3 步改回 `.env`
 （删 `JABIZ_BOOTSTRAP_ADMIN_PASSWORD`、加 `QB_BOOTSTRAP_ADMIN_DONE=true`）并重新部署，这一步本身也是演练的一部分。
 
+## 从 1.2 切到 1.3（一次性，2026-10-28）
+
+1.3 第一次部署到某个环境时，Flyway 在那个库上执行 1.3 的迁移；之后那个库只能运行 1.3。按下面的顺序做，staging 先、production 后：
+
+1. **1.2 停止自动部署**：合并 1.2 上的部署 PR（推送 `1.2/quizbuks` 不再部署，手动运行须填 `deploy-1.2`）。先做这一步，以免之后 1.2 的一次推送把 1.2 部署到已迁移的库上。
+2. **补齐 `.env`**：1.3 比 1.2 多出的必需变量只有 `SHOPIFY_API_KEY` 与 `SHOPIFY_API_SECRET`（缺少即启动失败；还没有 Shopify 应用时填占位，密钥至少 32 个字符）。
+   其余 Shopify 变量（`QB_SHOPIFY_*`）都有缺省值，见 `README.md` 的环境变量表与 `operations.md` §1。
+3. **GitHub 的 Environments**：`staging`、`production` 若设了 Deployment branches，改为允许 `1.3/quizbuks`、`1.3/quizbuks-release`（原来的 1.2 分支可以删掉）。
+4. **重置 staging**：照上一节第 0–5 步（确认对象、可选备份、停应用、删库重建、清文件、首个管理员）。不做第 6 步：下一步的部署就是第一次部署 1.3。
+5. **部署 1.3 到 staging**：合并把部署改为 1.3 的 PR（推送 `1.3/quizbuks` 即部署）。`docker logs -f quizbuks-staging-app` 直到健康、没有 `Platform check failed`，
+   再照"首次启动之后"（`operations.md` §3）走一遍。
+6. **production**：staging 确认之后，在 production 的 `.env` 补上第 2 步的变量，从 `1.3/quizbuks` 建 `1.3/quizbuks-release` 并推送（"一次性设置"第 3 步），推送即第一次部署 production。
+
 ## 之后的部署
 
-- **自动**：每次推送 `1.2/quizbuks`（staging）或 `1.2/quizbuks-release`（production）：测试（`:quizbuks:check`、入口脚本的测试、两个前端与后台扩展的检查）
+- **自动**：每次推送 `1.3/quizbuks`（staging）或 `1.3/quizbuks-release`（production）：测试（`:quizbuks:check`、入口脚本的测试、两个前端与后台扩展的检查）
   → 构建并推送镜像（标签为提交 SHA）→ 按分支渲染站点、上传 compose 与站点 → `deploy-app.sh <APP_NAME> <SHA>`。部署失败时 `deploy-app.sh` 自动回到上一个标签。
   两个分支各自排队，互不等待。
 - **手动**：GitHub → Actions → **QuizBuks deploy** → Run workflow，分支选环境的分支，`image-tag` 留空即测试、构建并部署该分支的最新提交。从其他分支运行时不构建、不部署。
