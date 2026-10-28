@@ -1,0 +1,157 @@
+name: QuizBuks mobile
+# The store apps of the takers' app (docs/quizbuks/plans/Q49b-android.md, quizbuks-mobile/). Pull requests and pushes
+# check the Android shell against the app it opens, the asset links the server serves and the Caddy site, and build
+# the release bundle unsigned. A manual run on the line branch builds it signed with the upload key and, unless the
+# track is "none", uploads it to Google Play (Play App Signing signs what users install); "none" only keeps the signed
+# bundle as the run's artifact, for the very first upload, which Play Console takes by hand.
+on:
+  push:
+    branches: ['[0-9]*.[0-9]*/quizbuks']
+    paths:
+      - 'quizbuks-mobile/**'
+      - 'deploy/quizbuks/assetlinks.sh'
+      - 'deploy/quizbuks/server/site.caddy.tpl'
+      - 'tools/quizbuks/test/assetlinks.test.sh'
+      - 'quizbuks-web/app/src/shell.ts'
+      - 'quizbuks-web/app/vite.config.ts'
+      - 'backend/quizbuks/build.gradle.kts'
+      - '.github/workflows/quizbuks-mobile.yml'
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - 'quizbuks-mobile/**'
+      - 'deploy/quizbuks/assetlinks.sh'
+      - 'deploy/quizbuks/server/site.caddy.tpl'
+      - 'tools/quizbuks/test/assetlinks.test.sh'
+      - 'quizbuks-web/app/src/shell.ts'
+      - 'quizbuks-web/app/vite.config.ts'
+      - 'backend/quizbuks/build.gradle.kts'
+      - '.github/workflows/quizbuks-mobile.yml'
+  workflow_dispatch:
+    inputs:
+      track:
+        description: 'Google Play track: none (signed bundle as an artifact only), internal, or alpha (the closed test)'
+        type: choice
+        options: [none, internal, alpha]
+        default: none
+      status:
+        description: 'Release status: completed, or draft while the app has never been published on any track'
+        type: choice
+        options: [completed, draft]
+        default: completed
+
+concurrency:
+  group: quizbuks-mobile-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: The shell agrees with the app; the upload script
+        run: node --test quizbuks-mobile/android/scripts/*.test.mjs
+      - name: The asset links statement
+        run: tools/quizbuks/test/assetlinks.test.sh
+      # The site with its asset links block, as the deploy workflow checks it before uploading.
+      - name: The Caddy site parses
+        run: |
+          sed -e 's/__DOMAIN__/staging.quizbuks.com/g' -e 's/__APP_NAME__/quizbuks-staging/g' \
+            -e 's|__APP_DIR__|/opt/apps/quizbuks-staging|g' deploy/quizbuks/server/site.caddy.tpl > site.caddy
+          docker run --rm -v "$PWD/site.caddy:/etc/caddy/site.caddy:ro" caddy:2 caddy validate --adapter caddyfile --config /etc/caddy/site.caddy
+      # The Android Gradle plugin's JDK; the runner's Android SDK (ANDROID_HOME) installs missing platforms itself.
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+      # Also validates the wrapper's checksum.
+      - uses: gradle/actions/setup-gradle@v5
+      - name: Build the release bundle (unsigned)
+        if: github.event_name != 'workflow_dispatch'
+        working-directory: quizbuks-mobile/android
+        run: ./gradlew --no-daemon bundleRelease
+      - name: Check the bundle's manifest
+        if: github.event_name != 'workflow_dispatch'
+        working-directory: quizbuks-mobile/android
+        run: |
+          manifest=app/build/intermediates/merged_manifest/release/processReleaseMainManifest/AndroidManifest.xml
+          [ -f "$manifest" ] || manifest="$(find app/build/intermediates -path '*merged_manifest*release*' -name AndroidManifest.xml | head -1)"
+          echo "$manifest"
+          host="$(jq -r .host twa-manifest.json)"
+          scope="$(jq -r .scope twa-manifest.json)"
+          grep -q "android:host=\"$host\"" "$manifest"
+          grep -q "android:pathPrefix=\"$scope\"" "$manifest"
+          if grep -q 'TRUSTED_WEB_ACTIVITY_SERVICE' "$manifest"; then echo "notification delegation is on" >&2; exit 1; fi
+
+  # Signed with the upload key, from the line branch only; the secrets are the GitHub Environment "play"'s
+  # (deploy/quizbuks/DEPLOY.md "Android"). The version code is the run number plus 100, above any bundle built by hand.
+  release:
+    if: github.event_name == 'workflow_dispatch'
+    needs: android
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment: play
+    steps:
+      - name: Only from the line branch
+        if: github.ref != 'refs/heads/1.3/quizbuks'
+        run: |
+          echo "::error::release builds only from 1.3/quizbuks, not ${{ github.ref_name }}"
+          exit 1
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v5
+      - name: Build the signed release bundle
+        working-directory: quizbuks-mobile/android
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_B64 }}
+          QB_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_PASSWORD }}
+          QB_ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_UPLOAD_KEY_ALIAS }}
+          QB_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEY_PASSWORD }}
+        run: |
+          missing=
+          [ -n "$KEYSTORE_B64" ] || missing="$missing ANDROID_UPLOAD_KEYSTORE_B64"
+          [ -n "$QB_ANDROID_KEYSTORE_PASSWORD" ] || missing="$missing ANDROID_UPLOAD_KEYSTORE_PASSWORD"
+          [ -n "$QB_ANDROID_KEY_ALIAS" ] || missing="$missing ANDROID_UPLOAD_KEY_ALIAS"
+          [ -n "$QB_ANDROID_KEY_PASSWORD" ] || missing="$missing ANDROID_UPLOAD_KEY_PASSWORD"
+          if [ -n "$missing" ]; then
+            echo "::error::secrets not set for the environment play:$missing"
+            exit 1
+          fi
+          export QB_ANDROID_VERSION_CODE=$((GITHUB_RUN_NUMBER + 100))
+          # The key lives only in the runner's temporary directory, removed with the runner.
+          export QB_ANDROID_KEYSTORE="$RUNNER_TEMP/upload.keystore"
+          printf '%s' "$KEYSTORE_B64" | base64 -d > "$QB_ANDROID_KEYSTORE"
+          ./gradlew --no-daemon bundleRelease
+          rm -f "$QB_ANDROID_KEYSTORE"
+          bundle=app/build/outputs/bundle/release/app-release.aab
+          "$JAVA_HOME/bin/jarsigner" -verify "$bundle" > /dev/null
+          echo "version code $QB_ANDROID_VERSION_CODE"
+      - uses: actions/upload-artifact@v6
+        with:
+          name: quizbuks-android-${{ github.run_number }}
+          path: quizbuks-mobile/android/app/build/outputs/bundle/release/app-release.aab
+          retention-days: 14
+      - uses: actions/setup-node@v5
+        if: inputs.track != 'none'
+        with:
+          node-version: 22
+      - name: Upload to Google Play
+        if: inputs.track != 'none'
+        env:
+          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          TRACK: ${{ inputs.track }}
+          STATUS: ${{ inputs.status }}
+        run: |
+          [ -n "$PLAY_SERVICE_ACCOUNT_JSON" ] || { echo "::error::secret PLAY_SERVICE_ACCOUNT_JSON not set for the environment play"; exit 1; }
+          node quizbuks-mobile/android/scripts/play-upload.mjs "$(jq -r .packageId quizbuks-mobile/android/twa-manifest.json)" \
+            quizbuks-mobile/android/app/build/outputs/bundle/release/app-release.aab "$TRACK" "$STATUS"

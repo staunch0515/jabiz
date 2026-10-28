@@ -291,6 +291,37 @@ rm /opt/apps/$APP/maintenance/maintenance.lock
   在服务器的 Caddy 的 compose 中加上只读挂载（`/opt/apps:/opt/apps:ro`）。目录看不到时锁文件不起作用，网站照常代理，不会误显示维护页。
 - 开启后在浏览器（或 `curl -sI https://<本环境的域名>/`）确认返回 503 与维护页，再开始维护。
 
+## Android App 的 assetlinks（Q49b）
+
+Android App（`quizbuks-mobile/android`，`docs/quizbuks/plans/Q49b-android.md`）以 `https://<域名>/.well-known/assetlinks.json` 证明它属于这个域名：
+没有它（或指纹不对）时 App 照常可用，只是顶部显示浏览器的地址栏，邮件链接不直接打开 App。平台 17l 合入前由 Caddy 站点提供：
+
+1. Settings → Environments → `production` → Variables 中设两个变量（是公开的值，不是 secret）：
+   - `QUIZBUKS_ANDROID_PACKAGE`：`com.quizbuks.app`（`twa-manifest.json` 的 `packageId`）；
+   - `QUIZBUKS_ANDROID_CERT_SHA256`：Play Console →（本 App）→ 测试和发布 → 应用完整性 → 应用签名 中**应用签名密钥证书**与**上传密钥证书**的 SHA-256 指纹，以逗号分隔。
+2. 部署一次（推送或手动运行部署 workflow）：workflow 以 `deploy/quizbuks/assetlinks.sh` 生成并检查 JSON，上传到服务器的 `/opt/apps/<APP_NAME>/well-known/assetlinks.json`；
+   两个变量都没有时删除这个文件，只设了一个时部署失败。staging 缺省不设（App 只打开 production）。
+3. 确认：`curl -s https://<域名>/.well-known/assetlinks.json` 返回这份 JSON（维护模式中也返回）；再以 Google 的
+   [Statement List Tester](https://developers.google.com/digital-asset-links/tools/generator) 对包名与指纹测试一次。
+
+Caddy 容器须能看到 `/opt/apps/<APP_NAME>/well-known/`，与维护页同一前提（见上节 `QUIZBUKS_CADDY_APPS_DIR`）。17l 之后改由平台提供，本节与站点中的这一段随之删除。
+
+## Android App 的构建与上传（Q49b）
+
+workflow `QuizBuks mobile`（`.github/workflows/quizbuks-mobile.yml`）：PR 与推送时检查并构建未签名的包；在 `1.3/quizbuks` 上手动运行（Actions → QuizBuks mobile → Run workflow）时
+以上传密钥签名，`track` 为 `none` 时只把签名的 `.aab` 存为运行的产物（第一次上传要在 Play Console 手动做），为 `internal` / `alpha`（封闭测试）时上传到 Google Play。
+版本号（versionCode）是运行编号加 100，每次运行都更大。
+
+Settings → Environments → 新建 `play`（建议设 Required reviewers 与 Deployment branches 只允许 `1.3/quizbuks`），其 Secrets：
+
+| Secret | 内容 |
+|---|---|
+| `ANDROID_UPLOAD_KEYSTORE_B64` | 上传密钥库的 Base64（`base64 -w0 upload.keystore`） |
+| `ANDROID_UPLOAD_KEYSTORE_PASSWORD` / `ANDROID_UPLOAD_KEY_ALIAS` / `ANDROID_UPLOAD_KEY_PASSWORD` | 密钥库的密码、密钥别名与密钥密码 |
+| `PLAY_SERVICE_ACCOUNT_JSON` | Google Cloud 服务账号的 JSON 密钥（在 Play Console 的"用户和权限"中只授予本 App 的发布权限） |
+
+上传密钥丢失时不影响已上架的 App（用户安装的是 Google 以应用签名密钥签的包）：在 Play Console 申请重置上传密钥，并更新上面的 secrets 与 `QUIZBUKS_ANDROID_CERT_SHA256`。
+
 ## 备份
 
 production 的数据库 `quizbuks` 按服务器的方案备份；另外备份数据卷 `quizbuks_files`（上传的文件不在数据库中），并离线保存 `JABIZ_INTEGRITY_KEY`、`JABIZ_MFA_KEY` 与 `JABIZ_SEAL_KEY`。

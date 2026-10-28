@@ -1,11 +1,13 @@
 import { PwaInstallBanner } from '@jabiz/ui'
 import { useEffect } from 'react'
+import { nativeShell } from './shell'
 
 /*
  * Offering to add the app to the home screen (docs/quizbuks/plans/Q38-install.md): after the first quiz is finished,
  * on the result page and from then on at the top of home, never before (an offer on the first visit is closed unread);
  * the account page is the place to install at any time. Closing it anywhere counts (one key, "taker"), so a closed
- * offer stays away 30 days and for good after three closes (platform 16zj).
+ * offer stays away 30 days and for good after three closes (platform 16zj). In a store app (Q49b, shell.ts) there is
+ * nothing to install: no offer anywhere, the account page included.
  */
 
 const APP_NAME = 'QuizBuks'
@@ -62,16 +64,18 @@ function rememberAnswered() {
 /** The offer on a finished quiz's result: from now on home offers it too. */
 export function ResultInstallOffer() {
   useEffect(rememberAnswered, [])
+  if (nativeShell()) return null
   return <PwaInstallBanner appName={APP_NAME} rememberAs={KEY} />
 }
 
 /** The offer at the top of home, once a quiz was finished on this browser. */
 export function HomeInstallOffer() {
-  if (!answeredOnce()) return null
+  if (!answeredOnce() || nativeShell()) return null
   return <PwaInstallBanner appName={APP_NAME} rememberAs={KEY} />
 }
 
-/** The account page's permanent entry: no close button; says so once installed. */
+/** The account page's permanent entry: no close button; says so once installed. Nothing in a store app. */
 export function AccountInstallEntry() {
+  if (nativeShell()) return null
   return <PwaInstallBanner appName={APP_NAME} rememberAs={KEY} dismissible={false} />
 }

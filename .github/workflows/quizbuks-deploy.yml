@@ -198,6 +198,27 @@ jobs:
             deploy/quizbuks/server/site.caddy.tpl > site.caddy
           if grep -q '__[A-Z_]*__' site.caddy; then echo "unrendered placeholder in site.caddy" >&2; exit 1; fi
           cat site.caddy
+      # The Android app's Digital Asset Links (docs/quizbuks/plans/Q49b-android.md), served by the site above until the
+      # platform does (17l). Only with both of the environment's variables (Settings → Environments → Variables): the
+      # package name and the SHA-256 fingerprints of Play App Signing's app signing key and the upload key; without
+      # them the environment has no statement and the upload below removes an earlier one.
+      - name: Render the Android app's asset links
+        env:
+          ANDROID_PACKAGE: ${{ vars.QUIZBUKS_ANDROID_PACKAGE }}
+          ANDROID_CERT_SHA256: ${{ vars.QUIZBUKS_ANDROID_CERT_SHA256 }}
+        run: |
+          if [ ! -f deploy/quizbuks/assetlinks.sh ]; then
+            # A commit from before Q49b (a rollback): its site does not serve the file, the server's is left as it is.
+            touch assetlinks.keep
+          elif [ -n "$ANDROID_PACKAGE" ] && [ -n "$ANDROID_CERT_SHA256" ]; then
+            bash deploy/quizbuks/assetlinks.sh "$ANDROID_PACKAGE" "$ANDROID_CERT_SHA256" > assetlinks.json
+            cat assetlinks.json
+          elif [ -n "$ANDROID_PACKAGE$ANDROID_CERT_SHA256" ]; then
+            echo "::error::set both QUIZBUKS_ANDROID_PACKAGE and QUIZBUKS_ANDROID_CERT_SHA256, or neither"
+            exit 1
+          else
+            echo "no Android app configured for this environment"
+          fi
       # The site is imported by the server's shared Caddy: one that does not parse would break the reload for every
       # application on the server, so it is checked here before it is uploaded.
       - name: Validate the Caddy site
@@ -211,8 +232,9 @@ jobs:
           printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
           printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
-      # Only the compose file, the site and the maintenance page; the server's .env and the maintenance lock file are
-      # never touched. A commit from before the maintenance page (a rollback) leaves the page on the server as it is.
+      # Only the compose file, the site, the maintenance page and the Android asset links; the server's .env and the
+      # maintenance lock file are never touched. A commit from before the maintenance page (a rollback) leaves the page
+      # on the server as it is.
       - name: Upload deploy files
         run: |
           ssh "$SERVER_USER@$SERVER_HOST" "mkdir -p /opt/apps/$APP_NAME/maintenance"
@@ -220,6 +242,12 @@ jobs:
           scp site.caddy "$SERVER_USER@$SERVER_HOST:/opt/apps/$APP_NAME/site.caddy"
           if [ -f deploy/quizbuks/server/maintenance.html ]; then
             scp deploy/quizbuks/server/maintenance.html "$SERVER_USER@$SERVER_HOST:/opt/apps/$APP_NAME/maintenance/maintenance.html"
+          fi
+          if [ -f assetlinks.json ]; then
+            ssh "$SERVER_USER@$SERVER_HOST" "mkdir -p /opt/apps/$APP_NAME/well-known"
+            scp assetlinks.json "$SERVER_USER@$SERVER_HOST:/opt/apps/$APP_NAME/well-known/assetlinks.json"
+          elif [ ! -f assetlinks.keep ]; then
+            ssh "$SERVER_USER@$SERVER_HOST" "rm -f /opt/apps/$APP_NAME/well-known/assetlinks.json"
           fi
       # One session: the environment's .env must name this environment (a copied .env naming the other one would make
       # compose replace that environment's containers); the registry login goes into a Docker configuration of this
