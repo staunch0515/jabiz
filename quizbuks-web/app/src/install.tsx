@@ -1,3 +1,4 @@
+import { useInstallPrompt } from '@jabiz/client'
 import { PwaInstallBanner } from '@jabiz/ui'
 import { useEffect } from 'react'
 import { nativeShell } from './shell'
@@ -8,6 +9,10 @@ import { nativeShell } from './shell'
  * the account page is the place to install at any time. Closing it anywhere counts (one key, "taker"), so a closed
  * offer stays away 30 days and for good after three closes (platform 16zj). In a store app (Q49b, shell.ts) there is
  * nothing to install: no offer anywhere, the account page included.
+ *
+ * Inside another app's browser (WeChat, QQ, LINE) installing is impossible and the sign-in stays in that app, so the
+ * way out to the phone's browser shows from the first visit, on the sign-in pages and a share link's page (Q50,
+ * amending D-Q38-1); the steps for WeChat and QQ are the platform's (17m).
  */
 
 const APP_NAME = 'QuizBuks'
@@ -78,4 +83,11 @@ export function HomeInstallOffer() {
 export function AccountInstallEntry() {
   if (nativeShell()) return null
   return <PwaInstallBanner appName={APP_NAME} rememberAs={KEY} dismissible={false} />
+}
+
+/** "Open this in your browser", from the first visit, inside another app's browser only (Q50). */
+export function InAppBrowserNotice() {
+  const { situation } = useInstallPrompt()
+  if (situation !== 'in-app' || nativeShell()) return null
+  return <PwaInstallBanner appName={APP_NAME} rememberAs={KEY} />
 }
