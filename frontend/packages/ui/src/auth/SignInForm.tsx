@@ -1,10 +1,12 @@
 import { api, entryInfo, isProblem, lastUserName, sitePath, unwrap, useOptionalAuth, type AuthState, type SignInStep } from '@jabiz/client'
-import { CircleCheck, Info, LockKeyhole, TriangleAlert, User } from 'lucide-react'
+import { CircleCheck, Info, LockKeyhole, Mail, TriangleAlert, User } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
 import { useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import { Alert, AlertDescription } from '../components/ui/alert'
 import { Button } from '../components/ui/button'
+import { Separator } from '../components/ui/separator'
+import { EmailLinkForm } from './EmailLink'
 import { AUTH_LINK_CLASS, AuthError, AuthField, AuthFrame, AuthLink, AuthSubmit, navigateTo, type AuthNavigation } from './frame'
 import { ResendVerification } from './MailLinkPage'
 import { AUTH_NAMESPACE } from './messages'
@@ -42,6 +44,16 @@ export interface SignInFormProps extends AuthNavigation {
   providers?: readonly OidcProvider[]
   /** How the providers are offered: full-width buttons (the default) or a row of icons (decision D61 item 5). */
   oidcLayout?: 'buttons' | 'icons'
+  /**
+   * Offers signing in by a mailed link first, above the password (phase 17m; decision D54): for people who sign up with
+   * their address and rarely keep a password. Shown only when the frontend's entry offers it (`email-link`).
+   */
+  emailLink?: boolean
+  /**
+   * What the name field asks for: `userName` (the default), or `email` where everybody signs up with their address
+   * (phase 17m). Either way the server takes a user name or an address.
+   */
+  userNameLabel?: 'userName' | 'email'
   /** Starts signing in through a provider; `startProviderSignIn` of `@jabiz/client` by default. */
   startProvider?: (providerId: string, returnTo: string) => Promise<void>
   /** Signing in and the second step; the session's (`useAuth`) by default. */
@@ -55,7 +67,8 @@ export interface SignInFormProps extends AuthNavigation {
 /**
  * Signing in (docs/design/10-security.md sections 4, 9 and 15): the password, then — for users with two-step
  * verification — a code, or the enrolment a role requires before the user signs in again; the identity providers;
- * links to reset a password and to sign up. An entry that requires a verified address answers 403 EMAIL_NOT_VERIFIED
+ * links to reset a password and to sign up; where the application asks for it and the entry offers it, a link by mail
+ * above the password. An entry that requires a verified address answers 403 EMAIL_NOT_VERIFIED
  * once the password was right: the form says so and offers a new link. A refusal by the application's rules
  * (SIGN_IN_REFUSED) gets a general text only. Every other refusal is the server's (LOGIN_FAILED, alike for every
  * cause), in the language of the request.
@@ -77,7 +90,8 @@ export function SignInForm(props: SignInFormProps) {
   const form = useForm<{ userName: string; password: string }>({
     defaultValues: { userName: props.initialUserName ?? (notice === 'idle' ? lastUserName() : undefined) ?? '', password: '' },
   })
-  const selfRegistration = useSelfRegistration(!!props.signUpPath)
+  const { selfRegistration, emailLink } = useEntryOffers(!!props.signUpPath, !!props.emailLink)
+  const byEmail = props.userNameLabel === 'email'
 
   const signedIn = () => (props.onSignedIn ? props.onSignedIn(returnTo) : navigateTo({ onNavigate, hrefOf }, returnTo))
   const failed = (e: unknown) => {
@@ -164,9 +178,23 @@ export function SignInForm(props: SignInFormProps) {
           <ResendVerification initialEmail={userName.includes('@') ? userName : ''} />
         </>
       )}
+      {emailLink && (
+        <>
+          {/* Two address fields on one page: each group says which way of signing in it is. */}
+          <div role="group" aria-label={t('login.byEmailLink')} data-testid="login-email-link">
+            <EmailLinkForm to={hrefOf ? hrefOf(returnTo) : returnTo} />
+          </div>
+          <div className="text-muted-foreground flex items-center gap-3 text-sm" data-testid="login-or-password">
+            <Separator className="flex-1" />
+            {t('login.orPassword')}
+            <Separator className="flex-1" />
+          </div>
+        </>
+      )}
       <form
         noValidate
         className="flex flex-col gap-4"
+        aria-label={emailLink ? t('login.byPassword') : undefined}
         onSubmit={form.handleSubmit(async ({ userName: name, password }) => {
           setError(null)
           setUnverified(false)
@@ -185,11 +213,15 @@ export function SignInForm(props: SignInFormProps) {
         })}
       >
         <AuthField
-          icon={User}
-          placeholder={t('login.userName')}
+          icon={byEmail ? Mail : User}
+          placeholder={t(byEmail ? 'account.email' : 'login.userName')}
           autoComplete="username"
+          inputMode={byEmail ? 'email' : undefined}
+          data-testid="login-user-name"
           error={errors.userName?.message}
-          {...form.register('userName', { validate: (v) => v.trim() !== '' || t('login.userNameRequired') })}
+          {...form.register('userName', {
+            validate: (v) => v.trim() !== '' || t(byEmail ? 'account.emailRequired' : 'login.userNameRequired'),
+          })}
         />
         <AuthField
           icon={LockKeyhole}
@@ -224,20 +256,21 @@ export function SignInForm(props: SignInFormProps) {
   )
 }
 
-/** Whether the frontend's entry lets people sign up (asked only when there is a page to link to). */
-function useSelfRegistration(wanted: boolean): boolean {
-  const [offered, setOffered] = useState(false)
+/** What the frontend's entry offers of signing up and signing in by mail (asked only when the page would show it). */
+function useEntryOffers(signUp: boolean, emailLink: boolean): { selfRegistration: boolean; emailLink: boolean } {
+  const wanted = signUp || emailLink
+  const [offered, setOffered] = useState({ selfRegistration: false, emailLink: false })
   useEffect(() => {
     if (!wanted) return undefined
     let live = true
     entryInfo()
       .then((info) => {
-        if (live) setOffered(!!info.selfRegistration)
+        if (live) setOffered({ selfRegistration: !!info.selfRegistration, emailLink: !!info.emailLink })
       })
       .catch(() => undefined)
     return () => {
       live = false
     }
   }, [wanted])
-  return wanted && offered
+  return { selfRegistration: signUp && offered.selfRegistration, emailLink: emailLink && offered.emailLink }
 }

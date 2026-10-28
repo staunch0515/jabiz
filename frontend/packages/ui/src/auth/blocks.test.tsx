@@ -34,6 +34,9 @@ function problem(status: number, ruleCode: string, field?: string): Answer {
   return { status, body: { status, violations: [{ field: field ?? null, ruleCode, message: `${ruleCode} message` }] } }
 }
 
+/** What the entries offer besides self-registration (an entry's offers are read once per page and name). */
+let entryOffers: Record<string, unknown> = {}
+
 /** Answers posts as given, by path; the entry offers self-registration. Returns the posts made. */
 function server(answers: Record<string, Answer | Answer[]> = {}) {
   const posts: { path: string; body: unknown; headers: Headers }[] = []
@@ -41,7 +44,7 @@ function server(answers: Record<string, Answer | Answer[]> = {}) {
     const request = input instanceof Request ? input : new Request(new URL(String(input), 'http://localhost'), init)
     const path = new URL(request.url).pathname
     if (request.method === 'GET' && path.startsWith('/api/auth/entries/')) {
-      return json(200, { name: path.split('/').pop(), selfRegistration: true, appPath: '/portal/' })
+      return json(200, { name: path.split('/').pop(), selfRegistration: true, appPath: '/portal/', ...entryOffers })
     }
     if (request.method === 'GET' && path === '/api/auth/oidc/providers') return json(200, [])
     const text = await request.text()
@@ -204,6 +207,59 @@ describe('SignInForm', () => {
     render(<SignInForm brand="Portal" returnTo="/portal/" auth={{ signIn, verify }} startProvider={startProvider} />)
     await user().click(await screen.findByTestId('oidc-corp'))
     expect(startProvider).toHaveBeenCalledWith('corp', '/portal/')
+  })
+
+  it('offers a mailed link above the password where the entry offers one, and asks for the address (phase 17m)', async () => {
+    // An entry of its own: what an entry offers is read once per page.
+    configureClient({ entry: 'mailed' })
+    entryOffers = { emailLink: true }
+    try {
+      const posts = server({ '/api/auth/email-link': { status: 202 } })
+      signIn.mockResolvedValue({ status: 'SIGNED_IN' })
+      const onSignedIn = vi.fn()
+      form({ emailLink: true, userNameLabel: 'email', onSignedIn, hrefOf: (path) => `/app${path}` })
+      const mailed = await screen.findByTestId('email-link-form')
+      // The link comes first, then the password under "or sign in with your password".
+      const or = screen.getByTestId('login-or-password')
+      const name = screen.getByTestId('login-user-name')
+      expect(mailed.compareDocumentPosition(or) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+      expect(or.compareDocumentPosition(name) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+      expect(or).toHaveTextContent('or sign in with your password')
+      // Two address fields: each sits in a group named for its way of signing in.
+      expect(screen.getByRole('group', { name: 'Sign in by a link in your mail' })).toContainElement(
+        screen.getByTestId('email-link-email'))
+      expect(screen.getByRole('form', { name: 'Sign in with your password' })).toContainElement(name)
+      // The name field asks for the address, and says so when empty.
+      expect(name).toHaveAttribute('placeholder', 'E-mail address')
+      expect(name).toHaveAttribute('inputmode', 'email')
+      await user().click(screen.getByRole('button', { name: 'Sign in' }))
+      expect(await screen.findByText('Enter your e-mail address.')).toBeInTheDocument()
+      await expectAccessible()
+      // The link leads back to the page to return to, at the frontend's address.
+      await user().type(screen.getByTestId('email-link-email'), 'ann@example.com')
+      await user().click(screen.getByRole('button', { name: 'Send me a link' }))
+      await screen.findByTestId('email-link-sent')
+      expect(posts.find((post) => post.path === '/api/auth/email-link')?.body)
+        .toMatchObject({ entry: 'mailed', email: 'ann@example.com', to: '/app/portal/orders' })
+      // The password still signs in, with the address as the name.
+      await user().type(name, 'ann@example.com')
+      await user().type(screen.getByLabelText('Password'), 'secret{Enter}')
+      await waitFor(() => expect(onSignedIn).toHaveBeenCalledWith('/portal/orders'))
+      expect(signIn).toHaveBeenCalledWith('ann@example.com', 'secret')
+    } finally {
+      entryOffers = {}
+    }
+  })
+
+  it('offers no mailed link where the entry does not, nor unless asked', async () => {
+    configureClient({ entry: 'unmailed' })
+    server()
+    form({ emailLink: true, signUpPath: '/portal/sign-up' })
+    // The entry was read (the sign-up link shows) and offers no link by mail.
+    expect(await screen.findByRole('link', { name: 'Create an account' })).toBeInTheDocument()
+    expect(screen.queryByTestId('email-link-form')).toBeNull()
+    expect(screen.queryByTestId('login-or-password')).toBeNull()
+    expect(screen.getByTestId('login-user-name')).toHaveAttribute('placeholder', 'User name')
   })
 })
 

@@ -303,7 +303,9 @@ jabizApp {
   `UI_SCOPE` 仍导出（D22 的约定），只是一个没有样式的类名，不再需要。
 - **登录与账户的积木**（D43，16c-1）：`@jabiz/ui` 的 `src/auth/`，文案在命名空间 `auth`（三语，应用可用 `addMessages('auth', …)` 覆盖个别键），
   亮、暗两种外观都过 axe。`AuthFrame`（品牌与标题由属性给出，带语言与外观切换）、`SignInForm`（密码、二次验证码、
-  绑定三步，身份提供方按钮，"忘记密码 / 注册"链接；403 `EMAIL_NOT_VERIFIED` 提示并可重发验证邮件，`SIGN_IN_REFUSED` 只给通用文案）、
+  绑定三步，身份提供方按钮，"忘记密码 / 注册"链接；403 `EMAIL_NOT_VERIFIED` 提示并可重发验证邮件，`SIGN_IN_REFUSED` 只给通用文案；
+  17m：`emailLink` 在入口开启了 `email-link` 时把"以邮件链接登录"（`EmailLinkForm`，链接回到 `returnTo`）放在最上面、密码在"或用密码登录"之下，
+  `userNameLabel="email"` 把名字一栏写作"邮箱"（服务端照旧接受用户名或邮箱）；身份提供方始终在最后）、
   `SignUpForm` + `SignUpSent`（邮箱、两次密码、显示名、邮件语言，应用的附加字段经 `extra` 插槽；202 后一律提示查收邮件并可重发）、
   `MailLinkPage`（按路径末段分派到 `VerifyEmailPanel`、`JoinPanel`、`PasswordResetConfirm`，无令牌的 `password-reset` 为 `PasswordResetRequest`）、
   `MfaCodeStep`、`MfaEnrollment`、`MfaSettings`（本人的两步验证：状态与剩余恢复码数，未绑定时绑定；默认调用 `/api/auth/mfa*`，可经属性替换；`refreshKey` 改变即重读；15c-2，后台安全设置与示范门户共用）、`StepUpProvider`、
@@ -338,9 +340,13 @@ jabizApp {
 - **安装到主屏幕**（16zj）：浏览器不允许网页自己把图标放到主屏幕，只能由用户添加。`@jabiz/client` 的 `useInstallPrompt()` 给出这个浏览器的安装方式
   （纯函数 `installSituation`）：`prompt`（Chrome、Edge、Samsung 的 `beforeinstallprompt`：`registerServiceWorker` 一开始就以 `captureInstallPrompt()`
   接住并 `preventDefault`，不显示浏览器自己的横条；`install()` 弹出浏览器的确认框，只能用一次）、`ios`（iPhone、iPad 的 Safari 及 iOS 上的其他浏览器：
-  只能从"分享"菜单手动添加；iPadOS 自称 Mac，以触屏区分）、`menu`（Android 的 Firefox：浏览器菜单）、`in-app`（LINE、微信、Instagram、Facebook 等 App 内置浏览器：
-  不能安装，请在浏览器中打开）、`installed`（`display-mode: standalone` 或 Safari 的 `navigator.standalone`）、`none`（电脑，或浏览器没有提供）。
-  `@jabiz/ui` 的 `PwaInstallBanner`（`appName`）据此显示不打断操作的提示与 iOS 的分步指引 `PwaInstallGuide`（"分享"按钮在新版 Safari 中可能在"…"里；
-  主屏幕上的 App 与 Safari 的存储分开，须再登录一次）；用户关掉后 30 天内不再出现、关掉 3 次后不再出现（`snoozeDays`、`maxDismissals`，记在本浏览器的
+  只能从"分享"菜单手动添加；iPadOS 自称 Mac，以触屏区分）、`menu`（没有 `beforeinstallprompt` 的 Android 浏览器：浏览器菜单）、`in-app`（LINE、微信、QQ、微博、钉钉、支付宝、
+  Instagram、Facebook 等 App 内置浏览器与 Android 的 WebView（`; wv)`）：不能安装，请在浏览器中打开）、`installed`（`display-mode: standalone` 或 Safari 的
+  `navigator.standalone`）、`none`（电脑，或 Chrome、Samsung 这类会给出 `beforeinstallprompt` 的浏览器还没有给出）。HarmonyOS（`OpenHarmony`，不再自称 Android）按 Android 处理。
+  **按浏览器的步骤**（17m）：`installBrowser`（纯函数）另给出 `InstallPrompt.browser`：`wechat`、`qq-app`（内置浏览器的"在浏览器打开"在右上角"···"里）、
+  `huawei`、`xiaomi`、`qq`（QQ 浏览器）、`uc`、`firefox`（各自菜单中的"添加到桌面"），其余为 `other`（通用步骤）。国产手机多数默认不允许浏览器在桌面建快捷方式，
+  所以除 Firefox 外的菜单步骤都提示在系统设置中开启浏览器的"桌面快捷方式"权限。
+  `@jabiz/ui` 的 `PwaInstallBanner`（`appName`）据此显示不打断操作的提示与分步指引 `PwaInstallGuide`：iOS（`situation="ios"`，缺省："分享"按钮在新版 Safari 中可能在"…"里；
+  主屏幕上的 App 与 Safari 的存储分开，须再登录一次）与 Android 浏览器的菜单（`situation="menu"`、`browser`，17m）；内置浏览器的提示以警示样式显示（那里别的都做不了）；用户关掉后 30 天内不再出现、关掉 3 次后不再出现（`snoozeDays`、`maxDismissals`，记在本浏览器的
   `localStorage`，按 SPA 前缀分开，存储不可用时下次照常出现）；`dismissible={false}` 用于作为安装入口的页面（账户页）：没有关闭按钮，已安装时说明已安装。
   何时显示由应用决定（不要放在首次访问或登录页：多半被直接关掉）。
