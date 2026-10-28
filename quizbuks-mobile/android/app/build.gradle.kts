@@ -33,7 +33,6 @@ android {
         resValue("string", "launcherName", twa("launcherName"))
         resValue("string", "launchUrl", "https://$host${twa("startUrl")}")
         resValue("string", "hostName", host)
-        resValue("string", "scopePath", twa("scope"))
         resValue("string", "providerAuthority", "${twa("packageId")}.fileprovider")
         resValue("string", "fallbackType", twa("fallbackType"))
         resValue("string", "orientation", twa("orientation"))
@@ -50,7 +49,6 @@ android {
         resValue("color", "navigationDividerColorDark", twa("navigationDividerColorDark"))
         resValue("color", "backgroundColor", twa("backgroundColor"))
         resValue("integer", "splashScreenFadeOutDuration", twa("splashScreenFadeOutDuration"))
-        resValue("bool", "enableNotification", twa("enableNotifications"))
         resValue("bool", "enableSiteSettingsShortcut", twa("enableSiteSettingsShortcut"))
         // The manifest's intent filter takes the host and the path prefix as placeholders (a resource is not allowed in
         // pathPrefix): only the app's addresses open the app, the sponsor console and the business site stay in the
