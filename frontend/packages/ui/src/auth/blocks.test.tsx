@@ -225,6 +225,10 @@ describe('SignInForm', () => {
       expect(mailed.compareDocumentPosition(or) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
       expect(or.compareDocumentPosition(name) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
       expect(or).toHaveTextContent('or sign in with your password')
+      // Two address fields: each sits in a group named for its way of signing in.
+      expect(screen.getByRole('group', { name: 'Sign in by a link in your mail' })).toContainElement(
+        screen.getByTestId('email-link-email'))
+      expect(screen.getByRole('form', { name: 'Sign in with your password' })).toContainElement(name)
       // The name field asks for the address, and says so when empty.
       expect(name).toHaveAttribute('placeholder', 'E-mail address')
       expect(name).toHaveAttribute('inputmode', 'email')

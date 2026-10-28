@@ -45,8 +45,8 @@ export function PwaInstallBanner({
   appName, dismissible = true, rememberAs, snoozeDays = 30, maxDismissals = 3, prompt, now = Date.now, className,
 }: PwaInstallBannerProps) {
   const { t } = useTranslation(AUTH_NAMESPACE)
-  const browser = useInstallPrompt()
-  const { situation, browser: kind = 'other', install } = prompt ?? browser
+  const detected = useInstallPrompt()
+  const { situation, browser, install } = prompt ?? detected
   const key = rememberAs ?? DEFAULT_KEY()
   const [closed, setClosed] = useState(() => dismissible
     && !installOfferAllowed(readInstallDismissals(key), now(), { days: snoozeDays, max: maxDismissals }))
@@ -85,7 +85,7 @@ export function PwaInstallBanner({
     case 'in-app':
       icon = <ExternalLink aria-hidden className="text-warning size-5 shrink-0" />
       // WeChat and QQ put "open in the browser" behind the "···" at the top right.
-      text = t(kind === 'wechat' || kind === 'qq-app' ? 'install.inAppWechat' : 'install.inApp', { app: appName })
+      text = t(browser === 'wechat' || browser === 'qq-app' ? 'install.inAppWechat' : 'install.inApp', { app: appName })
       break
     case 'installed':
       text = t('install.installed', { app: appName })
@@ -96,7 +96,7 @@ export function PwaInstallBanner({
 
   return (
     <section aria-label={t('install.title', { app: appName })} data-testid="pwa-install" data-situation={situation}
-      data-browser={kind}
+      data-browser={browser}
       className={cn('bg-card text-card-foreground flex items-start gap-3 border p-3 text-sm', inApp && 'border-warning',
         className)}>
       {icon}
@@ -113,7 +113,7 @@ export function PwaInstallBanner({
         </Button>
       )}
       {(situation === 'ios' || situation === 'menu') && (
-        <PwaInstallGuide appName={appName} open={guide} onOpenChange={setGuide} situation={situation} browser={kind} />
+        <PwaInstallGuide appName={appName} open={guide} onOpenChange={setGuide} situation={situation} browser={browser} />
       )}
     </section>
   )

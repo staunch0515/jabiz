@@ -43,7 +43,10 @@ export interface InstallEnvironment {
  * The browsers inside other apps. QQ's own browser says `MQQBrowser` but QQ the app adds ` QQ/<version>`; Android's web
  * view (any app showing pages itself: Alipay, DingTalk, Douyin) says `; wv)`.
  */
-const IN_APP = /\bLine\/|MicroMessenger|\sQQ\/\d|Weibo|DingTalk|AlipayClient|Instagram|FBAN|FBAV|FB_IAB|\bKAKAOTALK\b|; wv\)/i
+const WECHAT = /MicroMessenger/i
+const QQ_APP = /\sQQ\/\d/i
+const IN_APP = [WECHAT, QQ_APP,
+  /\bLine\/|Weibo|DingTalk|AlipayClient|Instagram|FBAN|FBAV|FB_IAB|\bKAKAOTALK\b|; wv\)/i]
 
 /** Chrome itself (Brave and others say the same) and Samsung Internet: they offer `beforeinstallprompt`. */
 const PROMPTING = / Chrome\/[\d.]+ (?:Mobile )?Safari\/[\d.]+$|SamsungBrowser\//
@@ -60,8 +63,8 @@ function isAndroid(userAgent: string): boolean {
 
 /** Which browser this is, where it changes how to install (pure). */
 export function installBrowser(userAgent: string): InstallBrowser {
-  if (/MicroMessenger/i.test(userAgent)) return 'wechat'
-  if (/\sQQ\/\d/.test(userAgent)) return 'qq-app'
+  if (WECHAT.test(userAgent)) return 'wechat'
+  if (QQ_APP.test(userAgent)) return 'qq-app'
   if (/HuaweiBrowser\/|HarmonyBrowser\//i.test(userAgent)) return 'huawei'
   if (/MiuiBrowser\//i.test(userAgent)) return 'xiaomi'
   if (/MQQBrowser\//i.test(userAgent)) return 'qq'
@@ -75,7 +78,7 @@ export function installSituation(env: InstallEnvironment): InstallSituation {
   if (env.standalone) return 'installed'
   const ios = isIos(env.userAgent, env.maxTouchPoints)
   const android = isAndroid(env.userAgent)
-  if ((ios || android) && IN_APP.test(env.userAgent)) return 'in-app'
+  if ((ios || android) && IN_APP.some((app) => app.test(env.userAgent))) return 'in-app'
   if (!ios && !android) return 'none'
   if (env.canPrompt) return 'prompt'
   if (ios) return 'ios'

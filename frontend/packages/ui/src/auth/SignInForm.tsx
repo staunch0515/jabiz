@@ -180,7 +180,10 @@ export function SignInForm(props: SignInFormProps) {
       )}
       {emailLink && (
         <>
-          <EmailLinkForm to={hrefOf ? hrefOf(returnTo) : returnTo} />
+          {/* Two address fields on one page: each group says which way of signing in it is. */}
+          <div role="group" aria-label={t('login.byEmailLink')} data-testid="login-email-link">
+            <EmailLinkForm to={hrefOf ? hrefOf(returnTo) : returnTo} />
+          </div>
           <div className="text-muted-foreground flex items-center gap-3 text-sm" data-testid="login-or-password">
             <Separator className="flex-1" />
             {t('login.orPassword')}
@@ -191,6 +194,7 @@ export function SignInForm(props: SignInFormProps) {
       <form
         noValidate
         className="flex flex-col gap-4"
+        aria-label={emailLink ? t('login.byPassword') : undefined}
         onSubmit={form.handleSubmit(async ({ userName: name, password }) => {
           setError(null)
           setUnverified(false)
