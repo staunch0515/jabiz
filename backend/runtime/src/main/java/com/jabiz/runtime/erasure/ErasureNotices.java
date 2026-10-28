@@ -37,7 +37,7 @@ public class ErasureNotices {
     public static final String MESSAGE_PREFIX = "erasure.notice.";
 
     /** A notice as shown: its code, to acknowledge, and its text in the request's language. */
-    public record View(String code, String message) {}
+    public record NoticeView(String code, String message) {}
 
     private final PersonalDataErasers erasers;
     private final DatasetEntityManager entities;
@@ -70,8 +70,8 @@ public class ErasureNotices {
     }
 
     /** The notices as the user reads them. */
-    public List<View> views(List<ErasureNotice> notices, Locale locale) {
-        return notices.stream().map(notice -> new View(notice.code(), messages.message(violation(notice), locale)))
+    public List<NoticeView> views(List<ErasureNotice> notices, Locale locale) {
+        return notices.stream().map(notice -> new NoticeView(notice.code(), messages.message(violation(notice), locale)))
             .toList();
     }
 

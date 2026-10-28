@@ -134,9 +134,9 @@ public class AccountDeletionProcesses {
     public record ExecuteInput(@NotNull UUID requestId) {}
 
     /** @param dueTime when the account is deleted, unless the request is withdrawn before */
-    public record RequestOutput(String requestId, Instant dueTime) {}
+    public record DeletionRequested(String requestId, Instant dueTime) {}
 
-    public record CancelOutput(String requestId) {}
+    public record DeletionCancelled(String requestId) {}
 
     /** @param erasureId the erasure, or null when the request was not (or no longer) due */
     public record ExecuteOutput(String requestId, String erasureId) {}
@@ -163,8 +163,8 @@ public class AccountDeletionProcesses {
 
     // ---- the user's own -------------------------------------------------------------------------------------------
 
-    static ProcessDefinition<RequestInput, RequestOutput, ProcessContext> request(MailTemplate requested) {
-        return ProcessDefinition.define(REQUEST, 1, RequestInput.class, RequestOutput.class, ProcessContext.class,
+    static ProcessDefinition<RequestInput, DeletionRequested, ProcessContext> request(MailTemplate requested) {
+        return ProcessDefinition.define(REQUEST, 1, RequestInput.class, DeletionRequested.class, ProcessContext.class,
             pb -> pb
                 .description("Asks for the deletion of the signed-in user's own account, after the cooling-off"
                     + " period.")
@@ -177,7 +177,7 @@ public class AccountDeletionProcesses {
                         : List.copyOf(input.acknowledgedNotices()));
                     return ctx;
                 })
-                .outputMapper(ctx -> ctx.get(REQUESTED, RequestOutput.class))
+                .outputMapper(ctx -> ctx.get(REQUESTED, DeletionRequested.class))
                 .compute("Check the caller", (metadata, ctx) -> checkOwn(ctx))
                 .step("One request at a time", HoldLock.<ProcessContext>exclusive(ctx -> LOCK + ctx.get(USER_ID)))
                 .step("Load the user", LoadEntity.by(SecurityEntities.USER_DATASET, USER_ID, USER))
@@ -185,13 +185,13 @@ public class AccountDeletionProcesses {
                 .step("Tell the user", requestedMail(requested)));
     }
 
-    static ProcessDefinition<UserInput, CancelOutput, ProcessContext> cancel() {
-        return ProcessDefinition.define(CANCEL, 1, UserInput.class, CancelOutput.class, ProcessContext.class, pb -> pb
+    static ProcessDefinition<UserInput, DeletionCancelled, ProcessContext> cancel() {
+        return ProcessDefinition.define(CANCEL, 1, UserInput.class, DeletionCancelled.class, ProcessContext.class, pb -> pb
             .description("Withdraws the signed-in user's pending request to delete the account.")
             .permissions(SecurityPermissions.ACCOUNT)
             .entryOnly()
             .contextFactory((start, input) -> userContext(start, input))
-            .outputMapper(ctx -> ctx.get(CANCELLED, CancelOutput.class))
+            .outputMapper(ctx -> ctx.get(CANCELLED, DeletionCancelled.class))
             .compute("Check the caller", (metadata, ctx) -> checkOwn(ctx))
             .step("One request at a time", HoldLock.<ProcessContext>exclusive(ctx -> LOCK + ctx.get(USER_ID)))
             .step("Withdraw the request", AccountDeletionStep.cancel()));
@@ -228,9 +228,9 @@ public class AccountDeletionProcesses {
                 Map.of(ENTRY, ctx -> ctx.get(ENTRY_NAME)))));
     }
 
-    static ProcessDefinition<ConfirmInput, RequestOutput, ProcessContext> confirm(MailTemplate requested,
+    static ProcessDefinition<ConfirmInput, DeletionRequested, ProcessContext> confirm(MailTemplate requested,
         SignInEntries entries) {
-        return ProcessDefinition.define(CONFIRM, 1, ConfirmInput.class, RequestOutput.class, ProcessContext.class,
+        return ProcessDefinition.define(CONFIRM, 1, ConfirmInput.class, DeletionRequested.class, ProcessContext.class,
             pb -> pb
                 .description("Uses a mailed link: asks for the deletion of the account it was sent for.")
                 .permissions(SecurityPermissions.SIGN_UP)
@@ -242,7 +242,7 @@ public class AccountDeletionProcesses {
                         : List.copyOf(input.acknowledgedNotices()));
                     return ctx;
                 })
-                .outputMapper(ctx -> ctx.get(REQUESTED, RequestOutput.class))
+                .outputMapper(ctx -> ctx.get(REQUESTED, DeletionRequested.class))
                 // A refusal (notices not acknowledged, say) rolls the use back: the link works again.
                 .step("Use the link", MailTokens.<ProcessContext>consume(TOKEN, ctx -> (String) ctx.get(TOKEN_VALUE),
                     CONSUMED))
@@ -260,28 +260,28 @@ public class AccountDeletionProcesses {
 
     // ---- by an administrator ---------------------------------------------------------------------------------------
 
-    static ProcessDefinition<UserInput, RequestOutput, ProcessContext> schedule(MailTemplate requested) {
-        return ProcessDefinition.define(SCHEDULE, 1, UserInput.class, RequestOutput.class, ProcessContext.class,
+    static ProcessDefinition<UserInput, DeletionRequested, ProcessContext> schedule(MailTemplate requested) {
+        return ProcessDefinition.define(SCHEDULE, 1, UserInput.class, DeletionRequested.class, ProcessContext.class,
             pb -> pb
                 .description("Schedules the deletion of a user's account, after the cooling-off period.")
                 .permissions(ErasurePermissions.ERASE)
                 .actsOn(SecurityEntities.USER, "userId")
                 .contextFactory((start, input) -> userContext(start, input))
-                .outputMapper(ctx -> ctx.get(REQUESTED, RequestOutput.class))
+                .outputMapper(ctx -> ctx.get(REQUESTED, DeletionRequested.class))
                 .step("One request at a time", HoldLock.<ProcessContext>exclusive(ctx -> LOCK + ctx.get(USER_ID)))
                 .step("Load the user", LoadEntity.by(SecurityEntities.USER_DATASET, USER_ID, USER))
                 .step("Record the request", AccountDeletionStep.request(Channel.ADMIN))
                 .step("Tell the user", requestedMail(requested)));
     }
 
-    static ProcessDefinition<UserInput, CancelOutput, ProcessContext> unschedule() {
-        return ProcessDefinition.define(UNSCHEDULE, 1, UserInput.class, CancelOutput.class, ProcessContext.class,
+    static ProcessDefinition<UserInput, DeletionCancelled, ProcessContext> unschedule() {
+        return ProcessDefinition.define(UNSCHEDULE, 1, UserInput.class, DeletionCancelled.class, ProcessContext.class,
             pb -> pb
                 .description("Withdraws the pending request to delete a user's account.")
                 .permissions(ErasurePermissions.ERASE)
                 .actsOn(SecurityEntities.USER, "userId")
                 .contextFactory((start, input) -> userContext(start, input))
-                .outputMapper(ctx -> ctx.get(CANCELLED, CancelOutput.class))
+                .outputMapper(ctx -> ctx.get(CANCELLED, DeletionCancelled.class))
                 .step("One request at a time", HoldLock.<ProcessContext>exclusive(ctx -> LOCK + ctx.get(USER_ID)))
                 .step("Withdraw the request", AccountDeletionStep.cancel()));
     }
@@ -359,7 +359,7 @@ public class AccountDeletionProcesses {
         return SendMail.<ProcessContext>when(ctx -> ctx.get(REQUESTED) != null && !ctx.hasViolations()
                 && ctx.get(USER, EntityInstance.class).get("email") != null, requested,
             ctx -> MailRecipient.user(ctx.get(USER, EntityInstance.class).id()),
-            Map.of(DUE_DATE, ctx -> ctx.get(REQUESTED, RequestOutput.class).dueTime().atOffset(ZoneOffset.UTC)
+            Map.of(DUE_DATE, ctx -> ctx.get(REQUESTED, DeletionRequested.class).dueTime().atOffset(ZoneOffset.UTC)
                 .toLocalDate().toString()));
     }
 
@@ -478,7 +478,7 @@ public class AccountDeletionProcesses {
                                 ctx.opTime(), ctx.opTime().plus(coolingOff), channel.name(),
                                 ctx.request().actorId());
                             return deletions.insert(request, ctx.processSeqId()).then(Mono.fromRunnable(() ->
-                                ctx.put(REQUESTED, new RequestOutput(requestId.toString(), request.dueTime()))));
+                                ctx.put(REQUESTED, new DeletionRequested(requestId.toString(), request.dueTime()))));
                         });
                     });
                 });
@@ -494,7 +494,7 @@ public class AccountDeletionProcesses {
                 UUID requestId = pending.get().requestId();
                 return deletions.end(requestId, AccountDeletions.Outcome.CANCELLED, null, ctx.request().actorId(),
                         ctx.opTime(), ctx.processSeqId())
-                    .then(Mono.fromRunnable(() -> ctx.put(CANCELLED, new CancelOutput(requestId.toString()))));
+                    .then(Mono.fromRunnable(() -> ctx.put(CANCELLED, new DeletionCancelled(requestId.toString()))));
             });
         }
 
@@ -646,12 +646,12 @@ public class AccountDeletionProcesses {
     }
 
     @Bean
-    ProcessDefinition<RequestInput, RequestOutput, ProcessContext> secAccountDeletionRequestProcess() {
+    ProcessDefinition<RequestInput, DeletionRequested, ProcessContext> secAccountDeletionRequestProcess() {
         return request(REQUESTED_MAIL);
     }
 
     @Bean
-    ProcessDefinition<UserInput, CancelOutput, ProcessContext> secAccountDeletionCancelProcess() {
+    ProcessDefinition<UserInput, DeletionCancelled, ProcessContext> secAccountDeletionCancelProcess() {
         return cancel();
     }
 
@@ -662,18 +662,18 @@ public class AccountDeletionProcesses {
     }
 
     @Bean
-    ProcessDefinition<ConfirmInput, RequestOutput, ProcessContext> sponsorAccountDeletionConfirmProcess(
+    ProcessDefinition<ConfirmInput, DeletionRequested, ProcessContext> sponsorAccountDeletionConfirmProcess(
         SignInEntries entries) {
         return confirm(REQUESTED_MAIL, entries);
     }
 
     @Bean
-    ProcessDefinition<UserInput, RequestOutput, ProcessContext> secUserDeletionScheduleProcess() {
+    ProcessDefinition<UserInput, DeletionRequested, ProcessContext> secUserDeletionScheduleProcess() {
         return schedule(REQUESTED_MAIL);
     }
 
     @Bean
-    ProcessDefinition<UserInput, CancelOutput, ProcessContext> secUserDeletionCancelProcess() {
+    ProcessDefinition<UserInput, DeletionCancelled, ProcessContext> secUserDeletionCancelProcess() {
         return unschedule();
     }
 

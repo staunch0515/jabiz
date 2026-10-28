@@ -54,33 +54,33 @@ class AccountDeletionController {
     static final String CONFIRM = REQUEST + "/confirm";
 
     /** The caller's pending request. */
-    record Pending(String requestId, Instant requestedTime, Instant dueTime, String channel) {}
+    record DeletionPending(String requestId, Instant requestedTime, Instant dueTime, String channel) {}
 
     /**
      * @param available whether the caller's entry lets them ask here
      * @param pending   the pending request, or null
      * @param notices   what the application wants the caller to know first (when available and nothing pending)
      */
-    record Status(boolean available, Pending pending, List<ErasureNotices.View> notices) {}
+    record DeletionStatus(boolean available, DeletionPending pending, List<ErasureNotices.NoticeView> notices) {}
 
     /**
      * @param currentPassword     the caller's password, needed unless the session passed a second factor recently
      * @param acknowledgedNotices the codes of the notices the caller read
      */
-    record AccountRequest(@Sensitive String currentPassword, List<String> acknowledgedNotices) {
+    record DeletionRequest(@Sensitive String currentPassword, List<String> acknowledgedNotices) {
         @Override
         public String toString() {
-            return "AccountRequest[currentPassword=***, acknowledgedNotices=" + acknowledgedNotices + "]";
+            return "DeletionRequest[currentPassword=***, acknowledgedNotices=" + acknowledgedNotices + "]";
         }
     }
 
     /** @param entry the sign-in entry whose pages the link opens; it must let users ask for the deletion */
-    record LinkRequest(String email, String entry) {}
+    record DeletionLinkRequest(String email, String entry) {}
 
-    record LinkConfirm(@Sensitive String token, List<String> acknowledgedNotices) {
+    record DeletionLinkConfirm(@Sensitive String token, List<String> acknowledgedNotices) {
         @Override
         public String toString() {
-            return "LinkConfirm[token=***, acknowledgedNotices=" + acknowledgedNotices + "]";
+            return "DeletionLinkConfirm[token=***, acknowledgedNotices=" + acknowledgedNotices + "]";
         }
     }
 
@@ -93,13 +93,13 @@ class AccountDeletionController {
     private final AccountDeletions deletions;
     private final ErasureNotices notices;
     private final ProcessDefinition<IdentityProcesses.BeginInput, IdentityProcesses.BeginOutput, ProcessContext> check;
-    private final ProcessDefinition<AccountDeletionProcesses.RequestInput, AccountDeletionProcesses.RequestOutput,
+    private final ProcessDefinition<AccountDeletionProcesses.RequestInput, AccountDeletionProcesses.DeletionRequested,
         ProcessContext> request;
-    private final ProcessDefinition<AccountDeletionProcesses.UserInput, AccountDeletionProcesses.CancelOutput,
+    private final ProcessDefinition<AccountDeletionProcesses.UserInput, AccountDeletionProcesses.DeletionCancelled,
         ProcessContext> cancel;
     private final ProcessDefinition<AccountDeletionProcesses.MailInput, AccountDeletionProcesses.Done,
         ProcessContext> mail;
-    private final ProcessDefinition<AccountDeletionProcesses.ConfirmInput, AccountDeletionProcesses.RequestOutput,
+    private final ProcessDefinition<AccountDeletionProcesses.ConfirmInput, AccountDeletionProcesses.DeletionRequested,
         ProcessContext> confirm;
 
     AccountDeletionController(ProcessExecutor processes, SignInEntries entries, SignUpRateLimits limits,
@@ -108,15 +108,15 @@ class AccountDeletionController {
         @Qualifier("secAccountReauthenticateProcess")
         ProcessDefinition<IdentityProcesses.BeginInput, IdentityProcesses.BeginOutput, ProcessContext> check,
         @Qualifier("secAccountDeletionRequestProcess")
-        ProcessDefinition<AccountDeletionProcesses.RequestInput, AccountDeletionProcesses.RequestOutput,
+        ProcessDefinition<AccountDeletionProcesses.RequestInput, AccountDeletionProcesses.DeletionRequested,
             ProcessContext> request,
         @Qualifier("secAccountDeletionCancelProcess")
-        ProcessDefinition<AccountDeletionProcesses.UserInput, AccountDeletionProcesses.CancelOutput,
+        ProcessDefinition<AccountDeletionProcesses.UserInput, AccountDeletionProcesses.DeletionCancelled,
             ProcessContext> cancel,
         @Qualifier("sponsorAccountDeletionMailProcess")
         ProcessDefinition<AccountDeletionProcesses.MailInput, AccountDeletionProcesses.Done, ProcessContext> mail,
         @Qualifier("sponsorAccountDeletionConfirmProcess")
-        ProcessDefinition<AccountDeletionProcesses.ConfirmInput, AccountDeletionProcesses.RequestOutput,
+        ProcessDefinition<AccountDeletionProcesses.ConfirmInput, AccountDeletionProcesses.DeletionRequested,
             ProcessContext> confirm) {
         this.processes = processes;
         this.entries = entries;
@@ -135,20 +135,20 @@ class AccountDeletionController {
 
     /** The caller's state: whether they may ask here, a pending request, and the notices to read first. */
     @GetMapping(ACCOUNT)
-    Mono<Status> status() {
+    Mono<DeletionStatus> status() {
         return RequestContexts.current().flatMap(context -> CurrentSession.open(refreshTokens, context)
             .then(Mono.defer(() -> {
                 UUID user = requireUser(context);
                 boolean available = available(context);
                 Locale locale = context.locale() == null ? Locale.ENGLISH : context.locale();
                 return deletions.pending(user).flatMap(pending -> {
-                    Pending view = pending.map(found -> new Pending(found.requestId().toString(),
+                    DeletionPending view = pending.map(found -> new DeletionPending(found.requestId().toString(),
                         found.requestedTime(), found.dueTime(), found.channel())).orElse(null);
                     if (!available || view != null) {
-                        return Mono.just(new Status(available, view, List.of()));
+                        return Mono.just(new DeletionStatus(available, view, List.of()));
                     }
                     return notices.of(user.toString())
-                        .map(found -> new Status(true, null, notices.views(found, locale)));
+                        .map(found -> new DeletionStatus(true, null, notices.views(found, locale)));
                 });
             })));
     }
@@ -158,8 +158,8 @@ class AccountDeletionController {
      * (a recent second factor, or the current password), then {@value AccountDeletionProcesses#REQUEST}.
      */
     @PostMapping(ACCOUNT)
-    Mono<AccountDeletionProcesses.RequestOutput> requestDeletion(
-        @RequestBody(required = false) AccountRequest body, ServerHttpRequest http) {
+    Mono<AccountDeletionProcesses.DeletionRequested> requestDeletion(
+        @RequestBody(required = false) DeletionRequest body, ServerHttpRequest http) {
         return RequestContexts.current().flatMap(context -> CurrentSession.open(refreshTokens, context)
             .then(Mono.defer(() -> {
                 UUID user = requireUser(context);
@@ -167,7 +167,7 @@ class AccountDeletionController {
                 if (!available(context)) {
                     return Mono.error(unavailable());
                 }
-                AccountRequest values = body == null ? new AccountRequest(null, null) : body;
+                DeletionRequest values = body == null ? new DeletionRequest(null, null) : body;
                 return reauthentication.require(context, user, values.currentPassword(), http, check)
                     .then(processes.executeAtEntry(request, new AccountDeletionProcesses.RequestInput(
                         user.toString(), values.acknowledgedNotices())));
@@ -179,7 +179,7 @@ class AccountDeletionController {
      * {@code ACCOUNT_DELETION_NONE} when there is none. No proof needed: withdrawing harms nobody.
      */
     @PostMapping(CANCEL)
-    Mono<AccountDeletionProcesses.CancelOutput> cancelDeletion() {
+    Mono<AccountDeletionProcesses.DeletionCancelled> cancelDeletion() {
         return RequestContexts.current().flatMap(context -> CurrentSession.open(refreshTokens, context)
             .then(Mono.defer(() -> {
                 UUID user = requireUser(context);
@@ -191,10 +191,10 @@ class AccountDeletionController {
     /** 202 whatever the address: the account's user at its verified address gets a link. */
     @PostMapping(REQUEST)
     @ResponseStatus(HttpStatus.ACCEPTED)
-    Mono<ResponseEntity<Void>> requestLink(@RequestBody(required = false) LinkRequest body, ServerHttpRequest http) {
+    Mono<ResponseEntity<Void>> requestLink(@RequestBody(required = false) DeletionLinkRequest body, ServerHttpRequest http) {
         return Mono.defer(() -> {
             limits.client(SignUpRateLimits.Kind.ACCOUNT_DELETION, clients.clientOf(http));
-            LinkRequest values = body == null ? new LinkRequest(null, null) : body;
+            DeletionLinkRequest values = body == null ? new DeletionLinkRequest(null, null) : body;
             SignInEntries.Entry entry = entries.find(values.entry()).filter(SignInEntries.Entry::accountDeletion)
                 .orElse(null);
             if (entry == null) {
@@ -217,11 +217,11 @@ class AccountDeletionController {
      * 422 {@code TOKEN_INVALID} for any link that is not good.
      */
     @PostMapping(CONFIRM)
-    Mono<AccountDeletionProcesses.RequestOutput> confirmLink(@RequestBody(required = false) LinkConfirm body,
+    Mono<AccountDeletionProcesses.DeletionRequested> confirmLink(@RequestBody(required = false) DeletionLinkConfirm body,
         ServerHttpRequest http) {
         return Mono.defer(() -> {
             limits.client(SignUpRateLimits.Kind.LINK, clients.clientOf(http));
-            LinkConfirm values = body == null ? new LinkConfirm(null, null) : body;
+            DeletionLinkConfirm values = body == null ? new DeletionLinkConfirm(null, null) : body;
             return processes.executeAtEntry(confirm, new AccountDeletionProcesses.ConfirmInput(values.token(),
                 values.acknowledgedNotices()));
         });

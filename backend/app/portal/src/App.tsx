@@ -32,7 +32,8 @@ const HOME = '/orders'
 /** The second step of a sign-in through an identity provider, handed from the callback to the sign-in page. */
 let pendingStep: SignInStep | undefined
 
-const MAIL_PAGES = new Set(['/auth/verify-email', '/auth/join', '/auth/password-reset', '/auth/email-link'])
+const MAIL_PAGES = new Set(['/auth/verify-email', '/auth/join', '/auth/password-reset', '/auth/email-link',
+  '/auth/account-deletion'])
 
 /**
  * The unsubscribe page of the portal's notifications (decision D52): `jabiz.mail.unsubscribe-paths.portal` is

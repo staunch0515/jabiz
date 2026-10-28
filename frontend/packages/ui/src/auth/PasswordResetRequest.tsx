@@ -73,7 +73,7 @@ export function PasswordResetRequest({ brand, appearance, entry, signInPath, onN
 }
 
 /** The root path of the entry's frontend, asked only when wanted. */
-function useAppPath(entry: string | undefined, wanted: boolean): string {
+export function useAppPath(entry: string | undefined, wanted: boolean): string {
   const [path, setPath] = useState('/')
   useEffect(() => {
     if (!wanted) return undefined

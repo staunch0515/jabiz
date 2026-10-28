@@ -52,6 +52,18 @@ describe('the portal', () => {
     expect(window.location.search).not.toContain('token')
   })
 
+  it('opens the account deletion link without signing in, asking for a link when it has no token', async () => {
+    server()
+    window.history.replaceState(null, '', '/auth/account-deletion?entry=portal&token=abc')
+    const { unmount } = render(<App />)
+    expect(await screen.findByTestId('account-deletion-confirm')).toBeInTheDocument()
+    expect(window.location.search).not.toContain('token')
+    unmount()
+    window.history.replaceState(null, '', '/auth/account-deletion?entry=portal')
+    render(<App />)
+    expect(await screen.findByTestId('account-deletion-request')).toBeInTheDocument()
+  })
+
   it('opens its unsubscribe page without signing in and posts the token of the link once', async () => {
     const posted: unknown[] = []
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
@@ -115,6 +127,9 @@ describe('linking a provider account (phase 16f)', () => {
             displayName: 'Shipment notices' }] })
         case '/api/auth/account/locale':
           return json(200, { locale: null, effective: 'en', languages: ['zh', 'ja', 'en'] })
+        case '/api/auth/account/deletion':
+          return json(200, { available: true, pending: { requestId: 'r1', requestedTime: '2026-10-28T09:00:00Z',
+            dueTime: '2026-11-11T09:00:00Z', channel: 'ACCOUNT' }, notices: [] })
         case '/api/auth/entries/portal':
           return json(200, { name: 'portal', selfRegistration: true, requireVerifiedEmail: true, appPath: '/portal/',
             sessionPersistence: 'device' })
@@ -130,6 +145,9 @@ describe('linking a provider account (phase 16f)', () => {
     expect(await screen.findByTestId('linked-identity')).toHaveTextContent('mei@gmail.com')
     // The portal's notifications, by their names (phase 16s).
     expect(await screen.findByRole('switch', { name: 'Shipment notices' })).toBeChecked()
+    // Asking for the account to be deleted, last (phase 17i): a pending request says when.
+    expect(screen.getAllByRole('heading', { level: 2 }).at(-1)).toHaveTextContent('Delete your account')
+    expect(await screen.findByTestId('account-deletion-pending')).toHaveTextContent('November 11, 2026')
   })
 })
 

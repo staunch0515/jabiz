@@ -1,20 +1,6 @@
 {
   "components" : {
     "schemas" : {
-      "AccountRequest" : {
-        "properties" : {
-          "acknowledgedNotices" : {
-            "items" : {
-              "type" : "string"
-            },
-            "type" : "array"
-          },
-          "currentPassword" : {
-            "type" : "string"
-          }
-        },
-        "type" : "object"
-      },
       "ActsOnEntry" : {
         "properties" : {
           "entity" : {
@@ -117,14 +103,6 @@
             "type" : "string"
           },
           "state" : {
-            "type" : "string"
-          }
-        },
-        "type" : "object"
-      },
-      "CancelOutput" : {
-        "properties" : {
-          "requestId" : {
             "type" : "string"
           }
         },
@@ -307,6 +285,101 @@
           },
           "writeRequiresVerifiedEmail" : {
             "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "DeletionCancelled" : {
+        "properties" : {
+          "requestId" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "DeletionLinkConfirm" : {
+        "properties" : {
+          "acknowledgedNotices" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "token" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "DeletionLinkRequest" : {
+        "properties" : {
+          "email" : {
+            "type" : "string"
+          },
+          "entry" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "DeletionPending" : {
+        "properties" : {
+          "channel" : {
+            "type" : "string"
+          },
+          "dueTime" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "requestId" : {
+            "type" : "string"
+          },
+          "requestedTime" : {
+            "format" : "date-time",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "DeletionRequest" : {
+        "properties" : {
+          "acknowledgedNotices" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "currentPassword" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "DeletionRequested" : {
+        "properties" : {
+          "dueTime" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "requestId" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "DeletionStatus" : {
+        "properties" : {
+          "available" : {
+            "type" : "boolean"
+          },
+          "notices" : {
+            "items" : {
+              "$ref" : "#/components/schemas/NoticeView"
+            },
+            "type" : "array"
+          },
+          "pending" : {
+            "$ref" : "#/components/schemas/DeletionPending"
           }
         },
         "type" : "object"
@@ -1609,31 +1682,6 @@
         },
         "type" : "object"
       },
-      "LinkConfirm" : {
-        "properties" : {
-          "acknowledgedNotices" : {
-            "items" : {
-              "type" : "string"
-            },
-            "type" : "array"
-          },
-          "token" : {
-            "type" : "string"
-          }
-        },
-        "type" : "object"
-      },
-      "LinkRequest" : {
-        "properties" : {
-          "email" : {
-            "type" : "string"
-          },
-          "entry" : {
-            "type" : "string"
-          }
-        },
-        "type" : "object"
-      },
       "LinkResult" : {
         "properties" : {
           "provider" : {
@@ -1826,6 +1874,17 @@
         },
         "type" : "object"
       },
+      "NoticeView" : {
+        "properties" : {
+          "code" : {
+            "type" : "string"
+          },
+          "message" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "Options" : {
         "properties" : {
           "charset" : {
@@ -1879,25 +1938,6 @@
             "type" : "string"
           },
           "refreshToken" : {
-            "type" : "string"
-          }
-        },
-        "type" : "object"
-      },
-      "Pending" : {
-        "properties" : {
-          "channel" : {
-            "type" : "string"
-          },
-          "dueTime" : {
-            "format" : "date-time",
-            "type" : "string"
-          },
-          "requestId" : {
-            "type" : "string"
-          },
-          "requestedTime" : {
-            "format" : "date-time",
             "type" : "string"
           }
         },
@@ -2179,18 +2219,6 @@
           },
           "period" : {
             "$ref" : "#/components/schemas/PeriodEntry"
-          }
-        },
-        "type" : "object"
-      },
-      "RequestOutput" : {
-        "properties" : {
-          "dueTime" : {
-            "format" : "date-time",
-            "type" : "string"
-          },
-          "requestId" : {
-            "type" : "string"
           }
         },
         "type" : "object"
@@ -2689,23 +2717,6 @@
         },
         "type" : "object"
       },
-      "Status" : {
-        "properties" : {
-          "available" : {
-            "type" : "boolean"
-          },
-          "notices" : {
-            "items" : {
-              "$ref" : "#/components/schemas/View"
-            },
-            "type" : "array"
-          },
-          "pending" : {
-            "$ref" : "#/components/schemas/Pending"
-          }
-        },
-        "type" : "object"
-      },
       "StepUpResponse" : {
         "properties" : {
           "accessToken" : {
@@ -2923,17 +2934,6 @@
             "type" : "string"
           },
           "token" : {
-            "type" : "string"
-          }
-        },
-        "type" : "object"
-      },
-      "View" : {
-        "properties" : {
-          "code" : {
-            "type" : "string"
-          },
-          "message" : {
             "type" : "string"
           }
         },
@@ -3256,7 +3256,7 @@
           "content" : {
             "application/json" : {
               "schema" : {
-                "$ref" : "#/components/schemas/LinkRequest"
+                "$ref" : "#/components/schemas/DeletionLinkRequest"
               }
             }
           }
@@ -3276,7 +3276,7 @@
           "content" : {
             "application/json" : {
               "schema" : {
-                "$ref" : "#/components/schemas/LinkConfirm"
+                "$ref" : "#/components/schemas/DeletionLinkConfirm"
               }
             }
           }
@@ -3286,7 +3286,7 @@
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/RequestOutput"
+                  "$ref" : "#/components/schemas/DeletionRequested"
                 }
               }
             },
@@ -3304,7 +3304,7 @@
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/Status"
+                  "$ref" : "#/components/schemas/DeletionStatus"
                 }
               }
             },
@@ -3319,7 +3319,7 @@
           "content" : {
             "application/json" : {
               "schema" : {
-                "$ref" : "#/components/schemas/AccountRequest"
+                "$ref" : "#/components/schemas/DeletionRequest"
               }
             }
           }
@@ -3329,7 +3329,7 @@
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/RequestOutput"
+                  "$ref" : "#/components/schemas/DeletionRequested"
                 }
               }
             },
@@ -3347,7 +3347,7 @@
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/CancelOutput"
+                  "$ref" : "#/components/schemas/DeletionCancelled"
                 }
               }
             },

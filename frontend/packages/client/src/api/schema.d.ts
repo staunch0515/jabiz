@@ -1800,10 +1800,6 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        AccountRequest: {
-            acknowledgedNotices?: string[];
-            currentPassword?: string;
-        };
         ActsOnEntry: {
             entity?: string;
             input?: string;
@@ -1847,9 +1843,6 @@ export interface components {
             binder?: string;
             code?: string;
             state?: string;
-        };
-        CancelOutput: {
-            requestId?: string;
         };
         ChallengeRequest: {
             challenge?: string;
@@ -1913,6 +1906,39 @@ export interface components {
             temporal?: boolean;
             writeRequiresMfa?: boolean;
             writeRequiresVerifiedEmail?: boolean;
+        };
+        DeletionCancelled: {
+            requestId?: string;
+        };
+        DeletionLinkConfirm: {
+            acknowledgedNotices?: string[];
+            token?: string;
+        };
+        DeletionLinkRequest: {
+            email?: string;
+            entry?: string;
+        };
+        DeletionPending: {
+            channel?: string;
+            /** Format: date-time */
+            dueTime?: string;
+            requestId?: string;
+            /** Format: date-time */
+            requestedTime?: string;
+        };
+        DeletionRequest: {
+            acknowledgedNotices?: string[];
+            currentPassword?: string;
+        };
+        DeletionRequested: {
+            /** Format: date-time */
+            dueTime?: string;
+            requestId?: string;
+        };
+        DeletionStatus: {
+            available?: boolean;
+            notices?: components["schemas"]["NoticeView"][];
+            pending?: components["schemas"]["DeletionPending"];
         };
         Device: {
             /** @enum {string} */
@@ -2426,14 +2452,6 @@ export interface components {
         LabelsRequest: {
             ids?: unknown[];
         };
-        LinkConfirm: {
-            acknowledgedNotices?: string[];
-            token?: string;
-        };
-        LinkRequest: {
-            email?: string;
-            entry?: string;
-        };
         LinkResult: {
             provider?: string;
             status?: string;
@@ -2501,6 +2519,10 @@ export interface components {
             /** Format: int64 */
             total?: number;
         };
+        NoticeView: {
+            code?: string;
+            message?: string;
+        };
         Options: {
             charset?: string;
             delimiter?: string;
@@ -2522,14 +2544,6 @@ export interface components {
             currentPassword?: string;
             newPassword?: string;
             refreshToken?: string;
-        };
-        Pending: {
-            channel?: string;
-            /** Format: date-time */
-            dueTime?: string;
-            requestId?: string;
-            /** Format: date-time */
-            requestedTime?: string;
         };
         PeriodEntry: {
             from?: string;
@@ -2630,11 +2644,6 @@ export interface components {
         ReportEntry: {
             landscape?: boolean;
             period?: components["schemas"]["PeriodEntry"];
-        };
-        RequestOutput: {
-            /** Format: date-time */
-            dueTime?: string;
-            requestId?: string;
         };
         ResetConfirmRequest: {
             password?: string;
@@ -2829,11 +2838,6 @@ export interface components {
             authorizationUrl?: string;
             binder?: string;
         };
-        Status: {
-            available?: boolean;
-            notices?: components["schemas"]["View"][];
-            pending?: components["schemas"]["Pending"];
-        };
         StepUpResponse: {
             accessToken?: string;
             /** Format: date-time */
@@ -2919,10 +2923,6 @@ export interface components {
             newPassword?: string;
             password?: string;
             token?: string;
-        };
-        View: {
-            code?: string;
-            message?: string;
         };
         WhenEntry: {
             field?: string;
@@ -3082,7 +3082,7 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": components["schemas"]["LinkRequest"];
+                "application/json": components["schemas"]["DeletionLinkRequest"];
             };
         };
         responses: {
@@ -3104,7 +3104,7 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": components["schemas"]["LinkConfirm"];
+                "application/json": components["schemas"]["DeletionLinkConfirm"];
             };
         };
         responses: {
@@ -3114,7 +3114,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RequestOutput"];
+                    "application/json": components["schemas"]["DeletionRequested"];
                 };
             };
         };
@@ -3134,7 +3134,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Status"];
+                    "application/json": components["schemas"]["DeletionStatus"];
                 };
             };
         };
@@ -3148,7 +3148,7 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": components["schemas"]["AccountRequest"];
+                "application/json": components["schemas"]["DeletionRequest"];
             };
         };
         responses: {
@@ -3158,7 +3158,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RequestOutput"];
+                    "application/json": components["schemas"]["DeletionRequested"];
                 };
             };
         };
@@ -3178,7 +3178,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CancelOutput"];
+                    "application/json": components["schemas"]["DeletionCancelled"];
                 };
             };
         };
