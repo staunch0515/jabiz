@@ -18,7 +18,7 @@
 | # | 内容 |
 |---|---|
 | E-1 | **源码**：独立的小工程 `quizbuks-web/storefront/`，TypeScript，Vite 库模式打包成一个 `quiz.js`。<br>**不用 React、不用 `@jabiz/ui`**：组件跑在商户的店面上，与主题共存，体积预算是压缩后 ≤ 15 KB。这是根 `CLAUDE.md`"界面组件只用 `@jabiz/ui`"的例外，只限这一个店面组件（§4 Q-S2b-1）。<br>原生 Web Component（`<quizbuks-quiz>`）加 Shadow DOM，样式不外泄也不被主题污染；字体、文字颜色继承主题（`inherit` / `currentColor`），只加最少的中性样式 |
-| E-2 | **扩展**：放在 `tools/quizbuks/shopify/extensions/quizbuks-quiz/`，与 `shopify.app.toml` 同级，即 Shopify CLI 的工程结构。包括：<br>- `shopify.extension.toml`；<br>- `blocks/quiz.liquid`：App block，只用于商品页模板，不设任何设置项；输出 `<quizbuks-quiz>` 和店面语言 `request.locale.iso_code`；<br>- `assets/quiz.js`：构建产物；<br>- `locales/`：英、中、日 |
+| E-2 | **扩展**：放在 `tools/quizbuks/shopify/extensions/quizbuks-quiz/`，与 `shopify.app.toml` 同级，即 Shopify CLI 的工程结构。包括：<br>- `shopify.extension.toml`；<br>- `blocks/quiz.liquid`：App block，只用于商品页模板，不设任何设置项；输出 `<quizbuks-quiz>` 和店面语言 `request.locale.iso_code`；<br>- `assets/quiz.js`、`assets/quiz-player.js`：构建产物（S4c 拆成两个，见 §6 I-9）；<br>- `locales/*.schema.json`：区块名称的英、中、日（S4c：设置界面用的翻译必须放在 `.schema.json`） |
 | E-3 | **流程**：<br>1. 载入后以 GET `/apps/quizbuks/QBS_SF_CAMPAIGN` 读活动。没有活动或今天的码已发完就不显示。<br>2. 显示按钮"答题赢 X% 折扣"，点开对话框（`<dialog>`）。<br>3. 视频是点击后才加载的占位：不预载 YouTube / Vimeo 的播放器和缩略图，首屏不受影响，也不在顾客点之前向第三方发请求。<br>4. "开始答题"（`QBS_SF_START`）：一题一页，显示倒计时。<br>5. 交卷（`QBS_SF_SUBMIT`）：<br>- 通过：显示码、"复制"、"去使用"（`/discount/<码>?redirect=<当前页>`）；<br>- 未通过：显示得分；<br>- 当天发完、没码了：照实说明 |
 | E-4 | **访客键**：首次载入时生成随机键（`crypto.randomUUID()`），存 `localStorage`，查询参数和正文里都带上。领到的码按发布编号也存 `localStorage`，再打开直接显示。<br>已答过时服务端回 `QB_ATTEMPT_ALREADY_TAKEN`（带答题编号），组件用这个编号再交一次，取回已领的码（S2a 的"同一答题再交，答同一个码"） |
 | E-5 | **语言**：组件自带英、中、日文字，按 Liquid 给出的店面语言选，其他语言用英文。服务端的错误码映射成组件自己的文字，不显示服务端原文 |
@@ -35,9 +35,10 @@
   - 访客键与码的持久化；
   - 三语键齐全；
   - 无障碍检查：经 `@jabiz/ui/testing` 的 `expectAccessible`，只作开发依赖。
-- 体积门槛：构建后压缩 ≤ 15 KB，否则测试失败。
+- 体积门槛：构建后 `quiz.js` gzip ≤ 4 KB、`quiz-player.js` gzip ≤ 10 KB（`scripts/size.mjs`），超了构建失败。
+- Shopify 的规则（S4c，`scripts/extension.mjs`，构建的最后一步，规则本身有测试）：`assets/` 只放 Shopify 接受的文件类型；区块的 `javascript` 原始大小 ≤ 10 000 字节；区块设置里的每个 `t:` 键在 `locales/en.default.schema.json` 里都有。
 - CI：`quizbuks.yml` 的 web 作业加上 storefront 工程（install、lint、typecheck、test、build）。
-- 构建产物 `assets/quiz.js` 不提交。部署脚本 `tools/quizbuks/shopify/deploy-extension.sh` 先构建，再 `shopify app deploy`，由需求方以自己的 Partner 账号执行。
+- 构建产物 `assets/quiz.js`、`assets/quiz-player.js` 不提交（忽略规则在 `tools/quizbuks/shopify/.gitignore`：Shopify 不接受 `assets/` 里的 `.gitignore`）。部署脚本 `tools/quizbuks/shopify/deploy-extension.sh` 先构建，再 `shopify app deploy`，由需求方以自己的 Partner 账号执行。
 - 不写 Playwright 端到端：内嵌页离不开 Shopify 的 App Bridge，店面组件离不开真实店面的 App Proxy。改为开发店铺上的手工联调清单（§5），写进 PR。
 
 ## 4. 待需求方确认
@@ -73,6 +74,7 @@
 | I-6 | 浏览器里存的答题编号与码按发布**和顾客**分开（`quizbuks:code:<发布>:<c顾客号 / anon>`，Liquid 传 `customer="{{ customer.id }}"`）：共用电脑上的下一个人看不到上一个人的码 |
 | I-7 | 店面组件不跑 `pnpm app:check`：它只用 `@jabiz/ui/testing`（axe），不用 React 与 `@jabiz/ui` 的组件，`app:check` 会要求它装上全部共用依赖。改为 `pnpm versions`（`scripts/versions.mjs`，用 `app:check` 自己读锁文件的函数）检查 vite 与测试工具的版本与平台一致，CI 中执行。若平台的 `app:check` 将来区分"只用测试辅助"的项目，再改回 |
 | I-8 | 后台切换到"概况"标签时活动页保持挂载（隐藏），正在编辑的草稿不丢；活动列表在第一次打开活动标签时才读 |
+| I-9 | **S4c（2026-10-28，首次 `shopify app deploy` 时被拒）**：<br>1. `assets/.gitignore`：Shopify 不接受 `assets/` 里的其他文件。忽略规则移到 `tools/quizbuks/shopify/.gitignore`。<br>2. `t:name` 找不到：区块设置的翻译要放在 `locales/*.schema.json`，三个语言文件改名。<br>3. `quiz.js` 14.7 KB，超过 Shopify 对区块脚本的 10 000 字节（主题检查按原始大小算，本地的门槛按 gzip 算，所以没拦住）。拆成两个经典脚本：`quiz.js`（约 4.9 KB，gzip 约 2.3 KB）只读活动、显示按钮；顾客第一次点开时再加载 `quiz-player.js`（约 13.8 KB，gzip 约 5.9 KB：对话框、视频、题目、交卷、码与全部文字）。地址由 Liquid 的 `{{ 'quiz-player.js' \| asset_url }}` 作为 `player` 属性给出，同一页面上只加载一次；加载失败时按钮下方提示，再点会重试。按钮的三语文字在 `src/opener.ts`，`messages.ts` 由它组成全部文字。两个脚本各带一份 `api.ts`：浏览器存储不可用时（隐私模式等）两边的内存各管各的，只影响按钮上是否显示"你的折扣码"，不影响答题与领码。<br>4. 以后由构建的最后一步 `scripts/extension.mjs` 按这三条规则检查扩展 |
 
 ### 已知问题（需要改后端，留给后续阶段）
 

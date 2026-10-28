@@ -3,9 +3,10 @@
  * otherwise. The server's refusals are mapped to these by their codes ({@link refusalText}): the block never shows
  * the server's own text.
  */
+import { OPENER_TEXTS, format, languageOf } from './opener'
+
 const en = {
-  open: 'Answer a quiz, get {p}% off',
-  openClaimed: 'Your {p}% discount code',
+  ...OPENER_TEXTS.en,
   dialog: 'Quiz',
   close: 'Close',
   intro: '{n} questions · {s} seconds · {k} correct to pass',
@@ -39,8 +40,7 @@ const en = {
 type Texts = typeof en
 
 const zh: Texts = {
-  open: '答题赢 {p}% 折扣',
-  openClaimed: '你的 {p}% 折扣码',
+  ...OPENER_TEXTS.zh,
   dialog: '答题',
   close: '关闭',
   intro: '{n} 道题 · {s} 秒 · 答对 {k} 题通过',
@@ -72,8 +72,7 @@ const zh: Texts = {
 }
 
 const ja: Texts = {
-  open: 'クイズに答えて {p}% オフ',
-  openClaimed: 'あなたの {p}% 割引コード',
+  ...OPENER_TEXTS.ja,
   dialog: 'クイズ',
   close: '閉じる',
   intro: '{n} 問 · {s} 秒 · {k} 問正解で合格',
@@ -110,14 +109,10 @@ export type TextKey = keyof Texts
 
 /** The texts of a storefront language ({@code zh-CN}, {@code ja}, …): its own when QuizBuks has them, else English. */
 export function textsOf(locale: string | null | undefined): Texts {
-  const language = (locale ?? 'en').toLowerCase().split('-')[0]
-  return MESSAGES[language] ?? en
+  return MESSAGES[languageOf(locale)]
 }
 
-/** A text with its {placeholders} filled. */
-export function format(text: string, values: Record<string, string | number> = {}): string {
-  return text.replace(/\{(\w+)\}/g, (all, key: string) => (key in values ? String(values[key]) : all))
-}
+export { format }
 
 /** What the block says for a refusal of the server, by its rule code; a general error for any other. */
 export function refusalText(texts: Texts, code: string | null): string {
