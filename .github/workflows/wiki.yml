@@ -1,0 +1,38 @@
+name: Wiki
+
+# Publishes the platform's documents to the repository's wiki (docs/guide/wiki.md): a push to a platform branch that
+# changes them, or a manual run. Only the newest version line publishes (tools/wiki/publish.sh); an application
+# publishes its own section from its own branch with its own workflow.
+on:
+  push:
+    branches: ['[0-9]*.[0-9]*/platform']
+    paths: ['docs/design/**', 'docs/guide/**', 'docs/perf/**', 'docs/ROADMAP.md', 'tools/wiki/**']
+  workflow_dispatch:
+
+# The wiki is one repository: one run at a time per section; the platform's and an application's runs that meet
+# push one after the other (publish.sh retries on the newer wiki).
+concurrency:
+  group: wiki-platform
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: endsWith(github.ref_name, '/platform')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Publish the platform section
+        env:
+          WIKI_BRANCH: ${{ github.ref_name }}
+          WIKI_LINE_KIND: platform
+          WIKI_TOKEN: ${{ secrets.WIKI_TOKEN || secrets.GITHUB_TOKEN }}
+        run: >-
+          tools/wiki/publish.sh --repo "$GITHUB_REPOSITORY" --title 平台
+          --section Platform:docs:design,guide,perf,ROADMAP.md

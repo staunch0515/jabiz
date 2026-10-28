@@ -1,0 +1,38 @@
+name: QuizBuks wiki
+
+# Publishes QuizBuks's documents (docs/quizbuks) as the "QuizBuks" section of the repository's wiki, beside the
+# platform's section (docs/guide/wiki.md): a push to a QuizBuks line branch that changes them, or a manual run. Only
+# the newest line publishes (tools/wiki/publish.sh), so pushes to 1.2/quizbuks leave the wiki as 1.3 wrote it.
+on:
+  push:
+    branches: ['[0-9]*.[0-9]*/quizbuks']
+    paths: ['docs/quizbuks/**', 'tools/wiki/**']
+  workflow_dispatch:
+
+concurrency:
+  group: wiki-quizbuks
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: endsWith(github.ref_name, '/quizbuks')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      # Links from QuizBuks's documents to the platform's become wiki links (the platform publishes those pages).
+      - name: Publish the QuizBuks section
+        env:
+          WIKI_BRANCH: ${{ github.ref_name }}
+          WIKI_LINE_KIND: quizbuks
+          WIKI_TOKEN: ${{ secrets.WIKI_TOKEN || secrets.GITHUB_TOKEN }}
+        run: >-
+          tools/wiki/publish.sh --repo "$GITHUB_REPOSITORY" --title QuizBuks
+          --section QuizBuks:docs/quizbuks:.
+          --link-section Platform:docs:design,guide,perf,ROADMAP.md
