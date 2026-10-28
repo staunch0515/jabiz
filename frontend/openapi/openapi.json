@@ -1,6 +1,20 @@
 {
   "components" : {
     "schemas" : {
+      "AccountRequest" : {
+        "properties" : {
+          "acknowledgedNotices" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "currentPassword" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "ActsOnEntry" : {
         "properties" : {
           "entity" : {
@@ -103,6 +117,14 @@
             "type" : "string"
           },
           "state" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "CancelOutput" : {
+        "properties" : {
+          "requestId" : {
             "type" : "string"
           }
         },
@@ -1587,6 +1609,31 @@
         },
         "type" : "object"
       },
+      "LinkConfirm" : {
+        "properties" : {
+          "acknowledgedNotices" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "token" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "LinkRequest" : {
+        "properties" : {
+          "email" : {
+            "type" : "string"
+          },
+          "entry" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "LinkResult" : {
         "properties" : {
           "provider" : {
@@ -1832,6 +1879,25 @@
             "type" : "string"
           },
           "refreshToken" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "Pending" : {
+        "properties" : {
+          "channel" : {
+            "type" : "string"
+          },
+          "dueTime" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "requestId" : {
+            "type" : "string"
+          },
+          "requestedTime" : {
+            "format" : "date-time",
             "type" : "string"
           }
         },
@@ -2113,6 +2179,18 @@
           },
           "period" : {
             "$ref" : "#/components/schemas/PeriodEntry"
+          }
+        },
+        "type" : "object"
+      },
+      "RequestOutput" : {
+        "properties" : {
+          "dueTime" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "requestId" : {
+            "type" : "string"
           }
         },
         "type" : "object"
@@ -2611,6 +2689,23 @@
         },
         "type" : "object"
       },
+      "Status" : {
+        "properties" : {
+          "available" : {
+            "type" : "boolean"
+          },
+          "notices" : {
+            "items" : {
+              "$ref" : "#/components/schemas/View"
+            },
+            "type" : "array"
+          },
+          "pending" : {
+            "$ref" : "#/components/schemas/Pending"
+          }
+        },
+        "type" : "object"
+      },
       "StepUpResponse" : {
         "properties" : {
           "accessToken" : {
@@ -2828,6 +2923,17 @@
             "type" : "string"
           },
           "token" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "View" : {
+        "properties" : {
+          "code" : {
+            "type" : "string"
+          },
+          "message" : {
             "type" : "string"
           }
         },
@@ -3141,6 +3247,114 @@
           }
         },
         "tags" : [ "audit-controller" ]
+      }
+    },
+    "/api/auth/account-deletion" : {
+      "post" : {
+        "operationId" : "requestLink",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/LinkRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "202" : {
+            "description" : "Accepted"
+          }
+        },
+        "tags" : [ "account-deletion-controller" ]
+      }
+    },
+    "/api/auth/account-deletion/confirm" : {
+      "post" : {
+        "operationId" : "confirmLink",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/LinkConfirm"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RequestOutput"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "account-deletion-controller" ]
+      }
+    },
+    "/api/auth/account/deletion" : {
+      "get" : {
+        "operationId" : "status",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Status"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "account-deletion-controller" ]
+      },
+      "post" : {
+        "operationId" : "requestDeletion",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/AccountRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RequestOutput"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "account-deletion-controller" ]
+      }
+    },
+    "/api/auth/account/deletion/cancel" : {
+      "post" : {
+        "operationId" : "cancelDeletion",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/CancelOutput"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "account-deletion-controller" ]
       }
     },
     "/api/auth/account/identities" : {
@@ -3765,7 +3979,7 @@
     },
     "/api/auth/mfa" : {
       "get" : {
-        "operationId" : "status",
+        "operationId" : "status_1",
         "responses" : {
           "200" : {
             "content" : {

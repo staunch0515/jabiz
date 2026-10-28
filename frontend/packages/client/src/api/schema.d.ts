@@ -84,6 +84,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/auth/account-deletion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["requestLink"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/account-deletion/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["confirmLink"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/account/deletion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["status"];
+        put?: never;
+        post: operations["requestDeletion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/account/deletion/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["cancelDeletion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/account/identities": {
         parameters: {
             query?: never;
@@ -507,7 +571,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["status"];
+        get: operations["status_1"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1736,6 +1800,10 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AccountRequest: {
+            acknowledgedNotices?: string[];
+            currentPassword?: string;
+        };
         ActsOnEntry: {
             entity?: string;
             input?: string;
@@ -1779,6 +1847,9 @@ export interface components {
             binder?: string;
             code?: string;
             state?: string;
+        };
+        CancelOutput: {
+            requestId?: string;
         };
         ChallengeRequest: {
             challenge?: string;
@@ -2355,6 +2426,14 @@ export interface components {
         LabelsRequest: {
             ids?: unknown[];
         };
+        LinkConfirm: {
+            acknowledgedNotices?: string[];
+            token?: string;
+        };
+        LinkRequest: {
+            email?: string;
+            entry?: string;
+        };
         LinkResult: {
             provider?: string;
             status?: string;
@@ -2443,6 +2522,14 @@ export interface components {
             currentPassword?: string;
             newPassword?: string;
             refreshToken?: string;
+        };
+        Pending: {
+            channel?: string;
+            /** Format: date-time */
+            dueTime?: string;
+            requestId?: string;
+            /** Format: date-time */
+            requestedTime?: string;
         };
         PeriodEntry: {
             from?: string;
@@ -2543,6 +2630,11 @@ export interface components {
         ReportEntry: {
             landscape?: boolean;
             period?: components["schemas"]["PeriodEntry"];
+        };
+        RequestOutput: {
+            /** Format: date-time */
+            dueTime?: string;
+            requestId?: string;
         };
         ResetConfirmRequest: {
             password?: string;
@@ -2737,6 +2829,11 @@ export interface components {
             authorizationUrl?: string;
             binder?: string;
         };
+        Status: {
+            available?: boolean;
+            notices?: components["schemas"]["View"][];
+            pending?: components["schemas"]["Pending"];
+        };
         StepUpResponse: {
             accessToken?: string;
             /** Format: date-time */
@@ -2822,6 +2919,10 @@ export interface components {
             newPassword?: string;
             password?: string;
             token?: string;
+        };
+        View: {
+            code?: string;
+            message?: string;
         };
         WhenEntry: {
             field?: string;
@@ -2968,6 +3069,116 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RevealPage"];
+                };
+            };
+        };
+    };
+    requestLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["LinkRequest"];
+            };
+        };
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    confirmLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["LinkConfirm"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestOutput"];
+                };
+            };
+        };
+    };
+    status: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Status"];
+                };
+            };
+        };
+    };
+    requestDeletion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["AccountRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestOutput"];
+                };
+            };
+        };
+    };
+    cancelDeletion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CancelOutput"];
                 };
             };
         };
@@ -3588,7 +3799,7 @@ export interface operations {
             };
         };
     };
-    status: {
+    status_1: {
         parameters: {
             query?: never;
             header?: never;
