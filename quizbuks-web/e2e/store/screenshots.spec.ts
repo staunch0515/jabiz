@@ -2,14 +2,17 @@ import { animationsSettled } from '@jabiz/ui/testing/playwright'
 import type { APIRequestContext, Browser, Page } from '@playwright/test'
 import { mkdirSync } from 'node:fs'
 import { deflateSync } from 'node:zlib'
-import { fundedSponsor, taker, untilLive } from '../tests/play'
-import { adminToken, expect, prepareQuizbuks, run, signIn, test } from '../tests/support'
+import { untilLive } from '../tests/play'
+import { contentAdmin } from '../tests/legal'
+import { adminToken, expect, PASSWORD, prepareQuizbuks, rows, run, signIn, test, tokenOf } from '../tests/support'
+import { approvedSponsor, takerInJapan } from '../tests/wallet'
 import { CONTENT, FEATURE, type Language, type StoreQuiz } from './content'
 
 /**
  * The store's screenshots of the takers' app (docs/quizbuks/plans/Q49d-store.md): for each language a sponsor of that
- * language publishes three quizzes, a taker answers one of them through the API (history and Kudos to show), then
- * answers another in a phone, which is photographed page by page. The phone is the Android store app (`?shell=android`,
+ * language publishes three quizzes rewarded with a prize at the sponsor's shop, as in the launch phase (operations.md
+ * "阶段一": OFFLINE_REDEEM only, no money; Q28), a taker answers one of them through the API (a history to show),
+ * then answers another in a phone, which is photographed page by page. The phone is the Android store app (`?shell=android`,
  * Q49b): no install offer in the pictures. Each language's publications are paused afterwards, so the next language's
  * home shows only its own quizzes. Not part of the e2e suite (store.config.ts); the QuizBuks store workflow runs it
  * and keeps the pictures as its artifact, which are never committed.
@@ -62,7 +65,7 @@ function cover([from, to]: StoreQuiz['colours'], width = 960, height = 540): Buf
     chunk('IDAT', deflateSync(raw, { level: 9 })), chunk('IEND', Buffer.alloc(0))])
 }
 
-/** A live publication of a store quiz: three questions, a point each; two pass, three earn the most. */
+/** A live publication of a store quiz: three questions, a point each; two or more win the shop's prize. */
 async function publish(request: APIRequestContext, token: string, quiz: StoreQuiz): Promise<string> {
   const uploaded = await request.post(`/api/files?policy=${encodeURIComponent('qb.content.image')}`, {
     headers: { Authorization: `Bearer ${token}` },
@@ -81,9 +84,8 @@ async function publish(request: APIRequestContext, token: string, quiz: StoreQui
   const publication = await run(request, token, 'QB_PUBLICATION_SAVE', {
     versionId: version.versionId, name: quiz.title, regions: ['GLOBAL'],
     startAt: new Date(now - 60_000).toISOString(), endAt: new Date(now + 14 * 86_400_000).toISOString(),
-    timeLimitSec: 300, passScore: 2,
-    tiers: [{ fromScore: 0, toScore: 1, reward: 0 }, { fromScore: 2, toScore: 2, reward: quiz.reward / 2 },
-      { fromScore: 3, toScore: 3, reward: quiz.reward }],
+    timeLimitSec: 300, passScore: 2, rewardMethod: 'OFFLINE_REDEEM', redeemDescription: quiz.prize,
+    tiers: [{ fromScore: 0, toScore: 1, reward: 0 }, { fromScore: 2, toScore: 3, reward: quiz.value }],
   })
   const publicationId = publication.publicationId as string
   const submitted = await run(request, token, 'QB_PUBLICATION_SUBMIT', { publicationId })
@@ -122,10 +124,16 @@ for (const language of ['ja', 'zh', 'en'] as const) {
     test.setTimeout(300_000)
     mkdirSync(`${OUT}/${language}`, { recursive: true })
     const content = CONTENT[language]
-    const sponsor = await fundedSponsor(request, content.company)
+    const sponsor = await approvedSponsor(request, content.contact, content.company)
+    // The launch phase's one way to reward (qb.reward.default-methods = OFFLINE_REDEEM), allowed for this sponsor as
+    // an administrator does on the sponsor review page (it asks for a verified address: a content administrator).
+    const userId = (await rows(request, sponsor.token, 'urn:jabiz:dataset:sponsor:QbSponsor', []))[0].attributes.userId
+    const allower = await tokenOf(request, await contentAdmin(request, 'Rin'), PASSWORD, 'admin')
+    await run(request, allower, 'QB_SPONSOR_REWARD_METHODS_SET', { userId, methods: ['OFFLINE_REDEEM'],
+      note: 'store screenshots' })
     const publications: string[] = []
     for (const quiz of content.quizzes) publications.push(await publish(request, sponsor.token, quiz))
-    const me = await taker(request, content.taker)
+    const me = await takerInJapan(request, content.taker)
     for (const id of publications) await untilLive(request, me.token, id)
     await answerAll(request, me.token, publications[1], content.quizzes[1])
 
@@ -168,16 +176,14 @@ for (const language of ['ja', 'zh', 'en'] as const) {
     await page.getByRole('alertdialog').getByRole('button', { name: label, exact: true }).click()
     await expect(page).toHaveURL(/\/result\/[^/]+$/)
     await expect(page.getByTestId('result-score')).toHaveText(`${quiz.questions.length} / ${quiz.questions.length}`)
+    await expect(page.getByTestId('redeem-prize')).toHaveText(quiz.prize)
+    await expect(page.getByTestId('redeem-code')).toBeVisible()
     await page.evaluate(() => window.scrollTo(0, 0))
     await shoot(page, language, '5-result')
 
     await page.getByTestId('nav-history').click()
     await expect(page.getByTestId('history-row')).toHaveCount(2)
     await shoot(page, language, '6-history')
-
-    await page.goto('/taker/wallet')
-    await expect(page.getByTestId('wallet-earned')).toBeVisible()
-    await shoot(page, language, '7-wallet')
 
     // The feature graphic (1024 × 500): the app's colours and the language's line.
     const graphic = await page.context().browser()!.newPage({ viewport: { width: 1024, height: 500 } })
