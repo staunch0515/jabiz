@@ -14,7 +14,7 @@
 
 ## 2. 实现
 
-- `quizbuks-mobile/android`（`README.md`）：androidbrowserhelper 2.7.4、AGP 8.9.1、Gradle 8.11.1、compile / target SDK 36、min SDK 23；
+- `quizbuks-mobile/android`（`README.md`）：androidbrowserhelper 2.7.4、AGP 8.9.1、Gradle 8.11.1、compile / target SDK 36、min SDK 24（androidbrowserhelper 2.7.4 的下限）；
   `LauncherActivity` 给本域名的每个启动地址（启动器与 App Links）加 `shell=android`；没有通知委托（推送是平台 17k）。
 - App：`src/shell.ts` 的 `nativeShell()`（`shell=android` 或 Chrome 给 TWA 首页的 referrer `android-app://com.quizbuks.app`，按标签页记在 `sessionStorage`，
   参数从地址中去掉）；`main.tsx` 在路由读取地址前调用 `rememberShell()`；`install.tsx` 的三个组件在外壳中不渲染。

@@ -18,7 +18,7 @@
   "fallbackType": "customtabs",
   "enableNotifications": false,
   "enableSiteSettingsShortcut": true,
-  "minSdkVersion": 23,
+  "minSdkVersion": 24,
   "appVersionName": "1.0.0",
   "generatorApp": "bubblewrap-cli"
 }
