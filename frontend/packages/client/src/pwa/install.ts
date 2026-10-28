@@ -1,23 +1,32 @@
 import { useSyncExternalStore } from 'react'
 
 /*
- * Offering to install the PWA (docs/design/12-frontend.md, phase 16zj). No browser lets a site put itself on the home
- * screen: the person adds it. Where the browser has its own installation (`beforeinstallprompt`: Chrome, Edge, Samsung
- * Internet), the page keeps the event and shows the browser's confirmation when the person asks for it; Safari has no
- * such event, so iOS gets a guide to the Share menu; the browsers inside other apps (LINE, WeChat, Instagram, Facebook)
- * cannot install at all, so they get "open this in your browser".
+ * Offering to install the PWA (docs/design/12-frontend.md, phases 16zj and 17m). No browser lets a site put itself on
+ * the home screen: the person adds it. Where the browser has its own installation (`beforeinstallprompt`: Chrome, Edge,
+ * Samsung Internet), the page keeps the event and shows the browser's confirmation when the person asks for it; Safari
+ * has no such event, so iOS gets a guide to the Share menu; the other Android browsers (Firefox, and the browsers of
+ * Huawei, Xiaomi, QQ and UC that most phones sold in China use) get a guide to their own menu; the browsers inside other
+ * apps (LINE, WeChat, QQ, Instagram, Facebook, any app's web view) cannot install at all, so they get "open this in
+ * your browser".
  */
 
 /**
  * How this browser installs the PWA:
  * - `prompt`: the browser's own confirmation (the kept `beforeinstallprompt`),
  * - `ios`: by hand from the Share menu (Safari, and other browsers on iOS 16.4 and later),
- * - `menu`: by hand from the browser's menu (Firefox on Android has no event),
+ * - `menu`: by hand from the browser's menu (an Android browser without the event; {@link InstallBrowser} says which),
  * - `in-app`: not here: the page is open inside another app's browser,
  * - `installed`: it is running from the home screen already,
  * - `none`: nothing to offer (a computer, or a browser that did not offer installation).
  */
 export type InstallSituation = 'prompt' | 'ios' | 'menu' | 'in-app' | 'installed' | 'none'
+
+/**
+ * The browser, where the way to install differs by it (phase 17m): inside WeChat or QQ (`wechat`, `qq-app`: open in
+ * the browser from the "···" at the top right), or an Android browser with its own menu (`huawei`, `xiaomi`, `qq`,
+ * `uc`, `firefox`); `other` for every other browser.
+ */
+export type InstallBrowser = 'wechat' | 'qq-app' | 'huawei' | 'xiaomi' | 'qq' | 'uc' | 'firefox' | 'other'
 
 /** What {@link installSituation} reads of the browser. */
 export interface InstallEnvironment {
@@ -30,25 +39,50 @@ export interface InstallEnvironment {
   canPrompt: boolean
 }
 
-const IN_APP = /\bLine\/|MicroMessenger|Instagram|FBAN|FBAV|FB_IAB|\bKAKAOTALK\b/i
+/**
+ * The browsers inside other apps. QQ's own browser says `MQQBrowser` but QQ the app adds ` QQ/<version>`; Android's web
+ * view (any app showing pages itself: Alipay, DingTalk, Douyin) says `; wv)`.
+ */
+const IN_APP = /\bLine\/|MicroMessenger|\sQQ\/\d|Weibo|DingTalk|AlipayClient|Instagram|FBAN|FBAV|FB_IAB|\bKAKAOTALK\b|; wv\)/i
+
+/** Chrome itself (Brave and others say the same) and Samsung Internet: they offer `beforeinstallprompt`. */
+const PROMPTING = / Chrome\/[\d.]+ (?:Mobile )?Safari\/[\d.]+$|SamsungBrowser\//
 
 /** Whether the device is an iPhone, iPod or iPad (which says "Macintosh" since iPadOS 13 but has a touch screen). */
 export function isIos(userAgent: string, maxTouchPoints: number): boolean {
   return /iPhone|iPad|iPod/.test(userAgent) || (/Macintosh/.test(userAgent) && maxTouchPoints > 1)
 }
 
+/** Android, or HarmonyOS without Android (Huawei's phones since HarmonyOS NEXT say `OpenHarmony`). */
+function isAndroid(userAgent: string): boolean {
+  return /Android|OpenHarmony/.test(userAgent)
+}
+
+/** Which browser this is, where it changes how to install (pure). */
+export function installBrowser(userAgent: string): InstallBrowser {
+  if (/MicroMessenger/i.test(userAgent)) return 'wechat'
+  if (/\sQQ\/\d/.test(userAgent)) return 'qq-app'
+  if (/HuaweiBrowser\/|HarmonyBrowser\//i.test(userAgent)) return 'huawei'
+  if (/MiuiBrowser\//i.test(userAgent)) return 'xiaomi'
+  if (/MQQBrowser\//i.test(userAgent)) return 'qq'
+  if (/UCBrowser\/|UCWEB/i.test(userAgent)) return 'uc'
+  if (/Firefox\//.test(userAgent)) return 'firefox'
+  return 'other'
+}
+
 /** How this browser installs the PWA (pure: the environment is given). */
 export function installSituation(env: InstallEnvironment): InstallSituation {
   if (env.standalone) return 'installed'
   const ios = isIos(env.userAgent, env.maxTouchPoints)
-  const android = /Android/.test(env.userAgent)
+  const android = isAndroid(env.userAgent)
   if ((ios || android) && IN_APP.test(env.userAgent)) return 'in-app'
   if (!ios && !android) return 'none'
   if (env.canPrompt) return 'prompt'
   if (ios) return 'ios'
-  if (/Firefox\//.test(env.userAgent)) return 'menu'
   // Chrome and the browsers like it offer the event once the page qualifies (and not again once it is installed).
-  return 'none'
+  if (installBrowser(env.userAgent) === 'other' && PROMPTING.test(env.userAgent)) return 'none'
+  // Every other Android browser installs, if at all, from its own menu: a guide for the known ones, a general one else.
+  return 'menu'
 }
 
 /** The event the browser fires when it would offer installation (not in the DOM types: Chromium only). */
@@ -123,6 +157,8 @@ export type InstallOutcome = 'accepted' | 'dismissed' | 'unavailable'
 
 export interface InstallPrompt {
   situation: InstallSituation
+  /** Which browser this is, for the steps of `menu` and `in-app`. */
+  browser: InstallBrowser
   /** Shows the browser's confirmation (situation `prompt`); `unavailable` otherwise. The kept offer works once. */
   install: () => Promise<InstallOutcome>
 }
@@ -142,7 +178,7 @@ async function install(): Promise<InstallOutcome> {
 export function useInstallPrompt(environment?: Partial<InstallEnvironment>): InstallPrompt {
   useSyncExternalStore(subscribe, () => version, () => 0)
   const env = { ...browserEnvironment(), ...environment }
-  return { situation: installed ? 'installed' : installSituation(env), install }
+  return { situation: installed ? 'installed' : installSituation(env), browser: installBrowser(env.userAgent), install }
 }
 
 /** What the page remembers of the offers the person closed. */

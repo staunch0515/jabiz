@@ -92,11 +92,11 @@ export { default as UserName, useUserName } from './components/UserName'
 export { registerServiceWorker, useServiceWorkerUpdate, onServiceWorkerUpdate } from './pwa/register'
 export type { PwaMode, ServiceWorkerOptions } from './pwa/register'
 export {
-  captureInstallPrompt, installOfferAllowed, installSituation, isIos, readInstallDismissals, rememberInstallDismissed,
-  useInstallPrompt,
+  captureInstallPrompt, installBrowser, installOfferAllowed, installSituation, isIos, readInstallDismissals,
+  rememberInstallDismissed, useInstallPrompt,
 } from './pwa/install'
 export type {
-  InstallDismissals, InstallEnvironment, InstallOutcome, InstallPrompt, InstallSituation,
+  InstallBrowser, InstallDismissals, InstallEnvironment, InstallOutcome, InstallPrompt, InstallSituation,
 } from './pwa/install'
 export type { UserNameProps } from './components/UserName'
 

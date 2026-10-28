@@ -788,6 +788,7 @@ jabiz:
 | `POST /api/auth/email-link` | `{entry, email, to?, locale?}`，任何地址都答 202（入口没有开启即 422 `SIGN_UP_DISABLED`，`to` 等不合格即 400）；可信地址上该入口会接受的用户、或（开放注册时）无人使用的地址收到链接 |
 | `POST /api/auth/email-link/confirm` | `{token}`，答复同登录（`SIGNED_IN` 或第二步）；无效即 422 `TOKEN_INVALID` |
 
+- 前端：`EmailLinkForm` 放在应用自己的页面上；登录页可用 `SignInForm` 的 `emailLink`，把它放在密码之上（入口开启时才显示；17m，见 12"登录与账户的积木"）。
 - 链接只寄往可信的地址：管理员设而本人没有验证过的地址收不到（同 §15.7 的验证链接）。
 - 打开链接：登录该用户；接管可预占的账号（清除密码等，同 §15.7）；或为无人使用的地址开已验证、无密码的账号（入口的注册角色）。
   之后照常是登录流程 `SPONSOR_EMAIL_LINK_SIGN_IN`：登录记录（因素 `EMAIL_LINK`）、`SignInGuard`、入口角色与二次验证都照旧。
