@@ -87,6 +87,9 @@ jobs:
           pnpm lint
           pnpm typecheck
           pnpm test
+          # S4b: the first load of the embedded pages against its budget (scripts/size.mjs).
+          VITE_BASE=/shopify/ pnpm build
+          VITE_BASE=/shopify/ pnpm size
       # S2b: the storefront's block, a plain Web Component (no React, no @jabiz/ui components); the build checks its
       # size budget, `pnpm versions` its tools against the platform's (app:check is for SPAs on @jabiz/ui).
       - name: Shopify storefront block (S2b)

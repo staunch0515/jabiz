@@ -11,7 +11,8 @@
     "typecheck": "tsc -b",
     "lint": "eslint .",
     "test": "vitest run",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "size": "node scripts/size.mjs"
   },
   "dependencies": {
     "@jabiz/client": "link:../../frontend/packages/client",

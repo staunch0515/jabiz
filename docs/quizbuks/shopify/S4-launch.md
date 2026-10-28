@@ -90,3 +90,16 @@ S1 的已知问题：内嵌页的 `<meta name="shopify-api-key">` 在构建时�
 | I-6 | 隐私政策写了"卸载时 Shopify 删除本应用建立的折扣"（S2 的前提），联调时核实；若不是，改为本应用在卸载时自己删除，或改写政策 |
 
 **测试**：`shopify-site` 的 `site.test.ts`（6 例）：三种语言内容键一致；每页每种语言都生成且互相链接、sitemap 条数；支持邮箱是邮件链接且页面没有脚本、内联样式与事件属性；隐私政策含必需的内容；构建设置的校验；转义。内嵌页 `App.test.tsx` 加 1 例（帮助链接、支持邮箱、开发服务器时不显示）；店面 `quiz.test.ts` 的 badge 用例加上链接的检查。CI：`quizbuks.yml` 加公开页面的步骤，冒烟检查 `/shopify-app/privacy/` 与内嵌页写入的 Client ID。
+
+## 9. S4b 的实施（与计划不同或计划未写的）
+
+| # | 内容 |
+|---|---|
+| I-1 | 三页各有地址：`/shopify/`、`/shopify/campaigns`、`/shopify/plan`（`routes.ts`，经浏览器历史切换，保留 Shopify 的查询参数；任何人的 `pushState` 都会被听到，App Bridge 的菜单也一样），App Bridge 的 `<ui-nav-menu>` 链到它们，`<ui-title-bar>` 给出页面标题；页内标签去掉。概况是 `rel="home"`：按 Shopify 的惯例它不作为菜单项，点侧栏中的应用名回到概况，所以菜单里是两项。新版本部署时打开着的旧页面加载不到旧的分块，会提示重新载入而不是空白。页面自己的 `<h1>` 保留（不内嵌时与读屏用）。菜单链接写完整路径（带 `/shopify/`），Shopify 是否这样解析要在联调时核实 |
+| I-2 | 正在编辑的活动在换页时保留（S2b I-8 的做法照旧：看过即保持挂载，不显示时隐藏） |
+| I-3 | 外观：只覆盖 `@jabiz/ui` 的主题 token（灰底白卡、深色按钮、Shopify 的蓝色焦点环、0.75rem 圆角、系统字体），组件不变；亮色的文字对比都过 AA（见 `index.css`）。Shopify 后台只有亮色，暗色沿用平台的 token |
+| I-4 | 文案：中文的"店铺"改为 Shopify 后台的"商店"（日文本来就是"ストア"） |
+| I-5 | **体积**：活动与套餐两页按需加载（压缩后约 15 KB 与 1 KB）。但首屏（脚本加样式表）仍有约 187 KB（gzip，样式表约 14 KB）：大头是 React、`@jabiz/ui` 与 `@jabiz/client` 的共用代码，不是本应用的页面。计划的 120 KB 目标在本应用内达不到；门槛定为 200 KB（`scripts/size.mjs`，脚本与样式表都计入，CI 中 `pnpm build` 后 `pnpm size`），防止再变大。要再降，需要平台的包按需拆分，记为平台的后续事项；"Built for Shopify" 的 LCP 等指标在联调时用开发店铺实测 |
+| I-6 | 店面组件的性能测试没有用 Playwright：jsdom 测试已能断言点击前只请求一次 `QBS_SF_CAMPAIGN`、不加载任何框架、图片与脚本（`quiz.test.ts`），加上压缩后约 6 KB 的门槛与 App block 的延迟载入。对店面 Lighthouse 分数的实际影响在开发店铺上量 |
+
+**测试**：`App.test.tsx`（按地址打开的页面、菜单的三个链接与标题栏、换页保留 Shopify 的查询参数、编辑中的活动换页后保留）；`PlanPage.test.tsx` 照旧；店面 `quiz.test.ts` 加首屏只读活动的用例。
