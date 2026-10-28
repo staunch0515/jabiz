@@ -4629,3 +4629,25 @@ Wiki 只有一份；平台与应用各发布自己的一节，只发布最新的
 **使用者**：平台文档；QuizBuks 在 `1.3/quizbuks` 上以自己的 workflow 发布 `docs/quizbuks/`（同步本阶段后另一个 PR）。
 
 **17h 状态**：✅ 已实施。
+
+### 17m 登录页先给邮件链接、国产浏览器与内置浏览器的安装指引（已确认 2026-10-28）
+
+**缘由**：需求方 2026-10-28：有的地区打不开 Google、Facebook、LINE（应用只能经网页与"添加到主屏幕"的 PWA 到达那里的用户），登录页要让邮箱最显眼；
+那里的手机多用华为、小米、QQ、UC 的浏览器，它们不给出 `beforeinstallprompt`，16zj 因此什么都不提示；微信、QQ 的内置浏览器提示叫人用 Safari 或 Chrome 打开，
+而"在浏览器打开"其实在右上角的"···"里。17i–17l 已为另一组工作预留，本阶段用 17m。不改变约束，不新增决策。
+
+| # | 内容 |
+|---|---|
+| 17m-1 | `SignInForm` 的 `emailLink`：入口开启了 `email-link`（`GET /api/auth/entries/{name}` 的 `emailLink`）时，`EmailLinkForm` 在最上面（链接回到 `returnTo`），密码在"或用密码登录"之下；身份提供方照旧在最后。未开启或未要求即不显示 |
+| 17m-2 | `SignInForm` 的 `userNameLabel="email"`：名字一栏写作"邮箱"（`inputmode=email`，空时"请输入电子邮箱"）；服务端照旧接受用户名或邮箱，`autocomplete=username` 不变 |
+| 17m-3 | `installBrowser`（`@jabiz/client`，纯函数）与 `InstallPrompt.browser`：`wechat`、`qq-app`、`huawei`、`xiaomi`、`qq`、`uc`、`firefox`、`other`。没有事件的 Android 浏览器一律 `menu`（只有 Chrome 本身与 Samsung 仍等事件、为 `none`）；HarmonyOS（`OpenHarmony`）按 Android |
+| 17m-4 | 内置浏览器加入 QQ（` QQ/`，与 QQ 浏览器的 `MQQBrowser` 区分）、微博、钉钉、支付宝与 Android WebView（`; wv)`） |
+| 17m-5 | `PwaInstallGuide` 的 `situation="menu"`、`browser`：菜单按钮、"添加到桌面"（华为的"添加至"、小米 / QQ / UC 的"工具箱"）、确认三步，三语；除 Firefox 外提示开启浏览器的"桌面快捷方式"权限。横幅的 `menu` 有"查看步骤" |
+| 17m-6 | 内置浏览器的横幅为警示样式；微信、QQ 写明"点右上角的'···'，再选'在浏览器打开'"；中文的通用文案不再写 Safari / Chrome |
+| 17m-7 | 示范：门户入口开启 `email-link`（`JABIZ_PORTAL_EMAIL_LINK`，缺省开）、处理 `auth/email-link`，登录页用 `emailLink` 与 `userNameLabel="email"` |
+| 17m-8 | 测试：`install.test.ts`（一组真实 UA：华为含 HarmonyOS NEXT、小米、QQ 浏览器、UC、vivo、Edge、Samsung、平板 Chrome、微信 X5 与 iOS、QQ、支付宝、WebView）；`install.test.tsx`（各浏览器的步骤与权限提示、微信与 QQ 的文案与警示样式、三语，axe）；`blocks.test.tsx`（邮件链接在密码之上、`to`、"邮箱"标签、入口未开启时不显示，axe）；e2e `pwa.spec.ts`（华为浏览器的菜单指引、微信的"在浏览器打开"，axe）、`portal.spec.ts` |
+| 17m-9 | 文档：12"登录与账户的积木"与"安装到主屏幕"、10 §15.11、指南 `app-spa.md` |
+
+**不做**：按语言或地区自动改变登录方式的顺序（由应用按自己的界面语言传 `emailLink`）；国产浏览器的菜单文字随版本而变，步骤写的是常见的写法，须在真机上确认（应用的上线检查）。
+
+**17m 状态**：✅ 已实施。

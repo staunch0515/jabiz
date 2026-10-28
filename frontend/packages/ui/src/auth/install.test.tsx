@@ -1,4 +1,4 @@
-import { i18n, type InstallPrompt, type InstallSituation } from '@jabiz/client'
+import { i18n, type InstallBrowser, type InstallPrompt, type InstallSituation } from '@jabiz/client'
 import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -7,8 +7,9 @@ import { PwaInstallBanner } from './index'
 
 const DAY = 86_400_000
 
-function prompt(situation: InstallSituation, install = vi.fn(async () => 'accepted' as const)): InstallPrompt {
-  return { situation, install }
+function prompt(situation: InstallSituation, install = vi.fn(async () => 'accepted' as const),
+  browser: InstallBrowser = 'other'): InstallPrompt {
+  return { situation, browser, install }
 }
 
 beforeEach(async () => {
@@ -49,6 +50,52 @@ describe('PwaInstallBanner', () => {
     expect(screen.queryByRole('button', { name: 'Install' })).toBeNull()
     rerender(<PwaInstallBanner appName="QuizBuks" prompt={prompt('menu')} rememberAs="t3" />)
     expect(screen.getByTestId('pwa-install')).toHaveTextContent('in your browser\'s menu')
+  })
+
+  it('guides an Android browser through its own menu, with the permission some phones ask for (phase 17m)', async () => {
+    const steps = async (browser: InstallBrowser) => {
+      const { unmount } = render(<PwaInstallBanner appName="QuizBuks" rememberAs={`m-${browser}`}
+        prompt={prompt('menu', undefined, browser)} />)
+      await userEvent.setup().click(screen.getByRole('button', { name: 'Show me how' }))
+      const guide = await screen.findByTestId('pwa-install-guide')
+      const text = guide.textContent ?? ''
+      const permission = screen.queryByTestId('pwa-install-permission') !== null
+      expect(screen.queryByTestId('pwa-install-sign-in')).toBeNull()
+      await expectAccessible()
+      unmount()
+      return { text, permission }
+    }
+    const huawei = await steps('huawei')
+    expect(huawei.text).toContain('"≡" at the bottom')
+    expect(huawei.text).toContain('"Add to" first')
+    expect(huawei.permission).toBe(true)
+    const uc = await steps('uc')
+    expect(uc.text).toContain('under "Toolbox"')
+    const firefox = await steps('firefox')
+    expect(firefox.text).toContain('next to the address bar')
+    expect(firefox.permission).toBe(false)
+    const other = await steps('other')
+    expect(other.text).toContain('usually "⋮", "≡" or "…"')
+    expect(other.permission).toBe(true)
+  })
+
+  it('tells WeChat and QQ users where their "open in the browser" is, as a warning, in every language', async () => {
+    const { rerender } = render(<PwaInstallBanner appName="QuizBuks" rememberAs="w1"
+      prompt={prompt('in-app', undefined, 'wechat')} />)
+    const banner = screen.getByTestId('pwa-install')
+    expect(banner).toHaveTextContent('tap "···" at the top right')
+    expect(banner).toHaveClass('border-warning')
+    await expectAccessible()
+    await act(() => i18n.changeLanguage('zh'))
+    rerender(<PwaInstallBanner appName="QuizBuks" rememberAs="w1" prompt={prompt('in-app', undefined, 'qq-app')} />)
+    expect(screen.getByTestId('pwa-install')).toHaveTextContent('点右上角的"···"，再选"在浏览器打开"')
+    // Other apps: their own menu; no browser named that most phones in China do not have.
+    rerender(<PwaInstallBanner appName="QuizBuks" rememberAs="w1" prompt={prompt('in-app')} />)
+    expect(screen.getByTestId('pwa-install')).toHaveTextContent('用手机的浏览器打开本页')
+    expect(screen.getByTestId('pwa-install')).not.toHaveTextContent('Chrome')
+    await act(() => i18n.changeLanguage('ja'))
+    rerender(<PwaInstallBanner appName="QuizBuks" rememberAs="w1" prompt={prompt('in-app', undefined, 'wechat')} />)
+    expect(screen.getByTestId('pwa-install')).toHaveTextContent('右上の「···」')
   })
 
   it('offers nothing on a computer or once installed', () => {
