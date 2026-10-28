@@ -23,10 +23,10 @@ interface Me {
 }
 
 /**
- * The server as the app sees it: its entry, no identity providers, and for a signed-in taker their identity, profile,
+ * The server as the app sees it: its entry, the identity providers given (none by default), and for a signed-in taker their identity, profile,
  * the countries and currencies. Records what was asked and what was posted.
  */
-function server(me?: Me) {
+function server(me?: Me, providers: unknown[] = []) {
   const asked: string[] = []
   const posted: { path: string; body: unknown }[] = []
   let profile = me?.profile ?? null
@@ -42,7 +42,7 @@ function server(me?: Me) {
       case '/api/auth/entries/app':
         return json(200, ENTRY)
       case '/api/auth/oidc/providers':
-        return json(200, [])
+        return json(200, providers)
       case '/api/auth/me':
         return me ? json(200, { userId: 'u1', displayName: 'Mei', email: 'mei@example.com', roles: ['QB_TAKER'],
           permissions: ['qb.me', 'qb.account.read', 'qb.country.read'], emailVerified: me.emailVerified ?? true,
@@ -150,6 +150,22 @@ describe('a visitor', () => {
     await waitFor(() => expect(asked).toContain('/api/auth/oidc/providers?entry=app'))
     // A test system says so before signing in (platform 16zd): the entry names the environment.
     expect(await screen.findByTestId('environment-banner')).toHaveTextContent('staging')
+  })
+
+  it('signs in and signs up with Google, Facebook and LINE as a row of icons (Q40)', async () => {
+    window.localStorage.setItem('qb.intro.seen', '1')
+    server(undefined, [{ id: 'google', kind: 'google', label: 'Google' }, { id: 'facebook', kind: 'facebook',
+      label: 'Facebook' }, { id: 'line', kind: 'line', label: 'LINE' }])
+    render(<App />)
+    const row = await screen.findByTestId('oidc-icons')
+    expect(row).toHaveTextContent('Other ways to sign in')
+    expect(within(row).getAllByRole('button').map((b) => b.getAttribute('aria-label')))
+      .toEqual(['Google', 'Facebook', 'LINE'])
+    cleanup()
+    window.history.replaceState(null, '', '/signup')
+    render(<App />)
+    const signUp = await screen.findByTestId('signup-providers')
+    expect(await within(signUp).findByRole('button', { name: 'Facebook' })).toHaveAttribute('data-kind', 'facebook')
   })
 
   it('opens the pages of mailed links without signing in, and drops the token from the address', async () => {

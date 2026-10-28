@@ -220,10 +220,14 @@ class AccountSignUpIT extends AccountItSupport {
         register("sponsor", email);
         String userId = userIdOf(email);
         assertThat(rolesOf(userId)).containsExactly(QbRoles.SPONSOR);
-        // The sponsor console takes verified addresses only.
-        assertThat(code(signIn(email, "sponsor"), 403)).isEqualTo("EMAIL_NOT_VERIFIED");
+        // The sponsor console signs the sponsor in unverified (Q40), but applying needs the address verified.
+        Map<String, Object> unverified = sessionAt(email, "sponsor");
+        assertThat(code(client.post().uri("/api/processes/QB_SPONSOR_APPLY/latest")
+            .contentType(MediaType.APPLICATION_JSON).header(HttpHeaders.AUTHORIZATION, bearerOf(unverified))
+            .bodyValue(body("displayName", "Sara", "company", "Acme", "acceptTerms", true)).exchange(), 403))
+            .isEqualTo("EMAIL_NOT_VERIFIED");
         verify(email);
-        Map<String, Object> session = sessionAt(email, "sponsor");
+        Map<String, Object> session = refreshed(unverified, "sponsor");
 
         Map<String, Object> applied = run("QB_SPONSOR_APPLY", bearerOf(session), body("displayName", "Sara",
             "company", "Acme", "acceptTerms", true));

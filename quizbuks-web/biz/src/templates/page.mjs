@@ -68,16 +68,21 @@ function list(items, className = 'checks') {
 function header({ language, page, content, base }) {
   const nav = Object.entries(content.nav).map(([key, label]) =>
     `<a href="${pagePath(language, key, base)}"${key === page ? ' aria-current="page"' : ''}>${esc(label)}</a>`).join('')
+  // A drop-down (Q41): the current language on the button, the three as links under it, so it works without the script
+  // and search engines still see the alternates; site.js only closes it on a click outside or Escape.
   const languages = ['en', 'zh', 'ja'].map((lang) => lang === language
-    ? `<span aria-current="true">${LANGUAGE_NAMES[lang]}</span>`
-    : `<a href="${pagePath(lang, page, base)}" lang="${LOCALES[lang]}" hreflang="${LOCALES[lang]}" data-lang="${lang}">${LANGUAGE_NAMES[lang]}</a>`).join('')
+    ? `<li><a href="${pagePath(lang, page, base)}" lang="${LOCALES[lang]}" aria-current="true">${LANGUAGE_NAMES[lang]}</a></li>`
+    : `<li><a href="${pagePath(lang, page, base)}" lang="${LOCALES[lang]}" hreflang="${LOCALES[lang]}" data-lang="${lang}">${LANGUAGE_NAMES[lang]}</a></li>`).join('')
   return `<header class="top">
   <div class="wrap bar">
     ${wordmark(pagePath(language, 'home', base))}
     <button class="menu-toggle" type="button" data-menu-toggle aria-expanded="false" aria-controls="site-menu" aria-label="${esc(content.menu)}"><span></span><span></span><span></span></button>
     <nav id="site-menu" class="menu" data-menu aria-label="${esc(content.navLabel)}">
       <div class="links">${nav}</div>
-      <div class="lang" role="group" aria-label="${esc(content.languageLabel)}">${languages}</div>
+      <details class="lang" data-lang-menu>
+        <summary aria-label="${esc(content.languageLabel)}: ${LANGUAGE_NAMES[language]}" data-testid="lang-toggle">${icon('globe', 'icon small')}<span>${LANGUAGE_NAMES[language]}</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></summary>
+        <ul>${languages}</ul>
+      </details>
       <div class="signin" role="group" aria-label="${esc(content.signIn.label)}">
         <a href="/taker/login" data-signup="taker" data-testid="signin-taker">${esc(content.signIn.taker)}</a>
         <a href="/sponsor/login" data-signup="sponsor" target="_blank" rel="noopener" data-testid="signin-sponsor">${esc(content.signIn.sponsor)}</a>

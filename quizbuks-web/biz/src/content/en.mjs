@@ -211,7 +211,7 @@ export const en = {
     title: 'Talk to us',
     lead: 'Questions about a plan, a partnership, or something that does not work? Write to us.',
     waysTitle: 'Ways to reach us',
-    email: { title: 'E-mail', text: 'For merchants, partners and press. We usually answer within a few business days.', address: 'staunch0515@gmail.com' },
+    email: { title: 'E-mail', text: 'For merchants, partners and press. We usually answer within a few business days.', address: 'quizbuks@gmail.com' },
     merchants: { title: 'Become a merchant', text: 'Register your business; approval usually takes a few days.', cta: 'Register your business' },
     takers: { title: 'Help for takers', text: 'Questions about a quiz or a prize? The app’s help page explains, and the merchant you played with can see your prize.', cta: 'Open the help page' },
     note: 'QuizBuks is in its launch phase. Company details and the legal notices required by Japanese law are published in the app’s legal pages.',

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { cameFromThisSite, isModifiedClick, isPhone, openSignUp, parsePath, pathFor, pickLanguage, redirectTarget,
+import { APP_INSTALLED, cameFromThisSite, isModifiedClick, isPhone, openSignUp, opensInApp, parsePath, pathFor, pickLanguage, redirectTarget,
   phoneWindow, PHONE_HEIGHT, PHONE_WIDTH } from '../src/assets/site.js'
 import { readTryQuizzes } from '../scripts/build.mjs'
 
@@ -67,6 +67,23 @@ function fakeWindow({ coarse = false, width = 1280, screen = { availWidth: 1920,
     location: { assign: vi.fn() },
   }
 }
+
+describe('the installed app (Q41)', () => {
+  const storing = (value: string | null, more = {}) => ({ ...fakeWindow(more),
+    localStorage: { getItem: (key: string) => (key === APP_INSTALLED ? value : null) } })
+
+  it('is opened by following the link on a desktop that ran it installed', () => {
+    expect(opensInApp('taker', storing('true') as never)).toBe(true)
+    expect(opensInApp('taker', storing(null) as never)).toBe(false)
+  })
+
+  it('leaves phones, merchants and blocked storage to the usual ways', () => {
+    expect(opensInApp('taker', storing('true', { coarse: true }) as never)).toBe(false)
+    expect(opensInApp('sponsor', storing('true') as never)).toBe(false)
+    const blocked = { ...fakeWindow(), get localStorage(): never { throw new Error('denied') } }
+    expect(opensInApp('taker', blocked as never)).toBe(false)
+  })
+})
 
 describe('sign-up buttons', () => {
   it('open a phone-sized window for a taker on a desktop', () => {

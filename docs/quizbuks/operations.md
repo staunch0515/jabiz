@@ -40,8 +40,10 @@
 | `JABIZ_MAIL_FROM` | 是 | 发件域（配好 SPF / DKIM / DMARC） | — | 邮件发不出 |
 | `JABIZ_MAIL_BASE_URL` | 是 | 主机根地址 `https://<主机>`（不带 `/admin`） | 换域名时 | 邮件中的链接错误；也是商家后台地址的缺省来源 |
 | `SPRING_MAIL_HOST` / `_PORT` / `_USERNAME` / `_PASSWORD` | 是 | 邮件服务商（SMTP） | 按服务商；改环境变量、重启 | 投递失败 |
-| `SPRING_PROFILES_ACTIVE` | 否 | `google` 开启 App 的 Google 登录。**绝不能含 `dev`**（`dev` 的签名密钥与操作人请求头是公开的） | — | 无 Google 登录 |
+| `SPRING_PROFILES_ACTIVE` | 否 | `google` 开启 App 与商家后台的 Google 登录，`social` 开启 Google、Facebook 与 LINE（Q40）。**绝不能含 `dev`**（`dev` 的签名密钥与操作人请求头是公开的） | — | 无 Google 登录 |
 | `JABIZ_OIDC_GOOGLE_CLIENT_ID` / `_CLIENT_SECRET` | 开 Google 时 | Google Cloud 控制台 | 在控制台建新密钥、改环境变量、重启、删旧密钥 | Google 登录启动失败 |
+| `JABIZ_OIDC_FACEBOOK_CLIENT_ID` / `_CLIENT_SECRET` | 开 `social` 时 | Meta for Developers | 在控制台重置应用密钥、改环境变量、重启（重置即旧密钥失效，换的那一刻 Facebook 登录失败） | 启动失败 |
+| `JABIZ_OIDC_LINE_CLIENT_ID` / `_CLIENT_SECRET` | 开 `social` 时 | LINE Developers | 在控制台签发新 Channel secret、改环境变量、重启（旧的立即失效；它也是 ID 令牌的签名密钥） | 启动失败（不足 32 字节同样） |
 | `QB_OIDC_REDIRECT_APP` | 开 Google 时 | `https://<主机>/taker/login/oidc`（与控制台登记的完全相同；Q30 之前没有 `/taker`） | 换域名时 | Google 拒绝回调 |
 | `QB_OIDC_REDIRECT_SPONSOR` | 开 Google 时 | `https://<主机>/sponsor/login/oidc`（Q37；与控制台登记的完全相同） | 换域名时 | Google 拒绝回调；缺少即不能启动 |
 | `JABIZ_WEB_ROOT_REDIRECT` | 否 | 裸域名转到的路径，缺省 `/biz/`（招商网站，Q30）；`QB_APP_LINK` 须以 `/taker/` 结尾 | — | 裸域名打开招商站 |
@@ -198,7 +200,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
    再在后台扩展的"QuizBuks → 规约类"页（`/qb/legal`）预览草稿并"发布"（`QB_LEGAL_PUBLISH`，每次要求二次验证，留审计；发布的是页面读到的草稿版本，期间被改即拒绝）：生效时间留空即立即生效，或填以后的时间作预告（至多 `qb.legal.max-announce-days` 天；预告期间不能再发布同一种文本）；
    预告有误时在同一页的版本列表中填理由"撤回"（`QB_LEGAL_WITHDRAW`，只能在生效前；撤回的版本永不生效、不要求同意，版本号不再使用，公开的历史中标为"已撤回"）；
    实质性变更勾选"须重新同意"，措辞修订不勾。已发布的版本不可修改，改错只能发布新版本。正式模式下缺少已生效的答题人条款、商家条款或隐私政策时**启动告警**（`LiveModeDataCheck`）。
-   帮助中心的问答在后台"帮助中心问答"中维护（英语必填、`seq` 排序、"公开中"才出现在页面）。支持邮箱 `qb.support.email`（普通参数，空即不显示"仍需帮助"的联系方式）在后台参数中设。
+   帮助中心的问答在后台"帮助中心问答"中维护（英语必填、`seq` 排序、"公开中"才出现在页面）。支持邮箱 `qb.support.email`（普通参数，空即不显示"仍需帮助"的联系方式）在后台参数中设；Q41 起 `QB_SETUP` 新建它时为 `quizbuks@gmail.com`，已建过的（空）不会被改，要在后台参数中改一次。
    发布条款时可勾选"在收件箱中公告"：一分钟内（任务 `qb.broadcast-dispatch`）给相关的人发一条系统公告（答题人条款 → App，隐私政策 → App 与商家后台，其余 → 商家后台），有效 30 天。
 10. **站内信与公告**（Q7c）：个人消息（奖励、转账、收款账户）由事件的消费者写入，不需设置；公告在后台扩展的"QuizBuks → 公告与通知"（`/qb/broadcasts`）编写与发送（发送要求二次验证，撤回每次二次验证并填理由，商家可见）。
    普通参数（`QB_SETUP` 建立，可在后台参数中直接改）：商家每个发布的通知上限 `qb.broadcast.sponsor.max-per-publication`（3）、两条之间的最短间隔 `qb.broadcast.sponsor.min-interval-hours`（24）、
