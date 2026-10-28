@@ -94,9 +94,16 @@ class QuizbuksAppIT extends PostgresIntegrationTest {
                 org.assertj.core.groups.Tuple.tuple("/admin", "admin", JabizWebProperties.Pwa.OFF),
                 // S1: QuizBuks for Shopify's embedded pages, framed by the shop that opened them.
                 org.assertj.core.groups.Tuple.tuple("/shopify", "shopify", JabizWebProperties.Pwa.OFF),
-                org.assertj.core.groups.Tuple.tuple("/biz", null, JabizWebProperties.Pwa.OFF));
+                org.assertj.core.groups.Tuple.tuple("/biz", null, JabizWebProperties.Pwa.OFF),
+                // S4a: its public pages (landing, privacy, support), static with no entry.
+                org.assertj.core.groups.Tuple.tuple("/shopify-app", null, JabizWebProperties.Pwa.OFF));
         assertThat(web.spa()).filteredOn(spa -> "/shopify".equals(spa.path())).singleElement()
-            .satisfies(spa -> assertThat(spa.embedding()).isEqualTo("shopify"));
+            .satisfies(spa -> {
+                assertThat(spa.embedding()).isEqualTo("shopify");
+                // S4a: the app key and support address come from the deployment (17g), not the build.
+                assertThat(spa.indexValues()).containsOnlyKeys("shopify-api-key", "support-email")
+                    .containsEntry("shopify-api-key", "test-only-quizbuks-shopify-key");
+            });
         // The bare address goes to the business site (Q30).
         assertThat(web.rootRedirect()).isEqualTo("/biz/");
     }
