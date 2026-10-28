@@ -61,7 +61,7 @@ tools/culture/**
     `docs/design` `docs/guide`）下的任何改动（包括新文件）都算越界，不论 `.jabiz-app-paths` 如何写。
   - 检查用的脚本与工作流来自被检查的分支本身，因此只有在分支保护把 `app-paths` 设为必需检查、且对这两个文件的修改经过评审时才有约束力。
   - 退出码：0 通过（或没有 `.jabiz-app-paths`，不是应用分支）；1 有越界或线不一致；2 无法检查（找不到平台分支或共同祖先、线号格式不对），不放行。
-- 平台 CI（`ci.yml`）对推送到长期分支（各线的平台分支与应用分支）和所有 PR 运行（应用分支不能改 `ci.yml`）；工作分支（`<线>/phase-…`、`<线>/<应用>-<N>-…`）只经 PR 运行，同一提交不重复检查；PR 的新推送取消其进行中的运行；`e2e` 与 `compose` 在 `build`、`frontend` 通过后运行，草稿 PR 不运行（标为就绪时补跑）；也可手动运行（`workflow_dispatch`）。其 `app-paths` 作业取完整历史，存在 `.jabiz-app-paths` 时取该线的平台分支，
+- 平台 CI（`ci.yml`）对推送到各线的平台分支（`<线>/platform`）和所有 PR 运行（应用分支不能改 `ci.yml`）；工作分支（`<线>/phase-…`、`<线>/<应用>-<N>-…`）只经 PR 运行，合并进应用分支的改动也已在 PR 中检查过，因此应用分支的推送不再运行，同一提交不重复检查（17n）；PR 的新推送取消其进行中的运行；作业 `scope` 判断分支：有 `.jabiz-app-paths` 的应用分支上平台的代码就是已在平台分支上检查过的某个平台提交（`app-paths` 保证），所以只运行 `build-application`（应用模块的 `check`，平台模块只编译不再测试）与 `app-paths`，平台自己的 `build`、`frontend`、`e2e`、`compose` 只在平台分支及其 PR 上运行；`e2e` 与 `compose` 在 `build`、`frontend` 通过后运行，草稿 PR 不运行（标为就绪时补跑）；也可手动运行（`workflow_dispatch`）。其 `app-paths` 作业取完整历史，存在 `.jabiz-app-paths` 时取该线的平台分支，
   在每个分支上运行检查（线的检查对平台分支同样有效）与脚本自己的测试 `tools/test/check-app-paths.test.sh`。
 - 应用自己的开发规则写在应用目录内的 `CLAUDE.md`（如 `backend/culture/CLAUDE.md`、`site/CLAUDE.md`）与 `docs/<应用>/` 中；
   根目录的 `CLAUDE.md` 只属于平台，应用分支不改它（避免合并冲突）。
@@ -146,7 +146,7 @@ jabizApp {
 ### 3.3 部署与 CI
 
 - 每个应用一个 compose 文件（`deploy/<应用>/docker-compose.yml`）与一个 CI 工作流（`.github/workflows/<应用>.yml`），都在应用目录中。
-- 平台的 `ci.yml` 运行 `./gradlew check`：在应用分支上它自动覆盖应用模块（自动包含），因此平台改动合并到应用分支后，应用的测试会立即执行。
+- 平台的 `ci.yml` 在应用分支的 PR 上运行应用模块的 `check`（`backend/` 下平台模块以外、带构建脚本的子目录，与 settings 的自动包含一致），因此把平台合并到应用分支的 PR 会执行应用的测试；平台模块的测试只在平台分支上运行（§2）。应用自己的工作流宜同样只对 PR 运行，部署工作流在推送时直接构建并部署、不再重复测试。
 
 ## 4. 公开前端
 
