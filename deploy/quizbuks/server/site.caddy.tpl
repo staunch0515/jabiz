@@ -64,4 +64,22 @@ __DOMAIN__ {
 	handle {
 		reverse_proxy __APP_NAME__-app:8080
 	}
+
+	# The application unreachable (stopped, restarting, not yet listening, crashed): Caddy's own 502 becomes the
+	# maintenance page, as with the lock file but without it, so that a `docker stop` or a deployment's restart never
+	# shows a bare error. Only Caddy's failure to reach the application counts: the application's own 503 answers
+	# (PROCESS_BUSY, QUERY_TIMEOUT) pass through as they are. A shorter Retry-After than planned maintenance: a restart
+	# takes a minute or two.
+	handle_errors {
+		@unreachable expression `{err.status_code} == 502`
+		handle @unreachable {
+			header Retry-After 60
+			header Cache-Control no-store
+			root * __APP_DIR__/maintenance
+			rewrite * /maintenance.html
+			file_server {
+				status 503
+			}
+		}
+	}
 }
