@@ -4,16 +4,19 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.ConstructorBinding;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.regex.Pattern;
 
 /**
  * The single-page applications served by this application (docs/design/17-apps-and-branches.md section 3.2):
- * {@code jabiz.web.spa[i].path}, {@code .index}, {@code .content-security-policy}, {@code .entry}, {@code .pwa} and
- * {@code .embedding}.
+ * {@code jabiz.web.spa[i].path}, {@code .index}, {@code .content-security-policy}, {@code .entry}, {@code .pwa},
+ * {@code .embedding} and {@code .index-values}.
  * The build writes the SPAs of {@code jabizApp { spa(...) }} into the jar ({@code META-INF/jabiz-app.properties}) as the
  * lowest-priority default; an application's own {@code jabiz.web.spa} replaces that list as a whole. Without either,
  * the admin frontend is served at {@code /} as before. {@link SpaConfigCheck} reports invalid entries at startup.
@@ -170,9 +173,13 @@ public record JabizWebProperties(List<Spa> spa, String environment, String rootR
      * @param embedding             the external token provider whose tenants may frame its pages (decision D59): a page
      *                              opened with the provider's tenant parameter naming a valid tenant gets that tenant's
      *                              {@code frame-ancestors}; none by default (never framed)
+     * @param indexValues           values of this deployment the index page shows where it says
+     *                              {@code ="{{jabiz:<name>}}"} (phase 17g, {@link SpaIndexes}), by name: such as a
+     *                              public key another platform's script reads from a {@code meta} element; none by
+     *                              default
      */
     public record Spa(String path, String index, String contentSecurityPolicy, String entry, Pwa pwa,
-        String embedding) {
+        String embedding, Map<String, String> indexValues) {
 
         @ConstructorBinding
         public Spa {
@@ -191,6 +198,12 @@ public record JabizWebProperties(List<Spa> spa, String environment, String rootR
             if (embedding != null && embedding.isBlank()) {
                 embedding = null;
             }
+            indexValues = indexValues == null ? Map.of() : Collections.unmodifiableMap(new LinkedHashMap<>(indexValues));
+        }
+
+        /** An SPA whose index page takes no values. */
+        public Spa(String path, String index, String contentSecurityPolicy, String entry, Pwa pwa, String embedding) {
+            this(path, index, contentSecurityPolicy, entry, pwa, embedding, null);
         }
 
         /** An SPA that is never framed. */
@@ -280,6 +293,16 @@ public record JabizWebProperties(List<Spa> spa, String environment, String rootR
                 problems.add(where + ".entry: must be the name of a sign-in entry (lower-case letters, digits, "
                     + "hyphens), was " + quoted(s.entry()));
             }
+            s.indexValues().forEach((name, value) -> {
+                if (!SpaIndexes.NAME.matcher(name).matches()) {
+                    problems.add(where + ".index-values: " + quoted(name) + " is not a value's name (a lower-case "
+                        + "letter, then lower-case letters, digits and hyphens, up to 40)");
+                } else if (value == null || value.isBlank() || value.length() > SpaIndexes.MAX_VALUE
+                    || value.chars().anyMatch(c -> c < 0x20 || c == 0x7f)) {
+                    problems.add(where + ".index-values." + name + ": must be a non-empty single line of at most "
+                        + SpaIndexes.MAX_VALUE + " characters");
+                }
+            });
         }
         return problems;
     }
