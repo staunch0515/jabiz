@@ -30,6 +30,9 @@ import reactor.core.publisher.Mono;
  * a route that names such a directory is answered with that directory's {@code index.html} instead of the site's root
  * page.
  *
+ * <p>An SPA with values for its index page (phase 17g, {@link SpaIndexes}) is answered with the page those values
+ * were written into, rendered once at startup, with the same headers.
+ *
  * <p>Redirects (phase 16zf-a), before any SPA is looked up: a {@code GET} or {@code HEAD} of exactly {@code /} goes
  * (302) to {@code jabiz.web.root-redirect} when one is configured; one of a prefix in {@code jabiz.web.redirects}, or
  * of a path under it, goes (301) to the same path under its new prefix. Both keep the query string, carry no page
@@ -42,17 +45,25 @@ class SpaFallbackFilter implements WebFilter {
     private final JabizWebProperties properties;
     private final StaticPages pages;
     private final SpaEmbedding embedding;
+    private final SpaIndexes indexes;
 
     @org.springframework.beans.factory.annotation.Autowired
     SpaFallbackFilter(JabizWebProperties properties, StaticPages pages,
-        org.springframework.beans.factory.ObjectProvider<SpaEmbedding> embedding) {
-        this(properties, pages, embedding.getIfAvailable(() -> SpaEmbedding.NONE));
+        org.springframework.beans.factory.ObjectProvider<SpaEmbedding> embedding,
+        org.springframework.beans.factory.ObjectProvider<SpaIndexes> indexes) {
+        this(properties, pages, embedding.getIfAvailable(() -> SpaEmbedding.NONE),
+            indexes.getIfAvailable(SpaIndexes::none));
     }
 
-    SpaFallbackFilter(JabizWebProperties properties, StaticPages pages, SpaEmbedding embedding) {
+    SpaFallbackFilter(JabizWebProperties properties, StaticPages pages, SpaEmbedding embedding, SpaIndexes indexes) {
         this.properties = properties;
         this.pages = pages;
         this.embedding = embedding;
+        this.indexes = indexes;
+    }
+
+    SpaFallbackFilter(JabizWebProperties properties, StaticPages pages, SpaEmbedding embedding) {
+        this(properties, pages, embedding, SpaIndexes.none());
     }
 
     /** Never framed. */
@@ -108,6 +119,25 @@ class SpaFallbackFilter implements WebFilter {
             cacheHeaders(response, spa, page);
             return Mono.empty();
         });
+        // The index with this deployment's values (phase 17g), rendered once at startup: as a route's page, and when
+        // asked for by its own name (as a Service Worker precaches it), never as built.
+        boolean index = route ? page.equals(spa.index()) : read && path.equals(spa.index());
+        var rendered = index ? indexes.page(spa).orElse(null) : null;
+        if (rendered != null) {
+            HttpHeaders headers = response.getHeaders();
+            headers.setETag(rendered.etag());
+            headers.setContentType(HTML);
+            if (req.getHeaders().getIfNoneMatch().contains(rendered.etag())) {
+                response.setStatusCode(HttpStatus.NOT_MODIFIED);
+                return response.setComplete();
+            }
+            response.setStatusCode(HttpStatus.OK);
+            headers.setContentLength(rendered.body().length);
+            if (HttpMethod.HEAD.equals(req.getMethod())) {
+                return response.setComplete();
+            }
+            return response.writeWith(Mono.just(response.bufferFactory().wrap(rendered.body())));
+        }
         if (route) {
             return chain.filter(exchange.mutate().request(req.mutate().path(page).build()).build());
         }
@@ -178,5 +208,6 @@ class SpaFallbackFilter implements WebFilter {
     static final String NO_CACHE = "no-cache";
     static final String IMMUTABLE = "public, max-age=31536000, immutable";
     private static final String MANIFEST_EXTENSION = ".webmanifest";
+    static final MediaType HTML = new MediaType(MediaType.TEXT_HTML, java.nio.charset.StandardCharsets.UTF_8);
     static final MediaType MANIFEST_TYPE = MediaType.parseMediaType("application/manifest+json");
 }

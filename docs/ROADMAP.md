@@ -4430,6 +4430,18 @@ L4 共享仪表的注释；L5 13 写明每个键每次轮询多一个查询观�
 
 **16zj 状态**：✅ 已实施（线 1.2，PR #258），向前合并到 1.3。
 
+### 16zk Facebook 与 LINE 登录（2 天）
+
+来源：需求方 2026-10-27（QuizBuks Q40：答题者与商户可用 Facebook、LINE 注册与登录，登录页参考淘宝，邮箱按方案 A）。分支 `1.2/phase-16zk-social-oidc`。兼容的新增，向前合并到 1.3。决策 D61。
+提供方的 `kind` 增加 `facebook` / `line`（缺省 issuer、`client_secret_post`、Facebook 的发现文档地址与令牌端点）；`IdTokenValidator` 只对 `line` 接受 HS256（client secret）；
+提供方设置 `sign-up-unverified-email`：不担保的邮箱照样开户（未验证、可预占、寄出验证邮件）；`SPONSOR_EMAIL_VERIFY` 在本账号的会话中（已登录的 `/api/auth/account/verify-email/check|confirm`）代替当前密码，`@jabiz/client` 的 `checkVerificationLink` / `confirmVerificationLink` 有会话时先在会话中问；
+`@jabiz/ui` 的 `FacebookMark`、`LineMark` 与 `OidcButtons` 的 `layout="icons"`（`SignInForm` 的 `oidcLayout`）。设计 10 §12、§15.7、12 §auth。
+测试：`IdTokenValidatorTest`（HS256 正确与错误的密钥、`line` 以外拒绝 HS256、`none`、以 RSA 公钥作 HMAC 密钥）、`OidcProvidersTest`（新种类的缺省与启动检查）、
+`OidcClientTest`（`client_secret_post`、Facebook 的发现文档与缺省令牌端点）、`OidcUnverifiedSignUpIT`（LINE 的 HS256 与 `client_secret_post`、未担保的邮箱开户为可预占、寄出验证、已被使用即 403、没有邮箱不开户、本人会话中验证保留关联、他人以链接接管删除关联）、
+前端 `blocks.test.tsx`（`OidcButtons` 的图标排列与标志、会话中验证、会话不被接受时改为匿名并提示，亮暗 axe）。
+
+**16zk 状态**：✅ 已实施（线 1.2，PR #266；决策改号 D61，PR #275），向前合并到 1.3。
+
 ---
 
 ## 阶段 17：线 1.3 的通用能力（外部商店平台的接入）
@@ -4513,7 +4525,7 @@ QuizBuks 的 S0 迁移正是如此（五张只追加表的 `sponsor_id` 被改�
 
 **之后**：同步到 `1.3/quizbuks` 后，QuizBuks 的 `SealedColumnsMigrationIT` 改用夹具（保留 V29 的 `neverReleased`）。
 
-### 17b 凭外部平台签发的令牌登录、按入口放行内嵌（已确认 2026-10-27，已实施，待合并，决策 D59）
+### 17b 凭外部平台签发的令牌登录、按入口放行内嵌（已确认 2026-10-27，已完成 #257，决策 D59；审查修正见 17e）
 
 **缘由**：商店平台（Shopify）的内嵌后台由平台后台以 iframe 打开，页面经平台的脚本取得**会话令牌**（HS256 的 JWT，以应用密钥签名，约 1 分钟有效，
 `iss` = `https://<店铺>/admin`、`dest` = `https://<店铺>`、`aud` = 应用的 API key、`sub` = 店员编号）。平台现在只有密码、邮件链接与 OIDC 三种登录，
@@ -4532,3 +4544,72 @@ SPA 的 CSP 固定为 `frame-ancestors 'none'`，外部服务只按精确主机�
 
 **不做**：登录时交换外部平台的访问令牌（需求方：必须时才交换，由应用的流程以外部服务调用）；店员的角色细分（应用的成员关系决定）。
 
+### 17d 应用代理入口与店面限流（已确认 2026-10-27，已实施，决策 D60）
+
+**缘由**：商店应用的店面组件（QuizBuks S2）跑在商户的店铺页面上，顾客匿名；店面的请求经商店平台转发（`/apps/...`）并在查询中签名。平台没有"验签之后同步运行流程"的入口。
+原在 17a、17b 的"公开接口的限流"一并在此（需求方 2026-10-27 确认计划，按默认建议）。
+
+| # | 内容 |
+|---|---|
+| 17d-1 | 配置 `jabiz.app-proxies.<名>`：密钥（只取自环境变量，可写两个，同 17e 的占位符检查）、租户参数与形式、顾客与访客键参数、时间窗口（缺省 90 秒，与 Shopify 自己的库相同，至多 10 分钟）；启动时一次报告全部问题 |
+| 17d-2 | 接口 `GET|POST /api/proxy/{名}/{流程}`：入口过滤器挡掉未知代理（404）与其他方法（405）；验签（核心 `AppProxySignature`，以 Shopify 的库 @shopify/shopify-api 15.0.1 的算法交叉核对）、时间、租户与顾客，一切不符 401 `APP_PROXY_REFUSED`，不说明原因；以 `AppProxyCaller` 运行，答复即输出，不缓存 |
+| 17d-3 | 流程用途 `appProxy(名)`（`ProcessAccess.APP_PROXY`）：只经该代理，不经流程接口与子流程；权限 `app-proxy.<名>` 由声明带上；不能要求二次验证、已验证邮箱或替代权限 |
+| 17d-4 | 限流 `per-tenant`、`per-visitor`（`jabiz.process.rate-limits`），只用于代理流程；超限 429 |
+| 17d-5 | 观测 `jabiz.app_proxy.refused`（标签代理名与原因）；操作记录的操作人为代理身份 |
+| 17d-6 | 测试与文档：核心 `AppProxySignatureTest`（与 Shopify 的库同值、篡改、过期、格式）；`AppProxiesTest`（启动检查与绑定）；`ProcessAdmissionChecksTest`（代理的限流）；集成测试 `AppProxyIT`（签名的请求以代理调用者运行、旧密钥、`+` 与 `%2F` 的解码、带来的凭据不影响；各种不符一律 401 且流程未运行；别的代理、开放流程、未知流程、版本路径 404，PUT 405，流程接口 403；按访客与租户限流）；`ProcessAccessRulesTest`、`ProcessChecksTest`、`ProcessRateLimitsTest` 的代理分支；场景回放把代理流程的步骤当作入口；D60、10 §15.13、06 §8、07 §3 |
+
+**不做**：示范应用中的代理流程（只在测试中声明，示范没有店面）；按地址限流时识别商店平台转发的真实顾客地址（未在开发店铺上核实是否转发，见 10 §15.13）。
+
+### 17e 外部签名令牌的审查修正（已确认 2026-10-27，已实施，决策 D59）
+
+**缘由**：17b 合并后的代码审查发现三处安全问题与两处行为问题，核实属实（需求方 2026-10-27 同意按建议修正）。17c 已用于 D58，17d 留给应用代理与店面限流。
+
+| # | 问题 | 修正 |
+|---|---|---|
+| 17e-1 | 核对在令牌最后时刻（`exp` + 容差）之前、登记在之后时，登记前的清理会删掉第一次使用的记录，同一 `jti` 被接受两次 | `ExternalTokens.useOnce` 在最后时刻及之后即拒绝（`EXPIRED`）；清理只删过了最后时刻再加 60 秒（容差上限）的记录，各实例的时钟相差不超过它时都删不到仍可能被重放的记录 |
+| 17e-2 | `VerifyExternalToken` 的 403 说出了原因（签名、过期、不属于操作人），违反 10 §15.12 | 403 一律为 "External token refused"，原因只记日志 |
+| 17e-3 | 没有缺省值的占位符在环境变量缺失时原样留下，超过 32 个字符即被当作密钥 | 启动检查拒绝含 `${` 的密钥与 `audience`（"is its environment variable set?"）；文档与示范的示例改为带空缺省值 |
+| 17e-4 | 登录接口把服务器故障（数据库、繁忙）也答成 401 `LOGIN_FAILED` | 只有令牌与身份的拒绝是 401，服务器故障照常 5xx（客户端以新令牌重试）；守卫的拒绝与未验证的地址仍是 403。`OidcController` 有同样的写法，不在本阶段 |
+| 17e-5 | `destination-format` 带路径（如 `https://{tenant}/`）时内嵌静默失效 | 启动检查要求它是 https 源（`https://{tenant}`） |
+
+**测试**：`ExternalTokenProvidersTest`（占位符密钥经环境绑定后被拒、目的地须为源）；`ExternalTokenIT`（最后时刻前核对、之后登记的重放被拒且只留一条记录；
+各种拒绝的 403 说明相同；服务器故障为 5xx；守卫的拒绝仍是 403 `SIGN_IN_REFUSED`）。先写的测试在修正前全部失败。
+
+
+### 17f 单页应用公开路由的服务器端标题与预览信息、按公开模板生成 sitemap（2026-10-27 记录，**待开发**，未确认）
+
+**缘由**：需求方 2026-10-27 要做 QuizBuks 的公开问卷页面（`docs/quizbuks/plans/Q44-public-quiz-pages.md`，在 `1.3/quizbuks`）：
+不登录也能浏览正在进行的问卷，搜索引擎与社交网络能收录、能显示预览。单页应用的 `index.html` 是静态的（`SpaFallbackFilter` 对前缀下没有扩展名的路径都返回同一份），
+社交网络的预览抓取不执行脚本，看到的只有应用的固定标题；平台没有为单页应用的某条路由按数据给出 `<title>` 与 Open Graph 信息的办法，也不能按数据生成 `sitemap.xml`。
+需求方决定这件事整体放在线 1.3，先记录，以后开发（当时急着做上线演练）。开工前先写本阶段的计划与决策（新决策号接 1.3 当时的最后一个）、经确认后实施。
+
+**设想**（细节在计划中确定）：
+- 单页应用（`jabiz.web.spa[i]`）声明**公开路由**：路径模式（如 `/taker/p/{publicationId}`、`/taker/explore`）→ 一个**公开模板**（设计 15，`access: public`）与参数的对应 →
+  结果的列到 `<title>`、`<meta name="description">`、`og:title`、`og:description`、`og:image`、`og:url`、`<link rel="canonical">` 的映射；固定文案的路由可以不用模板、按请求语言给出。
+- 返回该路由的 `index.html` 时，服务器把这些值写进 `<head>` 的固定位置（HTML 转义、按长度截断），其余原样；模板没有结果（数据已不公开、不存在）或参数不合格时返回原样的 `index.html`
+  并加 `<meta name="robots" content="noindex">`；只写 `<head>`，不渲染页面内容，不引入模板引擎。
+- 同一机制按公开模板生成 `sitemap.xml`（列出公开路由的全部 URL，有条数上限、超过时分页成 sitemap 索引），可与静态站点（如 QuizBuks 的 `/biz/`）已有的 sitemap 合并或互相引用；可选的根 `robots.txt`。
+- 缓存随公开模板的 `cacheSeconds`；出错（模板超时等）时退回原样的 `index.html`，从不让页面打不开；观测标签只有路由名与结果（13、D16）。
+- 启动检查（`PlatformCheck`）：公开路由引用的模板必须是公开模板，参数与映射的列必须存在于其参数与结果中，路径模式不与其他单页应用或接口冲突。
+
+**测试**：插入位置、转义与截断、没有结果时 `noindex`、参数不合格、缓存、出错时退回原样、未声明的路由不变、sitemap 的上限与分页、启动检查；示范应用 `app` 中一条公开路由。
+
+**使用者**：QuizBuks Q44b（`/taker/p/<id>` 与 `/taker/explore` 的预览信息与 sitemap）。
+
+**17f 状态**：📝 待开发（2026-10-27 记录，计划未写、未确认）。
+
+### 17g 单页应用入口页的部署值（已确认 2026-10-27）
+
+**缘由**：被 Shopify 一类平台内嵌的前端要在入口页里给出它在那个平台上的应用 key（如 `<meta name="shopify-api-key">`，平台的脚本读它），只能在构建时写入。
+测试环境与正式环境是那个平台上的两个应用、两个 key，而部署只构建一个镜像、几处共用，正式就会拿到测试环境的 key。平台没有让入口页随部署取值的办法。
+
+| # | 内容 |
+|---|---|
+| 17g-1 | 配置 `jabiz.web.spa[i].index-values.<名>`（名为小写字母开头、至多 40 字符；值非空单行、至多 2000 字符），由 `JabizWebProperties` 与启动检查校验 |
+| 17g-2 | `SpaIndexes`：启动时从静态位置读入口页，把每个 `="{{jabiz:名}}"`（标签中双引号属性的完整值，不在 `script` / `style` 的内容中）换成 HTML 转义的值；其他写法、没有值的占位与读不出的入口页是启动错误（`WEB`，只报告不抛出），没用到的值、jar 中没有入口页是告警（照原样提供） |
+| 17g-3 | `SpaFallbackFilter`：有部署值的 SPA，客户端路由与直接请求入口页（Service Worker 预存它）都回渲染好的页面（与其他入口页相同的页面策略、`no-cache`；强 ETag，重新验证回 304）；文件与没有部署值的 SPA 不变 |
+| 17g-4 | 测试与文档：`SpaIndexesTest`（替换与转义、各种不允许的写法含脚本与样式、未闭合、值像占位、没有值与没用到、写法错的不再报没用到、读不出、jar 中没有、从第一个有它的静态位置读、配置校验、过滤器回页面、直接请求入口页、304 与 HEAD、文件照旧）；集成测试 `MultiSpaIT`（PWA 入口页带部署值，经完整的过滤链）；设计 17 §3.2、指南 `app-spa.md`、根 `CLAUDE.md` |
+
+**使用者**：被外部平台内嵌、入口页要给出应用 key 的应用前端。
+
+**17g 状态**：✅ 已实施。

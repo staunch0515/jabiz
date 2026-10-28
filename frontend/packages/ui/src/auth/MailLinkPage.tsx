@@ -1,4 +1,5 @@
-import { api, confirmPasswordReset, resendVerification, sitePath, unwrap, useMailLink } from '@jabiz/client'
+import { api, checkVerificationLink, confirmPasswordReset, confirmVerificationLink, resendVerification, sitePath,
+  unwrap, useMailLink } from '@jabiz/client'
 import { Info, LockKeyhole, Mail } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { useForm, type UseFormReturn } from 'react-hook-form'
@@ -130,17 +131,20 @@ export function VerifyEmailPanel({ link, brand, appearance }: PanelProps) {
   const { entry, token, appPath } = link
   const [state, setState] = useState<VerifyState>(token ? 'ready' : 'invalid')
   const [busy, setBusy] = useState(false)
+  // Checked in this frontend's session (decision D61 item 4): then used there too.
+  const [inSession, setInSession] = useState(false)
 
   const failed = (e: unknown) => setState(invalidLink(e) ? 'invalid' : 'failed')
 
   const start = async () => {
     setBusy(true)
     try {
-      const check = await unwrap(api.POST('/api/auth/verify-email/check', { body: { token: token! } }))
+      const check = await checkVerificationLink(token!)
+      setInSession(check.inSession)
       if (check.passwordRequired) {
         setState('password')
       } else {
-        await unwrap(api.POST('/api/auth/verify-email', { body: { token: token! } }))
+        await confirmVerificationLink(token!, check.inSession)
         setState('done')
       }
     } catch (e) {
@@ -163,7 +167,8 @@ export function VerifyEmailPanel({ link, brand, appearance }: PanelProps) {
           </Button>
         </>
       )}
-      {state === 'password' && <PasswordStep token={token!} onDone={() => setState('done')} onFailed={failed} />}
+      {state === 'password' && <PasswordStep token={token!} inSession={inSession} onDone={() => setState('done')}
+        onFailed={failed} />}
       {state === 'done' && (
         <Outcome ok testId="verify-state" next={<ContinueTo path={appPath} />}>
           <span data-state={state}>{t('account.verified')}</span>
@@ -196,7 +201,12 @@ export function VerifyEmailPanel({ link, brand, appearance }: PanelProps) {
 }
 
 /** The password of an account nobody verified yet: the registrant's current one, or a new one that takes it over. */
-function PasswordStep({ token, onDone, onFailed }: { token: string; onDone(): void; onFailed(e: unknown): void }) {
+function PasswordStep({ token, inSession, onDone, onFailed }: {
+  token: string
+  inSession: boolean
+  onDone(): void
+  onFailed(e: unknown): void
+}) {
   const { t } = useTranslation(AUTH_NAMESPACE)
   const [mode, setMode] = useState<'current' | 'new'>('current')
   const [fieldError, setFieldError] = useState<string | null>(null)
@@ -206,7 +216,7 @@ function PasswordStep({ token, onDone, onFailed }: { token: string; onDone(): vo
   const send = async (body: { token: string; password?: string; newPassword?: string }) => {
     setFieldError(null)
     try {
-      await unwrap(api.POST('/api/auth/verify-email', { body }))
+      await confirmVerificationLink(token, inSession, { password: body.password, newPassword: body.newPassword })
       onDone()
     } catch (e) {
       const problems = passwordProblems(e)
@@ -221,6 +231,8 @@ function PasswordStep({ token, onDone, onFailed }: { token: string; onDone(): vo
         <Info aria-hidden />
         <AlertDescription data-testid="verify-password-hint">{t('account.verifyPasswordHint')}</AlertDescription>
       </Alert>
+      {/* An account opened through Google, Facebook or LINE has no password (decision D61 item 4). */}
+      <p className="text-muted-foreground text-sm" data-testid="verify-session-hint">{t('account.verifySessionHint')}</p>
       {mode === 'current' ? (
         <form noValidate className="flex flex-col gap-4"
           onSubmit={current.handleSubmit(({ password }) => send({ token, password }))}>

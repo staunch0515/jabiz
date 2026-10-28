@@ -276,6 +276,11 @@ function Today() {
               <span>{row.takerName ?? '?'}</span>
               <span>{row.description}</span>
               <span className="text-muted-foreground">{row.redeemedAt ? formatDateTime(row.redeemedAt) : ''}</span>
+              {row.redeemedByName && (
+                <span className="text-muted-foreground" data-testid="redeem-today-staff">
+                  {t('publishing.redeem.handedBy', { name: row.redeemedByName })}
+                </span>
+              )}
             </li>
           ))}
         </ul>
@@ -327,6 +332,11 @@ function History() {
           )}
           {row.original.status === 'REDEEMED' && row.original.redeemedAt && (
             <span className="text-muted-foreground text-xs">{t('publishing.redeem.collectedAt', { time: formatDateTime(row.original.redeemedAt) })}</span>
+          )}
+          {row.original.status === 'REDEEMED' && row.original.redeemedByName && (
+            <span className="text-muted-foreground text-xs" data-testid="redemption-staff">
+              {t('publishing.redeem.handedBy', { name: row.original.redeemedByName })}
+            </span>
           )}
         </span>
       ) },

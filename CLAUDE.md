@@ -38,7 +38,8 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
    做 I/O（业务参数用 `LoadParams.of`，以业务发生时间读取；可以尚未设置的用 `LoadParams.optional` 并以 `find` 读取，见 04 §9），用 `ctx.changes()` 登记变更、`ctx.reject(...)` 累积违规，由平台在流程结束时统一提交（见 06 与决策 D11）。每个流程必须声明权限。
    热门的命名锁在流程上以 `admission(族, 输入 -> 键)` 声明取锁前的排队（族名与键同该流程最外层 `HoldLock` 的名称，由同一辅助方法生成；06 §4.2、决策 D45），正确性仍由 `HoldLock` 保证；
    子流程从不排队；过载即 503 `PROCESS_BUSY`。流程入口的限流只在 `jabiz.process.rate-limits` 配置，不在业务代码中自己计数。
-   不经流程接口的流程按用途声明（06 §8、决策 D41）：事件消费、定时任务、回调用 `internal()`（只由系统身份运行），平台入口自己运行的用 `entryOnly()`，只作子流程的用 `subProcessOnly()`；依赖声明，由平台检查（步骤中对系统身份的检查只是已有处的多余的第二道防线，不再新加）。
+   不经流程接口的流程按用途声明（06 §8、决策 D41）：事件消费、定时任务、回调用 `internal()`（只由系统身份运行），平台入口自己运行的用 `entryOnly()`，只作子流程的用 `subProcessOnly()`，
+   另一个平台转发并签名的访客请求（商店的店面经 `/apps/...`）用 `appProxy(代理)`（只经 `/api/proxy/{代理}/{流程}`，调用者是 `AppProxyCaller`，按 `per-tenant` / `per-visitor` 限流，正文不签名、当作不可信输入，10 §15.13、决策 D60）；依赖声明，由平台检查（步骤中对系统身份的检查只是已有处的多余的第二道防线，不再新加）。
 4. 业务模块（`app` 及以后的业务模块）**禁止引用 `reactor.*`**。以上规则由 ArchUnit 测试强制执行。
 5. 请求路径上禁止阻塞调用；测试环境启用 BlockHound 检测。
 
@@ -228,7 +229,7 @@ Gradle 9（wrapper）多模块工程，根目录为 `backend/`（模块：`core`
   应用扩展（12 §9）：`JABIZ_ADMIN_EXTENSION=<目录> pnpm ext:check`（类型、lint、测试；`app` 的示范为 `../backend/app/admin-extension`）
   应用自有 SPA（12 §12）：`pnpm app:check <目录>`（共用依赖的版本须与平台前端一致，不一致即失败；有 `@jabiz/ui/testing` 所用的测试工具时它们也须一致；Gradle 构建中为 `spaCheck<名>`，在 `check` 中）。
   示范门户 `backend/app/portal/`（`/portal/`，PWA）：`pnpm app:check ../backend/app/portal`，以及在该目录下 `pnpm install --frozen-lockfile && pnpm lint && pnpm typecheck && pnpm test`
-  挂在子路径下构建：`VITE_BASE=/admin/ pnpm build`；后端按 `jabiz.web.spa[i].path` / `.index` / `.content-security-policy` 提供多个 SPA，裸域名可用 `jabiz.web.root-redirect` 转向到一个路径、搬走的前缀用 `jabiz.web.redirects` 保持旧链接有效（见 17 §3.2）
+  挂在子路径下构建：`VITE_BASE=/admin/ pnpm build`；后端按 `jabiz.web.spa[i].path` / `.index` / `.content-security-policy` 提供多个 SPA（入口页随部署而变的公开值写 `content="{{jabiz:名}}"`、配置 `.index-values.<名>`，17g），裸域名可用 `jabiz.web.root-redirect` 转向到一个路径、搬走的前缀用 `jabiz.web.redirects` 保持旧链接有效（见 17 §3.2）
   接口变化后：`./gradlew :app:test --tests '*OpenApiSnapshotIT' -Dopenapi.update-snapshot=true`（写 `frontend/openapi/openapi.json`）→ `pnpm gen:api`，一起提交
 - 公开模板目录快照（15 §7）：`./gradlew :app:test --tests '*PublicQueriesSnapshotIT' -Dpublic-queries.update-snapshot=true`
   （写 `frontend/openapi/public-queries.json`，路径由 `jabizApp.publicQueriesSnapshot` 配置），随变更提交

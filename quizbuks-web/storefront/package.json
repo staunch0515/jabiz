@@ -1,0 +1,28 @@
+{
+  "name": "quizbuks-storefront",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "QuizBuks for Shopify: the storefront's quiz block, a plain Web Component built into the Theme App Extension's quiz.js (docs/quizbuks/shopify/S2b-ui.md section 2). No React, no @jabiz/ui: it runs inside a merchant's theme within a size budget.",
+  "packageManager": "pnpm@10.18.0",
+  "scripts": {
+    "build": "tsc -b && vite build && node scripts/size.mjs",
+    "typecheck": "tsc -b",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "versions": "node scripts/versions.mjs"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@jabiz/ui": "link:../../frontend/packages/ui",
+    "@types/node": "26.6.3",
+    "eslint": "10.11.0",
+    "globals": "17.12.0",
+    "jsdom": "30.1.1",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.70.1",
+    "vite": "8.3.1",
+    "vitest": "5.0.2",
+    "vitest-axe": "0.1.0"
+  }
+}

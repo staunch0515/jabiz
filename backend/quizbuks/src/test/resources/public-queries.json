@@ -369,7 +369,7 @@
         "type" : "text"
       },
       "rewardMethod" : {
-        "allowedValues" : [ "PLATFORM", "SPONSOR_CASH", "OFFLINE_REDEEM", "DIGITAL_PRIZE" ],
+        "allowedValues" : [ "PLATFORM", "SPONSOR_CASH", "OFFLINE_REDEEM", "DIGITAL_PRIZE", "CHANNEL" ],
         "dictUrn" : "urn:jabiz:dict:quizbuks:reward-method",
         "type" : "code"
       },

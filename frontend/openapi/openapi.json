@@ -3366,6 +3366,53 @@
         "tags" : [ "sign-up-controller" ]
       }
     },
+    "/api/auth/account/verify-email/check" : {
+      "post" : {
+        "operationId" : "verifyCheckOwn",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/TokenRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/VerifyCheck"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "sign-up-controller" ]
+      }
+    },
+    "/api/auth/account/verify-email/confirm" : {
+      "post" : {
+        "operationId" : "verifyOwn",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/VerifyRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "204" : {
+            "description" : "No Content"
+          }
+        },
+        "tags" : [ "sign-up-controller" ]
+      }
+    },
     "/api/auth/challenge/enroll" : {
       "post" : {
         "operationId" : "enrollUnderChallenge",
@@ -5751,6 +5798,80 @@
         "tags" : [ "process-controller" ]
       }
     },
+    "/api/proxy/{proxy}/{process}" : {
+      "get" : {
+        "operationId" : "get",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "proxy",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "path",
+          "name" : "process",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "app-proxy-controller" ]
+      },
+      "post" : {
+        "operationId" : "post",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "proxy",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "path",
+          "name" : "process",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "additionalProperties" : { },
+                "type" : "object"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "app-proxy-controller" ]
+      }
+    },
     "/api/queries/{queryId}" : {
       "post" : {
         "operationId" : "run",
@@ -5886,7 +6007,7 @@
     },
     "/api/reports/runs/{runId}" : {
       "get" : {
-        "operationId" : "get",
+        "operationId" : "get_1",
         "parameters" : [ {
           "in" : "path",
           "name" : "runId",

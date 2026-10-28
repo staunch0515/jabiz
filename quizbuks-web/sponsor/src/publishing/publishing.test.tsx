@@ -67,6 +67,8 @@ interface Server {
   mailServer?: Record<string, unknown> | null
   /** The draft's stored matching conditions (Q39), one row per option or range. */
   conditions?: Record<string, unknown>[]
+  /** The sponsor's staff (Q39). */
+  staff?: Record<string, unknown>[]
 }
 
 /** The server as the console sees it, for a signed-in, approved sponsor. Records what was posted. */
@@ -165,6 +167,8 @@ function server(options: Server = {}) {
         return json(200, { items: [{ publicationId: 'p1', total: rows.length, added: count('ADDED'), queued: count('QUEUED'),
           sent: count('SENT'), started: count('STARTED'), answered: count('ANSWERED') }], offset: 0, limit: 1 })
       }
+      case '/api/queries/qb.sponsor.staff':
+        return json(200, { items: options.staff ?? [], offset: 0, limit: 100 })
       case '/api/queries/qb.sponsor.cash-rewards':
         return json(200, { items: options.cashRewards ?? [], offset: 0, limit: 20, total: options.cashRewards?.length ?? 0 })
       case '/api/dictionaries/urn:jabiz:dict:quizbuks:publication-status':
@@ -767,6 +771,71 @@ describe('the redeem page (Q22b)', () => {
     expect(rows).toHaveLength(2)
     expect(rows.map((row) => row.getAttribute('data-status'))).toEqual(['CLAIMED', 'REDEEMED'])
     await waitFor(() => expect(within(rows[1]).getByTestId('redemption-status')).toHaveTextContent('Collected'))
+  })
+
+  it('names the staff member who handed a prize over (Q39), and nobody for the sponsor\'s own', async () => {
+    server({
+      redemptions: [prize({ status: 'REDEEMED', redeemedAt: '2026-10-20T00:30:00Z', redeemedByName: 'Kai' }),
+        prize({ redemptionId: 'r2', code: 'C-00000002', status: 'REDEEMED', redeemedAt: '2026-10-20T00:40:00Z',
+          redeemedByName: null })],
+      processes: { QB_REDEEM_CODE_ISSUE: [issued('ROTATING', 'rot-key-3')] },
+    })
+    window.history.replaceState(null, '', '/redeem')
+    render(<App />)
+    const rows = await screen.findAllByTestId('redemption-row')
+    expect(within(rows[0]).getByTestId('redemption-staff')).toHaveTextContent('Handed over by Kai')
+    expect(within(rows[1]).queryByTestId('redemption-staff')).toBeNull()
+  })
+})
+
+describe('the staff (Q39)', () => {
+  const KAI = '01a0f4fe-4660-7000-8000-000000000001'
+  const found = (onStaff: boolean) => ({ status: 200, body: { output: { userId: KAI, displayName: 'Kai', onStaff } } })
+  const done = { status: 200, body: { output: { userId: KAI, changed: true } } }
+
+  it('looks an ID up, shows whose it is and adds them; the list shows the staff', async () => {
+    const { processCalls } = server({ processes: { QB_SPONSOR_STAFF_FIND: [found(false)], QB_SPONSOR_STAFF_ADD: [done] } })
+    window.history.replaceState(null, '', '/staff')
+    render(<App />)
+    await waitFor(() => expect(screen.getByTestId('staff-list')).toHaveTextContent('No staff yet.'))
+    await userEvent.type(screen.getByLabelText('Their ID'), `  ${KAI} `)
+    await userEvent.click(screen.getByTestId('staff-find'))
+    expect(await screen.findByTestId('staff-candidate')).toHaveTextContent('This ID is Kai.')
+    expect(processCalls('QB_SPONSOR_STAFF_FIND')).toEqual([{ userId: KAI }])
+    await userEvent.click(screen.getByRole('button', { name: 'Add Kai' }))
+    await waitFor(() => expect(processCalls('QB_SPONSOR_STAFF_ADD')).toEqual([{ userId: KAI }]))
+    await waitFor(() => expect(screen.queryByTestId('staff-candidate')).toBeNull())
+    await expectAccessible()
+  })
+
+  it('says the server\'s reason for an ID that cannot be added, and offers no button for one already added', async () => {
+    server({ processes: { QB_SPONSOR_STAFF_FIND: [{ status: 422, body: { title: 'Rejected', status: 422,
+      detail: 'This ID is not a quiz taker\'s.', violations: [{ field: 'userId', ruleCode: 'QB_STAFF_NOT_A_TAKER',
+        message: 'This ID is not a quiz taker\'s.' }] } }, found(true)] } })
+    window.history.replaceState(null, '', '/staff')
+    render(<App />)
+    await userEvent.type(await screen.findByLabelText('Their ID'), 'nobody')
+    await userEvent.click(screen.getByTestId('staff-find'))
+    expect(await screen.findByTestId('staff-find-failed')).toHaveTextContent("This ID is not a quiz taker's.")
+    await userEvent.clear(screen.getByLabelText('Their ID'))
+    await userEvent.type(screen.getByLabelText('Their ID'), KAI)
+    await userEvent.click(screen.getByTestId('staff-find'))
+    expect(await screen.findByTestId('staff-candidate')).toHaveTextContent('Kai is already on your staff.')
+    expect(screen.queryByTestId('staff-add-confirm')).toBeNull()
+  })
+
+  it('removes a staff member after the sponsor confirms', async () => {
+    const { processCalls } = server({ staff: [{ userId: KAI, displayName: 'Kai', addedAt: '2026-10-20T00:00:00Z' }],
+      processes: { QB_SPONSOR_STAFF_REMOVE: [done] } })
+    window.history.replaceState(null, '', '/staff')
+    render(<App />)
+    const row = await screen.findByTestId('staff-row')
+    expect(row).toHaveTextContent('Kai')
+    expect(row).toHaveTextContent(KAI)
+    await expectAccessible()
+    await userEvent.click(within(row).getByTestId('staff-remove'))
+    await userEvent.click(await screen.findByRole('button', { name: 'Remove' }))
+    await waitFor(() => expect(processCalls('QB_SPONSOR_STAFF_REMOVE')).toEqual([{ userId: KAI }]))
   })
 })
 

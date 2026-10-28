@@ -15,19 +15,28 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
 } from '@jabiz/ui'
-import { QueryClient, QueryClientProvider, useMutation, useQuery } from '@tanstack/react-query'
+import { QueryClient, QueryClientProvider, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { check, connect, join, transferAdmin, type Shop } from './api'
 import { NotEmbeddedError, sessionToken } from './appBridge'
+import { CampaignsPage } from './CampaignsPage'
+import { PlanPage, planKey, UsageNotice } from './PlanPage'
+import { reasonOf } from './errors'
 import { SHOPIFY } from './messages'
 
 /**
  * QuizBuks for Shopify's embedded pages (docs/quizbuks/shopify/S1-install.md section 6): sign in with Shopify's
  * session token (the platform's external token sign-in, decision D59), join the store (QBS_SHOP_JOIN, whose answer is
  * what the page shows), and the store's overview: its connection to Shopify and its members, the admin handing the
- * role on. Every rule is the server's; the page only offers what it may.
+ * role on; (S2b, docs/quizbuks/shopify/S2b-ui.md) the store's quiz campaigns; and (S3b, docs/quizbuks/shopify/S3b-ui.md)
+ * its plan and use, with a notice on the overview as the period's attempts run out. Every rule is the server's; the
+ * page only offers what it may.
  */
 export default function App() {
   const [queryClient] = useState(() => new QueryClient({ defaultOptions: { queries: { retry: false } } }))
@@ -42,15 +51,18 @@ export default function App() {
   )
 }
 
-/** What the server said (its rule's text in the user's language), else the error's message. */
-function reasonOf(error: unknown): string {
-  if (error instanceof ApiError && error.violations.length > 0) return error.violations.map((v) => v.message).join(' ')
-  return error instanceof Error ? error.message : String(error)
-}
 
 function ShopPage() {
   const { t } = useTranslation(SHOPIFY)
   const auth = useAuth()
+  // The campaigns are read when first shown, then kept mounted (hidden when not shown) so an open editor keeps what
+  // was typed while the overview is shown.
+  const [campaignsShown, setCampaignsShown] = useState(false)
+  const [tab, setTab] = useState('overview')
+  const show = (value: string) => {
+    setTab(value)
+    if (value === 'campaigns') setCampaignsShown(true)
+  }
 
   // Signs in with a session token (each is used once) whenever the tab has no session.
   const signIn = useMutation({
@@ -72,9 +84,12 @@ function ShopPage() {
     staleTime: Infinity,
     refetchOnWindowFocus: false,
   })
+  const queryClient = useQueryClient()
+  // A reload (after connecting or checking the store) reads the plan again too: its connection may have changed.
   const reload = useCallback(async () => {
     await opened.refetch()
-  }, [opened])
+    await queryClient.invalidateQueries({ queryKey: planKey(auth.userId) })
+  }, [opened, queryClient, auth.userId])
 
   // The tab's session is another store's staff member (the admin switched stores): sign in as this one, once.
   const switchUser = useMutation({
@@ -110,7 +125,27 @@ function ShopPage() {
           </AlertDescription>
         </Alert>
       )}
-      {opened.data && <Overview shop={opened.data} userId={auth.userId} reload={reload} />}
+      {opened.data && (
+        <Tabs value={tab} onValueChange={show}>
+          <TabsList>
+            <TabsTrigger value="overview">{t('tabs.overview')}</TabsTrigger>
+            <TabsTrigger value="campaigns">{t('tabs.campaigns')}</TabsTrigger>
+            <TabsTrigger value="plan">{t('tabs.plan')}</TabsTrigger>
+          </TabsList>
+          <TabsContent value="overview" className="flex flex-col gap-4">
+            <UsageNotice userId={auth.userId} onShowPlan={() => show('plan')} />
+            <Overview shop={opened.data} userId={auth.userId} reload={reload} />
+          </TabsContent>
+          {campaignsShown && (
+            <TabsContent value="campaigns" forceMount className="data-[state=inactive]:hidden">
+              <CampaignsPage connection={opened.data.connection} />
+            </TabsContent>
+          )}
+          <TabsContent value="plan">
+            <PlanPage userId={auth.userId} onShowOverview={() => show('overview')} />
+          </TabsContent>
+        </Tabs>
+      )}
     </div>
   )
 }

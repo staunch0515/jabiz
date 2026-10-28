@@ -286,7 +286,7 @@ public final class AttemptFinishing {
             && AttemptRules.tooLate(PlaySteps.instant(attempt.get("deadline")), now);
     }
 
-    private static EntityQuery byId(Object attemptId) {
+    static EntityQuery byId(Object attemptId) {
         return EntityQuery.builder().where(new QueryPredicate.In("attemptId", ids(attemptId))).limit(1).build();
     }
 
@@ -413,7 +413,7 @@ public final class AttemptFinishing {
         return payload;
     }
 
-    private static Violation finished(EntityInstance attempt) {
+    static Violation finished(EntityInstance attempt) {
         return new Violation("attemptId", PlayCodes.FINISHED, "The attempt is finished already",
             Map.of("status", String.valueOf((Object) attempt.get("status"))));
     }

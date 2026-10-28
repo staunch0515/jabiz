@@ -227,7 +227,8 @@ public class ProcessExecutor implements SmartInitializingSingleton {
     /**
      * Refuses to start {@code definition} as a top-level process unless its declaration allows it (decision D41):
      * an {@code internal()} process as the system only, an {@code entryOnly()} one only from its platform entry point
-     * ({@link ExecutionOptions#atEntryOf}), a {@code subProcessOnly()} one never. 403 {@code PROCESS_INTERNAL},
+     * ({@link ExecutionOptions#atEntryOf}), an {@code appProxy()} one only from the proxy's entry (decision D60), a
+     * {@code subProcessOnly()} one never. 403 {@code PROCESS_INTERNAL},
      * whatever the actor's permissions. The process API calls it before converting the input, too.
      */
     public static void requireStartable(ProcessDefinition<?, ?, ?> definition, RequestContext request,
@@ -235,7 +236,8 @@ public class ProcessExecutor implements SmartInitializingSingleton {
         boolean allowed = switch (definition.access()) {
             case OPEN -> true;
             case INTERNAL -> isSystem(request);
-            case ENTRY_ONLY -> options.isEntryOf(definition);
+            // An app proxy's process runs from the proxy's entry (AppProxyController), as an entry-only one does.
+            case ENTRY_ONLY, APP_PROXY -> options.isEntryOf(definition);
             case SUB_PROCESS_ONLY -> false;
         };
         if (!allowed) {
@@ -253,7 +255,7 @@ public class ProcessExecutor implements SmartInitializingSingleton {
         boolean allowed = switch (definition.access()) {
             case OPEN, SUB_PROCESS_ONLY -> true;
             case INTERNAL -> isSystem(request);
-            case ENTRY_ONLY -> false;
+            case ENTRY_ONLY, APP_PROXY -> false;
         };
         if (!allowed) {
             throw refused(definition, "Process " + definition.name() + " cannot be called as a sub-process here: "

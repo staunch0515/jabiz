@@ -24,6 +24,7 @@ import { CircleHelp, FileQuestion, LayoutDashboard, Megaphone, MessagesSquare, R
   Gift,
   Mail,
   Ticket,
+  UsersRound,
 } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -41,6 +42,7 @@ import { PublicationPage } from './publishing/PublicationPage'
 import { CASH_REWARDS_PATH, CashRewardsPage } from './publishing/CashRewardsPage'
 import { DIGITAL_PRIZES_PATH, DigitalPrizesPage } from './publishing/DigitalPrizesPage'
 import { REDEEM_PATH, RedeemPage } from './publishing/RedeemPage'
+import { STAFF_PATH, StaffPage } from './publishing/StaffPage'
 import { MailServerPage } from './publishing/MailServerPage'
 import { MAIL_SERVER_PATH } from './publishing/paths'
 import { publicationIdOf, PUBLICATIONS_PATH } from './publishing/paths'
@@ -146,6 +148,7 @@ function SignedIn({ path }: { path: string }) {
   else if (path === CASH_REWARDS_PATH) page = <CashRewardsPage />
   else if (path === DIGITAL_PRIZES_PATH) page = <DigitalPrizesPage />
   else if (path === REDEEM_PATH) page = <RedeemPage />
+  else if (path === STAFF_PATH) page = <StaffPage />
   else if (analyticsIdOf(path)) page = <PublicationAnalyticsPage key={path} publicationId={analyticsIdOf(path)!} />
   else if (publicationIdOf(path)) page = <PublicationPage key={path} publicationId={publicationIdOf(path)!} />
   else if (path === ONBOARDING) page = <OnboardingPage />
@@ -171,6 +174,7 @@ function SignedIn({ path }: { path: string }) {
       { key: 'cash', label: t('publishing.cash.nav'), path: CASH_REWARDS_PATH, icon: HandCoins },
       { key: 'digital', label: t('publishing.digital.nav'), path: DIGITAL_PRIZES_PATH, icon: Ticket },
       { key: 'redeem', label: t('publishing.redeem.nav'), path: REDEEM_PATH, icon: Gift },
+      { key: 'staff', label: t('publishing.staff.nav'), path: STAFF_PATH, icon: UsersRound },
     ] },
     { key: 'money', label: t('nav.groups.money'), items: [
       ...(kudos ? [{ key: 'wallet', label: t('wallet.nav'), path: WALLET_PATH, icon: Wallet }] : []),

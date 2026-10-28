@@ -193,7 +193,8 @@ public class JobChecks implements PlatformCheck {
             case INTERNAL -> List.of();
             case OPEN -> manualToo ? List.of() : List.of(CheckProblem.warning(category, where, target
                 + ", which is open: declare it internal() (decision D41), or manualToo() if it is also run by hand"));
-            case ENTRY_ONLY, SUB_PROCESS_ONLY -> List.of(CheckProblem.error(category, where, target + ", which is "
+            case ENTRY_ONLY, SUB_PROCESS_ONLY, APP_PROXY -> List.of(CheckProblem.error(category, where, target
+                + ", which is "
                 + process.access() + " and cannot be started by the system: declare it internal() (decision D41)"));
         };
     }

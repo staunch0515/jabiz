@@ -11,8 +11,8 @@ application_url = "https://<host>/shopify/"
 embedded = true
 
 [access_scopes]
-# S1 reads the shop's name only, which needs no scope; S2 adds the discount scopes.
-scopes = ""
+# S1 reads the shop's name only, which needs no scope; S2a creates and deletes the storefront quiz's discounts.
+scopes = "read_discounts,write_discounts"
 use_legacy_install_flow = false
 
 [auth]
@@ -26,10 +26,22 @@ api_version = "2026-10"
   topics = ["app/uninstalled"]
   uri = "https://<host>/api/inbound/shopify"
 
+  # S3a: a change of the shop's subscription (Shopify App Pricing) has its plan read again.
+  [[webhooks.subscriptions]]
+  topics = ["app_subscriptions/update"]
+  uri = "https://<host>/api/inbound/shopify"
+
   # The three privacy topics every public app must answer (signed like every webhook; a bad signature gets 401).
   [[webhooks.subscriptions]]
   compliance_topics = ["customers/data_request", "customers/redact", "shop/redact"]
   uri = "https://<host>/api/inbound/shopify"
+
+# S2a (docs/quizbuks/shopify/S2-storefront.md section 3): the storefront's block calls /apps/quizbuks/<process>, which
+# Shopify forwards, signed, to QuizBuks's app proxy entry (platform decision D60).
+[app_proxy]
+url = "https://<host>/api/proxy/shopify"
+subpath = "quizbuks"
+prefix = "apps"
 
 [pos]
 embedded = false

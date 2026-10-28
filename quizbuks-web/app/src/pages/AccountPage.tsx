@@ -13,6 +13,7 @@ import { legalPath } from '../qb/legal'
 import { Link, navigate, useLocation } from '../qb/router'
 import { ProfileDetails } from './ProfileDetails'
 import { PROFILE_QUERY, ProfileForm } from './ProfileForm'
+import { StaffAccount } from '../staff/StaffAccount'
 
 /** The account page, where a round trip through an identity provider to link an account comes back to. */
 export const ACCOUNT_PATH = '/account'
@@ -36,7 +37,8 @@ function takeLinked(): IdentityLinked | null {
 /**
  * The taker's own account (U-70, U-71; M-02 for sign-ins): the profile, the address (not changeable, U-70), the
  * password, two-step verification, linked Google accounts when the app offers Google, the sessions at the app and
- * the latest sign-ins, the mail settings (Q7a) and the interface language.
+ * the latest sign-ins, the mail settings (Q7a) and the interface language; the taker's ID and their place on a
+ * sponsor's staff (Q39).
  */
 export function AccountPage() {
   const { t } = useTranslation(QB)
@@ -68,6 +70,7 @@ export function AccountPage() {
           <ProfileDetails />
         </AccountSection>
       </div>
+      <StaffAccount />
       <AccountInstallEntry />
       <AccountSections returnTo={ACCOUNT_PATH} linked={linked} mailHint={tApp('mail.hint')}
         onSignedOut={() => navigate('/login', { replace: true })} />

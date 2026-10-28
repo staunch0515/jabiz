@@ -209,6 +209,20 @@ class ProcessChecksTest {
     }
 
     @Test
+    void callingAnAppProxysProcessIsAnError() {
+        ProcessDefinition<String, Out, ProcessContext> proxied = process("PROXIED", 1, pb -> pb
+            .appProxy("shop").step("Mark", MarkStep.class, NoMetadata.INSTANCE));
+        ProcessDefinition<String, Out, ProcessContext> caller = process("CALLER", 1, pb -> pb
+            .permissions("c.run").step("Call", CallProcess.of("PROXIED", 1, ctx -> "x", null)));
+
+        assertThat(check(false, proxied, caller)).extracting(CheckProblem::location, CheckProblem::message)
+            .containsExactly(tuple("CALLER@1 step 'Call'",
+                "calls PROXIED@1, which only its app proxy runs (appProxy, decision D60)"));
+        assertThat(proxied.permissions()).containsExactly("app-proxy.shop");
+        assertThat(proxied.listed()).isFalse();
+    }
+
+    @Test
     void onlyInternalProcessesCallInternalOnes() {
         ProcessDefinition<String, Out, ProcessContext> handOff = process("HAND_OFF", 1, pb -> pb
             .permissions("h.run").internal().step("Mark", MarkStep.class, NoMetadata.INSTANCE));

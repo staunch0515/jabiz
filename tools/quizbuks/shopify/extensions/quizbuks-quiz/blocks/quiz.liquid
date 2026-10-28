@@ -1,0 +1,25 @@
+{%- comment -%}
+  QuizBuks for Shopify (docs/quizbuks/shopify/S2b-ui.md section 2): the storefront's quiz on a product page. No
+  setting: the shop's live campaign is the one shown. The element reads the campaign through the app proxy
+  (/apps/quizbuks, behind the storefront's language prefix) and shows nothing when there is none.
+{%- endcomment -%}
+{%- liquid
+  assign root = routes.root_url
+  if root == '/'
+    assign proxy = '/apps/quizbuks'
+  else
+    assign proxy = root | append: '/apps/quizbuks'
+  endif
+-%}
+<quizbuks-quiz locale="{{ request.locale.iso_code }}" root="{{ root }}" proxy="{{ proxy }}"
+  customer="{{ customer.id }}"></quizbuks-quiz>
+
+{% schema %}
+{
+  "name": "t:name",
+  "target": "section",
+  "javascript": "quiz.js",
+  "enabled_on": { "templates": ["product"] },
+  "settings": []
+}
+{% endschema %}

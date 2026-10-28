@@ -1,0 +1,6 @@
+# QuizBuks for Shopify's storefront block (docs/quizbuks/shopify/S2b-ui.md section 2): a Theme App Extension the
+# Shopify CLI deploys with the app (tools/quizbuks/shopify/deploy-extension.sh builds assets/quiz.js first, from
+# quizbuks-web/storefront). The format follows Shopify's theme app extensions; check it on the development store
+# (S2-storefront.md section 8).
+name = "QuizBuks quiz"
+type = "theme"

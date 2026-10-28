@@ -1,6 +1,7 @@
 package com.jabiz.runtime.web;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.boot.context.properties.bind.ConstructorBinding;
 
 import java.time.Duration;
 import java.util.Map;
@@ -36,10 +37,23 @@ public record ProcessRateLimitProperties(Map<String, Limit> rateLimits) {
      *                    only)
      * @param perInstance of everyone together, on this instance
      * @param period      default one minute
+     * @param perTenant   per tenant of an app proxy's caller (decision D60): app proxy processes only
+     * @param perVisitor  per visitor key within the tenant (the query parameter the proxy names, decision D60): app
+     *                    proxy processes only; the key is the visitor's own and proves nothing, so it only spreads the
+     *                    tenant's allowance
      */
-    public record Limit(Integer perUser, Integer perAddress, Integer perInstance, Duration period) {
+    public record Limit(Integer perUser, Integer perAddress, Integer perInstance, Duration period, Integer perTenant,
+        Integer perVisitor) {
+
+        // Bound through this constructor: the record has another one, so the binder must be told.
+        @ConstructorBinding
         public Limit {
             period = period == null ? DEFAULT_PERIOD : period;
+        }
+
+        /** A limit of the process API: per actor, address and instance. */
+        public Limit(Integer perUser, Integer perAddress, Integer perInstance, Duration period) {
+            this(perUser, perAddress, perInstance, period, null, null);
         }
     }
 }

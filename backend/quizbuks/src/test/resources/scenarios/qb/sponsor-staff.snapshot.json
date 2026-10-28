@@ -1,0 +1,174 @@
+{
+  "scenario" : "Sponsor staff",
+  "asOf" : "2026-10-01T01:07:00Z",
+  "entities" : {
+    "QbSponsorStaff" : [ ],
+    "QbRedemption" : [ {
+      "redemptionId" : "#uuid:1",
+      "attemptId" : "#uuid:2",
+      "publicationId" : "#uuid:3",
+      "publisherKind" : "SPONSOR",
+      "publisherId" : "#uuid:4",
+      "userId" : "#uuid:5",
+      "amount" : "300",
+      "description" : "A coffee at our counter",
+      "code" : "C-000003E4",
+      "status" : "REDEEMED",
+      "dueAt" : "2026-10-01T01:06:00Z",
+      "expiresAt" : "2026-10-31T01:06:00Z",
+      "redeemedAt" : "2026-10-01T01:06:00Z",
+      "claimKind" : "ROTATING",
+      "claimedAt" : "2026-10-01T01:06:00Z",
+      "confirmBy" : null,
+      "redeemedBy" : "#uuid:6",
+      "voidedBy" : null,
+      "voidNote" : null,
+      "revision" : "2",
+      "versionNo" : 2,
+      "effectStartTime" : "2026-10-01T01:06:00Z",
+      "createdTime" : "2026-10-01T01:06:00Z",
+      "processSeqId" : "#op:1"
+    }, {
+      "redemptionId" : "#uuid:7",
+      "attemptId" : "#uuid:8",
+      "publicationId" : "#uuid:3",
+      "publisherKind" : "SPONSOR",
+      "publisherId" : "#uuid:4",
+      "userId" : "#uuid:9",
+      "amount" : "300",
+      "description" : "A coffee at our counter",
+      "code" : "C-000003EC",
+      "status" : "REDEEMED",
+      "dueAt" : "2026-10-01T01:07:00Z",
+      "expiresAt" : "2026-10-31T01:07:00Z",
+      "redeemedAt" : "2026-10-01T01:07:00Z",
+      "claimKind" : "PRINTED",
+      "claimedAt" : "2026-10-01T01:07:00Z",
+      "confirmBy" : "2026-10-01T01:17:00Z",
+      "redeemedBy" : "#uuid:6",
+      "voidedBy" : null,
+      "voidNote" : null,
+      "revision" : "3",
+      "versionNo" : 3,
+      "effectStartTime" : "2026-10-01T01:07:00Z",
+      "createdTime" : "2026-10-01T01:07:00Z",
+      "processSeqId" : "#op:2"
+    } ],
+    "QbMessage" : [ {
+      "messageId" : "#uuid:10",
+      "recipientId" : "#uuid:5",
+      "type" : "REWARD",
+      "kind" : "REDEEM_DUE",
+      "title" : {
+        "en" : "You won a prize",
+        "ja" : "賞品を獲得しました",
+        "zh" : "你赢得了奖品"
+      },
+      "body" : {
+        "en" : "Collect your prize for \"Coffee week\" (worth 300 Kudos) at the sponsor's place by 2026-10-31: A coffee at our counter",
+        "ja" : "「Coffee week」の賞品（300 Kudos 相当）を 2026-10-31 までにスポンサーの店舗で受け取ってください：A coffee at our counter",
+        "zh" : "请在 2026-10-31 前到商家处领取\"Coffee week\"的奖品（价值 300 Kudos）：A coffee at our counter"
+      },
+      "publicationId" : "#uuid:3",
+      "action" : "RESULT",
+      "actionId" : "#uuid:2",
+      "sourceKey" : "redeem-due:01a0f4ff-30c0-7000-8000-0000000003e5",
+      "createdAt" : "2026-10-01T01:06:00Z",
+      "readAt" : null,
+      "clickedAt" : null,
+      "version" : 1
+    }, {
+      "messageId" : "#uuid:11",
+      "recipientId" : "#uuid:5",
+      "type" : "REWARD",
+      "kind" : "REDEEM_REDEEMED",
+      "title" : {
+        "en" : "Prize collected",
+        "ja" : "賞品を受け取りました",
+        "zh" : "奖品已领取"
+      },
+      "body" : {
+        "en" : "You collected your prize for \"Coffee week\" (code C-000003E4, worth 300 Kudos). Enjoy!",
+        "ja" : "「Coffee week」の賞品（コード C-000003E4、300 Kudos 相当）を受け取りました。お楽しみください！",
+        "zh" : "你已领取\"Coffee week\"的奖品（编码 C-000003E4，价值 300 Kudos）。请享用！"
+      },
+      "publicationId" : "#uuid:3",
+      "action" : "RESULT",
+      "actionId" : "#uuid:2",
+      "sourceKey" : "redeem-redeemed:01a0f4ff-30c0-7000-8000-0000000003e5",
+      "createdAt" : "2026-10-01T01:06:00Z",
+      "readAt" : null,
+      "clickedAt" : null,
+      "version" : 1
+    }, {
+      "messageId" : "#uuid:12",
+      "recipientId" : "#uuid:9",
+      "type" : "REWARD",
+      "kind" : "REDEEM_DUE",
+      "title" : {
+        "en" : "You won a prize",
+        "ja" : "賞品を獲得しました",
+        "zh" : "你赢得了奖品"
+      },
+      "body" : {
+        "en" : "Collect your prize for \"Coffee week\" (worth 300 Kudos) at the sponsor's place by 2026-10-31: A coffee at our counter",
+        "ja" : "「Coffee week」の賞品（300 Kudos 相当）を 2026-10-31 までにスポンサーの店舗で受け取ってください：A coffee at our counter",
+        "zh" : "请在 2026-10-31 前到商家处领取\"Coffee week\"的奖品（价值 300 Kudos）：A coffee at our counter"
+      },
+      "publicationId" : "#uuid:3",
+      "action" : "RESULT",
+      "actionId" : "#uuid:8",
+      "sourceKey" : "redeem-due:01a0f500-1b20-7000-8000-0000000003ed",
+      "createdAt" : "2026-10-01T01:07:00Z",
+      "readAt" : null,
+      "clickedAt" : null,
+      "version" : 1
+    }, {
+      "messageId" : "#uuid:13",
+      "recipientId" : "#uuid:4",
+      "type" : "SYSTEM",
+      "kind" : "REDEEM_CLAIMED",
+      "title" : {
+        "en" : "A taker scanned your printed code",
+        "ja" : "回答者が印刷したコードをスキャンしました",
+        "zh" : "有答题人扫了你的固定码"
+      },
+      "body" : {
+        "en" : "Someone at your place claims the prize for \"Coffee week\" (code C-000003EC, worth 300 Kudos). Confirm it on the redeem page within ten minutes, or decline it.",
+        "ja" : "店舗で誰かが「Coffee week」の賞品（コード C-000003EC、300 Kudos 相当）の受け取りを申請しています。10 分以内に引き換えページで確認するか、拒否してください。",
+        "zh" : "有人在你的店里申请领取\"Coffee week\"的奖品（编码 C-000003EC，价值 300 Kudos）。请在十分钟内到领奖页确认，或拒绝。"
+      },
+      "publicationId" : "#uuid:3",
+      "action" : "REDEEM",
+      "actionId" : "#uuid:7",
+      "sourceKey" : "redeem-claimed:01a0f500-1b20-7000-8000-0000000003ed:1790816820",
+      "createdAt" : "2026-10-01T01:07:00Z",
+      "readAt" : null,
+      "clickedAt" : null,
+      "version" : 1
+    }, {
+      "messageId" : "#uuid:14",
+      "recipientId" : "#uuid:9",
+      "type" : "REWARD",
+      "kind" : "REDEEM_REDEEMED",
+      "title" : {
+        "en" : "Prize collected",
+        "ja" : "賞品を受け取りました",
+        "zh" : "奖品已领取"
+      },
+      "body" : {
+        "en" : "You collected your prize for \"Coffee week\" (code C-000003EC, worth 300 Kudos). Enjoy!",
+        "ja" : "「Coffee week」の賞品（コード C-000003EC、300 Kudos 相当）を受け取りました。お楽しみください！",
+        "zh" : "你已领取\"Coffee week\"的奖品（编码 C-000003EC，价值 300 Kudos）。请享用！"
+      },
+      "publicationId" : "#uuid:3",
+      "action" : "RESULT",
+      "actionId" : "#uuid:8",
+      "sourceKey" : "redeem-redeemed:01a0f500-1b20-7000-8000-0000000003ed",
+      "createdAt" : "2026-10-01T01:07:00Z",
+      "readAt" : null,
+      "clickedAt" : null,
+      "version" : 1
+    } ]
+  }
+}

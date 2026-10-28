@@ -91,7 +91,11 @@ public class SecurityConfig {
         // Inbound webhooks (decision D37): the provider's signature is the credential; credentials sent along are
         // not even looked at, so a stray Authorization header cannot turn a delivery into a 401.
         // InboundWebhookWebFilter has refused unknown providers, other methods and callers over the limit already.
-        ServerWebExchangeMatchers.pathMatchers(HttpMethod.POST, "/api/inbound/*"));
+        ServerWebExchangeMatchers.pathMatchers(HttpMethod.POST, "/api/inbound/*"),
+        // App proxies (decision D60): the other platform's signature is the credential, checked by the controller;
+        // credentials sent along are not looked at. AppProxyWebFilter has refused unknown proxies and other methods.
+        ServerWebExchangeMatchers.pathMatchers(HttpMethod.GET, "/api/proxy/*/*"),
+        ServerWebExchangeMatchers.pathMatchers(HttpMethod.POST, "/api/proxy/*/*"));
 
     /**
      * Public read access (docs/design/15-public-access.md section 6; decision D17), open to everyone and never

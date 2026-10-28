@@ -28,7 +28,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  * QuizBuks for Shopify's integration tests (docs/quizbuks/shopify/S1-install.md): session tokens signed with the
  * app's test secret as Shopify would sign them, sign-in at the entry {@code shopify}, webhooks signed over their body,
  * and a stub of the shops' Admin API on this machine (token exchange, refresh and the shop's name), which by default
- * grants a fresh expiring pair and names a shop after its address. QuizBuks is set up once (the role QBS_SHOP).
+ * grants a fresh expiring pair and names a shop after its address, and (S2a) creates discounts whose bulk creations are
+ * done at once, and (S3a) answers each shop's subscriptions from {@link #SUBSCRIPTIONS} (none by default). QuizBuks is
+ * set up once (the role QBS_SHOP, the parameters published).
  */
 abstract class ShopifyItSupport extends ContentItSupport {
 
@@ -36,6 +38,9 @@ abstract class ShopifyItSupport extends ContentItSupport {
     static final String KEY = "test-only-quizbuks-shopify-key";
     static final JsonMapper JSON = JsonMapper.builder().build();
     static final AtomicInteger GRANTS = new AtomicInteger();
+
+    /** S3a: a shop's active subscriptions as Shopify answers them (the JSON array), by its address. */
+    static final Map<String, String> SUBSCRIPTIONS = new java.util.concurrent.ConcurrentHashMap<>();
 
     static final StubHttpServer SHOPIFY = StubHttpServer.start(ShopifyItSupport::shopify);
 
@@ -61,6 +66,29 @@ abstract class ShopifyItSupport extends ContentItSupport {
                 + "\"expires_in\":3600,\"refresh_token\":\"shprt_" + n + "\",\"refresh_token_expires_in\":7776000}");
         }
         if (path.endsWith("/graphql.json")) {
+            String body = request.body();
+            // S2a: the discounts; every bulk creation is done at once and adds every code.
+            if (body.contains("discountCodeBasicCreate")) {
+                return StubHttpServer.Answer.json(200, "{\"data\":{\"discountCodeBasicCreate\":{\"codeDiscountNode\":"
+                    + "{\"id\":\"gid://shopify/DiscountCodeNode/" + GRANTS.incrementAndGet() + "\"},\"userErrors\":[]}}}");
+            }
+            if (body.contains("discountRedeemCodeBulkAdd")) {
+                return StubHttpServer.Answer.json(200, "{\"data\":{\"discountRedeemCodeBulkAdd\":{\"bulkCreation\":"
+                    + "{\"id\":\"gid://shopify/DiscountRedeemCodeBulkCreation/" + GRANTS.incrementAndGet()
+                    + "\"},\"userErrors\":[]}}}");
+            }
+            if (body.contains("discountRedeemCodeBulkCreation")) {
+                return StubHttpServer.Answer.json(200, "{\"data\":{\"discountRedeemCodeBulkCreation\":{\"done\":true,"
+                    + "\"failedCount\":0,\"codes\":{\"nodes\":[]}}}}");
+            }
+            if (body.contains("currentAppInstallation")) {
+                return StubHttpServer.Answer.json(200, "{\"data\":{\"currentAppInstallation\":{\"activeSubscriptions\":"
+                    + SUBSCRIPTIONS.getOrDefault(shop, "[]") + "}}}");
+            }
+            if (body.contains("discountCodeDelete")) {
+                return StubHttpServer.Answer.json(200, "{\"data\":{\"discountCodeDelete\":{\"deletedCodeDiscountId\":"
+                    + "\"gid://shopify/DiscountCodeNode/1\",\"userErrors\":[]}}}");
+            }
             return StubHttpServer.Answer.json(200, "{\"data\":{\"shop\":{\"name\":\"Shop " + shop + "\"}}}");
         }
         return StubHttpServer.Answer.of(404, "");
@@ -75,7 +103,8 @@ abstract class ShopifyItSupport extends ContentItSupport {
     @BeforeEach
     void setUpShopify() {
         if (query("SELECT 1 FROM sec_role_version WHERE role_code = 'QBS_SHOP'").isEmpty()) {
-            runSetup(admin()).expectStatus().isOk();
+            // The controlled parameters too (S2: a storefront's submission reads the engine's, as every one does).
+            publishProposals(setup());
         }
         SHOPIFY.reset();
     }
@@ -200,5 +229,14 @@ abstract class ShopifyItSupport extends ContentItSupport {
     static List<Map<String, Object>> memberRows(String shop) {
         return query("SELECT user_id, staff_id, role, shop_status FROM qbs_shop_member WHERE shop_domain = ?"
             + " ORDER BY joined_at, staff_id", shop);
+    }
+
+    /** The rule code of a problem: its first violation's, or its own. */
+    static String ruleCode(Map<String, Object> problem) {
+        Object violations = problem.get("violations");
+        if (violations instanceof List<?> list && !list.isEmpty() && list.getFirst() instanceof Map<?, ?> first) {
+            return String.valueOf(first.get("ruleCode"));
+        }
+        return String.valueOf(problem.get("code"));
     }
 }

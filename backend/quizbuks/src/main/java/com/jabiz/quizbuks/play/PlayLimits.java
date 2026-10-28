@@ -14,6 +14,12 @@ public final class PlayLimits {
     public static final Duration SUBMIT_GRACE = Duration.ofSeconds(5);
 
     /**
+     * S2: the least time from a channel's start to its submission. A storefront's visitor is anonymous and can start
+     * again under another key, so a script that submits at once is refused; a person takes longer to read a question.
+     */
+    public static final Duration CHANNEL_MIN_ANSWER = Duration.ofSeconds(3);
+
+    /**
      * Pending rewards one run of {@code QB_PENDING_SETTLE} pays, in order, under the sponsor's wallet lock; the rest
      * in the next run, started by an event in a transaction of its own (D-Q5-5).
      */

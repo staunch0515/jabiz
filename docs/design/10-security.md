@@ -318,12 +318,14 @@ BCrypt 有意很慢（每次数十到数百毫秒 CPU）。登录洪峰时若不
 | `scopes` | 缺省 `openid profile email`，必须含 `openid` |
 | `labels` | 登录按钮的文字（`{语言: 文本}`），缺省为 `id` |
 | `mfa-amr` | ID 令牌的 `amr` 含其中任一值时视同平台的二次验证；缺省为空（不信任，照常走第 9 节） |
-| `kind` | `generic`（缺省）或 `google`（16f-1）：Google 的 `issuer` 缺省为 `https://accounts.google.com`，邮箱是否可信另有规则（见"自动开户"）；其他值启动报错（`apple` 在 16f-2） |
+| `kind` | `generic`（缺省）、`google`（16f-1）、`facebook` 或 `line`（16zk，决策 D61 第 1 条）：Google 的 `issuer` 缺省为 `https://accounts.google.com`，邮箱是否可信另有规则（见"自动开户"）；Facebook 缺省 `https://www.facebook.com`、LINE 缺省 `https://access.line.me`（见下文"Facebook 与 LINE"）；其他值启动报错（`apple` 在 16f-2） |
 | `auto-provision` | 缺省 `false`：未关联的外部账号可否开户（D39，见"自动开户"） |
+| `sign-up-unverified-email` | 缺省 `false`，须同时开启 `auto-provision`（否则启动报错）：提供方不担保的邮箱也开户，账号未验证、可预占（决策 D61 第 3 条，见"自动开户"） |
 
 启动检查（类别 `SECURITY`）一次报告全部问题：缺项（`redirect-uri` 与 `redirect-uris` 至少有一个）、`id` 格式或重复、`scopes` 无 `openid`、
 `issuer` / `redirect-uri` / `redirect-uris.<入口>` 不是绝对的 `https` 地址（只有 `localhost` / `127.0.0.1` 可用 `http`，供开发与测试）、回调带片段（`#`）、
-`redirect-uris` 的键不是入口名、`redirect-uri` 与 `redirect-uris.admin` 都写了却不同、`kind` 未知、`auto-provision` 而 `scopes` 无 `email`；
+`redirect-uris` 的键不是入口名、`redirect-uri` 与 `redirect-uris.admin` 都写了却不同、`kind` 未知、`auto-provision` 而 `scopes` 无 `email`、
+`sign-up-unverified-email` 而无 `auto-provision`、`kind: line` 的 `client-secret` 不足 32 字节（UTF-8）；
 `auto-provision` 而它服务的入口（有回调的）都不允许注册为**警告**。启动时不访问身份提供方。
 
 **接口**（公开，认证过滤器不处理）
@@ -338,12 +340,18 @@ BCrypt 有意很慢（每次数十到数百毫秒 CPU）。登录洪峰时若不
 
 1. 消费 state：在 `sec_oidc_state_use` 插入一行（主键保证只能用一次，与刷新令牌相同）；未知、过期、用过、binder 不符、用途不是登录（`purpose = LINK`，本人关联的状态）→ 401。
    binder 把回调绑定到发起登录的那个浏览器：攻击者停在回调之前、把自己的 state 与授权码发给别人时，别人的页面没有对应的 binder，不会以攻击者身份登录（login CSRF）。
-2. 以 `client_secret_basic` 与 `code_verifier` 在令牌端点换取令牌（5 秒超时）；`redirect_uri` 是 state 所记入口的回调（与授权请求相同，
+2. 以 `client_secret_basic`（`kind: facebook` / `line` 为 `client_secret_post`：`client_id` 与 `client_secret` 在表单中，不带 `Authorization`）与 `code_verifier` 在令牌端点换取令牌（5 秒超时）；`redirect_uri` 是 state 所记入口的回调（与授权请求相同，
    身份提供方据此核对），回调请求里的任何入口都不算；配置中已没有该入口的回调则拒绝。
-3. 校验 ID 令牌：签名只接受 RS256 / ES256（拒绝 `none` 与 HS*，防止以公钥作 HMAC 密钥），按 `kid` 取 JWKS 中的公钥；`iss` 等于配置；`aud` 含 `client-id`，
+3. 校验 ID 令牌：签名只接受 RS256 / ES256（拒绝 `none` 与 HS*，防止以公钥作 HMAC 密钥），按 `kid` 取 JWKS 中的公钥；唯一的例外是 `kind: line` 的 HS256，
+   密钥是该提供方的 `client-secret`（UTF-8 字节，至少 32 字节，不取 JWKS；决策 D61 第 2 条）——LINE 网页登录的 ID 令牌如此签名，这把密钥只有 LINE 与平台知道，任何 JWKS 中的公钥都不作 HMAC 密钥；`iss` 等于配置；`aud` 含 `client-id`，
    多个受众时 `azp` 必须是 `client-id`；`exp` 未过、`iat` 不在将来（按注入的 `Clock`，容许 60 秒偏差）；`nonce` 的 SHA-256 与记录的一致；`sub` 非空。
 4. 以 `(提供方, sub)` 执行流程 `SPONSOR_OIDC_SIGN_IN`（没有关联时先看能否开户，见"自动开户"）；成功时刷新令牌记下所经的关联（`sec_refresh_token.identity_id`），每次刷新都要求该关联仍在，
    因此解除关联即结束其会话（最迟在下一次刷新）。
+
+**Facebook 与 LINE**【决策 D61 第 1–2 条，阶段 16zk】：Facebook 的发现文档在 `{issuer}/.well-known/openid-configuration/`（带结尾的 `/`），
+它不写令牌端点时用 `https://graph.facebook.com/oauth/access_token`；Facebook 与 LINE 的 `email_verified` 通常没有，邮箱因此不受担保（`trustedEmail` 为空），
+要为这类邮箱开户须开启 `sign-up-unverified-email`（见"自动开户"）。LINE 只有在渠道获准取得邮箱、用户同意时才给 `email`。
+公开的说明页以外的细节（端点、签名）由存根测试覆盖，正式上线前要以真实的应用核对一次（D61 剩余风险）。
 
 发现文档与 JWKS 在首次使用时读取并缓存 1 小时；遇到未知的 `kid` 时重新读取 JWKS（至多每分钟一次）；端点必须是 `https`（同上，`localhost` 除外）。
 对身份提供方的调用用 JDK 的异步 HTTP 客户端（不跟随重定向、不带链路头，也不在请求线程上阻塞）。观测 `jabiz.auth.oidc`，标签只有 `provider` 与结果（`outcome`）。
@@ -372,11 +380,15 @@ BCrypt 有意很慢（每次数十到数百毫秒 CPU）。登录洪峰时若不
   这条规则按 `kind` **或** issuer 适用：issuer 为 `https://accounts.google.com` 而 `kind` 不是 `google` 的提供方同样按它判断，启动检查另给警告（建议写 `kind: google`）；
   只在其 `email_verified` 可靠（提供方确实验证并持续拥有邮箱，如企业自己的目录）的通用提供方上开启 `auto-provision`；
   该邮箱（不分大小写）没有被任何用户使用。
+- **提供方不担保的邮箱**【决策 D61 第 3 条，阶段 16zk】：提供方同时开启 `sign-up-unverified-email` 时，ID 令牌中像样的 `email` 即使未经担保也开户，但账号**未验证、可预占**：
+  写 `email` 与 `registeredEmail`，不写 `verifiedEmail` / `emailVerifiedAt`，没有密码，与自助注册（§15.7）一样发验证邮件 `jabiz.auth.verify-email`；
+  入口 `require-verified-email` 时随后的登录照常 403 `EMAIL_NOT_VERIFIED`。邮箱已被使用照常 403 `OIDC_ACCOUNT_EXISTS`；令牌没有邮箱则不开户（401）。
+  邮箱的主人可以经验证或找回密码接管这个账号（删除关联，§15.7）；账号本人在**自己的会话中**验证则保留账号与关联（§15.7"验证"）。
 - **后台从不开户**：除启动检查外，回调本身也不在 `admin` 入口开户（`OidcController.opensAccounts`）。
 - **开户**（流程 `SPONSOR_OIDC_SIGN_UP`，`entryOnly`，权限 `auth.sign-up`，只经回调运行）：用户名同注册（小写邮箱，被占用时加 `-` 与 6 位随机字符）；写 `email`、
-  `verifiedEmail`、`emailVerifiedAt`，**不写 `registeredEmail`**（永不可预占）；没有密码；`displayName` 取 ID 令牌的 `name`（去掉控制与格式字符、合并空白、至多 200 字符）；
+  `verifiedEmail`、`emailVerifiedAt`，**不写 `registeredEmail`**（永不可预占；提供方不担保的邮箱例外，见上条）；没有密码；`displayName` 取 ID 令牌的 `name`（去掉控制与格式字符、合并空白、至多 200 字符）；
   `locale` 取请求的语言（平台语言之一，否则不写）；授予入口的注册角色（缺少或停用即不开户）；建 `SecUserIdentity`（带邮箱）。之后照常运行 `SPONSOR_OIDC_SIGN_IN`：
-  写登录记录，受入口、`SignInGuard`、锁定与二次验证规则约束（角色要求二次验证即 `MFA_ENROLLMENT_REQUIRED`）。开户时不发邮件（用户刚刚亲自登录）。
+  写登录记录，受入口、`SignInGuard`、锁定与二次验证规则约束（角色要求二次验证即 `MFA_ENROLLMENT_REQUIRED`）。邮箱受担保时开户不发邮件（用户刚刚亲自登录）。
 - **邮箱已被使用**（任何用户，含可预占的账号与禁用的账号）：不开户、不关联，403 `OIDC_ACCOUNT_EXISTS`（"请用原来的方式登录，再在账户设置中关联"）。提供方刚向请求者证明了邮箱，
   只对他区分这种情况（同 D36 实现说明第 2 条）；可预占账号的主人照常经找回密码接管。其他不满足的情况一律 401 `LOGIN_FAILED`，不建用户、不写记录，原因只记日志。
 - **限流**：开户按客户端地址（`SignUpRateLimits` 的 `OIDC_SIGN_UP`，沿用 `jabiz.security.sign-up.rate-limit.per-address`，缺省每小时 20 次），超限 429，不建用户。
@@ -405,7 +417,7 @@ BCrypt 有意很慢（每次数十到数百毫秒 CPU）。登录洪峰时若不
 - 秘密不进操作记录：`currentPassword` 标 `@Sensitive`；请求与 `Identity` 的 `toString` 遮蔽。
 - 前端：`@jabiz/client` 的 `startIdentityLink(provider, {currentPassword?}, returnTo)`（在 `sessionStorage` 记下用途 `LINK`，每次发起都重写）、`finishIdentityLink`、
   `listIdentities`、`unlinkIdentity`；`@jabiz/ui` 的 `OidcCallback` 按记下的用途走登录或关联（`onLinked`），`OIDC_ACCOUNT_EXISTS` 时说明怎样继续；积木 `LinkedIdentities`
-  （列表、需要时先问当前密码、解除）；`OidcButtons` 按 `kind` 画提供方的标志（Google 的单色"G"，颜色只用主题 token）。示范门户的账户页与后台安全设置页（`/account/security` 的一节，只在后台入口提供了身份提供方时显示）使用它。
+  （列表、需要时先问当前密码、解除）；`OidcButtons` 按 `kind` 画提供方的标志（Google 的四色"G"、Facebook 的蓝色"f"、LINE 的绿色气泡，各按其品牌指南的颜色，D44），`layout="icons"` 时为"其他方式登录"下的一排圆形图标按钮（以提供方的标签为名，D61 第 5 条）。示范门户的账户页与后台安全设置页（`/account/security` 的一节，只在后台入口提供了身份提供方时显示）使用它。
 
 ## 13. 按权限显示明文、数据期限、访问审查【D28 第 7–9 条，阶段 14g-3】
 
@@ -608,6 +620,7 @@ class PortalSignInGuard implements SignInGuard {
 | `POST /api/auth/join {token, password?}`（匿名） | `SPONSOR_SIGN_UP_JOIN` | 204；链接无效 422 `TOKEN_INVALID`；可预占的账号没给新密码 422 `REQUIRED`（`field: password`） |
 | `POST /api/auth/verify-email/check {token}`（匿名） | `SPONSOR_EMAIL_VERIFY_CHECK`（试运行，不使用令牌） | `{passwordRequired}`；链接无效 422 `TOKEN_INVALID` |
 | `POST /api/auth/verify-email {token, password?, newPassword?}`（匿名） | `SPONSOR_EMAIL_VERIFY` | 204；链接无效 422 `TOKEN_INVALID`；可预占的账号缺密码 422 `REQUIRED`、密码错 422 `PASSWORD_INCORRECT`（`field: password`） |
+| `POST /api/auth/account/verify-email/check {token}`、`POST /api/auth/account/verify-email/confirm {token, password?, newPassword?}`（已登录，D61 第 4 条） | 同上两行 | 同上；链接所属的账号就是会话的用户时，可预占的账号不需要密码（见"验证"） |
 | `POST /api/auth/verify-email/resend {email, entry}`（匿名） | `SPONSOR_EMAIL_VERIFY_SEND` | 202，对任何邮箱相同；只给启用、可预占的账号发信 |
 | `POST /api/auth/account/verify-email`（已登录） | 同上（本人、会话的入口） | 202；给启用、邮箱未验证的本人发信 |
 | `POST /api/auth/password-reset/request {email, entry?}`（匿名） | `SPONSOR_PASSWORD_RESET_REQUEST` | 202，对任何邮箱相同；只给启用、邮箱可信的用户发信 |
@@ -648,7 +661,10 @@ class PortalSignInGuard implements SignInGuard {
 - **加入**（细则 6）：入口取自那封邮件的参数（`MailMessageParams`），须仍允许注册；追加尚未持有的注册角色、写验证字段。**可预占的账号**还必须同时设新密码并被接管
   （吊销原因 `JOIN`）；其他账号（已验证的）只追加角色，密码不变。注册请求中的密码从不用于已有账号。
 - **验证**：可预占的账号需要其**当前密码**（注册人自己，保留账号）或**新密码**（邮箱的主人，接管账号，吊销原因 `CLAIM`）；其他账号（已登录的本人要求的验证）只凭链接。
-  落地页先用 `check` 问清是否需要密码。
+  **账号本人的会话**代替当前密码（决策 D61 第 4 条，16zk）：在已登录的接口 `/api/auth/account/verify-email/check|confirm` 上、会话的用户就是链接所属的用户时，
+  不需要密码、不接管，账号、关联与会话都保留——经身份提供方开的、没有密码的账号由此验证；别人的会话不算（照常要求密码）。公开接口从不认证访问令牌，所以这是另外两个接口。
+  落地页先用 `check` 问清是否需要密码；有会话时先在会话中问（`@jabiz/client` 的 `checkVerificationLink` / `confirmVerificationLink`，会话已不被接受（401）时改为匿名），
+  需要密码时提示"在已登录的浏览器中打开此链接"。
 - **找回密码**：设置新密码（只用 OIDC 的用户也可）、写验证字段、吊销全部令牌族（原因 `PASSWORD_RESET`）、写登录记录 `PASSWORD_RESET`
   （清零失败计数并解锁，带入口、地址与 UA）。**二次验证保留**：重置证明的是邮箱，不是认证器，下次登录照常要求第二步；只有可预占的账号被接管时才删除。
   不自动登录。密码不合规则（400）时令牌不消费。
@@ -792,11 +808,11 @@ jabiz:
   security:
     external-tokens:
       shop:                                         # 提供方名：身份的提供方为 ext:shop
-        secrets: [ "${SHOP_APP_SECRET}" ]            # 只取自环境变量；更换时写两个
+        secrets: [ "${SHOP_APP_SECRET:}" ]           # 只取自环境变量（写空缺省值：缺失即启动失败）；更换时写两个
         audience: ${SHOP_APP_KEY}
         tenant-pattern: '[a-z0-9][a-z0-9-]*\.myshopify\.com'
         issuer-format: https://{tenant}/admin
-        destination-format: https://{tenant}
+        destination-format: https://{tenant}          # 租户的源（不带路径），内嵌时即 frame-ancestors
         auto-provision: true                        # 无人关联的身份首次登录即开户（入口须允许注册）
         frame-ancestors: [ https://admin.shopify.com ]
         tenant-parameter: shop                      # 平台打开页面时带的租户参数
@@ -810,13 +826,54 @@ jabiz:
 
 | 接口 | 作用 |
 |---|---|
-| `POST /api/auth/external-token` | `{token, entry}`，答复同登录（`SIGNED_IN` 或第二步）；一切拒绝都是 401 `LOGIN_FAILED`（守卫 403、开户过多 429） |
+| `POST /api/auth/external-token` | `{token, entry}`，答复同登录（`SIGNED_IN` 或第二步）；令牌与身份的一切拒绝都是 401 `LOGIN_FAILED`（守卫 403、开户过多 429）；服务器故障照常 5xx（17e） |
 
-- 验证（`ExternalTokenRules`）：HS256、任一密钥的签名（常量时间）、`exp` / `nbf`（容差）、`aud`、`iss` 与 `dest` 指向同一个匹配 `tenant-pattern` 的租户、`sub` 与 `jti`；`jti` 只用一次（`sec_external_token_use`）。
+- 验证（`ExternalTokenRules`）：HS256、任一密钥的签名（常量时间）、`exp` / `nbf`（容差）、`aud`、`iss` 与 `dest` 指向同一个匹配 `tenant-pattern` 的租户、`sub` 与 `jti`；`jti` 只用一次（`sec_external_token_use`；登记时已过最后时刻即拒绝，免得清理删掉第一次使用的记录，17e）。启动检查拒绝未解析的占位符密钥与带路径的 `destination-format`（17e）。
 - 身份是租户中的一个人：`SecUserIdentity(ext:<提供方>, <租户>/<sub>)`。之后照常是写登录记录的流程 `SPONSOR_EXTERNAL_TOKEN_SIGN_IN`（因素 `EXTERNAL_TOKEN`）：`SignInGuard`、入口角色、二次验证照旧。
 - 开户（`SPONSOR_EXTERNAL_TOKEN_SIGN_UP`）：提供方 `auto-provision` 且入口允许注册时，为无人关联的身份建无邮箱、无密码的用户（用户名即身份主体）与入口的注册角色；不能是 `admin` 或接受 `*` 的入口，也不能要求已验证的邮箱。
-- 业务流程以步骤 `VerifyExternalToken.of(提供方, ctx -> 令牌, 键)` 核对店员递来的令牌属于操作人（403 不说明原因），把租户、主体与令牌放进上下文，供阻塞步骤交给签发它的平台；不消耗 `jti`。
+- 业务流程以步骤 `VerifyExternalToken.of(提供方, ctx -> 令牌, 键)` 核对店员递来的令牌属于操作人（403 不说明原因：说明一律为 "External token refused"，原因只记日志），把租户、主体与令牌放进上下文，供阻塞步骤交给签发它的平台；不消耗 `jti`。
 - 页面：`@jabiz/client` 的 `signInWithExternalToken(令牌)`（向平台的脚本每次取新令牌）；SPA 声明 `embedding`（17 §3.2）才能被该租户内嵌。
+
+### 15.13 应用代理：另一个平台转发的访客请求（阶段 17d，决策 D60）
+
+商店平台把店面上的请求（店铺域名下的 `/apps/<子路径>/...`）转发给应用，并在查询中加上租户、已登录顾客的编号、时间与签名。平台以**应用代理**承接：
+验签之后以代理的调用者同步运行一个流程，答复即流程的输出。店面上的顾客匿名，与平台的用户无关。
+
+```yaml
+jabiz:
+  app-proxies:
+    shop:                                           # 代理名：路径 /api/proxy/shop/<流程>
+      secrets: [ "${SHOP_APP_SECRET:}" ]            # 即应用密钥，只取自环境变量（写空缺省值：缺失即启动失败）；更换时写两个
+      tenant-pattern: '[a-z0-9][a-z0-9-]*\.myshopify\.com'
+      # tenant-parameter: shop                      # 缺省值
+      # customer-parameter: logged_in_customer_id   # 缺省值；空即匿名访客
+      # visitor-parameter: visitor                  # 缺省值；店面自己生成的访客键，只用于限流
+      # max-age: 90s                                # 签名时间与现在之差，缺省 90 秒，至多 10 分钟
+  process:
+    rate-limits:
+      "[SHOP_QUIZ_ANSWER]": { per-tenant: 600, per-visitor: 10, period: 1m }
+```
+
+- 接口 `GET|POST /api/proxy/{代理}/{流程}`：未配置（或配置有问题）的代理 404，其他方法 405（`AppProxyWebFilter`，在安全链之前）；带来的凭据一概不看。
+- 签名（`AppProxySignature`，与 Shopify 自己的库相同）：查询中除 `signature` 外的全部参数（访客自己的也在内）按名排序，写成 `名=值`（同名多值以 `,` 相连），
+  不加分隔地连起来，以应用密钥作 HMAC-SHA256，小写十六进制，常量时间比较、每个密钥都试。时间 `timestamp` 须在 `max-age` 内；租户参数恰好一个且匹配 `tenant-pattern`；
+  顾客编号为空或是 `[A-Za-z0-9_-]{1,40}`。任一不符即 401 `APP_PROXY_REFUSED`，说明相同，原因只记观测 `jabiz.app_proxy.refused`（标签 `proxy`、`reason`）与 debug 日志（谁都能发未签名的请求，日志不应被灌满）。
+  验签之前不按地址限流：请求都来自商店平台的出口地址，按地址限流会挡住所有正常的顾客；验签本身不访问数据库。
+  查询按表单解码（`+` 是空格），与签名方一致。
+- 流程须是 `appProxy(代理)` 声明的最新版本（否则 404，不透露别的流程）；以 `AppProxyCaller` 运行：操作人 `app-proxy:<代理>[:<顾客>]`、
+  `RequestContext.tenantId` 为租户、权限只有 `app-proxy.<代理>`；流程以 `AppProxyCaller.of(ctx.request())` 读取。代理名至多 30 字符、顾客编号至多 40，操作人编号因此放得进各操作人列（100）。
+  输出若是实体实例，与读接口一样按权限遮蔽（`f.masked` 的字段对匿名访客总是遮蔽）。不写操作记录之外的东西，不签发会话。
+  操作人编号不含租户：所有店铺的匿名访客是同一个操作人。代理流程因此不用按操作人区分的平台功能（`StartExternalJob` / `CancelExternalJob` 的"本人开始的作业"、幂等键），
+  归属一律以租户与业务数据（访客键、领取记录）判断。
+- 正文（POST 的 JSON）是流程的输入，**不在签名之内**：它与访客发来的任何东西一样不可信，由流程校验。签名过的地址在 `max-age` 内可被重放：代理流程本来就面向匿名访客，
+  伤害受限流与业务上的"一人一次"约束。
+- 限流（`jabiz.process.rate-limits`）：`per-tenant`（按租户）与 `per-visitor`（租户内按访客键；键由访客自己给出，不证明什么，只用于分摊租户的额度；
+  不是一个 `[A-Za-z0-9_-]{1,40}` 的键按"无键"计）只用于代理流程；代理流程不能用 `per-user`（所有店铺的匿名访客是同一个操作人，启动检查报错）；
+  `per-address` 计 `ClientAddresses` 得出的地址（经商店平台转发时多为其出口地址）。超限 429 `RATE_LIMITED`。
+- 场景回放（07 §3）：`appProxy()` 流程的步骤代表代理入口，步骤的操作人即代理的调用者：`{id: app-proxy:<代理>[:<顾客>], tenant: <租户>, permissions: [app-proxy.<代理>]}`。
+- 答复不缓存（`Cache-Control: no-store`），不读不写 Cookie，不开 CORS（请求由商店平台从它自己的域名发出）。
+- 启动检查（`AppProxies`，类别 `APP_PROXY`）：代理的名字、密钥（至少 32 字符、不是未解析的占位符）、租户形式、参数名、`max-age`；`appProxy()` 流程只持代理的权限、
+  所指的代理已配置、不要求二次验证、已验证邮箱或替代权限（调用者不是本平台的用户）。
 
 ## 16. 受保护的授权：四眼【决策 D48 第 1 条，阶段 16r】
 

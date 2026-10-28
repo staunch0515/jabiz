@@ -167,6 +167,21 @@ public class PlayConfig {
         return AttemptFinishing.submit(messages);
     }
 
+    /** S2: a channel's taker's start and submission (sub-processes of the channel's module). */
+    @Bean
+    ProcessDefinition<com.jabiz.quizbuks.channel.Channel.StartInput, com.jabiz.quizbuks.channel.Channel.StartOutput,
+        ProcessContext> qbChannelAttemptStart(
+        com.jabiz.integrity.IntegrityKey integrityKey) {
+        return ChannelPlay.start(OptionShuffle.of(integrityKey));
+    }
+
+    @Bean
+    ProcessDefinition<com.jabiz.quizbuks.channel.Channel.SubmitInput, com.jabiz.quizbuks.channel.Channel.SubmitOutput,
+        ProcessContext> qbChannelAttemptSubmit(
+        MessageCatalog messages) {
+        return ChannelPlay.submit(messages);
+    }
+
     @Bean
     ProcessDefinition<AttemptFinishing.ExpireInput, AttemptFinishing.ExpireOutput, ProcessContext> qbAttemptExpire(
         MessageCatalog messages) {

@@ -57,11 +57,14 @@
   商家的数据视图一律 `fromContext("publisherId", actorId)` **且** `fixed("publisherKind", SPONSOR)`（`RewardConfig.ownDataset` 按字段名自动加）；答题人的首页、详情与公开卡片视图只看 `SPONSOR` 的发布（店面流量在 S2 走 Shopify 模块自己的模板）。
   审批事实是 `publisherKind` + `publisherId`；事件 `qb.publication.status` 的载荷同样是这一对，消费者 `QB_MAIL_PUBLICATION` 只对 `SPONSOR` 发邮件、对没有发布方的事件什么也不做；钱包事件（`qb.sponsor.*`）的 `sponsorId` 不变。
   内容的 `ownerId` 与 AI 的 `sponsorId` 记的是**操作人**，不是发布方，S0 不改（店铺怎样成为操作人由 S1 决定）。界面文字仍叫"商家"，后台扩展以 `PublisherLink` 按类型显示（`SPONSOR` 链到用户页，其他显示编号）；地址参数仍是 `?sponsor=`。
-- **QuizBuks for Shopify**（S1，模块 `backend/quizbuks-shopify`，包 `com.jabiz.quizbuks.shopify`，`docs/quizbuks/shopify/S1-install.md`）：Java 库，打进同一个 jar，**只依赖平台**（不引用引擎的类，S2 起以流程名调用引擎的流程；不碰钱包与普通商户表）；表 `qbs_*`、实体 `Qbs*`、流程 `QBS_*`、权限 `qbs.*`，迁移在本模块的 `db/migration` 中、与引擎共用版本序列（V31 起），文案是自己的消息包 `jabiz/quizbuks/shopify/messages_*`（`jabiz.i18n.bundles`）。
+- **QuizBuks for Shopify**（S1，模块 `backend/quizbuks-shopify`，包 `com.jabiz.quizbuks.shopify`，`docs/quizbuks/shopify/S1-install.md`）：Java 库，打进同一个 jar，**只依赖平台**与渠道合约 `backend/quizbuks-channel`（不引用引擎的类，S2 起以合约的记录调用引擎的 `QB_CHANNEL_*` 子流程；不碰钱包与普通商户表）；表 `qbs_*`、实体 `Qbs*`、流程 `QBS_*`、权限 `qbs.*`，迁移在本模块的 `db/migration` 中、与引擎共用版本序列（V31 起），文案是自己的消息包 `jabiz/quizbuks/shopify/messages_*`（`jabiz.i18n.bundles`）。
   登录只经入口 `shopify` 与平台的外部令牌（D59：提供方 `shopify`，`SHOPIFY_API_KEY` / `SHOPIFY_API_SECRET` 只取自环境变量），身份是店铺中的一个店员，角色 `QBS_SHOP` 由 `QB_SETUP` 建立；
   店铺与成员只经 `QBS_SHOP_JOIN`（每次打开内嵌页，第一位成员是主管理员，重装时恢复店铺；它的输出就是页面所示的概况，没有给店员的模板）与 `QBS_SHOP_ADMIN_TRANSFER` 写入；Shopify 的访问令牌按需交换（`QBS_SHOP_CONNECT`，`expiring=1`）、密封保存，只在锁 `qbs.shop-token:<店铺>` 内刷新（`QBS_SHOP_CHECK`），锁序 `qbs.shop:<店铺>` → `qbs.shop-token:<店铺>`；
-  流程中核对会话令牌只用平台步骤 `VerifyExternalToken`。Webhook 只经入站提供方 `shopify`（`app/uninstalled` 与三个合规主题），消费者以签名的正文核对不签名的 `X-Shopify-Shop-Domain`；卸载保留数据（会话在下次刷新时由 `ShopSignInGuard` 结束），`shop/redact` 才删除（已重装的不删）。
+  流程中核对会话令牌只用平台步骤 `VerifyExternalToken`。Webhook 只经入站提供方 `shopify`（`app/uninstalled`、三个合规主题与 S3 的 `app_subscriptions/update`），消费者以签名的正文核对不签名的 `X-Shopify-Shop-Domain`（`app_subscriptions/update` 的正文没有店铺地址：只取请求头的店铺、只向 Shopify 重读它的订阅，不写入正文中的任何内容）；卸载保留数据（会话在下次刷新时由 `ShopSignInGuard` 结束），`shop/redact` 才删除（已重装的不删）。
   对 Shopify 的调用只经 `ShopifyApi`（外部服务 `shopify`，主机 `*.myshopify.com`）。内嵌页是第三个 SPA `quizbuks-web/shopify`（`/shopify/`，`embedding: shopify`，App Bridge 取自 Shopify 的 CDN）。
+  店面（S2，`docs/quizbuks/shopify/S2-storefront.md`、`S2b-ui.md`）：活动、码池与店面流程（`QBS_SF_*`，只经应用代理 `shopify`，平台 D60）在本模块；引擎只判分（奖励方式 `CHANNEL`）。顾客编号与访客键不进引擎（`QbsStorefront.customerTaker` / `visitorTaker`）。
+  收费（S3，`docs/quizbuks/shopify/S3-billing.md`）：套餐由 Shopify App Pricing 出售，本模块**只读**订阅（`ShopifyApi.activeSubscriptions`，不调 `appSubscriptionCreate`），存于 `QbsShopPlan`；店面完成的答题只在 `QBS_SF_SUBMIT` 中、锁 `qbs.shop-usage:<店铺>` 内计入 `QbsUsage`，到套餐上限（受控参数 `qbs.plan.<套餐>.monthly-attempts`）即不能开始新的答题。
+  店面组件是 `quizbuks-web/storefront`：原生 Web Component，**不用 React 与 `@jabiz/ui`**（只限这个组件：它跑在商户的主题里，压缩后 ≤ 15 KB，构建即检查），打包到 `tools/quizbuks/shopify/extensions/quizbuks-quiz/assets/quiz.js`（不提交，`deploy-extension.sh` 先构建再 `shopify app deploy`）；无障碍测试照样用 `@jabiz/ui/testing`。
 - **发布**（`publishing`，`docs/quizbuks/plans/Q4-publishing.md`）：写入只经 `QB_PUBLICATION_*` 流程（默认数据视图 `processOnlyWrites`，商家视图只读，
   写权限同样是不授予任何角色的 `qb.content.view.write`）。**锁的顺序固定**：（`qb.account:<商家>`，封禁、发布的审批结果与管理员恢复取，Q10b 评审 L1）→ `qb.quiz:<quizId>`（只有提交时取，共享）→ 按发布编号升序 [`qb.pub:<publicationId>`（独占）→ `qb.pub-start:<publicationId>`（开始锁，Q10a4）] → 平台审批的 `jabiz.approval:*` → Q5 的 `qb.wallet:<种类>:<所有者>`；
   写一个发布的流程先取发布锁再读取；**改变已上架发布状态的流程**（暂停、恢复、`ADVANCE`、`FUNDED`）在发布锁之后、读取之前再取开始锁（`PublicationEditing.lockStarts` / `lockStatesAndLoad`），其他发布流程不取。**提交即冻结**：只有 `DRAFT` 可改（`QB_PUBLICATION_NOT_DRAFT`），要改就复制。
@@ -128,9 +131,13 @@
   字段 `sensitive()`（不再加 `processOnly()`：敏感已含）；明文只在 `QB_DIGITAL_PRIZE_OPEN` 的输出 `prizeContent` 中（标 `@Sensitive(returned = true)`：响应中返回，`op_process_result`、事件与摘要中遮蔽），输出 record 的 `toString()` 遮蔽；
   码池只经 `QB_DIGITAL_CODES_LOAD`/`REVOKE` 写、结算在池锁 `qb.digital-pool:<发布>` 内按 `seq` 取码；`POOL` 的提交在 `PublicationLifecycle.submit` 数可用码（`PublicationReadiness.pool`）。
   列表与结果只给 `hint`（末 4 位，共用码没有）。
-  到店领取（Q22b，`reward.RedemptionProcesses`）：商家的码只经 `QB_REDEEM_CODE_ISSUE` 签发（随机数经平台 `RandomBytesStep`，值只在输出 `redeemKey` 中；实体字段 `tokenValue` 敏感且含 token，
+  到店领取（Q22b，`reward.RedemptionProcesses`）：商家的码只经 `QB_REDEEM_CODE_ISSUE`（商家本人）与 `QB_STAFF_REDEEM_CODE_ISSUE`（店员，只有轮换码，Q39）签发（随机数经平台 `RandomBytesStep`，值只在输出 `redeemKey` 中；实体字段 `tokenValue` 敏感且含 token，
   平台按名遮蔽，输入组件叫 `scannedKey` 并标 `@Sensitive`——不要给输出组件起含 password / secret / token / credential 的名字，否则接口返回被遮蔽）；
-  领取只经 `QB_REDEEM_TOKEN_CHECK` / `QB_REDEMPTION_CLAIM`（轮换码即时 `REDEEMED`，固定码 `CLAIMED` 由 `QB_REDEMPTION_CONFIRM` / `DECLINE` 结束），不在 App 里扫码（相机打开链接 `/redeem/<key>`）。
+  领取只经 `QB_REDEEM_TOKEN_CHECK` / `QB_REDEMPTION_CLAIM`（轮换码即时 `REDEEMED`，经手人 `redeemedBy` 为码的签发人 `issuedBy`；固定码 `CLAIMED` 由 `QB_REDEMPTION_CONFIRM` / `DECLINE`
+  或店员的 `QB_STAFF_REDEMPTION_CONFIRM` / `DECLINE` 结束，确认业务规则共用 `RedemptionProcesses.confirm` / `decline`），不在 App 里扫码（相机打开链接 `/redeem/<key>`）。
+  店员（Q39，`reward.StaffProcesses`，`docs/quizbuks/plans/Q39-sponsor-staff.md`）：普通表 `qb_sponsor_staff`（一人至多属于一家），只经商家的 `QB_SPONSOR_STAFF_ADD` / `REMOVE` 与店员的
+  `QB_STAFF_LEAVE` 写入；店员不另有角色或权限，店员的流程用 `qb.me`、每次经共享锁 `qb.staff:<用户>` 读本人的店员关系（加入与移除取排他锁），商家被封禁即拒绝
+  （`QB_STAFF_SPONSOR_BANNED`）；锁的顺序 `qb.sponsor-staff:<商家>` → `qb.staff:<用户>` → `qb.redeem-token:<商家>`。店员只看待处理的申请与本人交付的（`qb.app.staff-redemptions`），不看商家的历史。
 - **账户**（`identity`，`docs/quizbuks/plans/Q2-accounts.md`）：三个登录入口 `admin` / `app` / `sponsor` 写在 `application.yml`（平台 10 §15）；`app` 允许未验证的用户登录浏览，`sponsor` 要求已验证。
   **QuizBuks 的一切写入流程声明 `requiresVerifiedEmail()`**（未验证即"待激活"；预占他人邮箱的人因此留不下应用数据），以后的阶段照此。
   资料、入驻、封禁各是一人一行的时态实体（主键是生成的 UUID，`userId` 不可变、唯一；资料与入驻的 `userId` 是操作人编号的文本，封禁的是平台用户的引用），只经 `QB_PROFILE_*` / `QB_SPONSOR_*` / `QB_USER_*BAN` 写入；

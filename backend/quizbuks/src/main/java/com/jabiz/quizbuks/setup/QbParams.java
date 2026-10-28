@@ -66,6 +66,21 @@ public final class QbParams {
     public static final String WITHDRAWAL_BANK_COOLDOWN_HOURS = "qb.withdrawal.bank.cooldown-hours";
     public static final List<String> WITHDRAWAL_BANK = List.of(WITHDRAWAL_BANK_ENABLED, WITHDRAWAL_BANK_FEE,
         WITHDRAWAL_BANK_COOLDOWN_HOURS);
+    /**
+     * S2 (docs/quizbuks/shopify/S2-storefront.md section 2, I-8): the most discount codes one shop's storefront hands
+     * out a day (UTC), whatever its pool holds: the most a shop loses a day to a script that keeps changing its visitor
+     * key. Controlled (it bounds what the shops give away), but not created by {@code QB_SETUP}: the storefront reads
+     * it as optional and takes {@code Shopify.DAILY_CODES_DEFAULT} (100) until an administrator creates it through a
+     * controlled change. Kept out of {@link #CONTROLLED} and {@link #ALL}: a new parameter of the setup would move every
+     * key the setup hands out, and with them the order of every scenario's options.
+     */
+    public static final String SHOPIFY_DAILY_CODES = com.jabiz.quizbuks.shopify.Shopify.DAILY_CODES;
+    /**
+     * S3a (docs/quizbuks/shopify/S3-billing.md section 3): the attempts a Shopify shop's storefront completes a billing
+     * period on each plan. Controlled, read as optional and kept out of the setup like {@link #SHOPIFY_DAILY_CODES}
+     * (the defaults are {@code QbsBilling.DEFAULT_LIMITS}).
+     */
+    public static final List<String> SHOPIFY_PLAN_LIMITS = com.jabiz.quizbuks.shopify.QbsBilling.LIMIT_PARAMS;
     /** Whether sponsor onboarding is approved without a person's review. */
     public static final String REVIEW_SPONSOR_AUTO = "qb.review.sponsor.auto";
     /** Whether publications are approved without a person's review. */

@@ -9,6 +9,8 @@ import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.PermissionDeniedException;
 import com.jabiz.runtime.process.steps.QueryEntities;
 import com.jabiz.security.ExternalTokenRules;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -21,7 +23,8 @@ import java.util.function.Function;
  * requires it to be of the operator: the identity it names ({@code ext:<provider>}, {@code <tenant>/<sub>}) is linked to
  * the operator's user. The context then holds the {@link Verified} token: its tenant, subject and the token itself, for
  * a blocking step that hands it on (such as exchanging it for an access token at the platform that signed it). It does
- * not use the token up: the platform that signed it is the one to judge reuse. Anything else is 403, whatever failed.
+ * not use the token up: the platform that signed it is the one to judge reuse. Anything else is 403, whatever failed,
+ * and the answer does not say what (the reason is logged).
  * The step names carry the target key, so that a process may verify more than one token.
  * <pre>{@code
  * .steps(VerifyExternalToken.of("shop", ctx -> input(ctx).sessionToken(), "verified"))
@@ -85,8 +88,14 @@ public class VerifyExternalToken<C extends ProcessContext>
         }
     }
 
-    private static PermissionDeniedException refused(String provider, String message) {
-        return new PermissionDeniedException("external-token:" + provider, message);
+    private static final Logger log = LoggerFactory.getLogger(VerifyExternalToken.class);
+
+    /** The 403's text: the same for every reason, which the log keeps instead. */
+    static final String REFUSED = "External token refused";
+
+    private static PermissionDeniedException refused(String provider, String reason) {
+        log.info("External token of {} refused in a process: {}", provider, reason);
+        return new PermissionDeniedException("external-token:" + provider, REFUSED);
     }
 
     private final ExternalTokenProviders providers;

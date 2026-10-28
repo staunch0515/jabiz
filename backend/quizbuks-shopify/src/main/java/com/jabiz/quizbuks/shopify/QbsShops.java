@@ -68,7 +68,11 @@ public final class QbsShops {
     public static final String KEPT_REINSTALLED = "KEPT_REINSTALLED";
     public static final String NOT_FOUND = "NOT_FOUND";
     public static final String MISMATCH = "MISMATCH";
-    public static final List<String> OUTCOMES = List.of(NO_DATA, DELETED, KEPT_REINSTALLED, NOT_FOUND, MISMATCH);
+    /** S2: a customer's data was reported (in the request's record), or erased. */
+    public static final String REPORTED = "REPORTED";
+    public static final String REDACTED = "REDACTED";
+    public static final List<String> OUTCOMES = List.of(NO_DATA, DELETED, KEPT_REINSTALLED, NOT_FOUND, MISMATCH,
+        REPORTED, REDACTED);
 
     public static final int ID_LENGTH = 36;
     public static final int USER_ID_LENGTH = 128;
@@ -153,6 +157,11 @@ public final class QbsShops {
             .asCode(OUTCOME_DICTIONARY, OUTCOMES.toArray(String[]::new)));
         eb.field("receivedAt", f -> f.physicalColumn("received_at").immutable(true).required(true)
             .asTemporal(TemporalRole.EVENT_TIME));
+        // S2: the customer a request is about and, for a data request, what is held of them (JSON): personal, so
+        // never in the audit's values.
+        eb.field("customerId", f -> f.physicalColumn("customer_id").immutable(true).auditMasked()
+            .asText(QbsStorefront.CUSTOMER_LENGTH));
+        eb.field("report", f -> f.physicalColumn("report").immutable(true).auditMasked().asText(null, true));
         eb.field("handledAt", f -> f.physicalColumn("handled_at").immutable(true).required(true)
             .asTemporal(TemporalRole.EVENT_TIME));
         eb.field("version", f -> f.physicalColumn("version").asVersion());

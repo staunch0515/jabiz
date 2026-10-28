@@ -18,7 +18,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * section 3.2): a public website at {@code /}, the admin frontend at {@code /admin/} and a PWA at {@code /portal/},
  * each falling back to its own index page and carrying its own Content-Security-Policy, through the full WebFlux chain
  * including security. The pages are test resources laid out as the jar lays out the built SPAs ({@code static/},
- * {@code static/admin/}, {@code static/portal/}). The PWA's files have the cache headers and types decision D43 item 6
+ * {@code static/admin/}, {@code static/portal/}); the PWA's index shows a value of the deployment (phase 17g). The PWA's
+ * files have the cache headers and types decision D43 item 6
  * asks for, and only its declared Service Worker answers a request for a Service Worker script.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK, properties = {
@@ -30,6 +31,7 @@ import static org.assertj.core.api.Assertions.assertThat;
     "jabiz.web.spa[2].path=/portal",
     "jabiz.web.spa[2].entry=portal",
     "jabiz.web.spa[2].pwa=on",
+    "jabiz.web.spa[2].index-values.application-name=Portal \"test\" & Co",
 })
 class MultiSpaIT extends PostgresIntegrationTest {
 
@@ -94,8 +96,11 @@ class MultiSpaIT extends PostgresIntegrationTest {
                 .expectHeader().valueEquals(CSP, JabizWebProperties.DEFAULT_CONTENT_SECURITY_POLICY)
                 .expectHeader().doesNotExist("Service-Worker-Allowed");
         }
+        // Its index shows this deployment's value (phase 17g), escaped, with the same headers as any index page.
         client.get().uri("/portal/orders").exchange()
-            .expectBody(String.class).value(body -> assertThat(body).contains("id=\"portal\""));
+            .expectHeader().contentType("text/html;charset=UTF-8")
+            .expectBody(String.class).value(body -> assertThat(body).contains("id=\"portal\"")
+                .contains("content=\"Portal &quot;test&quot; &amp; Co\"").doesNotContain("{{jabiz:"));
         client.get().uri("/portal/manifest.webmanifest").exchange()
             .expectHeader().contentType("application/manifest+json");
         // Content-hashed files never change.

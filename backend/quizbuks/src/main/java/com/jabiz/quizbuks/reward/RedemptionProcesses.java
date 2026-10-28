@@ -144,7 +144,7 @@ public final class RedemptionProcesses {
     static final String RANDOM = "random";
     static final int TOKEN_BYTES = 24;
 
-    private static ProcessContext start(com.jabiz.process.ProcessStart start, Object input, UUID id) {
+    static ProcessContext start(com.jabiz.process.ProcessStart start, Object input, UUID id) {
         ProcessContext ctx = new ProcessContext(start);
         ctx.put(INPUT, input);
         if (id != null) {
@@ -182,10 +182,14 @@ public final class RedemptionProcesses {
                         new QueryPredicate.Eq("kind", RedemptionStatus.KIND_ROTATING),
                         new QueryPredicate.Lt("expiresAt", ctx.opTime()))))
                     .limit(500).build(), TOKENS)))
-            .compute("Issue it", (metadata, ctx) -> issue(ctx)));
+            .compute("Issue it", (metadata, ctx) -> issue(ctx, ctx.request().actorId())));
     }
 
-    static void issue(ProcessContext ctx) {
+    /**
+     * Issues the code {@link #INPUT} asks for, as the sponsor {@code sponsorId}'s; the caller is recorded as its issuer
+     * (the sponsor, or one of their staff, Q39). Drops the expired rotating codes loaded under {@link #TOKENS}.
+     */
+    static void issue(ProcessContext ctx, String sponsorId) {
         IssueInput input = ctx.get(INPUT, IssueInput.class);
         if (!RedemptionStatus.KINDS.contains(input.kind())) {
             ctx.reject(new Violation("kind", RewardCodes.REDEEM_TOKEN_KIND, "Unknown kind " + input.kind(),
@@ -193,7 +197,6 @@ public final class RedemptionProcesses {
             return;
         }
         Instant now = ctx.opTime();
-        String sponsorId = ctx.request().actorId();
         for (EntityInstance token : list(ctx, TOKENS)) {
             ctx.changes().delete(QbRewards.REDEEM_TOKEN, token.id(), token.version());
         }
@@ -216,6 +219,7 @@ public final class RedemptionProcesses {
         values.put("kind", input.kind());
         values.put("issuedAt", now);
         values.put("expiresAt", expiresAt);
+        values.put("issuedBy", ctx.request().actorId());
         ctx.changes().insert(QbRewards.REDEEM_TOKEN, values);
         ctx.put(OUTPUT, new IssueOutput(token, input.kind(), now, expiresAt));
     }
@@ -350,16 +354,26 @@ public final class RedemptionProcesses {
                 Map.of()));
             return;
         }
+        boolean rotating = RedemptionStatus.KIND_ROTATING.equals(token.get("kind"));
+        // A rotating code redeems in the name of whoever asked for it (codes from before Q39: the sponsor).
+        Object issuedBy = token.get("issuedBy");
+        String redeemedBy = String.valueOf(issuedBy != null ? issuedBy : token.get("sponsorId"));
+        if (rotating && redeemedBy.equals(ctx.request().actorId())) {
+            // Q39: a staff member does not hand a prize to themselves.
+            ctx.reject(new Violation("scannedKey", RewardCodes.STAFF_OWN_PRIZE,
+                "The code is the caller's own: someone else hands this prize over", Map.of()));
+            return;
+        }
         if (!in(ctx, effectiveStatus(redemption, ctx.opTime()), RedemptionStatus.DUE)) {
             return;
         }
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("claimKind", token.get("kind"));
         values.put("claimedAt", ctx.opTime());
-        if (RedemptionStatus.KIND_ROTATING.equals(token.get("kind"))) {
+        if (rotating) {
             values.put("status", RedemptionStatus.REDEEMED);
             values.put("redeemedAt", ctx.opTime());
-            values.put("redeemedBy", token.get("sponsorId"));
+            values.put("redeemedBy", redeemedBy);
             values.put("confirmBy", null);
         } else {
             values.put("status", RedemptionStatus.CLAIMED);
@@ -381,33 +395,44 @@ public final class RedemptionProcesses {
                     .contextFactory((s, input) -> start(s, input, input.redemptionId()))
                     .outputMapper(ctx -> ctx.get(OUTPUT, RedemptionOutput.class));
                 lockAndLoad(pb, QbRewards.sponsorDataset(QbRewards.REDEMPTION));
-                pb.compute("Confirm", (metadata, ctx) -> {
-                        EntityInstance redemption = redemption(ctx);
-                        String status = effectiveStatus(redemption, ctx.opTime());
-                        if (RedemptionStatus.DUE.equals(status)) {
-                            // Claimed, but the sponsor took too long: the taker scans again.
-                            ctx.reject(new Violation("redemptionId", RewardCodes.REDEMPTION_CLAIM_LAPSED,
-                                "The claim lapsed: the taker scans again", Map.of()));
-                            return;
-                        }
-                        if (!in(ctx, status, RedemptionStatus.CLAIMED)) {
-                            return;
-                        }
-                        Instant confirmBy = instant(redemption.get("confirmBy"));
-                        if (confirmBy != null && !confirmBy.isAfter(ctx.opTime())) {
-                            ctx.reject(new Violation("redemptionId", RewardCodes.REDEMPTION_CLAIM_LAPSED,
-                                "The claim lapsed: the taker scans again", Map.of()));
-                            return;
-                        }
-                        Map<String, Object> values = new LinkedHashMap<>();
-                        values.put("status", RedemptionStatus.REDEEMED);
-                        values.put("redeemedAt", ctx.opTime());
-                        values.put("redeemedBy", ctx.request().actorId());
-                        write(ctx, redemption, values);
-                    })
+                pb.compute("Confirm", (metadata, ctx) -> confirm(ctx))
                     .step("Tell the taker", PublishEvent.<ProcessContext>when(RedemptionProcesses::changed,
                         REDEEMED_EVENT, RedemptionProcesses::payload));
             });
+    }
+
+    /** Confirms the claim loaded under {@link #REDEMPTION}: collected, by the caller. */
+    static void confirm(ProcessContext ctx) {
+        EntityInstance redemption = redemption(ctx);
+        String status = effectiveStatus(redemption, ctx.opTime());
+        if (RedemptionStatus.DUE.equals(status)) {
+            // Claimed, but the sponsor took too long: the taker scans again.
+            ctx.reject(new Violation("redemptionId", RewardCodes.REDEMPTION_CLAIM_LAPSED,
+                "The claim lapsed: the taker scans again", Map.of()));
+            return;
+        }
+        if (!in(ctx, status, RedemptionStatus.CLAIMED)) {
+            return;
+        }
+        Instant confirmBy = instant(redemption.get("confirmBy"));
+        if (confirmBy != null && !confirmBy.isAfter(ctx.opTime())) {
+            ctx.reject(new Violation("redemptionId", RewardCodes.REDEMPTION_CLAIM_LAPSED,
+                "The claim lapsed: the taker scans again", Map.of()));
+            return;
+        }
+        Map<String, Object> values = new LinkedHashMap<>();
+        values.put("status", RedemptionStatus.REDEEMED);
+        values.put("redeemedAt", ctx.opTime());
+        values.put("redeemedBy", ctx.request().actorId());
+        write(ctx, redemption, values);
+    }
+
+    /** Declines the claim loaded under {@link #REDEMPTION}: the prize is due again. */
+    static void decline(ProcessContext ctx) {
+        EntityInstance redemption = redemption(ctx);
+        if (in(ctx, redemption.get("status"), RedemptionStatus.CLAIMED)) {
+            write(ctx, redemption, dueAgain());
+        }
     }
 
     public static ProcessDefinition<RedemptionRef, RedemptionOutput, ProcessContext> decline() {
@@ -421,12 +446,7 @@ public final class RedemptionProcesses {
                     .contextFactory((s, input) -> start(s, input, input.redemptionId()))
                     .outputMapper(ctx -> ctx.get(OUTPUT, RedemptionOutput.class));
                 lockAndLoad(pb, QbRewards.sponsorDataset(QbRewards.REDEMPTION));
-                pb.compute("Decline", (metadata, ctx) -> {
-                        EntityInstance redemption = redemption(ctx);
-                        if (in(ctx, redemption.get("status"), RedemptionStatus.CLAIMED)) {
-                            write(ctx, redemption, dueAgain());
-                        }
-                    })
+                pb.compute("Decline", (metadata, ctx) -> decline(ctx))
                     .step("Tell the taker", PublishEvent.<ProcessContext>when(RedemptionProcesses::changed,
                         DECLINED_EVENT, RedemptionProcesses::payload));
             });
@@ -524,13 +544,13 @@ public final class RedemptionProcesses {
     // ---- shared ------------------------------------------------------------------------------------------------------
 
     /** Locks the redemption and loads it through {@code dataset}: 404 unless the caller may see it. */
-    private static <I, O> void lockAndLoad(ProcessDefinitionBuilder<I, O, ProcessContext> pb, String dataset) {
+    static <I, O> void lockAndLoad(ProcessDefinitionBuilder<I, O, ProcessContext> pb, String dataset) {
         pb.step("Lock the redemption", HoldLock.<ProcessContext>exclusive(
                 ctx -> QbRewards.redemptionLockName(ctx.get(ID))))
             .step("Load the redemption", LoadEntity.by(dataset, ID, REDEMPTION));
     }
 
-    private static EntityInstance redemption(ProcessContext ctx) {
+    static EntityInstance redemption(ProcessContext ctx) {
         return ctx.get(REDEMPTION, EntityInstance.class);
     }
 
