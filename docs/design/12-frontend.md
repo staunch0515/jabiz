@@ -302,7 +302,8 @@ jabizApp {
   antd 页面所在的内容区固定为亮色。15d 删除 antd、ProComponents、icons 与 React 19 补丁，preflight 改为全局，去掉层 `antd`、亮色固定与路由标记；
   `UI_SCOPE` 仍导出（D22 的约定），只是一个没有样式的类名，不再需要。
 - **登录与账户的积木**（D43，16c-1）：`@jabiz/ui` 的 `src/auth/`，文案在命名空间 `auth`（三语，应用可用 `addMessages('auth', …)` 覆盖个别键），
-  亮、暗两种外观都过 axe。`AuthFrame`（品牌与标题由属性给出，带语言与外观切换）、`SignInForm`（密码、二次验证码、
+  亮、暗两种外观都过 axe。积木中的每个密码栏右端有显示输入字符的切换按钮（`PasswordInput`，`AuthField` 的 `type="password"` 即用它；`aria-pressed`，
+  名称"显示输入的字符"不含"密码"，按名称定位密码栏时不会同时命中；表单提交时恢复隐藏；17p）。`AuthFrame`（品牌与标题由属性给出，带语言与外观切换）、`SignInForm`（密码、二次验证码、
   绑定三步，身份提供方按钮，"忘记密码 / 注册"链接；403 `EMAIL_NOT_VERIFIED` 提示并可重发验证邮件，`SIGN_IN_REFUSED` 只给通用文案；
   17m：`emailLink` 在入口开启了 `email-link` 时把"以邮件链接登录"（`EmailLinkForm`，链接回到 `returnTo`）放在最上面、密码在"或用密码登录"之下，
   `userNameLabel="email"` 把名字一栏写作"邮箱"（服务端照旧接受用户名或邮箱）；身份提供方始终在最后）、
