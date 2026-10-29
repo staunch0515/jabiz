@@ -1,6 +1,6 @@
 import { expect, type APIRequestContext, type Page } from '@playwright/test'
 import { expectAccessible, setAppearance } from '@jabiz/ui/testing/playwright'
-import { ADMIN, adminToken, CARRIERS, dataRows, datasetPath, dialog, entityForm, insert, pageRendered, signIn, test, unique } from './support'
+import { ADMIN, adminToken, CARRIERS, dataRows, datasetPath, dialog, entityForm, insert, pageRendered, signIn, test, unique, rowMenu } from './support'
 
 const PRODUCTS = 'urn:jabiz:dataset:default:Product'
 const WAREHOUSES = 'urn:jabiz:dataset:default:Warehouse'
@@ -41,7 +41,9 @@ async function checkPagesAfterSignIn(page: Page, request: APIRequestContext, app
   await expectAccessible(page, at('dataset list'), { expect })
 
   // The pop-ups of the list: the delete confirmation, the calendar of the point in time.
-  await dataRows(page).first().getByTestId('row-delete').click()
+  const actions = await rowMenu(dataRows(page).first())
+  await expectAccessible(page, at('row actions menu'), { expect })
+  await actions.getByTestId('row-delete').click()
   await expect(page.getByRole('alertdialog')).toBeVisible()
   await expectAccessible(page, at('delete confirmation'), { expect })
   await page.keyboard.press('Escape')

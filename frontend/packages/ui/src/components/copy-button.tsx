@@ -11,6 +11,8 @@ export interface CopyButtonProps {
   value: string
   /** The button's accessible name; "Copy" when absent. Name what is copied when several buttons are near. */
   label?: string
+  /** Shown on hovering the button; the label when absent (as the key itself, beside a label saying what is copied). */
+  tooltip?: string
   className?: string
   'data-testid'?: string
 }
@@ -19,7 +21,7 @@ export interface CopyButtonProps {
  * Copies a text (a key, a recovery code, an identifier) to the clipboard. The outcome is shown on the button for
  * a moment and announced politely; without clipboard access (an insecure page, a refusal) it says it could not.
  */
-export function CopyButton({ value, label, className, ...rest }: CopyButtonProps) {
+export function CopyButton({ value, label, tooltip, className, ...rest }: CopyButtonProps) {
   const { t } = useTranslation(UI_NAMESPACE)
   const [state, setState] = useState<'idle' | 'copied' | 'failed'>('idle')
 
@@ -47,7 +49,7 @@ export function CopyButton({ value, label, className, ...rest }: CopyButtonProps
         variant="ghost"
         size="icon-sm"
         aria-label={label ?? t('copy.copy')}
-        title={label ?? t('copy.copy')}
+        title={tooltip ?? label ?? t('copy.copy')}
         onClick={() => void copy()}
         {...rest}
       >

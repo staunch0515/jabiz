@@ -125,6 +125,17 @@ describe('CopyButton', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Could not copy')
   })
 
+  it('shows on hovering its label, or the tooltip given (the value itself), keeping the label as its name', () => {
+    render(
+      <>
+        <CopyButton value="a" label="Copy the key" />
+        <CopyButton value="019a-c0de" label="Copy ID" tooltip="019a-c0de" />
+      </>,
+    )
+    expect(screen.getByRole('button', { name: 'Copy the key' })).toHaveAttribute('title', 'Copy the key')
+    expect(screen.getByRole('button', { name: 'Copy ID' })).toHaveAttribute('title', '019a-c0de')
+  })
+
   it('keeps its whole target beside a long text', () => {
     // jsdom lays nothing out: what keeps the 32px button whole in a flex row is that it does not shrink.
     render(<CopyButton value="x" className="ml-1" />)

@@ -339,7 +339,9 @@ describe('EntityFormDrawer', () => {
     expect(within(sheet).queryByRole('button', { name: 'Save' })).toBeNull()
     expect(within(sheet).getByLabelText(/^note/)).toBeDisabled()
     expect(within(sheet).queryByLabelText('Takes effect at')).toBeNull()
-    expect(within(sheet).getByTestId('detail-actions')).toHaveTextContent('Suspend')
+    // The entry's actions in one menu, behind a button that says so.
+    await userEvent.click(within(within(sheet).getByTestId('detail-actions')).getByRole('button', { name: 'Actions' }))
+    expect(await screen.findByRole('menuitem', { name: 'Suspend' })).toBeInTheDocument()
   })
 
   it('shows an entry of the past without actions', () => {
