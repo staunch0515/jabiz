@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next'
 import { Button } from '../components/ui/button'
 import { Label } from '../components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select'
+import { OidcButtons, type OidcProvider } from './OidcButtons'
 import { AUTH_LINK_CLASS, AuthError, AuthField, AuthFrame, AuthLink, AuthSubmit, Outcome, type AuthNavigation } from './frame'
 import { NewPasswordFields, ResendVerification, type NewPassword } from './MailLinkPage'
 import { AUTH_NAMESPACE } from './messages'
@@ -35,6 +36,21 @@ export interface SignUpFormProps extends AuthNavigation {
   onSubmitted?: (values: SignUpSubmitted) => void
   /** Registers the account; `register` of `@jabiz/client` (the frontend's entry) by default. */
   submit?: (registration: Registration) => Promise<void>
+  /**
+   * Signing up through an identity provider (a provider's first sign-in opens the account where the entry allows it;
+   * decision D39): its buttons in the card, under "Other ways to sign up", as the sign-in form has them. None when absent.
+   */
+  oidc?: {
+    /** Where to go once signed in (kept across the round trip; only paths of this site). */
+    returnTo: string
+    layout?: 'buttons' | 'icons'
+    /** The providers when the caller has them; loaded otherwise. */
+    providers?: readonly OidcProvider[]
+    /** Starts the round trip; `startProviderSignIn` of `@jabiz/client` by default. */
+    start?: (providerId: string, returnTo: string) => Promise<void>
+  }
+  /** Small print at the bottom of the card: the texts signing up agrees to, say. */
+  note?: ReactNode
 }
 
 /**
@@ -42,7 +58,8 @@ export interface SignUpFormProps extends AuthNavigation {
  * twice, the name and the language of the mails. The server answers alike whether the address is new, taken or
  * refused, so the form then always says to look in the mailbox ({@link SignUpSent}); the mail says what happened.
  */
-export function SignUpForm({ brand, appearance, signInPath, extra, onSubmitted, submit = registerAccount, onNavigate, hrefOf }: SignUpFormProps) {
+export function SignUpForm({ brand, appearance, signInPath, extra, onSubmitted, submit = registerAccount, oidc, note, onNavigate,
+  hrefOf }: SignUpFormProps) {
   const { t, i18n } = useTranslation(AUTH_NAMESPACE)
   const languageId = useId()
   const [sent, setSent] = useState<string | null>(null)
@@ -132,6 +149,11 @@ export function SignUpForm({ brand, appearance, signInPath, extra, onSubmitted, 
           {t('signUp.haveAccount')}
         </AuthLink>
       )}
+      {oidc && (
+        <OidcButtons returnTo={oidc.returnTo} providers={oidc.providers} start={oidc.start} layout={oidc.layout}
+          purpose="signUp" onError={(e) => setError(e === null ? null : t('common.error'))} />
+      )}
+      {note && <div className="text-muted-foreground text-center text-sm" data-testid="sign-up-note">{note}</div>}
     </AuthFrame>
   )
 }

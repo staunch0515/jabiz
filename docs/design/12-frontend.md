@@ -314,7 +314,7 @@ jabizApp {
   `SignUpForm` + `SignUpSent`（邮箱、两次密码、显示名、邮件语言，应用的附加字段经 `extra` 插槽；202 后一律提示查收邮件并可重发）、
   `MailLinkPage`（按路径末段分派到 `VerifyEmailPanel`、`JoinPanel`、`PasswordResetConfirm`，无令牌的 `password-reset` 为 `PasswordResetRequest`）、
   `MfaCodeStep`、`MfaEnrollment`、`MfaSettings`（本人的两步验证：状态与剩余恢复码数，未绑定时绑定；默认调用 `/api/auth/mfa*`，可经属性替换；`refreshKey` 改变即重读；15c-2，后台安全设置与示范门户共用）、`StepUpProvider`、
-  `OidcButtons`（按提供方的 `kind` 画标志，Google 为品牌指南的四色"G"（D44），16f-1；Facebook 与 LINE 的标志与 `layout="icons"`（"其他方式登录"下的一排圆形图标按钮，`SignInForm` 的 `oidcLayout`）见 D61 第 5 条，16zk）、`OidcCallback`（登录与本人关联共用：按
+  `OidcButtons`（按提供方的 `kind` 画标志，Google 为品牌指南的四色"G"（D44），16f-1；Facebook 与 LINE 的标志与 `layout="icons"`（"其他方式登录"下的一排圆形图标按钮，`SignInForm` 的 `oidcLayout`）见 D61 第 5 条，16zk；`purpose="signUp"` 时写作"其他方式注册"，`SignUpForm` 的 `oidc` 把它放进注册卡片，`note` 是卡片底部的小字，17u）、`OidcCallback`（登录与本人关联共用：按
   `startIdentityLink` 记下的用途完成关联后调用 `onLinked`；403 `OIDC_ACCOUNT_EXISTS` 时说明用原方式登录后关联）、`LinkedIdentities`（本人的外部账号：列表、关联（需要时先问当前密码）、
   确认后解除；10 §12，16f-1）、`ChangePasswordForm`（`POST /api/auth/account/password`，16m）、
   `SessionList`（本人当前入口的有效会话：设备、地址、最近使用与登录时间，本机标记；确认后结束单个会话（本机即退出登录）或"退出其他全部设备"，

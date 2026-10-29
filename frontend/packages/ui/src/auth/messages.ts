@@ -97,6 +97,8 @@ const en = {
     sentHint: 'It may take a few minutes. No mail? Look in the spam folder first.',
     noMail: 'Didn’t get the mail?',
     haveAccount: 'Already have an account? Sign in',
+    orWith: 'or sign up with',
+    otherWays: 'Other ways to sign up',
   },
   password: {
     changeTitle: 'Change your password',
@@ -383,6 +385,8 @@ const zh: Messages = {
     sentHint: '邮件可能需要几分钟才能送达。没有收到？请先检查垃圾邮件。',
     noMail: '没有收到邮件？',
     haveAccount: '已有账号？登录',
+    orWith: '或通过以下方式注册',
+    otherWays: '其他方式注册',
   },
   password: {
     changeTitle: '修改密码',
@@ -667,6 +671,8 @@ const ja: Messages = {
     sentHint: '届くまで数分かかることがあります。届かない場合は、まず迷惑メールフォルダを確認してください。',
     noMail: 'メールが届きませんか？',
     haveAccount: 'アカウントをお持ちの方はログイン',
+    orWith: 'または次の方法で登録',
+    otherWays: 'その他の方法で登録',
   },
   password: {
     changeTitle: 'パスワードの変更',
