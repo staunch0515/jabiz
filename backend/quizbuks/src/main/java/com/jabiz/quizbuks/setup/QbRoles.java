@@ -119,9 +119,11 @@ public final class QbRoles {
     /**
      * Publishing controlled changes (money parameters, review switches; platform decision D40) belongs to the finance
      * administrator alone, so the super administrator who proposes them is never also the one who publishes. Kept
-     * apart from {@link #FINANCE} because the super administrator's role is built from that list.
+     * apart from {@link #FINANCE} because the super administrator's role is built from that list. Publishing needs
+     * reading the changes too: the controlled changes ({@code SysControlChange}), and the approval rules and limits they
+     * change, are read with {@code approval.read}, and without it the change to publish is nowhere to be seen.
      */
-    private static final List<String> PUBLISH = List.of("control.publish");
+    private static final List<String> PUBLISH = List.of("control.publish", "approval.read");
 
     /**
      * Stripe's events as received (Q6a, D-Q6-14): their bodies may hold payers' names and addresses, so only the finance

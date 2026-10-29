@@ -10,13 +10,14 @@ import {
   Input,
   PageHeader,
   useAuth,
+  useLanguage,
   type ColumnDef,
   type PaginationState,
 } from '@jabiz/admin'
 import { searchUsers, type UserRow } from './api'
 import { DICTIONARY, PATH, PERMISSION } from './ids'
 import { LoadFailed } from './components'
-import { money, useLabels, when } from './hooks'
+import { money, textIn, useLabels, when } from './hooks'
 import { readTakerKudos } from './payout-api'
 
 const linkClass = 'text-primary font-medium underline-offset-4 hover:underline'
@@ -27,6 +28,7 @@ const linkClass = 'text-primary font-medium underline-offset-4 hover:underline'
  */
 export default function UsersPage() {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
+  const language = useLanguage()
   const sponsorStatus = useLabels(DICTIONARY.sponsorReviewStatus)
   const [text, setText] = useState('')
   const [q, setQ] = useState('')
@@ -57,7 +59,7 @@ export default function UsersPage() {
     },
     { id: 'displayName', header: t('users.displayName'), cell: ({ row }) => row.original.displayName ?? '' },
     { id: 'email', header: t('users.email'), cell: ({ row }) => row.original.email ?? '' },
-    { id: 'country', header: t('users.country'), cell: ({ row }) => row.original.countryName ?? row.original.countryCode ?? '' },
+    { id: 'country', header: t('users.country'), cell: ({ row }) => textIn(row.original.countryName, language) || row.original.countryCode || '' },
     { id: 'registeredAt', header: t('users.registeredAt'), cell: ({ row }) => when(row.original.registeredAt) },
     { id: 'sponsorStatus', header: t('users.sponsorStatus'), cell: ({ row }) => sponsorStatus(row.original.sponsorStatus) },
     {
@@ -79,7 +81,7 @@ export default function UsersPage() {
           return k ? money(k.balance) : ''
         } },
     ] satisfies ColumnDef<UserRow, unknown>[] : []),
-  ], [t, sponsorStatus, finance, kudos.data])
+  ], [t, language, sponsorStatus, finance, kudos.data])
 
   return (
     <div className="flex flex-col gap-4" data-testid="qb-users">

@@ -1,6 +1,7 @@
 package com.jabiz.quizbuks.setup;
 
 import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.runtime.approval.ApprovalPermissions;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -79,6 +80,8 @@ class QbRolesTest {
             .extracting(QbRoles.Role::code).containsExactly(QbRoles.ADMIN_FINANCE);
         assertThat(QbRoles.all()).noneSatisfy(role -> assertThat(role.permissions())
             .contains("control.propose", "control.publish"));
+        // Who publishes sees what there is to publish: the controlled changes' dataset is read with approval.read.
+        assertThat(QbRoles.of(QbRoles.ADMIN_FINANCE).permissions()).contains(ApprovalPermissions.READ);
         // The sponsors' content datasets are read only; their write permission is held by nobody.
         assertThat(QbRoles.all()).allSatisfy(role -> assertThat(role.permissions())
             .doesNotContain(QbPermissions.SPONSOR_VIEW_WRITE));
