@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { adminToken, confirm, dataRows, datasetPath, entityForm, insert, option, searchedRow, signIn, unique } from './support'
+import { adminToken, confirm, dataRows, datasetPath, entityForm, insert, option, searchedRow, signIn, unique, rowMenu } from './support'
 
 const SUPPLIERS = 'urn:jabiz:dataset:default:Supplier'
 const CERTIFICATIONS = 'urn:jabiz:dataset:default:SupplierCertification'
@@ -49,13 +49,14 @@ test('a certification is written, picked for its supplier and moved on by its ro
   await expect(row).toContainText(supplierName)
   await expect(row).toContainText('草稿')
 
-  await row.getByTestId('row-action-CERTIFICATION_SUBMIT').click()
+  await (await rowMenu(row)).getByTestId('row-action-CERTIFICATION_SUBMIT').click()
   await confirm(page)
   await expect(row).toContainText('审核中')
-  await expect(row.getByTestId('row-action-CERTIFICATION_SUBMIT')).toHaveCount(0)
+  const actions = await rowMenu(row)
+  await expect(actions.getByTestId('row-action-CERTIFICATION_SUBMIT')).toHaveCount(0)
 
   // An action with more input opens its form with the certification filled in and read-only.
-  await row.getByTestId('row-action-CERTIFICATION_REJECT').click()
+  await actions.getByTestId('row-action-CERTIFICATION_REJECT').click()
   await expect(page.getByLabel('certificationId')).not.toBeEditable()
   await page.getByLabel('comment').fill('The certificate copy is missing.')
   await page.getByRole('button', { name: '执行', exact: true }).click()

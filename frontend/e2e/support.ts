@@ -138,6 +138,17 @@ export function rangeEnd(scope: Page | Locator, label: string, end: 'from' | 'to
 }
 
 /** Confirms the open confirmation (an alert dialog, "确定"), as a row's delete or action asks for. */
+/**
+ * Opens a data row's actions menu (its processes, history, audit trail and delete; 12 section 3) and gives the open
+ * menu, which is rendered apart from the row.
+ */
+export async function rowMenu(row: Locator): Promise<Locator> {
+  await row.getByTestId('row-actions').click()
+  const menu = row.page().getByRole('menu')
+  await expect(menu).toBeVisible()
+  return menu
+}
+
 export async function confirm(page: Page) {
   await confirmWith(page, '确定')
 }

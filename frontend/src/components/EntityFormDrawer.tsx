@@ -300,7 +300,8 @@ function EntityForm({
             )}
             {instance && actions.length > 0 && (
               <div className="flex flex-wrap items-center gap-2" data-testid="detail-actions">
-                <RowActions actions={actions} id={instance.id} attributes={original} onDone={onSaved} />
+                <RowActions actions={actions} id={instance.id} attributes={original} onDone={onSaved}
+                  label={t('list.actions')} />
               </div>
             )}
             {fields.map((formField) => (

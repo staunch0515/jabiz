@@ -130,6 +130,12 @@ async function page(search = '') {
 const table = () => screen.getByRole('table', { name: 'Carrier' })
 const rows = () => Array.from(table().querySelectorAll<HTMLElement>('[data-slot="data-table-row"]'))
 
+/** Opens a row's actions menu; the menu (rendered apart from the row). */
+async function rowMenu(row: HTMLElement): Promise<HTMLElement> {
+  await userEvent.click(within(row).getByTestId('row-actions'))
+  return screen.findByRole('menu')
+}
+
 describe('DatasetListPage', () => {
   beforeEach(async () => {
     await act(() => i18n.changeLanguage('en'))
@@ -239,7 +245,8 @@ describe('DatasetListPage', () => {
     expect(screen.getByTestId('time-travel')).toHaveTextContent('Editing is only possible on the current data.')
     expect(screen.queryByTestId('create')).toBeNull()
     expect(within(rows()[0]).queryByTestId('row-edit')).toBeNull()
-    expect(within(rows()[0]).queryByTestId('row-delete')).toBeNull()
+    expect(within(await rowMenu(rows()[0])).queryByTestId('row-delete')).toBeNull()
+    await userEvent.keyboard('{Escape}')
     expect(within(rows()[0]).getByTestId('row-view')).toBeInTheDocument()
 
     // Clearing the time returns to the current data, in the address too.
@@ -260,7 +267,7 @@ describe('DatasetListPage', () => {
   it('deletes after a confirmation and reads the page again', async () => {
     await page()
     const before = queries().length
-    await userEvent.click(within(rows()[0]).getByTestId('row-delete'))
+    await userEvent.click(within(await rowMenu(rows()[0])).getByTestId('row-delete'))
     const confirm = screen.getByRole('alertdialog', { name: 'Delete this entry?' })
     await expectAccessible()
     await userEvent.click(within(confirm).getByRole('button', { name: 'OK' }))
@@ -279,7 +286,7 @@ describe('DatasetListPage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Next page' }))
     await waitFor(() => expect(rows()).toHaveLength(1))
     expect(rows()[0]).toHaveTextContent('C21')
-    await userEvent.click(within(rows()[0]).getByTestId('row-delete'))
+    await userEvent.click(within(await rowMenu(rows()[0])).getByTestId('row-delete'))
     await userEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'OK' }))
     await waitFor(() => expect(lastQuery()).toMatchObject({ offset: 0, limit: 20 }))
     await waitFor(() => expect(rows()).toHaveLength(20))
@@ -288,10 +295,10 @@ describe('DatasetListPage', () => {
     await waitFor(() => expect(document.activeElement).toBe(table()))
   })
 
-  it('keeps focus on the delete button of a row that is still there after cancelling', async () => {
+  it('keeps focus on the actions menu of a row that is still there after cancelling', async () => {
     await page()
-    const button = within(rows()[0]).getByTestId('row-delete')
-    await userEvent.click(button)
+    const button = within(rows()[0]).getByTestId('row-actions')
+    await userEvent.click(within(await rowMenu(rows()[0])).getByTestId('row-delete'))
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     await waitFor(() => expect(document.activeElement).toBe(button))
   })
@@ -325,12 +332,15 @@ describe('DatasetListPage', () => {
       { name: 'CARRIER_SUSPEND', version: 1, latest: true, deprecated: false, label: 'Suspend', actsOn: { entity: 'Carrier', input: 'carrierId' } } as unknown as ProcessEntry,
     ]
     await page()
-    const row = within(rows()[0])
-    expect(row.getByTestId('row-edit')).toBeInTheDocument()
-    expect(row.getByTestId('row-delete')).toBeInTheDocument()
-    expect(row.getByTestId('row-history')).toHaveAttribute('href', `/data/${encodeURIComponent(DATASET)}/c-1/history`)
-    expect(row.getByTestId('row-audit')).toHaveAttribute('href', '/audit?entityType=Carrier&entityId=c-1')
-    expect(row.getByTestId('row-action-CARRIER_SUSPEND')).toBeInTheDocument()
+    expect(within(rows()[0]).getByTestId('row-edit')).toBeInTheDocument()
+    // The rest in one menu: the processes, the pages about the row, and deleting last.
+    const menu = await rowMenu(rows()[0])
+    expect(within(menu).getAllByRole('menuitem').map((item) => item.textContent)).toEqual(['Suspend', 'History',
+      'Audit trail', 'Delete'])
+    expect(within(menu).getByTestId('row-history')).toHaveAttribute('href', `/data/${encodeURIComponent(DATASET)}/c-1/history`)
+    expect(within(menu).getByTestId('row-audit')).toHaveAttribute('href', '/audit?entityType=Carrier&entityId=c-1')
+    expect(within(menu).getByTestId('row-action-CARRIER_SUSPEND')).toBeInTheDocument()
+    await expectAccessible()
     expect(screen.getByRole('columnheader', { name: 'Actions' })).toHaveClass('sticky')
   })
 
@@ -340,9 +350,8 @@ describe('DatasetListPage', () => {
     expect(screen.queryByTestId('create')).toBeNull()
     const row = within(rows()[0])
     expect(row.queryByTestId('row-edit')).toBeNull()
-    expect(row.queryByTestId('row-delete')).toBeNull()
-    expect(row.queryByTestId('row-history')).toBeNull()
-    expect(row.queryByTestId('row-audit')).toBeNull()
+    // No delete, history, audit trail or process: no menu at all.
+    expect(row.queryByTestId('row-actions')).toBeNull()
     expect(screen.queryByLabelText('As of')).toBeNull()
     await userEvent.click(row.getByTestId('row-view'))
     const sheet = screen.getByRole('dialog', { name: 'Carrier' })
@@ -353,7 +362,8 @@ describe('DatasetListPage', () => {
     state.entity = { ...entity, writeOnce: true }
     await page()
     expect(screen.getByTestId('create')).toBeInTheDocument()
-    expect(within(rows()[0]).queryByTestId('row-delete')).toBeNull()
+    expect(within(await rowMenu(rows()[0])).queryByTestId('row-delete')).toBeNull()
+    await userEvent.keyboard('{Escape}')
     expect(within(rows()[0]).getByTestId('row-view')).toBeInTheDocument()
   })
 

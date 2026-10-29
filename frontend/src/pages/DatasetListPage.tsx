@@ -3,7 +3,6 @@ import {
   Alert,
   AlertDescription,
   Button,
-  ConfirmDialog,
   DataTable,
   DateTimePicker,
   FilterBar,
@@ -19,7 +18,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { History, Info, Plus, ScrollText } from 'lucide-react'
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Link, useParams, useSearchParams } from 'react-router'
+import { useParams, useSearchParams } from 'react-router'
 import EntityFormDrawer from '../components/EntityFormDrawer'
 import RowActions from '../components/RowActions'
 import AdminPage from '../layout/AdminPage'
@@ -187,44 +186,25 @@ function DatasetList({
             >
               {t(canChange ? 'list.edit' : 'list.view')}
             </Button>
-            {!timeTravel && (
-              <RowActions
-                actions={actions}
-                id={row.__instance.id}
-                attributes={row}
-                onDone={() => refetch()}
-                returnFocus={focusTable}
-              />
-            )}
-            {canChange && (
-              <ConfirmDialog
-                title={t('list.deleteConfirm')}
-                destructive
-                onConfirm={() => remove(row)}
-                returnFocus={focusTable}
-                trigger={
-                  <Button variant="link" size="sm" className={`${LINK} text-destructive`} data-testid="row-delete">
-                    {t('list.delete')}
-                  </Button>
-                }
-              />
-            )}
-            {showHistory && (
-              <Button variant="link" size="sm" className={LINK} asChild>
-                <Link to={paths.history(datasetId, String(row.__instance.id))} data-testid="row-history">
-                  <History aria-hidden />
-                  {t('list.history')}
-                </Link>
-              </Button>
-            )}
-            {showAudit && (
-              <Button variant="link" size="sm" className={LINK} asChild>
-                <Link to={paths.audit(entity.entity, String(row.__instance.id))} data-testid="row-audit">
-                  <ScrollText aria-hidden />
-                  {t('audit.open')}
-                </Link>
-              </Button>
-            )}
+            <RowActions
+              // At another point in time nothing is run: the row is not the current one.
+              actions={timeTravel ? [] : actions}
+              id={row.__instance.id}
+              attributes={row}
+              onDone={() => refetch()}
+              returnFocus={focusTable}
+              links={[
+                ...(showHistory
+                  ? [{ label: t('list.history'), to: paths.history(datasetId, String(row.__instance.id)),
+                      icon: <History aria-hidden />, testId: 'row-history' }]
+                  : []),
+                ...(showAudit
+                  ? [{ label: t('audit.open'), to: paths.audit(entity.entity, String(row.__instance.id)),
+                      icon: <ScrollText aria-hidden />, testId: 'row-audit' }]
+                  : []),
+              ]}
+              onDelete={canChange ? () => remove(row) : undefined}
+            />
           </span>
         ),
       },
