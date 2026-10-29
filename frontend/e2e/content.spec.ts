@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { adminToken, confirm, dataRows, datasetPath, entityForm, insert, option, searchedRow, signIn, unique } from './support'
+import { adminToken, confirm, dataRows, datasetPath, entityForm, insert, option, searchedRow, signIn, unique, rowMenu } from './support'
 
 const SUPPLIERS = 'urn:jabiz:dataset:default:Supplier'
 const CERTIFICATIONS = 'urn:jabiz:dataset:default:SupplierCertification'
@@ -42,6 +42,8 @@ test('a certification is written, picked for its supplier and moved on by its ro
   await expect(page.getByTestId('i18n-body').getByTestId('markdown-view').locator('strong')).toHaveText('关东')
   await drawer.getByRole('button', { name: '保存', exact: true }).click()
   await expect(page.getByText('已保存。').or(page.getByText('Saved.'))).toBeVisible()
+  // The closing form gives focus back to "New" when it is gone, which would close a menu opened before.
+  await expect(drawer).toBeHidden()
 
   const row = dataRows(page).filter({ hasText: `有机认证 ${code}` })
   await expect(row).toHaveCount(1)
@@ -49,13 +51,14 @@ test('a certification is written, picked for its supplier and moved on by its ro
   await expect(row).toContainText(supplierName)
   await expect(row).toContainText('草稿')
 
-  await row.getByTestId('row-action-CERTIFICATION_SUBMIT').click()
+  await (await rowMenu(row)).getByTestId('row-action-CERTIFICATION_SUBMIT').click()
   await confirm(page)
   await expect(row).toContainText('审核中')
-  await expect(row.getByTestId('row-action-CERTIFICATION_SUBMIT')).toHaveCount(0)
+  const actions = await rowMenu(row)
+  await expect(actions.getByTestId('row-action-CERTIFICATION_SUBMIT')).toHaveCount(0)
 
   // An action with more input opens its form with the certification filled in and read-only.
-  await row.getByTestId('row-action-CERTIFICATION_REJECT').click()
+  await actions.getByTestId('row-action-CERTIFICATION_REJECT').click()
   await expect(page.getByLabel('certificationId')).not.toBeEditable()
   await page.getByLabel('comment').fill('The certificate copy is missing.')
   await page.getByRole('button', { name: '执行', exact: true }).click()

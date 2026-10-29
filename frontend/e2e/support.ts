@@ -1,4 +1,5 @@
 import { test as base, expect, type APIRequestContext, type Locator, type Page } from '@playwright/test'
+import { animationsSettled } from '@jabiz/ui/testing/playwright'
 
 /**
  * Playwright's test, failing any test during which the page reported a Content-Security-Policy violation: the server
@@ -138,6 +139,21 @@ export function rangeEnd(scope: Page | Locator, label: string, end: 'from' | 'to
 }
 
 /** Confirms the open confirmation (an alert dialog, "确定"), as a row's delete or action asks for. */
+/**
+ * Opens a data row's actions menu (its processes, history, audit trail and delete; 12 section 3) and gives the open
+ * menu, which is rendered apart from the row.
+ */
+export async function rowMenu(row: Locator): Promise<Locator> {
+  const page = row.page()
+  // A closing drawer or dialog gives focus back when its animation ends, which closes a menu opened meanwhile.
+  await animationsSettled(page)
+  await row.getByTestId('row-actions').click()
+  const menu = page.getByRole('menu')
+  await expect(menu).toBeVisible()
+  await animationsSettled(page)
+  return menu
+}
+
 export async function confirm(page: Page) {
   await confirmWith(page, '确定')
 }

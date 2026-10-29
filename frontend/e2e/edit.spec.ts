@@ -1,5 +1,5 @@
 import { expect } from '@playwright/test'
-import { adminToken, CARRIERS, commit, confirm, dataRows, datasetPath, entityForm, insert, option, searchedRow, signIn, test, unique } from './support'
+import { adminToken, CARRIERS, commit, confirm, dataRows, datasetPath, entityForm, insert, option, searchedRow, signIn, test, unique, rowMenu } from './support'
 
 /**
  * Acceptance criteria 1 and 2 of ROADMAP phase 10: the generated form creates and edits a Carrier, and for the same
@@ -35,7 +35,7 @@ test.describe('the generated form', () => {
     await expect(drawer).toBeHidden()
     await expect(row).toContainText('Echo Express Ltd')
 
-    await row.getByTestId('row-delete').click()
+    await (await rowMenu(row)).getByTestId('row-delete').click()
     await confirm(page)
     await expect(dataRows(page)).toHaveCount(0)
   })

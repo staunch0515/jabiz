@@ -39,6 +39,9 @@ test('the list page of a new entity is generated from its metadata', async ({ pa
   await expect(rows.nth(0)).toContainText(`${prefix}A`)
   await expect(rows.nth(0)).toContainText('日本')
   await expect(rows.nth(0)).toContainText('3,000')
+  // The first column copies the row's key, shown on hovering (17t).
+  await expect(page.getByRole('columnheader').first()).toHaveText('ID')
+  await expect(rows.nth(0).getByRole('button', { name: '复制 ID' })).toHaveAttribute('title', /\S{8,}/)
 
   // Sorting by credit limit (whitelisted).
   await sortBy(page, '信用额度')
