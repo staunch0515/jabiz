@@ -100,14 +100,16 @@ public class ErasurePurge {
     /**
      * The maintenance connection, when configured: {@code jabiz.erasure.datasource.url} (R2DBC, the application's
      * database and schema), {@code .username} and {@code .password} of a login that is a member of
-     * {@code jabiz_maintenance}; from the environment only ({@code JABIZ_ERASURE_DATASOURCE_*}).
+     * {@code jabiz_maintenance}; from the environment only ({@code JABIZ_ERASURE_DATASOURCE_*}). A URL that is not
+     * R2DBC (a JDBC one, typically) makes no connection rather than failing the context with a stack trace: the
+     * startup check ({@link AccountDeletionChecks}) reports it in a line, with every other problem at once.
      */
     @Bean
     @ConditionalOnProperty(name = "jabiz.erasure.datasource.url")
     MaintenanceStorage erasureMaintenanceStorage(@Value("${jabiz.erasure.datasource.url}") String url,
         @Value("${jabiz.erasure.datasource.username:}") String username,
         @Value("${jabiz.erasure.datasource.password:}") String password) {
-        return MaintenanceStorage.connect(url, username, password);
+        return MaintenanceStorage.urlProblem(url) == null ? MaintenanceStorage.connect(url, username, password) : null;
     }
 
     /** The step: reads the erasure, purges it unless purged already. */
