@@ -31,6 +31,7 @@ import {
 } from '@jabiz/admin'
 import { LoadFailed } from './components'
 import { useLabels, usePaged, when } from './hooks'
+import { useMoreFilters } from './moreFilters'
 import { DICTIONARY, PATH } from './ids'
 import { OPERATORS_KEY, readOperatorReviews, readOperators, spotCheck, type CheckResult, type OperatorReview } from './operator-api'
 
@@ -118,8 +119,13 @@ export default function OperatorReviewsPage() {
     }
     setSearch(next, { replace: true })
   }
-  const { query, table, sortable } = usePaged([...KEY, operatorId, unchecked],
-    (offset, limit, sorts) => readOperatorReviews(operatorId, unchecked, offset, limit, sorts), true, SORTS)
+  const more = useMoreFilters([
+    { kind: 'choice', name: 'decision', label: t('operator.reviews.decision'),
+      options: ['APPROVE', 'REJECT'].map((code) => ({ value: code, label: t(`operator.reviews.decisions.${code}`) })) },
+    { kind: 'time', name: 'decidedAt', label: t('operator.reviews.decidedAt') },
+  ], 'reviews-filters')
+  const { query, table, sortable } = usePaged([...KEY, operatorId, unchecked, more.filters],
+    (offset, limit, sorts) => readOperatorReviews(operatorId, unchecked, offset, limit, sorts, more.filters), true, SORTS)
   const columns = useMemo<ColumnDef<OperatorReview, unknown>[]>(() => [
     { id: 'decidedAt', header: t('operator.reviews.decidedAt'), cell: ({ row }) => when(row.original.decidedAt) },
     { id: 'operator', header: t('operator.reviews.operator'), cell: ({ row }) => row.original.operatorName },
@@ -202,6 +208,7 @@ export default function OperatorReviewsPage() {
           <Label htmlFor={`${id}-unchecked`} className="font-normal">{t('operator.reviews.onlyUnchecked')}</Label>
         </div>
       </div>
+      {more.bar}
       {query.isError
         ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
         : (

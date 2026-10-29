@@ -1,4 +1,4 @@
-import { api, runProcess, runQuery, unwrap } from '@jabiz/admin'
+import { api, runProcess, runQuery, unwrap, type Filter } from '@jabiz/admin'
 import { DATASET, PROCESS, SPONSOR_KIND, TEMPLATE } from './ids'
 import type { SortSpec } from './api'
 
@@ -125,11 +125,11 @@ function cashReward(row: Row): CashReward {
   }
 }
 
-export async function readCashRewards(status: string | null, q: string, offset: number, limit: number, sorts?: SortSpec[]):
+export async function readCashRewards(status: string | null, q: string, offset: number, limit: number, sorts?: SortSpec[], more?: Filter[]):
   Promise<{ items: CashReward[]; total?: number }> {
   const page = await runQuery<Row>(TEMPLATE.cashRewards, {
     params: q.trim() ? { q: q.trim() } : {},
-    filters: status ? [{ field: 'status', op: 'eq', value: status }] : [],
+    filters: [...status ? [{ field: 'status', op: 'eq', value: status }] : [], ...(more ?? [])],
     sorts,
     offset,
     limit,
@@ -201,11 +201,11 @@ function redemption(row: Row): Redemption {
   }
 }
 
-export async function readRedemptions(status: string | null, q: string, offset: number, limit: number, sorts?: SortSpec[]):
+export async function readRedemptions(status: string | null, q: string, offset: number, limit: number, sorts?: SortSpec[], more?: Filter[]):
   Promise<{ items: Redemption[]; total?: number }> {
   const page = await runQuery<Row>(TEMPLATE.redemptions, {
     params: q.trim() ? { q: q.trim() } : {},
-    filters: status ? [{ field: 'status', op: 'eq', value: status }] : [],
+    filters: [...status ? [{ field: 'status', op: 'eq', value: status }] : [], ...(more ?? [])],
     sorts,
     offset,
     limit,
@@ -292,11 +292,11 @@ function digitalPrize(row: Row): DigitalPrize {
   }
 }
 
-export async function readDigitalPrizes(status: string | null, q: string, offset: number, limit: number, sorts?: SortSpec[]):
+export async function readDigitalPrizes(status: string | null, q: string, offset: number, limit: number, sorts?: SortSpec[], more?: Filter[]):
   Promise<{ items: DigitalPrize[]; total?: number }> {
   const page = await runQuery<Row>(TEMPLATE.digitalPrizes, {
     params: q.trim() ? { q: q.trim() } : {},
-    filters: status ? [{ field: 'status', op: 'eq', value: status }] : [],
+    filters: [...status ? [{ field: 'status', op: 'eq', value: status }] : [], ...(more ?? [])],
     sorts,
     offset,
     limit,

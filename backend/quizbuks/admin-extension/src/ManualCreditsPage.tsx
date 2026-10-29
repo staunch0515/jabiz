@@ -37,6 +37,7 @@ import { parseAmount } from './finance'
 import { StatusFilter } from './finance-components'
 import { LoadFailed } from './components'
 import { money, useLabels, usePaged, when } from './hooks'
+import { useMoreFilters } from './moreFilters'
 import { BANK_REVIEW, DICTIONARY, PATH, PERMISSION } from './ids'
 import { MANUAL_KINDS, readApprovedSponsors, readManualCredits, recordManualCredit, SPONSOR_CHOICES,
   type ManualCredit, type ManualKind } from './manual-api'
@@ -230,8 +231,13 @@ export default function ManualCreditsPage() {
     }
     setSearch(next, { replace: true })
   }
-  const { query, table, sortable } = usePaged([...KEY, filterStatus],
-    (offset, limit, sorts) => readManualCredits(filterStatus, offset, limit, sorts), true, SORTS)
+  const more = useMoreFilters([
+    { kind: 'dictionary', name: 'manualKind', label: t('manual.kind'), dictionary: DICTIONARY.topUpManualKind },
+    { kind: 'eq', name: 'transferCode', label: t('manual.code'), upper: true },
+    { kind: 'time', name: 'createdAt', label: t('manual.createdAt') },
+  ], 'manual-filters')
+  const { query, table, sortable } = usePaged([...KEY, filterStatus, more.filters],
+    (offset, limit, sorts) => readManualCredits(filterStatus, offset, limit, sorts, more.filters), true, SORTS)
   const columns = useMemo<ColumnDef<ManualCredit, unknown>[]>(() => [
     { id: 'createdAt', header: t('manual.createdAt'), cell: ({ row }) => when(row.original.createdAt) },
     { id: 'code', header: t('manual.code'),
@@ -285,6 +291,7 @@ export default function ManualCreditsPage() {
           <Button variant="ghost" size="sm" onClick={() => set({ status: null })}>{t('manual.all')}</Button>
         )}
       </div>
+      {more.bar}
       {query.isError
         ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
         : (

@@ -22,6 +22,7 @@ import {
 } from '@jabiz/admin'
 import { LoadFailed } from './components'
 import { useLabels, usePaged, when } from './hooks'
+import { useMoreFilters } from './moreFilters'
 import { DICTIONARY, PATH, PERMISSION } from './ids'
 import { OperatorFields } from './operator-components'
 import { OPERATORS_KEY, readOperators, saveOperator, type Operator } from './operator-api'
@@ -90,7 +91,12 @@ export default function OperatorsPage() {
   const { can } = useAuth()
   const status = useLabels(DICTIONARY.operatorStatus)
   const [creating, setCreating] = useState(false)
-  const { query, table, sortable } = usePaged([...OPERATORS_KEY, 'list'], readOperators, true, SORTS)
+  const more = useMoreFilters([
+    { kind: 'dictionary', name: 'status', label: t('operator.fields.status'), dictionary: DICTIONARY.operatorStatus },
+    { kind: 'time', name: 'createdAt', label: t('operator.list.createdAt') },
+  ], 'operators-filters')
+  const { query, table, sortable } = usePaged([...OPERATORS_KEY, 'list', more.filters],
+    (offset, limit, sorts) => readOperators(offset, limit, sorts, more.filters), true, SORTS)
   const columns = useMemo<ColumnDef<Operator, unknown>[]>(() => [
     {
       id: 'name',
@@ -116,6 +122,7 @@ export default function OperatorsPage() {
         actions={can(PERMISSION.operatorsWrite) && (
           <Button onClick={() => setCreating(true)} data-testid="operator-new">{t('operator.list.new')}</Button>
         )} />
+      {more.bar}
       {query.isError
         ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
         : (

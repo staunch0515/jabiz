@@ -16,6 +16,7 @@ import {
 } from '@jabiz/admin'
 import { LoadFailed } from './components'
 import { useLabels, usePaged, when } from './hooks'
+import { useMoreFilters } from './moreFilters'
 import { DICTIONARY, PATH } from './ids'
 import { quizFilterOf, readQuizzes, type QuizRow } from './overview-api'
 
@@ -52,8 +53,13 @@ export default function QuizzesPage() {
     }
     setSearch(next, { replace: true })
   }
-  const { query, table, sortable } = usePaged(['qb-ext', 'quizzes', filter],
-    (offset, limit, sorts) => readQuizzes(filter, offset, limit, sorts), true, SORTS)
+  const more = useMoreFilters([
+    { kind: 'dictionary', name: 'kind', label: t('quizzes.kind'), dictionary: DICTIONARY.quizKind },
+    { kind: 'dictionary', name: 'status', label: t('quizzes.status'), dictionary: DICTIONARY.quizStatus },
+    { kind: 'time', name: 'editedAt', label: t('quizzes.editedAt') },
+  ], 'quizzes-filters')
+  const { query, table, sortable } = usePaged(['qb-ext', 'quizzes', filter, more.filters],
+    (offset, limit, sorts) => readQuizzes(filter, offset, limit, sorts, more.filters), true, SORTS)
 
   const columns = useMemo<ColumnDef<QuizRow, unknown>[]>(() => [
     {
@@ -143,6 +149,7 @@ export default function QuizzesPage() {
           </Button>
         )}
       </div>
+      {more.bar}
       {query.isError
         ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
         : (

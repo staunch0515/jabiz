@@ -91,13 +91,13 @@ export interface AttemptListRow {
   rewardStatus: string | null
 }
 
-export async function readAllAttempts(filter: AttemptFilter, offset: number, limit: number, sorts?: SortSpec[]) {
+export async function readAllAttempts(filter: AttemptFilter, offset: number, limit: number, sorts?: SortSpec[], more?: Filter[]) {
   const filters: Filter[] = []
   if (filter.userId) filters.push({ field: 'userId', op: 'eq', value: filter.userId })
   if (filter.publicationId) filters.push({ field: 'publicationId', op: 'eq', value: filter.publicationId })
   if (filter.status) filters.push({ field: 'status', op: 'eq', value: filter.status })
   if (filter.rewardStatus) filters.push({ field: 'rewardStatus', op: 'eq', value: filter.rewardStatus })
-  const answer = await runQuery<Row>(TEMPLATE.attempts, { filters, sorts, offset, limit, count: true })
+  const answer = await runQuery<Row>(TEMPLATE.attempts, { filters: [...filters, ...(more ?? [])], sorts, offset, limit, count: true })
   return {
     total: answer.total,
     items: answer.items.map((row): AttemptListRow => ({

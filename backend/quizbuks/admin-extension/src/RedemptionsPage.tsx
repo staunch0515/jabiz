@@ -27,6 +27,7 @@ import {
 import { StatusFilter } from './finance-components'
 import { LoadFailed, PublisherLink } from './components'
 import { money, useLabels, usePaged, when } from './hooks'
+import { useMoreFilters } from './moreFilters'
 import { DICTIONARY, PATH, PERMISSION } from './ids'
 import { readRedemptions, voidRedemption, type Redemption } from './reward-api'
 
@@ -112,8 +113,12 @@ export default function RedemptionsPage() {
     }
     setSearch(next, { replace: true })
   }
-  const { query, table, sortable } = usePaged([...KEY, filterStatus, q],
-    (offset, limit, sorts) => readRedemptions(filterStatus, q, offset, limit, sorts), true, SORTS)
+  const more = useMoreFilters([
+    { kind: 'amount', name: 'amount', label: t('reward.redeem.value') },
+    { kind: 'time', name: 'dueAt', label: t('reward.redeem.dueAt') },
+  ], 'redeem-filters')
+  const { query, table, sortable } = usePaged([...KEY, filterStatus, q, more.filters],
+    (offset, limit, sorts) => readRedemptions(filterStatus, q, offset, limit, sorts, more.filters), true, SORTS)
   const columns = useMemo<ColumnDef<Redemption, unknown>[]>(() => [
     { id: 'dueAt', header: t('reward.redeem.dueAt'), cell: ({ row }) => when(row.original.dueAt) },
     { id: 'code', header: t('reward.redeem.code'),
@@ -197,6 +202,7 @@ export default function RedemptionsPage() {
           }}>{t('reward.redeem.all')}</Button>
         )}
       </div>
+      {more.bar}
       {query.isError
         ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
         : (

@@ -15,6 +15,7 @@ import {
 import { LoadFailed } from './components'
 import { StatusFilter } from './finance-components'
 import { money, useLabels, usePaged, when } from './hooks'
+import { useMoreFilters } from './moreFilters'
 import { DICTIONARY, PATH, PERMISSION } from './ids'
 import { attemptFilterOf, readAllAttempts, readAttemptKudos, type AttemptListRow } from './payout-api'
 
@@ -45,8 +46,12 @@ export default function AttemptsPage() {
     }
     setSearch(next, { replace: true })
   }
-  const { query, table, sortable } = usePaged(['qb-ext', 'attempts', filter],
-    (offset, limit, sorts) => readAllAttempts(filter, offset, limit, sorts), true, SORTS)
+  const more = useMoreFilters([
+    { kind: 'time', name: 'startedAt', label: t('attempts.startedAt') },
+    { kind: 'time', name: 'submittedAt', label: t('attempts.submittedAt') },
+  ], 'attempts-filters')
+  const { query, table, sortable } = usePaged(['qb-ext', 'attempts', filter, more.filters],
+    (offset, limit, sorts) => readAllAttempts(filter, offset, limit, sorts, more.filters), true, SORTS)
   const ids = (query.data?.items ?? []).map((row) => row.attemptId)
   const kudos = useQuery({ queryKey: ['qb-ext', 'attempt-kudos', ids], queryFn: () => readAttemptKudos(ids),
     enabled: finance && ids.length > 0 })
@@ -107,6 +112,7 @@ export default function AttemptsPage() {
           </Button>
         )}
       </div>
+      {more.bar}
       {query.isError
         ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
         : (
