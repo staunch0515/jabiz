@@ -12,6 +12,7 @@ import {
   PageState,
   UserName,
   useAuth,
+  useLanguage,
   type ColumnDef,
   type DescriptionItem,
 } from '@jabiz/admin'
@@ -34,13 +35,14 @@ import {
 import { DICTIONARY, isUserId, PATH, PERMISSION } from './ids'
 import { LoadFailed, Section } from './components'
 import { PayoutPanel } from './PayoutPanel'
-import { money, useLabels, usePaged, when } from './hooks'
+import { money, textIn, useLabels, usePaged, when } from './hooks'
 
 const linkClass = 'text-primary font-medium underline-offset-4 hover:underline'
 const right = { className: 'text-right tabular-nums' }
 
 function Profile({ user }: { user: UserRow }) {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
+  const language = useLanguage()
   const sponsorStatus = useLabels(DICTIONARY.sponsorReviewStatus)
   const { can } = useAuth()
   const ban = useQuery({ queryKey: ['qb-ext', 'ban', user.userId], queryFn: () => readBan(user.userId) })
@@ -55,7 +57,7 @@ function Profile({ user }: { user: UserRow }) {
     {
       key: 'country',
       label: t('user.country'),
-      value: [user.countryName ?? user.countryCode, user.city].filter(Boolean).join(', ') || notSet,
+      value: [textIn(user.countryName, language) || user.countryCode, user.city].filter(Boolean).join(', ') || notSet,
     },
     { key: 'registeredAt', label: t('user.registeredAt'), value: when(user.registeredAt) || notSet },
     {
