@@ -208,6 +208,8 @@ export interface Publication {
   /** Q10b: who paused it (SPONSOR or ADMIN) and the reason an administrator gave. */
   pausedBy: string | null
   adminReason: string | null
+  /** Q48a: the operator whose member took it down; null when headquarters did, or nobody. */
+  takedownOperatorId: string | null
 }
 
 export async function readPublication(publicationId: string): Promise<Publication | null> {
@@ -238,6 +240,7 @@ export async function readPublication(publicationId: string): Promise<Publicatio
     rejectReason: str(row.rejectReason),
     pausedBy: str(row.pausedBy),
     adminReason: str(row.adminReason),
+    takedownOperatorId: str(row.takedownOperatorId),
   }
 }
 

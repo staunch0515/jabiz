@@ -14,14 +14,29 @@ class QbRolesTest {
     @Test
     void declaresTheFiveRolesOfTheDesign() {
         assertThat(QbRoles.all()).extracting(QbRoles.Role::code).containsExactly(QbRoles.TAKER, QbRoles.SPONSOR,
-            QbRoles.SHOPIFY_SHOP, QbRoles.ADMIN_CONTENT, QbRoles.ADMIN_FINANCE, QbRoles.ADMIN_SUPER);
+            QbRoles.SHOPIFY_SHOP, QbRoles.ADMIN_CONTENT, QbRoles.ADMIN_FINANCE, QbRoles.ADMIN_SUPER, QbRoles.OPERATOR);
         assertThat(QbRoles.all()).allSatisfy(role -> assertThat(role.labels()).containsOnlyKeys("en", "zh", "ja"));
     }
 
     @Test
     void administratorsNeedASecondFactor() {
         assertThat(QbRoles.all()).filteredOn(QbRoles.Role::requireMfa).extracting(QbRoles.Role::code)
-            .containsExactly(QbRoles.ADMIN_CONTENT, QbRoles.ADMIN_FINANCE, QbRoles.ADMIN_SUPER);
+            .containsExactly(QbRoles.ADMIN_CONTENT, QbRoles.ADMIN_FINANCE, QbRoles.ADMIN_SUPER, QbRoles.OPERATOR);
+    }
+
+    @Test
+    void anOperatorReviewsButHandlesNoMoneyUsersOrRights() {
+        // Q48a, D-Q48-4: reviews, content, the disputes that move no money and its own acts; nothing of finance, the
+        // users' profiles, the legal texts, parameters, roles or headquarters' operator pages.
+        assertThat(QbRoles.of(QbRoles.OPERATOR).permissions())
+            .contains(QbPermissions.OPERATOR_USE, QbPermissions.REVIEW_SPONSOR, QbPermissions.REVIEW_PUBLICATION,
+                "approval.decide", QbPermissions.REDEMPTION_VOID, QbPermissions.DIGITAL_RESOLVE)
+            .doesNotContain(QbPermissions.ADMIN_USERS_READ, QbPermissions.ADMIN_FINANCE_READ,
+                QbPermissions.ADMIN_CONTENT_WRITE, QbPermissions.ADMIN_USERS_BAN, QbPermissions.CASH_RESOLVE,
+                QbPermissions.TOPUP_BANK_APPROVE, QbPermissions.OPERATORS_READ, QbPermissions.OPERATORS_WRITE,
+                QbPermissions.SPOT_CHECK, "control.propose", "control.publish", "platform.param.read",
+                "security.user-role.write", "ledger.read")
+            .doesNotHaveDuplicates();
     }
 
     @Test

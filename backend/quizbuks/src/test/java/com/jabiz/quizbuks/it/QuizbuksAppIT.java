@@ -92,6 +92,8 @@ class QuizbuksAppIT extends PostgresIntegrationTest {
                 org.assertj.core.groups.Tuple.tuple("/taker", "app", JabizWebProperties.Pwa.ON),
                 org.assertj.core.groups.Tuple.tuple("/sponsor", "sponsor", JabizWebProperties.Pwa.OFF),
                 org.assertj.core.groups.Tuple.tuple("/admin", "admin", JabizWebProperties.Pwa.OFF),
+                // Q48a: the operators' back office, the admin frontend signing in to the entry operator.
+                org.assertj.core.groups.Tuple.tuple("/operator", "operator", JabizWebProperties.Pwa.OFF),
                 // S1: QuizBuks for Shopify's embedded pages, framed by the shop that opened them.
                 org.assertj.core.groups.Tuple.tuple("/shopify", "shopify", JabizWebProperties.Pwa.OFF),
                 org.assertj.core.groups.Tuple.tuple("/biz", null, JabizWebProperties.Pwa.OFF),

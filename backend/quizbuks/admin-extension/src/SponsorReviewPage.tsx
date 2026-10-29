@@ -24,6 +24,7 @@ import {
   type DescriptionItem,
 } from '@jabiz/admin'
 import { readSponsor, readUser } from './api'
+import { readSponsorAsOperator } from './operator-api'
 import { readRewardDefaults, readSponsorMethods, REWARD_METHODS, setSponsorMethods, type RewardMethod } from './reward-api'
 import { AVATAR_VARIANTS, DICTIONARY, isUserId, PATH, PERMISSION, SPONSOR_PENDING } from './ids'
 import { AfterDecision, LoadFailed, Section } from './components'
@@ -128,13 +129,23 @@ export default function SponsorReviewPage() {
   const queryClient = useQueryClient()
   const after = useAfterDecision()
   const statusLabel = useLabels(DICTIONARY.sponsorReviewStatus)
+  // Q48a: an operator reads the onboarding and the address through its own template (no user's profile).
+  const operator = !can(PERMISSION.usersRead) && can(PERMISSION.operatorUse)
   const sponsor = useQuery({
-    queryKey: ['qb-ext', 'sponsor', userId],
-    queryFn: () => readSponsor(userId),
+    queryKey: ['qb-ext', 'sponsor', userId, operator],
+    queryFn: async () => (operator ? (await readSponsorAsOperator(userId))?.sponsor ?? null : readSponsor(userId)),
     refetchInterval: (query) => after.interval(query.state.data?.reviewStatus === SPONSOR_PENDING),
     refetchOnWindowFocus: false,
   })
-  const user = useQuery({ queryKey: ['qb-ext', 'user', userId], queryFn: () => readUser(userId), enabled: isUserId(userId) })
+  const user = useQuery({
+    queryKey: ['qb-ext', 'user', userId, operator],
+    queryFn: async () => {
+      if (!operator) return readUser(userId)
+      const read = await readSponsorAsOperator(userId)
+      return read ? { email: read.email, emailVerified: read.emailVerified } : null
+    },
+    enabled: isUserId(userId),
+  })
 
   const back = (
     <Button variant="ghost" size="sm" asChild>
@@ -189,7 +200,9 @@ export default function SponsorReviewPage() {
         className="pb-0"
         description={
           <span className="flex flex-wrap items-center gap-x-4 gap-y-1">
-            <Link to={PATH.user(userId)} className={linkClass} data-testid="sponsor-summary">{t('sponsor.summary')}</Link>
+            {!operator && (
+              <Link to={PATH.user(userId)} className={linkClass} data-testid="sponsor-summary">{t('sponsor.summary')}</Link>
+            )}
             <Badge variant={pending ? 'secondary' : 'outline'} data-testid="sponsor-status">
               {statusLabel(s.reviewStatus)}
             </Badge>

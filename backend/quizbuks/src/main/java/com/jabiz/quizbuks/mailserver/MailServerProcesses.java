@@ -4,6 +4,7 @@ import com.jabiz.entity.Violation;
 import com.jabiz.process.NoMetadata;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
+import com.jabiz.process.ProcessDefinitionBuilder;
 import com.jabiz.process.ProcessStart;
 import com.jabiz.process.StepSpec;
 import com.jabiz.query.EntityQuery;
@@ -11,8 +12,8 @@ import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.quizbuks.identity.CallerChecks;
 import com.jabiz.runtime.EntityInstance;
+import com.jabiz.runtime.EntityNotFoundException;
 import com.jabiz.runtime.process.steps.HoldLock;
-import com.jabiz.runtime.process.steps.LoadEntity;
 import com.jabiz.runtime.process.steps.QueryEntities;
 import com.jabiz.runtime.security.SecurityEntities;
 import com.jabiz.runtime.security.secret.SealSecret;
@@ -28,6 +29,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.Consumer;
+import java.util.function.Function;
 
 /**
  * A sponsor's mail server (docs/quizbuks/plans/Q29-merchant-mail-server.md):
@@ -83,53 +86,80 @@ public final class MailServerProcesses {
     static final String SENT_TO = "mailServer.sentTo";
 
     public static ProcessDefinition<SetInput, SetOutput, ProcessContext> set() {
-        return ProcessDefinition.define(SET, 1, SetInput.class, SetOutput.class, ProcessContext.class, pb -> pb
-            .description("Saves the sponsor's own mail server after sending a test mail through it.")
-            .permissions(QbPermissions.PUBLICATION_WRITE)
-            .requiresVerifiedEmail()
-            .steps(CallerChecks::refuseBanned)
-            .contextFactory(MailServerProcesses::context)
-            .outputMapper(ctx -> ctx.get(OUTPUT, SetOutput.class))
-            .step("Lock the sponsor's server", HoldLock.<ProcessContext>exclusive(
-                ctx -> QbMailServers.lockName(ctx.get(SPONSOR_ID))))
-            .step("Load the server", QueryEntities.<ProcessContext>of(QbMailServers.DEFAULT_DATASET,
-                ctx -> QbMailServers.bySponsor(ctx.get(SPONSOR_ID)), SERVER))
-            // The platform's user, for the address the test mail goes to (an actor id that is no UUID names none).
-            .step("Load the sponsor's account", QueryEntities.<ProcessContext>of(SecurityEntities.USER_DATASET,
-                ctx -> EntityQuery.builder().where(new QueryPredicate.In("userId", uuids(ctx.get(SPONSOR_ID))))
-                    .limit(1).build(), USER))
-            .compute("Check the settings", (metadata, ctx) -> check(ctx))
-            .step("Seal the password", SealSecret.<ProcessContext>of(
-                ctx -> ctx.hasViolations() ? null : ctx.get(INPUT, SetInput.class).password(),
-                ctx -> String.valueOf((Object) ctx.get(SPONSOR_ID)), SEALED))
-            .step("Send a test mail through it", StepSpec.of(TestMailServer.class, NoMetadata.INSTANCE))
-            .compute("Record the server", (metadata, ctx) -> record(ctx)));
+        return set(SET, "Saves the sponsor's own mail server after sending a test mail through it.",
+            QbPermissions.PUBLICATION_WRITE, pb -> pb.steps(CallerChecks::refuseBanned),
+            ctx -> ctx.request().actorId());
+    }
+
+    /**
+     * A process that saves a mail server under a sender key: the sponsor's id, or another key (Q48c: an owner's
+     * prospecting, {@code prospect:<owner>}) decided by {@code prelude}'s steps. The test mail goes to the caller.
+     */
+    public static ProcessDefinition<SetInput, SetOutput, ProcessContext> set(String name, String description,
+        String permission, Consumer<ProcessDefinitionBuilder<SetInput, SetOutput, ProcessContext>> prelude,
+        Function<ProcessContext, Object> key) {
+        return ProcessDefinition.define(name, 1, SetInput.class, SetOutput.class, ProcessContext.class, pb -> {
+            pb.description(description)
+                .permissions(permission)
+                .requiresVerifiedEmail()
+                .contextFactory(MailServerProcesses::context)
+                .outputMapper(ctx -> ctx.get(OUTPUT, SetOutput.class));
+            prelude.accept(pb);
+            pb.compute("Whose server", (metadata, ctx) -> ctx.put(SPONSOR_ID, String.valueOf(key.apply(ctx))))
+                .step("Lock the sponsor's server", HoldLock.<ProcessContext>exclusive(
+                    ctx -> QbMailServers.lockName(ctx.get(SPONSOR_ID))))
+                .step("Load the server", QueryEntities.<ProcessContext>of(QbMailServers.DEFAULT_DATASET,
+                    ctx -> QbMailServers.bySponsor(ctx.get(SPONSOR_ID)), SERVER))
+                // The caller's platform user, for the address the test mail goes to (an actor id that is no UUID
+                // names none).
+                .step("Load the caller's account", QueryEntities.<ProcessContext>of(SecurityEntities.USER_DATASET,
+                    ctx -> EntityQuery.builder().where(new QueryPredicate.In("userId", uuids(ctx.request().actorId())))
+                        .limit(1).build(), USER))
+                .compute("Check the settings", (metadata, ctx) -> check(ctx))
+                .step("Seal the password", SealSecret.<ProcessContext>of(
+                    ctx -> ctx.hasViolations() ? null : ctx.get(INPUT, SetInput.class).password(),
+                    ctx -> String.valueOf((Object) ctx.get(SPONSOR_ID)), SEALED))
+                .step("Send a test mail through it", StepSpec.of(TestMailServer.class, NoMetadata.INSTANCE))
+                .compute("Record the server", (metadata, ctx) -> record(ctx));
+        });
     }
 
     public static ProcessDefinition<RemoveInput, RemoveOutput, ProcessContext> remove() {
-        return ProcessDefinition.define(REMOVE, 1, RemoveInput.class, RemoveOutput.class, ProcessContext.class,
-            pb -> pb
-                .description("Removes the sponsor's own mail server; invitations are refused until another is verified.")
-                .permissions(QbPermissions.PUBLICATION_WRITE)
+        return remove(REMOVE, "Removes the sponsor's own mail server; invitations are refused until another is "
+            + "verified.", QbPermissions.PUBLICATION_WRITE, pb -> pb.steps(CallerChecks::refuseBanned),
+            ctx -> ctx.request().actorId());
+    }
+
+    /** As {@link #set(String, String, String, Consumer, Function)}: none under the key is 404. */
+    public static ProcessDefinition<RemoveInput, RemoveOutput, ProcessContext> remove(String name, String description,
+        String permission, Consumer<ProcessDefinitionBuilder<RemoveInput, RemoveOutput, ProcessContext>> prelude,
+        Function<ProcessContext, Object> key) {
+        return ProcessDefinition.define(name, 1, RemoveInput.class, RemoveOutput.class, ProcessContext.class, pb -> {
+            pb.description(description)
+                .permissions(permission)
                 .requiresVerifiedEmail()
-                .steps(CallerChecks::refuseBanned)
                 .contextFactory(MailServerProcesses::context)
-                .outputMapper(ctx -> ctx.get(OUTPUT, RemoveOutput.class))
+                .outputMapper(ctx -> ctx.get(OUTPUT, RemoveOutput.class));
+            prelude.accept(pb);
+            pb.compute("Whose server", (metadata, ctx) -> ctx.put(SPONSOR_ID, String.valueOf(key.apply(ctx))))
                 .step("Lock the sponsor's server", HoldLock.<ProcessContext>exclusive(
                     ctx -> QbMailServers.lockName(ctx.get(SPONSOR_ID))))
-                // The sponsor's own (the dataset's scope): none is 404.
-                .step("Load the server", LoadEntity.by(QbMailServers.SPONSOR_DATASET, SPONSOR_ID, SERVER))
+                .step("Load the server", QueryEntities.<ProcessContext>of(QbMailServers.DEFAULT_DATASET,
+                    ctx -> QbMailServers.bySponsor(ctx.get(SPONSOR_ID)), SERVER))
                 .compute("Remove it", (metadata, ctx) -> {
-                    EntityInstance server = ctx.get(SERVER, EntityInstance.class);
+                    EntityInstance server = existing(ctx);
+                    if (server == null) {
+                        throw new EntityNotFoundException(QbMailServers.ENTITY + " not found");
+                    }
                     ctx.changes().delete(QbMailServers.ENTITY, server.id(), server.version());
                     ctx.put(OUTPUT, new RemoveOutput(String.valueOf((Object) ctx.get(SPONSOR_ID))));
-                }));
+                });
+        });
     }
 
     private static ProcessContext context(ProcessStart start, Object input) {
         ProcessContext ctx = new ProcessContext(start);
         ctx.put(INPUT, input);
-        ctx.put(SPONSOR_ID, start.request().actorId());
         return ctx;
     }
 

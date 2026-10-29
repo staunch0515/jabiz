@@ -9,13 +9,19 @@ import { aiMenu, aiMessages } from './ai-messages'
 import { legalMenu, legalMessages } from './legal-messages'
 import { settingsMenu, settingsMessages } from './settings-messages'
 import { overviewMenu, publicationsMessages, quizMessages, quizzesMessages } from './overview-messages'
+import { operatorMenu, operatorMessages } from './operator-messages'
+import { prospectMenu, prospectMessages } from './prospect-messages'
+import { settlementMenu, settlementMessages } from './settlement-messages'
 
 /** Texts of the QuizBuks admin extension, in every platform language (namespace EXTENSION_NAMESPACE, `app`). */
 export const messages = {
   en: {
     menu: { group: 'QuizBuks', reviews: 'Reviews', users: 'Users', ...legalMenu.en, ...aiMenu.en,
       ...financeMenu.en, ...broadcastsMenu.en, ...attemptsMenu.en, ...bankMenu.en, ...manualMenu.en, ...rewardMenu.en, ...settingsMenu.en, ...withdrawalMenu.en,
-      ...overviewMenu.en },
+      ...overviewMenu.en, ...operatorMenu.en, ...prospectMenu.en, ...settlementMenu.en },
+    operator: operatorMessages.en,
+    prospect: prospectMessages.en,
+    settlement: settlementMessages.en,
     quizzes: quizzesMessages.en,
     quiz: quizMessages.en,
     publications: publicationsMessages.en,
@@ -251,7 +257,10 @@ export const messages = {
   zh: {
     menu: { group: 'QuizBuks', reviews: '审核', users: '用户', ...legalMenu.zh, ...aiMenu.zh,
       ...financeMenu.zh, ...broadcastsMenu.zh, ...attemptsMenu.zh, ...bankMenu.zh, ...manualMenu.zh, ...rewardMenu.zh, ...settingsMenu.zh, ...withdrawalMenu.zh,
-      ...overviewMenu.zh },
+      ...overviewMenu.zh, ...operatorMenu.zh, ...prospectMenu.zh, ...settlementMenu.zh },
+    operator: operatorMessages.zh,
+    prospect: prospectMessages.zh,
+    settlement: settlementMessages.zh,
     quizzes: quizzesMessages.zh,
     quiz: quizMessages.zh,
     publications: publicationsMessages.zh,
@@ -487,7 +496,10 @@ export const messages = {
   ja: {
     menu: { group: 'QuizBuks', reviews: '審査', users: 'ユーザー', ...legalMenu.ja, ...aiMenu.ja,
       ...financeMenu.ja, ...broadcastsMenu.ja, ...attemptsMenu.ja, ...bankMenu.ja, ...manualMenu.ja, ...rewardMenu.ja, ...settingsMenu.ja, ...withdrawalMenu.ja,
-      ...overviewMenu.ja },
+      ...overviewMenu.ja, ...operatorMenu.ja, ...prospectMenu.ja, ...settlementMenu.ja },
+    operator: operatorMessages.ja,
+    prospect: prospectMessages.ja,
+    settlement: settlementMessages.ja,
     quizzes: quizzesMessages.ja,
     quiz: quizMessages.ja,
     publications: publicationsMessages.ja,

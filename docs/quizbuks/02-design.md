@@ -70,6 +70,9 @@ docs/quizbuks/               本文件等
 | `QB_ADMIN_FINANCE` | `qb.admin.users.read`、`qb.admin.finance.read`、`qb.payout.review`、`qb.reconcile`、`qb.sponsor.avatar.read`、`ledger.read`、`report.issue`、`report.archive.read`（Q9c：读已签发的月报）、`approval.decide`、`task.read`、`control.publish`（发布受控变更，超级管理员不持有）与 `approval.read`（读受控变更 `SysControlChange` 与审批规则，没有它就看不到要发布的提案）、`qb.journal.export`、`qb.journal.confirm`、`file.generated.read`（Q9d：分录导出、记录外部凭证号、下载存档的 CSV）、`qb.topup.bank.record`、`qb.topup.bank.approve`（Q13a：登记银行转账的到账；审批另一位登记的）|
 | `QB_ADMIN_SUPER` | 上述全部（`control.publish`、`inbound.read` 与 `approval.decide` 除外：Q10b 的职责分离 `QbSodRules`）+ `qb.admin.users.ban`、`platform.param.read`、`control.propose`、平台安全管理权限、`security.protected-change.decide` 与 `approval.read`（平台 16u，D51：两位超级管理员互为受保护授权的四眼，一位申请、另一位审批；不是 `approval.decide`）（不再有 `platform.param.write`，见下） |
 
+| `QB_OPERATOR` | 运营商的成员（Q48a，`plans/Q48-operators.md`，只在入口 `operator` / `/operator/`，要求二次验证）：`qb.operator.use`（本运营商的页面、模板与动作，每个动作再查成员关系）、`qb.review.sponsor`、`qb.review.publication`、`approval.decide`、`task.read`（审核为终审）、`qb.admin.quiz.read`、`qb.admin.publication.read`、`qb.content.file.read`、`qb.sponsor.avatar.read`、`qb.redemption.void`、`qb.digital.resolve`（不动钱的争议）、`qb.country.read`。不持有用户资料、财务、法律文本、参数、角色与运营商管理。持有 `approval.decide`，是受保护的授权：只经平台的角色分配与四眼 |
+
+- Q48a 的总部权限：`qb.admin.operators.read`（运营商、成员、商户归属；内容与财务管理员，超级管理员随之持有）、`qb.admin.operators.write`（建与改运营商、添加与移除成员、改派商户；超级管理员）、`qb.admin.spot-check`（抽查运营商的审核；内容管理员与超级管理员）。
 - 另有两个公用权限（Q1）：`qb.country.read`（读国家字典，五个角色都有）、`qb.setup`（执行 `QB_SETUP`，超级管理员；平台的 `ADMIN` 角色持有全部权限）。
 - 不授予任何角色的权限：`qb.content.view.write`（数据视图的写权限，Q3、Q4）、`qb.content.system`（`QB_QUIZ_RELEASE_FILES`，只由 `QB_QUIZ_DELETE` 作为子流程运行）、`qb.publication.system`（Q4 的系统流程）、`qb.sponsor.system`（`QB_SPONSOR_APPROVAL_RESULT`，Q2）、`qb.stats.system`（Q9e 的逐项分析任务的每项流程 `QB_ANALYTICS_ITEM` 与其模板）。
   平台 D41（16l）已合入：`QB_SPONSOR_APPROVAL_RESULT` 与 Q4 的系统流程声明 `internal()`（只允许系统身份运行），`QB_QUIZ_RELEASE_FILES` 声明 `subProcessOnly()`；这些系统权限随之只起声明作用。
@@ -92,6 +95,10 @@ docs/quizbuks/               本文件等
 | `QbProfile` | T | 主键 `profileId`；`userId`（文本，不可变、唯一、有索引）、`displayName`、`countryCode`（字典，可空）、`city`、`preferredCurrency`（USD/EUR/GBP/JPY/CNY/INR，只用于显示参考，可空）；`processOnly`：`createdAt`（资料第一次保存的时间；管理员页面的"注册时间"即此，商家入驻建立的只有名字的资料也算）、`editedAt`、`revision` | 答题人与商家共用的资料（商家只有名字，由入驻写入）；激活即邮箱已验证，由平台（G1）管；封禁另见 `QbUserBan` |
 | `QbSponsor` | T | 主键 `onboardingId`；`userId`（文本，不可变、唯一）、`contactName`（商家的名字，随入驻审核）、`company`、`intro`（Markdown）、`avatar`（文件，策略 `qb.sponsor-avatar`）；`processOnly`：`reviewStatus`（PENDING / APPROVED / REJECTED，状态机）、`termsAcceptedAt`、`approvalRequestId`、`submittedAt`、`approvedAt`、`rejectReason`、`rejectedAt`、`revision`、`editedAt` | 商家入驻（审批对象 `qb.sponsor`）；发布人的公开信息来自这里（U-10 发布人名称 / 头像） |
 | `QbUserBan` | T | 主键 `banId`；`userId`（引用平台用户，不可变、唯一）；`processOnly`：`banned`、`reason`、`bannedAt` / `bannedBy`、`liftedAt` / `liftedBy` / `liftNote`、`revision` | 封禁（Q2 D-Q2-4）：与资料分开，没有资料的人也能封禁；历史即封禁与解封的记录 |
+| `QbOperator` | P（Q48a） | 主键 `operatorId`；`name`、`contactName`、`contactEmail`、`collection`（PLATFORM；DIRECT 留给以后的直接收款）、`status`（ACTIVE / SUSPENDED）、`note`、`createdAt` / `createdBy`、`revision` | 运营商（代理商）。直营（总部）没有记录：没有归属的商户即总部的 |
+| `QbOperatorMember` | P（Q48a） | `operatorId`、`userId`（引用平台用户：登录检查按 UUID 读）、`lead`、`operatorActive`（随运营商的状态，登录检查只读本人的行）、`addedAt` / `addedBy`、`removedAt` / `removedBy` | 成员关系；移除只写移除时间（抽查按决定时的成员关系判断），一人同时只属于一个运营商（部分唯一索引） |
+| `QbSponsorOperator` | P（Q48a） | `userId`（唯一）、`operatorId`、`assignedAt` / `assignedBy`、`reason` | 商户的归属；没有行即总部的；改派的历史在平台审计中 |
+| `QbReviewSpotCheck` | P（Q48a） | `decisionId`（平台审批决定，唯一）、`result`（OK / PROBLEM）、`note`、`checkedAt` / `checkedBy` | 总部对运营商审核的抽查 |
 | `QbCountry` | T（字典） | `code`（ISO 3166-1）、`name`（多语言）、`regions`（多值：GLOBAL、JP、CN、US、EUROPE、ASIA、NORTH_AMERICA、SOUTH_AMERICA） | 【缺省 Q7】国家到地区的映射。平台没有多值字段：`regions` 存为按固定顺序、以逗号连接的地区代码（`GLOBAL,JP,ASIA`），总含 GLOBAL（Q1）。只经流程写入（`QB_SETUP` 导入） |
 | `QbPayoutAccount` | P（Q6b） | `userId`（唯一）、`provider`（STRIPE_CONNECT）、`externalAccountId`（唯一，`f.masked(qb.admin.finance.read, LAST4)`）、`country`、`status`（PENDING / ENABLED / RESTRICTED / DEAUTHORIZED）、`payoutsEnabled`、`detailsSubmitted`、`requirementsDue`、`stripeUpdatedAt`（以上 `processOnly`，由 Stripe 的 Connect 通知更新，只取更新的报告） | 用户的收款账户；银行信息由 Stripe 保存，平台不存银行账号。普通表（不是计划中的时态表）：通知按 Stripe 账户号查找，且只有表的唯一约束能保证一个 Stripe 账户只属于一个用户；历史由平台审计保留。开通链接另存普通表 `QbPayoutOnboarding`（每人一行、覆盖，只有本人的数据视图给出） |
 
@@ -179,8 +186,10 @@ docs/quizbuks/               本文件等
 | 4110 | 平台服务收入（抽成） | 收入 | — |
 | 5110 | 支付手续费（Stripe） | 费用 | — |
 | 5120 | 推广费用（赠送的 Kudos，Q18b） | 费用 | — |
+| 2140 | 应付运营商分成（Q48b） | 负债 | — |
+| 5130 | 运营商分成（Q48b） | 费用 | — |
 
-维度"当事人"（`LedgerDimension` 位置 1，取值为用户编号）与"发布"（位置 2，`QbPublication.publicationId`，Q5：商家花费与汇总凭证按发布从账本汇总）。每笔分录带来源（`sourceEntity` / `sourceId`）：充值、答题会话、转账。
+维度"当事人"（`LedgerDimension` 位置 1，取值为用户编号）与"发布"（位置 2，`QbPublication.publicationId`，Q5：商家花费与汇总凭证按发布从账本汇总）。运营商不另设维度（Q48b）：发布的卡片在上线时冻结商家当时的运营商（`QbPublicationCard.operatorId`），月结算按发布维度把 4110 归给运营商，答题路径因此不多读一条。每笔分录带来源（`sourceEntity` / `sourceId`）：充值、答题会话、转账。
 
 ### 4.2 分录
 
@@ -193,6 +202,8 @@ docs/quizbuks/               本文件等
 | Stripe 手续费确定（作业读取余额流水） | `QB_TOPUP_FEE_RECORD` | 5110 支付手续费 | 1110 Stripe 余额（为 0 时不过账） |
 | 退款 / 争议败诉（Stripe 后台发生；扣回可用余额以内的部分，余下为差额待办） | `QB_TOPUP_REFUNDED` / `QB_TOPUP_DISPUTE_CLOSED` | 2110 商家预收款（商家） | 1110 Stripe 余额 |
 | 答题奖励结算 | `QB_ATTEMPT_SUBMIT` / `QB_ATTEMPT_EXPIRE` / `QB_PENDING_PAY` | 2110 商家预收款（商家，发布）：奖励 | 2120 应付用户奖励（用户，发布）：奖励 − 抽成；4110（发布）：抽成（当前 0，为 0 时不出该行） |
+| 运营商月结算（Q48b，日本时间的自然月；抽成 × (1 − 平台分成)，取整到日元） | `QB_OPERATOR_SETTLEMENT_RUN`（逐项任务 `qb.operator-settlement`） | 5130 运营商分成 | 2140 应付运营商分成 |
+| 运营商分成付款获批（财务登记、另一位管理员批准） | `QB_OPERATOR_SETTLEMENT_APPROVAL_RESULT` | 2140 应付运营商分成 | 1120 银行存款 |
 | 转账发出（Q6b） | `QB_TRANSFER_CREATE` / `QB_TRANSFER_APPROVAL_RESULT` | 2120 应付用户奖励（用户）：金额 | 2130 转账中（用户）：实付；4110：手续费（为 0 时不出该行） |
 | 转账成功（作业结果或核实） | `QB_TRANSFER_SENT` / `QB_TRANSFER_CHECKED` | 2130 转账中（用户） | 1110 Stripe 余额 |
 | 转账确定失败（Stripe 拒绝创建，或核实确定没有） | `QB_TRANSFER_SEND_FAILED` / `QB_TRANSFER_CHECKED` | `LEDGER_REVERSE` 发出交易（2130 与 4110 回到 2120） | |

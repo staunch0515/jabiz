@@ -1,6 +1,7 @@
 package com.jabiz.quizbuks.setup;
 
 import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.operator.OperatorSettlements;
 import com.jabiz.quizbuks.identity.SponsorApprovals;
 import com.jabiz.quizbuks.publishing.PublicationApprovals;
 import com.jabiz.quizbuks.wallet.BankTopUps;
@@ -75,8 +76,17 @@ public final class QbApprovalRules {
         List.of(entries("permission", QbPermissions.TOPUP_BANK_APPROVE)), 100,
         "Manual credits are credited only after another administrator approves them");
 
+    /**
+     * Every payment of an operator's settlement finance records waits for another administrator's approval (Q48b): the
+     * recorder prepares the case, so they cannot approve their own. The approvers are those of the bank top-ups.
+     */
+    public static final Rule OPERATOR_PAYMENT_REVIEW = new Rule(OperatorSettlements.REVIEW_RULE,
+        OperatorSettlements.APPROVAL_SUBJECT, entries("fact", "operatorPayment", "op", "eq", "value", true),
+        List.of(entries("permission", QbPermissions.TOPUP_BANK_APPROVE)), 100,
+        "Operators' settlements are paid only after another administrator approves what finance recorded");
+
     public static final List<Rule> ALL = List.of(PUBLICATION_REVIEW, SPONSOR_REVIEW, TRANSFER_REVIEW,
-        BANK_TOPUP_REVIEW, MANUAL_CREDIT_REVIEW);
+        BANK_TOPUP_REVIEW, MANUAL_CREDIT_REVIEW, OPERATOR_PAYMENT_REVIEW);
 
     private static Map<String, Object> entries(Object... pairs) {
         Map<String, Object> map = new LinkedHashMap<>();

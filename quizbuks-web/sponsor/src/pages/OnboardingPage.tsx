@@ -19,6 +19,7 @@ import { neutralName } from '../content/api'
 import { SPONSOR } from '../messages'
 import { ShownAt } from '../content/ShownAt'
 import { applyAsSponsor, readMySponsor, saveSponsorProfile, type Sponsor, type SponsorOutput } from '../qb/api'
+import { claimSource } from '../trial/claim'
 import { FileImage } from '../qb/FileImage'
 import { CONSENTS_QUERY, useMyConsents } from '../qb/ConsentGate'
 import { CODE, FILE_POLICY, LEGAL } from '../qb/ids'
@@ -129,6 +130,8 @@ function OnboardingForm({ sponsor }: { sponsor: Sponsor | null }) {
       setDone(approved ? t('onboarding.saved')
         : output.reviewStatus === 'APPROVED' ? t('onboarding.approvedNow') : t('onboarding.applied'))
       setAcceptTerms(false)
+      // Q48d: the prospecting trial the sponsor came by, if any (once their onboarding exists).
+      void claimSource()
       // The consents first: once the application is there, the prompt reads them, and must not see the old ones.
       await queryClient.invalidateQueries({ queryKey: CONSENTS_QUERY })
       await queryClient.invalidateQueries({ queryKey: SPONSOR_QUERY })

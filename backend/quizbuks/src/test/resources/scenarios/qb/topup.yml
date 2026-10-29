@@ -27,7 +27,8 @@ steps:
       p35: "$.proposals[34]", p36: "$.proposals[35]", p37: "$.proposals[36]", p38: "$.proposals[37]",
       p39: "$.proposals[38]", p40: "$.proposals[39]", p41: "$.proposals[40]", p42: "$.proposals[41]",
       p43: "$.proposals[42]", p44: "$.proposals[43]", p45: "$.proposals[44]", p46: "$.proposals[45]", p47: "$.proposals[46]",
-      p48: "$.proposals[47]", p49: "$.proposals[48]" }
+      p48: "$.proposals[47]", p49: "$.proposals[48]",
+      p50: "$.proposals[49]", p51: "$.proposals[50]", p52: "$.proposals[51]", p53: "$.proposals[52]", p54: "$.proposals[53]", p55: "$.proposals[54]", p56: "$.proposals[55]", p57: "$.proposals[56]", p58: "$.proposals[57]" }
   - process: CONTROL_CHANGE_PUBLISH@latest
     actor: { id: publisher, permissions: [control.publish] }
     input: { changeId: "${p1}" }
@@ -175,6 +176,33 @@ steps:
   - process: CONTROL_CHANGE_PUBLISH@latest
     actor: { id: publisher, permissions: [control.publish] }
     input: { changeId: "${p49}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p50}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p51}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p52}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p53}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p54}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p55}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p56}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p57}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p58}" }
   - expect: { param: qb.topup.min, value: 1000 }
   - expect: { param: qb.topup.max, value: 1000000 }
   - note: Publications go on without a review (the controlled switch, four eyes).
@@ -271,7 +299,7 @@ steps:
     expectOutput: { reward: 100, rewardStatus: PAID }
   - actor: { id: "${u2}", permissions: [qb.play, qb.me] }
     process: QB_ATTEMPT_SUBMIT@latest
-    input: { attemptId: "${t2}", publicationId: "${pub}", answers: [{ questionNo: 1, selected: [2] }, { questionNo: 2, selected: [2] }] }
+    input: { attemptId: "${t2}", publicationId: "${pub}", answers: [{ questionNo: 1, selected: [1] }, { questionNo: 2, selected: [1] }] }
     expectOutput: { reward: 100, rewardStatus: PENDING }
   - expect: { entity: QbPublication, id: "${pub}", fields: { status: FUNDS_SHORT } }
 
@@ -391,7 +419,7 @@ steps:
     expect:
       query: qb.admin.monthly
       params: { from: "2026-10-01T00:00:00Z", to: "2026-11-01T00:00:00Z" }
-      rows: 16
+      rows: 18
       values:
         - { category: TOPUP, transactionCount: 1, amount: 5000, stripeBalance: 5000, sponsorWallets: -5000 }
         - { category: BANK_TOPUP, transactionCount: 0, amount: 0 }
@@ -408,20 +436,24 @@ steps:
         - { category: TRANSFER_REVERSED, transactionCount: 0 }
         - { category: PAYOUT, transactionCount: 0 }
         - { category: PAYOUT_FAILED, transactionCount: 0 }
+        - { category: OPERATOR_SHARE, transactionCount: 0 }
+        - { category: OPERATOR_PAID, transactionCount: 0 }
         - { category: OTHER, transactionCount: 1, amount: 100, stripeBalance: 100, sponsorWallets: -100 }
   - expect:
       query: qb.admin.balances
       params: { from: "2026-10-01T00:00:00Z", to: "2026-11-01T00:00:00Z" }
-      rows: 12
+      rows: 14
       values:
         - { rowKind: ACCOUNT, code: "1110", opening: 0, debit: 5100, credit: 180, closing: 4920 }
         - { rowKind: ACCOUNT, code: "1120", opening: 0, debit: 0, credit: 0, closing: 0 }
         - { rowKind: ACCOUNT, code: "2110", opening: 0, debit: 200, credit: 5100, closing: -4900 }
         - { rowKind: ACCOUNT, code: "2120", opening: 0, debit: 0, credit: 200, closing: -200 }
         - { rowKind: ACCOUNT, code: "2130", closing: 0 }
+        - { rowKind: ACCOUNT, code: "2140", closing: 0 }
         - { rowKind: ACCOUNT, code: "4110", closing: 0 }
         - { rowKind: ACCOUNT, code: "5110", debit: 180, closing: 180 }
         - { rowKind: ACCOUNT, code: "5120", debit: 0, closing: 0 }
+        - { rowKind: ACCOUNT, code: "5130", closing: 0 }
         - { rowKind: CHECK, code: SPONSOR_WALLETS, closing: -4900, partyTotal: -4900, matches: true }
         - { rowKind: CHECK, code: TAKER_WALLETS, closing: -200, partyTotal: -200, matches: true }
         - { rowKind: CHECK, code: NO_OVERDRAWN_WALLET, closing: 0, matches: true }

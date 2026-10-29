@@ -191,5 +191,34 @@ public final class QbPermissions {
      */
     public static final String MESSAGING_SYSTEM = "qb.messaging.system";
 
+    /**
+     * An operator's member (Q48a, docs/quizbuks/plans/Q48-operators.md): the operator's own pages and templates, and
+     * the operator's acts ({@code QB_OPERATOR_*}: taking publications down, banning sponsors, the lead's removal of a
+     * member), each of which checks the caller's membership. The role {@code QB_OPERATOR} only.
+     */
+    public static final String OPERATOR_USE = "qb.operator.use";
+    /** Read the operators, their members and which sponsors they run (headquarters). */
+    public static final String OPERATORS_READ = "qb.admin.operators.read";
+    /** Create and change operators, name and remove their members, move sponsors between them. Super administrator. */
+    public static final String OPERATORS_WRITE = "qb.admin.operators.write";
+    /** Spot-check the reviews operators decided (D-Q48-5). Content administrator (and the super administrator). */
+    public static final String SPOT_CHECK = "qb.admin.spot-check";
+
+    /** Q48b: record the bank payment of an operator's settlement (another administrator approves it). Finance. */
+    public static final String OPERATOR_SETTLEMENT_PAY = "qb.operator.settlement.pay";
+    /** Q48b: the monthly settlement run and the payment's approval result ({@code internal()}). Granted to no role. */
+    public static final String OPERATOR_SETTLEMENT_SYSTEM = "qb.operator.settlement.system";
+
+    /**
+     * AI prospecting (Q48c): the owner's settings, directions of search, approving or discarding the drafted mails,
+     * and blocking addresses. The owner is the caller's operator, or headquarters for those holding
+     * {@link #ADMIN_PROSPECT}. Operators' members and the content administrator.
+     */
+    public static final String PROSPECT_USE = "qb.prospect.use";
+    /** Headquarters' own prospecting, and reading every owner's prospects, usage and blocks. Content administrator. */
+    public static final String ADMIN_PROSPECT = "qb.admin.prospect";
+    /** The prospecting jobs' items and outcomes ({@code internal()}). Granted to no role. */
+    public static final String PROSPECT_SYSTEM = "qb.prospect.system";
+
     private QbPermissions() {}
 }
