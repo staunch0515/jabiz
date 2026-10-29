@@ -27,17 +27,22 @@ import java.util.regex.Pattern;
  * <p>
  * A notification's recipients choose whether they receive it, among the templates of the sign-in entry they are
  * signed in at ({@link #entries}; all when none is named), under its display name, the message
- * {@code mail.<name>.name} (phase 16s; decision D49).
+ * {@code mail.<name>.name} (phase 16s; decision D49). A notification sent only to plain addresses that are nobody's
+ * account ({@link Builder#addressesOnly}, phase 17r) is among no user's preferences: its recipient opts out by its
+ * link alone.
  *
  * @param name     unique; letters, digits and {@code . _ : -} like event names, at most 100 characters
  * @param category whether recipients may unsubscribe
  * @param params   names of the values the sending process gives, in declaration order
  * @param tokens   one-time tokens by purpose (also their placeholder), with how long each is valid
  * @param entries  the sign-in entries whose users the template is for, which list it among their mail preferences;
- *                 empty: every entry (decision D49 item 1)
+ *                 empty: every entry (decision D49 item 1); for {@code addressesOnly}, the entries whose unsubscribe
+ *                 page its link leads to
+ * @param addressesOnly a notification to plain addresses only (an application's prospecting), never among a user's
+ *                 mail preferences
  */
 public record MailTemplate(String name, MailCategory category, List<String> params, Map<String, Duration> tokens,
-    Set<String> entries) {
+    Set<String> entries, boolean addressesOnly) {
 
     /** Names of templates: as event names. */
     public static final Pattern NAME = Pattern.compile("[A-Za-z0-9._:-]{1,100}");
@@ -108,6 +113,10 @@ public record MailTemplate(String name, MailCategory category, List<String> para
                     + " needs a positive validity");
             }
         }
+        if (addressesOnly && category != MailCategory.NOTIFICATION) {
+            throw new IllegalArgumentException("Mail template " + name + " is for addresses only, which only a "
+                + "notification can be: other mail is among nobody's preferences anyway");
+        }
         if (tokens.containsKey(SIGN_IN_TOKEN) && !(params.contains(ENTRY_PARAM) && params.contains(RETURN_PARAM))) {
             throw new IllegalArgumentException("Mail template " + name + " carries a sign-in link, which needs the "
                 + "parameters " + ENTRY_PARAM + " and " + RETURN_PARAM + " (declare it with signInLink)");
@@ -127,6 +136,17 @@ public record MailTemplate(String name, MailCategory category, List<String> para
         this(name, category, params, tokens, Set.of());
     }
 
+    /** A template for the users of the entries named (as before phase 17r). */
+    public MailTemplate(String name, MailCategory category, List<String> params, Map<String, Duration> tokens,
+        Set<String> entries) {
+        this(name, category, params, tokens, entries, false);
+    }
+
+    /** Whether a user's mail preferences may list it: a notification for users, not one to plain addresses only. */
+    public boolean listedAmongPreferences() {
+        return unsubscribable() && !addressesOnly;
+    }
+
     private static void requireName(String template, String what, String value, Pattern pattern) {
         if (value == null || !pattern.matcher(value).matches()) {
             throw new IllegalArgumentException("The " + what + " '" + value + "' of mail template " + template
@@ -141,7 +161,8 @@ public record MailTemplate(String name, MailCategory category, List<String> para
     public static MailTemplate define(String name, Consumer<Builder> spec) {
         Builder builder = new Builder();
         Objects.requireNonNull(spec, "spec must not be null").accept(builder);
-        return new MailTemplate(name, builder.category, builder.params, builder.tokens, builder.entries);
+        return new MailTemplate(name, builder.category, builder.params, builder.tokens, builder.entries,
+            builder.addressesOnly);
     }
 
     /** Message code of the subject. */
@@ -225,8 +246,20 @@ public record MailTemplate(String name, MailCategory category, List<String> para
         private final List<String> params = new ArrayList<>();
         private final Map<String, Duration> tokens = new LinkedHashMap<>();
         private final Set<String> entries = new LinkedHashSet<>();
+        private boolean addressesOnly;
 
         private Builder() {}
+
+        /**
+         * A notification sent only to plain addresses that are nobody's account, such as an application's prospecting
+         * of businesses (phase 17r): it is among no user's mail preferences and no signed-in session sets it; the
+         * recipient opts out by its own unsubscribe link (decision D55: the address opts out). {@link #entries} then
+         * names only whose unsubscribe page that link leads to.
+         */
+        public Builder addressesOnly() {
+            addressesOnly = true;
+            return this;
+        }
 
         /**
          * The sign-in entries ({@code jabiz.security.entries.<name>}) whose users the template is for: a notification
