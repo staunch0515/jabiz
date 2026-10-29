@@ -131,7 +131,7 @@ test('an invited address answers through its mailed link; nobody else sees the p
   await expectAccessible(page, 'invited publication')
   await page.getByTestId('detail-start').click()
   await expect(page.getByTestId('play-progress')).toHaveText('Question 1 of 1')
-  await page.getByRole('checkbox', { name: 'Paris' }).click()
+  await page.getByRole('radio', { name: 'Paris' }).click()
   await page.getByTestId('play-submit').click()
   await page.getByRole('alertdialog').getByRole('button', { name: 'Submit' }).click()
   await expect(page.getByTestId('result-score')).toHaveText('1 / 1')

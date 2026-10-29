@@ -162,7 +162,9 @@ public class MailProcesses {
         // (listed so they can be turned on again); the unsubscribe link (no entry) any notification it names. Anything
         // else is refused here, in the process, exactly as a name that is no notification: decision D49 item 1.
         String entry = ctx.request().entry();
-        if (template.isEmpty() || entry != null && !template.get().appliesTo(entry) && !optedOut) {
+        // Mail to plain addresses only (17r) is no user's to set in a session: only its own link turns it off.
+        if (template.isEmpty() || entry != null && (template.get().addressesOnly()
+            || !template.get().appliesTo(entry) && !optedOut)) {
             ctx.reject(notANotification(input.template()));
             return;
         }

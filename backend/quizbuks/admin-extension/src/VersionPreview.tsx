@@ -61,6 +61,12 @@ function MaterialContent({ material }: { material: SnapshotMaterial }) {
   }
 }
 
+/** A scored question's kind (D-Q5-2): one correct option makes a single choice, several a multiple one. */
+function choiceKey(question: { options: { correct: boolean }[] }): 'SINGLE' | 'MULTIPLE' | null {
+  const correct = question.options.filter((option) => option.correct).length
+  return correct === 0 ? null : correct === 1 ? 'SINGLE' : 'MULTIPLE'
+}
+
 /**
  * A quiz version's whole frozen content, as the reviewer must see it before deciding: the cover and introduction, every
  * material (links open in a new tab; PDFs and sounds are downloads; article texts are folded), and every question with
@@ -134,7 +140,9 @@ export function VersionPreview({ content }: { content: Snapshot }) {
                       <span className="font-medium">{t('preview.question', { number: question.no })}</span>
                       <Badge variant="outline">
                         {question.selection ? t(`preview.selections.${question.selection}`)
-                          : t('preview.points', { points: question.points })}
+                          : [choiceKey(question) && t(`preview.selections.${choiceKey(question)}`),
+                            t('preview.points', { points: question.points })]
+                            .filter(Boolean).join(' · ')}
                       </Badge>
                     </summary>
                     <div className="mt-2 flex flex-col gap-2">

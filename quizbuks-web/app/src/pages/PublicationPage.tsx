@@ -113,22 +113,26 @@ export function PublicationPage({ publicationId, country }: { publicationId: str
     enabled: !!publication.data })
 
   // The funnel's first view; a failure (a banned caller, a publication gone) changes nothing on the page.
-  const [viewed, setViewed] = useState(false)
-  useEffect(() => {
-    if (emailVerified) recordView(publicationId).then(() => setViewed(true)).catch(() => undefined)
-  }, [publicationId, emailVerified])
+  const [viewed, setViewed] = useState<string | null>(null)
   // The view also claims an invitation addressed to the caller (Q25): a page the first read did not find is read once
-  // more after it, and an invited publication is shown to the invitee from then on.
+  // more after it, and until then "not available" is not shown, so an invitee never sees it flash before the quiz.
+  const [settledFor, setSettledFor] = useState<string | null>(null)
+  useEffect(() => {
+    if (emailVerified) {
+      recordView(publicationId).then(() => setViewed(publicationId)).catch(() => setSettledFor(publicationId))
+    }
+  }, [publicationId, emailVerified])
   const readAgain = useRef(false)
   const { data: found, fetchStatus, refetch } = publication
   useEffect(() => {
-    if (viewed && !readAgain.current && found === null && fetchStatus === 'idle') {
+    if (viewed === publicationId && !readAgain.current && found === null && fetchStatus === 'idle') {
       readAgain.current = true
-      void refetch()
+      void refetch().finally(() => setSettledFor(publicationId))
     }
-  }, [viewed, found, fetchStatus, refetch])
+  }, [viewed, publicationId, found, fetchStatus, refetch])
+  const claiming = emailVerified && settledFor !== publicationId
 
-  if (publication.isPending) return <PageState kind="loading" />
+  if (publication.isPending || (publication.data === null && claiming)) return <PageState kind="loading" />
   if (publication.isError) {
     return <PageState kind="error" description={problemText(publication.error)}
       action={<Button variant="outline" onClick={() => void publication.refetch()}>{tQb('retry')}</Button>} />

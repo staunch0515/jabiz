@@ -1,7 +1,7 @@
 import type { Material, PublicationView, Tier } from '../qb/play'
 import { videoPlayer } from '../qb/video'
 import type { Sponsor } from '../qb/api'
-import type { Draft, Snapshot } from '../content/api'
+import { choiceOf, type Draft, type Selection, type Snapshot } from '../content/api'
 import type { Publication, Tier as SponsorTier } from '../publishing/api'
 
 /** One question as the preview shows it: what a taker reads, never which options are right. */
@@ -10,6 +10,8 @@ export interface PreviewQuestion {
   stem: string | null
   image: string | null
   points: number
+  /** Single or multiple choice, as the taker is told (a scored question by its correct options, D-Q5-2). */
+  choice: Selection | null
   options: { no: number; text: string | null; image: string | null }[]
 }
 
@@ -60,6 +62,7 @@ export function publicationPreview(p: Publication, tiers: SponsorTier[], snapsho
     tiers: tiers.map((tier, index) => ({ seq: index + 1, fromScore: tier.fromScore, toScore: tier.toScore,
       reward: tier.reward })),
     questions: questions.map((q) => ({ no: q.no, stem: q.stem, image: q.image, points: q.points,
+      choice: q.selection ?? choiceOf(q.options.filter((o) => o.correct).length),
       options: q.options.map((o) => ({ no: o.no, text: o.text, image: o.image })) })),
     view: {
       ...base(sponsor),
@@ -96,6 +99,7 @@ export function draftPreview(draft: Draft, sponsor: Sponsor | null, now: Date = 
     tiers: [],
     questions: draft.questions.map((question, index) => ({ no: index + 1, stem: question.stem, image: question.image,
       points: question.points,
+      choice: question.selection ?? choiceOf(question.options.filter((o) => o.correct).length),
       options: question.options.map((o, i) => ({ no: i + 1, text: o.text, image: o.image })) })),
     view: {
       ...base(sponsor),

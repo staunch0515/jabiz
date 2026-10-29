@@ -232,6 +232,8 @@ describe('PublicationReviewPage', () => {
     expect(questions).toHaveLength(2)
     expect(questions[0]).toHaveTextContent('Capital of France?')
     expect(questions[1]).toHaveTextContent('Capital of Japan?')
+    // One correct option each: single choices, as the taker is shown them (D-Q5-2).
+    expect(questions[0]).toHaveTextContent('Single choice')
     const options = within(preview).getAllByTestId('preview-option')
     expect(options.map((o) => o.getAttribute('data-correct'))).toEqual(['true', 'false', 'false', 'true'])
     expect(options[0]).toHaveTextContent('Paris')

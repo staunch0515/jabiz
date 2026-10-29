@@ -65,6 +65,18 @@ public record QuizSnapshot(String title, String intro, UUID cover, Integer timeL
             this(no, stem, image, points, options, null);
         }
 
+        /**
+         * How the question is answered, as the taker is told: a survey's question as set ({@code SINGLE} or
+         * {@code MULTIPLE}); a scored one by its correct options (Q5, D-Q5-2): exactly one makes it a single choice,
+         * several a multiple choice. Null only for a survey's question not yet set, which a version does not accept.
+         */
+        public String choice() {
+            if (selection != null || options.stream().noneMatch(Option::correct)) {
+                return selection;
+            }
+            return options.stream().filter(Option::correct).count() == 1 ? QbContent.SINGLE : QbContent.MULTIPLE;
+        }
+
         /** Whether these chosen options answer the question (Q12: a single choice takes exactly one). */
         public boolean answeredBy(java.util.Collection<Integer> chosen) {
             return QbContent.SINGLE.equals(selection) ? chosen.size() == 1 : !chosen.isEmpty();

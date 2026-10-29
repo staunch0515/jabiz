@@ -288,6 +288,17 @@ class AccountDeletionIT extends SignUpItSupport {
         assertThat(new com.jabiz.runtime.erasure.AccountDeletionChecks(entries, erasers, datasets, definitions,
             development).check()).extracting(p -> p.severity().toString())
             .containsExactlyInAnyOrder("WARNING", "ERROR", "ERROR");
+
+        // A JDBC URL for the maintenance connection (the usual mistake): one line naming the variable and the form,
+        // not a stack trace from the connection factory (the bean makes no connection; the check says why).
+        org.springframework.mock.env.MockEnvironment jdbc = new org.springframework.mock.env.MockEnvironment()
+            .withProperty("jabiz.erasure.datasource.url", "jdbc:postgresql://db:5432/app");
+        assertThat(new com.jabiz.runtime.erasure.AccountDeletionChecks(entries, erasers, datasets, definitions,
+            jdbc).check()).extracting(p -> p.severity() + " " + p.location() + ": " + p.message())
+            .contains("ERROR jabiz.erasure.datasource.url: the maintenance connection (JABIZ_ERASURE_DATASOURCE_URL)"
+                + " must be an R2DBC URL like r2dbc:postgresql://host:5432/database (as spring.r2dbc.url,"
+                + " SPRING_R2DBC_URL), but is a JDBC URL (jdbc:…)")
+            .noneMatch(line -> line.contains("is configured: personal data would never be purged"));
     }
 
     // ================= helpers =================

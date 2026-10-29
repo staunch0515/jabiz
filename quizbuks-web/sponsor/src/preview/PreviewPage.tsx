@@ -57,7 +57,9 @@ function QuestionScreen({ questions }: { questions: PreviewQuestion[] }) {
             </li>
           ))}
         </ul>
-        <p className="text-muted-foreground text-xs">{t('preview.points', { count: q.points })}</p>
+        <p className="text-muted-foreground text-xs" data-testid="preview-choice" data-choice={q.choice ?? 'none'}>
+          {q.choice && <>{t(`questions.selections.${q.choice}`)} · </>}{t('preview.points', { count: q.points })}
+        </p>
       </div>
       <div className="flex items-center justify-between">
         <Button variant="outline" disabled={index === 0} onClick={() => setIndex(index - 1)} data-testid="preview-prev">
