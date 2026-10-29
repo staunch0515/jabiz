@@ -43,7 +43,7 @@ results:
   waitingSince:        { from: QbPublication.submittedAt }
 list:
   filters: [publicationId, publisherKind, publisherId, quizId, status, startAt, submittedAt]
-  sorts:   [editedAt, submittedAt, pendingSince, waitingSince, startAt, name]
+  sorts:   [editedAt, submittedAt, pendingSince, waitingSince, startAt, name, status]
   defaultSort: { field: editedAt, asc: false }
   key: [publicationId]
 permissions: [qb.admin.publication.read]

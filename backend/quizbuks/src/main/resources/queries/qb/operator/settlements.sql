@@ -27,7 +27,7 @@ results:
   revision: { from: QbOperatorSettlement.revision }
 list:
   filters: [status, month]
-  sorts:   [month]
+  sorts:   [month, payable, status]
   defaultSort: { field: month, asc: false }
   key: [settlementId]
 permissions: [qb.operator.use]

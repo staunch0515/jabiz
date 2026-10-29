@@ -23,6 +23,9 @@ import { LoadFailed, Section } from './components'
 import { money, useLabels, usePaged, when } from './hooks'
 import { DICTIONARY, isUserId, PAGE_LIMIT, PATH, referenceKind } from './ids'
 
+/** The columns sorted on the server, by the template's `list.sorts` field (Q53a). */
+const SORTS = { scheduledTime: 'scheduledTime' } as const
+
 const linkClass = 'text-primary font-medium underline-offset-4 hover:underline'
 
 /** What a difference is about: its top-up or transfer, and its party's summary. */
@@ -107,7 +110,7 @@ export default function ReconciliationPage() {
   const [search] = useSearchParams()
   const selected = search.get('run')
   const runId = selected && isUserId(selected) ? selected : null
-  const { query, table } = usePaged(['qb-ext', 'finance', 'recon-runs'], readReconRuns)
+  const { query, table, sortable } = usePaged(['qb-ext', 'finance', 'recon-runs'], readReconRuns, true, SORTS)
   const columns = useMemo<ColumnDef<ReconRun, unknown>[]>(() => [
     {
       id: 'scheduledTime',
@@ -139,7 +142,7 @@ export default function ReconciliationPage() {
         {query.isError
           ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
           : (
-            <DataTable label={t('finance.recon.runsTable')} columns={columns} {...table}
+            <DataTable label={t('finance.recon.runsTable')} columns={sortable(columns)} {...table}
               getRowId={(row) => row.runId} empty={t('finance.recon.noRuns')}
               rowProps={(row) => ({ 'data-testid': 'recon-run', 'data-id': row.runId, 'data-status': row.status,
                 'data-selected': String(row.runId === runId) })} />

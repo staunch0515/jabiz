@@ -19,6 +19,9 @@ import { useLabels, usePaged, when } from './hooks'
 import { DICTIONARY, PATH } from './ids'
 import { quizFilterOf, readQuizzes, type QuizRow } from './overview-api'
 
+/** The columns sorted on the server, by the template's `list.sorts` field (Q53a). */
+const SORTS = { title: 'title', status: 'status', questions: 'questionCount', editedAt: 'editedAt' } as const
+
 const linkClass = 'text-primary font-medium underline-offset-4 hover:underline'
 const right = { className: 'text-right tabular-nums' }
 
@@ -49,8 +52,8 @@ export default function QuizzesPage() {
     }
     setSearch(next, { replace: true })
   }
-  const { query, table } = usePaged(['qb-ext', 'quizzes', filter],
-    (offset, limit) => readQuizzes(filter, offset, limit))
+  const { query, table, sortable } = usePaged(['qb-ext', 'quizzes', filter],
+    (offset, limit, sorts) => readQuizzes(filter, offset, limit, sorts), true, SORTS)
 
   const columns = useMemo<ColumnDef<QuizRow, unknown>[]>(() => [
     {
@@ -143,7 +146,7 @@ export default function QuizzesPage() {
       {query.isError
         ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
         : (
-          <DataTable label={t('quizzes.table')} columns={columns} {...table} getRowId={(row) => row.quizId}
+          <DataTable label={t('quizzes.table')} columns={sortable(columns)} {...table} getRowId={(row) => row.quizId}
             empty={t('quizzes.none')}
             rowProps={(row) => ({ 'data-testid': 'quiz-row', 'data-id': row.quizId })} />
         )}

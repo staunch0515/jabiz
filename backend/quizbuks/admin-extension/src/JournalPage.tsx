@@ -39,6 +39,9 @@ import { LoadFailed, Section } from './components'
 import { money, usePaged, when } from './hooks'
 import { PATH, PERMISSION } from './ids'
 
+/** The columns sorted on the server, by the template's `list.sorts` field (Q53a). */
+const SORTS = { period: 'periodFrom' } as const
+
 const linkClass = 'text-primary font-medium underline-offset-4 hover:underline'
 const right = 'text-right tabular-nums'
 const EXPORTS_KEY = ['qb-ext', 'finance', 'journal-exports']
@@ -278,7 +281,7 @@ function DownloadButton({ fileId, name, label, ariaLabel, testId }: { fileId: st
 export default function JournalPage() {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
   const { can } = useAuth()
-  const { query, table } = usePaged(EXPORTS_KEY, readJournalExports)
+  const { query, table, sortable } = usePaged(EXPORTS_KEY, readJournalExports, true, SORTS)
   const files = can(PERMISSION.generatedFileRead)
   const confirmer = can(PERMISSION.journalConfirm)
   const columns = useMemo<ColumnDef<JournalExport, unknown>[]>(() => [
@@ -334,7 +337,7 @@ export default function JournalPage() {
         {query.isError
           ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
           : (
-            <DataTable label={t('finance.journal.exportsTable')} columns={columns} {...table}
+            <DataTable label={t('finance.journal.exportsTable')} columns={sortable(columns)} {...table}
               getRowId={(row) => row.exportId} empty={t('finance.journal.noExports')}
               rowProps={(row) => ({ 'data-testid': 'journal-export-row', 'data-id': row.exportId,
                 'data-voucher': row.voucherNo })} />

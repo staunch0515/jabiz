@@ -1,5 +1,6 @@
 import { runProcess, runQuery, type Filter } from '@jabiz/admin'
 import { isUserId, PROCESS, TEMPLATE } from './ids'
+import type { SortSpec } from './api'
 
 /*
  * Q14: the administrators' view of answering and payouts, typed by hand after `qb.admin.attempts`,
@@ -90,13 +91,13 @@ export interface AttemptListRow {
   rewardStatus: string | null
 }
 
-export async function readAllAttempts(filter: AttemptFilter, offset: number, limit: number) {
+export async function readAllAttempts(filter: AttemptFilter, offset: number, limit: number, sorts?: SortSpec[]) {
   const filters: Filter[] = []
   if (filter.userId) filters.push({ field: 'userId', op: 'eq', value: filter.userId })
   if (filter.publicationId) filters.push({ field: 'publicationId', op: 'eq', value: filter.publicationId })
   if (filter.status) filters.push({ field: 'status', op: 'eq', value: filter.status })
   if (filter.rewardStatus) filters.push({ field: 'rewardStatus', op: 'eq', value: filter.rewardStatus })
-  const answer = await runQuery<Row>(TEMPLATE.attempts, { filters, offset, limit, count: true })
+  const answer = await runQuery<Row>(TEMPLATE.attempts, { filters, sorts, offset, limit, count: true })
   return {
     total: answer.total,
     items: answer.items.map((row): AttemptListRow => ({

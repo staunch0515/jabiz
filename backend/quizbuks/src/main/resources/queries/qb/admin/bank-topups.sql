@@ -25,7 +25,7 @@ results:
   paidAt:            { from: QbTopUp.paidAt }
 list:
   filters: [topUpId, sponsorId, status, transferCode, createdAt]
-  sorts:   [createdAt, reportedAt, recordedAt]
+  sorts:   [createdAt, reportedAt, recordedAt, status]
   defaultSort: { field: createdAt, asc: false }
   key: [topUpId]
 permissions: [qb.topup.bank.approve]

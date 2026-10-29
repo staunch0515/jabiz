@@ -30,6 +30,9 @@ import { money, useLabels, usePaged, when } from './hooks'
 import { DICTIONARY, PATH, PERMISSION } from './ids'
 import { readRedemptions, voidRedemption, type Redemption } from './reward-api'
 
+/** The columns sorted on the server, by the template's `list.sorts` field (Q53a). */
+const SORTS = { dueAt: 'dueAt', amount: 'amount', status: 'status' } as const
+
 const linkClass = 'text-primary font-medium underline-offset-4 hover:underline'
 const right = { className: 'text-right tabular-nums' }
 const KEY = ['qb-ext', 'redemptions'] as const
@@ -109,8 +112,8 @@ export default function RedemptionsPage() {
     }
     setSearch(next, { replace: true })
   }
-  const { query, table } = usePaged([...KEY, filterStatus, q],
-    (offset, limit) => readRedemptions(filterStatus, q, offset, limit))
+  const { query, table, sortable } = usePaged([...KEY, filterStatus, q],
+    (offset, limit, sorts) => readRedemptions(filterStatus, q, offset, limit, sorts), true, SORTS)
   const columns = useMemo<ColumnDef<Redemption, unknown>[]>(() => [
     { id: 'dueAt', header: t('reward.redeem.dueAt'), cell: ({ row }) => when(row.original.dueAt) },
     { id: 'code', header: t('reward.redeem.code'),
@@ -197,7 +200,7 @@ export default function RedemptionsPage() {
       {query.isError
         ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
         : (
-          <DataTable label={t('reward.redeem.table')} columns={columns} {...table} getRowId={(row) => row.redemptionId}
+          <DataTable label={t('reward.redeem.table')} columns={sortable(columns)} {...table} getRowId={(row) => row.redemptionId}
             empty={t('reward.redeem.none')}
             rowProps={(row) => ({ 'data-testid': 'redeem-row', 'data-id': row.redemptionId, 'data-status': row.status })} />
         )}

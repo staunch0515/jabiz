@@ -28,7 +28,7 @@ results:
   failedAt:          { from: QbTransfer.failedAt }
 list:
   filters: [transferId, userId, status, createdAt]
-  sorts:   [createdAt, sentAt, amount]
+  sorts:   [createdAt, sentAt, amount, status]
   defaultSort: { field: createdAt, asc: false }
   key: [transferId]
 permissions: [qb.admin.finance.read]

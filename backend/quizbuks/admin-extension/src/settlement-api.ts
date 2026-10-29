@@ -2,6 +2,7 @@ import { ApiError, runProcess, runQuery, sessionFetch } from '@jabiz/admin'
 import type { Page } from './api'
 import { fileNameOf } from './finance-api'
 import { SETTLEMENT_PROCESS, TEMPLATE } from './ids'
+import type { SortSpec } from './api'
 
 /*
  * Operators' monthly settlements (backend `operator.OperatorSettlements`, Q48b): finance reads every operator's
@@ -60,9 +61,9 @@ function toSettlement(row: Row): Settlement {
 
 /** The settlements, the newest month first: every operator's for finance, the caller's own for an operator. */
 export async function readSettlements(finance: boolean, status: string | null, offset: number,
-  limit: number): Promise<Page<Settlement>> {
+  limit: number, sorts?: SortSpec[]): Promise<Page<Settlement>> {
   const page = await runQuery<Row>(finance ? TEMPLATE.operatorSettlements : TEMPLATE.ownSettlements, {
-    params: finance && status ? { status } : {}, offset, limit, count: true,
+    params: finance && status ? { status } : {}, sorts, offset, limit, count: true,
   })
   return { total: page.total, items: page.items.map(toSettlement) }
 }

@@ -36,7 +36,7 @@ results:
   operatorName: { from: QbOperator.name }
 list:
   filters: [status, month]
-  sorts:   [month, payable]
+  sorts:   [month, payable, status]
   defaultSort: { field: month, asc: false }
   key: [settlementId]
 permissions: [qb.admin.finance.read]

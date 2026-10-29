@@ -1,5 +1,6 @@
 import { api, runProcess, runQuery, unwrap } from '@jabiz/admin'
 import { BROADCAST, DATASET, PAGE_LIMIT, TEMPLATE } from './ids'
+import type { SortSpec } from './api'
 
 /*
  * What the announcements' page reads and runs (docs/quizbuks/plans/Q7-messages-legal.md, Q7c; P-04), typed by hand
@@ -130,10 +131,11 @@ function broadcast(row: Row): BroadcastRow {
 }
 
 /** A page of every announcement and notice, newest edited first. */
-export async function readBroadcasts(filter: BroadcastFilter, offset: number, limit: number) {
+export async function readBroadcasts(filter: BroadcastFilter, offset: number, limit: number, sorts?: SortSpec[]) {
   const answer = await runQuery<Row>(TEMPLATE.broadcasts, {
     params: { senderKind: filter.senderKind || undefined, status: filter.status || undefined,
       q: filter.q || undefined },
+    sorts,
     offset,
     limit,
     count: true,

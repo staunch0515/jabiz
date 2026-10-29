@@ -33,6 +33,9 @@ import { money, useLabels, usePaged } from './hooks'
 import { DICTIONARY, PERMISSION } from './ids'
 import { downloadStatement, issueStatement, paySettlement, readSettlements, SETTLEMENTS_KEY, type Settlement } from './settlement-api'
 
+/** The columns sorted on the server, by the template's `list.sorts` field (Q53a). */
+const SORTS = { month: 'month', payable: 'payable', status: 'status' } as const
+
 const right = { className: 'text-right tabular-nums' }
 const ALL = 'ALL'
 const STATUSES = ['ISSUED', 'PAYING', 'PAID'] as const
@@ -114,8 +117,8 @@ export default function SettlementsPage() {
   const [search, setSearch] = useSearchParams()
   const status = search.get('status') ?? ALL
   const [paying, setPaying] = useState<Settlement | null>(null)
-  const { query, table } = usePaged([...SETTLEMENTS_KEY, finance, status],
-    (offset, limit) => readSettlements(finance, status === ALL ? null : status, offset, limit))
+  const { query, table, sortable } = usePaged([...SETTLEMENTS_KEY, finance, status],
+    (offset, limit, sorts) => readSettlements(finance, status === ALL ? null : status, offset, limit, sorts), true, SORTS)
   const columns = useMemo<ColumnDef<Settlement, unknown>[]>(() => [
     ...(finance ? [{ id: 'operator', header: t('settlement.operator'),
       cell: ({ row }) => row.original.operatorName ?? row.original.operatorId } as ColumnDef<Settlement, unknown>] : []),
@@ -183,7 +186,7 @@ export default function SettlementsPage() {
       {query.isError
         ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
         : (
-          <DataTable label={t(finance ? 'settlement.title' : 'settlement.ownTitle')} columns={columns} {...table}
+          <DataTable label={t(finance ? 'settlement.title' : 'settlement.ownTitle')} columns={sortable(columns)} {...table}
             getRowId={(row) => row.settlementId} empty={t('settlement.none')}
             rowProps={(row) => ({ 'data-testid': 'settlement-row', 'data-id': row.settlementId })} />
         )}

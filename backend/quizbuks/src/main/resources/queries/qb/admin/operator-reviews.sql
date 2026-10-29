@@ -31,7 +31,7 @@ results:
   checkedBy:    { from: QbReviewSpotCheck.checkedBy }
 list:
   filters: [decision, subject, operatorId, checkResult, decidedAt]
-  sorts:   [decidedAt]
+  sorts:   [decidedAt, decision]
   defaultSort: { field: decidedAt, asc: false }
   key: [decisionId]
 permissions: [qb.admin.spot-check]

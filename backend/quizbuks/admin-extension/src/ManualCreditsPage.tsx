@@ -41,6 +41,9 @@ import { BANK_REVIEW, DICTIONARY, PATH, PERMISSION } from './ids'
 import { MANUAL_KINDS, readApprovedSponsors, readManualCredits, recordManualCredit, SPONSOR_CHOICES,
   type ManualCredit, type ManualKind } from './manual-api'
 
+/** The columns sorted on the server, by the template's `list.sorts` field (Q53a). */
+const SORTS = { createdAt: 'createdAt', amount: 'amount', status: 'status' } as const
+
 const linkClass = 'text-primary font-medium underline-offset-4 hover:underline'
 const right = { className: 'text-right tabular-nums' }
 const KEY = ['qb-ext', 'finance', 'manual-credits'] as const
@@ -227,8 +230,8 @@ export default function ManualCreditsPage() {
     }
     setSearch(next, { replace: true })
   }
-  const { query, table } = usePaged([...KEY, filterStatus],
-    (offset, limit) => readManualCredits(filterStatus, offset, limit))
+  const { query, table, sortable } = usePaged([...KEY, filterStatus],
+    (offset, limit, sorts) => readManualCredits(filterStatus, offset, limit, sorts), true, SORTS)
   const columns = useMemo<ColumnDef<ManualCredit, unknown>[]>(() => [
     { id: 'createdAt', header: t('manual.createdAt'), cell: ({ row }) => when(row.original.createdAt) },
     { id: 'code', header: t('manual.code'),
@@ -285,7 +288,7 @@ export default function ManualCreditsPage() {
       {query.isError
         ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
         : (
-          <DataTable label={t('manual.table')} columns={columns} {...table} getRowId={(row) => row.topUpId}
+          <DataTable label={t('manual.table')} columns={sortable(columns)} {...table} getRowId={(row) => row.topUpId}
             empty={t('manual.none')}
             rowProps={(row) => ({ 'data-testid': 'manual-row', 'data-id': row.topUpId, 'data-status': row.status })} />
         )}

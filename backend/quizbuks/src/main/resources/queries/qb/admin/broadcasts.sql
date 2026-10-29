@@ -45,7 +45,7 @@ results:
   revision:        { from: QbBroadcast.revision }
   editedAt:        { from: QbBroadcast.editedAt }
 list:
-  sorts: [editedAt, sentAt]
+  sorts: [editedAt, sentAt, status, title]
   defaultSort: { field: editedAt, asc: false }
   key: [broadcastId]
 permissions: [qb.admin.content.write]

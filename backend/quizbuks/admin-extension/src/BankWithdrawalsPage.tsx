@@ -34,6 +34,9 @@ import { money, useLabels, usePaged, when } from './hooks'
 import { DICTIONARY, PATH, PERMISSION } from './ids'
 import { markPaid, markReturned, readBankWithdrawals, revealAccountNumber, type BankWithdrawal } from './withdrawal-api'
 
+/** The columns sorted on the server, by the template's `list.sorts` field (Q53a). */
+const SORTS = { createdAt: 'createdAt', amount: 'amount', status: 'status' } as const
+
 const linkClass = 'text-primary font-medium underline-offset-4 hover:underline'
 const right = { className: 'text-right tabular-nums' }
 const QUERY = ['qb-ext', 'finance', 'bank-withdrawals'] as const
@@ -160,8 +163,8 @@ export default function BankWithdrawalsPage() {
   const [search, setSearch] = useSearchParams()
   const filterStatus = search.get('status')
   const [action, setAction] = useState<Action | null>(null)
-  const { query, table } = usePaged([...QUERY, filterStatus],
-    (offset, limit) => readBankWithdrawals(filterStatus, offset, limit))
+  const { query, table, sortable } = usePaged([...QUERY, filterStatus],
+    (offset, limit, sorts) => readBankWithdrawals(filterStatus, offset, limit, sorts), true, SORTS)
   const mayPay = can(PERMISSION.withdrawalPay)
   const mayReveal = can(PERMISSION.bankReveal)
   const columns = useMemo<ColumnDef<BankWithdrawal, unknown>[]>(() => [
@@ -250,7 +253,7 @@ export default function BankWithdrawalsPage() {
       {query.isError
         ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
         : (
-          <DataTable label={t('withdrawal.table')} columns={columns} {...table} getRowId={(row) => row.transferId}
+          <DataTable label={t('withdrawal.table')} columns={sortable(columns)} {...table} getRowId={(row) => row.transferId}
             empty={t('withdrawal.none')}
             rowProps={(row) => ({ 'data-testid': 'withdrawal-row', 'data-id': row.transferId,
               'data-status': row.status })} />
