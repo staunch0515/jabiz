@@ -18,10 +18,10 @@ import java.util.Set;
  * <ul>
  *   <li>A <b>password</b> is own when it came from self-registration (or self-provisioning at an identity provider);
  *       when the user changed it themselves while the account was <em>clean</em> (its password own); or when a mailed
- *       one-time link set it (reset, joining, verifying a pre-claimable account) at an address that is own. Any other
- *       password - set by an administrator, at creation or later, or applied after an approval - is not own, and
- *       neither is anything the user derives from it by a change of their own: an administrator who knows the old
- *       password can change it as well as the user.</li>
+ *       one-time link set it (reset, joining, verifying a pre-claimable account, accepting an invitation) at an address
+ *       that is own. Any other password - set by an administrator, at creation or later, or applied after an approval -
+ *       is not own, and neither is anything the user derives from it by a change of their own: an administrator who
+ *       knows the old password can change it as well as the user.</li>
  *   <li>An <b>address</b> is own when the user registered with it, or set it themselves while clean; an address an
  *       administrator entered when creating the account becomes own once a mailed link proves it (whoever reads that
  *       mailbox chose what follows - the approvers see the address and who entered it, as they would that of a
@@ -48,7 +48,7 @@ final class CredentialChain {
         "SPONSOR_EXTERNAL_TOKEN_SIGN_UP");
     /** Processes in which a mailed one-time link to the user's address is used (they prove the address). */
     static final Set<String> MAIL_PROVEN = Set.of("SPONSOR_PASSWORD_RESET_CONFIRM", "SPONSOR_EMAIL_VERIFY",
-        "SPONSOR_SIGN_UP_JOIN");
+        "SPONSOR_SIGN_UP_JOIN", "SPONSOR_INVITATION_ACCEPT");
     /** The process in which a signed-in user changes their own password. */
     static final String SELF_PASSWORD_CHANGE = "SEC_ACCOUNT_PASSWORD_CHANGE";
     /** Processes that open an account for an identity a provider vouched for, linking it as they open it. */
@@ -98,9 +98,11 @@ final class CredentialChain {
      * @param clean                 whether nobody else could sign in as the user now
      * @param addressChangedByOther whether someone other than the user changed the address after the account was
      *                              created
+     * @param addressAsCreated      whether there is an address and it is the one entered when the account was created,
+     *                              never changed since by anyone (decision D63: where an invitation may go)
      */
     record Judgement(boolean own, String setBy, Instant setAt, String summary, List<String> history, String email,
-        String address, boolean clean, boolean addressChangedByOther) {
+        String address, boolean clean, boolean addressChangedByOther, boolean addressAsCreated) {
         Judgement {
             history = List.copyOf(history);
         }
@@ -159,6 +161,7 @@ final class CredentialChain {
         private String addressHow;
         private Instant addressProvenAt;
         private boolean addressChangedByOther;
+        private boolean addressChanged;
 
         Walk(String user) {
             this.user = user;
@@ -210,6 +213,7 @@ final class CredentialChain {
                         : (byUser(event) ? "set by the user" : "changed by " + who(event)) + " at " + event.at();
                     addressProvenAt = null;
                     addressChangedByOther = newEmail != null && !byUser(event);
+                    addressChanged = true;
                     changes.add(newEmail == null ? "address removed" : "address changed to " + newEmail);
                 }
                 boolean proven = MAIL_PROVEN.contains(event.process()) && newEmail != null
@@ -323,7 +327,7 @@ final class CredentialChain {
             String described = email == null ? "no address" : email + " (" + addressHow
                 + (addressProvenAt == null ? ", not proven by mail" : ", proven by mail at " + addressProvenAt) + ")";
             return new Judgement(own, own ? null : foreignBy, own ? null : foreignAt, summary, history, email,
-                described, clean(), addressChangedByOther);
+                described, clean(), addressChangedByOther, email != null && !addressChanged);
         }
     }
 

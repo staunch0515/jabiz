@@ -392,6 +392,29 @@ describe('MailLinkPage', () => {
     expect(screen.getByRole('link', { name: 'Send the link' })).toHaveAttribute('href', '/portal/auth/password-reset?entry=portal')
   })
 
+  it("accepts an invitation from the address and leads to the entry's sign-in", async () => {
+    window.history.replaceState(null, '', '/portal/auth/invitation?entry=portal&token=inv')
+    const posts = server({ '/api/auth/invitation/confirm': { status: 204 } })
+    render(<MailLinkPage brand="Portal" />)
+    expect(window.location.search).toBe('?entry=portal')
+    await expectAccessible()
+    await user().type(screen.getByLabelText('New password'), 'brand new horse')
+    await user().type(screen.getByLabelText('Repeat the new password'), 'brand new horse{Enter}')
+    await waitFor(() => expect(screen.getByTestId('invitation-state')).toHaveTextContent('Your password is set'))
+    expect(posts.map((p) => [p.path, p.body])).toEqual([['/api/auth/invitation/confirm',
+      { token: 'inv', password: 'brand new horse' }]])
+    await waitFor(() => expect(screen.getByTestId('auth-continue')).toHaveAttribute('href', '/portal/'))
+  })
+
+  it('says an invitation without a token is no good, without sending anything', async () => {
+    window.history.replaceState(null, '', '/portal/auth/invitation?entry=portal')
+    const posts = server()
+    render(<MailLinkPage brand="Portal" />)
+    expect(screen.getByTestId('invitation-state')).toHaveTextContent('no longer valid')
+    expect(posts).toEqual([])
+    await expectAccessible()
+  })
+
   it('says so for a page it does not know', () => {
     window.history.replaceState(null, '', '/portal/auth/elsewhere?token=x')
     server()

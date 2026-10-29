@@ -7,6 +7,7 @@ import { expectAccessible } from '@jabiz/ui/testing'
 import JoinPage from './JoinPage'
 import PasswordResetPage from './PasswordResetPage'
 import VerifyEmailPage from './VerifyEmailPage'
+import InvitationPage from './InvitationPage'
 
 type Answer = { status: number; body?: unknown }
 
@@ -48,6 +49,7 @@ function page(path: string) {
           <Route path="/auth/verify-email" element={<VerifyEmailPage />} />
           <Route path="/auth/join" element={<JoinPage />} />
           <Route path="/auth/password-reset" element={<PasswordResetPage />} />
+          <Route path="/auth/invitation" element={<InvitationPage />} />
           <Route path="/login" element={<div data-testid="login" />} />
         </Routes>
       </MemoryRouter>
@@ -251,6 +253,54 @@ describe('account pages', () => {
       await i18n.changeLanguage('ja')
       page('/auth/password-reset')
       expect(screen.getByRole('button', { name: 'リンクを送る' })).toBeTruthy()
+    })
+  })
+
+  describe('InvitationPage', () => {
+    it('sets the password of the invited account and leads to signing in', async () => {
+      const posts = server({ '/api/auth/invitation/confirm': { status: 204 } })
+      const { container } = page('/auth/invitation?entry=portal&token=i1')
+      expect(window.location.search).not.toContain('token')
+      await expectAccessible(container)
+      expect(screen.getByTestId('invitation-hint').textContent).toContain('An administrator created an account')
+      fireEvent.click(screen.getByRole('button', { name: 'Set the password' }))
+      expect(await screen.findByText('Enter a new password.')).toBeTruthy()
+      expect(posts).toEqual([])
+      type('New password', 'brand new horse')
+      type('Repeat the new password', 'brand new horse')
+      fireEvent.click(screen.getByRole('button', { name: 'Set the password' }))
+      await waitFor(() => expect(screen.getByTestId('invitation-state').textContent).toContain('Your password is set'))
+      expect(posts).toEqual([{ path: '/api/auth/invitation/confirm', body: { token: 'i1', password: 'brand new horse' } }])
+      await waitFor(() => expect(screen.getByTestId('auth-continue').getAttribute('href')).toBe('/portal/'))
+      await expectAccessible(container)
+    })
+
+    it('says when the invitation is no good, with no way to send one again', async () => {
+      server({ '/api/auth/invitation/confirm': problem(422, 'TOKEN_INVALID') })
+      const { container } = page('/auth/invitation?entry=portal&token=old')
+      type('New password', 'brand new horse')
+      type('Repeat the new password', 'brand new horse')
+      fireEvent.click(screen.getByRole('button', { name: 'Set the password' }))
+      await waitFor(() => expect(screen.getByTestId('invitation-state').textContent).toContain('no longer valid'))
+      expect(screen.queryByRole('button', { name: 'Send the link' })).toBeNull()
+      await expectAccessible(container)
+    })
+
+    it('shows the password rules under the field', async () => {
+      server({ '/api/auth/invitation/confirm': problem(400, 'PASSWORD_TOO_SHORT', 'password') })
+      page('/auth/invitation?entry=portal&token=i2')
+      type('New password', 'short')
+      type('Repeat the new password', 'short')
+      fireEvent.click(screen.getByRole('button', { name: 'Set the password' }))
+      expect(await screen.findByText('PASSWORD_TOO_SHORT message')).toBeTruthy()
+      expect(screen.queryByTestId('invitation-state')).toBeNull()
+    })
+
+    it('speaks the language of the interface', async () => {
+      server({})
+      await i18n.changeLanguage('zh')
+      page('/auth/invitation?entry=portal&token=i3')
+      expect(screen.getByTestId('invitation-hint').textContent).toContain('管理员为您建立了账号')
     })
   })
 })

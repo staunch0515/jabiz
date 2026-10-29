@@ -52,6 +52,15 @@ describe('the portal', () => {
     expect(window.location.search).not.toContain('token')
   })
 
+  it("opens an administrator's invitation without signing in", async () => {
+    server()
+    window.history.replaceState(null, '', '/auth/invitation?entry=portal&token=inv')
+    render(<App />)
+    expect(await screen.findByTestId('invitation')).toBeInTheDocument()
+    await waitFor(() => expect(document.querySelectorAll('input[type="password"]')).toHaveLength(2))
+    expect(window.location.search).not.toContain('token')
+  })
+
   it('opens the account deletion link without signing in, asking for a link when it has no token', async () => {
     server()
     window.history.replaceState(null, '', '/auth/account-deletion?entry=portal&token=abc')

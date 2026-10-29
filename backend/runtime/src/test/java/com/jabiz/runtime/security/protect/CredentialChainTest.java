@@ -100,6 +100,40 @@ class CredentialChainTest {
         assertThat(judged.history()).anySatisfy(line -> assertThat(line).contains("address changed to admin@example.com"));
     }
 
+    /** Decision D63: an invitation's link is mailed like a reset's, and counts only where a reset's would. */
+    @Test
+    void anAcceptedInvitationIsAMailedLinkLikeAReset() {
+        user(ADMIN, "SEC_USER_CREATE", "h1", "u@example.com", null);
+        user(ANONYMOUS, "SPONSOR_INVITATION_ACCEPT", "h2", "u@example.com", "u@example.com");
+        Judgement judged = judged();
+        assertThat(judged.own()).isTrue();
+        assertThat(judged.history()).last().asString().contains("(SPONSOR_INVITATION_ACCEPT): password changed, own");
+        assertThat(judged.address()).contains("proven by mail");
+
+        events.clear();
+        user(ADMIN, "SEC_USER_CREATE", null, null, null);
+        user(ADMIN, "SEC_USER_UPDATE", null, "admin@example.com", null);
+        assertThat(judged().addressAsCreated()).as("added after creation").isFalse();
+        user(ANONYMOUS, "SPONSOR_INVITATION_ACCEPT", "h2", "admin@example.com", "admin@example.com");
+        assertThat(judged().own()).as("an address added after creation is someone else's").isFalse();
+    }
+
+    /** Where an invitation may go (D63): the address entered at creation, changed by nobody since, the user included. */
+    @Test
+    void anAddressIsAsCreatedUntilAnyoneChangesIt() {
+        user(ADMIN, "SEC_USER_CREATE", "h1", "u@example.com", null);
+        assertThat(judged().addressAsCreated()).isTrue();
+        user(ADMIN, "SEC_USER_UNLOCK", "h1", "U@Example.com", null);
+        assertThat(judged().addressAsCreated()).as("only the case differs").isTrue();
+        // The administrator who set the password signs in as the user and changes the address.
+        user(USER, "SEC_USER_UPDATE", "h1", "admin@example.com", null);
+        assertThat(judged().addressChangedByOther()).isFalse();
+        assertThat(judged().addressAsCreated()).isFalse();
+        events.clear();
+        user(ADMIN, "SEC_USER_CREATE", null, null, null);
+        assertThat(judged().addressAsCreated()).as("no address").isFalse();
+    }
+
     @Test
     void aFactorEnrolledWhileTheAccountWasNotCleanIsNotOwnUntilRemoved() {
         user(ADMIN, "SEC_USER_CREATE", "h1", "u@example.com", null);

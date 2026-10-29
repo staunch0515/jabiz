@@ -8,7 +8,8 @@ function flatten(routes: RouteObject[]): RouteObject[] {
 }
 
 /** The paths reached without signing in: signing in itself and the links of mail, whose token is the credential. */
-const PUBLIC = ['/login', '/login/oidc', '/mail/unsubscribe', '/auth/verify-email', '/auth/join', '/auth/password-reset']
+const PUBLIC = ['/login', '/login/oidc', '/mail/unsubscribe', '/auth/verify-email', '/auth/join', '/auth/password-reset',
+  '/auth/invitation']
 
 describe('the routes of the admin', () => {
   it('put every page but signing in and the mail links behind signing in, within the shell', () => {
