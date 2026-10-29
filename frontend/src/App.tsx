@@ -31,6 +31,7 @@ import TasksPage from './pages/TasksPage'
 import JoinPage from './pages/auth/JoinPage'
 import PasswordResetPage from './pages/auth/PasswordResetPage'
 import VerifyEmailPage from './pages/auth/VerifyEmailPage'
+import InvitationPage from './pages/auth/InvitationPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -64,6 +65,7 @@ export const appRoutes: RouteObject[] = [
   { path: '/auth/verify-email', element: <VerifyEmailPage /> },
   { path: '/auth/join', element: <JoinPage /> },
   { path: '/auth/password-reset', element: <PasswordResetPage /> },
+  { path: '/auth/invitation', element: <InvitationPage /> },
   {
     element: <RequireSignIn />,
     children: [

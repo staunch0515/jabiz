@@ -79,6 +79,10 @@ const en = {
     resetDone: 'Your password has been changed and the other sessions of your account have ended. Sign in with the new password.',
     signIn: 'Sign in',
     unknownPage: 'This page does not exist.',
+    invitationTitle: 'Set your password',
+    invitationHint: 'An administrator created an account for you. Choose its password; you then sign in with the e-mail address this link was sent to.',
+    invitationDone: 'Your password is set. Sign in with your e-mail address and the new password.',
+    invitationInvalid: 'This invitation is no longer valid: it expired, was used, or a newer one replaced it. If your password is set already, sign in; otherwise ask your administrator for a new invitation.',
   },
   signUp: {
     title: 'Create an account',
@@ -361,6 +365,10 @@ const zh: Messages = {
     resetDone: '密码已修改，该账号的其他会话已结束。请用新密码登录。',
     signIn: '登录',
     unknownPage: '此页面不存在。',
+    invitationTitle: '设定密码',
+    invitationHint: '管理员为您建立了账号。请设定它的密码，之后用收到这封链接的邮箱登录。',
+    invitationDone: '密码已设定。请用您的邮箱和新密码登录。',
+    invitationInvalid: '这封邀请已失效：已过期、已使用，或被新的邀请取代。如果密码已经设定，请直接登录；否则请联系管理员重新邀请。',
   },
   signUp: {
     title: '注册账号',
@@ -641,6 +649,10 @@ const ja: Messages = {
     resetDone: 'パスワードを変更し、アカウントの他のセッションを終了しました。新しいパスワードでログインしてください。',
     signIn: 'ログイン',
     unknownPage: 'このページは存在しません。',
+    invitationTitle: 'パスワードの設定',
+    invitationHint: '管理者があなたのアカウントを作成しました。パスワードを設定してください。その後、このリンクが届いたメールアドレスでログインします。',
+    invitationDone: 'パスワードを設定しました。メールアドレスと新しいパスワードでログインしてください。',
+    invitationInvalid: 'この招待は無効です。期限切れ、使用済み、または新しい招待に置き換えられました。パスワードを設定済みの場合はログインしてください。そうでない場合は、管理者に招待の再送を依頼してください。',
   },
   signUp: {
     title: 'アカウントを作成',

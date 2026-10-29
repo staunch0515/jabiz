@@ -636,6 +636,7 @@ class PortalSignInGuard implements SignInGuard {
   可预占的账号不能自行关联外部账号（`SEC_IDENTITY_LINK_SELF` 答 422 `IDENTITY_LINK_UNAVAILABLE`，§12）。
 - **可信的邮箱**：已验证，或属于可预占的账号。只有这类邮箱收得到找回密码与"你已有账号"的邮件，这两种链接也只对它有效。
   **管理员设置或修改的邮箱从不可信**（持有 `security.user.write` 的人改了别人的邮箱，不能借找回密码接管账号）：其用户登录后用 `POST /api/auth/account/verify-email` 验证一次。
+  建号时填写、之后无人改过的邮箱另可由管理员寄**邀请**（§15.14，决策 D63）：本人凭邀请的链接设定密码，同时证明邮箱，不必先登录。
   因此 16b-2 之前创建的账号在验证邮箱之前不能找回密码（升级说明）。
 
 - **邮件**（D35，`TRANSACTIONAL`，三语消息 `mail.jabiz.auth.<名>.subject|body`，唯一的参数是入口）：`jabiz.auth.verify-email`（令牌 `jabiz.verify`，
@@ -876,6 +877,32 @@ jabiz:
 - 启动检查（`AppProxies`，类别 `APP_PROXY`）：代理的名字、密钥（至少 32 字符、不是未解析的占位符）、租户形式、参数名、`max-age`；`appProxy()` 流程只持代理的权限、
   所指的代理已配置、不要求二次验证、已验证邮箱或替代权限（调用者不是本平台的用户）。
 
+### 15.14 管理员建号的邀请（阶段 17o，决策 D63）
+
+管理员建的账号没有本人的密码，邮箱也未经证明（§15.7：管理员填写的邮箱不可信，收不到找回密码的链接）。邀请把"证明邮箱"与"设定本人的密码"合成一封邮件：
+
+| 接口 / 流程 | 说明 |
+|---|---|
+| `SEC_USER_INVITE {userId, entry?}`（流程接口，`security.user.create`，二次验证，`actsOn(SecUser)`） | 给用户寄邀请（模板 `jabiz.auth.invitation`，令牌 `jabiz.invite`，`jabiz.security.invitation.ttl` 缺省 72 小时）；链接 `{entryUrl}auth/invitation?entry=…&token=…`，入口缺省 `admin`，未知入口 422 `INVALID_VALUE`；答复 `{userId, status: SENT}` |
+| `SEC_USER_CREATE {…, invite: true}` | 建号的同一事务中寄出（入口 `admin`）；须有格式正确的邮箱（422 `MAIL_NO_ADDRESS` / `INVALID_VALUE`）、不能同时给密码（422 `INVALID_VALUE`）、不能停用（422 `INVITATION_USER_DISABLED`） |
+| `POST /api/auth/invitation/confirm {token, password}`（匿名，`SPONSOR_INVITATION_ACCEPT`） | 204；与找回密码相同：设定密码、证明邮箱、吊销全部令牌族（`PASSWORD_RESET`）、写登录记录 `PASSWORD_RESET`、二次验证保留、不自动登录；任何不好的链接 422 `TOKEN_INVALID` |
+
+- **只寄给需要的人**：用户启用（否则 422 `INVITATION_USER_DISABLED`）、有邮箱（`MAIL_NO_ADDRESS`）、邮箱未验证（已验证的由本人找回密码，422 `INVITATION_NOT_NEEDED`）。
+- **只寄到建号时的地址**：建号之后改过或补填的地址（任何人改的，包括以"本人"会话改的）422 `INVITATION_ADDRESS_CHANGED`（`AddressVerifiable.unchanged`，按所有权链的 `addressAsCreated`）：
+  不论账号是否干净、受保护的授权是否开启——请求的是管理员而不是本人，改地址正是接管账号的手法。地址填错的账号重新建立。建号时的地址去掉首尾空白后保存。
+- **邮件未开启**（`jabiz.mail.enabled`）即 422 `MAIL_DISABLED`：不记下一封永远不会寄出的邀请。
+- **链接**：只认最新的一封（新的邀请使之前的失效，`MailTokens.consume`）；邮箱已验证（本人已接受某一封）、用户停用或邮箱已改即作废。
+- **所有权链**（§16.2）：`SPONSOR_INVITATION_ACCEPT` 与找回、加入、验证同列为"寄到本人邮箱的一次性链接"，所以建号时的地址经接受后算本人的，所设密码是本人的。
+- **不需要审批，但按 §16 评估**：邀请即设定密码，所以对持有受保护权限（或有待审批的变更将给他）的用户与 `SEC_USER_SET_PASSWORD` 一样评估：建立期内照常寄出，
+  建立期结束后 422 `PROTECTED_CHANGE_REQUIRES_APPROVAL`（退役的首个管理员 403）——填写地址的管理员可能读得到那个邮箱。先收回受保护的权限、邀请、本人接受后再申请授权，
+  审批人在事实中看得到地址、由谁填写与何时经邮件证明。
+- **前端**：`@jabiz/client` 的 `acceptInvitation`、`@jabiz/ui` `MailLinkPage` 的 `invitation` 页（`InvitationPanel`：两次输入新密码；失效时说明并请联系管理员，不能自助重寄）；
+  通用后台的路由 `/auth/invitation`。应用把邀请指向自己的入口时，其前端也要挂载该页（同其他邮件链接页）。
+- **测试**：`InvitationIT`（建号即邀请、接受后邮箱已验证并能以邮箱登录、链接只能用一次、建立期之后受保护的授权 `APPLIED`、替换管理员知道的密码、新邀请使旧链接失效并按入口生成链接、
+  地址改后链接作废、建号后改过或补填的地址被拒、已验证 / 停用 / 无邮箱 / 未知入口被拒、建号时带密码 / 无邮箱 / 格式不对 / 停用被拒且不建号、首尾空白、
+  建立期之后受保护权限的持有人被拒、权限）、`InvitationWithoutMailIT`（邮件未开启）、`CredentialChainTest`（接受邀请算邮件证明，补填的地址不算；`addressAsCreated`）、
+  前端 `AuthPages.test.tsx`、`blocks.test.tsx`（axe）与示范门户的 `App.test.tsx`。
+
 ## 16. 受保护的授权：四眼【决策 D48 第 1 条，阶段 16r】
 
 一个管理员不能独自让某人（包括自己或另一个账号）得到能改权限、能审批、能记账的权限，也不能独自接管持有这类权限的账号。
@@ -965,7 +992,7 @@ SEC_PROTECTED_CHANGE_APPLY（internal，事件消费者）──► 再经 Requi
   只看"最后一次是谁改的"不够——甲以 U 的身份登录、"本人"改一次密码即可。平台按账号的全部历史、按操作顺序判断一条**所有权链**（`CredentialChain`，不另存）：
   一个凭据只有在建立时**没有别人可能知道一个可用的凭据**才是本人的。
   - **密码**是本人的：来自自助注册或经提供方开户；或账号"干净"时由本人修改（`SEC_ACCOUNT_PASSWORD_CHANGE`，原密码本人的）；或由寄到**本人的邮箱**的一次性链接设置
-    （找回密码、加入、验证可预占账号时设新密码）。其他一律不是：管理员建立或设置的密码（`SEC_USER_CREATE`、`SEC_USER_SET_PASSWORD`、批准后生效的重设、首个管理员），
+    （找回密码、加入、验证可预占账号时设新密码、接受邀请）。其他一律不是：管理员建立或设置的密码（`SEC_USER_CREATE`、`SEC_USER_SET_PASSWORD`、批准后生效的重设、首个管理员），
     以及由这样的密码"本人"改出来的密码——知道旧密码的管理员同样能改它——直到经邮件链接重设为止。
   - **邮箱**是本人的：注册时的地址；或账号干净时由本人设置。管理员建立账号时填写的地址在一次邮件链接证明它之后算本人的——此后的一切取决于谁读那个邮箱，
     审批人在事实中看得见这个地址，与自助注册的账号相同；管理员**之后改过**的地址不是（这正是接管账号的方式），它被验证（因而能收到找回密码的链接）时账号不干净。
@@ -973,7 +1000,7 @@ SEC_PROTECTED_CHANGE_APPLY（internal，事件消费者）──► 再经 Requi
     （重新开始绑定会在同一行写入新的密钥，评审 L-a；只确认不能使别人看见过的密钥变成本人的），只消耗恢复码的版本（`SPONSOR_MFA_VERIFY`）不算。
   - 同一行的版本须与其操作的先后一致；两个事务提交顺序与操作顺序相反时，什么也不算本人的（评审 L-b）。
   - **干净**：密码不是别人的、每个外部关联都是本人的、没有已验证的别人设置的邮箱；凭据是本人的 = 干净且每个二次验证都是本人的。没有任何凭据的账号（没有人能以它登录）是本人的。
-  - 因此管理员建立的账号要得到受保护的权限，须先由本人经邮件找回密码（或在没有任何凭据时授权，之后的重设密码本身要审批，§16.1）；自助注册与经提供方开户的账号照常。
+  - 因此管理员建立的账号要得到受保护的权限，须先由本人经邮件设定密码——接受邀请（§15.14，D63）或找回密码（或在没有任何凭据时授权，之后的重设密码本身要审批，§16.1）；自助注册与经提供方开户的账号照常。
   - **邮箱不能被换掉**（评审 M-b）：持有受保护权限、或有待审批的变更将给他受保护权限的用户，其邮箱只经 `EMAIL` 变更（审批人须覆盖他持有的受保护权限）；
     直接写入（数据视图、实体 API 等）一律 422 `PROTECTED_CHANGE_REQUIRES_APPROVAL`。其他用户的邮箱照旧直接修改（`SEC_USER_EMAIL_SET` 当即生效）。
     别人在建立账号**之后**改过的地址，在别人可能知道该账号的登录方式（账号不干净）时不能由已登录的用户申请验证（422 `EMAIL_SET_BY_ANOTHER`）：

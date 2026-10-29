@@ -146,7 +146,7 @@ export default defineConfig({
 - **客户端**：`configureClient({ entry: 'app' })`（缺省取 `VITE_JABIZ_ENTRY`；本地 `pnpm dev` 时没有它，所以示范门户在 `main.tsx` 中写明），
   `AuthProvider`、`QueryClientProvider`、`AppearanceProvider` 包住页面，`registerServiceWorker()` 在启动时调用一次。
 - **页面积木**（`@jabiz/ui`，不依赖路由，导航经 `onNavigate` / `hrefOf`）：`SignInForm`（`signUpPath`、`passwordResetPath`；入口开启了 `email-link` 时 `emailLink` 把邮件链接放在密码之上，`userNameLabel="email"` 把名字一栏写作"邮箱"，17m）、`SignUpForm`、
-  `MailLinkPage`（路径 `auth/verify-email`、`auth/join`、`auth/password-reset`，开启邮件链接时还有 `auth/email-link`，开启删除账号时还有 `auth/account-deletion`；不要传 `search`，它自己读一次地址并立即去掉令牌）、`PasswordResetRequest`、
+  `MailLinkPage`（路径 `auth/verify-email`、`auth/join`、`auth/password-reset`，开启邮件链接时还有 `auth/email-link`，开启删除账号时还有 `auth/account-deletion`，管理员把邀请指向这个入口时还有 `auth/invitation`（D63）；不要传 `search`，它自己读一次地址并立即去掉令牌）、`PasswordResetRequest`、
   `OidcCallback`（路径 `login/oidc`；登录与本人关联共用，关联完成后调用 `onLinked`）、`LinkedIdentities`（本人的外部账号：列表、关联、解除，16f-1）、`StepUpProvider`、`MfaEnrollment`、`ChangePasswordForm`、`SessionList`（本人在该入口的会话，结束本机会话后调用 `onSignedOut`，10 §15.9）、
   `MailPreferences`（本人的邮件：该入口的可退订通知与邮件语言，16s；应用的模板以 `.entries("app")` 声明给该入口、显示名写在 `mail.<名>.name`）、
   `AccountDeletion`（入口开启 `account-deletion` 时：申请删除本人账号、确认提示与身份、撤回；冷静期内账号照常可用，10 §17.5）、

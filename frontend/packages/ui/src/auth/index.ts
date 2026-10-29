@@ -18,6 +18,7 @@ export {
   VerifyEmailPanel,
   JoinPanel,
   PasswordResetConfirm,
+  InvitationPanel,
   ResendVerification,
   NewPasswordFields,
 } from './MailLinkPage'

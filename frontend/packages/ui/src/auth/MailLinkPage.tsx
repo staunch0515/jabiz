@@ -1,5 +1,5 @@
-import { api, checkVerificationLink, confirmPasswordReset, confirmVerificationLink, resendVerification, sitePath,
-  unwrap, useMailLink } from '@jabiz/client'
+import { acceptInvitation, api, checkVerificationLink, confirmPasswordReset, confirmVerificationLink,
+  resendVerification, sitePath, unwrap, useMailLink } from '@jabiz/client'
 import { Info, LockKeyhole, Mail } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { useForm, type UseFormReturn } from 'react-hook-form'
@@ -49,8 +49,8 @@ export interface MailLinkPageBase extends AuthNavigation {
 
 export interface MailLinkPageProps extends MailLinkPageBase {
   /**
-   * Which page of a link this is: `verify-email`, `join`, `password-reset`, `email-link` or `account-deletion`; the last
-   * segment of the address when absent (links are `{entryUrl}auth/<page>?entry=…&token=…`, decision D43 item 4).
+   * Which page of a link this is: `verify-email`, `join`, `password-reset`, `email-link`, `account-deletion` or
+   * `invitation`; the last segment of the address when absent (links are `{entryUrl}auth/<page>?entry=…&token=…`, decision D43 item 4).
    */
   page?: string
   /** The query of the address, when a router keeps its own location; the address bar's when absent. */
@@ -60,8 +60,8 @@ export interface MailLinkPageProps extends MailLinkPageBase {
 /**
  * The pages mailed links lead to (docs/design/10-security.md section 15.7; decisions D36 and D43): verifying an
  * address, joining an entry with an existing account, choosing a new password (or, without a token, asking for
- * the link), signing in with a mailed link and confirming an account's deletion (or, without a token, asking for the
- * link; decision D62). The token is taken out of the address bar at once and the page sends no referrer while open;
+ * the link), signing in with a mailed link, confirming an account's deletion (or, without a token, asking for the
+ * link; decision D62) and accepting an administrator's invitation (decision D63). The token is taken out of the address bar at once and the page sends no referrer while open;
  * nothing is sent before the person clicks, so that a mail scanner opening the link changes nothing.
  */
 export function MailLinkPage({ page, search, ...base }: MailLinkPageProps) {
@@ -78,6 +78,7 @@ export function MailLinkPage({ page, search, ...base }: MailLinkPageProps) {
       ? <PasswordResetConfirm {...base} link={link} />
       : <PasswordResetRequest {...base} entry={link.entry} />
   }
+  if (which === 'invitation') return <InvitationPanel {...base} link={link} />
   if (which === 'account-deletion') {
     return link.token
       ? <AccountDeletionConfirm {...base} link={link} />
@@ -462,6 +463,61 @@ export function PasswordResetConfirm({ link, brand, appearance, passwordResetPat
           }
         >
           {t('account.invalidLink')}
+        </Outcome>
+      )}
+    </AuthFrame>
+  )
+}
+
+/**
+ * Where an administrator's invitation leads (decision D63): the person chooses the password of the account created for
+ * them, which also proves the address; no session is opened, they sign in afterwards. A link that is no good cannot be
+ * sent again from here: only an administrator invites.
+ */
+export function InvitationPanel({ link, brand, appearance }: PanelProps) {
+  const { t } = useTranslation(AUTH_NAMESPACE)
+  const { token, appPath } = link
+  const [state, setState] = useState<'form' | 'done' | 'invalid'>(token ? 'form' : 'invalid')
+  const [error, setError] = useState<string | null>(null)
+  const [fieldError, setFieldError] = useState<string | null>(null)
+  const form = useForm<NewPassword>({ defaultValues: { password: '', confirm: '' } })
+  return (
+    <AuthFrame brand={brand} appearance={appearance} title={t('account.invitationTitle')} testId="invitation">
+      {state === 'form' && (
+        <form
+          noValidate
+          className="flex flex-col gap-4"
+          onSubmit={form.handleSubmit(async ({ password }) => {
+            setError(null)
+            setFieldError(null)
+            try {
+              await acceptInvitation(token ?? '', password)
+              setState('done')
+            } catch (e) {
+              if (invalidLink(e)) setState('invalid')
+              else if (passwordProblems(e).length > 0) setFieldError(passwordProblems(e).join(' '))
+              else setError(failure(e, t('account.failed')))
+            }
+          })}
+        >
+          <p className="text-sm" data-testid="invitation-hint">{t('account.invitationHint')}</p>
+          {error && (
+            <Outcome ok={false} testId="invitation-error">
+              {error}
+            </Outcome>
+          )}
+          <NewPasswordFields form={form} serverError={fieldError} />
+          <AuthSubmit busy={form.formState.isSubmitting}>{t('account.setPassword')}</AuthSubmit>
+        </form>
+      )}
+      {state === 'done' && (
+        <Outcome ok testId="invitation-state" next={<ContinueTo path={appPath} label={t('account.signIn')} />}>
+          {t('account.invitationDone')}
+        </Outcome>
+      )}
+      {state === 'invalid' && (
+        <Outcome ok={false} testId="invitation-state" next={<ContinueTo path={appPath} label={t('account.signIn')} />}>
+          {t('account.invitationInvalid')}
         </Outcome>
       )}
     </AuthFrame>

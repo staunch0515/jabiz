@@ -157,8 +157,18 @@ public class SignUpProcesses {
 
     public record ResetRequestInput(String entry, String email) {}
 
+    /** What setting a password with a mailed link takes (a reset, an invitation). */
+    interface PasswordLinkInput {
+        String token();
+
+        String password();
+
+        SignInSource source();
+    }
+
     /** @param source where the request came from, for the login record */
-    public record ResetConfirmInput(@Sensitive String token, @Sensitive String password, SignInSource source) {
+    public record ResetConfirmInput(@Sensitive String token, @Sensitive String password, SignInSource source)
+        implements PasswordLinkInput {
         @Override
         public String toString() {
             return "ResetConfirmInput[***]";
@@ -332,9 +342,22 @@ public class SignUpProcesses {
     }
 
     static ProcessDefinition<ResetConfirmInput, Done, AccountContext> resetConfirm(LoginAttemptPolicy policy) {
-        return ProcessDefinition.define(RESET_CONFIRM, 1, ResetConfirmInput.class, Done.class, AccountContext.class,
+        return passwordByLink(RESET_CONFIRM, ResetConfirmInput.class,
+            "Sets a new password with the link of a password reset mail and ends every session.", AuthMailTemplates.RESET,
+            true, false, policy);
+    }
+
+    /**
+     * Sets a password with a mailed link of {@code purpose} (a reset; an invitation, decision D63): the link is checked
+     * first ({@link #checkLink(AccountContext, boolean, boolean)}), then the password is set, the address proven, every
+     * session ended and {@code PASSWORD_RESET} recorded ({@link #resetPassword}).
+     */
+    static <I extends PasswordLinkInput> ProcessDefinition<I, Done, AccountContext> passwordByLink(String name,
+        Class<I> inputType, String description, String purpose, boolean trustedOnly, boolean unverifiedOnly,
+        LoginAttemptPolicy policy) {
+        return ProcessDefinition.define(name, 1, inputType, Done.class, AccountContext.class,
             pb -> pb
-                .description("Sets a new password with the link of a password reset mail and ends every session.")
+                .description(description)
                 .permissions(SecurityPermissions.SIGN_UP)
                 .entryOnly()
                 .contextFactory((start, input) -> {
@@ -344,13 +367,12 @@ public class SignUpProcesses {
                     return ctx;
                 })
                 .outputMapper(DONE)
-                .step("Use the link", MailTokens.<AccountContext>consume(AuthMailTemplates.RESET,
-                    AccountContext::token, CONSUMED))
+                .step("Use the link", MailTokens.<AccountContext>consume(purpose, AccountContext::token, CONSUMED))
                 .step("Read the mail", MailMessageParams.<AccountContext>of(
                     ctx -> ctx.consumed() == null ? null : ctx.consumed().messageId(), MAIL_PARAMS))
                 .step("Load the user", QueryEntities.<AccountContext>of(SecurityEntities.USER_DATASET,
                     SignUpProcesses::linkUser, USERS))
-                .compute("Check the link", (metadata, ctx) -> checkLink(ctx, true))
+                .compute("Check the link", (metadata, ctx) -> checkLink(ctx, trustedOnly, unverifiedOnly))
                 .step("Load the latest login record", QueryEntities.<AccountContext>of(
                     SecurityEntities.LOGIN_RECORD_DATASET, ctx -> Rbac.latestLoginRecordOf(linkedId(ctx)),
                     LATEST_RECORD))
@@ -567,6 +589,14 @@ public class SignUpProcesses {
      * is void: {@code TOKEN_INVALID}, as for any other invalid link (once). The user goes under {@value #LINKED}.
      */
     static void checkLink(AccountContext ctx, boolean trustedOnly) {
+        checkLink(ctx, trustedOnly, false);
+    }
+
+    /**
+     * As {@link #checkLink(AccountContext, boolean)}; an {@code unverifiedOnly} link (an invitation, decision D63) is
+     * also void once the address is verified: accepting one invitation voids the others.
+     */
+    static void checkLink(AccountContext ctx, boolean trustedOnly, boolean unverifiedOnly) {
         MailTokens.Consumed consumed = ctx.consumed();
         if (consumed == null) {
             // The token step rejected the link already.
@@ -576,7 +606,7 @@ public class SignUpProcesses {
         if (user == null || !Rbac.enabled(user) || consumed.userId() == null
             || !consumed.userId().equals(String.valueOf(user.id()))
             || !EmailVerification.verified(user.get("email"), consumed.address())
-            || (trustedOnly && !trusted(user))) {
+            || (trustedOnly && !trusted(user)) || (unverifiedOnly && SecurityEntities.emailVerified(user))) {
             if (!ctx.hasViolations()) {
                 ctx.reject(new Violation(null, PlatformErrorCodes.TOKEN_INVALID, "Invalid token (user or address "
                     + "changed)"));

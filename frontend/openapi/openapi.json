@@ -1662,6 +1662,17 @@
         },
         "type" : "object"
       },
+      "InvitationConfirm" : {
+        "properties" : {
+          "password" : {
+            "type" : "string"
+          },
+          "token" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "JoinRequest" : {
         "properties" : {
           "password" : {
@@ -3806,6 +3817,26 @@
           }
         },
         "tags" : [ "external-token-controller" ]
+      }
+    },
+    "/api/auth/invitation/confirm" : {
+      "post" : {
+        "operationId" : "confirmInvitation",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/InvitationConfirm"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "204" : {
+            "description" : "No Content"
+          }
+        },
+        "tags" : [ "invitation-controller" ]
       }
     },
     "/api/auth/join" : {

@@ -263,6 +263,15 @@ public final class PlatformErrorCodes {
      * account (D48, review M-b): the one asking may not be the user.
      */
     public static final String EMAIL_SET_BY_ANOTHER = "EMAIL_SET_BY_ANOTHER";
+    /** 422: the user's address is verified already; they set a password with a password reset (D63). */
+    public static final String INVITATION_NOT_NEEDED = "INVITATION_NOT_NEEDED";
+    /**
+     * 422: someone else changed the user's address after the account was created (D63): an invitation goes only to the
+     * address entered when it was created, since changing the address is how an account is taken over.
+     */
+    public static final String INVITATION_ADDRESS_CHANGED = "INVITATION_ADDRESS_CHANGED";
+    /** 422: the user is disabled (D63). */
+    public static final String INVITATION_USER_DISABLED = "INVITATION_USER_DISABLED";
     /** The second factor code (or recovery code) is wrong, or the account is locked (10 section 9). */
     public static final String MFA_CODE_INVALID = "MFA_CODE_INVALID";
     /** The user has not set up a second factor. */
@@ -368,7 +377,7 @@ public final class PlatformErrorCodes {
         TASK_NOT_OPEN, TASK_CLOSED_BY_ITS_PROCESS, APPROVAL_NOT_PENDING, APPROVAL_OWN_REQUEST, APPROVAL_ALREADY_DECIDED, APPROVAL_LIMIT_EXCEEDED,
         CONTROL_CHANGE_INVALID, CONTROL_CHANGE_NOT_PROPOSED, CONTROL_SAME_PERSON, CONTROL_TARGET_CHANGED, SOD_CONFLICT,
         PROTECTED_CHANGE_REQUIRES_APPROVAL, BOOTSTRAP_ADMIN_RETIRED, APPROVAL_TARGET_USER, PROTECTED_CHANGE_NOT_PENDING,
-        EMAIL_SET_BY_ANOTHER,
+        EMAIL_SET_BY_ANOTHER, INVITATION_NOT_NEEDED, INVITATION_ADDRESS_CHANGED, INVITATION_USER_DISABLED,
         MFA_CODE_INVALID, MFA_NOT_ENROLLED, MFA_ALREADY_ENROLLED,
         IDEMPOTENCY_KEY_REUSED,
         UNAUTHENTICATED, LOGIN_FAILED, INVALID_REFRESH_TOKEN, APP_PROXY_REFUSED,

@@ -74,6 +74,14 @@ export async function confirmPasswordReset(token: string, password: string): Pro
   await unwrap(api.POST('/api/auth/password-reset/confirm', { body: { token, password } }))
 }
 
+/**
+ * Accepts an administrator's invitation (decision D63): sets the account's password with the token of the mailed link,
+ * which also proves the address; no session is opened, the person signs in afterwards.
+ */
+export async function acceptInvitation(token: string, password: string): Promise<void> {
+  await unwrap(api.POST('/api/auth/invitation/confirm', { body: { token, password } }))
+}
+
 /** Asks for a new verification mail; answered alike whatever the address. */
 export async function resendVerification(email: string, entry: string = session.entry()): Promise<void> {
   await unwrap(api.POST('/api/auth/verify-email/resend', { body: { email: email.trim(), entry } }))
