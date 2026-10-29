@@ -39,10 +39,12 @@ class PublicationReviewSettingsIT extends PublicationItSupport {
         assertThat(installed.get("rulesProposed")).isEqualTo(List.of(PublicationApprovals.RULE,
             SponsorApprovals.RULE, com.jabiz.quizbuks.wallet.QbPayouts.REVIEW_RULE,
             com.jabiz.quizbuks.wallet.BankTopUps.REVIEW_RULE, com.jabiz.quizbuks.wallet.ManualCredits.REVIEW_RULE,
-            com.jabiz.quizbuks.setup.QbSodRules.CONTROL.code(), com.jabiz.quizbuks.setup.QbSodRules.SECURITY.code()));
+            com.jabiz.quizbuks.operator.OperatorSettlements.REVIEW_RULE, com.jabiz.quizbuks.setup.QbSodRules.CONTROL.code(), com.jabiz.quizbuks.setup.QbSodRules.SECURITY.code()));
         String id = draft(sponsorA(), version(sponsorA(), "Settings"), "Configured?");
         // The separation of duties (Q10b) comes last and is left unpublished: the rules are counted before it.
         int count = proposals.size() - com.jabiz.quizbuks.setup.QbSodRules.ALL.size();
+        // The approval rules come just before it, in QbApprovalRules.ALL's order.
+        int rules = count - com.jabiz.quizbuks.setup.QbApprovalRules.ALL.size();
 
         // Nothing published yet: the switch has no value, which refuses.
         assertThat(codes(refused("QB_PUBLICATION_SUBMIT", sponsorA(), body("publicationId", id), 422)))
@@ -50,14 +52,14 @@ class PublicationReviewSettingsIT extends PublicationItSupport {
 
         // The parameters and the sponsors' rule published (the sponsor is onboarded), not the publications' rule: no
         // review would be asked for, which is refused too.
-        publishProposals(Map.of("proposals", proposals.subList(0, count - 5)));
-        publishProposals(Map.of("proposals", proposals.subList(count - 4, count - 3)));
+        publishProposals(Map.of("proposals", proposals.subList(0, rules)));
+        publishProposals(Map.of("proposals", proposals.subList(rules + 1, rules + 2)));
         onboard(SPONSOR_A);
         assertThat(codes(refused("QB_PUBLICATION_SUBMIT", sponsorA(), body("publicationId", id), 422)))
             .containsExactly(PublishingCodes.REVIEW_NOT_CONFIGURED);
 
         // With the rule, a review is asked for.
-        publishProposals(Map.of("proposals", proposals.subList(count - 5, count - 4)));
+        publishProposals(Map.of("proposals", proposals.subList(rules, rules + 1)));
         assertThat(submit(sponsorA(), id)).containsEntry("status", PublicationStatus.PENDING_REVIEW);
         run("QB_PUBLICATION_WITHDRAW", sponsorA(), body("publicationId", id));
 

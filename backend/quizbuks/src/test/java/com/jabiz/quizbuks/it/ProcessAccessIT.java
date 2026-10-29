@@ -114,7 +114,20 @@ class ProcessAccessIT extends QbItSupport {
         Map.entry("QB_CASH_REWARD_REMIND", ProcessAccess.INTERNAL),
         Map.entry("QB_REDEMPTION_EXPIRE", ProcessAccess.INTERNAL),
         Map.entry("QB_INVITATION_MAIL", ProcessAccess.INTERNAL),
-        Map.entry("QB_REDEMPTION_LAPSE", ProcessAccess.INTERNAL));
+        Map.entry("QB_REDEMPTION_LAPSE", ProcessAccess.INTERNAL),
+        // Q48c/d: AI prospecting's job items and the outcomes of its external jobs; Q48b: the operators' settlements.
+        Map.entry("QB_PROSPECT_FIND_START", ProcessAccess.INTERNAL),
+        Map.entry("QB_PROSPECT_FOUND", ProcessAccess.INTERNAL),
+        Map.entry("QB_PROSPECT_FIND_FAILED", ProcessAccess.INTERNAL),
+        Map.entry("QB_PROSPECT_FIND_CANCELLED", ProcessAccess.INTERNAL),
+        Map.entry("QB_PROSPECT_RESEARCH_START", ProcessAccess.INTERNAL),
+        Map.entry("QB_PROSPECT_RESEARCHED", ProcessAccess.INTERNAL),
+        Map.entry("QB_PROSPECT_RESEARCH_FAILED", ProcessAccess.INTERNAL),
+        Map.entry("QB_PROSPECT_RESEARCH_CANCELLED", ProcessAccess.INTERNAL),
+        Map.entry("QB_PROSPECT_SEND", ProcessAccess.INTERNAL),
+        Map.entry("QB_PROSPECT_FOLLOW_UP", ProcessAccess.INTERNAL),
+        Map.entry("QB_OPERATOR_SETTLEMENT_RUN", ProcessAccess.INTERNAL),
+        Map.entry("QB_OPERATOR_SETTLEMENT_APPROVAL_RESULT", ProcessAccess.INTERNAL));
 
     @Autowired
     ProcessRegistry registry;

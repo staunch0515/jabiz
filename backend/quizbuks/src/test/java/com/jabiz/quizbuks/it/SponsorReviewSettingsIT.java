@@ -40,6 +40,8 @@ class SponsorReviewSettingsIT extends AccountItSupport {
         List<Object> proposals = (List<Object>) installed.get("proposals");
         // The separation of duties (Q10b) comes last and is left unpublished: the rules are counted before it.
         int count = proposals.size() - com.jabiz.quizbuks.setup.QbSodRules.ALL.size();
+        // The approval rules come just before it, in QbApprovalRules.ALL's order.
+        int rules = count - com.jabiz.quizbuks.setup.QbApprovalRules.ALL.size();
         String sara = userWithRole(unique("sara"), QbRoles.SPONSOR);
         String token = tokenOf(sara, QbRoles.SPONSOR);
 
@@ -47,13 +49,13 @@ class SponsorReviewSettingsIT extends AccountItSupport {
         assertThat(codes(refused("QB_SPONSOR_APPLY", token, application("Acme"), 422)))
             .containsExactly("PARAM_NOT_FOUND");
         // The parameters published, not the rule: no review would be asked for, which is refused.
-        publishProposals(Map.of("proposals", proposals.subList(0, count - 5)));
+        publishProposals(Map.of("proposals", proposals.subList(0, rules)));
         assertThat(codes(refused("QB_SPONSOR_APPLY", token, application("Acme"), 422)))
             .containsExactly(ReviewCodes.REVIEW_NOT_CONFIGURED);
         assertThat(onboardingOf(sara)).isNull();
 
         // With the rule, a review is asked for.
-        publishProposals(Map.of("proposals", proposals.subList(count - 4, count - 3)));
+        publishProposals(Map.of("proposals", proposals.subList(rules + 1, rules + 2)));
         assertThat(run("QB_SPONSOR_APPLY", token, application("Acme"))).containsEntry("reviewStatus",
             SponsorStatus.PENDING);
 

@@ -59,7 +59,7 @@ class OperatorSettlementIT extends PlayItSupport {
         return query("SELECT a.account_code, e.direction, e.amount FROM ledger_transaction_version t "
             + "JOIN ledger_entry_version e ON e.transaction_id = t.transaction_id "
             + "JOIN ledger_account_version a ON a.account_id = e.account_id "
-            + "WHERE t.source_entity = 'QbOperatorSettlement' AND t.source_id = ? ORDER BY t.booking_time, t.transaction_id, e.line_no",
+            + "WHERE t.source_entity = 'QbOperatorSettlement' AND t.source_id = ? ORDER BY t.process_seq_id, e.line_no",
             settlementId).stream().map(p -> p.get("account_code") + " " + p.get("direction") + " "
             + ((BigDecimal) p.get("amount")).stripTrailingZeros().toPlainString()).toList();
     }
