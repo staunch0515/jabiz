@@ -43,6 +43,11 @@ export interface OidcButtonsProps {
    * buttons under "Other ways to sign in", each named by its provider's label (decision D61 item 5).
    */
   layout?: 'buttons' | 'icons'
+  /**
+   * What the buttons are offered for: signing in (the default) or signing up, which only changes the words over them
+   * (a provider's first sign-in opens the account where the entry allows it; decision D39).
+   */
+  purpose?: 'signIn' | 'signUp'
 }
 
 /**
@@ -92,8 +97,8 @@ export function ProviderMark({ kind, className = 'size-4' }: { kind?: string | n
  * Signing in through an identity provider (docs/design/10-security.md section 12): a button per provider, under an
  * "or" separator; nothing when none is offered. A provider of a known kind (`google`) shows its mark beside its label.
  */
-export function OidcButtons({ returnTo, providers, start = startProviderSignIn, onError, layout = 'buttons' }:
-  OidcButtonsProps) {
+export function OidcButtons({ returnTo, providers, start = startProviderSignIn, onError, layout = 'buttons',
+  purpose = 'signIn' }: OidcButtonsProps) {
   const { t } = useTranslation(AUTH_NAMESPACE)
   const offered = useOidcProviders(providers)
   if (offered.length === 0) return null
@@ -106,7 +111,7 @@ export function OidcButtons({ returnTo, providers, start = startProviderSignIn, 
       <div className="flex flex-col gap-3" data-testid="oidc-icons">
         <div className="text-muted-foreground flex items-center gap-3 text-sm">
           <Separator className="flex-1" />
-          {t('login.otherWays')}
+          {t(purpose === 'signUp' ? 'signUp.otherWays' : 'login.otherWays')}
           <Separator className="flex-1" />
         </div>
         <ul className="flex flex-wrap items-center justify-center gap-4">
@@ -127,7 +132,7 @@ export function OidcButtons({ returnTo, providers, start = startProviderSignIn, 
     <>
       <div className="text-muted-foreground flex items-center gap-3 text-sm">
         <Separator className="flex-1" />
-        {t('login.orWith')}
+        {t(purpose === 'signUp' ? 'signUp.orWith' : 'login.orWith')}
         <Separator className="flex-1" />
       </div>
       <div className="flex flex-col gap-2">
