@@ -21,6 +21,9 @@ jabizApp {
     // Its public pages (S4a): the landing page, the privacy policy and support, static like the business site.
     spa("/shopify-app", "../../quizbuks-web/shopify-site")
     spa("/admin", "../../frontend", extension = "admin-extension", entry = "admin")
+    // Q48a: the operators' back office, the same admin frontend and pages signing in to the entry operator; the menu
+    // offers what the operator's permissions allow.
+    spa("/operator", "../../frontend", extension = "admin-extension", entry = "operator")
     languages("en", "zh", "ja")
     // The snapshots stay in the application's directory: the platform's own (frontend/openapi) are not ours to write.
     openApiSnapshot = rootProject.layout.projectDirectory.file("quizbuks/src/test/resources/openapi.json")

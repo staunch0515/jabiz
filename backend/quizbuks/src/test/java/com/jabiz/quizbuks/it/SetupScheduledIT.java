@@ -35,7 +35,7 @@ class SetupScheduledIT extends QbItSupport {
         Map<String, Object> output = setup();
 
         assertThat(output.get("rolesCreated")).isEqualTo(List.of(QbRoles.SHOPIFY_SHOP, QbRoles.ADMIN_CONTENT,
-            QbRoles.ADMIN_FINANCE, QbRoles.ADMIN_SUPER));
+            QbRoles.ADMIN_FINANCE, QbRoles.ADMIN_SUPER, QbRoles.OPERATOR));
         int expected = QbRoles.all().stream().mapToInt(role -> role.permissions().size()).sum()
             - QbRoles.of(QbRoles.TAKER).permissions().size() - 1;
         assertThat(output.get("permissionsAdded")).isEqualTo(expected);

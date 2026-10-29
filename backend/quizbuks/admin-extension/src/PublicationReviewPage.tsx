@@ -39,7 +39,7 @@ import {
 import { AfterDecision, LoadFailed, PublisherLink, Section } from './components'
 import type { BackTo } from './PublicationsPage'
 import { forbidden, money, QUEUE, useAfterDecision, useLabels, when } from './hooks'
-import { ACCOUNT_SUSPENDED, DICTIONARY, PATH, PENDING_REVIEW, PERMISSION, PUBLICATION_ADMIN } from './ids'
+import { ACCOUNT_SUSPENDED, DICTIONARY, OPERATOR_PROCESS, PATH, PENDING_REVIEW, PERMISSION, PUBLICATION_ADMIN } from './ids'
 
 /** An administrator's reason as the reader reads it: a ban's pause records a code (Q10b, review L3). */
 function useAdminReason() {
@@ -425,7 +425,11 @@ export default function PublicationReviewPage() {
       <Settings publication={p} tiers={tiers} quiz={quiz} finance={finance} />
       <Content versionId={versionId} version={version} />
       <Section title={t('publication.decision')} testId="publication-decision">{decision}</Section>
-      {can(PERMISSION.contentWrite) && <AdminActions publication={p} />}
+      {can(PERMISSION.contentWrite) && <AdminActions publication={p} processes={PUBLICATION_ADMIN} />}
+      {/* Q48a: an operator's member takes it down with the operator's processes (headquarters' come first). */}
+      {!can(PERMISSION.contentWrite) && can(PERMISSION.operatorUse) && (
+        <AdminActions publication={p} processes={OPERATOR_TAKEDOWN} />
+      )}
     </div>
   )
 }
@@ -433,31 +437,46 @@ export default function PublicationReviewPage() {
 /** The running states an administrator may act on (the processes' `actsOn`; the server decides all the same). */
 const RUNNING = ['SCHEDULED', 'LIVE', 'FUNDS_SHORT', 'PAUSED']
 
+/** An operator's takedowns (Q48a): the same, through the operator's processes. */
+const OPERATOR_TAKEDOWN = { pause: OPERATOR_PROCESS.pause, resume: OPERATOR_PROCESS.resume, end: OPERATOR_PROCESS.end,
+  version: 1, operator: true } as const
+
+type TakedownProcesses = { pause: string; resume: string; end: string; version: number; operator?: boolean }
+
 /**
  * Taking a publication down (Q10b, review M2): links to the platform's process pages with the publication filled in,
  * where the administrator gives the reason (the sponsor reads it) and passes a second factor.
  */
-function AdminActions({ publication }: { publication: Publication }) {
+function AdminActions({ publication, processes }: { publication: Publication; processes: TakedownProcesses }) {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
   if (!RUNNING.includes(publication.status)) return null
   const adminPaused = publication.status === 'PAUSED' && publication.pausedBy === 'ADMIN'
+  // An operator does not resume or end headquarters' takedown (the server refuses it): it is shown as such.
+  const headquarters = !!processes.operator && adminPaused && !publication.takedownOperatorId
+  if (headquarters) {
+    return (
+      <Section title={t('publication.admin')} testId="publication-admin">
+        <p className="text-muted-foreground text-sm" data-testid="publication-admin-hq">{t('operator.takenDownByHq')}</p>
+      </Section>
+    )
+  }
   const link = (name: string) =>
-    `${paths.process(name, PUBLICATION_ADMIN.version)}?${new URLSearchParams({ publicationId: publication.publicationId })}`
+    `${paths.process(name, processes.version)}?${new URLSearchParams({ publicationId: publication.publicationId })}`
   return (
     <Section title={t('publication.admin')} testId="publication-admin">
       <p className="text-muted-foreground text-sm">{t('publication.adminHint')}</p>
       <div className="flex flex-wrap gap-4">
         {!adminPaused && (
-          <Link to={link(PUBLICATION_ADMIN.pause)} className={linkClass} data-testid="publication-admin-pause">
+          <Link to={link(processes.pause)} className={linkClass} data-testid="publication-admin-pause">
             {t('publication.adminPause')}
           </Link>
         )}
         {adminPaused && (
-          <Link to={link(PUBLICATION_ADMIN.resume)} className={linkClass} data-testid="publication-admin-resume">
+          <Link to={link(processes.resume)} className={linkClass} data-testid="publication-admin-resume">
             {t('publication.adminResume')}
           </Link>
         )}
-        <Link to={link(PUBLICATION_ADMIN.end)} className={linkClass} data-testid="publication-admin-end">
+        <Link to={link(processes.end)} className={linkClass} data-testid="publication-admin-end">
           {t('publication.adminEnd')}
         </Link>
       </div>

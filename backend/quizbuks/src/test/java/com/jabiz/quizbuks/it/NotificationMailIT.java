@@ -660,7 +660,9 @@ class NotificationMailIT extends PayoutItSupport {
             .exchange().expectStatus().isOk().expectBody(MAP).returnResult().getResponseBody();
         assertThat((List<Map<String, Object>>) atConsole.get("templates"))
             .extracting(row -> row.get("template") + " " + row.get("displayName"))
-            .containsExactlyInAnyOrder("qb.publication.funds-short 公開の残高不足", "qb.publication.ended 公開の終了");
+            .containsExactlyInAnyOrder("qb.publication.funds-short 公開の残高不足", "qb.publication.ended 公開の終了",
+                // Q48c/d: the prospecting mails are the sponsor console's (their unsubscribe page is there).
+                "qb.prospect QuizBuks パートナーからのご案内", "qb.prospect.follow-up QuizBuks パートナーからのご案内（再送）");
 
         String taker = newTaker(fresh("t-mail-prefs"), "JP");
         Map<String, Object> atApp = client.get().uri("/api/auth/mail/preferences")

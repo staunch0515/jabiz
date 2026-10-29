@@ -357,6 +357,8 @@ export const MONTHLY_COLUMNS: Record<string, string> = {
   '4110': 'revenue',
   '5110': 'paymentFees',
   '5120': 'promotion',
+  '2140': 'operatorPayable',
+  '5130': 'operatorShares',
 }
 
 export async function readMonthly(period: Period): Promise<MonthlyRow[]> {

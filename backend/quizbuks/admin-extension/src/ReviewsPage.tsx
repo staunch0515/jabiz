@@ -15,6 +15,7 @@ import {
   type ColumnDef,
 } from '@jabiz/admin'
 import { readPendingPublications, readPendingSponsors, type PublicationRow, type SponsorRow } from './api'
+import { readPendingSponsorsAsOperator } from './operator-api'
 import { LoadFailed, PublisherLink } from './components'
 import { money, QUEUE, usePaged, when } from './hooks'
 import { PATH, PERMISSION } from './ids'
@@ -58,9 +59,15 @@ function PublicationQueue() {
   )
 }
 
+/** Q48a: an operator reads the applications through its own template (it reads no user's profile). */
+function useSponsorReader() {
+  const { can } = useAuth()
+  return !can(PERMISSION.usersRead) && can(PERMISSION.operatorUse) ? readPendingSponsorsAsOperator : readPendingSponsors
+}
+
 function SponsorQueue() {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
-  const { query, table } = usePaged(QUEUE.sponsors, readPendingSponsors)
+  const { query, table } = usePaged(QUEUE.sponsors, useSponsorReader())
   const columns = useMemo<ColumnDef<SponsorRow, unknown>[]>(() => [
     {
       id: 'company',
@@ -108,7 +115,7 @@ export default function ReviewsPage() {
   const publications = can(PERMISSION.reviewPublication)
   const sponsors = can(PERMISSION.reviewSponsor)
   const publicationCount = useCount(QUEUE.publications, readPendingPublications, publications)
-  const sponsorCount = useCount(QUEUE.sponsors, readPendingSponsors, sponsors)
+  const sponsorCount = useCount(QUEUE.sponsors, useSponsorReader(), sponsors)
   const tab = search.get('tab') === 'sponsors' && sponsors ? 'sponsors' : publications ? 'publications' : 'sponsors'
   return (
     <div className="flex flex-col gap-4" data-testid="qb-reviews">

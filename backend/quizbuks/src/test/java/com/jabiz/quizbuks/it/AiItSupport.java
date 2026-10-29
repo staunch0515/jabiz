@@ -75,9 +75,13 @@ abstract class AiItSupport extends LegalItSupport {
     @Autowired
     JobRunner jobRunner;
 
+    /** A class's own answers, asked before the stub's (Q48c: by the business a request is about); null for none. */
+    static volatile java.util.function.Function<StubHttpServer.Received, StubHttpServer.Answer> answering;
+
     @BeforeEach
     void resetClaude() {
         CLAUDE.reset();
+        answering = null;
     }
 
     /**
@@ -86,6 +90,11 @@ abstract class AiItSupport extends LegalItSupport {
      * normal end of turn.
      */
     static StubHttpServer.Answer claude(StubHttpServer.Received request) {
+        var own = answering;
+        StubHttpServer.Answer answer = own == null ? null : own.apply(request);
+        if (answer != null) {
+            return answer;
+        }
         if ("POST".equals(request.method()) && COUNT_TOKENS.equals(request.path())) {
             return StubHttpServer.Answer.json(200, "{\"input_tokens\":" + countOf(JSON.readTree(request.body())) + "}");
         }

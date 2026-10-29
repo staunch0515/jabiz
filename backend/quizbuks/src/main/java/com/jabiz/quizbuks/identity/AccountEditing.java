@@ -29,7 +29,7 @@ import java.util.function.Function;
  * datasets by the immutable {@code userId}; the platform's user (for a mail's address), the uploader of a file, the
  * revision check and writing the profile's name.
  */
-final class AccountEditing {
+public final class AccountEditing {
 
     static final String INPUT = "input";
     static final String USER_ID = "userId";
@@ -80,7 +80,7 @@ final class AccountEditing {
             .builder().where(new QueryPredicate.In("userId", uuids(id.apply(ctx)))).limit(1).build(), USERS));
     }
 
-    static List<Object> uuids(Object id) {
+    public static List<Object> uuids(Object id) {
         List<Object> ids = new ArrayList<>();
         UUID uuid = uuidOrNull(id);
         if (uuid != null) {
@@ -90,12 +90,12 @@ final class AccountEditing {
     }
 
     /** A user id as the platform writes it (a UUID in lower case); anything else as given. */
-    static String canonical(String id) {
+    public static String canonical(String id) {
         UUID uuid = uuidOrNull(id);
         return uuid == null ? id : uuid.toString();
     }
 
-    static UUID uuidOrNull(Object id) {
+    public static UUID uuidOrNull(Object id) {
         if (id == null) {
             return null;
         }
@@ -226,7 +226,7 @@ final class AccountEditing {
         return Objects.equals(stored, value);
     }
 
-    static long number(Object value) {
+    public static long number(Object value) {
         return value == null ? 0 : new BigDecimal(value.toString()).longValueExact();
     }
 

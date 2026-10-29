@@ -167,6 +167,8 @@ public final class QbAccounts {
         eb.field("liftNote", f -> f.physicalColumn("lift_note").processOnly()
             .asText(AccountLimits.REASON_LENGTH, true));
         eb.field("revision", f -> f.physicalColumn("revision").required(true).processOnly().asNumeric(9, 0));
+        // Q48a: the operator whose member banned the user; null when headquarters did. An operator lifts only its own.
+        eb.field("operatorId", f -> f.physicalColumn("operator_id").processOnly().asText(36));
         eb.unique("uk_qb_user_ban_user", "userId");
         eb.temporal(t -> t.allowScheduled(false));
         eb.listView("default", lv -> lv
