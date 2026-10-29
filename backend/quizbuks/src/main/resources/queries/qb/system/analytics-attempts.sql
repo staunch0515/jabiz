@@ -2,7 +2,7 @@
 id: qb.system.analytics-attempts
 description: >-
   The attempts some publications finished since the analytics job's watermark (or all of them, to recount a
-  publication whole), summed per question and per publication
+  publication whole), summed per version and question (Q51b) and per publication
 entities: [QbPublicationCard, QbAnalyticsCursor, QbAttempt]
 datasets:
   QbPublicationCard: urn:jabiz:dataset:stats:QbPublicationCard
@@ -15,6 +15,8 @@ params:
   cap:   { kind: { type: numeric, precision: 9, scale: 0 }, required: true, description: Most attempts read in all (not for a recount) }
 results:
   publicationId: { from: QbPublicationCard.publicationId }
+  versionId:     { from: QbAttempt.versionId }
+  vAttempts:     { kind: { type: numeric, precision: 12, scale: 0 } }
   questionNo:    { kind: { type: numeric, precision: 4, scale: 0 } }
   qCompletions:  { kind: { type: numeric, precision: 12, scale: 0 } }
   qCorrect:      { kind: { type: numeric, precision: 12, scale: 0 } }
@@ -25,7 +27,7 @@ results:
   lastAt:        { kind: { type: temporal, role: EVENT_TIME } }
   lastId:        { kind: { type: text, maxLength: 36 } }
 list:
-  key: [publicationId, questionNo]
+  key: [publicationId, versionId, questionNo]
 permissions: [qb.stats.system]
 ---*/
 -- The finished attempts in (submitted_at, attempt_id) order after each publication's watermark, through the index on
@@ -35,7 +37,8 @@ permissions: [qb.stats.system]
 -- rest is read by the next runs. Each result is the canonical JSON of play.Scoring (no, earned, ...): a question is
 -- right when it earned points, which for a multiple choice means all of it right; a result that is not such JSON
 -- (it never is) counts as a completion without questions instead of failing the chunk. Average times count the submitted
--- attempts only (an expired one took the whole time limit, E-6).
+-- attempts only (an expired one took the whole time limit, E-6). Questions are counted per version the attempt ran on
+-- (Q51b): after a switch the same numbers are other questions.
 WITH pubs AS (
     SELECT k.{{QbPublicationCard.publicationId}} AS pid,
            c.{{QbAnalyticsCursor.watermarkAt}} AS wm_at, c.{{QbAnalyticsCursor.watermarkId}} AS wm_id
@@ -62,7 +65,8 @@ picked AS (
     WHERE CAST(:full AS boolean) OR r.rn <= CAST(:cap AS bigint)),
 attempts AS (
     SELECT p.pid, t.{{QbAttempt.attemptId}} AS aid, t.{{QbAttempt.submittedAt}} AS sat,
-           t.{{QbAttempt.startedAt}} AS started, t.{{QbAttempt.status}} AS v_status, t.{{QbAttempt.result}} AS v_result
+           t.{{QbAttempt.startedAt}} AS started, t.{{QbAttempt.status}} AS v_status, t.{{QbAttempt.result}} AS v_result,
+           t.{{QbAttempt.versionId}} AS vid
     FROM picked p
     JOIN {{QbAttempt}} t ON t.{{QbAttempt.attemptId}} = p.aid),
 per_publication AS (
@@ -77,17 +81,23 @@ last_read AS (
     SELECT DISTINCT ON (a.pid) a.pid, a.sat, a.aid
     FROM attempts a
     ORDER BY a.pid, a.sat DESC, a.aid DESC),
+per_version AS (
+    SELECT a.pid, a.vid, count(*) AS n
+    FROM attempts a
+    GROUP BY a.pid, a.vid),
 per_question AS (
-    SELECT a.pid, CAST(q.value ->> 'no' AS int) AS qno, count(*) AS n,
+    SELECT a.pid, a.vid, CAST(q.value ->> 'no' AS int) AS qno, count(*) AS n,
            count(*) FILTER (WHERE jsonb_typeof(q.value -> 'earned') = 'number'
                               AND CAST(q.value ->> 'earned' AS numeric) > 0) AS correct
     FROM attempts a
     CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN a.v_result IS JSON ARRAY THEN CAST(a.v_result AS jsonb)
                                                  ELSE CAST('[]' AS jsonb) END) q
     WHERE jsonb_typeof(q.value -> 'no') = 'number'
-    GROUP BY a.pid, CAST(q.value ->> 'no' AS int))
+    GROUP BY a.pid, a.vid, CAST(q.value ->> 'no' AS int))
 SELECT
     p.pid                                      AS publicationId,
+    v.vid                                      AS versionId,
+    CAST(v.n AS numeric(12, 0))                AS vAttempts,
     CAST(q.qno AS numeric(4, 0))               AS questionNo,
     CAST(coalesce(q.n, 0) AS numeric(12, 0))   AS qCompletions,
     CAST(coalesce(q.correct, 0) AS numeric(12, 0)) AS qCorrect,
@@ -99,4 +109,5 @@ SELECT
     CAST(l.aid AS varchar(36))                 AS lastId
 FROM per_publication p
 JOIN last_read l ON l.pid = p.pid
-LEFT JOIN per_question q ON q.pid = p.pid
+JOIN per_version v ON v.pid = p.pid
+LEFT JOIN per_question q ON q.pid = v.pid AND q.vid = v.vid

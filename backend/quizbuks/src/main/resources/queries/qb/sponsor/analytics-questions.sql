@@ -1,17 +1,19 @@
 /*---
 id: qb.sponsor.analytics.questions
 description: >-
-  Each question of one of the sponsor's publications (M-42) - its text and points, how many answered it, the share
-  answered right and its difficulty, only over the minimum group of completions
-entities: [QbPublicationCard, QbQuizVersion, QbAnalyticsCursor, QbQuestionStat, SysParam]
+  Each question of one of the sponsor's publications (M-42) in one version it ran on (Q51b; by default the one it
+  runs on) - its text and points, how many answered it, the share answered right and its difficulty, only over the
+  minimum group of that version's completions
+entities: [QbPublicationCard, QbPublicationPastVersion, QbQuizVersion, QbQuestionStat, SysParam]
 datasets:
   QbPublicationCard: urn:jabiz:dataset:sponsor:QbPublicationCard
+  QbPublicationPastVersion: urn:jabiz:dataset:default:QbPublicationPastVersion
   QbQuizVersion: urn:jabiz:dataset:default:QbQuizVersion
-  QbAnalyticsCursor: urn:jabiz:dataset:default:QbAnalyticsCursor
   QbQuestionStat: urn:jabiz:dataset:default:QbQuestionStat
   SysParam: urn:jabiz:dataset:now:SysParam
 params:
   publicationId: { like: QbPublicationCard.publicationId, required: true, description: The publication }
+  versionId:     { like: QbPublicationCard.versionId, description: "A version the publication ran on (qb.sponsor.analytics.versions); none: the one it runs on" }
 results:
   questionNo:  { kind: { type: numeric, precision: 4, scale: 0 } }
   stem:        { kind: { type: text, maxLength: 1000 } }
@@ -30,39 +32,50 @@ list:
   key: [questionNo]
 permissions: [qb.stats.read]
 ---*/
--- Only a publication of the sponsor's own; the questions (number, text, points; never the options or the right
--- answers) from the version it froze. The figures are the job's shown ones (stats.MinGroup, E-4): they change only
--- after at least k new completions, so two looks never tell one person's answers, and are given only over at least k
--- completions (suppressed otherwise): k is qb.stats.min-group if a whole number, else 5, never below 3, as in every
--- analytics template. Right = the question earned points (a multiple choice: all of it right, as scored). Difficulty
+-- Only a publication of the sponsor's own, and only a version it ran on (its card's, or one it switched from: Q51b);
+-- another version gives no rows. The questions (number, text, points; never the options or the right answers) come
+-- from that version. The figures are the job's shown ones for that version (stats.MinGroup, E-4): they change only
+-- after at least k new completions of the version, so two looks never tell one person's answers, and are given only
+-- over at least k completions (suppressed otherwise): k is qb.stats.min-group if a whole number, else 5, never below
+-- 3, as in every analytics template. Right = the question earned points (a multiple choice: all of it right, as scored). Difficulty
 -- (E-5): EASY from 80 % right, MEDIUM from 50 %, HARD below.
 WITH params AS (
     SELECT greatest(3, coalesce(max(CASE WHEN p.{{SysParam.value}} ~ '^[0-9]{1,9}$'
                                          THEN CAST(p.{{SysParam.value}} AS int) END), 5)) AS k
     FROM {{SysParam}} p
     WHERE p.{{SysParam.paramKey}} = 'qb.stats.min-group'),
-pub AS (
+card AS (
     SELECT p.{{QbPublicationCard.publicationId}} AS pid, p.{{QbPublicationCard.versionId}} AS vid
     FROM {{QbPublicationCard}} p
     WHERE p.{{QbPublicationCard.publicationId}} = :publicationId),
+pub AS (
+    SELECT c.pid, c.vid FROM card c
+    WHERE CAST(:versionId AS uuid) IS NULL OR c.vid = CAST(:versionId AS uuid)
+    UNION
+    SELECT c.pid, x.{{QbPublicationPastVersion.versionId}}
+    FROM card c
+    JOIN {{QbPublicationPastVersion}} x ON x.{{QbPublicationPastVersion.publicationId}} = c.pid
+    WHERE x.{{QbPublicationPastVersion.versionId}} = CAST(:versionId AS uuid)),
 qs AS (
-    SELECT b.pid, CAST(q.value ->> 'no' AS int) AS no, q.value ->> 'stem' AS stem,
+    SELECT b.pid, b.vid, CAST(q.value ->> 'no' AS int) AS no, q.value ->> 'stem' AS stem,
            CAST(q.value ->> 'points' AS int) AS points
     FROM pub b
     JOIN {{QbQuizVersion}} v ON v.{{QbQuizVersion.versionId}} = b.vid
     CROSS JOIN LATERAL jsonb_array_elements(CAST(v.{{QbQuizVersion.content}} AS jsonb) -> 'questions') q),
-figures AS (
+stats AS (
     SELECT q.no, q.stem, q.points, s.{{QbQuestionStat.completions}} AS v_completions,
            s.{{QbQuestionStat.correct}} AS v_correct, s.{{QbQuestionStat.shownAt}} AS v_shown_at,
-           coalesce(c.{{QbAnalyticsCursor.shownAnalysed}}, 0) AS v_based_on, m.k,
-           s.{{QbQuestionStat.completions}} IS NOT NULL
-               AND coalesce(c.{{QbAnalyticsCursor.shownAnalysed}}, 0) >= m.k
-               AND s.{{QbQuestionStat.completions}} >= m.k AS shown
+           s.{{QbQuestionStat.basedOn}} AS v_row_based_on, m.k
     FROM qs q
     CROSS JOIN params m
-    LEFT JOIN {{QbAnalyticsCursor}} c ON c.{{QbAnalyticsCursor.publicationId}} = q.pid
     LEFT JOIN {{QbQuestionStat}} s ON s.{{QbQuestionStat.publicationId}} = q.pid
-        AND s.{{QbQuestionStat.questionNo}} = q.no)
+        AND s.{{QbQuestionStat.versionId}} = q.vid AND s.{{QbQuestionStat.questionNo}} = q.no),
+figures AS (
+    -- The version's completions the figures were last shown over (every question of it is written then).
+    SELECT t.*, coalesce(max(t.v_row_based_on) OVER (), 0) AS v_based_on,
+           t.v_completions IS NOT NULL AND coalesce(t.v_row_based_on, 0) >= t.k
+               AND t.v_completions >= t.k AS shown
+    FROM stats t)
 SELECT
     CAST(f.no AS numeric(4, 0))                                   AS questionNo,
     CAST(f.stem AS varchar(1000))                                 AS stem,

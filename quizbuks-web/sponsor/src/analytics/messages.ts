@@ -132,6 +132,10 @@ const en = {
       basedOn_one: 'Based on {{n}} completion; the figures change only after at least {{k}} more.',
       basedOn_other: 'Based on {{n}} completions; the figures change only after at least {{k}} more.',
       empty: 'This publication has no questions.',
+      version: 'Version',
+      versionCurrent: '{{label}} (current)',
+      versionPast: '{{label}} (until {{time}})',
+      versionHint: 'This publication switched its quiz version: each version\'s answers are counted apart, as its questions may differ.',
     },
     export: {
       label: 'Export',
@@ -273,6 +277,10 @@ const zh: typeof en = {
       basedOn_one: '基于 {{n}} 个完成；新增至少 {{k}} 个后才更新。',
       basedOn_other: '基于 {{n}} 个完成；新增至少 {{k}} 个后才更新。',
       empty: '此发布没有题目。',
+      version: '版本',
+      versionCurrent: '{{label}}（当前）',
+      versionPast: '{{label}}（至 {{time}}）',
+      versionHint: '本发布切换过 Quiz 版本：各版本的作答分开统计，因为题目可能不同。',
     },
     export: {
       label: '导出',
@@ -414,6 +422,10 @@ const ja: typeof en = {
       basedOn_one: '{{n}} 件の完了に基づきます。{{k}} 件以上増えると更新されます。',
       basedOn_other: '{{n}} 件の完了に基づきます。{{k}} 件以上増えると更新されます。',
       empty: 'この公開には問題がありません。',
+      version: 'バージョン',
+      versionCurrent: '{{label}}（現在）',
+      versionPast: '{{label}}（{{time}} まで）',
+      versionHint: 'この公開はクイズのバージョンを切り替えました。問題が異なる場合があるため、回答はバージョンごとに集計されます。',
     },
     export: {
       label: 'エクスポート',

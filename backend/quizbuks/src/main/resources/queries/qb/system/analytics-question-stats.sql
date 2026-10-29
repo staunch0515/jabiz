@@ -9,21 +9,25 @@ params:
 results:
   statId:        { from: QbQuestionStat.statId }
   publicationId: { from: QbQuestionStat.publicationId }
+  versionId:     { from: QbQuestionStat.versionId }
   questionNo:    { from: QbQuestionStat.questionNo }
   completions:   { from: QbQuestionStat.completions }
   correct:       { from: QbQuestionStat.correct }
+  basedOn:       { from: QbQuestionStat.basedOn }
   version:       { from: QbQuestionStat.version }
 list:
   key: [statId]
 permissions: [qb.stats.system]
 ---*/
--- Through the unique (publication, question) index.
+-- Through the unique (publication, version, question) index.
 SELECT
     s.{{QbQuestionStat.statId}}        AS statId,
     s.{{QbQuestionStat.publicationId}} AS publicationId,
+    s.{{QbQuestionStat.versionId}}     AS versionId,
     s.{{QbQuestionStat.questionNo}}    AS questionNo,
     s.{{QbQuestionStat.completions}}   AS completions,
     s.{{QbQuestionStat.correct}}       AS correct,
+    s.{{QbQuestionStat.basedOn}}       AS basedOn,
     s.{{QbQuestionStat.version}}       AS version
 FROM {{QbQuestionStat}} s
 WHERE s.{{QbQuestionStat.publicationId}} = ANY(:ids)

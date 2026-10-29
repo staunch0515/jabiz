@@ -151,22 +151,34 @@ abstract class AnalyticsItSupport extends PlayItSupport {
             publicationId);
     }
 
-    /** The question totals the job recounts from the attempts directly: what the increments must add up to. */
+    /**
+     * The question totals the job recounts from the attempts directly, per version the attempts ran on (Q51b): what the
+     * increments must add up to, in the cursor's canonical JSON.
+     */
     String recount(String publicationId) {
-        List<Map<String, Object>> rows = query("SELECT CAST(q ->> 'no' AS int) AS no, count(*) AS n, "
-            + "count(*) FILTER (WHERE CAST(q ->> 'earned' AS numeric) > 0) AS c FROM qb_attempt a "
-            + "CROSS JOIN LATERAL jsonb_array_elements(CAST(a.result AS jsonb)) q "
-            + "WHERE a.publication_id = ?::uuid AND a.submitted_at IS NOT NULL GROUP BY 1 ORDER BY 1",
+        List<Map<String, Object>> versions = query("SELECT CAST(version_id AS text) AS v, count(*) AS n "
+            + "FROM qb_attempt WHERE publication_id = ?::uuid AND submitted_at IS NOT NULL GROUP BY 1 ORDER BY 1",
             publicationId);
-        StringBuilder json = new StringBuilder("[");
-        for (Map<String, Object> row : rows) {
+        StringBuilder json = new StringBuilder("{");
+        for (Map<String, Object> version : versions) {
             if (json.length() > 1) {
                 json.append(',');
             }
-            json.append('[').append(row.get("no")).append(',').append(row.get("n")).append(',').append(row.get("c"))
-                .append(']');
+            json.append('"').append(version.get("v")).append("\":{\"n\":").append(version.get("n"))
+                .append(",\"q\":[");
+            List<Map<String, Object>> rows = query("SELECT CAST(q ->> 'no' AS int) AS no, count(*) AS n, "
+                + "count(*) FILTER (WHERE CAST(q ->> 'earned' AS numeric) > 0) AS c FROM qb_attempt a "
+                + "CROSS JOIN LATERAL jsonb_array_elements(CAST(a.result AS jsonb)) q "
+                + "WHERE a.publication_id = ?::uuid AND CAST(a.version_id AS text) = ? AND a.submitted_at IS NOT NULL "
+                + "GROUP BY 1 ORDER BY 1", publicationId, version.get("v"));
+            for (int i = 0; i < rows.size(); i++) {
+                Map<String, Object> row = rows.get(i);
+                json.append(i == 0 ? "" : ",").append('[').append(row.get("no")).append(',').append(row.get("n"))
+                    .append(',').append(row.get("c")).append(']');
+            }
+            json.append("]}");
         }
-        return json.append(']').toString();
+        return json.append('}').toString();
     }
 
     static long count(Object value) {

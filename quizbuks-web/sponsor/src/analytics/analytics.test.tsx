@@ -1,4 +1,5 @@
 import { configureClient, session } from '@jabiz/client'
+import { expectAccessible } from '@jabiz/ui/testing'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -55,6 +56,11 @@ const QUESTIONS_BIG = [
     difficulty: 'HARD', suppressed: false, basedOn: 10, minGroup: 5, shownAt: '2026-10-18T01:10:00Z' },
 ]
 
+const VERSION_2 = { versionId: 'v2', versionNumber: 2, label: 'v2.0', title: 'Capitals', current: true,
+  replacedAt: null }
+const VERSION_1 = { versionId: 'v1', versionNumber: 1, label: 'v1.0', title: 'Capitals', current: false,
+  replacedAt: '2026-10-16T03:00:00Z' }
+
 interface Server {
   dashboard?: { status: number; body: unknown }
   top?: unknown[]
@@ -63,6 +69,8 @@ interface Server {
   overview?: unknown[]
   overviewError?: boolean
   questions?: unknown[]
+  /** The versions the publication ran on (Q51b); one (the current) when not given. */
+  versions?: unknown[]
   export?: { status: number; body: unknown }
 }
 
@@ -104,6 +112,8 @@ function server(options: Server = {}) {
         return page(options.overview ?? [OVERVIEW_SMALL])
       case '/api/queries/qb.sponsor.analytics.questions':
         return page(options.questions ?? QUESTIONS_SMALL)
+      case '/api/queries/qb.sponsor.analytics.versions':
+        return page(options.versions ?? [VERSION_2])
       default:
         if (path.includes('/export?format=')) {
           if (options.export) return json(options.export.status, options.export.body)
@@ -282,6 +292,38 @@ describe('a publication\'s analytics', () => {
     expect(screen.getByTestId('overview-k')).toHaveTextContent('Based on 10 completions.')
     expect(screen.getByTestId('funnel-starts')).toHaveAttribute('data-largest-drop', 'true')
     expect(screen.getByTestId('funnel-views-below')).toBeInTheDocument()
+  })
+
+  it('shows the questions of the version chosen when the publication switched its version (Q51b)', async () => {
+    const { questions, exports } = server({ overview: [OVERVIEW_BIG], questions: QUESTIONS_BIG,
+      versions: [VERSION_2, VERSION_1] })
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:export')
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    window.history.replaceState(null, '', `/publications/${P1}/analytics`)
+    const user = userEvent.setup()
+    render(<App />)
+    const picker = await screen.findByTestId('questions-versions')
+    expect(within(picker).getByTestId('questions-version')).toHaveTextContent('v2.0 (current)')
+    expect(picker).toHaveTextContent('each version\'s answers are counted apart')
+    expect(questions().at(-1)).toMatchObject({ params: { publicationId: P1 } })
+    await expectAccessible()
+    await user.click(within(picker).getByTestId('questions-version'))
+    await user.click(await screen.findByRole('option', { name: /v1\.0 \(until/ }))
+    await waitFor(() => expect(questions().at(-1)).toMatchObject({ params: { publicationId: P1, versionId: 'v1' } }))
+    expect(screen.getByTestId('questions-version')).toHaveTextContent('v1.0 (until')
+    await user.click(screen.getByTestId('export-questions-csv'))
+    await waitFor(() => expect(exports().at(-1)).toEqual({
+      path: '/api/queries/qb.sponsor.analytics.questions/export?format=csv',
+      body: { params: { publicationId: P1, versionId: 'v1' }, sorts: [{ field: 'questionNo', asc: true }] } }))
+  })
+
+  it('offers no choice of version when the publication ran on one', async () => {
+    server({ overview: [OVERVIEW_BIG], questions: QUESTIONS_BIG })
+    window.history.replaceState(null, '', `/publications/${P1}/analytics`)
+    render(<App />)
+    await screen.findAllByTestId('question-row')
+    expect(screen.queryByTestId('questions-versions')).toBeNull()
   })
 
   it('switches between the last 24 hours and the last 7 days, with their tables', async () => {

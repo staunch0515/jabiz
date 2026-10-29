@@ -2,6 +2,7 @@ package com.jabiz.quizbuks.stats;
 
 import com.jabiz.entity.EntityDefinition;
 import com.jabiz.entity.TemporalRole;
+import com.jabiz.quizbuks.content.QbContent;
 import com.jabiz.quizbuks.publishing.QbPublications;
 import com.jabiz.quizbuks.publishing.PublisherKind;
 
@@ -68,7 +69,8 @@ public final class QbAnalytics {
      * Where the job stands with a publication: the counters' values and the first views counted at its last change
      * ({@code views} … {@code spent}), how far the first views ({@code viewsUntil}) and the finished attempts
      * ({@code watermarkAt}, {@code watermarkId}) were read, the totals of the attempts read ({@code analysed},
-     * {@code submitted}, {@code expired}, {@code durationSec} of the submitted ones, {@code questions} per question)
+     * {@code submitted}, {@code expired}, {@code durationSec} of the submitted ones, {@code questions} per version and
+     * question, Q51b: {@link QuestionTotals})
      * and the ones the sponsor is shown ({@code shown*}), which change only after at least the minimum group of new
      * completions (E-4). {@code finalizedAt}: the publication was recounted whole after it ended and is not read again.
      * The current totals are the job's and never shown: read only by administrators and the job.
@@ -113,7 +115,9 @@ public final class QbAnalytics {
 
     /**
      * One question's completions and right answers (its points earned: a multiple choice only when all right, as the
-     * scoring counts it) as the sponsor is shown them, written only when the shown figures change (E-4).
+     * scoring counts it) as the sponsor is shown them, written only when the shown figures change (E-4). Per version
+     * of the quiz the publication ran on (Q51b: a switch changes the questions behind the numbers), with the version's
+     * completions the figures were shown over ({@code basedOn}, the minimum group being a version's).
      */
     public static final EntityDefinition QUESTION_STAT_ENTITY = EntityDefinition.define(QUESTION_STAT, eb -> {
         eb.physicalTable("qb_question_stat");
@@ -123,15 +127,18 @@ public final class QbAnalytics {
         eb.field("publicationId", f -> f.physicalColumn("publication_id").immutable(true).required(true)
             .asReference(QbPublications.PUBLICATION));
         PublisherKind.declare(eb, false);
+        eb.field("versionId", f -> f.physicalColumn("version_id").immutable(true).required(true)
+            .asReference(QbContent.VERSION));
         eb.field("questionNo", f -> f.physicalColumn("question_no").immutable(true).required(true)
             .asNumeric(4, 0));
         count(eb, "completions", "completions");
         count(eb, "correct", "correct");
+        count(eb, "basedOn", "based_on");
         eb.field("shownAt", f -> f.physicalColumn("shown_at").required(true).asTemporal(TemporalRole.EVENT_TIME));
         eb.field("version", f -> f.physicalColumn("version").asVersion());
         eb.listView("default", lv -> lv
-            .columns("publicationId", "questionNo", "completions", "correct", "shownAt")
-            .filters("publicationId", "publisherKind", "publisherId")
+            .columns("publicationId", "versionId", "questionNo", "completions", "correct", "basedOn", "shownAt")
+            .filters("publicationId", "publisherKind", "publisherId", "versionId")
             .sorts("questionNo", "shownAt")
             .defaultSort("questionNo", true));
     });

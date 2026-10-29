@@ -4,9 +4,15 @@ import {
   Badge,
   Button,
   DescriptionList,
+  Label,
   PageHeader,
   PageState,
   SegmentedControl,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
   Table,
   TableBody,
   TableCell,
@@ -15,7 +21,7 @@ import {
   TableRow,
 } from '@jabiz/ui'
 import { useQuery } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useId, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { SPONSOR } from '../messages'
 import { publicationPath } from '../publishing/paths'
@@ -29,9 +35,11 @@ import {
   percent,
   readOverview,
   readQuestions,
+  readVersions,
   REFRESH_MS,
   TREND_RANGES,
   zoneTime,
+  type AnalyticsVersion,
   type Difficulty,
   type Overview,
   type QuestionFigures,
@@ -166,8 +174,48 @@ function RateBar({ rate }: { rate: number }) {
   )
 }
 
+/**
+ * Which version's questions are shown (Q51b), when the publication switched its version: each version's answers are
+ * counted apart. The one it runs on first.
+ */
+function VersionPicker({ versions, value, onChange }: {
+  versions: AnalyticsVersion[]
+  value: string
+  onChange: (versionId: string) => void
+}) {
+  const { t, i18n } = useTranslation(SPONSOR)
+  const id = useId()
+  return (
+    <div className="flex flex-col gap-2" data-testid="questions-versions">
+      <div className="flex flex-wrap items-center gap-2">
+        <Label htmlFor={`${id}-version`}>{t('analytics.questions.version')}</Label>
+        <Select value={value} onValueChange={onChange}>
+          <SelectTrigger id={`${id}-version`} className="w-72" data-testid="questions-version">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {versions.map((v) => (
+              <SelectItem key={v.versionId} value={v.versionId}>
+                {v.current
+                  ? t('analytics.questions.versionCurrent', { label: v.label })
+                  : t('analytics.questions.versionPast', { label: v.label,
+                    time: v.replacedAt ? new Date(v.replacedAt).toLocaleDateString(i18n.language) : '' })}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <p className="text-muted-foreground text-sm">{t('analytics.questions.versionHint')}</p>
+    </div>
+  )
+}
+
 /** Each question's right rate and difficulty (M-42), or that it is shown once at least k people have answered. */
-function QuestionsSection({ questions, o }: { questions: QuestionFigures[]; o: Overview }) {
+function QuestionsSection({ questions, o, picker }: {
+  questions: QuestionFigures[]
+  o: Overview
+  picker?: ReactNode
+}) {
   const { t, i18n } = useTranslation(SPONSOR)
   const locale = i18n.language
   const k = questions[0]?.minGroup ?? o.minGroup
@@ -176,6 +224,7 @@ function QuestionsSection({ questions, o }: { questions: QuestionFigures[]; o: O
   return (
     <section className="flex flex-col gap-3" aria-labelledby="questions-title" data-testid="analytics-questions">
       <h2 id="questions-title" className="text-base font-semibold">{t('analytics.questions.title')}</h2>
+      {picker}
       {questions.length === 0 && (
         <p className="text-muted-foreground text-sm" data-testid="questions-empty">{t('analytics.questions.empty')}</p>
       )}
@@ -258,9 +307,17 @@ export function PublicationAnalyticsPage({ publicationId }: { publicationId: str
     ...live,
   })
   const found = overview.isSuccess && overview.data !== null
+  const versions = useQuery({
+    queryKey: [...ANALYTICS_QUERY, 'versions', publicationId],
+    queryFn: () => readVersions(publicationId),
+    enabled: found,
+  })
+  // Q51b: the version whose questions are shown; none chosen: the one the publication runs on.
+  const [chosen, setChosen] = useState<string | null>(null)
+  const versionId = chosen ?? versions.data?.find((v) => v.current)?.versionId ?? null
   const questions = useQuery({
-    queryKey: [...ANALYTICS_QUERY, 'questions', publicationId],
-    queryFn: () => readQuestions(publicationId),
+    queryKey: [...ANALYTICS_QUERY, 'questions', publicationId, chosen],
+    queryFn: () => readQuestions(publicationId, chosen),
     enabled: found,
     ...live,
   })
@@ -300,11 +357,14 @@ export function PublicationAnalyticsPage({ publicationId }: { publicationId: str
       {questions.isPending && <PageState kind="loading" />}
       {questions.isError && <PageState kind="error" description={t('analytics.failed')}
         action={<Button variant="outline" onClick={() => void questions.refetch()}>{tQb('retry')}</Button>} />}
-      {questions.isSuccess && <QuestionsSection questions={questions.data} o={o} />}
+      {questions.isSuccess && <QuestionsSection questions={questions.data} o={o}
+        picker={versions.data && versions.data.length > 1 && versionId
+          ? <VersionPicker versions={versions.data} value={versionId} onChange={setChosen} />
+          : undefined} />}
       <ExportButtons params={{
         trend: trend.data?.params ?? null,
         overview: { publicationId },
-        questions: { publicationId },
+        questions: chosen ? { publicationId, versionId: chosen } : { publicationId },
       }} />
     </div>
   )
