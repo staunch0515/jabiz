@@ -4795,3 +4795,16 @@ Playwright 端到端（需维护连接与数据库角色，以 Vitest 与 `Accou
 | 17u-4 | 测试：`blocks.test.tsx`（按钮与小字在卡片中、注册的字样、开始、失败、axe；不给即没有）；设计 12 一句 |
 
 **17u 状态**：📝 待评审。
+
+### 17v 通用后台用应用的名称与标志（需求 2026-10-29）
+
+**缘由**：需求方 2026-10-29：应用的标识要集中在一处，换一份就像另一个系统（每个品牌单独部署，QuizBuks Q52）。管理后台与运营商后台是平台的通用后台，名称（`app.title`，"jabiz"）、浏览器标签与图标都是平台的，扩展无法替换。
+
+| # | 内容 |
+|---|---|
+| 17v-1 | `AdminExtension.brand`（`AdminBrand`：`name` 一个或按语言、`logo`、`favicon`）：登录卡片、邮件链接页、退订页、外框左上角显示标志与名称；没有时照旧 `app.title` |
+| 17v-2 | 启动时与切换语言时把名称写进浏览器标签、图标换成 `favicon`（`applyBrandHead`） |
+| 17v-3 | `checkedExtension`：给了 `brand` 却没有名称即报告；`@jabiz/admin` 导出 `AdminBrand` |
+| 17v-4 | 测试：`brand.test.ts`（名称按语言、标签与图标）、`registry.test.ts`、`AppLayout.test.tsx`（外框的标志与名称）、`LoginPage.test.tsx`；设计 12 §9、指南 `admin-extension.md` |
+
+**17v 状态**：📝 待评审。

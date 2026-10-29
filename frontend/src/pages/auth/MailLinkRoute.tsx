@@ -1,7 +1,8 @@
 import { MailLinkPage } from '@jabiz/ui'
-import { useTranslation } from 'react-i18next'
 import { useLocation } from 'react-router'
 import { useRouterNavigation } from '../../auth/routerNavigation'
+import { BrandTitle } from '../../extension/BrandTitle'
+import { extension } from '../../extension'
 
 /**
  * A page of a mailed link in the admin (`/auth/<page>?entry=<entry>&token=<token>`, decision D36 implementation
@@ -9,7 +10,6 @@ import { useRouterNavigation } from '../../auth/routerNavigation'
  * mailed before the entries' own pages existed keep working; once done it leads to the entry's frontend.
  */
 export function MailLinkRoute({ page }: { page: 'verify-email' | 'join' | 'password-reset' | 'invitation' }) {
-  const { t } = useTranslation()
   const navigation = useRouterNavigation()
   const location = useLocation()
   return (
@@ -17,7 +17,7 @@ export function MailLinkRoute({ page }: { page: 'verify-email' | 'join' | 'passw
       {...navigation}
       page={page}
       search={location.search}
-      brand={t('app.title')}
+      brand={<BrandTitle brand={extension.brand} />}
       appearance={false}
       signInPath="/login"
       passwordResetPath="/auth/password-reset"

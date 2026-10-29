@@ -230,7 +230,7 @@ frontend/                   pnpm 工作区（pnpm-workspace.yaml：packages/*）
 ```
 <应用目录>/admin-extension/            （例：backend/app/admin-extension/、finance-web/）
   tsconfig.json                        {"extends": "<相对路径>/frontend/tsconfig.extension.json", "include": ["src"]}
-  src/index.tsx                        export default defineExtension({ routes, menu, messages, home })
+  src/index.tsx                        export default defineExtension({ routes, menu, messages, home, brand })
   src/…Page.tsx、src/…test.tsx          页面与测试；只 import '@jabiz/admin'（测试另可 '@jabiz/admin/testing'）与平台前端已有的第三方包
 ```
 
@@ -241,6 +241,7 @@ frontend/                   pnpm 工作区（pnpm-workspace.yaml：packages/*）
 | `menu` | 排在服务端菜单之后；`label` 是扩展文案的键；`permission` 只决定是否显示；子项全部不可见的分组不显示 |
 | `messages` | 每种界面语言一份，放在 i18next 命名空间 `app`（`useTranslation(EXTENSION_NAMESPACE)`），不覆盖平台文案 |
 | `home` | 登录后（没有要返回的页面时）、根路径与未知路径的落点；缺省 `/data` |
+| `brand` | 应用的名称与标志（17v）：`name`（一个，或按语言；缺的语言用给出的第一个）、`logo`、`favicon`（扩展 import 的图片）。登录卡片、外框左上角、浏览器标签的标题与图标都用它；配色由扩展 import 的样式表覆盖主题 token（D34）。没有时为平台的名称 |
 | 可用的平台内容 | 只有 `@jabiz/admin`（`frontend/src/lib/index.ts`）：`api` / `unwrap` / `ApiError`、`runQuery`（SQL 模板）、`runProcess`（流程，自动带幂等键）、`useAuth`、元数据 hooks、`EntityFormDrawer` 等通用组件、`UserName`（用户编号显示为名字，10 §14）、格式化函数；测试另有 `@jabiz/admin/testing`（`frontend/src/lib/testing.ts`，16w-1）：`expectAccessible(root?)` 与 `WCAG_TAGS`，即 `@jabiz/ui/testing` 的，亮暗两种外观过 axe（§11）。它同属 D22 的契约，只用于测试：带入 Vitest 与 vitest-axe，`@jabiz/admin` 与平台前端的生产源码都不引用它（`src/lib/testing.test.ts`），生产包里没有 |
 | 检查 | 启动时 `checkedExtension` 一次报告全部问题并停止；`pnpm build` 先对扩展做类型检查；`pnpm ext:typecheck / ext:lint / ext:test / ext:check`（lint 另加规则：拒绝引用 `frontend/` 下的路径、`virtual:jabiz-extension` 与 antd / `@ant-design/*`（平台前端自己的 lint 用同一条，15d）；16w-1 起（W-7）拒绝 `@jabiz/ui`、`@jabiz/ui/*`、`@jabiz/client`、`@jabiz/client/*`（提示经 `@jabiz/admin`）与 `@jabiz/ui/testing`（提示 `@jabiz/admin/testing`），`@jabiz/admin/testing` 只许在测试（`*.test.*`、`*.spec.*` 与 `test/` 目录下的辅助文件）中——只拒绝 D22 本来就不允许的；规则对 `import()`、`require()`、`export … from` 与 `.js` / `.jsx` / `.mjs` / `.cjs` 文件同样适用。`ext:check` 另有 `bundle` 步骤：带扩展构建到临时目录，读回 `assets/*.js`，有 Vitest、`@vitest/*`、vitest-axe 或 axe-core 即失败；通用后台的每次构建由 Vite 插件 `noTestCodeInBundle`（`scripts/bundle-check.mjs`）同样检查）。菜单项的 `icon` 是 lucide 图标组件（`icon: Boxes`），菜单类型是平台的 `ShellMenuItem` |
 
