@@ -307,16 +307,40 @@ rm /opt/apps/$APP/maintenance/maintenance.lock
   可以先在服务器上确认应用健康（`docker logs "$APP-app"`）再关闭。
 - 维护期间 Stripe 等的 Webhook（`/api/inbound/**`）也得到 503；Stripe 会自动重试（正式模式下至多 3 天，测试模式下只有几次），维护不长时关闭后照常送达。
   App 与商家后台的接口请求同样得到 503，页面显示请求失败，关闭后刷新即可。
-- 第一次使用前确认 Caddy 容器能看到这个目录（Caddy 读取的是它自己容器内的路径）。站点按 `/opt/apps/<APP_NAME>/maintenance` 渲染，
-  即假定服务器的 `/opt/apps` 在 Caddy 容器中也挂载在 `/opt/apps`：
+- **第一次使用前给 Caddy 挂载这两个目录**。Caddy 读的是它自己容器内的路径，站点按 `/opt/apps/<APP_NAME>/maintenance` 与
+  `/opt/apps/<APP_NAME>/well-known` 渲染；Caddy 容器看不到它们时，锁文件不起作用（网站照常代理），应用停掉时也只有空白的 502
+  （经 Cloudflare 时是它的 "Bad gateway" 页）。只挂这两个子目录、只读，**不要挂整个 `/opt/apps`**：那里有各应用的 `.env`（密钥），
+  整个挂进去，Caddy 一旦被攻破就能读到服务器上所有应用的密钥。
 
   ```bash
+  # 1. Caddy 的容器名与 compose 文件
+  docker ps --format '{{.Names}} {{.Image}}' | grep -i caddy
+  docker inspect <Caddy 容器名> -f '{{index .Config.Labels "com.docker.compose.project.config_files"}}'
+  # 2. 现有的挂载（只有 Caddyfile、站点目录与数据卷时，就要加下面的挂载）
+  docker inspect <Caddy 容器名> -f '{{range .Mounts}}{{.Source}} -> {{.Destination}}{{"\n"}}{{end}}'
+  ```
+
+  在该 compose 文件中 Caddy 服务的 `volumes:` 下加上（容器内与服务器上同一路径，站点不必改；production 还没有时也可以先加，
+  目录不存在时 Docker 建空目录）：
+
+  ```yaml
+      - /opt/apps/quizbuks-staging/maintenance:/opt/apps/quizbuks-staging/maintenance:ro
+      - /opt/apps/quizbuks-staging/well-known:/opt/apps/quizbuks-staging/well-known:ro
+      - /opt/apps/quizbuks/maintenance:/opt/apps/quizbuks/maintenance:ro
+      - /opt/apps/quizbuks/well-known:/opt/apps/quizbuks/well-known:ro
+  ```
+
+  然后重建 Caddy（服务器上所有网站断开几秒）并确认：
+
+  ```bash
+  mkdir -p /opt/apps/quizbuks-staging/well-known /opt/apps/quizbuks/maintenance /opt/apps/quizbuks/well-known
+  cd <compose 文件所在目录> && docker compose up -d <Caddy 服务名>
   docker exec <Caddy 容器名> ls /opt/apps/$APP/maintenance/maintenance.html
   ```
 
-  看不到时找出 Caddy 容器中的实际位置（`docker inspect <Caddy 容器名> -f '{{json .Mounts}}'`），把容器内对应 `/opt/apps` 的路径写入仓库变量
-  `QUIZBUKS_CADDY_APPS_DIR`（Settings → Secrets and variables → Actions → Variables）并重新部署；Caddy 容器根本没有挂载 `/opt/apps` 时，
-  在服务器的 Caddy 的 compose 中加上只读挂载（`/opt/apps:/opt/apps:ro`）。目录看不到时锁文件不起作用，网站照常代理，不会误显示维护页。
+  挂的是目录，锁文件的建立与删除在容器中立即可见。Caddy 的 compose 已把服务器的 `/opt/apps` 挂在容器中另一个路径时，
+  也可以不加挂载，把容器内对应 `/opt/apps` 的路径写入仓库变量 `QUIZBUKS_CADDY_APPS_DIR`（Settings → Secrets and variables → Actions →
+  Variables）并重新部署。
 - 开启后在浏览器（或 `curl -sI https://<本环境的域名>/`）确认返回 503 与维护页，再开始维护。
 
 ## Android App 的 assetlinks（Q49b）
@@ -332,7 +356,7 @@ Android App（`quizbuks-mobile/android`，`docs/quizbuks/plans/Q49b-android.md`�
 3. 确认：`curl -s https://<域名>/.well-known/assetlinks.json` 返回这份 JSON（维护模式中也返回）；再以 Google 的
    [Statement List Tester](https://developers.google.com/digital-asset-links/tools/generator) 对包名与指纹测试一次。
 
-Caddy 容器须能看到 `/opt/apps/<APP_NAME>/well-known/`，与维护页同一前提（见上节 `QUIZBUKS_CADDY_APPS_DIR`）。17l 之后改由平台提供，本节与站点中的这一段随之删除。
+Caddy 容器须能看到 `/opt/apps/<APP_NAME>/well-known/`，与维护页同一前提（见上节"第一次使用前给 Caddy 挂载这两个目录"）。17l 之后改由平台提供，本节与站点中的这一段随之删除。
 
 ## Android App 的构建与上传（Q49b）
 
