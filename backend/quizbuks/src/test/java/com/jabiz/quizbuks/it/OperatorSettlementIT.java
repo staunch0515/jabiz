@@ -104,7 +104,12 @@ class OperatorSettlementIT extends PlayItSupport {
             + "cost_usd, version) VALUES (gen_random_uuid()::text, ?, '2026-11', 0, 0, 5, 1, 0.05, 0)", operatorId);
 
         clock.set(Instant.parse("2026-12-02T00:00:00Z"));
-        assertThat(runSettlements().items().succeeded()).isGreaterThanOrEqualTo(1);
+        JobRunner.JobRun settling = runSettlements();
+        if (settling.items().succeeded() == 0) {
+            // Surfaces why (the job only counts a failing item).
+            systemRun(OperatorSettlements.RUN, body("operatorId", operatorId, "month", "2026-11"));
+        }
+        assertThat(settling.items().succeeded()).as(settling.toString()).isGreaterThanOrEqualTo(1);
         Map<String, Object> settled = settlement(operatorId);
         // 22 less the platform's 20%: 17.6, rounded down to the yen; less the prospecting cost, 9 is payable.
         assertThat((BigDecimal) settled.get("revenue")).isEqualByComparingTo("22");
