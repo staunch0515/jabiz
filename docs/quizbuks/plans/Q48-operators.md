@@ -171,3 +171,44 @@
 6. **人工批准**："今日待发"列出 `DRAFTED` 的候选（按分数），可修改邮件的标题与正文、问卷的题目，然后批准（`APPROVED`）或丢弃；**每日发送**由逐项任务在日本时间 10 点起发出已批准的，至多当天的上限（所有者的设置，20–50），每项一个事务。
 7. **设置** `QbProspectSetting`（每个所有者一行）：开关、每日上限、分数门槛（缺省 70）、每月费用上限（美元）、发件人名称、住所、联系邮箱；总开关是受控参数 `qb.prospect.enabled`（两种作业类型 `enabledBy` 它）。
 8. **每日任务** `qb.prospect-daily`（逐项任务，每个开启的所有者一项）：每个启用的方向在待研究的候选少于需要时开一个找的作业；为 `FOUND` 的候选开研究作业，至多当天上限的两倍；当月费用已到上限即不开新作业。
+
+### Q48c（2026-10-29）
+
+按上面的实施设计实现（包 `prospect`、迁移 V38、外部作业 `qb.prospect.find` / `qb.prospect.research`、模板 `qb.operator.prospect*` / `qb.admin.prospect*` / `qb.system.prospect-*-due` / `qb.public.prospect-trial`、后台扩展的 `/qb/prospects/**`、商家后台的公开页 `/sponsor/try/<键>`）。与设计不同或设计没有写到的：
+
+1. **三个逐项任务代替一个每日任务**（D42：每项一个事务、先取锁再读）：`qb.prospect-find` 每天 08:17（日本时间）为每个启用的方向开一个找的作业（方向记 `lastSearchAt`，同一天不再找）；`qb.prospect-research` 每小时为 `FOUND` 的候选开研究作业，每个所有者每天至多 `dailyCap × 2` 个（按 `researchStartedAt` 计）；`qb.prospect-send` 每 10 分钟发出已批准的，只在日本时间 9–18 点之间、每天至多 `dailyCap` 封。模板只做排序与粗筛，判断都在每项流程的所有者锁 `qb.prospect-owner:<所有者>` 内重读后做。
+2. **试答链接的键叫 `trialKey`**，不叫"令牌"：平台按名字遮蔽含 token 的字段与输出。24 字节随机数（`RandomBytesStep`），在批准时生成；公开数据视图只给 `SENT` 的行，字段只有键、公司名、语言与问卷。
+3. **每日上限 1–50**（设计为 20–50）：新的运营商从少量开始。**费用上限**只挡新的找与研究；已批准的邮件照常发出（发送不花钱）。
+4. **发件服务器**：商户邮件服务器的两个流程改为可指定键与前置步骤（`MailServerProcesses.set/remove(名称, …, 键)`），获客用 `QB_PROSPECT_MAIL_SERVER_SET` / `REMOVE`，键 `prospect:<所有者>`，测试邮件寄给调用者本人；商户自己的 `QB_MAIL_SERVER_*` 行为不变。
+5. **不发名单的来源**：研究发现网站声明拒收 → 屏蔽域名（`REFUSES_MARKETING`）；发送前发现该地址已退订（平台的地址退订，任何模板）→ 跳过并屏蔽该地址（`UNSUBSCRIBED`）；丢弃时勾选"屏蔽" → 地址与域名（`DECLINED`）；退信、投诉与其他由人经 `QB_PROSPECT_BLOCK_ADD` 记下。找的结果、研究的结果与发送前都再查。
+6. **公开的业务邮箱只认本域名（或其子域名）的地址**：免费邮箱或别人的地址不是这家网站的业务邮箱，候选因此 `SKIPPED`（`no-public-email`）。
+7. **费用**：tokens 按 `qb.prospect.model` 的标价（`AiCost`，参数缺失时按最贵的 Opus），搜索每次 0.01 美元；没有回答与没有记下用量的尝试按预留的 120 000 输入 + 16 000 输出计入（`ClaudeWebResearch.unanswered`）。
+8. **总部**持有 `qb.admin.prospect`（内容管理员，超级管理员经内容的权限），在后台按 `?owner=` 读任何所有者的；流程只作用于调用者自己的（运营商成员即其运营商，否则 `direct`），读别人的页面上不给按钮。
+
+未完成：e2e（Playwright）未覆盖获客页面；Q48d（漏斗、注册归属、跟进邮件、按分数自动发送、费用计入结算）。
+
+### Q48b（2026-10-29）
+
+实现（`operator.OperatorSettlements`、迁移 V39、模板 `qb.system.operator-revenue` / `qb.system.operator-settlements-due` / `qb.admin.operator-settlements` / `qb.operator.settlements` / `qb.admin.operator-settlement-doc`、单据 `qb.operator_settlement`、后台扩展 `/qb/finance/operator-settlements` 与 `/qb/operator/settlements`）。与 §4 不同的：
+
+1. **不加账本维度"运营商"**：答题奖励在发布锁内过账，给 4110 行加一个以实体为来源的维度会多一次引用检查，改变 `AttemptStatementBudgetIT` 的语句数。改为**发布的卡片在上线时冻结商家当时的运营商**（`qb_publication_card.operator_id`，与资料同一条语句读入，上线的语句数不变），结算按 4110 行已有的发布维度连到卡片。改派商户只影响以后上线的发布；已上线的发布的收入仍归上线时的运营商。V39 之前上线的发布都是直营。
+2. **分成比例是一个受控参数** `qb.operator.platform-share`（缺省 0.2），全部运营商共用：第一阶段只有一个运营商（D-Q48-2）；按运营商分别设置等 Q48e。
+3. **结算**：逐项任务 `qb.operator-settlement` 在每月 2 日 01:13（日本时间）为每个运营商结算上一个月（停用的也结算：其商户的收入照样有份）；分成 = 抽成 × (1 − 比例) 向下取整到日元，当月抽成为负（冲正多于奖励）即 0；过账 5130 / 2140（为 0 时不过账），签发结算单（日语，存档原样字节）。每个运营商每月一张（唯一约束），再运行什么也不做；月份未结束即拒绝（`QB_OPERATOR_MONTH_OPEN`）。获客费用的扣除与结转的列已在表上（Q48d 填入，现在为 0）。
+4. **付款**：财务以 `QB_OPERATOR_SETTLEMENT_PAY` 登记银行付款日与流水号，审批对象 `qb.operator-settlement`、规则 `qb.operator-settlement.review`（审批人同银行充值，`qb.topup.bank.approve`；由 `QB_SETUP` 提出），批准后过账 2140 / 1120 并 `PAID`，驳回回到 `ISSUED`、清空付款记录。
+5. **结算单只给财务下载**（版式权限 `qb.admin.finance.read`）：运营商在自己的后台看到金额与状态（不含登记人与审批），PDF 由总部发送；运营商自取 PDF 要等 Q48e 能把单据限定到本运营商。
+6. 月报 `qb.admin.monthly` 加两类 `OPERATOR_SHARE`（5130 / 2140）与 `OPERATOR_PAID`（2140 / 1120）及两列；分录导出的映射加 `qb.journal.account.2140` / `5130`。
+
+未完成：e2e 未覆盖结算页面。
+
+### Q48d（2026-10-29）
+
+实现（迁移 V40、`QB_PROSPECT_CLAIM` / `QB_PROSPECT_FOLLOW_UP`、任务 `qb.prospect-follow-up`、模板 `qb.operator.prospect-funnel` / `qb.admin.prospect-funnel` / `qb.system.prospect-follow-up-due`、邮件 `qb.prospect.follow-up`、受控参数 `qb.prospect.operator-monthly-cap-usd` / `qb.prospect.usd-jpy`）。与计划 §2 不同或计划没有写到的：
+
+1. **注册归属**：试答页的注册链接带 `?src=<键>`，商家后台在本浏览器中记住它，商家提交入驻申请之后调用一次 `QB_PROSPECT_CLAIM`。服务器把候选标记为该商户带来的（只认第一个），商户没有归属、且不是在邮件发出之前就已通过审核的，归属到做获客的运营商（总部的获客不改归属）；回答只说 `claimed` / `again` / `taken` / `unknown`，不说是谁的。键随机、只寄给对方的业务邮箱，因此它就是证据；归属失败不影响商户的申请。
+2. **一次跟进**：首封邮件 7 天后、没有带来商户的，逐项任务每小时发一次固定文案的跟进（只有试答链接与发件人，没有 Claude 或人写的内容），与首封共用工作时间、每日上限、不发名单、退订与发件服务器的检查；跟进只发一次（退订或屏蔽也记为已跟进，不再尝试）。
+3. **高分自动发送**：设置 `autoApproveScore`（不低于最低评分，空即从不），研究结果的分数达到它即直接 `APPROVED`（`approvedBy = auto`），随每日发送发出；草稿照样经同样的核对。
+4. **按效果调整方向**：只给数字（方向的漏斗：发现、调研、起草、发送、跟进、注册、通过审核），调整由人在设置页做；不自动改方向。试答页的打开次数不统计（公开读取不写记录）。
+5. **获客费用计入结算**：月结算读该运营商当月的 `QbProspectUsage`，按 `qb.prospect.usd-jpy` 折成日元（向上取整）从分成中扣除，扣不完的结转下月；被扣回的部分记为总部的 4110（借 5130 分成 / 贷 2140 应付 + 4110 扣回），未扣回的结转部分在扣回的月份才入账。有费用而没有汇率即拒绝（`QB_OPERATOR_NO_RATE`）。
+6. **运营商的月度上限**：所有者自己的上限之外，运营商另受受控参数 `qb.prospect.operator-monthly-cap-usd` 约束（取两者的较小值，参数未发布即为 0、不跑）；总部不受它约束。
+
+未完成：e2e 未覆盖。

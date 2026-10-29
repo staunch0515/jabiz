@@ -11,7 +11,7 @@ steps:
   - process: QB_SETUP@latest
     input: {}
     expectOutput:
-      rolesCreated: [QB_TAKER, QB_SPONSOR, QBS_SHOP, QB_ADMIN_CONTENT, QB_ADMIN_FINANCE, QB_ADMIN_SUPER]
+      rolesCreated: [QB_TAKER, QB_SPONSOR, QBS_SHOP, QB_ADMIN_CONTENT, QB_ADMIN_FINANCE, QB_ADMIN_SUPER, QB_OPERATOR]
       accountsOpened: ["1110", "1120", "2110", "2120", "2130", "4110", "5110", "5120"]
       countriesAdded: 249
       paramsCreated: [qb.app.min-version, qb.stats.min-group, qb.support.email,
@@ -27,7 +27,8 @@ steps:
         qb.journal.account.2130, qb.journal.account.4110, qb.journal.account.5110,
         qb.journal.account.5120, qb.issuer.name, qb.issuer.address,
         qb.issuer.registration-no, qb.legal.max-announce-days, qb.ai.enabled, qb.ai.model, qb.ai.effort,
-        qb.ai.sponsor.daily-jobs, qb.ai.sponsor.monthly-tokens, qb.ai.global.monthly-tokens, qb.topup.bank.min,
+        qb.ai.sponsor.daily-jobs, qb.ai.sponsor.monthly-tokens, qb.ai.global.monthly-tokens, qb.prospect.enabled,
+        qb.prospect.model, qb.prospect.effort, qb.topup.bank.min,
         qb.topup.bank.max, qb.bank.receiving.bank, qb.bank.receiving.branch, qb.bank.receiving.account-type,
         qb.bank.receiving.account-number, qb.bank.receiving.account-holder, qb.withdrawal.bank.enabled,
         qb.withdrawal.bank.fee, qb.withdrawal.bank.cooldown-hours]
@@ -46,7 +47,8 @@ steps:
       p35: "$.proposals[34]", p36: "$.proposals[35]", p37: "$.proposals[36]", p38: "$.proposals[37]",
       p39: "$.proposals[38]", p40: "$.proposals[39]", p41: "$.proposals[40]", p42: "$.proposals[41]",
       p43: "$.proposals[42]", p44: "$.proposals[43]", p45: "$.proposals[44]", p46: "$.proposals[45]", p47: "$.proposals[46]",
-      p48: "$.proposals[47]", p49: "$.proposals[48]" }
+      p48: "$.proposals[47]", p49: "$.proposals[48]", p50: "$.proposals[49]", p51: "$.proposals[50]",
+      p52: "$.proposals[51]" }
   - note: A second administrator publishes the parameters (the journal mapping and issuer empty) and the review rules.
     process: CONTROL_CHANGE_PUBLISH@latest
     actor: { id: publisher, permissions: [control.publish] }
@@ -195,6 +197,15 @@ steps:
   - process: CONTROL_CHANGE_PUBLISH@latest
     actor: { id: publisher, permissions: [control.publish] }
     input: { changeId: "${p49}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p50}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p51}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p52}" }
   - expect: { param: qb.creator-fee-rate, value: 0 }
   - expect: { param: qb.transfer.threshold, value: 1000 }
   - expect: { param: qb.transfer.enabled, value: false }

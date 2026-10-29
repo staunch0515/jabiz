@@ -90,6 +90,8 @@ public final class ProspectProcesses {
     public static final String FIND_START = "QB_PROSPECT_FIND_START";
     public static final String RESEARCH_START = "QB_PROSPECT_RESEARCH_START";
     public static final String SEND = "QB_PROSPECT_SEND";
+    public static final String FOLLOW_UP = "QB_PROSPECT_FOLLOW_UP";
+    public static final String CLAIM = "QB_PROSPECT_CLAIM";
     public static final String FOUND = "QB_PROSPECT_FOUND";
     public static final String FIND_FAILED = "QB_PROSPECT_FIND_FAILED";
     public static final String FIND_CANCELLED = "QB_PROSPECT_FIND_CANCELLED";
@@ -103,6 +105,10 @@ public final class ProspectProcesses {
     public static final String FIND_DUE_TEMPLATE = "qb.system.prospect-find-due";
     public static final String RESEARCH_DUE_TEMPLATE = "qb.system.prospect-research-due";
     public static final String SEND_DUE_TEMPLATE = "qb.system.prospect-send-due";
+    public static final String FOLLOW_UP_JOB = "qb.prospect-follow-up";
+    public static final String FOLLOW_UP_DUE_TEMPLATE = "qb.system.prospect-follow-up-due";
+    /** Days after the first mail the one follow-up goes out, when the trial brought no sponsor (Q48d). */
+    public static final int FOLLOW_UP_DAYS = 7;
 
     /** The mails go out between these hours of the zone's day (a business's working day). */
     public static final LocalTime SEND_FROM = LocalTime.of(9, 0);
@@ -110,6 +116,8 @@ public final class ProspectProcesses {
     /** Research started a day for an owner, per mail it may send that day. */
     public static final int RESEARCH_PER_MAIL = 2;
     static final int TOKEN_BYTES = 24;
+    /** Who approved a draft the owner's score approved (Q48d). */
+    public static final String AUTO_APPROVER = "auto";
 
     // ---- inputs and outputs ------------------------------------------------------------------------------------------
 
@@ -118,7 +126,8 @@ public final class ProspectProcesses {
         @NotNull @DecimalMin("0") @DecimalMax("100000") BigDecimal monthlyCostCap,
         @NotBlank @Size(max = QbProspects.NAME_LENGTH) String senderName,
         @NotBlank @Size(max = QbProspects.SENDER_ADDRESS_LENGTH) String senderAddress,
-        @NotBlank @Size(max = QbProspects.EMAIL_LENGTH) String senderContact, Long baseRevision) {}
+        @NotBlank @Size(max = QbProspects.EMAIL_LENGTH) String senderContact, @Min(0) @Max(100) Integer autoApproveScore,
+        Long baseRevision) {}
 
     public record SettingsOutput(String owner, long revision) {}
 
@@ -170,6 +179,7 @@ public final class ProspectProcesses {
     static final String PARAMS = "params";
     static final String SERVER = "server";
     static final String SENT_TODAY = "sentToday";
+    static final String FOLLOWED_TODAY = "followedToday";
     static final String STARTED_TODAY = "startedToday";
     static final String RANDOM = "random";
     static final String JOB_INPUT = "jobInput";
@@ -268,9 +278,16 @@ public final class ProspectProcesses {
             ctx.reject(new Violation("senderContact", ProspectCodes.FIELD, "Not an e-mail address", Map.of()));
             return;
         }
+        if (input.autoApproveScore() != null && input.autoApproveScore() < input.minScore()) {
+            ctx.reject(new Violation("autoApproveScore", ProspectCodes.FIELD, "Approving without a person needs at "
+                + "least the score a draft needs", Map.of("minScore", input.minScore())));
+            return;
+        }
         long revision = setting == null ? 1 : AccountEditing.number(setting.get("revision")) + 1;
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("enabled", input.enabled());
+        values.put("autoApproveScore", input.autoApproveScore() == null ? null
+            : BigDecimal.valueOf(input.autoApproveScore()));
         values.put("dailyCap", BigDecimal.valueOf(input.dailyCap()));
         values.put("minScore", BigDecimal.valueOf(input.minScore()));
         values.put("monthlyCostCap", input.monthlyCostCap().setScale(2, RoundingMode.HALF_UP));
@@ -650,10 +667,24 @@ public final class ProspectProcesses {
         }
         EntityInstance usage = first(ctx, USAGE);
         BigDecimal spent = usage == null ? BigDecimal.ZERO : decimal(usage.get("costUsd"));
-        if (spent.compareTo(decimal(setting.get("monthlyCostCap"))) >= 0) {
+        if (spent.compareTo(monthlyCap(owner, setting, params)) >= 0) {
             return "cost-cap";
         }
         return null;
+    }
+
+    /**
+     * The owner's cap of the month: its own setting, and for an operator at most headquarters' cap
+     * ({@code qb.prospect.operator-monthly-cap-usd}, Q48d: the cost is deducted from what it is paid); an operator
+     * whose cap is not published prospects nothing.
+     */
+    static BigDecimal monthlyCap(Object owner, EntityInstance setting, Map<String, String> params) {
+        BigDecimal own = decimal(setting.get("monthlyCostCap"));
+        if (QbProspects.DIRECT.equals(owner)) {
+            return own;
+        }
+        String cap = params.get(QbParams.PROSPECT_OPERATOR_MONTHLY_CAP);
+        return cap == null || cap.isBlank() ? BigDecimal.ZERO : own.min(new BigDecimal(cap));
     }
 
     /**
@@ -755,8 +786,23 @@ public final class ProspectProcesses {
      * server; a business blocked or unsubscribed meanwhile is skipped, one whose owner has no usable server waits.
      */
     public static ProcessDefinition<ProspectRef, ItemOutput, ProcessContext> send(ZoneId zone) {
-        return ProcessDefinition.define(SEND, 1, ProspectRef.class, ItemOutput.class, ProcessContext.class, pb -> pb
-            .description("Sends one approved prospecting mail.")
+        return send(zone, false);
+    }
+
+    /**
+     * {@value #FOLLOW_UP} (Q48d): the one follow-up of a mail sent {@value #FOLLOW_UP_DAYS} days ago that brought no
+     * sponsor, under the same checks as the first mail (hours, the day's cap counting both, blocks, unsubscriptions,
+     * the owner's server).
+     */
+    public static ProcessDefinition<ProspectRef, ItemOutput, ProcessContext> followUp(ZoneId zone) {
+        return send(zone, true);
+    }
+
+    private static ProcessDefinition<ProspectRef, ItemOutput, ProcessContext> send(ZoneId zone, boolean followUp) {
+        return ProcessDefinition.define(followUp ? FOLLOW_UP : SEND, 1, ProspectRef.class, ItemOutput.class,
+            ProcessContext.class, pb -> pb
+            .description(followUp ? "Sends the one follow-up of a prospecting mail." : "Sends one approved "
+                + "prospecting mail.")
             .permissions(QbPermissions.PROSPECT_SYSTEM)
             .internal()
             .contextFactory(ProspectProcesses::start)
@@ -782,6 +828,11 @@ public final class ProspectProcesses {
                         new QueryPredicate.In("owner", one(ownerOfRow(ctx, PROSPECT))),
                         new QueryPredicate.Gte("sentAt", dayStart(ctx.opTime(), zone)))))
                     .limit(QbProspects.MAX_DAILY_CAP + 1).build(), SENT_TODAY),
+                QueryEntities.query(QbProspects.defaultDataset(QbProspects.PROSPECT), ctx -> EntityQuery.builder()
+                    .where(new QueryPredicate.And(List.of(
+                        new QueryPredicate.In("owner", one(ownerOfRow(ctx, PROSPECT))),
+                        new QueryPredicate.Gte("followedUpAt", dayStart(ctx.opTime(), zone)))))
+                    .limit(QbProspects.MAX_DAILY_CAP + 1).build(), FOLLOWED_TODAY),
                 QueryEntities.query(QbProspects.defaultDataset(QbProspects.BLOCK),
                     ctx -> blocksOf(first(ctx, PROSPECT)), BLOCKS),
                 QueryEntities.query(MailEntities.ADDRESS_OPT_OUT_DATASET, ctx -> EntityQuery.builder()
@@ -791,19 +842,21 @@ public final class ProspectProcesses {
                     first(ctx, PROSPECT) == null ? null : QbProspects.senderKey(first(ctx, PROSPECT).get("owner"))),
                     SERVER),
                 paramsQuery()))
-            .compute("Decide", (metadata, ctx) -> decideSend(ctx, zone))
+            .compute("Decide", (metadata, ctx) -> decideSend(ctx, zone, followUp))
             .step("Send the mail", SendMail.<ProcessContext>via(ctx -> sending(ctx)
                     ? QbProspects.senderKey(first(ctx, PROSPECT).get("owner")) : null)
-                .when(ProspectProcesses::sending, ProspectMails.PROSPECT,
+                .when(ProspectProcesses::sending, followUp ? ProspectMails.FOLLOW_UP : ProspectMails.PROSPECT,
                     ctx -> MailRecipient.address(first(ctx, PROSPECT).get("publicEmail"),
                         ProspectMails.language(first(ctx, PROSPECT).get("language"))),
-                    ProspectMails.params(ProspectProcesses::firstProspect,
+                    ProspectMails.params(followUp ? ProspectMails.FOLLOW_UP : ProspectMails.PROSPECT,
+                        ProspectProcesses::firstProspect,
                         ctx -> first(ctx, SETTING))))
             .compute("Record the send", (metadata, ctx) -> {
                 if (sending(ctx)) {
                     EntityInstance prospect = first(ctx, PROSPECT);
-                    write(ctx, prospect, Map.of("status", QbProspects.SENT, "sentAt", ctx.opTime()));
-                    ctx.put(OUTPUT, new ItemOutput(String.valueOf(prospect.id()), "sent"));
+                    write(ctx, prospect, followUp ? Map.of("status", QbProspects.SENT, "followedUpAt", ctx.opTime())
+                        : Map.of("status", QbProspects.SENT, "sentAt", ctx.opTime()));
+                    ctx.put(OUTPUT, new ItemOutput(String.valueOf(prospect.id()), followUp ? "followed-up" : "sent"));
                 }
             }));
     }
@@ -816,20 +869,26 @@ public final class ProspectProcesses {
         return Boolean.TRUE.equals(ctx.get(SENDING));
     }
 
-    static void decideSend(ProcessContext ctx, ZoneId zone) {
+    static void decideSend(ProcessContext ctx, ZoneId zone, boolean followUp) {
         EntityInstance prospect = first(ctx, PROSPECT);
-        if (prospect == null || !QbProspects.APPROVED.equals(prospect.get("status"))) {
-            ctx.put(OUTPUT, new ItemOutput(prospect == null ? null : String.valueOf(prospect.id()), "not-approved"));
+        boolean due = prospect != null && (followUp
+            ? QbProspects.SENT.equals(prospect.get("status")) && prospect.get("followedUpAt") == null
+                && prospect.get("convertedAt") == null
+            : QbProspects.APPROVED.equals(prospect.get("status")));
+        if (!due) {
+            ctx.put(OUTPUT, new ItemOutput(prospect == null ? null : String.valueOf(prospect.id()), "not-due"));
             return;
         }
         String id = String.valueOf(prospect.id());
-        // Unsubscribed or blocked meanwhile: never sent, and the unsubscription is blocked for every owner too.
+        // Unsubscribed or blocked meanwhile: never written to, and the unsubscription is blocked for every owner too.
         if (!list(ctx, OPT_OUTS).isEmpty() || !list(ctx, BLOCKS).isEmpty()) {
             if (!list(ctx, OPT_OUTS).isEmpty()) {
                 ctx.put(OWNER, String.valueOf((Object) prospect.get("owner")));
                 block(ctx, QbProspects.KIND_EMAIL, prospect.get("publicEmail"), QbProspects.UNSUBSCRIBED, null);
             }
-            write(ctx, prospect, Map.of("status", QbProspects.SKIPPED, "failure", "blocked"));
+            // A follow-up stays sent (the first mail went out) and is never tried again.
+            write(ctx, prospect, followUp ? Map.of("status", QbProspects.SENT, "followedUpAt", ctx.opTime())
+                : Map.of("status", QbProspects.SKIPPED, "failure", "blocked"));
             ctx.put(OUTPUT, new ItemOutput(id, "blocked"));
             return;
         }
@@ -839,7 +898,8 @@ public final class ProspectProcesses {
             refusal = "outside-hours";
         }
         EntityInstance setting = first(ctx, SETTING);
-        if (refusal == null && list(ctx, SENT_TODAY).size() >= AccountEditing.number(setting.get("dailyCap"))) {
+        if (refusal == null && list(ctx, SENT_TODAY).size() + list(ctx, FOLLOWED_TODAY).size()
+            >= AccountEditing.number(setting.get("dailyCap"))) {
             refusal = "daily-cap";
         }
         if (refusal == null && !QbMailServers.usable(first(ctx, SERVER))) {
@@ -973,6 +1033,15 @@ public final class ProspectProcesses {
             values.put("trial", json.writeValueAsString(result.trial()));
             values.put("mailSubject", result.mailSubject());
             values.put("mailBody", result.mailBody());
+            // Q48d: the owner's score above which nobody needs to read the draft (checked as a person's approval is:
+            // the research's answer passed the same checks).
+            Object auto = setting == null ? null : setting.get("autoApproveScore");
+            if (auto != null && result.score() >= AccountEditing.number(auto)) {
+                status = QbProspects.APPROVED;
+                values.put("trialKey", HexFormat.of().formatHex(ctx.get(RANDOM, byte[].class)));
+                values.put("approvedAt", ctx.opTime());
+                values.put("approvedBy", AUTO_APPROVER);
+            }
         }
         values.put("status", status);
         values.put("failure", failure);
@@ -1082,6 +1151,7 @@ public final class ProspectProcesses {
                             OPT_OUTS)));
                 }
             })
+            .step("Draw a trial's key", RandomBytesStep.class, new RandomBytesStep.Metadata(RANDOM, TOKEN_BYTES))
             .compute("Act", (metadata, ctx) -> act.accept(ctx))
             .step("Lock the owner's usage", HoldLock.<ProcessContext>exclusive(
                 ctx -> ctx.contains(CHARGE) ? QbProspects.usageLockName(ownerOfRow(ctx, search ? DIRECTION : PROSPECT))
@@ -1188,6 +1258,90 @@ public final class ProspectProcesses {
         ExternalJobCompletion completion = ctx.get(INPUT) instanceof ExternalJobCompletion c ? c : null;
         String email = completion == null ? null : completion.result(ProspectJobs.ResearchResult.class).publicEmail();
         return email == null ? null : email.toLowerCase(Locale.ROOT);
+    }
+
+    // ---- the sign-up a trial brought (Q48d) ---------------------------------------------------------------------------
+
+    /** @param trialKey the key of the trial's link the sponsor came by (the console keeps it from the sign-up) */
+    public record ClaimInput(@NotBlank @Size(max = 64) String trialKey) {}
+
+    /**
+     * @param outcome   {@code claimed} (first time), {@code again} (this sponsor's already), {@code taken} (another
+     *                  sponsor's), {@code unknown} (no trial that went out has the key)
+     * @param operatorId the operator the sponsor was assigned to, when this assigned them
+     */
+    public record ClaimOutput(String outcome, String operatorId) {}
+
+    static final String ONBOARDING = "onboarding";
+    static final String ASSIGNMENT = "assignment";
+
+    /**
+     * {@value #CLAIM}: the signed-up sponsor names the trial that brought them. The business is marked converted (once,
+     * to the first sponsor), and a sponsor of no operator who was not approved before the mail went out is assigned to
+     * the operator that prospected it (D-Q48-9); headquarters' prospects assign nobody. The key is random and mailed to
+     * the business only, so it is the evidence; an answer never says whose the trial is.
+     */
+    public static ProcessDefinition<ClaimInput, ClaimOutput, ProcessContext> claim() {
+        return ProcessDefinition.define(CLAIM, 1, ClaimInput.class, ClaimOutput.class, ProcessContext.class, pb -> pb
+            .description("Records the prospecting trial a new sponsor came by; its operator becomes theirs.")
+            .permissions(QbPermissions.SPONSOR_ME)
+            .requiresVerifiedEmail()
+            .steps(com.jabiz.quizbuks.identity.CallerChecks::refuseBanned)
+            .contextFactory(ProspectProcesses::start)
+            .outputMapper(ctx -> ctx.contains(OUTPUT) ? ctx.get(OUTPUT, ClaimOutput.class)
+                : new ClaimOutput("unknown", null))
+            .step("Find the trial", QueryEntities.<ProcessContext>of(QbProspects.defaultDataset(QbProspects.PROSPECT),
+                ctx -> byKey("trialKey", ctx.get(INPUT, ClaimInput.class).trialKey().strip()), PROSPECT))
+            .step("Lock the sponsor's assignment", HoldLock.<ProcessContext>exclusive(
+                ctx -> com.jabiz.quizbuks.operator.QbOperators.assignmentLockName(ctx.request().actorId())))
+            .step("Lock the prospect", HoldLock.<ProcessContext>exclusive(
+                ctx -> first(ctx, PROSPECT) == null ? null : QbProspects.prospectLockName(first(ctx, PROSPECT).id())))
+            .step("Read it again, the onboarding and the assignment", QueryEntities.<ProcessContext>all(
+                QueryEntities.query(QbProspects.defaultDataset(QbProspects.PROSPECT), ctx -> byKey("prospectId",
+                    first(ctx, PROSPECT) == null ? null : String.valueOf(first(ctx, PROSPECT).id())), PROSPECT),
+                QueryEntities.query(com.jabiz.quizbuks.identity.QbAccounts.defaultDataset(
+                    com.jabiz.quizbuks.identity.QbAccounts.SPONSOR), ctx -> byKey("userId", ctx.request().actorId()),
+                    ONBOARDING),
+                QueryEntities.query(com.jabiz.quizbuks.operator.QbOperators.defaultDataset(
+                    com.jabiz.quizbuks.operator.QbOperators.ASSIGNMENT), ctx -> byKey("userId",
+                    ctx.request().actorId()), ASSIGNMENT)))
+            .compute("Claim", (metadata, ctx) -> claimed(ctx)));
+    }
+
+    static void claimed(ProcessContext ctx) {
+        EntityInstance prospect = first(ctx, PROSPECT);
+        String caller = ctx.request().actorId();
+        if (prospect == null || !QbProspects.SENT.equals(prospect.get("status"))) {
+            ctx.put(OUTPUT, new ClaimOutput("unknown", null));
+            return;
+        }
+        Object converted = prospect.get("convertedUserId");
+        if (converted != null && !caller.equals(converted)) {
+            ctx.put(OUTPUT, new ClaimOutput("taken", null));
+            return;
+        }
+        if (converted == null) {
+            Map<String, Object> values = new LinkedHashMap<>();
+            values.put("convertedUserId", caller);
+            values.put("convertedAt", ctx.opTime());
+            write(ctx, prospect, values);
+        }
+        String owner = String.valueOf((Object) prospect.get("owner"));
+        EntityInstance onboarding = first(ctx, ONBOARDING);
+        Instant approvedAt = onboarding == null ? null : instant(onboarding.get("approvedAt"));
+        Instant sentAt = instant(prospect.get("sentAt"));
+        boolean assign = !QbProspects.DIRECT.equals(owner) && onboarding != null && first(ctx, ASSIGNMENT) == null
+            && (approvedAt == null || sentAt == null || !approvedAt.isBefore(sentAt));
+        if (assign) {
+            Map<String, Object> values = new LinkedHashMap<>();
+            values.put("userId", caller);
+            values.put("operatorId", owner);
+            values.put("assignedAt", ctx.opTime());
+            values.put("assignedBy", "prospect:" + prospect.id());
+            values.put("reason", ("AI prospecting: " + prospect.get("domain")));
+            ctx.changes().insert(com.jabiz.quizbuks.operator.QbOperators.ASSIGNMENT, values);
+        }
+        ctx.put(OUTPUT, new ClaimOutput(converted == null ? "claimed" : "again", assign ? owner : null));
     }
 
     // ---- shared ------------------------------------------------------------------------------------------------------

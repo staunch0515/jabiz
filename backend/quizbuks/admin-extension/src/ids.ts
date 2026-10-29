@@ -115,6 +115,17 @@ export const TEMPLATE = {
   adminProspectDirections: 'qb.admin.prospect-directions',
   adminProspectUsage: 'qb.admin.prospect-usage',
   adminProspectBlocks: 'qb.admin.prospect-blocks',
+  /** Q48d: the funnel by direction. */
+  operatorProspectFunnel: 'qb.operator.prospect-funnel',
+  adminProspectFunnel: 'qb.admin.prospect-funnel',
+  /** Q48b: the operators' monthly settlements, every operator's (finance) and the caller operator's own. */
+  operatorSettlements: 'qb.admin.operator-settlements',
+  ownSettlements: 'qb.operator.settlements',
+} as const
+
+/** The operators' settlements' processes (backend `operator.OperatorSettlements`, Q48b). */
+export const SETTLEMENT_PROCESS = {
+  pay: 'QB_OPERATOR_SETTLEMENT_PAY',
 } as const
 
 /** AI prospecting's processes (backend `prospect`, Q48c); the owner is the caller's operator, or headquarters. */
@@ -260,6 +271,7 @@ export const DICTIONARY = {
   spotCheckResult: 'urn:jabiz:dict:quizbuks:spot-check-result',
   prospectStatus: 'urn:jabiz:dict:quizbuks:prospect-status',
   prospectBlockReason: 'urn:jabiz:dict:quizbuks:prospect-block-reason',
+  settlementStatus: 'urn:jabiz:dict:quizbuks:operator-settlement-status',
 } as const
 
 /** Permissions (`QbPermissions`): they only decide what the pages offer; the server checks every call. */
@@ -311,6 +323,8 @@ export const PERMISSION = {
   /** Q48c: AI prospecting (an operator's own, or headquarters'), and headquarters' view of every owner's. */
   prospectUse: 'qb.prospect.use',
   adminProspect: 'qb.admin.prospect',
+  /** Q48b: recording the payment of an operator's settlement (finance; another administrator approves). */
+  settlementPay: 'qb.operator.settlement.pay',
 } as const
 
 /** The bank top-up states finance may record money against, and the one an approval waits in (Q13a). */
@@ -406,6 +420,9 @@ export const PATH = {
   prospects: '/qb/prospects',
   prospect: (prospectId: string) => `/qb/prospects/${encodeURIComponent(prospectId)}`,
   prospectSettings: '/qb/prospects/settings',
+  /** Q48b: the operators' settlements (finance), and an operator's own. */
+  settlements: '/qb/finance/operator-settlements',
+  operatorSettlements: '/qb/operator/settlements',
   /** The platform's own pages. */
   tasks: '/tasks',
 } as const

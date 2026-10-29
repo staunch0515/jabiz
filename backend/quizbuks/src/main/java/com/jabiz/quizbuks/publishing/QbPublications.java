@@ -347,6 +347,9 @@ public final class QbPublications {
             .sensitive().asText(PublishingLimits.SEALED_LENGTH));
         eb.field("wentOnAt", f -> f.physicalColumn("went_on_at").immutable(true).required(true)
             .asTemporal(TemporalRole.EVENT_TIME));
+        // Q48b: the sponsor's operator when it went on (null: headquarters'); the commission of its rewards is
+        // settled to it.
+        eb.field("operatorId", f -> f.physicalColumn("operator_id").immutable(true).asText(36));
         // When it ended, by whatever reason (its time, its winners, its budget): the statistics job counts a
         // publication for a month after this.
         eb.field("endedAt", f -> f.physicalColumn("ended_at").asTemporal(TemporalRole.EVENT_TIME));

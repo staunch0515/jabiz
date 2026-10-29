@@ -43,9 +43,23 @@ public final class OperatorCodes {
     /** The sponsor is assigned to this operator already (or to headquarters, when moving them back). */
     public static final String SAME_OPERATOR = "QB_OPERATOR_SAME";
 
+    /** Q48b: a month is settled only once it has ended (in Japan). */
+    public static final String MONTH_OPEN = "QB_OPERATOR_MONTH_OPEN";
+    /** Q48b: the platform's share (qb.operator.platform-share) is not published, or not a fraction from 0 to 1. */
+    public static final String NO_SHARE = "QB_OPERATOR_NO_SHARE";
+    /** Q48d: the month has prospecting costs and the yen of a dollar (qb.prospect.usd-jpy) is not published. */
+    public static final String NO_RATE = "QB_OPERATOR_NO_RATE";
+    /** Q48b: only an issued settlement is paid (one being approved, or paid, is not again). */
+    public static final String SETTLEMENT_STATE = "QB_OPERATOR_SETTLEMENT_STATE";
+    /** Q48b: the settlement has nothing payable. */
+    public static final String SETTLEMENT_NOTHING = "QB_OPERATOR_SETTLEMENT_NOTHING";
+    /** Q48b: no approval rule asks for a second person on the operators' payments. */
+    public static final String SETTLEMENT_NO_REVIEW = "QB_OPERATOR_SETTLEMENT_NO_REVIEW";
+
     public static final List<String> ALL = List.of(NOT_MEMBER, SUSPENDED, NOT_LEAD, FIELD, CODE, CHANGED,
         MEMBER_ELSEWHERE, MEMBER_IS_SPONSOR, MEMBER_UNVERIFIED, MEMBERS_FULL, LEAD_SELF, NOT_A_SPONSOR, HQ_TAKEDOWN,
-        HQ_BAN, NOT_AN_OPERATOR_DECISION, SPOT_CHECK_NOTE, SAME_OPERATOR);
+        HQ_BAN, NOT_AN_OPERATOR_DECISION, SPOT_CHECK_NOTE, SAME_OPERATOR, MONTH_OPEN, NO_SHARE, SETTLEMENT_STATE,
+        SETTLEMENT_NOTHING, SETTLEMENT_NO_REVIEW, NO_RATE);
 
     private OperatorCodes() {}
 }

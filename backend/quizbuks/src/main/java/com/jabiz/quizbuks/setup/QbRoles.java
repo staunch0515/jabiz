@@ -82,6 +82,8 @@ public final class QbRoles {
         "report.archive.read",
         // Q9d: the journal export, its confirmation and its archived CSV files.
         QbPermissions.JOURNAL_EXPORT, QbPermissions.JOURNAL_CONFIRM, "file.generated.read",
+        // Q48b: paying the operators' settlements (another administrator approves), and their statements.
+        QbPermissions.OPERATOR_SETTLEMENT_PAY, "document.archive.read",
         // Platform 16y: closing by hand, with a note, a reconciliation task that needs nothing (TASK_RESOLVE).
         "task.resolve",
         // Q13a: bank top-ups, recorded from the statement by one administrator and approved by another.

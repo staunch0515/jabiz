@@ -5,7 +5,7 @@ entities: [QbProspectUsage]
 datasets:
   QbProspectUsage: urn:jabiz:dataset:default:QbProspectUsage
 params:
-  owner: { like: QbProspect.owner, required: true, description: "The owner: an operator's id, or direct (headquarters)" }
+  owner: { like: QbProspectUsage.owner, required: true, description: "The owner: an operator's id, or direct (headquarters)" }
 results:
   month:        { from: QbProspectUsage.month }
   inputTokens:  { from: QbProspectUsage.inputTokens }

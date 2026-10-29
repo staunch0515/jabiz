@@ -293,6 +293,47 @@
     }
   }, {
     "cacheSeconds" : 60,
+    "description" : "A trial quiz a prospecting mail sent (Q48c), by the random key of its link",
+    "id" : "qb.public.prospect-trial",
+    "list" : {
+      "filters" : [ ],
+      "sorts" : [ ]
+    },
+    "params" : {
+      "key" : {
+        "kind" : {
+          "maxLength" : 64,
+          "multiline" : false,
+          "type" : "text"
+        },
+        "list" : false,
+        "required" : true
+      }
+    },
+    "results" : {
+      "company" : {
+        "maxLength" : 200,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "language" : {
+        "maxLength" : 5,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "trial" : {
+        "maxLength" : 20000,
+        "multiline" : true,
+        "type" : "text"
+      },
+      "trialKey" : {
+        "maxLength" : 64,
+        "multiline" : false,
+        "type" : "text"
+      }
+    }
+  }, {
+    "cacheSeconds" : 60,
     "description" : "A live publication as its share link shows it to anybody before signing in (Q15): the quiz's title, the sponsor's company, the reward, the number of questions and the time limit; none when it is not live",
     "id" : "qb.public.publication",
     "list" : {

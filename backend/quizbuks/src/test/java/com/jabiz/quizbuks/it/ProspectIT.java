@@ -77,6 +77,10 @@ class ProspectIT extends AiItSupport {
     @Qualifier("qbProspectSendJobDefinition")
     JobDefinition<ProspectProcesses.ProspectRef> sendJob;
 
+    @Autowired
+    @Qualifier("qbProspectFollowUpJobDefinition")
+    JobDefinition<ProspectProcesses.ProspectRef> followUpJob;
+
     @BeforeEach
     void prospectingOn() {
         clock.set(MONDAY_TEN);
@@ -115,13 +119,13 @@ class ProspectIT extends AiItSupport {
         return TestTokens.bearer(tokens, "q48c-hq", QbPermissions.OPERATORS_WRITE, QbPermissions.OPERATORS_READ);
     }
 
-    /** A new operator with one lead; returns {operatorId, the lead's token}. */
+    /** A new operator with one lead; returns {operatorId, the lead's token, the lead}. */
     private List<String> newOperator(String name) {
         String operatorId = (String) run(OperatorProcesses.SAVE, hqAdmin(), body("name", name, "contactName",
             "Owner", "contactEmail", "ops@" + name.toLowerCase().replace(' ', '-') + ".example")).get("operatorId");
         String member = verifiedUser(unique("q48c-op"));
         run(OperatorProcesses.MEMBER_ADD, hqAdmin(), body("operatorId", operatorId, "userId", member, "lead", true));
-        return List.of(operatorId, tokenOf(member, QbRoles.OPERATOR));
+        return List.of(operatorId, tokenOf(member, QbRoles.OPERATOR), member);
     }
 
     private static Map<String, Object> settings(int dailyCap, String cap, Long revision) {
@@ -212,6 +216,23 @@ class ProspectIT extends AiItSupport {
         return "Done.\n" + JSON.writeValueAsString(root);
     }
 
+    /** Researches answered by the domain each request is about, whatever order the jobs run in. */
+    static void researches(Map<String, String> byDomain) {
+        answering = request -> {
+            if (!MESSAGES.equals(request.path())) {
+                return null;
+            }
+            JsonNode body = JSON.readTree(request.body());
+            String user = body.get("messages").get(0).get("content").asString();
+            for (Map.Entry<String, String> entry : byDomain.entrySet()) {
+                if (user.contains("\"domain\":\"" + entry.getKey() + "\"")) {
+                    return webAnswer(entry.getValue(), 100, 100, 0);
+                }
+            }
+            return null;
+        };
+    }
+
     private Map<String, Object> prospect(String domain) {
         return query("SELECT * FROM qb_prospect WHERE domain = ?", domain).getFirst();
     }
@@ -253,8 +274,13 @@ class ProspectIT extends AiItSupport {
         assertThat(sent()).hasSize(calls);
 
         // The research: one business's site, read with fetches; its draft kept for a person.
-        CLAUDE.script(MESSAGES, webAnswer(research("info@greenleaf.example", 85, false), 20_000, 3000, 1));
-        CLAUDE.script(MESSAGES, webAnswer(research(null, 75, false), 15_000, 2000, 1));
+        answering = request -> {
+            String text = request.body();
+            return !MESSAGES.equals(request.path()) ? null
+                : text.contains("greenleaf.example") ? webAnswer(research("info@greenleaf.example", 85, false), 20_000,
+                    3000, 1)
+                : text.contains("teahouse.example") ? webAnswer(research(null, 75, false), 15_000, 2000, 1) : null;
+        };
         assertThat(runJob(researchJob).items().succeeded()).isEqualTo(2);
         Map<String, Object> drafted = prospect("greenleaf.example");
         assertThat(drafted).containsEntry("status", QbProspects.DRAFTED).containsEntry("public_email",
@@ -263,9 +289,10 @@ class ProspectIT extends AiItSupport {
         // No published business address: never written to.
         assertThat(prospect("teahouse.example")).containsEntry("status", QbProspects.SKIPPED)
             .containsEntry("failure", "no-public-email");
-        JsonNode read = sent().get(sent().size() - 2);
-        assertThat(read.get("tools").toString()).contains("web_fetch_");
-        assertThat(read.get("messages").get(0).get("content").asString()).contains("The site: https://");
+        assertThat(sent()).anySatisfy(read -> {
+            assertThat(read.get("tools").toString()).contains("web_fetch_");
+            assertThat(read.get("messages").get(0).get("content").asString()).contains("The site: https://");
+        });
 
         // The month's cost: every call's tokens and the four plus two searches at ten dollars a thousand.
         Map<String, Object> usage = query("SELECT * FROM qb_prospect_usage WHERE owner = 'direct'").getFirst();
@@ -303,7 +330,8 @@ class ProspectIT extends AiItSupport {
         assertThat(to(OWN, "info@greenleaf.example")).singleElement().satisfies(mail -> {
             assertThat(mail.getSubject()).isEqualTo("A quiz made from your sencha");
             assertThat(mail.getFrom()[0].toString()).contains("sales@partner.example");
-            String text = GreenMailUtil.getBody(mail);
+            // Quoted-printable: without its soft line breaks.
+            String text = GreenMailUtil.getBody(mail).replace("=\r\n", "").replace("=\n", "");
             assertThat(text).contains("Your sencha caught our eye.").contains("sponsor/try/" + key)
                 .contains("1-2-3 Shibuya, Tokyo").contains("unsubscribe");
         });
@@ -322,7 +350,7 @@ class ProspectIT extends AiItSupport {
         assertThat((List<?>) none.get("items")).isEmpty();
 
         // Headquarters' page shows the prospects, without the key.
-        assertThat(items("qb.admin.prospects", token, Map.of("params", Map.of("owner", "direct"))))
+        assertThat(items("qb.admin.prospects", hq(person), Map.of("params", Map.of("owner", "direct"))))
             .hasSize(2).allSatisfy(row -> assertThat(row).doesNotContainKey("trialKey"));
     }
 
@@ -345,9 +373,8 @@ class ProspectIT extends AiItSupport {
         assertThat(sent().getLast().get("messages").get(0).get("content").asString()).contains("blocked.example");
 
         // A site that refuses promotional mail is skipped and its domain blocked for every owner.
-        // Researched in the order found: refuses.example, then later.example.
-        CLAUDE.script(MESSAGES, webAnswer(research("info@refuses.example", 90, true), 100, 100, 0));
-        CLAUDE.script(MESSAGES, webAnswer(research("info@later.example", 90, false), 100, 100, 0));
+        researches(Map.of("refuses.example", research("info@refuses.example", 90, true),
+            "later.example", research("info@later.example", 90, false)));
         runJob(researchJob);
         assertThat(prospect("refuses.example")).containsEntry("status", QbProspects.SKIPPED)
             .containsEntry("failure", "refuses-marketing");
@@ -402,10 +429,12 @@ class ProspectIT extends AiItSupport {
         // A higher cap; the daily cap of one mail allows two researches a day, and one send.
         Map<String, Object> setting = query("SELECT revision FROM qb_prospect_setting WHERE owner = ?", owner)
             .getFirst();
+        // A day later: a new access token (the first has expired).
+        token = tokenOf(operator.get(2), QbRoles.OPERATOR);
         run(ProspectProcesses.SETTINGS_SAVE, token, settings(1, "50", ((Number) setting.get("revision"))
             .longValue()));
-        CLAUDE.script(MESSAGES, webAnswer(research("hi@one.example", 90, false), 100, 100, 0));
-        CLAUDE.script(MESSAGES, webAnswer(research("hi@two.example", 90, false), 100, 100, 0));
+        researches(Map.of("one.example", research("hi@one.example", 90, false),
+            "two.example", research("hi@two.example", 90, false)));
         runJob(researchJob);
         for (String domain : List.of("one.example", "two.example")) {
             Map<String, Object> row = prospect(domain);
@@ -458,5 +487,70 @@ class ProspectIT extends AiItSupport {
         // Somebody who is neither an operator's member nor headquarters' prospects for nobody.
         String stranger = TestTokens.bearer(tokens, verifiedUser(unique("q48c-x")), QbPermissions.PROSPECT_USE);
         refused(ProspectProcesses.SETTINGS_SAVE, stranger, settings(5, "50", null), 422);
+    }
+
+    @Test
+    void aHighScoreGoesOutAloneIsFollowedUpOnceAndItsSponsorJoinsTheOperator() {
+        List<String> operator = newOperator(unique("Funnel"));
+        String owner = operator.get(0);
+        String token = operator.get(1);
+        ready(token, 5, "50");
+        // Drafts scoring 80 or more go out without a person.
+        Map<String, Object> auto = settings(5, "50", 1L);
+        auto.put("autoApproveScore", 80);
+        run(ProspectProcesses.SETTINGS_SAVE, token, auto);
+        Map<String, Object> below = settings(5, "50", 2L);
+        below.put("autoApproveScore", 10);
+        assertThat(codes(refused(ProspectProcesses.SETTINGS_SAVE, token, below, 422)))
+            .containsExactly(ProspectCodes.FIELD);
+
+        CLAUDE.script(MESSAGES, webAnswer(found("funnel-tea.example"), 100, 100, 1));
+        runJob(findJob);
+        researches(Map.of("funnel-tea.example", research("info@funnel-tea.example", 90, false)));
+        runJob(researchJob);
+        Map<String, Object> approved = prospect("funnel-tea.example");
+        assertThat(approved).containsEntry("status", QbProspects.APPROVED)
+            .containsEntry("approved_by", ProspectProcesses.AUTO_APPROVER);
+        String key = String.valueOf(approved.get("trial_key"));
+        runJob(sendJob);
+        deliverEvents();
+        assertThat(to(OWN, "info@funnel-tea.example")).hasSize(1);
+
+        // A week later, without a sponsor: one follow-up, never a second.
+        clock.set(MONDAY_TEN.plus(Duration.ofDays(8)));
+        runJob(followUpJob);
+        deliverEvents();
+        assertThat(to(OWN, "info@funnel-tea.example")).hasSize(2).last().satisfies(mail -> assertThat(
+            GreenMailUtil.getBody(mail).replace("=\r\n", "").replace("=\n", "")).contains("sponsor/try/" + key));
+        assertThat(prospect("funnel-tea.example").get("followed_up_at")).isNotNull();
+        clock.set(MONDAY_TEN.plus(Duration.ofDays(9)));
+        runJob(followUpJob);
+        deliverEvents();
+        assertThat(to(OWN, "info@funnel-tea.example")).hasSize(2);
+
+        // The business signs up by the trial's link: the sponsor is the operator's (D-Q48-9), once.
+        String sponsor = newSponsor(unique("q48d-s"));
+        assertThat(run(ProspectProcesses.CLAIM, sponsorToken(sponsor), body("trialKey", key)))
+            .containsEntry("outcome", "claimed").containsEntry("operatorId", owner);
+        assertThat(query("SELECT operator_id FROM qb_sponsor_operator WHERE user_id = ?", sponsor)).singleElement()
+            .satisfies(r -> assertThat(r).containsEntry("operator_id", owner));
+        assertThat(prospect("funnel-tea.example")).containsEntry("converted_user_id", sponsor);
+        assertThat(run(ProspectProcesses.CLAIM, sponsorToken(sponsor), body("trialKey", key)))
+            .containsEntry("outcome", "again");
+        String other = newSponsor(unique("q48d-o"));
+        assertThat(run(ProspectProcesses.CLAIM, sponsorToken(other), body("trialKey", key)))
+            .containsEntry("outcome", "taken");
+        assertThat(run(ProspectProcesses.CLAIM, sponsorToken(other), body("trialKey", "0".repeat(48))))
+            .containsEntry("outcome", "unknown");
+        assertThat(query("SELECT 1 FROM qb_sponsor_operator WHERE user_id = ?", other)).isEmpty();
+
+        // The funnel counts it.
+        assertThat(items("qb.operator.prospect-funnel", tokenOf(operator.get(2), QbRoles.OPERATOR), Map.of()))
+            .singleElement().satisfies(row -> assertThat(row).containsEntry("name", "Tea shops"))
+            .satisfies(row -> {
+                assertThat(((Number) row.get("sent")).intValue()).isEqualTo(1);
+                assertThat(((Number) row.get("followedUp")).intValue()).isEqualTo(1);
+                assertThat(((Number) row.get("signedUp")).intValue()).isEqualTo(1);
+            });
     }
 }

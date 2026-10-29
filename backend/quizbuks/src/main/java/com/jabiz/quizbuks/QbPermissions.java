@@ -204,6 +204,11 @@ public final class QbPermissions {
     /** Spot-check the reviews operators decided (D-Q48-5). Content administrator (and the super administrator). */
     public static final String SPOT_CHECK = "qb.admin.spot-check";
 
+    /** Q48b: record the bank payment of an operator's settlement (another administrator approves it). Finance. */
+    public static final String OPERATOR_SETTLEMENT_PAY = "qb.operator.settlement.pay";
+    /** Q48b: the monthly settlement run and the payment's approval result ({@code internal()}). Granted to no role. */
+    public static final String OPERATOR_SETTLEMENT_SYSTEM = "qb.operator.settlement.system";
+
     /**
      * AI prospecting (Q48c): the owner's settings, directions of search, approving or discarding the drafted mails,
      * and blocking addresses. The owner is the caller's operator, or headquarters for those holding

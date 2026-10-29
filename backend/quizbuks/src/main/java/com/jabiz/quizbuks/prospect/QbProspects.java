@@ -152,6 +152,8 @@ public final class QbProspects {
         eb.field("senderAddress", f -> f.physicalColumn("sender_address").required(true)
             .asText(SENDER_ADDRESS_LENGTH));
         eb.field("senderContact", f -> f.physicalColumn("sender_contact").required(true).asText(EMAIL_LENGTH));
+        // Q48d: a draft scoring at least this is approved without a person; null: never.
+        eb.field("autoApproveScore", f -> f.physicalColumn("auto_approve_score").asNumeric(3, 0));
         eb.field("updatedAt", f -> f.physicalColumn("updated_at").required(true).asTemporal(TemporalRole.EVENT_TIME));
         eb.field("updatedBy", f -> f.physicalColumn("updated_by").required(true).asText(128));
         eb.field("revision", f -> f.physicalColumn("revision").required(true).asNumeric(9, 0));
@@ -228,6 +230,10 @@ public final class QbProspects {
         eb.field("sentAt", f -> f.physicalColumn("sent_at").asTemporal(TemporalRole.EVENT_TIME));
         eb.field("discardedAt", f -> f.physicalColumn("discarded_at").asTemporal(TemporalRole.EVENT_TIME));
         eb.field("discardedBy", f -> f.physicalColumn("discarded_by").asText(128));
+        // Q48d: the sponsor the trial brought, and the one follow-up.
+        eb.field("convertedUserId", f -> f.physicalColumn("converted_user_id").asText(128));
+        eb.field("convertedAt", f -> f.physicalColumn("converted_at").asTemporal(TemporalRole.EVENT_TIME));
+        eb.field("followedUpAt", f -> f.physicalColumn("followed_up_at").asTemporal(TemporalRole.EVENT_TIME));
         eb.field("revision", f -> f.physicalColumn("revision").required(true).asNumeric(9, 0));
         eb.field("version", f -> f.physicalColumn("version").asVersion());
         eb.unique("uk_qb_prospect_domain", "owner", "domain");

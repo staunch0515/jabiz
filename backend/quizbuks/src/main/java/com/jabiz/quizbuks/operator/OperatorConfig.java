@@ -1,7 +1,14 @@
 package com.jabiz.quizbuks.operator;
 
 import com.jabiz.dataset.DatasetDefinition;
+import com.jabiz.approval.ApprovalSubject;
 import com.jabiz.dictionary.StaticDictionary;
+import com.jabiz.document.DocumentLayout;
+import com.jabiz.event.EventSubscription;
+import com.jabiz.job.JobDefinition;
+import com.jabiz.job.JobItems;
+import com.jabiz.quizbuks.wallet.TransferProcesses;
+import com.jabiz.runtime.approval.ApprovalProcesses;
 import com.jabiz.entity.EntityDefinition;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
@@ -17,7 +24,10 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
 
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -31,9 +41,18 @@ import java.util.stream.Collectors;
 public class OperatorConfig {
 
     private final String poolRef;
+    private final ZoneId zone;
 
-    OperatorConfig(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
+    OperatorConfig(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef,
+        @Value("${jabiz.fiscal-year-zone:UTC}") String zone) {
         this.poolRef = poolRef;
+        ZoneId zoneId;
+        try {
+            zoneId = ZoneId.of(zone);
+        } catch (RuntimeException e) {
+            zoneId = ZoneOffset.UTC;
+        }
+        this.zone = zoneId;
     }
 
     private DatasetDefinition defaultDataset(String entity) {
@@ -194,5 +213,95 @@ public class OperatorConfig {
     @Bean
     ProcessDefinition<BanProcesses.UnbanInput, BanProcesses.BanOutput, ProcessContext> qbOperatorSponsorUnban() {
         return BanProcesses.operatorUnban();
+    }
+
+    // ---- Q48b: the monthly settlements ---------------------------------------------------------------------------------
+
+    @Bean
+    EntityDefinition qbOperatorSettlementEntity() {
+        return OperatorSettlements.SETTLEMENT_ENTITY;
+    }
+
+    /** Finance reads them (and the operator through its own template); only the processes write them. */
+    @Bean
+    DatasetDefinition qbOperatorSettlementDataset() {
+        return DatasetDefinition.define(QbOperators.defaultDataset(OperatorSettlements.SETTLEMENT), d -> d
+            .targetEntityType(OperatorSettlements.SETTLEMENT)
+            .asDefault()
+            .permissions(QbPermissions.ADMIN_FINANCE_READ, QbPermissions.SPONSOR_VIEW_WRITE)
+            .policy(p -> p.processOnlyWrites())
+            .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
+    }
+
+    @Bean
+    StaticDictionary qbOperatorSettlementStatusDictionary() {
+        return StaticDictionary.define(OperatorSettlements.STATUS_DICTIONARY, d -> d
+            .item(OperatorSettlements.ISSUED, "en", "Issued", "zh", "已出具", "ja", "発行済み")
+            .item(OperatorSettlements.PAYING, "en", "Payment in approval", "zh", "付款审批中", "ja", "支払い承認待ち")
+            .item(OperatorSettlements.PAID, "en", "Paid", "zh", "已付款", "ja", "支払い済み"));
+    }
+
+    @Bean
+    DocumentLayout qbOperatorSettlementLayout() {
+        return OperatorSettlements.LAYOUT;
+    }
+
+    @Bean
+    ApprovalSubject qbOperatorSettlementApprovalSubject() {
+        return ApprovalSubject.define(OperatorSettlements.APPROVAL_SUBJECT, s -> s.entity(OperatorSettlements.SETTLEMENT)
+            .bool("operatorPayment").number("amount").text("operatorId"));
+    }
+
+    @Bean
+    ProcessDefinition<OperatorSettlements.RunInput, OperatorSettlements.SettlementOutput, ProcessContext>
+        qbOperatorSettlementRun() {
+        return OperatorSettlements.run(zone);
+    }
+
+    @Bean
+    ProcessDefinition<OperatorSettlements.PayInput, OperatorSettlements.SettlementOutput, ProcessContext>
+        qbOperatorSettlementPay() {
+        return OperatorSettlements.pay();
+    }
+
+    @Bean
+    ProcessDefinition<TransferProcesses.ApprovalResultInput, OperatorSettlements.SettlementOutput, ProcessContext>
+        qbOperatorSettlementApprovalResult() {
+        return OperatorSettlements.approvalResult();
+    }
+
+    @Bean
+    EventSubscription<TransferProcesses.ApprovalResultInput> qbOperatorSettlementApprovedSubscription(
+        ProcessDefinition<TransferProcesses.ApprovalResultInput, OperatorSettlements.SettlementOutput, ProcessContext>
+            qbOperatorSettlementApprovalResult) {
+        return EventSubscription.of("qb.operator-settlement-approved", ApprovalProcesses.APPROVED_EVENT,
+            qbOperatorSettlementApprovalResult, TransferProcesses::resultInput);
+    }
+
+    @Bean
+    EventSubscription<TransferProcesses.ApprovalResultInput> qbOperatorSettlementRejectedSubscription(
+        ProcessDefinition<TransferProcesses.ApprovalResultInput, OperatorSettlements.SettlementOutput, ProcessContext>
+            qbOperatorSettlementApprovalResult) {
+        return EventSubscription.of("qb.operator-settlement-rejected", ApprovalProcesses.REJECTED_EVENT,
+            qbOperatorSettlementApprovalResult, TransferProcesses::resultInput);
+    }
+
+    /**
+     * On the 1st of every month at 16:13 UTC (01:13 on the 2nd in Tokyo): each operator's previous month (Japan's) is
+     * settled, one operator a transaction; a missed run is made up by the next, which settles only its own month.
+     */
+    @Bean
+    JobDefinition<OperatorSettlements.RunInput> qbOperatorSettlementJob(
+        ProcessDefinition<OperatorSettlements.RunInput, OperatorSettlements.SettlementOutput, ProcessContext>
+            qbOperatorSettlementRun) {
+        return JobDefinition.forEach(OperatorSettlements.JOB, "0 13 16 1 * *", ZoneOffset.UTC,
+                JobItems.template(OperatorSettlements.DUE_TEMPLATE, scheduledTime -> {
+                    String month = OperatorSettlements.previousMonth(scheduledTime, zone);
+                    return Map.of("month", month, "periodEnd", OperatorSettlements.monthEnd(month, zone));
+                }, "operatorId"),
+                qbOperatorSettlementRun,
+                (scheduledTime, row) -> new OperatorSettlements.RunInput(String.valueOf(row.get("operatorId")),
+                    OperatorSettlements.previousMonth(scheduledTime, zone)))
+            .maxItems(1_000);
     }
 }

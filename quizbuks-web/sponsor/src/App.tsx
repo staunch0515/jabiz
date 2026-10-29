@@ -52,6 +52,8 @@ import { MAIL_SERVER_PATH } from './publishing/paths'
 import { publicationIdOf, PUBLICATIONS_PATH } from './publishing/paths'
 import { PreviewPage } from './preview/PreviewPage'
 import { previewOf } from './preview/paths'
+import { rememberSource } from './trial/claim'
+import TrialPage, { trialKeyOf } from './trial/TrialPage'
 import { OnboardingPage, useMySponsor } from './pages/OnboardingPage'
 import { MESSAGES_PATH } from './notices/api'
 import { MessagesPage } from './notices/MessagesPage'
@@ -83,6 +85,9 @@ const LINKED: readonly LegalKind[] = [...LEGAL.sponsorKinds, 'COMMERCE_NOTICE']
 function publicPage(path: string): ReactNode | null {
   const kind = legalKindOf(path)
   if (path === HELP) return <HelpPage audience="SPONSOR" />
+  // Q48c: the trial quiz a prospecting mail links to.
+  const trialKey = trialKeyOf(path)
+  if (trialKey) return <TrialPage key={trialKey} trialKey={trialKey} />
   if (kind) return <LegalPage key={kind} kind={kind} />
   return null
 }
@@ -305,6 +310,8 @@ function Routes() {
   // verification. Google, Facebook and LINE open an account at their first sign-in, so they are offered here too.
   // The sponsors' terms are accepted with the application (Q7b); signing up says where to read them.
   if (path === '/signup') {
+    // Q48d: a sign-up from a prospecting trial keeps its key until the sponsor applies.
+    rememberSource(search)
     return frame(<>
       <SignUpForm {...navigation} brand={brand} signInPath="/login" />
       <SignUpProviders returnTo="/" />

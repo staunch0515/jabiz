@@ -23,6 +23,7 @@ import com.jabiz.quizbuks.setup.QbParams;
 import com.jabiz.runtime.process.steps.LoadEntity;
 import com.jabiz.runtime.process.steps.LoadParams;
 import com.jabiz.runtime.process.steps.QueryEntities;
+import com.jabiz.quizbuks.operator.QbOperators;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -59,6 +60,7 @@ final class PublicationEditing {
     static final String BAN_ROWS = "banRows";
     static final String CARD = "card";
     static final String SPONSOR_PROFILE = "sponsorProfile";
+    static final String SPONSOR_OPERATOR = "sponsorOperator";
 
     /**
      * The family of the publication's lock {@code qb.pub:<publicationId>}: also the admission family of the processes
@@ -158,12 +160,19 @@ final class PublicationEditing {
      */
     static <I, O> void loadSponsorProfile(ProcessDefinitionBuilder<I, O, ProcessContext> pb,
         Function<ProcessContext, EntityInstance> publication) {
-        pb.step("Load the sponsor's profile", QueryEntities.<ProcessContext>of(
-            QbAccounts.defaultDataset(QbAccounts.PROFILE), ctx -> {
+        // Q48b: with the sponsor's operator, in the same statement, whose card keeps it.
+        pb.step("Load the sponsor's profile and operator", QueryEntities.<ProcessContext>all(
+            QueryEntities.query(QbAccounts.defaultDataset(QbAccounts.PROFILE), ctx -> {
                 EntityInstance found = publication.apply(ctx);
                 return EntityQuery.builder().where(new QueryPredicate.In("userId",
                     ids(found == null ? null : found.get("publisherId")))).limit(1).build();
-            }, SPONSOR_PROFILE));
+            }, SPONSOR_PROFILE),
+            QueryEntities.query(QbOperators.defaultDataset(QbOperators.ASSIGNMENT), ctx -> {
+                EntityInstance found = publication.apply(ctx);
+                return EntityQuery.builder().where(new QueryPredicate.In("userId",
+                    ids(found == null || !PublisherKind.SPONSOR.equals(found.get("publisherKind")) ? null
+                        : found.get("publisherId")))).limit(1).build();
+            }, SPONSOR_OPERATOR)));
     }
 
     /**
@@ -584,6 +593,8 @@ final class PublicationEditing {
         card.put("video", snapshot.materials().stream().filter(QuizSnapshot.Material::watchToAnswer).findFirst()
             .flatMap(material -> VideoEmbeds.player(material.url())).orElse(null));
         card.put("wentOnAt", ctx.opTime());
+        EntityInstance operator = first(ctx, SPONSOR_OPERATOR);
+        card.put("operatorId", operator == null ? null : operator.get("operatorId"));
         return card;
     }
 

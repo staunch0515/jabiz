@@ -1249,7 +1249,7 @@ public final class TransferProcesses {
     }
 
     /** The input of {@value #APPROVAL_RESULT} from an approval event. */
-    static ApprovalResultInput resultInput(DomainEvent event) {
+    public static ApprovalResultInput resultInput(DomainEvent event) {
         Map<String, Object> payload = event.payload();
         return new ApprovalResultInput(text(payload, "subject"), text(payload, "entityId"), text(payload, "status"),
             text(payload, "requestId"), text(payload, "preparerId"), text(payload, "contentHash"),

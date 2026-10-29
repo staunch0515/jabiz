@@ -22,6 +22,8 @@ import {
   Ticket,
   Users,
   Wallet,
+  Radar,
+  Receipt,
 } from 'lucide-react'
 import BankTopUpPage from './BankTopUpPage'
 import BankSettingsPage from './BankSettingsPage'
@@ -60,6 +62,10 @@ import OperatorPage from './OperatorPage'
 import OperatorReviewsPage from './OperatorReviewsPage'
 import OperatorsPage from './OperatorsPage'
 import OperatorSponsorsPage from './OperatorSponsorsPage'
+import ProspectPage from './ProspectPage'
+import ProspectSettingsPage from './ProspectSettingsPage'
+import ProspectsPage from './ProspectsPage'
+import SettlementsPage from './SettlementsPage'
 
 /**
  * QuizBuks's own pages in the platform's admin frontend (docs/quizbuks/02-design.md section 7.3,
@@ -109,6 +115,13 @@ export default defineExtension({
     { path: PATH.operatorReviews, element: <OperatorReviewsPage /> },
     { path: PATH.operatorHome, element: <OperatorHomePage /> },
     { path: PATH.operatorSponsors, element: <OperatorSponsorsPage /> },
+    // Q48c: AI prospecting, for an operator's members and headquarters alike (each reads its own templates).
+    { path: PATH.prospects, element: <ProspectsPage /> },
+    { path: PATH.prospectSettings, element: <ProspectSettingsPage /> },
+    { path: '/qb/prospects/:prospectId', element: <ProspectPage /> },
+    // Q48b: the operators' settlements, for finance and for the operator.
+    { path: PATH.settlements, element: <SettlementsPage /> },
+    { path: PATH.operatorSettlements, element: <SettlementsPage /> },
   ],
   menu: [
     // Q48a: the operator's own pages, first in its back office (only its members hold qb.operator.use).
@@ -120,6 +133,12 @@ export default defineExtension({
           permission: PERMISSION.operatorUse },
         { key: 'qb-operator-sponsors', label: 'menu.operatorSponsors', path: PATH.operatorSponsors, icon: Users,
           permission: PERMISSION.operatorUse },
+        // Q48c: the operator's own prospecting.
+        { key: 'qb-operator-prospects', label: 'menu.prospects', path: PATH.prospects, icon: Radar,
+          permission: PERMISSION.operatorUse },
+        // Q48b: the operator's own settlements.
+        { key: 'qb-operator-settlements', label: 'menu.operatorSettlements', path: PATH.operatorSettlements,
+          icon: Receipt, permission: PERMISSION.operatorUse },
       ],
     },
     {
@@ -160,6 +179,9 @@ export default defineExtension({
           permission: PERMISSION.operatorsRead },
         { key: 'qb-operator-reviews', label: 'menu.operatorReviews', path: PATH.operatorReviews, icon: ClipboardCheck,
           permission: PERMISSION.spotCheck },
+        // Q48c: headquarters' own prospecting, and every owner's.
+        { key: 'qb-prospects', label: 'menu.prospects', path: PATH.prospects, icon: Radar,
+          permission: PERMISSION.adminProspect },
       ],
     },
     {
@@ -191,6 +213,9 @@ export default defineExtension({
         { key: 'qb-investor-metrics', label: 'menu.investorMetrics', path: PATH.investorMetrics, icon: TrendingUp,
           permission: PERMISSION.financeRead },
         { key: 'qb-journal', label: 'menu.journal', path: PATH.journal, icon: BookOpenCheck,
+          permission: PERMISSION.financeRead },
+        // Q48b: what is owed to the operators, and its payments.
+        { key: 'qb-settlements', label: 'menu.settlements', path: PATH.settlements, icon: Receipt,
           permission: PERMISSION.financeRead },
       ],
     },

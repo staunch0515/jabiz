@@ -52,7 +52,7 @@ public final class BankTransfers {
     }
 
     /** A day not after today in Japan, or a problem on {@code field}. */
-    static Violation futureProblem(String field, LocalDate day, Instant now) {
+    public static Violation futureProblem(String field, LocalDate day, Instant now) {
         return day.isAfter(today(now)) ? new Violation(field, WalletCodes.TOPUP_BANK_DATE_FUTURE,
             "The day is in the future", Map.of()) : null;
     }

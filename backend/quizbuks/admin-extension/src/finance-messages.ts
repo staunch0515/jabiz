@@ -31,6 +31,8 @@ export const financeMessages = {
       TRANSFER_REVERSED: 'Transfers reversed by Stripe',
       PAYOUT: 'Payouts to the bank',
       PAYOUT_FAILED: 'Payouts failed (reversed)',
+      OPERATOR_SHARE: 'Operators’ shares settled',
+      OPERATOR_PAID: 'Operators’ shares paid',
       OTHER: 'Other postings',
     },
     overview: {
@@ -330,6 +332,8 @@ export const financeMessages = {
       TRANSFER_REVERSED: 'Stripe 撤回转账',
       PAYOUT: '打款到银行',
       PAYOUT_FAILED: '打款失败（冲正）',
+      OPERATOR_SHARE: '运营商分成（结算）',
+      OPERATOR_PAID: '运营商分成（付款）',
       OTHER: '其他分录',
     },
     overview: {
@@ -629,6 +633,8 @@ export const financeMessages = {
       TRANSFER_REVERSED: 'Stripe による送金の取消',
       PAYOUT: '銀行への入金',
       PAYOUT_FAILED: '銀行への入金の失敗（取消）',
+      OPERATOR_SHARE: '運営パートナーへの分配（精算）',
+      OPERATOR_PAID: '運営パートナーへの分配（支払い）',
       OTHER: 'その他の仕訳',
     },
     overview: {

@@ -23,6 +23,14 @@ public final class ProspectMails {
         .category(MailCategory.NOTIFICATION).entries("sponsor")
         .param("subject", "mailBody", "trialKey", "company", "senderName", "senderAddress", "senderContact"));
 
+    /**
+     * The one follow-up (Q48d): the template's own text in the site's language, a reminder of the trial with its link
+     * and the sender; no text of Claude's or a person's.
+     */
+    public static final MailTemplate FOLLOW_UP = MailTemplate.define("qb.prospect.follow-up", t -> t
+        .category(MailCategory.NOTIFICATION).entries("sponsor")
+        .param("trialKey", "company", "senderName", "senderAddress", "senderContact"));
+
     /** The languages the mail's own texts are written in; another site's language gets English. */
     static Locale language(Object language) {
         String code = language == null ? "" : language.toString().toLowerCase(Locale.ROOT);
@@ -32,7 +40,16 @@ public final class ProspectMails {
         };
     }
 
-    static Map<String, Function<ProcessContext, ?>> params(Function<ProcessContext, EntityInstance> prospect,
+    /** The values a template declares, of a prospect and its owner's settings. */
+    static Map<String, Function<ProcessContext, ?>> params(MailTemplate template,
+        Function<ProcessContext, EntityInstance> prospect, Function<ProcessContext, EntityInstance> setting) {
+        Map<String, Function<ProcessContext, ?>> all = params(prospect, setting);
+        Map<String, Function<ProcessContext, ?>> declared = new LinkedHashMap<>();
+        template.params().forEach(name -> declared.put(name, all.get(name)));
+        return declared;
+    }
+
+    private static Map<String, Function<ProcessContext, ?>> params(Function<ProcessContext, EntityInstance> prospect,
         Function<ProcessContext, EntityInstance> setting) {
         Map<String, Function<ProcessContext, ?>> params = new LinkedHashMap<>();
         params.put("subject", ctx -> prospect.apply(ctx).get("mailSubject"));

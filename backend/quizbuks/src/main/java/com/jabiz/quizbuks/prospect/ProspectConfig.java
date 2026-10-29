@@ -154,6 +154,40 @@ public class ProspectConfig {
         return ProspectMails.PROSPECT;
     }
 
+    @Bean
+    MailTemplate qbProspectFollowUpMail() {
+        return ProspectMails.FOLLOW_UP;
+    }
+
+    @Bean
+    ProcessDefinition<ProspectProcesses.ProspectRef, ProspectProcesses.ItemOutput, ProcessContext>
+        qbProspectFollowUp() {
+        return ProspectProcesses.followUp(zone);
+    }
+
+    @Bean
+    ProcessDefinition<ProspectProcesses.ClaimInput, ProspectProcesses.ClaimOutput, ProcessContext> qbProspectClaim() {
+        return ProspectProcesses.claim();
+    }
+
+    /**
+     * Every hour at :37: the one follow-up of each mail sent {@value ProspectProcesses#FOLLOW_UP_DAYS} days ago that
+     * brought no sponsor (the item decides on the hours and the day's cap, as for the first mail).
+     */
+    @Bean
+    JobDefinition<ProspectProcesses.ProspectRef> qbProspectFollowUpJobDefinition(
+        ProcessDefinition<ProspectProcesses.ProspectRef, ProspectProcesses.ItemOutput, ProcessContext>
+            qbProspectFollowUp) {
+        return JobDefinition.forEach(ProspectProcesses.FOLLOW_UP_JOB, "0 37 * * * *", ZoneOffset.UTC,
+                JobItems.template(ProspectProcesses.FOLLOW_UP_DUE_TEMPLATE, scheduledTime -> Map.of(
+                    "sentBefore", scheduledTime.minus(java.time.Duration.ofDays(ProspectProcesses.FOLLOW_UP_DAYS))),
+                    "prospectId"),
+                qbProspectFollowUp,
+                (scheduledTime, row) -> new ProspectProcesses.ProspectRef(
+                    UUID.fromString(String.valueOf(row.get("prospectId")))))
+            .maxItems(500);
+    }
+
     /** @param maxConcurrency jobs running at a time across instances, per type ({@code quizbuks.prospect.max-concurrency}) */
     @Bean
     ExternalJobType<ProspectJobs.FindInput, ProspectJobs.FindResult> qbProspectFindJob(
@@ -269,11 +303,12 @@ public class ProspectConfig {
      */
     @Bean
     JobDefinition<ProspectProcesses.DirectionRef> qbProspectFindJobDefinition(
-        ProcessDefinition<ProspectProcesses.DirectionRef, ProspectProcesses.ItemOutput, ProcessContext> start) {
+        ProcessDefinition<ProspectProcesses.DirectionRef, ProspectProcesses.ItemOutput, ProcessContext>
+            qbProspectFindStart) {
         return JobDefinition.forEach(ProspectProcesses.FIND_JOB, "0 17 23 * * *", ZoneOffset.UTC,
                 JobItems.template(ProspectProcesses.FIND_DUE_TEMPLATE, scheduledTime -> Map.of(
                     "dayStart", ProspectProcesses.dayStart(scheduledTime, zone)), "directionId"),
-                start,
+                qbProspectFindStart,
                 (scheduledTime, row) -> new ProspectProcesses.DirectionRef(
                     UUID.fromString(String.valueOf(row.get("directionId")))))
             .maxItems(1_000);
@@ -285,11 +320,12 @@ public class ProspectConfig {
      */
     @Bean
     JobDefinition<ProspectProcesses.ProspectRef> qbProspectResearchJobDefinition(
-        ProcessDefinition<ProspectProcesses.ProspectRef, ProspectProcesses.ItemOutput, ProcessContext> start) {
+        ProcessDefinition<ProspectProcesses.ProspectRef, ProspectProcesses.ItemOutput, ProcessContext>
+            qbProspectResearchStart) {
         return JobDefinition.forEach(ProspectProcesses.RESEARCH_JOB, "0 23 * * * *", ZoneOffset.UTC,
                 JobItems.template(ProspectProcesses.RESEARCH_DUE_TEMPLATE, scheduledTime -> Map.of(
                     "dayStart", ProspectProcesses.dayStart(scheduledTime, zone)), "prospectId"),
-                start,
+                qbProspectResearchStart,
                 (scheduledTime, row) -> new ProspectProcesses.ProspectRef(
                     UUID.fromString(String.valueOf(row.get("prospectId")))))
             .maxItems(500);
@@ -301,11 +337,12 @@ public class ProspectConfig {
      */
     @Bean
     JobDefinition<ProspectProcesses.ProspectRef> qbProspectSendJobDefinition(
-        ProcessDefinition<ProspectProcesses.ProspectRef, ProspectProcesses.ItemOutput, ProcessContext> send) {
+        ProcessDefinition<ProspectProcesses.ProspectRef, ProspectProcesses.ItemOutput, ProcessContext>
+            qbProspectSend) {
         return JobDefinition.forEach(ProspectProcesses.SEND_JOB, "0 7/10 * * * *", ZoneOffset.UTC,
                 JobItems.template(ProspectProcesses.SEND_DUE_TEMPLATE, scheduledTime -> Map.of(
                     "dayStart", ProspectProcesses.dayStart(scheduledTime, zone)), "prospectId"),
-                send,
+                qbProspectSend,
                 (scheduledTime, row) -> new ProspectProcesses.ProspectRef(
                     UUID.fromString(String.valueOf(row.get("prospectId")))))
             .maxItems(500);

@@ -140,6 +140,8 @@ export interface ProspectSetting {
   senderName: string
   senderAddress: string
   senderContact: string
+  /** Q48d: drafts scoring at least this are approved without a person; null: never. */
+  autoApproveScore: number | null
   revision: number | null
   serverHost: string | null
   serverPort: number | null
@@ -167,6 +169,7 @@ export async function readSetting(scope: Scope): Promise<ProspectSetting | null>
     senderName: String(row.senderName ?? ''),
     senderAddress: String(row.senderAddress ?? ''),
     senderContact: String(row.senderContact ?? ''),
+    autoApproveScore: row.autoApproveScore == null ? null : num(row.autoApproveScore),
     revision: row.revision == null ? null : num(row.revision),
     serverHost: str(row.serverHost),
     serverPort: row.serverPort == null ? null : num(row.serverPort),
@@ -212,6 +215,30 @@ export async function readDirections(scope: Scope): Promise<Direction[]> {
   }))
 }
 
+/** Q48d: a direction's funnel, from businesses found to the sponsors they brought. */
+export interface FunnelRow {
+  directionId: string
+  name: string
+  found: number
+  researched: number
+  drafted: number
+  sent: number
+  followedUp: number
+  signedUp: number
+  approved: number
+}
+
+export async function readFunnel(scope: Scope): Promise<FunnelRow[]> {
+  const page = await runQuery<Row>(scope.admin ? TEMPLATE.adminProspectFunnel : TEMPLATE.operatorProspectFunnel, {
+    params: params(scope), limit: 50,
+  })
+  return page.items.map((row) => ({
+    directionId: String(row.directionId), name: String(row.name ?? ''), found: num(row.found),
+    researched: num(row.researched), drafted: num(row.drafted), sent: num(row.sent), followedUp: num(row.followedUp),
+    signedUp: num(row.signedUp), approved: num(row.approved),
+  }))
+}
+
 /** What prospecting cost by month, the newest first. */
 export interface Usage {
   month: string
@@ -246,6 +273,7 @@ export interface SettingsInput {
   senderName: string
   senderAddress: string
   senderContact: string
+  autoApproveScore: number | null
   baseRevision: number | null
 }
 

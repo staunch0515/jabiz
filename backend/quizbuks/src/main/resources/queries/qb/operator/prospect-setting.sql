@@ -15,6 +15,7 @@ results:
   senderName:     { from: QbProspectSetting.senderName }
   senderAddress:  { from: QbProspectSetting.senderAddress }
   senderContact:  { from: QbProspectSetting.senderContact }
+  autoApproveScore: { from: QbProspectSetting.autoApproveScore }
   updatedAt:      { from: QbProspectSetting.updatedAt }
   revision:       { from: QbProspectSetting.revision }
   serverHost:     { from: QbSponsorMailServer.host }
@@ -36,6 +37,7 @@ SELECT
     s.{{QbProspectSetting.minScore}} AS minScore, s.{{QbProspectSetting.monthlyCostCap}} AS monthlyCostCap,
     s.{{QbProspectSetting.senderName}} AS senderName, s.{{QbProspectSetting.senderAddress}} AS senderAddress,
     s.{{QbProspectSetting.senderContact}} AS senderContact, s.{{QbProspectSetting.updatedAt}} AS updatedAt,
+    s.{{QbProspectSetting.autoApproveScore}} AS autoApproveScore,
     s.{{QbProspectSetting.revision}} AS revision,
     m.{{QbSponsorMailServer.host}} AS serverHost, m.{{QbSponsorMailServer.port}} AS serverPort,
     m.{{QbSponsorMailServer.tls}} AS serverTls, m.{{QbSponsorMailServer.username}} AS serverUsername,

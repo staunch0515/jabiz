@@ -186,8 +186,10 @@ docs/quizbuks/               本文件等
 | 4110 | 平台服务收入（抽成） | 收入 | — |
 | 5110 | 支付手续费（Stripe） | 费用 | — |
 | 5120 | 推广费用（赠送的 Kudos，Q18b） | 费用 | — |
+| 2140 | 应付运营商分成（Q48b） | 负债 | — |
+| 5130 | 运营商分成（Q48b） | 费用 | — |
 
-维度"当事人"（`LedgerDimension` 位置 1，取值为用户编号）与"发布"（位置 2，`QbPublication.publicationId`，Q5：商家花费与汇总凭证按发布从账本汇总）。每笔分录带来源（`sourceEntity` / `sourceId`）：充值、答题会话、转账。
+维度"当事人"（`LedgerDimension` 位置 1，取值为用户编号）与"发布"（位置 2，`QbPublication.publicationId`，Q5：商家花费与汇总凭证按发布从账本汇总）。运营商不另设维度（Q48b）：发布的卡片在上线时冻结商家当时的运营商（`QbPublicationCard.operatorId`），月结算按发布维度把 4110 归给运营商，答题路径因此不多读一条。每笔分录带来源（`sourceEntity` / `sourceId`）：充值、答题会话、转账。
 
 ### 4.2 分录
 
@@ -200,6 +202,8 @@ docs/quizbuks/               本文件等
 | Stripe 手续费确定（作业读取余额流水） | `QB_TOPUP_FEE_RECORD` | 5110 支付手续费 | 1110 Stripe 余额（为 0 时不过账） |
 | 退款 / 争议败诉（Stripe 后台发生；扣回可用余额以内的部分，余下为差额待办） | `QB_TOPUP_REFUNDED` / `QB_TOPUP_DISPUTE_CLOSED` | 2110 商家预收款（商家） | 1110 Stripe 余额 |
 | 答题奖励结算 | `QB_ATTEMPT_SUBMIT` / `QB_ATTEMPT_EXPIRE` / `QB_PENDING_PAY` | 2110 商家预收款（商家，发布）：奖励 | 2120 应付用户奖励（用户，发布）：奖励 − 抽成；4110（发布）：抽成（当前 0，为 0 时不出该行） |
+| 运营商月结算（Q48b，日本时间的自然月；抽成 × (1 − 平台分成)，取整到日元） | `QB_OPERATOR_SETTLEMENT_RUN`（逐项任务 `qb.operator-settlement`） | 5130 运营商分成 | 2140 应付运营商分成 |
+| 运营商分成付款获批（财务登记、另一位管理员批准） | `QB_OPERATOR_SETTLEMENT_APPROVAL_RESULT` | 2140 应付运营商分成 | 1120 银行存款 |
 | 转账发出（Q6b） | `QB_TRANSFER_CREATE` / `QB_TRANSFER_APPROVAL_RESULT` | 2120 应付用户奖励（用户）：金额 | 2130 转账中（用户）：实付；4110：手续费（为 0 时不出该行） |
 | 转账成功（作业结果或核实） | `QB_TRANSFER_SENT` / `QB_TRANSFER_CHECKED` | 2130 转账中（用户） | 1110 Stripe 余额 |
 | 转账确定失败（Stripe 拒绝创建，或核实确定没有） | `QB_TRANSFER_SEND_FAILED` / `QB_TRANSFER_CHECKED` | `LEDGER_REVERSE` 发出交易（2130 与 4110 回到 2120） | |
