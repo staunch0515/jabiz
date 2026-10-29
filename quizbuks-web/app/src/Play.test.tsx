@@ -4,6 +4,7 @@ import { act, cleanup, render, screen, waitFor, within } from '@testing-library/
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
+import { forgetRedeem, pendingRedeem, rememberRedeem, RESUME_FOR_MS } from './redeemReturn'
 import { placeholderIndex } from './qb/Illustrations'
 import './messages'
 import { activeFilterCount, containsPattern, feedFilters, GREETING_MS, NO_FILTERS } from './pages/FeedPage'
@@ -186,6 +187,7 @@ beforeEach(() => {
   session.clear()
   session.store('access', 'refresh')
   forgetAttempts()
+  forgetRedeem()
   window.history.replaceState(null, '', '/')
 })
 afterEach(() => vi.restoreAllMocks())
@@ -419,6 +421,39 @@ describe('collecting a prize by the sponsor\'s code (Q22b)', () => {
     window.history.replaceState(null, '', '/redeem/old-key')
     render(<App />)
     expect(await screen.findByText('This code does not work any more')).toBeInTheDocument()
+  })
+
+  it('collects at once by the rotating code a prize whose printed code\'s claim still waits', async () => {
+    const { posted } = server({ redemptions: [prizeRow],
+      redeemCheck: () => json(200, { output: { sponsorCompany: 'Capitals Inc', kind: 'ROTATING', prizes: [{
+        redemptionId: 'r1', attemptId: ATTEMPT, code: 'C-ABCD1234', amount: 100, description: 'A coffee at our counter',
+        publicationName: 'Capitals week', status: 'CLAIMED', expiresAt: '2026-11-20T00:00:00Z' }] } }) })
+    window.history.replaceState(null, '', '/redeem/rot-key-2')
+    render(<App />)
+    const prize = await screen.findByTestId('redeem-prize')
+    expect(prize).toHaveAttribute('data-status', 'CLAIMED')
+    expect(within(prize).queryByTestId('redeem-claimed')).toBeNull()
+    await userEvent.click(within(prize).getByTestId('redeem-collect'))
+    await waitFor(() => expect(posted('QB_REDEMPTION_CLAIM')).toEqual([{ scannedKey: 'rot-key-2', redemptionId: 'r1' }]))
+    expect(await screen.findByTestId('redeem-done')).toHaveAttribute('data-status', 'REDEEMED')
+  })
+
+  it('goes back to a code scanned before signing in when signing in ended elsewhere, for a few minutes', async () => {
+    server({ redemptions: [prizeRow] })
+    rememberRedeem('rot-key-3')
+    window.history.replaceState(null, '', '/')
+    render(<App />)
+    expect(await screen.findByTestId('redeem-page')).toBeInTheDocument()
+    expect(window.location.pathname).toBe('/redeem/rot-key-3')
+    // Reached: not again.
+    expect(pendingRedeem()).toBeNull()
+    cleanup()
+    server({ redemptions: [prizeRow] })
+    rememberRedeem('rot-key-4', Date.now() - RESUME_FOR_MS - 1)
+    window.history.replaceState(null, '', '/')
+    render(<App />)
+    expect(await screen.findByTestId('home-redeem')).toBeInTheDocument()
+    expect(window.location.pathname).toBe('/')
   })
 
   it('lists the prizes waiting on the home, and shows a claim waiting for the sponsor on the result', async () => {

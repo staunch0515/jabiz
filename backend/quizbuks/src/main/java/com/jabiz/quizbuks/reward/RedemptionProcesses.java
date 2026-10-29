@@ -42,8 +42,9 @@ import java.util.UUID;
  *   <li>{@code QB_REDEEM_TOKEN_CHECK} (taker): what the scanned code stands for: the sponsor's company and the
  *       caller's prizes to collect there;</li>
  *   <li>{@code QB_REDEMPTION_CLAIM} (taker): collects one of them. A rotating code is shown by the sponsor to the
- *       taker in person, so the prize is redeemed at once; a printed code could be scanned anywhere, so the claim
- *       waits for the sponsor ({@code CLAIMED}, {@link QbRewards#PRINTED_CLAIM_LIFE});</li>
+ *       taker in person, so the prize is redeemed at once, a claim made by the printed code and still waiting
+ *       included; a printed code could be scanned anywhere, so the claim waits for the sponsor ({@code CLAIMED},
+ *       {@link QbRewards#PRINTED_CLAIM_LIFE});</li>
  *   <li>{@code QB_REDEMPTION_CONFIRM} / {@code QB_REDEMPTION_DECLINE} (sponsor): the claim is the person at the
  *       counter, or is not (due again);</li>
  *   <li>{@code QB_REDEMPTION_VOID} (administrator): a prize that should not stand;</li>
@@ -364,7 +365,11 @@ public final class RedemptionProcesses {
                 "The code is the caller's own: someone else hands this prize over", Map.of()));
             return;
         }
-        if (!in(ctx, effectiveStatus(redemption, ctx.opTime()), RedemptionStatus.DUE)) {
+        // A rotating code proves the taker is at the counter: it also hands over a prize whose printed-code claim
+        // still waits for the sponsor (the taker need not wait for its confirmation or its lapse).
+        String status = effectiveStatus(redemption, ctx.opTime());
+        if (rotating ? !in(ctx, status, RedemptionStatus.DUE, RedemptionStatus.CLAIMED)
+            : !in(ctx, status, RedemptionStatus.DUE)) {
             return;
         }
         Map<String, Object> values = new LinkedHashMap<>();

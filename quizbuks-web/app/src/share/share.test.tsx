@@ -5,6 +5,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import App from '../App'
 import '../messages'
 import { nameFromEmail } from '../pages/ProfileForm'
+import { forgetRedeem, pendingRedeem } from '../redeemReturn'
 import { forgetShareNext, rememberShareNext, shareNext } from './share'
 
 function json(status: number, body: unknown) {
@@ -202,5 +203,17 @@ describe('the share helpers', () => {
     expect(nameFromEmail('Mei.T@example.com')).toBe('Mei.T')
     expect(nameFromEmail(null)).toBe('')
     expect(nameFromEmail(`${'a'.repeat(150)}@x`)).toHaveLength(100)
+  })
+})
+
+describe('a sponsor\'s redeem code scanned before signing in (Q22b)', () => {
+  it('asks to sign in and back, and keeps the code on the device for a sign-in that ends in another tab', async () => {
+    server({})
+    window.history.replaceState(null, '', '/redeem/rot-key-9')
+    render(<App />)
+    await waitFor(() => expect(window.location.pathname).toBe('/login'))
+    expect(window.location.search).toBe('?next=%2Fredeem%2Frot-key-9')
+    expect(pendingRedeem()).toBe('rot-key-9')
+    forgetRedeem()
   })
 })

@@ -244,6 +244,23 @@ class RedemptionIT extends PlayItSupport {
         // The right code does.
         assertThat(run(RedemptionProcesses.CLAIM, renLater, body("scannedKey", renewed, "redemptionId", renPrize)))
             .containsEntry("status", "CLAIMED");
+        // Waiting for the sponsor, the claim is not made twice by the printed code; the rotating code on the
+        // sponsor's screen shows Ren is at the counter and hands the prize over at once.
+        assertThat(codes(refused(RedemptionProcesses.CLAIM, renLater, body("scannedKey", renewed, "redemptionId",
+            renPrize), 422))).containsExactly(RewardCodes.REDEMPTION_STATE);
+        String rotating = issue(sponsorLater, "ROTATING", false);
+        assertThat(((List<Map<String, Object>>) run(RedemptionProcesses.CHECK, renLater, body("scannedKey", rotating))
+            .get("prizes")).getFirst()).containsEntry("status", "CLAIMED");
+        assertThat(run(RedemptionProcesses.CLAIM, renLater, body("scannedKey", rotating, "redemptionId", renPrize)))
+            .containsEntry("status", "REDEEMED");
+        assertThat(redemption(ren.attemptId())).containsEntry("status", "REDEEMED")
+            .containsEntry("claim_kind", "ROTATING").containsEntry("redeemed_by", sponsor)
+            .containsEntry("confirm_by", null);
+        // The claim it replaced is no longer the sponsor's to answer.
+        assertThat(codes(refused(RedemptionProcesses.CONFIRM, sponsorLater, body("redemptionId", renPrize), 422)))
+            .containsExactly(RewardCodes.REDEMPTION_STATE);
+        deliverEvents();
+        assertThat(InboxItSupport.kindsOf(ren.userId())).contains("REDEEM_REDEEMED");
     }
 
     @Test
