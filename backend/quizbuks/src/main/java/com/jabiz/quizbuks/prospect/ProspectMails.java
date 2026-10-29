@@ -20,7 +20,7 @@ import java.util.function.Function;
 public final class ProspectMails {
 
     public static final MailTemplate PROSPECT = MailTemplate.define("qb.prospect", t -> t
-        .category(MailCategory.NOTIFICATION).entries("sponsor")
+        .category(MailCategory.NOTIFICATION).addressesOnly().entries("sponsor")
         .param("subject", "mailBody", "trialKey", "company", "senderName", "senderAddress", "senderContact"));
 
     /**
@@ -28,7 +28,7 @@ public final class ProspectMails {
      * and the sender; no text of Claude's or a person's.
      */
     public static final MailTemplate FOLLOW_UP = MailTemplate.define("qb.prospect.follow-up", t -> t
-        .category(MailCategory.NOTIFICATION).entries("sponsor")
+        .category(MailCategory.NOTIFICATION).addressesOnly().entries("sponsor")
         .param("trialKey", "company", "senderName", "senderAddress", "senderContact"));
 
     /** The languages the mail's own texts are written in; another site's language gets English. */
