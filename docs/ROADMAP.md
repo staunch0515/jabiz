@@ -4714,3 +4714,16 @@ Playwright 端到端（需维护连接与数据库角色，以 Vitest 与 `Accou
 **不做**：批量邀请；邀请的撤回（新的邀请、停用账号或改地址都令旧链接失效）。
 
 **17o 状态**：✅ 已实施。
+
+### 17q 维护连接的 URL 格式错误时给出一行启动错误（已确认 2026-10-29）
+
+**缘由**：需求方 2026-10-29：QuizBuks staging 的 `JABIZ_ERASURE_DATASOURCE_URL` 写成了 Flyway 用的 JDBC 格式，新版本启动时在建立维护连接处抛出一大段堆栈、部署回滚。
+需求方确认：平台给出一行明确的启动错误，应用的运维文档补上这三个变量。
+
+| # | 内容 |
+|---|---|
+| 17q-1 | `MaintenanceStorage.urlProblem`：只接受 `r2dbc:` 开头的 URL，指出给的是 JDBC 还是别的（只说格式，不重复 URL，可能带凭据） |
+| 17q-2 | 格式不对时 `erasureMaintenanceStorage` 不建立连接（清除照旧 422 `ERASURE_PURGE_UNAVAILABLE`），启动检查 `AccountDeletionChecks` 报 `ERASURE \| jabiz.erasure.datasource.url`，与其他问题一次报告；设计 10 §17.2 一句 |
+| 17q-3 | 测试：`MaintenanceStorageTest`、`AccountDeletionIT` 的启动检查用例 |
+
+**17q 状态**：📝 待评审。

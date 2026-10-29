@@ -6,6 +6,7 @@ import com.jabiz.runtime.check.PlatformCheck;
 import com.jabiz.runtime.dataset.DatasetRegistry;
 import com.jabiz.runtime.entity.EntityDefinitionRegistry;
 import com.jabiz.runtime.security.SignInEntries;
+import com.jabiz.runtime.storage.MaintenanceStorage;
 import com.jabiz.security.erasure.ErasureLoad;
 import com.jabiz.security.erasure.PersonalDataEraser;
 import org.springframework.core.env.Environment;
@@ -24,6 +25,8 @@ import java.util.Optional;
  *   <li>an entry lets its users ask for the deletion of their account, but no maintenance connection
  *       ({@code jabiz.erasure.datasource.url}) is configured: the accounts would be erased and their personal data never
  *       purged. An error, a warning under the dev profile;</li>
+ *   <li>the maintenance connection's URL is not an R2DBC one (a JDBC URL, typically): every purge would fail. An
+ *       error, whatever the entries;</li>
  *   <li>an eraser's {@link PersonalDataEraser#loads()} read a dataset that does not exist or a field its entity does not
  *       have, or use a load name twice with different meanings: the notices could never be read, and every request
  *       would fail.</li>
@@ -61,6 +64,12 @@ public class AccountDeletionChecks implements PlatformCheck {
                     : CheckProblem.error(ErasureChecks.CATEGORY, location, message + " (set it, or run with the dev"
                         + " profile)"));
             }
+        }
+        String urlProblem = url.isBlank() ? null : MaintenanceStorage.urlProblem(url);
+        if (urlProblem != null) {
+            // Whether or not an entry deletes accounts: a purge on this connection would fail every time.
+            problems.add(CheckProblem.error(ErasureChecks.CATEGORY, "jabiz.erasure.datasource.url",
+                "the maintenance connection (JABIZ_ERASURE_DATASOURCE_URL) " + urlProblem));
         }
         Map<String, ErasureLoad> seen = new LinkedHashMap<>();
         for (PersonalDataEraser eraser : erasers.all()) {

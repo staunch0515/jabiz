@@ -28,7 +28,24 @@ public final class MaintenanceStorage {
     private final StorageEngine engine;
 
     /**
-     * @param url      R2DBC URL of the application's database and schema (as {@code spring.r2dbc.url})
+     * What is wrong with a maintenance connection's URL, or null when nothing is: it is an R2DBC URL
+     * ({@code r2dbc:postgresql://host:port/database}, as {@code spring.r2dbc.url}), not the JDBC one Flyway takes. Only
+     * the scheme is named, never the URL, which may carry credentials.
+     */
+    public static String urlProblem(String url) {
+        String value = url == null ? "" : url.strip();
+        if (value.startsWith("r2dbc:")) {
+            return null;
+        }
+        String given = value.startsWith("jdbc:") ? "a JDBC URL (jdbc:…)" : value.isEmpty() ? "empty"
+            : "not an R2DBC URL";
+        return "must be an R2DBC URL like r2dbc:postgresql://host:5432/database (as spring.r2dbc.url,"
+            + " SPRING_R2DBC_URL), but is " + given;
+    }
+
+    /**
+     * @param url      R2DBC URL of the application's database and schema (as {@code spring.r2dbc.url}); see
+     *                 {@link #urlProblem}
      * @param username the maintenance login
      * @param password its password
      */
