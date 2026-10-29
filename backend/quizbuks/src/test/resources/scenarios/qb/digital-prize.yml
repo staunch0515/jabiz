@@ -397,7 +397,7 @@ steps:
   - actor: { id: "${u3}", permissions: [qb.play, qb.me] }
     process: QB_ATTEMPT_SUBMIT@latest
     input: { attemptId: "${t3}", publicationId: "${pool}",
-      answers: [{ questionNo: 1, selected: [1] }, { questionNo: 2, selected: [1] }] }
+      answers: [{ questionNo: 1, selected: [1] }, { questionNo: 2, selected: [2] }] }
     expectOutput: { rewardStatus: DIGITAL }
   - deliverEvents: true
   - actor: { id: "${u2}", permissions: [qb.play, qb.me] }
