@@ -301,6 +301,19 @@ class InvitationIT extends SignUpItSupport {
         assertThat(userOf(email)).containsEntry("email", email).containsEntry("verified_email", email);
     }
 
+    /** The row action on a user is found by its name in the interface's language, not as SEC_USER_INVITE. */
+    @Test
+    void theInvitationHasANameInEachLanguage() {
+        for (Map.Entry<String, String> language : Map.of("zh", "发送邀请", "ja", "招待を送る", "en", "Send an invitation")
+            .entrySet()) {
+            java.util.List<Map<String, Object>> processes = client.get().uri("/api/meta/processes")
+                .header("Authorization", admin()).header("Accept-Language", language.getKey()).exchange()
+                .expectStatus().isOk().expectBody(LIST).returnResult().getResponseBody();
+            assertThat(processes).filteredOn(p -> "SEC_USER_INVITE".equals(p.get("name"))).singleElement()
+                .satisfies(p -> assertThat(p).containsEntry("label", language.getValue()));
+        }
+    }
+
     @Test
     void inviteNeedsThePermissionToCreateUsers() {
         String user = createUserWithEmail(unique("perm"), address("perm"), null);
