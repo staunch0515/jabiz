@@ -58,6 +58,9 @@ describe('LinkedIdentities', () => {
     expect(start).toHaveBeenNthCalledWith(1, 'corp', { currentPassword: undefined }, '/account')
     const dialog = await screen.findByRole('dialog')
     expect(dialog).toHaveTextContent('Enter your current password to link Corporate')
+    // The password can be shown (phase 17p).
+    await user().click(within(dialog).getByRole('button', { name: 'Show typed characters' }))
+    expect(within(dialog).getByLabelText('Current password')).toHaveAttribute('type', 'text')
     await expectAccessible()
     await user().type(within(dialog).getByLabelText('Current password'), 'wrong{Enter}')
     expect(await screen.findByTestId('link-password-error')).toHaveTextContent('PASSWORD_INCORRECT message')

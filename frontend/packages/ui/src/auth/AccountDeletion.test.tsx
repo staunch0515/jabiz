@@ -112,6 +112,9 @@ describe('AccountDeletion', () => {
       await user().click(within(dialog).getByTestId('account-deletion-confirm'))
       expect(request).toHaveBeenNthCalledWith(1, { currentPassword: undefined, acknowledgedNotices: ['orders', 'points'] })
       expect(await within(dialog).findByTestId('account-deletion-password-hint')).toHaveTextContent('current password')
+      // The password can be shown (phase 17p).
+      await user().click(within(dialog).getByRole('button', { name: 'Show typed characters' }))
+      expect(within(dialog).getByLabelText('Current password')).toHaveAttribute('type', 'text')
       await expectAccessible()
 
       await user().type(within(dialog).getByLabelText('Current password'), 'wrong{Enter}')
