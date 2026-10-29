@@ -1,4 +1,5 @@
 import { test as base, expect, type APIRequestContext, type Locator, type Page } from '@playwright/test'
+import { animationsSettled } from '@jabiz/ui/testing/playwright'
 
 /**
  * Playwright's test, failing any test during which the page reported a Content-Security-Policy violation: the server
@@ -143,9 +144,13 @@ export function rangeEnd(scope: Page | Locator, label: string, end: 'from' | 'to
  * menu, which is rendered apart from the row.
  */
 export async function rowMenu(row: Locator): Promise<Locator> {
+  const page = row.page()
+  // A closing drawer or dialog gives focus back when its animation ends, which closes a menu opened meanwhile.
+  await animationsSettled(page)
   await row.getByTestId('row-actions').click()
-  const menu = row.page().getByRole('menu')
+  const menu = page.getByRole('menu')
   await expect(menu).toBeVisible()
+  await animationsSettled(page)
   return menu
 }
 

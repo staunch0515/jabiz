@@ -42,6 +42,8 @@ test('a certification is written, picked for its supplier and moved on by its ro
   await expect(page.getByTestId('i18n-body').getByTestId('markdown-view').locator('strong')).toHaveText('关东')
   await drawer.getByRole('button', { name: '保存', exact: true }).click()
   await expect(page.getByText('已保存。').or(page.getByText('Saved.'))).toBeVisible()
+  // The closing form gives focus back to "New" when it is gone, which would close a menu opened before.
+  await expect(drawer).toBeHidden()
 
   const row = dataRows(page).filter({ hasText: `有机认证 ${code}` })
   await expect(row).toHaveCount(1)
