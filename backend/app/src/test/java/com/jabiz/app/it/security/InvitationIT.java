@@ -258,6 +258,30 @@ class InvitationIT extends SignUpItSupport {
         assertThat(to(email)).isEmpty();
     }
 
+    /** Security review: a protected grant that came after the invitation was sent voids its link. */
+    @Test
+    void anInvitationIsNotAcceptedForAUserWhoGainedAProtectedPermissionSince() {
+        String email = address("later");
+        String user = createInvited(email);
+        deliver();
+        String token = token(INVITE_LINK, email);
+        assertThat(approve(grant(user))).isEqualTo("APPLIED");
+        assertThat(refusal(accept(token, OWN), 422)).isEqualTo("TOKEN_INVALID");
+        assertThat(query("SELECT password_hash, verified_email FROM sec_user_version WHERE user_id = ?::uuid"
+            + " ORDER BY version_no DESC LIMIT 1", user).getFirst()).containsEntry("password_hash", null)
+            .containsEntry("verified_email", null);
+    }
+
+    /** Inviting a user who has a password replaces it: as setting a password, it needs security.user.password. */
+    @Test
+    void replacingAPasswordNeedsThePermissionToSetPasswords() {
+        String user = createUserWithEmail(unique("haspw"), address("haspw"), TEMPORARY);
+        post("/api/processes/SEC_USER_INVITE/latest", TestTokens.bearer(tokens, "it-creator", "security.user.create"),
+            Map.of("userId", user)).expectStatus().isForbidden();
+        post("/api/processes/SEC_USER_INVITE/latest", TestTokens.bearer(tokens, "it-creator", "security.user.create",
+            "security.user.password"), Map.of("userId", user)).expectStatus().isOk();
+    }
+
     @Test
     void creatingWithAnInvitationChecksTheAddressAndTheUser() {
         String malformed = unique("malformed");

@@ -41,9 +41,11 @@ import java.util.UUID;
  *       verified, so accepting one invitation voids the others.</li>
  * </ul>
  * An invitation needs no approval. Once the setup window has closed, a holder of a protected permission is not invited
- * ({@code PROTECTED_CHANGE_REQUIRES_APPROVAL}), as setting their password needs another administrator's approval: whoever
- * entered the address may read that mailbox. The protected grant is withdrawn, the user invited, and the grant asked for
- * again, when the approvers see the address proven by mail (decision D48).
+ * ({@code PROTECTED_CHANGE_REQUIRES_APPROVAL}), nor is an invitation accepted for one ({@code TOKEN_INVALID}: a grant
+ * may have come after it was sent), as setting their password needs another administrator's approval: whoever entered
+ * the address may read that mailbox. The protected grant is withdrawn, the user invited, and the grant asked for again,
+ * when the approvers see the address proven by mail (decision D48). Inviting a user who has a password replaces it, so
+ * it also needs {@code security.user.password}.
  */
 @Configuration
 public class InvitationProcesses {
@@ -111,7 +113,7 @@ public class InvitationProcesses {
     static ProcessDefinition<AcceptInput, SignUpProcesses.Done, AccountContext> accept(LoginAttemptPolicy policy) {
         return SignUpProcesses.passwordByLink(ACCEPT, AcceptInput.class,
             "Sets the password of an invited user with the invitation's link, proving the address.",
-            AuthMailTemplates.INVITE, false, true, policy);
+            AuthMailTemplates.INVITE, true, policy);
     }
 
     /** The named entry, or {@value #DEFAULT_ENTRY}. */
@@ -152,8 +154,16 @@ public class InvitationProcesses {
         }
     }
 
-    /** Whether the user may be invited: enabled, with an address that is not verified yet. */
+    /**
+     * Whether the user may be invited: enabled, with an address that is not verified yet. Replacing a password the user
+     * has also needs the permission to set passwords ({@code security.user.password}), as {@code SEC_USER_SET_PASSWORD}
+     * does: creating users alone does not let one take an account from its user.
+     */
     static void checkAccount(ProcessContext ctx, EntityInstance user) {
+        if (user.get("passwordHash") != null && !ctx.request().hasPermission(SecurityPermissions.USER_PASSWORD)) {
+            throw new com.jabiz.runtime.PermissionDeniedException(SecurityPermissions.USER_PASSWORD,
+                "The user has a password: inviting them replaces it, which needs " + SecurityPermissions.USER_PASSWORD);
+        }
         if (!Rbac.enabled(user)) {
             ctx.reject(new Violation(USER_ID, PlatformErrorCodes.INVITATION_USER_DISABLED, "The user is disabled"));
         } else if (user.get("email") == null || String.valueOf(user.<Object>get("email")).isBlank()) {

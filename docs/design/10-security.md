@@ -891,16 +891,18 @@ jabiz:
 - **只寄到建号时的地址**：建号之后改过或补填的地址（任何人改的，包括以"本人"会话改的）422 `INVITATION_ADDRESS_CHANGED`（`AddressVerifiable.unchanged`，按所有权链的 `addressAsCreated`）：
   不论账号是否干净、受保护的授权是否开启——请求的是管理员而不是本人，改地址正是接管账号的手法。地址填错的账号重新建立。建号时的地址去掉首尾空白后保存。
 - **邮件未开启**（`jabiz.mail.enabled`）即 422 `MAIL_DISABLED`：不记下一封永远不会寄出的邀请。
+- **替换已有的密码**：用户已有密码时，邀请另需 `security.user.password`（同 `SEC_USER_SET_PASSWORD`，否则 403）：只有建号权限的人不能借邀请把账号从其用户手中拿走。
 - **链接**：只认最新的一封（新的邀请使之前的失效，`MailTokens.consume`）；邮箱已验证（本人已接受某一封）、用户停用或邮箱已改即作废。
 - **所有权链**（§16.2）：`SPONSOR_INVITATION_ACCEPT` 与找回、加入、验证同列为"寄到本人邮箱的一次性链接"，所以建号时的地址经接受后算本人的，所设密码是本人的。
 - **不需要审批，但按 §16 评估**：邀请即设定密码，所以对持有受保护权限（或有待审批的变更将给他）的用户与 `SEC_USER_SET_PASSWORD` 一样评估：建立期内照常寄出，
-  建立期结束后 422 `PROTECTED_CHANGE_REQUIRES_APPROVAL`（退役的首个管理员 403）——填写地址的管理员可能读得到那个邮箱。先收回受保护的权限、邀请、本人接受后再申请授权，
+  建立期结束后 422 `PROTECTED_CHANGE_REQUIRES_APPROVAL`（退役的首个管理员 403）——填写地址的管理员可能读得到那个邮箱；接受时再评估一次（授权可能在寄出之后生效），
+  那时已是持有人的链接作废（`TOKEN_INVALID`）。先收回受保护的权限、邀请、本人接受后再申请授权，
   审批人在事实中看得到地址、由谁填写与何时经邮件证明。
 - **前端**：`@jabiz/client` 的 `acceptInvitation`、`@jabiz/ui` `MailLinkPage` 的 `invitation` 页（`InvitationPanel`：两次输入新密码；失效时说明并请联系管理员，不能自助重寄）；
   通用后台的路由 `/auth/invitation`。应用把邀请指向自己的入口时，其前端也要挂载该页（同其他邮件链接页）。
 - **测试**：`InvitationIT`（建号即邀请、接受后邮箱已验证并能以邮箱登录、链接只能用一次、建立期之后受保护的授权 `APPLIED`、替换管理员知道的密码、新邀请使旧链接失效并按入口生成链接、
   地址改后链接作废、建号后改过或补填的地址被拒、已验证 / 停用 / 无邮箱 / 未知入口被拒、建号时带密码 / 无邮箱 / 格式不对 / 停用被拒且不建号、首尾空白、
-  建立期之后受保护权限的持有人被拒、权限）、`InvitationWithoutMailIT`（邮件未开启）、`CredentialChainTest`（接受邀请算邮件证明，补填的地址不算；`addressAsCreated`）、
+  建立期之后受保护权限的持有人被拒、寄出后才得到受保护权限的链接作废、替换已有密码需要 `security.user.password`、权限）、`InvitationWithoutMailIT`（邮件未开启）、`CredentialChainTest`（接受邀请算邮件证明，补填的地址不算；`addressAsCreated`）、
   前端 `AuthPages.test.tsx`、`blocks.test.tsx`（axe）与示范门户的 `App.test.tsx`。
 
 ## 16. 受保护的授权：四眼【决策 D48 第 1 条，阶段 16r】

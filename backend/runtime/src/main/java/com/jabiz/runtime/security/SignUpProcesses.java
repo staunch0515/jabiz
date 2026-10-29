@@ -15,6 +15,9 @@ import com.jabiz.runtime.mail.SendMail;
 import com.jabiz.runtime.process.sponsor.SignInSource;
 import com.jabiz.runtime.process.sponsor.SponsorSignInProcess;
 import com.jabiz.runtime.process.steps.QueryEntities;
+import com.jabiz.runtime.security.protect.AssessProtectedChange;
+import com.jabiz.runtime.security.protect.ProtectedChangeEntities;
+import com.jabiz.runtime.security.protect.ProtectedGrants;
 import com.jabiz.security.EmailVerification;
 import com.jabiz.security.LoginAttemptPolicy;
 import com.jabiz.security.LoginOutcome;
@@ -107,6 +110,7 @@ public class SignUpProcesses {
     static final String EXISTING_USER = "existing_user";
     static final String LINKED = "linked";
     static final String END_SESSIONS = "end_sessions";
+    static final String ASSESSMENT = "protected_assessment";
 
     /**
      * @param entry       the sign-in entry registered with; it must let people register
@@ -344,17 +348,21 @@ public class SignUpProcesses {
     static ProcessDefinition<ResetConfirmInput, Done, AccountContext> resetConfirm(LoginAttemptPolicy policy) {
         return passwordByLink(RESET_CONFIRM, ResetConfirmInput.class,
             "Sets a new password with the link of a password reset mail and ends every session.", AuthMailTemplates.RESET,
-            true, false, policy);
+            false, policy);
     }
 
     /**
      * Sets a password with a mailed link of {@code purpose} (a reset; an invitation, decision D63): the link is checked
      * first ({@link #checkLink(AccountContext, boolean, boolean)}), then the password is set, the address proven, every
      * session ended and {@code PASSWORD_RESET} recorded ({@link #resetPassword}).
+     *
+     * <p>A reset's link holds only at a trusted address. An {@code invitation}'s holds only while the address is not
+     * verified, and, once the setup window has closed, not for a holder of a protected permission: the link went to an
+     * address an administrator entered, so setting the password of such a user would need approval as
+     * {@code SEC_USER_SET_PASSWORD} does (decision D48) - a grant may have come after the invitation was sent.
      */
     static <I extends PasswordLinkInput> ProcessDefinition<I, Done, AccountContext> passwordByLink(String name,
-        Class<I> inputType, String description, String purpose, boolean trustedOnly, boolean unverifiedOnly,
-        LoginAttemptPolicy policy) {
+        Class<I> inputType, String description, String purpose, boolean invitation, LoginAttemptPolicy policy) {
         return ProcessDefinition.define(name, 1, inputType, Done.class, AccountContext.class,
             pb -> pb
                 .description(description)
@@ -372,7 +380,19 @@ public class SignUpProcesses {
                     ctx -> ctx.consumed() == null ? null : ctx.consumed().messageId(), MAIL_PARAMS))
                 .step("Load the user", QueryEntities.<AccountContext>of(SecurityEntities.USER_DATASET,
                     SignUpProcesses::linkUser, USERS))
-                .compute("Check the link", (metadata, ctx) -> checkLink(ctx, trustedOnly, unverifiedOnly))
+                .compute("Check the link", (metadata, ctx) -> checkLink(ctx, !invitation, invitation))
+                .step("Assess the password", AssessProtectedChange.<AccountContext>of(ctx -> invitation
+                    && linked(ctx) != null ? new ProtectedGrants.Draft(ProtectedChangeEntities.PASSWORD,
+                    UUID.fromString(String.valueOf(linked(ctx).id())), null, null) : null, ASSESSMENT))
+                .compute("Check a protected holder", (metadata, ctx) -> {
+                    ProtectedGrants.Assessment assessment = ctx.contains(ASSESSMENT)
+                        ? ctx.get(ASSESSMENT, ProtectedGrants.Assessment.class) : null;
+                    if (assessment != null && assessment.protectedChange() && assessment.needsApproval()
+                        && !ctx.hasViolations()) {
+                        ctx.reject(new Violation(null, PlatformErrorCodes.TOKEN_INVALID, "Invalid token (the user"
+                            + " holds protected permissions now)"));
+                    }
+                })
                 .step("Load the latest login record", QueryEntities.<AccountContext>of(
                     SecurityEntities.LOGIN_RECORD_DATASET, ctx -> Rbac.latestLoginRecordOf(linkedId(ctx)),
                     LATEST_RECORD))
@@ -382,7 +402,7 @@ public class SignUpProcesses {
                     SecurityEntities.USER_IDENTITY_DATASET, SignUpProcesses::ofLinkedUser, IDENTITIES))
                 // Not for a link that is no good: no hashing work for made-up tokens.
                 .step("Hash the new password", on(HashPasswordStep.class), new HashPasswordStep.Metadata(PASSWORD,
-                    HASH, PASSWORD, false, ctx -> linked(ctx) != null))
+                    HASH, PASSWORD, false, ctx -> linked(ctx) != null && !ctx.hasViolations()))
                 .compute("Set the password", (metadata, ctx) -> resetPassword(ctx, policy))
                 .step("End the sessions", on(RevokeSessionsStep.class), new RevokeSessionsStep.Metadata(END_SESSIONS,
                     RefreshTokenStore.REASON_PASSWORD_RESET,
