@@ -182,6 +182,8 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
    邀请要求邮件已开启（`JABIZ_MAIL_ENABLED=true`，否则 422 `MAIL_DISABLED`），只寄到建号时填写、之后没改过的邮箱：邮箱填错时重新建号。
    已用临时密码建好、尚未经邮件设定密码的管理员账号，同样对其执行"发送邀请"（替换已有密码另需 `security.user.password`，首个管理员持有）。
 5. 财务管理员在后台**发布** `QB_SETUP` 的提案（`CONTROL_CHANGE_PUBLISH`，四眼：提出人不能发布自己的），**包括两条职责分离规则**。发布之前商家入驻与提交发布一律被拒。
+   操作：后台"数据 → SysControlChange"列出提案，在状态为待发布（`PROPOSED`）的一行执行行操作 `CONTROL_CHANGE_PUBLISH`。财务角色以 `approval.read` 读这个视图；
+   这项权限在 2026-10-29 才加入财务角色，此前建好的系统要由超级管理员再执行一次 `QB_SETUP` 补上（不是受保护的权限，当即生效），财务管理员重新登录后才看得到。
    职责分离规则须在建立期结束（下一步）之前发布：之后任命内容或财务管理员要由一位超级管理员审批，而超级管理员不持有、也不能持有 `approval.decide` 与 `control.publish`，
    平台只按**已发布的** `qb.sod.security-administration` 免去对这两项的覆盖要求（D51 修订 H1）。
    然后建**两位超级管理员**（`QB_ADMIN_SUPER`，各自一人一号、各自二次验证）：首个管理员建第一位（此后首个管理员退役，不能再做受保护的变更，403 `BOOTSTRAP_ADMIN_RETIRED`），
