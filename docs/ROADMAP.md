@@ -4742,4 +4742,17 @@ Playwright 端到端（需维护连接与数据库角色，以 Vitest 与 `Accou
 | 17q-2 | 格式不对时 `erasureMaintenanceStorage` 不建立连接（清除照旧 422 `ERASURE_PURGE_UNAVAILABLE`），启动检查 `AccountDeletionChecks` 报 `ERASURE \| jabiz.erasure.datasource.url`，与其他问题一次报告；设计 10 §17.2 一句 |
 | 17q-3 | 测试：`MaintenanceStorageTest`、`AccountDeletionIT` 的启动检查用例 |
 
-**17q 状态**：📝 待评审。
+**17q 状态**：✅ 已实施。
+
+### 17r 只寄给地址的通知不在用户的邮件偏好中（已确认 2026-10-29）
+
+**缘由**：QuizBuks 的 Q48 获客邮件（`qb.prospect`、`qb.prospect.follow-up`）寄给还不是用户的商户地址，为了让退订链接指向商家后台的退订页而声明了 `entries("sponsor")`，
+结果出现在每个已注册商家的邮件偏好中（e2e `topup.spec.ts` 因此失败）。需求方确认：从偏好中去掉。平台此前没有"只寄给地址"的声明。
+
+| # | 内容 |
+|---|---|
+| 17r-1 | `MailTemplate.Builder.addressesOnly()`（记录字段 `addressesOnly`，只能用于 NOTIFICATION）与 `listedAmongPreferences()`；旧的构造器照旧 |
+| 17r-2 | 偏好接口不列出它；`MAIL_PREFERENCE_SET` 在会话中拒绝它（`INVALID_VALUE`，同不是通知的名字）；退订链接照旧按地址退订；`SendMail` 把它寄给用户即流程失败；启动检查不要求它的显示名 |
+| 17r-3 | 设计 18 §5.6 一条、根 `CLAUDE.md` 一句；测试：`MailTemplateTest`、`MailPreferencesIT`（不列出、不能设置）、`MailIT`（按地址退订、寄给用户即失败），测试夹具 `it.prospect` |
+
+**17r 状态**：📝 待评审。

@@ -827,4 +827,24 @@ class MailIT extends SecurityItSupport {
         assertThat(to(address)).extracting(MailIT::subject).containsExactly("You are invited to the quiz",
             "Verify your address, Ivy");
     }
+
+    /**
+     * A notification to plain addresses only (phase 17r): its link opts the address out as any address's does, and a
+     * process that sends it to a user is a defect, which fails the process and sends nothing.
+     */
+    @Test
+    void aMailForAddressesOnlyOptsOutByItsLinkAndIsNeverSentToAUser() throws Exception {
+        String address = address("prospect");
+        send("prospect", null, address, "en", "the shop", false, 200);
+        deliver();
+        String token = link(UNSUBSCRIBE_LINK, to(address).getFirst());
+        post("/api/auth/mail/unsubscribe", null, Map.of("token", token)).expectStatus().isNoContent();
+        assertThat(query("SELECT template FROM sys_mail_address_optout WHERE address = ?",
+            address.toLowerCase(java.util.Locale.ROOT))).singleElement()
+            .satisfies(row -> assertThat(row).containsEntry("template", "it.prospect"));
+
+        String user = user(address("prospect-user"), "en");
+        send("prospect", user, null, "en", "the shop", false, 500);
+        assertThat(query("SELECT 1 FROM sys_mail_message WHERE user_id = ?::uuid", user)).isEmpty();
+    }
 }
