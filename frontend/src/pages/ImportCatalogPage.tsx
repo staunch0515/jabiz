@@ -1,7 +1,10 @@
 import { Button, Card, CardContent, PageState } from '@jabiz/ui'
 import { History } from 'lucide-react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
+import { ListSearch } from '../components/ListSearch'
+import { matches } from '../components/useLocalList'
 import AdminPage from '../layout/AdminPage'
 import { useImportCatalog } from '../meta/hooks'
 import { paths } from './paths'
@@ -10,8 +13,12 @@ import { paths } from './paths'
 export default function ImportCatalogPage() {
   const { t } = useTranslation()
   const catalog = useImportCatalog()
+  const [query, setQuery] = useState('')
   if (catalog.isLoading) return <PageState kind="loading" />
-  const imports = catalog.data ?? []
+  const all = catalog.data ?? []
+  // Phase 17w: searched by title, id and fields.
+  const imports = all.filter((entry) => matches([entry.title, entry.id, ...(entry.fields ?? []).map((f) => f.label)],
+    query))
   return (
     <AdminPage
       title={t('imports.title')}
@@ -24,8 +31,11 @@ export default function ImportCatalogPage() {
         </Button>
       }
     >
+      {all.length > 0 && (
+        <ListSearch value={query} onChange={setQuery} matched={imports.length} total={all.length} />
+      )}
       {imports.length === 0 ? (
-        <PageState kind="empty" title={t('imports.empty')} />
+        <PageState kind="empty" title={all.length === 0 ? t('imports.empty') : t('list.noMatch')} />
       ) : (
         <Card>
           <CardContent>
