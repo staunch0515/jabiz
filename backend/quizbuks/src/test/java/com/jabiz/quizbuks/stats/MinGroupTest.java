@@ -54,26 +54,42 @@ class MinGroupTest {
     }
 
     @Test
-    void questionTotalsRoundTripAndAdd() {
-        SortedMap<Integer, QuestionTotals.Count> totals = new TreeMap<>(Map.of(2, new QuestionTotals.Count(4, 1),
-            1, new QuestionTotals.Count(4, 3)));
+    void questionTotalsRoundTripAndAddPerVersion() {
+        String v1 = "0192f0a0-0000-7000-8000-000000000001";
+        String v2 = "0192f0a0-0000-7000-8000-000000000002";
+        SortedMap<String, QuestionTotals.Version> totals = new TreeMap<>(Map.of(v1, new QuestionTotals.Version(4,
+            new TreeMap<>(Map.of(2, new QuestionTotals.Count(4, 1), 1, new QuestionTotals.Count(4, 3))))));
         String json = QuestionTotals.format(totals);
-        assertThat(json).isEqualTo("[[1,4,3],[2,4,1]]");
+        assertThat(json).isEqualTo("{\"" + v1 + "\":{\"n\":4,\"q\":[[1,4,3],[2,4,1]]}}");
         assertThat(QuestionTotals.parse(json)).isEqualTo(totals);
         assertThat(QuestionTotals.parse(null)).isEmpty();
-        assertThat(QuestionTotals.parse("[]")).isEmpty();
-        assertThat(QuestionTotals.add(totals, Map.of(1, new QuestionTotals.Count(1, 1), 3,
-            new QuestionTotals.Count(1, 0))))
-            .containsEntry(1, new QuestionTotals.Count(5, 4)).containsEntry(2, new QuestionTotals.Count(4, 1))
-            .containsEntry(3, new QuestionTotals.Count(1, 0));
-        // A hundred questions of the largest counts fit the column.
-        SortedMap<Integer, QuestionTotals.Count> most = new TreeMap<>();
+        assertThat(QuestionTotals.parse("{}")).isEmpty();
+        // The migration's JSON (PostgreSQL's spacing) reads the same.
+        assertThat(QuestionTotals.parse("{\"" + v1 + "\": {\"n\": 4, \"q\": [[1, 4, 3], [2, 4, 1]]}}"))
+            .isEqualTo(totals);
+        // Increments add to their own version's questions; another version's numbers are other questions (Q51b).
+        SortedMap<String, QuestionTotals.Version> sum = QuestionTotals.add(totals, Map.of(
+            v1, new QuestionTotals.Version(1, new TreeMap<>(Map.of(1, new QuestionTotals.Count(1, 1),
+                3, new QuestionTotals.Count(1, 0)))),
+            v2, new QuestionTotals.Version(2, new TreeMap<>(Map.of(1, new QuestionTotals.Count(2, 0))))));
+        assertThat(sum.get(v1).attempts()).isEqualTo(5);
+        assertThat(sum.get(v1).questions()).containsEntry(1, new QuestionTotals.Count(5, 4))
+            .containsEntry(2, new QuestionTotals.Count(4, 1)).containsEntry(3, new QuestionTotals.Count(1, 0));
+        assertThat(sum.get(v2)).isEqualTo(new QuestionTotals.Version(2,
+            new TreeMap<>(Map.of(1, new QuestionTotals.Count(2, 0)))));
+        assertThat(QuestionTotals.format(sum)).startsWith("{\"" + v1 + "\":").contains("\"" + v2 + "\":{\"n\":2,");
+        // A hundred versions of a hundred questions of the largest counts fit the column; more do not.
+        SortedMap<Integer, QuestionTotals.Count> questions = new TreeMap<>();
         for (int no = 1; no <= 100; no++) {
-            most.put(no, new QuestionTotals.Count(999_999_999L, 999_999_999L));
+            questions.put(no, new QuestionTotals.Count(999_999_999L, 999_999_999L));
+        }
+        SortedMap<String, QuestionTotals.Version> most = new TreeMap<>();
+        for (int i = 0; i < 100; i++) {
+            most.put(java.util.UUID.randomUUID().toString(), new QuestionTotals.Version(999_999_999L, questions));
         }
         assertThat(QuestionTotals.format(most).length()).isLessThanOrEqualTo(QuestionTotals.MAX_LENGTH);
-        for (int no = 101; no <= 200; no++) {
-            most.put(no, new QuestionTotals.Count(999_999_999L, 999_999_999L));
+        for (int i = 0; i < 60; i++) {
+            most.put(java.util.UUID.randomUUID().toString(), new QuestionTotals.Version(999_999_999L, questions));
         }
         assertThatThrownBy(() -> QuestionTotals.format(most)).isInstanceOf(IllegalStateException.class);
     }

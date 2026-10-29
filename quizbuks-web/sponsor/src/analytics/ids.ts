@@ -12,6 +12,8 @@ export const ANALYTICS_TEMPLATE = {
   top: 'qb.sponsor.analytics.top',
   overview: 'qb.sponsor.analytics.overview',
   questions: 'qb.sponsor.analytics.questions',
+  /** The versions of its quiz a publication ran on (Q51b), whose questions are analysed apart. */
+  versions: 'qb.sponsor.analytics.versions',
 } as const
 
 export type AnalyticsTemplate = (typeof ANALYTICS_TEMPLATE)[keyof typeof ANALYTICS_TEMPLATE]

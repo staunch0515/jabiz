@@ -37,8 +37,10 @@ import java.util.UUID;
  * <ul>
  *   <li>{@code CHUNK}: a range of the publications to read. One statement reads their counters (both sides), cursors
  *       and new first views; the increments go to an hourly bucket ({@link AnalyticsBuckets}); the attempts finished
- *       since the watermark (at most the configured number) are added to the question totals and timings; the figures
- *       the sponsor is shown change only after at least the minimum group of new completions ({@link MinGroup});</li>
+ *       since the watermark (at most the configured number) are added to the question totals (per version the
+ *       attempt ran on, Q51b) and timings; the figures the sponsor is shown change only after at least the minimum
+ *       group of new completions ({@link MinGroup}): of the publication for its timings, of the version for its
+ *       questions;</li>
  *   <li>{@code RECOUNT}: one ended publication, recounted whole and finalized
  *       ({@link AnalyticsLimits#FINALIZE_AFTER} after its end once nothing is in progress, or a day after it whatever is
  *       in progress). A publication of more completions than the recount's bound is finalized with the totals read so
@@ -253,8 +255,8 @@ public final class AnalyticsJob {
         return List.copyOf(ids);
     }
 
-    /** The attempts read for one publication: per question and in all. */
-    private record Read(SortedMap<Integer, QuestionTotals.Count> questions, long attempts, long submitted,
+    /** The attempts read for one publication: per version and question, and in all. */
+    private record Read(SortedMap<String, QuestionTotals.Version> versions, long attempts, long submitted,
         long expired, BigDecimal durationSec, Instant lastAt, String lastId) {
 
         static Read none() {
@@ -273,9 +275,15 @@ public final class AnalyticsJob {
                     instant(column(row, "lastAt")), text(column(row, "lastId")));
                 reads.put(id, read);
             }
+            String versionId = text(column(row, "versionId"));
+            if (versionId == null) {
+                continue;
+            }
+            QuestionTotals.Version version = read.versions().computeIfAbsent(versionId,
+                key -> new QuestionTotals.Version(number(column(row, "vAttempts")), new TreeMap<>()));
             Object questionNo = column(row, "questionNo");
             if (questionNo != null) {
-                read.questions().put((int) number(questionNo), new QuestionTotals.Count(
+                version.questions().put((int) number(questionNo), new QuestionTotals.Count(
                     number(column(row, "qCompletions")), number(column(row, "qCorrect"))));
             }
         }
@@ -298,9 +306,10 @@ public final class AnalyticsJob {
         boolean chunk = CHUNK.equals(input.kind());
         Map<UUID, Read> incremental = reads(rows(ctx, NEW));
         Map<UUID, Read> recounted = reads(rows(ctx, FULL));
-        Map<UUID, Map<Integer, Map<String, Object>>> shownRows = new HashMap<>();
+        Map<UUID, Map<String, Map<Integer, Map<String, Object>>>> shownRows = new HashMap<>();
         for (Map<String, Object> row : rows(ctx, STATS)) {
             shownRows.computeIfAbsent(uuid(column(row, "publicationId")), key -> new HashMap<>())
+                .computeIfAbsent(text(column(row, "versionId")), key -> new HashMap<>())
                 .put((int) number(column(row, "questionNo")), row);
         }
         int written = 0;
@@ -427,20 +436,20 @@ public final class AnalyticsJob {
     /** Adds (or, for a recount, replaces) the attempts read in the cursor's totals; returns the stat rows written. */
     private static int addAttempts(ProcessContext ctx, Map<String, Object> row, UUID id, String publisherKind,
         String publisherId, Read read,
-        boolean replace, boolean hasCursor, Map<Integer, Map<String, Object>> shownRows, Map<String, Object> cursor,
-        Instant at) {
+        boolean replace, boolean hasCursor, Map<String, Map<Integer, Map<String, Object>>> shownRows,
+        Map<String, Object> cursor, Instant at) {
         boolean fresh = replace || !hasCursor;
         long analysed = (fresh ? 0 : number(column(row, "analysed"))) + read.attempts();
         long submitted = (fresh ? 0 : number(column(row, "submitted"))) + read.submitted();
         long expired = (fresh ? 0 : number(column(row, "expired"))) + read.expired();
         BigDecimal duration = (fresh ? BigDecimal.ZERO : decimal(column(row, "durationSec"))).add(read.durationSec());
-        SortedMap<Integer, QuestionTotals.Count> questions = replace ? read.questions()
-            : QuestionTotals.add(QuestionTotals.parse(text(column(row, "questions"))), read.questions());
+        SortedMap<String, QuestionTotals.Version> versions = replace ? read.versions()
+            : QuestionTotals.add(QuestionTotals.parse(text(column(row, "questions"))), read.versions());
         cursor.put("analysed", analysed);
         cursor.put("submitted", submitted);
         cursor.put("expired", expired);
         cursor.put("durationSec", duration);
-        cursor.put("questions", QuestionTotals.format(questions));
+        cursor.put("questions", QuestionTotals.format(versions));
         if (read.lastAt() != null) {
             cursor.put("watermarkAt", read.lastAt());
             cursor.put("watermarkId", read.lastId());
@@ -453,7 +462,17 @@ public final class AnalyticsJob {
             cursor.put("shownAnalysed", analysed);
             cursor.put("shownExpired", expired);
             cursor.put("shownAt", at);
-            written += showQuestions(ctx, id, publisherKind, publisherId, questions, shownRows, at);
+        }
+        // A version's questions change after k new completions of that version (Q51b): k new ones of which one ran
+        // on another version would tell that one's answers.
+        for (Map.Entry<String, QuestionTotals.Version> version : versions.entrySet()) {
+            Map<Integer, Map<String, Object>> existing = shownRows.getOrDefault(version.getKey(), Map.of());
+            long shownOfVersion = existing.values().stream().mapToLong(stat -> number(column(stat, "basedOn")))
+                .max().orElse(0);
+            if (MinGroup.publish(version.getValue().attempts(), shownOfVersion, k)) {
+                written += showQuestions(ctx, id, publisherKind, publisherId, version.getKey(), version.getValue(),
+                    existing, at);
+            }
         }
         // The average time is over the attempts submitted in time only: it changes after k new ones of those, or k
         // new completions of which one was submitted would tell that one's time.
@@ -484,26 +503,29 @@ public final class AnalyticsJob {
         return written + 1;
     }
 
-    /** Writes the question figures the sponsor is shown; returns the rows written. */
+    /** Writes the question figures of a version the sponsor is shown; returns the rows written. */
     private static int showQuestions(ProcessContext ctx, UUID publicationId, String publisherKind, String publisherId,
-        Map<Integer, QuestionTotals.Count> questions, Map<Integer, Map<String, Object>> existing, Instant at) {
+        String versionId, QuestionTotals.Version version, Map<Integer, Map<String, Object>> existing, Instant at) {
         int written = 0;
-        for (Map.Entry<Integer, QuestionTotals.Count> question : questions.entrySet()) {
+        for (Map.Entry<Integer, QuestionTotals.Count> question : version.questions().entrySet()) {
             Map<String, Object> row = existing.get(question.getKey());
             QuestionTotals.Count count = question.getValue();
             Map<String, Object> values = new LinkedHashMap<>();
             values.put("completions", count.completions());
             values.put("correct", count.correct());
+            values.put("basedOn", version.attempts());
             values.put("shownAt", at);
             if (row == null) {
                 values.put("publicationId", publicationId);
                 values.put("publisherKind", publisherKind);
                 values.put("publisherId", publisherId);
+                values.put("versionId", UUID.fromString(versionId));
                 values.put("questionNo", question.getKey());
                 ctx.changes().insert(QbAnalytics.QUESTION_STAT, values);
                 written++;
             } else if (number(column(row, "completions")) != count.completions()
-                || number(column(row, "correct")) != count.correct()) {
+                || number(column(row, "correct")) != count.correct()
+                || number(column(row, "basedOn")) != version.attempts()) {
                 ctx.changes().update(QbAnalytics.QUESTION_STAT, text(column(row, "statId")),
                     number(column(row, "version")), values);
                 written++;

@@ -349,14 +349,42 @@ export function toQuestion(row: Row): QuestionFigures {
   }
 }
 
-/** The publication's questions in order. */
-export async function readQuestions(publicationId: string): Promise<QuestionFigures[]> {
+/**
+ * The publication's questions in order, in one version it ran on (Q51b; by default the one it runs on): each
+ * version's answers are counted apart, as the same numbers are other questions after a switch.
+ */
+export async function readQuestions(publicationId: string, versionId?: string | null): Promise<QuestionFigures[]> {
   const page = await runQuery<Row>(ANALYTICS_TEMPLATE.questions, {
-    params: { publicationId },
+    params: versionId ? { publicationId, versionId } : { publicationId },
     sorts: [{ field: 'questionNo', asc: true }],
     limit: 500,
   })
   return page.items.map(toQuestion)
+}
+
+/** A version of its quiz the publication ran on (Q51b): the one it runs on, or one it switched from and when. */
+export interface AnalyticsVersion {
+  versionId: string
+  label: string
+  title: string
+  current: boolean
+  replacedAt: string | null
+}
+
+/** The versions the publication ran on, newest first. */
+export async function readVersions(publicationId: string): Promise<AnalyticsVersion[]> {
+  const page = await runQuery<Row>(ANALYTICS_TEMPLATE.versions, {
+    params: { publicationId },
+    sorts: [{ field: 'versionNumber', asc: false }],
+    limit: 500,
+  })
+  return page.items.map((row) => ({
+    versionId: String(row.versionId),
+    label: String(row.label ?? ''),
+    title: String(row.title ?? ''),
+    current: bool(row.current),
+    replacedAt: str(row.replacedAt),
+  }))
 }
 
 /** An export format offered on the pages (the platform's endpoint also has PDF; the pages do not offer it). */
