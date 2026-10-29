@@ -386,6 +386,9 @@ HTML 部分转义全部文本与正文中的原始 HTML，纯文本部分为原�
   非 NOTIFICATION 的名称在流程中给出**同样的** 422 `INVALID_VALUE`（只差调用者自己提交的名称），回答与执行路径不透露其他入口有哪些模板。
   退订链接（无入口）照旧可退订任何 NOTIFICATION。偏好仍按用户 × 模板保存，与入口无关。
 - `.entries(...)` 写在 TRANSACTIONAL 模板上没有作用，启动检查 `MAIL` 告警。
+- **只寄给地址的通知**（17r）：`.addressesOnly()` 声明只寄给不是任何账号的地址的通知（如应用向商户的获客邮件）。它不在任何用户的偏好中，登录的会话也不能设置它（与不是通知的名字同样拒绝）；
+  收件地址只经邮件中的退订链接退订（按地址，D55）。`.entries(...)` 这时只决定退订链接指向哪个入口的退订页。流程把它寄给用户（`MailRecipient.user`）是缺陷：流程失败、不寄出。
+  不需要显示名 `mail.<名>.name`。只能用于 NOTIFICATION。
 - `GET /api/auth/account/locale`（16s）：本人的邮件语言 `{locale, effective, languages, defaultLocale}`——`locale` 为所选（未选为 null），`effective` 为邮件实际使用的语言
   （所选且在应用语言中，否则缺省语言，同 `SendMail`），`languages` 为应用语言，`defaultLocale` 为应用的缺省语言。只读调用者自己的用户；开发请求头的操作人不是用户，403。
   积木的语言选择含"默认（…）"一项（`locale: null`）。

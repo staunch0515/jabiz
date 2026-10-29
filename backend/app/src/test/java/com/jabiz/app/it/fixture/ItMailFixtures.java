@@ -52,6 +52,12 @@ public final class ItMailFixtures {
      */
     public static final MailTemplate INVITE = MailTemplate.define("it.invite", t -> t
         .category(MailCategory.NOTIFICATION).param("item").entries("portal").signInLink(Duration.ofDays(7)));
+    /**
+     * A notification to plain addresses only (phase 17r), as an application prospecting businesses sends: among no
+     * user's preferences; its link leads to the portal's unsubscribe page.
+     */
+    public static final MailTemplate PROSPECT = MailTemplate.define("it.prospect", t -> t
+        .category(MailCategory.NOTIFICATION).param("item").entries("portal").addressesOnly());
     /** A mail that leaves through the application's own server (decision D56). */
     public static final MailTemplate VIA = MailTemplate.define("it.via", t -> t
         .category(MailCategory.TRANSACTIONAL).param("item"));
@@ -133,6 +139,8 @@ public final class ItMailFixtures {
                 ItMailFixtures::recipient, Map.of("item", ctx -> input(ctx).value(),
                     MailTemplate.ENTRY_PARAM, ctx -> input(ctx).entry(), MailTemplate.RETURN_PARAM,
                     ctx -> input(ctx).to())))
+            .step("Send the prospecting", SendMail.when(ctx -> "prospect".equals(input(ctx).template()), PROSPECT,
+                ItMailFixtures::recipient, Map.of("item", ctx -> input(ctx).value())))
             .step("Send through the shop's server", SendMail.<ProcessContext>via(ctx -> input(ctx).via())
                 .when(ctx -> "via".equals(input(ctx).template()), VIA, ItMailFixtures::recipient,
                     Map.of("item", ctx -> input(ctx).value())))
@@ -289,6 +297,11 @@ public final class ItMailFixtures {
         @Bean
         MailTemplate itViaMail() {
             return VIA;
+        }
+
+        @Bean
+        MailTemplate itProspectMail() {
+            return PROSPECT;
         }
 
         @Bean
