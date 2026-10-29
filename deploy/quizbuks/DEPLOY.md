@@ -53,6 +53,28 @@ QuizBuks 是**一个镜像、一个服务**（`<APP_NAME>-app`，容器内端口
 把输出的连接串拆成下面 `.env` 中的六个数据库变量（应用用 R2DBC 读写，Flyway 用 JDBC 在启动时自动迁移，两者分别配置）。
 例如输出 `postgresql://quizbuks:<密码>@postgres:5432/quizbuks` 时：主机 `postgres`、端口 `5432`、库与角色都是 `quizbuks`。
 
+### 1a. 账号删除的维护连接（开启账号删除时）
+
+删除账号后，平台以一个单独的数据库登录清除只追加表中的个人信息（平台 10 §17.2，`ERASURE_PURGE`）。这个登录属于服务器上的角色 `jabiz_maintenance`，
+只能读、插入与更新本库的表，不能删除；应用自己的登录（`create-db.sh` 建的）**绝不能**属于这个角色。脚本在仓库中，先复制到服务器：
+
+```sh
+# 在本机：scp deploy/quizbuks/server/create-maintenance-login.sh <服务器>:/opt/infra/scripts/
+chmod +x /opt/infra/scripts/create-maintenance-login.sh
+/opt/infra/scripts/create-maintenance-login.sh quizbuks
+```
+
+它输出三行，原样加进下面的 `.env`（再运行一次即给同一登录换新密码）：
+
+```sh
+JABIZ_ERASURE_DATASOURCE_URL=r2dbc:postgresql://postgres:5432/quizbuks
+JABIZ_ERASURE_DATASOURCE_USERNAME=quizbuks_maint
+JABIZ_ERASURE_DATASOURCE_PASSWORD=<输出的密码>
+```
+
+URL 是 **R2DBC** 格式（与 `SPRING_R2DBC_URL` 相同），不是 `SPRING_FLYWAY_URL` 的 `jdbc:`：写成 JDBC 时应用拒绝启动（检查报 `ERASURE | jabiz.erasure.datasource.url`），部署回滚。
+还没有开启账号删除时可以不设这三行（`docs/quizbuks/operations.md` §1.1）。
+
 ### 2. `/opt/apps/quizbuks/.env`
 
 ```sh
@@ -126,7 +148,8 @@ SHOPIFY_API_SECRET=<API secret 或占位>
 ```
 
 **部署前的检查**：workflow 在服务器上改动任何东西之前，按所部署提交的 `deploy/quizbuks/server/required-env` 检查 `.env`
-（`check-env.sh`，只列出缺少或过短的变量名，不显示值）：缺少即停止，镜像不拉取、数据库不迁移。新增必需变量的提交同时把它加进这个清单。
+（`check-env.sh`，只列出缺少、过短或格式不对的变量名，不显示值）：有问题即停止，镜像不拉取、数据库不迁移。新增必需变量的提交同时把它加进这个清单；
+可选的变量以 `?` 标出，给了才查（如 `JABIZ_ERASURE_DATASOURCE_URL` 必须以 `r2dbc:` 开头）。
 
 `QB_LOCAL_SECRETS=false`、`QB_STRIPE_PLACEHOLDERS=false` 已写在 compose 中：缺少任何密钥时应用拒绝启动，不会自己生成。
 **关于可信代理**：`proxy` 网络上还有其他应用（包括另一个环境）的容器，它们能直接访问本环境的容器。只信任 Caddy 的地址，它们就不能伪造客户端地址；
@@ -187,6 +210,7 @@ Run workflow，分支选该环境的分支，`image-tag` 留空。第一次启�
 
    `.env` 中的库与角色都是 `quizbuks_staging`：`SPRING_R2DBC_URL=r2dbc:postgresql://postgres:5432/quizbuks_staging`、
    `SPRING_FLYWAY_URL=jdbc:postgresql://postgres:5432/quizbuks_staging`、`SPRING_R2DBC_USERNAME` 与 `SPRING_FLYWAY_USER` 为 `quizbuks_staging`，密码为输出中的密码。
+   维护连接（"1a"）同样另建：`/opt/infra/scripts/create-maintenance-login.sh quizbuks_staging`（登录 `quizbuks_staging_maint`，URL `r2dbc:postgresql://postgres:5432/quizbuks_staging`）。
 2. **`/opt/apps/quizbuks-staging/.env`**：
 
    ```sh

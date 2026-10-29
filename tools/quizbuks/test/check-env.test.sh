@@ -14,6 +14,7 @@ cat >"$work/required" <<'LIST'
 
 PLAIN
 LONG 8
+?MAYBE - r2dbc:
 LIST
 
 # run <.env content>: the check; its output in $out, its status in $status.
@@ -62,13 +63,26 @@ else
   echo "ok   no value is printed"
 fi
 
+run $'PLAIN=a\nLONG=12345678\nMAYBE=r2dbc:postgresql://postgres:5432/db'
+expect "an optional variable of the right form" 0
+
+run $'PLAIN=a\nLONG=12345678\nMAYBE=jdbc:postgresql://postgres:5432/db'
+expect "an optional variable of the wrong form" 1 "MAYBE must start with r2dbc:"
+if grep -q "postgres:5432" <<<"$out"; then
+  echo "FAIL a value is printed: $out"
+  failures=$((failures + 1))
+fi
+
+run $'PLAIN=a\nLONG=12345678\nMAYBE='
+expect "an optional variable left empty" 0
+
 status=0
 out="$(/bin/sh "$script" "$work/none" "$work/required" 2>&1)" || status=$?
 expect "no .env" 1 "cannot read"
 
-# The committed list: names only, each with an optional whole number.
-if grep -vE '^(#.*|[A-Z][A-Z0-9_]*( [0-9]+)?|)$' "$root/deploy/quizbuks/server/required-env"; then
-  echo "FAIL required-env has a line that is not a name with an optional length"
+# The committed list: names (`?` when optional), each with an optional length (`-` for any) and start.
+if grep -vE '^(#.*|\??[A-Z][A-Z0-9_]*( ([0-9]+|-)( [^ ]+)?)?|)$' "$root/deploy/quizbuks/server/required-env"; then
+  echo "FAIL required-env has a line that is not a name with an optional length and start"
   failures=$((failures + 1))
 else
   echo "ok   required-env parses"

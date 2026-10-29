@@ -131,6 +131,8 @@ jobs:
       - run: tools/quizbuks/test/stripe-test-mode.test.sh
       # The deploy's check of the server's .env (deploy/quizbuks/server/check-env.sh), offline.
       - run: tools/quizbuks/test/check-env.test.sh
+      # The maintenance login's script (deploy/quizbuks/server/create-maintenance-login.sh), offline.
+      - run: tools/quizbuks/test/create-maintenance-login.test.sh
       - run: $COMPOSE config --quiet
       - name: No .env
         run: test ! -e deploy/quizbuks/.env

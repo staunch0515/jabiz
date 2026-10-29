@@ -266,6 +266,7 @@ tools/quizbuks/local-demo.sh status | logs | seed
 | `QB_DIRECT_EXPOSURE` | 没有反向代理时 | `true`：应用直接对外，不列可信代理（否则正式模式下缺少 `JABIZ_TRUSTED_PROXIES` 即启动失败） |
 | `JABIZ_FILES_LOCAL_ROOT` | 是 | 上传文件目录；镜像中已设为卷 `/var/lib/jabiz/files` |
 | `SPRING_R2DBC_URL` / `SPRING_R2DBC_USERNAME` / `SPRING_R2DBC_PASSWORD`、`SPRING_FLYWAY_URL` / `SPRING_FLYWAY_USER` / `SPRING_FLYWAY_PASSWORD` | compose 已给 | 数据库连接（请求路径用 R2DBC，迁移用 JDBC） |
+| `JABIZ_ERASURE_DATASOURCE_URL` / `_USERNAME` / `_PASSWORD` | 开启账号删除时 | 清除被删账号个人信息的维护连接（平台 17i）：**R2DBC** URL（同 `SPRING_R2DBC_URL`，不是 JDBC）与属于 `jabiz_maintenance` 的单独登录；服务器上由 `deploy/quizbuks/server/create-maintenance-login.sh` 建立（`DEPLOY.md`"1a"） |
 | `JABIZ_SECURITY_MFA_ADMINISTRATION` | 否 | `false` 时平台管理操作（含 `QB_SETUP`）不要求二次验证；只用于本机演示与 e2e |
 | `QUIZBUKS_PORT` / `QUIZBUKS_DB_PORT` | 否 | 本机端口，缺省 8080 / 5440 |
 | `LOGGING_STRUCTURED_FORMAT_CONSOLE` | 否 | `ecs` 输出 JSON 日志（compose 已设） |
