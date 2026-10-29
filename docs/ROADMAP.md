@@ -4770,3 +4770,15 @@ Playwright 端到端（需维护连接与数据库角色，以 Vitest 与 `Accou
 | 17s-4 | 测试：`RowActions.test.tsx`（菜单、无项不显示、两种流程）、`DatasetListPage.test.tsx`（菜单的项与顺序、axe、取消后的焦点）、`EntityFormDrawer.test.tsx`；e2e 以 `support.ts` 的 `rowMenu` 打开菜单（`a11y.spec.ts` 另检查打开的菜单）；设计 12 §6 一条 |
 
 **17s 状态**：📝 待评审。
+
+### 17t 列表的每行可复制主键（需求 2026-10-30）
+
+**缘由**：需求方 2026-10-30：数据下的所有列表加一列，内容是复制的小图标，单击即把这条数据的 ID 复制到剪贴板；鼠标悬停时提示出这个 ID。
+
+| # | 内容 |
+|---|---|
+| 17t-1 | `meta/idColumn.tsx`：列表的第一列"ID"（三语 `list.id`），每行 `CopyButton`（名称 `list.copyId`："Copy ID" / "复制 ID" / "ID をコピー"），值为该行的主键；不排序；`DatasetListPage` 与 `ChildEntityList` 都用它 |
+| 17t-2 | `@jabiz/ui` 的 `CopyButton` 增加可选的 `tooltip`（悬停提示，缺省为名称）：提示是主键本身，读屏软件读出的名称仍是"复制 ID"，不念出一长串编号 |
+| 17t-3 | 测试：`display.test.tsx`（提示与名称分开）、`DatasetListPage.test.tsx`（首列、提示、复制、不可排序）、e2e `list.spec.ts`；设计 12 §6 一条 |
+
+**17t 状态**：📝 待评审。

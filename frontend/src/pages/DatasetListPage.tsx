@@ -21,6 +21,7 @@ import { useTranslation } from 'react-i18next'
 import { useParams, useSearchParams } from 'react-router'
 import EntityFormDrawer from '../components/EntityFormDrawer'
 import RowActions from '../components/RowActions'
+import { idColumn } from '../meta/idColumn'
 import AdminPage from '../layout/AdminPage'
 import { actionsFor } from '../meta/actions'
 import { toRow, type Row } from '../meta/cells'
@@ -164,6 +165,7 @@ function DatasetList({
 
   const columns = useMemo<ColumnDef<Row, unknown>[]>(
     () => [
+      idColumn(t),
       ...dataColumns(entity, view, dictionaries, t, i18n.language, {
         labels,
         defaultLocale: entity.defaultLocale,

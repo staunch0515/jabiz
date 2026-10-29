@@ -326,6 +326,23 @@ describe('DatasetListPage', () => {
     await waitFor(() => expect(document.activeElement).toBe(edit))
   })
 
+  it('starts each row with a button copying its key, which it shows on hovering', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+    try {
+      await page()
+      expect(screen.getAllByRole('columnheader')[0]).toHaveTextContent('ID')
+      const copy = within(rows()[0]).getByRole('button', { name: 'Copy ID' })
+      expect(copy).toHaveAttribute('title', 'c-1')
+      await userEvent.click(copy)
+      expect(writeText).toHaveBeenCalledWith('c-1')
+      // Not one of the columns the server sorts by.
+      expect(within(screen.getAllByRole('columnheader')[0]).queryByRole('button')).toBeNull()
+    } finally {
+      Object.defineProperty(navigator, 'clipboard', { configurable: true, value: undefined })
+    }
+  })
+
   it('offers what the user may do: edit, delete, history, audit, actions', async () => {
     permissions.value = new Set(['audit.read'])
     state.processes = [
