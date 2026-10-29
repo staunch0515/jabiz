@@ -18,11 +18,11 @@ import { Alert, AlertDescription, AlertTitle } from '../components/ui/alert'
 import { Button } from '../components/ui/button'
 import { Checkbox } from '../components/ui/checkbox'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../components/ui/dialog'
-import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
 import { cn } from '../lib/utils'
 import { AuthError, Outcome } from './frame'
 import { AUTH_NAMESPACE } from './messages'
+import { PasswordInput } from './PasswordInput'
 import { failure, refusal } from './problems'
 
 export interface AccountDeletionProps {
@@ -237,9 +237,8 @@ export function AccountDeletion({
                   </Alert>
                 )}
                 <Label htmlFor={passwordId}>{t('accountDeletion.password')}</Label>
-                <Input
+                <PasswordInput
                   id={passwordId}
-                  type="password"
                   autoFocus
                   autoComplete="current-password"
                   value={password}
