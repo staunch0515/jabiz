@@ -12,7 +12,7 @@ steps:
     input: {}
     expectOutput:
       rolesCreated: [QB_TAKER, QB_SPONSOR, QBS_SHOP, QB_ADMIN_CONTENT, QB_ADMIN_FINANCE, QB_ADMIN_SUPER, QB_OPERATOR]
-      accountsOpened: ["1110", "1120", "2110", "2120", "2130", "4110", "5110", "5120"]
+      accountsOpened: ["1110", "1120", "2110", "2120", "2130", "4110", "5110", "5120", "2140", "5130"]
       countriesAdded: 249
       paramsCreated: [qb.app.min-version, qb.stats.min-group, qb.support.email,
         qb.broadcast.sponsor.max-per-publication, qb.broadcast.sponsor.min-interval-hours, qb.broadcast.expires-days,
@@ -25,15 +25,16 @@ steps:
         qb.reward.default-methods, qb.reward.max-per-attempt,
         qb.journal.account.1110, qb.journal.account.1120, qb.journal.account.2110, qb.journal.account.2120,
         qb.journal.account.2130, qb.journal.account.4110, qb.journal.account.5110,
-        qb.journal.account.5120, qb.issuer.name, qb.issuer.address,
+        qb.journal.account.5120, qb.journal.account.2140, qb.journal.account.5130, qb.issuer.name, qb.issuer.address,
         qb.issuer.registration-no, qb.legal.max-announce-days, qb.ai.enabled, qb.ai.model, qb.ai.effort,
         qb.ai.sponsor.daily-jobs, qb.ai.sponsor.monthly-tokens, qb.ai.global.monthly-tokens, qb.prospect.enabled,
-        qb.prospect.model, qb.prospect.effort, qb.topup.bank.min,
+        qb.prospect.model, qb.prospect.effort, qb.prospect.operator-monthly-cap-usd, qb.prospect.usd-jpy,
+        qb.operator.platform-share, qb.topup.bank.min,
         qb.topup.bank.max, qb.bank.receiving.bank, qb.bank.receiving.branch, qb.bank.receiving.account-type,
         qb.bank.receiving.account-number, qb.bank.receiving.account-holder, qb.withdrawal.bank.enabled,
         qb.withdrawal.bank.fee, qb.withdrawal.bank.cooldown-hours]
       rulesProposed: [qb.publication.review, qb.sponsor.review, qb.transfer.review, qb.topup-bank.review,
-        qb.topup-manual.review, qb.sod.control-changes, qb.sod.security-administration]
+        qb.topup-manual.review, qb.operator-settlement.review, qb.sod.control-changes, qb.sod.security-administration]
       legalDraftsCreated: [TERMS_APP, TERMS_SPONSOR, PRIVACY, COMMERCE_NOTICE, AI_NOTICE]
     save: { p1: "$.proposals[0]", p2: "$.proposals[1]", p3: "$.proposals[2]", p4: "$.proposals[3]",
       p5: "$.proposals[4]", p6: "$.proposals[5]", p7: "$.proposals[6]", p8: "$.proposals[7]", p9: "$.proposals[8]",
@@ -48,7 +49,8 @@ steps:
       p39: "$.proposals[38]", p40: "$.proposals[39]", p41: "$.proposals[40]", p42: "$.proposals[41]",
       p43: "$.proposals[42]", p44: "$.proposals[43]", p45: "$.proposals[44]", p46: "$.proposals[45]", p47: "$.proposals[46]",
       p48: "$.proposals[47]", p49: "$.proposals[48]", p50: "$.proposals[49]", p51: "$.proposals[50]",
-      p52: "$.proposals[51]" }
+      p52: "$.proposals[51]", p53: "$.proposals[52]", p54: "$.proposals[53]", p55: "$.proposals[54]",
+      p56: "$.proposals[55]", p57: "$.proposals[56]", p58: "$.proposals[57]" }
   - note: A second administrator publishes the parameters (the journal mapping and issuer empty) and the review rules.
     process: CONTROL_CHANGE_PUBLISH@latest
     actor: { id: publisher, permissions: [control.publish] }
@@ -206,6 +208,24 @@ steps:
   - process: CONTROL_CHANGE_PUBLISH@latest
     actor: { id: publisher, permissions: [control.publish] }
     input: { changeId: "${p52}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p53}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p54}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p55}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p56}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p57}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p58}" }
   - expect: { param: qb.creator-fee-rate, value: 0 }
   - expect: { param: qb.transfer.threshold, value: 1000 }
   - expect: { param: qb.transfer.enabled, value: false }

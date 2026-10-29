@@ -89,9 +89,9 @@ class OperatorSettlementIT extends PlayItSupport {
         assertThat(card(directPublication).get("operator_id")).isNull();
 
         // Commission: 20 of the full marks' 100 and 2 of the 10; the direct sponsor's 20 is headquarters'.
-        play(u1(), publication, true, true);
-        play(u2(), publication, false, true);
-        play(u3(), directPublication, true, true);
+        play(newTaker(unique("q48b-t1"), "JP"), publication, true, true);
+        play(newTaker(unique("q48b-t2"), "JP"), publication, false, true);
+        play(newTaker(unique("q48b-t3"), "JP"), directPublication, true, true);
 
         // A month is settled once it has ended (in Japan).
         assertThatThrownBy(() -> systemRun(OperatorSettlements.RUN, body("operatorId", operatorId, "month",
