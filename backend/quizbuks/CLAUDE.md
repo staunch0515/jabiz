@@ -101,7 +101,9 @@
   （`JobDefinition.forEach`，平台决策 D42），不写成根流程 + `CallProcess.forEach`（一批一个事务会违反锁序、阻塞热门发布、一项失败拖住整批；不取锁的统计任务除外）；每项流程是 `internal()`，先取锁、再读取、已不到期即什么也不做。
   **正确答案只在完成后出现**：开始与继续的输出不含选项的正误，详情只取快照的简介与资料，`result` 列在完成时才写；答题人读不到版本（`AnswerSecrecyIT`）。
   **选项按位置编号**（Q10b，评审 M1）：开始、保存、提交、`answers` 与 `result` 中的选项编号都是本次显示的位置 1..k，只有评分经 `optionOrder` 换回版本的编号（`Scoring.scoreShown`、`Answers.inVersion`）；
-  `optionOrder` 是敏感字段，任何读接口都不返回。打乱的种子是服务端密钥下的 HMAC（`OptionShuffle.of(IntegrityKey)`：HMAC(`JABIZ_INTEGRITY_KEY`, `qb.option-shuffle`) 再对用户 | 发布 | 题号，评审 M-a），测试的固定密钥使场景的顺序不变。测试中答案按版本的编号写（巴黎是 1），由 `PlayItSupport.submission` / `shown` 换成本次的位置（`AttemptOptionIdsIT`）。
+  `optionOrder` 是敏感字段，任何读接口都不返回。
+  **单选与多选**（D-Q5-2，2026-10-29 需求方要求在前后台都说明）：问卷题按自己的 `selection`；计分题由正确选项的个数决定，恰好 1 个即单选、多个即多选，只经 `QuizSnapshot.Question.choice()` 判断。
+  开始与继续的输出以 `selection` 给出它（只说"几个"中的单选或多选，不说是哪个），App 对单选题用单选按钮、多选题用复选框，商家后台的编辑、版本与预览和后台的版本预览都标出单选或多选（商家端为 `content/api.ts` 的 `choiceOf`）。打乱的种子是服务端密钥下的 HMAC（`OptionShuffle.of(IntegrityKey)`：HMAC(`JABIZ_INTEGRITY_KEY`, `qb.option-shuffle`) 再对用户 | 发布 | 题号，评审 M-a），测试的固定密钥使场景的顺序不变。测试中答案按版本的编号写（巴黎是 1），由 `PlayItSupport.submission` / `shown` 换成本次的位置（`AttemptOptionIdsIT`）。
   **钱包余额只在钱包锁内改**（`wallet.QbWallets.change`），与同一事务中的 `LEDGER_POST` 一起；判断可支付一律经 `QbWallets.pays`（无待支付且可用余额 `QbWallets.available` = 余额 − 争议冻结 `held` 足够；SQL 模板同样用 `balance - held`，核对仍比较 `balance`）：待支付不入账、按提交顺序补发、不插队；
   `qb_wallet.balance >= 0` 由检查约束兜底。评分、档位、抽成、打乱、时限与开始条件是纯 Java 的 `Scoring`、`TierPick`、`RewardSplit`、`OptionShuffle`、`AttemptRules`；
   上限在 `PlayLimits`，错误码在 `PlayCodes`。系统流程的权限 `qb.play.system` 不授予任何角色。**开发入账** `QB_WALLET_DEV_CREDIT` 只在

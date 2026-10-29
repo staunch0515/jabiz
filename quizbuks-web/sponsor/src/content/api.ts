@@ -23,6 +23,14 @@ export type QuizKind = 'QUIZ' | 'SURVEY'
 /** How a survey's question is answered: exactly one option, or at least one. */
 export type Selection = 'SINGLE' | 'MULTIPLE'
 
+/**
+ * How a scored question is answered (D-Q5-2), as the taker is shown it: one correct option makes a single choice (radio
+ * buttons), several a multiple choice (check boxes). Null while none is marked.
+ */
+export function choiceOf(correct: number): Selection | null {
+  return correct === 0 ? null : correct === 1 ? 'SINGLE' : 'MULTIPLE'
+}
+
 const kindOf = (value: unknown): QuizKind => (value === 'SURVEY' ? 'SURVEY' : 'QUIZ')
 const selectionOf = (value: unknown): Selection | null =>
   value === 'SINGLE' || value === 'MULTIPLE' ? value : null

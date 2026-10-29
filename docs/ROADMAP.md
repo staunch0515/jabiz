@@ -4714,3 +4714,45 @@ Playwright 端到端（需维护连接与数据库角色，以 Vitest 与 `Accou
 **不做**：批量邀请；邀请的撤回（新的邀请、停用账号或改地址都令旧链接失效）。
 
 **17o 状态**：✅ 已实施。
+
+### 17p 密码栏可显示输入的字符（需求 2026-10-29）
+
+**缘由**：需求方 2026-10-29：平台后台与所有使用平台登录积木的应用前端，登录、注册等页面上的每个密码栏都要有按钮，以明文显示输入的密码并可再次隐藏。
+只改 `@jabiz/ui` 的积木，不改变约束，不新增决策。
+
+| # | 内容 |
+|---|---|
+| 17p-1 | `@jabiz/ui` 导出 `PasswordInput`（`src/auth/PasswordInput.tsx`）：输入框右端的图标按钮（`Eye` / `EyeOff`，`ghost`，只用 token）在 `password` 与 `text` 之间切换；`type="button"`、`aria-pressed`、`aria-controls`，名称在各状态相同（切换按钮的约定），可用键盘到达，有焦点环；输入框 `pr-10`；表单提交时（捕获阶段）恢复为隐藏，密码管理器看到的仍是密码栏；`autoComplete` 照旧 |
+| 17p-2 | `AuthField` 的 `type="password"` 一律使用它：`SignInForm`、`SignUpForm` 与邮件链接页的 `NewPasswordFields`（新密码与确认各自一个按钮）、验证邮箱的 `PasswordStep`、邀请与找回密码、`ChangePasswordForm`；`AccountDeletion` 与 `LinkedIdentities` 对话框中的当前密码改用 `PasswordInput` |
+| 17p-3 | 名称（命名空间 `auth` 的 `common.showTyped`）："Show typed characters" / "显示输入的字符" / "入力した文字を表示"，不含"密码"一词：按名称定位密码栏（Playwright 的 `getByLabel('Password')` 是子串匹配）不会同时命中按钮 |
+| 17p-4 | 测试：`PasswordInput.test.tsx`（切换类型与按下状态、键盘、禁用、三语名称、登录提交后恢复隐藏、注册两栏各自切换、改密码三栏，axe 亮暗）；`AccountDeletion.test.tsx`、`LinkedIdentities.test.tsx`（对话框中可显示）；文档：12"登录与账户的积木"一句 |
+
+**不做**：后台流程表单（`SchemaForm`）中 `format: password` 的字段不在登录、注册页上，保持原样。
+
+**17p 状态**：✅ 已实施。
+
+### 17q 维护连接的 URL 格式错误时给出一行启动错误（已确认 2026-10-29）
+
+**缘由**：需求方 2026-10-29：QuizBuks staging 的 `JABIZ_ERASURE_DATASOURCE_URL` 写成了 Flyway 用的 JDBC 格式，新版本启动时在建立维护连接处抛出一大段堆栈、部署回滚。
+需求方确认：平台给出一行明确的启动错误，应用的运维文档补上这三个变量。
+
+| # | 内容 |
+|---|---|
+| 17q-1 | `MaintenanceStorage.urlProblem`：只接受 `r2dbc:` 开头的 URL，指出给的是 JDBC 还是别的（只说格式，不重复 URL，可能带凭据） |
+| 17q-2 | 格式不对时 `erasureMaintenanceStorage` 不建立连接（清除照旧 422 `ERASURE_PURGE_UNAVAILABLE`），启动检查 `AccountDeletionChecks` 报 `ERASURE \| jabiz.erasure.datasource.url`，与其他问题一次报告；设计 10 §17.2 一句 |
+| 17q-3 | 测试：`MaintenanceStorageTest`、`AccountDeletionIT` 的启动检查用例 |
+
+**17q 状态**：✅ 已实施。
+
+### 17r 只寄给地址的通知不在用户的邮件偏好中（已确认 2026-10-29）
+
+**缘由**：QuizBuks 的 Q48 获客邮件（`qb.prospect`、`qb.prospect.follow-up`）寄给还不是用户的商户地址，为了让退订链接指向商家后台的退订页而声明了 `entries("sponsor")`，
+结果出现在每个已注册商家的邮件偏好中（e2e `topup.spec.ts` 因此失败）。需求方确认：从偏好中去掉。平台此前没有"只寄给地址"的声明。
+
+| # | 内容 |
+|---|---|
+| 17r-1 | `MailTemplate.Builder.addressesOnly()`（记录字段 `addressesOnly`，只能用于 NOTIFICATION）与 `listedAmongPreferences()`；旧的构造器照旧 |
+| 17r-2 | 偏好接口不列出它；`MAIL_PREFERENCE_SET` 在会话中拒绝它（`INVALID_VALUE`，同不是通知的名字）；退订链接照旧按地址退订；`SendMail` 把它寄给用户即流程失败；启动检查不要求它的显示名 |
+| 17r-3 | 设计 18 §5.6 一条、根 `CLAUDE.md` 一句；测试：`MailTemplateTest`、`MailPreferencesIT`（不列出、不能设置）、`MailIT`（按地址退订、寄给用户即失败），测试夹具 `it.prospect` |
+
+**17r 状态**：📝 待评审。

@@ -341,7 +341,10 @@ export interface QuestionView {
   image: string | null
   points: number
   options: OptionView[]
-  /** A survey's question: one option or several; null for a scored question (any number may be chosen). */
+  /**
+   * One option or several: a survey's question as set, a scored one by how many options are correct (one: a single
+   * choice); null only from a server before this was given for scored questions (then any number may be chosen).
+   */
   selection: Selection | null
 }
 

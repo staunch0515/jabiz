@@ -51,7 +51,9 @@ class AnswerSecrecyIT extends PlayItSupport {
                 Map<String, Object> shown = questions.get(i);
                 assertThat(shown).containsOnlyKeys("no", "stem", "image", "points", "options", "selection")
                     .containsEntry("no", question.no()).containsEntry("stem", question.stem())
-                    .containsEntry("points", question.points());
+                    .containsEntry("points", question.points())
+                    // Single or multiple choice (D-Q5-2): how many options are right, never which.
+                    .containsEntry("selection", question.choice());
                 List<Map<String, Object>> options = (List<Map<String, Object>>) shown.get("options");
                 // Every option, each with its number, text and image only: the same for right and wrong ones.
                 assertThat(options).allSatisfy(option -> assertThat(option).containsOnlyKeys("no", "text", "image"));

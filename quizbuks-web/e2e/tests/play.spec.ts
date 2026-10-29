@@ -76,10 +76,13 @@ async function openFromFeed(page: Page, name: string) {
   await expect(page.getByTestId('detail-name')).toHaveText(name)
 }
 
-/** Chooses an option of the current question by its text and waits until the answer is saved. */
+/**
+ * Chooses an option of the current question by its text and waits until the answer is saved. Every question here has
+ * one correct option, so it is a single choice: radio buttons (D-Q5-2).
+ */
 async function choose(page: Page, text: string) {
   const saved = page.waitForResponse((r) => r.url().includes('/api/processes/QB_ATTEMPT_SAVE/') && r.ok())
-  await page.getByRole('checkbox', { name: text }).click()
+  await page.getByRole('radio', { name: text }).click()
   await saved
 }
 
@@ -131,7 +134,7 @@ for (const appearance of ['light', 'dark'] as const) {
     // A reload continues at the same question with the answer saved.
     await page.reload()
     await expect(page.getByTestId('play-progress')).toHaveText('Question 1 of 2')
-    await expect(page.getByRole('checkbox', { name: 'Paris' })).toBeChecked()
+    await expect(page.getByRole('radio', { name: 'Paris' })).toBeChecked()
     const moved = page.waitForResponse((r) => r.url().includes('/api/processes/QB_ATTEMPT_SAVE/') && r.ok())
     await page.getByTestId('play-next').click()
     await moved
@@ -140,7 +143,7 @@ for (const appearance of ['light', 'dark'] as const) {
     await choose(page, 'Tokyo')
     await page.reload()
     await expect(page.getByTestId('play-progress')).toHaveText('Question 2 of 2')
-    await expect(page.getByRole('checkbox', { name: 'Tokyo' })).toBeChecked()
+    await expect(page.getByRole('radio', { name: 'Tokyo' })).toBeChecked()
 
     // Meanwhile another taker earns the whole budget: this taker's reward cannot be paid yet.
     const theirs = await run(request, other.token, 'QB_ATTEMPT_START', { publicationId: seeded.publicationId })
@@ -210,7 +213,7 @@ test('the time runs out: the answers are submitted by themselves, after continui
   await expect(row).toHaveAttribute('data-category', 'IN_PROGRESS')
   await row.getByTestId('history-continue').click()
   await expect(page).toHaveURL(/\/play\/[^/]+$/)
-  await expect(page.getByRole('checkbox', { name: 'Lyon' })).toBeChecked()
+  await expect(page.getByRole('radio', { name: 'Lyon' })).toBeChecked()
 
   // Nothing else is done: at 0:00 the page submits what was saved and says the time ran out.
   await expect(page).toHaveURL(/\/result\/[^/]+$/, { timeout: 45_000 })

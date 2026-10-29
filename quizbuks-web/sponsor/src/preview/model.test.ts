@@ -26,6 +26,8 @@ describe('the preview (Q34b)', () => {
       url: 'https://example.com', pdf: null, audio: null, images: [] }])
     expect(preview.questions[0].options).toEqual([{ no: 1, text: 'Yes', image: null }, { no: 2, text: 'No', image: null }])
     expect(JSON.stringify(preview.questions)).not.toContain('correct')
+    // Single or multiple choice, as the taker will be told (D-Q5-2); none while no option is correct.
+    expect(preview.questions.map((q) => q.choice)).toEqual(['SINGLE', null])
   })
 
   it('shows the sponsor only once approved, and a watch-to-answer video as the home card\'s video', () => {

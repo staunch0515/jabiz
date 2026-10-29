@@ -118,4 +118,24 @@ class QuizSnapshotsTest {
         map.put("kind", "POLL");
         assertThatThrownBy(() -> QuizSnapshots.fromMap(map)).isInstanceOf(IllegalArgumentException.class);
     }
+
+    @Test
+    void aScoredQuestionIsASingleChoiceByItsOneCorrectOption() {
+        // D-Q5-2: one correct option makes a single choice (radio buttons), several a multiple choice; a survey's
+        // question says which itself, and a question without a correct option says nothing.
+        QuizSnapshot.Option right = new QuizSnapshot.Option(1, "Paris", null, true);
+        QuizSnapshot.Option alsoRight = new QuizSnapshot.Option(2, "Lyon", null, true);
+        QuizSnapshot.Option wrong = new QuizSnapshot.Option(3, "Rome", null, false);
+        assertThat(new QuizSnapshot.Question(1, "Q", null, 2, List.of(right, wrong)).choice())
+            .isEqualTo(QbContent.SINGLE);
+        assertThat(new QuizSnapshot.Question(1, "Q", null, 2, List.of(right, alsoRight, wrong)).choice())
+            .isEqualTo(QbContent.MULTIPLE);
+        assertThat(new QuizSnapshot.Question(1, "Q", null, 2, List.of(wrong)).choice()).isNull();
+        QuizSnapshot.Option a = new QuizSnapshot.Option(1, "A", null, false);
+        QuizSnapshot.Option b = new QuizSnapshot.Option(2, "B", null, false);
+        assertThat(new QuizSnapshot.Question(1, "Q", null, 1, List.of(a, b), QbContent.MULTIPLE).choice())
+            .isEqualTo(QbContent.MULTIPLE);
+        assertThat(new QuizSnapshot.Question(1, "Q", null, 1, List.of(a, b), QbContent.SINGLE).choice())
+            .isEqualTo(QbContent.SINGLE);
+    }
 }
