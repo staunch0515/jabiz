@@ -126,6 +126,7 @@ export const TEMPLATE = {
 /** The operators' settlements' processes (backend `operator.OperatorSettlements`, Q48b). */
 export const SETTLEMENT_PROCESS = {
   pay: 'QB_OPERATOR_SETTLEMENT_PAY',
+  statement: 'QB_OPERATOR_SETTLEMENT_STATEMENT',
 } as const
 
 /** AI prospecting's processes (backend `prospect`, Q48c); the owner is the caller's operator, or headquarters. */

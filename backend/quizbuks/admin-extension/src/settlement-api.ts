@@ -72,6 +72,10 @@ export const paySettlement = (settlementId: string, paidOn: string, bankReferenc
   runProcess<{ settlementId: string; status: string; approvalRequestId: string | null }>(SETTLEMENT_PROCESS.pay,
     { settlementId, paidOn, bankReference })
 
+/** Issues the statement the first time (`QB_OPERATOR_SETTLEMENT_STATEMENT`), or gives the one issued. */
+export const issueStatement = (settlementId: string) =>
+  runProcess<{ settlementId: string; documentNo: string | null }>(SETTLEMENT_PROCESS.statement, { settlementId })
+
 /** Downloads the statement as issued (the platform's archive, `GET /api/documents/runs/{id}/pdf`). */
 export async function downloadStatement(runId: string, documentNo: string | null) {
   const response = await sessionFetch(`/api/documents/runs/${encodeURIComponent(runId)}/pdf`)

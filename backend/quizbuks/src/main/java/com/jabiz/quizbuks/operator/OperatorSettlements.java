@@ -58,7 +58,7 @@ import java.util.Map;
  *       calendar month, {@code jabiz.fiscal-year-zone}). The commission of its publications ({@code 4110} by the
  *       publication, whose card names the operator: {@value #REVENUE_TEMPLATE}) less the platform's share
  *       ({@code qb.operator.platform-share}) is the operator's share, rounded down to the yen; it is posted as an
- *       expense owed (debit 5130 / credit 2140) and the statement issued ({@value #LAYOUT_ID}, kept as issued).
+ *       expense owed (debit 5130 / credit 2140). Finance issues its statement ({@value #STATEMENT}).
  *       The month's prospecting cost (Q48d, in yen at {@code qb.prospect.usd-jpy}) and what was carried in are
  *       deducted from what is paid; what they exceed it by is carried to the next month, never a negative payment.</li>
  *   <li>{@value #PAY} (finance, {@code qb.operator.settlement.pay}): records the payment made by bank (the day and the
@@ -75,6 +75,7 @@ public final class OperatorSettlements {
     public static final String RUN = "QB_OPERATOR_SETTLEMENT_RUN";
     public static final String PAY = "QB_OPERATOR_SETTLEMENT_PAY";
     public static final String APPROVAL_RESULT = "QB_OPERATOR_SETTLEMENT_APPROVAL_RESULT";
+    public static final String STATEMENT = "QB_OPERATOR_SETTLEMENT_STATEMENT";
     public static final String JOB = "qb.operator-settlement";
     public static final String DUE_TEMPLATE = "qb.system.operator-settlements-due";
     public static final String REVENUE_TEMPLATE = "qb.system.operator-revenue";
@@ -266,12 +267,9 @@ public final class OperatorSettlements {
             .step("Save the settlement", SaveChanges.now())
             .step("Post the share owed", CallProcess.<ProcessContext>when(ctx -> ctx.contains(POST_INPUT),
                 LedgerProcesses.POST, 1, ctx -> ctx.get(POST_INPUT), POSTING))
-            .step("Issue the statement", CallProcess.<ProcessContext>when(ctx -> ctx.contains(NEW_ID),
-                DocumentProcesses.ISSUE, 1, ctx -> new DocumentProcesses.IssueInput(LAYOUT_ID,
-                    Map.of("settlementId", ctx.get(NEW_ID)), null, null, LANGUAGE), ISSUED_DOCUMENT))
             .step("Read the settlement", QueryEntities.<ProcessContext>of(QbOperators.defaultDataset(SETTLEMENT),
                 ctx -> byId(ctx.contains(NEW_ID) ? (String) ctx.get(NEW_ID) : null), NEW_ROW))
-            .compute("Record the statement", (metadata, ctx) -> recordIssue(ctx)));
+            .compute("Record the posting", (metadata, ctx) -> recordPosting(ctx)));
     }
 
     static void settle(ProcessContext ctx, ZoneId zone) {
@@ -339,19 +337,60 @@ public final class OperatorSettlements {
         return "op_" + month + "_" + operatorId.substring(0, Math.min(8, operatorId.length()));
     }
 
-    static void recordIssue(ProcessContext ctx) {
+    static void recordPosting(ProcessContext ctx) {
         EntityInstance row = first(ctx, NEW_ROW);
-        if (row == null) {
-            return;
+        if (row != null && ctx.contains(POSTING)) {
+            ctx.changes().update(SETTLEMENT, row.id(), row.version(), Map.of("issueTransactionId",
+                ctx.get(POSTING, LedgerProcesses.PostOutput.class).transactionId()));
         }
-        Map<String, Object> values = new LinkedHashMap<>();
-        DocumentProcesses.IssueOutput issued = ctx.get(ISSUED_DOCUMENT, DocumentProcesses.IssueOutput.class);
-        values.put("documentNo", issued.documentNo());
-        values.put("documentRunId", issued.runId());
-        if (ctx.contains(POSTING)) {
-            values.put("issueTransactionId", ctx.get(POSTING, LedgerProcesses.PostOutput.class).transactionId());
-        }
-        ctx.changes().update(SETTLEMENT, row.id(), row.version(), values);
+    }
+
+    // ---- the statement -------------------------------------------------------------------------------------------------
+
+    /** @param settlementId the settlement whose statement is issued, or given again */
+    public record StatementInput(@NotBlank @Size(max = 36) String settlementId) {}
+
+    /**
+     * {@value #STATEMENT} (finance): issues the settlement's statement ({@value #LAYOUT_ID}, kept exactly as issued) the
+     * first time, and gives the same one after. A person issues it: the platform issues a document only for a caller
+     * holding its layout's permissions, and the monthly job runs as the system, which holds none.
+     */
+    public static ProcessDefinition<StatementInput, SettlementOutput, ProcessContext> statement() {
+        return ProcessDefinition.define(STATEMENT, 1, StatementInput.class, SettlementOutput.class,
+            ProcessContext.class, pb -> pb
+                .description("Issues an operator settlement's statement, or gives the one already issued.")
+                .permissions(QbPermissions.OPERATOR_SETTLEMENT_PAY, QbPermissions.ADMIN_FINANCE_READ)
+                .requiresVerifiedEmail()
+                .actsOn(SETTLEMENT, "settlementId")
+                .contextFactory(OperatorSettlements::context)
+                .outputMapper(OperatorSettlements::output)
+                .step("Find the settlement", QueryEntities.<ProcessContext>of(QbOperators.defaultDataset(SETTLEMENT),
+                    ctx -> byId(ctx.get(INPUT, StatementInput.class).settlementId()), FOUND))
+                .step("Lock the operator", HoldLock.<ProcessContext>exclusive(ctx -> first(ctx, FOUND) == null
+                    ? null : QbOperators.operatorLockName(first(ctx, FOUND).get("operatorId"))))
+                .step("Read it again", QueryEntities.<ProcessContext>of(QbOperators.defaultDataset(SETTLEMENT),
+                    ctx -> byId(first(ctx, FOUND) == null ? null : String.valueOf(first(ctx, FOUND).id())),
+                    SETTLEMENT_ROW))
+                .compute("Check it", (metadata, ctx) -> {
+                    if (first(ctx, SETTLEMENT_ROW) == null) {
+                        throw new EntityNotFoundException(SETTLEMENT + " "
+                            + ctx.get(INPUT, StatementInput.class).settlementId() + " not found");
+                    }
+                })
+                .step("Issue the statement", CallProcess.<ProcessContext>when(
+                    ctx -> first(ctx, SETTLEMENT_ROW).get("documentRunId") == null,
+                    DocumentProcesses.ISSUE, 1, ctx -> new DocumentProcesses.IssueInput(LAYOUT_ID,
+                        Map.of("settlementId", String.valueOf(first(ctx, SETTLEMENT_ROW).id())), null, null, LANGUAGE),
+                    ISSUED_DOCUMENT))
+                .compute("Record the statement", (metadata, ctx) -> {
+                    if (!ctx.contains(ISSUED_DOCUMENT)) {
+                        return;
+                    }
+                    EntityInstance row = first(ctx, SETTLEMENT_ROW);
+                    DocumentProcesses.IssueOutput issued = ctx.get(ISSUED_DOCUMENT, DocumentProcesses.IssueOutput.class);
+                    ctx.changes().update(SETTLEMENT, row.id(), row.version(), Map.of("documentNo", issued.documentNo(),
+                        "documentRunId", issued.runId()));
+                }));
     }
 
     /**
@@ -493,7 +532,7 @@ public final class OperatorSettlements {
         content.put("bankReference", settlement.get("bankReference"));
         return ApprovalCase.of(String.valueOf(settlement.id()), facts, content)
             .preparedBy(settlement.get("paymentRecordedBy"))
-            .reference(settlement.get("month") + " " + settlement.get("documentNo"));
+            .reference(settlement.get("month") + " " + settlement.get("operatorId"));
     }
 
     // ---- the approval --------------------------------------------------------------------------------------------------

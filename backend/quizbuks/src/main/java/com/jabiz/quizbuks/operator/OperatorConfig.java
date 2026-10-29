@@ -259,6 +259,12 @@ public class OperatorConfig {
     }
 
     @Bean
+    ProcessDefinition<OperatorSettlements.StatementInput, OperatorSettlements.SettlementOutput, ProcessContext>
+        qbOperatorSettlementStatement() {
+        return OperatorSettlements.statement();
+    }
+
+    @Bean
     ProcessDefinition<OperatorSettlements.PayInput, OperatorSettlements.SettlementOutput, ProcessContext>
         qbOperatorSettlementPay() {
         return OperatorSettlements.pay();

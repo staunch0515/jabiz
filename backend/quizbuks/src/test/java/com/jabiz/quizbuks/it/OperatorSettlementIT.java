@@ -105,10 +105,6 @@ class OperatorSettlementIT extends PlayItSupport {
 
         clock.set(Instant.parse("2026-12-02T00:00:00Z"));
         JobRunner.JobRun settling = runSettlements();
-        if (settling.items().succeeded() == 0) {
-            // Surfaces why (the job only counts a failing item).
-            systemRun(OperatorSettlements.RUN, body("operatorId", operatorId, "month", "2026-11"));
-        }
         assertThat(settling.items().succeeded()).as(settling.toString()).isGreaterThanOrEqualTo(1);
         Map<String, Object> settled = settlement(operatorId);
         // 22 less the platform's 20%: 17.6, rounded down to the yen; less the prospecting cost, 9 is payable.
@@ -122,8 +118,15 @@ class OperatorSettlementIT extends PlayItSupport {
         String settlementId = String.valueOf(settled.get("settlement_id"));
         // The cost the share recovers is headquarters' revenue.
         assertThat(postings(settlementId)).containsExactly("5130 DEBIT 17", "2140 CREDIT 9", "4110 CREDIT 8");
-        // The statement is issued and kept as issued.
-        assertThat(settled.get("document_no")).isNotNull();
+        // Finance issues the statement, kept as issued; asking again gives the same.
+        assertThat(settled.get("document_run_id")).isNull();
+        Map<String, Object> statement = run(OperatorSettlements.STATEMENT, finance(), body("settlementId",
+            settlementId));
+        assertThat(statement.get("documentNo")).isNotNull();
+        assertThat(run(OperatorSettlements.STATEMENT, finance(), body("settlementId", settlementId)))
+            .containsEntry("documentNo", statement.get("documentNo"));
+        settled = settlement(operatorId);
+        assertThat(settled.get("document_no")).isEqualTo(statement.get("documentNo"));
         assertThat(query("SELECT layout_id FROM sys_document_run WHERE run_id = ?::uuid",
             String.valueOf(settled.get("document_run_id")))).singleElement()
             .satisfies(r -> assertThat(r).containsEntry("layout_id", OperatorSettlements.LAYOUT_ID));

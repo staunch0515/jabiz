@@ -31,7 +31,7 @@ import {
 import { LoadFailed } from './components'
 import { money, useLabels, usePaged } from './hooks'
 import { DICTIONARY, PERMISSION } from './ids'
-import { downloadStatement, paySettlement, readSettlements, SETTLEMENTS_KEY, type Settlement } from './settlement-api'
+import { downloadStatement, issueStatement, paySettlement, readSettlements, SETTLEMENTS_KEY, type Settlement } from './settlement-api'
 
 const right = { className: 'text-right tabular-nums' }
 const ALL = 'ALL'
@@ -108,6 +108,7 @@ export default function SettlementsPage() {
   const { can } = useAuth()
   const id = useId()
   const statusLabel = useLabels(DICTIONARY.settlementStatus)
+  const queryClient = useQueryClient()
   const finance = can(PERMISSION.financeRead)
   const payer = finance && can(PERMISSION.settlementPay)
   const [search, setSearch] = useSearchParams()
@@ -132,6 +133,15 @@ export default function SettlementsPage() {
         const s = row.original
         return (
           <span className="flex flex-wrap justify-end gap-2">
+            {payer && !s.documentRunId && (
+              <Button size="sm" variant="outline" data-testid="settlement-issue"
+                onClick={() => void issueStatement(s.settlementId).then(() => {
+                  notify.success(t('settlement.issued'))
+                  void queryClient.invalidateQueries({ queryKey: SETTLEMENTS_KEY })
+                }).catch((e: unknown) => notify.error(e instanceof ApiError ? e.display : String(e)))}>
+                {t('settlement.issue')}<span className="sr-only">: {s.month}</span>
+              </Button>
+            )}
             {finance && s.documentRunId && (
               <Button size="sm" variant="outline" data-testid="settlement-download"
                 onClick={() => void downloadStatement(s.documentRunId!, s.documentNo).catch((e: unknown) =>
@@ -148,7 +158,7 @@ export default function SettlementsPage() {
         )
       },
     },
-  ], [t, finance, payer, statusLabel])
+  ], [t, finance, payer, statusLabel, queryClient])
   return (
     <div className="flex flex-col gap-4" data-testid="settlements-page">
       <PageHeader title={t(finance ? 'settlement.title' : 'settlement.ownTitle')}
