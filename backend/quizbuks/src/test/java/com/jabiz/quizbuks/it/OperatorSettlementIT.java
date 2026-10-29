@@ -95,7 +95,9 @@ class OperatorSettlementIT extends PlayItSupport {
 
         // A month is settled once it has ended (in Japan).
         assertThatThrownBy(() -> systemRun(OperatorSettlements.RUN, body("operatorId", operatorId, "month",
-            "2026-11"))).hasMessageContaining(OperatorCodes.MONTH_OPEN);
+            "2026-11"))).isInstanceOfSatisfying(com.jabiz.runtime.BusinessRuleViolationException.class,
+                e -> assertThat(e.violations()).extracting(com.jabiz.entity.Violation::ruleCode)
+                    .containsExactly(OperatorCodes.MONTH_OPEN));
 
         // Q48d: November's prospecting cost 0.05 dollars, at 150 yen: 7.5, rounded up to 8.
         execute("INSERT INTO qb_prospect_usage (usage_id, owner, month, input_tokens, output_tokens, searches, jobs, "
