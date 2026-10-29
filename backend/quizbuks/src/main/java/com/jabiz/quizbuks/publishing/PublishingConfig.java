@@ -121,6 +121,16 @@ public class PublishingConfig {
     }
 
     @Bean
+    EntityDefinition qbPublicationPastVersionEntity() {
+        return QbPublications.PAST_VERSION_ENTITY;
+    }
+
+    @Bean
+    DatasetDefinition qbPublicationPastVersionDataset() {
+        return defaultDataset(QbPublications.PAST_VERSION, 1000);
+    }
+
+    @Bean
     EntityDefinition qbPublicationCardEntity() {
         return QbPublications.CARD_ENTITY;
     }
@@ -327,6 +337,17 @@ public class PublishingConfig {
     @Bean
     ProcessDefinition<PublicationLifecycle.PublicationRef, PublicationOutput, ProcessContext> qbPublicationWithdraw() {
         return PublicationLifecycle.withdraw();
+    }
+
+    @Bean
+    ProcessDefinition<PublicationVersions.SwitchInput, PublicationOutput, ProcessContext> qbPublicationSwitchVersion() {
+        return PublicationVersions.switchVersion();
+    }
+
+    @Bean
+    ProcessDefinition<PublicationVersions.WithdrawInput, PublicationOutput, ProcessContext>
+        qbPublicationSwitchWithdraw() {
+        return PublicationVersions.withdraw();
     }
 
     @Bean

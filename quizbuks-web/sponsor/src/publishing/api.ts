@@ -98,6 +98,13 @@ export interface Publication {
   adminReason: string | null
   endedAt: string | null
   endReason: string | null
+  /** A switch to another version of the quiz in review (Q51): the version, its label and since when; none without. */
+  pendingVersionId: string | null
+  pendingVersionLabel: string | null
+  pendingSince: string | null
+  /** Why the last switch did not happen: the reviewer's reason, or a code when it was dropped (ended, taken down). */
+  switchRejectReason: string | null
+  switchRejectCode: string | null
   /** The number of changes; sent back as `baseRevision`. */
   revision: number
   editedAt: string
@@ -256,6 +263,11 @@ export function toPublication(row: Row): Publication {
     adminReason: str(row.adminReason),
     endedAt: str(row.endedAt),
     endReason: str(row.endReason),
+    pendingVersionId: str(row.pendingVersionId),
+    pendingVersionLabel: str(row.pendingVersionLabel),
+    pendingSince: str(row.pendingSince),
+    switchRejectReason: str(row.switchRejectReason),
+    switchRejectCode: str(row.switchRejectCode),
     revision: num(row.revision),
     editedAt: String(row.editedAt ?? ''),
     copiedFrom: str(row.copiedFrom),
@@ -658,6 +670,17 @@ export const submitPublication = (publicationId: string, baseRevision: number) =
 export const withdrawPublication = (publicationId: string) =>
   runProcess<PublicationOutput>(PUBLISHING_PROCESS.withdraw, { publicationId })
 
+/**
+ * Asks to switch a publication that went on to another version of its quiz (Q51): reviewed again while it runs on its
+ * version; made at once when no review is needed.
+ */
+export const switchVersion = (publicationId: string, versionId: string, baseRevision: number) =>
+  runProcess<PublicationOutput>(PUBLISHING_PROCESS.switchVersion, { publicationId, versionId, baseRevision })
+
+/** Withdraws the switch in review; the publication keeps its version. */
+export const withdrawSwitch = (publicationId: string, baseRevision: number) =>
+  runProcess<PublicationOutput>(PUBLISHING_PROCESS.switchWithdraw, { publicationId, baseRevision })
+
 export const pausePublication = (publicationId: string) =>
   runProcess<PublicationOutput>(PUBLISHING_PROCESS.pause, { publicationId })
 
@@ -690,6 +713,9 @@ export function actionsOf(status: PublicationStatus, pausedBy: string | null = n
     pause: status === 'SCHEDULED' || status === 'LIVE' || status === 'FUNDS_SHORT',
     resume: status === 'PAUSED' && pausedBy !== 'ADMIN',
     copy: !takenDown,
+    /** Q51: one that went on, has not ended and was not taken down switches its version. */
+    switchVersion: !takenDown && (status === 'SCHEDULED' || status === 'LIVE' || status === 'FUNDS_SHORT'
+      || status === 'PAUSED'),
   }
 }
 

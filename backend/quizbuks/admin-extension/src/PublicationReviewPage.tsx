@@ -279,12 +279,14 @@ export default function PublicationReviewPage() {
   const publication = useQuery({
     queryKey: ['qb-ext', 'publication', publicationId],
     queryFn: () => readPublication(publicationId),
-    refetchInterval: (query) => after.interval(query.state.data?.status === PENDING_REVIEW),
+    refetchInterval: (query) => after.interval(query.state.data?.status === PENDING_REVIEW
+      || !!query.state.data?.pendingRequestId),
     // A refetch on focus would take the decision away while it is typed (it waits for every read to settle).
     refetchOnWindowFocus: false,
   })
-  const requestId = publication.data?.approvalRequestId ?? null
-  const versionId = publication.data?.versionId ?? null
+  // Q51: a running publication's switch in review is reviewed as the publication with the version it asks for.
+  const requestId = publication.data?.pendingRequestId ?? publication.data?.approvalRequestId ?? null
+  const versionId = publication.data?.pendingVersionId ?? publication.data?.versionId ?? null
   const row = useQuery({
     queryKey: ['qb-ext', 'publication-row', publicationId],
     queryFn: () => readPublicationRow(publicationId),
@@ -335,7 +337,8 @@ export default function PublicationReviewPage() {
     return <div className="flex flex-col gap-4">{back}<PageState kind="notFound" description={t('publication.notFound')} /></div>
   }
   const p = publication.data
-  const pending = p.status === PENDING_REVIEW && !!p.approvalRequestId
+  const switching = !!p.pendingRequestId
+  const pending = switching || (p.status === PENDING_REVIEW && !!p.approvalRequestId)
   const shownVersion = version.data?.value
   const quiz = shownVersion ? t('publication.quizValue', { title: shownVersion.title, label: shownVersion.label })
     : row.data?.quizTitle ? t('publication.quizValue', { title: row.data.quizTitle, label: p.versionLabel ?? '' })
@@ -343,8 +346,8 @@ export default function PublicationReviewPage() {
   const company = sponsor.data?.company ?? sponsor.data?.contactName
   // Everything the approval is bound to, settled and read for the request the publication waits for.
   const everythingShown = publication.isSuccess && !publication.isFetching
-    && tiers.isSuccess && !tiers.isFetching && tiers.data.requestId === p.approvalRequestId
-    && version.isSuccess && !version.isFetching && version.data.requestId === p.approvalRequestId
+    && tiers.isSuccess && !tiers.isFetching && tiers.data.requestId === requestId
+    && version.isSuccess && !version.isFetching && version.data.requestId === requestId
     && !!shownVersion?.content
     // And whether the quiz was taken down before (Q10b, M-d): nothing is decided without it.
     && (!p.quizId || (takedowns.isSuccess && !takedowns.isFetching))
@@ -386,7 +389,7 @@ export default function PublicationReviewPage() {
     decision = (
       <>
         <p className="text-muted-foreground text-sm">{t('publication.decisionHint')}</p>
-        <ApprovalPanel requestId={p.approvalRequestId!} onDecided={decided} />
+        <ApprovalPanel requestId={requestId!} onDecided={decided} />
       </>
     )
   }
@@ -421,6 +424,14 @@ export default function PublicationReviewPage() {
           </span>
         }
       />
+      {switching && (
+        <Alert data-testid="publication-switch">
+          <AlertDescription>
+            {t('publication.switch', { from: p.versionLabel ?? '', to: p.pendingVersionLabel ?? '',
+              time: when(p.pendingSince) })}
+          </AlertDescription>
+        </Alert>
+      )}
       <Takedowns takedowns={takedowns} />
       <Settings publication={p} tiers={tiers} quiz={quiz} finance={finance} />
       <Content versionId={versionId} version={version} />

@@ -374,6 +374,9 @@ public final class PublicationLifecycle {
                 .steps(PublicationEditing::lockSponsorAccount)
                 .step("Lock the publication", HoldLock.<ProcessContext>exclusive(
                     ctx -> PublicationEditing.lockName(ctx.get(PUB_ID))))
+                // Q51: an approved switch of version changes what a start reads: the start lock too, before the
+                // approval's (the publication's pair, then jabiz.approval:*). None waits on one still in review.
+                .steps(PublicationEditing::lockStarts)
                 .step("Find the publication", QueryEntities.<ProcessContext>of(
                     QbPublications.defaultDataset(QbPublications.PUBLICATION), ctx -> EntityQuery.builder()
                         .where(new QueryPredicate.In("publicationId", PublicationEditing.ids(ctx.get(PUB_ID))))
@@ -383,20 +386,31 @@ public final class PublicationLifecycle {
                     EntityInstance found = first(ctx, FOUND);
                     return found == null ? null : found.get("versionId");
                 }, false))
+                .steps(b -> PublicationVersions.loadPending(b, FOUND))
                 .steps(PublicationEditing::loadSchedule)
                 .steps(b -> PublicationEditing.loadSponsorProfile(b, ctx -> first(ctx, FOUND)))
                 .steps(b -> PublicationEditing.loadSponsorBan(b, ctx -> first(ctx, FOUND)))
                 .step("Load the request", QueryEntities.<ProcessContext>of(ApprovalEntities.REQUEST_DATASET,
                     ctx -> EntityQuery.builder().where(new QueryPredicate.In("requestId",
-                        ownRequest(ctx) ? PublicationEditing.ids(input(ctx).requestId()) : new ArrayList<>()))
+                        ownRequest(ctx) || ownSwitch(ctx) ? PublicationEditing.ids(input(ctx).requestId())
+                            : new ArrayList<>()))
                         .limit(1).build(), REQUEST))
                 .step("Check the approval", RequireApproval.<ProcessContext>when(
                     ctx -> ownRequest(ctx) && ApprovalEntities.APPROVED.equals(input(ctx).status()),
                     PublicationApprovals.SUBJECT, ctx -> PublicationEditing.approvalCase(first(ctx, FOUND),
                         list(ctx, TIERS), first(ctx, VERSIONS), false).preparedBy(input(ctx).preparerId()),
                     APPROVAL))
+                .step("Check the switch's approval", RequireApproval.<ProcessContext>when(
+                    ctx -> ownSwitch(ctx) && ApprovalEntities.APPROVED.equals(input(ctx).status()),
+                    PublicationApprovals.SUBJECT, ctx -> PublicationVersions.switchCase(ctx, first(ctx, FOUND))
+                        .preparedBy(input(ctx).preparerId()), APPROVAL))
                 .compute("Move on", (metadata, ctx) -> approvalResult(ctx))
                 .steps(PublicationNotices::announce));
+    }
+
+    /** Whether the event is about the switch of version the publication has in review (Q51). */
+    private static boolean ownSwitch(ProcessContext ctx) {
+        return PublicationVersions.ownSwitch(first(ctx, FOUND), input(ctx).requestId());
     }
 
     /** Whether the event is about the request the publication, still under review, waits for. */
@@ -423,6 +437,10 @@ public final class PublicationLifecycle {
     }
 
     static void approvalResult(ProcessContext ctx) {
+        if (ownSwitch(ctx)) {
+            PublicationVersions.result(ctx, first(ctx, FOUND), input(ctx), first(ctx, REQUEST));
+            return;
+        }
         if (!ownRequest(ctx)) {
             return;
         }
@@ -498,11 +516,21 @@ public final class PublicationLifecycle {
                 // Only a publication still in review has a pending request: one past its end loses it. Only then is
                 // the approval's case lock (jabiz.approval:<subject>:<publication>) taken: the lock order puts it
                 // after the publication's pair, and every other run of the tick takes no lock after the start lock.
+                // Q51: a switch of version still in review when the publication ends is withdrawn as well.
                 .step("Withdraw a review that came too late", WithdrawApproval.<ProcessContext>when(
-                    PublicationLifecycle::expiredInReview, PublicationApprovals.SUBJECT,
+                    ctx -> expiredInReview(ctx) || switchEnding(ctx), PublicationApprovals.SUBJECT,
                     ctx -> PublicationEditing.publication(ctx).id()))
                 .compute("Move on", (metadata, ctx) -> advance(ctx))
                 .steps(PublicationNotices::announce));
+    }
+
+    /** Whether the publication ends now with a switch of version in review (Q51). */
+    private static boolean switchEnding(ProcessContext ctx) {
+        EntityInstance publication = PublicationEditing.publication(ctx);
+        String status = publication.get("status");
+        return publication.get("pendingRequestId") != null && ENDED.equals(PublicationRules.next(status,
+            instant(publication.get("startAt")), instant(publication.get("endAt")), ctx.opTime()))
+            && !ENDED.equals(status);
     }
 
     private static boolean expiredInReview(ProcessContext ctx) {
@@ -530,6 +558,11 @@ public final class PublicationLifecycle {
             values.put("rejectReason", null);
         }
         ended(ctx, values, to);
+        if (ENDED.equals(to) && publication.get("pendingRequestId") != null) {
+            // Q51: its switch in review, withdrawn above, is dropped with the reason.
+            values.putAll(PublicationVersions.cleared());
+            values.put("switchRejectCode", PublishingCodes.SWITCH_ENDED);
+        }
         PublicationEditing.write(ctx, publication, values);
     }
 

@@ -9,6 +9,7 @@ datasets:
   QbPublicationStartCounter: urn:jabiz:dataset:default:QbPublicationStartCounter
 params:
   q: { kind: { type: text, maxLength: 100 }, description: Only publications whose name contains this text }
+  inReview: { kind: { type: bool }, description: "Only those waiting for a review, of the publication or of a switch of its version (Q51)" }
 results:
   publicationId:     { from: QbPublication.publicationId }
   publisherKind:     { from: QbPublication.publisherKind }
@@ -35,9 +36,14 @@ results:
   rejectReason:      { from: QbPublication.rejectReason }
   rejectCode:        { from: QbPublication.rejectCode }
   editedAt:          { from: QbPublication.editedAt }
+  pendingVersionId:    { from: QbPublication.pendingVersionId }
+  pendingVersionLabel: { from: QbPublication.pendingVersionLabel }
+  pendingRequestId:    { from: QbPublication.pendingRequestId }
+  pendingSince:        { from: QbPublication.pendingSince }
+  waitingSince:        { from: QbPublication.submittedAt }
 list:
   filters: [publicationId, publisherKind, publisherId, quizId, status, startAt, submittedAt]
-  sorts:   [editedAt, submittedAt, startAt, name]
+  sorts:   [editedAt, submittedAt, pendingSince, waitingSince, startAt, name]
   defaultSort: { field: editedAt, asc: false }
   key: [publicationId]
 permissions: [qb.admin.publication.read]
@@ -70,10 +76,18 @@ SELECT
     p.{{QbPublication.submittedAt}}         AS submittedAt,
     p.{{QbPublication.rejectReason}}        AS rejectReason,
     p.{{QbPublication.rejectCode}}          AS rejectCode,
-    p.{{QbPublication.editedAt}}            AS editedAt
+    p.{{QbPublication.editedAt}}            AS editedAt,
+    p.{{QbPublication.pendingVersionId}}    AS pendingVersionId,
+    p.{{QbPublication.pendingVersionLabel}} AS pendingVersionLabel,
+    p.{{QbPublication.pendingRequestId}}    AS pendingRequestId,
+    p.{{QbPublication.pendingSince}}        AS pendingSince,
+    -- Since when it waits for a review (Q51): a switch's request, else the submission.
+    coalesce(p.{{QbPublication.pendingSince}}, p.{{QbPublication.submittedAt}}) AS waitingSince
 FROM {{QbPublication}} p
 LEFT JOIN {{QbQuizVersion}} v ON v.{{QbQuizVersion.versionId}} = p.{{QbPublication.versionId}}
 LEFT JOIN {{QbPublicationCounter}} c ON c.{{QbPublicationCounter.publicationId}} = p.{{QbPublication.publicationId}}
 LEFT JOIN {{QbPublicationStartCounter}} s
     ON s.{{QbPublicationStartCounter.publicationId}} = p.{{QbPublication.publicationId}}
 WHERE (CAST(:q AS text) IS NULL OR strpos(lower(p.{{QbPublication.name}}), lower(CAST(:q AS text))) > 0)
+  AND (CAST(:inReview AS boolean) IS NOT TRUE OR p.{{QbPublication.status}} = 'PENDING_REVIEW'
+       OR p.{{QbPublication.pendingRequestId}} IS NOT NULL)

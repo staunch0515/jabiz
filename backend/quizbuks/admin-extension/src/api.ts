@@ -67,6 +67,10 @@ export interface PublicationRow {
   approvalRequestId: string | null
   submittedAt: string | null
   rejectReason: string | null
+  /** Q51: a switch to another version in review (its label and request), and since when the row waits for review. */
+  pendingVersionLabel: string | null
+  pendingRequestId: string | null
+  waitingSince: string | null
 }
 
 export function toPublicationRow(row: Row): PublicationRow {
@@ -87,14 +91,20 @@ export function toPublicationRow(row: Row): PublicationRow {
     approvalRequestId: str(row.approvalRequestId),
     submittedAt: str(row.submittedAt),
     rejectReason: str(row.rejectReason),
+    pendingVersionLabel: str(row.pendingVersionLabel),
+    pendingRequestId: str(row.pendingRequestId),
+    waitingSince: str(row.waitingSince),
   }
 }
 
-/** A page of the publications waiting for review, the longest waiting first, with their count. */
+/**
+ * A page of the publications waiting for review, the longest waiting first, with their count: those submitted and
+ * those running that asked to switch their version (Q51).
+ */
 export const readPendingPublications = (offset: number, limit: number) =>
   page(TEMPLATE.publications, toPublicationRow, {
-    filters: [{ field: 'status', op: 'eq', value: 'PENDING_REVIEW' }],
-    sorts: [{ field: 'submittedAt', asc: true }],
+    params: { inReview: true },
+    sorts: [{ field: 'waitingSince', asc: true }],
     offset,
     limit,
     count: true,
@@ -210,6 +220,11 @@ export interface Publication {
   adminReason: string | null
   /** Q48a: the operator whose member took it down; null when headquarters did, or nobody. */
   takedownOperatorId: string | null
+  /** Q51: a switch of the running publication to another version, in review: that version and its request. */
+  pendingVersionId: string | null
+  pendingVersionLabel: string | null
+  pendingRequestId: string | null
+  pendingSince: string | null
 }
 
 export async function readPublication(publicationId: string): Promise<Publication | null> {
@@ -241,6 +256,10 @@ export async function readPublication(publicationId: string): Promise<Publicatio
     pausedBy: str(row.pausedBy),
     adminReason: str(row.adminReason),
     takedownOperatorId: str(row.takedownOperatorId),
+    pendingVersionId: str(row.pendingVersionId),
+    pendingVersionLabel: str(row.pendingVersionLabel),
+    pendingRequestId: str(row.pendingRequestId),
+    pendingSince: str(row.pendingSince),
   }
 }
 

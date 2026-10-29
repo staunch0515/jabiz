@@ -140,7 +140,7 @@ function PublicationView({ detail, stale, onStale }: {
         <Alert variant="warning"><AlertDescription>{t('publishing.detail.fundsShort')}</AlertDescription></Alert>
       )}
       <AdminNotice publication={publication} />
-      <VersionNotice quizId={publication.quizId} versionId={publication.versionId} versionLabel={publication.versionLabel} />
+      <VersionNotice publication={publication} disabled={stale} onStale={onStale} />
       <PublicationSummary values={{
         ...publication,
         quizTitle: version?.title ?? null,

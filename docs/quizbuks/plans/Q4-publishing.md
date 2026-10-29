@@ -64,6 +64,7 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
   `{versionId, versionContentHash, name, regions, startAt, endAt, timeLimitSec, passScore, budgetCap, maxWinners, tiers:[{fromScore,toScore,reward}]}`。
   所以批准的正是提交时的快照与策略。驳回后再修改、再提交，会得到新的请求（旧请求作废）。
 - 发布即冻结（5.3-1）：发布引用只写一次的 `QbQuizVersion`，内容来自版本快照。之后修改模版或生成新版本，都不影响已有的发布。
+- Q51（2026-10-29，`Q51-publication-versions.md`）：已上架的发布可以经再审核换用同一 Quiz 的另一个满分相同的版本（`QB_PUBLICATION_SWITCH_VERSION`）；策略照旧冻结，进行中的会话保持开始时的版本。
 
 ### D-Q4-3 档位与金额【待确认 Q4-7】
 

@@ -234,7 +234,13 @@ public final class AttemptProcesses {
                     AudienceRows.conditions(ctx -> ctx.get(PUB_KEY), CONDITIONS),
                     AudienceRows.callers(ATTRIBUTES)))
                 .steps(b -> PlaySteps.loadRegions(b, ctx -> ctx.request().actorId()))
+                // Q51: an attempt keeps the version it started with, whichever the publication has switched to since;
+                // a new one takes the card's (checked again against the card read under the lock).
                 .steps(b -> PlaySteps.loadVersion(b, ctx -> {
+                    EntityInstance mine = first(ctx, MINE);
+                    if (mine != null) {
+                        return mine.get("versionId");
+                    }
                     EntityInstance card = first(ctx, CARD_BEFORE);
                     return card == null ? null : card.get("versionId");
                 }))
@@ -297,6 +303,11 @@ public final class AttemptProcesses {
     }
 
     private static void continueOrRefuse(ProcessContext ctx, EntityInstance attempt) {
+        if (!AttemptStatus.finished(attempt.get("status")) && !sameVersion(ctx, attempt.get("versionId"))) {
+            // Another start of the caller's went first, on a version this one did not read (Q51): start again.
+            versionChanged(ctx);
+            return;
+        }
         if (AttemptStatus.finished(attempt.get("status"))) {
             ctx.reject(new com.jabiz.entity.Violation("publicationId", PlayCodes.ALREADY_TAKEN, "The caller has "
                 + "already answered this publication", Map.of("attemptId", String.valueOf(attempt.id()))));
@@ -309,6 +320,18 @@ public final class AttemptProcesses {
             return;
         }
         ctx.put(OUTPUT, output(ctx, attempt, PlaySteps.snapshot(ctx), true));
+    }
+
+    /** Whether {@code versionId} is the version this start loaded ({@link PlaySteps#VERSION}). */
+    private static boolean sameVersion(ProcessContext ctx, Object versionId) {
+        EntityInstance version = first(ctx, PlaySteps.VERSION);
+        return version != null && versionId != null && String.valueOf(version.id()).equals(String.valueOf(versionId));
+    }
+
+    private static void versionChanged(ProcessContext ctx) {
+        ctx.reject(new com.jabiz.entity.Violation("publicationId", PlayCodes.VERSION_CHANGED, "The publication "
+            + "switched to another version meanwhile: start again", Map.of("publicationId",
+            String.valueOf(ctx.get(PUB_KEY)))));
     }
 
     static void start(ProcessContext ctx, OptionShuffle shuffle) {
@@ -353,6 +376,11 @@ public final class AttemptProcesses {
             ctx.reject(new com.jabiz.entity.Violation("publicationId", AudienceCodes.NOT_MATCHED, "The caller's "
                 + "profile does not meet the publication's conditions", Map.of("publicationId",
                 String.valueOf(ctx.get(PUB_KEY)))));
+            return;
+        }
+        if (!sameVersion(ctx, card.get("versionId"))) {
+            // The publication switched its version between the read before the lock and this one (Q51).
+            versionChanged(ctx);
             return;
         }
         QuizSnapshot snapshot = PlaySteps.snapshot(ctx);

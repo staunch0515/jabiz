@@ -182,8 +182,8 @@ describe('ReviewsPage', () => {
     expect(link).toHaveTextContent('Spring run')
     expect(link).toHaveAttribute('href', `/qb/reviews/publications/${PUBLICATION_ID}`)
     expect(server.runQuery).toHaveBeenCalledWith(TEMPLATE.publications, {
-      filters: [{ field: 'status', op: 'eq', value: 'PENDING_REVIEW' }],
-      sorts: [{ field: 'submittedAt', asc: true }],
+      params: { inReview: true },
+      sorts: [{ field: 'waitingSince', asc: true }],
       offset: 0,
       limit: 20,
       count: true,
@@ -193,6 +193,13 @@ describe('ReviewsPage', () => {
     const sponsor = await screen.findByTestId('queue-sponsor-link')
     expect(sponsor).toHaveTextContent('Rhea Co')
     expect(sponsor).toHaveAttribute('href', `/qb/reviews/sponsors/${SPONSOR_ID}`)
+  })
+
+  it('shows a running publication\'s switch of version among them (Q51)', async () => {
+    server.templates.set(TEMPLATE.publications, [{ ...publication('LIVE'), quizTitle: 'World capitals',
+      pendingVersionLabel: 'v2', pendingRequestId: 'switch-request', waitingSince: '2026-10-20T00:00:00Z' }])
+    renderAt('/qb/reviews', '/qb/reviews', <ReviewsPage />)
+    expect(await screen.findByTestId('queue-publication-switch')).toHaveTextContent('World capitals · v1 → v2')
   })
 
   it('offers only the queues the user may review', async () => {
@@ -277,6 +284,22 @@ describe('PublicationReviewPage', () => {
     await new Promise((resolve) => setTimeout(resolve, 2_500))
     expect(reads).toBe(settled)
   }, 15_000)
+
+  it('reviews a running publication\'s switch with the version it asks for (Q51)', async () => {
+    const next = '0192f0a0-0000-7000-8000-0000000000e2'
+    server.entities.set(`${DATASET.publication}/${PUBLICATION_ID}`, { ...publication('LIVE'),
+      pendingVersionId: next, pendingVersionLabel: 'v2', pendingRequestId: 'switch-request',
+      pendingSince: '2026-10-20T00:00:00Z' })
+    server.entities.set(`${DATASET.version}/${next}`, { versionId: next, label: 'v2', title: 'World capitals, revised',
+      contentHash: 'b'.repeat(64), versionedAt: '2026-10-19T00:00:00Z', content: SNAPSHOT_JSON })
+    renderPublication()
+    expect(await screen.findByTestId('publication-switch')).toHaveTextContent('from version v1 to v2')
+    const panel = await screen.findByTestId('approval-panel')
+    expect(panel).toHaveAttribute('data-request', 'switch-request')
+    expect(within(await screen.findByTestId('version-preview')).getByTestId('preview-title'))
+      .toHaveTextContent('World capitals')
+    expect(screen.getByTestId('publication-settings')).toHaveTextContent('World capitals, revised')
+  })
 
   it('links a content administrator to taking a running publication down (Q10b)', async () => {
     server.permissions = new Set([...server.permissions, 'qb.admin.content.write'])

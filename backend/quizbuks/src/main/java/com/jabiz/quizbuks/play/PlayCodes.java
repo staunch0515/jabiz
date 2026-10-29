@@ -18,6 +18,11 @@ public final class PlayCodes {
     public static final String QUOTA_FULL = "QB_PUBLICATION_QUOTA_FULL";
     public static final String FUNDS_SHORT = "QB_SPONSOR_FUNDS_SHORT";
     public static final String ALREADY_TAKEN = "QB_ATTEMPT_ALREADY_TAKEN";
+    /**
+     * The publication switched to another version of its quiz while this start read it (Q51): nothing is started, and
+     * starting again reads the new version.
+     */
+    public static final String VERSION_CHANGED = "QB_ATTEMPT_VERSION_CHANGED";
     public static final String OWN_PUBLICATION = "QB_ATTEMPT_OWN_PUBLICATION";
 
     // Saving and submitting.
@@ -54,7 +59,7 @@ public final class PlayCodes {
     public static final String TOO_FAST = "QB_ATTEMPT_TOO_FAST";
 
     public static final List<String> ALL = List.of(TOO_FAST, NOT_OPEN, NOT_VISIBLE, BUDGET_FULL, QUOTA_FULL, FUNDS_SHORT,
-        ALREADY_TAKEN, OWN_PUBLICATION, EXPIRED, NOT_IN_PROGRESS, FINISHED, ANSWER_INVALID, INCOMPLETE, SINGLE_CHOICE, PUBLICATION_MISMATCH,
+        ALREADY_TAKEN, VERSION_CHANGED, OWN_PUBLICATION, EXPIRED, NOT_IN_PROGRESS, FINISHED, ANSWER_INVALID, INCOMPLETE, SINGLE_CHOICE, PUBLICATION_MISMATCH,
         FEE_RATE_INVALID, REWARD_PENDING, REWARD_CASH, REWARD_REDEEM, REWARD_DIGITAL,
         REWARD_DIGITAL_DUE);
 
