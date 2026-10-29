@@ -419,7 +419,7 @@ steps:
     expect:
       query: qb.admin.monthly
       params: { from: "2026-10-01T00:00:00Z", to: "2026-11-01T00:00:00Z" }
-      rows: 16
+      rows: 18
       values:
         - { category: TOPUP, transactionCount: 1, amount: 5000, stripeBalance: 5000, sponsorWallets: -5000 }
         - { category: BANK_TOPUP, transactionCount: 0, amount: 0 }
@@ -436,20 +436,24 @@ steps:
         - { category: TRANSFER_REVERSED, transactionCount: 0 }
         - { category: PAYOUT, transactionCount: 0 }
         - { category: PAYOUT_FAILED, transactionCount: 0 }
+        - { category: OPERATOR_SHARE, transactionCount: 0 }
+        - { category: OPERATOR_PAID, transactionCount: 0 }
         - { category: OTHER, transactionCount: 1, amount: 100, stripeBalance: 100, sponsorWallets: -100 }
   - expect:
       query: qb.admin.balances
       params: { from: "2026-10-01T00:00:00Z", to: "2026-11-01T00:00:00Z" }
-      rows: 12
+      rows: 14
       values:
         - { rowKind: ACCOUNT, code: "1110", opening: 0, debit: 5100, credit: 180, closing: 4920 }
         - { rowKind: ACCOUNT, code: "1120", opening: 0, debit: 0, credit: 0, closing: 0 }
         - { rowKind: ACCOUNT, code: "2110", opening: 0, debit: 200, credit: 5100, closing: -4900 }
         - { rowKind: ACCOUNT, code: "2120", opening: 0, debit: 0, credit: 200, closing: -200 }
         - { rowKind: ACCOUNT, code: "2130", closing: 0 }
+        - { rowKind: ACCOUNT, code: "2140", closing: 0 }
         - { rowKind: ACCOUNT, code: "4110", closing: 0 }
         - { rowKind: ACCOUNT, code: "5110", debit: 180, closing: 180 }
         - { rowKind: ACCOUNT, code: "5120", debit: 0, closing: 0 }
+        - { rowKind: ACCOUNT, code: "5130", closing: 0 }
         - { rowKind: CHECK, code: SPONSOR_WALLETS, closing: -4900, partyTotal: -4900, matches: true }
         - { rowKind: CHECK, code: TAKER_WALLETS, closing: -200, partyTotal: -200, matches: true }
         - { rowKind: CHECK, code: NO_OVERDRAWN_WALLET, closing: 0, matches: true }

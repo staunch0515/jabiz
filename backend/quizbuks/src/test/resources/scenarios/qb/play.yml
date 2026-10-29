@@ -384,7 +384,7 @@ steps:
     save: { t3: $.attemptId }
   - actor: { id: "${u3}", permissions: [qb.play, qb.me] }
     process: QB_ATTEMPT_SAVE@latest
-    input: { attemptId: "${t3}", currentIndex: 1, answers: [{ questionNo: 1, selected: [1] }] }
+    input: { attemptId: "${t3}", currentIndex: 1, answers: [{ questionNo: 1, selected: [2] }] }
   - note: Past the time limit and its grace, the minute's job finishes it with the saved answer.
     advanceClock: PT6M
   - runJob: { job: qb.attempt-expire, items: { succeeded: 1 } }
