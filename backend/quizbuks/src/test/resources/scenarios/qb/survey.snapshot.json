@@ -210,7 +210,7 @@
       "questionCount" : "2",
       "budgetCap" : "3000",
       "maxWinners" : "100",
-      "tiers" : "[{\"fromScore\":0,\"reward\":\"0\",\"tierId\":\"01a0f4f9-b280-7000-8000-000000000414\",\"toScore\":1},{\"fromScore\":2,\"reward\":\"30\",\"tierId\":\"01a0f4f9-b280-7000-8000-000000000415\",\"toScore\":2}]",
+      "tiers" : "[{\"fromScore\":0,\"reward\":\"0\",\"tierId\":\"01a0f4f9-b280-7000-8000-000000000435\",\"toScore\":1},{\"fromScore\":2,\"reward\":\"30\",\"tierId\":\"01a0f4f9-b280-7000-8000-000000000436\",\"toScore\":2}]",
       "sponsorCountry" : null,
       "kind" : "SURVEY",
       "rewardMethod" : "PLATFORM",
@@ -219,6 +219,7 @@
       "digitalDescription" : null,
       "digitalSendDays" : null,
       "wentOnAt" : "2026-10-01T01:00:00Z",
+      "operatorId" : null,
       "endedAt" : null,
       "version" : 1
     } ],
