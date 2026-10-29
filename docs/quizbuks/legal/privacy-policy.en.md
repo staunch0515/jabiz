@@ -48,6 +48,10 @@ When you sign in or sign up with Google, Facebook or LINE, we receive from that 
 
 We do not collect your location (GPS or similar) or estimate it from your IP address. We use no advertising and no third-party behavioural analytics.
 
+### 2.4 Information businesses publish
+
+To introduce the Service to businesses, we and our Operators (see 5) collect what a business publishes on its website: its company or shop name, its products, its website's language and country, and the business contact email address it publishes. We do not collect anyone's private email address, nor anything about a business whose website says it refuses advertising or promotional email.
+
 ## 3. How we use the information
 
 1. To provide the Service: creating and authenticating accounts; publishing, answering and scoring quizzes; granting rewards and prizes; managing Kudos; and processing withdrawals and top-ups
@@ -57,6 +61,8 @@ We do not collect your location (GPS or similar) or estimate it from your IP add
 5. To meet legal obligations, such as issuing receipts and keeping accounting records
 6. To send notices about the Service, including changes to the terms and this policy, and to answer enquiries
 7. To produce statistics that do not identify individuals, and to improve the Service
+8. For our Operators to review, manage and support Sponsors (see 5)
+9. To introduce the Service to businesses (using the information under 2.4: an email with a trial quiz made from the business's own products; every email says how to stop them, and a request to stop holds for good)
 
 ## 4. What Sponsors see
 
@@ -89,6 +95,8 @@ We do not give personal information to third parties without your consent, excep
 | The mail server provider a Sponsor registers | Sending that Sponsor's invitations | The invitee's email address and the content of the email |
 | Anthropic, PBC (USA) | AI help for Sponsors writing quizzes (only when a Sponsor uses it) | Only the quiz and material content the Sponsor chooses. No information about Takers, and not the Sponsor's name or company. See the “AI notice” |
 | Google LLC (YouTube) (USA), Vimeo, Inc. (USA) | Playing videos embedded in quizzes | When a video is shown, your browser sends your IP address and similar information to these companies. YouTube is embedded in its cookie-free mode; Vimeo may set cookies |
+| Operators (agents under contract with us; [Operator name (country)]) | Reviewing Sponsors' applications and publications, managing and supporting Sponsors, introducing the Service to businesses (on our behalf) | Sponsors' company names, contact names, introductions, logos, business email addresses, their publications and their reviews, and attempt totals. Never information that identifies a Taker (email address, profile, individual answers) |
+| Anthropic, PBC (USA) | Preparing our introductions to businesses (sorting public information, drafting the trial quiz and the email) | Only what a business publishes on its website (2.4) |
 | [Hosting provider (country)] | Running the Service's servers | All information the Service stores |
 
 ## 6. Transfers to third parties outside Japan
@@ -112,6 +120,7 @@ The Takers' app also stores its page shell in the browser so that pages open off
 - AI-suggested drafts are deleted 7 days after they are generated.
 - Uploaded files are fully deleted when the Sponsor deletes them.
 - What you entered in About me is deleted as soon as you change or clear it. After an account is closed, it is no longer used to match quizzes.
+- Businesses' information under 2.4 and the record of our introductions are deleted 1 year after the last introduction. When a business asks us to stop, we keep only its email address and domain, without a time limit, so that we never contact it again.
 
 ## 9. Security
 

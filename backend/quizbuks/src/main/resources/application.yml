@@ -163,6 +163,16 @@ jabiz:
         session:
           persistence: tab
           idle-timeout: PT30M
+      # Operators (docs/quizbuks/plans/Q48-operators.md, Q48a): the agents' back office at /operator/, the admin
+      # frontend built a second time for this entry. Only QB_OPERATOR, whose holders must have a second factor (the
+      # role requires it); the sign-in guard also wants a current membership of an operator that runs. No
+      # registration: headquarters names the members and gives them the role through the platform's four eyes.
+      operator:
+        accepted-roles: QB_OPERATOR
+        app-path: /operator/
+        session:
+          persistence: tab
+          idle-timeout: PT30M
       # QuizBuks for Shopify (docs/quizbuks/shopify/S1-install.md; platform decision D59): the embedded pages sign in
       # with the session token Shopify gives them, as the staff member of the shop it names; the first sign-in opens the
       # account (no address, no password). The role QBS_SHOP comes from QB_SETUP. Sessions stay in the tab.
@@ -320,6 +330,10 @@ jabiz:
         pwa: "off"
       - path: /admin
         entry: admin
+        pwa: "off"
+      # Q48a: the operators' back office, the same admin frontend signing in to the entry operator.
+      - path: /operator
+        entry: operator
         pwa: "off"
       # The Shopify app's embedded pages (S1): framed by the shop that opened them only (embedding, D59); App Bridge
       # is loaded from Shopify's CDN, as Shopify requires.

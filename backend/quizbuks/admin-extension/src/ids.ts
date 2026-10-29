@@ -98,6 +98,51 @@ export const TEMPLATE = {
   aiSettings: 'qb.admin.ai-settings',
   /** Every announcement and sponsor's notice with its statistics (Q7c; `qb.admin.content.write`). */
   broadcasts: 'qb.admin.broadcasts',
+  /** Q48a, headquarters: the operators, an operator's members, the reviews they decided (`qb.admin.spot-check`). */
+  operators: 'qb.admin.operators',
+  operatorMembers: 'qb.admin.operator-members',
+  operatorReviews: 'qb.admin.operator-reviews',
+  /** Q48a, an operator's own pages (`qb.operator.use`): the totals and the sponsors, never a taker's profile. */
+  operatorOverview: 'qb.operator.overview',
+  operatorSponsors: 'qb.operator.sponsors',
+  /** Q48c, AI prospecting: an operator's own (`qb.prospect.use`) and headquarters' for any owner (`qb.admin.prospect`). */
+  operatorProspects: 'qb.operator.prospects',
+  operatorProspectSetting: 'qb.operator.prospect-setting',
+  operatorProspectDirections: 'qb.operator.prospect-directions',
+  operatorProspectUsage: 'qb.operator.prospect-usage',
+  adminProspects: 'qb.admin.prospects',
+  adminProspectSetting: 'qb.admin.prospect-setting',
+  adminProspectDirections: 'qb.admin.prospect-directions',
+  adminProspectUsage: 'qb.admin.prospect-usage',
+  adminProspectBlocks: 'qb.admin.prospect-blocks',
+} as const
+
+/** AI prospecting's processes (backend `prospect`, Q48c); the owner is the caller's operator, or headquarters. */
+export const PROSPECT_PROCESS = {
+  settingsSave: 'QB_PROSPECT_SETTINGS_SAVE',
+  directionSave: 'QB_PROSPECT_DIRECTION_SAVE',
+  approve: 'QB_PROSPECT_APPROVE',
+  discard: 'QB_PROSPECT_DISCARD',
+  blockAdd: 'QB_PROSPECT_BLOCK_ADD',
+  mailServerSet: 'QB_PROSPECT_MAIL_SERVER_SET',
+  mailServerRemove: 'QB_PROSPECT_MAIL_SERVER_REMOVE',
+} as const
+
+/** Operators' processes (backend `operator`, Q48a); the server checks each, and an operator's acts their membership. */
+export const OPERATOR_PROCESS = {
+  save: 'QB_OPERATOR_SAVE',
+  memberAdd: 'QB_OPERATOR_MEMBER_ADD',
+  memberRemove: 'QB_OPERATOR_MEMBER_REMOVE',
+  assign: 'QB_SPONSOR_OPERATOR_ASSIGN',
+  spotCheck: 'QB_REVIEW_SPOT_CHECK',
+  /** The operator's own: its team, the lead's removal of a member, takedowns and bans. */
+  team: 'QB_OPERATOR_TEAM',
+  memberDrop: 'QB_OPERATOR_MEMBER_DROP',
+  pause: 'QB_OPERATOR_PUBLICATION_PAUSE',
+  resume: 'QB_OPERATOR_PUBLICATION_RESUME',
+  end: 'QB_OPERATOR_PUBLICATION_END',
+  ban: 'QB_OPERATOR_SPONSOR_BAN',
+  unban: 'QB_OPERATOR_SPONSOR_UNBAN',
 } as const
 
 /** The announcements' processes (`messaging.BroadcastProcesses`, Q7c); the server checks each. */
@@ -211,6 +256,10 @@ export const DICTIONARY = {
   broadcastAudience: 'urn:jabiz:dict:quizbuks:broadcast-audience',
   broadcastTarget: 'urn:jabiz:dict:quizbuks:broadcast-target',
   consentSource: 'urn:jabiz:dict:quizbuks:consent-source',
+  operatorStatus: 'urn:jabiz:dict:quizbuks:operator-status',
+  spotCheckResult: 'urn:jabiz:dict:quizbuks:spot-check-result',
+  prospectStatus: 'urn:jabiz:dict:quizbuks:prospect-status',
+  prospectBlockReason: 'urn:jabiz:dict:quizbuks:prospect-block-reason',
 } as const
 
 /** Permissions (`QbPermissions`): they only decide what the pages offer; the server checks every call. */
@@ -254,6 +303,14 @@ export const PERMISSION = {
   /** Bank withdrawals (Q13b): paying them, and the account number in plain text to do so. */
   withdrawalPay: 'qb.withdrawal.pay',
   bankReveal: 'qb.payout.bank.reveal',
+  /** Q48a: an operator's member (their own pages and acts), and headquarters' operator pages. */
+  operatorUse: 'qb.operator.use',
+  operatorsRead: 'qb.admin.operators.read',
+  operatorsWrite: 'qb.admin.operators.write',
+  spotCheck: 'qb.admin.spot-check',
+  /** Q48c: AI prospecting (an operator's own, or headquarters'), and headquarters' view of every owner's. */
+  prospectUse: 'qb.prospect.use',
+  adminProspect: 'qb.admin.prospect',
 } as const
 
 /** The bank top-up states finance may record money against, and the one an approval waits in (Q13a). */
@@ -338,6 +395,17 @@ export const PATH = {
   broadcasts: '/qb/broadcasts',
   /** AI generation (Q8a): usage, failures, the switch and the limits. */
   ai: '/qb/ai',
+  /** Q48a, headquarters: the operators, one operator, and the spot checks of their reviews. */
+  operators: '/qb/operators',
+  operator: (operatorId: string) => `/qb/operators/${encodeURIComponent(operatorId)}`,
+  operatorReviews: '/qb/operator-reviews',
+  /** Q48a, an operator's own pages: home (totals and team) and the sponsors. */
+  operatorHome: '/qb/operator',
+  operatorSponsors: '/qb/operator/sponsors',
+  /** Q48c: AI prospecting: the businesses found, one business's draft, and the settings. */
+  prospects: '/qb/prospects',
+  prospect: (prospectId: string) => `/qb/prospects/${encodeURIComponent(prospectId)}`,
+  prospectSettings: '/qb/prospects/settings',
   /** The platform's own pages. */
   tasks: '/tasks',
 } as const

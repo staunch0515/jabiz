@@ -142,6 +142,9 @@ public final class QbPublications {
             .asTemporal(TemporalRole.EVENT_TIME));
         // The source's key, not a reference: a draft that was copied can still be deleted.
         eb.field("copiedFrom", f -> f.physicalColumn("copied_from").immutable(true).asText(36));
+        // Q48a: the operator whose member took it down (paused or ended it as an administrator); null when
+        // headquarters did, or nobody. An operator resumes only its own takedowns (D-Q48-5).
+        eb.field("takedownOperatorId", f -> f.physicalColumn("takedown_operator_id").processOnly().asText(36));
         // D-Q4-1. A rejected or withdrawn publication goes back to its draft, so the first state is declared. A channel's
         // publication (S2, ChannelPublishing) is live as it is made: it has no draft and no review.
         eb.stateTransitions("status", st -> st

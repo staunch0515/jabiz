@@ -112,6 +112,15 @@ public final class QbParams {
     /** Dollars per million tokens, only for the administrators' estimate (A-8: nothing is billed). Not controlled. */
     public static final String AI_PRICE_INPUT = "qb.ai.price.input-per-mtok-usd";
     public static final String AI_PRICE_OUTPUT = "qb.ai.price.output-per-mtok-usd";
+    /**
+     * AI prospecting (Q48c, docs/quizbuks/plans/Q48-operators.md): the switch every prospecting job is held by
+     * ({@code enabledBy}), and the model and effort its requests name. Controlled: prospecting writes to businesses
+     * and spends money.
+     */
+    public static final String PROSPECT_ENABLED = "qb.prospect.enabled";
+    public static final String PROSPECT_MODEL = "qb.prospect.model";
+    public static final String PROSPECT_EFFORT = "qb.prospect.effort";
+    public static final List<String> PROSPECT_CONTROLLED = List.of(PROSPECT_ENABLED, PROSPECT_MODEL, PROSPECT_EFFORT);
     /** The controlled AI parameters, in the order the administrators' page shows them. */
     public static final List<String> AI_CONTROLLED = List.of(AI_ENABLED, AI_MODEL, AI_EFFORT, AI_SPONSOR_DAILY_JOBS,
         AI_SPONSOR_MONTHLY_TOKENS, AI_GLOBAL_MONTHLY_TOKENS);
@@ -196,7 +205,7 @@ public final class QbParams {
     public static final List<String> CONTROLLED = java.util.stream.Stream.of(List.of(CREATOR_FEE_RATE,
         TRANSFER_THRESHOLD, TRANSFER_REVIEW_ABOVE, TRANSFER_ENABLED, REVIEW_SPONSOR_AUTO, REVIEW_PUBLICATION_AUTO,
         TOPUP_MIN, TOPUP_MAX, TRANSFER_FEE, TRANSFER_HOLD_DAYS, TOPUP_NEW_SPONSOR_DAYS, TOPUP_NEW_SPONSOR_MAX_TOTAL),
-        REWARD, JOURNAL_ACCOUNTS, ISSUER, List.of(LEGAL_MAX_ANNOUNCE_DAYS), AI_CONTROLLED,
+        REWARD, JOURNAL_ACCOUNTS, ISSUER, List.of(LEGAL_MAX_ANNOUNCE_DAYS), AI_CONTROLLED, PROSPECT_CONTROLLED,
         List.of(TOPUP_BANK_MIN, TOPUP_BANK_MAX), BANK_RECEIVING, WITHDRAWAL_BANK).flatMap(List::stream).toList();
 
     /** A parameter: its key, kind (as the platform writes kinds) and first value. */
@@ -293,6 +302,14 @@ public final class QbParams {
         new Param(AI_SPONSOR_MONTHLY_TOKENS, TOKENS, "2000000",
             "AI tokens (input and output) one sponsor may use a month"),
         new Param(AI_GLOBAL_MONTHLY_TOKENS, TOKENS, "50000000", "AI tokens all sponsors together may use a month"),
+        // Q48c: AI prospecting.
+        new Param(PROSPECT_ENABLED, BOOL, false, "Whether AI prospecting runs (finding and researching businesses)"),
+        new Param(PROSPECT_MODEL, Map.of("type", "code", "dictUrn", "urn:jabiz:dict:quizbuks:ai-model",
+            "allowedValues", List.of("claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5")), "claude-opus-5-5",
+            "Claude model that finds and researches businesses"),
+        new Param(PROSPECT_EFFORT, Map.of("type", "code", "dictUrn", "urn:jabiz:dict:quizbuks:ai-effort",
+            "allowedValues", List.of("low", "medium", "high")), "medium",
+            "Claude's effort (thinking depth and cost) when prospecting"),
         new Param(AI_EXPIRE_DAYS, DAYS, "7",
             "Days AI candidates wait for the sponsor's review before they are cleared"),
         new Param(AI_PRICE_INPUT, USD, "4",

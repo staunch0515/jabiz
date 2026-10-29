@@ -6,6 +6,8 @@ import com.jabiz.process.ProcessDefinition;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.operator.OperatorChecks;
+import com.jabiz.quizbuks.operator.OperatorCodes;
 import com.jabiz.quizbuks.publishing.PublisherKind;
 import com.jabiz.quizbuks.messaging.BroadcastProcesses;
 import com.jabiz.quizbuks.publishing.PublicationAdmin;
@@ -41,11 +43,19 @@ import static com.jabiz.quizbuks.identity.AccountEditing.list;
  * the same transaction ({@code QB_PUBLICATION_BAN_PAUSE}, Q10b): only an administrator resumes them, after the unban.
  * The sponsor reads a fixed reason ("account suspended"), not the ban's, which is internal (review L3). The history of
  * {@code QbUserBan} is the record of bans and lifts.
+ *
+ * <p>An operator's members ban and unban sponsors too (Q48a, D-Q48-4: {@value #OPERATOR_BAN} /
+ * {@value #OPERATOR_UNBAN}, {@code qb.operator.use}, after their membership is checked and held, before the account's
+ * lock): only users with a sponsor onboarding, recorded with the operator ({@code operatorId}; null for headquarters).
+ * An operator lifts only its own bans; headquarters lifts any, and its ban of a user an operator banned makes the ban
+ * headquarters' (D-Q48-5). The ban's pauses carry the operator likewise.
  */
 public final class BanProcesses {
 
     public static final String BAN = "QB_USER_BAN";
     public static final String UNBAN = "QB_USER_UNBAN";
+    public static final String OPERATOR_BAN = "QB_OPERATOR_SPONSOR_BAN";
+    public static final String OPERATOR_UNBAN = "QB_OPERATOR_SPONSOR_UNBAN";
 
     static final String ASSIGNMENTS = "assignments";
     static final String ROLES = "roles";
@@ -71,15 +81,34 @@ public final class BanProcesses {
 
     /** @param adminRoles the roles the administration's entry accepts */
     public static ProcessDefinition<BanInput, BanOutput, ProcessContext> ban(Set<String> adminRoles) {
+        return ban(adminRoles, false);
+    }
+
+    /** {@value #OPERATOR_BAN}: an operator's member bans a sponsor. */
+    public static ProcessDefinition<BanInput, BanOutput, ProcessContext> operatorBan(Set<String> adminRoles) {
+        return ban(adminRoles, true);
+    }
+
+    private static ProcessDefinition<BanInput, BanOutput, ProcessContext> ban(Set<String> adminRoles,
+        boolean operator) {
         Set<String> admins = Set.copyOf(adminRoles);
-        return ProcessDefinition.define(BAN, 1, BanInput.class, BanOutput.class, ProcessContext.class, pb -> {
-            pb.description("Bans a user: they cannot sign in until unbanned, and cannot publish or withdraw meanwhile.")
-                .permissions(QbPermissions.ADMIN_USERS_BAN)
+        return ProcessDefinition.define(operator ? OPERATOR_BAN : BAN, 1, BanInput.class, BanOutput.class,
+            ProcessContext.class, pb -> {
+            pb.description(operator ? "Bans a sponsor for the operator: they cannot sign in until unbanned."
+                    : "Bans a user: they cannot sign in until unbanned, and cannot publish or withdraw meanwhile.")
+                .permissions(operator ? QbPermissions.OPERATOR_USE : QbPermissions.ADMIN_USERS_BAN)
                 .requiresVerifiedEmail()
                 .actsOn(SecurityEntities.USER, "userId")
                 .contextFactory((start, input) -> AccountEditing.start(start, input, AccountEditing.canonical(input.userId())))
                 .outputMapper(ctx -> ctx.get(OUTPUT, BanOutput.class));
+            if (operator) {
+                OperatorChecks.member(pb);
+            }
             AccountEditing.lock(pb);
+            if (operator) {
+                AccountEditing.loadOfUser(pb, "Load the sponsor's onboarding", QbAccounts.SPONSOR,
+                    AccountEditing.SPONSORS);
+            }
             AccountEditing.loadUser(pb, AccountEditing::userId);
             pb.step("Load the user's roles", QueryEntities.<ProcessContext>of(SecurityEntities.USER_ROLE_DATASET,
                 ctx -> EntityQuery.builder().where(new QueryPredicate.In("userId",
@@ -120,13 +149,21 @@ public final class BanProcesses {
         if (ctx.hasViolations() || !ctx.contains(OUTPUT)) {
             return List.of();
         }
+        String operatorId = operatorOf(ctx);
         return list(ctx, PUBLICATIONS).stream()
             .filter(publication -> PAUSABLE.contains(String.valueOf((Object) publication.get("status")))
-                && !PublicationStatus.BY_ADMIN.equals(publication.get("pausedBy")))
+                && !(PublicationStatus.BY_ADMIN.equals(publication.get("pausedBy"))
+                    // Headquarters' ban takes over an operator's takedown (D-Q48-5); nothing else to pause again.
+                    && (operatorId != null || publication.get("takedownOperatorId") == null)))
             .map(publication -> String.valueOf(publication.id()))
             .sorted()
-            .map(id -> new PublicationAdmin.BanPauseInput(java.util.UUID.fromString(id)))
+            .map(id -> new PublicationAdmin.BanPauseInput(java.util.UUID.fromString(id), operatorId))
             .toList();
+    }
+
+    /** The caller's operator when an operator's member runs the process; null for headquarters. */
+    private static String operatorOf(ProcessContext ctx) {
+        return ctx.contains(OperatorChecks.OPERATOR_ID) ? OperatorChecks.operatorId(ctx) : null;
     }
 
     static void ban(ProcessContext ctx, Set<String> adminRoles) {
@@ -141,8 +178,16 @@ public final class BanProcesses {
                 Map.of()));
             return;
         }
+        String operatorId = operatorOf(ctx);
+        if (operatorId != null && first(ctx, AccountEditing.SPONSORS) == null) {
+            ctx.reject(new Violation("userId", OperatorCodes.NOT_A_SPONSOR, "An operator bans sponsors only",
+                Map.of()));
+            return;
+        }
         EntityInstance ban = first(ctx, BANS);
-        if (BanRules.banned(ban == null ? null : ban.attributes())) {
+        if (BanRules.banned(ban == null ? null : ban.attributes())
+            // Headquarters' ban of a user an operator banned makes the ban headquarters' (D-Q48-5).
+            && (operatorId != null || ban.get("operatorId") == null)) {
             ctx.reject(new Violation("userId", AccountCodes.BAN_STATE, "The user is banned already",
                 Map.of("banned", true)));
             return;
@@ -155,17 +200,32 @@ public final class BanProcesses {
         values.put("liftedAt", null);
         values.put("liftedBy", null);
         values.put("liftNote", null);
+        values.put("operatorId", operatorId);
         write(ctx, ban, userId, values);
     }
 
     public static ProcessDefinition<UnbanInput, BanOutput, ProcessContext> unban() {
-        return ProcessDefinition.define(UNBAN, 1, UnbanInput.class, BanOutput.class, ProcessContext.class, pb -> {
-            pb.description("Lifts a user's ban: they can sign in again.")
-                .permissions(QbPermissions.ADMIN_USERS_BAN)
+        return unban(false);
+    }
+
+    /** {@value #OPERATOR_UNBAN}: an operator's member lifts a ban their operator made. */
+    public static ProcessDefinition<UnbanInput, BanOutput, ProcessContext> operatorUnban() {
+        return unban(true);
+    }
+
+    private static ProcessDefinition<UnbanInput, BanOutput, ProcessContext> unban(boolean operator) {
+        return ProcessDefinition.define(operator ? OPERATOR_UNBAN : UNBAN, 1, UnbanInput.class, BanOutput.class,
+            ProcessContext.class, pb -> {
+            pb.description(operator ? "Lifts a ban the operator made: the sponsor can sign in again."
+                    : "Lifts a user's ban: they can sign in again.")
+                .permissions(operator ? QbPermissions.OPERATOR_USE : QbPermissions.ADMIN_USERS_BAN)
                 .requiresVerifiedEmail()
                 .actsOn(SecurityEntities.USER, "userId")
                 .contextFactory((start, input) -> AccountEditing.start(start, input, AccountEditing.canonical(input.userId())))
                 .outputMapper(ctx -> ctx.get(OUTPUT, BanOutput.class));
+            if (operator) {
+                OperatorChecks.member(pb);
+            }
             AccountEditing.lock(pb);
             AccountEditing.loadUser(pb, AccountEditing::userId);
             loadBan(pb);
@@ -180,6 +240,12 @@ public final class BanProcesses {
         if (!BanRules.banned(ban == null ? null : ban.attributes())) {
             ctx.reject(new Violation("userId", AccountCodes.BAN_STATE, "The user is not banned",
                 Map.of("banned", false)));
+            return;
+        }
+        String operatorId = operatorOf(ctx);
+        if (operatorId != null && !operatorId.equals(ban.get("operatorId"))) {
+            ctx.reject(new Violation("userId", OperatorCodes.HQ_BAN, "Headquarters banned the user: the operator does "
+                + "not lift the ban", Map.of()));
             return;
         }
         Map<String, Object> values = new LinkedHashMap<>();

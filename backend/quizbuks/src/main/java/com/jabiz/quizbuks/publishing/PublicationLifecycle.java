@@ -333,6 +333,8 @@ public final class PublicationLifecycle {
             values.put("pausedBy", null);
             if (adminReason != null) {
                 values.put("adminReason", adminReason);
+                // Q48a: the takedown is over, whoever made it.
+                values.put("takedownOperatorId", null);
             }
             ended(ctx, values, to);
             PublicationEditing.write(ctx, publication, values);

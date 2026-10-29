@@ -8,6 +8,8 @@ import {
   FileSpreadsheet,
   HandCoins,
   Gift,
+  Handshake,
+  House,
   Landmark,
   ListChecks,
   Megaphone,
@@ -53,6 +55,11 @@ import TransferReviewPage from './TransferReviewPage'
 import TransfersPage from './TransfersPage'
 import UserSummaryPage from './UserSummaryPage'
 import UsersPage from './UsersPage'
+import OperatorHomePage from './OperatorHomePage'
+import OperatorPage from './OperatorPage'
+import OperatorReviewsPage from './OperatorReviewsPage'
+import OperatorsPage from './OperatorsPage'
+import OperatorSponsorsPage from './OperatorSponsorsPage'
 
 /**
  * QuizBuks's own pages in the platform's admin frontend (docs/quizbuks/02-design.md section 7.3,
@@ -96,8 +103,25 @@ export default defineExtension({
     { path: PATH.legal, element: <LegalPage /> },
     { path: PATH.broadcasts, element: <BroadcastsPage /> },
     { path: PATH.ai, element: <AiPage /> },
+    // Q48a: headquarters' operators and spot checks, and the operators' own pages in their back office.
+    { path: PATH.operators, element: <OperatorsPage /> },
+    { path: '/qb/operators/:operatorId', element: <OperatorPage /> },
+    { path: PATH.operatorReviews, element: <OperatorReviewsPage /> },
+    { path: PATH.operatorHome, element: <OperatorHomePage /> },
+    { path: PATH.operatorSponsors, element: <OperatorSponsorsPage /> },
   ],
   menu: [
+    // Q48a: the operator's own pages, first in its back office (only its members hold qb.operator.use).
+    {
+      key: 'quizbuks-operator',
+      label: 'menu.operatorGroup',
+      children: [
+        { key: 'qb-operator-home', label: 'menu.operatorHome', path: PATH.operatorHome, icon: House,
+          permission: PERMISSION.operatorUse },
+        { key: 'qb-operator-sponsors', label: 'menu.operatorSponsors', path: PATH.operatorSponsors, icon: Users,
+          permission: PERMISSION.operatorUse },
+      ],
+    },
     {
       key: 'quizbuks',
       label: 'menu.group',
@@ -131,6 +155,11 @@ export default defineExtension({
         { key: 'qb-broadcasts', label: 'menu.broadcasts', path: PATH.broadcasts, icon: Megaphone,
           permission: PERMISSION.contentWrite },
         { key: 'qb-ai', label: 'menu.ai', path: PATH.ai, icon: Sparkles, permission: PERMISSION.aiRead },
+        // Q48a: the operators, and the spot checks of the reviews they decided.
+        { key: 'qb-operators', label: 'menu.operators', path: PATH.operators, icon: Handshake,
+          permission: PERMISSION.operatorsRead },
+        { key: 'qb-operator-reviews', label: 'menu.operatorReviews', path: PATH.operatorReviews, icon: ClipboardCheck,
+          permission: PERMISSION.spotCheck },
       ],
     },
     {

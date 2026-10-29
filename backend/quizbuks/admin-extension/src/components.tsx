@@ -13,8 +13,9 @@ import {
   EXTENSION_NAMESPACE,
   PageState,
   UserName,
+  useAuth,
 } from '@jabiz/admin'
-import { PATH, SPONSOR_KIND } from './ids'
+import { PATH, PERMISSION, SPONSOR_KIND } from './ids'
 
 const linkClass = 'text-primary font-medium underline-offset-4 hover:underline'
 
@@ -28,9 +29,12 @@ export function PublisherLink({ kind, id, label, testId }: {
   label?: ReactNode | null
   testId?: string
 }) {
+  const { can } = useAuth()
   if (!kind || kind === SPONSOR_KIND) {
+    // Q48a: an operator reads no user's summary; the sponsor's page is the one it has.
+    const operator = !can(PERMISSION.usersRead) && can(PERMISSION.operatorUse)
     return (
-      <Link to={PATH.user(id)} className={linkClass} data-testid={testId}>
+      <Link to={operator ? PATH.sponsor(id) : PATH.user(id)} className={linkClass} data-testid={testId}>
         {label ?? <UserName id={id} />}
       </Link>
     )

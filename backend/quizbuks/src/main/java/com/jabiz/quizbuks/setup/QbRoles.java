@@ -8,7 +8,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * The five roles of QuizBuks and their permissions (docs/quizbuks/02-design.md section 2); {@code QB_SETUP} creates
+ * The roles of QuizBuks and their permissions (docs/quizbuks/02-design.md section 2); {@code QB_SETUP} creates
  * them. Each phase adds the permissions of what it builds here, and running {@code QB_SETUP} again grants them. No
  * role holds {@code ledger.post}, {@code ledger.reverse} or {@code ledger.account.write}: the ledger is written only
  * by the QuizBuks processes, as their subprocesses.
@@ -20,6 +20,11 @@ public final class QbRoles {
     public static final String ADMIN_CONTENT = "QB_ADMIN_CONTENT";
     public static final String ADMIN_FINANCE = "QB_ADMIN_FINANCE";
     public static final String ADMIN_SUPER = "QB_ADMIN_SUPER";
+    /**
+     * An operator's member (Q48a): the operator's back office ({@code /operator/}, entry {@code operator}), with a
+     * second factor always. A protected grant (it decides approvals): given through the platform's four eyes.
+     */
+    public static final String OPERATOR = "QB_OPERATOR";
     /** A staff member of a Shopify shop (QuizBuks for Shopify, S1): the embedded pages only (entry shopify). */
     public static final String SHOPIFY_SHOP = com.jabiz.quizbuks.shopify.Shopify.ROLE;
 
@@ -47,7 +52,26 @@ public final class QbRoles {
         // Q22: which reward methods a sponsor may use, and the disputes between sponsors and takers over cash.
         QbPermissions.ADMIN_REWARD_METHODS, QbPermissions.CASH_RESOLVE, QbPermissions.REDEMPTION_VOID,
         // Q33: the disputes over digital prizes.
-        QbPermissions.DIGITAL_RESOLVE);
+        QbPermissions.DIGITAL_RESOLVE,
+        // Q48a: the operators, and the spot checks of the reviews they decided.
+        QbPermissions.OPERATORS_READ, QbPermissions.SPOT_CHECK,
+        // Q48c: headquarters' own AI prospecting, and every owner's prospects.
+        QbPermissions.PROSPECT_USE, QbPermissions.ADMIN_PROSPECT);
+
+    /**
+     * What an operator's member holds (Q48a, D-Q48-4): reviewing sponsors and publications (final, with the platform's
+     * approval panel), reading quizzes and publications, the disputes that move no money (prizes collected at a
+     * sponsor's place, digital prizes), and the operator's own acts and pages. Not users and their profiles (only the
+     * operator's sponsors, through its own templates), finance, the legal texts, parameters, roles or the investors'
+     * figures.
+     */
+    private static final List<String> OPERATOR_PERMISSIONS = List.of(QbPermissions.COUNTRY_READ,
+        QbPermissions.OPERATOR_USE, QbPermissions.ADMIN_QUIZ_READ, QbPermissions.CONTENT_FILE_READ,
+        QbPermissions.ADMIN_PUBLICATION_READ, QbPermissions.REVIEW_SPONSOR, QbPermissions.REVIEW_PUBLICATION,
+        QbPermissions.SPONSOR_AVATAR_READ, "approval.decide", "task.read", QbPermissions.REDEMPTION_VOID,
+        QbPermissions.DIGITAL_RESOLVE,
+        // Q48c: the operator's own AI prospecting (its own directions, drafts and blocks).
+        QbPermissions.PROSPECT_USE);
 
     private static final List<String> FINANCE = List.of(QbPermissions.COUNTRY_READ, QbPermissions.ADMIN_USERS_READ,
         QbPermissions.ADMIN_FINANCE_READ, QbPermissions.ADMIN_PUBLICATION_READ, QbPermissions.PAYOUT_REVIEW,
@@ -86,7 +110,9 @@ public final class QbRoles {
         // grants (they hold security.user-role.write), so one approves what another requests, with the permission
         // made for that alone (not approval.decide, which QbSodRules#SECURITY keeps from them). approval.read lets
         // them check the facts of the request; it is on no side of a separation of duties.
-        "security.protected-change.decide", "approval.read");
+        "security.protected-change.decide", "approval.read",
+        // Q48a: operators, their members and which sponsors they run.
+        QbPermissions.OPERATORS_WRITE);
 
     /**
      * Publishing controlled changes (money parameters, review switches; platform decision D40) belongs to the finance
@@ -123,6 +149,7 @@ public final class QbRoles {
             FINANCE_ONLY);
         add(ADMIN_SUPER, labels("Super administrator", "超级管理员", "スーパー管理者"), true,
             withoutApprovals(CONTENT), withoutApprovals(FINANCE), SUPER);
+        add(OPERATOR, labels("Operator", "运营商", "運営パートナー"), true, OPERATOR_PERMISSIONS);
     }
 
     /**
