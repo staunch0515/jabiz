@@ -19,6 +19,12 @@ const num = (value: unknown): number | null => {
 /** Amounts stay text: the server's decimals, formatted by `formatAmount`. */
 const amount = (value: unknown): string | null => (value == null || value === '' ? null : String(value))
 const bool = (value: unknown): boolean => value === true || value === 'true'
+/** A multilingual text (`{language: text}`, the platform's I18nText, such as a country's name); null when there is none. */
+const texts = (value: unknown): Record<string, string> | null => {
+  if (value == null || typeof value !== 'object') return null
+  const entries = Object.entries(value).filter((entry): entry is [string, string] => typeof entry[1] === 'string')
+  return entries.length > 0 ? Object.fromEntries(entries) : null
+}
 
 /** The most rows the pages ask for at once (the platform's page limit). */
 export const PAGE = PAGE_LIMIT
@@ -365,7 +371,8 @@ export interface UserRow {
   enabled: boolean
   displayName: string | null
   countryCode: string | null
-  countryName: string | null
+  /** The country's name in each language (`QbCountry.name`). */
+  countryName: Record<string, string> | null
   city: string | null
   registeredAt: string | null
   sponsorStatus: string | null
@@ -382,7 +389,7 @@ function toUserRow(row: Row): UserRow {
     enabled: bool(row.enabled),
     displayName: str(row.displayName),
     countryCode: str(row.countryCode),
-    countryName: str(row.countryName),
+    countryName: texts(row.countryName),
     city: str(row.city),
     registeredAt: str(row.registeredAt),
     sponsorStatus: str(row.sponsorStatus),

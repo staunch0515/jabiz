@@ -21,6 +21,12 @@ export function money(value: string | null | undefined): string {
   return value == null ? '' : formatAmount(value, { currency: CURRENCY, scale: 0 })
 }
 
+/** A multilingual text in the interface language, else English, else Japanese, else any; empty when there is none. */
+export function textIn(text: Record<string, string> | null | undefined, language: string): string {
+  if (!text) return ''
+  return text[language.split('-')[0]] || text.en || text.ja || Object.values(text)[0] || ''
+}
+
 /** A time as the administration shows it; empty when there is none. */
 export function when(value: string | null | undefined): string {
   return value ? formatDateTime(value) : ''

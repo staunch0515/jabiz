@@ -8,6 +8,7 @@ import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, AppearanceProvider, EXTENSION_NAMESPACE, Toaster } from '@jabiz/admin'
 import { COVER, PDF, PICTURE, SNAPSHOT_JSON } from './fixtures'
+import { textIn } from './hooks'
 import { DATASET, TEMPLATE, PROCESS } from './ids'
 import { messages } from './messages'
 import PublicationReviewPage from './PublicationReviewPage'
@@ -82,7 +83,7 @@ const SPONSOR: Row = {
 
 const USER: Row = {
   userId: SPONSOR_ID, userName: 'rhea@example.com', email: 'rhea@example.com', emailVerified: true, enabled: true,
-  displayName: 'Rhea', countryCode: 'JP', countryName: 'Japan', city: 'Kyoto', registeredAt: '2026-10-01T00:00:00Z',
+  displayName: 'Rhea', countryCode: 'JP', countryName: { en: 'Japan', ja: '日本', zh: '日本' }, city: 'Kyoto', registeredAt: '2026-10-01T00:00:00Z',
   sponsorStatus: 'APPROVED', company: 'Rhea Co', banned: false,
 }
 
@@ -538,5 +539,15 @@ describe('UserSummaryPage', () => {
     renderUser()
     expect(await screen.findByText('Shared answers.')).toBeInTheDocument()
     expect(screen.getByTestId('user-ban')).toHaveAttribute('data-banned', 'true')
+  })
+})
+
+describe('textIn', () => {
+  it('shows a multilingual name in the interface language, else English, else Japanese', () => {
+    const name = { en: 'Japan', ja: '日本', zh: '日本' }
+    expect(textIn(name, 'zh-CN')).toBe('日本')
+    expect(textIn(name, 'fr')).toBe('Japan')
+    expect(textIn({ ja: '日本' }, 'fr')).toBe('日本')
+    expect(textIn(null, 'en')).toBe('')
   })
 })
