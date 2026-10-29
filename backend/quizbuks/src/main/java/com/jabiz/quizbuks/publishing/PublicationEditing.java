@@ -649,11 +649,22 @@ final class PublicationEditing {
      */
     static ApprovalCase approvalCase(EntityInstance publication, List<EntityInstance> tiers, EntityInstance version,
         boolean autoApprove, boolean takenDown) {
+        return approvalCase(publication, publication.get("versionId"), tiers, version, autoApprove, takenDown);
+    }
+
+    /**
+     * The approval case of the publication running on {@code versionId} with its policy (Q51: a switch to another
+     * version is reviewed as the publication with that version, the policy unchanged).
+     */
+    static ApprovalCase approvalCase(EntityInstance publication, Object versionId, List<EntityInstance> tiers,
+        EntityInstance version, boolean autoApprove, boolean takenDown) {
         List<TierCoverage.Tier> ranges = tiersOf(tiers);
         Map<String, Object> facts = PublicationApprovals.facts(autoApprove && !takenDown,
             money(publication.get("maxReward")), money(publication.get("maxSpend")), publication.get("publisherKind"),
             publication.get("publisherId"), publication.get("regions"), takenDown, methodOf(publication.attributes()));
-        Map<String, Object> content = PublicationApprovals.content(draftOf(publication),
+        Map<String, Object> attributes = new LinkedHashMap<>(publication.attributes());
+        attributes.put("versionId", versionId);
+        Map<String, Object> content = PublicationApprovals.content(draftOf(attributes),
             version == null ? null : version.get("contentHash"), ranges);
         return ApprovalCase.of(publication.id(), facts, content).reference(publication.get("name"));
     }

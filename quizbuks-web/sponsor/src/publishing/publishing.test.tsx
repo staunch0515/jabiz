@@ -272,6 +272,77 @@ describe('the version a publication shows (Q34b)', () => {
   })
 })
 
+describe('switching the version of a publication that runs (Q51)', () => {
+  const TWO = [
+    { versionId: 'v2', versionNo: 2, label: 'v2.0', title: 'Coffee basics', questionCount: 2, fullScore: 2,
+      versionedAt: '2026-10-20T00:00:00Z', contentHash: 'b' },
+    { versionId: 'v1', versionNo: 1, label: 'v1.0', title: 'Coffee basics', questionCount: 2, fullScore: 2,
+      versionedAt: '2026-10-10T00:00:00Z', contentHash: 'a' }]
+  const switched = { status: 200, body: { output: { publicationId: 'p1', status: 'LIVE', revision: 4 } } }
+
+  it('asks for the switch to the newest version, said to be reviewed, with the revision seen', async () => {
+    const { processCalls } = server({ publication: { ...DRAFT, status: 'LIVE' }, versions: TWO,
+      processes: { QB_PUBLICATION_SWITCH_VERSION: [switched] } })
+    window.history.replaceState(null, '', '/publications/p1')
+    render(<App />)
+    const notice = await screen.findByTestId('publication-version')
+    expect(await within(notice).findByTestId('publication-version-newer')).toHaveTextContent('the switch is reviewed')
+    await userEvent.click(within(notice).getByTestId('publication-switch'))
+    const dialog = await screen.findByRole('alertdialog')
+    expect(dialog).toHaveTextContent('Takers who answered do not answer again')
+    await expectAccessible()
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Switch to v2.0' }))
+    await waitFor(() => expect(processCalls('QB_PUBLICATION_SWITCH_VERSION')).toEqual([
+      { publicationId: 'p1', versionId: 'v2', baseRevision: 3 }]))
+  })
+
+  it('shows the switch in review, which can be withdrawn, and never offers a second', async () => {
+    const { processCalls } = server({ publication: { ...DRAFT, status: 'LIVE', pendingVersionId: 'v2',
+      pendingVersionLabel: 'v2.0', pendingSince: '2026-10-21T00:00:00Z' }, versions: TWO,
+      processes: { QB_PUBLICATION_SWITCH_WITHDRAW: [switched] } })
+    window.history.replaceState(null, '', '/publications/p1')
+    render(<App />)
+    const pending = await screen.findByTestId('publication-switch-pending')
+    expect(pending).toHaveTextContent('The switch to version v2.0 is in review')
+    expect(pending).toHaveTextContent('Takers see version v1.0 until it is approved')
+    expect(screen.queryByTestId('publication-switch')).toBeNull()
+    await userEvent.click(within(pending).getByTestId('publication-switch-withdraw'))
+    const dialog = await screen.findByRole('alertdialog')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Withdraw the switch' }))
+    await waitFor(() => expect(processCalls('QB_PUBLICATION_SWITCH_WITHDRAW')).toEqual([
+      { publicationId: 'p1', baseRevision: 3 }]))
+  })
+
+  it('offers no switch to another full score, nor after an administrator took it down', async () => {
+    server({ publication: { ...DRAFT, status: 'LIVE' }, versions: [{ ...TWO[0], fullScore: 3 }, TWO[1]] })
+    window.history.replaceState(null, '', '/publications/p1')
+    const { unmount } = render(<App />)
+    expect(await screen.findByTestId('publication-version-newer'))
+      .toHaveTextContent('its full score is 3, not 2')
+    expect(screen.queryByTestId('publication-switch')).toBeNull()
+    unmount()
+    vi.restoreAllMocks()
+    server({ publication: { ...DRAFT, status: 'PAUSED', pausedBy: 'ADMIN' }, versions: TWO })
+    render(<App />)
+    expect(await screen.findByTestId('publication-version-newer')).toHaveTextContent('publish again to use it')
+    expect(screen.queryByTestId('publication-switch')).toBeNull()
+  })
+
+  it('says why the last switch was rejected or not made', async () => {
+    server({ publication: { ...DRAFT, status: 'LIVE', switchRejectReason: 'The cover is misleading.' }, versions: TWO })
+    window.history.replaceState(null, '', '/publications/p1')
+    const { unmount } = render(<App />)
+    expect(await screen.findByTestId('publication-switch-rejected'))
+      .toHaveTextContent('The switch to another version was rejected: The cover is misleading.')
+    unmount()
+    vi.restoreAllMocks()
+    server({ publication: { ...DRAFT, status: 'ENDED', switchRejectCode: 'QB_PUBLICATION_SWITCH_ENDED' } })
+    render(<App />)
+    expect(await screen.findByTestId('publication-switch-rejected'))
+      .toHaveTextContent('was not made: the publication ended first.')
+  })
+})
+
 describe('the preview (Q34b)', () => {
   it('draws the card, the quiz page and the questions as takers see them, without the right answers', async () => {
     server({ publication: { ...DRAFT, status: 'LIVE', rewardMethod: 'OFFLINE_REDEEM', redeemDescription: 'A free espresso' } })

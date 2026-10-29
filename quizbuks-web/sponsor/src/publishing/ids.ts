@@ -33,6 +33,9 @@ export const PUBLISHING_PROCESS = {
   withdraw: 'QB_PUBLICATION_WITHDRAW',
   pause: 'QB_PUBLICATION_PAUSE',
   resume: 'QB_PUBLICATION_RESUME',
+  /** A publication that went on switches to another version of its quiz, reviewed again (Q51). */
+  switchVersion: 'QB_PUBLICATION_SWITCH_VERSION',
+  switchWithdraw: 'QB_PUBLICATION_SWITCH_WITHDRAW',
 } as const
 
 /** SQL templates (`queries/qb/sponsor`). The wizard's quizzes and versions are the content workshop's templates. */

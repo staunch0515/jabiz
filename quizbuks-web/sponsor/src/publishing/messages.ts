@@ -5,7 +5,25 @@
  */
 export const publishingEn = {
   publishing: {
-    version: { uses: 'Takers see version {{label}} of the quiz: its title, introduction, materials and questions stay as they were while it runs.', newer: 'The quiz now has version {{label}}, which this publication does not show; publish again to use it.', openQuiz: 'Open the quiz' },
+    version: {
+      uses: 'Takers see version {{label}} of the quiz: its title, introduction, materials and questions. Each attempt keeps the version it started with.',
+      newer: 'The quiz now has version {{label}}, which this publication does not show; publish again to use it.',
+      openQuiz: 'Open the quiz',
+      newerSwitch: 'The quiz now has version {{label}}. You can switch this publication to it: the switch is reviewed, and takers see version {{current}} until it is approved.',
+      otherScore: 'The quiz now has version {{label}}, but its full score is {{newFullScore}}, not {{fullScore}}: a publication switches only to a version with the same full score, as its reward tiers rest on it.',
+      switch: 'Switch to {{label}}',
+      switchTitle: 'Switch to version {{label}}?',
+      switchText: 'The switch is reviewed again. Until it is approved takers see version {{current}}; then new attempts see version {{label}}. Takers who answered do not answer again, and attempts already started keep their version.',
+      switchSent: 'The switch to version {{label}} is sent.',
+      pending: 'The switch to version {{label}} is in review since {{time}}. Takers see version {{current}} until it is approved.',
+      withdraw: 'Withdraw the switch',
+      withdrawTitle: 'Withdraw the switch to version {{label}}?',
+      withdrawText: 'The publication keeps version {{current}}. You can ask for a switch again later.',
+      withdrawn: 'Switch withdrawn.',
+      rejected: 'The switch to another version was rejected: {{reason}}',
+      dropped: 'The switch to another version was not made: {{why}}.',
+      droppedBecause: { ended: 'the publication ended first', takenDown: 'an administrator took the publication down', banned: 'the account is suspended', quizRemoved: 'the quiz was removed' },
+    },
     nav: 'Publications',
     list: {
       title: 'Publications',
@@ -450,7 +468,25 @@ export const publishingEn = {
 
 export const publishingZh: typeof publishingEn = {
   publishing: {
-    version: { uses: '答题者看到的是测验第 {{label}} 版：标题、简介、材料与题目在发布期间保持不变。', newer: '测验现在有第 {{label}} 版，本发布不会显示它；要使用新版本请重新发布。', openQuiz: '打开测验' },
+    version: {
+      uses: '答题者看到的是测验第 {{label}} 版：标题、简介、材料与题目。每次作答都保持开始作答时的版本。',
+      newer: '测验现在有第 {{label}} 版，本发布不会显示它；要使用新版本请重新发布。',
+      openQuiz: '打开测验',
+      newerSwitch: '测验现在有第 {{label}} 版。可以把本发布切换到这个版本：切换需要审核，审核通过前答题者看到的仍是第 {{current}} 版。',
+      otherScore: '测验现在有第 {{label}} 版，但它的满分是 {{newFullScore}}，不是 {{fullScore}}：奖励档位以满分为准，发布只能切换到满分相同的版本。',
+      switch: '切换到 {{label}}',
+      switchTitle: '切换到第 {{label}} 版？',
+      switchText: '切换需要再次审核。审核通过前答题者看到第 {{current}} 版；通过后新的作答看到第 {{label}} 版。已经作答的人不会再次作答，已经开始的作答保持原来的版本。',
+      switchSent: '已提交切换到第 {{label}} 版。',
+      pending: '切换到第 {{label}} 版自 {{time}} 起审核中。审核通过前答题者看到的是第 {{current}} 版。',
+      withdraw: '撤回切换',
+      withdrawTitle: '撤回切换到第 {{label}} 版？',
+      withdrawText: '本发布保持第 {{current}} 版。之后可以再次申请切换。',
+      withdrawn: '已撤回切换。',
+      rejected: '切换版本被驳回：{{reason}}',
+      dropped: '切换版本未执行：{{why}}。',
+      droppedBecause: { ended: '发布已先结束', takenDown: '管理员已下架本发布', banned: '账号已被停用', quizRemoved: '测验已被删除' },
+    },
     nav: '发布',
     list: {
       title: '发布',
@@ -895,7 +931,25 @@ export const publishingZh: typeof publishingEn = {
 
 export const publishingJa: typeof publishingEn = {
   publishing: {
-    version: { uses: '回答者にはクイズのバージョン {{label}} が表示されます。掲載中はタイトル、紹介文、資料、問題は変わりません。', newer: 'クイズには新しいバージョン {{label}} がありますが、この掲載には表示されません。使うには掲載し直してください。', openQuiz: 'クイズを開く' },
+    version: {
+      uses: '回答者にはクイズのバージョン {{label}} が表示されます（タイトル、紹介文、資料、問題）。回答は開始したときのバージョンのまま続きます。',
+      newer: 'クイズには新しいバージョン {{label}} がありますが、この掲載には表示されません。使うには掲載し直してください。',
+      openQuiz: 'クイズを開く',
+      newerSwitch: 'クイズには新しいバージョン {{label}} があります。この公開をそのバージョンに切り替えられます。切り替えは審査され、承認されるまで回答者にはバージョン {{current}} が表示されます。',
+      otherScore: 'クイズには新しいバージョン {{label}} がありますが、満点が {{fullScore}} ではなく {{newFullScore}} です。報酬の区分は満点に基づくため、満点が同じバージョンにだけ切り替えられます。',
+      switch: '{{label}} に切り替え',
+      switchTitle: 'バージョン {{label}} に切り替えますか？',
+      switchText: '切り替えは改めて審査されます。承認されるまで回答者にはバージョン {{current}} が表示され、承認後に始まる回答ではバージョン {{label}} が表示されます。回答済みの人は再び回答せず、開始済みの回答はそのバージョンのままです。',
+      switchSent: 'バージョン {{label}} への切り替えを申請しました。',
+      pending: 'バージョン {{label}} への切り替えは {{time}} から審査中です。承認されるまで回答者にはバージョン {{current}} が表示されます。',
+      withdraw: '切り替えを取り下げ',
+      withdrawTitle: 'バージョン {{label}} への切り替えを取り下げますか？',
+      withdrawText: 'この公開はバージョン {{current}} のままです。あとで改めて切り替えを申請できます。',
+      withdrawn: '切り替えを取り下げました。',
+      rejected: 'バージョンの切り替えは却下されました：{{reason}}',
+      dropped: 'バージョンの切り替えは行われませんでした：{{why}}。',
+      droppedBecause: { ended: '公開が先に終了しました', takenDown: '管理者が公開を停止しました', banned: 'アカウントが停止されています', quizRemoved: 'クイズが削除されました' },
+    },
     nav: '公開',
     list: {
       title: '公開',

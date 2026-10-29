@@ -37,6 +37,17 @@ public final class PublishingCodes {
     /** Not a refusal: why a publication went back to its draft when its end passed while it was reviewed. */
     public static final String EXPIRED_IN_REVIEW = "QB_PUBLICATION_EXPIRED_IN_REVIEW";
 
+    // Switching a publication that went on to another version of its quiz (Q51, 422).
+    public static final String SWITCH_NOT_RUNNING = "QB_PUBLICATION_SWITCH_NOT_RUNNING";
+    public static final String SWITCH_TAKEN_DOWN = "QB_PUBLICATION_SWITCH_TAKEN_DOWN";
+    public static final String SWITCH_PENDING = "QB_PUBLICATION_SWITCH_PENDING";
+    public static final String SWITCH_SAME_VERSION = "QB_PUBLICATION_SWITCH_SAME_VERSION";
+    public static final String SWITCH_OTHER_QUIZ = "QB_PUBLICATION_SWITCH_OTHER_QUIZ";
+    public static final String SWITCH_FULL_SCORE = "QB_PUBLICATION_SWITCH_FULL_SCORE";
+    public static final String SWITCH_NOT_PENDING = "QB_PUBLICATION_SWITCH_NOT_PENDING";
+    /** Not a refusal: why a switch in review was dropped when its publication ended first. */
+    public static final String SWITCH_ENDED = "QB_PUBLICATION_SWITCH_ENDED";
+
     // Submitting (422): every rule of PublicationReadiness, reported at once.
     public static final String NO_VERSION = "QB_PUBLICATION_NO_VERSION";
     public static final String FIELD_REQUIRED = "QB_PUBLICATION_FIELD_REQUIRED";
@@ -97,7 +108,9 @@ public final class PublishingCodes {
         TIER_RANGE, TIER_GAP, TIER_OVERLAP, TIER_NOT_TO_FULL, TIER_NO_REWARD, SURVEY_PASS_SCORE, SURVEY_TIERS,
         ADMIN_PAUSED, NOT_ADMIN_PAUSED, SPONSOR_BANNED, TAKEN_DOWN, REVIEW_REQUIRED, REWARD_METHOD_NOT_ALLOWED, DIGITAL_DELIVERY_INVALID,
         DIGITAL_SEND_DAYS_RANGE, DIGITAL_POOL_SHORT,
-        REWARD_METHODS_FORMAT, REWARD_ABOVE_MAX, CHANNEL_PUBLISHER, CHANNEL_VIDEO, CHANNEL_TOO_LARGE);
+        REWARD_METHODS_FORMAT, REWARD_ABOVE_MAX, CHANNEL_PUBLISHER, CHANNEL_VIDEO, CHANNEL_TOO_LARGE, SWITCH_NOT_RUNNING,
+        SWITCH_TAKEN_DOWN, SWITCH_PENDING, SWITCH_SAME_VERSION, SWITCH_OTHER_QUIZ, SWITCH_FULL_SCORE, SWITCH_NOT_PENDING,
+        SWITCH_ENDED);
 
     private PublishingCodes() {}
 }

@@ -43,6 +43,8 @@ public final class QbPublications {
     public static final String START_COUNTER = "QbPublicationStartCounter";
     public static final String SCHEDULE = "QbPublicationSchedule";
     public static final String CARD = "QbPublicationCard";
+    /** Q51: a version a publication ran on before it switched to another, whose files its attempts still need. */
+    public static final String PAST_VERSION = "QbPublicationPastVersion";
     /** The live publications' cards that a share link shows to anybody (Q15): a whitelist of their fields. */
     public static final String PUBLIC_CARDS = "urn:jabiz:dataset:public:" + CARD;
     public static final String OWNER = "QbPublicationOwner";
@@ -145,6 +147,18 @@ public final class QbPublications {
         // Q48a: the operator whose member took it down (paused or ended it as an administrator); null when
         // headquarters did, or nobody. An operator resumes only its own takedowns (D-Q48-5).
         eb.field("takedownOperatorId", f -> f.physicalColumn("takedown_operator_id").processOnly().asText(36));
+        // Q51: a switch to another version of the quiz, in review while the publication runs on its version: the
+        // version asked for, its label, the review's request and when it was asked. Cleared when the switch is made,
+        // rejected or withdrawn; a rejection leaves its reason (or code) until the next switch is asked.
+        eb.field("pendingVersionId", f -> f.physicalColumn("pending_version_id").processOnly()
+            .asReference(QbContent.VERSION));
+        eb.field("pendingVersionLabel", f -> f.physicalColumn("pending_version_label").processOnly().asText(20));
+        eb.field("pendingRequestId", f -> f.physicalColumn("pending_request_id").processOnly().asText(64));
+        eb.field("pendingSince", f -> f.physicalColumn("pending_since").processOnly()
+            .asTemporal(TemporalRole.EVENT_TIME));
+        eb.field("switchRejectReason", f -> f.physicalColumn("switch_reject_reason").processOnly()
+            .asText(PublishingLimits.REJECT_REASON_LENGTH, true));
+        eb.field("switchRejectCode", f -> f.physicalColumn("switch_reject_code").processOnly().asText(64));
         // D-Q4-1. A rejected or withdrawn publication goes back to its draft, so the first state is declared. A channel's
         // publication (S2, ChannelPublishing) is live as it is made: it has no draft and no review.
         eb.stateTransitions("status", st -> st
@@ -268,8 +282,8 @@ public final class QbPublications {
             .asReference(PUBLICATION));
         eb.field("quizId", f -> f.physicalColumn("quiz_id").immutable(true).required(true)
             .asReference(QbContent.QUIZ));
-        eb.field("versionId", f -> f.physicalColumn("version_id").immutable(true).required(true)
-            .asReference(QbContent.VERSION));
+        // The version the publication runs on: a switch (Q51) moves it; the earlier ones are past versions.
+        eb.field("versionId", f -> f.physicalColumn("version_id").required(true).asReference(QbContent.VERSION));
         eb.field("nextDueAt", f -> f.physicalColumn("next_due_at").asTemporal(TemporalRole.EVENT_TIME));
         eb.field("version", f -> f.physicalColumn("version").asVersion());
         eb.listView("default", lv -> lv
@@ -280,9 +294,37 @@ public final class QbPublications {
     });
 
     /**
+     * A version a publication ran on before it switched to another (Q51): its attempts and their results still read it,
+     * so the removal of the quiz keeps its files ({@code QuizProcesses.filesStillNeeded}). An ordinary row, inserted
+     * once when the switch is made, by quiz (a plain index); never changed.
+     */
+    public static final EntityDefinition PAST_VERSION_ENTITY = EntityDefinition.define(PAST_VERSION, eb -> {
+        eb.physicalTable("qb_publication_past_version");
+        eb.primaryKey("pastId");
+        eb.field("pastId", f -> f.physicalColumn("past_id").immutable(true).required(true).generated(true)
+            .asSemanticIdentity("urn:jabiz:entity:quizbuks:publication-past-version"));
+        eb.field("publicationId", f -> f.physicalColumn("publication_id").immutable(true).required(true)
+            .asReference(PUBLICATION));
+        eb.field("quizId", f -> f.physicalColumn("quiz_id").immutable(true).required(true)
+            .asReference(QbContent.QUIZ));
+        eb.field("versionId", f -> f.physicalColumn("version_id").immutable(true).required(true)
+            .asReference(QbContent.VERSION));
+        eb.field("replacedAt", f -> f.physicalColumn("replaced_at").immutable(true).required(true)
+            .asTemporal(TemporalRole.EVENT_TIME));
+        eb.field("version", f -> f.physicalColumn("version").asVersion());
+        eb.listView("default", lv -> lv
+            .columns("publicationId", "versionId", "replacedAt")
+            .filters("publicationId", "quizId")
+            .sorts("replacedAt")
+            .defaultSort("replacedAt", true));
+    });
+
+    /**
      * The card of a publication that went on (docs/quizbuks/plans/Q5-answering.md, D-Q5-6): what the takers' feed,
      * the detail page and the answering processes need of it, in an ordinary row. Every field is frozen at submission
-     * except the state, which the publication's processes keep in step under its lock ({@link PublicationEditing}).
+     * except the state, which the publication's processes keep in step under its lock ({@link PublicationEditing}),
+     * and what a switch to another version of the quiz changes (Q51: the version, its title, cover, video and number of
+     * questions; the full score and the kind are the same by the switch's rules).
      * The feed filters on state, times and regions; on the temporal publications every such condition would read every
      * version. Inserted with the counters when the publication goes on; never deleted (the takers' history joins it).
      */
@@ -305,13 +347,13 @@ public final class QbPublications {
             .asTemporal(TemporalRole.EVENT_TIME));
         eb.field("name", f -> f.physicalColumn("name").immutable(true).required(true)
             .asText(PublishingLimits.NAME_LENGTH));
-        eb.field("quizTitle", f -> f.physicalColumn("quiz_title").immutable(true).required(true)
+        eb.field("quizTitle", f -> f.physicalColumn("quiz_title").required(true)
             .asText(ContentLimits.TITLE_LENGTH));
         // The cover's file key as text: the version's files keep the file, the card only names it.
-        eb.field("cover", f -> f.physicalColumn("cover").immutable(true).asText(36));
+        eb.field("cover", f -> f.physicalColumn("cover").asText(36));
         // Q19: the player of the version's video to watch (VideoEmbeds), shown on the App's home.
-        eb.field("video", f -> f.physicalColumn("video").immutable(true).asText(80));
-        eb.field("versionId", f -> f.physicalColumn("version_id").immutable(true).required(true)
+        eb.field("video", f -> f.physicalColumn("video").asText(80));
+        eb.field("versionId", f -> f.physicalColumn("version_id").required(true)
             .asReference(QbContent.VERSION));
         eb.field("maxReward", f -> f.physicalColumn("max_reward").immutable(true).required(true)
             .asMonetary("JPY", 0));
@@ -319,7 +361,7 @@ public final class QbPublications {
         eb.field("passScore", f -> f.physicalColumn("pass_score").immutable(true).required(true).asNumeric(6, 0));
         eb.field("timeLimitSec", f -> f.physicalColumn("time_limit_sec").immutable(true).required(true)
             .asNumeric(5, 0));
-        eb.field("questionCount", f -> f.physicalColumn("question_count").immutable(true).required(true)
+        eb.field("questionCount", f -> f.physicalColumn("question_count").required(true)
             .asNumeric(4, 0));
         eb.field("budgetCap", f -> f.physicalColumn("budget_cap").immutable(true).asMonetary("JPY", 0));
         eb.field("maxWinners", f -> f.physicalColumn("max_winners").immutable(true).asNumeric(9, 0));

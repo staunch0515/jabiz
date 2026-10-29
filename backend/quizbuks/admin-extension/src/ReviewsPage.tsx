@@ -39,11 +39,20 @@ function PublicationQueue() {
     {
       id: 'quiz',
       header: t('reviews.quiz'),
-      cell: ({ row }) => [row.original.quizTitle, row.original.versionLabel].filter(Boolean).join(' · '),
+      cell: ({ row }) => {
+        const { quizTitle, versionLabel, pendingVersionLabel } = row.original
+        // Q51: a running publication asking to switch its version shows from which to which.
+        return pendingVersionLabel
+          ? <span data-testid="queue-publication-switch">
+            {[quizTitle, t('reviews.switch', { from: versionLabel ?? '', to: pendingVersionLabel })]
+              .filter(Boolean).join(' · ')}
+          </span>
+          : [quizTitle, versionLabel].filter(Boolean).join(' · ')
+      },
     },
     { id: 'sponsor', header: t('reviews.sponsor'),
       cell: ({ row }) => <PublisherLink kind={row.original.publisherKind} id={row.original.publisherId} /> },
-    { id: 'submittedAt', header: t('reviews.submittedAt'), cell: ({ row }) => when(row.original.submittedAt) },
+    { id: 'submittedAt', header: t('reviews.submittedAt'), cell: ({ row }) => when(row.original.waitingSince) },
     {
       id: 'budget',
       header: t('reviews.budget'),

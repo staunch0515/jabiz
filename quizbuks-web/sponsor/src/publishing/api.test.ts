@@ -120,6 +120,12 @@ describe('what the pages say about a publication', () => {
     expect(actionsOf('ENDED', null, 'ADMIN')).toMatchObject({ copy: false })
     expect(actionsOf('ENDED', null, 'EXPIRED')).toMatchObject({ copy: true })
     expect(actionsOf('ENDED', 'ADMIN', 'EXPIRED')).toMatchObject({ copy: false })
+    // Q51: a version switches while the publication runs, not after an administrator took it down.
+    expect(actionsOf('LIVE')).toMatchObject({ switchVersion: true })
+    expect(actionsOf('PAUSED', 'SPONSOR')).toMatchObject({ switchVersion: true })
+    expect(actionsOf('PAUSED', 'ADMIN')).toMatchObject({ switchVersion: false })
+    expect(actionsOf('PENDING_REVIEW')).toMatchObject({ switchVersion: false })
+    expect(actionsOf('ENDED')).toMatchObject({ switchVersion: false })
     expect(actionsOf('ENDED', 'SPONSOR', 'EXPIRED')).toMatchObject({ copy: true })
     expect(actionsOf('ENDED')).toMatchObject({ pause: false, resume: false, withdraw: false, copy: true })
   })

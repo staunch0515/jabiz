@@ -100,6 +100,7 @@ public final class QuizProcesses {
     static final String RELEASE = "release";
     static final String PUBLICATIONS = "publications";
     static final String PUBLISHED_VERSIONS = "publishedVersions";
+    static final String PAST_VERSIONS = "pastVersions";
 
     // ---- save ------------------------------------------------------------------------------------------------------
 
@@ -265,6 +266,11 @@ public final class QuizProcesses {
                 QbContent.defaultDataset(QbPublications.SCHEDULE), ctx -> EntityQuery.builder()
                     .where(new QueryPredicate.Eq("quizId", ctx.get(QUIZ_ID)))
                     .limit(Integer.MAX_VALUE).build(), PUBLICATIONS))
+            // Q51: the versions publications ran on before switching to another, which their attempts still read.
+            .step("Load the versions they ran on before", QueryEntities.<ProcessContext>of(
+                QbContent.defaultDataset(QbPublications.PAST_VERSION), ctx -> EntityQuery.builder()
+                    .where(new QueryPredicate.Eq("quizId", ctx.get(QUIZ_ID)))
+                    .limit(Integer.MAX_VALUE).build(), PAST_VERSIONS))
             .step("Load their versions", QueryEntities.<ProcessContext>of(
                 QbContent.defaultDataset(QbContent.VERSION), ctx -> EntityQuery.builder()
                     .where(new QueryPredicate.In("versionId", publishedVersionIds(ctx)))
@@ -301,13 +307,15 @@ public final class QuizProcesses {
         QuizEditing.touch(ctx, quiz, values, null, List.of());
     }
 
-    /** The versions the quiz's submitted publications use, each once. */
+    /** The versions the quiz's submitted publications use or used before a switch (Q51), each once. */
     private static List<Object> publishedVersionIds(ProcessContext ctx) {
         Set<UUID> ids = new LinkedHashSet<>();
-        for (EntityInstance publication : list(ctx, PUBLICATIONS)) {
-            UUID versionId = uuid(publication.get("versionId"));
-            if (versionId != null) {
-                ids.add(versionId);
+        for (String key : List.of(PUBLICATIONS, PAST_VERSIONS)) {
+            for (EntityInstance row : list(ctx, key)) {
+                UUID versionId = uuid(row.get("versionId"));
+                if (versionId != null) {
+                    ids.add(versionId);
+                }
             }
         }
         return new ArrayList<>(ids);
