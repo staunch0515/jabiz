@@ -196,6 +196,18 @@ class MailPreferencesIT extends SecurityItSupport {
     }
 
     @Test
+    void aMailForAddressesOnlyIsAmongNobodysPreferences() {
+        String user = user();
+        String portal = at("portal", user);
+        // Declared for the portal (where its link leads), yet listed there for nobody (phase 17r).
+        assertThat(preferences(portal, "en")).extracting(row -> row.get("template")).doesNotContain("it.prospect");
+        // Nor set in a session, refused like a name that is no notification.
+        assertThat(ruleCode(set(portal, Map.of("template", "it.prospect", "subscribed", false), 422)))
+            .isEqualTo("INVALID_VALUE");
+        assertThat(query("SELECT 1 FROM sec_user_mail_preference_version WHERE user_id = ?::uuid", user)).isEmpty();
+    }
+
+    @Test
     void usersReadAndSetTheLanguageOfTheirOwnMail() {
         String user = user();
         String other = user();

@@ -156,11 +156,11 @@ public class MailUnsubscribeController {
         return RequestContexts.current().flatMap(context -> {
             UUID user = requireUser(context);
             // The session's entry: a customer is not shown the mail of the back office, nor its names; of other
-            // entries only what the user turned off themselves.
-            List<String> notifications = templates.all().stream().filter(MailTemplate::unsubscribable)
+            // entries only what the user turned off themselves. Mail to plain addresses only is nobody's (17r).
+            List<String> notifications = templates.all().stream().filter(MailTemplate::listedAmongPreferences)
                 .filter(template -> template.appliesTo(context.entry()))
                 .map(MailTemplate::name).distinct().sorted().toList();
-            List<String> others = templates.all().stream().filter(MailTemplate::unsubscribable)
+            List<String> others = templates.all().stream().filter(MailTemplate::listedAmongPreferences)
                 .filter(template -> !template.appliesTo(context.entry()))
                 .map(MailTemplate::name).distinct().sorted().toList();
             return storages.getEngine(poolRef).select("""

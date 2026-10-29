@@ -14,6 +14,7 @@ import { Input } from '../components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select'
 import { cn } from '../lib/utils'
 import { AUTH_NAMESPACE } from './messages'
+import { PasswordInput } from './PasswordInput'
 
 /**
  * How the blocks lead elsewhere without a router of their own (decision D43; ROADMAP 16c-3): a frontend with a
@@ -109,24 +110,29 @@ export function AuthFrame({ brand, title, children, testId, appearance = true, c
   )
 }
 
-/** A text field of these forms: an icon, the placeholder as its name, and its error under it. */
+/**
+ * A text field of these forms: an icon, the placeholder as its name, and its error under it. A password field
+ * (`type="password"`) has a button at its end that shows what was typed (`PasswordInput`, phase 17p).
+ */
 export function AuthField({
   icon: Icon,
   error,
+  type,
   ...input
 }: { icon: LucideIcon; error?: string } & ComponentProps<'input'>) {
   const errorId = useId()
+  const field = {
+    ...input,
+    'aria-label': input.placeholder,
+    'aria-invalid': error ? true : undefined,
+    'aria-describedby': error ? errorId : undefined,
+    className: 'h-10 pl-9',
+  }
   return (
     <div className="flex flex-col gap-1.5">
       <div className="relative">
         <Icon aria-hidden className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2" />
-        <Input
-          {...input}
-          aria-label={input.placeholder}
-          aria-invalid={error ? true : undefined}
-          aria-describedby={error ? errorId : undefined}
-          className="h-10 pl-9"
-        />
+        {type === 'password' ? <PasswordInput {...field} /> : <Input {...field} type={type} />}
       </div>
       {error && (
         <p id={errorId} className="text-destructive text-sm">

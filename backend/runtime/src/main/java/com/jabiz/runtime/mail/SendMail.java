@@ -161,6 +161,11 @@ public class SendMail<C extends ProcessContext> implements StepHandler<SendMail.
             MailTemplate template = metadata.template();
             MailRecipient recipient = Objects.requireNonNull(metadata.recipient().apply(ctx),
                 "the recipient must not be null");
+            if (template.addressesOnly() && recipient.userId() != null) {
+                // A defect of the sending process: a user could not turn this mail off among their preferences.
+                throw new IllegalStateException("Mail template " + template.name() + " is for plain addresses only"
+                    + " (addressesOnly), not for user " + recipient.userId());
+            }
             Map<String, String> values = new TreeMap<>();
             for (String param : template.params()) {
                 Function<C, ?> value = metadata.params().get(param);

@@ -1093,6 +1093,7 @@ SEC_PROTECTED_CHANGE_APPLY（internal，事件消费者）──► 再经 Requi
 `jabiz.account.erased` 的消费者（`jabiz.erasure-purge`）运行 `ERASURE_PURGE`（`internal()`），失败随事件重试；已清除的抹除什么都不做。
 
 - **维护连接**：`jabiz.erasure.datasource.url`（R2DBC，应用的库与 schema）、`.username`、`.password`，只来自环境变量（`JABIZ_ERASURE_DATASOURCE_*`）。
+  URL 是 R2DBC 格式（`r2dbc:postgresql://主机:5432/库`，与 `SPRING_R2DBC_URL` 相同），不是 Flyway 用的 JDBC 格式；格式不对时不建立连接，由启动检查 `ERASURE | jabiz.erasure.datasource.url` 报一行错误（17q）。
   这个登录属于运维建立的角色 `jabiz_maintenance`，并能读写应用的表；应用自己的登录不属于它（D5 第 4 条）。没有配置时清除 422 `ERASURE_PURGE_UNAVAILABLE`，抹除照常完成。
 - 事务以空的上下文开在维护连接上（与运行它的操作无关），`set_config('jabiz.maintenance_mode', 'purge', true)`；先确认连接看得到这次抹除（URL 的 schema 不对即失败，不会"什么都没找到"就算完成），
   固定封存与校验所用的会话设置（时区 UTC 等，行的文本因而相同），找出用户的地址、名字、行与操作，再取封存的事务锁（21 §2.5）后逐表覆盖。

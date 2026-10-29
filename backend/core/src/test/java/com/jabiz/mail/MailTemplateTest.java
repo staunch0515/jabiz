@@ -57,6 +57,21 @@ class MailTemplateTest {
     }
 
     @Test
+    void aNotificationForAddressesOnlyIsAmongNoUsersPreferences() {
+        MailTemplate prospect = MailTemplate.define("app.prospect", t -> t.category(MailCategory.NOTIFICATION)
+            .entries("shop").addressesOnly());
+        assertThat(prospect.addressesOnly()).isTrue();
+        assertThat(prospect.unsubscribable()).isTrue();
+        assertThat(prospect.listedAmongPreferences()).isFalse();
+        assertThat(MailTemplate.define("app.news", t -> t.category(MailCategory.NOTIFICATION))
+            .listedAmongPreferences()).isTrue();
+        assertThat(MailTemplate.define("app.verify", t -> t.category(MailCategory.TRANSACTIONAL))
+            .listedAmongPreferences()).isFalse();
+        assertThatThrownBy(() -> MailTemplate.define("app.receipt", t -> t.category(MailCategory.TRANSACTIONAL)
+            .addressesOnly())).isInstanceOf(IllegalArgumentException.class).hasMessageContaining("only a notification");
+    }
+
+    @Test
     void refusesMalformedOrNoEntries() {
         assertThatThrownBy(() -> MailTemplate.define("a.b", t -> t.category(MailCategory.NOTIFICATION)
             .entries("App")))

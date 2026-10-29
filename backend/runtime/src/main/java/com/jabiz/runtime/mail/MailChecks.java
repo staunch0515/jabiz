@@ -233,7 +233,7 @@ public class MailChecks implements PlatformCheck {
                     + "entry " + entry + ", but there is no usable sign-in entry " + entry + " (jabiz.security.entries."
                     + entry + ")")));
             for (Locale locale : messages.supportedLocales()) {
-                if (template.unsubscribable() && messages.find(template.nameKey(), locale).isEmpty()) {
+                if (template.listedAmongPreferences() && messages.find(template.nameKey(), locale).isEmpty()) {
                     problems.add(CheckProblem.warning(CATEGORY, location, "has no message " + template.nameKey()
                         + " [" + locale + "]: its users see the name of the template among their mail preferences"));
                 }

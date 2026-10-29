@@ -12,6 +12,9 @@ const en = {
     error: 'Something went wrong',
     loading: 'Loading…',
     security: 'Security',
+    // The name of the button that shows a password field's text (phase 17p); it avoids the word "password", so that
+    // locating the field by its name ("Password") does not also find the button.
+    showTyped: 'Show typed characters',
   },
   login: {
     forgotPassword: 'Forgot your password?',
@@ -298,7 +301,7 @@ const en = {
 type Messages = typeof en
 
 const zh: Messages = {
-  common: { language: '语言', error: '出错了', loading: '加载中…', security: '安全设置' },
+  common: { language: '语言', error: '出错了', loading: '加载中…', security: '安全设置', showTyped: '显示输入的字符' },
   login: {
     forgotPassword: '忘记密码？',
     signUp: '注册账号',
@@ -582,7 +585,7 @@ const zh: Messages = {
 }
 
 const ja: Messages = {
-  common: { language: '言語', error: 'エラーが発生しました', loading: '読み込み中…', security: 'セキュリティ' },
+  common: { language: '言語', error: 'エラーが発生しました', loading: '読み込み中…', security: 'セキュリティ', showTyped: '入力した文字を表示' },
   login: {
     forgotPassword: 'パスワードをお忘れですか？',
     signUp: 'アカウントを作成',
