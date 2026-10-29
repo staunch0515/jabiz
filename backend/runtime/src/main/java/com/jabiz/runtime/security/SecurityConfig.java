@@ -79,6 +79,8 @@ public class SecurityConfig {
             SignUpController.VERIFY, SignUpController.VERIFY_CHECK, SignUpController.VERIFY_RESEND, SignUpController.RESET_REQUEST,
             SignUpController.RESET_CONFIRM),
         ServerWebExchangeMatchers.pathMatchers(HttpMethod.GET, SignUpController.ENTRIES + "/*"),
+        // Accepting an administrator's invitation (decision D63): rate limited; the link's token is the credential.
+        ServerWebExchangeMatchers.pathMatchers(HttpMethod.POST, InvitationController.CONFIRM),
         // Signing in with a mailed link (decision D54): rate limited, answered alike for every address.
         ServerWebExchangeMatchers.pathMatchers(HttpMethod.POST, EmailLinkController.REQUEST,
             EmailLinkController.CONFIRM),

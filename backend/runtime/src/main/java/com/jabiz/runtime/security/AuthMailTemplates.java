@@ -26,6 +26,8 @@ import java.time.Duration;
  *       naming the provider, with the same link to the password reset.</li>
  *   <li>{@value #EMAIL_CHANGED}: no token; sent to the address an approved change of address replaced (decision D48,
  *       review M-b), naming the new one.</li>
+ *   <li>{@value #INVITATION}: token {@value #INVITE}, valid {@code jabiz.security.invitation.ttl} (72 hours); an
+ *       administrator's new user sets their password with it (section 15.14; decision D63).</li>
  * </ul>
  */
 @Configuration
@@ -37,10 +39,11 @@ public class AuthMailTemplates {
     public static final String PASSWORD_CHANGED = "jabiz.auth.password-changed";
     public static final String IDENTITY_LINKED = "jabiz.auth.identity-linked";
     public static final String EMAIL_CHANGED = "jabiz.auth.email-changed";
+    public static final String INVITATION = "jabiz.auth.invitation";
 
     /** The platform's templates, by name; applications declare none under {@code jabiz.} ({@code MailChecks}). */
     public static final java.util.Set<String> NAMES = java.util.Set.of(VERIFY_EMAIL, ACCOUNT_EXISTS, PASSWORD_RESET,
-        PASSWORD_CHANGED, IDENTITY_LINKED, EMAIL_CHANGED, EmailLinkProcesses.TEMPLATE,
+        PASSWORD_CHANGED, IDENTITY_LINKED, EMAIL_CHANGED, INVITATION, EmailLinkProcesses.TEMPLATE,
         // The account deletion's (AccountDeletionProcesses, section 17.5).
         "jabiz.auth.account-deletion", "jabiz.auth.account-deletion-requested");
 
@@ -51,6 +54,7 @@ public class AuthMailTemplates {
     public static final String VERIFY = "jabiz.verify";
     public static final String JOIN = "jabiz.join";
     public static final String RESET = "jabiz.reset";
+    public static final String INVITE = "jabiz.invite";
 
     /** The only parameter: the sign-in entry whose pages the link finishes at. */
     public static final String ENTRY = "entry";
@@ -71,6 +75,24 @@ public class AuthMailTemplates {
     static MailTemplate passwordReset(Duration validity) {
         return MailTemplate.define(PASSWORD_RESET, t -> t.category(MailCategory.TRANSACTIONAL).param(ENTRY)
             .token(RESET, validity));
+    }
+
+    /** The invitation of an administrator's new user (decision D63), as the processes that send it use it. */
+    public record Invitation(MailTemplate mail) {}
+
+    static MailTemplate invitation(Duration validity) {
+        return MailTemplate.define(INVITATION, t -> t.category(MailCategory.TRANSACTIONAL).param(ENTRY)
+            .token(INVITE, validity));
+    }
+
+    @Bean
+    Invitation authInvitation(@Value("${jabiz.security.invitation.ttl:PT72H}") Duration validity) {
+        return new Invitation(invitation(validity));
+    }
+
+    @Bean
+    MailTemplate authInvitationMail(Invitation invitation) {
+        return invitation.mail();
     }
 
     /** Tells a user that their password was changed (section 15.8): no token, the entry its only parameter. */

@@ -4694,3 +4694,23 @@ Playwright 端到端（需维护连接与数据库角色，以 Vitest 与 `Accou
 **已知**：PR 检查的是 PR 与当时目标分支的合并结果；目标分支其后又合并了别的 PR 时，合并后的组合不再单独检查（分支保护可要求合并前与目标分支同步）。
 
 **17n 状态**：✅ 已实施。
+
+### 17o 管理员建号的邀请邮件（已确认 2026-10-29，决策 D63）
+
+**缘由**：需求方 2026-10-29：QuizBuks 的财务负责人由管理员建号、分配角色后，在后台用"忘记密码"收不到邮件。管理员填写的邮箱不可信（D36），找回密码不寄；
+没有密码又不能登录去验证邮箱，账号交不到本人手里。需求方确认：邀请链接有效期 72 小时，权限沿用建号的 `security.user.create`，给持有受保护权限的人发邀请不需要审批
+（代码审查与安全复查发现这会绕过 D48 的第二位管理员，改为：建立期内照常寄出，建立期结束后对持有人拒绝、接受时再查一次，先收回权限再邀请，见 D63 第 5 条；
+替换已有的密码另需 `security.user.password`）。
+
+| # | 内容 |
+|---|---|
+| 17o-1 | 决策 D63；设计 10 §15.14（新）、§15.7、§16.2；根 `CLAUDE.md` 一句 |
+| 17o-2 | 流程 `SEC_USER_INVITE`（`actsOn(SecUser)`）与 `SEC_USER_CREATE` 的 `invite`；邮件模板 `jabiz.auth.invitation`（令牌 `jabiz.invite`，`jabiz.security.invitation.ttl` 缺省 72 小时，三语） |
+| 17o-3 | 只寄给启用、有邮箱、邮箱未验证、地址自建号后无人改过的用户（`AddressVerifiable.unchanged`，所有权链的 `addressAsCreated`）；邮件未开启即 `MAIL_DISABLED`；建立期结束后不邀请受保护权限的持有人；错误码 `INVITATION_NOT_NEEDED`、`INVITATION_ADDRESS_CHANGED`、`INVITATION_USER_DISABLED` |
+| 17o-4 | 接受：`POST /api/auth/invitation/confirm`（`SPONSOR_INVITATION_ACCEPT`），与找回密码相同的设定密码、证明邮箱、结束会话、登录记录；所有权链把它算作邮件证明 |
+| 17o-5 | 前端：`@jabiz/client` `acceptInvitation`，`@jabiz/ui` `MailLinkPage` 的 `invitation` 页（`InvitationPanel`），后台路由 `/auth/invitation`，示范门户与指南 `app-spa.md` 的邮件链接页；OpenAPI 快照与生成的类型 |
+| 17o-6 | 测试：`InvitationIT`、`InvitationWithoutMailIT`、`CredentialChainTest`、`AuthPages.test.tsx`、`blocks.test.tsx`（axe） |
+
+**不做**：批量邀请；邀请的撤回（新的邀请、停用账号或改地址都令旧链接失效）。
+
+**17o 状态**：✅ 已实施。

@@ -49,6 +49,7 @@ export {
   requestPasswordReset,
   requestEmailLink,
   confirmPasswordReset,
+  acceptInvitation,
   resendVerification,
   checkVerificationLink,
   confirmVerificationLink,

@@ -100,8 +100,12 @@ public class ProtectedGrants {
      *                created
      * @param clean   whether nobody else could sign in as the user now
      */
+    /**
+     * The chain of ownership of a user's credentials ({@code CredentialChain}); {@code addressAsCreated}: the address is
+     * the one entered when the account was created, changed by nobody since (decision D63).
+     */
     public record Credentials(boolean own, String setBy, Instant setAt, String summary, List<String> history,
-        String email, String address, boolean addressChangedByOther, boolean clean) {
+        String email, String address, boolean addressChangedByOther, boolean clean, boolean addressAsCreated) {
         public Credentials {
             history = List.copyOf(history);
         }
@@ -568,7 +572,7 @@ public class ProtectedGrants {
                 CredentialChain.Judgement judged = CredentialChain.judge(user.toString(), events);
                 return new Credentials(judged.own(), judged.setBy(), judged.setAt(), judged.summary(),
                     judged.history(), judged.email(), judged.address(), judged.addressChangedByOther(),
-                    judged.clean());
+                    judged.clean(), judged.addressAsCreated());
             });
     }
 

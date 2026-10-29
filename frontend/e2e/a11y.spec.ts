@@ -109,7 +109,8 @@ async function checkPagesAfterSignIn(page: Page, request: APIRequestContext, app
 
   // Each page with what shows it has rendered its content (not a loading or error state).
   for (const [path, name, ready] of [
-    ['/processes', 'process catalog', '[data-testid="process-PRICE_ADJUST-1"]'],
+    // Any process: which ones are on the catalog's first page changes as processes are added.
+    ['/processes', 'process catalog', '[data-testid^="process-"]'],
     ['/processes/PRICE_ADJUST/1', 'process form', '[data-testid="process-run"]'],
     ['/processes/APPROVAL_DECIDE/1', 'process form with a required choice', '[data-testid="process-run"]'],
     ['/tasks', 'tasks', '[data-testid="tasks"], [data-testid="tasks-empty"]'],

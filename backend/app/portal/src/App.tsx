@@ -33,7 +33,7 @@ const HOME = '/orders'
 let pendingStep: SignInStep | undefined
 
 const MAIL_PAGES = new Set(['/auth/verify-email', '/auth/join', '/auth/password-reset', '/auth/email-link',
-  '/auth/account-deletion'])
+  '/auth/account-deletion', '/auth/invitation'])
 
 /**
  * The unsubscribe page of the portal's notifications (decision D52): `jabiz.mail.unsubscribe-paths.portal` is
