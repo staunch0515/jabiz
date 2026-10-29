@@ -25,6 +25,7 @@ import { navigate } from '../qb/router'
 import { cloneQuiz, readVersion, readVersions, type VersionRow } from './api'
 import { ContentImage } from './ContentImage'
 import { MaterialContent, useKindLabel } from './MaterialsPanel'
+import { useScoredBadge } from './QuestionsPanel'
 import { quizPath, QUIZZES_QUERY, versionsQuery } from './paths'
 
 /** One version's whole content, read only, as it was saved (correct options marked). */
@@ -32,6 +33,7 @@ function VersionView({ versionId }: { versionId: string }) {
   const { t } = useTranslation(SPONSOR)
   const { t: tQb } = useTranslation(QB)
   const kindLabel = useKindLabel()
+  const scoredBadge = useScoredBadge()
   const version = useQuery({ queryKey: [...QUIZZES_QUERY, 'version', versionId], queryFn: () => readVersion(versionId),
     staleTime: Infinity })
   if (version.isPending) return <PageState kind="loading" />
@@ -79,9 +81,10 @@ function VersionView({ versionId }: { versionId: string }) {
               <p className="flex flex-wrap items-center justify-between gap-2">
                 <span className="font-medium">{t('questions.number', { number: question.no })}</span>
                 <Badge variant="outline">
-                  {/* A survey's question (Q12): one or several options, no points or correct ones. */}
+                  {/* A survey's question (Q12): one or several options, no points or correct ones; a scored one is a
+                      single or multiple choice by its correct options (D-Q5-2). */}
                   {question.selection ? t(`questions.selections.${question.selection}`)
-                    : t('questions.pointsValue', { points: question.points })}
+                    : scoredBadge(question.options.filter((o) => o.correct).length, question.points)}
                 </Badge>
               </p>
               <p className="whitespace-pre-wrap">{question.stem}</p>

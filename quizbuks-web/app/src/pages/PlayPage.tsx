@@ -190,9 +190,10 @@ function Player({ started }: { started: Started }) {
   if (total === 0) return <PageState kind="empty" description={t('play.noQuestions')} />
   const question = questions[index]
   const chosen = answers.get(question.no) ?? []
-  // A survey (Q12) is submitted only with every question answered (a single choice by one option).
+  // A survey (Q12) is submitted only with every question answered (a single choice by one option). A scored
+  // question with one correct option is a single choice too (the server says which, D-Q5-2): radio buttons.
   const survey = output.kind === 'SURVEY'
-  const single = survey && question.selection === 'SINGLE'
+  const single = question.selection === 'SINGLE'
   const open = unansweredOf(questions, answers)
   const unanswered = open.length
   const blocked = survey && unanswered > 0
@@ -239,8 +240,11 @@ function Player({ started }: { started: Started }) {
           </h1>
         </legend>
         <p id="play-hint" className="text-muted-foreground text-sm">
-          {survey ? t(single ? 'play.chooseOne' : 'play.chooseAny')
-            : <>{t('play.points', { count: question.points })} · {t('play.chooseAll')}</>}
+          <span className="text-foreground font-medium" data-testid="play-choice"
+            data-choice={single ? 'single' : 'multiple'}>{t(single ? 'play.single' : 'play.multiple')}</span>
+          {' · '}
+          <span>{survey ? t(single ? 'play.chooseOne' : 'play.chooseAny')
+            : <>{t('play.points', { count: question.points })} · {t(single ? 'play.chooseCorrect' : 'play.chooseAll')}</>}</span>
         </p>
         {question.image && (
           <FileImage fileId={question.image} variant="w640" alt={t('play.questionImage')}
@@ -319,7 +323,8 @@ function Player({ started }: { started: Started }) {
 }
 
 /**
- * The options of a question: check boxes, or radio buttons for a survey's single choice (Q12), which hold one option.
+ * The options of a question: check boxes, or radio buttons for a single choice (a survey's, Q12, or a scored question
+ * with one correct option), which hold one option.
  */
 function OptionList({ single, value, onChoose, children }: { single: boolean; value: number[];
   onChoose: (option: number) => void; children: ReactNode }) {

@@ -72,7 +72,11 @@ public final class AttemptProcesses {
     /** @param no the option's position in this attempt, 1..k in the order shown (Q10b, M1): what answers name */
     public record OptionView(int no, String text, UUID image) {}
 
-    /** @param selection a survey's question: {@code SINGLE} or {@code MULTIPLE} (Q12); null for a scored one */
+    /**
+     * @param selection {@code SINGLE} or {@code MULTIPLE}: a survey's question as set (Q12), a scored one by how many of
+     *                  its options are correct ({@link QuizSnapshot.Question#choice}), so that a single choice is shown
+     *                  with radio buttons
+     */
     public record QuestionView(int no, String stem, UUID image, int points, List<OptionView> options,
         String selection) {}
 
@@ -419,7 +423,7 @@ public final class AttemptProcesses {
                 options.add(new OptionView(options.size() + 1, option.text(), option.image()));
             }
             questions.add(new QuestionView(question.no(), question.stem(), question.image(), question.points(),
-                List.copyOf(options), question.selection()));
+                List.copyOf(options), question.choice()));
         }
         return List.copyOf(questions);
     }

@@ -24,7 +24,7 @@ import { useId, useRef, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { SPONSOR } from '../messages'
 import { fieldProblem } from '../qb/problems'
-import { deleteQuestion, moved, reorderQuestions, saveQuestion, type Question, type Selection } from './api'
+import { choiceOf, deleteQuestion, moved, reorderQuestions, saveQuestion, type Question, type Selection } from './api'
 import {
   failedRemoval,
   FileField,
@@ -169,6 +169,7 @@ function QuestionDialog({ question, number, survey, open, onOpenChange }: {
             <p className="text-muted-foreground text-sm">
               {t(survey ? 'questions.surveyOptionsHint' : 'questions.optionsHint', { min: LIMITS.minOptions, max: LIMITS.options })}
             </p>
+            {!survey && <ChoiceHint correct={options.filter((o) => o.correct).length} />}
             <ol ref={optionsRef} className="flex flex-col gap-3">
               {options.map((option, index) => (
                 <li key={option.key} className="flex flex-col gap-3 rounded-md border p-3" data-testid="option">
@@ -245,6 +246,27 @@ function QuestionDialog({ question, number, survey, open, onOpenChange }: {
   )
 }
 
+/** A scored question's badge: single or multiple choice, and its points. */
+export function useScoredBadge(): (correct: number, points: number) => string {
+  const { t } = useTranslation(SPONSOR)
+  return (correct, points) => {
+    const choice = choiceOf(correct)
+    const value = t('questions.pointsValue', { points })
+    return choice ? `${t(`questions.selections.${choice}`)} · ${value}` : value
+  }
+}
+
+/** Under a scored question's options: single or multiple choice as the correct options marked make it. */
+function ChoiceHint({ correct }: { correct: number }) {
+  const { t } = useTranslation(SPONSOR)
+  const choice = choiceOf(correct)
+  return (
+    <p className="text-sm font-medium" data-testid="question-choice" data-choice={choice ?? 'none'} aria-live="polite">
+      {choice ? t(`questions.choiceHint.${choice}`, { count: correct }) : t('questions.choiceHint.none')}
+    </p>
+  )
+}
+
 /**
  * The questions of the quiz in their order (M-24): each with its options, the correct ones marked; added, changed,
  * moved up or down (`QB_QUESTION_REORDER` with the whole order) and deleted. A survey's (Q12) say single or multiple
@@ -252,6 +274,7 @@ function QuestionDialog({ question, number, survey, open, onOpenChange }: {
  */
 export function QuestionsPanel({ questions, survey = false }: { questions: Question[]; survey?: boolean }) {
   const { t } = useTranslation(SPONSOR)
+  const scoredBadge = useScoredBadge()
   const editing = useEditing()
   const [editingQuestion, setEditingQuestion] = useState<{ question: Question | null; number: number } | null>(null)
   const addRef = useRef<HTMLButtonElement>(null)
@@ -303,7 +326,8 @@ export function QuestionsPanel({ questions, survey = false }: { questions: Quest
                       <h2 className="font-medium">{t('questions.number', { number: index + 1 })}</h2>
                       <Badge variant="outline" data-testid="question-badge">
                         {survey ? question.selection ? t(`questions.selections.${question.selection}`)
-                          : t('questions.noSelection') : t('questions.pointsValue', { points: question.points })}
+                          : t('questions.noSelection')
+                          : scoredBadge(question.options.filter((o) => o.correct).length, question.points)}
                       </Badge>
                     </div>
                     <p className="whitespace-pre-wrap" data-testid="question-stem-text">

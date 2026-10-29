@@ -1198,3 +1198,34 @@ describe('the history', () => {
     expect(window.location.pathname).toBe('/')
   })
 })
+
+describe('single and multiple choice in a scored quiz', () => {
+  it('shows a question with one correct option as a single choice with radio buttons, one with several as check boxes',
+    async () => {
+      const questions = started().questions
+      const { posted } = server({ start: () => json(200, { output: started({ questions: [
+        { ...questions[0], selection: 'SINGLE' }, { ...questions[1], selection: 'MULTIPLE' }] }) }) })
+      window.history.replaceState(null, '', `/p/${PUB}`)
+      render(<App />)
+      await userEvent.click(await screen.findByTestId('detail-start'))
+
+      // The server says which (D-Q5-2): one correct option is a single choice, and only one option holds.
+      expect(await screen.findByTestId('play-choice')).toHaveAttribute('data-choice', 'single')
+      expect(screen.getByTestId('play-choice')).toHaveTextContent('Single choice')
+      expect(screen.getByText(/Choose the correct option\./)).toBeInTheDocument()
+      expect(screen.queryByRole('checkbox')).toBeNull()
+      await userEvent.click(screen.getByRole('radio', { name: /Paris/ }))
+      await userEvent.click(screen.getByRole('radio', { name: /Lyon/ }))
+      expect(screen.getByRole('radio', { name: /Lyon/ })).toBeChecked()
+      expect(screen.getByRole('radio', { name: /Paris/ })).not.toBeChecked()
+      await waitFor(() => expect(posted('QB_ATTEMPT_SAVE').at(-1)).toEqual(
+        { attemptId: ATTEMPT, currentIndex: null, answers: [{ questionNo: 1, selected: [2] }] }), { timeout: 3000 })
+
+      await userEvent.click(screen.getByTestId('play-next'))
+      expect(screen.getByTestId('play-choice')).toHaveAttribute('data-choice', 'multiple')
+      expect(screen.getByTestId('play-choice')).toHaveTextContent('Multiple choice')
+      expect(screen.getByText(/Choose every correct option\./)).toBeInTheDocument()
+      expect(screen.queryByRole('radio')).toBeNull()
+      expect(screen.getAllByRole('checkbox')).toHaveLength(2)
+    })
+})
