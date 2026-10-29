@@ -79,7 +79,7 @@ const PRIZE_LINK = 'https://shop.example.com/voucher/WXYZ'
 
 interface Options {
   /** Answers each read of the publication's page (Q25: none until the view claimed the invitation). */
-  publicationPage?: () => Response
+  publicationPage?: () => Response | Promise<Response>
   start?: () => Response
   submit?: () => Response
   /** The answer of QB_ATTEMPT_RESULT; the finished quiz by default. */
@@ -98,6 +98,7 @@ interface Options {
   digitalOpen?: () => Response
   /** Q47: the taker's stored answers for matching (one row per option, or the birth year). */
   attributes?: Record<string, unknown>[]
+  view?: () => Promise<Response> | Response
 }
 
 /** The server as the play pages see it; records every call (path and body). */
@@ -157,7 +158,7 @@ function server(options: Options = {}) {
       case '/api/processes/QB_DIGITAL_PRIZE_DISPUTE/latest':
         return json(200, { output: { digitalPrizeId: 'd1', status: 'CONFIRMED', revision: 3 } })
       case '/api/processes/QB_VIEW/latest':
-        return json(200, { output: { publicationId: PUB, firstView: true } })
+        return options.view ? options.view() : json(200, { output: { publicationId: PUB, firstView: true } })
       case '/api/processes/QB_ATTEMPT_START/latest':
         return options.start ? options.start() : json(200, { output: started() })
       case '/api/processes/QB_ATTEMPT_SAVE/latest': {
@@ -685,14 +686,48 @@ describe('a publication\'s page', () => {
 
   it('shows an invited publication once the view claimed the invitation (Q25)', async () => {
     let reads = 0
+    let claim: (response: Response) => void = () => undefined
     const { posted } = server({ publicationPage: () => json(200, { items: ++reads === 1 ? []
-      : [publication({ audience: 'INVITED', invited: true })], offset: 0, limit: 1 }) })
+      : [publication({ audience: 'INVITED', invited: true })], offset: 0, limit: 1 }),
+    view: () => new Promise<Response>((resolve) => { claim = resolve }) })
     window.history.replaceState(null, '', `/p/${PUB}`)
     render(<App />)
+    // The first read finds nothing while the view is claiming the invitation: still loading, never "not available".
+    await waitFor(() => expect(reads).toBe(1))
+    await waitFor(() => expect(posted('QB_VIEW')).toHaveLength(1))
+    expect(screen.queryByTestId('detail-not-found')).toBeNull()
+    claim(json(200, { output: { publicationId: PUB, firstView: true } }))
     expect(await screen.findByTestId('detail-invited')).toHaveTextContent('By invitation')
     expect(screen.getByTestId('detail-start')).toBeInTheDocument()
     expect(posted('QB_VIEW')).toEqual([{ publicationId: PUB }])
     expect(reads).toBe(2)
+  })
+
+  it('reads once more a first read still under way when the view ends, and then says the quiz is not available',
+    async () => {
+    let reads = 0
+    // The first read ends only after the view: it may have missed what the view claimed, so it is read again.
+    let firstRead: (response: Response) => void = () => undefined
+    const { posted } = server({ publicationPage: () => ++reads === 1
+      ? new Promise<Response>((resolve) => { firstRead = resolve })
+      : json(200, { items: [], offset: 0, limit: 1 }) })
+    window.history.replaceState(null, '', `/p/${PUB}`)
+    render(<App />)
+    await waitFor(() => expect(posted('QB_VIEW')).toHaveLength(1))
+    expect(screen.queryByTestId('detail-not-found')).toBeNull()
+    firstRead(json(200, { items: [], offset: 0, limit: 1 }))
+    expect(await screen.findByTestId('detail-not-found')).toBeInTheDocument()
+    expect(reads).toBe(2)
+  })
+
+  it('says the quiz is not available when the view fails, without reading again', async () => {
+    let reads = 0
+    server({ publicationPage: () => json(200, { items: [], offset: 0, limit: (++reads, 1) }),
+      view: () => json(422, { title: 'Unprocessable', status: 422 }) })
+    window.history.replaceState(null, '', `/p/${PUB}`)
+    render(<App />)
+    expect(await screen.findByTestId('detail-not-found')).toBeInTheDocument()
+    expect(reads).toBe(1)
   })
 
   it('cannot start before the address is verified, and records no view', async () => {
