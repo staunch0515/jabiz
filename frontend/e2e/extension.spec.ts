@@ -1,5 +1,5 @@
 import { expect } from '@playwright/test'
-import { adminToken, dataRows, insert, signIn, test, unique } from './support'
+import { adminToken, dataRows, insert, signIn, test, unique, rowMenu } from './support'
 
 const PRODUCTS = 'urn:jabiz:dataset:default:Product'
 const WAREHOUSES = 'urn:jabiz:dataset:default:Warehouse'
@@ -38,7 +38,8 @@ test('the application page lists stock and receives goods', async ({ page, reque
   await expect(page).toHaveURL(/\/data\/urn%3Ajabiz%3Adataset%3Adefault%3AStockReceipt$/)
   await expect(page.getByTestId('row-view').first()).toBeVisible()
   await expect(page.getByTestId('row-edit')).toHaveCount(0)
-  await expect(page.getByTestId('row-delete')).toHaveCount(0)
+  await expect((await rowMenu(dataRows(page).first())).getByTestId('row-delete')).toHaveCount(0)
+  await page.keyboard.press('Escape')
 })
 
 test('a user without the permission has no menu entry and the server refuses the page its data', async ({

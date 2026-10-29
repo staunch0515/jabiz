@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -47,22 +47,42 @@ function renderActions(status: string, onDone = () => {}) {
   )
 }
 
+/** Opens the row's menu. */
+async function openMenu() {
+  await userEvent.click(screen.getByRole('button', { name: 'More actions' }))
+  await screen.findByRole('menu')
+}
+
 describe('RowActions', () => {
   beforeEach(async () => {
     post.mockReset()
     await act(() => i18n.changeLanguage('en'))
   })
 
-  it('offers the actions whose condition holds', () => {
+  it('offers the actions whose condition holds, in one menu', async () => {
     renderActions('DRAFT')
+    expect(screen.queryByTestId('row-action-SUBMIT')).toBeNull()
+    await openMenu()
     expect(screen.getByTestId('row-action-SUBMIT').textContent).toBe('Do SUBMIT')
     expect(screen.queryByTestId('row-action-REJECT')).toBeNull()
+    await expectAccessible()
   })
 
-  it('opens the form of a process that needs more than the key, with the key filled in', () => {
+  it('offers no menu when nothing holds', () => {
+    render(
+      <MemoryRouter>
+        <RowActions actions={[process('SUBMIT', ['storyId'], ['DRAFT'])]} id="s-1" attributes={{ status: 'DONE' }}
+          onDone={() => {}} />
+      </MemoryRouter>,
+    )
+    expect(screen.queryByTestId('row-actions')).toBeNull()
+  })
+
+  it('opens the form of a process that needs more than the key, with the key filled in', async () => {
     renderActions('SUBMITTED')
+    await openMenu()
     expect(screen.queryByTestId('row-action-SUBMIT')).toBeNull()
-    fireEvent.click(screen.getByTestId('row-action-REJECT'))
+    await userEvent.click(screen.getByTestId('row-action-REJECT'))
     expect(screen.getByTestId('where').textContent).toBe('/processes/REJECT/1?storyId=s-1')
   })
 
@@ -70,6 +90,7 @@ describe('RowActions', () => {
     post.mockResolvedValue({})
     const onDone = vi.fn()
     renderActions('DRAFT', onDone)
+    await openMenu()
     await userEvent.click(screen.getByTestId('row-action-SUBMIT'))
     const confirm = screen.getByRole('alertdialog', { name: 'Run “Do SUBMIT” on this entry?' })
     await expectAccessible()
@@ -79,6 +100,7 @@ describe('RowActions', () => {
     expect(post).not.toHaveBeenCalled()
 
     for (let run = 0; run < 2; run++) {
+      await openMenu()
       await userEvent.click(screen.getByTestId('row-action-SUBMIT'))
       await userEvent.click(screen.getByRole('button', { name: 'OK' }))
       await waitFor(() => expect(onDone).toHaveBeenCalledTimes(run + 1))

@@ -24,6 +24,7 @@ import type { ChildList } from '../meta/references'
 import type { EntityInstance } from '../meta/types'
 import EntityFormDrawer from './EntityFormDrawer'
 import RowActions from './RowActions'
+import { idColumn } from '../meta/idColumn'
 
 interface Props {
   child: ChildList
@@ -74,6 +75,7 @@ export default function ChildEntityList({ child, parentId }: Props) {
 
   const columns = useMemo<ColumnDef<Row, unknown>[]>(
     () => [
+      idColumn(t),
       // The reference to the parent is the same in every row.
       ...dataColumns(child.entity, view, dictionaries, t, i18n.language)
         .filter((c) => c.id !== child.field)

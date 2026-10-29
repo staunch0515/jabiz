@@ -1,5 +1,5 @@
 import { expect } from '@playwright/test'
-import { adminToken, confirm, dataRows, datasetPath, dialog, insert, signIn, test, unique } from './support'
+import { adminToken, confirm, dataRows, datasetPath, dialog, insert, signIn, test, unique, rowMenu } from './support'
 
 const PRODUCTS = 'urn:jabiz:dataset:default:Product'
 const WAREHOUSES = 'urn:jabiz:dataset:default:Warehouse'
@@ -30,7 +30,7 @@ test('an order confirmation is issued from its row, saved as issued and verified
   await page.getByLabel('订单号').first().fill(code)
   await page.getByRole('button', { name: '查询', exact: true }).click()
   await expect(dataRows(page)).toHaveCount(1)
-  await page.getByTestId('row-action-ORDER_CONFIRMATION_ISSUE').first().click()
+  await (await rowMenu(dataRows(page).first())).getByTestId('row-action-ORDER_CONFIRMATION_ISSUE').click()
   await confirm(page)
   await expect(page.getByText('流程已完成。')).toBeVisible()
 

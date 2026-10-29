@@ -1,5 +1,5 @@
 import { expect } from '@playwright/test'
-import { adminToken, CARRIERS, dialog, insert, PRICES, searchedRow, signIn, test, unique, update } from './support'
+import { adminToken, CARRIERS, dialog, insert, PRICES, searchedRow, signIn, test, unique, update, rowMenu } from './support'
 
 function historyPath(dataset: string, id: string): string {
   return `/data/${encodeURIComponent(dataset)}/${encodeURIComponent(id)}/history`
@@ -110,7 +110,7 @@ test.describe('history', () => {
     await page.goto(`/data/${encodeURIComponent(PRICES)}`)
     await page.getByLabel('SKU').first().fill(sku)
     await page.getByRole('button', { name: '查询', exact: true }).click()
-    await (await searchedRow(page, sku)).getByTestId('row-history').click()
+    await (await rowMenu(await searchedRow(page, sku))).getByTestId('row-history').click()
     await expect(page.getByTestId('history-timeline').locator('[data-testid^="version-"]')).toHaveCount(2)
     await page.getByTestId('version-1').getByTestId('view-at').click()
     await expect(page.getByTestId('point-in-time').locator('[data-field="amount"]')).toContainText('100')
