@@ -164,7 +164,11 @@ describe('a visitor', () => {
     cleanup()
     window.history.replaceState(null, '', '/signup')
     render(<App />)
-    const signUp = await screen.findByTestId('signup-providers')
+    // In the sign-up card, as on the sign-in page, under the words of signing up; with the terms' note (17u).
+    const signUp = await screen.findByTestId('oidc-icons')
+    expect(screen.getByTestId('sign-up')).toContainElement(signUp)
+    expect(signUp).toHaveTextContent('Other ways to sign up')
+    expect(screen.getByTestId('sign-up')).toContainElement(screen.getByTestId('signup-terms'))
     expect(await within(signUp).findByRole('button', { name: 'Facebook' })).toHaveAttribute('data-kind', 'facebook')
   })
 

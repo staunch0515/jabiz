@@ -2,13 +2,10 @@ import { AuthProvider, useAuth, type SignInStep } from '@jabiz/client'
 import {
   AppearanceProvider,
   AppShell,
-  AUTH_NAMESPACE,
-  AuthError,
   Button,
   MailLinkPage,
   MailUnsubscribe,
   OfflineBanner,
-  OidcButtons,
   OidcCallback,
   PageState,
   PasswordResetRequest,
@@ -313,13 +310,12 @@ function Routes() {
     // Q48d: a sign-up from a prospecting trial keeps its key until the sponsor applies.
     rememberSource(search)
     return frame(<>
-      <SignUpForm {...navigation} brand={brand} signInPath="/login" />
-      <SignUpProviders returnTo="/" />
-      <p className="text-muted-foreground mx-auto w-full max-w-md px-4 pb-6 text-center text-sm"
-        data-testid="signup-terms">
-        {t('public.signUpTerms')}{' '}
-        <LegalLink kind="TERMS_SPONSOR" />{' · '}<LegalLink kind="PRIVACY" />
-      </p>
+      <SignUpForm {...navigation} brand={brand} signInPath="/login"
+        oidc={{ returnTo: '/', layout: 'icons' }}
+        note={<span data-testid="signup-terms">
+          {t('public.signUpTerms')}{' '}
+          <LegalLink kind="TERMS_SPONSOR" />{' · '}<LegalLink kind="PRIVACY" />
+        </span>} />
     </>)
   }
   if (path === '/login') {
@@ -345,21 +341,6 @@ function Routes() {
     <StepUpProvider {...navigation} securityPath={ACCOUNT_PATH}>
       <SignedIn path={path} />
     </StepUpProvider>
-  )
-}
-
-/**
- * Signing up through an identity provider on the sign-up page (Q40, D-Q40-5): the same round icons as the sign-in page,
- * since a provider's first sign-in opens the account. A failure to start says so above them.
- */
-function SignUpProviders({ returnTo }: { returnTo: string }) {
-  const { t } = useTranslation(AUTH_NAMESPACE)
-  const [failed, setFailed] = useState(false)
-  return (
-    <div className="mx-auto flex w-full max-w-md flex-col gap-3 px-4 pb-4" data-testid="signup-providers">
-      {failed && <AuthError message={t('common.error')} testId="signup-providers-error" />}
-      <OidcButtons layout="icons" returnTo={returnTo} onError={(e) => setFailed(e !== null)} />
-    </div>
   )
 }
 
