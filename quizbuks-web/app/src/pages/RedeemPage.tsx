@@ -2,7 +2,7 @@ import { ApiError, formatDateTime } from '@jabiz/client'
 import { Alert, AlertDescription, AlertTitle, Button, PageState } from '@jabiz/ui'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CircleCheck, Gift, Hourglass } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
 import { formatKudos } from '../qb/kudos'
@@ -10,6 +10,7 @@ import { QB } from '../qb/messages'
 import { checkRedeemCode, claimRedemption, readAttemptResult, type RedeemPrize, type RedemptionStatus } from '../qb/play'
 import { problemText } from '../qb/problems'
 import { Link } from '../qb/router'
+import { forgetRedeem } from '../redeemReturn'
 
 /** How often the page asks whether the sponsor confirmed a claim from their printed code. */
 const WAIT_POLL = 4_000
@@ -57,6 +58,8 @@ export function RedeemPage({ scannedKey }: { scannedKey: string }) {
   const { t } = useTranslation(APP)
   const { t: tQb } = useTranslation(QB)
   const queryClient = useQueryClient()
+  // The scanned code's page is reached: signing in no longer leads back here.
+  useEffect(() => forgetRedeem(), [])
   const check = useQuery({ queryKey: ['qb', 'redeem-check', scannedKey], queryFn: () => checkRedeemCode(scannedKey),
     retry: false })
   const [claimed, setClaimed] = useState<{ prize: RedeemPrize; status: RedemptionStatus } | null>(null)
@@ -122,7 +125,8 @@ export function RedeemPage({ scannedKey }: { scannedKey: string }) {
                   {t('redeemPage.code', { code: prize.code })}
                   {prize.expiresAt ? ` · ${t('redeemPage.by', { time: formatDateTime(prize.expiresAt) })}` : ''}
                 </span>
-                {prize.status === 'CLAIMED' ? (
+                {/* A claim by the printed code waits for the sponsor; the rotating code hands it over at once. */}
+                {prize.status === 'CLAIMED' && check.data.kind !== 'ROTATING' ? (
                   <span className="text-sm" data-testid="redeem-claimed">{t('redeemPage.alreadyClaimed')}</span>
                 ) : (
                   <Button className="w-fit" disabled={claim.isPending} aria-busy={claim.isPending || undefined}

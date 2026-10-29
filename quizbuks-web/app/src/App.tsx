@@ -44,6 +44,7 @@ import { InboxPage } from './inbox/InboxPage'
 import { useUnread } from './inbox/useUnread'
 import { forgetAttempts } from './play/storage'
 import { itemPage } from './routes'
+import { pendingRedeem, redeemPath, rememberRedeem } from './redeemReturn'
 import { mailFirst } from './signin'
 import { InAppBrowserNotice } from './install'
 import { readMyProfile } from './qb/api'
@@ -194,6 +195,9 @@ function SignedIn({ path }: { path: string }) {
     return <Redirect to={WELCOME} />
   }
   if (complete && path === WELCOME) return <Redirect to={HOME} />
+  // A redeem code scanned before signing in, whose page the sign-in did not return to: back to it (the page forgets it).
+  const scanned = complete ? pendingRedeem() : null
+  if (scanned && itemPage(path)?.page !== 'redeem') return <Redirect to={redeemPath(scanned)} />
 
   const country = complete?.countryCode ?? null
   const item = itemPage(path)
@@ -326,8 +330,12 @@ function Routes() {
   if (!signedIn && shared?.page === 'p') {
     return <PublicPage path={path} signedIn={false}><SharePage publicationId={shared.id} /></PublicPage>
   }
-  // A sponsor's redeem code scanned before signing in (Q22b): sign in, then back to it.
-  if (!signedIn && shared?.page === 'redeem') return <Redirect to={`/login?next=${encodeURIComponent(path)}`} />
+  // A sponsor's redeem code scanned before signing in (Q22b): sign in, then back to it. The code is also kept on the
+  // device, for a sign-in that ends in another tab (a mailed link, an identity provider).
+  if (!signedIn && shared?.page === 'redeem') {
+    rememberRedeem(shared.id)
+    return <Redirect to={`/login?next=${encodeURIComponent(path)}`} />
+  }
   // Where signing in leads: a page of the app the person came from (a share link's), else home.
   const next = new URLSearchParams(search).get('next')
   const afterSignIn = next && next.startsWith('/') && !next.startsWith('//') ? next : HOME

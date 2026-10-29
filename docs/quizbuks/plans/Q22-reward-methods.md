@@ -39,14 +39,14 @@
 | 商家的码 | 普通表 `qb_redeem_token`（实体 `QbRedeemToken`：`sponsorId`、`tokenValue`（敏感，数据视图不返回；名字含 token，平台按名遮蔽）、`kind` ROTATING / PRINTED、`issuedAt`、`expiresAt`、`revokedAt`）。只经 `QB_REDEEM_CODE_ISSUE`（商家，`qb.publication.write`）写入：ROTATING 有效 2 分钟（`QbRewards.ROTATING_TOKEN_LIFE`），每次签发顺带删除本商家已失效的轮换码；PRINTED 长期有效，再次请求返回同一个，`renew: true` 作废旧码并签发新码。随机数经平台的阻塞步骤 `RandomBytesStep`（192 位，URL 安全 Base64），只在该流程的输出 `redeemKey` 中出现一次 |
 | 码的内容 | App 链接 `<站点>/redeem/<redeemKey>`：任何手机相机扫码即打开；未登录先登录再回到该页（`next`）。App 中不写扫码代码 |
 | 核对 | `QB_REDEEM_TOKEN_CHECK`（答题人，`qb.me`，输入 `scannedKey`）：码此刻有效（未失效、未作废，否则 422 `QB_REDEEM_TOKEN_INVALID`）→ 商家公司名、码的种类与本人在该商家未领取的奖品（`DUE` / `CLAIMED`，超过 `confirmBy` 的申请按 `DUE` 显示） |
-| 领取 | `QB_REDEMPTION_CLAIM`（答题人，输入 `scannedKey` + `redemptionId`）：奖品锁内经答题人视图读（他人 404），码须有效且属于奖品的商家（422 `QB_REDEEM_TOKEN_SPONSOR`），状态须为 `DUE`（含超时的申请）。轮换码 → `REDEEMED`（`redeemedBy` = 商家，事件 `qb.redemption.redeemed`）；固定码 → `CLAIMED`（`confirmBy = now + 10 分钟`，事件 `qb.redemption.claimed` → 商家收件箱） |
+| 领取 | `QB_REDEMPTION_CLAIM`（答题人，输入 `scannedKey` + `redemptionId`）：奖品锁内经答题人视图读（他人 404），码须有效且属于奖品的商家（422 `QB_REDEEM_TOKEN_SPONSOR`），状态须为 `DUE`（含超时的申请）。轮换码 → `REDEEMED`（`redeemedBy` = 商家，事件 `qb.redemption.redeemed`）；固定码 → `CLAIMED`（`confirmBy = now + 10 分钟`，事件 `qb.redemption.claimed` → 商家收件箱）。2026-10-29 起，轮换码也接受 `CLAIMED`：固定码的申请还在等商家确认时，扫屏幕上的轮换码即领取（人在柜台前，不必等确认或十分钟），原申请随之结束 |
 | 商家的回答 | `QB_REDEMPTION_CONFIRM`（`CLAIMED` 未超时 → `REDEEMED`，`redeemedBy` = 操作人；超时即 422 `QB_REDEMPTION_CLAIM_LAPSED`）、`QB_REDEMPTION_DECLINE`（→ `DUE`，事件 `qb.redemption.declined` 告知答题人）。都经商家视图读（他人 404） |
 | 作废与过期 | `QB_REDEMPTION_VOID`（管理员，权限 `qb.redemption.void`，`DUE` / `CLAIMED` → `VOID`，附注）；任务 `qb.redemption-expire`（每日 02:10 UTC，`DUE` 过了 `expiresAt` → `EXPIRED`）与 `qb.redemption-lapse`（每十分钟，`CLAIMED` 过了 `confirmBy` → `DUE`），都是 `forEach` 的 `internal()` 流程 |
 | 状态 | `RedemptionStatus`：DUE → CLAIMED / REDEEMED / EXPIRED / VOID；CLAIMED → REDEEMED / DUE / VOID。`QbRedemption` 新字段 `claimKind`、`claimedAt`、`confirmBy`、`redeemedBy`、`voidedBy`、`voidNote`（迁移 `V25`） |
 | 消息 | 站内信种类 `REDEEM_CLAIMED`（商家，动作 `REDEEM` → 领奖页）、`REDEEM_REDEEMED` / `REDEEM_DECLINED` / `REDEEM_EXPIRED` / `REDEEM_VOID`（答题人 → 结果页）。**商家后台的收件箱**（`qb.sponsor.inbox`）现在同时列出商家自己的消息（现金与奖品）与平台公告（Q22a 遗留项） |
 | 模板 | `qb.sponsor.redemptions`（搜索、状态、`since`）、`qb.app.redemptions`（`open`）、`qb.admin.redemptions`、`qb.system.redemptions-expired`、`qb.system.redemption-claims-lapsed` |
 | 商家后台 | 页 `/redeem`（导航"奖品领取"）：轮换码（每分钟重新签发、显示链接与有效期）、固定码（按需显示，保存 PNG / SVG / A4 海报，更换）、待确认的申请（每 5 秒轮询，确认 / 拒绝）、今天已领取、全部奖品的表（搜索、状态） |
-| App | 页 `/redeem/<key>`：商家名、可领奖品、"领取"按钮；轮换码即显示"已领取"，固定码显示"等待商家确认"并轮询结果；码失效的说明。结果页显示奖品码、扫码提示、`CLAIMED` 状态；首页"奖品等你领取"提示；历史带 `CLAIMED` |
+| App | 页 `/redeem/<key>`：商家名、可领奖品、"领取"按钮（轮换码时申请中的奖品也有按钮）；轮换码即显示"已领取"，固定码显示"等待商家确认"并轮询结果；码失效的说明。未登录时扫的码记在本机十分钟（`redeemReturn.ts`）：登录在另一个标签页结束（邮件链接、Google / Facebook / LINE）或先经欢迎步骤时，登录后仍回到该码的页面（2026-10-29，答题者在 Safari 登录后落在首页）。结果页显示奖品码、扫码提示、`CLAIMED` 状态；首页"奖品等你领取"提示；历史带 `CLAIMED` |
 | 后台扩展 | 页 `/qb/redemptions`：全部奖品、状态筛选、搜索、作废对话框（权限 `qb.redemption.void`）；菜单"奖品" |
 
 没有新参数（2 分钟、10 分钟是常量）。`src/qb/` 的 `play.ts`、`ids.ts` 两处相同。
