@@ -9,6 +9,8 @@
 export { AUTH_NAMESPACE, authMessages } from './messages'
 export { AuthFrame, AuthField, AuthSubmit, AuthLink, AuthError, Outcome, ContinueTo, navigateTo } from './frame'
 export type { AuthFrameProps, AuthNavigation } from './frame'
+export { PasswordInput } from './PasswordInput'
+export type { PasswordInputProps } from './PasswordInput'
 export { SignInForm } from './SignInForm'
 export type { SignInFormProps } from './SignInForm'
 export { SignUpForm, SignUpSent } from './SignUpForm'
