@@ -49,11 +49,11 @@ function toManualCredit(row: Row): ManualCredit {
 }
 
 /** The manual credits, newest first, of a state (all when null). */
-export async function readManualCredits(status: string | null, offset: number, limit: number, sorts?: SortSpec[]):
+export async function readManualCredits(status: string | null, offset: number, limit: number, sorts?: SortSpec[], more?: Filter[]):
   Promise<Page<ManualCredit>> {
   const filters: Filter[] = []
   if (status) filters.push({ field: 'status', op: 'eq', value: status })
-  const page = await runQuery<Row>(TEMPLATE.manualCredits, { filters, sorts, offset, limit, count: true })
+  const page = await runQuery<Row>(TEMPLATE.manualCredits, { filters: [...filters, ...(more ?? [])], sorts, offset, limit, count: true })
   return { total: page.total, items: page.items.map(toManualCredit) }
 }
 

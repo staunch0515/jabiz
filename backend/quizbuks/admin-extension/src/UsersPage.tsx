@@ -19,6 +19,7 @@ import { searchUsers, type UserRow } from './api'
 import { DICTIONARY, PATH, PERMISSION } from './ids'
 import { LoadFailed } from './components'
 import { money, sortableColumns, textIn, useLabels, when } from './hooks'
+import { useMoreFilters } from './moreFilters'
 import { readTakerKudos } from './payout-api'
 
 /** The columns sorted on the server, by the template's `list.sorts` field (Q53a). */
@@ -41,10 +42,25 @@ export default function UsersPage() {
   const [sorting, setSorting] = useState<SortingState>([])
   const sorts = sorting.filter((sort) => SORTS[sort.id as keyof typeof SORTS])
     .map((sort) => ({ field: SORTS[sort.id as keyof typeof SORTS], asc: !sort.desc }))
+  const more = useMoreFilters([
+    { kind: 'eq', name: 'countryCode', label: t('users.country'), placeholder: 'JP', upper: true },
+    { kind: 'time', name: 'registeredAt', label: t('users.registeredAt') },
+    { kind: 'dictionary', name: 'sponsorStatus', label: t('users.sponsorStatus'), dictionary: DICTIONARY.sponsorReviewStatus },
+    { kind: 'yesno', name: 'banned', label: t('users.banned') },
+    { kind: 'yesno', name: 'emailVerified', label: t('user.emailVerified') },
+    { kind: 'yesno', name: 'enabled', label: t('user.enabled') },
+  ], 'users-filters')
+  // Other filters list from the first page.
+  const filterText = JSON.stringify(more.filters)
+  const [listed, setListed] = useState(filterText)
+  if (listed !== filterText) {
+    setListed(filterText)
+    if (pagination.pageIndex !== 0) setPagination({ ...pagination, pageIndex: 0 })
+  }
   const users = useQuery({
-    queryKey: ['qb-ext', 'users', q, pagination, sorts],
+    queryKey: ['qb-ext', 'users', q, pagination, sorts, more.filters],
     queryFn: () => searchUsers(q, pagination.pageIndex * pagination.pageSize, pagination.pageSize,
-      sorts.length > 0 ? sorts : undefined),
+      sorts.length > 0 ? sorts : undefined, more.filters),
     placeholderData: keepPreviousData,
   })
   const { can } = useAuth()
@@ -111,6 +127,7 @@ export default function UsersPage() {
           {t('users.searchButton')}
         </Button>
       </form>
+      {more.bar}
       {users.isError
         ? <LoadFailed error={users.error} onRetry={() => void users.refetch()} />
         : (

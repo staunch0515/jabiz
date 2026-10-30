@@ -16,6 +16,7 @@ import {
 import { LoadFailed, PublisherLink } from './components'
 import { StatusFilter } from './finance-components'
 import { useLabels, usePaged, when } from './hooks'
+import { useMoreFilters } from './moreFilters'
 import { DICTIONARY, PATH, PERMISSION } from './ids'
 import { publicationFilterOf, readPublications, type PublicationListRow } from './overview-api'
 
@@ -58,8 +59,12 @@ export default function PublicationsPage() {
     }
     setSearch(next, { replace: true })
   }
-  const { query, table, sortable } = usePaged(['qb-ext', 'publications', filter],
-    (offset, limit, sorts) => readPublications(filter, offset, limit, sorts), true, SORTS)
+  const more = useMoreFilters([
+    { kind: 'time', name: 'startAt', label: t('publications.startAt') },
+    { kind: 'time', name: 'submittedAt', label: t('publications.submittedAt') },
+  ], 'publications-filters')
+  const { query, table, sortable } = usePaged(['qb-ext', 'publications', filter, more.filters],
+    (offset, limit, sorts) => readPublications(filter, offset, limit, sorts, more.filters), true, SORTS)
   const here = `${PATH.publications}${search.size > 0 ? `?${search}` : ''}`
 
   const columns = useMemo<ColumnDef<PublicationListRow, unknown>[]>(() => [
@@ -167,6 +172,7 @@ export default function PublicationsPage() {
           </Button>
         )}
       </div>
+      {more.bar}
       {query.isError
         ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
         : (

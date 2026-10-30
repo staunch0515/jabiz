@@ -37,6 +37,7 @@ import {
 } from './journal-api'
 import { LoadFailed, Section } from './components'
 import { money, usePaged, when } from './hooks'
+import { useMoreFilters } from './moreFilters'
 import { PATH, PERMISSION } from './ids'
 
 /** The columns sorted on the server, by the template's `list.sorts` field (Q53a). */
@@ -281,7 +282,13 @@ function DownloadButton({ fileId, name, label, ariaLabel, testId }: { fileId: st
 export default function JournalPage() {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
   const { can } = useAuth()
-  const { query, table, sortable } = usePaged(EXPORTS_KEY, readJournalExports, true, SORTS)
+  const more = useMoreFilters([
+    { kind: 'date', name: 'periodFrom', label: t('finance.journal.period') },
+    { kind: 'eq', name: 'voucherNo', label: t('finance.journal.voucherNo') },
+    { kind: 'eq', name: 'externalVoucherNo', label: t('finance.journal.externalVoucher') },
+  ], 'journal-filters')
+  const { query, table, sortable } = usePaged([...EXPORTS_KEY, more.filters],
+    (offset, limit, sorts) => readJournalExports(offset, limit, sorts, more.filters), true, SORTS)
   const files = can(PERMISSION.generatedFileRead)
   const confirmer = can(PERMISSION.journalConfirm)
   const columns = useMemo<ColumnDef<JournalExport, unknown>[]>(() => [
@@ -334,6 +341,7 @@ export default function JournalPage() {
         actions={<Link to={PATH.journalMapping} className={linkClass}>{t('finance.journal.mappingTitle')}</Link>} />
       {can(PERMISSION.journalExport) && <NextExport />}
       <Section title={t('finance.journal.exports')} testId="journal-exports">
+        {more.bar}
         {query.isError
           ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
           : (

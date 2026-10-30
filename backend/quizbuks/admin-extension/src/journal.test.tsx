@@ -226,6 +226,16 @@ describe('JournalPage', () => {
     expect(within(row).queryByTestId('journal-download')).not.toBeInTheDocument()
     expect(server.runProcess).not.toHaveBeenCalled()
   })
+
+  it('filters the exports by the fields the template declares, from the first page (Q53b)', async () => {
+    server.templates.set(TEMPLATE.journalExports, [exported({ externalVoucherNo: 'MF-0009' })])
+    renderAt('/qb/finance/journal', '/qb/finance/journal', <JournalPage />)
+    await screen.findByTestId('journal-export-row')
+    const bar = within(screen.getByTestId('journal-filters')).getByRole('search', { name: 'More filters' })
+    await userEvent.type(within(bar).getByRole('textbox', { name: 'Voucher' }), ' QBJ-2026-00009 {Enter}')
+    await waitFor(() => expect(server.runQuery).toHaveBeenCalledWith(TEMPLATE.journalExports, expect.objectContaining({
+      filters: [{ field: 'voucherNo', op: 'eq', value: 'QBJ-2026-00009' }], offset: 0 })))
+  })
 })
 
 describe('JournalMappingPage', () => {

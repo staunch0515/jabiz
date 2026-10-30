@@ -58,8 +58,8 @@ function toOperator(row: Row): Operator {
 }
 
 /** The operators, newest first. */
-export async function readOperators(offset: number, limit: number, sorts?: SortSpec[]): Promise<Page<Operator>> {
-  const page = await runQuery<Row>(TEMPLATE.operators, { sorts, offset, limit, count: true })
+export async function readOperators(offset: number, limit: number, sorts?: SortSpec[], more?: Filter[]): Promise<Page<Operator>> {
+  const page = await runQuery<Row>(TEMPLATE.operators, { filters: more, sorts, offset, limit, count: true })
   return { total: page.total, items: page.items.map(toOperator) }
 }
 
@@ -170,11 +170,11 @@ function toReview(row: Row): OperatorReview {
 
 /** The operators' reviews, newest first; one operator's, and only the unchecked, when given. */
 export async function readOperatorReviews(operatorId: string | null, unchecked: boolean, offset: number,
-  limit: number, sorts?: SortSpec[]): Promise<Page<OperatorReview>> {
+  limit: number, sorts?: SortSpec[], more?: Filter[]): Promise<Page<OperatorReview>> {
   const params: Record<string, unknown> = {}
   if (operatorId) params.operatorId = operatorId
   if (unchecked) params.unchecked = true
-  const page = await runQuery<Row>(TEMPLATE.operatorReviews, { params, sorts, offset, limit, count: true })
+  const page = await runQuery<Row>(TEMPLATE.operatorReviews, { params, filters: more, sorts, offset, limit, count: true })
   return { total: page.total, items: page.items.map(toReview) }
 }
 

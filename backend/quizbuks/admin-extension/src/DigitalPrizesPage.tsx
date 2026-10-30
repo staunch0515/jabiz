@@ -29,6 +29,7 @@ import {
 import { StatusFilter } from './finance-components'
 import { LoadFailed, PublisherLink } from './components'
 import { money, useLabels, usePaged, when } from './hooks'
+import { useMoreFilters } from './moreFilters'
 import { DICTIONARY, PATH, PERMISSION } from './ids'
 import { DIGITAL_RESOLUTIONS, readDigitalPrizes, resolveDigitalPrize, type DigitalPrize, type DigitalResolution }
   from './reward-api'
@@ -145,8 +146,13 @@ export default function DigitalPrizesPage() {
     }
     setSearch(next, { replace: true })
   }
-  const { query, table, sortable } = usePaged([...KEY, filterStatus, q],
-    (offset, limit, sorts) => readDigitalPrizes(filterStatus, q, offset, limit, sorts), true, SORTS)
+  const more = useMoreFilters([
+    { kind: 'dictionary', name: 'delivery', label: t('reward.digital.delivery'), dictionary: DICTIONARY.digitalDelivery },
+    { kind: 'amount', name: 'amount', label: t('reward.digital.value') },
+    { kind: 'time', name: 'dueAt', label: t('reward.digital.dueAt') },
+  ], 'digital-filters')
+  const { query, table, sortable } = usePaged([...KEY, filterStatus, q, more.filters],
+    (offset, limit, sorts) => readDigitalPrizes(filterStatus, q, offset, limit, sorts, more.filters), true, SORTS)
   const columns = useMemo<ColumnDef<DigitalPrize, unknown>[]>(() => [
     { id: 'dueAt', header: t('reward.digital.dueAt'), cell: ({ row }) => when(row.original.dueAt) },
     { id: 'sponsor', header: t('reward.digital.sponsor'),
@@ -243,6 +249,7 @@ export default function DigitalPrizesPage() {
           }}>{t('reward.digital.all')}</Button>
         )}
       </div>
+      {more.bar}
       {query.isError
         ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
         : (

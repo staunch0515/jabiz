@@ -29,6 +29,7 @@ import { parseAmount } from './finance'
 import { StatusFilter } from './finance-components'
 import { LoadFailed } from './components'
 import { money, useLabels, usePaged, when } from './hooks'
+import { useMoreFilters } from './moreFilters'
 import { BANK_RECORDABLE, BANK_REVIEW, DICTIONARY, PATH, PERMISSION } from './ids'
 
 /** The columns sorted on the server, by the template's `list.sorts` field (Q53a). */
@@ -142,8 +143,11 @@ export default function BankTopUpsPage() {
     }
     setSearch(next, { replace: true })
   }
-  const { query, table, sortable } = usePaged(['qb-ext', 'finance', 'bank-topups', filterStatus, filterCode],
-    (offset, limit, sorts) => readBankTopUps(filterStatus, filterCode, offset, limit, sorts), true, SORTS)
+  const more = useMoreFilters([
+    { kind: 'time', name: 'createdAt', label: t('bank.createdAt') },
+  ], 'bank-filters')
+  const { query, table, sortable } = usePaged(['qb-ext', 'finance', 'bank-topups', filterStatus, filterCode, more.filters],
+    (offset, limit, sorts) => readBankTopUps(filterStatus, filterCode, offset, limit, sorts, more.filters), true, SORTS)
   const mayRecord = can(PERMISSION.bankRecord)
   const columns = useMemo<ColumnDef<BankTopUp, unknown>[]>(() => [
     { id: 'createdAt', header: t('bank.createdAt'), cell: ({ row }) => when(row.original.createdAt) },
@@ -226,6 +230,7 @@ export default function BankTopUpsPage() {
           </Button>
         )}
       </div>
+      {more.bar}
       {query.isError
         ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
         : (

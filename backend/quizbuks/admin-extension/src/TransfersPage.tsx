@@ -21,6 +21,7 @@ import { readFinanceTransfers, releaseHold, type FinanceTransfer, type TransferF
 import { DayRange, StatusFilter } from './finance-components'
 import { LoadFailed } from './components'
 import { money, useLabels, usePaged, when } from './hooks'
+import { useMoreFilters } from './moreFilters'
 import { DICTIONARY, PATH, PERMISSION, TRANSFER_REVIEW } from './ids'
 
 /** The columns sorted on the server, by the template's `list.sorts` field (Q53a). */
@@ -66,8 +67,11 @@ export default function TransfersPage() {
   const filter = transferFilterOf(search)
   const set = (change: Partial<TransferFilter>) => setSearch(transferAddressOf({ ...filter, ...change }), { replace: true })
   const reviewer = can(PERMISSION.payoutReview)
-  const { query, table, sortable } = usePaged(['qb-ext', 'finance', 'transfers', filter],
-    (offset, limit, sorts) => readFinanceTransfers(filter, offset, limit, sorts), true, SORTS)
+  const more = useMoreFilters([
+    { kind: 'amount', name: 'amount', label: t('finance.transfers.amount') },
+  ], 'transfers-filters')
+  const { query, table, sortable } = usePaged(['qb-ext', 'finance', 'transfers', filter, more.filters],
+    (offset, limit, sorts) => readFinanceTransfers(filter, offset, limit, sorts, more.filters), true, SORTS)
   const columns = useMemo<ColumnDef<FinanceTransfer, unknown>[]>(() => [
     { id: 'createdAt', header: t('finance.transfers.createdAt'), cell: ({ row }) => when(row.original.createdAt) },
     {
@@ -153,6 +157,7 @@ export default function TransfersPage() {
           </Button>
         )}
       </div>
+      {more.bar}
       {query.isError
         ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
         : (

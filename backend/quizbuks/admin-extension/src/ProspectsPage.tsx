@@ -18,6 +18,7 @@ import {
 } from '@jabiz/admin'
 import { LoadFailed } from './components'
 import { useLabels, usePaged, when } from './hooks'
+import { useMoreFilters } from './moreFilters'
 import { DICTIONARY, PATH } from './ids'
 import { PROSPECT_STATUSES, PROSPECTS_KEY, readProspects, type Prospect } from './prospect-api'
 import { useProspectScope } from './prospect-scope'
@@ -51,8 +52,12 @@ export default function ProspectsPage() {
     }
     setSearch(next, { replace: true })
   }
-  const { query, table, sortable } = usePaged([...PROSPECTS_KEY, scope, status, q],
-    (offset, limit, sorts) => readProspects(scope, status === ALL ? null : status, q, offset, limit, sorts), true, SORTS)
+  const more = useMoreFilters([
+    { kind: 'time', name: 'foundAt', label: t('prospect.list.foundAt') },
+    { kind: 'time', name: 'sentAt', label: t('prospect.list.sentAt') },
+  ], 'prospects-filters')
+  const { query, table, sortable } = usePaged([...PROSPECTS_KEY, scope, status, q, more.filters],
+    (offset, limit, sorts) => readProspects(scope, status === ALL ? null : status, q, offset, limit, sorts, more.filters), true, SORTS)
   const ownerQuery = scope.admin ? `?owner=${encodeURIComponent(scope.owner)}` : ''
   const columns = useMemo<ColumnDef<Prospect, unknown>[]>(() => [
     {
@@ -110,6 +115,7 @@ export default function ProspectsPage() {
         </div>
         <Button type="submit" variant="outline">{t('prospect.list.find')}</Button>
       </form>
+      {more.bar}
       {query.isError
         ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
         : (

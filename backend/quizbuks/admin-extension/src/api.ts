@@ -430,8 +430,8 @@ export async function readUser(userId: string): Promise<UserRow | null> {
 }
 
 /** One page of users whose user name, address, name or company contains `q` (all users without it). */
-export async function searchUsers(q: string, offset: number, limit: number, sorts?: SortSpec[]): Promise<UserRow[]> {
-  const answer = await runQuery<Row>(TEMPLATE.users, { params: { q: q.trim() || null }, sorts, offset, limit })
+export async function searchUsers(q: string, offset: number, limit: number, sorts?: SortSpec[], more?: Filter[]): Promise<UserRow[]> {
+  const answer = await runQuery<Row>(TEMPLATE.users, { params: { q: q.trim() || null }, filters: more, sorts, offset, limit })
   return answer.items.map(toUserRow)
 }
 
