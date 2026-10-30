@@ -47,6 +47,7 @@ When you sign in or sign up with Google, Facebook or LINE, we receive from that 
 - Records of operations in the Service: when, by whom and which operation. Secret values such as passwords are not recorded.
 
 We do not collect your location (GPS or similar) or estimate it from your IP address. We use no advertising and no third-party behavioural analytics.
+When you scan a code in a shop with the app's "Scan", the camera's picture is used on your device only to read the code, and is neither stored nor sent (the service only opens its own page the code links to).
 
 ### 2.4 Information businesses publish
 

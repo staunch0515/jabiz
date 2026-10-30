@@ -171,6 +171,61 @@ test('a taker collects a prize by scanning the code on the sponsor\'s screen', a
     'REDEEMED')
 })
 
+test('a taker collects a prize by scanning the sponsor\'s screen with the app\'s own scanner (Q52)',
+  async ({ page, request }) => {
+    test.setTimeout(240_000)
+    const owed = await rewardOwed(request, 'OFFLINE_REDEEM')
+
+    // The QR code the sponsor's screen shows, as a picture.
+    await signIn(page, '/sponsor/', owed.sponsor.email)
+    await expect(page.getByTestId('dashboard-status')).toBeVisible()
+    await page.goto('/sponsor/redeem')
+    const code = page.getByTestId('redeem-rotating-image')
+    await expect(code).toBeVisible()
+    const picture = `data:image/png;base64,${(await code.screenshot()).toString('base64')}`
+
+    // The taker's phone: its camera sees that picture (a canvas drawing it, streamed), so the app decodes it itself.
+    await page.context().clearCookies()
+    await page.evaluate(() => {
+      window.localStorage.clear()
+      window.sessionStorage.clear()
+    })
+    await page.addInitScript((source: string) => {
+      const image = new Image()
+      image.src = source
+      const canvas = document.createElement('canvas')
+      canvas.width = 640
+      canvas.height = 640
+      const draw = () => {
+        const context = canvas.getContext('2d')!
+        context.fillStyle = '#ffffff'
+        context.fillRect(0, 0, canvas.width, canvas.height)
+        if (image.complete && image.naturalWidth) context.drawImage(image, 120, 120, 400, 400)
+      }
+      navigator.mediaDevices.getUserMedia = async () => {
+        draw()
+        window.setInterval(draw, 100)
+        return canvas.captureStream(10)
+      }
+    }, picture)
+    await signIn(page, '/taker/', owed.taker.email)
+    const open = page.getByTestId('scan-open')
+    await expect(open).toBeVisible()
+    await open.click()
+    await expect(page.getByTestId('scan-page')).toBeVisible()
+    await expectAccessible(page, 'app scanner')
+
+    // The scanned code opens its page in the signed-in app; one tap collects the prize.
+    const redeem = page.getByTestId('redeem-page')
+    await expect(redeem).toBeVisible({ timeout: 20_000 })
+    await expect(page).toHaveURL(/\/taker\/redeem\/[A-Za-z0-9_-]{30,}$/)
+    await expect(redeem).toHaveAttribute('data-kind', 'ROTATING')
+    const prize = page.getByTestId('redeem-prize')
+    await expect(prize).toContainText(owed.code)
+    await prize.getByTestId('redeem-collect').click()
+    await expect(page.getByTestId('redeem-done')).toHaveAttribute('data-status', 'REDEEMED')
+  })
+
 test('a sponsor names a taker to the staff by their ID, who hands out a prize at the counter (Q39)',
   async ({ page, request }) => {
     test.setTimeout(240_000)
