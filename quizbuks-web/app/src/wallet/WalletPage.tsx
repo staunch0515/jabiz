@@ -9,6 +9,7 @@ import { formatKudos } from '../qb/kudos'
 import { QB } from '../qb/messages'
 import { problemText } from '../qb/problems'
 import { Link } from '../qb/router'
+import { KudosOverview } from './KudosOverview'
 import {
   BANK_PATH,
   BANK_QUERY,
@@ -143,6 +144,7 @@ export function WalletPage() {
   return (
     <section className="flex flex-col gap-4" aria-labelledby="wallet-title" data-testid="wallet">
       <h1 id="wallet-title" className="text-xl font-semibold">{t('wallet.title')}</h1>
+      <KudosOverview />
       {wallet.isPending ? (
         <PageState kind="loading" />
       ) : wallet.isError || !data ? (

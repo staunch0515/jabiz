@@ -720,15 +720,32 @@ export interface HistoryRequest {
   q?: string
   /** Only these categories; all when absent. */
   categories?: HistoryCategory[]
+  /** Q58: only the rewards paid this way (a reward of nought is none). */
+  method?: RewardMethod
   offset?: number
   limit?: number
+}
+
+/** How each method's rewards are recorded on the attempt (`rewardStatus`). */
+const STATUSES_OF: Record<RewardMethod, RewardStatus[]> = {
+  PLATFORM: ['PAID', 'PENDING'],
+  SPONSOR_CASH: ['CASH'],
+  OFFLINE_REDEEM: ['REDEEM'],
+  DIGITAL_PRIZE: ['DIGITAL'],
+}
+
+function historyFilters(request: HistoryRequest) {
+  const filters = []
+  if (request.categories) filters.push({ field: 'category', op: 'in' as const, values: request.categories })
+  if (request.method) filters.push({ field: 'rewardStatus', op: 'in' as const, values: STATUSES_OF[request.method] })
+  return filters.length > 0 ? filters : undefined
 }
 
 /** One page of the caller's attempts, newest first (U-40 – U-42). */
 export async function readHistory(request: HistoryRequest): Promise<QueryPage<HistoryRow>> {
   const page = await runQuery<Record<string, unknown>>(PLAY.history, {
     params: { at: request.at, q: request.q?.trim() || null },
-    filters: request.categories ? [{ field: 'category', op: 'in', values: request.categories }] : undefined,
+    filters: historyFilters(request),
     offset: request.offset,
     limit: request.limit,
   })
