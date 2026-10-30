@@ -64,6 +64,8 @@ export interface FeedCard {
   /** Q19: the player of the video watching which is enough to answer (one of `qb/video.ts`), else null. */
   video: string | null
   kind: QuizKind
+  /** The language the quiz is written in (Q59a); a preview's card has none. */
+  language?: string | null
   /** The highest reward, in Kudos. */
   maxReward: unknown
   /** How the reward reaches the taker (Q22). */
@@ -105,6 +107,8 @@ export interface FeedRequest {
   method?: RewardMethod | null
   /** Also the publications the taker answered (Q34); left out when absent. */
   includeAnswered?: boolean
+  /** Q59a: only publications in these languages; all when absent. */
+  languages?: readonly string[]
   sort?: FeedSort
   filters?: Filter[]
   offset?: number
@@ -119,6 +123,7 @@ function feedCard(row: Record<string, unknown>): FeedCard {
     cover: textOrNull(row.cover),
     video: trustedPlayer(textOrNull(row.video)),
     kind: kindOf(row.kind),
+    language: textOrNull(row.language),
     maxReward: row.maxReward,
     rewardMethod: methodOf(row.rewardMethod),
     digitalDelivery: digitalDeliveryOf(row.digitalDelivery),
@@ -140,7 +145,8 @@ function feedCard(row: Record<string, unknown>): FeedCard {
 export async function readFeed(request: FeedRequest): Promise<QueryPage<FeedCard>> {
   const page = await runQuery<Record<string, unknown>>(PLAY.feed, {
     params: { at: request.at, country: request.country, q: request.q?.trim() || null,
-      method: request.method ?? null, includeAnswered: request.includeAnswered ?? false },
+      method: request.method ?? null, includeAnswered: request.includeAnswered ?? false,
+      languages: request.languages && request.languages.length > 0 ? request.languages.join(',') : null },
     filters: request.filters,
     sorts: request.sort ? [FEED_SORTS[request.sort]] : undefined,
     offset: request.offset,

@@ -40,13 +40,14 @@ import { EmptyArt, QuizArt } from '../qb/Illustrations'
 import { useStartAttempt } from '../play/useStartAttempt'
 import { FeedCardView, REWARD_METHOD_ICONS } from '../qb/view/FeedCard'
 import { VideoCardView } from '../qb/view/VideoCard'
-import { readCountries } from '../qb/api'
+import { readCountries, shownLanguages } from '../qb/api'
 import { formatKudos } from '../qb/kudos'
 import { QB } from '../qb/messages'
 import { FEED_SORTS, readFeed, readOpenCashRewards, readOpenRedemptions, type FeedCard, type FeedSort, type RewardMethod }
   from '../qb/play'
 import { problemText } from '../qb/problems'
 import { Link } from '../qb/router'
+import { useSoundSetting } from '../qb/SoundSettings'
 import { HomeInstallOffer } from '../install'
 
 /** Cards per page of the feed. */
@@ -392,10 +393,17 @@ export function FeedPage({ name, country }: { name: string; country: string | nu
   const prizes = useQuery({ queryKey: ['qb', 'redemptions', 'open'], queryFn: readOpenRedemptions })
   const openPrizes = prizes.data ?? []
 
+  // Q59a: only the languages the taker switched on (the app's language until they choose).
+  const settings = useSoundSetting()
+  const languages = shownLanguages(settings.data, i18n.language)
   const feed = useInfiniteQuery({
-    queryKey: ['qb', 'feed', at, country, q, filters.sort, filters.includeAnswered, method, filterList, i18n.language],
+    queryKey: ['qb', 'feed', at, country, q, filters.sort, filters.includeAnswered, method, filterList, i18n.language,
+      languages],
     queryFn: ({ pageParam }) => readFeed({ at, country, q, sort: filters.sort, method: method === 'ALL' ? null : method,
-      includeAnswered: filters.includeAnswered, filters: filterList, offset: pageParam, limit: FEED_PAGE }),
+      includeAnswered: filters.includeAnswered, languages, filters: filterList, offset: pageParam,
+      limit: FEED_PAGE }),
+    // The settings first: a feed of the wrong languages would show for a moment otherwise.
+    enabled: !settings.isPending,
     initialPageParam: 0,
     getNextPageParam: (last) => (last.items.length < FEED_PAGE ? undefined : last.offset + FEED_PAGE),
   })

@@ -255,6 +255,7 @@ public final class PublicationVersions {
             Map<String, Object> values = new LinkedHashMap<>();
             values.put("versionId", version.id());
             values.put("quizTitle", version.get("title"));
+            values.put("language", version.get("language"));
             values.put("questionCount", version.get("questionCount"));
             values.put("cover", snapshot.cover() == null ? null : snapshot.cover().toString());
             values.put("video", snapshot.materials().stream().filter(QuizSnapshot.Material::watchToAnswer).findFirst()

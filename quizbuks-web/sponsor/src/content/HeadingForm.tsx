@@ -9,11 +9,13 @@ import { fieldProblem } from '../qb/problems'
 import { saveQuiz, type Quiz } from './api'
 import { FileField, formProblem, MarkdownField, ProblemList, textOrNull, useEditing, wholeOrNull } from './editing'
 import { LIMITS } from './limits'
+import { QuizLanguageField } from './QuizLanguageField'
+import type { ContentLanguage } from '../qb/api'
 
 const FIELDS = ['title', 'intro', 'cover', 'timeLimitSec'] as const
 
 /**
- * The quiz's heading (M-21, M-22): title, introduction (Markdown), cover image and time limit, saved together with
+ * The quiz's heading (M-21, M-22): title, language (Q59a), introduction (Markdown), cover image and time limit, saved together with
  * `QB_QUIZ_SAVE`. A draft may be incomplete; only the title is required.
  */
 export function HeadingForm({ quiz }: { quiz: Quiz }) {
@@ -30,6 +32,7 @@ export function HeadingForm({ quiz }: { quiz: Quiz }) {
     setCover(quiz.cover)
   }
   const [timeLimit, setTimeLimit] = useState(quiz.timeLimitSec == null ? '' : String(quiz.timeLimitSec))
+  const [language, setLanguage] = useState<ContentLanguage>(quiz.language)
   const [local, setLocal] = useState<string | null>(null)
   const [done, setDone] = useState(false)
 
@@ -40,6 +43,7 @@ export function HeadingForm({ quiz }: { quiz: Quiz }) {
       intro: textOrNull(intro),
       cover,
       timeLimitSec: wholeOrNull(timeLimit),
+      language,
       baseRevision: editing.revision(),
     }),
     onSuccess: async (output) => {
@@ -74,6 +78,10 @@ export function HeadingForm({ quiz }: { quiz: Quiz }) {
         {problem('title') && <p id={`${id}-title-error`} className="text-destructive text-sm">{problem('title')}</p>}
         <ShownAt field="quizTitle" />
       </div>
+      <QuizLanguageField value={language} onChange={(next) => {
+        setDone(false)
+        setLanguage(next)
+      }} testId="heading-language" />
       <div className="flex flex-col gap-2">
         <MarkdownField label={t('editor.intro')} value={intro} onChange={setIntro} maxLength={LIMITS.intro}
           error={problem('intro')} testId="heading-intro" />

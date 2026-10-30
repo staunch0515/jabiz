@@ -1,4 +1,4 @@
-import { formatDateTime } from '@jabiz/client'
+import { formatDateTime, i18n } from '@jabiz/client'
 import {
   Alert,
   AlertDescription,
@@ -27,6 +27,7 @@ import { useEffect, useId, useMemo, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { SPONSOR } from '../messages'
 import { EmptyState } from '../EmptyState'
+import { contentLanguageOf, type ContentLanguage } from '../qb/api'
 import { QB } from '../qb/messages'
 import { fieldProblem, generalProblem } from '../qb/problems'
 import { Link, navigate } from '../qb/router'
@@ -34,6 +35,7 @@ import { readQuizStatuses, saveQuiz, searchQuizzes, type QuizKind, type QuizRow 
 import { Thumbnail } from './ContentImage'
 import { LIMITS } from './limits'
 import { quizPath, QUIZZES_QUERY } from './paths'
+import { QuizLanguageField } from './QuizLanguageField'
 import { ExportQuizButton, ImportQuizButton } from './QuizTransfer'
 import { CardGrid, Pager, useListView, ViewSwitch } from '../ListView'
 import { CoverPlaceholder } from '../qb/Illustrations'
@@ -63,8 +65,10 @@ function NewQuizDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o
   const id = useId()
   const [title, setTitle] = useState('')
   const [kind, setKind] = useState<QuizKind>('QUIZ')
+  // Q59a: in the console's language unless the sponsor picks another.
+  const [language, setLanguage] = useState<ContentLanguage>(() => contentLanguageOf(i18n.language))
   const create = useMutation({
-    mutationFn: () => saveQuiz({ title: title.trim(), intro: null, cover: null, timeLimitSec: null, kind }),
+    mutationFn: () => saveQuiz({ title: title.trim(), intro: null, cover: null, timeLimitSec: null, kind, language }),
     onSuccess: (output) => {
       onOpenChange(false)
       navigate(quizPath(output.quizId))
@@ -81,6 +85,7 @@ function NewQuizDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o
       if (!next) {
         setTitle('')
         setKind('QUIZ')
+        setLanguage(contentLanguageOf(i18n.language))
         create.reset()
       }
       onOpenChange(next)
@@ -115,6 +120,7 @@ function NewQuizDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o
               ))}
             </RadioGroup>
           </fieldset>
+          <QuizLanguageField value={language} onChange={setLanguage} testId="new-quiz-language" />
           {general && (
             <Alert variant="destructive"><AlertDescription>{general}</AlertDescription></Alert>
           )}

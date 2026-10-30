@@ -99,6 +99,7 @@
       "tiers" : "[{\"fromScore\":0,\"reward\":\"0\",\"tierId\":\"01a0f4f9-b280-7000-8000-000000000436\",\"toScore\":2},{\"fromScore\":3,\"reward\":\"10\",\"tierId\":\"01a0f4f9-b280-7000-8000-000000000437\",\"toScore\":4},{\"fromScore\":5,\"reward\":\"100\",\"tierId\":\"01a0f4f9-b280-7000-8000-000000000438\",\"toScore\":5}]",
       "sponsorCountry" : null,
       "kind" : "QUIZ",
+      "language" : "en",
       "rewardMethod" : "PLATFORM",
       "redeemDescription" : null,
       "digitalDelivery" : null,

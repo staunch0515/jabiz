@@ -1,5 +1,5 @@
 import { api, ApiError, runProcess, runQuery, toApiError, unwrap, type Sort } from '@jabiz/client'
-import { readDictionary, type DictionaryItem } from '../qb/api'
+import { contentLanguageOf, readDictionary, type ContentLanguage, type DictionaryItem } from '../qb/api'
 import {
   CONTENT_CODE,
   CONTENT_DATASET,
@@ -59,6 +59,8 @@ export interface Quiz {
   quizId: string
   title: string
   kind: QuizKind
+  /** The language the quiz is written in (Q59a). */
+  language: ContentLanguage
   intro: string | null
   cover: string | null
   timeLimitSec: number | null
@@ -138,6 +140,8 @@ export interface QuizInput {
   baseRevision?: number | null
   /** A new quiz's kind (a scored quiz when not given); a changed quiz's kind never changes. */
   kind?: QuizKind
+  /** Q59a: the language; when not given a new quiz takes the console's language and a changed one keeps its own. */
+  language?: ContentLanguage
 }
 
 /** `QuestionProcesses.QuestionInput`; `options` is the whole list in its order. */
@@ -279,6 +283,7 @@ export function toQuiz(row: Row): Quiz {
     quizId: String(row.quizId),
     title: String(row.title ?? ''),
     kind: kindOf(row.kind),
+    language: contentLanguageOf(str(row.language) ?? undefined),
     intro: str(row.intro),
     cover: str(row.cover),
     timeLimitSec: numOrNull(row.timeLimitSec),

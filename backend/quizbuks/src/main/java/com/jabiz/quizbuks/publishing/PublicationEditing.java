@@ -590,6 +590,7 @@ final class PublicationEditing {
             money(row.get("reward")))).toList()));
         card.put("sponsorCountry", profile == null ? null : profile.get("countryCode"));
         card.put("kind", snapshot.kind());
+        card.put("language", version.get("language"));
         card.put("video", snapshot.materials().stream().filter(QuizSnapshot.Material::watchToAnswer).findFirst()
             .flatMap(material -> VideoEmbeds.player(material.url())).orElse(null));
         card.put("wentOnAt", ctx.opTime());

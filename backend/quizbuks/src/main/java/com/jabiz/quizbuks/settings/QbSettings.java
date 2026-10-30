@@ -4,8 +4,8 @@ import com.jabiz.entity.EntityDefinition;
 
 /**
  * A user's own settings of the app and the sponsor console (docs/quizbuks/plans/Q57-sound.md): one row per user, in an
- * ordinary table, written only by {@link SettingsProcesses}. A user without a row has every default (sound on). The
- * first setting is the sound effects (Q57); the languages of the quizzes shown (Q59) join it.
+ * ordinary table, written only by {@link SettingsProcesses}. A user without a row has every default (sound on, the
+ * quizzes of the interface language). The sound effects (Q57) and the languages of the quizzes shown (Q59a).
  */
 public final class QbSettings {
 
@@ -23,8 +23,10 @@ public final class QbSettings {
         eb.field("userId", f -> f.physicalColumn("user_id").immutable(true).required(true).asText(USER_ID_LENGTH));
         // "Off" rather than "on", so that no row and a new column's default both mean the default: sound on.
         eb.field("soundOff", f -> f.physicalColumn("sound_off").required(true).asBool());
+        // Q59a: the languages of the quizzes shown, comma-separated; none: the interface language only.
+        eb.field("contentLanguages", f -> f.physicalColumn("content_languages").asText(20));
         eb.field("version", f -> f.physicalColumn("version").asVersion());
-        eb.listView("default", lv -> lv.columns("userId", "soundOff").filters("userId", "soundOff")
+        eb.listView("default", lv -> lv.columns("userId", "soundOff", "contentLanguages").filters("userId", "soundOff")
             .sorts("userId").defaultSort("userId", true));
     });
 

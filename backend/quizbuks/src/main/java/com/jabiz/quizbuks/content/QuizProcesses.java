@@ -16,6 +16,7 @@ import com.jabiz.runtime.process.steps.HoldLock;
 import com.jabiz.runtime.process.steps.QueryEntities;
 import com.jabiz.runtime.process.steps.SaveChanges;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
@@ -73,9 +74,17 @@ public final class QuizProcesses {
      * @param baseRevision the revision the caller edited; when given and no longer current, 422
      * @param kind         {@code QUIZ} (when not given) or {@code SURVEY}, chosen when the quiz is made (Q12,
      *                     D-Q12-1); a quiz's kind never changes, so a changed quiz may only name its own
+     * @param language     the language the quiz is written in (Q59a), one of the platform's; when not given, a new
+     *                     quiz takes the caller's interface language and a changed one keeps its own
      */
     public record QuizInput(UUID quizId, @NotNull String title, String intro, UUID cover, Integer timeLimitSec,
-        Long baseRevision, String kind) {}
+        Long baseRevision, String kind, @Pattern(regexp = "ja|zh|en") String language) {
+
+        public QuizInput(UUID quizId, String title, String intro, UUID cover, Integer timeLimitSec, Long baseRevision,
+            String kind) {
+            this(quizId, title, intro, cover, timeLimitSec, baseRevision, kind, null);
+        }
+    }
 
     public record QuizRef(@NotNull UUID quizId, Long baseRevision) {}
 
@@ -135,6 +144,9 @@ public final class QuizProcesses {
         heading.put("intro", text(input.intro()));
         heading.put("cover", input.cover());
         heading.put("timeLimitSec", input.timeLimitSec() == null ? null : decimal(input.timeLimitSec()));
+        if (input.language() != null) {
+            heading.put("language", input.language());
+        }
         if (input.quizId() == null) {
             QuizEditing.requireOwnFile(ctx, ctx.request().actorId(), "cover", input.cover(), null);
             if (ctx.hasViolations()) {
@@ -174,6 +186,7 @@ public final class QuizProcesses {
     private static Map<String, Object> newQuiz(ProcessContext ctx, Map<String, Object> heading, String kind,
         boolean ai, Object clonedFrom) {
         Map<String, Object> values = new LinkedHashMap<>(heading);
+        values.putIfAbsent("language", languageOf(ctx));
         values.put("ownerId", ctx.request().actorId());
         values.put("kind", kind);
         values.put("status", QbContent.DRAFT);
@@ -189,6 +202,13 @@ public final class QuizProcesses {
             values.put("clonedFrom", clonedFrom);
         }
         return values;
+    }
+
+    /** The language of a quiz made without one (Q59a): the caller's interface language, else the default. */
+    public static String languageOf(ProcessContext ctx) {
+        java.util.Locale locale = ctx.request().locale();
+        String language = locale == null ? null : locale.getLanguage();
+        return QbContent.LANGUAGES.contains(language) ? language : QbContent.DEFAULT_LANGUAGE;
     }
 
     // ---- delete ----------------------------------------------------------------------------------------------------
@@ -383,7 +403,7 @@ public final class QuizProcesses {
             content = QuizSnapshots.fromJson(list(ctx, VERSIONS).getFirst().get("content"));
         }
         Object quizId = insertContent(ctx, content, text(input.title()) == null ? content.title() : input.title(),
-            content.aiGenerated(), source.id());
+            content.aiGenerated(), source.id(), source.get("language"));
         ctx.put(OUTPUT, new CloneOutput(uuid(quizId), uuid(source.id()), input.versionNo(), 1, ctx.opTime()));
     }
 
@@ -392,12 +412,16 @@ public final class QuizProcesses {
      * and their options, numbered in their order. For copies and imports (Q16), whose files are the caller's.
      *
      * @param clonedFrom the quiz copied, or null
+     * @param language   the quiz's language (Q59a): a copy's source's; null for the caller's interface language
      * @return the new quiz's key
      */
     public static Object insertContent(ProcessContext ctx, QuizSnapshot content, String title, boolean aiGenerated,
-        Object clonedFrom) {
+        Object clonedFrom, Object language) {
         Map<String, Object> heading = new LinkedHashMap<>();
         heading.put("title", title);
+        if (language != null) {
+            heading.put("language", language);
+        }
         heading.put("intro", content.intro());
         heading.put("cover", content.cover());
         heading.put("timeLimitSec", content.timeLimitSec() == null ? null : decimal(content.timeLimitSec()));
@@ -503,7 +527,10 @@ public final class QuizProcesses {
         }
         String hash = QuizSnapshots.hash(content);
         List<EntityInstance> latest = list(ctx, VERSIONS);
-        if (!latest.isEmpty() && hash.equals(latest.getFirst().get("contentHash"))) {
+        // The language is the version's own column, not in the content (Q59a): a new language alone is a change too.
+        Object language = quiz.get("language");
+        if (!latest.isEmpty() && hash.equals(latest.getFirst().get("contentHash"))
+            && java.util.Objects.equals(language, latest.getFirst().get("language"))) {
             ctx.reject(new Violation(null, ContentCodes.VERSION_UNCHANGED, "The quiz is as its version "
                 + latest.getFirst().get("label") + " was", Map.of("label", latest.getFirst().get("label"))));
             return;
@@ -518,6 +545,7 @@ public final class QuizProcesses {
         version.put("label", label);
         version.put("title", content.title());
         version.put("timeLimitSec", content.timeLimitSec() == null ? null : decimal(content.timeLimitSec()));
+        version.put("language", language);
         version.put("questionCount", decimal(content.questions().size()));
         version.put("materialCount", decimal(content.materials().size()));
         version.put("fullScore", decimal(content.fullScore()));

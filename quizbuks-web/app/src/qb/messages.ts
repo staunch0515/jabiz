@@ -26,6 +26,7 @@ const en = {
     mfa: 'Two-step verification',
     mail: 'E-mail',
   },
+  languages: { ja: '日本語', zh: '中文', en: 'English' },
   sound: {
     title: 'Sound effects',
     label: 'Play sound effects',
@@ -139,6 +140,7 @@ const zh: typeof en = {
     mfa: '两步验证',
     mail: '邮件',
   },
+  languages: { ja: '日本語', zh: '中文', en: 'English' },
   sound: {
     title: '音效',
     label: '播放音效',
@@ -251,6 +253,7 @@ const ja: typeof en = {
     mfa: '2 段階認証',
     mail: 'メール',
   },
+  languages: { ja: '日本語', zh: '中文', en: 'English' },
   sound: {
     title: '効果音',
     label: '効果音を鳴らす',

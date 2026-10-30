@@ -35,6 +35,15 @@ public final class QbContent {
     public static final String KIND_QUIZ = "QUIZ";
     public static final String KIND_SURVEY = "SURVEY";
 
+    /**
+     * The language a quiz is written in (Q59a, docs/quizbuks/plans/Q59-languages.md): one of the platform's. A taker
+     * sees the publications of the languages they switched on (the interface language by default).
+     */
+    public static final String LANGUAGE_DICTIONARY = "urn:jabiz:dict:quizbuks:content-language";
+    public static final java.util.List<String> LANGUAGES = java.util.List.of("ja", "zh", "en");
+    /** The language of a quiz made without one (and of every quiz made before Q59a). */
+    public static final String DEFAULT_LANGUAGE = "ja";
+
     /** How a survey's question is answered (Q12, D-Q12-2): one option, or at least one. */
     public static final String SELECTION_DICTIONARY = "urn:jabiz:dict:quizbuks:question-selection";
     public static final String SINGLE = "SINGLE";
@@ -80,6 +89,8 @@ public final class QbContent {
             .asCode(QUIZ_KIND_DICTIONARY, KIND_QUIZ, KIND_SURVEY));
         eb.field("title", f -> f.physicalColumn("title").required(true).asText(ContentLimits.TITLE_LENGTH)
             .apply(Rules.notBlank(ContentCodes.QUIZ_TITLE_BLANK)));
+        eb.field("language", f -> f.physicalColumn("language").required(true)
+            .asCode(LANGUAGE_DICTIONARY, LANGUAGES.toArray(String[]::new)));
         // Markdown, rendered by the frontends only, without raw HTML.
         eb.field("intro", f -> f.physicalColumn("intro").asText(ContentLimits.INTRO_LENGTH, true));
         eb.field("cover", f -> f.physicalColumn("cover").kind(FileKind.of(IMAGE_POLICY)));
@@ -107,9 +118,9 @@ public final class QbContent {
         eb.display("title");
         eb.temporal(t -> t.allowScheduled(false));
         eb.listView("default", lv -> lv
-            .columns("cover", "title", "kind", "ownerId", "status", "versionLabel", "questionCount", "materialCount",
-                "removed", "editedAt")
-            .filters("title", "kind", "ownerId", "status", "removed", "aiGenerated", "editedAt")
+            .columns("cover", "title", "kind", "language", "ownerId", "status", "versionLabel", "questionCount",
+                "materialCount", "removed", "editedAt")
+            .filters("title", "kind", "language", "ownerId", "status", "removed", "aiGenerated", "editedAt")
             .sorts("title", "editedAt", "questionCount")
             .defaultSort("editedAt", false));
     });
@@ -231,6 +242,9 @@ public final class QbContent {
         eb.field("title", f -> f.physicalColumn("title").immutable(true).required(true)
             .asText(ContentLimits.TITLE_LENGTH));
         eb.field("timeLimitSec", f -> f.physicalColumn("time_limit_sec").immutable(true).asNumeric(5, 0));
+        // The quiz's language when the version was made (Q59a): what the publications of this version are shown in.
+        eb.field("language", f -> f.physicalColumn("language").immutable(true).required(true)
+            .asCode(LANGUAGE_DICTIONARY, LANGUAGES.toArray(String[]::new)));
         eb.field("questionCount", f -> f.physicalColumn("question_count").immutable(true).required(true)
             .asNumeric(4, 0));
         eb.field("materialCount", f -> f.physicalColumn("material_count").immutable(true).required(true)
