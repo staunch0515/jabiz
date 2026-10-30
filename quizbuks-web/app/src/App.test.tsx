@@ -298,15 +298,53 @@ describe('a signed-in taker', () => {
     expect(await screen.findByTestId('home')).toHaveTextContent('Mei')
   })
 
+  it('opens the account as a menu of its parts, each on a page of its own (Q56)', async () => {
+    server({ profile: { displayName: 'Mei', countryCode: 'JP', city: null, preferredCurrency: 'JPY', revision: 1 } })
+    window.history.replaceState(null, '', '/account')
+    render(<App />)
+    const menu = await screen.findByTestId('account')
+    expect(await within(menu).findByTestId('account-who')).toHaveTextContent('Mei · mei@example.com')
+    const settings = within(menu).getByRole('navigation', { name: 'Settings' })
+    expect(within(settings).getAllByRole('link').map((link) => link.getAttribute('href'))).toEqual([
+      '/account/profile', '/account/details', '/account/security', '/account/mail', '/account/preferences',
+      '/account/id'])
+    expect(within(menu).getByTestId('account-menu-security')).toHaveTextContent('Sign-in and security')
+    // Only the menu: no form of a part on it.
+    expect(screen.queryByTestId('profile-name')).toBeNull()
+    await expectAccessible()
+
+    await userEvent.click(within(menu).getByTestId('account-menu-security'))
+    expect(window.location.pathname).toBe('/account/security')
+    expect(await screen.findByRole('heading', { level: 1, name: 'Sign-in and security' })).toBeInTheDocument()
+    expect(screen.getByTestId('account-email')).toHaveTextContent('mei@example.com')
+    // The bottom navigation still marks the account.
+    expect(screen.getByTestId('nav-account')).toHaveAttribute('aria-current', 'page')
+    await userEvent.click(screen.getByTestId('account-back'))
+    expect(window.location.pathname).toBe('/account')
+    expect(await screen.findByTestId('account-menu-profile')).toBeInTheDocument()
+  })
+
+  it('keeps the old link to the details, and sends a part there is not to the menu', async () => {
+    server({ profile: { displayName: 'Mei', countryCode: 'JP', city: null, preferredCurrency: 'JPY', revision: 1 } })
+    window.history.replaceState(null, '', '/account?section=details')
+    render(<App />)
+    await waitFor(() => expect(window.location.pathname).toBe('/account/details'))
+    expect(await screen.findByTestId('account-details-page')).toBeInTheDocument()
+    cleanup()
+    window.history.replaceState(null, '', '/account/nothing')
+    render(<App />)
+    await waitFor(() => expect(window.location.pathname).toBe('/account'))
+    expect(await screen.findByTestId('account-menu-profile')).toBeInTheDocument()
+  })
+
   it('edits the profile on the account page with the revision it read', async () => {
     const { posted } = server({ profile: { displayName: 'Mei', countryCode: 'JP', city: 'Kyoto',
       preferredCurrency: 'EUR', revision: 3 } })
-    window.history.replaceState(null, '', '/account')
+    window.history.replaceState(null, '', '/account/profile')
     render(<App />)
     expect(await screen.findByTestId('profile-name')).toHaveValue('Mei')
     expect(screen.getByTestId('profile-city')).toHaveValue('Kyoto')
     expect(screen.getByTestId('profile-currency')).toHaveTextContent('Euro')
-    expect(screen.getByTestId('account-email')).toHaveTextContent('mei@example.com')
     await userEvent.click(screen.getByTestId('profile-save'))
     expect(await screen.findByTestId('profile-saved')).toBeInTheDocument()
     expect(posted).toContainEqual({ path: '/api/processes/QB_PROFILE_SAVE/latest', body: {
@@ -331,15 +369,16 @@ describe('a signed-in taker', () => {
     server({ profile: { displayName: 'Mei', countryCode: 'JP', city: null, preferredCurrency: 'JPY', revision: 1 },
       identities: [{ id: 'i1', provider: 'google', label: 'Google', kind: 'google', email: 'mei@gmail.com',
         linkedAt: '2026-10-13T09:00:00Z' }] })
-    window.history.replaceState(null, '', '/account')
+    window.history.replaceState(null, '', '/account/security')
     render(<App />)
     expect(await screen.findByTestId('linked-identity')).toHaveTextContent('mei@gmail.com')
+    expect(screen.getByTestId('account-email')).toHaveTextContent('mei@example.com')
   })
 
   it('turns the app\'s notifications on and off on the account page, and says which mail always goes', async () => {
     const { posted } = server({ profile: { displayName: 'Mei', countryCode: 'JP', city: null,
       preferredCurrency: 'JPY', revision: 1 } })
-    window.history.replaceState(null, '', '/account')
+    window.history.replaceState(null, '', '/account/mail')
     render(<App />)
     const section = await screen.findByTestId('account-mail')
     expect(await within(section).findByTestId('mail-preference')).toHaveTextContent('Welcome after registration')
@@ -352,7 +391,7 @@ describe('a signed-in taker', () => {
   it('asks before sending mail in the language the interface was switched to', async () => {
     const { posted } = server({ profile: { displayName: 'Mei', countryCode: 'JP', city: null,
       preferredCurrency: 'JPY', revision: 1 } })
-    window.history.replaceState(null, '', '/account')
+    window.history.replaceState(null, '', '/account/preferences')
     render(<App />)
     await userEvent.click(await screen.findByTestId('language-switch'))
     await userEvent.click(await screen.findByRole('option', { name: '日本語' }))

@@ -802,8 +802,7 @@ describe('customer matching (Q47)', () => {
     expect(screen.queryByTestId('detail-start')).toBeNull()
     expect(screen.queryByTestId('detail-unavailable')).toBeNull()
     await userEvent.click(screen.getByTestId('detail-complete-profile'))
-    await waitFor(() => expect(window.location.search).toBe('?section=details'))
-    expect(window.location.pathname).toMatch(/\/account$/)
+    await waitFor(() => expect(window.location.pathname).toMatch(/\/account\/details$/))
     expect(posted('QB_ATTEMPT_START')).toEqual([])
   })
 
@@ -811,7 +810,7 @@ describe('customer matching (Q47)', () => {
     const { posted } = server({ attributes: [
       { criterionKey: 'interest', valueCode: 'PETS' }, { criterionKey: 'gender', valueCode: 'FEMALE' },
       { criterionKey: 'occupation', valueCode: 'STUDENT' }] })
-    window.history.replaceState(null, '', '/account?section=details')
+    window.history.replaceState(null, '', '/account/details')
     render(<App />)
     const details = await screen.findByTestId('profile-details')
     expect(within(details).getByTestId('details-interest-PETS')).toBeChecked()

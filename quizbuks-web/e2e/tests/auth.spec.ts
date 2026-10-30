@@ -57,8 +57,9 @@ test('a taker registers, verifies at the app\'s own page, completes the profile 
   await page.reload()
   await expect(page.getByTestId('home')).toBeVisible()
   const again = await context.newPage()
-  await again.goto('/taker/account')
+  await again.goto('/taker/account/profile')
   await expect(again.getByTestId('profile-city')).toHaveValue('Seattle')
+  await again.goto('/taker/account/security')
   await expect(again.getByTestId('sign-in').first()).toBeVisible()
   await expect(again.getByTestId('account-email')).toContainText(email)
 

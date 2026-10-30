@@ -109,7 +109,7 @@ describe('the account page (Q39)', () => {
     const writeText = vi.fn(async () => undefined)
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
     server()
-    window.history.replaceState(null, '', '/account')
+    window.history.replaceState(null, '', '/account/id')
     render(<App />)
     expect(await screen.findByTestId('my-id')).toHaveTextContent(USER)
     await userEvent.click(screen.getByTestId('my-id-copy'))
@@ -120,7 +120,7 @@ describe('the account page (Q39)', () => {
   it('shows whose staff the taker is on, leads to the counter and lets them leave', async () => {
     const { processCalls } = server({ staffOf: PLACE,
       processes: { QB_STAFF_LEAVE: { status: 200, body: { output: { userId: USER, changed: true } } } } })
-    window.history.replaceState(null, '', '/account')
+    window.history.replaceState(null, '', '/account/id')
     render(<App />)
     const place = await screen.findByTestId('account-staff')
     expect(place).toHaveTextContent('You are on the staff of Capitals Inc')

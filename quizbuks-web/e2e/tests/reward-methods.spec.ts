@@ -253,7 +253,11 @@ test('a sponsor names a taker to the staff by their ID, who hands out a prize at
     // Kai reads their ID on the app's account page (once signed in: the home is shown).
     await signIn(page, '/taker/', kai.email)
     await expect(page.getByTestId('home')).toBeVisible()
+    // The account is a menu (Q56): Kai's ID is on its own page.
     await page.goto('/taker/account')
+    await expectAccessible(page, 'app account menu')
+    await page.getByTestId('account-menu-id').click()
+    await expect(page).toHaveURL(/\/taker\/account\/id$/)
     const kaiId = (await page.getByTestId('my-id').textContent())!.trim()
     expect(kaiId).toMatch(/^[0-9a-f-]{36}$/)
     await expect(page.getByTestId('account-staff')).toHaveCount(0)
@@ -276,7 +280,7 @@ test('a sponsor names a taker to the staff by their ID, who hands out a prize at
     await signOut()
     await signIn(page, '/taker/', kai.email)
     await expect(page.getByTestId('home')).toBeVisible()
-    await page.goto('/taker/account')
+    await page.goto('/taker/account/id')
     await page.getByTestId('staff-desk-link').click()
     await expect(page).toHaveURL(/\/taker\/staff$/)
     await expect(page.getByTestId('staff-code-image')).toBeVisible()

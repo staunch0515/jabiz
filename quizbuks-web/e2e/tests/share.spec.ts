@@ -85,6 +85,6 @@ test('a visitor starts from a share link with an e-mail address only', async ({ 
   await expect(page.getByTestId('detail-start')).toBeVisible()
 
   // The name sponsors may see is the address's part before the @, never the address.
-  await page.goto('/taker/account')
+  await page.goto('/taker/account/profile')
   await expect(page.getByTestId('profile-name')).toHaveValue(email.split('@')[0])
 })
