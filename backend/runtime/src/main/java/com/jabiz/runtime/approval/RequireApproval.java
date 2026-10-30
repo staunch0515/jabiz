@@ -121,6 +121,7 @@ public class RequireApproval<C extends ProcessContext> implements StepHandler<Re
                 : approvalCase.preparerId();
             return store.lockCase(subject.name(), approvalCase.entityId())
                 .then(store.openRequests(subject.name(), approvalCase.entityId())).flatMap(open -> {
+                ApprovalStore.requireOwnScope(ctx, open);
                 EntityInstance same = null;
                 for (EntityInstance request : open) {
                     if (hash.equals(request.get("contentHash"))

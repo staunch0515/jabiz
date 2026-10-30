@@ -30,6 +30,23 @@ public final class RequestContexts {
                     + "other callers must supply one (for example RequestContext.system)"))));
     }
 
+    /**
+     * The pipeline with its caller's entry scope left out (decision D64), for the platform's own reads of what a scope
+     * does not limit: the open requests of an approval case, the tasks of a source key. The rest of the context stays.
+     */
+    public static <T> reactor.core.publisher.Flux<T> withoutEntryScope(reactor.core.publisher.Flux<T> pipeline) {
+        return pipeline.contextWrite(view -> view.<RequestContext>getOrEmpty(RequestContext.class)
+            .filter(request -> request.entryScope() != null)
+            .map(request -> put(view, unscoped(request)))
+            .orElseGet(() -> Context.of(view)));
+    }
+
+    private static RequestContext unscoped(RequestContext request) {
+        return new RequestContext(request.actorId(), request.tenantId(), request.locale(), request.requestId(),
+            request.roles(), request.permissions(), request.mfaAt(), request.dataPeriod(), request.entry(),
+            request.emailVerified());
+    }
+
     /** Adds the context (and its request id) to a Reactor context. */
     public static Context put(ContextView base, RequestContext request) {
         return Context.of(base).put(RequestContext.class, request).put(REQUEST_ID_KEY, request.requestId());

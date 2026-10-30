@@ -112,7 +112,8 @@ public class TaskEntities {
                 .policy(p -> p.processOnlyWrites().maxQueryBatchSize(MAX_ROWS))
                 .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef));
             if (scoped) {
-                d.scope(s -> s.withinEntryScopeTag("scopeName", "scopeValue"));
+                // A task given to a user personally stays theirs in any session (made by the system, it has no scope).
+                d.scope(s -> s.withinEntryScopeTag("scopeName", "scopeValue", "assigneeUserId"));
             }
         });
     }

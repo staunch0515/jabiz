@@ -39,7 +39,8 @@ class FindRecipients<C extends ProcessContext> implements StepHandler<FindRecipi
         return StepSpec.of(FindRecipients.class, new Metadata(taskKey, targetKey));
     }
 
-    private static final String USERS = SodService.latest(SecurityEntities.SEC_USER, "user_name, email, enabled");
+    private static final String USERS = SodService.latest(SecurityEntities.SEC_USER,
+        "user_name, email, verified_email, enabled");
 
     private final StorageAdapterRegistry storages;
     private final String poolRef;
@@ -65,7 +66,7 @@ class FindRecipients<C extends ProcessContext> implements StepHandler<FindRecipi
                 sql = "SELECT u.user_id, u.email FROM " + USERS + " u WHERE u.user_id::text = :user AND u.enabled AND NOT u.is_deleted";
                 params = Map.of("user", BoundValue.of(user));
             } else {
-                sql = "SELECT DISTINCT u.user_id, u.user_name, u.email, r.role_code FROM " + USERS + " u"
+                sql = "SELECT DISTINCT u.user_id, u.user_name, u.email, u.verified_email, r.role_code FROM " + USERS + " u"
                     + " JOIN " + SodService.latest(SecurityEntities.SEC_USER_ROLE, "user_id, role_id")
                     + " ur ON ur.user_id = u.user_id AND NOT ur.is_deleted"
                     + " JOIN " + SodService.latest(SecurityEntities.SEC_ROLE, "role_code, enabled")
@@ -83,7 +84,7 @@ class FindRecipients<C extends ProcessContext> implements StepHandler<FindRecipi
                 .flatMapMany(rows -> scope == null || value == null ? Flux.fromIterable(rows)
                     : Flux.fromIterable(rows).groupBy(row -> String.valueOf(row.get("user_id")))
                         .concatMap(Flux::collectList)
-                        .concatMap(holder -> sees(holder, scope, value)
+                        .concatMap(holder -> sees(holder, scope, value, ctx.opTime())
                             .flatMapMany(yes -> yes ? Flux.just(holder.getFirst()) : Flux.empty())))
                 .map(row -> new Recipient(String.valueOf(row.get("user_id")), (String) row.get("email")))
                 .distinct()
@@ -97,20 +98,24 @@ class FindRecipients<C extends ProcessContext> implements StepHandler<FindRecipi
      * Whether a holder of the permission (one row per role granting it) sees a task of the entry scope {@code scope}'s
      * value {@code value}: through an entry without that scope, or through one of it whose resolver gives them the value.
      */
-    private Mono<Boolean> sees(List<Map<String, Object>> holder, String scope, String value) {
+    private Mono<Boolean> sees(List<Map<String, Object>> holder, String scope, String value, java.time.Instant now) {
         String userId = String.valueOf(holder.getFirst().get("user_id"));
         String userName = (String) holder.getFirst().get("user_name");
+        boolean verified = com.jabiz.security.EmailVerification.verified((String) holder.getFirst().get("email"),
+            (String) holder.getFirst().get("verified_email"));
         List<SignInEntries.Entry> reaching = entries.all().stream()
             .filter(entry -> holder.stream().anyMatch(row -> entry.accepts((String) row.get("role_code"))))
             .toList();
-        if (reaching.stream().anyMatch(entry -> !guards.scopeOf(entry.name()).map(scope::equals).orElse(false))) {
+        // An entry without a scope shows every task; one of another scope shows none of this one's.
+        if (reaching.stream().anyMatch(entry -> guards.scopeOf(entry.name()).isEmpty())) {
             return Mono.just(true);
         }
+        // One holder after another, each through the entries of the scope: the few holders of a permission.
         return Flux.fromIterable(reaching)
+            .filter(entry -> guards.scopeOf(entry.name()).map(scope::equals).orElse(false))
             .concatMap(entry -> guards.check(userId, userName, entry.name(), holder.stream()
                     .map(row -> (String) row.get("role_code")).filter(entry::accepts)
-                    .collect(java.util.stream.Collectors.toSet()), true, SignInAttempt.Factor.REFRESH,
-                java.time.Instant.EPOCH))
+                    .collect(java.util.stream.Collectors.toSet()), verified, SignInAttempt.Factor.REFRESH, now))
             .any(decision -> decision.allowed() && decision.scope() != null && value.equals(decision.scope().value()));
     }
 }

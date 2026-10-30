@@ -44,7 +44,8 @@ class TaskController {
         + " AND (t.assignee_user_id = :actor OR t.assignee_permission = ANY(:permissions)"
         + " OR (:all AND t.assignee_permission IS NOT NULL))"
         // A session of an entry scope sees that scope's tasks only (decision D64 item 3).
-        + " AND (CAST(:scopeName AS text) IS NULL OR (t.scope_name = :scopeName AND t.scope_value = :scopeValue))";
+        + " AND (CAST(:scopeName AS text) IS NULL OR t.assignee_user_id = :actor"
+        + " OR (t.scope_name = :scopeName AND t.scope_value = :scopeValue))";
 
     private static final TypeReference<Map<String, String>> PARAMS = new TypeReference<>() {};
 

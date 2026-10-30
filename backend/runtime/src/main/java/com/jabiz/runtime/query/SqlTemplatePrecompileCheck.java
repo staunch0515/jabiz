@@ -129,7 +129,7 @@ public class SqlTemplatePrecompileCheck implements PlatformCheck {
             Map<String, SqlTemplateRenderer.EntityBinding> bindings = new LinkedHashMap<>();
             datasets.forEach((entity, dataset) -> {
                 EntityDefinition def = entities.getOrThrow(entity);
-                bindings.put(entity, new SqlTemplateRenderer.EntityBinding(def, dataset, sampleScope(def, dataset)));
+                bindings.put(entity, new SqlTemplateRenderer.EntityBinding(def, dataset, sampleScope(def, dataset, entities)));
             });
             rendered = renderer.render(query, bindings, TimeSlice.asOf(Instant.EPOCH),
                 new QueryCompiler.Binder(TemplateChecks.SCOPE_PREFIX));
@@ -253,7 +253,8 @@ public class SqlTemplatePrecompileCheck implements PlatformCheck {
     }
 
     /** Values a scope could take, to render the scope condition; they are never bound, only described. */
-    private static Map<String, Object> sampleScope(EntityDefinition def, DatasetDefinition dataset) {
+    private static Map<String, Object> sampleScope(EntityDefinition def, DatasetDefinition dataset,
+        EntityDefinitionRegistry entities) {
         Map<String, Object> values = new LinkedHashMap<>();
         for (DatasetScope.Entry entry : dataset.scope().entries()) {
             switch (entry) {
@@ -263,9 +264,13 @@ public class SqlTemplatePrecompileCheck implements PlatformCheck {
                     new com.jabiz.context.DataPeriod(Instant.EPOCH, Instant.EPOCH.plusSeconds(1)),
                     within.referencedField()));
                 case DatasetScope.WithinEntryScope within -> values.put(within.field(), within.via() == null
-                    ? sample(def.field(within.field())) : new DatasetScope.EntryScopeCondition("0", within.via()));
+                    ? sample(def.field(within.field()))
+                    : new DatasetScope.EntryScopeCondition(String.valueOf(entities.find(within.via().entity())
+                        .flatMap(via -> via.findField(within.via().scopeField())).map(field -> sample(field))
+                        .orElse("0")), within.via()));
                 case DatasetScope.WithinEntryScopeTag tag -> values.put(tag.field(),
-                    new DatasetScope.EntryScopeTagCondition(tag.nameField(), new com.jabiz.context.EntryScope("x", "0")));
+                    new DatasetScope.EntryScopeTagCondition(tag.nameField(), new com.jabiz.context.EntryScope("x", "0"),
+                        tag.ownerField(), "0"));
             }
         }
         return values;

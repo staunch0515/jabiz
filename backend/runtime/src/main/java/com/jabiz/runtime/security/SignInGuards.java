@@ -62,6 +62,8 @@ public class SignInGuards implements PlatformCheck {
     private final List<EntryScopeResolver> resolvers;
     private final Map<String, EntryScopeResolver> byEntry = new LinkedHashMap<>();
     private final SignInEntries entries;
+    /** Why the entries' roles could not be reserved to the scoped entries (decision D64), for the startup check. */
+    private final List<String> reservation;
     private final DatasetEntityManager entities;
     private final DatasetRegistry datasets;
     private final EntityDefinitionRegistry definitions;
@@ -74,6 +76,8 @@ public class SignInGuards implements PlatformCheck {
         this.resolvers = resolvers.orderedStream().toList();
         this.resolvers.forEach(resolver -> byEntry.putIfAbsent(resolver.entry(), resolver));
         this.entries = entries;
+        // The roles of scoped entries count in those entries only: nowhere else would a scope limit their holders.
+        this.reservation = entries == null ? List.of() : entries.reserveScoped(byEntry.keySet());
         this.entities = entities;
         this.datasets = datasets;
         this.definitions = definitions;
@@ -200,6 +204,31 @@ public class SignInGuards implements PlatformCheck {
             if (earlier != null) {
                 problems.add(CheckProblem.error(SessionChecks.CATEGORY, location, "entry " + resolver.entry()
                     + " has another resolver already: " + earlier.getClass().getName()));
+            }
+        }
+        reservation.forEach(problem -> problems.add(CheckProblem.error(SessionChecks.CATEGORY,
+            SignInEntries.PROPERTY, problem)));
+        // A dataset limited by a scope no entry has would limit nobody: a misspelt name fails open, so it is an error.
+        Set<String> scopes = new java.util.TreeSet<>();
+        resolvers.forEach(resolver -> scopes.add(resolver.scope()));
+        if (datasets != null) {
+            for (DatasetDefinition dataset : datasets.all()) {
+                for (com.jabiz.dataset.DatasetScope.Entry entry : dataset.scope().entries()) {
+                    if (!(entry instanceof com.jabiz.dataset.DatasetScope.WithinEntryScope within)) {
+                        continue;
+                    }
+                    if (!scopes.contains(within.scope())) {
+                        problems.add(CheckProblem.error(SessionChecks.CATEGORY, dataset.resourceId(), "entry scope "
+                            + within.scope() + " is declared by no EntryScopeResolver"));
+                    }
+                    // The mapping is read as its table: a soft-deleted row would still map (and grant).
+                    if (within.via() != null && datasets.findForEntity(within.via().entity())
+                        .filter(mapping -> mapping.policy().softDelete()).isPresent()) {
+                        problems.add(CheckProblem.error(SessionChecks.CATEGORY, dataset.resourceId(), "entry scope "
+                            + within.scope() + " maps through " + within.via().entity()
+                            + ", whose rows are deleted softly; map through an entity whose rows are removed"));
+                    }
+                }
             }
         }
         List<Object> sources = new ArrayList<>(guards);

@@ -886,8 +886,11 @@ public class DatasetEntityManager {
                 continue;
             }
             if (filter.getValue() instanceof DatasetScope.EntryScopeTagCondition tag) {
-                if (!tag.scope().name().equals(String.valueOf(values.get(tag.nameField())))
-                    || !tag.scope().value().equals(String.valueOf(values.get(filter.getKey())))) {
+                boolean tagged = tag.scope().name().equals(String.valueOf(values.get(tag.nameField())))
+                    && tag.scope().value().equals(String.valueOf(values.get(filter.getKey())));
+                boolean owned = tag.ownerField() != null && tag.actorId().equals(String.valueOf(
+                    values.get(tag.ownerField())));
+                if (!tagged && !owned) {
                     return false;
                 }
                 continue;

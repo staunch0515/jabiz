@@ -178,6 +178,14 @@ class EntryScopeIT extends ApprovalItSupport {
             List.of(Map.of("action", "DELETE", "id", annId, "version", current.get("version"))))).expectStatus().isOk();
         refresh(movedSession, 401);
 
+        // The warehouse's role counts at the warehouse entry only: the administration (every role) does not take it.
+        String carl = unique("carl");
+        insert(CommerceEntities.WAREHOUSE_STAFF_DATASET, Map.of("userId", staff(carl), "warehouseId", northId), null);
+        client.post().uri("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
+            .bodyValue(Map.of("userName", carl, "password", PASSWORD, "entry", "admin")).exchange()
+            .expectStatus().isUnauthorized();
+        signInToWarehouse(carl);
+
         // A user of no warehouse does not get in.
         String bob = unique("bob");
         staff(bob);
@@ -264,6 +272,32 @@ class EntryScopeIT extends ApprovalItSupport {
         assertThat(requests(hq, channel)).containsExactlyInAnyOrder(north, south, plain);
         decide(hq, south, "APPROVE", "ok");
         assertThat(status(south)).isEqualTo(ApprovalEntities.APPROVED);
+        // A case headquarters opened is not the north's to supersede or withdraw: refused, never duplicated (the
+        // platform reads a case whole, whatever the caller's scope). Headquarters supersedes the north's.
+        String payment = unique("P");
+        String first = (String) pay(preparer(), payment, channel, 5, "first").get("requestId");
+        Map<String, Object> again = new HashMap<>(Map.of("paymentId", payment, "channel", channel, "amount", 7,
+            "memo", "again"));
+        assertThat(ruleCode(refused("IT_PAY", scoped("it-north-clerk", "north", preparer), again, 422)))
+            .isEqualTo("APPROVAL_OTHER_SCOPE");
+        assertThat(ruleCode(refused("IT_PAY_CANCEL", scoped("it-north-clerk", "north", preparer), again, 422)))
+            .isEqualTo("APPROVAL_OTHER_SCOPE");
+        assertThat(status(first)).isEqualTo(ApprovalEntities.PENDING);
+        String northCase = unique("P");
+        String northFirst = (String) pay(scoped("it-north-clerk", "north", preparer), northCase, channel, 5, "n")
+            .get("requestId");
+        pay(preparer(), northCase, channel, 6, "hq");
+        assertThat(status(northFirst)).isEqualTo(ApprovalEntities.SUPERSEDED);
+
+        // A task given to the north's approver personally, made where no scope was, is theirs in the north's session.
+        String key = unique("K");
+        Map<String, Object> open = new HashMap<>(Map.of("key", key, "item", key + "-mine"));
+        open.put("user", "it-north-approver");
+        open.put("permission", null);
+        open.put("due", null);
+        run("IT_TASK_OPEN", as("it-opener", com.jabiz.app.it.fixture.ItTaskFixtures.PERMISSION), open);
+        assertThat(taskSubjects(northApprover)).contains(key + "-mine");
+
         // The closed tasks kept their scope.
         assertThat(query("SELECT DISTINCT scope_value FROM sys_task_version WHERE source_key = ?", "approval:" + south))
             .extracting(r -> r.get("scope_value")).containsExactly("south");

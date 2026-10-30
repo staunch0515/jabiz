@@ -79,9 +79,10 @@ public final class DatasetScope {
     /**
      * Rows that say themselves which entry scope they belong to (decision D64 item 3; the platform's approvals and
      * tasks): a session with an entry scope sees the rows whose {@code nameField} is its scope's name and
-     * {@code field} its value, and no row without them. Sessions without a scope are not limited.
+     * {@code field} its value, and no row without them, except, with {@code ownerField}, the rows whose owner it is
+     * (a task given to its user personally). Sessions without a scope are not limited.
      */
-    public record WithinEntryScopeTag(String nameField, String field) implements Entry {
+    public record WithinEntryScopeTag(String nameField, String field, String ownerField) implements Entry {
         public WithinEntryScopeTag {
             Objects.requireNonNull(nameField, "nameField must not be null");
             Objects.requireNonNull(field, "field must not be null");
@@ -99,11 +100,21 @@ public final class DatasetScope {
         }
     }
 
-    /** Resolved value of a {@link WithinEntryScopeTag} entry: the row's name field is {@code scope}'s name, its field the value. */
-    public record EntryScopeTagCondition(String nameField, EntryScope scope) {
+    /**
+     * Resolved value of a {@link WithinEntryScopeTag} entry: the row's name field is {@code scope}'s name and its field
+     * the value, or, with {@code ownerField}, the row's owner is {@code actorId}.
+     */
+    public record EntryScopeTagCondition(String nameField, EntryScope scope, String ownerField, String actorId) {
         public EntryScopeTagCondition {
             Objects.requireNonNull(nameField, "nameField must not be null");
             Objects.requireNonNull(scope, "scope must not be null");
+            if (ownerField != null) {
+                Objects.requireNonNull(actorId, "actorId must not be null");
+            }
+        }
+
+        public EntryScopeTagCondition(String nameField, EntryScope scope) {
+            this(nameField, scope, null, null);
         }
     }
 
@@ -165,7 +176,8 @@ public final class DatasetScope {
                 case WithinEntryScopeTag tag -> {
                     EntryScope scope = request == null ? null : request.entryScope();
                     if (scope != null) {
-                        values.put(tag.field(), new EntryScopeTagCondition(tag.nameField(), scope));
+                        values.put(tag.field(), new EntryScopeTagCondition(tag.nameField(), scope, tag.ownerField(),
+                            request.actorId()));
                     }
                 }
                 case WithinDataPeriod within -> {
@@ -236,7 +248,16 @@ public final class DatasetScope {
          * sessions cannot write through the dataset.
          */
         public Builder withinEntryScopeTag(String nameField, String field) {
-            return add(new WithinEntryScopeTag(nameField, field));
+            return add(new WithinEntryScopeTag(nameField, field, null));
+        }
+
+        /**
+         * As {@link #withinEntryScopeTag(String, String)}, the rows whose {@code ownerField} is the session's user
+         * visible to it whatever their scope (a task given to that user personally).
+         */
+        public Builder withinEntryScopeTag(String nameField, String field, String ownerField) {
+            return add(new WithinEntryScopeTag(nameField, field, Objects.requireNonNull(ownerField,
+                "ownerField must not be null")));
         }
 
         private Builder add(Entry entry) {

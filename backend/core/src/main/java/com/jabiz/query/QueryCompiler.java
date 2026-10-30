@@ -500,10 +500,16 @@ public class QueryCompiler {
             }
             if (entry.getValue() instanceof DatasetScope.EntryScopeTagCondition tag) {
                 FieldDefinition name = resolveField(def, tag.nameField());
-                parts.add("(" + SqlIdentifiers.require(name.physicalColumn()) + " = :"
+                String tagged = "(" + SqlIdentifiers.require(name.physicalColumn()) + " = :"
                     + binder.bind(BoundValue.of(fieldValue(def, name, tag.scope().name()))) + " AND "
                     + SqlIdentifiers.require(fd.physicalColumn()) + " = :"
-                    + binder.bind(BoundValue.of(fieldValue(def, fd, tag.scope().value()))) + ")");
+                    + binder.bind(BoundValue.of(fieldValue(def, fd, tag.scope().value()))) + ")";
+                if (tag.ownerField() != null) {
+                    FieldDefinition owner = resolveField(def, tag.ownerField());
+                    tagged = "(" + tagged + " OR " + SqlIdentifiers.require(owner.physicalColumn()) + " = :"
+                        + binder.bind(BoundValue.of(fieldValue(def, owner, tag.actorId()))) + ")";
+                }
+                parts.add(tagged);
                 continue;
             }
             Object value = fieldValue(def, fd, entry.getValue());

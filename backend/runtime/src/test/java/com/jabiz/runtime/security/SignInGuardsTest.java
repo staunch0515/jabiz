@@ -104,6 +104,32 @@ class SignInGuardsTest {
     }
 
     @Test
+    void theRolesOfAScopedEntryCountThereOnly() {
+        SignInEntries entries = new SignInEntries(java.util.Map.of(
+            "portal", new SignInEntries.Config(java.util.List.of("CUSTOMER"), false, java.util.List.of(), null,
+                "/portal/", null, null),
+            "shop", new SignInEntries.Config(java.util.List.of("CLERK"), false, java.util.List.of(), null,
+                "/shop/", null, null)), false, null);
+        assertThat(entries.reserveScoped(Set.of("portal"))).isEmpty();
+        // The administration's "*" no longer includes the portal's role; other roles stay.
+        assertThat(entries.resolve("admin").accepts("CUSTOMER")).isFalse();
+        assertThat(entries.resolve("admin").accepts("ADMIN")).isTrue();
+        assertThat(entries.resolve("portal").accepts("CUSTOMER")).isTrue();
+        assertThat(entries.resolve("shop").accepts("CUSTOMER")).isFalse();
+
+        // Listing the role in an entry without a scope, or a scoped entry taking every role, is reported.
+        SignInEntries both = new SignInEntries(java.util.Map.of(
+            "portal", new SignInEntries.Config(java.util.List.of("CUSTOMER"), false, java.util.List.of(), null,
+                "/portal/", null, null),
+            "shop", new SignInEntries.Config(java.util.List.of("CUSTOMER"), false, java.util.List.of(), null,
+                "/shop/", null, null)), false, null);
+        assertThat(both.reserveScoped(Set.of("portal"))).singleElement()
+            .satisfies(problem -> assertThat(problem).startsWith("role CUSTOMER is accepted by entry shop"));
+        assertThat(new SignInEntries(java.util.Map.of(), false, null).reserveScoped(Set.of("admin")))
+            .singleElement().satisfies(problem -> assertThat(problem).contains("accepts every role"));
+    }
+
+    @Test
     void entryScopeResolversAreCheckedAtStartup() {
         assertThat(guards(java.util.List.of(resolver("portal", attempt -> "s"))).check()).isEmpty();
         assertThat(guards(java.util.List.of(resolver("nowhere", attempt -> "s"))).check())

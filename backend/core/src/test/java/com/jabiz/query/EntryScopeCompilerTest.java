@@ -44,6 +44,7 @@ class EntryScopeCompilerTest {
         eb.field("taskId", f -> f.physicalColumn("task_id").asSemanticIdentity("urn:test:task"));
         eb.field("scopeName", f -> f.physicalColumn("scope_name").asText(64));
         eb.field("scopeValue", f -> f.physicalColumn("scope_value").asText(128));
+        eb.field("assigneeUserId", f -> f.physicalColumn("assignee_user_id").asText(100));
     });
 
     private static final DatasetDefinition BY_STORE = DatasetDefinition.define("urn:test:ShipmentByStore", d -> d
@@ -56,6 +57,9 @@ class EntryScopeCompilerTest {
         .storage(s -> s.connectionPoolRef("default")));
     private static final DatasetDefinition TASKS = DatasetDefinition.define("urn:test:Task", d -> d
         .targetEntityType("Task").scope(s -> s.withinEntryScopeTag("scopeName", "scopeValue"))
+        .storage(s -> s.connectionPoolRef("default")));
+    private static final DatasetDefinition OWNED_TASKS = DatasetDefinition.define("urn:test:OwnedTask", d -> d
+        .targetEntityType("Task").scope(s -> s.withinEntryScopeTag("scopeName", "scopeValue", "assigneeUserId"))
         .storage(s -> s.connectionPoolRef("default")));
 
     private final QueryCompiler compiler = new QueryCompiler(name -> Optional.ofNullable(Map.of("Shipment", SHIPMENT,
@@ -113,6 +117,14 @@ class EntryScopeCompilerTest {
             .isEqualTo("(scope_name = :g0 AND scope_value = :g1)");
         assertThat(binder.params().get("g0").value()).isEqualTo("store");
         assertThat(binder.params().get("g1").value()).isEqualTo("S1");
+
+        // With an owner field, the session's user's own rows too.
+        Map<String, Object> owned = OWNED_TASKS.scope().resolve(session(new EntryScope("store", "S1")));
+        QueryCompiler.Binder own = new QueryCompiler.Binder("o");
+        assertThat(compiler.scopeCondition(OWNED_TASKS, TASK, owned, own))
+            .isEqualTo("((scope_name = :o0 AND scope_value = :o1) OR assignee_user_id = :o2)");
+        assertThat(own.params().get("o2").value()).isEqualTo("u1");
+        assertThat(OWNED_TASKS.scope().resolve(session(null))).isEmpty();
     }
 
     @Test
