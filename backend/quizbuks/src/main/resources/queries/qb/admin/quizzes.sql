@@ -27,7 +27,7 @@ results:
   publicationCount:    { kind: { type: numeric, precision: 9, scale: 0 } }
 list:
   filters: [quizId, ownerId, kind, status, removed, editedAt]
-  sorts:   [editedAt, title, questionCount]
+  sorts:   [editedAt, title, questionCount, status]
   defaultSort: { field: editedAt, asc: false }
   key: [quizId]
 permissions: [qb.admin.quiz.read]

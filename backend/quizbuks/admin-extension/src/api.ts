@@ -29,6 +29,9 @@ const texts = (value: unknown): Record<string, string> | null => {
 /** The most rows the pages ask for at once (the platform's page limit). */
 export const PAGE = PAGE_LIMIT
 
+/** A sort of a template's rows: one of the fields its `list.sorts` declares. */
+export type SortSpec = { field: string; asc: boolean }
+
 /** One page of a list; `total` when the server counted all rows. */
 export interface Page<Row> {
   items: Row[]
@@ -101,10 +104,10 @@ export function toPublicationRow(row: Row): PublicationRow {
  * A page of the publications waiting for review, the longest waiting first, with their count: those submitted and
  * those running that asked to switch their version (Q51).
  */
-export const readPendingPublications = (offset: number, limit: number) =>
+export const readPendingPublications = (offset: number, limit: number, sorts?: SortSpec[]) =>
   page(TEMPLATE.publications, toPublicationRow, {
     params: { inReview: true },
-    sorts: [{ field: 'waitingSince', asc: true }],
+    sorts: sorts ?? [{ field: 'waitingSince', asc: true }],
     offset,
     limit,
     count: true,
@@ -148,7 +151,7 @@ export interface SponsorRow {
 }
 
 /** A page of the sponsor applications waiting for review, the longest waiting first, with their count. */
-export const readPendingSponsors = (offset: number, limit: number) =>
+export const readPendingSponsors = (offset: number, limit: number, sorts?: SortSpec[]) =>
   page(TEMPLATE.sponsors, (row): SponsorRow => ({
     onboardingId: String(row.onboardingId),
     userId: String(row.userId ?? ''),
@@ -160,7 +163,7 @@ export const readPendingSponsors = (offset: number, limit: number) =>
     approvalRequestId: str(row.approvalRequestId),
   }), {
     filters: [{ field: 'reviewStatus', op: 'eq', value: 'PENDING' }],
-    sorts: [{ field: 'submittedAt', asc: true }],
+    sorts: sorts ?? [{ field: 'submittedAt', asc: true }],
     offset,
     limit,
     count: true,
@@ -427,8 +430,8 @@ export async function readUser(userId: string): Promise<UserRow | null> {
 }
 
 /** One page of users whose user name, address, name or company contains `q` (all users without it). */
-export async function searchUsers(q: string, offset: number, limit: number): Promise<UserRow[]> {
-  const answer = await runQuery<Row>(TEMPLATE.users, { params: { q: q.trim() || null }, offset, limit })
+export async function searchUsers(q: string, offset: number, limit: number, sorts?: SortSpec[]): Promise<UserRow[]> {
+  const answer = await runQuery<Row>(TEMPLATE.users, { params: { q: q.trim() || null }, sorts, offset, limit })
   return answer.items.map(toUserRow)
 }
 
@@ -445,7 +448,7 @@ export interface ConsentRow {
 }
 
 /** A page of the user's acceptances, newest first. */
-export const readConsents = (userId: string, offset: number, limit: number) =>
+export const readConsents = (userId: string, offset: number, limit: number, sorts?: SortSpec[]) =>
   page(TEMPLATE.consents, (row): ConsentRow => ({
     consentId: String(row.consentId),
     kind: String(row.kind ?? ''),
@@ -454,7 +457,7 @@ export const readConsents = (userId: string, offset: number, limit: number) =>
     entry: str(row.entry),
     source: String(row.source ?? ''),
     effectiveAt: str(row.effectiveAt),
-  }), { params: { userId }, offset, limit })
+  }), { params: { userId }, sorts, offset, limit })
 
 /** A row of `qb.admin.attempts`. */
 export interface AttemptRow {
@@ -471,7 +474,7 @@ export interface AttemptRow {
 }
 
 /** A page of the user's attempts, newest first (no amounts: those are finance's, {@link readAttemptRewards}). */
-export const readAttempts = (userId: string, offset: number, limit: number) =>
+export const readAttempts = (userId: string, offset: number, limit: number, sorts?: SortSpec[]) =>
   page(TEMPLATE.attempts, (row): AttemptRow => ({
     attemptId: String(row.attemptId),
     publicationId: String(row.publicationId ?? ''),
@@ -483,7 +486,7 @@ export const readAttempts = (userId: string, offset: number, limit: number) =>
     fullScore: num(row.fullScore),
     passed: bool(row.passed),
     rewardStatus: str(row.rewardStatus),
-  }), { filters: [{ field: 'userId', op: 'eq', value: userId }], offset, limit })
+  }), { filters: [{ field: 'userId', op: 'eq', value: userId }], sorts, offset, limit })
 
 /** A row of `qb.admin.attempt-rewards` (finance only): the money of a submitted attempt. */
 export interface AttemptRewardRow {
@@ -496,7 +499,7 @@ export interface AttemptRewardRow {
   rewardPaidAt: string | null
 }
 
-export const readAttemptRewards = (userId: string, offset: number, limit: number) =>
+export const readAttemptRewards = (userId: string, offset: number, limit: number, sorts?: SortSpec[]) =>
   page(TEMPLATE.attemptRewards, (row): AttemptRewardRow => ({
     attemptId: String(row.attemptId),
     name: str(row.name),
@@ -505,7 +508,7 @@ export const readAttemptRewards = (userId: string, offset: number, limit: number
     fee: amount(row.fee),
     rewardStatus: str(row.rewardStatus),
     rewardPaidAt: str(row.rewardPaidAt),
-  }), { filters: [{ field: 'userId', op: 'eq', value: userId }], offset, limit })
+  }), { filters: [{ field: 'userId', op: 'eq', value: userId }], sorts, offset, limit })
 
 /** A row of `qb.admin.transfers` (finance only). */
 export interface TransferRow {
@@ -519,7 +522,7 @@ export interface TransferRow {
   reversedAmount: string | null
 }
 
-export const readTransfers = (userId: string, offset: number, limit: number) =>
+export const readTransfers = (userId: string, offset: number, limit: number, sorts?: SortSpec[]) =>
   page(TEMPLATE.transfers, (row): TransferRow => ({
     transferId: String(row.transferId),
     amount: amount(row.amount),
@@ -529,7 +532,7 @@ export const readTransfers = (userId: string, offset: number, limit: number) =>
     createdAt: str(row.createdAt),
     sentAt: str(row.sentAt),
     reversedAmount: amount(row.reversedAmount),
-  }), { filters: [{ field: 'userId', op: 'eq', value: userId }], offset, limit })
+  }), { filters: [{ field: 'userId', op: 'eq', value: userId }], sorts, offset, limit })
 
 /** A row of `qb.admin.topups` (finance only): a sponsor's top-ups. */
 export interface TopUpRow {
@@ -541,7 +544,7 @@ export interface TopUpRow {
   refundedAmount: string | null
 }
 
-export const readTopUps = (sponsorId: string, offset: number, limit: number) =>
+export const readTopUps = (sponsorId: string, offset: number, limit: number, sorts?: SortSpec[]) =>
   page(TEMPLATE.topUps, (row): TopUpRow => ({
     topUpId: String(row.topUpId),
     amount: amount(row.amount),
@@ -549,7 +552,7 @@ export const readTopUps = (sponsorId: string, offset: number, limit: number) =>
     createdAt: str(row.createdAt),
     paidAt: str(row.paidAt),
     refundedAmount: amount(row.refundedAmount),
-  }), { filters: [{ field: 'sponsorId', op: 'eq', value: sponsorId }], offset, limit })
+  }), { filters: [{ field: 'sponsorId', op: 'eq', value: sponsorId }], sorts, offset, limit })
 
 /** The user's payout account (finance only); only the last four characters of Stripe's account are shown. */
 export interface PayoutAccount {

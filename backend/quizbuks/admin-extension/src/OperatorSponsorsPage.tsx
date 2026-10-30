@@ -29,6 +29,9 @@ import { useLabels, usePaged } from './hooks'
 import { DICTIONARY, PATH } from './ids'
 import { banSponsor, readOperatorSponsors, unbanSponsor, type OperatorSponsor } from './operator-api'
 
+/** The columns sorted on the server, by the template's `list.sorts` field (Q53a). */
+const SORTS = { company: 'company' } as const
+
 const linkClass = 'text-primary font-medium underline-offset-4 hover:underline'
 const right = { className: 'text-right tabular-nums' }
 const KEY = ['qb-ext', 'operator-sponsors'] as const
@@ -111,7 +114,7 @@ export default function OperatorSponsorsPage() {
     }
     setSearch(next, { replace: true })
   }
-  const { query, table } = usePaged([...KEY, q, mine], (offset, limit) => readOperatorSponsors(q, mine, offset, limit))
+  const { query, table, sortable } = usePaged([...KEY, q, mine], (offset, limit, sorts) => readOperatorSponsors(q, mine, offset, limit, sorts), true, SORTS)
   const columns = useMemo<ColumnDef<OperatorSponsor, unknown>[]>(() => [
     {
       id: 'company',
@@ -183,7 +186,7 @@ export default function OperatorSponsorsPage() {
       {query.isError
         ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
         : (
-          <DataTable label={t('operator.sponsors.pageTitle')} columns={columns} {...table}
+          <DataTable label={t('operator.sponsors.pageTitle')} columns={sortable(columns)} {...table}
             getRowId={(row) => row.onboardingId} empty={t('operator.sponsors.none')}
             rowProps={(row) => ({ 'data-testid': 'sponsor-row', 'data-id': row.userId })} />
         )}

@@ -18,6 +18,9 @@ import { money, useLabels, usePaged, when } from './hooks'
 import { DICTIONARY, PATH, PERMISSION } from './ids'
 import { attemptFilterOf, readAllAttempts, readAttemptKudos, type AttemptListRow } from './payout-api'
 
+/** The columns sorted on the server, by the template's `list.sorts` field (Q53a). */
+const SORTS = { startedAt: 'startedAt', status: 'status', score: 'score' } as const
+
 const linkClass = 'text-primary font-medium underline-offset-4 hover:underline'
 const right = { className: 'text-right tabular-nums' }
 
@@ -42,8 +45,8 @@ export default function AttemptsPage() {
     }
     setSearch(next, { replace: true })
   }
-  const { query, table } = usePaged(['qb-ext', 'attempts', filter],
-    (offset, limit) => readAllAttempts(filter, offset, limit))
+  const { query, table, sortable } = usePaged(['qb-ext', 'attempts', filter],
+    (offset, limit, sorts) => readAllAttempts(filter, offset, limit, sorts), true, SORTS)
   const ids = (query.data?.items ?? []).map((row) => row.attemptId)
   const kudos = useQuery({ queryKey: ['qb-ext', 'attempt-kudos', ids], queryFn: () => readAttemptKudos(ids),
     enabled: finance && ids.length > 0 })
@@ -107,7 +110,7 @@ export default function AttemptsPage() {
       {query.isError
         ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
         : (
-          <DataTable label={t('attempts.table')} columns={columns} {...table} getRowId={(row) => row.attemptId}
+          <DataTable label={t('attempts.table')} columns={sortable(columns)} {...table} getRowId={(row) => row.attemptId}
             empty={t('attempts.none')}
             rowProps={(row) => ({ 'data-testid': 'attempt-row', 'data-id': row.attemptId, 'data-status': row.status })} />
         )}

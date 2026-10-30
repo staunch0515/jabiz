@@ -31,6 +31,9 @@ import { LoadFailed } from './components'
 import { money, useLabels, usePaged, when } from './hooks'
 import { BANK_RECORDABLE, BANK_REVIEW, DICTIONARY, PATH, PERMISSION } from './ids'
 
+/** The columns sorted on the server, by the template's `list.sorts` field (Q53a). */
+const SORTS = { createdAt: 'createdAt', status: 'status' } as const
+
 const linkClass = 'text-primary font-medium underline-offset-4 hover:underline'
 const right = { className: 'text-right tabular-nums' }
 
@@ -139,8 +142,8 @@ export default function BankTopUpsPage() {
     }
     setSearch(next, { replace: true })
   }
-  const { query, table } = usePaged(['qb-ext', 'finance', 'bank-topups', filterStatus, filterCode],
-    (offset, limit) => readBankTopUps(filterStatus, filterCode, offset, limit))
+  const { query, table, sortable } = usePaged(['qb-ext', 'finance', 'bank-topups', filterStatus, filterCode],
+    (offset, limit, sorts) => readBankTopUps(filterStatus, filterCode, offset, limit, sorts), true, SORTS)
   const mayRecord = can(PERMISSION.bankRecord)
   const columns = useMemo<ColumnDef<BankTopUp, unknown>[]>(() => [
     { id: 'createdAt', header: t('bank.createdAt'), cell: ({ row }) => when(row.original.createdAt) },
@@ -226,7 +229,7 @@ export default function BankTopUpsPage() {
       {query.isError
         ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
         : (
-          <DataTable label={t('bank.table')} columns={columns} {...table} getRowId={(row) => row.topUpId}
+          <DataTable label={t('bank.table')} columns={sortable(columns)} {...table} getRowId={(row) => row.topUpId}
             empty={t('bank.none')}
             rowProps={(row) => ({ 'data-testid': 'bank-row', 'data-id': row.topUpId, 'data-status': row.status })} />
         )}

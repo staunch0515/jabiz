@@ -26,6 +26,9 @@ import { DICTIONARY, PATH, PERMISSION } from './ids'
 import { OperatorFields } from './operator-components'
 import { OPERATORS_KEY, readOperators, saveOperator, type Operator } from './operator-api'
 
+/** The columns sorted on the server, by the template's `list.sorts` field (Q53a). */
+const SORTS = { name: 'name', status: 'status', createdAt: 'createdAt' } as const
+
 const linkClass = 'text-primary font-medium underline-offset-4 hover:underline'
 const right = { className: 'text-right tabular-nums' }
 
@@ -87,7 +90,7 @@ export default function OperatorsPage() {
   const { can } = useAuth()
   const status = useLabels(DICTIONARY.operatorStatus)
   const [creating, setCreating] = useState(false)
-  const { query, table } = usePaged([...OPERATORS_KEY, 'list'], readOperators)
+  const { query, table, sortable } = usePaged([...OPERATORS_KEY, 'list'], readOperators, true, SORTS)
   const columns = useMemo<ColumnDef<Operator, unknown>[]>(() => [
     {
       id: 'name',
@@ -116,7 +119,7 @@ export default function OperatorsPage() {
       {query.isError
         ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
         : (
-          <DataTable label={t('operator.list.title')} columns={columns} {...table} getRowId={(row) => row.operatorId}
+          <DataTable label={t('operator.list.title')} columns={sortable(columns)} {...table} getRowId={(row) => row.operatorId}
             empty={t('operator.list.none')}
             rowProps={(row) => ({ 'data-testid': 'operator-row', 'data-id': row.operatorId })} />
         )}

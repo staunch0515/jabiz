@@ -19,6 +19,9 @@ import { useLabels, usePaged, when } from './hooks'
 import { DICTIONARY, PATH, PERMISSION } from './ids'
 import { publicationFilterOf, readPublications, type PublicationListRow } from './overview-api'
 
+/** The columns sorted on the server, by the template's `list.sorts` field (Q53a). */
+const SORTS = { name: 'name', status: 'status', period: 'startAt', editedAt: 'editedAt' } as const
+
 const linkClass = 'text-primary font-medium underline-offset-4 hover:underline'
 const right = { className: 'text-right tabular-nums' }
 
@@ -55,8 +58,8 @@ export default function PublicationsPage() {
     }
     setSearch(next, { replace: true })
   }
-  const { query, table } = usePaged(['qb-ext', 'publications', filter],
-    (offset, limit) => readPublications(filter, offset, limit))
+  const { query, table, sortable } = usePaged(['qb-ext', 'publications', filter],
+    (offset, limit, sorts) => readPublications(filter, offset, limit, sorts), true, SORTS)
   const here = `${PATH.publications}${search.size > 0 ? `?${search}` : ''}`
 
   const columns = useMemo<ColumnDef<PublicationListRow, unknown>[]>(() => [
@@ -167,7 +170,7 @@ export default function PublicationsPage() {
       {query.isError
         ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
         : (
-          <DataTable label={t('publications.table')} columns={columns} {...table}
+          <DataTable label={t('publications.table')} columns={sortable(columns)} {...table}
             getRowId={(row) => row.publicationId} empty={t('publications.none')}
             rowProps={(row) => ({ 'data-testid': 'publication-row', 'data-id': row.publicationId,
               'data-status': row.status })} />

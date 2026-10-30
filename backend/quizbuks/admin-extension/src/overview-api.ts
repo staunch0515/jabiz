@@ -2,6 +2,7 @@ import { api, ApiError, runQuery, unwrap, type Filter } from '@jabiz/admin'
 import { toPublicationRow, type Page, type PublicationRow } from './api'
 import { DATASET, isUserId, PAGE_LIMIT, TEMPLATE } from './ids'
 import type { MaterialKind, Snapshot } from './snapshot'
+import type { SortSpec } from './api'
 
 /*
  * What the overview pages read (Q17; docs/quizbuks/plans/Q17-admin-overview.md): every sponsor's quizzes
@@ -77,11 +78,11 @@ export function quizFilterOf(search: URLSearchParams): QuizFilter {
 }
 
 /** A page of quizzes, the last edited first, with their count. */
-export async function readQuizzes(filter: QuizFilter, offset: number, limit: number): Promise<Page<QuizRow>> {
+export async function readQuizzes(filter: QuizFilter, offset: number, limit: number, sorts?: SortSpec[]): Promise<Page<QuizRow>> {
   const filters: Filter[] = []
   if (filter.ownerId) filters.push({ field: 'ownerId', op: 'eq', value: filter.ownerId })
   if (!filter.removed) filters.push({ field: 'removed', op: 'eq', value: false })
-  const answer = await runQuery<Row>(TEMPLATE.quizzes, { params: { q: filter.q }, filters, offset, limit,
+  const answer = await runQuery<Row>(TEMPLATE.quizzes, { params: { q: filter.q }, filters, sorts, offset, limit,
     count: true })
   return { items: answer.items.map(toQuizRow), total: answer.total }
 }
@@ -105,8 +106,8 @@ export interface QuizVersionRow {
 }
 
 /** A page of a quiz's versions, the newest first. */
-export async function readQuizVersions(quizId: string, offset: number, limit: number): Promise<Page<QuizVersionRow>> {
-  const answer = await runQuery<Row>(TEMPLATE.quizVersions, { params: { quizId }, offset, limit, count: true })
+export async function readQuizVersions(quizId: string, offset: number, limit: number, sorts?: SortSpec[]): Promise<Page<QuizVersionRow>> {
+  const answer = await runQuery<Row>(TEMPLATE.quizVersions, { params: { quizId }, sorts, offset, limit, count: true })
   return {
     total: answer.total,
     items: answer.items.map((row) => ({
@@ -234,12 +235,12 @@ export function publicationFilterOf(search: URLSearchParams): PublicationFilter 
 
 /** A page of publications in every state, the last edited first, with their count. */
 export async function readPublications(filter: PublicationFilter, offset: number,
-  limit: number): Promise<Page<PublicationListRow>> {
+  limit: number, sorts?: SortSpec[]): Promise<Page<PublicationListRow>> {
   const filters: Filter[] = []
   if (filter.status) filters.push({ field: 'status', op: 'eq', value: filter.status })
   if (filter.sponsorId) filters.push({ field: 'publisherId', op: 'eq', value: filter.sponsorId })
   if (filter.quizId) filters.push({ field: 'quizId', op: 'eq', value: filter.quizId })
-  const answer = await runQuery<Row>(TEMPLATE.publications, { params: { q: filter.q }, filters, offset, limit,
+  const answer = await runQuery<Row>(TEMPLATE.publications, { params: { q: filter.q }, filters, sorts, offset, limit,
     count: true })
   return {
     total: answer.total,

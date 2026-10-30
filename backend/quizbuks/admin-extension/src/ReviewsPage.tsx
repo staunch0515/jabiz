@@ -20,11 +20,16 @@ import { LoadFailed, PublisherLink } from './components'
 import { money, QUEUE, usePaged, when } from './hooks'
 import { PATH, PERMISSION } from './ids'
 
+/** The columns sorted on the server, by the template's `list.sorts` field (Q53a). */
+const SORTS = { name: 'name', submittedAt: 'waitingSince' } as const
+/** The columns sorted on the server, by the template's `list.sorts` field (Q53a). */
+const SORTS_2 = { company: 'company', submittedAt: 'submittedAt' } as const
+
 const linkClass = 'text-primary font-medium underline-offset-4 hover:underline'
 
 function PublicationQueue() {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
-  const { query, table } = usePaged(QUEUE.publications, readPendingPublications)
+  const { query, table, sortable } = usePaged(QUEUE.publications, readPendingPublications, true, SORTS)
   const columns = useMemo<ColumnDef<PublicationRow, unknown>[]>(() => [
     {
       id: 'name',
@@ -62,7 +67,7 @@ function PublicationQueue() {
   ], [t])
   if (query.isError) return <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
   return (
-    <DataTable label={t('reviews.publicationsTable')} columns={columns} {...table}
+    <DataTable label={t('reviews.publicationsTable')} columns={sortable(columns)} {...table}
       getRowId={(row) => row.publicationId} empty={t('reviews.nonePublications')}
       rowProps={(row) => ({ 'data-testid': 'queue-publication', 'data-id': row.publicationId })} />
   )
@@ -76,7 +81,7 @@ function useSponsorReader() {
 
 function SponsorQueue() {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
-  const { query, table } = usePaged(QUEUE.sponsors, useSponsorReader())
+  const { query, table, sortable: sortable2 } = usePaged(QUEUE.sponsors, useSponsorReader(), true, SORTS_2)
   const columns = useMemo<ColumnDef<SponsorRow, unknown>[]>(() => [
     {
       id: 'company',
@@ -98,7 +103,7 @@ function SponsorQueue() {
   ], [t])
   if (query.isError) return <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
   return (
-    <DataTable label={t('reviews.sponsorsTable')} columns={columns} {...table}
+    <DataTable label={t('reviews.sponsorsTable')} columns={sortable2(columns)} {...table}
       getRowId={(row) => row.onboardingId} empty={t('reviews.noneSponsors')}
       rowProps={(row) => ({ 'data-testid': 'queue-sponsor', 'data-id': row.userId })} />
   )

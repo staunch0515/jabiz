@@ -22,7 +22,7 @@ results:
   sponsors:     { kind: { type: numeric, precision: 9, scale: 0 } }
 list:
   filters: [status, createdAt]
-  sorts:   [name, createdAt]
+  sorts:   [name, createdAt, status]
   defaultSort: { field: createdAt, asc: false }
   key: [operatorId]
 permissions: [qb.admin.operators.read]

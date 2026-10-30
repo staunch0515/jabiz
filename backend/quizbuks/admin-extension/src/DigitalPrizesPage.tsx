@@ -33,6 +33,9 @@ import { DICTIONARY, PATH, PERMISSION } from './ids'
 import { DIGITAL_RESOLUTIONS, readDigitalPrizes, resolveDigitalPrize, type DigitalPrize, type DigitalResolution }
   from './reward-api'
 
+/** The columns sorted on the server, by the template's `list.sorts` field (Q53a). */
+const SORTS = { dueAt: 'dueAt', amount: 'amount', status: 'status' } as const
+
 const linkClass = 'text-primary font-medium underline-offset-4 hover:underline'
 const right = { className: 'text-right tabular-nums' }
 const KEY = ['qb-ext', 'digital-prizes'] as const
@@ -142,8 +145,8 @@ export default function DigitalPrizesPage() {
     }
     setSearch(next, { replace: true })
   }
-  const { query, table } = usePaged([...KEY, filterStatus, q],
-    (offset, limit) => readDigitalPrizes(filterStatus, q, offset, limit))
+  const { query, table, sortable } = usePaged([...KEY, filterStatus, q],
+    (offset, limit, sorts) => readDigitalPrizes(filterStatus, q, offset, limit, sorts), true, SORTS)
   const columns = useMemo<ColumnDef<DigitalPrize, unknown>[]>(() => [
     { id: 'dueAt', header: t('reward.digital.dueAt'), cell: ({ row }) => when(row.original.dueAt) },
     { id: 'sponsor', header: t('reward.digital.sponsor'),
@@ -243,7 +246,7 @@ export default function DigitalPrizesPage() {
       {query.isError
         ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
         : (
-          <DataTable label={t('reward.digital.table')} columns={columns} {...table} getRowId={(row) => row.digitalPrizeId}
+          <DataTable label={t('reward.digital.table')} columns={sortable(columns)} {...table} getRowId={(row) => row.digitalPrizeId}
             empty={t('reward.digital.none')}
             rowProps={(row) => ({ 'data-testid': 'digital-row', 'data-id': row.digitalPrizeId, 'data-status': row.status })} />
         )}

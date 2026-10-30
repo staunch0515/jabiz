@@ -1,6 +1,7 @@
 import { ApiError, runProcess, runQuery, sessionFetch } from '@jabiz/admin'
 import { fileNameOf, type Page } from './finance-api'
 import { PROCESS, TEMPLATE } from './ids'
+import type { SortSpec } from './api'
 
 /*
  * What the journal pages read and run (docs/quizbuks/plans/Q9d-journal-receipts.md), typed by hand after
@@ -166,8 +167,8 @@ export async function readDetailParts(exportIds: string[]): Promise<Map<string, 
 }
 
 /** A page of the exports, the newest period first, counted, with their detail's files. */
-export async function readJournalExports(offset: number, limit: number): Promise<Page<JournalExport>> {
-  const page = await runQuery<Row>(TEMPLATE.journalExports, { offset, limit, count: true })
+export async function readJournalExports(offset: number, limit: number, sorts?: SortSpec[]): Promise<Page<JournalExport>> {
+  const page = await runQuery<Row>(TEMPLATE.journalExports, { sorts, offset, limit, count: true })
   const parts = await readDetailParts(page.items.map((row) => String(row.exportId)))
   return {
     total: page.total,

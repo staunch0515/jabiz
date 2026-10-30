@@ -34,6 +34,9 @@ import { useLabels, usePaged, when } from './hooks'
 import { DICTIONARY, PATH } from './ids'
 import { OPERATORS_KEY, readOperatorReviews, readOperators, spotCheck, type CheckResult, type OperatorReview } from './operator-api'
 
+/** The columns sorted on the server, by the template's `list.sorts` field (Q53a). */
+const SORTS = { decidedAt: 'decidedAt', decision: 'decision' } as const
+
 const linkClass = 'text-primary font-medium underline-offset-4 hover:underline'
 const KEY = [...OPERATORS_KEY, 'reviews'] as const
 /** The select's value for every operator (a select item cannot have an empty value). */
@@ -115,8 +118,8 @@ export default function OperatorReviewsPage() {
     }
     setSearch(next, { replace: true })
   }
-  const { query, table } = usePaged([...KEY, operatorId, unchecked],
-    (offset, limit) => readOperatorReviews(operatorId, unchecked, offset, limit))
+  const { query, table, sortable } = usePaged([...KEY, operatorId, unchecked],
+    (offset, limit, sorts) => readOperatorReviews(operatorId, unchecked, offset, limit, sorts), true, SORTS)
   const columns = useMemo<ColumnDef<OperatorReview, unknown>[]>(() => [
     { id: 'decidedAt', header: t('operator.reviews.decidedAt'), cell: ({ row }) => when(row.original.decidedAt) },
     { id: 'operator', header: t('operator.reviews.operator'), cell: ({ row }) => row.original.operatorName },
@@ -202,7 +205,7 @@ export default function OperatorReviewsPage() {
       {query.isError
         ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
         : (
-          <DataTable label={t('operator.reviews.title')} columns={columns} {...table} getRowId={(row) => row.decisionId}
+          <DataTable label={t('operator.reviews.title')} columns={sortable(columns)} {...table} getRowId={(row) => row.decisionId}
             empty={t('operator.reviews.none')}
             rowProps={(row) => ({ 'data-testid': 'review-row', 'data-id': row.decisionId })} />
         )}

@@ -1,6 +1,7 @@
 import { runProcess, runQuery, type Filter } from '@jabiz/admin'
 import type { Page } from './finance-api'
 import { PROCESS, TEMPLATE } from './ids'
+import type { SortSpec } from './api'
 
 type Row = Record<string, unknown>
 const str = (value: unknown) => (value === null || value === undefined ? null : String(value))
@@ -48,11 +49,11 @@ function toManualCredit(row: Row): ManualCredit {
 }
 
 /** The manual credits, newest first, of a state (all when null). */
-export async function readManualCredits(status: string | null, offset: number, limit: number):
+export async function readManualCredits(status: string | null, offset: number, limit: number, sorts?: SortSpec[]):
   Promise<Page<ManualCredit>> {
   const filters: Filter[] = []
   if (status) filters.push({ field: 'status', op: 'eq', value: status })
-  const page = await runQuery<Row>(TEMPLATE.manualCredits, { filters, offset, limit, count: true })
+  const page = await runQuery<Row>(TEMPLATE.manualCredits, { filters, sorts, offset, limit, count: true })
   return { total: page.total, items: page.items.map(toManualCredit) }
 }
 

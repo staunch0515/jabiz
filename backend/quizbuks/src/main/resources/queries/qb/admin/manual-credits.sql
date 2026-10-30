@@ -22,7 +22,7 @@ results:
   paidAt:            { from: QbTopUp.paidAt }
 list:
   filters: [topUpId, sponsorId, status, manualKind, transferCode, createdAt]
-  sorts:   [createdAt, paidAt, amount]
+  sorts:   [createdAt, paidAt, amount, status]
   defaultSort: { field: createdAt, asc: false }
   key: [topUpId]
 permissions: [qb.topup.bank.approve]
