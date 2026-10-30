@@ -56,6 +56,8 @@ import { Link, navigate, navigation, Redirect, useLocation } from './qb/router'
 import { useSoundSetting } from './qb/SoundSettings'
 import { useSessionLock } from './qb/session'
 import { BANK_PATH, PAYOUT_PATH, WALLET_PATH } from './wallet/api'
+import { kudosMethodOf } from './wallet/kudos'
+import { KudosMethodPage } from './wallet/KudosOverview'
 import { BankPage } from './wallet/BankPage'
 import { rememberShareNext } from './share/share'
 import { SharePage } from './share/SharePage'
@@ -141,10 +143,11 @@ function Header({ scan = false }: { scan?: boolean }) {
 function BottomNav({ path }: { path: string }) {
   const { t } = useTranslation(APP)
   const unread = useUnread()
-  // A publication's page belongs to home, an attempt's to the history, the payout account to the wallet, a message
-  // to the inbox, the staff's counter (Q39) and the account's parts (Q56) to the account.
+  // A publication's page belongs to home, an attempt's to the history, the payout account and the Kudos by method
+  // (Q58) to the wallet, a message to the inbox, the staff's counter (Q39) and the account's parts (Q56) to the account.
   const item = itemPage(path)
-  const section = item ? (item.page === 'p' ? HOME : HISTORY) : path === PAYOUT_PATH || path === BANK_PATH ? WALLET_PATH
+  const wallet = path === PAYOUT_PATH || path === BANK_PATH || kudosMethodOf(path) !== null
+  const section = item ? (item.page === 'p' ? HOME : HISTORY) : wallet ? WALLET_PATH
     : inboxItemOf(path) ? INBOX_PATH : path === STAFF_PATH || isAccountPath(path) ? ACCOUNT_PATH : path
   return (
     <nav aria-label={t('nav.label')}
@@ -220,6 +223,7 @@ function SignedIn({ path }: { path: string }) {
   else if (path === WALLET_PATH) page = <WalletPage />
   else if (path === PAYOUT_PATH) page = <PayoutPage />
   else if (path === BANK_PATH) page = <BankPage />
+  else if (kudosMethodOf(path)) page = <KudosMethodPage key={path} method={kudosMethodOf(path)!} />
   else if (isAccountPath(path)) page = <AccountPage path={path} />
   else if (path === INBOX_PATH) page = <InboxPage />
   else if (path === STAFF_PATH) page = <StaffDeskPage />

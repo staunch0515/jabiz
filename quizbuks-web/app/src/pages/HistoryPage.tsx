@@ -55,26 +55,7 @@ function Row({ row, onContinue, starting }: { row: HistoryRow; onContinue: () =>
               {t('history.score', { score: row.score ?? 0, full: row.fullScore })}
             </span>
           )}
-          {row.rewardStatus === 'PAID' && <span>{t('history.paid', { amount: formatKudos(row.reward) })}</span>}
-          {row.rewardStatus === 'PENDING' && (
-            <span className="text-warning">{t('history.pending', { amount: formatKudos(row.reward) })}</span>
-          )}
-          {row.rewardStatus === 'CASH' && row.cashStatus && (
-            <span data-testid="history-cash" data-status={row.cashStatus}>
-              {t(`history.cash.${row.cashStatus}`, { amount: formatKudos(row.reward), code: row.cashCode ?? '' })}
-            </span>
-          )}
-          {row.rewardStatus === 'REDEEM' && (
-            <span data-testid="history-redeem" data-status={row.redeemStatus ?? ''}>
-              {t(`history.redeem.${row.redeemStatus ?? 'DUE'}`, { amount: formatKudos(row.reward) })}
-            </span>
-          )}
-          {row.rewardStatus === 'DIGITAL' && (
-            <span data-testid="history-digital" data-status={row.digitalStatus ?? ''}>
-              {t(`history.digital.${row.digitalStatus ?? 'DUE'}`, { amount: formatKudos(row.reward),
-                time: row.digitalSendBy ? formatDateTime(row.digitalSendBy) : '' })}
-            </span>
-          )}
+          <RewardLine row={row} />
         </p>
       )}
       {row.category === 'TIMED_OUT' && <p className="text-sm">{t('history.timedOut')}</p>}
@@ -95,6 +76,38 @@ function Row({ row, onContinue, starting }: { row: HistoryRow; onContinue: () =>
         )}
       </div>
     </li>
+  )
+}
+
+/**
+ * What became of an attempt's reward, however it is paid: paid or waiting for the sponsor, and where the cash, the
+ * prize or the digital prize stands (also the wallet's list of a method's rewards, Q58).
+ */
+export function RewardLine({ row }: { row: HistoryRow }) {
+  const { t } = useTranslation(APP)
+  return (
+    <>
+      {row.rewardStatus === 'PAID' && <span>{t('history.paid', { amount: formatKudos(row.reward) })}</span>}
+      {row.rewardStatus === 'PENDING' && (
+        <span className="text-warning">{t('history.pending', { amount: formatKudos(row.reward) })}</span>
+      )}
+      {row.rewardStatus === 'CASH' && row.cashStatus && (
+        <span data-testid="history-cash" data-status={row.cashStatus}>
+          {t(`history.cash.${row.cashStatus}`, { amount: formatKudos(row.reward), code: row.cashCode ?? '' })}
+        </span>
+      )}
+      {row.rewardStatus === 'REDEEM' && (
+        <span data-testid="history-redeem" data-status={row.redeemStatus ?? ''}>
+          {t(`history.redeem.${row.redeemStatus ?? 'DUE'}`, { amount: formatKudos(row.reward) })}
+        </span>
+      )}
+      {row.rewardStatus === 'DIGITAL' && (
+        <span data-testid="history-digital" data-status={row.digitalStatus ?? ''}>
+          {t(`history.digital.${row.digitalStatus ?? 'DUE'}`, { amount: formatKudos(row.reward),
+            time: row.digitalSendBy ? formatDateTime(row.digitalSendBy) : '' })}
+        </span>
+      )}
+    </>
   )
 }
 
