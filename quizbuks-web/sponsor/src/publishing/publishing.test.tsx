@@ -187,7 +187,7 @@ function server(options: Server = {}) {
           status: 'VERSIONED' }], offset: 0, limit: 20, total: 1 })
       case '/api/queries/qb.sponsor.quiz-version':
         return json(200, { items: [{ versionId: 'v1', versionNo: 1, label: 'v1.0', title: 'Coffee basics',
-          questionCount: 1, quizId: 'q1', timeLimitSec: 300, materialCount: 1, content: JSON.stringify(SNAPSHOT) }],
+          language: 'zh', questionCount: 1, quizId: 'q1', timeLimitSec: 300, materialCount: 1, content: JSON.stringify(SNAPSHOT) }],
           offset: 0, limit: 1 })
       case '/api/queries/qb.sponsor.quiz-versions':
         return json(200, { items: options.versions ?? VERSIONS, offset: 0, limit: 100 })
@@ -939,8 +939,9 @@ describe('a submitted publication', () => {
     window.history.replaceState(null, '', '/publications/p1')
     render(<App />)
     await userEvent.click(await screen.findByTestId('publication-share'))
-    await waitFor(() => expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/taker/p/p1`))
-    expect(shareLink('a b', 'https://quizbuks.com')).toBe('https://quizbuks.com/taker/p/a%20b')
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/taker/p/p1?lang=zh`))
+    expect(shareLink('a b', null, 'https://quizbuks.com')).toBe('https://quizbuks.com/taker/p/a%20b')
+    expect(shareLink('a b', 'zh', 'https://quizbuks.com')).toBe('https://quizbuks.com/taker/p/a%20b?lang=zh')
   })
 
   it('shows the QR code of a live publication with its link, and saves the poster (Q21)', async () => {
@@ -961,9 +962,10 @@ describe('a submitted publication', () => {
     await userEvent.click(await screen.findByTestId('publication-qr'))
     const dialog = await screen.findByTestId('publication-qr-dialog')
     const image = await within(dialog).findByTestId('publication-qr-image')
-    expect(decodeURIComponent(image.getAttribute('src')!.split(',')[1])).toBe(`<svg>${window.location.origin}/taker/p/p1</svg>`)
+    expect(decodeURIComponent(image.getAttribute('src')!.split(',')[1]))
+      .toBe(`<svg>${window.location.origin}/taker/p/p1?lang=zh</svg>`)
     expect(image).toHaveAccessibleName('QR code leading to Coffee week')
-    expect(within(dialog).getByTestId('publication-qr-link')).toHaveTextContent(`${window.location.origin}/taker/p/p1`)
+    expect(within(dialog).getByTestId('publication-qr-link')).toHaveTextContent(`${window.location.origin}/taker/p/p1?lang=zh`)
 
     await userEvent.click(within(dialog).getByTestId('publication-qr-poster'))
     await waitFor(() => expect(saved).toEqual(['Coffee week poster.png']))

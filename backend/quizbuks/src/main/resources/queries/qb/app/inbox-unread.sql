@@ -16,6 +16,7 @@ datasets:
   QbPublicationOwner: urn:jabiz:dataset:me:QbPublicationOwner
 params:
   withOldest: { kind: { type: bool }, description: "Also when the oldest unread broadcast was sent (QB_MESSAGE_MARK's read-through mark)" }
+  languages: { kind: { type: text, maxLength: 20 }, description: "Only the sponsors' notices about publications in these languages (Q59b), comma-separated (ja, zh, en): the taker's switches, or their interface language; all when not given" }
 results:
   messages:     { kind: { type: numeric, precision: 3, scale: 0 } }
   broadcasts:   { kind: { type: numeric, precision: 3, scale: 0 } }
@@ -61,6 +62,9 @@ unread_feed AS NOT MATERIALIZED (
           AND (f.{{QbBroadcastFeed.senderKind}} <> 'SPONSOR'
                OR c.{{QbPublicationCard.status}} IN ('SCHEDULED', 'LIVE')
                   AND string_to_array(c.{{QbPublicationCard.regions}}, ',') && string_to_array(me.me_regions, ',')
+                  -- Q59b: as the inbox's list.
+                  AND (CAST(:languages AS text) IS NULL
+                       OR c.{{QbPublicationCard.language}} = ANY(string_to_array(CAST(:languages AS text), ',')))
                   AND NOT EXISTS (SELECT 1 FROM {{QbPublicationOwner}} own
                                   WHERE own.{{QbPublicationOwner.publicationId}} = f.{{QbBroadcastFeed.publicationId}}))
 )

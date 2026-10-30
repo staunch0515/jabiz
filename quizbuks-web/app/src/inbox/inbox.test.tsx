@@ -41,6 +41,8 @@ const ANNOUNCEMENT = {
 interface Server {
   unread?: { messages: number; broadcasts: number }
   items?: Record<string, unknown>[]
+  /** Q59b: the languages of the quizzes switched on (comma-separated), none when absent. */
+  contentLanguages?: string
 }
 
 /** The server as the inbox sees it, for a verified taker in Japan. Records what was posted. */
@@ -65,6 +67,9 @@ function server(options: Server = {}) {
       case '/api/datasets/urn:jabiz:dataset:me:QbProfile/query':
         return json(200, { items: [{ id: 'p1', version: 1, attributes: { displayName: 'Mei', countryCode: 'JP',
           city: null, preferredCurrency: 'JPY', revision: 1 } }], offset: 0, limit: 1 })
+      case '/api/datasets/urn:jabiz:dataset:me:QbUserSettings/query':
+        return json(200, { items: options.contentLanguages ? [{ id: 'u1', version: 0, attributes: { userId: 'u1',
+          soundOff: false, contentLanguages: options.contentLanguages } }] : [], offset: 0, limit: 1 })
       case '/api/datasets/urn:jabiz:dataset:me:QbInboxState/query':
         return json(200, { items: [{ id: 'u1', version: 1, attributes: { promoOff, readAllBefore: null } }],
           offset: 0, limit: 1 })
@@ -129,6 +134,21 @@ describe('the inbox helpers', () => {
       expect(keyPaths(bundle(APP, lng)), lng).toEqual(expect.arrayContaining(english))
       expect(emptyTexts(APP, lng), lng).toEqual([])
     }
+  })
+})
+
+describe('the languages (Q59b)', () => {
+  it('ask for the sponsors\' notices of the languages the taker sees, in the list and its count', async () => {
+    const { queryBodies } = server({ contentLanguages: 'zh,ja' })
+    window.history.replaceState(null, '', '/inbox')
+    render(<App />)
+    await waitFor(() => expect(queryBodies('qb.app.inbox')).toContainEqual(
+      expect.objectContaining({ params: expect.objectContaining({ languages: 'ja,zh' }) })))
+    await waitFor(() => expect(queryBodies('qb.app.inbox-unread')).toContainEqual(
+      expect.objectContaining({ params: { languages: 'ja,zh' } })))
+    // Never the interface language alone first, while the settings are read.
+    expect(queryBodies('qb.app.inbox-unread')).not.toContainEqual(
+      expect.objectContaining({ params: { languages: 'en' } }))
   })
 })
 

@@ -203,6 +203,8 @@ export interface VersionRow {
   label: string
   title: string
   kind: QuizKind
+  /** The language the version was made in (Q59a). */
+  language: ContentLanguage
   questionCount: number
   fullScore: number
   versionedAt: string
@@ -411,6 +413,7 @@ function toVersionRow(row: Row): VersionRow {
     label: String(row.label ?? ''),
     title: String(row.title ?? ''),
     kind: kindOf(row.kind),
+    language: contentLanguageOf(str(row.language) ?? undefined),
     questionCount: num(row.questionCount),
     fullScore: num(row.fullScore),
     versionedAt: String(row.versionedAt ?? ''),

@@ -12,6 +12,7 @@ results:
   versionNo:     { from: QbQuizVersion.versionNumber }
   label:         { from: QbQuizVersion.label }
   title:         { from: QbQuizVersion.title }
+  language:      { from: QbQuizVersion.language }
   kind:          { from: QbQuiz.kind }
   questionCount: { from: QbQuizVersion.questionCount }
   fullScore:     { from: QbQuizVersion.fullScore }
@@ -31,6 +32,7 @@ SELECT
     v.{{QbQuizVersion.versionNumber}} AS versionNo,
     v.{{QbQuizVersion.label}}         AS label,
     v.{{QbQuizVersion.title}}         AS title,
+    v.{{QbQuizVersion.language}}      AS language,
     z.{{QbQuiz.kind}}                 AS kind,
     v.{{QbQuizVersion.questionCount}} AS questionCount,
     v.{{QbQuizVersion.fullScore}}     AS fullScore,
