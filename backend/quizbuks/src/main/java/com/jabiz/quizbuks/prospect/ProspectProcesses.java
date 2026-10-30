@@ -1330,16 +1330,28 @@ public final class ProspectProcesses {
         EntityInstance onboarding = first(ctx, ONBOARDING);
         Instant approvedAt = onboarding == null ? null : instant(onboarding.get("approvedAt"));
         Instant sentAt = instant(prospect.get("sentAt"));
-        boolean assign = !QbProspects.DIRECT.equals(owner) && onboarding != null && first(ctx, ASSIGNMENT) == null
+        // Q59c: an assignment the platform made by the sign-up language gives way to the operator that prospected
+        // the business; one made by a person stays.
+        EntityInstance assignment = first(ctx, ASSIGNMENT);
+        boolean byLanguage = assignment != null
+            && com.jabiz.quizbuks.operator.QbOperators.BY_LANGUAGE.equals(assignment.get("assignedBy"));
+        boolean assign = !QbProspects.DIRECT.equals(owner) && onboarding != null
+            && (assignment == null
+                || byLanguage && !owner.equals(String.valueOf((Object) assignment.get("operatorId"))))
             && (approvedAt == null || sentAt == null || !approvedAt.isBefore(sentAt));
         if (assign) {
             Map<String, Object> values = new LinkedHashMap<>();
-            values.put("userId", caller);
             values.put("operatorId", owner);
             values.put("assignedAt", ctx.opTime());
             values.put("assignedBy", "prospect:" + prospect.id());
             values.put("reason", ("AI prospecting: " + prospect.get("domain")));
-            ctx.changes().insert(com.jabiz.quizbuks.operator.QbOperators.ASSIGNMENT, values);
+            if (assignment == null) {
+                values.put("userId", caller);
+                ctx.changes().insert(com.jabiz.quizbuks.operator.QbOperators.ASSIGNMENT, values);
+            } else {
+                ctx.changes().update(com.jabiz.quizbuks.operator.QbOperators.ASSIGNMENT, assignment.id(),
+                    assignment.version(), values);
+            }
         }
         ctx.put(OUTPUT, new ClaimOutput(converted == null ? "claimed" : "again", assign ? owner : null));
     }

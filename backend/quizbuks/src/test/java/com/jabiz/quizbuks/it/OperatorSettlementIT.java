@@ -72,8 +72,9 @@ class OperatorSettlementIT extends PlayItSupport {
     @Test
     void anOperatorsMonthIsSettledPostedAndPaidWithFourEyes() {
         clock.set(NOVEMBER);
+        // Q59c: an operator of Chinese-speaking sponsors gets its statements in Chinese.
         String operatorId = (String) run(OperatorProcesses.SAVE, hq(), body("name", unique("Kyushu"), "contactName",
-            "Kei", "contactEmail", "ops@kyushu.example")).get("operatorId");
+            "Kei", "contactEmail", "ops@kyushu.example", "language", "zh")).get("operatorId");
         String sponsor = newSponsor(unique("q48b-s"));
         run(OperatorProcesses.ASSIGN, hq(), body("userId", sponsor, "operatorId", operatorId, "reason",
             "Signed by the operator"));
@@ -127,9 +128,10 @@ class OperatorSettlementIT extends PlayItSupport {
             .containsEntry("documentNo", statement.get("documentNo"));
         settled = settlement(operatorId);
         assertThat(settled.get("document_no")).isEqualTo(statement.get("documentNo"));
-        assertThat(query("SELECT layout_id FROM sys_document_run WHERE run_id = ?::uuid",
+        assertThat(query("SELECT layout_id, language FROM sys_document_run WHERE run_id = ?::uuid",
             String.valueOf(settled.get("document_run_id")))).singleElement()
-            .satisfies(r -> assertThat(r).containsEntry("layout_id", OperatorSettlements.LAYOUT_ID));
+            .satisfies(r -> assertThat(r).containsEntry("layout_id", OperatorSettlements.LAYOUT_ID)
+                .containsEntry("language", "zh"));
         // Settled once: the next run finds it.
         runSettlements();
         assertThat(query("SELECT 1 FROM qb_operator_settlement WHERE operator_id = ?", operatorId)).hasSize(1);

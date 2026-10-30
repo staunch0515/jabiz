@@ -41,6 +41,7 @@ import {
   removeMember,
   saveOperator,
   type Operator,
+  type OperatorLanguage,
   type OperatorMember,
   type OperatorStatus,
 } from './operator-api'
@@ -57,7 +58,9 @@ function Details({ operator }: { operator: Operator }) {
   const id = useId()
   const queryClient = useQueryClient()
   const status = useLabels(DICTIONARY.operatorStatus)
-  const [values, setValues] = useState({ name: operator.name, contactName: operator.contactName,
+  const languages = useLabels(DICTIONARY.contentLanguage)
+  const [values, setValues] = useState({ name: operator.name, language: operator.language ?? '',
+    contactName: operator.contactName,
     contactEmail: operator.contactEmail, note: operator.note ?? '' })
   const [state, setState] = useState<OperatorStatus>(operator.status)
   const [busy, setBusy] = useState(false)
@@ -70,7 +73,8 @@ function Details({ operator }: { operator: Operator }) {
     setProblem(null)
     try {
       await saveOperator({ operatorId: operator.operatorId, name: values.name.trim(),
-        contactName: values.contactName.trim(), contactEmail: values.contactEmail.trim(), status: state,
+        contactName: values.contactName.trim(), contactEmail: values.contactEmail.trim(),
+        language: (values.language || null) as OperatorLanguage | null, status: state,
         note: values.note.trim() || null, baseRevision: operator.revision })
       notify.success(t('operator.detail.saved'))
       await queryClient.invalidateQueries({ queryKey: OPERATORS_KEY })
@@ -84,6 +88,7 @@ function Details({ operator }: { operator: Operator }) {
     return (
       <Section title={t('operator.detail.details')} testId="operator-details">
         <p>{operator.contactName} · {operator.contactEmail}</p>
+        {operator.language && <p className="text-sm">{t('operator.fields.language')}: {languages(operator.language)}</p>}
         {operator.note && <p className="text-muted-foreground text-sm">{operator.note}</p>}
       </Section>
     )

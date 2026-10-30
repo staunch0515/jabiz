@@ -3,6 +3,7 @@ package com.jabiz.quizbuks.operator;
 import com.jabiz.entity.EntityDefinition;
 import com.jabiz.entity.TemporalRole;
 import com.jabiz.runtime.security.SecurityEntities;
+import com.jabiz.quizbuks.content.QbContent;
 
 import java.util.List;
 
@@ -25,6 +26,11 @@ public final class QbOperators {
     public static final String OPERATOR = "QbOperator";
     public static final String MEMBER = "QbOperatorMember";
     public static final String ASSIGNMENT = "QbSponsorOperator";
+    /**
+     * Who made an assignment by the sponsor's language (Q59c): the platform when they applied. A prospecting claim
+     * (Q48d) replaces it; one by headquarters or a claim is never replaced by it.
+     */
+    public static final String BY_LANGUAGE = "auto:language";
     public static final String SPOT_CHECK = "QbReviewSpotCheck";
 
     /** The operators' sign-in entry ({@code jabiz.security.entries.operator}, {@code /operator/}). */
@@ -59,6 +65,9 @@ public final class QbOperators {
     public static final int REASON_LENGTH = 500;
     /** Members of one operator at most (they are few, like a sponsor's staff, D-Q48-3). */
     public static final int MAX_MEMBERS = 50;
+
+    /** The lock of the languages of the operators: two active operators never take the same language (Q59c). */
+    public static final String LANGUAGES_LOCK = "qb.operator.languages";
 
     /** The caller's own memberships (the operator's templates start from it). */
     public static final String OWN_MEMBERSHIP_DATASET = "urn:jabiz:dataset:operator:QbOperatorMember";
@@ -98,6 +107,9 @@ public final class QbOperators {
         eb.field("status", f -> f.physicalColumn("status").required(true)
             .asCode(STATUS_DICTIONARY, STATUSES.toArray(String[]::new)));
         eb.field("note", f -> f.physicalColumn("note").asText(NOTE_LENGTH, true));
+        // Q59c: the language whose new sponsors it takes (one active operator a language); none: by hand only.
+        eb.field("language", f -> f.physicalColumn("language")
+            .asCode(QbContent.LANGUAGE_DICTIONARY, QbContent.LANGUAGES.toArray(String[]::new)));
         eb.field("createdAt", f -> f.physicalColumn("created_at").immutable(true).required(true)
             .asTemporal(TemporalRole.EVENT_TIME));
         eb.field("createdBy", f -> f.physicalColumn("created_by").immutable(true).required(true).asText(128));
@@ -105,7 +117,7 @@ public final class QbOperators {
         eb.field("version", f -> f.physicalColumn("version").asVersion());
         eb.display("name");
         eb.listView("default", lv -> lv
-            .columns("name", "contactName", "contactEmail", "collection", "status", "createdAt")
+            .columns("name", "language", "contactName", "contactEmail", "collection", "status", "createdAt")
             .filters("name", "status", "createdAt")
             .sorts("name", "createdAt")
             .defaultSort("createdAt", false));
