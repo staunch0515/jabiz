@@ -4854,6 +4854,6 @@ Playwright 端到端（需维护连接与数据库角色，以 Vitest 与 `Accou
 
 | # | 补充（需求 2026-10-30，QuizBuks Q59c-2） |
 |---|---|
-| 17y-7 | 经对照约束、只由流程写入（`processOnlyWrites`）的数据视图：对照只约束读取，有范围的会话的流程照常写入（流程经同一范围读到对象并以 `RequireScope` 核对）；QuizBuks 的发布、奖励等缺省数据视图因此可以按运营商约束读取，运营商的下架、作废等流程照常写入。测试：`EntryScopeIT`（测试夹具 `ItEntryScopeFixtures`：插入与修改、`RequireScope` 拒绝别的仓库的、读取受限） |
+| 17y-7 | 经对照约束、只由流程写入（`processOnlyWrites`）的数据视图：对照只约束读取，有范围的会话的流程照常写入（流程经同一范围读到对象并以 `RequireScope` 核对）；QuizBuks 的发布、奖励等缺省数据视图因此可以按运营商约束读取，运营商的下架、作废等流程照常写入。写入路径与时态写入器核对所改版本时都不以对照拒绝。测试：`EntryScopeIT`（测试夹具 `ItEntryScopeFixtures`：普通表与只追加表各一个，插入与修改、`RequireScope` 拒绝别的仓库的、读取受限） |
 
 **17y 状态**：✅ 17y-1 至 17y-6 完成（#359）；17y-7 📝 待评审。

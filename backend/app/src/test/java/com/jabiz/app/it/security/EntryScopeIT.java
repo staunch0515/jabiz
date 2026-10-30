@@ -244,6 +244,26 @@ class EntryScopeIT extends ApprovalItSupport {
             theirs, "owner", westUser, "text", "hq")).expectStatus().isOk();
         assertThat(noteIds(bearer)).contains(mine).doesNotContain(theirs);
         assertThat(noteIds(bearer("it.note.read"))).contains(mine, theirs);
+
+        // The same on an append-only entity: the temporal writer checks the version it changes.
+        String entry = String.valueOf(output(post("/api/processes/" + ItEntryScopeFixtures.ENTRY_SAVE + "/latest",
+            bearer, Map.of("owner", eastUser, "body", "first"))).get("entryId"));
+        post("/api/processes/" + ItEntryScopeFixtures.ENTRY_SAVE + "/latest", bearer, Map.of("entryId", entry,
+            "owner", eastUser, "body", "second")).expectStatus().isOk();
+        assertThat(query("SELECT body FROM it_scoped_entry WHERE entry_id = ?::uuid ORDER BY version_no DESC LIMIT 1",
+            entry).getFirst()).containsEntry("body", "second");
+        String westEntry = String.valueOf(output(post("/api/processes/" + ItEntryScopeFixtures.ENTRY_SAVE
+            + "/latest", bearer("it.note.write"), Map.of("owner", westUser, "body", "hq"))).get("entryId"));
+        // Another warehouse's entry is not found in the east's session (read through the scope).
+        post("/api/processes/" + ItEntryScopeFixtures.ENTRY_SAVE + "/latest", bearer, Map.of("entryId", westEntry,
+            "owner", eastUser, "body", "x")).expectStatus().isNotFound();
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> output(org.springframework.test.web.reactive.server.WebTestClient.ResponseSpec
+        response) {
+        return (Map<String, Object>) response.expectStatus().isOk().expectBody(MAP).returnResult().getResponseBody()
+            .get("output");
     }
 
     @SuppressWarnings("unchecked")
