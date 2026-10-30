@@ -1,5 +1,6 @@
 import { addMessages } from '@jabiz/client'
 import { APP } from '../messages'
+import { BRAND } from '../qb/brand'
 
 /**
  * The wallet's texts, part of the app's namespace `app` (added here, next to the pages that use them). The server
@@ -112,7 +113,7 @@ const en = {
   payout: {
     title: 'Payout account',
     back: 'Back to the wallet',
-    intro: 'Stripe, our payment partner, pays your Kudos to your bank account. QuizBuks keeps no bank details: you enter them on Stripe\'s secure pages.',
+    intro: `Stripe, our payment partner, pays your Kudos to your bank account. ${BRAND.name} keeps no bank details: you enter them on Stripe's secure pages.`,
     status: 'Status',
     none: 'Not set up',
     requirements: 'Stripe still needs some details from you.',
@@ -127,7 +128,7 @@ const en = {
     enabled: 'Your payout account is ready. Your Kudos will be paid out to it.',
     notFinished: 'Your payout account is not finished yet. Continue with Stripe to complete it.',
     refresh: 'The setup link expired or was already used. Continue to get a new one.',
-    closed: 'Your payout account was disconnected from QuizBuks. Please contact us to set up payouts again.',
+    closed: `Your payout account was disconnected from ${BRAND.name}. Please contact us to set up payouts again.`,
     unsafe: 'Stripe\'s address could not be verified, so it was not opened. Please contact us.',
     checkAgain: 'Check again',
   },
@@ -239,7 +240,7 @@ const zh: typeof en = {
   payout: {
     title: '收款账户',
     back: '返回钱包',
-    intro: '我们的支付合作方 Stripe 把您的 Kudos 支付到您的银行账户。QuizBuks 不保存银行信息：您在 Stripe 的安全页面上填写。',
+    intro: `我们的支付合作方 Stripe 把您的 Kudos 支付到您的银行账户。${BRAND.name} 不保存银行信息：您在 Stripe 的安全页面上填写。`,
     status: '状态',
     none: '未开通',
     requirements: 'Stripe 仍需要您补充一些资料。',
@@ -254,7 +255,7 @@ const zh: typeof en = {
     enabled: '您的收款账户已就绪，Kudos 将支付到该账户。',
     notFinished: '您的收款账户尚未完成。请继续在 Stripe 填写。',
     refresh: '开通链接已过期或已使用。请继续以获取新的链接。',
-    closed: '您的收款账户已与 QuizBuks 解除关联。如需重新开通，请联系我们。',
+    closed: `您的收款账户已与 ${BRAND.name} 解除关联。如需重新开通，请联系我们。`,
     unsafe: '无法确认 Stripe 的地址，因此没有打开。请联系我们。',
     checkAgain: '再次查看',
   },
@@ -366,7 +367,7 @@ const ja: typeof en = {
   payout: {
     title: '受け取り口座',
     back: 'ウォレットに戻る',
-    intro: '決済パートナーの Stripe が Kudos をあなたの銀行口座に支払います。QuizBuks は銀行情報を保存しません。情報は Stripe の安全なページで入力します。',
+    intro: `決済パートナーの Stripe が Kudos をあなたの銀行口座に支払います。${BRAND.name} は銀行情報を保存しません。情報は Stripe の安全なページで入力します。`,
     status: '状態',
     none: '未設定',
     requirements: 'Stripe がまだいくつかの情報を必要としています。',
@@ -381,7 +382,7 @@ const ja: typeof en = {
     enabled: '受け取り口座の準備ができました。Kudos はこの口座に支払われます。',
     notFinished: '受け取り口座の設定がまだ終わっていません。Stripe で続けてください。',
     refresh: '設定用のリンクの期限が切れたか、使用済みです。続けると新しいリンクを取得します。',
-    closed: '受け取り口座と QuizBuks の連携が解除されました。再設定はお問い合わせください。',
+    closed: `受け取り口座と ${BRAND.name} の連携が解除されました。再設定はお問い合わせください。`,
     unsafe: 'Stripe のアドレスを確認できなかったため、開きませんでした。お問い合わせください。',
     checkAgain: 'もう一度確認',
   },

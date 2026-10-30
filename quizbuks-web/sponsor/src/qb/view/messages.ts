@@ -1,4 +1,5 @@
 import { addMessages } from '@jabiz/client'
+import { BRAND } from '../brand'
 
 /**
  * The texts of what a taker sees of a publication (namespace `qbview`, Q34b): the home's card and the quiz's page,
@@ -78,7 +79,7 @@ const en = {
     choose: 'How the reward is paid',
     menu: 'Reward type: {{method}}',
     all: 'All',
-    PLATFORM: 'Kudos paid by QuizBuks',
+    PLATFORM: `Kudos paid by ${BRAND.name}`,
     PLATFORMShort: 'Kudos',
     PLATFORMHint: 'Your Kudos come to your wallet as soon as you pass.',
     SPONSOR_CASH: 'Cash from the sponsor',
@@ -268,7 +269,7 @@ const ja: typeof en = {
     choose: '報酬の支払い方法',
     menu: '報酬の種類：{{method}}',
     all: 'すべて',
-    PLATFORM: 'QuizBuks が Kudos を支払う',
+    PLATFORM: `${BRAND.name} が Kudos を支払う`,
     PLATFORMShort: 'Kudos',
     PLATFORMHint: '合格するとすぐに Kudos がウォレットに入ります。',
     SPONSOR_CASH: 'スポンサーが現金で支払う',

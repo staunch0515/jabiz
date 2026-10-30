@@ -1,8 +1,9 @@
+import { BRAND } from '../qb/brand'
 /** The trial page's texts (Q48c), part of the console's namespace `sponsor` (`src/messages.ts` adds them). */
 export const trialEn = {
   trial: {
     title: 'A quiz made from your products',
-    intro: 'This is how QuizBuks works for a business like yours: customers answer a short quiz about your products, and you reward the ones who do well. Try it.',
+    intro: `This is how ${BRAND.name} works for a business like yours: customers answer a short quiz about your products, and you reward the ones who do well. Try it.`,
     madeFor: 'Made for {{company}} from your own website.',
     question: 'Question {{n}} of {{total}}',
     check: 'Check my answers',
@@ -21,7 +22,7 @@ export const trialEn = {
 export const trialZh = {
   trial: {
     title: '用贵公司产品制作的 Quiz',
-    intro: 'QuizBuks 能为像贵公司这样的商家做什么：顾客回答关于贵公司产品的简短 Quiz，您奖励答得好的人。来试一试吧。',
+    intro: `${BRAND.name} 能为像贵公司这样的商家做什么：顾客回答关于贵公司产品的简短 Quiz，您奖励答得好的人。来试一试吧。`,
     madeFor: '根据 {{company}} 自己的网站为您制作。',
     question: '第 {{n}} 题，共 {{total}} 题',
     check: '查看结果',
@@ -40,7 +41,7 @@ export const trialZh = {
 export const trialJa = {
   trial: {
     title: '御社の商品から作ったクイズ',
-    intro: 'QuizBuks は御社のような企業にこう役立ちます：お客様が商品についての短いクイズに答え、よくできた方に御社が特典を贈ります。お試しください。',
+    intro: `${BRAND.name} は御社のような企業にこう役立ちます：お客様が商品についての短いクイズに答え、よくできた方に御社が特典を贈ります。お試しください。`,
     madeFor: '{{company}} のウェブサイトの内容から作成しました。',
     question: '第 {{n}} 問（全 {{total}} 問）',
     check: '答え合わせ',

@@ -1,0 +1,54 @@
+/*
+ * The sample brand (Q54): a profile to copy for another brand, and the second profile the tests build with, so that
+ * nothing of QuizBuks stays behind when the profile changes. Indigo on the platform's theme, its rounded corners
+ * kept; the same tokens as every profile, in both appearances (src/qb/brand.test.ts checks their contrast).
+ */
+:root {
+  --primary: #4338ca;
+  --primary-foreground: #ffffff;
+  --ring: #4338ca;
+  --accent: #eef2ff;
+  --accent-foreground: #312e81;
+  --sidebar-primary: #4338ca;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-ring: #4338ca;
+  --sidebar-accent: #eef2ff;
+  --sidebar-accent-foreground: #312e81;
+  --chart-1: #4338ca;
+  --chart-2: #fbbf24;
+  --qb-hero-from: #3730a3;
+  --qb-hero-to: #4338ca;
+  --qb-hero-foreground: #ffffff;
+  --qb-hero-muted: #e0e7ff;
+  --qb-leaf: #818cf8;
+  --qb-leaf-deep: #4f46e5;
+  --qb-coin: #fbbf24;
+  --qb-coin-deep: #d97706;
+  --qb-sky: #eef2ff;
+  --qb-ink: #312e81;
+}
+
+.dark {
+  --primary: #a5b4fc;
+  --primary-foreground: #1e1b4b;
+  --ring: #a5b4fc;
+  --accent: #24215a;
+  --accent-foreground: #e0e7ff;
+  --sidebar-primary: #a5b4fc;
+  --sidebar-primary-foreground: #1e1b4b;
+  --sidebar-ring: #a5b4fc;
+  --sidebar-accent: #24215a;
+  --sidebar-accent-foreground: #e0e7ff;
+  --chart-1: #a5b4fc;
+  --chart-2: #92400e;
+  --qb-hero-from: #1e1b4b;
+  --qb-hero-to: #312e81;
+  --qb-hero-foreground: #ffffff;
+  --qb-hero-muted: #c7d2fe;
+  --qb-leaf: #818cf8;
+  --qb-leaf-deep: #6366f1;
+  --qb-coin: #fbbf24;
+  --qb-coin-deep: #f59e0b;
+  --qb-sky: #24215a;
+  --qb-ink: #e0e7ff;
+}

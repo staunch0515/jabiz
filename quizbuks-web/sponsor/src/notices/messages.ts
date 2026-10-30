@@ -1,5 +1,6 @@
 import { addMessages } from '@jabiz/client'
 import { SPONSOR } from '../messages'
+import { BRAND } from '../qb/brand'
 
 /**
  * The message centre's texts, part of the console's namespace `sponsor` (added here, next to the page that uses them).
@@ -36,7 +37,7 @@ const en = {
       QB_BROADCAST_PUBLICATION_ENDED: 'Not sent: the publication was no longer on.',
       QB_ACCOUNT_SUSPENDED: 'Not sent: your account was suspended.',
     },
-    withdrawnAdmin: 'Withdrawn by QuizBuks: {{reason}}',
+    withdrawnAdmin: `Withdrawn by ${BRAND.name}: {{reason}}`,
     withdrawnBan: 'Withdrawn: your account was suspended.',
     withdrawnSelf: 'Withdrawn by you.',
     actions: {
@@ -127,7 +128,7 @@ const zh: Texts = {
       QB_BROADCAST_PUBLICATION_ENDED: '未发送：发布已不在进行中。',
       QB_ACCOUNT_SUSPENDED: '未发送：你的账户已被停用。',
     },
-    withdrawnAdmin: '已被 QuizBuks 撤回：{{reason}}',
+    withdrawnAdmin: `已被 ${BRAND.name} 撤回：{{reason}}`,
     withdrawnBan: '已撤回：你的账户已被停用。',
     withdrawnSelf: '你已撤回。',
     actions: {
@@ -216,7 +217,7 @@ const ja: Texts = {
       QB_BROADCAST_PUBLICATION_ENDED: '未送信：公開が終了していました。',
       QB_ACCOUNT_SUSPENDED: '未送信：アカウントが利用停止されました。',
     },
-    withdrawnAdmin: 'QuizBuks が取り下げました：{{reason}}',
+    withdrawnAdmin: `${BRAND.name} が取り下げました：{{reason}}`,
     withdrawnBan: '取り下げ：アカウントが利用停止されました。',
     withdrawnSelf: '取り下げました。',
     actions: {

@@ -8,12 +8,12 @@ Trusted Web Activity：用户的 Chrome 以全屏打开 `https://quizbuks.com/ta
 
 包名、域名、起始地址、范围、名称与颜色都写在 `twa-manifest.json`（Bubblewrap 的格式），`app/build.gradle.kts` 构建时读取，不在别处重复。
 `scripts/consistency.test.mjs` 检查它与 App 一致：范围是 `backend/quizbuks/build.gradle.kts` 中 App 的前缀、起始地址带 `shell=android`、
-包名与 `quizbuks-web/app/src/shell.ts` 的 `ANDROID_PACKAGE` 相同、名称与颜色与 App 的 PWA manifest（`quizbuks-web/app/vite.config.ts`）相同。
+包名与 `quizbuks-web/app/src/shell.ts` 的 `ANDROID_PACKAGE` 相同、名称与颜色与 App 的 PWA manifest 相同（都取自品牌档案 `quizbuks-web/brands/quizbuks/brand.json`，Q54）。
 
 - **包名**上架后不能改。
 - **App Links** 只认 `/taker/` 前缀（`AndroidManifest.xml` 的 `pathPrefix`）：商家后台、招商站与管理后台的链接在浏览器中打开。
 - `LauncherActivity` 给本域名的每个启动地址（含邮件链接）加 `shell=android`，App 据此不显示安装提示。
-- 图标与启动画面由 `quizbuks-web/app/public/icon-512.png`、`icon-maskable-512.png` 缩放而成（尺寸同 Bubblewrap）；App 的图标改了就重新生成。
+- 图标与启动画面由 `quizbuks-web/brands/quizbuks/public/icon-512.png`、`icon-maskable-512.png`（品牌档案，Q54） 缩放而成（尺寸同 Bubblewrap）；App 的图标改了就重新生成。
 
 ## 构建
 

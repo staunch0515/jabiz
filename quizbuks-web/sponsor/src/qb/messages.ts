@@ -1,4 +1,5 @@
 import { addMessages } from '@jabiz/client'
+import { BRAND } from './brand'
 
 /**
  * The texts both QuizBuks front ends share (namespace `qb`); each SPA has its own besides (`src/messages.ts`). The
@@ -8,8 +9,8 @@ import { addMessages } from '@jabiz/client'
 export const QB = 'qb'
 
 const en = {
-  // The product's name, as the server's app.name (the pages before sign-in cannot ask the server for it).
-  brand: 'QuizBuks',
+  // The product's name, from the brand profile (Q54); the server's app.name is the same profile's.
+  brand: BRAND.name,
   signOut: 'Sign out',
   notFound: 'This page does not exist.',
   failed: 'Something went wrong. Please try again.',
@@ -75,7 +76,7 @@ const en = {
   },
   consent: {
     title: 'Please review the updated terms',
-    intro: 'We have updated the texts below. Read and accept them to keep using QuizBuks.',
+    intro: `We have updated the texts below. Read and accept them to keep using ${BRAND.name}.`,
     readFull: 'Read the full text (opens a new tab)',
     accept: 'Accept and continue',
     outdated: 'The texts changed again meanwhile. Please read them once more.',
@@ -117,7 +118,7 @@ const en = {
 }
 
 const zh: typeof en = {
-  brand: 'QuizBuks',
+  brand: BRAND.name,
   signOut: '退出登录',
   notFound: '页面不存在。',
   failed: '出错了，请重试。',
@@ -183,7 +184,7 @@ const zh: typeof en = {
   },
   consent: {
     title: '请阅读更新后的条款',
-    intro: '我们更新了以下文本。请阅读并同意后继续使用 QuizBuks。',
+    intro: `我们更新了以下文本。请阅读并同意后继续使用 ${BRAND.name}。`,
     readFull: '阅读全文（在新标签页中打开）',
     accept: '同意并继续',
     outdated: '文本刚刚再次更新，请重新阅读。',
@@ -224,7 +225,7 @@ const zh: typeof en = {
 }
 
 const ja: typeof en = {
-  brand: 'QuizBuks',
+  brand: BRAND.name,
   signOut: 'ログアウト',
   notFound: 'このページは存在しません。',
   failed: 'エラーが発生しました。もう一度お試しください。',
@@ -290,7 +291,7 @@ const ja: typeof en = {
   },
   consent: {
     title: '改定された規約をご確認ください',
-    intro: '以下の文書を改定しました。QuizBuks を引き続きご利用いただくには、内容をご確認のうえ同意してください。',
+    intro: `以下の文書を改定しました。${BRAND.name} を引き続きご利用いただくには、内容をご確認のうえ同意してください。`,
     readFull: '全文を読む（新しいタブで開きます）',
     accept: '同意して続ける',
     outdated: '文書がさらに更新されました。もう一度ご確認ください。',

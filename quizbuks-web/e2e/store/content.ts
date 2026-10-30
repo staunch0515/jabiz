@@ -1,4 +1,6 @@
 import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { loadBrand } from '../../brands/brand.mjs'
 
 /**
  * What the store's screenshots show (screenshots.spec.ts): per language a sponsor, a taker and three quizzes written in
@@ -117,16 +119,18 @@ const TAGLINE: Record<Language, [string, string]> = {
   en: ['Answer quizzes. Win treats.', 'Quizzes from shops and brands, prizes at their counter'],
 }
 
-const ICON = `data:image/png;base64,${readFileSync(new URL('../../app/public/icon-512.png', import.meta.url)).toString('base64')}`
+// The brand profile QB_BRAND chooses (Q54): its icon, name and colour.
+const BRAND = loadBrand()
+const ICON = `data:image/png;base64,${readFileSync(join(BRAND.dir, 'public', 'icon-512.png')).toString('base64')}`
 
-/** The feature graphic (1024 × 500) as a page: the app's icon and colour, the language's line. */
+/** The feature graphic (1024 × 500) as a page: the brand's icon, name and colour, the language's line. */
 export function FEATURE(language: Language): string {
   const [title, subtitle] = TAGLINE[language]
   return `<!doctype html><html lang="${language}"><body style="margin:0;width:1024px;height:500px;display:flex;
-align-items:center;gap:56px;padding:0 72px;box-sizing:border-box;background:linear-gradient(135deg,#047857,#10b981);
+align-items:center;gap:56px;padding:0 72px;box-sizing:border-box;background:linear-gradient(135deg,${BRAND.themeColor},color-mix(in srgb,${BRAND.themeColor} 70%,#ffffff));
 font-family:'Noto Sans CJK JP','Noto Sans CJK SC','Noto Sans',sans-serif;color:#fff">
 <img src="${ICON}" width="220" height="220" style="border-radius:48px;box-shadow:0 12px 32px rgba(0,0,0,.25)" alt="">
-<div><div style="font-size:30px;font-weight:600;opacity:.9">QuizBuks</div>
+<div><div style="font-size:30px;font-weight:600;opacity:.9">${BRAND.name}</div>
 <div style="font-size:52px;font-weight:700;line-height:1.2;margin:12px 0">${title}</div>
 <div style="font-size:26px;opacity:.9">${subtitle}</div></div></body></html>`
 }

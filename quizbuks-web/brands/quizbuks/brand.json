@@ -1,0 +1,12 @@
+{
+  "name": "QuizBuks",
+  "description": {
+    "en": "Answer quizzes, earn Kudos",
+    "zh": "答题，赚取 Kudos",
+    "ja": "クイズに答えて Kudos を獲得"
+  },
+  "themeColor": "#047857",
+  "backgroundColor": "#ffffff",
+  "supportEmail": "quizbuks@gmail.com",
+  "siteUrl": "https://quizbuks.com"
+}

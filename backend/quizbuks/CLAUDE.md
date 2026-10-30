@@ -261,7 +261,8 @@
 - **两个 SPA，各是独立的 pnpm 工程**（自己的 `package.json` 与 `pnpm-lock.yaml`，经 `link:../../frontend/packages/{client,ui}` 用平台的包；不用 pnpm 工作区）：
   `app`（答题 App，`/`，入口 `app`，PWA）与 `sponsor`（商家后台，`/sponsor/`，入口 `sponsor`）；`build.gradle.kts` 的 `spa(...)` 构建它们。`application.yml` 写出完整的 `jabiz.web.spa`（Q19：App 自己的内容安全策略多 `frame-src` 两个视频播放器），三个前端的路径、入口与 PWA 须与 `build.gradle.kts` 一致（启动检查 `WEB` 告警）。
   共享依赖的版本必须与平台前端相同（`pnpm app:check`，Gradle 中 `spaCheckRoot` / `spaCheckSponsor`，在 `check` 中）。指南：平台 `docs/guide/app-spa.md`。
-- **品牌与插画**（`docs/quizbuks/plans/Q32-visual-refresh.md`）：翠绿色只在共用的 `src/qb/brand.css` 中以覆盖 token 表达（`--primary` 等与品牌 token `--qb-*`，亮暗两套，对比度按平台 12 §11），页面只用 token 与 `qb-*` 颜色类，不写死色值；
+- **品牌档案**（`docs/quizbuks/plans/Q54-brand-profile.md`）：名称、标志、图标、配色只在品牌档案 `quizbuks-web/brands/<品牌>/` 中（构建时以 `QB_BRAND` 选择，缺省 `quizbuks`）；页面与消息以 `BRAND.name`（`src/qb/brand.ts`）称呼产品，不写死名称（`brand-profile.test.ts` 检查），新品牌复制 `brands/sample`。
+- **品牌与插画**（`docs/quizbuks/plans/Q32-visual-refresh.md`）：颜色只在品牌档案的 `brand.css` 中以覆盖 token 表达（`--primary` 等与品牌 token `--qb-*`，亮暗两套，对比度按平台 12 §11，`brand.test.ts` 检查每一份档案），页面只用 token 与 `qb-*` 颜色类，不写死色值；
   插画是共用的 `src/qb/Illustrations.tsx` 的内联 SVG（`aria-hidden`，颜色取 token），不引入外部图片或照片；没有封面的发布用 `CoverPlaceholder`。欢迎轮播（`pages/IntroPage.tsx`）只在未登录首次打开 `/` 时显示，`localStorage` 记住。
 - **共用代码只在 `src/qb/`**，两个 SPA 中各一份、**完全相同**（CI `diff -r`）：改一处即复制到另一处。流程、模板、数据视图、字典与文件策略的名字只写在 `qb/ids.ts`；
   流程的输入输出对照 Java record 手写在 `qb/api.ts`（答题的在 `qb/play.ts`；QuizBuks 没有自己的接口，因此没有 OpenAPI 类型），改了 record 就改这里并由 e2e 覆盖。

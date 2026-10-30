@@ -37,6 +37,14 @@ tasks.matching { it.name == "spaBuildShopifyApp" }.configureEach {
     inputs.property("siteUrl", providers.environmentVariable("SITE_URL").orElse(""))
 }
 
+// Q54: the takers' app and the sponsor console are built with the brand profile QB_BRAND chooses
+// (quizbuks-web/brands/<brand>, docs/quizbuks/plans/Q54-brand-profile.md): a change of the choice or of any profile
+// builds them again.
+tasks.matching { it.name == "spaBuildTaker" || it.name == "spaBuildSponsor" }.configureEach {
+    inputs.property("brand", providers.environmentVariable("QB_BRAND").orElse(""))
+    inputs.dir(rootProject.layout.projectDirectory.dir("../quizbuks-web/brands"))
+}
+
 dependencies {
     implementation(project(":runtime"))
     // QuizBuks for Shopify (docs/quizbuks/shopify/S1-install.md): a library of its own, in this jar.
