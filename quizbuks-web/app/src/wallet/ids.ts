@@ -19,6 +19,8 @@ export const WALLET_TEMPLATE = {
   ledger: 'qb.app.ledger',
   payoutAccount: 'qb.app.payout-account',
   bankAccount: 'qb.app.bank-account',
+  /** Q58: the Kudos by reward method. */
+  kudos: 'qb.app.kudos',
 } as const
 
 /** Dictionaries, labelled by the server in the request's language. */
