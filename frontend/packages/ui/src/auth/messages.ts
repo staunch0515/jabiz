@@ -115,6 +115,10 @@ const en = {
     offline: 'You are offline. What you see may be out of date, and nothing can be sent until you are back online.',
     update: 'A new version is available.',
     reload: 'Reload',
+    unavailableTitle: 'Down for maintenance',
+    unavailable: 'The service is being maintained or restarted and does not answer right now. This page waits and carries on by itself once it is back; nothing you saw is lost.',
+    unavailableNext: 'Next check in about {{seconds}} seconds.',
+    unavailableRetry: 'Check now',
   },
   install: {
     title: 'Add {{app}} to your home screen',
@@ -403,6 +407,10 @@ const zh: Messages = {
     offline: '您已离线。看到的内容可能不是最新的；恢复联网后才能提交修改。',
     update: '有新版本可用。',
     reload: '刷新',
+    unavailableTitle: '系统维护中',
+    unavailable: '服务正在维护或重启，暂时无法响应。本页会自动等待，恢复后自动继续，已显示的内容不会丢失。',
+    unavailableNext: '约 {{seconds}} 秒后再次检查。',
+    unavailableRetry: '立即重试',
   },
   install: {
     title: '把 {{app}} 添加到主屏幕',
@@ -689,6 +697,10 @@ const ja: Messages = {
     offline: 'オフラインです。表示が最新でない場合があり、オンラインに戻るまで送信できません。',
     update: '新しいバージョンがあります。',
     reload: '再読み込み',
+    unavailableTitle: 'メンテナンス中',
+    unavailable: 'サービスはメンテナンスまたは再起動中で、現在応答していません。このページは自動で待機し、復旧後に自動で再開します。表示中の内容は失われません。',
+    unavailableNext: '約 {{seconds}} 秒後に再確認します。',
+    unavailableRetry: '今すぐ再確認',
   },
   install: {
     title: '{{app}} をホーム画面に追加',

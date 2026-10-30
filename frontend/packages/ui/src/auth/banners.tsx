@@ -1,9 +1,17 @@
-import { resendVerification, useOnline, useOptionalAuth, useServiceWorkerUpdate } from '@jabiz/client'
-import { MailWarning, RefreshCw, WifiOff } from 'lucide-react'
-import { useState } from 'react'
+import { probeService, resendVerification, useOnline, useOptionalAuth, useServiceUnavailable, useServiceWorkerUpdate } from '@jabiz/client'
+import { MailWarning, RefreshCw, ServerCrash, WifiOff } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Alert, AlertDescription } from '../components/ui/alert'
 import { Button } from '../components/ui/button'
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '../components/ui/alert-dialog'
 import { cn } from '../lib/utils'
 import { AUTH_NAMESPACE } from './messages'
 
@@ -64,16 +72,77 @@ export function VerifyEmailBanner({ className, ...given }: VerifyEmailBannerProp
   )
 }
 
-/** Says so while the browser is offline (decision D43 item 6: only the shell works offline); nothing otherwise. */
+/**
+ * Says so while the browser is offline (decision D43 item 6: only the shell works offline); nothing otherwise. While
+ * online but the service does not answer (maintenance, a restart: ROADMAP 17x), says that once for the whole page,
+ * in front of it, instead of an error in every part; the page carries on by itself when the service is back.
+ */
 export function OfflineBanner({ className }: { className?: string }) {
   const { t } = useTranslation(AUTH_NAMESPACE)
   const online = useOnline()
-  if (online) return null
+  if (!online) {
+    return (
+      <Alert variant="warning" role="status" className={className} data-testid="offline-banner">
+        <WifiOff aria-hidden />
+        <AlertDescription className="text-current">{t('banner.offline')}</AlertDescription>
+      </Alert>
+    )
+  }
+  return <ServiceUnavailableNotice />
+}
+
+/** Seconds until a time, at least 0, refreshed every second while shown. */
+function useSecondsUntil(time: number | null): number {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    if (time === null) return
+    const timer = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(timer)
+  }, [time])
+  return time === null ? 0 : Math.max(0, Math.ceil((time - now) / 1000))
+}
+
+/**
+ * The service does not answer: an alert dialog over the page (it cannot be dismissed: nothing behind it works), with the
+ * time to the next check and a button to check now. It closes by itself when the service answers again, and what the
+ * page reads is read again (`useServiceUnavailable`).
+ */
+export function ServiceUnavailableNotice() {
+  const { t } = useTranslation(AUTH_NAMESPACE)
+  const unavailable = useServiceUnavailable()
+  const seconds = useSecondsUntil(unavailable?.nextProbe ?? null)
+  const [checking, setChecking] = useState(false)
+  const check = async () => {
+    setChecking(true)
+    try {
+      await probeService()
+    } finally {
+      setChecking(false)
+    }
+  }
   return (
-    <Alert variant="warning" role="status" className={className} data-testid="offline-banner">
-      <WifiOff aria-hidden />
-      <AlertDescription className="text-current">{t('banner.offline')}</AlertDescription>
-    </Alert>
+    <AlertDialog open={!!unavailable}>
+      <AlertDialogContent data-testid="service-unavailable" onEscapeKeyDown={(event) => event.preventDefault()}>
+        <AlertDialogHeader>
+          <AlertDialogTitle className="flex items-center gap-2">
+            <ServerCrash aria-hidden className="text-muted-foreground size-5" />
+            {t('banner.unavailableTitle')}
+          </AlertDialogTitle>
+          <AlertDialogDescription>{t('banner.unavailable')}</AlertDialogDescription>
+        </AlertDialogHeader>
+        {/* Not a live region: the dialog is announced when it opens; a countdown read out every second would not be. */}
+        <p className="text-muted-foreground text-sm" data-testid="service-unavailable-next">
+          {checking ? '' : t('banner.unavailableNext', { seconds })}
+        </p>
+        <AlertDialogFooter>
+          <Button onClick={() => void check()} disabled={checking} aria-busy={checking || undefined}
+            data-testid="service-unavailable-retry">
+            <RefreshCw aria-hidden className={cn(checking && 'animate-spin')} />
+            {t('banner.unavailableRetry')}
+          </Button>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   )
 }
 
