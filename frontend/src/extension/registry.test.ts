@@ -62,6 +62,12 @@ describe('extensionProblems', () => {
     ])
   })
 
+  it('wants a name of a brand it is given (phase 17v)', () => {
+    expect(extensionProblems({ brand: { name: '' } })).toEqual(['the brand needs a name'])
+    expect(extensionProblems({ brand: { name: { en: ' ' } } })).toEqual(['the brand needs a name'])
+    expect(extensionProblems({ brand: { name: { zh: '爱客美' }, logo: '/l.svg' } })).toEqual([])
+  })
+
   it('does not mistake a longer name for a platform path', () => {
     expect(extensionProblems({ routes: [{ path: '/database' }, { path: '/processes-report' }] })).toEqual([])
   })

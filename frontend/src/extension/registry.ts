@@ -56,6 +56,13 @@ export function extensionProblems(extension: AdminExtension): string[] {
     }
   }
   visit(extension.menu)
+  if (extension.brand) {
+    const { name } = extension.brand
+    const names = typeof name === 'string' ? [name] : Object.values(name ?? {})
+    if (!names.some((value) => typeof value === 'string' && value.trim() !== '')) {
+      problems.push('the brand needs a name')
+    }
+  }
   for (const path of [...menuPaths(extension.menu), ...(extension.home ? [extension.home] : [])]) {
     if (!path.startsWith('/')) problems.push(`"${path}" is not an absolute path`)
   }
