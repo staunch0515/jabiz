@@ -264,6 +264,36 @@ describe('SignInForm', () => {
 })
 
 describe('SignUpForm', () => {
+  it('offers the identity providers in its card under "Other ways to sign up", with its small print (phase 17u)',
+    async () => {
+      server()
+      const start = vi.fn(async () => undefined)
+      render(
+        <SignUpForm brand="Portal" signInPath="/portal/login" note={<span>By signing up you accept the terms.</span>}
+          oidc={{ returnTo: '/portal/', layout: 'icons', start, providers: [{ id: 'google', label: 'Google',
+            kind: 'google' }] }} />,
+      )
+      const card = screen.getByTestId('sign-up')
+      expect(card).toContainElement(screen.getByTestId('oidc-icons'))
+      expect(screen.getByTestId('oidc-icons')).toHaveTextContent('Other ways to sign up')
+      expect(card).toContainElement(screen.getByTestId('sign-up-note'))
+      expect(screen.getByTestId('sign-up-note')).toHaveTextContent('By signing up you accept the terms.')
+      await expectAccessible()
+      await user().click(screen.getByTestId('oidc-google'))
+      expect(start).toHaveBeenCalledWith('google', '/portal/')
+      // A start the server refuses is said in the card.
+      start.mockRejectedValueOnce(new Error('offline'))
+      await user().click(screen.getByTestId('oidc-google'))
+      expect(await screen.findByTestId('sign-up-error')).toHaveTextContent('Something went wrong')
+    })
+
+  it('offers no identity provider unless asked to', async () => {
+    server()
+    render(<SignUpForm brand="Portal" />)
+    expect(screen.queryByTestId('oidc-icons')).toBeNull()
+    expect(screen.queryByText('Other ways to sign up')).toBeNull()
+  })
+
   it('registers at the entry and then says to look in the mailbox, with a new mail on request', async () => {
     const posts = server({ '/api/auth/register': { status: 202 }, '/api/auth/verify-email/resend': { status: 202 } })
     const onSubmitted = vi.fn()

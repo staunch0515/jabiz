@@ -4782,3 +4782,16 @@ Playwright 端到端（需维护连接与数据库角色，以 Vitest 与 `Accou
 | 17t-3 | 测试：`display.test.tsx`（提示与名称分开）、`DatasetListPage.test.tsx`（首列、提示、复制、不可排序）、e2e `list.spec.ts`；设计 12 §6 一条 |
 
 **17t 状态**：📝 待评审。
+
+### 17u 注册卡片中的其他注册方式（需求 2026-10-29）
+
+**缘由**：需求方 2026-10-29（手机截图）：登录页的 Google / Facebook / LINE 在卡片里，注册页的却在卡片之外、页面最下方（应用自己把按钮放在 `SignUpForm` 之后），条款的说明也在最下方，而且写的是"其他方式登录"。
+
+| # | 内容 |
+|---|---|
+| 17u-1 | `SignUpForm` 新增 `oidc`（`returnTo`、`layout`、`providers`、`start`）：身份提供方的按钮放在注册卡片里，"已有账号？登录"之下，同登录卡片；开始失败时在卡片中报错（`sign-up-error`）。不给即没有（照旧） |
+| 17u-2 | `OidcButtons` 新增 `purpose`（`signIn` 缺省 / `signUp`）：注册时写"其他方式注册" / "或通过以下方式注册"（三语 `signUp.otherWays`、`signUp.orWith`）；提供方第一次登录即开户（入口允许注册时，D39），所以按钮本身不变 |
+| 17u-3 | `SignUpForm` 新增 `note`：卡片底部的小字（如注册所同意的条款） |
+| 17u-4 | 测试：`blocks.test.tsx`（按钮与小字在卡片中、注册的字样、开始、失败、axe；不给即没有）；设计 12 一句 |
+
+**17u 状态**：📝 待评审。
