@@ -9,6 +9,7 @@ import { walletMessages } from './messages'
 import { APP } from '../messages'
 import { bundle, emptyTexts, keyPaths, LANGUAGES } from '../qb/messageKeys'
 import { goToStripe } from './stripePage'
+import { maintenancePage } from '../maintenance'
 
 vi.mock('./stripePage', async (original) => ({
   ...(await original<typeof import('./stripePage')>()),
@@ -137,11 +138,13 @@ describe('the wallet helpers', () => {
 })
 
 describe('the wallet', () => {
-  it('says once that the service is down for maintenance, and reads every part again once it is back (17x)', async () => {
+  it('goes to the maintenance page when the service goes into maintenance with the page open', async () => {
     server()
     const answer = vi.mocked(globalThis.fetch).getMockImplementation()!
+    const open = vi.spyOn(maintenancePage, 'open').mockImplementation(() => {})
     let down = false
-    // During maintenance the reverse proxy answers every call with its own page: 503, HTML, with Retry-After.
+    // During maintenance the reverse proxy answers every request, the page's own address too, with its maintenance
+    // page: 503, HTML, with Retry-After.
     vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => down
       ? new Response('<html>maintenance</html>', { status: 503,
         headers: { 'Content-Type': 'text/html', 'Retry-After': '60' } })
@@ -149,16 +152,43 @@ describe('the wallet', () => {
     window.history.replaceState(null, '', '/wallet')
     render(<App />)
     expect(await screen.findByTestId('wallet-available')).toHaveTextContent('Kudos')
+    expect(open).not.toHaveBeenCalled()
     down = true
-    // The page open during maintenance reads something: one notice for the page, not an error in every part.
-    const periods = within(screen.getByTestId('kudos-period')).getAllByRole('radio')
-    await userEvent.click(periods[periods.length - 1])
+    // Another period: a read while the service is down (the chosen one is remembered from test to test).
+    const other = within(screen.getByTestId('kudos-period')).getAllByRole('radio')
+      .find((radio) => radio.getAttribute('aria-checked') !== 'true')!
+    await userEvent.click(other)
+    await waitFor(() => expect(open).toHaveBeenCalledTimes(1))
+    // What it asked for is the page's own address, past the HTTP cache.
+    expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledWith(window.location.href,
+      expect.objectContaining({ cache: 'no-store' }))
+  })
+
+  it('keeps the page with one notice when the server cannot be reached, and reads again once it answers', async () => {
+    server()
+    const answer = vi.mocked(globalThis.fetch).getMockImplementation()!
+    const open = vi.spyOn(maintenancePage, 'open').mockImplementation(() => {})
+    let down = false
+    // No answer at all: a reload would only get the app's shell from the Service Worker.
+    vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
+      if (down) throw new TypeError('Failed to fetch')
+      return answer(input, init)
+    })
+    window.history.replaceState(null, '', '/wallet')
+    render(<App />)
+    expect(await screen.findByTestId('wallet-available')).toHaveTextContent('Kudos')
+    down = true
+    // Another period: a read while the service is down (the chosen one is remembered from test to test).
+    const other = within(screen.getByTestId('kudos-period')).getAllByRole('radio')
+      .find((radio) => radio.getAttribute('aria-checked') !== 'true')!
+    await userEvent.click(other)
     expect(await screen.findByRole('alertdialog')).toHaveTextContent('Down for maintenance')
     expect(screen.getAllByTestId('service-unavailable')).toHaveLength(1)
     down = false
     await userEvent.click(screen.getByTestId('service-unavailable-retry'))
     await waitFor(() => expect(screen.queryByTestId('service-unavailable')).toBeNull())
     expect(screen.getByTestId('wallet-available')).toHaveTextContent('Kudos')
+    expect(open).not.toHaveBeenCalled()
   })
 
   it('shows what is held back from transfers and until when (Q10b)', async () => {
