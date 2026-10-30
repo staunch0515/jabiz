@@ -59,6 +59,7 @@ import {
 } from './api'
 import { AI_CODE, AI_KINDS, AI_LANGUAGES, AI_LIMITS, DIFFICULTIES } from './ids'
 import './messages'
+import { playSound } from '../qb/sound'
 
 export const AI_QUERY = ['qb', 'ai'] as const
 export const aiJobQuery = (quizId: string) => [...AI_QUERY, 'job', quizId] as const
@@ -333,6 +334,7 @@ function Review({ job }: { job: AiJob }) {
     })), editing.revision()),
     onSuccess: async (output) => {
       notify.success(t('ai.review.added', { n: output.questionIds.length }))
+      playSound('success')
       await editing.edited(output)
       await queryClient.invalidateQueries({ queryKey: AI_QUERY })
     },

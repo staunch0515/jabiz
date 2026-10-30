@@ -27,6 +27,8 @@ import { CelebrateArt } from '../qb/Illustrations'
 import { APP } from '../messages'
 import { autoSubmitted, storedResult, storedStart } from '../play/storage'
 import { formatKudos } from '../qb/kudos'
+import { SoundOnce } from '../qb/SoundSettings'
+import { playSound, type SoundCue } from '../qb/sound'
 import { QB } from '../qb/messages'
 import { confirmCashReward, confirmDigitalPrize, disputeCashReward, disputeDigitalPrize, openDigitalPrize,
   readAttemptResult, type AttemptResult, type CashView, type DigitalView, type QuestionResult, type QuestionView,
@@ -198,6 +200,7 @@ function CashReward({ cash, attemptId, outcome }: { cash: CashView | null; attem
     mutationFn: () => confirmCashReward(cash!.cashRewardId),
     onSuccess: async () => {
       notify.success(t('cash.confirmed'))
+      playSound('reward')
       await queryClient.invalidateQueries({ queryKey: ['qb', 'attempt-result', attemptId] })
       await queryClient.invalidateQueries({ queryKey: ['qb', 'cash-rewards'] })
     },
@@ -349,6 +352,7 @@ function DigitalPrize({ digital, attemptId, outcome }: { digital: DigitalView | 
     mutationFn: () => confirmDigitalPrize(digital!.digitalPrizeId),
     onSuccess: async () => {
       notify.success(t('digital.confirmed'))
+      playSound('reward')
       await queryClient.invalidateQueries({ queryKey: ['qb', 'attempt-result', attemptId] })
     },
   })
@@ -543,8 +547,14 @@ export function ResultPage({ attemptId }: { attemptId: string }) {
   // A survey (Q12) has no score to show: complete (every question answered) or not, and what was chosen.
   const survey = data.kind === 'SURVEY'
 
+  // Q57: a sound for the result just submitted in this tab (not for an old result opened from the history).
+  const cue: SoundCue | null = !submitted ? null
+    : survey ? (outcome.passed ? 'success' : null)
+      : !outcome.passed ? 'wrong' : outcome.rewardStatus !== 'NONE' ? 'reward' : 'success'
+
   return (
     <section className="flex flex-col gap-4" aria-labelledby="result-title" data-testid="result">
+      <SoundOnce cue={cue} />
       <header className="flex flex-col gap-1">
         <h1 id="result-title" className="text-xl font-semibold">{t('result.title')}</h1>
         {name && <p className="text-muted-foreground" data-testid="result-name">{name}</p>}

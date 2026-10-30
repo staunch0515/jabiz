@@ -43,6 +43,7 @@ import { useMailServer } from './MailServerPage'
 import { MAIL_SERVER_PATH } from './paths'
 import { hrefOf, navigate } from '../qb/router'
 import { useInvitationStatusLabel } from './shared'
+import { playSound } from '../qb/sound'
 
 const PAGE_SIZE = 20
 const STATUS_BADGES: Record<InvitationStatus, 'outline' | 'secondary' | 'warning' | 'success'> = {
@@ -99,6 +100,7 @@ export function InvitationsSection({ publicationId, status }: { publicationId: s
     mutationFn: () => sendInvitations(publicationId),
     onSuccess: async (output) => {
       notify.success(t('publishing.invitations.sent', { queued: output.queued, remaining: output.remainingToday }))
+      playSound('success')
       await refresh()
     },
     onError: (error) => notify.error(problemText(error)),

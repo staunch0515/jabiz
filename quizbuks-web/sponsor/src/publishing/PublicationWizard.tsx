@@ -73,6 +73,7 @@ import { publicationPath, PUBLICATIONS_QUERY } from './paths'
 import { LabelledProblems, PublicationSummary, useAudienceLabel, useDebounced, useDigitalDeliveryLabel, useRegionLabel,
   useRewardMethodLabel, useVersionOf } from './shared'
 import { TiersEditor } from './TiersEditor'
+import { playSound } from '../qb/sound'
 
 export const STEP_COUNT = 4
 
@@ -279,6 +280,7 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
     return submitPublication(publicationId!, revision ?? 0).then(
       async (out) => {
         notify.success(out.status === 'PENDING_REVIEW' ? t('publishing.wizard.submitted') : t('publishing.wizard.published'))
+        playSound('success')
         await queryClient.invalidateQueries({ queryKey: PUBLICATIONS_QUERY })
       },
       (error: unknown) => {
