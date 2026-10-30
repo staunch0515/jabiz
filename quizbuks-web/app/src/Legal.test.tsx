@@ -1,6 +1,7 @@
 import { changeLanguage, configureClient, session } from '@jabiz/client'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { expectAccessible } from '@jabiz/ui/testing'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
 import './messages'
@@ -219,8 +220,22 @@ describe('a visitor', () => {
     server()
     window.history.replaceState(null, '', '/signup')
     render(<App />)
-    expect(await screen.findByTestId('legal-link-TERMS_APP')).toHaveAttribute('href', '/legal/terms')
-    expect(screen.getByTestId('legal-link-PRIVACY')).toHaveAttribute('target', '_blank')
+    const link = await screen.findByTestId('legal-link-TERMS_APP')
+    expect(link).toHaveAttribute('href', '/legal/terms')
+    // No new window: in an installed app it has no way back but closing it.
+    expect(link).not.toHaveAttribute('target')
+    await userEvent.click(link)
+    const sheet = await screen.findByTestId('legal-sheet')
+    expect(await within(sheet).findByTestId('legal-text')).toHaveAttribute('data-version', '1')
+    expect(window.location.pathname).toBe('/signup')
+    await expectAccessible()
+    // Another version shows in the sheet, the address stays.
+    await userEvent.click(within(within(sheet).getByTestId('legal-upcoming')).getByRole('button'))
+    await waitFor(() => expect(within(sheet).getByTestId('legal-text')).toHaveAttribute('data-version', '2'))
+    expect(window.location.search).toBe('')
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByTestId('legal-sheet')).toBeNull())
+    expect(screen.getByTestId('legal-link-PRIVACY')).not.toHaveAttribute('target')
   })
 })
 
@@ -233,7 +248,7 @@ describe('a signed-in taker', () => {
     await waitFor(() => expect(window.location.pathname).toBe('/welcome'))
     // No prompt before the profile: the welcome step accepts.
     expect(screen.queryByTestId('consent-gate')).toBeNull()
-    expect(await screen.findByTestId('legal-link-TERMS_APP')).toHaveAttribute('target', '_blank')
+    expect(await screen.findByTestId('legal-link-TERMS_APP')).toHaveAttribute('aria-haspopup', 'dialog')
     expect(screen.getByTestId('profile-save')).toBeDisabled()
     await userEvent.click(screen.getByTestId('profile-terms'))
     await userEvent.click(screen.getByTestId('profile-save'))
