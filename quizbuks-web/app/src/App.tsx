@@ -110,12 +110,13 @@ function Header({ scan = false }: { scan?: boolean }) {
       <EnvironmentBanner className={ONE_LINE_BANNER} />
       <div className="mx-auto flex max-w-md items-center gap-2 px-4 py-2">
         <Wordmark name={t('brand')} compact className="text-primary mr-auto" />
-        {/* Q52: in the shop, the sponsor's code is scanned here, in the signed-in app. */}
+        {/* Q52: in the shop, the sponsor's code is scanned here, in the signed-in app. Below 400 px the label is
+            for assistive technology only: the name, the button, the appearance and signing out fill a 360 px phone. */}
         {scan && (
           <Button asChild size="sm" variant="outline">
             <Link to={SCAN_PATH} data-testid="scan-open">
               <ScanLine aria-hidden />
-              {tApp('scan.open')}
+              <span className="max-[400px]:sr-only">{tApp('scan.open')}</span>
             </Link>
           </Button>
         )}
