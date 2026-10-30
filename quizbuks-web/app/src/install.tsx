@@ -2,6 +2,7 @@ import { useInstallPrompt } from '@jabiz/client'
 import { PwaInstallBanner } from '@jabiz/ui'
 import { useEffect } from 'react'
 import { nativeShell } from './shell'
+import { BRAND } from './qb/brand'
 
 /*
  * Offering to add the app to the home screen (docs/quizbuks/plans/Q38-install.md): after the first quiz is finished,
@@ -15,7 +16,7 @@ import { nativeShell } from './shell'
  * amending D-Q38-1); the steps for WeChat and QQ are the platform's (17m).
  */
 
-const APP_NAME = 'QuizBuks'
+const APP_NAME = BRAND.name
 /**
  * Set once the app has run installed on this browser (Q41): the business site (same origin, same storage) then lets its
  * "start answering" link open normally, so a browser that captures links into an installed app (desktop Chrome 139+)

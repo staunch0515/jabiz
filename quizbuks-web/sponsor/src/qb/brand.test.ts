@@ -1,14 +1,15 @@
 import { createRequire } from 'node:module'
 import { readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { BRANDS_DIR, brandIds } from '../../../brands/brand.mjs'
 
 /*
- * The brand tokens (brand.css) override the platform's; the platform's own contrast test (theme.test.ts) checks
- * the platform's values, so the overrides are checked here with the platform's values as the fallback. This file
- * is the same in both SPAs (src/qb).
+ * The brand tokens (each brand profile's brand.css, Q54) override the platform's; the platform's own contrast test
+ * (theme.test.ts) checks the platform's values, so every profile's overrides are checked here with the platform's
+ * values as the fallback. This file is the same in both SPAs (src/qb).
  */
-const brand = readFileSync(resolve(import.meta.dirname, 'brand.css'), 'utf8')
+const brands = brandIds().map((id) => [id, readFileSync(join(BRANDS_DIR, id, 'brand.css'), 'utf8')] as const)
 const platform = readFileSync(createRequire(import.meta.url).resolve('@jabiz/ui/theme.css'), 'utf8')
 
 function tokens(css: string, selector: string): Record<string, string> {
@@ -57,7 +58,10 @@ const NON_TEXT: [string, string][] = [
   ['chart-1', 'chart-2'],
 ]
 
-describe.each(['light', 'dark'])('the brand in the %s appearance', (appearance) => {
+const APPEARANCES = brands.flatMap(([id, brand]) => (['light', 'dark'] as const).map((appearance) =>
+  ({ id, brand, appearance })))
+
+describe.each(APPEARANCES)('the brand $id in the $appearance appearance', ({ brand, appearance }) => {
   const selector = appearance === 'light' ? ':root' : '.dark'
   const t = { ...tokens(platform, selector), ...tokens(brand, selector) }
 

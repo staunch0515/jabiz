@@ -78,6 +78,19 @@ jobs:
           pnpm lint
           pnpm typecheck
           pnpm test
+      # Q54: built with another brand profile, neither SPA shows QuizBuks (only the iOS shell's user agent, an id).
+      - name: Another brand profile
+        working-directory: quizbuks-web
+        run: |
+          (cd app && QB_BRAND=sample VITE_JABIZ_ENTRY=app VITE_JABIZ_PWA=on pnpm exec vite build --outDir ../.brand-check/app --emptyOutDir)
+          (cd sponsor && QB_BRAND=sample VITE_JABIZ_ENTRY=sponsor pnpm exec vite build --outDir ../.brand-check/sponsor --emptyOutDir)
+          grep -q '<title>Sample Quiz</title>' .brand-check/app/index.html
+          grep -q '<title>Sample Quiz Sponsor</title>' .brand-check/sponsor/index.html
+          grep -q '"name": "Sample Quiz"' .brand-check/app/manifest.webmanifest
+          cmp -s brands/sample/public/icon-192.png .brand-check/sponsor/icon-192.png
+          if grep -rho '.\{0,20\}QuizBuks.\{0,20\}' .brand-check | grep -v 'QuizBuksApp/ios'; then
+            echo 'QuizBuks is still shown with another brand profile'; exit 1
+          fi
       - name: Shopify embedded pages (S1)
         working-directory: quizbuks-web/shopify
         run: |

@@ -1,5 +1,6 @@
 import { addMessages } from '@jabiz/client'
 import { APP } from '../messages'
+import { BRAND } from '../qb/brand'
 
 /**
  * The inbox's texts, part of the app's namespace `app` (added here, next to the pages that use them). The messages
@@ -22,11 +23,11 @@ const en = {
     readAllDone: 'Everything is marked as read.',
     settings: 'Settings',
     promotions: 'Show promotions',
-    promotionsHint: 'Notices from sponsors and QuizBuks offers. System messages, rewards and reminders always come.',
+    promotionsHint: `Notices from sponsors and ${BRAND.name} offers. System messages, rewards and reminders always come.`,
     unread: 'Unread',
     fromSponsor: 'From {{name}}',
     fromSponsorUnknown: 'From a sponsor',
-    fromQuizbuks: 'From QuizBuks',
+    fromQuizbuks: `From ${BRAND.name}`,
     emptyTitle: 'Nothing here yet',
     empty: 'Rewards, transfers and news appear here.',
     noMatch: 'No message matches.',
@@ -59,11 +60,11 @@ const zh: Texts = {
     readAllDone: '已全部标为已读。',
     settings: '设置',
     promotions: '接收推广',
-    promotionsHint: '商家的通知与 QuizBuks 的推广。系统消息、奖励与提醒总会收到。',
+    promotionsHint: `商家的通知与 ${BRAND.name} 的推广。系统消息、奖励与提醒总会收到。`,
     unread: '未读',
     fromSponsor: '来自 {{name}}',
     fromSponsorUnknown: '来自商家',
-    fromQuizbuks: '来自 QuizBuks',
+    fromQuizbuks: `来自 ${BRAND.name}`,
     emptyTitle: '还没有消息',
     empty: '奖励、转账与新闻会显示在这里。',
     noMatch: '没有符合条件的消息。',
@@ -94,11 +95,11 @@ const ja: Texts = {
     readAllDone: 'すべて既読にしました。',
     settings: '設定',
     promotions: 'プロモーションを受け取る',
-    promotionsHint: 'スポンサーからの通知と QuizBuks のおすすめです。システムのお知らせ、報酬、リマインダーは常に届きます。',
+    promotionsHint: `スポンサーからの通知と ${BRAND.name} のおすすめです。システムのお知らせ、報酬、リマインダーは常に届きます。`,
     unread: '未読',
     fromSponsor: '{{name}} から',
     fromSponsorUnknown: 'スポンサーから',
-    fromQuizbuks: 'QuizBuks から',
+    fromQuizbuks: `${BRAND.name} から`,
     emptyTitle: 'まだメッセージはありません',
     empty: '報酬、送金、お知らせがここに表示されます。',
     noMatch: '該当するメッセージがありません。',

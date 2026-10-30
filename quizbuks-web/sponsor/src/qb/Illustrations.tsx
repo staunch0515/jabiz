@@ -1,10 +1,12 @@
 import { cn } from '@jabiz/ui'
 import type { SVGProps } from 'react'
+import mark from '@qb-brand/mark.svg?raw'
 
 /*
  * QuizBuks's illustrations (docs/quizbuks/plans/Q32-visual-refresh.md): drawn here as inline SVG so that they ship
- * with the app, need no licence and follow the appearance through the brand tokens (qb/brand.css). All are
- * decorative: aria-hidden, the text beside them says what the page is about.
+ * with the app, need no licence and follow the appearance through the brand tokens (the brand profile's brand.css).
+ * All are decorative: aria-hidden, the text beside them says what the page is about. The wordmark's mark is the brand
+ * profile's mark.svg (Q54), inlined so that it takes the same tokens.
  */
 
 type Art = SVGProps<SVGSVGElement> & { className?: string }
@@ -15,26 +17,21 @@ const base = (className?: string) => ({
   className: cn('block', className),
 })
 
-/** The wordmark: a coin with a leaf, then the name. */
+/** The wordmark: the brand's mark, then the name. */
 export function Wordmark({ className, name, compact }: { className?: string; name: string; compact?: boolean }) {
   return (
     <span className={cn('inline-flex items-center gap-2', className)} data-testid="wordmark">
-      <CoinMark className={compact ? 'size-7' : 'size-9'} />
+      <BrandMark className={compact ? 'size-7' : 'size-9'} />
       <span className={cn('font-semibold tracking-tight', compact ? 'text-base' : 'text-2xl')}>{name}</span>
     </span>
   )
 }
 
-/** The coin with a leaf: the app's mark. */
-export function CoinMark({ className, ...rest }: Art) {
+/** The brand profile's mark (its own SVG, written at build time, never anyone's input). */
+export function BrandMark({ className }: { className?: string }) {
   return (
-    <svg viewBox="0 0 48 48" {...base(className)} {...rest}>
-      <circle cx="24" cy="24" r="22" fill="var(--qb-coin)" />
-      <circle cx="24" cy="24" r="17" fill="none" stroke="var(--qb-coin-deep)" strokeWidth="2.5" />
-      <path d="M24 34c-7 0-9-7-9-11 7 0 11 3 11 9 0 .7 0 1.4-.2 2H24z" fill="var(--qb-leaf-deep)" />
-      <path d="M24 34c7 0 9-7 9-11-7 0-11 3-11 9 0 .7 0 1.4.2 2H24z" fill="var(--qb-leaf)" />
-      <path d="M24 33V22" stroke="var(--qb-ink)" strokeWidth="1.6" strokeLinecap="round" />
-    </svg>
+    <span aria-hidden className={cn('block [&>svg]:size-full', className)} data-testid="brand-mark"
+      dangerouslySetInnerHTML={{ __html: mark }} />
   )
 }
 

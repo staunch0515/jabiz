@@ -142,8 +142,8 @@ jobs:
         working-directory: quizbuks-web/e2e
         env:
           STORE_OUT: ${{ runner.temp }}/store
-      # Play's high-resolution icon (512 × 512) is the app's own.
-      - run: mkdir -p "$RUNNER_TEMP/store" && cp quizbuks-web/app/public/icon-512.png "$RUNNER_TEMP/store/icon-512.png"
+      # Play's high-resolution icon (512 × 512) is the app's own: the brand profile's (Q54).
+      - run: mkdir -p "$RUNNER_TEMP/store" && cp "quizbuks-web/brands/${QB_BRAND:-quizbuks}/public/icon-512.png" "$RUNNER_TEMP/store/icon-512.png"
       - uses: actions/upload-artifact@v6
         with:
           name: quizbuks-store-screenshots

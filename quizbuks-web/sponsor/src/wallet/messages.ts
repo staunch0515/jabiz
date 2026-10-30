@@ -1,5 +1,6 @@
 import { addMessages } from '@jabiz/client'
 import { SPONSOR } from '../messages'
+import { BRAND } from '../qb/brand'
 
 /**
  * The wallet's texts, part of the console's namespace `sponsor` (added here, next to the pages that use them). The
@@ -72,7 +73,7 @@ const en = {
       newTopUp: 'New top-up',
     },
     manual: {
-      kinds: { PAID_OUTSIDE: 'Paid outside the system', GRANT: 'Granted by QuizBuks' },
+      kinds: { PAID_OUTSIDE: 'Paid outside the system', GRANT: `Granted by ${BRAND.name}` },
     },
     bank: {
       method: 'How do you pay?',
@@ -186,7 +187,7 @@ const zh: typeof en = {
       newTopUp: '重新充值',
     },
     manual: {
-      kinds: { PAID_OUTSIDE: '系统外收款', GRANT: 'QuizBuks 赠送' },
+      kinds: { PAID_OUTSIDE: '系统外收款', GRANT: `${BRAND.name} 赠送` },
     },
     bank: {
       method: '支付方式',
@@ -300,7 +301,7 @@ const ja: typeof en = {
       newTopUp: '新しくチャージ',
     },
     manual: {
-      kinds: { PAID_OUTSIDE: 'システム外の入金', GRANT: 'QuizBuks からの付与' },
+      kinds: { PAID_OUTSIDE: 'システム外の入金', GRANT: `${BRAND.name} からの付与` },
     },
     bank: {
       method: 'お支払い方法',

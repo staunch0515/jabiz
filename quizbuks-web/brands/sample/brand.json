@@ -1,0 +1,12 @@
+{
+  "name": "Sample Quiz",
+  "description": {
+    "en": "A brand profile to copy for another brand",
+    "zh": "新品牌可复制的品牌档案",
+    "ja": "新しいブランド用の見本のブランドプロファイル"
+  },
+  "themeColor": "#4338ca",
+  "backgroundColor": "#ffffff",
+  "supportEmail": "support@example.com",
+  "siteUrl": "https://quiz.example.com"
+}

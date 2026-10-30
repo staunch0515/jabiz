@@ -1,10 +1,12 @@
 /*
  * The platform's theme (decision D34): Tailwind with the semantic tokens of @jabiz/ui, whose own sources it scans;
  * Tailwind scans this project's sources itself. Colours come from the tokens only, in both appearances; the brand
- * (emerald, Q32) overrides --primary / --ring and the others in qb/brand.css after the import and passes axe in both.
+ * (Q32) overrides --primary / --ring and the others in the brand profile's brand.css (@qb-brand, Q54) after the import
+ * and passes axe in both.
  */
 @import '@jabiz/ui/theme.css';
-@import './qb/brand.css';
+@import '@qb-brand/brand.css';
+@import './qb/theme.css';
 
 html,
 body,

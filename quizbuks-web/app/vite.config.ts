@@ -3,8 +3,13 @@ import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { jabizSpa } from '@jabiz/client/vite'
 import { readFileSync } from 'node:fs'
-import { defineConfig } from 'vite'
+import { defineConfig, searchForWorkspaceRoot } from 'vite'
+import { loadBrand } from '../brands/brand.mjs'
+import { qbBrand } from '../brands/vite.mjs'
 import { buildTime } from './build-time.ts'
+
+// The brand profile chosen by QB_BRAND (Q54): its name and colours in the manifest, its icons, colours and mark.
+const brand = loadBrand()
 
 // The About page (U-74) shows the app's version (package.json) and when it was built (the sources' time: build-time.ts).
 const version = (JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as { version: string })
@@ -20,13 +25,14 @@ export default defineConfig({
     __QB_APP_BUILT_AT__: JSON.stringify(buildTime()),
   },
   plugins: [
+    qbBrand({ brand, allow: [searchForWorkspaceRoot(process.cwd())] }),
     jabizSpa({
       pwa: {
-        name: 'QuizBuks',
-        shortName: 'QuizBuks',
-        description: 'Answer quizzes, earn Kudos',
-        themeColor: '#047857',
-        backgroundColor: '#ffffff',
+        name: brand.name,
+        shortName: brand.shortName,
+        description: brand.description.en,
+        themeColor: brand.themeColor,
+        backgroundColor: brand.backgroundColor,
         icons: [
           { src: 'icon-192.png', sizes: '192x192' },
           { src: 'icon-512.png', sizes: '512x512' },
