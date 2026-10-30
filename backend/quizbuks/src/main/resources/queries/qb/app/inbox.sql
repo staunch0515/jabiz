@@ -25,6 +25,7 @@ params:
   itemKind: { kind: { type: text, maxLength: 10 }, description: "One item: MESSAGE or BROADCAST" }
   itemId:   { kind: { type: text, maxLength: 36 }, description: "One item: its id" }
   enabled:  { kind: { type: bool }, description: "false: nothing (the mark process runs one inbox of the two)" }
+  languages: { kind: { type: text, maxLength: 20 }, description: "Only the sponsors' notices about publications in these languages (Q59b), comma-separated (ja, zh, en): the taker's switches, or their interface language; all when not given" }
 results:
   itemKind:      { kind: { type: text, maxLength: 10 } }
   itemId:        { kind: { type: text, maxLength: 36 } }
@@ -133,6 +134,9 @@ items AS (
       AND (f.{{QbBroadcastFeed.senderKind}} <> 'SPONSOR'
            OR c.{{QbPublicationCard.status}} IN ('SCHEDULED', 'LIVE')
               AND string_to_array(c.{{QbPublicationCard.regions}}, ',') && string_to_array(me.me_regions, ',')
+              -- Q59b: a sponsor's notice is about a publication: only those of the languages the taker sees.
+              AND (CAST(:languages AS text) IS NULL
+                   OR c.{{QbPublicationCard.language}} = ANY(string_to_array(CAST(:languages AS text), ',')))
               AND NOT EXISTS (SELECT 1 FROM {{QbPublicationOwner}} own
                               WHERE own.{{QbPublicationOwner.publicationId}} = f.{{QbBroadcastFeed.publicationId}}))
 )

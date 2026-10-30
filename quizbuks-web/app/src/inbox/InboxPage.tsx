@@ -21,9 +21,11 @@ import { useEffect, useId, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
 import { pickText } from '../qb/legal'
+import { shownLanguages } from '../qb/api'
 import { QB } from '../qb/messages'
 import { problemText } from '../qb/problems'
 import { Link } from '../qb/router'
+import { useSoundSetting } from '../qb/SoundSettings'
 import {
   INBOX_QUERY,
   STATE_QUERY,
@@ -124,9 +126,13 @@ export function InboxPage() {
   useEffect(() => {
     void queryClient.invalidateQueries({ queryKey: UNREAD_QUERY })
   }, [queryClient])
+  // Q59b: as the home, the sponsors' notices of the languages the taker sees (after reading the settings).
+  const settings = useSoundSetting()
+  const languages = shownLanguages(settings.data, i18n.language)
   const inbox = useInfiniteQuery({
-    queryKey: [...INBOX_QUERY, 'list', at, filter, i18n.language],
-    queryFn: ({ pageParam }) => readInbox(i18n.language, filter, pageParam, INBOX_PAGE),
+    queryKey: [...INBOX_QUERY, 'list', at, filter, i18n.language, languages],
+    queryFn: ({ pageParam }) => readInbox(i18n.language, filter, pageParam, INBOX_PAGE, languages),
+    enabled: !settings.isPending,
     initialPageParam: 0,
     getNextPageParam: (last) => (last.items.length < INBOX_PAGE ? undefined : last.offset + INBOX_PAGE),
   })

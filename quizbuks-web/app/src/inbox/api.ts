@@ -151,10 +151,12 @@ function item(row: Row): InboxItem {
  * expired is out of the feed).
  */
 export async function readInbox(language: string, filter: InboxFilter, offset: number,
-  limit: number): Promise<QueryPage<InboxItem>> {
+  limit: number, languages?: readonly string[]): Promise<QueryPage<InboxItem>> {
   const page = await runQuery<Row>(INBOX_TEMPLATE.inbox, {
     params: {
       lang: language.split('-')[0],
+      // Q59b: the sponsors' notices about publications of the languages the taker sees only.
+      languages: languages && languages.length > 0 ? languages.join(',') : undefined,
       category: filter.category,
       unread: filter.unread || undefined,
       q: filter.q || undefined,
@@ -176,8 +178,9 @@ export async function readInboxItem(kind: ItemKind, id: string): Promise<InboxIt
   return page.items[0] ? item(page.items[0]) : null
 }
 
-export async function readUnread(): Promise<Unread> {
-  const row = (await runQuery<Row>(INBOX_TEMPLATE.unread, { params: {}, limit: 1 })).items[0] ?? {}
+export async function readUnread(languages?: readonly string[]): Promise<Unread> {
+  const params = languages && languages.length > 0 ? { languages: languages.join(',') } : {}
+  const row = (await runQuery<Row>(INBOX_TEMPLATE.unread, { params, limit: 1 })).items[0] ?? {}
   const messages = num(row.messages)
   const broadcasts = num(row.broadcasts)
   return { messages, broadcasts, total: messages + broadcasts }

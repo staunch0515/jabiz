@@ -18,7 +18,7 @@ public final class InvitationMails {
 
     public static final MailTemplate INVITATION = MailTemplate.define("qb.invitation", t -> t
         .category(MailCategory.NOTIFICATION).entries("app")
-        .param("company", "publicationName", "quizTitle", "maxReward", "endAt")
+        .param("company", "publicationName", "quizTitle", "maxReward", "endAt", "lang")
         .signInLink(LINK_VALIDITY));
 
     private InvitationMails() {}

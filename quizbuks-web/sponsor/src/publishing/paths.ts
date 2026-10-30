@@ -21,12 +21,15 @@ export const publicationQuery = (publicationId: string) => [...PUBLICATIONS_QUER
 
 /**
  * The link a sponsor shares (Q15): the app's page of the publication, which anybody can open; before signing in it
- * shows the quiz and asks for an e-mail address only. The app is under this site's /taker/ (Q30).
+ * shows the quiz and asks for an e-mail address only. The app is under this site's /taker/ (Q30). It carries the
+ * quiz's language (Q59b): a visitor new to the app sees it in that language.
  */
 export const APP_BASE = '/taker/'
 
-export function shareLink(publicationId: string, origin: string = window.location.origin): string {
-  return `${origin}${APP_BASE}p/${encodeURIComponent(publicationId)}`
+export function shareLink(publicationId: string, language?: string | null,
+  origin: string = window.location.origin): string {
+  const page = `${origin}${APP_BASE}p/${encodeURIComponent(publicationId)}`
+  return language ? `${page}?lang=${encodeURIComponent(language)}` : page
 }
 
 /**

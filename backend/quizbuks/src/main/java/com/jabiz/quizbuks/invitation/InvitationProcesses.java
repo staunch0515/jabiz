@@ -389,6 +389,8 @@ public final class InvitationProcesses {
         params.put("endAt", ctx -> values.time(Invitations.first(ctx, CARD).get("endAt")));
         params.put("entry", ctx -> ENTRY);
         params.put("to", ctx -> returnPath(appPath, Invitations.first(ctx, LIST).get("publicationId")));
+        // Q59b: the quiz's language, which the app takes for someone new to it (the link's ?lang=).
+        params.put("lang", ctx -> Invitations.first(ctx, CARD).get("language"));
         return params;
     }
 

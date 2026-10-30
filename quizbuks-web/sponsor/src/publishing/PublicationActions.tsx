@@ -11,7 +11,7 @@ import {
   Label,
   notify,
 } from '@jabiz/ui'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Copy, Link2, Pause, Play, QrCode, Trash2, Undo2 } from 'lucide-react'
 import { useId, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -31,11 +31,23 @@ import {
   type Publication,
 } from './api'
 import { publicationPath, PUBLICATIONS_PATH, PUBLICATIONS_QUERY, shareLink } from './paths'
+import { readVersion } from '../content/api'
 import { PublicationQrDialog } from './PublicationQrDialog'
 
+/**
+ * The language of the publication's quiz (Q59b), which its links carry: its version's. Null while it is read, or
+ * when the quiz was removed (the link then carries none).
+ */
+export function usePublicationLanguage(versionId: string | null): string | null {
+  const version = useQuery({ queryKey: ['qb', 'quiz-version', versionId], queryFn: () => readVersion(versionId!),
+    enabled: versionId !== null, staleTime: Infinity })
+  return version.data?.language ?? null
+}
+
 /** Copies the share link, or says it when the browser does not let the page copy. */
-async function copyShareLink(publicationId: string, t: (key: string, options?: Record<string, unknown>) => string) {
-  const link = shareLink(publicationId)
+async function copyShareLink(publicationId: string, language: string | null,
+  t: (key: string, options?: Record<string, unknown>) => string) {
+  const link = shareLink(publicationId, language)
   try {
     await navigator.clipboard.writeText(link)
     notify.success(t('publishing.actions.shareCopied', { link }))
@@ -121,6 +133,7 @@ export function PublicationActions({ publication, revision, disabled, onStale }:
   const [showingQr, setShowingQr] = useState(false)
   const can = actionsOf(publication.status, publication.pausedBy, publication.endReason)
   const id = publication.publicationId
+  const language = usePublicationLanguage(publication.versionId)
   const shareable = publication.status === 'LIVE' || publication.status === 'SCHEDULED'
 
   /** Runs a change; afterwards the lists and this page read again. A failure keeps the confirmation open. */
@@ -176,7 +189,7 @@ export function PublicationActions({ publication, revision, disabled, onStale }:
           } />
       )}
       {shareable && (
-        <Button variant="outline" data-testid="publication-share" onClick={() => void copyShareLink(id, t)}>
+        <Button variant="outline" data-testid="publication-share" onClick={() => void copyShareLink(id, language, t)}>
           <Link2 aria-hidden />
           {t('publishing.actions.share')}
         </Button>
@@ -207,7 +220,10 @@ export function PublicationActions({ publication, revision, disabled, onStale }:
           } />
       )}
       {copying && <CopyDialog publication={publication} open onOpenChange={setCopying} />}
-      {showingQr && <PublicationQrDialog publicationId={id} name={publication.name} open onOpenChange={setShowingQr} />}
+      {showingQr && (
+        <PublicationQrDialog publicationId={id} language={language} name={publication.name} open
+          onOpenChange={setShowingQr} />
+      )}
     </div>
   )
 }

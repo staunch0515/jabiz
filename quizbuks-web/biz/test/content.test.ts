@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { LANGUAGES, PAGES, contentOf } from '../src/content/index.mjs'
-import { renderPage, pagePath } from '../src/templates/page.mjs'
+import { renderPage, pagePath, withLanguage } from '../src/templates/page.mjs'
 
 /** Every key path of an object, arrays by length. */
 function shape(value: unknown, prefix = ''): string[] {
@@ -53,6 +53,17 @@ describe('the rendered pages', () => {
     }
   })
 
+  it('open the app in the page\'s language, and each try-it quiz in its own (Q59b)', () => {
+    const ja = renderPage({ language: 'ja', page: 'home', content: contentOf('ja'), base: '/biz/', tryQuizzes, assets, siteUrl })
+    expect(ja).toContain('href="/taker/login?lang=ja"')
+    expect(ja).toContain('href="/taker/signup?lang=ja"')
+    expect(ja).not.toMatch(/href="\/taker\/[^"?]*"/)
+    // The Chinese quiz opens in Chinese on the Japanese page too.
+    expect(ja).toContain('href="https://quizbuks.com/taker/p/abc?lang=zh"')
+    expect(withLanguage('https://quizbuks.com/taker/p/abc?lang=en', 'zh')).toBe('https://quizbuks.com/taker/p/abc?lang=en')
+    expect(withLanguage('/taker/help?x=1#faq', 'en')).toBe('/taker/help?x=1&lang=en#faq')
+  })
+
   it('carry the wordmark, and the drawings only as decoration (Q32)', () => {
     const home = renderPage({ language: 'en', page: 'home', content: contentOf('en'), base: '/biz/', tryQuizzes, assets, siteUrl })
     // The header and the footer: the coin beside the name, no image file.
@@ -74,7 +85,7 @@ describe('the rendered pages', () => {
       const content = contentOf(language)
       const html = renderPage({ language, page: 'home', content, base: '/biz/', tryQuizzes, assets, siteUrl })
       // The taker's opens the phone-sized window, the merchant's a new tab, as the sign-ups do.
-      expect(html.match(/href="\/taker\/login" data-signup="taker"/g)).toHaveLength(2)
+      expect(html.match(new RegExp(`href="/taker/login\\?lang=${language}" data-signup="taker"`, 'g'))).toHaveLength(2)
       expect(html.match(/href="\/sponsor\/login" data-signup="sponsor" target="_blank" rel="noopener"/g)).toHaveLength(2)
       expect(html).toContain(content.signIn.taker)
       expect(html).toContain(content.signIn.sponsor)
@@ -109,7 +120,7 @@ describe('the rendered pages', () => {
 
   it('show the try-it quiz as a button and a QR code when given, a placeholder otherwise', () => {
     const html = renderPage({ language: 'en', page: 'home', content: contentOf('en'), base: '/biz/', tryQuizzes, assets, siteUrl })
-    expect(html).toContain('href="https://quizbuks.com/taker/p/abc"')
+    expect(html).toContain('href="https://quizbuks.com/taker/p/abc?lang=zh"')
     expect(html).toContain('src="/biz/qr-zh.png"')
     expect(html.match(/QR code coming soon/g)!.length).toBeGreaterThanOrEqual(2)
     expect(html).toContain('Coming soon')
