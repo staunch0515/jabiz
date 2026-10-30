@@ -1,7 +1,8 @@
 import { Badge, CopyButton, DataTable, UI_NAMESPACE, type ColumnDef } from '@jabiz/ui'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
-import { useLocalPage } from '../components/useLocalPage'
+import { ListSearch } from '../components/ListSearch'
+import { useLocalList } from '../components/useLocalList'
 import AdminPage from '../layout/AdminPage'
 import { useDatasets } from '../meta/hooks'
 import { datasetTestId } from '../meta/references'
@@ -13,13 +14,20 @@ import { paths } from './paths'
  * frontend code, whether or not a menu item points at it.
  */
 export default function DatasetCatalogPage() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const datasets = useDatasets()
-  const page = useLocalPage(datasets.data)
+  // Phase 17w: searched by name and id, sorted by either; by name at first.
+  const list = useLocalList(datasets.data, {
+    text: (d) => [d.label, d.id],
+    sortBy: { label: (d) => d.label, id: (d) => d.id },
+    defaultSort: [{ id: 'label', desc: false }],
+    locale: i18n.language,
+  })
 
   const columns: ColumnDef<DatasetEntry, unknown>[] = [
     {
       id: 'label',
+      accessorFn: (d) => d.label,
       header: t('catalog.entity'),
       cell: ({ row: { original: d } }) => (
         <Link to={paths.dataset(d.id)} data-testid={datasetTestId(d)} className="text-primary font-medium hover:underline">
@@ -29,6 +37,7 @@ export default function DatasetCatalogPage() {
     },
     {
       id: 'id',
+      accessorFn: (d) => d.id,
       header: t('catalog.id'),
       cell: ({ row: { original: d } }) => (
         <span className="inline-flex items-center gap-1">
@@ -39,6 +48,7 @@ export default function DatasetCatalogPage() {
     },
     {
       id: 'traits',
+      enableSorting: false,
       header: () => <span className="sr-only">{t('catalog.traits')}</span>,
       cell: ({ row: { original: d } }) => (
         <span className="flex flex-wrap gap-1">
@@ -53,14 +63,14 @@ export default function DatasetCatalogPage() {
 
   return (
     <AdminPage title={t('catalog.datasetsTitle')}>
+      <ListSearch value={list.query} onChange={list.setQuery} matched={list.matched} total={list.total} />
       <DataTable
         label={t('catalog.datasetsTitle')}
         columns={columns}
         getRowId={(d) => d.id}
         loading={datasets.isLoading}
-        empty={t('catalog.empty')}
-        {...page.paging}
-        data={page.data}
+        empty={list.total > 0 ? t('list.noMatch') : t('catalog.empty')}
+        {...list.table}
       />
     </AdminPage>
   )

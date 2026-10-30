@@ -21,6 +21,8 @@ import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router'
 import { exportRun, type ExportFormat } from '../api/reports'
 import type { components } from '@jabiz/client'
+import { ListSearch } from '../components/ListSearch'
+import { useLocalList } from '../components/useLocalList'
 import AdminPage from '../layout/AdminPage'
 
 type RunSummary = components['schemas']['RunSummary']
@@ -54,13 +56,20 @@ function VerdictBadge({ runId }: { runId: string }) {
  * only runs the user may read.
  */
 export default function ReportArchivePage() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const [searchParams] = useSearchParams()
   const template = searchParams.get('template') ?? undefined
   const [verdicts, setVerdicts] = useState<Record<string, Verification>>({})
   const runs = useQuery({
     queryKey: ['report-runs', template],
     queryFn: () => unwrap(api.GET('/api/reports/runs', { params: { query: { template, limit: 200 } } })),
+  })
+  // Phase 17w: the latest runs searched and sorted here, newest first at first.
+  const list = useLocalList(runs.data, {
+    text: (run) => [run.title, run.period, run.issuedBy, run.contentHash],
+    sortBy: { title: (run) => run.title, issued: (run) => run.issuedTime, rows: (run) => run.rowCount },
+    defaultSort: [{ id: 'issued', desc: true }],
+    locale: i18n.language,
   })
   useEffect(() => {
     if (runs.error) notify.error(runs.error instanceof ApiError ? runs.error.display : String(runs.error))
@@ -87,6 +96,7 @@ export default function ReportArchivePage() {
     return [
       {
         id: 'title',
+        accessorFn: (run) => run.title,
         header: t('reports.archive.report'),
         cell: ({ row: { original: run } }) => (
           <span className="flex flex-col">
@@ -97,6 +107,7 @@ export default function ReportArchivePage() {
       },
       {
         id: 'issued',
+        accessorFn: (run) => run.issuedTime,
         header: t('reports.archive.issued'),
         cell: ({ row: { original: run } }) => (
           <span className="flex flex-col">
@@ -110,6 +121,7 @@ export default function ReportArchivePage() {
       },
       {
         id: 'rows',
+        accessorFn: (run) => run.rowCount,
         header: t('reports.archive.rows'),
         meta: { className: 'text-right tabular-nums' },
         cell: ({ row }) => row.original.rowCount,
@@ -192,12 +204,13 @@ export default function ReportArchivePage() {
       breadcrumb={[{ label: t('nav.reports'), to: '/reports' }, { label: t('reports.archive.title') }]}
       description={template && <code className="font-mono text-xs">{template}</code>}
     >
-      <div data-testid="report-archive">
+      <div className="flex flex-col gap-4" data-testid="report-archive">
+        <ListSearch value={list.query} onChange={list.setQuery} matched={list.matched} total={list.total} />
         <VerdictsContext.Provider value={verdicts}>
           <DataTable
             label={t('reports.archive.title')}
             columns={columns}
-            data={runs.data ?? []}
+            {...list.table}
             getRowId={(run) => run.runId ?? ''}
             loading={runs.isLoading}
           />

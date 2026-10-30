@@ -100,7 +100,8 @@ public class ApprovalEntities {
         eb.listView("default", lv -> lv
             .columns("userId", "subject", "maxValue")
             .filters("userId", "subject")
-            .sorts("subject"));
+            .sorts("subject", "userId", "maxValue")
+            .defaultSort("subject", true));
     });
 
     public static final EntityDefinition SOD = EntityDefinition.define(SOD_RULE, eb -> {
@@ -145,8 +146,9 @@ public class ApprovalEntities {
         eb.listView("default", lv -> lv
             .columns("targetEntity", "changeAction", "status", "reason", "proposedBy", "publishedBy",
                 "effectiveTime")
-            .filters("targetEntity", "status", "proposedBy")
-            .sorts("status"));
+            .filters("targetEntity", "status", "proposedBy", "publishedBy", "effectiveTime")
+            .sorts("effectiveTime", "status", "targetEntity")
+            .defaultSort("effectiveTime", false));
     });
 
     public static final EntityDefinition APPROVAL_REQUEST = EntityDefinition.define(REQUEST, eb -> {
@@ -170,9 +172,10 @@ public class ApprovalEntities {
         eb.field("reference", f -> f.physicalColumn("reference").immutable(true).asText(100));
         eb.temporal(t -> t.allowScheduled(false));
         eb.listView("default", lv -> lv
-            .columns("subject", "entityId", "status", "currentLevel", "preparerId")
-            .filters("subject", "entityId", "status", "preparerId")
-            .sorts("subject", "status"));
+            .columns("subject", "entityId", "reference", "status", "currentLevel", "preparerId", "effectStartTime")
+            .filters("subject", "entityId", "reference", "status", "preparerId")
+            .sorts("subject", "status", "effectStartTime")
+            .defaultSort("effectStartTime", false));
     });
 
     public static final EntityDefinition APPROVAL_DECISION = EntityDefinition.define(DECISION, eb -> {

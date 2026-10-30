@@ -163,6 +163,7 @@ frontend/                   pnpm 工作区（pnpm-workspace.yaml：packages/*）
 | `/auth/password-reset[?entry=&token=]` | 找回密码（10 §15.7）：无令牌时输入邮箱申请（对任何邮箱同样回答）；有令牌时设置新密码，完成后到入口的 `app-path` 登录。登录页有"忘记密码"链接。三个 `/auth/*` 页读出令牌后即从地址栏去掉它，打开期间不发送 referrer |
 | `/account/security` | 安全设置：由各节组成，节的顺序由页面中的数组 `ACCOUNT_SECTIONS` 声明（每节一个 `<section aria-labelledby>` 加 `Card`，测试 id `account-section-<名>`）：两步验证（`@jabiz/ui` 的 `MfaSettings`，10 §9：状态、剩余恢复码数、未绑定时绑定，二维码用 `qrcode` 绘制在 canvas 上，另显示密钥；示范门户的账户页也用它）、改密码（`ChangePasswordForm`，10 §15.8）、本人当前入口的会话（`SessionList`，10 §15.9）、关联的外部账号（`LinkedIdentities`，10 §12，16f-1；只在后台入口提供了身份提供方时显示——与登录页同一个 `/api/auth/oidc/providers` 查询——节可声明 `shown`；关联完成后 OIDC 回调页经路由状态把结果带回本页）、邮件（`MailPreferences`，18 §5.6，16s：后台入口的可退订通知与邮件语言）；新的一节只需往数组里加一项；从页头用户菜单进入 |
 | `/processes`、`/processes/:name/:version` | 流程目录与由输入 Schema 生成的表单（嵌套 record → 分组，record 列表 → 可增减的行）；每次打开表单生成一个 `Idempotency-Key`，成功后更换 |
+| 浏览器中的整份列表（17w） | 数据目录、流程目录、导入目录、报表目录与最近的运行（导入记录、报表存档、单据）在浏览器中搜索（`ListSearch`：每个词都要出现，不分大小写与重音）与按列排序（`useLocalList`，按语言的排序规则、数字按大小，空值总在最后），再分页；服务端分页的列表（数据视图、报表）照旧由列表视图的 `sorts` / `filters` 决定 |
 
 - 布局（`@jabiz/ui` 的侧栏外壳，15a）：服务端菜单（`SecMenu`，已按权限过滤、按语言命名）在前，其后是应用扩展的菜单项（第 9 节），再后是两个目录与"报表"（有报表时）；语言切换记在 `localStorage`（仅本机偏好）。
 - 全部页面以 `@jabiz/ui` 构建（15b–15c），用 `AdminPage`（页头、唯一的 `<h1>`、面包屑：数据 › 实体（› 历史）、流程 › 流程名、报表 › 报表名、导入 › 导入名），
@@ -230,7 +231,7 @@ frontend/                   pnpm 工作区（pnpm-workspace.yaml：packages/*）
 ```
 <应用目录>/admin-extension/            （例：backend/app/admin-extension/、finance-web/）
   tsconfig.json                        {"extends": "<相对路径>/frontend/tsconfig.extension.json", "include": ["src"]}
-  src/index.tsx                        export default defineExtension({ routes, menu, messages, home })
+  src/index.tsx                        export default defineExtension({ routes, menu, messages, home, brand })
   src/…Page.tsx、src/…test.tsx          页面与测试；只 import '@jabiz/admin'（测试另可 '@jabiz/admin/testing'）与平台前端已有的第三方包
 ```
 
@@ -241,6 +242,7 @@ frontend/                   pnpm 工作区（pnpm-workspace.yaml：packages/*）
 | `menu` | 排在服务端菜单之后；`label` 是扩展文案的键；`permission` 只决定是否显示；子项全部不可见的分组不显示 |
 | `messages` | 每种界面语言一份，放在 i18next 命名空间 `app`（`useTranslation(EXTENSION_NAMESPACE)`），不覆盖平台文案 |
 | `home` | 登录后（没有要返回的页面时）、根路径与未知路径的落点；缺省 `/data` |
+| `brand` | 应用的名称与标志（17v）：`name`（一个，或按语言；缺的语言用给出的第一个）、`logo`、`favicon`（扩展 import 的图片）。登录卡片、外框左上角、浏览器标签的标题与图标都用它；配色由扩展 import 的样式表覆盖主题 token（D34）。没有时为平台的名称 |
 | 可用的平台内容 | 只有 `@jabiz/admin`（`frontend/src/lib/index.ts`）：`api` / `unwrap` / `ApiError`、`runQuery`（SQL 模板）、`runProcess`（流程，自动带幂等键）、`useAuth`、元数据 hooks、`EntityFormDrawer` 等通用组件、`UserName`（用户编号显示为名字，10 §14）、格式化函数；测试另有 `@jabiz/admin/testing`（`frontend/src/lib/testing.ts`，16w-1）：`expectAccessible(root?)` 与 `WCAG_TAGS`，即 `@jabiz/ui/testing` 的，亮暗两种外观过 axe（§11）。它同属 D22 的契约，只用于测试：带入 Vitest 与 vitest-axe，`@jabiz/admin` 与平台前端的生产源码都不引用它（`src/lib/testing.test.ts`），生产包里没有 |
 | 检查 | 启动时 `checkedExtension` 一次报告全部问题并停止；`pnpm build` 先对扩展做类型检查；`pnpm ext:typecheck / ext:lint / ext:test / ext:check`（lint 另加规则：拒绝引用 `frontend/` 下的路径、`virtual:jabiz-extension` 与 antd / `@ant-design/*`（平台前端自己的 lint 用同一条，15d）；16w-1 起（W-7）拒绝 `@jabiz/ui`、`@jabiz/ui/*`、`@jabiz/client`、`@jabiz/client/*`（提示经 `@jabiz/admin`）与 `@jabiz/ui/testing`（提示 `@jabiz/admin/testing`），`@jabiz/admin/testing` 只许在测试（`*.test.*`、`*.spec.*` 与 `test/` 目录下的辅助文件）中——只拒绝 D22 本来就不允许的；规则对 `import()`、`require()`、`export … from` 与 `.js` / `.jsx` / `.mjs` / `.cjs` 文件同样适用。`ext:check` 另有 `bundle` 步骤：带扩展构建到临时目录，读回 `assets/*.js`，有 Vitest、`@vitest/*`、vitest-axe 或 axe-core 即失败；通用后台的每次构建由 Vite 插件 `noTestCodeInBundle`（`scripts/bundle-check.mjs`）同样检查）。菜单项的 `icon` 是 lucide 图标组件（`icon: Boxes`），菜单类型是平台的 `ShellMenuItem` |
 
@@ -314,7 +316,7 @@ jabizApp {
   `SignUpForm` + `SignUpSent`（邮箱、两次密码、显示名、邮件语言，应用的附加字段经 `extra` 插槽；202 后一律提示查收邮件并可重发）、
   `MailLinkPage`（按路径末段分派到 `VerifyEmailPanel`、`JoinPanel`、`PasswordResetConfirm`，无令牌的 `password-reset` 为 `PasswordResetRequest`）、
   `MfaCodeStep`、`MfaEnrollment`、`MfaSettings`（本人的两步验证：状态与剩余恢复码数，未绑定时绑定；默认调用 `/api/auth/mfa*`，可经属性替换；`refreshKey` 改变即重读；15c-2，后台安全设置与示范门户共用）、`StepUpProvider`、
-  `OidcButtons`（按提供方的 `kind` 画标志，Google 为品牌指南的四色"G"（D44），16f-1；Facebook 与 LINE 的标志与 `layout="icons"`（"其他方式登录"下的一排圆形图标按钮，`SignInForm` 的 `oidcLayout`）见 D61 第 5 条，16zk）、`OidcCallback`（登录与本人关联共用：按
+  `OidcButtons`（按提供方的 `kind` 画标志，Google 为品牌指南的四色"G"（D44），16f-1；Facebook 与 LINE 的标志与 `layout="icons"`（"其他方式登录"下的一排圆形图标按钮，`SignInForm` 的 `oidcLayout`）见 D61 第 5 条，16zk；`purpose="signUp"` 时写作"其他方式注册"，`SignUpForm` 的 `oidc` 把它放进注册卡片，`note` 是卡片底部的小字，17u）、`OidcCallback`（登录与本人关联共用：按
   `startIdentityLink` 记下的用途完成关联后调用 `onLinked`；403 `OIDC_ACCOUNT_EXISTS` 时说明用原方式登录后关联）、`LinkedIdentities`（本人的外部账号：列表、关联（需要时先问当前密码）、
   确认后解除；10 §12，16f-1）、`ChangePasswordForm`（`POST /api/auth/account/password`，16m）、
   `SessionList`（本人当前入口的有效会话：设备、地址、最近使用与登录时间，本机标记；确认后结束单个会话（本机即退出登录）或"退出其他全部设备"，

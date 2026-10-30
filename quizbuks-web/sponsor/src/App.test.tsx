@@ -151,7 +151,11 @@ describe('a visitor', () => {
       .toEqual(['Google', 'Facebook', 'LINE'])
     await userEvent.click(screen.getByTestId('sign-up-link'))
     await waitFor(() => expect(window.location.pathname).toBe('/signup'))
-    const signUp = await screen.findByTestId('signup-providers')
+    // In the sign-up card, as on the sign-in page, under the words of signing up; with the terms' note (17u).
+    const signUp = await screen.findByTestId('oidc-icons')
+    expect(screen.getByTestId('sign-up')).toContainElement(signUp)
+    expect(signUp).toHaveTextContent('Other ways to sign up')
+    expect(screen.getByTestId('sign-up')).toContainElement(screen.getByTestId('signup-terms'))
     expect(await within(signUp).findByRole('button', { name: 'LINE' })).toHaveAttribute('data-kind', 'line')
   })
 

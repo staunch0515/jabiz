@@ -17,6 +17,8 @@ import { downloadDocument } from '../api/documents'
 import type { components } from '@jabiz/client'
 import DocumentDeliveries from '../components/DocumentDeliveries'
 import SendDocumentModal from '../components/SendDocumentModal'
+import { ListSearch } from '../components/ListSearch'
+import { useLocalList } from '../components/useLocalList'
 import AdminPage from '../layout/AdminPage'
 
 type DocumentSummary = components['schemas']['DocumentSummary']
@@ -59,7 +61,7 @@ function VerdictBadges({ runId }: { runId: string }) {
  * e-mail, each row opening onto the addresses it went to. The server lists only documents the user may read.
  */
 export default function DocumentsPage() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const [searchParams] = useSearchParams()
   const layout = searchParams.get('layout') ?? undefined
   const subject = searchParams.get('subject') ?? undefined
@@ -72,6 +74,15 @@ export default function DocumentsPage() {
   const runs = useQuery({
     queryKey: ['documents', 'runs', layout, subject],
     queryFn: () => unwrap(api.GET('/api/documents/runs', { params: { query: { layout, subject, limit: 200 } } })),
+  })
+  // Phase 17w: the latest documents searched and sorted here, newest first at first.
+  const list = useLocalList(runs.data, {
+    text: (run) => [run.title, run.documentNo, run.layoutId, run.subjectEntity, run.subjectId, run.issuedBy,
+      ...(run.recipients ?? [])],
+    sortBy: { title: (run) => `${run.title ?? ''} ${run.documentNo ?? ''}`, subject: (run) => run.subjectId,
+      issued: (run) => run.issuedTime, pages: (run) => run.pages },
+    defaultSort: [{ id: 'issued', desc: true }],
+    locale: i18n.language,
   })
   useEffect(() => {
     if (runs.error) fail(runs.error)
@@ -102,6 +113,7 @@ export default function DocumentsPage() {
     return [
       {
         id: 'title',
+        accessorFn: (run) => run.title,
         header: t('documents.document'),
         cell: ({ row: { original: run } }) => (
           <span className="flex flex-col">
@@ -114,6 +126,7 @@ export default function DocumentsPage() {
       },
       {
         id: 'subject',
+        accessorFn: (run) => run.subjectId,
         header: t('documents.subject'),
         cell: ({ row: { original: run } }) =>
           run.subjectId ? (
@@ -122,6 +135,7 @@ export default function DocumentsPage() {
       },
       {
         id: 'issued',
+        accessorFn: (run) => run.issuedTime,
         header: t('documents.issued'),
         cell: ({ row: { original: run } }) => (
           <span className="flex flex-col">
@@ -134,6 +148,7 @@ export default function DocumentsPage() {
       },
       {
         id: 'pages',
+        accessorFn: (run) => run.pages,
         header: t('documents.pages'),
         meta: { className: 'text-right tabular-nums' },
         cell: ({ row }) => row.original.pages,
@@ -187,12 +202,13 @@ export default function DocumentsPage() {
 
   return (
     <AdminPage title={t('documents.title')}>
-      <div data-testid="documents">
+      <div className="flex flex-col gap-4" data-testid="documents">
+        <ListSearch value={list.query} onChange={list.setQuery} matched={list.matched} total={list.total} />
         <VerdictsContext.Provider value={verdicts}>
           <DataTable
             label={t('documents.title')}
             columns={columns}
-            data={runs.data ?? []}
+            {...list.table}
             getRowId={(run) => run.runId ?? ''}
             loading={runs.isLoading}
             renderExpanded={(run) => <DocumentDeliveries runId={run.runId!} />}
