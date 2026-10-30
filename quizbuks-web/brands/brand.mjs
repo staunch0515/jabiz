@@ -9,7 +9,7 @@ export const BRANDS_DIR = dirname(fileURLToPath(import.meta.url))
 export const DEFAULT_BRAND = 'quizbuks'
 export const LANGUAGES = ['en', 'zh', 'ja']
 /** The files every profile has, besides brand.json. */
-export const FILES = ['brand.css', 'mark.svg', 'public/icon-192.png', 'public/icon-512.png', 'public/icon-maskable-512.png']
+export const FILES = ['brand.css', 'site.css', 'mark.svg', 'public/icon-192.png', 'public/icon-512.png', 'public/icon-maskable-512.png']
 
 const COLOUR = /^#[0-9a-f]{6}$/
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/

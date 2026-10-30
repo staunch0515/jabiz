@@ -1,19 +1,20 @@
 // 简体中文，与 en.mjs 同内容（键齐全由测试检查）。
+import { BRAND } from '../brand.mjs'
 export const zh = {
-  siteName: 'QuizBuks for Shopify',
+  siteName: `${BRAND.name} for Shopify`,
   description: '把商品视频变成简短的答题：答对的顾客在商品页直接领到一次性折扣码。',
   skip: '跳到正文',
   navLabel: '页面',
   languageLabel: '语言',
   nav: { home: '首页', privacy: '隐私政策', support: '支持' },
-  footer: 'QuizBuks for Shopify · 联系我们：{email}',
+  footer: `${BRAND.name} for Shopify · 联系我们：{email}`,
   home: {
-    title: 'QuizBuks for Shopify',
+    title: `${BRAND.name} for Shopify`,
     lead: '把商品视频变成简短的答题。答对的顾客在商品页直接领到一次性折扣码。',
     howTitle: '怎样运作',
     steps: [
-      { title: '创建活动', text: '在 Shopify 后台打开 QuizBuks，加上视频、几道题和折扣。' },
-      { title: '加上区块', text: '在主题编辑器中，把 QuizBuks 区块加到商品页模板。不用改代码。' },
+      { title: '创建活动', text: `在 Shopify 后台打开 ${BRAND.name}，加上视频、几道题和折扣。` },
+      { title: '加上区块', text: `在主题编辑器中，把 ${BRAND.name} 区块加到商品页模板。不用改代码。` },
       { title: '顾客答题', text: '答对的顾客领到一个专属的折扣码，至少 7 天内有效。' },
     ],
     sections: [
@@ -28,7 +29,7 @@ export const zh = {
       },
       {
         title: '套餐',
-        paragraphs: ['免费套餐每月含一定次数的答题，付费套餐更多。在 Shopify 后台查看与更改：应用 → QuizBuks → 套餐与用量。'],
+        paragraphs: [`免费套餐每月含一定次数的答题，付费套餐更多。在 Shopify 后台查看与更改：应用 → ${BRAND.name} → 套餐与用量。`],
       },
     ],
   },
@@ -36,7 +37,7 @@ export const zh = {
     title: '隐私政策',
     updated: '最后更新：2026 年 10 月 27 日',
     intro: [
-      '本政策说明商店安装 QuizBuks for Shopify（"本应用"、"我们"）以及顾客回答其答题时，我们收集哪些数据、用来做什么、保存多久。如有疑问：{email}。',
+      `本政策说明商店安装 ${BRAND.name} for Shopify（"本应用"、"我们"）以及顾客回答其答题时，我们收集哪些数据、用来做什么、保存多久。如有疑问：{email}。`,
     ],
     sections: [
       {
@@ -101,20 +102,20 @@ export const zh = {
     sections: [
       {
         title: '把答题加到商品页',
-        paragraphs: ['在 Shopify 后台打开 在线商店 → 模板 → 自定义，选择商品页模板，加上 QuizBuks 区块（应用）。请先在 QuizBuks 中发布一个活动：没有活动时区块不显示。'],
+        paragraphs: [`在 Shopify 后台打开 在线商店 → 模板 → 自定义，选择商品页模板，加上 ${BRAND.name} 区块（应用）。请先在 ${BRAND.name} 中发布一个活动：没有活动时区块不显示。`],
       },
       {
         title: '我的商店不显示答题',
         items: [
-          '没有进行中的活动：在 QuizBuks → 答题活动 中发布或恢复一个。',
-          '商店没有连接：QuizBuks → 概况 → 连接。',
+          `没有进行中的活动：在 ${BRAND.name} → 答题活动 中发布或恢复一个。`,
+          `商店没有连接：${BRAND.name} → 概况 → 连接。`,
           '今天的折扣码已经发完：第二天（UTC）恢复。',
           '套餐本周期的答题次数已用完：下个周期恢复，或升级套餐后立即恢复。',
         ],
       },
       {
         title: '更改套餐',
-        paragraphs: ['QuizBuks → 套餐与用量 → 选择套餐，会打开 Shopify 的套餐页。套餐费与你商店的其他费用一起由 Shopify 收取。'],
+        paragraphs: [`${BRAND.name} → 套餐与用量 → 选择套餐，会打开 Shopify 的套餐页。套餐费与你商店的其他费用一起由 Shopify 收取。`],
       },
       {
         title: '卸载',

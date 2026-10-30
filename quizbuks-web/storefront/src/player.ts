@@ -106,7 +106,7 @@ export class QuizPlayer {
       // To the landing page in the shopper's language, in a new tab: the quiz and the product stay where they are.
       const language = languageOf(this.host.getAttribute('locale'))
       body.push(h('p', { class: 'badge' }, h('a', { href: `${__QUIZBUKS_SITE__}/shopify-app/${language === 'en' ? '' : `${language}/`}`,
-        target: '_blank', rel: 'noopener' }, 'Powered by QuizBuks')))
+        target: '_blank', rel: 'noopener' }, `Powered by ${__QUIZBUKS_BRAND__}`)))
     }
     this.screen(title, ...body)
   }

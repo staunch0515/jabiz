@@ -2,6 +2,8 @@
 // Everything the content gives is escaped; the few places that take markup (a paragraph with a link) are rendered by
 // the template itself. No inline scripts or styles: the platform's content security policy allows neither.
 
+import { BRAND, brandMark } from '../brand.mjs'
+
 const PAGE_PATH = { home: '', merchants: 'merchants/', takers: 'takers/', surveys: 'surveys/', pricing: 'pricing/',
   contact: 'contact/' }
 const LANGUAGE_NAMES = { en: 'English', zh: '中文', ja: '日本語' }
@@ -33,11 +35,9 @@ const ICONS = {
 }
 
 /*
- * The brand's drawings (Q32, the same shapes as the apps' qb/Illustrations.tsx), in the site's tokens: the coin of the
- * wordmark and the illustrations of the hero, the steps and the feature pages. All decorative (aria-hidden).
+ * The illustrations (Q32, the same shapes as the apps' qb/Illustrations.tsx), in the site's tokens: the hero, the steps
+ * and the feature pages. All decorative (aria-hidden). The wordmark's mark is the brand profile's (Q54).
  */
-const COIN = `<circle cx="24" cy="24" r="22" fill="var(--coin)"/><circle cx="24" cy="24" r="17" fill="none" stroke="var(--coin-deep)" stroke-width="2.5"/><path d="M24 34c-7 0-9-7-9-11 7 0 11 3 11 9 0 .7 0 1.4-.2 2H24z" fill="var(--leaf-deep)"/><path d="M24 34c7 0 9-7 9-11-7 0-11 3-11 9 0 .7 0 1.4.2 2H24z" fill="var(--leaf)"/><path d="M24 33V22" stroke="var(--ink)" stroke-width="1.6" stroke-linecap="round"/>`
-
 const ART = {
   quiz: `<ellipse cx="120" cy="150" rx="92" ry="14" fill="var(--sky)"/><rect x="52" y="30" width="136" height="110" rx="14" fill="var(--card)" stroke="var(--line)" stroke-width="2"/><rect x="68" y="48" width="78" height="10" rx="5" fill="var(--ink)" opacity=".85"/><rect x="68" y="66" width="104" height="8" rx="4" fill="var(--muted)" opacity=".5"/><rect x="68" y="88" width="104" height="16" rx="8" fill="var(--sky)" stroke="var(--leaf-deep)" stroke-width="2"/><path d="M76 96l5 5 9-10" fill="none" stroke="var(--leaf-deep)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><rect x="68" y="112" width="104" height="16" rx="8" fill="none" stroke="var(--line)" stroke-width="2"/><circle cx="190" cy="42" r="22" fill="var(--coin)"/><circle cx="190" cy="42" r="15" fill="none" stroke="var(--coin-deep)" stroke-width="2.5"/><path d="M186 36l4 12 4-12" fill="none" stroke="var(--ink)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M26 118c10-18 30-18 40 0" fill="none" stroke="var(--leaf)" stroke-width="4" stroke-linecap="round"/><path d="M46 118V96" stroke="var(--leaf-deep)" stroke-width="4" stroke-linecap="round"/>`,
   reward: `<ellipse cx="120" cy="152" rx="92" ry="14" fill="var(--sky)"/>${[0, 1, 2, 3].map((i) => `<g transform="translate(0 ${-i * 16})"><ellipse cx="110" cy="136" rx="46" ry="14" fill="var(--coin-deep)"/><ellipse cx="110" cy="130" rx="46" ry="14" fill="var(--coin)"/></g>`).join('')}<ellipse cx="110" cy="82" rx="30" ry="8" fill="none" stroke="var(--coin-deep)" stroke-width="2"/><path d="M150 90c22-26 48-30 64-28-4 22-22 42-50 44" fill="var(--leaf)" stroke="var(--leaf-deep)" stroke-width="2"/><path d="M152 104c14-14 30-26 54-36" fill="none" stroke="var(--leaf-deep)" stroke-width="2" stroke-linecap="round"/><circle cx="40" cy="48" r="4" fill="var(--coin)"/><circle cx="200" cy="140" r="5" fill="var(--leaf)"/><circle cx="60" cy="110" r="3" fill="var(--leaf-deep)"/>`,
@@ -52,9 +52,9 @@ export function art(name, className = 'art') {
   return `<svg class="${className}" viewBox="0 0 240 180" aria-hidden="true">${ART[name] ?? ''}</svg>`
 }
 
-/** The wordmark: the coin with a leaf, then the name. */
+/** The wordmark: the brand's mark, then its name. */
 export function wordmark(href) {
-  return `<a class="brand" href="${href}"><svg class="coin" viewBox="0 0 48 48" aria-hidden="true">${COIN}</svg><span>QuizBuks</span></a>`
+  return `<a class="brand" href="${href}">${brandMark('coin')}<span>${esc(BRAND.name)}</span></a>`
 }
 
 export function icon(name, className = 'icon') {
@@ -118,7 +118,7 @@ function footer({ language, content, base }) {
       <li><a href="/taker/legal/sponsor-terms">${esc(f.sponsorTerms)}</a></li>
       <li><a href="/taker/legal/privacy">${esc(f.privacy)}</a></li></ul></div>
   </div>
-  <div class="wrap fine"><span>© 2026 QuizBuks</span><span>${esc(f.rights)}</span></div>
+  <div class="wrap fine"><span>© 2026 ${esc(BRAND.name)}</span><span>${esc(f.rights)}</span></div>
 </footer>`
 }
 

@@ -8,6 +8,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { pagePath, renderPage } from '../src/templates/page.mjs'
 import { LANGUAGES, PAGES, contentOf } from '../src/content/index.mjs'
+import { BRAND, BRAND_CSS, BRAND_PUBLIC } from '../src/brand.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -15,11 +16,13 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 export function settings(env) {
   const base = env.VITE_BASE ?? '/shopify-app/'
   if (!/^\/[a-z0-9-]+\/$/.test(base)) throw new Error(`VITE_BASE must be like "/shopify-app/", was "${base}"`)
-  // The site's public origin, for canonical and hreflang links and the sitemap.
-  const siteUrl = (env.SITE_URL ?? 'https://quizbuks.com').replace(/\/$/, '')
+  // The site's public origin, for canonical and hreflang links and the sitemap: the brand profile's (Q54) unless
+  // SITE_URL says otherwise.
+  const siteUrl = (env.SITE_URL ?? BRAND.siteUrl).replace(/\/$/, '')
   if (!/^https:\/\/[a-z0-9.-]+(:\d+)?$/.test(siteUrl)) throw new Error(`SITE_URL must be an https origin, was "${siteUrl}"`)
-  // Where merchants write to (the same address the embedded pages show, QB_SHOPIFY_SUPPORT_EMAIL).
-  const supportEmail = env.QB_SHOPIFY_SUPPORT_EMAIL || 'quizbuks@gmail.com'
+  // Where merchants write to (the same address the embedded pages show, QB_SHOPIFY_SUPPORT_EMAIL; the brand profile's
+  // when unset).
+  const supportEmail = env.QB_SHOPIFY_SUPPORT_EMAIL || BRAND.supportEmail
   if (!/^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(supportEmail)) {
     throw new Error(`QB_SHOPIFY_SUPPORT_EMAIL must be an email address, was "${supportEmail}"`)
   }
@@ -31,10 +34,13 @@ export function build(args = process.argv.slice(2), env = process.env) {
   const { base, siteUrl, supportEmail } = settings(env)
   if (args.includes('--emptyOutDir') && existsSync(outDir)) rmSync(outDir, { recursive: true })
   mkdirSync(join(outDir, 'assets'), { recursive: true })
-  const bytes = readFileSync(join(root, 'src/assets/site.css'))
+  // The brand's colours (Q54) after the site's own tokens.
+  const bytes = Buffer.concat([readFileSync(join(root, 'src/assets/site.css')), Buffer.from(`\n${BRAND_CSS}`)])
   const css = `site-${createHash('sha256').update(bytes).digest('hex').slice(0, 8)}.css`
   writeFileSync(join(outDir, 'assets', css), bytes)
-  cpSync(join(root, 'public'), outDir, { recursive: true })
+  // The brand profile's icons, then the site's own public files (none at present).
+  cpSync(BRAND_PUBLIC, outDir, { recursive: true })
+  if (existsSync(join(root, 'public'))) cpSync(join(root, 'public'), outDir, { recursive: true })
   const urls = []
   for (const language of LANGUAGES) {
     const content = contentOf(language)

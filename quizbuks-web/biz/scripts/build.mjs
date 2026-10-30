@@ -8,14 +8,16 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { pagePath, renderPage } from '../src/templates/page.mjs'
 import { LANGUAGES, PAGES, contentOf } from '../src/content/index.mjs'
+import { BRAND, BRAND_CSS, BRAND_PUBLIC } from '../src/brand.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const args = process.argv.slice(2)
 const outDir = resolve(root, args.includes('--outDir') ? args[args.indexOf('--outDir') + 1] : 'dist')
 const base = process.env.VITE_BASE ?? '/biz/'
 if (!/^\/[a-z0-9-]+\/$/.test(base)) throw new Error(`VITE_BASE must be like "/biz/", was "${base}"`)
-// The site's public origin, for canonical and hreflang links (search engines want them absolute) and the sitemap.
-const siteUrl = (process.env.SITE_URL ?? 'https://quizbuks.com').replace(/\/$/, '')
+// The site's public origin, for canonical and hreflang links (search engines want them absolute) and the sitemap: the
+// brand profile's unless SITE_URL says otherwise.
+const siteUrl = (process.env.SITE_URL ?? BRAND.siteUrl).replace(/\/$/, '')
 if (!/^https:\/\/[a-z0-9.-]+(:\d+)?$/.test(siteUrl)) throw new Error(`SITE_URL must be an https origin, was "${siteUrl}"`)
 
 /** The try-it quizzes of the home page; a wrong value fails the build rather than rendering a bad link. */
@@ -31,8 +33,8 @@ export function readTryQuizzes(json) {
   return entries
 }
 
-function hashed(file, extension) {
-  const bytes = readFileSync(join(root, 'src/assets', file))
+function hashed(file, extension, appended = '') {
+  const bytes = Buffer.concat([readFileSync(join(root, 'src/assets', file)), Buffer.from(appended)])
   const hash = createHash('sha256').update(bytes).digest('hex').slice(0, 8)
   return { name: `${file.replace(/\.[^.]+$/, '')}-${hash}.${extension}`, bytes }
 }
@@ -40,13 +42,16 @@ function hashed(file, extension) {
 export function build() {
   if (args.includes('--emptyOutDir') && existsSync(outDir)) rmSync(outDir, { recursive: true })
   mkdirSync(join(outDir, 'assets'), { recursive: true })
-  const css = hashed('site.css', 'css')
+  // The brand's colours (Q54) after the site's own tokens.
+  const css = hashed('site.css', 'css', `\n${BRAND_CSS}`)
   const js = hashed('site.js', 'js')
   // The browser gets a classic script (runs in <head> before the body is painted); the tests import the module.
   js.bytes = Buffer.from(js.bytes.toString('utf8').replace(/^export /gm, ''))
   writeFileSync(join(outDir, 'assets', css.name), css.bytes)
   writeFileSync(join(outDir, 'assets', js.name), js.bytes)
-  cpSync(join(root, 'public'), outDir, { recursive: true })
+  // The brand profile's icons, then the site's own public files (none at present).
+  cpSync(BRAND_PUBLIC, outDir, { recursive: true })
+  if (existsSync(join(root, 'public'))) cpSync(join(root, 'public'), outDir, { recursive: true })
   const tryQuizzes = readTryQuizzes(readFileSync(join(root, 'src/content/try-quizzes.json'), 'utf8'))
   let count = 0
   const urls = []
@@ -71,5 +76,5 @@ if (args.includes('--watch')) {
   console.log('watching src/ and public/ …')
   const rebuild = () => { try { build() } catch (error) { console.error(error) } }
   watch(join(root, 'src'), { recursive: true }, rebuild)
-  watch(join(root, 'public'), { recursive: true }, rebuild)
+  if (existsSync(join(root, 'public'))) watch(join(root, 'public'), { recursive: true }, rebuild)
 }

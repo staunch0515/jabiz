@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { afterAll, describe, expect, it } from 'vitest'
 import { build, settings } from '../scripts/build.mjs'
 import { LANGUAGES, PAGES, contentOf } from '../src/content/index.mjs'
+import { BRAND } from '../src/brand.mjs'
 import { esc, withEmail } from '../src/templates/page.mjs'
 
 const out = mkdtempSync(join(tmpdir(), 'shopify-site-'))
@@ -63,8 +64,8 @@ describe('the built site', () => {
 
 describe('the settings', () => {
   it('refuses a bad base, origin or support address', () => {
-    expect(settings({})).toEqual({ base: '/shopify-app/', siteUrl: 'https://quizbuks.com',
-      supportEmail: 'quizbuks@gmail.com' })
+    // The brand profile's site and support address by default (Q54).
+    expect(settings({})).toEqual({ base: '/shopify-app/', siteUrl: BRAND.siteUrl, supportEmail: BRAND.supportEmail })
     expect(() => settings({ VITE_BASE: '/x' })).toThrow(/VITE_BASE/)
     expect(() => settings({ SITE_URL: 'http://example.com' })).toThrow(/SITE_URL/)
     expect(() => settings({ QB_SHOPIFY_SUPPORT_EMAIL: 'not an address"><x' })).toThrow(/email/)

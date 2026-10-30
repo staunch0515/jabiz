@@ -1,30 +1,16 @@
-/* QuizBuks business site (docs/quizbuks/plans/Q31-biz-site.md). One stylesheet, design tokens for light and dark,
-   no framework. Colours follow the apps' brand (Q32, qb/brand.css): slate with the emerald accent; every text pair
-   passes WCAG AA (light: accent on white 5.5:1, white on accent 5.5:1, --chip-fg on --accent-soft 8.6:1; dark: accent
-   on --bg 12.3:1, --accent-fg on accent 9.8:1). The --leaf/--coin/--sky/--ink/--paper tokens colour the
-   illustrations (decorative). */
+/* The business site (docs/quizbuks/plans/Q31-biz-site.md). One stylesheet, design tokens for light and dark,
+   no framework. The neutral tokens are here; the brand's (--accent and the others, the illustrations' --leaf/--coin/
+   --sky/--ink) are the brand profile's site.css, which the build appends (Q54) and whose text pairs
+   brands/brand.test.mjs checks (WCAG AA in both appearances). */
 :root {
   color-scheme: light dark;
   --bg: #ffffff;
-  --bg-soft: #f4faf7;
   --fg: #0f172a;
   --muted: #475569;
   --card: #ffffff;
   --card-soft: #f1f5f9;
   --line: #e2e8f0;
-  --accent: #047857;
-  --accent-strong: #065f46;
-  --accent-soft: #d1fae5;
-  --accent-fg: #ffffff;
-  --chip-fg: #064e3b;
-  --ok: #047857;
   --paper: #ffffff;
-  --leaf: #34d399;
-  --leaf-deep: #059669;
-  --coin: #fbbf24;
-  --coin-deep: #d97706;
-  --sky: #ecfdf5;
-  --ink: #064e3b;
   --shadow: 0 1px 2px rgba(15, 23, 42, .06), 0 12px 32px -16px rgba(15, 23, 42, .25);
   --radius: 16px;
   --max: 72rem;
@@ -32,25 +18,12 @@
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #0b1220;
-    --bg-soft: #0f172a;
     --fg: #f1f5f9;
     --muted: #cbd5e1;
     --card: #111a2e;
     --card-soft: #1e293b;
     --line: #27354d;
-    --accent: #6ee7b7;
-    --accent-strong: #a7f3d0;
-    --accent-soft: #123b2d;
-    --accent-fg: #052e16;
-    --chip-fg: #d1fae5;
-    --ok: #34d399;
     --paper: #ffffff;
-    --leaf: #34d399;
-    --leaf-deep: #10b981;
-    --coin: #fbbf24;
-    --coin-deep: #f59e0b;
-    --sky: #123b2d;
-    --ink: #d1fae5;
     --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 12px 32px -16px rgba(0, 0, 0, .7);
   }
 }

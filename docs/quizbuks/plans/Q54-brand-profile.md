@@ -26,10 +26,11 @@
 brands/quizbuks/
   brand.json        名称（可另给 shortName）、各语言的说明、主题色与背景色、客服邮箱、站点地址
   brand.css         配色 token（--primary 等与 --qb-*，亮暗两套）与圆角——由原来的 src/qb/brand.css 移来
-  mark.svg          标志图形（原来的金币），Wordmark 内联显示（颜色取 token），静态站共用
+  site.css          两个静态站（官网、Shopify 介绍站）的品牌色（--accent 等与插画的 --leaf/--coin…，亮暗两套，Q54b）
+  mark.svg          标志图形（原来的金币），Wordmark 内联显示（颜色取 token，只用 brand.css 与 site.css 都有的 token），静态站共用
   public/           图标：icon-192.png、icon-512.png、icon-maskable-512.png
 brands/sample/      见本：新品牌复制它；CI 以它构建，检查页面上不再出现 QuizBuks
-brands/brand.mjs    读取与检查；brands/vite.mjs 是 SPA 的 Vite 插件
+brands/brand.mjs    读取与检查；brands/vite.mjs 是 SPA 的 Vite 插件；brands/brand.test.mjs 检查档案与其余前端（Q54b）
 ```
 
 - `brands/brand.mjs`：读取所选档案并检查（缺字段、缺图标、颜色格式、名称为空即构建失败），供 Vite 配置与静态站的构建脚本使用。
@@ -44,15 +45,18 @@ brands/brand.mjs    读取与检查；brands/vite.mjs 是 SPA 的 Vite 插件
 
 - 点数的名称 "Kudos"：遍及全部页面与邮件，换品牌时是否也要换，待需求方决定（见 §4）。
 - 移动端外壳（`quizbuks-mobile/`，包名、图标、启动图）属另一会话；档案中给出图标原图，外壳如何取用由该会话决定。
-- 商店上架文字（`docs/quizbuks/store/`）、Shopify 应用的配置（`shopify.app.toml`、扩展名）随上架另做。
-- 标识符：包名 `com.quizbuks.app`、iOS 的 User-Agent `QuizBuksApp/ios`、字典的 URN、Quiz 文件的格式名 `quizbuks.quiz` 与扩展名 `.quizbuks.json`、模板与流程的 `qb.` 前缀、数据库名，不随品牌变化。
+- 商店上架文字（`docs/quizbuks/store/`）、Shopify 应用的配置（`shopify.app.toml`、店面扩展的 `shopify.extension.toml` 与 `locales`）随各品牌在 Shopify 上架另做。
+- 官网首页的"试答"链接（`biz/src/content/try-quizzes.json`）是部署的数据，各品牌填自己的。
+- 标识符：包名 `com.quizbuks.app`、iOS 的 User-Agent `QuizBuksApp/ios`、字典的 URN、Quiz 文件的格式名 `quizbuks.quiz` 与扩展名 `.quizbuks.json`、模板与流程的 `qb.` 前缀、数据库名，
+  以及店面组件的全局名（`QuizbuksQuiz`、`QuizbuksPlayer`）、浏览器存储的键（`quizbuks:…`）、窗口名 `quizbuks-taker`、扩展名 `quizbuks-quiz`、应用代理路径 `/apps/quizbuks`、
+  meta `quizbuks-support-email`，不随品牌变化（改了会丢失浏览器存的数据或破坏已部署的扩展）。
 
 ## 3. 分期
 
 | 期 | 内容 |
 |---|---|
-| **Q54a** | 档案目录与读取、检查、见本档案；答题者 App 与商家后台：名称、标题、PWA 清单、图标、配色、标志；Gradle 的构建输入；CI 以见本档案构建并检查；测试（本 PR） |
-| Q54b | Shopify 内嵌页、官网、Shopify 介绍站、店面组件 |
+| Q54a | 档案目录与读取、检查、见本档案；答题者 App 与商家后台：名称、标题、PWA 清单、图标、配色、标志；Gradle 的构建输入；CI 以见本档案构建并检查；测试（#342） |
+| **Q54b** | 官网与 Shopify 介绍站：名称、标志、图标、品牌色（档案的 `site.css`）、站点地址与客服邮箱的缺省；Shopify 内嵌页：名称、标题、图标（配色仍是 Shopify 后台的）；店面组件的"Powered by"与链接；`brands/brand.test.mjs`；Gradle 与 CI（本 PR） |
 | Q54c | 后端消息资源与 `app.name`、客服邮箱与站点地址的缺省、维护页、管理后台扩展（平台 17v 的 `brand`）、Docker 构建参数与部署工作流；指南"新建一个品牌" |
 
 ## 4. 待需求方决定
@@ -65,8 +69,11 @@ brands/brand.mjs    读取与检查；brands/vite.mjs 是 SPA 的 Vite 插件
   SPA 的源码与 `index.html` 中除标识符外不再出现品牌名。
 - `src/qb/brand.test.ts`：每份档案的 `brand.css` 在亮暗两种外观下都满足对比度。
 - 商店的宣传图（`e2e/store/content.ts`）取档案的图标、名称与主题色。
+- `brands/brand.test.mjs`（`node --test`，Q54b）：每份档案完整；`site.css` 的文字配色在亮暗两种外观下满足 AA（`--accent` 与页面、`--accent-fg` 与 `--accent`、`--chip-fg` 与 `--accent-soft`）；
+  `mark.svg` 用到的 token 在 `brand.css` 与 `site.css` 中都有；官网、Shopify 介绍站、Shopify 内嵌页、店面组件的源码中除标识符外不再出现品牌名。
+- CI：以 `QB_BRAND=sample` 构建官网、Shopify 介绍站与内嵌页，名称、站点地址与图标为见本档案的，产物中没有 QuizBuks。
 - CI（`quizbuks.yml` 的 web）：以 `QB_BRAND=sample` 构建两个 SPA，标题、清单、图标为见本档案的，产物中除 iOS 外壳的 User-Agent 外没有 QuizBuks。
 
 ## 6. 移动端外壳（另一会话）
 
-- `quizbuks-mobile/android/README.md` 说图标由 `quizbuks-web/app/public/icon-512.png` 与 `icon-maskable-512.png` 缩放而成：这两个文件现在在 `quizbuks-web/brands/quizbuks/public/`（内容不变）。
+- Android 外壳的一致性测试与 README 已改为读档案（需求方同意由 #342 修改）。

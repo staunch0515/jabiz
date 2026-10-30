@@ -1,4 +1,4 @@
-// The one layout of QuizBuks for Shopify's public pages and the body of each page, as template functions over the
+// The one layout of the Shopify app's public pages and the body of each page, as template functions over the
 // language's content. Everything the content gives is escaped; a text may name the support address as {email}, which
 // the template turns into a mail link. No scripts, no inline styles: the platform's content security policy allows
 // neither, and the pages need none.
