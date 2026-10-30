@@ -47,6 +47,7 @@ import { extensionMenu } from '../extension/registry'
 import { changeLanguage, languages, type Language } from '../i18n'
 import { useImportCatalog, useMenus, useMyTasks, useQueryCatalog } from '../meta/hooks'
 import type { MenuItem } from '../meta/types'
+import { BrandTitle } from '../extension/BrandTitle'
 
 /**
  * Switches the interface language, then offers (never makes) the same change for the user's mail, which is the
@@ -209,7 +210,7 @@ export default function AppLayout() {
     <AppShell
       brand={
         <Link to="/" className="flex h-8 items-center px-2 text-base font-semibold">
-          {t('app.title')}
+          <BrandTitle brand={extension.brand} />
         </Link>
       }
       navigation={

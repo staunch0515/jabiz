@@ -55,6 +55,8 @@ export default defineExtension({
 - 路由是绝对路径，不能用 `/`、`/login`、`/data…`、`/processes…`、`/tasks…`、`/auth…`（验证邮箱、加入、找回密码的落地页）等平台路径；写错时应用启动即报告全部问题。
 - `permission` 只决定菜单项是否显示；页面的每个请求都由服务端检查。
 - 文案在命名空间 `app`：页面里 `const { t } = useTranslation(EXTENSION_NAMESPACE)`。
+- 应用的名称与标志（17v）：`brand: { name: { en: 'Acme', zh: '爱客美' }, logo, favicon }`，`logo` 与 `favicon` 是扩展 import 的图片
+  （`import logo from './brand/logo.svg'`）；配色在扩展 import 的样式表中覆盖主题 token（`--primary` 等，亮暗两种都过 axe）。
 
 ## 3. 写页面
 

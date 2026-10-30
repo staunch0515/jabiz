@@ -6,6 +6,7 @@ import { Navigate, useLocation, useNavigate } from 'react-router'
 import { useRouterNavigation } from '../auth/routerNavigation'
 import { extension } from '../extension'
 import { homePath } from '../extension/registry'
+import { BrandTitle } from '../extension/BrandTitle'
 
 /**
  * Signing in (docs/design/10-security.md sections 4 and 9): @jabiz/ui's SignInForm (decision D43) on the admin's
@@ -34,7 +35,7 @@ export default function LoginPage() {
   return (
     <SignInForm
       {...navigation}
-      brand={t('app.title')}
+      brand={<BrandTitle brand={extension.brand} />}
       appearance={false}
       returnTo={from}
       onSignedIn={(path) => void navigate(path, { replace: true })}

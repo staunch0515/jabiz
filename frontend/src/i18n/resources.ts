@@ -288,6 +288,10 @@ const en = {
     description: 'Description',
   },
   list: {
+    search: 'Search the list',
+    searchPlaceholder: 'Search…',
+    searchCount: '{{matched}} of {{total}}',
+    noMatch: 'Nothing matches the search.',
     create: 'New',
     edit: 'Edit',
     delete: 'Delete',
@@ -682,6 +686,10 @@ const zh: Texts = {
     description: '说明',
   },
   list: {
+    search: '搜索列表',
+    searchPlaceholder: '搜索…',
+    searchCount: '{{total}} 项中的 {{matched}} 项',
+    noMatch: '没有符合搜索的项。',
     create: '新建',
     edit: '编辑',
     delete: '删除',
@@ -1073,6 +1081,10 @@ const ja: Texts = {
     description: '説明',
   },
   list: {
+    search: '一覧を検索',
+    searchPlaceholder: '検索…',
+    searchCount: '{{total}} 件中 {{matched}} 件',
+    noMatch: '検索に一致する項目はありません。',
     create: '新規',
     edit: '編集',
     delete: '削除',

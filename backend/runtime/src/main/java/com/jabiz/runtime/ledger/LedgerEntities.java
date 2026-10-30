@@ -65,8 +65,8 @@ public class LedgerEntities {
             eb.temporal(t -> t.allowScheduled(true));
             eb.listView("default", lv -> lv
                 .columns("accountCode", "accountName", "accountType", "parentId", "summary", "enabled")
-                .filters("accountCode", "accountType", "parentId", "summary", "enabled")
-                .sorts("accountCode")
+                .filters("accountCode", "accountName", "accountType", "parentId", "summary", "enabled")
+                .sorts("accountCode", "accountName", "accountType")
                 .defaultSort("accountCode", true));
         });
     }

@@ -50,6 +50,7 @@ vi.mock('../meta/hooks', () => ({
 
 vi.mock('../extension', () => ({
   extension: {
+    brand: { name: { en: 'Acme admin', zh: '爱客美后台' }, logo: '/assets/acme.svg' },
     menu: [
       { key: 'stock', label: 'menu.stock', path: '/commerce/stock', icon: Boxes, permission: 'commerce.stock.read' },
       { key: 'secret', label: 'menu.secret', path: '/secret', permission: 'audit.read' },
@@ -105,6 +106,14 @@ describe('AppLayout (the shell, decision D34)', () => {
     renderLayout()
     expect(screen.getByRole('link', { name: '3 open tasks' })).toHaveAttribute('href', '/tasks')
     expect(screen.getByTestId('menu-tasks')).toHaveTextContent('3')
+  })
+
+  it('shows the application\'s brand in the corner, linking home (phase 17v)', () => {
+    renderLayout()
+    const title = screen.getByTestId('brand-title')
+    expect(title).toHaveTextContent('Acme admin')
+    expect(screen.getByTestId('brand-logo')).toHaveAttribute('src', '/assets/acme.svg')
+    expect(title.closest('a')).toHaveAttribute('href', '/')
   })
 
   it('switches the language from the header', async () => {

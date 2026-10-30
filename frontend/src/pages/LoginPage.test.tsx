@@ -1,6 +1,6 @@
 import { ApiError, forgetEnvironment, setEnvironment } from '@jabiz/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import i18n from '../i18n'
@@ -22,9 +22,10 @@ vi.mock('@jabiz/client', async (importOriginal) => ({
 }))
 
 let home: string | undefined
+let brand: { name: string } | undefined
 vi.mock('../extension', () => ({
   get extension() {
-    return { home }
+    return { home, brand }
   },
 }))
 vi.mock('qrcode', () => ({ default: { toCanvas: vi.fn(async () => undefined) } }))
@@ -57,6 +58,7 @@ describe('LoginPage', () => {
     providers.mockResolvedValue([])
     startProviderSignIn.mockReset()
     home = undefined
+    brand = undefined
     await i18n.changeLanguage('en')
   })
 
@@ -74,6 +76,15 @@ describe('LoginPage', () => {
     fireEvent.click(screen.getByRole('button', { name: /Verify/ }))
     await waitFor(() => expect(verify).toHaveBeenCalledWith('ch', '123456'))
     expect(await screen.findByTestId('home')).toBeTruthy()
+  })
+
+  it("names the application's brand in the sign-in card, else the platform (phase 17v)", async () => {
+    page()
+    expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent('jabiz')
+    cleanup()
+    brand = { name: 'Acme admin' }
+    page()
+    expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent('Acme admin')
   })
 
   it("lands on the application's home when it declares one and there is no page to return to", async () => {
