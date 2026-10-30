@@ -30,7 +30,69 @@ public final class ItEntryScopeFixtures extends BaseEntityDefinitions {
 
     public static final String NOTE = "ItScopedNote";
     public static final String NOTE_DATASET = "urn:jabiz:dataset:it:ItScopedNote";
+    private static final String INPUT = "input";
+    private static final String FOUND = "found";
+    private static final String STAFF = "staff";
+
     public static final String SAVE = "IT_SCOPED_NOTE_SAVE";
+    public static final String ENTRY = "ItScopedEntry";
+    public static final String ENTRY_DATASET = "urn:jabiz:dataset:it:ItScopedEntry";
+    public static final String ENTRY_SAVE = "IT_SCOPED_ENTRY_SAVE";
+
+    /** @param entryId the entry to change; null for a new one */
+    public record EntryInput(String entryId, String owner, String body) {}
+
+    public record EntryOutput(String entryId) {}
+
+    /** Append-only: written and changed through the temporal writer. */
+    public static final EntityDefinition ENTRY_ENTITY = EntityDefinition.define(ENTRY, eb -> {
+        eb.physicalTable("it_scoped_entry");
+        eb.primaryKey("entryId");
+        eb.field("entryId", f -> f.physicalColumn("entry_id").immutable(true).required(true).generated(true)
+            .asSemanticIdentity("urn:jabiz:entity:it:scoped-entry"));
+        eb.field("owner", f -> f.physicalColumn("owner").required(true).asText(36));
+        eb.field("body", f -> f.physicalColumn("body").asText(null, true));
+        eb.temporal();
+    });
+
+    public static final ProcessDefinition<EntryInput, EntryOutput, ProcessContext> ENTRY_SAVE_PROCESS =
+        ProcessDefinition.define(ENTRY_SAVE, 1, EntryInput.class, EntryOutput.class, ProcessContext.class, pb -> pb
+            .permissions("it.note.write")
+            .contextFactory((start, input) -> {
+                ProcessContext ctx = new ProcessContext(start);
+                ctx.put(INPUT, input);
+                return ctx;
+            })
+            .outputMapper(ctx -> new EntryOutput(String.valueOf(ctx.get("savedId"))))
+            .step("Load the entry", QueryEntities.<ProcessContext>of(ENTRY_DATASET, ctx -> {
+                String id = ctx.get(INPUT, EntryInput.class).entryId();
+                return EntityQuery.builder().where(new QueryPredicate.In("entryId",
+                    id == null ? List.of() : List.of(java.util.UUID.fromString(id)))).limit(1).build();
+            }, FOUND))
+            .step("Load the owner's warehouse", QueryEntities.<ProcessContext>of(
+                CommerceEntities.WAREHOUSE_STAFF_DATASET, ctx -> EntityQuery.builder()
+                    .where(new QueryPredicate.Eq("userId", ctx.get(INPUT, EntryInput.class).owner())).limit(1)
+                    .build(), STAFF))
+            .step("The owner works in the caller's warehouse", RequireScope.<ProcessContext>of(
+                CommerceEntities.WAREHOUSE_SCOPE, ctx -> {
+                    List<EntityInstance> staff = rows(ctx, STAFF);
+                    return staff.isEmpty() ? null : String.valueOf((Object) staff.getFirst().get("warehouseId"));
+                }))
+            .compute("Save", (metadata, ctx) -> {
+                EntryInput input = ctx.get(INPUT, EntryInput.class);
+                List<EntityInstance> found = rows(ctx, FOUND);
+                Map<String, Object> values = new LinkedHashMap<>();
+                values.put("owner", input.owner());
+                values.put("body", input.body());
+                if (input.entryId() == null) {
+                    ctx.put("savedId", ctx.changes().insert(ENTRY, values));
+                } else if (found.isEmpty()) {
+                    throw new com.jabiz.runtime.EntityNotFoundException("ItScopedEntry " + input.entryId());
+                } else {
+                    ctx.changes().update(ENTRY, found.getFirst().id(), found.getFirst().version(), values);
+                    ctx.put("savedId", found.getFirst().id());
+                }
+            }));
 
     /** @param noteId the note to change, or a new one's id */
     public record SaveInput(String noteId, String owner, String text) {}
@@ -46,9 +108,6 @@ public final class ItEntryScopeFixtures extends BaseEntityDefinitions {
         eb.field("rowVersion", rowVersion("f_version"));
     });
 
-    private static final String INPUT = "input";
-    private static final String FOUND = "found";
-    private static final String STAFF = "staff";
 
     public static final ProcessDefinition<SaveInput, SaveOutput, ProcessContext> SAVE_PROCESS =
         ProcessDefinition.define(SAVE, 1, SaveInput.class, SaveOutput.class, ProcessContext.class, pb -> pb
@@ -116,6 +175,28 @@ public final class ItEntryScopeFixtures extends BaseEntityDefinitions {
         @Bean
         ProcessDefinition<SaveInput, SaveOutput, ProcessContext> itScopedNoteSave() {
             return SAVE_PROCESS;
+        }
+
+        @Bean
+        EntityDefinition itScopedEntryEntity() {
+            return ENTRY_ENTITY;
+        }
+
+        @Bean
+        DatasetDefinition itScopedEntryDataset(@Value("${jabiz.storage.default-pool-ref:default}") String pool) {
+            return DatasetDefinition.define(ENTRY_DATASET, d -> d
+                .targetEntityType(ENTRY)
+                .asDefault()
+                .permissions("it.note.read", "it.note.write")
+                .scope(s -> s.withinEntryScope(CommerceEntities.WAREHOUSE_SCOPE, "owner",
+                    EntryScopeVia.of(CommerceEntities.WAREHOUSE_STAFF, "userId", "warehouseId")))
+                .policy(p -> p.processOnlyWrites())
+                .storage(s -> s.connectionPoolRef(pool)));
+        }
+
+        @Bean
+        ProcessDefinition<EntryInput, EntryOutput, ProcessContext> itScopedEntrySave() {
+            return ENTRY_SAVE_PROCESS;
         }
     }
 }
