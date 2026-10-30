@@ -67,6 +67,7 @@ import { StaffDeskPage } from './staff/StaffDeskPage'
 import { PayoutPage } from './wallet/PayoutPage'
 import { WalletPage } from './wallet/WalletPage'
 import { ONE_LINE_BANNER } from './banner'
+import { MaintenanceRedirect } from './maintenance'
 
 /** Where a signed-in taker starts. */
 const HOME = '/'
@@ -404,6 +405,7 @@ export default function App() {
           <div className="bg-background text-foreground min-h-full">
             <Routes />
           </div>
+          <MaintenanceRedirect />
           {/* The account page's offer to send mail in the new interface language (offerMailLanguage). */}
           <Toaster />
         </AuthProvider>
