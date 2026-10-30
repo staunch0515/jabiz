@@ -200,7 +200,9 @@ test('a taker collects a prize by scanning the sponsor\'s screen with the app\'s
         const context = canvas.getContext('2d')!
         context.fillStyle = '#ffffff'
         context.fillRect(0, 0, canvas.width, canvas.height)
-        if (image.complete && image.naturalWidth) context.drawImage(image, 120, 120, 400, 400)
+        // The code only once the test has seen the scanner: it opens the prize as soon as it reads one.
+        const shown = (window as unknown as { qbShowCode?: boolean }).qbShowCode === true
+        if (shown && image.complete && image.naturalWidth) context.drawImage(image, 120, 120, 400, 400)
       }
       navigator.mediaDevices.getUserMedia = async () => {
         draw()
@@ -214,6 +216,9 @@ test('a taker collects a prize by scanning the sponsor\'s screen with the app\'s
     await open.click()
     await expect(page.getByTestId('scan-page')).toBeVisible()
     await expectAccessible(page, 'app scanner')
+    await page.evaluate(() => {
+      (window as unknown as { qbShowCode: boolean }).qbShowCode = true
+    })
 
     // The scanned code opens its page in the signed-in app; one tap collects the prize.
     const redeem = page.getByTestId('redeem-page')
