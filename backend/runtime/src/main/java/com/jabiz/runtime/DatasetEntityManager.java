@@ -1340,6 +1340,11 @@ public class DatasetEntityManager {
                 continue;
             }
             if (filter.getValue() instanceof DatasetScope.EntryScopeCondition) {
+                if (dataset.policy().processOnlyWrites()) {
+                    // Only processes write here: they read through the scope and check the object they act on
+                    // (RequireScope), so the mapping limits reads only (decision D64 item 2).
+                    continue;
+                }
                 // A session of an entry scope does not write rows whose scope it cannot judge from the values
                 // (decision D64 item 2).
                 violations.add(new Violation(filter.getKey(), PlatformErrorCodes.OUT_OF_SCOPE, String.format(

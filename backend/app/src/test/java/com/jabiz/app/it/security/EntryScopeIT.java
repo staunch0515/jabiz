@@ -2,6 +2,7 @@ package com.jabiz.app.it.security;
 
 import com.jabiz.app.commerce.CommerceEntities;
 import com.jabiz.app.it.fixture.ItApprovalFixtures;
+import com.jabiz.app.it.fixture.ItEntryScopeFixtures;
 import com.jabiz.context.EntryScope;
 import com.jabiz.runtime.approval.ApprovalEntities;
 import com.jabiz.runtime.approval.ApprovalPermissions;
@@ -33,7 +34,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * next refresh, and a token of the entry without its scope is refused. Approval requests, their decisions and tasks
  * carry the scope they were made in: a scoped session sees and decides its own only, others see all.
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK, properties = "it.entry-scope=true")
 @Import(EntryScopeIT.Staffed.class)
 class EntryScopeIT extends ApprovalItSupport {
 
@@ -211,6 +212,46 @@ class EntryScopeIT extends ApprovalItSupport {
             "action", "INSERT", "attributes", Map.of("warehouseCode", code("X"), "warehouseName", "X",
                 "active", true))))).expectStatus().is4xxClientError().expectBody(MAP).returnResult()
             .getResponseBody())).isEqualTo("OUT_OF_SCOPE");
+    }
+
+    /**
+     * 17y-7: through a mapping on a process-only dataset, a scoped session's process writes (it checks the object
+     * itself), and reads stay limited.
+     */
+    @Test
+    void aProcessWritesThroughAMappingOnAProcessOnlyDataset() {
+        String east = warehouse(code("E"));
+        String west = warehouse(code("W"));
+        String eastUser = createUser(unique("eu"), PASSWORD);
+        String westUser = createUser(unique("wu"), PASSWORD);
+        insert(CommerceEntities.WAREHOUSE_STAFF_DATASET, Map.of("userId", eastUser, "warehouseId", east), null);
+        insert(CommerceEntities.WAREHOUSE_STAFF_DATASET, Map.of("userId", westUser, "warehouseId", west), null);
+        String bearer = scoped("it-east-notes", east, "it.note.read", "it.note.write");
+        String mine = unique("note");
+        // Inserted, then changed, by the east's session: its own staff's note.
+        post("/api/processes/" + ItEntryScopeFixtures.SAVE + "/latest", bearer, Map.of("noteId", mine, "owner",
+            eastUser, "text", "first")).expectStatus().isOk();
+        post("/api/processes/" + ItEntryScopeFixtures.SAVE + "/latest", bearer, Map.of("noteId", mine, "owner",
+            eastUser, "text", "second")).expectStatus().isOk();
+        assertThat(query("SELECT f_text FROM it_scoped_note WHERE f_id = ?", mine).getFirst())
+            .containsEntry("f_text", "second");
+        // Another warehouse's staff is not its to write about: the process's own check (404).
+        post("/api/processes/" + ItEntryScopeFixtures.SAVE + "/latest", bearer, Map.of("noteId", unique("note"),
+            "owner", westUser, "text", "x")).expectStatus().isNotFound();
+        // Reads: the east sees its staff's notes only; headquarters sees all.
+        String theirs = unique("note");
+        post("/api/processes/" + ItEntryScopeFixtures.SAVE + "/latest", bearer("it.note.write"), Map.of("noteId",
+            theirs, "owner", westUser, "text", "hq")).expectStatus().isOk();
+        assertThat(noteIds(bearer)).contains(mine).doesNotContain(theirs);
+        assertThat(noteIds(bearer("it.note.read"))).contains(mine, theirs);
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Object> noteIds(String authorization) {
+        Map<String, Object> page = post("/api/datasets/" + ItEntryScopeFixtures.NOTE_DATASET + "/query",
+            authorization, Map.of("limit", 500)).expectStatus().isOk().expectBody(MAP).returnResult()
+            .getResponseBody();
+        return ((List<Map<String, Object>>) page.get("items")).stream().map(row -> row.get("id")).toList();
     }
 
     /** The codes of the warehouses the caller sees through {@link #STAFFED}. */

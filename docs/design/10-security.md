@@ -472,7 +472,7 @@ eb.field("bankAccount", f -> f.physicalColumn("bank_account").asText(34)
 - **声明**：应用的 `EntryScopeResolver` Bean 给一个入口一个范围名（`entry()`、`scope()`），以 `resolve(SignInAttempt)` 在登录与每次刷新时算出值（所需数据以 `loads()` 声明，
   在 `SignInGuard` 之后、同一次读取）。值为空即拒绝（同 `SignInGuard`）。值记入访问令牌的 `scope` 声明与 `RequestContext.entryScope`；声明了范围的入口的令牌缺少它即 401。
 - **数据视图**：`withinEntryScope(名, 字段)`、`withinEntryScope(名, 字段, EntryScopeVia.of(对照实体, 键字段, 范围字段))`、`withinEntryScopeTag(名字段, 值字段)`（03 §2.2）。
-  只约束范围名相同的会话；没有范围的会话照旧。经对照约束的数据视图，有范围的会话不能写入（`OUT_OF_SCOPE`），经标记约束的只写自己范围的行。
+  只约束范围名相同的会话；没有范围的会话照旧。经对照约束的数据视图，有范围的会话不能写入（`OUT_OF_SCOPE`；只由流程写入的除外，由流程以 `RequireScope` 核对），经标记约束的只写自己范围的行。
 - **角色**：有范围的入口逐个列出角色（不能 `*`），这些角色只在有范围的入口生效（其他入口的 `*` 不包括，明确列出即启动错误）。
 - **平台的审批与待办**：`ApprovalCase.scope(名, 值)`、`TaskSpec.scope(名, 值)` 记在请求与待办上，不给即取创建它的会话的范围；评估、决定与下一层的待办沿用请求的。
   审批请求、决定、评估与待办的数据视图以标记约束，`/api/tasks/mine` 与规则预览同样；决定（`APPROVAL_DECIDE`）、撤回与待办的处理对范围外的即 404。
