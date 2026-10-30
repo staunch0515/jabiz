@@ -434,6 +434,22 @@ public class QueryCompiler {
             + ")";
     }
 
+    /**
+     * Condition of an entry scope through a mapping entity (decision D64): the field's value is a key of a mapping
+     * row with the session's value. Both sides compared as text, so a {@code uuid} column maps through a text one.
+     */
+    private String entryScopeCondition(FieldDefinition field, DatasetScope.EntryScopeCondition mapped, Binder binder) {
+        EntityDefinition via = entities.apply(mapped.via().entity()).orElseThrow(
+            () -> new IllegalStateException("Unknown entity " + mapped.via().entity()));
+        FieldDefinition key = resolveField(via, mapped.via().keyField());
+        FieldDefinition scope = resolveField(via, mapped.via().scopeField());
+        return "CAST(" + SqlIdentifiers.require(field.physicalColumn()) + " AS text) IN (SELECT CAST("
+            + SqlIdentifiers.require(key.physicalColumn()) + " AS text) FROM "
+            + SqlIdentifiers.require(via.physicalTable) + " WHERE "
+            + SqlIdentifiers.require(scope.physicalColumn()) + " = :"
+            + binder.bind(BoundValue.of(fieldValue(via, scope, mapped.value()))) + ")";
+    }
+
     private static String range(String column, DataPeriod period, Binder binder) {
         List<String> bounds = new ArrayList<>(2);
         if (period.from() != null) {
@@ -476,6 +492,18 @@ public class QueryCompiler {
             FieldDefinition fd = resolveField(def, entry.getKey());
             if (entry.getValue() instanceof DatasetScope.PeriodCondition period) {
                 parts.add(periodCondition(def, fd, period, binder));
+                continue;
+            }
+            if (entry.getValue() instanceof DatasetScope.EntryScopeCondition mapped) {
+                parts.add(entryScopeCondition(fd, mapped, binder));
+                continue;
+            }
+            if (entry.getValue() instanceof DatasetScope.EntryScopeTagCondition tag) {
+                FieldDefinition name = resolveField(def, tag.nameField());
+                parts.add("(" + SqlIdentifiers.require(name.physicalColumn()) + " = :"
+                    + binder.bind(BoundValue.of(fieldValue(def, name, tag.scope().name()))) + " AND "
+                    + SqlIdentifiers.require(fd.physicalColumn()) + " = :"
+                    + binder.bind(BoundValue.of(fieldValue(def, fd, tag.scope().value()))) + ")");
                 continue;
             }
             Object value = fieldValue(def, fd, entry.getValue());
@@ -718,6 +746,8 @@ public class QueryCompiler {
         Map<String, Object> converted = new LinkedHashMap<>();
         for (Map.Entry<String, Object> entry : scopeValues.entrySet()) {
             converted.put(entry.getKey(), entry.getValue() instanceof DatasetScope.PeriodCondition
+                || entry.getValue() instanceof DatasetScope.EntryScopeCondition
+                || entry.getValue() instanceof DatasetScope.EntryScopeTagCondition
                 ? entry.getValue()
                 : fieldValue(def, resolveField(def, entry.getKey()), entry.getValue()));
         }

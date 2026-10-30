@@ -42,7 +42,9 @@ class TaskController {
         + " AND NOT EXISTS (SELECT 1 FROM sys_task_version n WHERE n.task_id = t.task_id"
         + " AND n.version_no > t.version_no)"
         + " AND (t.assignee_user_id = :actor OR t.assignee_permission = ANY(:permissions)"
-        + " OR (:all AND t.assignee_permission IS NOT NULL))";
+        + " OR (:all AND t.assignee_permission IS NOT NULL))"
+        // A session of an entry scope sees that scope's tasks only (decision D64 item 3).
+        + " AND (CAST(:scopeName AS text) IS NULL OR (t.scope_name = :scopeName AND t.scope_value = :scopeValue))";
 
     private static final TypeReference<Map<String, String>> PARAMS = new TypeReference<>() {};
 
@@ -65,7 +67,11 @@ class TaskController {
             Map<String, BoundValue> params = Map.of(
                 "actor", BoundValue.of(request.actorId()),
                 "permissions", BoundValue.of(request.permissions().toArray(String[]::new)),
-                "all", BoundValue.of(request.hasPermission(RequestContext.ALL_PERMISSIONS)));
+                "all", BoundValue.of(request.hasPermission(RequestContext.ALL_PERMISSIONS)),
+                "scopeName", request.entryScope() == null ? BoundValue.nullOf(String.class)
+                    : BoundValue.of(request.entryScope().name()),
+                "scopeValue", request.entryScope() == null ? BoundValue.nullOf(String.class)
+                    : BoundValue.of(request.entryScope().value()));
             Map<String, BoundValue> page = new java.util.HashMap<>(params);
             page.put("limit", BoundValue.of(Math.clamp(limit, 1, MAX_TASKS)));
             var engine = storages.getEngine(poolRef);

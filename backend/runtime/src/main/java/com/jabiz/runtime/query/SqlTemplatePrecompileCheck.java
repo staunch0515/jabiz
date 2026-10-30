@@ -262,6 +262,10 @@ public class SqlTemplatePrecompileCheck implements PlatformCheck {
                 case DatasetScope.WithinDataPeriod within -> values.put(within.field(), new DatasetScope.PeriodCondition(
                     new com.jabiz.context.DataPeriod(Instant.EPOCH, Instant.EPOCH.plusSeconds(1)),
                     within.referencedField()));
+                case DatasetScope.WithinEntryScope within -> values.put(within.field(), within.via() == null
+                    ? sample(def.field(within.field())) : new DatasetScope.EntryScopeCondition("0", within.via()));
+                case DatasetScope.WithinEntryScopeTag tag -> values.put(tag.field(),
+                    new DatasetScope.EntryScopeTagCondition(tag.nameField(), new com.jabiz.context.EntryScope("x", "0")));
             }
         }
         return values;

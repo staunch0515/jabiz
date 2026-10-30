@@ -170,6 +170,9 @@ public class ApprovalEntities {
         eb.field("facts", f -> f.physicalColumn("facts").immutable(true).required(true).asText(20_000, true));
         // How people know the document, for the approvers' tasks; requests made before it was kept have none.
         eb.field("reference", f -> f.physicalColumn("reference").immutable(true).asText(100));
+        // The entry scope the request belongs to (decision D64): only its sessions, and those without one, see it.
+        eb.field("scopeName", f -> f.physicalColumn("scope_name").immutable(true).asText(64));
+        eb.field("scopeValue", f -> f.physicalColumn("scope_value").immutable(true).asText(128));
         eb.temporal(t -> t.allowScheduled(false));
         eb.listView("default", lv -> lv
             .columns("subject", "entityId", "reference", "status", "currentLevel", "preparerId", "effectStartTime")
@@ -194,6 +197,9 @@ public class ApprovalEntities {
             .asTemporal(TemporalRole.SYSTEM_RECORDED));
         eb.field("processSeqId", f -> f.physicalColumn("process_seq_id").immutable(true).required(true)
             .asNumeric(19, 0));
+        // The request's entry scope (decision D64), so that the decisions are seen with it.
+        eb.field("scopeName", f -> f.physicalColumn("scope_name").immutable(true).asText(64));
+        eb.field("scopeValue", f -> f.physicalColumn("scope_value").immutable(true).asText(128));
         eb.field("version", f -> f.physicalColumn("version").immutable(true).asVersion());
         eb.listView("default", lv -> lv
             .columns("requestId", "levelNo", "approverId", "decision", "reason", "decidedTime")
@@ -223,6 +229,9 @@ public class ApprovalEntities {
             .asTemporal(TemporalRole.SYSTEM_RECORDED));
         eb.field("processSeqId", f -> f.physicalColumn("process_seq_id").immutable(true).required(true)
             .asNumeric(19, 0));
+        // The case's entry scope (decision D64): its facts are seen with it.
+        eb.field("scopeName", f -> f.physicalColumn("scope_name").immutable(true).asText(64));
+        eb.field("scopeValue", f -> f.physicalColumn("scope_value").immutable(true).asText(128));
         eb.field("version", f -> f.physicalColumn("version").immutable(true).asVersion());
         eb.listView("default", lv -> lv
             .columns("subject", "entityId", "outcome", "matchedRule", "requestId", "evaluatedTime")
@@ -293,24 +302,36 @@ public class ApprovalEntities {
 
     @Bean
     DatasetDefinition sysApprovalRequestDataset(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
-        return dataset(REQUEST_DATASET, REQUEST, ApprovalPermissions.READ, ApprovalPermissions.DECIDE, false, poolRef);
+        return dataset(REQUEST_DATASET, REQUEST, ApprovalPermissions.READ, ApprovalPermissions.DECIDE, false, poolRef,
+            true);
     }
 
     @Bean
     DatasetDefinition approvalDecisionDataset(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
         return dataset(DECISION_DATASET, DECISION, ApprovalPermissions.READ, ApprovalPermissions.DECIDE, false,
-            poolRef);
+            poolRef, true);
     }
 
     @Bean
     DatasetDefinition approvalEvaluationDataset(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
         return dataset(EVALUATION_DATASET, EVALUATION, ApprovalPermissions.READ, ApprovalPermissions.DECIDE, false,
-            poolRef);
+            poolRef, true);
     }
 
     private static DatasetDefinition dataset(String id, String entity, String read, String write, boolean timeTravel,
         String poolRef) {
+        return dataset(id, entity, read, write, timeTravel, poolRef, false);
+    }
+
+    /** @param scoped whether the rows say which entry scope they belong to (decision D64 item 3) */
+    private static DatasetDefinition dataset(String id, String entity, String read, String write, boolean timeTravel,
+        String poolRef, boolean scoped) {
         return DatasetDefinition.define(id, d -> d
+            .scope(s -> {
+                if (scoped) {
+                    s.withinEntryScopeTag("scopeName", "scopeValue");
+                }
+            })
             .targetEntityType(entity)
             .asDefault()
             .permissions(read, write)

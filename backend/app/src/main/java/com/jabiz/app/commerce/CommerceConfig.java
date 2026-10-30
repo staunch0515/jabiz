@@ -102,10 +102,30 @@ class CommerceConfig {
             "commerce.warehouse.write", false, poolRef);
     }
 
+    /**
+     * Stock levels; the warehouse entry's sessions see and write their warehouse's only (decision D64), in the
+     * dataset API, STOCK_RECEIVE and the templates alike. Other sessions are not limited.
+     */
     @Bean
     DatasetDefinition stockLevelDataset(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
-        return dataset(CommerceEntities.STOCK_LEVEL_DATASET, CommerceEntities.STOCK_LEVEL, "commerce.stock.read",
-            "commerce.stock.receive", true, poolRef);
+        return DatasetDefinition.define(CommerceEntities.STOCK_LEVEL_DATASET, d -> d
+            .targetEntityType(CommerceEntities.STOCK_LEVEL)
+            .asDefault()
+            .permissions("commerce.stock.read", "commerce.stock.receive")
+            .scope(s -> s.withinEntryScope(CommerceEntities.WAREHOUSE_SCOPE, "warehouseId"))
+            .policy(p -> p.maxQueryBatchSize(500).processOnlyWrites())
+            .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
+    }
+
+    @Bean
+    EntityDefinition warehouseStaffEntityDefinition() {
+        return CommerceEntities.WAREHOUSE_STAFF_ENTITY;
+    }
+
+    @Bean
+    DatasetDefinition warehouseStaffDataset(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
+        return dataset(CommerceEntities.WAREHOUSE_STAFF_DATASET, CommerceEntities.WAREHOUSE_STAFF,
+            "commerce.warehouse.read", "commerce.warehouse.write", false, poolRef);
     }
 
     /** Receipts are recorded by STOCK_RECEIVE and, by those who receive goods, directly; never changed. */

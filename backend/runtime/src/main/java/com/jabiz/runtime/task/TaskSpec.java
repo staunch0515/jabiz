@@ -1,5 +1,7 @@
 package com.jabiz.runtime.task;
 
+import com.jabiz.context.EntryScope;
+
 import java.time.Instant;
 import java.util.Map;
 import java.util.Objects;
@@ -20,9 +22,12 @@ import java.util.regex.Pattern;
  * @param link        where in the admin the task is done (a path such as {@code /tasks}), if anywhere
  * @param dueTime     when it should be done, if known
  * @param sourceKey   what created it ({@code approval:<request>}): {@link CloseTasks} closes the open tasks of a key
+ * @param scope       the entry scope the task belongs to (decision D64): only that scope's sessions, and sessions without
+ *                    a scope, see it; null: the creating session's scope, if it has one
  */
 public record TaskSpec(String type, String titleKey, Map<String, String> titleParams, String userId,
-    String permission, String subjectEntity, String subjectId, String link, Instant dueTime, String sourceKey) {
+    String permission, String subjectEntity, String subjectId, String link, Instant dueTime, String sourceKey,
+    EntryScope scope) {
 
     /** Types of tasks. */
     public static final Pattern TYPE = Pattern.compile("[a-z][a-z0-9._-]{0,99}");
@@ -40,6 +45,11 @@ public record TaskSpec(String type, String titleKey, Map<String, String> titlePa
         titleParams = titleParams == null ? Map.of() : Map.copyOf(titleParams);
     }
 
+    public TaskSpec(String type, String titleKey, Map<String, String> titleParams, String userId, String permission,
+        String subjectEntity, String subjectId, String link, Instant dueTime, String sourceKey) {
+        this(type, titleKey, titleParams, userId, permission, subjectEntity, subjectId, link, dueTime, sourceKey, null);
+    }
+
     /** A task for one user. */
     public static TaskSpec forUser(String type, String titleKey, Map<String, String> titleParams, String userId) {
         return new TaskSpec(type, titleKey, titleParams, Objects.requireNonNull(userId), null, null, null, null, null,
@@ -55,21 +65,33 @@ public record TaskSpec(String type, String titleKey, Map<String, String> titlePa
 
     public TaskSpec about(String entity, Object id) {
         return new TaskSpec(type, titleKey, titleParams, userId, permission, entity, String.valueOf(id), link,
-            dueTime, sourceKey);
+            dueTime, sourceKey, scope);
     }
 
     public TaskSpec link(String path) {
         return new TaskSpec(type, titleKey, titleParams, userId, permission, subjectEntity, subjectId, path, dueTime,
-            sourceKey);
+            sourceKey, scope);
     }
 
     public TaskSpec due(Instant time) {
         return new TaskSpec(type, titleKey, titleParams, userId, permission, subjectEntity, subjectId, link, time,
-            sourceKey);
+            sourceKey, scope);
     }
 
     public TaskSpec source(String key) {
         return new TaskSpec(type, titleKey, titleParams, userId, permission, subjectEntity, subjectId, link, dueTime,
-            key);
+            key, scope);
+    }
+
+    /** The task belongs to the entry scope {@code name}'s value {@code value} (decision D64). */
+    public TaskSpec scope(String name, String value) {
+        return new TaskSpec(type, titleKey, titleParams, userId, permission, subjectEntity, subjectId, link, dueTime,
+            sourceKey, new EntryScope(name, value));
+    }
+
+    /** The task belongs to {@code scope}, or, when null, to the creating session's scope (decision D64). */
+    public TaskSpec scope(EntryScope scope) {
+        return new TaskSpec(type, titleKey, titleParams, userId, permission, subjectEntity, subjectId, link, dueTime,
+            sourceKey, scope);
     }
 }

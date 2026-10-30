@@ -58,6 +58,10 @@ public class TaskWriter {
             task.put("status", TaskEntities.OPEN);
             task.put("dueTime", spec.dueTime());
             task.put("sourceKey", spec.sourceKey());
+            // Decision D64: the task's entry scope, by default the creating session's.
+            com.jabiz.context.EntryScope scope = spec.scope() != null ? spec.scope() : ctx.request().entryScope();
+            task.put("scopeName", scope == null ? null : scope.name());
+            task.put("scopeValue", scope == null ? null : scope.value());
             Object id = ctx.changes().insert(TaskEntities.TASK, task);
             EventPublisher target = publisher.getIfUnique();
             if (target == null) {

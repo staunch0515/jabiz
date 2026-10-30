@@ -206,6 +206,10 @@ public class RequireApproval<C extends ProcessContext> implements StepHandler<Re
             if (approvalCase.reference() != null) {
                 request.put("reference", approvalCase.reference());
             }
+            // Decision D64: the request's entry scope, by default the preparing session's.
+            com.jabiz.context.EntryScope scope = scopeOf(ctx, approvalCase);
+            request.put("scopeName", scope == null ? null : scope.name());
+            request.put("scopeValue", scope == null ? null : scope.value());
             String requestId = String.valueOf(ctx.changes().insert(ApprovalEntities.REQUEST, request));
             record(ctx, subject, approvalCase, ApprovalOutcome.Status.PENDING, matched,
                 versionKeys, requestId, hash, facts, businessTime);
@@ -213,7 +217,7 @@ public class RequireApproval<C extends ProcessContext> implements StepHandler<Re
             return publisher().publish(REQUESTED, new Requested(requestId, subject.name(),
                     approvalCase.entityId(), preparer, levels.size()), ctx.processSeqId())
                 .then(tasks.create(ctx, ApprovalTasks.task(subject.name(), approvalCase.entityId(), approvalCase.reference(),
-                    requestId, 1, levelList.getFirst().permission())));
+                    requestId, 1, levelList.getFirst().permission(), scope)));
         }
     }
 
@@ -240,7 +244,15 @@ public class RequireApproval<C extends ProcessContext> implements StepHandler<Re
         evaluation.put("businessTime", businessTime);
         evaluation.put("evaluatedTime", ctx.opTime());
         evaluation.put("processSeqId", BigDecimal.valueOf(ctx.processSeqId()));
+        com.jabiz.context.EntryScope scope = scopeOf(ctx, approvalCase);
+        evaluation.put("scopeName", scope == null ? null : scope.name());
+        evaluation.put("scopeValue", scope == null ? null : scope.value());
         ctx.changes().insert(ApprovalEntities.EVALUATION, evaluation);
+    }
+
+    /** The case's entry scope (decision D64), by default the preparing session's; null for none. */
+    static com.jabiz.context.EntryScope scopeOf(ProcessContext ctx, ApprovalCase approvalCase) {
+        return approvalCase.scope() != null ? approvalCase.scope() : ctx.request().entryScope();
     }
 
     @Override

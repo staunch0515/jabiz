@@ -1,7 +1,9 @@
 package com.jabiz.runtime.security;
 
+import com.jabiz.context.EntryScope;
 import com.jabiz.context.RequestContext;
 import com.jabiz.runtime.process.sponsor.SignInSource;
+import com.jabiz.security.EntryScopeResolver;
 import com.jabiz.security.SignInAttempt;
 import com.jabiz.security.SignInDecision;
 import com.jabiz.security.SignInGuard;
@@ -23,16 +25,92 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class SignInGuardsTest {
 
     private static SignInGuards guards(SignInGuard... guards) {
+        return guards(java.util.List.of(), guards);
+    }
+
+    /** Guards and entry scope resolvers, with the entries {@code admin} and {@code portal}. */
+    private static SignInGuards guards(java.util.List<EntryScopeResolver> resolvers, SignInGuard... guards) {
         StaticListableBeanFactory factory = new StaticListableBeanFactory();
         for (int i = 0; i < guards.length; i++) {
             factory.addBean("guard" + i, guards[i]);
         }
-        return new SignInGuards(factory.getBeanProvider(SignInGuard.class), null, null, null, null);
+        for (int i = 0; i < resolvers.size(); i++) {
+            factory.addBean("resolver" + i, resolvers.get(i));
+        }
+        SignInEntries entries = new SignInEntries(java.util.Map.of("portal", new SignInEntries.Config(
+            java.util.List.of("CUSTOMER"), false, java.util.List.of(), null, "/portal/", null, null)), false, null);
+        return new SignInGuards(factory.getBeanProvider(SignInGuard.class),
+            factory.getBeanProvider(EntryScopeResolver.class), entries, null, null, null, null);
+    }
+
+    /** A resolver of the scope {@code store} for {@code entry}, answering {@code value}. */
+    private static EntryScopeResolver resolver(String entry, java.util.function.Function<SignInAttempt, String> value) {
+        return new EntryScopeResolver() {
+            @Override
+            public String entry() {
+                return entry;
+            }
+
+            @Override
+            public String scope() {
+                return "store";
+            }
+
+            @Override
+            public String resolve(SignInAttempt attempt) {
+                return value.apply(attempt);
+            }
+        };
     }
 
     private static SignInDecision check(SignInGuards guards) {
         return guards.check("u1", "ann", "portal", Set.of("CUSTOMER"), true, SignInAttempt.Factor.PASSWORD,
             Instant.EPOCH).block();
+    }
+
+    @Test
+    void anEntryScopeIsWorkedOutAfterTheGuardsAndNoneRefuses() {
+        AtomicInteger asked = new AtomicInteger();
+        SignInGuards scoped = guards(java.util.List.of(resolver("portal", attempt -> {
+            asked.incrementAndGet();
+            return "s-" + attempt.userId();
+        })));
+        assertThat(scoped.any()).isTrue();
+        assertThat(scoped.scopeOf("portal")).contains("store");
+        assertThat(scoped.scopeOf("admin")).isEmpty();
+        assertThat(check(scoped)).satisfies(decision -> {
+            assertThat(decision.allowed()).isTrue();
+            assertThat(decision.scope()).isEqualTo(new EntryScope("store", "s-u1"));
+        });
+        // Another entry's sessions carry no scope, and its resolver is not asked.
+        assertThat(scoped.check("u1", "ann", "admin", Set.of("ADMIN"), true, SignInAttempt.Factor.REFRESH,
+            Instant.EPOCH).block()).isEqualTo(SignInDecision.ALLOW);
+        assertThat(asked).hasValue(1);
+
+        // No value, a blank one, one too long or a failure refuses (fail closed).
+        assertThat(check(guards(java.util.List.of(resolver("portal", attempt -> null)))).allowed()).isFalse();
+        assertThat(check(guards(java.util.List.of(resolver("portal", attempt -> " ")))).allowed()).isFalse();
+        assertThat(check(guards(java.util.List.of(resolver("portal", attempt -> "x".repeat(129))))).allowed())
+            .isFalse();
+        assertThat(check(guards(java.util.List.of(resolver("portal", attempt -> {
+            throw new IllegalStateException("bug");
+        })))).allowed()).isFalse();
+        // A guard's refusal comes first: the resolver is not asked.
+        assertThat(check(guards(java.util.List.of(resolver("portal", attempt -> {
+            asked.incrementAndGet();
+            return "s";
+        })), attempt -> SignInDecision.refuse("blocked")))).isEqualTo(SignInDecision.refuse("blocked"));
+        assertThat(asked).hasValue(1);
+    }
+
+    @Test
+    void entryScopeResolversAreCheckedAtStartup() {
+        assertThat(guards(java.util.List.of(resolver("portal", attempt -> "s"))).check()).isEmpty();
+        assertThat(guards(java.util.List.of(resolver("nowhere", attempt -> "s"))).check())
+            .extracting(problem -> problem.message()).containsExactly("entry nowhere does not exist");
+        assertThat(guards(java.util.List.of(resolver("portal", attempt -> "s"), resolver("portal", attempt -> "t")))
+            .check()).singleElement().satisfies(problem -> assertThat(problem.message())
+                .startsWith("entry portal has another resolver already"));
     }
 
     @Test

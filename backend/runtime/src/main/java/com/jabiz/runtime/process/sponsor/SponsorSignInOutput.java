@@ -22,6 +22,8 @@ import java.util.List;
  * @param dataTo        end of that data period (exclusive), or null; both null: not limited in time
  * @param entry         the sign-in entry of the session (section 15)
  * @param emailVerified whether the user's e-mail address is verified (of a {@link LoginOutcome#SUCCESS})
+ * @param scopeName     the session's entry scope (decision D64) of a {@link LoginOutcome#SUCCESS}, or null
+ * @param scopeValue    its value, or null
  */
 public record SponsorSignInOutput(
     LoginOutcome outcome,
@@ -36,12 +38,26 @@ public record SponsorSignInOutput(
     Instant dataFrom,
     Instant dataTo,
     String entry,
-    boolean emailVerified
+    boolean emailVerified,
+    String scopeName,
+    String scopeValue
 ) {
+    public SponsorSignInOutput(LoginOutcome outcome, String userId, String tenantId, List<String> roles,
+        List<String> permissions, String loginRecordId, Long attemptNo, String refusal, String identityId,
+        Instant dataFrom, Instant dataTo, String entry, boolean emailVerified) {
+        this(outcome, userId, tenantId, roles, permissions, loginRecordId, attemptNo, refusal, identityId, dataFrom,
+            dataTo, entry, emailVerified, null, null);
+    }
+
     public SponsorSignInOutput(LoginOutcome outcome, String userId, String tenantId, List<String> roles,
         List<String> permissions, String loginRecordId, Long attemptNo, String refusal, String identityId) {
         this(outcome, userId, tenantId, roles, permissions, loginRecordId, attemptNo, refusal, identityId, null, null,
             null, false);
+    }
+
+    /** The entry scope of a successful sign-in, or null for an entry without one. */
+    public com.jabiz.context.EntryScope entryScope() {
+        return scopeName == null || scopeValue == null ? null : new com.jabiz.context.EntryScope(scopeName, scopeValue);
     }
 
     /** The data period of a successful sign-in, or null when not limited. */

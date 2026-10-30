@@ -114,7 +114,8 @@ public class RbacService {
                                 access.permissions(), mfaAt, access.dataPeriod(), resolved.name(), verified);
                             return guards.check(actor.actorId(), user.get("userName"), resolved.name(),
                                     access.roles(), verified, SignInAttempt.Factor.REFRESH, now)
-                                .map(decision -> decision.allowed() ? new Renewal(actor, false) : Renewal.REFUSED);
+                                .map(decision -> decision.allowed() ? new Renewal(actor.inScope(decision.scope()), false)
+                                    : Renewal.REFUSED);
                         });
                 }))
             .defaultIfEmpty(Renewal.DENIED);
