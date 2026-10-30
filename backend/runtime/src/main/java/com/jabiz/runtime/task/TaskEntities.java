@@ -76,6 +76,9 @@ public class TaskEntities {
             .asTemporal(TemporalRole.SYSTEM_RECORDED));
         eb.field("processSeqId", f -> f.physicalColumn("process_seq_id").immutable(true).required(true)
             .asNumeric(19, 0));
+        // The task's entry scope (decision D64); its recipient sees it in any session.
+        eb.field("scopeName", f -> f.physicalColumn("scope_name").immutable(true).asText(64));
+        eb.field("scopeValue", f -> f.physicalColumn("scope_value").immutable(true).asText(128));
         eb.field("version", f -> f.physicalColumn("version").immutable(true).asVersion());
         eb.listView("default", lv -> lv
             .columns("taskId", "recipientId", "address", "subject", "createdTime")
@@ -96,25 +99,25 @@ public class TaskEntities {
 
     @Bean
     DatasetDefinition sysTaskDataset(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
-        return dataset(TASK_DATASET, TASK, poolRef, true);
+        return dataset(TASK_DATASET, TASK, poolRef, "assigneeUserId");
     }
 
     @Bean
     DatasetDefinition notificationDataset(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
-        return dataset(NOTIFICATION_DATASET, NOTIFICATION, poolRef, false);
+        return dataset(NOTIFICATION_DATASET, NOTIFICATION, poolRef, "recipientId");
     }
 
-    private static DatasetDefinition dataset(String id, String entity, String poolRef, boolean scoped) {
+    /** @param owner the field whose user sees a row in any session (decision D64: tags limit scoped sessions) */
+    private static DatasetDefinition dataset(String id, String entity, String poolRef, String owner) {
         return DatasetDefinition.define(id, d -> {
             d.targetEntityType(entity)
                 .asDefault()
                 .permissions(TaskPermissions.READ, TaskPermissions.WRITE)
                 .policy(p -> p.processOnlyWrites().maxQueryBatchSize(MAX_ROWS))
                 .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef));
-            if (scoped) {
-                // A task given to a user personally stays theirs in any session (made by the system, it has no scope).
-                d.scope(s -> s.withinEntryScopeTag("scopeName", "scopeValue", "assigneeUserId"));
-            }
+            // A task given to a user personally, or a message to them, stays theirs in any session (made by the
+            // system, a task has no scope).
+            d.scope(s -> s.withinEntryScopeTag("scopeName", "scopeValue", owner));
         });
     }
 }

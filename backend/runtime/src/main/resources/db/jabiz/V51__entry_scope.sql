@@ -8,3 +8,4 @@ CREATE INDEX sys_approval_request_version_scope_idx ON sys_approval_request_vers
     WHERE scope_name IS NOT NULL;
 CREATE INDEX sys_task_version_scope_idx ON sys_task_version (scope_name, scope_value) WHERE scope_name IS NOT NULL;
 ALTER TABLE sys_approval_evaluation ADD COLUMN scope_name varchar(64), ADD COLUMN scope_value varchar(128);
+ALTER TABLE sys_notification ADD COLUMN scope_name varchar(64), ADD COLUMN scope_value varchar(128);

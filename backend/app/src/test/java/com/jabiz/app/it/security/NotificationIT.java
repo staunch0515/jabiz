@@ -2,7 +2,12 @@ package com.jabiz.app.it.security;
 
 import com.icegreen.greenmail.junit5.GreenMailExtension;
 import com.icegreen.greenmail.util.ServerSetupTest;
+import com.jabiz.app.commerce.CommerceEntities;
 import com.jabiz.app.it.fixture.ItTaskFixtures;
+import com.jabiz.context.EntryScope;
+import com.jabiz.runtime.context.Actor;
+import com.jabiz.runtime.task.TaskEntities;
+import com.jabiz.runtime.task.TaskPermissions;
 import com.jabiz.runtime.event.OutboxDeliverer;
 import com.jabiz.runtime.task.NotificationSender;
 import com.jabiz.runtime.task.SmtpNotificationSender;
@@ -120,6 +125,73 @@ class NotificationIT extends SecurityItSupport {
         } catch (Exception e) {
             throw new IllegalStateException(e);
         }
+    }
+
+    /** A warehouse of this test's own; returns its id. */
+    String warehouse(String prefix) {
+        String code = prefix + Long.toString(System.nanoTime() % 1_000_000_000L, 36).toUpperCase();
+        return String.valueOf(insert(CommerceEntities.WAREHOUSE_DATASET, Map.of("warehouseCode", code,
+            "warehouseName", "Warehouse " + code, "active", true), null).get("id"));
+    }
+
+    /** A token of the demo's warehouse entry in the warehouse {@code warehouseId} (decision D64). */
+    String warehouseToken(String actor, String warehouseId, String... permissions) {
+        return "Bearer " + tokens.issue(new Actor(actor, null, Set.of("WAREHOUSE"), Set.of(permissions), null, null,
+            "warehouse", true).inScope(new EntryScope(CommerceEntities.WAREHOUSE_SCOPE, warehouseId))).token();
+    }
+
+    /** The task ids of the notifications the caller sees through the notification dataset. */
+    @SuppressWarnings("unchecked")
+    List<String> notifiedTasks(String authorization) {
+        Map<String, Object> page = post("/api/datasets/" + TaskEntities.NOTIFICATION_DATASET + "/query",
+            authorization, Map.of("limit", 500)).expectStatus().isOk().expectBody(MAP).returnResult()
+            .getResponseBody();
+        return ((List<Map<String, Object>>) page.get("items")).stream()
+            .map(row -> String.valueOf(((Map<String, Object>) row.get("attributes")).get("taskId"))).toList();
+    }
+
+    /**
+     * Decision D64: a task of a warehouse is mailed to the holders who see it (the warehouse's own staff, and those who
+     * reach it through an entry without a scope), not to another warehouse's staff; and the messages are seen as the
+     * task is.
+     */
+    @Test
+    void aScopedTaskIsMailedToThoseWhoSeeIt() throws Exception {
+        String permission = unique("it.scoped");
+        String north = warehouse("N");
+        String south = warehouse("S");
+        String roleId = createRole("WAREHOUSE", permission);
+        String key = unique("K");
+        String northAddress = "north-" + key.toLowerCase() + "@example.com";
+        String southAddress = "south-" + key.toLowerCase() + "@example.com";
+        String hqAddress = "hq-" + key.toLowerCase() + "@example.com";
+        String northStaff = userWithEmail(northAddress, true);
+        assign(northStaff, roleId, null);
+        insert(CommerceEntities.WAREHOUSE_STAFF_DATASET, Map.of("userId", northStaff, "warehouseId", north), null);
+        String southStaff = userWithEmail(southAddress, true);
+        assign(southStaff, roleId, null);
+        insert(CommerceEntities.WAREHOUSE_STAFF_DATASET, Map.of("userId", southStaff, "warehouseId", south), null);
+        userWithEmail(hqAddress, true, permission);
+
+        // Opened in the north's session: the task, and its messages, are the north's.
+        Map<String, Object> input = new HashMap<>(Map.of("key", key, "item", key));
+        input.put("user", null);
+        input.put("permission", permission);
+        post("/api/processes/IT_TASK_OPEN/latest", warehouseToken("it-north-opener", north, ItTaskFixtures.PERMISSION),
+            input).expectStatus().isOk();
+        deliverer.deliverPending().block();
+        assertThat(awaitSent(key, 2)).extracting(row -> row.get("address"))
+            .containsExactlyInAnyOrder(northAddress, hqAddress);
+        assertThat(recipients(key)).containsExactlyInAnyOrder(northAddress, hqAddress);
+
+        String taskId = String.valueOf(query("SELECT task_id FROM sys_task_version WHERE source_key = ?", key)
+            .getFirst().get("task_id"));
+        assertThat(notifiedTasks(warehouseToken("it-north-reader", north, TaskPermissions.READ))).contains(taskId);
+        assertThat(notifiedTasks(warehouseToken("it-south-reader", south, TaskPermissions.READ)))
+            .doesNotContain(taskId);
+        // Headquarters (no scope) sees them all; the north's staff sees their own message in any session.
+        assertThat(notifiedTasks(bearer(TaskPermissions.READ))).contains(taskId);
+        assertThat(notifiedTasks(warehouseToken(northStaff, south, TaskPermissions.READ))).contains(taskId);
     }
 
     @Test
