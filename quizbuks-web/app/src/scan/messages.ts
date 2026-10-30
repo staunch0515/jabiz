@@ -1,5 +1,6 @@
 import { addMessages } from '@jabiz/client'
 import { APP } from '../messages'
+import { BRAND } from '../qb/brand'
 
 /** The scanner's texts (Q52), part of the app's namespace `app`. */
 const en = {
@@ -9,8 +10,8 @@ const en = {
     hint: 'Point the camera at the QR code on the sponsor\'s screen or on a poster in the shop.',
     starting: 'Starting the camera…',
     scanning: 'Looking for a code…',
-    foreign: 'This is not a QuizBuks code. Point the camera at the code on the sponsor\'s screen or poster.',
-    denied: 'QuizBuks may not use the camera. Allow it in your phone\'s settings, or scan the code with your phone\'s camera app.',
+    foreign: `This is not a ${BRAND.name} code. Point the camera at the code on the sponsor's screen or poster.`,
+    denied: `${BRAND.name} may not use the camera. Allow it in your phone's settings, or scan the code with your phone's camera app.`,
     noCamera: 'No camera was found on this device. Scan the code with your phone\'s camera app instead.',
     unavailable: 'Scanning is not available here. Scan the code with your phone\'s camera app instead.',
     failed: 'The camera could not be started. Try again, or scan the code with your phone\'s camera app.',
@@ -28,8 +29,8 @@ const zh: typeof en = {
     hint: '把相机对准商家屏幕上或店内海报上的二维码。',
     starting: '正在打开相机…',
     scanning: '正在寻找二维码…',
-    foreign: '这不是 QuizBuks 的码。请对准商家屏幕或海报上的码。',
-    denied: 'QuizBuks 没有使用相机的权限。请在手机设置中允许，或用手机自带的相机扫码。',
+    foreign: `这不是 ${BRAND.name} 的码。请对准商家屏幕或海报上的码。`,
+    denied: `${BRAND.name} 没有使用相机的权限。请在手机设置中允许，或用手机自带的相机扫码。`,
     noCamera: '这台设备上没有找到相机。请改用手机自带的相机扫码。',
     unavailable: '这里不能扫码。请改用手机自带的相机扫码。',
     failed: '相机没能打开。请重试，或用手机自带的相机扫码。',
@@ -47,8 +48,8 @@ const ja: typeof en = {
     hint: 'スポンサーの画面か店内ポスターの QR コードにカメラを向けてください。',
     starting: 'カメラを起動しています…',
     scanning: 'コードを探しています…',
-    foreign: 'QuizBuks のコードではありません。スポンサーの画面かポスターのコードにカメラを向けてください。',
-    denied: 'QuizBuks はカメラを使えません。端末の設定で許可するか、端末のカメラアプリで読み取ってください。',
+    foreign: `${BRAND.name} のコードではありません。スポンサーの画面かポスターのコードにカメラを向けてください。`,
+    denied: `${BRAND.name} はカメラを使えません。端末の設定で許可するか、端末のカメラアプリで読み取ってください。`,
     noCamera: 'この端末にカメラが見つかりません。端末のカメラアプリで読み取ってください。',
     unavailable: 'ここでは読み取れません。端末のカメラアプリで読み取ってください。',
     failed: 'カメラを起動できませんでした。もう一度試すか、端末のカメラアプリで読み取ってください。',

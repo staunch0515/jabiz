@@ -64,6 +64,7 @@ brands/brand.mjs    读取与检查；brands/vite.mjs 是 SPA 的 Vite 插件
 - `src/qb/brand-profile.test.ts`（两个 SPA 共用）：每份档案完整；检查说出缺什么；没有的品牌被拒绝；构建的 `BRAND` 是 `QB_BRAND` 所选的；
   SPA 的源码与 `index.html` 中除标识符外不再出现品牌名。
 - `src/qb/brand.test.ts`：每份档案的 `brand.css` 在亮暗两种外观下都满足对比度。
+- 商店的宣传图（`e2e/store/content.ts`）取档案的图标、名称与主题色。
 - CI（`quizbuks.yml` 的 web）：以 `QB_BRAND=sample` 构建两个 SPA，标题、清单、图标为见本档案的，产物中除 iOS 外壳的 User-Agent 外没有 QuizBuks。
 
 ## 6. 移动端外壳（另一会话）
