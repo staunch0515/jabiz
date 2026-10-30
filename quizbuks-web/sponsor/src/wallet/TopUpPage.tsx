@@ -23,6 +23,7 @@ import './messages'
 import { pollUntil } from './poll'
 import { goToStripe, stripePageUrl } from './stripePage'
 import { STATUS_BADGES, useTopUpStatusLabel } from './WalletPage'
+import { SoundOnce } from '../qb/SoundSettings'
 
 /** How long the page asks before saying it will update later. */
 export const OPEN_TIMEOUT_MS = 60_000
@@ -200,6 +201,8 @@ export function TopUpPage({ topUpId }: { topUpId: string }) {
 
   return (
     <section className="flex max-w-xl flex-col gap-4" aria-labelledby="topup-title" data-testid="topup">
+      {/* Q57: back from paying and the Kudos are in. */}
+      <SoundOnce cue={state === 'paid' && back === 'paid' ? 'reward' : null} />
       {backLink}
       <h1 id="topup-title" className="text-xl font-semibold">{t('wallet.detail.title')}</h1>
       <Alert variant={tone} role="status" aria-live="polite" data-testid="topup-state" data-state={state}>

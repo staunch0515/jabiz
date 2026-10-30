@@ -26,6 +26,11 @@ const en = {
     mfa: 'Two-step verification',
     mail: 'E-mail',
   },
+  sound: {
+    title: 'Sound effects',
+    label: 'Play sound effects',
+    hint: 'Short sounds when an answer is checked, a reward arrives or something you did is done. They follow the device\'s volume.',
+  },
   legal: {
     kinds: {
       TERMS_APP: 'Terms of use',
@@ -134,6 +139,11 @@ const zh: typeof en = {
     mfa: '两步验证',
     mail: '邮件',
   },
+  sound: {
+    title: '音效',
+    label: '播放音效',
+    hint: '答题结果、获得奖励或操作完成时播放简短的音效，音量随设备设置。',
+  },
   legal: {
     kinds: {
       TERMS_APP: '用户条款',
@@ -240,6 +250,11 @@ const ja: typeof en = {
     emailHint: 'メールアドレスはここでは変更できません。変更が必要な場合はお問い合わせください。',
     mfa: '2 段階認証',
     mail: 'メール',
+  },
+  sound: {
+    title: '効果音',
+    label: '効果音を鳴らす',
+    hint: '回答の結果、報酬の受け取り、操作の完了などに短い音を鳴らします。音量は端末の設定に従います。',
   },
   legal: {
     kinds: {

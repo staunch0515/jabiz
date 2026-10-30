@@ -4,6 +4,7 @@ import { cleanup, render, screen, waitFor, within } from '@testing-library/react
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
+import { soundEnabled } from './qb/sound'
 import './messages'
 
 function json(status: number, body: unknown) {
@@ -18,6 +19,8 @@ interface Me {
   profile?: Record<string, unknown> | null
   /** The accounts at identity providers linked already. */
   identities?: Record<string, unknown>[]
+  /** Q57: the account has the sound effects off. */
+  soundOff?: boolean
   /** The answer to saving the profile when it is refused. */
   refusal?: Record<string, unknown>
 }
@@ -72,6 +75,11 @@ function server(me?: Me, providers: unknown[] = []) {
         }
         return json(200, { locale: mailLocale, effective: mailLocale ?? 'en', languages: ['en', 'zh', 'ja'],
           defaultLocale: 'en' })
+      case '/api/datasets/urn:jabiz:dataset:me:QbUserSettings/query':
+        return json(200, { items: me?.soundOff ? [{ id: 'u1', version: 0, attributes: { userId: 'u1', soundOff: true } }]
+          : [], offset: 0, limit: 1 })
+      case '/api/processes/QB_SETTINGS_SAVE/latest':
+        return json(200, { output: { soundOn: (body as { soundOn: boolean }).soundOn } })
       case '/api/processes/QB_PROFILE_SAVE/latest':
         if (me?.refusal) return json(422, me.refusal)
         profile = { displayName: (body as { displayName: string }).displayName, countryCode: 'JP', city: null,
@@ -386,6 +394,25 @@ describe('a signed-in taker', () => {
     await userEvent.click(within(section).getByTestId('mail-preference-qb.welcome'))
     await waitFor(() => expect(posted).toContainEqual({ path: '/api/auth/mail/preferences',
       body: { template: 'qb.welcome', subscribed: false } }))
+  })
+
+  it('turns the sound effects off and on from the app\'s settings, saved to the account (Q57)', async () => {
+    const { posted } = server({ profile: { displayName: 'Mei', countryCode: 'JP', city: null,
+      preferredCurrency: 'JPY', revision: 1 }, soundOff: true })
+    window.history.replaceState(null, '', '/account/preferences')
+    render(<App />)
+    const sound = await screen.findByTestId('account-sound')
+    expect(sound).toHaveTextContent('Sound effects')
+    const toggle = within(sound).getByRole('switch', { name: 'Play sound effects' })
+    // Off on this account: the device follows it.
+    await waitFor(() => expect(toggle).toHaveAttribute('aria-checked', 'false'))
+    expect(soundEnabled()).toBe(false)
+    await userEvent.click(toggle)
+    await waitFor(() => expect(posted).toContainEqual({ path: '/api/processes/QB_SETTINGS_SAVE/latest',
+      body: { soundOn: true } }))
+    expect(toggle).toHaveAttribute('aria-checked', 'true')
+    expect(soundEnabled()).toBe(true)
+    await expectAccessible()
   })
 
   it('asks before sending mail in the language the interface was switched to', async () => {

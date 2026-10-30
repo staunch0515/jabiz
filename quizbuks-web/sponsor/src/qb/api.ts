@@ -153,6 +153,19 @@ export async function readMySponsor(): Promise<Sponsor | null> {
   }
 }
 
+/** One's own settings (Q57): every default when there is no row (the sound on). */
+export interface UserSettings {
+  soundOn: boolean
+}
+
+export async function readMySettings(): Promise<UserSettings> {
+  const row = await ownRow(DATASET.mySettings)
+  return { soundOn: row?.soundOff !== true }
+}
+
+export const saveMySettings = (input: UserSettings) =>
+  runProcess<UserSettings>(PROCESS.settingsSave, { soundOn: input.soundOn })
+
 /** The most rows a dataset answers at once (the platform's page limit). */
 const PAGE = 100
 

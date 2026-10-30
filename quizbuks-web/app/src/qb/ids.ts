@@ -6,9 +6,10 @@
  * This folder (`src/qb`) is the same in both SPAs (`quizbuks-web/app`, `quizbuks-web/sponsor`); CI compares them.
  */
 
-/** Processes (`identity.ProfileProcesses`, `identity.SponsorProcesses`). */
+/** Processes (`identity.ProfileProcesses`, `identity.SponsorProcesses`, `settings.SettingsProcesses`). */
 export const PROCESS = {
   profileSave: 'QB_PROFILE_SAVE',
+  settingsSave: 'QB_SETTINGS_SAVE',
   sponsorApply: 'QB_SPONSOR_APPLY',
   sponsorProfileSave: 'QB_SPONSOR_PROFILE_SAVE',
 } as const
@@ -18,9 +19,10 @@ export const TEMPLATE = {
   mySignIns: 'qb.me.sign-ins',
 } as const
 
-/** Datasets (`identity.QbAccounts`, `country.QbCountries`). */
+/** Datasets (`identity.QbAccounts`, `country.QbCountries`, `settings.QbSettings`). */
 export const DATASET = {
   myProfile: 'urn:jabiz:dataset:me:QbProfile',
+  mySettings: 'urn:jabiz:dataset:me:QbUserSettings',
   mySponsor: 'urn:jabiz:dataset:sponsor:QbSponsor',
   countries: 'urn:jabiz:dataset:default:QbCountry',
 } as const

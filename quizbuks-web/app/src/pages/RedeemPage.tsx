@@ -10,6 +10,7 @@ import { QB } from '../qb/messages'
 import { checkRedeemCode, claimRedemption, readAttemptResult, type RedeemPrize, type RedemptionStatus } from '../qb/play'
 import { problemText } from '../qb/problems'
 import { Link } from '../qb/router'
+import { useSoundOnce } from '../qb/SoundSettings'
 import { forgetRedeem } from '../redeemReturn'
 import { SCAN_PATH } from '../scan/ScanPage'
 
@@ -28,6 +29,8 @@ function Claimed({ prize, status }: { prize: RedeemPrize; status: RedemptionStat
   })
   const now = result.data?.redeem?.status ?? status
   const collected = now === 'REDEEMED'
+  // Q57: the prize handed over.
+  useSoundOnce(collected ? 'reward' : null)
   return (
     <Alert variant={collected ? 'success' : 'default'} data-testid="redeem-done" data-status={now}>
       {collected ? <CircleCheck aria-hidden /> : <Hourglass aria-hidden />}
