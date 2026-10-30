@@ -126,7 +126,7 @@ jobs:
       - name: Brand profiles and the other front ends (Q54b)
         working-directory: quizbuks-web
         run: |
-          node --test brands/*.test.mjs
+          node --test brands/*.test.mjs maintenance/*.test.mjs
           (cd biz && QB_BRAND=sample node scripts/build.mjs --outDir ../.brand-check/biz --emptyOutDir)
           (cd shopify-site && QB_BRAND=sample node scripts/build.mjs --outDir ../.brand-check/shopify-site --emptyOutDir)
           (cd shopify && QB_BRAND=sample VITE_JABIZ_ENTRY=shopify pnpm exec vite build --outDir ../.brand-check/shopify --emptyOutDir)

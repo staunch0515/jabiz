@@ -311,7 +311,7 @@ Run workflow，分支选该环境的分支，`image-tag` 留空。第一次启�
 
 ## 维护模式
 
-手工开关：本环境目录中存在 `maintenance/maintenance.lock` 时，Caddy 对**所有**请求直接返回维护页（`maintenance.html`，日、中、英三种语言），
+手工开关：本环境目录中存在 `maintenance/maintenance.lock` 时，Caddy 对**所有**请求直接返回维护页（`maintenance.html`），
 状态码 503、`Retry-After: 300`、`Cache-Control: no-store`，请求不到达应用；删掉这个文件即恢复正常代理。Caddy 每个请求都检查这个文件，开关不需要重新加载 Caddy，
 也不经过 workflow。
 
@@ -326,6 +326,9 @@ rm /opt/apps/$APP/maintenance/maintenance.lock
 - **应用不在时自动显示**：没有锁文件、但 Caddy 连不上应用（`docker stop "$APP-app"`、重启、部署中的替换、尚未开始监听、崩溃）时，
   同样返回维护页（503、`Retry-After: 60`、`Cache-Control: no-store`）。只有 Caddy 连不上应用才算（它自己的 502）；应用自己回答的 503
   （`PROCESS_BUSY`、`QUERY_TIMEOUT` 等）照原样转发。计划内的维护仍先建锁文件：锁文件期间应用健康也不接请求，且 `Retry-After` 更长。
+- **维护页**（Q55，`docs/quizbuks/plans/Q55-maintenance-page.md`）：由 `node quizbuks-web/maintenance/build.mjs` 按品牌档案生成（名称、标志、配色、插画，全部内联），
+  只显示一种语言（链接的 `?lang=`，否则此浏览器在 App 中选过的语言，否则按时区：日本→日语，中国大陆、港澳台→中文，否则浏览器语言，否则英语），
+  并每 10 秒请求一次访问者原来打开的地址，不再是 503 即自动回到那个页面。改了品牌档案或维护页后重新生成并提交（CI 检查）。
 - 两个环境各有自己的开关，互不影响；同一服务器上的其他应用不受影响。
 - 维护页由每次部署上传（`maintenance/maintenance.html`），锁文件 workflow 从不创建或删除：维护期间照常部署（例如修复后重新部署），维护页一直显示到手工关闭，
   可以先在服务器上确认应用健康（`docker logs "$APP-app"`）再关闭。
