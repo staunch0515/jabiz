@@ -22,14 +22,16 @@ import { posterPng, qrFileName, qrImageUrl, qrPng, qrSvg } from './qr'
  * The QR code of a publication's share link (Q21): shown with the link, saved as PNG or SVG for the sponsor's own
  * design, or as a ready poster (A4) to print and post at the stops nearby.
  */
-export function PublicationQrDialog({ publicationId, name, open, onOpenChange }: {
+export function PublicationQrDialog({ publicationId, language, name, open, onOpenChange }: {
   publicationId: string
+  /** The quiz's language, which the link carries (Q59b). */
+  language: string | null
   name: string
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
   const { t } = useTranslation(SPONSOR)
-  const link = shareLink(publicationId)
+  const link = shareLink(publicationId, language)
   const image = useQuery({ queryKey: ['publication-qr', link], queryFn: () => qrImageUrl(link), staleTime: Infinity })
   const [saving, setSaving] = useState<string | null>(null)
 

@@ -52,7 +52,8 @@ class InvitationIT extends PlayItSupport {
         .withUser("shop@example.com", "shop", "shop-secret-1"));
 
     static final Pattern LINK = Pattern.compile(
-        "https://quizbuks\\.example\\.com/taker/auth/email-link\\?entry=app&token=([A-Za-z0-9_-]+)&to=([^)\\s]*)");
+        "https://quizbuks\\.example\\.com/taker/auth/email-link\\?entry=app&token=([A-Za-z0-9_-]+)&to=([^)\\s&]*)"
+            + "&lang=([a-z]{2})");
     static final Pattern UNSUBSCRIBE = Pattern.compile(
         "https://quizbuks\\.example\\.com/taker/mail/unsubscribe\\?token=([A-Za-z0-9_.-]+)");
 
@@ -225,6 +226,8 @@ class InvitationIT extends PlayItSupport {
         Matcher link = LINK.matcher(mail);
         assertThat(link.find()).isTrue();
         assertThat(link.group(2)).isEqualTo("%2Ftaker%2Fp%2F" + publicationId);
+        // Q59b: the quiz's language (made by a request in English), which the app takes for someone new to it.
+        assertThat(link.group(3)).isEqualTo("en");
         // Nothing waits any more: the job has nothing to do.
         assertThat(runMailJob().items().selected()).isZero();
 

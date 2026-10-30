@@ -88,3 +88,26 @@ test('a visitor starts from a share link with an e-mail address only', async ({ 
   await page.goto('/taker/account/profile')
   await expect(page.getByTestId('profile-name')).toHaveValue(email.split('@')[0])
 })
+
+test('a link\'s language opens the app in it for a new visitor, and leaves the address (Q59b)', async ({
+  browser, request,
+}) => {
+  test.setTimeout(180_000)
+  const shared = await sharedPublication(request)
+  await expect.poll(async () => (await request.get('/api/public/queries/qb.public.publication', {
+    params: { 'p.publicationId': shared.publicationId } })).json()
+    .then((page) => page.items?.length ?? 0), { timeout: 60_000 }).toBe(1)
+  // A browser in English that never opened the app: the link's Japanese wins.
+  const context = await browser.newContext({ locale: 'en-US', viewport: { width: 390, height: 844 } })
+  const page = await context.newPage()
+  await page.goto(`/taker/p/${shared.publicationId}?lang=ja`)
+  await expect(page.getByRole('heading', { name: shared.name })).toBeVisible()
+  await expect(page.locator('html')).toHaveAttribute('lang', 'ja')
+  expect(new URL(page.url()).search).toBe('')
+  await expectAccessible(page, 'share page in Japanese')
+  // Chosen now: a link in another language no longer changes it.
+  await page.goto(`/taker/p/${shared.publicationId}?lang=en`)
+  await expect(page.getByRole('heading', { name: shared.name })).toBeVisible()
+  await expect(page.locator('html')).toHaveAttribute('lang', 'ja')
+  await context.close()
+})

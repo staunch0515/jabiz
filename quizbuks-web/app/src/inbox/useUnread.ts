@@ -1,5 +1,8 @@
+import { i18n } from '@jabiz/client'
 import { useQuery } from '@tanstack/react-query'
 import { useEffect } from 'react'
+import { shownLanguages } from '../qb/api'
+import { useSoundSetting } from '../qb/SoundSettings'
 import { readUnread, UNREAD_INTERVAL, UNREAD_QUERY } from './api'
 
 /**
@@ -9,10 +12,13 @@ import { readUnread, UNREAD_INTERVAL, UNREAD_QUERY } from './api'
  * (docs/quizbuks/plans/Q7-messages-legal.md §9). A failure shows no badge.
  */
 export function useUnread(enabled = true) {
+  // Q59b: counted as the inbox lists (the sponsors' notices of the languages the taker sees).
+  const settings = useSoundSetting()
+  const languages = shownLanguages(settings.data, i18n.language)
   const unread = useQuery({
-    queryKey: UNREAD_QUERY,
-    queryFn: readUnread,
-    enabled,
+    queryKey: [...UNREAD_QUERY, languages],
+    queryFn: () => readUnread(languages),
+    enabled: enabled && !settings.isPending,
     refetchInterval: UNREAD_INTERVAL,
     refetchIntervalInBackground: false,
     // The return to the front is asked by `visibilitychange` below; a focus would ask a second time (review L4).

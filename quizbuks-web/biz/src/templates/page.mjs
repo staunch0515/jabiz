@@ -140,6 +140,21 @@ function cta(content) {
   </div>`
 }
 
+/**
+ * A link into the app with the language it should open in (Q59b): someone new to the app sees it in that language.
+ * A link that already names one keeps it.
+ */
+export function withLanguage(url, language) {
+  if (/[?&]lang=/.test(url)) return url
+  const [path, hash = ''] = url.split('#')
+  return `${path}${path.includes('?') ? '&' : '?'}lang=${language}${hash ? `#${hash}` : ''}`
+}
+
+/** Every link of the page into the taker app (/taker/...) in the page's language. */
+function appLinksIn(html, language) {
+  return html.replace(/href="(\/taker\/[^"]*)"/g, (_, url) => `href="${withLanguage(url, language)}"`)
+}
+
 function tryIt({ language, content, tryQuizzes, base }) {
   const t = content.home.tryIt
   const blocks = ['en', 'zh', 'ja'].map((lang) => {
@@ -148,7 +163,8 @@ function tryIt({ language, content, tryQuizzes, base }) {
     const qr = entry.qr ? `<img class="qr" src="${esc(entry.qr.startsWith('/') ? entry.qr : base + entry.qr)}" alt="${esc(t.qrAlt)} (${LANGUAGE_NAMES[lang]})" width="160" height="160" />`
       : `<div class="qr placeholder" role="img" aria-label="${esc(t.qrPending)}">${icon('qr', 'icon big muted')}<span>${esc(t.qrPending)}</span></div>`
     const button = ready
-      ? `<a class="button primary" href="${esc(entry.url)}" lang="${LOCALES[lang]}">${esc(t.buttons[lang])}</a>`
+      // The quiz of this language opens in it (Q59b).
+      ? `<a class="button primary" href="${esc(withLanguage(entry.url, lang))}" lang="${LOCALES[lang]}">${esc(t.buttons[lang])}</a>`
       : `<span class="button primary disabled" aria-disabled="true" lang="${LOCALES[lang]}">${esc(t.buttons[lang])}</span><span class="soon">${esc(t.comingSoon)}</span>`
     return `<div class="try-card" data-try="${lang}">${qr}${button}</div>`
   }).join('')
@@ -331,7 +347,8 @@ export function renderPage(ctx) {
   const meta = content.meta[page]
   const alternates = ['en', 'zh', 'ja'].map((lang) =>
     `<link rel="alternate" hreflang="${LOCALES[lang]}" href="${siteUrl}${pagePath(lang, page, base)}" />`).join('\n    ')
-  return `<!doctype html>
+  // Q59b: the links into the app carry the page's language.
+  return appLinksIn(`<!doctype html>
 <html lang="${LOCALES[language]}" data-base="${base}" data-page="${page}" data-language="${language}">
   <head>
     <meta charset="UTF-8" />
@@ -362,5 +379,5 @@ ${BODIES[page](ctx)}
     ${footer(ctx)}
   </body>
 </html>
-`
+`, language)
 }
