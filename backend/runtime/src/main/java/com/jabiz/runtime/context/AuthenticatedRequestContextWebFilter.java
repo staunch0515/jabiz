@@ -40,6 +40,7 @@ public class AuthenticatedRequestContextWebFilter implements WebFilter {
 
     private static RequestContext authenticated(RequestContext started, Actor actor) {
         return new RequestContext(actor.actorId(), actor.tenantId(), started.locale(), started.requestId(),
-            actor.roles(), actor.permissions(), actor.mfaAt(), actor.dataPeriod(), actor.entry(), actor.emailVerified());
+            actor.roles(), actor.permissions(), actor.mfaAt(), actor.dataPeriod(), actor.entry(), actor.emailVerified(),
+            actor.entryScope());
     }
 }

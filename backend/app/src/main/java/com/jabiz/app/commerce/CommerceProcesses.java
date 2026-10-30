@@ -17,6 +17,7 @@ import com.jabiz.runtime.process.steps.CallProcess;
 import com.jabiz.runtime.process.steps.HoldLock;
 import com.jabiz.runtime.process.steps.LoadEntity;
 import com.jabiz.runtime.process.steps.QueryEntities;
+import com.jabiz.runtime.process.steps.RequireScope;
 import com.jabiz.runtime.publicread.FileAccess;
 import com.jabiz.runtime.security.SecurityEntities;
 import jakarta.validation.Valid;
@@ -211,6 +212,10 @@ public final class CommerceProcesses {
                 .outputMapper(ctx -> ctx.get(OUTPUT, ReceiveOutput.class))
                 .step("Load the warehouse", QueryEntities.of(WAREHOUSE_DATASET,
                     ctx -> byCode("warehouseCode", input(ctx, ReceiveInput.class).warehouseCode()), WAREHOUSES))
+                // The warehouse entry's staff receive into their own warehouse only (decision D64).
+                .step("In the caller's warehouse", RequireScope.of(CommerceEntities.WAREHOUSE_SCOPE,
+                    CommerceProcesses::warehouseIdOf,
+                    ctx -> "Warehouse " + input(ctx, ReceiveInput.class).warehouseCode()))
                 .step("Load the product", QueryEntities.of(PRODUCT_DATASET,
                     ctx -> byCode("sku", input(ctx, ReceiveInput.class).sku()), PRODUCTS))
                 .step("Load the stock", QueryEntities.of(STOCK_LEVEL_DATASET, CommerceProcesses::stockQuery, STOCK))
@@ -646,6 +651,12 @@ public final class CommerceProcesses {
     /** Identifiers compare as text: references and keys may come back as UUID or String. */
     private static String key(Object id) {
         return String.valueOf(id);
+    }
+
+    /** The id of the warehouse loaded, or null when there is none (refused later as not found). */
+    static String warehouseIdOf(ProcessContext ctx) {
+        EntityInstance warehouse = first(ctx, WAREHOUSES);
+        return warehouse == null ? null : String.valueOf(warehouse.id());
     }
 
     private static EntityInstance first(ProcessContext ctx, String key) {

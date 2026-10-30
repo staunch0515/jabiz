@@ -53,8 +53,10 @@ class PlatformCheckIT {
                 + "stored but no subscription consumes jabiz.inbound.demo-shop.orders.paid",
             "WARNING INBOUND | jabiz.inbound-webhooks.providers.demo-shop.event-types | app/uninstalled is accepted and "
                 + "stored but no subscription consumes jabiz.inbound.demo-shop.app.uninstalled",
-            "WARNING SECURITY | jabiz.security.entries | role CUSTOMER does not exist (yet)");
-        assertThat(outcome.lines()).last().isEqualTo("platformCheck: 0 error(s), 3 warning(s)");
+            "WARNING SECURITY | jabiz.security.entries | role CUSTOMER does not exist (yet)",
+            // The warehouse entry's role (ROADMAP phase 17y): the demo leaves creating it to an administrator.
+            "WARNING SECURITY | jabiz.security.entries | role WAREHOUSE does not exist (yet)");
+        assertThat(outcome.lines()).last().isEqualTo("platformCheck: 0 error(s), 4 warning(s)");
         assertThat(outcome.exitCode()).isZero();
     }
 

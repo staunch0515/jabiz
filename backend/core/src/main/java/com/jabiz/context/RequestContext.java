@@ -29,6 +29,8 @@ import java.util.Set;
  *                    scenario replays)
  * @param emailVerified whether the actor's e-mail address was verified when the session's token was issued
  *                    (docs/design/10-security.md section 15)
+ * @param entryScope  the share of the data the session works on, for sessions of an entry with a scope (decision D64;
+ *                    docs/design/10-security.md section 13.4), or null when the actor is not limited by one
  */
 public record RequestContext(
     String actorId,
@@ -40,11 +42,18 @@ public record RequestContext(
     Instant mfaAt,
     DataPeriod dataPeriod,
     String entry,
-    boolean emailVerified
+    boolean emailVerified,
+    EntryScope entryScope
 ) {
 
     /** The sign-in entry that exists always: the administration (decision D36 item 1). */
     public static final String DEFAULT_ENTRY = "admin";
+
+    /** A context outside any entry scope. */
+    public RequestContext(String actorId, String tenantId, Locale locale, String requestId, Set<String> roles,
+        Set<String> permissions, Instant mfaAt, DataPeriod dataPeriod, String entry, boolean emailVerified) {
+        this(actorId, tenantId, locale, requestId, roles, permissions, mfaAt, dataPeriod, entry, emailVerified, null);
+    }
 
     /** A context outside any sign-in entry, of an actor whose e-mail address is not known to be verified. */
     public RequestContext(String actorId, String tenantId, Locale locale, String requestId, Set<String> roles,
@@ -92,6 +101,11 @@ public record RequestContext(
      */
     public static RequestContext anonymous(Locale locale, String requestId) {
         return new RequestContext(ANONYMOUS_ACTOR, null, locale, requestId, Set.of(), Set.of());
+    }
+
+    /** The session's value of the entry scope {@code scope}, or null when the session has none of that name. */
+    public String entryScopeValue(String scope) {
+        return entryScope != null && entryScope.is(scope) ? entryScope.value() : null;
     }
 
     /** Whether the actor holds the permission, directly or through {@link #ALL_PERMISSIONS}. */
