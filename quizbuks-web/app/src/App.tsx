@@ -23,7 +23,7 @@ import { History, House, Inbox, ScanLine, UserRound, Wallet, type LucideIcon } f
 import { useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from './messages'
-import { ACCOUNT_PATH, AccountPage, rememberLinked } from './pages/AccountPage'
+import { ACCOUNT_PATH, ACCOUNT_SECURITY_PATH, AccountPage, isAccountPath, rememberLinked } from './pages/AccountPage'
 import { FeedPage } from './pages/FeedPage'
 import { HistoryPage } from './pages/HistoryPage'
 import { PlayPage } from './pages/PlayPage'
@@ -141,10 +141,10 @@ function BottomNav({ path }: { path: string }) {
   const { t } = useTranslation(APP)
   const unread = useUnread()
   // A publication's page belongs to home, an attempt's to the history, the payout account to the wallet, a message
-  // to the inbox, the staff's counter to the account (Q39).
+  // to the inbox, the staff's counter (Q39) and the account's parts (Q56) to the account.
   const item = itemPage(path)
   const section = item ? (item.page === 'p' ? HOME : HISTORY) : path === PAYOUT_PATH || path === BANK_PATH ? WALLET_PATH
-    : inboxItemOf(path) ? INBOX_PATH : path === STAFF_PATH ? ACCOUNT_PATH : path
+    : inboxItemOf(path) ? INBOX_PATH : path === STAFF_PATH || isAccountPath(path) ? ACCOUNT_PATH : path
   return (
     <nav aria-label={t('nav.label')}
       className="bg-card fixed inset-x-0 bottom-0 z-10 border-t pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_16px_-12px_var(--overlay)]">
@@ -198,7 +198,7 @@ function SignedIn({ path }: { path: string }) {
       action={<Button variant="outline" onClick={() => void profile.refetch()}>{t('retry')}</Button>} />
   }
   const complete = profile.data?.countryCode ? profile.data : null
-  if (!complete && emailVerified && path !== WELCOME && path !== ACCOUNT_PATH) {
+  if (!complete && emailVerified && path !== WELCOME && !isAccountPath(path)) {
     // From a share link (Q15): the short welcome step, then back to the publication.
     if (itemPage(path)?.page === 'p') rememberShareNext(path)
     return <Redirect to={WELCOME} />
@@ -217,7 +217,7 @@ function SignedIn({ path }: { path: string }) {
   else if (path === WALLET_PATH) page = <WalletPage />
   else if (path === PAYOUT_PATH) page = <PayoutPage />
   else if (path === BANK_PATH) page = <BankPage />
-  else if (path === ACCOUNT_PATH) page = <AccountPage />
+  else if (isAccountPath(path)) page = <AccountPage path={path} />
   else if (path === INBOX_PATH) page = <InboxPage />
   else if (path === STAFF_PATH) page = <StaffDeskPage />
   else if (path === SCAN_PATH) page = <ScanPage />
@@ -325,7 +325,7 @@ function Routes() {
       onSignedIn={(to) => navigate(to, { replace: true })}
       onLinked={(to, linked) => {
         rememberLinked(linked)
-        navigate(to || ACCOUNT_PATH, { replace: true })
+        navigate(to || ACCOUNT_SECURITY_PATH, { replace: true })
       }}
       onSecondStep={(step) => {
         pendingStep = step
@@ -381,7 +381,7 @@ function Routes() {
   if (!signedIn && path === HOME && !introSeen()) return <IntroPage />
   if (!signedIn) return <Redirect to="/login" />
   return (
-    <StepUpProvider {...navigation} securityPath={ACCOUNT_PATH}>
+    <StepUpProvider {...navigation} securityPath={ACCOUNT_SECURITY_PATH}>
       <SignedIn path={path} />
     </StepUpProvider>
   )

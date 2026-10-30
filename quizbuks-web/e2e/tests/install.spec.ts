@@ -3,7 +3,7 @@ import { taker } from './play'
 import { expect, expectAccessible, prepareQuizbuks, signIn, test } from './support'
 
 /*
- * Adding the app to the home screen (docs/quizbuks/plans/Q38-install.md, platform 16zj): the account page is the
+ * Adding the app to the home screen (docs/quizbuks/plans/Q38-install.md, platform 16zj): the account's app settings are the
  * place to install at any time. No browser installs by itself, so these show what is offered: the Share-menu guide on
  * an iPhone, and on Android the browser's own confirmation (its `beforeinstallprompt`, given by the test as Chrome
  * would give it once the app qualifies).
@@ -32,7 +32,7 @@ test('an iPhone is guided through the Share menu from the account page', async (
   const page = await context.newPage()
   await signIn(page, '/taker/', email)
   await expect(page).not.toHaveURL(/\/login/)
-  await page.goto('/taker/account')
+  await page.goto('/taker/account/preferences')
   const offer = page.getByTestId('pwa-install')
   await expect(offer).toHaveAttribute('data-situation', 'ios')
   // The account page's entry stays: nothing to close.
@@ -50,8 +50,8 @@ test('Android shows the browser\'s own confirmation, once', async ({ browser, re
   const page = await context.newPage()
   await signIn(page, '/taker/', email)
   await expect(page).not.toHaveURL(/\/login/)
-  await page.goto('/taker/account')
-  await expect(page.getByTestId('account')).toBeVisible()
+  await page.goto('/taker/account/preferences')
+  await expect(page.getByTestId('account-preferences-page')).toBeVisible()
   // Chrome's offer, as it fires it once the app qualifies: kept by the page, not shown as the browser's own bar.
   const prevented = await page.evaluate(() => {
     const offer = new Event('beforeinstallprompt', { cancelable: true }) as Event & Record<string, unknown>
@@ -81,7 +81,7 @@ test('a Xiaomi browser is guided through its own menu, in Chinese (Q50)', async 
   const page = await context.newPage()
   await signIn(page, '/taker/', email)
   await expect(page).not.toHaveURL(/\/login/)
-  await page.goto('/taker/account')
+  await page.goto('/taker/account/preferences')
   const offer = page.getByTestId('pwa-install')
   await expect(offer).toHaveAttribute('data-situation', 'menu')
   await offer.getByRole('button', { name: '查看步骤' }).click()

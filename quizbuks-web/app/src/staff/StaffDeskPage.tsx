@@ -191,7 +191,7 @@ export function StaffDeskPage() {
   }
   if (!place.data) {
     return <PageState kind="empty" titleAs="h1" title={t('staff.notStaffTitle')} description={t('staff.notStaff')}
-      action={<Link to="/account" className="underline underline-offset-4">{t('staff.toAccount')}</Link>} />
+      action={<Link to="/account/id" className="underline underline-offset-4">{t('staff.toAccount')}</Link>} />
   }
   return (
     <section className="flex flex-col gap-4" aria-labelledby="staff-title" data-testid="staff-desk">

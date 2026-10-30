@@ -96,11 +96,15 @@ for (const appearance of ['light', 'dark'] as const) {
     await takerWithProfile(page, request)
     await expect(page.getByTestId('environment-banner')).toBeVisible()
     await expectAccessible(page, at('app home'))
+    // The account is a menu with a page per part (Q56): the menu, then the sign-in and security page.
     await page.getByTestId('nav-account').click()
+    await expect(page.getByTestId('account-menu-security')).toBeVisible()
+    await expectAccessible(page, at('app account menu'))
+    await page.getByTestId('account-menu-security').click()
     await expect(page.getByTestId('sign-in').first()).toBeVisible()
-    await expectAccessible(page, at('app account'))
+    await expectAccessible(page, at('app account security'))
     await page.setViewportSize({ width: 1280, height: 900 })
-    await expectAccessible(page, at('app account 1280px'))
+    await expectAccessible(page, at('app account security 1280px'))
   })
 
   test(`the sponsor console's pages pass axe (${appearance})`, async ({ page, request }) => {

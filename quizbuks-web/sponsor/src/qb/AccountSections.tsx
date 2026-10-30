@@ -74,21 +74,18 @@ export function SignInHistory() {
 }
 
 /**
- * The parts of an account page both front ends share (docs/quizbuks/plans/QP-pages.md section 3): the address, the
+ * Signing in and security, as both front ends show it (docs/quizbuks/plans/QP-pages.md section 3): the address, the
  * password, two-step verification (optional, Q-7), the accounts of identity providers when the entry offers one or
- * some are linked already, the mail (the language and the notifications of this entry that can be turned off, Q7a;
- * platform decision D49), the sessions at this entry and the latest sign-ins. All of them are the platform's blocks but
- * the last.
+ * some are linked already, the sessions at this entry and the latest sign-ins. All of them are the platform's blocks
+ * but the last. The taker's account shows them on a page of their own (Q56).
  */
-export function AccountSections({ returnTo, linked, onSignedOut, mailHint }: {
-  /** The account page's path, where linking a provider account comes back to. */
+export function SecuritySections({ returnTo, linked, onSignedOut }: {
+  /** The page's path, where linking a provider account comes back to. */
   returnTo: string
   /** What the provider's return just linked, said once. */
   linked?: IdentityLinked | null
   /** This session was ended from the list. */
   onSignedOut: () => void
-  /** Which mail of this front end is always sent, under the mail settings. */
-  mailHint: string
 }) {
   const { t } = useTranslation(QB)
   const { t: tAuth } = useTranslation(AUTH_NAMESPACE)
@@ -114,16 +111,50 @@ export function AccountSections({ returnTo, linked, onSignedOut, mailHint }: {
           <LinkedIdentities returnTo={returnTo} linked={linked} providers={providers} />
         </AccountSection>
       )}
-      <AccountSection title={t('account.mail')} testId="account-mail">
-        <MailPreferences />
-        <p className="text-muted-foreground text-sm">{mailHint}</p>
-      </AccountSection>
       <AccountSection title={tAuth('sessions.title')}>
         <SessionList onSignedOut={onSignedOut} />
       </AccountSection>
       <AccountSection title={t('signIns.title')}>
         <SignInHistory />
       </AccountSection>
+    </>
+  )
+}
+
+/**
+ * The mail: the language and the notifications of this entry that can be turned off (Q7a; platform decision D49),
+ * with the front end's word on which mail is always sent.
+ */
+export function MailSection({ hint, title = true }: { hint: string; title?: boolean }) {
+  const { t } = useTranslation(QB)
+  const content = (
+    <>
+      <MailPreferences />
+      <p className="text-muted-foreground text-sm">{hint}</p>
+    </>
+  )
+  if (!title) return <div className="flex flex-col gap-3" data-testid="account-mail">{content}</div>
+  return <AccountSection title={t('account.mail')} testId="account-mail">{content}</AccountSection>
+}
+
+/**
+ * The parts of an account page both front ends share, on one page (the sponsor console's): signing in and security,
+ * then the mail.
+ */
+export function AccountSections({ returnTo, linked, onSignedOut, mailHint }: {
+  /** The account page's path, where linking a provider account comes back to. */
+  returnTo: string
+  /** What the provider's return just linked, said once. */
+  linked?: IdentityLinked | null
+  /** This session was ended from the list. */
+  onSignedOut: () => void
+  /** Which mail of this front end is always sent, under the mail settings. */
+  mailHint: string
+}) {
+  return (
+    <>
+      <SecuritySections returnTo={returnTo} linked={linked} onSignedOut={onSignedOut} />
+      <MailSection hint={mailHint} />
     </>
   )
 }

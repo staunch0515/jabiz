@@ -58,7 +58,7 @@
 | 邮件链接 | `/auth/verify-email`、`/auth/join`、`/auth/password-reset`：`MailLinkPage` | `/sponsor/` 下的同样路径 |
 | 找回密码 | `/password-reset`：`PasswordResetRequest` | 同左 |
 | OIDC | `/login/oidc`：`OidcCallback`；Google 自动开户（16f-1） | 缺省不提供（Q2-16） |
-| 账户 | `/account`：资料、`ChangePasswordForm`、`MfaSettings`（可选）、`SessionList`、`LinkedIdentities`、登录记录（`qb.me.sign-ins`） | `/account`：同样的积木；没有提供方时不显示 `LinkedIdentities` |
+| 账户 | `/account`：菜单与子页面（Q56，`Q56-account-menu.md`）：资料、`ChangePasswordForm`、`MfaSettings`（可选）、`SessionList`、`LinkedIdentities`、登录记录（`qb.me.sign-ins`） | `/account`：同样的积木；没有提供方时不显示 `LinkedIdentities` |
 | 横幅 | `VerifyEmailBanner`（可浏览，写入都要已验证）、`OfflineBanner`、`PwaUpdatePrompt` | `OfflineBanner` |
 
 封禁：`QbSignInGuard` 在登录时拒绝；封禁后的写入得 422 `QB_USER_BANNED`，由共用的问题 → 文案函数显示。`QB_*` 的文案都由服务端按 `Accept-Language` 翻译，SPA 显示其 `detail` / 违规文案。

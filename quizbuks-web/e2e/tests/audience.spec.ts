@@ -61,7 +61,7 @@ test('a sponsor aims a quiz at a profile; a taker who matches it can start it', 
 
   // Telling the app they like pets.
   await page.getByTestId('detail-complete-profile').click()
-  await expect(page).toHaveURL(/\/taker\/account\?section=details/)
+  await expect(page).toHaveURL(/\/taker\/account\/details$/)
   const details = page.getByTestId('profile-details')
   await details.getByTestId('details-interest-PETS').click()
   await details.getByTestId('details-save').click()
