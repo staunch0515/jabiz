@@ -1,13 +1,12 @@
-/* QuizBuks for Shopify's public pages (docs/quizbuks/shopify/S4-launch.md section 1). One stylesheet, tokens for light
-   and dark, no framework; the text pairs pass WCAG AA (light: accent on white 5.5:1; dark: accent on --bg 12.3:1). */
+/* The Shopify app's public pages (docs/quizbuks/shopify/S4-launch.md section 1). One stylesheet, tokens for light
+   and dark, no framework; the brand's --accent and --soft are the brand profile's site.css, which the build appends
+   (Q54) and whose text pairs brands/brand.test.mjs checks (WCAG AA in both appearances). */
 :root {
   color-scheme: light dark;
   --bg: #ffffff;
   --fg: #0f172a;
   --muted: #475569;
   --line: #e2e8f0;
-  --soft: #f4faf7;
-  --accent: #047857;
   --max: 46rem;
 }
 @media (prefers-color-scheme: dark) {
@@ -16,8 +15,6 @@
     --fg: #f1f5f9;
     --muted: #cbd5e1;
     --line: #27354d;
-    --soft: #0f172a;
-    --accent: #6ee7b7;
   }
 }
 * { box-sizing: border-box; }

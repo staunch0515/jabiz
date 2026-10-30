@@ -121,6 +121,23 @@ jobs:
           pnpm typecheck
           pnpm test
           pnpm build
+      # Q54b: the brand profiles (complete, readable, a mark in tokens both the apps and the sites have) and the front ends
+      # that are not the two SPAs: none names a brand of its own, and built with another profile none shows QuizBuks.
+      - name: Brand profiles and the other front ends (Q54b)
+        working-directory: quizbuks-web
+        run: |
+          node --test brands/*.test.mjs
+          (cd biz && QB_BRAND=sample node scripts/build.mjs --outDir ../.brand-check/biz --emptyOutDir)
+          (cd shopify-site && QB_BRAND=sample node scripts/build.mjs --outDir ../.brand-check/shopify-site --emptyOutDir)
+          (cd shopify && QB_BRAND=sample VITE_JABIZ_ENTRY=shopify pnpm exec vite build --outDir ../.brand-check/shopify --emptyOutDir)
+          grep -q '© 2026 Sample Quiz' .brand-check/biz/index.html
+          grep -q 'https://quiz.example.com/biz/' .brand-check/biz/index.html
+          grep -q '<title>Sample Quiz for Shopify' .brand-check/shopify-site/index.html
+          grep -q '<title>Sample Quiz for Shopify</title>' .brand-check/shopify/index.html
+          cmp -s brands/sample/public/icon-192.png .brand-check/biz/icon-192.png
+          if grep -rho '.\{0,20\}QuizBuks.\{0,20\}' .brand-check/biz .brand-check/shopify-site .brand-check/shopify; then
+            echo 'QuizBuks is still shown with another brand profile'; exit 1
+          fi
       - name: End-to-end tests (types only; they run in the e2e job)
         working-directory: quizbuks-web/e2e
         run: |

@@ -1,0 +1,41 @@
+/*
+ * The sample brand's colours on the static sites (Q54): the same tokens as every profile's site.css, after the
+ * site's own stylesheet; text pairs checked by brands/brand.test.mjs. The --qb-* tokens are the ones mark.svg uses.
+ */
+:root {
+  --bg-soft: #f5f7ff;
+  --soft: #f5f7ff;
+  --accent: #4338ca;
+  --accent-strong: #3730a3;
+  --accent-soft: #e0e7ff;
+  --accent-fg: #ffffff;
+  --chip-fg: #312e81;
+  --ok: #4338ca;
+  --leaf: #818cf8;
+  --leaf-deep: #4f46e5;
+  --coin: #fbbf24;
+  --coin-deep: #d97706;
+  --sky: #eef2ff;
+  --ink: #312e81;
+  --qb-hero-to: #4338ca;
+  --qb-hero-foreground: #ffffff;
+  --qb-coin: var(--coin);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg-soft: #0f172a;
+    --soft: #0f172a;
+    --accent: #a5b4fc;
+    --accent-strong: #c7d2fe;
+    --accent-soft: #24215a;
+    --accent-fg: #1e1b4b;
+    --chip-fg: #e0e7ff;
+    --ok: #a5b4fc;
+    --leaf: #818cf8;
+    --leaf-deep: #6366f1;
+    --coin: #fbbf24;
+    --coin-deep: #f59e0b;
+    --sky: #24215a;
+    --ink: #e0e7ff;
+  }
+}

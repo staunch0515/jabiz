@@ -2,14 +2,16 @@
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { jabizSpa } from '@jabiz/client/vite'
-import { defineConfig } from 'vite'
+import { defineConfig, searchForWorkspaceRoot } from 'vite'
+import { qbBrand } from '../brands/vite.mjs'
 
 // QuizBuks for Shopify's embedded pages (docs/quizbuks/shopify/S1-install.md): jabizApp { spa("/shopify",
 // "../../quizbuks-web/shopify", entry = "shopify") } builds them with VITE_BASE=/shopify/ and VITE_JABIZ_ENTRY=shopify;
 // not a PWA. The app's public Client ID goes into index.html at the server's startup (platform 17g, index-values), not
-// at build time; the dev server leaves the placeholder as it is.
+// at build time; the dev server leaves the placeholder as it is. The brand profile chosen by QB_BRAND (Q54) gives the name
+// and the icon; the pages keep Shopify admin's colours.
 export default defineConfig({
-  plugins: [jabizSpa(), tailwindcss(), react()],
+  plugins: [qbBrand({ allow: [searchForWorkspaceRoot(process.cwd())] }), jabizSpa(), tailwindcss(), react()],
   server: { port: 5177, proxy: { '/api': 'http://localhost:8080' } },
   test: {
     environment: 'jsdom',

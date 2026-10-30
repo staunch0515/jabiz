@@ -1,0 +1,45 @@
+/*
+ * The brand's colours on the static sites (Q54): the business site (biz) and QuizBuks for Shopify's public pages
+ * (shopify-site), whose own tokens are not the apps' (brand.css). Each site's stylesheet comes first, these after.
+ * Text pairs (brands/brand.test.mjs): --accent on the white and the dark page, --accent-fg on --accent and
+ * --chip-fg on --accent-soft, each ≥ 4.5:1. The --qb-* tokens are the ones mark.svg uses.
+ */
+:root {
+  --bg-soft: #f4faf7;
+  --soft: #f4faf7;
+  --accent: #047857;
+  --accent-strong: #065f46;
+  --accent-soft: #d1fae5;
+  --accent-fg: #ffffff;
+  --chip-fg: #064e3b;
+  --ok: #047857;
+  --leaf: #34d399;
+  --leaf-deep: #059669;
+  --coin: #fbbf24;
+  --coin-deep: #d97706;
+  --sky: #ecfdf5;
+  --ink: #064e3b;
+  --qb-leaf: var(--leaf);
+  --qb-leaf-deep: var(--leaf-deep);
+  --qb-coin: var(--coin);
+  --qb-coin-deep: var(--coin-deep);
+  --qb-ink: var(--ink);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg-soft: #0f172a;
+    --soft: #0f172a;
+    --accent: #6ee7b7;
+    --accent-strong: #a7f3d0;
+    --accent-soft: #123b2d;
+    --accent-fg: #052e16;
+    --chip-fg: #d1fae5;
+    --ok: #34d399;
+    --leaf: #34d399;
+    --leaf-deep: #10b981;
+    --coin: #fbbf24;
+    --coin-deep: #f59e0b;
+    --sky: #123b2d;
+    --ink: #d1fae5;
+  }
+}
