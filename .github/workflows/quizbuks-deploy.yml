@@ -31,8 +31,10 @@ permissions:
 # The environment follows the branch. The base domain is quizbuks.com unless the repository variable
 # QUIZBUKS_BASE_DOMAIN (Settings → Secrets and variables → Actions → Variables) names another. The server's /opt/apps
 # appears in the Caddy container at the same path unless QUIZBUKS_CADDY_APPS_DIR names where it is mounted there
-# (the maintenance page and its lock file are read by Caddy, DEPLOY.md "维护模式").
+# (the maintenance page and its lock file are read by Caddy, DEPLOY.md "维护模式"). The image and the maintenance page
+# are the brand profile QUIZBUKS_BRAND names (quizbuks-web/brands/<brand>; QuizBuks's when unset, Q55b).
 env:
+  QB_BRAND: ${{ vars.QUIZBUKS_BRAND || 'quizbuks' }}
   APP_NAME: ${{ github.ref == 'refs/heads/1.3/quizbuks-release' && 'quizbuks' || 'quizbuks-staging' }}
   BASE_DOMAIN: ${{ vars.QUIZBUKS_BASE_DOMAIN || 'quizbuks.com' }}
   CADDY_APPS_DIR: ${{ vars.QUIZBUKS_CADDY_APPS_DIR || '/opt/apps' }}
@@ -64,8 +66,11 @@ jobs:
           push: true
           # Both environments run the same image of a commit; only the commit SHA is a tag (no moving "latest").
           tags: ${{ env.IMAGE }}:${{ github.sha }}
-          # Shown under the admin's sign-in form, so the running version can be checked at a glance (platform 16z).
-          build-args: JABIZ_BUILD_COMMIT=${{ github.sha }}
+          # The commit is shown under the admin's sign-in form, so the running version can be checked at a glance
+          # (platform 16z); the brand profile is built into the jar and its front ends (Q55b).
+          build-args: |
+            JABIZ_BUILD_COMMIT=${{ github.sha }}
+            QB_BRAND=${{ env.QB_BRAND }}
           labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
           cache-from: type=gha,scope=quizbuks
           cache-to: type=gha,mode=max,scope=quizbuks
@@ -215,9 +220,12 @@ jobs:
             /opt/apps/$APP_NAME/deploy-check/required-env"
       # Only the compose file, the site, the maintenance page and the store apps' statements; the server's .env and the
       # maintenance lock file are never touched. A commit from before the maintenance page (a rollback) leaves the page
-      # on the server as it is.
+      # on the server as it is. The page is written again for the brand (the committed one is QuizBuks's; Q55b).
       - name: Upload deploy files
         run: |
+          if [ -f quizbuks-web/maintenance/build.mjs ]; then
+            node quizbuks-web/maintenance/build.mjs
+          fi
           ssh "$SERVER_USER@$SERVER_HOST" "mkdir -p /opt/apps/$APP_NAME/maintenance"
           scp deploy/quizbuks/server/compose.yaml "$SERVER_USER@$SERVER_HOST:/opt/apps/$APP_NAME/compose.yaml"
           scp site.caddy "$SERVER_USER@$SERVER_HOST:/opt/apps/$APP_NAME/site.caddy"

@@ -38,7 +38,13 @@ brands/brand.mjs    读取与检查；brands/vite.mjs 是 SPA 的 Vite 插件；
   `src/qb/brand.ts` 导出构建时写入的 `BRAND`（`define`，只含页面可显示的部分）；`index.html` 中的 `__QB_BRAND_NAME__` 换成名称。
   原 `brand.css` 中与品牌无关的部分（`qb-*` 颜色类的映射、Q34b 的标签布局）留在共用的 `src/qb/theme.css`。
 - 消息中的名称写成 `BRAND.name` 的模板字符串，不再写死；PWA 清单（名称、说明、颜色）取 `brand.json`。
-- 后端：消息资源中的名称写成记号 `@brand.name@`，`processResources` 以所选档案替换；`app.name` 同样来自档案。客服邮箱与站点地址的缺省也取自档案。
+- 后端（Q55b）：消息资源中的名称写成记号 `@QB_BRAND_NAME@`，`processResources` 以所选档案替换（Gradle 读 `brand.json`）；`app.name` 同样来自档案。
+  客服邮箱与站点地址的缺省也取自档案（`@QB_BRAND_SUPPORT_EMAIL@`、`@QB_BRAND_SITE_URL@`：`quizbuks/brand.properties` 由 `setup.Brand` 读取，
+  参数 `qb.support.email` 的缺省、分录摘要的前缀；`application.yml` 中 Shopify 的客服邮箱）。
+- 管理后台与运营商后台（Q55b，平台 17v 的 `brand`）：扩展由平台前端编译，平台前端不提供扩展目录以外的文件，所以档案经生成的
+  `admin-extension/src/brands.generated.ts`（`node quizbuks-web/brands/admin.mjs`；名称、标志与图标，标志的 token 换成亮色外观的值）进入扩展；
+  构建时 Gradle 把 `QB_BRAND` 作为 `VITE_QB_BRAND` 交给 `spaBuildAdmin` / `spaBuildOperator`，扩展的文字以 `BRAND_NAME` 称呼产品。管理后台的配色仍是平台的。
+- 维护页（Q55a）由档案生成；部署时按所选品牌重新生成后上传。
 - 检查：测试扫描各前端与后端消息资源，除档案目录外不得再出现品牌名（标识符、包名、`qb.` 前缀等不算）；以测试用的第二份档案构建，名称、配色与图标都换掉。
 
 ### 2.2 不在档案中的
@@ -57,7 +63,7 @@ brands/brand.mjs    读取与检查；brands/vite.mjs 是 SPA 的 Vite 插件；
 |---|---|
 | Q54a | 档案目录与读取、检查、见本档案；答题者 App 与商家后台：名称、标题、PWA 清单、图标、配色、标志；Gradle 的构建输入；CI 以见本档案构建并检查；测试（#342） |
 | **Q54b** | 官网与 Shopify 介绍站：名称、标志、图标、品牌色（档案的 `site.css`）、站点地址与客服邮箱的缺省；Shopify 内嵌页：名称、标题、图标（配色仍是 Shopify 后台的）；店面组件的"Powered by"与链接；`brands/brand.test.mjs`；Gradle 与 CI（本 PR） |
-| Q54c | 后端消息资源与 `app.name`、客服邮箱与站点地址的缺省、维护页、管理后台扩展（平台 17v 的 `brand`）、Docker 构建参数与部署工作流；指南"新建一个品牌" |
+| Q54c | 改为 Q55a（维护页，#347）与 Q55b：后端消息资源与 `app.name`、客服邮箱与站点地址的缺省、管理后台扩展（平台 17v 的 `brand`）、Docker 构建参数与部署工作流；§7 新建一个品牌 |
 
 ## 4. 待需求方决定
 
@@ -74,6 +80,20 @@ brands/brand.mjs    读取与检查；brands/vite.mjs 是 SPA 的 Vite 插件；
 - CI：以 `QB_BRAND=sample` 构建官网、Shopify 介绍站与内嵌页，名称、站点地址与图标为见本档案的，产物中没有 QuizBuks。
 - CI（`quizbuks.yml` 的 web）：以 `QB_BRAND=sample` 构建两个 SPA，标题、清单、图标为见本档案的，产物中除 iOS 外壳的 User-Agent 外没有 QuizBuks。
 
+- 后端（Q55b）：`setup.BrandTest`：构建的 `Brand` 与参数缺省是所选档案的，打包的消息与 `application.yml` 中没有剩下的记号、`app.name` 为档案名称，
+  源消息中（注释除外）没有写死的 QuizBuks；以 `QB_BRAND=sample` 打包时消息为见本档案的名称。
+- 管理后台扩展（Q55b）：`brand.test.ts`（缺省是 QuizBuks，见本档案的名称、标志与图标，没有的品牌被拒绝，菜单以品牌名称呼）；
+  `brands/admin.test.mjs`：提交的 `brands.generated.ts` 与档案一致，标志中没有剩下的 token。
+
 ## 6. 移动端外壳（另一会话）
 
 - Android 外壳的一致性测试与 README 已改为读档案（需求方同意由 #342 修改）。
+
+## 7. 新建一个品牌
+
+1. 复制 `quizbuks-web/brands/sample` 为 `quizbuks-web/brands/<品牌>`（小写字母、数字与 `-`），改 `brand.json`（名称、三种语言的说明、主题色与背景色、客服邮箱、站点地址）、
+   `brand.css` 与 `site.css` 的配色（亮暗两套，测试检查对比度）、`mark.svg`（颜色只用 token）与 `public/` 的三个图标。
+2. 在 `quizbuks-web/` 下 `node --test brands/*.test.mjs maintenance/*.test.mjs`（档案完整、对比度），再 `node brands/admin.mjs` 重新生成管理后台扩展的档案并提交。
+3. 本地试看：`QB_BRAND=<品牌>` 下 `./gradlew :quizbuks:bootRun`（后端消息、管理后台与全部前端），`QB_BRAND=<品牌> node quizbuks-web/maintenance/build.mjs <文件>` 看维护页。
+4. 部署：仓库变量 `QUIZBUKS_BRAND=<品牌>`（`deploy/quizbuks/DEPLOY.md` 一次性设置第 1 条）；镜像以构建参数 `QB_BRAND` 构建，维护页在上传前按它重新生成。
+5. 不随品牌改变的见 §2.2：移动端外壳、商店文字、Shopify 应用的配置与标识符另做。

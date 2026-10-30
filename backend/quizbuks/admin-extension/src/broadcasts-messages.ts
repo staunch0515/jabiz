@@ -1,3 +1,5 @@
+import { BRAND_NAME } from './brand'
+
 /** Texts of the announcements' page (Q7c; P-04), in every platform language. */
 export const broadcastsMenu = {
   en: { broadcasts: 'Announcements' },
@@ -8,7 +10,7 @@ export const broadcastsMenu = {
 export const broadcastsMessages = {
   en: {
     title: 'Announcements and notices',
-    description: 'Write QuizBuks\'s announcements to the app\'s users or the sponsors, send them now or at a time, '
+    description: `Write ${BRAND_NAME}'s announcements to the app's users or the sponsors, send them now or at a time, `
       + 'and withdraw any announcement or sponsor\'s notice. Statistics count people: who read is never shown.',
     new: 'New announcement',
     filters: { sender: 'Sender', status: 'Status', all: 'All', search: 'Search titles and sponsors' },
@@ -25,7 +27,7 @@ export const broadcastsMessages = {
       conversions: 'Started',
       actions: 'Actions',
     },
-    platform: 'QuizBuks',
+    platform: BRAND_NAME,
     stat: '{{count}} ({{rate}} %)',
     none: 'No announcement yet.',
     publication: 'Publication: {{name}}',
@@ -80,7 +82,7 @@ export const broadcastsMessages = {
   },
   zh: {
     title: '公告与通知',
-    description: '撰写 QuizBuks 给 App 用户或商家的公告，立即或定时发送，并撤回任何公告或商家通知。统计只计人数，从不显示是谁阅读。',
+    description: `撰写 ${BRAND_NAME} 给 App 用户或商家的公告，立即或定时发送，并撤回任何公告或商家通知。统计只计人数，从不显示是谁阅读。`,
     new: '新建公告',
     filters: { sender: '发送方', status: '状态', all: '全部', search: '搜索标题与商家' },
     columns: {
@@ -96,7 +98,7 @@ export const broadcastsMessages = {
       conversions: '开始答题',
       actions: '操作',
     },
-    platform: 'QuizBuks',
+    platform: BRAND_NAME,
     stat: '{{count}}（{{rate}}%）',
     none: '还没有公告。',
     publication: '发布：{{name}}',
@@ -150,7 +152,7 @@ export const broadcastsMessages = {
   },
   ja: {
     title: 'お知らせと通知',
-    description: 'アプリのユーザーやスポンサーへの QuizBuks のお知らせを作成し、今すぐまたは日時を指定して送信します。お知らせやスポンサーの通知はいつでも取り下げられます。統計は人数のみで、誰が読んだかは表示しません。',
+    description: `アプリのユーザーやスポンサーへの ${BRAND_NAME} のお知らせを作成し、今すぐまたは日時を指定して送信します。お知らせやスポンサーの通知はいつでも取り下げられます。統計は人数のみで、誰が読んだかは表示しません。`,
     new: 'お知らせを作成',
     filters: { sender: '送信元', status: '状態', all: 'すべて', search: '件名とスポンサーを検索' },
     columns: {
@@ -166,7 +168,7 @@ export const broadcastsMessages = {
       conversions: '回答開始',
       actions: '操作',
     },
-    platform: 'QuizBuks',
+    platform: BRAND_NAME,
     stat: '{{count}}（{{rate}}%）',
     none: 'まだお知らせはありません。',
     publication: '公開：{{name}}',
