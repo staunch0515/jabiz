@@ -4852,4 +4852,4 @@ Playwright 端到端（需维护连接与数据库角色，以 Vitest 与 `Accou
 | 17y-5 | 示范应用：入口 `warehouse`（角色 `WAREHOUSE`）、`WarehouseStaff`（迁移 V19）与 `WarehouseScope`；库存数据视图以范围约束（模板 `commerce.stock_availability` 随之），`STOCK_RECEIVE` 以 `RequireScope` 核对仓库 |
 | 17y-6 | 测试：`EntryScopeCompilerTest`（三种约束的解析与 SQL、名字与值）、`SignInGuardsTest`（解析在守卫之后、空与失败即拒绝、其他入口、启动检查）、`EntryScopeIT`（登录带值、调动在刷新时生效、移出即 401、没有仓库即 403、缺少范围的令牌 401、库存的数据视图与模板、`RequireScope`、经对照的读与拒绝写、审批与待办的标记、决定 404、总部看到全部）；设计 03、10 §13.4、决策 D64；`/security-review` |
 
-**17y 状态**：🚧 进行中。
+**17y 状态**：📝 待评审。
