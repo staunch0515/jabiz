@@ -35,6 +35,8 @@ QuizBuks 是**一个镜像、一个服务**（`<APP_NAME>-app`，容器内端口
 1. **基础域名**：缺省为 `quizbuks.com`（staging 即 `staging.quizbuks.com`）；要用其他域名时在 Settings → Secrets and variables → Actions → Variables
    新建 `QUIZBUKS_BASE_DOMAIN`（小写、不带协议）。**服务器的 secrets**：同一页的 Secrets 中设 `SERVER_HOST`、`SERVER_USER`、`SERVER_SSH_KEY`、`SERVER_KNOWN_HOSTS`
    （仓库级，或在 Environments 的 `staging` / `production` 中各设一份），缺少任何一个时部署在第一步停止并列出缺少的名字。
+   **品牌**：缺省为 QuizBuks；部署另一个品牌时在同一页的 Variables 中新建仓库级的 `QUIZBUKS_BRAND`（`quizbuks-web/brands/` 下的目录名）：
+   镜像（消息、前端、管理后台）与上传的维护页都按它构建（Q55b，`docs/quizbuks/plans/Q54-brand-profile.md` §7）。
 2. **Environments**：Settings → Environments 中的 `production` 与 `staging` 在第一次部署时自动建立；建议给 `production` 设 Required reviewers
    与 Deployment branches（只允许 `1.3/quizbuks-release`）。服务器的 secrets（`SERVER_*`）可以留在仓库级，也可以按环境分别设置。
 3. **production 分支**：staging 部署正常之后，从 `1.3/quizbuks` 建 `1.3/quizbuks-release` 并推送（`git push origin origin/1.3/quizbuks:refs/heads/1.3/quizbuks-release`）。
