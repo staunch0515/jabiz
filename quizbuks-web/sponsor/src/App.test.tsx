@@ -214,7 +214,7 @@ describe('a signed-in sponsor', () => {
     render(<App />)
     // Before applying there is nothing to accept again: no prompt, the form accepts with the application.
     expect(await screen.findByTestId('legal-link-TERMS_SPONSOR')).toHaveAttribute('href', '/legal/sponsor-terms')
-    expect(screen.getByTestId('legal-link-PRIVACY')).toHaveAttribute('target', '_blank')
+    expect(screen.getByTestId('legal-link-PRIVACY')).not.toHaveAttribute('target')
     expect(screen.queryByTestId('consent-gate')).toBeNull()
     await userEvent.type(screen.getByTestId('onboarding-company'), 'Acme Quiz')
     await userEvent.click(screen.getByTestId('onboarding-terms'))

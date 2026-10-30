@@ -10,6 +10,7 @@ import { acceptConsents, legalPath, pickText, readMyConsents, type ConsentState,
   type LegalKind } from './legal'
 import { QB } from './messages'
 import { consentRequired, problemText } from './problems'
+import { LegalSheet } from './LegalPage'
 import { hrefOf } from './router'
 
 /** The query of the caller's standing with the texts, which the pages that record consent refresh. */
@@ -45,8 +46,10 @@ export function useMyConsents(kinds: readonly LegalKind[], enabled = true) {
 }
 
 /**
- * A link to a text's page in a new tab (the prompt and the forms stay as they are); with a version, to that version
- * (the one the user is asked to accept, review L6), else to the one in effect when the page opens.
+ * A link to a text that shows it over the page (`LegalSheet`): the prompt and the forms stay as they are, and nothing
+ * opens another window, which in an installed app has no way back but closing it. A click with a modifier (a new tab,
+ * a new window) still opens the text's page; with a version, that version (the one the user is asked to accept, review
+ * L6), else the one in effect.
  */
 export function LegalLink({ kind, versionNo, children, testId }: {
   kind: LegalKind
@@ -55,12 +58,21 @@ export function LegalLink({ kind, versionNo, children, testId }: {
   testId?: string
 }) {
   const { t } = useTranslation(QB)
+  const [open, setOpen] = useState(false)
   const href = hrefOf(legalPath(kind)) + (versionNo ? `?v=${versionNo}` : '')
   return (
-    <a href={href} target="_blank" rel="noopener" className="text-primary underline"
-      data-testid={testId ?? `legal-link-${kind}`}>
-      {children ?? t(`legal.kinds.${kind}`)}
-    </a>
+    <>
+      <a href={href} className="text-primary underline" aria-haspopup="dialog"
+        data-testid={testId ?? `legal-link-${kind}`}
+        onClick={(event) => {
+          if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+          event.preventDefault()
+          setOpen(true)
+        }}>
+        {children ?? t(`legal.kinds.${kind}`)}
+      </a>
+      <LegalSheet kind={kind} versionNo={versionNo} open={open} onOpenChange={setOpen} />
+    </>
   )
 }
 
