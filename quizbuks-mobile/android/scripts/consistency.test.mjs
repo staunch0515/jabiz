@@ -24,11 +24,11 @@ test('the page knows the shell\'s package', () => {
 })
 
 test('looks like the installed web app', () => {
-  const vite = read('quizbuks-web/app/vite.config.ts')
-  const colour = (key) => vite.match(new RegExp(`${key}: '(#[0-9a-fA-F]{6})'`))?.[1].toLowerCase()
-  assert.equal(twa.themeColor.toLowerCase(), colour('themeColor'))
-  assert.equal(twa.backgroundColor.toLowerCase(), colour('backgroundColor'))
-  assert.equal(twa.name, vite.match(/name: '([^']+)'/)?.[1])
+  // The web app's manifest takes its name and colours from the brand profile (docs/quizbuks/plans/Q54-brand-profile.md).
+  const brand = JSON.parse(read('quizbuks-web/brands/quizbuks/brand.json'))
+  assert.equal(twa.themeColor.toLowerCase(), brand.themeColor)
+  assert.equal(twa.backgroundColor.toLowerCase(), brand.backgroundColor)
+  assert.equal(twa.name, brand.name)
 })
 
 test('the host is the production domain, a plain host name', () => {
