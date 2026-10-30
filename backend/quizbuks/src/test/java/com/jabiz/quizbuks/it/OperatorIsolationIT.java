@@ -115,6 +115,10 @@ class OperatorIsolationIT extends PlayItSupport {
         assertThat(query("SELECT DISTINCT owner_id FROM qb_quiz_version WHERE quiz_id::text = ANY(?)",
             (Object) northQuizzes.stream().map(String::valueOf).toArray(String[]::new)))
             .extracting(row -> String.valueOf(row.get("owner_id"))).containsOnly(ann);
+        // The live public cards are read through the public template only: not through the dataset API.
+        client.post().uri("/api/datasets/" + QbPublications.PUBLIC_CARDS + "/query")
+            .contentType(MediaType.APPLICATION_JSON).header(HttpHeaders.AUTHORIZATION, northSession)
+            .bodyValue(Map.of("limit", 10)).exchange().expectStatus().isForbidden();
         // Headquarters sees all.
         assertThat(datasetIds(QbPublications.defaultDataset(QbPublications.PUBLICATION), hq()))
             .contains(annPublication, bobPublication, directPublication);

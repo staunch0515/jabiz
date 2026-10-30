@@ -38,9 +38,10 @@ class OperatorScopesIT extends QbItSupport {
     SqlTemplateRegistry templates;
 
     private static boolean limited(DatasetDefinition dataset) {
+        // Fixed values alone limit nothing per operator (the live public cards are every sponsor's).
         return dataset.scope().entries().stream().anyMatch(entry -> entry instanceof DatasetScope.FromContext
             || entry instanceof DatasetScope.WithinEntryScope within && QbOperators.SCOPE.equals(within.scope())
-            || entry instanceof DatasetScope.WithinEntryScopeTag || entry instanceof DatasetScope.Fixed);
+            || entry instanceof DatasetScope.WithinEntryScopeTag);
     }
 
     @Test

@@ -161,7 +161,10 @@ public class PublishingConfig {
             .publicRead(p -> p.fields("publicationId", "publisherId", "name", "quizTitle", "kind", "startAt", "endAt",
                 "timeLimitSec", "questionCount", "fullScore", "passScore", "maxReward", "rewardMethod",
                 "redeemDescription", "digitalDelivery", "digitalDescription"))
-            .permissions(QbPermissions.ADMIN_PUBLICATION_READ, QbPermissions.SPONSOR_VIEW_WRITE)
+            // Read anonymously through the public template only, which projects the whitelist. The dataset API, which
+            // does not, is closed to everybody (no role holds the permission): an operator's session would read every
+            // live card with its budget and operator (Q59c-2); headquarters reads the cards' own dataset.
+            .permissions(QbPermissions.SPONSOR_VIEW_WRITE, QbPermissions.SPONSOR_VIEW_WRITE)
             .policy(p -> p.readOnly(true).allowTimeTravel(false))
             .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
     }
