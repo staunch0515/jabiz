@@ -885,6 +885,20 @@ public class DatasetEntityManager {
                 }
                 continue;
             }
+            if (filter.getValue() instanceof DatasetScope.EntryScopeTagCondition tag) {
+                boolean tagged = tag.scope().name().equals(String.valueOf(values.get(tag.nameField())))
+                    && tag.scope().value().equals(String.valueOf(values.get(filter.getKey())));
+                boolean owned = tag.ownerField() != null && tag.actorId().equals(String.valueOf(
+                    values.get(tag.ownerField())));
+                if (!tagged && !owned) {
+                    return false;
+                }
+                continue;
+            }
+            if (filter.getValue() instanceof DatasetScope.EntryScopeCondition) {
+                // Through a mapping entity: not in the values (default deny).
+                return false;
+            }
             Object expected = FieldValueCoercer.coerce(def.field(filter.getKey()), filter.getValue(), false);
             if (!sameValue(expected, values.get(filter.getKey()))) {
                 return false;
@@ -1124,7 +1138,9 @@ public class DatasetEntityManager {
         }
         for (Object value : scope.values()) {
             // A period judged through a reference is not in the values: looked up, as a read would (default deny).
-            if (value instanceof DatasetScope.PeriodCondition period && period.referencedField() != null) {
+            if (value instanceof DatasetScope.PeriodCondition period && period.referencedField() != null
+                || value instanceof DatasetScope.EntryScopeCondition
+                || value instanceof DatasetScope.EntryScopeTagCondition) {
                 return false;
             }
         }
@@ -1308,6 +1324,29 @@ public class DatasetEntityManager {
                 checkPeriod(dataset, def, field, period, attrs, fillMissing, violations);
                 continue;
             }
+            if (filter.getValue() instanceof DatasetScope.EntryScopeTagCondition tag) {
+                // A row that names its entry scope (decision D64 item 3): a scoped session writes its own scope's
+                // rows only, and an insert is tagged with it.
+                boolean named = attrs.containsKey(tag.nameField()) || attrs.containsKey(filter.getKey());
+                if (named && (!tag.scope().name().equals(attrs.get(tag.nameField()))
+                    || !tag.scope().value().equals(attrs.get(filter.getKey())))) {
+                    violations.add(new Violation(filter.getKey(), PlatformErrorCodes.OUT_OF_SCOPE, String.format(
+                        "Write rejected: %s of another entry scope than %s in dataset %s", def.name,
+                        tag.scope().name(), dataset.resourceId()), Map.of("expected", tag.scope().value())));
+                } else if (!named && fillMissing) {
+                    attrs.put(tag.nameField(), tag.scope().name());
+                    attrs.put(filter.getKey(), tag.scope().value());
+                }
+                continue;
+            }
+            if (filter.getValue() instanceof DatasetScope.EntryScopeCondition) {
+                // A session of an entry scope does not write rows whose scope it cannot judge from the values
+                // (decision D64 item 2).
+                violations.add(new Violation(filter.getKey(), PlatformErrorCodes.OUT_OF_SCOPE, String.format(
+                    "Write rejected: %s is not written through dataset %s in an entry scope", def.name,
+                    dataset.resourceId()), Map.of()));
+                continue;
+            }
             Object expected = FieldValueCoercer.coerce(field, filter.getValue(), false);
             if (attrs.containsKey(filter.getKey())) {
                 if (!sameValue(expected, attrs.get(filter.getKey()))) {
@@ -1369,7 +1408,9 @@ public class DatasetEntityManager {
                     raw.put(field, state);
                 }
             } else if (dataset.isTarget(def.name) && scope.containsKey(field)
-                && !(scope.get(field) instanceof DatasetScope.PeriodCondition)) {
+                && !(scope.get(field) instanceof DatasetScope.PeriodCondition)
+                && !(scope.get(field) instanceof DatasetScope.EntryScopeCondition)
+                && !(scope.get(field) instanceof DatasetScope.EntryScopeTagCondition)) {
                 raw.put(field, scope.get(field));
             }
         }

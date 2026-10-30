@@ -234,20 +234,33 @@ public class SecurityConfig {
         return new SensitiveDataMasker(json, entities, processes.orderedStream().toList(), fragments);
     }
 
-    /** Verifies access tokens; development header actors arrive authenticated already. */
+    /**
+     * Verifies access tokens; development header actors arrive authenticated already. A token of an entry with a scope
+     * (decision D64) that does not carry that scope is refused, whichever way it was issued.
+     */
     @Bean
-    ReactiveAuthenticationManager jabizAuthenticationManager(JwtService tokens) {
+    ReactiveAuthenticationManager jabizAuthenticationManager(JwtService tokens, ObjectProvider<SignInGuards> guards) {
         return authentication -> {
             if (authentication instanceof ActorAuthentication authenticated) {
                 return Mono.just(authenticated);
             }
             if (authentication instanceof BearerToken bearer) {
-                return Mono.fromCallable(() -> (Authentication) new ActorAuthentication(tokens.verify(bearer.token())))
+                return Mono.fromCallable(() -> (Authentication) new ActorAuthentication(
+                        scoped(tokens.verify(bearer.token()), guards.getObject())))
                     .onErrorMap(JwtService.InvalidTokenException.class,
                         e -> new BadCredentialsException(e.getMessage()));
             }
             return Mono.empty();
         };
+    }
+
+    /** The actor of a token, if it carries the scope its entry has (none for an entry without). */
+    static Actor scoped(Actor actor, SignInGuards guards) {
+        String scope = guards.scopeOf(actor.entry()).orElse(null);
+        if (scope != null && (actor.entryScope() == null || !actor.entryScope().is(scope))) {
+            throw new JwtService.InvalidTokenException("Token of entry " + actor.entry() + " without its scope");
+        }
+        return actor;
     }
 
     @Bean

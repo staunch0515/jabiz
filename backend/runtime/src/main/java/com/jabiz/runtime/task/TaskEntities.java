@@ -49,6 +49,9 @@ public class TaskEntities {
         eb.field("closedBy", f -> f.physicalColumn("closed_by").asText(100));
         // Why a person closed it (TASK_RESOLVE); null when its process closed it.
         eb.field("closeNote", f -> f.physicalColumn("close_note").asText(TaskResolution.NOTE_LENGTH));
+        // The entry scope the task belongs to (decision D64): only its sessions, and those without one, see it.
+        eb.field("scopeName", f -> f.physicalColumn("scope_name").immutable(true).asText(64));
+        eb.field("scopeValue", f -> f.physicalColumn("scope_value").immutable(true).asText(128));
         eb.temporal(t -> t.allowScheduled(false));
         eb.listView("default", lv -> lv
             .columns("taskType", "titleKey", "assigneeUserId", "assigneePermission", "status", "dueTime",
@@ -73,6 +76,9 @@ public class TaskEntities {
             .asTemporal(TemporalRole.SYSTEM_RECORDED));
         eb.field("processSeqId", f -> f.physicalColumn("process_seq_id").immutable(true).required(true)
             .asNumeric(19, 0));
+        // The task's entry scope (decision D64); its recipient sees it in any session.
+        eb.field("scopeName", f -> f.physicalColumn("scope_name").immutable(true).asText(64));
+        eb.field("scopeValue", f -> f.physicalColumn("scope_value").immutable(true).asText(128));
         eb.field("version", f -> f.physicalColumn("version").immutable(true).asVersion());
         eb.listView("default", lv -> lv
             .columns("taskId", "recipientId", "address", "subject", "createdTime")
@@ -93,20 +99,25 @@ public class TaskEntities {
 
     @Bean
     DatasetDefinition sysTaskDataset(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
-        return dataset(TASK_DATASET, TASK, poolRef);
+        return dataset(TASK_DATASET, TASK, poolRef, "assigneeUserId");
     }
 
     @Bean
     DatasetDefinition notificationDataset(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
-        return dataset(NOTIFICATION_DATASET, NOTIFICATION, poolRef);
+        return dataset(NOTIFICATION_DATASET, NOTIFICATION, poolRef, "recipientId");
     }
 
-    private static DatasetDefinition dataset(String id, String entity, String poolRef) {
-        return DatasetDefinition.define(id, d -> d
-            .targetEntityType(entity)
-            .asDefault()
-            .permissions(TaskPermissions.READ, TaskPermissions.WRITE)
-            .policy(p -> p.processOnlyWrites().maxQueryBatchSize(MAX_ROWS))
-            .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
+    /** @param owner the field whose user sees a row in any session (decision D64: tags limit scoped sessions) */
+    private static DatasetDefinition dataset(String id, String entity, String poolRef, String owner) {
+        return DatasetDefinition.define(id, d -> {
+            d.targetEntityType(entity)
+                .asDefault()
+                .permissions(TaskPermissions.READ, TaskPermissions.WRITE)
+                .policy(p -> p.processOnlyWrites().maxQueryBatchSize(MAX_ROWS))
+                .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef));
+            // A task given to a user personally, or a message to them, stays theirs in any session (made by the
+            // system, a task has no scope).
+            d.scope(s -> s.withinEntryScopeTag("scopeName", "scopeValue", owner));
+        });
     }
 }

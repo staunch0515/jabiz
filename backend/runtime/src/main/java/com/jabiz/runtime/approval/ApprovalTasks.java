@@ -27,7 +27,7 @@ class ApprovalTasks<C extends ProcessContext> implements StepHandler<ApprovalTas
 
     /** What {@code APPROVAL_DECIDE} decided: {@code nextPermission} null when no level remains. */
     record Passed(String requestId, String subject, String entityId, String reference, int nextLevel,
-        String nextPermission) {}
+        String nextPermission, com.jabiz.context.EntryScope scope) {}
 
     record Metadata(String passedKey) {}
 
@@ -44,10 +44,10 @@ class ApprovalTasks<C extends ProcessContext> implements StepHandler<ApprovalTas
      * messages have one) and the document's reference, or its id when the case gave none.
      */
     static TaskSpec task(String subject, String entityId, String reference, String requestId, int level,
-        String permission) {
+        String permission, com.jabiz.context.EntryScope scope) {
         return TaskSpec.forPermission(TYPE, TITLE, Map.of("subject", subject, "entity",
                 reference == null ? entityId : reference, "level", String.valueOf(level)), permission)
-            .about(ApprovalEntities.REQUEST, requestId).link(LINK).source(sourceKey(requestId));
+            .about(ApprovalEntities.REQUEST, requestId).link(LINK).source(sourceKey(requestId)).scope(scope);
     }
 
     private final TaskWriter tasks;
@@ -66,7 +66,7 @@ class ApprovalTasks<C extends ProcessContext> implements StepHandler<ApprovalTas
             Mono<Void> closed = tasks.close(ctx, sourceKey(passed.requestId()), TaskEntities.DONE);
             return passed.nextPermission() == null ? closed : closed.then(tasks.create(ctx,
                 task(passed.subject(), passed.entityId(), passed.reference(), passed.requestId(), passed.nextLevel(),
-                    passed.nextPermission())));
+                    passed.nextPermission(), passed.scope())));
         });
     }
 }

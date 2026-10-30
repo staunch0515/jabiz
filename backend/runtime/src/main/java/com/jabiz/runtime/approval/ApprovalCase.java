@@ -1,5 +1,7 @@
 package com.jabiz.runtime.approval;
 
+import com.jabiz.context.EntryScope;
+
 import java.time.Instant;
 import java.util.Map;
 import java.util.Objects;
@@ -17,9 +19,11 @@ import java.util.Objects;
  *                     after an approval, running as the system, passes the preparer of the approved request
  * @param reference    how people know the document (a journal entry's number, at most 100 characters), shown in
  *                     the approvers' task instead of the id; null: the id
+ * @param scope        the entry scope the request belongs to (decision D64): only that scope's sessions, and sessions
+ *                     without a scope, see and decide it; null: the preparing session's scope, if it has one
  */
 public record ApprovalCase(String entityId, Map<String, ?> facts, Map<String, ?> content, Instant businessTime,
-    String preparerId, String reference) {
+    String preparerId, String reference, EntryScope scope) {
 
     public ApprovalCase {
         if (entityId == null || entityId.isBlank() || entityId.length() > 100) {
@@ -33,6 +37,11 @@ public record ApprovalCase(String entityId, Map<String, ?> facts, Map<String, ?>
     }
 
     public ApprovalCase(String entityId, Map<String, ?> facts, Map<String, ?> content, Instant businessTime,
+        String preparerId, String reference) {
+        this(entityId, facts, content, businessTime, preparerId, reference, null);
+    }
+
+    public ApprovalCase(String entityId, Map<String, ?> facts, Map<String, ?> content, Instant businessTime,
         String preparerId) {
         this(entityId, facts, content, businessTime, preparerId, null);
     }
@@ -42,15 +51,21 @@ public record ApprovalCase(String entityId, Map<String, ?> facts, Map<String, ?>
     }
 
     public ApprovalCase at(Instant time) {
-        return new ApprovalCase(entityId, facts, content, time, preparerId, reference);
+        return new ApprovalCase(entityId, facts, content, time, preparerId, reference, scope);
     }
 
     public ApprovalCase preparedBy(String preparer) {
-        return new ApprovalCase(entityId, facts, content, businessTime, preparer, reference);
+        return new ApprovalCase(entityId, facts, content, businessTime, preparer, reference, scope);
     }
 
     /** The case known to people as {@code reference} (see the parameter). */
     public ApprovalCase reference(String reference) {
-        return new ApprovalCase(entityId, facts, content, businessTime, preparerId, reference);
+        return new ApprovalCase(entityId, facts, content, businessTime, preparerId, reference, scope);
+    }
+
+    /** The request belongs to the entry scope {@code name}'s value {@code value} (decision D64). */
+    public ApprovalCase scope(String name, String value) {
+        return new ApprovalCase(entityId, facts, content, businessTime, preparerId, reference,
+            new EntryScope(name, value));
     }
 }

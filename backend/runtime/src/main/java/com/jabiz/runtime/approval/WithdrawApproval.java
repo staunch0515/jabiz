@@ -2,6 +2,7 @@ package com.jabiz.runtime.approval;
 
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.StepSpec;
+import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.process.StepHandler;
 import com.jabiz.runtime.process.steps.CheckedStep;
 import com.jabiz.runtime.task.TaskEntities;
@@ -72,8 +73,12 @@ public class WithdrawApproval<C extends ProcessContext> implements StepHandler<W
                 "entityId must not be null"));
             return store.lockCase(metadata.subject(), entityId)
                 .then(store.openRequests(metadata.subject(), entityId))
-                .flatMapMany(Flux::fromIterable)
-                .filter(request -> ApprovalEntities.PENDING.equals(request.get("status")))
+                .flatMapMany(open -> {
+                    List<EntityInstance> pending = open.stream()
+                        .filter(request -> ApprovalEntities.PENDING.equals(request.get("status"))).toList();
+                    ApprovalStore.requireOwnScope(ctx, pending);
+                    return Flux.fromIterable(pending);
+                })
                 .concatMap(request -> {
                     ctx.changes().update(ApprovalEntities.REQUEST, request.id(), request.version(),
                         Map.of("status", ApprovalEntities.WITHDRAWN));

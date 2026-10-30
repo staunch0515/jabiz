@@ -10,6 +10,7 @@ import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.runtime.DatasetEntityManager;
 import com.jabiz.runtime.EntityInstance;
+import com.jabiz.runtime.context.RequestContexts;
 import com.jabiz.runtime.dataset.DatasetRegistry;
 import com.jabiz.runtime.storage.StorageAdapterRegistry;
 import com.jabiz.query.BoundValue;
@@ -45,6 +46,25 @@ public class ApprovalStore {
             .select("SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))) l",
                 Map.of("key", BoundValue.of("jabiz.approval:" + subject + ":" + entityId)))
             .then();
+    }
+
+    /**
+     * Refuses a session of an entry scope that would change the open requests of a case it does not own (decision
+     * D64): requests of another scope, or of none, are not its to supersede or withdraw (422
+     * {@code APPROVAL_OTHER_SCOPE}). Sessions without a scope change any.
+     */
+    static void requireOwnScope(com.jabiz.process.ProcessContext ctx, List<EntityInstance> open) {
+        com.jabiz.context.EntryScope mine = ctx.request().entryScope();
+        if (mine == null) {
+            return;
+        }
+        for (EntityInstance request : open) {
+            if (!mine.name().equals(request.get("scopeName")) || !mine.value().equals(request.get("scopeValue"))) {
+                throw new com.jabiz.runtime.BusinessRuleViolationException(new com.jabiz.entity.Violation(null,
+                    com.jabiz.i18n.PlatformErrorCodes.APPROVAL_OTHER_SCOPE, "The case has an open request of another "
+                    + "entry scope", Map.of()));
+            }
+        }
     }
 
     /** The requests of a case that are pending or approved. */
@@ -87,11 +107,15 @@ public class ApprovalStore {
         Instant asOf) {
         DatasetDefinition dataset = datasets.findById(datasetId).orElseThrow();
         EntityQuery query = EntityQuery.builder().where(where).limit(ApprovalEntities.MAX_ROWS).build();
-        return entities.query(dataset, def, query, asOf, null).collectList().map(rows -> {
-            if (rows.size() >= ApprovalEntities.MAX_ROWS) {
-                throw new IllegalStateException(def.name + " query reached " + ApprovalEntities.MAX_ROWS + " rows");
-            }
-            return List.copyOf(rows);
-        });
+        // The platform's own reads of a case: whole, whatever the caller's entry scope (decision D64), so that one
+        // open request a case stays the rule.
+        return RequestContexts.withoutEntryScope(entities.query(dataset, def, query, asOf, null)).collectList()
+            .map(rows -> {
+                if (rows.size() >= ApprovalEntities.MAX_ROWS) {
+                    throw new IllegalStateException(def.name + " query reached " + ApprovalEntities.MAX_ROWS
+                        + " rows");
+                }
+                return List.copyOf(rows);
+            });
     }
 }

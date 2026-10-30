@@ -93,6 +93,9 @@ public class NotificationProcesses {
             notification.put("body", body.length() > 4000 ? body.substring(0, 4000) : body);
             notification.put("createdTime", ctx.opTime());
             notification.put("processSeqId", BigDecimal.valueOf(ctx.processSeqId()));
+            // The task's entry scope (decision D64): the message is a copy of the task, seen as the task is.
+            notification.put("scopeName", task.get("scopeName"));
+            notification.put("scopeValue", task.get("scopeValue"));
             ids.add(String.valueOf(ctx.changes().insert(TaskEntities.NOTIFICATION, notification)));
         }
         ctx.put(IDS, List.copyOf(ids));

@@ -28,6 +28,7 @@ public final class CommerceEntities extends BaseEntityDefinitions {
     public static final String WAREHOUSE = "Warehouse";
     public static final String CUSTOMER = "Customer";
     public static final String STOCK_LEVEL = "StockLevel";
+    public static final String WAREHOUSE_STAFF = "WarehouseStaff";
     public static final String STOCK_RECEIPT = "StockReceipt";
     public static final String ORDER = "SalesOrder";
     public static final String ORDER_LINE = "SalesOrderLine";
@@ -37,6 +38,10 @@ public final class CommerceEntities extends BaseEntityDefinitions {
     public static final String WAREHOUSE_DATASET = "urn:jabiz:dataset:default:Warehouse";
     public static final String CUSTOMER_DATASET = "urn:jabiz:dataset:default:Customer";
     public static final String STOCK_LEVEL_DATASET = "urn:jabiz:dataset:default:StockLevel";
+    public static final String WAREHOUSE_STAFF_DATASET = "urn:jabiz:dataset:default:WarehouseStaff";
+
+    /** The entry scope of the warehouse entry's sessions: the warehouse their user works in (decision D64). */
+    public static final String WAREHOUSE_SCOPE = "warehouse";
     public static final String STOCK_RECEIPT_DATASET = "urn:jabiz:dataset:default:StockReceipt";
     public static final String ORDER_DATASET = "urn:jabiz:dataset:default:SalesOrder";
     public static final String ORDER_LINE_DATASET = "urn:jabiz:dataset:default:SalesOrderLine";
@@ -122,6 +127,22 @@ public final class CommerceEntities extends BaseEntityDefinitions {
             .sorts("warehouseCode", "warehouseName")
             .defaultSort("warehouseCode", true));
         eb.temporal(t -> t.allowScheduled(false));
+    });
+
+    /**
+     * Who works in which warehouse (decision D64): the warehouse entry scopes its sessions to it
+     * ({@code WarehouseScope}). An ordinary table, the current assignment only; its history is the audit.
+     */
+    public static final EntityDefinition WAREHOUSE_STAFF_ENTITY = EntityDefinition.define(WAREHOUSE_STAFF, eb -> {
+        eb.physicalTable("warehouse_staff");
+        eb.primaryKey("userId");
+        // The user's id as text, as the sign-in loads compare it (a primary key is not a reference).
+        eb.field("userId", f -> f.physicalColumn("user_id").immutable(true).required(true).asText(36));
+        eb.field("warehouseId", f -> f.physicalColumn("warehouse_id").required(true).asReference(WAREHOUSE));
+        eb.field("version", f -> f.physicalColumn("version").asVersion());
+        eb.listView("default", lv -> lv
+            .columns("userId", "warehouseId")
+            .filters("userId", "warehouseId"));
     });
 
     public static final EntityDefinition STOCK_LEVEL_ENTITY = EntityDefinition.define(STOCK_LEVEL, eb -> {

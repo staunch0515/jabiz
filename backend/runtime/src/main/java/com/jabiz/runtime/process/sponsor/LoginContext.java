@@ -37,6 +37,7 @@ public class LoginContext extends ProcessContext {
     private volatile String factor = SecurityEntities.FACTOR_PASSWORD;
     private volatile Long acceptedMfaStep;
     private volatile SignInEntries.Entry entry;
+    private volatile com.jabiz.context.EntryScope scope;
 
     public LoginContext(ProcessStart start, SponsorSignInInput input) {
         this(start, input.userName(), input.password(), input.source());
@@ -214,7 +215,17 @@ public class LoginContext extends ProcessContext {
             access.roles().stream().sorted().toList(), access.permissions().stream().sorted().toList(),
             recordId, attemptNo, null, identityId(),
             access.dataPeriod() == null ? null : access.dataPeriod().from(),
-            access.dataPeriod() == null ? null : access.dataPeriod().to(), entryName(), emailVerified());
+            access.dataPeriod() == null ? null : access.dataPeriod().to(), entryName(), emailVerified(),
+            scope == null ? null : scope.name(), scope == null ? null : scope.value());
+    }
+
+    /** The session's entry scope (decision D64), as the entry's resolver worked it out; null for none. */
+    public com.jabiz.context.EntryScope scope() {
+        return scope;
+    }
+
+    public void setScope(com.jabiz.context.EntryScope scope) {
+        this.scope = scope;
     }
 
     /** The provider account the attempt came through; null for passwords. */
