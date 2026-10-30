@@ -9,8 +9,10 @@ import com.jabiz.process.ProcessDefinition;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.content.QuizProcesses;
 import com.jabiz.quizbuks.messaging.ConsentChecks;
 import com.jabiz.quizbuks.messaging.QbLegal;
+import com.jabiz.quizbuks.operator.QbOperators;
 import com.jabiz.quizbuks.setup.QbParams;
 import com.jabiz.quizbuks.setup.ReviewCodes;
 import com.jabiz.runtime.EntityInstance;
@@ -80,6 +82,8 @@ public final class SponsorProcesses {
     static final String DECISIONS = "decisions";
     static final String KEY = "onboardingId";
     static final String OLD_AVATAR = "oldAvatar";
+    static final String ASSIGNMENT = "assignment";
+    static final String LANGUAGE_OPERATOR = "languageOperator";
 
     /**
      * @param displayName  the sponsor's name (their profile's)
@@ -137,9 +141,21 @@ public final class SponsorProcesses {
                 })
                 .outputMapper(ctx -> ctx.get(OUTPUT, SponsorOutput.class));
             AccountEditing.lock(pb);
+            // Q59c: the assignment after the account (nothing takes them the other way round).
+            pb.step("Lock the sponsor's assignment", HoldLock.<ProcessContext>exclusive(
+                ctx -> QbOperators.assignmentLockName(AccountEditing.userId(ctx))));
             CallerChecks.refuseBanned(pb);
             AccountEditing.loadOfUser(pb, "Load the onboarding", QbAccounts.SPONSOR, SPONSORS);
             AccountEditing.loadOfUser(pb, "Load the profile", QbAccounts.PROFILE, PROFILES);
+            pb.step("Load the assignment and the operator of the language", QueryEntities.<ProcessContext>all(
+                QueryEntities.query(QbOperators.defaultDataset(QbOperators.ASSIGNMENT), ctx -> EntityQuery.builder()
+                    .where(new QueryPredicate.In("userId", List.of(AccountEditing.userId(ctx)))).limit(1).build(),
+                    ASSIGNMENT),
+                QueryEntities.query(QbOperators.defaultDataset(QbOperators.OPERATOR), ctx -> EntityQuery.builder()
+                    .where(new QueryPredicate.And(List.of(
+                        new QueryPredicate.In("language", List.of(QuizProcesses.languageOf(ctx))),
+                        new QueryPredicate.In("status", List.of(QbOperators.ACTIVE))))).limit(1).build(),
+                    LANGUAGE_OPERATOR)));
             AccountEditing.loadFile(pb, ctx -> ctx.get(INPUT, ApplyInput.class).avatar());
             pb.step("Load the review switch", LoadParams.<ProcessContext>of(ProcessContext::opTime, PARAMS,
                 QbParams.REVIEW_SPONSOR_AUTO));
@@ -239,6 +255,26 @@ public final class SponsorProcesses {
         String userId = AccountEditing.userId(ctx);
         AccountEditing.writeName(ctx, first(ctx, PROFILES), userId, input.displayName());
         write(ctx, first(ctx, SPONSORS), values, approval.status().name());
+        assignByLanguage(ctx, userId);
+    }
+
+    /**
+     * Q59c: a sponsor's first application goes to the active operator of the language they applied in, unless they
+     * have an operator already; none of the language: headquarters'. A prospecting claim made afterwards replaces it.
+     */
+    static void assignByLanguage(ProcessContext ctx, String userId) {
+        EntityInstance operator = first(ctx, LANGUAGE_OPERATOR);
+        if (first(ctx, SPONSORS) != null || first(ctx, ASSIGNMENT) != null || operator == null) {
+            return;
+        }
+        String language = String.valueOf((Object) operator.get("language"));
+        Map<String, Object> values = new LinkedHashMap<>();
+        values.put("userId", userId);
+        values.put("operatorId", String.valueOf(operator.id()));
+        values.put("assignedAt", ctx.opTime());
+        values.put("assignedBy", QbOperators.BY_LANGUAGE);
+        values.put("reason", "Sign-up language: " + language);
+        ctx.changes().insert(QbOperators.ASSIGNMENT, values);
     }
 
     /** Notes the avatar the onboarding had, when this write replaces or removes it. */

@@ -25,7 +25,7 @@ import { useLabels, usePaged, when } from './hooks'
 import { useMoreFilters } from './moreFilters'
 import { DICTIONARY, PATH, PERMISSION } from './ids'
 import { OperatorFields } from './operator-components'
-import { OPERATORS_KEY, readOperators, saveOperator, type Operator } from './operator-api'
+import { OPERATORS_KEY, readOperators, saveOperator, type Operator, type OperatorLanguage } from './operator-api'
 
 /** The columns sorted on the server, by the template's `list.sorts` field (Q53a). */
 const SORTS = { name: 'name', status: 'status', createdAt: 'createdAt' } as const
@@ -39,7 +39,7 @@ function NewDialog({ onClose }: { onClose: () => void }) {
   const id = useId()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const [values, setValues] = useState({ name: '', contactName: '', contactEmail: '', note: '' })
+  const [values, setValues] = useState({ name: '', language: '', contactName: '', contactEmail: '', note: '' })
   const [busy, setBusy] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
   const complete = !!values.name.trim() && !!values.contactName.trim() && !!values.contactEmail.trim()
@@ -50,7 +50,8 @@ function NewDialog({ onClose }: { onClose: () => void }) {
     setProblem(null)
     try {
       const saved = await saveOperator({ name: values.name.trim(), contactName: values.contactName.trim(),
-        contactEmail: values.contactEmail.trim(), note: values.note.trim() || null })
+        contactEmail: values.contactEmail.trim(), language: (values.language || null) as OperatorLanguage | null,
+        note: values.note.trim() || null })
       void queryClient.invalidateQueries({ queryKey: OPERATORS_KEY })
       navigate(PATH.operator(saved.operatorId))
     } catch (e) {
@@ -90,6 +91,7 @@ export default function OperatorsPage() {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
   const { can } = useAuth()
   const status = useLabels(DICTIONARY.operatorStatus)
+  const languages = useLabels(DICTIONARY.contentLanguage)
   const [creating, setCreating] = useState(false)
   const more = useMoreFilters([
     { kind: 'dictionary', name: 'status', label: t('operator.fields.status'), dictionary: DICTIONARY.operatorStatus },
@@ -107,6 +109,8 @@ export default function OperatorsPage() {
         </Link>
       ),
     },
+    { id: 'language', header: t('operator.fields.language'),
+      cell: ({ row }) => (row.original.language ? languages(row.original.language) : '—') },
     { id: 'contact', header: t('operator.fields.contactName'),
       cell: ({ row }) => `${row.original.contactName} · ${row.original.contactEmail}` },
     { id: 'status', header: t('operator.fields.status'), cell: ({ row }) => (
@@ -115,7 +119,7 @@ export default function OperatorsPage() {
     { id: 'members', header: t('operator.list.members'), meta: right, cell: ({ row }) => row.original.members },
     { id: 'sponsors', header: t('operator.list.sponsors'), meta: right, cell: ({ row }) => row.original.sponsors },
     { id: 'createdAt', header: t('operator.list.createdAt'), cell: ({ row }) => when(row.original.createdAt) },
-  ], [t, status])
+  ], [t, status, languages])
   return (
     <div className="flex flex-col gap-4" data-testid="operators">
       <PageHeader title={t('operator.list.title')} description={t('operator.list.description')} className="pb-0"

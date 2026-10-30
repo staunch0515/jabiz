@@ -20,6 +20,7 @@ import com.jabiz.runtime.process.steps.QueryEntities;
 import com.jabiz.runtime.security.SecurityEntities;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
@@ -64,10 +65,21 @@ public final class OperatorProcesses {
      * @param operatorId   null to create one
      * @param baseRevision the revision the page read (required when changing one)
      */
+    /**
+     * @param language the language whose new sponsors the operator takes (Q59c); none: by hand only. One active
+     *                 operator a language.
+     */
     public record SaveInput(String operatorId, @NotBlank @Size(max = QbOperators.NAME_LENGTH) String name,
         @NotBlank @Size(max = QbOperators.CONTACT_NAME_LENGTH) String contactName,
         @NotBlank @Size(max = QbOperators.EMAIL_LENGTH) String contactEmail, String status,
-        @Size(max = QbOperators.NOTE_LENGTH) String note, Long baseRevision) {}
+        @Size(max = QbOperators.NOTE_LENGTH) String note, Long baseRevision,
+        @Pattern(regexp = "ja|zh|en") String language) {
+
+        public SaveInput(String operatorId, String name, String contactName, String contactEmail, String status,
+            String note, Long baseRevision) {
+            this(operatorId, name, contactName, contactEmail, status, note, baseRevision, null);
+        }
+    }
 
     public record SaveOutput(String operatorId, long revision, String status) {}
 
@@ -104,6 +116,7 @@ public final class OperatorProcesses {
     static final String OUTPUT = "output";
     static final String OPERATOR = "operator";
     static final String MEMBERS = "members";
+    static final String SAME_LANGUAGE = "sameLanguage";
     static final String TARGET = "target";
     static final String PLACE = "place";
     static final String USERS = "users";
@@ -126,13 +139,18 @@ public final class OperatorProcesses {
             .requiresVerifiedEmail()
             .contextFactory((start, input) -> start(start, input, blankToNull(input.operatorId())))
             .outputMapper(ctx -> ctx.get(OUTPUT, SaveOutput.class))
+            // Q59c: the languages first (every save takes it in the same order), so that two saves never give one
+            // language to two active operators.
+            .step("Lock the languages", HoldLock.<ProcessContext>exclusive(ctx -> QbOperators.LANGUAGES_LOCK))
             .step("Lock the operator", HoldLock.<ProcessContext>exclusive(
                 ctx -> QbOperators.operatorLockName(target(ctx))))
             .step("Load the operator and its members", QueryEntities.<ProcessContext>all(
                 QueryEntities.query(QbOperators.defaultDataset(QbOperators.OPERATOR),
                     ctx -> byKey("operatorId", target(ctx)), OPERATOR),
                 QueryEntities.query(QbOperators.defaultDataset(QbOperators.MEMBER),
-                    ctx -> currentMembers(target(ctx)), MEMBERS)))
+                    ctx -> currentMembers(target(ctx)), MEMBERS),
+                QueryEntities.query(QbOperators.defaultDataset(QbOperators.OPERATOR),
+                    ctx -> activeOfLanguage(ctx.get(INPUT, SaveInput.class).language()), SAME_LANGUAGE)))
             .compute("Save", (metadata, ctx) -> save(ctx, ctx.get(INPUT, SaveInput.class))));
     }
 
@@ -155,11 +173,18 @@ public final class OperatorProcesses {
             ctx.reject(new Violation("baseRevision", OperatorCodes.CHANGED, "The operator was changed since it was "
                 + "read", Map.of("revision", AccountEditing.number(operator.get("revision")))));
         }
+        String language = input.language() == null || input.language().isBlank() ? null : input.language();
+        if (language != null && QbOperators.ACTIVE.equals(status) && OperatorChecks.list(ctx, SAME_LANGUAGE).stream()
+            .anyMatch(other -> operator == null || !String.valueOf(other.id()).equals(String.valueOf(operator.id())))) {
+            ctx.reject(new Violation("language", OperatorCodes.LANGUAGE_TAKEN, "Another active operator takes the "
+                + "new sponsors of this language", Map.of("language", language)));
+        }
         if (ctx.hasViolations()) {
             return;
         }
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("name", input.name().strip());
+        values.put("language", language);
         values.put("contactName", input.contactName().strip());
         values.put("contactEmail", email);
         values.put("status", status);
@@ -568,6 +593,14 @@ public final class OperatorProcesses {
             default -> throw new IllegalStateException("No person in " + input.getClass().getSimpleName());
         };
         return AccountEditing.canonical(userId.strip());
+    }
+
+    /** The active operators of a language (none without one). */
+    static EntityQuery activeOfLanguage(String language) {
+        List<Object> languages = language == null || language.isBlank() ? List.of() : List.of(language);
+        return EntityQuery.builder().where(new QueryPredicate.And(List.of(
+            new QueryPredicate.In("language", languages),
+            new QueryPredicate.In("status", List.of(QbOperators.ACTIVE))))).limit(5).build();
     }
 
     private static EntityQuery byKey(String field, Object value) {

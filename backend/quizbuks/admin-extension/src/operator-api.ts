@@ -26,10 +26,16 @@ export type OperatorStatus = (typeof OPERATOR_STATUSES)[number]
 export const CHECK_RESULTS = ['OK', 'PROBLEM'] as const
 export type CheckResult = (typeof CHECK_RESULTS)[number]
 
+/** The languages an operator can take the new sponsors of (Q59c): the platform's. */
+export const OPERATOR_LANGUAGES = ['ja', 'zh', 'en'] as const
+export type OperatorLanguage = (typeof OPERATOR_LANGUAGES)[number]
+
 /** A row of `qb.admin.operators`. */
 export interface Operator {
   operatorId: string
   name: string
+  /** The language whose new sponsors it takes (Q59c); null: by hand only. */
+  language: OperatorLanguage | null
   contactName: string
   contactEmail: string
   collection: string
@@ -45,6 +51,7 @@ function toOperator(row: Row): Operator {
   return {
     operatorId: String(row.operatorId),
     name: String(row.name ?? ''),
+    language: (OPERATOR_LANGUAGES as readonly unknown[]).includes(row.language) ? row.language as OperatorLanguage : null,
     contactName: String(row.contactName ?? ''),
     contactEmail: String(row.contactEmail ?? ''),
     collection: String(row.collection ?? ''),
@@ -75,6 +82,7 @@ export interface OperatorInput {
   name: string
   contactName: string
   contactEmail: string
+  language?: OperatorLanguage | null
   status?: OperatorStatus
   note?: string | null
   baseRevision?: number

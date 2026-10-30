@@ -17,6 +17,9 @@ export const operatorMessages = {
     takenDownByHq: 'Headquarters took this publication down. Only headquarters can resume or end it.',
     fields: {
       name: 'Name',
+      language: 'Language of new sponsors',
+      languageHint: 'A sponsor applying for the first time in this language is assigned to this operator, unless an operator brought them. One active operator a language.',
+      noLanguage: 'None (assigned by hand only)',
       contactName: 'Contact',
       contactEmail: 'Contact e-mail',
       note: 'Note',
@@ -152,6 +155,9 @@ export const operatorMessages = {
     takenDownByHq: '此发布已由总部下架，只有总部可以恢复或结束。',
     fields: {
       name: '名称',
+      language: '新商户的语言',
+      languageHint: '以该语言首次申请的商户会分配给此运营商（由运营商开拓的商户除外）。每种语言只能有一个有效的运营商。',
+      noLanguage: '无（只手动分配）',
       contactName: '联系人',
       contactEmail: '联系邮箱',
       note: '备注',
@@ -287,6 +293,9 @@ export const operatorMessages = {
     takenDownByHq: 'この公開は本部が取り下げました。再開・終了できるのは本部だけです。',
     fields: {
       name: '名称',
+      language: '新しいスポンサーの言語',
+      languageHint: 'この言語で初めて申請したスポンサーはこの運営パートナーの担当になります（運営パートナーが開拓したスポンサーを除く）。有効な運営パートナーは一つの言語に一つです。',
+      noLanguage: 'なし（手動で割り当てるだけ）',
       contactName: '担当者',
       contactEmail: '連絡先メール',
       note: 'メモ',

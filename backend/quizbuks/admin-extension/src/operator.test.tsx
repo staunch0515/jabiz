@@ -134,9 +134,13 @@ describe('headquarters', () => {
     await user.type(within(dialog).getByTestId('operator-name'), ' Kyushu ')
     await user.type(within(dialog).getByTestId('operator-contact'), 'Kei')
     await user.type(within(dialog).getByTestId('operator-email'), 'ops@kyushu.example')
+    // Q59c: the language whose new sponsors it takes; none until chosen.
+    expect(within(dialog).getByTestId('operator-language')).toHaveTextContent('None')
+    await user.click(within(dialog).getByTestId('operator-language'))
+    await user.click(await screen.findByRole('option', { name: 'zh' }))
     await user.click(within(dialog).getByTestId('operator-create'))
     await waitFor(() => expect(server.runProcess).toHaveBeenCalledWith(OPERATOR_PROCESS.save, {
-      name: 'Kyushu', contactName: 'Kei', contactEmail: 'ops@kyushu.example', note: null }))
+      name: 'Kyushu', contactName: 'Kei', contactEmail: 'ops@kyushu.example', language: 'zh', note: null }))
   })
 
   it('does not offer creating one without the permission', async () => {

@@ -11,6 +11,7 @@ params:
 results:
   operatorId:   { from: QbOperator.operatorId }
   name:         { from: QbOperator.name }
+  language:     { from: QbOperator.language }
   contactName:  { from: QbOperator.contactName }
   contactEmail: { from: QbOperator.contactEmail }
   collection:   { from: QbOperator.collection }
@@ -21,7 +22,7 @@ results:
   members:      { kind: { type: numeric, precision: 9, scale: 0 } }
   sponsors:     { kind: { type: numeric, precision: 9, scale: 0 } }
 list:
-  filters: [status, createdAt]
+  filters: [status, language, createdAt]
   sorts:   [name, createdAt, status]
   defaultSort: { field: createdAt, asc: false }
   key: [operatorId]
@@ -30,6 +31,7 @@ permissions: [qb.admin.operators.read]
 SELECT
     o.{{QbOperator.operatorId}}   AS operatorId,
     o.{{QbOperator.name}}         AS name,
+    o.{{QbOperator.language}}     AS language,
     o.{{QbOperator.contactName}}  AS contactName,
     o.{{QbOperator.contactEmail}} AS contactEmail,
     o.{{QbOperator.collection}}   AS collection,

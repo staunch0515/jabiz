@@ -529,11 +529,17 @@ class ProspectIT extends AiItSupport {
         assertThat(to(OWN, "info@funnel-tea.example")).hasSize(2);
 
         // The business signs up by the trial's link: the sponsor is the operator's (D-Q48-9), once.
+        // Q59c: the platform had assigned them by their sign-up language; the trial's operator replaces that.
         String sponsor = newSponsor(unique("q48d-s"));
+        String byLanguage = newOperator(unique("Lang")).get(0);
+        execute("INSERT INTO qb_sponsor_operator (assignment_id, user_id, operator_id, assigned_at, assigned_by, "
+            + "reason, version) VALUES (gen_random_uuid()::text, ?, ?, now(), ?, 'Sign-up language: ja', 0)", sponsor,
+            byLanguage, com.jabiz.quizbuks.operator.QbOperators.BY_LANGUAGE);
         assertThat(run(ProspectProcesses.CLAIM, sponsorToken(sponsor), body("trialKey", key)))
             .containsEntry("outcome", "claimed").containsEntry("operatorId", owner);
-        assertThat(query("SELECT operator_id FROM qb_sponsor_operator WHERE user_id = ?", sponsor)).singleElement()
-            .satisfies(r -> assertThat(r).containsEntry("operator_id", owner));
+        assertThat(query("SELECT operator_id, assigned_by FROM qb_sponsor_operator WHERE user_id = ?", sponsor))
+            .singleElement().satisfies(r -> assertThat(r).containsEntry("operator_id", owner)
+                .satisfies(row -> assertThat((String) row.get("assigned_by")).startsWith("prospect:")));
         assertThat(prospect("funnel-tea.example")).containsEntry("converted_user_id", sponsor);
         assertThat(run(ProspectProcesses.CLAIM, sponsorToken(sponsor), body("trialKey", key)))
             .containsEntry("outcome", "again");

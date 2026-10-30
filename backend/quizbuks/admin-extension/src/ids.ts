@@ -242,6 +242,7 @@ export const TRANSFER_REVIEW = 'REVIEW'
 /** Dictionaries, labelled by the server in the request's language. */
 export const DICTIONARY = {
   region: 'urn:jabiz:dict:quizbuks:region',
+  contentLanguage: 'urn:jabiz:dict:quizbuks:content-language',
   audience: 'urn:jabiz:dict:quizbuks:publication-audience',
   publicationStatus: 'urn:jabiz:dict:quizbuks:publication-status',
   quizStatus: 'urn:jabiz:dict:quizbuks:quiz-status',

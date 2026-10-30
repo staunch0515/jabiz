@@ -36,6 +36,8 @@ public final class OperatorCodes {
     public static final String HQ_TAKEDOWN = "QB_OPERATOR_HQ_TAKEDOWN";
     /** Headquarters banned the user, or another operator did: the operator does not lift the ban. */
     public static final String HQ_BAN = "QB_OPERATOR_HQ_BAN";
+    /** Another active operator takes the new sponsors of this language already (Q59c): one a language. */
+    public static final String LANGUAGE_TAKEN = "QB_OPERATOR_LANGUAGE_TAKEN";
     /** The decision is not one an operator's member made on a review (a sponsor's or a publication's). */
     public static final String NOT_AN_OPERATOR_DECISION = "QB_OPERATOR_NOT_AN_OPERATOR_DECISION";
     /** A problem found by a spot check needs a note saying what it is. */

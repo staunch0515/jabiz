@@ -85,7 +85,10 @@ public final class OperatorSettlements {
     public static final String APPROVAL_SUBJECT = "qb.operator-settlement";
     public static final String REVIEW_RULE = "qb.operator-settlement.review";
     public static final String STATUS_DICTIONARY = "urn:jabiz:dict:quizbuks:operator-settlement-status";
-    /** The language of the statements: the operators are in Japan (§6 item 5). */
+    /**
+     * The language of the statements of an operator without one: the first operators are in Japan (§6 item 5). An
+     * operator with a language (Q59c) gets them in that one.
+     */
     public static final String LANGUAGE = "ja";
 
     public static final String ISSUED = "ISSUED";
@@ -377,10 +380,16 @@ public final class OperatorSettlements {
                             + ctx.get(INPUT, StatementInput.class).settlementId() + " not found");
                     }
                 })
+                .step("Load the operator", QueryEntities.<ProcessContext>of(
+                    QbOperators.defaultDataset(QbOperators.OPERATOR), ctx -> EntityQuery.builder()
+                        .where(new QueryPredicate.In("operatorId",
+                            List.of(String.valueOf((Object) first(ctx, SETTLEMENT_ROW).get("operatorId")))))
+                        .limit(1).build(), OPERATOR))
                 .step("Issue the statement", CallProcess.<ProcessContext>when(
                     ctx -> first(ctx, SETTLEMENT_ROW).get("documentRunId") == null,
                     DocumentProcesses.ISSUE, 1, ctx -> new DocumentProcesses.IssueInput(LAYOUT_ID,
-                        Map.of("settlementId", String.valueOf(first(ctx, SETTLEMENT_ROW).id())), null, null, LANGUAGE),
+                        Map.of("settlementId", String.valueOf(first(ctx, SETTLEMENT_ROW).id())), null, null,
+                        statementLanguage(first(ctx, OPERATOR))),
                     ISSUED_DOCUMENT))
                 .compute("Record the statement", (metadata, ctx) -> {
                     if (!ctx.contains(ISSUED_DOCUMENT)) {
@@ -641,6 +650,12 @@ public final class OperatorSettlements {
     private static EntityQuery monthOf(String operatorId, String month) {
         return EntityQuery.builder().where(new QueryPredicate.And(List.of(
             new QueryPredicate.Eq("operatorId", operatorId), new QueryPredicate.Eq("month", month)))).limit(1).build();
+    }
+
+    /** The language of an operator's statements: its own (Q59c), else {@value #LANGUAGE}. */
+    static String statementLanguage(EntityInstance operator) {
+        Object language = operator == null ? null : operator.get("language");
+        return language == null ? LANGUAGE : String.valueOf(language);
     }
 
     static EntityQuery byId(String settlementId) {
