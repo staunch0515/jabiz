@@ -174,6 +174,14 @@ public class ContentConfig {
     }
 
     @Bean
+    StaticDictionary qbContentLanguageDictionary() {
+        return StaticDictionary.define(QbContent.LANGUAGE_DICTIONARY, d -> d
+            .item("ja", "en", "Japanese", "zh", "日语", "ja", "日本語")
+            .item("zh", "en", "Chinese", "zh", "中文", "ja", "中国語")
+            .item("en", "en", "English", "zh", "英语", "ja", "英語"));
+    }
+
+    @Bean
     StaticDictionary qbQuestionSelectionDictionary() {
         return StaticDictionary.define(QbContent.SELECTION_DICTIONARY, d -> d
             .item(QbContent.SINGLE, "en", "Single choice", "zh", "单选", "ja", "単一選択")

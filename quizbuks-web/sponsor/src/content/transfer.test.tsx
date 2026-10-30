@@ -32,7 +32,7 @@ const QUIZ = {
 }
 
 const DRAFT: Draft = {
-  quiz: { quizId: 'q1', title: 'Coffee basics', kind: 'QUIZ', intro: 'About coffee.', cover: 'file-cover',
+  quiz: { quizId: 'q1', title: 'Coffee basics', kind: 'QUIZ', language: 'en', intro: 'About coffee.', cover: 'file-cover',
     timeLimitSec: 300, status: 'DRAFT', latestVersionNo: 0, versionLabel: null, revision: 7,
     editedAt: '2026-10-14T01:00:00Z', changedSinceVersion: true, questionCount: 2, materialCount: 1, clonedFrom: null },
   questions: [

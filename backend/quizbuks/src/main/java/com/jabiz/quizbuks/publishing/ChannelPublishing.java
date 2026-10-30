@@ -133,6 +133,9 @@ public final class ChannelPublishing {
         quiz.put("ownerId", owner);
         quiz.put("kind", QbContent.KIND_QUIZ);
         quiz.put("title", snapshot.title());
+        // Q59a: the shop's quiz is in the language of the request (the storefront's channel), else the default.
+        String language = com.jabiz.quizbuks.content.QuizProcesses.languageOf(ctx);
+        quiz.put("language", language);
         quiz.put("timeLimitSec", BigDecimal.valueOf(input.timeLimitSec()));
         quiz.put("status", QbContent.VERSIONED);
         quiz.put("removed", false);
@@ -155,6 +158,7 @@ public final class ChannelPublishing {
         version.put("label", VersionLabels.label(1));
         version.put("title", snapshot.title());
         version.put("timeLimitSec", BigDecimal.valueOf(input.timeLimitSec()));
+        version.put("language", language);
         version.put("questionCount", BigDecimal.valueOf(snapshot.questions().size()));
         version.put("materialCount", BigDecimal.valueOf(snapshot.materials().size()));
         version.put("fullScore", BigDecimal.valueOf(snapshot.fullScore()));

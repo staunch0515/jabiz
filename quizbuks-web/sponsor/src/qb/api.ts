@@ -153,18 +153,49 @@ export async function readMySponsor(): Promise<Sponsor | null> {
   }
 }
 
-/** One's own settings (Q57): every default when there is no row (the sound on). */
+/** The languages a quiz is written in (Q59a), the platform's. */
+export type ContentLanguage = 'ja' | 'zh' | 'en'
+export const CONTENT_LANGUAGES: readonly ContentLanguage[] = ['ja', 'zh', 'en']
+
+/** The content language of an interface language (`zh-CN` → `zh`); Japanese for another. */
+export function contentLanguageOf(language: string | undefined): ContentLanguage {
+  const code = (language ?? '').split('-')[0] as ContentLanguage
+  return CONTENT_LANGUAGES.includes(code) ? code : 'ja'
+}
+
+/**
+ * One's own settings (Q57, Q59a): every default when there is no row (the sound on; the quizzes of the interface
+ * language only, which `contentLanguages` empty means).
+ */
 export interface UserSettings {
   soundOn: boolean
+  contentLanguages: ContentLanguage[]
+}
+
+export const DEFAULT_SETTINGS: UserSettings = { soundOn: true, contentLanguages: [] }
+
+function languagesOf(value: unknown): ContentLanguage[] {
+  const listed = Array.isArray(value) ? value.map(String) : typeof value === 'string' ? value.split(',') : []
+  return CONTENT_LANGUAGES.filter((language) => listed.includes(language))
 }
 
 export async function readMySettings(): Promise<UserSettings> {
   const row = await ownRow(DATASET.mySettings)
-  return { soundOn: row?.soundOff !== true }
+  return { soundOn: row?.soundOff !== true, contentLanguages: languagesOf(row?.contentLanguages) }
 }
 
-export const saveMySettings = (input: UserSettings) =>
-  runProcess<UserSettings>(PROCESS.settingsSave, { soundOn: input.soundOn })
+/** Saves the settings given; one left out stays as it is. */
+export async function saveMySettings(input: Partial<UserSettings>): Promise<UserSettings> {
+  const output = await runProcess<Record<string, unknown>>(PROCESS.settingsSave, {
+    soundOn: input.soundOn ?? null, contentLanguages: input.contentLanguages ?? null })
+  return { soundOn: output.soundOn !== false, contentLanguages: languagesOf(output.contentLanguages) }
+}
+
+/** The languages whose quizzes are shown: the ones switched on, else the interface language. */
+export function shownLanguages(settings: UserSettings | undefined, interfaceLanguage: string): ContentLanguage[] {
+  const chosen = settings?.contentLanguages ?? []
+  return chosen.length > 0 ? chosen : [contentLanguageOf(interfaceLanguage)]
+}
 
 /** The most rows a dataset answers at once (the platform's page limit). */
 const PAGE = 100

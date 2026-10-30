@@ -19,7 +19,7 @@ function json(status: number, body: unknown) {
 }
 
 const QUIZ: Quiz = {
-  quizId: 'q1', kind: 'QUIZ', title: 'Paris', intro: 'About Paris', cover: null, timeLimitSec: null, status: 'DRAFT',
+  quizId: 'q1', kind: 'QUIZ', language: 'en', title: 'Paris', intro: 'About Paris', cover: null, timeLimitSec: null, status: 'DRAFT',
   latestVersionNo: 0, versionLabel: null, revision: 7, editedAt: '2026-10-18T00:00:00Z', changedSinceVersion: false,
   questionCount: 0, materialCount: 2, clonedFrom: null,
 }

@@ -21,6 +21,8 @@ interface Me {
   identities?: Record<string, unknown>[]
   /** Q57: the account has the sound effects off. */
   soundOff?: boolean
+  /** Q59a: the languages of the quizzes switched on (comma-separated), none when absent. */
+  contentLanguages?: string
   /** The answer to saving the profile when it is refused. */
   refusal?: Record<string, unknown>
 }
@@ -76,10 +78,12 @@ function server(me?: Me, providers: unknown[] = []) {
         return json(200, { locale: mailLocale, effective: mailLocale ?? 'en', languages: ['en', 'zh', 'ja'],
           defaultLocale: 'en' })
       case '/api/datasets/urn:jabiz:dataset:me:QbUserSettings/query':
-        return json(200, { items: me?.soundOff ? [{ id: 'u1', version: 0, attributes: { userId: 'u1', soundOff: true } }]
+        return json(200, { items: me?.soundOff || me?.contentLanguages ? [{ id: 'u1', version: 0, attributes: {
+          userId: 'u1', soundOff: me?.soundOff === true, contentLanguages: me?.contentLanguages ?? null } }]
           : [], offset: 0, limit: 1 })
       case '/api/processes/QB_SETTINGS_SAVE/latest':
-        return json(200, { output: { soundOn: (body as { soundOn: boolean }).soundOn } })
+        return json(200, { output: { soundOn: (body as { soundOn: boolean | null }).soundOn ?? true,
+          contentLanguages: (body as { contentLanguages: string[] | null }).contentLanguages ?? [] } })
       case '/api/processes/QB_PROFILE_SAVE/latest':
         if (me?.refusal) return json(422, me.refusal)
         profile = { displayName: (body as { displayName: string }).displayName, countryCode: 'JP', city: null,
@@ -409,10 +413,47 @@ describe('a signed-in taker', () => {
     expect(soundEnabled()).toBe(false)
     await userEvent.click(toggle)
     await waitFor(() => expect(posted).toContainEqual({ path: '/api/processes/QB_SETTINGS_SAVE/latest',
-      body: { soundOn: true } }))
+      body: { soundOn: true, contentLanguages: null } }))
     expect(toggle).toHaveAttribute('aria-checked', 'true')
     expect(soundEnabled()).toBe(true)
     await expectAccessible()
+  })
+
+  it('shows the quizzes of the app\'s language until the taker switches others on (Q59a)', async () => {
+    const profile = { displayName: 'Mei', countryCode: 'JP', city: null, preferredCurrency: 'JPY', revision: 1 }
+    const { posted } = server({ profile })
+    render(<App />)
+    const feedLanguages = () => posted.filter((p) => p.path === '/api/queries/qb.app.feed')
+      .map((p) => (p.body as { params: { languages: string } }).params.languages)
+    await waitFor(() => expect(feedLanguages()).toContain('en'))
+    cleanup()
+
+    window.history.replaceState(null, '', '/account/preferences')
+    render(<App />)
+    const section = await screen.findByTestId('account-quiz-languages')
+    const english = within(section).getByRole('checkbox', { name: 'English' })
+    await waitFor(() => expect(english).toBeChecked())
+    // The last one on stays on; the app's language is followed until the taker chooses.
+    expect(english).toBeDisabled()
+    expect(within(section).getByTestId('quiz-languages-following')).toHaveTextContent('English')
+    await userEvent.click(within(section).getByRole('checkbox', { name: '日本語' }))
+    await waitFor(() => expect(posted).toContainEqual({ path: '/api/processes/QB_SETTINGS_SAVE/latest',
+      body: { soundOn: null, contentLanguages: ['ja', 'en'] } }))
+    expect(within(section).getByRole('checkbox', { name: '日本語' })).toBeChecked()
+    expect(english).toBeEnabled()
+    expect(within(section).queryByTestId('quiz-languages-following')).toBeNull()
+    await expectAccessible()
+  })
+
+  it('asks the feed for the languages switched on (Q59a)', async () => {
+    const { posted } = server({ profile: { displayName: 'Mei', countryCode: 'JP', city: null,
+      preferredCurrency: 'JPY', revision: 1 }, contentLanguages: 'zh,en' })
+    render(<App />)
+    await waitFor(() => expect(posted.filter((p) => p.path === '/api/queries/qb.app.feed')
+      .map((p) => (p.body as { params: { languages: string } }).params.languages)).toContain('zh,en'))
+    // Never the app's language alone first, while the settings are read.
+    expect(posted.filter((p) => p.path === '/api/queries/qb.app.feed')
+      .map((p) => (p.body as { params: { languages: string } }).params.languages)).not.toContain('en')
   })
 
   it('asks before sending mail in the language the interface was switched to', async () => {

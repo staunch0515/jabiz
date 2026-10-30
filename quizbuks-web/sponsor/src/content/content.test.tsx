@@ -13,7 +13,7 @@ const ENTRY = { name: 'sponsor', selfRegistration: true, requireVerifiedEmail: t
   sessionPersistence: 'tab' }
 
 const QUIZ = {
-  quizId: 'q1', ownerId: 'u2', title: 'Coffee basics', intro: 'About **coffee**.', cover: null, timeLimitSec: 300,
+  quizId: 'q1', ownerId: 'u2', title: 'Coffee basics', language: 'zh', intro: 'About **coffee**.', cover: null, timeLimitSec: 300,
   status: 'DRAFT', removed: false, aiGenerated: false, latestVersionNo: 0, versionLabel: null, revision: 7,
   editedAt: '2026-10-14T01:00:00Z', changedSinceVersion: true, questionCount: 2, materialCount: 1, clonedFrom: null,
 }
@@ -130,7 +130,7 @@ describe('the quiz list', () => {
     await userEvent.click(screen.getByTestId('new-quiz-create'))
     await waitFor(() => expect(window.location.pathname).toBe('/quizzes/q9'))
     expect(processCalls('QB_QUIZ_SAVE')).toEqual([{ title: 'Tea time', intro: null, cover: null,
-      timeLimitSec: null, kind: 'QUIZ' }])
+      timeLimitSec: null, kind: 'QUIZ', language: 'en' }])
   })
 
   it('shows an illustrated empty state when the sponsor has no quiz yet (Q32)', async () => {
@@ -140,6 +140,22 @@ describe('the quiz list', () => {
     const empty = await screen.findByTestId('quizzes-empty')
     expect(empty).toHaveTextContent('No quizzes yet')
     expect(empty.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
+  })
+
+  it('writes a new quiz in the language the sponsor picks (Q59a)', async () => {
+    const { processCalls } = server({ processes: { QB_QUIZ_SAVE: [edit(1, { quizId: 'q9' })] } })
+    window.history.replaceState(null, '', '/quizzes')
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('new-quiz'))
+    await userEvent.type(await screen.findByTestId('new-quiz-title'), 'お茶の時間')
+    // The console's language first.
+    expect(screen.getByTestId('new-quiz-language')).toHaveTextContent('English')
+    await userEvent.click(screen.getByTestId('new-quiz-language'))
+    await userEvent.click(await screen.findByRole('option', { name: '日本語' }))
+    await userEvent.click(screen.getByTestId('new-quiz-create'))
+    await waitFor(() => expect(window.location.pathname).toBe('/quizzes/q9'))
+    expect(processCalls('QB_QUIZ_SAVE')).toEqual([{ title: 'お茶の時間', intro: null, cover: null,
+      timeLimitSec: null, kind: 'QUIZ', language: 'ja' }])
   })
 
   it('makes a survey when the sponsor chooses one (Q12)', async () => {
@@ -152,7 +168,7 @@ describe('the quiz list', () => {
     await userEvent.click(screen.getByTestId('new-quiz-create'))
     await waitFor(() => expect(window.location.pathname).toBe('/quizzes/q9'))
     expect(processCalls('QB_QUIZ_SAVE')).toEqual([{ title: 'Tea habits', intro: null, cover: null,
-      timeLimitSec: null, kind: 'SURVEY' }])
+      timeLimitSec: null, kind: 'SURVEY', language: 'en' }])
   })
 })
 
@@ -169,7 +185,7 @@ describe('the quiz editor', () => {
     await userEvent.click(screen.getByTestId('heading-save'))
     expect(await screen.findByTestId('heading-saved')).toBeInTheDocument()
     expect(processCalls('QB_QUIZ_SAVE')).toEqual([{ quizId: 'q1', title: 'Coffee 101', intro: 'About **coffee**.',
-      cover: null, timeLimitSec: 300, baseRevision: 7 }])
+      cover: null, timeLimitSec: 300, language: 'zh', baseRevision: 7 }])
   })
 
   it('previews the introduction as Markdown', async () => {

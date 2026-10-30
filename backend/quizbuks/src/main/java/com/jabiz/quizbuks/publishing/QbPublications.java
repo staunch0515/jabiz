@@ -373,6 +373,10 @@ public final class QbPublications {
         // A scored quiz or a survey (Q12), from the version's snapshot.
         eb.field("kind", f -> f.physicalColumn("kind").immutable(true).required(true)
             .asCode(QbContent.QUIZ_KIND_DICTIONARY, QbContent.KIND_QUIZ, QbContent.KIND_SURVEY));
+        // Q59a: the language of the version on (the feed shows a taker the languages they switched on); a switch to
+        // another version (Q51) brings its language.
+        eb.field("language", f -> f.physicalColumn("language").required(true)
+            .asCode(QbContent.LANGUAGE_DICTIONARY, QbContent.LANGUAGES.toArray(String[]::new)));
         // Q22: the reward method and, for a prize at the sponsor's place, what it is: the feed filters on the method
         // and the detail page shows the prize.
         eb.field("rewardMethod", f -> f.physicalColumn("reward_method").immutable(true).required(true)

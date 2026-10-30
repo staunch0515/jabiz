@@ -2,7 +2,7 @@ import { Label, notify, Switch } from '@jabiz/ui'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useId, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import { readMySettings, saveMySettings, type UserSettings } from './api'
+import { DEFAULT_SETTINGS, readMySettings, saveMySettings, type UserSettings } from './api'
 import { QB } from './messages'
 import { problemText } from './problems'
 import { playSound, setSoundEnabled, soundEnabled, type SoundCue } from './sound'
@@ -32,14 +32,14 @@ export function SoundSwitch() {
     mutationFn: (soundOn: boolean) => saveMySettings({ soundOn }),
     onMutate: (soundOn) => {
       const before = queryClient.getQueryData<UserSettings>(SETTINGS_QUERY)
-      queryClient.setQueryData<UserSettings>(SETTINGS_QUERY, { soundOn })
+      queryClient.setQueryData<UserSettings>(SETTINGS_QUERY, { ...(before ?? DEFAULT_SETTINGS), soundOn })
       setSoundEnabled(soundOn)
       // Turned on: let them hear it.
       if (soundOn) playSound('tap')
       return { before }
     },
     onError: (error, _soundOn, saved) => {
-      const before = saved?.before ?? { soundOn: true }
+      const before = saved?.before ?? DEFAULT_SETTINGS
       queryClient.setQueryData<UserSettings>(SETTINGS_QUERY, before)
       setSoundEnabled(before.soundOn)
       notify.error(problemText(error))

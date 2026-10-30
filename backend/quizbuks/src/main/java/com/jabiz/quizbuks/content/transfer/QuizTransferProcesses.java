@@ -157,7 +157,7 @@ public final class QuizTransferProcesses {
         if (ctx.hasViolations()) {
             return;
         }
-        Object quizId = QuizProcesses.insertContent(ctx, snapshot(file, ids), file.title(), false, null);
+        Object quizId = QuizProcesses.insertContent(ctx, snapshot(file, ids), file.title(), false, null, null);
         QuizFileFormat.Reading reading = ctx.get(READING, QuizFileFormat.Reading.class);
         ctx.put(OUTPUT, new ImportOutput(QuizEditing.uuid(quizId), reading.version(), reading.readers()));
     }

@@ -48,10 +48,10 @@ class SettingsIT extends AccountItSupport {
     }
 
     @Test
-    void theInputIsRequiredAndNobodyWritesSettingsThroughADataset() {
+    void anUnknownLanguageIsRefusedAndNobodyWritesSettingsThroughADataset() {
         String ann = userWithRole(unique("ann"), QbRoles.TAKER);
         String token = tokenOf(ann, QbRoles.TAKER);
-        refused("QB_SETTINGS_SAVE", token, body(), 400);
+        refused("QB_SETTINGS_SAVE", token, body("contentLanguages", List.of("fr")), 400);
         run("QB_SETTINGS_SAVE", token, body("soundOn", false));
         for (String dataset : List.of(QbSettings.DEFAULT_DATASET, QbSettings.MY_DATASET)) {
             for (String writer : List.of(admin(), token)) {

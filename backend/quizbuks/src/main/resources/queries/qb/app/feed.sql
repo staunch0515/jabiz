@@ -19,6 +19,7 @@ params:
   q:       { kind: { type: text, maxLength: 100 }, description: Only publications whose name or quiz title contains this text }
   includeAnswered: { kind: { type: bool }, description: "If true, also the publications the caller has answered (Q34); by default those are left out" }
   method:  { like: QbPublicationCard.rewardMethod, description: "Only publications whose reward comes this way (Q22, Q33): PLATFORM, SPONSOR_CASH, OFFLINE_REDEEM or DIGITAL_PRIZE" }
+  languages: { kind: { type: text, maxLength: 20 }, description: "Only publications in these languages (Q59a), comma-separated (ja, zh, en): the taker's switches, or their interface language; all when not given" }
 results:
   publicationId:  { from: QbPublicationCard.publicationId }
   name:           { from: QbPublicationCard.name }
@@ -26,6 +27,7 @@ results:
   cover:          { from: QbPublicationCard.cover }
   video:          { from: QbPublicationCard.video }
   kind:           { from: QbPublicationCard.kind }
+  language:       { from: QbPublicationCard.language }
   maxReward:      { from: QbPublicationCard.maxReward }
   rewardMethod:   { from: QbPublicationCard.rewardMethod }
   digitalDelivery: { from: QbPublicationCard.digitalDelivery }
@@ -65,6 +67,7 @@ SELECT
     c.{{QbPublicationCard.cover}}          AS cover,
     c.{{QbPublicationCard.video}}          AS video,
     c.{{QbPublicationCard.kind}}           AS kind,
+    c.{{QbPublicationCard.language}}       AS language,
     c.{{QbPublicationCard.maxReward}}      AS maxReward,
     c.{{QbPublicationCard.rewardMethod}}   AS rewardMethod,
     c.{{QbPublicationCard.digitalDelivery}} AS digitalDelivery,
@@ -106,6 +109,9 @@ WHERE c.{{QbPublicationCard.status}} = 'LIVE'
        OR (coalesce(w.{{QbWallet.pendingCount}}, 0) = 0
            AND coalesce(w.{{QbWallet.balance}} - w.{{QbWallet.held}}, 0) >= c.{{QbPublicationCard.maxReward}}))
   AND (CAST(:method AS text) IS NULL OR c.{{QbPublicationCard.rewardMethod}} = CAST(:method AS text))
+  -- Q59a: publications of different languages are not listed together; the client says which the taker sees.
+  AND (CAST(:languages AS text) IS NULL
+       OR c.{{QbPublicationCard.language}} = ANY(string_to_array(CAST(:languages AS text), ',')))
   -- Q34: what the caller answered is done, and so is an attempt whose time ran out before the expiry job closed it;
   -- one still in progress stays, so that it can be resumed from here. The view holds the caller's own attempts only
   -- (taker), found by qb_attempt_once (user_id, publication_id).
