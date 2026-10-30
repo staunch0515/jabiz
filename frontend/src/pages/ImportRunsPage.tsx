@@ -21,7 +21,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router'
 import { exportImportRun, type ExportFormat, type ImportRunDetail, type ImportRunSummary } from '../api/imports'
-import { useLocalPage } from '../components/useLocalPage'
+import { ListSearch } from '../components/ListSearch'
+import { useLocalList } from '../components/useLocalList'
 import AdminPage from '../layout/AdminPage'
 import { useImportCatalog } from '../meta/hooks'
 import { IssueTable } from './ImportReportView'
@@ -36,7 +37,7 @@ const fail = (e: unknown) => notify.error(e instanceof ApiError ? e.display : St
  * user may run.
  */
 export default function ImportRunsPage() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const [searchParams] = useSearchParams()
   const importId = searchParams.get('import') ?? undefined
   const catalog = useImportCatalog()
@@ -47,7 +48,20 @@ export default function ImportRunsPage() {
     queryKey: ['import-runs', importId],
     queryFn: () => unwrap(api.GET('/api/imports/runs', { params: { query: { import: importId, limit: 200 } } })),
   })
-  const page = useLocalPage(runs.data, 50)
+  // Phase 17w: the latest runs searched and sorted here, newest first at first.
+  const list = useLocalList(runs.data, {
+    text: (run) => [run.title, run.importedBy, run.notes, t(`imports.runs.outcomes.${run.outcome}`)],
+    sortBy: {
+      title: (run) => run.title,
+      imported: (run) => run.importedTime,
+      outcome: (run) => run.outcome,
+      rows: (run) => run.rows,
+      duplicates: (run) => run.duplicates,
+      issues: (run) => run.issueCount,
+    },
+    defaultSort: [{ id: 'imported', desc: true }],
+    locale: i18n.language,
+  })
 
   useEffect(() => {
     if (runs.error) fail(runs.error)
@@ -70,9 +84,10 @@ export default function ImportRunsPage() {
     }
     const right = { className: 'text-right tabular-nums' }
     return [
-      { id: 'title', header: t('imports.runs.import'), cell: ({ row }) => row.original.title },
+      { id: 'title', accessorFn: (run) => run.title, header: t('imports.runs.import'), cell: ({ row }) => row.original.title },
       {
         id: 'imported',
+        accessorFn: (run) => run.importedTime,
         header: t('imports.runs.imported'),
         cell: ({ row: { original: run } }) => (
           <span className="flex flex-col">
@@ -83,6 +98,7 @@ export default function ImportRunsPage() {
       },
       {
         id: 'outcome',
+        accessorFn: (run) => run.outcome,
         header: t('imports.runs.outcome'),
         cell: ({ row: { original: run } }) => (
           <Badge variant={run.outcome === 'committed' ? 'success' : 'destructive'} data-testid={`run-outcome-${run.runId}`}>
@@ -90,9 +106,9 @@ export default function ImportRunsPage() {
           </Badge>
         ),
       },
-      { id: 'rows', header: t('imports.rows'), meta: right, cell: ({ row }) => row.original.rows },
-      { id: 'duplicates', header: t('imports.duplicates'), meta: right, cell: ({ row }) => row.original.duplicates },
-      { id: 'issues', header: t('imports.runs.problems'), meta: right, cell: ({ row }) => row.original.issueCount },
+      { id: 'rows', accessorFn: (run) => run.rows, header: t('imports.rows'), meta: right, cell: ({ row }) => row.original.rows },
+      { id: 'duplicates', accessorFn: (run) => run.duplicates, header: t('imports.duplicates'), meta: right, cell: ({ row }) => row.original.duplicates },
+      { id: 'issues', accessorFn: (run) => run.issueCount, header: t('imports.runs.problems'), meta: right, cell: ({ row }) => row.original.issueCount },
       {
         id: 'notes',
         header: t('imports.notes'),
@@ -140,14 +156,14 @@ export default function ImportRunsPage() {
       breadcrumb={[{ label: t('nav.imports'), to: '/imports' }, { label: t('imports.runs.title') }]}
       description={importId && <code className="font-mono text-xs">{importId}</code>}
     >
-      <div data-testid="import-runs">
+      <div className="flex flex-col gap-4" data-testid="import-runs">
+        <ListSearch value={list.query} onChange={list.setQuery} matched={list.matched} total={list.total} />
         <DataTable
           label={t('imports.runs.title')}
           columns={columns}
           getRowId={(run) => run.runId ?? ''}
           loading={runs.isLoading}
-          {...page.paging}
-          data={page.data}
+          {...list.table}
         />
       </div>
       <Sheet open={detail?.open ?? false} onOpenChange={(open) => !open && setDetail((d) => d && { ...d, open: false })}>

@@ -163,6 +163,7 @@ frontend/                   pnpm 工作区（pnpm-workspace.yaml：packages/*）
 | `/auth/password-reset[?entry=&token=]` | 找回密码（10 §15.7）：无令牌时输入邮箱申请（对任何邮箱同样回答）；有令牌时设置新密码，完成后到入口的 `app-path` 登录。登录页有"忘记密码"链接。三个 `/auth/*` 页读出令牌后即从地址栏去掉它，打开期间不发送 referrer |
 | `/account/security` | 安全设置：由各节组成，节的顺序由页面中的数组 `ACCOUNT_SECTIONS` 声明（每节一个 `<section aria-labelledby>` 加 `Card`，测试 id `account-section-<名>`）：两步验证（`@jabiz/ui` 的 `MfaSettings`，10 §9：状态、剩余恢复码数、未绑定时绑定，二维码用 `qrcode` 绘制在 canvas 上，另显示密钥；示范门户的账户页也用它）、改密码（`ChangePasswordForm`，10 §15.8）、本人当前入口的会话（`SessionList`，10 §15.9）、关联的外部账号（`LinkedIdentities`，10 §12，16f-1；只在后台入口提供了身份提供方时显示——与登录页同一个 `/api/auth/oidc/providers` 查询——节可声明 `shown`；关联完成后 OIDC 回调页经路由状态把结果带回本页）、邮件（`MailPreferences`，18 §5.6，16s：后台入口的可退订通知与邮件语言）；新的一节只需往数组里加一项；从页头用户菜单进入 |
 | `/processes`、`/processes/:name/:version` | 流程目录与由输入 Schema 生成的表单（嵌套 record → 分组，record 列表 → 可增减的行）；每次打开表单生成一个 `Idempotency-Key`，成功后更换 |
+| 浏览器中的整份列表（17w） | 数据目录、流程目录、导入目录、报表目录与最近的运行（导入记录、报表存档、单据）在浏览器中搜索（`ListSearch`：每个词都要出现，不分大小写与重音）与按列排序（`useLocalList`，按语言的排序规则、数字按大小，空值总在最后），再分页；服务端分页的列表（数据视图、报表）照旧由列表视图的 `sorts` / `filters` 决定 |
 
 - 布局（`@jabiz/ui` 的侧栏外壳，15a）：服务端菜单（`SecMenu`，已按权限过滤、按语言命名）在前，其后是应用扩展的菜单项（第 9 节），再后是两个目录与"报表"（有报表时）；语言切换记在 `localStorage`（仅本机偏好）。
 - 全部页面以 `@jabiz/ui` 构建（15b–15c），用 `AdminPage`（页头、唯一的 `<h1>`、面包屑：数据 › 实体（› 历史）、流程 › 流程名、报表 › 报表名、导入 › 导入名），

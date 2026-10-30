@@ -45,7 +45,7 @@ public class ParamEntities {
         eb.temporal(t -> t.allowScheduled(true));
         eb.listView("default", lv -> lv
             .columns(KEY, VALUE, DESCRIPTION, "effectStartTime")
-            .filters(KEY)
+            .filters(KEY, VALUE, DESCRIPTION)
             .sorts(KEY, "effectStartTime")
             .defaultSort(KEY, true));
     });

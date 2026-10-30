@@ -54,7 +54,8 @@ public class TaskEntities {
             .columns("taskType", "titleKey", "assigneeUserId", "assigneePermission", "status", "dueTime",
                 "subjectEntity", "subjectId")
             .filters("taskType", "status", "assigneeUserId", "assigneePermission", "sourceKey")
-            .sorts("dueTime", "status"));
+            .sorts("dueTime", "status", "taskType")
+            .defaultSort("dueTime", true));
     });
 
     public static final EntityDefinition NOTIFICATION_ENTITY = EntityDefinition.define(NOTIFICATION, eb -> {
