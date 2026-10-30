@@ -1,13 +1,15 @@
+import { BRAND_NAME } from './brand'
+
 /**
  * Texts of the finance pages (Q9c), in every platform language, merged into the extension's messages under
  * `finance` (and the menu's entries under `menu`). Kept apart from messages.ts only for size.
  */
 export const financeMenu = {
-  en: { finance: 'QuizBuks finance', financeOverview: 'Overview', transfers: 'Transfers', topUps: 'Top-ups',
+  en: { finance: `${BRAND_NAME} finance`, financeOverview: 'Overview', transfers: 'Transfers', topUps: 'Top-ups',
     reconciliation: 'Reconciliation', reports: 'Monthly reports', journal: 'Journal export', investorMetrics: 'Investor metrics' },
-  zh: { finance: 'QuizBuks 财务', financeOverview: '总览', transfers: '转账', topUps: '充值', reconciliation: '核对',
+  zh: { finance: `${BRAND_NAME} 财务`, financeOverview: '总览', transfers: '转账', topUps: '充值', reconciliation: '核对',
     reports: '月报', journal: '分录导出', investorMetrics: '投资人指标' },
-  ja: { finance: 'QuizBuks 財務', financeOverview: '概要', transfers: '送金', topUps: 'チャージ', reconciliation: '照合',
+  ja: { finance: `${BRAND_NAME} 財務`, financeOverview: '概要', transfers: '送金', topUps: 'チャージ', reconciliation: '照合',
     reports: '月次レポート', journal: '仕訳の出力', investorMetrics: '投資家向け指標' },
 }
 

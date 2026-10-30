@@ -1,5 +1,6 @@
 package com.jabiz.quizbuks.journal;
 
+import com.jabiz.quizbuks.setup.Brand;
 import com.jabiz.quizbuks.wallet.QbLedger;
 
 import java.io.ByteArrayOutputStream;
@@ -173,8 +174,8 @@ public final class JournalLines {
         for (Line line : summary.lines()) {
             row(csv, List.of(voucherNo, period.to().toString(), String.valueOf(line.lineNo()), line.side(),
                 nullToEmpty(line.externalCode()), line.accountCode(), nullToEmpty(line.sponsorId()),
-                line.amount().toPlainString(), "QuizBuks " + period.label() + " " + line.accountCode() + " "
-                    + line.side()));
+                line.amount().toPlainString(),
+                Brand.current().name() + " " + period.label() + " " + line.accountCode() + " " + line.side()));
         }
         return bytes(csv);
     }

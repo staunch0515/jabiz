@@ -44,6 +44,13 @@ tasks.matching { it.name in brandedSpas }.configureEach {
     inputs.property("brand", providers.environmentVariable("QB_BRAND").orElse(""))
     inputs.dir(rootProject.layout.projectDirectory.dir("../quizbuks-web/brands"))
 }
+// Q55b: the admin and operator back offices take the brand from the extension (admin-extension/src/brand.ts), which
+// holds every profile (brands.generated.ts) and picks the one VITE_QB_BRAND names.
+tasks.matching { it.name in setOf("spaBuildAdmin", "spaBuildOperator") }.configureEach {
+    val brand = providers.environmentVariable("QB_BRAND").orElse("")
+    inputs.property("brand", brand)
+    (this as com.github.gradle.node.pnpm.task.PnpmTask).environment.put("VITE_QB_BRAND", brand)
+}
 
 dependencies {
     implementation(project(":runtime"))
@@ -126,4 +133,30 @@ tasks.register<JavaExec>("loadTest") {
 // The load test is not run by check, but it is compiled there: it cannot break unnoticed.
 tasks.named("check") {
     dependsOn("compileLoadTestJava")
+}
+
+// Q55b: the brand profile QB_BRAND chooses (quizbuks-web/brands/<brand>/brand.json, docs/quizbuks/plans/Q54-brand-profile.md)
+// is written into the resources when they are packaged: @QB_BRAND_NAME@ (and the support address and site) in the
+// messages, quizbuks/brand.properties and application.yml. A brand is deployed on its own, so the jar is the brand's.
+val qbBrandTokens: Provider<Map<String, String>> = providers.environmentVariable("QB_BRAND")
+    .map { it.trim() }.filter { it.isNotEmpty() }.orElse("quizbuks")
+    .map { id ->
+        require(Regex("[a-z0-9][a-z0-9-]*").matches(id)) { "QB_BRAND must name a brand profile, was \"$id\"" }
+        val file = rootProject.file("../quizbuks-web/brands/$id/brand.json")
+        require(file.isFile) { "QB_BRAND=$id: no brand profile ${file.path}" }
+        @Suppress("UNCHECKED_CAST")
+        val profile = groovy.json.JsonSlurper().parse(file) as Map<String, Any?>
+        mapOf(
+            "QB_BRAND_NAME" to profile["name"].toString(),
+            "QB_BRAND_SUPPORT_EMAIL" to profile["supportEmail"].toString(),
+            "QB_BRAND_SITE_URL" to profile["siteUrl"].toString(),
+        )
+    }
+
+tasks.named<ProcessResources>("processResources") {
+    inputs.property("brand", qbBrandTokens)
+    filteringCharset = "UTF-8"
+    filesMatching(listOf("messages*.properties", "quizbuks/brand.properties", "application.yml")) {
+        filter(mapOf("tokens" to qbBrandTokens.get()), org.apache.tools.ant.filters.ReplaceTokens::class.java)
+    }
 }

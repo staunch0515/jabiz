@@ -1,3 +1,5 @@
+import { BRAND_NAME } from './brand'
+
 /**
  * Texts of the reward methods, cash rewards (Q22) and digital prizes (Q33), in every platform language, merged into
  * the extension's messages under `reward` (and the menu's entries under `menu`).
@@ -12,7 +14,7 @@ export const rewardMessages = {
   en: {
     methods: {
       title: 'Reward methods',
-      hint: 'Which ways this sponsor may pay rewards. Kudos from the wallet are paid by QuizBuks; cash, prizes and digital prizes (codes, vouchers, links) the sponsor hands over themselves, so allow them only to sponsors you trust. Without a setting of their own, the parameter qb.reward.default-methods applies (prizes only in the launch phase). Running publications are not changed.',
+      hint: `Which ways this sponsor may pay rewards. Kudos from the wallet are paid by ${BRAND_NAME}; cash, prizes and digital prizes (codes, vouchers, links) the sponsor hands over themselves, so allow them only to sponsors you trust. Without a setting of their own, the parameter qb.reward.default-methods applies (prizes only in the launch phase). Running publications are not changed.`,
       current: 'Allowed now: {{methods}}',
       byDefault: 'Allowed now, by the platform\'s default: {{methods}}',
       note: 'Note',
@@ -129,7 +131,7 @@ export const rewardMessages = {
   zh: {
     methods: {
       title: '奖励支付方式',
-      hint: '这个商家可以用哪些方式支付奖励。钱包里的 Kudos 由 QuizBuks 支付；现金、奖品和电子奖品（码、券、链接）由商家自己交付，只允许你信任的商家使用。没有单独设定的商家按参数 qb.reward.default-methods（推广期只有线下奖品）。进行中的发布不受影响。',
+      hint: `这个商家可以用哪些方式支付奖励。钱包里的 Kudos 由 ${BRAND_NAME} 支付；现金、奖品和电子奖品（码、券、链接）由商家自己交付，只允许你信任的商家使用。没有单独设定的商家按参数 qb.reward.default-methods（推广期只有线下奖品）。进行中的发布不受影响。`,
       current: '当前允许：{{methods}}',
       byDefault: '当前允许（平台缺省）：{{methods}}',
       note: '说明',
@@ -246,7 +248,7 @@ export const rewardMessages = {
   ja: {
     methods: {
       title: '報酬の支払い方法',
-      hint: 'このスポンサーが報酬を支払える方法です。ウォレットの Kudos は QuizBuks が支払います。現金、賞品、デジタル賞品（コード、クーポン、リンク）はスポンサー自身が渡すので、信頼できるスポンサーにだけ許可してください。個別の設定がないスポンサーにはパラメータ qb.reward.default-methods（立ち上げ期間は店頭の景品のみ）が適用されます。実施中の公開は変わりません。',
+      hint: `このスポンサーが報酬を支払える方法です。ウォレットの Kudos は ${BRAND_NAME} が支払います。現金、賞品、デジタル賞品（コード、クーポン、リンク）はスポンサー自身が渡すので、信頼できるスポンサーにだけ許可してください。個別の設定がないスポンサーにはパラメータ qb.reward.default-methods（立ち上げ期間は店頭の景品のみ）が適用されます。実施中の公開は変わりません。`,
       current: '現在の許可：{{methods}}',
       byDefault: '現在の許可（プラットフォームの既定）：{{methods}}',
       note: 'メモ',

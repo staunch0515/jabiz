@@ -34,6 +34,7 @@ import ManualCreditsPage from './ManualCreditsPage'
 import BroadcastsPage from './BroadcastsPage'
 import AiPage from './AiPage'
 import AttemptsPage from './AttemptsPage'
+import { BRAND } from './brand'
 import FinanceOverviewPage from './FinanceOverviewPage'
 import { PATH, PERMISSION } from './ids'
 import JournalMappingPage from './JournalMappingPage'
@@ -78,6 +79,8 @@ import SettlementsPage from './SettlementsPage'
  * what is offered.
  */
 export default defineExtension({
+  // Q55b: the brand profile's name, mark and icon in place of the platform's.
+  brand: BRAND,
   routes: [
     { path: PATH.reviews, element: <ReviewsPage /> },
     { path: '/qb/reviews/publications/:publicationId', element: <PublicationReviewPage /> },

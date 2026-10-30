@@ -279,6 +279,11 @@ jobs:
           done
       - name: The API still needs a token
         run: test "$(curl -s -o /dev/null -w '%{http_code}' localhost:8080/api/meta/datasets)" = 401
+      # Q55b: the backend's resources packaged for another brand profile name it (the default build's are checked by
+      # the module's tests).
+      - name: Another brand profile in the backend's resources
+        run: QB_BRAND=sample ./gradlew :quizbuks:test --tests '*BrandTest'
+        working-directory: backend
       - if: failure()
         uses: actions/upload-artifact@v6
         with:
