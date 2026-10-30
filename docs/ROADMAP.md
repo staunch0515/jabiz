@@ -4837,3 +4837,19 @@ Playwright 端到端（需维护连接与数据库角色，以 Vitest 与 `Accou
 | 17x-4 | 测试：`availability.test.tsx`（判定、间隔的上下限、连接失败、恢复与处理器、`api` 与 `sessionFetch`、`PROCESS_BUSY` 不算、恢复后重新读取）、`banners.test.tsx`（对话框、不可关闭、立即重试、三语、离线时让给离线提示）、e2e `maintenance.spec.ts`（打开的列表遇到维护页：整页一次、axe；恢复后立即重试即关闭、重新读取）；前端测试的公共初始化每个测试后清除该状态；设计 12 一条 |
 
 **17x 状态**：📝 待评审。
+
+### 17y 入口的范围：运营商只看到自己的商户（需求 2026-10-30，决策 D64）
+
+**缘由**：需求方 2026-10-30：QuizBuks 按语言建三个运营商，"运营商只看到自己的商户"（Q59c-2，即 Q48e）。同一入口的不同会话要看到不同的行，
+审批与待办要只给所属的运营商；此前平台没有这种约束（10 §13.4）。
+
+| # | 内容 |
+|---|---|
+| 17y-1 | core：`EntryScope`、`EntryScopeResolver`（`entry`、`scope`、`loads`、`resolve`）、`RequestContext.entryScope`；`SignInGuards` 在守卫之后算出值（空即拒绝），登录与刷新的会话带上它；令牌的 `scope` 声明，声明了范围的入口缺少即 401；启动检查（入口存在、至多一个、名字） |
+| 17y-2 | 数据视图：`DatasetScope.withinEntryScope`（直接、经对照实体）与 `withinEntryScopeTag`；查询编译、模板、写入（经对照或标记的拒绝）、启动检查（字段、对照实体为普通表） |
+| 17y-3 | 审批与待办：迁移给 `sys_approval_request_version`、`sys_task_version` 加 `scope_name` / `scope_value`；`ApprovalCase.scope`、`TaskSpec.scope`；平台的数据视图以标记约束；收件箱、决定、撤回、待办列表与处理对范围外为 404 |
+| 17y-4 | 流程步骤 `RequireScope.of(名, ctx -> 值)` |
+| 17y-5 | 示范应用：一个以范围约束的入口（门户的客户只看到自己的订单之外，再示范一个"仓库"入口只看到本仓库的发货），场景与 IT |
+| 17y-6 | 测试：`DatasetScopeTest`、`QueryCompilerTest`（三种约束的 SQL）、`EntryScopeIT`（登录与刷新带值、空即拒绝、缺少即 401、三种约束的读与写、审批与待办、`RequireScope`、其他入口不受影响）；设计 03、10 §13.4、决策 D64；`/security-review` |
+
+**17y 状态**：🚧 进行中。

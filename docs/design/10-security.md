@@ -29,7 +29,7 @@
 
 | | 访问令牌 | 刷新令牌 |
 |---|---|---|
-| 形式 | JWT，HS256 签名（Nimbus），`iss=jabiz`、`sub`、`tenant`、`roles`、`perms`、`iat`、`exp`；另有 `mfa_at`（§9）、`data_from` / `data_to`（§13.2）、`entry` 与 `email_verified`（§15）、`sid`（会话编号，即刷新令牌族，§15.9） | 256 位随机串（Base64URL），不透明；行记下令牌族的 `mfa_at`、`identity_id` 与 `entry`，以及签发这一个令牌时的 `client_ip` 与 `user_agent`（§15.9） |
+| 形式 | JWT，HS256 签名（Nimbus），`iss=jabiz`、`sub`、`tenant`、`roles`、`perms`、`iat`、`exp`；另有 `mfa_at`（§9）、`data_from` / `data_to`（§13.2）、`entry` 与 `email_verified`（§15）、`sid`（会话编号，即刷新令牌族，§15.9）、`scope`（入口的范围，§13.4） | 256 位随机串（Base64URL），不透明；行记下令牌族的 `mfa_at`、`identity_id` 与 `entry`，以及签发这一个令牌时的 `client_ip` 与 `user_agent`（§15.9） |
 | 有效期 | 默认 15 分钟（`jabiz.security.jwt.access-token-ttl`） | 默认 8 小时（`jabiz.security.refresh-token-ttl`）；入口可另设（§15.1，上限 90 天）。每次刷新从当时起算（滑动） |
 | 存储 | 不存储 | 库中只存 SHA-256（`sec_refresh_token`） |
 | 校验 | 只接受 HS256 与本服务的密钥；过期按注入的 `Clock` 判断 | 未过期、未使用、所属族未吊销 |
@@ -466,6 +466,17 @@ eb.field("bankAccount", f -> f.physicalColumn("bank_account").asText(34)
 - **平台的使用**：账本交易（`bookingTime`）与分录（经 `transactionId`）数据视图；审计记录与操作记录的查询（`/api/audit/records`、`/operations`、`/reveals`）按记录时间截取在期限内，
   单条审计记录在期限外为 404。
 - **签发的报表**：数据期限作为范围值记入运行（19 §5.3），只有期限相同的读者能读；声明期限之前签发的运行没有这项记录，受期限限制的读者不能读。
+
+### 13.4 入口的范围【D64，阶段 17y】
+
+- **声明**：应用的 `EntryScopeResolver` Bean 给一个入口一个范围名（`entry()`、`scope()`），以 `resolve(SignInAttempt)` 在登录与每次刷新时算出值（所需数据以 `loads()` 声明，
+  在 `SignInGuard` 之后、同一次读取）。值为空即拒绝（同 `SignInGuard`）。值记入访问令牌的 `scope` 声明与 `RequestContext.entryScope`；声明了范围的入口的令牌缺少它即 401。
+- **数据视图**：`withinEntryScope(名, 字段)`、`withinEntryScope(名, 字段, EntryScopeVia.of(对照实体, 键字段, 范围字段))`、`withinEntryScopeTag(名字段, 值字段)`（03 §2.2）。
+  只约束范围名相同的会话；没有范围的会话照旧。经对照或标记约束的数据视图，有范围的会话不能写入（`OUT_OF_SCOPE`）。
+- **平台的审批与待办**：`ApprovalCase.scope(名, 值)`、`CreateTask…scope(名, ctx -> 值)` 记在请求与待办上；审批请求、审批决定（经请求）与待办的数据视图以标记约束，
+  审批的收件箱、决定（`APPROVAL_DECIDE`）、撤回与待办的列表、处理对有范围的会话只含自己范围的，范围外即 404。
+- **流程**：`RequireScope.of(名, ctx -> 值)` 核对流程所处理的对象在调用者的范围内（404）；没有范围的调用者通过。
+- **观测**：范围值是业务数据，不进观测标签与日志的结构化字段（D16）。
 
 ### 13.3 访问审查
 

@@ -55,6 +55,8 @@ d.scope(s -> s
   `withinDataPeriod("transactionId", "bookingTime")`（引用字段 + 被引用实体的不可变时态字段）把读取限定在调用者的
   `RequestContext.dataPeriod` 之内（`[from, to)`），期限外的写入被拒（`OUT_OF_SCOPE`）。与 `fromContext` **相反**：
   调用者**没有期限 = 不受限制**，所以只有明确声明的数据视图才受期限限制；它不用于插入时的自动填充，公开数据视图不能使用它。
+- **入口的范围**【决策 D64，10 §13.4】：`withinEntryScope("operator", "operatorId")`（字段等于会话的范围值）、经对照实体的 `withinEntryScope(名, 字段, EntryScopeVia.of(实体, 键, 范围字段))`
+  与 `withinEntryScopeTag(名字段, 值字段)`（行自己记范围）。只约束范围名相同的会话，没有范围的会话不受影响；有范围的会话经对照或标记约束的数据视图不能写入。
 
 ### 2.3 逻辑删除引用逻辑字段
 
