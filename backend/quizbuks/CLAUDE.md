@@ -148,7 +148,7 @@
   到店领取（Q22b，`reward.RedemptionProcesses`）：商家的码只经 `QB_REDEEM_CODE_ISSUE`（商家本人）与 `QB_STAFF_REDEEM_CODE_ISSUE`（店员，只有轮换码，Q39）签发（随机数经平台 `RandomBytesStep`，值只在输出 `redeemKey` 中；实体字段 `tokenValue` 敏感且含 token，
   平台按名遮蔽，输入组件叫 `scannedKey` 并标 `@Sensitive`——不要给输出组件起含 password / secret / token / credential 的名字，否则接口返回被遮蔽）；
   领取只经 `QB_REDEEM_TOKEN_CHECK` / `QB_REDEMPTION_CLAIM`（轮换码即时 `REDEEMED`，经手人 `redeemedBy` 为码的签发人 `issuedBy`；固定码 `CLAIMED` 由 `QB_REDEMPTION_CONFIRM` / `DECLINE`
-  或店员的 `QB_STAFF_REDEMPTION_CONFIRM` / `DECLINE` 结束，确认业务规则共用 `RedemptionProcesses.confirm` / `decline`），不在 App 里扫码（相机打开链接 `/redeem/<key>`）。
+  或店员的 `QB_STAFF_REDEMPTION_CONFIRM` / `DECLINE` 结束，确认业务规则共用 `RedemptionProcesses.confirm` / `decline`）；码是链接 `/redeem/<key>`，手机相机即可打开，App 另有自己的"扫一扫"（Q52，`/scan`，`app/src/scan/`：只打开本站的发布与领奖链接（`scanTarget`），画面不离开手机，取景用浏览器的 `BarcodeDetector`、没有时按需加载 jsQR；改码的链接格式时同时改 `scanTarget`）。
   店员（Q39，`reward.StaffProcesses`，`docs/quizbuks/plans/Q39-sponsor-staff.md`）：普通表 `qb_sponsor_staff`（一人至多属于一家），只经商家的 `QB_SPONSOR_STAFF_ADD` / `REMOVE` 与店员的
   `QB_STAFF_LEAVE` 写入；店员不另有角色或权限，店员的流程用 `qb.me`、每次经共享锁 `qb.staff:<用户>` 读本人的店员关系（加入与移除取排他锁），商家被封禁即拒绝
   （`QB_STAFF_SPONSOR_BANNED`）；锁的顺序 `qb.sponsor-staff:<商家>` → `qb.staff:<用户>` → `qb.redeem-token:<商家>`。店员只看待处理的申请与本人交付的（`qb.app.staff-redemptions`），不看商家的历史。

@@ -421,6 +421,22 @@ describe('collecting a prize by the sponsor\'s code (Q22b)', () => {
     window.history.replaceState(null, '', '/redeem/old-key')
     render(<App />)
     expect(await screen.findByText('This code does not work any more')).toBeInTheDocument()
+    // Q52: the screen shows a new code every minute; scanning it again is one tap away.
+    expect(screen.getByTestId('redeem-scan-again')).toHaveAttribute('href', '/scan')
+  })
+
+  it('offers to scan again when the code expired while the prize was chosen (Q52)', async () => {
+    server({ redemptions: [prizeRow],
+      redeemCheck: () => json(200, { output: { sponsorCompany: 'Capitals Inc', kind: 'ROTATING', prizes: [{
+        redemptionId: 'r1', attemptId: ATTEMPT, code: 'C-ABCD1234', amount: 100, description: 'A coffee at our counter',
+        publicationName: 'Capitals week', status: 'DUE', expiresAt: '2026-11-20T00:00:00Z' }] } }),
+      redeemClaim: () => json(422, { title: 'Unprocessable', status: 422, detail: 'This code is no longer valid.',
+        violations: [{ ruleCode: 'QB_REDEEM_TOKEN_INVALID', message: 'This code is no longer valid.' }] }) })
+    window.history.replaceState(null, '', '/redeem/screen-key')
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('redeem-collect'))
+    expect(await screen.findByTestId('redeem-failed')).toBeInTheDocument()
+    expect(screen.getByTestId('redeem-failed-scan')).toHaveAttribute('href', '/scan')
   })
 
   it('collects at once by the rotating code a prize whose printed code\'s claim still waits', async () => {

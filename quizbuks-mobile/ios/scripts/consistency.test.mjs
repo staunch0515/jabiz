@@ -46,3 +46,8 @@ test('iPhone only, iOS 16 and later, portrait', () => {
   assert.doesNotMatch(plist, /~ipad/)
   assert.doesNotMatch(plist, /Landscape/)
 })
+
+test('says why it uses the camera: the scanner in the app (Q52) asks for it, and iOS ends an app that does not say', () => {
+  const plist = read('quizbuks-mobile/ios/xcode/App/App/Info.plist')
+  assert.match(plist, /<key>NSCameraUsageDescription<\/key>\s*<string>[^<]*Scan[^<]*<\/string>/)
+})

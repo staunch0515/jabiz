@@ -37,7 +37,7 @@
 | 部分 | 内容 |
 |---|---|
 | 商家的码 | 普通表 `qb_redeem_token`（实体 `QbRedeemToken`：`sponsorId`、`tokenValue`（敏感，数据视图不返回；名字含 token，平台按名遮蔽）、`kind` ROTATING / PRINTED、`issuedAt`、`expiresAt`、`revokedAt`）。只经 `QB_REDEEM_CODE_ISSUE`（商家，`qb.publication.write`）写入：ROTATING 有效 2 分钟（`QbRewards.ROTATING_TOKEN_LIFE`），每次签发顺带删除本商家已失效的轮换码；PRINTED 长期有效，再次请求返回同一个，`renew: true` 作废旧码并签发新码。随机数经平台的阻塞步骤 `RandomBytesStep`（192 位，URL 安全 Base64），只在该流程的输出 `redeemKey` 中出现一次 |
-| 码的内容 | App 链接 `<站点>/redeem/<redeemKey>`：任何手机相机扫码即打开；未登录先登录再回到该页（`next`）。App 中不写扫码代码 |
+| 码的内容 | App 链接 `<站点>/redeem/<redeemKey>`：任何手机相机扫码即打开；未登录先登录再回到该页（`next`）。~~App 中不写扫码代码~~（Q52 起 App 另有"扫一扫"，`plans/Q52-scan.md`：系统相机打开的是浏览器，主屏幕上的 App 与商店 App 在那里没有登录） |
 | 核对 | `QB_REDEEM_TOKEN_CHECK`（答题人，`qb.me`，输入 `scannedKey`）：码此刻有效（未失效、未作废，否则 422 `QB_REDEEM_TOKEN_INVALID`）→ 商家公司名、码的种类与本人在该商家未领取的奖品（`DUE` / `CLAIMED`，超过 `confirmBy` 的申请按 `DUE` 显示） |
 | 领取 | `QB_REDEMPTION_CLAIM`（答题人，输入 `scannedKey` + `redemptionId`）：奖品锁内经答题人视图读（他人 404），码须有效且属于奖品的商家（422 `QB_REDEEM_TOKEN_SPONSOR`），状态须为 `DUE`（含超时的申请）。轮换码 → `REDEEMED`（`redeemedBy` = 商家，事件 `qb.redemption.redeemed`）；固定码 → `CLAIMED`（`confirmBy = now + 10 分钟`，事件 `qb.redemption.claimed` → 商家收件箱）。2026-10-29 起，轮换码也接受 `CLAIMED`：固定码的申请还在等商家确认时，扫屏幕上的轮换码即领取（人在柜台前，不必等确认或十分钟），原申请随之结束 |
 | 商家的回答 | `QB_REDEMPTION_CONFIRM`（`CLAIMED` 未超时 → `REDEEMED`，`redeemedBy` = 操作人；超时即 422 `QB_REDEMPTION_CLAIM_LAPSED`）、`QB_REDEMPTION_DECLINE`（→ `DUE`，事件 `qb.redemption.declined` 告知答题人）。都经商家视图读（他人 404） |
@@ -70,7 +70,7 @@
 Q22b：
 - 固定码可在任何地方扫：申请须商家在十分钟内确认，否则回到待领取；商家不在屏幕前时答题人要重扫轮换码。
 - 轮换码是链接中的秘密：两分钟有效、只在签发流程的输出中出现、存储时按名遮蔽、数据视图不返回；管理员后台也看不到码的值。
-- 手机相机扫码打开的是本站链接；App 不请求相机权限。
+- 手机相机扫码打开的是本站链接；~~App 不请求相机权限~~（Q52：只在答题人点"扫一扫"时请求，画面只在本机识别）。
 
 
 - 现金与兑换绕过账本：平台不知道钱有没有真付；争议只能靠管理员裁定与商家信誉。管理员应只对信得过的商家开放（设定时写附注）。

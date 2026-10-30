@@ -94,7 +94,7 @@ const en = {
       EXPIRED: 'The time to collect it has passed.',
       VOID: `${BRAND.name} voided this prize.`,
     },
-    scanHint: 'At the sponsor\'s place, scan the code on their screen or poster with your camera.',
+    scanHint: 'At the sponsor\'s place, tap "Scan" at the top and scan the code on their screen or poster.',
     openTitle_one: 'A prize is waiting for you',
     openTitle_other: '{{count}} prizes are waiting for you',
     open: {
@@ -448,7 +448,7 @@ const zh: typeof en = {
       EXPIRED: '领取期限已过。',
       VOID: `${BRAND.name} 已作废这份奖品。`,
     },
-    scanHint: '到商家处，用相机扫描屏幕或海报上的码。',
+    scanHint: '到商家处，点上方的“扫一扫”，扫描屏幕或海报上的码。',
     openTitle_one: '有一份奖品等你领取',
     openTitle_other: '有 {{count}} 份奖品等你领取',
     open: {
@@ -802,7 +802,7 @@ const ja: typeof en = {
       EXPIRED: '引き換え期限が過ぎました。',
       VOID: `${BRAND.name} がこの賞品を無効にしました。`,
     },
-    scanHint: 'スポンサーの店舗で、画面またはポスターのコードをカメラでスキャンしてください。',
+    scanHint: 'スポンサーの店舗で、上の「スキャン」をタップして、画面またはポスターのコードを読み取ってください。',
     openTitle_one: '賞品が 1 つ待っています',
     openTitle_other: '賞品が {{count}} つ待っています',
     open: {
