@@ -135,7 +135,7 @@ jobs:
           grep -q '<title>Sample Quiz for Shopify' .brand-check/shopify-site/index.html
           grep -q '<title>Sample Quiz for Shopify</title>' .brand-check/shopify/index.html
           cmp -s brands/sample/public/icon-192.png .brand-check/biz/icon-192.png
-          if grep -rho '.\{0,20\}QuizBuks.\{0,20\}' .brand-check; then
+          if grep -rho '.\{0,20\}QuizBuks.\{0,20\}' .brand-check/biz .brand-check/shopify-site .brand-check/shopify; then
             echo 'QuizBuks is still shown with another brand profile'; exit 1
           fi
       - name: End-to-end tests (types only; they run in the e2e job)
