@@ -16,6 +16,22 @@ export interface AdminExtension {
   messages?: Partial<Record<Language, Record<string, unknown>>>
   /** Where a signed-in user lands; the data catalog when absent. */
   home?: string
+  /**
+   * The application's name and marks in place of the platform's (phase 17v): the sign-in card, the frame's
+   * corner, the browser's tab and icon. The colours are the application's own stylesheet's, which the extension
+   * imports (it overrides the theme tokens, decision D34). Absent: the platform's name.
+   */
+  brand?: AdminBrand
+}
+
+/** An application's name and marks in the admin frontend. */
+export interface AdminBrand {
+  /** The name, one for every language or per language (the first given stands in for a missing one). */
+  name: string | Partial<Record<Language, string>>
+  /** The mark shown before the name (an image the extension imports: `import logo from './logo.svg'`). */
+  logo?: string
+  /** The browser tab's icon (an image the extension imports); the platform's when absent. */
+  favicon?: string
 }
 
 export interface ExtensionMenuItem {

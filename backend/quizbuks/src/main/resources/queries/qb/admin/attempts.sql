@@ -23,7 +23,7 @@ results:
   rewardPaidAt:        { from: QbAttempt.rewardPaidAt }
 list:
   filters: [userId, publicationId, publisherKind, publisherId, status, rewardStatus, startedAt, submittedAt]
-  sorts:   [startedAt, submittedAt]
+  sorts:   [startedAt, submittedAt, status, score]
   defaultSort: { field: startedAt, asc: false }
   key: [attemptId]
 permissions: [qb.admin.users.read]

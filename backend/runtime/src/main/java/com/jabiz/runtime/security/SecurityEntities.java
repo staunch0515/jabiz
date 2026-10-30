@@ -93,8 +93,8 @@ public class SecurityEntities {
         eb.temporal(t -> t.allowScheduled(false));
         eb.listView("default", lv -> lv
             .columns("userName", "displayName", "email", "locale", "tenantId", "enabled")
-            .filters("userName", "tenantId", "enabled")
-            .sorts("userName")
+            .filters("userName", "displayName", "email", "tenantId", "enabled")
+            .sorts("userName", "displayName", "email")
             .defaultSort("userName", true));
     });
 
@@ -154,7 +154,9 @@ public class SecurityEntities {
         eb.temporal(t -> t.allowScheduled(true));
         eb.listView("default", lv -> lv
             .columns("userId", "roleId", "dataFrom", "dataTo", "effectStartTime")
-            .filters("userId", "roleId"));
+            .filters("userId", "roleId")
+            .sorts("userId", "roleId", "effectStartTime")
+            .defaultSort("effectStartTime", false));
     });
 
     public static final EntityDefinition SEC_MENU = EntityDefinition.define(MENU, eb -> {
@@ -238,7 +240,9 @@ public class SecurityEntities {
         eb.temporal(t -> t.allowScheduled(false));
         eb.listView("default", lv -> lv
             .columns("userId", "confirmed", "confirmedTime")
-            .filters("userId", "confirmed"));
+            .filters("userId", "confirmed")
+            .sorts("userId", "confirmedTime")
+            .defaultSort("confirmedTime", false));
     });
 
     /**

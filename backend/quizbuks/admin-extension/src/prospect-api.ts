@@ -1,6 +1,7 @@
-import { runProcess, runQuery } from '@jabiz/admin'
+import { runProcess, runQuery, type Filter } from '@jabiz/admin'
 import type { Page } from './api'
 import { PROSPECT_PROCESS, TEMPLATE } from './ids'
+import type { SortSpec } from './api'
 
 /*
  * AI prospecting (backend `prospect`, docs/quizbuks/plans/Q48-operators.md, Q48c): what its pages read and run, typed
@@ -114,9 +115,9 @@ function toProspect(row: Row): Prospect {
 
 /** The businesses found, newest first, of a state when one is given. */
 export async function readProspects(scope: Scope, status: string | null, q: string, offset: number,
-  limit: number): Promise<Page<Prospect>> {
+  limit: number, sorts?: SortSpec[], more?: Filter[]): Promise<Page<Prospect>> {
   const page = await runQuery<Row>(scope.admin ? TEMPLATE.adminProspects : TEMPLATE.operatorProspects, {
-    params: params(scope, { status: status || undefined, q: q || undefined }), offset, limit, count: true,
+    params: params(scope, { status: status || undefined, q: q || undefined }), filters: more, sorts, offset, limit, count: true,
   })
   return { total: page.total, items: page.items.map(toProspect) }
 }

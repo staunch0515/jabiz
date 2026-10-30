@@ -61,6 +61,41 @@ describe('catalog pages', () => {
     expect(screen.getByRole('button', { name: 'urn:jabiz:dataset:default:E1 をコピー' })).toBeInTheDocument()
   })
 
+  it('searches the datasets by name or id and sorts them by a column (phase 17w)', async () => {
+    hooks.datasets.data = [dataset(2), { ...dataset(10), label: 'Carrier rates' }, dataset(1)]
+    show(<DatasetCatalogPage />)
+    const names = () => screen.getAllByRole('link').map((link) => link.textContent)
+    // By name at first, as the language sorts.
+    expect(names()).toEqual(['Carrier rates', 'Entity 1', 'Entity 2'])
+    await userEvent.click(screen.getByRole('button', { name: 'Entity' }))
+    expect(names()).toEqual(['Entity 2', 'Entity 1', 'Carrier rates'])
+    // By id, numbers in order (E1, E2, E10).
+    await userEvent.click(screen.getByRole('button', { name: 'View' }))
+    expect(names()).toEqual(['Entity 1', 'Entity 2', 'Carrier rates'])
+    await userEvent.type(screen.getByTestId('list-search'), 'carrier')
+    expect(names()).toEqual(['Carrier rates'])
+    expect(screen.getByTestId('list-search-count')).toHaveTextContent('1 of 3')
+    await userEvent.clear(screen.getByTestId('list-search'))
+    await userEvent.type(screen.getByTestId('list-search'), 'dataset:default:E1 ')
+    expect(names()).toEqual(['Entity 1', 'Carrier rates'])
+    await userEvent.type(screen.getByTestId('list-search'), 'nothing')
+    expect(screen.getByText('Nothing matches the search.')).toBeInTheDocument()
+    await expectAccessible()
+  })
+
+  it('searches the processes by name, id or description', async () => {
+    hooks.processes.data = [
+      { name: 'SEC_USER_INVITE', version: 1, label: 'Invite a user', description: 'Mails a link', latest: true },
+      { name: 'LEDGER_POST', version: 2, label: 'Post a transaction', description: 'Books the lines', latest: true },
+    ]
+    show(<ProcessCatalogPage />)
+    await userEvent.type(screen.getByTestId('list-search'), 'ledger')
+    expect(screen.getAllByRole('link').map((link) => link.textContent)).toEqual(['Post a transaction'])
+    await userEvent.clear(screen.getByTestId('list-search'))
+    await userEvent.type(screen.getByTestId('list-search'), 'mails')
+    expect(screen.getAllByRole('link').map((link) => link.textContent)).toEqual(['Invite a user'])
+  })
+
   it('pages 50 at a time in the browser', async () => {
     hooks.datasets.data = Array.from({ length: 51 }, (_, i) => dataset(i + 1))
     show(<DatasetCatalogPage />)

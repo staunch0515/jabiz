@@ -7,7 +7,7 @@
 
 // The extension itself.
 export { defineExtension, EXTENSION_NAMESPACE } from '../extension/api'
-export type { AdminExtension, ExtensionMenuItem } from '../extension/api'
+export type { AdminBrand, AdminExtension, ExtensionMenuItem } from '../extension/api'
 
 // Calling the server: typed platform endpoints, SQL templates and processes, all with the session and the language.
 export { api, unwrap, sessionFetch, ApiError, runQuery, runProcess } from '@jabiz/client'

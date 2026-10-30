@@ -202,6 +202,19 @@ describe('ReviewsPage', () => {
     expect(await screen.findByTestId('queue-publication-switch')).toHaveTextContent('World capitals · v1 → v2')
   })
 
+  it('sorts the queue on the server by the column clicked, from the first page (Q53a)', async () => {
+    renderAt('/qb/reviews', '/qb/reviews', <ReviewsPage />)
+    await screen.findByTestId('queue-publication-link')
+    await userEvent.click(screen.getByRole('button', { name: 'Waiting since' }))
+    await waitFor(() => expect(server.runQuery).toHaveBeenCalledWith(TEMPLATE.publications, expect.objectContaining({
+      sorts: [{ field: 'waitingSince', asc: true }], offset: 0 })))
+    await userEvent.click(screen.getByRole('button', { name: 'Waiting since' }))
+    await waitFor(() => expect(server.runQuery).toHaveBeenCalledWith(TEMPLATE.publications, expect.objectContaining({
+      sorts: [{ field: 'waitingSince', asc: false }] })))
+    // A column the template does not sort by has no button.
+    expect(screen.queryByRole('button', { name: 'Budget' })).toBeNull()
+  })
+
   it('offers only the queues the user may review', async () => {
     server.permissions = new Set(['qb.review.publication'])
     renderAt('/qb/reviews?tab=sponsors', '/qb/reviews', <ReviewsPage />)

@@ -1,7 +1,8 @@
 import { keepPreviousData, useQuery, type QueryKey } from '@tanstack/react-query'
 import { useCallback, useEffect, useState } from 'react'
-import { ApiError, formatAmount, formatDateTime, useLanguage, type PaginationState } from '@jabiz/admin'
-import { readDictionary, type Page } from './api'
+import { ApiError, formatAmount, formatDateTime, useLanguage, type ColumnDef, type PaginationState,
+  type SortingState } from '@jabiz/admin'
+import { readDictionary, type Page, type SortSpec } from './api'
 import { CURRENCY } from './ids'
 
 /** A dictionary's labels by code, in the interface language (the code itself until the server answered). */
@@ -38,10 +39,19 @@ export const PAGE_SIZE = 20
 /**
  * One page of a list at a time, for the platform's `DataTable`: the previous page stays (inert) while the next loads;
  * the pager knows the total when the server counted it, else whether a full page suggests another.
+ *
+ * Q53a: `sorts` names the columns the user may sort by (column id → the template's `list.sorts` field); the table's
+ * headers then sort on the server, a new order starting at the first page. Before a choice the template's own
+ * `defaultSort` (or the reader's) stands. Pass the columns through `sortable` so that those headers are buttons.
  */
-export function usePaged<Row>(key: QueryKey, read: (offset: number, limit: number) => Promise<Page<Row>>,
-  enabled = true) {
+export function usePaged<Row>(key: QueryKey,
+  read: (offset: number, limit: number, sorts?: SortSpec[]) => Promise<Page<Row>>, enabled = true,
+  sorts?: Readonly<Record<string, string>>) {
   const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: PAGE_SIZE })
+  const [sorting, setSorting] = useState<SortingState>([])
+  const order: SortSpec[] | undefined = sorts
+    ? sorting.filter((sort) => sorts[sort.id]).map((sort) => ({ field: sorts[sort.id], asc: !sort.desc }))
+    : undefined
   // Another list (a filter changed) starts at its first page.
   const keyText = JSON.stringify(key)
   const [listed, setListed] = useState(keyText)
@@ -50,8 +60,9 @@ export function usePaged<Row>(key: QueryKey, read: (offset: number, limit: numbe
     if (pagination.pageIndex !== 0) setPagination({ ...pagination, pageIndex: 0 })
   }
   const query = useQuery({
-    queryKey: [...key, pagination.pageIndex, pagination.pageSize],
-    queryFn: () => read(pagination.pageIndex * pagination.pageSize, pagination.pageSize),
+    queryKey: [...key, pagination.pageIndex, pagination.pageSize, order ?? null],
+    queryFn: () => read(pagination.pageIndex * pagination.pageSize, pagination.pageSize,
+      order && order.length > 0 ? order : undefined),
     placeholderData: keepPreviousData,
     enabled,
   })
@@ -65,8 +76,25 @@ export function usePaged<Row>(key: QueryKey, read: (offset: number, limit: numbe
       onPaginationChange: setPagination,
       rowCount: query.data?.total,
       hasNextPage: (query.data?.items.length ?? 0) === pagination.pageSize,
+      ...(sorts ? {
+        sorting,
+        onSortingChange: (next: SortingState) => {
+          setSorting(next)
+          setPagination((current) => ({ ...current, pageIndex: 0 }))
+        },
+      } : {}),
     },
+    /** The columns with a header to sort by for each of `sorts` (the DataTable sorts columns with an accessor). */
+    sortable: (columns: ColumnDef<Row, unknown>[]): ColumnDef<Row, unknown>[] => sortableColumns<Row>(columns, sorts),
   }
+}
+
+/** The columns named in `sorts` made sortable (an accessor; the order itself is the server's). */
+export function sortableColumns<Row>(columns: ColumnDef<Row, unknown>[],
+  sorts: Readonly<Record<string, string>> | undefined): ColumnDef<Row, unknown>[] {
+  if (!sorts) return columns
+  return columns.map((column) => (column.id && sorts[column.id] && !('accessorFn' in column && column.accessorFn)
+    ? { ...column, accessorFn: () => null } as ColumnDef<Row, unknown> : column))
 }
 
 /** How often the page reads again after a decision until the state follows it, and for how long at most. */

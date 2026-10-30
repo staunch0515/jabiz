@@ -27,7 +27,7 @@ results:
   releasedBy:        { from: QbTransfer.releasedBy }
 list:
   filters: [transferId, userId, method, status, createdAt, sentAt, amount, failureCode, stale, held]
-  sorts:   [createdAt, sentAt, amount]
+  sorts:   [createdAt, sentAt, amount, status]
   defaultSort: { field: createdAt, asc: false }
   key: [transferId]
 permissions: [qb.admin.finance.read]

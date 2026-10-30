@@ -45,7 +45,7 @@ results:
 list:
   filters: [topUpId, sponsorId, status, createdAt, paidAt, amount, checkReason, disputeStatus, paymentIntentId,
     method, transferCode]
-  sorts:   [createdAt, paidAt, amount]
+  sorts:   [createdAt, paidAt, amount, status]
   defaultSort: { field: createdAt, asc: false }
   key: [topUpId]
 permissions: [qb.admin.finance.read]

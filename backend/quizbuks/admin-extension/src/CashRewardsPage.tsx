@@ -29,9 +29,13 @@ import {
 import { StatusFilter } from './finance-components'
 import { LoadFailed, PublisherLink } from './components'
 import { money, useLabels, usePaged, when } from './hooks'
+import { useMoreFilters } from './moreFilters'
 import { DICTIONARY, PATH, PERMISSION } from './ids'
 import { CASH_RESOLUTIONS, readCashRewards, resolveCashReward, type CashResolution, type CashReward }
   from './reward-api'
+
+/** The columns sorted on the server, by the template's `list.sorts` field (Q53a). */
+const SORTS = { dueAt: 'dueAt', amount: 'amount', status: 'status' } as const
 
 const linkClass = 'text-primary font-medium underline-offset-4 hover:underline'
 const right = { className: 'text-right tabular-nums' }
@@ -125,8 +129,12 @@ export default function CashRewardsPage() {
     }
     setSearch(next, { replace: true })
   }
-  const { query, table } = usePaged([...KEY, filterStatus, q],
-    (offset, limit) => readCashRewards(filterStatus, q, offset, limit))
+  const more = useMoreFilters([
+    { kind: 'amount', name: 'amount', label: t('reward.cash.amount') },
+    { kind: 'time', name: 'dueAt', label: t('reward.cash.dueAt') },
+  ], 'cash-filters')
+  const { query, table, sortable } = usePaged([...KEY, filterStatus, q, more.filters],
+    (offset, limit, sorts) => readCashRewards(filterStatus, q, offset, limit, sorts, more.filters), true, SORTS)
   const columns = useMemo<ColumnDef<CashReward, unknown>[]>(() => [
     { id: 'dueAt', header: t('reward.cash.dueAt'), cell: ({ row }) => when(row.original.dueAt) },
     { id: 'code', header: t('reward.cash.code'),
@@ -206,10 +214,11 @@ export default function CashRewardsPage() {
           }}>{t('reward.cash.all')}</Button>
         )}
       </div>
+      {more.bar}
       {query.isError
         ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
         : (
-          <DataTable label={t('reward.cash.table')} columns={columns} {...table} getRowId={(row) => row.cashRewardId}
+          <DataTable label={t('reward.cash.table')} columns={sortable(columns)} {...table} getRowId={(row) => row.cashRewardId}
             empty={t('reward.cash.none')}
             rowProps={(row) => ({ 'data-testid': 'cash-row', 'data-id': row.cashRewardId, 'data-status': row.status })} />
         )}

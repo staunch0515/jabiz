@@ -80,7 +80,8 @@ public class ProtectedChangeEntities {
             .columns("kind", "status", "userId", "roleId", "permission", "requestedBy", "decidedBy", "reason",
                 "effectStartTime")
             .filters("kind", "status", "userId", "roleId", "requestedBy")
-            .sorts("status", "kind"));
+            .sorts("status", "kind", "effectStartTime")
+            .defaultSort("effectStartTime", false));
     });
 
     @Bean

@@ -18,9 +18,13 @@ import {
 } from '@jabiz/admin'
 import { LoadFailed } from './components'
 import { useLabels, usePaged, when } from './hooks'
+import { useMoreFilters } from './moreFilters'
 import { DICTIONARY, PATH } from './ids'
 import { PROSPECT_STATUSES, PROSPECTS_KEY, readProspects, type Prospect } from './prospect-api'
 import { useProspectScope } from './prospect-scope'
+
+/** The columns sorted on the server, by the template's `list.sorts` field (Q53a). */
+const SORTS = { score: 'score', foundAt: 'foundAt', sentAt: 'sentAt' } as const
 
 const linkClass = 'text-primary font-medium underline-offset-4 hover:underline'
 const right = { className: 'text-right tabular-nums' }
@@ -48,8 +52,12 @@ export default function ProspectsPage() {
     }
     setSearch(next, { replace: true })
   }
-  const { query, table } = usePaged([...PROSPECTS_KEY, scope, status, q],
-    (offset, limit) => readProspects(scope, status === ALL ? null : status, q, offset, limit))
+  const more = useMoreFilters([
+    { kind: 'time', name: 'foundAt', label: t('prospect.list.foundAt') },
+    { kind: 'time', name: 'sentAt', label: t('prospect.list.sentAt') },
+  ], 'prospects-filters')
+  const { query, table, sortable } = usePaged([...PROSPECTS_KEY, scope, status, q, more.filters],
+    (offset, limit, sorts) => readProspects(scope, status === ALL ? null : status, q, offset, limit, sorts, more.filters), true, SORTS)
   const ownerQuery = scope.admin ? `?owner=${encodeURIComponent(scope.owner)}` : ''
   const columns = useMemo<ColumnDef<Prospect, unknown>[]>(() => [
     {
@@ -107,10 +115,11 @@ export default function ProspectsPage() {
         </div>
         <Button type="submit" variant="outline">{t('prospect.list.find')}</Button>
       </form>
+      {more.bar}
       {query.isError
         ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
         : (
-          <DataTable label={t('prospect.list.title')} columns={columns} {...table}
+          <DataTable label={t('prospect.list.title')} columns={sortable(columns)} {...table}
             getRowId={(row) => row.prospectId} empty={t('prospect.list.none')}
             rowProps={(row) => ({ 'data-testid': 'prospect-row', 'data-id': row.prospectId })} />
         )}

@@ -33,6 +33,11 @@ import {
 import type { BackTo } from './PublicationsPage'
 import { VersionPreview } from './VersionPreview'
 
+/** The columns sorted on the server, by the template's `list.sorts` field (Q53a). */
+const SORTS = { name: 'name', status: 'status', editedAt: 'editedAt' } as const
+/** The columns sorted on the server, by the template's `list.sorts` field (Q53a). */
+const SORTS_2 = { label: 'versionNo', versionedAt: 'versionedAt' } as const
+
 const linkClass = 'text-primary font-medium underline-offset-4 hover:underline'
 const right = { className: 'text-right tabular-nums' }
 
@@ -40,8 +45,8 @@ function Publications({ quiz }: { quiz: QuizRow }) {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
   const statusLabel = useLabels(DICTIONARY.publicationStatus)
   const filter = { q: null, status: null, sponsorId: null, quizId: quiz.quizId }
-  const { query, table } = usePaged(['qb-ext', 'publications', filter],
-    (offset, limit) => readPublications(filter, offset, limit))
+  const { query, table, sortable } = usePaged(['qb-ext', 'publications', filter],
+    (offset, limit, sorts) => readPublications(filter, offset, limit, sorts), true, SORTS)
   const columns = useMemo<ColumnDef<PublicationListRow, unknown>[]>(() => [
     {
       id: 'name',
@@ -80,7 +85,7 @@ function Publications({ quiz }: { quiz: QuizRow }) {
       {query.isError
         ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
         : (
-          <DataTable label={t('quiz.publicationsTable')} columns={columns} {...table}
+          <DataTable label={t('quiz.publicationsTable')} columns={sortable(columns)} {...table}
             getRowId={(row) => row.publicationId} empty={t('quiz.nonePublications')}
             rowProps={(row) => ({ 'data-testid': 'quiz-publication', 'data-id': row.publicationId })} />
         )}
@@ -129,8 +134,8 @@ function ShowToggle({ version }: { version: QuizVersionRow }) {
 
 function Versions({ quiz }: { quiz: QuizRow }) {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
-  const { query, table } = usePaged(['qb-ext', 'quiz-versions', quiz.quizId],
-    (offset, limit) => readQuizVersions(quiz.quizId, offset, limit))
+  const { query, table, sortable: sortable2 } = usePaged(['qb-ext', 'quiz-versions', quiz.quizId],
+    (offset, limit, sorts) => readQuizVersions(quiz.quizId, offset, limit, sorts), true, SORTS_2)
   const [shown, setShown] = useState<QuizVersionRow | null>(null)
   const columns = useMemo<ColumnDef<QuizVersionRow, unknown>[]>(() => [
     { id: 'label', header: t('quiz.versionLabel'), cell: ({ row }) => row.original.label },
@@ -154,7 +159,7 @@ function Versions({ quiz }: { quiz: QuizRow }) {
         {query.isError
           ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
           : (
-            <DataTable label={t('quiz.versionsTable')} columns={columns} {...table}
+            <DataTable label={t('quiz.versionsTable')} columns={sortable2(columns)} {...table}
               getRowId={(row) => row.versionId} empty={t('quiz.noneVersions')}
               rowProps={(row) => ({ 'data-testid': 'quiz-version', 'data-id': row.versionId })} />
           )}

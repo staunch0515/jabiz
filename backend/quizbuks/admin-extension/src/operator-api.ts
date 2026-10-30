@@ -1,6 +1,7 @@
 import { runProcess, runQuery, type Filter } from '@jabiz/admin'
 import type { Page, Sponsor, SponsorRow } from './api'
 import { OPERATOR_PROCESS, TEMPLATE } from './ids'
+import type { SortSpec } from './api'
 
 /*
  * Operators (backend `operator`, docs/quizbuks/plans/Q48-operators.md, Q48a): what headquarters' pages and the
@@ -57,8 +58,8 @@ function toOperator(row: Row): Operator {
 }
 
 /** The operators, newest first. */
-export async function readOperators(offset: number, limit: number): Promise<Page<Operator>> {
-  const page = await runQuery<Row>(TEMPLATE.operators, { offset, limit, count: true })
+export async function readOperators(offset: number, limit: number, sorts?: SortSpec[], more?: Filter[]): Promise<Page<Operator>> {
+  const page = await runQuery<Row>(TEMPLATE.operators, { filters: more, sorts, offset, limit, count: true })
   return { total: page.total, items: page.items.map(toOperator) }
 }
 
@@ -169,11 +170,11 @@ function toReview(row: Row): OperatorReview {
 
 /** The operators' reviews, newest first; one operator's, and only the unchecked, when given. */
 export async function readOperatorReviews(operatorId: string | null, unchecked: boolean, offset: number,
-  limit: number): Promise<Page<OperatorReview>> {
+  limit: number, sorts?: SortSpec[], more?: Filter[]): Promise<Page<OperatorReview>> {
   const params: Record<string, unknown> = {}
   if (operatorId) params.operatorId = operatorId
   if (unchecked) params.unchecked = true
-  const page = await runQuery<Row>(TEMPLATE.operatorReviews, { params, offset, limit, count: true })
+  const page = await runQuery<Row>(TEMPLATE.operatorReviews, { params, filters: more, sorts, offset, limit, count: true })
   return { total: page.total, items: page.items.map(toReview) }
 }
 
@@ -295,10 +296,11 @@ export function toOperatorSponsor(row: Row): OperatorSponsor {
 }
 
 /** The sponsors, newest application first: only the operator's own when `mine`, searched by `q`. */
-export async function readOperatorSponsors(q: string, mine: boolean, offset: number, limit: number):
+export async function readOperatorSponsors(q: string, mine: boolean, offset: number, limit: number, sorts?: SortSpec[]):
   Promise<Page<OperatorSponsor>> {
   const filters: Filter[] = mine ? [{ field: 'mine', op: 'eq', value: true }] : []
-  const page = await runQuery<Row>(TEMPLATE.operatorSponsors, { params: { q: q.trim() || null }, filters, offset,
+  const page = await runQuery<Row>(TEMPLATE.operatorSponsors, { params: { q: q.trim() || null }, filters, sorts,
+    offset,
     limit, count: true })
   return { total: page.total, items: page.items.map(toOperatorSponsor) }
 }
@@ -319,10 +321,10 @@ export const unbanSponsor = (userId: string, note: string | null) =>
  * The applications waiting for review as an operator reads them (it has no `qb.admin.sponsors`): the same rows, the
  * longest waiting first, with their count.
  */
-export async function readPendingSponsorsAsOperator(offset: number, limit: number): Promise<Page<SponsorRow>> {
+export async function readPendingSponsorsAsOperator(offset: number, limit: number, sorts?: SortSpec[]): Promise<Page<SponsorRow>> {
   const page = await runQuery<Row>(TEMPLATE.operatorSponsors, {
     filters: [{ field: 'reviewStatus', op: 'eq', value: 'PENDING' }],
-    sorts: [{ field: 'submittedAt', asc: true }],
+    sorts: sorts ?? [{ field: 'submittedAt', asc: true }],
     offset,
     limit,
     count: true,

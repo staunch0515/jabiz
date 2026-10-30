@@ -21,7 +21,11 @@ import { readFinanceTransfers, releaseHold, type FinanceTransfer, type TransferF
 import { DayRange, StatusFilter } from './finance-components'
 import { LoadFailed } from './components'
 import { money, useLabels, usePaged, when } from './hooks'
+import { useMoreFilters } from './moreFilters'
 import { DICTIONARY, PATH, PERMISSION, TRANSFER_REVIEW } from './ids'
+
+/** The columns sorted on the server, by the template's `list.sorts` field (Q53a). */
+const SORTS = { createdAt: 'createdAt', amount: 'amount', status: 'status' } as const
 
 const linkClass = 'text-primary font-medium underline-offset-4 hover:underline'
 const right = { className: 'text-right tabular-nums' }
@@ -63,8 +67,11 @@ export default function TransfersPage() {
   const filter = transferFilterOf(search)
   const set = (change: Partial<TransferFilter>) => setSearch(transferAddressOf({ ...filter, ...change }), { replace: true })
   const reviewer = can(PERMISSION.payoutReview)
-  const { query, table } = usePaged(['qb-ext', 'finance', 'transfers', filter],
-    (offset, limit) => readFinanceTransfers(filter, offset, limit))
+  const more = useMoreFilters([
+    { kind: 'amount', name: 'amount', label: t('finance.transfers.amount') },
+  ], 'transfers-filters')
+  const { query, table, sortable } = usePaged(['qb-ext', 'finance', 'transfers', filter, more.filters],
+    (offset, limit, sorts) => readFinanceTransfers(filter, offset, limit, sorts, more.filters), true, SORTS)
   const columns = useMemo<ColumnDef<FinanceTransfer, unknown>[]>(() => [
     { id: 'createdAt', header: t('finance.transfers.createdAt'), cell: ({ row }) => when(row.original.createdAt) },
     {
@@ -150,10 +157,11 @@ export default function TransfersPage() {
           </Button>
         )}
       </div>
+      {more.bar}
       {query.isError
         ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
         : (
-          <DataTable label={t('finance.transfers.table')} columns={columns} {...table}
+          <DataTable label={t('finance.transfers.table')} columns={sortable(columns)} {...table}
             getRowId={(row) => row.transferId} empty={t('finance.transfers.none')}
             rowProps={(row) => ({ 'data-testid': 'transfer-row', 'data-id': row.transferId,
               'data-status': row.status, 'data-stale': String(row.stale), 'data-held': String(row.held) })} />

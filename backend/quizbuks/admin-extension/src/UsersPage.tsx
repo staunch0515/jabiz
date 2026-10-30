@@ -13,12 +13,17 @@ import {
   useLanguage,
   type ColumnDef,
   type PaginationState,
+  type SortingState,
 } from '@jabiz/admin'
 import { searchUsers, type UserRow } from './api'
 import { DICTIONARY, PATH, PERMISSION } from './ids'
 import { LoadFailed } from './components'
-import { money, textIn, useLabels, when } from './hooks'
+import { money, sortableColumns, textIn, useLabels, when } from './hooks'
+import { useMoreFilters } from './moreFilters'
 import { readTakerKudos } from './payout-api'
+
+/** The columns sorted on the server, by the template's `list.sorts` field (Q53a). */
+const SORTS = { userName: 'userName', displayName: 'displayName', registeredAt: 'registeredAt' } as const
 
 const linkClass = 'text-primary font-medium underline-offset-4 hover:underline'
 
@@ -33,9 +38,29 @@ export default function UsersPage() {
   const [text, setText] = useState('')
   const [q, setQ] = useState('')
   const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: 20 })
+  // Q53a: sorted on the server by the template's `list.sorts`; a new order starts at the first page.
+  const [sorting, setSorting] = useState<SortingState>([])
+  const sorts = sorting.filter((sort) => SORTS[sort.id as keyof typeof SORTS])
+    .map((sort) => ({ field: SORTS[sort.id as keyof typeof SORTS], asc: !sort.desc }))
+  const more = useMoreFilters([
+    { kind: 'eq', name: 'countryCode', label: t('users.country'), placeholder: 'JP', upper: true },
+    { kind: 'time', name: 'registeredAt', label: t('users.registeredAt') },
+    { kind: 'dictionary', name: 'sponsorStatus', label: t('users.sponsorStatus'), dictionary: DICTIONARY.sponsorReviewStatus },
+    { kind: 'yesno', name: 'banned', label: t('users.banned') },
+    { kind: 'yesno', name: 'emailVerified', label: t('user.emailVerified') },
+    { kind: 'yesno', name: 'enabled', label: t('user.enabled') },
+  ], 'users-filters')
+  // Other filters list from the first page.
+  const filterText = JSON.stringify(more.filters)
+  const [listed, setListed] = useState(filterText)
+  if (listed !== filterText) {
+    setListed(filterText)
+    if (pagination.pageIndex !== 0) setPagination({ ...pagination, pageIndex: 0 })
+  }
   const users = useQuery({
-    queryKey: ['qb-ext', 'users', q, pagination],
-    queryFn: () => searchUsers(q, pagination.pageIndex * pagination.pageSize, pagination.pageSize),
+    queryKey: ['qb-ext', 'users', q, pagination, sorts, more.filters],
+    queryFn: () => searchUsers(q, pagination.pageIndex * pagination.pageSize, pagination.pageSize,
+      sorts.length > 0 ? sorts : undefined, more.filters),
     placeholderData: keepPreviousData,
   })
   const { can } = useAuth()
@@ -102,10 +127,15 @@ export default function UsersPage() {
           {t('users.searchButton')}
         </Button>
       </form>
+      {more.bar}
       {users.isError
         ? <LoadFailed error={users.error} onRetry={() => void users.refetch()} />
         : (
-          <DataTable label={t('users.table')} columns={columns} data={users.data ?? []} loading={users.isPending}
+          <DataTable label={t('users.table')} columns={sortableColumns(columns, SORTS)} data={users.data ?? []}
+            loading={users.isPending} sorting={sorting} onSortingChange={(next) => {
+              setSorting(next)
+              setPagination((current) => ({ ...current, pageIndex: 0 }))
+            }}
             stale={users.isPlaceholderData} getRowId={(row) => row.userId} empty={t('users.none')}
             pagination={pagination} onPaginationChange={setPagination}
             hasNextPage={(users.data?.length ?? 0) === pagination.pageSize}

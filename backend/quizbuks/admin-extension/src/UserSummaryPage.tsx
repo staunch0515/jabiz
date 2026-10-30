@@ -117,7 +117,7 @@ function Attempts({ userId }: { userId: string }) {
   const attemptStatus = useLabels(DICTIONARY.attemptStatus)
   const rewardStatus = useLabels(DICTIONARY.rewardStatus)
   const { query: attempts, table } = usePaged(['qb-ext', 'attempts', userId],
-    (offset, limit) => readAttempts(userId, offset, limit))
+    (offset, limit, sorts) => readAttempts(userId, offset, limit, sorts))
   const columns = useMemo<ColumnDef<AttemptRow, unknown>[]>(() => [
     { id: 'name', header: t('user.publication'), cell: ({ row }) => row.original.name ?? row.original.publicationId },
     { id: 'status', header: t('user.attemptStatus'), cell: ({ row }) => attemptStatus(row.original.status) },
@@ -150,7 +150,7 @@ function Consents({ userId }: { userId: string }) {
   const kind = useLabels(DICTIONARY.legalKind)
   const source = useLabels(DICTIONARY.consentSource)
   const { query: consents, table } = usePaged(['qb-ext', 'consents', userId],
-    (offset, limit) => readConsents(userId, offset, limit))
+    (offset, limit, sorts) => readConsents(userId, offset, limit, sorts))
   const columns = useMemo<ColumnDef<ConsentRow, unknown>[]>(() => [
     { id: 'kind', header: t('user.consentKind'), cell: ({ row }) => kind(row.original.kind) },
     {
@@ -183,10 +183,10 @@ function Finance({ userId, sponsor }: { userId: string; sponsor: boolean }) {
   const topUpStatus = useLabels(DICTIONARY.topUpStatus)
   const accountStatus = useLabels(DICTIONARY.payoutAccountStatus)
   const rewardStatus = useLabels(DICTIONARY.rewardStatus)
-  const rewards = usePaged(['qb-ext', 'rewards', userId], (offset, limit) => readAttemptRewards(userId, offset, limit))
-  const transfers = usePaged(['qb-ext', 'transfers', userId], (offset, limit) => readTransfers(userId, offset, limit))
+  const rewards = usePaged(['qb-ext', 'rewards', userId], (offset, limit, sorts) => readAttemptRewards(userId, offset, limit, sorts))
+  const transfers = usePaged(['qb-ext', 'transfers', userId], (offset, limit, sorts) => readTransfers(userId, offset, limit, sorts))
   const account = useQuery({ queryKey: ['qb-ext', 'payout', userId], queryFn: () => readPayoutAccount(userId) })
-  const topUps = usePaged(['qb-ext', 'topups', userId], (offset, limit) => readTopUps(userId, offset, limit), sponsor)
+  const topUps = usePaged(['qb-ext', 'topups', userId], (offset, limit, sorts) => readTopUps(userId, offset, limit, sorts), sponsor)
   const rewardColumns = useMemo<ColumnDef<AttemptRewardRow, unknown>[]>(() => [
     { id: 'name', header: t('user.publication'), cell: ({ row }) => row.original.name ?? '' },
     { id: 'submittedAt', header: t('user.createdAt'), cell: ({ row }) => when(row.original.submittedAt) },

@@ -62,6 +62,9 @@ import { StatusFilter } from './finance-components'
 import { useLabels, usePaged, when } from './hooks'
 import { DICTIONARY, PATH } from './ids'
 
+/** The columns sorted on the server, by the template's `list.sorts` field (Q53a). */
+const SORTS = { title: 'title', status: 'status', when: 'sentAt' } as const
+
 const KEY = ['qb-ext', 'broadcasts']
 const REASON_LENGTH = 1000
 const ALL = '__all'
@@ -416,8 +419,8 @@ export default function BroadcastsPage() {
   const [filter, setFilter] = useState<BroadcastFilter>({})
   const [text, setText] = useState('')
   const [editing, setEditing] = useState<BroadcastRow | 'new' | null>(null)
-  const { query, table } = usePaged([...KEY, 'list', filter], (offset, limit) => readBroadcasts(filter, offset,
-    limit))
+  const { query, table, sortable } = usePaged([...KEY, 'list', filter], (offset, limit, sorts) => readBroadcasts(filter, offset,
+    limit, sorts), true, SORTS)
   const columns = useMemo<ColumnDef<BroadcastRow, unknown>[]>(() => [
     {
       id: 'title',
@@ -562,7 +565,7 @@ export default function BroadcastsPage() {
       {query.isError
         ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
         : (
-          <DataTable label={t('broadcasts.title')} columns={columns} {...table}
+          <DataTable label={t('broadcasts.title')} columns={sortable(columns)} {...table}
             getRowId={(row) => row.broadcastId} empty={t('broadcasts.none')}
             rowProps={(row) => ({ 'data-testid': 'broadcast-row', 'data-id': row.broadcastId,
               'data-status': row.status })} />

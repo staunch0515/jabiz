@@ -1,5 +1,6 @@
 import { api, ApiError, runProcess, runQuery, sessionFetch, unwrap, type Filter } from '@jabiz/admin'
 import { PROCESS, STALE_AFTER_MS, TEMPLATE, type ReportId } from './ids'
+import type { SortSpec } from './api'
 
 /*
  * What the finance pages read and run (docs/quizbuks/plans/Q9c-admin-finance.md), typed by hand after the templates of
@@ -177,10 +178,10 @@ export function transferFilters(filter: TransferFilter): Filter[] {
 }
 
 /** A page of transfers, newest first, counted. */
-export async function readFinanceTransfers(filter: TransferFilter, offset: number, limit: number):
+export async function readFinanceTransfers(filter: TransferFilter, offset: number, limit: number, sorts?: SortSpec[], more?: Filter[]):
   Promise<Page<FinanceTransfer>> {
   const page = await runQuery<Row>(TEMPLATE.transfers, { params: { staleBefore: staleBefore() },
-    filters: transferFilters(filter), offset, limit, count: true })
+    filters: [...transferFilters(filter), ...(more ?? [])], sorts, offset, limit, count: true })
   return { items: page.items.map(toTransfer), total: page.total }
 }
 
@@ -247,9 +248,9 @@ export function topUpFilters(filter: TopUpFilter): Filter[] {
   return [...filters, ...periodFilters('createdAt', filter.from, filter.to)]
 }
 
-export async function readFinanceTopUps(filter: TopUpFilter, offset: number, limit: number):
+export async function readFinanceTopUps(filter: TopUpFilter, offset: number, limit: number, sorts?: SortSpec[]):
   Promise<Page<FinanceTopUp>> {
-  const page = await runQuery<Row>(TEMPLATE.topUps, { filters: topUpFilters(filter), offset, limit, count: true })
+  const page = await runQuery<Row>(TEMPLATE.topUps, { filters: topUpFilters(filter), sorts, offset, limit, count: true })
   return {
     total: page.total,
     items: page.items.map((row) => ({
@@ -284,8 +285,8 @@ export interface ReconRun {
   checkedAt: string | null
 }
 
-export async function readReconRuns(offset: number, limit: number): Promise<Page<ReconRun>> {
-  const page = await runQuery<Row>(TEMPLATE.reconRuns, { offset, limit, count: true })
+export async function readReconRuns(offset: number, limit: number, sorts?: SortSpec[], more?: Filter[]): Promise<Page<ReconRun>> {
+  const page = await runQuery<Row>(TEMPLATE.reconRuns, { filters: more, sorts, offset, limit, count: true })
   return {
     total: page.total,
     items: page.items.map((row) => ({ runId: String(row.runId), scheduledTime: str(row.scheduledTime),
@@ -543,12 +544,12 @@ function toBankTopUp(row: Row): BankTopUp {
 }
 
 /** The bank top-ups, newest first, of a state (all when null) or with a transfer code. */
-export async function readBankTopUps(status: string | null, code: string | null, offset: number, limit: number):
+export async function readBankTopUps(status: string | null, code: string | null, offset: number, limit: number, sorts?: SortSpec[], more?: Filter[]):
   Promise<Page<BankTopUp>> {
   const filters: Filter[] = []
   if (status) filters.push({ field: 'status', op: 'eq', value: status })
   if (code) filters.push({ field: 'transferCode', op: 'eq', value: code })
-  const page = await runQuery<Row>(TEMPLATE.bankTopUps, { filters, offset, limit, count: true })
+  const page = await runQuery<Row>(TEMPLATE.bankTopUps, { filters: [...filters, ...(more ?? [])], sorts, offset, limit, count: true })
   return { total: page.total, items: page.items.map(toBankTopUp) }
 }
 

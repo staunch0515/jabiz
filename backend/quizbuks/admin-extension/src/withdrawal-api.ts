@@ -1,6 +1,7 @@
 import { api, runProcess, runQuery, unwrap, type Filter } from '@jabiz/admin'
 import type { Page } from './finance-api'
 import { DATASET, PROCESS, TEMPLATE } from './ids'
+import type { SortSpec } from './api'
 
 /*
  * Bank withdrawals (Q13b; docs/quizbuks/plans/Q13-bank-transfer.md section 3): the template `qb.admin.bank-withdrawals`
@@ -59,10 +60,10 @@ function toWithdrawal(row: Row): BankWithdrawal {
   }
 }
 
-export async function readBankWithdrawals(status: string | null, offset: number, limit: number):
+export async function readBankWithdrawals(status: string | null, offset: number, limit: number, sorts?: SortSpec[], more?: Filter[]):
   Promise<Page<BankWithdrawal>> {
   const filters: Filter[] = status ? [{ field: 'status', op: 'eq', value: status }] : []
-  const page = await runQuery<Row>(TEMPLATE.bankWithdrawals, { filters, offset, limit, count: true })
+  const page = await runQuery<Row>(TEMPLATE.bankWithdrawals, { filters: [...filters, ...(more ?? [])], sorts, offset, limit, count: true })
   return { total: page.total, items: page.items.map(toWithdrawal) }
 }
 

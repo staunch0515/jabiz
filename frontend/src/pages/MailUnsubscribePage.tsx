@@ -1,6 +1,7 @@
 import { MailUnsubscribe } from '@jabiz/ui'
-import { useTranslation } from 'react-i18next'
 import { useLocation } from 'react-router'
+import { BrandTitle } from '../extension/BrandTitle'
+import { extension } from '../extension'
 
 /**
  * Where the unsubscribe link of a notification mail leads in the admin (`/mail/unsubscribe?token=…`,
@@ -9,7 +10,6 @@ import { useLocation } from 'react-router'
  * mailed before an entry had its own page, which keep working. Open to everyone, outside the sign-in.
  */
 export default function MailUnsubscribePage() {
-  const { t } = useTranslation()
   const location = useLocation()
-  return <MailUnsubscribe search={location.search} brand={t('app.title')} appearance={false} />
+  return <MailUnsubscribe search={location.search} brand={<BrandTitle brand={extension.brand} />} appearance={false} />
 }

@@ -21,7 +21,11 @@ import { byCheck } from './finance'
 import { readReconItems, readReconRuns, type ReconItem, type ReconRun } from './finance-api'
 import { LoadFailed, Section } from './components'
 import { money, useLabels, usePaged, when } from './hooks'
+import { useMoreFilters } from './moreFilters'
 import { DICTIONARY, isUserId, PAGE_LIMIT, PATH, referenceKind } from './ids'
+
+/** The columns sorted on the server, by the template's `list.sorts` field (Q53a). */
+const SORTS = { scheduledTime: 'scheduledTime' } as const
 
 const linkClass = 'text-primary font-medium underline-offset-4 hover:underline'
 
@@ -107,7 +111,13 @@ export default function ReconciliationPage() {
   const [search] = useSearchParams()
   const selected = search.get('run')
   const runId = selected && isUserId(selected) ? selected : null
-  const { query, table } = usePaged(['qb-ext', 'finance', 'recon-runs'], readReconRuns)
+  const more = useMoreFilters([
+    { kind: 'choice', name: 'status', label: t('finance.recon.result'),
+      options: ['OK', 'DIFF'].map((code) => ({ value: code, label: t(`finance.recon.status.${code}`) })) },
+    { kind: 'time', name: 'scheduledTime', label: t('finance.recon.scheduledTime') },
+  ], 'recon-filters')
+  const { query, table, sortable } = usePaged(['qb-ext', 'finance', 'recon-runs', more.filters],
+    (offset, limit, sorts) => readReconRuns(offset, limit, sorts, more.filters), true, SORTS)
   const columns = useMemo<ColumnDef<ReconRun, unknown>[]>(() => [
     {
       id: 'scheduledTime',
@@ -136,10 +146,11 @@ export default function ReconciliationPage() {
     <div className="flex flex-col gap-4" data-testid="finance-reconciliation">
       <PageHeader title={t('finance.recon.title')} description={t('finance.recon.description')} className="pb-0" />
       <Section title={t('finance.recon.runs')} testId="recon-runs">
+        {more.bar}
         {query.isError
           ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
           : (
-            <DataTable label={t('finance.recon.runsTable')} columns={columns} {...table}
+            <DataTable label={t('finance.recon.runsTable')} columns={sortable(columns)} {...table}
               getRowId={(row) => row.runId} empty={t('finance.recon.noRuns')}
               rowProps={(row) => ({ 'data-testid': 'recon-run', 'data-id': row.runId, 'data-status': row.status,
                 'data-selected': String(row.runId === runId) })} />
