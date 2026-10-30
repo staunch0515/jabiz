@@ -324,9 +324,14 @@ jabizApp {
   `MailPreferences`（本人的邮件：当前入口的每个可退订通知一个开关（`Switch` 加 `Label`，名称为服务端给出的显示名），其后"您关闭的其他邮件"（其他入口、用户关闭过的，可重新开启），邮件语言的选择（应用语言多于一种时，含"默认"一项）；每次改动即时保存并以状态提示说明，失败时保持原值；读取失败时有"重试"；界面语言变化时重读显示名；别处设置的邮件语言经 `onMailLanguageChange` 立即显示；默认调用下面的函数，可经属性替换；18 §5.6，16s，D49）、
   `offerMailLanguage(lang)`（切换界面语言后询问是否把邮件也改为该语言，见 §10；提示一直显示到回答，说明以后在哪里修改；`notify` 为此增加可选的 `action` 与 `cancel` 按钮）、
   `MailUnsubscribe`（退订链接的落地页：读出令牌，只 POST 一次 `/api/auth/mail/unsubscribe`，状态 `working` / `done` / `invalid` / `failed`（`data-testid="unsubscribe-state"` 的 `data-state`）；`brand`、`appearance`、`search` 同其他落地页；通用后台的 `/mail/unsubscribe` 与示范门户的 `/portal/mail/unsubscribe` 都是它；18 §5.6，16v-1，D52 第 3 条）、
-  `VerifyEmailBanner`、`OfflineBanner`。积木**不依赖路由**：导航经属性 `onNavigate(path)` / `hrefOf(path)` 与回调（`onSignedIn(path)` 等）交出，
+  `VerifyEmailBanner`、`OfflineBanner`（离线时的提示；在线而服务不响应时整页显示一次"系统维护中"：`ServiceUnavailableNotice`，见下）。积木**不依赖路由**：导航经属性 `onNavigate(path)` / `hrefOf(path)` 与回调（`onSignedIn(path)` 等）交出，
   没有时为普通链接与整页跳转；邮件链接的入口与令牌从 `window.location` 读（有路由时传 `search`）。后台的登录页、OIDC 回调页、三个落地页与 step-up
   是这些积木外的 React Router 适配（`src/auth/routerNavigation.ts`），测试 id 与行为不变，后台不显示外观切换。
+- **服务不响应时（17x）**：维护或重启期间，反向代理以自己的页面回答一切请求（502 / 503 / 504，非 JSON，带 `Retry-After`），在线时连不上同样算。
+  `@jabiz/client` 的请求（`api`、`sessionFetch`）把这类回答记为"服务不可用"（`observedFetch`、`useServiceUnavailable`）；应用自己的 503（`PROCESS_BUSY`、
+  `QUERY_TIMEOUT`，JSON）照常是错误。`ServiceUnavailableNotice`（`OfflineBanner` 在线时即显示它，通用后台的外壳另放一个）以不可关闭的警示对话框整页说一次，
+  不在每个区块各报一次错；按 `Retry-After`（10–300 秒）以入口的说明（`/api/auth/entries/<入口>`）探测，也可"立即重试"；任一请求或探测得到回答即恢复，
+  并让外围的 QueryClient 重新读取（`invalidateQueries`）。不自动刷新整页：正在填写的内容不丢。
 - **`@jabiz/client` 的无界面函数**（D43，16c-1）：`configureClient({ entry })`、`entryInfo()`、`register()`、`requestPasswordReset()`、
   `confirmPasswordReset()`、`resendVerification()`、`changePassword()`、`listSessions()`、`revokeSession(id, current)`（结束本机会话时清空本地令牌）、`revokeOtherSessions()`、`startIdentityLink(provider, {currentPassword?}, returnTo)`、`finishIdentityLink()`、`listIdentities()`、`unlinkIdentity(id)`（16f-1）、`getMailPreferences()` / `setMailPreference(template, subscribed)`、`getMailLanguage()` / `setMailLanguage(locale | null)`、`onMailLanguageChange(listener)`、`mailLanguageOffer(lang)`（16s，D49）、`readMailLink()` / `useMailLink()`（读出入口与令牌，以 `replaceState` 去掉令牌，
   页面打开期间 `<meta name="referrer" content="no-referrer">`）、`isProblem(error, code)`、`useOnline()`；`createApiClient<Paths>()` 以应用自己快照生成的类型

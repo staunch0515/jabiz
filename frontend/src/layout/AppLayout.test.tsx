@@ -19,6 +19,8 @@ const auth = {
 vi.mock('@jabiz/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@jabiz/client')>()),
   useAuth: () => auth,
+  // The shell's own calls (tasks, mail preferences) go nowhere in jsdom: not the service being down (17x).
+  useServiceUnavailable: () => null,
   useIdleLock: (seconds: number | null, onIdle: () => void) => {
     idle.seconds = seconds
     idle.onIdle = onIdle

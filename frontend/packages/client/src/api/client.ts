@@ -1,5 +1,6 @@
 import createClient from 'openapi-fetch'
 import type { paths } from './schema'
+import { observedFetch } from './availability'
 import { ApiError, toApiError } from './problem'
 import { session, withRefreshLock } from './session'
 
@@ -148,17 +149,18 @@ async function authFetch(request: Request): Promise<Response> {
   const path = new URL(request.url).pathname
   const retry = request.clone()
   const again = request.clone()
-  let response = await globalThis.fetch(decorate(request))
+  // Every call notes whether the service answered (17x): the proxy's maintenance page is not the application's error.
+  let response = await observedFetch(decorate(request))
   if (response.status === 401 && !SESSION_PATHS.includes(path) && session.refreshToken()) {
     // A refused refresh has already ended the session; a failed one (network) keeps it for the next attempt.
     if (await refreshSession()) {
       retry.headers.delete('Authorization')
-      response = await globalThis.fetch(decorate(retry))
+      response = await observedFetch(decorate(retry))
     }
   }
   if (!SESSION_PATHS.includes(path) && path !== STEP_UP_PATH && (await stepUpFor(response))) {
     again.headers.delete('Authorization')
-    return globalThis.fetch(decorate(again))
+    return observedFetch(decorate(again))
   }
   return response
 }
@@ -178,7 +180,7 @@ export async function sessionFetch(
     headers.set('Accept-Language', language)
     const token = session.accessToken()
     if (token) headers.set('Authorization', `Bearer ${token}`)
-    return globalThis.fetch(path, { ...init, headers })
+    return observedFetch(path, { ...init, headers })
   }
   let response = await send()
   if (response.status === 401 && session.refreshToken() && (await refreshSession())) {
