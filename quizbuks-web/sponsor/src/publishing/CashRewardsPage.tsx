@@ -34,6 +34,7 @@ import { Link } from '../qb/router'
 import { CASH_STATUSES, markCashPaid, searchCashRewards, type CashRewardRow, type CashStatus } from './api'
 import { publicationPath } from './paths'
 import { useCashStatusLabel } from './shared'
+import { playSound } from '../qb/sound'
 
 export const CASH_REWARDS_PATH = '/cash-rewards'
 export const CASH_REWARDS_QUERY = ['qb', 'cash-rewards'] as const
@@ -58,6 +59,7 @@ function MarkPaidDialog({ reward, onClose }: { reward: CashRewardRow; onClose: (
     mutationFn: () => markCashPaid(reward.cashRewardId, note),
     onSuccess: async () => {
       notify.success(t('publishing.cash.marked', { code: reward.code }))
+      playSound('success')
       await queryClient.invalidateQueries({ queryKey: CASH_REWARDS_QUERY })
       onClose()
     },

@@ -53,6 +53,7 @@ import { LegalLinks } from './qb/LegalLinks'
 import { LegalPage } from './qb/LegalPage'
 import { QB } from './qb/messages'
 import { Link, navigate, navigation, Redirect, useLocation } from './qb/router'
+import { useSoundSetting } from './qb/SoundSettings'
 import { useSessionLock } from './qb/session'
 import { BANK_PATH, PAYOUT_PATH, WALLET_PATH } from './wallet/api'
 import { kudosMethodOf } from './wallet/kudos'
@@ -192,6 +193,8 @@ function SignedIn({ path }: { path: string }) {
   const { t } = useTranslation(QB)
   // The app's entry never locks for idleness (idle-timeout 0); the hook follows whatever the server says.
   useSessionLock()
+  // Q57: the sound effects follow the taker's switch.
+  useSoundSetting()
   const { userId, emailVerified, displayName } = useAuth()
   const profile = useQuery({ queryKey: PROFILE_QUERY, queryFn: readMyProfile })
   // The pages start from who is signed in (the sign-up name prefills the profile): wait until the server said so.

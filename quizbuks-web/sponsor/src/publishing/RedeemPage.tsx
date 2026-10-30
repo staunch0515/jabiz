@@ -43,6 +43,7 @@ import {
 import { publicationPath, redeemLink } from './paths'
 import { posterPng, qrFileName, qrImageUrl, qrPng, qrSvg } from './qr'
 import { useRedemptionStatusLabel } from './shared'
+import { playSound } from '../qb/sound'
 
 export const REDEEM_PATH = '/redeem'
 export const REDEMPTIONS_QUERY = ['qb', 'redemptions'] as const
@@ -210,6 +211,7 @@ function Claims() {
       confirm ? confirmRedemption(redemptionId) : declineRedemption(redemptionId),
     onSuccess: async (_output, { confirm }) => {
       notify.success(t(confirm ? 'publishing.redeem.confirmed' : 'publishing.redeem.declined'))
+      if (confirm) playSound('reward')
       await queryClient.invalidateQueries({ queryKey: REDEMPTIONS_QUERY })
     },
     onError: async (error) => {

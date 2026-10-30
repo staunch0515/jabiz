@@ -1,15 +1,16 @@
 import { useTranslation } from 'react-i18next'
 import { SPONSOR } from '../messages'
-import { AccountSections } from '../qb/AccountSections'
+import { AccountSection, AccountSections } from '../qb/AccountSections'
 import { LanguageSelect } from '../qb/LanguageSelect'
 import { QB } from '../qb/messages'
 import { navigate } from '../qb/router'
+import { SoundSwitch } from '../qb/SoundSettings'
 
 export const ACCOUNT_PATH = '/account'
 
 /**
  * The sponsor's own account (M-02, M-03, M-70): the address, the password, optional two-step verification (Q-7), the
- * sessions at the console, the latest sign-ins, the mail settings (Q7a) and the interface language. The name and company are the sponsor
+ * sessions at the console, the latest sign-ins, the mail settings (Q7a), the interface language and the sound effects (Q57). The name and company are the sponsor
  * profile's (onboarding page). No provider accounts: the console offers no identity provider (Q-6).
  */
 export function AccountPage() {
@@ -23,6 +24,9 @@ export function AccountPage() {
       </div>
       <AccountSections returnTo={ACCOUNT_PATH} mailHint={tSponsor('mail.hint')}
         onSignedOut={() => navigate('/login', { replace: true })} />
+      <AccountSection title={t('sound.title')} testId="account-sound">
+        <SoundSwitch />
+      </AccountSection>
     </section>
   )
 }

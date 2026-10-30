@@ -8,6 +8,7 @@ import { APP } from '../messages'
 import { QB } from '../qb/messages'
 import { problemText } from '../qb/problems'
 import { Link } from '../qb/router'
+import { playSound } from '../qb/sound'
 import {
   CODE_QUERY,
   confirmClaim,
@@ -95,6 +96,7 @@ function Claims() {
       confirm ? confirmClaim(redemptionId) : declineClaim(redemptionId),
     onSuccess: async (_output, { confirm }) => {
       notify.success(t(confirm ? 'staff.confirmed' : 'staff.declined'))
+      if (confirm) playSound('reward')
       await queryClient.invalidateQueries({ queryKey: COUNTER_QUERY })
     },
     onError: async (error) => {

@@ -64,6 +64,7 @@ import { LegalPage } from './qb/LegalPage'
 import { QB } from './qb/messages'
 import { hrefOf, navigate, navigation, Redirect, useLocation } from './qb/router'
 import { useSessionLock } from './qb/session'
+import { useSoundSetting } from './qb/SoundSettings'
 import { TRANSACTIONS_PATH } from './transactions/api'
 import { TransactionsPage } from './transactions/TransactionsPage'
 import { BankTopUpPage } from './wallet/BankTopUpPage'
@@ -127,6 +128,8 @@ function SignedIn({ path }: { path: string }) {
   const sponsor = useMySponsor()
   // Q28: a sponsor who may not pay in the platform's Kudos has no use for the wallet and its top-ups; the server
   // decides what they may publish, this only hides the pages. Until the answer is in (or without one) they show.
+  // Q57: the sound effects follow the sponsor's switch.
+  useSoundSetting()
   const rewards = useQuery({ queryKey: REWARD_SETTINGS_QUERY, queryFn: readRewardSettings, staleTime: 60_000 })
   const kudos = rewards.data ? rewards.data.methods.includes('PLATFORM') : true
   // The transactions page starts from its address's filters: another address (the nav, back, forward) starts it anew.

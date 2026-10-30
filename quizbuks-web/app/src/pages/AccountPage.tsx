@@ -24,6 +24,7 @@ import { readMyProfile } from '../qb/api'
 import { LanguageSelect } from '../qb/LanguageSelect'
 import { QB } from '../qb/messages'
 import { legalPath } from '../qb/legal'
+import { SoundSwitch } from '../qb/SoundSettings'
 import { Link, navigate, Redirect, useLocation } from '../qb/router'
 import { ProfileDetails } from './ProfileDetails'
 import { PROFILE_QUERY, ProfileForm } from './ProfileForm'
@@ -85,7 +86,7 @@ const ICONS: Record<AccountPart, LucideIcon> = {
  * The taker's own account (U-70, U-71; M-02 for sign-ins), as a menu of its parts (Q56): the profile, the details for
  * matching (Q47), signing in and security (the address, which cannot be changed, U-70; the password, two-step
  * verification, linked accounts, the sessions and the latest sign-ins), the mail (Q7a), the app's settings (the
- * interface language, installing the app), the taker's ID and their place on a sponsor's staff (Q39); then help and
+ * interface language, the sound effects, installing the app), the taker's ID and their place on a sponsor's staff (Q39); then help and
  * the legal texts. The old `/account?section=details` still opens the details.
  */
 export function AccountPage({ path }: { path: string }) {
@@ -239,13 +240,17 @@ function MailPart() {
   return <MailSection hint={tApp('mail.hint')} title={false} />
 }
 
-/** The app's own settings: the interface language and installing the app (Q57's sound and Q59's languages join). */
+/** The app's own settings: the interface language, the sound effects (Q57), installing the app (Q59's languages join). */
 function PreferencesPart() {
+  const { t } = useTranslation(QB)
   const { t: tApp } = useTranslation(APP)
   return (
     <div className="flex flex-col gap-8">
       <AccountSection title={tApp('account.language')} testId="account-language">
         <div><LanguageSelect /></div>
+      </AccountSection>
+      <AccountSection title={t('sound.title')} testId="account-sound">
+        <SoundSwitch />
       </AccountSection>
       <AccountInstallEntry />
     </div>
