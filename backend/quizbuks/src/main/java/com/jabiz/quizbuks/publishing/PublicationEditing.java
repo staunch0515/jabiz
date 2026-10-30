@@ -190,6 +190,24 @@ final class PublicationEditing {
                 BAN_ROWS));
     }
 
+    /**
+     * Loads the caller's operator (Q59c-2), as {@link #loadSponsorProfile} does with the profile: their publication's
+     * review belongs to it, as its operator's members are the ones who see and decide it (platform decision D64).
+     * None: headquarters'.
+     */
+    static <I, O> void loadSponsorOperator(ProcessDefinitionBuilder<I, O, ProcessContext> pb) {
+        pb.step("Load the sponsor's operator", QueryEntities.<ProcessContext>of(
+            QbOperators.defaultDataset(QbOperators.ASSIGNMENT), ctx -> EntityQuery.builder()
+                .where(new QueryPredicate.Eq("userId", ctx.request().actorId())).limit(1).build(), SPONSOR_OPERATOR));
+    }
+
+    /** The case in its sponsor's operator's scope, when the sponsor's operator was loaded and they have one. */
+    static ApprovalCase withOperator(ApprovalCase approvalCase, ProcessContext ctx) {
+        List<EntityInstance> rows = ctx.contains(SPONSOR_OPERATOR) ? list(ctx, SPONSOR_OPERATOR) : List.of();
+        return rows.isEmpty() ? approvalCase : approvalCase.scope(QbOperators.SCOPE,
+            String.valueOf((Object) rows.getFirst().get("operatorId")));
+    }
+
     /** The caller's reward methods setting (Q22), for {@link #allowedMethods}. */
     static final String SPONSOR_METHODS = "sponsorMethods";
     /** The reward parameters (Q28): the default methods and the highest reward per attempt, at the operation time. */

@@ -108,6 +108,8 @@ public final class BanProcesses {
             if (operator) {
                 AccountEditing.loadOfUser(pb, "Load the sponsor's onboarding", QbAccounts.SPONSOR,
                     AccountEditing.SPONSORS);
+                // Q59c-2: only a sponsor the caller's operator looks after.
+                OperatorChecks.ownSponsor(pb, AccountEditing::userId);
             }
             AccountEditing.loadUser(pb, AccountEditing::userId);
             pb.step("Load the user's roles", QueryEntities.<ProcessContext>of(SecurityEntities.USER_ROLE_DATASET,
@@ -227,6 +229,10 @@ public final class BanProcesses {
                 OperatorChecks.member(pb);
             }
             AccountEditing.lock(pb);
+            if (operator) {
+                // Q59c-2: only a sponsor the caller's operator looks after.
+                OperatorChecks.ownSponsor(pb, AccountEditing::userId);
+            }
             AccountEditing.loadUser(pb, AccountEditing::userId);
             loadBan(pb);
             pb.compute("Lift the ban", (metadata, ctx) -> unban(ctx));

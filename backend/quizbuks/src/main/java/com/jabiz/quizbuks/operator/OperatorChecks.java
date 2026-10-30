@@ -10,9 +10,11 @@ import com.jabiz.runtime.BusinessRuleViolationException;
 import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.process.steps.HoldLock;
 import com.jabiz.runtime.process.steps.QueryEntities;
+import com.jabiz.runtime.process.steps.RequireScope;
 
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 
 /**
  * The caller's place on an operator's staff, which every act of an operator's member starts with: the membership is
@@ -63,6 +65,38 @@ public final class OperatorChecks {
     }
 
     @SuppressWarnings("unchecked")
+    /** Where {@link #ownSponsor} keeps the sponsor's assignment. */
+    static final String SPONSOR_ASSIGNMENT = "ownSponsorAssignment";
+
+    /**
+     * Q59c-2 (platform decision D64): the sponsor a process acts on ({@code sponsorUserId}, read after the object was
+     * loaded) must be the caller's operator's when an operator's member runs it; any other is not found (404).
+     * Headquarters, and the processes of other entries, pass. A sponsor's publications, rewards and prizes are theirs.
+     */
+    public static <I, O> void ownSponsor(ProcessDefinitionBuilder<I, O, ProcessContext> pb,
+        Function<ProcessContext, Object> sponsorUserId) {
+        pb.step("Load the sponsor's operator", QueryEntities.<ProcessContext>of(
+                QbOperators.defaultDataset(QbOperators.ASSIGNMENT), ctx -> {
+                    Object sponsor = sponsorUserId.apply(ctx);
+                    return EntityQuery.builder().where(new QueryPredicate.In("userId",
+                        sponsor == null ? List.of() : List.of(String.valueOf(sponsor)))).limit(1).build();
+                }, SPONSOR_ASSIGNMENT))
+            .step("The sponsor is the operator's", RequireScope.<ProcessContext>of(QbOperators.SCOPE, ctx -> {
+                EntityInstance assignment = first(ctx, SPONSOR_ASSIGNMENT);
+                return assignment == null ? null : String.valueOf((Object) assignment.get("operatorId"));
+            }, ctx -> "Sponsor " + sponsorUserId.apply(ctx)));
+    }
+
+    /**
+     * The entry scope of the sponsor {@link #ownSponsor} loaded the operator of: their operator's, for the tasks made
+     * about them (Q59c-2); null for a sponsor of headquarters'.
+     */
+    public static com.jabiz.context.EntryScope sponsorScope(ProcessContext ctx) {
+        EntityInstance assignment = first(ctx, SPONSOR_ASSIGNMENT);
+        return assignment == null ? null
+            : new com.jabiz.context.EntryScope(QbOperators.SCOPE, String.valueOf((Object) assignment.get("operatorId")));
+    }
+
     static List<EntityInstance> list(ProcessContext ctx, String key) {
         List<EntityInstance> found = (List<EntityInstance>) ctx.get(key);
         return found == null ? List.of() : found;

@@ -10,6 +10,7 @@ import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.quizbuks.publishing.PublisherKind;
+import com.jabiz.quizbuks.operator.OperatorScopes;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -42,6 +43,8 @@ public class RewardConfig {
         return DatasetDefinition.define(QbRewards.defaultDataset(entity), d -> d
             .targetEntityType(entity)
             .asDefault()
+            // Q59c-2: an operator's session sees its sponsors' rows only (platform decision D64).
+            .scope(OperatorScopes.of(entity))
             .permissions(QbPermissions.ADMIN_PUBLICATION_READ, QbPermissions.SPONSOR_VIEW_WRITE)
             .policy(p -> p.processOnlyWrites().maxWriteBatchSize(maxWriteBatch))
             .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));

@@ -1,6 +1,6 @@
 /*---
 id: qb.operator.sponsors
-description: "The sponsors an operator looks after (Q48a): every ordinary sponsor while there is one operator (D-Q48-2), with whose they are, their review, ban and running publications"
+description: "The sponsors an operator looks after (Q48a; its own only since Q59c-2, the dataset of the sponsors being limited to them), with their review, ban and running publications"
 entities: [QbSponsor, SecUser, QbSponsorOperator, QbOperator, QbOperatorMember, QbUserBan, QbPublicationCard]
 datasets:
   QbSponsor: urn:jabiz:dataset:default:QbSponsor

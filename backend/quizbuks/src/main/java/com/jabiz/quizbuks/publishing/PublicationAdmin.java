@@ -129,6 +129,15 @@ public final class PublicationAdmin {
                 })
                 .steps(PublicationEditing::lockStatesAndLoadAny)
                 .steps(b -> {
+                    if (operator) {
+                        // Q59c-2: only a publication of a sponsor the caller's operator looks after.
+                        OperatorChecks.ownSponsor(b, ctx -> {
+                            EntityInstance publication = PublicationEditing.publication(ctx);
+                            return publication == null ? null : publication.get("publisherId");
+                        });
+                    }
+                })
+                .steps(b -> {
                     if (readBan) {
                         PublicationEditing.loadSponsorBan(b, PublicationEditing::publication);
                     }

@@ -66,6 +66,12 @@ public final class QbOperators {
     /** Members of one operator at most (they are few, like a sponsor's staff, D-Q48-3). */
     public static final int MAX_MEMBERS = 50;
 
+    /**
+     * The entry scope of the operators' sessions (Q59c-2, platform decision D64): the operator the member works for.
+     * The data an operator's permissions read is limited to it ({@link OperatorScopes}).
+     */
+    public static final String SCOPE = "operator";
+
     /** The lock of the languages of the operators: two active operators never take the same language (Q59c). */
     public static final String LANGUAGES_LOCK = "qb.operator.languages";
 

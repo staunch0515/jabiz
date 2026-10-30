@@ -11,6 +11,7 @@ import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.quizbuks.publishing.PublisherKind;
 import com.jabiz.quizbuks.play.QbPlay;
 import com.jabiz.quizbuks.publishing.QbPublications;
+import com.jabiz.quizbuks.operator.OperatorScopes;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -71,6 +72,8 @@ public class AnalyticsConfig {
         return DatasetDefinition.define(QbAnalytics.defaultDataset(entity), d -> d
             .targetEntityType(entity)
             .asDefault()
+            // Q59c-2: an operator's session sees its sponsors' rows only (platform decision D64).
+            .scope(OperatorScopes.of(entity))
             .permissions(QbPermissions.ADMIN_PUBLICATION_READ, QbPermissions.SPONSOR_VIEW_WRITE)
             .policy(p -> p.processOnlyWrites().maxWriteBatchSize(maxWriteBatch)
                 .queryTimeout(AnalyticsLimits.QUERY_TIMEOUT))

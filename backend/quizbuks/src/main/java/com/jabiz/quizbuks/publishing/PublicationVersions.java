@@ -120,6 +120,7 @@ public final class PublicationVersions {
                     ctx -> QbContent.lockName(ctx.get(FIRST, EntityInstance.class).get("quizId"))))
                 .steps(PublicationEditing::lockStatesAndLoad)
                 .steps(b -> PublicationEditing.loadSponsorPublications(b, PublicationEditing::publication))
+                .steps(PublicationEditing::loadSponsorOperator)
                 .step("Load the review switch", LoadParams.<ProcessContext>of(ProcessContext::opTime, PARAMS,
                     QbParams.REVIEW_PUBLICATION_AUTO))
                 .steps(PublicationEditing::loadTiers)
@@ -198,8 +199,8 @@ public final class PublicationVersions {
         }
         boolean takenDown = !PublicationEditing.takenDownOfQuiz(ctx, publication).isEmpty();
         ctx.put(TAKEN_DOWN, takenDown);
-        ctx.put(CASE, PublicationEditing.approvalCase(publication, version.id(), list(ctx, TIERS), version,
-            autoApprove(ctx), takenDown));
+        ctx.put(CASE, PublicationEditing.withOperator(PublicationEditing.approvalCase(publication, version.id(),
+            list(ctx, TIERS), version, autoApprove(ctx), takenDown), ctx));
     }
 
     static void requested(ProcessContext ctx) {
