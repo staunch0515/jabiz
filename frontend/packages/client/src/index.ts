@@ -19,6 +19,20 @@ export {
 } from './api/client'
 export type { RefreshOptions } from './api/client'
 export { toApiError } from './api/problem'
+export {
+  isProxyUnavailable,
+  noteNetworkFailure,
+  noteResponse,
+  observedFetch,
+  onServiceRestored,
+  probeService,
+  resetServiceAvailability,
+  serviceUnavailable,
+  useServiceUnavailable,
+  PROBE_MAX_MS,
+  PROBE_MIN_MS,
+} from './api/availability'
+export type { ServiceUnavailable } from './api/availability'
 export type { Violation } from './api/problem'
 export { session } from './api/session'
 export type { SessionPersistence } from './api/session'
