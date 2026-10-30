@@ -4823,3 +4823,17 @@ Playwright 端到端（需维护连接与数据库角色，以 Vitest 与 `Accou
 未包括：审计（服务端分页）、会话、封存、访问审查、保留与待办页仍无排序，留待后续。
 
 **17w 状态**：📝 待评审。
+
+### 17x 服务维护或重启时，页面整页说一次（需求 2026-10-30）
+
+**缘由**：需求方 2026-10-30：QuizBuks staging 维护时，已打开的 App 钱包页每个区块各显示一次"出错了，请重试"，维护结束也不会自己恢复。
+维护时反向代理（Caddy）以维护页回答一切请求（503、HTML、`Retry-After`），前端把它当作普通错误。
+
+| # | 内容 |
+|---|---|
+| 17x-1 | `@jabiz/client`：`observedFetch` 记下每个请求有没有得到服务的回答：502 / 503 / 504 而非 JSON（代理自己的页面），或在线时连接失败（取消的请求与离线不算）即"服务不可用"（`serviceUnavailable`、`useServiceUnavailable`、`onServiceRestored`）；应用自己的 503（`PROCESS_BUSY`、`QUERY_TIMEOUT`）是 JSON，不算。`api` 与 `sessionFetch` 都经过它 |
+| 17x-2 | 探测：按 `Retry-After`（限制在 10–300 秒；连接失败为 10 秒）以 `GET /api/auth/entries/<入口>` 探测，并发共用一次；任一请求或探测得到回答即恢复，`useServiceUnavailable` 让外围的 QueryClient 重新读取 |
+| 17x-3 | `@jabiz/ui`：`ServiceUnavailableNotice`：不可关闭的警示对话框（"系统维护中"，下次检查的倒计时不是实时区域，"立即重试"），三语；`OfflineBanner` 在线时显示它（应用的 SPA 不用改），通用后台的外壳另放一个 |
+| 17x-4 | 测试：`availability.test.tsx`（判定、间隔的上下限、连接失败、恢复与处理器、`api` 与 `sessionFetch`、`PROCESS_BUSY` 不算、恢复后重新读取）、`banners.test.tsx`（对话框、不可关闭、立即重试、三语、离线时让给离线提示）、e2e `maintenance.spec.ts`（打开的列表遇到维护页：整页一次、axe；恢复后立即重试即关闭、重新读取）；前端测试的公共初始化每个测试后清除该状态；设计 12 一条 |
+
+**17x 状态**：📝 待评审。

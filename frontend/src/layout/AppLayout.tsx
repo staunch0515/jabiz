@@ -12,6 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
   offerMailLanguage,
+  ServiceUnavailableNotice,
   ShellNav,
   ThemeToggle,
   Tooltip,
@@ -229,6 +230,8 @@ export default function AppLayout() {
       <StepUpProvider>
         <Outlet />
       </StepUpProvider>
+      {/* During maintenance or a restart: said once for the whole page (ROADMAP 17x), not in every part of it. */}
+      <ServiceUnavailableNotice />
     </AppShell>
   )
 }
