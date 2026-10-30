@@ -22,7 +22,7 @@ import {
   cn,
 } from '@jabiz/ui'
 import { QueryClientProvider, useQuery } from '@tanstack/react-query'
-import { History, House, Inbox, UserRound, Wallet, type LucideIcon } from 'lucide-react'
+import { History, House, Inbox, ScanLine, UserRound, Wallet, type LucideIcon } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from './messages'
@@ -62,6 +62,7 @@ import { BankPage } from './wallet/BankPage'
 import { rememberShareNext } from './share/share'
 import { SharePage } from './share/SharePage'
 import { STAFF_PATH } from './staff/api'
+import { SCAN_PATH, ScanPage } from './scan/ScanPage'
 import { StaffDeskPage } from './staff/StaffDeskPage'
 import { PayoutPage } from './wallet/PayoutPage'
 import { WalletPage } from './wallet/WalletPage'
@@ -102,8 +103,9 @@ function toSignIn() {
 }
 
 /** The app's header: the name, the appearance and signing out. */
-function Header() {
+function Header({ scan = false }: { scan?: boolean }) {
   const { t } = useTranslation(QB)
+  const { t: tApp } = useTranslation(APP)
   const { signOut } = useAuth()
   return (
     <header className="bg-background sticky top-0 z-10 border-b">
@@ -111,6 +113,15 @@ function Header() {
       <EnvironmentBanner className={ONE_LINE_BANNER} />
       <div className="mx-auto flex max-w-md items-center gap-2 px-4 py-2">
         <Wordmark name={t('brand')} compact className="text-primary mr-auto" />
+        {/* Q52: in the shop, the sponsor's code is scanned here, in the signed-in app. */}
+        {scan && (
+          <Button asChild size="sm" variant="outline">
+            <Link to={SCAN_PATH} data-testid="scan-open">
+              <ScanLine aria-hidden />
+              {tApp('scan.open')}
+            </Link>
+          </Button>
+        )}
         <ThemeToggle />
         <Button variant="ghost" size="sm" data-testid="sign-out"
           onClick={() => void signOut().then(() => {
@@ -211,6 +222,7 @@ function SignedIn({ path }: { path: string }) {
   else if (path === ACCOUNT_PATH) page = <AccountPage />
   else if (path === INBOX_PATH) page = <InboxPage />
   else if (path === STAFF_PATH) page = <StaffDeskPage />
+  else if (path === SCAN_PATH) page = <ScanPage />
   else if (inboxItemOf(path)) {
     const message = inboxItemOf(path)!
     page = <InboxItemPage key={`${message.kind}:${message.id}`} kind={message.kind} id={message.id} />
@@ -224,7 +236,7 @@ function SignedIn({ path }: { path: string }) {
   const nav = path !== WELCOME && item?.page !== 'play'
   const pages = (
     <div className="flex min-h-full flex-col">
-      <Header />
+      <Header scan={nav && path !== SCAN_PATH} />
       <main className={cn('mx-auto flex w-full max-w-md flex-col gap-4 px-4 py-4', nav && 'pb-24')}>
         <OfflineBanner />
         <PwaUpdatePrompt />

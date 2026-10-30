@@ -11,6 +11,7 @@ import { checkRedeemCode, claimRedemption, readAttemptResult, type RedeemPrize, 
 import { problemText } from '../qb/problems'
 import { Link } from '../qb/router'
 import { forgetRedeem } from '../redeemReturn'
+import { SCAN_PATH } from '../scan/ScanPage'
 
 /** How often the page asks whether the sponsor confirmed a claim from their printed code. */
 const WAIT_POLL = 4_000
@@ -79,8 +80,15 @@ export function RedeemPage({ scannedKey }: { scannedKey: string }) {
     return (
       <PageState kind={invalid ? 'empty' : 'error'} titleAs="h1" title={invalid ? t('redeemPage.invalidTitle') : undefined}
         description={invalid ? t('redeemPage.invalid') : problemText(check.error)}
-        action={invalid ? <Link to="/" className="underline underline-offset-4">{t('redeemPage.home')}</Link>
-          : <Button variant="outline" onClick={() => void check.refetch()}>{tQb('retry')}</Button>} />
+        action={invalid ? (
+          // A screen's code renews every minute: scanning the current one again is what the person needs (Q52).
+          <span className="flex flex-col items-center gap-3">
+            <Button asChild>
+              <Link to={SCAN_PATH} data-testid="redeem-scan-again">{t('scan.scanAgain')}</Link>
+            </Button>
+            <Link to="/" className="underline underline-offset-4">{t('redeemPage.home')}</Link>
+          </span>
+        ) : <Button variant="outline" onClick={() => void check.refetch()}>{tQb('retry')}</Button>} />
     )
   }
   if (claimed) {
@@ -108,7 +116,13 @@ export function RedeemPage({ scannedKey }: { scannedKey: string }) {
           </p>
           {claim.isError && (
             <Alert variant="destructive" data-testid="redeem-failed">
-              <AlertDescription>{problemText(claim.error)}</AlertDescription>
+              <AlertDescription className="flex flex-col items-start gap-2">
+                <span>{problemText(claim.error)}</span>
+                {/* The code expired while the prize was chosen: the screen shows a new one. */}
+                <Link to={SCAN_PATH} className="underline underline-offset-4" data-testid="redeem-failed-scan">
+                  {t('scan.scanAgain')}
+                </Link>
+              </AlertDescription>
             </Alert>
           )}
           <ul className="flex flex-col gap-3">
