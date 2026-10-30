@@ -1,11 +1,16 @@
 import '@testing-library/jest-dom/vitest'
+import { resetServiceAvailability } from '@jabiz/client'
 import { cleanup, configure } from '@testing-library/react'
 import { afterEach } from 'vitest'
 
 // A loaded machine renders slowly: the default second for findBy/waitFor made tests flaky.
 configure({ asyncUtilTimeout: 5000 })
 
-afterEach(() => cleanup())
+// The client's note of whether the service answers is module state: a test that left it down must not carry it on.
+afterEach(() => {
+  cleanup()
+  resetServiceAvailability()
+})
 
 // Radix UI (the @jabiz/ui components) reads browser APIs jsdom does not provide.
 Object.defineProperty(window, 'matchMedia', {

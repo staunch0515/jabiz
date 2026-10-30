@@ -1,4 +1,4 @@
-import { api, runProcess, runQuery, unwrap } from '@jabiz/client'
+import { api, observedFetch, runProcess, runQuery, unwrap } from '@jabiz/client'
 import { LEGAL } from './ids'
 
 /*
@@ -154,7 +154,8 @@ export async function publicQuery<Row>(id: string, params: Record<string, string
   }
   query.set('limit', String(limit))
   query.set('count', 'false')
-  const response = await fetch(`/api/public/queries/${encodeURIComponent(id)}?${query}`, {
+  // Through the client's note of the service's answers: during maintenance, one notice for the page (17x).
+  const response = await observedFetch(`/api/public/queries/${encodeURIComponent(id)}?${query}`, {
     headers: { Accept: 'application/json' },
   })
   if (!response.ok) throw new Error(`HTTP ${response.status}`)

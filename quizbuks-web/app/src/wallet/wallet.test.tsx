@@ -137,6 +137,30 @@ describe('the wallet helpers', () => {
 })
 
 describe('the wallet', () => {
+  it('says once that the service is down for maintenance, and reads every part again once it is back (17x)', async () => {
+    server()
+    const answer = vi.mocked(globalThis.fetch).getMockImplementation()!
+    let down = false
+    // During maintenance the reverse proxy answers every call with its own page: 503, HTML, with Retry-After.
+    vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => down
+      ? new Response('<html>maintenance</html>', { status: 503,
+        headers: { 'Content-Type': 'text/html', 'Retry-After': '60' } })
+      : answer(input, init))
+    window.history.replaceState(null, '', '/wallet')
+    render(<App />)
+    expect(await screen.findByTestId('wallet-available')).toHaveTextContent('Kudos')
+    down = true
+    // The page open during maintenance reads something: one notice for the page, not an error in every part.
+    const periods = within(screen.getByTestId('kudos-period')).getAllByRole('radio')
+    await userEvent.click(periods[periods.length - 1])
+    expect(await screen.findByRole('alertdialog')).toHaveTextContent('Down for maintenance')
+    expect(screen.getAllByTestId('service-unavailable')).toHaveLength(1)
+    down = false
+    await userEvent.click(screen.getByTestId('service-unavailable-retry'))
+    await waitFor(() => expect(screen.queryByTestId('service-unavailable')).toBeNull())
+    expect(screen.getByTestId('wallet-available')).toHaveTextContent('Kudos')
+  })
+
   it('shows what is held back from transfers and until when (Q10b)', async () => {
     const { queryBodies } = server({ wallet: { available: '1250', totalEarned: '1500', pendingCount: 0,
       pendingAmount: '0', inTransfer: '0', held: '450', heldOpen: '150', heldUntil: '2026-10-21T01:00:00Z' } })
