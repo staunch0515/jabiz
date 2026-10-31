@@ -169,6 +169,35 @@ class OperatorIsolationIT extends PlayItSupport {
             404);
     }
 
+    /**
+     * Q48e-1: voiding a prize and deciding a disputed digital prize check the caller's membership within the act, as the
+     * operator's other acts do: a member removed stops at once, though their access token is still valid. The check
+     * comes before the record is read, so a record that does not exist shows it: refused for the removed member, not
+     * found for a member and for headquarters.
+     */
+    @Test
+    void aRemovedMemberNoLongerVoidsOrResolvesWithTheirTokenStillValid() {
+        String operator = newOperator(unique("Gone"));
+        String stays = member(operator, unique("q48e1-stays"));
+        String leaves = member(operator, unique("q48e1-leaves"));
+        String staysSession = operatorSession(stays, operator);
+        String leavesSession = operatorSession(leaves, operator);
+        run(OperatorProcesses.MEMBER_REMOVE, hq(), body("userId", leaves));
+        String hq = TestTokens.bearer(tokens, "q48e1-hq", QbPermissions.REDEMPTION_VOID, QbPermissions.DIGITAL_RESOLVE);
+        Map<String, Object> voiding = body("redemptionId", java.util.UUID.randomUUID().toString(), "note", "gone");
+        Map<String, Object> resolving = body("digitalPrizeId", java.util.UUID.randomUUID().toString(),
+            "resolution", "VOID", "note", "gone");
+
+        assertThat(String.valueOf(refused("QB_REDEMPTION_VOID", leavesSession, voiding, 422).get("violations")))
+            .contains("QB_OPERATOR_NOT_MEMBER");
+        assertThat(String.valueOf(refused("QB_DIGITAL_PRIZE_RESOLVE", leavesSession, resolving, 422)
+            .get("violations"))).contains("QB_OPERATOR_NOT_MEMBER");
+        refused("QB_REDEMPTION_VOID", staysSession, voiding, 404);
+        refused("QB_DIGITAL_PRIZE_RESOLVE", staysSession, resolving, 404);
+        refused("QB_REDEMPTION_VOID", hq, voiding, 404);
+        refused("QB_DIGITAL_PRIZE_RESOLVE", hq, resolving, 404);
+    }
+
     @SuppressWarnings("unchecked")
     private List<Object> taskSubjects(String token) {
         Map<String, Object> result = client.get().uri("/api/tasks/mine").header(HttpHeaders.AUTHORIZATION, token)

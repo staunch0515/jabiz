@@ -71,6 +71,8 @@ export interface SponsorInput {
   /** The versions of the sponsors' terms and the privacy policy the page showed (Q7b). */
   termsVersionNo?: number | null
   privacyVersionNo?: number | null
+  /** The prospecting trial that brought the sponsor (Q48e-1): a first application goes to its operator. */
+  trialKey?: string | null
 }
 
 /** `SponsorProcesses.SponsorOutput`. */

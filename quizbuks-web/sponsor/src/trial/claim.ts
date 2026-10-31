@@ -2,8 +2,9 @@ import { runProcess } from '@jabiz/client'
 
 /*
  * Which prospecting trial brought a sponsor (Q48d): the trial page's sign-up link carries its key (`?src=`); the console
- * keeps it in this browser until the sponsor has applied, then names it once (`QB_PROSPECT_CLAIM`), and the server
- * assigns them to the operator that prospected the business. Only a convenience: without the key nothing changes.
+ * keeps it in this browser, sends it with the application (Q48e-1: a first application, its review included, goes to
+ * the operator that prospected the business), then names it once more (`QB_PROSPECT_CLAIM`, for a sponsor who applied
+ * before they came by the link). Only a convenience: without the key nothing changes.
  */
 
 const STORAGE_KEY = 'qb.trial-src'
@@ -20,7 +21,8 @@ export function rememberSource(search: string) {
   }
 }
 
-function remembered(): string | null {
+/** The kept key, sent with the first application (Q48e-1); null without one. */
+export function remembered(): string | null {
   try {
     return window.localStorage.getItem(STORAGE_KEY)
   } catch {

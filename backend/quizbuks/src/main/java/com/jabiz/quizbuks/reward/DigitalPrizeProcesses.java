@@ -231,6 +231,8 @@ public final class DigitalPrizeProcesses {
                     .outputMapper(ctx -> ctx.get(OUTPUT, PrizeOutput.class));
                 pb.step("Load the days to send", LoadParams.<ProcessContext>of(ProcessContext::opTime, PARAMS,
                     QbParams.DIGITAL_SEND_DAYS));
+                // Q48e-1: an operator's member is checked within the act, before the record's lock.
+                OperatorChecks.memberWhenScoped(pb);
                 lockAndLoad(pb, QbDigitalPrizes.defaultDataset(QbDigitalPrizes.DIGITAL_PRIZE));
                 // Q59c-2: an operator's member decides their own sponsors' disputes only.
                 OperatorChecks.ownSponsor(pb, ctx -> prize(ctx) == null ? null : prize(ctx).get("publisherId"));
