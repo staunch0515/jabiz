@@ -16,7 +16,7 @@ import {
 } from '@jabiz/admin'
 import { readPendingPublications, readPendingSponsors, type PublicationRow, type SponsorRow } from './api'
 import { readPendingSponsorsAsOperator } from './operator-api'
-import { LoadFailed, PublisherLink } from './components'
+import { EmptyState, LoadFailed, PublisherLink } from './components'
 import { money, QUEUE, usePaged, when } from './hooks'
 import { PATH, PERMISSION } from './ids'
 import { readPendingSponsorPages } from './page-api'
@@ -70,7 +70,7 @@ function PublicationQueue() {
   if (query.isError) return <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
   return (
     <DataTable label={t('reviews.publicationsTable')} columns={sortable(columns)} {...table}
-      getRowId={(row) => row.publicationId} empty={t('reviews.nonePublications')}
+      getRowId={(row) => row.publicationId} empty={<EmptyState art="done" title={t('reviews.nonePublications')} />}
       rowProps={(row) => ({ 'data-testid': 'queue-publication', 'data-id': row.publicationId })} />
   )
 }
@@ -106,7 +106,7 @@ function SponsorQueue() {
   if (query.isError) return <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
   return (
     <DataTable label={t('reviews.sponsorsTable')} columns={sortable2(columns)} {...table}
-      getRowId={(row) => row.onboardingId} empty={t('reviews.noneSponsors')}
+      getRowId={(row) => row.onboardingId} empty={<EmptyState art="done" title={t('reviews.noneSponsors')} />}
       rowProps={(row) => ({ 'data-testid': 'queue-sponsor', 'data-id': row.userId })} />
   )
 }

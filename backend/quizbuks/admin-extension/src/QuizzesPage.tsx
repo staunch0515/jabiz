@@ -14,7 +14,7 @@ import {
   UserName,
   type ColumnDef,
 } from '@jabiz/admin'
-import { LoadFailed } from './components'
+import { EmptyState, LoadFailed } from './components'
 import { useLabels, usePaged, when } from './hooks'
 import { useMoreFilters } from './moreFilters'
 import { DICTIONARY, PATH } from './ids'
@@ -154,7 +154,7 @@ export default function QuizzesPage() {
         ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
         : (
           <DataTable label={t('quizzes.table')} columns={sortable(columns)} {...table} getRowId={(row) => row.quizId}
-            empty={t('quizzes.none')}
+            empty={<EmptyState art="content" title={t('quizzes.none')} />}
             rowProps={(row) => ({ 'data-testid': 'quiz-row', 'data-id': row.quizId })} />
         )}
     </div>

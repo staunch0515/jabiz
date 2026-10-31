@@ -5,6 +5,7 @@ import {
   Alert,
   AlertDescription,
   ApiError,
+  Badge,
   Button,
   Card,
   CardContent,
@@ -15,7 +16,9 @@ import {
   UserName,
   useAuth,
 } from '@jabiz/admin'
+import { EmptyArt, type ArtKind } from './art'
 import { PATH, PERMISSION, SPONSOR_KIND } from './ids'
+import { statusTone } from './status'
 
 const linkClass = 'text-primary font-medium underline-offset-4 hover:underline'
 
@@ -96,4 +99,27 @@ export function AfterDecision({ after, onRetry }: {
     )
   }
   return <Alert data-testid="decision-updating"><AlertDescription>{t('decision.updating')}</AlertDescription></Alert>
+}
+
+/**
+ * A status as a badge coloured by what it means (Q53c, `statusTone`): green done, amber waiting, red refused or
+ * failed, none when over. `label` is the dictionary's text; the code stays on the element for tests.
+ */
+export function StatusBadge({ code, label, testId }: { code: string | null | undefined; label: ReactNode;
+  testId?: string }) {
+  return (
+    <Badge variant={statusTone(code)} data-testid={testId} data-status={code ?? undefined}>{label}</Badge>
+  )
+}
+
+/** What an empty list shows (Q53c): a small drawing, a line saying so and, when it helps, what to do. */
+export function EmptyState({ title, hint, art = 'inbox', testId }: { title: ReactNode; hint?: ReactNode;
+  art?: ArtKind; testId?: string }) {
+  return (
+    <div className="flex flex-col items-center gap-2 py-6 text-center" data-testid={testId ?? 'empty-state'}>
+      <EmptyArt kind={art} />
+      <p className="text-sm font-medium">{title}</p>
+      {hint && <p className="text-muted-foreground max-w-md text-xs">{hint}</p>}
+    </div>
+  )
 }

@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
 import {
-  Badge,
   DataTable,
   EXTENSION_NAMESPACE,
   Label,
@@ -14,9 +13,9 @@ import {
   SelectValue,
   type ColumnDef,
 } from '@jabiz/admin'
-import { LoadFailed } from './components'
+import { EmptyState, LoadFailed, StatusBadge } from './components'
 import { usePaged, useLabels, when, QUEUE } from './hooks'
-import { DICTIONARY, PATH, SPONSOR_PAGE_STATUSES, SPONSOR_PAGE_STOPPED } from './ids'
+import { DICTIONARY, PATH, SPONSOR_PAGE_STATUSES } from './ids'
 import { readPendingSponsorPages, readSponsorPages, type SponsorPageRow } from './page-api'
 
 const linkClass = 'text-primary font-medium underline-offset-4 hover:underline'
@@ -46,8 +45,7 @@ function useColumns(waiting: boolean) {
       cell: ({ row }) => languageLabel(row.original.language) },
     ...(waiting ? [] : [{ id: 'status', header: t('sponsorPages.columns.status'),
       cell: ({ row }: { row: { original: SponsorPageRow } }) => (
-        <Badge variant={SPONSOR_PAGE_STOPPED.includes(row.original.status) ? 'outline' : 'secondary'}>
-          {statusLabel(row.original.status)}</Badge>
+        <StatusBadge code={row.original.status} label={statusLabel(row.original.status)} />
       ) }]),
     waiting
       ? { id: 'submittedAt', header: t('sponsorPages.columns.submittedAt'), cell: ({ row }) => when(row.original.submittedAt) }
@@ -63,7 +61,7 @@ export function SponsorPageQueue() {
   if (query.isError) return <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
   return (
     <DataTable label={t('sponsorPages.reviewsTable')} columns={sortable(columns)} {...table}
-      getRowId={(row) => row.userId} empty={t('sponsorPages.nonePending')}
+      getRowId={(row) => row.userId} empty={<EmptyState art="done" title={t('sponsorPages.nonePending')} />}
       rowProps={(row) => ({ 'data-testid': 'queue-sponsor-page', 'data-id': row.userId })} />
   )
 }
@@ -98,7 +96,7 @@ export default function SponsorPagesPage() {
       </div>
       {query.isError ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} /> : (
         <DataTable label={t('sponsorPages.list.table')} columns={sortable(columns)} {...table}
-          getRowId={(row) => row.userId} empty={t('sponsorPages.none')}
+          getRowId={(row) => row.userId} empty={<EmptyState art="search" title={t('sponsorPages.none')} />}
           rowProps={(row) => ({ 'data-testid': 'sponsor-page-row', 'data-id': row.userId })} />
       )}
     </div>

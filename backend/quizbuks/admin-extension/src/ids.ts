@@ -406,8 +406,6 @@ export const SPONSOR_PRODUCT_STATUSES = ['LISTED', 'UNLISTED', 'TAKEN_DOWN'] as 
 export const SPONSOR_PAGE_PENDING = 'PENDING'
 export const SPONSOR_PAGE_PUBLISHED = 'PUBLISHED'
 export const SPONSOR_PAGE_STATUSES = [SPONSOR_PAGE_PENDING, SPONSOR_PAGE_PUBLISHED, 'DRAFT', 'REJECTED', 'TAKEN_DOWN'] as const
-/** The states a page is not shown in because someone refused or stopped it. */
-export const SPONSOR_PAGE_STOPPED: readonly string[] = ['REJECTED', 'TAKEN_DOWN']
 
 /** The most rows one request asks for (the platform's page limit). */
 export const PAGE_LIMIT = 100

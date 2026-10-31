@@ -13,7 +13,7 @@ import {
   useAuth,
   type ColumnDef,
 } from '@jabiz/admin'
-import { LoadFailed, PublisherLink } from './components'
+import { EmptyState, LoadFailed, PublisherLink, StatusBadge } from './components'
 import { StatusFilter } from './finance-components'
 import { useLabels, usePaged, when } from './hooks'
 import { useMoreFilters } from './moreFilters'
@@ -101,9 +101,9 @@ export default function PublicationsPage() {
       header: t('publications.status'),
       cell: ({ row }) => (
         <span className="flex flex-wrap items-center gap-1">
-          <Badge variant="outline">{statusLabel(row.original.status)}</Badge>
+          <StatusBadge code={row.original.status} label={statusLabel(row.original.status)} />
           {row.original.status === 'DRAFT' && row.original.rejectReason && (
-            <Badge variant="secondary" data-testid="publication-sent-back">{t('publications.sentBack')}</Badge>
+            <Badge variant="warning" data-testid="publication-sent-back">{t('publications.sentBack')}</Badge>
           )}
         </span>
       ),
@@ -177,7 +177,7 @@ export default function PublicationsPage() {
         ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
         : (
           <DataTable label={t('publications.table')} columns={sortable(columns)} {...table}
-            getRowId={(row) => row.publicationId} empty={t('publications.none')}
+            getRowId={(row) => row.publicationId} empty={<EmptyState art="search" title={t('publications.none')} />}
             rowProps={(row) => ({ 'data-testid': 'publication-row', 'data-id': row.publicationId,
               'data-status': row.status })} />
         )}
