@@ -14,7 +14,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * The video to watch (docs/quizbuks/plans/Q19-embedded-video.md): a video material whose watching is enough to answer
  * is a YouTube or Vimeo video, one per quiz; the version keeps it, and the publication's card on the App's home carries
- * the video's player (YouTube without cookies) from when it goes on. Every other material and card has none.
+ * the video's player (YouTube without cookies) from when it goes on. Q63: without one, the card carries the first
+ * material's video the App plays, for the taker to learn from before answering; a card without such a video has none.
  */
 class WatchVideoIT extends PlayItSupport {
 
@@ -91,5 +92,32 @@ class WatchVideoIT extends PlayItSupport {
             .satisfies(row -> assertThat(row).containsEntry("video", PLAYER));
         assertThat(feed).filteredOn(row -> row.get("publicationId").equals(ordinary)).singleElement()
             .satisfies(row -> assertThat(row).containsEntry("video", null));
+    }
+
+    @Test
+    void withoutAVideoToWatchTheCardCarriesTheFirstVideoTheAppPlays() {
+        String sponsor = newSponsor("s-watch-learn");
+        credit(sponsor, 10_000);
+        String token = sponsorToken(sponsor);
+        String quizId = newQuiz(token, "Learn quiz");
+        run("QB_QUIZ_SAVE", token, body("quizId", quizId, "title", "Learn quiz", "timeLimitSec", 300));
+        // A video the App cannot play comes first: it is passed over for the one it plays.
+        run("QB_MATERIAL_SAVE", token, video(quizId, "https://video.example/learn", null));
+        run("QB_MATERIAL_SAVE", token, video(quizId, "https://vimeo.com/76979871", null));
+        run("QB_QUESTION_SAVE", token, body("quizId", quizId, "stem", "Capital of France?", "points", 2,
+            "options", List.of(body("text", "Paris", "correct", true), body("text", "Lyon"))));
+        run("QB_QUESTION_SAVE", token, body("quizId", quizId, "stem", "Capital of Japan?", "points", 3,
+            "options", List.of(body("text", "Tokyo", "correct", true), body("text", "Osaka"))));
+        String versionId = (String) run("QB_QUIZ_PUBLISH_VERSION", token, body("quizId", quizId)).get("versionId");
+        Instant now = clock.instant();
+        Map<String, Object> save = complete(versionId, "Learn run", now, now.plus(Duration.ofDays(7)));
+        save.put("regions", List.of("GLOBAL"));
+        String learn = (String) run("QB_PUBLICATION_SAVE", token, save).get("publicationId");
+        run("QB_PUBLICATION_SUBMIT", token, body("publicationId", learn));
+
+        List<Map<String, Object>> feed = items("qb.app.feed", taker(newTaker("t-watch-learn", null)), body("params",
+            body("at", clock.instant().toString()), "limit", 200));
+        assertThat(feed).filteredOn(row -> row.get("publicationId").equals(learn)).singleElement()
+            .satisfies(row -> assertThat(row).containsEntry("video", "https://player.vimeo.com/video/76979871"));
     }
 }

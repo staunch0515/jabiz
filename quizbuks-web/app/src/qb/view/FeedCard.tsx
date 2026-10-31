@@ -1,4 +1,5 @@
-import { Banknote, Coins, Gift, Ticket, Trophy, Users, type LucideIcon } from 'lucide-react'
+import { Banknote, Coins, Gift, Play, Ticket, Trophy, type LucideIcon } from 'lucide-react'
+import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { CoverPlaceholder } from '../Illustrations'
 import { formatKudos } from '../kudos'
@@ -6,6 +7,7 @@ import type { FeedCard, RewardMethod } from '../play'
 import { Link } from '../router'
 import { LazyImage } from './LazyImage'
 import { QBVIEW } from './messages'
+import { VideoPlayer } from './VideoPlayer'
 
 /** The icon of each way a reward is paid (Q34): on the cards, the quiz's page and the home's reward menu. */
 export const REWARD_METHOD_ICONS: Record<RewardMethod, LucideIcon> = {
@@ -29,65 +31,80 @@ export function RewardTag({ card }: { card: FeedCard }) {
 }
 
 /**
- * One card of the picture grid (Q34; U-10): the cover fills the whole card (a drawn placeholder without one), the
- * reward and the way it is paid sit on its top, the name, the sponsor and how many answered on a dark band at its
- * foot, so the feed reads as pictures.
+ * One card of the home (Q63, as a video site's home): the picture across the screen at 16:9 (a drawn placeholder
+ * without one), with the reward and the way it is paid on its corners; under it the sponsor's picture, the name in up
+ * to two lines and the sponsor and how many answered. A publication with a video (`card.video`: the one to watch to
+ * answer, else the first the App plays) shows a play mark on its picture, and its player instead, started muted, while
+ * `playing` (the home plays the card in the middle of the screen). `action` goes under the name (the app's start).
  */
-export function FeedCardView({ card, href }: { card: FeedCard; href: string | null }) {
+export function FeedCardView({ card, href, playing = false, action }: { card: FeedCard; href: string | null
+  playing?: boolean; action?: ReactNode }) {
   const { t } = useTranslation(QBVIEW)
   const sponsor = card.sponsorCompany ?? card.sponsorName
   const MethodIcon = REWARD_METHOD_ICONS[card.rewardMethod]
-  const className = 'group bg-card focus-visible:ring-ring/50 relative block aspect-[4/5] overflow-hidden border shadow-sm outline-none transition-shadow hover:shadow-md focus-visible:ring-[3px]'
-  const content = (
-    <>
-        {card.cover
-          ? <LazyImage fileId={card.cover} variant="w320" alt=""
-            className="absolute inset-0 size-full transition-transform duration-300 group-hover:scale-105" />
-          : <CoverPlaceholder seed={card.publicationId} className="absolute inset-0 size-full"
-            data-testid="feed-card-placeholder" />}
-        <span className="absolute inset-x-0 top-0 flex items-start justify-between gap-1 p-1.5">
-          <span className="flex flex-col items-start gap-1">
-            {card.rewardMethod !== 'PLATFORM' && (
-              <span className="bg-background/90 text-foreground inline-flex items-center gap-1 px-1.5 py-0.5 text-[11px] font-medium"
-                data-testid="feed-card-method" data-method={card.rewardMethod}>
-                <MethodIcon aria-hidden className="size-3" />
-                {t(`methods.${card.rewardMethod}Short`)}
-              </span>
-            )}
-            {card.kind === 'SURVEY' && (
-              <span className="bg-background/90 text-foreground px-1.5 py-0.5 text-[11px] font-medium"
-                data-testid="feed-card-survey">{t('feed.survey')}</span>
-            )}
-          </span>
-          <RewardTag card={card} />
-        </span>
-        <span className="from-qb-hero-from via-qb-hero-from/85 text-qb-hero-foreground absolute inset-x-0 bottom-0 flex flex-col gap-0.5 bg-linear-to-t to-transparent px-2 pt-8 pb-2">
-          <span className="line-clamp-2 text-sm leading-tight font-semibold" data-testid="feed-card-name">{card.name}</span>
-          <span className="text-qb-hero-muted flex min-w-0 items-center gap-2 text-[11px]">
-            {sponsor && (
-              <span className="flex min-w-0 items-center gap-1">
-                {card.sponsorAvatar && (
-                  <LazyImage fileId={card.sponsorAvatar} variant="w128" alt="" className="size-3.5 shrink-0 rounded-full" />
-                )}
-                <span className="truncate">{sponsor}</span>
-              </span>
-            )}
-            <span className="ml-auto flex shrink-0 items-center gap-0.5" data-testid="feed-card-completions">
-              <Users aria-hidden className="size-3" />
-              <span aria-hidden>{card.completions}</span>
-              <span className="sr-only">{t('feed.completions', { count: card.completions })}</span>
+  const picture = (
+    <span className="group bg-muted relative block aspect-video overflow-hidden">
+      {card.cover
+        ? <LazyImage fileId={card.cover} variant="w640" alt=""
+          className="absolute inset-0 size-full transition-transform duration-300 group-hover:scale-105" />
+        : <CoverPlaceholder seed={card.publicationId} className="absolute inset-0 size-full"
+          data-testid="feed-card-placeholder" />}
+      <span className="absolute inset-x-0 top-0 flex items-start justify-between gap-1 p-2">
+        <span className="flex flex-col items-start gap-1">
+          {card.rewardMethod !== 'PLATFORM' && (
+            <span className="bg-background/90 text-foreground inline-flex items-center gap-1 px-1.5 py-0.5 text-[11px] font-medium"
+              data-testid="feed-card-method" data-method={card.rewardMethod}>
+              <MethodIcon aria-hidden className="size-3" />
+              {t(`methods.${card.rewardMethod}Short`)}
             </span>
-          </span>
+          )}
+          {card.kind === 'SURVEY' && (
+            <span className="bg-background/90 text-foreground px-1.5 py-0.5 text-[11px] font-medium"
+              data-testid="feed-card-survey">{t('feed.survey')}</span>
+          )}
         </span>
-    </>
+        <RewardTag card={card} />
+      </span>
+      {card.video && (
+        <span className="absolute inset-0 flex items-center justify-center" data-testid="feed-card-video-mark">
+          <span className="bg-background/85 text-foreground flex size-12 items-center justify-center rounded-full shadow-md">
+            <Play aria-hidden className="ml-0.5 size-6" />
+          </span>
+          <span className="sr-only">{t('feed.hasVideo')}</span>
+        </span>
+      )}
+    </span>
   )
-  // The preview (Q34b) draws the card where it leads nowhere.
+  const name = <span className="line-clamp-2 leading-snug font-semibold" data-testid="feed-card-name">{card.name}</span>
   return (
-    <li>
-      {href
-        ? <Link to={href} data-testid="feed-card" className={className}>{content}</Link>
-        : <div data-testid="feed-card" className={className}>{content}</div>}
+    <li className="flex flex-col" data-testid="feed-card" data-publication={card.publicationId}
+      data-video={card.video ? true : undefined} data-playing={playing || undefined}>
+      {card.video && playing
+        ? <VideoPlayer player={card.video} autoplay title={t('feed.videoTitle', { name: card.name })}
+          className="bg-muted aspect-video w-full overflow-hidden" />
+        : href
+          ? <Link to={href} aria-label={card.name} data-testid="feed-card-picture">{picture}</Link>
+          : picture}
+      <div className="flex gap-3 px-1 pt-3">
+        {card.sponsorAvatar
+          ? <LazyImage fileId={card.sponsorAvatar} variant="w128" alt="" className="size-9 shrink-0 rounded-full" />
+          : <span aria-hidden className="bg-accent text-accent-foreground flex size-9 shrink-0 items-center justify-center rounded-full text-sm font-semibold">
+            {(sponsor ?? card.name).trim().charAt(0).toUpperCase()}
+          </span>}
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          {href
+            ? <Link to={href} data-testid="feed-card-link" className="hover:underline focus-visible:ring-ring/50 underline-offset-4 outline-none focus-visible:ring-[3px]">{name}</Link>
+            : name}
+          <span className="text-muted-foreground flex min-w-0 flex-wrap items-center gap-x-1.5 text-xs">
+            {sponsor && <span className="truncate" data-testid="feed-card-sponsor">{sponsor}</span>}
+            {sponsor && <span aria-hidden>·</span>}
+            <span data-testid="feed-card-completions">{t('feed.completions', { count: card.completions })}</span>
+          </span>
+          {/* The player covers the picture and its reward: while it plays, the reward is said here. */}
+          {card.video && playing && <span className="self-start"><RewardTag card={card} /></span>}
+          {action}
+        </div>
+      </div>
     </li>
   )
 }
-

@@ -22,7 +22,6 @@ import { QB } from '../qb/messages'
 import { Link } from '../qb/router'
 import { FeedCardView } from '../qb/view/FeedCard'
 import { PublicationContent } from '../qb/view/PublicationContent'
-import { VideoCardView } from '../qb/view/VideoCard'
 import { draftPreview, publicationPreview, type Preview, type PreviewQuestion } from './model'
 import type { PreviewTarget } from './paths'
 
@@ -90,10 +89,9 @@ function Screens({ preview }: { preview: Preview }) {
       <div className="bg-background w-full max-w-[468px] border p-4 shadow-sm" data-testid="preview-frame"
         data-screen={screen}>
         {screen === 'home' && (
-          <ul className="grid grid-cols-2 gap-3" aria-label={t('preview.home')}>
-            {preview.video
-              ? <VideoCardView card={{ ...preview.view, video: preview.video }} player={preview.video} href={null} />
-              : <FeedCardView card={{ ...preview.view, video: null }} href={null} />}
+          // Q63: one card a row, as on the app's home; the video's play mark, the video not started.
+          <ul className="flex flex-col" aria-label={t('preview.home')}>
+            <FeedCardView card={{ ...preview.view, video: preview.video }} href={null} />
           </ul>
         )}
         {screen === 'page' && (

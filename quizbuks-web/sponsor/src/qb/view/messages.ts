@@ -100,8 +100,7 @@ const en = {
   },
   feed: {
     videoTitle: 'Video: {{name}}',
-    videoReward: 'Answer correctly to earn up to {{amount}}',
-    videoSurveyReward: 'Answer to earn {{amount}}',
+    hasVideo: 'With a video',
     upTo: 'Up to {{amount}}',
     survey: 'Survey',
     surveyReward: '{{amount}} for answering',
@@ -201,8 +200,7 @@ const zh: typeof en = {
   },
   feed: {
     videoTitle: '视频：{{name}}',
-    videoReward: '答对最多可得 {{amount}}',
-    videoSurveyReward: '作答即可得 {{amount}}',
+    hasVideo: '有视频',
     upTo: '最高 {{amount}}',
     survey: '问卷',
     surveyReward: '作答得 {{amount}}',
@@ -302,8 +300,7 @@ const ja: typeof en = {
   },
   feed: {
     videoTitle: '動画：{{name}}',
-    videoReward: '正解すると最大 {{amount}} もらえます',
-    videoSurveyReward: '回答すると {{amount}} もらえます',
+    hasVideo: '動画あり',
     upTo: '最高 {{amount}}',
     survey: 'アンケート',
     surveyReward: '回答で {{amount}}',

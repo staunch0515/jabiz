@@ -17,13 +17,28 @@ const DRAFT = {
 } as unknown as Draft
 
 describe('the preview (Q34b)', () => {
+  it('puts the video the taker learns from on the home\'s card, as the server does (Q63)', () => {
+    const at = new Date('2026-10-26T00:00:00Z')
+    const video = (url: string, watchToAnswer: boolean) => ({ materialId: url, kind: 'VIDEO_LINK', title: 'V',
+      description: null, body: null, url, pdf: null, audio: null, images: [], watchToAnswer })
+    const withMaterials = (materials: unknown[]) => ({ ...DRAFT, materials }) as unknown as Draft
+    // No video to watch: the first the app plays, past one it cannot.
+    expect(draftPreview(withMaterials([video('https://video.example/a', false), video('https://vimeo.com/76979871', false)]),
+      null, at).video).toBe('https://player.vimeo.com/video/76979871')
+    // The video to watch comes first.
+    expect(draftPreview(withMaterials([video('https://vimeo.com/76979871', false),
+      video('https://youtu.be/dQw4w9WgXcQ', true)]), null, at).video)
+      .toBe('https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ')
+    expect(draftPreview(DRAFT, null, at).video).toBeNull()
+  })
+
   it('reads a draft as its page would: the quiz itself, no reward, questions without their answers', () => {
     const preview = draftPreview(DRAFT, null, new Date('2026-10-26T00:00:00Z'))
     expect(preview.draft).toBe(true)
     expect(preview.view).toMatchObject({ name: 'Coffee basics', intro: 'About beans', cover: 'f1', questionCount: 2,
       fullScore: 5, timeLimitSec: 120, rewardMethod: 'PLATFORM', canStart: false })
     expect(preview.view.materials).toEqual([{ no: 1, kind: 'LINK', title: 'Site', description: null, body: null,
-      url: 'https://example.com', pdf: null, audio: null, images: [] }])
+      url: 'https://example.com', pdf: null, audio: null, images: [], watchToAnswer: false }])
     expect(preview.questions[0].options).toEqual([{ no: 1, text: 'Yes', image: null }, { no: 2, text: 'No', image: null }])
     expect(JSON.stringify(preview.questions)).not.toContain('correct')
     // Single or multiple choice, as the taker will be told (D-Q5-2); none while no option is correct.

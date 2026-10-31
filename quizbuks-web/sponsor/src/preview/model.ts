@@ -32,13 +32,18 @@ function material(m: SnapshotMaterial | Draft['materials'][number], no: number):
   return {
     no, kind: m.kind, title: m.title, description: m.description, body: m.body, url: m.url, pdf: m.pdf,
     audio: m.audio, images: m.images.map((image, index) => ({ no: index + 1, image: image.image, caption: image.caption })),
+    watchToAnswer: (m as { watchToAnswer?: boolean }).watchToAnswer === true,
   }
 }
 
-/** The home card's video: the first video watching which is enough to answer, when the app can play it. */
+/**
+ * The home card's video, as the server's card has it (Q63, `PublicationEditing.cardVideo`): the video watching which
+ * is enough to answer, else the first the app plays.
+ */
 function videoOf(materials: { kind: string; url: string | null; watchToAnswer?: boolean }[]): string | null {
-  const watch = materials.find((m) => m.kind === 'VIDEO_LINK' && m.watchToAnswer && m.url)
-  return watch ? videoPlayer(watch.url!) : null
+  const playable = (m: (typeof materials)[number]) => (m.kind === 'VIDEO_LINK' ? videoPlayer(m.url) : null)
+  const watch = materials.find((m) => m.watchToAnswer && playable(m)) ?? materials.find((m) => playable(m))
+  return watch ? playable(watch) : null
 }
 
 function base(given: Sponsor | null) {

@@ -1,5 +1,5 @@
 import { adminToken, expect, expectAccessible, prepareQuizbuks, run, signIn, test, unique } from './support'
-import { fundedSponsor, taker, untilLive } from './play'
+import { fundedSponsor, searchHome, taker, untilLive } from './play'
 
 /*
  * The video to watch (docs/quizbuks/plans/Q19-embedded-video.md): a sponsor ticks "Watching this video is enough to
@@ -61,18 +61,24 @@ test('a video to watch is shown on the home with its reward and starts the quiz'
   await page.setViewportSize({ width: 390, height: 844 })
   await signIn(page, '/taker/', me.email)
   await expect(page.getByTestId('home')).toBeVisible()
-  await page.getByTestId('feed-search').fill(name)
-  await page.getByTestId('feed-search-submit').click()
-  const card = page.getByTestId('feed-video-card').filter({ hasText: name })
-  await expect(card).toBeVisible()
+  await searchHome(page, name)
+  const card = page.getByTestId('feed-card').filter({ hasText: name })
+  await expect(card).toHaveAttribute('data-video', 'true')
+  // Q63: in the middle of the screen the card plays its video, muted.
+  await card.evaluate((element) => element.scrollIntoView({ block: 'center' }))
   const frame = card.locator('iframe')
-  await expect(frame).toHaveAttribute('src', PLAYER)
-  await expect(card.getByTestId('feed-video-reward')).toContainText(
-    `Answer correctly to earn up to ${sponsor.balance.toLocaleString('en-US')} Kudos`)
+  await expect(frame).toHaveAttribute('src', `${PLAYER}?autoplay=1&mute=1&playsinline=1`)
+  await expect(card).toContainText(`Up to ${sponsor.balance.toLocaleString('en-US')} Kudos`)
   // The App's policy lets this player in (the stub answers for it).
   await expect(card.frameLocator('iframe').getByRole('button', { name: 'Play' })).toBeVisible()
   await expectAccessible(page, 'app home video to watch')
+  // The start opens the start page first: the video leads it, playing as it opens; then the quiz starts.
   await card.getByTestId('feed-video-start').click()
+  await expect(page).toHaveURL(/\/p\/[^/]+$/)
+  await expect(page.getByTestId('detail-hero').locator('iframe'))
+    .toHaveAttribute('src', `${PLAYER}?autoplay=1&mute=1&playsinline=1`)
+  await expectAccessible(page, 'app start page with its video')
+  await page.getByTestId('detail-start').click()
   await expect(page).toHaveURL(/\/play\/[^/]+$/)
   await expect(page.getByTestId('play-question')).toContainText('What did the video show?')
 })

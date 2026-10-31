@@ -100,12 +100,25 @@ function hasContent(m: Material): boolean {
 }
 
 /**
+ * The video a taker learns from before answering (Q63), as the card's (`PublicationEditing.cardVideo`): the one watching
+ * which is enough to answer, else the first video the App plays; with its player.
+ */
+export function leadVideo(materials: Material[]): { material: Material; player: string } | null {
+  const playerOf = (m: Material) => (m.kind === 'VIDEO_LINK' ? videoPlayer(m.url) : null)
+  const material = materials.find((m) => m.watchToAnswer && playerOf(m)) ?? materials.find((m) => playerOf(m))
+  return material ? { material, player: playerOf(material)! } : null
+}
+
+/**
  * The reference materials of the publication's version (U-21; Q34): a video the app can play first, in the page; every
  * other one a row with its kind's icon, its title and its description on one line. A row opens the material in full
  * on a sheet over the whole screen (a link goes straight to its site in a new tab), so the page stays short. Markdown
  * without raw HTML (`MarkdownView`); files fetched with the session.
  */
-export function Materials({ materials }: { materials: Material[] }) {
+export function Materials({ materials: all, exclude }: { materials: Material[]
+  /** Q63: the material already shown at the top of the page (its video), left out here. */
+  exclude?: number }) {
+  const materials = exclude === undefined ? all : all.filter((m) => m.no !== exclude)
   const { t } = useTranslation(QBVIEW)
   // The material shown stays while the sheet slides away, so it does not empty before it is gone.
   const [shown, setShown] = useState<Material | null>(null)

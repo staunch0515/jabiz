@@ -1,4 +1,4 @@
-import type { APIRequestContext } from '@playwright/test'
+import type { APIRequestContext, Page } from '@playwright/test'
 import { adminToken, expect, PASSWORD, rows, run, tokenOf, unique, verifiedUser } from './support'
 
 /*
@@ -61,3 +61,11 @@ export async function untilLive(request: APIRequestContext, token: string, publi
   }, { message: 'the publication goes live', timeout: 30_000 }).toBe(true)
 }
 
+
+/** Searches the taker's home from the header's magnifier (Q63) and waits for the results. */
+export async function searchHome(page: Page, text: string) {
+  await page.getByTestId('search-open').click()
+  await page.getByTestId('feed-search').fill(text)
+  await page.getByTestId('feed-search-submit').click()
+  await expect(page.getByTestId('feed-searched')).toBeVisible()
+}

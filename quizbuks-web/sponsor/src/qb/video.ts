@@ -41,6 +41,22 @@ export function videoPlayer(url: string | null | undefined): string | null {
   return null
 }
 
+/**
+ * The player started muted at once (Q63: the home's card in the middle of the screen, the start page): browsers let
+ * a page start only a silent video by itself; the viewer turns the sound on in the player.
+ */
+export function autoplaying(player: string): string {
+  const params = player.startsWith(VIMEO_PLAYER) ? 'autoplay=1&muted=1&playsinline=1'
+    : 'autoplay=1&mute=1&playsinline=1'
+  return `${player}?${params}`
+}
+
+/** Whether the viewer asked for less motion: then no video starts by itself (Q63). */
+export function prefersStillVideo(): boolean {
+  return typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+    && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+}
+
 /** A player address the server gave (the card's): only one of the two players, else none. */
 export function trustedPlayer(address: string | null | undefined): string | null {
   if (!address) return null

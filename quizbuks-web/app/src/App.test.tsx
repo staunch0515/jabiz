@@ -317,7 +317,8 @@ describe('a signed-in taker', () => {
     render(<App />)
     expect(await screen.findByTestId('home')).toBeInTheDocument()
     const header = screen.getByRole('banner')
-    expect(within(header).getAllByRole('button')).toHaveLength(1)
+    // Q63: the home's search beside the menu, at the right.
+    expect(within(header).getAllByRole('button').map((b) => b.dataset.testid)).toEqual(['search-open', 'app-menu'])
     expect(within(header).queryByTestId('sign-out')).toBeNull()
     await user.click(within(header).getByTestId('app-menu'))
     const menu = await screen.findByRole('menu')

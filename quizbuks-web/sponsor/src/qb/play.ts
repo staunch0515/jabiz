@@ -174,6 +174,8 @@ export interface Material {
   /** AUDIO: a file of the policy `qb.content.audio`. */
   audio: string | null
   images: { no: number; image: string; caption: string | null }[]
+  /** VIDEO_LINK (Q19): watching it is enough to answer. */
+  watchToAnswer: boolean
 }
 
 /** The materials of the template's column (the snapshot's JSON); none when it cannot be read. */
@@ -198,6 +200,7 @@ export function parseMaterials(json: unknown): Material[] {
     images: (Array.isArray(m.images) ? m.images : [])
       .filter((i): i is Record<string, unknown> => typeof i === 'object' && i !== null && !!i.image)
       .map((i) => ({ no: numberOf(i.no), image: String(i.image), caption: textOrNull(i.caption) })),
+    watchToAnswer: m.watchToAnswer === true,
   }))
 }
 

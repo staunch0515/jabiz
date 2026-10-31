@@ -365,7 +365,7 @@ describe('the preview (Q34b)', () => {
     // The home's card leads nowhere here.
     await userEvent.click(screen.getByRole('radio', { name: 'Home card' }))
     const card = within(screen.getByTestId('preview-frame')).getByTestId('feed-card')
-    expect(card.tagName).toBe('DIV')
+    expect(card.querySelector('a')).toBeNull()
     expect(card).toHaveTextContent('Coffee week')
     // The questions: the options, never which is right.
     await userEvent.click(screen.getByRole('radio', { name: 'Questions' }))
