@@ -825,6 +825,25 @@ describe('the video to watch (Q19, Q63)', () => {
   })
 })
 
+describe('the pages of the bottom bar (Q67)', () => {
+  it('puts a round badge before the title of each page of the bottom bar, as the account has (Q67)', async () => {
+    server()
+    render(<App />)
+    await screen.findByTestId('home')
+    for (const [nav, title] of [['nav-history', 'history-title'], ['nav-wallet', 'wallet-title'],
+      ['nav-inbox', 'inbox-title'], ['nav-account', 'account-title']]) {
+      await userEvent.click(screen.getByTestId(nav))
+      const heading = await screen.findByRole('heading', { level: 1 })
+      expect(heading).toHaveAttribute('id', title)
+      const badge = heading.closest('section')!.querySelector('[data-testid="title-badge"]')!
+      expect(badge).toHaveAttribute('aria-hidden', 'true')
+      // The bar's icon for the three pages; the account's initial.
+      if (nav === 'nav-account') expect(badge).toHaveTextContent('M')
+      else expect(badge.querySelector('svg')).not.toBeNull()
+    }
+  })
+})
+
 describe('a card\'s progress and its sponsor (Q64, Q66)', () => {
   it("says the taker's progress in the line of facts, and links the sponsor's published page from the name and picture",
     async () => {
