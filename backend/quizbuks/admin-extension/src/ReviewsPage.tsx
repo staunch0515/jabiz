@@ -19,6 +19,8 @@ import { readPendingSponsorsAsOperator } from './operator-api'
 import { LoadFailed, PublisherLink } from './components'
 import { money, QUEUE, usePaged, when } from './hooks'
 import { PATH, PERMISSION } from './ids'
+import { readPendingSponsorPages } from './page-api'
+import { SponsorPageQueue } from './SponsorPagesPage'
 
 /** The columns sorted on the server, by the template's `list.sorts` field (Q53a). */
 const SORTS = { name: 'name', submittedAt: 'waitingSince' } as const
@@ -130,11 +132,17 @@ export default function ReviewsPage() {
   const sponsors = can(PERMISSION.reviewSponsor)
   const publicationCount = useCount(QUEUE.publications, readPendingPublications, publications)
   const sponsorCount = useCount(QUEUE.sponsors, useSponsorReader(), sponsors)
-  const tab = search.get('tab') === 'sponsors' && sponsors ? 'sponsors' : publications ? 'publications' : 'sponsors'
+  // Q60a-3: sponsors' pages are reviewed by those who review sponsors, read through a template that needs the
+  // publications' read permission as well.
+  const pages = sponsors && can(PERMISSION.publicationRead)
+  const pageCount = useCount(QUEUE.sponsorPages, readPendingSponsorPages, pages)
+  const asked = search.get('tab')
+  const tab = (asked === 'sponsors' && sponsors) || (asked === 'pages' && pages) ? asked
+    : publications ? 'publications' : 'sponsors'
   return (
     <div className="flex flex-col gap-4" data-testid="qb-reviews">
       <PageHeader title={t('reviews.title')} description={t('reviews.description')} className="pb-0" />
-      <Tabs value={tab} onValueChange={(value) => setSearch(value === 'sponsors' ? { tab: 'sponsors' } : {},
+      <Tabs value={tab} onValueChange={(value) => setSearch(value === 'publications' ? {} : { tab: value },
         { replace: true })}>
         <TabsList>
           {publications && (
@@ -147,9 +155,15 @@ export default function ReviewsPage() {
               {t('reviews.sponsors', { n: sponsorCount })}
             </TabsTrigger>
           )}
+          {pages && (
+            <TabsTrigger value="pages" data-testid="tab-sponsor-pages">
+              {t('sponsorPages.reviewsTab', { n: pageCount })}
+            </TabsTrigger>
+          )}
         </TabsList>
         {publications && <TabsContent value="publications"><PublicationQueue /></TabsContent>}
         {sponsors && <TabsContent value="sponsors"><SponsorQueue /></TabsContent>}
+        {pages && <TabsContent value="pages"><SponsorPageQueue /></TabsContent>}
       </Tabs>
     </div>
   )
