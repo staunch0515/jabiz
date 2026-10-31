@@ -32,6 +32,8 @@ export const DATASET = {
 export const TEMPLATE = {
   /** Sponsors' pages (Q60a-3): the list, the review queue and one page (an operator's own sponsors' only). */
   sponsorPages: 'qb.admin.sponsor-pages',
+  /** Sponsors' products (Q60b-3), the list and one sponsor's (an operator's own sponsors' only). */
+  sponsorProducts: 'qb.admin.sponsor-products',
   /** The reward parameters in force (Q28): the default methods and the highest reward per attempt. */
   rewardDefaults: 'qb.admin.reward-defaults',
   /** The review queue: no money (the content administrators read it). */
@@ -265,6 +267,7 @@ export const TRANSFER_REVIEW = 'REVIEW'
 /** Dictionaries, labelled by the server in the request's language. */
 export const DICTIONARY = {
   sponsorPageStatus: 'urn:jabiz:dict:quizbuks:sponsor-page-status',
+  sponsorProductStatus: 'urn:jabiz:dict:quizbuks:sponsor-product-status',
   region: 'urn:jabiz:dict:quizbuks:region',
   contentLanguage: 'urn:jabiz:dict:quizbuks:content-language',
   audience: 'urn:jabiz:dict:quizbuks:publication-audience',
@@ -385,6 +388,18 @@ export const SPONSOR_PAGE_PROCESS = {
   version: 1,
 } as const
 
+/** Taking a sponsor's product down and putting it back (Q60b): headquarters', and an operator's for its sponsors. */
+export const SPONSOR_PRODUCT_PROCESS = {
+  takedown: 'QB_PRODUCT_TAKEDOWN',
+  restore: 'QB_PRODUCT_RESTORE',
+  operatorTakedown: 'QB_OPERATOR_PRODUCT_TAKEDOWN',
+  operatorRestore: 'QB_OPERATOR_PRODUCT_RESTORE',
+  version: 1,
+} as const
+
+/** A sponsor product's states (`QbSponsorProducts`). */
+export const SPONSOR_PRODUCT_STATUSES = ['LISTED', 'UNLISTED', 'TAKEN_DOWN'] as const
+
 /** A sponsor page's states (`QbSponsorPages`): waiting for its review, shown, and the rest. */
 export const SPONSOR_PAGE_PENDING = 'PENDING'
 export const SPONSOR_PAGE_PUBLISHED = 'PUBLISHED'
@@ -413,6 +428,8 @@ export const PATH = {
   /** Sponsors' pages (Q60a-3): every one, and one page's content, review and takedown. */
   sponsorPages: '/qb/sponsor-pages',
   sponsorPage: (userId: string) => `/qb/sponsor-pages/${encodeURIComponent(userId)}`,
+  /** Sponsors' products (Q60b-3), to take down and put back. */
+  sponsorProducts: '/qb/sponsor-products',
   users: '/qb/users',
   /** Every attempt (Q14), by user, publication and state. */
   attempts: '/qb/attempts',

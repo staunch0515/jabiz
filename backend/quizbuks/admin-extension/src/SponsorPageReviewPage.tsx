@@ -17,6 +17,7 @@ import {
   type DescriptionItem,
 } from '@jabiz/admin'
 import { AfterDecision, LoadFailed, Section } from './components'
+import { httpsUrl } from './links'
 import { QUEUE, useAfterDecision, useLabels, when } from './hooks'
 import {
   ACCOUNT_SUSPENDED,
@@ -29,12 +30,11 @@ import {
   SPONSOR_PAGE_PUBLISHED,
 } from './ids'
 import { readSponsorPage } from './page-api'
+import { SponsorProductsTable } from './SponsorProductsPage'
 
 const IMAGE = { image: true, variants: SPONSOR_PAGE_IMAGE_VARIANTS }
 const linkClass = 'text-primary font-medium underline-offset-4 hover:underline'
 
-/** Only an https link is made a link (the server accepts no other). */
-const httpsUrl = (url: string | null) => (url && /^https:\/\/[^\s"'<>]+$/.test(url) ? url : null)
 
 /**
  * A sponsor's page (Q60a-3; docs/quizbuks/plans/Q60-sponsor-page.md) as the reviewer and whoever may take it down
@@ -148,6 +148,10 @@ export default function SponsorPageReviewPage() {
         </div>
       </Section>
       <Section title={t('sponsorPages.decision')} testId="sponsor-page-decision">{decision}</Section>
+      {/* Q60b-3: the sponsor's products, shown with the page and taken down here too. */}
+      <Section title={t('sponsorProducts.section')} testId="sponsor-page-products">
+        <SponsorProductsTable userId={userId} />
+      </Section>
       {takedown && p.status === SPONSOR_PAGE_PUBLISHED && (
         <Section title={t('sponsorPages.takedownTitle')} testId="sponsor-page-takedown">
           <p className="text-muted-foreground text-sm">{t('sponsorPages.takedownHint')}</p>

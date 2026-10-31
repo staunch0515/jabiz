@@ -1,0 +1,67 @@
+/**
+ * Texts of the sponsors' products (Q60b-3): their list and their takedown, for headquarters and the operators, in
+ * every platform language, merged into the extension's messages under `sponsorProducts` (and the menu's entry under
+ * `menu`).
+ */
+export const productMenu = {
+  en: { sponsorProducts: 'Sponsor products' },
+  zh: { sponsorProducts: '商户商品' },
+  ja: { sponsorProducts: 'スポンサー商品' },
+}
+
+export const productMessages = {
+  en: {
+    title: 'Sponsor products',
+    description: 'The products sponsors show on their pages and with their quizzes, each linking to their own shop. They are not reviewed: take one down if it should not be shown; only you put it back.',
+    table: 'Sponsor products',
+    sponsorTable: 'The sponsor’s products',
+    section: 'Products',
+    none: 'No products.',
+    status: 'Status',
+    allStatuses: 'All',
+    columns: { name: 'Product', sponsor: 'Sponsor', price: 'Price', status: 'Status', editedAt: 'Last edited', actions: 'Actions' },
+    shop: 'Shop link',
+    takedown: 'Take down',
+    restore: 'Put back',
+    takedownOf: 'Take down {{name}}',
+    restoreOf: 'Put back {{name}}',
+    reason: 'Why it was taken down: {{reason}}',
+    byHq: 'Taken down by headquarters: only headquarters puts it back.',
+  },
+  zh: {
+    title: '商户商品',
+    description: '商户在主页和 Quiz 上展示的商品，每件都链接到商户自己的商店。商品不经审核：不应展示的请下架，只有平台能恢复。',
+    table: '商户商品',
+    sponsorTable: '该商户的商品',
+    section: '商品',
+    none: '没有商品。',
+    status: '状态',
+    allStatuses: '全部',
+    columns: { name: '商品', sponsor: '商户', price: '价格', status: '状态', editedAt: '最后编辑', actions: '操作' },
+    shop: '商店链接',
+    takedown: '下架',
+    restore: '恢复',
+    takedownOf: '下架 {{name}}',
+    restoreOf: '恢复 {{name}}',
+    reason: '下架理由：{{reason}}',
+    byHq: '由总部下架，只有总部能恢复。',
+  },
+  ja: {
+    title: 'スポンサー商品',
+    description: 'スポンサーがページとクイズに表示する商品です。それぞれスポンサー自身のショップにリンクします。審査はありません。表示すべきでないものは公開停止してください。復元できるのは運営だけです。',
+    table: 'スポンサー商品',
+    sponsorTable: 'このスポンサーの商品',
+    section: '商品',
+    none: '商品はありません。',
+    status: '状態',
+    allStatuses: 'すべて',
+    columns: { name: '商品', sponsor: 'スポンサー', price: '価格', status: '状態', editedAt: '最終編集', actions: '操作' },
+    shop: 'ショップのリンク',
+    takedown: '公開停止',
+    restore: '復元',
+    takedownOf: '{{name}} を公開停止',
+    restoreOf: '{{name}} を復元',
+    reason: '公開停止の理由：{{reason}}',
+    byHq: '本部が公開停止しました。復元できるのは本部だけです。',
+  },
+}

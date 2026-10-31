@@ -104,3 +104,14 @@
 - 两端共用的调用与类型在 `src/qb/products.ts`。
 - **测试**：`sponsor/src/products/products.test.tsx`（列表与下架理由、添加、价格的字段错误、移动与删除、Quiz 的商品载入与保存、没有商品、三种语言、axe）；
   `app/src/share/sponsorPage.test.tsx`（主页的商品与价格、https 以外不成链接、分享页只显示 Quiz 的商品）；`app/src/Play.test.tsx`（结果页的题目商品、发布页的 Quiz 商品）。
+
+## 7. Q60b-3 设计
+
+- **模板** `qb.admin.sponsor-products`（权限 `qb.admin.publication.read`；商品、入驻、主页三个数据视图都按运营商限定）：商品与商户的公司名、主页链接名；
+  可按状态、名称、公司、币种筛选；带 `userId` 参数即一个商户的商品。
+- **商品列表**（`/qb/sponsor-products`）：总部在 QuizBuks 菜单（`qb.admin.content.write`），运营商在自己的菜单；按状态筛选；
+  每件商品显示商店链接（只链接 https）、商户（链接到其主页详情）、按币种显示的价格、状态与下架理由；
+  "下架"或"恢复"链接到平台的流程页（总部 `QB_PRODUCT_TAKEDOWN` / `RESTORE`，运营商 `QB_OPERATOR_PRODUCT_*`，填好商品，在那里填写理由并二次验证）。
+- **主页详情**（Q60a-3 的 `/qb/sponsor-pages/:userId`）新增"商品"区块：该商户的商品，同样可下架与恢复。
+- **测试**：扩展 `sponsorProducts.test.tsx`（列表、商户与商店链接、https 以外不成链接、下架理由、总部与运营商的流程链接、只读者没有操作、状态筛选、
+  主页详情中只列该商户的商品、三种语言、axe）；`SponsorProductIT`（运营商经模板只看到自己的商户的商品；一个商户的商品）。
