@@ -67,14 +67,16 @@ function cover([from, to]: StoreQuiz['colours'], width = 960, height = 540): Buf
 }
 
 /** A live publication of a store quiz: three questions, a point each; two or more win the shop's prize. */
-async function publish(request: APIRequestContext, token: string, quiz: StoreQuiz): Promise<string> {
+async function publish(request: APIRequestContext, token: string, quiz: StoreQuiz,
+  language: Language): Promise<string> {
   const uploaded = await request.post(`/api/files?policy=${encodeURIComponent('qb.content.image')}`, {
     headers: { Authorization: `Bearer ${token}` },
     multipart: { file: { name: 'cover.png', mimeType: 'image/png', buffer: cover(quiz.colours) } },
   })
   expect(uploaded.status(), await uploaded.text()).toBeLessThan(300)
+  // The quiz's language (Q59a): the home page lists only the taker's languages, and the request's is not the quiz's.
   const saved = await run(request, token, 'QB_QUIZ_SAVE', { title: quiz.title, intro: quiz.intro,
-    cover: (await uploaded.json()).fileId, timeLimitSec: 300 })
+    cover: (await uploaded.json()).fileId, timeLimitSec: 300, language })
   const quizId = saved.quizId as string
   for (const question of quiz.questions) {
     await run(request, token, 'QB_QUESTION_SAVE', { quizId, stem: question.stem, points: 1,
@@ -213,7 +215,7 @@ for (const language of ['ja', 'zh', 'en'] as const) {
     await run(request, allower, 'QB_SPONSOR_REWARD_METHODS_SET', { userId, methods: ['OFFLINE_REDEEM'],
       note: 'store screenshots' })
     const publications: string[] = []
-    for (const quiz of content.quizzes) publications.push(await publish(request, sponsor.token, quiz))
+    for (const quiz of content.quizzes) publications.push(await publish(request, sponsor.token, quiz, language))
 
     for (const device of DEVICES) await photograph(browser, request, language, publications, device)
 
