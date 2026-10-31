@@ -16,6 +16,7 @@ import com.jabiz.runtime.mail.SendMail;
 import com.jabiz.runtime.process.steps.QueryEntities;
 import com.jabiz.security.EmailVerification;
 import com.jabiz.security.Sensitive;
+import com.jabiz.security.SignUpAttempt;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -241,6 +242,10 @@ public class EmailLinkProcesses {
                 ctx -> ofUser(ctx), SignUpProcesses.IDENTITIES))
             .step("Draw a name suffix", SignUpProcesses.on(RandomBytesStep.class), new RandomBytesStep.Metadata(
                 SignUpProcesses.RANDOM, SignUpProcesses.SUFFIX_LENGTH))
+            // Only where the link opens an account (D66): the mailbox is proven, so the refusal is answered at the link.
+            .step("Sign-up guards", SignUpGuardStep.spec(new SignUpGuardStep.Metadata<AccountContext>(
+                SignUpAttempt.Path.EMAIL_LINK, AccountContext::entryName, ctx -> null,
+                ctx -> ctx.consumed().address(), ctx -> true, ctx -> opens(ctx, entries))))
             .compute("Sign in or open the account", (metadata, ctx) -> opened(ctx, entries))
             .step("End the sessions", SignUpProcesses.on(RevokeSessionsStep.class), new RevokeSessionsStep.Metadata(
                 SignUpProcesses.END_SESSIONS, RefreshTokenStore.REASON_CLAIM,
@@ -250,6 +255,14 @@ public class EmailLinkProcesses {
     private static EntityQuery ofUser(AccountContext ctx) {
         EntityInstance user = ctx.user();
         return Rbac.all(new QueryPredicate.In("userId", user == null ? List.of() : List.of(user.id())), "userId");
+    }
+
+    /** Whether the used link opens an account: to an address nobody has, at an entry that takes registrations. */
+    static boolean opens(AccountContext ctx, SignInEntries entries) {
+        MailTokens.Consumed consumed = ctx.consumed();
+        return consumed != null && consumed.userId() == null && ctx.list(SignUpProcesses.USERS).isEmpty()
+            && entries.find(ctx.entryName()).filter(entry -> entry.emailLink() && entry.selfRegistration())
+                .isPresent();
     }
 
     static void opened(AccountContext ctx, SignInEntries entries) {
