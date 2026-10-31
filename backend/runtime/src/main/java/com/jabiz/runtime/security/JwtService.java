@@ -69,6 +69,8 @@ public final class JwtService {
      * tokens of no session and in those issued before sessions were listed.
      */
     static final String SESSION = "sid";
+    /** The session's entry scope (decision D64): {@code {name, value}}, absent for entries without one. */
+    static final String SCOPE = "scope";
     /** Type of challenge tokens: never accepted where an access token is expected, nor the other way round. */
     static final JOSEObjectType CHALLENGE_TYPE = new JOSEObjectType("jabiz-mfa+jwt");
     /**
@@ -171,6 +173,8 @@ public final class JwtService {
             .claim(ENTRY, actor.entry() == null ? com.jabiz.context.RequestContext.DEFAULT_ENTRY : actor.entry())
             .claim(EMAIL_VERIFIED, actor.emailVerified())
             .claim(SESSION, actor.sessionId() == null ? null : actor.sessionId().toString())
+            .claim(SCOPE, actor.entryScope() == null ? null
+                : java.util.Map.of("name", actor.entryScope().name(), "value", actor.entryScope().value()))
             .build();
         return new Issued(sign(claims, JOSEObjectType.JWT), expires);
     }
@@ -304,7 +308,7 @@ public final class JwtService {
                 mfaAt == null ? null : Instant.ofEpochSecond(mfaAt),
                 DataPeriod.of(instant(claims.getStringClaim(DATA_FROM)), instant(claims.getStringClaim(DATA_TO))),
                 entryOf(claims), Boolean.TRUE.equals(claims.getBooleanClaim(EMAIL_VERIFIED)),
-                sessionOf(claims.getStringClaim(SESSION)));
+                sessionOf(claims.getStringClaim(SESSION)), scopeOf(claims.getJSONObjectClaim(SCOPE)));
         } catch (ParseException | java.time.format.DateTimeParseException | IllegalArgumentException e) {
             throw new InvalidTokenException("Malformed token claims");
         }
@@ -314,6 +318,17 @@ public final class JwtService {
     private static String entryOf(JWTClaimsSet claims) throws ParseException {
         String entry = claims.getStringClaim(ENTRY);
         return entry == null || entry.isBlank() ? com.jabiz.context.RequestContext.DEFAULT_ENTRY : entry;
+    }
+
+    /** The entry scope of a token; one that is not a name and a value is malformed (refused). */
+    private static com.jabiz.context.EntryScope scopeOf(java.util.Map<String, Object> claim) {
+        if (claim == null) {
+            return null;
+        }
+        if (!(claim.get("name") instanceof String name) || !(claim.get("value") instanceof String value)) {
+            throw new IllegalArgumentException("Malformed scope claim");
+        }
+        return new com.jabiz.context.EntryScope(name, value);
     }
 
     private static java.util.UUID sessionOf(String text) {

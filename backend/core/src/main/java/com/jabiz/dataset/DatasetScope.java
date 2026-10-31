@@ -1,6 +1,7 @@
 package com.jabiz.dataset;
 
 import com.jabiz.context.DataPeriod;
+import com.jabiz.context.EntryScope;
 import com.jabiz.context.RequestContext;
 
 import java.util.ArrayList;
@@ -19,12 +20,13 @@ import java.util.function.Function;
  * <p>A value taken from the context that is missing rejects the request ({@link ScopeUnavailableException}):
  * the scope never silently degrades to "no filter". The one exception is {@link WithinDataPeriod}, where "no period"
  * means "not limited in time" by design (decision D28 item 8). Its resolved value is a {@link PeriodCondition}, a
- * range rather than a value.
+ * range rather than a value. Neither do the entry scopes of decision D64 ({@link WithinEntryScope},
+ * {@link WithinEntryScopeTag}): they limit the sessions of a scoped entry only, others see every row.
  */
 public final class DatasetScope {
 
     /** Condition of one field. */
-    public sealed interface Entry permits Fixed, FromContext, WithinDataPeriod {
+    public sealed interface Entry permits Fixed, FromContext, WithinDataPeriod, WithinEntryScope, WithinEntryScopeTag {
         String field();
     }
 
@@ -56,6 +58,63 @@ public final class DatasetScope {
     public record WithinDataPeriod(String field, String referencedField) implements Entry {
         public WithinDataPeriod {
             Objects.requireNonNull(field, "field must not be null");
+        }
+    }
+
+    /**
+     * Rows of the session's entry scope {@code scope} (decision D64; docs/design/10-security.md section 13.4): those
+     * whose {@code field} is the session's value, or, with {@code via}, whose {@code field} maps to it through another
+     * entity. Sessions without that scope are not limited.
+     */
+    public record WithinEntryScope(String scope, String field, EntryScopeVia via) implements Entry {
+        public WithinEntryScope {
+            Objects.requireNonNull(scope, "scope must not be null");
+            if (!EntryScope.NAME.matcher(scope).matches()) {
+                throw new IllegalArgumentException("Invalid scope name: " + scope);
+            }
+            Objects.requireNonNull(field, "field must not be null");
+        }
+    }
+
+    /**
+     * Rows that say themselves which entry scope they belong to (decision D64 item 3; the platform's approvals and
+     * tasks): a session with an entry scope sees the rows whose {@code nameField} is its scope's name and
+     * {@code field} its value, and no row without them, except, with {@code ownerField}, the rows whose owner it is
+     * (a task given to its user personally). Sessions without a scope are not limited.
+     */
+    public record WithinEntryScopeTag(String nameField, String field, String ownerField) implements Entry {
+        public WithinEntryScopeTag {
+            Objects.requireNonNull(nameField, "nameField must not be null");
+            Objects.requireNonNull(field, "field must not be null");
+        }
+    }
+
+    /**
+     * Resolved value of a {@link WithinEntryScope} entry through another entity: the dataset's field must be a key of
+     * {@code via}'s entity whose scope field is {@code value}.
+     */
+    public record EntryScopeCondition(String value, EntryScopeVia via) {
+        public EntryScopeCondition {
+            Objects.requireNonNull(value, "value must not be null");
+            Objects.requireNonNull(via, "via must not be null");
+        }
+    }
+
+    /**
+     * Resolved value of a {@link WithinEntryScopeTag} entry: the row's name field is {@code scope}'s name and its field
+     * the value, or, with {@code ownerField}, the row's owner is {@code actorId}.
+     */
+    public record EntryScopeTagCondition(String nameField, EntryScope scope, String ownerField, String actorId) {
+        public EntryScopeTagCondition {
+            Objects.requireNonNull(nameField, "nameField must not be null");
+            Objects.requireNonNull(scope, "scope must not be null");
+            if (ownerField != null) {
+                Objects.requireNonNull(actorId, "actorId must not be null");
+            }
+        }
+
+        public EntryScopeTagCondition(String nameField, EntryScope scope) {
+            this(nameField, scope, null, null);
         }
     }
 
@@ -107,6 +166,20 @@ public final class DatasetScope {
                     }
                     values.put(dynamic.field(), value);
                 }
+                case WithinEntryScope within -> {
+                    String value = request == null ? null : request.entryScopeValue(within.scope());
+                    if (value != null) {
+                        values.put(within.field(), within.via() == null ? value
+                            : new EntryScopeCondition(value, within.via()));
+                    }
+                }
+                case WithinEntryScopeTag tag -> {
+                    EntryScope scope = request == null ? null : request.entryScope();
+                    if (scope != null) {
+                        values.put(tag.field(), new EntryScopeTagCondition(tag.nameField(), scope, tag.ownerField(),
+                            request.actorId()));
+                    }
+                }
                 case WithinDataPeriod within -> {
                     DataPeriod period = request == null ? null : request.dataPeriod();
                     if (period != null) {
@@ -153,12 +226,54 @@ public final class DatasetScope {
                 "referencedField must not be null")));
         }
 
+        /**
+         * Rows whose {@code field} is the session's value of the entry scope {@code scope} (decision D64); sessions
+         * without it see every row.
+         */
+        public Builder withinEntryScope(String scope, String field) {
+            return add(new WithinEntryScope(scope, field, null));
+        }
+
+        /**
+         * Rows whose {@code field} maps to the session's value of the entry scope {@code scope} through {@code via}'s
+         * entity (decision D64); sessions without it see every row. Scoped sessions cannot write through the dataset.
+         */
+        public Builder withinEntryScope(String scope, String field, EntryScopeVia via) {
+            return add(new WithinEntryScope(scope, field, Objects.requireNonNull(via, "via must not be null")));
+        }
+
+        /**
+         * Rows that name their entry scope in {@code nameField} and its value in {@code field} (decision D64 item 3):
+         * a session with any entry scope sees those of its own only; sessions without one see every row. Scoped
+         * sessions cannot write through the dataset.
+         */
+        public Builder withinEntryScopeTag(String nameField, String field) {
+            return add(new WithinEntryScopeTag(nameField, field, null));
+        }
+
+        /**
+         * As {@link #withinEntryScopeTag(String, String)}, the rows whose {@code ownerField} is the session's user
+         * visible to it whatever their scope (a task given to that user personally).
+         */
+        public Builder withinEntryScopeTag(String nameField, String field, String ownerField) {
+            return add(new WithinEntryScopeTag(nameField, field, Objects.requireNonNull(ownerField,
+                "ownerField must not be null")));
+        }
+
         private Builder add(Entry entry) {
-            if (entries.stream().anyMatch(e -> e.field().equals(entry.field()))) {
-                throw new IllegalArgumentException("scope field " + entry.field() + " is declared twice");
+            for (String field : fields(entry)) {
+                if (entries.stream().anyMatch(e -> fields(e).contains(field))) {
+                    throw new IllegalArgumentException("scope field " + field + " is declared twice");
+                }
             }
             entries.add(entry);
             return this;
+        }
+
+        /** The fields an entry limits: a tag limits its name field too. */
+        private static List<String> fields(Entry entry) {
+            return entry instanceof WithinEntryScopeTag tag ? List.of(tag.nameField(), tag.field())
+                : List.of(entry.field());
         }
 
         DatasetScope build() {

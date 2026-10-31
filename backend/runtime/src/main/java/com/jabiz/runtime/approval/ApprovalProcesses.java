@@ -114,6 +114,13 @@ public class ApprovalProcesses {
         }
     }
 
+    /** A request's entry scope (decision D64), or null for one without. */
+    static com.jabiz.context.EntryScope scopeOf(EntityInstance request) {
+        String name = request.get("scopeName");
+        String value = request.get("scopeValue");
+        return name == null || value == null ? null : new com.jabiz.context.EntryScope(name, value);
+    }
+
     private static boolean isDecided(ProcessContext ctx, String status) {
         return ctx.contains(DECIDED) && ctx.get(DECIDED, Decided.class).status().equals(status);
     }
@@ -177,6 +184,8 @@ public class ApprovalProcesses {
         decision.put("reason", reason);
         decision.put("decidedTime", ctx.opTime());
         decision.put("processSeqId", BigDecimal.valueOf(ctx.processSeqId()));
+        decision.put("scopeName", request.get("scopeName"));
+        decision.put("scopeValue", request.get("scopeValue"));
         ctx.changes().insert(ApprovalEntities.DECISION, decision);
 
         String status = input.decision() == Decision.REJECT ? ApprovalEntities.REJECTED
@@ -193,7 +202,8 @@ public class ApprovalProcesses {
         ctx.put(OUTPUT, new DecideOutput(requestId, status, next));
         ctx.put(PASSED, new ApprovalTasks.Passed(requestId, request.get("subject"), request.get("entityId"),
             request.get("reference"), next,
-            status.equals(ApprovalEntities.PENDING) ? String.valueOf(levels.get(next - 1).get("permission")) : null));
+            status.equals(ApprovalEntities.PENDING) ? String.valueOf(levels.get(next - 1).get("permission")) : null,
+            scopeOf(request)));
     }
 
     @Bean

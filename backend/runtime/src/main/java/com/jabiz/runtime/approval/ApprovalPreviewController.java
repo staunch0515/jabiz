@@ -82,7 +82,7 @@ class ApprovalPreviewController {
                 "approval subject '" + body.subject() + "' is not declared"));
             ApprovalRule draft = draft(body.draft(), subject);
             int limit = body.limit() == null ? MAX_CASES : Math.clamp(body.limit(), 1, MAX_CASES);
-            return store.rules(subject, null).zipWith(latestFacts(subject.name(), limit + 1)).map(found -> {
+            return store.rules(subject, null).zipWith(latestFacts(subject.name(), limit + 1, request.entryScope())).map(found -> {
                 List<ApprovalRule> before = found.getT1();
                 List<ApprovalRule> after = new ArrayList<>(before.stream()
                     .filter(rule -> !rule.ruleId().equals(body.ruleId())).toList());
@@ -143,12 +143,18 @@ class ApprovalPreviewController {
             levels, draft.priority() == null ? 0 : draft.priority());
     }
 
-    private Mono<List<Map<String, Object>>> latestFacts(String subject, int limit) {
+    /** The latest facts of each case; a session of an entry scope previews against its scope's cases only (D64). */
+    private Mono<List<Map<String, Object>>> latestFacts(String subject, int limit,
+        com.jabiz.context.EntryScope scope) {
         return storages.getEngine(poolRef).select("SELECT entity_id, facts, evaluated_time FROM ("
                 + "SELECT DISTINCT ON (entity_id) entity_id, facts, evaluated_time FROM sys_approval_evaluation"
-                + " WHERE subject = :subject ORDER BY entity_id, evaluated_time DESC, evaluation_id DESC) e"
+                + " WHERE subject = :subject AND (CAST(:scopeName AS text) IS NULL"
+                + " OR (scope_name = :scopeName AND scope_value = :scopeValue))"
+                + " ORDER BY entity_id, evaluated_time DESC, evaluation_id DESC) e"
                 + " ORDER BY evaluated_time DESC, entity_id LIMIT :limit",
-                Map.of("subject", BoundValue.of(subject), "limit", BoundValue.of(limit)))
+                Map.of("subject", BoundValue.of(subject), "limit", BoundValue.of(limit),
+                    "scopeName", scope == null ? BoundValue.nullOf(String.class) : BoundValue.of(scope.name()),
+                    "scopeValue", scope == null ? BoundValue.nullOf(String.class) : BoundValue.of(scope.value())))
             .collectList();
     }
 

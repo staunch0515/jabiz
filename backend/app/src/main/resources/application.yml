@@ -55,6 +55,12 @@ jabiz:
           persistence: device
           refresh-token-ttl: P30D
           idle-timeout: 0
+      # The warehouse staff (ROADMAP phase 17y, decision D64): their sessions are scoped to the warehouse their user
+      # works in (WarehouseStaff, WarehouseScope), so they see and receive that warehouse's stock only. No frontend of
+      # its own in the sample: the administration's pages, signed in at this entry.
+      warehouse:
+        accepted-roles: WAREHOUSE
+        app-path: /
     # Signing in with Google at the portal, which may open a customer's account at the first sign-in (decision D39;
     # docs/design/10-security.md section 12; guide app-spa.md). Off in the sample: no client is registered for it.
     # To turn it on, register an OAuth client at Google with the portal's callback and uncomment (the secret comes from

@@ -38,6 +38,8 @@ public class SignInGuardStep<C extends LoginContext> implements StepHandler<NoMe
             .doOnNext(decision -> {
                 if (!decision.allowed()) {
                     ctx.setOutcome(LoginOutcome.REFUSED);
+                } else {
+                    ctx.setScope(decision.scope());
                 }
             })
             .then();

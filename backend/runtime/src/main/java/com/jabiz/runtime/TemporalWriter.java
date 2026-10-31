@@ -296,8 +296,19 @@ final class TemporalWriter {
             def.name, id, expected, actual));
     }
 
+    /**
+     * Whether the version a write changes lies in the dataset's scope. A mapped entry scope on a dataset only processes
+     * write limits reads only (decision D64 item 2, ROADMAP 17y-7): the process read the instance through it and
+     * checks the object itself, and the mapping is not in the values.
+     */
     private static boolean inScope(Write w, Map<String, Object> state) {
-        return DatasetEntityManager.withinScope(w.dataset(), w.def(), w.scope(), state);
+        Map<String, Object> scope = w.scope();
+        if (w.dataset().policy().processOnlyWrites()) {
+            Map<String, Object> judged = new java.util.LinkedHashMap<>(scope);
+            judged.values().removeIf(com.jabiz.dataset.DatasetScope.EntryScopeCondition.class::isInstance);
+            scope = judged;
+        }
+        return DatasetEntityManager.withinScope(w.dataset(), w.def(), scope, state);
     }
 
     private static boolean touchesUnique(EntityDefinition def, Set<String> fields) {

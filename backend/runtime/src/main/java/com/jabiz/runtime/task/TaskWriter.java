@@ -5,6 +5,7 @@ import com.jabiz.process.ProcessContext;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.runtime.DatasetEntityManager;
+import com.jabiz.runtime.context.RequestContexts;
 import com.jabiz.runtime.dataset.DatasetRegistry;
 import com.jabiz.runtime.process.steps.EventPublisher;
 import org.springframework.beans.factory.ObjectProvider;
@@ -58,6 +59,10 @@ public class TaskWriter {
             task.put("status", TaskEntities.OPEN);
             task.put("dueTime", spec.dueTime());
             task.put("sourceKey", spec.sourceKey());
+            // Decision D64: the task's entry scope, by default the creating session's.
+            com.jabiz.context.EntryScope scope = spec.scope() != null ? spec.scope() : ctx.request().entryScope();
+            task.put("scopeName", scope == null ? null : scope.name());
+            task.put("scopeValue", scope == null ? null : scope.value());
             Object id = ctx.changes().insert(TaskEntities.TASK, task);
             EventPublisher target = publisher.getIfUnique();
             if (target == null) {
@@ -76,7 +81,8 @@ public class TaskWriter {
         EntityQuery query = EntityQuery.builder().where(new QueryPredicate.And(List.of(
             new QueryPredicate.Eq("sourceKey", sourceKey),
             new QueryPredicate.Eq("status", TaskEntities.OPEN)))).limit(TaskEntities.MAX_ROWS).build();
-        return entities.queryAll(dataset, TaskEntities.SYS_TASK, query)
+        // Every open task of the key, whatever the caller's entry scope (decision D64): the process ends them all.
+        return RequestContexts.withoutEntryScope(entities.queryAll(dataset, TaskEntities.SYS_TASK, query))
             .doOnNext(task -> {
                 Map<String, Object> closed = new LinkedHashMap<>();
                 closed.put("status", status);

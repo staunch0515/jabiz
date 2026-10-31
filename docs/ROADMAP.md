@@ -4837,3 +4837,23 @@ Playwright 端到端（需维护连接与数据库角色，以 Vitest 与 `Accou
 | 17x-4 | 测试：`availability.test.tsx`（判定、间隔的上下限、连接失败、恢复与处理器、`api` 与 `sessionFetch`、`PROCESS_BUSY` 不算、恢复后重新读取）、`banners.test.tsx`（对话框、不可关闭、立即重试、三语、离线时让给离线提示）、e2e `maintenance.spec.ts`（打开的列表遇到维护页：整页一次、axe；恢复后立即重试即关闭、重新读取）；前端测试的公共初始化每个测试后清除该状态；设计 12 一条 |
 
 **17x 状态**：📝 待评审。
+
+### 17y 入口的范围：运营商只看到自己的商户（需求 2026-10-30，决策 D64）
+
+**缘由**：需求方 2026-10-30：QuizBuks 按语言建三个运营商，"运营商只看到自己的商户"（Q59c-2，即 Q48e）。同一入口的不同会话要看到不同的行，
+审批与待办要只给所属的运营商；此前平台没有这种约束（10 §13.4）。
+
+| # | 内容 |
+|---|---|
+| 17y-1 | core：`EntryScope`、`EntryScopeResolver`（`entry`、`scope`、`loads`、`resolve`）、`RequestContext.entryScope`；`SignInGuards` 在守卫之后算出值（空即拒绝），登录与刷新的会话带上它；令牌的 `scope` 声明，声明了范围的入口缺少即 401；启动检查（入口存在、至多一个、名字） |
+| 17y-2 | 数据视图：`DatasetScope.withinEntryScope`（直接、经对照实体）与 `withinEntryScopeTag`；查询编译、模板、写入（经对照或标记的拒绝）、启动检查（字段、对照实体为普通表） |
+| 17y-3 | 审批与待办：迁移 V51 给审批请求、决定、评估、待办与通知加 `scope_name` / `scope_value`；`ApprovalCase.scope`、`TaskSpec.scope`（缺省为创建的会话的范围）；平台的数据视图以标记约束；`/api/tasks/mine`、规则预览、决定与撤回对范围外为 404；有范围的待办只通知看得到的人 |
+| 17y-4 | 流程步骤 `RequireScope.of(名, ctx -> 值[, ctx -> 名称])` |
+| 17y-5 | 示范应用：入口 `warehouse`（角色 `WAREHOUSE`）、`WarehouseStaff`（迁移 V19）与 `WarehouseScope`；库存数据视图以范围约束（模板 `commerce.stock_availability` 随之），`STOCK_RECEIVE` 以 `RequireScope` 核对仓库 |
+| 17y-6 | 测试：`EntryScopeCompilerTest`（三种约束的解析与 SQL、名字与值）、`SignInGuardsTest`（解析在守卫之后、空与失败即拒绝、其他入口、启动检查）、`EntryScopeIT`（登录带值、调动在刷新时生效、移出即 401、没有仓库即 403、缺少范围的令牌 401、库存的数据视图与模板、`RequireScope`、经对照的读与拒绝写、审批与待办的标记、决定 404、总部看到全部）；设计 03、10 §13.4、决策 D64；`/security-review` |
+
+| # | 补充（需求 2026-10-30，QuizBuks Q59c-2） |
+|---|---|
+| 17y-7 | 经对照约束、只由流程写入（`processOnlyWrites`）的数据视图：对照只约束读取，有范围的会话的流程照常写入（流程经同一范围读到对象并以 `RequireScope` 核对）；QuizBuks 的发布、奖励等缺省数据视图因此可以按运营商约束读取，运营商的下架、作废等流程照常写入。写入路径与时态写入器核对所改版本时都不以对照拒绝。测试：`EntryScopeIT`（测试夹具 `ItEntryScopeFixtures`：普通表与只追加表各一个，插入与修改、`RequireScope` 拒绝别的仓库的、读取受限） |
+
+**17y 状态**：✅ 17y-1 至 17y-6 完成（#359）；17y-7 📝 待评审。

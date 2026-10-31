@@ -134,6 +134,12 @@ public final class DatasetRegistry implements PlatformCheck {
                 problems.add(label + ": scope field " + entry.field() + " does not exist on " + entity.name);
             } else if (entry instanceof DatasetScope.WithinDataPeriod within) {
                 checkDataPeriod(within, field, entity, entities, label, problems);
+            } else if (entry instanceof DatasetScope.WithinEntryScope within && within.via() != null) {
+                checkEntryScopeVia(within, entity, entities, label, problems);
+            } else if (entry instanceof DatasetScope.WithinEntryScopeTag tag
+                && !entity.fields.containsKey(tag.nameField())) {
+                problems.add(label + ": entry scope name field " + tag.nameField() + " does not exist on "
+                    + entity.name);
             } else if (!allowsEquality(field.kind())) {
                 problems.add(label + ": scope field " + entry.field() + " cannot be compared for equality");
             } else if (entry instanceof DatasetScope.Fixed fixed) {
@@ -233,6 +239,30 @@ public final class DatasetRegistry implements PlatformCheck {
         if (time.isEmpty() || !(time.get().kind() instanceof SemanticKind.Temporal) || !time.get().immutable()) {
             problems.add(label + ": data period field " + reference.targetEntity() + "." + within.referencedField()
                 + " (through " + field.name() + ") must be an immutable temporal field");
+        }
+    }
+
+    /**
+     * An entry scope through a mapping entity (decision D64) needs an ordinary entity (its rows are the current
+     * mapping) with both fields.
+     */
+    private static void checkEntryScopeVia(DatasetScope.WithinEntryScope within, EntityDefinition entity,
+        EntityDefinitionRegistry entities, String label, List<String> problems) {
+        Optional<EntityDefinition> via = entities.find(within.via().entity());
+        if (via.isEmpty()) {
+            problems.add(label + ": entry scope " + within.scope() + " maps through " + within.via().entity()
+                + ", which does not exist");
+            return;
+        }
+        if (via.get().temporal) {
+            problems.add(label + ": entry scope " + within.scope() + " maps through temporal entity "
+                + within.via().entity() + "; only an ordinary entity can map");
+        }
+        for (String name : List.of(within.via().keyField(), within.via().scopeField())) {
+            if (via.get().findField(name).isEmpty()) {
+                problems.add(label + ": entry scope " + within.scope() + " maps through " + within.via().entity()
+                    + "." + name + ", which does not exist");
+            }
         }
     }
 

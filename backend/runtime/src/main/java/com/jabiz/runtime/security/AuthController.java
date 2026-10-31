@@ -321,7 +321,8 @@ class AuthController {
     /** The actor a successful sign-in (or second step, passed at {@code mfaAt}) established, in its entry. */
     static Actor actor(SponsorSignInOutput result, Instant mfaAt) {
         return new Actor(result.userId(), result.tenantId(), Set.copyOf(result.roles()),
-            Set.copyOf(result.permissions()), mfaAt, result.dataPeriod(), result.entry(), result.emailVerified());
+            Set.copyOf(result.permissions()), mfaAt, result.dataPeriod(), result.entry(), result.emailVerified())
+            .inScope(result.entryScope());
     }
 
     static AuthenticationFailedException loginFailed(String message) {

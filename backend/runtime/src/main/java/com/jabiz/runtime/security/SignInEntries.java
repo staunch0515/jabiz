@@ -124,16 +124,33 @@ public class SignInEntries implements PlatformCheck {
      * @param externalToken        the external token provider people sign in with here (decision D59); null: none
      * @param accountDeletion      whether users of this entry may ask for the deletion of their account here, signed
      *                             in or from a mailed link (section 17.5; decision D62)
+     * @param reservedRoles        roles of entries with an entry scope (decision D64), which {@value #ALL_ROLES} does not
+     *                             include here: their holders work in their scope only
      */
     public record Entry(String name, Set<String> acceptedRoles, boolean selfRegistration, Set<String> registrationRoles,
         boolean requireVerifiedEmail, String appPath, Session session, boolean emailLink, String externalToken,
-        boolean accountDeletion) {
+        boolean accountDeletion, Set<String> reservedRoles) {
 
         public Entry {
             acceptedRoles = Set.copyOf(acceptedRoles);
             registrationRoles = Set.copyOf(registrationRoles);
             Objects.requireNonNull(session, "session must not be null");
             externalToken = externalToken == null || externalToken.isBlank() ? null : externalToken.trim();
+            reservedRoles = reservedRoles == null ? Set.of() : Set.copyOf(reservedRoles);
+        }
+
+        /** An entry whose {@value #ALL_ROLES} includes every role. */
+        public Entry(String name, Set<String> acceptedRoles, boolean selfRegistration, Set<String> registrationRoles,
+            boolean requireVerifiedEmail, String appPath, Session session, boolean emailLink, String externalToken,
+            boolean accountDeletion) {
+            this(name, acceptedRoles, selfRegistration, registrationRoles, requireVerifiedEmail, appPath, session,
+                emailLink, externalToken, accountDeletion, Set.of());
+        }
+
+        /** This entry, its {@value #ALL_ROLES} without {@code roles}. */
+        Entry reserving(Set<String> roles) {
+            return new Entry(name, acceptedRoles, selfRegistration, registrationRoles, requireVerifiedEmail, appPath,
+                session, emailLink, externalToken, accountDeletion, roles);
         }
 
         /** An entry where nobody asks for the deletion of their account. */
@@ -166,7 +183,8 @@ public class SignInEntries implements PlatformCheck {
 
         /** Whether holders of the role may sign in through this entry. */
         public boolean accepts(String roleCode) {
-            return acceptedRoles.contains(ALL_ROLES) || acceptedRoles.contains(roleCode);
+            return acceptedRoles.contains(roleCode)
+                || acceptedRoles.contains(ALL_ROLES) && !reservedRoles.contains(roleCode);
         }
     }
 
@@ -254,6 +272,42 @@ public class SignInEntries implements PlatformCheck {
                 usable.put(name, entry(name, config));
             }
         });
+    }
+
+    /**
+     * Reserves the roles of the entries with an entry scope to them (decision D64): {@value #ALL_ROLES} of every other
+     * entry stops including them, so that their holders cannot sign in where no scope limits them. Called once the
+     * scoped entries are known; returns why an entry cannot be scoped or reserves badly (for the startup check).
+     */
+    public List<String> reserveScoped(Set<String> scopedEntries) {
+        List<String> problems = new ArrayList<>();
+        Set<String> reserved = new java.util.TreeSet<>();
+        for (String name : scopedEntries) {
+            Entry entry = usable.get(name);
+            if (entry == null) {
+                continue;
+            }
+            if (entry.acceptedRoles().contains(ALL_ROLES)) {
+                problems.add("entry " + name + " has an entry scope and accepts every role (" + ALL_ROLES
+                    + "); list its roles");
+                continue;
+            }
+            reserved.addAll(entry.acceptedRoles());
+        }
+        for (Map.Entry<String, Entry> other : new ArrayList<>(usable.entrySet())) {
+            if (scopedEntries.contains(other.getKey())) {
+                continue;
+            }
+            for (String role : reserved) {
+                if (other.getValue().acceptedRoles().contains(role)) {
+                    problems.add("role " + role + " is accepted by entry " + other.getKey()
+                        + ", which has no entry scope, and by an entry that has one: its holders would work outside "
+                        + "their scope there");
+                }
+            }
+            usable.put(other.getKey(), other.getValue().reserving(reserved));
+        }
+        return problems;
     }
 
     /** The usable entry of that name; the default entry for none (null or blank, as everywhere entries are named). */
