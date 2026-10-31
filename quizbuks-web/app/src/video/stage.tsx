@@ -40,6 +40,9 @@ let state: StageState = { slot: null, player: null, soundAsked: false, soundOn: 
 const listeners = new Set<() => void>()
 let frame: HTMLIFrameElement | null = null
 let release: ReturnType<typeof setTimeout> | null = null
+/** Until when a card's tap hands the player to the start page it opens (which may first load its data). */
+let handoffUntil = 0
+const HANDOFF_MS = 10_000
 
 function set(next: Partial<StageState>) {
   state = { ...state, ...next }
@@ -111,6 +114,7 @@ function claim(slot: Slot) {
     clearTimeout(release)
     release = null
   }
+  handoffUntil = 0
   const same = state.player === slot.player
   set({ slot, player: slot.player, ...(same ? {} : { soundAsked: false, soundOn: false }) })
 }
@@ -118,11 +122,14 @@ function claim(slot: Slot) {
 function leave(slot: Slot) {
   if (state.slot?.element !== slot.element) return
   set({ slot: null })
-  // The next page's slot claims it within this tick when it shows the same video; else the player goes.
+  // The next page's slot claims it within this tick when it shows the same video; else the player goes. A card's tap
+  // waits longer: the start page it opens shows its slot only once its data has come.
+  const wait = Math.max(0, handoffUntil - Date.now())
+  handoffUntil = 0
   release = setTimeout(() => {
     release = null
     if (!state.slot) set({ player: null, soundAsked: false, soundOn: false })
-  }, 0)
+  }, wait)
 }
 
 export function useStage(): StageState {
@@ -221,7 +228,10 @@ export function VideoStage() {
       {/* On a card nothing in the player is for touching: the whole of it opens the start page. */}
       {slot?.mode === 'card' && (
         <button type="button" className="absolute inset-0 size-full cursor-pointer" data-testid="video-open"
-          aria-label={slot.title} onClick={() => slot.onOpen?.()} />
+          aria-label={slot.title} onClick={() => {
+            handoffUntil = Date.now() + HANDOFF_MS
+            slot.onOpen?.()
+          }} />
       )}
     </div>,
     document.body,

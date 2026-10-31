@@ -728,10 +728,12 @@ describe('the video to watch (Q19, Q63)', () => {
   it('opens the start page from a tap on the playing video, the same player playing on with its sound (Q65)',
     async () => {
     const io = intersections()
-    server({ feed: [{ ...CARD, video: PLAYER }], publicationPage: () => json(200, { items: [publication({
-      materials: JSON.stringify([{ no: 1, kind: 'VIDEO_LINK', title: 'Watch first', description: null, body: null,
-        url: 'https://youtu.be/dQw4w9WgXcQ', pdf: null, audio: null, images: [], watchToAnswer: true }]) })],
-      offset: 0, limit: 1 }) })
+    // The start page's data comes a while after the tap: the player waits for its slot.
+    server({ feed: [{ ...CARD, video: PLAYER }], publicationPage: () => new Promise<Response>((resolve) => setTimeout(
+      () => resolve(json(200, { items: [publication({
+        materials: JSON.stringify([{ no: 1, kind: 'VIDEO_LINK', title: 'Watch first', description: null, body: null,
+          url: 'https://youtu.be/dQw4w9WgXcQ', pdf: null, audio: null, images: [], watchToAnswer: true }]) })],
+        offset: 0, limit: 1 })), 300)) })
     render(<App />)
     const card = await screen.findByTestId('feed-card')
     io.fire(card, true, MIDDLE)
