@@ -9,6 +9,7 @@ import com.jabiz.query.QueryCompiler;
 import com.jabiz.query.RawQueryPlan;
 import com.jabiz.query.SqlIdentifiers;
 import com.jabiz.query.TimeSlice;
+import com.jabiz.entity.ValidationException;
 import com.jabiz.runtime.dataset.DatasetRegistry;
 import com.jabiz.runtime.entity.EntityDefinitionRegistry;
 import com.jabiz.runtime.observability.PlatformObservations;
@@ -40,7 +41,6 @@ import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
-import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.LongSupplier;
 
@@ -312,7 +312,14 @@ public class PublicCounters {
         // Scopes of public datasets are fixed values; the anonymous context resolves them.
         RequestContext anonymous = RequestContext.anonymous(Locale.ROOT, "public-counter");
         QueryCompiler.Binder binder = new QueryCompiler.Binder("p_");
-        String keyParam = binder.bindNamed("counter_key", BoundValue.of(target.ids() ? UUID.fromString(key) : key));
+        Object value;
+        try {
+            // As the column holds it: an id may be a uuid column or text (an ordinary table's semantic identity).
+            value = compiler.fieldValue(target.entity(), target.entity().fields.get(counter.field()), key);
+        } catch (ValidationException e) {
+            return Mono.just(Visibility.NONE);
+        }
+        String keyParam = binder.bindNamed("counter_key", BoundValue.of(value));
         String source = compiler.templateExpression(target.dataset(), target.entity(),
             target.dataset().scope().resolve(anonymous), TimeSlice.asOf(clock.instant()), binder);
         // One visible row is enough; with an owner, it also says whose the key is (the owner is the row's, so any
