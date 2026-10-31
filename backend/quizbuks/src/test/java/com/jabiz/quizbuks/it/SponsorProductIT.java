@@ -196,6 +196,14 @@ class SponsorProductIT extends PlayItSupport {
         String handle = publishedPage(ann);
         String annProduct = save(sponsorToken(ann), product("Ann's", "100", "JPY", true));
         String directProduct = save(sponsorToken(direct), product("Direct's", "100", "JPY", true));
+        // Q60b-3: the administration's list, limited for an operator's session to its own sponsors' products.
+        assertThat(items("qb.admin.sponsor-products", northSession, Map.of("limit", 500)))
+            .extracting(row -> row.get("productId")).contains(annProduct).doesNotContain(directProduct);
+        assertThat(items("qb.admin.sponsor-products", hq(), Map.of("params", Map.of("userId", direct))))
+            .singleElement().satisfies(row -> assertThat(row).containsEntry("productId", directProduct)
+                .containsEntry("company", "Company of " + direct).containsEntry("currency", "JPY"));
+        assertThat(items("qb.admin.sponsor-products", northSession, Map.of("params", Map.of("userId", direct))))
+            .isEmpty();
 
         // Headquarters: hidden whatever the sponsor saves, until put back (hidden, for the sponsor to show).
         run(SponsorProductProcesses.TAKEDOWN, contentAdmin2(), body("productId", annProduct, "reason", "Fake"));

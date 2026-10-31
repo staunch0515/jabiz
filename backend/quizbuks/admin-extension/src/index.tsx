@@ -26,6 +26,7 @@ import {
   Radar,
   Receipt,
   Globe,
+  ShoppingBag,
 } from 'lucide-react'
 import BankTopUpPage from './BankTopUpPage'
 import BankSettingsPage from './BankSettingsPage'
@@ -55,6 +56,7 @@ import ReviewsPage from './ReviewsPage'
 import SponsorReviewPage from './SponsorReviewPage'
 import SponsorPagesPage from './SponsorPagesPage'
 import SponsorPageReviewPage from './SponsorPageReviewPage'
+import SponsorProductsPage from './SponsorProductsPage'
 import CashRewardsPage from './CashRewardsPage'
 import DigitalPrizesPage from './DigitalPrizesPage'
 import TopUpsPage from './TopUpsPage'
@@ -94,6 +96,8 @@ export default defineExtension({
     // Q60a-3: sponsors' pages, for headquarters and the operators (their own sponsors').
     { path: PATH.sponsorPages, element: <SponsorPagesPage /> },
     { path: '/qb/sponsor-pages/:userId', element: <SponsorPageReviewPage /> },
+    // Q60b-3: sponsors' products.
+    { path: PATH.sponsorProducts, element: <SponsorProductsPage /> },
     { path: PATH.users, element: <UsersPage /> },
     { path: '/qb/users/:userId', element: <UserSummaryPage /> },
     { path: PATH.attempts, element: <AttemptsPage /> },
@@ -151,6 +155,8 @@ export default defineExtension({
         // Q60a-3: the pages of the operator's sponsors.
         { key: 'qb-operator-sponsor-pages', label: 'menu.sponsorPages', path: PATH.sponsorPages, icon: Globe,
           permission: PERMISSION.operatorUse },
+        { key: 'qb-operator-sponsor-products', label: 'menu.sponsorProducts', path: PATH.sponsorProducts,
+          icon: ShoppingBag, permission: PERMISSION.operatorUse },
         // Q48c: the operator's own prospecting.
         { key: 'qb-operator-prospects', label: 'menu.prospects', path: PATH.prospects, icon: Radar,
           permission: PERMISSION.operatorUse },
@@ -180,6 +186,8 @@ export default defineExtension({
           permission: PERMISSION.publicationRead },
         // Q60a-3: every sponsor's page (headquarters; an operator has its own entry above).
         { key: 'qb-sponsor-pages', label: 'menu.sponsorPages', path: PATH.sponsorPages, icon: Globe,
+          permission: PERMISSION.contentWrite },
+        { key: 'qb-sponsor-products', label: 'menu.sponsorProducts', path: PATH.sponsorProducts, icon: ShoppingBag,
           permission: PERMISSION.contentWrite },
         { key: 'qb-users', label: 'menu.users', path: PATH.users, icon: Users, permission: PERMISSION.usersRead },
         // Q22: the cash rewards sponsors pay takers themselves, with the disputes to decide.
