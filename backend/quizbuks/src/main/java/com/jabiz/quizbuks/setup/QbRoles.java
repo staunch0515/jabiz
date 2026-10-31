@@ -136,7 +136,9 @@ public final class QbRoles {
     static {
         add(TAKER, labels("Quiz taker", "答题人", "回答者"), false, List.of(QbPermissions.COUNTRY_READ,
             QbPermissions.PLAY, QbPermissions.ME, QbPermissions.PAYOUT_ONBOARD, QbPermissions.ACCOUNT_READ,
-            QbPermissions.SPONSOR_AVATAR_READ, QbPermissions.CONTENT_FILE_READ));
+            QbPermissions.SPONSOR_AVATAR_READ, QbPermissions.CONTENT_FILE_READ,
+            // Q68: a sponsor's own figures and publications in the app, and pausing or resuming them.
+            QbPermissions.SPONSOR_APP));
         add(SPONSOR, labels("Sponsor", "商家", "スポンサー"), false, List.of(QbPermissions.COUNTRY_READ,
             QbPermissions.SPONSOR_ME, QbPermissions.CONTENT_WRITE, QbPermissions.CONTENT_FILE_READ,
             QbPermissions.AI_USE, QbPermissions.PUBLICATION_WRITE, QbPermissions.TOPUP,
@@ -145,7 +147,9 @@ public final class QbRoles {
             // Q9d: the receipts of their own top-ups (the platform shows a sponsor only what they issued).
             "document.archive.read",
             // Q9e: the analytics of their own publications (aggregates only).
-            QbPermissions.STATS_READ));
+            QbPermissions.STATS_READ,
+            // Q68: the dashboard, the trend, pausing and resuming are shared with the app (see SPONSOR_APP).
+            QbPermissions.SPONSOR_APP));
         add(SHOPIFY_SHOP, labels("Shopify shop staff", "Shopify 店铺员工", "Shopify ストアのスタッフ"), false,
             List.of(com.jabiz.quizbuks.shopify.Shopify.USE));
         add(ADMIN_CONTENT, labels("Content administrator", "内容管理员", "コンテンツ管理者"), true, CONTENT);

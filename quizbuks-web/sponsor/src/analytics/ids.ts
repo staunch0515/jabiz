@@ -4,7 +4,7 @@
  * shared `src/qb/ids.ts` (backend/quizbuks/CLAUDE.md section 5).
  */
 
-/** SQL templates (permission `qb.stats.read`), all limited to the sponsor's own publications. */
+/** SQL templates (permission `qb.stats.read`; the dashboard and the trend `qb.sponsor.app`, Q68), all limited to the sponsor's own publications. */
 export const ANALYTICS_TEMPLATE = {
   dashboard: 'qb.sponsor.dashboard',
   trend: 'qb.sponsor.analytics.trend',

@@ -44,6 +44,7 @@ import {
   Moon,
   ScanLine,
   Search,
+  Store,
   Sun,
   UserRound,
   type LucideIcon,
@@ -65,6 +66,8 @@ import { AboutPage } from './pages/AboutPage'
 import { IntroPage, introSeen, rememberSeen } from './pages/IntroPage'
 import { Wordmark } from './qb/Illustrations'
 import { badgeText, inboxItemOf, INBOX_PATH } from './inbox/api'
+import { MY_SPONSOR_PATH, MY_SPONSOR_QUERY, readFigures, useMySponsor } from './mysponsor/api'
+import { MySponsorPage } from './mysponsor/MySponsorPage'
 import { InboxItemPage } from './inbox/InboxItemPage'
 import { InboxPage } from './inbox/InboxPage'
 import { useUnread } from './inbox/useUnread'
@@ -187,6 +190,30 @@ function backFallback(path: string): string {
 }
 
 /**
+ * The header's way to the sponsor's own page (Q68): only for a taker who is a sponsor too. A dot says that a
+ * publication is short of funds; the figures come from the page's own (shared, five minutes) query.
+ */
+function SponsorEntry({ current }: { current: boolean }) {
+  const { t } = useTranslation(APP)
+  const sponsor = useMySponsor().data
+  const approved = sponsor?.reviewStatus === 'APPROVED'
+  const figures = useQuery({ queryKey: [...MY_SPONSOR_QUERY, 'attention'], enabled: approved, staleTime: 5 * 60_000,
+    queryFn: () => readFigures(new Date().toISOString()) })
+  if (!sponsor) return null
+  const attention = (figures.data?.fundsShort ?? 0) > 0
+  return (
+    <Button asChild variant="ghost" size="icon-sm" className="relative">
+      <Link to={MY_SPONSOR_PATH} current={current} data-testid="header-my-sponsor"
+        aria-label={attention ? `${t('mySponsor.nav')}: ${t('mySponsor.attention')}` : t('mySponsor.nav')}>
+        <Store aria-hidden />
+        {attention && <span aria-hidden data-testid="header-my-sponsor-dot"
+          className="bg-destructive absolute top-1 right-1 size-2 rounded-full" />}
+      </Link>
+    </Button>
+  )
+}
+
+/**
  * The app's header (Q62): the name, and at the right one menu of scanning a sponsor's code (Q52), the appearance and
  * signing out, so that the bar stays the name and one button on any phone.
  */
@@ -221,6 +248,8 @@ function Header({ scan = false, search = false }: { scan?: boolean; search?: boo
         <Wordmark name={t('brand')} compact className="text-primary mr-auto" />
         {/* Q64: on the home, its filters (the way a reward is paid and the others) beside the search. */}
         {search && path === HOME && <FeedFiltersButton />}
+        {/* Q68: a sponsor's own account, for a sponsor only; a dot when something needs them. */}
+        {search && <SponsorEntry current={path === MY_SPONSOR_PATH} />}
         {/* Q63: the home's search is opened here, a magnifier beside the menu. */}
         {search && (
           <Button variant="ghost" size="icon-sm" aria-label={tApp('feed.search')} data-testid="search-open"
@@ -365,6 +394,7 @@ function SignedIn({ path }: { path: string }) {
   else if (isAccountPath(path)) page = <AccountPage path={path} />
   else if (path === INBOX_PATH) page = <InboxPage />
   else if (path === STAFF_PATH) page = <StaffDeskPage />
+  else if (path === MY_SPONSOR_PATH) page = <MySponsorPage />
   else if (path === SCAN_PATH) page = <ScanPage />
   else if (inboxItemOf(path)) {
     const message = inboxItemOf(path)!
