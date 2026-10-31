@@ -429,5 +429,138 @@
         "type" : "numeric"
       }
     }
+  }, {
+    "cacheSeconds" : 60,
+    "description" : "A sponsor's published page as its link (/s/<handle>) shows it to anybody (Q60a): the headline, the story, the logo, the cover, the website and the language, with the company of the approved onboarding; none when it is not published",
+    "id" : "qb.public.sponsor-page",
+    "list" : {
+      "filters" : [ ],
+      "sorts" : [ ]
+    },
+    "params" : {
+      "handle" : {
+        "kind" : {
+          "maxLength" : 30,
+          "multiline" : false,
+          "type" : "text"
+        },
+        "list" : false,
+        "required" : true
+      }
+    },
+    "results" : {
+      "company" : {
+        "maxLength" : 100,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "cover" : {
+        "kindId" : "jabiz.file",
+        "policy" : "qb.sponsor-page-image",
+        "type" : "custom"
+      },
+      "handle" : {
+        "maxLength" : 30,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "headline" : {
+        "maxLength" : 120,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "language" : {
+        "allowedValues" : [ "ja", "zh", "en" ],
+        "dictUrn" : "urn:jabiz:dict:quizbuks:content-language",
+        "type" : "code"
+      },
+      "logo" : {
+        "kindId" : "jabiz.file",
+        "policy" : "qb.sponsor-page-image",
+        "type" : "custom"
+      },
+      "story" : {
+        "maxLength" : 5000,
+        "multiline" : true,
+        "type" : "text"
+      },
+      "website" : {
+        "maxLength" : 300,
+        "multiline" : false,
+        "type" : "text"
+      }
+    }
+  }, {
+    "cacheSeconds" : 60,
+    "description" : "The live public publications of the sponsor whose published page has the handle (Q60a): what the page lists, each linking to its share page; none when the page is not published",
+    "id" : "qb.public.sponsor-page-publications",
+    "list" : {
+      "defaultSort" : {
+        "asc" : true,
+        "field" : "endAt"
+      },
+      "filters" : [ ],
+      "sorts" : [ "endAt" ]
+    },
+    "params" : {
+      "handle" : {
+        "kind" : {
+          "maxLength" : 30,
+          "multiline" : false,
+          "type" : "text"
+        },
+        "list" : false,
+        "required" : true
+      }
+    },
+    "results" : {
+      "endAt" : {
+        "role" : "EVENT_TIME",
+        "type" : "temporal"
+      },
+      "kind" : {
+        "allowedValues" : [ "QUIZ", "SURVEY" ],
+        "dictUrn" : "urn:jabiz:dict:quizbuks:quiz-kind",
+        "type" : "code"
+      },
+      "maxReward" : {
+        "currency" : "JPY",
+        "scale" : 0,
+        "type" : "monetary"
+      },
+      "name" : {
+        "maxLength" : 100,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "publicationId" : {
+        "targetEntity" : "QbPublication",
+        "type" : "reference"
+      },
+      "questionCount" : {
+        "precision" : 4,
+        "scale" : 0,
+        "type" : "numeric"
+      },
+      "quizTitle" : {
+        "maxLength" : 100,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "rewardMethod" : {
+        "allowedValues" : [ "PLATFORM", "SPONSOR_CASH", "OFFLINE_REDEEM", "DIGITAL_PRIZE", "CHANNEL" ],
+        "dictUrn" : "urn:jabiz:dict:quizbuks:reward-method",
+        "type" : "code"
+      },
+      "startAt" : {
+        "role" : "EVENT_TIME",
+        "type" : "temporal"
+      },
+      "timeLimitSec" : {
+        "precision" : 5,
+        "scale" : 0,
+        "type" : "numeric"
+      }
+    }
   } ]
 }

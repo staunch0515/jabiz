@@ -151,7 +151,7 @@ public final class AccountEditing {
      * Whether the caller saw the row as it is: a given {@code baseRevision} other than the current one is 422
      * {@code code}; none means the last writer wins.
      */
-    static boolean current(ProcessContext ctx, EntityInstance row, Long baseRevision, String code) {
+    public static boolean current(ProcessContext ctx, EntityInstance row, Long baseRevision, String code) {
         long revision = row == null ? 0 : number(row.get("revision"));
         if (baseRevision != null && baseRevision != revision) {
             ctx.reject(new Violation("baseRevision", code, "Changed meanwhile: revision " + revision + ", not "

@@ -32,6 +32,7 @@ class ProcessAccessIT extends QbItSupport {
     /** The QuizBuks processes not open to callers, by kind; every other QuizBuks process is open. */
     private static final Map<String, ProcessAccess> CLOSED = Map.ofEntries(
         Map.entry("QB_SPONSOR_APPROVAL_RESULT", ProcessAccess.INTERNAL),
+        Map.entry("QB_SPONSOR_PAGE_APPROVAL_RESULT", ProcessAccess.INTERNAL),
         Map.entry("QB_PUBLICATION_APPROVAL_RESULT", ProcessAccess.INTERNAL),
         Map.entry("QB_PUBLICATION_BAN_PAUSE", ProcessAccess.SUB_PROCESS_ONLY),
         Map.entry("QB_PUBLICATION_COMPLETION_MOVE", ProcessAccess.SUB_PROCESS_ONLY),
