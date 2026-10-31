@@ -7,14 +7,17 @@ import { QBVIEW } from './messages'
 /**
  * A sponsor's products as takers see them (Q60b): on the sponsor's page, with a publication (its quiz's) and under a
  * question of its result. Each opens the sponsor's own shop in a new tab; a link that is not https is never made one.
- * Part of the shared folder `src/qb`.
+ * `onOpen` hears of each opening (Q60c: the app counts the click; a preview does not pass it). Part of the shared
+ * folder `src/qb`.
  */
-export function ProductCards({ products, title, testId = 'products', headingLevel = 'h2' }: {
+export function ProductCards({ products, title, testId = 'products', headingLevel = 'h2', onOpen }: {
   products: PublicProduct[]
   /** The block's heading; none: the products alone (under a question, which names them). */
   title?: string
   testId?: string
   headingLevel?: 'h2' | 'h3'
+  /** Called when a product's shop link is opened (clicked, or opened with the keyboard or the middle button). */
+  onOpen?: (product: PublicProduct) => void
 }) {
   const { t, i18n } = useTranslation(QBVIEW)
   if (products.length === 0) return null
@@ -46,7 +49,9 @@ export function ProductCards({ products, title, testId = 'products', headingLeve
                 {shop && (
                   <a href={shop} target="_blank" rel="noopener noreferrer nofollow sponsored"
                     className="text-primary inline-flex items-center gap-1 self-start text-sm underline"
-                    aria-label={t('products.shopOf', { name: product.name })} data-testid={`${testId}-shop`}>
+                    aria-label={t('products.shopOf', { name: product.name })} data-testid={`${testId}-shop`}
+                    onClick={onOpen && (() => onOpen(product))}
+                    onAuxClick={onOpen && ((event) => { if (event.button === 1) onOpen(product) })}>
                     <ExternalLink aria-hidden className="size-4" />{t('products.shop')}
                   </a>
                 )}

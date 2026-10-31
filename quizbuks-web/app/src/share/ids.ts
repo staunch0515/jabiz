@@ -6,3 +6,12 @@ export const SPONSOR_PAGE_TEMPLATE = {
   /** A live publication's products (its quiz's and its questions'). */
   publicationProducts: 'qb.public.publication-products',
 } as const
+
+/**
+ * The platform's public counters of sponsors' pages (Q60c; backend `SponsorStatsConfig`): a page's views by its
+ * handle, a product's shop-link clicks by the product.
+ */
+export const SPONSOR_COUNTER = {
+  pageView: 'qb.sponsor-page-view',
+  productClick: 'qb.product-click',
+} as const
