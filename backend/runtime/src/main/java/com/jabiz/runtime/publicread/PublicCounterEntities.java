@@ -8,8 +8,10 @@ import org.springframework.context.annotation.Configuration;
 
 /**
  * The counts of the public counters as a read-only platform entity (docs/design/15-public-access.md section 10;
- * decision D65): one row per counter, key and day. The platform's dataset needs {@value #READ}; an application gives
- * its readers their share through datasets of its own (read-only, scoped to the keys they may see) and templates.
+ * decision D65): one row per counter, key and day, with the key's owner for counters that declare one. The platform's
+ * dataset needs {@value #READ}; an application gives its readers their share through datasets of its own (read-only,
+ * scoped to the reader as {@code ownerKey}, e.g. {@code fromContext("ownerKey", RequestContext::actorId)}) and
+ * templates.
  * Only {@link PublicCounters} writes the table.
  */
 @Configuration
@@ -32,9 +34,11 @@ public class PublicCounterEntities {
         eb.field("counterKey", f -> f.physicalColumn("counter_key").immutable(true).required(true).asText(100));
         eb.field("day", f -> f.physicalColumn("day").immutable(true).required(true).asDate());
         eb.field("hits", f -> f.physicalColumn("hits").required(true).asNumeric(18, 0));
+        // Whom the key belongs to (the counter's owner field, decision D65 item 7); empty without one.
+        eb.field("ownerKey", f -> f.physicalColumn("owner_key").immutable(true).asText(128));
         eb.listView("default", lv -> lv
-            .columns("counterName", "counterKey", "day", "hits")
-            .filters("counterName", "counterKey", "day")
+            .columns("counterName", "counterKey", "ownerKey", "day", "hits")
+            .filters("counterName", "counterKey", "ownerKey", "day")
             .sorts("day", "hits")
             .defaultSort("day", false));
     });
