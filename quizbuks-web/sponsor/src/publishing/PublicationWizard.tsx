@@ -31,6 +31,7 @@ import { readVersions, searchQuizzes } from '../content/api'
 import { QUIZZES_QUERY, versionsQuery } from '../content/paths'
 import { SPONSOR } from '../messages'
 import { ShownAt, type ShownField } from '../content/ShownAt'
+import { FileField } from '../content/editing'
 import { kudosName } from '../qb/kudos'
 import { noticeConsentProblem } from '../qb/ConsentGate'
 import { fieldProblem, problemText } from '../qb/problems'
@@ -318,6 +319,15 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
             disabled={locked} data-testid="publication-name" onChange={(event) => set('name', event.target.value)} />
         )}
       </Field>
+      {/* Q64: the publication's own cover, the same upload as the quiz's; empty, the quiz's is shown. */}
+      <div className="flex flex-col gap-1.5">
+        <FileField kind="image" label={t('publishing.field.cover')}
+          uploadLabel={form.cover ? t('publishing.field.replaceCover') : t('publishing.field.uploadCover')}
+          value={form.cover} onChange={(cover) => set('cover', cover)} error={problemOf('cover')} disabled={locked}
+          testId="publication-cover" />
+        <p className="text-muted-foreground text-sm" data-testid="publication-cover-hint">{t('publishing.field.coverHint')}</p>
+        <ShownAt field="cover" />
+      </div>
       <Field id={`${id}-quiz`} label={t('publishing.field.quiz')} hint={t('publishing.field.quizHint')}>
         {(aria) => (
           <Combobox {...aria} value={form.quizId} selectedLabel={quizTitle ?? undefined}
@@ -625,6 +635,7 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
       )}
       <PublicationSummary values={{
         name: form.name,
+        cover: form.cover,
         quizTitle,
         versionLabel: version?.label ?? detail?.publication.versionLabel ?? null,
         regions: form.audience === 'INVITED' ? [] : REGIONS.filter((region) => form.regions.includes(region)),

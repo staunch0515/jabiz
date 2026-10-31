@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { draftPreview } from './model'
+import { draftPreview, publicationPreview } from './model'
 import { previewOf, previewOfPublication, previewOfQuiz } from './paths'
-import type { Draft } from '../content/api'
+import type { Draft, Snapshot } from '../content/api'
+import { toPublication } from '../publishing/api'
 
 const DRAFT = {
   quiz: { quizId: 'q1', title: 'Coffee basics', kind: 'QUIZ', intro: 'About beans', cover: 'f1', timeLimitSec: 120,
@@ -55,6 +56,16 @@ describe('the preview (Q34b)', () => {
     const withVideo = { ...DRAFT, materials: [{ ...DRAFT.materials[0], kind: 'VIDEO_LINK',
       url: 'https://youtu.be/dQw4w9WgXcQ', watchToAnswer: true }] } as unknown as Draft
     expect(draftPreview(withVideo, null).video).toBe('https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ')
+  })
+
+  it('shows a publication with its own cover, else its version\'s (Q64)', () => {
+    const snapshot = { title: 'Coffee basics', intro: null, cover: 'quiz-cover', timeLimitSec: 120, kind: 'QUIZ',
+      materials: [], questions: [] } as unknown as Snapshot
+    const row = { publicationId: 'p1', name: 'Autumn', status: 'LIVE', revision: 1, editedAt: '2026-10-26T00:00:00Z' }
+    expect(publicationPreview(toPublication({ ...row, cover: 'own-cover' }), [], snapshot, null).view.cover)
+      .toBe('own-cover')
+    expect(publicationPreview(toPublication(row), [], snapshot, null).view.cover).toBe('quiz-cover')
+    expect(publicationPreview(toPublication(row), [], null, null).view.cover).toBeNull()
   })
 
   it('has its own addresses', () => {

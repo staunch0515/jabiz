@@ -83,6 +83,12 @@ export interface FeedCard {
   timeLimitSec: number
   questionCount: number
   fullScore: number
+  /** Q64: the sponsor's published page (its link name); none while it is not published, and on a preview's card. */
+  sponsorHandle?: string | null
+  /** Q64: the caller's own attempt at it, when they started one: its id, status and deadline. */
+  myAttemptId?: string | null
+  myStatus?: string | null
+  myDeadline?: string | null
 }
 
 /** The sorts the feed offers (U-14), each a column of the template and a direction. */
@@ -138,7 +144,21 @@ function feedCard(row: Record<string, unknown>): FeedCard {
     timeLimitSec: numberOf(row.timeLimitSec),
     questionCount: numberOf(row.questionCount),
     fullScore: numberOf(row.fullScore),
+    sponsorHandle: textOrNull(row.sponsorHandle),
+    myAttemptId: textOrNull(row.myAttemptId),
+    myStatus: textOrNull(row.myStatus),
+    myDeadline: textOrNull(row.myDeadline),
   }
+}
+
+/** Q64: where a card's start leads: the start page, back to answering, or the result. */
+export type CardProgress = 'start' | 'resume' | 'done'
+
+/** The caller's progress on a card at `now`: an attempt in progress and still in time resumes; any other is done. */
+export function cardProgress(card: Pick<FeedCard, 'myAttemptId' | 'myStatus' | 'myDeadline'>, now: Date): CardProgress {
+  if (!card.myAttemptId) return 'start'
+  const inTime = card.myStatus === 'IN_PROGRESS' && !!card.myDeadline && Date.parse(card.myDeadline) > now.getTime()
+  return inTime ? 'resume' : 'done'
 }
 
 /** One page of the feed (U-10 – U-14). */

@@ -74,9 +74,16 @@ class SponsorPageIT extends PlayItSupport {
         params.put("publicationId", publicationId);
         params.put("at", clock.instant().toString());
         params.put("country", "JP");
-        Object app = items("qb.app.publication", taker(newTaker(unique("t-q60-page"), "JP")),
-            Map.of("params", params)).getFirst().get("sponsorHandle");
+        String taker = taker(newTaker(unique("t-q60-page"), "JP"));
+        Object app = items("qb.app.publication", taker, Map.of("params", params)).getFirst().get("sponsorHandle");
         assertThat(app).isEqualTo(anonymous);
+        // Q64: the home's card links the same page.
+        Map<String, Object> feedParams = new java.util.LinkedHashMap<>();
+        feedParams.put("at", clock.instant().toString());
+        feedParams.put("country", "JP");
+        assertThat(items("qb.app.feed", taker, Map.of("params", feedParams, "limit", 200)))
+            .filteredOn(row -> publicationId.equals(row.get("publicationId"))).singleElement()
+            .satisfies(row -> assertThat(row.get("sponsorHandle")).isEqualTo(anonymous));
         return anonymous;
     }
 

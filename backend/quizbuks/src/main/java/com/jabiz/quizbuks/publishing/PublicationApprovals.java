@@ -15,7 +15,7 @@ import java.util.Map;
  * {@code qb.review.publication.auto}, read at each submission; false whatever it says when an administrator took
  * down a publication of the same quiz), whether that is so ({@code takenDown}, Q10b review M-d), the highest reward,
  * the most it can pay out, the publisher (kind and id) and the regions. The content is everything the reviewer approves: the version (by its content hash) and
- * every part of the policy. An approval stays valid while the content hashes the same ({@link ContentHash}: key order
+ * every part of the policy, with the publication's own cover (Q64). An approval stays valid while the content hashes the same ({@link ContentHash}: key order
  * and number scale do not count), and a policy is frozen once submitted, so what goes live is what was approved.
  */
 public final class PublicationApprovals {
@@ -57,6 +57,15 @@ public final class PublicationApprovals {
      */
     public static Map<String, Object> content(PublicationReadiness.Draft draft, String versionContentHash,
         List<TierCoverage.Tier> tiers) {
+        return content(draft, versionContentHash, tiers, null);
+    }
+
+    /**
+     * As {@link #content(PublicationReadiness.Draft, String, List)}, with the publication's own cover (Q64): the file
+     * the takers see on its card instead of the version's. Named only when there is one, so earlier hashes stand.
+     */
+    public static Map<String, Object> content(PublicationReadiness.Draft draft, String versionContentHash,
+        List<TierCoverage.Tier> tiers, Object cover) {
         Map<String, Object> content = new LinkedHashMap<>();
         content.put("versionId", draft.versionId() == null ? null : draft.versionId().toString());
         content.put("versionContentHash", versionContentHash);
@@ -82,6 +91,9 @@ public final class PublicationApprovals {
         if (RewardMethod.DIGITAL_PRIZE.equals(draft.rewardMethod())) {
             content.put("digitalDelivery", draft.digitalDelivery());
             content.put("digitalDescription", draft.digitalDescription());
+        }
+        if (cover != null) {
+            content.put("cover", cover.toString());
         }
         List<Object> ranges = new ArrayList<>();
         tiers.stream().sorted(Comparator.comparingInt(TierCoverage.Tier::fromScore)

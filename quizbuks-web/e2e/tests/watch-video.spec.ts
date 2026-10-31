@@ -73,7 +73,7 @@ test('a video to watch is shown on the home with its reward and starts the quiz'
   await expect(card.frameLocator('iframe').getByRole('button', { name: 'Play' })).toBeVisible()
   await expectAccessible(page, 'app home video to watch')
   // The start opens the start page first: the video leads it, playing as it opens; then the quiz starts.
-  await card.getByTestId('feed-video-start').click()
+  await card.getByTestId('feed-card-start').click()
   await expect(page).toHaveURL(/\/p\/[^/]+$/)
   await expect(page.getByTestId('detail-hero').locator('iframe'))
     .toHaveAttribute('src', `${PLAYER}?autoplay=1&mute=1&playsinline=1`)

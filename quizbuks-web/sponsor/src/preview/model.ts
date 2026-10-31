@@ -74,7 +74,8 @@ export function publicationPreview(p: Publication, tiers: SponsorTier[], snapsho
       publicationId: p.publicationId,
       name: p.name,
       quizTitle: snapshot?.title ?? '',
-      cover: snapshot?.cover ?? null,
+      // Q64: the publication's own cover, as its card shows it; else the version's.
+      cover: p.cover ?? snapshot?.cover ?? null,
       kind: snapshot?.kind === 'SURVEY' ? 'SURVEY' : 'QUIZ',
       intro: snapshot?.intro ?? null,
       materials: (snapshot?.materials ?? []).map((m) => material(m, m.no)),

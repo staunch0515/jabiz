@@ -8,6 +8,7 @@ import com.jabiz.process.ProcessDefinition;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.content.QuizEditing;
 import com.jabiz.quizbuks.identity.CallerChecks;
 import com.jabiz.quizbuks.country.Regions;
 import com.jabiz.runtime.EntityInstance;
@@ -77,6 +78,8 @@ public final class PublicationProcesses {
      * @param baseRevision      the revision the caller edited; when given and no longer current, 422
      * @param audience          who may answer (Q25, {@link Audience}): {@code PUBLIC} when not given; {@code INVITED}
      *                          needs no regions
+     * @param cover             the publication's own cover (Q64), a file of the policy {@code qb.content.image}
+     *                          uploaded by the sponsor; none shows the version's cover
      */
     public record SaveInput(UUID publicationId, UUID versionId, @NotNull String name, List<@NotNull String> regions,
         Instant startAt, Instant endAt, Integer timeLimitSec, Integer passScore, BigDecimal budgetCap,
@@ -85,14 +88,14 @@ public final class PublicationProcesses {
         @Size(max = PublishingLimits.REDEEM_DESCRIPTION_LENGTH) String redeemDescription,
         @Size(max = 10) String audience, @Size(max = 20) String digitalDelivery,
         @Size(max = PublishingLimits.REDEEM_DESCRIPTION_LENGTH) String digitalDescription, Integer digitalSendDays,
-        @Sensitive @Size(max = PublishingLimits.DIGITAL_CONTENT_LENGTH) String digitalContent) {
+        @Sensitive @Size(max = PublishingLimits.DIGITAL_CONTENT_LENGTH) String digitalContent, UUID cover) {
 
         /** As before Q25: everybody in the regions. */
         public SaveInput(UUID publicationId, UUID versionId, String name, List<String> regions, Instant startAt,
             Instant endAt, Integer timeLimitSec, Integer passScore, BigDecimal budgetCap, Integer maxWinners,
             List<TierInput> tiers, Long baseRevision, String rewardMethod, String redeemDescription) {
             this(publicationId, versionId, name, regions, startAt, endAt, timeLimitSec, passScore, budgetCap,
-                maxWinners, tiers, baseRevision, rewardMethod, redeemDescription, null, null, null, null, null);
+                maxWinners, tiers, baseRevision, rewardMethod, redeemDescription, null, null, null, null, null, null);
         }
 
         /** As before Q33: no digital prize. */
@@ -101,14 +104,26 @@ public final class PublicationProcesses {
             List<TierInput> tiers, Long baseRevision, String rewardMethod, String redeemDescription,
             String audience) {
             this(publicationId, versionId, name, regions, startAt, endAt, timeLimitSec, passScore, budgetCap,
-                maxWinners, tiers, baseRevision, rewardMethod, redeemDescription, audience, null, null, null, null);
+                maxWinners, tiers, baseRevision, rewardMethod, redeemDescription, audience, null, null, null, null,
+                null);
+        }
+
+        /** As before Q64: no cover of its own. */
+        public SaveInput(UUID publicationId, UUID versionId, String name, List<String> regions, Instant startAt,
+            Instant endAt, Integer timeLimitSec, Integer passScore, BigDecimal budgetCap, Integer maxWinners,
+            List<TierInput> tiers, Long baseRevision, String rewardMethod, String redeemDescription,
+            String audience, String digitalDelivery, String digitalDescription, Integer digitalSendDays,
+            String digitalContent) {
+            this(publicationId, versionId, name, regions, startAt, endAt, timeLimitSec, passScore, budgetCap,
+                maxWinners, tiers, baseRevision, rewardMethod, redeemDescription, audience, digitalDelivery,
+                digitalDescription, digitalSendDays, digitalContent, null);
         }
 
         /** The shared code or link, only ever shown masked. */
         @Override
         public String toString() {
             return "SaveInput[publicationId=" + publicationId + ", versionId=" + versionId + ", name=" + name
-                + ", rewardMethod=" + rewardMethod + ", digitalDelivery=" + digitalDelivery
+                + ", rewardMethod=" + rewardMethod + ", digitalDelivery=" + digitalDelivery + ", cover=" + cover
                 + ", digitalContent=" + (digitalContent == null ? "null" : "***") + "]";
         }
     }
@@ -148,6 +163,11 @@ public final class PublicationProcesses {
             .steps(PublicationAudience::loadCriteria)
             .steps(PublicationEditing::loadSponsor)
             .steps(PublicationEditing::loadSponsorMethods)
+            // Q64: who uploaded the cover given, which must be the sponsor's own file.
+            .steps(b -> QuizEditing.loadFiles(b, ctx -> {
+                UUID cover = ctx.get(INPUT, SaveInput.class).cover();
+                return cover == null ? List.of() : List.of(cover);
+            }))
             .steps(b -> PublicationEditing.loadVersion(b, ctx -> {
                 UUID given = ctx.get(INPUT, SaveInput.class).versionId();
                 EntityInstance found = first(ctx, FOUND);
@@ -193,11 +213,16 @@ public final class PublicationProcesses {
             ctx.reject(new Violation("audience", PublishingCodes.AUDIENCE_INVALID, "Unknown audience " + audience,
                 Map.of("audience", audience)));
         }
+        // Q64: the cover is a file the sponsor uploaded (one kept from before stays, whoever reads it now).
+        QuizEditing.requireOwnFile(ctx, publication == null ? ctx.request().actorId()
+            : publication.get("publisherId"), "cover", input.cover(), publication == null ? null
+            : publication.get("cover"));
         if (ctx.hasViolations()) {
             return;
         }
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("name", input.name());
+        values.put("cover", input.cover());
         values.put("regions", regions);
         values.put("audience", audience);
         values.put("rewardMethod", method);
@@ -470,7 +495,8 @@ public final class PublicationProcesses {
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("name", input.name() == null || input.name().isBlank() ? copyName(messages, ctx,
             source.get("name")) : input.name());
-        for (String field : List.of("regions", "startAt", "endAt", "timeLimitSec", "passScore", "budgetCap",
+        // Q64: the cover too, the copier's own file as the source's was (both are the caller's publications).
+        for (String field : List.of("cover", "regions", "startAt", "endAt", "timeLimitSec", "passScore", "budgetCap",
             "maxWinners", "redeemDescription", "digitalDelivery", "digitalDescription", "digitalSendDays",
             "sealedDigitalContent")) {
             values.put(field, source.get(field));

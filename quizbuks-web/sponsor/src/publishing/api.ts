@@ -64,6 +64,8 @@ export interface Tier {
 export interface Publication {
   publicationId: string
   name: string
+  /** Q64: the publication's own cover; none shows the quiz version's. */
+  cover: string | null
   quizId: string | null
   versionId: string | null
   versionLabel: string | null
@@ -158,6 +160,8 @@ export interface SaveInput {
   publicationId: string | null
   versionId: string | null
   name: string
+  /** Q64: the publication's own cover (a `qb.content.image` file); null shows the version's. Sent with each save. */
+  cover: string | null
   regions: string[]
   startAt: string | null
   endAt: string | null
@@ -234,6 +238,7 @@ export function toPublication(row: Row): Publication {
   return {
     publicationId: String(row.publicationId),
     name: String(row.name ?? ''),
+    cover: str(row.cover),
     quizId: str(row.quizId),
     versionId: str(row.versionId),
     versionLabel: str(row.versionLabel),
@@ -749,6 +754,7 @@ export interface TierDraft {
 /** The wizard's form: the policy as typed. Blank numbers are none (the time limit: the version's). */
 export interface PublicationForm {
   name: string
+  cover: string | null
   quizId: string | null
   versionId: string | null
   regions: string[]
@@ -781,6 +787,7 @@ export function formOf(detail: PublicationDetail | null): PublicationForm {
   const p = detail?.publication
   return {
     name: p?.name ?? '',
+    cover: p?.cover ?? null,
     quizId: p?.quizId ?? null,
     versionId: p?.versionId ?? null,
     regions: p?.regions ?? [],
@@ -846,6 +853,7 @@ export function inputOf(form: PublicationForm, publicationId: string | null, bas
       publicationId,
       versionId: form.versionId,
       name: form.name.trim(),
+      cover: form.cover,
       // An invited publication has no regions: its list stands in for them (Q25).
       regions: form.audience === 'INVITED' ? [] : REGIONS.filter((region) => form.regions.includes(region)),
       startAt: form.startAt,

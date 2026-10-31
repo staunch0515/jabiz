@@ -52,7 +52,7 @@ import { useState, type FormEvent, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from './messages'
 import { ACCOUNT_PATH, ACCOUNT_SECURITY_PATH, AccountPage, isAccountPath, rememberLinked } from './pages/AccountPage'
-import { FeedPage, searchOf, searchPath } from './pages/FeedPage'
+import { FeedControlsProvider, FeedFiltersButton, FeedPage, searchOf, searchPath } from './pages/FeedPage'
 import { HistoryPage } from './pages/HistoryPage'
 import { PlayPage } from './pages/PlayPage'
 import { PublicationPage } from './pages/PublicationPage'
@@ -80,7 +80,7 @@ import { legalKindOf } from './qb/legal'
 import { LegalLinks } from './qb/LegalLinks'
 import { LegalPage } from './qb/LegalPage'
 import { QB } from './qb/messages'
-import { Link, navigate, navigation, Redirect, useLocation } from './qb/router'
+import { canGoBack, Link, navigate, navigation, Redirect, useLocation } from './qb/router'
 import { useSoundSetting } from './qb/SoundSettings'
 import { useSessionLock } from './qb/session'
 import { BANK_PATH, isWalletPath, PAYOUT_PATH, WALLET_PATH } from './wallet/api'
@@ -162,6 +162,18 @@ function HeaderSearch({ initial, onClose }: { initial: string; onClose: () => vo
   )
 }
 
+/** The pages the header offers a way back from (Q64): a quiz's start page and a result. */
+function backable(path: string): boolean {
+  const item = itemPage(path)
+  return item?.page === 'p' || item?.page === 'result'
+}
+
+/** Back to the page before, within the app; home when the page was opened first (a shared link, a mail). */
+function goBack() {
+  if (canGoBack()) window.history.back()
+  else navigate(HOME)
+}
+
 /**
  * The app's header (Q62): the name, and at the right one menu of scanning a sponsor's code (Q52), the appearance and
  * signing out, so that the bar stays the name and one button on any phone.
@@ -187,7 +199,16 @@ function Header({ scan = false, search = false }: { scan?: boolean; search?: boo
       {/* A test system says so on every page (platform 16zd); the app's frame is its own, so it places the banner. */}
       <EnvironmentBanner className={ONE_LINE_BANNER} />
       <div className="mx-auto flex max-w-md items-center gap-1 px-4 py-2">
+        {/* Q64: a page opened from another (a quiz's start page, a result) goes back from here. */}
+        {backable(path) && (
+          <Button variant="ghost" size="icon-sm" className="-ml-2" aria-label={tApp('nav.back')} data-testid="header-back"
+            onClick={goBack}>
+            <ArrowLeft aria-hidden />
+          </Button>
+        )}
         <Wordmark name={t('brand')} compact className="text-primary mr-auto" />
+        {/* Q64: on the home, its filters (the way a reward is paid and the others) beside the search. */}
+        {search && path === HOME && <FeedFiltersButton />}
         {/* Q63: the home's search is opened here, a magnifier beside the menu. */}
         {search && (
           <Button variant="ghost" size="icon-sm" aria-label={tApp('feed.search')} data-testid="search-open"
@@ -361,7 +382,7 @@ function SignedIn({ path }: { path: string }) {
   return <ConsentGate kinds={LEGAL.appKinds} enabled={!!complete} onSignOut={() => {
     forgetAttempts()
     toSignIn()
-  }}>{pages}</ConsentGate>
+  }}><FeedControlsProvider>{pages}</FeedControlsProvider></ConsentGate>
 }
 
 /**

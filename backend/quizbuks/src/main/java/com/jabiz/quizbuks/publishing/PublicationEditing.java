@@ -602,7 +602,7 @@ final class PublicationEditing {
         card.put("audience", Audience.of(publication.get("audience")));
         card.put("quizTitle", version.get("title"));
         card.put("questionCount", version.get("questionCount"));
-        card.put("cover", snapshot.cover() == null ? null : snapshot.cover().toString());
+        card.put("cover", cardCover(publication, snapshot));
         card.put("tiers", CardTiers.toJson(ordered(list(ctx, TIERS)).stream().map(row -> new CardTiers.Tier(
             String.valueOf(row.id()), integer(row.get("fromScore")), integer(row.get("toScore")),
             money(row.get("reward")))).toList()));
@@ -614,6 +614,18 @@ final class PublicationEditing {
         EntityInstance operator = first(ctx, SPONSOR_OPERATOR);
         card.put("operatorId", operator == null ? null : operator.get("operatorId"));
         return card;
+    }
+
+    /**
+     * The cover on the publication's card (Q64): the publication's own when it has one (reviewed and frozen with its
+     * policy), else its version's; none when neither has one.
+     */
+    static String cardCover(EntityInstance publication, QuizSnapshot snapshot) {
+        Object own = publication.get("cover");
+        if (own != null) {
+            return own.toString();
+        }
+        return snapshot == null || snapshot.cover() == null ? null : snapshot.cover().toString();
     }
 
     /**
@@ -696,7 +708,7 @@ final class PublicationEditing {
         Map<String, Object> attributes = new LinkedHashMap<>(publication.attributes());
         attributes.put("versionId", versionId);
         Map<String, Object> content = PublicationApprovals.content(draftOf(attributes),
-            version == null ? null : version.get("contentHash"), ranges);
+            version == null ? null : version.get("contentHash"), ranges, publication.get("cover"));
         return ApprovalCase.of(publication.id(), facts, content).reference(publication.get("name"));
     }
 

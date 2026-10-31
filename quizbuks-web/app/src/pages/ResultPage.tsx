@@ -1,6 +1,7 @@
 import { questionProducts, type PublicationProduct } from '../qb/products'
 import { readPublicationProducts } from '../share/api'
 import { ProductCards } from '../qb/view/ProductCards'
+import { SponsorVisit } from './SponsorVisit'
 import { ApiError, formatDateTime } from '@jabiz/client'
 import {
   Alert,
@@ -34,7 +35,7 @@ import { SoundOnce } from '../qb/SoundSettings'
 import { playSound, type SoundCue } from '../qb/sound'
 import { QB } from '../qb/messages'
 import { confirmCashReward, confirmDigitalPrize, disputeCashReward, disputeDigitalPrize, openDigitalPrize,
-  readAttemptResult, type AttemptResult, type CashView, type DigitalView, type QuestionResult, type QuestionView,
+  readAttemptResult, readPublication, type AttemptResult, type CashView, type DigitalView, type QuestionResult, type QuestionView,
   type RedeemView, type RewardStatus, type StartOutput, type SubmitOutput } from '../qb/play'
 import { problemText } from '../qb/problems'
 import { Link, Redirect } from '../qb/router'
@@ -517,6 +518,11 @@ export function ResultPage({ attemptId }: { attemptId: string }) {
   const publicationId = result.data?.publicationId
   const products = useQuery({ queryKey: ['qb', 'publication-products', publicationId],
     queryFn: () => readPublicationProducts(publicationId!), enabled: !!publicationId, retry: false })
+  // Q64: the sponsor's page, from the publication (found by the caller's attempt whatever its state now).
+  const [at] = useState(() => new Date().toISOString())
+  const publication = useQuery({ queryKey: ['qb', 'result-publication', publicationId],
+    queryFn: () => readPublication({ publicationId: publicationId!, at, country: null }), enabled: !!publicationId,
+    retry: false })
 
   if (result.isPending) return <PageState kind="loading" />
   // The submission's own answer stands in only when the server could not answer (not when it refused: a 404 or 403 is
@@ -622,6 +628,10 @@ export function ResultPage({ attemptId }: { attemptId: string }) {
                 product={productOf.get(result.no)} />)}
           </ol>
         </section>
+      )}
+      {publication.data && (
+        <SponsorVisit handle={publication.data.sponsorHandle} avatar={publication.data.sponsorAvatar}
+          sponsor={publication.data.sponsorCompany ?? publication.data.sponsorName} products={false} />
       )}
       <div className="flex gap-2">
         <Button asChild variant="outline" className="flex-1"><Link to="/history">{t('nav.history')}</Link></Button>

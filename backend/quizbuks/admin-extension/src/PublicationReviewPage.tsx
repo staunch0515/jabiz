@@ -10,6 +10,7 @@ import {
   Button,
   DescriptionList,
   EXTENSION_NAMESPACE,
+  FilePreview,
   PageHeader,
   PageState,
   Table,
@@ -39,7 +40,10 @@ import {
 import { AfterDecision, LoadFailed, PublisherLink, Section } from './components'
 import type { BackTo } from './PublicationsPage'
 import { forbidden, money, QUEUE, useAfterDecision, useLabels, when } from './hooks'
-import { ACCOUNT_SUSPENDED, DICTIONARY, OPERATOR_PROCESS, PATH, PENDING_REVIEW, PERMISSION, PUBLICATION_ADMIN } from './ids'
+import {
+  ACCOUNT_SUSPENDED, CONTENT_IMAGE_VARIANTS, DICTIONARY, OPERATOR_PROCESS, PATH, PENDING_REVIEW, PERMISSION,
+  PUBLICATION_ADMIN,
+} from './ids'
 
 /** An administrator's reason as the reader reads it: a ban's pause records a code (Q10b, review L3). */
 function useAdminReason() {
@@ -88,6 +92,7 @@ function Takedowns({ takedowns }: { takedowns: UseQueryResult<Takedown[]> }) {
 import { VersionPreview } from './VersionPreview'
 
 const linkClass = 'text-primary font-medium underline-offset-4 hover:underline'
+const IMAGE = { image: true, variants: CONTENT_IMAGE_VARIANTS }
 
 /** What a read was made for: the review request the publication waited for when it was read. */
 interface ForRequest<T> {
@@ -130,6 +135,15 @@ function Settings({ publication, tiers, quiz, finance }: {
   const invited = publication.audience === 'INVITED'
   const items: DescriptionItem[] = [
     { key: 'quiz', label: t('publication.quiz'), value: quiz ?? notSet },
+    // Q64: the publication's own cover is part of what is approved; the takers see it instead of the quiz's. The
+    // finance administrators read no content files.
+    ...(finance && !publication.cover ? [] : [{
+      key: 'cover',
+      label: t('publication.cover'),
+      value: publication.cover
+        ? <span data-testid="publication-cover"><FilePreview fileId={publication.cover} field={IMAGE} width={240} /></span>
+        : t('publication.coverOfQuiz'),
+    }]),
     { key: 'audience', label: t('publication.audience'),
       value: <span data-testid="publication-audience">{audience(publication.audience)}</span> },
     // Q25: an invited publication's list stands in for its regions.
