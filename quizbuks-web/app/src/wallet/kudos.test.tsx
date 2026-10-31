@@ -96,7 +96,7 @@ describe('the Kudos by method helpers (Q58)', () => {
 describe('the wallet\'s Kudos by method (Q58)', () => {
   it('shows the total and a card per method, by period, each opening its rewards', async () => {
     const { bodies } = server()
-    window.history.replaceState(null, '', '/wallet')
+    window.history.replaceState(null, '', '/wallet/rewards')
     render(<App />)
     const kudos = await screen.findByTestId('kudos')
     // The total is the sum of the four.
@@ -127,6 +127,6 @@ describe('the wallet\'s Kudos by method (Q58)', () => {
     expect(screen.getByTestId('nav-wallet')).toHaveAttribute('aria-current', 'page')
     await expectAccessible()
     await userEvent.click(within(page).getByTestId('kudos-back'))
-    expect(window.location.pathname).toBe('/wallet')
+    expect(window.location.pathname).toBe('/wallet/rewards')
   })
 })

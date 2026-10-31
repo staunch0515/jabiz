@@ -3,7 +3,6 @@ import { cn, PageState } from '@jabiz/ui'
 import { useQuery } from '@tanstack/react-query'
 import {
   ArrowLeft,
-  ChevronRight,
   CircleHelp,
   FileText,
   IdCard,
@@ -15,7 +14,7 @@ import {
   UserRound,
   type LucideIcon,
 } from 'lucide-react'
-import { useState, type ReactNode } from 'react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
 import { AccountInstallEntry } from '../install'
@@ -26,6 +25,7 @@ import { QB } from '../qb/messages'
 import { legalPath } from '../qb/legal'
 import { SoundSwitch } from '../qb/SoundSettings'
 import { Link, navigate, Redirect, useLocation } from '../qb/router'
+import { MenuItem, MenuList } from './Menu'
 import { ProfileDetails } from './ProfileDetails'
 import { QuizLanguages } from './QuizLanguages'
 import { PROFILE_QUERY, ProfileForm } from './ProfileForm'
@@ -147,36 +147,6 @@ function AccountMenu() {
         <MenuItem to="/about" icon={Info} title={tApp('account.about')} testId="account-about" />
       </MenuList>
     </section>
-  )
-}
-
-function MenuList({ label, children, testId }: { label: string; children: ReactNode; testId?: string }) {
-  return (
-    <nav aria-label={label} className="flex flex-col gap-2" data-testid={testId}>
-      <h2 className="text-muted-foreground px-1 text-sm font-medium">{label}</h2>
-      <ul className="bg-card divide-border flex flex-col divide-y overflow-hidden rounded-lg border">{children}</ul>
-    </nav>
-  )
-}
-
-function MenuItem({ to, icon: Icon, title, hint, testId }: {
-  to: string
-  icon: LucideIcon
-  title: string
-  hint?: string
-  testId?: string
-}) {
-  return (
-    <li>
-      <Link to={to} data-testid={testId} className="hover:bg-accent flex min-h-12 items-center gap-3 px-3 py-3">
-        <Icon aria-hidden className="text-primary size-5 shrink-0" />
-        <span className="flex min-w-0 flex-1 flex-col">
-          <span className="text-sm font-medium">{title}</span>
-          {hint && <span className="text-muted-foreground text-xs">{hint}</span>}
-        </span>
-        <ChevronRight aria-hidden className="text-muted-foreground size-4 shrink-0" />
-      </Link>
-    </li>
   )
 }
 

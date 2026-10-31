@@ -1,7 +1,16 @@
 import { AuthProvider, useAuth, type SignInStep } from '@jabiz/client'
 import {
+  APPEARANCES,
   AppearanceProvider,
   Button,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
   EnvironmentBanner,
   MailLinkPage,
   MailUnsubscribe,
@@ -15,11 +24,27 @@ import {
   StepUpProvider,
   ThemeToggle,
   Toaster,
+  UI_NAMESPACE,
   VerifyEmailBanner,
   cn,
+  useAppearance,
+  type Appearance,
 } from '@jabiz/ui'
 import { QueryClientProvider, useQuery } from '@tanstack/react-query'
-import { History, House, Inbox, ScanLine, UserRound, Wallet, type LucideIcon } from 'lucide-react'
+import {
+  Coins,
+  History,
+  House,
+  Inbox,
+  LogOut,
+  Menu,
+  Monitor,
+  Moon,
+  ScanLine,
+  Sun,
+  UserRound,
+  type LucideIcon,
+} from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from './messages'
@@ -55,7 +80,7 @@ import { QB } from './qb/messages'
 import { Link, navigate, navigation, Redirect, useLocation } from './qb/router'
 import { useSoundSetting } from './qb/SoundSettings'
 import { useSessionLock } from './qb/session'
-import { BANK_PATH, PAYOUT_PATH, WALLET_PATH } from './wallet/api'
+import { BANK_PATH, isWalletPath, PAYOUT_PATH, WALLET_PATH } from './wallet/api'
 import { kudosMethodOf } from './wallet/kudos'
 import { KudosMethodPage } from './wallet/KudosOverview'
 import { BankPage } from './wallet/BankPage'
@@ -94,7 +119,7 @@ const UNSUBSCRIBE_PATH = '/mail/unsubscribe'
 const NAV: { path: string; key: string; icon: LucideIcon }[] = [
   { path: HOME, key: 'nav.home', icon: House },
   { path: HISTORY, key: 'nav.history', icon: History },
-  { path: WALLET_PATH, key: 'wallet.nav', icon: Wallet },
+  { path: WALLET_PATH, key: 'wallet.nav', icon: Coins },
   { path: INBOX_PATH, key: 'inbox.nav', icon: Inbox },
   { path: ACCOUNT_PATH, key: 'nav.account', icon: UserRound },
 ]
@@ -104,35 +129,65 @@ function toSignIn() {
   navigate('/login', { replace: true })
 }
 
-/** The app's header: the name, the appearance and signing out. */
+const APPEARANCE_ICONS: Record<Appearance, LucideIcon> = { light: Sun, dark: Moon, system: Monitor }
+
+/**
+ * The app's header (Q62): the name, and at the right one menu of scanning a sponsor's code (Q52), the appearance and
+ * signing out, so that the bar stays the name and one button on any phone.
+ */
 function Header({ scan = false }: { scan?: boolean }) {
   const { t } = useTranslation(QB)
   const { t: tApp } = useTranslation(APP)
+  const { t: tUi } = useTranslation(UI_NAMESPACE)
   const { signOut } = useAuth()
+  const { appearance, setAppearance } = useAppearance()
   return (
     <header className="bg-background sticky top-0 z-10 border-b">
       {/* A test system says so on every page (platform 16zd); the app's frame is its own, so it places the banner. */}
       <EnvironmentBanner className={ONE_LINE_BANNER} />
       <div className="mx-auto flex max-w-md items-center gap-2 px-4 py-2">
         <Wordmark name={t('brand')} compact className="text-primary mr-auto" />
-        {/* Q52: in the shop, the sponsor's code is scanned here, in the signed-in app. Below 400 px the label is
-            for assistive technology only: the name, the button, the appearance and signing out fill a 360 px phone. */}
-        {scan && (
-          <Button asChild size="sm" variant="outline">
-            <Link to={SCAN_PATH} data-testid="scan-open">
-              <ScanLine aria-hidden />
-              <span className="max-[400px]:sr-only">{tApp('scan.open')}</span>
-            </Link>
-          </Button>
-        )}
-        <ThemeToggle />
-        <Button variant="ghost" size="sm" data-testid="sign-out"
-          onClick={() => void signOut().then(() => {
-            forgetAttempts()
-            toSignIn()
-          })}>
-          {t('signOut')}
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon-sm" aria-label={tApp('menu.open')} data-testid="app-menu">
+              <Menu aria-hidden />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="min-w-48">
+            {/* Q52: in the shop, the sponsor's code is scanned here, in the signed-in app. */}
+            {scan && (
+              <>
+                <DropdownMenuItem data-testid="scan-open" onSelect={() => navigate(SCAN_PATH)}>
+                  <ScanLine aria-hidden />
+                  {tApp('scan.open')}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+              </>
+            )}
+            <DropdownMenuLabel>{tUi('appearance.label')}</DropdownMenuLabel>
+            <DropdownMenuRadioGroup value={appearance} onValueChange={(value) => setAppearance(value as Appearance)}
+              data-testid="appearance-choices">
+              {APPEARANCES.map((value) => {
+                const Icon = APPEARANCE_ICONS[value]
+                return (
+                  <DropdownMenuRadioItem key={value} value={value} data-testid={`appearance-${value}`}>
+                    <Icon aria-hidden />
+                    {tUi(`appearance.${value}`)}
+                  </DropdownMenuRadioItem>
+                )
+              })}
+            </DropdownMenuRadioGroup>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem data-testid="sign-out"
+              onSelect={() => void signOut().then(() => {
+                forgetAttempts()
+                toSignIn()
+              })}>
+              <LogOut aria-hidden />
+              {t('signOut')}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </header>
   )
@@ -146,10 +201,10 @@ function BottomNav({ path }: { path: string }) {
   const { t } = useTranslation(APP)
   const unread = useUnread()
   // A publication's page belongs to home, an attempt's to the history, the payout account and the Kudos by method
-  // (Q58) to the wallet, a message to the inbox, the staff's counter (Q39) and the account's parts (Q56) to the account.
+  // (Q58) and the parts of My Kudos (Q62) to My Kudos, a message to the inbox, the staff's counter (Q39) and the
+  // account's parts (Q56) to the account.
   const item = itemPage(path)
-  const wallet = path === PAYOUT_PATH || path === BANK_PATH || kudosMethodOf(path) !== null
-  const section = item ? (item.page === 'p' ? HOME : HISTORY) : wallet ? WALLET_PATH
+  const section = item ? (item.page === 'p' ? HOME : HISTORY) : isWalletPath(path) ? WALLET_PATH
     : inboxItemOf(path) ? INBOX_PATH : path === STAFF_PATH || isAccountPath(path) ? ACCOUNT_PATH : path
   return (
     <nav aria-label={t('nav.label')}
@@ -222,10 +277,10 @@ function SignedIn({ path }: { path: string }) {
   if (path === WELCOME) page = <WelcomePage profile={profile.data} />
   else if (path === HOME) page = <FeedPage name={complete?.displayName || displayName || ''} country={country} />
   else if (path === HISTORY) page = <HistoryPage />
-  else if (path === WALLET_PATH) page = <WalletPage />
   else if (path === PAYOUT_PATH) page = <PayoutPage />
   else if (path === BANK_PATH) page = <BankPage />
   else if (kudosMethodOf(path)) page = <KudosMethodPage key={path} method={kudosMethodOf(path)!} />
+  else if (isWalletPath(path)) page = <WalletPage path={path} />
   else if (isAccountPath(path)) page = <AccountPage path={path} />
   else if (path === INBOX_PATH) page = <InboxPage />
   else if (path === STAFF_PATH) page = <StaffDeskPage />

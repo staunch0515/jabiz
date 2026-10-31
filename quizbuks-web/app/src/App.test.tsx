@@ -310,6 +310,27 @@ describe('a signed-in taker', () => {
     expect(await screen.findByTestId('home')).toHaveTextContent('Mei')
   })
 
+  it('keeps the header to the name and one menu: scanning, the appearance and signing out (Q62)', async () => {
+    server({ profile: { displayName: 'Mei', countryCode: 'JP', city: null, preferredCurrency: 'JPY', revision: 3 } })
+    window.history.replaceState(null, '', '/')
+    const user = userEvent.setup()
+    render(<App />)
+    expect(await screen.findByTestId('home')).toBeInTheDocument()
+    const header = screen.getByRole('banner')
+    expect(within(header).getAllByRole('button')).toHaveLength(1)
+    expect(within(header).queryByTestId('sign-out')).toBeNull()
+    await user.click(within(header).getByTestId('app-menu'))
+    const menu = await screen.findByRole('menu')
+    expect(within(menu).getByTestId('scan-open')).toHaveTextContent('Scan')
+    await user.click(within(menu).getByRole('menuitemradio', { name: 'Dark' }))
+    expect(document.documentElement).toHaveClass('dark')
+    await user.click(within(header).getByTestId('app-menu'))
+    expect(await screen.findByRole('menuitemradio', { name: 'Dark' })).toHaveAttribute('aria-checked', 'true')
+    await expectAccessible()
+    await user.click(screen.getByTestId('sign-out'))
+    await waitFor(() => expect(window.location.pathname).toBe('/login'))
+  })
+
   it('opens the account as a menu of its parts, each on a page of its own (Q56)', async () => {
     server({ profile: { displayName: 'Mei', countryCode: 'JP', city: null, preferredCurrency: 'JPY', revision: 1 } })
     window.history.replaceState(null, '', '/account')

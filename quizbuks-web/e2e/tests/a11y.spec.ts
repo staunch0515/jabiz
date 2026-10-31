@@ -90,6 +90,9 @@ for (const appearance of ['light', 'dark'] as const) {
     await expect(page.getByRole('option').first()).toBeVisible()
     await expectAccessible(page, at('app country picker'))
     await page.keyboard.press('Escape')
+    // Q62: signing out is in the header's menu.
+    await page.getByTestId('app-menu').click()
+    await expectAccessible(page, at('app header menu'))
     await page.getByTestId('sign-out').click()
     await expect(page).toHaveURL(/\/login$/)
 

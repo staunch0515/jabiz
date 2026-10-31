@@ -211,9 +211,10 @@ test('a taker collects a prize by scanning the sponsor\'s screen with the app\'s
       }
     }, picture)
     await signIn(page, '/taker/', owed.taker.email)
-    // On a 360 px phone the header with the scanner's button fits: the page is no wider than the screen (a wider one
-    // is zoomed out, and taps miss what they aim at).
+    // On a 360 px phone the header fits: the page is no wider than the screen (a wider one is zoomed out, and taps
+    // miss what they aim at). Q62: the scanner is in the header's menu.
     await page.setViewportSize({ width: 360, height: 780 })
+    await page.getByTestId('app-menu').click()
     const open = page.getByTestId('scan-open')
     await expect(open).toBeVisible()
     await expect(open).toHaveAccessibleName('Scan')

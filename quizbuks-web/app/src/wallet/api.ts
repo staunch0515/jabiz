@@ -269,6 +269,26 @@ export const netOf = (amount: number, fee: number): number => Math.max(0, amount
 export const WALLET_PATH = '/wallet'
 export const PAYOUT_PATH = '/wallet/payout'
 export const BANK_PATH = '/wallet/bank'
+
+/** The parts of My Kudos (Q62), each at `/wallet/<part>` under its menu, as the account's are (Q56). */
+export const WALLET_PARTS = ['balance', 'rewards', 'history'] as const
+export type WalletPart = (typeof WALLET_PARTS)[number]
+
+export function walletPath(part: WalletPart): string {
+  return `${WALLET_PATH}/${part}`
+}
+
+/** The part a path names; null for the menu itself, undefined for any other path. */
+export function walletPartOf(path: string): WalletPart | null | undefined {
+  if (path === WALLET_PATH) return null
+  const part = path.startsWith(`${WALLET_PATH}/`) ? path.slice(WALLET_PATH.length + 1) : ''
+  return (WALLET_PARTS as readonly string[]).includes(part) ? (part as WalletPart) : undefined
+}
+
+/** Whether a path is one of My Kudos' pages (the bottom navigation marks My Kudos for all). */
+export function isWalletPath(path: string): boolean {
+  return path === WALLET_PATH || path.startsWith(`${WALLET_PATH}/`)
+}
 export const WALLET_QUERY = ['qb', 'taker-wallet'] as const
 export const PAYOUT_QUERY = [...WALLET_QUERY, 'payout-account'] as const
 export const BANK_QUERY = [...WALLET_QUERY, 'bank-account'] as const
