@@ -202,6 +202,8 @@ class SponsorProductIT extends PlayItSupport {
         assertThat(items("qb.admin.sponsor-products", hq(), Map.of("params", Map.of("userId", direct))))
             .singleElement().satisfies(row -> assertThat(row).containsEntry("productId", directProduct)
                 .containsEntry("company", "Company of " + direct).containsEntry("currency", "JPY"));
+        assertThat(items("qb.admin.sponsor-products", northSession, Map.of("params", Map.of("userId", direct))))
+            .isEmpty();
 
         // Headquarters: hidden whatever the sponsor saves, until put back (hidden, for the sponsor to show).
         run(SponsorProductProcesses.TAKEDOWN, contentAdmin2(), body("productId", annProduct, "reason", "Fake"));
