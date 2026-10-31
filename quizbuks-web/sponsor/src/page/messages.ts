@@ -1,12 +1,13 @@
 /**
- * The texts of the sponsor's page editor (Q60a), part of the console's namespace `sponsor` under `page`
- * (`src/messages.ts` adds them). The server words its own refusals (`QB_SPONSOR_PAGE_*`).
+ * The texts of the sponsor's page editor (Q60a), the shop page section of the sponsor profile (Q65b), part of the
+ * console's namespace `sponsor` under `page` (`src/messages.ts` adds them). The server words its own refusals
+ * (`QB_SPONSOR_PAGE_*`).
  */
 export const pageEn = {
   page: {
-    nav: 'My page',
-    title: 'My page',
-    intro: 'Your own page in the app: your company, a headline, your story and your quizzes that are live. Anybody can open it by its link, also before signing in. Its first publication is reviewed; once published, your changes show at once.',
+    title: 'Shop page',
+    intro: 'Your own page in the app: a headline, a cover, your website and your quizzes that are live. Anybody can open it by its link, also before signing in. Its first publication is reviewed; once published, your changes show at once.',
+    fromProfile: 'The page shows your company, logo and introduction from the basic profile above (as “About us”): change them there.',
     statusLabel: 'Status',
     status: {
       NONE: 'Not created',
@@ -25,10 +26,6 @@ export const pageEn = {
     language: 'Language of the page',
     languageHint: 'Write the page in one language. Takers who read your quizzes in that language find it most useful.',
     headline: 'Headline',
-    story: 'About us',
-    storyHint: 'Up to 5,000 characters. Markdown is allowed (no HTML).',
-    logo: 'Logo',
-    logoAlt: 'The page’s logo',
     cover: 'Cover image',
     coverAlt: 'The page’s cover image',
     imageHint: 'JPEG or PNG, up to 5 MB. The location of photos is removed. Shown to anybody once the page is published.',
@@ -56,9 +53,9 @@ export const pageEn = {
 
 export const pageZh: typeof pageEn = {
   page: {
-    nav: '我的主页',
-    title: '我的主页',
-    intro: '您在 App 中的主页：公司名、标题、介绍，以及您正在进行的 Quiz。任何人都能通过链接打开，登录前也可以。首次发布需要审核；发布后，修改会立即生效。',
+    title: '店铺主页',
+    intro: '您在 App 中的主页：标题、封面图、网站，以及您正在进行的 Quiz。任何人都能通过链接打开，登录前也可以。首次发布需要审核；发布后，修改会立即生效。',
+    fromProfile: '主页显示上方基本资料中的公司名、标志与简介（作为"介绍"），请在那里修改。',
     statusLabel: '状态',
     status: {
       NONE: '尚未创建',
@@ -77,10 +74,6 @@ export const pageZh: typeof pageEn = {
     language: '主页的语言',
     languageHint: '主页用一种语言撰写。阅读这种语言 Quiz 的答题者最能看懂。',
     headline: '标题',
-    story: '介绍',
-    storyHint: '5,000 字以内。可以使用 Markdown（不可使用 HTML）。',
-    logo: '标志',
-    logoAlt: '主页的标志',
     cover: '封面图',
     coverAlt: '主页的封面图',
     imageHint: 'JPEG 或 PNG，5 MB 以内。照片的位置信息会被删除。主页发布后任何人都能看到。',
@@ -108,9 +101,9 @@ export const pageZh: typeof pageEn = {
 
 export const pageJa: typeof pageEn = {
   page: {
-    nav: 'マイページ',
-    title: 'マイページ',
-    intro: 'アプリ内のあなたのページです。会社名、見出し、紹介、公開中のクイズが表示されます。リンクを知っていれば誰でも、ログイン前でも開けます。最初の公開は審査があり、公開後の変更はすぐに反映されます。',
+    title: 'ショップページ',
+    intro: 'アプリ内のあなたのページです。見出し、カバー画像、ウェブサイト、公開中のクイズが表示されます。リンクを知っていれば誰でも、ログイン前でも開けます。最初の公開は審査があり、公開後の変更はすぐに反映されます。',
+    fromProfile: 'ページには上の基本情報の会社名、ロゴ、紹介文（「紹介」として）が表示されます。変更はそちらで行ってください。',
     statusLabel: '状態',
     status: {
       NONE: '未作成',
@@ -129,10 +122,6 @@ export const pageJa: typeof pageEn = {
     language: 'ページの言語',
     languageHint: 'ページは一つの言語で書いてください。その言語でクイズを読む回答者に最も役立ちます。',
     headline: '見出し',
-    story: '紹介',
-    storyHint: '5,000 文字まで。Markdown を使えます（HTML は不可）。',
-    logo: 'ロゴ',
-    logoAlt: 'ページのロゴ',
     cover: 'カバー画像',
     coverAlt: 'ページのカバー画像',
     imageHint: 'JPEG または PNG、5 MB まで。写真の位置情報は削除されます。ページの公開後は誰でも見られます。',

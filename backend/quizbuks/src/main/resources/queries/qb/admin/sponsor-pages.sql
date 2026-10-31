@@ -2,7 +2,8 @@
 id: qb.admin.sponsor-pages
 description: >-
   Sponsors' pages (Q60a) with the sponsor's company, last edited first: the review queue (status PENDING), the list
-  to take pages down from, and one page's content (userId); an operator's session sees its own sponsors' only
+  to take pages down from, and one page's content (userId); the logo and the story are the onboarding's avatar and
+  introduction, as the page shows them (Q65b); an operator's session sees its own sponsors' only
 entities: [QbSponsorPage, QbSponsor]
 datasets:
   QbSponsorPage: urn:jabiz:dataset:default:QbSponsorPage
@@ -14,8 +15,8 @@ results:
   handle:            { from: QbSponsorPage.handle }
   language:          { from: QbSponsorPage.language }
   headline:          { from: QbSponsorPage.headline }
-  story:             { from: QbSponsorPage.story }
-  logo:              { from: QbSponsorPage.logo }
+  story:             { from: QbSponsor.intro }
+  logo:              { from: QbSponsor.avatar }
   cover:             { from: QbSponsorPage.cover }
   website:           { from: QbSponsorPage.website }
   status:            { from: QbSponsorPage.status }
@@ -42,8 +43,8 @@ SELECT
     p.{{QbSponsorPage.handle}}            AS handle,
     p.{{QbSponsorPage.language}}          AS language,
     p.{{QbSponsorPage.headline}}          AS headline,
-    p.{{QbSponsorPage.story}}             AS story,
-    p.{{QbSponsorPage.logo}}              AS logo,
+    s.{{QbSponsor.intro}}                 AS story,
+    s.{{QbSponsor.avatar}}                AS logo,
     p.{{QbSponsorPage.cover}}             AS cover,
     p.{{QbSponsorPage.website}}           AS website,
     p.{{QbSponsorPage.status}}            AS status,

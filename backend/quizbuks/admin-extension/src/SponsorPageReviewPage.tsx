@@ -24,6 +24,7 @@ import {
   DICTIONARY,
   PATH,
   PERMISSION,
+  AVATAR_VARIANTS,
   SPONSOR_PAGE_IMAGE_VARIANTS,
   SPONSOR_PAGE_PENDING,
   SPONSOR_PAGE_PROCESS,
@@ -33,13 +34,15 @@ import { readSponsorPage } from './page-api'
 import { SponsorProductsTable } from './SponsorProductsPage'
 
 const IMAGE = { image: true, variants: SPONSOR_PAGE_IMAGE_VARIANTS }
+const AVATAR = { image: true, variants: AVATAR_VARIANTS }
 const linkClass = 'text-primary font-medium underline-offset-4 hover:underline'
 
 
 /**
  * A sponsor's page (Q60a-3; docs/quizbuks/plans/Q60-sponsor-page.md) as the reviewer and whoever may take it down
- * see it: the content its approval is bound to (link name, language, headline, story, logo, cover, website) and its
- * state. The decision is the platform's `ApprovalPanel` while it waits; a published page is taken down through the
+ * see it: the content its approval is bound to (link name, language, headline, cover, website), the logo and the
+ * "About us" it shows from the sponsor's profile (Q65b: the onboarding's avatar and introduction, reviewed with the
+ * onboarding, not with the page), and its state. The decision is the platform's `ApprovalPanel` while it waits; a published page is taken down through the
  * platform's process page with the sponsor filled in, where the reason is given with a second factor: headquarters'
  * process, or the operator's for the sponsors it looks after.
  */
@@ -129,6 +132,8 @@ export default function SponsorPageReviewPage() {
           <h3 className="font-semibold">{t('sponsorPages.headline')}</h3>
           <p lang={p.language} data-testid="sponsor-page-headline">{p.headline}</p>
         </div>
+        <p className="text-muted-foreground text-sm" data-testid="sponsor-page-from-profile">
+          {t('sponsorPages.fromProfile')}</p>
         <div className="flex flex-col gap-1" data-testid="sponsor-page-story">
           <h3 className="font-semibold">{t('sponsorPages.story')}</h3>
           {p.story ? <div lang={p.language}><MarkdownView text={p.story} /></div>
@@ -137,7 +142,7 @@ export default function SponsorPageReviewPage() {
         <div className="flex flex-wrap gap-6">
           <div className="flex flex-col gap-1">
             <h3 className="font-semibold">{t('sponsorPages.logo')}</h3>
-            {p.logo ? <FilePreview fileId={p.logo} field={IMAGE} width={128} />
+            {p.logo ? <FilePreview fileId={p.logo} field={AVATAR} width={128} />
               : <p className="text-muted-foreground text-sm">{t('sponsorPages.noImage')}</p>}
           </div>
           <div className="flex flex-col gap-1">

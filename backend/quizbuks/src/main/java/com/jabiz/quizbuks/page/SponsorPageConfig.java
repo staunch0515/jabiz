@@ -66,23 +66,22 @@ public class SponsorPageConfig {
     }
 
     /**
-     * The published pages, anonymously through the public templates, which project the whitelist; the logo and the
-     * cover of a published page are public files thereby. The dataset API is closed to everybody (no role holds the
-     * permission), as the public cards' (Q59c-2).
+     * The published pages, anonymously through the public templates, which project the whitelist; the cover of a
+     * published page is a public file thereby (its logo and "About us" are the onboarding's, Q65b).
+     * The dataset API is closed to everybody (no role holds the permission), as the public cards' (Q59c-2).
      */
     @Bean
     DatasetDefinition qbPublicSponsorPageDataset() {
         return DatasetDefinition.define(QbSponsorPages.PUBLIC_DATASET, d -> d
             .targetEntityType(QbSponsorPages.PAGE)
             .scope(s -> s.fixed("status", QbSponsorPages.PUBLISHED))
-            .publicRead(p -> p.fields("userId", "handle", "language", "headline", "story", "logo", "cover",
-                "website"))
+            .publicRead(p -> p.fields("userId", "handle", "language", "headline", "cover", "website"))
             .permissions(QbPermissions.SPONSOR_VIEW_WRITE, QbPermissions.SPONSOR_VIEW_WRITE)
             .policy(p -> p.readOnly(true).allowTimeTravel(false))
             .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
     }
 
-    /** A page's logo and cover: re-encoded without metadata; the file name and the upload stay the sponsor's. */
+    /** A page's cover and products' images: re-encoded without metadata; the file name and the upload stay private. */
     @Bean
     FilePolicy qbSponsorPageImagePolicy() {
         return FilePolicy.define(QbSponsorPages.IMAGE_POLICY)

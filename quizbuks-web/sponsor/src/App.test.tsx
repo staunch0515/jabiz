@@ -62,6 +62,9 @@ function server(me?: Me, providers: unknown[] = []) {
       case '/api/datasets/urn:jabiz:dataset:sponsor:QbSponsor/query':
         return json(200, { items: sponsor ? [{ id: 's1', version: 1, attributes: sponsor }] : [],
           offset: 0, limit: 1 })
+      // Q65b: the sponsor profile holds the shop page too; none made yet.
+      case '/api/datasets/urn:jabiz:dataset:me:QbSponsorPage/query':
+        return json(200, { items: [], offset: 0, limit: 1 })
       case '/api/processes/QB_SPONSOR_APPLY/latest':
         if (me?.applied?.status === 200) {
           // Applying records the application and the consents with it.
@@ -322,7 +325,7 @@ describe('a signed-in sponsor', () => {
     expect(within(nav).getAllByRole('group').map((g) => g.getAttribute('aria-labelledby') && within(g).getAllByRole('link')
       .map((link) => link.textContent))).toEqual([
       ['Dashboard'], ['Quizzes', 'Publications'], ['Cash rewards', 'Digital prizes', 'Prizes', 'Staff'],
-      ['Wallet', 'Transactions'], ['Sponsor profile', 'My page', 'My products', 'Mail server', 'Messages', 'Account', 'Help']])
+      ['Wallet', 'Transactions'], ['Sponsor profile', 'My products', 'Mail server', 'Messages', 'Account', 'Help']])
     expect(within(nav).getByRole('group', { name: 'Rewards' })).toBeInTheDocument()
     expect(within(nav).getAllByTestId('menu-separator')).toHaveLength(4)
     await userEvent.click(screen.getByRole('link', { name: 'Sponsor profile' }))

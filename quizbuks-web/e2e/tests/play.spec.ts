@@ -164,7 +164,9 @@ for (const appearance of ['light', 'dark'] as const) {
     await expect(page.getByTestId('result-reward')).toHaveAttribute('data-status', 'PENDING')
     await expect(page.getByTestId('result-reward')).toContainText(`${seeded.reward.toLocaleString('en-US')} Kudos`)
     await expect(page.getByTestId('result-question')).toHaveCount(2)
-    await expect(page.getByTestId('result-correct').first()).toContainText('Paris')
+    // Q65: both answers right: each shown once, without a second "correct answer" line.
+    await expect(page.getByTestId('result-mine').first()).toContainText('Paris')
+    await expect(page.getByTestId('result-correct')).toHaveCount(0)
     await expectAccessible(page, at('app result'))
 
     // The attempt is over: its play page leads to the result, and the publication offers no second try.
@@ -181,7 +183,7 @@ for (const appearance of ['light', 'dark'] as const) {
     await expect(page).toHaveURL(/\/result\/[^/]+$/)
     await expect(page.getByTestId('result-question')).toHaveCount(2)
     await expect(page.getByTestId('result-mine').first()).toContainText('Paris')
-    await expect(page.getByTestId('result-correct').first()).toContainText('Paris')
+    await expect(page.getByTestId('result-correct')).toHaveCount(0)
     await page.goto(`/taker/p/${seeded.publicationId}`)
     await expect(page.getByTestId('detail-answered')).toBeVisible()
     await expect(page.getByTestId('detail-start')).toHaveCount(0)

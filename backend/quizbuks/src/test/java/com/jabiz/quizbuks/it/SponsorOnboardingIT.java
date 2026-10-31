@@ -2,6 +2,7 @@ package com.jabiz.quizbuks.it;
 
 import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.quizbuks.identity.AccountCodes;
+import com.jabiz.quizbuks.identity.AccountLimits;
 import com.jabiz.quizbuks.identity.QbAccounts;
 import com.jabiz.quizbuks.identity.SponsorApprovals;
 import com.jabiz.quizbuks.identity.SponsorStatus;
@@ -316,6 +317,31 @@ class SponsorOnboardingIT extends AccountItSupport {
         // The same again writes nothing.
         assertThat(run("QB_SPONSOR_PROFILE_SAVE", token, body("displayName", "Sara Lee", "company", "Acme Quizzes",
             "intro", "New intro"))).containsEntry("revision", 3);
+    }
+
+    /** Q65b: the introduction is the sponsor page's "About us" too, as long as the page's own story was. */
+    @Test
+    void anIntroductionTakesUpTo5000Characters() {
+        assertThat(AccountLimits.INTRO_LENGTH).isEqualTo(5_000);
+        String sara = newSponsor("sara");
+        String token = tokenOf(sara, QbRoles.SPONSOR);
+        Map<String, Object> tooLong = application("Sara", "Acme");
+        tooLong.put("intro", "字".repeat(5_001));
+        assertThat(violations(refused("QB_SPONSOR_APPLY", token, tooLong, 400)))
+            .extracting(v -> v.get("field")).contains("intro");
+        assertThat(query("SELECT 1 FROM qb_sponsor_version WHERE user_id = ?", sara)).isEmpty();
+
+        Map<String, Object> longest = application("Sara", "Acme");
+        longest.put("intro", "字".repeat(5_000));
+        Map<String, Object> applied = run("QB_SPONSOR_APPLY", token, longest);
+        assertThat(((String) onboardingOf(sara).get("intro"))).hasSize(5_000);
+        decideSponsor(applied.get("approvalRequestId"), "APPROVE", null);
+        // Changing the profile afterwards checks the same limit.
+        assertThat(violations(refused("QB_SPONSOR_PROFILE_SAVE", token, body("displayName", "Sara", "company", "Acme",
+            "intro", "x".repeat(5_001)), 400))).extracting(v -> v.get("field")).contains("intro");
+        run("QB_SPONSOR_PROFILE_SAVE", token, body("displayName", "Sara", "company", "Acme", "intro",
+            "x".repeat(5_000)));
+        assertThat(((String) onboardingOf(sara).get("intro"))).isEqualTo("x".repeat(5_000));
     }
 
     @Test

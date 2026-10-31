@@ -19,6 +19,7 @@ import { problemText } from '../qb/problems'
 import { Link } from '../qb/router'
 import { prefersStillVideo } from '../qb/video'
 import { SponsorVisit } from './SponsorVisit'
+import { VideoSlot } from '../video/stage'
 import { PublicationContent, useDuration } from '../qb/view/PublicationContent'
 
 /** Whole minutes from now until a time, at least 0 (by the device's clock: a hint only). */
@@ -157,7 +158,13 @@ export function PublicationPage({ publicationId, country }: { publicationId: str
   }
   return (
     <article className="flex flex-col gap-3" aria-labelledby="detail-title" data-testid="detail">
-      <PublicationContent publication={p} tiers={tiers.data ?? []} linkSponsor autoplay={!prefersStillVideo()} />
+      {/* Q65: the home's player carries on here, its sound on from the tap that opened the page; a viewer who
+          asked for less motion gets a player that waits for their own tap. */}
+      <PublicationContent publication={p} tiers={tiers.data ?? []} linkSponsor autoplay={!prefersStillVideo()}
+        video={prefersStillVideo() ? undefined : (player, title) => (
+          <VideoSlot id={`page:${p.publicationId}`} player={player} title={title} mode="page"
+            className="bg-muted relative aspect-video w-full sm:border" />
+        )} />
       <ProductCards products={quizProducts(products.data)}
         title={tView('products.title')} testId="publication-products" onOpen={countProductClick} />
       {/* Q64: the sponsor's own page, with all their products, from the start page as from the result. */}

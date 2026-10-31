@@ -52,6 +52,7 @@ import { useState, type FormEvent, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from './messages'
 import { ACCOUNT_PATH, ACCOUNT_SECURITY_PATH, AccountPage, isAccountPath, rememberLinked } from './pages/AccountPage'
+import { VideoStage } from './video/stage'
 import { FeedControlsProvider, FeedFiltersButton, FeedPage, searchOf, searchPath } from './pages/FeedPage'
 import { HistoryPage } from './pages/HistoryPage'
 import { PlayPage } from './pages/PlayPage'
@@ -80,7 +81,8 @@ import { legalKindOf } from './qb/legal'
 import { LegalLinks } from './qb/LegalLinks'
 import { LegalPage } from './qb/LegalPage'
 import { QB } from './qb/messages'
-import { canGoBack, Link, navigate, navigation, Redirect, useLocation } from './qb/router'
+import { canGoBack, currentPath, Link, navigate, navigation, Redirect, useLocation } from './qb/router'
+import { resultPublication } from './pages/resultPublication'
 import { useSoundSetting } from './qb/SoundSettings'
 import { useSessionLock } from './qb/session'
 import { BANK_PATH, isWalletPath, PAYOUT_PATH, WALLET_PATH } from './wallet/api'
@@ -171,7 +173,17 @@ function backable(path: string): boolean {
 /** Back to the page before, within the app; home when the page was opened first (a shared link, a mail). */
 function goBack() {
   if (canGoBack()) window.history.back()
-  else navigate(HOME)
+  else navigate(backFallback(currentPath()))
+}
+
+/** Where back goes from a page opened first (Q65): a result to its quiz's page, a quiz's page home. */
+function backFallback(path: string): string {
+  const item = itemPage(path)
+  if (item?.page === 'result') {
+    const publicationId = resultPublication.get(item.id)
+    if (publicationId) return `/p/${encodeURIComponent(publicationId)}`
+  }
+  return HOME
 }
 
 /**
@@ -368,7 +380,10 @@ function SignedIn({ path }: { path: string }) {
   const pages = (
     <div className="flex min-h-full flex-col">
       <Header scan={nav && path !== SCAN_PATH} search={nav} />
-      <main className={cn('mx-auto flex w-full max-w-md flex-col gap-4 px-4 py-4', nav && 'pb-24')}>
+      {/* Q65: the one video player, laid over the place that shows it. */}
+      <VideoStage />
+      <main className={cn('mx-auto flex w-full max-w-md flex-col gap-4 px-4 py-4', nav && 'pb-24',
+        path === HOME && 'pt-0')}>
         <OfflineBanner />
         <PwaUpdatePrompt />
         <VerifyEmailBanner />

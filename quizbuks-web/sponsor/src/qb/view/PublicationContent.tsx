@@ -10,7 +10,6 @@ import { Link } from '../router'
 import { CoverPlaceholder } from '../Illustrations'
 import { formatKudos } from '../kudos'
 import type { PublicationView, Tier } from '../play'
-import { DetailCard } from './DetailCard'
 import { REWARD_METHOD_ICONS } from './FeedCard'
 import { leadVideo, Materials } from './Materials'
 import { QBVIEW } from './messages'
@@ -54,15 +53,14 @@ function Tiers({ tiers }: { tiers: Tier[] }) {
   )
 }
 
-/** One fact of the row under the picture (Q34): an icon, the value, and what it is in small type under it. */
+/** One fact under the title (Q65: inline, small): an icon and the value, which says what it is; the term for assistive technology. */
 function Fact({ icon: Icon, label, value, testId }: { icon: LucideIcon; label: string; value: ReactNode; testId?: string }) {
   return (
-    <div className="bg-card flex min-w-0 flex-col items-center gap-0.5 px-1 py-2 text-center" data-testid={testId}>
-      {/* A list item holds its term and its definition only: the term comes first, shown under the value. */}
-      <dt className="text-muted-foreground order-last w-full truncate text-[11px] leading-tight">{label}</dt>
-      <dd className="flex w-full min-w-0 flex-col items-center gap-0.5">
-        <Icon aria-hidden className="text-primary size-4" />
-        <span className="w-full text-sm leading-tight font-semibold break-words">{value}</span>
+    <div className="flex min-w-0 items-center gap-1" data-testid={testId}>
+      <dt className="sr-only">{label}</dt>
+      <dd className="flex min-w-0 items-center gap-1">
+        <Icon aria-hidden className="text-primary size-3.5 shrink-0" />
+        <span className="text-foreground">{value}</span>
       </dd>
     </div>
   )
@@ -140,7 +138,7 @@ function Disclosure({ summary, icon: Icon, testId, children }: {
  * own data. Layout and the place of every text: docs/quizbuks/plans/Q34-ui-polish.md, D-Q34-11.
  */
 export function PublicationContent({ publication: p, tiers, titleAs: Title = 'h1', draft = false,
-  linkSponsor = false, autoplay = false }: {
+  linkSponsor = false, autoplay = false, video }: {
   publication: PublicationView
   tiers: Tier[]
   /** The name's heading: the page's own on the taker's page, under the preview's heading in the console. */
@@ -151,6 +149,8 @@ export function PublicationContent({ publication: p, tiers, titleAs: Title = 'h1
   linkSponsor?: boolean
   /** Q63: whether the video leading the page starts by itself (the app's start page; not the console's preview). */
   autoplay?: boolean
+  /** Q65: the app's own place for the leading video (its one player, carried over from the home's card). */
+  video?: (player: string, title: string) => ReactNode
 }) {
   const { t } = useTranslation(QBVIEW)
   const duration = useDuration()
@@ -185,9 +185,10 @@ export function PublicationContent({ publication: p, tiers, titleAs: Title = 'h1
         // Q63: a video to learn from before answering leads the page and starts (muted) as it opens; the name, the
         // sponsor and what passing earns follow it.
         <header className="-mx-4 flex flex-col gap-3 sm:mx-0" data-testid="detail-hero" data-video>
-          <VideoPlayer player={lead.player} autoplay={autoplay}
-            title={lead.material.title ?? t('feed.videoTitle', { name: p.name })}
-            className="bg-muted aspect-video w-full overflow-hidden sm:border" />
+          {video ? video(lead.player, lead.material.title ?? t('feed.videoTitle', { name: p.name }))
+            : <VideoPlayer player={lead.player} autoplay={autoplay}
+              title={lead.material.title ?? t('feed.videoTitle', { name: p.name })}
+              className="bg-muted aspect-video w-full overflow-hidden sm:border" />}
           <div className="flex flex-col gap-1 px-4 sm:px-0">
             <div className="flex items-start justify-between gap-2">
               <Title id="detail-title" className="text-xl leading-tight font-semibold" data-testid="detail-name">{p.name}</Title>
@@ -215,17 +216,21 @@ export function PublicationContent({ publication: p, tiers, titleAs: Title = 'h1
         </div>
       </header>
       )}
-      <dl className="bg-border grid grid-cols-3 gap-px border" data-testid="detail-facts" aria-label={t('detail.facts')}>
-        <Fact icon={ListChecks} label={t('detail.questions')} value={p.questionCount} />
+      {/* Q65: the facts in a line or two of small type, each with its icon; what each is, for assistive technology. */}
+      <dl className="text-muted-foreground flex flex-wrap gap-x-3 gap-y-1 px-0.5 text-sm" data-testid="detail-facts"
+        aria-label={t('detail.facts')}>
+        <Fact icon={ListChecks} label={t('detail.questions')} value={t('detail.questionCount', { count: p.questionCount })} />
         {survey
           ? <Fact icon={BookOpen} label={t('detail.kind')} value={t('detail.survey')} />
-          : <Fact icon={Target} label={t('detail.passScore')} value={draft ? `– / ${p.fullScore}` : `${p.passScore} / ${p.fullScore}`} />}
+          : <Fact icon={Target} label={t('detail.passScore')}
+            value={t('detail.passOf', { pass: draft ? '–' : p.passScore, full: p.fullScore })} />}
         <Fact icon={Timer} label={t('detail.timeLimit')} value={duration(p.timeLimitSec)} />
         <Fact icon={Trophy} label={survey ? t('detail.surveyReward') : prize ? t('detail.prizeValue') : t('detail.maxReward')}
           value={draft ? '–' : formatKudos(p.maxReward)} />
         <Fact icon={MethodIcon} label={t('detail.method')} testId="detail-method-fact"
           value={draft ? '–' : <span data-testid="detail-method" data-method={p.rewardMethod}>{t(`methods.${p.rewardMethod}Short`)}</span>} />
-        <Fact icon={CalendarClock} label={t('detail.endAt')} value={draft ? '–' : formatDateTime(p.endAt)} />
+        <Fact icon={CalendarClock} label={t('detail.endAt')}
+          value={draft ? '–' : t('detail.until', { time: formatDateTime(p.endAt) })} />
       </dl>
       {p.audience === 'INVITED' && (
         <p className="text-muted-foreground flex items-center gap-2 text-sm" data-testid="detail-invited">
@@ -235,24 +240,29 @@ export function PublicationContent({ publication: p, tiers, titleAs: Title = 'h1
       )}
       <Materials materials={p.materials} exclude={lead?.material.no} />
       {p.intro && (
-        <DetailCard title={t('detail.intro')} titleId="intro-title" icon={BookOpen} testId="detail-intro">
+        // Q65: the introduction without a card of its own, its first lines and the rest on demand.
+        <section aria-label={t('detail.intro')} className="px-0.5 text-sm" data-testid="detail-intro">
           <Expandable testId="detail-intro-text"><MarkdownView text={p.intro} /></Expandable>
-        </DetailCard>
+        </section>
       )}
       {!draft && (
-      <DetailCard title={t('detail.rewardTitle')} titleId="reward-title" icon={MethodIcon} testId="detail-reward">
-        {/* Q22: what the sponsor does after a pass, in their words for a prize. */}
-        <p className="text-sm" data-testid="detail-method-name">{t(`methods.${p.rewardMethod}`)}</p>
-        {p.rewardMethod !== 'PLATFORM' && (
-          <div className="bg-accent text-accent-foreground flex flex-col gap-1 px-3 py-2 text-sm"
-            data-testid="detail-method-note" data-method={p.rewardMethod}>
-            <span>{t(`methods.${p.rewardMethod}Hint`)}</span>
-            {prizeText && <span className="font-medium whitespace-pre-line" data-testid="detail-prize">{prizeText}</span>}
-          </div>
-        )}
-        {survey && <p className="text-muted-foreground text-sm" data-testid="detail-survey">{t('detail.surveyHint')}</p>}
-        {!survey && <Tiers tiers={tiers} />}
-      </DetailCard>
+      // Q65: the reward folded to one line (the amount is beside the name); how it is paid and the tiers inside.
+      <Disclosure icon={MethodIcon} testId="detail-reward" summary={
+        <span data-testid="detail-reward-line">{t('detail.rewardLine', { method: t(`methods.${p.rewardMethod}Short`) })}</span>}>
+        <div className="flex flex-col gap-2">
+          {/* Q22: what the sponsor does after a pass, in their words for a prize. */}
+          <p className="text-sm" data-testid="detail-method-name">{t(`methods.${p.rewardMethod}`)}</p>
+          {p.rewardMethod !== 'PLATFORM' && (
+            <div className="bg-accent text-accent-foreground flex flex-col gap-1 px-3 py-2 text-sm"
+              data-testid="detail-method-note" data-method={p.rewardMethod}>
+              <span>{t(`methods.${p.rewardMethod}Hint`)}</span>
+              {prizeText && <span className="font-medium whitespace-pre-line" data-testid="detail-prize">{prizeText}</span>}
+            </div>
+          )}
+          {survey && <p className="text-muted-foreground text-sm" data-testid="detail-survey">{t('detail.surveyHint')}</p>}
+          {!survey && <Tiers tiers={tiers} />}
+        </div>
+      </Disclosure>
       )}
       <Disclosure icon={TrendingUp} testId="detail-stats" summary={
         <span data-testid="detail-stats-line">{t('detail.statsLine', { recent: p.last24h, total: p.completions })}</span>}>

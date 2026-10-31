@@ -378,7 +378,7 @@ export const CONTENT_IMAGE_VARIANTS = ['w320', 'w640', 'w1280']
 /** The widths the policy `qb.sponsor-avatar` keeps. */
 export const AVATAR_VARIANTS = ['w128', 'w256']
 
-/** The widths the policy `qb.sponsor-page-image` keeps (a sponsor page's logo and cover, Q60a). */
+/** The widths the policy `qb.sponsor-page-image` keeps (a sponsor page's cover, Q60a; its logo is the avatar, Q65b). */
 export const SPONSOR_PAGE_IMAGE_VARIANTS = ['w256', 'w640', 'w1280']
 
 /** Taking a sponsor's page down (Q60a): headquarters', and an operator's for the sponsors it looks after. */
