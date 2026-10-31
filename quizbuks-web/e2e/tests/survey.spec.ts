@@ -90,6 +90,8 @@ for (const appearance of ['light', 'dark'] as const) {
     const card = page.getByTestId('feed-card').filter({ hasText: seeded.name })
     await expect(card.getByTestId('feed-card-survey')).toBeVisible()
     await card.getByTestId('feed-card-link').click()
+    // Q65: the reward's details, the survey's among them, fold under one line.
+    await page.getByTestId('detail-reward-line').click()
     await expect(page.getByTestId('detail-survey')).toBeVisible()
     await expect(page.getByTestId('detail-tiers')).toHaveCount(0)
     await expectAccessible(page, at('app survey'))

@@ -8,7 +8,7 @@ public final class AccountLimits {
     public static final int CITY_LENGTH = 100;
     public static final int COMPANY_LENGTH = 100;
     /** A sponsor's introduction: Markdown in one language, rendered by the frontends without raw HTML. */
-    public static final int INTRO_LENGTH = 2_000;
+    public static final int INTRO_LENGTH = 5_000;
     /** A reviewer's reason for sending an onboarding back, a ban's reason, the note of lifting it. */
     public static final int REASON_LENGTH = 500;
     /** User ids (the platform's are UUIDs); as wide as Q4's {@code sponsorId}. */

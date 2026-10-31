@@ -33,7 +33,7 @@ const en = {
     materialBody: 'when they open the material, over the whole screen.',
     publicationName: "as the name on their home's card and the big title of the quiz's page.",
     prizeDescription: 'on the quiz\'s page, in the card "Your reward", in full.',
-    sponsorIntro: 'at the foot of each of your quizzes\' pages, under "About the sponsor" (folded).',
+    sponsorIntro: 'at the foot of each of your quizzes\' pages, under "About the sponsor" (folded), and as "About us" on your shop page.',
   },
   preview: {
     title: 'Preview: {{name}}',
@@ -75,6 +75,7 @@ const en = {
   onboarding: {
     title: 'Sponsor profile',
     intro: 'Your name and company as takers will see them. Applications are reviewed before you can publish.',
+    basicTitle: 'Basic profile',
     status: {
       NONE: 'Not applied yet',
       PENDING: 'In review',
@@ -88,9 +89,9 @@ const en = {
     displayName: 'Your name',
     company: 'Company or brand',
     intro2: 'Introduction',
-    introHint: 'Up to 2,000 characters. Markdown is allowed (no HTML).',
+    introHint: 'Up to 5,000 characters. Markdown is allowed (no HTML).',
     avatar: 'Logo or avatar',
-    avatarHint: 'JPEG or PNG, at most 2 MB. Location data in photos is removed.',
+    avatarHint: 'JPEG or PNG, at most 2 MB. Location data in photos is removed. Your shop page shows it as its logo, to anybody once published.',
     avatarAlt: 'The current logo',
     uploadAvatar: 'Upload an image',
     removeAvatar: 'Remove the image',
@@ -122,7 +123,7 @@ const zh: typeof en = {
     materialBody: '答题者打开材料后，全屏显示。',
     publicationName: '首页卡片上的名称，以及开始答题页的大标题。',
     prizeDescription: '开始答题页的"你的奖励"卡片，完整显示。',
-    sponsorIntro: '你每个测验的开始答题页底部"关于发布人"（默认收起）。',
+    sponsorIntro: '你每个测验的开始答题页底部"关于发布人"（默认收起），以及店铺主页的"介绍"。',
   },
   preview: {
     title: '预览：{{name}}',
@@ -164,6 +165,7 @@ const zh: typeof en = {
   onboarding: {
     title: '商家资料',
     intro: '答题人看到的你的名字与公司。申请经审核通过后才能发布。',
+    basicTitle: '基本资料',
     status: {
       NONE: '尚未申请',
       PENDING: '审核中',
@@ -177,9 +179,9 @@ const zh: typeof en = {
     displayName: '你的名字',
     company: '公司或品牌',
     intro2: '简介',
-    introHint: '最多 2,000 字，可使用 Markdown（不支持 HTML）。',
+    introHint: '最多 5,000 字，可使用 Markdown（不支持 HTML）。',
     avatar: '标志或头像',
-    avatarHint: 'JPEG 或 PNG，不超过 2 MB。照片中的位置信息会被去除。',
+    avatarHint: 'JPEG 或 PNG，不超过 2 MB。照片中的位置信息会被去除。店铺主页以它作为标志，发布后任何人都能看到。',
     avatarAlt: '当前的标志',
     uploadAvatar: '上传图片',
     removeAvatar: '移除图片',
@@ -211,7 +213,7 @@ const ja: typeof en = {
     materialBody: '資料を開いたとき、画面全体に表示。',
     publicationName: 'ホームのカードの名前と、クイズのページの大見出し。',
     prizeDescription: 'クイズのページの「あなたの報酬」カードに全文。',
-    sponsorIntro: 'あなたの各クイズのページの下部「スポンサーについて」（折りたたみ）。',
+    sponsorIntro: 'あなたの各クイズのページの下部「スポンサーについて」（折りたたみ）と、ショップページの「紹介」。',
   },
   preview: {
     title: 'プレビュー：{{name}}',
@@ -253,6 +255,7 @@ const ja: typeof en = {
   onboarding: {
     title: 'スポンサー情報',
     intro: '回答者に表示されるお名前と会社名です。申請が承認されると公開できます。',
+    basicTitle: '基本情報',
     status: {
       NONE: '未申請',
       PENDING: '審査中',
@@ -266,9 +269,9 @@ const ja: typeof en = {
     displayName: 'お名前',
     company: '会社名またはブランド',
     intro2: '紹介文',
-    introHint: '2,000 文字まで。Markdown を使えます（HTML は不可）。',
+    introHint: '5,000 文字まで。Markdown を使えます（HTML は不可）。',
     avatar: 'ロゴまたはアバター',
-    avatarHint: 'JPEG または PNG、2 MB まで。写真の位置情報は削除されます。',
+    avatarHint: 'JPEG または PNG、2 MB まで。写真の位置情報は削除されます。ショップページのロゴとして表示され、公開後は誰でも見られます。',
     avatarAlt: '現在のロゴ',
     uploadAvatar: '画像をアップロード',
     removeAvatar: '画像を削除',

@@ -66,17 +66,22 @@ test('a video to watch is shown on the home with its reward and starts the quiz'
   await expect(card).toHaveAttribute('data-video', 'true')
   // Q63: in the middle of the screen the card plays its video, muted.
   await card.evaluate((element) => element.scrollIntoView({ block: 'center' }))
-  const frame = card.locator('iframe')
-  await expect(frame).toHaveAttribute('src', `${PLAYER}?autoplay=1&mute=1&playsinline=1`)
+  // Q65: the app's one player, laid over the card; started muted, with its interface on.
+  const stage = page.getByTestId('video-stage')
+  const frame = stage.locator('iframe')
+  await expect(frame).toHaveAttribute('src', new RegExp(`^${PLAYER}\\?autoplay=1&mute=1&playsinline=1&rel=0&enablejsapi=1`))
   await expect(card).toContainText(`Up to ${sponsor.balance.toLocaleString('en-US')} Kudos`)
   // The App's policy lets this player in (the stub answers for it).
-  await expect(card.frameLocator('iframe').getByRole('button', { name: 'Play' })).toBeVisible()
+  await expect(stage.frameLocator('iframe').getByRole('button', { name: 'Play' })).toBeVisible()
   await expectAccessible(page, 'app home video to watch')
-  // The start opens the start page first: the video leads it, playing as it opens; then the quiz starts.
-  await card.getByTestId('feed-card-start').click()
+  // A tap on the video (nothing in the player is touched) opens the start page; the same player plays on there.
+  const before = await frame.elementHandle()
+  await page.getByTestId('video-open').click()
   await expect(page).toHaveURL(/\/p\/[^/]+$/)
-  await expect(page.getByTestId('detail-hero').locator('iframe'))
-    .toHaveAttribute('src', `${PLAYER}?autoplay=1&mute=1&playsinline=1`)
+  await expect(page.getByTestId('detail-hero').getByTestId('video-slot')).toHaveAttribute('data-mode', 'page')
+  await expect(stage).toHaveAttribute('data-mode', 'page')
+  expect(await page.evaluate((element) => element?.isConnected, before)).toBe(true)
+  await expect(page.locator('iframe')).toHaveCount(1)
   await expectAccessible(page, 'app start page with its video')
   await page.getByTestId('detail-start').click()
   await expect(page).toHaveURL(/\/play\/[^/]+$/)

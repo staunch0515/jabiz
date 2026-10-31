@@ -25,7 +25,7 @@ import {
 } from '@jabiz/ui'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { Check, Gift, HandCoins, LayoutGrid, Play, SlidersHorizontal, StepForward, X, type LucideIcon } from 'lucide-react'
-import { createContext, useContext, useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
 import { EmptyArt, QuizArt } from '../qb/Illustrations'
@@ -38,6 +38,8 @@ import { cardProgress, FEED_SORTS, readFeed, readOpenCashRewards, readOpenRedemp
 import { problemText } from '../qb/problems'
 import { Link, navigate, useLocation } from '../qb/router'
 import { prefersStillVideo } from '../qb/video'
+import { QBVIEW } from '../qb/view/messages'
+import { soundOn, VideoSlot } from '../video/stage'
 import { useSoundSetting } from '../qb/SoundSettings'
 import { HomeInstallOffer } from '../install'
 
@@ -244,6 +246,20 @@ function useMoreNearTheEnd(sentinel: HTMLElement | null, more: () => void) {
     observer.observe(sentinel)
     return () => observer.disconnect()
   }, [sentinel])
+}
+
+/**
+ * The playing card's video (Q65): the app's one player, which nothing on the card touches; a tap on it opens the
+ * start page with the sound on, the same player playing on.
+ */
+function CardVideo({ card, player }: { card: FeedCard; player: string }) {
+  const { t } = useTranslation(QBVIEW)
+  const open = useCallback(() => {
+    soundOn()
+    navigate(`/p/${card.publicationId}`)
+  }, [card.publicationId])
+  return <VideoSlot id={`card:${card.publicationId}`} player={player} mode="card" onOpen={open}
+    title={t('feed.videoTitle', { name: card.name })} />
 }
 
 const PROGRESS_ICONS: Record<CardProgress, LucideIcon> = { start: Play, resume: StepForward, done: Check }
@@ -493,7 +509,10 @@ export function FeedPage({ name, country }: { name: string; country: string | nu
   })
 
   return (
-    <section className="flex flex-col gap-4" aria-labelledby="home-title" data-testid="home">
+    <section className="flex flex-col" aria-labelledby="home-title" data-testid="home">
+      {/* Q65: what comes before the cards takes room only when there is something to see: the first card is right
+          under the header otherwise. */}
+      <div className="flex flex-col gap-4 has-[>:not(.sr-only)]:pb-4" data-testid="home-top">
       <Greeting name={name} />
       <HomeInstallOffer />
       {openCash.length > 0 && (
@@ -542,6 +561,7 @@ export function FeedPage({ name, country }: { name: string; country: string | nu
       )}
       <FiltersSheet open={filtersOpen} onOpenChange={setFiltersOpen} value={filters} onApply={setFilters}
         method={method} onMethod={chooseMethod} />
+      </div>
       {feed.isPending ? (
         <PageState kind="loading" />
       ) : feed.isError ? (
@@ -566,12 +586,13 @@ export function FeedPage({ name, country }: { name: string; country: string | nu
         </div>
       ) : (
         <>
-          <h2 className="sr-only">{t('feed.listTitle')}</h2>
           {/* Q63: one card a row across the screen; the one with a video in the middle of the screen plays. */}
-          <ul ref={setList} className="-mx-4 flex flex-col gap-6 sm:mx-0" data-testid="feed-list">
+          <ul ref={setList} className="-mx-4 flex flex-col gap-6 sm:mx-0" data-testid="feed-list"
+            aria-label={t('feed.listTitle')}>
             {cards.map((card) => (
               <FeedCardView key={card.publicationId} card={card} href={`/p/${card.publicationId}`}
-                playing={playing === card.publicationId} action={<CardStart card={card} at={at} />} />
+                playing={playing === card.publicationId} action={<CardStart card={card} at={at} />}
+                video={card.video && <CardVideo card={card} player={card.video} />} />
             ))}
           </ul>
           <div ref={setEnd} aria-hidden data-testid="feed-end" />
