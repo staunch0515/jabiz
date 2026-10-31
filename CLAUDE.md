@@ -125,6 +125,8 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
   `jabiz.public.enabled` 默认关闭。公开的行与列只在数据视图上声明：`publicRead(p -> p.fields(...))`（固定值范围、非默认视图、不含敏感字段），
   模板渲染时投影到白名单；公开模板头部写 `access: public`（代替 `permissions`），`datasets` 必须指向公开视图。文件是否公开由公开行的白名单文件字段推导，
   不设标记；需要立即撤下时在流程的提交后步骤 `FileAccess.invalidate(...)`。公开读取不写操作记录。
+  匿名访客的浏览与点击只经公开计数器（`PublicCounter` Bean，键来自公开视图的白名单字段；前端 `countPublic`；`POST /api/public/counters/{计数器}/{键}`，
+  每访客每天一次、只在内存中去重、按日聚合到 `sys_public_counter_day`，15 §10、决策 D65），不自写匿名写入的接口或逐次记录访问。
 - **启动即失败**：元数据、数据视图、流程、SQL 模板、表结构的不一致，必须在启动时一次性全部报告，而不是等到请求触发。
   新的检查实现 `PlatformCheck`（返回问题列表，不抛异常），启动与 `platformCheck` 共用。
 - **单据**（见 22 与决策 D30）：发票、确认书这类单据用 `DocumentLayout` Bean 声明（区块显示普通 SQL 模板的列，模板不写 `timeSlice`），
@@ -233,6 +235,7 @@ Gradle 9（wrapper）多模块工程，根目录为 `backend/`（模块：`core`
 - 事件、定时任务与外部作业：测试配置关闭后台投递、调度与外部作业执行器（`jabiz.events.delivery.enabled=false`、`jabiz.jobs.scheduler.enabled=false`、
   `jabiz.external-jobs.executor.enabled=false`），测试直接调用 `OutboxDeliverer.deliverPending()` / `JobRunner.run(job, 计划时刻)` /
   `ExternalJobExecutor.runPending()`，场景中用 `deliverEvents: true` / `runJob` / `runExternalJobs: true` / `completeExternalJob`（不调用外部服务）步骤
+  公开计数器（D65）同样不定时写入（`jabiz.public.counters.flush-interval=0s`），测试直接调用 `PublicCounters.flush()`
 - 场景回放（07 §3）：场景放在各模块 `src/test/resources/scenarios/**/*.yml`，快照为同目录的 `<名>.snapshot.json`（随变更提交）；
   `./gradlew :app:test --tests '*ScenarioTest'` 回放全部场景；确认行为变化正确后用 `./gradlew :app:test --tests '*ScenarioTest' -Dscenario.update-snapshots=true` 更新快照。
   每次回放使用新的 schema 与应用上下文（数据库同集成测试）
