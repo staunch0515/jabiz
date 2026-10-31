@@ -12,8 +12,9 @@ import { formatKudos } from '../kudos'
 import type { PublicationView, Tier } from '../play'
 import { DetailCard } from './DetailCard'
 import { REWARD_METHOD_ICONS } from './FeedCard'
-import { Materials } from './Materials'
+import { leadVideo, Materials } from './Materials'
 import { QBVIEW } from './messages'
+import { VideoPlayer } from './VideoPlayer'
 
 /** The time limit as people read it: minutes, with seconds when not whole. */
 export function useDuration() {
@@ -139,7 +140,7 @@ function Disclosure({ summary, icon: Icon, testId, children }: {
  * own data. Layout and the place of every text: docs/quizbuks/plans/Q34-ui-polish.md, D-Q34-11.
  */
 export function PublicationContent({ publication: p, tiers, titleAs: Title = 'h1', draft = false,
-  linkSponsor = false }: {
+  linkSponsor = false, autoplay = false }: {
   publication: PublicationView
   tiers: Tier[]
   /** The name's heading: the page's own on the taker's page, under the preview's heading in the console. */
@@ -148,6 +149,8 @@ export function PublicationContent({ publication: p, tiers, titleAs: Title = 'h1
   draft?: boolean
   /** Q60a: whether the sponsor's name links to their published page (the app's own route; not the console's). */
   linkSponsor?: boolean
+  /** Q63: whether the video leading the page starts by itself (the app's start page; not the console's preview). */
+  autoplay?: boolean
 }) {
   const { t } = useTranslation(QBVIEW)
   const duration = useDuration()
@@ -157,38 +160,61 @@ export function PublicationContent({ publication: p, tiers, titleAs: Title = 'h1
   const prize = p.rewardMethod === 'OFFLINE_REDEEM' || p.rewardMethod === 'DIGITAL_PRIZE'
   const prizeText = p.rewardMethod === 'OFFLINE_REDEEM' ? p.redeemDescription
     : p.rewardMethod === 'DIGITAL_PRIZE' ? p.digitalDescription : null
+  const lead = leadVideo(p.materials)
+  const reward = (
+    <span className="bg-primary text-primary-foreground inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold shadow-sm">
+      <Trophy aria-hidden className="size-3.5" />
+      {survey ? t('feed.surveyReward', { amount: formatKudos(p.maxReward) })
+        : t('feed.upTo', { amount: formatKudos(p.maxReward) })}
+    </span>
+  )
+  const sponsorLine = (tone: string) => sponsor && (
+      <p className={cn(tone, 'flex items-center gap-2 text-sm')} data-testid="detail-sponsor">
+        {p.sponsorAvatar && <FileImage fileId={p.sponsorAvatar} variant="w128" alt=""
+          className="size-5 rounded-full" />}
+        {/* Q60a: the sponsor's page, when it is published (the app only: the console has no such route). */}
+        {p.sponsorHandle && linkSponsor && !draft
+          ? <Link to={sponsorPagePath(p.sponsorHandle)} className="underline underline-offset-2"
+            data-testid="detail-sponsor-page">{t('detail.by', { sponsor })}</Link>
+          : <span>{t('detail.by', { sponsor })}</span>}
+      </p>
+  )
   return (
     <>
-      {/* Q34: the picture leads, the name and the sponsor on its foot, what passing earns on its corner. */}
+      {lead ? (
+        // Q63: a video to learn from before answering leads the page and starts (muted) as it opens; the name, the
+        // sponsor and what passing earns follow it.
+        <header className="-mx-4 flex flex-col gap-3 sm:mx-0" data-testid="detail-hero" data-video>
+          <VideoPlayer player={lead.player} autoplay={autoplay}
+            title={lead.material.title ?? t('feed.videoTitle', { name: p.name })}
+            className="bg-muted aspect-video w-full overflow-hidden sm:border" />
+          <div className="flex flex-col gap-1 px-4 sm:px-0">
+            <div className="flex items-start justify-between gap-2">
+              <Title id="detail-title" className="text-xl leading-tight font-semibold" data-testid="detail-name">{p.name}</Title>
+              {!draft && <span className="shrink-0">{reward}</span>}
+            </div>
+            {p.quizTitle && p.quizTitle !== p.name && (
+              <p className="text-muted-foreground text-sm" data-testid="detail-quiz-title">{p.quizTitle}</p>
+            )}
+            {sponsorLine('text-muted-foreground')}
+          </div>
+        </header>
+      ) : (
+      /* Q34: the picture leads, the name and the sponsor on its foot, what passing earns on its corner. */
       <header className="relative -mx-4 aspect-video overflow-hidden sm:mx-0 sm:border" data-testid="detail-hero">
         {p.cover
           ? <FileImage fileId={p.cover} variant="w640" alt="" className="absolute inset-0 size-full" />
           : <CoverPlaceholder seed={p.publicationId} className="absolute inset-0 size-full" />}
-        {!draft && (
-          <span className="bg-primary text-primary-foreground absolute top-2 right-2 inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold shadow-sm">
-            <Trophy aria-hidden className="size-3.5" />
-            {survey ? t('feed.surveyReward', { amount: formatKudos(p.maxReward) })
-              : t('feed.upTo', { amount: formatKudos(p.maxReward) })}
-          </span>
-        )}
+        {!draft && <span className="absolute top-2 right-2">{reward}</span>}
         <div className="from-qb-hero-from via-qb-hero-from/85 text-qb-hero-foreground absolute inset-x-0 bottom-0 flex flex-col gap-0.5 bg-linear-to-t to-transparent px-4 pt-10 pb-3">
           <Title id="detail-title" className="text-xl leading-tight font-semibold" data-testid="detail-name">{p.name}</Title>
           {p.quizTitle && p.quizTitle !== p.name && (
             <p className="text-qb-hero-muted text-sm" data-testid="detail-quiz-title">{p.quizTitle}</p>
           )}
-          {sponsor && (
-            <p className="text-qb-hero-muted flex items-center gap-2 text-sm" data-testid="detail-sponsor">
-              {p.sponsorAvatar && <FileImage fileId={p.sponsorAvatar} variant="w128" alt=""
-                className="size-5 rounded-full" />}
-              {/* Q60a: the sponsor's page, when it is published (the app only: the console has no such route). */}
-              {p.sponsorHandle && linkSponsor && !draft
-                ? <Link to={sponsorPagePath(p.sponsorHandle)} className="underline underline-offset-2"
-                  data-testid="detail-sponsor-page">{t('detail.by', { sponsor })}</Link>
-                : <span>{t('detail.by', { sponsor })}</span>}
-            </p>
-          )}
+          {sponsorLine('text-qb-hero-muted')}
         </div>
       </header>
+      )}
       <dl className="bg-border grid grid-cols-3 gap-px border" data-testid="detail-facts" aria-label={t('detail.facts')}>
         <Fact icon={ListChecks} label={t('detail.questions')} value={p.questionCount} />
         {survey
@@ -207,7 +233,7 @@ export function PublicationContent({ publication: p, tiers, titleAs: Title = 'h1
           {t('detail.invitedOnly')}
         </p>
       )}
-      <Materials materials={p.materials} />
+      <Materials materials={p.materials} exclude={lead?.material.no} />
       {p.intro && (
         <DetailCard title={t('detail.intro')} titleId="intro-title" icon={BookOpen} testId="detail-intro">
           <Expandable testId="detail-intro-text"><MarkdownView text={p.intro} /></Expandable>

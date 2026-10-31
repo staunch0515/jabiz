@@ -171,7 +171,7 @@ async function photograph(chromium: Browser, request: APIRequestContext, languag
   await shoot(page, dir, '2-home')
 
   const quiz = content.quizzes[0]
-  await page.getByTestId('feed-card').filter({ hasText: quiz.title }).click()
+  await page.getByTestId('feed-card').filter({ hasText: quiz.title }).getByTestId('feed-card-link').click()
   await expect(page.getByTestId('detail-start')).toBeVisible()
   await shoot(page, dir, '3-quiz')
 

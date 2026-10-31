@@ -609,12 +609,24 @@ final class PublicationEditing {
         card.put("sponsorCountry", profile == null ? null : profile.get("countryCode"));
         card.put("kind", snapshot.kind());
         card.put("language", version.get("language"));
-        card.put("video", snapshot.materials().stream().filter(QuizSnapshot.Material::watchToAnswer).findFirst()
-            .flatMap(material -> VideoEmbeds.player(material.url())).orElse(null));
+        card.put("video", cardVideo(snapshot.materials()));
         card.put("wentOnAt", ctx.opTime());
         EntityInstance operator = first(ctx, SPONSOR_OPERATOR);
         card.put("operatorId", operator == null ? null : operator.get("operatorId"));
         return card;
+    }
+
+    /**
+     * The video on the publication's card (Q19, Q63): the one watching which is enough to answer, else the first
+     * material's video the App plays (YouTube or Vimeo), so that the taker learns from it before answering; else none.
+     */
+    static String cardVideo(List<QuizSnapshot.Material> materials) {
+        return materials.stream().filter(QuizSnapshot.Material::watchToAnswer).findFirst()
+            .flatMap(material -> VideoEmbeds.player(material.url()))
+            .or(() -> materials.stream()
+                .filter(material -> "VIDEO_LINK".equals(material.kind()) && material.url() != null)
+                .flatMap(material -> VideoEmbeds.player(material.url()).stream()).findFirst())
+            .orElse(null);
     }
 
     /** The publication's policy as the readiness check and the approval see it. */

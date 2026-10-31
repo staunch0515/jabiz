@@ -12,6 +12,7 @@ import { QB } from '../qb/messages'
 import { readPublication, readTiers, recordView, type PublicationView } from '../qb/play'
 import { problemText } from '../qb/problems'
 import { Link } from '../qb/router'
+import { prefersStillVideo } from '../qb/video'
 import { PublicationContent, useDuration } from '../qb/view/PublicationContent'
 
 /** Whole minutes from now until a time, at least 0 (by the device's clock: a hint only). */
@@ -150,7 +151,7 @@ export function PublicationPage({ publicationId, country }: { publicationId: str
         <ArrowLeft aria-hidden className="size-4" />
         {t('detail.back')}
       </Link>
-      <PublicationContent publication={p} tiers={tiers.data ?? []} linkSponsor />
+      <PublicationContent publication={p} tiers={tiers.data ?? []} linkSponsor autoplay={!prefersStillVideo()} />
       <div className="bg-background sticky bottom-20 -mx-4 border-t px-4 py-3">
         <Action publication={p} />
       </div>

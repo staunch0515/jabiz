@@ -12,6 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
   EnvironmentBanner,
+  Input,
   MailLinkPage,
   MailUnsubscribe,
   OfflineBanner,
@@ -32,6 +33,7 @@ import {
 } from '@jabiz/ui'
 import { QueryClientProvider, useQuery } from '@tanstack/react-query'
 import {
+  ArrowLeft,
   Coins,
   History,
   House,
@@ -41,15 +43,16 @@ import {
   Monitor,
   Moon,
   ScanLine,
+  Search,
   Sun,
   UserRound,
   type LucideIcon,
 } from 'lucide-react'
-import { useState, type ReactNode } from 'react'
+import { useState, type FormEvent, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from './messages'
 import { ACCOUNT_PATH, ACCOUNT_SECURITY_PATH, AccountPage, isAccountPath, rememberLinked } from './pages/AccountPage'
-import { FeedPage } from './pages/FeedPage'
+import { FeedPage, searchOf, searchPath } from './pages/FeedPage'
 import { HistoryPage } from './pages/HistoryPage'
 import { PlayPage } from './pages/PlayPage'
 import { PublicationPage } from './pages/PublicationPage'
@@ -131,22 +134,67 @@ function toSignIn() {
 
 const APPEARANCE_ICONS: Record<Appearance, LucideIcon> = { light: Sun, dark: Moon, system: Monitor }
 
+/** The header's search (Q63): the box in place of the header's row; a search shows the home's results. */
+function HeaderSearch({ initial, onClose }: { initial: string; onClose: () => void }) {
+  const { t } = useTranslation(APP)
+  const [text, setText] = useState(initial)
+  const submit = (event: FormEvent) => {
+    event.preventDefault()
+    onClose()
+    navigate(searchPath(text.trim()))
+  }
+  return (
+    <form role="search" onSubmit={submit} className="mx-auto flex max-w-md items-center gap-1 px-2 py-1.5"
+      data-testid="header-search">
+      <Button type="button" variant="ghost" size="icon-sm" aria-label={t('feed.searchClose')} onClick={onClose}
+        data-testid="search-close">
+        <ArrowLeft aria-hidden />
+      </Button>
+      <Input type="search" value={text} maxLength={100} placeholder={t('feed.search')} aria-label={t('feed.search')}
+        autoFocus className="min-w-0 flex-1" data-testid="feed-search"
+        onChange={(event) => setText(event.target.value)}
+        onKeyDown={(event) => { if (event.key === 'Escape') onClose() }} />
+      <Button type="submit" variant="ghost" size="icon-sm" aria-label={t('feed.searchButton')}
+        data-testid="feed-search-submit">
+        <Search aria-hidden />
+      </Button>
+    </form>
+  )
+}
+
 /**
  * The app's header (Q62): the name, and at the right one menu of scanning a sponsor's code (Q52), the appearance and
  * signing out, so that the bar stays the name and one button on any phone.
  */
-function Header({ scan = false }: { scan?: boolean }) {
+function Header({ scan = false, search = false }: { scan?: boolean; search?: boolean }) {
   const { t } = useTranslation(QB)
   const { t: tApp } = useTranslation(APP)
   const { t: tUi } = useTranslation(UI_NAMESPACE)
   const { signOut } = useAuth()
   const { appearance, setAppearance } = useAppearance()
+  const { path, search: query } = useLocation()
+  const [searching, setSearching] = useState(false)
+  if (searching) {
+    return (
+      <header className="bg-background sticky top-0 z-10 border-b">
+        <EnvironmentBanner className={ONE_LINE_BANNER} />
+        <HeaderSearch initial={path === HOME ? searchOf(query) : ''} onClose={() => setSearching(false)} />
+      </header>
+    )
+  }
   return (
     <header className="bg-background sticky top-0 z-10 border-b">
       {/* A test system says so on every page (platform 16zd); the app's frame is its own, so it places the banner. */}
       <EnvironmentBanner className={ONE_LINE_BANNER} />
-      <div className="mx-auto flex max-w-md items-center gap-2 px-4 py-2">
+      <div className="mx-auto flex max-w-md items-center gap-1 px-4 py-2">
         <Wordmark name={t('brand')} compact className="text-primary mr-auto" />
+        {/* Q63: the home's search is opened here, a magnifier beside the menu. */}
+        {search && (
+          <Button variant="ghost" size="icon-sm" aria-label={tApp('feed.search')} data-testid="search-open"
+            onClick={() => setSearching(true)}>
+            <Search aria-hidden />
+          </Button>
+        )}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon-sm" aria-label={tApp('menu.open')} data-testid="app-menu">
@@ -298,7 +346,7 @@ function SignedIn({ path }: { path: string }) {
   const nav = path !== WELCOME && item?.page !== 'play'
   const pages = (
     <div className="flex min-h-full flex-col">
-      <Header scan={nav && path !== SCAN_PATH} />
+      <Header scan={nav && path !== SCAN_PATH} search={nav} />
       <main className={cn('mx-auto flex w-full max-w-md flex-col gap-4 px-4 py-4', nav && 'pb-24')}>
         <OfflineBanner />
         <PwaUpdatePrompt />

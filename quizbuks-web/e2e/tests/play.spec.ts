@@ -10,7 +10,7 @@ import {
   unique,
   setAppearance,
 } from './support'
-import { fundedSponsor, taker, untilLive } from './play'
+import { fundedSponsor, searchHome, taker, untilLive } from './play'
 
 /**
  * Answering in the app (docs/quizbuks/plans/QP-pages.md, QP2): the feed, a publication's page, one question per page
@@ -67,12 +67,11 @@ async function seedPublication(request: APIRequestContext, timeLimitSec: number)
 
 /** Opens the publication from the feed, found by its name. */
 async function openFromFeed(page: Page, name: string) {
-  await page.getByTestId('feed-search').fill(name)
-  await page.getByTestId('feed-search-submit').click()
+  await searchHome(page, name)
   const card = page.getByTestId('feed-card').filter({ hasText: name })
   await expect(card).toBeVisible()
   await expect(card).toContainText('Kudos')
-  await card.click()
+  await card.getByTestId('feed-card-link').click()
   await expect(page.getByTestId('detail-name')).toHaveText(name)
 }
 

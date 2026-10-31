@@ -88,6 +88,8 @@ interface Options {
   history?: Record<string, unknown>[]
   emailVerified?: boolean
   feed?: Record<string, unknown>[]
+  /** Q63: the feed's page at an offset (10 a page), in place of `feed`. */
+  feedPage?: (offset: number) => Record<string, unknown>[]
   /** The taker's open cash rewards (Q22). */
   cashRewards?: Record<string, unknown>[]
   cash?: () => Response
@@ -103,6 +105,38 @@ interface Options {
 }
 
 /** The server as the play pages see it; records every call (path and body). */
+/**
+ * The browser's IntersectionObserver, which jsdom lacks (Q63): the test says when a card enters the screen's middle
+ * band or the end of the list comes near.
+ */
+function intersections() {
+  const observers: { callback: IntersectionObserverCallback; targets: Element[]; margin: string }[] = []
+  class Observer {
+    entry: (typeof observers)[number]
+    constructor(callback: IntersectionObserverCallback, init?: IntersectionObserverInit) {
+      this.entry = { callback, targets: [], margin: init?.rootMargin ?? '' }
+      observers.push(this.entry)
+    }
+    observe(target: Element) { this.entry.targets.push(target) }
+    unobserve() {}
+    disconnect() { this.entry.targets = [] }
+    takeRecords() { return [] }
+  }
+  vi.stubGlobal('IntersectionObserver', Observer)
+  return {
+    /** The target crosses (or leaves) the area the observers with this margin watch. */
+    fire(target: Element, isIntersecting: boolean, margin: string) {
+      act(() => {
+        for (const o of observers.filter((o) => o.margin === margin && o.targets.includes(target))) {
+          o.callback([{ target, isIntersecting } as unknown as IntersectionObserverEntry], o as never)
+        }
+      })
+    },
+  }
+}
+const MIDDLE = '-40% 0px -40% 0px'
+const NEAR_END = '0px 0px 600px 0px'
+
 function server(options: Options = {}) {
   const calls: { path: string; body: unknown; key: string | null }[] = []
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
@@ -127,8 +161,10 @@ function server(options: Options = {}) {
           attributes })), offset: 0, limit: 100 })
       case '/api/processes/QB_PROFILE_ATTRIBUTES_SAVE/latest':
         return json(200, { output: { answered: (body as { profileAnswers: unknown[] }).profileAnswers.length } })
-      case '/api/queries/qb.app.feed':
-        return json(200, { items: options.feed ?? [CARD], offset: 0, limit: 20 })
+      case '/api/queries/qb.app.feed': {
+        const offset = (body as { offset?: number } | null)?.offset ?? 0
+        return json(200, { items: options.feedPage ? options.feedPage(offset) : options.feed ?? [CARD], offset, limit: 10 })
+      }
       case '/api/queries/qb.app.publication':
         return options.publicationPage ? options.publicationPage() : json(200, { items: [publication()], offset: 0, limit: 1 })
       case '/api/queries/qb.app.publication-tiers':
@@ -190,7 +226,10 @@ beforeEach(() => {
   forgetRedeem()
   window.history.replaceState(null, '', '/')
 })
-afterEach(() => vi.restoreAllMocks())
+afterEach(() => {
+  vi.restoreAllMocks()
+  vi.unstubAllGlobals()
+})
 
 describe('the feed', () => {
   it('lists the quizzes the taker can answer, for their country, in Kudos', async () => {
@@ -212,13 +251,15 @@ describe('the feed', () => {
     render(<App />)
     const cards = await screen.findAllByTestId('feed-card')
     expect(screen.getByTestId('home-hero')).toHaveTextContent('Answer a quiz, earn Kudos and prizes.')
-    expect(screen.getByTestId('feed-list')).toHaveClass('grid-cols-2')
+    // Q63: one card a row, the picture across the screen, the name and the sponsor under it.
+    expect(screen.getByTestId('feed-list')).toHaveClass('flex-col')
     // No cover: a pattern chosen by the publication's id, decorative.
     expect(within(cards[0]).getByTestId('feed-card-placeholder')).toHaveAttribute('aria-hidden', 'true')
     expect(cards[0]).toHaveTextContent('100 Kudos')
-    expect(cards[0]).toHaveTextContent('Capitals Inc')
-    // The count is part of the card link's name, not only a number for the eye.
-    expect(cards[0]).toHaveAccessibleName(expect.stringContaining('Completed: 2'))
+    expect(within(cards[0]).getByTestId('feed-card-sponsor')).toHaveTextContent('Capitals Inc')
+    expect(within(cards[0]).getByTestId('feed-card-completions')).toHaveTextContent('Completed: 2')
+    expect(within(cards[0]).getByTestId('feed-card-link')).toHaveAccessibleName('Capitals week')
+    expect(within(cards[0]).getByTestId('feed-card-link')).toHaveAttribute('href', `/p/${PUB}`)
     expect(within(cards[0]).getByTestId('feed-card-name')).toHaveTextContent('Capitals week')
     // A cover: the image (loaded lazily), no placeholder.
     expect(within(cards[1]).queryByTestId('feed-card-placeholder')).toBeNull()
@@ -245,14 +286,17 @@ describe('the feed', () => {
     expect(screen.getByRole('heading', { level: 1 })).toHaveClass('sr-only')
   })
 
-  it('keeps the search on one line and moves the order and the answered ones into the filters (Q34)', async () => {
+  it('puts the filters and the ways a reward is paid in a row of chips, the order and the answered ones in the filters (Q63)',
+    async () => {
     const { calls } = server()
     render(<App />)
     await screen.findByTestId('feed-card')
-    const search = screen.getByRole('search')
-    // The reward menu, the box, the search and the advanced filters, in this order.
-    expect([...search.querySelectorAll('[data-testid]')].map((e) => e.getAttribute('data-testid')))
-      .toEqual(['feed-method', 'feed-search', 'feed-search-submit', 'feed-filters-open'])
+    // The search is the header's (a magnifier); the home has none of its own.
+    expect(screen.queryByRole('search')).toBeNull()
+    expect([...screen.getByTestId('feed-chips').querySelectorAll('[data-testid]')].map((e) => e.getAttribute('data-testid')))
+      .toEqual(['feed-filters-open', 'feed-method-ALL', 'feed-method-PLATFORM', 'feed-method-SPONSOR_CASH',
+        'feed-method-OFFLINE_REDEEM', 'feed-method-DIGITAL_PRIZE'])
+    expect(screen.getByTestId('feed-method-ALL')).toHaveAttribute('aria-pressed', 'true')
     expect(screen.queryByTestId('feed-sort')).toBeNull()
     // By default the answered ones are left out.
     expect(calls.some((c) => c.path === '/api/queries/qb.app.feed'
@@ -285,10 +329,23 @@ describe('the feed', () => {
     const { calls } = server()
     render(<App />)
     await screen.findByTestId('feed-card')
+    // Q63: the magnifier beside the header's menu opens the box; a search shows the home's results.
+    await userEvent.click(within(screen.getByRole('banner')).getByTestId('search-open'))
     await userEvent.type(screen.getByTestId('feed-search'), 'capital')
     await userEvent.click(screen.getByTestId('feed-search-submit'))
     await waitFor(() => expect(calls.some((c) =>
       (c.body as { params?: { q?: string } } | null)?.params?.q === 'capital')).toBe(true))
+    expect(window.location.search).toBe('?q=capital')
+    expect(screen.getByTestId('feed-searched')).toHaveTextContent('Results for “capital”')
+    expect(screen.queryByTestId('header-search')).toBeNull()
+    await expectAccessible()
+    // Opened again, it starts from the search; cleared, the home is the whole feed again.
+    await userEvent.click(screen.getByTestId('search-open'))
+    expect(screen.getByTestId('feed-search')).toHaveValue('capital')
+    await userEvent.click(screen.getByTestId('search-close'))
+    await userEvent.click(screen.getByTestId('feed-search-clear'))
+    expect(window.location.search).toBe('')
+    await waitFor(() => expect(screen.queryByTestId('feed-searched')).toBeNull())
     expect(feedFilters({ ...NO_FILTERS, sponsor: ' 50%_off ', rewardMin: '10', rewardMax: 'x', minCompletions: '3',
       sponsorCountry: 'FR' })).toEqual([
       { field: 'sponsorCompany', op: 'like', value: '%50\\%\\_off%' },
@@ -309,12 +366,10 @@ describe('the ways a reward is paid (Q22)', () => {
     render(<App />)
     const card = await screen.findByTestId('feed-card')
     expect(within(card).getByTestId('feed-card-method')).toHaveAttribute('data-method', 'SPONSOR_CASH')
-    // Q34: the reward menu in front of the search box; its button names the choice.
-    expect(screen.getByTestId('feed-method')).toHaveAccessibleName('Reward type: All')
-    await userEvent.click(screen.getByTestId('feed-method'))
-    await userEvent.click(await screen.findByRole('menuitemradio', { name: "Prize at the sponsor's place" }))
-    await waitFor(() => expect(screen.getByTestId('feed-method')).toHaveAttribute('data-method', 'OFFLINE_REDEEM'))
-    expect(screen.getByTestId('feed-method')).toHaveAccessibleName("Reward type: Prize at the sponsor's place")
+    // Q63: a row of chips, the one chosen pressed.
+    await userEvent.click(screen.getByTestId('feed-method-OFFLINE_REDEEM'))
+    await waitFor(() => expect(screen.getByTestId('feed-method-OFFLINE_REDEEM')).toHaveAttribute('aria-pressed', 'true'))
+    expect(screen.getByTestId('feed-method-ALL')).toHaveAttribute('aria-pressed', 'false')
     await waitFor(() => expect(calls.some((c) => c.path === '/api/queries/qb.app.feed'
       && (c.body as { params: { method?: string } }).params.method === 'OFFLINE_REDEEM')).toBe(true))
     expect(window.localStorage.getItem('qb.feed.method')).toBe('OFFLINE_REDEEM')
@@ -580,8 +635,7 @@ describe('a digital prize (Q33)', () => {
     expect(within(card).getByTestId('feed-card-method')).toHaveAttribute('data-method', 'DIGITAL_PRIZE')
     expect(within(card).getByTestId('feed-card-method')).toHaveTextContent('Digital')
     await expectAccessible()
-    await userEvent.click(screen.getByTestId('feed-method'))
-    await userEvent.click(await screen.findByRole('menuitemradio', { name: 'Digital prize' }))
+    await userEvent.click(screen.getByTestId('feed-method-DIGITAL_PRIZE'))
     await waitFor(() => expect(calls.some((c) => c.path === '/api/queries/qb.app.feed'
       && (c.body as { params: { method?: string } }).params.method === 'DIGITAL_PRIZE')).toBe(true))
     window.localStorage.removeItem('qb.feed.method')
@@ -615,37 +669,96 @@ describe('a digital prize (Q33)', () => {
   })
 })
 
-describe('the video to watch (Q19)', () => {
+describe('the video to watch (Q19, Q63)', () => {
   const PLAYER = 'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ'
+  const PLAYING = `${PLAYER}?autoplay=1&mute=1&playsinline=1`
 
-  it('shows the video itself on the home, with what answering earns and a start, and does not play it', async () => {
+  it('plays a card\'s video muted while the card is in the middle of the screen, and its start opens the start page',
+    async () => {
+    const io = intersections()
     const api = server({ feed: [{ ...CARD, video: PLAYER }] })
     render(<App />)
-    const card = await screen.findByTestId('feed-video-card')
+    const card = await screen.findByTestId('feed-card')
+    expect(card).toHaveAttribute('data-video', 'true')
+    // Out of the middle: the picture with a play mark, no player.
+    expect(within(card).getByTestId('feed-card-video-mark')).toHaveTextContent('With a video')
+    expect(document.querySelector('iframe')).toBeNull()
+    io.fire(card, true, MIDDLE)
     const frame = within(card).getByTitle('Video: Capitals week')
-    expect(frame.tagName).toBe('IFRAME')
-    expect(frame).toHaveAttribute('src', PLAYER)
-    expect(frame.getAttribute('src')).not.toMatch(/autoplay/)
-    expect(frame).toHaveAttribute('loading', 'lazy')
-    expect(within(card).getByTestId('feed-video-reward')).toHaveTextContent('Answer correctly to earn up to 100 Kudos')
-    expect(screen.queryByTestId('feed-card')).not.toBeInTheDocument()
+    expect(frame).toHaveAttribute('src', PLAYING)
+    expect(frame.getAttribute('allow')).toContain('autoplay')
+    expect(card).toHaveAttribute('data-playing', 'true')
+    io.fire(card, false, MIDDLE)
+    expect(document.querySelector('iframe')).toBeNull()
+    // The start opens the start page first (its time limit and pass score), and starts nothing.
+    expect(within(card).getByTestId('feed-video-start')).toHaveAttribute('href', `/p/${PUB}`)
     await userEvent.click(within(card).getByTestId('feed-video-start'))
-    await waitFor(() => expect(window.location.pathname).toBe(`/play/${ATTEMPT}`))
-    expect(api.posted('QB_ATTEMPT_START')).toEqual([{ publicationId: PUB }])
+    await waitFor(() => expect(window.location.pathname).toBe(`/p/${PUB}`))
+    expect(api.posted('QB_ATTEMPT_START')).toEqual([])
   })
 
-  it('shows a survey\'s reward for answering', async () => {
-    server({ feed: [{ ...CARD, kind: 'SURVEY', video: PLAYER }] })
+  it('plays one card at a time, the first of those in the middle', async () => {
+    const io = intersections()
+    server({ feed: [{ ...CARD, video: PLAYER }, { ...CARD, publicationId: 'pub-2', name: 'Rivers', video: PLAYER },
+      { ...CARD, publicationId: 'pub-3', name: 'Plain' }] })
     render(<App />)
-    expect(await screen.findByTestId('feed-video-reward')).toHaveTextContent('Answer to earn 100 Kudos')
+    const cards = await screen.findAllByTestId('feed-card')
+    expect(cards[2]).not.toHaveAttribute('data-video')
+    expect(within(cards[2]).queryByTestId('feed-video-start')).toBeNull()
+    io.fire(cards[1], true, MIDDLE)
+    io.fire(cards[0], true, MIDDLE)
+    expect(document.querySelectorAll('iframe')).toHaveLength(1)
+    expect(cards[0]).toHaveAttribute('data-playing', 'true')
+    io.fire(cards[0], false, MIDDLE)
+    expect(cards[1]).toHaveAttribute('data-playing', 'true')
+  })
+
+  it('starts nothing by itself for a viewer who asked for less motion', async () => {
+    const io = intersections()
+    const media = vi.spyOn(window, 'matchMedia').mockImplementation((query) => ({ matches: query.includes('reduce'),
+      media: query, onchange: null, addListener: vi.fn(), removeListener: vi.fn(), addEventListener: vi.fn(),
+      removeEventListener: vi.fn(), dispatchEvent: vi.fn() }) as MediaQueryList)
+    try {
+      server({ feed: [{ ...CARD, video: PLAYER }] })
+      render(<App />)
+      const card = await screen.findByTestId('feed-card')
+      io.fire(card, true, MIDDLE)
+      expect(document.querySelector('iframe')).toBeNull()
+    } finally {
+      media.mockRestore()
+    }
   })
 
   it('frames no other address, whatever the server says', async () => {
+    const io = intersections()
     server({ feed: [{ ...CARD, video: 'https://evil.example/embed/dQw4w9WgXcQ' }] })
     render(<App />)
-    expect(await screen.findByTestId('feed-card')).toBeInTheDocument()
-    expect(screen.queryByTestId('feed-video-card')).not.toBeInTheDocument()
+    const card = await screen.findByTestId('feed-card')
+    expect(card).not.toHaveAttribute('data-video')
+    io.fire(card, true, MIDDLE)
     expect(document.querySelector('iframe')).toBeNull()
+  })
+})
+
+describe('the feed as the screen scrolls (Q63)', () => {
+  it('reads ten at first and the next ten as the end of the list comes near, until there are no more', async () => {
+    const io = intersections()
+    const page = (offset: number) => (offset >= 20 ? [] : Array.from({ length: 10 }, (_, i) => ({ ...CARD,
+      publicationId: `pub-${offset + i}`, name: `Quiz ${offset + i}` })))
+    const { calls } = server({ feedPage: page })
+    render(<App />)
+    await waitFor(() => expect(screen.getAllByTestId('feed-card')).toHaveLength(10))
+    const reads = () => calls.filter((c) => c.path === '/api/queries/qb.app.feed').map((c) =>
+      (c.body as { offset: number; limit: number }))
+    expect(reads()).toEqual([expect.objectContaining({ offset: 0, limit: 10 })])
+    io.fire(screen.getByTestId('feed-end'), true, NEAR_END)
+    await waitFor(() => expect(screen.getAllByTestId('feed-card')).toHaveLength(20))
+    expect(reads().at(-1)).toMatchObject({ offset: 10, limit: 10 })
+    io.fire(screen.getByTestId('feed-end'), true, NEAR_END)
+    await waitFor(() => expect(reads().at(-1)).toMatchObject({ offset: 20 }))
+    await waitFor(() => expect(screen.queryByTestId('feed-more')).toBeNull())
+    io.fire(screen.getByTestId('feed-end'), true, NEAR_END)
+    expect(reads()).toHaveLength(3)
   })
 })
 
@@ -657,12 +770,17 @@ describe('a publication\'s page', () => {
     expect(await screen.findByTestId('detail-name')).toHaveTextContent('Capitals week')
     const materials = screen.getByTestId('materials')
     // Q34: a row per material with its title and its description on one line; the article opens on a sheet.
+    // Q63: the video the app plays leads the page, playing muted as it opens; it is not among the materials again.
+    const hero = screen.getByTestId('detail-hero')
+    expect(within(hero).getByTitle('On YouTube'))
+      .toHaveAttribute('src', 'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?autoplay=1&mute=1&playsinline=1')
+    expect(within(hero).getByRole('heading', { level: 1 })).toHaveTextContent('Capitals week')
     const rows = within(materials).getAllByTestId('material')
-    expect(rows.map((row) => row.getAttribute('data-kind'))).toEqual(['VIDEO_LINK', 'ARTICLE', 'VIDEO_LINK'])
-    expect(within(rows[1]).getByTestId('material-title')).toHaveTextContent('Read first')
-    expect(within(rows[1]).getByTestId('material-description')).toHaveTextContent('Two lines on France')
+    expect(rows.map((row) => row.getAttribute('data-kind'))).toEqual(['ARTICLE', 'VIDEO_LINK'])
+    expect(within(rows[0]).getByTestId('material-title')).toHaveTextContent('Read first')
+    expect(within(rows[0]).getByTestId('material-description')).toHaveTextContent('Two lines on France')
     expect(within(materials).queryByText('the capital')).toBeNull()
-    await userEvent.click(within(rows[1]).getByTestId('material-open'))
+    await userEvent.click(within(rows[0]).getByTestId('material-open'))
     const sheet = await screen.findByTestId('material-sheet')
     expect(within(sheet).getByRole('heading', { name: 'Read first' })).toBeInTheDocument()
     expect(within(sheet).getByText('the capital').tagName).toBe('STRONG')
@@ -674,9 +792,7 @@ describe('a publication\'s page', () => {
     expect(link).toHaveAttribute('href', 'https://video.example.com/tour')
     expect(link).toHaveAttribute('target', '_blank')
     expect(link).toHaveAttribute('rel', 'noopener noreferrer')
-    // Q19: a YouTube or Vimeo video plays in the page.
-    expect(within(materials).getByTitle('On YouTube'))
-      .toHaveAttribute('src', 'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ')
+    expect(within(materials).queryByTitle('On YouTube')).toBeNull()
     expect(await screen.findByTestId('detail-tiers')).toHaveTextContent('100 Kudos')
     await waitFor(() => expect(posted('QB_VIEW')).toEqual([{ publicationId: PUB }]))
   })

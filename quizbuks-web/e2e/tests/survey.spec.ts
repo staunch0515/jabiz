@@ -10,7 +10,7 @@ import {
   test,
   unique,
 } from './support'
-import { fundedSponsor, taker, untilLive } from './play'
+import { fundedSponsor, searchHome, taker, untilLive } from './play'
 
 /**
  * Surveys (docs/quizbuks/plans/Q12-survey.md): a sponsor makes one in the console (a quiz of the kind "survey"), its
@@ -86,11 +86,10 @@ for (const appearance of ['light', 'dark'] as const) {
     await page.setViewportSize({ width: 390, height: 844 })
     await signIn(page, '/taker/', me.email)
     await expect(page.getByTestId('home')).toBeVisible()
-    await page.getByTestId('feed-search').fill(seeded.name)
-    await page.getByTestId('feed-search-submit').click()
+    await searchHome(page, seeded.name)
     const card = page.getByTestId('feed-card').filter({ hasText: seeded.name })
     await expect(card.getByTestId('feed-card-survey')).toBeVisible()
-    await card.click()
+    await card.getByTestId('feed-card-link').click()
     await expect(page.getByTestId('detail-survey')).toBeVisible()
     await expect(page.getByTestId('detail-tiers')).toHaveCount(0)
     await expectAccessible(page, at('app survey'))

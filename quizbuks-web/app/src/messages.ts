@@ -176,6 +176,9 @@ const en = {
     includeAnsweredHint: 'Hidden by default; one you have started stays.',
     search: 'Search quizzes',
     searchButton: 'Search',
+    searchClose: 'Close the search',
+    searchedFor: 'Results for “{{q}}”',
+    clearSearch: 'Clear',
     sort: 'Sort',
     sorts: {
       newest: 'Newest first',
@@ -562,6 +565,9 @@ const zh: typeof en = {
     includeAnsweredHint: '默认隐藏；进行中的仍会显示。',
     search: '搜索 Quiz',
     searchButton: '搜索',
+    searchClose: '关闭搜索',
+    searchedFor: '“{{q}}”的搜索结果',
+    clearSearch: '清除',
     sort: '排序',
     sorts: {
       newest: '最新',
@@ -948,6 +954,9 @@ const ja: typeof en = {
     includeAnsweredHint: '既定では非表示。回答中のものは表示されます。',
     search: 'クイズを検索',
     searchButton: '検索',
+    searchClose: '検索を閉じる',
+    searchedFor: '「{{q}}」の検索結果',
+    clearSearch: 'クリア',
     sort: '並べ替え',
     sorts: {
       newest: '新しい順',

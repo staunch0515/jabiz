@@ -5,13 +5,6 @@ import {
   AlertTitle,
   Button,
   Combobox,
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
   Input,
   Label,
   PageState,
@@ -31,27 +24,37 @@ import {
   cn,
 } from '@jabiz/ui'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
-import { Gift, HandCoins, LayoutGrid, Play, Search, SlidersHorizontal, type LucideIcon } from 'lucide-react'
-import { useEffect, useId, useState, type FormEvent } from 'react'
+import { Gift, HandCoins, LayoutGrid, Play, SlidersHorizontal, X, type LucideIcon } from 'lucide-react'
+import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
-import { playProblemText } from '../play/busy'
 import { EmptyArt, QuizArt } from '../qb/Illustrations'
-import { useStartAttempt } from '../play/useStartAttempt'
 import { FeedCardView, REWARD_METHOD_ICONS } from '../qb/view/FeedCard'
-import { VideoCardView } from '../qb/view/VideoCard'
 import { readCountries, shownLanguages } from '../qb/api'
 import { formatKudos } from '../qb/kudos'
 import { QB } from '../qb/messages'
-import { FEED_SORTS, readFeed, readOpenCashRewards, readOpenRedemptions, type FeedCard, type FeedSort, type RewardMethod }
+import { FEED_SORTS, readFeed, readOpenCashRewards, readOpenRedemptions, type FeedSort, type RewardMethod }
   from '../qb/play'
 import { problemText } from '../qb/problems'
-import { Link } from '../qb/router'
+import { Link, navigate, useLocation } from '../qb/router'
+import { prefersStillVideo } from '../qb/video'
 import { useSoundSetting } from '../qb/SoundSettings'
 import { HomeInstallOffer } from '../install'
 
+/** The home's address, searched from the header (Q63): `/?q=<text>`. */
+export const HOME_PATH = '/'
+
+export function searchPath(q: string): string {
+  return q ? `${HOME_PATH}?q=${encodeURIComponent(q)}` : HOME_PATH
+}
+
+/** The search an address of the home carries; empty for none. */
+export function searchOf(search: string): string {
+  return (new URLSearchParams(search).get('q') ?? '').trim().slice(0, 100)
+}
+
 /** Cards per page of the feed. */
-export const FEED_PAGE = 20
+export const FEED_PAGE = 10
 
 /** The ways a reward is paid the home can be narrowed to (Q22): all, or one of the methods. */
 export type MethodChoice = 'ALL' | RewardMethod
@@ -80,37 +83,39 @@ function storeMethod(choice: MethodChoice) {
 export const METHOD_ICONS: Record<MethodChoice, LucideIcon> = { ALL: LayoutGrid, ...REWARD_METHOD_ICONS }
 
 /**
- * The reward menu in front of the search box (Q34): an icon button that opens the five choices with their icons; the
- * button shows the chosen one's icon and says its name to assistive technology.
+ * The ways a reward is paid as a row of chips under the header (Q63, as a video site's topics; Q34 had a menu in front
+ * of the search box), after the advanced filters' button. The row scrolls sideways on a narrow screen.
  */
-function MethodMenu({ value, onChange }: { value: MethodChoice; onChange: (choice: MethodChoice) => void }) {
+function MethodChips({ value, onChange, filters, onFilters }: { value: MethodChoice
+  onChange: (choice: MethodChoice) => void; filters: number; onFilters: () => void }) {
   const { t } = useTranslation(APP)
-  const label = (choice: MethodChoice) => (choice === 'ALL' ? t('methods.all') : t(`methods.${choice}`))
-  const Icon = METHOD_ICONS[value]
+  const label = (choice: MethodChoice) => (choice === 'ALL' ? t('methods.all') : t(`methods.${choice}Short`))
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant={value === 'ALL' ? 'outline' : 'secondary'} size="icon" className="shrink-0"
-          aria-label={t('methods.menu', { method: label(value) })} data-testid="feed-method" data-method={value}>
-          <Icon aria-hidden />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="min-w-56">
-        <DropdownMenuLabel>{t('methods.choose')}</DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        <DropdownMenuRadioGroup value={value} onValueChange={(choice) => onChange(choice as MethodChoice)}>
-          {METHOD_CHOICES.map((choice) => {
-            const ItemIcon = METHOD_ICONS[choice]
-            return (
-              <DropdownMenuRadioItem key={choice} value={choice} data-testid={`feed-method-${choice}`}>
-                <ItemIcon aria-hidden className="text-muted-foreground" />
-                {label(choice)}
-              </DropdownMenuRadioItem>
-            )
-          })}
-        </DropdownMenuRadioGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <div className="-mx-4 flex items-center gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none]"
+      data-testid="feed-chips">
+      <Button type="button" variant={filters > 0 ? 'secondary' : 'outline'} size="icon" className="relative shrink-0"
+        aria-label={filters > 0 ? `${t('feed.filters')}, ${t('feed.activeFilters', { count: filters })}` : t('feed.filters')}
+        onClick={onFilters} data-testid="feed-filters-open">
+        <SlidersHorizontal aria-hidden />
+        {filters > 0 && (
+          <span aria-hidden className="bg-primary text-primary-foreground absolute -top-1.5 -right-1.5 inline-flex size-4 items-center justify-center rounded-full text-[10px] font-semibold"
+            data-testid="feed-filters-count">{filters}</span>
+        )}
+      </Button>
+      <div role="group" aria-label={t('methods.choose')} className="flex shrink-0 gap-2">
+        {METHOD_CHOICES.map((choice) => {
+          const Icon = METHOD_ICONS[choice]
+          const on = choice === value
+          return (
+            <Button key={choice} type="button" size="sm" variant={on ? 'default' : 'secondary'} aria-pressed={on}
+              className="shrink-0 rounded-full" data-testid={`feed-method-${choice}`} onClick={() => onChange(choice)}>
+              <Icon aria-hidden />
+              {label(choice)}
+            </Button>
+          )
+        })}
+      </div>
+    </div>
   )
 }
 
@@ -163,31 +168,45 @@ export function feedFilters(filters: FeedFilters): Filter[] {
 }
 
 /**
- * A card whose quiz is answered by watching a video (Q19): the video's own player (it plays when the taker presses its
- * button, never by itself), what answering earns, and the start. The name still leads to the publication's page.
+ * The card in the middle of the screen (Q63): of the cards with a video, the one crossing the screen's middle band
+ * plays; none while the viewer asked for less motion or the browser cannot tell.
  */
-function VideoCard({ card, player }: { card: FeedCard; player: string }) {
-  const { t } = useTranslation(APP)
-  const { t: tQb } = useTranslation(QB)
-  const start = useStartAttempt()
-  return (
-    <VideoCardView card={card} player={player} href={`/p/${card.publicationId}`} action={
-      <div className="flex flex-col items-end gap-1">
-        <Button disabled={start.isPending} aria-busy={start.isPending || undefined}
-          aria-describedby={`feed-video-hint-${card.publicationId}`}
-          data-testid="feed-video-start" onClick={() => start.mutate(card.publicationId)}>
-          <Play aria-hidden />
-          {t('detail.start')}
-        </Button>
-        <p className="text-muted-foreground text-sm empty:hidden" role="status">{start.busy ? t('play.busy') : ''}</p>
-        {start.isError && (
-          <p className="text-destructive text-sm" role="alert" data-testid="feed-video-error">
-            {playProblemText(start.error) || tQb('failed')}
-          </p>
-        )}
-      </div>
-    } />
-  )
+function useCentredVideo(list: HTMLElement | null, count: number): string | null {
+  const [centred, setCentred] = useState<string | null>(null)
+  useEffect(() => {
+    if (!list || typeof IntersectionObserver === 'undefined' || prefersStillVideo()) return
+    const inBand = new Set<string>()
+    const observer = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        const id = (entry.target as HTMLElement).dataset.publication!
+        if (entry.isIntersecting) inBand.add(id)
+        else inBand.delete(id)
+      }
+      // The first in the list's order of those in the band.
+      const first = Array.from(list.querySelectorAll<HTMLElement>('[data-video]'))
+        .map((card) => card.dataset.publication!).find((id) => inBand.has(id))
+      setCentred(first ?? null)
+    }, { rootMargin: '-40% 0px -40% 0px' })
+    list.querySelectorAll('[data-video]').forEach((card) => observer.observe(card))
+    return () => observer.disconnect()
+  }, [list, count])
+  return centred
+}
+
+/** Asks for the next page as the end of the list comes near the screen (Q63), as the "more" button does. */
+function useMoreNearTheEnd(sentinel: HTMLElement | null, more: () => void) {
+  const latest = useRef(more)
+  useEffect(() => {
+    latest.current = more
+  })
+  useEffect(() => {
+    if (!sentinel || typeof IntersectionObserver === 'undefined') return
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) latest.current()
+    }, { rootMargin: '0px 0px 600px 0px' })
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [sentinel])
 }
 
 /** The advanced filters' form; it starts from the filters applied each time the sheet opens. */
@@ -372,11 +391,10 @@ function Greeting({ name }: { name: string }) {
 export function FeedPage({ name, country }: { name: string; country: string | null }) {
   const { t } = useTranslation(APP)
   const { t: tQb } = useTranslation(QB)
-  const id = useId()
   // The feed is for the moment the page opened; a search or a new sort asks again for that moment.
   const [at] = useState(() => new Date().toISOString())
-  const [text, setText] = useState('')
-  const [q, setQ] = useState('')
+  // Q63: searched from the header (`/?q=`).
+  const q = searchOf(useLocation().search)
   const [filters, setFilters] = useState<FeedFilters>(NO_FILTERS)
   const [filtersOpen, setFiltersOpen] = useState(false)
   const filterList = feedFilters(filters)
@@ -408,11 +426,12 @@ export function FeedPage({ name, country }: { name: string; country: string | nu
     getNextPageParam: (last) => (last.items.length < FEED_PAGE ? undefined : last.offset + FEED_PAGE),
   })
   const cards = feed.data?.pages.flatMap((page) => page.items) ?? []
-
-  const search = (event: FormEvent) => {
-    event.preventDefault()
-    setQ(text.trim())
-  }
+  const [list, setList] = useState<HTMLUListElement | null>(null)
+  const [end, setEnd] = useState<HTMLDivElement | null>(null)
+  const playing = useCentredVideo(list, cards.length)
+  useMoreNearTheEnd(end, () => {
+    if (feed.hasNextPage && !feed.isFetchingNextPage) void feed.fetchNextPage()
+  })
 
   return (
     <section className="flex flex-col gap-4" aria-labelledby="home-title" data-testid="home">
@@ -453,26 +472,16 @@ export function FeedPage({ name, country }: { name: string; country: string | nu
           </AlertDescription>
         </Alert>
       )}
-      {/* Q34: one line, the reward menu in front of the box, the advanced filters (with the order) behind the search. */}
-      <form role="search" onSubmit={search} className="flex items-center gap-2">
-        <MethodMenu value={method} onChange={chooseMethod} />
-        <Label htmlFor={`${id}-q`} className="sr-only">{t('feed.search')}</Label>
-        <Input id={`${id}-q`} type="search" value={text} maxLength={100} placeholder={t('feed.search')}
-          className="min-w-0 flex-1" data-testid="feed-search" onChange={(event) => setText(event.target.value)} />
-        <Button type="submit" size="icon" className="shrink-0" aria-label={t('feed.searchButton')}
-          data-testid="feed-search-submit">
-          <Search aria-hidden />
-        </Button>
-        <Button type="button" variant={active > 0 ? 'secondary' : 'outline'} size="icon" className="relative shrink-0"
-          aria-label={active > 0 ? `${t('feed.filters')}, ${t('feed.activeFilters', { count: active })}` : t('feed.filters')}
-          onClick={() => setFiltersOpen(true)} data-testid="feed-filters-open">
-          <SlidersHorizontal aria-hidden />
-          {active > 0 && (
-            <span aria-hidden className="bg-primary text-primary-foreground absolute -top-1.5 -right-1.5 inline-flex size-4 items-center justify-center rounded-full text-[10px] font-semibold"
-              data-testid="feed-filters-count">{active}</span>
-          )}
-        </Button>
-      </form>
+      <MethodChips value={method} onChange={chooseMethod} filters={active} onFilters={() => setFiltersOpen(true)} />
+      {q && (
+        <div className="flex items-center gap-2 text-sm" data-testid="feed-searched">
+          <span className="min-w-0 truncate">{t('feed.searchedFor', { q })}</span>
+          <Button variant="ghost" size="sm" onClick={() => navigate(HOME_PATH)} data-testid="feed-search-clear">
+            <X aria-hidden />
+            {t('feed.clearSearch')}
+          </Button>
+        </div>
+      )}
       <FiltersSheet open={filtersOpen} onOpenChange={setFiltersOpen} value={filters} onApply={setFilters} />
       {feed.isPending ? (
         <PageState kind="loading" />
@@ -499,11 +508,22 @@ export function FeedPage({ name, country }: { name: string; country: string | nu
       ) : (
         <>
           <h2 className="sr-only">{t('feed.listTitle')}</h2>
-          <ul className="grid grid-cols-2 gap-3" data-testid="feed-list">
-            {cards.map((card) => (card.video
-              ? <VideoCard key={card.publicationId} card={card} player={card.video} />
-              : <FeedCardView key={card.publicationId} card={card} href={`/p/${card.publicationId}`} />))}
+          {/* Q63: one card a row across the screen; the one with a video in the middle of the screen plays. */}
+          <ul ref={setList} className="-mx-4 flex flex-col gap-6 sm:mx-0" data-testid="feed-list">
+            {cards.map((card) => (
+              <FeedCardView key={card.publicationId} card={card} href={`/p/${card.publicationId}`}
+                playing={playing === card.publicationId} action={card.video ? (
+                  // The start leads to the start page first: its time limit and pass score are read before answering.
+                  <Button asChild size="sm" className="mt-1 self-start">
+                    <Link to={`/p/${card.publicationId}`} data-testid="feed-video-start">
+                      <Play aria-hidden />
+                      {t('detail.start')}
+                    </Link>
+                  </Button>
+                ) : undefined} />
+            ))}
           </ul>
+          <div ref={setEnd} aria-hidden data-testid="feed-end" />
           {feed.hasNextPage && (
             <Button variant="outline" disabled={feed.isFetchingNextPage} data-testid="feed-more"
               onClick={() => void feed.fetchNextPage()}>
