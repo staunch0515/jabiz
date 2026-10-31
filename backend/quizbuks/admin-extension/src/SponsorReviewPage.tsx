@@ -7,7 +7,6 @@ import {
   Alert,
   AlertDescription,
   ApprovalPanel,
-  Badge,
   Button,
   Checkbox,
   DescriptionList,
@@ -27,7 +26,7 @@ import { readSponsor, readUser } from './api'
 import { readSponsorAsOperator } from './operator-api'
 import { readRewardDefaults, readSponsorMethods, REWARD_METHODS, setSponsorMethods, type RewardMethod } from './reward-api'
 import { AVATAR_VARIANTS, DICTIONARY, isUserId, PATH, PERMISSION, SPONSOR_PENDING } from './ids'
-import { AfterDecision, LoadFailed, Section } from './components'
+import { AfterDecision, LoadFailed, Section, StatusBadge } from './components'
 import { QUEUE, useAfterDecision, useLabels, when } from './hooks'
 
 const AVATAR = { image: true, variants: AVATAR_VARIANTS }
@@ -203,9 +202,7 @@ export default function SponsorReviewPage() {
             {!operator && (
               <Link to={PATH.user(userId)} className={linkClass} data-testid="sponsor-summary">{t('sponsor.summary')}</Link>
             )}
-            <Badge variant={pending ? 'secondary' : 'outline'} data-testid="sponsor-status">
-              {statusLabel(s.reviewStatus)}
-            </Badge>
+            <StatusBadge code={s.reviewStatus} label={statusLabel(s.reviewStatus)} testId="sponsor-status" />
           </span>
         }
       />

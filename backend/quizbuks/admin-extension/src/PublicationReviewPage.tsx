@@ -6,7 +6,6 @@ import {
   Alert,
   AlertDescription,
   ApprovalPanel,
-  Badge,
   Button,
   DescriptionList,
   EXTENSION_NAMESPACE,
@@ -37,7 +36,7 @@ import {
   type Tier,
   type Version,
 } from './api'
-import { AfterDecision, LoadFailed, PublisherLink, Section } from './components'
+import { AfterDecision, LoadFailed, PublisherLink, Section, StatusBadge } from './components'
 import type { BackTo } from './PublicationsPage'
 import { forbidden, money, QUEUE, useAfterDecision, useLabels, when } from './hooks'
 import {
@@ -432,9 +431,7 @@ export default function PublicationReviewPage() {
                 {t('publications.attempts')}
               </Link>
             )}
-            <Badge variant={pending ? 'secondary' : 'outline'} data-testid="publication-status">
-              {statusLabel(p.status)}
-            </Badge>
+            <StatusBadge code={p.status} label={statusLabel(p.status)} testId="publication-status" />
           </span>
         }
       />

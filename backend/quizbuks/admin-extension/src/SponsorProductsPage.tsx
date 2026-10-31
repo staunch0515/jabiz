@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
 import {
-  Badge,
   DataTable,
   EXTENSION_NAMESPACE,
   Label,
@@ -16,7 +15,7 @@ import {
   useAuth,
   type ColumnDef,
 } from '@jabiz/admin'
-import { LoadFailed } from './components'
+import { EmptyState, LoadFailed, StatusBadge } from './components'
 import { httpsUrl } from './links'
 import { QUEUE, usePaged, useLabels, when } from './hooks'
 import { DICTIONARY, PATH, PERMISSION, SPONSOR_PRODUCT_PROCESS, SPONSOR_PRODUCT_STATUSES } from './ids'
@@ -89,8 +88,7 @@ export function SponsorProductsTable({ userId, status = null }: { userId?: strin
         header: t('sponsorProducts.columns.status'),
         cell: ({ row }) => (
           <span className="flex flex-col gap-1">
-            <Badge variant={row.original.status === 'TAKEN_DOWN' ? 'outline' : 'secondary'}>
-              {statusLabel(row.original.status)}</Badge>
+            <StatusBadge code={row.original.status} label={statusLabel(row.original.status)} />
             {row.original.takedownReason && (
               <span className="text-muted-foreground text-xs" data-testid="sponsor-product-reason">
                 {t('sponsorProducts.reason', { reason: row.original.takedownReason })}</span>
@@ -119,7 +117,7 @@ export function SponsorProductsTable({ userId, status = null }: { userId?: strin
   if (query.isError) return <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
   return (
     <DataTable label={userId ? t('sponsorProducts.sponsorTable') : t('sponsorProducts.table')}
-      columns={sortable(columns)} {...table} getRowId={(row) => row.productId} empty={t('sponsorProducts.none')}
+      columns={sortable(columns)} {...table} getRowId={(row) => row.productId} empty={<EmptyState art="search" title={t('sponsorProducts.none')} />}
       rowProps={(row) => ({ 'data-testid': 'sponsor-product-row', 'data-id': row.productId, 'data-status': row.status })} />
   )
 }

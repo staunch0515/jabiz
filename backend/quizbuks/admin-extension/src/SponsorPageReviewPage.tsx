@@ -4,7 +4,6 @@ import { useTranslation } from 'react-i18next'
 import { Link, useParams } from 'react-router'
 import {
   ApprovalPanel,
-  Badge,
   Button,
   DescriptionList,
   EXTENSION_NAMESPACE,
@@ -16,7 +15,7 @@ import {
   useAuth,
   type DescriptionItem,
 } from '@jabiz/admin'
-import { AfterDecision, LoadFailed, Section } from './components'
+import { AfterDecision, LoadFailed, Section, StatusBadge } from './components'
 import { httpsUrl } from './links'
 import { QUEUE, useAfterDecision, useLabels, when } from './hooks'
 import {
@@ -123,7 +122,7 @@ export default function SponsorPageReviewPage() {
       <div>{back}</div>
       <PageHeader title={p.company ?? p.handle} className="pb-0" description={
         <span className="flex flex-wrap items-center gap-x-4 gap-y-1">
-          <Badge variant={pending ? 'secondary' : 'outline'} data-testid="sponsor-page-status">{statusLabel(p.status)}</Badge>
+          <StatusBadge code={p.status} label={statusLabel(p.status)} testId="sponsor-page-status" />
           {p.reviewRequired && <span className="text-muted-foreground text-sm">{t('sponsorPages.reviewRequired')}</span>}
         </span>
       } />

@@ -18,7 +18,7 @@ import {
   type ColumnDef,
 } from '@jabiz/admin'
 import { readVersion } from './api'
-import { LoadFailed, Section } from './components'
+import { EmptyState, LoadFailed, Section, StatusBadge } from './components'
 import { useLabels, usePaged, when } from './hooks'
 import { DICTIONARY, PATH, PERMISSION } from './ids'
 import {
@@ -61,7 +61,7 @@ function Publications({ quiz }: { quiz: QuizRow }) {
     },
     { id: 'version', header: t('quiz.versionLabel'), cell: ({ row }) => row.original.versionLabel ?? '' },
     { id: 'status', header: t('publications.status'),
-      cell: ({ row }) => <Badge variant="outline">{statusLabel(row.original.status)}</Badge> },
+      cell: ({ row }) => <StatusBadge code={row.original.status} label={statusLabel(row.original.status)} /> },
     { id: 'starts', header: t('publications.participants'), meta: right,
       cell: ({ row }) => String(row.original.starts) },
     {
@@ -86,7 +86,7 @@ function Publications({ quiz }: { quiz: QuizRow }) {
         ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
         : (
           <DataTable label={t('quiz.publicationsTable')} columns={sortable(columns)} {...table}
-            getRowId={(row) => row.publicationId} empty={t('quiz.nonePublications')}
+            getRowId={(row) => row.publicationId} empty={<EmptyState art="inbox" title={t('quiz.nonePublications')} />}
             rowProps={(row) => ({ 'data-testid': 'quiz-publication', 'data-id': row.publicationId })} />
         )}
     </Section>
@@ -160,7 +160,7 @@ function Versions({ quiz }: { quiz: QuizRow }) {
           ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
           : (
             <DataTable label={t('quiz.versionsTable')} columns={sortable2(columns)} {...table}
-              getRowId={(row) => row.versionId} empty={t('quiz.noneVersions')}
+              getRowId={(row) => row.versionId} empty={<EmptyState art="content" title={t('quiz.noneVersions')} />}
               rowProps={(row) => ({ 'data-testid': 'quiz-version', 'data-id': row.versionId })} />
           )}
       </Section>
@@ -215,7 +215,7 @@ export default function QuizDetailPage() {
       <PageHeader title={q.title} className="pb-0" description={
         <span className="flex flex-wrap items-center gap-2">
           <Badge variant="outline">{kindLabel(q.kind)}</Badge>
-          <Badge variant="outline">{statusLabel(q.status)}</Badge>
+          <StatusBadge code={q.status} label={statusLabel(q.status)} />
           {q.removed && <Badge variant="secondary" data-testid="quiz-removed">{t('quizzes.removed')}</Badge>}
         </span>
       } />
