@@ -74,9 +74,17 @@ interface Server {
 /** The server as the console sees it, for a signed-in, approved sponsor. Records what was posted. */
 function server(options: Server = {}) {
   const posted: { path: string; body: Record<string, unknown> }[] = []
+  const uploads: { policy: string | null; name: string }[] = []
   const publication = { current: options.publication === undefined ? { ...DRAFT } : options.publication }
   const turns = new Map<string, number>()
-  vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+    // Q64: an upload's form, read before a Request is made of it (jsdom's cannot hold one).
+    if (!(input instanceof Request) && init?.method === 'POST'
+      && new URL(String(input), window.location.origin).pathname === '/api/files') {
+      const policy = new URL(String(input), window.location.origin).searchParams.get('policy')
+      uploads.push({ policy, name: ((init.body as FormData).get('file') as File).name })
+      return json(201, { fileId: `up-${uploads.length}` })
+    }
     const request = input instanceof Request ? input : new Request(new URL(String(input), window.location.origin))
     const url = new URL(request.url, window.location.origin)
     const path = decodeURIComponent(url.pathname)
@@ -93,6 +101,8 @@ function server(options: Server = {}) {
       const answer = answers[Math.min(turn, answers.length - 1)]
       return json(answer.status, answer.body)
     }
+    // A content image's record: no variants (a small picture), as the server says of one.
+    if (/^\/api\/files\/[^/]+$/.test(path)) return json(200, { fileId: path.split('/').at(-1), variants: [] })
     switch (path) {
       case '/api/auth/entries/sponsor':
         return json(200, ENTRY)
@@ -197,7 +207,7 @@ function server(options: Server = {}) {
   })
   const processCalls = (name: string) =>
     posted.filter((p) => p.path === `/api/processes/${name}/latest`).map((p) => p.body)
-  return { posted, processCalls, publication }
+  return { posted, processCalls, publication, uploads }
 }
 
 const VERIFIED_SERVER = { sponsorId: 'u2', host: 'smtp.example.com', port: 587, tls: 'STARTTLS', username: 'shop',
@@ -386,8 +396,39 @@ describe('the publication wizard', () => {
     await waitFor(() => expect(window.location.pathname).toBe('/publications/p9'))
     expect(window.location.search).toBe('?step=1')
     expect(processCalls('QB_PUBLICATION_SAVE')).toEqual([{ publicationId: null, versionId: null, name: 'Tea week',
-      regions: [], startAt: null, endAt: null, timeLimitSec: null, passScore: null, budgetCap: null,
+      cover: null, regions: [], startAt: null, endAt: null, timeLimitSec: null, passScore: null, budgetCap: null,
       maxWinners: null, tiers: [], baseRevision: null, rewardMethod: 'PLATFORM', redeemDescription: null, audience: 'PUBLIC' }])
+  })
+
+  it('uploads the publication\'s own cover and sends it with the save (Q64)', async () => {
+    const { processCalls, uploads } = server({ processes: { QB_PUBLICATION_SAVE: [saved(4)] } })
+    window.history.replaceState(null, '', '/publications/p1')
+    render(<App />)
+    const field = await screen.findByTestId('publication-cover')
+    expect(screen.getByTestId('publication-cover-hint'))
+      .toHaveTextContent("shown on the home card and the start page. When empty, the quiz's cover is used.")
+    expect(within(field).queryByTestId('publication-cover-current')).toBeNull()
+    await userEvent.upload(within(field).getByTestId('publication-cover-upload'),
+      new File(['x'], 'My photo.png', { type: 'image/png' }))
+    expect(await within(field).findByTestId('publication-cover-current')).toBeInTheDocument()
+    // The content images' policy, under a neutral name (takers read the file's metadata).
+    expect(uploads).toEqual([{ policy: 'qb.content.image', name: 'image.png' }])
+    await userEvent.click(screen.getByTestId('publication-next'))
+    await waitFor(() => expect(processCalls('QB_PUBLICATION_SAVE')).toHaveLength(1))
+    expect(processCalls('QB_PUBLICATION_SAVE')[0]).toMatchObject({ publicationId: 'p1', cover: 'up-1' })
+  })
+
+  it('removes the publication\'s own cover: the save sends none, the quiz\'s is shown (Q64)', async () => {
+    const { processCalls } = server({ publication: { ...DRAFT, cover: 'own-1' },
+      processes: { QB_PUBLICATION_SAVE: [saved(4)] } })
+    window.history.replaceState(null, '', '/publications/p1')
+    render(<App />)
+    const field = await screen.findByTestId('publication-cover')
+    await userEvent.click(await within(field).findByTestId('publication-cover-remove'))
+    expect(within(field).queryByTestId('publication-cover-current')).toBeNull()
+    await userEvent.click(screen.getByTestId('publication-next'))
+    await waitFor(() => expect(processCalls('QB_PUBLICATION_SAVE')).toHaveLength(1))
+    expect(processCalls('QB_PUBLICATION_SAVE')[0]).toMatchObject({ publicationId: 'p1', cover: null })
   })
 
   it('chooses the newest version with the quiz', async () => {
@@ -450,7 +491,7 @@ describe('the publication wizard', () => {
     expect(screen.getByTestId('publication-submit')).toBeDisabled()
     expect(document.activeElement).toBe(screen.getByTestId('publication-step-title'))
     expect(processCalls('QB_PUBLICATION_SAVE').at(-1)).toEqual({ publicationId: 'p1', versionId: 'v1', name: 'Coffee week',
-      regions: ['GLOBAL', 'JP'], startAt: '2026-11-01T00:00:00Z', endAt: '2026-11-08T00:00:00Z', timeLimitSec: 300,
+      cover: null, regions: ['GLOBAL', 'JP'], startAt: '2026-11-01T00:00:00Z', endAt: '2026-11-08T00:00:00Z', timeLimitSec: 300,
       passScore: 2, budgetCap: null, maxWinners: null, baseRevision: 4, rewardMethod: 'PLATFORM', redeemDescription: null, audience: 'PUBLIC',
       tiers: [{ tierId: 't9', fromScore: 0, toScore: 2, reward: 100 }] })
     // The conditions were not touched: not sent.

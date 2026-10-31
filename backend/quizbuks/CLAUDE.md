@@ -79,7 +79,7 @@
   到期上下架只由逐项任务 `qb.publication-tick` 做（模板 `qb.system.publications-due` 按普通表 `qb_publication_schedule` 的 `next_due_at` 选出全部到期的，可补跑；每项 `QB_PUBLICATION_ADVANCE` 一个事务（平台决策 D42）；各流程在发布锁内随状态维护该行）。系统流程（定时任务、审批结果）声明 `internal()`（平台决策 D41：只允许系统身份运行，其他人一律 403 `PROCESS_INTERNAL`），权限 `qb.publication.system` 照常声明、不授予任何角色；审批结果只认发布自己的请求。时态表上只按不可变字段查找（可变字段的条件用不到索引）。档位、提交检查、审批内容是纯 Java 的 `TierCoverage`、`PublicationReadiness`、`PublicationApprovals`；
   上限在 `PublishingLimits`，错误码在 `PublishingCodes`。**审批规则只经 `QB_SETUP` 以受控变更提出**（`setup.QbApprovalRules`，与 `QbParams` 并列），由另一位管理员发布；
   "无规则即放行"由应用挡住（`QB_REVIEW_NOT_CONFIGURED`）。移除模版时，已提交过的发布所用版本的文件保留（`QuizProcesses.filesStillNeeded`）。
-  上架时随计数的两行（完成一侧 `QbPublicationCounter`、开始一侧 `QbPublicationStartCounter`，同一事务）插入**卡片** `QbPublicationCard`（普通表：除状态与版本切换（Q51）外全部在提交时冻结，含档位的 JSON `CardTiers`），`PublicationEditing.write` 在发布锁内随状态同步它；
+  上架时随计数的两行（完成一侧 `QbPublicationCounter`、开始一侧 `QbPublicationStartCounter`，同一事务）插入**卡片** `QbPublicationCard`（普通表：除状态与版本切换（Q51）外全部在提交时冻结，含档位的 JSON `CardTiers`），`PublicationEditing.write` 在发布锁内随状态同步它；卡片的封面先取发布自己的 `cover`（Q64，草稿中设、随审批冻结），否则版本的（`PublicationEditing.cardCover`，上架与版本切换都经它）；
   答题人的首页、详情、档位与答题流程只读卡片，不读时态的发布与档位。答题只经 `publishing.PublicationMoves` 改变发布（结束、预算不足）。
 - **答题**（`play`，`docs/quizbuks/plans/Q5-answering.md`）：会话 `QbAttempt`、首次浏览、完成人数都是普通表，只经 `QB_VIEW` / `QB_ATTEMPT_*` /
   `QB_PENDING_*` / `QB_PUBLICATION_STATS_REFRESH` 写入（默认数据视图 `processOnlyWrites`，答题人视图只读、限本人）。会话带奖励与抽成，而数据视图不能去掉字段：`QbAttempt` 的默认数据视图不给任何角色读取（读权限 `qb.play.system`），财务读只读视图 `finance:QbAttempt`，支持人员只经不含金额的 `qb.admin.attempts`（Q9c，C-2）。**一人一次**由 `(user_id, publication_id)` 唯一约束兜底，
