@@ -125,7 +125,7 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
   `jabiz.public.enabled` 默认关闭。公开的行与列只在数据视图上声明：`publicRead(p -> p.fields(...))`（固定值范围、非默认视图、不含敏感字段），
   模板渲染时投影到白名单；公开模板头部写 `access: public`（代替 `permissions`），`datasets` 必须指向公开视图。文件是否公开由公开行的白名单文件字段推导，
   不设标记；需要立即撤下时在流程的提交后步骤 `FileAccess.invalidate(...)`。公开读取不写操作记录。
-  匿名访客的浏览与点击只经公开计数器（`PublicCounter` Bean，键来自公开视图的白名单字段，`owner(字段)` 记下键的所有人供应用按读者限定；前端 `countPublic`；`POST /api/public/counters/{计数器}/{键}`，
+  匿名访客的浏览与点击只经公开计数器（`PublicCounter` Bean，键来自公开视图的白名单字段，`owner(字段)` 记下键的所有人供应用按读者限定，所有人是用户账号时加 `ownerIsUser()`，删除账号时计数随之删除；前端 `countPublic`；`POST /api/public/counters/{计数器}/{键}`，
   每访客每天一次、只在内存中去重、按日聚合到 `sys_public_counter_day`，15 §10、决策 D65），不自写匿名写入的接口或逐次记录访问。
 - **启动即失败**：元数据、数据视图、流程、SQL 模板、表结构的不一致，必须在启动时一次性全部报告，而不是等到请求触发。
   新的检查实现 `PlatformCheck`（返回问题列表，不抛异常），启动与 `platformCheck` 共用。

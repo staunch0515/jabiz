@@ -1,5 +1,7 @@
 package com.jabiz.runtime.erasure;
 
+import com.jabiz.query.BoundValue;
+import com.jabiz.runtime.publicread.PublicCounters;
 import com.jabiz.dataset.DatasetDefinition;
 import com.jabiz.entity.EntityDefinition;
 import com.jabiz.entity.Violation;
@@ -128,6 +130,7 @@ public class AccountErasure {
         public record Metadata() {}
 
         private final PersonalDataErasers erasers;
+        private final PublicCounters counters;
         private final EntityDefinitionRegistry entities;
         private final DatasetRegistry datasets;
         private final DatasetEntityManager entityManager;
@@ -136,11 +139,12 @@ public class AccountErasure {
         private final EntityIdGenerator ids;
         private final String poolRef;
 
-        public EraseAccountStep(PersonalDataErasers erasers, EntityDefinitionRegistry entities,
+        public EraseAccountStep(PersonalDataErasers erasers, PublicCounters counters, EntityDefinitionRegistry entities,
             DatasetRegistry datasets, DatasetEntityManager entityManager, DeletionGuard guard,
             StorageAdapterRegistry storages, EntityIdGenerator ids,
             @Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
             this.erasers = erasers;
+            this.counters = counters;
             this.entities = entities;
             this.datasets = datasets;
             this.entityManager = entityManager;
@@ -184,7 +188,24 @@ public class AccountErasure {
                 .thenMany(Flux.fromIterable(erasers.entities()))
                 .concatMap(erased -> applicationRows(erased, user.id())
                     .doOnNext(row -> register(ctx, erased, row)))
+                .then(Mono.defer(() -> counts(user)))
                 .then(Mono.defer(() -> record(ctx, user)));
+        }
+
+        /**
+         * The public counters' counts the user owns (counters whose owner is a user, decision D65 item 8): deleted with
+         * the account, an ordinary table the platform writes (no history to purge); those held in memory are forgotten.
+         */
+        private Mono<Void> counts(EntityInstance user) {
+            List<String> owned = counters.userOwnedCounters();
+            if (owned.isEmpty()) {
+                return Mono.empty();
+            }
+            String owner = String.valueOf(user.id());
+            return storages.getEngine(poolRef).select("DELETE FROM sys_public_counter_day"
+                    + " WHERE counter_name = ANY(:names) AND owner_key = :owner RETURNING row_id",
+                    Map.of("names", BoundValue.of(owned.toArray(String[]::new)), "owner", BoundValue.of(owner)))
+                .then(Mono.fromRunnable(() -> counters.forgetOwner(owner)));
         }
 
         /**

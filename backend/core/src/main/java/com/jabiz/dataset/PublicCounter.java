@@ -33,9 +33,12 @@ import java.util.regex.Pattern;
  * @param dataset the public dataset whose visible rows give the valid keys
  * @param field   the whitelisted field of that dataset holding the keys
  * @param owner   the whitelisted field of the key's row naming its owner, stored with the counts; null for none
+ * @param ownerIsUser whether the owner is a user account's id: the counts are deleted when that account is erased
+ *                (decision D65 item 8)
  * @param zone    the zone in which a count's day is told
  */
-public record PublicCounter(String name, String dataset, String field, String owner, ZoneId zone) {
+public record PublicCounter(String name, String dataset, String field, String owner, boolean ownerIsUser,
+    ZoneId zone) {
 
     public static final Pattern NAME = Pattern.compile("[a-z][a-z0-9.-]{0,59}");
 
@@ -52,12 +55,16 @@ public record PublicCounter(String name, String dataset, String field, String ow
         Objects.requireNonNull(dataset, "Public counter " + name + " needs the public dataset of its keys");
         Objects.requireNonNull(field, "Public counter " + name + " needs the field of its keys");
         zone = zone == null ? ZoneOffset.UTC : zone;
+        if (ownerIsUser && owner == null) {
+            throw new IllegalArgumentException("Public counter " + name + " says its owner is a user but names no owner");
+        }
     }
 
     public static PublicCounter define(String name, Consumer<Builder> spec) {
         Builder builder = new Builder();
         spec.accept(builder);
-        return new PublicCounter(name, builder.dataset, builder.field, builder.owner, builder.zone);
+        return new PublicCounter(name, builder.dataset, builder.field, builder.owner, builder.ownerIsUser,
+            builder.zone);
     }
 
     /**
@@ -129,6 +136,7 @@ public record PublicCounter(String name, String dataset, String field, String ow
         private String dataset;
         private String field;
         private String owner;
+        private boolean ownerIsUser;
         private ZoneId zone;
 
         /** The public dataset and its whitelisted field whose values are the valid keys. */
@@ -145,6 +153,15 @@ public record PublicCounter(String name, String dataset, String field, String ow
          */
         public Builder owner(String fieldName) {
             this.owner = fieldName;
+            return this;
+        }
+
+        /**
+         * The owner field holds a user account's id (a sponsor, a seller): when that account is erased (decision D62),
+         * its counts are deleted with it (decision D65 item 8). Needs {@link #owner}.
+         */
+        public Builder ownerIsUser() {
+            this.ownerIsUser = true;
             return this;
         }
 

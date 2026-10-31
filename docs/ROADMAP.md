@@ -4872,4 +4872,6 @@ D17 下匿名不能写任何东西（15 §10）。
 
 | 17z-5 | 所有人：`PublicCounter.owner(字段)`（白名单内的文本、代码或标识字段），计数时与可见性一同读出并存入 `owner_key`（迁移 V53）；平台实体的 `ownerKey`；应用以 `fromContext("ownerKey", …)` 的数据视图给每个所有人自己的计数（D65 第 7 条）。测试：`PublicCounterTest`、`PublicCountersTest`、`PublicCounterIT`（每个所有人只读到自己的键） |
 
-**17z 状态**：✅ 17z-1 至 17z-4 完成（#377）；17z-5 📝 待评审。
+| 17z-6 | 随账号删除：`PublicCounter.ownerIsUser()`（须有 `owner`）；`ACCOUNT_ERASE` 在同一事务中删除这些计数器里所有人是该用户的行，`PublicCounters.forgetOwner` 丢弃内存中未写入的（D65 第 8 条）。测试：`PublicCounterTest`、`PublicCountersTest`、`ErasureIT`（该用户的计数删除，别的所有人与不随账号删除的计数器保留） |
+
+**17z 状态**：✅ 17z-1 至 17z-5 完成（#377、#379）；17z-6 📝 待评审。
