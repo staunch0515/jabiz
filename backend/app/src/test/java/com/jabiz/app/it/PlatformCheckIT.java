@@ -112,7 +112,12 @@ class PlatformCheckIT {
             .contains("PUBLIC | broken-public/public_and_permissions.sql | query it.broken.public_and_permissions:"
                 + " timeoutMs (3000) exceeds jabiz.public.max-timeout (2000 ms)")
             .contains("PUBLIC | broken-public/private_cache.sql | query it.broken.private_cache: cacheSeconds applies"
-                + " to public templates (access: public) only");
+                + " to public templates (access: public) only")
+            .contains("PUBLIC | PublicCounter it.private | dataset urn:jabiz:dataset:it:ItAttachment is not public"
+                + " (publicRead)")
+            .contains("PUBLIC | PublicCounter it.hidden | field title is not whitelisted in publicRead of"
+                + " urn:jabiz:dataset:it:broken:large")
+            .contains("PUBLIC | PublicCounter commerce.product-view | declared more than once");
     }
 
     /** ROADMAP 16b fix: values that cannot be bound as the type of their field are found at startup. */

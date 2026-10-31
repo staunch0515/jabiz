@@ -55,6 +55,10 @@ public class PlatformObservations {
     /** A sign-in with another platform's signed token (decision D59). */
     public static final String AUTH_EXTERNAL_TOKEN = "jabiz.auth.external_token";
     public static final String PUBLIC_RATE_LIMITED = "jabiz.public.rate_limited";
+    /** A public counter was hit (decision D65): tags {@code counter} and {@code result} only, never the key. */
+    public static final String PUBLIC_COUNTER = "jabiz.public.counter";
+    /** Writing the counts the public counters held in memory (decision D65). */
+    public static final String PUBLIC_COUNTER_FLUSH = "jabiz.public.counter.flush";
     /** A sign-in guard refused a session at a refresh, which ended it (decision D36 item 6). */
     public static final String AUTH_REFRESH_REFUSED = "jabiz.auth.refresh.refused";
     public static final String DOCUMENT_RENDER = "jabiz.document.render";

@@ -29,6 +29,8 @@ class PublicSwitchedOffIT extends PostgresIntegrationTest {
             .expectHeader().valueEquals(HttpHeaders.CACHE_CONTROL, "no-store");
         client.head().uri(catalog).exchange().expectStatus().isNotFound();
         client.post().uri(catalog).exchange().expectStatus().isNotFound();
+        client.post().uri("/api/public/counters/commerce.product-view/019c1347-d280-74b3-a3e9-25b7e53b7bac")
+            .exchange().expectStatus().isNotFound();
         client.get().uri("/api/public/files/019c1347-d280-74b3-a3e9-25b7e53b7bac").exchange()
             .expectStatus().isNotFound();
     }
