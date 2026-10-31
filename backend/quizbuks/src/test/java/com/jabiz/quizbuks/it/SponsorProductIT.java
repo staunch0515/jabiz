@@ -17,6 +17,8 @@ import com.jabiz.runtime.test.TestTokens;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -160,6 +162,32 @@ class SponsorProductIT extends PlayItSupport {
             SponsorStatsConfig.PAGE_VIEWS + " " + annHandle + " 2",
             SponsorStatsConfig.PRODUCT_CLICKS + " " + annProduct + " 1");
         assertThat(myCounts(bob)).containsExactly(SponsorStatsConfig.PRODUCT_CLICKS + " " + bobProduct + " 1");
+
+        // Q60c-2: by day (every day of the period, zeros included) and by product, for the sponsor; in all, for
+        // headquarters and for the operator looking after the sponsor, not another operator.
+        LocalDate today = LocalDate.ofInstant(clock.instant(), ZoneId.of("Asia/Tokyo"));
+        Map<String, Object> period = Map.of("from", today.minusDays(2).toString(), "to", today.toString());
+        assertThat(items("qb.sponsor.page-stats", sponsorToken(ann), Map.of("params", period)))
+            .extracting(row -> row.get("day") + " " + row.get("views") + " " + row.get("clicks"))
+            .containsExactly(today.minusDays(2) + " 0 0", today.minusDays(1) + " 0 0", today + " 2 1");
+        assertThat(items("qb.sponsor.product-clicks", sponsorToken(ann), Map.of("params", period)))
+            .extracting(row -> row.get("name") + " " + row.get("clicks"))
+            .containsExactly("Rye 1", "Hidden 0");
+        assertThat(items("qb.sponsor.product-clicks", sponsorToken(bob), Map.of("params", period)))
+            .extracting(row -> row.get("name") + " " + row.get("clicks")).containsExactly("Cake 1");
+
+        String north = newOperator(unique("North"));
+        String south = newOperator(unique("South"));
+        run(OperatorProcesses.ASSIGN, hq(), body("userId", ann, "operatorId", north, "reason", "Q60c"));
+        Map<String, Object> annPeriod = Map.of("params", Map.of("userId", ann, "from", period.get("from"),
+            "to", period.get("to")));
+        for (String reader : List.of(hq(), operatorSession(member(north, unique("q60c-n")), north))) {
+            assertThat(items("qb.admin.sponsor-stats", reader, annPeriod)).singleElement()
+                .satisfies(row -> assertThat(row).containsEntry("views", 2).containsEntry("clicks", 1));
+        }
+        assertThat(items("qb.admin.sponsor-stats", operatorSession(member(south, unique("q60c-s")), south),
+            annPeriod)).singleElement()
+            .satisfies(row -> assertThat(row).containsEntry("views", 0).containsEntry("clicks", 0));
     }
 
     private void countPublic(String counter, String key, String browser) {

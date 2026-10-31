@@ -4,6 +4,7 @@ import com.jabiz.context.RequestContext;
 import com.jabiz.dataset.DatasetDefinition;
 import com.jabiz.dataset.PublicCounter;
 import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.operator.OperatorScopes;
 import com.jabiz.runtime.publicread.PublicCounterEntities;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -25,6 +26,8 @@ public class SponsorStatsConfig {
     public static final String PRODUCT_CLICKS = "qb.product-click";
     /** The sponsor's own counts (both counters), read-only. */
     public static final String MY_DATASET = "urn:jabiz:dataset:me:PublicCounterDay";
+    /** The administration's counts, an operator's session limited to its sponsors' (Q60c-2), read-only. */
+    public static final String ADMIN_DATASET = "urn:jabiz:dataset:admin:PublicCounterDay";
 
     private final String zone;
     private final String poolRef;
@@ -56,5 +59,19 @@ public class SponsorStatsConfig {
             .policy(p -> p.readOnly(true).allowTimeTravel(false).maxQueryBatchSize(1000))
             .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef))
             .scope(s -> s.fromContext("ownerKey", "actorId", RequestContext::actorId)));
+    }
+
+    /**
+     * The counts for headquarters and the operators (the template {@code qb.admin.sponsor-stats}): every sponsor's, an
+     * operator's session its own sponsors' only (by the counts' owner, platform decision D64).
+     */
+    @Bean
+    DatasetDefinition qbAdminPublicCounterDataset() {
+        return DatasetDefinition.define(ADMIN_DATASET, d -> d
+            .targetEntityType(PublicCounterEntities.ENTITY)
+            .permissions(QbPermissions.ADMIN_PUBLICATION_READ, QbPermissions.SPONSOR_VIEW_WRITE)
+            .scope(OperatorScopes.of(PublicCounterEntities.ENTITY))
+            .policy(p -> p.readOnly(true).allowTimeTravel(false).maxQueryBatchSize(1000))
+            .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
     }
 }

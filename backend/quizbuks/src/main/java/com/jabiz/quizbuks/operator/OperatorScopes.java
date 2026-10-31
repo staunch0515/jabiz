@@ -1,5 +1,6 @@
 package com.jabiz.quizbuks.operator;
 
+import com.jabiz.runtime.publicread.PublicCounterEntities;
 import com.jabiz.dataset.DatasetScope;
 import com.jabiz.dataset.EntryScopeVia;
 import com.jabiz.quizbuks.audience.QbAudience;
@@ -53,6 +54,8 @@ public final class OperatorScopes {
         fields.put(QbSponsorPages.PAGE, "userId");
         fields.put(QbSponsorProducts.PRODUCT, "userId");
         fields.put(QbSponsorProducts.QUIZ_LINK, "ownerId");
+        // Q60c-2: the public counters' counts of sponsors' pages and products, by their owner (the sponsor).
+        fields.put(PublicCounterEntities.ENTITY, "ownerKey");
         for (String entity : new String[] {QbPublications.COUNTER, QbPublications.START_COUNTER,
             QbPublications.SCHEDULE, QbPublications.PAST_VERSION, QbPlay.VIEW, QbPlay.STATS}) {
             fields.put(entity, BY_CARD);

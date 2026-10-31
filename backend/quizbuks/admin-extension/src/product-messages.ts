@@ -27,6 +27,10 @@ export const productMessages = {
     restoreOf: 'Put back {{name}}',
     reason: 'Why it was taken down: {{reason}}',
     byHq: 'Taken down by headquarters: only headquarters puts it back.',
+    visits: 'Visits in the last 30 days',
+    views: 'Page views',
+    clicks: 'Shop link clicks',
+    visitsNote: 'Approximate: each visitor counts once a day per page or product.',
   },
   zh: {
     title: '商户商品',
@@ -45,6 +49,10 @@ export const productMessages = {
     restoreOf: '恢复 {{name}}',
     reason: '下架理由：{{reason}}',
     byHq: '由总部下架，只有总部能恢复。',
+    visits: '最近 30 天的访问',
+    views: '主页浏览',
+    clicks: '商店链接点击',
+    visitsNote: '近似值：每位访客每天对同一主页或商品只计一次。',
   },
   ja: {
     title: 'スポンサー商品',
@@ -63,5 +71,9 @@ export const productMessages = {
     restoreOf: '{{name}} を復元',
     reason: '公開停止の理由：{{reason}}',
     byHq: '本部が公開停止しました。復元できるのは本部だけです。',
+    visits: '過去 30 日の訪問',
+    views: 'ページの閲覧',
+    clicks: 'ショップリンクのクリック',
+    visitsNote: '概数です。訪問者は同じページや商品について1日1回だけ数えます。',
   },
 }
