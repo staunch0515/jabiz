@@ -26,20 +26,20 @@ import { SPONSOR } from '../messages'
 import { CONTENT_LANGUAGES, contentLanguageOf, type ContentLanguage } from '../qb/api'
 import { FileImage } from '../qb/FileImage'
 import { QB } from '../qb/messages'
+import { sponsorPageLink } from '../qb/page'
 import {
   HEADLINE_LENGTH,
   HANDLE_LENGTH,
   readMySponsorPage,
   saveSponsorPage,
-  sponsorPageLink,
-  SPONSOR_PAGE,
   STORY_LENGTH,
   submitSponsorPage,
   unpublishSponsorPage,
   WEBSITE_LENGTH,
   type MySponsorPage,
   type SponsorPageInput,
-} from '../qb/page'
+} from './api'
+import { SPONSOR_PAGE } from './ids'
 import { fieldProblem, generalProblem } from '../qb/problems'
 
 export const SPONSOR_PAGE_PATH = '/page'

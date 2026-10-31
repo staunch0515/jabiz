@@ -238,7 +238,9 @@ public class OperatorConfig {
         return StaticDictionary.define(OperatorSettlements.STATUS_DICTIONARY, d -> d
             .item(OperatorSettlements.ISSUED, "en", "Issued", "zh", "已出具", "ja", "発行済み")
             .item(OperatorSettlements.PAYING, "en", "Payment in approval", "zh", "付款审批中", "ja", "支払い承認待ち")
-            .item(OperatorSettlements.PAID, "en", "Paid", "zh", "已付款", "ja", "支払い済み"));
+            .item(OperatorSettlements.PAID, "en", "Paid", "zh", "已付款", "ja", "支払い済み")
+            .item(OperatorSettlements.CREDITED, "en", "Credited to the account", "zh", "已记入账户", "ja",
+                "口座に記入済み"));
     }
 
     @Bean
@@ -309,5 +311,167 @@ public class OperatorConfig {
                 (scheduledTime, row) -> new OperatorSettlements.RunInput(String.valueOf(row.get("operatorId")),
                     OperatorSettlements.previousMonth(scheduledTime, zone)))
             .maxItems(1_000);
+    }
+
+    // ---- Q48e-2: plans, accounts and withdrawals -------------------------------------------------------------------
+
+    @Bean
+    EntityDefinition qbOperatorPlanEntity() {
+        return OperatorPlans.PLAN_ENTITY;
+    }
+
+    /** Headquarters reads the changes (the operator through its own template); only the processes write them. */
+    @Bean
+    DatasetDefinition qbOperatorPlanDataset() {
+        return defaultDataset(OperatorPlans.PLAN);
+    }
+
+    @Bean
+    EntityDefinition qbOperatorBankAccountEntity() {
+        return OperatorWithdrawals.BANK_ACCOUNT_ENTITY;
+    }
+
+    @Bean
+    EntityDefinition qbOperatorWithdrawalEntity() {
+        return OperatorWithdrawals.WITHDRAWAL_ENTITY;
+    }
+
+    /** Finance reads the accounts and withdrawals (the operator through its own templates). */
+    @Bean
+    DatasetDefinition qbOperatorBankAccountDataset() {
+        return financeDataset(OperatorWithdrawals.BANK_ACCOUNT);
+    }
+
+    @Bean
+    DatasetDefinition qbOperatorWithdrawalDataset() {
+        return financeDataset(OperatorWithdrawals.WITHDRAWAL);
+    }
+
+    private DatasetDefinition financeDataset(String entity) {
+        return DatasetDefinition.define(QbOperators.defaultDataset(entity), d -> d
+            .targetEntityType(entity)
+            .asDefault()
+            .permissions(QbPermissions.ADMIN_FINANCE_READ, QbPermissions.SPONSOR_VIEW_WRITE)
+            .policy(p -> p.processOnlyWrites())
+            .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
+    }
+
+    @Bean
+    StaticDictionary qbOperatorPlanDictionary() {
+        return StaticDictionary.define(OperatorPlans.PLAN_DICTIONARY, d -> d
+            .item("1", "en", "Plan 1", "zh", "方案 1", "ja", "プラン 1")
+            .item("2", "en", "Plan 2", "zh", "方案 2", "ja", "プラン 2")
+            .item("3", "en", "Plan 3", "zh", "方案 3", "ja", "プラン 3")
+            .item("4", "en", "Plan 4", "zh", "方案 4", "ja", "プラン 4")
+            .item("5", "en", "Plan 5", "zh", "方案 5", "ja", "プラン 5"));
+    }
+
+    @Bean
+    StaticDictionary qbOperatorPlanStatusDictionary() {
+        return StaticDictionary.define(OperatorPlans.STATUS_DICTIONARY, d -> d
+            .item(OperatorPlans.PENDING, "en", "Waiting for approval", "zh", "待审批", "ja", "承認待ち")
+            .item(OperatorPlans.APPROVED, "en", "Approved", "zh", "已批准", "ja", "承認済み")
+            .item(OperatorPlans.REJECTED, "en", "Rejected", "zh", "已驳回", "ja", "却下"));
+    }
+
+    @Bean
+    StaticDictionary qbOperatorWithdrawalStatusDictionary() {
+        return StaticDictionary.define(OperatorWithdrawals.STATUS_DICTIONARY, d -> d
+            .item(OperatorWithdrawals.REQUESTED, "en", "Asked for", "zh", "已申请", "ja", "申請済み")
+            .item(OperatorWithdrawals.PAYING, "en", "Payment in approval", "zh", "付款审批中", "ja", "支払い承認待ち")
+            .item(OperatorWithdrawals.PAID, "en", "Paid", "zh", "已付款", "ja", "支払い済み")
+            .item(OperatorWithdrawals.REJECTED, "en", "Rejected", "zh", "已驳回", "ja", "却下")
+            .item(OperatorWithdrawals.CANCELLED, "en", "Cancelled", "zh", "已取消", "ja", "取消済み"));
+    }
+
+    @Bean
+    ApprovalSubject qbOperatorPlanApprovalSubject() {
+        return ApprovalSubject.define(OperatorPlans.APPROVAL_SUBJECT, s -> s.entity(OperatorPlans.PLAN)
+            .bool("operatorPlan"));
+    }
+
+    @Bean
+    ApprovalSubject qbOperatorWithdrawalApprovalSubject() {
+        return ApprovalSubject.define(OperatorWithdrawals.APPROVAL_SUBJECT, s -> s.entity(OperatorWithdrawals.WITHDRAWAL)
+            .bool("operatorWithdrawal").number("amount").text("operatorId"));
+    }
+
+    @Bean
+    ProcessDefinition<OperatorPlans.SetInput, OperatorPlans.PlanOutput, ProcessContext> qbOperatorPlanSet() {
+        return OperatorPlans.set(zone);
+    }
+
+    @Bean
+    ProcessDefinition<TransferProcesses.ApprovalResultInput, OperatorPlans.PlanOutput, ProcessContext>
+        qbOperatorPlanApprovalResult() {
+        return OperatorPlans.approvalResult();
+    }
+
+    @Bean
+    EventSubscription<TransferProcesses.ApprovalResultInput> qbOperatorPlanApprovedSubscription(
+        ProcessDefinition<TransferProcesses.ApprovalResultInput, OperatorPlans.PlanOutput, ProcessContext>
+            qbOperatorPlanApprovalResult) {
+        return EventSubscription.of("qb.operator-plan-approved", ApprovalProcesses.APPROVED_EVENT,
+            qbOperatorPlanApprovalResult, TransferProcesses::resultInput);
+    }
+
+    @Bean
+    EventSubscription<TransferProcesses.ApprovalResultInput> qbOperatorPlanRejectedSubscription(
+        ProcessDefinition<TransferProcesses.ApprovalResultInput, OperatorPlans.PlanOutput, ProcessContext>
+            qbOperatorPlanApprovalResult) {
+        return EventSubscription.of("qb.operator-plan-rejected", ApprovalProcesses.REJECTED_EVENT,
+            qbOperatorPlanApprovalResult, TransferProcesses::resultInput);
+    }
+
+    @Bean
+    ProcessDefinition<OperatorWithdrawals.BankAccountInput, OperatorWithdrawals.BankAccountOutput, ProcessContext>
+        qbOperatorBankAccountSave() {
+        return OperatorWithdrawals.saveBankAccount();
+    }
+
+    @Bean
+    ProcessDefinition<OperatorWithdrawals.RequestInput, OperatorWithdrawals.WithdrawalOutput, ProcessContext>
+        qbOperatorWithdrawalRequest() {
+        return OperatorWithdrawals.request();
+    }
+
+    @Bean
+    ProcessDefinition<OperatorWithdrawals.WithdrawalRef, OperatorWithdrawals.WithdrawalOutput, ProcessContext>
+        qbOperatorWithdrawalCancel() {
+        return OperatorWithdrawals.cancel();
+    }
+
+    @Bean
+    ProcessDefinition<OperatorWithdrawals.PayInput, OperatorWithdrawals.WithdrawalOutput, ProcessContext>
+        qbOperatorWithdrawalPay() {
+        return OperatorWithdrawals.pay();
+    }
+
+    @Bean
+    ProcessDefinition<OperatorWithdrawals.RejectInput, OperatorWithdrawals.WithdrawalOutput, ProcessContext>
+        qbOperatorWithdrawalReject() {
+        return OperatorWithdrawals.reject();
+    }
+
+    @Bean
+    ProcessDefinition<TransferProcesses.ApprovalResultInput, OperatorWithdrawals.WithdrawalOutput, ProcessContext>
+        qbOperatorWithdrawalApprovalResult() {
+        return OperatorWithdrawals.approvalResult();
+    }
+
+    @Bean
+    EventSubscription<TransferProcesses.ApprovalResultInput> qbOperatorWithdrawalApprovedSubscription(
+        ProcessDefinition<TransferProcesses.ApprovalResultInput, OperatorWithdrawals.WithdrawalOutput, ProcessContext>
+            qbOperatorWithdrawalApprovalResult) {
+        return EventSubscription.of("qb.operator-withdrawal-approved", ApprovalProcesses.APPROVED_EVENT,
+            qbOperatorWithdrawalApprovalResult, TransferProcesses::resultInput);
+    }
+
+    @Bean
+    EventSubscription<TransferProcesses.ApprovalResultInput> qbOperatorWithdrawalRejectedSubscription(
+        ProcessDefinition<TransferProcesses.ApprovalResultInput, OperatorWithdrawals.WithdrawalOutput, ProcessContext>
+            qbOperatorWithdrawalApprovalResult) {
+        return EventSubscription.of("qb.operator-withdrawal-rejected", ApprovalProcesses.REJECTED_EVENT,
+            qbOperatorWithdrawalApprovalResult, TransferProcesses::resultInput);
     }
 }

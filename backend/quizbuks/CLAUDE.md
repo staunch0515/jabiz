@@ -32,7 +32,7 @@
 ## 4. 应用约定
 
 - **金额**：账本与接口一律 JPY、小数位 0（`jabiz.ledger.currency: JPY`、`scale: 0`；字段 `asMonetary("JPY", 0)`）。三个应用前端把金额显示为点数（`1,234 Kudos`，中文"学分"、日文"クドス"，Q61，一处格式化函数）；
-  平台通用后台对管理员仍显示 JPY。不写点数以外的对外币种名。站内信的金额经 `MessageTexts.kudos`（消息 `qb.kudos.unit`），邮件的金额参数只是数字（`MailValues.amount`）、单位写在各语言的模板中。
+  平台通用后台对管理员仍显示 JPY。不写点数以外的对外币种名；例外只有商户商品的标价（Q60b：商店自己的价格，平台不经手，按其币种显示，`qb/products.ts` 的 `formatPrice`）。站内信的金额经 `MessageTexts.kudos`（消息 `qb.kudos.unit`），邮件的金额参数只是数字（`MailValues.amount`）、单位写在各语言的模板中。
 - **会计年度**为日历年（`jabiz.fiscal-year-end: 12`）。
 - **语言**：消息资源 `messages_{en,zh,ja}.properties` 三语齐全（`jabizApp { languages("en", "zh", "ja") }`，启动检查）；实体与字段 `entity.<实体>[.<字段>]`、流程 `process.<名>`、参数 `param.<键>`。
   产品显示名只写在 `app.name`（按语言：品牌档案的 `names`，Q61）。
@@ -128,7 +128,8 @@
   **运营商不读用户资料**（没有 `qb.admin.users.read`）：只经 `qb.operator.*` 模板（商户、概况，只有合计）与只读流程 `QB_OPERATOR_TEAM`；扩展的页面按权限选模板（审核页、商户链接）。新增运营商可做的事时，权限加进 `QbRoles` 的 `OPERATOR_PERMISSIONS` 并在 `QbRolesTest` 的清单中写明，不给运营商用户资料、财务、法律文本、参数与角色的权限。
   多个运营商互相隔离（Q59c-2，平台 17y 的入口范围，决策 D64）：运营商的权限读得到的数据视图以 `OperatorScopes` 约束、对象以 `OperatorChecks.ownSponsor`（`RequireScope`）核对，总部也运行的运营商动作（作废兑换、电子奖品处理）以 `OperatorChecks.memberWhenScoped` 在动作之内再查成员关系（Q48e-1）；
   首次入驻带开拓链接的键（`QB_SPONSOR_APPLY` 的 `trialKey`）即归开拓的运营商、审核随之（`docs/quizbuks/plans/Q48e-operator-isolation.md`）。
-- **运营商结算**（`operator.OperatorSettlements`，`docs/quizbuks/plans/Q48-operators.md` §7 Q48b）：收入的归属是发布卡片上线时冻结的 `operatorId`（不是账本维度：答题过账不多读），月结算按 4110 的发布维度连到卡片，比例为受控参数 `qb.operator.platform-share`；`QbOperatorSettlement` 只经 `QB_OPERATOR_SETTLEMENT_RUN`（逐项任务，`internal()`）/ `PAY` / `APPROVAL_RESULT` 写入，过账 5130 / 2140 与 2140 / 1120（来源 `QbOperatorSettlement`，月报的 `OPERATOR_SHARE` / `OPERATOR_PAID`）；付款只在另一位管理员批准后过账。锁 `qb.operator:<运营商>`。
+- **运营商结算**（`operator.OperatorSettlements`，`docs/quizbuks/plans/Q48-operators.md` §7 Q48b）：收入的归属是发布卡片上线时冻结的 `operatorId`（不是账本维度：答题过账不多读），月结算按 4110 的发布维度连到卡片；`QbOperatorSettlement` 只经 `QB_OPERATOR_SETTLEMENT_RUN`（逐项任务，`internal()`）/ `PAY` / `APPROVAL_RESULT` 写入，过账 5130 / 2140（来源 `QbOperatorSettlement`，月报的 `OPERATOR_SHARE`）。锁 `qb.operator:<运营商>`。
+  **方案与账户**（Q48e-2，`OperatorPlans`、`OperatorWithdrawals`，`docs/quizbuks/plans/Q48e-operator-isolation.md`）：比例与固定费取运营商当月的方案（受控参数 `qb.operator.plan.<n>.fee|share`；方案变更 `QbOperatorPlan` 只经 `QB_OPERATOR_PLAN_SET` 与审批结果写入，四眼、从以后的月份起）；结算记入运营商的账户（`CREDITED`，余额 = 记入的应付 − 未驳回未取消的提现，模板 `qb.system.operator-balance`），钱都在平台；提现 `QbOperatorWithdrawal` 只经负责人的 `QB_OPERATOR_WITHDRAWAL_REQUEST` / `CANCEL`（入口范围给出运营商，先取运营商锁再查成员关系）与财务的 `PAY` / `REJECT`、审批结果写入，批准后过账 2140 / 1120（月报 `OPERATOR_PAID`）；银行账户 `QbOperatorBankAccount` 只经 `QB_OPERATOR_BANK_ACCOUNT_SAVE`。此前签发（`ISSUED`）的结算照旧逐张 `PAY`。
 - **AI 获客**（包 `prospect`，`docs/quizbuks/plans/Q48-operators.md` §3 与 §7 Q48c）：所有者 `owner` 是运营商编号或总部的 `direct`，只由 `ProspectProcesses.owner` 决定（调用者的当前成员关系，否则持有 `qb.admin.prospect` 即总部，否则拒绝），不取自输入；五张普通表（设置、方向、候选、不发名单、月用量）只经 `QB_PROSPECT_*` 写入（默认数据视图 `processOnlyWrites`，读权限 `qb.admin.prospect`；运营商只经 `qb.operator.prospect*` 模板读自己的）。
   Claude 的调用只在两种外部作业（`ClaudeWebResearch`：网页搜索与读取，不用结构化输出、以末尾的 JSON 对象作答并由 `ProspectAnswers` 逐项核对，`pause_turn` 续发），处理器不访问数据库，作业类型 `enabledBy(qb.prospect.enabled)`；用量（tokens 与搜索次数）只由作业的结局流程在所有者锁内计入 `QbProspectUsage`（没有回答与没有记下用量的尝试按预留计入），当月达到上限即不开新的找与研究。
   **候选从不自动发送**：研究只写草稿（`DRAFTED`），人经 `QB_PROSPECT_APPROVE`（改过的邮件与问卷照 Claude 的同样核对：纯文本、无链接，5 题 4 选 1）批准，逐项任务 `qb.prospect-send` 在工作时间内、每日上限之内经 `SendMail.via("prospect:<所有者>")` 从所有者验证过的服务器发出（`QB_PROSPECT_MAIL_SERVER_SET`，与商户邮件服务器同表），绝不经平台的服务器；邮件带发件人名称、住所与联系方式（《特定電子メール法》）与平台的地址退订链接。

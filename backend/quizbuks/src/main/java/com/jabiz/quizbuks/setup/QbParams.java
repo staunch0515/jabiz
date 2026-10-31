@@ -129,10 +129,32 @@ public final class QbParams {
     public static final List<String> PROSPECT_CONTROLLED = List.of(PROSPECT_ENABLED, PROSPECT_MODEL, PROSPECT_EFFORT,
         PROSPECT_OPERATOR_MONTHLY_CAP, PROSPECT_USD_JPY);
     /**
-     * The platform's share of an operator's commission (Q48b, D-Q48-7), the same for every operator while there is one
-     * (D-Q48-2): the operator is paid the rest. Controlled: it is money.
+     * The operators' plans (Q48e-2, docs/quizbuks/plans/Q48e-operator-isolation.md): each plan's monthly fixed fee in
+     * yen and the platform's share of the commission (the operator is paid the rest); each operator is on one
+     * ({@code QbOperatorPlan}). Controlled: they are money. They replace Q48b's one share for every operator.
      */
-    public static final String OPERATOR_PLATFORM_SHARE = "qb.operator.platform-share";
+    public static String operatorPlanFee(String plan) {
+        return "qb.operator.plan." + plan + ".fee";
+    }
+
+    public static String operatorPlanShare(String plan) {
+        return "qb.operator.plan." + plan + ".share";
+    }
+
+    /** The plans' first terms (the requester's, 2026-10-31): fee in yen, the platform's share. */
+    private static final String[][] PLAN_TERMS = {{"1", "0", "0.5"}, {"2", "20000", "0.4"}, {"3", "40000", "0.3"},
+        {"4", "60000", "0.2"}, {"5", "100000", "0.1"}};
+
+    public static final List<String> OPERATOR_PLANS = java.util.Arrays.stream(PLAN_TERMS)
+        .flatMap(terms -> java.util.stream.Stream.of(operatorPlanFee(terms[0]), operatorPlanShare(terms[0]))).toList();
+    /**
+     * Operators' withdrawals (Q48e-2): the least an operator withdraws at once, in yen, and the hours after a change
+     * of its bank account before it may withdraw. The platform bears the bank's fee.
+     */
+    public static final String OPERATOR_WITHDRAWAL_MIN = "qb.operator.withdrawal.min";
+    public static final String OPERATOR_WITHDRAWAL_COOLDOWN_HOURS = "qb.operator.withdrawal.cooldown-hours";
+    public static final List<String> OPERATOR_WITHDRAWAL = List.of(OPERATOR_WITHDRAWAL_MIN,
+        OPERATOR_WITHDRAWAL_COOLDOWN_HOURS);
     /** The controlled AI parameters, in the order the administrators' page shows them. */
     public static final List<String> AI_CONTROLLED = List.of(AI_ENABLED, AI_MODEL, AI_EFFORT, AI_SPONSOR_DAILY_JOBS,
         AI_SPONSOR_MONTHLY_TOKENS, AI_GLOBAL_MONTHLY_TOKENS);
@@ -221,7 +243,7 @@ public final class QbParams {
         TRANSFER_THRESHOLD, TRANSFER_REVIEW_ABOVE, TRANSFER_ENABLED, REVIEW_SPONSOR_AUTO, REVIEW_PUBLICATION_AUTO,
         TOPUP_MIN, TOPUP_MAX, TRANSFER_FEE, TRANSFER_HOLD_DAYS, TOPUP_NEW_SPONSOR_DAYS, TOPUP_NEW_SPONSOR_MAX_TOTAL),
         REWARD, JOURNAL_ACCOUNTS, ISSUER, List.of(LEGAL_MAX_ANNOUNCE_DAYS), AI_CONTROLLED, PROSPECT_CONTROLLED,
-        List.of(OPERATOR_PLATFORM_SHARE), List.of(TOPUP_BANK_MIN, TOPUP_BANK_MAX), BANK_RECEIVING, WITHDRAWAL_BANK).flatMap(List::stream).toList();
+        OPERATOR_PLANS, OPERATOR_WITHDRAWAL, List.of(TOPUP_BANK_MIN, TOPUP_BANK_MAX), BANK_RECEIVING, WITHDRAWAL_BANK).flatMap(List::stream).toList();
 
     /** A parameter: its key, kind (as the platform writes kinds) and first value. */
     public record Param(String key, Map<String, Object> valueKind, Object value, String description) {
@@ -331,9 +353,16 @@ public final class QbParams {
             "The most an operator's AI prospecting may cost a month, in US dollars (deducted from its settlement)"),
         new Param(PROSPECT_USD_JPY, Map.of("type", "numeric", "precision", 8, "scale", 2), "150",
             "Yen per US dollar the prospecting cost is deducted from an operator's settlement at"),
-        // Q48b: what the platform keeps of an operator's commission.
-        new Param(OPERATOR_PLATFORM_SHARE, Map.of("type", "numeric", "precision", 4, "scale", 4), "0.2",
-            "The platform's share of an operator's commission, as a fraction from 0 to below 1 (0.2 = 20%)"),
+        // Q48e-2: the operators' plans (a fixed fee and the platform's share) and withdrawals.
+        planParam(PLAN_TERMS[0], true), planParam(PLAN_TERMS[0], false),
+        planParam(PLAN_TERMS[1], true), planParam(PLAN_TERMS[1], false),
+        planParam(PLAN_TERMS[2], true), planParam(PLAN_TERMS[2], false),
+        planParam(PLAN_TERMS[3], true), planParam(PLAN_TERMS[3], false),
+        planParam(PLAN_TERMS[4], true), planParam(PLAN_TERMS[4], false),
+        new Param(OPERATOR_WITHDRAWAL_MIN, KUDOS, "10000",
+            "The least an operator withdraws from its account at once, in yen"),
+        new Param(OPERATOR_WITHDRAWAL_COOLDOWN_HOURS, Map.of("type", "numeric", "precision", 4, "scale", 0), "24",
+            "Hours after a change of an operator's bank account before it may withdraw"),
         new Param(AI_EXPIRE_DAYS, DAYS, "7",
             "Days AI candidates wait for the sponsor's review before they are cleared"),
         new Param(AI_PRICE_INPUT, USD, "4",
@@ -397,6 +426,16 @@ public final class QbParams {
     public static String text(ParamValues params, String key) {
         String value = params == null ? null : params.find(key, String.class).orElse(null);
         return value == null ? defaultOf(key) : value;
+    }
+
+    /** A plan's fixed fee ({@code fee}) or the platform's share of its commission. */
+    private static Param planParam(String[] terms, boolean fee) {
+        return fee
+            ? new Param(operatorPlanFee(terms[0]), KUDOS, terms[1], "Plan " + terms[0] + " of the operators: the "
+                + "monthly fixed fee, in yen, deducted from the operator's settlement")
+            : new Param(operatorPlanShare(terms[0]), Map.of("type", "numeric", "precision", 4, "scale", 4), terms[2],
+                "Plan " + terms[0] + " of the operators: the platform's share of the commission, as a fraction from "
+                + "0 to 1 (0.5 = 50%)");
     }
 
     private static Param journal(String key, String account) {

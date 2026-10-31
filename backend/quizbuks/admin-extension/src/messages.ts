@@ -12,6 +12,7 @@ import { overviewMenu, publicationsMessages, quizMessages, quizzesMessages } fro
 import { operatorMenu, operatorMessages } from './operator-messages'
 import { prospectMenu, prospectMessages } from './prospect-messages'
 import { settlementMenu, settlementMessages } from './settlement-messages'
+import { accountMenu, accountMessages, operatorWithdrawalMessages, planMessages } from './account-messages'
 import { pageMenu, pageMessages } from './page-messages'
 import { BRAND_NAMES } from './brand'
 
@@ -20,10 +21,13 @@ export const messages = {
   en: {
     menu: { group: BRAND_NAMES.en, reviews: 'Reviews', users: 'Users', ...legalMenu.en, ...aiMenu.en,
       ...financeMenu.en, ...broadcastsMenu.en, ...attemptsMenu.en, ...bankMenu.en, ...manualMenu.en, ...rewardMenu.en, ...settingsMenu.en, ...withdrawalMenu.en,
-      ...overviewMenu.en, ...operatorMenu.en, ...prospectMenu.en, ...settlementMenu.en, ...pageMenu.en },
+      ...overviewMenu.en, ...operatorMenu.en, ...prospectMenu.en, ...settlementMenu.en, ...accountMenu.en, ...pageMenu.en },
     operator: operatorMessages.en,
     prospect: prospectMessages.en,
     settlement: settlementMessages.en,
+    account: accountMessages.en,
+    operatorWithdrawal: operatorWithdrawalMessages.en,
+    plan: planMessages.en,
     sponsorPages: pageMessages.en,
     quizzes: quizzesMessages.en,
     quiz: quizMessages.en,
@@ -263,10 +267,13 @@ export const messages = {
   zh: {
     menu: { group: BRAND_NAMES.zh, reviews: '审核', users: '用户', ...legalMenu.zh, ...aiMenu.zh,
       ...financeMenu.zh, ...broadcastsMenu.zh, ...attemptsMenu.zh, ...bankMenu.zh, ...manualMenu.zh, ...rewardMenu.zh, ...settingsMenu.zh, ...withdrawalMenu.zh,
-      ...overviewMenu.zh, ...operatorMenu.zh, ...prospectMenu.zh, ...settlementMenu.zh, ...pageMenu.zh },
+      ...overviewMenu.zh, ...operatorMenu.zh, ...prospectMenu.zh, ...settlementMenu.zh, ...accountMenu.zh, ...pageMenu.zh },
     operator: operatorMessages.zh,
     prospect: prospectMessages.zh,
     settlement: settlementMessages.zh,
+    account: accountMessages.zh,
+    operatorWithdrawal: operatorWithdrawalMessages.zh,
+    plan: planMessages.zh,
     sponsorPages: pageMessages.zh,
     quizzes: quizzesMessages.zh,
     quiz: quizMessages.zh,
@@ -506,10 +513,13 @@ export const messages = {
   ja: {
     menu: { group: BRAND_NAMES.ja, reviews: '審査', users: 'ユーザー', ...legalMenu.ja, ...aiMenu.ja,
       ...financeMenu.ja, ...broadcastsMenu.ja, ...attemptsMenu.ja, ...bankMenu.ja, ...manualMenu.ja, ...rewardMenu.ja, ...settingsMenu.ja, ...withdrawalMenu.ja,
-      ...overviewMenu.ja, ...operatorMenu.ja, ...prospectMenu.ja, ...settlementMenu.ja, ...pageMenu.ja },
+      ...overviewMenu.ja, ...operatorMenu.ja, ...prospectMenu.ja, ...settlementMenu.ja, ...accountMenu.ja, ...pageMenu.ja },
     operator: operatorMessages.ja,
     prospect: prospectMessages.ja,
     settlement: settlementMessages.ja,
+    account: accountMessages.ja,
+    operatorWithdrawal: operatorWithdrawalMessages.ja,
+    plan: planMessages.ja,
     sponsorPages: pageMessages.ja,
     quizzes: quizzesMessages.ja,
     quiz: quizMessages.ja,

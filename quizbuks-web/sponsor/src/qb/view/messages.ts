@@ -9,6 +9,12 @@ import { BRAND } from '../brand'
 export const QBVIEW = 'qbview'
 
 const en = {
+  products: {
+    title: 'From the sponsor',
+    questionTitle: 'Related product',
+    shop: 'View in the shop',
+    shopOf: 'View {{name}} in the shop',
+  },
   detail: {
     readMore: 'Show more',
     readLess: 'Show less',
@@ -103,6 +109,12 @@ const en = {
 }
 
 const zh: typeof en = {
+  products: {
+    title: '商户的商品',
+    questionTitle: '相关商品',
+    shop: '去商店看看',
+    shopOf: '去商店查看 {{name}}',
+  },
   detail: {
     readMore: '展开全文',
     readLess: '收起',
@@ -197,6 +209,12 @@ const zh: typeof en = {
 }
 
 const ja: typeof en = {
+  products: {
+    title: 'スポンサーの商品',
+    questionTitle: '関連商品',
+    shop: 'ショップで見る',
+    shopOf: '{{name}} をショップで見る',
+  },
   detail: {
     readMore: 'もっと見る',
     readLess: '閉じる',

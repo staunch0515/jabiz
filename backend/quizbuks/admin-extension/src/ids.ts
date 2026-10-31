@@ -123,12 +123,33 @@ export const TEMPLATE = {
   /** Q48b: the operators' monthly settlements, every operator's (finance) and the caller operator's own. */
   operatorSettlements: 'qb.admin.operator-settlements',
   ownSettlements: 'qb.operator.settlements',
+  /** Q48e-2, the operator's own (`qb.operator.use`): its account (balance, bank account), withdrawals and plans. */
+  operatorAccount: 'qb.operator.account',
+  ownWithdrawals: 'qb.operator.withdrawals',
+  ownPlans: 'qb.operator.plans',
+  /** Q48e-2: every operator's withdrawals (finance) and plan changes (headquarters). */
+  operatorWithdrawals: 'qb.admin.operator-withdrawals',
+  operatorPlans: 'qb.admin.operator-plans',
 } as const
 
 /** The operators' settlements' processes (backend `operator.OperatorSettlements`, Q48b). */
 export const SETTLEMENT_PROCESS = {
   pay: 'QB_OPERATOR_SETTLEMENT_PAY',
   statement: 'QB_OPERATOR_SETTLEMENT_STATEMENT',
+} as const
+
+/**
+ * The operators' accounts, withdrawals and plans (backend `operator.OperatorWithdrawals` and `OperatorPlans`, Q48e-2):
+ * the operator's lead sets the bank account and withdraws (both with a recent second factor, which the platform asks
+ * for), finance records the payment or rejects it, headquarters proposes a plan; another administrator approves.
+ */
+export const ACCOUNT_PROCESS = {
+  bankAccountSave: 'QB_OPERATOR_BANK_ACCOUNT_SAVE',
+  withdrawalRequest: 'QB_OPERATOR_WITHDRAWAL_REQUEST',
+  withdrawalCancel: 'QB_OPERATOR_WITHDRAWAL_CANCEL',
+  withdrawalPay: 'QB_OPERATOR_WITHDRAWAL_PAY',
+  withdrawalReject: 'QB_OPERATOR_WITHDRAWAL_REJECT',
+  planSet: 'QB_OPERATOR_PLAN_SET',
 } as const
 
 /** AI prospecting's processes (backend `prospect`, Q48c); the owner is the caller's operator, or headquarters. */
@@ -277,6 +298,11 @@ export const DICTIONARY = {
   prospectStatus: 'urn:jabiz:dict:quizbuks:prospect-status',
   prospectBlockReason: 'urn:jabiz:dict:quizbuks:prospect-block-reason',
   settlementStatus: 'urn:jabiz:dict:quizbuks:operator-settlement-status',
+  /** Q48e-2: the operators' withdrawals and plans, and the kind of a Japanese bank account. */
+  operatorWithdrawalStatus: 'urn:jabiz:dict:quizbuks:operator-withdrawal-status',
+  operatorPlan: 'urn:jabiz:dict:quizbuks:operator-plan',
+  operatorPlanStatus: 'urn:jabiz:dict:quizbuks:operator-plan-status',
+  bankAccountType: 'urn:jabiz:dict:quizbuks:bank-account-type',
 } as const
 
 /** Permissions (`QbPermissions`): they only decide what the pages offer; the server checks every call. */
@@ -448,6 +474,9 @@ export const PATH = {
   /** Q48b: the operators' settlements (finance), and an operator's own. */
   settlements: '/qb/finance/operator-settlements',
   operatorSettlements: '/qb/operator/settlements',
+  /** Q48e-2: the operator's account (balance, bank account, withdrawals), and the withdrawals (finance). */
+  operatorAccount: '/qb/operator/account',
+  operatorWithdrawals: '/qb/finance/operator-withdrawals',
   /** The platform's own pages. */
   tasks: '/tasks',
 } as const

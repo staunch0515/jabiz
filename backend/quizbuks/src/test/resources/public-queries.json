@@ -436,6 +436,74 @@
     }
   }, {
     "cacheSeconds" : 60,
+    "description" : "The products a live publication shows (Q60b): those of its quiz (question 0) and one for some of its questions, by the question's number; only the publisher's own listed products, and only while their page is published",
+    "id" : "qb.public.publication-products",
+    "list" : {
+      "defaultSort" : {
+        "asc" : true,
+        "field" : "questionNo"
+      },
+      "filters" : [ ],
+      "sorts" : [ "questionNo", "seq" ]
+    },
+    "params" : {
+      "publicationId" : {
+        "kind" : {
+          "targetEntity" : "QbPublication",
+          "type" : "reference"
+        },
+        "list" : false,
+        "required" : true
+      }
+    },
+    "results" : {
+      "currency" : {
+        "allowedValues" : [ "USD", "EUR", "GBP", "JPY", "CNY", "INR" ],
+        "dictUrn" : "urn:jabiz:dict:quizbuks:currency",
+        "type" : "code"
+      },
+      "description" : {
+        "maxLength" : 500,
+        "multiline" : true,
+        "type" : "text"
+      },
+      "image" : {
+        "kindId" : "jabiz.file",
+        "policy" : "qb.sponsor-page-image",
+        "type" : "custom"
+      },
+      "name" : {
+        "maxLength" : 100,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "price" : {
+        "precision" : 12,
+        "scale" : 2,
+        "type" : "numeric"
+      },
+      "productId" : {
+        "type" : "semanticIdentity",
+        "urn" : "urn:jabiz:entity:quizbuks:sponsor-product"
+      },
+      "questionNo" : {
+        "precision" : 3,
+        "scale" : 0,
+        "type" : "numeric"
+      },
+      "seq" : {
+        "precision" : 2,
+        "scale" : 0,
+        "type" : "numeric"
+      },
+      "shopUrl" : {
+        "maxLength" : 300,
+        "multiline" : false,
+        "type" : "text"
+      }
+    }
+  }, {
+    "cacheSeconds" : 60,
     "description" : "A sponsor's published page as its link (/s/<handle>) shows it to anybody (Q60a): the headline, the story, the logo, the cover, the website and the language, with the company of the approved onboarding; none when it is not published",
     "id" : "qb.public.sponsor-page",
     "list" : {
@@ -490,6 +558,70 @@
         "type" : "text"
       },
       "website" : {
+        "maxLength" : 300,
+        "multiline" : false,
+        "type" : "text"
+      }
+    }
+  }, {
+    "cacheSeconds" : 60,
+    "description" : "The products a sponsor's published page shows (Q60b), in the sponsor's order: name, description, image, price with its currency and the shop's link; none when the page is not published",
+    "id" : "qb.public.sponsor-page-products",
+    "list" : {
+      "defaultSort" : {
+        "asc" : true,
+        "field" : "seq"
+      },
+      "filters" : [ ],
+      "sorts" : [ "seq" ]
+    },
+    "params" : {
+      "handle" : {
+        "kind" : {
+          "maxLength" : 30,
+          "multiline" : false,
+          "type" : "text"
+        },
+        "list" : false,
+        "required" : true
+      }
+    },
+    "results" : {
+      "currency" : {
+        "allowedValues" : [ "USD", "EUR", "GBP", "JPY", "CNY", "INR" ],
+        "dictUrn" : "urn:jabiz:dict:quizbuks:currency",
+        "type" : "code"
+      },
+      "description" : {
+        "maxLength" : 500,
+        "multiline" : true,
+        "type" : "text"
+      },
+      "image" : {
+        "kindId" : "jabiz.file",
+        "policy" : "qb.sponsor-page-image",
+        "type" : "custom"
+      },
+      "name" : {
+        "maxLength" : 100,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "price" : {
+        "precision" : 12,
+        "scale" : 2,
+        "type" : "numeric"
+      },
+      "productId" : {
+        "type" : "semanticIdentity",
+        "urn" : "urn:jabiz:entity:quizbuks:sponsor-product"
+      },
+      "seq" : {
+        "precision" : 4,
+        "scale" : 0,
+        "type" : "numeric"
+      },
+      "shopUrl" : {
         "maxLength" : 300,
         "multiline" : false,
         "type" : "text"

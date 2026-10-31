@@ -15,6 +15,8 @@ results:
   platformShare: { from: QbOperatorSettlement.platformShare }
   operatorShare: { from: QbOperatorSettlement.operatorShare }
   prospectingCost: { from: QbOperatorSettlement.prospectingCost }
+  plan: { from: QbOperatorSettlement.plan }
+  fixedFee: { from: QbOperatorSettlement.fixedFee }
   carriedIn: { from: QbOperatorSettlement.carriedIn }
   payable: { from: QbOperatorSettlement.payable }
   carriedOut: { from: QbOperatorSettlement.carriedOut }
@@ -43,6 +45,8 @@ SELECT
     s.{{QbOperatorSettlement.platformShare}} AS platformShare,
     s.{{QbOperatorSettlement.operatorShare}} AS operatorShare,
     s.{{QbOperatorSettlement.prospectingCost}} AS prospectingCost,
+    s.{{QbOperatorSettlement.plan}} AS plan,
+    s.{{QbOperatorSettlement.fixedFee}} AS fixedFee,
     s.{{QbOperatorSettlement.carriedIn}} AS carriedIn,
     s.{{QbOperatorSettlement.payable}} AS payable,
     s.{{QbOperatorSettlement.carriedOut}} AS carriedOut,

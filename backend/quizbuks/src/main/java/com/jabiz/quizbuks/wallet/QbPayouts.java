@@ -242,9 +242,10 @@ public final class QbPayouts {
 
     /**
      * A Japanese bank account's fields, on the taker's account and copied onto a withdrawal ({@code nullable} there:
-     * a Stripe transfer has none). The number is masked; the holder's name is not: the reviewer compares it.
+     * a Stripe transfer has none); an operator's account and withdrawals have them too (Q48e-2). The number is masked;
+     * the holder's name is not: the reviewer compares it.
      */
-    private static void bankFields(com.jabiz.entity.EntityBuilder eb, boolean onTransfer) {
+    public static void bankFields(com.jabiz.entity.EntityBuilder eb, boolean onTransfer) {
         eb.field("bankCode", f -> bank(f.physicalColumn("bank_code"), onTransfer).asText(4));
         eb.field("bankName", f -> bank(f.physicalColumn("bank_name"), onTransfer).asText(BankAccounts.NAME_LENGTH));
         eb.field("branchCode", f -> bank(f.physicalColumn("branch_code"), onTransfer).asText(3));
