@@ -1,7 +1,7 @@
 import { formatDateTime, i18n } from '@jabiz/client'
 import { Alert, AlertDescription, Badge, Button, Input, Label, PageState, SegmentedControl, Spinner } from '@jabiz/ui'
 import { useInfiniteQuery } from '@tanstack/react-query'
-import { Play, Search } from 'lucide-react'
+import { ChevronRight, Play, Search } from 'lucide-react'
 import { useId, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
@@ -35,58 +35,54 @@ const BADGES: Record<HistoryCategory, 'success' | 'secondary' | 'outline' | 'war
   TIMED_OUT: 'warning',
 }
 
+/**
+ * One attempt (Q66): the publication's cover and name lead back to its start page; the result, or the attempt to
+ * continue, is the round button at the row's end. The score and the reward come under the name, then when it started.
+ */
 function Row({ row, onContinue, starting }: { row: HistoryRow; onContinue: () => void; starting: boolean }) {
   const { t } = useTranslation(APP)
   const finished = row.category === 'PASSED' || row.category === 'FAILED'
   const left = minutesUntil(row.deadline)
+  const page = `/p/${row.publicationId}`
   return (
-    <li className="flex flex-col gap-2 rounded-lg border p-3" data-testid="history-row" data-category={row.category}>
-      {/* Q65: the publication's cover (its card's) beside the name, as on the home. */}
-      <div className="flex items-start gap-3">
-        <span className="bg-muted relative aspect-video w-24 shrink-0 overflow-hidden rounded" data-testid="history-cover">
-          {row.cover
-            ? <LazyImage fileId={row.cover} variant="w320" alt="" className="absolute inset-0 size-full" />
-            : <CoverPlaceholder seed={row.publicationId} className="absolute inset-0 size-full" />}
-        </span>
-        <div className="flex min-w-0 flex-1 flex-col gap-1">
-          <div className="flex items-start gap-2">
-            <h2 className="line-clamp-2 flex-1 leading-snug font-medium">{row.name}</h2>
-            <Badge variant={BADGES[row.category]} data-testid="history-category">
-              {/* A survey (Q12) is completed or not, never passed. */}
-              {row.kind === 'SURVEY' && finished ? t(`history.surveyCategories.${row.category}`)
-                : t(`history.categories.${row.category}`)}
-            </Badge>
-          </div>
-          <p className="text-muted-foreground text-xs">{t('history.startedAt', { time: formatDateTime(row.startedAt) })}</p>
-        </div>
-      </div>
-      {finished && (
-        <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-          {row.kind !== 'SURVEY' && (
-            <span data-testid="history-score">
-              {t('history.score', { score: row.score ?? 0, full: row.fullScore })}
-            </span>
+    <li className="flex items-center gap-3 rounded-lg border p-2" data-testid="history-row" data-category={row.category}>
+      <Link to={page} aria-label={row.name} data-testid="history-cover"
+        className="bg-muted relative aspect-video w-28 shrink-0 self-start overflow-hidden rounded">
+        {row.cover
+          ? <LazyImage fileId={row.cover} variant="w320" alt="" className="absolute inset-0 size-full" />
+          : <CoverPlaceholder seed={row.publicationId} className="absolute inset-0 size-full" />}
+      </Link>
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <h2 className="line-clamp-2 text-sm leading-snug font-medium">
+          <Link to={page} data-testid="history-name" className="underline-offset-2 hover:underline">{row.name}</Link>
+        </h2>
+        <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
+          <Badge variant={BADGES[row.category]} data-testid="history-category">
+            {/* A survey (Q12) is completed or not, never passed. */}
+            {row.kind === 'SURVEY' && finished ? t(`history.surveyCategories.${row.category}`)
+              : t(`history.categories.${row.category}`)}
+          </Badge>
+          {finished && row.kind !== 'SURVEY' && (
+            <span data-testid="history-score">{t('history.score', { score: row.score ?? 0, full: row.fullScore })}</span>
           )}
-          <RewardLine row={row} />
+          {finished && <RewardLine row={row} />}
+          {row.category === 'TIMED_OUT' && <span>{t('history.timedOut')}</span>}
         </p>
-      )}
-      {row.category === 'TIMED_OUT' && <p className="text-sm">{t('history.timedOut')}</p>}
-      <div className="flex justify-end">
-        {row.category === 'IN_PROGRESS' && left > 0 ? (
-          <Button size="sm" disabled={starting} onClick={onContinue} data-testid="history-continue">
-            <Play aria-hidden />
-            {t('detail.continue', { count: left })}
-          </Button>
-        ) : (
-          <Button asChild size="sm" variant="outline">
-            <Link to={finished || row.category === 'TIMED_OUT' ? `/result/${row.attemptId}` : `/p/${row.publicationId}`}
-              data-testid="history-open">
-              {finished ? t('history.seeResult') : t('history.open')}
-              <span className="sr-only">: {row.name}</span>
-            </Link>
-          </Button>
-        )}
+        <p className="text-muted-foreground text-xs">{t('history.startedAt', { time: formatDateTime(row.startedAt) })}</p>
       </div>
+      {row.category === 'IN_PROGRESS' && left > 0 ? (
+        <Button size="icon" className="size-9 shrink-0 rounded-full" disabled={starting} onClick={onContinue}
+          aria-label={`${t('detail.continue', { count: left })}: ${row.name}`} data-testid="history-continue">
+          <Play aria-hidden className="ml-0.5" />
+        </Button>
+      ) : (finished || row.category === 'TIMED_OUT') && (
+        <Button asChild size="icon" variant="ghost" className="size-9 shrink-0 rounded-full">
+          <Link to={`/result/${row.attemptId}`} data-testid="history-open"
+            aria-label={`${t('history.seeResult')}: ${row.name}`}>
+            <ChevronRight aria-hidden />
+          </Link>
+        </Button>
+      )}
     </li>
   )
 }

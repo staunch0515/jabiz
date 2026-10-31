@@ -1,9 +1,5 @@
-import { Button } from '@jabiz/ui'
-import { Volume2 } from 'lucide-react'
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
-import { useTranslation } from 'react-i18next'
-import { APP } from '../messages'
 import { VIMEO_PLAYER } from '../qb/video'
 
 /*
@@ -11,8 +7,10 @@ import { VIMEO_PLAYER } from '../qb/video'
  * (`VideoSlot`) that shows it now: the home's card in the middle of the screen, then the start page it opens. A browser
  * plays sound only after a tap, and a new player on the next page would not have had one; moving the iframe in the
  * page would reload it. So the player stays, the slot changes, and the tap that opens the start page turns the sound on
- * through the player's own interface (YouTube's and Vimeo's postMessage commands). Where the browser still refuses it
- * (an iPhone, a page opened first), the start page offers a button for the sound.
+ * through the player's own interface (YouTube's and Vimeo's postMessage commands). A tap on a card not playing (its
+ * cover, its name) asks for the sound too: the start page's new player turns it on as soon as it is ready, where the
+ * browser allows it after the tap (Android's Chrome); where it does not, the player waits on its own play button,
+ * which plays with the sound (Q66).
  */
 
 type Mode = 'card' | 'page'
@@ -43,6 +41,8 @@ let release: ReturnType<typeof setTimeout> | null = null
 /** Until when a card's tap hands the player to the start page it opens (which may first load its data). */
 let handoffUntil = 0
 const HANDOFF_MS = 10_000
+/** A player asked for with its sound by a tap on a card not playing, until when (Q66). */
+let wanted: { player: string; until: number } | null = null
 
 function set(next: Partial<StageState>) {
   state = { ...state, ...next }
@@ -92,6 +92,8 @@ function listen(event: MessageEvent) {
   } catch {
     return
   }
+  // A player now ready (YouTube's `onReady`, Vimeo's `ready`) takes the sound asked for before it could hear it.
+  if ((data?.event === 'onReady' || data?.event === 'ready') && state.soundAsked && !state.soundOn) soundOn()
   const info = data?.info as Record<string, unknown> | undefined
   if (data?.event === 'infoDelivery' && info && typeof info.muted === 'boolean') {
     if (state.soundOn !== !info.muted) set({ soundOn: !info.muted })
@@ -99,6 +101,19 @@ function listen(event: MessageEvent) {
   const vimeo = data?.data as Record<string, unknown> | undefined
   if (data?.event === 'volumechange' && vimeo && typeof vimeo.volume === 'number') {
     set({ soundOn: vimeo.volume > 0 })
+  }
+}
+
+/**
+ * A tap that opens a start page with the given video: the sound on, and the player kept for the page (Q65, Q66). The
+ * playing card's player turns its sound on within the tap; a new one does as it comes, the browser permitting.
+ */
+export function openWithSound(player: string) {
+  if (state.player === player && state.slot) {
+    handoffUntil = Date.now() + HANDOFF_MS
+    soundOn()
+  } else {
+    wanted = { player, until: Date.now() + HANDOFF_MS }
   }
 }
 
@@ -116,7 +131,9 @@ function claim(slot: Slot) {
   }
   handoffUntil = 0
   const same = state.player === slot.player
-  set({ slot, player: slot.player, ...(same ? {} : { soundAsked: false, soundOn: false }) })
+  const asked = !!wanted && wanted.player === slot.player && wanted.until >= Date.now()
+  wanted = null
+  set({ slot, player: slot.player, ...(same ? {} : { soundAsked: asked, soundOn: false }) })
 }
 
 function leave(slot: Slot) {
@@ -139,7 +156,7 @@ export function useStage(): StageState {
 /**
  * The place a video shows: an empty 16:9 box the stage lays the player over while `active`. On a card (`mode`
  * `card`) the player cannot be touched: a tap anywhere on it is `onOpen`. On the start page (`page`) the player's
- * controls work, and while the sound is not on a button asks for it.
+ * controls work.
  */
 export function VideoSlot({ id, player, title, mode, active = true, onOpen, className }: {
   id: string
@@ -151,8 +168,6 @@ export function VideoSlot({ id, player, title, mode, active = true, onOpen, clas
   className?: string
 }) {
   const ref = useRef<HTMLDivElement>(null)
-  const { t } = useTranslation(APP)
-  const stage = useStage()
   useLayoutEffect(() => {
     const element = ref.current
     if (!element || !active) return
@@ -160,18 +175,9 @@ export function VideoSlot({ id, player, title, mode, active = true, onOpen, clas
     claim(slot)
     return () => leave(slot)
   }, [id, player, title, mode, active, onOpen])
-  const shown = active && stage.slot?.key === id && stage.player === player
   return (
     <div ref={ref} className={className ?? 'bg-muted relative aspect-video w-full'} data-testid="video-slot"
-      data-mode={mode} data-active={active || undefined}>
-      {shown && mode === 'page' && !stage.soundOn && (
-        <Button size="sm" className="absolute right-2 bottom-2 z-10 shadow-md" data-testid="video-sound"
-          onClick={() => soundOn()}>
-          <Volume2 aria-hidden />
-          {t('video.sound')}
-        </Button>
-      )}
-    </div>
+      data-mode={mode} data-active={active || undefined} />
   )
 }
 
@@ -228,10 +234,7 @@ export function VideoStage() {
       {/* On a card nothing in the player is for touching: the whole of it opens the start page. */}
       {slot?.mode === 'card' && (
         <button type="button" className="absolute inset-0 size-full cursor-pointer" data-testid="video-open"
-          aria-label={slot.title} onClick={() => {
-            handoffUntil = Date.now() + HANDOFF_MS
-            slot.onOpen?.()
-          }} />
+          aria-label={slot.title} onClick={() => slot.onOpen?.()} />
       )}
     </div>,
     document.body,

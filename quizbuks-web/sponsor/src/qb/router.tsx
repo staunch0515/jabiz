@@ -72,12 +72,14 @@ export function Redirect({ to }: { to: string }) {
 }
 
 /** A link to a page of the SPA, followed without reloading (modified clicks open a tab as usual). */
-export function Link({ to, className, children, current, ...rest }: {
+export function Link({ to, className, children, current, onNavigate, ...rest }: {
   to: string
   className?: string
   children: ReactNode
   /** Marks the link as the current page (`aria-current="page"`). */
   current?: boolean
+  /** Told within the tap, just before the app goes to `to` (Q66: a video's sound asks for the tap itself). */
+  onNavigate?: () => void
   'aria-label'?: string
   'data-testid'?: string
 }) {
@@ -89,6 +91,7 @@ export function Link({ to, className, children, current, ...rest }: {
       onClick={(event) => {
         if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
         event.preventDefault()
+        onNavigate?.()
         navigate(to)
       }}
       {...rest}
