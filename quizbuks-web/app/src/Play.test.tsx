@@ -8,7 +8,7 @@ import { forgetRedeem, pendingRedeem, rememberRedeem, RESUME_FOR_MS } from './re
 import { placeholderIndex } from './qb/Illustrations'
 import './messages'
 import { stagedPlayer } from './video/stage'
-import { activeFilterCount, containsPattern, feedFilters, GREETING_MS, NO_FILTERS } from './pages/FeedPage'
+import { activeFilterCount, containsPattern, feedFilters, NO_FILTERS } from './pages/FeedPage'
 import { forgetAttempts, storeResult, storeStart } from './play/storage'
 import type { StartOutput, SubmitOutput } from './qb/play'
 
@@ -255,7 +255,6 @@ describe('the feed', () => {
     server({ feed: [CARD, { ...CARD, publicationId: 'pub-2', name: 'Rivers', cover: 'file-1', sponsorAvatar: null }] })
     render(<App />)
     const cards = await screen.findAllByTestId('feed-card')
-    expect(screen.getByTestId('home-hero')).toHaveTextContent('Answer a quiz, earn Kudos and prizes.')
     // Q63: one card a row, the picture across the screen, the name and the sponsor under it.
     expect(screen.getByTestId('feed-list')).toHaveClass('flex-col')
     // No cover: a pattern chosen by the publication's id, decorative.
@@ -272,19 +271,8 @@ describe('the feed', () => {
     expect(new Set(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].map(placeholderIndex)).size).toBeGreaterThan(1)
   })
 
-  it('greets once a session for two seconds, then folds the greeting away (Q34)', async () => {
-    window.sessionStorage.clear()
+  it("greets nobody: the cards come first, the page's heading only for assistive technology (Q66)", async () => {
     server()
-    const { unmount } = render(<App />)
-    await screen.findByTestId('feed-card')
-    const hero = screen.getByTestId('home-hero')
-    expect(hero).not.toHaveAttribute('data-folding')
-    await waitFor(() => expect(hero).toHaveAttribute('data-folding', 'true'), { timeout: GREETING_MS + 2000 })
-    // jsdom tells no end of the transition: the band goes all the same, the heading stays.
-    await waitFor(() => expect(screen.queryByTestId('home-hero')).toBeNull(), { timeout: 2000 })
-    expect(screen.getByRole('heading', { level: 1 })).toHaveClass('sr-only')
-    unmount()
-    // Back on the home in the same session: no greeting, the heading stays for assistive technology.
     render(<App />)
     await screen.findByTestId('feed-card')
     expect(screen.queryByTestId('home-hero')).toBeNull()
@@ -714,13 +702,14 @@ describe('the video to watch (Q19, Q63)', () => {
     expect(screen.getByTestId('video-open')).toHaveAccessibleName('Video: Capitals week')
     expect(within(card).getByTestId('video-slot')).toHaveAttribute('data-mode', 'card')
     expect(card).toHaveAttribute('data-playing', 'true')
-    // The player covers the picture's reward; it is said under the name.
+    // Q66: the reward is in the line of facts, the same whether the video plays or not.
     expect(within(card).getByTestId('feed-card-reward')).toHaveTextContent('Up to 100 Kudos')
     io.fire(card, false, MIDDLE)
     await waitFor(() => expect(document.querySelector('iframe')).toBeNull())
-    // The start opens the start page first (its time limit and pass score), and starts nothing.
-    expect(within(card).getByTestId('feed-card-start')).toHaveAttribute('href', `/p/${PUB}`)
-    await userEvent.click(within(card).getByTestId('feed-card-start'))
+    expect(within(card).getByTestId('feed-card-reward')).toHaveTextContent('Up to 100 Kudos')
+    // The picture opens the start page first (its time limit and pass score), and starts nothing.
+    expect(within(card).getByTestId('feed-card-picture')).toHaveAttribute('href', `/p/${PUB}`)
+    await userEvent.click(within(card).getByTestId('feed-card-picture'))
     await waitFor(() => expect(window.location.pathname).toBe(`/p/${PUB}`))
     expect(api.posted('QB_ATTEMPT_START')).toEqual([])
   })
@@ -750,14 +739,47 @@ describe('the video to watch (Q19, Q63)', () => {
     expect(document.querySelectorAll('iframe')).toHaveLength(1)
     expect(document.querySelector('iframe')).toBe(frame)
     expect(screen.queryByTestId('video-open')).toBeNull()
-    // Until the player says its sound is on, a button asks for it; then it goes.
-    const button = await screen.findByTestId('video-sound')
-    expect(button).toHaveTextContent('Tap for sound')
+    // Q66: no button of the app's own for the sound; the player's are there.
+    expect(screen.queryByTestId('video-sound')).toBeNull()
+  })
+
+  it("asks for the sound from a tap on a card not playing: the start page's player turns it on once ready (Q66)",
+    async () => {
+    intersections()
+    server({ feed: [{ ...CARD, video: PLAYER }], publicationPage: () => json(200, { items: [publication({
+      materials: JSON.stringify([{ no: 1, kind: 'VIDEO_LINK', title: 'Watch first', description: null, body: null,
+        url: 'https://youtu.be/dQw4w9WgXcQ', pdf: null, audio: null, images: [], watchToAnswer: true }]) })],
+      offset: 0, limit: 1 }) })
+    render(<App />)
+    const card = await screen.findByTestId('feed-card')
+    // Out of the middle of the screen: the cover, no player yet.
+    expect(document.querySelector('iframe')).toBeNull()
+    await userEvent.click(within(card).getByTestId('feed-card-link'))
+    await waitFor(() => expect(window.location.pathname).toBe(`/p/${PUB}`))
+    const frame = await screen.findByTitle('Watch first') as HTMLIFrameElement
+    const sent = vi.spyOn(frame.contentWindow!, 'postMessage')
     act(() => {
       window.dispatchEvent(new MessageEvent('message', { source: frame.contentWindow,
-        data: JSON.stringify({ event: 'infoDelivery', info: { muted: false } }) }))
+        data: JSON.stringify({ event: 'onReady' }) }))
     })
-    await waitFor(() => expect(screen.queryByTestId('video-sound')).toBeNull())
+    expect(sent.mock.calls.map(([message]) => JSON.parse(String(message)).func)).toEqual(
+      expect.arrayContaining(['unMute', 'playVideo']))
+  })
+
+  it('leaves a start page opened first muted: no tap asked for the sound (Q66)', async () => {
+    server({ publicationPage: () => json(200, { items: [publication({
+      materials: JSON.stringify([{ no: 1, kind: 'VIDEO_LINK', title: 'Watch first', description: null, body: null,
+        url: 'https://youtu.be/dQw4w9WgXcQ', pdf: null, audio: null, images: [], watchToAnswer: true }]) })],
+      offset: 0, limit: 1 }) })
+    window.history.replaceState(null, '', `/p/${PUB}`)
+    render(<App />)
+    const frame = await screen.findByTitle('Watch first') as HTMLIFrameElement
+    const sent = vi.spyOn(frame.contentWindow!, 'postMessage')
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', { source: frame.contentWindow,
+        data: JSON.stringify({ event: 'onReady' }) }))
+    })
+    expect(sent.mock.calls.map(([message]) => JSON.parse(String(message)).func)).not.toContain('unMute')
   })
 
   it('plays one card at a time, the first of those in the middle', async () => {
@@ -767,7 +789,7 @@ describe('the video to watch (Q19, Q63)', () => {
     render(<App />)
     const cards = await screen.findAllByTestId('feed-card')
     expect(cards[2]).not.toHaveAttribute('data-video')
-    expect(within(cards[2]).getByTestId('feed-card-start')).toHaveAttribute('data-progress', 'start')
+    expect(within(cards[2]).queryByTestId('feed-card-progress')).toBeNull()
     io.fire(cards[1], true, MIDDLE)
     io.fire(cards[0], true, MIDDLE)
     await waitFor(() => expect(document.querySelectorAll('iframe')).toHaveLength(1))
@@ -803,8 +825,9 @@ describe('the video to watch (Q19, Q63)', () => {
   })
 })
 
-describe('a card\'s start and its sponsor (Q64)', () => {
-  it('starts, resumes or shows the result by a small icon, and links the sponsor\'s published page', async () => {
+describe('a card\'s progress and its sponsor (Q64, Q66)', () => {
+  it("says the taker's progress in the line of facts, and links the sponsor's published page from the name and picture",
+    async () => {
     const future = new Date(Date.now() + 600_000).toISOString()
     const past = new Date(Date.now() - 600_000).toISOString()
     server({ feed: [{ ...CARD, sponsorHandle: 'capitals' },
@@ -813,20 +836,19 @@ describe('a card\'s start and its sponsor (Q64)', () => {
       { ...CARD, publicationId: 'pub-4', name: 'Done', myAttemptId: 'att-4', myStatus: 'SUBMITTED', myDeadline: past }] })
     render(<App />)
     const cards = await screen.findAllByTestId('feed-card')
-    const start = (i: number) => within(cards[i]).getByTestId('feed-card-start')
-    expect(start(0)).toHaveAttribute('data-progress', 'start')
-    expect(start(0)).toHaveAttribute('href', `/p/${PUB}`)
-    expect(start(0)).toHaveAccessibleName('Start: Capitals week')
-    // An icon only: the name is for assistive technology.
-    expect(start(0)).toHaveTextContent('')
-    expect(start(1)).toHaveAttribute('href', '/play/att-2')
-    expect(start(1)).toHaveAccessibleName('Continue: Going')
-    expect(start(2)).toHaveAttribute('data-progress', 'done')
-    expect(start(3)).toHaveAttribute('href', '/result/att-4')
-    expect(start(3)).toHaveAccessibleName('Result: Done')
-    // The sponsor of a published page links to it; another's name is text.
+    // No start icon (Q66): the whole card opens the start page, which leads on.
+    expect(screen.queryByTestId('feed-card-start')).toBeNull()
+    expect(within(cards[0]).queryByTestId('feed-card-progress')).toBeNull()
+    expect(within(cards[1]).getByTestId('feed-card-progress')).toHaveTextContent('In progress')
+    expect(within(cards[2]).getByTestId('feed-card-progress')).toHaveAttribute('data-progress', 'done')
+    expect(within(cards[3]).getByTestId('feed-card-progress')).toHaveTextContent('Answered')
+    expect(within(cards[3]).getByTestId('feed-card-link')).toHaveAttribute('href', '/p/pub-4')
+    // The sponsor of a published page links to it, by name and by picture; another's are not links.
     expect(within(cards[0]).getByTestId('feed-card-sponsor')).toHaveAttribute('href', '/s/capitals')
+    expect(within(cards[0]).getByTestId('feed-card-avatar')).toHaveAttribute('href', '/s/capitals')
+    expect(within(cards[0]).getByTestId('feed-card-avatar')).toHaveAccessibleName("Capitals Inc's page")
     expect(within(cards[1]).getByTestId('feed-card-sponsor').tagName).toBe('SPAN')
+    expect(within(cards[1]).getByTestId('feed-card-avatar').tagName).toBe('SPAN')
     await expectAccessible()
   })
 
@@ -888,11 +910,10 @@ describe('a publication\'s page', () => {
     // Q34: a row per material with its title and its description on one line; the article opens on a sheet.
     // Q63: the video the app plays leads the page, playing muted as it opens; it is not among the materials again.
     const hero = screen.getByTestId('detail-hero')
-    // Q65: the app's one player over the hero's place, started muted; a button asks for the sound.
+    // Q65: the app's one player over the hero's place, started muted.
     expect(await screen.findByTitle('On YouTube'))
       .toHaveAttribute('src', stagedPlayer('https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ'))
     expect(within(hero).getByTestId('video-slot')).toHaveAttribute('data-mode', 'page')
-    expect(await within(hero).findByTestId('video-sound')).toBeInTheDocument()
     expect(within(hero).getByRole('heading', { level: 1 })).toHaveTextContent('Capitals week')
     const rows = within(materials).getAllByTestId('material')
     expect(rows.map((row) => row.getAttribute('data-kind'))).toEqual(['ARTICLE', 'VIDEO_LINK'])
@@ -1478,6 +1499,13 @@ describe('the history', () => {
     expect(item).toHaveTextContent('Passed')
     expect(item).toHaveTextContent('Score 5 / 5')
     expect(item).toHaveTextContent('Earned 100 Kudos')
+    // Q66: the cover and the name lead back to the start page; the round arrow at the end, to the result.
+    expect(within(item).getByTestId('history-cover')).toHaveAttribute('href', `/p/${PUB}`)
+    expect(within(item).getByTestId('history-name')).toHaveAttribute('href', `/p/${PUB}`)
+    expect(within(item).getByTestId('history-open')).toHaveAttribute('href', `/result/${ATTEMPT}`)
+    expect(within(item).getByTestId('history-open')).toHaveAccessibleName('See the result: Capitals week')
+    expect(within(item).getByTestId('history-open')).toHaveTextContent('')
+    await expectAccessible()
     expect(screen.getByTestId('nav-history')).toHaveAttribute('aria-current', 'page')
     await userEvent.click(screen.getByRole('radio', { name: 'Unfinished' }))
     await waitFor(() => expect(calls.some((c) => JSON.stringify(c.body).includes('"values":["IN_PROGRESS","TIMED_OUT"]')))
@@ -1500,7 +1528,9 @@ describe('the history', () => {
     window.history.replaceState(null, '', '/history')
     render(<App />)
     const button = await screen.findByTestId('history-continue')
-    expect(button).toHaveTextContent('minutes left: 2')
+    // Q66: a round button at the row's end, named for assistive technology.
+    expect(button).toHaveAccessibleName(expect.stringContaining('minutes left: 2'))
+    expect(screen.queryByTestId('history-open')).toBeNull()
     await act(async () => userEvent.click(button))
     await waitFor(() => expect(window.location.pathname).toBe(`/play/${ATTEMPT}`))
     expect(await screen.findByTestId('play-progress')).toHaveTextContent('Question 2 of 2')

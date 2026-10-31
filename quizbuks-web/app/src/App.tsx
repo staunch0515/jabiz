@@ -380,10 +380,11 @@ function SignedIn({ path }: { path: string }) {
   const pages = (
     <div className="flex min-h-full flex-col">
       <Header scan={nav && path !== SCAN_PATH} search={nav} />
-      {/* Q65: the one video player, laid over the place that shows it. */}
+      {/* Q65: the one video player, laid over the place that shows it. The home and a start page begin right under
+          the header (Q66). */}
       <VideoStage />
       <main className={cn('mx-auto flex w-full max-w-md flex-col gap-4 px-4 py-4', nav && 'pb-24',
-        path === HOME && 'pt-0')}>
+        (path === HOME || item?.page === 'p') && 'pt-0')}>
         <OfflineBanner />
         <PwaUpdatePrompt />
         <VerifyEmailBanner />
