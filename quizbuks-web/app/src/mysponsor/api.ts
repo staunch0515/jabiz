@@ -1,6 +1,6 @@
 import { runProcess, runQuery } from '@jabiz/client'
 import { useQuery } from '@tanstack/react-query'
-import { MY_SPONSOR_PROCESS, MY_SPONSOR_TEMPLATE } from './ids'
+import { CERTIFICATION_PROCESS, MY_SPONSOR_PROCESS, MY_SPONSOR_TEMPLATE, SPONSOR_APPLY } from './ids'
 
 /*
  * The app's sponsor page (Q68): typed by hand after the templates `qb.app.my-sponsor`, `qb.app.sponsor-publications`,
@@ -113,3 +113,13 @@ export const pausePublication = (publicationId: string) =>
 
 export const resumePublication = (publicationId: string) =>
   runProcess<{ status: string }>(MY_SPONSOR_PROCESS.resume, { publicationId })
+
+/** `CertificationProcesses.ClaimOutput` (Q69): until when it is held (none: not held), the round to answer. */
+export interface CertificationClaim {
+  certification: string
+  heldUntil: string | null
+  roundPublicationId: string | null
+}
+
+export const claimSponsorApply = () =>
+  runProcess<CertificationClaim>(CERTIFICATION_PROCESS.claim, { certification: SPONSOR_APPLY })
