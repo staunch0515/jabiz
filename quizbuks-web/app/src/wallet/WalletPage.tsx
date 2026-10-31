@@ -1,7 +1,8 @@
 import { formatDate, formatDateTime, i18n } from '@jabiz/client'
+import { TitleBadge } from '../pages/TitleBadge'
 import { Badge, Button, Input, Label, PageState, SegmentedControl, Spinner } from '@jabiz/ui'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
-import { ArrowLeft, Banknote, CreditCard, Gift, Hourglass, ReceiptText, Search, type LucideIcon } from 'lucide-react'
+import { ArrowLeft, Banknote, Coins, CreditCard, Gift, Hourglass, ReceiptText, Search, type LucideIcon } from 'lucide-react'
 import { useId, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
@@ -126,7 +127,10 @@ function WalletMenu() {
   const data = wallet.data
   return (
     <section className="flex flex-col gap-6" aria-labelledby="wallet-title" data-testid="wallet">
-      <h1 id="wallet-title" className="text-xl font-semibold">{t('wallet.title')}</h1>
+      <div className="flex items-center gap-3">
+        <TitleBadge icon={Coins} />
+        <h1 id="wallet-title" className="text-xl font-semibold">{t('wallet.title')}</h1>
+      </div>
       {!data ? <SummaryState query={wallet} /> : (
         <div className="grid grid-cols-2 gap-3 rounded-lg border p-4" data-testid="wallet-summary">
           <p className="flex flex-col">

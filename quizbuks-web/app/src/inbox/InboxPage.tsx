@@ -1,4 +1,5 @@
 import { formatDateTime, i18n } from '@jabiz/client'
+import { TitleBadge } from '../pages/TitleBadge'
 import {
   Badge,
   Button,
@@ -16,7 +17,7 @@ import {
   cn,
 } from '@jabiz/ui'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CheckCheck, Search } from 'lucide-react'
+import { CheckCheck, Inbox, Search } from 'lucide-react'
 import { useEffect, useId, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
@@ -151,7 +152,8 @@ export function InboxPage() {
   const filtered = !!(filter.q || filter.category || filter.unread || filter.from || filter.to)
   return (
     <section className="flex flex-col gap-4" aria-labelledby="inbox-title" data-testid="inbox">
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-3">
+        <TitleBadge icon={Inbox} />
         <h1 id="inbox-title" className="mr-auto text-xl font-semibold">{t('inbox.title')}</h1>
         <Button variant="outline" size="sm" disabled={all.isPending} onClick={() => all.mutate()}
           data-testid="inbox-read-all">

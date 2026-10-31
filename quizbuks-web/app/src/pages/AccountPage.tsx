@@ -1,5 +1,6 @@
 import { useAuth, type IdentityLinked } from '@jabiz/client'
-import { cn, PageState } from '@jabiz/ui'
+import { TitleBadge } from './TitleBadge'
+import { PageState } from '@jabiz/ui'
 import { useQuery } from '@tanstack/react-query'
 import {
   ArrowLeft,
@@ -123,10 +124,7 @@ function AccountMenu() {
   return (
     <section className="flex flex-col gap-6" aria-labelledby="account-title" data-testid="account">
       <div className="flex items-center gap-3">
-        <span aria-hidden className={cn('bg-primary text-primary-foreground flex size-12 shrink-0 items-center',
-          'justify-center rounded-full text-lg font-semibold')}>
-          {(name || email || '?').trim().charAt(0).toUpperCase()}
-        </span>
+        <TitleBadge>{(name || email || '?').trim().charAt(0).toUpperCase()}</TitleBadge>
         <div className="min-w-0">
           <h1 id="account-title" className="text-xl font-semibold">{t('account.title')}</h1>
           <p className="text-muted-foreground truncate text-sm" data-testid="account-who">

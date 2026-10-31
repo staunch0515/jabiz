@@ -1,7 +1,8 @@
 import { formatDateTime, i18n } from '@jabiz/client'
+import { TitleBadge } from './TitleBadge'
 import { Alert, AlertDescription, Badge, Button, Input, Label, PageState, SegmentedControl, Spinner } from '@jabiz/ui'
 import { useInfiniteQuery } from '@tanstack/react-query'
-import { ChevronRight, Play, Search } from 'lucide-react'
+import { ChevronRight, History as HistoryIcon, Play, Search } from 'lucide-react'
 import { useId, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
@@ -147,7 +148,10 @@ export function HistoryPage() {
   }
   return (
     <section className="flex flex-col gap-4" aria-labelledby="history-title" data-testid="history">
-      <h1 id="history-title" className="text-xl font-semibold">{t('history.title')}</h1>
+      <div className="flex items-center gap-3">
+        <TitleBadge icon={HistoryIcon} />
+        <h1 id="history-title" className="text-xl font-semibold">{t('history.title')}</h1>
+      </div>
       <form role="search" onSubmit={search} className="flex gap-2">
         <Label htmlFor={`${id}-q`} className="sr-only">{t('history.search')}</Label>
         <Input id={`${id}-q`} type="search" value={text} maxLength={100} placeholder={t('history.search')}
