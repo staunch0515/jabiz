@@ -109,15 +109,17 @@ describe('what a scanned code opens (Q52)', () => {
 })
 
 describe('the scanner (Q52)', () => {
-  it('is offered in the header, starts the camera, ignores a foreign code and opens the scanned redeem code', async () => {
+  it('is offered in the header\'s menu, starts the camera, ignores a foreign code and opens the scanned redeem code', async () => {
     const { posted } = server()
     const { stopTrack, getUserMedia } = camera([null, 'https://evil.example/redeem/x', `${ORIGIN}/redeem/k1`])
     window.history.replaceState(null, '', '/account')
     render(<App />)
+    // Q62: one menu at the right of the header holds scanning, the appearance and signing out.
+    await userEvent.click(await screen.findByTestId('app-menu'))
     const open = await screen.findByTestId('scan-open')
-    expect(open).toHaveAttribute('href', '/scan')
     expect(open).toHaveTextContent('Scan')
     await userEvent.click(open)
+    expect(window.location.pathname).toBe('/scan')
     expect(await screen.findByTestId('scan-page')).toBeInTheDocument()
     // The back camera, no sound.
     expect(getUserMedia).toHaveBeenCalledWith({ video: { facingMode: { ideal: 'environment' } }, audio: false })
@@ -131,7 +133,7 @@ describe('the scanner (Q52)', () => {
     expect(posted.filter((p) => p.path === '/api/processes/QB_REDEEM_TOKEN_CHECK/latest').map((p) => p.body))
       .toEqual([{ scannedKey: 'k1' }])
     // The scanner is not in the history: back leaves the prize for where the person was.
-    expect(screen.queryByTestId('scan-open')).toBeInTheDocument()
+    expect(screen.getByTestId('app-menu')).toBeInTheDocument()
   })
 
   it('opens a publication\'s page from a shop\'s poster', async () => {

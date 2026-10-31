@@ -11,7 +11,7 @@ import { QB } from '../qb/messages'
 import { readHistory, type RewardMethod } from '../qb/play'
 import { problemText } from '../qb/problems'
 import { Link } from '../qb/router'
-import { WALLET_PATH } from './api'
+import { walletPath } from './api'
 import { kudosPath, PERIODS, readKudos, totalOf, type KudosRow, type KudosTotals, type Period } from './kudos'
 import './messages'
 
@@ -64,7 +64,7 @@ function Figures({ totals, method, testId }: { totals: KudosTotals; method?: Rew
 }
 
 /**
- * The taker's Kudos by reward method (Q58), at the top of the wallet: the total of all rewards, then one card per
+ * The taker's Kudos by reward method (Q58), a part of My Kudos (Q62): the total of all rewards, then one card per
  * method (Kudos to the wallet, cash, a prize at the shop, a digital prize), each opening its rewards. In all, this year
  * or this month; what is still owed is always now's.
  */
@@ -74,11 +74,8 @@ export function KudosOverview() {
   const [period, setPeriod] = usePeriod()
   const kudos = useQuery({ queryKey: [...KUDOS_QUERY, period], queryFn: () => readKudos(period) })
   return (
-    <section aria-labelledby="kudos-title" className="flex flex-col gap-3" data-testid="kudos">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 id="kudos-title" className="text-lg font-semibold">{t('kudos.title')}</h2>
-        <PeriodSwitch period={period} onChange={setPeriod} />
-      </div>
+    <div className="flex flex-col gap-3" data-testid="kudos">
+      <PeriodSwitch period={period} onChange={setPeriod} />
       {kudos.isPending ? (
         <PageState kind="loading" />
       ) : kudos.isError ? (
@@ -101,7 +98,7 @@ export function KudosOverview() {
           <p className="text-muted-foreground text-xs">{t('kudos.hint')}</p>
         </>
       )}
-    </section>
+    </div>
   )
 }
 
@@ -144,7 +141,7 @@ export function KudosMethodPage({ method }: { method: RewardMethod }) {
   return (
     <section className="flex flex-col gap-4" aria-labelledby="kudos-method-title" data-testid="kudos-method"
       data-method={method}>
-      <Link to={WALLET_PATH} data-testid="kudos-back"
+      <Link to={walletPath('rewards')} data-testid="kudos-back"
         className="text-muted-foreground hover:text-foreground inline-flex w-fit items-center gap-1 text-sm">
         <ArrowLeft aria-hidden className="size-4" />
         {t('kudos.back')}

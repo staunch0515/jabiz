@@ -36,7 +36,7 @@ const en = {
     back: 'All messages',
     gone: 'This message is no longer in your inbox.',
     viewQuiz: 'View quiz',
-    action: { RESULT: 'See the result', WALLET: 'Open the wallet', PAYOUT: 'Open the payout account' },
+    action: { RESULT: 'See the result', WALLET: 'Open My Kudos', PAYOUT: 'Open the payout account' },
     until: 'Until {{time}}',
   },
 }
@@ -73,7 +73,7 @@ const zh: Texts = {
     back: '全部消息',
     gone: '这条消息已不在你的收件箱中。',
     viewQuiz: '查看 Quiz',
-    action: { RESULT: '查看结果', WALLET: '打开钱包', PAYOUT: '打开收款账户' },
+    action: { RESULT: '查看结果', WALLET: '打开我的学分', PAYOUT: '打开收款账户' },
     until: '至 {{time}}',
   },
 }
@@ -108,7 +108,7 @@ const ja: Texts = {
     back: 'メッセージ一覧',
     gone: 'このメッセージは受信箱にありません。',
     viewQuiz: 'クイズを見る',
-    action: { RESULT: '結果を見る', WALLET: 'ウォレットを開く', PAYOUT: '受取口座を開く' },
+    action: { RESULT: '結果を見る', WALLET: 'マイクドスを開く', PAYOUT: '受取口座を開く' },
     until: '{{time}} まで',
   },
 }

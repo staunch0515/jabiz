@@ -102,7 +102,7 @@ test('after a change of substance a taker accepts again on signing in; a rewordi
 
   // The page read the texts before the change: the server's refusal brings the prompt up at once (review M3).
   await page.getByTestId('nav-wallet').click()
-  await page.getByTestId('wallet-payout-open').click()
+  await page.getByTestId('wallet-payout').click()
   await page.getByTestId('payout-onboard').click()
   const gate = page.getByTestId('consent-gate')
   await expect(gate).toBeVisible()
