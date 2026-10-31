@@ -2,7 +2,10 @@ import { runQuery, type Filter } from '@jabiz/admin'
 import type { Page, SortSpec } from './api'
 import { SPONSOR_PAGE_PENDING, TEMPLATE } from './ids'
 
-/** A row of `qb.admin.sponsor-pages` (Q60a-3): a sponsor's page with the sponsor's company. */
+/**
+ * A row of `qb.admin.sponsor-pages` (Q60a-3): a sponsor's page with the sponsor's company; its logo and story are the
+ * onboarding's avatar and introduction (Q65b).
+ */
 export interface SponsorPageRow {
   userId: string
   handle: string

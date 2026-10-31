@@ -504,7 +504,7 @@
     }
   }, {
     "cacheSeconds" : 60,
-    "description" : "A sponsor's published page as its link (/s/<handle>) shows it to anybody (Q60a): the headline, the story, the logo, the cover, the website and the language, with the company of the approved onboarding; none when it is not published",
+    "description" : "A sponsor's published page as its link (/s/<handle>) shows it to anybody (Q60a): the headline, the cover, the website and the language, with the company, the logo (avatar) and the story (introduction) of the approved onboarding (Q65b); none when it is not published",
     "id" : "qb.public.sponsor-page",
     "list" : {
       "filters" : [ ],
@@ -549,7 +549,7 @@
       },
       "logo" : {
         "kindId" : "jabiz.file",
-        "policy" : "qb.sponsor-page-image",
+        "policy" : "qb.sponsor-avatar",
         "type" : "custom"
       },
       "story" : {
