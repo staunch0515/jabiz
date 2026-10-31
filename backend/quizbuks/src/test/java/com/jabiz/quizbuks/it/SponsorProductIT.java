@@ -9,10 +9,13 @@ import com.jabiz.quizbuks.page.QbSponsorProducts;
 import com.jabiz.quizbuks.page.SponsorPageCodes;
 import com.jabiz.quizbuks.page.SponsorPageProcesses;
 import com.jabiz.quizbuks.page.SponsorProductProcesses;
+import com.jabiz.quizbuks.page.SponsorStatsConfig;
 import com.jabiz.quizbuks.setup.QbRoles;
 import com.jabiz.runtime.context.Actor;
+import com.jabiz.runtime.publicread.PublicCounters;
 import com.jabiz.runtime.test.TestTokens;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.util.List;
 import java.util.Map;
@@ -30,6 +33,9 @@ class SponsorProductIT extends PlayItSupport {
 
     private static final String PAGE_PRODUCTS = "qb.public.sponsor-page-products";
     private static final String PUBLICATION_PRODUCTS = "qb.public.publication-products";
+
+    @Autowired
+    PublicCounters counters;
 
     @SuppressWarnings("unchecked")
     private List<Map<String, Object>> publicItems(String template, String param, String value) {
@@ -124,6 +130,54 @@ class SponsorProductIT extends PlayItSupport {
         Map<String, Object> foreign = product("Mine now", "1", "USD", true);
         foreign.put("productId", bread);
         refused(SponsorProductProcesses.SAVE, sponsorToken(newSponsor(unique("s-q60b-bob"))), foreign, 404);
+    }
+
+    /** Q60c: anonymous visitors' views of a published page and clicks on listed products, read by their sponsor only. */
+    @Test
+    void viewsAndClicksAreCountedForTheirSponsorOnly() {
+        String ann = newSponsor(unique("s-q60c-ann"));
+        String bob = newSponsor(unique("s-q60c-bob"));
+        String annHandle = publishedPage(ann);
+        String annProduct = save(sponsorToken(ann), product("Rye", "100", "JPY", true));
+        String hidden = save(sponsorToken(ann), product("Hidden", "100", "JPY", false));
+        String bobProduct = save(sponsorToken(bob), product("Cake", "100", "JPY", true));
+        String bobHandle = "q60c-unpublished-" + UUID.randomUUID().toString().substring(0, 6);
+        run(SponsorPageProcesses.SAVE, sponsorToken(bob), body("handle", bobHandle, "language", "en",
+            "headline", "Not yet"));
+
+        countPublic(SponsorStatsConfig.PAGE_VIEWS, annHandle, "A");
+        countPublic(SponsorStatsConfig.PAGE_VIEWS, annHandle, "A");
+        countPublic(SponsorStatsConfig.PAGE_VIEWS, annHandle, "B");
+        countPublic(SponsorStatsConfig.PAGE_VIEWS, bobHandle, "A");
+        countPublic(SponsorStatsConfig.PRODUCT_CLICKS, annProduct, "A");
+        countPublic(SponsorStatsConfig.PRODUCT_CLICKS, hidden, "A");
+        countPublic(SponsorStatsConfig.PRODUCT_CLICKS, bobProduct, "A");
+        counters.flush().block();
+
+        // Ann reads her page's views (twice: two visitors) and her listed product's click; not the hidden product,
+        // nor Bob's unpublished page; Bob reads his product's click only.
+        assertThat(myCounts(ann)).containsExactlyInAnyOrder(
+            SponsorStatsConfig.PAGE_VIEWS + " " + annHandle + " 2",
+            SponsorStatsConfig.PRODUCT_CLICKS + " " + annProduct + " 1");
+        assertThat(myCounts(bob)).containsExactly(SponsorStatsConfig.PRODUCT_CLICKS + " " + bobProduct + " 1");
+    }
+
+    private void countPublic(String counter, String key, String browser) {
+        client.post().uri("/api/public/counters/" + counter + "/" + key).header("User-Agent", browser).exchange()
+            .expectStatus().isNoContent();
+    }
+
+    /** The caller's counts through their dataset, as "counter key hits". */
+    @SuppressWarnings("unchecked")
+    private List<String> myCounts(String sponsor) {
+        Map<String, Object> page = client.post().uri("/api/datasets/" + SponsorStatsConfig.MY_DATASET + "/query")
+            .header("Authorization", sponsorToken(sponsor)).bodyValue(Map.of()).exchange()
+            .expectStatus().isOk().expectBody(MAP).returnResult().getResponseBody();
+        return ((List<Map<String, Object>>) page.get("items")).stream().map(item -> {
+            Map<String, Object> values = (Map<String, Object>) item.get("attributes");
+            return values.get("counterName") + " " + values.get("counterKey") + " "
+                + ((Number) values.get("hits")).longValue();
+        }).toList();
     }
 
     @Test

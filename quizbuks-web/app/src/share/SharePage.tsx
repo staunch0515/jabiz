@@ -1,5 +1,6 @@
 import { readPublicationProducts } from './api'
 import { quizProducts } from '../qb/products'
+import { countProductClick } from './counting'
 import { ProductCards } from '../qb/view/ProductCards'
 import { QBVIEW } from '../qb/view/messages'
 import { entryInfo, formatDateTime } from '@jabiz/client'
@@ -70,7 +71,7 @@ export function SharePage({ publicationId }: { publicationId: string }) {
         { key: 'endAt', label: t('detail.endAt'), value: formatDateTime(p.endAt) },
       ]} />
       <ProductCards products={quizProducts(products.data)}
-        title={tView('products.title')} testId="share-products" />
+        title={tView('products.title')} testId="share-products" onOpen={countProductClick} />
       <section aria-labelledby="share-start" className="flex flex-col gap-3">
         {entry.data?.emailLink ? <>
           <h2 id="share-start" className="text-lg font-semibold">{t('share.start')}</h2>

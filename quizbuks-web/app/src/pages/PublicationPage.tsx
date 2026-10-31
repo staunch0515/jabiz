@@ -1,5 +1,6 @@
 import { readPublicationProducts } from '../share/api'
 import { quizProducts } from '../qb/products'
+import { countProductClick } from '../share/counting'
 import { ProductCards } from '../qb/view/ProductCards'
 import { QBVIEW } from '../qb/view/messages'
 import { i18n, useAuth } from '@jabiz/client'
@@ -158,7 +159,7 @@ export function PublicationPage({ publicationId, country }: { publicationId: str
     <article className="flex flex-col gap-3" aria-labelledby="detail-title" data-testid="detail">
       <PublicationContent publication={p} tiers={tiers.data ?? []} linkSponsor autoplay={!prefersStillVideo()} />
       <ProductCards products={quizProducts(products.data)}
-        title={tView('products.title')} testId="publication-products" />
+        title={tView('products.title')} testId="publication-products" onOpen={countProductClick} />
       {/* Q64: the sponsor's own page, with all their products, from the start page as from the result. */}
       <SponsorVisit handle={p.sponsorHandle} sponsor={p.sponsorCompany ?? p.sponsorName} avatar={p.sponsorAvatar}
         products={quizProducts(products.data).length > 0} />

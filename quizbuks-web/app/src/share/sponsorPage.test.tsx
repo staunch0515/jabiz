@@ -1,6 +1,7 @@
 import { configureClient, session } from '@jabiz/client'
 import { expectAccessible } from '@jabiz/ui/testing'
-import { render, screen, within } from '@testing-library/react'
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../App'
 import '../messages'
@@ -141,6 +142,31 @@ describe("a sponsor's page (Q60a)", () => {
     // A link that is not https is never made one.
     expect(within(items[1]).queryByTestId('sponsor-page-products-shop')).toBeNull()
   })
+
+  it("counts a view of the page and an opening of a product's shop, not of a page that is not there (Q60c)",
+    async () => {
+      const { asked } = server({ products: [
+        { productId: 'p1', name: 'Rye loaf', description: null, image: null, price: '1200', currency: 'JPY',
+          shopUrl: 'https://shop.example/rye', seq: 0 },
+      ] })
+      window.history.replaceState(null, '', '/s/Acme-Bakery')
+      render(<App />)
+      const shop = await screen.findByTestId('sponsor-page-products-shop')
+      // By the page's handle as stored (lowercase), once.
+      await waitFor(() => expect(asked).toContain('/api/public/counters/qb.sponsor-page-view/acme-bakery'))
+      expect(asked.filter((path) => path.startsWith('/api/public/counters/'))).toHaveLength(1)
+      shop.addEventListener('click', (event) => event.preventDefault())
+      await userEvent.click(shop)
+      expect(asked).toContain('/api/public/counters/qb.product-click/p1')
+      cleanup()
+
+      vi.restoreAllMocks()
+      const none = server({ page: null })
+      window.history.replaceState(null, '', '/s/nobody')
+      render(<App />)
+      await screen.findByTestId('sponsor-page-home')
+      expect(none.asked.filter((path) => path.startsWith('/api/public/counters/'))).toEqual([])
+    })
 
   it("shows the quiz's products on a share link's page, not the questions' (Q60b)", async () => {
     server({ shared: { publicationId: 'pub1', name: 'Bread quiz', quizTitle: 'Bread', kind: 'QUIZ',

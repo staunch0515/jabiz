@@ -1,5 +1,6 @@
 import { questionProducts, type PublicationProduct } from '../qb/products'
 import { readPublicationProducts } from '../share/api'
+import { countProductClick } from '../share/counting'
 import { ProductCards } from '../qb/view/ProductCards'
 import { SponsorVisit } from './SponsorVisit'
 import { ApiError, formatDateTime } from '@jabiz/client'
@@ -116,7 +117,7 @@ function SurveyRow({ result, question, index, product }: { result: QuestionResul
           <dd data-testid="result-mine">{mine.length > 0 ? mine.join(', ') : t('result.noAnswer')}</dd>
         </dl>
       )}
-      {product && <ProductCards products={[product]} testId="result-product" />}
+      {product && <ProductCards products={[product]} testId="result-product" onOpen={countProductClick} />}
     </li>
   )
 }
@@ -148,7 +149,7 @@ function QuestionRow({ result, question, index, product }: { result: QuestionRes
       )}
       <p className="text-muted-foreground text-xs">{t('result.earned', { earned: result.earned, points: result.points })}</p>
       {/* Q60b: the sponsor's product for this question, after its answer is shown. */}
-      {product && <ProductCards products={[product]} testId="result-product" />}
+      {product && <ProductCards products={[product]} testId="result-product" onOpen={countProductClick} />}
     </li>
   )
 }

@@ -4,6 +4,7 @@ import { QBVIEW } from '../qb/view/messages'
 import { formatDateTime } from '@jabiz/client'
 import { MarkdownView, PageState } from '@jabiz/ui'
 import { useQuery } from '@tanstack/react-query'
+import { useEffect } from 'react'
 import { ExternalLink, Trophy } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
@@ -14,6 +15,7 @@ import { QB } from '../qb/messages'
 import { readPagePublications, readPublicSponsorPage } from './api'
 import { Link } from '../qb/router'
 import { sharePath } from './share'
+import { countPageView, countProductClick } from './counting'
 
 const SPONSOR_PAGE = /^\/s\/([^/]+)$/
 
@@ -48,6 +50,12 @@ export function SponsorPage({ handle }: { handle: string }) {
   const { t: tView } = useTranslation(QBVIEW)
   const publications = useQuery({ queryKey: ['qb', 'sponsor-page-publications', handle],
     queryFn: () => readPagePublications(handle), enabled: !!page.data })
+
+  // Q60c: a view of a page that exists (published), once per page shown; the server counts a visitor once a day.
+  const shown = page.data ? page.data.handle : null
+  useEffect(() => {
+    if (shown) countPageView(shown)
+  }, [shown])
 
   if (page.isPending) return <PageState kind="loading" />
   if (page.isError) return <PageState kind="error" description={tQb('failed')} />
@@ -93,7 +101,8 @@ export function SponsorPage({ handle }: { handle: string }) {
           <div lang={p.language} data-testid="sponsor-page-story"><MarkdownView text={p.story} /></div>
         </section>
       )}
-      <ProductCards products={products.data ?? []} title={tView('products.title')} testId="sponsor-page-products" />
+      <ProductCards products={products.data ?? []} title={tView('products.title')} testId="sponsor-page-products"
+        onOpen={countProductClick} />
       <section aria-labelledby="sponsor-page-quizzes" className="flex flex-col gap-3">
         <h2 id="sponsor-page-quizzes" className="text-lg font-semibold">{t('sponsorPage.quizzes')}</h2>
         {publications.isPending && <PageState kind="loading" />}
