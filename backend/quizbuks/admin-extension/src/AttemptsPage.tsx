@@ -3,7 +3,6 @@ import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useSearchParams } from 'react-router'
 import {
-  Badge,
   Button,
   DataTable,
   EXTENSION_NAMESPACE,
@@ -12,7 +11,7 @@ import {
   useAuth,
   type ColumnDef,
 } from '@jabiz/admin'
-import { LoadFailed } from './components'
+import { EmptyState, LoadFailed, StatusBadge } from './components'
 import { StatusFilter } from './finance-components'
 import { money, useLabels, usePaged, when } from './hooks'
 import { useMoreFilters } from './moreFilters'
@@ -77,7 +76,7 @@ export default function AttemptsPage() {
       ),
     },
     { id: 'status', header: t('attempts.status'),
-      cell: ({ row }) => <Badge variant="outline">{statusLabel(row.original.status)}</Badge> },
+      cell: ({ row }) => <StatusBadge code={row.original.status} label={statusLabel(row.original.status)} /> },
     { id: 'score', header: t('attempts.score'), meta: right,
       cell: ({ row }) => (row.original.score === null ? '' : `${row.original.score} / ${row.original.fullScore ?? '?'}`) },
     { id: 'passed', header: t('attempts.passed'),
@@ -117,7 +116,7 @@ export default function AttemptsPage() {
         ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
         : (
           <DataTable label={t('attempts.table')} columns={sortable(columns)} {...table} getRowId={(row) => row.attemptId}
-            empty={t('attempts.none')}
+            empty={<EmptyState art="content" title={t('attempts.none')} />}
             rowProps={(row) => ({ 'data-testid': 'attempt-row', 'data-id': row.attemptId, 'data-status': row.status })} />
         )}
     </div>
