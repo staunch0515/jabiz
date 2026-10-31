@@ -1,3 +1,6 @@
+import { questionProducts, type PublicationProduct } from '../qb/products'
+import { readPublicationProducts } from '../share/api'
+import { ProductCards } from '../qb/view/ProductCards'
 import { ApiError, formatDateTime } from '@jabiz/client'
 import {
   Alert,
@@ -98,7 +101,8 @@ function optionTexts(question: QuestionView | undefined, numbers: number[]): str
 }
 
 /** A survey's question (Q12): what was chosen, never right or wrong. */
-function SurveyRow({ result, question, index }: { result: QuestionResult; question?: QuestionView; index: number }) {
+function SurveyRow({ result, question, index, product }: { result: QuestionResult; question?: QuestionView; index: number;
+  product?: PublicationProduct }) {
   const { t } = useTranslation(APP)
   const mine = optionTexts(question, result.selected)
   return (
@@ -111,11 +115,13 @@ function SurveyRow({ result, question, index }: { result: QuestionResult; questi
           <dd data-testid="result-mine">{mine.length > 0 ? mine.join(', ') : t('result.noAnswer')}</dd>
         </dl>
       )}
+      {product && <ProductCards products={[product]} testId="result-product" />}
     </li>
   )
 }
 
-function QuestionRow({ result, question, index }: { result: QuestionResult; question?: QuestionView; index: number }) {
+function QuestionRow({ result, question, index, product }: { result: QuestionResult; question?: QuestionView;
+  index: number; product?: PublicationProduct }) {
   const { t } = useTranslation(APP)
   // Scoring's rule: right when the options chosen are exactly the correct ones.
   const right = result.correct.length > 0 && [...result.selected].sort().join() === [...result.correct].sort().join()
@@ -140,6 +146,8 @@ function QuestionRow({ result, question, index }: { result: QuestionResult; ques
         </dl>
       )}
       <p className="text-muted-foreground text-xs">{t('result.earned', { earned: result.earned, points: result.points })}</p>
+      {/* Q60b: the sponsor's product for this question, after its answer is shown. */}
+      {product && <ProductCards products={[product]} testId="result-product" />}
     </li>
   )
 }
@@ -504,6 +512,11 @@ export function ResultPage({ attemptId }: { attemptId: string }) {
     refetchInterval: (query) => (query.state.data?.status === 'IN_PROGRESS' ? FINISHING_POLL_MS
       : query.state.data?.redeem?.status === 'CLAIMED' ? CLAIM_POLL_MS : false),
   })
+  // Q60b: the products the sponsor shows with the questions, while the publication is live (public, so it may fail
+  // quietly: the result stands without them).
+  const publicationId = result.data?.publicationId
+  const products = useQuery({ queryKey: ['qb', 'publication-products', publicationId],
+    queryFn: () => readPublicationProducts(publicationId!), enabled: !!publicationId, retry: false })
 
   if (result.isPending) return <PageState kind="loading" />
   // The submission's own answer stands in only when the server could not answer (not when it refused: a 404 or 403 is
@@ -543,6 +556,8 @@ export function ResultPage({ attemptId }: { attemptId: string }) {
   }
   const automatic = outcome.status === 'EXPIRED' || autoSubmitted(attemptId)
   const byNo = new Map(data.questions.map((q) => [q.no, q]))
+  // Q60b: one product per question, by its number (the quiz's own, number 0, show on its page).
+  const productOf = questionProducts(products.data)
   const name = data.name
   // A survey (Q12) has no score to show: complete (every question answered) or not, and what was chosen.
   const survey = data.kind === 'SURVEY'
@@ -601,8 +616,10 @@ export function ResultPage({ attemptId }: { attemptId: string }) {
           </h2>
           <ol className="flex flex-col gap-2">
             {outcome.questions.map((result, i) => survey
-              ? <SurveyRow key={result.no} result={result} question={byNo.get(result.no)} index={i} />
-              : <QuestionRow key={result.no} result={result} question={byNo.get(result.no)} index={i} />)}
+              ? <SurveyRow key={result.no} result={result} question={byNo.get(result.no)} index={i}
+                product={productOf.get(result.no)} />
+              : <QuestionRow key={result.no} result={result} question={byNo.get(result.no)} index={i}
+                product={productOf.get(result.no)} />)}
           </ol>
         </section>
       )}

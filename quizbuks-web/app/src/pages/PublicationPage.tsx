@@ -1,3 +1,7 @@
+import { readPublicationProducts } from '../share/api'
+import { quizProducts } from '../qb/products'
+import { ProductCards } from '../qb/view/ProductCards'
+import { QBVIEW } from '../qb/view/messages'
 import { i18n, useAuth } from '@jabiz/client'
 import { Alert, AlertDescription, Button, PageState } from '@jabiz/ui'
 import { useQuery } from '@tanstack/react-query'
@@ -111,6 +115,10 @@ export function PublicationPage({ publicationId, country }: { publicationId: str
     queryFn: () => readPublication(request) })
   const tiers = useQuery({ queryKey: ['qb', 'publication-tiers', request], queryFn: () => readTiers(request),
     enabled: !!publication.data })
+  // Q60b: the products the sponsor shows with the quiz (question 0); quietly none when they cannot be read.
+  const products = useQuery({ queryKey: ['qb', 'publication-products', publicationId],
+    queryFn: () => readPublicationProducts(publicationId), enabled: !!publication.data, retry: false })
+  const { t: tView } = useTranslation(QBVIEW)
 
   // The funnel's first view; a failure (a banned caller, a publication gone) changes nothing on the page.
   const [viewed, setViewed] = useState<string | null>(null)
@@ -151,6 +159,8 @@ export function PublicationPage({ publicationId, country }: { publicationId: str
         {t('detail.back')}
       </Link>
       <PublicationContent publication={p} tiers={tiers.data ?? []} linkSponsor />
+      <ProductCards products={quizProducts(products.data)}
+        title={tView('products.title')} testId="publication-products" />
       <div className="bg-background sticky bottom-20 -mx-4 border-t px-4 py-3">
         <Action publication={p} />
       </div>

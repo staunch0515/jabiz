@@ -24,6 +24,7 @@ import { CircleHelp, FileQuestion, LayoutDashboard, Megaphone, MessagesSquare, R
   HandCoins,
   Gift,
   Globe,
+  ShoppingBag,
   Mail,
   Ticket,
   UsersRound,
@@ -54,6 +55,7 @@ import { rememberSource } from './trial/claim'
 import TrialPage, { trialKeyOf } from './trial/TrialPage'
 import { OnboardingPage, useMySponsor } from './pages/OnboardingPage'
 import { SPONSOR_PAGE_PATH, SponsorPageEditor } from './page/SponsorPageEditor'
+import { PRODUCTS_PATH, ProductsPage } from './products/ProductsPage'
 import { MESSAGES_PATH } from './notices/api'
 import { MessagesPage } from './notices/MessagesPage'
 import { ConsentGate, LegalLink, newQbQueryClient } from './qb/ConsentGate'
@@ -164,6 +166,7 @@ function SignedIn({ path }: { path: string }) {
   else if (publicationIdOf(path)) page = <PublicationPage key={path} publicationId={publicationIdOf(path)!} />
   else if (path === ONBOARDING) page = <OnboardingPage />
   else if (path === SPONSOR_PAGE_PATH) page = <SponsorPageEditor />
+  else if (path === PRODUCTS_PATH) page = <ProductsPage />
   else if (path === WALLET_PATH && kudos) page = <WalletPage />
   else if (topUpId && kudos) page = <TopUpPage key={topUpId} topUpId={topUpId} />
   else if (bankTopUpId && kudos) page = <BankTopUpPage key={bankTopUpId} topUpId={bankTopUpId} />
@@ -195,6 +198,7 @@ function SignedIn({ path }: { path: string }) {
     { key: 'settings', label: t('nav.groups.settings'), items: [
       { key: 'onboarding', label: t('nav.onboarding'), path: ONBOARDING, icon: Store },
       { key: 'page', label: t('page.nav'), path: SPONSOR_PAGE_PATH, icon: Globe },
+      { key: 'products', label: t('products.nav'), path: PRODUCTS_PATH, icon: ShoppingBag },
       { key: 'mailServer', label: t('publishing.mailServer.nav'), path: MAIL_SERVER_PATH, icon: Mail },
       { key: 'messages', label: t('notices.nav'), path: MESSAGES_PATH, icon: MessagesSquare },
       { key: 'account', label: t('nav.account'), path: ACCOUNT_PATH, icon: UserRound },

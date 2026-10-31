@@ -140,6 +140,10 @@ for (const appearance of ['light', 'dark'] as const) {
     await page.getByRole('link', { name: 'My page' }).click()
     await expect(page.getByTestId('sponsor-page-form')).toBeVisible()
     await expectAccessible(page, at('sponsor page editor'))
+    // Q60b-2: the sponsor's products.
+    await page.getByRole('link', { name: 'My products' }).click()
+    await expect(page.getByTestId('product-add')).toBeVisible()
+    await expectAccessible(page, at('sponsor products'))
     await page.getByRole('link', { name: 'Account' }).click()
     await expect(page.getByTestId('sign-in').first()).toBeVisible()
     await expectAccessible(page, at('sponsor account'))
