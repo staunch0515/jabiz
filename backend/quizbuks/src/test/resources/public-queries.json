@@ -419,6 +419,11 @@
         "multiline" : false,
         "type" : "text"
       },
+      "sponsorHandle" : {
+        "maxLength" : 30,
+        "multiline" : false,
+        "type" : "text"
+      },
       "startAt" : {
         "role" : "EVENT_TIME",
         "type" : "temporal"

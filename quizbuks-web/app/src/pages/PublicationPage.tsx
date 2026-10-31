@@ -150,7 +150,7 @@ export function PublicationPage({ publicationId, country }: { publicationId: str
         <ArrowLeft aria-hidden className="size-4" />
         {t('detail.back')}
       </Link>
-      <PublicationContent publication={p} tiers={tiers.data ?? []} />
+      <PublicationContent publication={p} tiers={tiers.data ?? []} linkSponsor />
       <div className="bg-background sticky bottom-20 -mx-4 border-t px-4 py-3">
         <Action publication={p} />
       </div>

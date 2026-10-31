@@ -1,5 +1,6 @@
 import { addMessages } from '@jabiz/client'
 import { contentEn, contentJa, contentZh } from './content/messages'
+import { pageEn, pageJa, pageZh } from './page/messages'
 import { publishingEn, publishingJa, publishingZh } from './publishing/messages'
 import { trialEn, trialJa, trialZh } from './trial/messages'
 import './qb/messages'
@@ -14,6 +15,7 @@ export const SPONSOR = 'sponsor'
 const en = {
   ...contentEn,
   ...publishingEn,
+  ...pageEn,
   ...trialEn,
   brand: `${BRAND.names.en} Sponsor`,
   lists: { view: 'View', cards: 'Cards', table: 'Table', pages: 'Pages', previous: 'Previous page', next: 'Next page', page: 'Page {{page}} of {{pages}}' },
@@ -100,6 +102,7 @@ const en = {
 const zh: typeof en = {
   ...contentZh,
   ...publishingZh,
+  ...pageZh,
   ...trialZh,
   brand: `${BRAND.names.zh}商家后台`,
   lists: { view: '显示方式', cards: '卡片', table: '表格', pages: '分页', previous: '上一页', next: '下一页', page: '第 {{page}} / {{pages}} 页' },
@@ -186,6 +189,7 @@ const zh: typeof en = {
 const ja: typeof en = {
   ...contentJa,
   ...publishingJa,
+  ...pageJa,
   ...trialJa,
   brand: `${BRAND.names.ja}スポンサー`,
   lists: { view: '表示', cards: 'カード', table: '表', pages: 'ページ', previous: '前のページ', next: '次のページ', page: '{{page}} / {{pages}} ページ' },
