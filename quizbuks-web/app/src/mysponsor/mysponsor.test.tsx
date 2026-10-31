@@ -27,6 +27,7 @@ interface Server {
   figures?: Record<string, unknown>
   publications?: Record<string, unknown>[]
   inbox?: Record<string, unknown>[]
+  claim?: Record<string, unknown>
 }
 
 /** The server as the app sees it, for a verified taker who may also be a sponsor. Records what was posted. */
@@ -39,7 +40,12 @@ function server(options: Server = {}) {
     const path = decodeURIComponent(url.pathname)
     const body = request.method === 'POST' ? await request.clone().json().catch(() => null) : null
     if (request.method === 'POST') posted.push({ path, body })
+    if (path === '/api/auth/account/entries/sponsor/join') return new Response(null, { status: 204 })
     const process = /^\/api\/processes\/([A-Z_]+)\/latest$/.exec(path)
+    if (process?.[1] === 'QB_CERTIFICATION_CLAIM') {
+      return json(200, { output: options.claim ?? { certification: 'SPONSOR_APPLY', heldUntil: null,
+        roundPublicationId: 'pub-cert' } })
+    }
     if (process) {
       const id = (body as { publicationId: string }).publicationId
       const status = process[1] === 'QB_PUBLICATION_PAUSE' ? 'PAUSED' : 'LIVE'
@@ -81,7 +87,8 @@ function server(options: Server = {}) {
   })
   const processCalls = (name: string) =>
     posted.filter((p) => p.path === `/api/processes/${name}/latest`).map((p) => p.body)
-  return { processCalls }
+  const joined = () => posted.filter((p) => p.path === '/api/auth/account/entries/sponsor/join').length
+  return { processCalls, joined }
 }
 
 beforeAll(() => configureClient({ entry: 'app' }))
@@ -176,5 +183,34 @@ describe('a sponsor in the app (Q68)', () => {
     render(<App />)
     await userEvent.click(await screen.findByTestId('inbox-category'))
     expect(await screen.findByRole('option', { name: 'Sponsor' })).toBeInTheDocument()
+  })
+
+  it('offers a taker who is no sponsor the certification quiz, then the application once they hold it (Q69)',
+    async () => {
+    server({ account: null })
+    window.history.replaceState(null, '', '/account')
+    render(<App />)
+    const section = await screen.findByTestId('become-sponsor')
+    expect(await within(section).findByTestId('become-sponsor-quiz')).toHaveAttribute('href', '/p/pub-cert')
+    expect(within(section).queryByTestId('become-sponsor-apply')).toBeNull()
+    await expectAccessible()
+  })
+
+  it('applies with the certification: the sponsor sign-in is added and the console is linked (Q69)', async () => {
+    const api = server({ account: null, claim: { certification: 'SPONSOR_APPLY',
+      heldUntil: '2027-10-31T00:00:00Z', roundPublicationId: null } })
+    window.history.replaceState(null, '', '/account')
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('become-sponsor-apply'))
+    expect(await screen.findByTestId('become-sponsor-onboarding')).toHaveAttribute('href', '/sponsor/onboarding')
+    expect(api.joined()).toBe(1)
+  })
+
+  it('shows nothing of it to a sponsor', async () => {
+    server()
+    window.history.replaceState(null, '', '/account')
+    render(<App />)
+    expect(await screen.findByTestId('account')).toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByTestId('become-sponsor')).toBeNull())
   })
 })

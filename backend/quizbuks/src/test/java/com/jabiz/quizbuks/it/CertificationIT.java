@@ -25,6 +25,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * a taker who passes it holds the certification for a year, records only inserted; operators run their own rounds and
  * grants and see only theirs; the answering path is not touched.
  */
+// The sponsor entry takes registrations (the signed-in join needs it), as in production.
+@org.springframework.test.context.TestPropertySource(properties = "jabiz.security.entries.sponsor.self-registration=true")
 class CertificationIT extends PlayItSupport {
 
     private static final String CERT = "SPONSOR_APPLY";
@@ -41,6 +43,18 @@ class CertificationIT extends PlayItSupport {
         return "Bearer " + tokens.issue(actor).token();
     }
 
+    /** Marks the user's address verified, as the mailed link does (the join requires it). */
+    private void verify(String userId) {
+        List<String> columns = query("SELECT column_name FROM information_schema.columns WHERE table_schema = "
+            + "current_schema() AND table_name = 'sec_user_version' AND column_name NOT IN ('row_id', 'version_no', "
+            + "'verified_email') ORDER BY ordinal_position").stream().map(row -> (String) row.get("column_name"))
+            .toList();
+        String list = String.join(", ", columns);
+        execute("INSERT INTO sec_user_version (" + list + ", version_no, verified_email) SELECT " + list
+            + ", version_no + 1, email FROM sec_user_version WHERE user_id = ?::uuid ORDER BY version_no DESC LIMIT 1",
+            userId);
+    }
+
     private String member(String operatorId, String name) {
         String userId = createUser(name);
         List<String> columns = query("SELECT column_name FROM information_schema.columns WHERE table_schema = "
@@ -53,6 +67,16 @@ class CertificationIT extends PlayItSupport {
             userId);
         run(OperatorProcesses.MEMBER_ADD, hq(), body("operatorId", operatorId, "userId", userId, "lead", true));
         return userId;
+    }
+
+    private org.springframework.test.web.reactive.server.WebTestClient.ResponseSpec join(String takerId) {
+        return client.post().uri("/api/auth/account/entries/sponsor/join")
+            .header(org.springframework.http.HttpHeaders.AUTHORIZATION, taker(takerId)).exchange();
+    }
+
+    private long roleRows(String userId) {
+        return ((Number) query("SELECT count(*) AS n FROM sec_user_role_version WHERE user_id = ?::uuid", userId)
+            .getFirst().get("n")).longValue();
     }
 
     private Map<String, Object> claim(String takerId) {
@@ -89,6 +113,16 @@ class CertificationIT extends PlayItSupport {
         claim(passer);
         assertThat(query("SELECT count(*) AS n FROM qb_certification_record WHERE user_id = ?", passer).getFirst()
             .get("n")).isEqualTo(1L);
+
+        // Q69 D-Q69-7: the sponsor entry's signed-in join needs the certification (the platform's sign-up guard).
+        verify(passer);
+        verify(failer);
+        assertThat(join(failer).expectStatus().isForbidden().expectBody(MAP).returnResult().getResponseBody()
+            .toString()).contains("SIGN_UP_REFUSED");
+        long rolesBefore = roleRows(passer);
+        join(passer).expectStatus().isNoContent();
+        // The sponsor entry's registration role is added to the account.
+        assertThat(roleRows(passer)).isGreaterThan(rolesBefore);
 
         // A year and a day on, it is held no more.
         clock.advance(Duration.ofDays(366));
