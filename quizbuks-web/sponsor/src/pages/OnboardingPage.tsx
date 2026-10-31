@@ -19,7 +19,7 @@ import { neutralName } from '../content/api'
 import { SPONSOR } from '../messages'
 import { ShownAt } from '../content/ShownAt'
 import { applyAsSponsor, readMySponsor, saveSponsorProfile, type Sponsor, type SponsorOutput } from '../qb/api'
-import { claimSource } from '../trial/claim'
+import { claimSource, remembered } from '../trial/claim'
 import { FileImage } from '../qb/FileImage'
 import { CONSENTS_QUERY, useMyConsents } from '../qb/ConsentGate'
 import { CODE, FILE_POLICY, LEGAL } from '../qb/ids'
@@ -124,7 +124,7 @@ function OnboardingForm({ sponsor }: { sponsor: Sponsor | null }) {
         baseRevision: sponsor?.revision ?? null,
       }
       return approved ? saveSponsorProfile(input)
-        : applyAsSponsor({ ...input, acceptTerms, ...acceptedVersions(terms.data) })
+        : applyAsSponsor({ ...input, acceptTerms, ...acceptedVersions(terms.data), trialKey: remembered() })
     },
     onSuccess: async (output: SponsorOutput) => {
       setDone(approved ? t('onboarding.saved')

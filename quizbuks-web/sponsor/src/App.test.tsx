@@ -203,7 +203,24 @@ describe('a signed-in sponsor', () => {
     expect(await screen.findByTestId('onboarding-done')).toBeInTheDocument()
     expect(posted).toContainEqual({ path: '/api/processes/QB_SPONSOR_APPLY/latest', body: {
       displayName: 'Sara', company: 'Acme Quiz', intro: 'We make **quizzes**.', avatar: null, baseRevision: null,
-      acceptTerms: true, termsVersionNo: null, privacyVersionNo: null } })
+      acceptTerms: true, termsVersionNo: null, privacyVersionNo: null, trialKey: null } })
+  })
+
+  it('sends the trial that brought the sponsor with the application, for its operator to review (Q48e-1)', async () => {
+    const key = 'ab'.repeat(24)
+    window.localStorage.setItem('qb.trial-src', key)
+    const { posted } = server({ sponsor: null, applied: { status: 200, body: { output: { userId: 'u2',
+      onboardingId: 'o1', reviewStatus: 'PENDING', revision: 1, approval: 'PENDING', approvalRequestId: 'r1' } } } })
+    render(<App />)
+    await waitFor(() => expect(window.location.pathname).toBe('/onboarding'))
+    expect(await screen.findByTestId('onboarding-status')).toHaveAttribute('data-status', 'NONE')
+    await userEvent.type(screen.getByTestId('onboarding-company'), 'Acme Quiz')
+    await userEvent.click(screen.getByTestId('onboarding-terms'))
+    await userEvent.click(screen.getByTestId('onboarding-submit'))
+    expect(await screen.findByTestId('onboarding-done')).toBeInTheDocument()
+    expect(posted.find((p) => p.path === '/api/processes/QB_SPONSOR_APPLY/latest')?.body)
+      .toMatchObject({ trialKey: key })
+    window.localStorage.removeItem('qb.trial-src')
   })
 
   it('applies accepting the versions in effect, each linked to its text (Q7b)', async () => {
@@ -305,7 +322,7 @@ describe('a signed-in sponsor', () => {
     expect(within(nav).getAllByRole('group').map((g) => g.getAttribute('aria-labelledby') && within(g).getAllByRole('link')
       .map((link) => link.textContent))).toEqual([
       ['Dashboard'], ['Quizzes', 'Publications'], ['Cash rewards', 'Digital prizes', 'Prizes', 'Staff'],
-      ['Wallet', 'Transactions'], ['Sponsor profile', 'Mail server', 'Messages', 'Account', 'Help']])
+      ['Wallet', 'Transactions'], ['Sponsor profile', 'My page', 'Mail server', 'Messages', 'Account', 'Help']])
     expect(within(nav).getByRole('group', { name: 'Rewards' })).toBeInTheDocument()
     expect(within(nav).getAllByTestId('menu-separator')).toHaveLength(4)
     await userEvent.click(screen.getByRole('link', { name: 'Sponsor profile' }))

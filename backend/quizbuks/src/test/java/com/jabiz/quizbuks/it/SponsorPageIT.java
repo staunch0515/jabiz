@@ -60,6 +60,26 @@ class SponsorPageIT extends PlayItSupport {
         return (List<Map<String, Object>>) page.get("items");
     }
 
+    /**
+     * The sponsor's page as both pages of a publication name it, which must agree: the share page's (anonymous) and the
+     * app's (a taker's); null while the page is not published.
+     */
+    @SuppressWarnings("unchecked")
+    private Object sponsorHandleOf(String publicationId) {
+        Map<String, Object> shared = client.get().uri(b -> b.path("/api/public/queries/qb.public.publication")
+                .queryParam("p.publicationId", "{id}").build(publicationId))
+            .exchange().expectStatus().isOk().expectBody(MAP).returnResult().getResponseBody();
+        Object anonymous = ((List<Map<String, Object>>) shared.get("items")).getFirst().get("sponsorHandle");
+        Map<String, Object> params = new java.util.LinkedHashMap<>();
+        params.put("publicationId", publicationId);
+        params.put("at", clock.instant().toString());
+        params.put("country", "JP");
+        Object app = items("qb.app.publication", taker(newTaker(unique("t-q60-page"), "JP")),
+            Map.of("params", params)).getFirst().get("sponsorHandle");
+        assertThat(app).isEqualTo(anonymous);
+        return anonymous;
+    }
+
     private static Map<String, Object> stored(String userId) {
         return query("SELECT * FROM qb_sponsor_page WHERE user_id = ?", userId).getFirst();
     }
@@ -121,6 +141,8 @@ class SponsorPageIT extends PlayItSupport {
         String publication = livePublication(sponsor, "Ann's bread quiz");
         assertThat(publicItems(PUBLICATIONS_TEMPLATE, handle)).extracting(row -> row.get("publicationId"))
             .containsExactly(publication);
+        // The publication's pages name the page the sponsor's name links to (Q60a-2): its share page and the app's.
+        assertThat(sponsorHandleOf(publication)).isEqualTo(handle);
 
         // Changes apply at once; a stale revision is refused.
         long revision = ((Number) stored(sponsor).get("revision")).longValue();
@@ -148,6 +170,7 @@ class SponsorPageIT extends PlayItSupport {
         assertThat(run(SponsorPageProcesses.UNPUBLISH, token, body())).containsEntry("status", QbSponsorPages.DRAFT);
         assertThat(publicItems(PAGE_TEMPLATE, renamed)).isEmpty();
         assertThat(publicItems(PUBLICATIONS_TEMPLATE, renamed)).isEmpty();
+        assertThat(sponsorHandleOf(publication)).isNull();
         // Its images stop being public at once, not after the remembered decision's lifetime.
         client.get().uri("/api/public/files/" + cover).exchange().expectStatus().isNotFound();
         assertThat(run(SponsorPageProcesses.SUBMIT, token, body())).containsEntry("status", QbSponsorPages.PENDING);

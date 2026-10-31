@@ -37,19 +37,45 @@ public final class OperatorChecks {
                 ctx -> QbOperators.memberLockName(ctx.request().actorId())))
             .step("Load the caller's membership", QueryEntities.<ProcessContext>of(
                 QbOperators.defaultDataset(QbOperators.MEMBER), ctx -> current(ctx.request().actorId()), MEMBERSHIP))
+            .compute("Check the caller's membership", (metadata, ctx) -> checkMembership(ctx));
+    }
+
+    /**
+     * {@link #member} for a process headquarters runs too (Q48e-1): when the caller signed in at the operators' entry,
+     * the membership is held and checked within the act, as in every other act of an operator's member, so a member
+     * removed or an operator suspended stops at once rather than when the access token expires; otherwise nothing.
+     */
+    public static <I, O> void memberWhenScoped(ProcessDefinitionBuilder<I, O, ProcessContext> pb) {
+        pb.step("Hold the caller's membership", HoldLock.<ProcessContext>shared(
+                ctx -> scoped(ctx) ? QbOperators.memberLockName(ctx.request().actorId()) : null))
+            .step("Load the caller's membership", QueryEntities.<ProcessContext>of(
+                QbOperators.defaultDataset(QbOperators.MEMBER),
+                ctx -> current(scoped(ctx) ? ctx.request().actorId() : null), MEMBERSHIP))
             .compute("Check the caller's membership", (metadata, ctx) -> {
-                EntityInstance member = first(ctx, MEMBERSHIP);
-                if (member == null) {
-                    throw new BusinessRuleViolationException(new Violation(null, OperatorCodes.NOT_MEMBER,
-                        "The caller is no operator's member", Map.of()));
+                if (scoped(ctx)) {
+                    checkMembership(ctx);
                 }
-                if (!Boolean.TRUE.equals(member.get("operatorActive"))) {
-                    throw new BusinessRuleViolationException(new Violation(null, OperatorCodes.SUSPENDED,
-                        "The caller's operator is suspended", Map.of()));
-                }
-                ctx.put(OPERATOR_ID, String.valueOf((Object) member.get("operatorId")));
-                ctx.put(LEAD, Boolean.TRUE.equals(member.get("lead")));
             });
+    }
+
+    /** Whether the caller's session is an operator's (the operators' entry scope). */
+    static boolean scoped(ProcessContext ctx) {
+        com.jabiz.context.EntryScope scope = ctx.request().entryScope();
+        return scope != null && scope.is(QbOperators.SCOPE);
+    }
+
+    private static void checkMembership(ProcessContext ctx) {
+        EntityInstance member = first(ctx, MEMBERSHIP);
+        if (member == null) {
+            throw new BusinessRuleViolationException(new Violation(null, OperatorCodes.NOT_MEMBER,
+                "The caller is no operator's member", Map.of()));
+        }
+        if (!Boolean.TRUE.equals(member.get("operatorActive"))) {
+            throw new BusinessRuleViolationException(new Violation(null, OperatorCodes.SUSPENDED,
+                "The caller's operator is suspended", Map.of()));
+        }
+        ctx.put(OPERATOR_ID, String.valueOf((Object) member.get("operatorId")));
+        ctx.put(LEAD, Boolean.TRUE.equals(member.get("lead")));
     }
 
     /** The caller's operator ({@link #member} passed). */

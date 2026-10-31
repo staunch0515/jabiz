@@ -1,7 +1,7 @@
 /*---
 id: qb.app.publication
 description: One publication's page for a taker (U-20 – U-23) with the caller's own attempt; none when they cannot see it
-entities: [QbPublicationCard, QbPublicationCounter, QbPublicationStartCounter, QbPublicationStats, QbStatsRun, QbWallet, QbCountry, QbSponsor, QbQuizVersion, QbAttempt, QbPublicationOwner, QbInvitation, QbProfileAttribute, QbPublicationCriterion]
+entities: [QbPublicationCard, QbPublicationCounter, QbPublicationStartCounter, QbPublicationStats, QbStatsRun, QbWallet, QbCountry, QbSponsor, QbSponsorPage, QbQuizVersion, QbAttempt, QbPublicationOwner, QbInvitation, QbProfileAttribute, QbPublicationCriterion]
 datasets:
   QbPublicationCard: urn:jabiz:dataset:default:QbPublicationCard
   QbPublicationCounter: urn:jabiz:dataset:default:QbPublicationCounter
@@ -11,6 +11,7 @@ datasets:
   QbWallet: urn:jabiz:dataset:default:QbWallet
   QbCountry: urn:jabiz:dataset:default:QbCountry
   QbSponsor: urn:jabiz:dataset:default:QbSponsor
+  QbSponsorPage: urn:jabiz:dataset:public:QbSponsorPage
   QbQuizVersion: urn:jabiz:dataset:default:QbQuizVersion
   QbAttempt: urn:jabiz:dataset:taker:QbAttempt
   QbProfileAttribute: urn:jabiz:dataset:me:QbProfileAttribute
@@ -48,6 +49,7 @@ results:
   sponsorCompany: { from: QbSponsor.company }
   sponsorIntro:   { from: QbSponsor.intro }
   sponsorAvatar:  { from: QbSponsor.avatar }
+  sponsorHandle:  { from: QbSponsorPage.handle }
   sponsorCountry: { from: QbPublicationCard.sponsorCountry }
   completions:    { from: QbPublicationCounter.completions }
   last1h:         { from: QbPublicationStats.last1h }
@@ -99,6 +101,7 @@ SELECT
     d.sponsorCompany AS sponsorCompany,
     d.sponsorIntro AS sponsorIntro,
     d.sponsorAvatar AS sponsorAvatar,
+    d.sponsorHandle AS sponsorHandle,
     d.sponsorCountry AS sponsorCountry,
     d.completions AS completions,
     d.last1h AS last1h,
@@ -139,6 +142,8 @@ SELECT
     sp.{{QbSponsor.company}}               AS sponsorCompany,
     sp.{{QbSponsor.intro}}                 AS sponsorIntro,
     sp.{{QbSponsor.avatar}}                AS sponsorAvatar,
+    -- Q60a: the sponsor's published page, which the sponsor's name links to; none while it is not published.
+    sp_page.{{QbSponsorPage.handle}}       AS sponsorHandle,
     c.{{QbPublicationCard.sponsorCountry}} AS sponsorCountry,
     n.{{QbPublicationCounter.completions}} AS completions,
     coalesce(st.{{QbPublicationStats.last1h}}, 0)  AS last1h,
@@ -191,6 +196,7 @@ LEFT JOIN {{QbWallet}} w ON w.{{QbWallet.ownerId}} = c.{{QbPublicationCard.publi
     AND w.{{QbWallet.kind}} = 'SPONSOR'
 LEFT JOIN {{QbSponsor}} sp ON sp.{{QbSponsor.userId}} = c.{{QbPublicationCard.publisherId}}
     AND sp.{{QbSponsor.reviewStatus}} = 'APPROVED'
+LEFT JOIN {{QbSponsorPage}} sp_page ON sp_page.{{QbSponsorPage.userId}} = sp.{{QbSponsor.userId}}
 LEFT JOIN {{QbAttempt}} m ON m.{{QbAttempt.publicationId}} = c.{{QbPublicationCard.publicationId}}
 LEFT JOIN {{QbPublicationOwner}} own
     ON own.{{QbPublicationOwner.publicationId}} = c.{{QbPublicationCard.publicationId}}

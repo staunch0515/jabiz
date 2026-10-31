@@ -18,6 +18,8 @@ export interface SharedPublication {
   passScore: number
   maxReward: unknown
   sponsorCompany: string | null
+  /** Q60a: the sponsor's published page, which the company links to. */
+  sponsorHandle?: string | null
 }
 
 /** The publication if it is live, else null (scheduled, paused, over, unknown: the page says it is not open). */

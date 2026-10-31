@@ -48,6 +48,33 @@ class OperatorLanguagesIT extends PlayItSupport {
         assertThat(result.getStatus().value()).as(String.valueOf(result.getResponseBody())).isEqualTo(200);
     }
 
+    /** The sponsor's application in Japanese, naming the trial that brought them (the sign-up link's key). */
+    private Map<String, Object> applyWithTrial(String userId, String trialKey) {
+        var result = client.post().uri("/api/processes/QB_SPONSOR_APPLY/latest")
+            .contentType(MediaType.APPLICATION_JSON).header(HttpHeaders.AUTHORIZATION, sponsor(userId))
+            .header(HttpHeaders.ACCEPT_LANGUAGE, "ja")
+            .bodyValue(body("displayName", "Owner", "company", "Company of " + userId, "acceptTerms", true,
+                "trialKey", trialKey))
+            .exchange().expectBody(MAP).returnResult();
+        assertThat(result.getStatus().value()).as(String.valueOf(result.getResponseBody())).isEqualTo(200);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> output = (Map<String, Object>) result.getResponseBody().get("output");
+        return output;
+    }
+
+    /** A trial mailed to a business by {@code owner} (an operator, or headquarters' {@code direct}); returns its key. */
+    private String sentTrial(String owner, String domain) {
+        String direction = java.util.UUID.randomUUID().toString();
+        execute("INSERT INTO qb_prospect_direction (direction_id, owner, name, brief, active, per_search, created_at, "
+            + "created_by, revision, version) VALUES (?, ?, 'Tea shops', 'Tea', true, 5, now(), 'q48e1', 1, 0)",
+            direction, owner);
+        String key = java.util.HexFormat.of().formatHex(java.security.SecureRandom.getSeed(24));
+        execute("INSERT INTO qb_prospect (prospect_id, owner, direction_id, domain, website_url, status, found_at, "
+            + "trial_key, sent_at, revision, version) VALUES (?, ?, ?, ?, ?, 'SENT', now(), ?, now(), 1, 0)",
+            java.util.UUID.randomUUID().toString(), owner, direction, domain, "https://" + domain, key);
+        return key;
+    }
+
     private List<Map<String, Object>> assignment(String userId) {
         return query("SELECT operator_id, assigned_by, reason FROM qb_sponsor_operator WHERE user_id = ?", userId);
     }
@@ -118,5 +145,45 @@ class OperatorLanguagesIT extends PlayItSupport {
         String late = user(unique("s-q59c-late"));
         applyIn(late, "en");
         assertThat(assignment(late)).isEmpty();
+    }
+
+    /**
+     * Q48e-1: a first application that names the trial an operator mailed goes to that operator, review and all: the
+     * operator that prospected the business looks after it from the start, not the one of the language. A trial of
+     * headquarters', or one another sponsor claimed, does not count.
+     */
+    @Test
+    void aFirstApplicationByAnOperatorsTrialIsThatOperatorsReviewFromTheStart() {
+        String scout = newOperator(unique("Scout"), null);
+        String key = sentTrial(scout, unique("tea") + ".example");
+        String sponsor = user(unique("s-q48e1-trial"));
+        Map<String, Object> applied = applyWithTrial(sponsor, key);
+        assertThat(assignment(sponsor)).singleElement().satisfies(row -> {
+            assertThat(row).containsEntry("operator_id", scout);
+            assertThat((String) row.get("assigned_by")).startsWith("prospect:");
+        });
+        assertThat(query("SELECT converted_user_id FROM qb_prospect WHERE trial_key = ?", key).getFirst())
+            .containsEntry("converted_user_id", sponsor);
+        // Reviewed by a person (the tests' setting): the request is the scout's.
+        assertThat(applied).as("the application").containsEntry("reviewStatus", "PENDING");
+        assertThat(query("SELECT scope_name, scope_value FROM sys_approval_request_version"
+            + " WHERE request_id = ?::uuid", String.valueOf(applied.get("approvalRequestId"))).getFirst())
+            .containsEntry("scope_name", QbOperators.SCOPE).containsEntry("scope_value", scout);
+        // The claim the console makes afterwards changes nothing.
+        assertThat(run("QB_PROSPECT_CLAIM", sponsor(sponsor), body("trialKey", key)))
+            .containsEntry("outcome", "again");
+
+        // The same trial for another sponsor, or one of headquarters': by the language, as before (the active
+        // operator of Japanese when there is one, else headquarters').
+        List<Object> japanese = query("SELECT operator_id FROM qb_operator WHERE language = 'ja' AND status = 'ACTIVE'")
+            .stream().map(row -> row.get("operator_id")).toList();
+        String other = user(unique("s-q48e1-other"));
+        applyWithTrial(other, key);
+        String direct = user(unique("s-q48e1-direct"));
+        applyWithTrial(direct, sentTrial("direct", unique("hq") + ".example"));
+        for (String byLanguage : List.of(other, direct)) {
+            assertThat(assignment(byLanguage)).extracting(row -> row.get("operator_id"))
+                .containsExactlyElementsOf(japanese);
+        }
     }
 }

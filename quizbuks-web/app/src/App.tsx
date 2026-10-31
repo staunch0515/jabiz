@@ -61,6 +61,7 @@ import { KudosMethodPage } from './wallet/KudosOverview'
 import { BankPage } from './wallet/BankPage'
 import { rememberShareNext } from './share/share'
 import { SharePage } from './share/SharePage'
+import { SponsorPage, sponsorPageOf } from './share/SponsorPage'
 import { STAFF_PATH } from './staff/api'
 import { SCAN_PATH, ScanPage } from './scan/ScanPage'
 import { StaffDeskPage } from './staff/StaffDeskPage'
@@ -279,7 +280,8 @@ function PublicPage({ path, signedIn, children }: { path: string; signedIn: bool
         <div className="mx-auto flex max-w-md items-center gap-2 px-4 py-2">
           <Wordmark name={t('brand')} compact className="text-primary mr-auto" />
           <ThemeToggle />
-          <Link to={signedIn ? HOME : itemPage(path) ? `/login?next=${encodeURIComponent(path)}` : '/login'}
+          <Link to={signedIn ? HOME : itemPage(path) || sponsorPageOf(path)
+            ? `/login?next=${encodeURIComponent(path)}` : '/login'}
             className="text-primary text-sm underline" data-testid="public-back">
             {signedIn ? tApp('public.back') : tApp('public.signIn')}
           </Link>
@@ -343,6 +345,11 @@ function Routes() {
   }
   if (!ready) return <PageState kind="loading" />
   if (isPublic(path)) return <PublicPage path={path} signedIn={signedIn} />
+  // A sponsor's page (Q60a): anybody's, signed in or not, from the public templates.
+  const sponsorHandle = sponsorPageOf(path)
+  if (sponsorHandle) {
+    return <PublicPage path={path} signedIn={signedIn}><SponsorPage key={sponsorHandle} handle={sponsorHandle} /></PublicPage>
+  }
   // A publication's share link before signing in (Q15): its public page with the address to sign in by.
   const shared = itemPage(path)
   if (!signedIn && shared?.page === 'p') {
