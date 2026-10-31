@@ -33,6 +33,10 @@ export function problems(id, profile, exists = (path) => existsSync(join(BRANDS_
   const text = (value, max) => typeof value === 'string' && value.trim() !== '' && value.length <= max
   if (!text(profile.name, 30)) found.push('name: a text of 1 to 30 characters')
   if (profile.shortName !== undefined && !text(profile.shortName, 12)) found.push('shortName: a text of 1 to 12 characters')
+  // The name a text in each language calls the product (Q61); `name` stays the one name where only one fits.
+  for (const language of LANGUAGES) {
+    if (!text(profile.names?.[language], 30)) found.push(`names.${language}: a text of 1 to 30 characters`)
+  }
   for (const language of LANGUAGES) {
     if (!text(profile.description?.[language], 120)) found.push(`description.${language}: a text of 1 to 120 characters`)
   }
@@ -65,6 +69,7 @@ export function loadBrand(id = chosenBrand()) {
     id,
     dir,
     name: profile.name,
+    names: profile.names,
     shortName: profile.shortName ?? profile.name,
     description: profile.description,
     themeColor: profile.themeColor,
@@ -76,6 +81,6 @@ export function loadBrand(id = chosenBrand()) {
 
 /** The part of the profile a page may show (written into the SPAs' code). */
 export function publicBrand(brand) {
-  const { name, shortName, description, supportEmail, siteUrl } = brand
-  return { name, shortName, description, supportEmail, siteUrl }
+  const { name, names, shortName, description, supportEmail, siteUrl } = brand
+  return { name, names, shortName, description, supportEmail, siteUrl }
 }

@@ -1,15 +1,15 @@
-import { BRAND_NAME } from './brand'
+import { BRAND_NAMES } from './brand'
 
 /**
  * Texts of the finance pages (Q9c), in every platform language, merged into the extension's messages under
  * `finance` (and the menu's entries under `menu`). Kept apart from messages.ts only for size.
  */
 export const financeMenu = {
-  en: { finance: `${BRAND_NAME} finance`, financeOverview: 'Overview', transfers: 'Transfers', topUps: 'Top-ups',
+  en: { finance: `${BRAND_NAMES.en} finance`, financeOverview: 'Overview', transfers: 'Transfers', topUps: 'Top-ups',
     reconciliation: 'Reconciliation', reports: 'Monthly reports', journal: 'Journal export', investorMetrics: 'Investor metrics' },
-  zh: { finance: `${BRAND_NAME} 财务`, financeOverview: '总览', transfers: '转账', topUps: '充值', reconciliation: '核对',
+  zh: { finance: `${BRAND_NAMES.zh}财务`, financeOverview: '总览', transfers: '转账', topUps: '充值', reconciliation: '核对',
     reports: '月报', journal: '分录导出', investorMetrics: '投资人指标' },
-  ja: { finance: `${BRAND_NAME} 財務`, financeOverview: '概要', transfers: '送金', topUps: 'チャージ', reconciliation: '照合',
+  ja: { finance: `${BRAND_NAMES.ja}財務`, financeOverview: '概要', transfers: '送金', topUps: 'チャージ', reconciliation: '照合',
     reports: '月次レポート', journal: '仕訳の出力', investorMetrics: '投資家向け指標' },
 }
 
@@ -462,7 +462,7 @@ export const financeMessages = {
       periodValue: '{{from}} 至 {{to}}，UTC 月份（不含结束）',
       badPeriod: '请选择 1 到 36 个月的期间，起始月不得晚于结束月。',
       months: '按月',
-      monthsHint: '商户在审核通过时计为新增，其问卷被作答时计为活跃，本月与三个月前都活跃时计为留存。答题人在建立资料时计为新增（商户自己的资料不计），开始作答时计为活跃。完成与通过按提交时间计，奖品按获得、申领与领取的时间计；充值、奖励与佣金按支付时间计（仅 Kudos）。',
+      monthsHint: '商户在审核通过时计为新增，其问卷被作答时计为活跃，本月与三个月前都活跃时计为留存。答题人在建立资料时计为新增（商户自己的资料不计），开始作答时计为活跃。完成与通过按提交时间计，奖品按获得、申领与领取的时间计；充值、奖励与佣金按支付时间计（仅学分）。',
       monthsTable: '按月数字',
       sponsors: '期间内的商户',
       sponsorsHint: '整个期间内有答题、奖品或邀请的每个商户，答题最多的在前。',
@@ -488,7 +488,7 @@ export const financeMessages = {
       invitationsAnswered: '应答邀请',
       topUps: '充值笔数',
       topUpAmount: '充值金额',
-      rewardsPaid: '已付 Kudos 奖励',
+      rewardsPaid: '已付学分奖励',
       commission: '佣金',
       company: '商户',
       total: '合计',
@@ -623,7 +623,7 @@ export const financeMessages = {
       TOPUP: 'チャージの入金',
       BANK_TOPUP: '銀行振込チャージの入金',
       MANUAL_TOPUP: '手動付与：システム外の入金',
-      GRANT: '手動付与：Kudos の付与',
+      GRANT: '手動付与：クドスの付与',
       REFUND: '返金による取り戻し',
       DISPUTE: '異議申し立ての敗訴による取り戻し',
       STRIPE_FEE: 'Stripe の手数料',
@@ -763,7 +763,7 @@ export const financeMessages = {
       periodValue: '{{from}} から {{to}}、UTC の月（終了は含まず）',
       badPeriod: '1 か月から 36 か月の期間を選び、開始月は終了月より後にしないでください。',
       months: '月別',
-      monthsHint: '加盟店は承認時に新規、そのクイズが回答された月に活動中、当月と 3 か月前の両方で活動中なら継続と数えます。回答者はプロフィール作成時に新規（加盟店自身のプロフィールは数えません）、回答開始時に活動中です。完了と合格は提出時、景品は獲得・申請・受取の時点、チャージ・報酬・手数料は支払時点（Kudos のみ）で数えます。',
+      monthsHint: '加盟店は承認時に新規、そのクイズが回答された月に活動中、当月と 3 か月前の両方で活動中なら継続と数えます。回答者はプロフィール作成時に新規（加盟店自身のプロフィールは数えません）、回答開始時に活動中です。完了と合格は提出時、景品は獲得・申請・受取の時点、チャージ・報酬・手数料は支払時点（クドスのみ）で数えます。',
       monthsTable: '月別の数字',
       sponsors: '期間内の加盟店',
       sponsorsHint: '期間全体で回答、景品または招待のあった加盟店すべて、回答の多い順。',
@@ -789,7 +789,7 @@ export const financeMessages = {
       invitationsAnswered: '回答された招待',
       topUps: 'チャージ件数',
       topUpAmount: 'チャージ金額',
-      rewardsPaid: '支払済 Kudos 報酬',
+      rewardsPaid: '支払済クドス報酬',
       commission: '手数料',
       company: '加盟店',
       total: '合計',

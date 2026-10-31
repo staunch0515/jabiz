@@ -73,7 +73,7 @@ const en = {
       newTopUp: 'New top-up',
     },
     manual: {
-      kinds: { PAID_OUTSIDE: 'Paid outside the system', GRANT: `Granted by ${BRAND.name}` },
+      kinds: { PAID_OUTSIDE: 'Paid outside the system', GRANT: `Granted by ${BRAND.names.en}` },
     },
     bank: {
       method: 'How do you pay?',
@@ -125,7 +125,7 @@ const zh: typeof en = {
   wallet: {
     nav: '钱包',
     title: '钱包',
-    intro: '您的 Kudos 用于支付已发布 Quiz 的奖励。请充值以保持发布进行。',
+    intro: '您的学分用于支付已发布 Quiz 的奖励。请充值以保持发布进行。',
     topUp: '充值',
     summary: '余额',
     available: '可用于奖励',
@@ -153,12 +153,12 @@ const zh: typeof en = {
     dialog: {
       title: '为钱包充值',
       hint: '在 Stripe 的安全页面上支付。Stripe 确认付款后才计入钱包。',
-      amount: '金额（Kudos）',
-      amountHint: 'Kudos 的整数。',
+      amount: '金额（学分）',
+      amountHint: '学分的整数。',
       range: '每笔充值：{{min}} 至 {{max}}。',
       newSponsor: '新商家在 {{until}} 之前累计最多可充值 {{maxTotal}}，还可充值 {{remaining}}。',
       newSponsorFirst: '新商家在最初一段时间内累计最多可充值 {{maxTotal}}，还可充值 {{remaining}}。',
-      invalid: '请输入大于 0 的 Kudos 整数。',
+      invalid: '请输入大于 0 的学分整数。',
       cancel: '取消',
       submit: '继续支付',
     },
@@ -187,7 +187,7 @@ const zh: typeof en = {
       newTopUp: '重新充值',
     },
     manual: {
-      kinds: { PAID_OUTSIDE: '系统外收款', GRANT: `${BRAND.name} 赠送` },
+      kinds: { PAID_OUTSIDE: '系统外收款', GRANT: `${BRAND.names.zh}赠送` },
     },
     bank: {
       method: '支付方式',
@@ -239,7 +239,7 @@ const ja: typeof en = {
   wallet: {
     nav: 'ウォレット',
     title: 'ウォレット',
-    intro: 'Kudos は公開中のクイズの報酬に使われます。チャージして公開を続けましょう。',
+    intro: 'クドスは公開中のクイズの報酬に使われます。チャージして公開を続けましょう。',
     topUp: 'チャージ',
     summary: '残高',
     available: '報酬に使える額',
@@ -267,12 +267,12 @@ const ja: typeof en = {
     dialog: {
       title: 'ウォレットにチャージ',
       hint: 'Stripe の安全なページでお支払いください。Stripe が支払いを確認してからウォレットに反映されます。',
-      amount: '金額（Kudos）',
-      amountHint: 'Kudos の整数で入力してください。',
+      amount: '金額（クドス）',
+      amountHint: 'クドスの整数で入力してください。',
       range: '1 回のチャージ：{{min}}～{{max}}。',
       newSponsor: '新規スポンサーは {{until}} まで累計 {{maxTotal}} までチャージできます。残り：{{remaining}}。',
       newSponsorFirst: '新規スポンサーは最初の期間中、累計 {{maxTotal}} までチャージできます。残り：{{remaining}}。',
-      invalid: '0 より大きい Kudos の整数を入力してください。',
+      invalid: '0 より大きいクドスの整数を入力してください。',
       cancel: 'キャンセル',
       submit: '支払いへ進む',
     },
@@ -301,7 +301,7 @@ const ja: typeof en = {
       newTopUp: '新しくチャージ',
     },
     manual: {
-      kinds: { PAID_OUTSIDE: 'システム外の入金', GRANT: `${BRAND.name} からの付与` },
+      kinds: { PAID_OUTSIDE: 'システム外の入金', GRANT: `${BRAND.names.ja}からの付与` },
     },
     bank: {
       method: 'お支払い方法',

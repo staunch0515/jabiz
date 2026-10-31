@@ -11,6 +11,7 @@ import { BRAND } from './brand'
 
 const COMPLETE = {
   name: 'Quizzle',
+  names: { en: 'Quizzle', zh: '答题乐', ja: 'クイズル' },
   description: { en: 'Quizzes', zh: '答题', ja: 'クイズ' },
   themeColor: '#123456',
   backgroundColor: '#ffffff',
@@ -25,9 +26,12 @@ describe('the brand profiles', () => {
 
   it('says what a profile lacks', () => {
     expect(problems('x', COMPLETE, () => true)).toEqual([])
-    expect(problems('x', { ...COMPLETE, name: ' ', description: { en: 'Quizzes' }, themeColor: '#ABCDEF',
-      supportEmail: 'help', siteUrl: 'http://quizzle.example/path' }, (file) => file !== 'mark.svg')).toEqual([
+    expect(problems('x', { ...COMPLETE, name: ' ', names: { en: 'Quizzle' }, description: { en: 'Quizzes' },
+      themeColor: '#ABCDEF', supportEmail: 'help', siteUrl: 'http://quizzle.example/path' },
+    (file) => file !== 'mark.svg')).toEqual([
       'name: a text of 1 to 30 characters',
+      'names.zh: a text of 1 to 30 characters',
+      'names.ja: a text of 1 to 30 characters',
       'description.zh: a text of 1 to 120 characters',
       'description.ja: a text of 1 to 120 characters',
       'themeColor: a colour #rrggbb in lower case',
@@ -46,8 +50,8 @@ describe('the brand profiles', () => {
     expect(chosenBrand({})).toBe('quizbuks')
     expect(chosenBrand({ QB_BRAND: ' sample ' })).toBe('sample')
     const brand = loadBrand(chosenBrand())
-    expect(BRAND).toEqual({ name: brand.name, shortName: brand.shortName, description: brand.description,
-      supportEmail: brand.supportEmail, siteUrl: brand.siteUrl })
+    expect(BRAND).toEqual({ name: brand.name, names: brand.names, shortName: brand.shortName,
+      description: brand.description, supportEmail: brand.supportEmail, siteUrl: brand.siteUrl })
   })
 })
 
@@ -75,6 +79,9 @@ function code(text: string): string {
   return text.replace(/\/\*[\s\S]*?\*\//g, '').split('\n').filter((line) => !line.trim().startsWith('//')).join('\n')
 }
 
+/** QuizBuks's names in Chinese and Japanese, which only its profile says. */
+const LOCAL_NAMES = [loadBrand('quizbuks').names.zh, loadBrand('quizbuks').names.ja]
+
 describe('the SPA names no brand of its own', () => {
   const root = join(import.meta.dirname, '..', '..')
   const files = [...sources(join(root, 'src')), join(root, 'index.html')]
@@ -83,5 +90,7 @@ describe('the SPA names no brand of its own', () => {
     let text = code(readFileSync(join(root, file), 'utf8'))
     for (const identifier of IDENTIFIERS) text = text.replace(identifier, '')
     expect(text.match(/.*quizbuks.*/gi) ?? []).toEqual([])
+    // Nor its name in another language (Q61): texts take BRAND.names.
+    expect(LOCAL_NAMES.filter((name) => text.includes(name))).toEqual([])
   })
 })

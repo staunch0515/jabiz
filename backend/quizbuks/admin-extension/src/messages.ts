@@ -12,12 +12,12 @@ import { overviewMenu, publicationsMessages, quizMessages, quizzesMessages } fro
 import { operatorMenu, operatorMessages } from './operator-messages'
 import { prospectMenu, prospectMessages } from './prospect-messages'
 import { settlementMenu, settlementMessages } from './settlement-messages'
-import { BRAND_NAME } from './brand'
+import { BRAND_NAMES } from './brand'
 
 /** Texts of the QuizBuks admin extension, in every platform language (namespace EXTENSION_NAMESPACE, `app`). */
 export const messages = {
   en: {
-    menu: { group: BRAND_NAME, reviews: 'Reviews', users: 'Users', ...legalMenu.en, ...aiMenu.en,
+    menu: { group: BRAND_NAMES.en, reviews: 'Reviews', users: 'Users', ...legalMenu.en, ...aiMenu.en,
       ...financeMenu.en, ...broadcastsMenu.en, ...attemptsMenu.en, ...bankMenu.en, ...manualMenu.en, ...rewardMenu.en, ...settingsMenu.en, ...withdrawalMenu.en,
       ...overviewMenu.en, ...operatorMenu.en, ...prospectMenu.en, ...settlementMenu.en },
     operator: operatorMessages.en,
@@ -259,7 +259,7 @@ export const messages = {
     },
   },
   zh: {
-    menu: { group: BRAND_NAME, reviews: '审核', users: '用户', ...legalMenu.zh, ...aiMenu.zh,
+    menu: { group: BRAND_NAMES.zh, reviews: '审核', users: '用户', ...legalMenu.zh, ...aiMenu.zh,
       ...financeMenu.zh, ...broadcastsMenu.zh, ...attemptsMenu.zh, ...bankMenu.zh, ...manualMenu.zh, ...rewardMenu.zh, ...settingsMenu.zh, ...withdrawalMenu.zh,
       ...overviewMenu.zh, ...operatorMenu.zh, ...prospectMenu.zh, ...settlementMenu.zh },
     operator: operatorMessages.zh,
@@ -501,7 +501,7 @@ export const messages = {
     },
   },
   ja: {
-    menu: { group: BRAND_NAME, reviews: '審査', users: 'ユーザー', ...legalMenu.ja, ...aiMenu.ja,
+    menu: { group: BRAND_NAMES.ja, reviews: '審査', users: 'ユーザー', ...legalMenu.ja, ...aiMenu.ja,
       ...financeMenu.ja, ...broadcastsMenu.ja, ...attemptsMenu.ja, ...bankMenu.ja, ...manualMenu.ja, ...rewardMenu.ja, ...settingsMenu.ja, ...withdrawalMenu.ja,
       ...overviewMenu.ja, ...operatorMenu.ja, ...prospectMenu.ja, ...settlementMenu.ja },
     operator: operatorMessages.ja,

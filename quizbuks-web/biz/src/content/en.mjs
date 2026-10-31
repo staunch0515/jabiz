@@ -11,17 +11,17 @@ export const en = {
   cta: { taker: 'Start answering', sponsor: 'Register your business', takerLong: 'Start answering — it’s free',
     sponsorLong: 'Register your business' },
   meta: {
-    home: { title: `${BRAND.name} — attention you can measure`, description: `${BRAND.name} turns your ad budget into quizzes people actually learn from. Takers answer on their phone and win prizes or Kudos; merchants reach only people who understood their product. Free during the launch phase.` },
-    merchants: { title: `${BRAND.name} for merchants`, description: 'Publish a quiz or a survey about your shop or product, reward the people who get it right, and see every answer by day and by question. Offline prizes are free.' },
-    takers: { title: `${BRAND.name} for takers`, description: 'Two-minute quizzes about shops, products and places. Pass, win a prize at the counter or Kudos in your wallet.' },
-    surveys: { title: `Surveys with ${BRAND.name}`, description: 'Questionnaires people finish: a reward for every complete answer set, one response per person, results by day, invitation-only audiences.' },
-    pricing: { title: `${BRAND.name} pricing`, description: 'Quizzes and surveys with offline prizes are free. Kudos and cash rewards, featured placement, extra invitations and plans are priced for the launch phase.' },
-    contact: { title: `Contact ${BRAND.name}`, description: 'Write to us by e-mail, register your business, or open the help page of the app.' },
+    home: { title: `${BRAND.names.en} — attention you can measure`, description: `${BRAND.names.en} turns your ad budget into quizzes people actually learn from. Takers answer on their phone and win prizes or Kudos; merchants reach only people who understood their product. Free during the launch phase.` },
+    merchants: { title: `${BRAND.names.en} for merchants`, description: 'Publish a quiz or a survey about your shop or product, reward the people who get it right, and see every answer by day and by question. Offline prizes are free.' },
+    takers: { title: `${BRAND.names.en} for takers`, description: 'Two-minute quizzes about shops, products and places. Pass, win a prize at the counter or Kudos in your wallet.' },
+    surveys: { title: `Surveys with ${BRAND.names.en}`, description: 'Questionnaires people finish: a reward for every complete answer set, one response per person, results by day, invitation-only audiences.' },
+    pricing: { title: `${BRAND.names.en} pricing`, description: 'Quizzes and surveys with offline prizes are free. Kudos and cash rewards, featured placement, extra invitations and plans are priced for the launch phase.' },
+    contact: { title: `Contact ${BRAND.names.en}`, description: 'Write to us by e-mail, register your business, or open the help page of the app.' },
   },
   home: {
     eyebrow: 'Quizzes, surveys and rewards for local business',
     title: 'Attention you can measure.',
-    lead: `${BRAND.name} turns an ad budget into a two-minute quiz about your shop, your product or your town. People answer on their phone; the ones who got it right collect a prize at your counter. You pay for understanding, not for impressions.`,
+    lead: `${BRAND.names.en} turns an ad budget into a two-minute quiz about your shop, your product or your town. People answer on their phone; the ones who got it right collect a prize at your counter. You pay for understanding, not for impressions.`,
     heroNote: 'Free during the launch phase for merchants who reward with prizes. No app to install, no card required.',
     mock: { chip: 'Question 2 of 5', question: 'Which roast does Kissa Kudos pour by default?', a: 'Light roast', b: 'Medium roast', c: 'Dark roast', reward: 'Pass 4 of 5 → a free coffee', statLabel: 'Pass rate this week', statValue: '78%' },
     value: {
@@ -60,35 +60,35 @@ export const en = {
     surveys: {
       eyebrow: 'Surveys',
       title: 'Questionnaires people actually finish',
-      text: `A survey on ${BRAND.name} is a quiz without a right answer: every complete answer set earns the reward. You get honest responses from the people you want, with the same analytics by question.`,
+      text: `A survey on ${BRAND.names.en} is a quiz without a right answer: every complete answer set earns the reward. You get honest responses from the people you want, with the same analytics by question.`,
       bullets: ['Single or multiple choice per question, as many questions as you need', 'One response per person, rewarded only when the whole set is answered', 'Invitation-only audiences for your own customers', 'Completions and rewards by day, exportable the moment they arrive'],
       more: 'More about surveys',
       mock: [{ label: 'Taste', pct: 64 }, { label: 'Price', pct: 41 }, { label: 'Location', pct: 58 }, { label: 'Service', pct: 83 }],
     },
     tryIt: {
       eyebrow: 'Try it now',
-      title: `Answer ${BRAND.name}’s own quiz`,
-      text: `${BRAND.name} is the first merchant on ${BRAND.name}. Scan a code or press a button and see what your customers would see, in the language of your choice.`,
+      title: `Answer ${BRAND.names.en}’s own quiz`,
+      text: `${BRAND.names.en} is the first merchant on ${BRAND.names.en}. Scan a code or press a button and see what your customers would see, in the language of your choice.`,
       buttons: { en: 'Try the quiz in English', zh: '用中文试答', ja: '日本語で試す' },
       comingSoon: 'Coming soon',
       qrPending: 'QR code coming soon',
-      qrAlt: `QR code of ${BRAND.name}’s quiz`,
+      qrAlt: `QR code of ${BRAND.names.en}’s quiz`,
       note: 'The quiz opens the takers’ app. On a computer it opens in a phone-sized window.',
     },
     pricing: {
       title: 'Free while we launch',
-      text: `Merchants who reward with prizes at their own counter use ${BRAND.name} without charge during the launch phase. Rewards paid through the platform, featured placement and larger plans are priced from day one and listed openly.`,
+      text: `Merchants who reward with prizes at their own counter use ${BRAND.names.en} without charge during the launch phase. Rewards paid through the platform, featured placement and larger plans are priced from day one and listed openly.`,
       cta: 'See pricing',
     },
     faq: {
       title: 'Questions, answered',
       items: [
-        { q: 'Do my customers need to install an app?', a: `No. ${BRAND.name} runs in the browser on any phone. Those who want it can add it to their home screen like an app.` },
-        { q: 'What does a prize cost me?', a: `Whatever you choose to hand over: a coffee, a discount, a sample. ${BRAND.name} takes nothing on offline prizes during the launch phase.` },
+        { q: 'Do my customers need to install an app?', a: `No. ${BRAND.names.en} runs in the browser on any phone. Those who want it can add it to their home screen like an app.` },
+        { q: 'What does a prize cost me?', a: `Whatever you choose to hand over: a coffee, a discount, a sample. ${BRAND.names.en} takes nothing on offline prizes during the launch phase.` },
         { q: 'How do you stop people from guessing?', a: 'You set the pass score, the time limit and how many may win. Each person answers a quiz once, and the result is tied to their account.' },
         { q: 'Can I ask only my own customers?', a: 'Yes. An invitation-only quiz or survey goes to a list of e-mail addresses; each receives a one-click link and nobody else can answer.' },
         { q: 'Which languages are supported?', a: 'The app, the merchant console and this site are available in English, Chinese and Japanese. Your quiz is shown in the language you wrote it in.' },
-        { q: 'Who sees the answers?', a: `You see attempts, scores and completions for your own quizzes and surveys, never an individual’s answers. Takers’ names and addresses stay with ${BRAND.name}.` },
+        { q: 'Who sees the answers?', a: `You see attempts, scores and completions for your own quizzes and surveys, never an individual’s answers. Takers’ names and addresses stay with ${BRAND.names.en}.` },
       ],
     },
   },
@@ -116,7 +116,7 @@ export const en = {
         cards: [
           { icon: 'chart', title: 'By day and by quiz', text: 'Attempts, completions, pass rate, prizes won and collected.' },
           { icon: 'clipboard', title: 'By question', text: 'Which option people chose; what they misunderstood about your offer.' },
-          { icon: 'shield', title: 'Your data, your rules', text: `Exports belong to you. Takers’ personal data is held by ${BRAND.name} under its privacy policy.` },
+          { icon: 'shield', title: 'Your data, your rules', text: `Exports belong to you. Takers’ personal data is held by ${BRAND.names.en} under its privacy policy.` },
         ] },
     ],
     closing: { title: 'Open your merchant console', text: 'Registration takes a minute, approval usually a few days. Offline prizes are free in the launch phase.' },
@@ -137,7 +137,7 @@ export const en = {
         bullets: ['Prizes are collected at the shop, by scanning its code', 'Kudos go to your wallet and can be paid out', 'Your history keeps every quiz and prize', 'Invitations by e-mail sign you in with one click'] },
       { title: 'Your answers stay yours', text: 'Merchants see how many answered and how well, not who you are. Your e-mail address is used to sign you in and to send the mail you asked for; every mail has an unsubscribe link.',
         cards: [
-          { icon: 'shield', title: 'No profile for sale', text: `${BRAND.name} does not sell or share your profile with merchants.` },
+          { icon: 'shield', title: 'No profile for sale', text: `${BRAND.names.en} does not sell or share your profile with merchants.` },
           { icon: 'mail', title: 'Mail you control', text: 'Notifications are optional and each kind can be turned off.' },
           { icon: 'phone', title: 'No app store needed', text: 'Runs in the browser; add it to your home screen if you like.' },
         ] },
@@ -147,7 +147,7 @@ export const en = {
   surveys: {
     eyebrow: 'Surveys',
     title: 'Questionnaires people finish, answered by the people you want',
-    lead: `A ${BRAND.name} survey rewards every complete answer set, so response rates are high and answers thoughtful. Ask your customers what they think; see the results by question as they arrive.`,
+    lead: `A ${BRAND.names.en} survey rewards every complete answer set, so response rates are high and answers thoughtful. Ask your customers what they think; see the results by question as they arrive.`,
     sections: [
       { title: 'Ask anything', text: 'Single or multiple choice for every question, as many questions as you need. The set can only be submitted once every question is answered, and the reward is for completing it.',
         cards: [
@@ -165,7 +165,7 @@ export const en = {
   pricing: {
     eyebrow: 'Pricing',
     title: 'Free for prizes. Priced openly for everything else.',
-    lead: `During the launch phase a merchant who rewards with prizes at their own counter pays nothing: ${BRAND.name} handles no money for those quizzes and the cost to us is negligible. Everything the platform does with money, reach or scale is priced below. All prices are launch-phase estimates in Japanese yen, tax excluded, and may change with notice.`,
+    lead: `During the launch phase a merchant who rewards with prizes at their own counter pays nothing: ${BRAND.names.en} handles no money for those quizzes and the cost to us is negligible. Everything the platform does with money, reach or scale is priced below. All prices are launch-phase estimates in Japanese yen, tax excluded, and may change with notice.`,
     plansTitle: 'Plans',
     currencyNote: 'All prices in Japanese yen, tax excluded. Plans marked “planned” are not sold yet: ask us.',
     plans: [
@@ -187,7 +187,7 @@ export const en = {
       text: 'Charged only when the platform moves money, mails for you, or promotes you. Rows marked “planned” are not billed yet; they apply when enabled, with notice.',
       columns: { item: 'Service', price: 'Price', note: 'Notes' },
       rows: [
-        { item: 'Offline prizes (you hand over the prize)', price: 'Free', note: `Launch phase. ${BRAND.name} handles no money and takes nothing.` },
+        { item: 'Offline prizes (you hand over the prize)', price: 'Free', note: `Launch phase. ${BRAND.names.en} handles no money and takes nothing.` },
         { item: 'Kudos rewards paid through the platform', price: '20% of rewards paid', note: 'Planned. You prepay the reward budget; the commission is taken when a reward is paid to a taker.' },
         { item: 'Cash rewards (you hand over the cash at the counter)', price: '5% of rewards handed over', note: 'Planned. The platform handles no cash; the fee is billed monthly from the rewards you record as collected.' },
         { item: 'Featured placement in the takers’ feed', price: '¥30,000 / week / region', note: 'Planned. Your quiz at the top of the feed for the region.' },
@@ -201,7 +201,7 @@ export const en = {
       title: 'Pricing questions',
       items: [
         { q: 'Is “free” really free?', a: 'Yes, for quizzes and surveys rewarded with prizes you hand over yourself. No card, no limit on the number of quizzes, in the launch phase.' },
-        { q: 'When do fees apply?', a: `When ${BRAND.name} pays rewards for you (Kudos or cash), promotes your quiz, or sends mail beyond your plan. Those are listed above and shown in the console before you confirm.` },
+        { q: 'When do fees apply?', a: `When ${BRAND.names.en} pays rewards for you (Kudos or cash), promotes your quiz, or sends mail beyond your plan. Those are listed above and shown in the console before you confirm.` },
         { q: 'How do I pay for Kudos rewards?', a: 'You top up a prepaid balance by card or bank transfer; rewards and the commission are deducted as they are paid. Unused balance stays yours.' },
         { q: 'Can prices change?', a: 'These are launch-phase estimates. Changes are announced to registered merchants in advance and never apply to quizzes already running.' },
       ],
@@ -215,7 +215,7 @@ export const en = {
     email: { title: 'E-mail', text: 'For merchants, partners and press. We usually answer within a few business days.', address: BRAND.supportEmail },
     merchants: { title: 'Become a merchant', text: 'Register your business; approval usually takes a few days.', cta: 'Register your business' },
     takers: { title: 'Help for takers', text: 'Questions about a quiz or a prize? The app’s help page explains, and the merchant you played with can see your prize.', cta: 'Open the help page' },
-    note: `${BRAND.name} is in its launch phase. Company details and the legal notices required by Japanese law are published in the app’s legal pages.`,
+    note: `${BRAND.names.en} is in its launch phase. Company details and the legal notices required by Japanese law are published in the app’s legal pages.`,
   },
   footer: {
     tagline: 'Quizzes, surveys and rewards for local business, in English, Chinese and Japanese.',

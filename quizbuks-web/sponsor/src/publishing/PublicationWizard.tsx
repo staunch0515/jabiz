@@ -31,7 +31,7 @@ import { readVersions, searchQuizzes } from '../content/api'
 import { QUIZZES_QUERY, versionsQuery } from '../content/paths'
 import { SPONSOR } from '../messages'
 import { ShownAt, type ShownField } from '../content/ShownAt'
-import { KUDOS } from '../qb/kudos'
+import { kudosName } from '../qb/kudos'
 import { noticeConsentProblem } from '../qb/ConsentGate'
 import { fieldProblem, problemText } from '../qb/problems'
 import { navigate } from '../qb/router'
@@ -497,7 +497,7 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
           <Field id={`${id}-survey-reward`} label={t('publishing.field.surveyReward')}
             problem={problemOf(`tiers[1].reward`) ?? problemOf('tiers')} hint={t('publishing.field.surveyRewardHint')}>
             {(aria) => (
-              <MoneyInput {...aria} value={surveyReward(form)} scale={0} allowNegative={false} unit={KUDOS}
+              <MoneyInput {...aria} value={surveyReward(form)} scale={0} allowNegative={false} unit={kudosName()}
                 autoComplete="off" disabled={locked || fullScore === null} data-testid="publication-survey-reward"
                 onChange={(value) => fullScore !== null && setForm((f) => asSurvey(f, fullScore, value))} />
             )}
@@ -521,7 +521,7 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
         <Field id={`${id}-budget`} label={t('publishing.field.budgetCap')} problem={problemOf('budgetCap')}
           hint={t('publishing.field.budgetHint')}>
           {(aria) => (
-            <MoneyInput {...aria} value={form.budgetCap} scale={0} allowNegative={false} unit={KUDOS}
+            <MoneyInput {...aria} value={form.budgetCap} scale={0} allowNegative={false} unit={kudosName()}
               autoComplete="off" disabled={locked} data-testid="publication-budget"
               onChange={(value) => set('budgetCap', value)} />
           )}

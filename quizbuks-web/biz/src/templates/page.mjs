@@ -52,9 +52,9 @@ export function art(name, className = 'art') {
   return `<svg class="${className}" viewBox="0 0 240 180" aria-hidden="true">${ART[name] ?? ''}</svg>`
 }
 
-/** The wordmark: the brand's mark, then its name. */
-export function wordmark(href) {
-  return `<a class="brand" href="${href}">${brandMark('coin')}<span>${esc(BRAND.name)}</span></a>`
+/** The wordmark: the brand's mark, then its name in the page's language (Q61). */
+export function wordmark(href, language) {
+  return `<a class="brand" href="${href}">${brandMark('coin')}<span>${esc(BRAND.names[language])}</span></a>`
 }
 
 export function icon(name, className = 'icon') {
@@ -75,7 +75,7 @@ function header({ language, page, content, base }) {
     : `<li><a href="${pagePath(lang, page, base)}" lang="${LOCALES[lang]}" hreflang="${LOCALES[lang]}" data-lang="${lang}">${LANGUAGE_NAMES[lang]}</a></li>`).join('')
   return `<header class="top">
   <div class="wrap bar">
-    ${wordmark(pagePath(language, 'home', base))}
+    ${wordmark(pagePath(language, 'home', base), language)}
     <button class="menu-toggle" type="button" data-menu-toggle aria-expanded="false" aria-controls="site-menu" aria-label="${esc(content.menu)}"><span></span><span></span><span></span></button>
     <nav id="site-menu" class="menu" data-menu aria-label="${esc(content.navLabel)}">
       <div class="links">${nav}</div>
@@ -101,7 +101,7 @@ function footer({ language, content, base }) {
   return `<footer class="foot">
   <div class="wrap grid4">
     <div>
-      ${wordmark(pagePath(language, 'home', base))}
+      ${wordmark(pagePath(language, 'home', base), language)}
       <p class="muted">${esc(f.tagline)}</p>
     </div>
     <div><h3>${esc(f.product)}</h3><ul class="plain">

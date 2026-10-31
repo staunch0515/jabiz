@@ -1,9 +1,14 @@
 {
   "name": "QuizBuks",
+  "names": {
+    "en": "QuizBuks",
+    "zh": "答题拼好价",
+    "ja": "クイズdeおトク"
+  },
   "description": {
     "en": "Answer quizzes, earn Kudos",
-    "zh": "答题，赚取 Kudos",
-    "ja": "クイズに答えて Kudos を獲得"
+    "zh": "答题，赚取学分",
+    "ja": "クイズに答えてクドスを獲得"
   },
   "themeColor": "#047857",
   "backgroundColor": "#ffffff",

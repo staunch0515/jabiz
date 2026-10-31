@@ -12,9 +12,9 @@ import { BRAND_PROFILES } from './brands.generated'
 export function adminBrand(id: string = import.meta.env.VITE_QB_BRAND?.trim() || 'quizbuks'): AdminBrand {
   const profile = BRAND_PROFILES[id]
   if (!profile) throw new Error(`QB_BRAND=${id}: no brand profile (there are: ${Object.keys(BRAND_PROFILES).join(', ')})`)
-  return { ...profile }
+  return { name: profile.names, logo: profile.logo, favicon: profile.favicon }
 }
 
-/** The brand this build is, and its name in the extension's texts. */
+/** The brand this build is, and its name in each language of the extension's texts (Q61). */
 export const BRAND = adminBrand()
-export const BRAND_NAME = BRAND.name as string
+export const BRAND_NAMES = BRAND.name as Record<'en' | 'zh' | 'ja', string>

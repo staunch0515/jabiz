@@ -1,5 +1,10 @@
 {
   "name": "Sample Quiz",
+  "names": {
+    "en": "Sample Quiz",
+    "zh": "示例答题",
+    "ja": "サンプルクイズ"
+  },
   "description": {
     "en": "A brand profile to copy for another brand",
     "zh": "新品牌可复制的品牌档案",
