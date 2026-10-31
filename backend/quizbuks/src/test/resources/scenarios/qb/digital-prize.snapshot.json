@@ -280,8 +280,8 @@
       },
       "body" : {
         "en" : "You won A month of Capitals Premium (worth 500 Kudos) for \"Shared link week\". Open the result and tap \"Show prize\" to see it; then confirm that it works.",
-        "ja" : "「Shared link week」でA month of Capitals Premium（500 Kudos 相当）を獲得しました。結果を開いて「賞品を表示」を押して確認し、使えたら確認してください。",
-        "zh" : "你在\"Shared link week\"赢得了A month of Capitals Premium（价值 500 Kudos）。打开结果，点\"显示奖品\"查看，然后确认它可用。"
+        "ja" : "「Shared link week」でA month of Capitals Premium（500 クドス相当）を獲得しました。結果を開いて「賞品を表示」を押して確認し、使えたら確認してください。",
+        "zh" : "你在\"Shared link week\"赢得了A month of Capitals Premium（价值 500 学分）。打开结果，点\"显示奖品\"查看，然后确认它可用。"
       },
       "publicationId" : "#uuid:1",
       "action" : "RESULT",
@@ -303,8 +303,8 @@
       },
       "body" : {
         "en" : "The taker confirmed the prize of 500 Kudos for \"Shared link week\" works. This prize is complete.",
-        "ja" : "回答者が「Shared link week」の賞品（500 Kudos）が使えたと確認しました。この賞品は完了です。",
-        "zh" : "答题人确认\"Shared link week\"的奖品（500 Kudos）可用。这份奖品已完成。"
+        "ja" : "回答者が「Shared link week」の賞品（500 クドス）が使えたと確認しました。この賞品は完了です。",
+        "zh" : "答题人确认\"Shared link week\"的奖品（500 学分）可用。这份奖品已完成。"
       },
       "publicationId" : "#uuid:1",
       "action" : "DIGITAL",
@@ -326,8 +326,8 @@
       },
       "body" : {
         "en" : "You won A 1000 yen gift code (worth 1,000 Kudos) for \"Code pool week\". Open the result and tap \"Show prize\" to see it; then confirm that it works.",
-        "ja" : "「Code pool week」でA 1000 yen gift code（1,000 Kudos 相当）を獲得しました。結果を開いて「賞品を表示」を押して確認し、使えたら確認してください。",
-        "zh" : "你在\"Code pool week\"赢得了A 1000 yen gift code（价值 1,000 Kudos）。打开结果，点\"显示奖品\"查看，然后确认它可用。"
+        "ja" : "「Code pool week」でA 1000 yen gift code（1,000 クドス相当）を獲得しました。結果を開いて「賞品を表示」を押して確認し、使えたら確認してください。",
+        "zh" : "你在\"Code pool week\"赢得了A 1000 yen gift code（价值 1,000 学分）。打开结果，点\"显示奖品\"查看，然后确认它可用。"
       },
       "publicationId" : "#uuid:4",
       "action" : "RESULT",
@@ -349,8 +349,8 @@
       },
       "body" : {
         "en" : "You won A 1000 yen gift code (worth 1,000 Kudos) for \"Code pool week\". Open the result and tap \"Show prize\" to see it; then confirm that it works.",
-        "ja" : "「Code pool week」でA 1000 yen gift code（1,000 Kudos 相当）を獲得しました。結果を開いて「賞品を表示」を押して確認し、使えたら確認してください。",
-        "zh" : "你在\"Code pool week\"赢得了A 1000 yen gift code（价值 1,000 Kudos）。打开结果，点\"显示奖品\"查看，然后确认它可用。"
+        "ja" : "「Code pool week」でA 1000 yen gift code（1,000 クドス相当）を獲得しました。結果を開いて「賞品を表示」を押して確認し、使えたら確認してください。",
+        "zh" : "你在\"Code pool week\"赢得了A 1000 yen gift code（价值 1,000 学分）。打开结果，点\"显示奖品\"查看，然后确认它可用。"
       },
       "publicationId" : "#uuid:4",
       "action" : "RESULT",
@@ -372,8 +372,8 @@
       },
       "body" : {
         "en" : "The taker reports a problem with the prize of 1,000 Kudos for \"Code pool week\". An administrator will decide; you can read the note in your digital prizes.",
-        "ja" : "回答者が「Code pool week」の賞品（1,000 Kudos）の問題を報告しました。管理者が裁定します。メモはデジタル賞品の一覧で読めます。",
-        "zh" : "答题人报告\"Code pool week\"的奖品（1,000 Kudos）有问题。管理员会裁定；说明见你的电子奖品。"
+        "ja" : "回答者が「Code pool week」の賞品（1,000 クドス）の問題を報告しました。管理者が裁定します。メモはデジタル賞品の一覧で読めます。",
+        "zh" : "答题人报告\"Code pool week\"的奖品（1,000 学分）有问题。管理员会裁定；说明见你的电子奖品。"
       },
       "publicationId" : "#uuid:4",
       "action" : "DIGITAL",
@@ -395,8 +395,8 @@
       },
       "body" : {
         "en" : "An administrator decided the prize of 1,000 Kudos for \"Code pool week\": it is now confirmed. Open the result to see the details.",
-        "ja" : "管理者が「Code pool week」の賞品（1,000 Kudos）を裁定しました：現在確認済みです。結果を開いて詳細を確認してください。",
-        "zh" : "管理员已裁定\"Code pool week\"的奖品（1,000 Kudos）：现在已确认。打开结果查看详情。"
+        "ja" : "管理者が「Code pool week」の賞品（1,000 クドス）を裁定しました：現在確認済みです。結果を開いて詳細を確認してください。",
+        "zh" : "管理员已裁定\"Code pool week\"的奖品（1,000 学分）：现在已确认。打开结果查看详情。"
       },
       "publicationId" : "#uuid:4",
       "action" : "RESULT",
@@ -418,8 +418,8 @@
       },
       "body" : {
         "en" : "An administrator decided the disputed prize of 1,000 Kudos for \"Code pool week\": it is now confirmed. See your digital prizes for the note.",
-        "ja" : "管理者が「Code pool week」の異議のある賞品（1,000 Kudos）を裁定しました：現在確認済みです。メモはデジタル賞品の一覧で読めます。",
-        "zh" : "管理员已裁定\"Code pool week\"有异议的奖品（1,000 Kudos）：现在已确认。说明见你的电子奖品。"
+        "ja" : "管理者が「Code pool week」の異議のある賞品（1,000 クドス）を裁定しました：現在確認済みです。メモはデジタル賞品の一覧で読めます。",
+        "zh" : "管理员已裁定\"Code pool week\"有异议的奖品（1,000 学分）：现在已确认。说明见你的电子奖品。"
       },
       "publicationId" : "#uuid:4",
       "action" : "DIGITAL",

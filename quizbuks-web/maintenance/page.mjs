@@ -99,9 +99,9 @@ ${LANGUAGES.map((language) => `html[data-lang="${language}"] [data-l]:not([data-
 `
 
 /** Chooses the language before the page is painted, and sets the document's lang and title. */
-function chooser(name) {
+function chooser(names) {
   const titles = Object.fromEntries(LANGUAGES.map((language) =>
-    [language, MESSAGES[language].title.replace('{name}', name)]))
+    [language, MESSAGES[language].title.replace('{name}', names[language])]))
   const tags = Object.fromEntries(LANGUAGES.map((language) => [language, MESSAGES[language].lang]))
   return `(function () {
   var LANGS = ${JSON.stringify(LANGUAGES)}, ZONES = ${JSON.stringify(ZONES)}, TITLES = ${JSON.stringify(titles)}, TAGS = ${JSON.stringify(tags)};
@@ -175,13 +175,13 @@ function retrier() {
 }
 
 /**
- * The page for a brand: `brand` is the profile's public part (name), `mark` its mark.svg, `css` its site.css (the
- * static sites' brand tokens) and `icon` its 192 px icon (PNG bytes).
+ * The page for a brand: `brand` is the profile's public part (its name in each language, Q61), `mark` its mark.svg,
+ * `css` its site.css (the static sites' brand tokens) and `icon` its 192 px icon (PNG bytes).
  */
 export function renderPage({ brand, mark, css, icon }) {
-  const name = brand.name
   const panels = LANGUAGES.map((language) => {
     const m = MESSAGES[language]
+    const name = brand.names[language]
     const status = (key) => esc(m[key]).replace('{name}', esc(name))
     return `<div class="copy" data-l="${language}" lang="${m.lang}">
   <p class="eyebrow">${text(language, 'badge', name)}</p>
@@ -206,22 +206,23 @@ export function renderPage({ brand, mark, css, icon }) {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>${esc(MESSAGES.en.title.replace('{name}', name))}</title>
+<title>${esc(MESSAGES.en.title.replace('{name}', brand.names.en))}</title>
 <link rel="icon" type="image/png" href="data:image/png;base64,${icon.toString('base64')}">
 <style>${css}
 ${CSS}</style>
-<script>${chooser(name)}</script>
+<script>${chooser(brand.names)}</script>
 </head>
 <body>
 <header>
-  <div class="brand">${mark.trim()}<span>${esc(name)}</span></div>
+  <div class="brand">${mark.trim()}${LANGUAGES.map((language) =>
+    `<span data-l="${language}" lang="${MESSAGES[language].lang}">${esc(brand.names[language])}</span>`).join('')}</div>
   <nav class="langs" aria-label="${labels}">${switcher}</nav>
 </header>
 <main>
 ${ART}
 ${panels}
 </main>
-<footer>© ${esc(name)}</footer>
+<footer>© ${esc(brand.name)}</footer>
 <script>${retrier()}</script>
 </body>
 </html>

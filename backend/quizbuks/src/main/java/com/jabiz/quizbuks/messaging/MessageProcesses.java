@@ -210,14 +210,14 @@ public final class MessageProcesses {
         }
         Map<String, MessageTexts.Value> params = new LinkedHashMap<>();
         Draft draft = switch (input.kind()) {
-            case QbInbox.REWARD_PAID, QbInbox.REWARD_PENDING -> rewardMessage(ctx, input, params);
+            case QbInbox.REWARD_PAID, QbInbox.REWARD_PENDING -> rewardMessage(ctx, texts, input, params);
             case QbInbox.TRANSFER_SENT, QbInbox.TRANSFER_FAILED -> transferMessage(ctx, texts, input, params);
             case QbInbox.PAYOUT_ACTION_NEEDED -> payoutMessage(ctx);
             case QbInbox.CASH_DUE, QbInbox.CASH_MARKED_PAID, QbInbox.CASH_CONFIRMED, QbInbox.CASH_DISPUTED,
                  QbInbox.CASH_RESOLVED, QbInbox.CASH_RESOLVED_SPONSOR, QbInbox.CASH_OVERDUE ->
                 cashMessage(ctx, input, params, texts);
             case QbInbox.REDEEM_DUE, QbInbox.REDEEM_CLAIMED, QbInbox.REDEEM_REDEEMED, QbInbox.REDEEM_DECLINED,
-                 QbInbox.REDEEM_EXPIRED, QbInbox.REDEEM_VOID -> redeemMessage(ctx, input, params);
+                 QbInbox.REDEEM_EXPIRED, QbInbox.REDEEM_VOID -> redeemMessage(ctx, texts, input, params);
             case QbInbox.DIGITAL_DELIVERED, QbInbox.DIGITAL_DUE, QbInbox.DIGITAL_CONFIRMED, QbInbox.DIGITAL_DISPUTED,
                  QbInbox.DIGITAL_RESOLVED, QbInbox.DIGITAL_RESOLVED_SPONSOR, QbInbox.DIGITAL_OVERDUE ->
                 digitalMessage(ctx, input, params, texts);
@@ -232,7 +232,8 @@ public final class MessageProcesses {
     record Draft(String recipientId, String type, String kind, Object publicationId, String action,
         String actionId) {}
 
-    private static Draft rewardMessage(ProcessContext ctx, EventInput input, Map<String, MessageTexts.Value> params) {
+    private static Draft rewardMessage(ProcessContext ctx, MessageTexts texts, EventInput input,
+        Map<String, MessageTexts.Value> params) {
         EntityInstance attempt = first(ctx, ATTEMPT);
         EntityInstance card = first(ctx, CARD);
         // Only while it is so: a pending reward paid since says so with its own message.
@@ -243,8 +244,8 @@ public final class MessageProcesses {
         }
         BigDecimal reward = money(attempt.get("reward"));
         BigDecimal fee = money(attempt.get("fee"));
-        params.put("amount", MessageTexts.Value.of(MailValues.kudos(RewardStatus.PAID.equals(status)
-            ? reward.subtract(fee) : reward)));
+        params.put("amount", texts.kudos(RewardStatus.PAID.equals(status)
+            ? reward.subtract(fee) : reward));
         params.put("name", MessageTexts.Value.of(card.get("name")));
         return new Draft(attempt.get("userId"), QbInbox.TYPE_REWARD, input.kind(), card.id(), QbInbox.ACTION_RESULT,
             String.valueOf(attempt.id()));
@@ -273,7 +274,7 @@ public final class MessageProcesses {
         if (expected != null && !expected.equals(cash.get("status"))) {
             return null;
         }
-        params.put("amount", MessageTexts.Value.of(MailValues.kudos(cash.get("amount"))));
+        params.put("amount", texts.kudos(cash.get("amount")));
         params.put("name", MessageTexts.Value.of(card.get("name")));
         params.put("code", MessageTexts.Value.of(cash.get("code")));
         // The state in the reader's language (the dictionary's words), not its code.
@@ -292,7 +293,8 @@ public final class MessageProcesses {
      * printed code to the sponsor, collected, declined, expired or voided to the taker. Skipped when the prize moved on
      * since the event (the next message says where it stands).
      */
-    private static Draft redeemMessage(ProcessContext ctx, EventInput input, Map<String, MessageTexts.Value> params) {
+    private static Draft redeemMessage(ProcessContext ctx, MessageTexts texts, EventInput input,
+        Map<String, MessageTexts.Value> params) {
         EntityInstance redemption = first(ctx, REDEMPTION);
         EntityInstance card = first(ctx, CARD);
         if (redemption == null || card == null) {
@@ -310,7 +312,7 @@ public final class MessageProcesses {
             return null;
         }
         params.put("code", MessageTexts.Value.of(redemption.get("code")));
-        params.put("amount", MessageTexts.Value.of(MailValues.kudos(redemption.get("amount"))));
+        params.put("amount", texts.kudos(redemption.get("amount")));
         params.put("name", MessageTexts.Value.of(card.get("name")));
         params.put("description", MessageTexts.Value.of(redemption.get("description")));
         // The day only (UTC): the message is written once, in every language, without the reader's zone.
@@ -348,7 +350,7 @@ public final class MessageProcesses {
         if (expected != null && !expected.equals(prize.get("status"))) {
             return null;
         }
-        params.put("amount", MessageTexts.Value.of(MailValues.kudos(prize.get("amount"))));
+        params.put("amount", texts.kudos(prize.get("amount")));
         params.put("name", MessageTexts.Value.of(card.get("name")));
         params.put("description", MessageTexts.Value.of(prize.get("description") == null ? ""
             : prize.get("description")));
@@ -373,9 +375,9 @@ public final class MessageProcesses {
         if (transfer == null || !status.equals(transfer.get("status"))) {
             return null;
         }
-        params.put("amount", MessageTexts.Value.of(MailValues.kudos(transfer.get("amount"))));
-        params.put("net", MessageTexts.Value.of(MailValues.kudos(transfer.get("net"))));
-        params.put("fee", MessageTexts.Value.of(MailValues.kudos(transfer.get("fee"))));
+        params.put("amount", texts.kudos(transfer.get("amount")));
+        params.put("net", texts.kudos(transfer.get("net")));
+        params.put("fee", texts.kudos(transfer.get("fee")));
         if (TransferStatus.FAILED.equals(status)) {
             // Whether the taker can do something about it, never Stripe's own words (as the mail).
             params.put("reason", texts.message("qb.mail.transfer-failure."
@@ -492,8 +494,8 @@ public final class MessageProcesses {
             return;
         }
         Map<String, MessageTexts.Value> values = new LinkedHashMap<>();
-        values.put("amount", MessageTexts.Value.of(MailValues.kudos(QbWallets.balance(wallet))));
-        values.put("threshold", MessageTexts.Value.of(MailValues.kudos(threshold)));
+        values.put("amount", texts.kudos(QbWallets.balance(wallet)));
+        values.put("threshold", texts.kudos(threshold));
         insert(ctx, texts, new Draft(userId, QbInbox.TYPE_REMINDER, QbInbox.PAYOUT_REMINDER, null,
             QbInbox.ACTION_PAYOUT, null), values, "payout-reminder:" + userId + ":"
             + ctx.opTime().atOffset(ZoneOffset.UTC).toLocalDate());

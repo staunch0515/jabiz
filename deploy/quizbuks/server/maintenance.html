@@ -112,7 +112,7 @@ html[data-lang="zh"] [data-l]:not([data-l="zh"]),
 html[data-lang="en"] [data-l]:not([data-l="en"]) { display: none; }
 </style>
 <script>(function () {
-  var LANGS = ["ja","zh","en"], ZONES = {"ja":["Asia/Tokyo"],"zh":["Asia/Shanghai","Asia/Chongqing","Asia/Harbin","Asia/Urumqi","Asia/Kashgar","Asia/Hong_Kong","Asia/Macau","Asia/Taipei"]}, TITLES = {"ja":"QuizBuks — メンテナンス中","zh":"QuizBuks — 系统维护中","en":"QuizBuks — Maintenance"}, TAGS = {"ja":"ja","zh":"zh-CN","en":"en"};
+  var LANGS = ["ja","zh","en"], ZONES = {"ja":["Asia/Tokyo"],"zh":["Asia/Shanghai","Asia/Chongqing","Asia/Harbin","Asia/Urumqi","Asia/Kashgar","Asia/Hong_Kong","Asia/Macau","Asia/Taipei"]}, TITLES = {"ja":"クイズdeおトク — メンテナンス中","zh":"答题拼好价 — 系统维护中","en":"QuizBuks — Maintenance"}, TAGS = {"ja":"ja","zh":"zh-CN","en":"en"};
   function known(l) { return l && LANGS.indexOf(l) >= 0 ? l : null; }
   function pick() {
     var l = null;
@@ -147,7 +147,7 @@ html[data-lang="en"] [data-l]:not([data-l="en"]) { display: none; }
   <path d="M24 34c-7 0-9-7-9-11 7 0 11 3 11 9 0 .7 0 1.4-.2 2H24z" fill="var(--qb-leaf-deep)" />
   <path d="M24 34c7 0 9-7 9-11-7 0-11 3-11 9 0 .7 0 1.4.2 2H24z" fill="var(--qb-leaf)" />
   <path d="M24 33V22" stroke="var(--qb-ink)" stroke-width="1.6" stroke-linecap="round" />
-</svg><span>QuizBuks</span></div>
+</svg><span data-l="ja" lang="ja">クイズdeおトク</span><span data-l="zh" lang="zh-CN">答题拼好价</span><span data-l="en" lang="en">QuizBuks</span></div>
   <nav class="langs" aria-label="言語 / 语言 / Language"><button type="button" data-set-lang="ja" lang="ja" aria-pressed="false">日本語</button><button type="button" data-set-lang="zh" lang="zh-CN" aria-pressed="false">中文</button><button type="button" data-set-lang="en" lang="en" aria-pressed="false">English</button></nav>
 </header>
 <main>
@@ -166,7 +166,7 @@ html[data-lang="en"] [data-l]:not([data-l="en"]) { display: none; }
 <div class="copy" data-l="ja" lang="ja">
   <p class="eyebrow">メンテナンス中</p>
   <h1>ただいまメンテナンス中です</h1>
-  <p class="lead">QuizBuks をより快適にご利用いただけるよう、システムを更新しています。ご不便をおかけして申し訳ありません。</p>
+  <p class="lead">クイズdeおトク をより快適にご利用いただけるよう、システムを更新しています。ご不便をおかけして申し訳ありません。</p>
   <p class="auto">準備ができしだい、このページは自動で元の画面に戻ります。閉じずにそのままお待ちください。</p>
   <div class="status">
     <button type="button" data-check>今すぐ確認</button>
@@ -176,7 +176,7 @@ html[data-lang="en"] [data-l]:not([data-l="en"]) { display: none; }
 <div class="copy" data-l="zh" lang="zh-CN">
   <p class="eyebrow">维护中</p>
   <h1>系统维护中</h1>
-  <p class="lead">我们正在升级 QuizBuks，让您用得更顺畅。给您带来不便，敬请谅解。</p>
+  <p class="lead">我们正在升级 答题拼好价，让您用得更顺畅。给您带来不便，敬请谅解。</p>
   <p class="auto">维护完成后，本页会自动回到您刚才打开的页面，请勿关闭。</p>
   <div class="status">
     <button type="button" data-check>立即检查</button>

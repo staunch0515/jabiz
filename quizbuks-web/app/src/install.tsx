@@ -16,6 +16,7 @@ import { BRAND } from './qb/brand'
  * amending D-Q38-1); the steps for WeChat and QQ are the platform's (17m).
  */
 
+// The name it is installed under: the manifest's, one for every language (Q61).
 const APP_NAME = BRAND.name
 /**
  * Set once the app has run installed on this browser (Q41): the business site (same origin, same storage) then lets its

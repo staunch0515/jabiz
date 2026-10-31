@@ -30,6 +30,18 @@ public final class MessageTexts {
         }
     }
 
+    /**
+     * An amount of Kudos in each language: grouped, with the points' name in that language ({@code qb.kudos.unit}:
+     * Kudos, 学分, クドス; Q61).
+     */
+    public Value kudos(Object amount) {
+        String number = MailValues.amount(amount);
+        return locale -> number + " " + find(KUDOS_UNIT, locale);
+    }
+
+    /** The message naming the points in each language. */
+    public static final String KUDOS_UNIT = "qb.kudos.unit";
+
     /** A parameter that is itself a message, in each language. */
     public Value message(String code) {
         return locale -> find(code, locale);

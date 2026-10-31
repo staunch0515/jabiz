@@ -78,7 +78,7 @@ export const withdrawalMessages = {
     },
     returnedDialog: {
       title: '记录银行退回 {{amount}}',
-      hint: 'Kudos 将退回答题人的余额。请说明原因，供答题人与记录使用。',
+      hint: '学分将退回答题人的余额。请说明原因，供答题人与记录使用。',
       reason: '退回原因',
       submit: '记为被退回',
       done: '已记为被退回。',
@@ -116,7 +116,7 @@ export const withdrawalMessages = {
     },
     returnedDialog: {
       title: '{{amount}} の組戻しを記録',
-      hint: 'Kudos は回答者の残高に戻ります。回答者と記録のために理由を入力してください。',
+      hint: 'クドスは回答者の残高に戻ります。回答者と記録のために理由を入力してください。',
       reason: '組戻しの理由',
       submit: '組戻しにする',
       done: '組戻しにしました。',

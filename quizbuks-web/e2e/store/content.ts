@@ -130,7 +130,7 @@ export function FEATURE(language: Language): string {
 align-items:center;gap:56px;padding:0 72px;box-sizing:border-box;background:linear-gradient(135deg,${BRAND.themeColor},color-mix(in srgb,${BRAND.themeColor} 70%,#ffffff));
 font-family:'Noto Sans CJK JP','Noto Sans CJK SC','Noto Sans',sans-serif;color:#fff">
 <img src="${ICON}" width="220" height="220" style="border-radius:48px;box-shadow:0 12px 32px rgba(0,0,0,.25)" alt="">
-<div><div style="font-size:30px;font-weight:600;opacity:.9">${BRAND.name}</div>
+<div><div style="font-size:30px;font-weight:600;opacity:.9">${BRAND.names[language]}</div>
 <div style="font-size:52px;font-weight:700;line-height:1.2;margin:12px 0">${title}</div>
 <div style="font-size:26px;opacity:.9">${subtitle}</div></div></body></html>`
 }

@@ -1,20 +1,20 @@
 // 日本語、en.mjs と同じ内容（キーがそろっていることはテストで確認）。
 import { BRAND } from '../brand.mjs'
 export const ja = {
-  siteName: `${BRAND.name} for Shopify`,
+  siteName: `${BRAND.names.ja} for Shopify`,
   description: '商品動画を短いクイズに。正解したお客様は商品ページでその場で 1 回限りの割引コードを受け取れます。',
   skip: '本文へ移動',
   navLabel: 'ページ',
   languageLabel: '言語',
   nav: { home: 'ホーム', privacy: 'プライバシーポリシー', support: 'サポート' },
-  footer: `${BRAND.name} for Shopify · お問い合わせ：{email}`,
+  footer: `${BRAND.names.ja} for Shopify · お問い合わせ：{email}`,
   home: {
-    title: `${BRAND.name} for Shopify`,
+    title: `${BRAND.names.ja} for Shopify`,
     lead: '商品動画を短いクイズに。合格したお客様は、商品ページでその場で 1 回限りの割引コードを受け取れます。',
     howTitle: 'しくみ',
     steps: [
-      { title: 'キャンペーンを作る', text: `Shopify 管理画面で ${BRAND.name} を開き、動画、いくつかの問題、割引を設定します。` },
-      { title: 'ブロックを追加', text: `テーマエディターで商品ページのテンプレートに ${BRAND.name} ブロックを追加します。コードの変更は不要です。` },
+      { title: 'キャンペーンを作る', text: `Shopify 管理画面で${BRAND.names.ja}を開き、動画、いくつかの問題、割引を設定します。` },
+      { title: 'ブロックを追加', text: `テーマエディターで商品ページのテンプレートに${BRAND.names.ja}ブロックを追加します。コードの変更は不要です。` },
       { title: 'お客様が回答', text: '合格したお客様は専用の割引コードを受け取ります。少なくとも 7 日間有効です。' },
     ],
     sections: [
@@ -29,7 +29,7 @@ export const ja = {
       },
       {
         title: 'プラン',
-        paragraphs: [`無料プランには毎月一定回数のクイズが含まれ、有料プランではさらに多くなります。Shopify 管理画面のアプリ → ${BRAND.name} → プランと利用量で確認・変更できます。`],
+        paragraphs: [`無料プランには毎月一定回数のクイズが含まれ、有料プランではさらに多くなります。Shopify 管理画面のアプリ → ${BRAND.names.ja} → プランと利用量で確認・変更できます。`],
       },
     ],
   },
@@ -37,7 +37,7 @@ export const ja = {
     title: 'プライバシーポリシー',
     updated: '最終更新：2026 年 10 月 27 日',
     intro: [
-      `本ポリシーは、ストアが ${BRAND.name} for Shopify（「本アプリ」「当社」）をインストールしたとき、およびお客様がそのクイズに回答したときに、当社が何を収集し、何に使い、どのくらい保存するかを説明します。お問い合わせ：{email}。`,
+      `本ポリシーは、ストアが${BRAND.names.ja} for Shopify（「本アプリ」「当社」）をインストールしたとき、およびお客様がそのクイズに回答したときに、当社が何を収集し、何に使い、どのくらい保存するかを説明します。お問い合わせ：{email}。`,
     ],
     sections: [
       {
@@ -102,20 +102,20 @@ export const ja = {
     sections: [
       {
         title: '商品ページにクイズを追加する',
-        paragraphs: [`Shopify 管理画面でオンラインストア → テーマ → カスタマイズを開き、商品ページのテンプレートを選んで ${BRAND.name} ブロック（アプリ）を追加します。先に ${BRAND.name} でキャンペーンを公開してください。キャンペーンがないとブロックは何も表示しません。`],
+        paragraphs: [`Shopify 管理画面でオンラインストア → テーマ → カスタマイズを開き、商品ページのテンプレートを選んで${BRAND.names.ja}ブロック（アプリ）を追加します。先に${BRAND.names.ja}でキャンペーンを公開してください。キャンペーンがないとブロックは何も表示しません。`],
       },
       {
         title: 'ストアにクイズが表示されない',
         items: [
-          `実施中のキャンペーンがない：${BRAND.name} → クイズキャンペーンで公開または再開してください。`,
-          `ストアが接続されていない：${BRAND.name} → 概要 → 接続。`,
+          `実施中のキャンペーンがない：${BRAND.names.ja} → クイズキャンペーンで公開または再開してください。`,
+          `ストアが接続されていない：${BRAND.names.ja} → 概要 → 接続。`,
           '今日の割引コードがすべて配布された：翌日（UTC）に再開します。',
           'プランの今期のクイズ回数を使い切った：次の期間に、またはプランを上げればすぐに再開します。',
         ],
       },
       {
         title: 'プランの変更',
-        paragraphs: [`${BRAND.name} → プランと利用量 → プランを選ぶ で Shopify のプランのページが開きます。料金はストアのほかの料金とともに Shopify が請求します。`],
+        paragraphs: [`${BRAND.names.ja} → プランと利用量 → プランを選ぶ で Shopify のプランのページが開きます。料金はストアのほかの料金とともに Shopify が請求します。`],
       },
       {
         title: 'アンインストール',

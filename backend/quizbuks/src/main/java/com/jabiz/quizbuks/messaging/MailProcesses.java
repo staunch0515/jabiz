@@ -158,11 +158,11 @@ public final class MailProcesses {
                 }
                 String kind = input(ctx, TransferMailInput.class).kind();
                 Map<String, Object> params = new LinkedHashMap<>();
-                params.put("amount", MailValues.kudos(transfer.get("amount")));
+                params.put("amount", MailValues.amount(transfer.get("amount")));
                 // Only what is still true: after a long backlog the transfer may have been reversed since.
                 if (SENT.equals(kind) && TransferStatus.SENT.equals(transfer.get("status"))) {
-                    params.put("fee", MailValues.kudos(transfer.get("fee")));
-                    params.put("net", MailValues.kudos(transfer.get("net")));
+                    params.put("fee", MailValues.amount(transfer.get("fee")));
+                    params.put("net", MailValues.amount(transfer.get("net")));
                     decide(ctx, NotificationMails.TRANSFER_SENT, params);
                 } else if (FAILED.equals(kind) && TransferStatus.FAILED.equals(transfer.get("status"))) {
                     // Whether the taker can do something about it, never Stripe's own words (D-Q7-1).
@@ -223,7 +223,7 @@ public final class MailProcesses {
                 if (topUp != null && topUp.get("paidAt") != null) {
                     // Kudos granted by hand (Q18b) are no payment received.
                     decide(ctx, QbTopUps.GRANT.equals(topUp.get("manualKind")) ? NotificationMails.TOPUP_GRANTED
-                        : NotificationMails.TOPUP_PAID, Map.of("amount", MailValues.kudos(topUp.get("amount"))));
+                        : NotificationMails.TOPUP_PAID, Map.of("amount", MailValues.amount(topUp.get("amount"))));
                 }
             }, messages, NotificationMails.TOPUP_PAID, NotificationMails.TOPUP_GRANTED);
     }
@@ -354,7 +354,7 @@ public final class MailProcesses {
         params.put("publications", MailValues.names(shortOnes.stream().map(card -> (Object) card.get("name"))
             .toList(), MAX_LISTED));
         params.put("pendingCount", MailValues.count(wallet == null ? null : wallet.get("pendingCount")));
-        params.put("pendingAmount", MailValues.kudos(wallet == null ? null : wallet.get("pendingAmount")));
+        params.put("pendingAmount", MailValues.amount(wallet == null ? null : wallet.get("pendingAmount")));
         return params;
     }
 

@@ -14,8 +14,8 @@ import java.util.Objects;
 
 /**
  * Parameters of QuizBuks's mail as the mail shows them (platform decision D35: parameters are stored as text, the
- * process formats them): amounts as the three front ends show them ("1,234 Kudos", backend/quizbuks/CLAUDE.md section
- * 4), counts with digit grouping, lists of names separated by commas, and times in the business's zone with its
+ * process formats them): amounts as numbers whose unit the template writes in its language ("1,234 Kudos", "1,234 学分",
+ * backend/quizbuks/CLAUDE.md section 4), counts with digit grouping, lists of names separated by commas, and times in the business's zone with its
  * short name written out ("2026-10-20 09:30 JST"). The zone is {@code jabiz.fiscal-year-zone} (Asia/Tokyo for
  * QuizBuks, a Japanese business), the one its dates are reckoned in elsewhere; its label is the zone's own short
  * name, never written here.
@@ -44,9 +44,13 @@ public final class MailValues {
         }
     }
 
-    /** An amount in Kudos: whole, grouped by thousands ("1,234 Kudos"); a missing one is 0. */
-    public static String kudos(Object amount) {
-        return grouped(amount) + " Kudos";
+    /**
+     * An amount of Kudos as a number: whole, grouped by thousands ("1,234"); a missing one is 0. The points' name is
+     * the language's (Q61): a mail's template writes it after the number ("{amount} 学分"), an inbox message takes
+     * {@link MessageTexts#kudos}.
+     */
+    public static String amount(Object amount) {
+        return grouped(amount);
     }
 
     /** A count, grouped by thousands; a missing one is 0. */

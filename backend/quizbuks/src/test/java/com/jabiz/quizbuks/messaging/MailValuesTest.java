@@ -4,10 +4,17 @@ import com.jabiz.mail.MailCategory;
 import com.jabiz.mail.MailTemplate;
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.regex.Pattern;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -15,12 +22,36 @@ import static org.assertj.core.api.Assertions.assertThat;
 class MailValuesTest {
 
     @Test
-    void amountsAreKudosGroupedByThousands() {
-        assertThat(MailValues.kudos(new BigDecimal("1234"))).isEqualTo("1,234 Kudos");
-        assertThat(MailValues.kudos("1500000")).isEqualTo("1,500,000 Kudos");
-        assertThat(MailValues.kudos(BigDecimal.ZERO)).isEqualTo("0 Kudos");
-        assertThat(MailValues.kudos(null)).isEqualTo("0 Kudos");
+    void amountsAreNumbersGroupedByThousands() {
+        assertThat(MailValues.amount(new BigDecimal("1234"))).isEqualTo("1,234");
+        assertThat(MailValues.amount("1500000")).isEqualTo("1,500,000");
+        assertThat(MailValues.amount(BigDecimal.ZERO)).isEqualTo("0");
+        assertThat(MailValues.amount(null)).isEqualTo("0");
         assertThat(MailValues.count(new BigDecimal("12345"))).isEqualTo("12,345");
+    }
+
+    /** The mail parameters are numbers: each language's template writes the points' name after them (Q61). */
+    @Test
+    void theMailTemplatesNameThePointsAfterEveryAmountInTheirLanguage() throws IOException {
+        Map<String, String> units = Map.of("en", "Kudos", "zh", "学分", "ja", "クドス");
+        Pattern amount = Pattern.compile("\\{(amount|fee|net|pendingAmount|maxReward)}(?! ?(Kudos|学分|クドス))");
+        for (Map.Entry<String, String> unit : units.entrySet()) {
+            Properties messages = new Properties();
+            try (InputStream in = MailValuesTest.class.getResourceAsStream("/messages_" + unit.getKey() + ".properties")) {
+                messages.load(new InputStreamReader(in, StandardCharsets.UTF_8));
+            }
+            assertThat(messages.getProperty("qb.kudos.unit")).isEqualTo(unit.getValue());
+            for (String template : List.of("qb.transfer.sent", "qb.transfer.failed", "qb.topup.paid", "qb.topup.granted",
+                "qb.publication.funds-short", "qb.invitation")) {
+                for (String part : List.of("subject", "body")) {
+                    String text = messages.getProperty("mail." + template + "." + part);
+                    assertThat(text).as("mail.%s.%s (%s)", template, part, unit.getKey()).isNotNull()
+                        .doesNotContain("Kudos".equals(unit.getValue()) ? "学分" : "Kudos");
+                    assertThat(amount.matcher(text).find()).as("an amount without its unit in mail.%s.%s (%s)",
+                        template, part, unit.getKey()).isFalse();
+                }
+            }
+        }
     }
 
     @Test
