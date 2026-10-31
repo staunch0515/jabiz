@@ -92,9 +92,11 @@ public final class OperatorSettlements {
     public static final String LANGUAGE = "ja";
 
     public static final String ISSUED = "ISSUED";
+    /** Q48e-2: credited to the operator's account, which the operator withdraws from (no payment of its own). */
+    public static final String CREDITED = "CREDITED";
     public static final String PAYING = "PAYING";
     public static final String PAID = "PAID";
-    public static final List<String> STATUSES = List.of(ISSUED, PAYING, PAID);
+    public static final List<String> STATUSES = List.of(ISSUED, PAYING, PAID, CREDITED);
 
     /** The ledger's references of the two postings: the settlement's month and operator. */
     static final String ISSUE_DESCRIPTION = "Operator share";
@@ -108,8 +110,8 @@ public final class OperatorSettlements {
         .number(DOCUMENT_TEMPLATE, "settlementNo")
         .party("issuer", ISSUER_TEMPLATE, "name", "address", "registrationNo")
         .party("operator", DOCUMENT_TEMPLATE, "operatorName", "contactName")
-        .facts(DOCUMENT_TEMPLATE, "month", "revenue", "platformShare", "operatorShare", "prospectingCost",
-            "carriedIn", "carriedOut")
+        .facts(DOCUMENT_TEMPLATE, "month", "plan", "revenue", "platformShare", "operatorShare", "fixedFee",
+            "prospectingCost", "carriedIn", "carriedOut")
         .totals(DOCUMENT_TEMPLATE, "payable")
         .note("note"));
 
@@ -131,6 +133,10 @@ public final class OperatorSettlements {
         eb.field("operatorShare", f -> f.physicalColumn("operator_share").immutable(true).required(true)
             .asMonetary("JPY", 0));
         eb.field("prospectingCost", f -> f.physicalColumn("prospecting_cost").immutable(true).required(true)
+            .asMonetary("JPY", 0));
+        // Q48e-2: the operator's plan that month and its fixed fee (0 while the operator is suspended).
+        eb.field("plan", f -> f.physicalColumn("plan").immutable(true).asText(2));
+        eb.field("fixedFee", f -> f.physicalColumn("fixed_fee").immutable(true).required(true)
             .asMonetary("JPY", 0));
         eb.field("carriedIn", f -> f.physicalColumn("carried_in").immutable(true).required(true)
             .asMonetary("JPY", 0));
@@ -185,6 +191,7 @@ public final class OperatorSettlements {
     static final String FOUND = "found";
     static final String PREVIOUS = "previous";
     static final String PARAMS = "params";
+    static final String PLANS = "plans";
     static final String USAGE = "usage";
     static final String REVENUE = "revenue";
     static final String NEW_ID = "newId";
@@ -257,8 +264,9 @@ public final class OperatorSettlements {
                     .operatorId(), MONTH.format(YearMonth.parse(runInput(ctx).month(), MONTH).minusMonths(1))),
                     PREVIOUS),
                 QueryEntities.query(ParamEntities.DATASET, ctx -> EntityQuery.builder()
-                    .where(new QueryPredicate.In(ParamEntities.KEY, new ArrayList<>(List.of(
-                        QbParams.OPERATOR_PLATFORM_SHARE, QbParams.PROSPECT_USD_JPY)))).limit(2).build(), PARAMS),
+                    .where(new QueryPredicate.In(ParamEntities.KEY, paramKeys())).limit(20).build(), PARAMS),
+                QueryEntities.query(QbOperators.defaultDataset(OperatorPlans.PLAN),
+                    ctx -> OperatorPlans.changesOf(runInput(ctx).operatorId()), PLANS),
                 QueryEntities.query(QbProspects.defaultDataset(QbProspects.USAGE), ctx -> EntityQuery.builder()
                     .where(new QueryPredicate.And(List.of(new QueryPredicate.Eq("owner", runInput(ctx).operatorId()),
                         new QueryPredicate.Eq("month", runInput(ctx).month())))).limit(1).build(), USAGE)))
@@ -284,11 +292,18 @@ public final class OperatorSettlements {
             throw new BusinessRuleViolationException(new Violation("month", OperatorCodes.MONTH_OPEN,
                 "The month has not ended", Map.of("month", input.month())));
         }
-        BigDecimal share = platformShare(ctx);
-        if (share == null) {
-            throw new BusinessRuleViolationException(new Violation(null, OperatorCodes.NO_SHARE,
-                "The platform's share of the operators' commission is not set", Map.of()));
+        // Q48e-2: the operator's plan in effect that month gives the platform's share and the fixed fee.
+        String plan = OperatorPlans.planOf(rows(ctx, PLANS).stream().map(EntityInstance.class::cast).toList(),
+            input.month());
+        OperatorPlans.Terms terms = OperatorPlans.terms(plan, params(ctx));
+        if (terms == null) {
+            throw new BusinessRuleViolationException(new Violation(null, OperatorCodes.NO_PLAN,
+                "The terms of the operator's plan are not set", Map.of("plan", plan)));
         }
+        BigDecimal share = terms.platformShare();
+        // A suspended operator pays no fixed fee: its contract rests; its sponsors' commission is still shared.
+        BigDecimal fixedFee = QbOperators.ACTIVE.equals(first(ctx, OPERATOR).get("status")) ? terms.fixedFee()
+            : BigDecimal.ZERO;
         Map<String, Object> revenueRow = rows(ctx, REVENUE).isEmpty() ? Map.of() : rows(ctx, REVENUE).getFirst();
         BigDecimal revenue = money(revenueRow.get("revenue"));
         BigDecimal operatorShare = operatorShare(revenue, share);
@@ -299,7 +314,7 @@ public final class OperatorSettlements {
             throw new BusinessRuleViolationException(new Violation(null, OperatorCodes.NO_RATE,
                 "The yen of a dollar the prospecting cost is deducted at is not set", Map.of()));
         }
-        BigDecimal[] payable = payable(operatorShare, cost, carriedIn);
+        BigDecimal[] payable = payable(operatorShare, cost.add(fixedFee), carriedIn);
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("operatorId", input.operatorId());
         values.put("month", input.month());
@@ -309,18 +324,20 @@ public final class OperatorSettlements {
         values.put("platformShare", share);
         values.put("operatorShare", operatorShare);
         values.put("prospectingCost", cost);
+        values.put("plan", plan);
+        values.put("fixedFee", fixedFee);
         values.put("carriedIn", carriedIn);
         values.put("payable", payable[0]);
         values.put("carriedOut", payable[1]);
-        values.put("status", ISSUED);
+        values.put("status", CREDITED);
         values.put("issuedAt", ctx.opTime());
         values.put("revision", BigDecimal.ONE);
         String id = String.valueOf(ctx.changes().insert(SETTLEMENT, values));
         ctx.put(NEW_ID, id);
         if (operatorShare.signum() > 0) {
-            // The expense is the operator's share: what is payable is owed (2140), the prospecting cost it recovers is
-            // headquarters' revenue (4110, without a publication). A cost the share does not cover is carried, and
-            // booked only when a later month recovers it.
+            // The expense is the operator's share: what is payable is owed (2140: the operator's account), the
+            // prospecting cost and the fixed fee it recovers are headquarters' revenue (4110, without a publication).
+            // What the share does not cover is carried, and booked only when a later month recovers it.
             List<LedgerProcesses.Line> lines = new ArrayList<>();
             lines.add(new LedgerProcesses.Line(QbLedger.OPERATOR_SHARES, Direction.DEBIT, operatorShare));
             if (payable[0].signum() > 0) {
@@ -432,13 +449,25 @@ public final class OperatorSettlements {
         return null;
     }
 
-    private static BigDecimal platformShare(ProcessContext ctx) {
-        Object value = param(ctx, QbParams.OPERATOR_PLATFORM_SHARE);
-        if (value == null || value.toString().isBlank()) {
-            return null;
+    /** The parameters a month's settlement reads: the plans' terms and the dollar's yen. */
+    static List<Object> paramKeys() {
+        List<Object> keys = new ArrayList<>(OperatorPlans.paramKeys());
+        keys.add(QbParams.PROSPECT_USD_JPY);
+        return keys;
+    }
+
+    /** The parameters read, by key. */
+    private static Map<String, Object> params(ProcessContext ctx) {
+        Map<String, Object> values = new LinkedHashMap<>();
+        Object found = ctx.contains(PARAMS) ? ctx.get(PARAMS) : null;
+        if (found instanceof List<?> list) {
+            for (Object row : list) {
+                if (row instanceof EntityInstance param) {
+                    values.put(String.valueOf((Object) param.get(ParamEntities.KEY)), param.get(ParamEntities.VALUE));
+                }
+            }
         }
-        BigDecimal share = new BigDecimal(value.toString());
-        return share.signum() < 0 || share.compareTo(BigDecimal.ONE) > 0 ? null : share;
+        return values;
     }
 
     // ---- the payment ---------------------------------------------------------------------------------------------------

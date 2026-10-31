@@ -57,11 +57,35 @@ public final class OperatorCodes {
     public static final String SETTLEMENT_NOTHING = "QB_OPERATOR_SETTLEMENT_NOTHING";
     /** Q48b: no approval rule asks for a second person on the operators' payments. */
     public static final String SETTLEMENT_NO_REVIEW = "QB_OPERATOR_SETTLEMENT_NO_REVIEW";
+    /** Q48e-2: a plan changes from a later month (param {@code month}, the current one). */
+    public static final String PLAN_MONTH = "QB_OPERATOR_PLAN_MONTH";
+    /** Q48e-2: a change of the operator's plan is waiting for its approval. */
+    public static final String PLAN_PENDING = "QB_OPERATOR_PLAN_PENDING";
+    /** Q48e-2: no approval rule asks for a second person on the operators' plans. */
+    public static final String PLAN_NO_REVIEW = "QB_OPERATOR_PLAN_NO_REVIEW";
+    /** Q48e-2: the plan's terms are not set (param {@code plan}). */
+    public static final String NO_PLAN = "QB_OPERATOR_NO_PLAN";
+    /** Q48e-2: the bank account as typed is not valid (field by field). */
+    public static final String BANK_ACCOUNT = "QB_OPERATOR_BANK_ACCOUNT";
+    /** Q48e-2: the operator has no bank account to withdraw to. */
+    public static final String WITHDRAWAL_NO_ACCOUNT = "QB_OPERATOR_WITHDRAWAL_NO_ACCOUNT";
+    /** Q48e-2: the bank account changed lately (param {@code from}, when withdrawals are possible again). */
+    public static final String WITHDRAWAL_COOLDOWN = "QB_OPERATOR_WITHDRAWAL_COOLDOWN";
+    /** Q48e-2: the amount is below the least (param {@code min}) or above the balance (param {@code balance}). */
+    public static final String WITHDRAWAL_AMOUNT = "QB_OPERATOR_WITHDRAWAL_AMOUNT";
+    /** Q48e-2: a withdrawal is open already. */
+    public static final String WITHDRAWAL_OPEN = "QB_OPERATOR_WITHDRAWAL_OPEN";
+    /** Q48e-2: the withdrawal is not in a state for this (param {@code status}). */
+    public static final String WITHDRAWAL_STATE = "QB_OPERATOR_WITHDRAWAL_STATE";
+    /** Q48e-2: no approval rule asks for a second person on the operators' withdrawals. */
+    public static final String WITHDRAWAL_NO_REVIEW = "QB_OPERATOR_WITHDRAWAL_NO_REVIEW";
 
     public static final List<String> ALL = List.of(NOT_MEMBER, SUSPENDED, NOT_LEAD, FIELD, CODE, CHANGED,
         MEMBER_ELSEWHERE, MEMBER_IS_SPONSOR, MEMBER_UNVERIFIED, MEMBERS_FULL, LEAD_SELF, NOT_A_SPONSOR, HQ_TAKEDOWN,
         HQ_BAN, NOT_AN_OPERATOR_DECISION, SPOT_CHECK_NOTE, SAME_OPERATOR, MONTH_OPEN, NO_SHARE, SETTLEMENT_STATE,
-        SETTLEMENT_NOTHING, SETTLEMENT_NO_REVIEW, NO_RATE);
+        SETTLEMENT_NOTHING, SETTLEMENT_NO_REVIEW, NO_RATE, PLAN_MONTH, PLAN_PENDING, PLAN_NO_REVIEW, NO_PLAN,
+        BANK_ACCOUNT, WITHDRAWAL_NO_ACCOUNT, WITHDRAWAL_COOLDOWN, WITHDRAWAL_AMOUNT, WITHDRAWAL_OPEN, WITHDRAWAL_STATE,
+        WITHDRAWAL_NO_REVIEW);
 
     private OperatorCodes() {}
 }

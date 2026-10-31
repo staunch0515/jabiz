@@ -269,10 +269,18 @@ class SetupIT extends QbItSupport {
         // Q28: the default methods and the highest reward per attempt.
         expected.put(QbParams.REWARD_DEFAULT_METHODS, "PLATFORM");
         expected.put(QbParams.REWARD_MAX_PER_ATTEMPT, "0");
-        // Q48: AI prospecting off, its model and effort, the operators' cost cap and rate; the platform's share.
+        // Q48: AI prospecting off, its model and effort, the operators' cost cap and rate.
         expected.putAll(Map.of(QbParams.PROSPECT_ENABLED, "false", QbParams.PROSPECT_MODEL, "claude-opus-5-5",
             QbParams.PROSPECT_EFFORT, "medium", QbParams.PROSPECT_OPERATOR_MONTHLY_CAP, "100.0000",
-            QbParams.PROSPECT_USD_JPY, "150.00", QbParams.OPERATOR_PLATFORM_SHARE, "0.2000"));
+            QbParams.PROSPECT_USD_JPY, "150.00"));
+        // Q48e-2: the operators' five plans (fixed fee, platform's share) and their withdrawals.
+        expected.putAll(Map.of(QbParams.operatorPlanFee("1"), "0", QbParams.operatorPlanShare("1"), "0.5000",
+            QbParams.operatorPlanFee("2"), "20000", QbParams.operatorPlanShare("2"), "0.4000",
+            QbParams.operatorPlanFee("3"), "40000", QbParams.operatorPlanShare("3"), "0.3000",
+            QbParams.operatorPlanFee("4"), "60000", QbParams.operatorPlanShare("4"), "0.2000",
+            QbParams.operatorPlanFee("5"), "100000", QbParams.operatorPlanShare("5"), "0.1000"));
+        expected.putAll(Map.of(QbParams.OPERATOR_WITHDRAWAL_MIN, "10000",
+            QbParams.OPERATOR_WITHDRAWAL_COOLDOWN_HOURS, "24"));
         assertThat(values).containsExactlyInAnyOrderEntriesOf(expected);
     }
 

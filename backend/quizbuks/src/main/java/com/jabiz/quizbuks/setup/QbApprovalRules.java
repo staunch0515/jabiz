@@ -1,7 +1,9 @@
 package com.jabiz.quizbuks.setup;
 
 import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.operator.OperatorPlans;
 import com.jabiz.quizbuks.operator.OperatorSettlements;
+import com.jabiz.quizbuks.operator.OperatorWithdrawals;
 import com.jabiz.quizbuks.identity.SponsorApprovals;
 import com.jabiz.quizbuks.publishing.PublicationApprovals;
 import com.jabiz.quizbuks.wallet.BankTopUps;
@@ -85,8 +87,24 @@ public final class QbApprovalRules {
         List.of(entries("permission", QbPermissions.TOPUP_BANK_APPROVE)), 100,
         "Operators' settlements are paid only after another administrator approves what finance recorded");
 
+    /**
+     * Q48e-2: a change of an operator's plan (its fixed fee and the platform's share) headquarters proposes waits for
+     * another administrator's approval; the approvers are those of the operators' payments.
+     */
+    public static final Rule OPERATOR_PLAN_REVIEW = new Rule(OperatorPlans.REVIEW_RULE, OperatorPlans.APPROVAL_SUBJECT,
+        entries("fact", "operatorPlan", "op", "eq", "value", true),
+        List.of(entries("permission", QbPermissions.TOPUP_BANK_APPROVE)), 100,
+        "An operator's plan changes only after another administrator approves it");
+
+    /** Q48e-2: every payment of an operator's withdrawal finance records waits for another administrator's approval. */
+    public static final Rule OPERATOR_WITHDRAWAL_REVIEW = new Rule(OperatorWithdrawals.REVIEW_RULE,
+        OperatorWithdrawals.APPROVAL_SUBJECT, entries("fact", "operatorWithdrawal", "op", "eq", "value", true),
+        List.of(entries("permission", QbPermissions.TOPUP_BANK_APPROVE)), 100,
+        "Operators' withdrawals are paid only after another administrator approves what finance recorded");
+
     public static final List<Rule> ALL = List.of(PUBLICATION_REVIEW, SPONSOR_REVIEW, TRANSFER_REVIEW,
-        BANK_TOPUP_REVIEW, MANUAL_CREDIT_REVIEW, OPERATOR_PAYMENT_REVIEW);
+        BANK_TOPUP_REVIEW, MANUAL_CREDIT_REVIEW, OPERATOR_PAYMENT_REVIEW, OPERATOR_PLAN_REVIEW,
+        OPERATOR_WITHDRAWAL_REVIEW);
 
     private static Map<String, Object> entries(Object... pairs) {
         Map<String, Object> map = new LinkedHashMap<>();

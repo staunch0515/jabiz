@@ -29,12 +29,16 @@ steps:
         qb.issuer.registration-no, qb.legal.max-announce-days, qb.ai.enabled, qb.ai.model, qb.ai.effort,
         qb.ai.sponsor.daily-jobs, qb.ai.sponsor.monthly-tokens, qb.ai.global.monthly-tokens, qb.prospect.enabled,
         qb.prospect.model, qb.prospect.effort, qb.prospect.operator-monthly-cap-usd, qb.prospect.usd-jpy,
-        qb.operator.platform-share, qb.topup.bank.min,
+        qb.operator.plan.1.fee, qb.operator.plan.1.share, qb.operator.plan.2.fee, qb.operator.plan.2.share,
+        qb.operator.plan.3.fee, qb.operator.plan.3.share, qb.operator.plan.4.fee, qb.operator.plan.4.share,
+        qb.operator.plan.5.fee, qb.operator.plan.5.share, qb.operator.withdrawal.min,
+        qb.operator.withdrawal.cooldown-hours, qb.topup.bank.min,
         qb.topup.bank.max, qb.bank.receiving.bank, qb.bank.receiving.branch, qb.bank.receiving.account-type,
         qb.bank.receiving.account-number, qb.bank.receiving.account-holder, qb.withdrawal.bank.enabled,
         qb.withdrawal.bank.fee, qb.withdrawal.bank.cooldown-hours]
       rulesProposed: [qb.publication.review, qb.sponsor.review, qb.transfer.review, qb.topup-bank.review,
-        qb.topup-manual.review, qb.operator-settlement.review, qb.sod.control-changes, qb.sod.security-administration]
+        qb.topup-manual.review, qb.operator-settlement.review, qb.operator-plan.review, qb.operator-withdrawal.review,
+        qb.sod.control-changes, qb.sod.security-administration]
       legalDraftsCreated: [TERMS_APP, TERMS_SPONSOR, PRIVACY, COMMERCE_NOTICE, AI_NOTICE]
     save: { p1: "$.proposals[0]", p2: "$.proposals[1]", p3: "$.proposals[2]", p4: "$.proposals[3]",
       p5: "$.proposals[4]", p6: "$.proposals[5]", p7: "$.proposals[6]", p8: "$.proposals[7]", p9: "$.proposals[8]",

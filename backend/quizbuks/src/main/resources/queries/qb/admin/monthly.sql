@@ -125,8 +125,8 @@ kinds AS (
                WHEN p.src = 'QbOperatorSettlement' AND NOT p.reversal
                     AND p.accts IN ('2140,5130', '2140,4110,5130', '4110,5130')
                     AND p.a5130 > 0 AND p.a2140 <= 0 AND p.a4110 <= 0 THEN 'OPERATOR_SHARE'
-               WHEN p.src = 'QbOperatorSettlement' AND NOT p.reversal AND p.accts = '1120,2140'
-                    AND p.a2140 > 0 AND p.a1120 < 0 THEN 'OPERATOR_PAID'
+               WHEN p.src IN ('QbOperatorSettlement', 'QbOperatorWithdrawal') AND NOT p.reversal
+                    AND p.accts = '1120,2140' AND p.a2140 > 0 AND p.a1120 < 0 THEN 'OPERATOR_PAID'
                ELSE 'OTHER'
            END AS kind
     FROM per_tx p
