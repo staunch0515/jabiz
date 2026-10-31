@@ -136,6 +136,10 @@ for (const appearance of ['light', 'dark'] as const) {
     await page.getByRole('link', { name: 'Dashboard' }).click()
     await expect(page.getByTestId('dashboard-status')).toBeVisible()
     await expectAccessible(page, at('sponsor dashboard'))
+    // Q60a-2: the sponsor's page editor.
+    await page.getByRole('link', { name: 'My page' }).click()
+    await expect(page.getByTestId('sponsor-page-form')).toBeVisible()
+    await expectAccessible(page, at('sponsor page editor'))
     await page.getByRole('link', { name: 'Account' }).click()
     await expect(page.getByTestId('sign-in').first()).toBeVisible()
     await expectAccessible(page, at('sponsor account'))

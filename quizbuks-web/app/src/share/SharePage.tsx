@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
 import { useDuration } from '../qb/view/PublicationContent'
 import { formatKudos } from '../qb/kudos'
+import { sponsorPagePath } from '../qb/page'
 import { QB } from '../qb/messages'
 import { hrefOf, Link } from '../qb/router'
 import { InAppBrowserNotice } from '../install'
@@ -45,7 +46,10 @@ export function SharePage({ publicationId }: { publicationId: string }) {
         {p.quizTitle !== p.name && <p className="text-muted-foreground text-sm">{p.quizTitle}</p>}
         {p.sponsorCompany && (
           <p className="text-muted-foreground text-sm" data-testid="share-sponsor">
-            {t('share.by', { sponsor: p.sponsorCompany })}
+            {p.sponsorHandle
+              ? <Link to={sponsorPagePath(p.sponsorHandle)} className="underline underline-offset-2"
+                data-testid="share-sponsor-page">{t('share.by', { sponsor: p.sponsorCompany })}</Link>
+              : t('share.by', { sponsor: p.sponsorCompany })}
           </p>
         )}
       </header>

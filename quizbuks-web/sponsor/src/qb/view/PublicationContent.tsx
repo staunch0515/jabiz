@@ -5,6 +5,8 @@ import { BookOpen, CalendarClock, ChevronDown, ListChecks, MailCheck, Store, Tar
 import { useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { FileImage } from '../FileImage'
+import { sponsorPagePath } from '../page'
+import { Link } from '../router'
 import { CoverPlaceholder } from '../Illustrations'
 import { formatKudos } from '../kudos'
 import type { PublicationView, Tier } from '../play'
@@ -136,13 +138,16 @@ function Disclosure({ summary, icon: Icon, testId, children }: {
  * the taker app draws it above the start button, the sponsor console's preview (Q34b) the same from the sponsor's
  * own data. Layout and the place of every text: docs/quizbuks/plans/Q34-ui-polish.md, D-Q34-11.
  */
-export function PublicationContent({ publication: p, tiers, titleAs: Title = 'h1', draft = false }: {
+export function PublicationContent({ publication: p, tiers, titleAs: Title = 'h1', draft = false,
+  linkSponsor = false }: {
   publication: PublicationView
   tiers: Tier[]
   /** The name's heading: the page's own on the taker's page, under the preview's heading in the console. */
   titleAs?: 'h1' | 'h2'
   /** A quiz before it is published (the console's preview): what only a publication sets reads "–". */
   draft?: boolean
+  /** Q60a: whether the sponsor's name links to their published page (the app's own route; not the console's). */
+  linkSponsor?: boolean
 }) {
   const { t } = useTranslation(QBVIEW)
   const duration = useDuration()
@@ -175,7 +180,11 @@ export function PublicationContent({ publication: p, tiers, titleAs: Title = 'h1
             <p className="text-qb-hero-muted flex items-center gap-2 text-sm" data-testid="detail-sponsor">
               {p.sponsorAvatar && <FileImage fileId={p.sponsorAvatar} variant="w128" alt=""
                 className="size-5 rounded-full" />}
-              <span>{t('detail.by', { sponsor })}</span>
+              {/* Q60a: the sponsor's page, when it is published (the app only: the console has no such route). */}
+              {p.sponsorHandle && linkSponsor && !draft
+                ? <Link to={sponsorPagePath(p.sponsorHandle)} className="underline underline-offset-2"
+                  data-testid="detail-sponsor-page">{t('detail.by', { sponsor })}</Link>
+                : <span>{t('detail.by', { sponsor })}</span>}
             </p>
           )}
         </div>
