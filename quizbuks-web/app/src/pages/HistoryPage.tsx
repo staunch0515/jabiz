@@ -12,6 +12,8 @@ import { QB } from '../qb/messages'
 import { readHistory, type HistoryCategory, type HistoryRow } from '../qb/play'
 import { problemText } from '../qb/problems'
 import { Link } from '../qb/router'
+import { CoverPlaceholder } from '../qb/Illustrations'
+import { LazyImage } from '../qb/view/LazyImage'
 import { minutesUntil } from './PublicationPage'
 
 /** Rows per page of the history. */
@@ -39,15 +41,25 @@ function Row({ row, onContinue, starting }: { row: HistoryRow; onContinue: () =>
   const left = minutesUntil(row.deadline)
   return (
     <li className="flex flex-col gap-2 rounded-lg border p-3" data-testid="history-row" data-category={row.category}>
-      <div className="flex items-start gap-2">
-        <h2 className="flex-1 font-medium">{row.name}</h2>
-        <Badge variant={BADGES[row.category]} data-testid="history-category">
-          {/* A survey (Q12) is completed or not, never passed. */}
-          {row.kind === 'SURVEY' && finished ? t(`history.surveyCategories.${row.category}`)
-            : t(`history.categories.${row.category}`)}
-        </Badge>
+      {/* Q65: the publication's cover (its card's) beside the name, as on the home. */}
+      <div className="flex items-start gap-3">
+        <span className="bg-muted relative aspect-video w-24 shrink-0 overflow-hidden rounded" data-testid="history-cover">
+          {row.cover
+            ? <LazyImage fileId={row.cover} variant="w320" alt="" className="absolute inset-0 size-full" />
+            : <CoverPlaceholder seed={row.publicationId} className="absolute inset-0 size-full" />}
+        </span>
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <div className="flex items-start gap-2">
+            <h2 className="line-clamp-2 flex-1 leading-snug font-medium">{row.name}</h2>
+            <Badge variant={BADGES[row.category]} data-testid="history-category">
+              {/* A survey (Q12) is completed or not, never passed. */}
+              {row.kind === 'SURVEY' && finished ? t(`history.surveyCategories.${row.category}`)
+                : t(`history.categories.${row.category}`)}
+            </Badge>
+          </div>
+          <p className="text-muted-foreground text-xs">{t('history.startedAt', { time: formatDateTime(row.startedAt) })}</p>
+        </div>
       </div>
-      <p className="text-muted-foreground text-xs">{t('history.startedAt', { time: formatDateTime(row.startedAt) })}</p>
       {finished && (
         <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
           {row.kind !== 'SURVEY' && (

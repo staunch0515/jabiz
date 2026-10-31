@@ -42,6 +42,7 @@ const en = {
   },
   nav: { label: 'App', home: 'Home', history: 'History', account: 'Account', back: 'Back' },
   menu: { open: 'Menu' },
+  video: { sound: 'Tap for sound' },
   sponsorVisit: { title: 'Visit {{sponsor}}', hint: 'Their story and all their products', products: 'See their products and story' },
   intro: {
     skip: 'Skip',
@@ -294,6 +295,7 @@ const en = {
     noAnswer: 'No answer',
     earned: 'Points: {{earned}} of {{points}}',
     more: 'More quizzes',
+    toQuiz: 'About this quiz',
   },
   history: {
     title: 'History',
@@ -433,6 +435,7 @@ const zh: typeof en = {
   },
   nav: { label: 'App', home: '首页', history: '记录', account: '账户', back: '返回' },
   menu: { open: '菜单' },
+  video: { sound: '点按开启声音' },
   sponsorVisit: { title: '访问 {{sponsor}} 的店铺主页', hint: '店铺介绍与全部商品', products: '看看这家店的商品与介绍' },
   intro: {
     skip: '跳过',
@@ -685,6 +688,7 @@ const zh: typeof en = {
     noAnswer: '未作答',
     earned: '得分：{{earned}} / {{points}}',
     more: '更多 Quiz',
+    toQuiz: '问答介绍',
   },
   history: {
     title: '答题记录',
@@ -824,6 +828,7 @@ const ja: typeof en = {
   },
   nav: { label: 'アプリ', home: 'ホーム', history: '履歴', account: 'アカウント', back: '戻る' },
   menu: { open: 'メニュー' },
+  video: { sound: 'タップして音声をオン' },
   sponsorVisit: { title: '{{sponsor}} のページへ', hint: 'お店の紹介とすべての商品', products: 'このお店の商品と紹介を見る' },
   intro: {
     skip: 'スキップ',
@@ -1076,6 +1081,7 @@ const ja: typeof en = {
     noAnswer: '未回答',
     earned: '得点：{{earned}} / {{points}}',
     more: 'ほかのクイズ',
+    toQuiz: 'クイズの紹介',
   },
   history: {
     title: '回答履歴',

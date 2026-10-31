@@ -7,6 +7,7 @@ import App from './App'
 import { forgetRedeem, pendingRedeem, rememberRedeem, RESUME_FOR_MS } from './redeemReturn'
 import { placeholderIndex } from './qb/Illustrations'
 import './messages'
+import { stagedPlayer } from './video/stage'
 import { activeFilterCount, containsPattern, feedFilters, GREETING_MS, NO_FILTERS } from './pages/FeedPage'
 import { forgetAttempts, storeResult, storeStart } from './play/storage'
 import type { StartOutput, SubmitOutput } from './qb/play'
@@ -693,7 +694,6 @@ describe('a digital prize (Q33)', () => {
 
 describe('the video to watch (Q19, Q63)', () => {
   const PLAYER = 'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ'
-  const PLAYING = `${PLAYER}?autoplay=1&mute=1&playsinline=1`
 
   it('plays a card\'s video muted while the card is in the middle of the screen, and its start opens the start page',
     async () => {
@@ -706,19 +706,56 @@ describe('the video to watch (Q19, Q63)', () => {
     expect(within(card).getByTestId('feed-card-video-mark')).toHaveTextContent('With a video')
     expect(document.querySelector('iframe')).toBeNull()
     io.fire(card, true, MIDDLE)
-    const frame = within(card).getByTitle('Video: Capitals week')
-    expect(frame).toHaveAttribute('src', PLAYING)
+    // Q65: the app's one player, laid over the card's place; nothing in it is for touching.
+    const frame = await screen.findByTitle('Video: Capitals week')
+    expect(frame).toHaveAttribute('src', stagedPlayer(PLAYER))
+    expect(frame.getAttribute('src')).toContain('mute=1')
     expect(frame.getAttribute('allow')).toContain('autoplay')
+    expect(screen.getByTestId('video-open')).toHaveAccessibleName('Video: Capitals week')
+    expect(within(card).getByTestId('video-slot')).toHaveAttribute('data-mode', 'card')
     expect(card).toHaveAttribute('data-playing', 'true')
     // The player covers the picture's reward; it is said under the name.
     expect(within(card).getByTestId('feed-card-reward')).toHaveTextContent('Up to 100 Kudos')
     io.fire(card, false, MIDDLE)
-    expect(document.querySelector('iframe')).toBeNull()
+    await waitFor(() => expect(document.querySelector('iframe')).toBeNull())
     // The start opens the start page first (its time limit and pass score), and starts nothing.
     expect(within(card).getByTestId('feed-card-start')).toHaveAttribute('href', `/p/${PUB}`)
     await userEvent.click(within(card).getByTestId('feed-card-start'))
     await waitFor(() => expect(window.location.pathname).toBe(`/p/${PUB}`))
     expect(api.posted('QB_ATTEMPT_START')).toEqual([])
+  })
+
+  it('opens the start page from a tap on the playing video, the same player playing on with its sound (Q65)',
+    async () => {
+    const io = intersections()
+    server({ feed: [{ ...CARD, video: PLAYER }], publicationPage: () => json(200, { items: [publication({
+      materials: JSON.stringify([{ no: 1, kind: 'VIDEO_LINK', title: 'Watch first', description: null, body: null,
+        url: 'https://youtu.be/dQw4w9WgXcQ', pdf: null, audio: null, images: [], watchToAnswer: true }]) })],
+      offset: 0, limit: 1 }) })
+    render(<App />)
+    const card = await screen.findByTestId('feed-card')
+    io.fire(card, true, MIDDLE)
+    const frame = await screen.findByTitle('Video: Capitals week') as HTMLIFrameElement
+    const sent = vi.spyOn(frame.contentWindow!, 'postMessage')
+    await userEvent.click(screen.getByTestId('video-open'))
+    await waitFor(() => expect(window.location.pathname).toBe(`/p/${PUB}`))
+    // The sound is asked for within the tap, through the player's own commands.
+    expect(sent.mock.calls.map(([message]) => JSON.parse(String(message)).func)).toEqual(
+      expect.arrayContaining(['unMute', 'playVideo']))
+    // The start page takes the same player over: not a new one from the start.
+    const hero = await screen.findByTestId('detail-hero')
+    await waitFor(() => expect(within(hero).getByTestId('video-slot')).toHaveAttribute('data-mode', 'page'))
+    expect(document.querySelectorAll('iframe')).toHaveLength(1)
+    expect(document.querySelector('iframe')).toBe(frame)
+    expect(screen.queryByTestId('video-open')).toBeNull()
+    // Until the player says its sound is on, a button asks for it; then it goes.
+    const button = await screen.findByTestId('video-sound')
+    expect(button).toHaveTextContent('Tap for sound')
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', { source: frame.contentWindow,
+        data: JSON.stringify({ event: 'infoDelivery', info: { muted: false } }) }))
+    })
+    await waitFor(() => expect(screen.queryByTestId('video-sound')).toBeNull())
   })
 
   it('plays one card at a time, the first of those in the middle', async () => {
@@ -731,7 +768,7 @@ describe('the video to watch (Q19, Q63)', () => {
     expect(within(cards[2]).getByTestId('feed-card-start')).toHaveAttribute('data-progress', 'start')
     io.fire(cards[1], true, MIDDLE)
     io.fire(cards[0], true, MIDDLE)
-    expect(document.querySelectorAll('iframe')).toHaveLength(1)
+    await waitFor(() => expect(document.querySelectorAll('iframe')).toHaveLength(1))
     expect(cards[0]).toHaveAttribute('data-playing', 'true')
     io.fire(cards[0], false, MIDDLE)
     expect(cards[1]).toHaveAttribute('data-playing', 'true')
@@ -849,8 +886,11 @@ describe('a publication\'s page', () => {
     // Q34: a row per material with its title and its description on one line; the article opens on a sheet.
     // Q63: the video the app plays leads the page, playing muted as it opens; it is not among the materials again.
     const hero = screen.getByTestId('detail-hero')
-    expect(within(hero).getByTitle('On YouTube'))
-      .toHaveAttribute('src', 'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?autoplay=1&mute=1&playsinline=1')
+    // Q65: the app's one player over the hero's place, started muted; a button asks for the sound.
+    expect(await screen.findByTitle('On YouTube'))
+      .toHaveAttribute('src', stagedPlayer('https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ'))
+    expect(within(hero).getByTestId('video-slot')).toHaveAttribute('data-mode', 'page')
+    expect(await within(hero).findByTestId('video-sound')).toBeInTheDocument()
     expect(within(hero).getByRole('heading', { level: 1 })).toHaveTextContent('Capitals week')
     const rows = within(materials).getAllByTestId('material')
     expect(rows.map((row) => row.getAttribute('data-kind'))).toEqual(['ARTICLE', 'VIDEO_LINK'])
@@ -913,13 +953,17 @@ describe('a publication\'s page', () => {
     expect(within(hero).getByRole('heading', { level: 1 })).toHaveTextContent('Capitals week')
     expect(within(hero).getByTestId('detail-quiz-title')).toHaveTextContent('World capitals')
     expect(within(hero).getByTestId('detail-sponsor')).toHaveTextContent('Capitals Inc')
-    // Six facts in one block of three columns: each a term and its value.
+    // Q65: the six facts in a line or two of small type, each saying what it is (the term for assistive technology).
     const facts = screen.getByTestId('detail-facts')
     expect(facts.querySelectorAll('dt')).toHaveLength(6)
-    expect(facts).toHaveTextContent('3 / 5')
-    // The cards have a title bar of their own.
-    expect(within(screen.getByTestId('detail-intro')).getByRole('heading', { name: 'About this quiz' }).parentElement)
-      .toHaveClass('bg-muted')
+    expect(facts).toHaveTextContent('2 questions')
+    expect(facts).toHaveTextContent('Pass 3/5')
+    expect(facts).toHaveTextContent('Until')
+    expect(facts).toHaveClass('flex-wrap')
+    // The introduction without a card of its own; the reward folded to one line, its details inside.
+    expect(screen.getByTestId('detail-intro')).toHaveAccessibleName('About this quiz')
+    expect(screen.getByTestId('detail-reward-line')).toHaveTextContent('Your reward: Kudos')
+    expect(screen.getByTestId('detail-reward')).not.toHaveAttribute('open')
     expect(screen.getByTestId('detail-reward')).toHaveTextContent('Kudos paid by QuizBuks')
     // The counts in one line, the details and the sponsor folded.
     expect(screen.getByTestId('detail-stats-line')).toHaveTextContent('2 in the last 24 hours · 2 in total')
@@ -1067,9 +1111,13 @@ describe('answering', () => {
     const questions = screen.getAllByTestId('result-question')
     expect(questions[0]).toHaveAttribute('data-correct', 'true')
     expect(within(questions[0]).getByTestId('result-mine')).toHaveTextContent('B. Paris')
+    // Q65: a right answer once; the right one besides only where the taker's differs.
+    expect(within(questions[0]).queryByTestId('result-correct')).toBeNull()
     expect(questions[1]).toHaveAttribute('data-correct', 'false')
     expect(within(questions[1]).getByTestId('result-mine')).toHaveTextContent('B. Osaka')
     expect(within(questions[1]).getByTestId('result-correct')).toHaveTextContent('A. Tokyo')
+    // Back to the quiz's own page.
+    expect(screen.getByTestId('result-publication')).toHaveAttribute('href', `/p/${PUB}`)
   })
 
   it('stays on the question when submitting fails, saves the answers again and can submit again', async () => {
@@ -1422,6 +1470,9 @@ describe('the history', () => {
     window.history.replaceState(null, '', '/history')
     render(<App />)
     const item = await screen.findByTestId('history-row')
+    // Q65: the publication's cover beside the name (a drawn one without a cover).
+    expect(within(item).getByTestId('history-cover')).toBeInTheDocument()
+    expect(within(item).getByTestId('history-cover').querySelector('svg')).not.toBeNull()
     expect(item).toHaveTextContent('Passed')
     expect(item).toHaveTextContent('Score 5 / 5')
     expect(item).toHaveTextContent('Earned 100 Kudos')

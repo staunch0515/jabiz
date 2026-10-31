@@ -2,6 +2,7 @@ import { questionProducts, type PublicationProduct } from '../qb/products'
 import { readPublicationProducts } from '../share/api'
 import { ProductCards } from '../qb/view/ProductCards'
 import { SponsorVisit } from './SponsorVisit'
+import { resultPublication } from './resultPublication'
 import { ApiError, formatDateTime } from '@jabiz/client'
 import {
   Alert,
@@ -142,8 +143,13 @@ function QuestionRow({ result, question, index, product }: { result: QuestionRes
         <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
           <dt className="text-muted-foreground">{t('result.yourAnswer')}</dt>
           <dd data-testid="result-mine">{mine.length > 0 ? mine.join(', ') : t('result.noAnswer')}</dd>
-          <dt className="text-muted-foreground">{t('result.correctAnswer')}</dt>
-          <dd data-testid="result-correct">{correct.join(', ')}</dd>
+          {/* Q65: the right answer only where it differs from the taker's. */}
+          {!right && (
+            <>
+              <dt className="text-muted-foreground">{t('result.correctAnswer')}</dt>
+              <dd data-testid="result-correct">{correct.join(', ')}</dd>
+            </>
+          )}
         </dl>
       )}
       <p className="text-muted-foreground text-xs">{t('result.earned', { earned: result.earned, points: result.points })}</p>
@@ -516,6 +522,7 @@ export function ResultPage({ attemptId }: { attemptId: string }) {
   // Q60b: the products the sponsor shows with the questions, while the publication is live (public, so it may fail
   // quietly: the result stands without them).
   const publicationId = result.data?.publicationId
+  if (publicationId) resultPublication.remember(attemptId, publicationId)
   const products = useQuery({ queryKey: ['qb', 'publication-products', publicationId],
     queryFn: () => readPublicationProducts(publicationId!), enabled: !!publicationId, retry: false })
   // Q64: the sponsor's page, from the publication (found by the caller's attempt whatever its state now).
@@ -634,7 +641,12 @@ export function ResultPage({ attemptId }: { attemptId: string }) {
           sponsor={publication.data.sponsorCompany ?? publication.data.sponsorName} products={false} />
       )}
       <div className="flex gap-2">
-        <Button asChild variant="outline" className="flex-1"><Link to="/history">{t('nav.history')}</Link></Button>
+        {/* Q65: back to the quiz's own page (its introduction and materials), else to the history. */}
+        {data.publicationId
+          ? <Button asChild variant="outline" className="flex-1">
+            <Link to={`/p/${data.publicationId}`} data-testid="result-publication">{t('result.toQuiz')}</Link>
+          </Button>
+          : <Button asChild variant="outline" className="flex-1"><Link to="/history">{t('nav.history')}</Link></Button>}
         <Button asChild className="flex-1"><Link to="/">{t('result.more')}</Link></Button>
       </div>
     </section>
