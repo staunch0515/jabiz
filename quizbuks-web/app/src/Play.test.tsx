@@ -290,27 +290,29 @@ describe('the feed', () => {
     expect(screen.getByRole('heading', { level: 1 })).toHaveClass('sr-only')
   })
 
-  it('puts the filters and the ways a reward is paid in a row of chips, the order and the answered ones in the filters (Q63)',
-    async () => {
+  it('keeps the filters in the header: the ways a reward is paid and the others in one sheet (Q64)', async () => {
     const { calls } = server()
     render(<App />)
     await screen.findByTestId('feed-card')
-    // The search is the header's (a magnifier); the home has none of its own.
+    // The search and the filters are the header's; the home has no row of its own.
     expect(screen.queryByRole('search')).toBeNull()
-    expect([...screen.getByTestId('feed-chips').querySelectorAll('[data-testid]')].map((e) => e.getAttribute('data-testid')))
-      .toEqual(['feed-filters-open', 'feed-method-ALL', 'feed-method-PLATFORM', 'feed-method-SPONSOR_CASH',
-        'feed-method-OFFLINE_REDEEM', 'feed-method-DIGITAL_PRIZE'])
-    expect(screen.getByTestId('feed-method-ALL')).toHaveAttribute('aria-pressed', 'true')
+    expect(within(screen.getByRole('banner')).getByTestId('feed-filters-open')).toHaveAccessibleName('Filters')
+    expect(screen.queryByTestId('feed-chips')).toBeNull()
     expect(screen.queryByTestId('feed-sort')).toBeNull()
     // By default the answered ones are left out.
     expect(calls.some((c) => c.path === '/api/queries/qb.app.feed'
       && (c.body as { params: { includeAnswered?: boolean } }).params.includeAnswered === false)).toBe(true)
     await userEvent.click(screen.getByTestId('feed-filters-open'))
+    expect([...(await screen.findByTestId('feed-chips')).querySelectorAll('[data-testid]')]
+      .map((e) => e.getAttribute('data-testid'))).toEqual(['feed-method-ALL', 'feed-method-PLATFORM',
+      'feed-method-SPONSOR_CASH', 'feed-method-OFFLINE_REDEEM', 'feed-method-DIGITAL_PRIZE'])
+    expect(screen.getByTestId('feed-method-ALL')).toHaveAttribute('aria-pressed', 'true')
+    await expectAccessible()
     await userEvent.click(await screen.findByTestId('feed-filter-answered'))
     await userEvent.click(screen.getByTestId('feed-filters-apply'))
     await waitFor(() => expect(calls.some((c) => c.path === '/api/queries/qb.app.feed'
       && (c.body as { params: { includeAnswered?: boolean } }).params.includeAnswered === true)).toBe(true))
-    expect(screen.getByTestId('feed-filters-count')).toHaveTextContent('1')
+    expect(screen.getByTestId('feed-filters-dot')).toBeInTheDocument()
     expect(screen.getByTestId('feed-filters-open')).toHaveAccessibleName('Filters, Filters on: 1')
     expect(activeFilterCount({ ...NO_FILTERS, sort: 'popular', includeAnswered: true, minCompletions: '3' })).toBe(3)
   })
@@ -370,13 +372,15 @@ describe('the ways a reward is paid (Q22)', () => {
     render(<App />)
     const card = await screen.findByTestId('feed-card')
     expect(within(card).getByTestId('feed-card-method')).toHaveAttribute('data-method', 'SPONSOR_CASH')
-    // Q63: a row of chips, the one chosen pressed.
-    await userEvent.click(screen.getByTestId('feed-method-OFFLINE_REDEEM'))
+    // Q64: chips in the header's filters, the one chosen pressed; it counts as a filter on.
+    await userEvent.click(screen.getByTestId('feed-filters-open'))
+    await userEvent.click(await screen.findByTestId('feed-method-OFFLINE_REDEEM'))
     await waitFor(() => expect(screen.getByTestId('feed-method-OFFLINE_REDEEM')).toHaveAttribute('aria-pressed', 'true'))
     expect(screen.getByTestId('feed-method-ALL')).toHaveAttribute('aria-pressed', 'false')
     await waitFor(() => expect(calls.some((c) => c.path === '/api/queries/qb.app.feed'
       && (c.body as { params: { method?: string } }).params.method === 'OFFLINE_REDEEM')).toBe(true))
     expect(window.localStorage.getItem('qb.feed.method')).toBe('OFFLINE_REDEEM')
+    expect(screen.getByTestId('feed-filters-open')).toHaveAccessibleName('Filters, Filters on: 1')
     window.localStorage.removeItem('qb.feed.method')
   })
 
@@ -420,6 +424,19 @@ describe('the ways a reward is paid (Q22)', () => {
     await waitFor(() => expect(screen.queryByTestId('cash-dispute-dialog')).toBeNull())
     await userEvent.click(within(screen.getByTestId('result-reward')).getByTestId('cash-confirm'))
     await waitFor(() => expect(posted('QB_CASH_REWARD_CONFIRM')).toEqual([{ cashRewardId: 'c1' }]))
+  })
+
+  it('offers the sponsor\'s page on the result, whether passed or not (Q64)', async () => {
+    server({ result: () => json(200, { output: finished({ score: 0, passed: false, reward: 0, rewardStatus: 'NONE' }) }),
+      publicationPage: () => json(200, { items: [publication({ sponsorHandle: 'capitals' })], offset: 0, limit: 1 }) })
+    window.history.replaceState(null, '', `/result/${ATTEMPT}`)
+    render(<App />)
+    expect(await screen.findByTestId('result-passed')).toHaveAttribute('data-passed', 'false')
+    const visit = await screen.findByTestId('sponsor-visit')
+    expect(visit).toHaveAttribute('href', '/s/capitals')
+    expect(visit).toHaveTextContent('See their products and story')
+    // Opened first (from the history's link or a mail), the header's arrow goes home.
+    expect(screen.getByTestId('header-back')).toBeInTheDocument()
   })
 
   it('shows a prize with what it is and until when', async () => {
@@ -639,7 +656,8 @@ describe('a digital prize (Q33)', () => {
     expect(within(card).getByTestId('feed-card-method')).toHaveAttribute('data-method', 'DIGITAL_PRIZE')
     expect(within(card).getByTestId('feed-card-method')).toHaveTextContent('Digital')
     await expectAccessible()
-    await userEvent.click(screen.getByTestId('feed-method-DIGITAL_PRIZE'))
+    await userEvent.click(screen.getByTestId('feed-filters-open'))
+    await userEvent.click(await screen.findByTestId('feed-method-DIGITAL_PRIZE'))
     await waitFor(() => expect(calls.some((c) => c.path === '/api/queries/qb.app.feed'
       && (c.body as { params: { method?: string } }).params.method === 'DIGITAL_PRIZE')).toBe(true))
     window.localStorage.removeItem('qb.feed.method')
@@ -697,8 +715,8 @@ describe('the video to watch (Q19, Q63)', () => {
     io.fire(card, false, MIDDLE)
     expect(document.querySelector('iframe')).toBeNull()
     // The start opens the start page first (its time limit and pass score), and starts nothing.
-    expect(within(card).getByTestId('feed-video-start')).toHaveAttribute('href', `/p/${PUB}`)
-    await userEvent.click(within(card).getByTestId('feed-video-start'))
+    expect(within(card).getByTestId('feed-card-start')).toHaveAttribute('href', `/p/${PUB}`)
+    await userEvent.click(within(card).getByTestId('feed-card-start'))
     await waitFor(() => expect(window.location.pathname).toBe(`/p/${PUB}`))
     expect(api.posted('QB_ATTEMPT_START')).toEqual([])
   })
@@ -710,7 +728,7 @@ describe('the video to watch (Q19, Q63)', () => {
     render(<App />)
     const cards = await screen.findAllByTestId('feed-card')
     expect(cards[2]).not.toHaveAttribute('data-video')
-    expect(within(cards[2]).queryByTestId('feed-video-start')).toBeNull()
+    expect(within(cards[2]).getByTestId('feed-card-start')).toHaveAttribute('data-progress', 'start')
     io.fire(cards[1], true, MIDDLE)
     io.fire(cards[0], true, MIDDLE)
     expect(document.querySelectorAll('iframe')).toHaveLength(1)
@@ -743,6 +761,59 @@ describe('the video to watch (Q19, Q63)', () => {
     expect(card).not.toHaveAttribute('data-video')
     io.fire(card, true, MIDDLE)
     expect(document.querySelector('iframe')).toBeNull()
+  })
+})
+
+describe('a card\'s start and its sponsor (Q64)', () => {
+  it('starts, resumes or shows the result by a small icon, and links the sponsor\'s published page', async () => {
+    const future = new Date(Date.now() + 600_000).toISOString()
+    const past = new Date(Date.now() - 600_000).toISOString()
+    server({ feed: [{ ...CARD, sponsorHandle: 'capitals' },
+      { ...CARD, publicationId: 'pub-2', name: 'Going', myAttemptId: 'att-2', myStatus: 'IN_PROGRESS', myDeadline: future },
+      { ...CARD, publicationId: 'pub-3', name: 'Ran out', myAttemptId: 'att-3', myStatus: 'IN_PROGRESS', myDeadline: past },
+      { ...CARD, publicationId: 'pub-4', name: 'Done', myAttemptId: 'att-4', myStatus: 'SUBMITTED', myDeadline: past }] })
+    render(<App />)
+    const cards = await screen.findAllByTestId('feed-card')
+    const start = (i: number) => within(cards[i]).getByTestId('feed-card-start')
+    expect(start(0)).toHaveAttribute('data-progress', 'start')
+    expect(start(0)).toHaveAttribute('href', `/p/${PUB}`)
+    expect(start(0)).toHaveAccessibleName('Start: Capitals week')
+    // An icon only: the name is for assistive technology.
+    expect(start(0)).toHaveTextContent('')
+    expect(start(1)).toHaveAttribute('href', '/play/att-2')
+    expect(start(1)).toHaveAccessibleName('Continue: Going')
+    expect(start(2)).toHaveAttribute('data-progress', 'done')
+    expect(start(3)).toHaveAttribute('href', '/result/att-4')
+    expect(start(3)).toHaveAccessibleName('Result: Done')
+    // The sponsor of a published page links to it; another's name is text.
+    expect(within(cards[0]).getByTestId('feed-card-sponsor')).toHaveAttribute('href', '/s/capitals')
+    expect(within(cards[1]).getByTestId('feed-card-sponsor').tagName).toBe('SPAN')
+    await expectAccessible()
+  })
+
+  it('goes back from the start page with the header\'s arrow, and offers the sponsor\'s page there', async () => {
+    server({ publicationPage: () => json(200, { items: [publication({ sponsorHandle: 'capitals' })], offset: 0,
+      limit: 1 }) })
+    render(<App />)
+    await userEvent.click(within((await screen.findAllByTestId('feed-card'))[0]).getByTestId('feed-card-link'))
+    expect(await screen.findByTestId('detail-name')).toBeInTheDocument()
+    expect(screen.queryByText('All quizzes')).toBeNull()
+    const visit = await screen.findByTestId('sponsor-visit')
+    expect(visit).toHaveAttribute('href', '/s/capitals')
+    expect(visit).toHaveTextContent('Visit Capitals Inc')
+    await userEvent.click(screen.getByTestId('header-back'))
+    await waitFor(() => expect(window.location.pathname).toBe('/'))
+    expect(screen.queryByTestId('header-back')).toBeNull()
+  })
+
+  it('goes home from a start page opened first, and shows no sponsor page while there is none', async () => {
+    server()
+    window.history.replaceState(null, '', `/p/${PUB}`)
+    render(<App />)
+    expect(await screen.findByTestId('detail-name')).toBeInTheDocument()
+    expect(screen.queryByTestId('sponsor-visit')).toBeNull()
+    await userEvent.click(screen.getByTestId('header-back'))
+    await waitFor(() => expect(window.location.pathname).toBe('/'))
   })
 })
 

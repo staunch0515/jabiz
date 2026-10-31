@@ -1,7 +1,7 @@
 /*---
 id: qb.app.feed
 description: The publications a taker can answer now (U-10 – U-14), newest first; searched by name and title
-entities: [QbPublicationCard, QbPublicationCounter, QbPublicationStartCounter, QbWallet, QbCountry, QbSponsor, QbPublicationOwner, QbAttempt, QbProfileAttribute, QbPublicationCriterion]
+entities: [QbPublicationCard, QbPublicationCounter, QbPublicationStartCounter, QbWallet, QbCountry, QbSponsor, QbSponsorPage, QbPublicationOwner, QbAttempt, QbProfileAttribute, QbPublicationCriterion]
 datasets:
   QbPublicationCard: urn:jabiz:dataset:default:QbPublicationCard
   QbPublicationCounter: urn:jabiz:dataset:default:QbPublicationCounter
@@ -9,6 +9,7 @@ datasets:
   QbWallet: urn:jabiz:dataset:default:QbWallet
   QbCountry: urn:jabiz:dataset:default:QbCountry
   QbSponsor: urn:jabiz:dataset:default:QbSponsor
+  QbSponsorPage: urn:jabiz:dataset:public:QbSponsorPage
   QbPublicationOwner: urn:jabiz:dataset:me:QbPublicationOwner
   QbAttempt: urn:jabiz:dataset:taker:QbAttempt
   QbProfileAttribute: urn:jabiz:dataset:me:QbProfileAttribute
@@ -36,12 +37,16 @@ results:
   sponsorName:    { from: QbSponsor.contactName }
   sponsorCompany: { from: QbSponsor.company }
   sponsorAvatar:  { from: QbSponsor.avatar }
+  sponsorHandle:  { from: QbSponsorPage.handle }
   sponsorCountry: { from: QbPublicationCard.sponsorCountry }
   startAt:        { from: QbPublicationCard.startAt }
   endAt:          { from: QbPublicationCard.endAt }
   timeLimitSec:   { from: QbPublicationCard.timeLimitSec }
   questionCount:  { from: QbPublicationCard.questionCount }
   fullScore:      { from: QbPublicationCard.fullScore }
+  myAttemptId:    { from: QbAttempt.attemptId }
+  myStatus:       { from: QbAttempt.status }
+  myDeadline:     { from: QbAttempt.deadline }
 list:
   filters: [sponsorCountry, sponsorName, sponsorCompany, maxReward, rewardMethod, completions, startAt]
   sorts:   [startAt, maxReward, completions]
@@ -76,12 +81,19 @@ SELECT
     sp.{{QbSponsor.contactName}}           AS sponsorName,
     sp.{{QbSponsor.company}}               AS sponsorCompany,
     sp.{{QbSponsor.avatar}}                AS sponsorAvatar,
+    -- Q64: the sponsor's published page (the public view holds published ones only), which the card links to.
+    sp_page.{{QbSponsorPage.handle}}       AS sponsorHandle,
     c.{{QbPublicationCard.sponsorCountry}} AS sponsorCountry,
     c.{{QbPublicationCard.startAt}}        AS startAt,
     c.{{QbPublicationCard.endAt}}          AS endAt,
     c.{{QbPublicationCard.timeLimitSec}}   AS timeLimitSec,
     c.{{QbPublicationCard.questionCount}}  AS questionCount,
-    c.{{QbPublicationCard.fullScore}}      AS fullScore
+    c.{{QbPublicationCard.fullScore}}      AS fullScore,
+    -- Q64: the caller's own attempt (the view holds theirs only, one a publication), for the card's start to say
+    -- whether it starts, resumes or shows the result.
+    m.{{QbAttempt.attemptId}}              AS myAttemptId,
+    m.{{QbAttempt.status}}                 AS myStatus,
+    m.{{QbAttempt.deadline}}               AS myDeadline
 FROM {{QbPublicationCard}} c
 JOIN {{QbPublicationCounter}} n ON n.{{QbPublicationCounter.publicationId}} = c.{{QbPublicationCard.publicationId}}
 JOIN {{QbPublicationStartCounter}} s
@@ -90,6 +102,8 @@ LEFT JOIN {{QbWallet}} w ON w.{{QbWallet.ownerId}} = c.{{QbPublicationCard.publi
     AND w.{{QbWallet.kind}} = 'SPONSOR'
 LEFT JOIN {{QbSponsor}} sp ON sp.{{QbSponsor.userId}} = c.{{QbPublicationCard.publisherId}}
     AND sp.{{QbSponsor.reviewStatus}} = 'APPROVED'
+LEFT JOIN {{QbSponsorPage}} sp_page ON sp_page.{{QbSponsorPage.userId}} = sp.{{QbSponsor.userId}}
+LEFT JOIN {{QbAttempt}} m ON m.{{QbAttempt.publicationId}} = c.{{QbPublicationCard.publicationId}}
 WHERE c.{{QbPublicationCard.status}} = 'LIVE'
   -- S0 (D-S0-4): the App lists the sponsors' publications; a shop's (S2) are answered in its storefront.
   AND c.{{QbPublicationCard.publisherKind}} = 'SPONSOR'

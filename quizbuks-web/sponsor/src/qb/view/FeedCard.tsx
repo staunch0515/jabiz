@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { CoverPlaceholder } from '../Illustrations'
 import { formatKudos } from '../kudos'
 import type { FeedCard, RewardMethod } from '../play'
+import { sponsorPagePath } from '../page'
 import { Link } from '../router'
 import { LazyImage } from './LazyImage'
 import { QBVIEW } from './messages'
@@ -35,7 +36,8 @@ export function RewardTag({ card }: { card: FeedCard }) {
  * without one), with the reward and the way it is paid on its corners; under it the sponsor's picture, the name in up
  * to two lines and the sponsor and how many answered. A publication with a video (`card.video`: the one to watch to
  * answer, else the first the App plays) shows a play mark on its picture, and its player instead, started muted, while
- * `playing` (the home plays the card in the middle of the screen). `action` goes under the name (the app's start).
+ * `playing` (the home plays the card in the middle of the screen). `action` (the app's start, Q64) sits right under
+ * the picture at the left, in the place of the sponsor's picture, which then goes beside the sponsor's name.
  */
 export function FeedCardView({ card, href, playing = false, action }: { card: FeedCard; href: string | null
   playing?: boolean; action?: ReactNode }) {
@@ -85,24 +87,35 @@ export function FeedCardView({ card, href, playing = false, action }: { card: Fe
         : href
           ? <Link to={href} aria-label={card.name} data-testid="feed-card-picture">{picture}</Link>
           : picture}
-      <div className="flex gap-3 px-1 pt-3">
-        {card.sponsorAvatar
+      <div className="flex gap-3 px-1 pt-2">
+        {/* Q64: the app's start sits right under the picture at the left, an icon; the preview shows the sponsor. */}
+        {action ?? (card.sponsorAvatar
           ? <LazyImage fileId={card.sponsorAvatar} variant="w128" alt="" className="size-9 shrink-0 rounded-full" />
           : <span aria-hidden className="bg-accent text-accent-foreground flex size-9 shrink-0 items-center justify-center rounded-full text-sm font-semibold">
             {(sponsor ?? card.name).trim().charAt(0).toUpperCase()}
-          </span>}
+          </span>)}
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           {href
             ? <Link to={href} data-testid="feed-card-link" className="hover:underline focus-visible:ring-ring/50 underline-offset-4 outline-none focus-visible:ring-[3px]">{name}</Link>
             : name}
           <span className="text-muted-foreground flex min-w-0 flex-wrap items-center gap-x-1.5 text-xs">
-            {sponsor && <span className="truncate" data-testid="feed-card-sponsor">{sponsor}</span>}
+            {sponsor && (
+              <span className="flex min-w-0 items-center gap-1">
+                {action && card.sponsorAvatar && (
+                  <LazyImage fileId={card.sponsorAvatar} variant="w128" alt="" className="size-4 shrink-0 rounded-full" />
+                )}
+                {/* Q64: the sponsor's page, when it is published (the app's own route; the preview leads nowhere). */}
+                {href && card.sponsorHandle
+                  ? <Link to={sponsorPagePath(card.sponsorHandle)} data-testid="feed-card-sponsor"
+                    className="truncate underline-offset-2 hover:underline">{sponsor}</Link>
+                  : <span className="truncate" data-testid="feed-card-sponsor">{sponsor}</span>}
+              </span>
+            )}
             {sponsor && <span aria-hidden>·</span>}
             <span data-testid="feed-card-completions">{t('feed.completions', { count: card.completions })}</span>
           </span>
           {/* The player covers the picture and its reward: while it plays, the reward is said here. */}
           {card.video && playing && <span className="self-start"><RewardTag card={card} /></span>}
-          {action}
         </div>
       </div>
     </li>

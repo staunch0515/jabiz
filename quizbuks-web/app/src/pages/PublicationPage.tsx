@@ -5,7 +5,7 @@ import { QBVIEW } from '../qb/view/messages'
 import { i18n, useAuth } from '@jabiz/client'
 import { Alert, AlertDescription, Button, PageState } from '@jabiz/ui'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft, MailWarning, Play, UserRoundSearch } from 'lucide-react'
+import { MailWarning, Play, UserRoundSearch } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
@@ -17,6 +17,7 @@ import { readPublication, readTiers, recordView, type PublicationView } from '..
 import { problemText } from '../qb/problems'
 import { Link } from '../qb/router'
 import { prefersStillVideo } from '../qb/video'
+import { SponsorVisit } from './SponsorVisit'
 import { PublicationContent, useDuration } from '../qb/view/PublicationContent'
 
 /** Whole minutes from now until a time, at least 0 (by the device's clock: a hint only). */
@@ -155,13 +156,12 @@ export function PublicationPage({ publicationId, country }: { publicationId: str
   }
   return (
     <article className="flex flex-col gap-3" aria-labelledby="detail-title" data-testid="detail">
-      <Link to="/" className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 self-start text-sm">
-        <ArrowLeft aria-hidden className="size-4" />
-        {t('detail.back')}
-      </Link>
       <PublicationContent publication={p} tiers={tiers.data ?? []} linkSponsor autoplay={!prefersStillVideo()} />
       <ProductCards products={quizProducts(products.data)}
         title={tView('products.title')} testId="publication-products" />
+      {/* Q64: the sponsor's own page, with all their products, from the start page as from the result. */}
+      <SponsorVisit handle={p.sponsorHandle} sponsor={p.sponsorCompany ?? p.sponsorName} avatar={p.sponsorAvatar}
+        products={quizProducts(products.data).length > 0} />
       <div className="bg-background sticky bottom-20 -mx-4 border-t px-4 py-3">
         <Action publication={p} />
       </div>

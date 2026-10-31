@@ -292,6 +292,16 @@ class FeedIT extends PlayItSupport {
         // Asked for, everything again.
         assertThat(ids(feed(token, null, Map.of("includeAnswered", true))))
             .filteredOn(mine::contains).containsExactlyInAnyOrder(done, failed, open, fresh);
+        // Q64: each card says the caller's own attempt, for its start to resume or show the result; none for another.
+        Map<Object, Map<String, Object>> cards = new java.util.HashMap<>();
+        feed(token, null, Map.of("includeAnswered", true)).forEach(row -> cards.put(row.get("publicationId"), row));
+        assertThat(cards.get(done)).containsEntry("myStatus", "SUBMITTED").containsKey("myAttemptId");
+        assertThat(cards.get(done).get("myAttemptId")).isNotNull();
+        assertThat(cards.get(open)).containsEntry("myStatus", "IN_PROGRESS");
+        assertThat(cards.get(open).get("myDeadline")).isNotNull();
+        assertThat(cards.get(fresh)).containsEntry("myAttemptId", null).containsEntry("myStatus", null);
+        assertThat(feed(taker(u2()), "US", Map.of())).filteredOn(row -> mine.contains(row.get("publicationId")))
+            .allSatisfy(row -> assertThat(row).containsEntry("myAttemptId", null));
         // Another taker's answers are not this one's: they still see all four.
         assertThat(ids(feed(taker(u2()), "US", Map.of()))).filteredOn(mine::contains)
             .containsExactlyInAnyOrder(done, failed, open, fresh);

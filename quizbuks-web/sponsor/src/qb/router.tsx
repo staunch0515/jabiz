@@ -29,9 +29,21 @@ export function hrefOf(path: string): string {
 export function navigate(path: string, options: { replace?: boolean } = {}) {
   const site = sitePath(path, BASE)
   const target = BASE !== '/' && (site + '/').startsWith(BASE) ? site : hrefOf(site)
-  if (options.replace) window.history.replaceState(null, '', target)
-  else window.history.pushState(null, '', target)
+  // The depth within the SPA rides on the history's entries, so that a page knows whether back stays in the SPA.
+  const depth = depthOf(window.history.state)
+  if (options.replace) window.history.replaceState({ qbDepth: depth }, '', target)
+  else window.history.pushState({ qbDepth: depth + 1 }, '', target)
   window.dispatchEvent(new Event(CHANGE))
+}
+
+function depthOf(state: unknown): number {
+  const depth = (state as { qbDepth?: unknown } | null)?.qbDepth
+  return typeof depth === 'number' && depth > 0 ? depth : 0
+}
+
+/** Whether the browser's back stays in the SPA (Q64): this page was reached by going to it from another of its pages. */
+export function canGoBack(): boolean {
+  return depthOf(window.history.state) > 0
 }
 
 function subscribe(onChange: () => void) {

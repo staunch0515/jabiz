@@ -24,8 +24,8 @@ import {
   cn,
 } from '@jabiz/ui'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
-import { Gift, HandCoins, LayoutGrid, Play, SlidersHorizontal, X, type LucideIcon } from 'lucide-react'
-import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
+import { Check, Gift, HandCoins, LayoutGrid, Play, SlidersHorizontal, StepForward, X, type LucideIcon } from 'lucide-react'
+import { createContext, useContext, useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
 import { EmptyArt, QuizArt } from '../qb/Illustrations'
@@ -33,7 +33,7 @@ import { FeedCardView, REWARD_METHOD_ICONS } from '../qb/view/FeedCard'
 import { readCountries, shownLanguages } from '../qb/api'
 import { formatKudos } from '../qb/kudos'
 import { QB } from '../qb/messages'
-import { FEED_SORTS, readFeed, readOpenCashRewards, readOpenRedemptions, type FeedSort, type RewardMethod }
+import { cardProgress, FEED_SORTS, readFeed, readOpenCashRewards, readOpenRedemptions, type CardProgress, type FeedCard, type FeedSort, type RewardMethod }
   from '../qb/play'
 import { problemText } from '../qb/problems'
 import { Link, navigate, useLocation } from '../qb/router'
@@ -82,39 +82,23 @@ function storeMethod(choice: MethodChoice) {
 /** The icon of each choice of the reward menu (Q34): the menu's button shows the chosen one. */
 export const METHOD_ICONS: Record<MethodChoice, LucideIcon> = { ALL: LayoutGrid, ...REWARD_METHOD_ICONS }
 
-/**
- * The ways a reward is paid as a row of chips under the header (Q63, as a video site's topics; Q34 had a menu in front
- * of the search box), after the advanced filters' button. The row scrolls sideways on a narrow screen.
- */
-function MethodChips({ value, onChange, filters, onFilters }: { value: MethodChoice
-  onChange: (choice: MethodChoice) => void; filters: number; onFilters: () => void }) {
+/** The ways a reward is paid, as chips at the top of the filters' sheet (Q64; Q63 had them in a row on the home). */
+function MethodChoices({ value, onChange }: { value: MethodChoice; onChange: (choice: MethodChoice) => void }) {
   const { t } = useTranslation(APP)
   const label = (choice: MethodChoice) => (choice === 'ALL' ? t('methods.all') : t(`methods.${choice}Short`))
   return (
-    <div className="-mx-4 flex items-center gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none]"
-      data-testid="feed-chips">
-      <Button type="button" variant={filters > 0 ? 'secondary' : 'outline'} size="icon" className="relative shrink-0"
-        aria-label={filters > 0 ? `${t('feed.filters')}, ${t('feed.activeFilters', { count: filters })}` : t('feed.filters')}
-        onClick={onFilters} data-testid="feed-filters-open">
-        <SlidersHorizontal aria-hidden />
-        {filters > 0 && (
-          <span aria-hidden className="bg-primary text-primary-foreground absolute -top-1.5 -right-1.5 inline-flex size-4 items-center justify-center rounded-full text-[10px] font-semibold"
-            data-testid="feed-filters-count">{filters}</span>
-        )}
-      </Button>
-      <div role="group" aria-label={t('methods.choose')} className="flex shrink-0 gap-2">
-        {METHOD_CHOICES.map((choice) => {
-          const Icon = METHOD_ICONS[choice]
-          const on = choice === value
-          return (
-            <Button key={choice} type="button" size="sm" variant={on ? 'default' : 'secondary'} aria-pressed={on}
-              className="shrink-0 rounded-full" data-testid={`feed-method-${choice}`} onClick={() => onChange(choice)}>
-              <Icon aria-hidden />
-              {label(choice)}
-            </Button>
-          )
-        })}
-      </div>
+    <div role="group" aria-label={t('methods.choose')} className="flex flex-wrap gap-2" data-testid="feed-chips">
+      {METHOD_CHOICES.map((choice) => {
+        const Icon = METHOD_ICONS[choice]
+        const on = choice === value
+        return (
+          <Button key={choice} type="button" size="sm" variant={on ? 'default' : 'secondary'} aria-pressed={on}
+            className="rounded-full" data-testid={`feed-method-${choice}`} onClick={() => onChange(choice)}>
+            <Icon aria-hidden />
+            {label(choice)}
+          </Button>
+        )
+      })}
     </div>
   )
 }
@@ -141,6 +125,59 @@ export function activeFilterCount(filters: FeedFilters): number {
 }
 
 /** A pattern of the template's LIKE that finds the text as written: % _ and \ match themselves. */
+/**
+ * The home's choices (Q64): the way a reward is paid and the advanced filters, chosen from the header's filter button
+ * and read by the home; they last while the app is open (the way a reward is paid also on this device).
+ */
+interface FeedControls {
+  method: MethodChoice
+  chooseMethod: (choice: MethodChoice) => void
+  filters: FeedFilters
+  setFilters: (filters: FeedFilters | ((current: FeedFilters) => FeedFilters)) => void
+  open: boolean
+  setOpen: (open: boolean) => void
+}
+
+const FeedControlsContext = createContext<FeedControls | null>(null)
+
+export function FeedControlsProvider({ children }: { children: ReactNode }) {
+  const [method, setMethod] = useState<MethodChoice>(storedMethod)
+  const [filters, setFilters] = useState<FeedFilters>(NO_FILTERS)
+  const [open, setOpen] = useState(false)
+  const value = useMemo<FeedControls>(() => ({
+    method,
+    chooseMethod: (choice) => {
+      setMethod(choice)
+      storeMethod(choice)
+    },
+    filters, setFilters, open, setOpen,
+  }), [method, filters, open])
+  return <FeedControlsContext.Provider value={value}>{children}</FeedControlsContext.Provider>
+}
+
+function useFeedControls(): FeedControls {
+  const controls = useContext(FeedControlsContext)
+  if (!controls) throw new Error('useFeedControls needs a <FeedControlsProvider> around it')
+  return controls
+}
+
+/** The header's filter button on the home (Q64): a dot says something narrows the feed. */
+export function FeedFiltersButton() {
+  const { t } = useTranslation(APP)
+  const { method, filters, setOpen } = useFeedControls()
+  const count = activeFilterCount(filters) + (method === 'ALL' ? 0 : 1)
+  return (
+    <Button variant="ghost" size="icon-sm" className="relative" data-testid="feed-filters-open"
+      aria-label={count > 0 ? `${t('feed.filters')}, ${t('feed.activeFilters', { count })}` : t('feed.filters')}
+      onClick={() => setOpen(true)}>
+      <SlidersHorizontal aria-hidden />
+      {count > 0 && (
+        <span aria-hidden className="bg-primary absolute top-0.5 right-0.5 size-2 rounded-full" data-testid="feed-filters-dot" />
+      )}
+    </Button>
+  )
+}
+
 export function containsPattern(text: string): string {
   return `%${text.replace(/[\\%_]/g, (c) => `\\${c}`)}%`
 }
@@ -207,6 +244,30 @@ function useMoreNearTheEnd(sentinel: HTMLElement | null, more: () => void) {
     observer.observe(sentinel)
     return () => observer.disconnect()
   }, [sentinel])
+}
+
+const PROGRESS_ICONS: Record<CardProgress, LucideIcon> = { start: Play, resume: StepForward, done: Check }
+
+/**
+ * A card's start (Q64): a small round icon right under the picture, which says by its icon and name where it leads:
+ * the start page first (its time limit and pass score are read before answering, Q63), back to an attempt in
+ * progress, or the result of one answered.
+ */
+function CardStart({ card, at }: { card: FeedCard; at: string }) {
+  const { t } = useTranslation(APP)
+  const progress = cardProgress(card, new Date(at))
+  const Icon = PROGRESS_ICONS[progress]
+  const to = progress === 'start' ? `/p/${card.publicationId}`
+    : progress === 'resume' ? `/play/${card.myAttemptId}` : `/result/${card.myAttemptId}`
+  return (
+    <Button asChild size="icon" variant={progress === 'done' ? 'secondary' : 'default'}
+      className="size-9 shrink-0 rounded-full">
+      <Link to={to} data-testid="feed-card-start" data-progress={progress}
+        aria-label={t(`feed.card.${progress}`, { name: card.name })}>
+        <Icon aria-hidden className={progress === 'start' ? 'ml-0.5' : undefined} />
+      </Link>
+    </Button>
+  )
 }
 
 /** The advanced filters' form; it starts from the filters applied each time the sheet opens. */
@@ -291,15 +352,19 @@ function FiltersForm({ value, onApply }: { value: FeedFilters; onApply: (filters
 }
 
 /** The advanced filters in a sheet from the bottom; applied together. */
-function FiltersSheet({ open, onOpenChange, value, onApply }: {
+function FiltersSheet({ open, onOpenChange, value, onApply, method, onMethod }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   value: FeedFilters
   onApply: (filters: FeedFilters) => void
+  method: MethodChoice
+  onMethod: (choice: MethodChoice) => void
 }) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="bottom" className="mx-auto max-h-[90vh] max-w-md overflow-y-auto">
+        {/* Q64: the way a reward is paid applies at once; the advanced filters with their button. */}
+        <div className="px-4 pt-12"><MethodChoices value={method} onChange={onMethod} /></div>
         <FiltersForm value={value} onApply={(filters) => {
           onApply(filters)
           onOpenChange(false)
@@ -395,16 +460,10 @@ export function FeedPage({ name, country }: { name: string; country: string | nu
   const [at] = useState(() => new Date().toISOString())
   // Q63: searched from the header (`/?q=`).
   const q = searchOf(useLocation().search)
-  const [filters, setFilters] = useState<FeedFilters>(NO_FILTERS)
-  const [filtersOpen, setFiltersOpen] = useState(false)
+  // Q64: chosen from the header's filter button (Q22: one way of paying the reward, remembered on this device).
+  const { method, chooseMethod, filters, setFilters, open: filtersOpen, setOpen: setFiltersOpen } = useFeedControls()
   const filterList = feedFilters(filters)
   const active = activeFilterCount(filters)
-  // Q22: narrowed to one way of paying the reward; remembered on this device.
-  const [method, setMethod] = useState<MethodChoice>(storedMethod)
-  const chooseMethod = (choice: MethodChoice) => {
-    setMethod(choice)
-    storeMethod(choice)
-  }
   // The cash rewards still waiting for the taker or the sponsor: a notice at the top, with each to look at.
   const cash = useQuery({ queryKey: ['qb', 'cash-rewards', 'open'], queryFn: readOpenCashRewards })
   const openCash = cash.data ?? []
@@ -472,7 +531,6 @@ export function FeedPage({ name, country }: { name: string; country: string | nu
           </AlertDescription>
         </Alert>
       )}
-      <MethodChips value={method} onChange={chooseMethod} filters={active} onFilters={() => setFiltersOpen(true)} />
       {q && (
         <div className="flex items-center gap-2 text-sm" data-testid="feed-searched">
           <span className="min-w-0 truncate">{t('feed.searchedFor', { q })}</span>
@@ -482,7 +540,8 @@ export function FeedPage({ name, country }: { name: string; country: string | nu
           </Button>
         </div>
       )}
-      <FiltersSheet open={filtersOpen} onOpenChange={setFiltersOpen} value={filters} onApply={setFilters} />
+      <FiltersSheet open={filtersOpen} onOpenChange={setFiltersOpen} value={filters} onApply={setFilters}
+        method={method} onMethod={chooseMethod} />
       {feed.isPending ? (
         <PageState kind="loading" />
       ) : feed.isError ? (
@@ -512,15 +571,7 @@ export function FeedPage({ name, country }: { name: string; country: string | nu
           <ul ref={setList} className="-mx-4 flex flex-col gap-6 sm:mx-0" data-testid="feed-list">
             {cards.map((card) => (
               <FeedCardView key={card.publicationId} card={card} href={`/p/${card.publicationId}`}
-                playing={playing === card.publicationId} action={card.video ? (
-                  // The start leads to the start page first: its time limit and pass score are read before answering.
-                  <Button asChild size="sm" className="mt-1 self-start">
-                    <Link to={`/p/${card.publicationId}`} data-testid="feed-video-start">
-                      <Play aria-hidden />
-                      {t('detail.start')}
-                    </Link>
-                  </Button>
-                ) : undefined} />
+                playing={playing === card.publicationId} action={<CardStart card={card} at={at} />} />
             ))}
           </ul>
           <div ref={setEnd} aria-hidden data-testid="feed-end" />
