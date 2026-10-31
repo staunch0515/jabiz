@@ -18,25 +18,32 @@ import java.util.regex.Pattern;
 /**
  * A counter of what anonymous visitors do on public pages, by day (docs/design/15-public-access.md section 10;
  * decision D65), declared by the application as a bean: its name, the public dataset and whitelisted field its keys
- * come from (a key counts only while a row visible in that dataset has it) and the zone its days are told in.
+ * come from (a key counts only while a row visible in that dataset has it), optionally the field of that row naming
+ * who the key belongs to (stored with the counts, so that an application's dataset can give each owner theirs) and
+ * the zone its days are told in.
  *
  * <pre>{@code
  * PublicCounter.define("commerce.product-view", c -> c
  *     .keys(CommerceEntities.PUBLIC_PRODUCT_DATASET, "productId")
+ *     .owner("sellerId")
  *     .zone("Asia/Tokyo"))
  * }</pre>
  *
  * @param name    the name in the path {@code /api/public/counters/{name}/{key}}
  * @param dataset the public dataset whose visible rows give the valid keys
  * @param field   the whitelisted field of that dataset holding the keys
+ * @param owner   the whitelisted field of the key's row naming its owner, stored with the counts; null for none
  * @param zone    the zone in which a count's day is told
  */
-public record PublicCounter(String name, String dataset, String field, ZoneId zone) {
+public record PublicCounter(String name, String dataset, String field, String owner, ZoneId zone) {
 
     public static final Pattern NAME = Pattern.compile("[a-z][a-z0-9.-]{0,59}");
 
     /** Longest key (the column {@code counter_key}). */
     public static final int MAX_KEY_LENGTH = 100;
+
+    /** Longest owner (the column {@code owner_key}); a longer value is not stored. */
+    public static final int MAX_OWNER_LENGTH = 128;
 
     public PublicCounter {
         if (name == null || !NAME.matcher(name).matches()) {
@@ -50,7 +57,7 @@ public record PublicCounter(String name, String dataset, String field, ZoneId zo
     public static PublicCounter define(String name, Consumer<Builder> spec) {
         Builder builder = new Builder();
         spec.accept(builder);
-        return new PublicCounter(name, builder.dataset, builder.field, builder.zone);
+        return new PublicCounter(name, builder.dataset, builder.field, builder.owner, builder.zone);
     }
 
     /**
@@ -70,14 +77,25 @@ public record PublicCounter(String name, String dataset, String field, ZoneId zo
         if (!definition.publicRead().allows(field)) {
             problems.add("field " + field + " is not whitelisted in publicRead of " + dataset);
         }
-        FieldDefinition declared = entity == null ? null : entity.fields.get(field);
-        if (declared == null) {
-            problems.add("field " + field + " is not a field of " + definition.targetEntityType());
-        } else if (!(declared.kind() instanceof SemanticKind.Text || declared.kind() instanceof SemanticKind.Code
-            || ids(declared)) || declared.sensitive()) {
-            problems.add("field " + field + " is not a text, code, identity or reference field");
+        checkField(field, definition, entity, problems);
+        if (owner != null) {
+            if (!definition.publicRead().allows(owner)) {
+                problems.add("owner field " + owner + " is not whitelisted in publicRead of " + dataset);
+            }
+            checkField(owner, definition, entity, problems);
         }
         return problems;
+    }
+
+    private static void checkField(String name, DatasetDefinition definition, EntityDefinition entity,
+        List<String> problems) {
+        FieldDefinition declared = entity == null ? null : entity.fields.get(name);
+        if (declared == null) {
+            problems.add("field " + name + " is not a field of " + definition.targetEntityType());
+        } else if (!(declared.kind() instanceof SemanticKind.Text || declared.kind() instanceof SemanticKind.Code
+            || ids(declared)) || declared.sensitive()) {
+            problems.add("field " + name + " is not a text, code, identity or reference field");
+        }
     }
 
     /** Whether the field holds ids (UUIDs): an identity or a reference field. */
@@ -110,12 +128,23 @@ public record PublicCounter(String name, String dataset, String field, ZoneId zo
     public static final class Builder {
         private String dataset;
         private String field;
+        private String owner;
         private ZoneId zone;
 
         /** The public dataset and its whitelisted field whose values are the valid keys. */
         public Builder keys(String datasetId, String fieldName) {
             this.dataset = datasetId;
             this.field = fieldName;
+            return this;
+        }
+
+        /**
+         * The whitelisted field of the key's row naming whom the key belongs to (text, code or id, best immutable):
+         * stored with the counts as {@code ownerKey}, so that an application's dataset scoped to the reader gives
+         * each owner their keys' counts only.
+         */
+        public Builder owner(String fieldName) {
+            this.owner = fieldName;
             return this;
         }
 

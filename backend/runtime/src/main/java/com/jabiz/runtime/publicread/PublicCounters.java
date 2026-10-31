@@ -64,16 +64,22 @@ public class PublicCounters {
     private static final Logger log = LoggerFactory.getLogger(PublicCounters.class);
 
     private static final String ADD = """
-        INSERT INTO sys_public_counter_day (row_id, counter_name, counter_key, day, hits)
-        VALUES (CAST(:id AS uuid), :counter, :key, :day, :hits)
+        INSERT INTO sys_public_counter_day (row_id, counter_name, counter_key, day, hits, owner_key)
+        VALUES (CAST(:id AS uuid), :counter, :key, :day, :hits, :owner)
         ON CONFLICT (counter_name, counter_key, day)
-        DO UPDATE SET hits = sys_public_counter_day.hits + EXCLUDED.hits
+        DO UPDATE SET hits = sys_public_counter_day.hits + EXCLUDED.hits,
+            owner_key = COALESCE(sys_public_counter_day.owner_key, EXCLUDED.owner_key)
         RETURNING hits""";
 
-    /** One key's count of one day, waiting to be written. */
-    record Pending(String counter, String key, LocalDate day) {}
+    /** One key's count of one day, waiting to be written, with the key's owner when the counter has one. */
+    record Pending(String counter, String key, LocalDate day, String owner) {}
 
-    private record Decision(boolean allowed, long expiresAt) {}
+    /** Whether the key is visible in the counter's public dataset, and its row's owner (null without). */
+    private record Visibility(boolean allowed, String owner) {
+        static final Visibility NONE = new Visibility(false, null);
+    }
+
+    private record Decision(Visibility visibility, long expiresAt) {}
 
     private final Map<String, PublicCounter> counters;
     private final DatasetRegistry datasets;
@@ -150,8 +156,8 @@ public class PublicCounters {
                     return Mono.just(Result.REPEATED);
                 }
             }
-            return visible(counter, target, key).map(allowed -> allowed ? add(seen, new Pending(counter.name(), key,
-                day)) : Result.IGNORED);
+            return visible(counter, target, key).map(visibility -> visibility.allowed()
+                ? add(seen, new Pending(counter.name(), key, day, visibility.owner())) : Result.IGNORED);
         }).doOnNext(result -> observations.event(PlatformObservations.PUBLIC_COUNTER,
             KeyValues.of("counter", counter.name(), "result", result.name().toLowerCase(Locale.ROOT))));
     }
@@ -215,6 +221,8 @@ public class PublicCounters {
                     params.put("key", BoundValue.of(count.key()));
                     params.put("day", BoundValue.of(count.day()));
                     params.put("hits", BoundValue.of(entry.getValue()));
+                    params.put("owner", count.owner() == null ? BoundValue.nullOf(String.class)
+                        : BoundValue.of(count.owner()));
                     return engine.select(ADD, params).then()
                         .onErrorResume(e -> {
                             log.warn("Public counter {} not written, kept for the next write: {}", count.counter(),
@@ -263,8 +271,12 @@ public class PublicCounters {
 
     // ------------------------------------------------------------------ keys
 
-    /** The counter's dataset and entity, and whether its key field holds ids; null when not declared. */
-    private record Target(DatasetDefinition dataset, EntityDefinition entity, String column, boolean ids) {}
+    /**
+     * The counter's dataset and entity, its key's column and whether it holds ids, and its owner's column (null
+     * without); null when not declared.
+     */
+    private record Target(DatasetDefinition dataset, EntityDefinition entity, String column, boolean ids,
+        String ownerColumn) {}
 
     private Target target(PublicCounter counter) {
         if (counters.get(counter.name()) != counter) {
@@ -284,15 +296,16 @@ public class PublicCounters {
             return null;
         }
         return new Target(dataset, entity, SqlIdentifiers.require(entity.physicalColumn(counter.field())),
-            PublicCounter.ids(entity.fields.get(counter.field())));
+            PublicCounter.ids(entity.fields.get(counter.field())),
+            counter.owner() == null ? null : SqlIdentifiers.require(entity.physicalColumn(counter.owner())));
     }
 
-    private Mono<Boolean> visible(PublicCounter counter, Target target, String key) {
+    private Mono<Visibility> visible(PublicCounter counter, Target target, String key) {
         String remembered = counter.name() + '\n' + key;
         synchronized (decisions) {
             Decision decision = decisions.get(remembered);
             if (decision != null && nanoTime.getAsLong() - decision.expiresAt() < 0) {
-                return Mono.just(decision.allowed());
+                return Mono.just(decision.visibility());
             }
             decisions.remove(remembered);
         }
@@ -302,23 +315,35 @@ public class PublicCounters {
         String keyParam = binder.bindNamed("counter_key", BoundValue.of(target.ids() ? UUID.fromString(key) : key));
         String source = compiler.templateExpression(target.dataset(), target.entity(),
             target.dataset().scope().resolve(anonymous), TimeSlice.asOf(clock.instant()), binder);
-        String sql = "SELECT EXISTS (SELECT 1 FROM " + source + " pc WHERE pc." + target.column() + " = :" + keyParam
-            + ") AS found";
+        // One visible row is enough; with an owner, it also says whose the key is (the owner is the row's, so any
+        // visible row of the key gives the same).
+        String owner = target.ownerColumn() == null ? "NULL" : "pc." + target.ownerColumn();
+        String sql = "SELECT " + owner + " AS owner_key FROM " + source + " pc WHERE pc." + target.column() + " = :"
+            + keyParam + " LIMIT 1";
         return storages.getEngine(target.dataset().storage().connectionPoolRef())
             .executeRawQuery(new RawQueryPlan(sql, binder.params(), properties.maxTimeout()))
             .next()
-            .map(row -> Boolean.TRUE.equals(row.get("found")))
-            .defaultIfEmpty(false)
-            .doOnNext(allowed -> remember(remembered, allowed));
+            .map(row -> new Visibility(true, owner(row.get("owner_key"))))
+            .defaultIfEmpty(Visibility.NONE)
+            .doOnNext(visibility -> remember(remembered, visibility));
     }
 
-    private void remember(String remembered, boolean allowed) {
+    /** The owner as stored: its text, or null when there is none or it does not fit the column. */
+    private static String owner(Object value) {
+        if (value == null) {
+            return null;
+        }
+        String text = value.toString();
+        return text.isBlank() || text.length() > PublicCounter.MAX_OWNER_LENGTH ? null : text;
+    }
+
+    private void remember(String remembered, Visibility visibility) {
         Duration ttl = properties.fileDecisionTtl();
         if (ttl.isZero() || ttl.isNegative()) {
             return;
         }
         synchronized (decisions) {
-            decisions.put(remembered, new Decision(allowed, nanoTime.getAsLong() + ttl.toNanos()));
+            decisions.put(remembered, new Decision(visibility, nanoTime.getAsLong() + ttl.toNanos()));
         }
     }
 

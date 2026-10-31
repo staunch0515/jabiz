@@ -76,6 +76,22 @@ class PublicCounterTest {
     }
 
     @Test
+    void mayNameTheKeysOwnerByAWhitelistedField() {
+        PublicCounter bySku = PublicCounter.define("shop.product-view", c -> c.keys(PUBLIC.resourceId(), "productId")
+            .owner("sku"));
+        assertThat(bySku.owner()).isEqualTo("sku");
+        assertThat(bySku.problems(PUBLIC, PRODUCT)).isEmpty();
+        assertThat(counter("productId").owner()).isNull();
+
+        assertThat(PublicCounter.define("shop.product-view", c -> c.keys(PUBLIC.resourceId(), "productId")
+            .owner("hidden")).problems(PUBLIC, PRODUCT))
+            .containsExactly("owner field hidden is not whitelisted in publicRead of urn:test:public:Product");
+        assertThat(PublicCounter.define("shop.product-view", c -> c.keys(PUBLIC.resourceId(), "productId")
+            .owner("price")).problems(PUBLIC, PRODUCT))
+            .containsExactly("field price is not a text, code, identity or reference field");
+    }
+
+    @Test
     void normalizesKeys() {
         String id = "0192f0a0-0000-7000-8000-00000000c001";
         assertThat(PublicCounter.normalizeKey(id.toUpperCase(), true)).isEqualTo(id);

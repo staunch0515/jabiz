@@ -58,7 +58,7 @@ class PublicCountersTest {
         .storage(s -> s.connectionPoolRef("default")));
 
     private static final PublicCounter VIEWS = PublicCounter.define("shop.view", c -> c.keys(PUBLIC.resourceId(),
-        "productId"));
+        "productId").owner("sku"));
 
     private final StorageEngine engine = mock(StorageEngine.class);
     private final List<Map<String, BoundValue>> written = new ArrayList<>();
@@ -74,7 +74,8 @@ class PublicCountersTest {
         when(entities.find("Product")).thenReturn(Optional.of(PRODUCT));
         StorageAdapterRegistry storages = mock(StorageAdapterRegistry.class);
         when(storages.getEngine(anyString())).thenReturn(engine);
-        when(engine.executeRawQuery(any())).thenAnswer(i -> Flux.just(Map.of("found", true)));
+        // A visible row of the key, with its owner (the key's row says whose it is).
+        when(engine.executeRawQuery(any())).thenAnswer(i -> Flux.just(Map.of("owner_key", "seller-1")));
         when(engine.select(anyString(), anyMap())).thenAnswer(i -> {
             if (failures.getAndDecrement() > 0) {
                 return Flux.error(new IllegalStateException("database down"));
@@ -102,7 +103,7 @@ class PublicCountersTest {
         assertThat(counters.count(VIEWS, key, "b").block()).isEqualTo(PublicCounters.Result.COUNTED);
         assertThat(counters.count(VIEWS, "not-a-uuid", "a").block()).isEqualTo(PublicCounters.Result.IGNORED);
         assertThat(counters.pending()).containsExactly(Map.entry(
-            new PublicCounters.Pending("shop.view", key, LocalDate.parse("2026-03-01")), 2L));
+            new PublicCounters.Pending("shop.view", key, LocalDate.parse("2026-03-01"), "seller-1"), 2L));
         // The key's visibility is asked once and remembered; a repeat and a key not an id never ask.
         verify(engine, org.mockito.Mockito.times(1)).executeRawQuery(any());
     }
@@ -139,11 +140,20 @@ class PublicCountersTest {
             assertThat(params.get("key").value()).isEqualTo(key);
             assertThat(params.get("hits").value()).isEqualTo(2L);
             assertThat(params.get("day").value()).isEqualTo(LocalDate.parse("2026-03-01"));
+            assertThat(params.get("owner").value()).isEqualTo("seller-1");
         });
         assertThat(counters.pending()).isEmpty();
         // Nothing held: nothing written.
         counters.flush().block();
         assertThat(written).hasSize(1);
+    }
+
+    @Test
+    void aKeyWithoutAVisibleRowIsNotCounted() {
+        PublicCounters counters = counters(10);
+        when(engine.executeRawQuery(any())).thenAnswer(i -> Flux.empty());
+        assertThat(counters.count(VIEWS, key(), "a").block()).isEqualTo(PublicCounters.Result.IGNORED);
+        assertThat(counters.pending()).isEmpty();
     }
 
     @Test

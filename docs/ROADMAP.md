@@ -4870,4 +4870,6 @@ D17 下匿名不能写任何东西（15 §10）。
 | 17z-3 | 前端：`@jabiz/client` 的 `countPublic`（`sendBeacon`，退而 `fetch` + `keepalive`，失败忽略） |
 | 17z-4 | 示范与测试：`app` 的 `commerce.product-view`；`PublicCounterTest`、`PublicCountersTest`、`PublicCounterIT`、`PlatformCheckIT`、`countPublic` 的单元测试；15 §10、决策 D65；`/security-review` |
 
-**17z 状态**：📝 待评审。
+| 17z-5 | 所有人：`PublicCounter.owner(字段)`（白名单内的文本、代码或标识字段），计数时与可见性一同读出并存入 `owner_key`（迁移 V53）；平台实体的 `ownerKey`；应用以 `fromContext("ownerKey", …)` 的数据视图给每个所有人自己的计数（D65 第 7 条）。测试：`PublicCounterTest`、`PublicCountersTest`、`PublicCounterIT`（每个所有人只读到自己的键） |
+
+**17z 状态**：✅ 17z-1 至 17z-4 完成（#377）；17z-5 📝 待评审。

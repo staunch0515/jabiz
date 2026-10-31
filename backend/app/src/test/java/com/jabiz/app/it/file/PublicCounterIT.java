@@ -1,12 +1,18 @@
 package com.jabiz.app.it.file;
 
 import com.jabiz.app.commerce.CommerceEntities;
+import com.jabiz.context.RequestContext;
+import com.jabiz.dataset.DatasetDefinition;
+import com.jabiz.dataset.PublicCounter;
 import com.jabiz.runtime.publicread.PublicCounterEntities;
 import com.jabiz.runtime.publicread.PublicCounters;
 import com.jabiz.runtime.test.MutableClock;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
 import org.springframework.http.HttpHeaders;
 import org.springframework.test.web.reactive.server.WebTestClient;
 
@@ -29,6 +35,33 @@ import static org.assertj.core.api.Assertions.assertThat;
     "jabiz.public.file-decision-ttl=0s"})
 class PublicCounterIT extends FileItSupport {
 
+    private static final String BY_SKU = "it.product-view-by-sku";
+    private static final String MINE = "urn:jabiz:dataset:it:mine:PublicCounterDay";
+
+    /**
+     * A counter whose keys' owner is the product's code (decision D65 item 7), and a dataset giving each reader the
+     * counts of the keys they own, as an application gives a sponsor theirs.
+     */
+    @TestConfiguration
+    static class OwnedCounts {
+
+        @Bean
+        PublicCounter itViewsBySku() {
+            return PublicCounter.define(BY_SKU, c -> c.keys(CommerceEntities.PUBLIC_PRODUCT_DATASET, "productId")
+                .owner("sku"));
+        }
+
+        @Bean
+        DatasetDefinition itMyCounts(@Value("${jabiz.storage.default-pool-ref:default}") String pool) {
+            return DatasetDefinition.define(MINE, d -> d
+                .targetEntityType(PublicCounterEntities.ENTITY)
+                .scope(s -> s.fixed("counterName", BY_SKU).fromContext("ownerKey", RequestContext::actorId))
+                .permissions("it.counts.read", "it.counts.write")
+                .policy(p -> p.readOnly(true).maxQueryBatchSize(100))
+                .storage(s -> s.connectionPoolRef(pool)));
+        }
+    }
+
     private static final String VIEWS = "/api/public/counters/" + CommerceEntities.PRODUCT_VIEWS + "/";
 
     @Autowired
@@ -42,7 +75,11 @@ class PublicCounterIT extends FileItSupport {
     }
 
     private String product(boolean active) {
-        String sku = "CNT" + UUID.randomUUID().toString().replace("-", "").substring(0, 8).toUpperCase(Locale.ROOT);
+        return product(active, "CNT" + UUID.randomUUID().toString().replace("-", "").substring(0, 8)
+            .toUpperCase(Locale.ROOT));
+    }
+
+    private String product(boolean active, String sku) {
         Map<String, Object> attributes = new LinkedHashMap<>();
         attributes.put("sku", sku);
         attributes.put("productName", "Product " + sku);
@@ -101,7 +138,8 @@ class PublicCounterIT extends FileItSupport {
         // Counting is not an operation; nothing is written about the visitor.
         assertThat(operations()).isEqualTo(operations);
         assertThat(query("SELECT * FROM sys_public_counter_day WHERE counter_key = '" + product + "'").getFirst())
-            .containsOnlyKeys("row_id", "counter_name", "counter_key", "day", "hits");
+            .containsOnlyKeys("row_id", "counter_name", "counter_key", "day", "hits", "owner_key")
+            .containsEntry("owner_key", null);
     }
 
     @Test
@@ -159,5 +197,34 @@ class PublicCounterIT extends FileItSupport {
             .expectStatus().isOk().expectBody(MAP).returnResult().getResponseBody();
         assertThat(page.get("items")).asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.LIST)
             .singleElement().satisfies(item -> assertThat(item).asString().contains("hits=1"));
+    }
+
+    @Test
+    void eachOwnerReadsTheCountsOfTheirKeysOnly() {
+        String mine = "OWN" + UUID.randomUUID().toString().substring(0, 8).toUpperCase(Locale.ROOT);
+        String theirs = "OWN" + UUID.randomUUID().toString().substring(0, 8).toUpperCase(Locale.ROOT);
+        String myProduct = product(true, mine);
+        String theirProduct = product(true, theirs);
+        for (String product : List.of(myProduct, theirProduct)) {
+            client.post().uri("/api/public/counters/" + BY_SKU + "/" + product).header(HttpHeaders.USER_AGENT, "A")
+                .exchange().expectStatus().isNoContent();
+        }
+        counters.flush().block();
+        // The owner is stored with the counts of an owned counter, and not with those of the others.
+        assertThat(query("SELECT owner_key FROM sys_public_counter_day WHERE counter_name = '" + BY_SKU
+            + "' AND counter_key = '" + myProduct + "'")).singleElement()
+            .satisfies(row -> assertThat(row).containsEntry("owner_key", mine));
+
+        String path = "/api/datasets/" + MINE + "/query";
+        Map<String, Object> page = post(path, bearer(mine, "it.counts.read"), Map.of())
+            .expectStatus().isOk().expectBody(MAP).returnResult().getResponseBody();
+        assertThat(page.get("items")).asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.LIST)
+            .singleElement().satisfies(item -> assertThat(item).asString().contains(myProduct)
+                .doesNotContain(theirProduct));
+        // Asking for the other's key through a filter finds nothing.
+        Map<String, Object> other = post(path, bearer(mine, "it.counts.read"), Map.of("filters", List.of(
+            Map.of("field", "counterKey", "op", "eq", "value", theirProduct))))
+            .expectStatus().isOk().expectBody(MAP).returnResult().getResponseBody();
+        assertThat(other.get("items")).asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.LIST).isEmpty();
     }
 }
