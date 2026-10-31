@@ -1,3 +1,7 @@
+import { readPublicationProducts } from './api'
+import { quizProducts } from '../qb/products'
+import { ProductCards } from '../qb/view/ProductCards'
+import { QBVIEW } from '../qb/view/messages'
 import { entryInfo, formatDateTime } from '@jabiz/client'
 import { DescriptionList, EmailLinkForm, PageState } from '@jabiz/ui'
 import { useQuery } from '@tanstack/react-query'
@@ -21,6 +25,10 @@ export function SharePage({ publicationId }: { publicationId: string }) {
   const { t: tQb } = useTranslation(QB)
   const duration = useDuration()
   const shared = useQuery({ queryKey: ['qb', 'share', publicationId], queryFn: () => readSharedPublication(publicationId) })
+  // Q60b: the products the sponsor shows with the quiz; quietly none when they cannot be read.
+  const products = useQuery({ queryKey: ['qb', 'publication-products', publicationId],
+    queryFn: () => readPublicationProducts(publicationId), enabled: !!shared.data, retry: false })
+  const { t: tView } = useTranslation(QBVIEW)
   // Signing in by a mailed link is the entry's (QB_APP_EMAIL_LINK): off, the password only.
   const entry = useQuery({ queryKey: ['qb', 'entry'], queryFn: () => entryInfo(), staleTime: Infinity })
   const here = sharePath(publicationId)
@@ -61,6 +69,8 @@ export function SharePage({ publicationId }: { publicationId: string }) {
           value: formatKudos(p.maxReward) },
         { key: 'endAt', label: t('detail.endAt'), value: formatDateTime(p.endAt) },
       ]} />
+      <ProductCards products={quizProducts(products.data)}
+        title={tView('products.title')} testId="share-products" />
       <section aria-labelledby="share-start" className="flex flex-col gap-3">
         {entry.data?.emailLink ? <>
           <h2 id="share-start" className="text-lg font-semibold">{t('share.start')}</h2>

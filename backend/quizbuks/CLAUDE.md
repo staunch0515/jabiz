@@ -32,7 +32,7 @@
 ## 4. 应用约定
 
 - **金额**：账本与接口一律 JPY、小数位 0（`jabiz.ledger.currency: JPY`、`scale: 0`；字段 `asMonetary("JPY", 0)`）。三个应用前端把金额显示为点数（`1,234 Kudos`，中文"学分"、日文"クドス"，Q61，一处格式化函数）；
-  平台通用后台对管理员仍显示 JPY。不写点数以外的对外币种名。站内信的金额经 `MessageTexts.kudos`（消息 `qb.kudos.unit`），邮件的金额参数只是数字（`MailValues.amount`）、单位写在各语言的模板中。
+  平台通用后台对管理员仍显示 JPY。不写点数以外的对外币种名；例外只有商户商品的标价（Q60b：商店自己的价格，平台不经手，按其币种显示，`qb/products.ts` 的 `formatPrice`）。站内信的金额经 `MessageTexts.kudos`（消息 `qb.kudos.unit`），邮件的金额参数只是数字（`MailValues.amount`）、单位写在各语言的模板中。
 - **会计年度**为日历年（`jabiz.fiscal-year-end: 12`）。
 - **语言**：消息资源 `messages_{en,zh,ja}.properties` 三语齐全（`jabizApp { languages("en", "zh", "ja") }`，启动检查）；实体与字段 `entity.<实体>[.<字段>]`、流程 `process.<名>`、参数 `param.<键>`。
   产品显示名只写在 `app.name`（按语言：品牌档案的 `names`，Q61）。

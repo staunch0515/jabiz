@@ -100,6 +100,8 @@ interface Options {
   /** Q47: the taker's stored answers for matching (one row per option, or the birth year). */
   attributes?: Record<string, unknown>[]
   view?: () => Promise<Response> | Response
+  /** Q60b: the products the publication shows (the quiz's, number 0, and the questions'). */
+  publicationProducts?: Record<string, unknown>[]
 }
 
 /** The server as the play pages see it; records every call (path and body). */
@@ -169,6 +171,8 @@ function server(options: Options = {}) {
       }
       case '/api/processes/QB_ATTEMPT_SUBMIT/latest':
         return options.submit ? options.submit() : json(200, { output: SUBMITTED })
+      case '/api/public/queries/qb.public.publication-products':
+        return json(200, { items: options.publicationProducts ?? [], offset: 0, limit: 200 })
       case '/api/processes/QB_ATTEMPT_RESULT/latest':
         return options.result ? options.result() : json(200, { output: finished() })
       default:
@@ -1313,4 +1317,33 @@ describe('single and multiple choice in a scored quiz', () => {
       expect(screen.queryByRole('radio')).toBeNull()
       expect(screen.getAllByRole('checkbox')).toHaveLength(2)
     })
+})
+
+describe("the sponsor's products (Q60b)", () => {
+  const products = [
+    { questionNo: 0, seq: 0, productId: 'p1', name: 'Rye loaf', description: null, image: null, price: '1200',
+      currency: 'JPY', shopUrl: 'https://shop.example/rye' },
+    { questionNo: 2, seq: 0, productId: 'p2', name: 'Butter', description: null, image: null, price: '300',
+      currency: 'JPY', shopUrl: 'https://shop.example/butter' },
+  ]
+
+  it("shows a question's product under it in the result", async () => {
+    server({ publicationProducts: products })
+    window.history.replaceState(null, '', `/result/${ATTEMPT}`)
+    render(<App />)
+    await waitFor(() => expect(screen.getAllByTestId('result-question').length).toBeGreaterThan(1))
+    const questions = screen.getAllByTestId('result-question')
+    expect(await within(questions[1]).findByTestId('result-product-item')).toHaveTextContent('Butter')
+    expect(within(questions[0]).queryByTestId('result-product-item')).toBeNull()
+  })
+
+  it("shows the quiz's products on its page", async () => {
+    server({ publicationProducts: products })
+    window.history.replaceState(null, '', `/p/${PUB}`)
+    render(<App />)
+    const items = await screen.findAllByTestId('publication-products-item')
+    expect(items).toHaveLength(1)
+    expect(items[0]).toHaveTextContent('Rye loaf')
+    expect(within(items[0]).getByTestId('publication-products-shop')).toHaveAttribute('href', 'https://shop.example/rye')
+  })
 })

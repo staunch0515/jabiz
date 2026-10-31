@@ -1,3 +1,4 @@
+import { QuizProductsPanel } from '../products/QuizProductsPanel'
 import { formatDateTime } from '@jabiz/client'
 import {
   Alert,
@@ -96,7 +97,7 @@ function CopyDialog({ quiz, open, onOpenChange }: { quiz: Quiz; open: boolean; o
   )
 }
 
-type Tab = 'quiz' | 'questions' | 'materials' | 'versions'
+type Tab = 'quiz' | 'questions' | 'materials' | 'versions' | 'products'
 
 /**
  * One quiz's editor (M-21 – M-24, M-27, M-28): its heading, questions and materials, saved part by part, and its
@@ -286,6 +287,8 @@ export function QuizEditorPage({ quizId }: { quizId: string }) {
               {t('editor.tabs.materialsCount', { n: materials.length })}
             </TabsTrigger>
             <TabsTrigger value="versions" data-testid="tab-versions">{t('editor.tabs.versions')}</TabsTrigger>
+            {/* Q60b: the products the quiz shows, outside its versions. */}
+            <TabsTrigger value="products" data-testid="tab-products">{t('products.quiz.tab')}</TabsTrigger>
           </TabsList>
           <TabsContent value="quiz" className="flex flex-col gap-6 pt-4">
             <HeadingForm key={generation} quiz={quiz} />
@@ -301,6 +304,9 @@ export function QuizEditorPage({ quizId }: { quizId: string }) {
           </TabsContent>
           <TabsContent value="versions" className="pt-4">
             <VersionsPanel quizId={quizId} stale={stale} />
+          </TabsContent>
+          <TabsContent value="products" className="pt-4">
+            <QuizProductsPanel quizId={quizId} questions={questions} />
           </TabsContent>
         </Tabs>
         {copying && <CopyDialog quiz={quiz} open onOpenChange={setCopying} />}

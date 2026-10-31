@@ -1,3 +1,6 @@
+import { readPageProducts } from './api'
+import { ProductCards } from '../qb/view/ProductCards'
+import { QBVIEW } from '../qb/view/messages'
 import { formatDateTime } from '@jabiz/client'
 import { MarkdownView, PageState } from '@jabiz/ui'
 import { useQuery } from '@tanstack/react-query'
@@ -8,7 +11,7 @@ import { FileImage } from '../qb/FileImage'
 import { CoverPlaceholder } from '../qb/Illustrations'
 import { formatKudos } from '../qb/kudos'
 import { QB } from '../qb/messages'
-import { readPagePublications, readPublicSponsorPage } from '../qb/page'
+import { readPagePublications, readPublicSponsorPage } from './api'
 import { Link } from '../qb/router'
 import { sharePath } from './share'
 
@@ -39,6 +42,10 @@ export function SponsorPage({ handle }: { handle: string }) {
   const { t } = useTranslation(APP)
   const { t: tQb } = useTranslation(QB)
   const page = useQuery({ queryKey: ['qb', 'sponsor-page', handle], queryFn: () => readPublicSponsorPage(handle) })
+  // Q60b: the page's listed products, in the sponsor's order.
+  const products = useQuery({ queryKey: ['qb', 'sponsor-page-products', handle],
+    queryFn: () => readPageProducts(handle), enabled: !!page.data, retry: false })
+  const { t: tView } = useTranslation(QBVIEW)
   const publications = useQuery({ queryKey: ['qb', 'sponsor-page-publications', handle],
     queryFn: () => readPagePublications(handle), enabled: !!page.data })
 
@@ -86,6 +93,7 @@ export function SponsorPage({ handle }: { handle: string }) {
           <div lang={p.language} data-testid="sponsor-page-story"><MarkdownView text={p.story} /></div>
         </section>
       )}
+      <ProductCards products={products.data ?? []} title={tView('products.title')} testId="sponsor-page-products" />
       <section aria-labelledby="sponsor-page-quizzes" className="flex flex-col gap-3">
         <h2 id="sponsor-page-quizzes" className="text-lg font-semibold">{t('sponsorPage.quizzes')}</h2>
         {publications.isPending && <PageState kind="loading" />}
