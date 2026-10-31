@@ -13,6 +13,7 @@ import com.jabiz.quizbuks.content.QuizProcesses;
 import com.jabiz.quizbuks.messaging.ConsentChecks;
 import com.jabiz.quizbuks.messaging.QbLegal;
 import com.jabiz.quizbuks.operator.QbOperators;
+import com.jabiz.quizbuks.prospect.QbProspects;
 import com.jabiz.quizbuks.setup.QbParams;
 import com.jabiz.quizbuks.setup.ReviewCodes;
 import com.jabiz.runtime.EntityInstance;
@@ -33,6 +34,7 @@ import com.jabiz.runtime.task.CreateTask;
 import com.jabiz.runtime.task.TaskSpec;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -84,6 +86,7 @@ public final class SponsorProcesses {
     static final String OLD_AVATAR = "oldAvatar";
     static final String ASSIGNMENT = "assignment";
     static final String LANGUAGE_OPERATOR = "languageOperator";
+    static final String TRIAL = "trial";
 
     /**
      * @param displayName  the sponsor's name (their profile's)
@@ -95,8 +98,13 @@ public final class SponsorProcesses {
      *                         be that one (Q7b, D-Q7-5)
      * @param privacyVersionNo the version of the privacy policy the page showed, likewise
      */
+    /**
+     * @param trialKey the prospecting trial that brought the sponsor (Q48e-1, the sign-up link's {@code ?src=}), if the
+     *                 console kept one: a first application goes to the operator that prospected the business
+     */
     public record ApplyInput(@NotNull String displayName, @NotNull String company, String intro, UUID avatar,
-        Boolean acceptTerms, Long baseRevision, Integer termsVersionNo, Integer privacyVersionNo) {
+        Boolean acceptTerms, Long baseRevision, Integer termsVersionNo, Integer privacyVersionNo,
+        @Size(max = 64) String trialKey) {
 
         /** The versions the page showed, by kind of text. */
         Map<String, Integer> shown() {
@@ -156,6 +164,14 @@ public final class SponsorProcesses {
                         new QueryPredicate.In("language", List.of(QuizProcesses.languageOf(ctx))),
                         new QueryPredicate.In("status", List.of(QbOperators.ACTIVE))))).limit(1).build(),
                     LANGUAGE_OPERATOR)));
+            // Q48e-1: the trial that brought the sponsor, read again under its lock (after the assignment's, as the
+            // claim takes them), for a first application only.
+            pb.step("Find the trial that brought them", QueryEntities.<ProcessContext>of(
+                    QbProspects.defaultDataset(QbProspects.PROSPECT), ctx -> trialQuery(ctx, null), TRIAL))
+                .step("Lock the trial", HoldLock.<ProcessContext>exclusive(
+                    ctx -> first(ctx, TRIAL) == null ? null : QbProspects.prospectLockName(first(ctx, TRIAL).id())))
+                .step("Read the trial again", QueryEntities.<ProcessContext>of(
+                    QbProspects.defaultDataset(QbProspects.PROSPECT), ctx -> trialQuery(ctx, first(ctx, TRIAL)), TRIAL));
             AccountEditing.loadFile(pb, ctx -> ctx.get(INPUT, ApplyInput.class).avatar());
             pb.step("Load the review switch", LoadParams.<ProcessContext>of(ProcessContext::opTime, PARAMS,
                 QbParams.REVIEW_SPONSOR_AUTO));
@@ -262,14 +278,54 @@ public final class SponsorProcesses {
         assignByLanguage(ctx, userId);
     }
 
+    /**
+     * The trial named by the input, for a first application of a sponsor of no operator: none otherwise. Read again by
+     * its id once locked ({@code found}).
+     */
+    static EntityQuery trialQuery(ProcessContext ctx, EntityInstance found) {
+        String key = ctx.get(INPUT, ApplyInput.class).trialKey();
+        List<Object> values = new java.util.ArrayList<>();
+        boolean first = first(ctx, SPONSORS) == null && first(ctx, ASSIGNMENT) == null;
+        if (found != null) {
+            values.add(String.valueOf(found.id()));
+        } else if (first && key != null && !key.isBlank()) {
+            values.add(key.strip());
+        }
+        return EntityQuery.builder().where(new QueryPredicate.In(found == null ? "trialKey" : "prospectId", values))
+            .limit(1).build();
+    }
+
+    /**
+     * Q48e-1: the trial a first application goes by: one that went out, of an operator (not headquarters'), that no
+     * other sponsor claimed. The key is random and mailed to the business only, so it is the evidence, as for
+     * {@code QB_PROSPECT_CLAIM}.
+     */
+    static EntityInstance trial(ProcessContext ctx) {
+        EntityInstance trial = first(ctx, TRIAL);
+        if (trial == null || !QbProspects.SENT.equals(trial.get("status"))
+            || QbProspects.DIRECT.equals(trial.get("owner"))) {
+            return null;
+        }
+        Object converted = trial.get("convertedUserId");
+        return converted == null || AccountEditing.userId(ctx).equals(String.valueOf(converted)) ? trial : null;
+    }
+
     /** The operator the sponsor is (or this first application makes them) looked after by; null: headquarters. */
     static String operatorOf(ProcessContext ctx) {
         EntityInstance assignment = first(ctx, ASSIGNMENT);
         if (assignment != null) {
             return String.valueOf((Object) assignment.get("operatorId"));
         }
+        if (first(ctx, SPONSORS) != null) {
+            return null;
+        }
+        // Q48e-1: the operator that prospected the business comes before the one of the language.
+        EntityInstance trial = trial(ctx);
+        if (trial != null) {
+            return String.valueOf((Object) trial.get("owner"));
+        }
         EntityInstance operator = first(ctx, LANGUAGE_OPERATOR);
-        return first(ctx, SPONSORS) == null && operator != null ? String.valueOf(operator.id()) : null;
+        return operator != null ? String.valueOf(operator.id()) : null;
     }
 
     /**
@@ -277,8 +333,16 @@ public final class SponsorProcesses {
      * have an operator already; none of the language: headquarters'. A prospecting claim made afterwards replaces it.
      */
     static void assignByLanguage(ProcessContext ctx, String userId) {
+        if (first(ctx, SPONSORS) != null || first(ctx, ASSIGNMENT) != null) {
+            return;
+        }
+        EntityInstance trial = trial(ctx);
+        if (trial != null) {
+            assignToProspecting(ctx, userId, trial);
+            return;
+        }
         EntityInstance operator = first(ctx, LANGUAGE_OPERATOR);
-        if (first(ctx, SPONSORS) != null || first(ctx, ASSIGNMENT) != null || operator == null) {
+        if (operator == null) {
             return;
         }
         String language = String.valueOf((Object) operator.get("language"));
@@ -289,6 +353,25 @@ public final class SponsorProcesses {
         values.put("assignedBy", QbOperators.BY_LANGUAGE);
         values.put("reason", "Sign-up language: " + language);
         ctx.changes().insert(QbOperators.ASSIGNMENT, values);
+    }
+
+    /**
+     * Q48e-1: a first application that came by an operator's trial goes to that operator, as {@code QB_PROSPECT_CLAIM}
+     * would assign it afterwards (the same values), and the trial is marked converted by this sponsor.
+     */
+    static void assignToProspecting(ProcessContext ctx, String userId, EntityInstance trial) {
+        Map<String, Object> values = new LinkedHashMap<>();
+        values.put("userId", userId);
+        values.put("operatorId", String.valueOf((Object) trial.get("owner")));
+        values.put("assignedAt", ctx.opTime());
+        values.put("assignedBy", "prospect:" + trial.id());
+        values.put("reason", "AI prospecting: " + trial.get("domain"));
+        ctx.changes().insert(QbOperators.ASSIGNMENT, values);
+        if (trial.get("convertedUserId") == null) {
+            ctx.changes().update(QbProspects.PROSPECT, trial.id(), trial.version(), Map.of("convertedUserId", userId,
+                "convertedAt", ctx.opTime(), "revision",
+                BigDecimal.valueOf(AccountEditing.number(trial.get("revision")) + 1)));
+        }
     }
 
     /** Notes the avatar the onboarding had, when this write replaces or removes it. */

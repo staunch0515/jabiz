@@ -480,6 +480,8 @@ public final class RedemptionProcesses {
                         a -> a.whenField("status", RedemptionStatus.DUE, RedemptionStatus.CLAIMED))
                     .contextFactory((s, input) -> start(s, input, input.redemptionId()))
                     .outputMapper(ctx -> ctx.get(OUTPUT, RedemptionOutput.class));
+                // Q48e-1: an operator's member is checked within the act, before the record's lock.
+                OperatorChecks.memberWhenScoped(pb);
                 lockAndLoad(pb, QbRewards.defaultDataset(QbRewards.REDEMPTION));
                 // Q59c-2: an operator's member voids their own sponsors' prizes only.
                 OperatorChecks.ownSponsor(pb, ctx -> redemption(ctx) == null ? null
