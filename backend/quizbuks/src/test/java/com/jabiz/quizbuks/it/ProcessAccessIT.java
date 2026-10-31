@@ -35,6 +35,9 @@ class ProcessAccessIT extends QbItSupport {
         Map.entry("QB_SPONSOR_PAGE_APPROVAL_RESULT", ProcessAccess.INTERNAL),
         Map.entry("QB_PUBLICATION_APPROVAL_RESULT", ProcessAccess.INTERNAL),
         Map.entry("QB_PUBLICATION_BAN_PAUSE", ProcessAccess.SUB_PROCESS_ONLY),
+        // Q69: after a sponsor's account was erased (on jabiz.account.erased), and its sub-process.
+        Map.entry("QB_SPONSOR_ERASED", ProcessAccess.INTERNAL),
+        Map.entry("QB_PUBLICATION_ERASED_END", ProcessAccess.SUB_PROCESS_ONLY),
         Map.entry("QB_PUBLICATION_COMPLETION_MOVE", ProcessAccess.SUB_PROCESS_ONLY),
         Map.entry("QB_PUBLICATION_ADVANCE", ProcessAccess.INTERNAL),
         Map.entry("QB_QUIZ_RELEASE_FILES", ProcessAccess.SUB_PROCESS_ONLY),
