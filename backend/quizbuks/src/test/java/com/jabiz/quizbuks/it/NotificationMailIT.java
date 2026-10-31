@@ -238,7 +238,7 @@ class NotificationMailIT extends PayoutItSupport {
         MimeMessage mail = received(addressOf(name)).stream()
             .filter(message -> subject(message).contains("送金しました")).findFirst().orElseThrow();
         assertThat(subject(mail)).isEqualTo("クドスを送金しました：1,500 クドス");
-        assertThat(text(mail)).contains("1,500 Kudos", "0 Kudos", APP + "wallet");
+        assertThat(text(mail)).contains("1,500 クドス", "0 クドス", APP + "wallet");
 
         String failing = fresh("t-mail-failed");
         String other = payee(failing);

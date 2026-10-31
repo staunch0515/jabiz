@@ -36,6 +36,18 @@ class BrandTest {
         return matcher.group(1);
     }
 
+    /** The profile's name in one language (its "names", Q61). */
+    private static String profileName(String language) throws IOException {
+        String id = Objects.requireNonNullElse(System.getenv("QB_BRAND"), "").trim();
+        Path profile = Path.of("../../quizbuks-web/brands", id.isEmpty() ? "quizbuks" : id, "brand.json");
+        String json = Files.readString(profile);
+        Matcher names = Pattern.compile("\"names\"\\s*:\\s*\\{([^}]*)}").matcher(json);
+        assertThat(names.find()).as("names").isTrue();
+        Matcher name = Pattern.compile("\"" + language + "\"\\s*:\\s*\"([^\"]*)\"").matcher(names.group(1));
+        assertThat(name.find()).as("names." + language).isTrue();
+        return name.group(1);
+    }
+
     private static String resource(String path) throws IOException {
         try (InputStream in = BrandTest.class.getResourceAsStream(path)) {
             assertThat(in).as(path).isNotNull();
@@ -63,7 +75,9 @@ class BrandTest {
                 try (InputStream in = BrandTest.class.getResourceAsStream(path)) {
                     properties.load(new InputStreamReader(Objects.requireNonNull(in), StandardCharsets.UTF_8));
                 }
-                assertThat(properties.getProperty("app.name")).as(path).isEqualTo(Brand.current().name());
+                // Each language's messages name the product in that language (Q61).
+                String language = path.substring(path.lastIndexOf('_') + 1, path.indexOf('.'));
+                assertThat(properties.getProperty("app.name")).as(path).isEqualTo(profileName(language));
             }
         }
         assertThat(resource("/application.yml")).doesNotContain("@QB_BRAND_");
