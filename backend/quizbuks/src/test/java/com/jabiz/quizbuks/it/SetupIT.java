@@ -48,6 +48,8 @@ class SetupIT extends QbItSupport {
         assertThat(first.get("rulesProposed")).isEqualTo(List.of(PublicationApprovals.RULE, SponsorApprovals.RULE,
             com.jabiz.quizbuks.wallet.QbPayouts.REVIEW_RULE, com.jabiz.quizbuks.wallet.BankTopUps.REVIEW_RULE,
             com.jabiz.quizbuks.wallet.ManualCredits.REVIEW_RULE, com.jabiz.quizbuks.operator.OperatorSettlements.REVIEW_RULE,
+            com.jabiz.quizbuks.setup.QbApprovalRules.OPERATOR_PLAN_REVIEW.code(),
+            com.jabiz.quizbuks.setup.QbApprovalRules.OPERATOR_WITHDRAWAL_REVIEW.code(),
             QbSodRules.CONTROL.code(), QbSodRules.SECURITY.code()));
         assertThat((List<?>) first.get("proposals")).hasSize(QbParams.CONTROLLED.size() + QbApprovalRules.ALL.size()
             + QbSodRules.ALL.size());
@@ -80,12 +82,27 @@ class SetupIT extends QbItSupport {
         assertThat(query("SELECT rule_code, subject, enabled, priority, condition, levels "
             + "FROM sys_approval_rule_version ORDER BY rule_code"))
             .satisfiesExactly(
+                // Q48e-2: an operator's plan changes only after another administrator approves it.
+                rule -> assertThat(rule).containsEntry("rule_code", com.jabiz.quizbuks.operator.OperatorPlans.REVIEW_RULE)
+                    .containsEntry("subject", com.jabiz.quizbuks.operator.OperatorPlans.APPROVAL_SUBJECT)
+                    .containsEntry("enabled", true)
+                    .satisfies(r -> assertThat(r.get("condition").toString()).contains("operatorPlan"))
+                    .satisfies(r -> assertThat(r.get("levels").toString())
+                        .contains(QbPermissions.TOPUP_BANK_APPROVE)),
                 // Q48b: an operator's settlement is paid only after another administrator approves it.
                 rule -> assertThat(rule).containsEntry("rule_code",
                     com.jabiz.quizbuks.operator.OperatorSettlements.REVIEW_RULE)
                     .containsEntry("subject", com.jabiz.quizbuks.operator.OperatorSettlements.APPROVAL_SUBJECT)
                     .containsEntry("enabled", true)
                     .satisfies(r -> assertThat(r.get("condition").toString()).contains("operatorPayment"))
+                    .satisfies(r -> assertThat(r.get("levels").toString())
+                        .contains(QbPermissions.TOPUP_BANK_APPROVE)),
+                // Q48e-2: an operator's withdrawal is paid only after another administrator approves it.
+                rule -> assertThat(rule).containsEntry("rule_code",
+                    com.jabiz.quizbuks.operator.OperatorWithdrawals.REVIEW_RULE)
+                    .containsEntry("subject", com.jabiz.quizbuks.operator.OperatorWithdrawals.APPROVAL_SUBJECT)
+                    .containsEntry("enabled", true)
+                    .satisfies(r -> assertThat(r.get("condition").toString()).contains("operatorWithdrawal"))
                     .satisfies(r -> assertThat(r.get("levels").toString())
                         .contains(QbPermissions.TOPUP_BANK_APPROVE)),
                 rule -> assertThat(rule).containsEntry("rule_code", PublicationApprovals.RULE)
@@ -149,14 +166,16 @@ class SetupIT extends QbItSupport {
         publishProposals(setup());
         for (String key : QbParams.CONTROLLED) {
             // A valid value of the parameter's kind: refused for being controlled, not for its value.
-            Map<String, Object> kind = QbParams.ALL.stream().filter(p -> p.key().equals(key)).findFirst().orElseThrow()
-                .valueKind();
+            QbParams.Param param = QbParams.ALL.stream().filter(p -> p.key().equals(key)).findFirst().orElseThrow();
+            Map<String, Object> kind = param.valueKind();
             Object type = kind.get("type");
             // The commission rate is a fraction below 1; the days (Q10b) are whole.
             // Q8a: a code (the AI model and effort) takes a listed value other than its first one.
             String value = "bool".equals(type) ? "true"
                 : "code".equals(type) ? String.valueOf(((List<?>) kind.get("allowedValues")).getLast())
-                : "numeric".equals(type) && !Integer.valueOf(0).equals(kind.get("scale")) ? "0.1" : "1";
+                : "numeric".equals(type) && !Integer.valueOf(0).equals(kind.get("scale"))
+                    // Q48e-2: a value other than the one in effect (plan 5's share is 0.1).
+                    ? ("0.1".equals(param.value()) ? "0.2" : "0.1") : "1";
             Map<String, Object> refused = client.post().uri("/api/processes/PARAM_SET/latest")
                 .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
                 .header("Authorization", admin()).bodyValue(Map.of("key", key, "value", value)).exchange()

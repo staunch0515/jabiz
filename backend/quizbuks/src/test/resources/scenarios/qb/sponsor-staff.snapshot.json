@@ -12,7 +12,7 @@
       "userId" : "#uuid:5",
       "amount" : "300",
       "description" : "A coffee at our counter",
-      "code" : "C-0000043B",
+      "code" : "C-00000462",
       "status" : "REDEEMED",
       "dueAt" : "2026-10-01T01:06:00Z",
       "expiresAt" : "2026-10-31T01:06:00Z",
@@ -37,7 +37,7 @@
       "userId" : "#uuid:9",
       "amount" : "300",
       "description" : "A coffee at our counter",
-      "code" : "C-00000443",
+      "code" : "C-0000046A",
       "status" : "REDEEMED",
       "dueAt" : "2026-10-01T01:07:00Z",
       "expiresAt" : "2026-10-31T01:07:00Z",
@@ -72,7 +72,7 @@
       "publicationId" : "#uuid:3",
       "action" : "RESULT",
       "actionId" : "#uuid:2",
-      "sourceKey" : "redeem-due:01a0f4ff-30c0-7000-8000-00000000043c",
+      "sourceKey" : "redeem-due:01a0f4ff-30c0-7000-8000-000000000463",
       "createdAt" : "2026-10-01T01:06:00Z",
       "readAt" : null,
       "clickedAt" : null,
@@ -88,14 +88,14 @@
         "zh" : "奖品已领取"
       },
       "body" : {
-        "en" : "You collected your prize for \"Coffee week\" (code C-0000043B, worth 300 Kudos). Enjoy!",
-        "ja" : "「Coffee week」の賞品（コード C-0000043B、300 Kudos 相当）を受け取りました。お楽しみください！",
-        "zh" : "你已领取\"Coffee week\"的奖品（编码 C-0000043B，价值 300 Kudos）。请享用！"
+        "en" : "You collected your prize for \"Coffee week\" (code C-00000462, worth 300 Kudos). Enjoy!",
+        "ja" : "「Coffee week」の賞品（コード C-00000462、300 Kudos 相当）を受け取りました。お楽しみください！",
+        "zh" : "你已领取\"Coffee week\"的奖品（编码 C-00000462，价值 300 Kudos）。请享用！"
       },
       "publicationId" : "#uuid:3",
       "action" : "RESULT",
       "actionId" : "#uuid:2",
-      "sourceKey" : "redeem-redeemed:01a0f4ff-30c0-7000-8000-00000000043c",
+      "sourceKey" : "redeem-redeemed:01a0f4ff-30c0-7000-8000-000000000463",
       "createdAt" : "2026-10-01T01:06:00Z",
       "readAt" : null,
       "clickedAt" : null,
@@ -118,7 +118,7 @@
       "publicationId" : "#uuid:3",
       "action" : "RESULT",
       "actionId" : "#uuid:8",
-      "sourceKey" : "redeem-due:01a0f500-1b20-7000-8000-000000000444",
+      "sourceKey" : "redeem-due:01a0f500-1b20-7000-8000-00000000046b",
       "createdAt" : "2026-10-01T01:07:00Z",
       "readAt" : null,
       "clickedAt" : null,
@@ -134,14 +134,14 @@
         "zh" : "有答题人扫了你的固定码"
       },
       "body" : {
-        "en" : "Someone at your place claims the prize for \"Coffee week\" (code C-00000443, worth 300 Kudos). Confirm it on the redeem page within ten minutes, or decline it.",
-        "ja" : "店舗で誰かが「Coffee week」の賞品（コード C-00000443、300 Kudos 相当）の受け取りを申請しています。10 分以内に引き換えページで確認するか、拒否してください。",
-        "zh" : "有人在你的店里申请领取\"Coffee week\"的奖品（编码 C-00000443，价值 300 Kudos）。请在十分钟内到领奖页确认，或拒绝。"
+        "en" : "Someone at your place claims the prize for \"Coffee week\" (code C-0000046A, worth 300 Kudos). Confirm it on the redeem page within ten minutes, or decline it.",
+        "ja" : "店舗で誰かが「Coffee week」の賞品（コード C-0000046A、300 Kudos 相当）の受け取りを申請しています。10 分以内に引き換えページで確認するか、拒否してください。",
+        "zh" : "有人在你的店里申请领取\"Coffee week\"的奖品（编码 C-0000046A，价值 300 Kudos）。请在十分钟内到领奖页确认，或拒绝。"
       },
       "publicationId" : "#uuid:3",
       "action" : "REDEEM",
       "actionId" : "#uuid:7",
-      "sourceKey" : "redeem-claimed:01a0f500-1b20-7000-8000-000000000444:1790816820",
+      "sourceKey" : "redeem-claimed:01a0f500-1b20-7000-8000-00000000046b:1790816820",
       "createdAt" : "2026-10-01T01:07:00Z",
       "readAt" : null,
       "clickedAt" : null,
@@ -157,14 +157,14 @@
         "zh" : "奖品已领取"
       },
       "body" : {
-        "en" : "You collected your prize for \"Coffee week\" (code C-00000443, worth 300 Kudos). Enjoy!",
-        "ja" : "「Coffee week」の賞品（コード C-00000443、300 Kudos 相当）を受け取りました。お楽しみください！",
-        "zh" : "你已领取\"Coffee week\"的奖品（编码 C-00000443，价值 300 Kudos）。请享用！"
+        "en" : "You collected your prize for \"Coffee week\" (code C-0000046A, worth 300 Kudos). Enjoy!",
+        "ja" : "「Coffee week」の賞品（コード C-0000046A、300 Kudos 相当）を受け取りました。お楽しみください！",
+        "zh" : "你已领取\"Coffee week\"的奖品（编码 C-0000046A，价值 300 Kudos）。请享用！"
       },
       "publicationId" : "#uuid:3",
       "action" : "RESULT",
       "actionId" : "#uuid:8",
-      "sourceKey" : "redeem-redeemed:01a0f500-1b20-7000-8000-000000000444",
+      "sourceKey" : "redeem-redeemed:01a0f500-1b20-7000-8000-00000000046b",
       "createdAt" : "2026-10-01T01:07:00Z",
       "readAt" : null,
       "clickedAt" : null,

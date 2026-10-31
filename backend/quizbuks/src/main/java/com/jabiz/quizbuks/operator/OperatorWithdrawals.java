@@ -26,7 +26,7 @@ import com.jabiz.runtime.approval.ApprovalEntities;
 import com.jabiz.runtime.approval.ApprovalOutcome;
 import com.jabiz.runtime.approval.RequireApproval;
 import com.jabiz.runtime.ledger.LedgerProcesses;
-import com.jabiz.runtime.param.ParamValues;
+import com.jabiz.param.ParamValues;
 import com.jabiz.runtime.process.steps.CallProcess;
 import com.jabiz.runtime.process.steps.HoldLock;
 import com.jabiz.runtime.process.steps.LoadParams;

@@ -57,8 +57,8 @@ import java.util.Map;
  *   <li>{@value #RUN} ({@code internal()}, the item of the monthly job {@value #JOB}): one operator's month (Japan's
  *       calendar month, {@code jabiz.fiscal-year-zone}). The commission of its publications ({@code 4110} by the
  *       publication, whose card names the operator: {@value #REVENUE_TEMPLATE}) less the platform's share
- *       ({@code qb.operator.platform-share}) is the operator's share, rounded down to the yen; it is posted as an
- *       expense owed (debit 5130 / credit 2140). Finance issues its statement ({@value #STATEMENT}).
+ *       of the operator's plan that month ({@code qb.operator.plan.<n>.share}, Q48e-2) is the operator's share,
+ *       rounded down to the yen; it is posted as an expense owed (debit 5130 / credit 2140). Finance issues its statement ({@value #STATEMENT}).
  *       The month's prospecting cost (Q48d, in yen at {@code qb.prospect.usd-jpy}) and what was carried in are
  *       deducted from what is paid; what they exceed it by is carried to the next month, never a negative payment.</li>
  *   <li>{@value #PAY} (finance, {@code qb.operator.settlement.pay}): records the payment made by bank (the day and the
@@ -293,8 +293,7 @@ public final class OperatorSettlements {
                 "The month has not ended", Map.of("month", input.month())));
         }
         // Q48e-2: the operator's plan in effect that month gives the platform's share and the fixed fee.
-        String plan = OperatorPlans.planOf(rows(ctx, PLANS).stream().map(EntityInstance.class::cast).toList(),
-            input.month());
+        String plan = OperatorPlans.planOf(instances(ctx, PLANS), input.month());
         OperatorPlans.Terms terms = OperatorPlans.terms(plan, params(ctx));
         if (terms == null) {
             throw new BusinessRuleViolationException(new Violation(null, OperatorCodes.NO_PLAN,
@@ -732,6 +731,12 @@ public final class OperatorSettlements {
     static List<Map<String, Object>> rows(ProcessContext ctx, String key) {
         Object found = ctx.contains(key) ? ctx.get(key) : null;
         return found instanceof List<?> list ? (List<Map<String, Object>>) list : List.of();
+    }
+
+    @SuppressWarnings("unchecked")
+    static List<EntityInstance> instances(ProcessContext ctx, String key) {
+        Object found = ctx.contains(key) ? ctx.get(key) : null;
+        return found instanceof List<?> list ? (List<EntityInstance>) list : List.of();
     }
 
     @SuppressWarnings("unchecked")

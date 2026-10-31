@@ -160,7 +160,7 @@ class OperatorSettlementIT extends PlayItSupport {
                 .doesNotContainKeys("paymentRecordedBy", "approvalRequestId"));
         String session = operatorSession(member, operatorId);
         assertThat(items("qb.operator.account", session, Map.of())).singleElement()
-            .satisfies(row -> assertThat((BigDecimal) row.get("balance")).isEqualByComparingTo("3"));
+            .satisfies(row -> assertThat(new BigDecimal(String.valueOf(row.get("balance")))).isEqualByComparingTo("3"));
 
         // The operator withdraws (the least lowered to 1 for this test): its bank account first, then, once its
         // cooling-off is over, the balance.
@@ -180,7 +180,7 @@ class OperatorSettlementIT extends PlayItSupport {
         assertThat(codes(refused(OperatorWithdrawals.REQUEST, session, body("amount", 1), 422)))
             .contains(OperatorCodes.WITHDRAWAL_OPEN);
         assertThat(items("qb.operator.account", session, Map.of())).singleElement()
-            .satisfies(row -> assertThat((BigDecimal) row.get("balance")).isEqualByComparingTo("0"));
+            .satisfies(row -> assertThat(new BigDecimal(String.valueOf(row.get("balance")))).isEqualByComparingTo("0"));
 
         // Finance records the payment; nothing is posted until another administrator approves it.
         Map<String, Object> paying = run(OperatorWithdrawals.PAY, finance(), body("withdrawalId", withdrawalId,
@@ -246,17 +246,17 @@ class OperatorSettlementIT extends PlayItSupport {
         assertThat(query("SELECT plan, fixed_fee, carried_out FROM qb_operator_settlement WHERE operator_id = ? "
             + "AND month = '2027-01'", operatorId)).singleElement().satisfies(row -> {
                 assertThat(row).containsEntry("plan", "1");
-                assertThat((BigDecimal) row.get("fixed_fee")).isEqualByComparingTo("0");
+                assertThat(new BigDecimal(String.valueOf(row.get("fixed_fee")))).isEqualByComparingTo("0");
             });
         clock.set(Instant.parse("2027-03-02T00:00:00Z"));
         systemRun(OperatorSettlements.RUN, body("operatorId", operatorId, "month", "2027-02"));
         assertThat(query("SELECT plan, platform_share, fixed_fee, payable, carried_out FROM qb_operator_settlement "
             + "WHERE operator_id = ? AND month = '2027-02'", operatorId)).singleElement().satisfies(row -> {
                 assertThat(row).containsEntry("plan", "3");
-                assertThat((BigDecimal) row.get("platform_share")).isEqualByComparingTo("0.3");
-                assertThat((BigDecimal) row.get("fixed_fee")).isEqualByComparingTo("40000");
-                assertThat((BigDecimal) row.get("payable")).isEqualByComparingTo("0");
-                assertThat((BigDecimal) row.get("carried_out")).isEqualByComparingTo("40000");
+                assertThat(new BigDecimal(String.valueOf(row.get("platform_share")))).isEqualByComparingTo("0.3");
+                assertThat(new BigDecimal(String.valueOf(row.get("fixed_fee")))).isEqualByComparingTo("40000");
+                assertThat(new BigDecimal(String.valueOf(row.get("payable")))).isEqualByComparingTo("0");
+                assertThat(new BigDecimal(String.valueOf(row.get("carried_out")))).isEqualByComparingTo("40000");
             });
 
         // Withdrawals: the lead of this operator's session only.
@@ -264,8 +264,8 @@ class OperatorSettlementIT extends PlayItSupport {
         String staff = member(operatorId, unique("q48e2-staff"), false);
         assertThat(codes(refused(OperatorWithdrawals.BANK_ACCOUNT_SAVE, operatorSession(staff, operatorId),
             bankAccount(), 422))).containsExactly(OperatorCodes.NOT_LEAD);
-        assertThat(codes(refused(OperatorWithdrawals.BANK_ACCOUNT_SAVE, hq(), bankAccount(), 422)))
-            .containsExactly(OperatorCodes.NOT_MEMBER);
+        // Headquarters is no operator: it does not use the operators' acts.
+        refused(OperatorWithdrawals.BANK_ACCOUNT_SAVE, hq(), bankAccount(), 403);
         run(OperatorWithdrawals.BANK_ACCOUNT_SAVE, operatorSession(lead, operatorId), bankAccount());
         String other = (String) run(OperatorProcesses.SAVE, hq(), body("name", unique("Other"), "contactName", "O",
             "contactEmail", "ops@other.example")).get("operatorId");

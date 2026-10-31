@@ -47,7 +47,10 @@ public final class OperatorCodes {
 
     /** Q48b: a month is settled only once it has ended (in Japan). */
     public static final String MONTH_OPEN = "QB_OPERATOR_MONTH_OPEN";
-    /** Q48b: the platform's share (qb.operator.platform-share) is not published, or not a fraction from 0 to 1. */
+    /**
+     * Q48b: the platform's share of the operator's plan ({@code qb.operator.plan.<n>.share}) is not published, or not
+     * a fraction from 0 to 1.
+     */
     public static final String NO_SHARE = "QB_OPERATOR_NO_SHARE";
     /** Q48d: the month has prospecting costs and the yen of a dollar (qb.prospect.usd-jpy) is not published. */
     public static final String NO_RATE = "QB_OPERATOR_NO_RATE";
