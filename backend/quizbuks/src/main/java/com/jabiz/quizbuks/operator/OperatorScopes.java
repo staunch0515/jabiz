@@ -7,6 +7,7 @@ import com.jabiz.quizbuks.content.QbContent;
 import com.jabiz.quizbuks.identity.QbAccounts;
 import com.jabiz.quizbuks.invitation.QbInvitations;
 import com.jabiz.quizbuks.page.QbSponsorPages;
+import com.jabiz.quizbuks.page.QbSponsorProducts;
 import com.jabiz.quizbuks.play.QbPlay;
 import com.jabiz.quizbuks.publishing.QbPublications;
 import com.jabiz.quizbuks.reward.QbDigitalPrizes;
@@ -50,6 +51,8 @@ public final class OperatorScopes {
         fields.put(QbPublications.SPONSOR_METHODS, "userId");
         fields.put(QbAccounts.SPONSOR, "userId");
         fields.put(QbSponsorPages.PAGE, "userId");
+        fields.put(QbSponsorProducts.PRODUCT, "userId");
+        fields.put(QbSponsorProducts.QUIZ_LINK, "ownerId");
         for (String entity : new String[] {QbPublications.COUNTER, QbPublications.START_COUNTER,
             QbPublications.SCHEDULE, QbPublications.PAST_VERSION, QbPlay.VIEW, QbPlay.STATS}) {
             fields.put(entity, BY_CARD);
