@@ -13,8 +13,10 @@ import java.util.Locale;
 /**
  * A sponsor's page in the app (docs/quizbuks/plans/Q60-sponsor-page.md, Q60a): one per sponsor, at {@code /s/<handle>}
  * for anybody once published, in an ordinary table (its history is the platform's audit), written only by
- * {@link SponsorPageProcesses}. The company comes from the approved onboarding; the logo and the cover are the page's
- * own (the onboarding's avatar is not public).
+ * {@link SponsorPageProcesses}. The company, the logo (the avatar) and the "About us" (the introduction) come from the
+ * approved onboarding (Q65b: one page of the console, docs/quizbuks/plans/Q65-start-and-profile.md section 1); the
+ * page's own are the handle, language, headline, cover and website. The table's columns {@code logo} and {@code story}
+ * of Q60a stay, unused (V50).
  */
 public final class QbSponsorPages {
 
@@ -26,7 +28,7 @@ public final class QbSponsorPages {
     /** The published pages, read anonymously through the public templates. */
     public static final String PUBLIC_DATASET = "urn:jabiz:dataset:public:" + PAGE;
 
-    /** The images of a page (its logo and cover): public once the page is. */
+    /** The page's cover (and the products' images): public once the page is. */
     public static final String IMAGE_POLICY = "qb.sponsor-page-image";
     public static final String STATUS_DICTIONARY = "urn:jabiz:dict:quizbuks:sponsor-page-status";
 
@@ -46,7 +48,6 @@ public final class QbSponsorPages {
     public static final String HANDLE_PATTERN = "[a-z0-9][a-z0-9-]{1,28}[a-z0-9]";
     public static final int HANDLE_LENGTH = 30;
     public static final int HEADLINE_LENGTH = 120;
-    public static final int STORY_LENGTH = 5000;
     public static final int WEBSITE_LENGTH = 300;
     public static final String WEBSITE_PATTERN = "https://[^ \\t\\r\\n]+";
     public static final int REASON_LENGTH = 500;
@@ -62,9 +63,6 @@ public final class QbSponsorPages {
             .asCode(QbContent.LANGUAGE_DICTIONARY, QbContent.LANGUAGES.toArray(String[]::new)));
         eb.field("headline", f -> f.physicalColumn("headline").required(true).asText(HEADLINE_LENGTH)
             .apply(Rules.notBlank(SponsorPageCodes.HEADLINE_BLANK)));
-        // Markdown in the page's language, rendered by the frontends only, without raw HTML.
-        eb.field("story", f -> f.physicalColumn("story").asText(STORY_LENGTH, true));
-        eb.field("logo", f -> f.physicalColumn("logo").kind(FileKind.of(IMAGE_POLICY)));
         eb.field("cover", f -> f.physicalColumn("cover").kind(FileKind.of(IMAGE_POLICY)));
         eb.field("website", f -> f.physicalColumn("website").asText(WEBSITE_LENGTH)
             .apply(Rules.pattern(SponsorPageCodes.WEBSITE_FORMAT, WEBSITE_PATTERN)));

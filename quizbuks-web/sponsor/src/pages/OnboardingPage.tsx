@@ -26,6 +26,7 @@ import { CODE, FILE_POLICY, LEGAL } from '../qb/ids'
 import { QB } from '../qb/messages'
 import { fieldProblem, generalProblem } from '../qb/problems'
 import { TermsAgreement, acceptedVersions } from '../qb/TermsAgreement'
+import { SponsorPageSection } from '../page/SponsorPageEditor'
 
 /** The query of the sponsor's onboarding, which the routes and the dashboard read too. */
 export const SPONSOR_QUERY = ['qb', 'sponsor'] as const
@@ -36,7 +37,8 @@ export function useMySponsor() {
 }
 
 const FIELDS = ['displayName', 'company', 'intro', 'avatar', 'acceptTerms'] as const
-const INTRO_LENGTH = 2_000
+/** `AccountLimits.INTRO_LENGTH`: the shop page's "About us" too (Q65b). */
+const INTRO_LENGTH = 5_000
 const AVATAR_TYPES = 'image/jpeg,image/png'
 const AVATAR_BYTES = 2 * 1024 * 1024
 
@@ -72,10 +74,12 @@ function OnboardingStatus({ sponsor }: { sponsor: Sponsor | null }) {
 }
 
 /**
- * The sponsor's onboarding and profile (M-01, M-03, P-09; D-Q2-3): name, company, introduction (Markdown, shown as
- * written until the content pages render it) and a logo. Before approval, saving applies (`QB_SPONSOR_APPLY`, with
- * the terms accepted; applying again while in review replaces the request); after approval it changes the profile
- * without a review (`QB_SPONSOR_PROFILE_SAVE`).
+ * The sponsor profile, one page in two sections (Q65b; docs/quizbuks/plans/Q65-start-and-profile.md section 1).
+ * The basic profile is the onboarding (M-01, M-03, P-09; D-Q2-3): name, company, introduction (Markdown) and a logo.
+ * Before approval, saving applies (`QB_SPONSOR_APPLY`, with the terms accepted; applying again while in review
+ * replaces the request); after approval it changes the profile without a review (`QB_SPONSOR_PROFILE_SAVE`). The shop
+ * page (`SponsorPageSection`, Q60a) holds only what is the page's own; it shows the basic profile's logo and
+ * introduction. As "My page" was, it is there before approval too (only an approved sponsor publishes it).
  */
 export function OnboardingPage() {
   const { t } = useTranslation(SPONSOR)
@@ -91,8 +95,12 @@ export function OnboardingPage() {
       {sponsor.isError && <PageState kind="error" description={tQb('failed')} />}
       {sponsor.isSuccess && (
         <>
-          <OnboardingStatus sponsor={sponsor.data} />
-          <OnboardingForm sponsor={sponsor.data} />
+          <section className="flex flex-col gap-4" aria-labelledby="onboarding-basic-title" data-testid="onboarding-basic">
+            <h2 id="onboarding-basic-title" className="text-lg font-semibold">{t('onboarding.basicTitle')}</h2>
+            <OnboardingStatus sponsor={sponsor.data} />
+            <OnboardingForm sponsor={sponsor.data} />
+          </section>
+          <SponsorPageSection />
         </>
       )}
     </section>

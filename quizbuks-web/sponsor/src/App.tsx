@@ -23,7 +23,6 @@ import { CircleHelp, FileQuestion, LayoutDashboard, Megaphone, MessagesSquare, R
   Wallet,
   HandCoins,
   Gift,
-  Globe,
   ShoppingBag,
   Mail,
   Ticket,
@@ -54,7 +53,7 @@ import { previewOf } from './preview/paths'
 import { rememberSource } from './trial/claim'
 import TrialPage, { trialKeyOf } from './trial/TrialPage'
 import { OnboardingPage, useMySponsor } from './pages/OnboardingPage'
-import { SPONSOR_PAGE_PATH, SponsorPageEditor } from './page/SponsorPageEditor'
+import { SPONSOR_PAGE_PATH } from './page/SponsorPageEditor'
 import { PRODUCTS_PATH, ProductsPage } from './products/ProductsPage'
 import { MESSAGES_PATH } from './notices/api'
 import { MessagesPage } from './notices/MessagesPage'
@@ -165,7 +164,8 @@ function SignedIn({ path }: { path: string }) {
   else if (analyticsIdOf(path)) page = <PublicationAnalyticsPage key={path} publicationId={analyticsIdOf(path)!} />
   else if (publicationIdOf(path)) page = <PublicationPage key={path} publicationId={publicationIdOf(path)!} />
   else if (path === ONBOARDING) page = <OnboardingPage />
-  else if (path === SPONSOR_PAGE_PATH) page = <SponsorPageEditor />
+  // Q65b: the shop page is a section of the sponsor profile; its old address ("My page") leads there.
+  else if (path === SPONSOR_PAGE_PATH) page = <Redirect to={ONBOARDING} />
   else if (path === PRODUCTS_PATH) page = <ProductsPage />
   else if (path === WALLET_PATH && kudos) page = <WalletPage />
   else if (topUpId && kudos) page = <TopUpPage key={topUpId} topUpId={topUpId} />
@@ -197,7 +197,6 @@ function SignedIn({ path }: { path: string }) {
     ] },
     { key: 'settings', label: t('nav.groups.settings'), items: [
       { key: 'onboarding', label: t('nav.onboarding'), path: ONBOARDING, icon: Store },
-      { key: 'page', label: t('page.nav'), path: SPONSOR_PAGE_PATH, icon: Globe },
       { key: 'products', label: t('products.nav'), path: PRODUCTS_PATH, icon: ShoppingBag },
       { key: 'mailServer', label: t('publishing.mailServer.nav'), path: MAIL_SERVER_PATH, icon: Mail },
       { key: 'messages', label: t('notices.nav'), path: MESSAGES_PATH, icon: MessagesSquare },

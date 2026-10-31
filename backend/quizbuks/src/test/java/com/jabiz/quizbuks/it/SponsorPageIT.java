@@ -13,6 +13,8 @@ import com.jabiz.quizbuks.setup.QbRoles;
 import com.jabiz.runtime.context.Actor;
 import com.jabiz.runtime.test.FileSamples;
 import com.jabiz.runtime.test.TestTokens;
+import com.jabiz.quizbuks.identity.QbAccounts;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -28,8 +30,14 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Sponsors' pages (docs/quizbuks/plans/Q60-sponsor-page.md, Q60a): a draft goes to review once, is then shown to
  * anybody by its handle with the sponsor's live publications, and changes at once afterwards; the sponsor takes it
  * back, headquarters or the sponsor's operator takes it down (back only after a new review), and a ban takes it down.
+ * Since Q65b the page's logo and "About us" are the onboarding's avatar and introduction (the sponsor profile).
  */
 class SponsorPageIT extends PlayItSupport {
+
+    @AfterEach
+    void onlyInserted() {
+        assertAccountsOnlyInserted();
+    }
 
     private static final String PAGE_TEMPLATE = "qb.public.sponsor-page";
     private static final String PUBLICATIONS_TEMPLATE = "qb.public.sponsor-page-publications";
@@ -44,8 +52,19 @@ class SponsorPageIT extends PlayItSupport {
     }
 
     private static Map<String, Object> page(String handle, String headline) {
-        return body("handle", handle, "language", "en", "headline", headline, "story", "We make **things**.",
-            "website", "https://example.com/shop");
+        return body("handle", handle, "language", "en", "headline", headline, "website", "https://example.com/shop");
+    }
+
+    private String avatar(String token) {
+        return (String) upload(QbAccounts.AVATAR_POLICY, FileSamples.jpeg(200, 200), "avatar.jpg", "image/jpeg",
+            token).expectStatus().isCreated().expectBody(MAP).returnResult().getResponseBody().get("fileId");
+    }
+
+    /** The approved sponsor's profile (Q65b: the page's logo and "About us"), changed without a review. */
+    private void profile(String sponsor, String intro, String avatar) {
+        Map<String, Object> input = body("displayName", "Ann", "company", "Company of " + sponsor, "intro", intro);
+        input.put("avatar", avatar);
+        run("QB_SPONSOR_PROFILE_SAVE", sponsorToken(sponsor), input);
     }
 
     private Map<String, Object> save(String token, Map<String, Object> page) {
@@ -124,13 +143,18 @@ class SponsorPageIT extends PlayItSupport {
         String sponsor = newSponsor(unique("s-q60-ann"));
         String token = sponsorToken(sponsor);
         String cover = image(token);
+        String logo = avatar(token);
+        profile(sponsor, "Since **1990**.", logo);
         String handle = newHandle();
 
-        // Typed in capitals, stored lowercase: one name whatever the case.
+        // Typed in capitals, stored lowercase: one name whatever the case. A logo and a story of the page's own
+        // (Q60a) are no longer part of the input (Q65b): a caller still sending them is not heard.
         Map<String, Object> draft = save(token, body("handle", handle.toUpperCase(), "language", "en", "headline",
-            "Fresh bread daily", "story", "Since 1990.", "cover", cover, "website", "https://example.com"));
+            "Fresh bread daily", "story", "Not stored", "logo", image(token), "cover", cover, "website",
+            "https://example.com"));
         assertThat(draft).containsEntry("handle", handle).containsEntry("status", QbSponsorPages.DRAFT)
             .containsEntry("revision", 1);
+        assertThat(stored(sponsor)).containsEntry("story", null).containsEntry("logo", null);
         assertThat(publicItems(PAGE_TEMPLATE, handle)).isEmpty();
 
         Map<String, Object> submitted = run(SponsorPageProcesses.SUBMIT, token, body("baseRevision", 1));
@@ -138,12 +162,23 @@ class SponsorPageIT extends PlayItSupport {
         assertThat(publicItems(PAGE_TEMPLATE, handle)).isEmpty();
         approve((String) submitted.get("approvalRequestId"));
 
-        // Shown to anybody, with the company of the onboarding and the cover as a public file.
+        // Shown to anybody, with the company of the onboarding and the cover as a public file; its logo and "About us"
+        // are the onboarding's avatar and introduction (Q65b).
         assertThat(publicItems(PAGE_TEMPLATE, handle)).singleElement().satisfies(row -> assertThat(row)
             .containsEntry("headline", "Fresh bread daily").containsEntry("company", "Company of " + sponsor)
             .containsEntry("cover", cover).containsEntry("language", "en")
+            .containsEntry("logo", logo).containsEntry("story", "Since **1990**.")
             .containsOnlyKeys("handle", "language", "headline", "story", "logo", "cover", "website", "company"));
         client.get().uri("/api/public/files/" + cover).exchange().expectStatus().isOk();
+        client.get().uri("/api/public/files/" + logo).exchange().expectStatus().isOk();
+        // The profile changes the published page at once, without the page's review.
+        profile(sponsor, "Since 1990, in Kyoto.", logo);
+        assertThat(publicItems(PAGE_TEMPLATE, handle)).singleElement()
+            .satisfies(row -> assertThat(row).containsEntry("story", "Since 1990, in Kyoto."));
+        // The administrators' template shows the same.
+        assertThat(items("qb.admin.sponsor-pages", hq(), Map.of("params", Map.of("userId", sponsor))))
+            .singleElement().satisfies(row -> assertThat(row).containsEntry("logo", logo)
+                .containsEntry("story", "Since 1990, in Kyoto."));
         credit(sponsor, 10_000);
         String publication = livePublication(sponsor, "Ann's bread quiz");
         assertThat(publicItems(PUBLICATIONS_TEMPLATE, handle)).extracting(row -> row.get("publicationId"))
@@ -178,8 +213,10 @@ class SponsorPageIT extends PlayItSupport {
         assertThat(publicItems(PAGE_TEMPLATE, renamed)).isEmpty();
         assertThat(publicItems(PUBLICATIONS_TEMPLATE, renamed)).isEmpty();
         assertThat(sponsorHandleOf(publication)).isNull();
-        // Its images stop being public at once, not after the remembered decision's lifetime.
+        // Its cover stops being public at once, not after the remembered decision's lifetime. The logo is the avatar,
+        // public as an approved sponsor's (Q65b), not as the page's.
         client.get().uri("/api/public/files/" + cover).exchange().expectStatus().isNotFound();
+        client.get().uri("/api/public/files/" + logo).exchange().expectStatus().isOk();
         assertThat(run(SponsorPageProcesses.SUBMIT, token, body())).containsEntry("status", QbSponsorPages.PENDING);
         assertThat(query("SELECT count(*) AS n FROM qb_sponsor_page WHERE user_id = ?", sponsor).getFirst())
             .containsEntry("n", 1L);
@@ -204,7 +241,7 @@ class SponsorPageIT extends PlayItSupport {
             .contains(SponsorPageCodes.WEBSITE_FORMAT);
         // Another's image: refused.
         Map<String, Object> borrowed = page(newHandle(), "Bob's");
-        borrowed.put("logo", image(sponsorToken(ann)));
+        borrowed.put("cover", image(sponsorToken(ann)));
         assertThat(codes(refused(SponsorPageProcesses.SAVE, sponsorToken(bob), borrowed, 422)))
             .containsExactly("QB_FILE_NOT_OWN");
         assertThat(query("SELECT 1 FROM qb_sponsor_page WHERE user_id = ?", bob)).isEmpty();

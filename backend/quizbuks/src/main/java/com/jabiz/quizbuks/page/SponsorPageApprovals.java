@@ -13,6 +13,9 @@ import java.util.Map;
  * (the onboarding's switch {@code qb.review.sponsor.auto}; never for a page taken down). The content is everything the
  * page shows of its own, and when it was last taken down, so that a page taken down is never approved by an earlier
  * approval of the same text. An approval counts only while the stored page hashes the same.
+ *
+ * <p>Since Q65b the page's logo and "About us" are the onboarding's avatar and introduction, reviewed with the
+ * onboarding (docs/quizbuks/plans/Q65-start-and-profile.md section 1): the page's content holds only its own fields.
  */
 public final class SponsorPageApprovals {
 
@@ -34,7 +37,7 @@ public final class SponsorPageApprovals {
     /** The content of the page as stored (files as their keys, the time as its instant). */
     static Map<String, Object> content(EntityInstance page) {
         Map<String, Object> content = new LinkedHashMap<>();
-        for (String field : new String[] {"handle", "language", "headline", "story", "logo", "cover", "website"}) {
+        for (String field : new String[] {"handle", "language", "headline", "cover", "website"}) {
             Object value = page.get(field);
             content.put(field, value == null ? null : String.valueOf(value));
         }

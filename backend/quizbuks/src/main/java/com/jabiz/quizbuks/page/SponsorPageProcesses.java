@@ -42,10 +42,8 @@ import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -73,16 +71,17 @@ public final class SponsorPageProcesses {
     public static final String OPERATOR_TAKEDOWN = "QB_OPERATOR_SPONSOR_PAGE_TAKEDOWN";
 
     /**
+     * No logo and no story (Q65b): the page shows the onboarding's avatar and introduction, which the sponsor edits in
+     * the basic profile; a caller still sending them is not heard (unknown input properties are ignored).
+     *
      * @param handle       the name in the page's link ({@code /s/<handle>}); case does not matter
      * @param language     the page's one language
-     * @param story        Markdown
-     * @param logo         a file of the policy {@code qb.sponsor-page-image} the caller uploaded; none to have none
-     * @param cover        likewise
+     * @param cover        a file of the policy {@code qb.sponsor-page-image} the caller uploaded; none to have none
      * @param website      an https link
      * @param baseRevision the revision the caller edited; when given and no longer current, 422
      */
     public record SaveInput(@NotBlank @Size(max = QbSponsorPages.HANDLE_LENGTH) String handle, @NotBlank String language, @NotBlank String headline,
-        String story, UUID logo, UUID cover, String website, Long baseRevision) {}
+        UUID cover, String website, Long baseRevision) {}
 
     /** @param baseRevision the revision the caller submits; when given and no longer current, 422 */
     public record SubmitInput(Long baseRevision) {}
@@ -130,7 +129,7 @@ public final class SponsorPageProcesses {
 
     public static ProcessDefinition<SaveInput, PageOutput, ProcessContext> save() {
         return ProcessDefinition.define(SAVE, 1, SaveInput.class, PageOutput.class, ProcessContext.class, pb -> {
-            pb.description("Saves the sponsor's page: its link name, language, headline, story, images and website. "
+            pb.description("Saves the sponsor's page: its link name, language, headline, cover and website. "
                     + "A published page changes at once.")
                 .permissions(QbPermissions.SPONSOR_ME)
                 .requiresVerifiedEmail()
@@ -140,19 +139,14 @@ public final class SponsorPageProcesses {
             CallerChecks.refuseBanned(pb);
             pb.step("Lock the handle", HoldLock.<ProcessContext>exclusive(
                 ctx -> QbSponsorPages.handleLockName(handle(ctx))));
-            pb.step("Load the page, the handle's holder and the images", QueryEntities.<ProcessContext>all(
+            pb.step("Load the page, the handle's holder and the cover", QueryEntities.<ProcessContext>all(
                 QueryEntities.query(QbSponsorPages.DEFAULT_DATASET, ctx -> ofUser(userId(ctx)), PAGE),
                 QueryEntities.query(QbSponsorPages.DEFAULT_DATASET, ctx -> EntityQuery.builder()
                     .where(new QueryPredicate.In("handle", List.of(handle(ctx)))).limit(1).build(), HOLDER),
                 QueryEntities.query(FileEntities.DATASET, ctx -> {
-                    SaveInput input = ctx.get(INPUT, SaveInput.class);
-                    List<Object> ids = new ArrayList<>();
-                    for (UUID id : new UUID[] {input.logo(), input.cover()}) {
-                        if (id != null) {
-                            ids.add(id);
-                        }
-                    }
-                    return EntityQuery.builder().where(new QueryPredicate.In(FileEntities.FILE_ID, ids)).limit(2)
+                    UUID cover = ctx.get(INPUT, SaveInput.class).cover();
+                    List<Object> ids = cover == null ? List.of() : List.of(cover);
+                    return EntityQuery.builder().where(new QueryPredicate.In(FileEntities.FILE_ID, ids)).limit(1)
                         .build();
                 }, FILES)));
             pb.compute("Write the page", (metadata, ctx) -> saved(ctx));
@@ -172,7 +166,6 @@ public final class SponsorPageProcesses {
                 + " is another sponsor's", Map.of("handle", handle(ctx))));
         }
         current(ctx, page, input.baseRevision());
-        requireOwnFile(ctx, "logo", input.logo(), page);
         requireOwnFile(ctx, "cover", input.cover(), page);
         if (ctx.hasViolations()) {
             return;
@@ -181,8 +174,6 @@ public final class SponsorPageProcesses {
         values.put("handle", handle(ctx));
         values.put("language", input.language());
         values.put("headline", input.headline());
-        values.put("story", blankToNull(input.story()));
-        values.put("logo", input.logo());
         values.put("cover", input.cover());
         values.put("website", blankToNull(input.website()));
         if (page == null) {
@@ -196,30 +187,22 @@ public final class SponsorPageProcesses {
                 values.put("approvalRequestId", null);
                 ctx.put(WITHDRAW, true);
             }
-            Set<Object> released = new LinkedHashSet<>();
-            for (String field : new String[] {"logo", "cover"}) {
-                Object stored = page.get(field);
-                if (stored != null && !same(stored, input.logo()) && !same(stored, input.cover())) {
-                    released.add(UUID.fromString(String.valueOf(stored)));
-                }
-            }
-            ctx.put(RELEASED, List.copyOf(released));
+            Object stored = page.get("cover");
+            ctx.put(RELEASED, stored == null || same(stored, input.cover()) ? List.of()
+                : List.of(UUID.fromString(String.valueOf(stored))));
         }
         write(ctx, page, values, null);
     }
 
     /**
-     * Releases images the save replaced or removed (root CLAUDE.md, files): the references are saved first, then the
-     * platform deletes each file, which it refuses while anything still refers to it.
+     * Releases the cover the save replaced or removed (root CLAUDE.md, files): the reference is saved first, then the
+     * platform deletes the file, which it refuses while anything still refers to it.
      */
     private static void releaseImages(ProcessDefinitionBuilder<SaveInput, PageOutput, ProcessContext> pb) {
         pb.step("Save", SaveChanges.now());
-        for (int i = 0; i < 2; i++) {
-            int index = i;
-            pb.step("Release replaced image " + (index + 1), CallProcess.<ProcessContext>when(
-                ctx -> !ctx.hasViolations() && released(ctx).size() > index, FileProcesses.DELETE, 1,
-                ctx -> new FileProcesses.DeleteInput(released(ctx).get(index)), null));
-        }
+        pb.step("Release the replaced cover", CallProcess.<ProcessContext>when(
+            ctx -> !ctx.hasViolations() && !released(ctx).isEmpty(), FileProcesses.DELETE, 1,
+            ctx -> new FileProcesses.DeleteInput(released(ctx).getFirst()), null));
     }
 
     @SuppressWarnings("unchecked")
@@ -229,7 +212,7 @@ public final class SponsorPageProcesses {
 
     /** Refuses an image newly put on the page that the sponsor did not upload (422 {@code QB_FILE_NOT_OWN}). */
     private static void requireOwnFile(ProcessContext ctx, String field, UUID given, EntityInstance page) {
-        if (given == null || page != null && (same(page.get("logo"), given) || same(page.get("cover"), given))) {
+        if (given == null || page != null && same(page.get("cover"), given)) {
             return;
         }
         for (EntityInstance file : list(ctx, FILES)) {
@@ -576,19 +559,16 @@ public final class SponsorPageProcesses {
         stopServingImages(pb);
     }
 
-    /** Notes the images of a published page going offline: they stop being served publicly once committed. */
+    /**
+     * Notes the cover of a published page going offline: it stops being served publicly once committed. The logo is
+     * the onboarding's avatar (Q65b), public as an approved sponsor's, not as the page's.
+     */
     private static void offline(ProcessContext ctx, EntityInstance page) {
         if (!QbSponsorPages.PUBLISHED.equals(page.get("status"))) {
             return;
         }
-        List<UUID> images = new ArrayList<>();
-        for (String field : new String[] {"logo", "cover"}) {
-            Object id = page.get(field);
-            if (id != null) {
-                images.add(UUID.fromString(String.valueOf(id)));
-            }
-        }
-        ctx.put(OFFLINE, List.copyOf(images));
+        Object cover = page.get("cover");
+        ctx.put(OFFLINE, cover == null ? List.of() : List.of(UUID.fromString(String.valueOf(cover))));
     }
 
     /**

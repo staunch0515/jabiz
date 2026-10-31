@@ -2,7 +2,10 @@ import { api, runProcess, unwrap } from '@jabiz/client'
 import type { ContentLanguage } from '../qb/api'
 import { SPONSOR_PAGE } from './ids'
 
-/* The sponsor's page as the console edits it (Q60a): types after `SponsorPageProcesses`'s records, and its calls. */
+/*
+ * The sponsor's page as the console edits it (Q60a): types after `SponsorPageProcesses`'s records, and its calls. No
+ * logo and no story since Q65b: the page shows the onboarding's avatar and introduction.
+ */
 
 export type SponsorPageStatus = 'DRAFT' | 'PENDING' | 'PUBLISHED' | 'REJECTED' | 'TAKEN_DOWN'
 
@@ -10,7 +13,6 @@ export type SponsorPageStatus = 'DRAFT' | 'PENDING' | 'PUBLISHED' | 'REJECTED' |
 export const HANDLE_PATTERN = /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/
 export const HANDLE_LENGTH = 30
 export const HEADLINE_LENGTH = 120
-export const STORY_LENGTH = 5_000
 export const WEBSITE_LENGTH = 300
 
 /** The sponsor's own page as stored. */
@@ -18,8 +20,6 @@ export interface MySponsorPage {
   handle: string
   language: ContentLanguage
   headline: string
-  story: string | null
-  logo: string | null
   cover: string | null
   website: string | null
   status: SponsorPageStatus
@@ -37,8 +37,6 @@ export interface SponsorPageInput {
   handle: string
   language: ContentLanguage
   headline: string
-  story: string | null
-  logo: string | null
   cover: string | null
   website: string | null
   baseRevision: number | null
@@ -69,8 +67,6 @@ export async function readMySponsorPage(): Promise<MySponsorPage | null> {
     handle: String(row.handle ?? ''),
     language: row.language as ContentLanguage,
     headline: String(row.headline ?? ''),
-    story: text(row.story),
-    logo: text(row.logo),
     cover: text(row.cover),
     website: text(row.website),
     status: row.status as SponsorPageStatus,

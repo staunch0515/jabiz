@@ -15,7 +15,6 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-  Textarea,
 } from '@jabiz/ui'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CircleCheck, Copy, ExternalLink } from 'lucide-react'
@@ -32,7 +31,6 @@ import {
   HANDLE_LENGTH,
   readMySponsorPage,
   saveSponsorPage,
-  STORY_LENGTH,
   submitSponsorPage,
   unpublishSponsorPage,
   WEBSITE_LENGTH,
@@ -42,19 +40,22 @@ import {
 import { SPONSOR_PAGE } from './ids'
 import { fieldProblem, generalProblem } from '../qb/problems'
 
+/** The page's own address before Q65b ("My page"): it leads to the sponsor profile, which holds the page now. */
 export const SPONSOR_PAGE_PATH = '/page'
 export const SPONSOR_PAGE_QUERY = ['qb', 'sponsor-page'] as const
 
-const FIELDS = ['handle', 'language', 'headline', 'story', 'logo', 'cover', 'website', 'baseRevision'] as const
+const FIELDS = ['handle', 'language', 'headline', 'cover', 'website', 'baseRevision'] as const
 const IMAGE_TYPES = 'image/jpeg,image/png'
 const IMAGE_BYTES = 5 * 1024 * 1024
 
 /**
- * The sponsor's page (Q60a; docs/quizbuks/plans/Q60-sponsor-page.md): its link name, language, headline, story,
- * logo, cover and website, saved with `QB_SPONSOR_PAGE_SAVE`; published once through a review
- * (`QB_SPONSOR_PAGE_SUBMIT`), after which changes show at once; taken back with `QB_SPONSOR_PAGE_UNPUBLISH`.
+ * The sponsor's shop page (Q60a; docs/quizbuks/plans/Q60-sponsor-page.md), the second section of the sponsor profile
+ * (Q65b; docs/quizbuks/plans/Q65-start-and-profile.md section 1): what is the page's own, its link name, language,
+ * headline, cover and website, saved with `QB_SPONSOR_PAGE_SAVE`; published once through a review
+ * (`QB_SPONSOR_PAGE_SUBMIT`), after which changes show at once; taken back with `QB_SPONSOR_PAGE_UNPUBLISH`. Its logo
+ * and "About us" are the basic profile's avatar and introduction.
  */
-export function SponsorPageEditor() {
+export function SponsorPageSection() {
   const { t } = useTranslation(SPONSOR)
   const { t: tQb } = useTranslation(QB)
   const page = useQuery({ queryKey: SPONSOR_PAGE_QUERY, queryFn: readMySponsorPage })
@@ -63,8 +64,9 @@ export function SponsorPageEditor() {
   return (
     <section className="flex max-w-xl flex-col gap-6" aria-labelledby="sponsor-page-title" data-testid="sponsor-page">
       <div className="flex flex-col gap-2">
-        <h1 id="sponsor-page-title" className="text-xl font-semibold">{t('page.title')}</h1>
+        <h2 id="sponsor-page-title" className="text-lg font-semibold">{t('page.title')}</h2>
         <p className="text-muted-foreground text-sm">{t('page.intro')}</p>
+        <p className="text-muted-foreground text-sm" data-testid="sponsor-page-from-profile">{t('page.fromProfile')}</p>
       </div>
       {page.isPending && <PageState kind="loading" />}
       {page.isError && <PageState kind="error" description={tQb('failed')} />}
@@ -123,8 +125,6 @@ function PageForm({ page, done, setDone }: {
     handle: page?.handle ?? '',
     language: page?.language ?? contentLanguageOf(i18n.language),
     headline: page?.headline ?? '',
-    story: page?.story ?? null,
-    logo: page?.logo ?? null,
     cover: page?.cover ?? null,
     website: page?.website ?? null,
     baseRevision: page?.revision ?? null,
@@ -143,7 +143,6 @@ function PageForm({ page, done, setDone }: {
       ...form,
       handle: form.handle.trim().toLowerCase(),
       headline: form.headline.trim(),
-      story: form.story?.trim() ? form.story : null,
       website: form.website?.trim() ? form.website.trim() : null,
     }),
     onSuccess: async (output) => {
@@ -188,12 +187,12 @@ function PageForm({ page, done, setDone }: {
   const canSubmit = !!page && (status === 'DRAFT' || status === 'REJECTED' || status === 'TAKEN_DOWN')
   const canUnpublish = status === 'PUBLISHED' || status === 'PENDING'
 
-  const image = (field: 'logo' | 'cover', alt: string, className: string) => (
+  const image = (field: 'cover', alt: string, className: string) => (
     <div className="flex flex-col gap-2">
       <Label htmlFor={`${id}-${field}`}>{t(`page.${field}`)}</Label>
       {form[field] && (
         <div className="flex items-center gap-3">
-          <FileImage fileId={form[field]!} variant={field === 'logo' ? 'w256' : 'w640'} alt={alt}
+          <FileImage fileId={form[field]!} variant="w640" alt={alt}
             className={className} data-testid={`sponsor-page-${field}-image`} />
           <Button type="button" variant="outline" size="sm" data-testid={`sponsor-page-${field}-remove`}
             onClick={() => set(field, null)}>{t('page.remove')}</Button>
@@ -273,15 +272,6 @@ function PageForm({ page, done, setDone }: {
             data-testid="sponsor-page-headline" onChange={(event) => set('headline', event.target.value)} />
           {errorOf('headline')}
         </div>
-        <div className="flex flex-col gap-2">
-          <Label htmlFor={`${id}-story`}>{t('page.story')}</Label>
-          <Textarea id={`${id}-story`} value={form.story ?? ''} rows={8} maxLength={STORY_LENGTH}
-            aria-invalid={invalid('story')} aria-describedby={describedBy('story', `${id}-story-hint`)}
-            data-testid="sponsor-page-story" onChange={(event) => set('story', event.target.value)} />
-          <p id={`${id}-story-hint`} className="text-muted-foreground text-sm">{t('page.storyHint')}</p>
-          {errorOf('story')}
-        </div>
-        {image('logo', t('page.logoAlt'), 'size-16 rounded-full border object-cover')}
         {image('cover', t('page.coverAlt'), 'aspect-video w-48 border object-cover')}
         <div className="flex flex-col gap-2">
           <Label htmlFor={`${id}-website`}>{t('page.website')}</Label>

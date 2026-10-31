@@ -133,6 +133,8 @@ describe("sponsors' pages (Q60a-3)", () => {
     expect(within(screen.getByTestId('sponsor-page-story')).getByText('1990').tagName).toBe('STRONG')
     expect(screen.getByTestId('sponsor-page-website')).toHaveAttribute('href', 'https://example.com/shop')
     expect(screen.getAllByTestId('file-preview').map((image) => image.dataset.file)).toEqual(['f-logo', 'f-cover'])
+    // Q65b: the logo and the story come from the sponsor's profile, which the page's review does not cover.
+    expect(screen.getByTestId('sponsor-page-from-profile')).toHaveTextContent('reviewed with their onboarding')
     expect(screen.getByTestId('approval-panel')).toHaveAttribute('data-request', 'r1')
     expect(screen.queryByTestId('sponsor-page-takedown')).toBeNull()
     await expectAccessible(container)

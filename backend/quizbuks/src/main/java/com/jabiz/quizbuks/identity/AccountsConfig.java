@@ -100,15 +100,17 @@ public class AccountsConfig {
 
     /**
      * The company of every approved sponsor, for a share link's page (Q15, template {@code qb.public.publication},
-     * which names only the sponsors of live publications): not the contact's name, the introduction or anything of the
-     * review.
+     * which names only the sponsors of live publications), and the avatar and introduction that a published sponsor
+     * page shows as its logo and "About us" (Q65b, template {@code qb.public.sponsor-page}, which returns them only for
+     * a published page): not the contact's name or anything of the review. The avatars of approved sponsors are public
+     * files thereby; their ids are random (the policy's metadata is private) and only that template names them.
      */
     @Bean
     DatasetDefinition qbPublicSponsorDataset() {
         return DatasetDefinition.define(QbAccounts.PUBLIC_SPONSOR_DATASET, d -> d
             .targetEntityType(QbAccounts.SPONSOR)
             .scope(s -> s.fixed("reviewStatus", SponsorStatus.APPROVED))
-            .publicRead(p -> p.fields("userId", "company"))
+            .publicRead(p -> p.fields("userId", "company", "intro", "avatar"))
             .permissions(QbPermissions.ADMIN_USERS_READ, QbPermissions.SPONSOR_VIEW_WRITE)
             .policy(p -> p.readOnly(true).allowTimeTravel(false))
             .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
