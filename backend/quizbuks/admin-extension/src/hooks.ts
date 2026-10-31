@@ -1,7 +1,8 @@
 import { keepPreviousData, useQuery, type QueryKey } from '@tanstack/react-query'
 import { useCallback, useEffect, useState } from 'react'
-import { ApiError, formatAmount, formatDateTime, useLanguage, type ColumnDef, type PaginationState,
-  type SortingState } from '@jabiz/admin'
+import { useTranslation } from 'react-i18next'
+import { ApiError, EXTENSION_NAMESPACE, formatAmount, formatDateTime, useLanguage, type ColumnDef,
+  type PaginationState, type SortingState } from '@jabiz/admin'
 import { readDictionary, type Page, type SortSpec } from './api'
 import { CURRENCY } from './ids'
 
@@ -20,6 +21,16 @@ export function useLabels(urn: string): (code: string | null | undefined) => str
 /** An amount of the ledger, in its real currency (administrators see JPY, not the apps' "Kudos"). */
 export function money(value: string | null | undefined): string {
   return value == null ? '' : formatAmount(value, { currency: CURRENCY, scale: 0 })
+}
+
+/**
+ * An amount on an operator's own pages (Q48e-2): a grouped whole number and the points' name of the interface
+ * language ("1,234 Kudos"), never a currency, as the apps show amounts; finance's pages keep {@link money}.
+ */
+export function usePoints(): (value: string | null | undefined) => string {
+  const { t } = useTranslation(EXTENSION_NAMESPACE)
+  return useCallback((value) => (value == null ? ''
+    : t('account.points', { value: formatAmount(value, { scale: 0 }) })), [t])
 }
 
 /** A multilingual text in the interface language, else English, else Japanese, else any; empty when there is none. */

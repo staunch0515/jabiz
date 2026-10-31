@@ -13,6 +13,7 @@ import {
   Landmark,
   ListChecks,
   Megaphone,
+  PiggyBank,
   Rocket,
   Scale,
   ScrollText,
@@ -67,6 +68,8 @@ import ProspectPage from './ProspectPage'
 import ProspectSettingsPage from './ProspectSettingsPage'
 import ProspectsPage from './ProspectsPage'
 import SettlementsPage from './SettlementsPage'
+import OperatorAccountPage from './OperatorAccountPage'
+import OperatorWithdrawalsPage from './OperatorWithdrawalsPage'
 
 /**
  * QuizBuks's own pages in the platform's admin frontend (docs/quizbuks/02-design.md section 7.3,
@@ -125,6 +128,9 @@ export default defineExtension({
     // Q48b: the operators' settlements, for finance and for the operator.
     { path: PATH.settlements, element: <SettlementsPage /> },
     { path: PATH.operatorSettlements, element: <SettlementsPage /> },
+    // Q48e-2: the operator's account and withdrawals, and finance's view of the withdrawals.
+    { path: PATH.operatorAccount, element: <OperatorAccountPage /> },
+    { path: PATH.operatorWithdrawals, element: <OperatorWithdrawalsPage /> },
   ],
   menu: [
     // Q48a: the operator's own pages, first in its back office (only its members hold qb.operator.use).
@@ -142,6 +148,9 @@ export default defineExtension({
         // Q48b: the operator's own settlements.
         { key: 'qb-operator-settlements', label: 'menu.operatorSettlements', path: PATH.operatorSettlements,
           icon: Receipt, permission: PERMISSION.operatorUse },
+        // Q48e-2: the operator's account: balance, plan, bank account and withdrawals.
+        { key: 'qb-operator-account', label: 'menu.operatorAccount', path: PATH.operatorAccount,
+          icon: PiggyBank, permission: PERMISSION.operatorUse },
       ],
     },
     {
@@ -220,6 +229,9 @@ export default defineExtension({
         // Q48b: what is owed to the operators, and its payments.
         { key: 'qb-settlements', label: 'menu.settlements', path: PATH.settlements, icon: Receipt,
           permission: PERMISSION.financeRead },
+        // Q48e-2: the operators' withdrawals from their accounts.
+        { key: 'qb-operator-withdrawals', label: 'menu.operatorWithdrawals', path: PATH.operatorWithdrawals,
+          icon: HandCoins, permission: PERMISSION.financeRead },
       ],
     },
   ],
