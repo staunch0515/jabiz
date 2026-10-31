@@ -21,25 +21,24 @@ import {
   SheetTitle,
   Spinner,
   Switch,
-  cn,
 } from '@jabiz/ui'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
-import { Check, Gift, HandCoins, LayoutGrid, Play, SlidersHorizontal, StepForward, X, type LucideIcon } from 'lucide-react'
+import { Gift, HandCoins, LayoutGrid, SlidersHorizontal, X, type LucideIcon } from 'lucide-react'
 import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
-import { EmptyArt, QuizArt } from '../qb/Illustrations'
+import { EmptyArt } from '../qb/Illustrations'
 import { FeedCardView, REWARD_METHOD_ICONS } from '../qb/view/FeedCard'
 import { readCountries, shownLanguages } from '../qb/api'
 import { formatKudos } from '../qb/kudos'
 import { QB } from '../qb/messages'
-import { cardProgress, FEED_SORTS, readFeed, readOpenCashRewards, readOpenRedemptions, type CardProgress, type FeedCard, type FeedSort, type RewardMethod }
+import { cardProgress, FEED_SORTS, readFeed, readOpenCashRewards, readOpenRedemptions, type FeedCard, type FeedSort, type RewardMethod }
   from '../qb/play'
 import { problemText } from '../qb/problems'
 import { Link, navigate, useLocation } from '../qb/router'
 import { prefersStillVideo } from '../qb/video'
 import { QBVIEW } from '../qb/view/messages'
-import { soundOn, VideoSlot } from '../video/stage'
+import { openWithSound, VideoSlot } from '../video/stage'
 import { useSoundSetting } from '../qb/SoundSettings'
 import { HomeInstallOffer } from '../install'
 
@@ -255,34 +254,24 @@ function useMoreNearTheEnd(sentinel: HTMLElement | null, more: () => void) {
 function CardVideo({ card, player }: { card: FeedCard; player: string }) {
   const { t } = useTranslation(QBVIEW)
   const open = useCallback(() => {
-    soundOn()
+    openWithSound(player)
     navigate(`/p/${card.publicationId}`)
-  }, [card.publicationId])
+  }, [card.publicationId, player])
   return <VideoSlot id={`card:${card.publicationId}`} player={player} mode="card" onOpen={open}
     title={t('feed.videoTitle', { name: card.name })} />
 }
 
-const PROGRESS_ICONS: Record<CardProgress, LucideIcon> = { start: Play, resume: StepForward, done: Check }
-
 /**
- * A card's start (Q64): a small round icon right under the picture, which says by its icon and name where it leads:
- * the start page first (its time limit and pass score are read before answering, Q63), back to an attempt in
- * progress, or the result of one answered.
+ * The taker's own progress on a card (Q64, Q66), in its line of facts: nothing before answering, else in progress or
+ * answered. The start page it opens leads on: to start, to continue, or to the result.
  */
-function CardStart({ card, at }: { card: FeedCard; at: string }) {
+function CardProgressNote({ card, at }: { card: FeedCard; at: string }) {
   const { t } = useTranslation(APP)
   const progress = cardProgress(card, new Date(at))
-  const Icon = PROGRESS_ICONS[progress]
-  const to = progress === 'start' ? `/p/${card.publicationId}`
-    : progress === 'resume' ? `/play/${card.myAttemptId}` : `/result/${card.myAttemptId}`
+  if (progress === 'start') return null
   return (
-    <Button asChild size="icon" variant={progress === 'done' ? 'secondary' : 'default'}
-      className="size-9 shrink-0 rounded-full">
-      <Link to={to} data-testid="feed-card-start" data-progress={progress}
-        aria-label={t(`feed.card.${progress}`, { name: card.name })}>
-        <Icon aria-hidden className={progress === 'start' ? 'ml-0.5' : undefined} />
-      </Link>
-    </Button>
+    <span className={progress === 'resume' ? 'text-primary font-medium' : undefined}
+      data-testid="feed-card-progress" data-progress={progress}>{t(`feed.progress.${progress}`)}</span>
   )
 }
 
@@ -390,80 +379,6 @@ function FiltersSheet({ open, onOpenChange, value, onApply, method, onMethod }: 
   )
 }
 
-/** How long the greeting stays before it folds away (Q34). */
-export const GREETING_MS = 2000
-/** How long the fold takes (the band's `duration-500`). */
-const FOLD_MS = 500
-const GREETED_KEY = 'qb.home.greeted'
-
-function greetedAlready(): boolean {
-  try {
-    return window.sessionStorage.getItem(GREETED_KEY) === '1'
-  } catch {
-    return false
-  }
-}
-
-function rememberGreeted() {
-  try {
-    window.sessionStorage.setItem(GREETED_KEY, '1')
-  } catch {
-    // Blocked storage: the greeting comes again on the next visit of the home, which does no harm.
-  }
-}
-
-function reducedMotion(): boolean {
-  try {
-    return window.matchMedia('(prefers-reduced-motion: reduce)').matches
-  } catch {
-    return false
-  }
-}
-
-/**
- * The greeting band (Q34): shown once per session (a return to the home does not repeat it), for two seconds, then it
- * folds away so the quizzes take the screen; without the motion when the taker asked for less. The page's heading
- * stays for assistive technology after the band is gone.
- */
-function Greeting({ name }: { name: string }) {
-  const { t } = useTranslation(APP)
-  const [shown, setShown] = useState(() => !greetedAlready())
-  const [folding, setFolding] = useState(false)
-  useEffect(() => {
-    if (!shown) return undefined
-    rememberGreeted()
-    const timer = window.setTimeout(() => {
-      if (reducedMotion()) setShown(false)
-      else setFolding(true)
-    }, GREETING_MS)
-    // Should the end of the fold never be told (no transitions, a hidden tab), the band goes all the same.
-    const fallback = window.setTimeout(() => setShown(false), GREETING_MS + FOLD_MS + 100)
-    return () => {
-      window.clearTimeout(timer)
-      window.clearTimeout(fallback)
-    }
-  }, [shown])
-  if (!shown) return <h1 id="home-title" className="sr-only">{t('home.greeting', { name })}</h1>
-  return (
-    <div className={cn('grid transition-[grid-template-rows,opacity,margin] duration-500 ease-out',
-      folding ? '-mb-4 grid-rows-[0fr] opacity-0' : 'grid-rows-[1fr] opacity-100')}
-      onTransitionEnd={(event) => {
-        if (folding && event.target === event.currentTarget && event.propertyName === 'grid-template-rows') setShown(false)
-      }} data-testid="home-hero" data-folding={folding || undefined}>
-      <div className="overflow-hidden">
-        <div className="from-qb-hero-from to-qb-hero-to text-qb-hero-foreground relative overflow-hidden bg-linear-to-br p-4 shadow-sm">
-          {/* The text column ends where the illustration begins (pr-32 ≥ its 128px), so words never sit on it. */}
-          <div className="relative z-10 flex flex-col gap-1 pr-32">
-            <h1 id="home-title" className="text-xl font-semibold">{t('home.greeting', { name })}</h1>
-            <p className="text-qb-hero-muted text-sm">{t('home.tagline')}</p>
-          </div>
-          <QuizArt className="absolute -right-3 -bottom-5 h-28 w-35 opacity-95" />
-        </div>
-      </div>
-    </div>
-  )
-}
-
 /**
  * Home: the publications the taker can answer now (U-10 – U-14; template `qb.app.feed`), newest first, searched by
  * name and title, sorted and filtered; more on request. The country is the profile's: without one (an unverified
@@ -513,7 +428,8 @@ export function FeedPage({ name, country }: { name: string; country: string | nu
       {/* Q65: what comes before the cards takes room only when there is something to see: the first card is right
           under the header otherwise. */}
       <div className="flex flex-col gap-4 has-[>:not(.sr-only)]:pb-4" data-testid="home-top">
-      <Greeting name={name} />
+      {/* Q66: no greeting band; the page's heading is for assistive technology only. */}
+      <h1 id="home-title" className="sr-only">{t('home.greeting', { name })}</h1>
       <HomeInstallOffer />
       {openCash.length > 0 && (
         <Alert variant={openCash.some((r) => r.status === 'OVERDUE') ? 'warning' : 'default'} data-testid="home-cash">
@@ -587,12 +503,13 @@ export function FeedPage({ name, country }: { name: string; country: string | nu
       ) : (
         <>
           {/* Q63: one card a row across the screen; the one with a video in the middle of the screen plays. */}
-          <ul ref={setList} className="-mx-4 flex flex-col gap-6 sm:mx-0" data-testid="feed-list"
+          <ul ref={setList} className="-mx-4 flex flex-col gap-4 sm:mx-0" data-testid="feed-list"
             aria-label={t('feed.listTitle')}>
             {cards.map((card) => (
               <FeedCardView key={card.publicationId} card={card} href={`/p/${card.publicationId}`}
-                playing={playing === card.publicationId} action={<CardStart card={card} at={at} />}
-                video={card.video && <CardVideo card={card} player={card.video} />} />
+                playing={playing === card.publicationId} note={<CardProgressNote card={card} at={at} />}
+                video={card.video && <CardVideo card={card} player={card.video} />}
+                onOpen={card.video ? () => openWithSound(card.video!) : undefined} />
             ))}
           </ul>
           <div ref={setEnd} aria-hidden data-testid="feed-end" />
