@@ -11,6 +11,7 @@ import com.jabiz.process.ProcessDefinition;
 import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.quizbuks.publishing.PublisherKind;
 import com.jabiz.quizbuks.messaging.MailValues;
+import com.jabiz.quizbuks.operator.OperatorScopes;
 import com.jabiz.context.RequestContext;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -63,6 +64,8 @@ public class InvitationConfig {
         return DatasetDefinition.define(QbInvitations.DEFAULT_DATASET, d -> d
             .targetEntityType(QbInvitations.INVITATION)
             .asDefault()
+            // Q59c-2: an operator's session sees its sponsors' rows only (platform decision D64).
+            .scope(OperatorScopes.of(QbInvitations.INVITATION))
             .permissions(QbPermissions.ADMIN_PUBLICATION_READ, QbPermissions.SPONSOR_VIEW_WRITE)
             .policy(p -> p.processOnlyWrites().maxWriteBatchSize(QbInvitations.MAX_PER_CALL))
             .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
@@ -96,6 +99,7 @@ public class InvitationConfig {
         return DatasetDefinition.define(QbInvitations.QUOTA_DATASET, d -> d
             .targetEntityType(QbInvitations.QUOTA)
             .asDefault()
+            .scope(OperatorScopes.of(QbInvitations.QUOTA))
             .permissions(QbPermissions.ADMIN_PUBLICATION_READ, QbPermissions.SPONSOR_VIEW_WRITE)
             .policy(p -> p.processOnlyWrites().maxWriteBatchSize(10))
             .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));

@@ -197,8 +197,8 @@ public final class PublicationLifecycle {
         if (!ctx.hasViolations()) {
             boolean takenDown = !PublicationEditing.takenDownOfQuiz(ctx, publication).isEmpty();
             ctx.put(TAKEN_DOWN, takenDown);
-            ctx.put(CASE, PublicationEditing.approvalCase(publication, list(ctx, TIERS), version, autoApprove(ctx),
-                takenDown));
+            ctx.put(CASE, PublicationEditing.withOperator(PublicationEditing.approvalCase(publication, list(ctx, TIERS),
+                version, autoApprove(ctx), takenDown), ctx));
         }
     }
 

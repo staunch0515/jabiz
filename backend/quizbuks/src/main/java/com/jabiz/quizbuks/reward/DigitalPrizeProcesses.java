@@ -10,6 +10,7 @@ import com.jabiz.process.StepSpec;
 import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.quizbuks.identity.CallerChecks;
 import com.jabiz.quizbuks.setup.QbParams;
+import com.jabiz.quizbuks.operator.OperatorChecks;
 import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.process.steps.HoldLock;
 import com.jabiz.runtime.process.steps.LoadEntity;
@@ -182,6 +183,8 @@ public final class DigitalPrizeProcesses {
                     .contextFactory((s, input) -> start(s, input, input.digitalPrizeId()))
                     .outputMapper(ctx -> ctx.get(OUTPUT, PrizeOutput.class));
                 lockAndLoad(pb, QbDigitalPrizes.takerDataset(QbDigitalPrizes.DIGITAL_PRIZE));
+                // Q59c-2: the dispute is decided by the sponsor's operator (a taker has no scope: the check passes).
+                OperatorChecks.ownSponsor(pb, ctx -> prize(ctx) == null ? null : prize(ctx).get("publisherId"));
                 pb.compute("Dispute", (metadata, ctx) -> dispute(ctx))
                     .step("Ask an administrator to decide", CreateTask.<ProcessContext>when(
                         DigitalPrizeProcesses::changed, ctx -> TaskSpec.forPermission(QbDigitalPrizes.DISPUTE_TASK,
@@ -190,7 +193,8 @@ public final class DigitalPrizeProcesses {
                                     prize(ctx).get("hint") == null ? "" : String.valueOf((Object) prize(ctx).get("hint"))),
                                 QbPermissions.DIGITAL_RESOLVE)
                             .about(QbDigitalPrizes.DIGITAL_PRIZE, prize(ctx).id())
-                            .source(QbDigitalPrizes.disputeTaskSource(prize(ctx).id()))))
+                            .source(QbDigitalPrizes.disputeTaskSource(prize(ctx).id()))
+                            .scope(OperatorChecks.sponsorScope(ctx))))
                     .step("Tell the sponsor", PublishEvent.<ProcessContext>when(DigitalPrizeProcesses::changed,
                         DISPUTED_EVENT, DigitalPrizeProcesses::payload));
             });
@@ -228,6 +232,8 @@ public final class DigitalPrizeProcesses {
                 pb.step("Load the days to send", LoadParams.<ProcessContext>of(ProcessContext::opTime, PARAMS,
                     QbParams.DIGITAL_SEND_DAYS));
                 lockAndLoad(pb, QbDigitalPrizes.defaultDataset(QbDigitalPrizes.DIGITAL_PRIZE));
+                // Q59c-2: an operator's member decides their own sponsors' disputes only.
+                OperatorChecks.ownSponsor(pb, ctx -> prize(ctx) == null ? null : prize(ctx).get("publisherId"));
                 pb.compute("Resolve", (metadata, ctx) -> resolve(ctx))
                     .step("Close the dispute's task", CloseTasks.<ProcessContext>done(
                         ctx -> QbDigitalPrizes.disputeTaskSource(ctx.get(ID))))

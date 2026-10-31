@@ -13,6 +13,7 @@ import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.quizbuks.wallet.QbWallets;
+import com.jabiz.quizbuks.operator.OperatorScopes;
 import com.jabiz.runtime.approval.ApprovalProcesses;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -45,6 +46,8 @@ public class PublishingConfig {
         return DatasetDefinition.define(QbPublications.defaultDataset(entity), d -> d
             .targetEntityType(entity)
             .asDefault()
+            // Q59c-2: an operator's session sees its sponsors' rows only (platform decision D64).
+            .scope(OperatorScopes.of(entity))
             .permissions(QbPermissions.ADMIN_PUBLICATION_READ, QbPermissions.SPONSOR_VIEW_WRITE)
             .policy(p -> p.processOnlyWrites().maxWriteBatchSize(maxWriteBatch))
             .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
@@ -158,7 +161,10 @@ public class PublishingConfig {
             .publicRead(p -> p.fields("publicationId", "publisherId", "name", "quizTitle", "kind", "startAt", "endAt",
                 "timeLimitSec", "questionCount", "fullScore", "passScore", "maxReward", "rewardMethod",
                 "redeemDescription", "digitalDelivery", "digitalDescription"))
-            .permissions(QbPermissions.ADMIN_PUBLICATION_READ, QbPermissions.SPONSOR_VIEW_WRITE)
+            // Read anonymously through the public template only, which projects the whitelist. The dataset API, which
+            // does not, is closed to everybody (no role holds the permission): an operator's session would read every
+            // live card with its budget and operator (Q59c-2); headquarters reads the cards' own dataset.
+            .permissions(QbPermissions.SPONSOR_VIEW_WRITE, QbPermissions.SPONSOR_VIEW_WRITE)
             .policy(p -> p.readOnly(true).allowTimeTravel(false))
             .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
     }

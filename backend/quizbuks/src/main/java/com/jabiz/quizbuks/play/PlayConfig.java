@@ -44,12 +44,17 @@ public class PlayConfig {
     }
 
     private DatasetDefinition defaultDataset(String entity, String readPermission, int maxWriteBatch) {
-        return DatasetDefinition.define(QbPlay.defaultDataset(entity), d -> d
-            .targetEntityType(entity)
-            .asDefault()
-            .permissions(readPermission, QbPermissions.SPONSOR_VIEW_WRITE)
-            .policy(p -> p.processOnlyWrites().maxWriteBatchSize(maxWriteBatch))
-            .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
+        return DatasetDefinition.define(QbPlay.defaultDataset(entity), d -> {
+            d.targetEntityType(entity)
+                .asDefault()
+                .permissions(readPermission, QbPermissions.SPONSOR_VIEW_WRITE)
+                .policy(p -> p.processOnlyWrites().maxWriteBatchSize(maxWriteBatch))
+                .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef));
+            if (QbPlay.VIEW.equals(entity) || QbPlay.STATS.equals(entity)) {
+                // Q59c-2: an operator's session sees its sponsors' publications' views and counts only.
+                d.scope(com.jabiz.quizbuks.operator.OperatorScopes.of(entity));
+            }
+        });
     }
 
     @Bean

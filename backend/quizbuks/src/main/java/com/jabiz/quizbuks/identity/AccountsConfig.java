@@ -12,6 +12,7 @@ import com.jabiz.mail.MailTemplate;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.operator.OperatorScopes;
 import com.jabiz.runtime.approval.ApprovalProcesses;
 import com.jabiz.runtime.security.SecurityEntities;
 import org.springframework.beans.factory.annotation.Value;
@@ -45,12 +46,17 @@ public class AccountsConfig {
     }
 
     private DatasetDefinition defaultDataset(String entity) {
-        return DatasetDefinition.define(QbAccounts.defaultDataset(entity), d -> d
-            .targetEntityType(entity)
-            .asDefault()
-            .permissions(QbPermissions.ADMIN_USERS_READ, QbPermissions.SPONSOR_VIEW_WRITE)
-            .policy(p -> p.processOnlyWrites())
-            .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
+        return DatasetDefinition.define(QbAccounts.defaultDataset(entity), d -> {
+            d.targetEntityType(entity)
+                .asDefault()
+                .permissions(QbPermissions.ADMIN_USERS_READ, QbPermissions.SPONSOR_VIEW_WRITE)
+                .policy(p -> p.processOnlyWrites())
+                .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef));
+            if (QbAccounts.SPONSOR.equals(entity)) {
+                // Q59c-2: an operator's session sees its own sponsors' onboardings only (platform decision D64).
+                d.scope(OperatorScopes.of(entity));
+            }
+        });
     }
 
     /**

@@ -11,6 +11,7 @@ import com.jabiz.quizbuks.publishing.PublisherKind;
 import com.jabiz.quizbuks.identity.CallerChecks;
 import com.jabiz.quizbuks.identity.QbAccounts;
 import com.jabiz.quizbuks.publishing.QbPublications;
+import com.jabiz.quizbuks.operator.OperatorChecks;
 import com.jabiz.runtime.BusinessRuleViolationException;
 import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.process.steps.HoldLock;
@@ -480,6 +481,9 @@ public final class RedemptionProcesses {
                     .contextFactory((s, input) -> start(s, input, input.redemptionId()))
                     .outputMapper(ctx -> ctx.get(OUTPUT, RedemptionOutput.class));
                 lockAndLoad(pb, QbRewards.defaultDataset(QbRewards.REDEMPTION));
+                // Q59c-2: an operator's member voids their own sponsors' prizes only.
+                OperatorChecks.ownSponsor(pb, ctx -> redemption(ctx) == null ? null
+                    : redemption(ctx).get("publisherId"));
                 pb.compute("Void", (metadata, ctx) -> {
                         EntityInstance redemption = redemption(ctx);
                         if (in(ctx, redemption.get("status"), RedemptionStatus.DUE, RedemptionStatus.CLAIMED)) {

@@ -220,9 +220,13 @@ public final class SponsorProcesses {
         values.put("rejectedAt", null);
         ctx.put(VALUES, values);
         oldAvatar(ctx, sponsor, input.avatar());
-        ctx.put(CASE, ApprovalCase.of(id, SponsorApprovals.facts(autoApprove(ctx)), SponsorApprovals.content(
+        ApprovalCase review = ApprovalCase.of(id, SponsorApprovals.facts(autoApprove(ctx)), SponsorApprovals.content(
             input.displayName(), input.company(), blankToNull(input.intro()), input.avatar(), terms, termsVersionNo))
-            .reference(reference(input.company())));
+            .reference(reference(input.company()));
+        // Q59c-2: the review is the operator's who looks after the sponsor (the one of the language for a first
+        // application, which this process assigns them to); headquarters' for a direct sponsor.
+        String operator = operatorOf(ctx);
+        ctx.put(CASE, operator == null ? review : review.scope(QbOperators.SCOPE, operator));
     }
 
     @SuppressWarnings("unchecked")
@@ -256,6 +260,16 @@ public final class SponsorProcesses {
         AccountEditing.writeName(ctx, first(ctx, PROFILES), userId, input.displayName());
         write(ctx, first(ctx, SPONSORS), values, approval.status().name());
         assignByLanguage(ctx, userId);
+    }
+
+    /** The operator the sponsor is (or this first application makes them) looked after by; null: headquarters. */
+    static String operatorOf(ProcessContext ctx) {
+        EntityInstance assignment = first(ctx, ASSIGNMENT);
+        if (assignment != null) {
+            return String.valueOf((Object) assignment.get("operatorId"));
+        }
+        EntityInstance operator = first(ctx, LANGUAGE_OPERATOR);
+        return first(ctx, SPONSORS) == null && operator != null ? String.valueOf(operator.id()) : null;
     }
 
     /**
