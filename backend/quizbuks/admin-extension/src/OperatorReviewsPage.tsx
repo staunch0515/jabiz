@@ -29,7 +29,7 @@ import {
   UserName,
   type ColumnDef,
 } from '@jabiz/admin'
-import { LoadFailed } from './components'
+import { EmptyState, LoadFailed } from './components'
 import { useLabels, usePaged, when } from './hooks'
 import { useMoreFilters } from './moreFilters'
 import { DICTIONARY, PATH } from './ids'
@@ -146,7 +146,7 @@ export default function OperatorReviewsPage() {
       header: t('operator.reviews.decision'),
       cell: ({ row }) => (
         <span className="flex flex-col gap-1">
-          <Badge variant={row.original.decision === 'APPROVE' ? 'secondary' : 'outline'} className="w-fit">
+          <Badge variant={row.original.decision === 'APPROVE' ? 'success' : 'destructive'} className="w-fit">
             {t(`operator.reviews.decisions.${row.original.decision === 'APPROVE' ? 'APPROVE' : 'REJECT'}`)}
           </Badge>
           {row.original.reason && <span className="text-muted-foreground text-sm">{row.original.reason}</span>}
@@ -159,7 +159,7 @@ export default function OperatorReviewsPage() {
       header: t('operator.reviews.check'),
       cell: ({ row }) => (row.original.checkResult ? (
         <span className="flex flex-col gap-1" data-testid="review-check">
-          <Badge variant={row.original.checkResult === 'PROBLEM' ? 'destructive' : 'secondary'} className="w-fit">
+          <Badge variant={row.original.checkResult === 'PROBLEM' ? 'destructive' : 'success'} className="w-fit">
             {check(row.original.checkResult)}
           </Badge>
           {row.original.checkNote && <span className="text-sm">{row.original.checkNote}</span>}
@@ -213,7 +213,7 @@ export default function OperatorReviewsPage() {
         ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
         : (
           <DataTable label={t('operator.reviews.title')} columns={sortable(columns)} {...table} getRowId={(row) => row.decisionId}
-            empty={t('operator.reviews.none')}
+            empty={<EmptyState art="done" title={t('operator.reviews.none')} />}
             rowProps={(row) => ({ 'data-testid': 'review-row', 'data-id': row.decisionId })} />
         )}
       {checking && <CheckDialog review={checking.review} result={checking.result} onClose={() => setChecking(null)} />}

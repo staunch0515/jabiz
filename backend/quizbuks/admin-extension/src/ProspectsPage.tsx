@@ -2,7 +2,6 @@ import { useId, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useSearchParams } from 'react-router'
 import {
-  Badge,
   Button,
   DataTable,
   EXTENSION_NAMESPACE,
@@ -16,7 +15,7 @@ import {
   SelectValue,
   type ColumnDef,
 } from '@jabiz/admin'
-import { LoadFailed } from './components'
+import { EmptyState, LoadFailed, StatusBadge } from './components'
 import { useLabels, usePaged, when } from './hooks'
 import { useMoreFilters } from './moreFilters'
 import { DICTIONARY, PATH } from './ids'
@@ -74,7 +73,7 @@ export default function ProspectsPage() {
       ),
     },
     { id: 'status', header: t('prospect.list.status'),
-      cell: ({ row }) => <Badge variant="secondary">{statusLabel(row.original.status)}</Badge> },
+      cell: ({ row }) => <StatusBadge code={row.original.status} label={statusLabel(row.original.status)} /> },
     { id: 'score', header: t('prospect.list.score'), meta: right, cell: ({ row }) => row.original.score ?? '' },
     { id: 'foundAt', header: t('prospect.list.foundAt'), cell: ({ row }) => when(row.original.foundAt) },
     { id: 'sentAt', header: t('prospect.list.sentAt'), cell: ({ row }) => when(row.original.sentAt) },
@@ -120,7 +119,7 @@ export default function ProspectsPage() {
         ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
         : (
           <DataTable label={t('prospect.list.title')} columns={sortable(columns)} {...table}
-            getRowId={(row) => row.prospectId} empty={t('prospect.list.none')}
+            getRowId={(row) => row.prospectId} empty={<EmptyState art="search" title={t('prospect.list.none')} />}
             rowProps={(row) => ({ 'data-testid': 'prospect-row', 'data-id': row.prospectId })} />
         )}
     </div>

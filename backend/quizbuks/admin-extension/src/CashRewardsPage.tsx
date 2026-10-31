@@ -5,7 +5,6 @@ import { Link, useSearchParams } from 'react-router'
 import {
   Alert,
   AlertDescription,
-  Badge,
   Button,
   DataTable,
   Dialog,
@@ -27,7 +26,7 @@ import {
   type ColumnDef,
 } from '@jabiz/admin'
 import { StatusFilter } from './finance-components'
-import { LoadFailed, PublisherLink } from './components'
+import { EmptyState, LoadFailed, PublisherLink, StatusBadge } from './components'
 import { money, useLabels, usePaged, when } from './hooks'
 import { useMoreFilters } from './moreFilters'
 import { DICTIONARY, PATH, PERMISSION } from './ids'
@@ -155,10 +154,8 @@ export default function CashRewardsPage() {
     { id: 'status', header: t('reward.cash.status'),
       cell: ({ row }) => (
         <span className="flex flex-col gap-1">
-          <Badge variant={row.original.status === 'DISPUTED' ? 'destructive' : 'outline'} className="w-fit"
-            data-testid="cash-row-status" data-status={row.original.status}>
-            {status(row.original.status)}
-          </Badge>
+          <StatusBadge code={row.original.status} label={status(row.original.status)} className="w-fit"
+            testId="cash-row-status" />
           {row.original.status === 'DUE' && row.original.payBy && (
             <span className="text-muted-foreground text-xs">{t('reward.cash.payBy', { time: when(row.original.payBy) })}</span>
           )}
@@ -219,7 +216,7 @@ export default function CashRewardsPage() {
         ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
         : (
           <DataTable label={t('reward.cash.table')} columns={sortable(columns)} {...table} getRowId={(row) => row.cashRewardId}
-            empty={t('reward.cash.none')}
+            empty={<EmptyState art="money" title={t('reward.cash.none')} />}
             rowProps={(row) => ({ 'data-testid': 'cash-row', 'data-id': row.cashRewardId, 'data-status': row.status })} />
         )}
       {resolving && <ResolveDialog reward={resolving} onClose={() => setResolving(null)} />}

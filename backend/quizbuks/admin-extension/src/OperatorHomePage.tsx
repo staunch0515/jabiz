@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Link } from 'react-router'
+import { CircleCheck, ClipboardCheck, ClipboardList, Megaphone, Radio, Store, Users, type LucideIcon } from 'lucide-react'
 import {
   Alert,
   AlertDescription,
@@ -21,12 +21,11 @@ import {
   PageState,
   type ColumnDef,
 } from '@jabiz/admin'
-import { LoadFailed, Section } from './components'
+import { EmptyState, LoadFailed, Metric, Section, StatusBadge } from './components'
 import { useLabels, when } from './hooks'
 import { DICTIONARY, PATH } from './ids'
 import { dropMember, readOverview, readTeam, type Overview, type Team } from './operator-api'
 
-const linkClass = 'text-primary font-medium underline-offset-4 hover:underline'
 const KEY = ['qb-ext', 'operator-home'] as const
 
 type Member = Team['members'][number]
@@ -34,26 +33,21 @@ type Member = Team['members'][number]
 /** The totals of the operator's sponsors and of the whole platform (D-Q48-4: the takers in aggregate only). */
 function Figures({ overview }: { overview: Overview }) {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
-  const figures: { key: keyof Overview; to?: string }[] = [
-    { key: 'mySponsors', to: `${PATH.operatorSponsors}?mine=true` },
-    { key: 'myLivePublications' },
-    { key: 'myCompletions' },
-    { key: 'sponsorsInReview', to: `${PATH.reviews}?tab=sponsors` },
-    { key: 'publicationsInReview', to: PATH.reviews },
-    { key: 'livePublications' },
-    { key: 'sponsors', to: PATH.operatorSponsors },
+  const figures: { key: keyof Overview; icon: LucideIcon; to?: string }[] = [
+    { key: 'mySponsors', icon: Store, to: `${PATH.operatorSponsors}?mine=true` },
+    { key: 'myLivePublications', icon: Megaphone },
+    { key: 'myCompletions', icon: CircleCheck },
+    { key: 'sponsorsInReview', icon: ClipboardCheck, to: `${PATH.reviews}?tab=sponsors` },
+    { key: 'publicationsInReview', icon: ClipboardList, to: PATH.reviews },
+    { key: 'livePublications', icon: Radio },
+    { key: 'sponsors', icon: Users, to: PATH.operatorSponsors },
   ]
   return (
     <Section title={t('operator.home.figures')} testId="operator-figures">
-      <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        {figures.map(({ key, to }) => (
-          <div key={key} className="flex flex-col gap-1" data-testid={`figure-${key}`}>
-            <dt className="text-muted-foreground text-sm">{t(`operator.home.${key}`)}</dt>
-            <dd className="text-2xl font-semibold tabular-nums">
-              {to ? <Link to={to} className={linkClass}>{overview[key].toLocaleString()}</Link>
-                : overview[key].toLocaleString()}
-            </dd>
-          </div>
+      <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {figures.map(({ key, icon, to }) => (
+          <Metric key={key} label={t(`operator.home.${key}`)} value={overview[key].toLocaleString()} icon={icon}
+            to={to} testId={`figure-${key}`} />
         ))}
       </dl>
     </Section>
@@ -133,7 +127,7 @@ function TeamSection({ team }: { team: Team }) {
     <Section title={t('operator.home.team')} testId="operator-team">
       <p className="text-muted-foreground text-sm">{t(team.lead ? 'operator.home.teamLeadHint' : 'operator.home.teamHint')}</p>
       <DataTable label={t('operator.home.team')} columns={columns} data={team.members} getRowId={(row) => row.userId}
-        empty={t('operator.members.none')}
+        empty={<EmptyState art="people" title={t('operator.members.none')} />}
         rowProps={(row) => ({ 'data-testid': 'team-row', 'data-id': row.userId })} />
       {dropping && <DropDialog member={dropping} onClose={() => setDropping(null)} />}
     </Section>
@@ -156,7 +150,7 @@ export default function OperatorHomePage() {
       <PageHeader title={team.data.name} className="pb-0" description={
         <span className="flex flex-wrap items-center gap-2">
           {t('operator.home.description')}
-          <Badge variant="outline">{status(team.data.status)}</Badge>
+          <StatusBadge code={team.data.status} label={status(team.data.status)} />
         </span>
       } />
       {overview.isError

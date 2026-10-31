@@ -5,7 +5,6 @@ import { Link, useSearchParams } from 'react-router'
 import {
   Alert,
   AlertDescription,
-  Badge,
   Button,
   DataTable,
   Dialog,
@@ -27,7 +26,7 @@ import {
   type ColumnDef,
 } from '@jabiz/admin'
 import { StatusFilter } from './finance-components'
-import { LoadFailed, PublisherLink } from './components'
+import { EmptyState, LoadFailed, PublisherLink, StatusBadge } from './components'
 import { money, useLabels, usePaged, when } from './hooks'
 import { useMoreFilters } from './moreFilters'
 import { DICTIONARY, PATH, PERMISSION } from './ids'
@@ -45,9 +44,6 @@ const KEY = ['qb-ext', 'digital-prizes'] as const
 const VOIDABLE = ['DUE', 'DELIVERED', 'OVERDUE'] as const
 
 /** A dispute asks for a decision; a late sponsor is a warning; everything else is just a state. */
-const badge = (state: DigitalPrize['status']) =>
-  state === 'DISPUTED' ? 'destructive' : state === 'OVERDUE' ? 'warning' : 'outline'
-
 /**
  * An administrator decides a disputed digital prize (`QB_DIGITAL_PRIZE_RESOLVE`): delivered, not delivered or void,
  * with a note. A prize still open (due, delivered, overdue) can only be voided, so the other choices are disabled.
@@ -181,10 +177,8 @@ export default function DigitalPrizesPage() {
     { id: 'status', header: t('reward.digital.status'),
       cell: ({ row }) => (
         <span className="flex flex-col gap-1">
-          <Badge variant={badge(row.original.status)} className="w-fit"
-            data-testid="digital-row-status" data-status={row.original.status}>
-            {status(row.original.status)}
-          </Badge>
+          <StatusBadge code={row.original.status} label={status(row.original.status)} className="w-fit"
+            testId="digital-row-status" />
           {row.original.status === 'DUE' && row.original.sendBy && (
             <span className="text-muted-foreground text-xs">{t('reward.digital.sendBy', { time: when(row.original.sendBy) })}</span>
           )}
@@ -254,7 +248,7 @@ export default function DigitalPrizesPage() {
         ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
         : (
           <DataTable label={t('reward.digital.table')} columns={sortable(columns)} {...table} getRowId={(row) => row.digitalPrizeId}
-            empty={t('reward.digital.none')}
+            empty={<EmptyState art="money" title={t('reward.digital.none')} />}
             rowProps={(row) => ({ 'data-testid': 'digital-row', 'data-id': row.digitalPrizeId, 'data-status': row.status })} />
         )}
       {resolving && <ResolveDialog prize={resolving} onClose={() => setResolving(null)} />}

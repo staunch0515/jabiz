@@ -17,7 +17,7 @@ import {
 } from '@jabiz/admin'
 import { searchUsers, type UserRow } from './api'
 import { DICTIONARY, PATH, PERMISSION } from './ids'
-import { LoadFailed } from './components'
+import { EmptyState, LoadFailed, StatusBadge } from './components'
 import { money, sortableColumns, textIn, useLabels, when } from './hooks'
 import { useMoreFilters } from './moreFilters'
 import { readTakerKudos } from './payout-api'
@@ -86,11 +86,13 @@ export default function UsersPage() {
     { id: 'email', header: t('users.email'), cell: ({ row }) => row.original.email ?? '' },
     { id: 'country', header: t('users.country'), cell: ({ row }) => textIn(row.original.countryName, language) || row.original.countryCode || '' },
     { id: 'registeredAt', header: t('users.registeredAt'), cell: ({ row }) => when(row.original.registeredAt) },
-    { id: 'sponsorStatus', header: t('users.sponsorStatus'), cell: ({ row }) => sponsorStatus(row.original.sponsorStatus) },
+    { id: 'sponsorStatus', header: t('users.sponsorStatus'), cell: ({ row }) => (row.original.sponsorStatus
+      ? <StatusBadge code={row.original.sponsorStatus} label={sponsorStatus(row.original.sponsorStatus)} /> : '') },
     {
       id: 'banned',
       header: t('users.banned'),
-      cell: ({ row }) => (row.original.banned ? t('common.yes') : ''),
+      cell: ({ row }) => (row.original.banned
+        ? <StatusBadge code="BANNED" label={t('common.yes')} testId="user-banned" /> : ''),
     },
     ...(finance ? [
       { id: 'attempts', header: t('payout.attempts'), meta: { className: 'text-right tabular-nums' },
@@ -136,7 +138,7 @@ export default function UsersPage() {
               setSorting(next)
               setPagination((current) => ({ ...current, pageIndex: 0 }))
             }}
-            stale={users.isPlaceholderData} getRowId={(row) => row.userId} empty={t('users.none')}
+            stale={users.isPlaceholderData} getRowId={(row) => row.userId} empty={<EmptyState art="people" title={t('users.none')} />}
             pagination={pagination} onPaginationChange={setPagination}
             hasNextPage={(users.data?.length ?? 0) === pagination.pageSize}
             rowProps={(row) => ({ 'data-testid': 'user-row', 'data-id': row.userId })} />
