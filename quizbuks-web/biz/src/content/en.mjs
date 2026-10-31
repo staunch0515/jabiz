@@ -13,7 +13,7 @@ export const en = {
   meta: {
     home: { title: `${BRAND.names.en} — attention you can measure`, description: `${BRAND.names.en} turns your ad budget into quizzes people actually learn from. Takers answer on their phone and win prizes or Kudos; merchants reach only people who understood their product. Free during the launch phase.` },
     merchants: { title: `${BRAND.names.en} for merchants`, description: 'Publish a quiz or a survey about your shop or product, reward the people who get it right, and see every answer by day and by question. Offline prizes are free.' },
-    takers: { title: `${BRAND.names.en} for takers`, description: 'Two-minute quizzes about shops, products and places. Pass, win a prize at the counter or Kudos in your wallet.' },
+    takers: { title: `${BRAND.names.en} for takers`, description: 'Two-minute quizzes about shops, products and places. Pass, win a prize at the counter or Kudos in My Kudos.' },
     surveys: { title: `Surveys with ${BRAND.names.en}`, description: 'Questionnaires people finish: a reward for every complete answer set, one response per person, results by day, invitation-only audiences.' },
     pricing: { title: `${BRAND.names.en} pricing`, description: 'Quizzes and surveys with offline prizes are free. Kudos and cash rewards, featured placement, extra invitations and plans are priced for the launch phase.' },
     contact: { title: `Contact ${BRAND.names.en}`, description: 'Write to us by e-mail, register your business, or open the help page of the app.' },
@@ -30,7 +30,7 @@ export const en = {
       cards: [
         { icon: 'target', title: 'Only real attention counts', text: 'A prize is earned by passing, so your budget goes to people who read your message, not to a scroll past it.' },
         { icon: 'chart', title: 'Every answer is data', text: 'Attempts, pass rates, which questions were missed, prizes collected: by day, by quiz, exportable.' },
-        { icon: 'gift', title: 'Rewards that bring people in', text: 'A coffee, a discount, a sample at your counter, or Kudos to a wallet. You choose the reward and how many can win.' },
+        { icon: 'gift', title: 'Rewards that bring people in', text: 'A coffee, a discount, a sample at your counter, or Kudos to the taker’s My Kudos. You choose the reward and how many can win.' },
       ],
     },
     audiences: {
@@ -38,7 +38,7 @@ export const en = {
       takers: {
         title: 'For takers',
         text: 'Short quizzes about places and products near you. Learn something, pass, and collect a real prize.',
-        bullets: ['Two to five questions, about two minutes', 'A prize at the counter or Kudos in your wallet', 'Your answers are yours: no profile sold, no spam', 'Works in the browser; add it to your home screen'],
+        bullets: ['Two to five questions, about two minutes', 'A prize at the counter or Kudos in My Kudos', 'Your answers are yours: no profile sold, no spam', 'Works in the browser; add it to your home screen'],
         more: 'How answering works',
       },
       merchants: {
@@ -100,7 +100,7 @@ export const en = {
       { title: 'Publish in minutes', text: 'A quiz is two to five questions about your shop, your product or your town. Write them yourself, or paste your menu, a brochure or a PDF and let the assistant draft questions you then edit.',
         cards: [
           { icon: 'spark', title: 'Assistant drafts', text: 'From text or a PDF: questions, options and the right answers, ready to edit.' },
-          { icon: 'gift', title: 'You set the reward', text: 'A prize at your counter, Kudos to the taker’s wallet, or cash. Set the pass score and how many may win.' },
+          { icon: 'gift', title: 'You set the reward', text: 'A prize at your counter, Kudos to the taker’s My Kudos, or cash. Set the pass score and how many may win.' },
           { icon: 'globe', title: 'Local or targeted', text: 'Open the quiz to everyone around you, to chosen regions, or to a list of your own customers.' },
         ] },
       { title: 'Share where your customers are', text: 'Every quiz has a link and a QR code. Print the poster for the counter or the window, put the link in your newsletter, or send invitations to your list: one click, and the invitee is answering.',
@@ -124,17 +124,17 @@ export const en = {
   takers: {
     eyebrow: 'For takers',
     title: 'Learn something about the places around you. Get rewarded.',
-    lead: 'Shops, cafés and venues publish short quizzes about what they do. Answer on your phone in two minutes, pass, and collect a prize at the counter or Kudos in your wallet.',
+    lead: 'Shops, cafés and venues publish short quizzes about what they do. Answer on your phone in two minutes, pass, and collect a prize at the counter or Kudos in My Kudos.',
     sections: [
       { title: 'How answering works', text: 'Open a quiz from a link, a QR code or your feed. Read the questions, answer within the time limit, and see your result at once.',
         steps: [
           { title: 'Open', text: 'Scan a code in a shop, tap a link, or browse quizzes near you.' },
           { title: 'Answer', text: 'Two to five questions, a few minutes at most. Once per quiz.' },
           { title: 'Pass', text: 'Reach the pass score and the reward is yours.' },
-          { title: 'Collect', text: 'Scan the shop’s code at the counter, or watch Kudos arrive in your wallet.' },
+          { title: 'Collect', text: 'Scan the shop’s code at the counter, or watch Kudos arrive in My Kudos.' },
         ] },
       { title: 'Rewards worth the walk', text: 'Most quizzes reward with a prize you collect in person: a coffee, a discount, a sample. Some pay Kudos, the platform’s points, which you can transfer out once you reach the minimum.',
-        bullets: ['Prizes are collected at the shop, by scanning its code', 'Kudos go to your wallet and can be paid out', 'Your history keeps every quiz and prize', 'Invitations by e-mail sign you in with one click'] },
+        bullets: ['Prizes are collected at the shop, by scanning its code', 'Kudos go to My Kudos and can be paid out', 'Your history keeps every quiz and prize', 'Invitations by e-mail sign you in with one click'] },
       { title: 'Your answers stay yours', text: 'Merchants see how many answered and how well, not who you are. Your e-mail address is used to sign you in and to send the mail you asked for; every mail has an unsubscribe link.',
         cards: [
           { icon: 'shield', title: 'No profile for sale', text: `${BRAND.names.en} does not sell or share your profile with merchants.` },
