@@ -7,7 +7,6 @@ import {
   Alert,
   AlertDescription,
   ApprovalPanel,
-  Badge,
   Button,
   DescriptionList,
   EXTENSION_NAMESPACE,
@@ -33,7 +32,7 @@ import {
   type UserRow,
 } from './api'
 import { readTakerWallet, readTransfer, type FinanceTransfer, type TakerWallet } from './finance-api'
-import { AfterDecision, LoadFailed, Section } from './components'
+import { AfterDecision, LoadFailed, Section, StatusBadge } from './components'
 import { money, useAfterDecision, useLabels, when } from './hooks'
 import { DICTIONARY, isUserId, PATH, PERMISSION, TRANSFER_REVIEW } from './ids'
 
@@ -230,7 +229,7 @@ export default function TransferReviewPage() {
         description={
           <span className="flex flex-wrap items-center gap-x-4 gap-y-1">
             <span>{t('finance.review.payee')}: <UserName id={tr.userId} /></span>
-            <Badge variant={pending ? 'secondary' : 'outline'} data-testid="review-status">{statusLabel(tr.status)}</Badge>
+            <StatusBadge code={tr.status} label={statusLabel(tr.status)} testId="review-status" />
           </span>
         }
       />

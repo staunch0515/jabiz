@@ -15,6 +15,7 @@ import PublicationReviewPage from './PublicationReviewPage'
 import ReviewsPage from './ReviewsPage'
 import SponsorReviewPage from './SponsorReviewPage'
 import UserSummaryPage from './UserSummaryPage'
+import UsersPage from './UsersPage'
 
 type Row = Record<string, unknown>
 
@@ -593,6 +594,23 @@ describe('UserSummaryPage', () => {
     renderUser()
     expect(await screen.findByText('Shared answers.')).toBeInTheDocument()
     expect(screen.getByTestId('user-ban')).toHaveAttribute('data-banned', 'true')
+  })
+})
+
+describe('the users list (Q53c-2)', () => {
+  it('colours the sponsor status and a ban, and shows an empty list with a drawing', async () => {
+    server.templates.set(TEMPLATE.users, [{ ...USER, banned: true }])
+    const { unmount } = renderAt('/qb/users', '/qb/users', <UsersPage />)
+    const banned = await screen.findByTestId('user-banned')
+    expect(banned).toHaveAttribute('data-status', 'BANNED')
+    expect(banned.className).toMatch(/bg-destructive/)
+    expect(document.querySelector('[data-status="APPROVED"]')?.className).toMatch(/bg-success/)
+    unmount()
+
+    server.templates.set(TEMPLATE.users, [])
+    renderAt('/qb/users', '/qb/users', <UsersPage />)
+    const empty = await screen.findByTestId('empty-state')
+    expect(empty.querySelector('svg')).toHaveAttribute('data-art', 'people')
   })
 })
 

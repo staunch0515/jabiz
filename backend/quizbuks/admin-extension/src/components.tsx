@@ -1,3 +1,4 @@
+import type { LucideIcon } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
@@ -105,10 +106,12 @@ export function AfterDecision({ after, onRetry }: {
  * A status as a badge coloured by what it means (Q53c, `statusTone`): green done, amber waiting, red refused or
  * failed, none when over. `label` is the dictionary's text; the code stays on the element for tests.
  */
-export function StatusBadge({ code, label, testId }: { code: string | null | undefined; label: ReactNode;
-  testId?: string }) {
+export function StatusBadge({ code, label, testId, className }: { code: string | null | undefined;
+  label: ReactNode; testId?: string; className?: string }) {
   return (
-    <Badge variant={statusTone(code)} data-testid={testId} data-status={code ?? undefined}>{label}</Badge>
+    <Badge variant={statusTone(code)} className={className} data-testid={testId} data-status={code ?? undefined}>
+      {label}
+    </Badge>
   )
 }
 
@@ -123,3 +126,27 @@ export function EmptyState({ title, hint, art = 'inbox', testId }: { title: Reac
     </div>
   )
 }
+
+/**
+ * A figure of an overview (Q53c): an icon, its label and value, the value a link when it leads to the list behind it.
+ * Rendered as a group of a description list (`<dl>` around the figures).
+ */
+export function Metric({ label, value, icon: Icon, to, testId }: { label: ReactNode; value: ReactNode;
+  icon?: LucideIcon; to?: string; testId?: string }) {
+  return (
+    <div className="bg-card flex flex-col gap-2 rounded-lg border p-4" data-testid={testId}>
+      <dt className="text-muted-foreground flex items-center gap-2 text-sm">
+        {Icon && (
+          <span className="bg-muted flex size-7 shrink-0 items-center justify-center rounded-md">
+            <Icon aria-hidden className="size-4" />
+          </span>
+        )}
+        {label}
+      </dt>
+      <dd className="text-2xl font-semibold tabular-nums">
+        {to ? <Link to={to} className={linkClass}>{value}</Link> : value}
+      </dd>
+    </div>
+  )
+}
+

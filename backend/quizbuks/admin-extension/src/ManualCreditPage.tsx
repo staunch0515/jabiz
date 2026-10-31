@@ -5,7 +5,6 @@ import { useTranslation } from 'react-i18next'
 import { Link, useParams } from 'react-router'
 import {
   ApprovalPanel,
-  Badge,
   Button,
   DescriptionList,
   EXTENSION_NAMESPACE,
@@ -14,7 +13,7 @@ import {
   UserName,
   useAuth,
 } from '@jabiz/admin'
-import { LoadFailed, Section } from './components'
+import { LoadFailed, Section, StatusBadge } from './components'
 import { money, useLabels, when } from './hooks'
 import { BANK_REVIEW, DICTIONARY, isUserId, PATH, PERMISSION } from './ids'
 import { readManualCredit } from './manual-api'
@@ -88,7 +87,7 @@ export default function ManualCreditPage() {
           <span className="flex flex-wrap items-center gap-x-4 gap-y-1">
             <span>{t('manual.sponsor')}: <Link to={PATH.user(mc.sponsorId)} className={linkClass}>
               {mc.company ?? <UserName id={mc.sponsorId} />}</Link></span>
-            <Badge variant={pending ? 'secondary' : 'outline'} data-testid="manual-status">{status(mc.status)}</Badge>
+            <StatusBadge code={mc.status} label={status(mc.status)} testId="manual-status" />
           </span>
         } />
       <Section title={t('manual.detail.facts')} testId="manual-facts">

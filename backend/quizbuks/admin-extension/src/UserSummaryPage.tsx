@@ -33,7 +33,7 @@ import {
   type UserRow,
 } from './api'
 import { DICTIONARY, isUserId, PATH, PERMISSION } from './ids'
-import { LoadFailed, Section } from './components'
+import { EmptyState, LoadFailed, Section, StatusBadge } from './components'
 import { PayoutPanel } from './PayoutPanel'
 import { money, textIn, useLabels, usePaged, when } from './hooks'
 
@@ -120,7 +120,8 @@ function Attempts({ userId }: { userId: string }) {
     (offset, limit, sorts) => readAttempts(userId, offset, limit, sorts))
   const columns = useMemo<ColumnDef<AttemptRow, unknown>[]>(() => [
     { id: 'name', header: t('user.publication'), cell: ({ row }) => row.original.name ?? row.original.publicationId },
-    { id: 'status', header: t('user.attemptStatus'), cell: ({ row }) => attemptStatus(row.original.status) },
+    { id: 'status', header: t('user.attemptStatus'),
+      cell: ({ row }) => <StatusBadge code={row.original.status} label={attemptStatus(row.original.status)} /> },
     { id: 'startedAt', header: t('user.startedAt'), cell: ({ row }) => when(row.original.startedAt) },
     {
       id: 'score',
@@ -129,13 +130,14 @@ function Attempts({ userId }: { userId: string }) {
       cell: ({ row }) => (row.original.score == null ? ''
         : t('user.scoreValue', { score: row.original.score, full: row.original.fullScore ?? '?' })),
     },
-    { id: 'rewardStatus', header: t('user.rewardStatus'), cell: ({ row }) => rewardStatus(row.original.rewardStatus) },
+    { id: 'rewardStatus', header: t('user.rewardStatus'), cell: ({ row }) => (row.original.rewardStatus
+      ? <StatusBadge code={row.original.rewardStatus} label={rewardStatus(row.original.rewardStatus)} /> : '') },
   ], [t, attemptStatus, rewardStatus])
   return (
     <Section title={t('user.attempts')} testId="user-attempts">
       {attempts.isError ? <LoadFailed error={attempts.error} onRetry={() => void attempts.refetch()} /> : (
         <DataTable label={t('user.attemptsTable')} columns={columns} {...table}
-          getRowId={(row) => row.attemptId} empty={t('user.noAttempts')} />
+          getRowId={(row) => row.attemptId} empty={<EmptyState art="content" title={t('user.noAttempts')} />} />
       )}
     </Section>
   )
@@ -167,7 +169,7 @@ function Consents({ userId }: { userId: string }) {
     <Section title={t('user.consents')} testId="user-consents">
       {consents.isError ? <LoadFailed error={consents.error} onRetry={() => void consents.refetch()} /> : (
         <DataTable label={t('user.consentsTable')} columns={columns} {...table}
-          getRowId={(row) => row.consentId} empty={t('user.noConsents')} />
+          getRowId={(row) => row.consentId} empty={<EmptyState art="inbox" title={t('user.noConsents')} />} />
       )}
     </Section>
   )
@@ -192,7 +194,8 @@ function Finance({ userId, sponsor }: { userId: string; sponsor: boolean }) {
     { id: 'submittedAt', header: t('user.createdAt'), cell: ({ row }) => when(row.original.submittedAt) },
     { id: 'reward', header: t('user.reward'), meta: right, cell: ({ row }) => money(row.original.reward) },
     { id: 'fee', header: t('user.fee'), meta: right, cell: ({ row }) => money(row.original.fee) },
-    { id: 'rewardStatus', header: t('user.rewardStatus'), cell: ({ row }) => rewardStatus(row.original.rewardStatus) },
+    { id: 'rewardStatus', header: t('user.rewardStatus'), cell: ({ row }) => (row.original.rewardStatus
+      ? <StatusBadge code={row.original.rewardStatus} label={rewardStatus(row.original.rewardStatus)} /> : '') },
     { id: 'paidAt', header: t('user.paidAt'), cell: ({ row }) => when(row.original.rewardPaidAt) },
   ], [t, rewardStatus])
   const transferColumns = useMemo<ColumnDef<TransferRow, unknown>[]>(() => [
@@ -200,13 +203,15 @@ function Finance({ userId, sponsor }: { userId: string; sponsor: boolean }) {
     { id: 'amount', header: t('user.amount'), meta: right, cell: ({ row }) => money(row.original.amount) },
     { id: 'fee', header: t('user.fee'), meta: right, cell: ({ row }) => money(row.original.fee) },
     { id: 'net', header: t('user.net'), meta: right, cell: ({ row }) => money(row.original.net) },
-    { id: 'status', header: t('user.transferStatus'), cell: ({ row }) => transferStatus(row.original.status) },
+    { id: 'status', header: t('user.transferStatus'),
+      cell: ({ row }) => <StatusBadge code={row.original.status} label={transferStatus(row.original.status)} /> },
     { id: 'sentAt', header: t('user.sentAt'), cell: ({ row }) => when(row.original.sentAt) },
   ], [t, transferStatus])
   const topUpColumns = useMemo<ColumnDef<TopUpRow, unknown>[]>(() => [
     { id: 'createdAt', header: t('user.createdAt'), cell: ({ row }) => when(row.original.createdAt) },
     { id: 'amount', header: t('user.amount'), meta: right, cell: ({ row }) => money(row.original.amount) },
-    { id: 'status', header: t('user.topUpStatus'), cell: ({ row }) => topUpStatus(row.original.status) },
+    { id: 'status', header: t('user.topUpStatus'),
+      cell: ({ row }) => <StatusBadge code={row.original.status} label={topUpStatus(row.original.status)} /> },
     { id: 'paidAt', header: t('user.paidAt'), cell: ({ row }) => when(row.original.paidAt) },
     { id: 'refunded', header: t('user.refunded'), meta: right, cell: ({ row }) => money(row.original.refundedAmount) },
   ], [t, topUpStatus])
@@ -235,7 +240,7 @@ function Finance({ userId, sponsor }: { userId: string; sponsor: boolean }) {
           ? <LoadFailed error={rewards.query.error} onRetry={() => void rewards.query.refetch()} />
           : (
             <DataTable label={t('user.rewardsTable')} columns={rewardColumns} {...rewards.table}
-              getRowId={(row) => row.attemptId} empty={t('user.noRewards')} />
+              getRowId={(row) => row.attemptId} empty={<EmptyState art="money" title={t('user.noRewards')} />} />
           )}
       </div>
       <div className="flex flex-col gap-2">
@@ -244,7 +249,7 @@ function Finance({ userId, sponsor }: { userId: string; sponsor: boolean }) {
           ? <LoadFailed error={transfers.query.error} onRetry={() => void transfers.query.refetch()} />
           : (
             <DataTable label={t('user.transfersTable')} columns={transferColumns} {...transfers.table}
-              getRowId={(row) => row.transferId} empty={t('user.noTransfers')} />
+              getRowId={(row) => row.transferId} empty={<EmptyState art="money" title={t('user.noTransfers')} />} />
           )}
       </div>
       <div className="flex flex-col gap-2" data-testid="user-payout">
@@ -258,7 +263,7 @@ function Finance({ userId, sponsor }: { userId: string; sponsor: boolean }) {
             ? <LoadFailed error={topUps.query.error} onRetry={() => void topUps.query.refetch()} />
             : (
               <DataTable label={t('user.topUpsTable')} columns={topUpColumns} {...topUps.table}
-                getRowId={(row) => row.topUpId} empty={t('user.noTopUps')} />
+                getRowId={(row) => row.topUpId} empty={<EmptyState art="money" title={t('user.noTopUps')} />} />
             )}
         </div>
       )}

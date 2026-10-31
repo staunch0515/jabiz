@@ -56,7 +56,7 @@ import {
   type SaveOutput,
   type Text,
 } from './broadcasts-api'
-import { LoadFailed, Section } from './components'
+import { EmptyState, LoadFailed, Section, StatusBadge } from './components'
 import { failed } from './finance'
 import { StatusFilter } from './finance-components'
 import { useLabels, usePaged, when } from './hooks'
@@ -464,7 +464,7 @@ export default function BroadcastsPage() {
     {
       id: 'status',
       header: t('broadcasts.columns.status'),
-      cell: ({ row }) => <Badge variant="outline">{status(row.original.status)}</Badge>,
+      cell: ({ row }) => <StatusBadge code={row.original.status} label={status(row.original.status)} />,
     },
     {
       id: 'when',
@@ -566,7 +566,7 @@ export default function BroadcastsPage() {
         ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
         : (
           <DataTable label={t('broadcasts.title')} columns={sortable(columns)} {...table}
-            getRowId={(row) => row.broadcastId} empty={t('broadcasts.none')}
+            getRowId={(row) => row.broadcastId} empty={<EmptyState art="inbox" title={t('broadcasts.none')} />}
             rowProps={(row) => ({ 'data-testid': 'broadcast-row', 'data-id': row.broadcastId,
               'data-status': row.status })} />
         )}

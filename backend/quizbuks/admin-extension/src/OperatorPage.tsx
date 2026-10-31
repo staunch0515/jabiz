@@ -37,7 +37,7 @@ import {
   setOperatorPlan,
   type OperatorPlanChange,
 } from './account-api'
-import { LoadFailed, Section } from './components'
+import { EmptyState, LoadFailed, Section, StatusBadge } from './components'
 import { useLabels, when } from './hooks'
 import { DICTIONARY, PATH, PERMISSION, TEMPLATE } from './ids'
 import { OperatorFields } from './operator-components'
@@ -212,7 +212,7 @@ function Members({ operatorId }: { operatorId: string }) {
         ? <LoadFailed error={members.error} onRetry={() => void members.refetch()} />
         : (
           <DataTable label={t('operator.members.title')} columns={columns} data={members.data ?? []}
-            loading={members.isPending} getRowId={(row) => row.memberId} empty={t('operator.members.none')}
+            loading={members.isPending} getRowId={(row) => row.memberId} empty={<EmptyState art="people" title={t('operator.members.none')} />}
             rowProps={(row) => ({ 'data-testid': 'member-row', 'data-id': row.userId })} />
         )}
       {writable && (
@@ -308,7 +308,7 @@ function Sponsors({ operatorId }: { operatorId: string }) {
         ? <LoadFailed error={sponsors.error} onRetry={() => void sponsors.refetch()} />
         : (
           <DataTable label={t('operator.sponsors.title')} columns={columns} data={sponsors.data ?? []}
-            loading={sponsors.isPending} getRowId={(row) => row.userId} empty={t('operator.sponsors.none')}
+            loading={sponsors.isPending} getRowId={(row) => row.userId} empty={<EmptyState art="people" title={t('operator.sponsors.none')} />}
             rowProps={(row) => ({ 'data-testid': 'operator-sponsor-row', 'data-id': row.userId })} />
         ))}
       {can(PERMISSION.operatorsWrite) && (
@@ -386,7 +386,7 @@ function Plan({ operatorId }: { operatorId: string }) {
     { id: 'plan', header: t('plan.plan'), cell: ({ row }) => planLabel(row.original.plan) },
     { id: 'effectiveMonth', header: t('plan.effectiveMonth'), cell: ({ row }) => row.original.effectiveMonth },
     { id: 'status', header: t('plan.status'), cell: ({ row }) => (
-      <Badge variant={row.original.status === 'REJECTED' ? 'outline' : 'secondary'}>{statusLabel(row.original.status)}</Badge>
+      <StatusBadge code={row.original.status} label={statusLabel(row.original.status)} />
     ) },
     { id: 'reason', header: t('plan.reason'), cell: ({ row }) => row.original.reason ?? '' },
     { id: 'proposedBy', header: t('plan.proposedBy'), cell: ({ row }) => (
@@ -412,7 +412,7 @@ function Plan({ operatorId }: { operatorId: string }) {
         ? <LoadFailed error={plans.error} onRetry={() => void plans.refetch()} />
         : (
           <DataTable label={t('plan.changes')} columns={columns} data={changes} loading={plans.isPending}
-            getRowId={(row) => row.planChangeId} empty={t('plan.none')}
+            getRowId={(row) => row.planChangeId} empty={<EmptyState art="inbox" title={t('plan.none')} />}
             rowProps={(row) => ({ 'data-testid': 'plan-change-row', 'data-id': row.planChangeId })} />
         )}
       {can(PERMISSION.operatorsWrite) && (
@@ -474,9 +474,7 @@ export default function OperatorPage() {
     <div className="flex flex-col gap-4" data-testid="operator" data-status={o.status}>
       <div>{back}</div>
       <PageHeader title={o.name} className="pb-0" description={
-        <Badge variant={o.status === 'ACTIVE' ? 'secondary' : 'outline'} data-testid="operator-state">
-          {status(o.status)}
-        </Badge>
+        <StatusBadge code={o.status} label={status(o.status)} testId="operator-state" />
       } />
       {/* Keyed by the revision: a saved change reads the operator again and starts the form from it. */}
       <Details key={o.revision} operator={o} />

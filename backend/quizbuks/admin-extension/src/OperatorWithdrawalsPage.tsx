@@ -6,7 +6,6 @@ import {
   Alert,
   AlertDescription,
   ApiError,
-  Badge,
   Button,
   DataTable,
   Dialog,
@@ -36,10 +35,9 @@ import {
   readOperatorWithdrawals,
   rejectWithdrawal,
   WITHDRAWAL_STATUSES,
-  withdrawalVariant,
   type OperatorWithdrawal,
 } from './account-api'
-import { LoadFailed } from './components'
+import { EmptyState, LoadFailed, StatusBadge } from './components'
 import { money, useLabels, usePaged, when } from './hooks'
 import { DICTIONARY, PERMISSION } from './ids'
 
@@ -162,7 +160,7 @@ export default function OperatorWithdrawalsPage() {
       header: t('operatorWithdrawal.status'),
       cell: ({ row }) => (
         <span className="flex flex-col gap-1">
-          <Badge variant={withdrawalVariant(row.original.status)} className="w-fit">{statusLabel(row.original.status)}</Badge>
+          <StatusBadge code={row.original.status} label={statusLabel(row.original.status)} className="w-fit" />
           {row.original.rejectReason && <span className="text-muted-foreground text-sm">{row.original.rejectReason}</span>}
         </span>
       ),
@@ -232,7 +230,7 @@ export default function OperatorWithdrawalsPage() {
         ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
         : (
           <DataTable label={t('operatorWithdrawal.title')} columns={sortable(columns)} {...table}
-            getRowId={(row) => row.withdrawalId} empty={t('operatorWithdrawal.none')}
+            getRowId={(row) => row.withdrawalId} empty={<EmptyState art="money" title={t('operatorWithdrawal.none')} />}
             rowProps={(row) => ({ 'data-testid': 'operator-withdrawal-row', 'data-id': row.withdrawalId })} />
         )}
       {action && <ActionDialog action={action} onClose={() => setAction(null)} />}

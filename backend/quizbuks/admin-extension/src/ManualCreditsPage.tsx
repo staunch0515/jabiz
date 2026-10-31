@@ -6,7 +6,6 @@ import {
   Alert,
   AlertDescription,
   ApiError,
-  Badge,
   Button,
   DataTable,
   Dialog,
@@ -35,7 +34,7 @@ import {
 import { todayInJapan } from './finance-api'
 import { parseAmount } from './finance'
 import { StatusFilter } from './finance-components'
-import { LoadFailed } from './components'
+import { EmptyState, LoadFailed, StatusBadge } from './components'
 import { money, useLabels, usePaged, when } from './hooks'
 import { useMoreFilters } from './moreFilters'
 import { BANK_REVIEW, DICTIONARY, PATH, PERMISSION } from './ids'
@@ -258,7 +257,7 @@ export default function ManualCreditsPage() {
     {
       id: 'status',
       header: t('manual.status'),
-      cell: ({ row }) => <Badge variant="outline" data-testid="manual-row-status">{status(row.original.status)}</Badge>,
+      cell: ({ row }) => <StatusBadge code={row.original.status} label={status(row.original.status)} testId="manual-row-status" />,
     },
     { id: 'recordedBy', header: t('manual.recordedBy'),
       cell: ({ row }) => (row.original.recordedBy ? <UserName id={row.original.recordedBy} /> : '') },
@@ -296,7 +295,7 @@ export default function ManualCreditsPage() {
         ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
         : (
           <DataTable label={t('manual.table')} columns={sortable(columns)} {...table} getRowId={(row) => row.topUpId}
-            empty={t('manual.none')}
+            empty={<EmptyState art="money" title={t('manual.none')} />}
             rowProps={(row) => ({ 'data-testid': 'manual-row', 'data-id': row.topUpId, 'data-status': row.status })} />
         )}
       {recording && <RecordDialog onClose={() => setRecording(false)} />}

@@ -38,9 +38,8 @@ import {
   type BankAccountInput,
   type OperatorAccount,
   type OwnWithdrawal,
-  withdrawalVariant,
 } from './account-api'
-import { LoadFailed, Section } from './components'
+import { EmptyState, LoadFailed, Section, StatusBadge } from './components'
 import { useLabels, usePaged, usePoints, when } from './hooks'
 import { DICTIONARY, PATH } from './ids'
 
@@ -104,7 +103,7 @@ function Plans() {
           {later.map((change) => (
             <li key={`${change.effectiveMonth}-${change.plan}-${change.proposedAt ?? ''}`} className="flex flex-wrap items-center gap-2">
               {t('account.planLater', { month: change.effectiveMonth, plan: planLabel(change.plan) })}
-              <Badge variant={change.status === 'APPROVED' ? 'secondary' : 'outline'}>{statusLabel(change.status)}</Badge>
+              <StatusBadge code={change.status} label={statusLabel(change.status)} />
             </li>
           ))}
         </ul>
@@ -298,7 +297,7 @@ function Withdrawals({ account }: { account: OperatorAccount }) {
       header: t('account.status'),
       cell: ({ row }) => (
         <span className="flex flex-col gap-1">
-          <Badge variant={withdrawalVariant(row.original.status)} className="w-fit">{statusLabel(row.original.status)}</Badge>
+          <StatusBadge code={row.original.status} label={statusLabel(row.original.status)} className="w-fit" />
           {row.original.rejectReason && (
             <span className="text-muted-foreground text-sm" data-testid="withdrawal-reason">
               {t('account.rejectReason', { reason: row.original.rejectReason })}
@@ -337,7 +336,7 @@ function Withdrawals({ account }: { account: OperatorAccount }) {
         ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
         : (
           <DataTable label={t('account.withdrawals')} columns={sortable(columns)} {...table}
-            getRowId={(row) => row.withdrawalId} empty={t('account.none')}
+            getRowId={(row) => row.withdrawalId} empty={<EmptyState art="money" title={t('account.none')} />}
             rowProps={(row) => ({ 'data-testid': 'withdrawal-row', 'data-id': row.withdrawalId, 'data-status': row.status })} />
         )}
     </Section>

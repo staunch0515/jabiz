@@ -19,7 +19,7 @@ import {
 import { transferAddressOf, transferFilterOf, failed } from './finance'
 import { readFinanceTransfers, releaseHold, type FinanceTransfer, type TransferFilter } from './finance-api'
 import { DayRange, StatusFilter } from './finance-components'
-import { LoadFailed } from './components'
+import { EmptyState, LoadFailed, StatusBadge } from './components'
 import { money, useLabels, usePaged, when } from './hooks'
 import { useMoreFilters } from './moreFilters'
 import { DICTIONARY, PATH, PERMISSION, TRANSFER_REVIEW } from './ids'
@@ -91,9 +91,9 @@ export default function TransfersPage() {
       header: t('finance.transfers.status'),
       cell: ({ row }) => (
         <span className="flex flex-wrap items-center gap-1">
-          <Badge variant="outline" data-testid="transfer-status">{status(row.original.status)}</Badge>
+          <StatusBadge code={row.original.status} label={status(row.original.status)} testId="transfer-status" />
           {row.original.stale && <Badge variant="warning" data-testid="transfer-stale">{t('finance.transfers.stale')}</Badge>}
-          {row.original.held && <Badge variant="secondary" data-testid="transfer-held">{t('finance.transfers.held')}</Badge>}
+          {row.original.held && <Badge variant="warning" data-testid="transfer-held">{t('finance.transfers.held')}</Badge>}
         </span>
       ),
     },
@@ -162,7 +162,7 @@ export default function TransfersPage() {
         ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
         : (
           <DataTable label={t('finance.transfers.table')} columns={sortable(columns)} {...table}
-            getRowId={(row) => row.transferId} empty={t('finance.transfers.none')}
+            getRowId={(row) => row.transferId} empty={<EmptyState art="money" title={t('finance.transfers.none')} />}
             rowProps={(row) => ({ 'data-testid': 'transfer-row', 'data-id': row.transferId,
               'data-status': row.status, 'data-stale': String(row.stale), 'data-held': String(row.held) })} />
         )}
