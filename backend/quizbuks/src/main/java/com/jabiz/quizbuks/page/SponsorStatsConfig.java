@@ -15,7 +15,8 @@ import org.springframework.context.annotation.Configuration;
  * docs/quizbuks/plans/Q60-sponsor-page.md section 8): platform public counters (decision D65), counted for anonymous
  * and signed-in visitors alike, once per visitor and day, in the days of {@code jabiz.fiscal-year-zone}. A page counts
  * while published and by its handle (the user id is not public); a product while listed. Both name the sponsor as
- * the owner of their keys, so that the sponsor's dataset gives each sponsor theirs only.
+ * the owner of their keys, so that the sponsor's dataset gives each sponsor theirs only; the owner is the sponsor's
+ * account, so their counts go with it (Q69, platform 17z-6).
  */
 @Configuration
 public class SponsorStatsConfig {
@@ -41,13 +42,13 @@ public class SponsorStatsConfig {
     @Bean
     PublicCounter qbSponsorPageViews() {
         return PublicCounter.define(PAGE_VIEWS, c -> c.keys(QbSponsorPages.PUBLIC_DATASET, "handle").owner("userId")
-            .zone(zone));
+            .ownerIsUser().zone(zone));
     }
 
     @Bean
     PublicCounter qbProductClicks() {
         return PublicCounter.define(PRODUCT_CLICKS, c -> c.keys(QbSponsorProducts.PUBLIC_DATASET, "productId")
-            .owner("userId").zone(zone));
+            .owner("userId").ownerIsUser().zone(zone));
     }
 
     /** The counts of the caller's own page and products: those whose owner is the caller. */

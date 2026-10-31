@@ -46,6 +46,12 @@ class SponsorErasureIT extends PlayItSupport {
             "shopUrl", "https://shop.example/rye", "listed", true));
         String publication = livePublication(ann, "Ann's quiz");
         String bobsPublication = livePublication(bob, "Bob's quiz");
+        // A day of counts of their page (platform 17z-6: owned by the account, so they go with it); Bob's stay.
+        for (String owner : java.util.List.of(ann, bob)) {
+            execute("INSERT INTO sys_public_counter_day (row_id, counter_name, counter_key, day, hits, owner_key)"
+                + " VALUES (gen_random_uuid(), 'qb.sponsor-page-view', 'h-" + UUID.randomUUID() + "', DATE '2026-03-01',"
+                + " 3, '" + owner + "')");
+        }
 
         runAsSystem("ACCOUNT_ERASE", Map.of("userId", ann, "requestedBy", "it-support"));
         deliverEvents();
@@ -64,6 +70,8 @@ class SponsorErasureIT extends PlayItSupport {
                 .containsEntry("company", "***"));
         assertThat(query("SELECT DISTINCT display_name FROM qb_profile_version WHERE user_id = ?", ann))
             .allSatisfy(row -> assertThat(row).containsEntry("display_name", "***"));
+        assertThat(query("SELECT owner_key FROM sys_public_counter_day WHERE owner_key IN (?, ?)", ann, bob))
+            .extracting(row -> row.get("owner_key")).containsExactly(bob);
         // Another sponsor is untouched.
         assertThat(query("SELECT DISTINCT company FROM qb_sponsor_version WHERE user_id = ?", bob))
             .noneSatisfy(row -> assertThat(row).containsEntry("company", "***"));
