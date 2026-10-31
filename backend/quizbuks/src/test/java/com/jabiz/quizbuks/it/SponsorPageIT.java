@@ -274,6 +274,13 @@ class SponsorPageIT extends PlayItSupport {
 
         assertThat(datasetIds(QbSponsorPages.DEFAULT_DATASET, northSession)).contains(ann).doesNotContain(direct);
         assertThat(datasetIds(QbSponsorPages.DEFAULT_DATASET, hq())).contains(ann, direct);
+        // Q60a-3: the administration's template likewise (the list, the review queue, one page).
+        assertThat(items("qb.admin.sponsor-pages", northSession, Map.of("limit", 500)))
+            .extracting(row -> row.get("userId")).contains(ann).doesNotContain(direct);
+        assertThat(items("qb.admin.sponsor-pages", hq(), Map.of("params", Map.of("userId", direct))))
+            .singleElement().satisfies(row -> assertThat(row).containsEntry("status", QbSponsorPages.PUBLISHED)
+                .containsEntry("headline", "Direct page").containsEntry("company", "Company of " + direct));
+        assertThat(items("qb.admin.sponsor-pages", northSession, Map.of("params", Map.of("userId", direct)))).isEmpty();
         refused(SponsorPageProcesses.OPERATOR_TAKEDOWN, northSession, body("userId", direct, "reason", "Not ours"),
             404);
         assertThat(run(SponsorPageProcesses.OPERATOR_TAKEDOWN, northSession, body("userId", ann, "reason", "Ours")))

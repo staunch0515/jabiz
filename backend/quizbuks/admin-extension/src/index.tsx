@@ -24,6 +24,7 @@ import {
   Wallet,
   Radar,
   Receipt,
+  Globe,
 } from 'lucide-react'
 import BankTopUpPage from './BankTopUpPage'
 import BankSettingsPage from './BankSettingsPage'
@@ -51,6 +52,8 @@ import ReportsPage from './ReportsPage'
 import InvestorMetricsPage from './InvestorMetricsPage'
 import ReviewsPage from './ReviewsPage'
 import SponsorReviewPage from './SponsorReviewPage'
+import SponsorPagesPage from './SponsorPagesPage'
+import SponsorPageReviewPage from './SponsorPageReviewPage'
 import CashRewardsPage from './CashRewardsPage'
 import DigitalPrizesPage from './DigitalPrizesPage'
 import TopUpsPage from './TopUpsPage'
@@ -85,6 +88,9 @@ export default defineExtension({
     { path: PATH.reviews, element: <ReviewsPage /> },
     { path: '/qb/reviews/publications/:publicationId', element: <PublicationReviewPage /> },
     { path: '/qb/reviews/sponsors/:userId', element: <SponsorReviewPage /> },
+    // Q60a-3: sponsors' pages, for headquarters and the operators (their own sponsors').
+    { path: PATH.sponsorPages, element: <SponsorPagesPage /> },
+    { path: '/qb/sponsor-pages/:userId', element: <SponsorPageReviewPage /> },
     { path: PATH.users, element: <UsersPage /> },
     { path: '/qb/users/:userId', element: <UserSummaryPage /> },
     { path: PATH.attempts, element: <AttemptsPage /> },
@@ -136,6 +142,9 @@ export default defineExtension({
           permission: PERMISSION.operatorUse },
         { key: 'qb-operator-sponsors', label: 'menu.operatorSponsors', path: PATH.operatorSponsors, icon: Users,
           permission: PERMISSION.operatorUse },
+        // Q60a-3: the pages of the operator's sponsors.
+        { key: 'qb-operator-sponsor-pages', label: 'menu.sponsorPages', path: PATH.sponsorPages, icon: Globe,
+          permission: PERMISSION.operatorUse },
         // Q48c: the operator's own prospecting.
         { key: 'qb-operator-prospects', label: 'menu.prospects', path: PATH.prospects, icon: Radar,
           permission: PERMISSION.operatorUse },
@@ -160,6 +169,9 @@ export default defineExtension({
           permission: PERMISSION.quizRead },
         { key: 'qb-publications', label: 'menu.publications', path: PATH.publications, icon: Rocket,
           permission: PERMISSION.publicationRead },
+        // Q60a-3: every sponsor's page (headquarters; an operator has its own entry above).
+        { key: 'qb-sponsor-pages', label: 'menu.sponsorPages', path: PATH.sponsorPages, icon: Globe,
+          permission: PERMISSION.contentWrite },
         { key: 'qb-users', label: 'menu.users', path: PATH.users, icon: Users, permission: PERMISSION.usersRead },
         // Q22: the cash rewards sponsors pay takers themselves, with the disputes to decide.
         { key: 'qb-cash-rewards', label: 'menu.cashRewards', path: PATH.cashRewards, icon: HandCoins,
