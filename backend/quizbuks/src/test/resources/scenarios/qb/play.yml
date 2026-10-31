@@ -351,8 +351,8 @@ steps:
   - advanceClock: PT1M
   - actor: { id: "${u1}", permissions: [qb.play, qb.me] }
     process: QB_ATTEMPT_SAVE@latest
-    input: { attemptId: "${t1}", currentIndex: 1, answers: [{ questionNo: 1, selected: [1] }] }
-    expectOutput: { currentIndex: 1, answers: [{ questionNo: 1, selected: [1] }] }
+    input: { attemptId: "${t1}", currentIndex: 1, answers: [{ questionNo: 1, selected: [2] }] }
+    expectOutput: { currentIndex: 1, answers: [{ questionNo: 1, selected: [2] }] }
   - actor: { id: "${u1}", permissions: [qb.play, qb.me] }
     process: QB_ATTEMPT_START@latest
     input: { publicationId: "${pub}" }
@@ -360,20 +360,20 @@ steps:
   - advanceClock: PT1M
   - actor: { id: "${u1}", permissions: [qb.play, qb.me] }
     process: QB_ATTEMPT_SUBMIT@latest
-    input: { attemptId: "${t1}", publicationId: "${pub}", answers: [{ questionNo: 2, selected: [2] }] }
+    input: { attemptId: "${t1}", publicationId: "${pub}", answers: [{ questionNo: 2, selected: [1] }] }
     expectOutput:
       status: SUBMITTED
       score: 5
       passed: true
       reward: 100
       rewardStatus: PAID
-      questions: [{ no: 1, selected: [1], correct: [1], earned: 2 }, { no: 2, selected: [2], correct: [2], earned: 3 }]
+      questions: [{ no: 1, selected: [2], correct: [2], earned: 2 }, { no: 2, selected: [1], correct: [1], earned: 3 }]
 
   - note: U2's full marks cannot be paid; the publication is underfunded and takes no new attempt.
     advanceClock: PT1M
   - actor: { id: "${u2}", permissions: [qb.play, qb.me] }
     process: QB_ATTEMPT_SUBMIT@latest
-    input: { attemptId: "${t2}", publicationId: "${pub}", answers: [{ questionNo: 1, selected: [1] }, { questionNo: 2, selected: [1] }] }
+    input: { attemptId: "${t2}", publicationId: "${pub}", answers: [{ questionNo: 1, selected: [2] }, { questionNo: 2, selected: [1] }] }
     expectOutput: { score: 5, reward: 100, rewardStatus: PENDING }
   - expect: { entity: QbPublication, id: "${pub}", fields: { status: FUNDS_SHORT } }
   - expectError:
@@ -428,7 +428,7 @@ steps:
     save: { t3: $.attemptId }
   - actor: { id: "${u3}", permissions: [qb.play, qb.me] }
     process: QB_ATTEMPT_SAVE@latest
-    input: { attemptId: "${t3}", currentIndex: 1, answers: [{ questionNo: 1, selected: [2] }] }
+    input: { attemptId: "${t3}", currentIndex: 1, answers: [{ questionNo: 1, selected: [1] }] }
   - note: Past the time limit and its grace, the minute's job finishes it with the saved answer.
     advanceClock: PT6M
   - runJob: { job: qb.attempt-expire, items: { succeeded: 1 } }
