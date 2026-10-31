@@ -6,7 +6,6 @@ import {
   Alert,
   AlertDescription,
   ApiError,
-  Badge,
   Button,
   DataTable,
   Dialog,
@@ -28,7 +27,7 @@ import {
   useAuth,
   type ColumnDef,
 } from '@jabiz/admin'
-import { LoadFailed } from './components'
+import { EmptyState, LoadFailed, StatusBadge } from './components'
 import { money, useLabels, usePaged, usePoints } from './hooks'
 import { DICTIONARY, PERMISSION } from './ids'
 import { downloadStatement, issueStatement, paySettlement, readSettlements, SETTLEMENTS_KEY, type Settlement } from './settlement-api'
@@ -135,7 +134,7 @@ export default function SettlementsPage() {
     { id: 'fixedFee', header: t('settlement.fixedFee'), meta: right, cell: ({ row }) => amount(row.original.fixedFee) },
     { id: 'payable', header: t('settlement.payable'), meta: right, cell: ({ row }) => amount(row.original.payable) },
     { id: 'status', header: t('settlement.status'),
-      cell: ({ row }) => <Badge variant="secondary">{statusLabel(row.original.status)}</Badge> },
+      cell: ({ row }) => <StatusBadge code={row.original.status} label={statusLabel(row.original.status)} /> },
     { id: 'paidOn', header: t('settlement.paidOn'), cell: ({ row }) => row.original.paidOn ?? '' },
     {
       id: 'actions',
@@ -195,7 +194,7 @@ export default function SettlementsPage() {
         ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
         : (
           <DataTable label={t(finance ? 'settlement.title' : 'settlement.ownTitle')} columns={sortable(columns)} {...table}
-            getRowId={(row) => row.settlementId} empty={t('settlement.none')}
+            getRowId={(row) => row.settlementId} empty={<EmptyState art="money" title={t('settlement.none')} />}
             rowProps={(row) => ({ 'data-testid': 'settlement-row', 'data-id': row.settlementId })} />
         )}
       {paying && <PayDialog settlement={paying} onClose={() => setPaying(null)} />}

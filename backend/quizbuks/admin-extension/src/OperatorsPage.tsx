@@ -6,7 +6,6 @@ import {
   Alert,
   AlertDescription,
   ApiError,
-  Badge,
   Button,
   DataTable,
   Dialog,
@@ -20,7 +19,7 @@ import {
   useAuth,
   type ColumnDef,
 } from '@jabiz/admin'
-import { LoadFailed } from './components'
+import { EmptyState, LoadFailed, StatusBadge } from './components'
 import { useLabels, usePaged, when } from './hooks'
 import { useMoreFilters } from './moreFilters'
 import { DICTIONARY, PATH, PERMISSION } from './ids'
@@ -114,7 +113,7 @@ export default function OperatorsPage() {
     { id: 'contact', header: t('operator.fields.contactName'),
       cell: ({ row }) => `${row.original.contactName} · ${row.original.contactEmail}` },
     { id: 'status', header: t('operator.fields.status'), cell: ({ row }) => (
-      <Badge variant={row.original.status === 'ACTIVE' ? 'secondary' : 'outline'}>{status(row.original.status)}</Badge>
+      <StatusBadge code={row.original.status} label={status(row.original.status)} />
     ) },
     { id: 'members', header: t('operator.list.members'), meta: right, cell: ({ row }) => row.original.members },
     { id: 'sponsors', header: t('operator.list.sponsors'), meta: right, cell: ({ row }) => row.original.sponsors },
@@ -131,7 +130,7 @@ export default function OperatorsPage() {
         ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
         : (
           <DataTable label={t('operator.list.title')} columns={sortable(columns)} {...table} getRowId={(row) => row.operatorId}
-            empty={t('operator.list.none')}
+            empty={<EmptyState art="people" title={t('operator.list.none')} />}
             rowProps={(row) => ({ 'data-testid': 'operator-row', 'data-id': row.operatorId })} />
         )}
       {creating && <NewDialog onClose={() => setCreating(false)} />}

@@ -26,7 +26,7 @@ import {
   RadioGroupItem,
   Textarea,
 } from '@jabiz/admin'
-import { LoadFailed, Section } from './components'
+import { LoadFailed, Section, StatusBadge } from './components'
 import { useLabels, when } from './hooks'
 import { DICTIONARY, PATH } from './ids'
 import { approve, discard, DIRECT, PROSPECTS_KEY, readProspect, type Prospect, type Trial } from './prospect-api'
@@ -282,7 +282,7 @@ export default function ProspectPage() {
         actions={(
           <span className="flex items-center gap-2">
             {p.score != null && <Badge variant="outline">{t('prospect.list.score')} {p.score}</Badge>}
-            <Badge variant="secondary" data-testid="prospect-status">{statusLabel(p.status)}</Badge>
+            <StatusBadge code={p.status} label={statusLabel(p.status)} testId="prospect-status" />
           </span>
         )} />
       <Research prospect={p} />

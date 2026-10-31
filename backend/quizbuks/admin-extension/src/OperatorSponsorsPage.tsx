@@ -24,7 +24,7 @@ import {
   Textarea,
   type ColumnDef,
 } from '@jabiz/admin'
-import { LoadFailed } from './components'
+import { EmptyState, LoadFailed } from './components'
 import { useLabels, usePaged } from './hooks'
 import { DICTIONARY, PATH } from './ids'
 import { banSponsor, readOperatorSponsors, unbanSponsor, type OperatorSponsor } from './operator-api'
@@ -187,7 +187,7 @@ export default function OperatorSponsorsPage() {
         ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
         : (
           <DataTable label={t('operator.sponsors.pageTitle')} columns={sortable(columns)} {...table}
-            getRowId={(row) => row.onboardingId} empty={t('operator.sponsors.none')}
+            getRowId={(row) => row.onboardingId} empty={<EmptyState art="people" title={t('operator.sponsors.none')} />}
             rowProps={(row) => ({ 'data-testid': 'sponsor-row', 'data-id': row.userId })} />
         )}
       {acting && <BanDialog sponsor={acting.sponsor} lift={acting.lift} onClose={() => setActing(null)} />}

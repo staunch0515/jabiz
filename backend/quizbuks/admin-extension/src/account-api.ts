@@ -23,14 +23,6 @@ export const DEFAULT_PLAN = '1'
 /** A withdrawal's states (`urn:jabiz:dict:quizbuks:operator-withdrawal-status`). */
 export const WITHDRAWAL_STATUSES = ['REQUESTED', 'PAYING', 'PAID', 'REJECTED', 'CANCELLED'] as const
 
-/** A withdrawal's badge: rejected stands out, the closed ones recede. */
-export function withdrawalVariant(status: string): 'default' | 'secondary' | 'destructive' | 'outline' {
-  if (status === 'PAID') return 'default'
-  if (status === 'REJECTED') return 'destructive'
-  if (status === 'CANCELLED') return 'outline'
-  return 'secondary'
-}
-
 /** The kinds of a Japanese bank account (`urn:jabiz:dict:quizbuks:bank-account-type`). */
 export const ACCOUNT_TYPES = ['ORDINARY', 'CURRENT', 'SAVINGS'] as const
 
