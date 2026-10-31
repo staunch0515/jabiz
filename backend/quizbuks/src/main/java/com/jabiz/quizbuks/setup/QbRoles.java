@@ -56,7 +56,9 @@ public final class QbRoles {
         // Q48a: the operators, and the spot checks of the reviews they decided.
         QbPermissions.OPERATORS_READ, QbPermissions.SPOT_CHECK,
         // Q48c: headquarters' own AI prospecting, and every owner's prospects.
-        QbPermissions.PROSPECT_USE, QbPermissions.ADMIN_PROSPECT);
+        QbPermissions.PROSPECT_USE, QbPermissions.ADMIN_PROSPECT,
+        // Q69: the certifications' rounds, grants and revocations, and the official publishers.
+        QbPermissions.CERTIFICATION_MANAGE, QbPermissions.CERTIFICATION_ADMIN);
 
     /**
      * What an operator's member holds (Q48a, D-Q48-4): reviewing sponsors and publications (final, with the platform's
@@ -71,7 +73,9 @@ public final class QbRoles {
         QbPermissions.SPONSOR_AVATAR_READ, "approval.decide", "task.read", QbPermissions.REDEMPTION_VOID,
         QbPermissions.DIGITAL_RESOLVE,
         // Q48c: the operator's own AI prospecting (its own directions, drafts and blocks).
-        QbPermissions.PROSPECT_USE);
+        QbPermissions.PROSPECT_USE,
+        // Q69: the rounds of its official publisher, and grants and revocations, in its own name.
+        QbPermissions.CERTIFICATION_MANAGE);
 
     private static final List<String> FINANCE = List.of(QbPermissions.COUNTRY_READ, QbPermissions.ADMIN_USERS_READ,
         QbPermissions.ADMIN_FINANCE_READ, QbPermissions.ADMIN_PUBLICATION_READ, QbPermissions.PAYOUT_REVIEW,
