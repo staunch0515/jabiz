@@ -15,9 +15,10 @@ for (const id of brandIds()) {
     // Nothing loaded from elsewhere: the application is down when it is shown.
     assert.deepEqual([...html.matchAll(/(?:src|href)="(?!data:)([^"]*)"/g)].map((m) => m[1]), [])
     assert.doesNotMatch(html, /@import|url\((?!data:)/)
-    assert.ok(html.includes(`<span>${brand.name}</span>`))
     for (const language of LANGUAGES) {
       assert.ok(html.includes(`data-l="${language}"`), `${id}: the ${language} panel`)
+      // Each language's panel and wordmark call the brand by its name in that language (Q61).
+      assert.ok(html.includes(`lang="${MESSAGES[language].lang}">${brand.names[language]}</span>`), `${id}: the ${language} name`)
       assert.ok(html.includes(MESSAGES[language].heading.replace('’', '’')), `${id}: the ${language} heading`)
     }
     assert.ok(html.length < 64 * 1024, `${id}: ${html.length} bytes`)

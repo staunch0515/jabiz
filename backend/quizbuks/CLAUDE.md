@@ -31,11 +31,11 @@
 
 ## 4. 应用约定
 
-- **金额**：账本与接口一律 JPY、小数位 0（`jabiz.ledger.currency: JPY`、`scale: 0`；字段 `asMonetary("JPY", 0)`）。三个应用前端把金额显示为 "Kudos"（`1,234 Kudos`，一处格式化函数）；
-  平台通用后台对管理员仍显示 JPY。不写"Kudos"以外的对外币种名。
+- **金额**：账本与接口一律 JPY、小数位 0（`jabiz.ledger.currency: JPY`、`scale: 0`；字段 `asMonetary("JPY", 0)`）。三个应用前端把金额显示为点数（`1,234 Kudos`，中文"学分"、日文"クドス"，Q61，一处格式化函数）；
+  平台通用后台对管理员仍显示 JPY。不写点数以外的对外币种名。站内信的金额经 `MessageTexts.kudos`（消息 `qb.kudos.unit`），邮件的金额参数只是数字（`MailValues.amount`）、单位写在各语言的模板中。
 - **会计年度**为日历年（`jabiz.fiscal-year-end: 12`）。
 - **语言**：消息资源 `messages_{en,zh,ja}.properties` 三语齐全（`jabizApp { languages("en", "zh", "ja") }`，启动检查）；实体与字段 `entity.<实体>[.<字段>]`、流程 `process.<名>`、参数 `param.<键>`。
-  产品显示名只写在 `app.name`。
+  产品显示名只写在 `app.name`（按语言：品牌档案的 `names`，Q61）。
 - **初始数据只经 `QB_SETUP`**：角色、账本科目、国家、业务参数由它建立；它可重复执行，只补**从未存在过**的（`QbSetupRecord` 记下它建过或见过的每一项），不改已有的，也不加回管理员删除的角色、收回的权限。新阶段的新权限、科目、参数加到
   `QbRoles` / `QbLedger` / `QbParams`，部署后再执行一次 `QB_SETUP`。从代码中去掉的授权不会被收回：由管理员在已有安装中收回一次。
 - **受控参数**（平台决策 D40）：金额与免审核开关列在 `QbParams.CONTROLLED`（`ControlledParams` Bean），只经受控变更修改；`QB_SETUP` 提出它们的首个值，由另一位管理员发布。
@@ -263,7 +263,7 @@
 - **两个 SPA，各是独立的 pnpm 工程**（自己的 `package.json` 与 `pnpm-lock.yaml`，经 `link:../../frontend/packages/{client,ui}` 用平台的包；不用 pnpm 工作区）：
   `app`（答题 App，`/`，入口 `app`，PWA）与 `sponsor`（商家后台，`/sponsor/`，入口 `sponsor`）；`build.gradle.kts` 的 `spa(...)` 构建它们。`application.yml` 写出完整的 `jabiz.web.spa`（Q19：App 自己的内容安全策略多 `frame-src` 两个视频播放器），三个前端的路径、入口与 PWA 须与 `build.gradle.kts` 一致（启动检查 `WEB` 告警）。
   共享依赖的版本必须与平台前端相同（`pnpm app:check`，Gradle 中 `spaCheckRoot` / `spaCheckSponsor`，在 `check` 中）。指南：平台 `docs/guide/app-spa.md`。
-- **品牌档案**（`docs/quizbuks/plans/Q54-brand-profile.md`）：名称、标志、图标、配色只在品牌档案 `quizbuks-web/brands/<品牌>/` 中（构建时以 `QB_BRAND` 选择，缺省 `quizbuks`）；页面与消息以 `BRAND.name`（SPA 的 `src/qb/brand.ts`、Shopify 内嵌页的 `src/brand.ts`、静态站的 `src/brand.mjs`）称呼产品，不写死名称（`brand-profile.test.ts` 与 `brands/brand.test.mjs` 检查），静态站的品牌色在档案的 `site.css`；后端消息以记号 `@QB_BRAND_NAME@` 称呼产品（`processResources` 替换），客服邮箱与站点地址的缺省取 `setup.Brand`；管理后台扩展以 `BRAND_NAME`（`src/brand.ts`，档案经 `brands/admin.mjs` 生成的 `brands.generated.ts`，改档案后重新生成）；新品牌复制 `brands/sample`（Q54 计划 §7）。
+- **品牌档案**（`docs/quizbuks/plans/Q54-brand-profile.md`）：名称、标志、图标、配色只在品牌档案 `quizbuks-web/brands/<品牌>/` 中（构建时以 `QB_BRAND` 选择，缺省 `quizbuks`）；页面与消息以该语言的名字 `BRAND.names.<语言>`（Q61，`docs/quizbuks/plans/Q61-local-names.md`；SPA 的 `src/qb/brand.ts`、Shopify 内嵌页的 `src/brand.ts`、静态站的 `src/brand.mjs`）称呼产品，`BRAND.name`（QuizBuks）只用于只能有一个名字的地方（PWA 清单与安装名、发件人、版权行），不写死名称（`brand-profile.test.ts` 与 `brands/brand.test.mjs` 检查，含中文、日文名），静态站的品牌色在档案的 `site.css`；后端消息以记号 `@QB_BRAND_NAME@` 称呼产品（`processResources` 按文件的语言替换），客服邮箱与站点地址的缺省取 `setup.Brand`；管理后台扩展以 `BRAND_NAMES.<语言>`（`src/brand.ts`，档案经 `brands/admin.mjs` 生成的 `brands.generated.ts`，改档案后重新生成）；新品牌复制 `brands/sample`（Q54 计划 §7）。
 - **品牌与插画**（`docs/quizbuks/plans/Q32-visual-refresh.md`）：颜色只在品牌档案的 `brand.css` 中以覆盖 token 表达（`--primary` 等与品牌 token `--qb-*`，亮暗两套，对比度按平台 12 §11，`brand.test.ts` 检查每一份档案），页面只用 token 与 `qb-*` 颜色类，不写死色值；
   插画是共用的 `src/qb/Illustrations.tsx` 的内联 SVG（`aria-hidden`，颜色取 token），不引入外部图片或照片；没有封面的发布用 `CoverPlaceholder`。欢迎轮播（`pages/IntroPage.tsx`）只在未登录首次打开 `/` 时显示，`localStorage` 记住。
 - **共用代码只在 `src/qb/`**，两个 SPA 中各一份、**完全相同**（CI `diff -r`）：改一处即复制到另一处。流程、模板、数据视图、字典与文件策略的名字只写在 `qb/ids.ts`；
@@ -301,7 +301,7 @@
 - **AI 出题页**（Q8a，`sponsor/src/ai/`，名字在 `ids.ts`、手写类型与调用在 `api.ts`）：编辑器题目页上方的面板与对话框、候选校对、仪表盘的用量卡（`AiUsageMetric`，在 Q9e2 的卡片位）；Q8b 的封面面板（`AiCoverPanel`，模版页基本信息之下，作业模板按 `kind` 读）选定后经 `editing.edited` 记下新的 revision，`HeadingForm` 随读到的 `cover` 更新（其他未保存的改动保留）。候选只以纯文本显示（输入框与文本框，不经 `MarkdownView`）；进行中每 5 秒查询、至多 5 分钟（按服务端时钟），离开即停；对话框只在合计不超过上限时可提交，判断仍在服务端。
 - **认证与账户只用平台的积木**（`@jabiz/ui` 的 `SignInForm`、`SignUpForm`、`MailLinkPage`、`OidcCallback`、`StepUpProvider`、`ChangePasswordForm`、`MfaSettings`、`SessionList`、
   `LinkedIdentities`、横幅），QuizBuks 不写认证代码。邮件链接页在各自的 `auth/verify-email|join|password-reset`。路由是 `qb/router.tsx` 的小路由。
-- **金额只经 `qb/kudos.ts` 的 `formatKudos`**（`1,234 Kudos`），不写 JPY 或其他币种名。服务端的 `QB_*` 文案已按请求的语言翻译，页面直接显示（`qb/problems.ts`）。
+- **金额只经 `qb/kudos.ts` 的 `formatKudos`**（`1,234 Kudos` / `1,234 学分` / `1,234 クドス`，随界面语言；单位单独出现时用 `kudosName()`），不写 JPY 或其他币种名。服务端的 `QB_*` 文案已按请求的语言翻译，页面直接显示（`qb/problems.ts`）。
 - **文案**：SPA 自己的在 `src/messages.ts`（命名空间 `app` / `sponsor`），共用的在 `qb/messages.ts`（`qb`），三语齐全，测试检查键一致且非空。
 - **界面**只用 `@jabiz/ui` 的组件与主题 token（不写颜色值）；亮、暗两种外观都过 axe（e2e `a11y.spec.ts`）。检查只用平台导出的辅助函数（Vitest `@jabiz/ui/testing` 的 `expectAccessible()`，e2e `@jabiz/ui/testing/playwright`，经 `e2e/tests/support.ts`），不另写；
   后台扩展的测试用 `@jabiz/admin/testing` 的 `expectAccessible()`（平台 16w-1；只在测试中，扩展的 lint 拒绝页面中引用它与 `@jabiz/ui*`）。App 按 ≤ 430 px 设计，也检查 1280 px。

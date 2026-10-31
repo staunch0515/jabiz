@@ -16,7 +16,7 @@ steps:
     input: {}
     expectOutput:
       rulesProposed: [qb.publication.review, qb.sponsor.review, qb.transfer.review, qb.topup-bank.review,
-        qb.topup-manual.review, qb.operator-settlement.review, qb.operator-plan.review,
+        qb.topup-manual.review, qb.operator-settlement.review, qb.sponsor-page.review, qb.operator-plan.review,
         qb.operator-withdrawal.review, qb.sod.control-changes, qb.sod.security-administration]
     save: { p1: "$.proposals[0]", p2: "$.proposals[1]", p3: "$.proposals[2]", p4: "$.proposals[3]",
       p5: "$.proposals[4]", p6: "$.proposals[5]", p7: "$.proposals[6]", p8: "$.proposals[7]", p9: "$.proposals[8]",
@@ -33,7 +33,7 @@ steps:
       p48: "$.proposals[47]", p49: "$.proposals[48]",
       p50: "$.proposals[49]", p51: "$.proposals[50]", p52: "$.proposals[51]", p53: "$.proposals[52]", p54: "$.proposals[53]", p55: "$.proposals[54]", p56: "$.proposals[55]", p57: "$.proposals[56]", p58: "$.proposals[57]",
       p59: "$.proposals[58]", p60: "$.proposals[59]", p61: "$.proposals[60]", p62: "$.proposals[61]", p63: "$.proposals[62]", p64: "$.proposals[63]", p65: "$.proposals[64]",
-      p66: "$.proposals[65]", p67: "$.proposals[66]", p68: "$.proposals[67]", p69: "$.proposals[68]", p70: "$.proposals[69]", p71: "$.proposals[70]" }
+      p66: "$.proposals[65]", p67: "$.proposals[66]", p68: "$.proposals[67]", p69: "$.proposals[68]", p70: "$.proposals[69]", p71: "$.proposals[70]", p72: "$.proposals[71]" }
   - note: A second administrator publishes the parameters and the review rule.
     process: CONTROL_CHANGE_PUBLISH@latest
     actor: { id: publisher, permissions: [control.publish] }
@@ -248,6 +248,9 @@ steps:
   - process: CONTROL_CHANGE_PUBLISH@latest
     actor: { id: publisher, permissions: [control.publish] }
     input: { changeId: "${p71}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p72}" }
 
   - note: Sponsor A is onboarded (Q2); a content administrator approves.
     actor: { id: sponsor-a, permissions: [qb.sponsor.me] }

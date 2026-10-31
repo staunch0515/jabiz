@@ -3,7 +3,7 @@ import { Plus, X } from 'lucide-react'
 import { useId } from 'react'
 import { useTranslation } from 'react-i18next'
 import { SPONSOR } from '../messages'
-import { KUDOS } from '../qb/kudos'
+import { kudosName } from '../qb/kudos'
 import { nextTier, PUBLISHING_LIMITS, type TierDraft } from './api'
 
 /**
@@ -79,7 +79,7 @@ export function TiersEditor({ tiers, onChange, fullScore, problemOf, disabled }:
                   <Label htmlFor={reward.fieldId}>
                     {t('publishing.tiers.reward')}<span className="sr-only">, {t('publishing.tiers.tier', { number })}</span>
                   </Label>
-                  <MoneyInput id={reward.fieldId} value={tier.reward} scale={0} allowNegative={false} unit={KUDOS}
+                  <MoneyInput id={reward.fieldId} value={tier.reward} scale={0} allowNegative={false} unit={kudosName()}
                     disabled={disabled} autoComplete="off" data-testid="tier-reward" {...invalid(reward)}
                     onChange={(value) => set(i, 'reward', value)} />
                   {reward.problem && <p id={reward.errorId} className="text-destructive text-sm">{reward.problem}</p>}

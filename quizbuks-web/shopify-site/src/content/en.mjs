@@ -2,20 +2,20 @@
 // the code keeps (docs/quizbuks/shopify/S4-launch.md W-2); its legal review is the owner's.
 import { BRAND } from '../brand.mjs'
 export const en = {
-  siteName: `${BRAND.name} for Shopify`,
+  siteName: `${BRAND.names.en} for Shopify`,
   description: 'Turn product videos into a short quiz: shoppers who pass get a one-time discount code on your product page.',
   skip: 'Skip to the content',
   navLabel: 'Pages',
   languageLabel: 'Language',
   nav: { home: 'Home', privacy: 'Privacy', support: 'Support' },
-  footer: `${BRAND.name} for Shopify · Questions: {email}`,
+  footer: `${BRAND.names.en} for Shopify · Questions: {email}`,
   home: {
-    title: `${BRAND.name} for Shopify`,
+    title: `${BRAND.names.en} for Shopify`,
     lead: 'Turn a product video into a short quiz. Shoppers who pass get a one-time discount code, right on your product page.',
     howTitle: 'How it works',
     steps: [
-      { title: 'Create a campaign', text: `In Shopify admin, open ${BRAND.name} and add a video, a few questions and the discount.` },
-      { title: 'Add the block', text: `In the theme editor, add the ${BRAND.name} block to your product page template. No code to change.` },
+      { title: 'Create a campaign', text: `In Shopify admin, open ${BRAND.names.en} and add a video, a few questions and the discount.` },
+      { title: 'Add the block', text: `In the theme editor, add the ${BRAND.names.en} block to your product page template. No code to change.` },
       { title: 'Shoppers answer', text: 'A shopper who passes gets a unique code for the order, valid for at least seven days.' },
     ],
     sections: [
@@ -30,7 +30,7 @@ export const en = {
       },
       {
         title: 'Plans',
-        paragraphs: [`The free plan includes a number of quiz attempts a month; paid plans include more. See and change the plan in Shopify admin: Apps → ${BRAND.name} → Plan and use.`],
+        paragraphs: [`The free plan includes a number of quiz attempts a month; paid plans include more. See and change the plan in Shopify admin: Apps → ${BRAND.names.en} → Plan and use.`],
       },
     ],
   },
@@ -38,7 +38,7 @@ export const en = {
     title: 'Privacy policy',
     updated: 'Last updated: 27 October 2026',
     intro: [
-      `This policy explains what ${BRAND.name} for Shopify ("the app", "we") collects when a store installs it and when shoppers answer its quizzes, what we use it for and how long we keep it. Questions: {email}.`,
+      `This policy explains what ${BRAND.names.en} for Shopify ("the app", "we") collects when a store installs it and when shoppers answer its quizzes, what we use it for and how long we keep it. Questions: {email}.`,
     ],
     sections: [
       {
@@ -103,20 +103,20 @@ export const en = {
     sections: [
       {
         title: 'Adding the quiz to your product page',
-        paragraphs: [`In Shopify admin, open Online Store → Themes → Customize, choose a product page template and add the ${BRAND.name} block (Apps). Publish a campaign in ${BRAND.name} first: the block shows nothing without one.`],
+        paragraphs: [`In Shopify admin, open Online Store → Themes → Customize, choose a product page template and add the ${BRAND.names.en} block (Apps). Publish a campaign in ${BRAND.names.en} first: the block shows nothing without one.`],
       },
       {
         title: 'The quiz does not show on my store',
         items: [
-          `There is no live campaign: publish or resume one in ${BRAND.name} → Quiz campaigns.`,
-          `The store is not connected: ${BRAND.name} → Overview → Connect.`,
+          `There is no live campaign: publish or resume one in ${BRAND.names.en} → Quiz campaigns.`,
+          `The store is not connected: ${BRAND.names.en} → Overview → Connect.`,
           'Today\'s discount codes are all handed out: the quiz comes back the next day (UTC).',
           'The plan\'s quiz attempts for this period are used up: it comes back with the next period, or now with a higher plan.',
         ],
       },
       {
         title: 'Changing the plan',
-        paragraphs: [`${BRAND.name} → Plan and use → Choose a plan opens Shopify's page of the plans. Shopify bills the plan with your store's other charges.`],
+        paragraphs: [`${BRAND.names.en} → Plan and use → Choose a plan opens Shopify's page of the plans. Shopify bills the plan with your store's other charges.`],
       },
       {
         title: 'Uninstalling',

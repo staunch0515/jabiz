@@ -45,6 +45,7 @@ class MessagesTest {
         assertThat(en.stringPropertyNames()).containsAll(ContentCodes.ALL).containsAll(PublishingCodes.ALL)
             .contains("approval.subject.qb.publication", "qb.publication.copy-name")
             .containsAll(AccountCodes.ALL).containsAll(ReviewCodes.ALL)
+            .containsAll(com.jabiz.quizbuks.page.SponsorPageCodes.ALL)
             .contains("approval.subject.qb.sponsor", "task.qb.sponsor.resubmit", "process.QB_PROFILE_SAVE",
                 "process.QB_SPONSOR_APPLY", "process.QB_SPONSOR_PROFILE_SAVE", "process.QB_SPONSOR_APPROVAL_RESULT",
                 "process.QB_USER_BAN", "process.QB_USER_UNBAN", "mail.qb.welcome.subject", "mail.qb.welcome.body",

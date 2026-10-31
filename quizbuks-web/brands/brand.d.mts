@@ -2,7 +2,10 @@ export type Language = 'en' | 'zh' | 'ja'
 
 /** What a page may show of the brand (`__QB_BRAND__` in the SPAs). */
 export interface PublicBrand {
+  /** The one name for every language: the installed app's, the mail sender's, the tab's before a language is known. */
   name: string
+  /** The name a text in each language calls the product (Q61). */
+  names: Record<Language, string>
   shortName: string
   description: Record<Language, string>
   supportEmail: string

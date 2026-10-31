@@ -1,5 +1,6 @@
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
+import { loadBrand } from '../../brands/brand.mjs'
 import { maintenancePage } from '../../maintenance/build.mjs'
 import { expect, expectAccessible, test } from './support'
 
@@ -8,6 +9,9 @@ import { expect, expectAccessible, test } from './support'
  * every address) by a server of the test's own: it does not need the application. One language, by the time zone or
  * the browser's language; it asks for the opened address again and loads it once the server answers it.
  */
+
+/** The brand's names in each language, as the page shows them (Q61). */
+const NAMES = loadBrand().names
 
 let server: Server
 let base = ''
@@ -43,7 +47,8 @@ test.beforeEach(async ({ page }) => {
 
 /** The panels shown (one language). */
 async function shown(page: import('@playwright/test').Page) {
-  return page.locator('[data-l]').evaluateAll((panels) =>
+  // The panels (the header's name follows the same language, Q61).
+  return page.locator('main [data-l]').evaluateAll((panels) =>
     panels.filter((panel) => getComputedStyle(panel).display !== 'none').map((panel) => panel.getAttribute('data-l')))
 }
 
@@ -53,8 +58,9 @@ test.describe('in Japan', () => {
   test('shows Japanese only, by the time zone, and passes axe', async ({ page }) => {
     await page.goto(`${base}/taker/`)
     expect(await shown(page)).toEqual(['ja'])
+    await expect(page.locator('header [data-l]:visible')).toHaveText(NAMES.ja)
     await expect(page.locator('html')).toHaveAttribute('lang', 'ja')
-    await expect(page).toHaveTitle('QuizBuks — メンテナンス中')
+    await expect(page).toHaveTitle(`${NAMES.ja} — メンテナンス中`)
     await expect(page.getByRole('button', { name: '日本語' })).toHaveAttribute('aria-pressed', 'true')
     await expectAccessible(page, 'maintenance page')
   })

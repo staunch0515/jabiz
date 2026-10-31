@@ -48,6 +48,7 @@ class SetupIT extends QbItSupport {
         assertThat(first.get("rulesProposed")).isEqualTo(List.of(PublicationApprovals.RULE, SponsorApprovals.RULE,
             com.jabiz.quizbuks.wallet.QbPayouts.REVIEW_RULE, com.jabiz.quizbuks.wallet.BankTopUps.REVIEW_RULE,
             com.jabiz.quizbuks.wallet.ManualCredits.REVIEW_RULE, com.jabiz.quizbuks.operator.OperatorSettlements.REVIEW_RULE,
+            com.jabiz.quizbuks.page.SponsorPageApprovals.RULE,
             com.jabiz.quizbuks.setup.QbApprovalRules.OPERATOR_PLAN_REVIEW.code(),
             com.jabiz.quizbuks.setup.QbApprovalRules.OPERATOR_WITHDRAWAL_REVIEW.code(),
             QbSodRules.CONTROL.code(), QbSodRules.SECURITY.code()));
@@ -110,6 +111,13 @@ class SetupIT extends QbItSupport {
                     .satisfies(r -> assertThat(r.get("condition").toString()).contains("autoApprove"))
                     .satisfies(r -> assertThat(r.get("levels").toString())
                         .contains(QbPermissions.REVIEW_PUBLICATION)),
+                // Q60a: sponsors' pages, reviewed by those who review the onboarding.
+                rule -> assertThat(rule).containsEntry("rule_code", com.jabiz.quizbuks.page.SponsorPageApprovals.RULE)
+                    .containsEntry("subject", com.jabiz.quizbuks.page.SponsorPageApprovals.SUBJECT)
+                    .containsEntry("enabled", true)
+                    .satisfies(r -> assertThat(r.get("condition").toString()).contains("autoApprove"))
+                    .satisfies(r -> assertThat(r.get("levels").toString())
+                        .contains(QbPermissions.REVIEW_SPONSOR)),
                 rule -> assertThat(rule).containsEntry("rule_code", SponsorApprovals.RULE)
                     .containsEntry("subject", SponsorApprovals.SUBJECT).containsEntry("enabled", true)
                     .satisfies(r -> assertThat(r.get("condition").toString()).contains("autoApprove"))

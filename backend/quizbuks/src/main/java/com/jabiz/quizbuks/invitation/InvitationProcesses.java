@@ -385,7 +385,7 @@ public final class InvitationProcesses {
         });
         params.put("publicationName", ctx -> Invitations.first(ctx, CARD).get("name"));
         params.put("quizTitle", ctx -> Invitations.first(ctx, CARD).get("quizTitle"));
-        params.put("maxReward", ctx -> MailValues.kudos(Invitations.first(ctx, CARD).get("maxReward")));
+        params.put("maxReward", ctx -> MailValues.amount(Invitations.first(ctx, CARD).get("maxReward")));
         params.put("endAt", ctx -> values.time(Invitations.first(ctx, CARD).get("endAt")));
         params.put("entry", ctx -> ENTRY);
         params.put("to", ctx -> returnPath(appPath, Invitations.first(ctx, LIST).get("publicationId")));

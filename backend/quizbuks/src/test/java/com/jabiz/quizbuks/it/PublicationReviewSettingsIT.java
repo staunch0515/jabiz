@@ -39,7 +39,11 @@ class PublicationReviewSettingsIT extends PublicationItSupport {
         assertThat(installed.get("rulesProposed")).isEqualTo(List.of(PublicationApprovals.RULE,
             SponsorApprovals.RULE, com.jabiz.quizbuks.wallet.QbPayouts.REVIEW_RULE,
             com.jabiz.quizbuks.wallet.BankTopUps.REVIEW_RULE, com.jabiz.quizbuks.wallet.ManualCredits.REVIEW_RULE,
-            com.jabiz.quizbuks.operator.OperatorSettlements.REVIEW_RULE, com.jabiz.quizbuks.setup.QbSodRules.CONTROL.code(), com.jabiz.quizbuks.setup.QbSodRules.SECURITY.code()));
+            com.jabiz.quizbuks.operator.OperatorSettlements.REVIEW_RULE,
+            com.jabiz.quizbuks.page.SponsorPageApprovals.RULE,
+            com.jabiz.quizbuks.setup.QbApprovalRules.OPERATOR_PLAN_REVIEW.code(),
+            com.jabiz.quizbuks.setup.QbApprovalRules.OPERATOR_WITHDRAWAL_REVIEW.code(),
+            com.jabiz.quizbuks.setup.QbSodRules.CONTROL.code(), com.jabiz.quizbuks.setup.QbSodRules.SECURITY.code()));
         String id = draft(sponsorA(), version(sponsorA(), "Settings"), "Configured?");
         // The separation of duties (Q10b) comes last and is left unpublished: the rules are counted before it.
         int count = proposals.size() - com.jabiz.quizbuks.setup.QbSodRules.ALL.size();
