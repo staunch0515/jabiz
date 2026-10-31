@@ -65,3 +65,18 @@ export function formatShopPrice(price: string, currency: string, locale?: string
     return `${amount.toFixed(digits)} ${currency}`
   }
 }
+
+/** One sponsor's page views and product clicks in a period (Q60c-2; approximate, platform decision D65). */
+export interface SponsorVisits {
+  views: number
+  clicks: number
+}
+
+/** The sponsor's visits from `from` to `to` (dates, `YYYY-MM-DD`); an operator's session reads its sponsors' only. */
+export async function readSponsorVisits(userId: string, from: string, to: string): Promise<SponsorVisits> {
+  const answer = await runQuery<Row>(TEMPLATE.sponsorStats, { params: { userId, from, to }, limit: 1 })
+  const row = answer.items[0] ?? {}
+  const count = (value: unknown) => (Number.isFinite(Number(value)) ? Number(value) : 0)
+  return { views: count(row.views), clicks: count(row.clicks) }
+}
+

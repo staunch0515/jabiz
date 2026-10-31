@@ -32,6 +32,7 @@ import {
 } from './ids'
 import { readSponsorPage } from './page-api'
 import { SponsorProductsTable } from './SponsorProductsPage'
+import { SponsorVisits } from './SponsorVisits'
 
 const IMAGE = { image: true, variants: SPONSOR_PAGE_IMAGE_VARIANTS }
 const AVATAR = { image: true, variants: AVATAR_VARIANTS }
@@ -156,6 +157,10 @@ export default function SponsorPageReviewPage() {
       {/* Q60b-3: the sponsor's products, shown with the page and taken down here too. */}
       <Section title={t('sponsorProducts.section')} testId="sponsor-page-products">
         <SponsorProductsTable userId={userId} />
+      </Section>
+      {/* Q60c-2: what the page and the products drew, approximately. */}
+      <Section title={t('sponsorProducts.visits')} testId="sponsor-page-visits">
+        <SponsorVisits userId={userId} />
       </Section>
       {takedown && p.status === SPONSOR_PAGE_PUBLISHED && (
         <Section title={t('sponsorPages.takedownTitle')} testId="sponsor-page-takedown">

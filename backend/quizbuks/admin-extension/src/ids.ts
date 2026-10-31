@@ -34,6 +34,8 @@ export const TEMPLATE = {
   sponsorPages: 'qb.admin.sponsor-pages',
   /** Sponsors' products (Q60b-3), the list and one sponsor's (an operator's own sponsors' only). */
   sponsorProducts: 'qb.admin.sponsor-products',
+  /** Q60c-2: one sponsor's page views and product clicks in a period. */
+  sponsorStats: 'qb.admin.sponsor-stats',
   /** The reward parameters in force (Q28): the default methods and the highest reward per attempt. */
   rewardDefaults: 'qb.admin.reward-defaults',
   /** The review queue: no money (the content administrators read it). */

@@ -24,6 +24,7 @@ import { CircleHelp, FileQuestion, LayoutDashboard, Megaphone, MessagesSquare, R
   HandCoins,
   Gift,
   ShoppingBag,
+  ChartColumn,
   Mail,
   Ticket,
   UsersRound,
@@ -55,6 +56,7 @@ import TrialPage, { trialKeyOf } from './trial/TrialPage'
 import { OnboardingPage, useMySponsor } from './pages/OnboardingPage'
 import { SPONSOR_PAGE_PATH } from './page/SponsorPageEditor'
 import { PRODUCTS_PATH, ProductsPage } from './products/ProductsPage'
+import { STATS_PATH, StatsPage } from './stats/StatsPage'
 import { MESSAGES_PATH } from './notices/api'
 import { MessagesPage } from './notices/MessagesPage'
 import { ConsentGate, LegalLink, newQbQueryClient } from './qb/ConsentGate'
@@ -167,6 +169,7 @@ function SignedIn({ path }: { path: string }) {
   // Q65b: the shop page is a section of the sponsor profile; its old address ("My page") leads there.
   else if (path === SPONSOR_PAGE_PATH) page = <Redirect to={ONBOARDING} />
   else if (path === PRODUCTS_PATH) page = <ProductsPage />
+  else if (path === STATS_PATH) page = <StatsPage />
   else if (path === WALLET_PATH && kudos) page = <WalletPage />
   else if (topUpId && kudos) page = <TopUpPage key={topUpId} topUpId={topUpId} />
   else if (bankTopUpId && kudos) page = <BankTopUpPage key={bankTopUpId} topUpId={bankTopUpId} />
@@ -198,6 +201,7 @@ function SignedIn({ path }: { path: string }) {
     { key: 'settings', label: t('nav.groups.settings'), items: [
       { key: 'onboarding', label: t('nav.onboarding'), path: ONBOARDING, icon: Store },
       { key: 'products', label: t('products.nav'), path: PRODUCTS_PATH, icon: ShoppingBag },
+      { key: 'stats', label: t('stats.nav'), path: STATS_PATH, icon: ChartColumn },
       { key: 'mailServer', label: t('publishing.mailServer.nav'), path: MAIL_SERVER_PATH, icon: Mail },
       { key: 'messages', label: t('notices.nav'), path: MESSAGES_PATH, icon: MessagesSquare },
       { key: 'account', label: t('nav.account'), path: ACCOUNT_PATH, icon: UserRound },

@@ -56,6 +56,9 @@ beforeEach(() => {
   server.runQuery.mockReset().mockImplementation(async (id: string, options: {
     count?: boolean; params?: Row; filters?: { field: string; value: unknown }[]
   } = {}) => {
+    if (id === TEMPLATE.sponsorStats) {
+      return { items: [{ views: '1200', clicks: '34' }], offset: 0, limit: 1 }
+    }
     let items = id === TEMPLATE.sponsorProducts ? server.products
       : id === TEMPLATE.sponsorPages ? [{ userId: ANN, handle: 'acme', language: 'en', headline: 'Bread',
         status: 'PUBLISHED', company: 'Acme', reviewRequired: false }] : []
@@ -142,5 +145,14 @@ describe("sponsors' products (Q60b-3)", () => {
     expect(within(section).queryByTestId('sponsor-product-sponsor')).toBeNull()
     expect(server.runQuery).toHaveBeenCalledWith(TEMPLATE.sponsorProducts, expect.objectContaining({
       params: { userId: ANN } }))
+  })
+
+  it("show the sponsor's visits of the last 30 days with their page (Q60c-2)", async () => {
+    renderAt(`/qb/sponsor-pages/${ANN}`, '/qb/sponsor-pages/:userId', <SponsorPageReviewPage />)
+    const visits = await screen.findByTestId('sponsor-page-visits')
+    expect(await within(visits).findByText('1,200')).toBeInTheDocument()
+    expect(within(visits).getByTestId('sponsor-visits-clicks')).toHaveTextContent('34')
+    expect(server.runQuery).toHaveBeenCalledWith(TEMPLATE.sponsorStats, expect.objectContaining({
+      params: expect.objectContaining({ userId: ANN }) }))
   })
 })
