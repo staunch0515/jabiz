@@ -34,7 +34,8 @@ import java.util.Set;
 /**
  * Gate of {@code /api/public/**} (docs/design/15-public-access.md sections 5 and 6), before any security or
  * controller code: with {@code jabiz.public.enabled=false} every request is answered 404; methods other than
- * {@code GET} and {@code HEAD} are answered 405 and never reach a write path; each client address may make
+ * {@code GET} and {@code HEAD} are answered 405 and never reach a write path, except {@code POST} of a public counter
+ * ({@code /api/public/counters/{counter}/{key}}, section 10; decision D65); each client address may make
  * {@code jabiz.public.rate-limit.per-minute} requests (429 {@code RATE_LIMITED} with {@code Retry-After}).
  *
  * <p>The client address comes from {@link ClientAddresses}: forwarded headers count only from trusted proxies
@@ -49,6 +50,10 @@ public class PublicAccessWebFilter implements WebFilter {
      * parameters), so that no other spelling of it passes the switch and the limit.
      */
     private static final PathPattern PUBLIC = PathPatternParser.defaultInstance.parse("/api/public/**");
+
+    /** The one path anonymous visitors may post to: a public counter (decision D65). */
+    private static final PathPattern COUNTER = PathPatternParser.defaultInstance.parse(
+        "/api/public/counters/{counter}/{key}");
 
     private static final Set<HttpMethod> READ = Set.of(HttpMethod.GET, HttpMethod.HEAD);
 
@@ -83,7 +88,7 @@ public class PublicAccessWebFilter implements WebFilter {
         if (!properties.on()) {
             return problem(exchange, HttpStatus.NOT_FOUND, "Not found", null);
         }
-        if (!READ.contains(exchange.getRequest().getMethod())) {
+        if (!READ.contains(exchange.getRequest().getMethod()) && !counting(exchange)) {
             exchange.getResponse().getHeaders().setAllow(READ);
             return problem(exchange, HttpStatus.METHOD_NOT_ALLOWED, "Public resources are read-only", null);
         }
@@ -99,6 +104,11 @@ public class PublicAccessWebFilter implements WebFilter {
                 limited.violations().getFirst());
         }
         return chain.filter(exchange);
+    }
+
+    private static boolean counting(ServerWebExchange exchange) {
+        return HttpMethod.POST.equals(exchange.getRequest().getMethod())
+            && COUNTER.matches(exchange.getRequest().getPath().pathWithinApplication());
     }
 
     private Mono<Void> problem(ServerWebExchange exchange, HttpStatus status, String detail, Violation violation) {

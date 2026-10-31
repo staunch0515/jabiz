@@ -4857,3 +4857,17 @@ Playwright 端到端（需维护连接与数据库角色，以 Vitest 与 `Accou
 | 17y-7 | 经对照约束、只由流程写入（`processOnlyWrites`）的数据视图：对照只约束读取，有范围的会话的流程照常写入（流程经同一范围读到对象并以 `RequireScope` 核对）；QuizBuks 的发布、奖励等缺省数据视图因此可以按运营商约束读取，运营商的下架、作废等流程照常写入。写入路径与时态写入器核对所改版本时都不以对照拒绝。测试：`EntryScopeIT`（测试夹具 `ItEntryScopeFixtures`：普通表与只追加表各一个，插入与修改、`RequireScope` 拒绝别的仓库的、读取受限） |
 
 **17y 状态**：✅ 17y-1 至 17y-6 完成（#359）；17y-7 📝 待评审。
+
+### 17z 公开计数器：匿名访客的浏览与点击（需求 2026-10-31，决策 D65）
+
+**缘由**：QuizBuks 的商户主页与分享页是公开页面，访客大多没有登录；需求方要按日统计主页浏览与商品链接点击（Q60c），并选择连匿名访客一起计（2026-10-31）。
+D17 下匿名不能写任何东西（15 §10）。
+
+| # | 内容 |
+|---|---|
+| 17z-1 | core：`PublicCounter`（名字、`keys(公开视图, 字段)`、`zone`）；启动检查 `PublicCounterCheck`（名字、重复、视图公开、字段在白名单且类型合适） |
+| 17z-2 | runtime：`POST /api/public/counters/{计数器}/{键}`（`PublicAccessWebFilter` 只为它放行 `POST`）；键按公开视图判定并记住；每访客每天一次（地址与 `User-Agent` 的摘要，只在内存中）；内存累加、定时与停止时写入 `sys_public_counter_day`（迁移 V52）；平台实体与数据视图 `PublicCounterDay`（`public-counter.read`）；观测 `jabiz.public.counter` |
+| 17z-3 | 前端：`@jabiz/client` 的 `countPublic`（`sendBeacon`，退而 `fetch` + `keepalive`，失败忽略） |
+| 17z-4 | 示范与测试：`app` 的 `commerce.product-view`；`PublicCounterTest`、`PublicCountersTest`、`PublicCounterIT`、`PlatformCheckIT`、`countPublic` 的单元测试；15 §10、决策 D65；`/security-review` |
+
+**17z 状态**：📝 待评审。
