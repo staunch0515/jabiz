@@ -73,7 +73,7 @@
 
 ## 5. Q60b 设计（需求方 2026-10-31 确认：商品不单独审核；关联不进 Quiz 版本，立即生效）
 
-- **商品** `QbSponsorProduct`（普通表 `qb_sponsor_product`，V47）：每个商户最多 50 件；名称（100 字内）、简介（500 字内，纯文本）、图片（策略 `qb.sponsor-page-image`）、
+- **商品** `QbSponsorProduct`（普通表 `qb_sponsor_product`，V48）：每个商户最多 50 件；名称（100 字内）、简介（500 字内，纯文本）、图片（策略 `qb.sponsor-page-image`）、
   价格与币种（商店的标价，不是平台上流动的钱：`numeric` 加币种，如 `QbTopUps` 的 presentment 金额；日元不带小数、其他两位，`QB_PRODUCT_PRICE`）、
   商店链接（https）、排序；状态 `LISTED`（上架）/ `UNLISTED`（未上架）/ `TAKEN_DOWN`（下架）。
   - 不单独审核：主页首次发布时已审核；增改立即生效，只在主页已发布时对外显示（公开模板连接已发布的主页）。
