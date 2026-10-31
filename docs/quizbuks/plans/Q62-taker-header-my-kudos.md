@@ -14,7 +14,7 @@
 ## 2. 我的学分
 
 - 名称：en **My Kudos**，zh **我的学分**，ja **マイクドス**（底部菜单、页面标题、返回链接；App 中提到钱包的文字与答题者的三封邮件同样改为这个名字）。
-  官网（`quizbuks-web/biz`）同样改称这个名字。地址仍是 `/wallet`（邮件与站内信里的链接不变）。商户后台的"钱包"是商户自己的，不改。
+  官网（`quizbuks-web/biz`）的中文、日文同样改称这个名字，英文写 "Kudos to your account"。地址仍是 `/wallet`（邮件与站内信里的链接不变）。商户后台的"钱包"是商户自己的，不改。
 - `/wallet` 是菜单（与账户页 Q56 一样，组件 `pages/Menu.tsx` 共用）：最上面是当前余额（`available`）与累计获得（`totalEarned`），然后是
   - 学分：余额明细（`/wallet/balance`：等待商家、暂时保留、可转出、转出中）、按奖励方式（`/wallet/rewards`，Q58 的 `KudosOverview`；各方式的页面返回这里）、交易明细（`/wallet/history`）；
   - 收款：收款账户（`/wallet/payout`，显示状态）、提现到银行账户（`/wallet/bank`，开启时）。
