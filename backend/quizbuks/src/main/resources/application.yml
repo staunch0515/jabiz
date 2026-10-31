@@ -159,6 +159,10 @@ jabiz:
         self-registration: ${QB_SPONSOR_SELF_REGISTRATION:true}
         registration-roles: QB_SPONSOR
         require-verified-email: false
+        # Q69: sponsors may ask for the deletion of their account in the console or from a mailed link (platform
+        # D62). Off by default: it needs the maintenance connection that purges personal data
+        # (JABIZ_ERASURE_DATASOURCE_URL / _USERNAME / _PASSWORD, a login of the role jabiz_maintenance; deploy/quizbuks/DEPLOY.md).
+        account-deletion: ${QB_SPONSOR_ACCOUNT_DELETION:false}
         app-path: /sponsor/
         session:
           persistence: tab

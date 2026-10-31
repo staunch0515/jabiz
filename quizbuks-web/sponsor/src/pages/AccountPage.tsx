@@ -1,3 +1,6 @@
+import { getAccountDeletion } from '@jabiz/client'
+import { AccountDeletion } from '@jabiz/ui'
+import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { SPONSOR } from '../messages'
 import { AccountSection, AccountSections } from '../qb/AccountSections'
@@ -13,6 +16,22 @@ export const ACCOUNT_PATH = '/account'
  * sessions at the console, the latest sign-ins, the mail settings (Q7a), the interface language and the sound effects (Q57). The name and company are the sponsor
  * profile's (onboarding page). No provider accounts: the console offers no identity provider (Q-6).
  */
+/**
+ * Deleting the account (Q69; platform D62), where the sponsor entry allows it (`QB_SPONSOR_ACCOUNT_DELETION`), or while
+ * a request waits: the platform's block, which lists what the sponsor should know before asking.
+ */
+function DeletionSection() {
+  const { t } = useTranslation(SPONSOR)
+  const status = useQuery({ queryKey: ['qb', 'account-deletion'], queryFn: getAccountDeletion, retry: false })
+  if (!status.data || !(status.data.available || status.data.pending)) return null
+  return (
+    <AccountSection title={t('deletion.title')} testId="account-deletion-section">
+      <p className="text-muted-foreground text-sm">{t('deletion.hint')}</p>
+      <AccountDeletion />
+    </AccountSection>
+  )
+}
+
 export function AccountPage() {
   const { t } = useTranslation(QB)
   const { t: tSponsor } = useTranslation(SPONSOR)
@@ -27,6 +46,7 @@ export function AccountPage() {
       <AccountSection title={t('sound.title')} testId="account-sound">
         <SoundSwitch />
       </AccountSection>
+      <DeletionSection />
     </section>
   )
 }
