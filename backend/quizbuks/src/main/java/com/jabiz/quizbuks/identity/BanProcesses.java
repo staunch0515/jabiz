@@ -41,6 +41,7 @@ import static com.jabiz.quizbuks.identity.AccountEditing.list;
  * still works until it expires, so valuable actions check the ban again. Administrators are not banned (they are
  * disabled through the platform), and nobody bans themselves. Banning a sponsor pauses their running publications in
  * the same transaction ({@code QB_PUBLICATION_BAN_PAUSE}, Q10b): only an administrator resumes them, after the unban.
+ * Their page (Q60a) is taken down in the same transaction too, back only through a new review.
  * The sponsor reads a fixed reason ("account suspended"), not the ban's, which is internal (review L3). The history of
  * {@code QbUserBan} is the record of bans and lifts.
  *
@@ -131,6 +132,9 @@ public final class BanProcesses {
                         new QueryPredicate.Eq("publisherId", AccountEditing.userId(ctx)))))
                     .limit(Integer.MAX_VALUE).build(), PUBLICATIONS));
             pb.compute("Ban", (metadata, ctx) -> ban(ctx, admins));
+            // Q60a: their page leaves the app in the same transaction, under the account's lock (held).
+            com.jabiz.quizbuks.page.SponsorPageProcesses.takeDownOnBan(pb, AccountEditing::userId,
+                ctx -> !ctx.hasViolations() && ctx.contains(OUTPUT), PublicationAdmin.ACCOUNT_SUSPENDED);
             // Lock order: the account's lock (held) before the publications' pairs, in the order of their ids.
             pb.step("Pause the sponsor's publications", CallProcess.forEach(PublicationAdmin.BAN_PAUSE, 1,
                 BanProcesses::pauses, null));

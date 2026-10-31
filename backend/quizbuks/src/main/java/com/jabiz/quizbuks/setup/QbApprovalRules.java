@@ -3,6 +3,7 @@ package com.jabiz.quizbuks.setup;
 import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.quizbuks.operator.OperatorSettlements;
 import com.jabiz.quizbuks.identity.SponsorApprovals;
+import com.jabiz.quizbuks.page.SponsorPageApprovals;
 import com.jabiz.quizbuks.publishing.PublicationApprovals;
 import com.jabiz.quizbuks.wallet.BankTopUps;
 import com.jabiz.quizbuks.wallet.ManualCredits;
@@ -85,8 +86,19 @@ public final class QbApprovalRules {
         List.of(entries("permission", QbPermissions.TOPUP_BANK_APPROVE)), 100,
         "Operators' settlements are paid only after another administrator approves what finance recorded");
 
+    /**
+     * Sponsors' pages are reviewed before their first publication (and after a takedown) by those who review the
+     * onboarding, unless {@code qb.review.sponsor.auto} says they need not be (Q60a; never after a takedown, when
+     * the fact is false whatever the parameter says).
+     */
+    public static final Rule SPONSOR_PAGE_REVIEW = new Rule(SponsorPageApprovals.RULE, SponsorPageApprovals.SUBJECT,
+        entries("fact", "autoApprove", "op", "eq", "value", false),
+        List.of(entries("permission", QbPermissions.REVIEW_SPONSOR)), 100,
+        "Sponsor pages are reviewed unless qb.review.sponsor.auto is on (always after a takedown)");
+
+    // New rules go last: those already installed keep their place in the proposals.
     public static final List<Rule> ALL = List.of(PUBLICATION_REVIEW, SPONSOR_REVIEW, TRANSFER_REVIEW,
-        BANK_TOPUP_REVIEW, MANUAL_CREDIT_REVIEW, OPERATOR_PAYMENT_REVIEW);
+        BANK_TOPUP_REVIEW, MANUAL_CREDIT_REVIEW, OPERATOR_PAYMENT_REVIEW, SPONSOR_PAGE_REVIEW);
 
     private static Map<String, Object> entries(Object... pairs) {
         Map<String, Object> map = new LinkedHashMap<>();
