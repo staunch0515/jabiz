@@ -14,6 +14,7 @@ import { publicationIdOf, publicationPath } from './paths'
 
 const FORM: PublicationForm = {
   name: '  Spring quiz ',
+  cover: null,
   quizId: 'q1',
   versionId: 'v1',
   regions: ['ASIA', 'GLOBAL', 'JP'],
@@ -49,12 +50,17 @@ describe('the publishing paths', () => {
 describe('the wizard\'s form', () => {
   it('sends the whole draft: regions in the server\'s order, blank numbers as none, tiers with their keys', () => {
     expect(inputOf(FORM, 'p1', 4)).toEqual({ input: {
-      publicationId: 'p1', versionId: 'v1', name: 'Spring quiz', regions: ['GLOBAL', 'JP', 'ASIA'],
+      publicationId: 'p1', versionId: 'v1', name: 'Spring quiz', cover: null, regions: ['GLOBAL', 'JP', 'ASIA'],
       startAt: '2026-11-01T00:00:00.000Z', endAt: '2026-11-30T00:00:00.000Z', timeLimitSec: null, passScore: 2,
       budgetCap: 1000, maxWinners: 10, baseRevision: 4, tiers: [
         { tierId: 't1', fromScore: 0, toScore: 1, reward: 0 },
         { tierId: null, fromScore: 2, toScore: 2, reward: 100 },
       ], rewardMethod: 'PLATFORM', redeemDescription: null, audience: 'PUBLIC' } })
+  })
+
+  it('sends the publication\'s own cover with every save, none when removed (Q64)', () => {
+    expect(inputOf({ ...FORM, cover: 'f-own' }, 'p1', 4).input).toMatchObject({ cover: 'f-own' })
+    expect(inputOf(FORM, 'p1', 4).input).toMatchObject({ cover: null })
   })
 
   it('sends a digital prize\'s fields only with that method, the shared content only when typed (Q33)', () => {

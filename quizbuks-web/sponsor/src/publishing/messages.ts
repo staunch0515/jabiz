@@ -108,6 +108,10 @@ export const publishingEn = {
     field: {
       name: 'Name',
       nameHint: 'Takers see this name. Up to {{max}} characters.',
+      cover: 'Cover image',
+      coverHint: "Optional: this publication's own picture, shown on the home card and the start page. When empty, the quiz's cover is used.",
+      uploadCover: 'Upload a cover image',
+      replaceCover: 'Replace the cover image',
       quiz: 'Quiz',
       quizPlaceholder: 'Choose a quiz',
       quizSearch: 'Search your quizzes',
@@ -171,6 +175,7 @@ export const publishingEn = {
       required: 'Required.',
     },
     summary: {
+      coverOfQuiz: "The quiz's cover",
       quiz: 'Quiz version',
       quizValue: '{{title}} ({{label}})',
       fullScore: 'Full score',
@@ -571,6 +576,10 @@ export const publishingZh: typeof publishingEn = {
     field: {
       name: '名称',
       nameHint: '答题人会看到这个名称。最多 {{max}} 个字符。',
+      cover: '封面图片',
+      coverHint: '可选：这个发布自己的图片，显示在首页卡片和开始答题页上。不设置时使用 Quiz 的封面。',
+      uploadCover: '上传封面图片',
+      replaceCover: '更换封面图片',
       quiz: 'Quiz',
       quizPlaceholder: '选择 Quiz',
       quizSearch: '搜索你的 Quiz',
@@ -634,6 +643,7 @@ export const publishingZh: typeof publishingEn = {
       required: '必填。',
     },
     summary: {
+      coverOfQuiz: '使用 Quiz 的封面',
       quiz: 'Quiz 版本',
       quizValue: '{{title}}（{{label}}）',
       days: '{{days}} 天',
@@ -1034,6 +1044,10 @@ export const publishingJa: typeof publishingEn = {
     field: {
       name: '名前',
       nameHint: '回答者にはこの名前が表示されます。{{max}} 文字まで。',
+      cover: 'カバー画像',
+      coverHint: '任意：この公開専用の画像で、ホームのカードと開始ページに表示されます。未設定のときはクイズのカバーを使います。',
+      uploadCover: 'カバー画像をアップロード',
+      replaceCover: 'カバー画像を差し替え',
       quiz: 'クイズ',
       quizPlaceholder: 'クイズを選択',
       quizSearch: 'クイズを検索',
@@ -1097,6 +1111,7 @@ export const publishingJa: typeof publishingEn = {
       required: '必須です。',
     },
     summary: {
+      coverOfQuiz: 'クイズのカバーを使用',
       quiz: 'クイズのバージョン',
       quizValue: '{{title}}（{{label}}）',
       days: '{{days}} 日',

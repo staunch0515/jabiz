@@ -404,6 +404,22 @@ describe('PublicationReviewPage', () => {
   })
 })
 
+describe('PublicationReviewPage, the publication\'s own cover (Q64)', () => {
+  it('shows the cover the publication will show, or that the quiz\'s is used', async () => {
+    renderPublication()
+    const settings = await screen.findByTestId('publication-settings')
+    expect(settings).toHaveTextContent("The quiz's cover")
+    expect(within(settings).queryByTestId('publication-cover')).not.toBeInTheDocument()
+  })
+
+  it('shows its own cover with the settings it is approved with', async () => {
+    server.entities.set(`${DATASET.publication}/${PUBLICATION_ID}`, { ...publication(), cover: 'own-cover' })
+    renderPublication()
+    const cover = await screen.findByTestId('publication-cover')
+    expect(within(cover).getByTestId('file')).toHaveAttribute('data-file', 'own-cover')
+  })
+})
+
 describe('PublicationReviewPage, what the decision waits for', () => {
   afterEach(() => {
     vi.useRealTimers()

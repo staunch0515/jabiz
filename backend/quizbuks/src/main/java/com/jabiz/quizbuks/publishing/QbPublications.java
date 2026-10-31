@@ -5,6 +5,7 @@ import com.jabiz.entity.EntityDefinition;
 import com.jabiz.entity.Rules;
 import com.jabiz.entity.TemporalRole;
 import com.jabiz.entity.Violation;
+import com.jabiz.file.FileKind;
 import com.jabiz.quizbuks.content.ContentLimits;
 import com.jabiz.quizbuks.content.QbContent;
 import com.jabiz.quizbuks.country.Regions;
@@ -82,6 +83,8 @@ public final class QbPublications {
         eb.field("versionLabel", f -> f.physicalColumn("version_label").processOnly().asText(20));
         eb.field("name", f -> f.physicalColumn("name").required(true).asText(PublishingLimits.NAME_LENGTH)
             .apply(Rules.notBlank(PublishingCodes.NAME_BLANK)));
+        // Q64: the publication's own cover (a file of the content images); the card shows it, else the version's.
+        eb.field("cover", f -> f.physicalColumn("cover").kind(FileKind.of(QbContent.IMAGE_POLICY)));
         eb.field("regions", f -> f.physicalColumn("regions").asText(Regions.MAX_LENGTH)
             .apply(Rules.pattern(PublishingCodes.REGIONS_FORMAT, Regions.TARGETS.pattern())));
         // Q25: everybody in the regions, or the invitation list only (then the regions are not asked).
@@ -324,7 +327,7 @@ public final class QbPublications {
      * the detail page and the answering processes need of it, in an ordinary row. Every field is frozen at submission
      * except the state, which the publication's processes keep in step under its lock ({@link PublicationEditing}),
      * and what a switch to another version of the quiz changes (Q51: the version, its title, cover, video and number of
-     * questions; the full score and the kind are the same by the switch's rules).
+     * questions; the full score and the kind are the same by the switch's rules; a publication's own cover, Q64, stays).
      * The feed filters on state, times and regions; on the temporal publications every such condition would read every
      * version. Inserted with the counters when the publication goes on; never deleted (the takers' history joins it).
      */
@@ -349,7 +352,8 @@ public final class QbPublications {
             .asText(PublishingLimits.NAME_LENGTH));
         eb.field("quizTitle", f -> f.physicalColumn("quiz_title").required(true)
             .asText(ContentLimits.TITLE_LENGTH));
-        // The cover's file key as text: the version's files keep the file, the card only names it.
+        // The cover's file key as text: the version's files (or, for the publication's own cover, Q64, the publication)
+        // keep the file, the card only names it. The publication's own cover when it has one, else the version's.
         eb.field("cover", f -> f.physicalColumn("cover").asText(36));
         // Q19: the player of the version's video to watch (VideoEmbeds), shown on the App's home.
         eb.field("video", f -> f.physicalColumn("video").asText(80));

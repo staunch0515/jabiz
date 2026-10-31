@@ -55,6 +55,20 @@ class PublicationApprovalsTest {
     }
 
     @Test
+    void thePublicationsOwnCoverIsBoundOnlyWhenItHasOne() {
+        String hash = hash(draft(), "abc", tiers());
+        // Q64: without a cover of its own the content (and the hash of an approval asked before Q64) is as it was.
+        assertThat(PublicationApprovals.content(draft(), "abc", tiers(), null)).doesNotContainKey("cover");
+        assertThat(PublicationApprovals.hash(PublicationApprovals.content(draft(), "abc", tiers(), null)))
+            .isEqualTo(hash);
+        String one = PublicationApprovals.hash(PublicationApprovals.content(draft(), "abc", tiers(),
+            UUID.fromString("0190a000-0000-7000-8000-0000000000c1")));
+        String other = PublicationApprovals.hash(PublicationApprovals.content(draft(), "abc", tiers(),
+            UUID.fromString("0190a000-0000-7000-8000-0000000000c2")));
+        assertThat(one).isNotEqualTo(hash).isNotEqualTo(other);
+    }
+
+    @Test
     void anyChangeOfThePolicyOrTheVersionChangesTheHash() {
         String hash = hash(draft(), "abc", tiers());
         List<UnaryOperator<PublicationReadiness.Draft>> changes = List.of(

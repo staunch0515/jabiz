@@ -258,7 +258,8 @@ public final class PublicationVersions {
             values.put("quizTitle", version.get("title"));
             values.put("language", version.get("language"));
             values.put("questionCount", version.get("questionCount"));
-            values.put("cover", snapshot.cover() == null ? null : snapshot.cover().toString());
+            // Q64: a publication's own cover stays; only one taken from the version follows the switch.
+            values.put("cover", PublicationEditing.cardCover(publication, snapshot));
             values.put("video", snapshot.materials().stream().filter(QuizSnapshot.Material::watchToAnswer).findFirst()
                 .flatMap(material -> com.jabiz.quizbuks.content.VideoEmbeds.player(material.url())).orElse(null));
             ctx.changes().update(QbPublications.CARD, card.id(), card.version(), values);

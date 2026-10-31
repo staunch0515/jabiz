@@ -14,6 +14,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useEffect, useId, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { readVersions } from '../content/api'
+import { Thumbnail } from '../content/ContentImage'
 import { versionsQuery } from '../content/paths'
 import { SPONSOR } from '../messages'
 import { criterionOf, type Condition } from '../qb/audience'
@@ -159,6 +160,8 @@ export function useVersionOf(quizId: string | null, versionId: string | null) {
 
 export interface SummaryValues {
   name: string
+  /** Q64: the publication's own cover; null when the quiz's is shown; undefined when not known (not shown). */
+  cover?: string | null
   /** Q47: the matching conditions of a public publication; undefined while unknown (not shown). */
   conditions?: readonly Condition[]
   quizTitle: string | null
@@ -214,6 +217,13 @@ export function PublicationSummary({ values }: { values: SummaryValues }) {
   const audience = values.audience ?? 'PUBLIC'
   const items: DescriptionItem[] = [
     { key: 'name', label: t('publishing.field.name'), value: values.name || notSet },
+    ...(values.cover === undefined ? [] : [{
+      key: 'cover',
+      label: t('publishing.field.cover'),
+      value: values.cover
+        ? <span data-testid="summary-cover"><Thumbnail fileId={values.cover} width={160} className="h-16 w-28 rounded-md" /></span>
+        : <span data-testid="summary-cover-quiz">{t('publishing.summary.coverOfQuiz')}</span>,
+    }]),
     {
       key: 'version',
       label: t('publishing.summary.quiz'),
