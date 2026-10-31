@@ -15,6 +15,6 @@ describe('the brand (Q55b)', () => {
   it('names the brand in the menu in each language, as every text that named QuizBuks', () => {
     expect((messages.en as { menu: { group: string } }).menu.group).toBe(BRAND_NAMES.en)
     expect((messages.zh as { menu: { group: string } }).menu.group).toBe(BRAND_NAMES.zh)
-    expect((messages.ja as { finance?: unknown; menu: { finance: string } }).menu.finance).toBe(`${BRAND_NAMES.ja} 財務`)
+    expect((messages.ja as { finance?: unknown; menu: { finance: string } }).menu.finance).toBe(`${BRAND_NAMES.ja}財務`)
   })
 })
