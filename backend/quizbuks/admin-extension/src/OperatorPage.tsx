@@ -27,6 +27,16 @@ import {
   useAuth,
   type ColumnDef,
 } from '@jabiz/admin'
+import {
+  currentMonthInJapan,
+  laterChanges,
+  nextMonth,
+  planInEffect,
+  PLANS,
+  readOperatorPlans,
+  setOperatorPlan,
+  type OperatorPlanChange,
+} from './account-api'
 import { LoadFailed, Section } from './components'
 import { useLabels, when } from './hooks'
 import { DICTIONARY, PATH, PERMISSION, TEMPLATE } from './ids'
@@ -336,7 +346,112 @@ function Sponsors({ operatorId }: { operatorId: string }) {
 }
 
 /**
- * One operator (Q48a): its details and state, its members and its sponsors. Suspending it keeps its members out of
+ * The operator's plan (Q48e-2): the plan in effect this month (Japan's), its changes (`qb.admin.operator-plans`),
+ * and proposing one from a later month with a reason (`QB_OPERATOR_PLAN_SET`): another administrator approves it in
+ * the approvals.
+ */
+function Plan({ operatorId }: { operatorId: string }) {
+  const { t } = useTranslation(EXTENSION_NAMESPACE)
+  const { can } = useAuth()
+  const id = useId()
+  const queryClient = useQueryClient()
+  const planLabel = useLabels(DICTIONARY.operatorPlan)
+  const statusLabel = useLabels(DICTIONARY.operatorPlanStatus)
+  const key = [...OPERATORS_KEY, operatorId, 'plans']
+  const plans = useQuery({ queryKey: key, queryFn: () => readOperatorPlans(operatorId) })
+  const month = currentMonthInJapan()
+  const [plan, setPlan] = useState<string>(PLANS[1])
+  const [effectiveMonth, setEffectiveMonth] = useState(nextMonth(month))
+  const [reason, setReason] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [problem, setProblem] = useState<string | null>(null)
+  const later = /^\d{4}-\d{2}$/.test(effectiveMonth) && effectiveMonth > month
+  const submit = async (event: FormEvent) => {
+    event.preventDefault()
+    if (busy || !later || !reason.trim()) return
+    setBusy(true)
+    setProblem(null)
+    try {
+      await setOperatorPlan({ operatorId, plan, effectiveMonth, reason: reason.trim() })
+      notify.success(t('plan.proposed'))
+      setReason('')
+      await queryClient.invalidateQueries({ queryKey: key })
+    } catch (e) {
+      setProblem(problemOf(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+  const columns = useMemo<ColumnDef<OperatorPlanChange, unknown>[]>(() => [
+    { id: 'plan', header: t('plan.plan'), cell: ({ row }) => planLabel(row.original.plan) },
+    { id: 'effectiveMonth', header: t('plan.effectiveMonth'), cell: ({ row }) => row.original.effectiveMonth },
+    { id: 'status', header: t('plan.status'), cell: ({ row }) => (
+      <Badge variant={row.original.status === 'REJECTED' ? 'outline' : 'secondary'}>{statusLabel(row.original.status)}</Badge>
+    ) },
+    { id: 'reason', header: t('plan.reason'), cell: ({ row }) => row.original.reason ?? '' },
+    { id: 'proposedBy', header: t('plan.proposedBy'), cell: ({ row }) => (
+      <span className="flex flex-col">
+        {row.original.proposedBy && <UserName id={row.original.proposedBy} />}
+        <span className="text-muted-foreground text-sm">{when(row.original.proposedAt)}</span>
+      </span>
+    ) },
+  ], [t, planLabel, statusLabel])
+  const changes = plans.data ?? []
+  const current = planInEffect(changes, month)
+  const coming = laterChanges(changes, month)
+  return (
+    <Section title={t('plan.title')} testId="operator-plan">
+      {plans.data && (
+        <p data-testid="operator-plan-current" data-plan={current}>
+          {t('plan.current', { month, plan: planLabel(current) })}
+          {coming.length > 0 && ` ${t('plan.next', { month: coming[0].effectiveMonth, plan: planLabel(coming[0].plan),
+            status: statusLabel(coming[0].status) })}`}
+        </p>
+      )}
+      {plans.isError
+        ? <LoadFailed error={plans.error} onRetry={() => void plans.refetch()} />
+        : (
+          <DataTable label={t('plan.changes')} columns={columns} data={changes} loading={plans.isPending}
+            getRowId={(row) => row.planChangeId} empty={t('plan.none')}
+            rowProps={(row) => ({ 'data-testid': 'plan-change-row', 'data-id': row.planChangeId })} />
+        )}
+      {can(PERMISSION.operatorsWrite) && (
+        <form noValidate className="flex flex-col gap-4" onSubmit={(event) => void submit(event)}>
+          <div className="flex flex-wrap items-end gap-4">
+            <div className="flex flex-col gap-2">
+              <Label htmlFor={`${id}-plan`}>{t('plan.plan')}</Label>
+              <Select value={plan} onValueChange={setPlan}>
+                <SelectTrigger id={`${id}-plan`} className="w-40" data-testid="plan-select"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {PLANS.map((value) => <SelectItem key={value} value={value}>{planLabel(value)}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor={`${id}-month`}>{t('plan.effectiveMonth')}</Label>
+              <Input id={`${id}-month`} type="month" value={effectiveMonth} min={nextMonth(month)} required
+                className="w-44" data-testid="plan-month" onChange={(event) => setEffectiveMonth(event.target.value)} />
+            </div>
+            <div className="flex grow flex-col gap-2">
+              <Label htmlFor={`${id}-reason`}>{t('plan.reason')}</Label>
+              <Input id={`${id}-reason`} value={reason} maxLength={500} autoComplete="off" required
+                data-testid="plan-reason" onChange={(event) => setReason(event.target.value)} />
+            </div>
+          </div>
+          <p className="text-muted-foreground text-sm">{t('plan.hint')}</p>
+          <div>
+            <Button type="submit" disabled={busy || !later || !reason.trim()} aria-busy={busy || undefined}
+              data-testid="plan-propose">{t('plan.propose')}</Button>
+          </div>
+        </form>
+      )}
+      {problem && <Alert variant="destructive" data-testid="plan-problem"><AlertDescription>{problem}</AlertDescription></Alert>}
+    </Section>
+  )
+}
+
+/**
+ * One operator (Q48a): its details and state, its plan (Q48e-2), its members and its sponsors. Suspending it keeps its members out of
  * the back office at once; its sponsors stay its own until moved.
  */
 export default function OperatorPage() {
@@ -365,6 +480,7 @@ export default function OperatorPage() {
       } />
       {/* Keyed by the revision: a saved change reads the operator again and starts the form from it. */}
       <Details key={o.revision} operator={o} />
+      <Plan operatorId={o.operatorId} />
       <Members operatorId={o.operatorId} />
       <Sponsors operatorId={o.operatorId} />
     </div>

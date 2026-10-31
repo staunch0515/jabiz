@@ -7,7 +7,9 @@ import type { SortSpec } from './api'
 /*
  * Operators' monthly settlements (backend `operator.OperatorSettlements`, Q48b): finance reads every operator's
  * (`qb.admin.operator-settlements`) and records payments; an operator's member reads its own
- * (`qb.operator.settlements`), without who recorded the payment. The amounts are yen of the ledger.
+ * (`qb.operator.settlements`), without who recorded the payment. The amounts are yen of the ledger. Since Q48e-2 a
+ * settlement is credited to the operator's account (`CREDITED`), from which it withdraws (`account-api.ts`); only the
+ * older ones (`ISSUED`) are still paid one by one.
  */
 
 type Row = Record<string, unknown>
@@ -20,6 +22,10 @@ export interface Settlement {
   operatorId: string
   operatorName: string | null
   month: string
+  /** The plan the month was settled on ('1'..'5'; Q48e-2), null before plans. */
+  plan: string | null
+  /** The plan's fixed fee taken from the share (Q48e-2). */
+  fixedFee: string
   revenue: string
   platformShare: string
   operatorShare: string
@@ -42,6 +48,8 @@ function toSettlement(row: Row): Settlement {
     operatorId: String(row.operatorId ?? ''),
     operatorName: str(row.operatorName),
     month: String(row.month ?? ''),
+    plan: str(row.plan),
+    fixedFee: amount(row.fixedFee),
     revenue: amount(row.revenue),
     platformShare: amount(row.platformShare),
     operatorShare: amount(row.operatorShare),

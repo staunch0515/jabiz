@@ -29,7 +29,7 @@ import {
   type ColumnDef,
 } from '@jabiz/admin'
 import { LoadFailed } from './components'
-import { money, useLabels, usePaged } from './hooks'
+import { money, useLabels, usePaged, usePoints } from './hooks'
 import { DICTIONARY, PERMISSION } from './ids'
 import { downloadStatement, issueStatement, paySettlement, readSettlements, SETTLEMENTS_KEY, type Settlement } from './settlement-api'
 
@@ -38,7 +38,8 @@ const SORTS = { month: 'month', payable: 'payable', status: 'status' } as const
 
 const right = { className: 'text-right tabular-nums' }
 const ALL = 'ALL'
-const STATUSES = ['ISSUED', 'PAYING', 'PAID'] as const
+/** Q48e-2: `CREDITED` to the operator's account; the older `ISSUED` ones are still paid one by one. */
+const STATUSES = ['CREDITED', 'ISSUED', 'PAYING', 'PAID'] as const
 
 /** Today in Japan, the bank statement's day (`yyyy-MM-dd`). */
 function todayInJapan(): string {
@@ -104,13 +105,17 @@ function PayDialog({ settlement, onClose }: { settlement: Settlement; onClose: (
 /**
  * The operators' monthly settlements (Q48b). Finance (`qb.admin.finance.read`) sees every operator's, downloads the
  * statement as issued and records a payment (`qb.operator.settlement.pay`; another administrator approves it in the
- * approvals); an operator's member sees its own, without the payment's record.
+ * approvals); an operator's member sees its own, without the payment's record. Since Q48e-2 a month is credited to
+ * the operator's account (`CREDITED`, withdrawn from on the account page); the older `ISSUED` ones keep the Pay button.
+ * The operator's view shows points, not yen (as the apps do); finance's shows JPY.
  */
 export default function SettlementsPage() {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
   const { can } = useAuth()
   const id = useId()
   const statusLabel = useLabels(DICTIONARY.settlementStatus)
+  const planLabel = useLabels(DICTIONARY.operatorPlan)
+  const points = usePoints()
   const queryClient = useQueryClient()
   const finance = can(PERMISSION.financeRead)
   const payer = finance && can(PERMISSION.settlementPay)
@@ -119,13 +124,16 @@ export default function SettlementsPage() {
   const [paying, setPaying] = useState<Settlement | null>(null)
   const { query, table, sortable } = usePaged([...SETTLEMENTS_KEY, finance, status],
     (offset, limit, sorts) => readSettlements(finance, status === ALL ? null : status, offset, limit, sorts), true, SORTS)
+  const amount = finance ? money : points
   const columns = useMemo<ColumnDef<Settlement, unknown>[]>(() => [
     ...(finance ? [{ id: 'operator', header: t('settlement.operator'),
       cell: ({ row }) => row.original.operatorName ?? row.original.operatorId } as ColumnDef<Settlement, unknown>] : []),
     { id: 'month', header: t('settlement.month'), cell: ({ row }) => row.original.month },
-    { id: 'revenue', header: t('settlement.revenue'), meta: right, cell: ({ row }) => money(row.original.revenue) },
-    { id: 'share', header: t('settlement.share'), meta: right, cell: ({ row }) => money(row.original.operatorShare) },
-    { id: 'payable', header: t('settlement.payable'), meta: right, cell: ({ row }) => money(row.original.payable) },
+    { id: 'plan', header: t('settlement.plan'), cell: ({ row }) => planLabel(row.original.plan) },
+    { id: 'revenue', header: t('settlement.revenue'), meta: right, cell: ({ row }) => amount(row.original.revenue) },
+    { id: 'share', header: t('settlement.share'), meta: right, cell: ({ row }) => amount(row.original.operatorShare) },
+    { id: 'fixedFee', header: t('settlement.fixedFee'), meta: right, cell: ({ row }) => amount(row.original.fixedFee) },
+    { id: 'payable', header: t('settlement.payable'), meta: right, cell: ({ row }) => amount(row.original.payable) },
     { id: 'status', header: t('settlement.status'),
       cell: ({ row }) => <Badge variant="secondary">{statusLabel(row.original.status)}</Badge> },
     { id: 'paidOn', header: t('settlement.paidOn'), cell: ({ row }) => row.original.paidOn ?? '' },
@@ -161,7 +169,7 @@ export default function SettlementsPage() {
         )
       },
     },
-  ], [t, finance, payer, statusLabel, queryClient])
+  ], [t, finance, payer, statusLabel, planLabel, amount, queryClient])
   return (
     <div className="flex flex-col gap-4" data-testid="settlements-page">
       <PageHeader title={t(finance ? 'settlement.title' : 'settlement.ownTitle')}
