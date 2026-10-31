@@ -19,7 +19,7 @@ import {
 } from '@jabiz/admin'
 import { byCheck } from './finance'
 import { readReconItems, readReconRuns, type ReconItem, type ReconRun } from './finance-api'
-import { LoadFailed, Section } from './components'
+import { EmptyState, LoadFailed, Section } from './components'
 import { money, useLabels, usePaged, when } from './hooks'
 import { useMoreFilters } from './moreFilters'
 import { DICTIONARY, isUserId, PAGE_LIMIT, PATH, referenceKind } from './ids'
@@ -133,7 +133,7 @@ export default function ReconciliationPage() {
       id: 'status',
       header: t('finance.recon.result'),
       cell: ({ row }) => (
-        <Badge variant={row.original.status === 'DIFF' ? 'warning' : 'outline'}>
+        <Badge variant={row.original.status === 'DIFF' ? 'warning' : 'success'}>
           {t(`finance.recon.status.${row.original.status === 'DIFF' ? 'DIFF' : 'OK'}`)}
         </Badge>
       ),
@@ -151,7 +151,7 @@ export default function ReconciliationPage() {
           ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
           : (
             <DataTable label={t('finance.recon.runsTable')} columns={sortable(columns)} {...table}
-              getRowId={(row) => row.runId} empty={t('finance.recon.noRuns')}
+              getRowId={(row) => row.runId} empty={<EmptyState art="inbox" title={t('finance.recon.noRuns')} />}
               rowProps={(row) => ({ 'data-testid': 'recon-run', 'data-id': row.runId, 'data-status': row.status,
                 'data-selected': String(row.runId === runId) })} />
           )}

@@ -5,7 +5,6 @@ import { Link, useSearchParams } from 'react-router'
 import {
   Alert,
   AlertDescription,
-  Badge,
   Button,
   DataTable,
   Dialog,
@@ -25,7 +24,7 @@ import {
   type ColumnDef,
 } from '@jabiz/admin'
 import { StatusFilter } from './finance-components'
-import { LoadFailed, PublisherLink } from './components'
+import { EmptyState, LoadFailed, PublisherLink, StatusBadge } from './components'
 import { money, useLabels, usePaged, when } from './hooks'
 import { useMoreFilters } from './moreFilters'
 import { DICTIONARY, PATH, PERMISSION } from './ids'
@@ -145,10 +144,8 @@ export default function RedemptionsPage() {
     { id: 'status', header: t('reward.redeem.status'),
       cell: ({ row }) => (
         <span className="flex flex-col gap-1">
-          <Badge variant={row.original.status === 'CLAIMED' ? 'secondary' : 'outline'} className="w-fit"
-            data-testid="redeem-row-status" data-status={row.original.status}>
-            {status(row.original.status)}
-          </Badge>
+          <StatusBadge code={row.original.status} label={status(row.original.status)} className="w-fit"
+            testId="redeem-row-status" />
           {row.original.status === 'DUE' && row.original.expiresAt && (
             <span className="text-muted-foreground text-xs">{t('reward.redeem.expiresAt', { time: when(row.original.expiresAt) })}</span>
           )}
@@ -207,7 +204,7 @@ export default function RedemptionsPage() {
         ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
         : (
           <DataTable label={t('reward.redeem.table')} columns={sortable(columns)} {...table} getRowId={(row) => row.redemptionId}
-            empty={t('reward.redeem.none')}
+            empty={<EmptyState art="money" title={t('reward.redeem.none')} />}
             rowProps={(row) => ({ 'data-testid': 'redeem-row', 'data-id': row.redemptionId, 'data-status': row.status })} />
         )}
       {voiding && <VoidDialog prize={voiding} onClose={() => setVoiding(null)} />}

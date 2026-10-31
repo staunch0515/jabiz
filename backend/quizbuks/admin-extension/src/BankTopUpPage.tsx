@@ -7,7 +7,6 @@ import {
   Alert,
   AlertDescription,
   ApprovalPanel,
-  Badge,
   Button,
   DescriptionList,
   EXTENSION_NAMESPACE,
@@ -17,7 +16,7 @@ import {
   useAuth,
 } from '@jabiz/admin'
 import { readBankTopUp } from './finance-api'
-import { LoadFailed, Section } from './components'
+import { LoadFailed, Section, StatusBadge } from './components'
 import { money, useLabels, when } from './hooks'
 import { BANK_REVIEW, DICTIONARY, isUserId, PATH, PERMISSION } from './ids'
 
@@ -91,7 +90,7 @@ export default function BankTopUpPage() {
           <span className="flex flex-wrap items-center gap-x-4 gap-y-1">
             <span>{t('bank.sponsor')}: <Link to={PATH.user(tu.sponsorId)} className={linkClass}>
               {tu.company ?? <UserName id={tu.sponsorId} />}</Link></span>
-            <Badge variant={pending ? 'secondary' : 'outline'} data-testid="bank-status">{status(tu.status)}</Badge>
+            <StatusBadge code={tu.status} label={status(tu.status)} testId="bank-status" />
           </span>
         } />
       <Section title={t('bank.detail.facts')} testId="bank-facts">

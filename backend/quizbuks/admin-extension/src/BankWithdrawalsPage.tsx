@@ -7,7 +7,6 @@ import {
   Alert,
   AlertDescription,
   ApiError,
-  Badge,
   Button,
   CopyButton,
   DataTable,
@@ -29,7 +28,7 @@ import {
 } from '@jabiz/admin'
 import { todayInJapan } from './finance-api'
 import { StatusFilter } from './finance-components'
-import { LoadFailed } from './components'
+import { EmptyState, LoadFailed, StatusBadge } from './components'
 import { money, useLabels, usePaged, when } from './hooks'
 import { useMoreFilters } from './moreFilters'
 import { DICTIONARY, PATH, PERMISSION } from './ids'
@@ -201,7 +200,7 @@ export default function BankWithdrawalsPage() {
     {
       id: 'status',
       header: t('withdrawal.status'),
-      cell: ({ row }) => <Badge variant="outline" data-testid="withdrawal-status">{status(row.original.status)}</Badge>,
+      cell: ({ row }) => <StatusBadge code={row.original.status} label={status(row.original.status)} testId="withdrawal-status" />,
     },
     {
       id: 'outcome',
@@ -259,7 +258,7 @@ export default function BankWithdrawalsPage() {
         ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
         : (
           <DataTable label={t('withdrawal.table')} columns={sortable(columns)} {...table} getRowId={(row) => row.transferId}
-            empty={t('withdrawal.none')}
+            empty={<EmptyState art="money" title={t('withdrawal.none')} />}
             rowProps={(row) => ({ 'data-testid': 'withdrawal-row', 'data-id': row.transferId,
               'data-status': row.status })} />
         )}

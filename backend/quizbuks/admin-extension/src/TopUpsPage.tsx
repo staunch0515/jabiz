@@ -13,7 +13,7 @@ import {
 import { topUpAddressOf, topUpFilterOf } from './finance'
 import { readFinanceTopUps, type FinanceTopUp, type TopUpFilter } from './finance-api'
 import { DayRange, StatusFilter } from './finance-components'
-import { LoadFailed } from './components'
+import { EmptyState, LoadFailed, StatusBadge } from './components'
 import { money, useLabels, usePaged, when } from './hooks'
 import { DICTIONARY, PATH } from './ids'
 
@@ -89,7 +89,7 @@ export default function TopUpsPage() {
       header: t('finance.topUps.status'),
       cell: ({ row }) => (
         <span className="flex flex-wrap items-center gap-1">
-          <Badge variant="outline">{status(row.original.status)}</Badge>
+          <StatusBadge code={row.original.status} label={status(row.original.status)} />
           {row.original.checkReason && <Badge variant="warning">{t('finance.topUps.check')}</Badge>}
         </span>
       ),
@@ -121,7 +121,7 @@ export default function TopUpsPage() {
         ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
         : (
           <DataTable label={t('finance.topUps.table')} columns={sortable(columns)} {...table}
-            getRowId={(row) => row.topUpId} empty={t('finance.topUps.none')}
+            getRowId={(row) => row.topUpId} empty={<EmptyState art="money" title={t('finance.topUps.none')} />}
             rowProps={(row) => ({ 'data-testid': 'topup-row', 'data-id': row.topUpId, 'data-status': row.status })} />
         )}
     </div>

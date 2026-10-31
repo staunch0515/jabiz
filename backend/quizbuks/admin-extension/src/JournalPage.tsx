@@ -35,7 +35,7 @@ import {
   type JournalExport,
   type JournalPreview,
 } from './journal-api'
-import { LoadFailed, Section } from './components'
+import { EmptyState, LoadFailed, Section } from './components'
 import { money, usePaged, when } from './hooks'
 import { useMoreFilters } from './moreFilters'
 import { PATH, PERMISSION } from './ids'
@@ -346,7 +346,7 @@ export default function JournalPage() {
           ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
           : (
             <DataTable label={t('finance.journal.exportsTable')} columns={sortable(columns)} {...table}
-              getRowId={(row) => row.exportId} empty={t('finance.journal.noExports')}
+              getRowId={(row) => row.exportId} empty={<EmptyState art="inbox" title={t('finance.journal.noExports')} />}
               rowProps={(row) => ({ 'data-testid': 'journal-export-row', 'data-id': row.exportId,
                 'data-voucher': row.voucherNo })} />
           )}

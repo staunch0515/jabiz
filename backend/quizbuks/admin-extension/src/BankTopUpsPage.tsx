@@ -6,7 +6,6 @@ import {
   Alert,
   AlertDescription,
   ApiError,
-  Badge,
   Button,
   DataTable,
   Dialog,
@@ -27,7 +26,7 @@ import {
 import { readBankTopUps, recordBankTopUp, todayInJapan, type BankTopUp } from './finance-api'
 import { parseAmount } from './finance'
 import { StatusFilter } from './finance-components'
-import { LoadFailed } from './components'
+import { EmptyState, LoadFailed, StatusBadge } from './components'
 import { money, useLabels, usePaged, when } from './hooks'
 import { useMoreFilters } from './moreFilters'
 import { BANK_RECORDABLE, BANK_REVIEW, DICTIONARY, PATH, PERMISSION } from './ids'
@@ -174,7 +173,7 @@ export default function BankTopUpsPage() {
     {
       id: 'status',
       header: t('bank.status'),
-      cell: ({ row }) => <Badge variant="outline" data-testid="bank-row-status">{status(row.original.status)}</Badge>,
+      cell: ({ row }) => <StatusBadge code={row.original.status} label={status(row.original.status)} testId="bank-row-status" />,
     },
     {
       id: 'received',
@@ -235,7 +234,7 @@ export default function BankTopUpsPage() {
         ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
         : (
           <DataTable label={t('bank.table')} columns={sortable(columns)} {...table} getRowId={(row) => row.topUpId}
-            empty={t('bank.none')}
+            empty={<EmptyState art="money" title={t('bank.none')} />}
             rowProps={(row) => ({ 'data-testid': 'bank-row', 'data-id': row.topUpId, 'data-status': row.status })} />
         )}
       {recording && <RecordDialog topUp={recording} onClose={() => setRecording(null)} />}

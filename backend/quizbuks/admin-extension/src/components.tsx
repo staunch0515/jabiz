@@ -105,10 +105,12 @@ export function AfterDecision({ after, onRetry }: {
  * A status as a badge coloured by what it means (Q53c, `statusTone`): green done, amber waiting, red refused or
  * failed, none when over. `label` is the dictionary's text; the code stays on the element for tests.
  */
-export function StatusBadge({ code, label, testId }: { code: string | null | undefined; label: ReactNode;
-  testId?: string }) {
+export function StatusBadge({ code, label, testId, className }: { code: string | null | undefined;
+  label: ReactNode; testId?: string; className?: string }) {
   return (
-    <Badge variant={statusTone(code)} data-testid={testId} data-status={code ?? undefined}>{label}</Badge>
+    <Badge variant={statusTone(code)} className={className} data-testid={testId} data-status={code ?? undefined}>
+      {label}
+    </Badge>
   )
 }
 
