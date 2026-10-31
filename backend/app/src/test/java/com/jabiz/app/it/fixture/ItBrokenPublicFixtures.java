@@ -2,6 +2,7 @@ package com.jabiz.app.it.fixture;
 
 import com.jabiz.context.RequestContext;
 import com.jabiz.dataset.DatasetDefinition;
+import com.jabiz.dataset.PublicCounter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -43,5 +44,24 @@ class ItBrokenPublicFixtures {
             .publicRead(p -> p.fields("attachmentId"))
             .permissions("it.read", "it.write")
             .storage(s -> s.connectionPoolRef(pool)));
+    }
+
+    // Public counters (decision D65): keys of a private dataset, of a field not whitelisted, a name twice.
+
+    @Bean
+    PublicCounter itBrokenPrivateCounter() {
+        return PublicCounter.define("it.private", c -> c.keys("urn:jabiz:dataset:it:ItAttachment",
+            "attachmentId"));
+    }
+
+    @Bean
+    PublicCounter itBrokenHiddenField() {
+        return PublicCounter.define("it.hidden", c -> c.keys("urn:jabiz:dataset:it:broken:large", "title"));
+    }
+
+    @Bean
+    PublicCounter itBrokenTwice() {
+        return PublicCounter.define("commerce.product-view", c -> c.keys("urn:jabiz:dataset:it:broken:large",
+            "attachmentId"));
     }
 }

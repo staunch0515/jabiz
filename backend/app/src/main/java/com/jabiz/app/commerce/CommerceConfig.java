@@ -1,6 +1,7 @@
 package com.jabiz.app.commerce;
 
 import com.jabiz.dataset.DatasetDefinition;
+import com.jabiz.dataset.PublicCounter;
 import com.jabiz.dictionary.StaticDictionary;
 import com.jabiz.document.DocumentLayout;
 import com.jabiz.ledger.LedgerDimension;
@@ -94,6 +95,17 @@ class CommerceConfig {
             .publicRead(p -> p.fields("productId", "sku", "productName", "unitPrice", "imageFileId"))
             .permissions("commerce.product.read", "commerce.product.write")
             .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
+    }
+
+    /**
+     * How often anonymous visitors look at a product of the public catalog (docs/design/15-public-access.md section
+     * 10; decision D65): once per visitor and day, told in Tokyo time, and only for products on sale.
+     */
+    @Bean
+    PublicCounter productViews() {
+        return PublicCounter.define(CommerceEntities.PRODUCT_VIEWS, c -> c
+            .keys(CommerceEntities.PUBLIC_PRODUCT_DATASET, "productId")
+            .zone("Asia/Tokyo"));
     }
 
     @Bean

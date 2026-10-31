@@ -35,6 +35,8 @@ public final class CommerceEntities extends BaseEntityDefinitions {
 
     public static final String PRODUCT_DATASET = "urn:jabiz:dataset:default:Product";
     public static final String PUBLIC_PRODUCT_DATASET = "urn:jabiz:dataset:public:Product";
+    /** The public counter of product views (decision D65). */
+    public static final String PRODUCT_VIEWS = "commerce.product-view";
     public static final String WAREHOUSE_DATASET = "urn:jabiz:dataset:default:Warehouse";
     public static final String CUSTOMER_DATASET = "urn:jabiz:dataset:default:Customer";
     public static final String STOCK_LEVEL_DATASET = "urn:jabiz:dataset:default:StockLevel";
