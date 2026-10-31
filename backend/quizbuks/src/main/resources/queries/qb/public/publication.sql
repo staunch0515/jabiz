@@ -6,10 +6,11 @@ description: >-
 access: public
 cacheSeconds: 60
 timeoutMs: 2000
-entities: [QbPublicationCard, QbSponsor]
+entities: [QbPublicationCard, QbSponsor, QbSponsorPage]
 datasets:
   QbPublicationCard: urn:jabiz:dataset:public:QbPublicationCard
   QbSponsor: urn:jabiz:dataset:public:QbSponsor
+  QbSponsorPage: urn:jabiz:dataset:public:QbSponsorPage
 params:
   publicationId: { like: QbPublicationCard.publicationId, required: true, description: The publication }
 results:
@@ -29,6 +30,7 @@ results:
   digitalDelivery: { from: QbPublicationCard.digitalDelivery }
   digitalDescription: { from: QbPublicationCard.digitalDescription }
   sponsorCompany: { from: QbSponsor.company }
+  sponsorHandle:  { from: QbSponsorPage.handle }
 list:
   key: [publicationId]
 ---*/
@@ -52,7 +54,10 @@ SELECT
     c.{{QbPublicationCard.redeemDescription}} AS redeemDescription,
     c.{{QbPublicationCard.digitalDelivery}} AS digitalDelivery,
     c.{{QbPublicationCard.digitalDescription}} AS digitalDescription,
-    sp.{{QbSponsor.company}}              AS sponsorCompany
+    sp.{{QbSponsor.company}}              AS sponsorCompany,
+    -- Q60a: the sponsor's published page, which the sponsor's name links to.
+    pg.{{QbSponsorPage.handle}}           AS sponsorHandle
 FROM {{QbPublicationCard}} c
 LEFT JOIN {{QbSponsor}} sp ON sp.{{QbSponsor.userId}} = c.{{QbPublicationCard.publisherId}}
+LEFT JOIN {{QbSponsorPage}} pg ON pg.{{QbSponsorPage.userId}} = sp.{{QbSponsor.userId}}
 WHERE c.{{QbPublicationCard.publicationId}} = :publicationId

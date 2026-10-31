@@ -229,6 +229,8 @@ export interface PublicationView {
   sponsorCompany: string | null
   sponsorIntro: string | null
   sponsorAvatar: string | null
+  /** Q60a: the sponsor's published page (`/s/<handle>`), which the name links to; none while it is not published. */
+  sponsorHandle?: string | null
   sponsorCountry: string | null
   completions: number
   last1h: number
@@ -293,6 +295,7 @@ export async function readPublication(request: PublicationRequest): Promise<Publ
     sponsorCompany: textOrNull(row.sponsorCompany),
     sponsorIntro: textOrNull(row.sponsorIntro),
     sponsorAvatar: textOrNull(row.sponsorAvatar),
+    sponsorHandle: textOrNull(row.sponsorHandle),
     sponsorCountry: textOrNull(row.sponsorCountry),
     completions: numberOf(row.completions),
     last1h: numberOf(row.last1h),

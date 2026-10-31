@@ -59,10 +59,13 @@ class ShareLinkIT extends PlayItSupport {
         assertThat(page(publicationId)).singleElement().satisfies(row -> {
             assertThat(row).containsOnlyKeys("publicationId", "name", "quizTitle", "kind", "startAt", "endAt",
                 "timeLimitSec", "questionCount", "fullScore", "passScore", "maxReward", "rewardMethod",
-                "redeemDescription", "digitalDelivery", "digitalDescription", "sponsorCompany");
+                "redeemDescription", "digitalDelivery", "digitalDescription", "sponsorCompany",
+                // Q60a-2: the sponsor's published page (public itself), none here.
+                "sponsorHandle");
             assertThat(row).containsEntry("publicationId", publicationId).containsEntry("name", "Shared")
                 .containsEntry("kind", "QUIZ").containsEntry("questionCount", 2);
             assertThat(row.get("sponsorCompany")).isNotNull();
+            assertThat(row.get("sponsorHandle")).isNull();
         });
         // Nothing of the sponsor or the regions in the answer, whatever is asked.
         String raw = publicQuery("p.publicationId=" + publicationId)
