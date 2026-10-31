@@ -18,7 +18,8 @@ import java.util.function.LongSupplier;
  * {@code .per-email} (3) requests per {@code .period} (one hour), counted for each kind of request apart
  * (registering, resending the verification, asking for a password reset). A signed-in user's own password change
  * counts per client address and per user ({@code jabiz.security.account.rate-limit.per-user}, 10 per period); ending
- * sessions of one's own and linking provider accounts count per user with the same limit, apart. Accounts opened by
+ * sessions of one's own, linking provider accounts and joining another entry count per user with the same limit,
+ * apart. Accounts opened by
  * identity providers count per client address as registrations do ({@link Kind#OIDC_SIGN_UP}); anonymous starts of a
  * sign-in through a provider have a limit of their own ({@code jabiz.security.oidc.rate-limit.per-address}, 60).
  *
@@ -52,7 +53,9 @@ public class SignUpRateLimits {
          * Asking for the deletion of one's account (section 17.5): signed in, counted per user; for a mailed link,
          * per client address and per e-mail address.
          */
-        ACCOUNT_DELETION
+        ACCOUNT_DELETION,
+        /** A signed-in user joining another entry (section 15.15; decision D66): counted per user. */
+        ENTRY_JOIN
     }
 
     /** Default of {@code jabiz.security.account.rate-limit.per-user}. */
@@ -128,6 +131,11 @@ public class SignUpRateLimits {
     /** A signed-in user asking for, or withdrawing, the deletion of their account (section 17.5). */
     public void accountDeletion(String userId) {
         acquire(perUser, Kind.ACCOUNT_DELETION + " user:" + Objects.requireNonNull(userId, "userId"));
+    }
+
+    /** A signed-in user joining another entry (section 15.15), with the limit of password changes, apart. */
+    public void entryJoin(String userId) {
+        acquire(perUser, Kind.ENTRY_JOIN + " user:" + Objects.requireNonNull(userId, "userId"));
     }
 
     public void identityLink(String userId) {

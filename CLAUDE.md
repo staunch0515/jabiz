@@ -86,6 +86,7 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
 - **登录入口与自助注册**（见 10 与决策 D36）：前端各自的登录入口（`jabiz.security.entries`）决定接受的角色，令牌只含该入口角色的权限；
   自助注册、邮箱验证、找回密码、本人改密码只经平台接口与流程（`SPONSOR_SIGN_UP` 等、`SEC_ACCOUNT_PASSWORD_CHANGE`），不另写；
   管理员建的账号由本人经邀请设定密码（`SEC_USER_INVITE` 或建号时 `invite`，只寄到建号时填写、未验证的邮箱，前端 `MailLinkPage` 的 `invitation` 页，10 §15.14、决策 D63），不给管理员设的密码；需要已验证邮箱的操作声明 `requiresVerifiedEmail()`；封禁等应用规则写成 `SignInGuard`。
+  已登录、邮箱已验证的用户加入另一个入口只经 `POST /api/auth/account/entries/{entry}/join`（前端 `joinEntry`，只加该入口的注册角色，受保护的照旧须审批）；给出注册角色之前的应用规则（每条途径都问，按 `SignUpAttempt.Path` 区分；注册时没有用户编号，不泄露地址）只写成 `SignUpGuard`（10 §15.15、决策 D66），不自己拦注册或加入的接口。
   只凭邮箱登录（寄出一次性链接）只经入口的 `email-link` 与平台接口（`/api/auth/email-link`，前端积木 `EmailLinkForm` 与 `MailLinkPage` 的 `email-link` 页；`admin` 与接受 `*` 的入口不能开启，10 §15.11、决策 D54），不自写"输入邮箱即登录"。
   被另一个平台内嵌、以其签发的短时令牌登录（如 Shopify 的会话令牌）只经入口的 `external-token` 与提供方 `jabiz.security.external-tokens.<名>`（密钥只取自环境变量）、平台接口 `/api/auth/external-token`（前端 `signInWithExternalToken`）；
   身份是租户中的一个人（`SecUserIdentity(ext:<名>, <租户>/<sub>)`），流程中核对店员递来的令牌只用步骤 `VerifyExternalToken`；页面要被该租户内嵌时 SPA 声明 `embedding`，不自己改 CSP 或 `X-Frame-Options`（10 §15.12、决策 D59）。

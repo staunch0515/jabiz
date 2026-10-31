@@ -3,6 +3,7 @@ package com.jabiz.runtime.security;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
+import com.jabiz.security.SignUpAttempt;
 import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.process.steps.QueryEntities;
 import jakarta.validation.constraints.NotBlank;
@@ -71,6 +72,11 @@ public class ExternalTokenSignUpProcess {
                 SignUpProcesses.ROLES))
             .step("Draw a name suffix", SignUpProcesses.on(RandomBytesStep.class), new RandomBytesStep.Metadata(
                 SignUpProcesses.RANDOM, SignUpProcesses.SUFFIX_LENGTH))
+            // Only where an account would be opened (D66); the token is proven, so the refusal keeps its 403.
+            .step("Sign-up guards", SignUpGuardStep.spec(new SignUpGuardStep.Metadata<AccountContext>(
+                SignUpAttempt.Path.EXTERNAL_TOKEN, AccountContext::entryName, ctx -> null, ctx -> null,
+                ctx -> false, ctx -> ctx.list(LINKS).isEmpty()
+                    && entries.find(ctx.entryName()).filter(SignInEntries.Entry::selfRegistration).isPresent())))
             .compute("Open the account", (metadata, ctx) -> open(ctx, entries)));
     }
 

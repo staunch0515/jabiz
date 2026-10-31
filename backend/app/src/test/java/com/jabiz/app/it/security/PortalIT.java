@@ -179,4 +179,36 @@ class PortalIT extends SignUpItSupport {
         // The guard is the portal's: other entries do not ask it.
         loginTo(email, PASSWORD, LOOSE).expectStatus().isOk();
     }
+
+    @Test
+    void theAccountOfABlockedCustomerDoesNotJoinThePortalUntilUnblocked() {
+        // An account kept by the back office, whose customer is blocked, registers at the portal (decision D66).
+        String email = address("rejoin");
+        String userId = createUserWithEmail(unique("rejoin"), email, PASSWORD);
+        verifyEmail(userId);
+        String customerId = customerOf(userId, unique("R").toUpperCase());
+        block(customerId);
+        register(PORTAL, email, PASSWORD).expectStatus().isAccepted();
+        deliver();
+        String join = token(JOIN_LINK, email);
+
+        Map<String, Object> refused = client.post().uri("/api/auth/join")
+            .header("Accept-Language", "ja").contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+            .bodyValue(Map.of("token", join)).exchange().expectStatus().isForbidden().expectBody(MAP).returnResult()
+            .getResponseBody();
+        assertThat(ruleCode(refused)).isEqualTo("SIGN_UP_REFUSED");
+        assertThat(refused).containsEntry("reason", "commerce.customer-blocked");
+        assertThat(violations(refused).getFirst()).containsEntry("message",
+            "お客様のアカウントは停止されています。お問い合わせください。");
+        assertThat(rolesOf(userId)).isEmpty();
+
+        // Unblocked, the same link (not used up by the refusal) adds the portal's role.
+        Map<String, Object> customer = get("/api/datasets/" + CommerceEntities.CUSTOMER_DATASET + "/entities/"
+            + customerId, admin()).expectStatus().isOk().expectBody(MAP).returnResult().getResponseBody();
+        post("/api/datasets/" + CommerceEntities.CUSTOMER_DATASET + "/commit", admin(), Map.of("changes", List.of(
+            Map.of("action", "UPDATE", "id", customerId, "version", customer.get("version"), "attributes",
+                Map.of("blocked", false))))).expectStatus().isOk();
+        anonymous("/api/auth/join", Map.of("token", join)).expectStatus().isNoContent();
+        assertThat(rolesOf(userId)).containsExactly(CUSTOMER);
+    }
 }

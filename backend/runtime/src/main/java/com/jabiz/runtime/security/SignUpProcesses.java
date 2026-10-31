@@ -22,6 +22,7 @@ import com.jabiz.security.EmailVerification;
 import com.jabiz.security.LoginAttemptPolicy;
 import com.jabiz.security.LoginOutcome;
 import com.jabiz.security.Sensitive;
+import com.jabiz.security.SignUpAttempt;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Bean;
@@ -59,6 +60,8 @@ import java.util.function.Function;
  *       either way, so the two cannot be told apart by time either.</li>
  *   <li>{@value #JOIN}: the link of that mail adds the entry's registration roles; a pre-claimable account also needs
  *       a new password and is taken over.</li>
+ *   <li>{@value #ACCOUNT_JOIN}: a signed-in user with a verified address adds them without a mail (decision D66); both
+ *       joins give the roles the same way ({@link #addRoles}).</li>
  *   <li>{@value #VERIFY_CHECK} (a dry run) tells from a verification link alone whether verifying needs a password;
  *       {@value #VERIFY} proves the address; {@value #VERIFY_SEND} sends a new link (anonymously only to pre-claimable
  *       accounts, signed in to any unverified one), which supersedes the earlier link.</li>
@@ -67,7 +70,9 @@ import java.util.function.Function;
  *       {@link LoginOutcome#PASSWORD_RESET} (which lifts a lock). A second factor stays, and is asked at the next
  *       sign-in, except on a pre-claimable account.</li>
  * </ul>
- * Every link is a one-time token of its purpose ({@link MailTokens}); it is void once the user's address differs from
+ * Before any of them gives registration roles, the applications' {@link SignUpGuards} are asked
+ * ({@link SignUpGuardStep}; a registration before the address is looked up, without a user, so that the answer is the
+ * same for every address). Every link is a one-time token of its purpose ({@link MailTokens}); it is void once the user's address differs from
  * the one it was sent to, or the user is disabled, and every refusal of a link is the same {@code TOKEN_INVALID}. The
  * link is checked before any password is hashed. Proving the address writes {@code verifiedEmail} and
  * {@code emailVerifiedAt}, the only writers of both.
@@ -79,6 +84,8 @@ public class SignUpProcesses {
 
     public static final String SIGN_UP = "SPONSOR_SIGN_UP";
     public static final String JOIN = "SPONSOR_SIGN_UP_JOIN";
+    /** A signed-in user joining another entry (decision D66). */
+    public static final String ACCOUNT_JOIN = "SEC_ACCOUNT_ENTRY_JOIN";
     public static final String VERIFY = "SPONSOR_EMAIL_VERIFY";
     public static final String VERIFY_CHECK = "SPONSOR_EMAIL_VERIFY_CHECK";
     public static final String VERIFY_SEND = "SPONSOR_EMAIL_VERIFY_SEND";
@@ -133,6 +140,12 @@ public class SignUpProcesses {
             return "JoinInput[***]";
         }
     }
+
+    /**
+     * @param userId the signed-in user, who joins
+     * @param entry  the entry to join; it must let people register
+     */
+    public record AccountJoinInput(String userId, String entry) {}
 
     /**
      * @param password    the account's current password (a pre-claimable account kept by its registrant), or null
@@ -205,6 +218,11 @@ public class SignUpProcesses {
                 return ctx;
             })
             .outputMapper(DONE)
+            // Before the address is looked up, without a user: the guards answer alike for every address (D66).
+            .step("Sign-up guards", SignUpGuardStep.spec(new SignUpGuardStep.Metadata<AccountContext>(
+                SignUpAttempt.Path.REGISTER, AccountContext::entryName, ctx -> null, AccountContext::email,
+                ctx -> false, ctx -> entries.find(ctx.entryName()).filter(SignInEntries.Entry::selfRegistration)
+                    .isPresent())))
             .step("Find the address", LoadUserByEmail.<AccountContext>into(AccountContext::email, USERS))
             .step("Find the user name", QueryEntities.<AccountContext>of(SecurityEntities.USER_DATASET,
                 ctx -> EntityQuery.builder().where(new QueryPredicate.Eq("userName", baseName(ctx.email())))
@@ -248,6 +266,10 @@ public class SignUpProcesses {
                 ctx -> Rbac.assignmentsOf(linkedId(ctx)), ASSIGNMENTS))
             .step("Find the registration roles", QueryEntities.<AccountContext>of(SecurityEntities.ROLE_DATASET,
                 ctx -> rolesNamed(entries.resolve(ctx.entryName()).registrationRoles()), ROLES))
+            // The link proved the mailbox: answered at the link, the link stays usable (D66).
+            .step("Sign-up guards", SignUpGuardStep.spec(new SignUpGuardStep.Metadata<AccountContext>(
+                SignUpAttempt.Path.MAIL_JOIN, AccountContext::entryName, SignUpProcesses::linkedId,
+                ctx -> linked(ctx).get("email"), ctx -> true, ctx -> linked(ctx) != null)))
             .step("Load the second factor", QueryEntities.<AccountContext>of(SecurityEntities.USER_MFA_DATASET,
                 SignUpProcesses::ofLinkedUser, MFA))
             .step("Load the provider links", QueryEntities.<AccountContext>of(SecurityEntities.USER_IDENTITY_DATASET,
@@ -258,6 +280,35 @@ public class SignUpProcesses {
             .compute("Join", (metadata, ctx) -> join(ctx, entries))
             .step("End the sessions", on(RevokeSessionsStep.class), new RevokeSessionsStep.Metadata(END_SESSIONS,
                 RefreshTokenStore.REASON_JOIN, ctx -> ctx.get(END_SESSIONS) != null && !ctx.hasViolations())));
+    }
+
+    /**
+     * A signed-in user joining another entry (decision D66): the entry's registration roles the user does not hold yet,
+     * after the sign-up guards; only through {@code POST /api/auth/account/entries/{entry}/join}, as the user.
+     */
+    static ProcessDefinition<AccountJoinInput, Done, AccountContext> accountJoin(SignInEntries entries) {
+        return ProcessDefinition.define(ACCOUNT_JOIN, 1, AccountJoinInput.class, Done.class, AccountContext.class,
+            pb -> pb
+                .description("Adds an entry's registration roles to the signed-in user, whose address is verified.")
+                .permissions(SecurityPermissions.ACCOUNT)
+                .requiresVerifiedEmail()
+                .entryOnly()
+                .contextFactory((start, input) -> new AccountContext(start, input.entry(), null, null, null,
+                    input.userId(), null, null))
+                .outputMapper(DONE)
+                .step("Load the user", QueryEntities.<AccountContext>of(SecurityEntities.USER_DATASET,
+                    ctx -> byId(ctx.userId()), USERS))
+                .compute("Check the account", (metadata, ctx) -> checkAccount(ctx))
+                .step("Load the role assignments", QueryEntities.<AccountContext>of(
+                    SecurityEntities.USER_ROLE_DATASET, ctx -> Rbac.assignmentsOf(linkedId(ctx)), ASSIGNMENTS))
+                .step("Find the registration roles", QueryEntities.<AccountContext>of(SecurityEntities.ROLE_DATASET,
+                    ctx -> rolesNamed(entries.resolve(ctx.entryName()).registrationRoles()), ROLES))
+                // Only when there is something to give: joining again changes nothing and needs no decision.
+                .step("Sign-up guards", SignUpGuardStep.spec(new SignUpGuardStep.Metadata<AccountContext>(
+                    SignUpAttempt.Path.SIGNED_IN_JOIN, AccountContext::entryName, SignUpProcesses::linkedId,
+                    ctx -> linked(ctx).get("email"), ctx -> true, ctx -> linked(ctx) != null
+                        && !missingRoles(ctx, pendingRoles(ctx, entries)).isEmpty())))
+                .compute("Join", (metadata, ctx) -> accountJoin(ctx, entries)));
     }
 
     static ProcessDefinition<VerifyInput, VerifyCheck, AccountContext> verifyCheck() {
@@ -513,19 +564,75 @@ public class SignUpProcesses {
                 "A new password is required to join with an address nobody has verified", Map.of("field", PASSWORD)));
             return;
         }
-        Set<String> held = new HashSet<>();
-        ctx.list(ASSIGNMENTS).forEach(assignment -> held.add(String.valueOf(assignment.<Object>get("roleId"))));
-        for (EntityInstance role : roles.values()) {
-            if (!held.contains(String.valueOf(role.id()))) {
-                ctx.changes().insert(SecurityEntities.USER_ROLE, Map.of("userId", user.id(), "roleId", role.id()));
-            }
-        }
+        addRoles(ctx, user, roles);
         Map<String, Object> changed = proof(ctx, user);
         if (preClaimable) {
             changed.put("passwordHash", hash);
             claim(ctx);
         }
         ctx.changes().update(SecurityEntities.USER, user.id(), user.version(), changed);
+    }
+
+    /**
+     * Assigns {@code user} the {@code roles} it does not hold yet ({@value #ASSIGNMENTS}): the one way both joins give
+     * an entry's registration roles (decision D66). An ordinary assignment, so that the four eyes on protected grants
+     * (decision D48) apply to it as to any other.
+     */
+    static void addRoles(AccountContext ctx, EntityInstance user, Map<String, EntityInstance> roles) {
+        for (EntityInstance role : missingRoles(ctx, roles)) {
+            ctx.changes().insert(SecurityEntities.USER_ROLE, Map.of("userId", user.id(), "roleId", role.id()));
+        }
+    }
+
+    /**
+     * The entry's registration roles that were found enabled, by code, without a violation for those that were not
+     * (the join answers that); empty for an entry that takes no registrations.
+     */
+    static Map<String, EntityInstance> pendingRoles(AccountContext ctx, SignInEntries entries) {
+        Set<String> codes = entries.find(ctx.entryName()).filter(SignInEntries.Entry::selfRegistration)
+            .map(SignInEntries.Entry::registrationRoles).orElse(Set.of());
+        Map<String, EntityInstance> byCode = new LinkedHashMap<>();
+        ctx.list(ROLES).stream().filter(Rbac::enabled)
+            .filter(role -> codes.contains(String.valueOf(role.<Object>get("roleCode"))))
+            .forEach(role -> byCode.put(String.valueOf(role.<Object>get("roleCode")), role));
+        return byCode;
+    }
+
+    /** Of {@code roles}, those the loaded assignments ({@value #ASSIGNMENTS}) do not hold. */
+    static List<EntityInstance> missingRoles(AccountContext ctx, Map<String, EntityInstance> roles) {
+        Set<String> held = new HashSet<>();
+        ctx.list(ASSIGNMENTS).forEach(assignment -> held.add(String.valueOf(assignment.<Object>get("roleId"))));
+        return roles.values().stream().filter(role -> !held.contains(String.valueOf(role.id()))).toList();
+    }
+
+    /**
+     * Checks the signed-in user who joins another entry: enabled, and still at a verified address (the access token
+     * may say so from before the address changed). Refused as at the entry point otherwise.
+     */
+    static void checkAccount(AccountContext ctx) {
+        EntityInstance user = ctx.user();
+        if (user == null || !Rbac.enabled(user)) {
+            throw new com.jabiz.runtime.PermissionDeniedException(SecurityPermissions.ACCOUNT,
+                "Only an enabled user joins an entry");
+        }
+        if (!SecurityEntities.emailVerified(user)) {
+            throw new EmailNotVerifiedException("Joining an entry requires a verified e-mail address");
+        }
+        ctx.put(LINKED, user);
+    }
+
+    /** Adds the entry's registration roles the signed-in user does not hold yet; nothing when it holds them all. */
+    static void accountJoin(AccountContext ctx, SignInEntries entries) {
+        EntityInstance user = linked(ctx);
+        SignInEntries.Entry entry = entries.find(ctx.entryName()).filter(SignInEntries.Entry::selfRegistration)
+            .orElse(null);
+        if (user == null || entry == null) {
+            throw new com.jabiz.resource.ResourceNotFoundException("No sign-in entry to join: " + ctx.entryName());
+        }
+        Map<String, EntityInstance> roles = registrationRoles(ctx, entry);
+        if (roles != null) {
+            addRoles(ctx, user, roles);
+        }
     }
 
     /**
@@ -641,7 +748,7 @@ public class SignUpProcesses {
         return ctx.get(LINKED) instanceof EntityInstance user ? user : null;
     }
 
-    private static Object linkedId(ProcessContext ctx) {
+    static Object linkedId(ProcessContext ctx) {
         EntityInstance user = linked(ctx);
         return user == null ? null : user.id();
     }
@@ -718,6 +825,11 @@ public class SignUpProcesses {
     @Bean
     ProcessDefinition<JoinInput, Done, AccountContext> sponsorSignUpJoinProcess(SignInEntries entries) {
         return join(entries);
+    }
+
+    @Bean
+    ProcessDefinition<AccountJoinInput, Done, AccountContext> accountEntryJoinProcess(SignInEntries entries) {
+        return accountJoin(entries);
     }
 
     @Bean

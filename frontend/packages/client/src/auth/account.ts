@@ -219,6 +219,17 @@ export async function unlinkIdentity(id: string): Promise<void> {
   await unwrap(api.DELETE('/api/auth/account/identities/{id}', { params: { path: { id } } }))
 }
 
+/**
+ * Joins another sign-in entry with the signed-in account (`POST /api/auth/account/entries/{entry}/join`, decision
+ * D66): that entry's registration roles are added, after the application's sign-up guards. The session stays as it
+ * is; the user signs in at the joined entry afterwards. Joining an entry whose roles the account holds already changes
+ * nothing. Refusals: 403 `EMAIL_NOT_VERIFIED` (verify the address first), 403 `SIGN_UP_REFUSED` (the message says
+ * why), 404 for an entry that does not exist or takes no registrations, 429 `RATE_LIMITED`.
+ */
+export async function joinEntry(entry: string): Promise<void> {
+  await unwrap(api.POST('/api/auth/account/entries/{entry}/join', { params: { path: { entry } } }))
+}
+
 /** Whether a failure is the server's refusal with this rule code (and, when given, this status). */
 export function isProblem(error: unknown, code: string, status?: number): error is ApiError {
   return error instanceof ApiError && (status === undefined || error.status === status)
