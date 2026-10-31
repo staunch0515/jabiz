@@ -59,7 +59,8 @@ abstract class PublicationItSupport extends ContentItSupport {
     /** A sponsor's token, as the role QB_SPONSOR has it (the parts the tests use). */
     String sponsor(String actorId) {
         return TestTokens.bearer(tokens, actorId, QbPermissions.CONTENT_WRITE, QbPermissions.CONTENT_FILE_READ,
-            QbPermissions.PUBLICATION_WRITE, QbPermissions.SPONSOR_ME, QbPermissions.ACCOUNT_READ);
+            QbPermissions.PUBLICATION_WRITE, QbPermissions.SPONSOR_ME, QbPermissions.ACCOUNT_READ,
+            QbPermissions.SPONSOR_APP);
     }
 
     /** A content administrator reviewing sponsor onboarding, as {@code QB_ADMIN_CONTENT} does. */

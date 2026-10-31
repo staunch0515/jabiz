@@ -275,6 +275,10 @@ class RewardMethodsIT extends PlayItSupport {
         assertThat(InboxItSupport.kindsOf(sponsor)).containsExactly("CASH_CONFIRMED");
         assertThat(InboxItSupport.messagesOf(sponsor).getFirst()).containsEntry("action", "CASH")
             .containsEntry("action_id", cashRewardId);
+        // Q68: in the app the sponsor reads it under the sponsor's category; the taker's own are not there.
+        assertThat(rows("qb.app.inbox", taker(sponsor), Map.of("category", "SPONSOR"))).singleElement()
+            .satisfies(item -> assertThat(item).containsEntry("kind", "CASH_CONFIRMED"));
+        assertThat(rows("qb.app.inbox", token, Map.of("category", "SPONSOR"))).isEmpty();
         assertThat(rows("qb.app.cash-rewards", token, Map.of("open", true))).isEmpty();
         // Only ever inserted into.
         assertThat(query("SELECT count(*) AS n FROM qb_cash_reward_version WHERE attempt_id = ?", attemptId)

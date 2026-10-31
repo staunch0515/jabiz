@@ -271,7 +271,9 @@ public final class PublicationLifecycle {
             ProcessContext.class, pb -> pb
                 .description("Pauses a scheduled, live or underfunded publication: it takes no new attempts until "
                     + "resumed.")
-                .permissions(QbPermissions.PUBLICATION_WRITE)
+                // Q68: from the sponsor console and the app alike; the sponsor's dataset loads only the caller's
+                // own publication (another's is not found), and neither pausing nor resuming moves Kudos.
+                .permissions(QbPermissions.SPONSOR_APP)
                 .requiresVerifiedEmail()
                 .steps(CallerChecks::refuseBanned)
                 .actsOn(QbPublications.PUBLICATION, "publicationId",
@@ -299,7 +301,7 @@ public final class PublicationLifecycle {
             ProcessContext.class, pb -> pb
                 .description("Resumes a paused publication: scheduled before its start, live within its time, "
                     + "ended after its end.")
-                .permissions(QbPermissions.PUBLICATION_WRITE)
+                .permissions(QbPermissions.SPONSOR_APP)
                 .requiresVerifiedEmail()
                 .steps(CallerChecks::refuseBanned)
                 .actsOn(QbPublications.PUBLICATION, "publicationId", a -> a.whenField("status", PAUSED))

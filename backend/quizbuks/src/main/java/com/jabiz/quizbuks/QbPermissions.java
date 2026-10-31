@@ -179,6 +179,13 @@ public final class QbPermissions {
      */
     public static final String STATS_READ = "qb.stats.read";
     /**
+     * What a sponsor sees and does in the taker app (Q68, docs/quizbuks/plans/Q68-sponsor-in-app.md): their own
+     * account, key figures, publications on and trends (templates over the sponsor's datasets, which hold the caller's
+     * own rows only), and pausing or resuming their own publication (nothing that moves Kudos). Takers and sponsors
+     * both hold it: the app's sign-in carries the taker's role only, and a taker who is no sponsor finds nothing.
+     */
+    public static final String SPONSOR_APP = "qb.sponsor.app";
+    /**
      * The analytics job's item process ({@code QB_ANALYTICS_ITEM}, {@code internal()}), its templates and its own
      * datasets. Granted to no role.
      */

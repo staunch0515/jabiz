@@ -41,11 +41,14 @@ import {
   type InboxItem,
 } from './api'
 import './messages'
+import { useMySponsor } from '../mysponsor/api'
 
 /** Items per page of the inbox. */
 export const INBOX_PAGE = 20
 
 const CATEGORIES: (Category | 'all')[] = ['all', 'SYSTEM', 'PROMO', 'REWARD', 'REMINDER']
+/** Q68: a sponsor also has their own messages' category. */
+const SPONSOR_CATEGORIES: (Category | 'all')[] = [...CATEGORIES, 'SPONSOR']
 
 /** Who an item is from: QuizBuks for messages and announcements, the sponsor's company for a notice. */
 export function senderOf(item: InboxItem, t: (key: string, options?: Record<string, unknown>) => string): string {
@@ -119,6 +122,7 @@ export function InboxPage() {
   const { t: tQb } = useTranslation(QB)
   const id = useId()
   const queryClient = useQueryClient()
+  const sponsor = !!useMySponsor().data
   // The list as of opening the page: its pages stay one list until it is opened again or reloaded.
   const [at] = useState(() => Date.now())
   const [text, setText] = useState('')
@@ -182,7 +186,7 @@ export function InboxPage() {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {CATEGORIES.map((category) => (
+            {(sponsor ? SPONSOR_CATEGORIES : CATEGORIES).map((category) => (
               <SelectItem key={category} value={category}>{t(`inbox.categories.${category}`)}</SelectItem>
             ))}
           </SelectContent>

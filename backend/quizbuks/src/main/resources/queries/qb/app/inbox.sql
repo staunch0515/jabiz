@@ -16,7 +16,7 @@ datasets:
   QbPublicationCard: urn:jabiz:dataset:default:QbPublicationCard
   QbPublicationOwner: urn:jabiz:dataset:me:QbPublicationOwner
 params:
-  category: { kind: { type: text, maxLength: 10 }, description: "Only SYSTEM (system messages, announcements and notices), PROMO, REWARD or REMINDER" }
+  category: { kind: { type: text, maxLength: 10 }, description: "Only SYSTEM (system messages, announcements and notices), PROMO, REWARD, REMINDER or SPONSOR (a sponsor's own messages, Q68)" }
   unread:   { kind: { type: bool }, description: Only the unread ones }
   q:        { kind: { type: text, maxLength: 100 }, description: "Only those whose title or text contains this, in the language lang or English" }
   lang:     { kind: { type: text, maxLength: 5 }, description: "The interface's language (en, zh, ja)" }
@@ -77,7 +77,10 @@ items AS (
         CAST('MESSAGE' AS varchar(10))            AS item_kind,
         CAST(m.{{QbMessage.messageId}} AS varchar(36)) AS item_id,
         CAST(m.{{QbMessage.type}} AS varchar(10)) AS type,
-        CAST(m.{{QbMessage.type}} AS varchar(10)) AS category,
+        -- Q68: a sponsor's own messages (a cash reward, a claim, a digital prize: those leading to the sponsor
+        -- console) are the sponsor's category, whatever their type.
+        CAST(CASE WHEN m.{{QbMessage.action}} IN ('CASH', 'REDEEM', 'DIGITAL') THEN 'SPONSOR'
+                  ELSE m.{{QbMessage.type}} END AS varchar(10)) AS category,
         CAST(m.{{QbMessage.kind}} AS varchar(30)) AS kind,
         CAST(NULL AS varchar(10))                 AS sender,
         CAST(NULL AS varchar(200))                AS sponsor_name,

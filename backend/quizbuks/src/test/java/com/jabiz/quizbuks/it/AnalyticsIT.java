@@ -502,21 +502,39 @@ class AnalyticsIT extends AnalyticsItSupport {
             .isEqualTo(1);
     }
 
+    /** Q68: the two templates the app's sponsor page reads, with the permission takers hold too. */
+    static final List<String> SHARED_WITH_THE_APP = List.of(DASHBOARD, TREND);
+
     @Test
     void nobodyButASponsorReadsTheAnalytics() {
-        List<String> refused = List.of(taker(user("t-an-perm")), tokenOf(user("an-content"), QbRoles.ADMIN_CONTENT),
+        String taker = taker(user("t-an-perm"));
+        List<String> refused = List.of(taker, tokenOf(user("an-content"), QbRoles.ADMIN_CONTENT),
             tokenOf(user("an-finance"), QbRoles.ADMIN_FINANCE), tokenOf(user("an-super"), QbRoles.ADMIN_SUPER));
         Map<String, Object> params = Map.of("publicationId", UUID.randomUUID().toString(), "at",
             clock.instant().toString(), "from", clock.instant().toString(), "to",
             clock.instant().plus(Duration.ofHours(1)).toString(), "bucket", "HOUR");
         for (String token : refused) {
             for (String template : TEMPLATES) {
+                // Q68: the app's sponsor page reads the dashboard and the trend with the taker's role; a taker who
+                // is no sponsor finds only their own (no) publications, as below.
+                if (token.equals(taker) && SHARED_WITH_THE_APP.contains(template)) {
+                    continue;
+                }
                 client.post().uri("/api/queries/" + template).contentType(MediaType.APPLICATION_JSON)
                     .header(HttpHeaders.AUTHORIZATION, token).bodyValue(Map.of("params", params)).exchange()
                     .expectStatus().isForbidden();
             }
-            export(TREND, token, "csv", params, 403, "en");
+            if (!token.equals(taker)) {
+                export(TREND, token, "csv", params, 403, "en");
+            }
         }
+        Map<String, Object> none = dashboard(taker, clock.instant());
+        assertThat(List.of(count(none.get("live")), count(none.get("answering")), count(none.get("available"))))
+            .containsOnly(0L);
+        Map<String, Object> trend = new java.util.HashMap<>(params);
+        trend.remove("at");
+        assertThat(rows(TREND, taker, trend)).allSatisfy(bucket ->
+            assertThat(count(bucket.get("completions"))).isZero());
         for (String template : TEMPLATES) {
             client.post().uri("/api/queries/" + template).contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(Map.of("params", params)).exchange().expectStatus().isUnauthorized();
@@ -524,6 +542,8 @@ class AnalyticsIT extends AnalyticsItSupport {
         // Only the sponsors hold it; the job's processes are the system's.
         assertThat(QbRoles.all()).filteredOn(role -> role.permissions().contains("qb.stats.read"))
             .extracting(QbRoles.Role::code).containsExactly(QbRoles.SPONSOR);
+        assertThat(QbRoles.all()).filteredOn(role -> role.permissions().contains("qb.sponsor.app"))
+            .extracting(QbRoles.Role::code).containsExactlyInAnyOrder(QbRoles.TAKER, QbRoles.SPONSOR);
         assertThat(QbRoles.all()).noneMatch(role -> role.permissions().contains("qb.stats.system"));
         refusedAsInternal("QB_ANALYTICS_ITEM", admin(), body("at", clock.instant().toString(), "kind", "RUN"));
     }

@@ -86,6 +86,11 @@ export function InboxItemPage({ kind, id }: { kind: ItemKind; id: string }) {
         // A sponsor's text, or a message with a sponsor's publication name, exactly as written: never a link (Q7-10).
         <p className="whitespace-pre-wrap break-words" lang={body.lang} data-testid="inbox-item-plain">{body.text}</p>
       )}
+      {/* Q68: a sponsor's own message: what to do about it is the sponsor console's, on a computer. */}
+      {found.itemKind === 'MESSAGE' && (found.action === 'CASH' || found.action === 'REDEEM'
+        || found.action === 'DIGITAL') && (
+        <p className="text-muted-foreground text-sm" data-testid="inbox-item-console">{t('mySponsor.consoleHint')}</p>
+      )}
       {target && (
         <div>
           <Button onClick={go} disabled={click.isPending} data-testid="inbox-item-go">

@@ -28,8 +28,10 @@ list:
   sorts: [bucketStart]
   defaultSort: { field: bucketStart, asc: true }
   key: [bucketStart]
-permissions: [qb.stats.read]
+permissions: [qb.sponsor.app]
 ---*/
+-- Q68: also the app's sponsor page (permission qb.sponsor.app, held by sponsors and takers): the sponsor's datasets
+-- hold the caller's own rows only, so a taker who is no sponsor reads zeros or nothing.
 -- Only the sponsor's own publications (the sponsor's dataset of publication cards): another sponsor's publicationId finds
 -- nothing. The buckets are found by the sponsor's index and joined to those publications. Aggregates only, no person (D-Q9e-4): counts are not held back by the minimum group (E-4). The hourly
 -- buckets are the job's (every ten minutes; the hour now is filled as the job runs). HOUR: the UTC hours from the hour

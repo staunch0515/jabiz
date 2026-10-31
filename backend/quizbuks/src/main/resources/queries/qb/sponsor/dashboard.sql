@@ -28,8 +28,10 @@ results:
   dayStart:        { kind: { type: temporal, role: EVENT_TIME } }
   zone:            { from: QbStatsRun.zone }
   refreshedAt:     { from: QbStatsRun.refreshedAt }
-permissions: [qb.stats.read]
+permissions: [qb.sponsor.app]
 ---*/
+-- Q68: also the app's sponsor page (permission qb.sponsor.app, held by sponsors and takers): the sponsor's datasets
+-- hold the caller's own rows only, so a taker who is no sponsor reads zeros or nothing.
 -- One row over the sponsor's own publications and wallet (their datasets). Live (E-3): the publications' states, the
 -- takers answering now (starts - completions, both sides of the counters in this one statement), the wallet, and the
 -- part of today's spending since the job's last run (the counter's spent less the cursor's; a publication the job has
