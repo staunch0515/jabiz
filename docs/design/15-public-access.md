@@ -161,6 +161,7 @@ WHERE s.{{Story.slug}} = :slug
 PublicCounter productViews() {
     return PublicCounter.define("commerce.product-view", c -> c
         .keys(CommerceEntities.PUBLIC_PRODUCT_DATASET, "productId")   // 只计公开视图中此刻可见的行
+        // .owner("sellerId")                                           // 可选：键所在行的所有人，存入 ownerKey
         .zone("Asia/Tokyo"));                                           // 日期的时区，缺省 UTC
 }
 ```
@@ -178,6 +179,8 @@ countPublic('commerce.product-view', product.productId)   // sendBeacon；失败
   `ON CONFLICT DO UPDATE` 累加）；失败的留到下一次。平台的测试配置关闭定时写入（`jabiz.public.counters.flush-interval=0s`），测试直接调用 `PublicCounters.flush()`。
 - 读取：平台实体 `PublicCounterDay`、平台数据视图 `urn:jabiz:dataset:platform:PublicCounterDay`（`public-counter.read`，只读）；
   应用以自己的只读数据视图（带范围）与模板给各自的读者。
+- 所有人（D65 第 7 条）：声明了 `owner(字段)` 的计数器在计数时同时读出键所在行的该字段，存入 `owner_key`（迁移 V53；已有的行保留最早的值）。
+  应用给每个所有人一个数据视图：`scope(s -> s.fixed("counterName", 名).fromContext("ownerKey", RequestContext::actorId))`，只读。
 - 近似值：多实例各自去重、异常退出丢失最后一个间隔、NAT 后的同款浏览器计为一人；展示处应注明。
 - 部署在反向代理之后时必须把代理列入 `jabiz.security.trusted-proxies`（10 §15.5）：否则所有访客的地址都是代理的地址，同一款浏览器每天只计一次。
 - 观测：每次计数 `jabiz.public.counter`（§8），每次写入 `jabiz.public.counter.flush`（没有待写的计数时不产生）。
