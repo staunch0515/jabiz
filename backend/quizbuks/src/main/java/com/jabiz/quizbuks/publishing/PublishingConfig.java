@@ -158,9 +158,10 @@ public class PublishingConfig {
             // S0 (D-S0-4): the share page is the sponsors' system's; a shop's publication (S2) has its own storefront.
             .scope(s -> s.fixed("status", PublicationStatus.LIVE).fixed("audience", Audience.PUBLIC)
                 .fixed("publisherKind", PublisherKind.SPONSOR))
-            .publicRead(p -> p.fields("publicationId", "publisherId", "name", "quizTitle", "kind", "startAt", "endAt",
-                "timeLimitSec", "questionCount", "fullScore", "passScore", "maxReward", "rewardMethod",
-                "redeemDescription", "digitalDelivery", "digitalDescription"))
+            // Q60b: the version, for the template of the products its quiz shows (no template returns it).
+            .publicRead(p -> p.fields("publicationId", "publisherId", "versionId", "name", "quizTitle", "kind",
+                "startAt", "endAt", "timeLimitSec", "questionCount", "fullScore", "passScore", "maxReward",
+                "rewardMethod", "redeemDescription", "digitalDelivery", "digitalDescription"))
             // Read anonymously through the public template only, which projects the whitelist. The dataset API, which
             // does not, is closed to everybody (no role holds the permission): an operator's session would read every
             // live card with its budget and operator (Q59c-2); headquarters reads the cards' own dataset.
