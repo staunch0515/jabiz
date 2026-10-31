@@ -149,6 +149,22 @@ class PublicCountersTest {
     }
 
     @Test
+    void bindsTheKeyAsItsColumnHoldsIt() {
+        // An ordinary table's semantic identity is text (not a uuid column): the key is looked up as text.
+        PublicCounters counters = counters(10);
+        String key = key();
+        counters.count(VIEWS, key, "a").block();
+        org.mockito.ArgumentCaptor<com.jabiz.query.RawQueryPlan> plan =
+            org.mockito.ArgumentCaptor.forClass(com.jabiz.query.RawQueryPlan.class);
+        verify(engine).executeRawQuery(plan.capture());
+        assertThat(plan.getValue().bindParams().values()).anySatisfy(bound -> {
+            assertThat(bound.value()).isEqualTo(key);
+            assertThat(bound.type()).isEqualTo(String.class);
+        });
+        assertThat(plan.getValue().sql()).contains("pc.sku AS owner_key").contains("LIMIT 1");
+    }
+
+    @Test
     void aKeyWithoutAVisibleRowIsNotCounted() {
         PublicCounters counters = counters(10);
         when(engine.executeRawQuery(any())).thenAnswer(i -> Flux.empty());
