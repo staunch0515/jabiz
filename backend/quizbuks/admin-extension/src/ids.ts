@@ -30,6 +30,8 @@ export const DATASET = {
 
 /** SQL templates (`queries/qb/admin`). */
 export const TEMPLATE = {
+  /** Sponsors' pages (Q60a-3): the list, the review queue and one page (an operator's own sponsors' only). */
+  sponsorPages: 'qb.admin.sponsor-pages',
   /** The reward parameters in force (Q28): the default methods and the highest reward per attempt. */
   rewardDefaults: 'qb.admin.reward-defaults',
   /** The review queue: no money (the content administrators read it). */
@@ -262,6 +264,7 @@ export const TRANSFER_REVIEW = 'REVIEW'
 
 /** Dictionaries, labelled by the server in the request's language. */
 export const DICTIONARY = {
+  sponsorPageStatus: 'urn:jabiz:dict:quizbuks:sponsor-page-status',
   region: 'urn:jabiz:dict:quizbuks:region',
   contentLanguage: 'urn:jabiz:dict:quizbuks:content-language',
   audience: 'urn:jabiz:dict:quizbuks:publication-audience',
@@ -372,6 +375,23 @@ export const CONTENT_IMAGE_VARIANTS = ['w320', 'w640', 'w1280']
 /** The widths the policy `qb.sponsor-avatar` keeps. */
 export const AVATAR_VARIANTS = ['w128', 'w256']
 
+/** The widths the policy `qb.sponsor-page-image` keeps (a sponsor page's logo and cover, Q60a). */
+export const SPONSOR_PAGE_IMAGE_VARIANTS = ['w256', 'w640', 'w1280']
+
+/** Taking a sponsor's page down (Q60a): headquarters', and an operator's for the sponsors it looks after. */
+export const SPONSOR_PAGE_PROCESS = {
+  takedown: 'QB_SPONSOR_PAGE_TAKEDOWN',
+  operatorTakedown: 'QB_OPERATOR_SPONSOR_PAGE_TAKEDOWN',
+  version: 1,
+} as const
+
+/** A sponsor page's states (`QbSponsorPages`): waiting for its review, shown, and the rest. */
+export const SPONSOR_PAGE_PENDING = 'PENDING'
+export const SPONSOR_PAGE_PUBLISHED = 'PUBLISHED'
+export const SPONSOR_PAGE_STATUSES = [SPONSOR_PAGE_PENDING, SPONSOR_PAGE_PUBLISHED, 'DRAFT', 'REJECTED', 'TAKEN_DOWN'] as const
+/** The states a page is not shown in because someone refused or stopped it. */
+export const SPONSOR_PAGE_STOPPED: readonly string[] = ['REJECTED', 'TAKEN_DOWN']
+
 /** The most rows one request asks for (the platform's page limit). */
 export const PAGE_LIMIT = 100
 
@@ -390,6 +410,9 @@ export const PATH = {
   reviews: '/qb/reviews',
   publication: (publicationId: string) => `/qb/reviews/publications/${encodeURIComponent(publicationId)}`,
   sponsor: (userId: string) => `/qb/reviews/sponsors/${encodeURIComponent(userId)}`,
+  /** Sponsors' pages (Q60a-3): every one, and one page's content, review and takedown. */
+  sponsorPages: '/qb/sponsor-pages',
+  sponsorPage: (userId: string) => `/qb/sponsor-pages/${encodeURIComponent(userId)}`,
   users: '/qb/users',
   /** Every attempt (Q14), by user, publication and state. */
   attempts: '/qb/attempts',

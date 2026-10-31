@@ -151,4 +151,5 @@ export const forbidden = (error: unknown) => error instanceof ApiError && error.
 export const QUEUE = {
   publications: ['qb-ext', 'queue', 'publications'],
   sponsors: ['qb-ext', 'queue', 'sponsors'],
+  sponsorPages: ['qb-ext', 'queue', 'sponsor-pages'],
 } as const

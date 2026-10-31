@@ -56,3 +56,15 @@
 - **测试**：`sponsor/src/page/page.test.tsx`（创建草稿后发布、未保存不能发布、理由、撤下、字段错误、三种语言）；
   `app/src/share/sponsorPage.test.tsx`（主页与发布列表、https 以外不成链接、没有发布与没有主页、分享页的商户链接）；
   `SponsorPageIT` 断言两个发布模板的 `sponsorHandle`（发布后为链接名，撤下后为空）。
+
+## 4. Q60a-3 设计
+
+- **模板** `qb.admin.sponsor-pages`（权限 `qb.admin.publication.read`；两个数据视图都按运营商限定，运营商只看到自己的商户）：主页与公司名；
+  可按状态、语言、链接名、公司筛选；带 `userId` 参数即一个主页。
+- **审核**：审核页新增"商户主页"标签页（审核商户且能读发布列表的人可见），列出等待审核的主页，等待最久的在前。
+- **主页列表**（`/qb/sponsor-pages`）：总部在 QuizBuks 菜单（`qb.admin.content.write`），运营商在自己的菜单；按状态筛选。
+- **主页详情**（`/qb/sponsor-pages/:userId`）：链接名、语言、网站、标题、介绍、标志、封面、时间与理由；审核中显示平台的审批面板；
+  已发布时"下架"链接到平台的流程页（总部 `QB_SPONSOR_PAGE_TAKEDOWN`，运营商 `QB_OPERATOR_SPONSOR_PAGE_TAKEDOWN`，填好商户，在那里填写理由并二次验证）；
+  网站不能做成链接时照原样显示文字。
+- **测试**：扩展 `sponsorPages.test.tsx`（审核页标签、列表与状态筛选、审核中的内容与审批面板、总部与运营商的下架链接、封禁的理由、不存在的主页、三种语言、axe）；
+  `SponsorPageIT`（运营商经模板只看到自己的商户的主页；一个主页的内容）；`OperatorScopesIT` 覆盖新模板。
