@@ -66,8 +66,8 @@
       },
       "body" : {
         "en" : "Collect your prize for \"Coffee week\" (worth 300 Kudos) at the sponsor's place by 2026-10-31: A coffee at our counter",
-        "ja" : "「Coffee week」の賞品（300 Kudos 相当）を 2026-10-31 までにスポンサーの店舗で受け取ってください：A coffee at our counter",
-        "zh" : "请在 2026-10-31 前到商家处领取\"Coffee week\"的奖品（价值 300 Kudos）：A coffee at our counter"
+        "ja" : "「Coffee week」の賞品（300 クドス相当）を 2026-10-31 までにスポンサーの店舗で受け取ってください：A coffee at our counter",
+        "zh" : "请在 2026-10-31 前到商家处领取\"Coffee week\"的奖品（价值 300 学分）：A coffee at our counter"
       },
       "publicationId" : "#uuid:3",
       "action" : "RESULT",
@@ -89,8 +89,8 @@
       },
       "body" : {
         "en" : "You collected your prize for \"Coffee week\" (code C-0000043B, worth 300 Kudos). Enjoy!",
-        "ja" : "「Coffee week」の賞品（コード C-0000043B、300 Kudos 相当）を受け取りました。お楽しみください！",
-        "zh" : "你已领取\"Coffee week\"的奖品（编码 C-0000043B，价值 300 Kudos）。请享用！"
+        "ja" : "「Coffee week」の賞品（コード C-0000043B、300 クドス相当）を受け取りました。お楽しみください！",
+        "zh" : "你已领取\"Coffee week\"的奖品（编码 C-0000043B，价值 300 学分）。请享用！"
       },
       "publicationId" : "#uuid:3",
       "action" : "RESULT",
@@ -112,8 +112,8 @@
       },
       "body" : {
         "en" : "Collect your prize for \"Coffee week\" (worth 300 Kudos) at the sponsor's place by 2026-10-31: A coffee at our counter",
-        "ja" : "「Coffee week」の賞品（300 Kudos 相当）を 2026-10-31 までにスポンサーの店舗で受け取ってください：A coffee at our counter",
-        "zh" : "请在 2026-10-31 前到商家处领取\"Coffee week\"的奖品（价值 300 Kudos）：A coffee at our counter"
+        "ja" : "「Coffee week」の賞品（300 クドス相当）を 2026-10-31 までにスポンサーの店舗で受け取ってください：A coffee at our counter",
+        "zh" : "请在 2026-10-31 前到商家处领取\"Coffee week\"的奖品（价值 300 学分）：A coffee at our counter"
       },
       "publicationId" : "#uuid:3",
       "action" : "RESULT",
@@ -135,8 +135,8 @@
       },
       "body" : {
         "en" : "Someone at your place claims the prize for \"Coffee week\" (code C-00000443, worth 300 Kudos). Confirm it on the redeem page within ten minutes, or decline it.",
-        "ja" : "店舗で誰かが「Coffee week」の賞品（コード C-00000443、300 Kudos 相当）の受け取りを申請しています。10 分以内に引き換えページで確認するか、拒否してください。",
-        "zh" : "有人在你的店里申请领取\"Coffee week\"的奖品（编码 C-00000443，价值 300 Kudos）。请在十分钟内到领奖页确认，或拒绝。"
+        "ja" : "店舗で誰かが「Coffee week」の賞品（コード C-00000443、300 クドス相当）の受け取りを申請しています。10 分以内に引き換えページで確認するか、拒否してください。",
+        "zh" : "有人在你的店里申请领取\"Coffee week\"的奖品（编码 C-00000443，价值 300 学分）。请在十分钟内到领奖页确认，或拒绝。"
       },
       "publicationId" : "#uuid:3",
       "action" : "REDEEM",
@@ -158,8 +158,8 @@
       },
       "body" : {
         "en" : "You collected your prize for \"Coffee week\" (code C-00000443, worth 300 Kudos). Enjoy!",
-        "ja" : "「Coffee week」の賞品（コード C-00000443、300 Kudos 相当）を受け取りました。お楽しみください！",
-        "zh" : "你已领取\"Coffee week\"的奖品（编码 C-00000443，价值 300 Kudos）。请享用！"
+        "ja" : "「Coffee week」の賞品（コード C-00000443、300 クドス相当）を受け取りました。お楽しみください！",
+        "zh" : "你已领取\"Coffee week\"的奖品（编码 C-00000443，价值 300 学分）。请享用！"
       },
       "publicationId" : "#uuid:3",
       "action" : "RESULT",

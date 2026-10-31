@@ -38,7 +38,7 @@ class InboxIT extends InboxItSupport {
             assertThat(row).containsEntry("kind", "REWARD_PAID").containsEntry("type", "REWARD")
                 .containsEntry("action", "RESULT").containsEntry("action_id", submitted.get("attemptId"));
             assertThat(String.valueOf(row.get("title"))).contains("\"en\": \"You received 100 Kudos\"",
-                "100 Kudos を受け取りました", "你收到了 100 Kudos");
+                "100 クドスを受け取りました", "你收到了 100 学分");
             assertThat(String.valueOf(row.get("body"))).contains("Capitals");
         });
         // In the app's inbox, unread, with its publication.

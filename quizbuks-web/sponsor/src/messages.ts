@@ -15,7 +15,7 @@ const en = {
   ...contentEn,
   ...publishingEn,
   ...trialEn,
-  brand: `${BRAND.name} Sponsor`,
+  brand: `${BRAND.names.en} Sponsor`,
   lists: { view: 'View', cards: 'Cards', table: 'Table', pages: 'Pages', previous: 'Previous page', next: 'Next page', page: 'Page {{page}} of {{pages}}' },
   shownAt: {
     prefix: 'Takers see this:',
@@ -54,7 +54,7 @@ const en = {
   public: {
     signIn: 'Sign in',
     signUpTerms: 'You accept these when you apply as a sponsor:',
-    takerAccount: `Already answering quizzes on ${BRAND.name}? Sign up here with the same email address and open the link we mail you: your account becomes a sponsor's too, and you then sign in here as in the app, with your password or Google.`,
+    takerAccount: `Already answering quizzes on ${BRAND.names.en}? Sign up here with the same email address and open the link we mail you: your account becomes a sponsor's too, and you then sign in here as in the app, with your password or Google.`,
   },
   mail: { hint: 'Mail about your top-ups, the reviews of your publications and publications an administrator stops is always sent. You can choose here which other mail you get.' },
   dashboard: {
@@ -101,7 +101,7 @@ const zh: typeof en = {
   ...contentZh,
   ...publishingZh,
   ...trialZh,
-  brand: `${BRAND.name} 商家后台`,
+  brand: `${BRAND.names.zh}商家后台`,
   lists: { view: '显示方式', cards: '卡片', table: '表格', pages: '分页', previous: '上一页', next: '下一页', page: '第 {{page}} / {{pages}} 页' },
   shownAt: {
     prefix: '答题者在这里看到：',
@@ -140,7 +140,7 @@ const zh: typeof en = {
   public: {
     signIn: '登录',
     signUpTerms: '申请入驻时，您将同意以下文本：',
-    takerAccount: `已经在 ${BRAND.name} 答题？请在这里用同一个邮箱注册，并打开我们寄出的邮件中的链接：您的账号随即也成为商户账号，之后可以像在 App 中一样用密码或 Google 登录这里。`,
+    takerAccount: `已经在${BRAND.names.zh}答题？请在这里用同一个邮箱注册，并打开我们寄出的邮件中的链接：您的账号随即也成为商户账号，之后可以像在 App 中一样用密码或 Google 登录这里。`,
   },
   mail: { hint: '关于充值、发布的审核结果以及被管理员停止的发布的邮件总会发送。其他邮件可以在这里选择是否接收。' },
   dashboard: {
@@ -187,7 +187,7 @@ const ja: typeof en = {
   ...contentJa,
   ...publishingJa,
   ...trialJa,
-  brand: `${BRAND.name} スポンサー`,
+  brand: `${BRAND.names.ja}スポンサー`,
   lists: { view: '表示', cards: 'カード', table: '表', pages: 'ページ', previous: '前のページ', next: '次のページ', page: '{{page}} / {{pages}} ページ' },
   shownAt: {
     prefix: '回答者に表示される場所：',
@@ -226,7 +226,7 @@ const ja: typeof en = {
   public: {
     signIn: 'ログイン',
     signUpTerms: 'スポンサー申請の際に、以下へ同意していただきます：',
-    takerAccount: `${BRAND.name} でクイズに回答している方は、同じメールアドレスでこちらから登録し、お送りするメールのリンクを開いてください。アカウントがスポンサーとしても使えるようになり、アプリと同じくパスワードまたは Google でログインできます。`,
+    takerAccount: `${BRAND.names.ja}でクイズに回答している方は、同じメールアドレスでこちらから登録し、お送りするメールのリンクを開いてください。アカウントがスポンサーとしても使えるようになり、アプリと同じくパスワードまたは Google でログインできます。`,
   },
   mail: { hint: 'チャージ、公開の審査結果、管理者による公開の停止に関するメールは必ずお送りします。その他のメールはここで受け取るかどうかを選べます。' },
   dashboard: {

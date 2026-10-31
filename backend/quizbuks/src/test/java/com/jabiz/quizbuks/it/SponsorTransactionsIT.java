@@ -308,7 +308,7 @@ class SponsorTransactionsIT extends TopUpItSupport {
             .contentType(MediaType.APPLICATION_JSON).header(HttpHeaders.AUTHORIZATION, token)
             .header(HttpHeaders.ACCEPT_LANGUAGE, "zh").bodyValue(Map.of()).exchange().expectStatus().isOk()
             .expectBody().returnResult().getResponseBody(), StandardCharsets.UTF_8);
-        assertThat(chinese.lines().findFirst().orElseThrow()).contains("金额（Kudos）");
+        assertThat(chinese.lines().findFirst().orElseThrow()).contains("金额（学分）");
         // XLSX is offered as well.
         client.post().uri("/api/queries/" + LIST + "/export?format=xlsx").contentType(MediaType.APPLICATION_JSON)
             .header(HttpHeaders.AUTHORIZATION, token).bodyValue(Map.of()).exchange().expectStatus().isOk();

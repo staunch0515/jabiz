@@ -34,17 +34,34 @@ val qbBrandTokens: Provider<Map<String, String>> = providers.environmentVariable
         require(file.isFile) { "QB_BRAND=$id: no brand profile ${file.path}" }
         @Suppress("UNCHECKED_CAST")
         val profile = groovy.json.JsonSlurper().parse(file) as Map<String, Any?>
+        @Suppress("UNCHECKED_CAST")
+        val names = profile["names"] as Map<String, Any?>
         mapOf(
             "QB_BRAND_NAME" to profile["name"].toString(),
+            // Q61: the name each language's texts call the product (qbBrandTokensIn).
+            "QB_BRAND_NAME_en" to names["en"].toString(),
+            "QB_BRAND_NAME_zh" to names["zh"].toString(),
+            "QB_BRAND_NAME_ja" to names["ja"].toString(),
             "QB_BRAND_SUPPORT_EMAIL" to profile["supportEmail"].toString(),
             "QB_BRAND_SITE_URL" to profile["siteUrl"].toString(),
         )
     }
 
+
+/** The tokens for a file in one language: @QB_BRAND_NAME@ is that language's name (Q61). */
+fun qbBrandTokensIn(language: String): Map<String, String> =
+    qbBrandTokens.get().let { it + ("QB_BRAND_NAME" to it.getValue("QB_BRAND_NAME_$language")) }
+
 tasks.named<ProcessResources>("processResources") {
     inputs.property("brand", qbBrandTokens)
     filteringCharset = "UTF-8"
-    filesMatching("jabiz/quizbuks/shopify/messages*.properties") {
-        filter(mapOf("tokens" to qbBrandTokens.get()), org.apache.tools.ant.filters.ReplaceTokens::class.java)
+    // Each language's messages name the product in that language.
+    for (language in listOf("zh", "ja")) {
+        filesMatching("jabiz/quizbuks/shopify/messages_$language*.properties") {
+            filter(mapOf("tokens" to qbBrandTokensIn(language)), org.apache.tools.ant.filters.ReplaceTokens::class.java)
+        }
+    }
+    filesMatching(listOf("jabiz/quizbuks/shopify/messages.properties", "jabiz/quizbuks/shopify/messages_en*.properties")) {
+        filter(mapOf("tokens" to qbBrandTokensIn("en")), org.apache.tools.ant.filters.ReplaceTokens::class.java)
     }
 }

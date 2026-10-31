@@ -98,5 +98,8 @@ for (const file of FRONT_ENDS.flatMap((path) => sources(join(WEB, path)))) {
     let text = code(readFileSync(file, 'utf8'))
     for (const identifier of IDENTIFIERS) text = text.replace(identifier, '')
     assert.deepEqual(text.match(/.*quizbuks.*/gi) ?? [], [])
+    // Nor its name in another language (Q61): texts take the profile's names.
+    const local = loadBrand('quizbuks').names
+    assert.deepEqual([local.zh, local.ja].filter((name) => text.includes(name)), [])
   })
 }
