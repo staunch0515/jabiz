@@ -1,7 +1,7 @@
 # 15 公开只读访问
 
 让未登录的访客读取**已声明为公开**的数据（ROADMAP 阶段 13c）。约束性细则见【决策 D17】（补充 D12 第 2 条，不取代）。
-原则仍是**默认拒绝**：没有声明为公开的，匿名一律看不到；公开只意味着"可读"，从不意味着"可写"；
+原则仍是**默认拒绝**：没有声明为公开的，匿名一律看不到；公开只意味着"可读"，从不意味着"可写"（唯一的例外是声明过的公开计数器，§10、决策 D65）；
 公开的范围、字段和查询都在元数据里写明，并在启动时检查。
 
 ## 1. 三层声明
@@ -113,11 +113,12 @@ WHERE s.{{Story.slug}} = :slug
 - 总开关 `jabiz.public.enabled`（默认 **false**；`app` 以环境变量 `JABIZ_PUBLIC_ENABLED` 打开）：关闭时 `/api/public/**` 一律 404（任何方法），
   但公开视图与模板的启动检查照常执行。
 - 开关、方法（405，带 `Allow: GET, HEAD`）与限流（429）由 `PublicAccessWebFilter` 在安全过滤链之前处理，从不进入控制器或写入路径。
+  唯一放行的写方法是公开计数器的 `POST /api/public/counters/{计数器}/{键}`（§10）。
 
 ## 6. 安全配置
 
 - `SecurityConfig`：`/api/public/**` 的 `GET`/`HEAD` 放行（`permitAll`），位于"`/api/**` 必须已认证"之前；认证过滤器不处理这些路径。
-- 其他方法对 `/api/public/**` 仍然拒绝（405，从不进入任何写入路径）。
+- 其他方法对 `/api/public/**` 仍然拒绝（405，从不进入任何写入路径），公开计数器的 `POST`（§10）除外。
 - 公开页面本身（静态资源）与后台一样由 SPA 提供，内容安全策略按 SPA 配置（17 §3）。
 - 入站 Webhook `POST /api/inbound/{提供方}`（11 §2.5、决策 D37 第 5 条）同样匿名、同样在安全过滤链之前限流：`InboundWebhookWebFilter` 与
   `PublicAccessWebFilter` 写法相同（客户端地址取自 `ClientAddresses`，进程内令牌桶，429 `RATE_LIMITED` + `Retry-After`），但每个提供方一个桶
@@ -135,7 +136,7 @@ WHERE s.{{Story.slug}} = :slug
 ## 8. 观测
 
 `jabiz.public.query`（标签：模板 id、`result`＝`ok` / `not_modified`，以及所有平台观测都有的 `outcome` / `status`，被拒绝或出错时由它们表示）、
-`jabiz.public.rate_limited`（无标签）；公开文件沿用 `jabiz.file.serve`（`channel=public`）。不记录客户端地址（日志中也不记录），未知模板 id 不产生观测。
+`jabiz.public.rate_limited`（无标签）、`jabiz.public.counter`（标签：计数器名、`result`＝`counted` / `repeated` / `ignored`）；公开文件沿用 `jabiz.file.serve`（`channel=public`）。不记录客户端地址（日志中也不记录），未知模板 id 不产生观测。
 
 ## 9. 测试
 
@@ -147,3 +148,37 @@ WHERE s.{{Story.slug}} = :slug
   公开文件：被公开行引用 → 200，只被下线行引用 → 404，被非白名单字段引用 → 404（普通表 `ItAttachment`），经 `PRODUCT_WITHDRAW` 下线即 404，
   未失效时在判定有效期内仍可取；目录快照（`PublicQueriesSnapshotIT`）；启动检查一次报告全部违规（`PlatformCheckIT`）；观测（`ObservabilityIT`）；
   场景回放 `scenarios/commerce/public_catalog.yml`。
+- 公开计数器（§10）：core `PublicCounterTest`（声明与校验）；runtime `PublicCountersTest`（去重、日期按时区、合并与写入失败后保留）；
+  app 集成测试 `PublicCounterIT`（匿名计入并写入、重复与不合法的键不计、下线的行不计、未知计数器 404、其他写方法与路径仍 405、开关关闭时 404、不写 `op_process`、
+  平台数据视图需要 `public-counter.read`）、启动检查（`PlatformCheckIT`）；前端 `countPublic` 的单元测试。
+
+## 10. 公开计数器
+
+匿名访客的浏览与点击按日计数（决策 D65）：
+
+```java
+@Bean
+PublicCounter productViews() {
+    return PublicCounter.define("commerce.product-view", c -> c
+        .keys(CommerceEntities.PUBLIC_PRODUCT_DATASET, "productId")   // 只计公开视图中此刻可见的行
+        .zone("Asia/Tokyo"));                                           // 日期的时区，缺省 UTC
+}
+```
+
+```ts
+import { countPublic } from '@jabiz/client'
+countPublic('commerce.product-view', product.productId)   // sendBeacon；失败忽略
+```
+
+- 接口 `POST /api/public/counters/{计数器}/{键}`（没有正文）：未知计数器 404；其余一律 204（计入、重复、键不合法不区分）。开关与限流同 §5。
+- 键的合法性：此刻在该公开视图中可见的行（与公开文件同样的读法，§4）；判定记住 `jabiz.public.file-decision-ttl`。键至多 100 字符。
+- 去重：同一计数器、键、日期，同一访客（客户端地址与 `User-Agent` 的摘要，只在内存中）只计一次；`jabiz.public.counters.max-visitors`（缺省 200 000）。
+- 两次写入之间至多记 `jabiz.public.counters.max-pending`（缺省 50 000）个键（计数器、键、日期），超出的新键不计（内存有上限）。
+- 写入：内存中累加，每 `jabiz.public.counters.flush-interval`（缺省 10 s）与停止时写入 `sys_public_counter_day`（`counter_name`、`counter_key`、`day`、`hits`；
+  `ON CONFLICT DO UPDATE` 累加）；失败的留到下一次。平台的测试配置关闭定时写入（`jabiz.public.counters.flush-interval=0s`），测试直接调用 `PublicCounters.flush()`。
+- 读取：平台实体 `PublicCounterDay`、平台数据视图 `urn:jabiz:dataset:platform:PublicCounterDay`（`public-counter.read`，只读）；
+  应用以自己的只读数据视图（带范围）与模板给各自的读者。
+- 近似值：多实例各自去重、异常退出丢失最后一个间隔、NAT 后的同款浏览器计为一人；展示处应注明。
+- 部署在反向代理之后时必须把代理列入 `jabiz.security.trusted-proxies`（10 §15.5）：否则所有访客的地址都是代理的地址，同一款浏览器每天只计一次。
+- 观测：每次计数 `jabiz.public.counter`（§8），每次写入 `jabiz.public.counter.flush`（没有待写的计数时不产生）。
+

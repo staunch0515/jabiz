@@ -49,6 +49,7 @@ export {
 } from './api/files'
 export type { UploadedFile } from './api/files'
 export { runQuery, runProcess } from './lib/calls'
+export { countPublic } from './lib/counters'
 export type { QueryPage, QueryOptions, ProcessOptions, Filter, Sort } from './lib/calls'
 
 // Who is signed in.

@@ -106,7 +106,8 @@ public class SecurityConfig {
     /**
      * Public read access (docs/design/15-public-access.md section 6; decision D17), open to everyone and never
      * authenticated: credentials sent along are ignored, so an expired token cannot break a public page. Which methods
-     * and whether the switch is on is decided by {@code PublicAccessWebFilter} before this chain runs.
+     * and whether the switch is on is decided by {@code PublicAccessWebFilter} before this chain runs: read methods,
+     * and {@code POST} of a public counter only (decision D65).
      */
     static final ServerWebExchangeMatcher PUBLIC_READ = ServerWebExchangeMatchers.pathMatchers("/api/public",
         "/api/public/**");
