@@ -692,6 +692,8 @@ describe('the video to watch (Q19, Q63)', () => {
     expect(frame).toHaveAttribute('src', PLAYING)
     expect(frame.getAttribute('allow')).toContain('autoplay')
     expect(card).toHaveAttribute('data-playing', 'true')
+    // The player covers the picture's reward; it is said under the name.
+    expect(within(card).getByTestId('feed-card-reward')).toHaveTextContent('Up to 100 Kudos')
     io.fire(card, false, MIDDLE)
     expect(document.querySelector('iframe')).toBeNull()
     // The start opens the start page first (its time limit and pass score), and starts nothing.

@@ -100,6 +100,8 @@ export function FeedCardView({ card, href, playing = false, action }: { card: Fe
             {sponsor && <span aria-hidden>·</span>}
             <span data-testid="feed-card-completions">{t('feed.completions', { count: card.completions })}</span>
           </span>
+          {/* The player covers the picture and its reward: while it plays, the reward is said here. */}
+          {card.video && playing && <span className="self-start"><RewardTag card={card} /></span>}
           {action}
         </div>
       </div>
