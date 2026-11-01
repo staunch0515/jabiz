@@ -1,6 +1,7 @@
 import { api, unwrap } from '../api/client'
 import { session } from '../api/session'
 import { sitePath } from './mailLink'
+import { openAuthorization } from '../native'
 
 /** Where to go after signing in through an identity provider; kept across the round trip (not a secret). */
 const returnKey = () => `jabiz.session.${session.entry()}.oidcReturnTo`
@@ -13,14 +14,15 @@ const binderKey = () => `jabiz.session.${session.entry()}.oidcBinder`
 /**
  * Starts signing in through an identity provider (docs/design/10-security.md section 12) for this frontend's sign-in
  * entry: the server records the request and names the provider's page, which the browser then opens. The provider
- * sends the user back to the entry's callback page (`login/oidc`).
+ * sends the user back to the entry's callback page (`login/oidc`). A native shell opens the provider's page in the
+ * system's browser (`configureClient({ openAuthorization })`, decision D68).
  */
 export async function startProviderSignIn(providerId: string, returnTo: string): Promise<void> {
   const started = await unwrap(api.POST('/api/auth/oidc/{id}/start', {
     params: { path: { id: providerId }, query: { entry: session.entry() } },
   }))
   keep(returnTo, started.binder!, 'SIGN_IN')
-  window.location.assign(started.authorizationUrl!)
+  await openAuthorization(started.authorizationUrl!)
 }
 
 /**
@@ -62,7 +64,7 @@ Promise<void> {
     body: { provider: providerId, currentPassword: options.currentPassword || undefined },
   }))
   keep(returnTo, started.binder!, 'LINK')
-  window.location.assign(started.authorizationUrl!)
+  await openAuthorization(started.authorizationUrl!)
 }
 
 /**

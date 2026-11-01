@@ -117,6 +117,10 @@ jabizApp {
 - **根地址的转向**（16zf-a）：`jabiz.web.root-redirect`（环境变量 `JABIZ_WEB_ROOT_REDIRECT`）设了本主机的一个路径（如 `/biz/`）时，对恰好 `/` 的 `GET` / `HEAD`
   在查找 SPA 之前即 302 到该路径（查询串保留；`Cache-Control: no-cache`，不带页面策略）；只能是本主机的绝对路径（不能是 `/` 自身、带协议或主机的地址、`//…`、`/api` 或 `/actuator` 之下），
   `SpaConfigCheck` 检查（目标不在任何 SPA 之下时告警：须另有东西应答它）。前端都挂在前缀下（`/taker/`、`/biz/`）的主机用它决定裸域名打开哪一个；不设时根照旧由 `/` 上的 SPA（若有）提供。`/index.html` 等其他路径不转向。
+- **原生 App 的关联文件**（17l，决策 D68，`NativeAppAssociations`）：`jabiz.web.native-apps[i].path`（一个已配置 SPA 的路径）、`.ios[j]`（`<Team ID>.<bundle ID>`）、
+  `.android[j].package-name` 与 `.android[j].fingerprints[k]`（签名证书的 SHA-256，`AA:BB:…`，上传密钥与 Play App Signing 的都写）。平台在域名根提供
+  `/.well-known/apple-app-site-association`（`applinks` 只开该 SPA 路径之下的地址）与 `/.well-known/assetlinks.json`（`handle_all_urls`）：JSON、不转向、公开、`max-age=3600`；
+  没有该系统的 App 时 404。这两个地址从不由 SPA 的路由应答。单独一个列表、按路径，部署只加它、不重写构建声明的 SPA；`SpaConfigCheck` 一次报告全部格式问题。
 - **静态站点的多页**（16zf-b，`StaticPages`）：没有登录入口的 SPA 可以每个目录一页（`static/biz/zh/index.html`、`static/biz/zh/pricing/index.html`，由 Vite 的多页构建产生）；
   启动时扫描 jar 中该前缀下的 `**/index.html` 一次，请求命中这样的目录（带不带尾部斜杠都行）即交出该目录的页面而不是站点首页，其他客户端路由照旧回退到首页；
   这些页面与首页一样 `Cache-Control: no-cache`。带入口的 SPA 不受影响（路由全部回退到它的 `index.html`）。

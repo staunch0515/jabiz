@@ -1,5 +1,7 @@
 import { act, renderHook } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { configureClient } from '../configure'
+import { nativeShell } from '../native'
 import {
   captureInstallPrompt, installBrowser, installOfferAllowed, installSituation, isIos, readInstallDismissals, rememberInstallDismissed,
   resetInstallPrompt, useInstallPrompt, type InstallEnvironment,
@@ -122,6 +124,20 @@ function offerEvent(outcome: 'accepted' | 'dismissed') {
 }
 
 describe('useInstallPrompt', () => {
+  it('counts a native shell as installed, whatever the browser engine says (decision D68)', () => {
+    configureClient({ nativeShell: 'ios' })
+    try {
+      const { result } = renderHook(() => useInstallPrompt({ userAgent: UA.iphoneSafari }))
+      expect(result.current.situation).toBe('installed')
+      expect(nativeShell()).toBe('ios')
+    } finally {
+      configureClient({ nativeShell: null })
+    }
+    expect(nativeShell()).toBeNull()
+    const { result } = renderHook(() => useInstallPrompt({ userAgent: UA.iphoneSafari, maxTouchPoints: 5 }))
+    expect(result.current.situation).toBe('ios')
+  })
+
   it('keeps the browser\'s offer, suppresses its own bar and shows its confirmation once', async () => {
     captureInstallPrompt()
     const { result } = renderHook(() => useInstallPrompt({ userAgent: UA.androidChrome, standalone: false }))

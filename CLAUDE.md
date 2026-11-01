@@ -95,6 +95,8 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
   版本与平台一致：`app:check`），以 `jabizApp { spa(路径, 目录, entry = 入口, pwa = Pwa.ON) }` 构建、用预设 `@jabiz/client/vite`；页面用 `@jabiz/ui` 的登录与账户积木，
   会话按入口（`configureClient({ entry })`）。入口的 `app-path` 是该前端的根：邮件链接只用 `{entryUrl}` / `{entryUrl.<入口>}`，OIDC 回调为提供方的 `redirect-uris.<入口>`。
   Service Worker 只用平台的（只缓存外壳、不缓存接口、更新经用户同意，撤下用 `Pwa.REMOVE`），不引入 Workbox；不开 CORS、不用 Cookie。
+  在商店 App 的原生外壳中：提供方的页面经 `configureClient({ openAuthorization })` 交给系统浏览器、回调照旧是入口的 `login/oidc`，外壳以 `nativeShell` 声明（安装提示不出现），
+  关联文件只经 `jabiz.web.native-apps`（平台提供 `/.well-known/apple-app-site-association` 与 `assetlinks.json`，决策 D68），不自写登录回调、scheme 或反向代理的规则。
 - **二次验证**（见 10 §9–§11 与决策 D28）：只用 TOTP 与恢复码（`SecUserMfa`，密钥以 `JABIZ_MFA_KEY` 加密）；登录与 step-up 都是写登录记录的流程，不另写验证逻辑。
   需要二次验证的操作只声明：流程 `requiresMfa(…)`、数据视图 `writeRequiresMfa(…)`（平台管理为 `ADMINISTRATION`），由入口与权限一起检查；
   角色可要求二次验证（`SecRole.requireMfa`）。`@Sensitive` 组件名在整个 JSON 中遮蔽，不要用 `code` 这类通用名字（用 `mfaCode`）；

@@ -1,10 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { configureSession } from '../api/session'
+import { configureClient } from '../configure'
 import { pendingPurpose, startIdentityLink, startProviderSignIn, takeBinder, takeReturnPath } from './oidc'
 
 afterEach(() => {
   window.sessionStorage.clear()
   configureSession('admin')
+  configureClient({ openAuthorization: null })
   vi.unstubAllGlobals()
 })
 
@@ -83,5 +85,42 @@ describe('startIdentityLink', () => {
 
     await startProviderSignIn('google', '/portal/')
     expect(pendingPurpose()).toBe('SIGN_IN')
+  })
+})
+
+describe('a native shell (decision D68)', () => {
+  const started = () => vi.fn<(request: Request) => Promise<Response>>(async () =>
+    new Response(JSON.stringify({ authorizationUrl: 'https://idp.example.com/authorize?x=1', binder: 'bind-2' }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }))
+
+  it("hands the provider's page to the shell, the binder kept in this page as in a browser", async () => {
+    const open = vi.fn(async () => undefined)
+    configureClient({ openAuthorization: open })
+    vi.stubGlobal('fetch', started())
+    await startProviderSignIn('google', '/taker/')
+    expect(open).toHaveBeenCalledWith('https://idp.example.com/authorize?x=1')
+    expect(takeBinder()).toBe('bind-2')
+  })
+
+  it('opens the page for linking an account the same way, and waits for the shell', async () => {
+    let opened = false
+    configureClient({ openAuthorization: async () => {
+      await Promise.resolve()
+      opened = true
+    } })
+    vi.stubGlobal('fetch', started())
+    await startIdentityLink('apple', {}, '/taker/account')
+    expect(opened).toBe(true)
+    expect(pendingPurpose()).toBe('LINK')
+  })
+
+  it('fails like the start when the shell cannot open the page', async () => {
+    configureClient({ openAuthorization: () => {
+      throw new Error('no browser')
+    } })
+    vi.stubGlobal('fetch', started())
+    await expect(startProviderSignIn('google', '/taker/')).rejects.toThrow('no browser')
   })
 })
