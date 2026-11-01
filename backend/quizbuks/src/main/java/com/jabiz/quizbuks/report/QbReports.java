@@ -58,6 +58,11 @@ public final class QbReports {
         return "qb.report:" + publicationId;
     }
 
+    /** A taker's reports take turns, so that their reports of a day are counted once each. */
+    static String reporterLockName(Object userId) {
+        return "qb.report-user:" + userId;
+    }
+
     public static final EntityDefinition ENTITY = EntityDefinition.define(REPORT, eb -> {
         eb.physicalTable("qb_report");
         eb.primaryKey("reportId");

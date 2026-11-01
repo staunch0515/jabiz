@@ -12,9 +12,9 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * Registers takers' reports of publications (Q49a): the entity, its dataset (headquarters' and operators' reviewers,
- * an operator's session limited to its own sponsors, Q59c-2; written by the processes only), the dictionaries and the
- * processes.
+ * Registers takers' reports of publications (Q49a): the entity, its dataset (read by the reviewers of publications,
+ * headquarters' content administrators and the operators, not finance; an operator's session limited to its own
+ * sponsors, Q59c-2; written by the processes only), the dictionaries and the processes.
  */
 @Configuration
 public class ReportConfig {
@@ -35,7 +35,7 @@ public class ReportConfig {
         return DatasetDefinition.define(QbReports.DEFAULT_DATASET, d -> d
             .targetEntityType(QbReports.REPORT)
             .asDefault()
-            .permissions(QbPermissions.ADMIN_PUBLICATION_READ, QbPermissions.ADMIN_CONTENT_WRITE)
+            .permissions(QbPermissions.REVIEW_PUBLICATION, QbPermissions.ADMIN_CONTENT_WRITE)
             .scope(OperatorScopes.of(QbReports.REPORT))
             .policy(p -> p.processOnlyWrites())
             .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));

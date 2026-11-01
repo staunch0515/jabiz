@@ -13,6 +13,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
+  UserName,
   paths,
   useAuth,
   type ColumnDef,
@@ -106,8 +107,9 @@ export default function AbuseReportsPage() {
             {row.original.name ?? row.original.publicationId}</Link>
         ),
       },
+      // The sponsor's company; a sponsor without one (not onboarded, or erased) by their account's name.
       { id: 'sponsor', header: t('abuseReports.columns.sponsor'),
-        cell: ({ row }) => row.original.company ?? row.original.publisherId },
+        cell: ({ row }) => row.original.company ?? <UserName id={row.original.publisherId} /> },
       { id: 'open', header: t('abuseReports.columns.open'), meta: { className: 'tabular-nums' },
         cell: ({ row }) => t('abuseReports.count', { open: row.original.openCount, total: row.original.totalCount }) },
       {

@@ -11,6 +11,7 @@ import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.quizbuks.identity.CallerChecks;
 import com.jabiz.quizbuks.operator.OperatorChecks;
 import com.jabiz.quizbuks.operator.QbOperators;
+import com.jabiz.quizbuks.play.QbPlay;
 import com.jabiz.quizbuks.publishing.PublisherKind;
 import com.jabiz.quizbuks.publishing.QbPublications;
 import com.jabiz.runtime.EntityInstance;
@@ -33,7 +34,7 @@ import java.util.UUID;
 /**
  * Reporting a publication (Q49a; docs/quizbuks/plans/Q49a-contest-report.md; Apple App Review Guideline 1.2):
  * <ul>
- *   <li>{@value #SUBMIT}: a taker reports a quiz they can see, with a reason and an optional note; one open report of
+ *   <li>{@value #SUBMIT}: a taker reports a quiz they opened, with a reason and an optional note; one open report of
  *       theirs per quiz and {@value QbReports#DAILY_LIMIT} a day. The first open report of a quiz asks its reviewers:
  *       a task for the operator's members when an operator looks after the sponsor (scoped to the operator, decision
  *       D64), for headquarters' content administrators otherwise; headquarters' list shows every report.</li>
@@ -52,6 +53,7 @@ public final class ReportProcesses {
     static final String OUTPUT = "output";
     static final String CARD = "card";
     static final String MINE = "mine";
+    static final String VIEWED = "viewed";
     static final String RECENT = "recent";
     static final String OPEN_REPORTS = "openReports";
     static final String SPONSOR_OPERATOR = "sponsorOperator";
@@ -97,31 +99,39 @@ public final class ReportProcesses {
                     })
                     .outputMapper(ctx -> ctx.get(OUTPUT, SubmitOutput.class));
                 CallerChecks.refuseBanned(pb);
-                pb.step("Take the publication's turn", HoldLock.<ProcessContext>exclusive(
+                // The caller's turn first (their reports of a day are counted under it), then the publication's
+                // (its first open report asks the reviewers once).
+                pb.step("Take the caller's turn", HoldLock.<ProcessContext>exclusive(
+                        ctx -> QbReports.reporterLockName(ctx.request().actorId())))
+                    .step("Take the publication's turn", HoldLock.<ProcessContext>exclusive(
                         ctx -> QbReports.lockName(input(ctx).publicationId())))
-                    .step("Load the publication's card", QueryEntities.<ProcessContext>of(
-                        QbPublications.defaultDataset(QbPublications.CARD), ctx -> EntityQuery.builder()
-                            .where(new QueryPredicate.Eq("publicationId", input(ctx).publicationId()))
-                            .limit(1).build(), CARD))
-                    .step("Load the caller's reports of a day", QueryEntities.<ProcessContext>of(
-                        QbReports.DEFAULT_DATASET, ctx -> EntityQuery.builder()
-                            .where(new QueryPredicate.And(List.of(
-                                new QueryPredicate.Eq("reporterId", ctx.request().actorId()),
-                                new QueryPredicate.Gte("createdAt", ctx.opTime().minus(Duration.ofDays(1))))))
-                            .limit(QbReports.DAILY_LIMIT + 1).build(), RECENT))
-                    .step("Load the caller's open report of it", QueryEntities.<ProcessContext>of(
-                        QbReports.DEFAULT_DATASET, ctx -> EntityQuery.builder()
-                            .where(new QueryPredicate.And(List.of(
-                                new QueryPredicate.Eq("reporterId", ctx.request().actorId()),
-                                new QueryPredicate.Eq("publicationId", input(ctx).publicationId()),
-                                new QueryPredicate.Eq("status", QbReports.OPEN))))
-                            .limit(1).build(), MINE))
-                    .step("Load an open report of it", QueryEntities.<ProcessContext>of(
-                        QbReports.DEFAULT_DATASET, ctx -> EntityQuery.builder()
-                            .where(new QueryPredicate.And(List.of(
-                                new QueryPredicate.Eq("publicationId", input(ctx).publicationId()),
-                                new QueryPredicate.Eq("status", QbReports.OPEN))))
-                            .limit(1).build(), OPEN_REPORTS))
+                    .step("Load the card, the caller's view and reports, and an open report",
+                        QueryEntities.<ProcessContext>all(
+                            QueryEntities.query(QbPublications.defaultDataset(QbPublications.CARD),
+                                ctx -> EntityQuery.builder().where(new QueryPredicate.Eq("publicationId",
+                                    input(ctx).publicationId())).limit(1).build(), CARD),
+                            // A quiz the caller opened (QB_VIEW records the first view of one shown to them).
+                            QueryEntities.query(QbPlay.defaultDataset(QbPlay.VIEW), ctx -> EntityQuery.builder()
+                                .where(new QueryPredicate.And(List.of(
+                                    new QueryPredicate.Eq("userId", ctx.request().actorId()),
+                                    new QueryPredicate.Eq("publicationId", input(ctx).publicationId()))))
+                                .limit(1).build(), VIEWED),
+                            QueryEntities.query(QbReports.DEFAULT_DATASET, ctx -> EntityQuery.builder()
+                                .where(new QueryPredicate.And(List.of(
+                                    new QueryPredicate.Eq("reporterId", ctx.request().actorId()),
+                                    new QueryPredicate.Gte("createdAt", ctx.opTime().minus(Duration.ofDays(1))))))
+                                .limit(QbReports.DAILY_LIMIT + 1).build(), RECENT),
+                            QueryEntities.query(QbReports.DEFAULT_DATASET, ctx -> EntityQuery.builder()
+                                .where(new QueryPredicate.And(List.of(
+                                    new QueryPredicate.Eq("reporterId", ctx.request().actorId()),
+                                    new QueryPredicate.Eq("publicationId", input(ctx).publicationId()),
+                                    new QueryPredicate.Eq("status", QbReports.OPEN))))
+                                .limit(1).build(), MINE),
+                            QueryEntities.query(QbReports.DEFAULT_DATASET, ctx -> EntityQuery.builder()
+                                .where(new QueryPredicate.And(List.of(
+                                    new QueryPredicate.Eq("publicationId", input(ctx).publicationId()),
+                                    new QueryPredicate.Eq("status", QbReports.OPEN))))
+                                .limit(1).build(), OPEN_REPORTS)))
                     .step("Load the sponsor's operator", QueryEntities.<ProcessContext>of(
                         QbOperators.defaultDataset(QbOperators.ASSIGNMENT), ctx -> {
                             EntityInstance card = first(ctx, CARD);
@@ -129,15 +139,14 @@ public final class ReportProcesses {
                                 card == null ? "" : String.valueOf((Object) card.get("publisherId")))).limit(1).build();
                         }, SPONSOR_OPERATOR))
                     .compute("Record the report", (metadata, ctx) -> submit(ctx))
-                    // The sponsor's operator is asked when one looks after them, headquarters otherwise: an operator's
-                    // session closes only tasks of its scope (decision D64); headquarters has every report in its list
-                    // and closes the operator's task as well.
+                    // One task: the sponsor's operator's (in its scope) when one looks after them, headquarters'
+                    // otherwise. Headquarters' list shows every report; closing the reports closes the task.
                     .step("Ask headquarters", CreateTask.<ProcessContext>when(
                         ctx -> Boolean.TRUE.equals(ctx.get(FIRST_OPEN)) && first(ctx, SPONSOR_OPERATOR) == null,
-                        ctx -> task(ctx, QbPermissions.ADMIN_CONTENT_WRITE).link("/qb/reports")))
+                        ctx -> task(ctx, QbPermissions.ADMIN_CONTENT_WRITE).link("/qb/abuse-reports")))
                     .step("Ask the sponsor's operator", CreateTask.<ProcessContext>when(
                         ctx -> Boolean.TRUE.equals(ctx.get(FIRST_OPEN)) && first(ctx, SPONSOR_OPERATOR) != null,
-                        ctx -> task(ctx, QbPermissions.OPERATOR_USE).link("/qb/reports").scope(QbOperators.SCOPE,
+                        ctx -> task(ctx, QbPermissions.OPERATOR_USE).link("/qb/abuse-reports").scope(QbOperators.SCOPE,
                             String.valueOf((Object) first(ctx, SPONSOR_OPERATOR).get("operatorId")))));
             });
     }
@@ -146,7 +155,8 @@ public final class ReportProcesses {
         SubmitInput input = input(ctx);
         EntityInstance card = first(ctx, CARD);
         // A channel's publication (a shop's storefront quiz) is no App taker's: as good as none.
-        if (card == null || !PublisherKind.sponsor(card.get("publisherKind"))) {
+        // A quiz the caller never opened (one not shown to them, a draft, an invitee's) is as good as none.
+        if (card == null || !PublisherKind.sponsor(card.get("publisherKind")) || first(ctx, VIEWED) == null) {
             throw new EntityNotFoundException(QbPublications.PUBLICATION + " " + input.publicationId() + " not found");
         }
         if (!QbReports.REASONS.contains(input.reason())) {

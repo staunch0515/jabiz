@@ -31,7 +31,7 @@ list:
   sorts:   [lastReportedAt, openCount, totalCount, name]
   defaultSort: { field: lastReportedAt, asc: false }
   key: [publicationId]
-permissions: [qb.admin.publication.read]
+permissions: [qb.review.publication]
 ---*/
 -- Every dataset is limited to the operator's sponsors for an operator's session (Q59c-2). Closing the reports is
 -- QB_REPORT_RESOLVE (headquarters) or QB_OPERATOR_REPORT_RESOLVE; pausing or ending the quiz the existing processes.

@@ -29,7 +29,6 @@ export const abuseReportMessages = {
     actioned: 'Mark acted on',
     dismissOf: 'Dismiss the reports of {{name}}',
     actionedOf: 'Mark the reports of {{name}} acted on',
-    quizPage: 'Open the quiz',
   },
   zh: {
     title: '举报',
@@ -51,7 +50,6 @@ export const abuseReportMessages = {
     actioned: '标记为已处理',
     dismissOf: '驳回 {{name}} 的举报',
     actionedOf: '将 {{name}} 的举报标记为已处理',
-    quizPage: '打开测验',
   },
   ja: {
     title: '通報',
@@ -73,6 +71,5 @@ export const abuseReportMessages = {
     actioned: '対応済みにする',
     dismissOf: '{{name}} への通報を対応不要にする',
     actionedOf: '{{name}} への通報を対応済みにする',
-    quizPage: 'クイズを開く',
   },
 }

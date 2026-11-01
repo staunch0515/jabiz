@@ -29,7 +29,7 @@ class ReportIT extends PlayItSupport {
 
     private String reportReviewer() {
         return TestTokens.bearer(tokens, "q49a-content", QbPermissions.ADMIN_CONTENT_WRITE,
-            QbPermissions.ADMIN_PUBLICATION_READ);
+            QbPermissions.REVIEW_PUBLICATION);
     }
 
     private String hq() {
@@ -64,7 +64,9 @@ class ReportIT extends PlayItSupport {
         return userId;
     }
 
+    /** The taker opens the quiz (QB_VIEW, as its page does) and reports it. */
     private Map<String, Object> report(String taker, String publicationId, String reason, String note) {
+        run("QB_VIEW", taker(taker), body("publicationId", publicationId));
         return run(ReportProcesses.SUBMIT, taker(taker), body("publicationId", publicationId, "reason", reason,
             "note", note));
     }
@@ -110,6 +112,15 @@ class ReportIT extends PlayItSupport {
         assertThat(openTasks(publication)).hasSize(1);
         assertThat(codes(refused(ReportProcesses.SUBMIT, taker(bob), body("publicationId", UUID.randomUUID(),
             "reason", QbReports.SPAM), 404))).isNotNull();
+        // A quiz the taker never opened is as good as none.
+        String unseen = newTaker(unique("t-q49a-unseen"), "JP");
+        refused(ReportProcesses.SUBMIT, taker(unseen), body("publicationId", publication, "reason", QbReports.SPAM),
+            404);
+        // Finance reads publications, not the reports' notes and reporters.
+        client.post().uri("/api/datasets/" + QbReports.DEFAULT_DATASET + "/query")
+            .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+            .header(HttpHeaders.AUTHORIZATION, tokenOf("q49a-finance", QbRoles.ADMIN_FINANCE))
+            .bodyValue(Map.of("limit", 10)).exchange().expectStatus().isForbidden();
         assertThat(codes(refused(ReportProcesses.SUBMIT, taker(bob), body("publicationId", publication, "reason",
             "BORING"), 422))).contains(ReportCodes.REASON);
 
@@ -148,6 +159,7 @@ class ReportIT extends PlayItSupport {
             report(carl, livePublication(sponsor, "Quiz " + i), QbReports.SPAM, null);
         }
         String one = livePublication(sponsor, "One too many");
+        run("QB_VIEW", taker(carl), body("publicationId", one));
         assertThat(codes(refused(ReportProcesses.SUBMIT, taker(carl), body("publicationId", one, "reason",
             QbReports.SPAM), 422))).contains(ReportCodes.DAILY_LIMIT);
     }

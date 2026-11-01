@@ -203,7 +203,8 @@ export function PublicationPage({ publicationId, country }: { publicationId: str
           ? <Link to={legalPath('CONTEST_RULES')} className="text-muted-foreground text-sm underline"
             data-testid="detail-contest-rules">{t('contestRules')}</Link>
           : <span />}
-        <ReportButton publicationId={p.publicationId} name={p.name} />
+        {/* The server takes reports of verified takers only (as it records views). */}
+        {emailVerified && <ReportButton publicationId={p.publicationId} name={p.name} />}
       </div>
       <div className="bg-background sticky bottom-20 -mx-4 border-t px-4 py-3">
         <Action publication={p} />

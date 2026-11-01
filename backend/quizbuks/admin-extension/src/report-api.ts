@@ -11,7 +11,6 @@ import { DATASET, TEMPLATE } from './ids'
 export interface ReportedPublication {
   publicationId: string
   name: string | null
-  status: string | null
   publisherId: string
   company: string | null
   openCount: number
@@ -47,7 +46,6 @@ export async function readReportedPublications(offset: number, limit: number, so
     items: answer.items.map((row) => ({
       publicationId: String(row.publicationId ?? ''),
       name: str(row.name),
-      status: str(row.status),
       publisherId: String(row.publisherId ?? ''),
       company: str(row.company),
       openCount: num(row.openCount),
