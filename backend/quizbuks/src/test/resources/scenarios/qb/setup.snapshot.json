@@ -4972,8 +4972,8 @@
       "code" : "HK",
       "name" : {
         "en" : "Hong Kong",
-        "ja" : "香港",
-        "zh" : "香港"
+        "ja" : "中国香港",
+        "zh" : "中国香港"
       },
       "regions" : "GLOBAL,ASIA",
       "versionNo" : 1,
@@ -6701,8 +6701,8 @@
       "code" : "TW",
       "name" : {
         "en" : "Taiwan",
-        "ja" : "台湾",
-        "zh" : "台湾"
+        "ja" : "中国台湾",
+        "zh" : "中国台湾"
       },
       "regions" : "GLOBAL,ASIA",
       "versionNo" : 1,
