@@ -5,7 +5,7 @@ import { ProductCards } from '../qb/view/ProductCards'
 import { QBVIEW } from '../qb/view/messages'
 import { formatDateTime, i18n, useAuth } from '@jabiz/client'
 import { Alert, AlertDescription, Button, PageState } from '@jabiz/ui'
-import { useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { BadgeCheck, MailWarning, Play, UserRoundSearch } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -14,6 +14,9 @@ import { playProblemText } from '../play/busy'
 import { useStartAttempt } from '../play/useStartAttempt'
 import { ACCOUNT_DETAILS_PATH } from './AccountPage'
 import { QB } from '../qb/messages'
+import { shownLanguages } from '../qb/api'
+import { useSoundSetting } from '../qb/SoundSettings'
+import { linkLanguageOf } from '../linkLanguage'
 import { readPublication, readTiers, recordView, type PublicationView } from '../qb/play'
 import { problemText } from '../qb/problems'
 import { Link } from '../qb/router'
@@ -33,7 +36,7 @@ export function minutesUntil(time: string | null, now: number = Date.now()): num
 }
 
 /** What the caller can do: start, continue the attempt in progress, see their result, or nothing now. */
-function Action({ publication }: { publication: PublicationView }) {
+function Action({ publication, onLanguage }: { publication: PublicationView; onLanguage: (language: string) => void }) {
   const { t } = useTranslation(APP)
   const { t: tQb } = useTranslation(QB)
   const { emailVerified } = useAuth()
@@ -62,12 +65,31 @@ function Action({ publication }: { publication: PublicationView }) {
   } else if (inProgress || publication.canStart) {
     action = (
       <>
+        {/* Q73b: a publication in several languages is answered in the one chosen before starting; the page reads
+            itself in it. An attempt in progress keeps the language it started in. */}
+        {!inProgress && publication.languages.length > 1 && (
+          <div className="flex flex-wrap items-center gap-2" role="group" aria-labelledby="detail-language-label"
+            data-testid="detail-languages">
+            <span className="text-muted-foreground text-sm" id="detail-language-label">{t('detail.answerIn')}</span>
+            {publication.languages.map((language) => (
+              <Button key={language} type="button" size="sm"
+                variant={language === publication.displayLanguage ? 'secondary' : 'ghost'}
+                aria-pressed={language === publication.displayLanguage}
+                lang={language} data-testid={`detail-language-${language}`}
+                onClick={() => onLanguage(language)}>
+                {tQb(`languages.${language}`)}
+              </Button>
+            ))}
+            <span className="text-muted-foreground basis-full text-xs">{t('detail.languageFixed')}</span>
+          </div>
+        )}
         <p className="text-muted-foreground text-sm" id="detail-start-hint">
           {inProgress ? t('detail.continueHint') : t('detail.startHint', { time: duration(publication.timeLimitSec) })}
         </p>
         <Button size="lg" className="w-full" disabled={start.isPending} aria-busy={start.isPending || undefined}
           aria-describedby="detail-start-hint" data-testid="detail-start"
-          onClick={() => start.mutate(publication.publicationId)}>
+          onClick={() => start.mutate({ publicationId: publication.publicationId,
+            language: inProgress ? null : publication.displayLanguage })}>
           <Play aria-hidden />
           {inProgress
             ? t('detail.continue', { count: minutesUntil(publication.myDeadline) })
@@ -128,13 +150,20 @@ export function PublicationPage({ publicationId, country }: { publicationId: str
   const { t: tQb } = useTranslation(QB)
   const { emailVerified } = useAuth()
   const [at] = useState(() => new Date().toISOString())
-  const request = { publicationId, at, country }
+  // Q73b: the page in the language chosen on it, else the first of the taker's quiz languages it offers.
+  const settings = useSoundSetting()
+  // A link's ?lang= (a share link, a poster, an invitation) is the first choice on the page it opened.
+  const [chosen, setChosen] = useState<string | null>(() => linkLanguageOf(window.location.pathname))
+  const shown = shownLanguages(settings.data, i18n.language)
+  const languages = chosen ? [chosen, ...shown.filter((l) => l !== chosen)] : shown
+  const request = { publicationId, at, country, languages }
   // Q70: how many referral claims this page made: the page is read again after one (a new key, so that a claim
   // answered while the first read is on its way is not lost in that read).
   const [claims, setClaims] = useState(0)
   const publication = useQuery({ queryKey: ['qb', 'publication', request, i18n.language, claims],
-    queryFn: () => readPublication(request) })
-  const tiers = useQuery({ queryKey: ['qb', 'publication-tiers', request], queryFn: () => readTiers(request),
+    queryFn: () => readPublication(request), enabled: !settings.isPending, placeholderData: keepPreviousData })
+  const tiers = useQuery({ queryKey: ['qb', 'publication-tiers', publicationId, at, country],
+    queryFn: () => readTiers(request),
     enabled: !!publication.data })
   // Q60b: the products the sponsor shows with the quiz (question 0); quietly none when they cannot be read.
   const products = useQuery({ queryKey: ['qb', 'publication-products', publicationId],
@@ -207,7 +236,7 @@ export function PublicationPage({ publicationId, country }: { publicationId: str
         {emailVerified && <ReportButton publicationId={p.publicationId} name={p.name} />}
       </div>
       <div className="bg-background sticky bottom-20 -mx-4 border-t px-4 py-3">
-        <Action publication={p} />
+        <Action publication={p} onLanguage={setChosen} />
       </div>
     </article>
   )

@@ -195,6 +195,7 @@ public final class PublicationLifecycle {
         PublicationEditing.sponsorProblems(ctx).forEach(ctx::reject);
         PublicationEditing.methodProblems(ctx, PublicationEditing.methodOf(publication.attributes()))
             .forEach(ctx::reject);
+        PublicationEditing.languageProblems(publication.attributes(), version).forEach(ctx::reject);
         // Q70: the referral reward's method is one the sponsor may still use (a copy keeps the one it had).
         ReferralPolicy referral = ReferralPolicy.fromJson(publication.get("referral"));
         if (referral != null && RewardMethod.ALL.contains(referral.method())) {

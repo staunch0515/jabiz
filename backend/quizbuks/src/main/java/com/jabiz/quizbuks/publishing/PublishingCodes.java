@@ -111,6 +111,13 @@ public final class PublishingCodes {
     public static final String REFERRAL_RULE_INVALID = "QB_REFERRAL_RULE_INVALID";
     /** Q70 (D-Q70-19): the pool covers the attempts that may win and the referral quota too. */
     public static final String REFERRAL_POOL_SHORT = "QB_REFERRAL_POOL_SHORT";
+    /** Q73b: the languages a publication offers and its texts in them. */
+    public static final String LANGUAGES_INVALID = "QB_PUBLICATION_LANGUAGES_INVALID";
+    public static final String LANGUAGE_NOT_IN_VERSION = "QB_PUBLICATION_LANGUAGE_NOT_IN_VERSION";
+    public static final String TEXT_MISSING = "QB_PUBLICATION_TEXT_MISSING";
+    public static final String TEXT_STALE = "QB_PUBLICATION_TEXT_STALE";
+    public static final String TEXT_TOO_LONG = "QB_PUBLICATION_TEXT_TOO_LONG";
+    public static final String SWITCH_LANGUAGES = "QB_PUBLICATION_VERSION_LANGUAGES";
     /** Every code above that is publishing's own (not the shared review and account codes). */
 
     public static final List<String> ALL = List.of(NAME_BLANK, REGIONS_FORMAT, AUDIENCE_INVALID, TIME_LIMIT_RANGE, SCORE_RANGE,
@@ -124,7 +131,8 @@ public final class PublishingCodes {
         SWITCH_TAKEN_DOWN, SWITCH_PENDING, SWITCH_SAME_VERSION, SWITCH_OTHER_QUIZ, SWITCH_FULL_SCORE, SWITCH_NOT_PENDING,
         SWITCH_ENDED, REFERRAL_INVITED, REFERRAL_QUOTA_RANGE, REFERRAL_DAYS_RANGE, REFERRAL_AMOUNT_RANGE,
         REFERRAL_METHOD_INVALID, REFERRAL_REQUIREMENT_INVALID, REFERRAL_SURVEY_PASS, REFERRAL_RULE_INVALID,
-        REFERRAL_POOL_SHORT);
+        REFERRAL_POOL_SHORT, LANGUAGES_INVALID, LANGUAGE_NOT_IN_VERSION, TEXT_MISSING, TEXT_STALE, TEXT_TOO_LONG,
+        SWITCH_LANGUAGES);
 
     private PublishingCodes() {}
 }

@@ -299,6 +299,22 @@ describe('PublicationReviewPage', () => {
     expect(reads).toBe(settled)
   }, 15_000)
 
+  it('shows the texts in each language offered and decides only once each is ticked as read (Q73b)', async () => {
+    server.entities.set(`${DATASET.publication}/${PUBLICATION_ID}`, { ...publication(), languages: 'zh,en',
+      translations: JSON.stringify({ zh: { name: { text: '春季赛', hash: 'h' } } }) })
+    server.entities.set(`${DATASET.version}/${VERSION_ID}`, { versionId: VERSION_ID, label: 'v1', title: 'World capitals',
+      contentHash: 'a'.repeat(64), versionedAt: '2026-10-14T00:00:00Z', content: JSON.stringify({
+        ...JSON.parse(SNAPSHOT_JSON), schema: 2, translations: { zh: { texts: { title: '首都' }, images: {}, materials: [] } } }) })
+    renderPublication()
+    const zh = await screen.findByTestId('publication-language-zh')
+    expect(screen.getByTestId('publication-language-list')).toHaveTextContent('Chinese (main)English (base)')
+    expect(within(zh).getByTestId('publication-language-text')).toHaveTextContent('NameSpring run春季赛')
+    expect(screen.getByTestId('publication-needs-languages')).toBeInTheDocument()
+    expect(screen.queryByTestId('approval-panel')).not.toBeInTheDocument()
+    await userEvent.click(within(zh).getByTestId('publication-language-seen-zh'))
+    expect(await screen.findByTestId('approval-panel')).toBeInTheDocument()
+  })
+
   it('reviews a running publication\'s switch with the version it asks for (Q51)', async () => {
     const next = '0192f0a0-0000-7000-8000-0000000000e2'
     server.entities.set(`${DATASET.publication}/${PUBLICATION_ID}`, { ...publication('LIVE'),

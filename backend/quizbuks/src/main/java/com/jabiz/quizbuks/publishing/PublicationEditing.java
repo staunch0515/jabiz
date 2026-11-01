@@ -608,7 +608,12 @@ final class PublicationEditing {
             money(row.get("reward")))).toList()));
         card.put("sponsorCountry", profile == null ? null : profile.get("countryCode"));
         card.put("kind", snapshot.kind());
-        card.put("language", version.get("language"));
+        // Q73b: the languages offered (the version's base when none), the main one first, and the texts in them.
+        List<String> offered = PublicationLanguages.offered(publication.get("languages"), version.get("language"));
+        card.put("language", offered.getFirst());
+        card.put("languages", String.join(",", offered));
+        card.put("translations", PublicationLanguages.cardJson(publication.get("translations"), snapshot, offered,
+            String.valueOf((Object) version.get("language"))));
         card.put("video", cardVideo(snapshot.materials()));
         card.put("wentOnAt", ctx.opTime());
         EntityInstance operator = first(ctx, SPONSOR_OPERATOR);
@@ -650,6 +655,22 @@ final class PublicationEditing {
             Audience.of(values.get("audience")), DigitalDelivery.of(values.get("digitalDelivery")),
             (String) values.get("digitalDescription"), values.get("sealedDigitalContent") != null,
             ReferralPolicy.fromJson(values.get("referral")));
+    }
+
+    /**
+     * Q73b: what submitting a publication's languages is refused for: a language its version lacks, and texts not
+     * translated or out of date ({@link PublicationLanguages#problems}); none without a version.
+     */
+    static List<Violation> languageProblems(Map<String, Object> values, EntityInstance version) {
+        if (version == null) {
+            return List.of();
+        }
+        Object base = version.get("language");
+        return PublicationLanguages.problems(PublicationLanguages.offered(values.get("languages"), base),
+            PublicationLanguages.parse(values.get("translations")),
+            PublicationLanguages.sources((String) values.get("name"), (String) values.get("redeemDescription"),
+                (String) values.get("digitalDescription"), ReferralPolicy.fromJson(values.get("referral"))),
+            String.valueOf(base), PublicationLanguages.ofVersion(version.get("languages"), base));
     }
 
     /** The reward method of a publication's values; {@link RewardMethod#PLATFORM} when none is written (Q22). */
@@ -708,8 +729,17 @@ final class PublicationEditing {
             publication.get("publisherId"), publication.get("regions"), takenDown, methodOf(publication.attributes()));
         Map<String, Object> attributes = new LinkedHashMap<>(publication.attributes());
         attributes.put("versionId", versionId);
-        Map<String, Object> content = PublicationApprovals.content(draftOf(attributes),
-            version == null ? null : version.get("contentHash"), ranges, publication.get("cover"));
+        Map<String, Object> content = new LinkedHashMap<>(PublicationApprovals.content(draftOf(attributes),
+            version == null ? null : version.get("contentHash"), ranges, publication.get("cover")));
+        // Q73b: what the reviewer approves includes the languages offered and the texts in them (none for one that
+        // offers its version's base only: its content, and so its approvals, are as before).
+        if (publication.get("languages") != null) {
+            content.put("languages", publication.get("languages"));
+        }
+        String texts = PublicationLanguages.cardJson(publication.get("translations"));
+        if (texts != null) {
+            content.put("translations", texts);
+        }
         return ApprovalCase.of(publication.id(), facts, content).reference(publication.get("name"));
     }
 

@@ -263,7 +263,7 @@ public final class MessageProcesses {
         BigDecimal fee = money(attempt.get("fee"));
         params.put("amount", texts.kudos(RewardStatus.PAID.equals(status)
             ? reward.subtract(fee) : reward));
-        params.put("name", MessageTexts.Value.of(card.get("name")));
+        params.put("name", MessageTexts.publicationName(card));
         return new Draft(attempt.get("userId"), QbInbox.TYPE_REWARD, input.kind(), card.id(), QbInbox.ACTION_RESULT,
             String.valueOf(attempt.id()));
     }
@@ -292,7 +292,7 @@ public final class MessageProcesses {
             return null;
         }
         params.put("amount", texts.kudos(cash.get("amount")));
-        params.put("name", MessageTexts.Value.of(card.get("name")));
+        params.put("name", MessageTexts.publicationName(card));
         params.put("code", MessageTexts.Value.of(cash.get("code")));
         // The state in the reader's language (the dictionary's words), not its code.
         params.put("status", texts.message(QbRewards.STATUS_MESSAGE_PREFIX + cash.get("status")));
@@ -330,7 +330,7 @@ public final class MessageProcesses {
         }
         params.put("code", MessageTexts.Value.of(redemption.get("code")));
         params.put("amount", texts.kudos(redemption.get("amount")));
-        params.put("name", MessageTexts.Value.of(card.get("name")));
+        params.put("name", MessageTexts.publicationName(card));
         params.put("description", MessageTexts.Value.of(redemption.get("description")));
         // The day only (UTC): the message is written once, in every language, without the reader's zone.
         Object expires = redemption.get("expiresAt");
@@ -368,7 +368,7 @@ public final class MessageProcesses {
             return null;
         }
         params.put("amount", texts.kudos(prize.get("amount")));
-        params.put("name", MessageTexts.Value.of(card.get("name")));
+        params.put("name", MessageTexts.publicationName(card));
         params.put("description", MessageTexts.Value.of(prize.get("description") == null ? ""
             : prize.get("description")));
         Object sendBy = prize.get("sendBy");
@@ -417,7 +417,7 @@ public final class MessageProcesses {
         if (expected != null && !expected.equals(referral.get("status"))) {
             return null;
         }
-        params.put("name", MessageTexts.Value.of(card.get("name")));
+        params.put("name", MessageTexts.publicationName(card));
         params.put("amount", texts.kudos(referral.get("amount")));
         params.put("method", texts.message("qb.referral.method." + referral.get("rewardMethod")));
         Object expires = referral.get("expiresAt");

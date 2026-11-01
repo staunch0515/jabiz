@@ -469,3 +469,42 @@ Quiz「ラーメン通？」 基准：日本語   翻译：中文 ✓  English �
 - `QuizTransferIT`：带其他语言的文件导入后，语言、译文、资料版本都在，文件中的哈希使一段译文过时，因而版本不收中文；没有基准语言即拒绝；
 - 前端 `transfer.test.tsx`：导出其他语言。
 - e2e 的导出期望改为版本 2。
+
+### Q73b-1、Q73b-2（2026-11-01）：发布多语言（后端与三个前端）
+
+**数据**（迁移 V56）：
+- `qb_publication_version` 与 `qb_publication_card` 加 `languages`、`translations`；旧卡片的 `languages` 填为其 `language`；
+- `qb_attempt` 加 `language`（不可变、只由流程写）。
+
+**与 §3 的不同**（实现时的取舍）：
+- 没有建 `qb_publication_card_language` 表：首页与收件箱按卡片 `languages` 列做"有交集"的判断，卡片数量下不需要单独的索引表。卡片多到需要时再加。
+- 过时与缺少分成两个代码：`QB_PUBLICATION_TEXT_MISSING`、`QB_PUBLICATION_TEXT_STALE`；超长即时拒绝 `QB_PUBLICATION_TEXT_TOO_LONG`，语言不是平台的或重复 `QB_PUBLICATION_LANGUAGES_INVALID`。
+- 卡片的 `translations` 只存文字 `{语言: {name, redeemDescription, digitalDescription, referralDescription, quizTitle}}`（卡片冻结，没有过时可言），`quizTitle` 取版本该语言的标题。
+
+**规则与流程**（`publishing.PublicationLanguages`，纯 Java）：
+- 保存时，文字与已存的相同就保留原来的哈希，所以基准改了而译文没改，它就过时；不在提供语言中的、基准为空的字段的译文丢弃。
+- `PublicationEditing.languageProblems` 进入保存的 `problems` 与提交检查；审批内容只在有语言时加入 `languages`、`translations`（旧发布的审批内容不变）。
+- 版本切换：新版本必须含全部提供的语言，且其基准不能是发布的译文语言（`QB_PUBLICATION_VERSION_LANGUAGES`）。
+- 答题：`QB_ATTEMPT_START` 的 `language` 用锁外已读的卡片核对（语句数不变），不给即卡片的首选；继续、结果、答题记录经 `PlaySteps.inLanguage` 按会话的语言读快照；结果的发布名经 `cardText`。
+
+**模板**：`qb.app.feed`（显示语言 `dl`、按交集筛选、返回 `languages`、`displayLanguage`）、`qb.app.publication`（显示语言 = 会话的 > 参数中第一个提供的 > 首选；简介与资料按版本的译文，资料版本带 `language`）、`qb.app.inbox`、`inbox-unread`（交集）。
+
+**商家后台**：发布向导第二步的"语言"区（`publishing/LanguagesFields.tsx`）：版本只有一种语言时不显示；勾选版本的语言、选首选、按语言填写译文（旁边显示原文），问题按 `translations.<语言>.<字段>` 显示在字段下。
+
+**App**：开始页按"测验语言"读，提供不止一种时在"开始"上方选择答题语言（页面随之换语言，提示开始后不能更换），开始时把它交给 `QB_ATTEMPT_START`；推荐说明用发布的译文。
+
+**管理后台扩展**：审核页的"语言"区列出提供的语言、每种非基准语言的发布文字与原文对照和"已阅读"勾选；全部勾选后才给出决定面板（D-Q73-4），按审批请求记，换请求即重新勾选。版本预览本已可切换语言。
+
+**测试**：`PublicationLanguagesIT`（两个用例：缺少、不在版本、过时；卡片；三种语言组合的首页；详情；答题语言的拒绝、选定、继续不变、结果、缺省首选、基准；只有基准的发布照旧），商家后台向导用例、App 开始页用例、后台审核页用例。
+
+**未在 Q73b-1、Q73b-2 中**：见 Q73b-3。
+
+### Q73b-3（2026-11-01）：站内信、邮件、答题记录与分享链接的语言
+
+- **发布名的回落**（`PublicationLanguages.textIn`，读卡片的文字与发布的带哈希文字两种形式）：读者的语言有译文就用它，否则用首选语言的，再否则用基准。
+- **站内信**：五种以卡片为对象的消息（奖励、现金奖励、兑换、电子奖品等）以 `MessageTexts.publicationName(卡片)` 逐语言渲染发布名。
+- **邮件**：给商家的发布通知与"余额不足"按收件人的语言取名（`MailProcesses.readerLanguage`）；邀请邮件的名称与 Quiz 标题用首选语言（与链接的 `?lang=` 一致）。
+- **答题记录** `qb.app.history`：名称与 Quiz 标题按会话的语言，搜索也查该语言的名称。
+- **分享**：商家后台的链接带发布的首选语言；二维码对话框可在提供的语言间选择，链接、图片说明、文件名与海报上的名称随之。
+- **App 的 `?lang=`**：照旧只对新用户改界面语言；另外记下它打开的页面，开始页把它作为第一选择（`linkLanguageOf`），所以链接总是以它的语言打开发布（提供时）。
+- **测试**：`PublicationLanguagesTest`（回落的三种情形、两种存储形式、`publicationName`）、`PublicationLanguagesIT` 的答题记录、商家后台二维码语言用例、App `linkLanguage.test.ts`。

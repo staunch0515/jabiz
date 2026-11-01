@@ -43,6 +43,8 @@ const FORM: PublicationForm = {
   referrerRequires: 'NONE',
   refereeRules: ['NOT_REGULAR'],
   referralDays: '7',
+  languages: [],
+  translations: {},
 }
 
 describe('the publishing paths', () => {

@@ -65,7 +65,18 @@ public final class AttemptProcesses {
     public static final String START = "QB_ATTEMPT_START";
     public static final String SAVE = "QB_ATTEMPT_SAVE";
 
-    public record PublicationRef(@NotNull UUID publicationId) {}
+    /**
+     * @param language Q73b: the language to answer in when starting, one the publication offers (422
+     *                 {@code QB_ATTEMPT_LANGUAGE} otherwise); its main language when not given. A view and a continued
+     *                 attempt take none (an attempt keeps the language it started in).
+     */
+    public record PublicationRef(@NotNull UUID publicationId, @jakarta.validation.constraints.Pattern(
+        regexp = "ja|zh|en") String language) {
+
+        public PublicationRef(UUID publicationId) {
+            this(publicationId, null);
+        }
+    }
 
     /** @param firstView whether this view was the caller's first of the publication (and was recorded) */
     public record ViewOutput(UUID publicationId, boolean firstView) {}
@@ -394,6 +405,16 @@ public final class AttemptProcesses {
             versionChanged(ctx);
             return;
         }
+        // Q73b: the language asked for, one the card offers; else the card's main one.
+        List<String> offered = com.jabiz.quizbuks.publishing.PublicationLanguages.offered(card.get("languages"),
+            card.get("language"));
+        String asked = ctx.get(INPUT) instanceof PublicationRef ref ? ref.language() : null;
+        if (asked != null && !offered.contains(asked)) {
+            ctx.reject(new com.jabiz.entity.Violation("language", PlayCodes.LANGUAGE, "The publication is not "
+                + "offered in " + asked, Map.of("language", asked)));
+            return;
+        }
+        String language = asked != null ? asked : offered.getFirst();
         QuizSnapshot snapshot = PlaySteps.snapshot(ctx);
         Object publicationId = ctx.get(PUB_KEY);
         Instant deadline = AttemptRules.deadline(ctx.opTime(), PlaySteps.integer(card.get("timeLimitSec")));
@@ -404,6 +425,7 @@ public final class AttemptProcesses {
         values.put("publisherKind", card.get("publisherKind"));
         values.put("publisherId", card.get("publisherId"));
         values.put("versionId", card.get("versionId"));
+        values.put("language", language);
         values.put("startedAt", ctx.opTime());
         values.put("deadline", deadline);
         values.put("status", AttemptStatus.IN_PROGRESS);
@@ -427,7 +449,8 @@ public final class AttemptProcesses {
         }
         ctx.put(OUTPUT, new StartOutput(String.valueOf(attemptId), PlaySteps.uuid(publicationId),
             AttemptStatus.IN_PROGRESS, ctx.opTime(), deadline, ctx.opTime(),
-            PlaySteps.integer(card.get("timeLimitSec")), 0, false, questions(snapshot, order),
+            PlaySteps.integer(card.get("timeLimitSec")), 0, false,
+            questions(com.jabiz.quizbuks.content.QuizSnapshots.in(snapshot, language), order),
             List.of(), snapshot.kind()));
     }
 
@@ -435,6 +458,8 @@ public final class AttemptProcesses {
     private static StartOutput output(ProcessContext ctx, EntityInstance attempt, QuizSnapshot snapshot,
         boolean resumed) {
         List<List<Integer>> order = Answers.fromJson(attempt.get("optionOrder"));
+        // Q73b: the questions in the attempt's language (the version's base for one made before).
+        snapshot = PlaySteps.inLanguage(snapshot, attempt);
         Instant startedAt = PlaySteps.instant(attempt.get("startedAt"));
         Instant deadline = PlaySteps.instant(attempt.get("deadline"));
         return new StartOutput(String.valueOf(attempt.id()), PlaySteps.uuid(attempt.get("publicationId")),

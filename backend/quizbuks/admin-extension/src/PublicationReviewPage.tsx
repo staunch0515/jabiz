@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
 import { ArrowLeft } from 'lucide-react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useLocation, useParams } from 'react-router'
 import {
@@ -7,9 +8,11 @@ import {
   AlertDescription,
   ApprovalPanel,
   Button,
+  Checkbox,
   DescriptionList,
   EXTENSION_NAMESPACE,
   FilePreview,
+  Label,
   PageHeader,
   PageState,
   Table,
@@ -31,6 +34,7 @@ import {
   readTakedowns,
   readTiers,
   readVersion,
+  PUBLICATION_TEXT_FIELDS,
   type Publication,
   type Takedown,
   type Tier,
@@ -272,6 +276,69 @@ function Content({ versionId, version }: { versionId: string | null; version: Us
 }
 
 /**
+ * The languages a publication offers (Q73b, Q73 §3.6, D-Q73-4): for each other than its version's base, the
+ * publication's own texts beside the base's, and a tick that the reviewer read the quiz and the texts in it. The decision
+ * waits for every tick; it is the page's threshold only (the platform's `ApprovalPanel` records the decision).
+ */
+function Languages({ publication, others, seen, onSeen }: {
+  publication: Publication
+  others: string[]
+  seen: (language: string) => boolean
+  onSeen: (language: string, on: boolean) => void
+}) {
+  const { t } = useTranslation(EXTENSION_NAMESPACE)
+  const name = (language: string) => t(`preview.languages.${language}`, { defaultValue: language })
+  const fields = PUBLICATION_TEXT_FIELDS.filter((field) => publication.texts[field])
+  return (
+    <Section title={t('publication.languagesTitle')} testId="publication-languages">
+      <p className="text-muted-foreground text-sm">{t('publication.languagesHint')}</p>
+      <ul className="flex flex-wrap gap-x-4 gap-y-1 text-sm" data-testid="publication-language-list">
+        {publication.languages.map((language, i) => (
+          <li key={language}>
+            {name(language)}
+            {i === 0 && <span className="text-muted-foreground"> ({t('publication.languageMain')})</span>}
+            {!others.includes(language) && <span className="text-muted-foreground"> ({t('publication.languageBase')})</span>}
+          </li>
+        ))}
+      </ul>
+      {others.map((language) => (
+        <div key={language} className="flex flex-col gap-2" data-testid={`publication-language-${language}`}>
+          <h3 className="font-semibold">{name(language)}</h3>
+          <Table aria-label={name(language)}>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t('publication.textField')}</TableHead>
+                <TableHead>{t('publication.textBase')}</TableHead>
+                <TableHead>{t('publication.textTranslated', { language: name(language) })}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {fields.map((field) => (
+                <TableRow key={field} data-testid="publication-language-text">
+                  <TableCell>{t(`publication.textFields.${field}`)}</TableCell>
+                  <TableCell className="whitespace-pre-line">{publication.texts[field]}</TableCell>
+                  <TableCell className="whitespace-pre-line" lang={language}>
+                    {publication.translations[language]?.[field] ?? t('common.notSet')}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+          <div className="flex items-center gap-2">
+            <Checkbox id={`publication-seen-${language}`} checked={seen(language)}
+              data-testid={`publication-language-seen-${language}`}
+              onCheckedChange={(checked) => onSeen(language, checked === true)} />
+            <Label htmlFor={`publication-seen-${language}`} className="font-normal">
+              {t('publication.languageSeen', { language: name(language) })}
+            </Label>
+          </div>
+        </div>
+      ))}
+    </Section>
+  )
+}
+
+/**
  * A submitted publication as the reviewer decides it (02-design §7.3, P-09): who submitted it and when, every setting
  * and tier (frozen at submission), the sponsor's funds (finance only) and the whole frozen version with the correct
  * answers. The approval is bound to the version's hash, the settings and the tiers together, so the decision (the
@@ -329,6 +396,8 @@ export default function PublicationReviewPage() {
     refetchOnWindowFocus: false,
   })
   const reasonOf = useAdminReason()
+  // Q73b: the languages ticked as read, for the request they were read for.
+  const [seenLanguages, setSeenLanguages] = useState<string[]>([])
   const sponsor = useQuery({
     queryKey: ['qb-ext', 'sponsor', sponsorId],
     queryFn: () => readSponsor(sponsorId!),
@@ -364,6 +433,12 @@ export default function PublicationReviewPage() {
     && !!shownVersion?.content
     // And whether the quiz was taken down before (Q10b, M-d): nothing is decided without it.
     && (!p.quizId || (takedowns.isSuccess && !takedowns.isFetching))
+  // Q73b: the offered languages other than the version's base (those the version holds a translation into).
+  const others = shownVersion?.content
+    ? p.languages.filter((language) => language in shownVersion.content!.translations) : []
+  const seenKey = (language: string) => `${requestId}:${language}`
+  const seen = (language: string) => seenLanguages.includes(seenKey(language))
+  const allSeen = others.every(seen)
 
   const decided = (status: string) => {
     after.decide(status)
@@ -398,6 +473,8 @@ export default function PublicationReviewPage() {
   } else if (!everythingShown) {
     // Nothing is decided unseen: the panel waits for the settings, the tiers and the content.
     decision = <p className="text-muted-foreground text-sm" data-testid="publication-needs-content">{t('publication.needsContent')}</p>
+  } else if (!allSeen) {
+    decision = <p className="text-muted-foreground text-sm" data-testid="publication-needs-languages">{t('publication.needsLanguages')}</p>
   } else {
     decision = (
       <>
@@ -446,6 +523,10 @@ export default function PublicationReviewPage() {
       <Takedowns takedowns={takedowns} />
       <Settings publication={p} tiers={tiers} quiz={quiz} finance={finance} />
       <Content versionId={versionId} version={version} />
+      {others.length > 0 && (
+        <Languages publication={p} others={others} seen={seen} onSeen={(language, on) => setSeenLanguages((all) =>
+          on ? [...all.filter((k) => k !== seenKey(language)), seenKey(language)] : all.filter((k) => k !== seenKey(language)))} />
+      )}
       <Section title={t('publication.decision')} testId="publication-decision">{decision}</Section>
       {can(PERMISSION.contentWrite) && <AdminActions publication={p} processes={PUBLICATION_ADMIN} />}
       {/* Q48a: an operator's member takes it down with the operator's processes (headquarters' come first). */}

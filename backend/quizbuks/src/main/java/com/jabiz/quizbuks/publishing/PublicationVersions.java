@@ -190,6 +190,19 @@ public final class PublicationVersions {
                 Map.of("fullScore", fullScore, "newFullScore", newFullScore)));
             return;
         }
+        // Q73b: a publication offering languages keeps them: the new version has each, and its base is none the
+        // publication translated its own texts into (they would be read as the base's).
+        List<String> offered = com.jabiz.quizbuks.content.ContentLanguages.parseList(publication.get("languages"));
+        if (!offered.isEmpty()) {
+            List<String> languages = PublicationLanguages.ofVersion(version.get("languages"), version.get("language"));
+            if (!languages.containsAll(offered) || PublicationLanguages.parse(publication.get("translations"))
+                .containsKey(String.valueOf((Object) version.get("language")))) {
+                ctx.reject(new Violation("versionId", PublishingCodes.SWITCH_LANGUAGES, "Version "
+                    + version.get("label") + " lacks some of the languages " + offered, Map.of("languages",
+                    String.join(",", offered))));
+                return;
+            }
+        }
         // A version is checked when it is saved; checked again here as at submission, in case the rules became
         // stricter since (defence, as PublicationReadiness does).
         QuizSnapshot snapshot = PublicationEditing.snapshot(version);
@@ -256,7 +269,15 @@ public final class PublicationVersions {
             Map<String, Object> values = new LinkedHashMap<>();
             values.put("versionId", version.id());
             values.put("quizTitle", version.get("title"));
-            values.put("language", version.get("language"));
+            // Q73b: the languages offered stay as submitted; one offering none follows its version's. The card's
+            // texts take the new version's titles.
+            if (com.jabiz.quizbuks.content.ContentLanguages.parseList(publication.get("languages")).isEmpty()) {
+                values.put("language", version.get("language"));
+                values.put("languages", version.get("language"));
+            }
+            values.put("translations", PublicationLanguages.cardJson(publication.get("translations"), snapshot,
+                PublicationLanguages.offered(publication.get("languages"), version.get("language")),
+                String.valueOf((Object) version.get("language"))));
             values.put("questionCount", version.get("questionCount"));
             // Q64: a publication's own cover stays; only one taken from the version follows the switch.
             values.put("cover", PublicationEditing.cardCover(publication, snapshot));

@@ -54,6 +54,9 @@ public final class QbPlay {
         PublisherKind.declare(eb, true);
         eb.field("versionId", f -> f.physicalColumn("version_id").immutable(true).required(true).processOnly()
             .asReference(QbContent.VERSION));
+        // Q73b: the language the attempt is answered in, chosen at its start; none for one made before (its card's).
+        eb.field("language", f -> f.physicalColumn("language").immutable(true).processOnly()
+            .asCode(QbContent.LANGUAGE_DICTIONARY, QbContent.LANGUAGES.toArray(String[]::new)));
         eb.field("startedAt", f -> f.physicalColumn("started_at").immutable(true).required(true).processOnly()
             .asTemporal(TemporalRole.EVENT_TIME));
         eb.field("deadline", f -> f.physicalColumn("deadline").immutable(true).required(true).processOnly()

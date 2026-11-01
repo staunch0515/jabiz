@@ -52,8 +52,11 @@ permissions: [qb.me]
 SELECT
     m.{{QbAttempt.attemptId}}              AS attemptId,
     m.{{QbAttempt.publicationId}}          AS publicationId,
-    c.{{QbPublicationCard.name}}           AS name,
-    c.{{QbPublicationCard.quizTitle}}      AS quizTitle,
+    -- Q73b: the names in the language the attempt is answered in, else the card's own.
+    coalesce(CAST(c.{{QbPublicationCard.translations}} AS jsonb) -> m.{{QbAttempt.language}} ->> 'name',
+        c.{{QbPublicationCard.name}})      AS name,
+    coalesce(CAST(c.{{QbPublicationCard.translations}} AS jsonb) -> m.{{QbAttempt.language}} ->> 'quizTitle',
+        c.{{QbPublicationCard.quizTitle}}) AS quizTitle,
     c.{{QbPublicationCard.cover}}          AS cover,
     c.{{QbPublicationCard.kind}}           AS kind,
     m.{{QbAttempt.status}}                 AS status,
@@ -88,4 +91,6 @@ LEFT JOIN {{QbRedemption}} rd ON rd.{{QbRedemption.attemptId}} = m.{{QbAttempt.a
 LEFT JOIN {{QbDigitalPrize}} dg ON dg.{{QbDigitalPrize.attemptId}} = m.{{QbAttempt.attemptId}}
 WHERE (CAST(:q AS text) IS NULL
        OR strpos(lower(c.{{QbPublicationCard.name}}), lower(CAST(:q AS text))) > 0
-       OR strpos(lower(c.{{QbPublicationCard.quizTitle}}), lower(CAST(:q AS text))) > 0)
+       OR strpos(lower(c.{{QbPublicationCard.quizTitle}}), lower(CAST(:q AS text))) > 0
+       OR strpos(lower(coalesce(CAST(c.{{QbPublicationCard.translations}} AS jsonb) -> m.{{QbAttempt.language}}
+           ->> 'name', '')), lower(CAST(:q AS text))) > 0)

@@ -11,6 +11,7 @@ import com.jabiz.process.StepSpec;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.publishing.PublicationLanguages;
 import com.jabiz.quizbuks.publishing.PublisherKind;
 import com.jabiz.quizbuks.identity.BanRules;
 import com.jabiz.quizbuks.identity.QbAccounts;
@@ -286,7 +287,7 @@ public final class MailProcesses {
             return;
         }
         Map<String, Object> params = new LinkedHashMap<>();
-        params.put("name", publication.get("name"));
+        params.put("name", PublicationLanguages.textIn(publication, readerLanguage(ctx), PublicationLanguages.NAME));
         switch (input.kind()) {
             case PublicationNotices.APPROVED -> {
                 // Live at once when its start had come by the approval; the start as the publication has it.
@@ -351,8 +352,9 @@ public final class MailProcesses {
     private static Map<String, Object> fundsShortParams(ProcessContext ctx, List<EntityInstance> shortOnes) {
         EntityInstance wallet = first(ctx, WALLET);
         Map<String, Object> params = new LinkedHashMap<>();
-        params.put("publications", MailValues.names(shortOnes.stream().map(card -> (Object) card.get("name"))
-            .toList(), MAX_LISTED));
+        String language = readerLanguage(ctx);
+        params.put("publications", MailValues.names(shortOnes.stream().map(card -> (Object) PublicationLanguages
+            .textIn(card, language, PublicationLanguages.NAME)).toList(), MAX_LISTED));
         params.put("pendingCount", MailValues.count(wallet == null ? null : wallet.get("pendingCount")));
         params.put("pendingAmount", MailValues.amount(wallet == null ? null : wallet.get("pendingAmount")));
         return params;
@@ -555,6 +557,17 @@ public final class MailProcesses {
         Object locale = user == null ? null : user.get("locale");
         return messages.supported(locale == null || locale.toString().isBlank() ? messages.defaultLocale()
             : Locale.forLanguageTag(locale.toString()));
+    }
+
+    /**
+     * The recipient's language for the texts the sponsor wrote (Q73b): a publication's name in it when the publication
+     * offers it, else in its main language (`PublicationLanguages.textIn` falls back); null without a user.
+     */
+    static String readerLanguage(ProcessContext ctx) {
+        EntityInstance user = first(ctx, USER);
+        Object locale = user == null ? null : user.get("locale");
+        return locale == null || locale.toString().isBlank() ? null
+            : Locale.forLanguageTag(locale.toString()).getLanguage();
     }
 
     /** A message in the recipient's language. */

@@ -75,6 +75,15 @@ final class PlaySteps {
     }
 
     /** The snapshot of the loaded version; a version is written once, so an attempt's is always there. */
+    /**
+     * Q73b: the snapshot as the attempt reads it, in the language it started in (one made before Q73b, or in the
+     * version's base, reads the base); the structure, numbers and scoring are the same in every language.
+     */
+    static QuizSnapshot inLanguage(QuizSnapshot snapshot, EntityInstance attempt) {
+        Object language = attempt == null ? null : attempt.get("language");
+        return language == null ? snapshot : QuizSnapshots.in(snapshot, language.toString());
+    }
+
     static QuizSnapshot snapshot(ProcessContext ctx) {
         EntityInstance version = first(ctx, VERSION);
         if (version == null) {
