@@ -101,6 +101,7 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
   只给调用者、不留记录的秘密标 `@Sensitive(returned = true)`（响应中原样返回，记录与事件中遮蔽，10 §6）。
 - **单点登录**（见 10 §12 与决策 D28 第 6 条）：只做 OIDC（授权码 + PKCE + nonce，`jabiz.security.oidc.providers[i]`，客户端密钥只来自环境变量），
   平台自己校验 ID 令牌后签发自己的令牌；外部账号只经 `SecUserIdentity` 关联（管理员关联，或本人登录后经 `/api/auth/account/identities` 关联与解除：近期二次验证或当前密码，`SEC_IDENTITY_LINK_SELF` / `SEC_IDENTITY_UNLINK_SELF`，前端积木 `LinkedIdentities`）；
+  Apple 用 `kind: apple`（客户端密钥由平台以 `apple.private-key` 签出、答复经 `/api/auth/oidc/{id}/form-post` 转到入口的回调、首次的姓名、删除账号与解除关联后由平台撤销授权，决策 D67），不自写 Apple 的接入或撤销；
   缺省不自动开户，提供方开启 `auto-provision` 且入口允许注册时才为提供方担保（`kind: google` 只认 gmail 或 Workspace）、未被占用的邮箱开户（`SPONSOR_OIDC_SIGN_UP`，决策 D39），邮箱已被使用即 403 `OIDC_ACCOUNT_EXISTS`、绝不自动关联；
   接管可预占的账号时删除其关联；登录照常是写登录记录的流程（`SPONSOR_OIDC_SIGN_IN`）。不自己写关联或开户。
 - **登录入口与登录前检查**（见 10 §15 与决策 D36）：不同前端接受哪些角色只在 `jabiz.security.entries.<名>` 声明（缺省入口 `admin` 接受全部角色）；令牌只含该入口所接受角色的权限，

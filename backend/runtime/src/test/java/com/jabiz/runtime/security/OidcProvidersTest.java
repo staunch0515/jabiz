@@ -119,10 +119,10 @@ class OidcProvidersTest {
         assertThat(google.toString()).contains("kind=google", "autoProvision=true", "clientSecret=***");
 
         OidcProviders providers = new OidcProviders(List.of(google,
-            kind("apple", "apple", "https://appleid.apple.com", false, null, portal),
+            kind("github", "github", "https://github.com", false, null, portal),
             kind("noemail", null, "https://idp.example.com", true, List.of("openid", "profile"), portal)));
         assertThat(providers.check()).extracting(CheckProblem::message).containsExactly(
-            "kind must be one of generic, google, facebook, line",
+            "kind must be one of generic, google, facebook, line, apple",
             "auto-provision needs the scope email");
         assertThat(providers.all()).extracting(OidcProvider::id).containsExactly("google");
     }
@@ -225,8 +225,62 @@ class OidcProvidersTest {
         assertThat(ofKind("facebook", "s", true, true).problems()).isEmpty();
         // An unknown kind has no default issuer either.
         assertThat(ofKind("unknown", "s", false, false).problems())
-            .contains("kind must be one of generic, google, facebook, line", "issuer is required");
+            .contains("kind must be one of generic, google, facebook, line, apple", "issuer is required");
         assertThat(ofKind("line", "x".repeat(32), true, true).toString()).doesNotContain("xxxx")
             .contains("signUpUnverifiedEmail=true");
+    }
+
+    private static OidcProvider apple(String secret, List<String> scopes, OidcProvider.Apple settings) {
+        return new OidcProvider("apple", null, "com.example.web", secret, null, scopes, null, null,
+            Map.of("app", "https://app.example.com/login/oidc"), "apple", true, false, settings);
+    }
+
+    private static String appleKey() {
+        try {
+            return java.util.Base64.getEncoder().encodeToString(new com.nimbusds.jose.jwk.gen.ECKeyGenerator(
+                com.nimbusds.jose.jwk.Curve.P_256).generate().toECPrivateKey().getEncoded());
+        } catch (com.nimbusds.jose.JOSEException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    @Test
+    void appleHasItsIssuerScopesAndFormPostAndNeedsItsKeyInsteadOfASecret() {
+        // Decision D67.
+        String key = appleKey();
+        OidcProvider apple = apple(null, null, new OidcProvider.Apple("TEAM123456", "KEY1234567", key,
+            "https://app.example.com/api/auth/oidc/apple/form-post"));
+        assertThat(apple.problems()).isEmpty();
+        assertThat(apple.issuer()).isEqualTo(OidcProvider.APPLE_ISSUER);
+        assertThat(apple.scopes()).containsExactly("openid", "name", "email");
+        assertThat(apple.clientSecretPost()).isTrue();
+        assertThat(apple.pkce()).isFalse();
+        assertThat(apple.isApple()).isTrue();
+        // The entry's callback is where the browser goes on to; Apple is sent to this server.
+        assertThat(apple.redirectUri("app")).isEqualTo("https://app.example.com/login/oidc");
+        assertThat(apple.providerRedirectUri("app")).isEqualTo("https://app.example.com/api/auth/oidc/apple/form-post");
+        assertThat(apple.providerRedirectUri("admin")).isNull();
+        assertThat(apple.toString()).doesNotContain(key).contains("privateKey=***");
+        assertThat(good("corp").pkce()).isTrue();
+        assertThat(good("corp").providerRedirectUri("admin")).isEqualTo(good("corp").redirectUri("admin"));
+
+        assertThat(apple(null, null, null).problems()).containsExactly(
+            "apple.team-id, apple.key-id, apple.private-key and apple.form-post-uri are required");
+        assertThat(apple("s", List.of("openid", "profile"), new OidcProvider.Apple("team", "KEY", "nope",
+            "https://app.example.com/api/auth/oidc/other/form-post")).problems()).containsExactly(
+            "client-secret is not used by kind apple: the secret is signed with apple.private-key",
+            "apple.team-id must be the team's ten-character id",
+            "apple.key-id must be the key's ten-character id",
+            "apple.private-key: not a PKCS #8 EC private key",
+            "apple.form-post-uri must be this server's /api/auth/oidc/apple/form-post",
+            "scopes of kind apple are openid, name and email only",
+            "auto-provision needs the scope email");
+        assertThat(apple(null, null, new OidcProvider.Apple("TEAM123456", "KEY1234567", " ", "http://example.com/x"))
+            .problems()).containsExactly("apple.private-key is required (from the environment)",
+            "apple.form-post-uri must be an absolute https URL (http only for localhost)");
+        // Apple's settings belong to Apple only.
+        assertThat(new OidcProvider("corp", "https://idp.example.com", "client", "s", "https://erp.example.com/oidc",
+            null, null, null, null, null, false, false, new OidcProvider.Apple(null, null, null, null)).problems())
+            .containsExactly("apple.* is for kind apple only");
     }
 }

@@ -304,7 +304,7 @@ BCrypt 有意很慢（每次数十到数百毫秒 CPU）。登录洪峰时若不
 
 授权码 + PKCE（S256）+ nonce；平台自己校验 ID 令牌，然后照常签发自己的访问令牌与刷新令牌（第 2 节不变）。不用 Spring 的 oauth2-client（它依赖服务端会话），
 只用已有的 Nimbus 与 JDK 的异步 HTTP 客户端。不做 SAML、不做单点登出；缺省不自动开户，按提供方开启（【决策 D39】，阶段 16f-1，见下文"自动开户"）；
-已登录的用户可自行关联与解除外部账号（见下文"本人关联"）。Apple（`kind: apple`、form_post 回调、以 JWT 作客户端密钥）在 16f-2，推后。
+已登录的用户可自行关联与解除外部账号（见下文"本人关联"）。Apple（`kind: apple`、form_post 回调、以 JWT 作客户端密钥）见下文"Sign in with Apple"（阶段 17j，决策 D67）。
 
 **配置**（`jabiz.security.oidc.providers[i]`）
 
@@ -312,20 +312,21 @@ BCrypt 有意很慢（每次数十到数百毫秒 CPU）。登录洪峰时若不
 |---|---|
 | `id` | 小写字母、数字与连字符，唯一；出现在接口路径与登录记录中 |
 | `issuer` | 发现文档 `{issuer}/.well-known/openid-configuration` 的 `issuer` 必须与之完全相同 |
-| `client-id`、`client-secret` | 密钥只来自环境变量（如 `JABIZ_OIDC_<ID>_CLIENT_SECRET` 经 Spring 的松散绑定），不写入仓库 |
+| `client-id`、`client-secret` | 密钥只来自环境变量（如 `JABIZ_OIDC_<ID>_CLIENT_SECRET` 经 Spring 的松散绑定），不写入仓库；`kind: apple` 不用 `client-secret`（写了即启动报错），见 `apple.*` |
 | `redirect-uri` | 在身份提供方登记的绝对地址，指向后台的 `/login/oidc`（挂在子路径时带上子路径）：入口 `admin` 的回调 |
 | `redirect-uris.<入口>` | 其他入口的回调（阶段 16c-2，决策 D43 第 5 条）：该入口前端的 `login/oidc`，如 `https://shop.example.com/portal/login/oidc`；也可写 `admin`（与 `redirect-uri` 二选一）。没有某入口的回调，该提供方就不对该入口提供 |
-| `scopes` | 缺省 `openid profile email`，必须含 `openid` |
+| `scopes` | 缺省 `openid profile email`（`kind: apple` 为 `openid name email`，只能是这三项），必须含 `openid` |
 | `labels` | 登录按钮的文字（`{语言: 文本}`），缺省为 `id` |
 | `mfa-amr` | ID 令牌的 `amr` 含其中任一值时视同平台的二次验证；缺省为空（不信任，照常走第 9 节） |
-| `kind` | `generic`（缺省）、`google`（16f-1）、`facebook` 或 `line`（16zk，决策 D61 第 1 条）：Google 的 `issuer` 缺省为 `https://accounts.google.com`，邮箱是否可信另有规则（见"自动开户"）；Facebook 缺省 `https://www.facebook.com`、LINE 缺省 `https://access.line.me`（见下文"Facebook 与 LINE"）；其他值启动报错（`apple` 在 16f-2） |
+| `kind` | `generic`（缺省）、`google`（16f-1）、`facebook` 或 `line`（16zk，决策 D61 第 1 条）：Google 的 `issuer` 缺省为 `https://accounts.google.com`，邮箱是否可信另有规则（见"自动开户"）；Facebook 缺省 `https://www.facebook.com`、LINE 缺省 `https://access.line.me`（见下文"Facebook 与 LINE"）；`apple`（阶段 17j，决策 D67）缺省 `https://appleid.apple.com`（见下文"Sign in with Apple"）；其他值启动报错 |
 | `auto-provision` | 缺省 `false`：未关联的外部账号可否开户（D39，见"自动开户"） |
 | `sign-up-unverified-email` | 缺省 `false`，须同时开启 `auto-provision`（否则启动报错）：提供方不担保的邮箱也开户，账号未验证、可预占（决策 D61 第 3 条，见"自动开户"） |
+| `apple.team-id`、`apple.key-id`、`apple.private-key`、`apple.form-post-uri` | 只用于 `kind: apple`（决策 D67）：开发者团队与密钥的 10 位编号、签客户端密钥的 `.p8` 私钥（EC P-256，PKCS #8 的 PEM——换行可写作 `\n`——或其 Base64 正文；只来自环境变量）、Apple 回传答复的本服务器地址 `https://<主机>/api/auth/oidc/<id>/form-post`（在 Apple 登记为 Return URL）。`client-id` 是 Services ID |
 
 启动检查（类别 `SECURITY`）一次报告全部问题：缺项（`redirect-uri` 与 `redirect-uris` 至少有一个）、`id` 格式或重复、`scopes` 无 `openid`、
 `issuer` / `redirect-uri` / `redirect-uris.<入口>` 不是绝对的 `https` 地址（只有 `localhost` / `127.0.0.1` 可用 `http`，供开发与测试）、回调带片段（`#`）、
 `redirect-uris` 的键不是入口名、`redirect-uri` 与 `redirect-uris.admin` 都写了却不同、`kind` 未知、`auto-provision` 而 `scopes` 无 `email`、
-`sign-up-unverified-email` 而无 `auto-provision`、`kind: line` 的 `client-secret` 不足 32 字节（UTF-8）；
+`sign-up-unverified-email` 而无 `auto-provision`、`kind: line` 的 `client-secret` 不足 32 字节（UTF-8）、`kind: apple` 缺 `apple.*` 或其格式不对（编号不是 10 位大写字母与数字、私钥读不出或不是 P-256、`form-post-uri` 不是本提供方的路径）、写了 `client-secret` 或其他范围、其他种类写了 `apple.*`；
 `auto-provision` 而它服务的入口（有回调的）都不允许注册为**警告**。启动时不访问身份提供方。
 
 **接口**（公开，认证过滤器不处理）
@@ -334,6 +335,7 @@ BCrypt 有意很慢（每次数十到数百毫秒 CPU）。登录洪峰时若不
 |---|---|
 | `GET /api/auth/oidc/providers?entry=` | 对该入口（缺省 `admin`）提供的提供方，即有该入口回调的：`id`、按请求语言的 `label` 与 `kind`（前端据此画按钮），只此而已；未知入口为空列表 |
 | `POST /api/auth/oidc/{id}/start?entry=` | 按客户端地址限流（`jabiz.security.oidc.rate-limit.per-address`，缺省每小时 60 次，超限 429 `RATE_LIMITED`：每次发起都写一行）。提供方没有该入口的回调时与未知入口一样答 401 `LOGIN_FAILED`。生成 state、nonce、PKCE verifier 与浏览器绑定值 binder（各 32 字节随机数），写一行 `sec_oidc_state`（state、nonce、binder 只存 SHA-256；verifier 原样，换令牌时要用；10 分钟有效），返回 `{authorizationUrl, binder}`；前端把 binder 存进 `sessionStorage`（它不出现在任何 URL 中）后整页跳转 |
+| `POST /api/auth/oidc/{id}/form-post`（表单） | 只用于 `kind: apple`（其他提供方 404）：Apple 回传的 `code`、`state`、首次的 `user`，见下文"Sign in with Apple"；303 转到该轮所记入口的回调 |
 | `POST /api/auth/oidc/callback {state, code, binder}` | 见下；结果与 `POST /api/auth/login` 相同（`SIGNED_IN` / `MFA_REQUIRED` / `MFA_ENROLLMENT_REQUIRED`），其他一律 401 `LOGIN_FAILED`；例外：守卫拒绝、入口要求已验证（403，同 §15.2）、开户时邮箱已被使用（403 `OIDC_ACCOUNT_EXISTS`）、开户超限（429） |
 
 **回调**
@@ -355,6 +357,28 @@ BCrypt 有意很慢（每次数十到数百毫秒 CPU）。登录洪峰时若不
 
 发现文档与 JWKS 在首次使用时读取并缓存 1 小时；遇到未知的 `kid` 时重新读取 JWKS（至多每分钟一次）；端点必须是 `https`（同上，`localhost` 除外）。
 对身份提供方的调用用 JDK 的异步 HTTP 客户端（不跟随重定向、不带链路头，也不在请求线程上阻塞）。观测 `jabiz.auth.oidc`，标签只有 `provider` 与结果（`outcome`）。
+
+**Sign in with Apple**【决策 D67，阶段 17j】：Apple 与标准 OIDC 有四处不同，都由 `kind: apple` 决定，不另设开关。
+1. **客户端密钥是签出来的**：每次换令牌时以 `apple.private-key` 用 ES256 签一个 JWT（头 `kid` = `apple.key-id`；`iss` = `apple.team-id`、`sub` = `client-id`、`aud` = `https://appleid.apple.com`、
+   有效 1 小时，剩 10 分钟时重签），以 `client_secret_post` 送出。私钥不进日志与 `toString()`。
+2. **答复以表单回传给服务器**：要姓名或邮箱时 Apple 只能 `response_mode=form_post`，单页应用收不到 POST。授权请求的 `redirect_uri` 因此是 `apple.form-post-uri`（换令牌时同样以它为准），
+   `POST /api/auth/oidc/{id}/form-post`（公开，按客户端地址限流 `OIDC_FORM_POST`）以 state 找到尚未使用、未过期、属于该提供方的一轮（不消费它），
+   以 303 把浏览器送到**该轮所记入口的回调**（`redirect-uris.<入口>`），查询中带 `state` 与 `code`（同其他提供方回到回调的样子）；之后照常由页面以 binder 调回调或关联的回调。
+   只转到配置中的回调，请求中的任何地址都不算；Apple 的拒绝（`error`，如用户取消）带 `error` 转过去、不带 `code`（不是 RFC 6749 形式的错误码一律为 `access_denied`；`OidcCallback` 遇到 Apple 的取消 `user_cancelled_authorize` 直接回到登录页，不显示失败）；
+   state 未知、过期、用过或属于别的提供方即 401 `LOGIN_FAILED`。响应带 `Cache-Control: no-store` 与 `Referrer-Policy: no-referrer`。
+3. **姓名只在首次授权的表单中**（`user` 字段的 `name.firstName` / `lastName`，不在 ID 令牌中）：记在该轮名下的 `sec_oidc_state_name`（只记第一次、只记在属于该提供方的一轮上；回调用掉该轮时即删除，没用完的随过期的一轮在下一次发起或回传时删除；另建一表，使 `sec_oidc_state` 照旧只插入；不与用户关联、用完即删，不在抹除的清除范围中），
+   回调时 ID 令牌没有 `name` 即以它作显示名（开户时，清理与截断同令牌的 `name`）。名与姓之间空一格；任一含汉字、假名或谚文时姓在前、不空格。`user` 中的邮箱不用（以签名的 ID 令牌为准）。
+4. **不带 PKCE**：Apple 的文档没有 PKCE，授权请求不带 `code_challenge`、换令牌不带 `code_verifier`；授权码由 ID 令牌中的 nonce、state 与 binder、只有服务器能签的客户端密钥保护。
+Apple 的邮箱由 Apple 验证（`email_verified` 为 `true` 或文本 `"true"`），隐藏邮箱（`…@privaterelay.appleid.com`）同样是受担保的地址，可以开户、收信（须在 Apple 登记发信域名）。
+前端 `OidcButtons` 对 `kind: apple` 显示 Apple 的标志（取文字颜色：浅色按钮上黑、深色上白，同 Apple 的白色描边与黑色样式）与 Apple 规定的文字
+（"Sign in with Apple"/"通过 Apple 登录"/"Appleでサインイン"，注册时为"…Sign up…"），不用提供方的 `labels`。
+**撤销授权**【决策 D67 第 5 条，阶段 17j-b】：App Store 要求删除账号时撤销 Apple 的授权。Apple 登录与关联换令牌时得到的刷新令牌，由子流程 `SEC_IDENTITY_TOKEN_KEEP`
+（`subProcessOnly()`，在 `SPONSOR_OIDC_SIGN_IN` 找到关联时与 `SEC_IDENTITY_LINK_SELF` 建立关联后调用）以 `SealedSecrets`（`JABIZ_SEAL_KEY`，上下文为该关联）密封，
+记在普通表 `sec_identity_token`（实体 `SecIdentityToken`，键为关联的编号，敏感字段、审计中为 `***`；每次登录换成新的）。同一个提供方账号（按提供方与主体的 SHA-256 区分，不存主体）建了新的关联时，旧关联的令牌随之删除、不再撤销：授权是该账号对本应用的一个，撤销旧令牌会连新关联的授权一起撤销。有 `kind: apple` 的提供方而没有密封密钥时启动报错。
+定时任务 `jabiz.identity-token-revocation`（缺省每 15 分钟，`jabiz.security.oidc.revocation.cron`）以模板 `jabiz.identity_tokens_to_revoke` 找出关联已不在
+（`ACCOUNT_ERASE`、本人解除、管理员删除，都一样）而到了尝试时间的令牌，逐项运行 `SEC_IDENTITY_TOKEN_REVOKE`（`internal()`，每项一个事务）：再读一次（关联又在或令牌已没有即跳过），
+打开令牌，以换令牌时的认证方式向发现文档的 `revocation_endpoint` 发出 RFC 7009 请求（5 秒超时）；200 即删除令牌，其他（拒绝、连不上、提供方已不在配置中）
+记一次失败、按 15 分钟起倍增、至多一天推后下一次，至多 12 次后不再尝试：行留下，并给持有 `security.user.identity.write` 的管理员登记待办（`CreateTask`，消息 `task.identity-token-revocation`），由其在提供方的控制台撤销。对提供方的调用在该项的事务中（至多 5 秒）：各项依次在后台运行，同时至多一个连接在等提供方。令牌不进日志、操作记录与审计。
 
 **账号关联与登录流程**
 

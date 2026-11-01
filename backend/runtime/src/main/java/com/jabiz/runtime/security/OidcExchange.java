@@ -23,19 +23,34 @@ class OidcExchange {
     }
 
     /**
-     * The identity the provider vouches for. Fails with {@link IllegalStateException} when the provider no longer has
+     * What the round trip gave: the identity, and the refresh token to keep where the provider's tokens are revoked
+     * when the link goes (Apple, decision D67 item 5; null for every other provider).
+     */
+    record Exchanged(IdTokenValidator.Identity identity, String refreshToken) {
+        @Override
+        public String toString() {
+            return "Exchanged[" + identity + ", ***]";
+        }
+    }
+
+    /**
+     * The identity the provider vouches for; its name, when the token has none, as the provider posted it with its
+     * answer (Apple, the first time only: decision D67 item 3). Fails with {@link IllegalStateException} when the provider no longer has
      * a callback for the state's entry, {@link OidcClient.ProviderException} or {@link
      * IdTokenValidator.InvalidIdTokenException} otherwise.
      */
-    Mono<IdTokenValidator.Identity> identity(OidcProvider provider, String code, OidcStateStore.Pending pending) {
+    Mono<Exchanged> identity(OidcProvider provider, String code, OidcStateStore.Pending pending) {
         return Mono.defer(() -> {
-            String redirectUri = provider.redirectUri(pending.entry());
+            String redirectUri = provider.providerRedirectUri(pending.entry());
             if (redirectUri == null) {
                 return Mono.error(new IllegalStateException("The provider no longer has a callback for entry "
                     + pending.entry()));
             }
-            return client.idToken(provider, code, pending.codeVerifier(), redirectUri)
-                .flatMap(idToken -> verify(provider, idToken, pending.nonceHash()));
+            return client.tokens(provider, code, pending.codeVerifier(), redirectUri)
+                .flatMap(tokens -> verify(provider, tokens.idToken(), pending.nonceHash())
+                    .map(identity -> new Exchanged(identity.name() == null && pending.providedName() != null
+                        ? identity.withName(pending.providedName()) : identity,
+                        provider.isApple() ? tokens.refreshToken() : null)));
         });
     }
 

@@ -1474,10 +1474,10 @@ e2e 对打包的应用（同 CI 的 `e2e` 作业，新的数据库）44 个用�
 **其余工作的顺序**（2026-10-13 确认）：
 - 前端线：15c-1 → 15c-2 → 15d。
 - 安全线：16g → 16f-1（自动开户、Google、本人关联、接管时删除关联）。
-- 16f-2（Apple）推后：暂无 Apple 开发者账号，用真实的 Services ID 核对后再做。
+- 16f-2（Apple）推后：暂无 Apple 开发者账号，用真实的 Services ID 核对后再做。→ 在 17j 实施（决策 D67）。
 
 **待办**
-- [ ] 16f-2（Apple 登录）：取得 Apple 开发者账号后，用真实的 Services ID 核对后实现。
+- [ ] 16f-2（Apple 登录）：取得 Apple 开发者账号后，用真实的 Services ID 核对后实现。→ 改为阶段 17j（决策 D67）。
 - [x] 后台账户安全页加 `<LinkedIdentities/>`：15c-2 合入后作为 `ACCOUNT_SECTIONS` 的一节 `identities`（会话之后，只在后台入口提供了身份提供方时显示），在 16f-1 的分支上完成。
 - [x] Reactor Netty 1.3.1 受 CVE-2026-47874 影响（HTTP/1.1 管道化导致内存耗尽，1.3.7 修复）；2026-10-13 决定暂不升级，16q 随 Spring Boot 4.0.8 升级。
 - [ ] 平台缺口（Q10b，16q 不做）：`sys_generated_file` 与 `sys_document_run` 不能声明 `RetentionPolicy`。二者只追加、本来就不能删，只是不出现在到期报表中（21 §3），不影响上线；以后补上。
@@ -4901,3 +4901,19 @@ D17 下匿名不能写任何东西（15 §10）。
 | 17zb-2 | 抹除删除的普通表行在清除时已不在表中：按审计记录中声明的用户字段曾是该用户编号（插入、删除或改动该字段的记录）找到，其审计照样遮蔽（17i 起的缺口，测试 QuizBuks Q71 时发现；Q70 商户删除的普通表也受益）。测试：`ErasureIT`（抹除时删除的行，其审计中的个人值不留；没有修复时失败） |
 
 **17zb 状态**：✅ 17zb 完成（#392）；17zb-2 📝 待评审（分支 `1.3/phase-17zb2-erasure-deleted-rows`）。
+
+### 17j Sign in with Apple（需求 2026-10-28，QuizBuks Q49；确认 2026-11-01，决策 D67；即推后的 16f-2）
+
+**缘由**：App Store 要求提供第三方登录的 App 也提供 Apple 登录（审核指南 4.8），App 内删除的账号要撤销 Apple 的授权（5.1.1(v)）。需求方确认：App 与商户后台两个入口都提供，撤销在本阶段。
+分两个 PR：17j-a 登录，17j-b 撤销。
+
+| # | 内容 | PR |
+|---|---|---|
+| 17j-1 | `kind: apple`：缺省 issuer 与范围、`apple.team-id` / `key-id` / `private-key` / `form-post-uri` 与启动检查（不用 `client-secret`）；`AppleClientSecret`（ES256、1 小时、缓存）、`client_secret_post`、不带 PKCE | 17j-a |
+| 17j-2 | `POST /api/auth/oidc/{id}/form-post`：按 state 找到该提供方尚未使用的一轮（不消费），303 转到该轮入口的回调（`state`、`code` 或 `error`），限流 `OIDC_FORM_POST`；迁移 `V54__oidc_provided_name.sql`（`sec_oidc_state_name`，用完即删），首次授权的姓名作开户的显示名 | 17j-a |
+| 17j-3 | 前端：`OidcButtons` 的 Apple 标志与 Apple 规定的标题（三语）；OpenAPI 快照与生成的类型 | 17j-a |
+| 17j-4 | 测试：`OidcProvidersTest`（检查）、`OidcClientTest`（签出的密钥、表单、无 PKCE、刷新令牌）、`AppleClientSecretTest`（签名、重签、私钥的写法、姓名的组成）、集成测试 `OidcAppleIT`（隐藏邮箱开户并以首次的姓名为显示名、再次登录、取消、未知或别的提供方的 state、非 Apple 提供方 404）、`blocks.test.tsx`（Apple 按钮，axe）；测试夹具 `TestOidcProvider.asApple` | 17j-a |
+| 17j-5 | 文档：决策 D67、10 §12、根 `CLAUDE.md` 单点登录一条 | 17j-a |
+| 17j-6 | 刷新令牌密封保存（`SEC_IDENTITY_TOKEN_KEEP`、实体 `SecIdentityToken`、迁移 `V55__identity_token.sql`、没有密封密钥即启动报错）；定时任务 `jabiz.identity-token-revocation` 找出关联已不在的令牌，`SEC_IDENTITY_TOKEN_REVOKE` 经提供方客户端调用 `revocation_endpoint`（重试的间隔倍增、至多 12 次）；同一 Apple 账号的新关联取代旧令牌；放弃后给管理员登记待办；测试 `IdentityTokensTest`、`OidcClientTest`、`OidcAppleIT`（密封保存、审计与操作记录中没有、关联在时不撤销、抹除后撤销并删除、本人解除后撤销、拒绝后按间隔重试、再次登录换令牌、新关联取代旧令牌不撤销、12 次后登记待办并不再尝试）；10 §12 | 17j-b |
+
+**17j 状态**：✅ 17j-a 完成（#401）；17j-b 📝 待评审（分支 `1.3/phase-17j-apple-revoke`）。

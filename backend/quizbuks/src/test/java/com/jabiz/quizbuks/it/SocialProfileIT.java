@@ -16,10 +16,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * The Spring profile "social" (application-social.yml; docs/quizbuks/plans/Q40-social-sign-in.md): with the clients of
- * Google, Facebook and LINE and the callbacks of the app and the sponsor console from the environment, the application
- * starts (its OIDC checks pass, the LINE channel secret long enough) and offers all three to takers and sponsors, in
- * that order and with their kinds (the sign-in pages draw their marks by kind); the administration has no callback, so
- * it offers none. Nothing is asked of a provider until somebody signs in.
+ * Google, Apple, Facebook and LINE and the callbacks of the app and the sponsor console from the environment, the
+ * application starts (its OIDC checks pass: the LINE channel secret long enough, Apple's key a P-256 key, its form-post
+ * address this server's) and offers all four to takers and sponsors, in that order and with their kinds (the sign-in
+ * pages draw their marks by kind); the administration has no callback, so it offers none. Nothing is asked of a
+ * provider until somebody signs in.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK, properties = {
     "spring.profiles.active=social",
@@ -29,11 +30,24 @@ import static org.assertj.core.api.Assertions.assertThat;
     "JABIZ_OIDC_FACEBOOK_CLIENT_SECRET=test-only-facebook-secret",
     "JABIZ_OIDC_LINE_CLIENT_ID=2000000000",
     "JABIZ_OIDC_LINE_CLIENT_SECRET=0123456789abcdef0123456789abcdef",
+    "JABIZ_OIDC_APPLE_CLIENT_ID=com.example.quizbuks.web",
+    "JABIZ_OIDC_APPLE_TEAM_ID=TEAM123456",
+    "JABIZ_OIDC_APPLE_KEY_ID=KEY1234567",
+    "QB_OIDC_APPLE_FORM_POST=https://quizbuks.example.com/api/auth/oidc/apple/form-post",
     "QB_OIDC_REDIRECT_APP=https://quizbuks.example.com/taker/login/oidc",
     "QB_OIDC_REDIRECT_SPONSOR=https://quizbuks.example.com/sponsor/login/oidc",
     "jabiz.security.entries.app.self-registration=true",
     "jabiz.security.entries.sponsor.self-registration=true"})
 class SocialProfileIT extends PostgresIntegrationTest {
+
+    /** Apple's developer key: an EC P-256 key made for the run (the body of a .p8 file); none is kept in the code. */
+    @org.springframework.test.context.DynamicPropertySource
+    static void appleKey(org.springframework.test.context.DynamicPropertyRegistry registry) throws Exception {
+        java.security.KeyPairGenerator generator = java.security.KeyPairGenerator.getInstance("EC");
+        generator.initialize(new java.security.spec.ECGenParameterSpec("secp256r1"));
+        String key = java.util.Base64.getEncoder().encodeToString(generator.generateKeyPair().getPrivate().getEncoded());
+        registry.add("JABIZ_OIDC_APPLE_PRIVATE_KEY", () -> key);
+    }
 
     @Autowired
     ApplicationContext context;
@@ -52,11 +66,12 @@ class SocialProfileIT extends PostgresIntegrationTest {
     }
 
     @Test
-    void googleFacebookAndLineAreOfferedToTakersAndSponsorsNotToTheAdministration() {
+    void googleAppleFacebookAndLineAreOfferedToTakersAndSponsorsNotToTheAdministration() {
         for (String entry : List.of("app", "sponsor")) {
             assertThat(providers(entry)).as(entry)
                 .extracting(provider -> provider.get("id") + "/" + provider.get("kind") + "/" + provider.get("label"))
-                .containsExactly("google/google/Google", "facebook/facebook/Facebook", "line/line/LINE");
+                .containsExactly("google/google/Google", "apple/apple/Apple", "facebook/facebook/Facebook",
+                    "line/line/LINE");
         }
         assertThat(providers("admin")).isEmpty();
     }

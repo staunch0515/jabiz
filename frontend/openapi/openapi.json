@@ -4146,6 +4146,25 @@
         "tags" : [ "oidc-controller" ]
       }
     },
+    "/api/auth/oidc/{id}/form-post" : {
+      "post" : {
+        "operationId" : "formPost",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "oidc-controller" ]
+      }
+    },
     "/api/auth/oidc/{id}/start" : {
       "post" : {
         "operationId" : "start",

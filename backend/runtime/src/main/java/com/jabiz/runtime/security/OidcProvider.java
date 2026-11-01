@@ -25,7 +25,8 @@ import java.util.regex.Pattern;
  * @param redirectUri   the administration's callback ({@code admin}), as before entries had their own
  * @param mfaAmr        values of the ID token's {@code amr} claim that count as a second factor; empty trusts none
  * @param redirectUris  the callbacks of other entries (or the administration's), by entry name
- * @param kind          {@value #GENERIC} (the default), {@value #GOOGLE}, {@value #FACEBOOK} or {@value #LINE}: each
+ * @param kind          {@value #GENERIC} (the default), {@value #GOOGLE}, {@value #FACEBOOK}, {@value #LINE} or
+ *                      {@value #APPLE}: each
  *                      known kind has its issuer as the default; Google's addresses count as verified only where
  *                      Google vouches for them (gmail, or a Workspace domain); Facebook and LINE take the client's
  *                      credentials in the token request's form, and LINE's web sign-in signs its ID tokens with the
@@ -34,10 +35,27 @@ import java.util.regex.Pattern;
  * @param signUpUnverifiedEmail with {@code autoProvision}: whether an address the provider does not vouch for opens
  *                      an account too, unverified and pre-claimable, with a verification mail (default false; decision
  *                      D61 item 3)
+ * @param apple         the settings of a {@value #APPLE} provider (decision D67): its client secret is a short-lived
+ *                      token this server signs with the developer's key, and Apple posts its answer to this server
+ *                      ({@link Apple#formPostUri}), which sends the browser on to the entry's callback
  */
 public record OidcProvider(String id, String issuer, String clientId, String clientSecret, String redirectUri,
     List<String> scopes, Map<String, String> labels, List<String> mfaAmr, Map<String, String> redirectUris,
-    String kind, boolean autoProvision, boolean signUpUnverifiedEmail) {
+    String kind, boolean autoProvision, boolean signUpUnverifiedEmail, Apple apple) {
+
+    /**
+     * What Sign in with Apple needs besides the client id (its Services ID; decision D67): the developer team, the key
+     * that signs the client secret (a {@code .p8} file's PKCS #8 EC P-256 key, PEM or its Base64 body, from the
+     * environment) and this server's address Apple posts its answer to: {@code https://<host>/api/auth/oidc/<id>/form-post},
+     * registered at Apple as the return URL.
+     */
+    public record Apple(String teamId, String keyId, String privateKey, String formPostUri) {
+
+        @Override
+        public String toString() {
+            return "Apple[teamId=" + teamId + ", keyId=" + keyId + ", privateKey=***, formPostUri=" + formPostUri + "]";
+        }
+    }
 
     public static final List<String> DEFAULT_SCOPES = List.of("openid", "profile", "email");
 
@@ -55,28 +73,51 @@ public record OidcProvider(String id, String issuer, String clientId, String cli
     public static final String LINE = "line";
     /** LINE's issuer, the default of a {@value #LINE} provider. */
     public static final String LINE_ISSUER = "https://access.line.me";
+    /** Sign in with Apple (decision D67). */
+    public static final String APPLE = "apple";
+    /** Apple's issuer, the default of an {@value #APPLE} provider. */
+    public static final String APPLE_ISSUER = "https://appleid.apple.com";
+    /** Apple knows no {@code profile}: the name comes with the first sign-in's answer (decision D67 item 3). */
+    public static final List<String> APPLE_SCOPES = List.of("openid", "name", "email");
+    /** Where Apple posts its answer for the provider {@code id}, on this server (decision D67 item 1). */
+    public static String formPostPath(String id) {
+        return "/api/auth/oidc/" + id + "/form-post";
+    }
+
+    /** Apple's team and key ids: ten upper-case letters or digits. */
+    private static final Pattern APPLE_ID = Pattern.compile("[A-Z0-9]{10}");
     /** The shortest client secret an HS256 key may be (RFC 7518 section 3.2: the hash's size, 256 bits). */
     static final int HS256_MIN_SECRET_BYTES = 32;
-    private static final List<String> KINDS = List.of(GENERIC, GOOGLE, FACEBOOK, LINE);
+    private static final List<String> KINDS = List.of(GENERIC, GOOGLE, FACEBOOK, LINE, APPLE);
 
     private static final Pattern ID = Pattern.compile("[a-z0-9][a-z0-9-]{0,39}");
     private static final Pattern ENTRY = Pattern.compile("[a-z][a-z0-9-]{0,39}");
 
     @ConstructorBinding
     public OidcProvider {
-        scopes = scopes == null || scopes.isEmpty() ? DEFAULT_SCOPES : List.copyOf(scopes);
+        kind = kind == null || kind.isBlank() ? GENERIC : kind.strip().toLowerCase(Locale.ROOT);
+        scopes = scopes == null || scopes.isEmpty() ? (APPLE.equals(kind) ? APPLE_SCOPES : DEFAULT_SCOPES)
+            : List.copyOf(scopes);
         labels = labels == null ? Map.of() : Map.copyOf(labels);
         mfaAmr = mfaAmr == null ? List.of() : List.copyOf(mfaAmr);
         redirectUris = redirectUris == null ? Map.of() : Map.copyOf(redirectUris);
-        kind = kind == null || kind.isBlank() ? GENERIC : kind.strip().toLowerCase(Locale.ROOT);
         if (issuer == null || issuer.isBlank()) {
             issuer = switch (kind) {
                 case GOOGLE -> GOOGLE_ISSUER;
                 case FACEBOOK -> FACEBOOK_ISSUER;
                 case LINE -> LINE_ISSUER;
+                case APPLE -> APPLE_ISSUER;
                 default -> issuer;
             };
         }
+    }
+
+    /** A provider of any kind but {@value #APPLE}. */
+    public OidcProvider(String id, String issuer, String clientId, String clientSecret, String redirectUri,
+        List<String> scopes, Map<String, String> labels, List<String> mfaAmr, Map<String, String> redirectUris,
+        String kind, boolean autoProvision, boolean signUpUnverifiedEmail) {
+        this(id, issuer, clientId, clientSecret, redirectUri, scopes, labels, mfaAmr, redirectUris, kind,
+            autoProvision, signUpUnverifiedEmail, null);
     }
 
     /** A provider of a kind that opens accounts for verified addresses only (as before decision D61). */
@@ -112,7 +153,31 @@ public record OidcProvider(String id, String issuer, String clientId, String cli
      * Basic authentication: Facebook and LINE take them only so (decision D61 item 1).
      */
     public boolean clientSecretPost() {
-        return FACEBOOK.equals(kind) || LINE.equals(kind);
+        return FACEBOOK.equals(kind) || LINE.equals(kind) || APPLE.equals(kind);
+    }
+
+    /** Whether this is Sign in with Apple ({@value #APPLE}, decision D67). */
+    public boolean isApple() {
+        return APPLE.equals(kind);
+    }
+
+    /**
+     * Whether the round trip carries a PKCE challenge (RFC 7636). Apple documents none, so it is left out there; the
+     * nonce in the ID token, the state with its browser binder and the signed client secret protect the code
+     * (decision D67 item 2).
+     */
+    public boolean pkce() {
+        return !isApple();
+    }
+
+    /**
+     * Where the provider sends its answer for the sign-in entry {@code entry}, as the authorization and the token
+     * request name it: the entry's callback ({@link #redirectUri(String)}), or for Apple, which posts it as a form,
+     * this server's {@link Apple#formPostUri} (decision D67 item 1); null when the provider is not offered to the entry.
+     */
+    public String providerRedirectUri(String entry) {
+        String callback = redirectUri(entry);
+        return callback == null || !isApple() ? callback : apple.formPostUri();
     }
 
     /**
@@ -184,8 +249,13 @@ public record OidcProvider(String id, String issuer, String clientId, String cli
         if (blank(clientId)) {
             problems.add("client-id is required");
         }
-        if (blank(clientSecret)) {
+        if (isApple()) {
+            appleProblems(problems);
+        } else if (blank(clientSecret)) {
             problems.add("client-secret is required (from the environment)");
+        }
+        if (!isApple() && apple != null) {
+            problems.add("apple.* is for kind apple only");
         }
         if (!scopes.contains("openid")) {
             problems.add("scopes must include openid");
@@ -206,6 +276,40 @@ public record OidcProvider(String id, String issuer, String clientId, String cli
             problems.add("client-secret of a line provider must be at least " + HS256_MIN_SECRET_BYTES + " bytes");
         }
         return problems;
+    }
+
+    /** What is wrong with the settings of Sign in with Apple (decision D67). */
+    private void appleProblems(List<String> problems) {
+        if (!blank(clientSecret)) {
+            problems.add("client-secret is not used by kind apple: the secret is signed with apple.private-key");
+        }
+        if (apple == null) {
+            problems.add("apple.team-id, apple.key-id, apple.private-key and apple.form-post-uri are required");
+            return;
+        }
+        if (blank(apple.teamId()) || !APPLE_ID.matcher(apple.teamId()).matches()) {
+            problems.add("apple.team-id must be the team's ten-character id");
+        }
+        if (blank(apple.keyId()) || !APPLE_ID.matcher(apple.keyId()).matches()) {
+            problems.add("apple.key-id must be the key's ten-character id");
+        }
+        if (blank(apple.privateKey())) {
+            problems.add("apple.private-key is required (from the environment)");
+        } else {
+            try {
+                AppleClientSecret.privateKey(apple.privateKey());
+            } catch (IllegalArgumentException e) {
+                problems.add("apple.private-key: " + e.getMessage());
+            }
+        }
+        requireCallback(problems, "apple.form-post-uri", apple.formPostUri());
+        if (secureUrl(apple.formPostUri()) && id != null
+            && !URI.create(apple.formPostUri()).getPath().endsWith(formPostPath(id))) {
+            problems.add("apple.form-post-uri must be this server's " + formPostPath(id));
+        }
+        if (!scopes.stream().allMatch(APPLE_SCOPES::contains)) {
+            problems.add("scopes of kind apple are openid, name and email only");
+        }
     }
 
     /** The label in {@code language}, else English, else the id. */
@@ -260,6 +364,6 @@ public record OidcProvider(String id, String issuer, String clientId, String cli
     public String toString() {
         return "OidcProvider[id=" + id + ", kind=" + kind + ", issuer=" + issuer + ", clientId=" + clientId
             + ", clientSecret=***, autoProvision=" + autoProvision + ", signUpUnverifiedEmail=" + signUpUnverifiedEmail
-            + "]";
+            + (apple == null ? "" : ", apple=" + apple) + "]";
     }
 }
