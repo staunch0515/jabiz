@@ -29,11 +29,13 @@ export function useStartAttempt() {
     return () => controller.abort()
   }, [])
   const mutation = useMutation({
-    mutationFn: (publicationId: string) => {
+    mutationFn: (start: string | { publicationId: string; language: string | null }) => {
+      const { publicationId, language } = typeof start === 'string' ? { publicationId: start, language: null } : start
       // One key for this start and its retries. Each click is a new start: the server keeps one attempt per taker
       // and publication (its unique key) and a second start continues the one in progress.
       const key = crypto.randomUUID()
-      return retryWhenBusy(() => startAttempt(publicationId, key), { onBusy: setBusy, signal: page.current?.signal })
+      return retryWhenBusy(() => startAttempt(publicationId, key, language),
+        { onBusy: setBusy, signal: page.current?.signal })
     },
     onSuccess: (output) => {
       if (page.current?.signal.aborted) return

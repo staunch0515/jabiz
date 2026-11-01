@@ -82,7 +82,7 @@ const PRIZE_LINK = 'https://shop.example.com/voucher/WXYZ'
 
 interface Options {
   /** Answers each read of the publication's page (Q25: none until the view claimed the invitation). */
-  publicationPage?: () => Response | Promise<Response>
+  publicationPage?: (body: unknown) => Response | Promise<Response>
   start?: () => Response
   submit?: () => Response
   /** The answer of QB_ATTEMPT_RESULT; the finished quiz by default. */
@@ -172,7 +172,7 @@ function server(options: Options = {}) {
         return json(200, { items: options.feedPage ? options.feedPage(offset) : options.feed ?? [CARD], offset, limit: 10 })
       }
       case '/api/queries/qb.app.publication':
-        return options.publicationPage ? options.publicationPage() : json(200, { items: [publication()], offset: 0, limit: 1 })
+        return options.publicationPage ? options.publicationPage(body) : json(200, { items: [publication()], offset: 0, limit: 1 })
       case '/api/queries/qb.app.publication-tiers':
         return json(200, { items: [{ seq: 1, fromScore: 0, toScore: 2, reward: 0 },
           { seq: 2, fromScore: 3, toScore: 5, reward: 100 }], offset: 0, limit: 20 })
@@ -1216,6 +1216,24 @@ describe('customer matching (Q47)', () => {
 })
 
 describe('answering', () => {
+  it('reads a publication in several languages in the one chosen and starts it in that one (Q73b)', async () => {
+    const { posted } = server({ publicationPage: (body) => {
+      const languages = String((body as { params: { languages?: string } }).params.languages ?? '')
+      const zh = languages.startsWith('zh')
+      return json(200, { items: [publication({ name: zh ? '首都' : 'Capitals', languages: 'en,zh',
+        displayLanguage: zh ? 'zh' : 'en' })], offset: 0, limit: 1 })
+    } })
+    window.history.replaceState(null, '', `/p/${PUB}`)
+    render(<App />)
+    const choice = await screen.findByTestId('detail-languages')
+    expect(within(choice).getByTestId('detail-language-en')).toHaveAttribute('aria-pressed', 'true')
+    await userEvent.click(within(choice).getByTestId('detail-language-zh'))
+    await waitFor(() => expect(screen.getByTestId('detail-language-zh')).toHaveAttribute('aria-pressed', 'true'))
+    expect(screen.getByTestId('detail')).toHaveTextContent('首都')
+    await userEvent.click(screen.getByTestId('detail-start'))
+    await waitFor(() => expect(posted('QB_ATTEMPT_START')).toEqual([{ publicationId: PUB, language: 'zh' }]))
+  })
+
   it('starts, saves answers and moves, submits after asking, and shows the result with the texts', async () => {
     const { posted } = server()
     window.history.replaceState(null, '', `/p/${PUB}`)

@@ -400,6 +400,26 @@ describe('the publication wizard', () => {
       maxWinners: null, tiers: [], baseRevision: null, rewardMethod: 'PLATFORM', redeemDescription: null, audience: 'PUBLIC', referral: null }])
   })
 
+  it('offers the version\'s other languages with the publication\'s texts in them (Q73b)', async () => {
+    const { processCalls } = server({ versions: [{ ...VERSIONS[0], language: 'en', languages: 'en,zh,ja' }],
+      processes: { QB_PUBLICATION_SAVE: [saved(4)] } })
+    window.history.replaceState(null, '', '/publications/p1?step=1')
+    render(<App />)
+    const section = await screen.findByTestId('publication-languages')
+    // Nothing chosen: the base only, no texts asked.
+    expect(within(section).getByTestId('publication-language-en')).toBeChecked()
+    expect(within(section).queryByTestId('publication-texts-zh')).toBeNull()
+    await userEvent.click(within(section).getByTestId('publication-language-zh'))
+    const texts = within(section).getByTestId('publication-texts-zh')
+    expect(texts).toHaveTextContent('Coffee week')
+    await userEvent.type(within(texts).getByTestId('publication-text-zh-name'), '咖啡周')
+    await userEvent.click(within(section).getByTestId('publication-language-main-zh'))
+    await userEvent.click(screen.getByTestId('publication-next'))
+    await waitFor(() => expect(processCalls('QB_PUBLICATION_SAVE')).toHaveLength(1))
+    expect(processCalls('QB_PUBLICATION_SAVE')[0]).toMatchObject({ languages: ['zh', 'en'],
+      translations: { zh: { name: '咖啡周' } } })
+  })
+
   it('uploads the publication\'s own cover and sends it with the save (Q64)', async () => {
     const { processCalls, uploads } = server({ processes: { QB_PUBLICATION_SAVE: [saved(4)] } })
     window.history.replaceState(null, '', '/publications/p1')
