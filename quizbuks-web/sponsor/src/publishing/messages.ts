@@ -106,6 +106,8 @@ export const publishingEn = {
       ready: 'Nothing stops this publication: you can submit it.',
     },
     languages: {
+      aiUse: 'Use, as checked',
+      aiSent: 'Sent to the AI provider: this publication\'s name and descriptions in the base language. Never your account details or anything about quiz takers.',
       title: 'Languages',
       hint: 'Offer the publication in several of its quiz version\'s languages: one publication, one budget and one set of places; takers each see their own language.',
       base: 'the quiz\'s base',
@@ -631,6 +633,8 @@ export const publishingZh: typeof publishingEn = {
       ready: '没有阻止提交的问题：可以提交了。',
     },
     languages: {
+      aiUse: '确认并采用',
+      aiSent: '发送给 AI 服务商的内容：本发布基准语言的名称与说明。绝不发送你的账户信息或答题者的任何信息。',
       title: '语言',
       hint: '用模版版本中的几种语言提供这个发布：一个发布、一份预算和一组名额，每位答题者看到自己的语言。',
       base: '模版的基准语言',
@@ -1156,6 +1160,8 @@ export const publishingJa: typeof publishingEn = {
       ready: '提出を妨げる問題はありません。提出できます。',
     },
     languages: {
+      aiUse: '確認して使う',
+      aiSent: 'AI 事業者に送るもの：この公開の基準の言語の名前と説明。アカウント情報や回答者に関する情報は送りません。',
       title: '言語',
       hint: 'クイズのバージョンにある複数の言語で公開します。公開・予算・枠は一つで、回答者はそれぞれ自分の言語で見ます。',
       base: 'クイズの基準言語',

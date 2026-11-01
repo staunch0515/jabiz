@@ -24,7 +24,8 @@ import java.util.regex.Pattern;
  *   <li>otherwise as many questions as the request's "Number of questions: n" asks, each with one correct and two
  *       wrong options, 10 points and the first material sent, in Japanese when the request asks for Japanese and in
  *       English otherwise, with a made-up usage (about a token per four characters of the request);</li>
- *   <li>a translation request ("Target language: ...", Q73d-1) gets "译文 n" for each numbered text;</li>
+ *   <li>a translation request ("Target language: ...", Q73d-1) gets "译文 n" for each numbered text, and a
+ *       comparison ("Number of pairs: n", Q73d-2) finds every pair to mean the same;</li>
  *   <li>a request for covers ("Number of covers: 3", Q8b) gets three designs of the catalogue, which the server
  *       draws; PDF materials (document blocks) are accepted and not read;</li>
  *   <li>{@code POST /v1/messages/count_tokens} (Q8b: requests with PDFs are counted before they are sent) answers
@@ -93,6 +94,17 @@ public final class ClaudeStub {
                     + "{\"palette\":\"sunset\",\"layout\":\"band\",\"motif\":\"waves\",\"text\":\"" + text + " 2\"},"
                     + "{\"palette\":\"mint\",\"layout\":\"left\",\"motif\":\"grid\",\"text\":\"" + text + " 3\"}]}";
                 send(exchange, 200, message(model, "end_turn", covers, in, 150));
+                return;
+            }
+            if (body.contains("Number of pairs: ")) {
+                // Q73d-2: every pair compared means the same.
+                Matcher numbers = TEXT_NO.matcher(body);
+                List<String> verdicts = new ArrayList<>();
+                while (numbers.find()) {
+                    verdicts.add("{\"no\":" + numbers.group(1) + ",\"consistent\":true,\"note\":\"\"}");
+                }
+                String text = "{\"verdicts\":[" + String.join(",", verdicts) + "]}";
+                send(exchange, 200, message(model, "end_turn", text, in, 50L * verdicts.size()));
                 return;
             }
             if (body.contains("Target language: ")) {

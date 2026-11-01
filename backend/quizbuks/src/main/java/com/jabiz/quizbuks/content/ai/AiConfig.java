@@ -172,7 +172,9 @@ public class AiConfig {
         return StaticDictionary.define(QbAi.KIND_DICTIONARY, d -> d
             .item(QbAi.KIND_QUESTIONS, "en", "Questions", "zh", "题目", "ja", "問題")
             .item(QbAi.KIND_COVER, "en", "Cover", "zh", "封面", "ja", "カバー")
-            .item(QbAi.KIND_TRANSLATION, "en", "Translation", "zh", "翻译", "ja", "翻訳"));
+            .item(QbAi.KIND_TRANSLATION, "en", "Translation", "zh", "翻译", "ja", "翻訳")
+            .item(QbAi.KIND_PUBLICATION_TEXTS, "en", "Publication texts", "zh", "发布文字", "ja", "公開の文言")
+            .item(QbAi.KIND_TRANSLATION_CHECK, "en", "Translation check", "zh", "译文对照检查", "ja", "訳文の照合"));
     }
 
     /** The values the model parameter may take (its kind lists them; the dictionary labels them). */
@@ -220,6 +222,32 @@ public class AiConfig {
     @Bean
     ProcessDefinition<AiProcesses.TranslationAcceptInput, EditOutput, ProcessContext> qbAiTranslationAccept() {
         return AiProcesses.translationAccept();
+    }
+
+    /** Q73d-2: a publication's own texts translated, and their use recorded. */
+    @Bean
+    ProcessDefinition<AiProcesses.PublicationTranslateRequestInput, AiProcesses.RequestOutput, ProcessContext>
+        qbAiPublicationTranslateRequest(AiUserKeys userKeys) {
+        return AiProcesses.publicationTranslateRequest(zone, userKeys);
+    }
+
+    @Bean
+    ProcessDefinition<AiProcesses.PublicationTextsAcceptInput, AiProcesses.JobOutput, ProcessContext>
+        qbAiPublicationTextsAccept() {
+        return AiProcesses.publicationTextsAccept();
+    }
+
+    /** Q73d-2: a reviewer's comparison of a publication's translations, charged to the platform. */
+    @Bean
+    ProcessDefinition<AiProcesses.CheckRequestInput, AiProcesses.RequestOutput, ProcessContext> qbAiCheckRequest(
+        AiUserKeys userKeys) {
+        return AiProcesses.checkRequest(zone, userKeys);
+    }
+
+    @Bean
+    ExternalJobType<AiCheckJob.Input, AiCheckJob.Result> qbAiCheckJob(
+        @Value("${quizbuks.ai.max-concurrency:" + AiQuestionsJob.DEFAULT_CONCURRENCY + "}") int maxConcurrency) {
+        return AiCheckJob.type(maxConcurrency);
     }
 
     @Bean

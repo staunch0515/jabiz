@@ -48,6 +48,9 @@ public final class QbAi {
     public static final String KIND_COVER = "COVER";
     /** Q73d-1: candidate translations of a quiz's text into one of its other languages. */
     public static final String KIND_TRANSLATION = "TRANSLATION";
+    /** Q73d-2: candidate translations of a publication's own texts, and a reviewer's check of its translations. */
+    public static final String KIND_PUBLICATION_TEXTS = "PUBLICATION_TEXTS";
+    public static final String KIND_TRANSLATION_CHECK = "TRANSLATION_CHECK";
 
     /**
      * The fields holding a cover job's candidate pictures while they wait for the sponsor's choice: files of
@@ -94,7 +97,8 @@ public final class QbAi {
         eb.field("quizId", f -> f.physicalColumn("quiz_id").immutable(true).required(true).processOnly()
             .asReference(QbContent.QUIZ));
         eb.field("kind", f -> f.physicalColumn("kind").immutable(true).required(true).processOnly()
-            .asCode(KIND_DICTIONARY, KIND_QUESTIONS, KIND_COVER, KIND_TRANSLATION));
+            .asCode(KIND_DICTIONARY, KIND_QUESTIONS, KIND_COVER, KIND_TRANSLATION,
+                KIND_PUBLICATION_TEXTS, KIND_TRANSLATION_CHECK));
         // What was asked, as canonical JSON: the count, difficulty, language and materials (not their text).
         eb.field("params", f -> f.physicalColumn("params").immutable(true).required(true).processOnly()
             .asText(2_000));

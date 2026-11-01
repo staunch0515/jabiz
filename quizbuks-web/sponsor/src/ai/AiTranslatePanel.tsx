@@ -52,10 +52,26 @@ export function useAiTranslationJob(quizId: string) {
   })
 }
 
-/** "Translate with AI": which texts, what is sent and, on first use, the AI notice. */
-function TranslateDialog({ language, onOpenChange }: {
+/** Q73d-2: the latest AI job of one publication's texts, read as the quiz's translation job is. */
+export function useAiPublicationTextsJob(quizId: string | null, publicationId: string | null) {
+  return useQuery({
+    queryKey: [...AI_QUERY, 'publication-texts', publicationId] as const,
+    queryFn: () => readLatestAiJob(quizId!, AI_KINDS.publicationTexts, publicationId),
+    enabled: !!quizId && !!publicationId,
+    refetchInterval: (query) => (stillPolling(query.state.data ?? null) ? AI_LIMITS.pollMs : false),
+  })
+}
+
+/**
+ * "Translate with AI": which texts, what is sent and, on first use, the AI notice. `send` asks (a quiz's texts by
+ * default; Q73d-2: a publication's).
+ */
+export function TranslateDialog({ language, onOpenChange, send, sent }: {
   language: ContentLanguage
   onOpenChange: (open: boolean) => void
+  send?: (all: boolean, aiNoticeVersionNo: number | null) => Promise<unknown>
+  /** What is sent, when it is not the quiz's texts. */
+  sent?: string
 }) {
   const { t } = useTranslation(SPONSOR)
   const { t: tQb } = useTranslation(QB)
@@ -69,12 +85,11 @@ function TranslateDialog({ language, onOpenChange }: {
   const name = tQb(`languages.${language}`)
 
   const request = useMutation({
-    mutationFn: () => requestAiTranslation({
-      quizId: editing.quizId,
-      language,
-      all: scope === 'all',
-      aiNoticeVersionNo: notice.data?.mustAccept ? notice.data.versionNo : null,
-    }),
+    mutationFn: () => {
+      const version = notice.data?.mustAccept ? notice.data.versionNo : null
+      return send ? send(scope === 'all', version) : requestAiTranslation({
+        quizId: editing.quizId, language, all: scope === 'all', aiNoticeVersionNo: version })
+    },
     onSuccess: async () => {
       onOpenChange(false)
       await queryClient.invalidateQueries({ queryKey: AI_QUERY })
@@ -118,7 +133,7 @@ function TranslateDialog({ language, onOpenChange }: {
               ))}
             </RadioGroup>
           </fieldset>
-          <p className="text-muted-foreground text-sm" data-testid="ai-translate-sent">{t('ai.translate.sent')}</p>
+          <p className="text-muted-foreground text-sm" data-testid="ai-translate-sent">{sent ?? t('ai.translate.sent')}</p>
           <AiNoticeSection notice={notice} agreed={agreed} onAgreed={setAgreed} />
           {local && <p role="alert" className="text-destructive text-sm">{local}</p>}
           <ProblemList problems={formProblem(request.error, [])} testId="ai-translate-request-error" />

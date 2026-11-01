@@ -70,6 +70,8 @@ public final class AiCodes {
     public static final String COVER_FONT = "QB_AI_COVER_FONT";
     /** Q73d-1: every text of the language is translated and up to date (or the quiz has no text). */
     public static final String NOTHING_TO_TRANSLATE = "QB_AI_NOTHING_TO_TRANSLATE";
+    /** Q73d-2: the publication has no translation into the language to compare. */
+    public static final String NOTHING_TO_CHECK = "QB_AI_NOTHING_TO_CHECK";
     /** Questions asked for a survey: they would need correct options (Q12, D-Q12-9). */
     public static final String SURVEY_UNSUPPORTED = "QB_AI_SURVEY_UNSUPPORTED";
 

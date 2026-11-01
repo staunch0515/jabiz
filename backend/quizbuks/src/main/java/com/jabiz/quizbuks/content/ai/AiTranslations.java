@@ -80,15 +80,25 @@ public final class AiTranslations {
      * element key, a text within its element's length, one per element.
      */
     public static Checked check(List<AiTranslateJob.Translated> candidates) {
+        return check(candidates, key -> {
+            var element = ContentLanguages.parse(key);
+            return element.isPresent() && element.get().text() ? element.get().maxLength() : null;
+        });
+    }
+
+    /**
+     * As {@link #check(List)}, the keys and their lengths by {@code maxLength} (null for a key that is not one): a
+     * publication's fields' (Q73d-2).
+     */
+    public static Checked check(List<AiTranslateJob.Translated> candidates,
+        java.util.function.Function<String, Integer> maxLength) {
         List<AiTranslateJob.Translated> valid = new ArrayList<>();
         Set<String> seen = new HashSet<>();
         int invalid = 0;
         for (AiTranslateJob.Translated candidate : candidates) {
-            var element = candidate.key() == null ? java.util.Optional.<ContentLanguages.Element>empty()
-                : ContentLanguages.parse(candidate.key());
+            Integer max = candidate.key() == null ? null : maxLength.apply(candidate.key());
             String text = candidate.text() == null ? null : candidate.text().strip();
-            if (element.isEmpty() || !element.get().text() || text == null || text.isEmpty()
-                || text.length() > element.get().maxLength() || candidate.sourceHash() == null
+            if (max == null || text == null || text.isEmpty() || text.length() > max || candidate.sourceHash() == null
                 || !seen.add(candidate.key())) {
                 invalid++;
                 continue;
@@ -129,6 +139,68 @@ public final class AiTranslations {
                 (String) item.get("sourceHash"), (String) item.get("text")));
         }
         return out;
+    }
+
+    // ---- a reviewer's check (Q73d-2) ------------------------------------------------------------------------------
+
+    /**
+     * The pairs a reviewer's check compares: the version's texts in {@code language} (its title, introduction,
+     * questions' and options' texts, by the snapshot's keys) and the publication's own translated texts
+     * ({@code publication.<field>}), each with its base text. Only texts: not the correct answers or the points.
+     */
+    public static List<AiCheckJob.Pair> checkPairs(com.jabiz.quizbuks.content.QuizSnapshot snapshot, String language,
+        EntityInstance publication) {
+        List<AiCheckJob.Pair> pairs = new ArrayList<>();
+        var translated = snapshot.translations().get(language);
+        if (translated != null) {
+            Map<String, String> texts = translated.texts();
+            pair(pairs, com.jabiz.quizbuks.content.QuizSnapshot.TITLE_KEY, snapshot.title(), texts);
+            pair(pairs, com.jabiz.quizbuks.content.QuizSnapshot.INTRO_KEY, snapshot.intro(), texts);
+            for (var question : snapshot.questions()) {
+                pair(pairs, com.jabiz.quizbuks.content.QuizSnapshot.stemKey(question.no()), question.stem(), texts);
+                for (var option : question.options()) {
+                    pair(pairs, com.jabiz.quizbuks.content.QuizSnapshot.optionTextKey(question.no(), option.no()),
+                        option.text(), texts);
+                }
+            }
+        }
+        var stored = com.jabiz.quizbuks.publishing.PublicationLanguages.parse(publication.get("translations"))
+            .getOrDefault(language, Map.of());
+        Map<String, String> sources = com.jabiz.quizbuks.publishing.PublicationLanguages.sources(
+            publication.get("name"), publication.get("redeemDescription"), publication.get("digitalDescription"),
+            com.jabiz.quizbuks.publishing.ReferralPolicy.fromJson(publication.get("referral")));
+        sources.forEach((field, source) -> {
+            var text = stored.get(field);
+            if (source != null && text != null && text.text() != null && !text.text().isBlank()) {
+                pairs.add(new AiCheckJob.Pair(pairs.size() + 1, "publication." + field, source, text.text()));
+            }
+        });
+        return pairs;
+    }
+
+    private static void pair(List<AiCheckJob.Pair> pairs, String key, String source, Map<String, String> texts) {
+        String translation = texts.get(key);
+        if (source != null && !source.isBlank() && translation != null && !translation.isBlank()) {
+            pairs.add(new AiCheckJob.Pair(pairs.size() + 1, key, source, translation));
+        }
+    }
+
+    /** The verdicts' document kept on a check job: each pair's key and verdict. */
+    public static String checkJson(String language, List<AiCheckJob.Finding> findings) {
+        Map<String, Object> document = new LinkedHashMap<>();
+        document.put("schema", SCHEMA);
+        document.put("language", language);
+        List<Map<String, Object>> items = new ArrayList<>();
+        for (AiCheckJob.Finding finding : findings) {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("no", finding.no());
+            item.put("key", finding.key());
+            item.put("consistent", finding.consistent());
+            item.put("note", finding.note());
+            items.add(item);
+        }
+        document.put("verdicts", items);
+        return JSON.writeValueAsString(document);
     }
 
     private AiTranslations() {}

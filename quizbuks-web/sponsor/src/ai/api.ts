@@ -64,6 +64,8 @@ export interface AiJob {
   covers: AiCover[]
   /** Q73d-1: a translation job's language and candidates (none for the other kinds). */
   language: string | null
+  /** Q73d-2: a publication texts job's publication. */
+  publicationId: string | null
   translations: AiTranslation[]
   candidateCount: number
   invalidCount: number
@@ -155,8 +157,10 @@ export function toAiJob(row: Row): AiJob {
     count: num(params.count) || null,
     candidates: kind === AI_KINDS.questions ? parseCandidates(row.candidates) : [],
     covers: kind === AI_KINDS.cover ? parseCovers(row.candidates) : [],
-    language: kind === AI_KINDS.translation ? str(params.language) : null,
-    translations: kind === AI_KINDS.translation ? parseTranslations(row.candidates) : [],
+    language: kind === AI_KINDS.translation || kind === AI_KINDS.publicationTexts ? str(params.language) : null,
+    publicationId: str(params.publicationId),
+    translations: kind === AI_KINDS.translation || kind === AI_KINDS.publicationTexts
+      ? parseTranslations(row.candidates) : [],
     candidateCount: num(row.candidateCount),
     invalidCount: num(row.invalidCount),
     acceptedCount: num(row.acceptedCount),
@@ -168,8 +172,10 @@ export function toAiJob(row: Row): AiJob {
 }
 
 /** The quiz's latest AI job of a kind, or null when it has none. */
-export async function readLatestAiJob(quizId: string, kind: AiJobKind = AI_KINDS.questions): Promise<AiJob | null> {
-  const page = await runQuery<Row>(AI_TEMPLATE.jobs, { params: { quizId, kind }, limit: 1 })
+export async function readLatestAiJob(quizId: string, kind: AiJobKind = AI_KINDS.questions,
+  publicationId: string | null = null): Promise<AiJob | null> {
+  const page = await runQuery<Row>(AI_TEMPLATE.jobs, { params: { quizId, kind,
+    ...(publicationId ? { publicationId } : {}) }, limit: 1 })
   return page.items[0] ? toAiJob(page.items[0]) : null
 }
 
@@ -297,6 +303,15 @@ export interface AcceptedTranslation {
 export const acceptAiTranslations = (aiJobId: string, quizId: string, translations: AcceptedTranslation[],
   baseRevision: number) =>
   runProcess<EditOutput>(AI_PROCESS.translationAccept, { aiJobId, quizId, translations, baseRevision })
+
+/** Q73d-2: candidate translations of a publication's own texts into one of its languages. */
+export const requestAiPublicationTexts = (input: { quizId: string; publicationId: string; language: string;
+  all: boolean; aiNoticeVersionNo?: number | null }) =>
+  runProcess<AiRequestOutput>(AI_PROCESS.publicationTranslateRequest, { ...input })
+
+/** Q73d-2: records that the sponsor used `used` of the job's texts (kept in the publication's form). */
+export const acceptAiPublicationTexts = (aiJobId: string, publicationId: string, used: number) =>
+  runProcess<{ status: AiJobStatus }>(AI_PROCESS.publicationTextsAccept, { aiJobId, publicationId, used })
 
 export const discardAiJob = (aiJobId: string) => runProcess<{ status: AiJobStatus }>(AI_PROCESS.discard, { aiJobId })
 export const cancelAiJob = (aiJobId: string) => runProcess<{ status: AiJobStatus }>(AI_PROCESS.cancel, { aiJobId })

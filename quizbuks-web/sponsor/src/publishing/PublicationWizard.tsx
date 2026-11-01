@@ -483,7 +483,7 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
       <ReferralFields id={id} form={form} set={set} locked={locked} problemOf={problemOf} methods={methodChoices} />
       {/* Q73b: the languages offered and the publication's texts in them. */}
       <LanguagesFields id={id} form={form} set={set} version={version} method={rewardMethod} locked={locked}
-        problemOf={problemOf} />
+        problemOf={problemOf} publicationId={publicationId} />
       <div className="grid gap-4 md:grid-cols-2">
         <Field id={`${id}-start`} label={t('publishing.field.startAt')} problem={problemOf('startAt')}
           hint={t('publishing.field.periodHint')}>
