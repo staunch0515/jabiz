@@ -41,6 +41,7 @@ public class ErasureChecks implements PlatformCheck {
     public List<CheckProblem> check() {
         List<CheckProblem> problems = new ArrayList<>();
         Set<String> seen = new HashSet<>();
+        Set<String> undeclared = new HashSet<>();
         for (ErasedEntity erased : erasers.entities()) {
             String location = "PersonalDataEraser " + erased.entity();
             // Once per user field: an entity may be found by several (decision D62 item 8).
@@ -50,7 +51,11 @@ public class ErasureChecks implements PlatformCheck {
             }
             EntityDefinition def = entities.find(erased.entity()).orElse(null);
             if (def == null) {
-                problems.add(CheckProblem.error(CATEGORY, location, "entity " + erased.entity() + " is not declared"));
+                // Once, however many times it is declared.
+                if (undeclared.add(erased.entity())) {
+                    problems.add(CheckProblem.error(CATEGORY, location, "entity " + erased.entity()
+                        + " is not declared"));
+                }
                 continue;
             }
             if (def.fields.get(erased.userField()) == null) {

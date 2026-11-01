@@ -276,7 +276,31 @@ public class AccountErasure {
     }
 
     /** What becomes of one of the user's rows: deleted, or its personal fields cleared. */
-    record RowWrite(EntityInstance row, boolean delete, Map<String, Object> cleared) {}
+    record RowWrite(EntityInstance row, boolean delete, Map<String, Object> cleared) {
+
+        RowWrite {
+            cleared = Collections.unmodifiableMap(new LinkedHashMap<>(cleared));
+        }
+
+        static RowWrite of(EntityInstance row, ErasedEntity erased) {
+            boolean delete = erased.action() == ErasedEntity.RowAction.DELETE;
+            Map<String, Object> cleared = new LinkedHashMap<>();
+            if (!delete) {
+                erased.fields().forEach(field -> cleared.put(field, null));
+            }
+            return new RowWrite(row, delete, cleared);
+        }
+
+        /** The row found by another declaration too: deleted if either deletes it, else both one's fields cleared. */
+        RowWrite and(RowWrite other) {
+            if (delete || other.delete) {
+                return new RowWrite(row, true, Map.of());
+            }
+            Map<String, Object> both = new LinkedHashMap<>(cleared);
+            both.putAll(other.cleared);
+            return new RowWrite(row, false, both);
+        }
+    }
 
     /**
      * The rows found, each written once: an entity may be declared under several user fields (decision D62 item 8),
@@ -284,20 +308,13 @@ public class AccountErasure {
      * fields of every declaration are cleared.
      */
     static List<RowWrite> writes(List<Map.Entry<ErasedEntity, EntityInstance>> found) {
-        Map<List<Object>, EntityInstance> rows = new LinkedHashMap<>();
-        Map<List<Object>, Boolean> deleted = new LinkedHashMap<>();
-        Map<List<Object>, Map<String, Object>> cleared = new LinkedHashMap<>();
+        Map<List<Object>, RowWrite> writes = new LinkedHashMap<>();
         for (Map.Entry<ErasedEntity, EntityInstance> entry : found) {
             EntityInstance row = entry.getValue();
-            List<Object> key = List.of(row.entityType(), String.valueOf(row.id()));
-            rows.putIfAbsent(key, row);
-            deleted.merge(key, entry.getKey().action() == ErasedEntity.RowAction.DELETE, Boolean::logicalOr);
-            Map<String, Object> fields = cleared.computeIfAbsent(key, k -> new LinkedHashMap<>());
-            entry.getKey().fields().forEach(field -> fields.put(field, null));
+            ErasedEntity erased = entry.getKey();
+            writes.merge(List.of(row.entityType(), String.valueOf(row.id())), RowWrite.of(row, erased),
+                RowWrite::and);
         }
-        List<RowWrite> writes = new ArrayList<>();
-        rows.forEach((key, row) -> writes.add(new RowWrite(row, deleted.get(key),
-            deleted.get(key) ? Map.of() : Collections.unmodifiableMap(cleared.get(key)))));
-        return List.copyOf(writes);
+        return List.copyOf(writes.values());
     }
 }

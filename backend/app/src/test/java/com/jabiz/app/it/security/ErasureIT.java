@@ -331,24 +331,38 @@ class ErasureIT extends SecurityItSupport {
             .containsExactly(CommerceEntities.PRODUCT_VIEWS + " user", USER_OWNED_COUNTER + " other");
     }
 
-    /** Phase 17zb: an entity declared under two user fields: the rows of each are purged, their audit masked. */
+    /**
+     * Phase 17zb: an entity declared under two user fields: the rows of each are purged with their own declaration's
+     * fields, a row both find with both, in one statement; the audit is masked alike and the seals still verify.
+     */
     @Test
     void anEntityDeclaredUnderTwoUserFieldsLeavesNothingOfEither() {
         String name = unique("twice");
         String userId = create(name, "Twice", name + "@example.com");
         String byUser = "Customer " + UUID.randomUUID();
+        String byUserCode = unique("U");
         String byName = ("K" + UUID.randomUUID()).substring(0, 20);
-        insert(CommerceEntities.CUSTOMER_DATASET, Map.of("customerCode", unique("C"), "customerName", byUser,
+        String bothCode = ("B" + UUID.randomUUID()).substring(0, 20);
+        insert(CommerceEntities.CUSTOMER_DATASET, Map.of("customerCode", byUserCode, "customerName", byUser,
             "userId", userId), null);
         insert(CommerceEntities.CUSTOMER_DATASET, Map.of("customerCode", byName, "customerName", userId), null);
+        // Found by both: its name by the first declaration, its code by the second, as the row was before either.
+        insert(CommerceEntities.CUSTOMER_DATASET, Map.of("customerCode", bothCode, "customerName", userId,
+            "userId", userId), null);
+        long sealNo = sealNo(seal());
 
         erase(userId);
         deliverer.deliverPending().block();
 
         // Each declaration's fields are gone from its rows and from their audit records alike.
-        for (String needle : List.of(byUser, byName)) {
+        for (String needle : List.of(byUser, byName, bothCode)) {
             assertThat(occurrences(needle)).as("where %s still is", needle).isEmpty();
         }
+        // Not another declaration's: the first row's code is no field of the declaration that found it.
+        assertThat(query("SELECT customer_code FROM customer_version WHERE customer_code = ?", byUserCode))
+            .isNotEmpty();
+        // Each row overwritten once, by one statement: the seals verify.
+        assertThat(verify(sealNo)).containsEntry("intact", true);
     }
 
     private Map<String, Object> erase(String userId) {
