@@ -64,7 +64,8 @@ unread_feed AS NOT MATERIALIZED (
                   AND string_to_array(c.{{QbPublicationCard.regions}}, ',') && string_to_array(me.me_regions, ',')
                   -- Q59b: as the inbox's list.
                   AND (CAST(:languages AS text) IS NULL
-                       OR c.{{QbPublicationCard.language}} = ANY(string_to_array(CAST(:languages AS text), ',')))
+                       OR string_to_array(coalesce(c.{{QbPublicationCard.languages}}, c.{{QbPublicationCard.language}}), ',')
+                          && string_to_array(CAST(:languages AS text), ','))
                   AND NOT EXISTS (SELECT 1 FROM {{QbPublicationOwner}} own
                                   WHERE own.{{QbPublicationOwner.publicationId}} = f.{{QbBroadcastFeed.publicationId}}))
 )

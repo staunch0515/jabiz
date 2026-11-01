@@ -22,7 +22,7 @@ params:
   q:       { kind: { type: text, maxLength: 100 }, description: Only publications whose name or quiz title contains this text }
   includeAnswered: { kind: { type: bool }, description: "If true, also the publications the caller has answered (Q34); by default those are left out" }
   method:  { like: QbPublicationCard.rewardMethod, description: "Only publications whose reward comes this way (Q22, Q33): PLATFORM, SPONSOR_CASH, OFFLINE_REDEEM or DIGITAL_PRIZE" }
-  languages: { kind: { type: text, maxLength: 20 }, description: "Only publications in these languages (Q59a), comma-separated (ja, zh, en): the taker's switches, or their interface language; all when not given" }
+  languages: { kind: { type: text, maxLength: 20 }, description: "Only publications offering one of these languages (Q59a, Q73b), comma-separated in the taker's order (ja, zh, en): their switches, or their interface language; each shown in the first of them it offers; all when not given" }
 results:
   publicationId:  { from: QbPublicationCard.publicationId }
   name:           { from: QbPublicationCard.name }
@@ -31,6 +31,9 @@ results:
   video:          { from: QbPublicationCard.video }
   kind:           { from: QbPublicationCard.kind }
   language:       { from: QbPublicationCard.language }
+  languages:      { from: QbPublicationCard.languages }
+  displayLanguage: { kind: { type: text, maxLength: 2 } }
+  referralDescription: { kind: { type: text, maxLength: 500 } }
   maxReward:      { from: QbPublicationCard.maxReward }
   rewardMethod:   { from: QbPublicationCard.rewardMethod }
   digitalDelivery: { from: QbPublicationCard.digitalDelivery }
@@ -70,16 +73,23 @@ permissions: [qb.play]
 -- reserved s.reservedTotal - n.released.
 SELECT
     c.{{QbPublicationCard.publicationId}}  AS publicationId,
-    c.{{QbPublicationCard.name}}           AS name,
-    c.{{QbPublicationCard.quizTitle}}      AS quizTitle,
+    -- Q73b: the texts in the language shown (the card's translations), else the card's own.
+    coalesce(CAST(c.{{QbPublicationCard.translations}} AS jsonb) -> dl.lang ->> 'name',
+             c.{{QbPublicationCard.name}}) AS name,
+    coalesce(CAST(c.{{QbPublicationCard.translations}} AS jsonb) -> dl.lang ->> 'quizTitle',
+             c.{{QbPublicationCard.quizTitle}}) AS quizTitle,
     c.{{QbPublicationCard.cover}}          AS cover,
     c.{{QbPublicationCard.video}}          AS video,
     c.{{QbPublicationCard.kind}}           AS kind,
     c.{{QbPublicationCard.language}}       AS language,
+    c.{{QbPublicationCard.languages}}      AS languages,
+    dl.lang                                AS displayLanguage,
+    CAST(c.{{QbPublicationCard.translations}} AS jsonb) -> dl.lang ->> 'referralDescription' AS referralDescription,
     c.{{QbPublicationCard.maxReward}}      AS maxReward,
     c.{{QbPublicationCard.rewardMethod}}   AS rewardMethod,
     c.{{QbPublicationCard.digitalDelivery}} AS digitalDelivery,
-    c.{{QbPublicationCard.digitalDescription}} AS digitalDescription,
+    coalesce(CAST(c.{{QbPublicationCard.translations}} AS jsonb) -> dl.lang ->> 'digitalDescription',
+             c.{{QbPublicationCard.digitalDescription}}) AS digitalDescription,
     c.{{QbPublicationCard.referral}}       AS referral,
     n.{{QbPublicationCounter.completions}} AS completions,
     sp.{{QbSponsor.contactName}}           AS sponsorName,
@@ -99,6 +109,12 @@ SELECT
     m.{{QbAttempt.status}}                 AS myStatus,
     m.{{QbAttempt.deadline}}               AS myDeadline
 FROM {{QbPublicationCard}} c
+-- Q73b: the language the card is shown in: the first of the taker's it offers, else its main one.
+CROSS JOIN LATERAL (
+    SELECT coalesce((SELECT u.l FROM unnest(string_to_array(CAST(:languages AS text), ',')) WITH ORDINALITY AS u(l, i)
+                     WHERE u.l = ANY(string_to_array(coalesce(c.{{QbPublicationCard.languages}},
+                                                              c.{{QbPublicationCard.language}}), ','))
+                     ORDER BY u.i LIMIT 1), c.{{QbPublicationCard.language}}) AS lang) dl
 JOIN {{QbPublicationCounter}} n ON n.{{QbPublicationCounter.publicationId}} = c.{{QbPublicationCard.publicationId}}
 JOIN {{QbPublicationStartCounter}} s
     ON s.{{QbPublicationStartCounter.publicationId}} = c.{{QbPublicationCard.publicationId}}
@@ -127,9 +143,11 @@ WHERE c.{{QbPublicationCard.status}} = 'LIVE'
        OR (coalesce(w.{{QbWallet.pendingCount}}, 0) = 0
            AND coalesce(w.{{QbWallet.balance}} - w.{{QbWallet.held}}, 0) >= c.{{QbPublicationCard.maxReward}}))
   AND (CAST(:method AS text) IS NULL OR c.{{QbPublicationCard.rewardMethod}} = CAST(:method AS text))
-  -- Q59a: publications of different languages are not listed together; the client says which the taker sees.
+  -- Q59a: publications of different languages are not listed together; the client says which the taker sees. Q73b:
+  -- one offering several is listed when it offers one of them, once, in the first of them it offers.
   AND (CAST(:languages AS text) IS NULL
-       OR c.{{QbPublicationCard.language}} = ANY(string_to_array(CAST(:languages AS text), ',')))
+       OR string_to_array(coalesce(c.{{QbPublicationCard.languages}}, c.{{QbPublicationCard.language}}), ',')
+          && string_to_array(CAST(:languages AS text), ','))
   -- Q34: what the caller answered is done, and so is an attempt whose time ran out before the expiry job closed it;
   -- one still in progress stays, so that it can be resumed from here. The view holds the caller's own attempts only
   -- (taker), found by qb_attempt_once (user_id, publication_id).

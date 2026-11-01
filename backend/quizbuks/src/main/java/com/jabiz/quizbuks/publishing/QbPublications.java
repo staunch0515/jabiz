@@ -6,6 +6,7 @@ import com.jabiz.entity.Rules;
 import com.jabiz.entity.TemporalRole;
 import com.jabiz.entity.Violation;
 import com.jabiz.file.FileKind;
+import com.jabiz.quizbuks.content.ContentLanguages;
 import com.jabiz.quizbuks.content.ContentLimits;
 import com.jabiz.quizbuks.content.QbContent;
 import com.jabiz.quizbuks.country.Regions;
@@ -121,6 +122,10 @@ public final class QbPublications {
             .asText(PublishingLimits.SEALED_LENGTH));
         // Q70 (D-Q70-10): "referrals welcome", ReferralPolicy's JSON; none when not welcome. Frozen with the policy.
         eb.field("referral", f -> f.physicalColumn("referral").asText(PublishingLimits.REFERRAL_LENGTH));
+        // Q73b: the languages offered (the first the main one; none is the version's base only) and the texts in each
+        // other one, translated from the base's (PublicationLanguages). Frozen with the policy.
+        eb.field("languages", f -> f.physicalColumn("languages").asText(ContentLanguages.LIST_LENGTH));
+        eb.field("translations", f -> f.physicalColumn("translations").asText(PublicationLanguages.JSON_LENGTH));
         eb.field("fullScore", f -> f.physicalColumn("full_score").processOnly().asNumeric(7, 0));
         eb.field("maxReward", f -> f.physicalColumn("max_reward").processOnly().asMonetary("JPY", 0));
         eb.field("maxSpend", f -> f.physicalColumn("max_spend").processOnly().asMonetary("JPY", 0));
@@ -400,6 +405,10 @@ public final class QbPublications {
         // Q70: the referral policy as submitted (ReferralPolicy's JSON), for the link, the claim and the reward.
         eb.field("referral", f -> f.physicalColumn("referral").immutable(true)
             .asText(PublishingLimits.REFERRAL_LENGTH));
+        // Q73b: the languages offered, the main one first (as language), and the texts in each other one.
+        eb.field("languages", f -> f.physicalColumn("languages").immutable(true).asText(ContentLanguages.LIST_LENGTH));
+        eb.field("translations", f -> f.physicalColumn("translations").immutable(true)
+            .asText(PublicationLanguages.JSON_LENGTH));
         eb.field("wentOnAt", f -> f.physicalColumn("went_on_at").immutable(true).required(true)
             .asTemporal(TemporalRole.EVENT_TIME));
         // Q48b: the sponsor's operator when it went on (null: headquarters'); the commission of its rewards is
