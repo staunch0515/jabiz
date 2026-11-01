@@ -46,7 +46,7 @@ Google 的定义：转给第三方。服务提供方（Stripe、邮件、服务�
 
 ## 4. 删除账号
 
-- 表单的"删除账号的网址"：Q49a（平台 17i）的网页申请页合入并部署之后填 `https://quizbuks.com/taker/` 下的那个页面。
+- 表单的"删除账号的网址"：填 `https://quizbuks.com/taker/delete-account`（Q71；生产须先以 `QB_APP_ACCOUNT_DELETION=true` 开启，`DEPLOY.md` §1a）。
 - **在那之前**（封闭测试开始时）：填隐私政策的地址 `https://quizbuks.com/taker/legal/privacy`（第10条写明以注册邮箱申请删除），并在"可否申请删除部分数据"选"否"。Google 不接受时，封闭测试的发布等 Q49a。
 - 删除后保留的记录：政策第8条（交易与防止滥用的记录；收据与会计记录 10 年）。表单中说明"部分数据因法律义务保留"。
 

@@ -20,6 +20,7 @@
 | `JABIZ_FILES_LOCAL_ROOT` | 是 | 镜像已设 `/var/lib/jabiz/files`（卷） | — | 启动失败；卷丢失 = 上传的图片、PDF 丢失（备份见 §2.3） |
 | `SPRING_R2DBC_URL` / `_USERNAME`、`SPRING_FLYWAY_URL` / `_USER`、`DB_PASSWORD`（或 `SPRING_R2DBC_PASSWORD` / `SPRING_FLYWAY_PASSWORD`） | 是 | 数据库 | 换密码：先在库中加新密码可用的窗口（`ALTER ROLE`），改环境变量、滚动重启 | 连不上库，启动失败 |
 | `JABIZ_ERASURE_DATASOURCE_URL` / `_USERNAME` / `_PASSWORD` | 开启账号删除时（平台 17i：账号删除的申请入口 `account-deletion`）；否则可不设 | `deploy/quizbuks/server/create-maintenance-login.sh <库名>` 的输出（`DEPLOY.md`"1a"）：**R2DBC** URL（`r2dbc:postgresql://…`，与 `SPRING_R2DBC_URL` 相同，**不是** Flyway 的 JDBC URL）与一个单独的维护登录（属于角色 `jabiz_maintenance`；应用自己的登录绝不能属于它） | 再运行一次脚本即给同一登录换新密码，改 `.env` 后重新部署 | 不设：抹除账号照常完成，个人信息的清除 422 `ERASURE_PURGE_UNAVAILABLE`，有入口开启账号删除时启动失败。写成 JDBC 格式：启动失败，检查报一行 `ERASURE \| jabiz.erasure.datasource.url`（平台 17q 之前是一大段堆栈，部署回滚） |
+| `QB_APP_ACCOUNT_DELETION` / `QB_SPONSOR_ACCOUNT_DELETION` | 答题者的设为 `true` 是上架 App Store 与 Google Play 的前提（Q71）；商家的可选（Q72） | 设为 `true` 即开启该入口的账号删除：App 与商家后台的账户页出现"删除账号"，答题者另有不装 App 的申请页 `/taker/delete-account` | — | 缺省 `false`：没有删除入口。开启而没有上一行的维护连接：启动失败 |
 | `JABIZ_TRUSTED_PROXIES` | 在代理之后必需 | 代理的地址或网段 | 代理变化时 | 登录记录的 IP 都是代理的；入站 Webhook 按地址的限流把 Stripe 全部投递算成一个客户端（每分钟 120 次） |
 | `JABIZ_REPORTS_PDF_FONTS` | 镜像已设 | 镜像中的 IPA Gothic、Droid Sans Fallback | — | 镜像外运行时收据与月报的中日文为 `?`；设了读不到的文件即启动失败 |
 | `LOGGING_STRUCTURED_FORMAT_CONSOLE` | 建议 `ecs` | — | — | 文本日志 |

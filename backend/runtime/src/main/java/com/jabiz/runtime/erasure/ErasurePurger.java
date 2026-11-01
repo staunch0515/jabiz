@@ -97,14 +97,22 @@ public class ErasurePurger {
             });
     }
 
-    /** One overwriting statement: the table, which rows, and what each column becomes (null: by its type). */
+    /**
+     * One overwriting statement: the table, which rows, and what each column becomes (null: by its type). An
+     * application's entity names, instead of the rows, its declarations ({@code declared}): the rows any of them
+     * finds, each column overwritten only where a declaration naming it found the row ({@code conditions}, decision
+     * D62 item 8). One statement for them all: each row is written once, and every condition reads the row as it was.
+     */
     record Target(String table, String where, Map<String, BoundValue> params, Map<String, String> sets,
-        String userColumn) {
+        List<Declared> declared, Map<String, String> conditions) {
 
         Target(String table, String where, Map<String, BoundValue> params, Map<String, String> sets) {
-            this(table, where, params, sets, null);
+            this(table, where, params, sets, null, Map.of());
         }
     }
+
+    /** One declaration of an entity: the column holding the user's id, and the columns it overwrites. */
+    record Declared(String userColumn, Set<String> columns) {}
 
     /** What one purge learns as it goes. */
     private static final class Run {
@@ -115,6 +123,8 @@ public class ErasurePurger {
         /** The user's names in any version and its addresses, in lower case: what a sign-in or a request names. */
         String[] names = new String[0];
         final Map<String, List<Object>> ids = new LinkedHashMap<>();
+        /** The keys of the rows each declaration finds, by entity and user column (decision D62 item 8). */
+        final Map<String, List<Object>> declaredIds = new LinkedHashMap<>();
         /** The operations whose input and output are the user's. */
         Long[] processes = new Long[0];
         int count;
@@ -164,17 +174,20 @@ public class ErasurePurger {
     /** The keys of the user's rows, by entity: the user, its platform records, and the erasers' entities. */
     private Mono<Void> entityIds(Run run) {
         run.ids.put(SecurityEntities.USER, List.of(run.userId));
-        Map<EntityDefinition, String> userColumns = new LinkedHashMap<>();
+        // An entity may be declared under several user fields (decision D62 item 8): its rows are those of each.
+        List<Map.Entry<EntityDefinition, String>> userColumns = new ArrayList<>();
+        Map<String, String> declarations = new LinkedHashMap<>();
         for (String name : List.of(SecurityEntities.USER_IDENTITY, SecurityEntities.USER_MFA,
             SecurityEntities.LOGIN_RECORD, SecurityEntities.USER_ROLE, SecurityEntities.USER_MAIL_PREFERENCE,
             ProtectedChangeEntities.CHANGE)) {
-            userColumns.put(entities.getOrThrow(name), "user_id");
+            userColumns.add(Map.entry(entities.getOrThrow(name), "user_id"));
         }
         for (ErasedEntity erased : erasers.entities()) {
             EntityDefinition def = entities.getOrThrow(erased.entity());
-            userColumns.put(def, def.physicalColumn(erased.userField()));
+            userColumns.add(Map.entry(def, def.physicalColumn(erased.userField())));
+            declarations.put(declaration(def.name, def.physicalColumn(erased.userField())), erased.userField());
         }
-        return Flux.fromIterable(userColumns.entrySet())
+        return Flux.fromIterable(userColumns)
             .concatMap(entry -> {
                 EntityDefinition def = entry.getKey();
                 String table = SqlIdentifiers.require(def.physicalTable);
@@ -183,9 +196,51 @@ public class ErasurePurger {
                         "SELECT DISTINCT t." + key + " AS id FROM " + table + " t WHERE " + match.where(), match.params()))
                     .map(row -> row.get("id"))
                     .collectList()
-                    .doOnNext(found -> run.ids.put(def.name, List.copyOf(found)));
+                    .flatMap(found -> {
+                        String declaration = declaration(def.name, entry.getValue());
+                        String userField = declarations.get(declaration);
+                        if (userField == null) {
+                            run.ids.merge(def.name, List.copyOf(found), ErasurePurger::union);
+                            return Mono.empty();
+                        }
+                        // An application's rows: also those ACCOUNT_ERASE deleted, known by their audit records.
+                        return audited(run, def.name, userField).map(gone -> {
+                            List<Object> ids = union(found.stream().map(id -> (Object) String.valueOf(id)).toList(),
+                                gone);
+                            run.ids.merge(def.name, ids, ErasurePurger::union);
+                            run.declaredIds.put(declaration, ids);
+                            return ids;
+                        });
+                    });
             })
             .then();
+    }
+
+    /**
+     * The keys of an entity's rows whose user field held the user's id in an audit record (its insert, its deletion,
+     * a change of the field): rows a plain table no longer has once ACCOUNT_ERASE deleted them, whose earlier audit
+     * records and the deletion's own still hold their personal values.
+     */
+    private static Mono<List<Object>> audited(Run run, String entity, String userField) {
+        Map<String, BoundValue> params = new LinkedHashMap<>();
+        params.put("entityType", BoundValue.of(entity));
+        params.put("userField", BoundValue.of(userField));
+        params.put("userText", BoundValue.of(run.userId.toString()));
+        return run.engine.select("SELECT DISTINCT t.entity_id::text AS id FROM sys_audit_record t"
+                + " WHERE t.entity_type = :entityType AND :userText IN (t.changes::jsonb -> :userField ->> 0,"
+                + " t.changes::jsonb -> :userField ->> 1)", params)
+            .map(row -> (Object) Rows.string(row.get("id")))
+            .collectList();
+    }
+
+    private static String declaration(String entity, String userColumn) {
+        return entity + "\n" + userColumn;
+    }
+
+    private static <T> List<T> union(List<T> before, List<T> more) {
+        Set<T> union = new LinkedHashSet<>(before);
+        union.addAll(more);
+        return List.copyOf(union);
     }
 
     /** A condition on the column that holds the user id: as a uuid where it is one (its index applies), else as text. */
@@ -282,15 +337,24 @@ public class ErasurePurger {
         targets.add(new Target("sys_external_job", "t.requested_by = :userText", user, input));
         targets.add(new Target("sys_external_job_outcome", "t.job_id IN (SELECT j.job_id FROM sys_external_job j"
             + " WHERE j.requested_by = :userText)", user, sets("result")));
+        Map<String, List<ErasedEntity>> byEntity = new LinkedHashMap<>();
         for (ErasedEntity erased : erasers.entities()) {
-            if (erased.fields().isEmpty()) {
-                continue;
+            if (!erased.fields().isEmpty()) {
+                byEntity.computeIfAbsent(erased.entity(), name -> new ArrayList<>()).add(erased);
             }
-            EntityDefinition def = entities.getOrThrow(erased.entity());
-            Map<String, String> fields = new LinkedHashMap<>();
-            erased.fields().forEach(field -> fields.put(def.physicalColumn(field), null));
-            targets.add(new Target(def.physicalTable, null, user, fields, def.physicalColumn(erased.userField())));
         }
+        byEntity.forEach((entity, declared) -> {
+            EntityDefinition def = entities.getOrThrow(entity);
+            Map<String, String> fields = new LinkedHashMap<>();
+            List<Declared> declarations = new ArrayList<>();
+            for (ErasedEntity erased : declared) {
+                Set<String> columns = new LinkedHashSet<>();
+                erased.fields().forEach(field -> columns.add(def.physicalColumn(field)));
+                columns.forEach(column -> fields.put(column, null));
+                declarations.add(new Declared(def.physicalColumn(erased.userField()), columns));
+            }
+            targets.add(new Target(def.physicalTable, null, user, fields, List.copyOf(declarations), Map.of()));
+        });
         targets.addAll(audit(run));
         targets.addAll(operationTargets(run));
         return targets;
@@ -305,23 +369,28 @@ public class ErasurePurger {
         fields.put(SecurityEntities.LOGIN_RECORD, List.of("userName", "clientIp", "userAgent"));
         fields.put(SecurityEntities.USER_MFA, List.of("secret", "recoveryCodes"));
         fields.put(ProtectedChangeEntities.CHANGE, List.of("email", "subject", "passwordHash"));
+        List<Target> targets = new ArrayList<>();
+        fields.forEach((entity, names) -> auditTarget(entity, run.ids.getOrDefault(entity, List.of()), names)
+            .ifPresent(targets::add));
+        // An application's rows, each masked with the fields of the declarations that found it (decision D62 item 8):
+        // not another declaration's, which may be another person's. Rows of one set of fields share a statement, so
+        // that each audit record is written once.
+        Map<String, Map<Object, Set<String>>> byRow = new LinkedHashMap<>();
         for (ErasedEntity erased : erasers.entities()) {
-            if (!erased.fields().isEmpty()) {
-                fields.put(erased.entity(), erased.fields());
+            if (erased.fields().isEmpty()) {
+                continue;
+            }
+            EntityDefinition def = entities.getOrThrow(erased.entity());
+            Map<Object, Set<String>> rows = byRow.computeIfAbsent(def.name, name -> new LinkedHashMap<>());
+            for (Object id : run.declaredIds.getOrDefault(declaration(def.name,
+                def.physicalColumn(erased.userField())), List.of())) {
+                rows.computeIfAbsent(String.valueOf(id), key -> new java.util.TreeSet<>()).addAll(erased.fields());
             }
         }
-        List<Target> targets = new ArrayList<>();
-        fields.forEach((entity, names) -> {
-            List<Object> ids = run.ids.getOrDefault(entity, List.of());
-            if (ids.isEmpty()) {
-                return;
-            }
-            Map<String, BoundValue> params = new LinkedHashMap<>();
-            params.put("entityType", BoundValue.of(entity));
-            params.put("entityIds", BoundValue.of(ids.stream().map(String::valueOf).toArray(String[]::new)));
-            params.put("fields", BoundValue.of(names.toArray(String[]::new)));
-            targets.add(new Target("sys_audit_record", "t.entity_type = :entityType AND t.entity_id = ANY(:entityIds)"
-                + " AND t.changed_fields && :fields", params, Map.of("changes", masked())));
+        byRow.forEach((entity, rows) -> {
+            Map<Set<String>, List<Object>> byFields = new LinkedHashMap<>();
+            rows.forEach((id, names) -> byFields.computeIfAbsent(names, key -> new ArrayList<>()).add(id));
+            byFields.forEach((names, ids) -> auditTarget(entity, ids, List.copyOf(names)).ifPresent(targets::add));
         });
         // The opt-outs of the user's addresses are gone (ACCOUNT_ERASE deleted them); their audit records hold the
         // address. They are found by it: another user's addresses are not among them.
@@ -332,6 +401,20 @@ public class ErasurePurger {
             + " AND lower(COALESCE(t.changes::jsonb->'address'->>0, t.changes::jsonb->'address'->>1))"
             + " = ANY(:addresses)", optOuts, Map.of("changes", masked())));
         return targets;
+    }
+
+    /** The audit records of these rows of the entity that changed one of the fields: their values become the mask. */
+    private static java.util.Optional<Target> auditTarget(String entity, List<Object> ids, List<String> names) {
+        if (ids.isEmpty()) {
+            return java.util.Optional.empty();
+        }
+        Map<String, BoundValue> params = new LinkedHashMap<>();
+        params.put("entityType", BoundValue.of(entity));
+        params.put("entityIds", BoundValue.of(ids.stream().map(String::valueOf).toArray(String[]::new)));
+        params.put("fields", BoundValue.of(names.toArray(String[]::new)));
+        return java.util.Optional.of(new Target("sys_audit_record", "t.entity_type = :entityType"
+            + " AND t.entity_id = ANY(:entityIds) AND t.changed_fields && :fields", params,
+            Map.of("changes", masked())));
     }
 
     /** Each named field's pair [before, after] keeps null where there was none and the mask where there was. */
@@ -366,7 +449,10 @@ public class ErasurePurger {
         return Flux.fromIterable(erasers.entities())
             .filter(erased -> !erased.documents().isEmpty())
             .concatMap(erased -> {
-                List<Object> ids = run.ids.getOrDefault(erased.entity(), List.of());
+                // The rows this declaration found: another declaration's layouts are not its (decision D62 item 8).
+                EntityDefinition def = entities.getOrThrow(erased.entity());
+                List<Object> ids = run.declaredIds.getOrDefault(declaration(def.name,
+                    def.physicalColumn(erased.userField())), List.of());
                 if (ids.isEmpty()) {
                     return Mono.empty();
                 }
@@ -398,13 +484,36 @@ public class ErasurePurger {
     /** Runs one target: overwrites its rows that still hold something and records each in {@code sys_erasure_item}. */
     private Mono<Void> overwrite(Run run, Target target) {
         String table = SqlIdentifiers.require(target.table());
-        Mono<Target> resolved = target.userColumn() == null ? Mono.just(target)
-            : userMatch(run, table, target.userColumn()).map(match -> new Target(table, match.where(),
-                match.params(), target.sets()));
+        Mono<Target> resolved = target.declared() == null ? Mono.just(target)
+            : Flux.fromIterable(target.declared())
+                .concatMap(declared -> userMatch(run, table, declared.userColumn())
+                    .map(match -> Map.entry(declared, match)))
+                .collectList()
+                .map(matches -> declaredTarget(table, target, matches));
         Mono<IntegrityStore.Table> meta = integrity.table(run.engine, table)
             .switchIfEmpty(Mono.error(() -> new IllegalStateException("The maintenance connection does not see table "
                 + table)));
         return resolved.flatMap(match -> overwrite(run, match, meta));
+    }
+
+    /**
+     * The statement of an entity's declarations: the rows any of them finds; a column only some declarations name is
+     * overwritten where one of those found the row, and kept elsewhere.
+     */
+    static Target declaredTarget(String table, Target target, List<Map.Entry<Declared, Match>> matches) {
+        Map<String, BoundValue> params = new LinkedHashMap<>(target.params());
+        matches.forEach(match -> params.putAll(match.getValue().params()));
+        String where = matches.stream().map(match -> "(" + match.getValue().where() + ")")
+            .collect(Collectors.joining(" OR "));
+        Map<String, String> conditions = new LinkedHashMap<>();
+        for (String column : target.sets().keySet()) {
+            List<String> finding = matches.stream().filter(match -> match.getKey().columns().contains(column))
+                .map(match -> "(" + match.getValue().where() + ")").toList();
+            if (finding.size() < matches.size()) {
+                conditions.put(column, String.join(" OR ", finding));
+            }
+        }
+        return new Target(table, where, params, target.sets(), null, Map.copyOf(conditions));
     }
 
     private Mono<Void> overwrite(Run run, Target target, Mono<IntegrityStore.Table> tableMeta) {
@@ -425,7 +534,10 @@ public class ErasurePurger {
                         throw new IllegalStateException("Column " + column + " of " + table + " is required and of"
                             + " type " + info.type() + ": the purge has nothing to overwrite it with");
                     }
-                    sets.put(SqlIdentifiers.require(column), value);
+                    String condition = target.conditions().get(column);
+                    String quoted = SqlIdentifiers.require(column);
+                    sets.put(quoted, condition == null ? value
+                        : "CASE WHEN " + condition + " THEN (" + value + ") ELSE t." + quoted + " END");
                 });
                 List<String> keys = meta.keyColumns().stream().map(SqlIdentifiers::require).toList();
                 String changed = sets.entrySet().stream()

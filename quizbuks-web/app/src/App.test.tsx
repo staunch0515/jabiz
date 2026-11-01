@@ -27,6 +27,9 @@ interface Me {
   refusal?: Record<string, unknown>
 }
 
+/** What the account's deletion says (Q71): off unless a test turns it on. */
+let deletionStatus: Record<string, unknown> = { available: false, pending: null, notices: [] }
+
 /**
  * The server as the app sees it: its entry, the identity providers given (none by default), and for a signed-in taker their identity, profile,
  * the countries and currencies. Records what was asked and what was posted.
@@ -48,6 +51,8 @@ function server(me?: Me, providers: unknown[] = []) {
         return json(200, ENTRY)
       case '/api/auth/oidc/providers':
         return json(200, providers)
+      case '/api/auth/account/deletion':
+        return json(200, deletionStatus)
       case '/api/auth/me':
         return me ? json(200, { userId: 'u1', displayName: 'Mei', email: 'mei@example.com', roles: ['QB_TAKER'],
           permissions: ['qb.me', 'qb.account.read', 'qb.country.read'], emailVerified: me.emailVerified ?? true,
@@ -358,6 +363,38 @@ describe('a signed-in taker', () => {
     await userEvent.click(screen.getByTestId('account-back'))
     expect(window.location.pathname).toBe('/account')
     expect(await screen.findByTestId('account-menu-profile')).toBeInTheDocument()
+  })
+
+  it('offers the deletion of the account only where the entry allows it (Q71)', async () => {
+    server({ profile: { displayName: 'Mei', countryCode: 'JP', city: null, preferredCurrency: 'JPY', revision: 1 } })
+    window.history.replaceState(null, '', '/account')
+    const { unmount } = render(<App />)
+    expect(await screen.findByTestId('account-menu-profile')).toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByTestId('account-menu-delete')).toBeNull())
+    unmount()
+
+    deletionStatus = { available: true, pending: null, notices: [
+      { code: 'qb.wallet-balance', message: 'Your wallet still holds 300 Kudos.' }] }
+    try {
+      render(<App />)
+      await userEvent.click(await screen.findByTestId('account-menu-delete'))
+      expect(window.location.pathname).toBe('/account/delete')
+      const page = await screen.findByTestId('account-delete-page')
+      expect(within(page).getByRole('heading', { level: 1, name: 'Delete account' })).toBeInTheDocument()
+      expect(page).toHaveTextContent('waiting period')
+      expect(await within(page).findByTestId('account-deletion')).toBeInTheDocument()
+      await expectAccessible()
+    } finally {
+      deletionStatus = { available: false, pending: null, notices: [] }
+    }
+  })
+
+  it('leads the address given to the stores to the request of a deletion without the app (Q71)', async () => {
+    server()
+    window.history.replaceState(null, '', '/delete-account')
+    render(<App />)
+    await waitFor(() => expect(window.location.pathname).toBe('/auth/account-deletion'))
+    expect(await screen.findByTestId('account-deletion-request')).toBeInTheDocument()
   })
 
   it('keeps the old link to the details, and sends a part there is not to the menu', async () => {

@@ -55,7 +55,7 @@ public final class PublicationAdmin {
     public static final String RESUME = "QB_PUBLICATION_ADMIN_RESUME";
     public static final String END = "QB_PUBLICATION_ADMIN_END";
     public static final String BAN_PAUSE = "QB_PUBLICATION_BAN_PAUSE";
-    /** Q70: ends a publication of a sponsor whose account was erased (a sub-process of {@code QB_SPONSOR_ERASED}). */
+    /** Q72: ends a publication of a sponsor whose account was erased (a sub-process of {@code QB_SPONSOR_ERASED}). */
     public static final String ERASED_END = "QB_PUBLICATION_ERASED_END";
     public static final String OPERATOR_PAUSE = "QB_OPERATOR_PUBLICATION_PAUSE";
     public static final String OPERATOR_RESUME = "QB_OPERATOR_PUBLICATION_RESUME";
@@ -66,7 +66,7 @@ public final class PublicationAdmin {
      * the administration show in the reader's language ({@code messages_*.properties} has it too).
      */
     public static final String ACCOUNT_SUSPENDED = "QB_ACCOUNT_SUSPENDED";
-    /** The reason an erased sponsor's publications end with (Q70), a code shown in the reader's language. */
+    /** The reason an erased sponsor's publications end with (Q72), a code shown in the reader's language. */
     public static final String ACCOUNT_DELETED = "QB_ACCOUNT_DELETED";
 
     /**
@@ -227,7 +227,7 @@ public final class PublicationAdmin {
     }
 
     /**
-     * {@value #ERASED_END} (Q70; docs/quizbuks/plans/Q70-sponsor-erasure.md): ends a publication of a sponsor whose
+     * {@value #ERASED_END} (Q72; docs/quizbuks/plans/Q72-sponsor-erasure.md): ends a publication of a sponsor whose
      * account was erased, as an administrator's end with the reason {@value #ACCOUNT_DELETED}: it takes no new attempts
      * and leaves the takers' pages; its records stay. One that ended or went back to its draft meanwhile is left as it
      * is.
@@ -259,7 +259,7 @@ public final class PublicationAdmin {
         PublicationEditing.write(ctx, publication, values);
     }
 
-    /** The states an erased sponsor's publication is ended from (Q70). */
+    /** The states an erased sponsor's publication is ended from (Q72). */
     public static final java.util.Set<String> ENDABLE = java.util.Set.of(SCHEDULED, LIVE, PAUSED, FUNDS_SHORT);
 
     public static ProcessDefinition<AdminInput, PublicationOutput, ProcessContext> resume() {

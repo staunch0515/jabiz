@@ -16,7 +16,7 @@ import org.springframework.context.annotation.Configuration;
  * and signed-in visitors alike, once per visitor and day, in the days of {@code jabiz.fiscal-year-zone}. A page counts
  * while published and by its handle (the user id is not public); a product while listed. Both name the sponsor as
  * the owner of their keys, so that the sponsor's dataset gives each sponsor theirs only; the owner is the sponsor's
- * account, so their counts go with it (Q70, platform 17z-6).
+ * account, so their counts go with it (Q72, platform 17z-6).
  */
 @Configuration
 public class SponsorStatsConfig {
