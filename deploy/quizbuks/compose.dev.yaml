@@ -75,7 +75,7 @@ services:
       QB_APP_LINK: ${QB_APP_LINK:-}
       JABIZ_TRUSTED_PROXIES: ${JABIZ_TRUSTED_PROXIES:-}
       # Google sign-in (README.md, "前端"): SPRING_PROFILES_ACTIVE=google with the client from .env; social adds
-      # Facebook and LINE (Q40) with their clients.
+      # Apple (platform 17j), Facebook and LINE (Q40) with their clients.
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-}
       QB_OIDC_REDIRECT_APP: ${QB_OIDC_REDIRECT_APP:-}
       QB_OIDC_REDIRECT_SPONSOR: ${QB_OIDC_REDIRECT_SPONSOR:-}
@@ -85,6 +85,11 @@ services:
       JABIZ_OIDC_FACEBOOK_CLIENT_SECRET: ${JABIZ_OIDC_FACEBOOK_CLIENT_SECRET:-}
       JABIZ_OIDC_LINE_CLIENT_ID: ${JABIZ_OIDC_LINE_CLIENT_ID:-}
       JABIZ_OIDC_LINE_CLIENT_SECRET: ${JABIZ_OIDC_LINE_CLIENT_SECRET:-}
+      JABIZ_OIDC_APPLE_CLIENT_ID: ${JABIZ_OIDC_APPLE_CLIENT_ID:-}
+      JABIZ_OIDC_APPLE_TEAM_ID: ${JABIZ_OIDC_APPLE_TEAM_ID:-}
+      JABIZ_OIDC_APPLE_KEY_ID: ${JABIZ_OIDC_APPLE_KEY_ID:-}
+      JABIZ_OIDC_APPLE_PRIVATE_KEY: ${JABIZ_OIDC_APPLE_PRIVATE_KEY:-}
+      QB_OIDC_APPLE_FORM_POST: ${QB_OIDC_APPLE_FORM_POST:-}
     volumes: [quizbuks-secrets:/var/lib/jabiz/secrets, quizbuks-files:/var/lib/jabiz/files]
 
   # Catches the mail of a local installation, so that sign-ups can be verified on this machine (--profile tools):
