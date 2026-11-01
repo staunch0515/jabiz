@@ -75,6 +75,7 @@ export {
   listIdentities,
   finishIdentityLink,
   unlinkIdentity,
+  joinEntry,
   isProblem,
   useOnline,
 } from './auth/account'

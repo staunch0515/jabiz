@@ -185,7 +185,7 @@ class OidcController {
             // Refusals after the identity was proven (a guard, an unverified address, an address in use) keep their
             // 403; too many accounts opened from one address is 429.
             }).onErrorMap(e -> !(e instanceof AuthenticationFailedException) && !(e instanceof SignInRefusedException)
-                && !(e instanceof EmailNotVerifiedException) && !(e instanceof OidcAccountExistsException)
+                && !(e instanceof SignUpRefusedException) && !(e instanceof EmailNotVerifiedException) && !(e instanceof OidcAccountExistsException)
                 && !(e instanceof RateLimitedException), e -> {
                 log.info("Sign-in through an identity provider refused: {}", e.getMessage());
                 return AuthController.loginFailed("Sign-in through the identity provider refused");

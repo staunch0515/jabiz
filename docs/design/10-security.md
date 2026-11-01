@@ -919,6 +919,57 @@ jabiz:
   建立期之后受保护权限的持有人被拒、寄出后才得到受保护权限的链接作废、替换已有密码需要 `security.user.password`、权限）、`InvitationWithoutMailIT`（邮件未开启）、`CredentialChainTest`（接受邀请算邮件证明，补填的地址不算；`addressAsCreated`）、
   前端 `AuthPages.test.tsx`、`blocks.test.tsx`（axe）与示范门户的 `App.test.tsx`。
 
+### 15.15 注册前的应用检查 `SignUpGuard` 与登录后加入另一个入口（阶段 17za，决策 D66）
+
+已有账号的用户此前只能经"您已有账号"邮件的链接（§15.7，`POST /api/auth/join`）得到另一个入口的注册角色。现在：
+
+| 接口 / 流程 | 说明 |
+|---|---|
+| `POST /api/auth/account/entries/{entry}/join`（任何入口的访问令牌，`SEC_ACCOUNT_ENTRY_JOIN`，权限 `auth.account`，`requiresVerifiedEmail()`） | 给调用者加上该入口的 `registration-roles` 中尚未持有的角色，204；全部已持有即 204 且什么也不改；会话不变，之后在该入口照常登录 |
+
+- **前提**：已验证的邮箱（令牌的声明与流程中读到的用户两处都查，403 `EMAIL_NOT_VERIFIED`）；入口存在且开放注册，否则 404（不存在与不开放注册同一个答复，哪些入口开放注册本来公开）。
+  按用户限流（`jabiz.security.account.rate-limit.per-user`，与改密码各自计数），429 `RATE_LIMITED`。
+- **同一条授予路径**：与邮件加入共用 `SignUpProcesses.addRoles`——只插入普通的 `SecUserRole`，所以 §16 的受保护授权照旧：注册角色含受保护的权限时，
+  建立期之后 422 `PROTECTED_CHANGE_REQUIRES_APPROVAL`（建立期内与注册一样当即生效，启动检查对这类注册角色告警，§16）；从不经此得到受保护的角色。
+  写入记操作记录（调用者为操作人）与审计，同邮件加入。
+- **`SignUpGuard`**（core，同步、无 I/O，同 `SignInGuard`）：`loads()` 以 `SignInLoad` 声明预读（用户编号字段 = 该用户的行，至多 100 行），
+  `check(SignUpAttempt)` 返回 `SignUpDecision.ALLOW` 或 `SignUpDecision.refuse(原因码)`。`SignUpAttempt`：入口、途径 `path`、用户编号（新账号为 null）、邮箱、邮箱此刻是否已证明、时间、预读数据。
+
+```java
+@Component
+class PortalSignUpGuard implements SignUpGuard {
+    public List<SignInLoad> loads() {
+        return List.of(SignInLoad.of("customers", CommerceEntities.CUSTOMER_DATASET, "userId"));
+    }
+
+    public SignUpDecision check(SignUpAttempt attempt) {
+        if (!"portal".equals(attempt.entry()) || !attempt.existingUser()) {
+            return SignUpDecision.ALLOW;
+        }
+        return attempt.rows("customers").stream().anyMatch(c -> Boolean.TRUE.equals(c.get("blocked")))
+            ? SignUpDecision.refuse("commerce.customer-blocked") : SignUpDecision.ALLOW;
+    }
+}
+```
+
+- **每条给出注册角色的途径都问**（`SignUpAttempt.Path`）：`REGISTER`（注册）、`MAIL_JOIN`（邮件加入）、`SIGNED_IN_JOIN`（本节的接口）、
+  `EMAIL_LINK`（邮件登录链接为新地址开户，§15.11）、`OIDC`（提供方开户，§12）、`EXTERNAL_TOKEN`（外部令牌开户，§15.12）。应用可以只管其中几条。
+  新账号还没有用户编号：`userId` 为 null，预读一律没有行（不读数据库）。只在真要给出角色时才问：已持有全部角色的加入、不开户的 OIDC / 外部令牌 / 邮件链接登录都不问。
+- **拒绝**：全部守卫放行才放行；守卫抛异常、返回 null、预读失败即拒绝（fail closed）。拒绝时流程失败、什么也不写（邮件链接因此未被消费，原因消除后仍可用），
+  403 `SIGN_UP_REFUSED`，问题中 `reason` 为原因码，违规的消息为消息 `SIGN_UP_REFUSED.reason.<原因码>` 在请求语言中的文字（应用的消息资源，所选的每种语言都要有；
+  缺少任何一种即改用平台的 `refused` 并记警告，调用者总读到一句话）。原因码为 `[a-z][a-z0-9_.-]{0,63}`，不写个人信息。
+  OIDC 与外部令牌的登录接口保留这个 403（不改为 401）。
+- **不泄露地址是否有账号**：`/api/auth/register` 对任何地址都答 202。注册的检查在**查地址之前**进行，`SignUpAttempt` 只有入口、所填的地址与时间，
+  `userId` 总是 null——即使该地址属于一个账号——所以守卫对新地址与已用地址看到的完全相同，拒绝（403，同一个答复）也就说明不了地址。
+  地址属于账号时注册照常答 202 并寄出"您已有账号"的邮件；守卫对这个账号的判断在其用户使用链接时（`MAIL_JOIN`，带用户编号与预读）作出，答在链接处：
+  只有收得到这封邮件的人才看到。邮件登录链接开户同样在使用链接时检查（邮箱已证明）。
+- **没有守卫**：一切照旧（全部放行）。
+- **启动检查**：同 §15.3（预读的数据视图或字段不存在、字段放不下用户编号、同名预读含义不同、`loads()` 抛异常）；登录与注册守卫的预读名各自检查。
+- **前端**：`@jabiz/client` 的 `joinEntry(entry)`（以会话的 fetch 发送，非 2xx 抛 `ApiError`）。
+- **测试**：`SignUpGuardTypesTest`、`SignUpGuardsTest`（全部放行、第一个拒绝、抛异常与 null 即拒绝、缺少文字的原因、新账号不读数据、读不到即拒绝）、
+  `SignUpGuardIT`（加入、重复加入不改、未验证 403、不开放注册与不存在同为 404、未登录 401、受保护的注册角色 422、守卫拒绝与抛异常、注册时没有用户且对新旧地址答复相同、
+  邮件加入在链接处被拒且链接仍可用、邮件登录链接开户被拒）、`PortalIT`（被封禁客户的账号不能加入门户，解除封禁后同一链接可用；日文消息）、前端 `account.test.tsx`。
+
 ## 16. 受保护的授权：四眼【决策 D48 第 1 条，阶段 16r】
 
 一个管理员不能独自让某人（包括自己或另一个账号）得到能改权限、能审批、能记账的权限，也不能独自接管持有这类权限的账号。

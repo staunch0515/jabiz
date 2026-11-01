@@ -316,6 +316,11 @@ public final class PlatformErrorCodes {
      * not exist (decision D36 item 2). Which entries allow registration is no secret.
      */
     public static final String SIGN_UP_DISABLED = "SIGN_UP_DISABLED";
+    /**
+     * 403: an application's sign-up guard refused to give the account the entry's registration roles (decision D66);
+     * the message is the text of the guard's reason ({@code SIGN_UP_REFUSED.reason.<code>}).
+     */
+    public static final String SIGN_UP_REFUSED = "SIGN_UP_REFUSED";
 
     // Files (docs/design/14-files.md): 400 unless noted
     public static final String FILE_TYPE_NOT_ALLOWED = "FILE_TYPE_NOT_ALLOWED";
@@ -386,7 +391,7 @@ public final class PlatformErrorCodes {
         MFA_CODE_INVALID, MFA_NOT_ENROLLED, MFA_ALREADY_ENROLLED,
         IDEMPOTENCY_KEY_REUSED,
         UNAUTHENTICATED, LOGIN_FAILED, INVALID_REFRESH_TOKEN, APP_PROXY_REFUSED,
-        SCOPE_UNAVAILABLE, PERMISSION_DENIED, MFA_REQUIRED, EMAIL_NOT_VERIFIED, PROCESS_INTERNAL, SIGN_IN_REFUSED, SIGN_UP_DISABLED,
+        SCOPE_UNAVAILABLE, PERMISSION_DENIED, MFA_REQUIRED, EMAIL_NOT_VERIFIED, PROCESS_INTERNAL, SIGN_IN_REFUSED, SIGN_UP_DISABLED, SIGN_UP_REFUSED,
         FILE_TYPE_NOT_ALLOWED, FILE_TOO_LARGE, FILE_INVALID, FILE_NOT_FOUND, FILE_POLICY_MISMATCH, FILE_IN_USE,
         INBOUND_REJECTED, RATE_LIMITED, PROCESS_BUSY, AUTH_BUSY);
 
