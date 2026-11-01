@@ -383,3 +383,57 @@ Quiz「ラーメン通？」 基准：日本語   翻译：中文 ✓  English �
 5. ~~D-Q73-5：资料文件先共用。~~ 已确认（2026-11-01）：资料按语言分开，没有的语言回落到基准（§2.2b）。
 6. 题目与选项的图片是否也要按语言分开（图中有文字时），还是先共用。
 7. 题目的文字是否必须每种提供的语言都译全（本稿：是），还是也可以回落到基准。
+
+## 12. 实施记录
+
+### Q73a-1、Q73a-2（2026-11-01）：模版多语言（后端与商家后台）
+
+**数据**（迁移 V54）：
+- `qb_quiz_version` 加 `translation_languages`；
+- `qb_material_version` 加 `variant_of`、`language`；
+- `qb_quiz_version_version` 加 `languages`；
+- 新的时态表 `qb_content_translation_version`（实体 `QbContentTranslation`，与其他内容表一样只追加；"每个（模版、语言、元素）一行"由流程在模版锁内保证）。
+
+**规则与流程**：
+- 纯 Java 的规则：`content.ContentLanguages`（键、`sourceHash`、语言列表）、`content.QuizLanguages`（草稿在各语言下缺什么、版本含哪些语言）。
+- 新流程 `QB_QUIZ_LANGUAGES_SET`、`QB_TRANSLATION_SAVE`。
+- 资料的语言版本走现有的 `QB_MATERIAL_SAVE` / `_DELETE`（加 `variantOf`、`language`）。
+- 删除选项、题目、基准资料、语言或整个模版时，连带删除对应的译文与资料版本。
+- 复制草稿时，原样保留各语言（包括不完整的、过时的）；复制版本时保留版本中的语言。
+- AI 出题只读基准资料。
+
+**快照**：
+- 有翻译时 `schema = 2`，加 `translations`：`{语言: {texts, images, materials}}`，键按版本的编号（`q3.stem`、`q3.o2.text`、`q3.image`）。
+- 没有翻译的快照文本与哈希不变（`QuizSnapshotLanguagesTest`）。
+- `QuizSnapshots.in(快照, 语言)` 按语言读出，结构、编号、正误不变。
+- 一个版本的文件上限与快照大小随语言数放大：`MAX_FILES_PER_VERSION` 2701，释放块 `RELEASE_CHUNK` 3000，快照 6 MiB。
+
+**版本**：
+- `QB_QUIZ_PUBLISH_VERSION` 只收完整的语言。
+- 输出多 `languages` 与 `incomplete`，后者列出未完整的语言及其缺少、需更新的键与不完整的资料编号。
+- "未改变"的判断同时比较 `languages`。
+
+**商家后台**：
+- 编辑器的"语言"标签页（`content/TranslationsPanel.tsx`）：
+  - 勾选其他语言，去掉时先确认；
+  - 按语言列出资料，可新建、编辑、删除此语言的版本（`MaterialDialog` 的 `variant` 模式，种类固定为基准资料的种类，没有"看完再答"）；
+  - 文字左右对照，标出缺少、需要更新、已完成，可以"只看需要处理的"，一次保存全部改动；
+  - 题目与选项的图片可按语言替换。
+- 状态由 `content/languages.ts` 在页面上计算，它与 `ContentLanguages` 同一个哈希（两边测试用同一组样例）；以服务端的判断为准。
+- 有其他语言时，基准语言的选择不可改。
+- 保存版本后，警告列出未包含的语言。
+- 版本列表显示语言；预览可切换语言（`preview/model.ts` 的 `draftIn` / `snapshotIn`）。
+
+**管理后台扩展**：
+- `parseSnapshot` 接受 schema 1 和 2（此前遇到 2 会显示"无法读取"）。
+- 版本预览可切换语言（`snapshotIn`）。
+- 草稿预览只列基准资料。
+
+**测试**：
+- `ContentLanguagesTest`、`QuizSnapshotLanguagesTest`、`ContentLanguagesIT`（7 个用例：完整与不完整、过时、资料版本、图片与文件所有者、拒绝、连带删除与复制、复制版本的哈希）；
+- `ContentItSupport.TABLES` 加入译文表（只插入）；
+- 前端 `languages.test.ts`、`content.test.tsx` 的三个用例（含无障碍检查）、管理后台 `snapshot.test.ts`。
+
+**未在 Q73a 中**：
+- 内容包（`content.transfer`）的导出与导入还不带译文与资料版本，下一步 Q73a-3 做（格式版本 2）。
+- 发布、首页、答题仍只用基准语言（Q73b）。

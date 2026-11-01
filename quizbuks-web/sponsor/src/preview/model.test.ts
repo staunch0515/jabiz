@@ -7,14 +7,14 @@ import { toPublication } from '../publishing/api'
 const DRAFT = {
   quiz: { quizId: 'q1', title: 'Coffee basics', kind: 'QUIZ', intro: 'About beans', cover: 'f1', timeLimitSec: 120,
     status: 'DRAFT', latestVersionNo: 0, versionLabel: null, revision: 1, editedAt: '2026-10-26T00:00:00Z',
-    changedSinceVersion: false, questionCount: 2, materialCount: 1, clonedFrom: null },
+    changedSinceVersion: false, questionCount: 2, materialCount: 1, clonedFrom: null, translationLanguages: [] },
   questions: [
     { questionId: 'a', stem: 'One?', image: null, points: 2, selection: null,
       options: [{ optionId: 'x', text: 'Yes', image: null, correct: true }, { optionId: 'y', text: 'No', image: null, correct: false }] },
     { questionId: 'b', stem: 'Two?', image: null, points: 3, selection: null, options: [] },
   ],
   materials: [{ materialId: 'm', kind: 'LINK', title: 'Site', description: null, body: null, url: 'https://example.com',
-    pdf: null, audio: null, images: [], watchToAnswer: false }],
+    pdf: null, audio: null, images: [], watchToAnswer: false, variantOf: null, language: null }],
 } as unknown as Draft
 
 describe('the preview (Q34b)', () => {

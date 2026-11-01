@@ -1,10 +1,13 @@
 import { Check, ExternalLink } from 'lucide-react'
-import { useId } from 'react'
+import { useId, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Badge, EXTENSION_NAMESPACE, FilePreview, MarkdownView } from '@jabiz/admin'
+import { Badge, EXTENSION_NAMESPACE, FilePreview, MarkdownView, SegmentedControl } from '@jabiz/admin'
 import { CONTENT_IMAGE_VARIANTS, DICTIONARY } from './ids'
 import { useLabels } from './hooks'
-import { safeHttpUrl, type Snapshot, type SnapshotMaterial } from './snapshot'
+import { safeHttpUrl, snapshotIn, type Snapshot, type SnapshotMaterial } from './snapshot'
+
+/** The language a version is written in: the base, whose code the snapshot does not hold. */
+const BASE = 'base'
 
 const IMAGE = { image: true, variants: CONTENT_IMAGE_VARIANTS }
 /** PDFs and sounds are downloaded, not played or shown inline (the admin's content security policy stays as it is). */
@@ -74,12 +77,21 @@ function choiceKey(question: { options: { correct: boolean }[] }): 'SINGLE' | 'M
  * Questions are folded sections,
  * open to begin with. Markdown goes only through `MarkdownView` (no raw HTML).
  */
-export function VersionPreview({ content }: { content: Snapshot }) {
+export function VersionPreview({ content: version }: { content: Snapshot }) {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
   const kindLabel = useLabels(DICTIONARY.materialKind)
   const id = useId()
+  // Q73a: a version with other languages is read in each of them; the base first.
+  const languages = Object.keys(version.translations)
+  const [language, setLanguage] = useState<string>(BASE)
+  const content = language === BASE ? version : snapshotIn(version, language)
   return (
     <div className="flex flex-col gap-6" data-testid="version-preview">
+      {languages.length > 0 && (
+        <SegmentedControl<string> value={language} onChange={setLanguage} aria-label={t('preview.language')}
+          data-testid="preview-language" options={[{ value: BASE, label: t('preview.baseLanguage') },
+            ...languages.map((l) => ({ value: l, label: t(`preview.languages.${l}`, { defaultValue: l }) }))]} />
+      )}
       <div className="flex flex-col gap-2">
         <h3 className="flex flex-wrap items-center gap-2 text-lg font-semibold" data-testid="preview-title">
           {content.title}
