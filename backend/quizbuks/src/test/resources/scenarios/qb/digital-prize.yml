@@ -358,7 +358,7 @@ steps:
   - actor: { id: "${u1}", permissions: [qb.play, qb.me] }
     process: QB_ATTEMPT_SUBMIT@latest
     input: { attemptId: "${t1}", publicationId: "${shared}",
-      answers: [{ questionNo: 1, selected: [1] }, { questionNo: 2, selected: [2] }] }
+      answers: [{ questionNo: 1, selected: [1] }, { questionNo: 2, selected: [1] }] }
     expectOutput: { status: SUBMITTED, score: 5, passed: true, reward: 500, rewardStatus: DIGITAL }
   - deliverEvents: true
   - actor: { id: "${u1}", permissions: [qb.play, qb.me] }
@@ -431,7 +431,7 @@ steps:
   - actor: { id: "${u2}", permissions: [qb.play, qb.me] }
     process: QB_ATTEMPT_SUBMIT@latest
     input: { attemptId: "${t2}", publicationId: "${pool}",
-      answers: [{ questionNo: 1, selected: [1] }, { questionNo: 2, selected: [2] }] }
+      answers: [{ questionNo: 1, selected: [1] }, { questionNo: 2, selected: [1] }] }
     expectOutput: { rewardStatus: DIGITAL, reward: 1000 }
   - actor: { id: "${u3}", permissions: [qb.play, qb.me] }
     process: QB_ATTEMPT_START@latest
@@ -441,7 +441,7 @@ steps:
   - actor: { id: "${u3}", permissions: [qb.play, qb.me] }
     process: QB_ATTEMPT_SUBMIT@latest
     input: { attemptId: "${t3}", publicationId: "${pool}",
-      answers: [{ questionNo: 1, selected: [2] }, { questionNo: 2, selected: [2] }] }
+      answers: [{ questionNo: 1, selected: [1] }, { questionNo: 2, selected: [1] }] }
     expectOutput: { rewardStatus: DIGITAL }
   - deliverEvents: true
   - actor: { id: "${u2}", permissions: [qb.play, qb.me] }

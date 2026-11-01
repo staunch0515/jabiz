@@ -156,7 +156,9 @@ public class LegalConfig {
             .item(QbLegal.PRIVACY, "en", "Privacy policy", "zh", "隐私政策", "ja", "プライバシーポリシー")
             .item(QbLegal.COMMERCE_NOTICE, "en", "Specified Commercial Transactions Act notice",
                 "zh", "特定商取引法标示", "ja", "特定商取引法に基づく表記")
-            .item(QbLegal.AI_NOTICE, "en", "AI notice", "zh", "AI 使用说明", "ja", "AI 利用に関する説明"));
+            .item(QbLegal.AI_NOTICE, "en", "AI notice", "zh", "AI 使用说明", "ja", "AI 利用に関する説明")
+            .item(QbLegal.CONTEST_RULES, "en", "Official rules of reward campaigns", "zh", "有奖活动规则",
+                "ja", "懸賞キャンペーンの規約"));
     }
 
     @Bean

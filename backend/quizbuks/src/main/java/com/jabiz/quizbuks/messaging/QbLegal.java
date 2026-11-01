@@ -48,7 +48,14 @@ public final class QbLegal {
      * first AI request (not at sign-in); without a version in effect nobody can ask the AI.
      */
     public static final String AI_NOTICE = "AI_NOTICE";
-    public static final List<String> KINDS = List.of(TERMS_APP, TERMS_SPONSOR, PRIVACY, COMMERCE_NOTICE, AI_NOTICE);
+    /**
+     * The official rules of the campaigns with rewards (Q49a; Apple 5.3, Google Play's contest policy): who runs a
+     * campaign, who may take part, how rewards are decided and given, and that Apple and Google sponsor none of them.
+     * Read by anyone, accepted by nobody (not in {@link #APP_KINDS}).
+     */
+    public static final String CONTEST_RULES = "CONTEST_RULES";
+    public static final List<String> KINDS = List.of(TERMS_APP, TERMS_SPONSOR, PRIVACY, COMMERCE_NOTICE, AI_NOTICE,
+        CONTEST_RULES);
 
     /** What the app's users accept: the takers' terms and the privacy policy. */
     public static final List<String> APP_KINDS = List.of(TERMS_APP, PRIVACY);

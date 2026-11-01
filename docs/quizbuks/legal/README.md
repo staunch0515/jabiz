@@ -13,6 +13,10 @@
 
 4. 第10条的"删除账号"写明了 App 与商户后台的入口：发布含这一节的版本之前，先在生产开启 `QB_APP_ACCOUNT_DELETION` 与 `QB_SPONSOR_ACCOUNT_DELETION`（`deploy/quizbuks/DEPLOY.md` §1a，需要维护连接）。
 
+## 有奖活动规则（Q49a）
+
+`contest-rules.{ja,zh,en}.md` 是有奖活动规则（法律文本种类 `CONTEST_RULES`，页面 `/taker/legal/contest-rules`）的草稿，日文为准据文本：Apple 规则 5.3 与 Google Play 的竞赛政策要求写明 Apple / Google 不是主办方。须由需求方或律师确认（景品表示法上的上限等），填写【】后在管理后台的"法律文本（草稿）"中打开 `CONTEST_RULES` 粘贴、发布；标题：`懸賞キャンペーンの規約` / `有奖活动规则` / `Official rules of reward campaigns`。发布前 App 中的链接打开"尚未发布"。
+
 ## 代码改动时
 
 政策描述的是当前的实现。以下改动要同时修改政策并发布新版本（`requires re-consent` 视变更是否重要而定）：

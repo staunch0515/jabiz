@@ -4972,8 +4972,8 @@
       "code" : "HK",
       "name" : {
         "en" : "Hong Kong",
-        "ja" : "香港",
-        "zh" : "香港"
+        "ja" : "中国香港",
+        "zh" : "中国香港"
       },
       "regions" : "GLOBAL,ASIA",
       "versionNo" : 1,
@@ -6701,8 +6701,8 @@
       "code" : "TW",
       "name" : {
         "en" : "Taiwan",
-        "ja" : "台湾",
-        "zh" : "台湾"
+        "ja" : "中国台湾",
+        "zh" : "中国台湾"
       },
       "regions" : "GLOBAL,ASIA",
       "versionNo" : 1,
@@ -7075,6 +7075,26 @@
         "en" : "> **[TEST PLACEHOLDER] This is not a legal text.** It exists so that development and tests have something to publish. The operator's counsel supplies the real text, in Japanese (which governs) and in English; an administrator replaces this draft with it before going live.\n\n## 1. What is sent to the AI provider\n\nPlaceholder text.\n",
         "ja" : "> **[TEST PLACEHOLDER] これは法的な文書ではありません。** 開発とテストのための仮の文章です。正式な文章は運営者（または弁護士）が日本語（正文）と英語で用意し、公開前に管理者がこの下書きと差し替えます。\n\n## 第1条 AI 提供者に送信される情報\n\n仮の文章です。\n",
         "zh" : "> **[TEST PLACEHOLDER] 这不是法律文本。** 仅供开发与测试发布使用。正式文本由运营方（或律师）以日文（准据文本）和英文提供，上线前由管理员替换此草稿。\n\n## 第一条 发送给 AI 提供方的内容\n\n占位文本。\n"
+      },
+      "changeSummary" : null,
+      "latestVersionNo" : null,
+      "lastPublishedAt" : null,
+      "versionNo" : 1,
+      "effectStartTime" : "2026-10-01T00:00:00Z",
+      "createdTime" : "2026-10-01T00:00:00Z",
+      "processSeqId" : "#op:1"
+    }, {
+      "docId" : "#uuid:588",
+      "kind" : "CONTEST_RULES",
+      "title" : {
+        "en" : "[TEST PLACEHOLDER] Official rules of reward campaigns",
+        "ja" : "[TEST PLACEHOLDER] 懸賞キャンペーンの規約",
+        "zh" : "[TEST PLACEHOLDER] 有奖活动规则"
+      },
+      "body" : {
+        "en" : "> **[TEST PLACEHOLDER] This is not a legal text.** It exists so that development and tests have something to publish. The operator's counsel supplies the real text, in Japanese (which governs) and in English; an administrator replaces this draft with it before going live.\n\n## 1. Who runs a campaign\n\nPlaceholder text.\n",
+        "ja" : "> **[TEST PLACEHOLDER] これは法的な文書ではありません。** 開発とテストのための仮の文章です。正式な文章は運営者（または弁護士）が日本語（正文）と英語で用意し、公開前に管理者がこの下書きと差し替えます。\n\n## 第1条 主催者\n\n仮の文章です。\n",
+        "zh" : "> **[TEST PLACEHOLDER] 这不是法律文本。** 仅供开发与测试发布使用。正式文本由运营方（或律师）以日文（准据文本）和英文提供，上线前由管理员替换此草稿。\n\n## 第一条 主办方\n\n占位文本。\n"
       },
       "changeSummary" : null,
       "latestVersionNo" : null,
