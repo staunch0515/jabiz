@@ -165,6 +165,20 @@ class PublicCountersTest {
     }
 
     @Test
+    void forgetsWhatItHoldsForAnErasedOwner() {
+        PublicCounters counters = counters(10);
+        counters.count(VIEWS, key(), "a").block();
+        counters.count(VIEWS, key(), "b").block();
+        assertThat(counters.pending()).hasSize(2);
+        counters.forgetOwner("someone-else");
+        assertThat(counters.pending()).hasSize(2);
+        counters.forgetOwner("seller-1");
+        assertThat(counters.pending()).isEmpty();
+        // VIEWS names its owner, but not as a user account: not deleted with an account.
+        assertThat(counters.userOwnedCounters()).isEmpty();
+    }
+
+    @Test
     void aKeyWithoutAVisibleRowIsNotCounted() {
         PublicCounters counters = counters(10);
         when(engine.executeRawQuery(any())).thenAnswer(i -> Flux.empty());
