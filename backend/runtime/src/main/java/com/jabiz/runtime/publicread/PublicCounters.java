@@ -38,6 +38,7 @@ import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
@@ -180,6 +181,21 @@ public class PublicCounters {
             visitors.put(seen, Boolean.TRUE);
         }
         return Result.COUNTED;
+    }
+
+    /** The names of the counters whose owner is a user account (deleted with the account, decision D65 item 8). */
+    public List<String> userOwnedCounters() {
+        return counters.values().stream().filter(PublicCounter::ownerIsUser).map(PublicCounter::name).sorted().toList();
+    }
+
+    /**
+     * Forgets the counts held in memory for this owner, so that a write after the owner's account was erased does not
+     * bring them back (this instance only; another writes what it held within one flush interval).
+     */
+    public void forgetOwner(String owner) {
+        synchronized (pending) {
+            pending.keySet().removeIf(count -> owner.equals(count.owner()));
+        }
     }
 
     /** The counts held in memory, by key and day (tests). */

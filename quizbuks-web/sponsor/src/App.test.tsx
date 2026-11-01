@@ -36,6 +36,9 @@ const privacy = { kind: 'PRIVACY', versionId: 'p1', versionNo: 1, title: { en: '
  * The server as the console sees it (built with the base / in tests): its entry, the identity providers given, and for a
  * signed-in sponsor their identity and onboarding. Records what was asked and posted.
  */
+/** What the account's deletion says (Q70): off unless a test turns it on. */
+let deletionStatus: Record<string, unknown> = { available: false, pending: null, notices: [] }
+
 function server(me?: Me, providers: unknown[] = []) {
   const asked: string[] = []
   const posted: { path: string; body: unknown }[] = []
@@ -53,6 +56,8 @@ function server(me?: Me, providers: unknown[] = []) {
         return json(200, ENTRY)
       case '/api/auth/oidc/providers':
         return json(200, providers)
+      case '/api/auth/account/deletion':
+        return json(200, deletionStatus)
       case '/api/auth/me':
         return me ? json(200, { userId: 'u2', displayName: 'Sara', email: 'sara@example.com', roles: ['QB_SPONSOR'],
           permissions: ['qb.sponsor.me', 'qb.account.read'], emailVerified: me.emailVerified ?? true,
@@ -357,6 +362,25 @@ describe('a signed-in sponsor', () => {
     })
     await waitFor(() => expect(window.location.pathname).toBe('/login'))
     expect(await screen.findByTestId('idle-locked')).toBeInTheDocument()
+  })
+
+  it('offers the deletion of the account only where the entry allows it (Q70)', async () => {
+    server({ sponsor: null })
+    window.history.replaceState(null, '', '/account')
+    const { unmount } = render(<App />)
+    expect(await screen.findByTestId('account')).toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByTestId('account-deletion-section')).toBeNull())
+    unmount()
+
+    deletionStatus = { available: true, pending: null, notices: [
+      { code: 'qb.publications-end', message: 'Your 2 running publication(s) will end; their records stay.' }] }
+    try {
+      render(<App />)
+      const section = await screen.findByTestId('account-deletion-section')
+      expect(section).toHaveTextContent('Delete the account')
+    } finally {
+      deletionStatus = { available: false, pending: null, notices: [] }
+    }
   })
 
   it('turns the console\'s notifications on and off on the account page', async () => {
