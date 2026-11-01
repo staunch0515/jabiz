@@ -2382,7 +2382,8 @@ Apple 与平台的 OIDC（10 §12）有四处不合：客户端密钥不是固�
    Apple 的邮箱由 Apple 验证，隐藏邮箱（`@privaterelay.appleid.com`）也是受担保的地址，照 D39 开户。
 5. **撤销授权（17j-b）**：换令牌得到的刷新令牌以 `SealedSecrets`（`JABIZ_SEAL_KEY`，有 Apple 提供方时启动检查要求它）为该关联密封保存（登录与关联时由子流程写入，每次登录换成新的）。
    不在每条删除关联的途径上各写一段：定时任务找出**关联已不在**的令牌（账号抹除、本人解除、管理员删除都一样），逐项以 `internal()` 流程用平台的提供方客户端（同换令牌，超时 5 秒）
-   调用发现文档的 `revocation_endpoint`（Apple 的 `/auth/revoke`）；成功即删除令牌，失败按 15 分钟起倍增、至多一天的间隔重试，至多 12 次后留给管理员。不在请求中直接调用 Apple。
+   调用发现文档的 `revocation_endpoint`（Apple 的 `/auth/revoke`）；成功即删除令牌，失败按 15 分钟起倍增、至多一天的间隔重试，至多 12 次后给管理员登记待办。不在请求中直接调用 Apple。
+   同一个 Apple 账号建了新的关联时（如删除后又以同一个 Apple ID 开户），旧关联的令牌随之删除、不撤销：授权是该账号对本应用的一个，撤销旧令牌会连新关联的一起撤销。
 6. **前端**：`OidcButtons` 对 `kind: apple` 显示 Apple 的标志与 Apple 规定的标题（"Sign in with Apple" / "通过 Apple 登录" / "Appleでサインイン"，注册时"Sign up …"），不用 `labels`；
    标志取文字颜色（浅色按钮上黑、深色上白，同 Apple 的白色描边与黑色样式；D44 的品牌例外）。
 
