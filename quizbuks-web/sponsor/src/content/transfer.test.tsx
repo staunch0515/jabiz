@@ -50,7 +50,8 @@ const DRAFT: Draft = {
 const CHECK: ImportCheck = { formatVersion: 1, currentVersion: 1, readers: [1], kind: 'QUIZ', title: 'Coffee basics',
   questions: 2, materials: 1, files: [
     { key: 'f1', policy: 'qb.content.image', name: 'image.jpg', type: 'image/jpeg', size: 3 },
-    { key: 'f2', policy: 'qb.content.pdf', name: 'pdf.pdf', type: 'application/pdf', size: 3 }] }
+    { key: 'f2', policy: 'qb.content.pdf', name: 'pdf.pdf', type: 'application/pdf', size: 3 }],
+  language: null, languages: [] }
 
 interface Server {
   /** Answers to processes by name, in turn (the last one repeats). */
@@ -138,9 +139,10 @@ describe('the quiz file helpers', () => {
     const progress: number[][] = []
     const document = await exportDraft(DRAFT, (done, total) => progress.push([done, total]), read)
     expect(document.format).toBe(QUIZ_FILE_FORMAT)
-    expect(document.formatVersion).toBe(1)
+    expect(document.formatVersion).toBe(2)
     expect(document.quiz).toEqual({ kind: 'QUIZ', title: 'Coffee basics', intro: 'About coffee.',
-      timeLimitSec: 300, cover: 'f1' })
+      timeLimitSec: 300, cover: 'f1', language: 'en' })
+    expect(document.translations).toBeUndefined()
     expect(document.materials[0].pdf).toBe('f2')
     expect(document.questions[0].image).toBe('f3')
     // The cover again, the same key.
@@ -153,6 +155,34 @@ describe('the quiz file helpers', () => {
     expect(progress.at(-1)).toEqual([3, 3])
     // No ids, owners or revisions of this system.
     expect(JSON.stringify(document)).not.toMatch(/quizId|questionId|ownerId|revision/)
+  })
+
+  it('export the other languages by the snapshot\'s keys, with their own files and hashes (Q73a)', async () => {
+    const read = vi.fn(async (id: string) => new Blob([id], { type: id.includes('pdf') ? 'application/pdf'
+      : 'image/jpeg' }))
+    const draft: Draft = {
+      ...DRAFT,
+      quiz: { ...DRAFT.quiz, translationLanguages: ['zh'] },
+      variants: [{ ...DRAFT.materials[0], materialId: 'm9', title: '论文', pdf: 'file-pdf-zh', variantOf: 'm1',
+        language: 'zh' }],
+      translations: [
+        { translationId: 't1', language: 'zh', key: 'quiz.title', text: '咖啡入门', image: null,
+          sourceHash: 'aaaaaaaaaaaaaaaa' },
+        { translationId: 't2', language: 'zh', key: `question:${DRAFT.questions[0].questionId}.image`, text: null,
+          image: 'file-zh', sourceHash: null },
+        { translationId: 't3', language: 'zh', key: `option:${DRAFT.questions[0].options[0].optionId}.text`,
+          text: '咖啡', image: null, sourceHash: 'bbbbbbbbbbbbbbbb' },
+      ],
+    }
+    const document = await exportDraft(draft, undefined, read)
+    expect(document.translations?.zh).toEqual({
+      texts: { title: '咖啡入门', 'q1.o1.text': '咖啡' },
+      images: { 'q1.image': 'f4' },
+      materials: [{ no: 1, kind: 'PDF', title: '论文', description: null, body: null, url: null, pdf: 'f5',
+        audio: null, images: [] }],
+      hashes: { title: 'aaaaaaaaaaaaaaaa', 'q1.o1.text': 'bbbbbbbbbbbbbbbb' },
+    })
+    expect(Object.keys(document.files)).toEqual(['f1', 'f2', 'f3', 'f4', 'f5'])
   })
 
   it('round-trip the bytes, leave the data out for the server and name the file after the title', async () => {
@@ -220,7 +250,7 @@ describe('the quiz list', () => {
     await waitFor(() => expect(click).toHaveBeenCalled())
     // The list's cover thumbnail makes an object URL too: the download is the JSON one.
     const document = JSON.parse(await created.find((blob) => blob.type === 'application/json')!.text())
-    expect(document).toMatchObject({ format: QUIZ_FILE_FORMAT, formatVersion: 1, quiz: { title: 'Coffee basics',
+    expect(document).toMatchObject({ format: QUIZ_FILE_FORMAT, formatVersion: 2, quiz: { title: 'Coffee basics',
       cover: 'f1' }, questions: [{ stem: 'First?', points: 2 }] })
     expect(document.files.f1).toMatchObject({ type: 'image/png', size: 3, data: btoa('\x01\x02\x03') })
   })

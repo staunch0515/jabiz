@@ -37,7 +37,7 @@ test('a quiz is exported to a file and imported back as a new draft', async ({ p
   expect(file.suggestedFilename()).toMatch(/\.quizbuks\.json$/)
   const path = await file.path()
   const document = JSON.parse(await readFile(path, 'utf8'))
-  expect(document).toMatchObject({ format: 'quizbuks.quiz', formatVersion: 1, quiz: { title, cover: 'f1' } })
+  expect(document).toMatchObject({ format: 'quizbuks.quiz', formatVersion: 2, quiz: { title, cover: 'f1' } })
   expect(Object.keys(document.files)).toEqual(['f1', 'f2'])
 
   await page.getByTestId('quiz-import-file').setInputFiles(path)

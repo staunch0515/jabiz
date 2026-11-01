@@ -1,5 +1,7 @@
 import { ApiError, fetchFileContent, runProcess, uploadFile } from '@jabiz/client'
-import { readDraft, type Draft } from './api'
+import type { ContentLanguage } from '../qb/api'
+import { readDraft, type Draft, type Material } from './api'
+import { optionImageKey, optionTextKey, questionImageKey, stemKey, translationsIn, variantOf } from './languages'
 import { CONTENT_FILE_POLICY, CONTENT_PROCESS } from './ids'
 
 /**
@@ -10,8 +12,11 @@ import { CONTENT_FILE_POLICY, CONTENT_PROCESS } from './ids'
  */
 
 export const QUIZ_FILE_FORMAT = 'quizbuks.quiz'
-/** The version this console writes (`QuizFileFormat.CURRENT`); the server says which versions it reads. */
-export const QUIZ_FILE_VERSION = 1
+/**
+ * The version this console writes (`QuizFileFormat.CURRENT`); the server says which versions it reads. Version 2
+ * (Q73a) adds the base language and the other languages.
+ */
+export const QUIZ_FILE_VERSION = 2
 /** Above this size the export asks before going on (base64 adds about a third to the files). */
 export const LARGE_EXPORT_BYTES = 100 * 1024 * 1024
 
@@ -23,23 +28,40 @@ export interface QuizFileEntry {
   data: string
 }
 
-/** The file's JSON (version 1). */
+type FileMaterial = {
+  kind: string; title: string | null; description: string | null; body: string | null; url: string | null
+  pdf: string | null; audio: string | null; images: { image: string; caption: string | null }[]
+  /** Q19, written only when true (absent is false). */
+  watchToAnswer?: true
+}
+
+/**
+ * One other language of the quiz (version 2, `QuizFile.Language`): texts and own images by their key in a version's
+ * snapshot (`q3.stem`, `q3.o2.text`, `q3.image`), its own materials numbered as the base material each stands for,
+ * and the base hashes its texts were made from (an out-of-date translation stays out of date).
+ */
+export interface QuizFileLanguage {
+  texts: Record<string, string>
+  images: Record<string, string>
+  materials: (FileMaterial & { no: number })[]
+  hashes: Record<string, string>
+}
+
+/** The file's JSON (version 2). */
 export interface QuizFileDocument {
   format: typeof QUIZ_FILE_FORMAT
   formatVersion: number
   exportedAt: string
-  quiz: { kind: string; title: string; intro: string | null; timeLimitSec: number | null; cover: string | null }
-  materials: {
-    kind: string; title: string | null; description: string | null; body: string | null; url: string | null
-    pdf: string | null; audio: string | null; images: { image: string; caption: string | null }[]
-    /** Q19, written only when true (absent is false). */
-    watchToAnswer?: true
-  }[]
+  quiz: { kind: string; title: string; intro: string | null; timeLimitSec: number | null; cover: string | null
+    language: ContentLanguage }
+  materials: FileMaterial[]
   questions: {
     stem: string | null; image: string | null; points: number; selection: string | null
     options: { text: string | null; image: string | null; correct: boolean }[]
   }[]
   files: Record<string, QuizFileEntry>
+  /** Present only when the quiz has other languages. */
+  translations?: Partial<Record<ContentLanguage, QuizFileLanguage>>
 }
 
 /** Progress of an export or import: files done out of all. */
@@ -90,23 +112,58 @@ export async function exportDraft(draft: Draft, onProgress?: Progress,
     return keys.get(fileId)!.key
   }
   const { quiz } = draft
+  const material = (m: Material): FileMaterial => ({
+    kind: m.kind, title: m.title, description: m.description, body: m.body, url: m.url,
+    pdf: key(m.pdf, 'pdf'), audio: key(m.audio, 'audio'),
+    images: m.images.map((i) => ({ image: key(i.image, 'image')!, caption: i.caption })),
+    ...(m.watchToAnswer ? { watchToAnswer: true as const } : {}),
+  })
   const document: QuizFileDocument = {
     format: QUIZ_FILE_FORMAT,
     formatVersion: QUIZ_FILE_VERSION,
     exportedAt: new Date().toISOString(),
     quiz: { kind: quiz.kind, title: quiz.title, intro: quiz.intro, timeLimitSec: quiz.timeLimitSec,
-      cover: key(quiz.cover, 'image') },
-    materials: draft.materials.map((m) => ({
-      kind: m.kind, title: m.title, description: m.description, body: m.body, url: m.url,
-      pdf: key(m.pdf, 'pdf'), audio: key(m.audio, 'audio'),
-      images: m.images.map((i) => ({ image: key(i.image, 'image')!, caption: i.caption })),
-      ...(m.watchToAnswer ? { watchToAnswer: true as const } : {}),
-    })),
+      cover: key(quiz.cover, 'image'), language: quiz.language },
+    materials: draft.materials.map(material),
     questions: draft.questions.map((q) => ({
       stem: q.stem, image: key(q.image, 'image'), points: q.points, selection: q.selection,
       options: q.options.map((o) => ({ text: o.text, image: key(o.image, 'image'), correct: o.correct })),
     })),
     files: {},
+  }
+  // Q73a: each other language as the draft has it, complete or not.
+  if (quiz.translationLanguages.length > 0) {
+    document.translations = {}
+    for (const language of quiz.translationLanguages) {
+      const t = translationsIn(draft, language)
+      const out: QuizFileLanguage = { texts: {}, images: {}, materials: [], hashes: {} }
+      const text = (draftKey: string, fileKey: string) => {
+        const row = t.get(draftKey)
+        if (row?.text) {
+          out.texts[fileKey] = row.text
+          if (row.sourceHash) out.hashes[fileKey] = row.sourceHash
+        }
+      }
+      const image = (draftKey: string, fileKey: string) => {
+        const file = key(t.get(draftKey)?.image ?? null, 'image')
+        if (file) out.images[fileKey] = file
+      }
+      text('quiz.title', 'title')
+      text('quiz.intro', 'intro')
+      draft.questions.forEach((q, i) => {
+        text(stemKey(q.questionId), `q${i + 1}.stem`)
+        image(questionImageKey(q.questionId), `q${i + 1}.image`)
+        q.options.forEach((o, j) => {
+          text(optionTextKey(o.optionId), `q${i + 1}.o${j + 1}.text`)
+          image(optionImageKey(o.optionId), `q${i + 1}.o${j + 1}.image`)
+        })
+      })
+      draft.materials.forEach((base, i) => {
+        const own = variantOf(draft, base, language)
+        if (own) out.materials.push({ no: i + 1, ...material({ ...own, watchToAnswer: false }) })
+      })
+      document.translations[language] = out
+    }
   }
   let done = 0
   onProgress?.(0, keys.size)
@@ -181,6 +238,9 @@ export interface ImportCheck {
   questions: number
   materials: number
   files: { key: string; policy: string; name: string; type: string; size: number }[]
+  /** Q73a: the base language the file names (none in a version 1 file), and its other languages. */
+  language: ContentLanguage | null
+  languages: ContentLanguage[]
 }
 
 /** A file read as JSON; throws `SyntaxError` for anything else. */

@@ -16,6 +16,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { Download, Upload } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { QB } from '../qb/messages'
 import { SPONSOR } from '../messages'
 import { problemText } from '../qb/problems'
 import { navigate } from '../qb/router'
@@ -106,6 +107,7 @@ function problemsOf(error: unknown, missing: (key: string) => string): string[] 
  */
 export function ImportQuizButton() {
   const { t } = useTranslation(SPONSOR)
+  const { t: tQb } = useTranslation(QB)
   const queryClient = useQueryClient()
   const input = useRef<HTMLInputElement>(null)
   const [state, setState] = useState<ImportState | null>(null)
@@ -167,6 +169,11 @@ export function ImportQuizButton() {
               <p>{t('quizzes.transfer.summary', { title: state.check.title, questions: state.check.questions,
                 materials: state.check.materials, files: state.check.files.length })}</p>
               {state.check.kind === 'SURVEY' && <p>{t('quizzes.transfer.survey')}</p>}
+              {(state.check.languages?.length ?? 0) > 0 && state.check.language && (
+                <p data-testid="quiz-import-languages">{t('quizzes.transfer.languages', {
+                  languages: [state.check.language, ...state.check.languages].map((l) => tQb(`languages.${l}`))
+                    .join(' · ') })}</p>
+              )}
               <p className="text-muted-foreground" data-testid="quiz-import-version">
                 {t('quizzes.transfer.version', { version: state.check.formatVersion,
                   current: state.check.currentVersion })}
