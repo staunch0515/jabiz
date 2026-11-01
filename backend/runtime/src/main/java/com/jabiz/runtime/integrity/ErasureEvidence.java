@@ -22,7 +22,14 @@ public final class ErasureEvidence {
         }
     }
 
-    private static final Comparator<Item> ORDER = Comparator.comparing(Item::table).thenComparing(Item::rowKey);
+    /**
+     * By table and row; a row written twice by one purge (two statements reaching it) by its digests and columns too,
+     * so that the signed text does not depend on the order the database returns the entries in.
+     */
+    private static final Comparator<Item> ORDER = Comparator.comparing(Item::table).thenComparing(Item::rowKey)
+        .thenComparing(Item::before, Comparator.nullsFirst(Comparator.naturalOrder()))
+        .thenComparing(Item::after, Comparator.nullsFirst(Comparator.naturalOrder()))
+        .thenComparing(item -> String.join(",", item.columns()));
 
     private ErasureEvidence() {
     }

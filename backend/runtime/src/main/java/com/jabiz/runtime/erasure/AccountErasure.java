@@ -34,6 +34,8 @@ import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -186,8 +188,9 @@ public class AccountErasure {
             return optOuts(user)
                 .doOnNext(optOut -> ctx.changes().delete(optOut.entityType(), optOut.id(), optOut.version()))
                 .thenMany(Flux.fromIterable(erasers.entities()))
-                .concatMap(erased -> applicationRows(erased, user.id())
-                    .doOnNext(row -> register(ctx, erased, row)))
+                .concatMap(erased -> applicationRows(erased, user.id()).map(row -> Map.entry(erased, row)))
+                .collectList()
+                .doOnNext(found -> register(ctx, found))
                 .then(Mono.defer(() -> counts(user)))
                 .then(Mono.defer(() -> record(ctx, user)));
         }
@@ -214,7 +217,7 @@ public class AccountErasure {
          * then delete the account), nor one they proved before moving to another (it may be someone else's now).
          */
         private Flux<EntityInstance> optOuts(EntityInstance user) {
-            List<Object> addresses = new java.util.ArrayList<>();
+            List<Object> addresses = new ArrayList<>();
             if (SecurityEntities.emailVerified(user)) {
                 addresses.add(user.get("email").toString().toLowerCase(java.util.Locale.ROOT));
             }
@@ -241,13 +244,14 @@ public class AccountErasure {
                 : Flux.fromIterable(rows));
         }
 
-        private static void register(ProcessContext ctx, ErasedEntity erased, EntityInstance row) {
-            if (erased.action() == ErasedEntity.RowAction.DELETE) {
-                ctx.changes().delete(row.entityType(), row.id(), row.version());
-            } else {
-                Map<String, Object> cleared = new LinkedHashMap<>();
-                erased.fields().forEach(field -> cleared.put(field, null));
-                ctx.changes().update(row.entityType(), row.id(), row.version(), cleared);
+        private static void register(ProcessContext ctx, List<Map.Entry<ErasedEntity, EntityInstance>> found) {
+            for (RowWrite write : writes(found)) {
+                EntityInstance row = write.row();
+                if (write.delete()) {
+                    ctx.changes().delete(row.entityType(), row.id(), row.version());
+                } else {
+                    ctx.changes().update(row.entityType(), row.id(), row.version(), write.cleared());
+                }
             }
         }
 
@@ -269,5 +273,48 @@ public class AccountErasure {
             Object value = ctx.get(key);
             return value == null ? List.of() : (List<EntityInstance>) value;
         }
+    }
+
+    /** What becomes of one of the user's rows: deleted, or its personal fields cleared. */
+    record RowWrite(EntityInstance row, boolean delete, Map<String, Object> cleared) {
+
+        RowWrite {
+            cleared = Collections.unmodifiableMap(new LinkedHashMap<>(cleared));
+        }
+
+        static RowWrite of(EntityInstance row, ErasedEntity erased) {
+            boolean delete = erased.action() == ErasedEntity.RowAction.DELETE;
+            Map<String, Object> cleared = new LinkedHashMap<>();
+            if (!delete) {
+                erased.fields().forEach(field -> cleared.put(field, null));
+            }
+            return new RowWrite(row, delete, cleared);
+        }
+
+        /** The row found by another declaration too: deleted if either deletes it, else both one's fields cleared. */
+        RowWrite and(RowWrite other) {
+            if (delete || other.delete) {
+                return new RowWrite(row, true, Map.of());
+            }
+            Map<String, Object> both = new LinkedHashMap<>(cleared);
+            both.putAll(other.cleared);
+            return new RowWrite(row, false, both);
+        }
+    }
+
+    /**
+     * The rows found, each written once: an entity may be declared under several user fields (decision D62 item 8),
+     * and a row found by two of them (a sponsor who claimed their own invitation) is deleted if one says so, else its
+     * fields of every declaration are cleared.
+     */
+    static List<RowWrite> writes(List<Map.Entry<ErasedEntity, EntityInstance>> found) {
+        Map<List<Object>, RowWrite> writes = new LinkedHashMap<>();
+        for (Map.Entry<ErasedEntity, EntityInstance> entry : found) {
+            EntityInstance row = entry.getValue();
+            ErasedEntity erased = entry.getKey();
+            writes.merge(List.of(row.entityType(), String.valueOf(row.id())), RowWrite.of(row, erased),
+                RowWrite::and);
+        }
+        return List.copyOf(writes.values());
     }
 }

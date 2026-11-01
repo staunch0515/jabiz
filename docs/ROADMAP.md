@@ -4889,4 +4889,14 @@ D17 下匿名不能写任何东西（15 §10）。
 | 17za-4 | 前端：`@jabiz/client` 的 `joinEntry`；OpenAPI 快照与生成的类型 |
 | 17za-5 | 示范与测试：`app` 的 `PortalSignUpGuard`（被封禁客户的账号不能加入门户，原因 `commerce.customer-blocked`）；`SignUpGuardTypesTest`、`SignUpGuardsTest`、`SignUpGuardIT`、`PortalIT`、`account.test.tsx`；10 §15.15、决策 D66 |
 
-**17za 状态**：📝 待评审（分支 `1.3/phase-17za-signed-in-join`）。
+**17za 状态**：✅ 完成（#389）。
+
+### 17zb 一个实体按几个用户字段抹除（需求 2026-11-01，决策 D62 第 8 条）
+
+**缘由**：QuizBuks 抹除答题者时，邀请表与店员表中他的行由另一个字段指向他（邀请的认领人、店员本人），而商户的抹除已按发出人、商户声明了这两张表；平台只许一个实体声明一次，清除也只认最后一条声明的行，前一条的审计记录不被遮蔽。
+
+| # | 内容 |
+|---|---|
+| 17zb | 同一实体可按不同的用户字段声明几次（启动检查改为同一实体、同一用户字段只一次）；`ACCOUNT_ERASE` 同一行只写一次（有 `delete` 即删除，否则清空各条的字段）；`ERASURE_PURGE` 对一张表一条语句（每列只在声明它的声明找到该行时覆盖），审计与单据按找到该行的声明处理，清除条目的签名顺序与数据库的返回顺序无关。测试：`AccountErasureTest`、`ErasureEvidenceTest`、`ErasureIT`（两个用户字段与两者都找到的行：个人信息与审计都不留，另一声明的字段保留，封存仍可校验；同一用户字段两次是启动错误） |
+
+**17zb 状态**：📝 待评审（分支 `1.3/phase-17zb-erasure-fields`）。
