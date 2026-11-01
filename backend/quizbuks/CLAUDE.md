@@ -60,6 +60,8 @@
   - 版本只收**完整的语言**：译全且没有过时的；资料可以回落到基准，不影响完整（D-Q73-5、D-Q73-7）。有翻译的快照 `schema = 2`（`translations`），没有的与以前逐字相同。
   - **发布的语言**（Q73b，`publishing.PublicationLanguages`）：发布的 `languages` 是版本语言的一部分（第一个是首选，空即只有基准），名称与说明的译文在 `translations`（带所译原文的哈希，过时即提交被拒）；卡片冻结 `languages` 与只含文字的 `translations`。
     首页、收件箱按卡片 `languages` 与读者语言**有交集**筛选，文字按显示语言取；答题语言开始时定下（`QbAttempt.language`），之后一律经 `PlaySteps.inLanguage` 读快照、经 `PublicationLanguages.cardText` 取发布文字。
+  - **AI 翻译**（Q73d-1，`content.ai.AiTranslateJob`、`AiTranslations`）：只发文字（正误、分数、图片、文件、元素键都不发），候选只在作业中保存，写入只经 `QB_AI_TRANSLATION_ACCEPT`（每段 `reviewed`，规则即 `TranslationProcesses.apply`），哈希取 AI 拿到的原文的；计入商家现有的 AI 限额。
+    发布文字的翻译（`PUBLICATION_TEXTS`）只给候选，由向导填入、随 `QB_PUBLICATION_SAVE` 保存；审核人的对照检查（`QB_AI_TRANSLATION_CHECK_REQUEST`）只作参考、计在审核人名下，决定不等待它。
   - 按语言读快照只经 `QuizSnapshots.in`；前端照抄的是商家后台的 `content/languages.ts`、`preview/model.ts` 和后台扩展的 `snapshot.ts`，改规则时几处一起改。
 - **发布方**（S0，`publishing.PublisherKind`，`docs/quizbuks/shopify/S0-publisher.md`）：引擎里"谁发布的"是一对不可变、必填的字段 `publisherKind`（`SPONSOR` / `SHOPIFY_SHOP`，字典 `urn:jabiz:dict:quizbuks:publisher-kind`）+ `publisherId`（`SPONSOR` 的编号就是商家的用户编号），
   以 `PublisherKind.declare(eb, processOnly)` 声明；S0 之前就有行被封存的五张只追加表（发布、档位、现金、兑换、电子奖品的 `*_version`）用 `declareSealed`：列仍叫 `sponsor_id`（V30，被完整性封存的列只能增加、不能改名，平台 21 §2.1，`SealedColumnsMigrationIT`）；其他表，包括以后新建的只追加表，用 `declare`，列是 `publisher_id`。**一条规则定范围**：凡是"发布的所有者的副本"（发布、档位、卡片、`QbPublicationOwner`、会话、分析的三张表、现金 / 兑换 / 电子奖品与码池、邀请）带这一对；

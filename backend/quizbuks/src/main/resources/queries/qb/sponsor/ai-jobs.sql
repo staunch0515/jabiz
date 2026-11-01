@@ -9,7 +9,8 @@ datasets:
   QbAiJob: urn:jabiz:dataset:sponsor:QbAiJob
 params:
   quizId: { like: QbAiJob.quizId, required: true, description: The quiz }
-  kind:   { like: QbAiJob.kind, description: "If given, only jobs of this kind (QUESTIONS or COVER)" }
+  kind:   { like: QbAiJob.kind, description: "If given, only jobs of this kind (QUESTIONS, COVER, TRANSLATION or PUBLICATION_TEXTS)" }
+  publicationId: { kind: { type: text, maxLength: 36 }, description: "Q73d-2: if given, only the jobs of this publication's texts" }
 results:
   aiJobId:        { from: QbAiJob.aiJobId }
   externalJobId:  { from: QbAiJob.externalJobId }
@@ -50,3 +51,5 @@ SELECT
 FROM {{QbAiJob}} j
 WHERE j.{{QbAiJob.quizId}} = :quizId
   AND (CAST(:kind AS varchar) IS NULL OR j.{{QbAiJob.kind}} = :kind)
+  AND (CAST(:publicationId AS varchar) IS NULL
+       OR CAST(j.{{QbAiJob.params}} AS jsonb) ->> 'publicationId' = CAST(:publicationId AS varchar))

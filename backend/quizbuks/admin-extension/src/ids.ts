@@ -34,6 +34,8 @@ export const DATASET = {
 
 /** SQL templates (`queries/qb/admin`). */
 export const TEMPLATE = {
+  /** Q73d-2: the latest AI comparison of a publication's translations in one language (its reviewers). */
+  translationCheck: 'qb.admin.ai-translation-check',
   /** Q70: every referral, with its people (support and finance). */
   referrals: 'qb.admin.referrals',
   /** Sponsors' pages (Q60a-3): the list, the review queue and one page (an operator's own sponsors' only). */
@@ -434,6 +436,9 @@ export const SPONSOR_PRODUCT_PROCESS = {
 } as const
 
 /** Closing a publication's reports (Q49a): headquarters', and an operator's for its sponsors. */
+/** Q73d-2: a reviewer's AI comparison of a publication's translations (`content.ai.AiProcesses`). */
+export const TRANSLATION_CHECK_PROCESS = 'QB_AI_TRANSLATION_CHECK_REQUEST'
+
 export const REPORT_PROCESS = {
   resolve: 'QB_REPORT_RESOLVE',
   operatorResolve: 'QB_OPERATOR_REPORT_RESOLVE',

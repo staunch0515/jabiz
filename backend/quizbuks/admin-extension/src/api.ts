@@ -1,5 +1,5 @@
-import { api, ApiError, runQuery, unwrap, type Filter } from '@jabiz/admin'
-import { DATASET, PAGE_LIMIT, SPONSOR_KIND, TEMPLATE } from './ids'
+import { api, ApiError, runProcess, runQuery, unwrap, type Filter } from '@jabiz/admin'
+import { DATASET, PAGE_LIMIT, SPONSOR_KIND, TEMPLATE, TRANSLATION_CHECK_PROCESS } from './ids'
 import { parseSnapshot, type Snapshot } from './snapshot'
 
 /*
@@ -663,3 +663,41 @@ export async function readInvitationSummary(publicationId: string): Promise<Invi
   return { total: count(row.total), added: count(row.added), queued: count(row.queued), sent: count(row.sent),
     started: count(row.started), answered: count(row.answered) }
 }
+
+/** Q73d-2: the AI's verdict on one translated text (its key in the version, or `publication.<field>`). */
+export interface CheckVerdict {
+  key: string
+  consistent: boolean
+  note: string
+}
+
+/** The latest AI comparison of a publication's translations into one language (`qb.admin.ai-translation-check`). */
+export interface TranslationCheck {
+  aiJobId: string
+  status: string
+  verdicts: CheckVerdict[]
+  failureCode: string | null
+  requestedAt: string
+}
+
+function verdictsOf(value: unknown): CheckVerdict[] {
+  if (typeof value !== 'string' || !value) return []
+  try {
+    const document = JSON.parse(value) as { verdicts?: { key?: unknown; consistent?: unknown; note?: unknown }[] }
+    return (document.verdicts ?? []).map((v) => ({ key: String(v.key ?? ''), consistent: v.consistent === true,
+      note: String(v.note ?? '') })).filter((v) => v.key !== '')
+  } catch {
+    return []
+  }
+}
+
+export async function readTranslationCheck(publicationId: string, language: string): Promise<TranslationCheck | null> {
+  const page = await runQuery<Record<string, unknown>>(TEMPLATE.translationCheck,
+    { params: { publicationId, language }, limit: 1 })
+  const row = page.items[0]
+  return row ? { aiJobId: String(row.aiJobId), status: String(row.status ?? ''), verdicts: verdictsOf(row.candidates),
+    failureCode: str(row.failureCode), requestedAt: String(row.requestedAt ?? '') } : null
+}
+
+export const requestTranslationCheck = (publicationId: string, language: string) =>
+  runProcess<{ aiJobId: string; status: string }>(TRANSLATION_CHECK_PROCESS, { publicationId, language })

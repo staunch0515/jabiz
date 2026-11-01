@@ -128,6 +128,8 @@ export interface Translation {
   image: string | null
   /** The hash of the base text it was made from (`languages.ts`'s `sourceHash`); none for an image. */
   sourceHash: string | null
+  /** Q73d-1: who wrote it: the sponsor (`SPONSOR`) or the AI after the sponsor checked it (`AI`). */
+  translatedBy?: string | null
 }
 
 /**
@@ -410,6 +412,7 @@ export function assembleDraft(quiz: Row, questions: Row[], options: Row[], mater
       text: str(row.text),
       image: str(row.image),
       sourceHash: str(row.sourceHash),
+      translatedBy: str(row.translatedBy),
     })),
   }
 

@@ -45,6 +45,8 @@ type Answer = { status: number; body: unknown }
 
 interface Server {
   processes?: Record<string, Answer[]>
+  /** Q73d-2: the latest AI job of the publication's texts. */
+  aiTexts?: Record<string, unknown>
   publication?: Record<string, unknown> | null
   tiers?: Record<string, unknown>[]
   /** Holds the answers to searches of the quizzes (with `q`) until it resolves. */
@@ -207,6 +209,8 @@ function server(options: Server = {}) {
           offset: 0, limit: 1 })
       case '/api/queries/qb.sponsor.quiz-versions':
         return json(200, { items: options.versions ?? VERSIONS, offset: 0, limit: 100 })
+      case '/api/queries/qb.sponsor.ai-jobs':
+        return json(200, { items: options.aiTexts ? [options.aiTexts] : [], offset: 0, limit: 1 })
       default:
         return json(404, {})
     }
@@ -424,6 +428,29 @@ describe('the publication wizard', () => {
     await waitFor(() => expect(processCalls('QB_PUBLICATION_SAVE')).toHaveLength(1))
     expect(processCalls('QB_PUBLICATION_SAVE')[0]).toMatchObject({ languages: ['zh', 'en'],
       translations: { zh: { name: '咖啡周' } } })
+  })
+
+  it('shows the AI\'s suggestions of the publication\'s texts, each used as confirmed (Q73d-2)', async () => {
+    const { processCalls } = server({ versions: [{ ...VERSIONS[0], language: 'en', languages: 'en,zh' }],
+      publication: { ...DRAFT, languages: 'en,zh' },
+      aiTexts: { aiJobId: 'j7', externalJobId: 'x7', kind: 'PUBLICATION_TEXTS', status: 'READY',
+        params: JSON.stringify({ language: 'zh', publicationId: 'p1' }), candidateCount: 1, invalidCount: 0,
+        acceptedCount: 0, requestedAt: '2026-10-14T01:00:00Z', finishedAt: '2026-10-14T01:01:00Z',
+        expiresAt: '2026-10-21T01:01:00Z', candidates: JSON.stringify({ schema: 1, language: 'zh', translations: [
+          { no: 1, key: 'publication.name', sourceHash: 'h', text: '咖啡周（AI）' }] }) },
+      processes: { QB_AI_PUBLICATION_TEXTS_ACCEPT: [{ status: 200, body: { output: { aiJobId: 'j7',
+        status: 'ACCEPTED' } } }], QB_PUBLICATION_SAVE: [saved(4)] } })
+    window.history.replaceState(null, '', '/publications/p1?step=1')
+    render(<App />)
+    const texts = await screen.findByTestId('publication-texts-zh')
+    expect(await within(texts).findByTestId('publication-ai-suggestion')).toHaveTextContent('咖啡周（AI）')
+    await userEvent.click(within(texts).getByTestId('publication-ai-suggestion-use'))
+    expect(within(texts).getByTestId('publication-text-zh-name')).toHaveValue('咖啡周（AI）')
+    await waitFor(() => expect(processCalls('QB_AI_PUBLICATION_TEXTS_ACCEPT')).toEqual([{ aiJobId: 'j7',
+      publicationId: 'p1', used: 1 }]))
+    await userEvent.click(screen.getByTestId('publication-next'))
+    await waitFor(() => expect(processCalls('QB_PUBLICATION_SAVE')).toHaveLength(1))
+    expect(processCalls('QB_PUBLICATION_SAVE')[0]).toMatchObject({ translations: { zh: { name: '咖啡周（AI）' } } })
   })
 
   it('uploads the publication\'s own cover and sends it with the save (Q64)', async () => {
