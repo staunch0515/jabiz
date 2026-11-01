@@ -72,6 +72,18 @@ class ErasureIT extends SecurityItSupport {
         }
     }
 
+    /**
+     * Todos deleted with the account: a plain table, its rows gone before the purge (only their audit is left). The
+     * title holds the user's id here and the owner the personal text: the demo's only optional text field.
+     */
+    @TestConfiguration
+    static class DeletedRows {
+        @Bean
+        PersonalDataEraser itTodos() {
+            return () -> List.of(ErasedEntity.delete("Todo", "title", "ownerId"));
+        }
+    }
+
     @DynamicPropertySource
     static void maintenance(DynamicPropertyRegistry registry) {
         // The tests' login is the maintenance login too: a member of jabiz_maintenance (granted below).
@@ -363,6 +375,24 @@ class ErasureIT extends SecurityItSupport {
             .isNotEmpty();
         // Each row overwritten once, by one statement: the seals verify.
         assertThat(verify(sealNo)).containsEntry("intact", true);
+    }
+
+    /**
+     * Phase 17zb: a plain table's row that ACCOUNT_ERASE deleted is gone before the purge; its audit records (its
+     * insert, its deletion) are found by the user field they hold and masked all the same.
+     */
+    @Test
+    void theAuditOfARowDeletedWithTheAccountKeepsNothingOfIt() {
+        String name = unique("todo");
+        String userId = create(name, "Todo", name + "@example.com");
+        String personal = "Call " + UUID.randomUUID();
+        insert("urn:jabiz:dataset:default:Todo", Map.of("title", userId, "done", false, "ownerId", personal), null);
+
+        erase(userId);
+        assertThat(query("SELECT 1 FROM todo WHERE title = ?", userId)).isEmpty();
+        deliverer.deliverPending().block();
+
+        assertThat(occurrences(personal)).as("where %s still is", personal).isEmpty();
     }
 
     private Map<String, Object> erase(String userId) {

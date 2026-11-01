@@ -176,7 +176,7 @@ public class ErasurePurger {
         run.ids.put(SecurityEntities.USER, List.of(run.userId));
         // An entity may be declared under several user fields (decision D62 item 8): its rows are those of each.
         List<Map.Entry<EntityDefinition, String>> userColumns = new ArrayList<>();
-        Set<String> declarations = new LinkedHashSet<>();
+        Map<String, String> declarations = new LinkedHashMap<>();
         for (String name : List.of(SecurityEntities.USER_IDENTITY, SecurityEntities.USER_MFA,
             SecurityEntities.LOGIN_RECORD, SecurityEntities.USER_ROLE, SecurityEntities.USER_MAIL_PREFERENCE,
             ProtectedChangeEntities.CHANGE)) {
@@ -185,7 +185,7 @@ public class ErasurePurger {
         for (ErasedEntity erased : erasers.entities()) {
             EntityDefinition def = entities.getOrThrow(erased.entity());
             userColumns.add(Map.entry(def, def.physicalColumn(erased.userField())));
-            declarations.add(declaration(def.name, def.physicalColumn(erased.userField())));
+            declarations.put(declaration(def.name, def.physicalColumn(erased.userField())), erased.userField());
         }
         return Flux.fromIterable(userColumns)
             .concatMap(entry -> {
@@ -196,15 +196,41 @@ public class ErasurePurger {
                         "SELECT DISTINCT t." + key + " AS id FROM " + table + " t WHERE " + match.where(), match.params()))
                     .map(row -> row.get("id"))
                     .collectList()
-                    .doOnNext(found -> {
-                        run.ids.merge(def.name, List.copyOf(found), ErasurePurger::union);
+                    .flatMap(found -> {
                         String declaration = declaration(def.name, entry.getValue());
-                        if (declarations.contains(declaration)) {
-                            run.declaredIds.put(declaration, List.copyOf(found));
+                        String userField = declarations.get(declaration);
+                        if (userField == null) {
+                            run.ids.merge(def.name, List.copyOf(found), ErasurePurger::union);
+                            return Mono.empty();
                         }
+                        // An application's rows: also those ACCOUNT_ERASE deleted, known by their audit records.
+                        return audited(run, def.name, userField).map(gone -> {
+                            List<Object> ids = union(found.stream().map(id -> (Object) String.valueOf(id)).toList(),
+                                gone);
+                            run.ids.merge(def.name, ids, ErasurePurger::union);
+                            run.declaredIds.put(declaration, ids);
+                            return ids;
+                        });
                     });
             })
             .then();
+    }
+
+    /**
+     * The keys of an entity's rows whose user field held the user's id in an audit record (its insert, its deletion,
+     * a change of the field): rows a plain table no longer has once ACCOUNT_ERASE deleted them, whose earlier audit
+     * records and the deletion's own still hold their personal values.
+     */
+    private static Mono<List<Object>> audited(Run run, String entity, String userField) {
+        Map<String, BoundValue> params = new LinkedHashMap<>();
+        params.put("entityType", BoundValue.of(entity));
+        params.put("userField", BoundValue.of(userField));
+        params.put("userText", BoundValue.of(run.userId.toString()));
+        return run.engine.select("SELECT DISTINCT t.entity_id::text AS id FROM sys_audit_record t"
+                + " WHERE t.entity_type = :entityType AND :userText IN (t.changes::jsonb -> :userField ->> 0,"
+                + " t.changes::jsonb -> :userField ->> 1)", params)
+            .map(row -> (Object) Rows.string(row.get("id")))
+            .collectList();
     }
 
     private static String declaration(String entity, String userColumn) {
