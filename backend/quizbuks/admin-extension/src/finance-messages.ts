@@ -35,6 +35,7 @@ export const financeMessages = {
       PAYOUT_FAILED: 'Payouts failed (reversed)',
       OPERATOR_SHARE: 'Operators’ shares settled',
       OPERATOR_PAID: 'Operators’ shares paid',
+      REFERRAL_REWARD: 'Referral rewards',
       OTHER: 'Other postings',
     },
     overview: {
@@ -336,6 +337,7 @@ export const financeMessages = {
       PAYOUT_FAILED: '打款失败（冲正）',
       OPERATOR_SHARE: '运营商分成（结算）',
       OPERATOR_PAID: '运营商分成（付款）',
+      REFERRAL_REWARD: '推荐奖励',
       OTHER: '其他分录',
     },
     overview: {
@@ -637,6 +639,7 @@ export const financeMessages = {
       PAYOUT_FAILED: '銀行への入金の失敗（取消）',
       OPERATOR_SHARE: '運営パートナーへの分配（精算）',
       OPERATOR_PAID: '運営パートナーへの分配（支払い）',
+      REFERRAL_REWARD: '紹介報酬',
       OTHER: 'その他の仕訳',
     },
     overview: {

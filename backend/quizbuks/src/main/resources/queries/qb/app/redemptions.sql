@@ -11,6 +11,7 @@ params:
 results:
   redemptionId:    { from: QbRedemption.redemptionId }
   attemptId:       { from: QbRedemption.attemptId }
+  sourceKind:      { from: QbRedemption.sourceKind }
   code:            { from: QbRedemption.code }
   publicationId:   { from: QbRedemption.publicationId }
   publicationName: { from: QbPublicationCard.name }
@@ -33,6 +34,7 @@ permissions: [qb.me]
 SELECT
     r.{{QbRedemption.redemptionId}}  AS redemptionId,
     r.{{QbRedemption.attemptId}}     AS attemptId,
+    r.{{QbRedemption.sourceKind}}     AS sourceKind,
     r.{{QbRedemption.code}}          AS code,
     r.{{QbRedemption.publicationId}} AS publicationId,
     c.{{QbPublicationCard.name}}     AS publicationName,

@@ -98,7 +98,18 @@ public final class QbInbox {
     public static final String DIGITAL_OVERDUE = "DIGITAL_OVERDUE";
     public static final List<String> DIGITAL_KINDS = List.of(DIGITAL_DELIVERED, DIGITAL_DUE, DIGITAL_CONFIRMED,
         DIGITAL_DISPUTED, DIGITAL_RESOLVED, DIGITAL_RESOLVED_SPONSOR, DIGITAL_OVERDUE);
-    public static final List<String> MESSAGE_KINDS = List.of(REWARD_PAID, REWARD_PENDING, TRANSFER_SENT,
+    /**
+     * Q70: a referral of the referrer's was claimed (a friend came), rewarded, or ended without a pass (to the
+     * referrer, never naming the friend); the sponsor's wallet could not pay a referral reward (to the sponsor).
+     */
+    public static final String REFERRAL_CLAIMED = "REFERRAL_CLAIMED";
+    public static final String REFERRAL_REWARDED = "REFERRAL_REWARDED";
+    public static final String REFERRAL_EXPIRED = "REFERRAL_EXPIRED";
+    public static final String REFERRAL_FUNDS_SHORT = "REFERRAL_FUNDS_SHORT";
+    public static final List<String> REFERRAL_KINDS = List.of(REFERRAL_CLAIMED, REFERRAL_REWARDED, REFERRAL_EXPIRED,
+        REFERRAL_FUNDS_SHORT);
+    public static final List<String> MESSAGE_KINDS = List.of(REFERRAL_CLAIMED, REFERRAL_REWARDED, REFERRAL_EXPIRED,
+        REFERRAL_FUNDS_SHORT, REWARD_PAID, REWARD_PENDING, TRANSFER_SENT,
         TRANSFER_FAILED, PAYOUT_ACTION_NEEDED, PAYOUT_REMINDER, CASH_DUE, CASH_MARKED_PAID, CASH_CONFIRMED,
         CASH_DISPUTED, CASH_RESOLVED, CASH_RESOLVED_SPONSOR, CASH_OVERDUE, REDEEM_DUE, REDEEM_CLAIMED,
         REDEEM_REDEEMED, REDEEM_DECLINED, REDEEM_EXPIRED, REDEEM_VOID, DIGITAL_DELIVERED, DIGITAL_DUE,
@@ -114,8 +125,10 @@ public final class QbInbox {
     public static final String ACTION_REDEEM = "REDEEM";
     /** Q33: the sponsor console's digital prizes page. */
     public static final String ACTION_DIGITAL = "DIGITAL";
+    /** Q70: the App's referrals page (the referrer's), and a reward a referral earned (it has no result). */
+    public static final String ACTION_REFERRALS = "REFERRALS";
     public static final List<String> ACTIONS = List.of(ACTION_RESULT, ACTION_WALLET, ACTION_PAYOUT, ACTION_CASH,
-        ACTION_REDEEM, ACTION_DIGITAL);
+        ACTION_REDEEM, ACTION_DIGITAL, ACTION_REFERRALS);
 
     // ---- broadcasts ------------------------------------------------------------------------------------------------
 

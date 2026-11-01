@@ -156,7 +156,8 @@ public final class PublicationLifecycle {
                             .where(new QueryPredicate.And(List.of(
                                 new QueryPredicate.In("publicationId", pooled ? List.of(publication.id()) : List.of()),
                                 new QueryPredicate.Eq("status", DigitalPrizeStatus.CODE_AVAILABLE))))
-                            .limit(PublishingLimits.MAX_POOL_WINNERS).build();
+                            // Q70: the referral quota may come from the pool too.
+                            .limit(PublishingLimits.MAX_POOL_WINNERS + ReferralPolicy.MAX_QUOTA).build();
                     }, POOL))
                 .compute("Check the publication", (metadata, ctx) -> check(ctx))
                 .step("Ask for a review", RequireApproval.<ProcessContext>when(ctx -> ctx.contains(CASE),

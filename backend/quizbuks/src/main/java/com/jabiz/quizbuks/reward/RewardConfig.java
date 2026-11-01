@@ -137,6 +137,13 @@ public class RewardConfig {
     }
 
     @Bean
+    StaticDictionary qbRewardSourceDictionary() {
+        return StaticDictionary.define(RewardSources.DICTIONARY, d -> d
+            .item(RewardSources.ATTEMPT, "en", "Answering", "zh", "答题", "ja", "回答")
+            .item(RewardSources.REFERRAL, "en", "Referral", "zh", "推荐", "ja", "紹介"));
+    }
+
+    @Bean
     StaticDictionary qbDigitalPrizeStatusDictionary() {
         return StaticDictionary.define(QbDigitalPrizes.STATUS_DICTIONARY, d -> d
             .item(DigitalPrizeStatus.DUE, "en", "To be sent by the sponsor", "zh", "待商家发送", "ja", "スポンサーの送付待ち")

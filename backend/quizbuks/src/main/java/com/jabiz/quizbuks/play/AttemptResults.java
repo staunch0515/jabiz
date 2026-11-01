@@ -159,20 +159,20 @@ public final class AttemptResults {
         return sponsor == null ? null : sponsor.get("company");
     }
 
-    static CashView cash(EntityInstance cash, String company) {
+    public static CashView cash(EntityInstance cash, String company) {
         return cash == null ? null : new CashView(String.valueOf(cash.id()), cash.get("status"), cash.get("code"),
             PlaySteps.money(cash.get("amount")), PlaySteps.instant(cash.get("markedPaidAt")),
             PlaySteps.instant(cash.get("confirmBy")), company);
     }
 
-    static RedeemView redeem(EntityInstance redemption, String company) {
+    public static RedeemView redeem(EntityInstance redemption, String company) {
         return redemption == null ? null : new RedeemView(String.valueOf(redemption.id()),
             redemption.get("status"), redemption.get("code"), PlaySteps.money(redemption.get("amount")),
             redemption.get("description"), PlaySteps.instant(redemption.get("expiresAt")), company,
             PlaySteps.instant(redemption.get("confirmBy")), PlaySteps.instant(redemption.get("redeemedAt")));
     }
 
-    static DigitalView digital(EntityInstance prize, String company) {
+    public static DigitalView digital(EntityInstance prize, String company) {
         return prize == null ? null : new DigitalView(String.valueOf(prize.id()), prize.get("status"),
             prize.get("delivery"), PlaySteps.money(prize.get("amount")), prize.get("description"), prize.get("hint"),
             PlaySteps.instant(prize.get("deliveredAt")), PlaySteps.instant(prize.get("sendBy")),

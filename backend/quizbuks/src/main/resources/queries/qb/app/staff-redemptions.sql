@@ -13,6 +13,7 @@ results:
   redemptionId:    { from: QbRedemption.redemptionId }
   code:            { from: QbRedemption.code }
   publicationName: { from: QbPublicationCard.name }
+  sourceKind:      { from: QbRedemption.sourceKind }
   takerName:       { from: QbProfile.displayName }
   description:     { from: QbRedemption.description }
   status:          { from: QbRedemption.status }
@@ -30,6 +31,7 @@ permissions: [qb.me]
 -- through it. A staff member sees what the counter needs (D-Q39-3): the claims waiting for an answer, and the prizes they
 -- handed over themselves; not the sponsor's history, nor what others handed over.
 SELECT
+    r.{{QbRedemption.sourceKind}}     AS sourceKind,
     r.{{QbRedemption.redemptionId}}  AS redemptionId,
     r.{{QbRedemption.code}}          AS code,
     c.{{QbPublicationCard.name}}     AS publicationName,

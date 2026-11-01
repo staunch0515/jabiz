@@ -12,6 +12,7 @@ results:
   digitalPrizeId:  { from: QbDigitalPrize.digitalPrizeId }
   publicationId:   { from: QbDigitalPrize.publicationId }
   publicationName: { from: QbPublicationCard.name }
+  sourceKind:      { from: QbDigitalPrize.sourceKind }
   takerName:       { from: QbProfile.displayName }
   amount:          { from: QbDigitalPrize.amount }
   description:     { from: QbDigitalPrize.description }
@@ -39,6 +40,7 @@ permissions: [qb.publication.write]
 -- The taker's name as their profile gives it (none without a profile). The content is sealed and sensitive: not
 -- selectable here; the hint tells codes of a pool apart. The text is found as written: strpos takes it literally.
 SELECT
+    g.{{QbDigitalPrize.sourceKind}}     AS sourceKind,
     g.{{QbDigitalPrize.digitalPrizeId}} AS digitalPrizeId,
     g.{{QbDigitalPrize.publicationId}}  AS publicationId,
     c.{{QbPublicationCard.name}}        AS publicationName,

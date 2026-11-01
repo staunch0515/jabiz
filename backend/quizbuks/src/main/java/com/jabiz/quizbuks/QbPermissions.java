@@ -191,6 +191,13 @@ public final class QbPermissions {
      * their operator (the operators' entry scope decides whose).
      */
     public static final String CERTIFICATION_MANAGE = "qb.certification.manage";
+    /**
+     * Q70: the referrals' system processes ({@code QB_REFERRAL_REWARD}, {@code _EXPIRE}, {@code internal()}), their
+     * templates and the default datasets. Granted to no role.
+     */
+    public static final String REFERRAL_SYSTEM = "qb.referral.system";
+    /** Q70: reading every referral (headquarters' finance and support pages). */
+    public static final String REFERRAL_READ = "qb.admin.referrals.read";
     /** Marking the official publishers whose publications may be rounds (Q69): headquarters' content administrators. */
     public static final String CERTIFICATION_ADMIN = "qb.certification.admin";
     /**

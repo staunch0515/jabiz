@@ -61,6 +61,11 @@ public final class MessageProcesses {
     public static final String PAYOUT_REMINDER = "QB_PAYOUT_REMINDER";
 
     public static final String REWARD_SETTLED_CONSUMER = "qb.msg-reward-settled";
+    /** Q70: a referral's steps, one consumer each. */
+    public static final String REFERRAL_CLAIMED_CONSUMER = "qb.msg-referral-claimed";
+    public static final String REFERRAL_REWARDED_CONSUMER = "qb.msg-referral-rewarded";
+    public static final String REFERRAL_EXPIRED_CONSUMER = "qb.msg-referral-expired";
+    public static final String REFERRAL_FUNDS_SHORT_CONSUMER = "qb.msg-referral-funds-short";
     public static final String REWARD_PENDING_CONSUMER = "qb.msg-reward-pending";
     public static final String TRANSFER_SENT_CONSUMER = "qb.msg-transfer-sent";
     public static final String TRANSFER_FAILED_CONSUMER = "qb.msg-transfer-failed";
@@ -119,6 +124,7 @@ public final class MessageProcesses {
     static final String REDEMPTION = "redemption";
     static final String DIGITAL = "digital";
     static final String WALLET = "wallet";
+    static final String REFERRAL = "referral";
     static final String LAST = "lastReminder";
     static final String PARAMS = "params";
     static final String OUTPUT = "output";
@@ -160,6 +166,10 @@ public final class MessageProcesses {
                     QueryEntities.query(QbRewards.defaultDataset(QbRewards.REDEMPTION), ctx -> byId("redemptionId",
                         QbInbox.REDEEM_KINDS.contains(input(ctx).kind()) ? uuid(input(ctx).sourceId()) : null),
                         REDEMPTION),
+                    // Q70: the referral the event names.
+                    QueryEntities.query(com.jabiz.quizbuks.referral.QbReferrals.defaultDataset(
+                        com.jabiz.quizbuks.referral.QbReferrals.REFERRAL), ctx -> byId("referralId",
+                        QbInbox.REFERRAL_KINDS.contains(input(ctx).kind()) ? referralId(ctx) : null), REFERRAL),
                     // Q33: the digital prize the event names.
                     QueryEntities.query(QbDigitalPrizes.defaultDataset(QbDigitalPrizes.DIGITAL_PRIZE),
                         ctx -> byId("digitalPrizeId", QbInbox.DIGITAL_KINDS.contains(input(ctx).kind())
@@ -172,6 +182,11 @@ public final class MessageProcesses {
         String id = input.sourceId();
         if (QbInbox.PAYOUT_ACTION_NEEDED.equals(input.kind())) {
             return "payout-action:" + id + ":" + input.occurredAt().atOffset(ZoneOffset.UTC).toLocalDate();
+        }
+        if (QbInbox.REFERRAL_FUNDS_SHORT.equals(input.kind())) {
+            // Q70: one a day to the sponsor, however many referrals wait (the source is "<sponsor>|<referral>").
+            return "referral-funds-short:" + id.substring(0, id.indexOf('|')) + ":"
+                + input.occurredAt().atOffset(ZoneOffset.UTC).toLocalDate();
         }
         String key = input.kind().toLowerCase(java.util.Locale.ROOT).replace('_', '-') + ":" + id;
         // Q22: a cash reward can be marked paid, disputed or late more than once (an "unpaid" decision sends it
@@ -189,7 +204,7 @@ public final class MessageProcesses {
     private static boolean reward(ProcessContext ctx) {
         String kind = input(ctx).kind();
         return attemptReward(ctx) || QbInbox.CASH_KINDS.contains(kind) || QbInbox.REDEEM_KINDS.contains(kind)
-            || QbInbox.DIGITAL_KINDS.contains(kind);
+            || QbInbox.DIGITAL_KINDS.contains(kind) || QbInbox.REFERRAL_KINDS.contains(kind);
     }
 
     /** The kinds whose source is the attempt itself. */
@@ -221,6 +236,8 @@ public final class MessageProcesses {
             case QbInbox.DIGITAL_DELIVERED, QbInbox.DIGITAL_DUE, QbInbox.DIGITAL_CONFIRMED, QbInbox.DIGITAL_DISPUTED,
                  QbInbox.DIGITAL_RESOLVED, QbInbox.DIGITAL_RESOLVED_SPONSOR, QbInbox.DIGITAL_OVERDUE ->
                 digitalMessage(ctx, input, params, texts);
+            case QbInbox.REFERRAL_CLAIMED, QbInbox.REFERRAL_REWARDED, QbInbox.REFERRAL_EXPIRED,
+                 QbInbox.REFERRAL_FUNDS_SHORT -> referralMessage(ctx, input, params, texts);
             default -> null;
         };
         if (draft != null) {
@@ -284,7 +301,7 @@ public final class MessageProcesses {
         return sponsors
             ? new Draft(cash.get("publisherId"), QbInbox.TYPE_SYSTEM, input.kind(), card.id(), QbInbox.ACTION_CASH,
                 String.valueOf(cash.id()))
-            : new Draft(cash.get("userId"), QbInbox.TYPE_REWARD, input.kind(), card.id(), QbInbox.ACTION_RESULT,
+            : new Draft(cash.get("userId"), QbInbox.TYPE_REWARD, input.kind(), card.id(), takerAction(cash),
                 cash.get("attemptId"));
     }
 
@@ -324,7 +341,7 @@ public final class MessageProcesses {
                 QbInbox.ACTION_REDEEM, String.valueOf(redemption.id()));
         }
         return new Draft(redemption.get("userId"), QbInbox.TYPE_REWARD, input.kind(), card.id(),
-            QbInbox.ACTION_RESULT, redemption.get("attemptId"));
+            takerAction(redemption), redemption.get("attemptId"));
     }
 
     /**
@@ -364,8 +381,61 @@ public final class MessageProcesses {
         return sponsors
             ? new Draft(prize.get("publisherId"), QbInbox.TYPE_SYSTEM, input.kind(), card.id(),
                 QbInbox.ACTION_DIGITAL, String.valueOf(prize.id()))
-            : new Draft(prize.get("userId"), QbInbox.TYPE_REWARD, input.kind(), card.id(), QbInbox.ACTION_RESULT,
+            : new Draft(prize.get("userId"), QbInbox.TYPE_REWARD, input.kind(), card.id(), takerAction(prize),
                 prize.get("attemptId"));
+    }
+
+    /**
+     * Where a reward record's message leads its winner (Q70, D-Q70-20): an attempt's result, or for a referral's reward
+     * (whose {@code attemptId} is the referral) the referrals page.
+     */
+    static String takerAction(EntityInstance record) {
+        return com.jabiz.quizbuks.reward.RewardSources.referral(record.get("sourceKind")) ? QbInbox.ACTION_REFERRALS
+            : QbInbox.ACTION_RESULT;
+    }
+
+    /**
+     * A referral's message (Q70): to the referrer when a friend came, when the reward was paid (with what it is) and
+     * when it ended without a pass, never naming the friend; to the sponsor when their wallet could not pay one.
+     * Skipped when the referral moved on since the event.
+     */
+    private static Draft referralMessage(ProcessContext ctx, EventInput input, Map<String, MessageTexts.Value> params,
+        MessageTexts texts) {
+        EntityInstance referral = first(ctx, REFERRAL);
+        EntityInstance card = first(ctx, CARD);
+        if (referral == null || card == null) {
+            return null;
+        }
+        // A friend came whatever came of it since (the later steps have their own messages); the others only while
+        // the referral stands as the event said.
+        String expected = switch (input.kind()) {
+            case QbInbox.REFERRAL_CLAIMED -> null;
+            case QbInbox.REFERRAL_FUNDS_SHORT -> com.jabiz.quizbuks.referral.QbReferrals.REFERRED;
+            case QbInbox.REFERRAL_REWARDED -> com.jabiz.quizbuks.referral.QbReferrals.REWARDED;
+            default -> com.jabiz.quizbuks.referral.QbReferrals.EXPIRED;
+        };
+        if (expected != null && !expected.equals(referral.get("status"))) {
+            return null;
+        }
+        params.put("name", MessageTexts.Value.of(card.get("name")));
+        params.put("amount", texts.kudos(referral.get("amount")));
+        params.put("method", texts.message("qb.referral.method." + referral.get("rewardMethod")));
+        Object expires = referral.get("expiresAt");
+        params.put("expiresAt", MessageTexts.Value.of(expires == null ? "" : String.valueOf(expires).substring(0,
+            Math.min(10, String.valueOf(expires).length()))));
+        if (QbInbox.REFERRAL_FUNDS_SHORT.equals(input.kind())) {
+            return new Draft(referral.get("publisherId"), QbInbox.TYPE_SYSTEM, input.kind(), card.id(),
+                QbInbox.ACTION_WALLET, null);
+        }
+        Object referrer = referral.get("referrerId");
+        return referrer == null ? null : new Draft(String.valueOf(referrer), QbInbox.TYPE_REWARD, input.kind(),
+            card.id(), QbInbox.ACTION_REFERRALS, String.valueOf(referral.id()));
+    }
+
+    /** The referral an event names (the funds-short event names it after its sponsor, for the day's key). */
+    private static Object referralId(ProcessContext ctx) {
+        String id = input(ctx).sourceId();
+        return id.contains("|") ? id.substring(id.indexOf('|') + 1) : id;
     }
 
     private static Draft transferMessage(ProcessContext ctx, MessageTexts texts, EventInput input,
@@ -412,6 +482,13 @@ public final class MessageProcesses {
         values.put("readAt", null);
         values.put("clickedAt", null);
         ctx.put(OUTPUT, String.valueOf(ctx.changes().insert(QbInbox.MESSAGE, values)));
+    }
+
+    /** Q70: a referral's event: the referral (with its sponsor first for the funds-short one) and its publication. */
+    static EventInput referralInput(DomainEvent event, String kind) {
+        String id = text(event, "referralId");
+        String source = QbInbox.REFERRAL_FUNDS_SHORT.equals(kind) ? text(event, "publisherId") + "|" + id : id;
+        return new EventInput(kind, source, text(event, "publicationId"), event.createdTime());
     }
 
     static EventInput rewardInput(DomainEvent event, String kind) {

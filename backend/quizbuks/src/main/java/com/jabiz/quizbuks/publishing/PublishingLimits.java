@@ -46,6 +46,8 @@ public final class PublishingLimits {
     private PublishingLimits() {}
     /** Q22: what a prize collected at the sponsor's place is and where, as the taker reads it. */
     public static final int REDEEM_DESCRIPTION_LENGTH = 500;
+    /** Q70: the JSON of a referral policy (its description is at most {@link #REDEEM_DESCRIPTION_LENGTH}). */
+    public static final int REFERRAL_LENGTH = 2000;
     /** Q33: a digital prize's content (a code or link) as typed, and its sealed form; days the sponsor has to send. */
     public static final int DIGITAL_CONTENT_LENGTH = 500;
     public static final int SEALED_LENGTH = 2000;

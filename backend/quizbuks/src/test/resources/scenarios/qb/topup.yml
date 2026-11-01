@@ -343,7 +343,7 @@ steps:
     expectOutput: { reward: 100, rewardStatus: PAID }
   - actor: { id: "${u2}", permissions: [qb.play, qb.me] }
     process: QB_ATTEMPT_SUBMIT@latest
-    input: { attemptId: "${t2}", publicationId: "${pub}", answers: [{ questionNo: 1, selected: [1] }, { questionNo: 2, selected: [2] }] }
+    input: { attemptId: "${t2}", publicationId: "${pub}", answers: [{ questionNo: 1, selected: [2] }, { questionNo: 2, selected: [2] }] }
     expectOutput: { reward: 100, rewardStatus: PENDING }
   - expect: { entity: QbPublication, id: "${pub}", fields: { status: FUNDS_SHORT } }
 
@@ -463,7 +463,7 @@ steps:
     expect:
       query: qb.admin.monthly
       params: { from: "2026-10-01T00:00:00Z", to: "2026-11-01T00:00:00Z" }
-      rows: 18
+      rows: 19
       values:
         - { category: TOPUP, transactionCount: 1, amount: 5000, stripeBalance: 5000, sponsorWallets: -5000 }
         - { category: BANK_TOPUP, transactionCount: 0, amount: 0 }
@@ -482,6 +482,7 @@ steps:
         - { category: PAYOUT_FAILED, transactionCount: 0 }
         - { category: OPERATOR_SHARE, transactionCount: 0 }
         - { category: OPERATOR_PAID, transactionCount: 0 }
+        - { category: REFERRAL_REWARD, transactionCount: 0 }
         - { category: OTHER, transactionCount: 1, amount: 100, stripeBalance: 100, sponsorWallets: -100 }
   - expect:
       query: qb.admin.balances

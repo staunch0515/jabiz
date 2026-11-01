@@ -13,6 +13,7 @@ results:
   cashRewardId:    { from: QbCashReward.cashRewardId }
   code:            { from: QbCashReward.code }
   attemptId:       { from: QbCashReward.attemptId }
+  sourceKind:      { from: QbCashReward.sourceKind }
   publicationId:   { from: QbCashReward.publicationId }
   publicationName: { from: QbPublicationCard.name }
   publisherKind:   { from: QbCashReward.publisherKind }
@@ -47,6 +48,7 @@ SELECT
     r.{{QbCashReward.cashRewardId}}   AS cashRewardId,
     r.{{QbCashReward.code}}           AS code,
     r.{{QbCashReward.attemptId}}      AS attemptId,
+    r.{{QbCashReward.sourceKind}}      AS sourceKind,
     r.{{QbCashReward.publicationId}}  AS publicationId,
     c.{{QbPublicationCard.name}}      AS publicationName,
     r.{{QbCashReward.publisherKind}}    AS publisherKind,

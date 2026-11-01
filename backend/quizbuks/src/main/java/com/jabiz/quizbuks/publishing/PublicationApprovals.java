@@ -95,6 +95,10 @@ public final class PublicationApprovals {
         if (cover != null) {
             content.put("cover", cover.toString());
         }
+        // Q70: "referrals welcome" is spending too; named only when welcome, so earlier hashes stand.
+        if (draft.referral() != null) {
+            content.put("referral", ReferralPolicy.toMap(draft.referral()));
+        }
         List<Object> ranges = new ArrayList<>();
         tiers.stream().sorted(Comparator.comparingInt(TierCoverage.Tier::fromScore)
                 .thenComparingInt(TierCoverage.Tier::toScore))

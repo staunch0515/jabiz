@@ -155,6 +155,7 @@ class MessagesTest {
             assertThat(texts.stringPropertyNames()).as(language)
                 .containsAll(com.jabiz.quizbuks.reward.RewardCodes.ALL)
                 .containsAll(com.jabiz.quizbuks.certification.CertificationCodes.ALL)
+                .containsAll(com.jabiz.quizbuks.referral.ReferralCodes.ALL)
                 .contains("QB_DIGITAL_DELIVERY_INVALID", "QB_DIGITAL_SEND_DAYS_RANGE", "QB_DIGITAL_POOL_SHORT",
                     "QB_DIGITAL_PRIZE_STATE", "QB_DIGITAL_UNREADABLE", "QB_DIGITAL_DISPUTE_NOTE",
                     "QB_DIGITAL_RESOLUTION", "QB_DIGITAL_CODES_EMPTY", "QB_DIGITAL_CODES_TOO_MANY",

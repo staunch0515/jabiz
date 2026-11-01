@@ -13,6 +13,7 @@ results:
   redemptionId:    { from: QbRedemption.redemptionId }
   code:            { from: QbRedemption.code }
   attemptId:       { from: QbRedemption.attemptId }
+  sourceKind:      { from: QbRedemption.sourceKind }
   publicationId:   { from: QbRedemption.publicationId }
   publicationName: { from: QbPublicationCard.name }
   publisherKind:   { from: QbRedemption.publisherKind }
@@ -44,6 +45,7 @@ SELECT
     r.{{QbRedemption.redemptionId}}   AS redemptionId,
     r.{{QbRedemption.code}}           AS code,
     r.{{QbRedemption.attemptId}}      AS attemptId,
+    r.{{QbRedemption.sourceKind}}      AS sourceKind,
     r.{{QbRedemption.publicationId}}  AS publicationId,
     c.{{QbPublicationCard.name}}      AS publicationName,
     r.{{QbRedemption.publisherKind}}    AS publisherKind,

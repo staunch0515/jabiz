@@ -1,7 +1,7 @@
 /*---
 id: qb.app.publication
 description: One publication's page for a taker (U-20 – U-23) with the caller's own attempt; none when they cannot see it
-entities: [QbPublicationCard, QbPublicationCounter, QbPublicationStartCounter, QbPublicationStats, QbStatsRun, QbWallet, QbCountry, QbSponsor, QbSponsorPage, QbQuizVersion, QbAttempt, QbPublicationOwner, QbInvitation, QbProfileAttribute, QbPublicationCriterion, QbCertificationRound, QbCertificationRecord]
+entities: [QbPublicationCard, QbPublicationCounter, QbPublicationStartCounter, QbPublicationStats, QbStatsRun, QbWallet, QbCountry, QbSponsor, QbSponsorPage, QbQuizVersion, QbAttempt, QbPublicationOwner, QbInvitation, QbProfileAttribute, QbPublicationCriterion, QbCertificationRound, QbCertificationRecord, QbReferral]
 datasets:
   QbPublicationCard: urn:jabiz:dataset:default:QbPublicationCard
   QbPublicationCounter: urn:jabiz:dataset:default:QbPublicationCounter
@@ -18,6 +18,7 @@ datasets:
   QbPublicationCriterion: urn:jabiz:dataset:default:QbPublicationCriterion
   QbCertificationRound: urn:jabiz:dataset:default:QbCertificationRound
   QbCertificationRecord: urn:jabiz:dataset:me:QbCertificationRecord
+  QbReferral: urn:jabiz:dataset:referee:QbReferral
   QbPublicationOwner: urn:jabiz:dataset:me:QbPublicationOwner
   QbInvitation: urn:jabiz:dataset:me:QbInvitation
 params:
@@ -62,6 +63,9 @@ results:
   canStart:       { kind: { type: bool } }
   matched:        { kind: { type: bool } }
   heldUntil:      { from: QbCertificationRecord.validUntil }
+  referral:       { from: QbPublicationCard.referral }
+  myReferralStatus:    { from: QbReferral.status }
+  myReferralExpiresAt: { from: QbReferral.expiresAt }
   myAttemptId:    { from: QbAttempt.attemptId }
   myStatus:       { from: QbAttempt.status }
   myDeadline:     { from: QbAttempt.deadline }
@@ -115,6 +119,9 @@ SELECT
     (d.shown AND d.startable AND d.matched AND d.heldUntil IS NULL AND d.myAttemptId IS NULL) AS canStart,
     d.matched AS matched,
     d.heldUntil AS heldUntil,
+    d.referral AS referral,
+    d.myReferralStatus AS myReferralStatus,
+    d.myReferralExpiresAt AS myReferralExpiresAt,
     d.myAttemptId AS myAttemptId,
     d.myStatus AS myStatus,
     d.myDeadline AS myDeadline
@@ -211,6 +218,11 @@ SELECT
            AND e.at > coalesce((SELECT max(rv.{{QbCertificationRecord.at}}) FROM {{QbCertificationRecord}} rv
                                 WHERE rv.{{QbCertificationRecord.certification}} = cr.{{QbCertificationRound.certification}}
                                   AND rv.{{QbCertificationRecord.kind}} = 'REVOKED'), '-infinity')) AS heldUntil,
+    -- Q70: "referrals welcome" as frozen on the card, and the caller's own referral to it, if a friend referred them
+    -- (the view holds the caller's as referee only; the places left come with the referrer's link).
+    c.{{QbPublicationCard.referral}}       AS referral,
+    mr.{{QbReferral.status}}               AS myReferralStatus,
+    mr.{{QbReferral.expiresAt}}            AS myReferralExpiresAt,
     m.{{QbAttempt.attemptId}}              AS myAttemptId,
     m.{{QbAttempt.status}}                 AS myStatus,
     m.{{QbAttempt.deadline}}               AS myDeadline
@@ -227,6 +239,7 @@ LEFT JOIN {{QbSponsor}} sp ON sp.{{QbSponsor.userId}} = c.{{QbPublicationCard.pu
     AND sp.{{QbSponsor.reviewStatus}} = 'APPROVED'
 LEFT JOIN {{QbSponsorPage}} sp_page ON sp_page.{{QbSponsorPage.userId}} = sp.{{QbSponsor.userId}}
 LEFT JOIN {{QbAttempt}} m ON m.{{QbAttempt.publicationId}} = c.{{QbPublicationCard.publicationId}}
+LEFT JOIN {{QbReferral}} mr ON mr.{{QbReferral.publicationId}} = CAST(c.{{QbPublicationCard.publicationId}} AS text)
 LEFT JOIN {{QbPublicationOwner}} own
     ON own.{{QbPublicationOwner.publicationId}} = c.{{QbPublicationCard.publicationId}}
 LEFT JOIN {{QbInvitation}} inv ON inv.{{QbInvitation.publicationId}} = c.{{QbPublicationCard.publicationId}}

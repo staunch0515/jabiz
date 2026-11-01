@@ -88,6 +88,9 @@ public final class QbDigitalPrizes {
         eb.field("digitalPrizeId", f -> f.physicalColumn("digital_prize_id").immutable(true).required(true)
             .generated(true).asSemanticIdentity("urn:jabiz:entity:quizbuks:digital-prize"));
         eb.field("attemptId", f -> f.physicalColumn("attempt_id").immutable(true).required(true).asText(36));
+        // Q70 (D-Q70-20): what earned it: an attempt (none, as before Q70) or a referral, whose id is then the attemptId.
+        eb.field("sourceKind", f -> f.physicalColumn("source_kind").immutable(true)
+            .asCode(RewardSources.DICTIONARY, RewardSources.ALL.toArray(String[]::new)));
         eb.field("publicationId", f -> f.physicalColumn("publication_id").immutable(true).required(true)
             .asReference(QbPublications.PUBLICATION));
         PublisherKind.declareSealed(eb, false);
