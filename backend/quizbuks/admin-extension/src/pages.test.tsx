@@ -339,6 +339,20 @@ describe('PublicationReviewPage', () => {
     expect(screen.getByTestId('publication-needs-languages')).toBeInTheDocument()
   })
 
+  it('shows a publication of several languages by answer language, below the minimum group held back (Q73e-1)',
+    async () => {
+      server.entities.set(`${DATASET.publication}/${PUBLICATION_ID}`, { ...publication('LIVE'), languages: 'zh,en' })
+      server.templates.set(TEMPLATE.publicationLanguages, [
+        { language: 'zh', starts: 12, completions: 10, passRate: '0.8', averageScore: '4.2', minGroup: 5 },
+        { language: 'en', starts: 3, completions: 2, passRate: null, averageScore: null, minGroup: 5 }])
+      renderPublication()
+      const section = await screen.findByTestId('publication-language-figures')
+      const rows = within(section).getAllByTestId('publication-language-figure')
+      expect(rows.map((r) => r.dataset.language)).toEqual(['zh', 'en'])
+      expect(rows[0]).toHaveTextContent('80%')
+      expect(rows[1]).toHaveTextContent('Fewer than 5')
+    })
+
   it('reviews a running publication\'s switch with the version it asks for (Q51)', async () => {
     const next = '0192f0a0-0000-7000-8000-0000000000e2'
     server.entities.set(`${DATASET.publication}/${PUBLICATION_ID}`, { ...publication('LIVE'),
