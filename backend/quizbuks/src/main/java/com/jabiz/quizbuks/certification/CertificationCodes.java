@@ -12,8 +12,11 @@ public final class CertificationCodes {
     /** The sponsor entry's signed-in join without the certification (the sign-up guard's reason). */
     public static final String REQUIRED = "QB_CERTIFICATION_REQUIRED";
 
+    /** Q70a (D-Q70-1, option B): who holds a certification starts none of its rounds until it ends. */
+    public static final String HELD = "QB_CERTIFICATION_HELD";
+
     public static final List<String> ALL = List.of(NOT_APPROVED_SPONSOR, NO_SUCH_OPERATOR, NOT_OFFICIAL,
-        ALREADY_A_ROUND, REQUIRED);
+        ALREADY_A_ROUND, REQUIRED, HELD);
 
     private CertificationCodes() {}
 }

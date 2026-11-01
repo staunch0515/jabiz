@@ -336,38 +336,12 @@ public final class CertificationProcesses {
             .compute("Record the passes", (metadata, ctx) -> {
                 Certification certification = certification(input(ctx, ClaimInput.class).certification());
                 List<EntityInstance> rounds = list(ctx, ROUNDS);
-                Map<String, EntityInstance> byPublication = rounds.stream()
-                    .collect(Collectors.toMap(r -> String.valueOf((Object) r.get("publicationId")), r -> r));
-                Set<String> recorded = list(ctx, RECORDS).stream().map(r -> (String) r.get("attemptId"))
-                    .filter(id -> id != null).collect(Collectors.toSet());
                 List<CertificationHolding.Entry> entries = new ArrayList<>(list(ctx, RECORDS).stream()
                     .map(CertificationProcesses::entry).toList());
-                for (EntityInstance attempt : list(ctx, ATTEMPTS)) {
-                    String attemptId = String.valueOf(attempt.id());
-                    EntityInstance round = byPublication.get(String.valueOf((Object) attempt.get("publicationId")));
-                    Instant submitted = instant(attempt.get("submittedAt"));
-                    if (round == null || recorded.contains(attemptId) || submitted == null
-                        || !Boolean.TRUE.equals(attempt.get("passed"))) {
-                        continue;
-                    }
-                    Instant closed = instant(round.get("closedAt"));
-                    if (closed != null && !submitted.isBefore(closed)) {
-                        continue;
-                    }
-                    Map<String, Object> values = new LinkedHashMap<>();
-                    values.put("userId", ctx.request().actorId());
-                    values.put("certification", certification.key());
-                    values.put("certificationVersion", number(round.get("certificationVersion")));
-                    values.put("kind", CertificationHolding.PASSED);
-                    values.put("attemptId", attemptId);
-                    values.put("roundId", String.valueOf(round.id()));
-                    values.put("actor", ctx.request().actorId());
-                    values.put("owner", round.get("owner"));
-                    values.put("at", submitted);
-                    values.put("validUntil", submitted.plus(certification.validity()));
-                    ctx.changes().insert(QbCertifications.RECORD, values);
-                    entries.add(new CertificationHolding.Entry(CertificationHolding.PASSED,
-                        number(round.get("certificationVersion")), submitted, submitted.plus(certification.validity())));
+                for (Map<String, Object> pass : unrecordedPasses(certification, rounds, list(ctx, RECORDS),
+                    list(ctx, ATTEMPTS), ctx.request().actorId())) {
+                    ctx.changes().insert(QbCertifications.RECORD, pass);
+                    entries.add(passEntry(pass));
                 }
                 Instant until = CertificationHolding.heldUntil(entries, certification, ctx.opTime()).orElse(null);
                 String open = rounds.stream().filter(r -> r.get("closedAt") == null
@@ -469,6 +443,50 @@ public final class CertificationProcesses {
         return EntityQuery.builder().where(new QueryPredicate.And(List.of(
             new QueryPredicate.Eq("userId", ctx.request().actorId()),
             new QueryPredicate.In("publicationId", ids)))).limit(MAX_ROWS).build();
+    }
+
+    /**
+     * The caller's passes of the certification's rounds that no record holds yet, as the records to insert: a passed,
+     * submitted attempt on a round, before the round closed.
+     */
+    static List<Map<String, Object>> unrecordedPasses(Certification certification, List<EntityInstance> rounds,
+        List<EntityInstance> records, List<EntityInstance> attempts, Object userId) {
+        Map<String, EntityInstance> byPublication = rounds.stream()
+            .collect(Collectors.toMap(r -> String.valueOf((Object) r.get("publicationId")), r -> r, (a, b) -> a));
+        Set<String> recorded = records.stream().map(r -> (String) r.get("attemptId"))
+            .filter(id -> id != null).collect(Collectors.toSet());
+        List<Map<String, Object>> passes = new ArrayList<>();
+        for (EntityInstance attempt : attempts) {
+            String attemptId = String.valueOf(attempt.id());
+            EntityInstance round = byPublication.get(String.valueOf((Object) attempt.get("publicationId")));
+            Instant submitted = instant(attempt.get("submittedAt"));
+            if (round == null || recorded.contains(attemptId) || submitted == null
+                || !Boolean.TRUE.equals(attempt.get("passed"))) {
+                continue;
+            }
+            Instant closed = instant(round.get("closedAt"));
+            if (closed != null && !submitted.isBefore(closed)) {
+                continue;
+            }
+            Map<String, Object> values = new LinkedHashMap<>();
+            values.put("userId", userId);
+            values.put("certification", certification.key());
+            values.put("certificationVersion", number(round.get("certificationVersion")));
+            values.put("kind", CertificationHolding.PASSED);
+            values.put("attemptId", attemptId);
+            values.put("roundId", String.valueOf(round.id()));
+            values.put("actor", userId);
+            values.put("owner", round.get("owner"));
+            values.put("at", submitted);
+            values.put("validUntil", submitted.plus(certification.validity()));
+            passes.add(values);
+        }
+        return passes;
+    }
+
+    static CertificationHolding.Entry passEntry(Map<String, Object> pass) {
+        return new CertificationHolding.Entry(CertificationHolding.PASSED, (Integer) pass.get("certificationVersion"),
+            (Instant) pass.get("at"), (Instant) pass.get("validUntil"));
     }
 
     static CertificationHolding.Entry entry(EntityInstance record) {
