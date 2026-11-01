@@ -60,6 +60,18 @@ class ErasureIT extends SecurityItSupport {
         }
     }
 
+    /**
+     * Customers declared a second time, under another user field (decision D62 item 8): a row whose name is the
+     * user's id is the user's too, its code personal (the app's own eraser finds customers by their user).
+     */
+    @TestConfiguration
+    static class SecondUserField {
+        @Bean
+        PersonalDataEraser itCustomersByName() {
+            return () -> List.of(ErasedEntity.keep(CommerceEntities.CUSTOMER, "customerName", "customerCode"));
+        }
+    }
+
     @DynamicPropertySource
     static void maintenance(DynamicPropertyRegistry registry) {
         // The tests' login is the maintenance login too: a member of jabiz_maintenance (granted below).
@@ -265,13 +277,14 @@ class ErasureIT extends SecurityItSupport {
             () -> List.of(ErasedEntity.delete("NoSuchEntity", "userId")),
             () -> List.of(ErasedEntity.clear(CommerceEntities.CUSTOMER, "userId", "customerName"),
                 ErasedEntity.keep(CommerceEntities.CUSTOMER, "owner", "nickname", "customerId")),
+            () -> List.of(ErasedEntity.keep(CommerceEntities.CUSTOMER, "userId", "customerCode")),
             () -> List.of(ErasedEntity.keep("Product", "productId", "unitPrice").documents("no-layout"))))
             .extracting(p -> p.location(), p -> p.message())
             .contains(
                 tuple("PersonalDataEraser NoSuchEntity", "entity NoSuchEntity is not declared"),
                 tuple("PersonalDataEraser Customer", "field customerName is cleared on erasure, so it must be optional"
                     + " and changeable; declare the entity delete(...) or keep(...)"),
-                tuple("PersonalDataEraser Customer", "declared more than once"),
+                tuple("PersonalDataEraser Customer", "declared more than once with the user field userId"),
                 tuple("PersonalDataEraser Customer", "user field owner is not a field of Customer"),
                 tuple("PersonalDataEraser Customer", "field nickname is not a field of Customer"),
                 tuple("PersonalDataEraser Customer", "field customerId is the primary key: rows keep their keys"
@@ -316,6 +329,26 @@ class ErasureIT extends SecurityItSupport {
             + "', '" + other + "') ORDER BY counter_name, owner_key"))
             .extracting(row -> row.get("counter_name") + " " + (userId.equals(row.get("owner_key")) ? "user" : "other"))
             .containsExactly(CommerceEntities.PRODUCT_VIEWS + " user", USER_OWNED_COUNTER + " other");
+    }
+
+    /** Phase 17zb: an entity declared under two user fields: the rows of each are purged, their audit masked. */
+    @Test
+    void anEntityDeclaredUnderTwoUserFieldsLeavesNothingOfEither() {
+        String name = unique("twice");
+        String userId = create(name, "Twice", name + "@example.com");
+        String byUser = "Customer " + UUID.randomUUID();
+        String byName = ("K" + UUID.randomUUID()).substring(0, 20);
+        insert(CommerceEntities.CUSTOMER_DATASET, Map.of("customerCode", unique("C"), "customerName", byUser,
+            "userId", userId), null);
+        insert(CommerceEntities.CUSTOMER_DATASET, Map.of("customerCode", byName, "customerName", userId), null);
+
+        erase(userId);
+        deliverer.deliverPending().block();
+
+        // Each declaration's fields are gone from its rows and from their audit records alike.
+        for (String needle : List.of(byUser, byName)) {
+            assertThat(occurrences(needle)).as("where %s still is", needle).isEmpty();
+        }
     }
 
     private Map<String, Object> erase(String userId) {

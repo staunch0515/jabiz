@@ -16,10 +16,10 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Startup check of the applications' erasers (docs/design/10-security.md section 17; decision D62 item 7): each entity
- * declared once and known, its user field and personal fields fields of it, a field cleared on erasure optional and
- * changeable, a field the purge overwrites optional or text that can hold the mark {@value ErasureValues#TEXT_MARK},
- * and the document layouts declared.
+ * Startup check of the applications' erasers (docs/design/10-security.md section 17; decision D62 items 7 and 8): each
+ * entity known and declared once per user field, its user field and personal fields fields of it, a field cleared on
+ * erasure optional and changeable, a field the purge overwrites optional or text that can hold the mark
+ * {@value ErasureValues#TEXT_MARK}, and the document layouts declared.
  */
 @Component
 public class ErasureChecks implements PlatformCheck {
@@ -43,8 +43,10 @@ public class ErasureChecks implements PlatformCheck {
         Set<String> seen = new HashSet<>();
         for (ErasedEntity erased : erasers.entities()) {
             String location = "PersonalDataEraser " + erased.entity();
-            if (!seen.add(erased.entity())) {
-                problems.add(CheckProblem.error(CATEGORY, location, "declared more than once"));
+            // Once per user field: an entity may be found by several (decision D62 item 8).
+            if (!seen.add(erased.entity() + "\n" + erased.userField())) {
+                problems.add(CheckProblem.error(CATEGORY, location, "declared more than once with the user field "
+                    + erased.userField()));
             }
             EntityDefinition def = entities.find(erased.entity()).orElse(null);
             if (def == null) {

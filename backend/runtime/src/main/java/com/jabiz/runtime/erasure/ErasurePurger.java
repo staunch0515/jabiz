@@ -164,17 +164,18 @@ public class ErasurePurger {
     /** The keys of the user's rows, by entity: the user, its platform records, and the erasers' entities. */
     private Mono<Void> entityIds(Run run) {
         run.ids.put(SecurityEntities.USER, List.of(run.userId));
-        Map<EntityDefinition, String> userColumns = new LinkedHashMap<>();
+        // An entity may be declared under several user fields (decision D62 item 8): its rows are those of each.
+        List<Map.Entry<EntityDefinition, String>> userColumns = new ArrayList<>();
         for (String name : List.of(SecurityEntities.USER_IDENTITY, SecurityEntities.USER_MFA,
             SecurityEntities.LOGIN_RECORD, SecurityEntities.USER_ROLE, SecurityEntities.USER_MAIL_PREFERENCE,
             ProtectedChangeEntities.CHANGE)) {
-            userColumns.put(entities.getOrThrow(name), "user_id");
+            userColumns.add(Map.entry(entities.getOrThrow(name), "user_id"));
         }
         for (ErasedEntity erased : erasers.entities()) {
             EntityDefinition def = entities.getOrThrow(erased.entity());
-            userColumns.put(def, def.physicalColumn(erased.userField()));
+            userColumns.add(Map.entry(def, def.physicalColumn(erased.userField())));
         }
-        return Flux.fromIterable(userColumns.entrySet())
+        return Flux.fromIterable(userColumns)
             .concatMap(entry -> {
                 EntityDefinition def = entry.getKey();
                 String table = SqlIdentifiers.require(def.physicalTable);
@@ -183,7 +184,11 @@ public class ErasurePurger {
                         "SELECT DISTINCT t." + key + " AS id FROM " + table + " t WHERE " + match.where(), match.params()))
                     .map(row -> row.get("id"))
                     .collectList()
-                    .doOnNext(found -> run.ids.put(def.name, List.copyOf(found)));
+                    .doOnNext(found -> run.ids.merge(def.name, List.copyOf(found), (before, more) -> {
+                        Set<Object> union = new LinkedHashSet<>(before);
+                        union.addAll(more);
+                        return List.copyOf(union);
+                    }));
             })
             .then();
     }
@@ -307,7 +312,12 @@ public class ErasurePurger {
         fields.put(ProtectedChangeEntities.CHANGE, List.of("email", "subject", "passwordHash"));
         for (ErasedEntity erased : erasers.entities()) {
             if (!erased.fields().isEmpty()) {
-                fields.put(erased.entity(), erased.fields());
+                // Declared under several user fields: the fields of every declaration, in the rows of each.
+                fields.merge(erased.entity(), erased.fields(), (before, more) -> {
+                    Set<String> union = new LinkedHashSet<>(before);
+                    union.addAll(more);
+                    return List.copyOf(union);
+                });
             }
         }
         List<Target> targets = new ArrayList<>();
