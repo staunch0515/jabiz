@@ -1,6 +1,6 @@
 package com.jabiz.quizbuks.it;
 
-import com.jabiz.quizbuks.wallet.QbParams;
+import com.jabiz.quizbuks.setup.QbParams;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -19,7 +19,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * Q71 (docs/quizbuks/plans/Q71-taker-erasure.md; platform decision D62): erasing a taker's account removes their
  * "about me", bank account, the invitations they claimed and their place on a sponsor's staff; their withdrawals stay
- * as records with the holder's name and account number overwritten, their attempts stay with their id only.
+ * as records with the holder's name and account number emptied (V52), their attempts stay with their id only.
  */
 class TakerErasureIT extends PayoutItSupport {
 
@@ -79,8 +79,8 @@ class TakerErasureIT extends PayoutItSupport {
         assertThat(query("SELECT 1 FROM qb_invitation WHERE user_id = ?", ann)).isEmpty();
         assertThat(query("SELECT 1 FROM qb_sponsor_staff WHERE user_id = ?", ann)).isEmpty();
         // The withdrawal is kept, without who was paid; its amount and state are the accounts'.
-        assertThat(transfer(transferId)).containsEntry("account_holder", "***")
-            .containsEntry("account_number", "***").containsEntry("user_id", ann);
+        assertThat(transfer(transferId)).containsEntry("account_holder", null)
+            .containsEntry("account_number", null).containsEntry("user_id", ann).containsEntry("status", "REVIEW");
         // Nothing of hers is left anywhere: her account number and address, in no table, version or audit record.
         for (String needle : List.of(annNumber, ANN_HOLDER, annAddress)) {
             assertThat(occurrences(needle)).as("where %s still is", needle).isEmpty();

@@ -23,7 +23,7 @@ Q70 的声明对所有账户都有效（资料、设置、收件箱、通知与 
 | `QbPayoutOnboarding`（Stripe 的开户链接） | 删除 | url |
 | `QbInvitation`（按认领人 `userId`，他的地址） | 删除 | email |
 | `QbSponsorStaff`（按店员本人 `userId`） | 删除 | — |
-| `QbTransfer`（提现，保留 10 年） | 保留 | accountNumber、accountHolder |
+| `QbTransfer`（提现，保留 10 年） | 保留 | accountNumber、accountHolder（可空的列由清除置空；迁移 V52 放宽检查约束 `qb_transfer_method`，银行提现的这两列可以为空） |
 | `QbCashReward`（应付给他的现金奖励） | 保留 | markedPaidNote、disputeNote、resolveNote |
 | `QbRedemption`（兑换券） | 保留 | voidNote |
 
@@ -46,17 +46,22 @@ Q70 的声明对所有账户都有效（资料、设置、收件箱、通知与 
 - 不装 App：`https://quizbuks.com/taker/delete-account` 转到平台的申请页 `/auth/account-deletion`（填邮箱，凭寄到已验证地址的链接确认）。这是 Google Play 表单的"删除账号的网址"（`store/play-data-safety.md` §4）。
 - 隐私政策（三语）第8条、第10条补"删除账号"一节：入口、14 天的冷静期、抹除什么、保留什么、钱包余额、第三方处的副本。
 
-## 5. 测试
+## 5. 平台的配合
+
+- 17zb（`staunch0515/jabiz#392`）：同一实体按几个用户字段声明（邀请、店员）；抹除删除的普通表行，其审计在清除时照样遮蔽（测试本项时发现，Q70 的商户删除也受益）。
+- 应用的检查约束与清除：清除把可空的列置空，应用的检查约束若要求它们非空，整个清除回滚。声明要覆盖的字段时核对表上的约束（V52 即为此）。
+
+## 6. 测试
 
 - `TakerErasureTest`：提示的条件。
 - `TakerErasureIT`（维护连接）：
   - "关于我"、银行账户、认领的邀请、店员关系删除；
-  - 提现保留，持有人与账号为 `***`；
+  - 提现保留，持有人与账号置空；
   - 她的账号、持有人名与邮箱在任何表、版本与审计记录中都找不到；
   - 另一位答题者的不受影响。
 - App `App.test.tsx`：删除只在入口允许时出现在菜单中；`/delete-account` 转到申请页。
 
-## 6. 不在本项内
+## 7. 不在本项内
 
 - Q49a 的其余部分：有奖活动的规则页、发布页的举报入口。
 - 平台层面的 Stripe 账户关闭（Connect 账户的删除）：需要时另议。

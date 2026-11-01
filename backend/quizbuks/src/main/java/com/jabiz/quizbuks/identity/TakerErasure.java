@@ -27,10 +27,10 @@ import java.util.Set;
  *
  * <p>Their "about me", bank account, Stripe onboarding link, the invitations they claimed (their address) and their
  * place on a sponsor's staff go. Withdrawals stay as the records the accounts need (kept ten years) with the holder's
- * name and the account number overwritten; so do the rewards owed to them, with the notes people wrote about them.
- * Their attempts, views, vouchers, consents, certifications, bans, wallet, ledger and Stripe payout account hold only
- * the user's id and stay (decision D62 item 4): the sponsors' statistics and the accounts rest on them. A balance left
- * in the wallet stays there, unpaid (the requester's choice, 2026-11-01).
+ * name and the account number emptied (migration V52); so do the rewards owed to them, with the notes people wrote
+ * about them. Their attempts, views, vouchers, consents, certifications, bans, wallet, ledger and Stripe payout account
+ * hold only the user's id and stay (decision D62 item 4): the sponsors' statistics and the accounts rest on them. A
+ * balance left in the wallet stays there, unpaid (the requester's choice, 2026-11-01).
  */
 @Configuration
 public class TakerErasure {
