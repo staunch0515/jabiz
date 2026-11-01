@@ -1,4 +1,5 @@
 import { useAuth, type IdentityLinked } from '@jabiz/client'
+import { BecomeSponsor } from '../mysponsor/BecomeSponsor'
 import { TitleBadge } from './TitleBadge'
 import { PageState } from '@jabiz/ui'
 import { useQuery } from '@tanstack/react-query'
@@ -138,6 +139,8 @@ function AccountMenu() {
             hint={tApp(`account.hints.${part}`)} testId={`account-menu-${part}`} />
         ))}
       </MenuList>
+      {/* Q69: a taker who is no sponsor may apply, with the certification. */}
+      <BecomeSponsor />
       <MenuList label={tApp('account.info')} testId="account-info">
         <MenuItem to="/help" icon={CircleHelp} title={t('help.title')} />
         <MenuItem to={legalPath('TERMS_APP')} icon={FileText} title={t('legal.kinds.TERMS_APP')} />

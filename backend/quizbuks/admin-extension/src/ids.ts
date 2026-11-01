@@ -26,6 +26,8 @@ export const DATASET = {
   broadcastTarget: 'urn:jabiz:dataset:default:QbBroadcastTarget',
   /** Transfers: a bank withdrawal's account number is revealed from here (`qb.payout.bank.reveal`; Q13b). */
   transfer: 'urn:jabiz:dataset:default:QbTransfer',
+  /** The official publishers whose publications may be certification rounds (Q69; `qb.certification.admin`). */
+  officialPublisher: 'urn:jabiz:dataset:default:QbOfficialPublisher',
 } as const
 
 /** SQL templates (`queries/qb/admin`). */
@@ -310,6 +312,23 @@ export const DICTIONARY = {
   bankAccountType: 'urn:jabiz:dict:quizbuks:bank-account-type',
 } as const
 
+/** Certifications (Q69, backend `certification.CertificationProcesses`). */
+export const CERTIFICATION_PROCESS = {
+  overview: 'QB_CERTIFICATION_OVERVIEW',
+  roundAdd: 'QB_CERTIFICATION_ROUND_ADD',
+  roundClose: 'QB_CERTIFICATION_ROUND_CLOSE',
+  grant: 'QB_CERTIFICATION_GRANT',
+  revoke: 'QB_CERTIFICATION_REVOKE',
+  officialSet: 'QB_OFFICIAL_PUBLISHER_SET',
+} as const
+
+/** The certifications' keys (backend `certification.Certifications`); their names are `certification.names.<key>`. */
+export const CERTIFICATIONS = ['SPONSOR_APPLY'] as const
+export type Certification = (typeof CERTIFICATIONS)[number]
+
+/** The owner of headquarters' own rounds and official publishers (`QbCertifications.DIRECT`). */
+export const CERTIFICATION_DIRECT = 'direct'
+
 /** Permissions (`QbPermissions`): they only decide what the pages offer; the server checks every call. */
 export const PERMISSION = {
   reviewPublication: 'qb.review.publication',
@@ -361,6 +380,9 @@ export const PERMISSION = {
   adminProspect: 'qb.admin.prospect',
   /** Q48b: recording the payment of an operator's settlement (finance; another administrator approves). */
   settlementPay: 'qb.operator.settlement.pay',
+  /** Q69: certification rounds and records by hand (content administrators and operators), and the official publishers (headquarters). */
+  certificationManage: 'qb.certification.manage',
+  certificationAdmin: 'qb.certification.admin',
 } as const
 
 /** The bank top-up states finance may record money against, and the one an approval waits in (Q13a). */
@@ -494,6 +516,8 @@ export const PATH = {
   /** Q48e-2: the operator's account (balance, bank account, withdrawals), and the withdrawals (finance). */
   operatorAccount: '/qb/operator/account',
   operatorWithdrawals: '/qb/finance/operator-withdrawals',
+  /** Q69: certification rounds, records by hand and the official publishers. */
+  certifications: '/qb/certifications',
   /** The platform's own pages. */
   tasks: '/tasks',
 } as const

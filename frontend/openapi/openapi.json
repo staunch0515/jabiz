@@ -3368,6 +3368,25 @@
         "tags" : [ "account-deletion-controller" ]
       }
     },
+    "/api/auth/account/entries/{entry}/join" : {
+      "post" : {
+        "operationId" : "joinEntry",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "entry",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "204" : {
+            "description" : "No Content"
+          }
+        },
+        "tags" : [ "sign-up-controller" ]
+      }
+    },
     "/api/auth/account/identities" : {
       "get" : {
         "operationId" : "mine_2",

@@ -17,6 +17,9 @@ import com.jabiz.security.SignInAttempt;
 import com.jabiz.security.SignInDecision;
 import com.jabiz.security.SignInGuard;
 import com.jabiz.security.SignInLoad;
+import com.jabiz.security.SignUpAttempt;
+import com.jabiz.security.SignUpDecision;
+import com.jabiz.security.SignUpGuard;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -45,6 +48,19 @@ public final class ItSignInFixtures extends BaseEntityDefinitions {
 
     /** The last attempt the guard saw, by user id. */
     public static final Map<String, SignInAttempt> SEEN = new ConcurrentHashMap<>();
+
+    /** Users linked to this provider may not get any entry's registration roles (decision D66). */
+    public static final String SIGN_UP_BLOCKED = "it-sign-up-blocked";
+    /** For users linked to this provider the sign-up guard throws. */
+    public static final String SIGN_UP_FAILING = "it-sign-up-fails";
+    /** Addresses starting so are refused by the sign-up guard, also for new accounts. */
+    public static final String SIGN_UP_REFUSED_PREFIX = "signup-refused";
+    /** For addresses starting so the sign-up guard throws. */
+    public static final String SIGN_UP_THROWS_PREFIX = "signup-throws";
+    /** The sign-up guard's load: the user's provider links. */
+    public static final String SIGN_UP_LOAD = "signUpLinks";
+    /** The sign-up attempts the guard saw, by address (lower case) or, without one, by user id. */
+    public static final Map<String, List<SignUpAttempt>> SEEN_SIGN_UPS = new ConcurrentHashMap<>();
 
     public static final String NOTE_DATASET = "urn:jabiz:dataset:it:ItVerifiedNote";
     public static final String UNIQUE_CI_DATASET = "urn:jabiz:dataset:it:ItUniqueCi";
@@ -125,8 +141,39 @@ public final class ItSignInFixtures extends BaseEntityDefinitions {
         }
     }
 
+    /**
+     * Refuses addresses starting with {@link #SIGN_UP_REFUSED_PREFIX} and users linked to {@link #SIGN_UP_BLOCKED},
+     * throws for {@link #SIGN_UP_THROWS_PREFIX} and {@link #SIGN_UP_FAILING}, remembers what it saw; inert otherwise.
+     */
+    static final class SignUpLinkGuard implements SignUpGuard {
+
+        @Override
+        public List<SignInLoad> loads() {
+            return List.of(SignInLoad.of(SIGN_UP_LOAD, SecurityEntities.USER_IDENTITY_DATASET, "userId"));
+        }
+
+        @Override
+        public SignUpDecision check(SignUpAttempt attempt) {
+            String key = attempt.email() != null ? attempt.email().toLowerCase(java.util.Locale.ROOT)
+                : String.valueOf(attempt.userId());
+            SEEN_SIGN_UPS.computeIfAbsent(key, k -> new java.util.concurrent.CopyOnWriteArrayList<>()).add(attempt);
+            String local = key.contains("@") ? key.substring(0, key.indexOf('@')) : "";
+            List<Object> providers = attempt.rows(SIGN_UP_LOAD).stream().map(row -> row.get("provider")).toList();
+            if (local.startsWith(SIGN_UP_THROWS_PREFIX) || providers.contains(SIGN_UP_FAILING)) {
+                throw new IllegalStateException("The sign-up guard broke");
+            }
+            return local.startsWith(SIGN_UP_REFUSED_PREFIX) || providers.contains(SIGN_UP_BLOCKED)
+                ? SignUpDecision.refuse(null) : SignUpDecision.ALLOW;
+        }
+    }
+
     @Configuration
     static class Beans {
+
+        @Bean
+        SignUpGuard itSignUpLinkGuard() {
+            return new SignUpLinkGuard();
+        }
 
         @Bean
         SignInGuard itLinkGuard() {

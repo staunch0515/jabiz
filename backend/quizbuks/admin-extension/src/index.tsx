@@ -3,6 +3,7 @@ import {
   ArrowLeftRight,
   Banknote,
   BookOpenCheck,
+  BadgeCheck,
   ClipboardCheck,
   FileQuestion,
   FileSpreadsheet,
@@ -35,6 +36,7 @@ import BankWithdrawalsPage from './BankWithdrawalsPage'
 import ManualCreditPage from './ManualCreditPage'
 import ManualCreditsPage from './ManualCreditsPage'
 import BroadcastsPage from './BroadcastsPage'
+import CertificationsPage from './CertificationsPage'
 import AiPage from './AiPage'
 import AttemptsPage from './AttemptsPage'
 import { BRAND } from './brand'
@@ -141,6 +143,8 @@ export default defineExtension({
     // Q48e-2: the operator's account and withdrawals, and finance's view of the withdrawals.
     { path: PATH.operatorAccount, element: <OperatorAccountPage /> },
     { path: PATH.operatorWithdrawals, element: <OperatorWithdrawalsPage /> },
+    // Q69: certification rounds and records by hand (headquarters and operators), and the official publishers.
+    { path: PATH.certifications, element: <CertificationsPage /> },
   ],
   menu: [
     // Q48a: the operator's own pages, first in its back office (only its members hold qb.operator.use).
@@ -214,6 +218,9 @@ export default defineExtension({
         // Q48c: headquarters' own prospecting, and every owner's.
         { key: 'qb-prospects', label: 'menu.prospects', path: PATH.prospects, icon: Radar,
           permission: PERMISSION.adminProspect },
+        // Q69: one entry for both back offices (headquarters' content administrators and the operators hold it).
+        { key: 'qb-certifications', label: 'menu.certifications', path: PATH.certifications, icon: BadgeCheck,
+          permission: PERMISSION.certificationManage },
       ],
     },
     {
