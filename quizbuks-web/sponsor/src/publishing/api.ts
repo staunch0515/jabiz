@@ -92,6 +92,8 @@ export interface Publication {
   /** Q73b: the languages offered, the main one first (none: the version's base only), and the texts in them. */
   languages: ContentLanguage[]
   translations: Partial<Record<ContentLanguage, Partial<Record<PublicationTextField, string>>>>
+  /** Q73c: the hash of the base text each stored translation was made from. */
+  translationHashes?: Partial<Record<ContentLanguage, Partial<Record<PublicationTextField, string>>>>
   fullScore: number | null
   maxReward: string | null
   maxSpend: string | null
@@ -209,6 +211,29 @@ export function languagesOf(value: unknown): ContentLanguage[] {
     .filter((l): l is ContentLanguage => (CONTENT_LANGUAGES as readonly string[]).includes(l))
 }
 
+/** Q73c: the stored translations' hashes of the base texts they translate, by language and field. */
+export function translationHashesOf(value: unknown):
+  Partial<Record<ContentLanguage, Partial<Record<PublicationTextField, string>>>> {
+  if (value == null || value === '') return {}
+  try {
+    const parsed = JSON.parse(String(value)) as Record<string, Record<string, { hash?: string }>>
+    const out: Partial<Record<ContentLanguage, Partial<Record<PublicationTextField, string>>>> = {}
+    for (const [language, fields] of Object.entries(parsed)) {
+      if (!(CONTENT_LANGUAGES as readonly string[]).includes(language)) continue
+      const hashes: Partial<Record<PublicationTextField, string>> = {}
+      for (const [field, entry] of Object.entries(fields ?? {})) {
+        if ((PUBLICATION_TEXT_FIELDS as readonly string[]).includes(field) && entry?.hash) {
+          hashes[field as PublicationTextField] = entry.hash
+        }
+      }
+      out[language as ContentLanguage] = hashes
+    }
+    return out
+  } catch {
+    return {}
+  }
+}
+
 /** The stored translations' texts (`{lang: {field: {text, hash}}}`), by language and field. */
 export function translationsOf(value: unknown):
   Partial<Record<ContentLanguage, Partial<Record<PublicationTextField, string>>>> {
@@ -322,6 +347,7 @@ export function toPublication(row: Row): Publication {
     referral: referralPolicy(row.referral),
     languages: languagesOf(row.languages),
     translations: translationsOf(row.translations),
+    translationHashes: translationHashesOf(row.translations),
     fullScore: numOrNull(row.fullScore),
     maxReward: str(row.maxReward),
     maxSpend: str(row.maxSpend),
@@ -853,6 +879,13 @@ export interface PublicationForm {
   /** Q73b: the languages offered, the main one first (none: the version's base only), and the texts typed in them. */
   languages: ContentLanguage[]
   translations: Partial<Record<ContentLanguage, Partial<Record<PublicationTextField, string>>>>
+  /**
+   * Q73c: the translations as stored, with the hash of the base text each was made from, and those the sponsor
+   * confirms still right for a changed base text (`<language>.<field>`).
+   */
+  storedTranslations?: Partial<Record<ContentLanguage, Partial<Record<PublicationTextField, string>>>>
+  translationHashes?: Partial<Record<ContentLanguage, Partial<Record<PublicationTextField, string>>>>
+  confirmed?: string[]
 }
 
 let keys = 0
@@ -893,6 +926,9 @@ export function formOf(detail: PublicationDetail | null): PublicationForm {
     referralDays: p?.referral ? String(p.referral.days) : '7',
     languages: p?.languages ?? [],
     translations: p?.translations ?? {},
+    storedTranslations: p?.translations ?? {},
+    translationHashes: p?.translationHashes ?? {},
+    confirmed: [],
     tiers: (detail?.tiers ?? []).map((tier) => ({ key: tierKey(), tierId: tier.tierId,
       fromScore: String(tier.fromScore), toScore: String(tier.toScore), reward: tier.reward })),
   }
@@ -983,6 +1019,8 @@ export function inputOf(form: PublicationForm, publicationId: string | null, bas
           .filter((language) => form.translations[language])
           .map((language) => [language, Object.fromEntries(Object.entries(form.translations[language] ?? {})
             .filter(([, text]) => text && text.trim() !== '').map(([field, text]) => [field, text!.trim()]))])),
+        // Q73c: translations still right for a changed base text.
+        ...(form.confirmed && form.confirmed.length > 0 ? { confirmed: form.confirmed } : {}),
       } : {}),
     },
   }

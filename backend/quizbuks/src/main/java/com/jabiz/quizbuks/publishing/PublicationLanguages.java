@@ -145,6 +145,16 @@ public final class PublicationLanguages {
      */
     public static Map<String, Map<String, Text>> merge(Map<String, Map<String, String>> given,
         Map<String, Map<String, Text>> stored, Map<String, String> sources, List<String> languages, String base) {
+        return merge(given, stored, sources, languages, base, null);
+    }
+
+    /**
+     * As {@link #merge(Map, Map, Map, List, String)}; a translation the sponsor {@code confirmed}
+     * ({@code <language>.<field>}: still right for the present base text, Q73c) takes the present base text's hash.
+     */
+    public static Map<String, Map<String, Text>> merge(Map<String, Map<String, String>> given,
+        Map<String, Map<String, Text>> stored, Map<String, String> sources, List<String> languages, String base,
+        java.util.Collection<String> confirmed) {
         Map<String, Map<String, Text>> out = new LinkedHashMap<>();
         if (given == null) {
             return out;
@@ -161,8 +171,9 @@ public final class PublicationLanguages {
                     return;
                 }
                 Text old = before.get(field);
-                texts.put(field, old != null && value.equals(old.text()) ? old
-                    : new Text(value, ContentLanguages.sourceHash(sources.get(field))));
+                boolean kept = old != null && value.equals(old.text())
+                    && (confirmed == null || !confirmed.contains(language + "." + field));
+                texts.put(field, kept ? old : new Text(value, ContentLanguages.sourceHash(sources.get(field))));
             });
             if (!texts.isEmpty()) {
                 out.put(language, texts);

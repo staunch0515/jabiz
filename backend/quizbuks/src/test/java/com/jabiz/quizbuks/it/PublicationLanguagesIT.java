@@ -75,6 +75,11 @@ class PublicationLanguagesIT extends PlayItSupport {
         // The base name changed, the Chinese one not: it translates an older name until translated again.
         save.put("name", "Capitals of the world");
         assertThat(problemCodes(run("QB_PUBLICATION_SAVE", token, save))).contains("QB_PUBLICATION_TEXT_STALE");
+        // Q73c: the sponsor may confirm it is still right for the new name instead of translating it again.
+        save.put("confirmed", List.of("zh.name"));
+        assertThat(problemCodes(run("QB_PUBLICATION_SAVE", token, save))).doesNotContain(
+            "QB_PUBLICATION_TEXT_STALE");
+        save.remove("confirmed");
         save.put("translations", Map.of("zh", Map.of("name", "世界各国的首都")));
         assertThat(problemCodes(run("QB_PUBLICATION_SAVE", token, save))).doesNotContain(
             "QB_PUBLICATION_TEXT_STALE");
