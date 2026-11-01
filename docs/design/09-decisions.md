@@ -2411,7 +2411,7 @@ Google 拒绝在嵌入的网页视图中登录（`disallowed_useragent`），第
 2. **关联文件**：`jabiz.web.native-apps[i]`（`path` 为一个已配置 SPA 的路径；`ios` 为 `<Team ID>.<bundle ID>` 列表；`android[j].package-name` 与 `.fingerprints`，签名证书的 SHA-256）。
    单独一个列表、按 SPA 的路径，部署只加这一项，不必重写构建声明的 SPA 列表（Spring 的列表按整体替换）。平台在域名根提供
    `GET /.well-known/apple-app-site-association`（只开该 SPA 路径之下的地址，`/` 的 SPA 为全部）与 `GET /.well-known/assetlinks.json`（`delegate_permission/common.handle_all_urls`，
-   打开哪些地址由 App 的 manifest 决定）：JSON、不转向、公开（带来的凭据不看）、缓存一小时；没有该系统的 App 时 404。SPA 的路由从不应答这两个地址。启动检查一次报告全部问题
+   打开哪些地址由 App 的 manifest 决定）：JSON、不转向、公开（带来的凭据不看）、缓存一小时、`GET` 与 `HEAD`。由过滤器提供，不是接口（不在 OpenAPI 中）：没有该系统的 App 时请求照常往下走（构建中的静态文件，否则 404）。SPA 的路由从不应答这两个地址。启动检查一次报告全部问题
    （路径不是已配置的 SPA、同一路径两次、什么 App 也没写、编号、包名或指纹的格式）。
 3. **外壳中的安装提示**：`configureClient({ nativeShell: 'ios' | 'android' | … })` 声明网页在哪个外壳中运行（`nativeShell()` 读出）；在外壳中安装的判断视同已安装，横幅、指引与账户页的入口都不出现。
    外壳由应用自己识别（参数、User-Agent），平台不猜。

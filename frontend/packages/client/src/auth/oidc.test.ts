@@ -122,5 +122,8 @@ describe('a native shell (decision D68)', () => {
     } })
     vi.stubGlobal('fetch', started())
     await expect(startProviderSignIn('google', '/taker/')).rejects.toThrow('no browser')
+    // The round trip that never left is forgotten: no later callback takes its binder or purpose.
+    expect(takeBinder()).toBeNull()
+    expect(window.sessionStorage.getItem('jabiz.session.admin.oidcPurpose')).toBeNull()
   })
 })

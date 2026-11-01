@@ -4928,7 +4928,7 @@ D17 下匿名不能写任何东西（15 §10）。
 |---|---|
 | 17l-1 | `@jabiz/client`：`configureClient({ openAuthorization })`（缺省页面自己跳转），`startProviderSignIn` 与 `startIdentityLink` 经它打开提供方的页面，回调照旧是入口的 `login/oidc`（binder 不变） |
 | 17l-2 | `configureClient({ nativeShell })` 与 `nativeShell()`：外壳中安装的判断视同已安装，安装提示与指引不出现 |
-| 17l-3 | `jabiz.web.native-apps[i]`（`path`、`ios`、`android[j].package-name` / `.fingerprints`）：`NativeAppAssociations` 提供 `/.well-known/apple-app-site-association`（只开该 SPA 的路径）与 `/.well-known/assetlinks.json`；公开（凭据不看）、JSON、一小时缓存、没有 App 即 404；SPA 的路由不应答它们；`SpaConfigCheck` 检查 |
+| 17l-3 | `jabiz.web.native-apps[i]`（`path`、`ios`、`android[j].package-name` / `.fingerprints`）：`NativeAppAssociations` 提供 `/.well-known/apple-app-site-association`（只开该 SPA 的路径）与 `/.well-known/assetlinks.json`；公开（凭据不看）、JSON、一小时缓存、`GET` 与 `HEAD`；过滤器而不是接口（不在 OpenAPI 中），没有 App 时请求往下走（静态文件或 404）；SPA 的路由不应答它们；`SpaConfigCheck` 检查；外壳打不开页面时忘掉这一轮的 binder |
 | 17l-4 | 测试：`NativeAppAssociationsTest`（两个文件、404、不归 SPA、全部格式问题）、`MultiSpaIT`（经完整的过滤链：公开、JSON、缓存、无页面策略、带过期令牌也 200）、`oidc.test.ts`（外壳打开页面、关联同样、外壳失败即失败）、`install.test.ts`（外壳中视同已安装） |
 | 17l-5 | 文档：决策 D68、12 §4、17 §3.2、指南 `app-spa.md` 6a、根 `CLAUDE.md` |
 

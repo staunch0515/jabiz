@@ -185,6 +185,9 @@ class MultiSpaIT extends PostgresIntegrationTest {
             .jsonPath("$[0].relation[0]").isEqualTo("delegate_permission/common.handle_all_urls")
             .jsonPath("$[0].target.package_name").isEqualTo("com.example.portal")
             .jsonPath("$[0].target.sha256_cert_fingerprints[0]").isEqualTo(FINGERPRINT);
+        client.head().uri("/.well-known/assetlinks.json").header("Authorization", "Bearer stale").exchange()
+            .expectStatus().isOk().expectHeader().contentType(MediaType.APPLICATION_JSON)
+            .expectBody().isEmpty();
         // Other well-known addresses stay the site's.
         client.get().uri("/.well-known/other").exchange().expectStatus().isNotFound();
     }

@@ -5,9 +5,6 @@ import com.jabiz.runtime.web.JabizWebProperties.AndroidApp;
 import com.jabiz.runtime.web.JabizWebProperties.NativeApp;
 import com.jabiz.runtime.web.JabizWebProperties.Spa;
 import org.junit.jupiter.api.Test;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
 
 import java.util.List;
 import java.util.Map;
@@ -28,34 +25,33 @@ class NativeAppAssociationsTest {
         return new JabizWebProperties(SPAS, null, null, null, apps);
     }
 
+    private static NativeAppAssociations files(List<NativeApp> apps) {
+        return new NativeAppAssociations(properties(apps), tools.jackson.databind.json.JsonMapper.builder().build());
+    }
+
     @Test
     void appleOpensOnlyTheSpasOwnPath() {
-        NativeAppAssociations files = new NativeAppAssociations(properties(List.of(
+        NativeAppAssociations files = files(List.of(
             new NativeApp("/taker", List.of("ABCDE12345.com.example.app"), null),
-            new NativeApp("/", List.of("ABCDE12345.com.example.site"), null))));
-        ResponseEntity<Object> apple = files.apple();
-        assertThat(apple.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(apple.getHeaders().getContentType()).isEqualTo(MediaType.APPLICATION_JSON);
-        assertThat(apple.getHeaders().getCacheControl()).isEqualTo("max-age=3600, public");
-        assertThat(apple.getBody()).isEqualTo(Map.of("applinks", Map.of("details", List.of(
+            new NativeApp("/", List.of("ABCDE12345.com.example.site"), null)));
+        assertThat(files.apple()).contains(Map.of("applinks", Map.of("apps", List.of(), "details", List.of(
             Map.of("appIDs", List.of("ABCDE12345.com.example.app"), "components", List.of(Map.of("/", "/taker/*"))),
             Map.of("appIDs", List.of("ABCDE12345.com.example.site"), "components", List.of(Map.of("/", "/*")))))));
-        // No Android app: Google's file is not there.
-        assertThat(files.android().getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        // No Android app: Google's file is left to the rest of the chain.
+        assertThat(files.android()).isEmpty();
     }
 
     @Test
     void androidAppsHandleTheSitesLinksOnceEach() {
         AndroidApp app = new AndroidApp("com.example.app", List.of(FINGERPRINT.toLowerCase()));
-        NativeAppAssociations files = new NativeAppAssociations(properties(List.of(
-            new NativeApp("/taker", null, List.of(app)), new NativeApp("/sponsor", null, List.of(app)))));
-        assertThat(files.android().getBody()).isEqualTo(List.of(Map.of(
+        NativeAppAssociations files = files(List.of(
+            new NativeApp("/taker", null, List.of(app)), new NativeApp("/sponsor", null, List.of(app))));
+        assertThat(files.android()).contains(List.of(Map.of(
             "relation", List.of("delegate_permission/common.handle_all_urls"),
             "target", Map.of("namespace", "android_app", "package_name", "com.example.app",
                 "sha256_cert_fingerprints", List.of(FINGERPRINT)))));
-        assertThat(files.apple().getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
-        assertThat(new NativeAppAssociations(properties(null)).android().getStatusCode())
-            .isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(files.apple()).isEmpty();
+        assertThat(files(null).android()).isEmpty();
     }
 
     @Test
