@@ -189,7 +189,8 @@ class OidcController {
                     () -> new IllegalStateException("The provider of the state is no longer configured"));
                 SignInSource source = AuthController.source(clients, http, pending.entry());
                 Mono<AuthController.TokenResponse> work = exchange.identity(provider, request.code(), pending)
-                    .flatMap(identity -> signIn(provider, identity, source, http, false));
+                    .flatMap(exchanged -> signIn(provider, exchanged.identity(), exchanged.refreshToken(), source,
+                        http, false));
                 return observations.mono(PlatformObservations.AUTH_OIDC, "oidc " + provider.id(),
                     KeyValues.of("provider", provider.id()), work);
             // Refusals after the identity was proven (a guard, an unverified address, an address in use) keep their
@@ -259,10 +260,10 @@ class OidcController {
      * then. {@code again}: this is the sign-in after opening (or after losing a race to open), which opens nothing more.
      */
     private Mono<AuthController.TokenResponse> signIn(OidcProvider provider, IdTokenValidator.Identity identity,
-        SignInSource source, ServerHttpRequest http, boolean again) {
+        String refreshToken, SignInSource source, ServerHttpRequest http, boolean again) {
         java.time.Instant mfaAt = IdTokenValidator.secondFactorAt(identity, provider, clock.instant());
         SponsorOidcSignInInput input = new SponsorOidcSignInInput(provider.id(), identity.subject(), mfaAt != null,
-            source);
+            source, null, refreshToken);
         return processes.executeAtEntry(SponsorOidcSignInProcess.DEFINITION, input)
             // Two sign-ins of one user at once: the later loses the race for the next login record. No password is
             // guessed here, so it simply signs in once more.
@@ -271,7 +272,7 @@ class OidcController {
             .flatMap(result -> {
                 if (result.outcome() == LoginOutcome.BAD_CREDENTIALS) {
                     return again ? Mono.error(AuthController.loginFailed("No user is linked to the subject"))
-                        : open(provider, identity, source, http, false);
+                        : open(provider, identity, refreshToken, source, http, false);
                 }
                 return AuthController.answer(result, mfaAt,
                     result.identityId() == null ? null : UUID.fromString(result.identityId()),
@@ -287,7 +288,7 @@ class OidcController {
      * once) asks once more ({@code retried}), which then finds the link or the address in use.
      */
     private Mono<AuthController.TokenResponse> open(OidcProvider provider, IdTokenValidator.Identity identity,
-        SignInSource source, ServerHttpRequest http, boolean retried) {
+        String refreshToken, SignInSource source, ServerHttpRequest http, boolean retried) {
         return Mono.defer(() -> {
             String entry = source.entryOrDefault();
             String trusted = identity.trustedEmail(provider);
@@ -310,12 +311,13 @@ class OidcController {
                     identity.subject(), email, identity.name(),
                     PlatformLanguages.isSupported(language) ? language : null, trusted != null));
             }).flatMap(opened -> switch (opened.outcome()) {
-                case CREATED, EXISTS -> signIn(provider, identity, source, http, true);
+                case CREATED, EXISTS -> signIn(provider, identity, refreshToken, source, http, true);
                 case EMAIL_IN_USE -> Mono.<AuthController.TokenResponse>error(new OidcAccountExistsException(
                     "The address belongs to an account already"));
                 case DISABLED -> Mono.<AuthController.TokenResponse>error(AuthController.loginFailed(
                     "The entry " + entry + " takes no registrations"));
-            }).onErrorResume(e -> !retried && raceLost(e), e -> open(provider, identity, source, http, true));
+            }).onErrorResume(e -> !retried && raceLost(e), e -> open(provider, identity, refreshToken, source, http,
+                true));
         });
     }
 

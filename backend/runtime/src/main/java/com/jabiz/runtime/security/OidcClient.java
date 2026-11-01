@@ -56,7 +56,12 @@ public class OidcClient {
     }
 
     /** The endpoints the discovery document names. */
-    record Metadata(String authorizationEndpoint, String tokenEndpoint, String jwksUri) {}
+    record Metadata(String authorizationEndpoint, String tokenEndpoint, String jwksUri, String revocationEndpoint) {
+
+        Metadata(String authorizationEndpoint, String tokenEndpoint, String jwksUri) {
+            this(authorizationEndpoint, tokenEndpoint, jwksUri, null);
+        }
+    }
 
     private record Cached<T>(T value, Instant fetchedAt) {}
 
@@ -90,8 +95,11 @@ public class OidcClient {
             // Facebook's document names no token endpoint: its Graph API's is the one (decision D61 item 1).
             String tokenEndpoint = document.get("token_endpoint") == null && provider.defaultTokenEndpoint() != null
                 ? provider.defaultTokenEndpoint() : endpoint(document, "token_endpoint");
+            // Optional (RFC 7009 via the discovery document): only Apple's tokens are revoked (decision D67 item 5).
+            String revocation = document.get("revocation_endpoint") == null ? null
+                : endpoint(document, "revocation_endpoint");
             Metadata found = new Metadata(endpoint(document, "authorization_endpoint"), tokenEndpoint,
-                endpoint(document, "jwks_uri"));
+                endpoint(document, "jwks_uri"), revocation);
             metadata.put(provider.id(), new Cached<>(found, clock.instant()));
             return found;
         });
@@ -189,6 +197,39 @@ public class OidcClient {
                 return new Tokens(token, response.get("refresh_token") instanceof String refresh && !refresh.isBlank()
                     ? refresh : null);
             });
+    }
+
+    /**
+     * Revokes a refresh token at the provider's revocation endpoint (RFC 7009; Apple's {@code /auth/revoke}, decision
+     * D67 item 5), authenticating as for the token request. Completes when the provider answers 200, which it also
+     * does for a token it no longer knows; fails with {@link ProviderException} otherwise, or when the discovery
+     * document names no revocation endpoint.
+     */
+    Mono<Void> revoke(OidcProvider provider, String refreshToken) {
+        Mono<String> secret = provider.isApple()
+            ? Mono.fromCallable(() -> appleSecrets.secretOf(provider)).subscribeOn(Schedulers.boundedElastic())
+            : Mono.justOrEmpty(provider.clientSecret());
+        return secret.defaultIfEmpty("").zipWith(metadata(provider)).flatMap(found -> {
+            if (found.getT2().revocationEndpoint() == null) {
+                return Mono.error(new ProviderException("The discovery document names no revocation_endpoint"));
+            }
+            Map<String, String> fields = new java.util.LinkedHashMap<>();
+            fields.put("token", refreshToken);
+            fields.put("token_type_hint", "refresh_token");
+            HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(found.getT2().revocationEndpoint()))
+                .header("Content-Type", "application/x-www-form-urlencoded");
+            if (provider.clientSecretPost()) {
+                fields.put("client_id", provider.clientId());
+                fields.put("client_secret", found.getT1());
+            } else {
+                request.header("Authorization", "Basic " + Base64.getEncoder().encodeToString((encode(
+                    provider.clientId()) + ":" + encode(found.getT1())).getBytes(StandardCharsets.UTF_8)));
+            }
+            String form = fields.entrySet().stream()
+                .map(entry -> encode(entry.getKey()) + "=" + encode(entry.getValue()))
+                .collect(Collectors.joining("&"));
+            return send(request.POST(HttpRequest.BodyPublishers.ofString(form)), "revocation").then();
+        });
     }
 
     private Mono<String> send(HttpRequest.Builder request, String what) {

@@ -65,6 +65,8 @@ public final class TestOidcProvider implements AutoCloseable {
     private volatile ECKey appleKey;
     private volatile String appleTeam;
     private final List<String> refreshTokens = new java.util.concurrent.CopyOnWriteArrayList<>();
+    private final List<String> revoked = new java.util.concurrent.CopyOnWriteArrayList<>();
+    private volatile int revocationStatus = 200;
 
     public TestOidcProvider() {
         this(CLIENT_SECRET);
@@ -87,12 +89,14 @@ public final class TestOidcProvider implements AutoCloseable {
         published.add(ec.toPublicJWK());
         server.createContext("/idp/.well-known/openid-configuration", exchange -> json(exchange, 200, """
             {"issuer": "%s", "authorization_endpoint": "%s/authorize", "token_endpoint": "%s/token",
-             "jwks_uri": "%s/jwks"}""".formatted(issuer, issuer, issuer, issuer)));
+             "jwks_uri": "%s/jwks", "revocation_endpoint": "%s/revoke"}""".formatted(issuer, issuer, issuer, issuer,
+            issuer)));
         server.createContext("/idp/jwks", exchange -> {
             jwksReads++;
             json(exchange, 200, new JWKSet(List.copyOf(published)).toString(true));
         });
         server.createContext("/idp/token", this::token);
+        server.createContext("/idp/revoke", this::revoke);
         server.start();
     }
 
@@ -130,6 +134,16 @@ public final class TestOidcProvider implements AutoCloseable {
     /** The refresh tokens handed out as Apple, oldest first. */
     public List<String> refreshTokens() {
         return List.copyOf(refreshTokens);
+    }
+
+    /** The tokens revoked (as the revocation endpoint accepted them), oldest first. */
+    public List<String> revoked() {
+        return List.copyOf(revoked);
+    }
+
+    /** The status the revocation endpoint answers with (200 by default: revoked); another one refuses. */
+    public void revocationStatus(int status) {
+        revocationStatus = status;
     }
 
     /** How often the JWKS was read. */
@@ -222,6 +236,36 @@ public final class TestOidcProvider implements AutoCloseable {
                 URLDecoder.decode(pair.substring(eq + 1), StandardCharsets.UTF_8));
         }
         return params;
+    }
+
+    /** RFC 7009 as Apple takes it: the client authenticated as for the token request, then the token. */
+    private void revoke(HttpExchange exchange) throws IOException {
+        Map<String, String> form = form(exchange);
+        String header = exchange.getRequestHeaders().getFirst("Authorization");
+        boolean post = header == null && CLIENT_ID.equals(form.get("client_id"))
+            && (appleKey == null ? clientSecret.equals(form.get("client_secret")) : appleSecret(form.get("client_secret")));
+        if (!post || form.get("token") == null) {
+            json(exchange, 400, "{\"error\": \"invalid_client\"}");
+            return;
+        }
+        if (revocationStatus != 200) {
+            json(exchange, revocationStatus, "{\"error\": \"server_error\"}");
+            return;
+        }
+        revoked.add(form.get("token"));
+        json(exchange, 200, "{}");
+    }
+
+    private static Map<String, String> form(HttpExchange exchange) throws IOException {
+        Map<String, String> form = new LinkedHashMap<>();
+        for (String pair : new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8).split("&")) {
+            int eq = pair.indexOf('=');
+            if (eq > 0) {
+                form.put(URLDecoder.decode(pair.substring(0, eq), StandardCharsets.UTF_8),
+                    URLDecoder.decode(pair.substring(eq + 1), StandardCharsets.UTF_8));
+            }
+        }
+        return form;
     }
 
     private void token(HttpExchange exchange) throws IOException {

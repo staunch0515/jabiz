@@ -88,6 +88,13 @@ class OidcClientTest {
             assertThat(tokens).hasToString("Tokens[***]");
             assertThat(apple.clientAuthentication()).isEqualTo("post");
 
+            // The refresh token revokes the authorization (decision D67 item 5); a refusal fails.
+            client.revoke(provider, tokens.refreshToken()).block();
+            assertThat(apple.revoked()).containsExactly(tokens.refreshToken());
+            apple.revocationStatus(500);
+            org.assertj.core.api.Assertions.assertThatThrownBy(() -> client.revoke(provider, "rt-x").block())
+                .isInstanceOf(OidcClient.ProviderException.class).hasMessageContaining("HTTP 500");
+
             // The authorization request asks for a form post, Apple's scopes and no PKCE.
             String url = client.authorizationUrl(provider, new OidcStateStore.Started("st", "no", "ch", "b"),
                 provider.providerRedirectUri("app")).block();
