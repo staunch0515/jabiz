@@ -60,14 +60,41 @@ class OidcClientTest {
              TestOidcProvider generic = new TestOidcProvider()) {
             String token = "header.claims.signature";
             String verifier = "verifier-of-forty-three-characters-or-more-123456";
-            assertThat(new OidcClient(CLOCK).idToken(provider(line.issuer(), "line", LONG_SECRET),
-                line.code(challenge(verifier), token), verifier, TestOidcProvider.REDIRECT_URI).block())
+            assertThat(new OidcClient(CLOCK).tokens(provider(line.issuer(), "line", LONG_SECRET),
+                line.code(challenge(verifier), token), verifier, TestOidcProvider.REDIRECT_URI).block().idToken())
                 .isEqualTo(token);
             assertThat(line.clientAuthentication()).isEqualTo("post");
-            assertThat(new OidcClient(CLOCK).idToken(provider(generic.issuer(), null, TestOidcProvider.CLIENT_SECRET),
-                generic.code(challenge(verifier), token), verifier, TestOidcProvider.REDIRECT_URI).block())
+            assertThat(new OidcClient(CLOCK).tokens(provider(generic.issuer(), null, TestOidcProvider.CLIENT_SECRET),
+                generic.code(challenge(verifier), token), verifier, TestOidcProvider.REDIRECT_URI).block().idToken())
                 .isEqualTo(token);
             assertThat(generic.clientAuthentication()).isEqualTo("basic");
+        }
+    }
+
+    @Test
+    void appleGetsASignedSecretInTheFormNoVerifierAndGivesARefreshToken() {
+        try (TestOidcProvider apple = new TestOidcProvider()) {
+            String key = apple.asApple("TEAM123456", "KEY1234567");
+            OidcProvider provider = new OidcProvider("apple", apple.issuer(), TestOidcProvider.CLIENT_ID, null, null,
+                null, null, null, java.util.Map.of("app", "https://app.example.com/login/oidc"), "apple", true, false,
+                new OidcProvider.Apple("TEAM123456", "KEY1234567", key,
+                    "https://api.example.com/api/auth/oidc/apple/form-post"));
+            OidcClient client = new OidcClient(CLOCK);
+            OidcClient.Tokens tokens = client.tokens(provider, apple.code(null, "header.claims.signature",
+                "https://api.example.com/api/auth/oidc/apple/form-post"), "unused-verifier",
+                provider.providerRedirectUri("app")).block();
+            assertThat(tokens.idToken()).isEqualTo("header.claims.signature");
+            assertThat(tokens.refreshToken()).isEqualTo(apple.refreshTokens().getLast());
+            assertThat(tokens).hasToString("Tokens[***]");
+            assertThat(apple.clientAuthentication()).isEqualTo("post");
+
+            // The authorization request asks for a form post, Apple's scopes and no PKCE.
+            String url = client.authorizationUrl(provider, new OidcStateStore.Started("st", "no", "ch", "b"),
+                provider.providerRedirectUri("app")).block();
+            assertThat(TestOidcProvider.query(url)).containsEntry("response_mode", "form_post")
+                .containsEntry("scope", "openid name email")
+                .containsEntry("redirect_uri", "https://api.example.com/api/auth/oidc/apple/form-post")
+                .doesNotContainKeys("code_challenge", "code_challenge_method");
         }
     }
 
