@@ -288,6 +288,8 @@ export const publishingEn = {
     },
     qr: {
       title: 'QR code of this publication',
+      language: 'Language of the link',
+      languageHint: 'The page opens in this language; the poster shows the name in it.',
       text: 'Scanning it opens the share link: the visitor signs in with an e-mail address and answers. Print the poster, or put the code on your own.',
       alt: 'QR code leading to {{name}}',
       png: 'Save PNG',
@@ -803,6 +805,8 @@ export const publishingZh: typeof publishingEn = {
     },
     qr: {
       title: '这个发布的二维码',
+      language: '链接的语言',
+      languageHint: '页面以这种语言打开，海报上的名称也用这种语言。',
       text: '扫码即打开分享链接：访问者用邮箱登录后答题。可以打印海报，也可以把二维码放到你自己的设计里。',
       alt: '通往 {{name}} 的二维码',
       png: '保存 PNG',
@@ -1318,6 +1322,8 @@ export const publishingJa: typeof publishingEn = {
     },
     qr: {
       title: 'この公開のQRコード',
+      language: 'リンクの言語',
+      languageHint: 'ページはこの言語で開き、ポスターの名前もこの言語になります。',
       text: '読み取ると共有リンクが開きます：訪問者はメールアドレスでログインして回答します。ポスターを印刷するか、コードを自分のデザインに載せてください。',
       alt: '{{name}} へのQRコード',
       png: 'PNGを保存',

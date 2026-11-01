@@ -16,6 +16,7 @@ import { ACCOUNT_DETAILS_PATH } from './AccountPage'
 import { QB } from '../qb/messages'
 import { shownLanguages } from '../qb/api'
 import { useSoundSetting } from '../qb/SoundSettings'
+import { linkLanguageOf } from '../linkLanguage'
 import { readPublication, readTiers, recordView, type PublicationView } from '../qb/play'
 import { problemText } from '../qb/problems'
 import { Link } from '../qb/router'
@@ -149,7 +150,8 @@ export function PublicationPage({ publicationId, country }: { publicationId: str
   const [at] = useState(() => new Date().toISOString())
   // Q73b: the page in the language chosen on it, else the first of the taker's quiz languages it offers.
   const settings = useSoundSetting()
-  const [chosen, setChosen] = useState<string | null>(null)
+  // A link's ?lang= (a share link, a poster, an invitation) is the first choice on the page it opened.
+  const [chosen, setChosen] = useState<string | null>(() => linkLanguageOf(window.location.pathname))
   const shown = shownLanguages(settings.data, i18n.language)
   const languages = chosen ? [chosen, ...shown.filter((l) => l !== chosen)] : shown
   const request = { publicationId, at, country, languages }

@@ -250,6 +250,36 @@ public final class PublicationLanguages {
         return base == null ? null : base.toString();
     }
 
+    /**
+     * A publication's or a card's text for a reader of {@code language} (Q73b §3.5, the inbox's and the mail's
+     * publication names): its translation into that language, else into its main language, else the base text (the
+     * field itself). Reads both the card's texts and the publication's texts with their hashes.
+     */
+    public static String textIn(com.jabiz.runtime.EntityInstance publication, String language, String field) {
+        Object base = publication.get(field);
+        Object stored = publication.get("translations");
+        if (stored != null && !stored.toString().isBlank()) {
+            Map<String, Map<String, Object>> texts = JSON.readValue(stored.toString(),
+                new TypeReference<Map<String, Map<String, Object>>>() {});
+            List<String> offered = ContentLanguages.parseList(publication.get("languages") == null ? null
+                : publication.get("languages").toString());
+            Object main = offered.isEmpty() ? publication.get("language") : offered.getFirst();
+            for (Object candidate : java.util.Arrays.asList(language, main)) {
+                if (candidate == null) {
+                    continue;
+                }
+                Object text = texts.getOrDefault(candidate.toString(), Map.of()).get(field);
+                if (text instanceof Map<?, ?> withHash) {
+                    text = withHash.get("text");
+                }
+                if (text != null && !text.toString().isBlank()) {
+                    return text.toString();
+                }
+            }
+        }
+        return base == null ? null : base.toString();
+    }
+
     /** A blank text is none. */
     static String blank(String text) {
         return text == null || text.isBlank() ? null : text.strip();

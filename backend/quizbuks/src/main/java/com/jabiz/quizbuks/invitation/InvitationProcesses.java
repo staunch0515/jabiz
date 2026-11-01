@@ -7,6 +7,7 @@ import com.jabiz.process.ProcessDefinition;
 import com.jabiz.process.ProcessDefinitionBuilder;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
+import com.jabiz.quizbuks.publishing.PublicationLanguages;
 import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.quizbuks.identity.CallerChecks;
 import com.jabiz.quizbuks.identity.QbAccounts;
@@ -377,14 +378,21 @@ public final class InvitationProcesses {
         return QbMailServers.usable(Invitations.first(ctx, MAIL_SERVER));
     }
 
+    private static String mainText(EntityInstance card, String field) {
+        Object main = card.get("language");
+        String text = PublicationLanguages.textIn(card, main == null ? null : main.toString(), field);
+        return text == null ? "" : text;
+    }
+
     private static Map<String, java.util.function.Function<ProcessContext, ?>> mailParams(MailValues values, String appPath) {
         Map<String, java.util.function.Function<ProcessContext, ?>> params = new LinkedHashMap<>();
         params.put("company", ctx -> {
             EntityInstance sponsor = Invitations.first(ctx, SPONSOR);
             return sponsor == null || sponsor.get("company") == null ? "" : sponsor.get("company");
         });
-        params.put("publicationName", ctx -> Invitations.first(ctx, CARD).get("name"));
-        params.put("quizTitle", ctx -> Invitations.first(ctx, CARD).get("quizTitle"));
+        // Q73b: the invitation is in the publication's main language (its card's `language`, the link's ?lang=).
+        params.put("publicationName", ctx -> mainText(Invitations.first(ctx, CARD), PublicationLanguages.NAME));
+        params.put("quizTitle", ctx -> mainText(Invitations.first(ctx, CARD), PublicationLanguages.QUIZ_TITLE));
         params.put("maxReward", ctx -> MailValues.amount(Invitations.first(ctx, CARD).get("maxReward")));
         params.put("endAt", ctx -> values.time(Invitations.first(ctx, CARD).get("endAt")));
         params.put("entry", ctx -> ENTRY);

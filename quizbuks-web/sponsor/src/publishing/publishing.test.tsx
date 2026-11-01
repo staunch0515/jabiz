@@ -1070,6 +1070,21 @@ describe('a submitted publication', () => {
     await waitFor(() => expect(saved).toEqual(['Coffee week poster.png', 'Coffee week QR.svg', 'Coffee week QR.png']))
   })
 
+  it('shares the link in each language the publication offers, its name in it (Q73b)', async () => {
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(() => null)
+    server({ publication: { ...DRAFT, status: 'LIVE', revision: 6, languages: 'zh,ja',
+      translations: JSON.stringify({ ja: { name: { text: 'コーヒー週間', hash: 'h' } } }) } })
+    window.history.replaceState(null, '', '/publications/p1')
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('publication-qr'))
+    const dialog = await screen.findByTestId('publication-qr-dialog')
+    expect(within(dialog).getByTestId('publication-qr-link')).toHaveTextContent('/taker/p/p1?lang=zh')
+    await userEvent.click(within(within(dialog).getByTestId('publication-qr-language'))
+      .getByRole('radio', { name: '日本語' }))
+    expect(within(dialog).getByTestId('publication-qr-link')).toHaveTextContent('/taker/p/p1?lang=ja')
+    expect(await within(dialog).findByTestId('publication-qr-image')).toHaveAccessibleName('QR code leading to コーヒー週間')
+  })
+
   it('offers no share link for a paused publication', async () => {
     server({ publication: { ...DRAFT, status: 'PAUSED', revision: 7, pausedAt: '2026-10-14T03:00:00Z' } })
     window.history.replaceState(null, '', '/publications/p1')

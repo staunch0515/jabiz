@@ -126,6 +126,11 @@ class PublicationLanguagesIT extends PlayItSupport {
         assertThat((List<Map<String, Object>>) result.get("questions")).extracting(q -> q.get("stem"))
             .containsExactly("法国的首都？", "日本的首都？");
 
+        // The taker's history names it in the attempt's language (Q73b-3), and finds it by that name.
+        assertThat(items("qb.app.history", mei, Map.of("params", Map.of("q", "各国"), "limit", 10)))
+            .singleElement().satisfies(row -> assertThat(row).containsEntry("name", "世界各国的首都")
+                .containsEntry("quizTitle", "首都"));
+
         // Without a language an attempt takes the main one; English is the base's text.
         String ren = taker(newTaker(unique("t-q73b-ren"), "JP"));
         String renAttempt = (String) run("QB_ATTEMPT_START", ren, body("publicationId", publicationId))
