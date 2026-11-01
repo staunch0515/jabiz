@@ -216,7 +216,7 @@
       "questionCount" : "2",
       "budgetCap" : "3000",
       "maxWinners" : "100",
-      "tiers" : "[{\"fromScore\":0,\"reward\":\"0\",\"tierId\":\"01a0f4f9-b280-7000-8000-000000000479\",\"toScore\":1},{\"fromScore\":2,\"reward\":\"30\",\"tierId\":\"01a0f4f9-b280-7000-8000-00000000047a\",\"toScore\":2}]",
+      "tiers" : "[{\"fromScore\":0,\"reward\":\"0\",\"tierId\":\"01a0f4f9-b280-7000-8000-00000000047b\",\"toScore\":1},{\"fromScore\":2,\"reward\":\"30\",\"tierId\":\"01a0f4f9-b280-7000-8000-00000000047c\",\"toScore\":2}]",
       "sponsorCountry" : null,
       "kind" : "SURVEY",
       "language" : "en",

@@ -472,7 +472,7 @@ Quiz「ラーメン通？」 基准：日本語   翻译：中文 ✓  English �
 
 ### Q73b-1、Q73b-2（2026-11-01）：发布多语言（后端与三个前端）
 
-**数据**（迁移 V55）：
+**数据**（迁移 V56）：
 - `qb_publication_version` 与 `qb_publication_card` 加 `languages`、`translations`；旧卡片的 `languages` 填为其 `language`；
 - `qb_attempt` 加 `language`（不可变、只由流程写）。
 

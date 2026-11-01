@@ -7,6 +7,8 @@
 /** The administrators' (default) datasets, read only. */
 export const DATASET = {
   publication: 'urn:jabiz:dataset:default:QbPublication',
+  /** Q49a: takers' reports of publications (an operator's session: its own sponsors'). */
+  report: 'urn:jabiz:dataset:default:QbReport',
   tier: 'urn:jabiz:dataset:default:QbRewardTier',
   /** A version holds the correct answers: only `qb.admin.quiz.read` (the content administrators) reads it. */
   version: 'urn:jabiz:dataset:default:QbQuizVersion',
@@ -38,6 +40,8 @@ export const TEMPLATE = {
   sponsorPages: 'qb.admin.sponsor-pages',
   /** Sponsors' products (Q60b-3), the list and one sponsor's (an operator's own sponsors' only). */
   sponsorProducts: 'qb.admin.sponsor-products',
+  /** Q49a: the reported publications, with their reports counted by reason. */
+  abuseReports: 'qb.admin.reports',
   /** Q60c-2: one sponsor's page views and product clicks in a period. */
   sponsorStats: 'qb.admin.sponsor-stats',
   /** The reward parameters in force (Q28): the default methods and the highest reward per attempt. */
@@ -274,6 +278,8 @@ export const TRANSFER_REVIEW = 'REVIEW'
 export const DICTIONARY = {
   sponsorPageStatus: 'urn:jabiz:dict:quizbuks:sponsor-page-status',
   sponsorProductStatus: 'urn:jabiz:dict:quizbuks:sponsor-product-status',
+  reportReason: 'urn:jabiz:dict:quizbuks:report-reason',
+  reportStatus: 'urn:jabiz:dict:quizbuks:report-status',
   region: 'urn:jabiz:dict:quizbuks:region',
   contentLanguage: 'urn:jabiz:dict:quizbuks:content-language',
   audience: 'urn:jabiz:dict:quizbuks:publication-audience',
@@ -427,6 +433,13 @@ export const SPONSOR_PRODUCT_PROCESS = {
   version: 1,
 } as const
 
+/** Closing a publication's reports (Q49a): headquarters', and an operator's for its sponsors. */
+export const REPORT_PROCESS = {
+  resolve: 'QB_REPORT_RESOLVE',
+  operatorResolve: 'QB_OPERATOR_REPORT_RESOLVE',
+  version: 1,
+} as const
+
 /** A sponsor product's states (`QbSponsorProducts`). */
 export const SPONSOR_PRODUCT_STATUSES = ['LISTED', 'UNLISTED', 'TAKEN_DOWN'] as const
 
@@ -458,6 +471,8 @@ export const PATH = {
   sponsorPage: (userId: string) => `/qb/sponsor-pages/${encodeURIComponent(userId)}`,
   /** Sponsors' products (Q60b-3), to take down and put back. */
   sponsorProducts: '/qb/sponsor-products',
+  /** Q49a: takers' reports of quizzes. */
+  abuseReports: '/qb/abuse-reports',
   users: '/qb/users',
   /** Every attempt (Q14), by user, publication and state. */
   attempts: '/qb/attempts',

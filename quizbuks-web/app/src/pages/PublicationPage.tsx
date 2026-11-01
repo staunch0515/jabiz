@@ -25,6 +25,8 @@ import { SponsorVisit } from './SponsorVisit'
 import { VideoSlot } from '../video/stage'
 import { PublicationContent, useDuration } from '../qb/view/PublicationContent'
 import { ReferralPanel } from '../referral/ReferralPanel'
+import { ReportButton } from '../report/ReportButton'
+import { legalPath } from '../qb/legal'
 import { claimReferral, forgetReferral, pendingReferral } from '../referral/api'
 
 /** Whole minutes from now until a time, at least 0 (by the device's clock: a hint only). */
@@ -223,6 +225,16 @@ export function PublicationPage({ publicationId, country }: { publicationId: str
       <SponsorVisit handle={p.sponsorHandle} sponsor={p.sponsorCompany ?? p.sponsorName} avatar={p.sponsorAvatar}
         products={quizProducts(products.data).length > 0} />
       <ReferralPanel publication={p} />
+      {/* Q49a: the official rules of a quiz with a reward (Apple 5.3, Google Play's contest policy), and reporting it
+          (Apple 1.2). */}
+      <div className="flex flex-wrap items-center justify-between gap-2" data-testid="detail-footer">
+        {(tiers.data ?? []).length > 0
+          ? <Link to={legalPath('CONTEST_RULES')} className="text-muted-foreground text-sm underline"
+            data-testid="detail-contest-rules">{t('contestRules')}</Link>
+          : <span />}
+        {/* The server takes reports of verified takers only (as it records views). */}
+        {emailVerified && <ReportButton publicationId={p.publicationId} name={p.name} />}
+      </div>
       <div className="bg-background sticky bottom-20 -mx-4 border-t px-4 py-3">
         <Action publication={p} onLanguage={setChosen} />
       </div>

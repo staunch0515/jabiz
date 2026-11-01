@@ -11,7 +11,7 @@ datasets:
   QbLegalVersion: urn:jabiz:dataset:public:QbLegalVersion
   QbLegalWithdrawal: urn:jabiz:dataset:public:QbLegalWithdrawal
 params:
-  kind: { like: QbLegalVersion.kind, required: true, description: "TERMS_APP, TERMS_SPONSOR, PRIVACY or COMMERCE_NOTICE" }
+  kind: { like: QbLegalVersion.kind, required: true, description: "TERMS_APP, TERMS_SPONSOR, PRIVACY, COMMERCE_NOTICE, AI_NOTICE or CONTEST_RULES" }
   at:   { kind: { type: temporal, role: EVENT_TIME }, required: true, description: "The time (the page's now, to the minute)" }
 results:
   kind:                { from: QbLegalVersion.kind }

@@ -23,7 +23,7 @@ final class LegalAnnouncements {
     /** Who a kind of text concerns: the app's users, the sponsors, or both (the privacy policy). */
     static List<String> audiences(String kind) {
         return switch (kind) {
-            case QbLegal.TERMS_APP -> List.of(QbInbox.AUDIENCE_APP);
+            case QbLegal.TERMS_APP, QbLegal.CONTEST_RULES -> List.of(QbInbox.AUDIENCE_APP);
             case QbLegal.PRIVACY -> List.of(QbInbox.AUDIENCE_APP, QbInbox.AUDIENCE_SPONSOR);
             default -> List.of(QbInbox.AUDIENCE_SPONSOR);
         };

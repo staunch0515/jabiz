@@ -361,7 +361,7 @@ steps:
   - advanceClock: PT1M
   - actor: { id: "${u1}", permissions: [qb.play, qb.me] }
     process: QB_ATTEMPT_SUBMIT@latest
-    input: { attemptId: "${t1}", publicationId: "${pub}", answers: [{ questionNo: 1, selected: [1] }, { questionNo: 2, selected: [1] }] }
+    input: { attemptId: "${t1}", publicationId: "${pub}", answers: [{ questionNo: 1, selected: [1] }, { questionNo: 2, selected: [2] }] }
     expectOutput: { status: SUBMITTED, score: 5, passed: true, reward: 100, rewardStatus: PAID }
   - setClock: 2026-10-01T01:17:00Z
   - runJob: { job: qb.attempt-expire, items: { succeeded: 1 } }

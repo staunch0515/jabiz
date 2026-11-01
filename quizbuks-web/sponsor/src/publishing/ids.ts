@@ -45,6 +45,8 @@ export const PUBLISHING_TEMPLATE = {
   cashRewards: 'qb.sponsor.cash-rewards',
   /** The prizes takers collect at the sponsor's place (Q22b). */
   redemptions: 'qb.sponsor.redemptions',
+  /** Q74: who handed over the sponsor's prizes, with their figures. */
+  redemptionHandlers: 'qb.sponsor.redemption-handlers',
   /** The sponsor's staff (Q39). */
   staff: 'qb.sponsor.staff',
   /** The digital prizes won from the sponsor, and a publication's code pool: its counts and its codes' hints (Q33). */

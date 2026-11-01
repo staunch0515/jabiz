@@ -24,6 +24,7 @@
 - About me (all optional): gender (including "prefer not to say"), year of birth, occupation and interests
 - Quiz attempts: your answers, start and submission times, score, pass or fail, and the rewards you earned
 - Your Kudos balance and history in the Service; cash rewards and digital prizes you receive, and any disputes about them
+- The reason and note of a quiz you report (the Sponsor is not told who reported it)
 - If you withdraw by bank transfer, the receiving account (bank and branch, account type, account number, account holder)
 - Whether you have read or clicked messages in your inbox
 - If a Sponsor registers you as staff, the Sponsor you belong to and the prizes you hand over in store
