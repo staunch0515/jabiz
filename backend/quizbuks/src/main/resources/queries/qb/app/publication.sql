@@ -175,7 +175,9 @@ SELECT
     (inv.{{QbInvitation.invitationId}} IS NOT NULL) AS invited,
     sp.{{QbSponsor.contactName}}           AS sponsorName,
     sp.{{QbSponsor.company}}               AS sponsorCompany,
-    sp.{{QbSponsor.intro}}                 AS sponsorIntro,
+    -- Q73c: the sponsor's introduction in the page's language when translated.
+    coalesce(CAST(sp.{{QbSponsor.introTranslations}} AS jsonb) -> dl.lang -> 'intro' ->> 'text',
+             sp.{{QbSponsor.intro}})       AS sponsorIntro,
     sp.{{QbSponsor.avatar}}                AS sponsorAvatar,
     -- Q60a: the sponsor's published page, which the sponsor's name links to; none while it is not published.
     sp_page.{{QbSponsorPage.handle}}       AS sponsorHandle,

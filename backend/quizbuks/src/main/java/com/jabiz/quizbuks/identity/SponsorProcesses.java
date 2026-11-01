@@ -104,7 +104,15 @@ public final class SponsorProcesses {
      */
     public record ApplyInput(@NotNull String displayName, @NotNull String company, String intro, UUID avatar,
         Boolean acceptTerms, Long baseRevision, Integer termsVersionNo, Integer privacyVersionNo,
-        @Size(max = 64) String trialKey) {
+        @Size(max = 64) String trialKey, Map<String, Map<String, String>> introTranslations,
+        List<String> introConfirmed) {
+
+        /** An application with its introduction in one language (before Q73c). */
+        public ApplyInput(String displayName, String company, String intro, UUID avatar, Boolean acceptTerms,
+            Long baseRevision, Integer termsVersionNo, Integer privacyVersionNo, String trialKey) {
+            this(displayName, company, intro, avatar, acceptTerms, baseRevision, termsVersionNo, privacyVersionNo,
+                trialKey, null, null);
+        }
 
         /** The versions the page showed, by kind of text. */
         Map<String, Integer> shown() {
@@ -116,7 +124,34 @@ public final class SponsorProcesses {
     }
 
     public record ProfileInput(@NotNull String displayName, @NotNull String company, String intro, UUID avatar,
-        Long baseRevision) {}
+        Long baseRevision, Map<String, Map<String, String>> introTranslations, List<String> introConfirmed) {
+
+        public ProfileInput(String displayName, String company, String intro, UUID avatar, Long baseRevision) {
+            this(displayName, company, intro, avatar, baseRevision, null, null);
+        }
+    }
+
+    /** The introduction's field among its translations (Q73c). */
+    public static final String INTRO = "intro";
+
+    /**
+     * Q73c: the introduction's translations after a save (optional; one out of date refused with the save's other
+     * problems), as stored; null for none.
+     */
+    static String introTranslations(ProcessContext ctx, EntityInstance sponsor, String intro,
+        Map<String, Map<String, String>> given, List<String> confirmed) {
+        Map<String, String> sources = new LinkedHashMap<>();
+        sources.put(INTRO, intro);
+        Map<String, Map<String, com.jabiz.quizbuks.publishing.PublicationLanguages.Text>> stored =
+            com.jabiz.quizbuks.publishing.PublicationLanguages.parse(sponsor == null ? null
+                : sponsor.get("introTranslations"));
+        List<String> languages = new java.util.ArrayList<>(given == null ? stored.keySet() : given.keySet());
+        var merged = com.jabiz.quizbuks.content.TextTranslations.merge(given, stored, sources, languages, confirmed);
+        com.jabiz.quizbuks.content.TextTranslations.problems(languages, languages, given == null ? null
+            : given, merged, sources, Map.of(INTRO, AccountLimits.INTRO_LENGTH), false).forEach(ctx::reject);
+        return com.jabiz.quizbuks.publishing.PublicationLanguages.toJson(merged);
+    }
+
 
     /**
      * @param approval the approval outcome when the process asked for one ({@code PENDING}, {@code APPROVED},
@@ -212,6 +247,8 @@ public final class SponsorProcesses {
         AccountEditing.current(ctx, sponsor, input.baseRevision(), AccountCodes.SPONSOR_CHANGED);
         AccountEditing.requireOwnFile(ctx, AccountEditing.userId(ctx), "avatar", input.avatar(),
             sponsor == null ? null : sponsor.get("avatar"));
+        String introTranslations = introTranslations(ctx, sponsor, blankToNull(input.intro()),
+            input.introTranslations(), input.introConfirmed());
         if (ctx.hasViolations()) {
             return;
         }
@@ -228,6 +265,7 @@ public final class SponsorProcesses {
         values.put("contactName", input.displayName());
         values.put("company", input.company());
         values.put("intro", blankToNull(input.intro()));
+        values.put("introTranslations", introTranslations);
         values.put("avatar", input.avatar());
         values.put("termsAcceptedAt", terms);
         values.put("termsVersionNo", termsVersionNo == null ? null : BigDecimal.valueOf(termsVersionNo));
@@ -237,7 +275,8 @@ public final class SponsorProcesses {
         ctx.put(VALUES, values);
         oldAvatar(ctx, sponsor, input.avatar());
         ApprovalCase review = ApprovalCase.of(id, SponsorApprovals.facts(autoApprove(ctx)), SponsorApprovals.content(
-            input.displayName(), input.company(), blankToNull(input.intro()), input.avatar(), terms, termsVersionNo))
+            input.displayName(), input.company(), blankToNull(input.intro()), input.avatar(), terms, termsVersionNo,
+            introTranslations))
             .reference(reference(input.company()));
         // Q59c-2: the review is the operator's who looks after the sponsor (the one of the language for a first
         // application, which this process assigns them to); headquarters' for a direct sponsor.
@@ -493,6 +532,8 @@ public final class SponsorProcesses {
         }
         String userId = AccountEditing.userId(ctx);
         AccountEditing.requireOwnFile(ctx, userId, "avatar", input.avatar(), sponsor.get("avatar"));
+        String introTranslations = introTranslations(ctx, sponsor, blankToNull(input.intro()),
+            input.introTranslations(), input.introConfirmed());
         if (ctx.hasViolations()) {
             return;
         }
@@ -501,6 +542,7 @@ public final class SponsorProcesses {
         values.put("contactName", input.displayName());
         values.put("company", input.company());
         values.put("intro", blankToNull(input.intro()));
+        values.put("introTranslations", introTranslations);
         values.put("avatar", input.avatar());
         oldAvatar(ctx, sponsor, input.avatar());
         Map<String, Object> changed = AccountEditing.differences(sponsor, values);
@@ -618,7 +660,7 @@ public final class SponsorProcesses {
         return ApprovalCase.of(sponsor.id(), SponsorApprovals.facts(false), SponsorApprovals.content(
             sponsor.get("contactName"), sponsor.get("company"), sponsor.get("intro"),
             AccountEditing.uuid(sponsor.get("avatar")), AccountEditing.instant(sponsor.get("termsAcceptedAt")),
-            termsVersionNo(sponsor.get("termsVersionNo"))))
+            termsVersionNo(sponsor.get("termsVersionNo")), sponsor.get("introTranslations")))
             .reference(reference(sponsor.get("company")));
     }
 

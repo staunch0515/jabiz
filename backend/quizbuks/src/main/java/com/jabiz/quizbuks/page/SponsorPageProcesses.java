@@ -10,6 +10,8 @@ import com.jabiz.process.ProcessStart;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.content.TextTranslations;
+import com.jabiz.quizbuks.publishing.PublicationLanguages;
 import com.jabiz.quizbuks.identity.AccountCodes;
 import com.jabiz.quizbuks.identity.AccountEditing;
 import com.jabiz.quizbuks.identity.CallerChecks;
@@ -81,7 +83,15 @@ public final class SponsorPageProcesses {
      * @param baseRevision the revision the caller edited; when given and no longer current, 422
      */
     public record SaveInput(@NotBlank @Size(max = QbSponsorPages.HANDLE_LENGTH) String handle, @NotBlank String language, @NotBlank String headline,
-        UUID cover, String website, Long baseRevision) {}
+        UUID cover, String website, Long baseRevision, List<String> languages,
+        Map<String, Map<String, String>> translations, List<String> confirmed) {
+
+        /** A save of the page in its own language only (before Q73c). */
+        public SaveInput(String handle, String language, String headline, UUID cover, String website,
+            Long baseRevision) {
+            this(handle, language, headline, cover, website, baseRevision, null, null, null);
+        }
+    }
 
     /** @param baseRevision the revision the caller submits; when given and no longer current, 422 */
     public record SubmitInput(Long baseRevision) {}
@@ -106,6 +116,9 @@ public final class SponsorPageProcesses {
      */
     public record ApprovalResultInput(@NotBlank String subject, @NotBlank String entityId, @NotBlank String status,
         String requestId, String preparerId, String contentHash, String reason) {}
+
+    /** The page's text that is translated (Q73c). */
+    public static final String HEADLINE = "headline";
 
     static final String INPUT = "input";
     static final String OUTPUT = "output";
@@ -167,6 +180,21 @@ public final class SponsorPageProcesses {
         }
         current(ctx, page, input.baseRevision());
         requireOwnFile(ctx, "cover", input.cover(), page);
+        // Q73c: the languages offered and the headline in each other one, complete and up to date (a published page
+        // changes at once, so nothing out of date is ever saved).
+        List<String> offered = input.languages() == null || input.languages().isEmpty() ? List.of()
+            : List.copyOf(input.languages());
+        if (!offered.isEmpty() && !offered.contains(input.language())) {
+            ctx.reject(new Violation("languages", TextTranslations.LANGUAGES_INVALID, "The page's own language "
+                + input.language() + " is one it offers", Map.of("language", input.language())));
+        }
+        List<String> others = offered.stream().filter(l -> !l.equals(input.language())).toList();
+        Map<String, String> sources = Map.of(HEADLINE, input.headline());
+        Map<String, Map<String, PublicationLanguages.Text>> translations = TextTranslations.merge(
+            input.translations(), PublicationLanguages.parse(page == null ? null : page.get("translations")),
+            sources, others, input.confirmed());
+        TextTranslations.problems(offered, others, input.translations(), translations, sources,
+            Map.of(HEADLINE, QbSponsorPages.HEADLINE_LENGTH), true).forEach(ctx::reject);
         if (ctx.hasViolations()) {
             return;
         }
@@ -176,6 +204,8 @@ public final class SponsorPageProcesses {
         values.put("headline", input.headline());
         values.put("cover", input.cover());
         values.put("website", blankToNull(input.website()));
+        values.put("languages", offered.isEmpty() ? null : String.join(",", offered));
+        values.put("translations", PublicationLanguages.toJson(translations));
         if (page == null) {
             values.put("userId", userId);
             values.put("status", QbSponsorPages.DRAFT);

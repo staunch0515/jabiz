@@ -106,7 +106,10 @@ class SponsorProductIT extends PlayItSupport {
             .containsExactly(bread, cake);
         assertThat(publicItems(PAGE_PRODUCTS, "handle", handle).getFirst()).containsEntry("currency", "JPY")
             .containsEntry("shopUrl", "https://shop.example/bread")
-            .containsOnlyKeys("productId", "name", "description", "image", "price", "currency", "shopUrl", "seq");
+            // Q73c: the language its texts are in.
+            .containsEntry("textLanguage", "en")
+            .containsOnlyKeys("productId", "name", "description", "image", "price", "currency", "shopUrl", "seq",
+                "textLanguage");
 
         // A change shows at once (no review); hidden, it is gone.
         Map<String, Object> hidden = product("Cake", "8.50", "USD", false);

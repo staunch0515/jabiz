@@ -15,6 +15,8 @@ results:
   handle:            { from: QbSponsorPage.handle }
   language:          { from: QbSponsorPage.language }
   headline:          { from: QbSponsorPage.headline }
+  languages:         { from: QbSponsorPage.languages }
+  translations:      { from: QbSponsorPage.translations }
   story:             { from: QbSponsor.intro }
   logo:              { from: QbSponsor.avatar }
   cover:             { from: QbSponsorPage.cover }
@@ -43,6 +45,9 @@ SELECT
     p.{{QbSponsorPage.handle}}            AS handle,
     p.{{QbSponsorPage.language}}          AS language,
     p.{{QbSponsorPage.headline}}          AS headline,
+    -- Q73c: the languages offered and the headline in each, reviewed with it.
+    p.{{QbSponsorPage.languages}}         AS languages,
+    p.{{QbSponsorPage.translations}}      AS translations,
     s.{{QbSponsor.intro}}                 AS story,
     s.{{QbSponsor.avatar}}                AS logo,
     p.{{QbSponsorPage.cover}}             AS cover,
