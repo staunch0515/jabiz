@@ -11,6 +11,8 @@
    在 `/qb/legal` 发布（需要二次验证）。
 3. 发布后的地址：`https://<域名>/taker/legal/privacy`。Meta（Facebook 登录）与 LINE 控制台的"隐私政策 URL"填它；Meta 的"用户数据删除"选"数据删除说明 URL"，同样填它（第10条写明了删除的请求方式）。
 
+4. 第10条的"删除账号"写明了 App 与商户后台的入口：发布含这一节的版本之前，先在生产开启 `QB_APP_ACCOUNT_DELETION` 与 `QB_SPONSOR_ACCOUNT_DELETION`（`deploy/quizbuks/DEPLOY.md` §1a，需要维护连接）。
+
 ## 代码改动时
 
 政策描述的是当前的实现。以下改动要同时修改政策并发布新版本（`requires re-consent` 视变更是否重要而定）：

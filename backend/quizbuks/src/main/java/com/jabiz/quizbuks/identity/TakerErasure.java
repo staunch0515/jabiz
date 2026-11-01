@@ -43,7 +43,7 @@ public class TakerErasure {
     static final String NOTICE_WITHDRAWAL = "qb.withdrawal-in-progress";
     static final String NOTICE_REWARDS = "qb.rewards-unclaimed";
 
-    /** A withdrawal not yet settled either way: it is still processed after the deletion. */
+    /** A withdrawal not yet settled either way. */
     static final Set<String> OPEN_TRANSFERS = Set.of(TransferStatus.REVIEW, TransferStatus.SENDING,
         TransferStatus.CHECK);
     /** A cash reward a sponsor still owes the taker. */
@@ -88,8 +88,9 @@ public class TakerErasure {
     }
 
     /**
-     * What a taker should know before asking (they inform, they do not refuse): a withdrawal under way is still
-     * processed, and rewards not yet received are given up. A balance left in the wallet is {@link SponsorErasure}'s
+     * What a taker should know before asking (they inform, they do not refuse): a withdrawal under way should arrive
+     * first (a bank transfer not yet paid cannot be paid once the purge empties its account details), and rewards not
+     * yet received are given up. A balance left in the wallet is {@link SponsorErasure}'s
      * notice, for every account.
      */
     static List<ErasureNotice> notices(ErasureSubject subject) {

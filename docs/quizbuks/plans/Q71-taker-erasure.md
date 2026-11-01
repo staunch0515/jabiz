@@ -36,7 +36,7 @@ Q70 的声明对所有账户都有效（资料、设置、收件箱、通知与 
 | 代码 | 条件 |
 |---|---|
 | `qb.wallet-balance`（Q70） | 钱包余额大于 0：删除后既不能提现，也不会退还（文案改为对答题者也适用） |
-| `qb.withdrawal-in-progress` | 有 `REVIEW`、`SENDING`、`CHECK` 的提现：照常处理，结果不再通知 |
+| `qb.withdrawal-in-progress` | 有 `REVIEW`、`SENDING`、`CHECK` 的提现：请等到账后再让账户删除。Stripe 的照常处理；银行提现的账户信息在清除时置空，届时尚未支付的不能再支付，Kudos 留在钱包（冷静期 14 天通常足够） |
 | `qb.rewards-unclaimed` | 有未结的现金奖励（`DUE`、`MARKED_PAID`、`DISPUTED`、`OVERDUE`）或未使用的兑换券（`DUE`、`CLAIMED`）：删除后放弃 |
 
 ## 4. 申请的入口
@@ -62,6 +62,9 @@ Q70 的声明对所有账户都有效（资料、设置、收件箱、通知与 
 - App `App.test.tsx`：删除只在入口允许时出现在菜单中；`/delete-account` 转到申请页。
 
 ## 7. 不在本项内
+
+- 发给答题者邮箱但他没有认领的邀请（`userId` 为空）：按用户字段找不到，邮箱留在商户的邀请名单中（商户输入的地址）。需要时以平台按邮箱查找的声明另做。
+- 隐私政策写明了 App 与商户后台的删除入口：须先在生产开启 `QB_APP_ACCOUNT_DELETION` / `QB_SPONSOR_ACCOUNT_DELETION` 再发布新版政策（`legal/README.md`）。
 
 - Q49a 的其余部分：有奖活动的规则页、发布页的举报入口。
 - 平台层面的 Stripe 账户关闭（Connect 账户的删除）：需要时另议。
