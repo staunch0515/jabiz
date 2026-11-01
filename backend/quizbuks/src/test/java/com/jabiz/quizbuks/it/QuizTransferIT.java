@@ -66,8 +66,8 @@ class QuizTransferIT extends ContentItSupport {
     @Test
     void theCheckSaysWhatTheFileMakesAndWhichFilesToUpload() {
         Map<String, Object> checked = run("QB_QUIZ_IMPORT_CHECK", sponsorA(), body("document", document("Checked")));
-        assertThat(checked).containsEntry("formatVersion", 1).containsEntry("currentVersion", 1)
-            .containsEntry("readers", List.of(1)).containsEntry("kind", "QUIZ").containsEntry("title", "Checked")
+        assertThat(checked).containsEntry("formatVersion", 1).containsEntry("currentVersion", 2)
+            .containsEntry("readers", List.of(1, 2)).containsEntry("kind", "QUIZ").containsEntry("title", "Checked")
             .containsEntry("questions", 2).containsEntry("materials", 2);
         assertThat((List<?>) checked.get("files")).extracting(f -> ((Map<?, ?>) f).get("key") + " "
             + ((Map<?, ?>) f).get("policy")).containsExactly("c " + QbContent.IMAGE_POLICY,
@@ -99,7 +99,7 @@ class QuizTransferIT extends ContentItSupport {
         Map<String, Object> out = run("QB_QUIZ_IMPORT", sponsorA(), body("document", document("Imported"), "files",
             map("c", cover, "m", map, "p", paper)));
         String quizId = (String) out.get("quizId");
-        assertThat(out).containsEntry("formatVersion", 1).containsEntry("readers", List.of(1));
+        assertThat(out).containsEntry("formatVersion", 1).containsEntry("readers", List.of(1, 2));
 
         assertThat(query("SELECT owner_id, title, cover::text AS cover, status, question_count, material_count, "
             + "cloned_from, ai_generated FROM qb_quiz_version WHERE quiz_id = ?::uuid", quizId)).singleElement()
@@ -120,6 +120,59 @@ class QuizTransferIT extends ContentItSupport {
 
         // A draft like any other: it saves a version.
         assertThat(run("QB_QUIZ_PUBLISH_VERSION", sponsorA(), body("quizId", quizId))).containsKey("versionId");
+    }
+
+    /** The file in Japanese, of version 2, with a Chinese translation of everything, an image and a PDF of its own. */
+    @SuppressWarnings("unchecked")
+    static Map<String, Object> translated(String title) {
+        Map<String, Object> document = document(title);
+        document.put("formatVersion", 2);
+        ((Map<String, Object>) document.get("quiz")).put("language", "ja");
+        document.put("translations", map("zh", map(
+            "texts", map("title", "导入的", "intro", "来自文件。", "q1.stem", "法国的首都？", "q1.o1.text", "巴黎",
+                "q1.o2.text", "里昂", "q2.stem", "日本的首都？", "q2.o1.text", "东京", "q2.o2.text", "大阪"),
+            "images", map("q1.image", "zm"),
+            "materials", List.of(map("no", 2, "kind", "PDF", "title", "论文", "pdf", "zp", "images", List.of())),
+            "hashes", map("q2.o2.text", "0000000000000000"))));
+        Map<String, Object> files = new java.util.LinkedHashMap<>((Map<String, Object>) document.get("files"));
+        files.put("zm", map("name", "image.jpg", "type", "image/jpeg", "size", 2000));
+        files.put("zp", map("name", "material.pdf", "type", "application/pdf", "size", 500));
+        document.put("files", files);
+        return document;
+    }
+
+    @Test
+    void aFileWithOtherLanguagesImportsThemAsTheyWere() {
+        Map<String, Object> checked = run("QB_QUIZ_IMPORT_CHECK", sponsorA(), body("document", translated("Both")));
+        assertThat(checked).containsEntry("formatVersion", 2).containsEntry("readers", List.of(2))
+            .containsEntry("language", "ja").containsEntry("languages", List.of("zh"));
+        assertThat((List<?>) checked.get("files")).extracting(f -> (Object) String.valueOf(((Map<?, ?>) f).get("key"))).contains("zm", "zp");
+
+        String zm = image();
+        String zp = pdf();
+        String quizId = (String) run("QB_QUIZ_IMPORT", sponsorA(), body("document", translated("Both"), "files",
+            map("c", image(), "m", image(), "p", pdf(), "zm", zm, "zp", zp))).get("quizId");
+        assertThat(query("SELECT language, translation_languages FROM qb_quiz_version WHERE quiz_id = ?::uuid",
+            quizId).getFirst()).containsEntry("language", "ja").containsEntry("translation_languages", "zh");
+        assertThat(query("SELECT count(*) AS n FROM qb_content_translation_version WHERE quiz_id = ?::uuid",
+            quizId).getFirst().get("n")).isEqualTo(9L);
+        assertThat(query("SELECT kind, pdf::text AS pdf FROM qb_material_version WHERE quiz_id = ?::uuid "
+            + "AND language = 'zh'", quizId)).singleElement().satisfies(r -> assertThat(r).containsEntry("kind", "PDF")
+            .containsEntry("pdf", zp));
+
+        // The hash the file kept marks that option's translation out of date: the version leaves Chinese out.
+        Map<String, Object> version = run("QB_QUIZ_PUBLISH_VERSION", sponsorA(), body("quizId", quizId));
+        assertThat(version.get("languages")).isEqualTo(List.of("ja"));
+        assertThat(String.valueOf(version.get("incomplete"))).contains("stale=[option:");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void aFileWithTranslationsNamesItsBaseLanguage() {
+        Map<String, Object> document = translated("No base");
+        ((Map<String, Object>) document.get("quiz")).remove("language");
+        assertThat(codes(refused("QB_QUIZ_IMPORT_CHECK", sponsorA(), body("document", document), 422)))
+            .containsExactly(ContentCodes.QUIZ_FILE_VALUE);
     }
 
     @Test

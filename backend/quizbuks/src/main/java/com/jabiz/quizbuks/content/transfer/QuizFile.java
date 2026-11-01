@@ -10,17 +10,48 @@ import java.util.Objects;
  * status, versions, revision) is not part of it: an import always makes a new draft. Every older version of the
  * format is read into this one ({@link QuizFileFormat}).
  *
- * @param kind  {@code QUIZ} or {@code SURVEY}
- * @param cover a key of {@link #files}, or null
+ * @param kind         {@code QUIZ} or {@code SURVEY}
+ * @param cover        a key of {@link #files}, or null
+ * @param language     the base language (version 2, Q73a); null for the importer's interface language
+ * @param translations the quiz's other languages (version 2, Q73a), by code
  */
 public record QuizFile(String kind, String title, String intro, String cover, Integer timeLimitSec,
-    List<Material> materials, List<Question> questions, Map<String, FileEntry> files) {
+    List<Material> materials, List<Question> questions, Map<String, FileEntry> files, String language,
+    Map<String, Language> translations) {
 
     public QuizFile {
         materials = List.copyOf(Objects.requireNonNull(materials, "materials must not be null"));
         questions = List.copyOf(Objects.requireNonNull(questions, "questions must not be null"));
         files = Map.copyOf(Objects.requireNonNull(files, "files must not be null"));
+        translations = translations == null ? Map.of()
+            : java.util.Collections.unmodifiableMap(new java.util.LinkedHashMap<>(translations));
     }
+
+    /** A quiz of its base language only (version 1). */
+    public QuizFile(String kind, String title, String intro, String cover, Integer timeLimitSec,
+        List<Material> materials, List<Question> questions, Map<String, FileEntry> files) {
+        this(kind, title, intro, cover, timeLimitSec, materials, questions, files, null, Map.of());
+    }
+
+    /**
+     * One other language of the quiz (Q73a), as a version's snapshot has it: the texts by their key in the snapshot
+     * ({@code title}, {@code intro}, {@code q3.stem}, {@code q3.o2.text}), its own images by the same kind of key
+     * ({@code q3.image}, {@code q3.o2.image}; values are keys of {@link #files}), its own materials, each numbered as
+     * the base material it stands for, and the base hashes its texts were translated from (optional: a text without
+     * one counts as made from the base as it is).
+     */
+    public record Language(Map<String, String> texts, Map<String, String> images, List<NumberedMaterial> materials,
+        Map<String, String> hashes) {
+        public Language {
+            texts = Map.copyOf(Objects.requireNonNull(texts, "texts must not be null"));
+            images = Map.copyOf(Objects.requireNonNull(images, "images must not be null"));
+            materials = List.copyOf(Objects.requireNonNull(materials, "materials must not be null"));
+            hashes = Map.copyOf(Objects.requireNonNull(hashes, "hashes must not be null"));
+        }
+    }
+
+    /** A material of another language and the number (from 1) of the base material it stands for. */
+    public record NumberedMaterial(int no, Material material) {}
 
     /**
      * A material; its file fields are keys of {@link #files}. {@code watchToAnswer} (Q19, optional in version 1, absent
