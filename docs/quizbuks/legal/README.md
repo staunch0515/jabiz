@@ -18,6 +18,6 @@
 - 收集新的个人信息（例如资料增加生年、性别：1.3 的 Q47，已写入）
 - 增加外部服务（支付、邮件、登录方式、分析、嵌入）或改变送出的内容
 - 商家能看到的答题人信息、分析的最小人数（`qb.stats.min-group`）
-- 保存期间（`RetentionPolicy`）、本人能操作的功能（例如将来的导出或注销）
+- 保存期间（`RetentionPolicy`）、本人能操作的功能（例如将来的导出；删除账号见第10条，Q70 / Q71，2026-11-01）
 
 政策改了，商店的数据申报（Google Play 数据安全表 `docs/quizbuks/store/play-data-safety.md`，以后的 Apple 隐私标签）一起核对并在 Console 中更新（Q49d）。

@@ -116,7 +116,7 @@ The Takers' app also stores its page shell in the browser so that pages open off
 
 ## 8. How long we keep information
 
-- Account information, attempt and reward records, and sign-in and operation records are kept after an account is closed, as a record of transactions and to prevent misuse.
+- Account information, attempt and reward records, and sign-in and operation records are kept after an account is closed, as a record of transactions and to prevent misuse. When an account is deleted (section 10), they are kept without your name.
 - Receipts, accounting records and notices from payment providers are kept for 10 years from the end of the fiscal year.
 - AI-suggested drafts are deleted 7 days after they are generated.
 - Uploaded files are fully deleted when the Sponsor deletes them.
@@ -154,7 +154,7 @@ You can also do the following yourself in the Service:
 
 To have the information we received from Google, Facebook or LINE deleted, unlink that account on your account page and then contact us at the address above.
 
-If you ask us to close your account, we will make it unusable. Records that must be kept under section 8 are kept until their retention period ends.
+**Deleting your account.** You can ask for your account to be deleted in the app (Account → Delete account) or, without the app, at https://quizbuks.com/taker/delete-account (we send a link to your registered email address to confirm). Sponsors can ask on the account page of the Sponsor console. The account is deleted after a waiting period of 14 days; until then you can sign in and take the request back. When it is deleted, we erase your name, email address, profile, About me, bank account details and the invitations addressed to you, together with their copies in our history and logs. Records that must be kept under section 8 (your answers, rewards, withdrawals, receipts and accounting records) are kept until their retention period ends, without your name: they are linked only to a number that no longer identifies anyone. Kudos left in your wallet are not paid out. Information held by the providers in section 5 (for example Stripe) is kept by them under their own policies.
 
 ## 11. Minors
 

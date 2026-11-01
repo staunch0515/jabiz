@@ -31,6 +31,12 @@ const en = {
       interface: 'Following the app\'s language: {{language}}',
     },
     titles: { security: 'Sign-in and security', preferences: 'App settings', id: 'My ID and staff' },
+    deletion: {
+      group: 'Your account',
+      title: 'Delete account',
+      menuHint: 'Delete your account and your personal data',
+      hint: 'Your account is deleted after a waiting period; until then you can sign in and take the request back. Your name, address, "about me", bank account and the invitations you claimed are erased; your answers and the records the accounts must keep stay, without your name.',
+    },
     hints: {
       profile: 'Your name and where you live',
       details: 'Optional, for quizzes aimed at people like you',
@@ -475,6 +481,12 @@ const zh: typeof en = {
       interface: '跟随 App 的界面语言：{{language}}',
     },
     titles: { security: '登录与安全', preferences: 'App 设置', id: '我的 ID 与店员' },
+    deletion: {
+      group: '您的账户',
+      title: '删除账户',
+      menuHint: '删除您的账户与个人信息',
+      hint: '账户在等待期过后删除；在此之前您可以登录并撤回申请。您的姓名、邮箱、“关于我”、银行账户与您领取的邀请会被抹除；作答与依法须保留的记录会保留，但不再含有您的姓名。',
+    },
     hints: {
       profile: '名字与所在地',
       details: '可选，用于匹配面向你的 Quiz',
@@ -919,6 +931,12 @@ const ja: typeof en = {
       interface: 'アプリの表示言語に合わせています：{{language}}',
     },
     titles: { security: 'ログインとセキュリティ', preferences: 'アプリの設定', id: 'わたしの ID とスタッフ' },
+    deletion: {
+      group: 'あなたのアカウント',
+      title: 'アカウントを削除',
+      menuHint: 'アカウントと個人情報を削除します',
+      hint: 'アカウントは待機期間の後に削除されます。それまではサインインして申請を取り消せます。名前、メールアドレス、「自己紹介」、銀行口座、受け取った招待は消去されます。回答と法令で保存が必要な記録は、名前を含まない形で残ります。',
+    },
     hints: {
       profile: '名前とお住まいの地域',
       details: '任意。あなたに向けたクイズのために',

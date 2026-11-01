@@ -149,6 +149,10 @@ jabiz:
         registration-roles: QB_TAKER
         require-verified-email: false
         email-link: ${QB_APP_EMAIL_LINK:true}
+        # Q71: takers may ask for the deletion of their account in the app or, without it, at /taker/delete-account
+        # (Apple 5.1.1(v), Google Play's account deletion policy; platform D62). Off by default, as for sponsors: it
+        # needs the maintenance connection that purges personal data (deploy/quizbuks/DEPLOY.md section 1a).
+        account-deletion: ${QB_APP_ACCOUNT_DELETION:false}
         app-path: /taker/
         session:
           persistence: device
