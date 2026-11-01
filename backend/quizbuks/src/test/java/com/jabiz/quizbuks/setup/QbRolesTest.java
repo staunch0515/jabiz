@@ -30,8 +30,10 @@ class QbRolesTest {
         // users' profiles, the legal texts, parameters, roles or headquarters' operator pages.
         assertThat(QbRoles.of(QbRoles.OPERATOR).permissions())
             .contains(QbPermissions.OPERATOR_USE, QbPermissions.REVIEW_SPONSOR, QbPermissions.REVIEW_PUBLICATION,
-                "approval.decide", QbPermissions.REDEMPTION_VOID, QbPermissions.DIGITAL_RESOLVE)
-            .doesNotContain(QbPermissions.ADMIN_USERS_READ, QbPermissions.ADMIN_FINANCE_READ,
+                "approval.decide", QbPermissions.REDEMPTION_VOID, QbPermissions.DIGITAL_RESOLVE,
+                // Q69: its own certification rounds, grants and revocations (headquarters marks the official ones).
+                QbPermissions.CERTIFICATION_MANAGE)
+            .doesNotContain(QbPermissions.CERTIFICATION_ADMIN, QbPermissions.ADMIN_USERS_READ, QbPermissions.ADMIN_FINANCE_READ,
                 QbPermissions.ADMIN_CONTENT_WRITE, QbPermissions.ADMIN_USERS_BAN, QbPermissions.CASH_RESOLVE,
                 QbPermissions.TOPUP_BANK_APPROVE, QbPermissions.OPERATORS_READ, QbPermissions.OPERATORS_WRITE,
                 QbPermissions.SPOT_CHECK, "control.propose", "control.publish", "platform.param.read",

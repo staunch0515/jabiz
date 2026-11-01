@@ -14,7 +14,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Q69 (docs/quizbuks/plans/Q69-sponsor-erasure.md; platform decision D62): erasing a sponsor's account removes their
+ * Q70 (docs/quizbuks/plans/Q70-sponsor-erasure.md; platform decision D62): erasing a sponsor's account removes their
  * page, products and profile, tombstones their onboarding, and afterwards ends their running publications (kept as
  * records) with the reason that the account was deleted.
  */

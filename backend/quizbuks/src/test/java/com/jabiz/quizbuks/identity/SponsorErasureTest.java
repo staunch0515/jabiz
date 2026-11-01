@@ -9,7 +9,7 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** Q69: what a sponsor is told before asking for the deletion of their account (they inform, never refuse). */
+/** Q70: what a sponsor is told before asking for the deletion of their account (they inform, never refuse). */
 class SponsorErasureTest {
 
     private static List<ErasureNotice> notices(Map<String, List<Map<String, Object>>> data) {

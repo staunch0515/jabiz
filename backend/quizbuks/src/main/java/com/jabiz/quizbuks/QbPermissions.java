@@ -186,6 +186,14 @@ public final class QbPermissions {
      */
     public static final String SPONSOR_APP = "qb.sponsor.app";
     /**
+     * Running certification rounds and granting or revoking certifications by hand (Q69,
+     * docs/quizbuks/plans/Q69-certifications.md): content administrators for headquarters, operators' members for
+     * their operator (the operators' entry scope decides whose).
+     */
+    public static final String CERTIFICATION_MANAGE = "qb.certification.manage";
+    /** Marking the official publishers whose publications may be rounds (Q69): headquarters' content administrators. */
+    public static final String CERTIFICATION_ADMIN = "qb.certification.admin";
+    /**
      * The analytics job's item process ({@code QB_ANALYTICS_ITEM}, {@code internal()}), its templates and its own
      * datasets. Granted to no role.
      */

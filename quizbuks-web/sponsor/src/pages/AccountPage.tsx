@@ -17,7 +17,7 @@ export const ACCOUNT_PATH = '/account'
  * profile's (onboarding page). No provider accounts: the console offers no identity provider (Q-6).
  */
 /**
- * Deleting the account (Q69; platform D62), where the sponsor entry allows it (`QB_SPONSOR_ACCOUNT_DELETION`), or while
+ * Deleting the account (Q70; platform D62), where the sponsor entry allows it (`QB_SPONSOR_ACCOUNT_DELETION`), or while
  * a request waits: the platform's block, which lists what the sponsor should know before asking.
  */
 function DeletionSection() {

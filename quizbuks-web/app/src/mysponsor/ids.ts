@@ -17,3 +17,11 @@ export const MY_SPONSOR_PROCESS = {
   pause: 'QB_PUBLICATION_PAUSE',
   resume: 'QB_PUBLICATION_RESUME',
 } as const
+
+/** Q69: what the caller holds of a certification (recording their passes first). */
+export const CERTIFICATION_PROCESS = {
+  claim: 'QB_CERTIFICATION_CLAIM',
+} as const
+
+/** Q69: the certification that lets a taker apply to become a sponsor. */
+export const SPONSOR_APPLY = 'SPONSOR_APPLY'
