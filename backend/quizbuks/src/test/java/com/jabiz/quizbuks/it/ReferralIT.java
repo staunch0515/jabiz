@@ -335,5 +335,9 @@ class ReferralIT extends PlayItSupport {
             .get("problems");
         assertThat(problems).extracting(p -> p.get("code")).contains(PublishingCodes.REFERRAL_INVITED,
             PublishingCodes.REFERRAL_QUOTA_RANGE, PublishingCodes.REFERRAL_RULE_INVALID);
+        // The referral reward's method is one the sponsor may use, as the publication's is.
+        save.put("audience", "PUBLIC");
+        save.put("referral", referral(RewardMethod.SPONSOR_CASH, 100, 5, ReferralPolicy.NONE, List.of(), null));
+        refused("QB_PUBLICATION_SAVE", token, save, 422);
     }
 }

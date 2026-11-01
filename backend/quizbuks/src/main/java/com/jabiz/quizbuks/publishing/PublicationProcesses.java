@@ -453,6 +453,11 @@ public final class PublicationProcesses {
         // one they may not use (Q22: a copy of a publication made before the method was taken away).
         problems.addAll(PublicationEditing.sponsorProblems(ctx));
         problems.addAll(PublicationEditing.methodProblems(ctx, PublicationEditing.methodOf(values)));
+        ReferralPolicy referral = ReferralPolicy.fromJson(values.get("referral"));
+        if (referral != null && RewardMethod.ALL.contains(referral.method())) {
+            PublicationEditing.methodProblems(ctx, referral.method()).forEach(v -> problems.add(
+                new Violation("referral.method", v.ruleCode(), v.message(), v.params())));
+        }
         return new SaveOutput(publicationId, PublicationStatus.DRAFT, revision, editedAt,
             PublicationEditing.integer(values.get("fullScore")), (BigDecimal) values.get("maxReward"),
             (BigDecimal) values.get("maxSpend"), tierIds, PublicationEditing.problems(problems, messages, ctx));

@@ -195,6 +195,12 @@ public final class PublicationLifecycle {
         PublicationEditing.sponsorProblems(ctx).forEach(ctx::reject);
         PublicationEditing.methodProblems(ctx, PublicationEditing.methodOf(publication.attributes()))
             .forEach(ctx::reject);
+        // Q70: the referral reward's method is one the sponsor may still use (a copy keeps the one it had).
+        ReferralPolicy referral = ReferralPolicy.fromJson(publication.get("referral"));
+        if (referral != null && RewardMethod.ALL.contains(referral.method())) {
+            PublicationEditing.methodProblems(ctx, referral.method()).forEach(v -> ctx.reject(
+                new com.jabiz.entity.Violation("referral.method", v.ruleCode(), v.message(), v.params())));
+        }
         if (!ctx.hasViolations()) {
             boolean takenDown = !PublicationEditing.takenDownOfQuiz(ctx, publication).isEmpty();
             ctx.put(TAKEN_DOWN, takenDown);

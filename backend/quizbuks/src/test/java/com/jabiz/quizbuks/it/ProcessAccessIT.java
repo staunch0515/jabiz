@@ -116,6 +116,8 @@ class ProcessAccessIT extends QbItSupport {
         Map.entry("QB_REDEMPTION_EXPIRE", ProcessAccess.INTERNAL),
         Map.entry("QB_INVITATION_MAIL", ProcessAccess.INTERNAL),
         Map.entry("QB_REDEMPTION_LAPSE", ProcessAccess.INTERNAL),
+        // Q70: the referrals' reward and expiry jobs.
+        Map.entry("QB_REFERRAL_EXPIRE", ProcessAccess.INTERNAL), Map.entry("QB_REFERRAL_REWARD", ProcessAccess.INTERNAL),
         // Q48c/d: AI prospecting's job items and the outcomes of its external jobs; Q48b: the operators' settlements.
         Map.entry("QB_PROSPECT_FIND_START", ProcessAccess.INTERNAL),
         Map.entry("QB_PROSPECT_FOUND", ProcessAccess.INTERNAL),
