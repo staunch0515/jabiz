@@ -77,7 +77,7 @@ JABIZ_ERASURE_DATASOURCE_PASSWORD=<输出的密码>
 URL 是 **R2DBC** 格式（与 `SPRING_R2DBC_URL` 相同），不是 `SPRING_FLYWAY_URL` 的 `jdbc:`：写成 JDBC 时应用拒绝启动（检查报 `ERASURE | jabiz.erasure.datasource.url`），部署回滚。
 还没有开启账号删除时可以不设这三行（`docs/quizbuks/operations.md` §1.1）。
 
-设好这三行后，以 `QB_SPONSOR_ACCOUNT_DELETION=true` 开启商家账号的删除（Q70，`docs/quizbuks/plans/Q70-sponsor-erasure.md`）：商家后台的账户页出现"删除账号"，冷静期后执行。没有维护连接时开启，应用拒绝启动。
+设好这三行后，以 `QB_SPONSOR_ACCOUNT_DELETION=true` 开启商家账号的删除（Q72，`docs/quizbuks/plans/Q72-sponsor-erasure.md`）：商家后台的账户页出现"删除账号"，冷静期后执行。没有维护连接时开启，应用拒绝启动。
 答题者 App 的删除以 `QB_APP_ACCOUNT_DELETION=true` 开启（Q71，`docs/quizbuks/plans/Q71-taker-erasure.md`）：App 账户页出现"删除账号"，不装 App 的申请页为 `https://<域名>/taker/delete-account`（填写 Google Play 的"删除账号网址"）。**提交 App Store 与 Google Play 审核前必须开启。**
 
 ### 2. `/opt/apps/quizbuks/.env`
