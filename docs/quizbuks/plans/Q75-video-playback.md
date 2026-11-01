@@ -37,7 +37,7 @@
 
 ## 3. 后端（`backend/quizbuks`）
 
-### 3.1 迁移 V58 `quizbuks_video_playback`
+### 3.1 迁移 V59 `quizbuks_video_playback`（Q73c 用了 V58）
 
 ```sql
 ALTER TABLE qb_material ADD COLUMN duration_sec numeric(5, 0) CHECK (duration_sec IS NULL OR duration_sec BETWEEN 1 AND 7200);
@@ -112,7 +112,7 @@ ALTER TABLE qb_attempt ADD COLUMN playback_status varchar(10) CHECK (playback_st
   - `WatchVideoIT` 扩展：勾选须有时长、非视频资料不接受时长、语言版本不接受；保存版本时没有时长即拒绝；上线后卡片 `watchRequired = true` 且带时长、普通视频的卡片 `false`；版本切换（Q51）后卡片随新版本；没有报告或看得不够即 422 `QB_ATTEMPT_WATCH_REQUIRED`（带 `shortfallSec`），`ended` 或 ≥ 0.9 即开始，`UNKNOWN` 开始并记状态；继续进行中的会话不查；会话的三列按报告写入、普通发布为空。
   - `AttemptStatementBudgetIT`：数字**不变**（开始带报告再跑一次确认）。
   - `AnswerSecrecyIT`、`SponsorInAppIT` 等不变。
-  - 迁移的回填：Flyway 在测试 schema 上从 V1 跑到最新，V58 之前没有卡片，回填的 SQL 由一个专门的用例覆盖——先按旧形态（不带新列）插入一张"视频来自看完即可资料"的卡片与一张普通视频的卡片，再执行迁移中的同一段回填语句，核对前者 `watch_required = true`、后者 `false`。
+  - 迁移的回填：Flyway 在测试 schema 上从 V1 跑到最新，V59 之前没有卡片，回填的 SQL 由一个专门的用例覆盖——先按旧形态（不带新列）插入一张"视频来自看完即可资料"的卡片与一张普通视频的卡片，再执行迁移中的同一段回填语句，核对前者 `watch_required = true`、后者 `false`。
 - **场景回放**：`content` 场景的"看完即可"资料加时长，快照随之（只多一个字段）；其他场景不变。
 - **前端**：`video/playback.test.ts`（与 `WatchRulesTest` 相同的用例；2 倍速的上限、快进不计、暂停不计、`UNKNOWN` 的 8 秒）；`stage.test.tsx`（两家播放器的消息解析、只在开始页或开声音后计入）；`PublicationPage` 的测试（禁用与进度、满足后可用、`UNKNOWN` 的提示、服务器的 422 文案；axe）；`play.test.ts`（输入带 `playback`）；商户后台 `content.test.tsx`（时长字段的出现、预填、校验）、`transfer.test.tsx`。
 - **e2e** `watch-video.spec.ts` 扩展：桩播放器按 YouTube 的协议回答 `listening` 并每秒 `postMessage` 一次 `infoDelivery`（`currentTime` 递增、最后状态 0）；开始页的按钮先不可用、显示进度，播完后可用并进入第一题；另一个用例以 API（`request`）不带报告开始即 422。商户侧：勾选后填时长、预填来自桩的 `duration`。
