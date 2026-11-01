@@ -38,14 +38,19 @@ public class OidcStateStore {
     /**
      * A consumed state: which provider it was for, its nonce hash and PKCE verifier, and the sign-in entry it started
      * in (decision D36; the callback cannot pick another one). States from before entries existed are of the
-     * administration.
+     * administration. {@code providedName}: the name the provider posted with its answer (Apple, decision D67 item 3).
      */
     public record Pending(String providerId, String nonceHash, String codeVerifier, String entry, Purpose purpose,
-        String linkUserId) {
+        String linkUserId, String providedName) {
 
         public Pending {
             entry = entry == null || entry.isBlank() ? com.jabiz.context.RequestContext.DEFAULT_ENTRY : entry;
             purpose = purpose == null ? Purpose.SIGN_IN : purpose;
+        }
+
+        public Pending(String providerId, String nonceHash, String codeVerifier, String entry, Purpose purpose,
+            String linkUserId) {
+            this(providerId, nonceHash, codeVerifier, entry, purpose, linkUserId, null);
         }
 
         public Pending(String providerId, String nonceHash, String codeVerifier, String entry) {
@@ -64,6 +69,9 @@ public class OidcStateStore {
      * purpose only.
      */
     public enum Purpose { SIGN_IN, LINK }
+
+    /** A pending round trip whose answer the provider posted to this server: where to send the browser on. */
+    public record Posted(String providerId, String entry) {}
 
     /** Unknown, expired or used state. */
     public static final class InvalidStateException extends RuntimeException {
@@ -146,7 +154,7 @@ public class OidcStateStore {
             Instant now = now();
             return engine.get().inTransaction(engine.get().select("""
                     SELECT provider_id, nonce_hash, binder_hash, code_verifier, expires_at, entry, purpose,
-                           link_user_id::text AS link_user_id
+                           link_user_id::text AS link_user_id, provided_name
                     FROM sec_oidc_state WHERE state_hash = :hash""", Map.of("hash", BoundValue.of(hash)))
                 .next()
                 .switchIfEmpty(Mono.error(() -> new InvalidStateException("Unknown state")))
@@ -165,9 +173,38 @@ public class OidcStateStore {
                         String.valueOf(row.get("code_verifier")),
                         row.get("entry") == null ? null : String.valueOf(row.get("entry")),
                         Purpose.valueOf(String.valueOf(row.get("purpose"))),
-                        row.get("link_user_id") == null ? null : String.valueOf(row.get("link_user_id"))));
+                        row.get("link_user_id") == null ? null : String.valueOf(row.get("link_user_id")),
+                        row.get("provided_name") == null ? null : String.valueOf(row.get("provided_name"))));
                 }))
                 .onErrorMap(UniqueKeyViolationException.class, e -> new InvalidStateException("State used twice"));
+        });
+    }
+
+    /**
+     * The provider posted its answer for {@code state} to this server (Apple's {@code form_post}, decision D67 item 1):
+     * keeps the name it told, the first one only, and says which provider and entry the round trip is of, so that the
+     * browser goes on to that entry's callback. Does not use the state up: the callback does, with the browser's binder.
+     * Empty when the state is unknown, expired or used.
+     */
+    public Mono<Posted> posted(String state, String providedName) {
+        return Mono.defer(() -> {
+            if (malformed(state)) {
+                return Mono.empty();
+            }
+            String hash = hash(state);
+            Map<String, BoundValue> params = new LinkedHashMap<>();
+            params.put("hash", BoundValue.of(hash));
+            params.put("now", BoundValue.of(now()));
+            params.put("name", providedName == null ? BoundValue.nullOf(String.class) : BoundValue.of(providedName));
+            return engine.get().select("""
+                    UPDATE sec_oidc_state SET provided_name = COALESCE(provided_name, :name)
+                    WHERE state_hash = :hash AND expires_at > :now
+                      AND NOT EXISTS (SELECT 1 FROM sec_oidc_state_use u WHERE u.state_hash = :hash)
+                    RETURNING provider_id, entry""", params)
+                .next()
+                .map(row -> new Posted(String.valueOf(row.get("provider_id")),
+                    row.get("entry") == null ? com.jabiz.context.RequestContext.DEFAULT_ENTRY
+                        : String.valueOf(row.get("entry"))));
         });
     }
 

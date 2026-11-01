@@ -91,7 +91,7 @@ public class SecurityConfig {
         // Signing in through an identity provider (docs/design/10-security.md section 12).
         ServerWebExchangeMatchers.pathMatchers(HttpMethod.GET, OidcController.BASE + "/providers"),
         ServerWebExchangeMatchers.pathMatchers(HttpMethod.POST, OidcController.BASE + "/*/start",
-            OidcController.BASE + "/callback"),
+            OidcController.BASE + "/callback", OidcController.BASE + "/*/form-post"),
         // Signing in with another platform's signed token (decision D59): the token is the credential, used once.
         ServerWebExchangeMatchers.pathMatchers(HttpMethod.POST, ExternalTokenController.PATH),
         // Inbound webhooks (decision D37): the provider's signature is the credential; credentials sent along are

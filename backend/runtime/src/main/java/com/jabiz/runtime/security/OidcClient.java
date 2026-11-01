@@ -43,6 +43,17 @@ public class OidcClient {
         }
     }
 
+    /**
+     * What the token endpoint gave: the ID token, and the refresh token where the provider gives one (Apple's is what
+     * revokes the user's authorization when the account goes, decision D67 item 5).
+     */
+    record Tokens(String idToken, String refreshToken) {
+        @Override
+        public String toString() {
+            return "Tokens[***]";
+        }
+    }
+
     /** The endpoints the discovery document names. */
     record Metadata(String authorizationEndpoint, String tokenEndpoint, String jwksUri) {}
 
@@ -52,6 +63,7 @@ public class OidcClient {
     private final Clock clock;
     private final Map<String, Cached<Metadata>> metadata = new ConcurrentHashMap<>();
     private final Map<String, Cached<JWKSet>> keys = new ConcurrentHashMap<>();
+    private final AppleClientSecret appleSecrets;
 
     public OidcClient(Clock clock) {
         this(HttpClient.newBuilder().connectTimeout(TIMEOUT).followRedirects(HttpClient.Redirect.NEVER).build(),
@@ -61,6 +73,7 @@ public class OidcClient {
     OidcClient(HttpClient http, Clock clock) {
         this.http = Objects.requireNonNull(http);
         this.clock = Objects.requireNonNull(clock);
+        this.appleSecrets = new AppleClientSecret(clock);
     }
 
     Mono<Metadata> metadata(OidcProvider provider) {
@@ -101,31 +114,47 @@ public class OidcClient {
             }));
     }
 
-    /** The provider's page to send the user to; it sends them back to {@code redirectUri} (the entry's callback). */
+    /**
+     * The provider's page to send the user to; it sends them back to {@code redirectUri}
+     * ({@link OidcProvider#providerRedirectUri}). Apple posts its answer as a form (it must, to give the name and the
+     * address) and takes no PKCE challenge (decision D67 items 1 and 2).
+     */
     Mono<String> authorizationUrl(OidcProvider provider, OidcStateStore.Started started, String redirectUri) {
-        return metadata(provider).map(found -> UriComponentsBuilder.fromUriString(found.authorizationEndpoint())
-            .queryParam("response_type", "code")
-            .queryParam("client_id", provider.clientId())
-            .queryParam("redirect_uri", redirectUri)
-            .queryParam("scope", String.join(" ", provider.scopes()))
-            .queryParam("state", started.state())
-            .queryParam("nonce", started.nonce())
-            .queryParam("code_challenge", started.codeChallenge())
-            .queryParam("code_challenge_method", "S256")
-            .encode().build().toUriString());
+        return metadata(provider).map(found -> {
+            UriComponentsBuilder url = UriComponentsBuilder.fromUriString(found.authorizationEndpoint())
+                .queryParam("response_type", "code")
+                .queryParam("client_id", provider.clientId())
+                .queryParam("redirect_uri", redirectUri)
+                .queryParam("scope", String.join(" ", provider.scopes()))
+                .queryParam("state", started.state())
+                .queryParam("nonce", started.nonce());
+            if (provider.isApple()) {
+                url.queryParam("response_mode", "form_post");
+            }
+            if (provider.pkce()) {
+                url.queryParam("code_challenge", started.codeChallenge()).queryParam("code_challenge_method", "S256");
+            }
+            return url.encode().build().toUriString();
+        });
     }
 
     /**
      * Exchanges an authorization code (PKCE) for the ID token, naming the callback the authorization request named
      * ({@code redirectUri}), as the provider requires. The client authenticates with Basic (client_secret_basic), or
-     * in the form for the providers that take only that ({@link OidcProvider#clientSecretPost}).
+     * in the form for the providers that take only that ({@link OidcProvider#clientSecretPost}); Apple's secret is a
+     * token signed for the purpose ({@link AppleClientSecret}). No verifier where the round trip had no challenge.
      */
-    Mono<String> idToken(OidcProvider provider, String code, String codeVerifier, String redirectUri) {
-        Map<String, String> fields = new java.util.LinkedHashMap<>(Map.of("grant_type", "authorization_code",
-            "code", code, "redirect_uri", redirectUri, "code_verifier", codeVerifier));
+    Mono<Tokens> tokens(OidcProvider provider, String code, String codeVerifier, String redirectUri) {
+        Map<String, String> fields = new java.util.LinkedHashMap<>();
+        fields.put("grant_type", "authorization_code");
+        fields.put("code", code);
+        fields.put("redirect_uri", redirectUri);
+        if (provider.pkce()) {
+            fields.put("code_verifier", codeVerifier);
+        }
         if (provider.clientSecretPost()) {
             fields.put("client_id", provider.clientId());
-            fields.put("client_secret", provider.clientSecret());
+            fields.put("client_secret", provider.isApple() ? appleSecrets.secretOf(provider) : provider.clientSecret());
         }
         String form = fields.entrySet().stream()
             .map(entry -> encode(entry.getKey()) + "=" + encode(entry.getValue()))
@@ -142,11 +171,12 @@ public class OidcClient {
             return send(request, "token request");
         })
             .map(body -> {
-                Object token = json(body, "token response").get("id_token");
-                if (!(token instanceof String text) || text.isBlank()) {
+                Map<String, Object> response = json(body, "token response");
+                if (!(response.get("id_token") instanceof String token) || token.isBlank()) {
                     throw new ProviderException("The token response has no ID token");
                 }
-                return text;
+                return new Tokens(token, response.get("refresh_token") instanceof String refresh && !refresh.isBlank()
+                    ? refresh : null);
             });
     }
 

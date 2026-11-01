@@ -85,9 +85,22 @@ export function LineMark({ className }: { className?: string }) {
   )
 }
 
-/** The mark of a provider of a known brand, by its kind (`google`, `facebook`, `line`); none for any other. */
+/**
+ * Apple's logo, as Apple's Human Interface Guidelines for Sign in with Apple draw it (decision D67): in the colour of
+ * the button's text, black on a light button and white on a dark one, as Apple's white-outline and black styles are.
+ */
+export function AppleMark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" className={className}>
+      <path fill="currentColor" d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701" />
+    </svg>
+  )
+}
+
+/** The mark of a provider of a known brand, by its kind (`google`, `facebook`, `line`, `apple`); none for any other. */
 export function ProviderMark({ kind, className = 'size-4' }: { kind?: string | null; className?: string }) {
   if (kind === 'google') return <GoogleMark className={className} />
+  if (kind === 'apple') return <AppleMark className={className} />
   if (kind === 'facebook') return <FacebookMark className={className} />
   if (kind === 'line') return <LineMark className={className} />
   return null
@@ -95,13 +108,17 @@ export function ProviderMark({ kind, className = 'size-4' }: { kind?: string | n
 
 /**
  * Signing in through an identity provider (docs/design/10-security.md section 12): a button per provider, under an
- * "or" separator; nothing when none is offered. A provider of a known kind (`google`) shows its mark beside its label.
+ * "or" separator; nothing when none is offered. A provider of a known kind (`google`) shows its mark beside its label;
+ * Apple's button says Apple's own title in the page's language.
  */
 export function OidcButtons({ returnTo, providers, start = startProviderSignIn, onError, layout = 'buttons',
   purpose = 'signIn' }: OidcButtonsProps) {
   const { t } = useTranslation(AUTH_NAMESPACE)
   const offered = useOidcProviders(providers)
   if (offered.length === 0) return null
+  // Apple allows only its own titles on its button (decision D67), whatever the provider's label says.
+  const label = (provider: OidcProvider) => provider.kind === 'apple'
+    ? t(purpose === 'signUp' ? 'signUp.withApple' : 'login.withApple') : provider.label
   const go = (provider: OidcProvider) => {
     onError?.(null)
     start(provider.id!, sitePath(returnTo)).catch((e: unknown) => onError?.(e))
@@ -117,8 +134,8 @@ export function OidcButtons({ returnTo, providers, start = startProviderSignIn, 
         <ul className="flex flex-wrap items-center justify-center gap-4">
           {offered.map((provider) => (
             <li key={provider.id}>
-              <Button variant="outline" size="icon" className="size-11 rounded-full" aria-label={provider.label}
-                title={provider.label} data-testid={`oidc-${provider.id}`} data-kind={provider.kind ?? 'generic'}
+              <Button variant="outline" size="icon" className="size-11 rounded-full" aria-label={label(provider)}
+                title={label(provider)} data-testid={`oidc-${provider.id}`} data-kind={provider.kind ?? 'generic'}
                 onClick={() => go(provider)}>
                 {ProviderMark({ kind: provider.kind, className: 'size-6' }) ?? <KeyRound aria-hidden className="size-5" />}
               </Button>
@@ -146,7 +163,7 @@ export function OidcButtons({ returnTo, providers, start = startProviderSignIn, 
             onClick={() => go(provider)}
           >
             <ProviderMark kind={provider.kind} />
-            {provider.label}
+            {label(provider)}
           </Button>
         ))}
       </div>

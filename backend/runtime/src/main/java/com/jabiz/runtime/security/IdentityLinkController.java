@@ -172,7 +172,7 @@ class IdentityLinkController {
                         + " at entry " + entry));
                 return reauthenticated(context, user, body, http)
                     .then(states.start(provider.id(), entry, OidcStateStore.Purpose.LINK, user.toString()))
-                    .flatMap(started -> client.authorizationUrl(provider, started, provider.redirectUri(entry))
+                    .flatMap(started -> client.authorizationUrl(provider, started, provider.providerRedirectUri(entry))
                         .map(url -> new OidcController.StartResponse(url, started.binder())))
                     .onErrorMap(OidcClient.ProviderException.class, e -> {
                         log.warn("Identity provider {} unavailable: {}", provider.id(), e.getMessage());

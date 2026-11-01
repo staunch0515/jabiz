@@ -18,7 +18,13 @@ import com.jabiz.security.LoginOutcome;
 import io.micrometer.common.KeyValues;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.http.server.reactive.ServerHttpRequest;
+import org.springframework.web.server.ServerWebExchange;
+import org.springframework.web.util.UriComponentsBuilder;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -49,10 +55,19 @@ class OidcController {
 
     static final String BASE = "/api/auth/oidc";
 
+    /** Where Apple posts its answer for the provider {@code id} (decision D67 item 1). */
+    static String formPostPath(String id) {
+        return BASE + "/" + id + "/form-post";
+    }
+
+    /** The longest {@code user} form field read: Apple's names and address, with room to spare. */
+    static final int MAX_USER_FIELD = 4096;
+
     private static final Logger log = LoggerFactory.getLogger(OidcController.class);
 
     /**
-     * @param kind {@code generic} or {@code google}: which button to draw
+     * @param kind {@code generic}, {@code google}, {@code facebook}, {@code line} or {@code apple}: which button to
+     *             draw (Apple's with its own title, decision D67)
      */
     record ProviderEntry(String id, String label, String kind) {}
 
@@ -143,7 +158,7 @@ class OidcController {
                 return Mono.error(AuthController.loginFailed("Unknown sign-in entry"));
             }
             String resolved = found.get().name();
-            String redirectUri = provider.redirectUri(resolved);
+            String redirectUri = provider.providerRedirectUri(resolved);
             if (redirectUri == null) {
                 return Mono.error(AuthController.loginFailed("Identity provider " + provider.id()
                     + " has no callback for entry " + resolved));
@@ -192,6 +207,57 @@ class OidcController {
             });
         });
     }
+
+    /**
+     * Sign in with Apple's answer (decision D67 item 1): Apple posts code and state as a form (and, the first time, the
+     * person's name in {@code user}), which a single-page application cannot receive. The pending round trip keeps the
+     * name ({@link OidcStateStore#posted}); the browser goes on (303) to the callback of the round trip's entry with
+     * code and state in the query, as other providers send them, and the page finishes the sign-in or link with its
+     * binder as usual. Only to that configured callback: never to an address the request names. Apple's refusal
+     * ({@code error}, as when the person cancels) goes on without a code, and the page says it failed. An unknown,
+     * expired or used state, or another provider's, is 401 {@code LOGIN_FAILED}.
+     */
+    @PostMapping(value = BASE + "/{id}/form-post", consumes = MediaType.APPLICATION_FORM_URLENCODED_VALUE)
+    Mono<ResponseEntity<Void>> formPost(@PathVariable String id, ServerWebExchange http) {
+        return Mono.defer(() -> {
+            signInLimits.count(SignInRateLimits.Kind.OIDC_FORM_POST, http.getRequest(), null);
+            OidcProvider provider = providers.find(id).filter(OidcProvider::isApple)
+                .orElseThrow(() -> new EntityNotFoundException("Unknown identity provider " + id));
+            return http.getFormData().flatMap(form -> {
+                String state = form.getFirst("state");
+                String code = form.getFirst("code");
+                String error = form.getFirst("error");
+                return states.posted(state, AppleUser.name(form.getFirst("user")))
+                    .filter(posted -> posted.providerId().equals(provider.id()))
+                    .switchIfEmpty(Mono.error(() -> AuthController.loginFailed("Unknown, expired or used state, or "
+                        + "another provider's, posted to " + provider.id())))
+                    .flatMap(posted -> {
+                        String callback = provider.redirectUri(posted.entry());
+                        if (callback == null) {
+                            return Mono.error(AuthController.loginFailed("Identity provider " + provider.id()
+                                + " has no callback for entry " + posted.entry()));
+                        }
+                        UriComponentsBuilder next = UriComponentsBuilder.fromUriString(callback)
+                            .queryParam("state", state);
+                        if (code != null && !code.isBlank() && error == null) {
+                            next.queryParam("code", code);
+                        } else {
+                            String known = error == null || !ERROR.matcher(error).matches() ? "access_denied" : error;
+                            log.info("Identity provider {} refused: {}", provider.id(), known);
+                            next.queryParam("error", known);
+                        }
+                        return Mono.just(ResponseEntity.status(HttpStatus.SEE_OTHER)
+                            .location(next.encode().build().toUri())
+                            .header(HttpHeaders.CACHE_CONTROL, "no-store")
+                            .header("Referrer-Policy", "no-referrer")
+                            .<Void>build());
+                    });
+            });
+        });
+    }
+
+    /** An OAuth error code as RFC 6749 allows (section 4.1.2.1); anything else is passed on as access_denied. */
+    private static final java.util.regex.Pattern ERROR = java.util.regex.Pattern.compile("[a-z_]{1,64}");
 
     /**
      * Signs in whom the subject is linked to; a subject nobody linked may get an account ({@link #open}) and signs in

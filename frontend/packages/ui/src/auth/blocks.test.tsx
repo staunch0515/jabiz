@@ -578,6 +578,21 @@ describe('OidcButtons', () => {
     expect(start).toHaveBeenCalledWith('line', '/portal/')
     await expectAccessible()
   })
+  it("says Apple's own title on Apple's button, whatever the label, with its logo in the text colour", async () => {
+    const start = vi.fn(async () => undefined)
+    const apple = { id: 'apple', label: 'Apple ID', kind: 'apple' }
+    const { unmount } = render(<OidcButtons returnTo="/portal/" providers={[apple]} start={start} />)
+    const button = screen.getByRole('button', { name: 'Sign in with Apple' })
+    expect(button).toHaveAttribute('data-kind', 'apple')
+    expect(button.querySelector('path')).toHaveAttribute('fill', 'currentColor')
+    await expectAccessible()
+    await user().click(button)
+    expect(start).toHaveBeenCalledWith('apple', '/portal/')
+    unmount()
+    render(<OidcButtons returnTo="/portal/" layout="icons" purpose="signUp" providers={[apple]} start={start} />)
+    expect(screen.getByRole('button', { name: 'Sign up with Apple' })).toHaveAttribute('title', 'Sign up with Apple')
+    await expectAccessible()
+  })
 })
 
 describe('ChangePasswordForm', () => {
