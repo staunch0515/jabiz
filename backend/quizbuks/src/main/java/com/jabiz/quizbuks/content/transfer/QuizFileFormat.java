@@ -21,13 +21,19 @@ import java.util.function.UnaryOperator;
 public final class QuizFileFormat {
 
     public static final String FORMAT = "quizbuks.quiz";
-    /** The version the export writes and {@link #readCurrent} reads. */
-    public static final int CURRENT = 1;
+    /**
+     * The version the export writes and {@link #readCurrent} reads. Version 2 (Q73a) adds the base language
+     * ({@code quiz.language}) and the other languages ({@code translations}), both optional.
+     */
+    public static final int CURRENT = 2;
     /** The oldest version still read. */
     public static final int OLDEST = 1;
 
-    /** The upgrade from each version to the next, by the version it starts from. None yet: version 1 is current. */
-    static final Map<Integer, UnaryOperator<Map<String, Object>>> UPGRADES = Map.of();
+    /**
+     * The upgrade from each version to the next, by the version it starts from. Version 1 to 2 changes nothing: a
+     * file of version 1 is a quiz of its base language only, without saying which.
+     */
+    static final Map<Integer, UnaryOperator<Map<String, Object>>> UPGRADES = Map.of(1, document -> document);
 
     /** Whether a file can be imported, and why not. */
     public enum Status { SUPPORTED, NOT_A_QUIZ_FILE, TOO_NEW, TOO_OLD, INVALID }
@@ -103,23 +109,7 @@ public final class QuizFileFormat {
         List<QuizFile.Material> materials = new ArrayList<>();
         int m = 0;
         for (Map<String, ?> material : maps(document.get("materials"), "materials")) {
-            String at = "materials[" + m++ + "]";
-            List<QuizFile.Image> images = new ArrayList<>();
-            int i = 0;
-            for (Map<String, ?> image : maps(material.get("images"), at + ".images")) {
-                String imageAt = at + ".images[" + i++ + "]";
-                images.add(new QuizFile.Image(text(image.get("image"), imageAt + ".image"),
-                    text(image.get("caption"), imageAt + ".caption")));
-            }
-            Object watch = material.get("watchToAnswer");
-            if (watch != null && !(watch instanceof Boolean)) {
-                throw new IllegalArgumentException(at + ".watchToAnswer must be true or false");
-            }
-            materials.add(new QuizFile.Material(text(material.get("kind"), at + ".kind"),
-                text(material.get("title"), at + ".title"), text(material.get("description"), at + ".description"),
-                text(material.get("body"), at + ".body"), text(material.get("url"), at + ".url"),
-                text(material.get("pdf"), at + ".pdf"), text(material.get("audio"), at + ".audio"), images,
-                Boolean.TRUE.equals(watch)));
+            materials.add(material(material, "materials[" + m++ + "]"));
         }
         List<QuizFile.Question> questions = new ArrayList<>();
         int q = 0;
@@ -151,9 +141,64 @@ public final class QuizFileFormat {
                     text(file.get("type"), at + ".type"), size == null ? -1 : size));
             }
         }
+        Map<String, QuizFile.Language> translations = new LinkedHashMap<>();
+        Object given = document.get("translations");
+        if (given != null) {
+            for (Map.Entry<String, ?> entry : map(given, "translations").entrySet()) {
+                String at = "translations." + entry.getKey();
+                Map<String, ?> language = map(entry.getValue(), at);
+                List<QuizFile.NumberedMaterial> own = new ArrayList<>();
+                int n = 0;
+                for (Map<String, ?> material : maps(language.get("materials"), at + ".materials")) {
+                    String materialAt = at + ".materials[" + n++ + "]";
+                    Integer no = whole(material.get("no"), materialAt + ".no");
+                    if (no == null) {
+                        throw new IllegalArgumentException(materialAt + ".no must be a whole number");
+                    }
+                    own.add(new QuizFile.NumberedMaterial(no, material(material, materialAt)));
+                }
+                translations.put(entry.getKey(), new QuizFile.Language(texts(language.get("texts"), at + ".texts"),
+                    texts(language.get("images"), at + ".images"), own,
+                    texts(language.get("hashes"), at + ".hashes")));
+            }
+        }
         return new QuizFile(kind, text(quiz.get("title"), "quiz.title"), text(quiz.get("intro"), "quiz.intro"),
             text(quiz.get("cover"), "quiz.cover"), whole(quiz.get("timeLimitSec"), "quiz.timeLimitSec"), materials,
-            questions, files);
+            questions, files, text(quiz.get("language"), "quiz.language"), translations);
+    }
+
+    private static QuizFile.Material material(Map<String, ?> material, String at) {
+        List<QuizFile.Image> images = new ArrayList<>();
+        int i = 0;
+        for (Map<String, ?> image : maps(material.get("images"), at + ".images")) {
+            String imageAt = at + ".images[" + i++ + "]";
+            images.add(new QuizFile.Image(text(image.get("image"), imageAt + ".image"),
+                text(image.get("caption"), imageAt + ".caption")));
+        }
+        Object watch = material.get("watchToAnswer");
+        if (watch != null && !(watch instanceof Boolean)) {
+            throw new IllegalArgumentException(at + ".watchToAnswer must be true or false");
+        }
+        return new QuizFile.Material(text(material.get("kind"), at + ".kind"),
+            text(material.get("title"), at + ".title"), text(material.get("description"), at + ".description"),
+            text(material.get("body"), at + ".body"), text(material.get("url"), at + ".url"),
+            text(material.get("pdf"), at + ".pdf"), text(material.get("audio"), at + ".audio"), images,
+            Boolean.TRUE.equals(watch));
+    }
+
+    /** An object of texts by key (blank ones left out); none when absent. */
+    private static Map<String, String> texts(Object value, String at) {
+        Map<String, String> texts = new LinkedHashMap<>();
+        if (value == null) {
+            return texts;
+        }
+        for (Map.Entry<String, ?> entry : map(value, at).entrySet()) {
+            String text = text(entry.getValue(), at + "." + entry.getKey());
+            if (text != null) {
+                texts.put(entry.getKey(), text);
+            }
+        }
+        return texts;
     }
 
     @SuppressWarnings("unchecked")
