@@ -31,6 +31,9 @@ interface Server {
   /** The counter's prizes, answered by their status filter. */
   counter?: Record<string, unknown>[]
   processes?: Record<string, { status: number; body: unknown }>
+  /** Q74: what the staff member handed over, and its totals. */
+  handled?: Record<string, unknown>[]
+  totals?: Record<string, unknown> | null
 }
 
 /** The server as the app sees it, for a verified taker in Japan. Records what was posted. */
@@ -72,13 +75,20 @@ function server(options: Server = {}) {
         const items = (options.counter ?? []).filter((row) => !filter || row.status === filter.value)
         return json(200, { items, offset: 0, limit: 50 })
       }
+      case '/api/queries/qb.app.staff-handled': {
+        const items = options.handled ?? []
+        const limit = Number((body as { limit?: number } | null)?.limit ?? 20)
+        return json(200, { items: items.slice(0, limit), offset: 0, limit, total: items.length })
+      }
+      case '/api/queries/qb.app.staff-handled-totals':
+        return json(200, { items: options.totals ? [options.totals] : [], offset: 0, limit: 1 })
       default:
         return json(404, {})
     }
   })
   const processCalls = (name: string) =>
     posted.filter((p) => p.path === `/api/processes/${name}/latest`).map((p) => p.body)
-  return { processCalls, setStaffOf: (place: Record<string, unknown> | null) => { staffOf = place } }
+  return { posted, processCalls, setStaffOf: (place: Record<string, unknown> | null) => { staffOf = place } }
 }
 
 const PLACE = { sponsorId: 's1', sponsorCompany: 'Capitals Inc', addedAt: '2026-10-20T00:00:00Z' }
@@ -125,6 +135,7 @@ describe('the account page (Q39)', () => {
     const place = await screen.findByTestId('account-staff')
     expect(place).toHaveTextContent('You are on the staff of Capitals Inc')
     expect(within(place).getByTestId('staff-desk-link')).toHaveAttribute('href', '/staff')
+    expect(within(place).getByTestId('staff-handled-link')).toHaveAttribute('href', '/staff/handled')
     await userEvent.click(within(place).getByTestId('staff-leave'))
     await userEvent.click(await screen.findByRole('button', { name: 'Leave' }))
     await waitFor(() => expect(processCalls('QB_STAFF_LEAVE')).toEqual([{}]))
@@ -179,5 +190,37 @@ describe('the counter (Q39)', () => {
     render(<App />)
     expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent('You are not on a sponsor\'s staff')
     expect(processCalls('QB_STAFF_REDEEM_CODE_ISSUE')).toEqual([])
+  })
+})
+
+describe('what the staff member handed over (Q74)', () => {
+  const handled = (n: number) => ({ redemptionId: `h${n}`, code: `C-0000000${n}`, publicationName: 'Coffee week',
+    takerName: 'Mei', description: 'A coffee at our counter', amount: 300, redeemedAt: '2026-10-20T01:00:00Z' })
+
+  it('shows the totals and the prizes of a period, a tap from the code', async () => {
+    const { posted } = server({ staffOf: PLACE, totals: { todayCount: 2, todayValue: 600, weekCount: 5,
+      weekValue: 1500, monthCount: 30, monthValue: 9000, zone: 'Asia/Tokyo' },
+    handled: Array.from({ length: 25 }, (_, i) => handled(i + 1)) })
+    window.history.replaceState(null, '', '/staff/handled')
+    render(<App />)
+    expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent('What I handed over')
+    expect(await screen.findByTestId('staff-handled-today')).toHaveTextContent('2 prizes')
+    expect(screen.getByTestId('staff-handled-month')).toHaveTextContent('30 prizes')
+    expect(screen.getByTestId('staff-handled-totals').parentElement).toHaveTextContent('Asia/Tokyo')
+    expect(screen.getByTestId('staff-handled-code')).toHaveAttribute('href', '/staff')
+    await waitFor(() => expect(screen.getAllByTestId('staff-handled-row')).toHaveLength(20))
+    await userEvent.click(screen.getByTestId('staff-handled-more'))
+    await waitFor(() => expect(screen.getAllByTestId('staff-handled-row')).toHaveLength(25))
+    await userEvent.click(within(screen.getByTestId('staff-handled-period')).getByRole('radio', { name: 'This month' }))
+    await waitFor(() => expect(posted.some((p) => p.path === '/api/queries/qb.app.staff-handled'
+      && (p.body.params as Record<string, unknown>).period === 'MONTH')).toBe(true))
+    await expectAccessible()
+  })
+
+  it('says so to a taker on no staff', async () => {
+    server()
+    window.history.replaceState(null, '', '/staff/handled')
+    render(<App />)
+    expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent('You are not on a sponsor\'s staff')
   })
 })

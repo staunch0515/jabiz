@@ -59,6 +59,8 @@ interface Server {
   digitalPrizes?: Record<string, unknown>[]
   digitalPool?: { available: number; issued: number; revoked: number }
   digitalCodes?: Record<string, unknown>[]
+  /** Q74: who handed the prizes over, with their figures. */
+  handlers?: Record<string, unknown>[]
   /** The prizes of the redeem page (Q22b), answered to every search of `qb.sponsor.redemptions`. */
   redemptions?: Record<string, unknown>[]
   /** The invitation list of an invited publication (Q25), answered to every search and summed up. */
@@ -152,9 +154,13 @@ function server(options: Server = {}) {
           { code: 'REDEEMED', label: 'Collected' }, { code: 'EXPIRED', label: 'Expired' }, { code: 'VOID', label: 'Void' }])
       case '/api/queries/qb.sponsor.redemptions': {
         const filter = (body as { filters?: { field: string; value: string }[] } | null)?.filters?.find((f) => f.field === 'status')
+        const by = (body as { params?: { handledBy?: string } } | null)?.params?.handledBy
         const items = (options.redemptions ?? []).filter((row) => !filter || row.status === filter.value)
+          .filter((row) => !by || (by === 'SELF' ? row.handledBySelf === true : row.redeemedBy === by))
         return json(200, { items, offset: 0, limit: 20, total: items.length })
       }
+      case '/api/queries/qb.sponsor.redemption-handlers':
+        return json(200, { items: options.handlers ?? [], offset: 0, limit: 100 })
       case '/api/dictionaries/urn:jabiz:dict:quizbuks:publication-audience':
         return json(200, [{ code: 'PUBLIC', label: 'Everyone in the regions' },
           { code: 'INVITED', label: 'Invited e-mail addresses only' }])
@@ -919,18 +925,39 @@ describe('the redeem page (Q22b)', () => {
     await waitFor(() => expect(within(rows[1]).getByTestId('redemption-status')).toHaveTextContent('Collected'))
   })
 
-  it('names the staff member who handed a prize over (Q39), and nobody for the sponsor\'s own', async () => {
-    server({
-      redemptions: [prize({ status: 'REDEEMED', redeemedAt: '2026-10-20T00:30:00Z', redeemedByName: 'Kai' }),
-        prize({ redemptionId: 'r2', code: 'C-00000002', status: 'REDEEMED', redeemedAt: '2026-10-20T00:40:00Z',
-          redeemedByName: null })],
+  it('names who handed each prize over, filters by them and sums them up (Q39, Q74)', async () => {
+    const { posted } = server({
+      redemptions: [prize({ status: 'REDEEMED', redeemedAt: '2026-10-20T00:30:00Z', redeemedByName: 'Kai',
+        redeemedBy: 'kai-id', handledBySelf: false }),
+      prize({ redemptionId: 'r2', code: 'C-00000002', status: 'REDEEMED', redeemedAt: '2026-10-20T00:40:00Z',
+        redeemedByName: null, redeemedBy: 'u2', handledBySelf: true }),
+      prize({ redemptionId: 'r3', code: 'C-00000003', status: 'DUE' })],
+      handlers: [
+        { handlerId: 'kai-id', self: false, name: 'Kai', todayCount: 1, todayValue: 300, weekCount: 4,
+          weekValue: 1200, monthCount: 9, monthValue: 2700, totalCount: 20, totalValue: 6000, zone: 'Asia/Tokyo' },
+        { handlerId: 'u2', self: true, name: null, todayCount: 1, todayValue: 300, weekCount: 1, weekValue: 300,
+          monthCount: 1, monthValue: 300, totalCount: 1, totalValue: 300, zone: 'Asia/Tokyo' }],
       processes: { QB_REDEEM_CODE_ISSUE: [issued('ROTATING', 'rot-key-3')] },
     })
     window.history.replaceState(null, '', '/redeem')
     render(<App />)
     const rows = await screen.findAllByTestId('redemption-row')
-    expect(within(rows[0]).getByTestId('redemption-staff')).toHaveTextContent('Handed over by Kai')
-    expect(within(rows[1]).queryByTestId('redemption-staff')).toBeNull()
+    expect(within(rows[0]).getByTestId('redemption-staff')).toHaveTextContent('Kai')
+    expect(within(rows[1]).getByTestId('redemption-staff')).toHaveTextContent('You')
+    expect(within(rows[2]).queryByTestId('redemption-staff')).toBeNull()
+    // The figures by handler.
+    const handlers = await screen.findAllByTestId('redeem-handler-row')
+    expect(handlers[0]).toHaveTextContent('Kai')
+    expect(handlers[0]).toHaveTextContent('20 prizes')
+    expect(handlers[1]).toHaveTextContent('You')
+    expect(screen.getByTestId('redeem-handlers')).toHaveTextContent('Asia/Tokyo')
+    // Only Kai's.
+    await userEvent.click(screen.getByTestId('redemption-handler-filter'))
+    await userEvent.click(await screen.findByRole('option', { name: 'Kai' }))
+    await waitFor(() => expect(screen.getAllByTestId('redemption-row')).toHaveLength(1))
+    expect(posted.some((p) => p.path === '/api/queries/qb.sponsor.redemptions'
+      && (p.body.params as Record<string, unknown>)?.handledBy === 'kai-id')).toBe(true)
+    await expectAccessible()
   })
 })
 
