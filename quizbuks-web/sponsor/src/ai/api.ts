@@ -42,6 +42,16 @@ export interface AiCover {
   fileId: string
 }
 
+/**
+ * A candidate translation (Q73d-1) as the server keeps it: the element it translates (`content/languages.ts`'s key)
+ * and the text, numbered as the server accepts it.
+ */
+export interface AiTranslation {
+  no: number
+  key: string
+  text: string
+}
+
 /** A row of `qb.sponsor.ai-jobs`. */
 export interface AiJob {
   aiJobId: string
@@ -52,6 +62,9 @@ export interface AiJob {
   candidates: AiCandidate[]
   /** A cover job's candidates (none for questions). */
   covers: AiCover[]
+  /** Q73d-1: a translation job's language and candidates (none for the other kinds). */
+  language: string | null
+  translations: AiTranslation[]
   candidateCount: number
   invalidCount: number
   acceptedCount: number
@@ -110,21 +123,40 @@ export function parseCovers(text: unknown): AiCover[] {
   }
 }
 
-export function toAiJob(row: Row): AiJob {
-  let count: number | null
+/** The stored candidate translations (`{schema: 1, translations: [...]}`); none when they cannot be read. */
+export function parseTranslations(text: unknown): AiTranslation[] {
+  if (typeof text !== 'string' || !text) return []
   try {
-    count = num((JSON.parse(String(row.params ?? '{}')) as Row).count) || null
+    const document = JSON.parse(text) as { translations?: unknown }
+    if (!Array.isArray(document.translations)) return []
+    return document.translations
+      .map((c: Row): AiTranslation => ({ no: num(c.no), key: String(c.key ?? ''), text: String(c.text ?? '') }))
+      .filter((c) => c.no > 0 && c.key !== '')
   } catch {
-    count = null
+    return []
   }
+}
+
+const KINDS: readonly string[] = Object.values(AI_KINDS)
+
+export function toAiJob(row: Row): AiJob {
+  let params: Row
+  try {
+    params = JSON.parse(String(row.params ?? '{}')) as Row
+  } catch {
+    params = {}
+  }
+  const kind = (KINDS.includes(String(row.kind)) ? row.kind : AI_KINDS.questions) as AiJobKind
   return {
     aiJobId: String(row.aiJobId),
     externalJobId: String(row.externalJobId ?? ''),
-    kind: row.kind === AI_KINDS.cover ? AI_KINDS.cover : AI_KINDS.questions,
+    kind,
     status: (row.status as AiJobStatus) ?? 'QUEUED',
-    count,
-    candidates: row.kind === AI_KINDS.cover ? [] : parseCandidates(row.candidates),
-    covers: row.kind === AI_KINDS.cover ? parseCovers(row.candidates) : [],
+    count: num(params.count) || null,
+    candidates: kind === AI_KINDS.questions ? parseCandidates(row.candidates) : [],
+    covers: kind === AI_KINDS.cover ? parseCovers(row.candidates) : [],
+    language: kind === AI_KINDS.translation ? str(params.language) : null,
+    translations: kind === AI_KINDS.translation ? parseTranslations(row.candidates) : [],
     candidateCount: num(row.candidateCount),
     invalidCount: num(row.invalidCount),
     acceptedCount: num(row.acceptedCount),
@@ -242,6 +274,29 @@ export interface AcceptOutput {
 export const acceptAiQuestions = (aiJobId: string, quizId: string, questions: AcceptedQuestion[],
   baseRevision: number) =>
   runProcess<AcceptOutput>(AI_PROCESS.accept, { aiJobId, quizId, questions, baseRevision })
+
+/** `AiProcesses.TranslateRequestInput` (Q73d-1). */
+export interface AiTranslateRequestInput {
+  quizId: string
+  language: string
+  /** Every text, also the translated and up-to-date ones. */
+  all: boolean
+  aiNoticeVersionNo?: number | null
+}
+
+export const requestAiTranslation = (input: AiTranslateRequestInput) =>
+  runProcess<AiRequestOutput>(AI_PROCESS.translateRequest, { ...input })
+
+/** One reviewed candidate translation: its number and the text as the sponsor left it. */
+export interface AcceptedTranslation {
+  candidateNo: number
+  text: string
+  reviewed: true
+}
+
+export const acceptAiTranslations = (aiJobId: string, quizId: string, translations: AcceptedTranslation[],
+  baseRevision: number) =>
+  runProcess<EditOutput>(AI_PROCESS.translationAccept, { aiJobId, quizId, translations, baseRevision })
 
 export const discardAiJob = (aiJobId: string) => runProcess<{ status: AiJobStatus }>(AI_PROCESS.discard, { aiJobId })
 export const cancelAiJob = (aiJobId: string) => runProcess<{ status: AiJobStatus }>(AI_PROCESS.cancel, { aiJobId })

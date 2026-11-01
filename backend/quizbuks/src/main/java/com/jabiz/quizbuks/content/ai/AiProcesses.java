@@ -10,12 +10,14 @@ import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.quizbuks.content.ContentCodes;
+import com.jabiz.quizbuks.content.ContentLanguages;
 import com.jabiz.quizbuks.content.EditOutput;
 import com.jabiz.quizbuks.content.ContentLimits;
 import com.jabiz.quizbuks.content.MaterialKind;
 import com.jabiz.quizbuks.content.QbContent;
 import com.jabiz.quizbuks.content.QuizEditing;
 import com.jabiz.quizbuks.content.QuizLanguages;
+import com.jabiz.quizbuks.content.TranslationProcesses;
 import com.jabiz.quizbuks.identity.CallerChecks;
 import com.jabiz.quizbuks.messaging.ConsentChecks;
 import com.jabiz.quizbuks.messaging.QbLegal;
@@ -92,6 +94,9 @@ public final class AiProcesses {
     public static final String COVER_REQUEST = "QB_AI_COVER_REQUEST";
     /** The sponsor's choice of one candidate cover, written into the quiz's {@code cover} (Q8b). */
     public static final String COVER_ACCEPT = "QB_AI_COVER_ACCEPT";
+    /** Q73d-1: candidate translations of a quiz's text, and the sponsor's reviewed ones written. */
+    public static final String TRANSLATE_REQUEST = "QB_AI_TRANSLATE_REQUEST";
+    public static final String TRANSLATION_ACCEPT = "QB_AI_TRANSLATION_ACCEPT";
     public static final String COMPLETED = "QB_AI_JOB_COMPLETED";
     public static final String FAILED = "QB_AI_JOB_FAILED";
     public static final String ACCEPT = "QB_AI_ACCEPT";
@@ -128,6 +133,28 @@ public final class AiProcesses {
      */
     public record CoverRequestInput(@NotNull UUID quizId, @NotNull @Pattern(regexp = "en|zh|ja") String language,
         @Positive Integer aiNoticeVersionNo) implements Requested {}
+
+    /**
+     * Candidate translations of a quiz's text (Q73d-1) into one of its other languages.
+     *
+     * @param all               every text, also the ones translated and up to date (no: only the missing and the
+     *                          out-of-date ones)
+     * @param aiNoticeVersionNo the version of the AI notice the page showed, when the sponsor accepts it now
+     */
+    public record TranslateRequestInput(@NotNull UUID quizId, @NotNull @Pattern(regexp = "en|zh|ja") String language,
+        Boolean all, @Positive Integer aiNoticeVersionNo) implements Requested {}
+
+    /**
+     * One reviewed translation (Q73d-1): the candidate it comes from and the text as the sponsor left it.
+     *
+     * @param reviewed must be true: the sponsor marked it as checked (D-Q73-9, as A-6 for questions)
+     */
+    public record AcceptedTranslation(@NotNull @Min(1) Integer candidateNo,
+        @NotBlank @Size(max = ContentLimits.INTRO_LENGTH) String text, @NotNull @AssertTrue Boolean reviewed) {}
+
+    public record TranslationAcceptInput(@NotNull UUID aiJobId, @NotNull UUID quizId,
+        @NotNull @Size(min = 1, max = 1_000) List<@Valid @NotNull AcceptedTranslation> translations,
+        Long baseRevision) {}
 
     /** What every request of the AI names: the quiz, and the notice accepted with it. */
     public interface Requested {
@@ -199,7 +226,7 @@ public final class AiProcesses {
         AiUserKeys userKeys, AiPdfs.Limits pdfs) {
         return requestProcess(REQUEST, RequestInput.class,
             "Asks the AI for candidate questions of one of the sponsor's quizzes, to review.", AiQuestionsJob.TYPE,
-            true, zone, ctx -> prepare(ctx, userKeys, pdfs));
+            Loads.QUESTIONS, zone, ctx -> prepare(ctx, userKeys, pdfs));
     }
 
     /** Candidate covers (Q8b): the same checks, locks and limits as questions, of the job {@value AiCoverJob#TYPE}. */
@@ -207,8 +234,22 @@ public final class AiProcesses {
         AiUserKeys userKeys) {
         return requestProcess(COVER_REQUEST, CoverRequestInput.class,
             "Asks the AI for candidate covers of one of the sponsor's quizzes, to choose from.", AiCoverJob.TYPE,
-            false, zone, ctx -> prepareCover(ctx, userKeys));
+            Loads.NONE, zone, ctx -> prepareCover(ctx, userKeys));
     }
+
+    /**
+     * Candidate translations (Q73d-1): the same checks, locks and limits as questions, of the job
+     * {@value AiTranslateJob#TYPE}, reading the quiz's texts and the language's translations.
+     */
+    public static ProcessDefinition<TranslateRequestInput, RequestOutput, ProcessContext> translateRequest(
+        ZoneId zone, AiUserKeys userKeys) {
+        return requestProcess(TRANSLATE_REQUEST, TranslateRequestInput.class,
+            "Asks the AI to translate one of the sponsor's quizzes into one of its other languages, to review.",
+            AiTranslateJob.TYPE, Loads.TRANSLATION, zone, ctx -> prepareTranslation(ctx, userKeys));
+    }
+
+    /** What a request reads of the quiz besides the quiz itself. */
+    private enum Loads { NONE, QUESTIONS, TRANSLATION }
 
     /**
      * A request of the AI: before any lock the sponsor's standing, the notice, the settings and the quiz (with its
@@ -216,7 +257,7 @@ public final class AiProcesses {
      * everybody's, the limits; then the job (with the PDFs as its files) and its record.
      */
     private static <I extends Requested> ProcessDefinition<I, RequestOutput, ProcessContext> requestProcess(
-        String name, Class<I> type, String description, String jobType, boolean questions, ZoneId zone,
+        String name, Class<I> type, String description, String jobType, Loads loads, ZoneId zone,
         java.util.function.Consumer<ProcessContext> prepare) {
         return ProcessDefinition.define(name, 1, type, RequestOutput.class, ProcessContext.class, pb -> {
             pb.description(description)
@@ -236,7 +277,10 @@ public final class AiProcesses {
                 .step("Load the settings", loadSettings())
                 .step("Load the quiz", LoadEntity.by(QbContent.sponsorDataset(QbContent.QUIZ),
                     QuizEditing.QUIZ_ID, QuizEditing.QUIZ));
-            if (questions) {
+            if (loads == Loads.TRANSLATION) {
+                TranslationProcesses.loadTexts(pb, ctx -> ctx.get(INPUT, TranslateRequestInput.class).language());
+            }
+            if (loads == Loads.QUESTIONS) {
                 pb.step("Load its materials and questions", QueryEntities.<ProcessContext>all(
                         QueryEntities.query(QbContent.sponsorDataset(QbContent.MATERIAL),
                             ctx -> QuizEditing.ofQuiz(ctx.get(QuizEditing.QUIZ_ID)), MATERIAL_ROWS),
@@ -267,7 +311,7 @@ public final class AiProcesses {
                     ctx -> ctx.get(JOB_INPUT))
                 .reference(ctx -> "quiz:" + ctx.get(QuizEditing.QUIZ_ID))
                 .outputKey(EXTERNAL_JOB_ID);
-            if (questions) {
+            if (loads == Loads.QUESTIONS) {
                 start = start.files(AiProcesses::pdfFiles);
             }
             pb.step("Start the job", start)
@@ -499,6 +543,55 @@ public final class AiProcesses {
             AiLimits.estimate(size, AiCoverJob.MAX_TOKENS, 0), List.of());
     }
 
+    /**
+     * A translation's job (Q73d-1): the segments to translate (§5.1: texts only), in batches; the language must be
+     * one of the quiz's other languages and there must be something to translate. The reservation is every batch's
+     * call: its input at most the largest batch's, and all the output it asks for.
+     */
+    static void prepareTranslation(ProcessContext ctx, AiUserKeys userKeys) {
+        TranslateRequestInput input = ctx.get(INPUT, TranslateRequestInput.class);
+        Common common = common(ctx);
+        EntityInstance quiz = QuizEditing.quiz(ctx);
+        String base = String.valueOf((Object) quiz.get("language"));
+        boolean all = Boolean.TRUE.equals(input.all());
+        if (!ContentLanguages.parseList(quiz.get("translationLanguages")).contains(input.language())) {
+            common.problems().add(new Violation("language", ContentCodes.TRANSLATION_LANGUAGE, "The quiz has no "
+                + "language " + input.language() + " besides its base", Map.of("language", input.language())));
+        }
+        List<AiTranslateJob.Segment> segments = AiTranslations.segments(quiz, TranslationProcesses.questions(ctx),
+            TranslationProcesses.options(ctx), TranslationProcesses.translations(ctx), all);
+        if (segments.isEmpty()) {
+            common.problems().add(new Violation("all", AiCodes.NOTHING_TO_TRANSLATE, "Every text of "
+                + input.language() + " is translated and up to date", Map.of("language", input.language())));
+        }
+        AiTranslateJob.Input job = new AiTranslateJob.Input(common.settings().model(), base, input.language(),
+            quiz.get("title"), segments, userKeys.of(ctx.request().actorId()), null);
+        int size = bytes(JSON.writeValueAsString(job));
+        if (size > AiTranslateJob.MAX_JOB_INPUT_BYTES) {
+            common.problems().add(new Violation(null, AiCodes.INPUT_TOO_LARGE, "The request is " + size
+                + " bytes, more than " + AiTranslateJob.MAX_JOB_INPUT_BYTES, Map.of("size", size, "max",
+                AiTranslateJob.MAX_JOB_INPUT_BYTES)));
+        }
+        List<List<AiTranslateJob.Segment>> batches = AiTranslateJob.batches(segments);
+        int largest = 0;
+        for (List<AiTranslateJob.Segment> batch : batches) {
+            largest = Math.max(largest, bytes(AiTranslatePrompt.SYSTEM) + bytes(AiTranslatePrompt.user(job, batch,
+                JSON)));
+        }
+        long reservedInput = AiLimits.reservedInput(largest, 0);
+        Map<String, Object> params = new LinkedHashMap<>();
+        params.put("language", input.language());
+        params.put("from", base);
+        params.put("all", all);
+        params.put("segments", segments.size());
+        params.put("batches", batches.size());
+        params.put("reservedInputTokens", reservedInput);
+        long estimate = (long) AiQuestionsJob.ATTEMPTS * batches.size()
+            * (reservedInput + AiTranslateJob.BATCH_MAX_TOKENS);
+        prepared(ctx, common, QbAi.KIND_TRANSLATION, new AiTranslateJob.Input(job.model(), job.from(), job.to(),
+            job.title(), job.segments(), job.userKey(), reservedInput), params, size, estimate, List.of());
+    }
+
     static void checkLimits(ProcessContext ctx, ZoneId zone) {
         String quizId = String.valueOf((Object) ctx.get(QuizEditing.QUIZ_ID));
         List<EntityInstance> open = rows(ctx, OPEN);
@@ -634,6 +727,10 @@ public final class AiProcesses {
             completeCover(ctx, completion, job, usage, month);
             return;
         }
+        if (QbAi.KIND_TRANSLATION.equals(job.get("kind"))) {
+            completeTranslation(ctx, completion, job, usage, month);
+            return;
+        }
         AiQuestionsJob.Result result = completion.result(AiQuestionsJob.Result.class);
         java.math.BigDecimal cost = AiCost.of(job.get("model"), result.servedModel(), usage, settings(ctx).price());
         Map<String, Object> values = finished(usage, cost, completion.attempts(), completion.finishedTime());
@@ -716,6 +813,40 @@ public final class AiProcesses {
             job.get("status"))));
     }
 
+    /**
+     * A translation job's result (Q73d-1): its candidates checked again and kept for the sponsor's review
+     * ({@code READY}), never written into the quiz here; none usable is {@code FAILED} ({@link AiCodes#NO_CANDIDATES}).
+     */
+    private static void completeTranslation(ProcessContext ctx, ExternalJobCompletion completion, EntityInstance job,
+        ClaudeApi.Usage usage, String month) {
+        AiTranslateJob.Result result = completion.result(AiTranslateJob.Result.class);
+        BigDecimal cost = AiCost.of(job.get("model"), result.servedModel(), usage, settings(ctx).price());
+        Map<String, Object> values = finished(usage, cost, completion.attempts(), completion.finishedTime());
+        boolean failed = false;
+        if (QbAi.QUEUED.equals(job.get("status"))) {
+            values.put("servedModel", result.servedModel());
+            AiTranslations.Checked checked = AiTranslations.check(result.translations());
+            int invalid = result.invalid() + checked.invalid();
+            values.put("invalidCount", BigDecimal.valueOf(invalid));
+            values.put("candidateCount", BigDecimal.valueOf(checked.valid().size()));
+            if (checked.valid().isEmpty()) {
+                failed = true;
+                values.put("status", QbAi.FAILED);
+                values.put("failureCode", AiCodes.NO_CANDIDATES);
+                values.put("failureMessage", "None of the " + invalid + " translations was usable");
+            } else {
+                values.put("status", QbAi.READY);
+                values.put("candidates", AiTranslations.toJson(String.valueOf(params(job).get("language")),
+                    checked.valid()));
+                values.put("expiresAt", completion.finishedTime().plus(Duration.ofDays(settings(ctx).expireDays())));
+            }
+        }
+        ctx.changes().update(QbAi.JOB, job.id(), job.version(), values);
+        addUsage(ctx, completion.requestedBy(), month, usage, cost, failed);
+        ctx.put(OUTPUT, new JobOutput(String.valueOf(job.id()), (String) values.getOrDefault("status",
+            job.get("status"))));
+    }
+
     static void fail(ProcessContext ctx, ZoneId zone) {
         ExternalJobFailure failure = ctx.get(INPUT, ExternalJobFailure.class);
         EntityInstance job = unfinished(ctx, failure.requestedBy());
@@ -776,6 +907,12 @@ public final class AiProcesses {
         Map<String, Object> params = params(job);
         long input = params.get("reservedInputTokens") instanceof Number reserved ? reserved.longValue()
             : AiLimits.reservedInput(QuizEditing.number(job.get("inputBytes")), 0);
+        if (QbAi.KIND_TRANSLATION.equals(job.get("kind"))) {
+            // Every batch's call (Q73d-1): its reserved input and all the output it asks for.
+            int batches = Math.max(1, ((Number) params.getOrDefault("batches", 1)).intValue());
+            return ClaudeCalls.priced(job.get("model"), ClaudeApi.unrecorded(input * batches,
+                AiTranslateJob.BATCH_MAX_TOKENS * batches));
+        }
         int maxTokens = QbAi.KIND_COVER.equals(job.get("kind")) ? AiCoverJob.MAX_TOKENS
             : ClaudeApi.maxTokens(((Number) params.getOrDefault("count", AiQuestionsJob.MAX_COUNT)).intValue());
         return ClaudeCalls.priced(job.get("model"), ClaudeApi.unrecorded(input, maxTokens));
@@ -1214,6 +1351,91 @@ public final class AiProcesses {
     }
 
     /** A closed cover job refers to its pictures no more: the sweep takes the ones not chosen. */
+    // ---- translations (Q73d-1) ---------------------------------------------------------------------------------
+
+    /**
+     * {@value #TRANSLATION_ACCEPT}: under {@code qb.quiz:<quiz>} then {@code qb.ai:<sponsor>}, the candidate
+     * translations the sponsor reviewed (each {@code reviewed}, D-Q73-9; the text as the sponsor left it) are written
+     * by the rules of {@code QB_TRANSLATION_SAVE} ({@link TranslationProcesses#apply}), recorded as the AI's with the
+     * job and the base text's hash as the AI was given it. The job stays ready with the candidates not yet accepted,
+     * and is accepted once none is left. No candidate is ever written without this.
+     */
+    public static ProcessDefinition<TranslationAcceptInput, EditOutput, ProcessContext> translationAccept() {
+        return ProcessDefinition.define(TRANSLATION_ACCEPT, 1, TranslationAcceptInput.class, EditOutput.class,
+            ProcessContext.class, pb -> {
+                pb.description("Writes the AI translations the sponsor reviewed into the quiz, as the sponsor left them.")
+                    .permissions(QbPermissions.AI_USE, QbPermissions.CONTENT_WRITE)
+                    .requiresVerifiedEmail()
+                    .steps(CallerChecks::refuseBanned)
+                    .actsOn(QbContent.QUIZ, "quizId")
+                    .contextFactory((start, input) -> {
+                        ProcessContext ctx = new ProcessContext(start);
+                        ctx.put(INPUT, input);
+                        ctx.put(QuizEditing.QUIZ_ID, input.quizId());
+                        return ctx;
+                    })
+                    .outputMapper(ctx -> ctx.get(OUTPUT, EditOutput.class))
+                    .steps(QuizEditing::lockAndLoad)
+                    .step("Lock the sponsor's AI requests", HoldLock.<ProcessContext>exclusive(
+                        ctx -> QbAi.lockName(ctx.request().actorId())))
+                    .step("Load the job", QueryEntities.<ProcessContext>of(QbAi.defaultDataset(QbAi.JOB),
+                        ctx -> EntityQuery.builder().where(new QueryPredicate.Eq("aiJobId",
+                            ctx.get(INPUT, TranslationAcceptInput.class).aiJobId().toString())).limit(1).build(), JOB));
+                TranslationProcesses.loadTexts(pb, ctx -> String.valueOf(params(own(ctx)).get("language")));
+                pb.compute("Write the translations", (metadata, ctx) -> acceptTranslations(ctx));
+            });
+    }
+
+    static void acceptTranslations(ProcessContext ctx) {
+        TranslationAcceptInput input = ctx.get(INPUT, TranslationAcceptInput.class);
+        EntityInstance job = own(ctx);
+        if (!input.quizId().toString().equals(String.valueOf((Object) job.get("quizId")))) {
+            throw new EntityNotFoundException("AI job not found");
+        }
+        requireKind(job, QbAi.KIND_TRANSLATION);
+        requireReady(ctx, job);
+        List<AiTranslateJob.Translated> candidates = AiTranslations.fromJson(job.get("candidates"));
+        Map<Integer, AiTranslateJob.Translated> byNo = new LinkedHashMap<>();
+        candidates.forEach(candidate -> byNo.put(candidate.no(), candidate));
+        List<Violation> problems = new ArrayList<>();
+        List<TranslationProcesses.Entry> entries = new ArrayList<>();
+        Map<String, String> hashes = new LinkedHashMap<>();
+        Set<Integer> seen = new HashSet<>();
+        for (int i = 0; i < input.translations().size(); i++) {
+            AcceptedTranslation accepted = input.translations().get(i);
+            AiTranslateJob.Translated candidate = byNo.get(accepted.candidateNo());
+            if (candidate == null || !seen.add(accepted.candidateNo())) {
+                problems.add(new Violation("translations[" + i + "].candidateNo", AiCodes.CANDIDATE_UNKNOWN,
+                    "Candidate " + accepted.candidateNo() + " is not one of the job's, or is given twice",
+                    Map.of("candidateNo", accepted.candidateNo())));
+                continue;
+            }
+            entries.add(new TranslationProcesses.Entry(candidate.key(), accepted.text().strip(), null));
+            hashes.put(candidate.key(), candidate.sourceHash());
+        }
+        if (!problems.isEmpty()) {
+            throw new BusinessRuleViolationException(problems);
+        }
+        String language = String.valueOf(params(job).get("language"));
+        if (!TranslationProcesses.apply(ctx, new TranslationProcesses.SaveInput(input.quizId(), language, entries,
+            input.baseRevision()), String.valueOf(job.id()), hashes)) {
+            return;
+        }
+        List<AiTranslateJob.Translated> left = candidates.stream()
+            .filter(candidate -> !seen.contains(candidate.no())).toList();
+        Map<String, Object> jobValues = new LinkedHashMap<>();
+        jobValues.put("acceptedCount", BigDecimal.valueOf(QuizEditing.number(job.get("acceptedCount"))
+            + entries.size()));
+        if (left.isEmpty()) {
+            jobValues.put("status", QbAi.ACCEPTED);
+            jobValues.put("candidates", null);
+            jobValues.put("closedAt", ctx.opTime());
+        } else {
+            jobValues.put("candidates", AiTranslations.toJson(language, left));
+        }
+        ctx.changes().update(QbAi.JOB, job.id(), job.version(), jobValues);
+    }
+
     private static void clearCovers(Map<String, Object> values, EntityInstance job) {
         if (QbAi.KIND_COVER.equals(job.get("kind"))) {
             QbAi.COVER_FIELDS.forEach(field -> values.put(field, null));

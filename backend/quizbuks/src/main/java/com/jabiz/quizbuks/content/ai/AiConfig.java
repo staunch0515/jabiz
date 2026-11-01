@@ -84,6 +84,13 @@ public class AiConfig {
         return AiQuestionsJob.type(maxConcurrency, pdfs.maxBytes());
     }
 
+    /** Candidate translations (Q73d-1): the same concurrency setting, counted for this type of its own. */
+    @Bean
+    ExternalJobType<AiTranslateJob.Input, AiTranslateJob.Result> qbAiTranslateJob(
+        @Value("${quizbuks.ai.max-concurrency:" + AiQuestionsJob.DEFAULT_CONCURRENCY + "}") int maxConcurrency) {
+        return AiTranslateJob.type(maxConcurrency);
+    }
+
     /** Candidate covers (Q8b): the same concurrency setting, counted for this type of its own. */
     @Bean
     ExternalJobType<AiCoverJob.Input, AiCoverJob.Result> qbAiCoverJob(
@@ -164,7 +171,8 @@ public class AiConfig {
     StaticDictionary qbAiJobKindDictionary() {
         return StaticDictionary.define(QbAi.KIND_DICTIONARY, d -> d
             .item(QbAi.KIND_QUESTIONS, "en", "Questions", "zh", "题目", "ja", "問題")
-            .item(QbAi.KIND_COVER, "en", "Cover", "zh", "封面", "ja", "カバー"));
+            .item(QbAi.KIND_COVER, "en", "Cover", "zh", "封面", "ja", "カバー")
+            .item(QbAi.KIND_TRANSLATION, "en", "Translation", "zh", "翻译", "ja", "翻訳"));
     }
 
     /** The values the model parameter may take (its kind lists them; the dictionary labels them). */
@@ -200,6 +208,18 @@ public class AiConfig {
     @Bean
     ProcessDefinition<AiProcesses.CoverAcceptInput, EditOutput, ProcessContext> qbAiCoverAccept() {
         return AiProcesses.coverAccept();
+    }
+
+    /** Q73d-1: candidate translations of a quiz's text, asked for as questions are. */
+    @Bean
+    ProcessDefinition<AiProcesses.TranslateRequestInput, AiProcesses.RequestOutput, ProcessContext>
+        qbAiTranslateRequest(AiUserKeys userKeys) {
+        return AiProcesses.translateRequest(zone, userKeys);
+    }
+
+    @Bean
+    ProcessDefinition<AiProcesses.TranslationAcceptInput, EditOutput, ProcessContext> qbAiTranslationAccept() {
+        return AiProcesses.translationAccept();
     }
 
     @Bean

@@ -68,6 +68,8 @@ public final class AiCodes {
     public static final String PDF_UNREADABLE = "QB_AI_PDF_UNREADABLE";
     /** The quiz's title has characters no font of the server can draw: nothing was sent (Q8b covers). */
     public static final String COVER_FONT = "QB_AI_COVER_FONT";
+    /** Q73d-1: every text of the language is translated and up to date (or the quiz has no text). */
+    public static final String NOTHING_TO_TRANSLATE = "QB_AI_NOTHING_TO_TRANSLATE";
     /** Questions asked for a survey: they would need correct options (Q12, D-Q12-9). */
     public static final String SURVEY_UNSUPPORTED = "QB_AI_SURVEY_UNSUPPORTED";
 

@@ -9,7 +9,7 @@ datasets:
   QbAiJob: urn:jabiz:dataset:sponsor:QbAiJob
 params:
   quizId: { like: QbAiJob.quizId, required: true, description: The quiz }
-  kind:   { like: QbAiJob.kind, description: "If given, only jobs of this kind (QUESTIONS or COVER)" }
+  kind:   { like: QbAiJob.kind, description: "If given, only jobs of this kind (QUESTIONS, COVER or TRANSLATION)" }
 results:
   aiJobId:        { from: QbAiJob.aiJobId }
   externalJobId:  { from: QbAiJob.externalJobId }

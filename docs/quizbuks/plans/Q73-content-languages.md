@@ -508,3 +508,37 @@ Quiz「ラーメン通？」 基准：日本語   翻译：中文 ✓  English �
 - **分享**：商家后台的链接带发布的首选语言；二维码对话框可在提供的语言间选择，链接、图片说明、文件名与海报上的名称随之。
 - **App 的 `?lang=`**：照旧只对新用户改界面语言；另外记下它打开的页面，开始页把它作为第一选择（`linkLanguageOf`），所以链接总是以它的语言打开发布（提供时）。
 - **测试**：`PublicationLanguagesTest`（回落的三种情形、两种存储形式、`publicationName`）、`PublicationLanguagesIT` 的答题记录、商家后台二维码语言用例、App `linkLanguage.test.ts`。
+
+### Q73d-1（2026-11-01）：AI 翻译模版的文字（需求方 2026-11-01 确认：计入商家现有的 AI 限额，分两步做）
+
+**数据**（迁移 V57）：`qb_ai_job.kind` 的检查约束加 `TRANSLATION`。译文表的 `translated_by`、`ai_job_id` 在 V54 已有。
+
+**作业 `qb.ai.translate`**（`content.ai.AiTranslateJob`，接口 `ContentTranslator`，实现 `ClaudeContentTranslator`）：
+- 输入是按阅读顺序编号的文字段（标题、简介、每题的题干和它的选项），由 `AiTranslations.segments` 选出。缺省只选缺少或过时的；`all` 时全部。
+- **只发文字**：哪个选项正确、分数、图片、文件和元素键都不发（`AiTranslateInputTest`、`AiTranslateIT` 检查发出的内容）。元素键与原文哈希留在作业输入中，由处理器带回结果。
+- 每批约 8,000 个字符，每批调用一次（effort 固定为 `low`），所有批次算一次尝试。每次尝试最长 30 分钟，最多 3 次。
+- `enabledBy(qb.ai.enabled)`、`onCancelled`、输入上限 1 MiB，用量逐次 `recordUsage`。
+- 预估与没有回答的尝试按批数计：每批的输入上限加 16,000 个输出 token。
+
+**流程**：
+- `QB_AI_TRANSLATE_REQUEST`：与出题、封面同一套检查、锁与限额（D-Q73-9：计入商家现有的 AI 限额，一个模版同时只有一个同类作业）。语言须是模版的其他语言；没有要翻译的文字时拒绝（`QB_AI_NOTHING_TO_TRANSLATE`）。
+- 完成时再检查候选：元素存在、是文字、不超过字段长度、每个元素一条。之后存为 `READY`，候选保存 7 天，过期由现有任务清除。作业本身从不写入模版。
+- `QB_AI_TRANSLATION_ACCEPT`：每段 `reviewed = true`（否则 400）。写入走 `QB_TRANSLATION_SAVE` 的同一段代码（`TranslationProcesses.apply`），记 `translatedBy = AI` 与作业编号。
+  - 哈希取 AI 拿到的原文的，所以请求之后基准改了，译文写入后就是过时的。
+  - 可以分几次采用；采用完全部候选后作业为 `ACCEPTED`。
+  - **与 §5.2 的不同**：没有给 `QB_TRANSLATION_SAVE` 加 `aiJobId`。采用需要商家的 AI 锁和作业，所以单独成一个流程，写入规则与保存共用。
+
+**商家后台**（"语言"标签页）：
+- `ai/AiTranslatePanel.tsx`：发起前选择"只翻译未翻译或过时的"或"全部"，说明发送的内容；首次使用时显示 AI 说明。之后显示进行中（可停止）、失败、过期、就绪（可放弃），其他语言的作业另行说明。
+- 每段文字下方显示 AI 建议，可"采用"，或"采用全部 AI 建议"。采用的每段都要勾选"已确认"（可以先改）才能保存。
+- 保存时，已确认的 AI 段经 `QB_AI_TRANSLATION_ACCEPT` 写入，手工改的经 `QB_TRANSLATION_SAVE` 写入。来自 AI 的译文标"AI"。
+- 本地与 e2e 的 Claude 桩（`tools/quizbuks/claude-stub`）对翻译请求逐段回答"译文 n"。
+
+**测试**：
+- `AiTranslateInputTest`：阅读顺序，不含正误、分数与键，只选缺少或过时的，候选的再检查，分批，回答解析。
+- `AiTranslateIT`：发出的内容、一个模版一个作业、未确认的拒绝、未知候选、别人的作业、部分采用后编号不变、基准改动后过时、全部采用后关闭、下次只译过时的、`all`、语言不在模版中、没有要翻译的。
+- 商家后台：建议、采用全部、逐段确认、两种写入，以及发起与说明（含无障碍检查）。
+
+**需求方待办**：AI 说明（`AI_NOTICE`）的正式文本应加上"AI 生成译文建议，由你确认后保存"的用途，新版本须在后台发布。
+
+**Q73d-2（之后）**：发布文字的 AI 翻译；审核页的对照检查 `qb.ai.translation-check`（计入平台的用量）。

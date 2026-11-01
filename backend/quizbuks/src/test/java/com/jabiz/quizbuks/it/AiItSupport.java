@@ -60,6 +60,7 @@ abstract class AiItSupport extends LegalItSupport {
         // The tests make many requests a minute; the limit itself is the platform's (and configuration).
         registry.add("jabiz.process.rate-limits[QB_AI_QUESTIONS_REQUEST].per-user", () -> "10000");
         registry.add("jabiz.process.rate-limits[QB_AI_COVER_REQUEST].per-user", () -> "10000");
+        registry.add("jabiz.process.rate-limits[QB_AI_TRANSLATE_REQUEST].per-user", () -> "10000");
         // A provider that does not answer is found out in two seconds, not the two minutes of production.
         registry.add("quizbuks.ai.request-timeout", () -> "PT2S");
         registry.add("quizbuks.ai.pdf.max-pages", () -> String.valueOf(TEST_PDF_MAX_PAGES));
@@ -105,6 +106,9 @@ abstract class AiItSupport extends LegalItSupport {
         String user = userText(body);
         if (user.contains("Number of covers:")) {
             return answer(body.get("model").asString(), "end_turn", covers("Cover"), 300, 200);
+        }
+        if (user.contains("Target language:")) {
+            return answer(body.get("model").asString(), "end_turn", translations(user), 400, 300);
         }
         Matcher m = COUNT.matcher(user);
         int count = m.find() ? Integer.parseInt(m.group(1)) : 1;
@@ -156,6 +160,16 @@ abstract class AiItSupport extends LegalItSupport {
             Map.of("palette", "ocean", "layout", "center", "motif", "circles", "text", prefix + " 1"),
             Map.of("palette", "sunset", "layout", "band", "motif", "waves", "text", prefix + " 2"),
             Map.of("palette", "citrus", "layout", "corner", "motif", "rays", "text", prefix + " 3"))));
+    }
+
+    /** Q73d-1: each text of a translation request's data, as {@code 译:<text>}. */
+    static String translations(String user) {
+        String data = user.substring(user.indexOf("<quiz_data>") + "<quiz_data>".length(), user.indexOf("</quiz_data>"));
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (JsonNode text : JSON.readTree(data).get("texts")) {
+            out.add(Map.of("no", text.get("no").asInt(), "text", "译:" + text.get("text").asString()));
+        }
+        return JSON.writeValueAsString(Map.of("translations", out));
     }
 
     /** {@code n} questions as the answer's text. */

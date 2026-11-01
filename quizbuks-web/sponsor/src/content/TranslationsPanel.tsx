@@ -9,10 +9,13 @@ import {
   SegmentedControl,
   Textarea,
 } from '@jabiz/ui'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Pencil, Plus, Save, Trash2 } from 'lucide-react'
 import { useEffect, useId, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { AI_QUERY } from '../ai/AiQuestionsPanel'
+import { acceptAiTranslations, type AiJob } from '../ai/api'
+import { AiTranslatePanel, useAiTranslationJob } from '../ai/AiTranslatePanel'
 import { SPONSOR } from '../messages'
 import { CONTENT_LANGUAGES, type ContentLanguage } from '../qb/api'
 import { QB } from '../qb/messages'
@@ -22,6 +25,7 @@ import {
   saveTranslations,
   setLanguages,
   type Draft,
+  type EditOutput,
   type Material,
   type TranslationEntry,
 } from './api'
@@ -137,14 +141,21 @@ function useSourceLabel() {
       : t('translations.option', { n: source.question, m: source.option })
 }
 
-/** The texts of the quiz side by side with their translations in one language, saved together. */
-function TextsForm({ draft, language, texts, hashes }: {
+/**
+ * The texts of the quiz side by side with their translations in one language, saved together. Q73d-1: with a ready AI
+ * job of the language, each text shows the AI's suggestion under it; one used ("Use", or "Use all") fills the box and
+ * must be ticked as checked (or changed) before the save, which writes the checked ones as the AI's
+ * ({@code QB_AI_TRANSLATION_ACCEPT}) and the others as the sponsor's ({@code QB_TRANSLATION_SAVE}).
+ */
+function TextsForm({ draft, language, texts, hashes, ai }: {
   draft: Draft
   language: ContentLanguage
   texts: SourceText[]
   hashes: Hashes | null
+  ai: AiJob | null
 }) {
   const { t } = useTranslation(SPONSOR)
+  const queryClient = useQueryClient()
   const editing = useEditing()
   const id = useId()
   const label = useSourceLabel()
@@ -152,17 +163,51 @@ function TextsForm({ draft, language, texts, hashes }: {
   const [values, setValues] = useState<Record<string, string>>(() =>
     Object.fromEntries(texts.map((s) => [s.key, saved.get(s.key)?.text ?? ''])))
   const [onlyPending, setOnlyPending] = useState(false)
+  // The AI's suggestions of this language (Q73d-1), the ones used and whether each was checked.
+  const suggestions = useMemo(() => new Map((ai?.translations ?? []).map((c) => [c.key, c])), [ai])
+  const [used, setUsed] = useState<Record<string, boolean>>({})
+  const [local, setLocal] = useState<string | null>(null)
+  const takeSuggestion = (key: string) => {
+    const suggestion = suggestions.get(key)
+    if (!suggestion) return
+    setValues((v) => ({ ...v, [key]: suggestion.text }))
+    setUsed((u) => ({ ...u, [key]: false }))
+  }
   const changed = texts.filter((s) => (values[s.key] ?? '') !== (saved.get(s.key)?.text ?? ''))
+  // A used suggestion goes as the AI's once checked; changed or cleared afterwards, it is the sponsor's own.
+  const fromAi = changed.filter((s) => s.key in used && (values[s.key] ?? '').trim() !== '')
+  const own = changed.filter((s) => !fromAi.includes(s))
   const save = useMutation({
-    mutationFn: () => saveTranslations(editing.quizId, language,
-      changed.map((s): TranslationEntry => ({ key: s.key, text: (values[s.key] ?? '').trim() === '' ? null
-        : values[s.key] })), editing.revision()),
+    mutationFn: async () => {
+      let revision = editing.revision()
+      let output: EditOutput | null = null
+      if (fromAi.length > 0 && ai) {
+        output = await acceptAiTranslations(ai.aiJobId, editing.quizId, fromAi.map((s) => ({
+          candidateNo: suggestions.get(s.key)!.no, text: values[s.key]!, reviewed: true as const })), revision)
+        revision = output.revision
+      }
+      if (own.length > 0) {
+        output = await saveTranslations(editing.quizId, language,
+          own.map((s): TranslationEntry => ({ key: s.key, text: (values[s.key] ?? '').trim() === '' ? null
+            : values[s.key] })), revision)
+      }
+      return output!
+    },
     onSuccess: async (output) => {
       notify.success(t('translations.saved'))
+      await queryClient.invalidateQueries({ queryKey: AI_QUERY })
       await editing.edited(output)
     },
     onError: editing.failed,
   })
+  const submit = () => {
+    if (fromAi.some((s) => !used[s.key])) {
+      setLocal(t('ai.translate.reviewFirst'))
+      return
+    }
+    setLocal(null)
+    save.mutate()
+  }
   const shown = texts.filter((s) => s.text && s.text.trim() !== '').filter((s) => !onlyPending || !hashes
     || textState(s, saved.get(s.key), hashes) !== 'done')
   return (
@@ -175,12 +220,18 @@ function TextsForm({ draft, language, texts, hashes }: {
           <Label htmlFor={`${id}-pending`} className="font-normal">{t('translations.onlyPending')}</Label>
         </div>
       </div>
+      {suggestions.size > 0 && (
+        <Button variant="outline" size="sm" className="w-fit" data-testid="ai-translate-use-all"
+          onClick={() => texts.forEach((s) => !(s.key in used) && takeSuggestion(s.key))}>
+          {t('ai.translate.useAll')}
+        </Button>
+      )}
       {shown.length === 0 && <p className="text-muted-foreground text-sm">{t('translations.nothingPending')}</p>}
       <ol className="flex flex-col gap-3">
         {shown.map((source) => {
           const state = hashes ? textState(source, saved.get(source.key), hashes) : null
           const fieldId = `${id}-${source.key}`
-          const problem = fieldProblem(save.error, `entries[${changed.indexOf(source)}].text`)
+          const problem = fieldProblem(save.error, `entries[${own.indexOf(source)}].text`)
           return (
             <li key={source.key} className="grid gap-2 rounded-md border p-3 md:grid-cols-2"
               data-testid="translation-text" data-key={source.key} data-state={state ?? 'unknown'}>
@@ -191,6 +242,10 @@ function TextsForm({ draft, language, texts, hashes }: {
                     <Badge variant={STATE_VARIANT[state]} data-testid="translation-state">
                       {t(`translations.states.${state}`)}
                     </Badge>
+                  )}
+                  {/* Q73d-1: the saved translation came from the AI, checked by the sponsor. */}
+                  {saved.get(source.key)?.translatedBy === 'AI' && (
+                    <Badge variant="outline" data-testid="translation-by-ai">{t('ai.translate.byAi')}</Badge>
                   )}
                 </span>
                 <p className="text-muted-foreground text-sm whitespace-pre-line" data-testid="translation-source">
@@ -211,15 +266,34 @@ function TextsForm({ draft, language, texts, hashes }: {
                     onChange={(event) => setValues((v) => ({ ...v, [source.key]: event.target.value }))} />
                 )}
                 {problem && <p className="text-destructive text-sm">{problem}</p>}
+                {suggestions.has(source.key) && !(source.key in used) && (
+                  <div className="bg-muted/50 flex flex-col gap-1 rounded-md p-2" data-testid="ai-suggestion">
+                    <span className="text-muted-foreground text-xs">{t('ai.translate.candidate')}</span>
+                    <p className="text-sm whitespace-pre-line" lang={language}>
+                      {suggestions.get(source.key)!.text}
+                    </p>
+                    <Button size="sm" variant="outline" className="w-fit" data-testid="ai-suggestion-use"
+                      onClick={() => takeSuggestion(source.key)}>{t('ai.translate.use')}</Button>
+                  </div>
+                )}
+                {source.key in used && (
+                  <div className="flex items-center gap-2">
+                    <Checkbox id={`${fieldId}-reviewed`} checked={used[source.key]}
+                      data-testid="ai-suggestion-reviewed"
+                      onCheckedChange={(checked) => setUsed((u) => ({ ...u, [source.key]: checked === true }))} />
+                    <Label htmlFor={`${fieldId}-reviewed`} className="font-normal">{t('ai.translate.reviewed')}</Label>
+                  </div>
+                )}
               </div>
             </li>
           )
         })}
       </ol>
-      <ProblemList problems={formProblem(save.error, changed.map((_, i) => `entries[${i}].text`))}
+      <ProblemList problems={formProblem(save.error, own.map((_, i) => `entries[${i}].text`))}
         testId="translation-error" />
+      {local && <p role="alert" className="text-destructive text-sm" data-testid="ai-translate-review-first">{local}</p>}
       <Button className="w-fit" disabled={changed.length === 0 || save.isPending || editing.stale}
-        aria-busy={save.isPending || undefined} data-testid="translation-save" onClick={() => save.mutate()}>
+        aria-busy={save.isPending || undefined} data-testid="translation-save" onClick={submit}>
         <Save aria-hidden />
         {t('translations.save', { count: changed.length })}
       </Button>
@@ -362,6 +436,8 @@ export function TranslationsPanel({ draft, generation }: { draft: Draft; generat
   const language = chosen && languages.includes(chosen) ? chosen : languages[0] ?? null
   const texts = useMemo(() => sourceTexts(draft, TEXT_LIMITS), [draft])
   const hashes = useHashes(texts)
+  const aiJob = useAiTranslationJob(draft.quiz.quizId).data ?? null
+  const ready = aiJob?.status === 'READY' && aiJob.language === language ? aiJob : null
   return (
     <div className="flex flex-col gap-6" data-testid="translations">
       <LanguagesForm draft={draft} />
@@ -377,10 +453,11 @@ export function TranslationsPanel({ draft, generation }: { draft: Draft; generat
                 : left === 0 ? t('translations.languageDone', { language: tQb(`languages.${l}`) })
                   : t('translations.languagePending', { language: tQb(`languages.${l}`), count: left }) }
             })} />
+          <AiTranslatePanel language={language} job={aiJob} />
           <MaterialsSection draft={draft} language={language} />
           {/* A save or a reload starts the texts again from what the server has. */}
-          <TextsForm key={`${language}-${generation}-${draft.quiz.revision}`} draft={draft} language={language}
-            texts={texts} hashes={hashes} />
+          <TextsForm key={`${language}-${generation}-${draft.quiz.revision}-${ready?.aiJobId ?? ''}`} draft={draft}
+            language={language} texts={texts} hashes={hashes} ai={ready} />
           <ImagesSection draft={draft} language={language} />
         </>
       )}

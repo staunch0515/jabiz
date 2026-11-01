@@ -24,6 +24,7 @@ import java.util.regex.Pattern;
  *   <li>otherwise as many questions as the request's "Number of questions: n" asks, each with one correct and two
  *       wrong options, 10 points and the first material sent, in Japanese when the request asks for Japanese and in
  *       English otherwise, with a made-up usage (about a token per four characters of the request);</li>
+ *   <li>a translation request ("Target language: ...", Q73d-1) gets "译文 n" for each numbered text;</li>
  *   <li>a request for covers ("Number of covers: 3", Q8b) gets three designs of the catalogue, which the server
  *       draws; PDF materials (document blocks) are accepted and not read;</li>
  *   <li>{@code POST /v1/messages/count_tokens} (Q8b: requests with PDFs are counted before they are sent) answers
@@ -38,6 +39,8 @@ import java.util.regex.Pattern;
 public final class ClaudeStub {
 
     private static final Pattern COUNT = Pattern.compile("Number of questions: (\\d+)");
+    /** A numbered text of a translation request's data, escaped once inside the request's JSON. */
+    private static final Pattern TEXT_NO = Pattern.compile("\\\\\"no\\\\\":(\\d+)");
     private static final Pattern MATERIAL = Pattern.compile("\\\\\"no\\\\\":(\\d+)");
     private static final Pattern MODEL = Pattern.compile("^\\{\"model\":\"([a-z0-9-]+)\"");
     private static final Pattern DATA = Pattern.compile("\"data\":\"[A-Za-z0-9+/=]*\"");
@@ -90,6 +93,17 @@ public final class ClaudeStub {
                     + "{\"palette\":\"sunset\",\"layout\":\"band\",\"motif\":\"waves\",\"text\":\"" + text + " 2\"},"
                     + "{\"palette\":\"mint\",\"layout\":\"left\",\"motif\":\"grid\",\"text\":\"" + text + " 3\"}]}";
                 send(exchange, 200, message(model, "end_turn", covers, in, 150));
+                return;
+            }
+            if (body.contains("Target language: ")) {
+                // Q73d-1: a translation of each numbered text (the numbers as the request's data gives them).
+                Matcher numbers = TEXT_NO.matcher(body);
+                List<String> translations = new ArrayList<>();
+                while (numbers.find()) {
+                    translations.add("{\"no\":" + numbers.group(1) + ",\"text\":\"译文 " + numbers.group(1) + "\"}");
+                }
+                String text = "{\"translations\":[" + String.join(",", translations) + "]}";
+                send(exchange, 200, message(model, "end_turn", text, in, 100L * translations.size()));
                 return;
             }
             Matcher countMatch = COUNT.matcher(body);

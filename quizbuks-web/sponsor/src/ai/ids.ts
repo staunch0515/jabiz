@@ -11,6 +11,9 @@ export const AI_PROCESS = {
   /** Candidate covers (Q8b, M-25), and the one chosen. */
   coverRequest: 'QB_AI_COVER_REQUEST',
   coverAccept: 'QB_AI_COVER_ACCEPT',
+  /** Candidate translations of the quiz's text (Q73d-1), and the reviewed ones written. */
+  translateRequest: 'QB_AI_TRANSLATE_REQUEST',
+  translationAccept: 'QB_AI_TRANSLATION_ACCEPT',
   discard: 'QB_AI_DISCARD',
   cancel: 'QB_AI_CANCEL',
 } as const
@@ -46,7 +49,7 @@ export const AI_LIMITS = {
 } as const
 
 /** The kinds of AI jobs (`QbAi.KIND_*`): the template is read for one at a time. */
-export const AI_KINDS = { questions: 'QUESTIONS', cover: 'COVER' } as const
+export const AI_KINDS = { questions: 'QUESTIONS', cover: 'COVER', translation: 'TRANSLATION' } as const
 
 export const DIFFICULTIES = ['EASY', 'MEDIUM', 'HARD'] as const
 export const AI_LANGUAGES = ['en', 'zh', 'ja'] as const
