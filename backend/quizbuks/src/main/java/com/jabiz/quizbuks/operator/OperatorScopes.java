@@ -11,6 +11,7 @@ import com.jabiz.quizbuks.page.QbSponsorPages;
 import com.jabiz.quizbuks.page.QbSponsorProducts;
 import com.jabiz.quizbuks.play.QbPlay;
 import com.jabiz.quizbuks.publishing.QbPublications;
+import com.jabiz.quizbuks.report.QbReports;
 import com.jabiz.quizbuks.reward.QbDigitalPrizes;
 import com.jabiz.quizbuks.reward.QbRewards;
 import com.jabiz.quizbuks.stats.QbAnalytics;
@@ -43,7 +44,7 @@ public final class OperatorScopes {
         for (String entity : new String[] {QbPublications.PUBLICATION, QbPublications.TIER, QbPublications.CARD,
             QbRewards.CASH_REWARD, QbRewards.REDEMPTION, QbDigitalPrizes.DIGITAL_PRIZE, QbDigitalPrizes.DIGITAL_CODE,
             QbInvitations.INVITATION, QbAudience.CRITERION, QbAnalytics.HOUR, QbAnalytics.CURSOR,
-            QbAnalytics.QUESTION_STAT}) {
+            QbAnalytics.QUESTION_STAT, QbReports.REPORT}) {
             fields.put(entity, "publisherId");
         }
         fields.put(QbRewards.REDEEM_TOKEN, "sponsorId");

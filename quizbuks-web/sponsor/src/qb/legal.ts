@@ -10,8 +10,11 @@ import { LEGAL } from './ids'
 /** A text in several languages, as the server keeps it (`{en: …, ja: …}`). */
 export type I18nText = Record<string, string>
 
-/** `AI_NOTICE` (Q8a): what the AI provider is sent; sponsors accept it on their first AI request. */
-export type LegalKind = 'TERMS_APP' | 'TERMS_SPONSOR' | 'PRIVACY' | 'COMMERCE_NOTICE' | 'AI_NOTICE'
+/**
+ * `AI_NOTICE` (Q8a): what the AI provider is sent; sponsors accept it on their first AI request. `CONTEST_RULES`
+ * (Q49a): the official rules of the campaigns with rewards, read by anyone and accepted by nobody.
+ */
+export type LegalKind = 'TERMS_APP' | 'TERMS_SPONSOR' | 'PRIVACY' | 'COMMERCE_NOTICE' | 'AI_NOTICE' | 'CONTEST_RULES'
 
 /** The pages' addresses of the texts (`/legal/<slug>`), and back. */
 export const LEGAL_SLUGS: Record<string, LegalKind> = {
@@ -20,6 +23,7 @@ export const LEGAL_SLUGS: Record<string, LegalKind> = {
   privacy: 'PRIVACY',
   commerce: 'COMMERCE_NOTICE',
   ai: 'AI_NOTICE',
+  'contest-rules': 'CONTEST_RULES',
 }
 
 export function legalPath(kind: LegalKind): string {

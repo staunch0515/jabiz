@@ -99,6 +99,8 @@ interface Options {
   redemptions?: Record<string, unknown>[]
   redeemCheck?: () => Response
   redeemClaim?: () => Response
+  /** Q49a: the answer to reporting the quiz. */
+  report?: () => Response
   /** Q33: the answer to opening a digital prize's content. */
   digitalOpen?: () => Response
   /** Q47: the taker's stored answers for matching (one row per option, or the birth year). */
@@ -200,6 +202,8 @@ function server(options: Options = {}) {
       case '/api/processes/QB_DIGITAL_PRIZE_CONFIRM/latest':
       case '/api/processes/QB_DIGITAL_PRIZE_DISPUTE/latest':
         return json(200, { output: { digitalPrizeId: 'd1', status: 'CONFIRMED', revision: 3 } })
+      case '/api/processes/QB_REPORT_SUBMIT/latest':
+        return options.report ? options.report() : json(200, { output: { reportId: 'r1' } })
       case '/api/processes/QB_VIEW/latest':
         return options.view ? options.view() : json(200, { output: { publicationId: PUB, firstView: true } })
       case '/api/processes/QB_ATTEMPT_START/latest':
@@ -958,6 +962,35 @@ describe('a publication\'s page', () => {
     expect(await screen.findByTestId('detail-tiers')).toHaveTextContent('100 Kudos')
     await waitFor(() => expect(posted('QB_VIEW')).toEqual([{ publicationId: PUB }]))
   })
+
+  it('links the official rules of a quiz with a reward, and reports the quiz with a reason and a note (Q49a)',
+    async () => {
+      let refuse = true
+      const { posted } = server({ report: () => refuse
+        ? json(422, { status: 422, code: 'QB_REPORT_ALREADY_REPORTED',
+          detail: 'You reported this quiz already; we are looking into it.' })
+        : json(200, { output: { reportId: 'r1' } }) })
+      window.history.replaceState(null, '', `/p/${PUB}`)
+      render(<App />)
+      const footer = await screen.findByTestId('detail-footer')
+      expect(await within(footer).findByTestId('detail-contest-rules')).toHaveAttribute('href', '/legal/contest-rules')
+      expect(within(footer).getByTestId('detail-contest-rules')).toHaveTextContent('Official rules of reward campaigns')
+
+      await userEvent.click(within(footer).getByTestId('report-open'))
+      const dialog = await screen.findByTestId('report-dialog')
+      expect(within(dialog).getByTestId('report-send')).toBeDisabled()
+      await userEvent.click(within(dialog).getByTestId('report-reason-INAPPROPRIATE'))
+      await userEvent.type(within(dialog).getByTestId('report-note'), '  Rude words  ')
+      await expectAccessible()
+      await userEvent.click(within(dialog).getByTestId('report-send'))
+      expect(await within(dialog).findByTestId('report-error')).toHaveTextContent('reported this quiz already')
+      refuse = false
+      await userEvent.click(within(dialog).getByTestId('report-send'))
+      await waitFor(() => expect(screen.queryByTestId('report-dialog')).toBeNull())
+      expect(posted('QB_REPORT_SUBMIT')).toEqual([
+        { publicationId: PUB, reason: 'INAPPROPRIATE', note: 'Rude words' },
+        { publicationId: PUB, reason: 'INAPPROPRIATE', note: 'Rude words' }])
+    })
 
   it('opens a long introduction in place, and a link with a description on the sheet (Q34)', async () => {
     // jsdom lays nothing out: the introduction's content says it is taller than three lines.

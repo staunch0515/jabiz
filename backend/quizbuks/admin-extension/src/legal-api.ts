@@ -14,7 +14,9 @@ const str = (value: unknown): string | null => (value == null || value === '' ? 
 const text = (value: unknown): Text => (value && typeof value === 'object' ? value as Text : {})
 
 /** The kinds of legal text, in the order the page shows them (the dictionary `legal-kind`). */
-export const LEGAL_KINDS = ['TERMS_APP', 'TERMS_SPONSOR', 'PRIVACY', 'COMMERCE_NOTICE', 'AI_NOTICE'] as const
+export const LEGAL_KINDS = [
+  'TERMS_APP', 'TERMS_SPONSOR', 'PRIVACY', 'COMMERCE_NOTICE', 'AI_NOTICE', 'CONTEST_RULES',
+] as const
 
 /** A kind's draft (`QbLegalDoc`): what the next version would be, and the draft's version the page read. */
 export interface LegalDraft {

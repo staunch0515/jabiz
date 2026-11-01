@@ -27,7 +27,7 @@ import {
   Radar,
   Receipt,
   Globe,
-  ShoppingBag, UserRoundPlus } from 'lucide-react'
+  ShoppingBag, UserRoundPlus, Flag } from 'lucide-react'
 import BankTopUpPage from './BankTopUpPage'
 import BankSettingsPage from './BankSettingsPage'
 import BankTopUpsPage from './BankTopUpsPage'
@@ -59,6 +59,7 @@ import SponsorReviewPage from './SponsorReviewPage'
 import SponsorPagesPage from './SponsorPagesPage'
 import SponsorPageReviewPage from './SponsorPageReviewPage'
 import SponsorProductsPage from './SponsorProductsPage'
+import AbuseReportsPage from './AbuseReportsPage'
 import CashRewardsPage from './CashRewardsPage'
 import DigitalPrizesPage from './DigitalPrizesPage'
 import TopUpsPage from './TopUpsPage'
@@ -100,6 +101,8 @@ export default defineExtension({
     { path: '/qb/sponsor-pages/:userId', element: <SponsorPageReviewPage /> },
     // Q60b-3: sponsors' products.
     { path: PATH.sponsorProducts, element: <SponsorProductsPage /> },
+    // Q49a: takers' reports of quizzes, for headquarters and the operators (their own sponsors').
+    { path: PATH.abuseReports, element: <AbuseReportsPage /> },
     { path: PATH.users, element: <UsersPage /> },
     { path: '/qb/users/:userId', element: <UserSummaryPage /> },
     { path: PATH.attempts, element: <AttemptsPage /> },
@@ -162,6 +165,9 @@ export default defineExtension({
           permission: PERMISSION.operatorUse },
         { key: 'qb-operator-sponsor-products', label: 'menu.sponsorProducts', path: PATH.sponsorProducts,
           icon: ShoppingBag, permission: PERMISSION.operatorUse },
+        // Q49a: reports of the operator's sponsors' quizzes.
+        { key: 'qb-operator-abuse-reports', label: 'menu.abuseReports', path: PATH.abuseReports, icon: Flag,
+          permission: PERMISSION.operatorUse },
         // Q48c: the operator's own prospecting.
         { key: 'qb-operator-prospects', label: 'menu.prospects', path: PATH.prospects, icon: Radar,
           permission: PERMISSION.operatorUse },
@@ -193,6 +199,9 @@ export default defineExtension({
         { key: 'qb-sponsor-pages', label: 'menu.sponsorPages', path: PATH.sponsorPages, icon: Globe,
           permission: PERMISSION.contentWrite },
         { key: 'qb-sponsor-products', label: 'menu.sponsorProducts', path: PATH.sponsorProducts, icon: ShoppingBag,
+          permission: PERMISSION.contentWrite },
+        // Q49a: takers' reports of quizzes (headquarters; an operator has its own entry above).
+        { key: 'qb-abuse-reports', label: 'menu.abuseReports', path: PATH.abuseReports, icon: Flag,
           permission: PERMISSION.contentWrite },
         { key: 'qb-users', label: 'menu.users', path: PATH.users, icon: Users, permission: PERMISSION.usersRead },
         // Q22: the cash rewards sponsors pay takers themselves, with the disputes to decide.

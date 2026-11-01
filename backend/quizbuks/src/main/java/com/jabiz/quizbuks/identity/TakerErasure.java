@@ -2,6 +2,7 @@ package com.jabiz.quizbuks.identity;
 
 import com.jabiz.quizbuks.audience.QbAudience;
 import com.jabiz.quizbuks.invitation.QbInvitations;
+import com.jabiz.quizbuks.report.QbReports;
 import com.jabiz.quizbuks.reward.CashRewardStatus;
 import com.jabiz.quizbuks.reward.QbRewards;
 import com.jabiz.quizbuks.reward.RedemptionStatus;
@@ -69,7 +70,9 @@ public class TakerErasure {
                     ErasedEntity.keep(QbPayouts.TRANSFER, "userId", "accountNumber", "accountHolder"),
                     ErasedEntity.keep(QbRewards.CASH_REWARD, "userId", "markedPaidNote", "disputeNote",
                         "resolveNote"),
-                    ErasedEntity.keep(QbRewards.REDEMPTION, "userId", "voidNote"));
+                    ErasedEntity.keep(QbRewards.REDEMPTION, "userId", "voidNote"),
+                    // Q49a: their reports stay for the review under way; what they wrote goes.
+                    ErasedEntity.keep(QbReports.REPORT, "reporterId", "note"));
             }
 
             @Override

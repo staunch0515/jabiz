@@ -150,6 +150,7 @@ function AccountMenu() {
         <MenuItem to="/help" icon={CircleHelp} title={t('help.title')} />
         <MenuItem to={legalPath('TERMS_APP')} icon={FileText} title={t('legal.kinds.TERMS_APP')} />
         <MenuItem to={legalPath('PRIVACY')} icon={FileText} title={t('legal.kinds.PRIVACY')} />
+        <MenuItem to={legalPath('CONTEST_RULES')} icon={FileText} title={t('legal.kinds.CONTEST_RULES')} />
         <MenuItem to="/about" icon={Info} title={tApp('account.about')} testId="account-about" />
       </MenuList>
       <DeletionEntry />

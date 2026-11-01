@@ -106,9 +106,29 @@
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
+    }, {
+      "docId" : "#uuid:6",
+      "kind" : "CONTEST_RULES",
+      "title" : {
+        "en" : "[TEST PLACEHOLDER] Official rules of reward campaigns",
+        "ja" : "[TEST PLACEHOLDER] 懸賞キャンペーンの規約",
+        "zh" : "[TEST PLACEHOLDER] 有奖活动规则"
+      },
+      "body" : {
+        "en" : "> **[TEST PLACEHOLDER] This is not a legal text.** It exists so that development and tests have something to publish. The operator's counsel supplies the real text, in Japanese (which governs) and in English; an administrator replaces this draft with it before going live.\n\n## 1. Who runs a campaign\n\nPlaceholder text.\n",
+        "ja" : "> **[TEST PLACEHOLDER] これは法的な文書ではありません。** 開発とテストのための仮の文章です。正式な文章は運営者（または弁護士）が日本語（正文）と英語で用意し、公開前に管理者がこの下書きと差し替えます。\n\n## 第1条 主催者\n\n仮の文章です。\n",
+        "zh" : "> **[TEST PLACEHOLDER] 这不是法律文本。** 仅供开发与测试发布使用。正式文本由运营方（或律师）以日文（准据文本）和英文提供，上线前由管理员替换此草稿。\n\n## 第一条 主办方\n\n占位文本。\n"
+      },
+      "changeSummary" : null,
+      "latestVersionNo" : null,
+      "lastPublishedAt" : null,
+      "versionNo" : 1,
+      "effectStartTime" : "2026-10-01T00:00:00Z",
+      "createdTime" : "2026-10-01T00:00:00Z",
+      "processSeqId" : "#op:1"
     } ],
     "QbLegalVersion" : [ {
-      "legalVersionId" : "#uuid:6",
+      "legalVersionId" : "#uuid:7",
       "kind" : "TERMS_APP",
       "versionNumber" : "1",
       "title" : {
@@ -132,7 +152,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:2"
     }, {
-      "legalVersionId" : "#uuid:7",
+      "legalVersionId" : "#uuid:8",
       "kind" : "TERMS_SPONSOR",
       "versionNumber" : "1",
       "title" : {
@@ -156,7 +176,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:3"
     }, {
-      "legalVersionId" : "#uuid:8",
+      "legalVersionId" : "#uuid:9",
       "kind" : "PRIVACY",
       "versionNumber" : "1",
       "title" : {
@@ -180,7 +200,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:4"
     }, {
-      "legalVersionId" : "#uuid:9",
+      "legalVersionId" : "#uuid:10",
       "kind" : "TERMS_SPONSOR",
       "versionNumber" : "2",
       "title" : {
@@ -206,7 +226,7 @@
       "createdTime" : "2026-10-01T01:00:00Z",
       "processSeqId" : "#op:8"
     }, {
-      "legalVersionId" : "#uuid:10",
+      "legalVersionId" : "#uuid:11",
       "kind" : "PRIVACY",
       "versionNumber" : "2",
       "title" : {
@@ -232,7 +252,7 @@
       "createdTime" : "2026-10-09T00:00:00Z",
       "processSeqId" : "#op:10"
     }, {
-      "legalVersionId" : "#uuid:11",
+      "legalVersionId" : "#uuid:12",
       "kind" : "PRIVACY",
       "versionNumber" : "3",
       "title" : {
@@ -259,8 +279,8 @@
       "processSeqId" : "#op:12"
     } ],
     "QbLegalWithdrawal" : [ {
-      "withdrawalId" : "#uuid:12",
-      "legalVersionId" : "#uuid:10",
+      "withdrawalId" : "#uuid:13",
+      "legalVersionId" : "#uuid:11",
       "kind" : "PRIVACY",
       "versionNumber" : "2",
       "withdrawnAt" : "2026-10-09T00:00:00Z",
@@ -272,23 +292,10 @@
       "processSeqId" : "#op:11"
     } ],
     "QbConsent" : [ {
-      "consentId" : "#uuid:13",
-      "userId" : "#uuid:14",
+      "consentId" : "#uuid:14",
+      "userId" : "#uuid:15",
       "kind" : "PRIVACY",
-      "legalVersionId" : "#uuid:8",
-      "versionNumber" : "1",
-      "acceptedAt" : "2026-10-01T00:00:00Z",
-      "entry" : null,
-      "source" : "WELCOME",
-      "versionNo" : 1,
-      "effectStartTime" : "2026-10-01T00:00:00Z",
-      "createdTime" : "2026-10-01T00:00:00Z",
-      "processSeqId" : "#op:5"
-    }, {
-      "consentId" : "#uuid:15",
-      "userId" : "#uuid:14",
-      "kind" : "TERMS_APP",
-      "legalVersionId" : "#uuid:6",
+      "legalVersionId" : "#uuid:9",
       "versionNumber" : "1",
       "acceptedAt" : "2026-10-01T00:00:00Z",
       "entry" : null,
@@ -299,22 +306,22 @@
       "processSeqId" : "#op:5"
     }, {
       "consentId" : "#uuid:16",
-      "userId" : "#uuid:17",
-      "kind" : "PRIVACY",
-      "legalVersionId" : "#uuid:8",
+      "userId" : "#uuid:15",
+      "kind" : "TERMS_APP",
+      "legalVersionId" : "#uuid:7",
       "versionNumber" : "1",
       "acceptedAt" : "2026-10-01T00:00:00Z",
       "entry" : null,
-      "source" : "ONBOARDING",
+      "source" : "WELCOME",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
-      "processSeqId" : "#op:6"
+      "processSeqId" : "#op:5"
     }, {
-      "consentId" : "#uuid:18",
-      "userId" : "#uuid:17",
-      "kind" : "TERMS_SPONSOR",
-      "legalVersionId" : "#uuid:7",
+      "consentId" : "#uuid:17",
+      "userId" : "#uuid:18",
+      "kind" : "PRIVACY",
+      "legalVersionId" : "#uuid:9",
       "versionNumber" : "1",
       "acceptedAt" : "2026-10-01T00:00:00Z",
       "entry" : null,
@@ -325,9 +332,22 @@
       "processSeqId" : "#op:6"
     }, {
       "consentId" : "#uuid:19",
-      "userId" : "#uuid:17",
+      "userId" : "#uuid:18",
       "kind" : "TERMS_SPONSOR",
-      "legalVersionId" : "#uuid:9",
+      "legalVersionId" : "#uuid:8",
+      "versionNumber" : "1",
+      "acceptedAt" : "2026-10-01T00:00:00Z",
+      "entry" : null,
+      "source" : "ONBOARDING",
+      "versionNo" : 1,
+      "effectStartTime" : "2026-10-01T00:00:00Z",
+      "createdTime" : "2026-10-01T00:00:00Z",
+      "processSeqId" : "#op:6"
+    }, {
+      "consentId" : "#uuid:20",
+      "userId" : "#uuid:18",
+      "kind" : "TERMS_SPONSOR",
+      "legalVersionId" : "#uuid:10",
       "versionNumber" : "2",
       "acceptedAt" : "2026-10-09T00:00:00Z",
       "entry" : null,
@@ -338,8 +358,8 @@
       "processSeqId" : "#op:9"
     } ],
     "QbSponsor" : [ {
-      "onboardingId" : "#uuid:20",
-      "userId" : "#uuid:17",
+      "onboardingId" : "#uuid:21",
+      "userId" : "#uuid:18",
       "contactName" : "Alice",
       "company" : "Capitals Inc",
       "intro" : null,
@@ -347,7 +367,7 @@
       "reviewStatus" : "APPROVED",
       "termsAcceptedAt" : "2026-10-01T00:00:00Z",
       "termsVersionNo" : "1",
-      "approvalRequestId" : "#uuid:21",
+      "approvalRequestId" : "#uuid:22",
       "submittedAt" : "2026-10-01T00:00:00Z",
       "approvedAt" : "2026-10-01T00:00:00Z",
       "rejectReason" : null,
@@ -360,8 +380,8 @@
       "processSeqId" : "#op:7"
     } ],
     "QbTopUp" : [ {
-      "topUpId" : "#uuid:22",
-      "sponsorId" : "#uuid:17",
+      "topUpId" : "#uuid:23",
+      "sponsorId" : "#uuid:18",
       "amount" : "1000",
       "method" : "STRIPE",
       "status" : "OPENING",
@@ -409,8 +429,8 @@
       "sponsorVisible" : true,
       "version" : 1
     }, {
-      "topUpId" : "#uuid:23",
-      "sponsorId" : "#uuid:17",
+      "topUpId" : "#uuid:24",
+      "sponsorId" : "#uuid:18",
       "amount" : "1000",
       "method" : "STRIPE",
       "status" : "OPENING",
