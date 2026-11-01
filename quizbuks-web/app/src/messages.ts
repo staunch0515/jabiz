@@ -467,6 +467,7 @@ const en = {
     briefIntro: 'One more step before the quiz: where do you live? Quizzes are offered by country and region. You can change your name and other details later in your account.',
   },
   sponsorPage: {
+    language: 'Language of the page',
     notFound: 'This page is not available',
     notFoundHint: 'The sponsor may have renamed or unpublished it.',
     website: 'Website',
@@ -971,6 +972,7 @@ const zh: typeof en = {
     briefIntro: '开始答题前还有一步：你住在哪里？Quiz 按国家和地区提供。名字等其他信息之后可以在账户里修改。',
   },
   sponsorPage: {
+    language: '主页的语言',
     notFound: '这个主页现在无法查看',
     notFoundHint: '商户可能已更改链接名或撤下了主页。',
     website: '网站',
@@ -1475,6 +1477,7 @@ const ja: typeof en = {
     briefIntro: 'クイズの前にもう一つだけ：お住まいの国はどこですか？クイズは国と地域ごとに提供されます。お名前などはあとでアカウントで変更できます。',
   },
   sponsorPage: {
+    language: 'ページの言語',
     notFound: 'このページは表示できません',
     notFoundHint: 'スポンサーがリンク名を変えたか、非公開にした可能性があります。',
     website: 'ウェブサイト',

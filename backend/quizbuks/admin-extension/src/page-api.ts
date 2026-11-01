@@ -1,5 +1,5 @@
 import { runQuery, type Filter } from '@jabiz/admin'
-import type { Page, SortSpec } from './api'
+import { storedTexts, type Page, type SortSpec } from './api'
 import { SPONSOR_PAGE_PENDING, TEMPLATE } from './ids'
 
 /**
@@ -25,6 +25,9 @@ export interface SponsorPageRow {
   reviewRequired: boolean
   editedAt: string | null
   company: string | null
+  /** Q73c: the languages offered (the main one first; none: `language` only) and the headline in each other one. */
+  languages: string[]
+  translations: Record<string, Record<string, string>>
 }
 
 type Row = Record<string, unknown>
@@ -36,6 +39,8 @@ function rowOf(row: Row): SponsorPageRow {
     handle: String(row.handle ?? ''),
     language: String(row.language ?? ''),
     headline: String(row.headline ?? ''),
+    languages: (str(row.languages) ?? '').split(',').filter(Boolean),
+    translations: storedTexts(row.translations),
     story: str(row.story),
     logo: str(row.logo),
     cover: str(row.cover),

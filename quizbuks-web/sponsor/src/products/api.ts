@@ -1,3 +1,4 @@
+import { parseStoredTranslations, type TextsByLanguage } from '../content/TextTranslationsFields'
 import { api, runProcess, unwrap } from '@jabiz/client'
 import { PRODUCT } from './ids'
 
@@ -26,6 +27,9 @@ export interface MyProduct {
   seq: number
   takedownReason: string | null
   revision: number
+  /** Q73c: its name and description in other languages, and the hashes of the texts they translate. */
+  translations: TextsByLanguage
+  translationHashes: TextsByLanguage
 }
 
 /** `SponsorProductProcesses.SaveInput`. */
@@ -40,6 +44,9 @@ export interface ProductInput {
   listed: boolean
   seq: number | null
   baseRevision: number | null
+  /** Q73c: the name and description in other languages, and those confirmed as still right after a change. */
+  translations?: TextsByLanguage
+  confirmed?: string[]
 }
 
 /** A link of the sponsor's quiz to one of their products. */
@@ -67,6 +74,8 @@ export async function readMyProducts(): Promise<MyProduct[]> {
     productId: String(row.productId ?? ''),
     name: String(row.name ?? ''),
     description: text(row.description),
+    translations: parseStoredTranslations(row.translations).texts,
+    translationHashes: parseStoredTranslations(row.translations).hashes,
     image: text(row.image),
     price: String(row.price ?? '0'),
     currency: String(row.currency ?? 'JPY'),

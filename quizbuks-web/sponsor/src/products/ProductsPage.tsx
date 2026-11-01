@@ -29,10 +29,13 @@ import { ArrowDown, ArrowUp, Plus } from 'lucide-react'
 import { useId, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { neutralName } from '../content/api'
+import { TextTranslationsFields, type TextsByLanguage } from '../content/TextTranslationsFields'
 import { SPONSOR } from '../messages'
 import { FileImage } from '../qb/FileImage'
 import { QB } from '../qb/messages'
+import { readMySponsorPage } from '../page/api'
 import { SPONSOR_PAGE } from '../page/ids'
+import { SPONSOR_PAGE_QUERY } from '../page/SponsorPageEditor'
 import { formatPrice } from '../qb/products'
 import { fieldProblem, generalProblem } from '../qb/problems'
 import {
@@ -203,12 +206,20 @@ function ProductDialog({ product, seq, onClose, onSaved }: {
   const { t } = useTranslation(SPONSOR)
   const id = useId()
   const [form, setForm] = useState<ProductInput>(() => ({ ...inputOf(product), seq: product ? product.seq : seq }))
+  // Q73c: the page's other languages, into which the product may be translated (optional).
+  const page = useQuery({ queryKey: SPONSOR_PAGE_QUERY, queryFn: readMySponsorPage })
+  const others = (page.data?.languages ?? []).filter((l) => l !== page.data?.language)
+  const [translations, setTranslations] = useState<TextsByLanguage>(product?.translations ?? {})
+  const [confirmed, setConfirmed] = useState<string[]>([])
   const [uploading, setUploading] = useState(0)
   const set = <K extends keyof ProductInput>(key: K, value: ProductInput[K]) =>
     setForm((current) => ({ ...current, [key]: value }))
   const save = useMutation({
     mutationFn: () => saveProduct({ ...form, name: form.name.trim(), price: form.price.trim(),
-      shopUrl: form.shopUrl.trim(), description: form.description?.trim() ? form.description.trim() : null }),
+      shopUrl: form.shopUrl.trim(), description: form.description?.trim() ? form.description.trim() : null,
+      // The page's languages' translations given, others (of languages the page no longer offers) kept as stored.
+      translations: { ...product?.translations, ...Object.fromEntries(others.map((l) => [l, translations[l] ?? {}])) },
+      confirmed }),
     onSuccess: onSaved,
   })
   const problem = (field: string) => fieldProblem(save.error, field)
@@ -217,7 +228,8 @@ function ProductDialog({ product, seq, onClose, onSaved }: {
   const describedBy = (field: string, hint?: string) =>
     [hint, problem(field) ? `${id}-${field}-error` : undefined].filter(Boolean).join(' ') || undefined
   const invalid = (field: string) => (problem(field) ? true : undefined)
-  const general = generalProblem(save.error, FIELDS)
+  const general = generalProblem(save.error, [...FIELDS, ...others.flatMap((l) =>
+    [`translations.${l}.name`, `translations.${l}.description`])])
   const submit = (event: FormEvent) => {
     event.preventDefault()
     save.mutate()
@@ -244,6 +256,19 @@ function ProductDialog({ product, seq, onClose, onSaved }: {
               data-testid="product-description" onChange={(event) => set('description', event.target.value)} />
             <p id={`${id}-description-hint`} className="text-muted-foreground text-sm">{t('products.descriptionHint')}</p>
           </div>
+          {others.length > 0 && (
+            <div className="flex flex-col gap-2" data-testid="product-languages">
+              <p className="text-muted-foreground text-sm">{t('pageLanguages.productHint')}</p>
+              <TextTranslationsFields id={`${id}-tr`} languages={others} value={translations}
+                hashes={product?.translationHashes ?? {}} confirmed={confirmed} onChange={setTranslations}
+                onConfirmed={setConfirmed} problemOf={problem} testId="product-translations"
+                fields={[
+                  { field: 'name', label: t('products.name'), source: form.name, maxLength: PRODUCT_NAME_LENGTH },
+                  { field: 'description', label: t('products.description'), source: form.description ?? '',
+                    maxLength: PRODUCT_DESCRIPTION_LENGTH, multiline: true },
+                ]} />
+            </div>
+          )}
           <div className="flex flex-col gap-2">
             <Label htmlFor={`${id}-image`}>{t('products.image')}</Label>
             {form.image && (

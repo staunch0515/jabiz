@@ -16,6 +16,9 @@ export interface PublicSponsorPage {
   cover: string | null
   website: string | null
   company: string
+  /** Q73c: the languages it offers (`en,zh`, the main one first) and the one it is shown in. */
+  languages?: string | null
+  displayLanguage?: string | null
 }
 
 /** A live public publication the page lists. */
@@ -33,8 +36,10 @@ export interface PagePublication {
 }
 
 /** A published page by its handle (typed in any case); null when there is none. */
-export async function readPublicSponsorPage(handle: string): Promise<PublicSponsorPage | null> {
-  const rows = await publicQuery<PublicSponsorPage>(SPONSOR_PAGE_TEMPLATE.page, { handle: handle.toLowerCase() }, 1)
+export async function readPublicSponsorPage(handle: string, languages: readonly string[] = []):
+  Promise<PublicSponsorPage | null> {
+  const rows = await publicQuery<PublicSponsorPage>(SPONSOR_PAGE_TEMPLATE.page, { handle: handle.toLowerCase(),
+    ...(languages.length > 0 ? { languages: languages.join(',') } : {}) }, 1)
   return rows[0] ?? null
 }
 
@@ -44,8 +49,9 @@ export function readPagePublications(handle: string): Promise<PagePublication[]>
 }
 
 /** A published page's listed products, in the sponsor's order. */
-export function readPageProducts(handle: string): Promise<PublicProduct[]> {
-  return publicQuery<PublicProduct>(SPONSOR_PAGE_TEMPLATE.products, { handle: handle.toLowerCase() }, 50)
+export function readPageProducts(handle: string, languages: readonly string[] = []): Promise<PublicProduct[]> {
+  return publicQuery<PublicProduct>(SPONSOR_PAGE_TEMPLATE.products, { handle: handle.toLowerCase(),
+    ...(languages.length > 0 ? { languages: languages.join(',') } : {}) }, 50)
 }
 
 /** A live publication's products, by question number (0: the quiz's) and in the sponsor's order. */
