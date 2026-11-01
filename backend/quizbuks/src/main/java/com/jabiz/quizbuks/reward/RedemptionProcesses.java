@@ -108,9 +108,12 @@ public final class RedemptionProcesses {
         }
     }
 
-    /** A prize the caller may collect at the sponsor's place; {@code attemptId} leads to its result. */
+    /**
+     * A prize the caller may collect at the sponsor's place; {@code attemptId} leads to its result, unless
+     * {@code sourceKind} says a referral earned it (Q70: then it is the referral's id, and there is no result).
+     */
     public record Prize(UUID redemptionId, String attemptId, String code, BigDecimal amount, String description,
-        String publicationName, String status, Instant expiresAt) {}
+        String publicationName, String status, Instant expiresAt, String sourceKind) {}
 
     /** @param kind the code's kind: a rotating one redeems at once, a printed one makes a claim to confirm */
     public record CheckOutput(String sponsorCompany, String kind, List<Prize> prizes) {}
@@ -302,7 +305,9 @@ public final class RedemptionProcesses {
                             new BigDecimal(String.valueOf((Object) redemption.get("amount"))),
                             redemption.get("description"),
                             names.get(String.valueOf((Object) redemption.get("publicationId"))), status,
-                            instant(redemption.get("expiresAt"))));
+                            instant(redemption.get("expiresAt")),
+                            RewardSources.referral(redemption.get("sourceKind")) ? RewardSources.REFERRAL
+                                : RewardSources.ATTEMPT));
                     }
                     ctx.put(OUTPUT, new CheckOutput(sponsor == null ? null : sponsor.get("company"),
                         token.get("kind"), List.copyOf(prizes)));

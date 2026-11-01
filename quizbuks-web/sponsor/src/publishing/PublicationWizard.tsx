@@ -38,6 +38,7 @@ import { fieldProblem, problemText } from '../qb/problems'
 import { navigate } from '../qb/router'
 import type { Condition } from '../qb/audience'
 import { AudienceConditions, AudienceCountPanel } from './AudienceConditions'
+import { ReferralFields } from './ReferralFields'
 import {
   asSurvey,
   conditionsQuery,
@@ -477,6 +478,8 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
           )}
         </div>
       )}
+      {/* Q70: "referrals welcome": the sponsor's offer to referrers, frozen with the rest at submission. */}
+      <ReferralFields id={id} form={form} set={set} locked={locked} problemOf={problemOf} methods={methodChoices} />
       <div className="grid gap-4 md:grid-cols-2">
         <Field id={`${id}-start`} label={t('publishing.field.startAt')} problem={problemOf('startAt')}
           hint={t('publishing.field.periodHint')}>
@@ -659,6 +662,10 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
         digitalDelivery: form.digitalDelivery,
         digitalDescription: form.digitalDescription.trim() || null,
         digitalSendDays: form.digitalSendDays.trim() === '' ? null : Number(form.digitalSendDays),
+        referral: form.referralEnabled ? { quota: Number(form.referralQuota), method: form.referralMethod,
+          amount: Number(form.referralAmount), description: form.referralDescription.trim() || null,
+          referrerRequires: form.referrerRequires, refereeRules: form.refereeRules,
+          days: Number(form.referralDays || 7) } : null,
       }} />
     </div>,
   ]

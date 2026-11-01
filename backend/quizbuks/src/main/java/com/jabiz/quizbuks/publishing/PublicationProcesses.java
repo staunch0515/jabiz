@@ -67,6 +67,23 @@ public final class PublicationProcesses {
         @NotNull BigDecimal reward) {}
 
     /**
+     * "Referrals welcome" (Q70, D-Q70-10, {@link ReferralPolicy}); the save writes it whole, none (null) for not welcome.
+     *
+     * @param days how long a referee has to pass after claiming; {@value ReferralPolicy#DEFAULT_DAYS} when not given
+     */
+    public record ReferralInput(Integer quota, @Size(max = 20) String method, BigDecimal amount,
+        @Size(max = PublishingLimits.REDEEM_DESCRIPTION_LENGTH) String description,
+        @Size(max = 10) String referrerRequires, @Size(max = 10) List<@NotNull @Size(max = 40) String> refereeRules,
+        Integer days) {
+
+        ReferralPolicy policy() {
+            return new ReferralPolicy(quota == null ? 0 : quota, method == null || method.isBlank() ? null : method,
+                amount, description == null || description.isBlank() ? null : description.strip(), referrerRequires,
+                refereeRules, days == null ? ReferralPolicy.DEFAULT_DAYS : days);
+        }
+    }
+
+    /**
      * A new draft (no {@code publicationId}) or a draft's version and policy. Every field is written as given: an
      * empty one clears it, except the time limit, which is the version's when not given. {@code tiers} is the whole
      * list (tiers left out are deleted); without it (null) the tiers stay as they are.
@@ -88,7 +105,19 @@ public final class PublicationProcesses {
         @Size(max = PublishingLimits.REDEEM_DESCRIPTION_LENGTH) String redeemDescription,
         @Size(max = 10) String audience, @Size(max = 20) String digitalDelivery,
         @Size(max = PublishingLimits.REDEEM_DESCRIPTION_LENGTH) String digitalDescription, Integer digitalSendDays,
-        @Sensitive @Size(max = PublishingLimits.DIGITAL_CONTENT_LENGTH) String digitalContent, UUID cover) {
+        @Sensitive @Size(max = PublishingLimits.DIGITAL_CONTENT_LENGTH) String digitalContent, UUID cover,
+        @Valid ReferralInput referral) {
+
+        /** As before Q70: no referrals. */
+        public SaveInput(UUID publicationId, UUID versionId, String name, List<String> regions, Instant startAt,
+            Instant endAt, Integer timeLimitSec, Integer passScore, BigDecimal budgetCap, Integer maxWinners,
+            List<TierInput> tiers, Long baseRevision, String rewardMethod, String redeemDescription,
+            String audience, String digitalDelivery, String digitalDescription, Integer digitalSendDays,
+            String digitalContent, UUID cover) {
+            this(publicationId, versionId, name, regions, startAt, endAt, timeLimitSec, passScore, budgetCap,
+                maxWinners, tiers, baseRevision, rewardMethod, redeemDescription, audience, digitalDelivery,
+                digitalDescription, digitalSendDays, digitalContent, cover, null);
+        }
 
         /** As before Q25: everybody in the regions. */
         public SaveInput(UUID publicationId, UUID versionId, String name, List<String> regions, Instant startAt,
@@ -208,6 +237,12 @@ public final class PublicationProcesses {
         String method = input.rewardMethod() == null || input.rewardMethod().isBlank() ? RewardMethod.PLATFORM
             : input.rewardMethod();
         PublicationEditing.methodProblems(ctx, method).forEach(ctx::reject);
+        // Q70: the referral reward's method is one the sponsor may use too (the rest is a problem of the draft).
+        ReferralPolicy referral = input.referral() == null ? null : input.referral().policy();
+        if (referral != null && referral.method() != null && RewardMethod.ALL.contains(referral.method())) {
+            PublicationEditing.methodProblems(ctx, referral.method()).forEach(v -> ctx.reject(new Violation(
+                "referral.method", v.ruleCode(), v.message(), v.params())));
+        }
         String audience = Audience.of(input.audience());
         if (!Audience.ALL.contains(audience)) {
             ctx.reject(new Violation("audience", PublishingCodes.AUDIENCE_INVALID, "Unknown audience " + audience,
@@ -250,6 +285,7 @@ public final class PublicationProcesses {
         String sealed = ctx.contains(SEALED_DIGITAL) ? ctx.get(SEALED_DIGITAL, String.class) : null;
         values.put("sealedDigitalContent", !digital || !DigitalDelivery.SHARED.equals(delivery) ? null
             : sealed != null ? sealed : publication == null ? null : publication.get("sealedDigitalContent"));
+        values.put("referral", ReferralPolicy.toJson(referral));
         values.put("startAt", input.startAt());
         values.put("endAt", input.endAt());
         Integer limit = input.timeLimitSec() == null && version != null
@@ -324,8 +360,12 @@ public final class PublicationProcesses {
     private static void putDerived(Map<String, Object> values, List<TierPlan> tiers) {
         BigDecimal maxReward = TierCoverage.maxReward(tiers.stream().map(TierPlan::tier).toList());
         values.put("maxReward", maxReward);
-        values.put("maxSpend", TierCoverage.maxSpend((BigDecimal) values.get("budgetCap"),
-            PublicationEditing.integer(values.get("maxWinners")), maxReward));
+        BigDecimal spend = TierCoverage.maxSpend((BigDecimal) values.get("budgetCap"),
+            PublicationEditing.integer(values.get("maxWinners")), maxReward);
+        // Q70 (D-Q70-13): plus the referral rewards at most, quota times amount (not counted in the budget).
+        ReferralPolicy referral = ReferralPolicy.fromJson(values.get("referral"));
+        values.put("maxSpend", spend == null || referral == null ? spend
+            : spend.add(referral.maxSpend()).min(PublishingLimits.MAX_MONEY));
         values.put("tierCount", BigDecimal.valueOf(tiers.size()));
     }
 
@@ -413,6 +453,11 @@ public final class PublicationProcesses {
         // one they may not use (Q22: a copy of a publication made before the method was taken away).
         problems.addAll(PublicationEditing.sponsorProblems(ctx));
         problems.addAll(PublicationEditing.methodProblems(ctx, PublicationEditing.methodOf(values)));
+        ReferralPolicy referral = ReferralPolicy.fromJson(values.get("referral"));
+        if (referral != null && RewardMethod.ALL.contains(referral.method())) {
+            PublicationEditing.methodProblems(ctx, referral.method()).forEach(v -> problems.add(
+                new Violation("referral.method", v.ruleCode(), v.message(), v.params())));
+        }
         return new SaveOutput(publicationId, PublicationStatus.DRAFT, revision, editedAt,
             PublicationEditing.integer(values.get("fullScore")), (BigDecimal) values.get("maxReward"),
             (BigDecimal) values.get("maxSpend"), tierIds, PublicationEditing.problems(problems, messages, ctx));
@@ -498,7 +543,7 @@ public final class PublicationProcesses {
         // Q64: the cover too, the copier's own file as the source's was (both are the caller's publications).
         for (String field : List.of("cover", "regions", "startAt", "endAt", "timeLimitSec", "passScore", "budgetCap",
             "maxWinners", "redeemDescription", "digitalDelivery", "digitalDescription", "digitalSendDays",
-            "sealedDigitalContent")) {
+            "sealedDigitalContent", "referral")) {
             values.put(field, source.get(field));
         }
         values.put("rewardMethod", PublicationEditing.methodOf(source.attributes()));

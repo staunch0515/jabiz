@@ -108,6 +108,9 @@ kinds AS (
                     AND p.a1110 < 0 AND p.a5110 > 0 THEN 'STRIPE_FEE'
                WHEN p.src = 'QbAttempt' AND NOT p.reversal AND p.accts IN ('2110,2120', '2110,2120,4110', '2110,4110')
                     AND p.a2110 > 0 AND p.a2120 <= 0 AND p.a4110 <= 0 THEN 'REWARD'
+               -- Q70 (D-Q70-18): a referral reward paid from the sponsor's wallet, whole (no commission for now).
+               WHEN p.src = 'QbReferral' AND NOT p.reversal AND p.accts = '2110,2120'
+                    AND p.a2110 > 0 AND p.a2120 < 0 THEN 'REFERRAL_REWARD'
                WHEN p.src = 'QbTransfer' AND NOT p.reversal AND p.accts IN ('2120,2130', '2120,2130,4110')
                     AND p.a2120 > 0 AND p.a2130 < 0 AND p.a4110 <= 0 THEN 'TRANSFER_SENT'
                WHEN p.src = 'QbTransfer' AND NOT p.reversal AND p.accts = '1110,2130'
@@ -149,7 +152,7 @@ SELECT
 FROM (VALUES (1, 'TOPUP'), (2, 'BANK_TOPUP'), (3, 'MANUAL_TOPUP'), (4, 'GRANT'), (5, 'REFUND'), (6, 'DISPUTE'),
              (7, 'STRIPE_FEE'), (8, 'REWARD'), (9, 'TRANSFER_SENT'), (10, 'TRANSFER_SETTLED'), (11, 'WITHDRAWAL_PAID'),
              (12, 'TRANSFER_FAILED'), (13, 'TRANSFER_REVERSED'), (14, 'PAYOUT'), (15, 'PAYOUT_FAILED'),
-             (16, 'OPERATOR_SHARE'), (17, 'OPERATOR_PAID'), (18, 'OTHER'))
+             (16, 'OPERATOR_SHARE'), (17, 'OPERATOR_PAID'), (18, 'REFERRAL_REWARD'), (19, 'OTHER'))
          AS c (seq, kind)
 LEFT JOIN kinds k ON k.kind = c.kind
 GROUP BY c.seq, c.kind

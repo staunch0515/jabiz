@@ -156,7 +156,8 @@ public final class PublicationLifecycle {
                             .where(new QueryPredicate.And(List.of(
                                 new QueryPredicate.In("publicationId", pooled ? List.of(publication.id()) : List.of()),
                                 new QueryPredicate.Eq("status", DigitalPrizeStatus.CODE_AVAILABLE))))
-                            .limit(PublishingLimits.MAX_POOL_WINNERS).build();
+                            // Q70: the referral quota may come from the pool too.
+                            .limit(PublishingLimits.MAX_POOL_WINNERS + ReferralPolicy.MAX_QUOTA).build();
                     }, POOL))
                 .compute("Check the publication", (metadata, ctx) -> check(ctx))
                 .step("Ask for a review", RequireApproval.<ProcessContext>when(ctx -> ctx.contains(CASE),
@@ -194,6 +195,12 @@ public final class PublicationLifecycle {
         PublicationEditing.sponsorProblems(ctx).forEach(ctx::reject);
         PublicationEditing.methodProblems(ctx, PublicationEditing.methodOf(publication.attributes()))
             .forEach(ctx::reject);
+        // Q70: the referral reward's method is one the sponsor may still use (a copy keeps the one it had).
+        ReferralPolicy referral = ReferralPolicy.fromJson(publication.get("referral"));
+        if (referral != null && RewardMethod.ALL.contains(referral.method())) {
+            PublicationEditing.methodProblems(ctx, referral.method()).forEach(v -> ctx.reject(
+                new com.jabiz.entity.Violation("referral.method", v.ruleCode(), v.message(), v.params())));
+        }
         if (!ctx.hasViolations()) {
             boolean takenDown = !PublicationEditing.takenDownOfQuiz(ctx, publication).isEmpty();
             ctx.put(TAKEN_DOWN, takenDown);

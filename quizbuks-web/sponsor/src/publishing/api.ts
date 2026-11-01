@@ -2,6 +2,7 @@ import { api, ApiError, runProcess, runQuery, toApiError, unwrap, type Filter, t
 import { readDictionary, type DictionaryItem } from '../qb/api'
 import { CRITERIA, type Condition } from '../qb/audience'
 import { AUDIENCE } from '../qb/ids'
+import { referralPolicy, type ReferralPolicy } from '../qb/play'
 import { PUBLISHING_CODE, PUBLISHING_DATASET, PUBLISHING_DICTIONARY, PUBLISHING_PROCESS, PUBLISHING_TEMPLATE } from './ids'
 
 /*
@@ -85,6 +86,8 @@ export interface Publication {
   digitalSendDays: number | null
   /** Who may answer (Q25). */
   audience: Audience
+  /** Q70: "referrals welcome"; null when not. */
+  referral: ReferralPolicy | null
   fullScore: number | null
   maxReward: string | null
   maxSpend: string | null
@@ -183,7 +186,26 @@ export interface SaveInput {
   digitalSendDays?: number | null
   digitalContent?: string
   audience: Audience
+  /** Q70: "referrals welcome", whole; null for not welcome. */
+  referral?: ReferralInput | null
 }
+
+/** Q70: `PublicationProcesses.ReferralInput`. */
+export interface ReferralInput {
+  quota: number | null
+  method: RewardMethod
+  amount: number | null
+  description: string | null
+  referrerRequires: ReferrerRequirement
+  refereeRules: string[]
+  days: number | null
+}
+
+export type ReferrerRequirement = 'NONE' | 'ANSWERED' | 'PASSED'
+export const REFERRER_REQUIREMENTS: readonly ReferrerRequirement[] = ['NONE', 'ANSWERED', 'PASSED']
+/** `publishing.RefereeRules.ALL`, in its order; a new referral ticks `NOT_REGULAR` (only a default). */
+export const REFEREE_RULES = ['NOT_REGULAR', 'NEW_TO_PLATFORM', 'MATCHES_AUDIENCE', 'SAME_REGION_AS_REFERRER'] as const
+export const DEFAULT_REFEREE_RULES = ['NOT_REGULAR']
 
 /** One problem submitting would be refused for, in the caller's language (`SaveOutput.Problem`). */
 export interface Problem {
@@ -255,6 +277,7 @@ export function toPublication(row: Row): Publication {
     digitalDescription: str(row.digitalDescription),
     digitalSendDays: numOrNull(row.digitalSendDays),
     audience: audienceOf(row.audience),
+    referral: referralPolicy(row.referral),
     fullScore: numOrNull(row.fullScore),
     maxReward: str(row.maxReward),
     maxSpend: str(row.maxSpend),
@@ -774,6 +797,15 @@ export interface PublicationForm {
   /** Never filled from the server (it is sealed there); blank keeps the one saved. */
   digitalContent: string
   audience: Audience
+  /** Q70: "referrals welcome" as typed; its fields keep what was typed while switched off, but are not sent. */
+  referralEnabled: boolean
+  referralQuota: string
+  referralMethod: RewardMethod
+  referralAmount: string
+  referralDescription: string
+  referrerRequires: ReferrerRequirement
+  refereeRules: string[]
+  referralDays: string
 }
 
 let keys = 0
@@ -804,6 +836,14 @@ export function formOf(detail: PublicationDetail | null): PublicationForm {
     digitalSendDays: text(p?.digitalSendDays),
     digitalContent: '',
     audience: p?.audience ?? 'PUBLIC',
+    referralEnabled: !!p?.referral,
+    referralQuota: text(p?.referral?.quota),
+    referralMethod: (p?.referral?.method as RewardMethod | undefined) ?? 'PLATFORM',
+    referralAmount: text(p?.referral?.amount),
+    referralDescription: p?.referral?.description ?? '',
+    referrerRequires: p?.referral?.referrerRequires ?? 'NONE',
+    refereeRules: p?.referral ? p.referral.refereeRules : DEFAULT_REFEREE_RULES,
+    referralDays: p?.referral ? String(p.referral.days) : '7',
     tiers: (detail?.tiers ?? []).map((tier) => ({ key: tierKey(), tierId: tier.tierId,
       fromScore: String(tier.fromScore), toScore: String(tier.toScore), reward: tier.reward })),
   }
@@ -838,6 +878,16 @@ export function inputOf(form: PublicationForm, publicationId: string | null, bas
   const digital = form.rewardMethod === 'DIGITAL_PRIZE'
   const digitalSendDays = digital && form.digitalDelivery === 'SPONSOR_SENT'
     ? read('digitalSendDays', form.digitalSendDays) : null
+  // Q70: only when welcome; an invited publication sends it too, and the server says why it cannot.
+  const referral: ReferralInput | null = form.referralEnabled ? {
+    quota: read('referral.quota', form.referralQuota),
+    method: form.referralMethod,
+    amount: read('referral.amount', form.referralAmount),
+    description: form.referralDescription.trim() || null,
+    referrerRequires: form.referrerRequires,
+    refereeRules: REFEREE_RULES.filter((rule) => form.refereeRules.includes(rule)),
+    days: read('referral.days', form.referralDays),
+  } : null
   const tiers: TierInput[] = form.tiers.map((tier, i) => {
     const values = (['fromScore', 'toScore', 'reward'] as const).map((part) => {
       const field = `tiers[${i}].${part}`
@@ -876,6 +926,7 @@ export function inputOf(form: PublicationForm, publicationId: string | null, bas
           ? { digitalContent: form.digitalContent.trim() } : {}),
       } : {}),
       audience: form.audience,
+      referral,
     },
   }
 }
@@ -913,7 +964,7 @@ export function nextTier(tiers: readonly TierDraft[], fullScore: number | null):
 /** The fields of the publication the pages name (`entity.QbPublication.<field>` on the server). */
 export const PUBLICATION_FIELDS = ['name', 'versionId', 'regions', 'startAt', 'endAt', 'timeLimitSec', 'passScore',
   'budgetCap', 'maxWinners', 'rewardMethod', 'redeemDescription', 'digitalDelivery', 'digitalDescription',
-  'digitalSendDays', 'digitalContent', 'audience'] as const
+  'digitalSendDays', 'digitalContent', 'audience', 'referral'] as const
 export type PublicationField = (typeof PUBLICATION_FIELDS)[number]
 
 /**
@@ -925,6 +976,7 @@ export function problemPlace(field: string | null): PublicationField | 'tiers' |
   if (!field) return null
   if (field === 'tiers' || field.startsWith('tiers[')) return 'tiers'
   if (field === 'version' || field.startsWith('version.')) return 'version'
+  if (field.startsWith('referral.')) return 'referral'
   return (PUBLICATION_FIELDS as readonly string[]).includes(field) ? (field as PublicationField) : null
 }
 

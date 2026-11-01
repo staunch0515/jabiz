@@ -33,7 +33,8 @@ class QbRolesTest {
                 "approval.decide", QbPermissions.REDEMPTION_VOID, QbPermissions.DIGITAL_RESOLVE,
                 // Q69: its own certification rounds, grants and revocations (headquarters marks the official ones).
                 QbPermissions.CERTIFICATION_MANAGE)
-            .doesNotContain(QbPermissions.CERTIFICATION_ADMIN, QbPermissions.ADMIN_USERS_READ, QbPermissions.ADMIN_FINANCE_READ,
+            .doesNotContain(QbPermissions.CERTIFICATION_ADMIN, QbPermissions.REFERRAL_READ, QbPermissions.ADMIN_USERS_READ,
+                QbPermissions.ADMIN_FINANCE_READ,
                 QbPermissions.ADMIN_CONTENT_WRITE, QbPermissions.ADMIN_USERS_BAN, QbPermissions.CASH_RESOLVE,
                 QbPermissions.TOPUP_BANK_APPROVE, QbPermissions.OPERATORS_READ, QbPermissions.OPERATORS_WRITE,
                 QbPermissions.SPOT_CHECK, "control.propose", "control.publish", "platform.param.read",

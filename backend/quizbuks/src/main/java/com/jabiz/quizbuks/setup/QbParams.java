@@ -169,6 +169,9 @@ public final class QbParams {
     public static final String REDEEM_DAYS = "qb.reward.redeem-days";
     /** Q33: days a sponsor has to send a digital prize by hand when the publication names none. */
     public static final String DIGITAL_SEND_DAYS = "qb.reward.digital.send-days";
+    /** Q70 (D-Q70-19b): how many referees one referrer brings to a publication in 24 hours, and in all. */
+    public static final String REFERRAL_PER_REFERRER_DAILY = "qb.referral.per-referrer-daily";
+    public static final String REFERRAL_PER_REFERRER_TOTAL = "qb.referral.per-referrer-total";
     /** The oldest version of the app that may still be used. */
     public static final String APP_MIN_VERSION = "qb.app.min-version";
     /**
@@ -329,6 +332,10 @@ public final class QbParams {
         new Param(REDEEM_DAYS, DAYS, "30", "Days a prize may be collected at the sponsor's place after the quiz"),
         new Param(DIGITAL_SEND_DAYS, DAYS, "3",
             "Days a sponsor has to send a digital prize by hand unless the publication says otherwise"),
+        // Q70: so that referring is a friend's link, not a mailing list; not controlled (no money, no review).
+        new Param(REFERRAL_PER_REFERRER_DAILY, DAYS, "3",
+            "How many referees one referrer may bring to a publication in 24 hours"),
+        new Param(REFERRAL_PER_REFERRER_TOTAL, DAYS, "10", "How many referees one referrer may bring to a publication"),
         // Q8a: AI generation (the controlled ones last, in the order of AI_CONTROLLED).
         new Param(AI_ENABLED, BOOL, false, "Whether sponsors may ask the AI for questions (Claude)"),
         new Param(AI_MODEL, Map.of("type", "code", "dictUrn", "urn:jabiz:dict:quizbuks:ai-model", "allowedValues",
@@ -399,6 +406,11 @@ public final class QbParams {
      * (before setup), whole days (a fraction is dropped), never negative and at most ten years, so a mistyped value
      * neither fails the process nor sets a date in the far future.
      */
+    /** A count parameter (Q70), read as {@link #days} reads days. */
+    public static int count(ParamValues params, String key) {
+        return days(params, key);
+    }
+
     public static int days(ParamValues params, String key) {
         BigDecimal days = params.get(key, BigDecimal.class);
         if (days == null) {

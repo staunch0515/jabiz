@@ -140,7 +140,7 @@
 
 ---
 
-## 4. 数据（迁移 V52 起；新表都是普通表，只经流程写入）
+## 4. 数据（迁移 V53 起（V52 已被 Q71 使用）；新表都是普通表，只经流程写入）
 
 | 表 | 主要列 | 说明 |
 |---|---|---|
@@ -383,3 +383,25 @@
 - 方案 B：`certification.RoundHolders`（开始的查询与拒绝）、`CertificationProcesses.unrecordedPasses`（认领与开始共用的补记规则）；错误码 `QB_CERTIFICATION_HELD`（三语）。
 - 与 §5.1 草案的不同：开始时**不写**补记（只读），记录仍由认领写入，开始的事务因此不取认证锁、锁序不变；轮次的开始在锁外多两条语句，没有另加预算项（轮次是官方账号每月一次的发布，不是热门发布；普通发布的预算由 `AttemptStatementBudgetIT` 照旧断言）。
 - 测试：`CertificationIT.whoHoldsTheCertificationStartsNoneOfItsRoundsUntilItEnds`（未认领的合格即算、首页与详情、拒绝开始、普通发布与不持有的人不受影响、收回后可以再答）、`CertificationTemplatesTest`、App 的 `Play.test.tsx`（详情页的提示）。
+
+### Q70b-1：推荐的后端（2026-11-01）
+
+- 发布的"欢迎推荐"存为**一列 JSON** `referral`（`publishing.ReferralPolicy`，键排序的规范 JSON），发布（封存表只加列）与卡片各一列，而不是 §4 草案的多列：保存、复制、上架、审批内容（只在开启时写入，旧的哈希不变）各只多一个字段。最大支出加上"名额 × 数额"；检查在 `ReferralPolicy.problems`（问卷不能要求合格、指定邮箱不能开启、电子奖品的推荐奖励要求发布本身是电子奖品），码池的可用码要覆盖获奖人数与推荐名额（`PublicationReadiness.Draft.poolNeeded`）。
+- 被推荐人的规则 `publishing.RefereeRules`：`NOT_REGULAR`、`NEW_TO_PLATFORM`（以答题者资料的创建时间计，还没有资料的算新人）、`MATCHES_AUDIENCE`（以认领时的资料计，没有资料即不符合）、`SAME_REGION_AS_REFERRER`（资料的国家相同）。推荐的成立条件与上限在 `referral.ReferralRules`，"每天"按最近 24 小时计。
+- 流程 `QB_REFERRAL_LINK` / `_CLAIM` / `_REWARD` / `_EXPIRE`、任务 `qb.referral-reward`（每 5 分钟）与 `qb.referral-expire`（每小时，草案为每日：失败与到期的名额释放得更快）、模板 `qb.system.referrals-due` / `-over`。站内信四种（`REFERRAL_CLAIMED` / `_REWARDED` / `_EXPIRED` 给推荐人、`_FUNDS_SHORT` 每天至多一条给商户），去处 `REFERRALS`；推荐来源的现金、兑换、电子奖品消息也去 `REFERRALS`。
+- 来源列：三张奖励表加 `source_kind`；列出它的模板（App、商户后台、店员、管理后台的现金、兑换、电子奖品列表）都返回 `sourceKind`，`RedemptionProcesses.Prize` 也带上它。`qb.app.history` 只按答题连接，推荐来源的记录不出现在其中（它们在各自的列表与推荐页）。投资人指标的"奖品"计数包括推荐的奖品，暂不单列。
+- 商户被封禁时不在封禁流程中逐个作废：认领时拒绝，发放时作废（`SPONSOR_BANNED`），其余到期结束。D-Q70-22 的抹除：两张表除了推荐人、被推荐人的编号外不含个人信息，而编号是平台抹除时保留的（D62 第 4 条），所以不需要在 `PersonalDataEraser` 中声明（平台的检查也拒绝没有可覆盖字段的声明）；推荐与链接照常保留，供名额与统计使用。
+- 测试：`ReferralPolicyTest`、`ReferralRulesTest`、`ReferralIT`（平台 Kudos 的完整流程与账本来源、不计入的各种情形与"不选规则即熟客也算"、失败与到期、其余三种方式的记录与来源、余额不足的等待与提醒、草稿的问题）；`AdminFinanceIT` 多一行、`SetupIT` 多两个参数、场景的编号随之后移。
+
+### Q70b-2：三端页面（2026-11-01）
+
+- **App**（`quizbuks-web/app/src/referral/`）：
+  - 欢迎推荐的发布页上有"推荐给朋友"：写明朋友合格后得到什么，按请求生成链接（`QB_REFERRAL_LINK`；资格与推荐人条件由服务端判断并说明为什么不行），显示链接、复制、分享与本机生成的二维码、剩余名额，并提示"亲自发给认识的人"。平台不代发。
+  - 打开带 `?ref=` 的链接时，启动即记住键（本标签页）并从地址中去掉；登录且邮箱已验证后，发布页认领一次（`QB_REFERRAL_CLAIM`），之后以新的查询键重读页面。
+  - 被推荐人看到"在 … 前合格，朋友就能得到推荐奖励"。
+  - "我的推荐"（`/referrals`，菜单中）列出链接（来了几位、剩余名额）与来的朋友（按发布与状态，不显示名字）。已发放的推荐打开 `/referral/<编号>`（`QB_REFERRAL_VIEW`），现金的确认、兑换码与电子奖品照结果页的组件处理。
+  - 来源是推荐的现金与兑换（首页的待办）以及站内信的 `REFERRALS` 都链到那里。
+- **商户后台**：向导的奖励一步有"欢迎推荐"（名额、数额、期限、方式、奖品说明、推荐人条件、被推荐人规则，缺省勾选"不是熟客"）；指定邮箱的发布不能开启。确认一步与发布页的摘要都显示它，发布页另有该发布的推荐列表（不显示名字，余额不足时提示）。
+- **管理后台扩展**：`/qb/referrals`（`qb.admin.referrals.read`，内容与财务管理员）列出全部推荐，可按状态筛选，并"只看此推荐人"；月报的 `REFERRAL_REWARD` 有三语名称。
+- 测试：App `Play.test.tsx` 的 `referrals (Q70)` 四项；商户后台的 `referrals welcome (Q70)` 与 `api.test.ts`；扩展的 `referrals.test.tsx`。
+- 未做：e2e 的完整推荐流程，留到上线前与需求方一起在 staging 走一遍场景 3 至场景 7 时补。

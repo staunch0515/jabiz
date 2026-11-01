@@ -14,6 +14,7 @@ results:
   code:            { from: QbRedemption.code }
   publicationId:   { from: QbRedemption.publicationId }
   publicationName: { from: QbPublicationCard.name }
+  sourceKind:      { from: QbRedemption.sourceKind }
   takerName:       { from: QbProfile.displayName }
   amount:          { from: QbRedemption.amount }
   description:     { from: QbRedemption.description }
@@ -36,6 +37,7 @@ permissions: [qb.publication.write]
 -- the code; who handed it over when one of the sponsor's staff did (Q39; none when the sponsor did). The text is
 -- found as written: strpos takes it literally, so % _ and \ match themselves.
 SELECT
+    r.{{QbRedemption.sourceKind}}     AS sourceKind,
     r.{{QbRedemption.redemptionId}}   AS redemptionId,
     r.{{QbRedemption.code}}           AS code,
     r.{{QbRedemption.publicationId}}  AS publicationId,

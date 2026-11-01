@@ -224,6 +224,26 @@ public final class QbWallets {
             attemptId);
     }
 
+    /** Q70: the description of a referral reward's posting. */
+    public static final String REFERRAL_DESCRIPTION = "Referral reward";
+
+    /**
+     * The posting of a referral reward paid by the platform (Q70, D-Q70-18): the sponsor's wallet pays it (2110, debit),
+     * the referrer's receives it whole (2120, credit; no commission for now, decision 13). Both lines carry the
+     * publication; the wallet lines the party. Its source is the referral, so the monthly report has a class of its
+     * own and the transfer holds count it as a reward (D-Q70-21).
+     */
+    public static LedgerProcesses.PostInput referralPosting(Instant bookingTime, String referralId, String sponsorId,
+        String referrerId, String publicationId, BigDecimal amount) {
+        List<LedgerProcesses.Line> lines = List.of(
+            new LedgerProcesses.Line(QbLedger.SPONSOR_PREPAYMENTS, Direction.DEBIT, amount, null,
+                Map.of(QbLedger.PARTY, sponsorId, PUBLICATION, publicationId)),
+            new LedgerProcesses.Line(QbLedger.REWARDS_PAYABLE, Direction.CREDIT, amount, null,
+                Map.of(QbLedger.PARTY, referrerId, PUBLICATION, publicationId)));
+        return new LedgerProcesses.PostInput(bookingTime, REFERRAL_DESCRIPTION, referralId, lines,
+            com.jabiz.quizbuks.referral.QbReferrals.REFERRAL, referralId);
+    }
+
     static BigDecimal money(Object value) {
         return value == null ? BigDecimal.ZERO : new BigDecimal(value.toString());
     }

@@ -123,6 +123,9 @@ public final class QbRewards {
             .generated(true).asSemanticIdentity("urn:jabiz:entity:quizbuks:cash-reward"));
         // The attempt's key as text, not a reference: attempts are read through datasets of their own.
         eb.field("attemptId", f -> f.physicalColumn("attempt_id").immutable(true).required(true).asText(36));
+        // Q70 (D-Q70-20): what earned it: an attempt (none, as before Q70) or a referral, whose id is then the attemptId.
+        eb.field("sourceKind", f -> f.physicalColumn("source_kind").immutable(true)
+            .asCode(RewardSources.DICTIONARY, RewardSources.ALL.toArray(String[]::new)));
         eb.field("publicationId", f -> f.physicalColumn("publication_id").immutable(true).required(true)
             .asReference(QbPublications.PUBLICATION));
         PublisherKind.declareSealed(eb, false);
@@ -185,6 +188,9 @@ public final class QbRewards {
         eb.field("redemptionId", f -> f.physicalColumn("redemption_id").immutable(true).required(true)
             .generated(true).asSemanticIdentity("urn:jabiz:entity:quizbuks:redemption"));
         eb.field("attemptId", f -> f.physicalColumn("attempt_id").immutable(true).required(true).asText(36));
+        // Q70 (D-Q70-20): what earned it: an attempt (none, as before Q70) or a referral, whose id is then the attemptId.
+        eb.field("sourceKind", f -> f.physicalColumn("source_kind").immutable(true)
+            .asCode(RewardSources.DICTIONARY, RewardSources.ALL.toArray(String[]::new)));
         eb.field("publicationId", f -> f.physicalColumn("publication_id").immutable(true).required(true)
             .asReference(QbPublications.PUBLICATION));
         PublisherKind.declareSealed(eb, false);

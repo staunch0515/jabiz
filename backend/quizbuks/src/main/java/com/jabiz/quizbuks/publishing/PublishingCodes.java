@@ -99,6 +99,18 @@ public final class PublishingCodes {
     public static final String CHANNEL_VIDEO = "QB_CHANNEL_VIDEO";
     /** S2: a channel's quiz is too large to keep as a version. */
     public static final String CHANNEL_TOO_LARGE = "QB_CHANNEL_TOO_LARGE";
+    /** Q70 (D-Q70-11): an invited publication welcomes no referrals. */
+    public static final String REFERRAL_INVITED = "QB_REFERRAL_INVITED";
+    public static final String REFERRAL_QUOTA_RANGE = "QB_REFERRAL_QUOTA_RANGE";
+    public static final String REFERRAL_DAYS_RANGE = "QB_REFERRAL_DAYS_RANGE";
+    public static final String REFERRAL_AMOUNT_RANGE = "QB_REFERRAL_AMOUNT_RANGE";
+    public static final String REFERRAL_METHOD_INVALID = "QB_REFERRAL_METHOD_INVALID";
+    public static final String REFERRAL_REQUIREMENT_INVALID = "QB_REFERRAL_REQUIREMENT_INVALID";
+    /** Q70 (D-Q70-11): a survey has no pass, so its referrer cannot be required to have passed. */
+    public static final String REFERRAL_SURVEY_PASS = "QB_REFERRAL_SURVEY_PASS";
+    public static final String REFERRAL_RULE_INVALID = "QB_REFERRAL_RULE_INVALID";
+    /** Q70 (D-Q70-19): the pool covers the attempts that may win and the referral quota too. */
+    public static final String REFERRAL_POOL_SHORT = "QB_REFERRAL_POOL_SHORT";
     /** Every code above that is publishing's own (not the shared review and account codes). */
 
     public static final List<String> ALL = List.of(NAME_BLANK, REGIONS_FORMAT, AUDIENCE_INVALID, TIME_LIMIT_RANGE, SCORE_RANGE,
@@ -110,7 +122,9 @@ public final class PublishingCodes {
         DIGITAL_SEND_DAYS_RANGE, DIGITAL_POOL_SHORT,
         REWARD_METHODS_FORMAT, REWARD_ABOVE_MAX, CHANNEL_PUBLISHER, CHANNEL_VIDEO, CHANNEL_TOO_LARGE, SWITCH_NOT_RUNNING,
         SWITCH_TAKEN_DOWN, SWITCH_PENDING, SWITCH_SAME_VERSION, SWITCH_OTHER_QUIZ, SWITCH_FULL_SCORE, SWITCH_NOT_PENDING,
-        SWITCH_ENDED);
+        SWITCH_ENDED, REFERRAL_INVITED, REFERRAL_QUOTA_RANGE, REFERRAL_DAYS_RANGE, REFERRAL_AMOUNT_RANGE,
+        REFERRAL_METHOD_INVALID, REFERRAL_REQUIREMENT_INVALID, REFERRAL_SURVEY_PASS, REFERRAL_RULE_INVALID,
+        REFERRAL_POOL_SHORT);
 
     private PublishingCodes() {}
 }

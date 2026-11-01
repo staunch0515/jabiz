@@ -48,21 +48,31 @@ public final class RoundHolders {
      */
     public static <I, O> void load(ProcessDefinitionBuilder<I, O, ProcessContext> pb,
         Function<ProcessContext, Boolean> starting) {
-        pb.step("Load the caller's records and the rounds of the round's certification", QueryEntities.<ProcessContext>all(
+        loadHolding(pb, ctx -> certification(ctx, starting));
+    }
+
+    /**
+     * What tells whether the caller holds {@code certification} (none: nothing is read, no statement): their records
+     * of it and its rounds (one statement), then their attempts on those rounds, whose passes may not be recorded yet.
+     * {@link #heldUntil(ProcessContext, Certification)} answers from them. Used by the start of a round and, Q70b, by
+     * the referral link ({@code REFERRER}).
+     */
+    public static <I, O> void loadHolding(ProcessDefinitionBuilder<I, O, ProcessContext> pb,
+        Function<ProcessContext, Certification> certification) {
+        pb.step("Load the caller's records and the rounds of the certification", QueryEntities.<ProcessContext>all(
                 QueryEntities.query(QbCertifications.defaultDataset(QbCertifications.RECORD), ctx -> {
-                    Certification certification = certification(ctx, starting);
-                    return certification == null ? nothing("userId")
-                        : CertificationProcesses.records(ctx.request().actorId(), certification.key());
+                    Certification c = certification.apply(ctx);
+                    return c == null ? nothing("userId")
+                        : CertificationProcesses.records(ctx.request().actorId(), c.key());
                 }, RECORDS),
                 QueryEntities.query(QbCertifications.defaultDataset(QbCertifications.ROUND), ctx -> {
-                    Certification certification = certification(ctx, starting);
-                    return certification == null ? nothing("publicationId")
-                        : CertificationProcesses.rounds(certification);
+                    Certification c = certification.apply(ctx);
+                    return c == null ? nothing("publicationId") : CertificationProcesses.rounds(c);
                 }, ROUNDS)))
             .step("Load the caller's attempts on those rounds", QueryEntities.<ProcessContext>of(
                 QbPublications.defaultDataset(QbPlay.ATTEMPT), ctx -> {
                     List<Object> publications = new ArrayList<>();
-                    if (certification(ctx, starting) != null) {
+                    if (certification.apply(ctx) != null) {
                         for (EntityInstance r : CertificationProcesses.list(ctx, ROUNDS)) {
                             publications.add(UUID.fromString(String.valueOf((Object) r.get("publicationId"))));
                         }
@@ -79,7 +89,11 @@ public final class RoundHolders {
 
     /** Until when the caller holds the certification of the publication's round; empty when not, or not a round. */
     public static Optional<Instant> heldUntil(ProcessContext ctx) {
-        Certification certification = certification(ctx, c -> true);
+        return heldUntil(ctx, certification(ctx, c -> true));
+    }
+
+    /** Until when the caller holds {@code certification}, from what {@link #loadHolding} read; empty when not. */
+    public static Optional<Instant> heldUntil(ProcessContext ctx, Certification certification) {
         if (certification == null) {
             return Optional.empty();
         }

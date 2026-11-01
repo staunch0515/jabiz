@@ -35,6 +35,7 @@ results:
   rewardMethod:   { from: QbPublicationCard.rewardMethod }
   digitalDelivery: { from: QbPublicationCard.digitalDelivery }
   digitalDescription: { from: QbPublicationCard.digitalDescription }
+  referral:       { from: QbPublicationCard.referral }
   completions:    { from: QbPublicationCounter.completions }
   sponsorName:    { from: QbSponsor.contactName }
   sponsorCompany: { from: QbSponsor.company }
@@ -79,6 +80,7 @@ SELECT
     c.{{QbPublicationCard.rewardMethod}}   AS rewardMethod,
     c.{{QbPublicationCard.digitalDelivery}} AS digitalDelivery,
     c.{{QbPublicationCard.digitalDescription}} AS digitalDescription,
+    c.{{QbPublicationCard.referral}}       AS referral,
     n.{{QbPublicationCounter.completions}} AS completions,
     sp.{{QbSponsor.contactName}}           AS sponsorName,
     sp.{{QbSponsor.company}}               AS sponsorCompany,

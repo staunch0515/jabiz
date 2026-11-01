@@ -35,6 +35,14 @@ const FORM: PublicationForm = {
   digitalContent: '',
   audience: 'PUBLIC',
   redeemDescription: '',
+  referralEnabled: false,
+  referralQuota: '',
+  referralMethod: 'PLATFORM',
+  referralAmount: '',
+  referralDescription: '',
+  referrerRequires: 'NONE',
+  refereeRules: ['NOT_REGULAR'],
+  referralDays: '7',
 }
 
 describe('the publishing paths', () => {
@@ -55,7 +63,17 @@ describe('the wizard\'s form', () => {
       budgetCap: 1000, maxWinners: 10, baseRevision: 4, tiers: [
         { tierId: 't1', fromScore: 0, toScore: 1, reward: 0 },
         { tierId: null, fromScore: 2, toScore: 2, reward: 100 },
-      ], rewardMethod: 'PLATFORM', redeemDescription: null, audience: 'PUBLIC' } })
+      ], rewardMethod: 'PLATFORM', redeemDescription: null, audience: 'PUBLIC', referral: null } })
+  })
+
+  it('sends "referrals welcome" whole when switched on, the rules in the catalog\'s order (Q70)', () => {
+    const welcome = { ...FORM, referralEnabled: true, referralQuota: ' 20 ', referralAmount: '300',
+      referralMethod: 'OFFLINE_REDEEM' as const, referralDescription: ' A coffee ', referrerRequires: 'ANSWERED' as const,
+      refereeRules: ['SAME_REGION_AS_REFERRER', 'NOT_REGULAR'], referralDays: '' }
+    expect(inputOf(welcome, 'p1', 4).input?.referral).toEqual({ quota: 20, method: 'OFFLINE_REDEEM', amount: 300,
+      description: 'A coffee', referrerRequires: 'ANSWERED', refereeRules: ['NOT_REGULAR', 'SAME_REGION_AS_REFERRER'],
+      days: null })
+    expect(inputOf({ ...welcome, referralQuota: 'x' }, 'p1', 4).errors).toEqual({ 'referral.quota': 'wholeNumber' })
   })
 
   it('sends the publication\'s own cover with every save, none when removed (Q64)', () => {

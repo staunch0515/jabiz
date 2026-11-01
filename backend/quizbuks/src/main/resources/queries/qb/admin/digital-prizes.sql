@@ -12,6 +12,7 @@ params:
 results:
   digitalPrizeId:  { from: QbDigitalPrize.digitalPrizeId }
   attemptId:       { from: QbDigitalPrize.attemptId }
+  sourceKind:      { from: QbDigitalPrize.sourceKind }
   publicationId:   { from: QbDigitalPrize.publicationId }
   publicationName: { from: QbPublicationCard.name }
   publisherKind:   { from: QbDigitalPrize.publisherKind }
@@ -47,6 +48,7 @@ permissions: [qb.admin.publication.read]
 SELECT
     g.{{QbDigitalPrize.digitalPrizeId}} AS digitalPrizeId,
     g.{{QbDigitalPrize.attemptId}}      AS attemptId,
+    g.{{QbDigitalPrize.sourceKind}}      AS sourceKind,
     g.{{QbDigitalPrize.publicationId}}  AS publicationId,
     c.{{QbPublicationCard.name}}        AS publicationName,
     g.{{QbDigitalPrize.publisherKind}}    AS publisherKind,

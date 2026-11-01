@@ -72,14 +72,14 @@ disputed AS (
 kinds AS (
     SELECT l.l_amount, l.booked, l.seq, l.tx, l.line_no,
            CASE WHEN l.l_direction <> 'CREDIT' THEN 'DEBIT'
-                WHEN l.source = 'QbAttempt' AND d.since IS NOT NULL AND l.booked >= d.since THEN 'DISPUTED'
-                WHEN l.source = 'QbAttempt'
+                WHEN l.source IN ('QbAttempt', 'QbReferral') AND d.since IS NOT NULL AND l.booked >= d.since THEN 'DISPUTED'
+                WHEN l.source IN ('QbAttempt', 'QbReferral')
                      AND l.booked > CAST(:at AS timestamptz) - make_interval(days => CAST(:holdDays AS int))
                     THEN 'RECENT'
                 ELSE 'FREE' END AS kind
     FROM lines l
     LEFT JOIN {{QbPublicationCard}} c
-        ON l.l_direction = 'CREDIT' AND l.source = 'QbAttempt'
+        ON l.l_direction = 'CREDIT' AND l.source IN ('QbAttempt', 'QbReferral')
        AND c.{{QbPublicationCard.publicationId}} = CASE WHEN l.publication ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
                                                         THEN CAST(l.publication AS uuid) END
     LEFT JOIN disputed d ON d.sponsor = c.{{QbPublicationCard.publisherId}}),

@@ -218,7 +218,12 @@ public class InboxConfig {
             .item(QbInbox.PAYOUT_ACTION_NEEDED, "en", "Payout account needs information", "zh", "收款账户需补资料",
                 "ja", "受取口座の情報が必要")
             .item(QbInbox.PAYOUT_REMINDER, "en", "Open a payout account", "zh", "开通收款账户", "ja",
-                "受取口座の開設"));
+                "受取口座の開設")
+            .item(QbInbox.REFERRAL_CLAIMED, "en", "A friend came", "zh", "朋友来了", "ja", "友だちが来ました")
+            .item(QbInbox.REFERRAL_REWARDED, "en", "Referral rewarded", "zh", "推荐成功", "ja", "紹介の成立")
+            .item(QbInbox.REFERRAL_EXPIRED, "en", "Referral ended", "zh", "推荐已结束", "ja", "紹介の終了")
+            .item(QbInbox.REFERRAL_FUNDS_SHORT, "en", "Referral reward waiting for funds", "zh",
+                "推荐奖励待充值", "ja", "紹介報酬の残高不足"));
     }
 
     @Bean
@@ -442,6 +447,42 @@ public class InboxConfig {
             qbMessageFromEvent) {
         return EventSubscription.of(MessageProcesses.REWARD_SETTLED_CONSUMER, AttemptFinishing.SETTLED_EVENT,
             qbMessageFromEvent, event -> MessageProcesses.rewardInput(event, QbInbox.REWARD_PAID));
+    }
+
+    @Bean
+    EventSubscription<MessageProcesses.EventInput> qbMessageReferralClaimedSubscription(
+        ProcessDefinition<MessageProcesses.EventInput, MessageProcesses.MessageOutput, ProcessContext>
+            qbMessageFromEvent) {
+        return EventSubscription.of(MessageProcesses.REFERRAL_CLAIMED_CONSUMER,
+            com.jabiz.quizbuks.referral.ReferralProcesses.CLAIMED_EVENT, qbMessageFromEvent,
+            event -> MessageProcesses.referralInput(event, QbInbox.REFERRAL_CLAIMED));
+    }
+
+    @Bean
+    EventSubscription<MessageProcesses.EventInput> qbMessageReferralRewardedSubscription(
+        ProcessDefinition<MessageProcesses.EventInput, MessageProcesses.MessageOutput, ProcessContext>
+            qbMessageFromEvent) {
+        return EventSubscription.of(MessageProcesses.REFERRAL_REWARDED_CONSUMER,
+            com.jabiz.quizbuks.referral.ReferralProcesses.REWARDED_EVENT, qbMessageFromEvent,
+            event -> MessageProcesses.referralInput(event, QbInbox.REFERRAL_REWARDED));
+    }
+
+    @Bean
+    EventSubscription<MessageProcesses.EventInput> qbMessageReferralExpiredSubscription(
+        ProcessDefinition<MessageProcesses.EventInput, MessageProcesses.MessageOutput, ProcessContext>
+            qbMessageFromEvent) {
+        return EventSubscription.of(MessageProcesses.REFERRAL_EXPIRED_CONSUMER,
+            com.jabiz.quizbuks.referral.ReferralProcesses.EXPIRED_EVENT, qbMessageFromEvent,
+            event -> MessageProcesses.referralInput(event, QbInbox.REFERRAL_EXPIRED));
+    }
+
+    @Bean
+    EventSubscription<MessageProcesses.EventInput> qbMessageReferralFundsShortSubscription(
+        ProcessDefinition<MessageProcesses.EventInput, MessageProcesses.MessageOutput, ProcessContext>
+            qbMessageFromEvent) {
+        return EventSubscription.of(MessageProcesses.REFERRAL_FUNDS_SHORT_CONSUMER,
+            com.jabiz.quizbuks.referral.ReferralProcesses.FUNDS_SHORT_EVENT, qbMessageFromEvent,
+            event -> MessageProcesses.referralInput(event, QbInbox.REFERRAL_FUNDS_SHORT));
     }
 
     @Bean

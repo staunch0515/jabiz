@@ -13,6 +13,7 @@ results:
   code:           { from: QbCashReward.code }
   publicationId:  { from: QbCashReward.publicationId }
   publicationName: { from: QbPublicationCard.name }
+  sourceKind:      { from: QbCashReward.sourceKind }
   takerName:      { from: QbProfile.displayName }
   amount:         { from: QbCashReward.amount }
   status:         { from: QbCashReward.status }
@@ -36,6 +37,7 @@ permissions: [qb.publication.write]
 -- The taker's name as their profile gives it (none without a profile): what the sponsor asks at the counter, with the
 -- code. The text is found as written: strpos takes it literally, so % _ and \ match themselves.
 SELECT
+    r.{{QbCashReward.sourceKind}}     AS sourceKind,
     r.{{QbCashReward.cashRewardId}}   AS cashRewardId,
     r.{{QbCashReward.code}}           AS code,
     r.{{QbCashReward.publicationId}}  AS publicationId,

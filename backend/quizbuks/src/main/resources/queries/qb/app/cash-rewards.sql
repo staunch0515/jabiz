@@ -11,6 +11,7 @@ params:
 results:
   cashRewardId:    { from: QbCashReward.cashRewardId }
   attemptId:       { from: QbCashReward.attemptId }
+  sourceKind:      { from: QbCashReward.sourceKind }
   code:            { from: QbCashReward.code }
   publicationId:   { from: QbCashReward.publicationId }
   publicationName: { from: QbPublicationCard.name }
@@ -34,6 +35,7 @@ permissions: [qb.me]
 SELECT
     r.{{QbCashReward.cashRewardId}}  AS cashRewardId,
     r.{{QbCashReward.attemptId}}     AS attemptId,
+    r.{{QbCashReward.sourceKind}}     AS sourceKind,
     r.{{QbCashReward.code}}          AS code,
     r.{{QbCashReward.publicationId}} AS publicationId,
     c.{{QbPublicationCard.name}}     AS publicationName,

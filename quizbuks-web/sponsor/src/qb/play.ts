@@ -273,6 +273,11 @@ export interface PublicationView {
    * started (null for an ordinary publication, or one the caller does not hold).
    */
   heldUntil: string | null
+  /** Q70: "referrals welcome" as frozen on the card (its JSON, `ReferralPolicy`); null when not welcome. */
+  referral: ReferralPolicy | null
+  /** Q70: the caller's own referral to this publication (a friend referred them), and until when it counts. */
+  myReferralStatus: string | null
+  myReferralExpiresAt: string | null
   myAttemptId: string | null
   myStatus: string | null
   myDeadline: string | null
@@ -334,6 +339,9 @@ export async function readPublication(request: PublicationRequest): Promise<Publ
     canStart: row.canStart === true || row.canStart === 'true',
     matched: row.matched !== false && row.matched !== 'false',
     heldUntil: textOrNull(row.heldUntil),
+    referral: referralPolicy(row.referral),
+    myReferralStatus: textOrNull(row.myReferralStatus),
+    myReferralExpiresAt: textOrNull(row.myReferralExpiresAt),
     myAttemptId: textOrNull(row.myAttemptId),
     myStatus: textOrNull(row.myStatus),
     myDeadline: textOrNull(row.myDeadline),
@@ -639,6 +647,8 @@ export const claimRedemption = (scannedKey: string, redemptionId: string) =>
 export interface RedemptionRow {
   redemptionId: string
   attemptId: string
+  /** Q70: what earned it; a referral's `attemptId` is the referral, which has no result. */
+  sourceKind: 'ATTEMPT' | 'REFERRAL'
   code: string
   publicationId: string
   publicationName: string
@@ -656,6 +666,7 @@ export async function readOpenRedemptions(): Promise<RedemptionRow[]> {
   return page.items.map((row) => ({
     redemptionId: String(row.redemptionId),
     attemptId: String(row.attemptId ?? ''),
+    sourceKind: row.sourceKind === 'REFERRAL' ? 'REFERRAL' : 'ATTEMPT',
     code: String(row.code ?? ''),
     publicationId: String(row.publicationId),
     publicationName: String(row.publicationName ?? ''),
@@ -681,6 +692,8 @@ export const disputeCashReward = (cashRewardId: string, note: string) =>
 export interface CashRewardRow {
   cashRewardId: string
   attemptId: string
+  /** Q70: what earned it; a referral's `attemptId` is the referral, which has no result. */
+  sourceKind: 'ATTEMPT' | 'REFERRAL'
   code: string
   publicationId: string
   publicationName: string
@@ -698,6 +711,7 @@ export async function readOpenCashRewards(): Promise<CashRewardRow[]> {
   return page.items.map((row) => ({
     cashRewardId: String(row.cashRewardId),
     attemptId: String(row.attemptId ?? ''),
+    sourceKind: row.sourceKind === 'REFERRAL' ? 'REFERRAL' : 'ATTEMPT',
     code: String(row.code ?? ''),
     publicationId: String(row.publicationId),
     publicationName: String(row.publicationName ?? ''),
@@ -708,6 +722,14 @@ export async function readOpenCashRewards(): Promise<CashRewardRow[]> {
     markedPaidAt: textOrNull(row.markedPaidAt),
     confirmBy: textOrNull(row.confirmBy),
   }))
+}
+
+/**
+ * Where a reward record leads (Q70, D-Q70-20): its attempt's result, or for a referral's reward the referral's page.
+ */
+export function rewardPath(row: { attemptId: string; sourceKind?: string }): string {
+  return row.sourceKind === 'REFERRAL' ? `/referral/${encodeURIComponent(row.attemptId)}`
+    : `/result/${encodeURIComponent(row.attemptId)}`
 }
 
 /** The result of one of the caller's own attempts; an `ApiError` 404 when it is not theirs or does not exist. */
@@ -810,5 +832,39 @@ export async function readHistory(request: HistoryRequest): Promise<QueryPage<Hi
       submittedAt: textOrNull(row.submittedAt),
       deadline: String(row.deadline ?? ''),
     })),
+  }
+}
+
+/** Q70: how a referral reward reaches the referrer (`RewardMethod`). */
+export type ReferralMethod = 'PLATFORM' | 'SPONSOR_CASH' | 'OFFLINE_REDEEM' | 'DIGITAL_PRIZE'
+
+/** Q70 (D-Q70-10): a publication's "referrals welcome", as `ReferralPolicy` writes it. */
+export interface ReferralPolicy {
+  quota: number
+  method: ReferralMethod
+  amount: number
+  description: string | null
+  referrerRequires: 'NONE' | 'ANSWERED' | 'PASSED'
+  refereeRules: string[]
+  days: number
+}
+
+/** The policy of a template's `referral` column (its JSON), or null when there is none or it cannot be read. */
+export function referralPolicy(value: unknown): ReferralPolicy | null {
+  if (value === null || value === undefined || value === '') return null
+  try {
+    const raw = (typeof value === 'string' ? JSON.parse(value) : value) as Record<string, unknown>
+    if (!raw || typeof raw !== 'object') return null
+    return {
+      quota: Number(raw.quota),
+      method: String(raw.method) as ReferralMethod,
+      amount: Number(raw.amount),
+      description: typeof raw.description === 'string' ? raw.description : null,
+      referrerRequires: (raw.referrerRequires ?? 'NONE') as ReferralPolicy['referrerRequires'],
+      refereeRules: Array.isArray(raw.refereeRules) ? raw.refereeRules.map(String) : [],
+      days: Number(raw.days),
+    }
+  } catch {
+    return null
   }
 }

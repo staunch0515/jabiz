@@ -58,7 +58,9 @@ public final class QbRoles {
         // Q48c: headquarters' own AI prospecting, and every owner's prospects.
         QbPermissions.PROSPECT_USE, QbPermissions.ADMIN_PROSPECT,
         // Q69: the certifications' rounds, grants and revocations, and the official publishers.
-        QbPermissions.CERTIFICATION_MANAGE, QbPermissions.CERTIFICATION_ADMIN);
+        QbPermissions.CERTIFICATION_MANAGE, QbPermissions.CERTIFICATION_ADMIN,
+        // Q70: every referral (support: who referred whom, and what came of it).
+        QbPermissions.REFERRAL_READ);
 
     /**
      * What an operator's member holds (Q48a, D-Q48-4): reviewing sponsors and publications (final, with the platform's
@@ -97,7 +99,9 @@ public final class QbRoles {
         // Q14: a taker's transfer at once, with the daily run's checks.
         QbPermissions.TRANSFER_NOW,
         // Q13b: bank withdrawals, paid by hand from the account number revealed one at a time.
-        QbPermissions.PAYOUT_BANK_REVEAL, QbPermissions.WITHDRAWAL_PAY);
+        QbPermissions.PAYOUT_BANK_REVEAL, QbPermissions.WITHDRAWAL_PAY,
+        // Q70: the referrals, whose rewards the monthly report counts.
+        QbPermissions.REFERRAL_READ);
 
     /**
      * What the super administrator holds beyond the other two: bans, reading parameters, proposing controlled changes,

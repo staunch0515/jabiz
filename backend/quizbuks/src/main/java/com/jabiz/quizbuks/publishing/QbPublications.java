@@ -119,6 +119,8 @@ public final class QbPublications {
                 decimal(PublishingLimits.MAX_DIGITAL_SEND_DAYS))));
         eb.field("sealedDigitalContent", f -> f.physicalColumn("sealed_digital_content").sensitive()
             .asText(PublishingLimits.SEALED_LENGTH));
+        // Q70 (D-Q70-10): "referrals welcome", ReferralPolicy's JSON; none when not welcome. Frozen with the policy.
+        eb.field("referral", f -> f.physicalColumn("referral").asText(PublishingLimits.REFERRAL_LENGTH));
         eb.field("fullScore", f -> f.physicalColumn("full_score").processOnly().asNumeric(7, 0));
         eb.field("maxReward", f -> f.physicalColumn("max_reward").processOnly().asMonetary("JPY", 0));
         eb.field("maxSpend", f -> f.physicalColumn("max_spend").processOnly().asMonetary("JPY", 0));
@@ -395,6 +397,9 @@ public final class QbPublications {
         eb.field("digitalSendDays", f -> f.physicalColumn("digital_send_days").immutable(true).asNumeric(3, 0));
         eb.field("sealedDigitalContent", f -> f.physicalColumn("sealed_digital_content").immutable(true)
             .sensitive().asText(PublishingLimits.SEALED_LENGTH));
+        // Q70: the referral policy as submitted (ReferralPolicy's JSON), for the link, the claim and the reward.
+        eb.field("referral", f -> f.physicalColumn("referral").immutable(true)
+            .asText(PublishingLimits.REFERRAL_LENGTH));
         eb.field("wentOnAt", f -> f.physicalColumn("went_on_at").immutable(true).required(true)
             .asTemporal(TemporalRole.EVENT_TIME));
         // Q48b: the sponsor's operator when it went on (null: headquarters'); the commission of its rewards is

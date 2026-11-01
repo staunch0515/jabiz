@@ -17,7 +17,8 @@ steps:
       paramsCreated: [qb.app.min-version, qb.stats.min-group, qb.support.email,
         qb.broadcast.sponsor.max-per-publication, qb.broadcast.sponsor.min-interval-hours, qb.broadcast.expires-days,
         qb.payout.reminder-days, qb.broadcast.stats.min-audience, qb.reward.cash.confirm-days,
-        qb.reward.cash.pay-days, qb.reward.redeem-days, qb.reward.digital.send-days, qb.ai.candidates.expire-days,
+        qb.reward.cash.pay-days, qb.reward.redeem-days, qb.reward.digital.send-days, qb.referral.per-referrer-daily,
+        qb.referral.per-referrer-total, qb.ai.candidates.expire-days,
         qb.ai.price.input-per-mtok-usd, qb.ai.price.output-per-mtok-usd]
       paramsProposed: [qb.creator-fee-rate, qb.transfer.threshold, qb.transfer.review-above, qb.transfer.enabled,
         qb.review.sponsor.auto, qb.review.publication.auto, qb.topup.min, qb.topup.max, qb.transfer.fee,

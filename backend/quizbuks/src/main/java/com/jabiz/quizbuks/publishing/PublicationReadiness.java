@@ -24,7 +24,28 @@ public final class PublicationReadiness {
     public record Draft(UUID versionId, String name, String regions, Instant startAt, Instant endAt,
         Integer timeLimitSec, Integer passScore, BigDecimal budgetCap, Integer maxWinners, String rewardMethod,
         String redeemDescription, String audience, String digitalDelivery, String digitalDescription,
-        boolean hasDigitalContent) {
+        boolean hasDigitalContent, ReferralPolicy referral) {
+
+        /** As before Q70: no referrals. */
+        public Draft(UUID versionId, String name, String regions, Instant startAt, Instant endAt,
+            Integer timeLimitSec, Integer passScore, BigDecimal budgetCap, Integer maxWinners, String rewardMethod,
+            String redeemDescription, String audience, String digitalDelivery, String digitalDescription,
+            boolean hasDigitalContent) {
+            this(versionId, name, regions, startAt, endAt, timeLimitSec, passScore, budgetCap, maxWinners,
+                rewardMethod, redeemDescription, audience, digitalDelivery, digitalDescription, hasDigitalContent, null);
+        }
+
+        /**
+         * The codes a pool must hold (Q33, Q70 D-Q70-19): the winners, and the referral quota when its digital
+         * prizes come from the same pool; zero when the prize is not pooled.
+         */
+        public int poolNeeded() {
+            int needed = pooled() && maxWinners != null ? maxWinners : 0;
+            if (pooled() && referral != null && RewardMethod.DIGITAL_PRIZE.equals(referral.method())) {
+                needed += referral.quota();
+            }
+            return needed;
+        }
 
         /** As before Q33: no digital prize. */
         public Draft(UUID versionId, String name, String regions, Instant startAt, Instant endAt,
@@ -174,6 +195,14 @@ public final class PublicationReadiness {
                         "max", PublishingLimits.MAX_POOL_WINNERS)));
             }
         }
+        // Q70: "referrals welcome" (D-Q70-10, D-Q70-11). A referral prize from the pool needs a pooled publication.
+        problems.addAll(ReferralPolicy.problems(draft.referral(), draft.invited(), version != null && version.survey()));
+        if (draft.referral() != null && RewardMethod.DIGITAL_PRIZE.equals(draft.referral().method())
+            && !RewardMethod.DIGITAL_PRIZE.equals(draft.rewardMethod())) {
+            problems.add(new Violation("referral.method", PublishingCodes.REFERRAL_METHOD_INVALID, "A digital prize "
+                + "for referrals is delivered as the publication's: choose a digital prize for it too",
+                Map.of("method", RewardMethod.DIGITAL_PRIZE)));
+        }
         if (version != null) {
             QuizCompleteness.check(version).forEach(problem -> problems.add(new Violation(
                 problem.field() == null ? "version" : "version." + problem.field(), problem.ruleCode(),
@@ -209,8 +238,15 @@ public final class PublicationReadiness {
      * nor revoked against {@code maxWinners}; nothing for the other deliveries.
      */
     public static List<Violation> pool(Draft draft, int available) {
-        if (!draft.pooled() || draft.maxWinners() == null || available >= draft.maxWinners()) {
+        if (!draft.pooled() || draft.maxWinners() == null || available >= draft.poolNeeded()) {
             return List.of();
+        }
+        if (available >= draft.maxWinners()) {
+            // Q70 (D-Q70-19): the winners are covered, the referral quota is not.
+            return List.of(new Violation("referral.quota", PublishingCodes.REFERRAL_POOL_SHORT, "The pool has "
+                + available + " codes for " + draft.maxWinners() + " winners and " + draft.referral().quota()
+                + " referrals: load more or lower the quota", Map.of("available", available,
+                    "max", draft.poolNeeded())));
         }
         return List.of(new Violation("maxWinners", PublishingCodes.DIGITAL_POOL_SHORT, "The pool has " + available
             + " codes for " + draft.maxWinners() + " winners: load more or lower the winners",
