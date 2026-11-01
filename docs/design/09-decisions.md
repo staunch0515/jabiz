@@ -2358,3 +2358,39 @@ D17 规定公开只读、匿名不写任何东西，平台没有办法记下匿�
 
 **剩余风险**：守卫要的数据须以用户编号能读到；新账号没有用户编号，只能按入口、途径与地址判断（如地址的域）。守卫在给出角色时判断一次，之后数据变化（客户被封禁）
 不撤回已有的角色——那是登录守卫的事。
+
+---
+
+## D67 Sign in with Apple
+
+**背景**：QuizBuks 的答题者 App 要上架 App Store（QuizBuks Q49）。App Store 审核指南 4.8 要求：提供第三方登录（Google、Facebook、LINE）的 App 也要提供 Apple 登录；
+5.1.1(v) 要求 App 内可以删除账号，用 Apple 登录的账号删除时要撤销 Apple 的授权（Apple 的 REST API `/auth/revoke`）。D39 时 Apple 推后（16f-2），因为当时没有开发者账号；
+Apple 与平台的 OIDC（10 §12）有四处不合：客户端密钥不是固定文本、答复只能以表单回传、姓名不在 ID 令牌中、文档中没有 PKCE。需求方 2026-11-01 确认：在 App 与商户后台两个入口提供，
+删除与解除关联时撤销授权，都在 17j 中做。
+
+**决定**
+1. 提供方的 `kind` 增加 `apple`（D39 实现说明第 6 条：差异由种类决定）。缺省 issuer `https://appleid.apple.com`，缺省范围 `openid name email`（只能是这三项）。
+   不用 `client-secret`：设置 `apple.team-id`、`apple.key-id`、`apple.private-key`（`.p8` 的 EC P-256 私钥，只来自环境变量）。每次换令牌以 ES256 签一个客户端密钥
+   （`iss` 团队、`sub` 为 `client-id` 即 Services ID、`aud` 为 `https://appleid.apple.com`，有效 1 小时、剩 10 分钟时重签），以 `client_secret_post` 送出。
+2. **不带 PKCE**：授权请求不带 `code_challenge`，换令牌不带 `code_verifier`（Apple 未写明支持；带上未知参数的风险不值得）。授权码仍由 ID 令牌的 nonce、state 与浏览器的 binder、
+   只有服务器能签的客户端密钥保护（截获授权码的人没有密钥，换不了令牌；注入别人的授权码过不了 nonce 与 binder）。
+3. **答复经服务器转到入口的回调**：授权请求 `response_mode=form_post`、`redirect_uri` 为 `apple.form-post-uri`（`/api/auth/oidc/{id}/form-post`，在 Apple 登记为 Return URL）。
+   该接口（公开、限流）只按 state 找到尚未使用、未过期、属于该提供方的一轮，以 303 把浏览器送到该轮所记入口的配置回调，查询中带 `state` 与 `code`（拒绝时带 `error`）；之后与其他提供方相同：
+   页面以 binder 调用回调（登录）或关联的回调，state 在那里才用掉。不转到请求中的任何地址（不是开放重定向）。
+4. **首次授权的姓名**：Apple 只在第一次授权时在表单的 `user` 中给出姓名。记在该轮名下（`sec_oidc_state_name`，只记第一次、只记在该提供方的一轮上；回调用掉该轮时即删除，没用完的随过期的一轮删除），回调时 ID 令牌没有 `name` 即以它为显示名
+   （开户时；清理与截断同 `name`）。名与姓之间空一格，任一含汉字、假名或谚文时姓在前、不空格。`user` 中的邮箱不用，以签名的 ID 令牌为准。
+   Apple 的邮箱由 Apple 验证，隐藏邮箱（`@privaterelay.appleid.com`）也是受担保的地址，照 D39 开户。
+5. **撤销授权（17j-b）**：换令牌得到的刷新令牌以 `SealedSecrets`（`JABIZ_SEAL_KEY`，有 Apple 提供方时启动检查要求它）为该关联密封保存（登录与关联时由子流程写入，每次登录换成新的）。
+   不在每条删除关联的途径上各写一段：定时任务找出**关联已不在**的令牌（账号抹除、本人解除、管理员删除都一样），逐项以 `internal()` 流程用平台的提供方客户端（同换令牌，超时 5 秒）
+   调用发现文档的 `revocation_endpoint`（Apple 的 `/auth/revoke`）；成功即删除令牌，失败按 15 分钟起倍增、至多一天的间隔重试，至多 12 次后留给管理员。不在请求中直接调用 Apple。
+6. **前端**：`OidcButtons` 对 `kind: apple` 显示 Apple 的标志与 Apple 规定的标题（"Sign in with Apple" / "通过 Apple 登录" / "Appleでサインイン"，注册时"Sign up …"），不用 `labels`；
+   标志取文字颜色（浅色按钮上黑、深色上白，同 Apple 的白色描边与黑色样式；D44 的品牌例外）。
+
+**理由**：四处差异都只在一种提供方上，按 `kind` 处理而不加通用开关（D39 实现说明第 6 条），其他提供方的行为与检查不变。表单经服务器转一次，前端的回调页、binder 与关联流程都不用改，
+Apple 登录与其他提供方走同一条路径；转发只看库中的一轮，不看请求，因而不会被用来跳到别处。姓名只在一处、只有一次，放进用完即删、随过期的一轮删除的一行；另放一表，登录请求的表照旧只插入。
+
+**放弃的方案**：①前端直接收 Apple 的 POST（单页应用不能）；②`response_mode=query`（Apple 不允许同时要姓名与邮箱）；③在服务器上直接完成登录、把令牌放进重定向的 URL（令牌会进入浏览器历史与日志，
+binder 的保护也落空）；④带 PKCE 试试看（未写明支持，失败时整个 Apple 登录不可用）；⑤刷新令牌不保存、删除时以授权码撤销（删除时已没有授权码）。
+
+**剩余风险**：Apple 的发现文档、令牌端点与 ID 令牌的细节未能从本环境直接核对（`appleid.apple.com` 不在网络白名单中），平台以本地桩覆盖，上线前以真实的 Services ID 验证一次；
+若 Apple 实际支持并要求 PKCE，需要改第 2 条。App 内（原生）的 Apple 登录在 17l。
