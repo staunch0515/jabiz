@@ -166,7 +166,8 @@ public final class QuizEditing {
         Map<String, List<EntityInstance>> imagesOf = groups(images, "materialId");
         Map<String, List<EntityInstance>> optionsOf = groups(options, "questionId");
         List<QuizSnapshot.Material> m = new ArrayList<>();
-        for (EntityInstance material : ordered(materials)) {
+        // Q73a: the base materials only; the other languages' are in QuizLanguages.
+        for (EntityInstance material : QuizLanguages.bases(materials)) {
             List<QuizSnapshot.Image> list = new ArrayList<>();
             for (EntityInstance image : ordered(imagesOf.getOrDefault(key(material.id()), List.of()))) {
                 list.add(new QuizSnapshot.Image(list.size() + 1, uuid(image.get("image")), image.get("caption")));

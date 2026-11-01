@@ -102,18 +102,25 @@ public class ContentConfig {
     }
 
     @Bean
+    EntityDefinition qbContentTranslationEntity() {
+        return QbContent.TRANSLATION_ENTITY;
+    }
+
+    @Bean
     DatasetDefinition qbQuizDataset() {
         return defaultDataset(QbContent.QUIZ, 100);
     }
 
     @Bean
     DatasetDefinition qbMaterialDataset() {
-        return defaultDataset(QbContent.MATERIAL, 100);
+        return defaultDataset(QbContent.MATERIAL, 100);  // ≥ MAX_LANGUAGES × MAX_MATERIALS (Q73a)
     }
 
     @Bean
     DatasetDefinition qbMaterialImageDataset() {
-        return defaultDataset(QbContent.MATERIAL_IMAGE, ContentLimits.MAX_MATERIALS * ContentLimits.MAX_IMAGES);
+        // Q73a: a material may stand in each of the quiz's other languages too, with images of its own.
+        return defaultDataset(QbContent.MATERIAL_IMAGE,
+            ContentLanguages.MAX_LANGUAGES * ContentLimits.MAX_MATERIALS * ContentLimits.MAX_IMAGES);
     }
 
     @Bean
@@ -135,6 +142,17 @@ public class ContentConfig {
     DatasetDefinition qbVersionFileDataset() {
         // A version registers at most MAX_FILES_PER_VERSION files; a removal releases them in chunks of this size.
         return defaultDataset(QbContent.VERSION_FILE, ContentLimits.RELEASE_CHUNK);
+    }
+
+    @Bean
+    DatasetDefinition qbContentTranslationDataset() {
+        // A copy writes every translation of the quiz at once.
+        return defaultDataset(QbContent.TRANSLATION, ContentLanguages.MAX_TRANSLATION_ROWS);
+    }
+
+    @Bean
+    DatasetDefinition qbSponsorTranslationDataset() {
+        return sponsorDataset(QbContent.TRANSLATION);
     }
 
     @Bean
@@ -305,5 +323,15 @@ public class ContentConfig {
     @Bean
     ProcessDefinition<MaterialProcesses.ReorderInput, EditOutput, ProcessContext> qbMaterialReorder() {
         return MaterialProcesses.reorder();
+    }
+
+    @Bean
+    ProcessDefinition<TranslationProcesses.LanguagesInput, EditOutput, ProcessContext> qbQuizLanguagesSet() {
+        return TranslationProcesses.setLanguages();
+    }
+
+    @Bean
+    ProcessDefinition<TranslationProcesses.SaveInput, EditOutput, ProcessContext> qbTranslationSave() {
+        return TranslationProcesses.save();
     }
 }

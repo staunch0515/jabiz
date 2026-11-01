@@ -34,7 +34,8 @@ public final class QuizSnapshots {
 
     public static Map<String, Object> toMap(QuizSnapshot snapshot) {
         Map<String, Object> map = new LinkedHashMap<>();
-        map.put("schema", QuizSnapshot.SCHEMA);
+        // Q73a: only a snapshot with translations is of the new schema; one without stays as it was, text and hash.
+        map.put("schema", snapshot.translations().isEmpty() ? QuizSnapshot.SCHEMA : QuizSnapshot.SCHEMA_LANGUAGES);
         map.put("title", snapshot.title());
         map.put("intro", snapshot.intro());
         map.put("cover", text(snapshot.cover()));
@@ -45,8 +46,49 @@ public final class QuizSnapshots {
         if (snapshot.survey()) {
             map.put("kind", QbContent.KIND_SURVEY);
         }
+        map.put("materials", materials(snapshot.materials()));
+        List<Object> questions = new ArrayList<>();
+        for (QuizSnapshot.Question question : snapshot.questions()) {
+            Map<String, Object> q = new LinkedHashMap<>();
+            q.put("no", question.no());
+            q.put("stem", question.stem());
+            q.put("image", text(question.image()));
+            q.put("points", question.points());
+            if (snapshot.survey()) {
+                q.put("selection", question.selection());
+            }
+            List<Object> options = new ArrayList<>();
+            for (QuizSnapshot.Option option : question.options()) {
+                Map<String, Object> o = new LinkedHashMap<>();
+                o.put("no", option.no());
+                o.put("text", option.text());
+                o.put("image", text(option.image()));
+                o.put("correct", option.correct());
+                options.add(o);
+            }
+            q.put("options", options);
+            questions.add(q);
+        }
+        map.put("questions", questions);
+        if (!snapshot.translations().isEmpty()) {
+            Map<String, Object> translations = new LinkedHashMap<>();
+            snapshot.translations().forEach((language, t) -> {
+                Map<String, Object> l = new LinkedHashMap<>();
+                l.put("texts", new LinkedHashMap<>(t.texts()));
+                Map<String, Object> images = new LinkedHashMap<>();
+                t.images().forEach((key, image) -> images.put(key, text(image)));
+                l.put("images", images);
+                l.put("materials", materials(t.materials()));
+                translations.put(language, l);
+            });
+            map.put("translations", translations);
+        }
+        return map;
+    }
+
+    private static List<Object> materials(List<QuizSnapshot.Material> list) {
         List<Object> materials = new ArrayList<>();
-        for (QuizSnapshot.Material material : snapshot.materials()) {
+        for (QuizSnapshot.Material material : list) {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("no", material.no());
             m.put("kind", material.kind());
@@ -71,45 +113,12 @@ public final class QuizSnapshots {
             }
             materials.add(m);
         }
-        map.put("materials", materials);
-        List<Object> questions = new ArrayList<>();
-        for (QuizSnapshot.Question question : snapshot.questions()) {
-            Map<String, Object> q = new LinkedHashMap<>();
-            q.put("no", question.no());
-            q.put("stem", question.stem());
-            q.put("image", text(question.image()));
-            q.put("points", question.points());
-            if (snapshot.survey()) {
-                q.put("selection", question.selection());
-            }
-            List<Object> options = new ArrayList<>();
-            for (QuizSnapshot.Option option : question.options()) {
-                Map<String, Object> o = new LinkedHashMap<>();
-                o.put("no", option.no());
-                o.put("text", option.text());
-                o.put("image", text(option.image()));
-                o.put("correct", option.correct());
-                options.add(o);
-            }
-            q.put("options", options);
-            questions.add(q);
-        }
-        map.put("questions", questions);
-        return map;
+        return materials;
     }
 
-    public static QuizSnapshot fromMap(Map<String, ?> map) {
-        Object schema = map.get("schema");
-        if (!(schema instanceof Number n) || n.intValue() != QuizSnapshot.SCHEMA) {
-            throw new IllegalArgumentException("Not a quiz snapshot of schema " + QuizSnapshot.SCHEMA + ": " + schema);
-        }
-        Object kind = map.get("kind");
-        if (kind != null && !QbContent.KIND_SURVEY.equals(kind)) {
-            throw new IllegalArgumentException("Not a kind of quiz: " + kind);
-        }
-        boolean survey = kind != null;
+    private static List<QuizSnapshot.Material> materialsOf(Object value) {
         List<QuizSnapshot.Material> materials = new ArrayList<>();
-        for (Map<String, ?> m : maps(map.get("materials"))) {
+        for (Map<String, ?> m : maps(value)) {
             List<QuizSnapshot.Image> images = new ArrayList<>();
             for (Map<String, ?> i : maps(m.get("images"))) {
                 images.add(new QuizSnapshot.Image(number(i.get("no")), uuid(i.get("image")), string(i.get("caption"))));
@@ -118,6 +127,22 @@ public final class QuizSnapshots {
                 string(m.get("title")), string(m.get("description")), string(m.get("body")), string(m.get("url")),
                 uuid(m.get("pdf")), uuid(m.get("audio")), images, Boolean.TRUE.equals(m.get("watchToAnswer"))));
         }
+        return materials;
+    }
+
+    public static QuizSnapshot fromMap(Map<String, ?> map) {
+        Object schema = map.get("schema");
+        if (!(schema instanceof Number n)
+            || n.intValue() != QuizSnapshot.SCHEMA && n.intValue() != QuizSnapshot.SCHEMA_LANGUAGES) {
+            throw new IllegalArgumentException("Not a quiz snapshot of schema " + QuizSnapshot.SCHEMA + " or "
+                + QuizSnapshot.SCHEMA_LANGUAGES + ": " + schema);
+        }
+        Object kind = map.get("kind");
+        if (kind != null && !QbContent.KIND_SURVEY.equals(kind)) {
+            throw new IllegalArgumentException("Not a kind of quiz: " + kind);
+        }
+        boolean survey = kind != null;
+        List<QuizSnapshot.Material> materials = materialsOf(map.get("materials"));
         List<QuizSnapshot.Question> questions = new ArrayList<>();
         for (Map<String, ?> q : maps(map.get("questions"))) {
             List<QuizSnapshot.Option> options = new ArrayList<>();
@@ -128,10 +153,66 @@ public final class QuizSnapshots {
             questions.add(new QuizSnapshot.Question(number(q.get("no")), string(q.get("stem")), uuid(q.get("image")),
                 number(q.get("points")), options, survey ? string(q.get("selection")) : null));
         }
+        Map<String, QuizSnapshot.Language> translations = new LinkedHashMap<>();
+        if (map.get("translations") instanceof Map<?, ?> given) {
+            given.forEach((language, value) -> {
+                if (!(value instanceof Map<?, ?> l)) {
+                    throw new IllegalArgumentException("Not a translation: " + value);
+                }
+                Map<String, String> texts = new LinkedHashMap<>();
+                if (l.get("texts") instanceof Map<?, ?> t) {
+                    t.forEach((key, text) -> texts.put(String.valueOf(key), string(text)));
+                }
+                Map<String, UUID> images = new LinkedHashMap<>();
+                if (l.get("images") instanceof Map<?, ?> i) {
+                    i.forEach((key, image) -> images.put(String.valueOf(key), uuid(image)));
+                }
+                translations.put(String.valueOf(language),
+                    new QuizSnapshot.Language(texts, images, materialsOf(l.get("materials"))));
+            });
+        }
         Object limit = map.get("timeLimitSec");
         return new QuizSnapshot(string(map.get("title")), string(map.get("intro")), uuid(map.get("cover")),
             limit == null ? null : number(limit), Boolean.TRUE.equals(map.get("aiGenerated")), materials, questions,
-            survey);
+            survey, translations);
+    }
+
+    /**
+     * The quiz as a taker reads it in one of its languages (Q73a §2.5): the same structure, numbers and scoring, with
+     * the text of that language, its own images where it has them, and its own materials where it has them (each
+     * with its {@code language}; the base's materials have none). The base's when the language is none of the
+     * snapshot's translations: the caller checks that it is the version's base. The result has no translations.
+     */
+    public static QuizSnapshot in(QuizSnapshot snapshot, String language) {
+        QuizSnapshot.Language t = snapshot.translations().get(language);
+        if (t == null) {
+            return new QuizSnapshot(snapshot.title(), snapshot.intro(), snapshot.cover(), snapshot.timeLimitSec(),
+                snapshot.aiGenerated(), snapshot.materials(), snapshot.questions(), snapshot.survey());
+        }
+        Map<Integer, QuizSnapshot.Material> own = new LinkedHashMap<>();
+        t.materials().forEach(material -> own.put(material.no(), material));
+        List<QuizSnapshot.Material> materials = new ArrayList<>();
+        for (QuizSnapshot.Material base : snapshot.materials()) {
+            QuizSnapshot.Material m = own.get(base.no());
+            materials.add(m == null ? base : new QuizSnapshot.Material(base.no(), base.kind(), m.title(),
+                m.description(), m.body(), m.url(), m.pdf(), m.audio(), m.images(), base.watchToAnswer(), language));
+        }
+        List<QuizSnapshot.Question> questions = new ArrayList<>();
+        for (QuizSnapshot.Question q : snapshot.questions()) {
+            List<QuizSnapshot.Option> options = new ArrayList<>();
+            for (QuizSnapshot.Option o : q.options()) {
+                options.add(new QuizSnapshot.Option(o.no(),
+                    t.texts().getOrDefault(QuizSnapshot.optionTextKey(q.no(), o.no()), o.text()),
+                    t.images().getOrDefault(QuizSnapshot.optionImageKey(q.no(), o.no()), o.image()), o.correct()));
+            }
+            questions.add(new QuizSnapshot.Question(q.no(),
+                t.texts().getOrDefault(QuizSnapshot.stemKey(q.no()), q.stem()),
+                t.images().getOrDefault(QuizSnapshot.questionImageKey(q.no()), q.image()), q.points(), options,
+                q.selection()));
+        }
+        return new QuizSnapshot(t.texts().getOrDefault(QuizSnapshot.TITLE_KEY, snapshot.title()),
+            t.texts().getOrDefault(QuizSnapshot.INTRO_KEY, snapshot.intro()), snapshot.cover(),
+            snapshot.timeLimitSec(), snapshot.aiGenerated(), materials, questions, snapshot.survey());
     }
 
     /** The canonical text: keys sorted, no white space, absent values written as {@code null}. */
@@ -173,6 +254,15 @@ public final class QuizSnapshots {
         for (QuizSnapshot.Question question : snapshot.questions()) {
             add(files, question.image(), IMAGE);
             question.options().forEach(option -> add(files, option.image(), IMAGE));
+        }
+        // Q73a: each other language's own images and materials.
+        for (QuizSnapshot.Language language : snapshot.translations().values()) {
+            language.images().values().forEach(image -> add(files, image, IMAGE));
+            for (QuizSnapshot.Material material : language.materials()) {
+                add(files, material.pdf(), PDF);
+                add(files, material.audio(), AUDIO);
+                material.images().forEach(image -> add(files, image.image(), IMAGE));
+            }
         }
         return files;
     }

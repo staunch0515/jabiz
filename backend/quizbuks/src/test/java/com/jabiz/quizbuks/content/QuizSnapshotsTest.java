@@ -91,7 +91,7 @@ class QuizSnapshotsTest {
 
     @Test
     void refusesOtherSchemas() {
-        assertThatThrownBy(() -> QuizSnapshots.fromJson("{\"schema\":2}"))
+        assertThatThrownBy(() -> QuizSnapshots.fromJson("{\"schema\":3}"))
             .isInstanceOf(IllegalArgumentException.class);
     }
 

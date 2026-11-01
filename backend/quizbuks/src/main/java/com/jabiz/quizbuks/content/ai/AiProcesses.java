@@ -15,6 +15,7 @@ import com.jabiz.quizbuks.content.ContentLimits;
 import com.jabiz.quizbuks.content.MaterialKind;
 import com.jabiz.quizbuks.content.QbContent;
 import com.jabiz.quizbuks.content.QuizEditing;
+import com.jabiz.quizbuks.content.QuizLanguages;
 import com.jabiz.quizbuks.identity.CallerChecks;
 import com.jabiz.quizbuks.messaging.ConsentChecks;
 import com.jabiz.quizbuks.messaging.QbLegal;
@@ -280,7 +281,8 @@ public final class AiProcesses {
         Set<String> chosen = new HashSet<>();
         input.materialIds().forEach(id -> chosen.add(id.toString()));
         List<UUID> files = new ArrayList<>();
-        for (EntityInstance material : rows(ctx, MATERIAL_ROWS)) {
+        // Q73a: only the base materials are sent; the other languages' are not the quiz's source.
+        for (EntityInstance material : QuizLanguages.bases(rows(ctx, MATERIAL_ROWS))) {
             Object pdf = material.get("pdf");
             if (chosen.contains(String.valueOf(material.id())) && MaterialKind.PDF.name().equals(material.get("kind"))
                 && pdf != null) {
@@ -377,7 +379,7 @@ public final class AiProcesses {
             problems.add(new Violation("quizId", AiCodes.SURVEY_UNSUPPORTED, "Questions are not written for surveys",
                 Map.of()));
         }
-        List<EntityInstance> materials = QuizEditing.ordered(rows(ctx, MATERIAL_ROWS));
+        List<EntityInstance> materials = QuizLanguages.bases(rows(ctx, MATERIAL_ROWS));
         Map<String, Integer> numbers = new LinkedHashMap<>();
         for (int i = 0; i < materials.size(); i++) {
             numbers.put(String.valueOf((Object) materials.get(i).id()), i + 1);

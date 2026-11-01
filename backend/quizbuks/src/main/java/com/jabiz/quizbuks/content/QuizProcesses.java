@@ -102,8 +102,13 @@ public final class QuizProcesses {
 
     public record CloneOutput(UUID quizId, UUID clonedFrom, Integer versionNo, long revision, Instant editedAt) {}
 
+    /**
+     * @param languages  Q73a: the version's languages, the base first
+     * @param incomplete the quiz's other languages left out of the version, with what each lacks
+     */
     public record VersionOutput(UUID quizId, UUID versionId, int versionNo, String label, int questionCount,
-        int materialCount, int fullScore, String contentHash, long revision) {}
+        int materialCount, int fullScore, String contentHash, long revision, List<String> languages,
+        List<QuizLanguages.Status> incomplete) {}
 
     static final String FOUND = "found";
     static final String RELEASE = "release";
@@ -165,6 +170,12 @@ public final class QuizProcesses {
         EntityInstance quiz = found.getFirst();
         if (!QuizEditing.current(ctx, quiz, input.baseRevision())) {
             return;
+        }
+        // Q73a (D-Q73-6): the base cannot change under its translations.
+        if (input.language() != null && !input.language().equals(quiz.get("language"))
+            && !ContentLanguages.parseList(quiz.get("translationLanguages")).isEmpty()) {
+            ctx.reject(new Violation("language", ContentCodes.BASE_HAS_TRANSLATIONS, "The base language cannot change "
+                + "while the quiz has other languages", Map.of("language", input.language())));
         }
         if (input.kind() != null && !input.kind().equals(quiz.get("kind"))) {
             ctx.reject(new Violation("kind", ContentCodes.QUIZ_KIND_FIXED, "A quiz's kind cannot change; copy it "
@@ -229,6 +240,8 @@ public final class QuizProcesses {
                 .steps(b -> QuizEditing.loadAll(b, "Load the questions", QbContent.QUESTION, QUESTIONS))
                 .steps(b -> QuizEditing.loadAll(b, "Load the options", QbContent.OPTION, OPTIONS))
                 .steps(b -> QuizEditing.loadAll(b, "Load the version files", QbContent.VERSION_FILE, VERSION_FILES))
+                .steps(b -> QuizEditing.loadAll(b, "Load the translations", QbContent.TRANSLATION,
+                    TranslationProcesses.TRANSLATIONS))
                 // Under the quiz's lock: a submission holds it too (shared), so none slips in meanwhile.
                 .steps(QuizProcesses::loadSubmitted)
                 .compute("Remove the quiz", (metadata, ctx) -> remove(ctx))
@@ -302,7 +315,10 @@ public final class QuizProcesses {
         if (!QuizEditing.current(ctx, quiz, ctx.get(INPUT, QuizRef.class).baseRevision())) {
             return;
         }
-        // Parts before what they belong to: an instance still referred to cannot be deleted.
+        // Parts before what they belong to: an instance still referred to cannot be deleted (a material of another
+        // language refers to its base material, Q73a).
+        list(ctx, TranslationProcesses.TRANSLATIONS).forEach(row -> ctx.changes().delete(QbContent.TRANSLATION,
+            row.id(), row.version()));
         for (String key : List.of(IMAGES, MATERIALS, OPTIONS, QUESTIONS)) {
             String entity = switch (key) {
                 case IMAGES -> QbContent.MATERIAL_IMAGE;
@@ -310,7 +326,9 @@ public final class QuizProcesses {
                 case OPTIONS -> QbContent.OPTION;
                 default -> QbContent.QUESTION;
             };
-            list(ctx, key).forEach(row -> ctx.changes().delete(entity, row.id(), row.version()));
+            List<EntityInstance> rows = new ArrayList<>(list(ctx, key));
+            rows.sort(java.util.Comparator.comparing(row -> row.get("variantOf") == null));
+            rows.forEach(row -> ctx.changes().delete(entity, row.id(), row.version()));
         }
         // The version files are released in chunks, each its own commit within the dataset's write limit.
         Set<UUID> needed = filesStillNeeded(ctx);
@@ -380,6 +398,8 @@ public final class QuizProcesses {
                 .steps(b -> QuizEditing.loadAll(b, "Load the images", QbContent.MATERIAL_IMAGE, IMAGES))
                 .steps(b -> QuizEditing.loadAll(b, "Load the questions", QbContent.QUESTION, QUESTIONS))
                 .steps(b -> QuizEditing.loadAll(b, "Load the options", QbContent.OPTION, OPTIONS))
+                .steps(b -> QuizEditing.loadAll(b, "Load the translations", QbContent.TRANSLATION,
+                    TranslationProcesses.TRANSLATIONS))
                 .step("Load the version", QueryEntities.<ProcessContext>of(
                     QbContent.defaultDataset(QbContent.VERSION), ctx -> {
                         Integer versionNo = ctx.get(INPUT, CloneInput.class).versionNo();
@@ -392,9 +412,15 @@ public final class QuizProcesses {
         CloneInput input = ctx.get(INPUT, CloneInput.class);
         EntityInstance source = quiz(ctx);
         QuizSnapshot content;
+        Map<String, Map<String, String>> hashes = Map.of();
         if (input.versionNo() == null) {
-            content = QuizEditing.snapshot(source, list(ctx, MATERIALS), list(ctx, IMAGES), list(ctx, QUESTIONS),
-                list(ctx, OPTIONS));
+            // Q73a: the draft's other languages as they are, complete or not, and out of date where they are.
+            QuizLanguages.Draft draft = QuizLanguages.of(source, list(ctx, MATERIALS), list(ctx, IMAGES),
+                list(ctx, QUESTIONS), list(ctx, OPTIONS), list(ctx, TranslationProcesses.TRANSLATIONS));
+            QuizSnapshot base = draft.snapshot();
+            content = new QuizSnapshot(base.title(), base.intro(), base.cover(), base.timeLimitSec(),
+                base.aiGenerated(), base.materials(), base.questions(), base.survey(), draft.all());
+            hashes = draft.hashes();
         } else if (list(ctx, VERSIONS).isEmpty()) {
             ctx.reject(new Violation("versionNo", ContentCodes.VERSION_NOT_FOUND, "The quiz has no version "
                 + input.versionNo(), Map.of("versionNo", input.versionNo())));
@@ -403,7 +429,7 @@ public final class QuizProcesses {
             content = QuizSnapshots.fromJson(list(ctx, VERSIONS).getFirst().get("content"));
         }
         Object quizId = insertContent(ctx, content, text(input.title()) == null ? content.title() : input.title(),
-            content.aiGenerated(), source.id(), source.get("language"));
+            content.aiGenerated(), source.id(), source.get("language"), hashes);
         ctx.put(OUTPUT, new CloneOutput(uuid(quizId), uuid(source.id()), input.versionNo(), 1, ctx.opTime()));
     }
 
@@ -417,6 +443,16 @@ public final class QuizProcesses {
      */
     public static Object insertContent(ProcessContext ctx, QuizSnapshot content, String title, boolean aiGenerated,
         Object clonedFrom, Object language) {
+        return insertContent(ctx, content, title, aiGenerated, clonedFrom, language, Map.of());
+    }
+
+    /**
+     * As {@link #insertContent(ProcessContext, QuizSnapshot, String, boolean, Object, Object)}, with the content's
+     * other languages (Q73a): their translations, own images and materials, each translation recording the base hash
+     * {@code hashes} gives for it (a copy keeps what was out of date out of date), else the present base's.
+     */
+    public static Object insertContent(ProcessContext ctx, QuizSnapshot content, String title, boolean aiGenerated,
+        Object clonedFrom, Object language, Map<String, Map<String, String>> hashes) {
         Map<String, Object> heading = new LinkedHashMap<>();
         heading.put("title", title);
         if (language != null) {
@@ -429,33 +465,17 @@ public final class QuizProcesses {
         Map<String, Object> values = newQuiz(ctx, heading, content.kind(), aiGenerated, clonedFrom);
         values.put("questionCount", decimal(content.questions().size()));
         values.put("materialCount", decimal(content.materials().size()));
+        List<String> languages = QbContent.LANGUAGES.stream().filter(content.translations()::containsKey)
+            .filter(l -> !l.equals(values.get("language"))).toList();
+        values.put("translationLanguages", ContentLanguages.joinList(languages));
         Object quizId = ctx.changes().insert(QbContent.QUIZ, values);
         String owner = ctx.request().actorId();
+        Map<Integer, Object> materialIds = new LinkedHashMap<>();
         for (QuizSnapshot.Material material : content.materials()) {
-            Map<String, Object> m = new LinkedHashMap<>();
-            m.put("quizId", quizId);
-            m.put("ownerId", owner);
-            m.put("seq", decimal(material.no()));
-            m.put("kind", material.kind());
-            m.put("title", material.title());
-            m.put("description", material.description());
-            m.put("body", material.body());
-            m.put("url", material.url());
-            m.put("pdf", material.pdf());
-            m.put("audio", material.audio());
-            m.put("watchToAnswer", material.watchToAnswer());
-            Object materialId = ctx.changes().insert(QbContent.MATERIAL, m);
-            for (QuizSnapshot.Image image : material.images()) {
-                Map<String, Object> i = new LinkedHashMap<>();
-                i.put("materialId", materialId);
-                i.put("quizId", quizId);
-                i.put("ownerId", owner);
-                i.put("seq", decimal(image.no()));
-                i.put("image", image.image());
-                i.put("caption", image.caption());
-                ctx.changes().insert(QbContent.MATERIAL_IMAGE, i);
-            }
+            materialIds.put(material.no(), insertMaterial(ctx, quizId, owner, material, null, null));
         }
+        Map<Integer, Object> questionIds = new LinkedHashMap<>();
+        Map<String, Object> optionIds = new LinkedHashMap<>();
         for (QuizSnapshot.Question question : content.questions()) {
             Map<String, Object> q = new LinkedHashMap<>();
             q.put("quizId", quizId);
@@ -475,10 +495,113 @@ public final class QuizProcesses {
                 o.put("text", option.text());
                 o.put("image", option.image());
                 o.put("correct", option.correct());
-                ctx.changes().insert(QbContent.OPTION, o);
+                optionIds.put(QuizSnapshot.optionTextKey(question.no(), option.no()),
+                    ctx.changes().insert(QbContent.OPTION, o));
             }
+            questionIds.put(question.no(), questionId);
+        }
+        for (String translated : languages) {
+            insertLanguage(ctx, quizId, owner, translated, content, content.translations().get(translated),
+                hashes.getOrDefault(translated, Map.of()), materialIds, questionIds, optionIds);
         }
         return quizId;
+    }
+
+    private static Object insertMaterial(ProcessContext ctx, Object quizId, String owner,
+        QuizSnapshot.Material material, Object variantOf, String language) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("quizId", quizId);
+        m.put("ownerId", owner);
+        m.put("seq", decimal(material.no()));
+        m.put("kind", material.kind());
+        m.put("title", material.title());
+        m.put("description", material.description());
+        m.put("body", material.body());
+        m.put("url", material.url());
+        m.put("pdf", material.pdf());
+        m.put("audio", material.audio());
+        m.put("watchToAnswer", variantOf == null && material.watchToAnswer());
+        if (variantOf != null) {
+            m.put("variantOf", variantOf);
+            m.put("language", language);
+        }
+        Object materialId = ctx.changes().insert(QbContent.MATERIAL, m);
+        for (QuizSnapshot.Image image : material.images()) {
+            Map<String, Object> i = new LinkedHashMap<>();
+            i.put("materialId", materialId);
+            i.put("quizId", quizId);
+            i.put("ownerId", owner);
+            i.put("seq", decimal(image.no()));
+            i.put("image", image.image());
+            i.put("caption", image.caption());
+            ctx.changes().insert(QbContent.MATERIAL_IMAGE, i);
+        }
+        return materialId;
+    }
+
+    private static final java.util.regex.Pattern SNAPSHOT_KEY =
+        java.util.regex.Pattern.compile("q(\\d+)(?:\\.o(\\d+))?\\.(stem|text|image)");
+
+    /** Writes one other language of a new draft: its translations by the new items' keys, and its materials. */
+    private static void insertLanguage(ProcessContext ctx, Object quizId, String owner, String language,
+        QuizSnapshot content, QuizSnapshot.Language t, Map<String, String> hashes, Map<Integer, Object> materialIds,
+        Map<Integer, Object> questionIds, Map<String, Object> optionIds) {
+        Map<String, String> sources = new LinkedHashMap<>();
+        sources.put(QuizSnapshot.TITLE_KEY, content.title());
+        sources.put(QuizSnapshot.INTRO_KEY, content.intro());
+        for (QuizSnapshot.Question q : content.questions()) {
+            sources.put(QuizSnapshot.stemKey(q.no()), q.stem());
+            q.options().forEach(o -> sources.put(QuizSnapshot.optionTextKey(q.no(), o.no()), o.text()));
+        }
+        Map<String, Object[]> rows = new LinkedHashMap<>();
+        t.texts().forEach((key, text) -> rows.put(key, new Object[] {text, null}));
+        t.images().forEach((key, image) -> rows.put(key, new Object[] {null, image}));
+        rows.forEach((key, value) -> {
+            String element = elementKey(key, questionIds, optionIds);
+            if (element == null) {
+                return;
+            }
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("quizId", quizId);
+            row.put("ownerId", owner);
+            row.put("language", language);
+            row.put("elementKey", element);
+            row.put("text", value[0]);
+            row.put("image", value[1]);
+            row.put("sourceHash", value[0] == null ? null
+                : hashes.getOrDefault(key, ContentLanguages.sourceHash(sources.get(key))));
+            row.put("translatedBy", ContentLanguages.BY_SPONSOR);
+            ctx.changes().insert(QbContent.TRANSLATION, row);
+        });
+        for (QuizSnapshot.Material material : t.materials()) {
+            Object base = materialIds.get(material.no());
+            if (base != null) {
+                insertMaterial(ctx, quizId, owner, material, base, language);
+            }
+        }
+    }
+
+    /** The draft's key of an element named by its key in a snapshot; null for none of the content's. */
+    private static String elementKey(String key, Map<Integer, Object> questionIds, Map<String, Object> optionIds) {
+        if (QuizSnapshot.TITLE_KEY.equals(key)) {
+            return ContentLanguages.TITLE;
+        }
+        if (QuizSnapshot.INTRO_KEY.equals(key)) {
+            return ContentLanguages.INTRO;
+        }
+        java.util.regex.Matcher m = SNAPSHOT_KEY.matcher(key);
+        if (!m.matches()) {
+            return null;
+        }
+        int question = Integer.parseInt(m.group(1));
+        if (m.group(2) == null) {
+            Object id = questionIds.get(question);
+            return id == null || "text".equals(m.group(3)) ? null
+                : "stem".equals(m.group(3)) ? ContentLanguages.stem(id) : ContentLanguages.questionImage(id);
+        }
+        Object id = optionIds.get(QuizSnapshot.optionTextKey(question, Integer.parseInt(m.group(2))));
+        return id == null || "stem".equals(m.group(3)) ? null
+            : "text".equals(m.group(3)) ? ContentLanguages.optionText(id) : ContentLanguages.optionImage(id);
     }
 
     // ---- versions --------------------------------------------------------------------------------------------------
@@ -499,6 +622,8 @@ public final class QuizProcesses {
                 .steps(b -> QuizEditing.loadAll(b, "Load the questions", QbContent.QUESTION, QUESTIONS))
                 .steps(b -> QuizEditing.loadAll(b, "Load the options", QbContent.OPTION, OPTIONS))
                 .steps(b -> QuizEditing.loadAll(b, "Load the version files", QbContent.VERSION_FILE, VERSION_FILES))
+                .steps(b -> QuizEditing.loadAll(b, "Load the translations", QbContent.TRANSLATION,
+                    TranslationProcesses.TRANSLATIONS))
                 .step("Load the latest version", QueryEntities.<ProcessContext>of(
                     QbContent.defaultDataset(QbContent.VERSION),
                     ctx -> version(ctx.get(QUIZ_ID), (int) number(quiz(ctx).get("latestVersionNo"))), VERSIONS))
@@ -510,8 +635,10 @@ public final class QuizProcesses {
         if (!QuizEditing.current(ctx, quiz, ctx.get(INPUT, QuizRef.class).baseRevision())) {
             return;
         }
-        QuizSnapshot content = QuizEditing.snapshot(quiz, list(ctx, MATERIALS), list(ctx, IMAGES),
-            list(ctx, QUESTIONS), list(ctx, OPTIONS));
+        // Q73a (D-Q73-7): the version keeps the languages that are complete; the others are left out and said so.
+        QuizLanguages.Draft draft = QuizLanguages.of(quiz, list(ctx, MATERIALS), list(ctx, IMAGES),
+            list(ctx, QUESTIONS), list(ctx, OPTIONS), list(ctx, TranslationProcesses.TRANSLATIONS));
+        QuizSnapshot content = draft.snapshot();
         List<Violation> problems = QuizCompleteness.check(content);
         if (!problems.isEmpty()) {
             problems.forEach(ctx::reject);
@@ -529,8 +656,11 @@ public final class QuizProcesses {
         List<EntityInstance> latest = list(ctx, VERSIONS);
         // The language is the version's own column, not in the content (Q59a): a new language alone is a change too.
         Object language = quiz.get("language");
+        List<String> languages = draft.languages(String.valueOf(language));
+        String languagesColumn = content.translations().isEmpty() ? null : ContentLanguages.joinList(languages);
         if (!latest.isEmpty() && hash.equals(latest.getFirst().get("contentHash"))
-            && java.util.Objects.equals(language, latest.getFirst().get("language"))) {
+            && java.util.Objects.equals(language, latest.getFirst().get("language"))
+            && java.util.Objects.equals(languagesColumn, latest.getFirst().get("languages"))) {
             ctx.reject(new Violation(null, ContentCodes.VERSION_UNCHANGED, "The quiz is as its version "
                 + latest.getFirst().get("label") + " was", Map.of("label", latest.getFirst().get("label"))));
             return;
@@ -546,6 +676,7 @@ public final class QuizProcesses {
         version.put("title", content.title());
         version.put("timeLimitSec", content.timeLimitSec() == null ? null : decimal(content.timeLimitSec()));
         version.put("language", language);
+        version.put("languages", languagesColumn);
         version.put("questionCount", decimal(content.questions().size()));
         version.put("materialCount", decimal(content.materials().size()));
         version.put("fullScore", decimal(content.fullScore()));
@@ -576,7 +707,8 @@ public final class QuizProcesses {
         ctx.changes().update(QbContent.QUIZ, quiz.id(), quiz.version(), values);
         ctx.put(OUTPUT, new VersionOutput(uuid(quiz.id()), uuid(versionId), versionNo, label,
             content.questions().size(), content.materials().size(), content.fullScore(), hash,
-            number(quiz.get("revision"))));
+            number(quiz.get("revision")), languages,
+            draft.statuses().stream().filter(status -> !status.complete()).toList()));
     }
 
     private static EntityQuery version(Object quizId, int versionNo) {

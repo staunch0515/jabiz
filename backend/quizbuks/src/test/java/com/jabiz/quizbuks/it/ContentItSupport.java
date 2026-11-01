@@ -25,9 +25,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 /** Content integration tests: two sponsors, an administrator, and the processes and templates they use. */
 abstract class ContentItSupport extends QbItSupport {
 
-    /** The seven tables of content, only ever inserted into. */
+    /** The tables of content (Q73a: with the translations), only ever inserted into. */
     static final List<String> TABLES = List.of("qb_quiz_version", "qb_material_version", "qb_material_image_version",
-        "qb_question_version", "qb_option_version", "qb_quiz_version_version", "qb_version_file_version");
+        "qb_question_version", "qb_option_version", "qb_quiz_version_version", "qb_version_file_version",
+        "qb_content_translation_version");
 
     String sponsorA() {
         return TestTokens.bearer(tokens, "sponsor-a", QbPermissions.CONTENT_WRITE, QbPermissions.CONTENT_FILE_READ);

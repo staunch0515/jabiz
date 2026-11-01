@@ -60,28 +60,36 @@ public final class QuizCompleteness {
             }
         }
         for (int k = 0; k < draft.materials().size(); k++) {
-            QuizSnapshot.Material material = draft.materials().get(k);
-            String path = "materials[" + k + "]";
-            if (blank(material.title())) {
-                problems.add(new Violation(path + ".title", ContentCodes.MATERIAL_TITLE_REQUIRED,
-                    "Material " + material.no() + " has no title", Map.of("material", material.no())));
-            }
-            MaterialKind kind = MaterialKind.of(material.kind()).orElseThrow(
-                () -> new IllegalArgumentException("Unknown material kind " + material.kind()));
-            if (kind == MaterialKind.IMAGES) {
-                int images = material.images().size();
-                if (images < 1 || images > ContentLimits.MAX_IMAGES) {
-                    problems.add(new Violation(path + ".images", ContentCodes.MATERIAL_NO_IMAGES, "Material "
-                        + material.no() + " has " + images + " images, not 1 to " + ContentLimits.MAX_IMAGES,
-                        Map.of("material", material.no(), "count", images, "max", ContentLimits.MAX_IMAGES)));
-                }
-            } else if (!hasContent(material, kind)) {
-                problems.add(new Violation(path + "." + kind.contentField(), ContentCodes.MATERIAL_CONTENT_REQUIRED,
-                    "Material " + material.no() + " has no content of its kind " + kind,
-                    Map.of("material", material.no(), "kind", kind.name())));
-            }
+            problems.addAll(material(draft.materials().get(k), "materials[" + k + "]"));
         }
         return List.copyOf(problems);
+    }
+
+    /**
+     * What a material lacks to be in a version: a title, and the content of its kind. A material of one of the quiz's
+     * other languages (Q73a) is checked the same; one that lacks something leaves its language out of the version.
+     */
+    public static List<Violation> material(QuizSnapshot.Material material, String path) {
+        List<Violation> problems = new ArrayList<>();
+        if (blank(material.title())) {
+            problems.add(new Violation(path + ".title", ContentCodes.MATERIAL_TITLE_REQUIRED,
+                "Material " + material.no() + " has no title", Map.of("material", material.no())));
+        }
+        MaterialKind kind = MaterialKind.of(material.kind()).orElseThrow(
+            () -> new IllegalArgumentException("Unknown material kind " + material.kind()));
+        if (kind == MaterialKind.IMAGES) {
+            int images = material.images().size();
+            if (images < 1 || images > ContentLimits.MAX_IMAGES) {
+                problems.add(new Violation(path + ".images", ContentCodes.MATERIAL_NO_IMAGES, "Material "
+                    + material.no() + " has " + images + " images, not 1 to " + ContentLimits.MAX_IMAGES,
+                    Map.of("material", material.no(), "count", images, "max", ContentLimits.MAX_IMAGES)));
+            }
+        } else if (!hasContent(material, kind)) {
+            problems.add(new Violation(path + "." + kind.contentField(), ContentCodes.MATERIAL_CONTENT_REQUIRED,
+                "Material " + material.no() + " has no content of its kind " + kind,
+                Map.of("material", material.no(), "kind", kind.name())));
+        }
+        return problems;
     }
 
     private static boolean hasContent(QuizSnapshot.Material material, MaterialKind kind) {
