@@ -1,7 +1,7 @@
-import { useAuth, type IdentityLinked } from '@jabiz/client'
+import { getAccountDeletion, useAuth, type IdentityLinked } from '@jabiz/client'
 import { BecomeSponsor } from '../mysponsor/BecomeSponsor'
 import { TitleBadge } from './TitleBadge'
-import { PageState } from '@jabiz/ui'
+import { AccountDeletion, PageState } from '@jabiz/ui'
 import { useQuery } from '@tanstack/react-query'
 import {
   ArrowLeft,
@@ -13,6 +13,7 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
+  Trash2,
   UserRound,
   type LucideIcon,
 } from 'lucide-react'
@@ -39,6 +40,9 @@ export const ACCOUNT_PATH = '/account'
 /** The parts of the account, each at `/account/<part>` (docs/quizbuks/plans/Q56-account-menu.md). */
 export const ACCOUNT_PARTS = ['profile', 'details', 'security', 'mail', 'preferences', 'id'] as const
 export type AccountPart = (typeof ACCOUNT_PARTS)[number]
+
+/** Deleting the account (Q71): its own page, in the menu only where the entry allows it. */
+export const ACCOUNT_DELETION_PATH = `${ACCOUNT_PATH}/delete`
 
 /** A part's page. */
 export function accountPath(part: AccountPart): string {
@@ -98,6 +102,7 @@ export function AccountPage({ path }: { path: string }) {
   if (part === null && new URLSearchParams(search).get('section') === 'details') {
     return <Redirect to={ACCOUNT_DETAILS_PATH} />
   }
+  if (path === ACCOUNT_DELETION_PATH) return <DeletionPage />
   if (part === undefined) return <Redirect to={ACCOUNT_PATH} />
   if (part === null) return <AccountMenu />
   return <AccountPartPage part={part} />
@@ -147,6 +152,44 @@ function AccountMenu() {
         <MenuItem to={legalPath('PRIVACY')} icon={FileText} title={t('legal.kinds.PRIVACY')} />
         <MenuItem to="/about" icon={Info} title={tApp('account.about')} testId="account-about" />
       </MenuList>
+      <DeletionEntry />
+    </section>
+  )
+}
+
+const DELETION_QUERY = ['qb', 'account-deletion']
+
+/**
+ * The menu's way to deleting the account (Q71; Apple 5.1.1(v)): where the app entry allows it
+ * (`QB_APP_ACCOUNT_DELETION`), or while a request is pending even if it no longer does.
+ */
+function DeletionEntry() {
+  const { t: tApp } = useTranslation(APP)
+  const status = useQuery({ queryKey: DELETION_QUERY, queryFn: getAccountDeletion, retry: false })
+  if (!status.data || !(status.data.available || status.data.pending)) return null
+  return (
+    <MenuList label={tApp('account.deletion.group')} testId="account-deletion-menu">
+      <MenuItem to={ACCOUNT_DELETION_PATH} icon={Trash2} title={tApp('account.deletion.title')}
+        hint={tApp('account.deletion.menuHint')} testId="account-menu-delete" />
+    </MenuList>
+  )
+}
+
+/** Deleting the account: what is erased and what stays, then the platform's block (the request, its notices). */
+function DeletionPage() {
+  const { t: tApp } = useTranslation(APP)
+  return (
+    <section className="flex flex-col gap-6" aria-labelledby="account-part-title" data-testid="account-delete-page">
+      <div className="flex flex-col gap-2">
+        <Link to={ACCOUNT_PATH} data-testid="account-back"
+          className="text-muted-foreground hover:text-foreground inline-flex w-fit items-center gap-1 text-sm">
+          <ArrowLeft aria-hidden className="size-4" />
+          {tApp('account.back')}
+        </Link>
+        <h1 id="account-part-title" className="text-xl font-semibold">{tApp('account.deletion.title')}</h1>
+      </div>
+      <p className="text-muted-foreground text-sm">{tApp('account.deletion.hint')}</p>
+      <AccountDeletion />
     </section>
   )
 }

@@ -25,6 +25,17 @@ class ErasureEvidenceTest {
     }
 
     @Test
+    void twoEntriesOfOneRowAreSignedInAnOrderOfTheirOwn() {
+        // One row written twice by a purge: the database may return its entries either way round.
+        ErasureEvidence.Item first = new ErasureEvidence.Item("qb_invitation", "[i-1]", List.of("email"),
+            "a".repeat(64), "b".repeat(64));
+        ErasureEvidence.Item second = new ErasureEvidence.Item("qb_invitation", "[i-1]", List.of("note"),
+            "b".repeat(64), "c".repeat(64));
+        assertThat(ErasureEvidence.sign(KEY, ERASURE, 2, List.of(first, second, B)))
+            .isEqualTo(ErasureEvidence.sign(KEY, ERASURE, 2, List.of(second, B, first)));
+    }
+
+    @Test
     void everyPartIsSigned() {
         String signed = ErasureEvidence.sign(KEY, ERASURE, 2, List.of(A, B));
         assertThat(List.of(

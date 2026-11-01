@@ -36,7 +36,7 @@ const privacy = { kind: 'PRIVACY', versionId: 'p1', versionNo: 1, title: { en: '
  * The server as the console sees it (built with the base / in tests): its entry, the identity providers given, and for a
  * signed-in sponsor their identity and onboarding. Records what was asked and posted.
  */
-/** What the account's deletion says (Q70): off unless a test turns it on. */
+/** What the account's deletion says (Q72): off unless a test turns it on. */
 let deletionStatus: Record<string, unknown> = { available: false, pending: null, notices: [] }
 
 function server(me?: Me, providers: unknown[] = []) {
@@ -364,7 +364,7 @@ describe('a signed-in sponsor', () => {
     expect(await screen.findByTestId('idle-locked')).toBeInTheDocument()
   })
 
-  it('offers the deletion of the account only where the entry allows it (Q70)', async () => {
+  it('offers the deletion of the account only where the entry allows it (Q72)', async () => {
     server({ sponsor: null })
     window.history.replaceState(null, '', '/account')
     const { unmount } = render(<App />)

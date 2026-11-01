@@ -113,7 +113,15 @@ const ABOUT = '/about'
 /** The second step of a sign-in through an identity provider, handed from the callback to the sign-in page. */
 let pendingStep: SignInStep | undefined
 
-const MAIL_PAGES = new Set(['/auth/verify-email', '/auth/join', '/auth/password-reset', '/auth/email-link'])
+const MAIL_PAGES = new Set(['/auth/verify-email', '/auth/join', '/auth/password-reset', '/auth/email-link',
+  '/auth/account-deletion'])
+
+/**
+ * Asking for the deletion of an account without the app (Q71; Google Play's account deletion policy): the address
+ * given to the stores, which leads to the platform's request page (the address, then a mailed link to confirm).
+ */
+const DELETE_ACCOUNT_PATH = '/delete-account'
+const ACCOUNT_DELETION_REQUEST = '/auth/account-deletion'
 
 /**
  * The unsubscribe page of the app's notification mail (platform decision D52 item 3):
@@ -496,6 +504,7 @@ function Routes() {
   // The blocks of mailed links and of the identity provider's return read the address themselves, once: the token
   // and the code are removed from it right away.
   if (path === UNSUBSCRIBE_PATH) return frame(<MailUnsubscribe brand={brand} search={search} />)
+  if (path === DELETE_ACCOUNT_PATH) return <Redirect to={ACCOUNT_DELETION_REQUEST} />
   if (MAIL_PAGES.has(path)) {
     return frame(<MailLinkPage {...navigation} page={path.slice('/auth/'.length)} brand={brand}
       signInPath="/login" passwordResetPath="/password-reset" />)

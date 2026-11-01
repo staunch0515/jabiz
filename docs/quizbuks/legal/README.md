@@ -11,6 +11,8 @@
    在 `/qb/legal` 发布（需要二次验证）。
 3. 发布后的地址：`https://<域名>/taker/legal/privacy`。Meta（Facebook 登录）与 LINE 控制台的"隐私政策 URL"填它；Meta 的"用户数据删除"选"数据删除说明 URL"，同样填它（第10条写明了删除的请求方式）。
 
+4. 第10条的"删除账号"写明了 App 与商户后台的入口：发布含这一节的版本之前，先在生产开启 `QB_APP_ACCOUNT_DELETION` 与 `QB_SPONSOR_ACCOUNT_DELETION`（`deploy/quizbuks/DEPLOY.md` §1a，需要维护连接）。
+
 ## 代码改动时
 
 政策描述的是当前的实现。以下改动要同时修改政策并发布新版本（`requires re-consent` 视变更是否重要而定）：
@@ -18,6 +20,6 @@
 - 收集新的个人信息（例如资料增加生年、性别：1.3 的 Q47，已写入）
 - 增加外部服务（支付、邮件、登录方式、分析、嵌入）或改变送出的内容
 - 商家能看到的答题人信息、分析的最小人数（`qb.stats.min-group`）
-- 保存期间（`RetentionPolicy`）、本人能操作的功能（例如将来的导出或注销）
+- 保存期间（`RetentionPolicy`）、本人能操作的功能（例如将来的导出；删除账号见第10条，Q72 / Q71，2026-11-01）
 
 政策改了，商店的数据申报（Google Play 数据安全表 `docs/quizbuks/store/play-data-safety.md`，以后的 Apple 隐私标签）一起核对并在 Console 中更新（Q49d）。

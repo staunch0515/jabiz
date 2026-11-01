@@ -42,7 +42,7 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * A sponsor's account deleted (Q70; docs/quizbuks/plans/Q70-sponsor-erasure.md; platform decision D62): what QuizBuks
+ * A sponsor's account deleted (Q72; docs/quizbuks/plans/Q72-sponsor-erasure.md; platform decision D62): what QuizBuks
  * erases of the user when the platform erases the account ({@code ACCOUNT_ERASE}, the rows below in this order), what
  * the user is told before asking, and what happens after: their running publications end and their notices leave
  * every inbox ({@value #ERASED}, on the platform's {@code jabiz.account.erased}).
