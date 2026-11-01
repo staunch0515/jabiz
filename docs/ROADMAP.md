@@ -4914,6 +4914,6 @@ D17 下匿名不能写任何东西（15 §10）。
 | 17j-3 | 前端：`OidcButtons` 的 Apple 标志与 Apple 规定的标题（三语）；OpenAPI 快照与生成的类型 | 17j-a |
 | 17j-4 | 测试：`OidcProvidersTest`（检查）、`OidcClientTest`（签出的密钥、表单、无 PKCE、刷新令牌）、`AppleClientSecretTest`（签名、重签、私钥的写法、姓名的组成）、集成测试 `OidcAppleIT`（隐藏邮箱开户并以首次的姓名为显示名、再次登录、取消、未知或别的提供方的 state、非 Apple 提供方 404）、`blocks.test.tsx`（Apple 按钮，axe）；测试夹具 `TestOidcProvider.asApple` | 17j-a |
 | 17j-5 | 文档：决策 D67、10 §12、根 `CLAUDE.md` 单点登录一条 | 17j-a |
-| 17j-6 | 刷新令牌密封保存；删除账号与解除 Apple 关联时撤销（队列、定时任务、外部服务、重试与告警）；测试与文档 | 17j-b |
+| 17j-6 | 刷新令牌密封保存（`SEC_IDENTITY_TOKEN_KEEP`、实体 `SecIdentityToken`、迁移 `V55__identity_token.sql`、没有密封密钥即启动报错）；定时任务 `jabiz.identity-token-revocation` 找出关联已不在的令牌，`SEC_IDENTITY_TOKEN_REVOKE` 经提供方客户端调用 `revocation_endpoint`（重试的间隔倍增、至多 12 次）；同一 Apple 账号的新关联取代旧令牌；放弃后给管理员登记待办；测试 `IdentityTokensTest`、`OidcClientTest`、`OidcAppleIT`（密封保存、审计与操作记录中没有、关联在时不撤销、抹除后撤销并删除、本人解除后撤销、拒绝后按间隔重试、再次登录换令牌、新关联取代旧令牌不撤销、12 次后登记待办并不再尝试）；10 §12 | 17j-b |
 
-**17j 状态**：17j-a 📝 待评审（分支 `1.3/phase-17j-apple`）；17j-b 待开发。
+**17j 状态**：✅ 17j-a 完成（#401）；17j-b 📝 待评审（分支 `1.3/phase-17j-apple-revoke`）。

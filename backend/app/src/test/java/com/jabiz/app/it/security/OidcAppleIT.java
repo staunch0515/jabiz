@@ -3,8 +3,17 @@ package com.jabiz.app.it.security;
 import com.icegreen.greenmail.junit5.GreenMailExtension;
 import com.icegreen.greenmail.util.ServerSetup;
 import com.jabiz.runtime.test.TestOidcProvider;
+import com.jabiz.context.RequestContext;
+import com.jabiz.job.JobDefinition;
+import com.jabiz.runtime.erasure.AccountErasure;
+import com.jabiz.runtime.job.JobRunner;
+import com.jabiz.runtime.process.ProcessExecutor;
+import com.jabiz.runtime.security.IdentityTokens;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
@@ -18,8 +27,11 @@ import org.springframework.util.MultiValueMap;
 import org.springframework.web.reactive.function.BodyInserters;
 
 import java.net.URI;
+import java.time.Duration;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -64,6 +76,23 @@ class OidcAppleIT extends OidcItSupport {
         registry.add(prefix + "redirect-uris." + PORTAL, () -> callbackOf(PORTAL));
         registry.add(prefix + "labels.en", () -> "Apple");
         registry.add(prefix + "auto-provision", () -> "true");
+    }
+
+    @Autowired
+    JobRunner jobs;
+
+    @Autowired
+    @Qualifier("identityTokenRevocationJob")
+    JobDefinition<IdentityTokens.RevokeInput> revocation;
+
+    @Autowired
+    ProcessExecutor executor;
+
+    /** Each run of the job must not find the cluster lock of the previous one. */
+    @BeforeEach
+    void releaseTheLock() {
+        execute("UPDATE jabiz_shedlock SET lock_until = locked_at");
+        APPLE_IDP.revocationStatus(200);
     }
 
     @AfterAll
@@ -187,5 +216,166 @@ class OidcAppleIT extends OidcItSupport {
         // Nothing was kept for the other provider's state.
         assertThat(query("SELECT provided_name FROM sec_oidc_state_name WHERE state_hash = ?",
             com.jabiz.runtime.security.OidcStateStore.hash(open.state()))).isEmpty();
+    }
+
+    /** Opens an account with Apple at the portal; returns the user's id. */
+    private String signedUpWithApple(String subject, String relay) {
+        Request request = start(APPLE, PORTAL);
+        String code = APPLE_IDP.code(null, idToken(request, subject, c -> c.claim("email", relay)
+            .claim("email_verified", true)), FORM_POST);
+        Map<String, String> back = sentOn(formPost(APPLE, Map.of("state", request.state(), "code", code)));
+        anonymous("/api/auth/oidc/callback", Map.of("state", back.get("state"), "code", back.get("code"),
+            "binder", request.binder())).expectStatus().isOk();
+        return (String) userOf(relay).get("user_id");
+    }
+
+    private static String identityOf(String subject) {
+        return String.valueOf(query("SELECT DISTINCT user_identity_id::text AS id FROM sec_user_identity_version "
+            + "WHERE provider = ? AND subject = ?", APPLE, subject).getFirst().get("id"));
+    }
+
+    private static List<Map<String, Object>> tokenOf(String identityId) {
+        return query("SELECT provider, sealed_token, revoke_attempts, next_attempt_at FROM sec_identity_token "
+            + "WHERE identity_id = ?::uuid", identityId);
+    }
+
+    private void erase(String userId) {
+        asRequest(RequestContext.system(Locale.ENGLISH, "it-apple"), executor.execute(AccountErasure.ERASE,
+            new AccountErasure.EraseInput(UUID.fromString(userId), "it-apple"))).block();
+    }
+
+    private void revokeDue(java.time.Instant at) {
+        execute("UPDATE jabiz_shedlock SET lock_until = locked_at");
+        assertThat(jobs.run(revocation, at)).isEqualTo(JobRunner.Outcome.SUCCEEDED);
+    }
+
+    @Test
+    void appleTokenIsKeptSealedAndRevokedOnceTheAccountIsErased() {
+        String subject = unique("apple");
+        String userId = signedUpWithApple(subject, unique("e").toLowerCase() + "@privaterelay.appleid.com");
+        String refresh = APPLE_IDP.refreshTokens().getLast();
+        String identityId = identityOf(subject);
+
+        // Kept for the link, sealed: neither the table, the audit nor the operation log has it in clear.
+        assertThat(tokenOf(identityId)).singleElement().satisfies(row -> {
+            assertThat(row).containsEntry("provider", APPLE);
+            assertThat((String) row.get("sealed_token")).doesNotContain(refresh);
+        });
+        assertThat(query("SELECT 1 FROM sys_audit_record WHERE changes::text LIKE ?", "%" + refresh + "%")).isEmpty();
+        assertThat(query("SELECT 1 FROM op_process WHERE input_summary::text LIKE ?", "%" + refresh + "%")).isEmpty();
+
+        // While the link stands nothing is revoked.
+        revokeDue(clock.instant());
+        assertThat(APPLE_IDP.revoked()).doesNotContain(refresh);
+        assertThat(tokenOf(identityId)).hasSize(1);
+
+        // The account is erased: its link goes, the next run revokes the token at Apple and forgets it.
+        erase(userId);
+        revokeDue(clock.instant());
+        assertThat(APPLE_IDP.revoked()).contains(refresh);
+        assertThat(tokenOf(identityId)).isEmpty();
+    }
+
+    @Test
+    void aRefusedRevocationIsTriedAgainLaterAndASecondSignInReplacesTheToken() {
+        String subject = unique("apple");
+        String relay = unique("e").toLowerCase() + "@privaterelay.appleid.com";
+        String userId = signedUpWithApple(subject, relay);
+        String identityId = identityOf(subject);
+        String first = tokenOf(identityId).getFirst().get("sealed_token").toString();
+
+        // Signing in again keeps the newer token in place of the older.
+        Request again = start(APPLE, PORTAL);
+        String code = APPLE_IDP.code(null, idToken(again, subject, c -> c.claim("email", relay)
+            .claim("email_verified", true)), FORM_POST);
+        Map<String, String> back = sentOn(formPost(APPLE, Map.of("state", again.state(), "code", code)));
+        anonymous("/api/auth/oidc/callback", Map.of("state", back.get("state"), "code", back.get("code"),
+            "binder", again.binder())).expectStatus().isOk();
+        String latest = APPLE_IDP.refreshTokens().getLast();
+        assertThat(tokenOf(identityId)).singleElement()
+            .satisfies(row -> assertThat(row.get("sealed_token")).isNotEqualTo(first));
+
+        erase(userId);
+        APPLE_IDP.revocationStatus(503);
+        revokeDue(clock.instant());
+        assertThat(tokenOf(identityId)).singleElement().satisfies(row -> {
+            assertThat(((Number) row.get("revoke_attempts")).intValue()).isEqualTo(1);
+            assertThat(row.get("next_attempt_at")).isNotNull();
+        });
+        // Not before its pause has passed.
+        APPLE_IDP.revocationStatus(200);
+        revokeDue(clock.instant().plus(Duration.ofMinutes(5)));
+        assertThat(APPLE_IDP.revoked()).doesNotContain(latest);
+        revokeDue(clock.instant().plus(Duration.ofMinutes(16)));
+        assertThat(APPLE_IDP.revoked()).contains(latest);
+        assertThat(tokenOf(identityId)).isEmpty();
+    }
+
+    @Test
+    void aTokenOfALinkIsRevokedOnceTheUserUnlinksIt() {
+        String email = address("applelink");
+        String userId = createUserWithEmail(email, email, PASSWORD);
+        verifyEmail(userId);
+        assign(userId, roleId(CUSTOMER), null);
+        String bearer = bearerOf(session(email, PASSWORD, PORTAL));
+        Request request = request(authorized("POST", OidcIdentityLinkIT.IDENTITIES + "/start", bearer,
+            Map.of("provider", APPLE, "currentPassword", PASSWORD)).expectStatus().isOk().expectBody(MAP)
+            .returnResult().getResponseBody());
+        String subject = unique("apple");
+        String code = APPLE_IDP.code(null, idToken(request, subject, c -> c), FORM_POST);
+        Map<String, String> back = sentOn(formPost(APPLE, Map.of("state", request.state(), "code", code)));
+        authorized("POST", OidcIdentityLinkIT.IDENTITIES + "/callback", bearer, Map.of("state", back.get("state"),
+            "code", back.get("code"), "binder", request.binder())).expectStatus().isOk();
+        String refresh = APPLE_IDP.refreshTokens().getLast();
+        String identityId = identityOf(subject);
+        assertThat(tokenOf(identityId)).hasSize(1);
+
+        authorized("DELETE", OidcIdentityLinkIT.IDENTITIES + "/" + identityId, bearer, null).expectStatus()
+            .is2xxSuccessful();
+        revokeDue(clock.instant());
+        assertThat(APPLE_IDP.revoked()).contains(refresh);
+        assertThat(tokenOf(identityId)).isEmpty();
+    }
+
+    @Test
+    void aNewerLinkOfTheSameAppleAccountReplacesTheOlderToken() {
+        String subject = unique("apple");
+        String relay = unique("e").toLowerCase() + "@privaterelay.appleid.com";
+        String first = signedUpWithApple(subject, relay);
+        String oldLink = identityOf(subject);
+        String oldToken = APPLE_IDP.refreshTokens().getLast();
+        // The account is erased and opened again with the same Apple ID before the job ran.
+        erase(first);
+        signedUpWithApple(subject, unique("f").toLowerCase() + "@privaterelay.appleid.com");
+        String newLink = String.valueOf(query("SELECT DISTINCT ON (user_identity_id) user_identity_id::text AS id "
+            + "FROM sec_user_identity_version WHERE provider = ? AND subject = ? AND user_identity_id::text <> ?",
+            APPLE, subject, oldLink).getFirst().get("id"));
+        assertThat(tokenOf(oldLink)).isEmpty();
+        assertThat(tokenOf(newLink)).hasSize(1);
+        // Revoking the old token would have revoked the new link's authorization too: nothing is revoked.
+        revokeDue(clock.instant());
+        assertThat(APPLE_IDP.revoked()).doesNotContain(oldToken);
+        assertThat(tokenOf(newLink)).hasSize(1);
+    }
+
+    @Test
+    void anAdministratorIsAskedOnceThePlatformGivesUp() {
+        String subject = unique("apple");
+        String userId = signedUpWithApple(subject, unique("e").toLowerCase() + "@privaterelay.appleid.com");
+        String identityId = identityOf(subject);
+        erase(userId);
+        // Eleven attempts failed before.
+        execute("UPDATE sec_identity_token SET revoke_attempts = " + (IdentityTokens.MAX_ATTEMPTS - 1)
+            + ", next_attempt_at = NULL WHERE identity_id = '" + identityId + "'::uuid");
+        APPLE_IDP.revocationStatus(400);
+        revokeDue(clock.instant());
+        assertThat(tokenOf(identityId)).singleElement().satisfies(row -> assertThat(
+            ((Number) row.get("revoke_attempts")).intValue()).isEqualTo(IdentityTokens.MAX_ATTEMPTS));
+        assertThat(query("SELECT assignee_permission, source_key FROM sys_task_version WHERE source_key = ?",
+            "identity-token:" + identityId)).isNotEmpty();
+        // Not tried any more.
+        APPLE_IDP.revocationStatus(200);
+        revokeDue(clock.instant().plus(Duration.ofDays(2)));
+        assertThat(tokenOf(identityId)).hasSize(1);
     }
 }
