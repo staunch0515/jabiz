@@ -50,9 +50,11 @@ public final class QuizTransferProcesses {
     /**
      * @param formatVersion the file's own version
      * @param readers       the versions it is read through, its own first, the current one last
+     * @param language      the base language the file names (Q73a); null for the caller's interface language
+     * @param languages     the file's other languages (Q73a)
      */
     public record CheckOutput(int formatVersion, int currentVersion, List<Integer> readers, String kind,
-        String title, int questions, int materials, List<FileNeed> files) {}
+        String title, int questions, int materials, List<FileNeed> files, String language, List<String> languages) {}
 
     /** @param files the key of each file the quiz uses (its key in the file) as uploaded by the caller */
     public record ImportInput(@NotNull Map<String, Object> document, Map<String, UUID> files) {}
@@ -86,7 +88,8 @@ public final class QuizTransferProcesses {
                         needs.add(new FileNeed(key, field.policy(), entry.name(), entry.type(), entry.size()));
                     });
                     ctx.put(OUTPUT, new CheckOutput(reading.version(), QuizFileFormat.CURRENT, reading.readers(),
-                        file.kind(), file.title(), file.questions().size(), file.materials().size(), needs));
+                        file.kind(), file.title(), file.questions().size(), file.materials().size(), needs,
+                        file.language(), List.copyOf(file.translations().keySet())));
                 }));
     }
 
@@ -157,7 +160,11 @@ public final class QuizTransferProcesses {
         if (ctx.hasViolations()) {
             return;
         }
-        Object quizId = QuizProcesses.insertContent(ctx, snapshot(file, ids), file.title(), false, null, null);
+        // Q73a: the base language the file names (else the caller's), and the hashes its translations were made from.
+        Map<String, Map<String, String>> hashes = new LinkedHashMap<>();
+        file.translations().forEach((language, t) -> hashes.put(language, t.hashes()));
+        Object quizId = QuizProcesses.insertContent(ctx, snapshot(file, ids), file.title(), false, null,
+            file.language(), hashes);
         QuizFileFormat.Reading reading = ctx.get(READING, QuizFileFormat.Reading.class);
         ctx.put(OUTPUT, new ImportOutput(QuizEditing.uuid(quizId), reading.version(), reading.readers()));
     }
@@ -166,15 +173,7 @@ public final class QuizTransferProcesses {
     static QuizSnapshot snapshot(QuizFile file, Map<String, UUID> ids) {
         List<QuizSnapshot.Material> materials = new ArrayList<>();
         for (int m = 0; m < file.materials().size(); m++) {
-            QuizFile.Material material = file.materials().get(m);
-            List<QuizSnapshot.Image> images = new ArrayList<>();
-            for (int i = 0; i < material.images().size(); i++) {
-                QuizFile.Image image = material.images().get(i);
-                images.add(new QuizSnapshot.Image(i + 1, ids.get(image.image()), image.caption()));
-            }
-            materials.add(new QuizSnapshot.Material(m + 1, material.kind(), material.title(), material.description(),
-                material.body(), material.url(), key(ids, material.pdf()), key(ids, material.audio()), images,
-                material.watchToAnswer()));
+            materials.add(material(file.materials().get(m), m + 1, ids));
         }
         boolean survey = "SURVEY".equals(file.kind());
         List<QuizSnapshot.Question> questions = new ArrayList<>();
@@ -189,8 +188,26 @@ public final class QuizTransferProcesses {
             questions.add(new QuizSnapshot.Question(q + 1, question.stem(), key(ids, question.image()),
                 survey ? 1 : question.points(), options, survey ? question.selection() : null));
         }
+        Map<String, QuizSnapshot.Language> translations = new LinkedHashMap<>();
+        file.translations().forEach((language, t) -> {
+            Map<String, UUID> images = new LinkedHashMap<>();
+            t.images().forEach((slot, image) -> images.put(slot, key(ids, image)));
+            translations.put(language, new QuizSnapshot.Language(t.texts(), images, t.materials().stream()
+                .map(own -> material(own.material(), own.no(), ids)).toList()));
+        });
         return new QuizSnapshot(file.title(), file.intro(), key(ids, file.cover()), file.timeLimitSec(), false,
-            materials, questions, survey);
+            materials, questions, survey, translations);
+    }
+
+    private static QuizSnapshot.Material material(QuizFile.Material material, int no, Map<String, UUID> ids) {
+        List<QuizSnapshot.Image> images = new ArrayList<>();
+        for (int i = 0; i < material.images().size(); i++) {
+            QuizFile.Image image = material.images().get(i);
+            images.add(new QuizSnapshot.Image(i + 1, ids.get(image.image()), image.caption()));
+        }
+        return new QuizSnapshot.Material(no, material.kind(), material.title(), material.description(),
+            material.body(), material.url(), key(ids, material.pdf()), key(ids, material.audio()), images,
+            material.watchToAnswer());
     }
 
     private static UUID key(Map<String, UUID> ids, String key) {

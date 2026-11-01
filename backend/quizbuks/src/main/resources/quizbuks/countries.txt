@@ -97,7 +97,7 @@ GT|Guatemala|危地马拉|グアテマラ|NORTH_AMERICA
 GU|Guam|关岛|グアム|
 GW|Guinea-Bissau|几内亚比绍|ギニアビサウ|
 GY|Guyana|圭亚那|ガイアナ|SOUTH_AMERICA
-HK|Hong Kong|香港|香港|ASIA
+HK|Hong Kong|中国香港|中国香港|ASIA
 HM|Heard Island and McDonald Islands|赫德岛和麦克唐纳群岛|ハード島とマクドナルド諸島|
 HN|Honduras|洪都拉斯|ホンジュラス|NORTH_AMERICA
 HR|Croatia|克罗地亚|クロアチア|EUROPE
@@ -230,7 +230,7 @@ TO|Tonga|汤加|トンガ|
 TR|Türkiye|土耳其|トルコ|EUROPE,ASIA
 TT|Trinidad and Tobago|特立尼达和多巴哥|トリニダード・トバゴ|NORTH_AMERICA
 TV|Tuvalu|图瓦卢|ツバル|
-TW|Taiwan|台湾|台湾|ASIA
+TW|Taiwan|中国台湾|中国台湾|ASIA
 TZ|Tanzania|坦桑尼亚|タンザニア|
 UA|Ukraine|乌克兰|ウクライナ|EUROPE
 UG|Uganda|乌干达|ウガンダ|

@@ -3,6 +3,7 @@ package com.jabiz.quizbuks.content.transfer;
 import com.jabiz.entity.Violation;
 import com.jabiz.file.MediaTypes;
 import com.jabiz.quizbuks.content.ContentCodes;
+import com.jabiz.quizbuks.content.ContentLanguages;
 import com.jabiz.quizbuks.content.ContentLimits;
 import com.jabiz.quizbuks.content.MaterialKind;
 import com.jabiz.quizbuks.content.QbContent;
@@ -77,6 +78,21 @@ public final class QuizFileChecks {
                     FileField.IMAGE);
             }
         }
+        // Q73a: each other language's own images and materials.
+        file.translations().forEach((language, t) -> {
+            String at = "translations." + language;
+            t.images().forEach((key, image) -> add(uses, image, at + ".images." + key, FileField.IMAGE));
+            for (int m = 0; m < t.materials().size(); m++) {
+                QuizFile.Material material = t.materials().get(m).material();
+                String materialAt = at + ".materials[" + m + "]";
+                add(uses, material.pdf(), materialAt + ".pdf", FileField.PDF);
+                add(uses, material.audio(), materialAt + ".audio", FileField.AUDIO);
+                for (int i = 0; i < material.images().size(); i++) {
+                    add(uses, material.images().get(i).image(), materialAt + ".images[" + i + "].image",
+                        FileField.IMAGE);
+                }
+            }
+        });
         return uses;
     }
 
@@ -113,6 +129,7 @@ public final class QuizFileChecks {
         for (int q = 0; q < file.questions().size(); q++) {
             question(problems, "questions[" + q + "]", file.questions().get(q), survey);
         }
+        translations(problems, file);
         for (Use use : uses(file)) {
             QuizFile.FileEntry entry = file.files().get(use.key());
             if (entry == null) {
@@ -125,6 +142,120 @@ public final class QuizFileChecks {
             }
         }
         return List.copyOf(problems);
+    }
+
+    private static final Pattern TEXT_KEY = Pattern.compile("q(\\d{1,3})(?:\\.o(\\d{1,2}))?\\.(stem|text|image)");
+    private static final Pattern HASH = Pattern.compile("[0-9a-f]{16}");
+
+    /**
+     * The other languages (Q73a), as editing takes them: platform languages other than the base (which a file with
+     * translations names), each text a translation of a base text that exists and is not empty, within its field's
+     * length; images of questions and options that exist; materials standing for base materials, of their kind,
+     * one each, checked as a material is.
+     */
+    private static void translations(List<Violation> problems, QuizFile file) {
+        if (file.language() != null && !QbContent.LANGUAGES.contains(file.language())) {
+            problems.add(value("quiz.language", "one of " + QbContent.LANGUAGES));
+        }
+        if (file.translations().isEmpty()) {
+            return;
+        }
+        if (file.language() == null) {
+            problems.add(value("quiz.language", "a file with translations names its base language"));
+        }
+        count(problems, "translations", file.translations().size(), ContentLanguages.MAX_LANGUAGES - 1);
+        file.translations().forEach((language, t) -> {
+            String at = "translations." + language;
+            if (!QbContent.LANGUAGES.contains(language) || language.equals(file.language())) {
+                problems.add(value(at, "a platform language other than the base"));
+                return;
+            }
+            t.texts().forEach((key, text) -> {
+                String base = baseText(file, key);
+                if (base == null) {
+                    problems.add(value(at + ".texts." + key, "a translation of a text the quiz has"));
+                } else {
+                    length(problems, at + ".texts." + key, text, maxLength(key));
+                }
+            });
+            t.hashes().forEach((key, hash) -> {
+                if (!t.texts().containsKey(key) || !HASH.matcher(hash).matches()) {
+                    problems.add(value(at + ".hashes." + key, "the hash of a translated text"));
+                }
+            });
+            t.images().keySet().forEach(key -> {
+                if (!hasImageSlot(file, key)) {
+                    problems.add(value(at + ".images." + key, "an image of a question or option the quiz has"));
+                }
+            });
+            java.util.Set<Integer> seen = new java.util.HashSet<>();
+            for (int m = 0; m < t.materials().size(); m++) {
+                QuizFile.NumberedMaterial own = t.materials().get(m);
+                String materialAt = at + ".materials[" + m + "]";
+                if (own.no() < 1 || own.no() > file.materials().size() || !seen.add(own.no())) {
+                    problems.add(value(materialAt + ".no", "a base material's number, once"));
+                    continue;
+                }
+                QuizFile.Material material = own.material();
+                if (!String.valueOf(material.kind()).equals(file.materials().get(own.no() - 1).kind())) {
+                    problems.add(new Violation(materialAt + ".kind", ContentCodes.MATERIAL_KIND_FIXED, "A material "
+                        + "of another language is of its base's kind", Map.of("kind",
+                        String.valueOf(file.materials().get(own.no() - 1).kind()))));
+                    continue;
+                }
+                if (material.watchToAnswer()) {
+                    problems.add(new Violation(materialAt + ".watchToAnswer", ContentCodes.MATERIAL_FIELD_NOT_ALLOWED,
+                        "The video to watch is the base's choice"));
+                }
+                material(problems, materialAt, material);
+            }
+        });
+    }
+
+    /** The base text a translation's key names; null when the quiz has none there. */
+    private static String baseText(QuizFile file, String key) {
+        if ("title".equals(key)) {
+            return file.title();
+        }
+        if ("intro".equals(key)) {
+            return file.intro();
+        }
+        java.util.regex.Matcher m = TEXT_KEY.matcher(key);
+        if (!m.matches() || "image".equals(m.group(3))) {
+            return null;
+        }
+        QuizFile.Question question = question(file, Integer.parseInt(m.group(1)));
+        if (question == null) {
+            return null;
+        }
+        if (m.group(2) == null) {
+            return "stem".equals(m.group(3)) ? question.stem() : null;
+        }
+        int option = Integer.parseInt(m.group(2));
+        return "text".equals(m.group(3)) && option >= 1 && option <= question.options().size()
+            ? question.options().get(option - 1).text() : null;
+    }
+
+    private static int maxLength(String key) {
+        return switch (key) {
+            case "title" -> ContentLimits.TITLE_LENGTH;
+            case "intro" -> ContentLimits.INTRO_LENGTH;
+            default -> key.endsWith(".stem") ? ContentLimits.STEM_LENGTH : ContentLimits.OPTION_LENGTH;
+        };
+    }
+
+    private static boolean hasImageSlot(QuizFile file, String key) {
+        java.util.regex.Matcher m = TEXT_KEY.matcher(key);
+        if (!m.matches() || !"image".equals(m.group(3))) {
+            return false;
+        }
+        QuizFile.Question question = question(file, Integer.parseInt(m.group(1)));
+        return question != null && (m.group(2) == null
+            || Integer.parseInt(m.group(2)) >= 1 && Integer.parseInt(m.group(2)) <= question.options().size());
+    }
+
+    private static QuizFile.Question question(QuizFile file, int no) {
+        return no >= 1 && no <= file.questions().size() ? file.questions().get(no - 1) : null;
     }
 
     private static void material(List<Violation> problems, String at, QuizFile.Material material) {

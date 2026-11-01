@@ -22,7 +22,7 @@ class QuizFileTest {
     static Map<String, Object> document() {
         Map<String, Object> document = new LinkedHashMap<>();
         document.put("format", "quizbuks.quiz");
-        document.put("formatVersion", 1);
+        document.put("formatVersion", 2);
         document.put("quiz", map("kind", "QUIZ", "title", "Capitals", "intro", "Two **easy** ones.",
             "timeLimitSec", 300, "cover", "f1"));
         document.put("materials", List.of(
@@ -52,8 +52,8 @@ class QuizFileTest {
     void aCurrentFileIsReadByItsOwnVersion() {
         QuizFileFormat.Reading reading = QuizFileFormat.read(document());
         assertThat(reading.status()).isEqualTo(QuizFileFormat.Status.SUPPORTED);
-        assertThat(reading.version()).isEqualTo(1);
-        assertThat(reading.readers()).containsExactly(1);
+        assertThat(reading.version()).isEqualTo(2);
+        assertThat(reading.readers()).containsExactly(2);
         QuizFile file = reading.file();
         assertThat(file.title()).isEqualTo("Capitals");
         assertThat(file.cover()).isEqualTo("f1");
@@ -70,7 +70,7 @@ class QuizFileTest {
     @Test
     void aFileOfAnotherVersionOrFormatIsRefusedWithItsReason() {
         Map<String, Object> newer = document();
-        newer.put("formatVersion", 2);
+        newer.put("formatVersion", 3);
         assertThat(QuizFileFormat.read(newer).status()).isEqualTo(QuizFileFormat.Status.TOO_NEW);
         Map<String, Object> older = document();
         older.put("formatVersion", 0);
@@ -90,10 +90,79 @@ class QuizFileTest {
     }
 
     @Test
+    void aVersionOneFileIsReadAsAQuizOfItsBaseLanguageOnly() {
+        Map<String, Object> v1 = document();
+        v1.put("formatVersion", 1);
+        QuizFileFormat.Reading reading = QuizFileFormat.read(v1);
+        assertThat(reading.status()).isEqualTo(QuizFileFormat.Status.SUPPORTED);
+        assertThat(reading.readers()).containsExactly(1, 2);
+        assertThat(reading.file().language()).isNull();
+        assertThat(reading.file().translations()).isEmpty();
+    }
+
+    /** The current file in Japanese with a Chinese translation: texts, an image, a material and a hash (Q73a). */
+    @SuppressWarnings("unchecked")
+    static Map<String, Object> translated() {
+        Map<String, Object> document = document();
+        ((Map<String, Object>) document.get("quiz")).put("language", "en");
+        document.put("translations", map("zh", map(
+            "texts", map("title", "首都", "q1.stem", "法国的首都？", "q1.o1.text", "巴黎"),
+            "images", map("q1.image", "f4"),
+            "materials", List.of(map("no", 1, "kind", "ARTICLE", "title", "先读", "body", "巴黎是首都。",
+                "images", List.of()), map("no", 2, "kind", "IMAGES", "title", "地图", "images",
+                List.of(map("image", "f4", "caption", "法国")))),
+            "hashes", map("q1.stem", "0123456789abcdef"))));
+        ((Map<String, Object>) document.get("files")).put("f4", map("name", "image.png", "type", "image/png",
+            "size", 4000));
+        return document;
+    }
+
+    @Test
+    void readsChecksAndConvertsTheOtherLanguages() {
+        QuizFile file = QuizFileFormat.read(translated()).file();
+        assertThat(file.language()).isEqualTo("en");
+        assertThat(file.translations()).containsOnlyKeys("zh");
+        assertThat(QuizFileChecks.check(file)).isEmpty();
+        assertThat(QuizFileChecks.needed(file)).containsKey("f4");
+        assertThat(QuizFileChecks.uses(file)).extracting(QuizFileChecks.Use::at).contains("translations.zh.images.q1.image",
+            "translations.zh.materials[1].images[0].image");
+
+        UUID f4 = UUID.randomUUID();
+        QuizSnapshot snapshot = QuizTransferProcesses.snapshot(file, Map.of("f4", f4));
+        QuizSnapshot.Language zh = snapshot.translations().get("zh");
+        assertThat(zh.texts()).containsEntry("q1.stem", "法国的首都？");
+        assertThat(zh.images()).containsEntry("q1.image", f4);
+        assertThat(zh.materials()).extracting(QuizSnapshot.Material::no).containsExactly(1, 2);
+        assertThat(zh.materials().get(1).images().getFirst().image()).isEqualTo(f4);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void refusesTranslationsTheQuizCannotTake() {
+        Map<String, Object> document = translated();
+        ((Map<String, Object>) document.get("quiz")).remove("language");
+        Map<String, Object> zh = (Map<String, Object>) ((Map<String, Object>) document.get("translations")).get("zh");
+        zh.put("texts", map("q9.stem", "x", "q2.o3.text", "x", "intro", "x".repeat(ContentLimits.INTRO_LENGTH + 1),
+            "q1.o1.image", "x"));
+        zh.put("images", map("q1.o5.image", "f4", "title", "f4"));
+        zh.put("materials", List.of(map("no", 1, "kind", "PDF", "title", "x", "images", List.of()),
+            map("no", 3, "kind", "ARTICLE", "title", "x", "body", "x", "images", List.of())));
+        zh.put("hashes", map("q1.stem", "nothex"));
+        ((Map<String, Object>) document.get("translations")).put("fr", map());
+        List<String> at = QuizFileChecks.check(QuizFileFormat.read(document).file()).stream().map(Violation::field)
+            .toList();
+        assertThat(at).contains("quiz.language", "translations.zh.texts.q9.stem", "translations.zh.texts.q2.o3.text",
+            "translations.zh.texts.intro", "translations.zh.texts.q1.o1.image", "translations.zh.images.q1.o5.image",
+            "translations.zh.images.title", "translations.zh.materials[0].kind", "translations.zh.materials[1].no",
+            "translations.zh.hashes.q1.stem", "translations.fr");
+    }
+
+    @Test
     void anOlderVersionGoesThroughEachLaterUpgrade() {
         // As if version 3 were current: a version 1 file whose title was "name" in version 1 and the article
         // "text" until version 2.
         Map<String, Object> v1 = document();
+        v1.put("formatVersion", 1);
         @SuppressWarnings("unchecked")
         Map<String, Object> quiz = new LinkedHashMap<>((Map<String, Object>) v1.get("quiz"));
         quiz.put("name", quiz.remove("title"));
