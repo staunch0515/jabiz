@@ -74,6 +74,11 @@ export function FeedCardView({ card, href, playing = false, note, video, onOpen 
           <span className="sr-only">{t('feed.hasVideo')}</span>
         </span>
       )}
+      {card.video && card.watchRequired && (
+        // Q75: the video is the one to watch before answering.
+        <span className="bg-background/90 text-foreground absolute bottom-2 left-2 px-1.5 py-0.5 text-[11px] font-medium"
+          data-testid="feed-card-watch">{t('feed.watchFirst')}</span>
+      )}
     </span>
   )
   const name = <span className="line-clamp-2 leading-snug font-semibold" data-testid="feed-card-name">{card.name}</span>

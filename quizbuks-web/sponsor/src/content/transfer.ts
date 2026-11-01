@@ -33,6 +33,8 @@ type FileMaterial = {
   pdf: string | null; audio: string | null; images: { image: string; caption: string | null }[]
   /** Q19, written only when true (absent is false). */
   watchToAnswer?: true
+  /** Q75, written with `watchToAnswer` when the sponsor gave the duration (seconds). */
+  durationSec?: number
 }
 
 /**
@@ -117,6 +119,7 @@ export async function exportDraft(draft: Draft, onProgress?: Progress,
     pdf: key(m.pdf, 'pdf'), audio: key(m.audio, 'audio'),
     images: m.images.map((i) => ({ image: key(i.image, 'image')!, caption: i.caption })),
     ...(m.watchToAnswer ? { watchToAnswer: true as const } : {}),
+    ...(m.watchToAnswer && m.durationSec != null ? { durationSec: m.durationSec } : {}),
   })
   const document: QuizFileDocument = {
     format: QUIZ_FILE_FORMAT,

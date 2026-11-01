@@ -183,7 +183,7 @@ public final class QuizFileFormat {
             text(material.get("title"), at + ".title"), text(material.get("description"), at + ".description"),
             text(material.get("body"), at + ".body"), text(material.get("url"), at + ".url"),
             text(material.get("pdf"), at + ".pdf"), text(material.get("audio"), at + ".audio"), images,
-            Boolean.TRUE.equals(watch));
+            Boolean.TRUE.equals(watch), whole(material.get("durationSec"), at + ".durationSec"));
     }
 
     /** An object of texts by key (blank ones left out); none when absent. */

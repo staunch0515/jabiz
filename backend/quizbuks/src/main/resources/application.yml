@@ -343,6 +343,8 @@ jabiz:
       - path: /sponsor
         entry: sponsor
         pwa: "off"
+        # Q75: the material dialog previews the video to watch to read its duration from the player.
+        content-security-policy: "default-src 'self'; img-src 'self' blob: data:; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'; worker-src 'self'; manifest-src 'self'; frame-src https://www.youtube-nocookie.com https://player.vimeo.com"
       - path: /admin
         entry: admin
         pwa: "off"

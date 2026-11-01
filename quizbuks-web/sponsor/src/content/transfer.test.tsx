@@ -42,7 +42,7 @@ const DRAFT: Draft = {
     { questionId: 'k2', stem: 'Second?', image: null, points: 1, selection: null, options: [] },
   ],
   materials: [{ materialId: 'm1', kind: 'PDF', title: 'Paper', description: null, body: null, url: null,
-    pdf: 'file-pdf', audio: null, images: [], watchToAnswer: false, variantOf: null, language: null }],
+    pdf: 'file-pdf', audio: null, images: [], watchToAnswer: false, durationSec: null, variantOf: null, language: null }],
   variants: [],
   translations: [],
 }

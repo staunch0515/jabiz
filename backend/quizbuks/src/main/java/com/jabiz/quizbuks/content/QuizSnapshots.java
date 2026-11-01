@@ -110,6 +110,10 @@ public final class QuizSnapshots {
             // Only the video to watch says so (Q19): every other material's text and hash stay what they were.
             if (material.watchToAnswer()) {
                 m.put("watchToAnswer", true);
+                // Q75: and its duration when the sponsor gave one (D-Q75-5); other materials' text stays as it was.
+                if (material.durationSec() != null) {
+                    m.put("durationSec", material.durationSec());
+                }
             }
             materials.add(m);
         }
@@ -125,7 +129,8 @@ public final class QuizSnapshots {
             }
             materials.add(new QuizSnapshot.Material(number(m.get("no")), string(m.get("kind")),
                 string(m.get("title")), string(m.get("description")), string(m.get("body")), string(m.get("url")),
-                uuid(m.get("pdf")), uuid(m.get("audio")), images, Boolean.TRUE.equals(m.get("watchToAnswer"))));
+                uuid(m.get("pdf")), uuid(m.get("audio")), images, Boolean.TRUE.equals(m.get("watchToAnswer")), null,
+                m.get("durationSec") instanceof Number d ? d.intValue() : null));
         }
         return materials;
     }
@@ -194,8 +199,10 @@ public final class QuizSnapshots {
         List<QuizSnapshot.Material> materials = new ArrayList<>();
         for (QuizSnapshot.Material base : snapshot.materials()) {
             QuizSnapshot.Material m = own.get(base.no());
+            // Q75: the duration is the base's (the video to watch is watched in every language).
             materials.add(m == null ? base : new QuizSnapshot.Material(base.no(), base.kind(), m.title(),
-                m.description(), m.body(), m.url(), m.pdf(), m.audio(), m.images(), base.watchToAnswer(), language));
+                m.description(), m.body(), m.url(), m.pdf(), m.audio(), m.images(), base.watchToAnswer(), language,
+                base.durationSec()));
         }
         List<QuizSnapshot.Question> questions = new ArrayList<>();
         for (QuizSnapshot.Question q : snapshot.questions()) {

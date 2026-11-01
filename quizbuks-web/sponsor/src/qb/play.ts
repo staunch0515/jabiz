@@ -63,6 +63,9 @@ export interface FeedCard {
   cover: string | null
   /** Q19: the player of the video watching which is enough to answer (one of `qb/video.ts`), else null. */
   video: string | null
+  /** Q75: whether that video must be watched before starting (D-Q75-4), and how long it is (seconds; null unknown). */
+  watchRequired?: boolean
+  videoDurationSec?: number | null
   kind: QuizKind
   /** The language the quiz is written in (Q59a); a preview's card has none. */
   language?: string | null
@@ -128,6 +131,8 @@ function feedCard(row: Record<string, unknown>): FeedCard {
     quizTitle: String(row.quizTitle ?? ''),
     cover: textOrNull(row.cover),
     video: trustedPlayer(textOrNull(row.video)),
+    watchRequired: row.watchRequired === true || row.watchRequired === 'true',
+    videoDurationSec: row.videoDurationSec == null ? null : numberOf(row.videoDurationSec),
     kind: kindOf(row.kind),
     language: textOrNull(row.language),
     maxReward: row.maxReward,
@@ -196,6 +201,8 @@ export interface Material {
   images: { no: number; image: string; caption: string | null }[]
   /** VIDEO_LINK (Q19): watching it is enough to answer. */
   watchToAnswer: boolean
+  /** Q75: how long the video to watch is, in seconds, as the sponsor gave it (null for other materials). */
+  durationSec: number | null
 }
 
 /** The materials of the template's column (the snapshot's JSON); none when it cannot be read. */
@@ -221,6 +228,7 @@ export function parseMaterials(json: unknown): Material[] {
       .filter((i): i is Record<string, unknown> => typeof i === 'object' && i !== null && !!i.image)
       .map((i) => ({ no: numberOf(i.no), image: String(i.image), caption: textOrNull(i.caption) })),
     watchToAnswer: m.watchToAnswer === true,
+    durationSec: typeof m.durationSec === 'number' ? m.durationSec : null,
   }))
 }
 
@@ -230,6 +238,9 @@ export interface PublicationView {
   name: string
   quizTitle: string
   cover: string | null
+  /** Q75: the card's video must be watched before starting (the start waits for it), and its duration in seconds. */
+  watchRequired: boolean
+  videoDurationSec: number | null
   kind: QuizKind
   /** Markdown. */
   intro: string | null
@@ -319,6 +330,8 @@ export async function readPublication(request: PublicationRequest): Promise<Publ
     name: String(row.name ?? ''),
     quizTitle: String(row.quizTitle ?? ''),
     cover: textOrNull(row.cover),
+    watchRequired: row.watchRequired === true || row.watchRequired === 'true',
+    videoDurationSec: row.videoDurationSec == null ? null : numberOf(row.videoDurationSec),
     kind: kindOf(row.kind),
     intro: textOrNull(row.intro),
     materials: parseMaterials(row.materials),
@@ -455,8 +468,21 @@ export function unanswered(questions: readonly QuestionView[], answers: Readonly
  * retrying the same start (a busy answer, a lost one): the retry of one that went through returns its answer. Q73b: a
  * new attempt answers in `language` (one the publication offers; its main one when none); one in progress keeps its own.
  */
-export const startAttempt = (publicationId: string, idempotencyKey?: string, language?: string | null) =>
-  runProcess<StartOutput>(PLAY.start, { publicationId, ...(language ? { language } : {}) }, { idempotencyKey })
+/**
+ * `WatchRules.Playback` (Q75): what the App read from the video's player, sent with a start; the server refuses a new
+ * start of a publication whose video must be watched without enough of it (`QB_ATTEMPT_WATCH_REQUIRED`).
+ */
+export interface Playback {
+  status: 'REPORTED' | 'UNKNOWN'
+  watchedSec?: number
+  ended?: boolean
+  reportedDurationSec?: number
+}
+
+export const startAttempt = (publicationId: string, idempotencyKey?: string, language?: string | null,
+  playback?: Playback | null) =>
+  runProcess<StartOutput>(PLAY.start, { publicationId, ...(language ? { language } : {}),
+    ...(playback ? { playback } : {}) }, { idempotencyKey })
 
 /** `AttemptProcesses.SaveInput`. */
 export interface SaveInput {

@@ -29,6 +29,8 @@ results:
   redeemDescription: { from: QbPublicationCard.redeemDescription }
   digitalDelivery: { from: QbPublicationCard.digitalDelivery }
   digitalDescription: { from: QbPublicationCard.digitalDescription }
+  watchRequired:  { from: QbPublicationCard.watchRequired }
+  videoDurationSec: { from: QbPublicationCard.videoDurationSec }
   sponsorCompany: { from: QbSponsor.company }
   sponsorHandle:  { from: QbSponsorPage.handle }
 list:
@@ -54,6 +56,9 @@ SELECT
     c.{{QbPublicationCard.redeemDescription}} AS redeemDescription,
     c.{{QbPublicationCard.digitalDelivery}} AS digitalDelivery,
     c.{{QbPublicationCard.digitalDescription}} AS digitalDescription,
+    -- Q75: the video must be watched before answering (shown before signing in), and how long it is.
+    c.{{QbPublicationCard.watchRequired}} AS watchRequired,
+    c.{{QbPublicationCard.videoDurationSec}} AS videoDurationSec,
     sp.{{QbSponsor.company}}              AS sponsorCompany,
     -- Q60a: the sponsor's published page, which the sponsor's name links to.
     pg.{{QbSponsorPage.handle}}           AS sponsorHandle

@@ -59,11 +59,13 @@ public final class PlayCodes {
     public static final String TOO_FAST = "QB_ATTEMPT_TOO_FAST";
     /** Q73b: the language asked for is not one the publication offers. */
     public static final String LANGUAGE = "QB_ATTEMPT_LANGUAGE";
+    /** Q75 (D-Q75-4): the video to watch was not watched (by the App's report) before starting. */
+    public static final String WATCH_REQUIRED = "QB_ATTEMPT_WATCH_REQUIRED";
 
     public static final List<String> ALL = List.of(TOO_FAST, NOT_OPEN, NOT_VISIBLE, BUDGET_FULL, QUOTA_FULL, FUNDS_SHORT,
         ALREADY_TAKEN, VERSION_CHANGED, OWN_PUBLICATION, EXPIRED, NOT_IN_PROGRESS, FINISHED, ANSWER_INVALID, INCOMPLETE, SINGLE_CHOICE, PUBLICATION_MISMATCH,
         FEE_RATE_INVALID, REWARD_PENDING, REWARD_CASH, REWARD_REDEEM, REWARD_DIGITAL,
-        REWARD_DIGITAL_DUE, LANGUAGE);
+        REWARD_DIGITAL_DUE, LANGUAGE, WATCH_REQUIRED);
 
     private PlayCodes() {}
 }

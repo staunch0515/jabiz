@@ -86,10 +86,25 @@ public record QuizSnapshot(String title, String intro, UUID cover, Integer timeL
      * ({@link MaterialKind}).
      */
     public record Material(int no, String kind, String title, String description, String body, String url, UUID pdf,
-        UUID audio, List<Image> images, boolean watchToAnswer, String language) {
+        UUID audio, List<Image> images, boolean watchToAnswer, String language, Integer durationSec) {
         public Material {
             Objects.requireNonNull(kind, "kind must not be null");
             images = List.copyOf(Objects.requireNonNull(images, "images must not be null"));
+        }
+
+        /** A material as before Q75: without a duration. */
+        public Material(int no, String kind, String title, String description, String body, String url, UUID pdf,
+            UUID audio, List<Image> images, boolean watchToAnswer, String language) {
+            this(no, kind, title, description, body, url, pdf, audio, images, watchToAnswer, language, null);
+        }
+
+        /**
+         * The same material with this duration (Q75: how long the video is, in seconds, as the sponsor gave it; a
+         * version writes it on the video to watch only).
+         */
+        public Material withDuration(Integer seconds) {
+            return new Material(no, kind, title, description, body, url, pdf, audio, images, watchToAnswer, language,
+                seconds);
         }
 
         /**

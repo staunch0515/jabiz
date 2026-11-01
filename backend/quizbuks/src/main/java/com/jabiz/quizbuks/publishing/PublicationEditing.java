@@ -614,7 +614,7 @@ final class PublicationEditing {
         card.put("languages", String.join(",", offered));
         card.put("translations", PublicationLanguages.cardJson(publication.get("translations"), snapshot, offered,
             String.valueOf((Object) version.get("language"))));
-        card.put("video", cardVideo(snapshot.materials()));
+        cardVideo(snapshot.materials()).writeTo(card);
         card.put("wentOnAt", ctx.opTime());
         EntityInstance operator = first(ctx, SPONSOR_OPERATOR);
         card.put("operatorId", operator == null ? null : operator.get("operatorId"));
@@ -637,13 +637,29 @@ final class PublicationEditing {
      * The video on the publication's card (Q19, Q63): the one watching which is enough to answer, else the first
      * material's video the App plays (YouTube or Vimeo), so that the taker learns from it before answering; else none.
      */
-    static String cardVideo(List<QuizSnapshot.Material> materials) {
+    static CardVideo cardVideo(List<QuizSnapshot.Material> materials) {
         return materials.stream().filter(QuizSnapshot.Material::watchToAnswer).findFirst()
-            .flatMap(material -> VideoEmbeds.player(material.url()))
+            .flatMap(material -> VideoEmbeds.player(material.url())
+                .map(player -> new CardVideo(player, true, material.durationSec())))
             .or(() -> materials.stream()
                 .filter(material -> "VIDEO_LINK".equals(material.kind()) && material.url() != null)
-                .flatMap(material -> VideoEmbeds.player(material.url()).stream()).findFirst())
-            .orElse(null);
+                .flatMap(material -> VideoEmbeds.player(material.url()).stream()).findFirst()
+                .map(player -> new CardVideo(player, false, null)))
+            .orElse(CardVideo.NONE);
+    }
+
+    /**
+     * The video on a publication's card (Q19, Q63, Q75): its player, whether it is the video to watch (the start then
+     * requires its watching, D-Q75-4) and how long it is (as the sponsor gave it; none for an ordinary video).
+     */
+    public record CardVideo(String player, boolean watchRequired, Integer durationSec) {
+        static final CardVideo NONE = new CardVideo(null, false, null);
+
+        void writeTo(Map<String, Object> card) {
+            card.put("video", player);
+            card.put("watchRequired", watchRequired);
+            card.put("videoDurationSec", durationSec == null ? null : BigDecimal.valueOf(durationSec));
+        }
     }
 
     /** The publication's policy as the readiness check and the approval see it. */

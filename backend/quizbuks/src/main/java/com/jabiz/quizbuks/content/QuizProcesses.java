@@ -521,6 +521,7 @@ public final class QuizProcesses {
         m.put("pdf", material.pdf());
         m.put("audio", material.audio());
         m.put("watchToAnswer", variantOf == null && material.watchToAnswer());
+        m.put("durationSec", variantOf == null && material.durationSec() != null ? decimal(material.durationSec()) : null);
         if (variantOf != null) {
             m.put("variantOf", variantOf);
             m.put("language", language);

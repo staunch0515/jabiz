@@ -83,6 +83,12 @@ public final class QbPlay {
         eb.field("rewardPaidAt", f -> f.physicalColumn("reward_paid_at").processOnly()
             .asTemporal(TemporalRole.EVENT_TIME));
         eb.field("ledgerTransactionId", f -> f.physicalColumn("ledger_transaction_id").processOnly().asText(64));
+        // Q75 (D-Q75-9): what the App reported of the video's playback at the start: seconds watched, whether the
+        // video ended, and whether it could report at all (REPORTED / UNKNOWN); all null when the card has no video.
+        eb.field("watchedSec", f -> f.physicalColumn("watched_sec").immutable(true).processOnly().asNumeric(6, 0));
+        eb.field("videoEnded", f -> f.physicalColumn("video_ended").immutable(true).processOnly().asBool());
+        eb.field("playbackStatus", f -> f.physicalColumn("playback_status").immutable(true).processOnly()
+            .asText(10));
         eb.field("version", f -> f.physicalColumn("version").asVersion());
         // Finished is final: the platform refuses any other move as well.
         eb.stateTransitions("status", st -> st

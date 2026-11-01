@@ -128,7 +128,7 @@
 
 ### A. 视频播放的校验：知道答题者看过、看完
 
-> 实施计划已出：`plans/Q75-video-playback.md`（2026-11-01，待确认；需求方定下的顺序 A → D → E）。下文是候选时的概述，细节以计划为准。
+> **已实现**（Q75，`plans/Q75-video-playback.md`，需求方 2026-11-01 确认，顺序 A → D → E）。下文是候选时的概述，细节以计划为准。
 
 - **内容**：开始页与首页卡片的播放器改用 YouTube IFrame Player API 与 Vimeo Player API（`enablejsapi=1` / `postMessage`，仍是无 Cookie 的嵌入）；
   App 记录播放开始、进度与结束，在开始答题与提交时一并交给服务器（`QB_ATTEMPT_START` / `QB_ATTEMPT_SUBMIT` 的输入多几个字段，不加语句：写进会话的现有行）。

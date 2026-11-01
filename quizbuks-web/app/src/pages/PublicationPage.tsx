@@ -23,6 +23,7 @@ import { Link } from '../qb/router'
 import { prefersStillVideo } from '../qb/video'
 import { SponsorVisit } from './SponsorVisit'
 import { VideoSlot } from '../video/stage'
+import { clock, satisfied, shortfallSec, toInput, usePlayback } from '../video/playback'
 import { PublicationContent, useDuration } from '../qb/view/PublicationContent'
 import { ReferralPanel } from '../referral/ReferralPanel'
 import { ReportButton } from '../report/ReportButton'
@@ -44,6 +45,13 @@ function Action({ publication, onLanguage }: { publication: PublicationView; onL
   const duration = useDuration()
   const mine = publication.myAttemptId
   const inProgress = mine && publication.myStatus === 'IN_PROGRESS' && minutesUntil(publication.myDeadline) > 0
+  // Q75 (D-Q75-4): a video to watch first. Without the app's player (less motion asked for) nothing can be heard:
+  // the start goes with an UNKNOWN report (D-Q75-6). The server applies the same rule to what is sent.
+  const playback = usePlayback(publication.publicationId)
+  const noPlayer = prefersStillVideo()
+  const watching = publication.watchRequired && !inProgress && !mine
+  const watched = !watching || noPlayer || satisfied(playback, publication.videoDurationSec)
+  const report = noPlayer && !toInput(playback) ? { status: 'UNKNOWN' as const } : toInput(playback)
 
   let action
   if (mine && !inProgress) {
@@ -86,10 +94,23 @@ function Action({ publication, onLanguage }: { publication: PublicationView; onL
         <p className="text-muted-foreground text-sm" id="detail-start-hint">
           {inProgress ? t('detail.continueHint') : t('detail.startHint', { time: duration(publication.timeLimitSec) })}
         </p>
-        <Button size="lg" className="w-full" disabled={start.isPending} aria-busy={start.isPending || undefined}
-          aria-describedby="detail-start-hint" data-testid="detail-start"
+        {watching && !noPlayer && (
+          <p className="text-sm" id="detail-watch-hint" role="status" aria-live="polite" data-testid="detail-watch"
+            data-watched={watched || undefined} data-playback={playback.status ?? undefined}>
+            {playback.status === 'UNKNOWN' ? t('detail.playbackUnknown')
+              : watched ? t('detail.watched')
+                : publication.videoDurationSec != null
+                  ? t('detail.watchProgress', { watched: clock(playback.watchedSec), total: clock(publication.videoDurationSec),
+                    left: shortfallSec(playback, publication.videoDurationSec) })
+                  : t('detail.watchToEnd')}
+          </p>
+        )}
+        <Button size="lg" className="w-full" disabled={start.isPending || !watched} aria-busy={start.isPending || undefined}
+          aria-describedby={watching && !noPlayer ? 'detail-start-hint detail-watch-hint' : 'detail-start-hint'}
+          data-testid="detail-start"
           onClick={() => start.mutate({ publicationId: publication.publicationId,
-            language: inProgress ? null : publication.displayLanguage })}>
+            language: inProgress ? null : publication.displayLanguage,
+            playback: inProgress ? null : report })}>
           <Play aria-hidden />
           {inProgress
             ? t('detail.continue', { count: minutesUntil(publication.myDeadline) })
@@ -217,6 +238,7 @@ export function PublicationPage({ publicationId, country }: { publicationId: str
       <PublicationContent publication={p} tiers={tiers.data ?? []} linkSponsor autoplay={!prefersStillVideo()}
         video={prefersStillVideo() ? undefined : (player, title) => (
           <VideoSlot id={`page:${p.publicationId}`} player={player} title={title} mode="page"
+            publicationId={p.publicationId}
             className="bg-muted relative aspect-video w-full sm:border" />
         )} />
       <ProductCards products={quizProducts(products.data)}
