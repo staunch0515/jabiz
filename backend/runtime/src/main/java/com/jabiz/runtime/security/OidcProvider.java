@@ -79,6 +79,11 @@ public record OidcProvider(String id, String issuer, String clientId, String cli
     public static final String APPLE_ISSUER = "https://appleid.apple.com";
     /** Apple knows no {@code profile}: the name comes with the first sign-in's answer (decision D67 item 3). */
     public static final List<String> APPLE_SCOPES = List.of("openid", "name", "email");
+    /** Where Apple posts its answer for the provider {@code id}, on this server (decision D67 item 1). */
+    public static String formPostPath(String id) {
+        return "/api/auth/oidc/" + id + "/form-post";
+    }
+
     /** Apple's team and key ids: ten upper-case letters or digits. */
     private static final Pattern APPLE_ID = Pattern.compile("[A-Z0-9]{10}");
     /** The shortest client secret an HS256 key may be (RFC 7518 section 3.2: the hash's size, 256 bits). */
@@ -299,8 +304,8 @@ public record OidcProvider(String id, String issuer, String clientId, String cli
         }
         requireCallback(problems, "apple.form-post-uri", apple.formPostUri());
         if (secureUrl(apple.formPostUri()) && id != null
-            && !URI.create(apple.formPostUri()).getPath().endsWith(OidcController.formPostPath(id))) {
-            problems.add("apple.form-post-uri must be this server's " + OidcController.formPostPath(id));
+            && !URI.create(apple.formPostUri()).getPath().endsWith(formPostPath(id))) {
+            problems.add("apple.form-post-uri must be this server's " + formPostPath(id));
         }
         if (!scopes.stream().allMatch(APPLE_SCOPES::contains)) {
             problems.add("scopes of kind apple are openid, name and email only");

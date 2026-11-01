@@ -153,9 +153,10 @@ public class OidcStateStore {
             String hash = hash(state);
             Instant now = now();
             return engine.get().inTransaction(engine.get().select("""
-                    SELECT provider_id, nonce_hash, binder_hash, code_verifier, expires_at, entry, purpose,
-                           link_user_id::text AS link_user_id, provided_name
-                    FROM sec_oidc_state WHERE state_hash = :hash""", Map.of("hash", BoundValue.of(hash)))
+                    SELECT s.provider_id, s.nonce_hash, s.binder_hash, s.code_verifier, s.expires_at, s.entry,
+                           s.purpose, s.link_user_id::text AS link_user_id, n.provided_name
+                    FROM sec_oidc_state s LEFT JOIN sec_oidc_state_name n ON n.state_hash = s.state_hash
+                    WHERE s.state_hash = :hash""", Map.of("hash", BoundValue.of(hash)))
                 .next()
                 .switchIfEmpty(Mono.error(() -> new InvalidStateException("Unknown state")))
                 .flatMap(row -> {
@@ -168,7 +169,12 @@ public class OidcStateStore {
                     Map<String, Object> use = new LinkedHashMap<>();
                     use.put("state_hash", hash);
                     use.put("used_at", now);
-                    return engine.get().insert("sec_oidc_state_use", use).thenReturn(new Pending(
+                    // The name the provider posted goes with the request that uses it (decision D67 item 4); a
+                    // request without one costs no statement more.
+                    Mono<Void> forget = row.get("provided_name") == null ? Mono.empty()
+                        : engine.get().select("DELETE FROM sec_oidc_state_name WHERE state_hash = :hash "
+                            + "RETURNING state_hash", Map.of("hash", BoundValue.of(hash))).then();
+                    return engine.get().insert("sec_oidc_state_use", use).then(forget).thenReturn(new Pending(
                         String.valueOf(row.get("provider_id")), String.valueOf(row.get("nonce_hash")),
                         String.valueOf(row.get("code_verifier")),
                         row.get("entry") == null ? null : String.valueOf(row.get("entry")),
@@ -184,9 +190,10 @@ public class OidcStateStore {
      * The provider posted its answer for {@code state} to this server (Apple's {@code form_post}, decision D67 item 1):
      * keeps the name it told, the first one only, and says which provider and entry the round trip is of, so that the
      * browser goes on to that entry's callback. Does not use the state up: the callback does, with the browser's binder.
-     * Empty when the state is unknown, expired or used.
+     * Empty when the state is unknown, expired, used or of another provider than {@code providerId} (nothing is kept
+     * then). Removes the expired requests first, as starting one does, so that no name outlives its request long.
      */
-    public Mono<Posted> posted(String state, String providedName) {
+    public Mono<Posted> posted(String providerId, String state, String providedName) {
         return Mono.defer(() -> {
             if (malformed(state)) {
                 return Mono.empty();
@@ -194,14 +201,24 @@ public class OidcStateStore {
             String hash = hash(state);
             Map<String, BoundValue> params = new LinkedHashMap<>();
             params.put("hash", BoundValue.of(hash));
-            params.put("now", BoundValue.of(now()));
+            params.put("provider", BoundValue.of(providerId));
+            Instant now = now();
+            params.put("now", BoundValue.of(now));
             params.put("name", providedName == null ? BoundValue.nullOf(String.class) : BoundValue.of(providedName));
-            return engine.get().select("""
-                    UPDATE sec_oidc_state SET provided_name = COALESCE(provided_name, :name)
-                    WHERE state_hash = :hash AND expires_at > :now
-                      AND NOT EXISTS (SELECT 1 FROM sec_oidc_state_use u WHERE u.state_hash = :hash)
-                    RETURNING provider_id, entry""", params)
-                .next()
+            // The first name only: a second post (a reload) finds the row and keeps it.
+            return engine.get().select("DELETE FROM sec_oidc_state WHERE expires_at < :now RETURNING state_hash",
+                    Map.of("now", BoundValue.of(now)))
+                .then(engine.get().select("""
+                    WITH pending AS (
+                        SELECT state_hash, provider_id, entry FROM sec_oidc_state
+                        WHERE state_hash = :hash AND provider_id = :provider AND expires_at > :now
+                          AND NOT EXISTS (SELECT 1 FROM sec_oidc_state_use u WHERE u.state_hash = :hash)),
+                    named AS (
+                        INSERT INTO sec_oidc_state_name (state_hash, provided_name)
+                        SELECT state_hash, CAST(:name AS varchar) FROM pending WHERE CAST(:name AS varchar) IS NOT NULL
+                        ON CONFLICT (state_hash) DO NOTHING RETURNING state_hash)
+                    SELECT provider_id, entry, (SELECT count(*) FROM named) AS named FROM pending""", params)
+                .next())
                 .map(row -> new Posted(String.valueOf(row.get("provider_id")),
                     row.get("entry") == null ? com.jabiz.context.RequestContext.DEFAULT_ENTRY
                         : String.valueOf(row.get("entry"))));

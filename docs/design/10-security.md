@@ -364,10 +364,10 @@ BCrypt 有意很慢（每次数十到数百毫秒 CPU）。登录洪峰时若不
 2. **答复以表单回传给服务器**：要姓名或邮箱时 Apple 只能 `response_mode=form_post`，单页应用收不到 POST。授权请求的 `redirect_uri` 因此是 `apple.form-post-uri`（换令牌时同样以它为准），
    `POST /api/auth/oidc/{id}/form-post`（公开，按客户端地址限流 `OIDC_FORM_POST`）以 state 找到尚未使用、未过期、属于该提供方的一轮（不消费它），
    以 303 把浏览器送到**该轮所记入口的回调**（`redirect-uris.<入口>`），查询中带 `state` 与 `code`（同其他提供方回到回调的样子）；之后照常由页面以 binder 调回调或关联的回调。
-   只转到配置中的回调，请求中的任何地址都不算；Apple 的拒绝（`error`，如用户取消）带 `error` 转过去、不带 `code`（不是 RFC 6749 形式的错误码一律为 `access_denied`）；
+   只转到配置中的回调，请求中的任何地址都不算；Apple 的拒绝（`error`，如用户取消）带 `error` 转过去、不带 `code`（不是 RFC 6749 形式的错误码一律为 `access_denied`；`OidcCallback` 遇到 Apple 的取消 `user_cancelled_authorize` 直接回到登录页，不显示失败）；
    state 未知、过期、用过或属于别的提供方即 401 `LOGIN_FAILED`。响应带 `Cache-Control: no-store` 与 `Referrer-Policy: no-referrer`。
-3. **姓名只在首次授权的表单中**（`user` 字段的 `name.firstName` / `lastName`，不在 ID 令牌中）：记在该轮的 `sec_oidc_state.provided_name`（只记第一次，10 分钟内随该行删除），
-   回调时 ID 令牌没有 `name` 即以它作显示名（开户时，清理与截断同令牌的 `name`）。名与姓之间空一格；任一含汉字或假名时姓在前、不空格。`user` 中的邮箱不用（以签名的 ID 令牌为准）。
+3. **姓名只在首次授权的表单中**（`user` 字段的 `name.firstName` / `lastName`，不在 ID 令牌中）：记在该轮名下的 `sec_oidc_state_name`（只记第一次、只记在属于该提供方的一轮上；回调用掉该轮时即删除，没用完的随过期的一轮在下一次发起或回传时删除；另建一表，使 `sec_oidc_state` 照旧只插入；不与用户关联、用完即删，不在抹除的清除范围中），
+   回调时 ID 令牌没有 `name` 即以它作显示名（开户时，清理与截断同令牌的 `name`）。名与姓之间空一格；任一含汉字、假名或谚文时姓在前、不空格。`user` 中的邮箱不用（以签名的 ID 令牌为准）。
 4. **不带 PKCE**：Apple 的文档没有 PKCE，授权请求不带 `code_challenge`、换令牌不带 `code_verifier`；授权码由 ID 令牌中的 nonce、state 与 binder、只有服务器能签的客户端密钥保护。
 Apple 的邮箱由 Apple 验证（`email_verified` 为 `true` 或文本 `"true"`），隐藏邮箱（`…@privaterelay.appleid.com`）同样是受担保的地址，可以开户、收信（须在 Apple 登记发信域名）。
 前端 `OidcButtons` 对 `kind: apple` 显示 Apple 的标志（取文字颜色：浅色按钮上黑、深色上白，同 Apple 的白色描边与黑色样式）与 Apple 规定的文字

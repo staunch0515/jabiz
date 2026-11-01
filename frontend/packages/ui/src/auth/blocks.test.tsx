@@ -517,6 +517,15 @@ describe('OidcCallback', () => {
     expect(onBack).toHaveBeenCalled()
   })
 
+  it('goes straight back when the person cancelled at Apple', async () => {
+    window.history.replaceState(null, '', '/portal/login/oidc?state=s&error=user_cancelled_authorize')
+    const onBack = vi.fn()
+    render(<OidcCallback fallbackPath="/portal/" auth={{ signInWithProvider: vi.fn() }} onSignedIn={vi.fn()}
+      onSecondStep={vi.fn()} onBack={onBack} />)
+    expect(onBack).toHaveBeenCalled()
+    expect(screen.queryByTestId('oidc-error')).toBeNull()
+  })
+
   it('finishes a link instead when the round trip was started to link an account', async () => {
     window.history.replaceState(null, '', '/portal/login/oidc?state=s2&code=c2')
     window.sessionStorage.setItem('jabiz.session.portal.oidcBinder', 'b2')

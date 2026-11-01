@@ -55,11 +55,6 @@ class OidcController {
 
     static final String BASE = "/api/auth/oidc";
 
-    /** Where Apple posts its answer for the provider {@code id} (decision D67 item 1). */
-    static String formPostPath(String id) {
-        return BASE + "/" + id + "/form-post";
-    }
-
     /** The longest {@code user} form field read: Apple's names and address, with room to spare. */
     static final int MAX_USER_FIELD = 4096;
 
@@ -227,8 +222,7 @@ class OidcController {
                 String state = form.getFirst("state");
                 String code = form.getFirst("code");
                 String error = form.getFirst("error");
-                return states.posted(state, AppleUser.name(form.getFirst("user")))
-                    .filter(posted -> posted.providerId().equals(provider.id()))
+                return states.posted(provider.id(), state, AppleUser.name(form.getFirst("user")))
                     .switchIfEmpty(Mono.error(() -> AuthController.loginFailed("Unknown, expired or used state, or "
                         + "another provider's, posted to " + provider.id())))
                     .flatMap(posted -> {
@@ -246,8 +240,9 @@ class OidcController {
                             log.info("Identity provider {} refused: {}", provider.id(), known);
                             next.queryParam("error", known);
                         }
+                        // Encoded as values, not as a template: braces in a posted code are no template variables.
                         return Mono.just(ResponseEntity.status(HttpStatus.SEE_OTHER)
-                            .location(next.encode().build().toUri())
+                            .location(next.build().encode().toUri())
                             .header(HttpHeaders.CACHE_CONTROL, "no-store")
                             .header("Referrer-Policy", "no-referrer")
                             .<Void>build());

@@ -107,6 +107,7 @@ class AppleClientSecretTest {
         assertThat(AppleUser.name("{\"name\":{\"firstName\":\"Ada\",\"lastName\":\"Lovelace\"},\"email\":\"a@b.c\"}"))
             .isEqualTo("Ada Lovelace");
         assertThat(AppleUser.name("{\"name\":{\"firstName\":\"太郎\",\"lastName\":\"山田\"}}")).isEqualTo("山田太郎");
+        assertThat(AppleUser.name("{\"name\":{\"firstName\":\"민준\",\"lastName\":\"김\"}}")).isEqualTo("김민준");
         assertThat(AppleUser.name("{\"name\":{\"firstName\":\"Ada\"}}")).isEqualTo("Ada");
         assertThat(AppleUser.name("{\"name\":{\"lastName\":\" \\u0000Lovelace \"}}")).isEqualTo("Lovelace");
         assertThat(AppleUser.name("{\"email\":\"a@b.c\"}")).isNull();

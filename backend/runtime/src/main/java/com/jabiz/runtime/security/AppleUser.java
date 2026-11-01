@@ -16,8 +16,8 @@ final class AppleUser {
 
     /**
      * The person's name, as a token's name is cleaned ({@link IdTokenValidator#name}), or null: given and family name
-     * with a space between, or the family name first and no space when either is written in Chinese or Japanese
-     * characters, as such names are written. Anything unreadable or larger than {@link OidcController#MAX_USER_FIELD}
+     * with a space between, or the family name first and no space when either is written in Chinese, Japanese or
+     * Korean characters, as such names are written. Anything unreadable or larger than {@link OidcController#MAX_USER_FIELD}
      * is no name.
      */
     static String name(String field) {
@@ -43,12 +43,12 @@ final class AppleUser {
         return value instanceof String text && !text.isBlank() ? text.strip() : null;
     }
 
-    /** Whether the text has Han, Hiragana or Katakana characters. */
+    /** Whether the text has Han, Hiragana, Katakana or Hangul characters. */
     static boolean cjk(String text) {
         return text.codePoints().anyMatch(c -> {
             Character.UnicodeScript script = Character.UnicodeScript.of(c);
             return script == Character.UnicodeScript.HAN || script == Character.UnicodeScript.HIRAGANA
-                || script == Character.UnicodeScript.KATAKANA;
+                || script == Character.UnicodeScript.KATAKANA || script == Character.UnicodeScript.HANGUL;
         });
     }
 }

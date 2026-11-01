@@ -4,6 +4,7 @@ import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.util.JSONObjectUtils;
 import org.springframework.web.util.UriComponentsBuilder;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 import java.net.URI;
 import java.net.URLEncoder;
@@ -145,6 +146,16 @@ public class OidcClient {
      * token signed for the purpose ({@link AppleClientSecret}). No verifier where the round trip had no challenge.
      */
     Mono<Tokens> tokens(OidcProvider provider, String code, String codeVerifier, String redirectUri) {
+        // Signing Apple's secret draws on the system's random source, which may block: not on an event loop.
+        Mono<String> secret = provider.isApple()
+            ? Mono.fromCallable(() -> appleSecrets.secretOf(provider)).subscribeOn(Schedulers.boundedElastic())
+            : Mono.justOrEmpty(provider.clientSecret());
+        return secret.defaultIfEmpty("").flatMap(clientSecret -> tokens(provider, code, codeVerifier, redirectUri,
+            clientSecret));
+    }
+
+    private Mono<Tokens> tokens(OidcProvider provider, String code, String codeVerifier, String redirectUri,
+        String clientSecret) {
         Map<String, String> fields = new java.util.LinkedHashMap<>();
         fields.put("grant_type", "authorization_code");
         fields.put("code", code);
@@ -154,7 +165,7 @@ public class OidcClient {
         }
         if (provider.clientSecretPost()) {
             fields.put("client_id", provider.clientId());
-            fields.put("client_secret", provider.isApple() ? appleSecrets.secretOf(provider) : provider.clientSecret());
+            fields.put("client_secret", clientSecret);
         }
         String form = fields.entrySet().stream()
             .map(entry -> encode(entry.getKey()) + "=" + encode(entry.getValue()))
@@ -166,7 +177,7 @@ public class OidcClient {
             if (!provider.clientSecretPost()) {
                 // RFC 6749 section 2.3.1: client credentials are form-encoded before Basic authentication.
                 request.header("Authorization", "Basic " + Base64.getEncoder().encodeToString((encode(
-                    provider.clientId()) + ":" + encode(provider.clientSecret())).getBytes(StandardCharsets.UTF_8)));
+                    provider.clientId()) + ":" + encode(clientSecret)).getBytes(StandardCharsets.UTF_8)));
             }
             return send(request, "token request");
         })

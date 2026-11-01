@@ -4910,7 +4910,7 @@ D17 下匿名不能写任何东西（15 §10）。
 | # | 内容 | PR |
 |---|---|---|
 | 17j-1 | `kind: apple`：缺省 issuer 与范围、`apple.team-id` / `key-id` / `private-key` / `form-post-uri` 与启动检查（不用 `client-secret`）；`AppleClientSecret`（ES256、1 小时、缓存）、`client_secret_post`、不带 PKCE | 17j-a |
-| 17j-2 | `POST /api/auth/oidc/{id}/form-post`：按 state 找到该提供方尚未使用的一轮（不消费），303 转到该轮入口的回调（`state`、`code` 或 `error`），限流 `OIDC_FORM_POST`；迁移 `V54__oidc_provided_name.sql`，首次授权的姓名作开户的显示名 | 17j-a |
+| 17j-2 | `POST /api/auth/oidc/{id}/form-post`：按 state 找到该提供方尚未使用的一轮（不消费），303 转到该轮入口的回调（`state`、`code` 或 `error`），限流 `OIDC_FORM_POST`；迁移 `V54__oidc_provided_name.sql`（`sec_oidc_state_name`，用完即删），首次授权的姓名作开户的显示名 | 17j-a |
 | 17j-3 | 前端：`OidcButtons` 的 Apple 标志与 Apple 规定的标题（三语）；OpenAPI 快照与生成的类型 | 17j-a |
 | 17j-4 | 测试：`OidcProvidersTest`（检查）、`OidcClientTest`（签出的密钥、表单、无 PKCE、刷新令牌）、`AppleClientSecretTest`（签名、重签、私钥的写法、姓名的组成）、集成测试 `OidcAppleIT`（隐藏邮箱开户并以首次的姓名为显示名、再次登录、取消、未知或别的提供方的 state、非 Apple 提供方 404）、`blocks.test.tsx`（Apple 按钮，axe）；测试夹具 `TestOidcProvider.asApple` | 17j-a |
 | 17j-5 | 文档：决策 D67、10 §12、根 `CLAUDE.md` 单点登录一条 | 17j-a |

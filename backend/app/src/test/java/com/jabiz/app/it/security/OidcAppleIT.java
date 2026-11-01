@@ -131,6 +131,9 @@ class OidcAppleIT extends OidcItSupport {
         // Posting again (a reload) keeps the first name and still sends the browser on, until the callback uses the state.
         sentOn(formPost(APPLE, Map.of("state", request.state(), "code", code,
             "user", "{\"name\":{\"firstName\":\"Eve\"}}")));
+        assertThat(query("SELECT provided_name FROM sec_oidc_state_name WHERE state_hash = ?",
+            com.jabiz.runtime.security.OidcStateStore.hash(request.state()))).singleElement()
+            .satisfies(row -> assertThat(row).containsEntry("provided_name", "Ada Lovelace"));
 
         Map<String, Object> session = anonymous("/api/auth/oidc/callback", Map.of("state", query.get("state"),
             "code", query.get("code"), "binder", request.binder())).expectStatus().isOk().expectBody(MAP)
@@ -141,6 +144,9 @@ class OidcAppleIT extends OidcItSupport {
         assertThat(query("SELECT display_name FROM sec_user_version WHERE user_id = ?::uuid", userId))
             .singleElement().satisfies(row -> assertThat(row).containsEntry("display_name", "Ada Lovelace"));
         assertThat(linkedUser(APPLE, subject)).isEqualTo(userId);
+        // The name went with the request that used it.
+        assertThat(query("SELECT provided_name FROM sec_oidc_state_name WHERE state_hash = ?",
+            com.jabiz.runtime.security.OidcStateStore.hash(request.state()))).isEmpty();
 
         // The state is used: posting it once more is refused.
         formPost(APPLE, Map.of("state", request.state(), "code", code)).expectStatus().isUnauthorized();
@@ -174,12 +180,12 @@ class OidcAppleIT extends OidcItSupport {
         assertThat(refusal(formPost(APPLE, Map.of("state", "nope", "code", "c")), 401)).isEqualTo("LOGIN_FAILED");
         assertThat(refusal(formPost(APPLE, Map.of("code", "c")), 401)).isEqualTo("LOGIN_FAILED");
         Request open = start(OPEN, PORTAL);
-        assertThat(refusal(formPost(APPLE, Map.of("state", open.state(), "code", "c")), 401))
-            .isEqualTo("LOGIN_FAILED");
+        assertThat(refusal(formPost(APPLE, Map.of("state", open.state(), "code", "c",
+            "user", "{\"name\":{\"firstName\":\"Mallory\"}}")), 401)).isEqualTo("LOGIN_FAILED");
         // A provider that is not Apple takes no posted answers.
         formPost(OPEN, Map.of("state", open.state(), "code", "c")).expectStatus().isNotFound();
         // Nothing was kept for the other provider's state.
-        assertThat(query("SELECT provided_name FROM sec_oidc_state WHERE provider_id = ? AND provided_name IS NOT NULL",
-            OPEN)).isEmpty();
+        assertThat(query("SELECT provided_name FROM sec_oidc_state_name WHERE state_hash = ?",
+            com.jabiz.runtime.security.OidcStateStore.hash(open.state()))).isEmpty();
     }
 }
