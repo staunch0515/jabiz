@@ -268,6 +268,11 @@ export interface PublicationView {
    * the page asks for more of the profile instead of offering the start.
    */
   matched: boolean
+  /**
+   * Q70a: until when the caller holds the certification this publication is a round of; meanwhile it cannot be
+   * started (null for an ordinary publication, or one the caller does not hold).
+   */
+  heldUntil: string | null
   myAttemptId: string | null
   myStatus: string | null
   myDeadline: string | null
@@ -328,6 +333,7 @@ export async function readPublication(request: PublicationRequest): Promise<Publ
     statsAt: textOrNull(row.statsAt),
     canStart: row.canStart === true || row.canStart === 'true',
     matched: row.matched !== false && row.matched !== 'false',
+    heldUntil: textOrNull(row.heldUntil),
     myAttemptId: textOrNull(row.myAttemptId),
     myStatus: textOrNull(row.myStatus),
     myDeadline: textOrNull(row.myDeadline),

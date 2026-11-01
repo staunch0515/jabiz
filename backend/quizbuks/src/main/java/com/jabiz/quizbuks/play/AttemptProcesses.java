@@ -11,6 +11,7 @@ import com.jabiz.quizbuks.identity.CallerChecks;
 import com.jabiz.quizbuks.invitation.InvitationStatus;
 import com.jabiz.quizbuks.audience.AudienceCodes;
 import com.jabiz.quizbuks.audience.AudienceRows;
+import com.jabiz.quizbuks.certification.RoundHolders;
 import com.jabiz.quizbuks.invitation.Invitations;
 import com.jabiz.quizbuks.invitation.QbInvitations;
 import com.jabiz.quizbuks.reward.CashRewardChecks;
@@ -232,7 +233,9 @@ public final class AttemptProcesses {
                     // Q47: the publication's conditions and the caller's attributes, in the same statement (the
                     // statement budget stays); conditions are frozen with the publication, so not read again.
                     AudienceRows.conditions(ctx -> ctx.get(PUB_KEY), CONDITIONS),
-                    AudienceRows.callers(ATTRIBUTES)))
+                    AudienceRows.callers(ATTRIBUTES),
+                    // Q70a: whether the publication is a certification's round, in the same statement.
+                    RoundHolders.round(ctx -> ctx.get(PUB_KEY))))
                 .steps(b -> PlaySteps.loadRegions(b, ctx -> ctx.request().actorId()))
                 // Q51: an attempt keeps the version it started with, whichever the publication has switched to since;
                 // a new one takes the card's (checked again against the card read under the lock).
@@ -254,6 +257,14 @@ public final class AttemptProcesses {
                     }
                 })
                 .compute("Continue an attempt in progress", (metadata, ctx) -> resume(ctx))
+                // Q70a (D-Q70-1, option B): who holds the certification of a round starts none of its rounds. A round
+                // only reads more (an ordinary publication's queries are empty and send nothing), before the lock.
+                .steps(b -> RoundHolders.load(b, AttemptProcesses::starting))
+                .compute("Refuse a holder of the round's certification", (metadata, ctx) -> {
+                    if (starting(ctx)) {
+                        RoundHolders.refuse(ctx, "publicationId", ctx.get(PUB_KEY));
+                    }
+                })
                 // Without the wallet's lock (D-Q5-5): a soft check, so before the publication's lock too (Q10a: one
                 // read less while it is held); a reward the sponsor cannot pay at the end is pending.
                 .step("Read the sponsor's wallet", QueryEntities.<ProcessContext>of(

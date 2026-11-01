@@ -186,6 +186,62 @@ class CertificationIT extends PlayItSupport {
                 org.assertj.core.groups.Tuple.tuple("GRANTED", "Met at the fair"));
     }
 
+    /**
+     * Q70a (D-Q70-1, option B): who holds a certification does not answer its rounds: not listed, the detail says until
+     * when, the start is refused; a pass not claimed yet counts already; after a revocation they can again. Ordinary
+     * publications and those not holding it are not touched.
+     */
+    @Test
+    void whoHoldsTheCertificationStartsNoneOfItsRoundsUntilItEnds() {
+        String official = newSponsor("q70a-official");
+        credit(official, 10_000);
+        run(CertificationProcesses.OFFICIAL_SET, hq(), body("userId", official, "active", true));
+        String october = livePublication(official, "Q70a October round");
+        String november = livePublication(official, "Q70a November round");
+        String ordinary = livePublication(official, "Q70a ordinary");
+        run(CertificationProcesses.ROUND_ADD, hq(), body("publicationId", october, "certification", CERT));
+        run(CertificationProcesses.ROUND_ADD, hq(), body("publicationId", november, "certification", CERT));
+
+        String holder = newTaker("q70a-holder", "JP");
+        String other = newTaker("q70a-other", "JP");
+        assertThat(feedIds(holder)).contains(october, november, ordinary);
+        assertThat(play(holder, october, true, true)).containsEntry("passed", true);
+
+        // Not claimed yet: the pass counts all the same.
+        assertThat(query("SELECT count(*) AS n FROM qb_certification_record WHERE user_id = ?", holder).getFirst()
+            .get("n")).isEqualTo(0L);
+        assertThat(feedIds(holder)).doesNotContain(november).contains(ordinary);
+        Map<String, Object> page = detail(holder, november);
+        assertThat(page).containsEntry("canStart", false);
+        assertThat(Instant.parse(String.valueOf(page.get("heldUntil"))))
+            .isAfter(clock.instant().plus(Duration.ofDays(364)));
+        assertThat(codes(refused("QB_ATTEMPT_START", taker(holder), body("publicationId", november), 422)))
+            .containsExactly(CertificationCodes.HELD);
+        // An ordinary publication and somebody not holding it are not touched.
+        assertThat(start(taker(holder), ordinary)).containsKey("attemptId");
+        assertThat(detail(other, november)).containsEntry("canStart", true).containsEntry("heldUntil", null);
+        assertThat(start(taker(other), november)).containsKey("attemptId");
+
+        // Revoked: they may answer a round again.
+        clock.advance(Duration.ofMinutes(1));
+        run(CertificationProcesses.REVOKE, hq(), body("userId", holder, "certification", CERT, "reason",
+            "Answers shared"));
+        assertThat(feedIds(holder)).contains(november);
+        assertThat(detail(holder, november)).containsEntry("canStart", true).containsEntry("heldUntil", null);
+        assertThat(start(taker(holder), november)).containsKey("attemptId");
+    }
+
+    private Map<String, Object> detail(String takerId, String publicationId) {
+        List<Map<String, Object>> rows = items("qb.app.publication", taker(takerId), Map.of("params", Map.of(
+            "publicationId", publicationId, "at", clock.instant().toString(), "country", "JP")));
+        return rows.isEmpty() ? null : rows.getFirst();
+    }
+
+    private List<String> feedIds(String takerId) {
+        return feed(taker(takerId), "JP", Map.of()).stream().map(row -> String.valueOf(row.get("publicationId")))
+            .toList();
+    }
+
     @Test
     void anOperatorRunsItsOwnOfficialPublishersRoundsAndSeesOnlyItsOwn() {
         String north = (String) run(OperatorProcesses.SAVE, hq(), body("name", unique("North"), "contactName", "N",
