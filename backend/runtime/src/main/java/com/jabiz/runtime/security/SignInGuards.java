@@ -163,7 +163,15 @@ public class SignInGuards implements PlatformCheck {
         if (resolver != null) {
             resolver.loads().forEach(load -> loads.putIfAbsent(load.name(), load));
         }
-        return Flux.fromIterable(loads.values())
+        return read(loads.values(), userId);
+    }
+
+    /**
+     * The rows of {@code loads} for {@code userId}, by load name (also for the sign-up guards, decision D66); an
+     * error when one cannot be read or finds more than {@link SignInGuard#MAX_ROWS}.
+     */
+    Mono<Map<String, List<Map<String, Object>>>> read(java.util.Collection<SignInLoad> loads, String userId) {
+        return Flux.fromIterable(loads)
             .concatMap(load -> rows(load, userId).map(rows -> Map.entry(load.name(), rows)))
             .collectMap(Map.Entry::getKey, Map.Entry::getValue, LinkedHashMap::new)
             .map(map -> (Map<String, List<Map<String, Object>>>) map);
@@ -243,23 +251,33 @@ public class SignInGuards implements PlatformCheck {
                 problems.add(CheckProblem.error(SessionChecks.CATEGORY, location, "loads() failed: " + e.getMessage()));
                 continue;
             }
-            for (SignInLoad load : loads) {
-                SignInLoad earlier = seen.putIfAbsent(load.name(), load);
-                if (earlier != null && !earlier.equals(load)) {
-                    problems.add(CheckProblem.error(SessionChecks.CATEGORY, location, "load " + load.name()
-                        + " is declared with another dataset or field elsewhere"));
-                }
-                Optional<DatasetDefinition> dataset = datasets.findById(load.dataset());
-                if (dataset.isEmpty()) {
-                    problems.add(CheckProblem.error(SessionChecks.CATEGORY, location, "load " + load.name()
-                        + " reads unknown dataset " + load.dataset()));
-                    continue;
-                }
-                definitions.find(dataset.get().targetEntityType())
-                    .flatMap(def -> userFieldProblem(def, load))
-                    .ifPresent(problem -> problems.add(CheckProblem.error(SessionChecks.CATEGORY, location, "load "
-                        + load.name() + ": " + problem)));
+            problems.addAll(loadProblems(location, loads, seen));
+        }
+        return problems;
+    }
+
+    /**
+     * What is wrong with a guard's {@code loads}: an unknown dataset or field, a field that cannot hold a user id, a
+     * name {@code seen} before with another meaning. Also for the sign-up guards (decision D66).
+     */
+    List<CheckProblem> loadProblems(String location, List<SignInLoad> loads, Map<String, SignInLoad> seen) {
+        List<CheckProblem> problems = new ArrayList<>();
+        for (SignInLoad load : loads) {
+            SignInLoad earlier = seen.putIfAbsent(load.name(), load);
+            if (earlier != null && !earlier.equals(load)) {
+                problems.add(CheckProblem.error(SessionChecks.CATEGORY, location, "load " + load.name()
+                    + " is declared with another dataset or field elsewhere"));
             }
+            Optional<DatasetDefinition> dataset = datasets.findById(load.dataset());
+            if (dataset.isEmpty()) {
+                problems.add(CheckProblem.error(SessionChecks.CATEGORY, location, "load " + load.name()
+                    + " reads unknown dataset " + load.dataset()));
+                continue;
+            }
+            definitions.find(dataset.get().targetEntityType())
+                .flatMap(def -> userFieldProblem(def, load))
+                .ifPresent(problem -> problems.add(CheckProblem.error(SessionChecks.CATEGORY, location, "load "
+                    + load.name() + ": " + problem)));
         }
         return problems;
     }

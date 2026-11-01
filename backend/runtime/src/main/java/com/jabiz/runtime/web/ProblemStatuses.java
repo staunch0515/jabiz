@@ -25,6 +25,7 @@ import com.jabiz.runtime.security.MfaRequiredException;
 import com.jabiz.runtime.security.OidcAccountExistsException;
 import com.jabiz.runtime.security.SessionNotFoundException;
 import com.jabiz.runtime.security.SignInRefusedException;
+import com.jabiz.runtime.security.SignUpRefusedException;
 import com.jabiz.runtime.sod.SodConflictException;
 import com.jabiz.runtime.security.protect.BootstrapAdminRetiredException;
 
@@ -88,6 +89,8 @@ public final class ProblemStatuses {
                 e.getMessage(), Map.of("process", e.process())));
             case SignInRefusedException e -> List.of(new Violation(null, PlatformErrorCodes.SIGN_IN_REFUSED,
                 e.getMessage()));
+            case SignUpRefusedException e -> List.of(new Violation(null, PlatformErrorCodes.SIGN_UP_REFUSED,
+                e.getMessage(), Map.of("reason", e.reason())));
             case OidcAccountExistsException e -> List.of(new Violation(null, PlatformErrorCodes.OIDC_ACCOUNT_EXISTS,
                 e.getMessage()));
             case SessionNotFoundException e -> List.of(new Violation(null, PlatformErrorCodes.SESSION_NOT_FOUND,

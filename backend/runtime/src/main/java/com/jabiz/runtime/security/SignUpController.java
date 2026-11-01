@@ -58,6 +58,8 @@ class SignUpController {
     static final String RESET_REQUEST = "/api/auth/password-reset/request";
     static final String RESET_CONFIRM = "/api/auth/password-reset/confirm";
     static final String ENTRIES = "/api/auth/entries";
+    /** A signed-in user joining another entry (decision D66). */
+    static final String ACCOUNT_JOIN = "/api/auth/account/entries/{entry}/join";
 
     /** Longest display name ({@code SecUser.displayName}). */
     static final int MAX_DISPLAY_NAME = 200;
@@ -149,6 +151,8 @@ class SignUpController {
         resetRequest;
     private final ProcessDefinition<SignUpProcesses.ResetConfirmInput, SignUpProcesses.Done, AccountContext>
         resetConfirm;
+    private final ProcessDefinition<SignUpProcesses.AccountJoinInput, SignUpProcesses.Done, AccountContext>
+        accountJoin;
 
     SignUpController(ProcessExecutor processes, SignInEntries entries, SignUpRateLimits limits,
         ClientAddresses clients, PasswordHasher hasher, JabizWebProperties web,
@@ -158,7 +162,8 @@ class SignUpController {
         ProcessDefinition<SignUpProcesses.VerifyInput, SignUpProcesses.VerifyCheck, AccountContext> verifyCheck,
         ProcessDefinition<SignUpProcesses.VerifySendInput, SignUpProcesses.Done, AccountContext> verifySend,
         ProcessDefinition<SignUpProcesses.ResetRequestInput, SignUpProcesses.Done, AccountContext> resetRequest,
-        ProcessDefinition<SignUpProcesses.ResetConfirmInput, SignUpProcesses.Done, AccountContext> resetConfirm) {
+        ProcessDefinition<SignUpProcesses.ResetConfirmInput, SignUpProcesses.Done, AccountContext> resetConfirm,
+        ProcessDefinition<SignUpProcesses.AccountJoinInput, SignUpProcesses.Done, AccountContext> accountJoin) {
         this.processes = processes;
         this.entries = entries;
         this.limits = limits;
@@ -172,6 +177,7 @@ class SignUpController {
         this.verifySend = verifySend;
         this.resetRequest = resetRequest;
         this.resetConfirm = resetConfirm;
+        this.accountJoin = accountJoin;
     }
 
     /** 202 whether or not the address is in use; 422 {@code SIGN_UP_DISABLED} for an entry without registration. */
@@ -302,6 +308,29 @@ class SignUpController {
             return processes.executeAtEntry(verifySend, new SignUpProcesses.VerifySendInput(context.entry(), null,
                     user.toString()))
                 .thenReturn(accepted());
+        });
+    }
+
+    /**
+     * The signed-in user joins another entry (decision D66): the entry's registration roles are added to their account
+     * ({@value SignUpProcesses#ACCOUNT_JOIN}), after the sign-up guards (403 {@code SIGN_UP_REFUSED}); 204, also when
+     * the user holds them all already (nothing changes). Any entry's session will do; it stays as it is, and the user
+     * signs in at the joined entry afterwards. Needs a verified address (403 {@code EMAIL_NOT_VERIFIED}); an entry that
+     * does not exist or takes no registrations is 404 alike. Counted per user (429 {@code RATE_LIMITED}).
+     */
+    @PostMapping(ACCOUNT_JOIN)
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    Mono<ResponseEntity<Void>> joinEntry(@PathVariable String entry) {
+        return RequestContexts.current().flatMap(context -> {
+            UUID user = ActingUser.userId(context).orElseThrow(() -> new PermissionDeniedException(
+                SecurityPermissions.ACCOUNT, "Only users of the platform join entries"));
+            limits.entryJoin(user.toString());
+            VerifiedEmailPolicy.require(context, accountJoin.verifiedEmail(), "Joining an entry");
+            SignInEntries.Entry target = entries.find(entry).filter(SignInEntries.Entry::selfRegistration)
+                .orElseThrow(() -> new ResourceNotFoundException("No sign-in entry to join: " + entry));
+            return processes.executeAtEntry(accountJoin, new SignUpProcesses.AccountJoinInput(user.toString(),
+                    target.name()))
+                .thenReturn(ResponseEntity.noContent().<Void>build());
         });
     }
 

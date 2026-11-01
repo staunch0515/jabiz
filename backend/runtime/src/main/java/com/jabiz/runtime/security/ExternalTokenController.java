@@ -120,7 +120,8 @@ class ExternalTokenController {
      */
     private static boolean refusal(Throwable e) {
         // A guard's refusal and an unverified address keep their 403 (they are permission denials too).
-        if (e instanceof SignInRefusedException || e instanceof EmailNotVerifiedException) {
+        if (e instanceof SignInRefusedException || e instanceof SignUpRefusedException
+            || e instanceof EmailNotVerifiedException) {
             return false;
         }
         return e instanceof ExternalTokenRules.RefusedException || e instanceof ValidationException

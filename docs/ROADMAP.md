@@ -4873,3 +4873,18 @@ D17 下匿名不能写任何东西（15 §10）。
 | 17z-5 | 所有人：`PublicCounter.owner(字段)`（白名单内的文本、代码或标识字段），计数时与可见性一同读出并存入 `owner_key`（迁移 V53）；平台实体的 `ownerKey`；应用以 `fromContext("ownerKey", …)` 的数据视图给每个所有人自己的计数（D65 第 7 条）。测试：`PublicCounterTest`、`PublicCountersTest`、`PublicCounterIT`（每个所有人只读到自己的键） |
 
 **17z 状态**：✅ 17z-1 至 17z-4 完成（#377）；17z-5 📝 待评审。
+
+### 17za 注册前的应用检查与登录后加入另一个入口（需求 2026-10-31，决策 D66）
+
+**缘由**：已有账号、已登录且邮箱已验证的用户，要得到另一个入口的注册角色只能再注册一次并点开"您已有账号"邮件的链接；应用也无法在给出注册角色之前拒绝
+（被封禁客户的账号经邮件链接仍能重新得到门户的角色），更不能只对某一条途径另有要求（10 §15.15）。
+
+| # | 内容 |
+|---|---|
+| 17za-1 | core：`SignUpGuard`（`loads`、`check`）、`SignUpAttempt`（入口、`Path`、用户编号、邮箱、`emailVerified`、时间、预读）、`SignUpDecision`（`ALLOW`、`refuse(原因码)`）；错误码 `SIGN_UP_REFUSED`（403）与三种语言的消息 |
+| 17za-2 | runtime：`SignUpGuards`（预读同 `SignInGuards`，新账号不读；失败即拒绝；缺少文字的原因改用 `refused`；启动检查）、平台步骤 `SignUpGuardStep`、`SignUpRefusedException`（问题带 `reason`）；注册（查地址之前、没有用户）、邮件加入、邮件登录链接开户、提供方开户、外部令牌开户都在写入之前问守卫；OIDC 与外部令牌的登录接口保留 403 |
+| 17za-3 | 登录后加入：`POST /api/auth/account/entries/{entry}/join`（流程 `SEC_ACCOUNT_ENTRY_JOIN`，已验证的邮箱，不存在与不开放注册同为 404，按用户限流），与邮件加入共用 `addRoles`；受保护的注册角色照旧 422 |
+| 17za-4 | 前端：`@jabiz/client` 的 `joinEntry`；OpenAPI 快照与生成的类型 |
+| 17za-5 | 示范与测试：`app` 的 `PortalSignUpGuard`（被封禁客户的账号不能加入门户，原因 `commerce.customer-blocked`）；`SignUpGuardTypesTest`、`SignUpGuardsTest`、`SignUpGuardIT`、`PortalIT`、`account.test.tsx`；10 §15.15、决策 D66 |
+
+**17za 状态**：📝 待评审（分支 `1.3/phase-17za-signed-in-join`）。
