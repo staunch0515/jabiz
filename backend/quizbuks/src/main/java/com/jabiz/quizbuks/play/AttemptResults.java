@@ -120,7 +120,7 @@ public final class AttemptResults {
 
     static void read(ProcessContext ctx) {
         EntityInstance attempt = ctx.get(ATTEMPT, EntityInstance.class);
-        QuizSnapshot snapshot = PlaySteps.snapshot(ctx);
+        QuizSnapshot snapshot = PlaySteps.inLanguage(PlaySteps.snapshot(ctx), attempt);
         EntityInstance card = first(ctx, CARD);
         boolean finished = AttemptStatus.finished(attempt.get("status"));
         Integer passScore = snapshot.survey() || card == null ? null : PlaySteps.integer(card.get("passScore"));
@@ -133,7 +133,8 @@ public final class AttemptResults {
             : List.of();
         Object passed = attempt.get("passed");
         ctx.put(OUTPUT, new ResultOutput(String.valueOf(attempt.id()), PlaySteps.uuid(attempt.get("publicationId")),
-            card == null ? null : card.get("name"), attempt.get("status"), snapshot.kind(), PlaySteps.instant(attempt.get("deadline")), ctx.opTime(),
+            card == null ? null : com.jabiz.quizbuks.publishing.PublicationLanguages.cardText(card,
+                attempt.get("language"), com.jabiz.quizbuks.publishing.PublicationLanguages.NAME), attempt.get("status"), snapshot.kind(), PlaySteps.instant(attempt.get("deadline")), ctx.opTime(),
             number(attempt.get("score")), number(attempt.get("fullScore")), passScore,
             passed == null ? null : Boolean.TRUE.equals(passed) || "true".equals(String.valueOf(passed)),
             attempt.get("reward") == null ? null : PlaySteps.money(attempt.get("reward")),

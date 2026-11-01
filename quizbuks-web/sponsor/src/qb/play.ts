@@ -284,6 +284,12 @@ export interface PublicationView {
   /** Q25: who may answer, and whether the caller's account holds an invitation (claimed by `QB_VIEW` or a start). */
   audience: 'PUBLIC' | 'INVITED'
   invited: boolean
+  /**
+   * Q73b: the languages the publication offers, its main one first, and the one the page is in (the attempt's, else
+   * the first of the asked ones it offers, else its main one): the language a start answers in.
+   */
+  languages: string[]
+  displayLanguage: string | null
 }
 
 export interface Tier {
@@ -297,11 +303,15 @@ export interface PublicationRequest {
   publicationId: string
   at: string
   country: string | null
+  /** Q73b: the languages to read the page in, the preferred first (the publication's tiers have none). */
+  languages?: readonly string[]
 }
 
 /** A publication's page; null when the caller cannot see it (not live for them and no attempt of theirs). */
 export async function readPublication(request: PublicationRequest): Promise<PublicationView | null> {
-  const page = await runQuery<Record<string, unknown>>(PLAY.publication, { params: { ...request }, limit: 1 })
+  const { languages, ...rest } = request
+  const page = await runQuery<Record<string, unknown>>(PLAY.publication, { params: { ...rest,
+    languages: languages && languages.length > 0 ? languages.join(',') : null }, limit: 1 })
   const row = page.items[0]
   if (!row) return null
   return {
@@ -339,7 +349,7 @@ export async function readPublication(request: PublicationRequest): Promise<Publ
     canStart: row.canStart === true || row.canStart === 'true',
     matched: row.matched !== false && row.matched !== 'false',
     heldUntil: textOrNull(row.heldUntil),
-    referral: referralPolicy(row.referral),
+    referral: translatedReferral(referralPolicy(row.referral), row.referralDescription),
     myReferralStatus: textOrNull(row.myReferralStatus),
     myReferralExpiresAt: textOrNull(row.myReferralExpiresAt),
     myAttemptId: textOrNull(row.myAttemptId),
@@ -347,12 +357,22 @@ export async function readPublication(request: PublicationRequest): Promise<Publ
     myDeadline: textOrNull(row.myDeadline),
     audience: row.audience === 'INVITED' ? 'INVITED' : 'PUBLIC',
     invited: row.invited === true || row.invited === 'true',
+    languages: String(row.languages ?? '').split(',').map((l) => l.trim()).filter((l) => l !== ''),
+    displayLanguage: textOrNull(row.displayLanguage),
   }
+}
+
+/** Q73b: the referral offer with its description in the page's language, when the publication has it. */
+function translatedReferral(policy: ReferralPolicy | null, description: unknown): ReferralPolicy | null {
+  const text = textOrNull(description)
+  return policy && text ? { ...policy, description: text } : policy
 }
 
 /** A publication's reward tiers, lowest first (U-20). */
 export async function readTiers(request: PublicationRequest): Promise<Tier[]> {
-  const page = await runQuery<Record<string, unknown>>(PLAY.publicationTiers, { params: { ...request }, limit: 20 })
+  const { publicationId, at, country } = request
+  const page = await runQuery<Record<string, unknown>>(PLAY.publicationTiers, { params: { publicationId, at, country },
+    limit: 20 })
   return page.items.map((row) => ({
     seq: numberOf(row.seq),
     fromScore: numberOf(row.fromScore),
@@ -432,10 +452,11 @@ export function unanswered(questions: readonly QuestionView[], answers: Readonly
 
 /**
  * Starts the caller's attempt of a publication, or continues the one in progress (U-23, U-41). Pass the same key when
- * retrying the same start (a busy answer, a lost one): the retry of one that went through returns its answer.
+ * retrying the same start (a busy answer, a lost one): the retry of one that went through returns its answer. Q73b: a
+ * new attempt answers in `language` (one the publication offers; its main one when none); one in progress keeps its own.
  */
-export const startAttempt = (publicationId: string, idempotencyKey?: string) =>
-  runProcess<StartOutput>(PLAY.start, { publicationId }, { idempotencyKey })
+export const startAttempt = (publicationId: string, idempotencyKey?: string, language?: string | null) =>
+  runProcess<StartOutput>(PLAY.start, { publicationId, ...(language ? { language } : {}) }, { idempotencyKey })
 
 /** `AttemptProcesses.SaveInput`. */
 export interface SaveInput {

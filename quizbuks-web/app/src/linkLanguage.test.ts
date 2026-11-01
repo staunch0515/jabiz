@@ -1,6 +1,6 @@
 import { changeLanguage, i18n } from '@jabiz/client'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { applyLinkLanguage } from './linkLanguage'
+import { applyLinkLanguage, linkLanguageOf } from './linkLanguage'
 
 describe('a link\'s language (Q59b)', () => {
   beforeEach(() => localStorage.clear())
@@ -34,5 +34,14 @@ describe('a link\'s language (Q59b)', () => {
     window.history.replaceState(null, '', '/p/pub-1?ref=poster')
     applyLinkLanguage()
     expect(window.location.search).toBe('?ref=poster')
+  })
+
+  it('is the language the publication it opened reads in, whatever the interface\'s (Q73b)', () => {
+    localStorage.setItem('jabiz.language', 'en')
+    window.history.replaceState(null, '', '/p/pub-2?lang=ja')
+    applyLinkLanguage()
+    expect(i18n.language).toBe('en')
+    expect(linkLanguageOf('/p/pub-2')).toBe('ja')
+    expect(linkLanguageOf('/p/pub-3')).toBeNull()
   })
 })

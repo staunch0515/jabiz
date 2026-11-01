@@ -31,6 +31,18 @@ public final class MessageTexts {
     }
 
     /**
+     * A publication's name in each language (Q73b): its card's translation into that language, else into its main
+     * language, else the base name.
+     */
+    public static Value publicationName(com.jabiz.runtime.EntityInstance card) {
+        return locale -> {
+            String name = com.jabiz.quizbuks.publishing.PublicationLanguages.textIn(card, locale.getLanguage(),
+                com.jabiz.quizbuks.publishing.PublicationLanguages.NAME);
+            return name == null ? "" : name;
+        };
+    }
+
+    /**
      * An amount of Kudos in each language: grouped, with the points' name in that language ({@code qb.kudos.unit}:
      * Kudos, 学分, クドス; Q61).
      */

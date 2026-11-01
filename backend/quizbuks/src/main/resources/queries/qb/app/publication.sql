@@ -25,6 +25,7 @@ params:
   publicationId: { like: QbPublicationCard.publicationId, required: true, description: The publication }
   at:            { kind: { type: temporal, role: EVENT_TIME }, required: true, description: The time the page is for (the client's now) }
   country:       { kind: { type: text, maxLength: 2 }, description: "The taker's country (QbCountry.code)" }
+  languages:     { kind: { type: text, maxLength: 20 }, description: "Q73b: the languages to show it in, in the taker's order (a link's first); the first one it offers is shown, else its main one; an attempt shows its own" }
 results:
   publicationId:  { from: QbPublicationCard.publicationId }
   name:           { from: QbPublicationCard.name }
@@ -32,6 +33,9 @@ results:
   cover:          { from: QbPublicationCard.cover }
   kind:           { from: QbPublicationCard.kind }
   language:       { from: QbPublicationCard.language }
+  languages:      { from: QbPublicationCard.languages }
+  displayLanguage: { kind: { type: text, maxLength: 2 } }
+  referralDescription: { kind: { type: text, maxLength: 500 } }
   intro:          { kind: { type: text, maxLength: 5000 } }
   materials:      { kind: { type: text } }
   status:         { from: QbPublicationCard.status }
@@ -88,6 +92,9 @@ SELECT
     d.cover AS cover,
     d.kind AS kind,
     d.language AS language,
+    d.languages AS languages,
+    d.displayLanguage AS displayLanguage,
+    d.referralDescription AS referralDescription,
     d.intro AS intro,
     d.materials AS materials,
     d.status AS status,
@@ -128,13 +135,28 @@ SELECT
 FROM (
 SELECT
     c.{{QbPublicationCard.publicationId}}  AS publicationId,
-    c.{{QbPublicationCard.name}}           AS name,
-    c.{{QbPublicationCard.quizTitle}}      AS quizTitle,
+    -- Q73b: the texts in the language shown (the card's translations; the version's for its introduction and
+    -- materials, a language without a material of its own showing the base's, which says it is the base's), else
+    -- the card's own and the version's base.
+    coalesce(CAST(c.{{QbPublicationCard.translations}} AS jsonb) -> dl.lang ->> 'name',
+             c.{{QbPublicationCard.name}}) AS name,
+    coalesce(CAST(c.{{QbPublicationCard.translations}} AS jsonb) -> dl.lang ->> 'quizTitle',
+             c.{{QbPublicationCard.quizTitle}}) AS quizTitle,
     c.{{QbPublicationCard.cover}}          AS cover,
     c.{{QbPublicationCard.kind}}           AS kind,
     c.{{QbPublicationCard.language}}       AS language,
-    CAST(v.{{QbQuizVersion.content}} AS jsonb) ->> 'intro' AS intro,
-    CAST(CAST(v.{{QbQuizVersion.content}} AS jsonb) -> 'materials' AS text) AS materials,
+    coalesce(c.{{QbPublicationCard.languages}}, c.{{QbPublicationCard.language}}) AS languages,
+    dl.lang                                AS displayLanguage,
+    CAST(c.{{QbPublicationCard.translations}} AS jsonb) -> dl.lang ->> 'referralDescription' AS referralDescription,
+    coalesce(CAST(v.{{QbQuizVersion.content}} AS jsonb) -> 'translations' -> dl.lang -> 'texts' ->> 'intro',
+             CAST(v.{{QbQuizVersion.content}} AS jsonb) ->> 'intro') AS intro,
+    (SELECT CAST(coalesce(jsonb_agg(coalesce(
+                (SELECT own || jsonb_build_object('language', dl.lang) || CASE WHEN bm ? 'watchToAnswer'
+                     THEN jsonb_build_object('watchToAnswer', bm -> 'watchToAnswer') ELSE '{}'::jsonb END
+                 FROM jsonb_array_elements(CAST(v.{{QbQuizVersion.content}} AS jsonb) -> 'translations' -> dl.lang
+                                           -> 'materials') own
+                 WHERE own -> 'no' = bm -> 'no'), bm) ORDER BY CAST(bm ->> 'no' AS integer)), '[]'::jsonb) AS text)
+     FROM jsonb_array_elements(CAST(v.{{QbQuizVersion.content}} AS jsonb) -> 'materials') bm) AS materials,
     c.{{QbPublicationCard.status}}         AS status,
     c.{{QbPublicationCard.startAt}}        AS startAt,
     c.{{QbPublicationCard.endAt}}          AS endAt,
@@ -144,9 +166,11 @@ SELECT
     c.{{QbPublicationCard.passScore}}      AS passScore,
     c.{{QbPublicationCard.maxReward}}      AS maxReward,
     c.{{QbPublicationCard.rewardMethod}}   AS rewardMethod,
-    c.{{QbPublicationCard.redeemDescription}} AS redeemDescription,
+    coalesce(CAST(c.{{QbPublicationCard.translations}} AS jsonb) -> dl.lang ->> 'redeemDescription',
+             c.{{QbPublicationCard.redeemDescription}}) AS redeemDescription,
     c.{{QbPublicationCard.digitalDelivery}} AS digitalDelivery,
-    c.{{QbPublicationCard.digitalDescription}} AS digitalDescription,
+    coalesce(CAST(c.{{QbPublicationCard.translations}} AS jsonb) -> dl.lang ->> 'digitalDescription',
+             c.{{QbPublicationCard.digitalDescription}}) AS digitalDescription,
     c.{{QbPublicationCard.audience}}       AS audience,
     (inv.{{QbInvitation.invitationId}} IS NOT NULL) AS invited,
     sp.{{QbSponsor.contactName}}           AS sponsorName,
@@ -239,6 +263,13 @@ LEFT JOIN {{QbSponsor}} sp ON sp.{{QbSponsor.userId}} = c.{{QbPublicationCard.pu
     AND sp.{{QbSponsor.reviewStatus}} = 'APPROVED'
 LEFT JOIN {{QbSponsorPage}} sp_page ON sp_page.{{QbSponsorPage.userId}} = sp.{{QbSponsor.userId}}
 LEFT JOIN {{QbAttempt}} m ON m.{{QbAttempt.publicationId}} = c.{{QbPublicationCard.publicationId}}
+-- Q73b: the language shown: the caller's attempt's, else the first of the asked ones the card offers, else its main.
+CROSS JOIN LATERAL (
+    SELECT coalesce(m.{{QbAttempt.language}},
+        (SELECT u.l FROM unnest(string_to_array(CAST(:languages AS text), ',')) WITH ORDINALITY AS u(l, i)
+         WHERE u.l = ANY(string_to_array(coalesce(c.{{QbPublicationCard.languages}},
+                                                  c.{{QbPublicationCard.language}}), ','))
+         ORDER BY u.i LIMIT 1), c.{{QbPublicationCard.language}}) AS lang) dl
 LEFT JOIN {{QbReferral}} mr ON mr.{{QbReferral.publicationId}} = CAST(c.{{QbPublicationCard.publicationId}} AS text)
 LEFT JOIN {{QbPublicationOwner}} own
     ON own.{{QbPublicationOwner.publicationId}} = c.{{QbPublicationCard.publicationId}}

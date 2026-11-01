@@ -230,6 +230,49 @@ export interface Publication {
   pendingVersionLabel: string | null
   pendingRequestId: string | null
   pendingSince: string | null
+  /**
+   * Q73b: the languages it offers, the main one first (none: its version's base only), and its own texts: in the base
+   * (`texts`) and translated into each other language offered (`translations`, by language and field).
+   */
+  languages: string[]
+  texts: Partial<Record<PublicationTextField, string>>
+  translations: Record<string, Partial<Record<PublicationTextField, string>>>
+}
+
+/** Q73b: the publication's own texts that are translated (`PublicationLanguages.FIELDS`). */
+export type PublicationTextField = 'name' | 'redeemDescription' | 'digitalDescription' | 'referralDescription'
+export const PUBLICATION_TEXT_FIELDS: readonly PublicationTextField[] = ['name', 'redeemDescription',
+  'digitalDescription', 'referralDescription']
+
+/** The stored translations (`{lang: {field: {text, hash}}}`): their texts. */
+export function publicationTranslations(value: unknown): Record<string, Partial<Record<PublicationTextField, string>>> {
+  if (value == null || value === '') return {}
+  try {
+    const parsed = JSON.parse(String(value)) as Record<string, Record<string, { text?: unknown }>>
+    const out: Record<string, Partial<Record<PublicationTextField, string>>> = {}
+    for (const [language, fields] of Object.entries(parsed ?? {})) {
+      const texts: Partial<Record<PublicationTextField, string>> = {}
+      for (const field of PUBLICATION_TEXT_FIELDS) {
+        const text = fields?.[field]?.text
+        if (typeof text === 'string' && text !== '') texts[field] = text
+      }
+      out[language] = texts
+    }
+    return out
+  } catch {
+    return {}
+  }
+}
+
+/** The referral offer's description (`ReferralPolicy` JSON); none when there is no offer. */
+function referralDescription(value: unknown): string | null {
+  if (value == null || value === '') return null
+  try {
+    const parsed = JSON.parse(String(value)) as { description?: unknown }
+    return typeof parsed?.description === 'string' && parsed.description !== '' ? parsed.description : null
+  } catch {
+    return null
+  }
 }
 
 export async function readPublication(publicationId: string): Promise<Publication | null> {
@@ -266,6 +309,14 @@ export async function readPublication(publicationId: string): Promise<Publicatio
     pendingVersionLabel: str(row.pendingVersionLabel),
     pendingRequestId: str(row.pendingRequestId),
     pendingSince: str(row.pendingSince),
+    languages: (str(row.languages) ?? '').split(',').map((l) => l.trim()).filter(Boolean),
+    texts: Object.fromEntries(([
+      ['name', str(row.name)],
+      ['redeemDescription', str(row.redeemDescription)],
+      ['digitalDescription', str(row.digitalDescription)],
+      ['referralDescription', referralDescription(row.referral)],
+    ] as [PublicationTextField, string | null][]).filter(([, text]) => text != null)),
+    translations: publicationTranslations(row.translations),
   }
 }
 

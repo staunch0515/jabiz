@@ -133,7 +133,9 @@ export function PublicationActions({ publication, revision, disabled, onStale }:
   const [showingQr, setShowingQr] = useState(false)
   const can = actionsOf(publication.status, publication.pausedBy, publication.endReason)
   const id = publication.publicationId
-  const language = usePublicationLanguage(publication.versionId)
+  // Q73b: the links carry the publication's main language when it offers several of its version's.
+  const versionLanguage = usePublicationLanguage(publication.versionId)
+  const language = publication.languages[0] ?? versionLanguage
   const shareable = publication.status === 'LIVE' || publication.status === 'SCHEDULED'
 
   /** Runs a change; afterwards the lists and this page read again. A failure keeps the confirmation open. */
@@ -221,7 +223,9 @@ export function PublicationActions({ publication, revision, disabled, onStale }:
       )}
       {copying && <CopyDialog publication={publication} open onOpenChange={setCopying} />}
       {showingQr && (
-        <PublicationQrDialog publicationId={id} language={language} name={publication.name} open
+        <PublicationQrDialog publicationId={id} language={language} languages={publication.languages}
+          names={Object.fromEntries(Object.entries(publication.translations).map(([l, texts]) => [l, texts?.name]))}
+          name={publication.name} open
           onOpenChange={setShowingQr} />
       )}
     </div>

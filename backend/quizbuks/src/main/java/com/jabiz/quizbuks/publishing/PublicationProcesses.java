@@ -106,7 +106,26 @@ public final class PublicationProcesses {
         @Size(max = 10) String audience, @Size(max = 20) String digitalDelivery,
         @Size(max = PublishingLimits.REDEEM_DESCRIPTION_LENGTH) String digitalDescription, Integer digitalSendDays,
         @Sensitive @Size(max = PublishingLimits.DIGITAL_CONTENT_LENGTH) String digitalContent, UUID cover,
-        @Valid ReferralInput referral) {
+        @Valid ReferralInput referral, @Size(max = 3) List<@NotNull @Size(max = 2) String> languages,
+        @Size(max = 3) Map<@NotNull @Size(max = 2) String, @Size(max = 4) Map<@NotNull @Size(max = 30) String,
+            @Size(max = PublishingLimits.REDEEM_DESCRIPTION_LENGTH + 1) String>> translations) {
+
+        /**
+         * As before Q73b: the version's base language only.
+         *
+         * <p>Q73b: {@code languages} are the languages offered, some of the version's, the main one first (none: the
+         * version's base only); {@code translations} the publication's texts ({@link PublicationLanguages#FIELDS}) in
+         * each offered language other than the base, the whole set (as the save writes the whole draft).
+         */
+        public SaveInput(UUID publicationId, UUID versionId, String name, List<String> regions, Instant startAt,
+            Instant endAt, Integer timeLimitSec, Integer passScore, BigDecimal budgetCap, Integer maxWinners,
+            List<TierInput> tiers, Long baseRevision, String rewardMethod, String redeemDescription,
+            String audience, String digitalDelivery, String digitalDescription, Integer digitalSendDays,
+            String digitalContent, UUID cover, ReferralInput referral) {
+            this(publicationId, versionId, name, regions, startAt, endAt, timeLimitSec, passScore, budgetCap,
+                maxWinners, tiers, baseRevision, rewardMethod, redeemDescription, audience, digitalDelivery,
+                digitalDescription, digitalSendDays, digitalContent, cover, referral, null, null);
+        }
 
         /** As before Q70: no referrals. */
         public SaveInput(UUID publicationId, UUID versionId, String name, List<String> regions, Instant startAt,
@@ -248,6 +267,8 @@ public final class PublicationProcesses {
             ctx.reject(new Violation("audience", PublishingCodes.AUDIENCE_INVALID, "Unknown audience " + audience,
                 Map.of("audience", audience)));
         }
+        // Q73b: languages of the platform's, once each; texts within their fields.
+        PublicationLanguages.refusals(input.languages(), input.translations()).forEach(ctx::reject);
         // Q64: the cover is a file the sponsor uploaded (one kept from before stays, whoever reads it now).
         QuizEditing.requireOwnFile(ctx, publication == null ? ctx.request().actorId()
             : publication.get("publisherId"), "cover", input.cover(), publication == null ? null
@@ -286,6 +307,17 @@ public final class PublicationProcesses {
         values.put("sealedDigitalContent", !digital || !DigitalDelivery.SHARED.equals(delivery) ? null
             : sealed != null ? sealed : publication == null ? null : publication.get("sealedDigitalContent"));
         values.put("referral", ReferralPolicy.toJson(referral));
+        // Q73b: the languages offered and the texts in the other ones, each keeping the base hash it was made from
+        // while it is unchanged (a changed base text leaves its translations out of date).
+        String base = version == null ? null : String.valueOf((Object) version.get("language"));
+        List<String> offered = input.languages() == null || input.languages().isEmpty() ? List.of()
+            : input.languages().stream().distinct().toList();
+        values.put("languages", com.jabiz.quizbuks.content.ContentLanguages.joinList(offered));
+        values.put("translations", PublicationLanguages.toJson(PublicationLanguages.merge(input.translations(),
+            PublicationLanguages.parse(publication == null ? null : publication.get("translations")),
+            PublicationLanguages.sources((String) values.get("name"), (String) values.get("redeemDescription"),
+                (String) values.get("digitalDescription"), referral),
+            offered.isEmpty() && base != null ? List.of(base) : offered, base)));
         values.put("startAt", input.startAt());
         values.put("endAt", input.endAt());
         Integer limit = input.timeLimitSec() == null && version != null
@@ -453,6 +485,7 @@ public final class PublicationProcesses {
         // one they may not use (Q22: a copy of a publication made before the method was taken away).
         problems.addAll(PublicationEditing.sponsorProblems(ctx));
         problems.addAll(PublicationEditing.methodProblems(ctx, PublicationEditing.methodOf(values)));
+        problems.addAll(PublicationEditing.languageProblems(values, version));
         ReferralPolicy referral = ReferralPolicy.fromJson(values.get("referral"));
         if (referral != null && RewardMethod.ALL.contains(referral.method())) {
             PublicationEditing.methodProblems(ctx, referral.method()).forEach(v -> problems.add(
@@ -543,7 +576,7 @@ public final class PublicationProcesses {
         // Q64: the cover too, the copier's own file as the source's was (both are the caller's publications).
         for (String field : List.of("cover", "regions", "startAt", "endAt", "timeLimitSec", "passScore", "budgetCap",
             "maxWinners", "redeemDescription", "digitalDelivery", "digitalDescription", "digitalSendDays",
-            "sealedDigitalContent", "referral")) {
+            "sealedDigitalContent", "referral", "languages", "translations")) {
             values.put(field, source.get(field));
         }
         values.put("rewardMethod", PublicationEditing.methodOf(source.attributes()));

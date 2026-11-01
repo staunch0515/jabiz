@@ -105,6 +105,16 @@ export const publishingEn = {
       cannotSubmit: 'Correct these first, then save again:',
       ready: 'Nothing stops this publication: you can submit it.',
     },
+    languages: {
+      title: 'Languages',
+      hint: 'Offer the publication in several of its quiz version\'s languages: one publication, one budget and one set of places; takers each see their own language.',
+      base: 'the quiz\'s base',
+      main: 'Main language',
+      mainHint: 'Takers who use none of the languages offered, and links without a language, see this one.',
+      texts: 'The publication in {{language}}',
+      source: '{{language}}: {{text}}',
+      fields: { name: 'Name', redeemDescription: 'The prize and where to collect it', digitalDescription: 'What the digital prize is', referralDescription: 'The referral reward' },
+    },
     referral: {
       title: 'Referrals welcome',
       enable: 'Welcome referrals: a referrer whose friend passes gets a referral reward from you',
@@ -278,6 +288,8 @@ export const publishingEn = {
     },
     qr: {
       title: 'QR code of this publication',
+      language: 'Language of the link',
+      languageHint: 'The page opens in this language; the poster shows the name in it.',
       text: 'Scanning it opens the share link: the visitor signs in with an e-mail address and answers. Print the poster, or put the code on your own.',
       alt: 'QR code leading to {{name}}',
       png: 'Save PNG',
@@ -618,6 +630,16 @@ export const publishingZh: typeof publishingEn = {
       cannotSubmit: '请先改正以下问题，再保存一次：',
       ready: '没有阻止提交的问题：可以提交了。',
     },
+    languages: {
+      title: '语言',
+      hint: '用模版版本中的几种语言提供这个发布：一个发布、一份预算和一组名额，每位答题者看到自己的语言。',
+      base: '模版的基准语言',
+      main: '主语言',
+      mainHint: '不使用所提供任何语言的答题者，以及不带语言的链接，看到这种语言。',
+      texts: '发布的{{language}}内容',
+      source: '{{language}}：{{text}}',
+      fields: { name: '名称', redeemDescription: '奖品与领取地点', digitalDescription: '电子奖品是什么', referralDescription: '推荐奖励' },
+    },
     referral: {
       title: '欢迎推荐',
       enable: '欢迎推荐：推荐人的朋友合格后，由你给推荐人推荐奖励',
@@ -791,6 +813,8 @@ export const publishingZh: typeof publishingEn = {
     },
     qr: {
       title: '这个发布的二维码',
+      language: '链接的语言',
+      languageHint: '页面以这种语言打开，海报上的名称也用这种语言。',
       text: '扫码即打开分享链接：访问者用邮箱登录后答题。可以打印海报，也可以把二维码放到你自己的设计里。',
       alt: '通往 {{name}} 的二维码',
       png: '保存 PNG',
@@ -1131,6 +1155,16 @@ export const publishingJa: typeof publishingEn = {
       cannotSubmit: '次の問題を修正してから、もう一度保存してください：',
       ready: '提出を妨げる問題はありません。提出できます。',
     },
+    languages: {
+      title: '言語',
+      hint: 'クイズのバージョンにある複数の言語で公開します。公開・予算・枠は一つで、回答者はそれぞれ自分の言語で見ます。',
+      base: 'クイズの基準言語',
+      main: 'メインの言語',
+      mainHint: '提供するどの言語も使わない回答者と、言語のないリンクにはこの言語が表示されます。',
+      texts: '公開の{{language}}の内容',
+      source: '{{language}}：{{text}}',
+      fields: { name: '名前', redeemDescription: '景品と受け取り場所', digitalDescription: 'デジタル景品の内容', referralDescription: '紹介の報酬' },
+    },
     referral: {
       title: '紹介歓迎',
       enable: '紹介を歓迎する：紹介者の友だちが合格したら、紹介者に紹介報酬を支払います',
@@ -1304,6 +1338,8 @@ export const publishingJa: typeof publishingEn = {
     },
     qr: {
       title: 'この公開のQRコード',
+      language: 'リンクの言語',
+      languageHint: 'ページはこの言語で開き、ポスターの名前もこの言語になります。',
       text: '読み取ると共有リンクが開きます：訪問者はメールアドレスでログインして回答します。ポスターを印刷するか、コードを自分のデザインに載せてください。',
       alt: '{{name}} へのQRコード',
       png: 'PNGを保存',

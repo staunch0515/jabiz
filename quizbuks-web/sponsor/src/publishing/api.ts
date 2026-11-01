@@ -1,5 +1,5 @@
 import { api, ApiError, runProcess, runQuery, toApiError, unwrap, type Filter, type Sort } from '@jabiz/client'
-import { readDictionary, type DictionaryItem } from '../qb/api'
+import { CONTENT_LANGUAGES, readDictionary, type ContentLanguage, type DictionaryItem } from '../qb/api'
 import { minuteNow } from '../qb/legal'
 import { CRITERIA, type Condition } from '../qb/audience'
 import { AUDIENCE } from '../qb/ids'
@@ -89,6 +89,9 @@ export interface Publication {
   audience: Audience
   /** Q70: "referrals welcome"; null when not. */
   referral: ReferralPolicy | null
+  /** Q73b: the languages offered, the main one first (none: the version's base only), and the texts in them. */
+  languages: ContentLanguage[]
+  translations: Partial<Record<ContentLanguage, Partial<Record<PublicationTextField, string>>>>
   fullScore: number | null
   maxReward: string | null
   maxSpend: string | null
@@ -189,6 +192,44 @@ export interface SaveInput {
   audience: Audience
   /** Q70: "referrals welcome", whole; null for not welcome. */
   referral?: ReferralInput | null
+  /** Q73b: the languages offered, the main one first (none: the version's base only). */
+  languages?: ContentLanguage[] | null
+  /** Q73b: the publication's texts in each offered language other than the base, the whole set. */
+  translations?: Partial<Record<ContentLanguage, Partial<Record<PublicationTextField, string>>>> | null
+}
+
+/** Q73b: the publication's own texts that are translated (`PublicationLanguages.FIELDS`). */
+export type PublicationTextField = 'name' | 'redeemDescription' | 'digitalDescription' | 'referralDescription'
+export const PUBLICATION_TEXT_FIELDS: readonly PublicationTextField[] = ['name', 'redeemDescription',
+  'digitalDescription', 'referralDescription']
+
+/** The languages of a column (`zh,en`), the platform's only, in its order. */
+export function languagesOf(value: unknown): ContentLanguage[] {
+  return String(value ?? '').split(',').map((l) => l.trim())
+    .filter((l): l is ContentLanguage => (CONTENT_LANGUAGES as readonly string[]).includes(l))
+}
+
+/** The stored translations' texts (`{lang: {field: {text, hash}}}`), by language and field. */
+export function translationsOf(value: unknown):
+  Partial<Record<ContentLanguage, Partial<Record<PublicationTextField, string>>>> {
+  if (value == null || value === '') return {}
+  try {
+    const parsed = JSON.parse(String(value)) as Record<string, Record<string, { text?: string }>>
+    const out: Partial<Record<ContentLanguage, Partial<Record<PublicationTextField, string>>>> = {}
+    for (const [language, fields] of Object.entries(parsed)) {
+      if (!(CONTENT_LANGUAGES as readonly string[]).includes(language)) continue
+      const texts: Partial<Record<PublicationTextField, string>> = {}
+      for (const [field, text] of Object.entries(fields)) {
+        if ((PUBLICATION_TEXT_FIELDS as readonly string[]).includes(field) && text?.text) {
+          texts[field as PublicationTextField] = text.text
+        }
+      }
+      out[language as ContentLanguage] = texts
+    }
+    return out
+  } catch {
+    return {}
+  }
 }
 
 /** Q70: `PublicationProcesses.ReferralInput`. */
@@ -279,6 +320,8 @@ export function toPublication(row: Row): Publication {
     digitalSendDays: numOrNull(row.digitalSendDays),
     audience: audienceOf(row.audience),
     referral: referralPolicy(row.referral),
+    languages: languagesOf(row.languages),
+    translations: translationsOf(row.translations),
     fullScore: numOrNull(row.fullScore),
     maxReward: str(row.maxReward),
     maxSpend: str(row.maxSpend),
@@ -807,6 +850,9 @@ export interface PublicationForm {
   referrerRequires: ReferrerRequirement
   refereeRules: string[]
   referralDays: string
+  /** Q73b: the languages offered, the main one first (none: the version's base only), and the texts typed in them. */
+  languages: ContentLanguage[]
+  translations: Partial<Record<ContentLanguage, Partial<Record<PublicationTextField, string>>>>
 }
 
 let keys = 0
@@ -845,6 +891,8 @@ export function formOf(detail: PublicationDetail | null): PublicationForm {
     referrerRequires: p?.referral?.referrerRequires ?? 'NONE',
     refereeRules: p?.referral ? p.referral.refereeRules : DEFAULT_REFEREE_RULES,
     referralDays: p?.referral ? String(p.referral.days) : '7',
+    languages: p?.languages ?? [],
+    translations: p?.translations ?? {},
     tiers: (detail?.tiers ?? []).map((tier) => ({ key: tierKey(), tierId: tier.tierId,
       fromScore: String(tier.fromScore), toScore: String(tier.toScore), reward: tier.reward })),
   }
@@ -928,6 +976,14 @@ export function inputOf(form: PublicationForm, publicationId: string | null, bas
       } : {}),
       audience: form.audience,
       referral,
+      // Q73b: the texts of the languages offered only; neither for a publication of its version's base only.
+      ...(form.languages.length > 0 ? {
+        languages: form.languages,
+        translations: Object.fromEntries(form.languages
+          .filter((language) => form.translations[language])
+          .map((language) => [language, Object.fromEntries(Object.entries(form.translations[language] ?? {})
+            .filter(([, text]) => text && text.trim() !== '').map(([field, text]) => [field, text!.trim()]))])),
+      } : {}),
     },
   }
 }
