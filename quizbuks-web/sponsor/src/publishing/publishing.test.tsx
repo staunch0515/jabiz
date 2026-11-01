@@ -397,7 +397,7 @@ describe('the publication wizard', () => {
     expect(window.location.search).toBe('?step=1')
     expect(processCalls('QB_PUBLICATION_SAVE')).toEqual([{ publicationId: null, versionId: null, name: 'Tea week',
       cover: null, regions: [], startAt: null, endAt: null, timeLimitSec: null, passScore: null, budgetCap: null,
-      maxWinners: null, tiers: [], baseRevision: null, rewardMethod: 'PLATFORM', redeemDescription: null, audience: 'PUBLIC' }])
+      maxWinners: null, tiers: [], baseRevision: null, rewardMethod: 'PLATFORM', redeemDescription: null, audience: 'PUBLIC', referral: null }])
   })
 
   it('uploads the publication\'s own cover and sends it with the save (Q64)', async () => {
@@ -492,7 +492,7 @@ describe('the publication wizard', () => {
     expect(document.activeElement).toBe(screen.getByTestId('publication-step-title'))
     expect(processCalls('QB_PUBLICATION_SAVE').at(-1)).toEqual({ publicationId: 'p1', versionId: 'v1', name: 'Coffee week',
       cover: null, regions: ['GLOBAL', 'JP'], startAt: '2026-11-01T00:00:00Z', endAt: '2026-11-08T00:00:00Z', timeLimitSec: 300,
-      passScore: 2, budgetCap: null, maxWinners: null, baseRevision: 4, rewardMethod: 'PLATFORM', redeemDescription: null, audience: 'PUBLIC',
+      passScore: 2, budgetCap: null, maxWinners: null, baseRevision: 4, rewardMethod: 'PLATFORM', redeemDescription: null, audience: 'PUBLIC', referral: null,
       tiers: [{ tierId: 't9', fromScore: 0, toScore: 2, reward: 100 }] })
     // The conditions were not touched: not sent.
     expect(processCalls('QB_PUBLICATION_AUDIENCE_SAVE')).toEqual([])
@@ -599,6 +599,40 @@ describe('the publication wizard', () => {
     const reason = await screen.findByTestId('publication-sent-back-reason')
     expect(reason).toHaveTextContent('Your account was suspended while it was in review')
     expect(reason).not.toHaveTextContent('QB_USER_BANNED')
+  })
+})
+
+describe('referrals welcome (Q70)', () => {
+  it('sends the referral policy as set, "not a regular" ticked by default, and shows it in the summary', async () => {
+    const { processCalls } = server({ processes: { QB_PUBLICATION_SAVE: [saved(4)] } })
+    window.history.replaceState(null, '', '/publications/p1?step=1')
+    render(<App />)
+    const section = await screen.findByTestId('publication-referral')
+    expect(within(section).queryByTestId('publication-referral-quota')).toBeNull()
+    await userEvent.click(within(section).getByTestId('publication-referral-on'))
+    expect(within(section).getByTestId('publication-referral-rule-NOT_REGULAR')).toBeChecked()
+    await userEvent.type(within(section).getByTestId('publication-referral-quota'), '20')
+    await userEvent.type(within(section).getByTestId('publication-referral-amount'), '300')
+    await userEvent.click(within(section).getByTestId('publication-referral-requires-ANSWERED'))
+    await userEvent.click(within(section).getByTestId('publication-referral-rule-NEW_TO_PLATFORM'))
+    await expectAccessible()
+    await userEvent.click(screen.getByTestId('publication-next'))
+    await waitFor(() => expect(processCalls('QB_PUBLICATION_SAVE')).toHaveLength(1))
+    expect(processCalls('QB_PUBLICATION_SAVE')[0]).toMatchObject({ referral: { quota: 20, method: 'PLATFORM',
+      amount: 300, description: null, referrerRequires: 'ANSWERED', refereeRules: ['NOT_REGULAR', 'NEW_TO_PLATFORM'],
+      days: 7 } })
+    await userEvent.click(await screen.findByTestId('publication-conditions').then(() => screen.getByTestId('publication-next')))
+    await waitFor(() => expect(screen.getByTestId('summary-referral')).toHaveTextContent('20 places'))
+  })
+
+  it('sends none while switched off', async () => {
+    const { processCalls } = server({ processes: { QB_PUBLICATION_SAVE: [saved(4)] } })
+    window.history.replaceState(null, '', '/publications/p1?step=1')
+    render(<App />)
+    await screen.findByTestId('publication-referral')
+    await userEvent.click(screen.getByTestId('publication-next'))
+    await waitFor(() => expect(processCalls('QB_PUBLICATION_SAVE')).toHaveLength(1))
+    expect(processCalls('QB_PUBLICATION_SAVE')[0]).toMatchObject({ referral: null })
   })
 })
 

@@ -32,6 +32,8 @@ export const DATASET = {
 
 /** SQL templates (`queries/qb/admin`). */
 export const TEMPLATE = {
+  /** Q70: every referral, with its people (support and finance). */
+  referrals: 'qb.admin.referrals',
   /** Sponsors' pages (Q60a-3): the list, the review queue and one page (an operator's own sponsors' only). */
   sponsorPages: 'qb.admin.sponsor-pages',
   /** Sponsors' products (Q60b-3), the list and one sponsor's (an operator's own sponsors' only). */
@@ -284,6 +286,8 @@ export const DICTIONARY = {
   rewardStatus: 'urn:jabiz:dict:quizbuks:reward-status',
   rewardMethod: 'urn:jabiz:dict:quizbuks:reward-method',
   cashStatus: 'urn:jabiz:dict:quizbuks:cash-reward-status',
+  /** Q70: a referral's states. */
+  referralStatus: 'urn:jabiz:dict:quizbuks:referral-status',
   cashResolution: 'urn:jabiz:dict:quizbuks:cash-reward-resolution',
   redemptionStatus: 'urn:jabiz:dict:quizbuks:redemption-status',
   digitalStatus: 'urn:jabiz:dict:quizbuks:digital-prize-status',
@@ -382,6 +386,8 @@ export const PERMISSION = {
   settlementPay: 'qb.operator.settlement.pay',
   /** Q69: certification rounds and records by hand (content administrators and operators), and the official publishers (headquarters). */
   certificationManage: 'qb.certification.manage',
+  /** Q70: every referral. */
+  referralsRead: 'qb.admin.referrals.read',
   certificationAdmin: 'qb.certification.admin',
 } as const
 
@@ -518,6 +524,7 @@ export const PATH = {
   operatorWithdrawals: '/qb/finance/operator-withdrawals',
   /** Q69: certification rounds, records by hand and the official publishers. */
   certifications: '/qb/certifications',
+  referrals: '/qb/referrals',
   /** The platform's own pages. */
   tasks: '/tasks',
 } as const

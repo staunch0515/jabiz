@@ -51,6 +51,8 @@ export const PUBLISHING_TEMPLATE = {
   digitalPrizes: 'qb.sponsor.digital-prizes',
   digitalPoolSummary: 'qb.sponsor.digital-pool-summary',
   digitalCodes: 'qb.sponsor.digital-codes',
+  /** Q70: the sponsor's referrals, per publication, without names. */
+  referrals: 'qb.sponsor.referrals',
   /** An invited publication's list and its counts (Q25). */
   invitations: 'qb.sponsor.invitations',
   invitationSummary: 'qb.sponsor.invitation-summary',

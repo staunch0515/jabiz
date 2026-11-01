@@ -16,6 +16,7 @@ import { DigitalPoolSection } from './DigitalPool'
 import { InvitationsSection } from './Invitations'
 import { PublicationActions } from './PublicationActions'
 import { StaleBanner, PublicationWizard } from './PublicationWizard'
+import { ReferralsSection } from './ReferralsSection'
 import { PublicationSummary, StatusBadge, useEndReasonLabel, useVersionOf } from './shared'
 import { PreviewButton } from '../preview/PreviewButton'
 import { previewOfPublication } from '../preview/paths'
@@ -149,6 +150,9 @@ function PublicationView({ detail, stale, onStale }: {
       }} />
       {publication.audience === 'INVITED' && (
         <InvitationsSection publicationId={publication.publicationId} status={publication.status} />
+      )}
+      {publication.referral && publication.status !== 'DRAFT' && (
+        <ReferralsSection publicationId={publication.publicationId} />
       )}
       {pooled(publication) && <DigitalPoolSection publicationId={publication.publicationId} status={publication.status} />}
       {dates.length > 0 && (

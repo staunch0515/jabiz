@@ -32,7 +32,7 @@ import { FeedCardView, REWARD_METHOD_ICONS } from '../qb/view/FeedCard'
 import { readCountries, shownLanguages } from '../qb/api'
 import { formatKudos } from '../qb/kudos'
 import { QB } from '../qb/messages'
-import { cardProgress, FEED_SORTS, readFeed, readOpenCashRewards, readOpenRedemptions, type FeedCard, type FeedSort, type RewardMethod }
+import { cardProgress, FEED_SORTS, readFeed, readOpenCashRewards, readOpenRedemptions, rewardPath, type FeedCard, type FeedSort, type RewardMethod }
   from '../qb/play'
 import { problemText } from '../qb/problems'
 import { Link, navigate, useLocation } from '../qb/router'
@@ -439,7 +439,7 @@ export function FeedPage({ name, country }: { name: string; country: string | nu
             <ul className="flex flex-col gap-1">
               {openCash.map((r) => (
                 <li key={r.cashRewardId} data-testid="home-cash-item" data-status={r.status}>
-                  <Link to={`/result/${encodeURIComponent(r.attemptId)}`} className="underline underline-offset-4">
+                  <Link to={rewardPath(r)} className="underline underline-offset-4">
                     {t(`cash.open.${r.status}`, { name: r.publicationName, amount: formatKudos(r.amount), code: r.code })}
                   </Link>
                 </li>
@@ -456,7 +456,7 @@ export function FeedPage({ name, country }: { name: string; country: string | nu
             <ul className="flex flex-col gap-1">
               {openPrizes.map((r) => (
                 <li key={r.redemptionId} data-testid="home-redeem-item" data-status={r.status}>
-                  <Link to={`/result/${encodeURIComponent(r.attemptId)}`} className="underline underline-offset-4">
+                  <Link to={rewardPath(r)} className="underline underline-offset-4">
                     {t(`redeem.open.${r.status === 'CLAIMED' ? 'CLAIMED' : 'DUE'}`, { sponsor: r.sponsorCompany ?? t('cash.theSponsor'),
                       description: r.description, code: r.code })}
                   </Link>

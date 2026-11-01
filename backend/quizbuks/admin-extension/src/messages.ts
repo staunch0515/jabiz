@@ -16,6 +16,7 @@ import { accountMenu, accountMessages, operatorWithdrawalMessages, planMessages 
 import { pageMenu, pageMessages } from './page-messages'
 import { productMenu, productMessages } from './product-messages'
 import { certificationMenu, certificationMessages } from './certification-messages'
+import { referralMenu, referralMessages } from './referral-messages'
 import { BRAND_NAMES } from './brand'
 
 /** Texts of the QuizBuks admin extension, in every platform language (namespace EXTENSION_NAMESPACE, `app`). */
@@ -24,8 +25,9 @@ export const messages = {
     menu: { group: BRAND_NAMES.en, reviews: 'Reviews', users: 'Users', ...legalMenu.en, ...aiMenu.en,
       ...financeMenu.en, ...broadcastsMenu.en, ...attemptsMenu.en, ...bankMenu.en, ...manualMenu.en, ...rewardMenu.en, ...settingsMenu.en, ...withdrawalMenu.en,
       ...overviewMenu.en, ...operatorMenu.en, ...prospectMenu.en, ...settlementMenu.en, ...accountMenu.en, ...pageMenu.en, ...productMenu.en,
-      ...certificationMenu.en },
+      ...certificationMenu.en, ...referralMenu.en },
     certification: certificationMessages.en,
+    referral: referralMessages.en,
     operator: operatorMessages.en,
     prospect: prospectMessages.en,
     settlement: settlementMessages.en,
@@ -275,8 +277,9 @@ export const messages = {
     menu: { group: BRAND_NAMES.zh, reviews: '审核', users: '用户', ...legalMenu.zh, ...aiMenu.zh,
       ...financeMenu.zh, ...broadcastsMenu.zh, ...attemptsMenu.zh, ...bankMenu.zh, ...manualMenu.zh, ...rewardMenu.zh, ...settingsMenu.zh, ...withdrawalMenu.zh,
       ...overviewMenu.zh, ...operatorMenu.zh, ...prospectMenu.zh, ...settlementMenu.zh, ...accountMenu.zh, ...pageMenu.zh, ...productMenu.zh,
-      ...certificationMenu.zh },
+      ...certificationMenu.zh, ...referralMenu.zh },
     certification: certificationMessages.zh,
+    referral: referralMessages.zh,
     operator: operatorMessages.zh,
     prospect: prospectMessages.zh,
     settlement: settlementMessages.zh,
@@ -526,8 +529,9 @@ export const messages = {
     menu: { group: BRAND_NAMES.ja, reviews: '審査', users: 'ユーザー', ...legalMenu.ja, ...aiMenu.ja,
       ...financeMenu.ja, ...broadcastsMenu.ja, ...attemptsMenu.ja, ...bankMenu.ja, ...manualMenu.ja, ...rewardMenu.ja, ...settingsMenu.ja, ...withdrawalMenu.ja,
       ...overviewMenu.ja, ...operatorMenu.ja, ...prospectMenu.ja, ...settlementMenu.ja, ...accountMenu.ja, ...pageMenu.ja, ...productMenu.ja,
-      ...certificationMenu.ja },
+      ...certificationMenu.ja, ...referralMenu.ja },
     certification: certificationMessages.ja,
+    referral: referralMessages.ja,
     operator: operatorMessages.ja,
     prospect: prospectMessages.ja,
     settlement: settlementMessages.ja,

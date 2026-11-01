@@ -47,6 +47,7 @@ import {
   Store,
   Sun,
   UserRound,
+  UserRoundPlus,
   type LucideIcon,
 } from 'lucide-react'
 import { useState, type FormEvent, type ReactNode } from 'react'
@@ -68,6 +69,8 @@ import { Wordmark } from './qb/Illustrations'
 import { badgeText, inboxItemOf, INBOX_PATH } from './inbox/api'
 import { MY_SPONSOR_PATH, MY_SPONSOR_QUERY, readFigures, useMySponsor } from './mysponsor/api'
 import { MySponsorPage } from './mysponsor/MySponsorPage'
+import { ReferralPage, ReferralsPage } from './referral/ReferralsPage'
+import { REFERRALS_PATH } from './referral/api'
 import { InboxItemPage } from './inbox/InboxItemPage'
 import { InboxPage } from './inbox/InboxPage'
 import { useUnread } from './inbox/useUnread'
@@ -274,6 +277,12 @@ function Header({ scan = false, search = false }: { scan?: boolean; search?: boo
                 <DropdownMenuSeparator />
               </>
             )}
+            {/* Q70: the caller's referral links and the friends who came. */}
+            <DropdownMenuItem data-testid="referrals-open" onSelect={() => navigate(REFERRALS_PATH)}>
+              <UserRoundPlus aria-hidden />
+              {tApp('referral.mine')}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
             <DropdownMenuLabel>{tUi('appearance.label')}</DropdownMenuLabel>
             <DropdownMenuRadioGroup value={appearance} onValueChange={(value) => setAppearance(value as Appearance)}
               data-testid="appearance-choices">
@@ -395,6 +404,7 @@ function SignedIn({ path }: { path: string }) {
   else if (path === INBOX_PATH) page = <InboxPage />
   else if (path === STAFF_PATH) page = <StaffDeskPage />
   else if (path === MY_SPONSOR_PATH) page = <MySponsorPage />
+  else if (path === REFERRALS_PATH) page = <ReferralsPage />
   else if (path === SCAN_PATH) page = <ScanPage />
   else if (inboxItemOf(path)) {
     const message = inboxItemOf(path)!
@@ -403,6 +413,7 @@ function SignedIn({ path }: { path: string }) {
   else if (item?.page === 'p') page = <PublicationPage key={item.id} publicationId={item.id} country={country} />
   else if (item?.page === 'play') page = <PlayPage key={item.id} attemptId={item.id} />
   else if (item?.page === 'result') page = <ResultPage key={item.id} attemptId={item.id} />
+  else if (item?.page === 'referral') page = <ReferralPage key={item.id} referralId={item.id} />
   else if (item?.page === 'redeem') page = <RedeemPage key={item.id} scannedKey={item.id} />
   else page = <PageState kind="notFound" titleAs="h1" description={t('notFound')} />
   // The navigation is the app's; the welcome step stands alone, and answering keeps the screen to the question.

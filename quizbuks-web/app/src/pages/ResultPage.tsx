@@ -64,7 +64,7 @@ function fromSubmission(submitted: SubmitOutput, start: StartOutput | null): Att
 }
 
 /** A finished attempt as the page shows it, from the server's result. */
-interface Outcome {
+export interface Outcome {
   status: string
   score: number
   fullScore: number
@@ -208,7 +208,7 @@ function DisputeDialog({ cash, onDone }: { cash: CashView; onDone: () => void })
  * A reward the sponsor pays in cash (Q22): the code to show, where it stands, and the taker's confirm or report once
  * the sponsor marked it paid (or before, when they say nothing is coming).
  */
-function CashReward({ cash, attemptId, outcome }: { cash: CashView | null; attemptId: string; outcome: Outcome }) {
+export function CashReward({ cash, attemptId, outcome }: { cash: CashView | null; attemptId: string; outcome: Outcome }) {
   const { t } = useTranslation(APP)
   const queryClient = useQueryClient()
   const [disputing, setDisputing] = useState(false)
@@ -275,7 +275,7 @@ function CashReward({ cash, attemptId, outcome }: { cash: CashView | null; attem
  * A prize to collect at the sponsor's place (Q22): what it is, until when, and the code; collected by scanning the
  * sponsor's code (Q22b), or claimed by their printed one and waiting for them (the page asks again while it waits).
  */
-function Redemption({ redeem, outcome }: { redeem: RedeemView | null; outcome: Outcome }) {
+export function Redemption({ redeem, outcome }: { redeem: RedeemView | null; outcome: Outcome }) {
   const { t } = useTranslation(APP)
   const status = redeem?.status ?? 'DUE'
   const variant = status === 'REDEEMED' ? 'success' : status === 'EXPIRED' || status === 'VOID' ? 'default'
@@ -354,7 +354,7 @@ function DigitalDisputeDialog({ digital, onDone }: { digital: DigitalView; onDon
  * and lives in this component alone: shown for the rest of the page's life, never kept in storage. While delivered
  * the winner confirms it works or reports a problem; while due or overdue they can only report.
  */
-function DigitalPrize({ digital, attemptId, outcome }: { digital: DigitalView | null; attemptId: string;
+export function DigitalPrize({ digital, attemptId, outcome }: { digital: DigitalView | null; attemptId: string;
   outcome: Outcome }) {
   const { t } = useTranslation(APP)
   const queryClient = useQueryClient()

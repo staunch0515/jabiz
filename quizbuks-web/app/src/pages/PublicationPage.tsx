@@ -21,6 +21,8 @@ import { prefersStillVideo } from '../qb/video'
 import { SponsorVisit } from './SponsorVisit'
 import { VideoSlot } from '../video/stage'
 import { PublicationContent, useDuration } from '../qb/view/PublicationContent'
+import { ReferralPanel } from '../referral/ReferralPanel'
+import { claimReferral, forgetReferral, pendingReferral } from '../referral/api'
 
 /** Whole minutes from now until a time, at least 0 (by the device's clock: a hint only). */
 export function minutesUntil(time: string | null, now: number = Date.now()): number {
@@ -125,7 +127,10 @@ export function PublicationPage({ publicationId, country }: { publicationId: str
   const { emailVerified } = useAuth()
   const [at] = useState(() => new Date().toISOString())
   const request = { publicationId, at, country }
-  const publication = useQuery({ queryKey: ['qb', 'publication', request, i18n.language],
+  // Q70: how many referral claims this page made: the page is read again after one (a new key, so that a claim
+  // answered while the first read is on its way is not lost in that read).
+  const [claims, setClaims] = useState(0)
+  const publication = useQuery({ queryKey: ['qb', 'publication', request, i18n.language, claims],
     queryFn: () => readPublication(request) })
   const tiers = useQuery({ queryKey: ['qb', 'publication-tiers', request], queryFn: () => readTiers(request),
     enabled: !!publication.data })
@@ -153,6 +158,14 @@ export function PublicationPage({ publicationId, country }: { publicationId: str
     }
   }, [viewed, publicationId, found, fetchStatus, refetch])
   const claiming = emailVerified && settledFor !== publicationId
+  // Q70: a friend's link opened (noted at boot): claimed once the caller is verified, then forgotten; counted or not,
+  // the page reads itself again to show it.
+  useEffect(() => {
+    const key = emailVerified ? pendingReferral(publicationId) : null
+    if (!key) return
+    forgetReferral()
+    claimReferral(key).then(() => setClaims((n) => n + 1)).catch(() => undefined)
+  }, [publicationId, emailVerified])
 
   if (publication.isPending || (publication.data === null && claiming)) return <PageState kind="loading" />
   if (publication.isError) {
@@ -180,6 +193,7 @@ export function PublicationPage({ publicationId, country }: { publicationId: str
       {/* Q64: the sponsor's own page, with all their products, from the start page as from the result. */}
       <SponsorVisit handle={p.sponsorHandle} sponsor={p.sponsorCompany ?? p.sponsorName} avatar={p.sponsorAvatar}
         products={quizProducts(products.data).length > 0} />
+      <ReferralPanel publication={p} />
       <div className="bg-background sticky bottom-20 -mx-4 border-t px-4 py-3">
         <Action publication={p} />
       </div>

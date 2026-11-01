@@ -1,3 +1,4 @@
+import type { ReferralPolicy } from '../qb/play'
 import { formatDateTime } from '@jabiz/client'
 import {
   Badge,
@@ -186,6 +187,8 @@ export interface SummaryValues {
   digitalSendDays?: number | null
   /** Q25: who may answer; an invited publication shows no regions. */
   audience?: Audience
+  /** Q70: "referrals welcome"; none when not. */
+  referral?: ReferralPolicy | null
 }
 
 /** What a publication is: its version, audience, time, marks and money, and its tiers. Amounts in Kudos. */
@@ -262,6 +265,13 @@ export function PublicationSummary({ values }: { values: SummaryValues }) {
         value: <span data-testid="summary-digital-send-days">{values.digitalSendDays == null
           ? t('publishing.field.digitalSendDaysDefault') : t('publishing.summary.days', { days: values.digitalSendDays })}</span> }] : []),
     ] : []),
+    ...(values.referral !== undefined ? [{ key: 'referral', label: t('publishing.referral.title'),
+      value: <span data-testid="summary-referral">{values.referral
+        ? t('publishing.summary.referral', { quota: values.referral.quota, amount: formatKudos(values.referral.amount),
+          method: methodLabel(values.referral.method), days: values.referral.days,
+          rules: values.referral.refereeRules.length === 0 ? t('publishing.summary.referralAnybody')
+            : values.referral.refereeRules.map((rule) => t(`publishing.referral.rule.${rule}`)).join(' · ') })
+        : t('publishing.summary.referralOff')}</span> }] : []),
     { key: 'maxReward', label: t('publishing.summary.maxReward'),
       value: values.maxReward === null ? notSet : formatKudos(values.maxReward) },
     { key: 'maxSpend', label: t('publishing.summary.maxSpend'),

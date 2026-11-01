@@ -4,6 +4,7 @@ import { act, cleanup, render, screen, waitFor, within } from '@testing-library/
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
+import { takeReferralFromAddress } from './referral/api'
 import { forgetRedeem, pendingRedeem, rememberRedeem, RESUME_FOR_MS } from './redeemReturn'
 import { placeholderIndex } from './qb/Illustrations'
 import './messages'
@@ -105,6 +106,8 @@ interface Options {
   view?: () => Promise<Response> | Response
   /** Q60b: the products the publication shows (the quiz's, number 0, and the questions'). */
   publicationProducts?: Record<string, unknown>[]
+  /** Q70: answers to anything else (the referrals' processes and templates); undefined falls back to 404. */
+  extra?: (path: string, body: unknown) => Response | undefined
 }
 
 /** The server as the play pages see it; records every call (path and body). */
@@ -213,7 +216,7 @@ function server(options: Options = {}) {
       case '/api/processes/QB_ATTEMPT_RESULT/latest':
         return options.result ? options.result() : json(200, { output: finished() })
       default:
-        return json(404, {})
+        return options.extra?.(path, body) ?? json(404, {})
     }
   })
   return {
@@ -1082,6 +1085,96 @@ describe('certification rounds (Q70a)', () => {
     expect(screen.queryByTestId('detail-start')).toBeNull()
     expect(screen.queryByTestId('detail-unavailable')).toBeNull()
     expect(posted('QB_ATTEMPT_START')).toEqual([])
+  })
+})
+
+describe('referrals (Q70)', () => {
+  const POLICY = { quota: 20, method: 'PLATFORM', amount: '300', description: null, referrerRequires: 'NONE',
+    refereeRules: ['NOT_REGULAR'], days: 7 }
+  const KEY = '0123456789abcdef0123456789abcdef'
+
+  it('offers a referral link, made on request, with its places left and no sending for the referrer', async () => {
+    const { posted } = server({ publicationPage: () => json(200, { items: [publication({
+      referral: JSON.stringify(POLICY) })], offset: 0, limit: 1 }),
+    extra: (path) => path === '/api/processes/QB_REFERRAL_LINK/latest'
+      ? json(200, { output: { publicationId: PUB, linkKey: KEY, quotaLeft: 19 } }) : undefined })
+    window.history.replaceState(null, '', `/p/${PUB}`)
+    render(<App />)
+    expect(await screen.findByTestId('referral-offer')).toHaveTextContent('you get 300 Kudos')
+    await userEvent.click(screen.getByTestId('referral-make'))
+    expect(await screen.findByTestId('referral-url')).toHaveValue(`http://localhost:3000/p/${PUB}?ref=${KEY}`)
+    expect(screen.getByTestId('referral-link')).toHaveTextContent('Referral places left: 19')
+    expect(posted('QB_REFERRAL_LINK')).toEqual([{ publicationId: PUB }])
+  })
+
+  it('says why no link can be made, as the server says', async () => {
+    server({ publicationPage: () => json(200, { items: [publication({ referral: JSON.stringify(POLICY) })],
+      offset: 0, limit: 1 }),
+    extra: (path) => path === '/api/processes/QB_REFERRAL_LINK/latest'
+      ? json(422, { title: 'Unprocessable', status: 422, violations: [{ field: 'publicationId',
+        ruleCode: 'QB_REFERRAL_NOT_REFERRER', message: 'Pass the referrer certification quiz first.' }] })
+      : undefined })
+    window.history.replaceState(null, '', `/p/${PUB}`)
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('referral-make'))
+    expect(await screen.findByTestId('referral-error')).toHaveTextContent('Pass the referrer certification quiz first.')
+  })
+
+  it('claims a friend\'s link once the friend is signed in, and tells them until when it counts', async () => {
+    const claims: unknown[] = []
+    let claimed = false
+    server({ publicationPage: () => json(200, { items: [publication(claimed ? { myReferralStatus: 'REFERRED',
+      myReferralExpiresAt: '2026-11-08T00:00:00Z' } : {})], offset: 0, limit: 1 }),
+    extra: (path, body) => {
+      if (path !== '/api/processes/QB_REFERRAL_CLAIM/latest') return undefined
+      claims.push(body)
+      claimed = true
+      return json(200, { output: { publicationId: PUB, counted: true, expiresAt: '2026-11-08T00:00:00Z' } })
+    } })
+    window.history.replaceState(null, '', `/p/${PUB}?ref=${KEY}`)
+    takeReferralFromAddress()
+    expect(window.location.search).toBe('')
+    render(<App />)
+    await waitFor(() => expect(claims).toEqual([{ linkKey: KEY }]))
+    expect(await screen.findByTestId('referral-referred')).toHaveTextContent('A friend referred you')
+  })
+
+  it('lists the referrer\'s links and friends without names, and a rewarded one\'s cash reward', async () => {
+    server({ extra: (path) => {
+      if (path === '/api/queries/qb.app.referral-links') {
+        return json(200, { items: [{ linkId: 'l1', linkKey: KEY, publicationId: PUB, publicationName: 'Capitals week',
+          referral: JSON.stringify(POLICY), status: 'LIVE', endAt: '2026-11-20T00:00:00Z', createdAt:
+          '2026-10-20T00:00:00Z', placesLeft: 18, broughtByMe: 2 }], offset: 0, limit: 100 })
+      }
+      if (path === '/api/queries/qb.app.referrals') {
+        return json(200, { items: [
+          { referralId: 'r1', publicationId: PUB, publicationName: 'Capitals week', status: 'REWARDED',
+            referredAt: '2026-10-21T00:00:00Z', expiresAt: '2026-10-28T00:00:00Z', rewardMethod: 'SPONSOR_CASH',
+            amount: 300, rewardedAt: '2026-10-22T00:00:00Z', endedAt: '2026-10-22T00:00:00Z' },
+          { referralId: 'r2', publicationId: PUB, publicationName: 'Capitals week', status: 'REFERRED',
+            referredAt: '2026-10-25T00:00:00Z', expiresAt: '2026-11-01T00:00:00Z', rewardMethod: 'SPONSOR_CASH',
+            amount: 300, rewardedAt: null, endedAt: null }], offset: 0, limit: 100 })
+      }
+      if (path === '/api/processes/QB_REFERRAL_VIEW/latest') {
+        return json(200, { output: { referralId: 'r1', publicationId: PUB, publicationName: 'Capitals week',
+          status: 'REWARDED', referredAt: '2026-10-21T00:00:00Z', expiresAt: '2026-10-28T00:00:00Z',
+          rewardMethod: 'SPONSOR_CASH', amount: 300, rewardedAt: '2026-10-22T00:00:00Z', endedAt: null,
+          cash: { cashRewardId: 'c1', status: 'MARKED_PAID', code: 'C-ABCD1234', amount: 300,
+            markedPaidAt: '2026-10-23T00:00:00Z', confirmBy: '2026-10-30T00:00:00Z', sponsorCompany: 'Capitals Inc' },
+          redeem: null, digital: null } })
+      }
+      return undefined
+    } })
+    window.history.replaceState(null, '', '/referrals')
+    render(<App />)
+    expect(await screen.findByTestId('referral-link-row')).toHaveTextContent('Friends who came: 2')
+    const rows = await screen.findAllByTestId('referral-row')
+    expect(rows.map((r) => r.dataset.status)).toEqual(['REWARDED', 'REFERRED'])
+    await expectAccessible()
+    await userEvent.click(within(rows[0]).getByRole('link'))
+    expect(await screen.findByTestId('cash-code')).toHaveTextContent('C-ABCD1234')
+    await userEvent.click(screen.getByTestId('cash-confirm'))
+    await waitFor(() => expect(screen.getByTestId('referral-page')).toBeInTheDocument())
   })
 })
 

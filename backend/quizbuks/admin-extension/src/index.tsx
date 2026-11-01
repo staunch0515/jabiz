@@ -27,8 +27,7 @@ import {
   Radar,
   Receipt,
   Globe,
-  ShoppingBag,
-} from 'lucide-react'
+  ShoppingBag, UserRoundPlus } from 'lucide-react'
 import BankTopUpPage from './BankTopUpPage'
 import BankSettingsPage from './BankSettingsPage'
 import BankTopUpsPage from './BankTopUpsPage'
@@ -37,6 +36,7 @@ import ManualCreditPage from './ManualCreditPage'
 import ManualCreditsPage from './ManualCreditsPage'
 import BroadcastsPage from './BroadcastsPage'
 import CertificationsPage from './CertificationsPage'
+import ReferralsPage from './ReferralsPage'
 import AiPage from './AiPage'
 import AttemptsPage from './AttemptsPage'
 import { BRAND } from './brand'
@@ -145,6 +145,7 @@ export default defineExtension({
     { path: PATH.operatorWithdrawals, element: <OperatorWithdrawalsPage /> },
     // Q69: certification rounds and records by hand (headquarters and operators), and the official publishers.
     { path: PATH.certifications, element: <CertificationsPage /> },
+    { path: PATH.referrals, element: <ReferralsPage /> },
   ],
   menu: [
     // Q48a: the operator's own pages, first in its back office (only its members hold qb.operator.use).
@@ -221,6 +222,9 @@ export default defineExtension({
         // Q69: one entry for both back offices (headquarters' content administrators and the operators hold it).
         { key: 'qb-certifications', label: 'menu.certifications', path: PATH.certifications, icon: BadgeCheck,
           permission: PERMISSION.certificationManage },
+        // Q70: every referral (content and finance administrators).
+        { key: 'qb-referrals', label: 'menu.referrals', path: PATH.referrals, icon: UserRoundPlus,
+          permission: PERMISSION.referralsRead },
       ],
     },
     {
