@@ -78,9 +78,23 @@ public class IdentityProcesses {
      * @param subject       the provider's subject, as its verified ID token named it
      * @param email         the address the token named, for display; optional
      * @param providerLabel the provider's label in the caller's language, for the mail
+     * @param refreshToken  the provider's refresh token to keep for revoking the link later (Apple, decision D67 item
+     *                      5); null for other providers
      */
     public record LinkInput(@NotNull String userId, @NotBlank String provider, @NotBlank String subject, String email,
-        String providerLabel) {}
+        String providerLabel, @com.jabiz.security.Sensitive String refreshToken) {
+
+        public LinkInput(String userId, String provider, String subject, String email, String providerLabel) {
+            this(userId, provider, subject, email, providerLabel, null);
+        }
+
+        @Override
+        public String toString() {
+            return "LinkInput[userId=" + userId + ", provider=" + provider + ", subject=" + subject + ", email="
+                + email + ", providerLabel=" + providerLabel + ", refreshToken=" + (refreshToken == null ? null : "***")
+                + "]";
+        }
+    }
 
     /** {@code LINKED}, or {@code ALREADY_LINKED} when the caller had linked this very account before. */
     public record LinkOutput(String status) {}
@@ -98,6 +112,7 @@ public class IdentityProcesses {
     static final String LOCKED = "locked";
     static final String MATCHES = "password_matches";
     static final String SOURCE = "source";
+    static final String LINKED_ID = "linked_identity_id";
     static final String OUTCOME = "outcome";
     static final String INPUT = "input";
     static final String BY_SUBJECT = "by_subject";
@@ -169,6 +184,10 @@ public class IdentityProcesses {
             .step("Load the user's links", QueryEntities.of(SecurityEntities.USER_IDENTITY_DATASET,
                 ctx -> Rbac.all(new QueryPredicate.Eq("userId", user(ctx).id()), "provider"), OWN))
             .compute("Link", (metadata, ctx) -> link(ctx))
+            .step("Keep the provider's token", com.jabiz.runtime.process.steps.CallProcess.<ProcessContext>when(
+                ctx -> ctx.get(LINKED_ID) != null && linkInput(ctx).refreshToken() != null, IdentityTokens.KEEP, 1,
+                ctx -> new IdentityTokens.KeepInput((java.util.UUID) ctx.get(LINKED_ID), linkInput(ctx).provider(),
+                    linkInput(ctx).subject(), linkInput(ctx).refreshToken()), null))
             .step("Tell the user", SendMail.when(ctx -> mailEnabled && Boolean.TRUE.equals(ctx.get(LINKED))
                     && user(ctx).get("email") != null, AuthMailTemplates.IDENTITY_LINKED_MAIL,
                 ctx -> MailRecipient.user(user(ctx).id()),
@@ -281,8 +300,9 @@ public class IdentityProcesses {
         link.put("provider", input.provider());
         link.put("subject", input.subject());
         link.put("email", input.email());
-        ctx.changes().insert(SecurityEntities.USER_IDENTITY, link);
+        Object id = ctx.changes().insert(SecurityEntities.USER_IDENTITY, link);
         ctx.put(LINKED, true);
+        ctx.put(LINKED_ID, id instanceof java.util.UUID uuid ? uuid : java.util.UUID.fromString(String.valueOf(id)));
     }
 
     /**

@@ -372,7 +372,13 @@ BCrypt 有意很慢（每次数十到数百毫秒 CPU）。登录洪峰时若不
 Apple 的邮箱由 Apple 验证（`email_verified` 为 `true` 或文本 `"true"`），隐藏邮箱（`…@privaterelay.appleid.com`）同样是受担保的地址，可以开户、收信（须在 Apple 登记发信域名）。
 前端 `OidcButtons` 对 `kind: apple` 显示 Apple 的标志（取文字颜色：浅色按钮上黑、深色上白，同 Apple 的白色描边与黑色样式）与 Apple 规定的文字
 （"Sign in with Apple"/"通过 Apple 登录"/"Appleでサインイン"，注册时为"…Sign up…"），不用提供方的 `labels`。
-账号删除与解除关联时撤销 Apple 的授权在阶段 17j-b。
+**撤销授权**【决策 D67 第 5 条，阶段 17j-b】：App Store 要求删除账号时撤销 Apple 的授权。Apple 登录与关联换令牌时得到的刷新令牌，由子流程 `SEC_IDENTITY_TOKEN_KEEP`
+（`subProcessOnly()`，在 `SPONSOR_OIDC_SIGN_IN` 找到关联时与 `SEC_IDENTITY_LINK_SELF` 建立关联后调用）以 `SealedSecrets`（`JABIZ_SEAL_KEY`，上下文为该关联）密封，
+记在普通表 `sec_identity_token`（实体 `SecIdentityToken`，键为关联的编号，敏感字段、审计中为 `***`；每次登录换成新的）。同一个提供方账号（按提供方与主体的 SHA-256 区分，不存主体）建了新的关联时，旧关联的令牌随之删除、不再撤销：授权是该账号对本应用的一个，撤销旧令牌会连新关联的授权一起撤销。有 `kind: apple` 的提供方而没有密封密钥时启动报错。
+定时任务 `jabiz.identity-token-revocation`（缺省每 15 分钟，`jabiz.security.oidc.revocation.cron`）以模板 `jabiz.identity_tokens_to_revoke` 找出关联已不在
+（`ACCOUNT_ERASE`、本人解除、管理员删除，都一样）而到了尝试时间的令牌，逐项运行 `SEC_IDENTITY_TOKEN_REVOKE`（`internal()`，每项一个事务）：再读一次（关联又在或令牌已没有即跳过），
+打开令牌，以换令牌时的认证方式向发现文档的 `revocation_endpoint` 发出 RFC 7009 请求（5 秒超时）；200 即删除令牌，其他（拒绝、连不上、提供方已不在配置中）
+记一次失败、按 15 分钟起倍增、至多一天推后下一次，至多 12 次后不再尝试：行留下，并给持有 `security.user.identity.write` 的管理员登记待办（`CreateTask`，消息 `task.identity-token-revocation`），由其在提供方的控制台撤销。对提供方的调用在该项的事务中（至多 5 秒）：各项依次在后台运行，同时至多一个连接在等提供方。令牌不进日志、操作记录与审计。
 
 **账号关联与登录流程**
 
