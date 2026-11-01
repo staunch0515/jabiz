@@ -9,6 +9,7 @@ datasets:
 params:
   q:     { kind: { type: text, maxLength: 100 }, description: "Only prizes whose code or the taker's name contains this text" }
   since: { like: QbRedemption.dueAt, description: "Only prizes claimed or collected at or after this time (the redeem page's recent list)" }
+  handledBy: { kind: { type: text, maxLength: 128 }, description: "Q74: only prizes handed over by this user (one of qb.sponsor.redemption-handlers' handlerId), or SELF for the sponsor's own" }
 results:
   redemptionId:    { from: QbRedemption.redemptionId }
   code:            { from: QbRedemption.code }
@@ -26,6 +27,8 @@ results:
   confirmBy:       { from: QbRedemption.confirmBy }
   redeemedAt:      { from: QbRedemption.redeemedAt }
   redeemedByName:  { from: QbProfile.displayName }
+  redeemedBy:      { from: QbRedemption.redeemedBy }
+  handledBySelf:   { kind: { type: bool } }
 list:
   filters: [status, publicationId, dueAt, claimedAt, redeemedAt]
   sorts:   [dueAt, claimedAt, redeemedAt, amount, status]
@@ -52,7 +55,9 @@ SELECT
     r.{{QbRedemption.claimedAt}}      AS claimedAt,
     r.{{QbRedemption.confirmBy}}      AS confirmBy,
     r.{{QbRedemption.redeemedAt}}     AS redeemedAt,
-    b.{{QbProfile.displayName}}       AS redeemedByName
+    b.{{QbProfile.displayName}}       AS redeemedByName,
+    r.{{QbRedemption.redeemedBy}}     AS redeemedBy,
+    (r.{{QbRedemption.redeemedBy}} = r.{{QbRedemption.publisherId}}) AS handledBySelf
 FROM {{QbRedemption}} r
 JOIN {{QbPublicationCard}} c ON c.{{QbPublicationCard.publicationId}} = r.{{QbRedemption.publicationId}}
 LEFT JOIN {{QbProfile}} p ON p.{{QbProfile.userId}} = r.{{QbRedemption.userId}}
@@ -61,5 +66,8 @@ LEFT JOIN {{QbProfile}} b ON b.{{QbProfile.userId}} = r.{{QbRedemption.redeemedB
 WHERE (CAST(:q AS text) IS NULL
        OR strpos(lower(r.{{QbRedemption.code}}), lower(CAST(:q AS text))) > 0
        OR strpos(lower(coalesce(p.{{QbProfile.displayName}}, '')), lower(CAST(:q AS text))) > 0)
+  AND (CAST(:handledBy AS text) IS NULL
+       OR CAST(:handledBy AS text) = 'SELF' AND r.{{QbRedemption.redeemedBy}} = r.{{QbRedemption.publisherId}}
+       OR r.{{QbRedemption.redeemedBy}} = CAST(:handledBy AS text))
   AND (CAST(:since AS timestamptz) IS NULL
        OR r.{{QbRedemption.claimedAt}} >= :since OR r.{{QbRedemption.redeemedAt}} >= :since)

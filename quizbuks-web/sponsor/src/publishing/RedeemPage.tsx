@@ -35,8 +35,10 @@ import {
   confirmRedemption,
   declineRedemption,
   issueRedeemCode,
+  readRedemptionHandlers,
   REDEMPTION_STATUSES,
   searchRedemptions,
+  type RedemptionHandler,
   type RedemptionRow,
   type RedemptionStatus,
 } from './api'
@@ -47,6 +49,14 @@ import { playSound } from '../qb/sound'
 
 export const REDEEM_PATH = '/redeem'
 export const REDEMPTIONS_QUERY = ['qb', 'redemptions'] as const
+const HANDLERS_QUERY = [...REDEMPTIONS_QUERY, 'handlers'] as const
+
+/** Q74: who handed a prize over, as the sponsor knows them: themselves, or the staff member's name. */
+function useHandlerLabel() {
+  const { t } = useTranslation(SPONSOR)
+  return (self: boolean, name: string | null, id: string | null) =>
+    self ? t('publishing.redeem.self') : name ?? id ?? '?'
+}
 const ROTATING_QUERY = ['qb', 'redeem-code', 'rotating'] as const
 const PRINTED_QUERY = ['qb', 'redeem-code', 'printed'] as const
 /** The console asks for a new rotating code every minute; the server's lasts two. */
@@ -260,6 +270,7 @@ function Claims() {
 /** The day's redemptions, as they happen: the sponsor sees the scan land. */
 function Today() {
   const { t } = useTranslation(SPONSOR)
+  const handler = useHandlerLabel()
   const [since] = useState(startOfToday)
   const today = useQuery({ queryKey: [...REDEMPTIONS_QUERY, 'today', since],
     queryFn: () => searchRedemptions({ since, status: 'REDEEMED', offset: 0, limit: 50 }),
@@ -278,15 +289,55 @@ function Today() {
               <span>{row.takerName ?? '?'}</span>
               <span>{row.description}</span>
               <span className="text-muted-foreground">{row.redeemedAt ? formatDateTime(row.redeemedAt) : ''}</span>
-              {row.redeemedByName && (
+              {row.redeemedBy && (
                 <span className="text-muted-foreground" data-testid="redeem-today-staff">
-                  {t('publishing.redeem.handedBy', { name: row.redeemedByName })}
+                  {t('publishing.redeem.handedBy', { name: handler(row.handledBySelf, row.redeemedByName,
+                    row.redeemedBy) })}
                 </span>
               )}
             </li>
           ))}
         </ul>
       )}
+    </section>
+  )
+}
+
+/**
+ * Q74: who handed over the sponsor's prizes, the sponsor and each staff member (those that left included): how many
+ * and their value today, in the last 7 days, this month and in all, by the deployment's days.
+ */
+function Handlers() {
+  const { t } = useTranslation(SPONSOR)
+  const handler = useHandlerLabel()
+  const handlers = useQuery({ queryKey: HANDLERS_QUERY, queryFn: readRedemptionHandlers })
+  const rows = handlers.data ?? []
+  if (rows.length === 0) return null
+  const cell = (count: number, value: number) => (
+    <span className="flex flex-col tabular-nums">
+      <span>{t('publishing.redeem.handledCount', { count })}</span>
+      <span className="text-muted-foreground text-xs">{formatKudos(value)}</span>
+    </span>
+  )
+  const columns: ColumnDef<RedemptionHandler, unknown>[] = [
+    { id: 'name', header: t('publishing.redeem.handler'), enableSorting: false,
+      cell: ({ row }) => handler(row.original.self, row.original.name, row.original.handlerId) },
+    { id: 'today', header: t('publishing.redeem.periods.today'), enableSorting: false,
+      cell: ({ row }) => cell(row.original.todayCount, row.original.todayValue) },
+    { id: 'week', header: t('publishing.redeem.periods.week'), enableSorting: false,
+      cell: ({ row }) => cell(row.original.weekCount, row.original.weekValue) },
+    { id: 'month', header: t('publishing.redeem.periods.month'), enableSorting: false,
+      cell: ({ row }) => cell(row.original.monthCount, row.original.monthValue) },
+    { id: 'total', header: t('publishing.redeem.periods.total'), enableSorting: false,
+      cell: ({ row }) => cell(row.original.totalCount, row.original.totalValue) },
+  ]
+  return (
+    <section className="flex flex-col gap-2" aria-labelledby="redeem-handlers-title" data-testid="redeem-handlers">
+      <h2 id="redeem-handlers-title" className="text-lg font-semibold">{t('publishing.redeem.handlersTitle')}</h2>
+      <DataTable label={t('publishing.redeem.handlersTitle')} columns={columns} data={rows}
+        getRowId={(row) => row.handlerId} rowProps={(row) => ({ 'data-testid': 'redeem-handler-row',
+          'data-self': String(row.self) })} />
+      <p className="text-muted-foreground text-xs">{t('publishing.redeem.handlersZone', { zone: rows[0].zone })}</p>
     </section>
   )
 }
@@ -300,10 +351,14 @@ function History() {
   const [text, setText] = useState('')
   const [q, setQ] = useState('')
   const [status, setStatus] = useState<RedemptionStatus | null>(null)
+  // Q74: who handed it over (a handler's id, SELF, or anyone).
+  const [handledBy, setHandledBy] = useState<string | null>(null)
+  const handler = useHandlerLabel()
+  const handlers = useQuery({ queryKey: HANDLERS_QUERY, queryFn: readRedemptionHandlers })
   const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: PAGE_SIZE })
   const rows = useQuery({
-    queryKey: [...REDEMPTIONS_QUERY, 'history', q, status, pagination],
-    queryFn: () => searchRedemptions({ q, status, offset: pagination.pageIndex * pagination.pageSize,
+    queryKey: [...REDEMPTIONS_QUERY, 'history', q, status, handledBy, pagination],
+    queryFn: () => searchRedemptions({ q, status, handledBy, offset: pagination.pageIndex * pagination.pageSize,
       limit: pagination.pageSize }),
     placeholderData: keepPreviousData,
   })
@@ -335,16 +390,18 @@ function History() {
           {row.original.status === 'REDEEMED' && row.original.redeemedAt && (
             <span className="text-muted-foreground text-xs">{t('publishing.redeem.collectedAt', { time: formatDateTime(row.original.redeemedAt) })}</span>
           )}
-          {row.original.status === 'REDEEMED' && row.original.redeemedByName && (
-            <span className="text-muted-foreground text-xs" data-testid="redemption-staff">
-              {t('publishing.redeem.handedBy', { name: row.original.redeemedByName })}
-            </span>
-          )}
         </span>
       ) },
+    // Q74: who handed it over, a column of its own.
+    { id: 'handler', header: t('publishing.redeem.handler'), enableSorting: false,
+      cell: ({ row }) => row.original.status === 'REDEEMED' && row.original.redeemedBy ? (
+        <span data-testid="redemption-staff" data-self={row.original.handledBySelf}>
+          {handler(row.original.handledBySelf, row.original.redeemedByName, row.original.redeemedBy)}
+        </span>
+      ) : <span className="text-muted-foreground">—</span> },
     { id: 'dueAt', header: t('publishing.redeem.earned'), enableSorting: false,
       cell: ({ row }) => formatDateTime(row.original.dueAt) },
-  ], [t, statusLabel])
+  ], [t, statusLabel, handler])
   const search = (event: FormEvent) => {
     event.preventDefault()
     setQ(text.trim())
@@ -374,6 +431,24 @@ function History() {
             <SelectContent>
               <SelectItem value="ALL">{t('publishing.redeem.allStatuses')}</SelectItem>
               {REDEMPTION_STATUSES.map((code) => <SelectItem key={code} value={code}>{statusLabel(code)}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label htmlFor={`${id}-handler`} className="sr-only">{t('publishing.redeem.handler')}</Label>
+          <Select value={handledBy ?? 'ALL'} onValueChange={(value) => {
+            setHandledBy(value === 'ALL' ? null : value)
+            setPagination((p) => ({ ...p, pageIndex: 0 }))
+          }}>
+            <SelectTrigger id={`${id}-handler`} className="w-56" data-testid="redemption-handler-filter">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">{t('publishing.redeem.allHandlers')}</SelectItem>
+              <SelectItem value="SELF">{t('publishing.redeem.self')}</SelectItem>
+              {(handlers.data ?? []).filter((h) => !h.self).map((h) => (
+                <SelectItem key={h.handlerId} value={h.handlerId}>{handler(false, h.name, h.handlerId)}</SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
@@ -408,6 +483,7 @@ export function RedeemPage() {
         <PrintedCode />
       </div>
       <Today />
+      <Handlers />
       <History />
     </section>
   )

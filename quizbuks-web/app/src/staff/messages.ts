@@ -7,6 +7,20 @@ import { APP } from '../messages'
  */
 const en = {
   staff: {
+    handledLink: 'What I handed over',
+    handled: {
+      title: 'What I handed over',
+      intro: 'The prizes you handed over at the counter of {{sponsor}}.',
+      showCode: 'Show the code to scan',
+      count_one: '{{count}} prize',
+      count_other: '{{count}} prizes',
+      periods: { TODAY: 'Today', WEEK: 'Last 7 days', MONTH: 'This month', ALL: 'All' },
+      period: 'Period',
+      zone: 'Days are those of {{zone}}.',
+      none: 'Nothing handed over in this period.',
+      listLabel: 'Prizes handed over',
+      more: 'Show more ({{count}} left)',
+    },
     myIdTitle: 'Your ID',
     myIdText: 'A sponsor who wants you on their staff (to hand out prizes at their counter) asks for this ID.',
     copy: 'Copy',
@@ -45,6 +59,20 @@ const en = {
 
 const zh: typeof en = {
   staff: {
+    handledLink: '我的交付',
+    handled: {
+      title: '我的交付',
+      intro: '你在{{sponsor}}的柜台交付的奖品。',
+      showCode: '出示领奖码',
+      count_one: '{{count}} 件',
+      count_other: '{{count}} 件',
+      periods: { TODAY: '今天', WEEK: '近 7 天', MONTH: '本月', ALL: '全部' },
+      period: '期间',
+      zone: '日期按 {{zone}} 计算。',
+      none: '这段期间没有交付。',
+      listLabel: '交付的奖品',
+      more: '显示更多（还有 {{count}} 件）',
+    },
     myIdTitle: '我的 ID',
     myIdText: '想让你成为店员（在柜台交付奖品）的商家会问你要这个 ID。',
     copy: '复制',
@@ -83,6 +111,20 @@ const zh: typeof en = {
 
 const ja: typeof en = {
   staff: {
+    handledLink: '渡した景品',
+    handled: {
+      title: '渡した景品',
+      intro: '{{sponsor}}のカウンターであなたが渡した景品です。',
+      showCode: '受け取りコードを表示',
+      count_one: '{{count}} 件',
+      count_other: '{{count}} 件',
+      periods: { TODAY: '今日', WEEK: '直近 7 日', MONTH: '今月', ALL: 'すべて' },
+      period: '期間',
+      zone: '日付は {{zone}} で数えます。',
+      none: 'この期間に渡した景品はありません。',
+      listLabel: '渡した景品',
+      more: 'さらに表示（残り {{count}} 件）',
+    },
     myIdTitle: 'あなたの ID',
     myIdText: 'あなたをスタッフ（カウンターで賞品を渡す人）にしたいスポンサーには、この ID を伝えてください。',
     copy: 'コピー',

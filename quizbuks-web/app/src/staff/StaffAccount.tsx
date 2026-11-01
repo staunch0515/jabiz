@@ -1,13 +1,13 @@
 import { useAuth } from '@jabiz/client'
 import { Button, ConfirmDialog, notify } from '@jabiz/ui'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Copy, Store } from 'lucide-react'
+import { Copy, ListChecks, Store } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
 import { AccountSection } from '../qb/AccountSections'
 import { problemText } from '../qb/problems'
 import { Link } from '../qb/router'
-import { leaveStaff, readStaffOf, STAFF_PATH, STAFF_QUERY } from './api'
+import { HANDLED_PATH, leaveStaff, readStaffOf, STAFF_PATH, STAFF_QUERY } from './api'
 import './messages'
 
 /**
@@ -58,6 +58,10 @@ export function StaffAccount() {
           <div className="flex flex-wrap gap-2">
             <Button asChild size="sm">
               <Link to={STAFF_PATH} data-testid="staff-desk-link"><Store aria-hidden />{t('staff.openDesk')}</Link>
+            </Button>
+            {/* Q74: what they handed over, with its totals. */}
+            <Button asChild size="sm" variant="outline">
+              <Link to={HANDLED_PATH} data-testid="staff-handled-link"><ListChecks aria-hidden />{t('staff.handledLink')}</Link>
             </Button>
             <ConfirmDialog title={t('staff.leaveTitle', { sponsor })} description={t('staff.leaveText')}
               confirmLabel={t('staff.leaveConfirm')} cancelLabel={t('staff.cancel')} destructive

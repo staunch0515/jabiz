@@ -98,9 +98,10 @@ import { BankPage } from './wallet/BankPage'
 import { rememberShareNext } from './share/share'
 import { SharePage } from './share/SharePage'
 import { SponsorPage, sponsorPageOf } from './share/SponsorPage'
-import { STAFF_PATH } from './staff/api'
+import { HANDLED_PATH, STAFF_PATH } from './staff/api'
 import { SCAN_PATH, ScanPage } from './scan/ScanPage'
 import { StaffDeskPage } from './staff/StaffDeskPage'
+import { StaffHandledPage } from './staff/StaffHandledPage'
 import { PayoutPage } from './wallet/PayoutPage'
 import { WalletPage } from './wallet/WalletPage'
 import { ONE_LINE_BANNER } from './banner'
@@ -332,7 +333,7 @@ function BottomNav({ path }: { path: string }) {
   // account's parts (Q56) to the account.
   const item = itemPage(path)
   const section = item ? (item.page === 'p' ? HOME : HISTORY) : isWalletPath(path) ? WALLET_PATH
-    : inboxItemOf(path) ? INBOX_PATH : path === STAFF_PATH || isAccountPath(path) ? ACCOUNT_PATH : path
+    : inboxItemOf(path) ? INBOX_PATH : path === STAFF_PATH || path === HANDLED_PATH || isAccountPath(path) ? ACCOUNT_PATH : path
   return (
     <nav aria-label={t('nav.label')}
       className="bg-card fixed inset-x-0 bottom-0 z-10 border-t pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_16px_-12px_var(--overlay)]">
@@ -411,6 +412,7 @@ function SignedIn({ path }: { path: string }) {
   else if (isAccountPath(path)) page = <AccountPage path={path} />
   else if (path === INBOX_PATH) page = <InboxPage />
   else if (path === STAFF_PATH) page = <StaffDeskPage />
+  else if (path === HANDLED_PATH) page = <StaffHandledPage />
   else if (path === MY_SPONSOR_PATH) page = <MySponsorPage />
   else if (path === REFERRALS_PATH) page = <ReferralsPage />
   else if (path === SCAN_PATH) page = <ScanPage />

@@ -19,6 +19,9 @@ export const STAFF_TEMPLATE = {
   staffOf: 'qb.app.staff-of',
   /** That sponsor's prizes claimed or collected. */
   redemptions: 'qb.app.staff-redemptions',
+  /** Q74: what the caller handed over there, by period, and its totals. */
+  handled: 'qb.app.staff-handled',
+  handledTotals: 'qb.app.staff-handled-totals',
 } as const
 
 /** Error codes the pages react to. */

@@ -1,5 +1,6 @@
 import { api, ApiError, runProcess, runQuery, toApiError, unwrap, type Filter, type Sort } from '@jabiz/client'
 import { readDictionary, type DictionaryItem } from '../qb/api'
+import { minuteNow } from '../qb/legal'
 import { CRITERIA, type Condition } from '../qb/audience'
 import { AUDIENCE } from '../qb/ids'
 import { referralPolicy, type ReferralPolicy } from '../qb/play'
@@ -1027,6 +1028,9 @@ export interface RedemptionRow {
   redeemedAt: string | null
   /** Who handed it over when one of the sponsor's staff did (Q39); null when the sponsor did. */
   redeemedByName: string | null
+  /** Q74: the user who handed it over (the sponsor or one of their staff), and whether it was the sponsor. */
+  redeemedBy: string | null
+  handledBySelf: boolean
 }
 
 export interface RedemptionSearch {
@@ -1034,15 +1038,18 @@ export interface RedemptionSearch {
   status?: RedemptionStatus | null
   /** Only prizes claimed or collected at or after this time (the redeem page's recent list). */
   since?: string | null
+  /** Q74: only those handed over by this user (a handler's `handlerId`), or `SELF` for the sponsor's own. */
+  handledBy?: string | null
   offset: number
   limit: number
 }
 
-export async function searchRedemptions({ q, status, since, offset, limit }: RedemptionSearch) {
+export async function searchRedemptions({ q, status, since, handledBy, offset, limit }: RedemptionSearch) {
   const text = q?.trim()
   const params: Record<string, unknown> = {}
   if (text) params.q = text
   if (since) params.since = since
+  if (handledBy) params.handledBy = handledBy
   const page = await runQuery<Row>(PUBLISHING_TEMPLATE.redemptions, {
     params,
     filters: status ? [{ field: 'status', op: 'eq', value: status }] : [],
@@ -1068,8 +1075,43 @@ export async function searchRedemptions({ q, status, since, offset, limit }: Red
       confirmBy: row.confirmBy == null ? null : String(row.confirmBy),
       redeemedAt: row.redeemedAt == null ? null : String(row.redeemedAt),
       redeemedByName: row.redeemedByName == null ? null : String(row.redeemedByName),
+      redeemedBy: row.redeemedBy == null ? null : String(row.redeemedBy),
+      handledBySelf: row.handledBySelf === true,
     })),
   }
+}
+
+/** A row of `qb.sponsor.redemption-handlers` (Q74): one who handed over the sponsor's prizes, and their figures. */
+export interface RedemptionHandler {
+  handlerId: string
+  self: boolean
+  name: string | null
+  todayCount: number
+  todayValue: number
+  weekCount: number
+  weekValue: number
+  monthCount: number
+  monthValue: number
+  totalCount: number
+  totalValue: number
+  /** The deployment's zone the days are of. */
+  zone: string
+}
+
+/** Everyone who ever handed over one of the sponsor's prizes, staff that left included, most first. */
+export async function readRedemptionHandlers(): Promise<RedemptionHandler[]> {
+  const page = await runQuery<Row>(PUBLISHING_TEMPLATE.redemptionHandlers, { params: { at: minuteNow() },
+    limit: 100 })
+  return page.items.map((row) => ({
+    handlerId: String(row.handlerId),
+    self: row.self === true,
+    name: row.name == null ? null : String(row.name),
+    todayCount: Number(row.todayCount ?? 0), todayValue: Number(row.todayValue ?? 0),
+    weekCount: Number(row.weekCount ?? 0), weekValue: Number(row.weekValue ?? 0),
+    monthCount: Number(row.monthCount ?? 0), monthValue: Number(row.monthValue ?? 0),
+    totalCount: Number(row.totalCount ?? 0), totalValue: Number(row.totalValue ?? 0),
+    zone: String(row.zone ?? 'UTC'),
+  }))
 }
 
 type RedemptionOutput = { redemptionId: string; status: RedemptionStatus; revision: number }
