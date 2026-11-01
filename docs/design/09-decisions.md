@@ -2395,3 +2395,33 @@ binder 的保护也落空）；④带 PKCE 试试看（未写明支持，失败�
 
 **剩余风险**：Apple 的发现文档、令牌端点与 ID 令牌的细节未能从本环境直接核对（`appleid.apple.com` 不在网络白名单中），平台以本地桩覆盖，上线前以真实的 Services ID 验证一次；
 若 Apple 实际支持并要求 PKCE，需要改第 2 条。App 内（原生）的 Apple 登录在 17l。
+
+---
+
+## D68 原生 App 的接入：系统浏览器登录、关联文件、外壳中的安装提示
+
+**背景**：QuizBuks 的答题者 App 以原生外壳上架（Android TWA，iOS Capacitor 的 WKWebView 加载 `/taker/`；QuizBuks Q49b、Q49c）。三件事外壳自己做不好：
+Google 拒绝在嵌入的网页视图中登录（`disallowed_useragent`），第三方登录要在系统浏览器中进行再回到 App；邮件中的链接要直接打开 App，系统要从域名根取关联文件
+（`apple-app-site-association`、`assetlinks.json`），此前由 QuizBuks 以 Caddy 与脚本提供；外壳中网页不是 standalone，平台的安装提示会请已经装了 App 的人"添加到主屏幕"。
+需求方 2026-11-01 确认 17l 的计划。
+
+**决定**
+1. **系统浏览器登录**：`@jabiz/client` 的 `configureClient({ openAuthorization })` 决定提供方的页面如何打开，缺省照旧由页面自己跳转。外壳把它交给系统浏览器（iOS `ASWebAuthenticationSession`、
+   Android Custom Tabs）。发起登录、关联照旧在外壳的网页中进行（binder 留在其 `sessionStorage`）；提供方送回入口的回调页 `login/oidc`，它是 App 的关联链接，外壳在自己的网页中打开，
+   回调与浏览器中完全相同（binder 在，login CSRF 的保护不变）。Apple 的表单回传照旧经服务器 303 到该回调。服务器不加接口，不另造"App 专用"的登录。
+2. **关联文件**：`jabiz.web.native-apps[i]`（`path` 为一个已配置 SPA 的路径；`ios` 为 `<Team ID>.<bundle ID>` 列表；`android[j].package-name` 与 `.fingerprints`，签名证书的 SHA-256）。
+   单独一个列表、按 SPA 的路径，部署只加这一项，不必重写构建声明的 SPA 列表（Spring 的列表按整体替换）。平台在域名根提供
+   `GET /.well-known/apple-app-site-association`（只开该 SPA 路径之下的地址，`/` 的 SPA 为全部）与 `GET /.well-known/assetlinks.json`（`delegate_permission/common.handle_all_urls`，
+   打开哪些地址由 App 的 manifest 决定）：JSON、不转向、公开（带来的凭据不看）、缓存一小时、`GET` 与 `HEAD`。由过滤器提供，不是接口（不在 OpenAPI 中）：没有该系统的 App 时请求照常往下走（构建中的静态文件，否则 404）。SPA 的路由从不应答这两个地址。启动检查一次报告全部问题
+   （路径不是已配置的 SPA、同一路径两次、什么 App 也没写、编号、包名或指纹的格式）。
+3. **外壳中的安装提示**：`configureClient({ nativeShell: 'ios' | 'android' | … })` 声明网页在哪个外壳中运行（`nativeShell()` 读出）；在外壳中安装的判断视同已安装，横幅、指引与账户页的入口都不出现。
+   外壳由应用自己识别（参数、User-Agent），平台不猜。
+
+**理由**：登录照旧是网页的事，外壳只换掉"打开提供方的页面"这一步，回调、binder、开户与关联的规则一处也不变；Apple 的 form_post 与其他提供方走同一条路。关联文件只是部署的配置，
+放在平台里，每个应用不必再各写脚本与反向代理的规则，格式错误在启动时而不是在商店审核时发现。
+
+**放弃的方案**：①自定义 URL scheme 回调（任何 App 都能注册同一个 scheme，截走授权码；关联链接只属于域名的主人）；②在 App 内的网页视图中登录（Google 拒绝，其他提供方也不建议）；
+③服务器上专为 App 的登录接口、以 scheme 交回令牌（多一套流程，binder 的保护落空）；④按 User-Agent 在平台中判断外壳（应用的外壳各不相同，判断会错）。
+
+**剩余风险**：系统浏览器与外壳的网页不共享会话与存储：外壳必须在**同一个**网页视图中打开回调（binder 在那里）；冷启动时外壳要等视图出现后再打开链接（QuizBuks Q49c-1 已如此）。
+iOS 的 `ASWebAuthenticationSession` 对 https 回调需要 iOS 17.4 以上，更早的系统由 Universal Link 打开 App。原生部分由各应用的外壳实现，平台只给出接口与文件。

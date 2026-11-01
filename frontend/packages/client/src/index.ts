@@ -37,6 +37,8 @@ export type { Violation } from './api/problem'
 export { session } from './api/session'
 export type { SessionPersistence } from './api/session'
 export { configureClient } from './configure'
+export { nativeShell } from './native'
+export type { OpenAuthorization } from './native'
 export type { ClientOptions } from './configure'
 export type { paths, components, operations } from './api/schema'
 export {

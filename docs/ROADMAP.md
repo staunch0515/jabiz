@@ -4916,4 +4916,20 @@ D17 下匿名不能写任何东西（15 §10）。
 | 17j-5 | 文档：决策 D67、10 §12、根 `CLAUDE.md` 单点登录一条 | 17j-a |
 | 17j-6 | 刷新令牌密封保存（`SEC_IDENTITY_TOKEN_KEEP`、实体 `SecIdentityToken`、迁移 `V55__identity_token.sql`、没有密封密钥即启动报错）；定时任务 `jabiz.identity-token-revocation` 找出关联已不在的令牌，`SEC_IDENTITY_TOKEN_REVOKE` 经提供方客户端调用 `revocation_endpoint`（重试的间隔倍增、至多 12 次）；同一 Apple 账号的新关联取代旧令牌；放弃后给管理员登记待办；测试 `IdentityTokensTest`、`OidcClientTest`、`OidcAppleIT`（密封保存、审计与操作记录中没有、关联在时不撤销、抹除后撤销并删除、本人解除后撤销、拒绝后按间隔重试、再次登录换令牌、新关联取代旧令牌不撤销、12 次后登记待办并不再尝试）；10 §12 | 17j-b |
 
-**17j 状态**：✅ 17j-a 完成（#401）；17j-b 📝 待评审（分支 `1.3/phase-17j-apple-revoke`）。
+**17j 状态**：✅ 完成（17j-a #401，17j-b #402）。
+
+
+### 17l 原生 App 的接入（需求 2026-10-28，QuizBuks Q49；确认 2026-11-01，决策 D68）
+
+**缘由**：答题者 App 以原生外壳上架（Q49b TWA、Q49c Capacitor）。Google 拒绝在嵌入的网页视图中登录，第三方登录要在系统浏览器中进行再回到 App；邮件中的链接要直接打开 App，
+需要域名根上的关联文件（此前由 QuizBuks 以 Caddy 与脚本提供）；外壳中的网页不是 standalone，安装提示会请已经装了 App 的人"添加到主屏幕"。
+
+| # | 内容 |
+|---|---|
+| 17l-1 | `@jabiz/client`：`configureClient({ openAuthorization })`（缺省页面自己跳转），`startProviderSignIn` 与 `startIdentityLink` 经它打开提供方的页面，回调照旧是入口的 `login/oidc`（binder 不变） |
+| 17l-2 | `configureClient({ nativeShell })` 与 `nativeShell()`：外壳中安装的判断视同已安装，安装提示与指引不出现 |
+| 17l-3 | `jabiz.web.native-apps[i]`（`path`、`ios`、`android[j].package-name` / `.fingerprints`）：`NativeAppAssociations` 提供 `/.well-known/apple-app-site-association`（只开该 SPA 的路径）与 `/.well-known/assetlinks.json`；公开（凭据不看）、JSON、一小时缓存、`GET` 与 `HEAD`；过滤器而不是接口（不在 OpenAPI 中），没有 App 时请求往下走（静态文件或 404）；SPA 的路由不应答它们；`SpaConfigCheck` 检查；外壳打不开页面时忘掉这一轮的 binder |
+| 17l-4 | 测试：`NativeAppAssociationsTest`（两个文件、404、不归 SPA、全部格式问题）、`MultiSpaIT`（经完整的过滤链：公开、JSON、缓存、无页面策略、带过期令牌也 200）、`oidc.test.ts`（外壳打开页面、关联同样、外壳失败即失败）、`install.test.ts`（外壳中视同已安装） |
+| 17l-5 | 文档：决策 D68、12 §4、17 §3.2、指南 `app-spa.md` 6a、根 `CLAUDE.md` |
+
+**17l 状态**：📝 待评审（分支 `1.3/phase-17l-native-apps`）。
