@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
 import { ArrowLeft } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -34,7 +34,10 @@ import {
   readTakedowns,
   readTiers,
   readVersion,
+  readTranslationCheck,
+  requestTranslationCheck,
   PUBLICATION_TEXT_FIELDS,
+  type PublicationTextField,
   type Publication,
   type Takedown,
   type Tier,
@@ -43,6 +46,7 @@ import {
 import { AfterDecision, LoadFailed, PublisherLink, Section, StatusBadge } from './components'
 import type { BackTo } from './PublicationsPage'
 import { forbidden, money, QUEUE, useAfterDecision, useLabels, when } from './hooks'
+import type { Snapshot } from './snapshot'
 import {
   ACCOUNT_SUSPENDED, CONTENT_IMAGE_VARIANTS, DICTIONARY, OPERATOR_PROCESS, PATH, PENDING_REVIEW, PERMISSION,
   PUBLICATION_ADMIN,
@@ -280,11 +284,13 @@ function Content({ versionId, version }: { versionId: string | null; version: Us
  * publication's own texts beside the base's, and a tick that the reviewer read the quiz and the texts in it. The decision
  * waits for every tick; it is the page's threshold only (the platform's `ApprovalPanel` records the decision).
  */
-function Languages({ publication, others, seen, onSeen }: {
+function Languages({ publication, others, seen, onSeen, content }: {
   publication: Publication
   others: string[]
   seen: (language: string) => boolean
   onSeen: (language: string, on: boolean) => void
+  /** The version's content, for the AI check's texts (Q73d-2). */
+  content?: Snapshot | null
 }) {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
   const name = (language: string) => t(`preview.languages.${language}`, { defaultValue: language })
@@ -324,6 +330,8 @@ function Languages({ publication, others, seen, onSeen }: {
               ))}
             </TableBody>
           </Table>
+          {content && <TranslationCheckSection publicationId={publication.publicationId} language={language}
+            content={content} publication={publication} />}
           <div className="flex items-center gap-2">
             <Checkbox id={`publication-seen-${language}`} checked={seen(language)}
               data-testid={`publication-language-seen-${language}`}
@@ -335,6 +343,89 @@ function Languages({ publication, others, seen, onSeen }: {
         </div>
       ))}
     </Section>
+  )
+}
+
+/**
+ * Q73d-2 (§5.3, D-Q73-4): the AI's comparison of the translations into one language with their base texts, asked for
+ * by any reviewer and charged to the platform; only the texts it finds different are listed, with what differs. For
+ * reference only: the decision is the reviewer's, and the panel does not wait for it.
+ */
+function TranslationCheckSection({ publicationId, language, content, publication }: {
+  publicationId: string
+  language: string
+  content: Snapshot
+  publication: Publication
+}) {
+  const { t } = useTranslation(EXTENSION_NAMESPACE)
+  const queryClient = useQueryClient()
+  const key = ['qb-ext', 'translation-check', publicationId, language]
+  const check = useQuery({
+    queryKey: key,
+    queryFn: () => readTranslationCheck(publicationId, language),
+    refetchInterval: (query) => (query.state.data?.status === 'QUEUED' ? 5_000 : false),
+    refetchOnWindowFocus: false,
+  })
+  const request = useMutation({
+    mutationFn: () => requestTranslationCheck(publicationId, language),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: key }),
+  })
+  const texts = content.translations[language]?.texts ?? {}
+  const label = (k: string): string => {
+    if (k === 'title') return t('publication.check.items.title')
+    if (k === 'intro') return t('publication.check.items.intro')
+    if (k.startsWith('publication.')) return t(`publication.textFields.${k.slice('publication.'.length)}`)
+    const m = /^q(\d+)\.(?:stem|o(\d+)\.text)$/.exec(k)
+    return !m ? k : m[2] ? t('publication.check.items.option', { n: m[1], m: m[2] })
+      : t('publication.check.items.question', { n: m[1] })
+  }
+  const pair = (k: string): [string, string] => {
+    if (k.startsWith('publication.')) {
+      const field = k.slice('publication.'.length) as PublicationTextField
+      return [publication.texts[field] ?? '', publication.translations[language]?.[field] ?? '']
+    }
+    if (k === 'title') return [content.title ?? '', texts[k] ?? '']
+    if (k === 'intro') return [content.intro ?? '', texts[k] ?? '']
+    const m = /^q(\d+)\.(?:stem|o(\d+)\.text)$/.exec(k)
+    const question = m ? content.questions.find((q) => q.no === Number(m[1])) : undefined
+    const source = !question ? '' : m![2] ? question.options.find((o) => o.no === Number(m![2]))?.text ?? ''
+      : question.stem
+    return [source ?? '', texts[k] ?? '']
+  }
+  const data = check.data
+  const different = data?.verdicts.filter((v) => !v.consistent) ?? []
+  return (
+    <div className="flex flex-col gap-2 rounded-md border p-3" data-testid={`publication-check-${language}`}
+      data-status={data?.status ?? 'NONE'}>
+      <div className="flex flex-wrap items-center gap-3">
+        <Button type="button" size="sm" variant="outline" disabled={request.isPending || data?.status === 'QUEUED'}
+          data-testid={`publication-check-run-${language}`} onClick={() => request.mutate()}>
+          {t('publication.check.run')}
+        </Button>
+        <span className="text-muted-foreground text-xs">{t('publication.check.hint')}</span>
+      </div>
+      {request.isError && <LoadFailed error={request.error} onRetry={() => request.mutate()} />}
+      {data?.status === 'QUEUED' && <p role="status" className="text-sm">{t('publication.check.running')}</p>}
+      {data?.status === 'FAILED' && <p className="text-sm">{t('publication.check.failed')}</p>}
+      {data?.status === 'READY' && different.length === 0 && (
+        <p className="text-sm" data-testid="publication-check-consistent">{t('publication.check.consistent')}</p>
+      )}
+      {data?.status === 'READY' && different.length > 0 && (
+        <ul className="flex flex-col gap-2" aria-label={t('publication.check.differences')}>
+          {different.map((verdict) => {
+            const [source, translation] = pair(verdict.key)
+            return (
+              <li key={verdict.key} className="flex flex-col gap-0.5 text-sm" data-testid="publication-check-difference">
+                <span className="font-medium">{label(verdict.key)}</span>
+                <span className="text-muted-foreground whitespace-pre-line">{source}</span>
+                <span className="whitespace-pre-line" lang={language}>{translation}</span>
+                <span>{verdict.note}</span>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </div>
   )
 }
 
@@ -524,7 +615,7 @@ export default function PublicationReviewPage() {
       <Settings publication={p} tiers={tiers} quiz={quiz} finance={finance} />
       <Content versionId={versionId} version={version} />
       {others.length > 0 && (
-        <Languages publication={p} others={others} seen={seen} onSeen={(language, on) => setSeenLanguages((all) =>
+        <Languages publication={p} others={others} content={shownVersion?.content} seen={seen} onSeen={(language, on) => setSeenLanguages((all) =>
           on ? [...all.filter((k) => k !== seenKey(language)), seenKey(language)] : all.filter((k) => k !== seenKey(language)))} />
       )}
       <Section title={t('publication.decision')} testId="publication-decision">{decision}</Section>

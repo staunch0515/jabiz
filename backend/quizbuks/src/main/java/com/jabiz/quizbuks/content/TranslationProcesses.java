@@ -149,28 +149,60 @@ public final class TranslationProcesses {
                 .contextFactory((start, input) -> QuizEditing.start(start, input, input.quizId()))
                 .outputMapper(ctx -> ctx.get(OUTPUT, EditOutput.class))
                 .steps(QuizEditing::lockAndLoad)
-                .steps(b -> QuizEditing.loadAll(b, "Load the questions", QbContent.QUESTION, QUESTIONS))
-                .steps(b -> QuizEditing.loadAll(b, "Load the options", QbContent.OPTION, OPTIONS))
-                .step("Load the language's translations", QueryEntities.<ProcessContext>of(
-                    QbContent.defaultDataset(QbContent.TRANSLATION), ctx -> EntityQuery.builder()
-                        .where(new QueryPredicate.And(List.of(new QueryPredicate.Eq("quizId", ctx.get(QUIZ_ID)),
-                            new QueryPredicate.Eq("language", ctx.get(INPUT, SaveInput.class).language()))))
-                        .limit(Integer.MAX_VALUE).build(), TRANSLATIONS))
+                .steps(b -> loadTexts(b, ctx -> ctx.get(INPUT, SaveInput.class).language()))
                 .steps(b -> QuizEditing.loadFiles(b, ctx -> ctx.get(INPUT, SaveInput.class).entries().stream()
                     .map(Entry::image).toList()))
                 .compute("Save the translations", (metadata, ctx) -> save(ctx)));
     }
 
+    /**
+     * Loads what a save of one language's texts reads, under the quiz's lock: the questions, the options and that
+     * language's translations (also for {@code QB_AI_TRANSLATION_ACCEPT}, Q73d-1).
+     */
+    public static <I, O> void loadTexts(ProcessDefinitionBuilder<I, O, ProcessContext> pb,
+        java.util.function.Function<ProcessContext, String> language) {
+        QuizEditing.loadAll(pb, "Load the questions", QbContent.QUESTION, QUESTIONS);
+        QuizEditing.loadAll(pb, "Load the options", QbContent.OPTION, OPTIONS);
+        pb.step("Load the language's translations", QueryEntities.<ProcessContext>of(
+            QbContent.defaultDataset(QbContent.TRANSLATION), ctx -> EntityQuery.builder()
+                .where(new QueryPredicate.And(List.of(new QueryPredicate.Eq("quizId", ctx.get(QUIZ_ID)),
+                    new QueryPredicate.Eq("language", language.apply(ctx)))))
+                .limit(Integer.MAX_VALUE).build(), TRANSLATIONS));
+    }
+
+    /** The questions and options as loaded by {@link #loadTexts}. */
+    public static List<EntityInstance> questions(ProcessContext ctx) {
+        return list(ctx, QUESTIONS);
+    }
+
+    public static List<EntityInstance> options(ProcessContext ctx) {
+        return list(ctx, OPTIONS);
+    }
+
+    /** The translations of the language as loaded by {@link #loadTexts}. */
+    public static List<EntityInstance> translations(ProcessContext ctx) {
+        return list(ctx, TRANSLATIONS);
+    }
+
     static void save(ProcessContext ctx) {
-        SaveInput input = ctx.get(INPUT, SaveInput.class);
+        apply(ctx, ctx.get(INPUT, SaveInput.class), null, Map.of());
+    }
+
+    /**
+     * Checks and writes a save's entries (the rules of {@value #SAVE} whoever calls it); false when nothing was
+     * written (out of date, or refused with every problem). Entries of {@code aiJobId}'s candidates (Q73d-1) are
+     * recorded as translated by the AI with that job, each with the hash of the base text the AI was given
+     * ({@code aiHashes}): a base changed since leaves the translation out of date.
+     */
+    public static boolean apply(ProcessContext ctx, SaveInput input, String aiJobId, Map<String, String> aiHashes) {
         EntityInstance quiz = quiz(ctx);
         if (!QuizEditing.current(ctx, quiz, input.baseRevision())) {
-            return;
+            return false;
         }
         if (!ContentLanguages.parseList(quiz.get("translationLanguages")).contains(input.language())) {
             ctx.reject(new Violation("language", ContentCodes.TRANSLATION_LANGUAGE, "The quiz has no language "
                 + input.language() + " besides its base", Map.of("language", input.language())));
-            return;
+            return false;
         }
         Map<String, String> sources = sources(quiz, list(ctx, QUESTIONS), list(ctx, OPTIONS));
         Object owner = quiz.get("ownerId");
@@ -207,7 +239,7 @@ public final class TranslationProcesses {
             }
         }
         if (ctx.hasViolations()) {
-            return;
+            return false;
         }
         boolean changed = false;
         for (Entry entry : input.entries()) {
@@ -224,9 +256,11 @@ public final class TranslationProcesses {
             Map<String, Object> values = new LinkedHashMap<>();
             values.put("text", text ? value : null);
             values.put("image", text ? null : entry.image());
-            values.put("sourceHash", text ? ContentLanguages.sourceHash(sources.get(entry.key())) : null);
-            values.put("translatedBy", ContentLanguages.BY_SPONSOR);
-            values.put("aiJobId", null);
+            boolean ai = aiJobId != null && aiHashes.containsKey(entry.key());
+            values.put("sourceHash", !text ? null
+                : ai ? aiHashes.get(entry.key()) : ContentLanguages.sourceHash(sources.get(entry.key())));
+            values.put("translatedBy", ai ? ContentLanguages.BY_AI : ContentLanguages.BY_SPONSOR);
+            values.put("aiJobId", ai ? aiJobId : null);
             if (row == null) {
                 values.put("quizId", quiz.id());
                 values.put("ownerId", owner);
@@ -247,13 +281,14 @@ public final class TranslationProcesses {
         } else {
             QuizEditing.unchanged(ctx, quiz, null, List.of());
         }
+        return true;
     }
 
     /**
      * Every element of the draft that can be translated, by its key, with its base text (an image's is null): the
      * quiz's title and introduction, and each question's and option's text and image.
      */
-    static Map<String, String> sources(EntityInstance quiz, List<EntityInstance> questions,
+    public static Map<String, String> sources(EntityInstance quiz, List<EntityInstance> questions,
         List<EntityInstance> options) {
         Map<String, String> sources = new LinkedHashMap<>();
         sources.put(ContentLanguages.TITLE, quiz.get("title"));

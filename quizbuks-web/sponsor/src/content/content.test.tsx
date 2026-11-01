@@ -42,6 +42,8 @@ interface Server {
   /** Q73a: the quiz's translations and materials of other languages. */
   translations?: Record<string, unknown>[]
   variants?: Record<string, unknown>[]
+  /** Q73d-1: the quiz's latest AI translation job, if any. */
+  aiTranslation?: Record<string, unknown> | null
 }
 
 /** The server as the console sees it, for a signed-in, approved sponsor with one quiz. Records what was posted. */
@@ -99,6 +101,15 @@ function server(options: Server = {}) {
           : json(200, { items: [{ ...QUIZ, publicationCount: 0, published: false }], offset: 0, limit: 20, total: 1 })
       case '/api/queries/qb.sponsor.quiz-versions':
         return json(200, { items: [], offset: 0, limit: 100 })
+      case '/api/queries/qb.sponsor.ai-usage':
+        return json(200, { items: [{ month: '2026-10', enabled: true, jobs: 0, failedJobs: 0, inputTokens: 0,
+          outputTokens: 0, monthlyTokens: 2000000, reservedTokens: 0, remainingTokens: 2000000, dailyJobs: 20,
+          jobsToday: 0, monthEnds: '2026-10-31T15:00:00Z', dayEnds: '2026-10-18T15:00:00Z' }], offset: 0, limit: 1 })
+      case '/api/queries/qb.sponsor.ai-jobs': {
+        const kind = (posted.at(-1)?.body.params as Record<string, unknown> | undefined)?.kind
+        return json(200, { items: kind === 'TRANSLATION' && options.aiTranslation ? [options.aiTranslation] : [],
+          offset: 0, limit: 1 })
+      }
       default:
         return json(404, {})
     }
@@ -408,6 +419,64 @@ describe('the quiz\'s other languages (Q73a)', () => {
     await userEvent.click(within(panel).getByTestId('translation-language-ja'))
     await waitFor(() => expect(processCalls('QB_QUIZ_LANGUAGES_SET')).toEqual([{ quizId: 'q1',
       languages: ['en', 'ja'], baseRevision: 8 }]))
+  })
+
+  it('shows the AI\'s suggestions under the texts and writes the checked ones as the AI\'s (Q73d-1)', async () => {
+    const { processCalls } = server({
+      quiz: { ...QUIZ, translationLanguages: 'en' },
+      aiTranslation: { aiJobId: 'j1', externalJobId: 'x1', kind: 'TRANSLATION', status: 'READY',
+        params: JSON.stringify({ language: 'en', all: false }), candidateCount: 2, invalidCount: 0, acceptedCount: 0,
+        requestedAt: '2026-10-14T01:00:00Z', finishedAt: '2026-10-14T01:01:00Z', expiresAt: '2026-10-21T01:01:00Z',
+        candidates: JSON.stringify({ schema: 1, language: 'en', translations: [
+          { no: 1, key: 'quiz.title', sourceHash: 'h', text: 'Coffee basics (AI)' },
+          { no: 2, key: 'option:o1.text', sourceHash: 'h', text: 'Coffee (AI)' }] }) },
+      processes: { QB_AI_TRANSLATION_ACCEPT: [edit(8)], QB_TRANSLATION_SAVE: [edit(9)] },
+    })
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('tab-languages'))
+    const panel = await screen.findByTestId('translations')
+    expect(await within(panel).findByTestId('ai-translate-ready')).toHaveTextContent('2 AI translations')
+    const rows = within(panel).getAllByTestId('translation-text')
+    const title = rows.find((row) => row.dataset.key === 'quiz.title')!
+    expect(within(title).getByTestId('ai-suggestion')).toHaveTextContent('Coffee basics (AI)')
+    await expectAccessible()
+
+    // Every suggestion used at once; each must be checked before the save.
+    await userEvent.click(within(panel).getByTestId('ai-translate-use-all'))
+    expect(within(title).getByTestId('translation-input')).toHaveValue('Coffee basics (AI)')
+    await userEvent.click(within(panel).getByTestId('translation-save'))
+    expect(within(panel).getByTestId('ai-translate-review-first')).toBeInTheDocument()
+    expect(processCalls('QB_AI_TRANSLATION_ACCEPT')).toEqual([])
+
+    // The title checked as given; the option changed, then checked; the question translated by hand.
+    await userEvent.click(within(title).getByTestId('ai-suggestion-reviewed'))
+    const option = rows.find((row) => row.dataset.key === 'option:o1.text')!
+    await userEvent.clear(within(option).getByTestId('translation-input'))
+    await userEvent.type(within(option).getByTestId('translation-input'), 'Coffee')
+    await userEvent.click(within(option).getByTestId('ai-suggestion-reviewed'))
+    const question = rows.find((row) => row.dataset.key === 'question:k1.stem')!
+    await userEvent.type(within(question).getByTestId('translation-input'), 'First?')
+    await userEvent.click(within(panel).getByTestId('translation-save'))
+    await waitFor(() => expect(processCalls('QB_TRANSLATION_SAVE')).toHaveLength(1))
+    expect(processCalls('QB_AI_TRANSLATION_ACCEPT')).toEqual([{ aiJobId: 'j1', quizId: 'q1', baseRevision: 7,
+      translations: [{ candidateNo: 1, text: 'Coffee basics (AI)', reviewed: true },
+        { candidateNo: 2, text: 'Coffee', reviewed: true }] }])
+    expect(processCalls('QB_TRANSLATION_SAVE')).toEqual([{ quizId: 'q1', language: 'en', baseRevision: 8,
+      entries: [{ key: 'question:k1.stem', text: 'First?' }] }])
+  })
+
+  it('asks the AI to translate the missing texts, telling what is sent (Q73d-1)', async () => {
+    const { processCalls } = server({ quiz: { ...QUIZ, translationLanguages: 'en' },
+      processes: { QB_AI_TRANSLATE_REQUEST: [{ status: 200, body: { output: { aiJobId: 'j2', externalJobId: 'x2',
+        status: 'QUEUED', estimatedTokens: 1000 } } }] } })
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('tab-languages'))
+    await userEvent.click(await screen.findByTestId('ai-translate-generate'))
+    const dialog = await screen.findByTestId('ai-translate-dialog')
+    expect(within(dialog).getByTestId('ai-translate-sent')).toHaveTextContent('Never which answers are correct')
+    await userEvent.click(within(dialog).getByTestId('ai-translate-submit'))
+    await waitFor(() => expect(processCalls('QB_AI_TRANSLATE_REQUEST')).toEqual([{ quizId: 'q1', language: 'en',
+      all: false, aiNoticeVersionNo: null }]))
   })
 
   it('makes a material of another language of the base\'s kind', async () => {
