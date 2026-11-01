@@ -10,6 +10,7 @@ import {
   forgetEntryInfo,
   finishIdentityLink,
   isProblem,
+  joinEntry,
   listIdentities,
   listSessions,
   register,
@@ -254,5 +255,47 @@ describe('provider account functions (phase 16f)', () => {
     ])
     // Linking leaves the session as it is.
     expect(session.refreshToken()).toBe('refresh-1')
+  })
+})
+
+describe('joining another entry (decision D66)', () => {
+  beforeEach(() => configureSession('portal'))
+  afterEach(() => {
+    session.clear()
+    configureSession('admin')
+    vi.unstubAllGlobals()
+  })
+
+  function joinServer(answer: () => Response) {
+    const calls: { method: string; path: string; auth: string | null }[] = []
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = input instanceof Request ? input : null
+      const method = request?.method ?? init?.method ?? 'GET'
+      const path = new URL(urlOf(input), 'http://localhost').pathname
+      calls.push({ method, path, auth: new Headers(request?.headers ?? init?.headers).get('Authorization') })
+      return answer()
+    }))
+    return calls
+  }
+
+  it("posts in the signed-in user's session and keeps it", async () => {
+    session.store('access', 'refresh-1')
+    const calls = joinServer(() => new Response(null, { status: 204 }))
+    await joinEntry('shop')
+    expect(calls).toEqual([{ method: 'POST', path: '/api/auth/account/entries/shop/join', auth: 'Bearer access' }])
+    expect(session.accessToken()).toBe('access')
+    expect(session.refreshToken()).toBe('refresh-1')
+  })
+
+  it("throws the server's refusal", async () => {
+    session.store('access', 'refresh-1')
+    joinServer(() => json(403, { status: 403, violations: [
+      { field: null, ruleCode: 'SIGN_UP_REFUSED', message: 'Your customer account is blocked.' }] }))
+    const refused = await joinEntry('shop').catch((e: unknown) => e)
+    expect(refused).toBeInstanceOf(ApiError)
+    expect(isProblem(refused, 'SIGN_UP_REFUSED', 403)).toBe(true)
+
+    joinServer(() => json(404, { status: 404 }))
+    await expect(joinEntry('nowhere')).rejects.toMatchObject({ status: 404 })
   })
 })

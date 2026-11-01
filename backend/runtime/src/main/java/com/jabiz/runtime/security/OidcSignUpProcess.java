@@ -4,6 +4,7 @@ import com.jabiz.mail.MailRecipient;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
+import com.jabiz.security.SignUpAttempt;
 import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.mail.SendMail;
 import com.jabiz.runtime.process.steps.QueryEntities;
@@ -113,6 +114,12 @@ public class OidcSignUpProcess {
                 SignUpProcesses.ROLES))
             .step("Draw a name suffix", SignUpProcesses.on(RandomBytesStep.class), new RandomBytesStep.Metadata(
                 SignUpProcesses.RANDOM, SignUpProcesses.SUFFIX_LENGTH))
+            // Only where an account would be opened (D66); the identity is proven, so the refusal keeps its 403.
+            .step("Sign-up guards", SignUpGuardStep.spec(new SignUpGuardStep.Metadata<AccountContext>(
+                SignUpAttempt.Path.OIDC, AccountContext::entryName, ctx -> null, AccountContext::email,
+                ctx -> Boolean.TRUE.equals(ctx.get(VERIFIED)), ctx -> ctx.list(LINKS).isEmpty()
+                    && ctx.list(SignUpProcesses.USERS).isEmpty()
+                    && entries.find(ctx.entryName()).filter(SignInEntries.Entry::selfRegistration).isPresent())))
             .compute("Open the account", (metadata, ctx) -> open(ctx, entries))
             // An address the provider did not vouch for is verified by mail, as a self-registration's (D61 item 3).
             .step("Send the verification", SendMail.<AccountContext>when(

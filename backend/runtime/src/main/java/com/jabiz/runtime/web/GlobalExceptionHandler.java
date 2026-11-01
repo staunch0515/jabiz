@@ -21,6 +21,7 @@ import com.jabiz.runtime.RateLimitedException;
 import com.jabiz.runtime.inbound.InboundRejectedException;
 import com.jabiz.runtime.RebaseConflictException;
 import com.jabiz.runtime.RevertConflictException;
+import com.jabiz.runtime.security.SignUpRefusedException;
 import com.jabiz.runtime.storage.AppendOnlyViolationException;
 import com.jabiz.runtime.context.RequestContextWebFilter;
 import org.slf4j.Logger;
@@ -177,6 +178,17 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(PermissionDeniedException.class)
     ProblemDetail handlePermissionDenied(PermissionDeniedException ex, ServerWebExchange exchange) {
         return withViolations(statusOf(ex), ex.getMessage(), ProblemStatuses.violations(ex), exchange);
+    }
+
+    /**
+     * A sign-up guard's refusal (decision D66): 403 {@code SIGN_UP_REFUSED}, its message the text of the guard's
+     * reason, which the problem names as {@code reason}.
+     */
+    @ExceptionHandler(SignUpRefusedException.class)
+    ProblemDetail handleSignUpRefused(SignUpRefusedException ex, ServerWebExchange exchange) {
+        ProblemDetail problem = withViolations(statusOf(ex), ex.getMessage(), ProblemStatuses.violations(ex), exchange);
+        problem.setProperty("reason", ex.reason());
+        return problem;
     }
 
     /** An upload larger than accepted (docs/design/14-files.md section 5); the rest of the body is not read. */

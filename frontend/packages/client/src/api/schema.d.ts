@@ -148,6 +148,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/auth/account/entries/{entry}/join": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["joinEntry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/account/identities": {
         parameters: {
             query?: never;
@@ -3200,6 +3216,26 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["DeletionCancelled"];
                 };
+            };
+        };
+    };
+    joinEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                entry: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
