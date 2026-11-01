@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { AUDIO, COVER, OPTION_IMAGE, PDF, PICTURE, SNAPSHOT_JSON } from './fixtures'
-import { parseSnapshot, safeHttpUrl } from './snapshot'
+import { parseSnapshot, safeHttpUrl, snapshotIn } from './snapshot'
 
 describe('parseSnapshot', () => {
   it('reads a version as QuizSnapshots writes it', () => {
@@ -23,8 +23,24 @@ describe('parseSnapshot', () => {
     expect(parseSnapshot(JSON.parse(SNAPSHOT_JSON)).questions).toHaveLength(2)
   })
 
-  it('refuses anything but schema 1', () => {
-    expect(() => parseSnapshot('{"schema":2,"title":"x"}')).toThrow(/schema 1/)
+  it('reads a version in its other languages (Q73a, schema 2)', () => {
+    const snapshot = parseSnapshot({ schema: 2, title: 'Capitals', intro: null, materials: [
+      { no: 1, kind: 'ARTICLE', title: 'Read', body: 'Text', images: [] }], questions: [
+      { no: 1, stem: 'Capital of France?', image: null, points: 2, options: [
+        { no: 1, text: 'Paris', image: null, correct: true }, { no: 2, text: 'Lyon', image: null, correct: false }] }],
+    translations: { zh: { texts: { title: '首都', 'q1.stem': '法国的首都？', 'q1.o1.text': '巴黎' },
+      images: { 'q1.image': 'f9' }, materials: [{ no: 1, kind: 'ARTICLE', title: '阅读', body: '文字', images: [] }] } } })
+    expect(Object.keys(snapshot.translations)).toEqual(['zh'])
+    const zh = snapshotIn(snapshot, 'zh')
+    expect(zh.title).toBe('首都')
+    expect(zh.questions[0]).toMatchObject({ stem: '法国的首都？', image: 'f9', points: 2 })
+    expect(zh.questions[0].options.map((o) => [o.text, o.correct])).toEqual([['巴黎', true], ['Lyon', false]])
+    expect(zh.materials[0].title).toBe('阅读')
+    expect(snapshotIn(snapshot, 'en')).toBe(snapshot)
+  })
+
+  it('refuses anything but schemas 1 and 2', () => {
+    expect(() => parseSnapshot('{"schema":3,"title":"x"}')).toThrow(/schema 1/)
     expect(() => parseSnapshot('{"title":"x"}')).toThrow(/schema 1/)
     expect(() => parseSnapshot('null')).toThrow(/schema 1/)
     expect(() => parseSnapshot('not json')).toThrow()

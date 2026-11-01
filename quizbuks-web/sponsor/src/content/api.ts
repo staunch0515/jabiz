@@ -1,5 +1,6 @@
 import { api, ApiError, runProcess, runQuery, toApiError, unwrap, type Sort } from '@jabiz/client'
-import { contentLanguageOf, readDictionary, type ContentLanguage, type DictionaryItem } from '../qb/api'
+import { CONTENT_LANGUAGES, contentLanguageOf, readDictionary, type ContentLanguage, type DictionaryItem }
+  from '../qb/api'
 import {
   CONTENT_CODE,
   CONTENT_DATASET,
@@ -74,6 +75,8 @@ export interface Quiz {
   questionCount: number
   materialCount: number
   clonedFrom: string | null
+  /** Q73a: the quiz's other languages besides its base (`language`), in the platform's order. */
+  translationLanguages: ContentLanguage[]
 }
 
 export interface Option {
@@ -111,13 +114,34 @@ export interface Material {
   images: MaterialImage[]
   /** Q19: a YouTube or Vimeo video watching which is enough to answer; the App shows it on the card. */
   watchToAnswer: boolean
+  /** Q73a: a material of another language stands for the base material `variantOf` in `language`. */
+  variantOf: string | null
+  language: ContentLanguage | null
 }
 
-/** A quiz's draft as the editor shows it: questions and materials in their order, each with its parts. */
+/** Q73a: one element's translation (`QbContentTranslation`): its text, or a language's own image. */
+export interface Translation {
+  translationId: string
+  language: ContentLanguage
+  key: string
+  text: string | null
+  image: string | null
+  /** The hash of the base text it was made from (`languages.ts`'s `sourceHash`); none for an image. */
+  sourceHash: string | null
+}
+
+/**
+ * A quiz's draft as the editor shows it: questions and materials in their order, each with its parts; and (Q73a) its
+ * other languages' translations and materials.
+ */
 export interface Draft {
   quiz: Quiz
   questions: Question[]
+  /** The base materials. */
   materials: Material[]
+  /** The other languages' materials, each standing for a base material (`variantOf`). */
+  variants: Material[]
+  translations: Translation[]
 }
 
 /** `EditOutput`: the quiz after an edit. */
@@ -172,6 +196,25 @@ export interface MaterialInput {
   baseRevision?: number | null
   /** VIDEO_LINK only (Q19). */
   watchToAnswer?: boolean
+  /** Q73a: a material of another language, made with both and changed with the same. */
+  variantOf?: string | null
+  language?: ContentLanguage | null
+}
+
+/** Q73a: one element's translation as `QB_TRANSLATION_SAVE` takes it; neither text nor image removes it. */
+export interface TranslationEntry {
+  key: string
+  text?: string | null
+  image?: string | null
+}
+
+/** `QuizLanguages.Status`: what one of the quiz's other languages lacks to go into a version. */
+export interface LanguageStatus {
+  language: ContentLanguage
+  missing: string[]
+  stale: string[]
+  /** The numbers of the base materials whose material in this language is not complete. */
+  materials: number[]
 }
 
 /** `QuizProcesses.CloneOutput`. */
@@ -194,6 +237,10 @@ export interface VersionOutput {
   fullScore: number
   contentHash: string
   revision: number
+  /** Q73a: the version's languages, the base first. */
+  languages: ContentLanguage[]
+  /** The quiz's other languages left out of the version, and what each lacks. */
+  incomplete: LanguageStatus[]
 }
 
 /** A row of `qb.sponsor.quiz-versions`. */
@@ -205,33 +252,50 @@ export interface VersionRow {
   kind: QuizKind
   /** The language the version was made in (Q59a). */
   language: ContentLanguage
+  /** Q73a: every language of the version, the base first. */
+  languages: ContentLanguage[]
   questionCount: number
   fullScore: number
   versionedAt: string
   contentHash: string
 }
 
-/** A version's snapshot (`QuizSnapshots`, schema 1): parts by their number, from 1. */
+type SnapshotMaterial = {
+  no: number
+  kind: MaterialKind
+  title: string | null
+  description: string | null
+  body: string | null
+  url: string | null
+  pdf: string | null
+  audio: string | null
+  images: { no: number; image: string; caption: string | null }[]
+  /** Q19: present (true) only on the video watching which is enough to answer. */
+  watchToAnswer?: boolean
+}
+
+/**
+ * Q73a: the quiz in one of its other languages (`QuizSnapshot.Language`): the text by its key in the snapshot
+ * (`title`, `intro`, `q3.stem`, `q3.o2.text`), its own images (`q3.image`, `q3.o2.image`) and materials (numbered as
+ * the base material each stands for). What it lacks is the base's.
+ */
+export interface SnapshotLanguage {
+  texts: Record<string, string | null>
+  images: Record<string, string | null>
+  materials: SnapshotMaterial[]
+}
+
+/** A version's snapshot (`QuizSnapshots`, schema 1, or 2 with translations): parts by their number, from 1. */
 export interface Snapshot {
+  /** Q73a: the version's other languages (schema 2 only). */
+  translations?: Partial<Record<ContentLanguage, SnapshotLanguage>>
   /** Only a survey's snapshot names its kind; a scored quiz's has none. */
   kind?: 'SURVEY'
   title: string
   intro: string | null
   cover: string | null
   timeLimitSec: number | null
-  materials: {
-    no: number
-    kind: MaterialKind
-    title: string | null
-    description: string | null
-    body: string | null
-    url: string | null
-    pdf: string | null
-    audio: string | null
-    images: { no: number; image: string; caption: string | null }[]
-    /** Q19: present (true) only on the video watching which is enough to answer. */
-    watchToAnswer?: boolean
-  }[]
+  materials: SnapshotMaterial[]
   questions: {
     no: number
     stem: string | null
@@ -298,11 +362,22 @@ export function toQuiz(row: Row): Quiz {
     questionCount: num(row.questionCount),
     materialCount: num(row.materialCount),
     clonedFrom: str(row.clonedFrom),
+    translationLanguages: languagesOf(row.translationLanguages),
   }
 }
 
-/** Puts the rows of a quiz's parts together: each question with its options, each material with its images. */
-export function assembleDraft(quiz: Row, questions: Row[], options: Row[], materials: Row[], images: Row[]): Draft {
+/** A column's languages (`ja,zh`), the platform's ones only, in the platform's order. */
+function languagesOf(value: unknown): ContentLanguage[] {
+  const listed = String(value ?? '').split(',').map((l) => l.trim())
+  return CONTENT_LANGUAGES.filter((language) => listed.includes(language))
+}
+
+/**
+ * Puts the rows of a quiz's parts together: each question with its options, each material with its images; the
+ * materials of other languages and the translations apart (Q73a).
+ */
+export function assembleDraft(quiz: Row, questions: Row[], options: Row[], materials: Row[], images: Row[],
+  translations: Row[] = []): Draft {
   const bySeq = (a: Row, b: Row) => num(a.seq) - num(b.seq)
   const optionsOf = new Map<string, Option[]>()
   for (const o of [...options].sort(bySeq)) {
@@ -326,7 +401,20 @@ export function assembleDraft(quiz: Row, questions: Row[], options: Row[], mater
       options: optionsOf.get(String(q.questionId)) ?? [],
       selection: selectionOf(q.selection),
     })),
-    materials: [...materials].sort(bySeq).map((m) => ({
+    materials: [...materials].filter((m) => m.variantOf == null).sort(bySeq).map(toMaterial),
+    variants: materials.filter((m) => m.variantOf != null).map(toMaterial),
+    translations: translations.map((row) => ({
+      translationId: String(row.translationId),
+      language: contentLanguageOf(str(row.language) ?? undefined),
+      key: String(row.elementKey),
+      text: str(row.text),
+      image: str(row.image),
+      sourceHash: str(row.sourceHash),
+    })),
+  }
+
+  function toMaterial(m: Row): Material {
+    return {
       materialId: String(m.materialId),
       kind: m.kind as MaterialKind,
       title: str(m.title),
@@ -337,7 +425,9 @@ export function assembleDraft(quiz: Row, questions: Row[], options: Row[], mater
       audio: str(m.audio),
       images: imagesOf.get(String(m.materialId)) ?? [],
       watchToAnswer: m.watchToAnswer === true,
-    })),
+      variantOf: str(m.variantOf),
+      language: m.language == null ? null : contentLanguageOf(String(m.language)),
+    }
   }
 }
 
@@ -346,15 +436,16 @@ export function assembleDraft(quiz: Row, questions: Row[], options: Row[], mater
  * sponsor's own rows, and of quizzes only those not removed).
  */
 export async function readDraft(quizId: string): Promise<Draft | null> {
-  const [quiz, questions, options, materials, images] = await Promise.all([
+  const [quiz, questions, options, materials, images, translations] = await Promise.all([
     readQuizRow(quizId),
     readAll(CONTENT_DATASET.question, quizId, BY_SEQ),
     readAll(CONTENT_DATASET.option, quizId, BY_SEQ),
     readAll(CONTENT_DATASET.material, quizId, BY_SEQ),
     readAll(CONTENT_DATASET.materialImage, quizId, BY_SEQ),
+    readAll(CONTENT_DATASET.translation, quizId, [{ field: 'elementKey', asc: true }]),
   ])
   if (!quiz) return null
-  return assembleDraft(quiz, questions, options, materials, images)
+  return assembleDraft(quiz, questions, options, materials, images, translations)
 }
 
 /** The quiz's own row by its key; null when the sponsor's dataset does not have it (not theirs, or removed). */
@@ -414,6 +505,9 @@ function toVersionRow(row: Row): VersionRow {
     title: String(row.title ?? ''),
     kind: kindOf(row.kind),
     language: contentLanguageOf(str(row.language) ?? undefined),
+    // A version of its base language only has no list (before Q73a, and without translations).
+    languages: row.languages ? languagesInOrder(String(row.languages))
+      : [contentLanguageOf(str(row.language) ?? undefined)],
     questionCount: num(row.questionCount),
     fullScore: num(row.fullScore),
     versionedAt: String(row.versionedAt ?? ''),
@@ -446,6 +540,12 @@ export async function readVersion(versionId: string): Promise<VersionDetail | nu
     materialCount: num(row.materialCount),
     content,
   }
+}
+
+/** A version's languages as listed (the base first), the platform's ones only. */
+function languagesInOrder(value: string): ContentLanguage[] {
+  return value.split(',').map((l) => l.trim()).filter((l): l is ContentLanguage =>
+    (CONTENT_LANGUAGES as readonly string[]).includes(l))
 }
 
 /** The labels of quiz states and material kinds, in the request's language. */
@@ -482,6 +582,15 @@ export const deleteMaterial = (quizId: string, materialId: string, baseRevision:
 
 export const reorderMaterials = (quizId: string, materialIds: string[], baseRevision: number) =>
   runProcess<EditOutput>(CONTENT_PROCESS.materialReorder, { quizId, materialIds, baseRevision })
+
+/** Q73a: every other language of the quiz; one left out is removed with its translations and materials. */
+export const setLanguages = (quizId: string, languages: ContentLanguage[], baseRevision: number) =>
+  runProcess<EditOutput>(CONTENT_PROCESS.languagesSet, { quizId, languages, baseRevision })
+
+/** Q73a: some elements of the quiz in one of its other languages. */
+export const saveTranslations = (quizId: string, language: ContentLanguage, entries: TranslationEntry[],
+  baseRevision: number) =>
+  runProcess<EditOutput>(CONTENT_PROCESS.translationSave, { quizId, language, entries, baseRevision })
 
 /**
  * Whether a refusal means the page is out of date: the quiz changed since it was read (`QB_QUIZ_CHANGED`), or an

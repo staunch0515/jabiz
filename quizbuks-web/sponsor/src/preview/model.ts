@@ -2,6 +2,8 @@ import type { Material, PublicationView, Tier } from '../qb/play'
 import { videoPlayer } from '../qb/video'
 import type { Sponsor } from '../qb/api'
 import { choiceOf, type Draft, type Selection, type Snapshot } from '../content/api'
+import { optionImageKey, optionTextKey, questionImageKey, stemKey, translationsIn, variantOf } from '../content/languages'
+import type { ContentLanguage } from '../qb/api'
 import type { Publication, Tier as SponsorTier } from '../publishing/api'
 
 /** One question as the preview shows it: what a taker reads, never which options are right. */
@@ -130,5 +132,57 @@ export function draftPreview(draft: Draft, sponsor: Sponsor | null, now: Date = 
       digitalDescription: null,
       audience: 'PUBLIC',
     },
+  }
+}
+
+/**
+ * A version's content in one of its languages (Q73a, as `QuizSnapshots.in`): the same structure with that language's
+ * texts, its own images and materials where it has them; the base where it has not (or for its base language).
+ */
+export function snapshotIn(snapshot: Snapshot, language: ContentLanguage): Snapshot {
+  const t = snapshot.translations?.[language]
+  if (!t) return snapshot
+  const text = (key: string, base: string | null) => t.texts[key] ?? base
+  const image = (key: string, base: string | null) => t.images[key] ?? base
+  return {
+    ...snapshot,
+    translations: undefined,
+    title: text('title', snapshot.title) ?? snapshot.title,
+    intro: text('intro', snapshot.intro),
+    materials: snapshot.materials.map((m) => {
+      const own = t.materials.find((o) => o.no === m.no)
+      return own ? { ...own, no: m.no, kind: m.kind, watchToAnswer: m.watchToAnswer } : m
+    }),
+    questions: snapshot.questions.map((q) => ({
+      ...q,
+      stem: text(`q${q.no}.stem`, q.stem),
+      image: image(`q${q.no}.image`, q.image),
+      options: q.options.map((o) => ({ ...o, text: text(`q${q.no}.o${o.no}.text`, o.text),
+        image: image(`q${q.no}.o${o.no}.image`, o.image) })),
+    })),
+  }
+}
+
+/** A draft in one of its other languages, as it would read there: what the language has, else the base's. */
+export function draftIn(draft: Draft, language: ContentLanguage): Draft {
+  if (language === draft.quiz.language) return draft
+  const t = translationsIn(draft, language)
+  const text = (key: string, base: string | null) => t.get(key)?.text ?? base
+  const image = (key: string, base: string | null) => t.get(key)?.image ?? base
+  return {
+    ...draft,
+    quiz: { ...draft.quiz, title: text('quiz.title', draft.quiz.title) ?? draft.quiz.title,
+      intro: text('quiz.intro', draft.quiz.intro) },
+    materials: draft.materials.map((m) => {
+      const own = variantOf(draft, m, language)
+      return own ? { ...own, watchToAnswer: m.watchToAnswer } : m
+    }),
+    questions: draft.questions.map((q) => ({
+      ...q,
+      stem: text(stemKey(q.questionId), q.stem),
+      image: image(questionImageKey(q.questionId), q.image),
+      options: q.options.map((o) => ({ ...o, text: text(optionTextKey(o.optionId), o.text),
+        image: image(optionImageKey(o.optionId), o.image) })),
+    })),
   }
 }

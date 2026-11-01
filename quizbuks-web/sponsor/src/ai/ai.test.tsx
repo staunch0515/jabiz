@@ -21,12 +21,12 @@ function json(status: number, body: unknown) {
 const QUIZ: Quiz = {
   quizId: 'q1', kind: 'QUIZ', language: 'en', title: 'Paris', intro: 'About Paris', cover: null, timeLimitSec: null, status: 'DRAFT',
   latestVersionNo: 0, versionLabel: null, revision: 7, editedAt: '2026-10-18T00:00:00Z', changedSinceVersion: false,
-  questionCount: 0, materialCount: 2, clonedFrom: null,
+  questionCount: 0, materialCount: 2, clonedFrom: null, translationLanguages: [],
 }
 
 const material = (id: string, kind: Material['kind'], body: string | null): Material => ({
   materialId: id, kind, title: `Material ${id}`, description: 'About it', body, url: null, pdf: null, audio: null,
-  images: [], watchToAnswer: false,
+  images: [], watchToAnswer: false, variantOf: null, language: null,
 })
 
 const MATERIALS = [material('m1', 'ARTICLE', 'Paris is the capital of France.'), material('m2', 'VIDEO_LINK', null)]

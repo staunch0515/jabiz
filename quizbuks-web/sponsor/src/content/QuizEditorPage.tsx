@@ -33,13 +33,14 @@ import { SPONSOR } from '../messages'
 import { QB } from '../qb/messages'
 import { fieldProblem } from '../qb/problems'
 import { Link, navigate } from '../qb/router'
-import { cloneQuiz, deleteQuiz, isStale, publishVersion, readDraft, type Quiz } from './api'
+import { cloneQuiz, deleteQuiz, isStale, publishVersion, readDraft, type LanguageStatus, type Quiz } from './api'
 import { EditingProvider, failedRemoval, formProblem, ProblemList, type Editing } from './editing'
 import { HeadingForm } from './HeadingForm'
 import { LIMITS } from './limits'
 import { MaterialsPanel } from './MaterialsPanel'
 import { draftQuery, quizPath, QUIZZES_PATH, QUIZZES_QUERY, versionsQuery } from './paths'
 import { QuestionsPanel } from './QuestionsPanel'
+import { TranslationsPanel } from './TranslationsPanel'
 import { useQuizStatusLabel } from './QuizListPage'
 import { VersionsPanel } from './VersionsPanel'
 import { PreviewButton } from '../preview/PreviewButton'
@@ -97,7 +98,7 @@ function CopyDialog({ quiz, open, onOpenChange }: { quiz: Quiz; open: boolean; o
   )
 }
 
-type Tab = 'quiz' | 'questions' | 'materials' | 'versions' | 'products'
+type Tab = 'quiz' | 'questions' | 'materials' | 'languages' | 'versions' | 'products'
 
 /**
  * One quiz's editor (M-21 – M-24, M-27, M-28): its heading, questions and materials, saved part by part, and its
@@ -117,7 +118,8 @@ export function QuizEditorPage({ quizId }: { quizId: string }) {
   const [generation, setGeneration] = useState(0)
   const [copying, setCopying] = useState(false)
   // The last "save version": the label saved, or the problems that stopped it.
-  const [versionOutcome, setVersionOutcome] = useState<{ label?: string; problems?: string[] } | null>(null)
+  const [versionOutcome, setVersionOutcome] = useState<{ label?: string; problems?: string[];
+    incomplete?: LanguageStatus[] } | null>(null)
   const staleRef = useRef<HTMLDivElement>(null)
 
   // The revision the page knows: the one first read, then each of its own edits'. A newer one read afterwards is
@@ -170,7 +172,8 @@ export function QuizEditorPage({ quizId }: { quizId: string }) {
     mutationFn: () => publishVersion(quizId, editing.revision()),
     onMutate: () => setVersionOutcome(null),
     onSuccess: async (output) => {
-      setVersionOutcome({ label: output.label })
+      // Q73a: the languages left out of the version, said once with it.
+      setVersionOutcome({ label: output.label, incomplete: output.incomplete ?? [] })
       notify.success(t('editor.versionSaved', { label: output.label }))
       await queryClient.invalidateQueries({ queryKey: QUIZZES_QUERY })
       await queryClient.invalidateQueries({ queryKey: versionsQuery(quizId) })
@@ -277,6 +280,20 @@ export function QuizEditorPage({ quizId }: { quizId: string }) {
             {t('editor.versionSaved', { label: versionOutcome.label })}
           </p>
         )}
+        {(versionOutcome?.incomplete?.length ?? 0) > 0 && (
+          <Alert variant="warning" data-testid="version-incomplete">
+            <AlertTitle>{t('translations.leftOutTitle')}</AlertTitle>
+            <AlertDescription>
+              <ul className="list-disc pl-4">
+                {versionOutcome!.incomplete!.map((status) => (
+                  <li key={status.language}>{t('translations.leftOut', {
+                    language: tQb(`languages.${status.language}`), missing: status.missing.length,
+                    stale: status.stale.length, materials: status.materials.length })}</li>
+                ))}
+              </ul>
+            </AlertDescription>
+          </Alert>
+        )}
         <Tabs value={tab} onValueChange={(value) => setTab(value as Tab)}>
           <TabsList className="flex-wrap">
             <TabsTrigger value="quiz" data-testid="tab-quiz">{t('editor.tabs.quiz')}</TabsTrigger>
@@ -285,6 +302,12 @@ export function QuizEditorPage({ quizId }: { quizId: string }) {
             </TabsTrigger>
             <TabsTrigger value="materials" data-testid="tab-materials">
               {t('editor.tabs.materialsCount', { n: materials.length })}
+            </TabsTrigger>
+            {/* Q73a: the quiz's other languages. */}
+            <TabsTrigger value="languages" data-testid="tab-languages">
+              {quiz.translationLanguages.length > 0
+                ? t('editor.tabs.languagesCount', { n: quiz.translationLanguages.length + 1 })
+                : t('editor.tabs.languages')}
             </TabsTrigger>
             <TabsTrigger value="versions" data-testid="tab-versions">{t('editor.tabs.versions')}</TabsTrigger>
             {/* Q60b: the products the quiz shows, outside its versions. */}
@@ -301,6 +324,9 @@ export function QuizEditorPage({ quizId }: { quizId: string }) {
           </TabsContent>
           <TabsContent value="materials" className="pt-4">
             <MaterialsPanel materials={materials} />
+          </TabsContent>
+          <TabsContent value="languages" className="pt-4">
+            <TranslationsPanel draft={draft.data} generation={generation} />
           </TabsContent>
           <TabsContent value="versions" className="pt-4">
             <VersionsPanel quizId={quizId} stale={stale} />

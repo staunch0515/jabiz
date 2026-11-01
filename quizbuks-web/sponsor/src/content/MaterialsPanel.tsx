@@ -25,6 +25,8 @@ import { ArrowDown, ArrowUp, ExternalLink, Pencil, Plus, Trash2, X } from 'lucid
 import { useId, useRef, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { SPONSOR } from '../messages'
+import type { ContentLanguage } from '../qb/api'
+import { QB } from '../qb/messages'
 import { ShownAt } from './ShownAt'
 import { fieldProblem } from '../qb/problems'
 import {
@@ -89,17 +91,23 @@ const FIELDS = ['kind', 'title', 'description', 'body', 'url', 'pdf', 'audio', '
  * video link, a PDF, an image group with captions (the text alternatives) or an audio file. The kind is chosen once;
  * only its content field is sent.
  */
-function MaterialDialog({ material, number, open, onOpenChange }: {
+export function MaterialDialog({ material, number, open, onOpenChange, variant }: {
   material: Material | null
   number: number
   open: boolean
   onOpenChange: (open: boolean) => void
+  /**
+   * Q73a: the material of another language standing for `base` (of its kind; the video to watch is the base's
+   * choice, so it has no such box).
+   */
+  variant?: { base: Material; language: ContentLanguage }
 }) {
   const { t } = useTranslation(SPONSOR)
+  const { t: tQb } = useTranslation(QB)
   const editing = useEditing()
   const kindLabel = useKindLabel()
   const id = useId()
-  const [kind, setKind] = useState<MaterialKind>(material?.kind ?? 'ARTICLE')
+  const [kind, setKind] = useState<MaterialKind>(material?.kind ?? variant?.base.kind ?? 'ARTICLE')
   const [title, setTitle] = useState(material?.title ?? '')
   const [description, setDescription] = useState(material?.description ?? '')
   const [body, setBody] = useState(material?.body ?? '')
@@ -119,13 +127,14 @@ function MaterialDialog({ material, number, open, onOpenChange }: {
       title: textOrNull(title),
       description: textOrNull(description),
       baseRevision: editing.revision(),
+      ...(variant ? { variantOf: variant.base.materialId, language: variant.language } : {}),
     }
     switch (contentFieldOf(kind)) {
       case 'body':
         return { ...base, body: textOrNull(body) }
       case 'url':
         return { ...base, url: url.trim() === '' ? null : url.trim(),
-          ...(kind === 'VIDEO_LINK' ? { watchToAnswer: watch } : {}) }
+          ...(kind === 'VIDEO_LINK' && !variant ? { watchToAnswer: watch } : {}) }
       case 'pdf':
         return { ...base, pdf }
       case 'audio':
@@ -163,11 +172,14 @@ function MaterialDialog({ material, number, open, onOpenChange }: {
         <form noValidate onSubmit={submit} className="flex flex-col gap-5">
           <DialogHeader>
             <DialogTitle>
-              {material ? t('materials.editTitle', { number }) : t('materials.newTitle', { number })}
+              {variant ? t('translations.materialTitle', { number, language: tQb(`languages.${variant.language}`) })
+                : material ? t('materials.editTitle', { number }) : t('materials.newTitle', { number })}
             </DialogTitle>
-            <DialogDescription>{t('materials.dialogHint')}</DialogDescription>
+            <DialogDescription>
+              {variant ? t('translations.materialHint') : t('materials.dialogHint')}
+            </DialogDescription>
           </DialogHeader>
-          {material
+          {material || variant
             ? <p className="text-sm">{t('materials.kindValue', { kind: kindLabel(kind) })}</p>
             : (
               <div className="flex flex-col gap-2">
@@ -220,7 +232,7 @@ function MaterialDialog({ material, number, open, onOpenChange }: {
                 data-testid="material-url" onChange={(event) => setUrl(event.target.value)} />
               <p id={`${id}-url-hint`} className="text-muted-foreground text-sm">{t('materials.urlHint')}</p>
               {problem('url') && <p id={`${id}-url-error`} className="text-destructive text-sm">{problem('url')}</p>}
-              {kind === 'VIDEO_LINK' && (
+              {kind === 'VIDEO_LINK' && !variant && (
                 <div className="flex flex-col gap-1">
                   <div className="flex items-center gap-2">
                     <Checkbox id={`${id}-watch`} checked={watch} data-testid="material-watch"
