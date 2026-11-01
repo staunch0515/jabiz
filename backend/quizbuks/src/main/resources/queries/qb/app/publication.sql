@@ -1,7 +1,7 @@
 /*---
 id: qb.app.publication
 description: One publication's page for a taker (U-20 – U-23) with the caller's own attempt; none when they cannot see it
-entities: [QbPublicationCard, QbPublicationCounter, QbPublicationStartCounter, QbPublicationStats, QbStatsRun, QbWallet, QbCountry, QbSponsor, QbSponsorPage, QbQuizVersion, QbAttempt, QbPublicationOwner, QbInvitation, QbProfileAttribute, QbPublicationCriterion]
+entities: [QbPublicationCard, QbPublicationCounter, QbPublicationStartCounter, QbPublicationStats, QbStatsRun, QbWallet, QbCountry, QbSponsor, QbSponsorPage, QbQuizVersion, QbAttempt, QbPublicationOwner, QbInvitation, QbProfileAttribute, QbPublicationCriterion, QbCertificationRound, QbCertificationRecord]
 datasets:
   QbPublicationCard: urn:jabiz:dataset:default:QbPublicationCard
   QbPublicationCounter: urn:jabiz:dataset:default:QbPublicationCounter
@@ -16,6 +16,8 @@ datasets:
   QbAttempt: urn:jabiz:dataset:taker:QbAttempt
   QbProfileAttribute: urn:jabiz:dataset:me:QbProfileAttribute
   QbPublicationCriterion: urn:jabiz:dataset:default:QbPublicationCriterion
+  QbCertificationRound: urn:jabiz:dataset:default:QbCertificationRound
+  QbCertificationRecord: urn:jabiz:dataset:me:QbCertificationRecord
   QbPublicationOwner: urn:jabiz:dataset:me:QbPublicationOwner
   QbInvitation: urn:jabiz:dataset:me:QbInvitation
 params:
@@ -59,6 +61,7 @@ results:
   statsAt:        { from: QbStatsRun.refreshedAt }
   canStart:       { kind: { type: bool } }
   matched:        { kind: { type: bool } }
+  heldUntil:      { from: QbCertificationRecord.validUntil }
   myAttemptId:    { from: QbAttempt.attemptId }
   myStatus:       { from: QbAttempt.status }
   myDeadline:     { from: QbAttempt.deadline }
@@ -109,8 +112,9 @@ SELECT
     d.last7d AS last7d,
     d.last30d AS last30d,
     d.statsAt AS statsAt,
-    (d.shown AND d.startable AND d.matched AND d.myAttemptId IS NULL) AS canStart,
+    (d.shown AND d.startable AND d.matched AND d.heldUntil IS NULL AND d.myAttemptId IS NULL) AS canStart,
     d.matched AS matched,
+    d.heldUntil AS heldUntil,
     d.myAttemptId AS myAttemptId,
     d.myStatus AS myStatus,
     d.myDeadline AS myDeadline
@@ -182,6 +186,31 @@ SELECT
                                     - pa.{{QbProfileAttribute.valueNumber}}
                                 ELSE pa.{{QbProfileAttribute.valueNumber}} END
                             BETWEEN pc.{{QbPublicationCriterion.minValue}} AND pc.{{QbPublicationCriterion.maxValue}})))))) AS matched,
+    -- Q70a (D-Q70-1, option B): until when the caller holds the certification of this round (qb.app.feed, the same).
+    (SELECT max(e.until)
+         FROM {{QbCertificationRound}} cr
+         JOIN (VALUES ('SPONSOR_APPLY', 1, 31536000), ('REFERRER', 1, 31536000)) AS cat(cert, ver, secs)
+             ON cat.cert = cr.{{QbCertificationRound.certification}}
+         CROSS JOIN LATERAL (
+             SELECT rec.{{QbCertificationRecord.certificationVersion}} AS ver, rec.{{QbCertificationRecord.at}} AS at,
+                    rec.{{QbCertificationRecord.validUntil}} AS until
+             FROM {{QbCertificationRecord}} rec
+             WHERE rec.{{QbCertificationRecord.certification}} = cr.{{QbCertificationRound.certification}}
+               AND rec.{{QbCertificationRecord.kind}} IN ('PASSED', 'GRANTED')
+             UNION ALL
+             SELECT r2.{{QbCertificationRound.certificationVersion}}, a.{{QbAttempt.submittedAt}},
+                    a.{{QbAttempt.submittedAt}} + make_interval(secs => cat.secs)
+             FROM {{QbCertificationRound}} r2
+             JOIN {{QbAttempt}} a ON CAST(a.{{QbAttempt.publicationId}} AS text) = r2.{{QbCertificationRound.publicationId}}
+             WHERE r2.{{QbCertificationRound.certification}} = cr.{{QbCertificationRound.certification}}
+               AND a.{{QbAttempt.passed}} AND a.{{QbAttempt.submittedAt}} IS NOT NULL
+               AND (r2.{{QbCertificationRound.closedAt}} IS NULL
+                    OR a.{{QbAttempt.submittedAt}} < r2.{{QbCertificationRound.closedAt}})) e
+         WHERE cr.{{QbCertificationRound.publicationId}} = CAST(c.{{QbPublicationCard.publicationId}} AS text)
+           AND e.ver = cat.ver AND e.until > :at
+           AND e.at > coalesce((SELECT max(rv.{{QbCertificationRecord.at}}) FROM {{QbCertificationRecord}} rv
+                                WHERE rv.{{QbCertificationRecord.certification}} = cr.{{QbCertificationRound.certification}}
+                                  AND rv.{{QbCertificationRecord.kind}} = 'REVOKED'), '-infinity')) AS heldUntil,
     m.{{QbAttempt.attemptId}}              AS myAttemptId,
     m.{{QbAttempt.status}}                 AS myStatus,
     m.{{QbAttempt.deadline}}               AS myDeadline

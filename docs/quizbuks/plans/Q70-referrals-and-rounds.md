@@ -158,7 +158,9 @@
 
 ### 5.1 认证（Q70a）
 
-只改开始答题与首页、详情：一个发布是轮次时，**锁外**多读一次调用者在该认证上的记录（`QbCertificationRecord`，按 `userId` 与认证），按 `CertificationHolding` 判断是否持有。读之前先运行一次与 `QB_CERTIFICATION_CLAIM` 相同的补记（把调用者已有的合格补记为记录），使"刚合格的人"也被挡住。普通发布的语句数不变：`AttemptStatementBudgetIT` 的现有预算不改，另加"轮次的开始"一项。首页模板 `qb.app.feed` 与详情 `qb.app.publication` 对轮次排除持有者（读同一张记录表，按调用者的数据视图）。
+只改开始答题与首页、详情（实施见 §14）：
+- **开始答题**：锁外既有的那一条语句中多查一项"这个发布是不是轮次"（`QbCertificationRound` 按发布）。不是轮次时其余查询的条件为空、不发语句，普通发布的语句数不变（`AttemptStatementBudgetIT` 不改）。是轮次、且是新的开始时，锁外再读两条：调用者在该认证上的记录与该认证的全部轮次（一条），调用者在这些轮次上的答题（一条）。按 `CertificationHolding` 判断，**还没认领的合格同样算**（与 `QB_CERTIFICATION_CLAIM` 同一段补记规则，`CertificationProcesses.unrecordedPasses`，只读、不写记录），持有即 422 `QB_CERTIFICATION_HELD`；继续答到一半的会话不受影响。
+- **首页 `qb.app.feed` 与详情 `qb.app.publication`**：写同一段 SQL（记录经限本人的 `me:QbCertificationRecord`，答题经本人的 `taker:QbAttempt`，同样算上没认领的合格）。首页不列出；详情多一列 `heldUntil`，有值时 `canStart` 为假，App 显示"你已持有该资格（至 …）"。认证目录（键、版本、有效期秒数）在模板中写成 `VALUES`，与 `Certifications` 由 `CertificationTemplatesTest` 核对。
 
 ### 5.2 推荐（Q70b）
 
@@ -372,3 +374,12 @@
 1. 小王的推荐资格到期了，还没续。
 2. 他以前生成的推荐链接仍然有效：朋友照样可以认领，合格后小王照样得到推荐奖励。
 3. 他不能再对新的发布生成推荐链接。发布页显示"推荐资格已到期，答新一轮考题即可恢复"。
+
+## 14. 实施记录
+
+### Q70a（2026-11-01）
+
+- 推荐资格 `REFERRER`（一年、版本 1）加进 `Certifications.ALL`、字典与后台扩展的名字（三语）；Q70b 才用到它。
+- 方案 B：`certification.RoundHolders`（开始的查询与拒绝）、`CertificationProcesses.unrecordedPasses`（认领与开始共用的补记规则）；错误码 `QB_CERTIFICATION_HELD`（三语）。
+- 与 §5.1 草案的不同：开始时**不写**补记（只读），记录仍由认领写入，开始的事务因此不取认证锁、锁序不变；轮次的开始在锁外多两条语句，没有另加预算项（轮次是官方账号每月一次的发布，不是热门发布；普通发布的预算由 `AttemptStatementBudgetIT` 照旧断言）。
+- 测试：`CertificationIT.whoHoldsTheCertificationStartsNoneOfItsRoundsUntilItEnds`（未认领的合格即算、首页与详情、拒绝开始、普通发布与不持有的人不受影响、收回后可以再答）、`CertificationTemplatesTest`、App 的 `Play.test.tsx`（详情页的提示）。

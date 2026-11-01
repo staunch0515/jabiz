@@ -1,7 +1,7 @@
 /*---
 id: qb.app.feed
 description: The publications a taker can answer now (U-10 – U-14), newest first; searched by name and title
-entities: [QbPublicationCard, QbPublicationCounter, QbPublicationStartCounter, QbWallet, QbCountry, QbSponsor, QbSponsorPage, QbPublicationOwner, QbAttempt, QbProfileAttribute, QbPublicationCriterion]
+entities: [QbPublicationCard, QbPublicationCounter, QbPublicationStartCounter, QbWallet, QbCountry, QbSponsor, QbSponsorPage, QbPublicationOwner, QbAttempt, QbProfileAttribute, QbPublicationCriterion, QbCertificationRound, QbCertificationRecord]
 datasets:
   QbPublicationCard: urn:jabiz:dataset:default:QbPublicationCard
   QbPublicationCounter: urn:jabiz:dataset:default:QbPublicationCounter
@@ -14,6 +14,8 @@ datasets:
   QbAttempt: urn:jabiz:dataset:taker:QbAttempt
   QbProfileAttribute: urn:jabiz:dataset:me:QbProfileAttribute
   QbPublicationCriterion: urn:jabiz:dataset:default:QbPublicationCriterion
+  QbCertificationRound: urn:jabiz:dataset:default:QbCertificationRound
+  QbCertificationRecord: urn:jabiz:dataset:me:QbCertificationRecord
 params:
   at:      { kind: { type: temporal, role: EVENT_TIME }, required: true, description: The time the feed is for (the client's now) }
   country: { kind: { type: text, maxLength: 2 }, description: "The taker's country (QbCountry.code); without one only publications aimed at GLOBAL" }
@@ -149,6 +151,33 @@ WHERE c.{{QbPublicationCard.status}} = 'LIVE'
                                  - pa.{{QbProfileAttribute.valueNumber}}
                              ELSE pa.{{QbProfileAttribute.valueNumber}} END
                          BETWEEN pc.{{QbPublicationCriterion.minValue}} AND pc.{{QbPublicationCriterion.maxValue}})))))
+  -- Q70a (D-Q70-1, option B): a certification's round is not listed to whoever holds the certification now. The
+  -- holding is CertificationHolding's rule over the caller's records and the passes not recorded yet (RoundHolders, the
+  -- same; the catalog's versions and validity as Certifications, CertificationTemplatesTest), as in qb.app.publication.
+  AND (SELECT max(e.until)
+       FROM {{QbCertificationRound}} cr
+       JOIN (VALUES ('SPONSOR_APPLY', 1, 31536000), ('REFERRER', 1, 31536000)) AS cat(cert, ver, secs)
+           ON cat.cert = cr.{{QbCertificationRound.certification}}
+       CROSS JOIN LATERAL (
+           SELECT rec.{{QbCertificationRecord.certificationVersion}} AS ver, rec.{{QbCertificationRecord.at}} AS at,
+                  rec.{{QbCertificationRecord.validUntil}} AS until
+           FROM {{QbCertificationRecord}} rec
+           WHERE rec.{{QbCertificationRecord.certification}} = cr.{{QbCertificationRound.certification}}
+             AND rec.{{QbCertificationRecord.kind}} IN ('PASSED', 'GRANTED')
+           UNION ALL
+           SELECT r2.{{QbCertificationRound.certificationVersion}}, a.{{QbAttempt.submittedAt}},
+                  a.{{QbAttempt.submittedAt}} + make_interval(secs => cat.secs)
+           FROM {{QbCertificationRound}} r2
+           JOIN {{QbAttempt}} a ON CAST(a.{{QbAttempt.publicationId}} AS text) = r2.{{QbCertificationRound.publicationId}}
+           WHERE r2.{{QbCertificationRound.certification}} = cr.{{QbCertificationRound.certification}}
+             AND a.{{QbAttempt.passed}} AND a.{{QbAttempt.submittedAt}} IS NOT NULL
+             AND (r2.{{QbCertificationRound.closedAt}} IS NULL
+                  OR a.{{QbAttempt.submittedAt}} < r2.{{QbCertificationRound.closedAt}})) e
+       WHERE cr.{{QbCertificationRound.publicationId}} = CAST(c.{{QbPublicationCard.publicationId}} AS text)
+         AND e.ver = cat.ver AND e.until > :at
+         AND e.at > coalesce((SELECT max(rv.{{QbCertificationRecord.at}}) FROM {{QbCertificationRecord}} rv
+                              WHERE rv.{{QbCertificationRecord.certification}} = cr.{{QbCertificationRound.certification}}
+                                AND rv.{{QbCertificationRecord.kind}} = 'REVOKED'), '-infinity')) IS NULL
   AND NOT EXISTS (SELECT 1 FROM {{QbPublicationOwner}} own
                   WHERE own.{{QbPublicationOwner.publicationId}} = c.{{QbPublicationCard.publicationId}})
   AND (CAST(:q AS text) IS NULL

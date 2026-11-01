@@ -3,10 +3,10 @@ import { quizProducts } from '../qb/products'
 import { countProductClick } from '../share/counting'
 import { ProductCards } from '../qb/view/ProductCards'
 import { QBVIEW } from '../qb/view/messages'
-import { i18n, useAuth } from '@jabiz/client'
+import { formatDateTime, i18n, useAuth } from '@jabiz/client'
 import { Alert, AlertDescription, Button, PageState } from '@jabiz/ui'
 import { useQuery } from '@tanstack/react-query'
-import { MailWarning, Play, UserRoundSearch } from 'lucide-react'
+import { BadgeCheck, MailWarning, Play, UserRoundSearch } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
@@ -70,6 +70,16 @@ function Action({ publication }: { publication: PublicationView }) {
             : t('detail.start')}
         </Button>
       </>
+    )
+  } else if (publication.heldUntil) {
+    // Q70a (option B): a certification's round, and the caller holds the certification.
+    action = (
+      <Alert data-testid="detail-certification-held">
+        <BadgeCheck aria-hidden />
+        <AlertDescription className="text-current">
+          {t('detail.certificationHeld', { time: formatDateTime(publication.heldUntil) })}
+        </AlertDescription>
+      </Alert>
     )
   } else if (!publication.matched) {
     // Q47: aimed at people the caller's profile does not (yet) say they are.

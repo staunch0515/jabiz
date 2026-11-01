@@ -18,6 +18,12 @@ public final class QbCertifications {
     /** The owner of what headquarters does itself (the direct sponsors' operator, D-Q48-1). */
     public static final String DIRECT = "direct";
 
+    /**
+     * The caller's own records (Q70a): only the scope of the App's templates (qb.app.feed, qb.app.publication), which
+     * pick the columns; read by headquarters' permission like the default dataset, never by a taker's.
+     */
+    public static final String MY_RECORD_DATASET = "urn:jabiz:dataset:me:" + RECORD;
+
     public static String defaultDataset(String entity) {
         return "urn:jabiz:dataset:default:" + entity;
     }
