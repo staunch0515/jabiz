@@ -90,6 +90,12 @@ public final class CommerceProcesses {
      */
     public static final MailTemplate ORDER_SHIPPED_MAIL = MailTemplate.define("commerce.order-shipped", t -> t
         .category(MailCategory.NOTIFICATION).param("orderNo", "totalAmount").entries("portal"));
+    /**
+     * The same notice as a push notification to the customer's devices (decision D69), for the portal's users: a tap
+     * opens their orders. Nothing while push notifications are off.
+     */
+    public static final com.jabiz.push.PushTemplate ORDER_SHIPPED_PUSH = com.jabiz.push.PushTemplate.define(
+        "commerce.order-shipped", t -> t.param("orderNo").entries("portal"));
     public static final String PRODUCT_REPRICE = "PRODUCT_REPRICE";
     public static final String PRODUCT_WITHDRAW = "PRODUCT_WITHDRAW";
 
@@ -296,7 +302,10 @@ public final class CommerceProcesses {
                 .step("Tell the customer", SendMail.<ProcessContext>when(CommerceProcesses::customerHasAddress,
                     ORDER_SHIPPED_MAIL, ctx -> MailRecipient.user(customer(ctx).id()), Map.of(
                         "orderNo", ctx -> ctx.get(ORDER_KEY, EntityInstance.class).get("orderNo"),
-                        "totalAmount", ctx -> ctx.get(ORDER_KEY, EntityInstance.class).get("totalAmount")))));
+                        "totalAmount", ctx -> ctx.get(ORDER_KEY, EntityInstance.class).get("totalAmount"))))
+                .step("Push it to the customer's devices", com.jabiz.runtime.push.SendPush.<ProcessContext>when(
+                    CommerceProcesses::customerIsUser, ORDER_SHIPPED_PUSH, ctx -> customer(ctx).id(),
+                    Map.of("orderNo", ctx -> ctx.get(ORDER_KEY, EntityInstance.class).get("orderNo")), ctx -> "orders")));
 
     /** The account of the order's customer among the users: none when the customer has none (or no master). */
     private static EntityQuery customerQuery(ProcessContext ctx) {
@@ -309,6 +318,11 @@ public final class CommerceProcesses {
 
     private static EntityInstance customer(ProcessContext ctx) {
         return list(ctx, CUSTOMER).getFirst();
+    }
+
+    /** Only a shipment that went through, to a customer who has an account. */
+    private static boolean customerIsUser(ProcessContext ctx) {
+        return !ctx.hasViolations() && ctx.contains(CUSTOMER) && !list(ctx, CUSTOMER).isEmpty();
     }
 
     /** Only a shipment that went through, to a customer user with an address. */

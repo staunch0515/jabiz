@@ -38,6 +38,10 @@ export { session } from './api/session'
 export type { SessionPersistence } from './api/session'
 export { configureClient } from './configure'
 export { nativeShell } from './native'
+export {
+  base64urlBytes, disablePush, enablePush, pushEnabledHere, pushSettings, pushSupported, setPushPreference,
+} from './push'
+export type { PushOutcome, PushSettings } from './push'
 export type { OpenAuthorization } from './native'
 export type { ClientOptions } from './configure'
 export type { paths, components, operations } from './api/schema'

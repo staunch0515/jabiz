@@ -401,6 +401,27 @@
         },
         "type" : "object"
       },
+      "DeviceView" : {
+        "properties" : {
+          "createdAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "current" : {
+            "type" : "boolean"
+          },
+          "entry" : {
+            "type" : "string"
+          },
+          "id" : {
+            "type" : "string"
+          },
+          "kind" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "DictItem" : {
         "properties" : {
           "code" : {
@@ -2074,6 +2095,29 @@
         },
         "type" : "object"
       },
+      "PushSettings" : {
+        "properties" : {
+          "devices" : {
+            "items" : {
+              "$ref" : "#/components/schemas/DeviceView"
+            },
+            "type" : "array"
+          },
+          "enabled" : {
+            "type" : "boolean"
+          },
+          "templates" : {
+            "items" : {
+              "$ref" : "#/components/schemas/TemplateChoice"
+            },
+            "type" : "array"
+          },
+          "webPushKey" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "QueryEntry" : {
         "properties" : {
           "defaultSort" : {
@@ -2218,6 +2262,25 @@
             "type" : "string"
           },
           "password" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "Registered" : {
+        "properties" : {
+          "deviceId" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "RemoveRequest" : {
+        "properties" : {
+          "deviceId" : {
+            "type" : "string"
+          },
+          "endpoint" : {
             "type" : "string"
           }
         },
@@ -2779,6 +2842,23 @@
             "type" : "object"
           },
           "type" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "TemplateChoice" : {
+        "properties" : {
+          "name" : {
+            "type" : "string"
+          },
+          "otherEntry" : {
+            "type" : "boolean"
+          },
+          "subscribed" : {
+            "type" : "boolean"
+          },
+          "template" : {
             "type" : "string"
           }
         },
@@ -3542,6 +3622,98 @@
           }
         },
         "tags" : [ "account-controller" ]
+      }
+    },
+    "/api/auth/account/push" : {
+      "get" : {
+        "operationId" : "settings",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PushSettings"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "push-device-controller" ]
+      }
+    },
+    "/api/auth/account/push/devices" : {
+      "post" : {
+        "operationId" : "register_1",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/RegisterRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Registered"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "push-device-controller" ]
+      }
+    },
+    "/api/auth/account/push/devices/remove" : {
+      "post" : {
+        "operationId" : "remove",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/RemoveRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "204" : {
+            "description" : "No Content"
+          }
+        },
+        "tags" : [ "push-device-controller" ]
+      }
+    },
+    "/api/auth/account/push/preferences" : {
+      "post" : {
+        "operationId" : "setPreference_1",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/PreferenceRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PreferenceOutput"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "push-device-controller" ]
       }
     },
     "/api/auth/account/sessions" : {

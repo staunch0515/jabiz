@@ -4902,6 +4902,22 @@ D17 下匿名不能写任何东西（15 §10）。
 
 **17zb 状态**：✅ 17zb 完成（#392）；17zb-2 📝 待评审（分支 `1.3/phase-17zb2-erasure-deleted-rows`）。
 
+### 17k 推送通知（需求 2026-10-28，QuizBuks Q49；确认 2026-11-01，决策 D69）
+
+**缘由**：答题者 App 要以推送告诉用户新问卷、中奖与审核结果；App Store 不收"只是网站外壳"的 App（审核指南 4.2）。需求方确认：Android 与浏览器用 Web Push，偏好按模板。分 17k-a（Web Push）与 17k-b（APNs）。
+
+| # | 内容 | PR |
+|---|---|---|
+| 17k-1 | core `PushTemplate`；runtime `SendPush`（事件 `jabiz.push.queued`）、消费者 `PUSH_DELIVER`、`DeliverPush`（偏好、入口、会话、语言、链接）；`PushTemplates`、启动检查 `PUSH`；错误码 `PUSH_DISABLED`、`PUSH_SUBSCRIPTION_INVALID`、`PUSH_PARAM_SECRET` | 17k-a |
+| 17k-2 | `WebPushCrypto`（RFC 8291 `aes128gcm`，以 RFC 的例子测试）、`WebPushSender`（VAPID、只限允许的推送服务、5 秒、404 / 410 即删除设备）、`PushProperties`（`jabiz.push.*`） | 17k-a |
+| 17k-3 | 设备与偏好：迁移 `V56__push.sql`（`sec_user_device`、`sec_user_push_preference_version`）、实体 `SecUserDevice` / `SecUserPushPreference`、流程 `SEC_DEVICE_REGISTER` / `SEC_DEVICE_REMOVE` / `SEC_PUSH_PREFERENCE_SET`、接口 `/api/auth/account/push/**`；设备随会话；`ACCOUNT_ERASE` 删除设备与偏好 | 17k-a |
+| 17k-4 | 前端：Service Worker 显示通知与点按打开页面（只开本站）；`@jabiz/client` 的 `enablePush` / `disablePush` / `pushEnabledHere` / `pushSettings` / `setPushPreference`；`@jabiz/ui` 的 `PushPreferences`；OpenAPI 快照与类型 | 17k-a |
+| 17k-5 | 示范：发货时推送 `commerce.order-shipped`（门户的用户，链接到订单）；测试 `WebPushCryptoTest`、`PushPropertiesTest`、`PushIT`（测试推送服务：加密、签名、语言、链接、偏好、入口、回滚、410、退出、抹除、不允许的端点与坏的密钥、换账号）、`worker.test.ts`、`push.test.ts`、`PushPreferences.test.tsx`；测试夹具 `TestPushService` | 17k-a |
+| 17k-6 | 文档：决策 D69、18 §5.7、根 `CLAUDE.md` | 17k-a |
+| 17k-7 | APNs（令牌认证、`.p8` 来自环境变量、种类 `apns`） | 17k-b |
+
+**17k 状态**：17k-a 📝 待评审（分支 `1.3/phase-17k-push`）；17k-b 待开发。
+
 ### 17j Sign in with Apple（需求 2026-10-28，QuizBuks Q49；确认 2026-11-01，决策 D67；即推后的 16f-2）
 
 **缘由**：App Store 要求提供第三方登录的 App 也提供 Apple 登录（审核指南 4.8），App 内删除的账号要撤销 Apple 的授权（5.1.1(v)）。需求方确认：App 与商户后台两个入口都提供，撤销在本阶段。

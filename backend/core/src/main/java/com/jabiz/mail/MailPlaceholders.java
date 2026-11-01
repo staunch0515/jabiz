@@ -3,6 +3,7 @@ package com.jabiz.mail;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -21,6 +22,14 @@ public final class MailPlaceholders {
     static final Pattern PLACEHOLDER = Pattern.compile("\\{([A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_-]*)?)}");
 
     private MailPlaceholders() {}
+
+    /**
+     * Fills the placeholders of a plain text in one pass: a value is not searched for placeholders again, and a
+     * placeholder without a value stays as it is.
+     */
+    public static String fill(String text, Map<String, String> values) {
+        return MailRenderer.fill(text, values == null ? Map.of() : values, false, Set.of());
+    }
 
     /** The placeholder names of a text, in order of first use. */
     public static Set<String> of(String text) {
