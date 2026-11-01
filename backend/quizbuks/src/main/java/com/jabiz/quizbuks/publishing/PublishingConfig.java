@@ -388,6 +388,11 @@ public class PublishingConfig {
     }
 
     @Bean
+    ProcessDefinition<PublicationAdmin.BanPauseInput, PublicationOutput, ProcessContext> qbPublicationErasedEnd() {
+        return PublicationAdmin.erasedEnd();
+    }
+
+    @Bean
     ProcessDefinition<PublicationLifecycle.ApprovalResultInput, PublicationOutput, ProcessContext>
         qbPublicationApprovalResult() {
         return APPROVAL_RESULT;

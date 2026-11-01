@@ -2,6 +2,7 @@ package com.jabiz.app.it.security;
 
 import com.jabiz.app.commerce.CommerceEntities;
 import com.jabiz.context.RequestContext;
+import com.jabiz.dataset.PublicCounter;
 import com.jabiz.entity.Violation;
 import com.jabiz.runtime.BusinessRuleViolationException;
 import com.jabiz.runtime.document.DocumentLayoutRegistry;
@@ -21,6 +22,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.support.StaticListableBeanFactory;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
@@ -44,6 +47,18 @@ import static org.assertj.core.api.Assertions.tuple;
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
 class ErasureIT extends SecurityItSupport {
+
+    private static final String USER_OWNED_COUNTER = "it.product-view-by-user";
+
+    /** A public counter whose owner is a user account (decision D65 item 8): its counts go with the account. */
+    @TestConfiguration
+    static class UserOwnedCounter {
+        @Bean
+        PublicCounter itUserOwnedCounter() {
+            return PublicCounter.define(USER_OWNED_COUNTER, c -> c.keys(CommerceEntities.PUBLIC_PRODUCT_DATASET,
+                "productId").owner("sku").ownerIsUser());
+        }
+    }
 
     @DynamicPropertySource
     static void maintenance(DynamicPropertyRegistry registry) {
@@ -283,6 +298,24 @@ class ErasureIT extends SecurityItSupport {
         // A role, so that the entry accepts the user.
         assign(userId, createRole(unique("ROLE"), "audit.read"), null);
         return userId;
+    }
+
+    /** Phase 17z-6: the counts a user owns go with the account; another owner's, or another counter's, stay. */
+    @Test
+    void theCountsTheUserOwnsGoWithTheAccount() {
+        String userId = createUser("counted-" + UUID.randomUUID().toString().substring(0, 8), "Correct horse 9!");
+        String other = UUID.randomUUID().toString();
+        for (Object[] row : new Object[][] {{USER_OWNED_COUNTER, userId}, {USER_OWNED_COUNTER, other},
+            {CommerceEntities.PRODUCT_VIEWS, userId}}) {
+            execute("INSERT INTO sys_public_counter_day (row_id, counter_name, counter_key, day, hits, owner_key)"
+                + " VALUES (gen_random_uuid(), '" + row[0] + "', 'key-" + UUID.randomUUID() + "', DATE '2026-03-01', 3, '"
+                + row[1] + "')");
+        }
+        erase(userId);
+        assertThat(query("SELECT counter_name, owner_key FROM sys_public_counter_day WHERE owner_key IN ('" + userId
+            + "', '" + other + "') ORDER BY counter_name, owner_key"))
+            .extracting(row -> row.get("counter_name") + " " + (userId.equals(row.get("owner_key")) ? "user" : "other"))
+            .containsExactly(CommerceEntities.PRODUCT_VIEWS + " user", USER_OWNED_COUNTER + " other");
     }
 
     private Map<String, Object> erase(String userId) {

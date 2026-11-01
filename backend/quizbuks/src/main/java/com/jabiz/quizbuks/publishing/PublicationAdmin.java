@@ -55,6 +55,8 @@ public final class PublicationAdmin {
     public static final String RESUME = "QB_PUBLICATION_ADMIN_RESUME";
     public static final String END = "QB_PUBLICATION_ADMIN_END";
     public static final String BAN_PAUSE = "QB_PUBLICATION_BAN_PAUSE";
+    /** Q70: ends a publication of a sponsor whose account was erased (a sub-process of {@code QB_SPONSOR_ERASED}). */
+    public static final String ERASED_END = "QB_PUBLICATION_ERASED_END";
     public static final String OPERATOR_PAUSE = "QB_OPERATOR_PUBLICATION_PAUSE";
     public static final String OPERATOR_RESUME = "QB_OPERATOR_PUBLICATION_RESUME";
     public static final String OPERATOR_END = "QB_OPERATOR_PUBLICATION_END";
@@ -64,6 +66,8 @@ public final class PublicationAdmin {
      * the administration show in the reader's language ({@code messages_*.properties} has it too).
      */
     public static final String ACCOUNT_SUSPENDED = "QB_ACCOUNT_SUSPENDED";
+    /** The reason an erased sponsor's publications end with (Q70), a code shown in the reader's language. */
+    public static final String ACCOUNT_DELETED = "QB_ACCOUNT_DELETED";
 
     /**
      * Whether an administrator took the publication down: ended it, or paused it (a ban's pause included) and did not
@@ -221,6 +225,42 @@ public final class PublicationAdmin {
                 .compute("Pause", (metadata, ctx) -> pause(ctx, ACCOUNT_SUSPENDED, true,
                     ctx.get(PublicationEditing.INPUT, BanPauseInput.class).operatorId())));
     }
+
+    /**
+     * {@value #ERASED_END} (Q70; docs/quizbuks/plans/Q70-sponsor-erasure.md): ends a publication of a sponsor whose
+     * account was erased, as an administrator's end with the reason {@value #ACCOUNT_DELETED}: it takes no new attempts
+     * and leaves the takers' pages; its records stay. One that ended or went back to its draft meanwhile is left as it
+     * is.
+     */
+    public static ProcessDefinition<BanPauseInput, PublicationOutput, ProcessContext> erasedEnd() {
+        return ProcessDefinition.define(ERASED_END, 1, BanPauseInput.class, PublicationOutput.class,
+            ProcessContext.class, pb -> pb
+                .description("Ends a publication of a sponsor whose account was erased (part of the erasure only).")
+                .permissions(QbPermissions.PUBLICATION_SYSTEM)
+                .subProcessOnly()
+                .contextFactory((start, input) -> PublicationEditing.start(start, input, input.publicationId()))
+                .outputMapper(ctx -> ctx.get(OUTPUT, PublicationOutput.class))
+                .steps(PublicationEditing::lockStatesAndLoadAny)
+                .compute("End", (metadata, ctx) -> endErased(ctx)));
+    }
+
+    static void endErased(ProcessContext ctx) {
+        EntityInstance publication = PublicationEditing.publication(ctx);
+        if (!ENDABLE.contains(String.valueOf((Object) publication.get("status")))) {
+            // Ended, or back to its draft, since the erasure read it: nothing to end.
+            PublicationEditing.unchanged(ctx, publication);
+            return;
+        }
+        Map<String, Object> values = new LinkedHashMap<>();
+        values.put("status", ENDED);
+        values.put("endedAt", ctx.opTime());
+        values.put("endReason", PublicationStatus.ADMIN);
+        values.put("adminReason", ACCOUNT_DELETED);
+        PublicationEditing.write(ctx, publication, values);
+    }
+
+    /** The states an erased sponsor's publication is ended from (Q70). */
+    public static final java.util.Set<String> ENDABLE = java.util.Set.of(SCHEDULED, LIVE, PAUSED, FUNDS_SHORT);
 
     public static ProcessDefinition<AdminInput, PublicationOutput, ProcessContext> resume() {
         return define(RESUME, "Resumes a publication an administrator paused: scheduled before its start, live "

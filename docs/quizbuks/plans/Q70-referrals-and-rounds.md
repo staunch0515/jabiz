@@ -390,7 +390,7 @@
 - 被推荐人的规则 `publishing.RefereeRules`：`NOT_REGULAR`、`NEW_TO_PLATFORM`（以答题者资料的创建时间计，还没有资料的算新人）、`MATCHES_AUDIENCE`（以认领时的资料计，没有资料即不符合）、`SAME_REGION_AS_REFERRER`（资料的国家相同）。推荐的成立条件与上限在 `referral.ReferralRules`，"每天"按最近 24 小时计。
 - 流程 `QB_REFERRAL_LINK` / `_CLAIM` / `_REWARD` / `_EXPIRE`、任务 `qb.referral-reward`（每 5 分钟）与 `qb.referral-expire`（每小时，草案为每日：失败与到期的名额释放得更快）、模板 `qb.system.referrals-due` / `-over`。站内信四种（`REFERRAL_CLAIMED` / `_REWARDED` / `_EXPIRED` 给推荐人、`_FUNDS_SHORT` 每天至多一条给商户），去处 `REFERRALS`；推荐来源的现金、兑换、电子奖品消息也去 `REFERRALS`。
 - 来源列：三张奖励表加 `source_kind`；列出它的模板（App、商户后台、店员、管理后台的现金、兑换、电子奖品列表）都返回 `sourceKind`，`RedemptionProcesses.Prize` 也带上它。`qb.app.history` 只按答题连接，推荐来源的记录不出现在其中（它们在各自的列表与推荐页）。投资人指标的"奖品"计数包括推荐的奖品，暂不单列。
-- 商户被封禁时不在封禁流程中逐个作废：认领时拒绝，发放时作废（`SPONSOR_BANNED`），其余到期结束。QuizBuks 还没有接入账号删除（平台 D62），D-Q70-22 的抹除随其接入时一起声明；两张表的推荐人、被推荐人列已允许为空。
+- 商户被封禁时不在封禁流程中逐个作废：认领时拒绝，发放时作废（`SPONSOR_BANNED`），其余到期结束。D-Q70-22 的抹除：两张表除了推荐人、被推荐人的编号外不含个人信息，而编号是平台抹除时保留的（D62 第 4 条），所以不需要在 `PersonalDataEraser` 中声明（平台的检查也拒绝没有可覆盖字段的声明）；推荐与链接照常保留，供名额与统计使用。
 - 测试：`ReferralPolicyTest`、`ReferralRulesTest`、`ReferralIT`（平台 Kudos 的完整流程与账本来源、不计入的各种情形与"不选规则即熟客也算"、失败与到期、其余三种方式的记录与来源、余额不足的等待与提醒、草稿的问题）；`AdminFinanceIT` 多一行、`SetupIT` 多两个参数、场景的编号随之后移。
 
 ### Q70b-2：三端页面（2026-11-01）

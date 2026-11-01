@@ -92,6 +92,15 @@ class PublicCounterTest {
     }
 
     @Test
+    void mayCallItsOwnerAUserAccountOnlyWithAnOwner() {
+        assertThat(PublicCounter.define("shop.product-view", c -> c.keys(PUBLIC.resourceId(), "productId")
+            .owner("sku").ownerIsUser()).ownerIsUser()).isTrue();
+        assertThat(counter("productId").ownerIsUser()).isFalse();
+        assertThatThrownBy(() -> PublicCounter.define("shop.product-view", c -> c.keys(PUBLIC.resourceId(),
+            "productId").ownerIsUser())).isInstanceOf(IllegalArgumentException.class).hasMessageContaining("owner");
+    }
+
+    @Test
     void normalizesKeys() {
         String id = "0192f0a0-0000-7000-8000-00000000c001";
         assertThat(PublicCounter.normalizeKey(id.toUpperCase(), true)).isEqualTo(id);
