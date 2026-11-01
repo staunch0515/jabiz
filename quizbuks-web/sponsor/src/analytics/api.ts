@@ -477,3 +477,36 @@ export function analyticsIdOf(path: string): string | null {
 export const ANALYTICS_QUERY = ['qb', 'analytics'] as const
 /** How often the figures are read again while the page is open (they change every ten minutes, some live). */
 export const REFRESH_MS = 60_000
+
+/** Q73e-1: a row of `qb.sponsor.analytics.languages`, the figures of one answer language. */
+export interface LanguageFigures {
+  language: string
+  starts: number
+  completions: number
+  /** Only over the minimum group of completions in the language; null below it. */
+  passes: number | null
+  completionRate: number | null
+  passRate: number | null
+  averageScore: number | null
+  suppressed: boolean
+  minGroup: number
+}
+
+export function toLanguageFigures(row: Row): LanguageFigures {
+  return {
+    language: String(row.language ?? ''),
+    starts: num(row.starts),
+    completions: num(row.completions),
+    passes: numOrNull(row.passes),
+    completionRate: numOrNull(row.completionRate),
+    passRate: numOrNull(row.passRate),
+    averageScore: numOrNull(row.averageScore),
+    suppressed: row.suppressed === true || row.suppressed === 'true',
+    minGroup: num(row.minGroup),
+  }
+}
+
+export async function readLanguages(publicationId: string): Promise<LanguageFigures[]> {
+  const page = await runQuery<Row>(ANALYTICS_TEMPLATE.languages, { params: { publicationId }, limit: 10 })
+  return page.items.map(toLanguageFigures)
+}

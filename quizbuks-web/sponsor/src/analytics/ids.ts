@@ -14,6 +14,8 @@ export const ANALYTICS_TEMPLATE = {
   questions: 'qb.sponsor.analytics.questions',
   /** The versions of its quiz a publication ran on (Q51b), whose questions are analysed apart. */
   versions: 'qb.sponsor.analytics.versions',
+  /** Q73e-1: the publication by the language its attempts are answered in. */
+  languages: 'qb.sponsor.analytics.languages',
 } as const
 
 export type AnalyticsTemplate = (typeof ANALYTICS_TEMPLATE)[keyof typeof ANALYTICS_TEMPLATE]
