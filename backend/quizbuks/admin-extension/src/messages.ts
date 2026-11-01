@@ -155,6 +155,9 @@ export const messages = {
       levelApproved: 'Your level is approved; the request now waits for the next level’s decision.',
     },
     preview: {
+      language: 'Language',
+      baseLanguage: 'Base language',
+      languages: { ja: 'Japanese', zh: 'Chinese', en: 'English' },
       cover: 'Cover',
       survey: 'Survey',
       selections: { SINGLE: 'Single choice', MULTIPLE: 'Multiple choice' },
@@ -408,6 +411,9 @@ export const messages = {
       levelApproved: '你这一级已批准，请求等待下一级决定。',
     },
     preview: {
+      language: '语言',
+      baseLanguage: '基准语言',
+      languages: { ja: '日语', zh: '中文', en: '英语' },
       cover: '封面',
       survey: '问卷',
       selections: { SINGLE: '单选', MULTIPLE: '多选' },
@@ -661,6 +667,9 @@ export const messages = {
       levelApproved: 'このレベルは承認されました。次のレベルの判断を待っています。',
     },
     preview: {
+      language: '言語',
+      baseLanguage: '基準言語',
+      languages: { ja: '日本語', zh: '中国語', en: '英語' },
       cover: 'カバー',
       survey: 'アンケート',
       selections: { SINGLE: '単一選択', MULTIPLE: '複数選択' },

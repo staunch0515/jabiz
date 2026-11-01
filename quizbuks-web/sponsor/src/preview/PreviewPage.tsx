@@ -22,7 +22,8 @@ import { QB } from '../qb/messages'
 import { Link } from '../qb/router'
 import { FeedCardView } from '../qb/view/FeedCard'
 import { PublicationContent } from '../qb/view/PublicationContent'
-import { draftPreview, publicationPreview, type Preview, type PreviewQuestion } from './model'
+import { draftIn, draftPreview, publicationPreview, snapshotIn, type Preview, type PreviewQuestion } from './model'
+import { CONTENT_LANGUAGES, type ContentLanguage } from '../qb/api'
 import type { PreviewTarget } from './paths'
 
 type Screen = 'home' | 'page' | 'questions'
@@ -108,7 +109,7 @@ function Screens({ preview }: { preview: Preview }) {
   )
 }
 
-function usePreview(target: PreviewTarget) {
+function usePreview(target: PreviewTarget, chosen: ContentLanguage | null) {
   const sponsor = useQuery({ queryKey: SPONSOR_QUERY, queryFn: readMySponsor })
   const publication = useQuery({ queryKey: publicationQuery(target.id), queryFn: () => readPublication(target.id),
     enabled: target.kind === 'publication' })
@@ -121,8 +122,11 @@ function usePreview(target: PreviewTarget) {
     if (draft.isPending || sponsor.isPending) return { state: 'loading' as const }
     if (draft.isError) return { state: 'error' as const, retry: () => void draft.refetch() }
     if (!draft.data) return { state: 'missing' as const }
-    return { state: 'ready' as const, preview: draftPreview(draft.data, sponsor.data ?? null),
-      title: draft.data.quiz.title, back: quizPath(target.id) }
+    // Q73a: the draft in any of its languages.
+    const languages = [draft.data.quiz.language, ...draft.data.quiz.translationLanguages]
+    const language = chosen && languages.includes(chosen) ? chosen : languages[0]
+    return { state: 'ready' as const, preview: draftPreview(draftIn(draft.data, language), sponsor.data ?? null),
+      title: draft.data.quiz.title, back: quizPath(target.id), languages, language }
   }
   if (publication.isPending || sponsor.isPending || (versionId && version.isPending)) return { state: 'loading' as const }
   if (publication.isError || version.isError) {
@@ -130,8 +134,16 @@ function usePreview(target: PreviewTarget) {
   }
   if (!publication.data) return { state: 'missing' as const }
   const { publication: p, tiers } = publication.data
-  return { state: 'ready' as const, preview: publicationPreview(p, tiers, version.data?.content ?? null, sponsor.data ?? null),
-    title: p.name, back: publicationPath(target.id) }
+  // Q73a: the version in any of its languages.
+  const content = version.data?.content ?? null
+  const base = version.data?.language
+  const languages = base ? [base, ...CONTENT_LANGUAGES.filter((l) => l !== base && content?.translations?.[l])]
+    : []
+  const language = chosen && languages.includes(chosen) ? chosen : languages[0] ?? null
+  return { state: 'ready' as const,
+    preview: publicationPreview(p, tiers, content && language ? snapshotIn(content, language) : content,
+      sponsor.data ?? null),
+    title: p.name, back: publicationPath(target.id), languages, language }
 }
 
 /**
@@ -141,7 +153,8 @@ function usePreview(target: PreviewTarget) {
 export function PreviewPage({ target }: { target: PreviewTarget }) {
   const { t } = useTranslation(SPONSOR)
   const { t: tQb } = useTranslation(QB)
-  const result = usePreview(target)
+  const [chosen, setChosen] = useState<ContentLanguage | null>(null)
+  const result = usePreview(target, chosen)
   if (result.state === 'loading') return <PageState kind="loading" />
   if (result.state === 'error') {
     return <PageState kind="error" titleAs="h1" description={tQb('failed')}
@@ -155,6 +168,11 @@ export function PreviewPage({ target }: { target: PreviewTarget }) {
         actions={<Button asChild variant="outline"><Link to={result.back}>{t('preview.back')}</Link></Button>} />
       {result.preview.draft && (
         <Alert data-testid="preview-draft"><AlertDescription>{t('preview.draftNote')}</AlertDescription></Alert>
+      )}
+      {result.languages.length > 1 && result.language && (
+        <SegmentedControl<ContentLanguage> value={result.language} onChange={setChosen}
+          aria-label={t('translations.choose')} data-testid="preview-language"
+          options={result.languages.map((l) => ({ value: l, label: tQb(`languages.${l}`) }))} />
       )}
       <Screens preview={result.preview} />
     </section>

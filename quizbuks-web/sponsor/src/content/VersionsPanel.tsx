@@ -124,6 +124,12 @@ export function VersionsPanel({ quizId, stale }: { quizId: string; stale: boolea
   const columns = useMemo<ColumnDef<VersionRow, unknown>[]>(() => [
     { id: 'label', header: t('versions.label'), cell: ({ row }) => <span className="font-medium">{row.original.label}</span> },
     { id: 'title', header: t('versions.title'), cell: ({ row }) => row.original.title },
+    // Q73a: the version's languages, the base first.
+    { id: 'languages', header: t('translations.versionLanguages'), cell: ({ row }) => (
+      <span data-testid="version-languages">
+        {row.original.languages.map((l) => tQb(`languages.${l}`)).join(' · ')}
+      </span>
+    ) },
     { id: 'questionCount', header: t('quizzes.questions'), meta: { className: 'text-right' },
       cell: ({ row }) => row.original.questionCount },
     { id: 'fullScore', header: t('versions.fullScore'), meta: { className: 'text-right' },
@@ -162,7 +168,7 @@ export function VersionsPanel({ quizId, stale }: { quizId: string; stale: boolea
         </span>
       ),
     },
-  ], [t, quizId, queryClient, stale])
+  ], [t, tQb, quizId, queryClient, stale])
 
   if (versions.isError) {
     return <PageState kind="error" description={tQb('failed')}

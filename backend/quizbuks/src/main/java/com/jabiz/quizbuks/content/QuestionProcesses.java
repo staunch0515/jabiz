@@ -73,6 +73,9 @@ public final class QuestionProcesses {
                 .steps(b -> QuizEditing.loadAll(b, "Load the questions", QbContent.QUESTION, QUESTIONS))
                 .steps(b -> QuizEditing.loadPartsOf(b, "Load its options", QbContent.OPTION, "questionId",
                     ctx -> ctx.get(INPUT, QuestionInput.class).questionId(), OPTIONS))
+                // Q73a: an option taken out takes its translations with it.
+                .steps(b -> TranslationProcesses.loadTranslationsOf(b,
+                    ctx -> keysOf(ctx.get(INPUT, QuestionInput.class).questionId(), ctx)))
                 .steps(b -> QuizEditing.loadFiles(b, ctx -> {
                     QuestionInput input = ctx.get(INPUT, QuestionInput.class);
                     List<UUID> files = new ArrayList<>();
@@ -152,6 +155,16 @@ public final class QuestionProcesses {
             }
         }
 
+        if (options != null) {
+            java.util.Set<String> kept = new java.util.HashSet<>();
+            options.forEach(option -> kept.add(String.valueOf(option.optionId())));
+            java.util.Set<String> gone = new java.util.HashSet<>();
+            existing.stream().filter(option -> !kept.contains(QuizEditing.key(option.id()))).forEach(option -> {
+                gone.add(ContentLanguages.optionText(option.id()));
+                gone.add(ContentLanguages.optionImage(option.id()));
+            });
+            TranslationProcesses.deleteTranslationsOf(ctx, gone);
+        }
         List<UUID> optionIds = new ArrayList<>();
         if (options == null) {
             QuizEditing.ordered(existing).forEach(option -> optionIds.add(uuid(option.id())));
@@ -196,6 +209,8 @@ public final class QuestionProcesses {
                 .steps(b -> QuizEditing.loadAll(b, "Load the questions", QbContent.QUESTION, QUESTIONS))
                 .steps(b -> QuizEditing.loadPartsOf(b, "Load its options", QbContent.OPTION, "questionId",
                     ctx -> ctx.get(INPUT, QuestionRef.class).questionId(), OPTIONS))
+                .steps(b -> TranslationProcesses.loadTranslationsOf(b,
+                    ctx -> keysOf(ctx.get(INPUT, QuestionRef.class).questionId(), ctx)))
                 .compute("Delete the question", (metadata, ctx) -> {
                     QuestionRef input = ctx.get(INPUT, QuestionRef.class);
                     EntityInstance quiz = quiz(ctx);
@@ -208,6 +223,9 @@ public final class QuestionProcesses {
                         ctx.reject(QuizEditing.notInQuiz("questionId", input.questionId()));
                         return;
                     }
+                    // Q73a: its translations and its options' go with it.
+                    TranslationProcesses.deleteTranslationsOf(ctx,
+                        new java.util.HashSet<>(keysOf(input.questionId(), ctx)));
                     // Options first: a question still referred to cannot be deleted.
                     list(ctx, OPTIONS).forEach(option -> ctx.changes().delete(QbContent.OPTION, option.id(),
                         option.version()));
@@ -233,6 +251,12 @@ public final class QuestionProcesses {
                     QuizEditing.reorder(ctx, QbContent.QUESTION, list(ctx, QUESTIONS), input.questionIds(),
                         "questionIds", input.baseRevision());
                 }));
+    }
+
+    /** The translation keys of the question and of its options as loaded (none without a question). */
+    private static List<String> keysOf(UUID questionId, ProcessContext ctx) {
+        return questionId == null ? List.of()
+            : ContentLanguages.keysOf(questionId, list(ctx, OPTIONS).stream().map(EntityInstance::id).toList());
     }
 
     private QuestionProcesses() {}

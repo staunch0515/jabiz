@@ -1,6 +1,7 @@
 import { configureClient, session } from '@jabiz/client'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { expectAccessible } from '@jabiz/ui/testing'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../App'
 import '../messages'
@@ -15,7 +16,7 @@ const ENTRY = { name: 'sponsor', selfRegistration: true, requireVerifiedEmail: t
 const QUIZ = {
   quizId: 'q1', ownerId: 'u2', title: 'Coffee basics', language: 'zh', intro: 'About **coffee**.', cover: null, timeLimitSec: 300,
   status: 'DRAFT', removed: false, aiGenerated: false, latestVersionNo: 0, versionLabel: null, revision: 7,
-  editedAt: '2026-10-14T01:00:00Z', changedSinceVersion: true, questionCount: 2, materialCount: 1, clonedFrom: null,
+  editedAt: '2026-10-14T01:00:00Z', changedSinceVersion: true, questionCount: 2, materialCount: 1, clonedFrom: null, translationLanguages: [],
 }
 const QUESTIONS = [
   { questionId: 'k2', quizId: 'q1', seq: 2, stem: 'Second?', image: null, points: 1 },
@@ -38,6 +39,9 @@ interface Server {
   /** Answers to processes by name, in turn (the last one repeats). */
   processes?: Record<string, Answer[]>
   quiz?: Record<string, unknown> | null
+  /** Q73a: the quiz's translations and materials of other languages. */
+  translations?: Record<string, unknown>[]
+  variants?: Record<string, unknown>[]
 }
 
 /** The server as the console sees it, for a signed-in, approved sponsor with one quiz. Records what was posted. */
@@ -80,7 +84,9 @@ function server(options: Server = {}) {
       case '/api/datasets/urn:jabiz:dataset:sponsor:QbOption/query':
         return rows(OPTIONS)
       case '/api/datasets/urn:jabiz:dataset:sponsor:QbMaterial/query':
-        return rows(MATERIALS)
+        return rows([...MATERIALS, ...(options.variants ?? [])])
+      case '/api/datasets/urn:jabiz:dataset:sponsor:QbContentTranslation/query':
+        return rows(options.translations ?? [])
       case '/api/datasets/urn:jabiz:dataset:sponsor:QbMaterialImage/query':
         return rows([])
       case '/api/dictionaries/urn:jabiz:dict:quizbuks:quiz-status':
@@ -358,5 +364,71 @@ describe('the quiz editor', () => {
     server({ quiz: null })
     render(<App />)
     expect(await screen.findByText('This quiz does not exist or is no longer yours.')).toBeInTheDocument()
+  })
+})
+
+describe('the quiz\'s other languages (Q73a)', () => {
+  beforeEach(() => window.history.replaceState(null, '', '/quizzes/q1'))
+
+  // The hash of "First?" (NFC, SHA-256, 16 hexadecimal characters), as languages.test.ts checks.
+  const FIRST_HASH = '4a3c3009935c1351'
+
+  it('adds a language, shows the texts side by side and saves the changed ones', async () => {
+    const { processCalls } = server({
+      quiz: { ...QUIZ, translationLanguages: 'en' },
+      translations: [
+        { translationId: 't1', quizId: 'q1', language: 'en', elementKey: 'question:k1.stem', text: 'First?',
+          image: null, sourceHash: FIRST_HASH },
+        { translationId: 't2', quizId: 'q1', language: 'en', elementKey: 'question:k2.stem', text: 'Old',
+          image: null, sourceHash: '0000000000000000' },
+      ],
+      processes: { QB_TRANSLATION_SAVE: [edit(8)], QB_QUIZ_LANGUAGES_SET: [edit(8)] },
+    })
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('tab-languages'))
+    const panel = await screen.findByTestId('translations')
+    expect(screen.getByTestId('tab-languages')).toHaveTextContent('(2)')
+    // Done, out of date and missing, by the base's hashes.
+    await waitFor(() => expect(within(panel).getAllByTestId('translation-text')
+      .find((row) => row.dataset.key === 'question:k1.stem')).toHaveAttribute('data-state', 'done'))
+    const rows = within(panel).getAllByTestId('translation-text')
+    expect(rows.find((row) => row.dataset.key === 'question:k2.stem')).toHaveAttribute('data-state', 'stale')
+    expect(rows.find((row) => row.dataset.key === 'option:o1.text')).toHaveAttribute('data-state', 'missing')
+    // The materials: the base's shown in its place.
+    expect(within(panel).getByTestId('translation-material')).toHaveAttribute('data-own', 'no')
+    await expectAccessible()
+
+    const title = rows.find((row) => row.dataset.key === 'quiz.title')!
+    await userEvent.type(within(title).getByTestId('translation-input'), 'Coffee basics, in English')
+    await userEvent.click(within(panel).getByTestId('translation-save'))
+    await waitFor(() => expect(processCalls('QB_TRANSLATION_SAVE')).toEqual([{ quizId: 'q1', language: 'en',
+      entries: [{ key: 'quiz.title', text: 'Coffee basics, in English' }], baseRevision: 7 }]))
+
+    // Another language.
+    await userEvent.click(within(panel).getByTestId('translation-language-ja'))
+    await waitFor(() => expect(processCalls('QB_QUIZ_LANGUAGES_SET')).toEqual([{ quizId: 'q1',
+      languages: ['en', 'ja'], baseRevision: 8 }]))
+  })
+
+  it('makes a material of another language of the base\'s kind', async () => {
+    const { processCalls } = server({ quiz: { ...QUIZ, translationLanguages: 'en' },
+      processes: { QB_MATERIAL_SAVE: [edit(8, { itemId: 'm9' })] } })
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('tab-languages'))
+    await userEvent.click(await screen.findByTestId('translation-material-edit'))
+    const dialog = await screen.findByTestId('material-dialog')
+    expect(within(dialog).queryByTestId('material-kind')).not.toBeInTheDocument()
+    await userEvent.type(within(dialog).getByTestId('material-title'), 'Read more (EN)')
+    await userEvent.type(within(dialog).getByTestId('material-url'), 'https://example.com/en')
+    await userEvent.click(within(dialog).getByTestId('material-save'))
+    await waitFor(() => expect(processCalls('QB_MATERIAL_SAVE')).toEqual([{ quizId: 'q1', materialId: null,
+      kind: 'LINK', title: 'Read more (EN)', description: null, baseRevision: 7, variantOf: 'm1', language: 'en',
+      url: 'https://example.com/en' }]))
+  })
+
+  it('keeps the base language while the quiz has others', async () => {
+    server({ quiz: { ...QUIZ, translationLanguages: 'en' } })
+    render(<App />)
+    expect(await screen.findByTestId('heading-language')).toBeDisabled()
   })
 })

@@ -12,9 +12,9 @@ class ChunksTest {
 
     @Test
     void splitsInOrderIntoChunksOfAtMostTheSize() {
-        List<Integer> items = IntStream.rangeClosed(1, 2_501).boxed().toList();
+        List<Integer> items = IntStream.rangeClosed(1, 7_501).boxed().toList();
         List<List<Integer>> chunks = Chunks.of(items, ContentLimits.RELEASE_CHUNK);
-        assertThat(chunks).extracting(List::size).containsExactly(1_000, 1_000, 501);
+        assertThat(chunks).extracting(List::size).containsExactly(3_000, 3_000, 1_501);
         assertThat(chunks.stream().flatMap(List::stream).toList()).isEqualTo(items);
         assertThat(Chunks.of(List.of(), 3)).isEmpty();
         assertThat(Chunks.of(List.of(1, 2, 3), 3)).containsExactly(List.of(1, 2, 3));
@@ -24,7 +24,7 @@ class ChunksTest {
     @Test
     void oneVersionsFilesFitOneCommit() {
         // Publishing a version writes its new files in one commit through the dataset limited to RELEASE_CHUNK.
-        assertThat(ContentLimits.MAX_FILES_PER_VERSION).isEqualTo(901)
+        assertThat(ContentLimits.MAX_FILES_PER_VERSION).isEqualTo(2701)
             .isLessThanOrEqualTo(ContentLimits.RELEASE_CHUNK);
     }
 }

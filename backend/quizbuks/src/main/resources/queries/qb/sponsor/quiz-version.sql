@@ -14,6 +14,7 @@ results:
   label:         { from: QbQuizVersion.label }
   title:         { from: QbQuizVersion.title }
   language:      { from: QbQuizVersion.language }
+  languages:     { from: QbQuizVersion.languages }
   timeLimitSec:  { from: QbQuizVersion.timeLimitSec }
   questionCount: { from: QbQuizVersion.questionCount }
   materialCount: { from: QbQuizVersion.materialCount }
@@ -33,6 +34,7 @@ SELECT
     v.{{QbQuizVersion.label}}         AS label,
     v.{{QbQuizVersion.title}}         AS title,
     v.{{QbQuizVersion.language}}      AS language,
+    v.{{QbQuizVersion.languages}}     AS languages,
     v.{{QbQuizVersion.timeLimitSec}}  AS timeLimitSec,
     v.{{QbQuizVersion.questionCount}} AS questionCount,
     v.{{QbQuizVersion.materialCount}} AS materialCount,

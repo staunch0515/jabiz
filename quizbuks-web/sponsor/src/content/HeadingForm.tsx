@@ -78,7 +78,7 @@ export function HeadingForm({ quiz }: { quiz: Quiz }) {
         {problem('title') && <p id={`${id}-title-error`} className="text-destructive text-sm">{problem('title')}</p>}
         <ShownAt field="quizTitle" />
       </div>
-      <QuizLanguageField value={language} onChange={(next) => {
+      <QuizLanguageField value={language} locked={quiz.translationLanguages.length > 0} onChange={(next) => {
         setDone(false)
         setLanguage(next)
       }} testId="heading-language" />

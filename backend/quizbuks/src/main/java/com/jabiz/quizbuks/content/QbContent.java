@@ -24,6 +24,8 @@ public final class QbContent {
     public static final String OPTION = "QbOption";
     public static final String VERSION = "QbQuizVersion";
     public static final String VERSION_FILE = "QbVersionFile";
+    /** Q73a: the translations of a quiz's text into its other languages ({@link ContentLanguages}). */
+    public static final String TRANSLATION = "QbContentTranslation";
 
     public static final String STATUS_DICTIONARY = "urn:jabiz:dict:quizbuks:quiz-status";
     public static final String KIND_DICTIONARY = "urn:jabiz:dict:quizbuks:material-kind";
@@ -91,6 +93,9 @@ public final class QbContent {
             .apply(Rules.notBlank(ContentCodes.QUIZ_TITLE_BLANK)));
         eb.field("language", f -> f.physicalColumn("language").required(true)
             .asCode(LANGUAGE_DICTIONARY, LANGUAGES.toArray(String[]::new)));
+        // Q73a: the quiz's other languages, comma-separated (ContentLanguages); none for its base language only.
+        eb.field("translationLanguages", f -> f.physicalColumn("translation_languages").processOnly()
+            .asText(ContentLanguages.LIST_LENGTH));
         // Markdown, rendered by the frontends only, without raw HTML.
         eb.field("intro", f -> f.physicalColumn("intro").asText(ContentLimits.INTRO_LENGTH, true));
         eb.field("cover", f -> f.physicalColumn("cover").kind(FileKind.of(IMAGE_POLICY)));
@@ -146,6 +151,11 @@ public final class QbContent {
         eb.field("audio", f -> f.physicalColumn("audio").kind(FileKind.of(AUDIO_POLICY)));
         // Q19: a video watching which is enough to answer; the App shows it on the publication's card.
         eb.field("watchToAnswer", f -> f.physicalColumn("watch_to_answer").required(true).asBool());
+        // Q73a (§2.2b): a material in another language of the quiz stands for the base material variantOf there;
+        // a base material has neither.
+        eb.field("variantOf", f -> f.physicalColumn("variant_of").immutable(true).asReference(MATERIAL));
+        eb.field("language", f -> f.physicalColumn("language").immutable(true)
+            .asCode(LANGUAGE_DICTIONARY, LANGUAGES.toArray(String[]::new)));
         eb.display("title");
         eb.temporal(t -> t.allowScheduled(false));
         eb.listView("default", lv -> lv
@@ -245,6 +255,9 @@ public final class QbContent {
         // The quiz's language when the version was made (Q59a): what the publications of this version are shown in.
         eb.field("language", f -> f.physicalColumn("language").immutable(true).required(true)
             .asCode(LANGUAGE_DICTIONARY, LANGUAGES.toArray(String[]::new)));
+        // Q73a: every language of the version, the base first, comma-separated; none for its base language only.
+        eb.field("languages", f -> f.physicalColumn("languages").immutable(true)
+            .asText(ContentLanguages.LIST_LENGTH));
         eb.field("questionCount", f -> f.physicalColumn("question_count").immutable(true).required(true)
             .asNumeric(4, 0));
         eb.field("materialCount", f -> f.physicalColumn("material_count").immutable(true).required(true)
@@ -287,6 +300,39 @@ public final class QbContent {
             .filters("quizId")
             .sorts("firstVersionNo")
             .defaultSort("firstVersionNo", true));
+    });
+
+    /**
+     * A translation of one element of a quiz's text into one of its other languages (Q73a,
+     * docs/quizbuks/plans/Q73-content-languages.md §2.2): its text, or a language's own image of a question or an
+     * option, and the hash of the base text it translates ({@link ContentLanguages#sourceHash}). One live row per
+     * quiz, language and element, which the processes keep under the quiz's lock (a temporal table has no unique
+     * constraint on them).
+     */
+    public static final EntityDefinition TRANSLATION_ENTITY = EntityDefinition.define(TRANSLATION, eb -> {
+        eb.physicalTable("qb_content_translation_version");
+        eb.primaryKey("translationId");
+        eb.field("translationId", f -> f.physicalColumn("translation_id").immutable(true).required(true)
+            .generated(true).asSemanticIdentity("urn:jabiz:entity:quizbuks:content-translation"));
+        eb.field("quizId", f -> f.physicalColumn("quiz_id").immutable(true).required(true).asReference(QUIZ));
+        eb.field("ownerId", f -> f.physicalColumn("owner_id").immutable(true).required(true).asText(128));
+        eb.field("language", f -> f.physicalColumn("language").immutable(true).required(true)
+            .asCode(LANGUAGE_DICTIONARY, LANGUAGES.toArray(String[]::new)));
+        eb.field("elementKey", f -> f.physicalColumn("element_key").immutable(true).required(true)
+            .asText(ContentLanguages.KEY_LENGTH));
+        // Markdown where the base text is (the introduction, a question's text); lengths are the base's.
+        eb.field("text", f -> f.physicalColumn("text").asText(ContentLimits.INTRO_LENGTH, true));
+        eb.field("image", f -> f.physicalColumn("image").kind(FileKind.of(IMAGE_POLICY)));
+        eb.field("sourceHash", f -> f.physicalColumn("source_hash").asText(16));
+        eb.field("translatedBy", f -> f.physicalColumn("translated_by").required(true)
+            .asText(8));
+        eb.field("aiJobId", f -> f.physicalColumn("ai_job_id").asText(36));
+        eb.temporal(t -> t.allowScheduled(false));
+        eb.listView("default", lv -> lv
+            .columns("quizId", "language", "elementKey", "text", "image")
+            .filters("quizId", "language")
+            .sorts("elementKey")
+            .defaultSort("elementKey", true));
     });
 
     private QbContent() {}

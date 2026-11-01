@@ -176,13 +176,15 @@ export async function readDraft(quiz: QuizRow): Promise<Snapshot> {
   const imagesOf = group(images, 'materialId')
   const optionsOf = group(options, 'questionId')
   return {
+    // The draft's other languages (Q73a) are the sponsor's work in progress: the base is what the page shows.
+    translations: {},
     kind: quiz.kind === 'SURVEY' ? 'SURVEY' : 'QUIZ',
     title: String(draft.title ?? quiz.title),
     intro: str(draft.intro),
     cover: str(draft.cover),
     timeLimitSec: num(draft.timeLimitSec),
     aiGenerated: quiz.aiGenerated,
-    materials: [...materials].sort(bySeq).map((m, i) => ({
+    materials: [...materials].filter((m) => m.variantOf == null).sort(bySeq).map((m, i) => ({
       no: i + 1,
       kind: String(m.kind) as MaterialKind,
       title: str(m.title),

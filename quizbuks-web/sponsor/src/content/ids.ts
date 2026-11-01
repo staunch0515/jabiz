@@ -18,6 +18,9 @@ export const CONTENT_PROCESS = {
   materialSave: 'QB_MATERIAL_SAVE',
   materialDelete: 'QB_MATERIAL_DELETE',
   materialReorder: 'QB_MATERIAL_REORDER',
+  /** Q73a: the quiz's other languages, and the translations of its text into them. */
+  languagesSet: 'QB_QUIZ_LANGUAGES_SET',
+  translationSave: 'QB_TRANSLATION_SAVE',
 } as const
 
 /** SQL templates (`queries/qb/sponsor`). */
@@ -34,6 +37,7 @@ export const CONTENT_DATASET = {
   option: 'urn:jabiz:dataset:sponsor:QbOption',
   material: 'urn:jabiz:dataset:sponsor:QbMaterial',
   materialImage: 'urn:jabiz:dataset:sponsor:QbMaterialImage',
+  translation: 'urn:jabiz:dataset:sponsor:QbContentTranslation',
 } as const
 
 /** Dictionaries, labelled by the server in the request's language. */

@@ -51,6 +51,14 @@
   版本由"保存版本"显式生成，快照是 `QuizSnapshots` 的规范 JSON（哈希用平台 `ContentHash`），快照引用的文件另登记 `QbVersionFile`。业务流程不调用 `FILE_DELETE`：不再引用的文件由平台清扫。
   新放入内容的文件必须由模版所有者上传（`QuizEditing.requireOwnFile`，经平台文件数据视图读 `uploadedBy`）。子项列表（选项、图片）给出即完整列表，不给（null）即不动。
   版本与版本文件没有商家数据视图（版本含正确答案）：商家只经连接本人未移除模版的模板读取。商家视图的写权限 `qb.content.view.write` 不授予任何角色。
+- **内容的多语言**（Q73，`content.ContentLanguages`、`QuizLanguages`、`TranslationProcesses`，`docs/quizbuks/plans/Q73-content-languages.md`）：
+  - Quiz 的 `language` 是**基准语言**，`translationLanguages` 是其他语言（至多两种，只经 `QB_QUIZ_LANGUAGES_SET`；有其他语言时不能改基准，`QB_QUIZ_BASE_HAS_TRANSLATIONS`）。
+  - **结构只有基准一套**：题目、选项、正确答案、分数都只在基准里。其他语言只有：
+    - 译文 `QbContentTranslation`（标题、简介、题干、选项文字，与按语言替换的题目或选项图片），只经 `QB_TRANSLATION_SAVE`，每段记所译基准文字的 `sourceHash`；
+    - 资料的语言版本：`QbMaterial` 的 `variantOf` + `language`，种类同基准，没有"看完再答"，不占位置、不计入 `materialCount`。
+  - 读资料的地方一律先用 `QuizLanguages.bases(...)` 排除语言版本（快照、计数、排序、AI 的输入）。删除元素、资料、语言或模版时连带删除其译文与资料版本，复制时一起复制。
+  - 版本只收**完整的语言**：译全且没有过时的；资料可以回落到基准，不影响完整（D-Q73-5、D-Q73-7）。有翻译的快照 `schema = 2`（`translations`），没有的与以前逐字相同。
+  - 按语言读快照只经 `QuizSnapshots.in`；前端照抄的是商家后台的 `content/languages.ts`、`preview/model.ts` 和后台扩展的 `snapshot.ts`，改规则时几处一起改。
 - **发布方**（S0，`publishing.PublisherKind`，`docs/quizbuks/shopify/S0-publisher.md`）：引擎里"谁发布的"是一对不可变、必填的字段 `publisherKind`（`SPONSOR` / `SHOPIFY_SHOP`，字典 `urn:jabiz:dict:quizbuks:publisher-kind`）+ `publisherId`（`SPONSOR` 的编号就是商家的用户编号），
   以 `PublisherKind.declare(eb, processOnly)` 声明；S0 之前就有行被封存的五张只追加表（发布、档位、现金、兑换、电子奖品的 `*_version`）用 `declareSealed`：列仍叫 `sponsor_id`（V30，被完整性封存的列只能增加、不能改名，平台 21 §2.1，`SealedColumnsMigrationIT`）；其他表，包括以后新建的只追加表，用 `declare`，列是 `publisher_id`。**一条规则定范围**：凡是"发布的所有者的副本"（发布、档位、卡片、`QbPublicationOwner`、会话、分析的三张表、现金 / 兑换 / 电子奖品与码池、邀请）带这一对；
   商家账户自己的记录（充值、收据、邮件服务器、邀请配额、领奖码、AI 作业与用量、`QbSponsorRewardMethods.userId`、钱包、账本维度）保持 `sponsorId` / `userId`。新写入处必须显式给出类型（表上没有缺省，商家后台的流程写 `PublisherKind.SPONSOR` + 操作人）；

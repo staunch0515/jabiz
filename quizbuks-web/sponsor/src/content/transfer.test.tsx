@@ -28,13 +28,13 @@ const QUIZ = {
   quizId: 'q1', ownerId: 'u2', title: 'Coffee basics', intro: 'About coffee.', cover: 'file-cover', timeLimitSec: 300,
   status: 'DRAFT', kind: 'QUIZ', removed: false, aiGenerated: false, latestVersionNo: 0, versionLabel: null,
   revision: 7, editedAt: '2026-10-14T01:00:00Z', changedSinceVersion: true, questionCount: 1, materialCount: 0,
-  clonedFrom: null,
+  clonedFrom: null, translationLanguages: [],
 }
 
 const DRAFT: Draft = {
   quiz: { quizId: 'q1', title: 'Coffee basics', kind: 'QUIZ', language: 'en', intro: 'About coffee.', cover: 'file-cover',
     timeLimitSec: 300, status: 'DRAFT', latestVersionNo: 0, versionLabel: null, revision: 7,
-    editedAt: '2026-10-14T01:00:00Z', changedSinceVersion: true, questionCount: 2, materialCount: 1, clonedFrom: null },
+    editedAt: '2026-10-14T01:00:00Z', changedSinceVersion: true, questionCount: 2, materialCount: 1, clonedFrom: null, translationLanguages: [] },
   questions: [
     { questionId: 'k1', stem: 'First?', image: 'file-a', points: 2, selection: null, options: [
       { optionId: 'o1', text: 'Coffee', image: null, correct: true },
@@ -42,7 +42,9 @@ const DRAFT: Draft = {
     { questionId: 'k2', stem: 'Second?', image: null, points: 1, selection: null, options: [] },
   ],
   materials: [{ materialId: 'm1', kind: 'PDF', title: 'Paper', description: null, body: null, url: null,
-    pdf: 'file-pdf', audio: null, images: [], watchToAnswer: false }],
+    pdf: 'file-pdf', audio: null, images: [], watchToAnswer: false, variantOf: null, language: null }],
+  variants: [],
+  translations: [],
 }
 
 const CHECK: ImportCheck = { formatVersion: 1, currentVersion: 1, readers: [1], kind: 'QUIZ', title: 'Coffee basics',
@@ -104,6 +106,7 @@ function server(options: Server = {}) {
       case '/api/datasets/urn:jabiz:dataset:sponsor:QbOption/query':
       case '/api/datasets/urn:jabiz:dataset:sponsor:QbMaterial/query':
       case '/api/datasets/urn:jabiz:dataset:sponsor:QbMaterialImage/query':
+      case '/api/datasets/urn:jabiz:dataset:sponsor:QbContentTranslation/query':
         return rows([])
       case '/api/files/file-cover/content':
         return new Response(new Uint8Array([1, 2, 3]), { headers: { 'Content-Type': 'image/png' } })
