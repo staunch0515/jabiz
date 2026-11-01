@@ -62,6 +62,7 @@ const en = {
     signUpTerms: 'You accept these when you apply as a sponsor:',
     takerAccount: `Already answering quizzes on ${BRAND.names.en}? Sign up here with the same email address and open the link we mail you: your account becomes a sponsor's too, and you then sign in here as in the app, with your password or Google.`,
   },
+  deletion: { title: 'Delete the account', hint: 'Your page, products and profile are removed. Your quizzes and publications end and stay only as records; payments and receipts are kept as the law requires.' },
   mail: { hint: 'Mail about your top-ups, the reviews of your publications and publications an administrator stops is always sent. You can choose here which other mail you get.' },
   dashboard: {
     title: 'Dashboard',
@@ -152,6 +153,7 @@ const zh: typeof en = {
     signUpTerms: '申请入驻时，您将同意以下文本：',
     takerAccount: `已经在${BRAND.names.zh}答题？请在这里用同一个邮箱注册，并打开我们寄出的邮件中的链接：您的账号随即也成为商户账号，之后可以像在 App 中一样用密码或 Google 登录这里。`,
   },
+  deletion: { title: '删除账户', hint: '您的主页、商品与资料会被删除。Quiz 与发布结束，只作为记录保留；付款与收据按法律要求保存。' },
   mail: { hint: '关于充值、发布的审核结果以及被管理员停止的发布的邮件总会发送。其他邮件可以在这里选择是否接收。' },
   dashboard: {
     title: '概览',
@@ -242,6 +244,7 @@ const ja: typeof en = {
     signUpTerms: 'スポンサー申請の際に、以下へ同意していただきます：',
     takerAccount: `${BRAND.names.ja}でクイズに回答している方は、同じメールアドレスでこちらから登録し、お送りするメールのリンクを開いてください。アカウントがスポンサーとしても使えるようになり、アプリと同じくパスワードまたは Google でログインできます。`,
   },
+  deletion: { title: 'アカウントの削除', hint: 'マイページ、商品、プロフィールは削除されます。クイズと公開は終了し、記録としてのみ残ります。支払いと領収書は法律に従って保存されます。' },
   mail: { hint: 'チャージ、公開の審査結果、管理者による公開の停止に関するメールは必ずお送りします。その他のメールはここで受け取るかどうかを選べます。' },
   dashboard: {
     title: 'ダッシュボード',
