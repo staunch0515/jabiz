@@ -4916,4 +4916,4 @@ D17 下匿名不能写任何东西（15 §10）。
 | 17j-5 | 文档：决策 D67、10 §12、根 `CLAUDE.md` 单点登录一条 | 17j-a |
 | 17j-6 | 刷新令牌密封保存（`SEC_IDENTITY_TOKEN_KEEP`、实体 `SecIdentityToken`、迁移 `V55__identity_token.sql`、没有密封密钥即启动报错）；定时任务 `jabiz.identity-token-revocation` 找出关联已不在的令牌，`SEC_IDENTITY_TOKEN_REVOKE` 经提供方客户端调用 `revocation_endpoint`（重试的间隔倍增、至多 12 次）；同一 Apple 账号的新关联取代旧令牌；放弃后给管理员登记待办；测试 `IdentityTokensTest`、`OidcClientTest`、`OidcAppleIT`（密封保存、审计与操作记录中没有、关联在时不撤销、抹除后撤销并删除、本人解除后撤销、拒绝后按间隔重试、再次登录换令牌、新关联取代旧令牌不撤销、12 次后登记待办并不再尝试）；10 §12 | 17j-b |
 
-**17j 状态**：17j-a 📝 待评审（分支 `1.3/phase-17j-apple`）；17j-b 📝 待评审（分支 `1.3/phase-17j-apple-revoke`，在 17j-a 之上）。
+**17j 状态**：✅ 17j-a 完成（#401）；17j-b 📝 待评审（分支 `1.3/phase-17j-apple-revoke`）。
