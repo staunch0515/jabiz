@@ -58,6 +58,8 @@ export interface Sponsor {
   rejectReason: string | null
   rejectedAt: string | null
   revision: number
+  /** Q73c: the introduction's translations as stored (`{language: {intro: {text, hash}}}`); none when there are none. */
+  introTranslations?: string | null
 }
 
 /** `SponsorProcesses.ApplyInput` (and, without `acceptTerms`, `ProfileInput`). */
@@ -73,6 +75,9 @@ export interface SponsorInput {
   privacyVersionNo?: number | null
   /** The prospecting trial that brought the sponsor (Q48e-1): a first application goes to its operator. */
   trialKey?: string | null
+  /** Q73c: the introduction in other languages (`{language: {intro: text}}`), and those confirmed still right. */
+  introTranslations?: Record<string, Record<string, string>>
+  introConfirmed?: string[]
 }
 
 /** `SponsorProcesses.SponsorOutput`. */
@@ -152,6 +157,7 @@ export async function readMySponsor(): Promise<Sponsor | null> {
     rejectReason: (row.rejectReason as string | null) ?? null,
     rejectedAt: (row.rejectedAt as string | null) ?? null,
     revision: numberOf(row.revision),
+    introTranslations: (row.introTranslations as string | null) ?? null,
   }
 }
 
@@ -247,4 +253,6 @@ export const saveSponsorProfile = (input: SponsorInput) =>
     intro: input.intro,
     avatar: input.avatar,
     baseRevision: input.baseRevision,
+    ...(input.introTranslations ? { introTranslations: input.introTranslations,
+      introConfirmed: input.introConfirmed ?? [] } : {}),
   })

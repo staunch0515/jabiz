@@ -8,6 +8,8 @@ import com.jabiz.process.ProcessStart;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.content.TextTranslations;
+import com.jabiz.quizbuks.publishing.PublicationLanguages;
 import com.jabiz.quizbuks.content.ContentLimits;
 import com.jabiz.quizbuks.content.QbContent;
 import com.jabiz.quizbuks.identity.AccountCodes;
@@ -73,7 +75,14 @@ public final class SponsorProductProcesses {
      */
     public record SaveInput(String productId, @NotBlank String name, String description, UUID image,
         @NotNull BigDecimal price, @NotBlank String currency, @NotBlank String shopUrl, boolean listed, Integer seq,
-        Long baseRevision) {}
+        Long baseRevision, Map<String, Map<String, String>> translations, List<String> confirmed) {
+
+        /** A product in its page's own language only (before Q73c). */
+        public SaveInput(String productId, String name, String description, UUID image, BigDecimal price,
+            String currency, String shopUrl, boolean listed, Integer seq, Long baseRevision) {
+            this(productId, name, description, image, price, currency, shopUrl, listed, seq, baseRevision, null, null);
+        }
+    }
 
     public record ProductRef(@NotBlank String productId) {}
 
@@ -162,12 +171,26 @@ public final class SponsorProductProcesses {
                     + " was not uploaded by you", Map.of("fileId", input.image().toString())));
             }
         }
+        // Q73c: the name and description in other languages, optional; a translation out of date is refused.
+        Map<String, String> sources = new LinkedHashMap<>();
+        sources.put("name", input.name().strip());
+        sources.put("description", blankToNull(input.description()));
+        Map<String, Map<String, PublicationLanguages.Text>> storedTexts = PublicationLanguages.parse(
+            product == null ? null : product.get("translations"));
+        List<String> languages = new java.util.ArrayList<>(input.translations() == null ? storedTexts.keySet()
+            : input.translations().keySet());
+        Map<String, Map<String, PublicationLanguages.Text>> translations = TextTranslations.merge(
+            input.translations(), storedTexts, sources, languages, input.confirmed());
+        TextTranslations.problems(languages, languages, input.translations(), translations, sources, Map.of("name",
+            QbSponsorProducts.NAME_LENGTH, "description", QbSponsorProducts.DESCRIPTION_LENGTH), false)
+            .forEach(ctx::reject);
         if (ctx.hasViolations()) {
             return;
         }
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("name", input.name().strip());
         values.put("description", blankToNull(input.description()));
+        values.put("translations", PublicationLanguages.toJson(translations));
         values.put("image", input.image());
         values.put("price", price.setScale(QbSponsorProducts.scaleOf(input.currency())));
         values.put("currency", input.currency());

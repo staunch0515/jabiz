@@ -93,8 +93,9 @@ public class SponsorErasure {
                     ErasedEntity.delete(QbRewards.STAFF, "sponsorId"),
                     ErasedEntity.delete(QbSponsorProducts.QUIZ_LINK, "ownerId"),
                     ErasedEntity.delete(QbSponsorProducts.PRODUCT, "userId", "name", "description", "image",
-                        "shopUrl"),
-                    ErasedEntity.delete(QbSponsorPages.PAGE, "userId", "handle", "headline", "cover", "website"),
+                        "shopUrl", "translations"),
+                    ErasedEntity.delete(QbSponsorPages.PAGE, "userId", "handle", "headline", "cover", "website",
+                        "translations"),
                     ErasedEntity.delete(QbAi.JOB, "sponsorId", "candidates", "failureMessage"),
                     // Addresses of people the sponsor invited: theirs, not the sponsor's to keep.
                     ErasedEntity.delete(QbInvitations.INVITATION, "publisherId", "email"),
@@ -105,7 +106,8 @@ public class SponsorErasure {
                     ErasedEntity.delete(QbInbox.MESSAGE, "recipientId", "title", "body"),
                     ErasedEntity.delete(QbMessaging.NOTICE, "recipientId"),
                     // The onboarding: tombstoned; the purge overwrites who they are in every version.
-                    ErasedEntity.delete(QbAccounts.SPONSOR, "userId", "contactName", "company", "intro", "avatar"),
+                    ErasedEntity.delete(QbAccounts.SPONSOR, "userId", "contactName", "company", "intro", "avatar",
+                        "introTranslations"),
                     // Money stays (ten years): only who paid a bank transfer is overwritten.
                     ErasedEntity.keep(QbTopUps.TOPUP, "sponsorId", "payerName"));
             }

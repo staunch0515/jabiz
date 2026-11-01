@@ -41,6 +41,13 @@ public final class SponsorPageApprovals {
             Object value = page.get(field);
             content.put(field, value == null ? null : String.valueOf(value));
         }
+        // Q73c: the other languages' headlines are part of what is approved, only when the page offers any (so a page
+        // of one language hashes as before).
+        if (page.get("languages") != null) {
+            content.put("languages", String.valueOf((Object) page.get("languages")));
+            content.put("translations", page.get("translations") == null ? null
+                : String.valueOf((Object) page.get("translations")));
+        }
         Object takenDown = page.get("takenDownAt");
         content.put("takenDownAt", takenDown == null ? null : instant(takenDown).toString());
         return content;

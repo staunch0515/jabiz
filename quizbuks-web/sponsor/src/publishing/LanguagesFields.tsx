@@ -1,12 +1,13 @@
-import { Button, Checkbox, Input, Label, RadioGroup, RadioGroupItem, Spinner, Textarea } from '@jabiz/ui'
+import { Badge, Button, Checkbox, Input, Label, RadioGroup, RadioGroupItem, Spinner, Textarea } from '@jabiz/ui'
 import { useQueryClient } from '@tanstack/react-query'
 import { Languages } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AI_QUERY } from '../ai/AiQuestionsPanel'
 import { TranslateDialog, useAiPublicationTextsJob } from '../ai/AiTranslatePanel'
 import { acceptAiPublicationTexts, requestAiPublicationTexts, type AiJob } from '../ai/api'
 import type { VersionRow } from '../content/api'
+import { sourceHash } from '../content/languages'
 import { SPONSOR } from '../messages'
 import type { ContentLanguage } from '../qb/api'
 import { QB } from '../qb/messages'
@@ -14,6 +15,27 @@ import type { PublicationForm, PublicationTextField, RewardMethod } from './api'
 
 const NAME_LENGTH = 100
 const DESCRIPTION_LENGTH = 500
+
+/** Q73c: the hashes of the publication's base texts as typed now (`content/languages.ts`'s, the server's). */
+function useBaseHashes(form: PublicationForm, method: RewardMethod): Partial<Record<PublicationTextField, string>> {
+  const [hashes, setHashes] = useState<Partial<Record<PublicationTextField, string>>>({})
+  const texts: [PublicationTextField, string][] = [['name', form.name],
+    ['redeemDescription', method === 'OFFLINE_REDEEM' ? form.redeemDescription : ''],
+    ['digitalDescription', method === 'DIGITAL_PRIZE' ? form.digitalDescription : ''],
+    ['referralDescription', form.referralEnabled ? form.referralDescription : '']]
+  const joined = texts.map(([, text]) => text).join('\u0000')
+  useEffect(() => {
+    let live = true
+    void Promise.all(texts.map(async ([field, text]) => [field, await sourceHash(text.trim())] as const))
+      .then((pairs) => live && setHashes(Object.fromEntries(pairs.filter(([, hash]) => hash !== null))))
+    return () => {
+      live = false
+    }
+    // The texts by their content.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [joined])
+  return hashes
+}
 
 /**
  * The languages a publication offers (Q73b, docs/quizbuks/plans/Q73-content-languages.md §3): some of its version's,
@@ -39,6 +61,7 @@ export function LanguagesFields({ id, form, set, version, method, locked, proble
   const job = useAiPublicationTextsJob(form.quizId, publicationId).data ?? null
   const [asking, setAsking] = useState<ContentLanguage | null>(null)
   const [used, setUsed] = useState<string[]>([])
+  const baseHashes = useBaseHashes(form, method)
   if (!version || version.languages.length < 2) return null
   const base = version.language
   // None chosen: the version's base only, as before.
@@ -130,6 +153,12 @@ export function LanguagesFields({ id, form, set, version, method, locked, proble
             const problem = problemOf(`translations.${language}.${field}`)
             const value = form.translations[language]?.[field] ?? ''
             const long = field !== 'name'
+            // Q73c: stored, unchanged, and made from another base text: out of date unless confirmed still right.
+            const key = `${language}.${field}`
+            const storedHash = form.translationHashes?.[language]?.[field]
+            const stale = !!storedHash && !!baseHashes[field] && storedHash !== baseHashes[field]
+              && value === (form.storedTranslations?.[language]?.[field] ?? '')
+            const confirmed = form.confirmed ?? []
             return (
               <div key={field} className="flex flex-col gap-1">
                 <Label htmlFor={fieldId}>{t(`publishing.languages.fields.${field}`)}</Label>
@@ -146,6 +175,16 @@ export function LanguagesFields({ id, form, set, version, method, locked, proble
                     aria-describedby={`${fieldId}-source`} aria-invalid={problem ? true : undefined}
                     data-testid={`publication-text-${language}-${field}`}
                     onChange={(event) => typed(language, field, event.target.value)} />
+                )}
+                {stale && (
+                  <div className="flex items-center gap-2" data-testid="publication-text-stale">
+                    <Badge variant="default">{t('textTranslations.stale')}</Badge>
+                    <Checkbox id={`${fieldId}-confirm`} checked={confirmed.includes(key)} disabled={locked}
+                      data-testid="publication-text-confirm"
+                      onCheckedChange={(checked) => set('confirmed', checked === true ? [...confirmed, key]
+                        : confirmed.filter((c) => c !== key))} />
+                    <Label htmlFor={`${fieldId}-confirm`} className="font-normal">{t('textTranslations.confirm')}</Label>
+                  </div>
                 )}
                 {problem && <p className="text-destructive text-sm">{problem}</p>}
                 {(() => {

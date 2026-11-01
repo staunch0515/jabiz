@@ -132,6 +132,18 @@ export default function SponsorPageReviewPage() {
           <h3 className="font-semibold">{t('sponsorPages.headline')}</h3>
           <p lang={p.language} data-testid="sponsor-page-headline">{p.headline}</p>
         </div>
+        {p.languages.length > 1 && (
+          <div className="flex flex-col gap-1" data-testid="sponsor-page-languages">
+            <h3 className="font-semibold">{t('sponsorPages.languages')}</h3>
+            <p className="text-sm">{p.languages.map((l) => t(`preview.languages.${l}`, { defaultValue: l })).join(', ')}</p>
+            {p.languages.filter((l) => l !== p.language).map((language) => (
+              <p key={language} className="text-sm" lang={language} data-testid="sponsor-page-headline-translation">
+                <span className="text-muted-foreground">{t(`preview.languages.${language}`, { defaultValue: language })}: </span>
+                {p.translations[language]?.headline ?? t('common.notSet')}
+              </p>
+            ))}
+          </div>
+        )}
         <p className="text-muted-foreground text-sm" data-testid="sponsor-page-from-profile">
           {t('sponsorPages.fromProfile')}</p>
         <div className="flex flex-col gap-1" data-testid="sponsor-page-story">

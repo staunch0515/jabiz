@@ -5,11 +5,14 @@ import {
   AlertTitle,
   Badge,
   Button,
+  Checkbox,
   ConfirmDialog,
   FileUpload,
   Input,
   Label,
   PageState,
+  RadioGroup,
+  RadioGroupItem,
   Select,
   SelectContent,
   SelectItem,
@@ -21,6 +24,7 @@ import { CircleCheck, Copy, ExternalLink } from 'lucide-react'
 import { useId, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { neutralName } from '../content/api'
+import { TextTranslationsFields, type TextsByLanguage } from '../content/TextTranslationsFields'
 import { SPONSOR } from '../messages'
 import { CONTENT_LANGUAGES, contentLanguageOf, type ContentLanguage } from '../qb/api'
 import { FileImage } from '../qb/FileImage'
@@ -130,11 +134,23 @@ function PageForm({ page, done, setDone }: {
     baseRevision: page?.revision ?? null,
   }
   const [form, setForm] = useState(stored)
+  // Q73c: the other languages offered (besides the page's own), the main one, the headline in each, and the
+  // translations confirmed as still right after a change of the headline.
+  const storedExtra = (page?.languages ?? []).filter((l) => l !== stored.language)
+  const [extra, setExtra] = useState<ContentLanguage[]>(storedExtra)
+  const [main, setMain] = useState<ContentLanguage>(page?.languages[0] ?? stored.language)
+  const [translations, setTranslations] = useState<TextsByLanguage>(page?.translations ?? {})
+  const [confirmed, setConfirmed] = useState<string[]>([])
+  const others = extra.filter((l) => l !== form.language)
+  const offered: ContentLanguage[] = others.length === 0 ? []
+    : [main, ...[form.language, ...others].filter((l) => l !== main)].filter((l, i, all) => all.indexOf(l) === i)
   // Images being uploaded: saving waits for them, so that none is left out (and orphaned) by a save meanwhile.
   const [uploading, setUploading] = useState(0)
   const set = <K extends keyof SponsorPageInput>(key: K, value: SponsorPageInput[K]) =>
     setForm((current) => ({ ...current, [key]: value }))
   const dirty = (Object.keys(stored) as (keyof SponsorPageInput)[]).some((key) => (form[key] ?? '') !== (stored[key] ?? ''))
+    || offered.join(',') !== (page?.languages ?? []).join(',')
+    || JSON.stringify(translations) !== JSON.stringify(page?.translations ?? {}) || confirmed.length > 0
   const status = page?.status
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: SPONSOR_PAGE_QUERY })
@@ -144,6 +160,9 @@ function PageForm({ page, done, setDone }: {
       handle: form.handle.trim().toLowerCase(),
       headline: form.headline.trim(),
       website: form.website?.trim() ? form.website.trim() : null,
+      languages: offered,
+      translations: Object.fromEntries(others.map((l) => [l, translations[l] ?? {}])),
+      confirmed,
     }),
     onSuccess: async (output) => {
       setDone(status === 'PENDING' && output.status === 'DRAFT' ? t('page.savedBackToDraft')
@@ -182,7 +201,8 @@ function PageForm({ page, done, setDone }: {
   const invalid = (field: string) => (problem(field) ? true : undefined)
   const errorOf = (field: string) => problem(field)
     && <p id={errorId(field)} className="text-destructive text-sm">{problem(field)}</p>
-  const general = generalProblem(error, FIELDS)
+  // Q73c: the languages' and translations' problems show at their fields.
+  const general = generalProblem(error, [...FIELDS, 'languages', ...others.map((l) => `translations.${l}.headline`)])
   const link = sponsorPageLink(form.handle.trim().toLowerCase() || 'your-name')
   const canSubmit = !!page && (status === 'DRAFT' || status === 'REJECTED' || status === 'TAKEN_DOWN')
   const canUnpublish = status === 'PUBLISHED' || status === 'PENDING'
@@ -272,6 +292,46 @@ function PageForm({ page, done, setDone }: {
             data-testid="sponsor-page-headline" onChange={(event) => set('headline', event.target.value)} />
           {errorOf('headline')}
         </div>
+        <fieldset className="flex flex-col gap-3" data-testid="sponsor-page-languages">
+          <legend className="text-sm font-medium">{t('pageLanguages.title')}</legend>
+          <p className="text-muted-foreground text-sm">{t('pageLanguages.hint')}</p>
+          <div className="flex flex-wrap gap-4">
+            {CONTENT_LANGUAGES.filter((l) => l !== form.language).map((language) => (
+              <div key={language} className="flex items-center gap-2">
+                <Checkbox id={`${id}-offer-${language}`} checked={extra.includes(language)}
+                  data-testid={`sponsor-page-offer-${language}`}
+                  onCheckedChange={(checked) => setExtra((all) => checked === true
+                    ? [...all.filter((l) => l !== language), language] : all.filter((l) => l !== language))} />
+                <Label htmlFor={`${id}-offer-${language}`} className="font-normal">{tQb(`languages.${language}`)}</Label>
+              </div>
+            ))}
+          </div>
+          {fieldProblem(save.error, 'languages') && (
+            <p className="text-destructive text-sm">{fieldProblem(save.error, 'languages')}</p>
+          )}
+          {offered.length > 1 && (
+            <fieldset className="flex flex-col gap-2">
+              <legend className="text-sm font-medium">{t('pageLanguages.main')}</legend>
+              <p className="text-muted-foreground text-xs">{t('pageLanguages.mainHint')}</p>
+              <RadioGroup value={offered[0]} onValueChange={(value) => setMain(value as ContentLanguage)}>
+                {offered.map((language) => (
+                  <div key={language} className="flex items-center gap-2">
+                    <RadioGroupItem id={`${id}-main-${language}`} value={language}
+                      data-testid={`sponsor-page-main-${language}`} />
+                    <Label htmlFor={`${id}-main-${language}`} className="font-normal">
+                      {tQb(`languages.${language}`)}
+                    </Label>
+                  </div>
+                ))}
+              </RadioGroup>
+            </fieldset>
+          )}
+          <TextTranslationsFields id={`${id}-tr`} languages={others} value={translations}
+            hashes={page?.translationHashes ?? {}} confirmed={confirmed} onChange={setTranslations}
+            onConfirmed={setConfirmed} problemOf={(path) => fieldProblem(save.error, path)}
+            testId="sponsor-page-translations"
+            fields={[{ field: 'headline', label: t('page.headline'), source: form.headline, maxLength: HEADLINE_LENGTH }]} />
+        </fieldset>
         {image('cover', t('page.coverAlt'), 'aspect-video w-48 border object-cover')}
         <div className="flex flex-col gap-2">
           <Label htmlFor={`${id}-website`}>{t('page.website')}</Label>

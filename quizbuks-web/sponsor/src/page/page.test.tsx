@@ -147,6 +147,33 @@ describe("the sponsor's page editor (Q60a), a section of the sponsor profile (Q6
     expect(calls('QB_SPONSOR_PROFILE_SAVE')).toHaveLength(1)
   })
 
+  it('offers the page in more languages, its headline and the introduction in each (Q73c)', async () => {
+    const { calls } = server(DRAFT)
+    window.history.replaceState(null, '', PROFILE_PATH)
+    render(<App />)
+    // The introduction in Chinese too (optional), sent with the basic profile.
+    await userEvent.click(await screen.findByTestId('onboarding-intro-language-zh'))
+    const introZh = within(screen.getByTestId('onboarding-intro-translations-zh'))
+      .getByTestId('onboarding-intro-translations-input')
+    await userEvent.type(introZh, '面包')
+    await userEvent.click(screen.getByTestId('onboarding-submit'))
+    await waitFor(() => expect(calls('QB_SPONSOR_PROFILE_SAVE')).toHaveLength(1))
+    expect(calls('QB_SPONSOR_PROFILE_SAVE')[0]).toMatchObject({ introTranslations: { zh: { intro: '面包' } },
+      introConfirmed: [] })
+
+    // The page in Chinese as well, Chinese its main language, with its headline.
+    await userEvent.click(await screen.findByTestId('sponsor-page-offer-zh'))
+    const headlineZh = within(screen.getByTestId('sponsor-page-translations-zh'))
+      .getByTestId('sponsor-page-translations-input')
+    await userEvent.type(headlineZh, '新鲜面包')
+    await userEvent.click(screen.getByTestId('sponsor-page-main-zh'))
+    await userEvent.click(screen.getByTestId('sponsor-page-save'))
+    await waitFor(() => expect(calls('QB_SPONSOR_PAGE_SAVE')).toHaveLength(1))
+    expect(calls('QB_SPONSOR_PAGE_SAVE')[0]).toMatchObject({ languages: ['zh', 'en'],
+      translations: { zh: { headline: '新鲜面包' } }, confirmed: [] })
+    await expectAccessible()
+  })
+
   it('creates the draft, then publishes it once saved', async () => {
     const { calls } = server(null)
     window.history.replaceState(null, '', PROFILE_PATH)

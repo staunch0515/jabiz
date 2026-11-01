@@ -39,9 +39,10 @@ export function ProductCards({ products, title, testId = 'products', headingLeve
                   className="size-16 shrink-0 border object-cover" />
               )}
               <div className="flex min-w-0 flex-1 flex-col gap-1">
-                <span className="font-medium">{product.name}</span>
+                <span className="font-medium" lang={product.textLanguage ?? undefined}>{product.name}</span>
                 {product.description && (
-                  <span className="text-muted-foreground text-sm whitespace-pre-line">{product.description}</span>
+                  <span className="text-muted-foreground text-sm whitespace-pre-line"
+                    lang={product.textLanguage ?? undefined}>{product.description}</span>
                 )}
                 <span className="text-sm font-semibold tabular-nums" data-testid={`${testId}-price`}>
                   {formatPrice(product.price, product.currency, i18n.language)}

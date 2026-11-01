@@ -168,7 +168,10 @@ class SponsorPageIT extends PlayItSupport {
             .containsEntry("headline", "Fresh bread daily").containsEntry("company", "Company of " + sponsor)
             .containsEntry("cover", cover).containsEntry("language", "en")
             .containsEntry("logo", logo).containsEntry("story", "Since **1990**.")
-            .containsOnlyKeys("handle", "language", "headline", "story", "logo", "cover", "website", "company"));
+            // Q73c: the languages it offers and the one it is shown in.
+            .containsEntry("languages", "en").containsEntry("displayLanguage", "en")
+            .containsOnlyKeys("handle", "language", "headline", "story", "logo", "cover", "website", "company",
+                "languages", "displayLanguage"));
         client.get().uri("/api/public/files/" + cover).exchange().expectStatus().isOk();
         client.get().uri("/api/public/files/" + logo).exchange().expectStatus().isOk();
         // The profile changes the published page at once, without the page's review.

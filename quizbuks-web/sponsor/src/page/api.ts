@@ -1,5 +1,6 @@
 import { api, runProcess, unwrap } from '@jabiz/client'
-import type { ContentLanguage } from '../qb/api'
+import { parseStoredTranslations, type TextsByLanguage } from '../content/TextTranslationsFields'
+import { CONTENT_LANGUAGES, type ContentLanguage } from '../qb/api'
 import { SPONSOR_PAGE } from './ids'
 
 /*
@@ -30,6 +31,10 @@ export interface MySponsorPage {
   /** Taken down and not published since: the next publication waits for a person's review. */
   reviewRequired: boolean
   revision: number
+  /** Q73c: the languages offered, the main one first (none: `language` only), and the headline in the others. */
+  languages: ContentLanguage[]
+  translations: TextsByLanguage
+  translationHashes: TextsByLanguage
 }
 
 /** `SponsorPageProcesses.SaveInput`. */
@@ -40,6 +45,11 @@ export interface SponsorPageInput {
   cover: string | null
   website: string | null
   baseRevision: number | null
+  /** Q73c: the languages offered, the main one first; none: its own language only. */
+  languages?: ContentLanguage[]
+  translations?: TextsByLanguage
+  /** Translations still right for a changed headline (`<language>.headline`). */
+  confirmed?: string[]
 }
 
 /** `SponsorPageProcesses.PageOutput`. */
@@ -51,6 +61,12 @@ export interface SponsorPageOutput {
   /** `PENDING`, `APPROVED` or `NOT_REQUIRED` when the process asked for a review. */
   approval: string | null
   approvalRequestId: string | null
+}
+
+/** A column of languages (`en,zh`), the platform's only, in its order. */
+export function languagesOf(value: unknown): ContentLanguage[] {
+  return String(value ?? '').split(',').map((l) => l.trim())
+    .filter((l): l is ContentLanguage => (CONTENT_LANGUAGES as readonly string[]).includes(l))
 }
 
 const text = (value: unknown) => (value == null || value === '' ? null : String(value))
@@ -76,6 +92,9 @@ export async function readMySponsorPage(): Promise<MySponsorPage | null> {
     publishedAt: text(row.publishedAt),
     reviewRequired: row.reviewRequired === true,
     revision: Number(row.revision) || 0,
+    languages: languagesOf(row.languages),
+    translations: parseStoredTranslations(row.translations).texts,
+    translationHashes: parseStoredTranslations(row.translations).hashes,
   }
 }
 
