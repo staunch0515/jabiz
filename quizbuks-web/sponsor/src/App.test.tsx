@@ -329,9 +329,10 @@ describe('a signed-in sponsor', () => {
     const nav = screen.getByRole('navigation', { name: 'Sponsor console' })
     expect(within(nav).getAllByRole('group').map((g) => g.getAttribute('aria-labelledby') && within(g).getAllByRole('link')
       .map((link) => link.textContent))).toEqual([
-      ['Dashboard'], ['Quizzes', 'Publications'], ['Cash rewards', 'Digital prizes', 'Prizes', 'Staff'],
-      ['Wallet', 'Transactions'], ['Sponsor profile', 'My products', 'Page statistics', 'Mail server', 'Messages',
-        'Account', 'Help']])
+      ['Dashboard'], ['Quizzes', 'Publications'], ['Cash rewards', 'Digital prizes', 'Prizes'],
+      // Q78: the staff with the sponsor's settings.
+      ['Wallet', 'Transactions'], ['Sponsor profile', 'Staff', 'My products', 'Page statistics', 'Mail server',
+        'Messages', 'Account', 'Help']])
     expect(within(nav).getByRole('group', { name: 'Rewards' })).toBeInTheDocument()
     expect(within(nav).getAllByTestId('menu-separator')).toHaveLength(4)
     await userEvent.click(screen.getByRole('link', { name: 'Sponsor profile' }))

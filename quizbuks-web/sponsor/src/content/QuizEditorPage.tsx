@@ -7,6 +7,10 @@ import {
   Badge,
   Button,
   ConfirmDialog,
+  DropdownMenuTrigger,
+  DropdownMenuItem,
+  DropdownMenuContent,
+  DropdownMenu,
   Dialog,
   DialogContent,
   DialogDescription,
@@ -24,7 +28,7 @@ import {
   TabsTrigger,
 } from '@jabiz/ui'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CircleCheck, Copy, RefreshCw, Save, Trash2 } from 'lucide-react'
+import { CircleCheck, Copy, MoreHorizontal, RefreshCw, Save, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AiCoverPanel } from '../ai/AiCoverPanel'
@@ -117,6 +121,7 @@ export function QuizEditorPage({ quizId }: { quizId: string }) {
   // Forms start from the quiz as read; a reload starts them again.
   const [generation, setGeneration] = useState(0)
   const [copying, setCopying] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   // The last "save version": the label saved, or the problems that stopped it.
   const [versionOutcome, setVersionOutcome] = useState<{ label?: string; problems?: string[];
     incomplete?: LanguageStatus[] } | null>(null)
@@ -242,21 +247,42 @@ export function QuizEditorPage({ quizId }: { quizId: string }) {
                 {t('editor.saveVersion')}
               </Button>
               <PreviewButton to={previewOfQuiz(quiz.quizId)} />
-              <Button variant="outline" disabled={stale} data-testid="copy-quiz" onClick={() => setCopying(true)}>
-                <Copy aria-hidden />
-                {t('editor.copy')}
-              </Button>
-              <ConfirmDialog destructive title={t('editor.deleteTitle')} description={t('editor.deleteText')}
-                confirmLabel={t('editor.delete')} cancelLabel={t('common.cancel')} onConfirm={remove}
-                trigger={
-                  <Button variant="outline" disabled={stale} data-testid="delete-quiz">
+              {/* Q78: copy and delete side by side from `sm` up, in a menu below it. */}
+              <div className="hidden gap-2 sm:flex">
+                <Button variant="outline" disabled={stale} data-testid="copy-quiz" onClick={() => setCopying(true)}>
+                  <Copy aria-hidden />
+                  {t('editor.copy')}
+                </Button>
+                <Button variant="outline" disabled={stale} data-testid="delete-quiz" onClick={() => setDeleting(true)}>
+                  <Trash2 aria-hidden />
+                  {t('editor.delete')}
+                </Button>
+              </div>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" className="sm:hidden" aria-label={t('editor.more')} data-testid="editor-more">
+                    <MoreHorizontal aria-hidden />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem disabled={stale} onSelect={() => setCopying(true)}>
+                    <Copy aria-hidden />
+                    {t('editor.copy')}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem disabled={stale} variant="destructive" onSelect={() => setDeleting(true)}>
                     <Trash2 aria-hidden />
                     {t('editor.delete')}
-                  </Button>
-                } />
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <ConfirmDialog destructive title={t('editor.deleteTitle')} description={t('editor.deleteText')}
+                confirmLabel={t('editor.delete')} cancelLabel={t('common.cancel')} onConfirm={remove}
+                open={deleting} onOpenChange={setDeleting} />
             </div>
           } />
-        {stale && (
+        {/* Q78: one notice at a time, the most pressing first: out of date, a refused version, languages left out
+            of the version, the version saved. */}
+        {stale ? (
           <Alert variant="warning" ref={staleRef} tabIndex={-1} data-testid="stale">
             <AlertTitle>{t('editor.staleTitle')}</AlertTitle>
             <AlertDescription className="flex flex-col items-start gap-3">
@@ -267,20 +293,12 @@ export function QuizEditorPage({ quizId }: { quizId: string }) {
               </Button>
             </AlertDescription>
           </Alert>
-        )}
-        {versionProblems.length > 0 && (
+        ) : versionProblems.length > 0 ? (
           <div className="flex flex-col gap-2">
             <p className="text-sm font-medium">{t('editor.versionRefused')}</p>
             <ProblemList problems={versionProblems} testId="version-problems" />
           </div>
-        )}
-        {versionOutcome?.label && (
-          <p role="status" className="text-success flex items-center gap-2 text-sm" data-testid="version-saved">
-            <CircleCheck aria-hidden className="size-4" />
-            {t('editor.versionSaved', { label: versionOutcome.label })}
-          </p>
-        )}
-        {(versionOutcome?.incomplete?.length ?? 0) > 0 && (
+        ) : (versionOutcome?.incomplete?.length ?? 0) > 0 ? (
           <Alert variant="warning" data-testid="version-incomplete">
             <AlertTitle>{t('translations.leftOutTitle')}</AlertTitle>
             <AlertDescription>
@@ -293,7 +311,12 @@ export function QuizEditorPage({ quizId }: { quizId: string }) {
               </ul>
             </AlertDescription>
           </Alert>
-        )}
+        ) : versionOutcome?.label ? (
+          <p role="status" className="text-success flex items-center gap-2 text-sm" data-testid="version-saved">
+            <CircleCheck aria-hidden className="size-4" />
+            {t('editor.versionSaved', { label: versionOutcome.label })}
+          </p>
+        ) : null}
         <Tabs value={tab} onValueChange={(value) => setTab(value as Tab)}>
           <TabsList className="flex-wrap">
             <TabsTrigger value="quiz" data-testid="tab-quiz">{t('editor.tabs.quiz')}</TabsTrigger>

@@ -465,7 +465,42 @@ export function AiQuestionsPanel({ quiz, materials }: { quiz: Quiz; materials: M
   const enabled = usage.data?.enabled ?? false
   const running = latest?.status === 'QUEUED'
   const remaining = usage.data?.remainingTokens
+  // Q78: nothing going on (no job, or one already closed): one line with the button; the card opens for a job.
+  const busy = running || (latest != null && ['READY', 'FAILED', 'EXPIRED'].includes(latest.status))
+    || (latest?.status === 'CANCELLED' && !latest.finishedAt)
+  const request = (
+    <>
+      {usage.isError && <p className="text-destructive text-sm">{tQb('failed')}</p>}
+      {usage.isSuccess && !enabled && <p className="text-muted-foreground text-sm" data-testid="ai-off">{t('ai.off')}</p>}
+      {usage.isSuccess && enabled && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <Button variant={busy ? 'default' : 'outline'} disabled={running || editing.stale || remaining === 0}
+            data-testid="ai-generate" onClick={() => setAsking(true)}>
+            <Sparkles aria-hidden />
+            {t('ai.generate')}
+          </Button>
+          <span className="text-muted-foreground text-sm" data-testid="ai-remaining">
+            {remaining === 0 ? t('ai.remainingNone')
+              : remaining != null ? t('ai.remaining', { tokens: remaining.toLocaleString() }) : null}
+            {usage.data.dailyJobs != null && ` · ${t('ai.today', { n: usage.data.jobsToday,
+              max: usage.data.dailyJobs })}`}
+          </span>
+        </div>
+      )}
+    </>
+  )
+  const dialog = asking && <RequestDialog quiz={quiz} materials={materials}
+    maxCount={usage.data?.maxCount ?? AI_LIMITS.maxCount} open onOpenChange={setAsking} />
 
+  if (!busy) {
+    return (
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2" data-testid="ai-panel" data-status={latest?.status ?? 'NONE'}
+        data-collapsed="true">
+        {request}
+        {dialog}
+      </div>
+    )
+  }
   return (
     <Card data-testid="ai-panel" data-status={latest?.status ?? 'NONE'}>
       <CardHeader>
@@ -476,23 +511,7 @@ export function AiQuestionsPanel({ quiz, materials }: { quiz: Quiz; materials: M
         <CardDescription>{t('ai.intro')}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        {usage.isError && <p className="text-destructive text-sm">{tQb('failed')}</p>}
-        {usage.isSuccess && !enabled && <p className="text-muted-foreground text-sm" data-testid="ai-off">{t('ai.off')}</p>}
-        {usage.isSuccess && enabled && (
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-            <Button disabled={running || editing.stale || remaining === 0} data-testid="ai-generate"
-              onClick={() => setAsking(true)}>
-              <Sparkles aria-hidden />
-              {t('ai.generate')}
-            </Button>
-            <span className="text-muted-foreground text-sm" data-testid="ai-remaining">
-              {remaining === 0 ? t('ai.remainingNone')
-                : remaining != null ? t('ai.remaining', { tokens: remaining.toLocaleString() }) : null}
-              {usage.data.dailyJobs != null && ` · ${t('ai.today', { n: usage.data.jobsToday,
-                max: usage.data.dailyJobs })}`}
-            </span>
-          </div>
-        )}
+        {request}
         {running && (
           <div role="status" className="flex flex-wrap items-center gap-3 text-sm" data-testid="ai-running">
             <Spinner />
@@ -516,8 +535,7 @@ export function AiQuestionsPanel({ quiz, materials }: { quiz: Quiz; materials: M
         )}
         {latest?.status === 'READY' && <Review key={latest.aiJobId} job={latest} />}
       </CardContent>
-      {asking && <RequestDialog quiz={quiz} materials={materials}
-        maxCount={usage.data?.maxCount ?? AI_LIMITS.maxCount} open onOpenChange={setAsking} />}
+      {dialog}
     </Card>
   )
 }

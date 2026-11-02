@@ -27,3 +27,25 @@ export function useMoveFocus(busy: boolean) {
     },
   }
 }
+
+/**
+ * Q78: the same for a list with one "move to" control per item (`data-move="<id>"`): after a move, focus goes back to
+ * the moved item's control once the list is drawn again, and the new place is announced.
+ */
+export function useMoveToFocus(busy: boolean) {
+  const [announcement, setAnnouncement] = useState('')
+  const target = useRef<string | null>(null)
+  useEffect(() => {
+    const moving = target.current
+    if (!moving || busy) return
+    target.current = null
+    document.querySelector<HTMLElement>(`[data-move="${CSS.escape(moving)}"]`)?.focus()
+  })
+  return {
+    announcement,
+    moved: (id: string, text: string) => {
+      target.current = id
+      setAnnouncement(text)
+    },
+  }
+}
