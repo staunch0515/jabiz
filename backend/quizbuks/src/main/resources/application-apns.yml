@@ -1,0 +1,15 @@
+# Push notifications to the iOS app (platform 17k-b, decision D69): Apple's push service for the Capacitor shell
+# (quizbuks-mobile/ios), switched on with the Spring profile "apns" beside "push" (SPRING_PROFILES_ACTIVE=…,push,apns),
+# which it needs for the templates and the devices. Token authentication with a key of the Apple Developer team that
+# has Apple Push Notifications service: the team's ten-character id as JABIZ_APNS_TEAM_ID, the key's id as
+# JABIZ_APNS_KEY_ID, its .p8 file as JABIZ_APNS_PRIVATE_KEY (PEM, line breaks written \n, or its Base64 body; from
+# the environment only). The topic is the app's bundle id (quizbuks-mobile/ios/capacitor.config.json); production
+# serves TestFlight and the App Store, sandbox only builds made by Xcode (JABIZ_APNS_ENVIRONMENT).
+jabiz:
+  push:
+    apns:
+      team-id: ${JABIZ_APNS_TEAM_ID}
+      key-id: ${JABIZ_APNS_KEY_ID}
+      private-key: ${JABIZ_APNS_PRIVATE_KEY}
+      topic: ${QB_APNS_TOPIC:com.quizbuks.app}
+      environment: ${JABIZ_APNS_ENVIRONMENT:production}
