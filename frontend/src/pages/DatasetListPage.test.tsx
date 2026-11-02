@@ -396,6 +396,21 @@ describe('DatasetListPage', () => {
     await waitFor(() => expect(queries().length).toBe(before + 1))
   })
 
+  it('shows the list as cards on request: the first column as the title, no key button, the actions at the foot (17zc)', async () => {
+    await page()
+    const toggle = screen.getByTestId('data-table-view')
+    await userEvent.click(within(toggle).getByRole('radio', { name: 'Cards' }))
+    const cards = screen.getByRole('list', { name: 'Carrier' }).querySelectorAll<HTMLElement>('[data-slot="data-table-card"]')
+    expect(cards.length).toBeGreaterThan(0)
+    const first = cards[0]
+    expect(first.querySelector('[data-slot="data-table-card-title"]')).not.toBeNull()
+    expect(within(first).queryByTestId('row-copy-id')).toBeNull()
+    expect(within(first).getByTestId('row-actions')).toBeInTheDocument()
+    // Remembered for this dataset.
+    expect(window.localStorage.getItem(`jabiz.data-table.view.${DATASET}`)).toBe('cards')
+    window.localStorage.clear()
+  })
+
   it('says when the dataset does not exist', async () => {
     state.dataset = undefined
     render(

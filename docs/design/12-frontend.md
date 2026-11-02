@@ -176,6 +176,10 @@ frontend/                   pnpm 工作区（pnpm-workspace.yaml：packages/*）
   每列先升序、再降序、再取消）与 `FilterBar`（白名单字段，按语义类型给文本、选项、数值 / 时间 / 日期区间；不含敏感字段，遮蔽字段只给持有权限者），
   新的查询或排序回到第 1 页；请求由 TanStack Query 发出，翻页时保留上一页；操作列固定在右侧。列与筛选由 `meta/dataColumns.tsx` 生成，单元格（`meta/cells.ts`
   的 `renderCell`：引用显示名、多语言回退、文件缩略图、遮蔽值"显示"）只有这一份。
+  **卡片模式**（17zc）：`DataTable` 的列以 `meta.card` 标注在卡片上的位置（`title`、`subtitle`、`badge`、`actions`（缺省取 `pinned: 'right'` 的列）、`hidden`），其余列按"标签：值"排成 `DescriptionList`；
+  有标注的表格给用户"表格 / 卡片"的切换（`SegmentedControl`），缺省窄于 `md` 为卡片、否则表格，选择按 `storageKey` 记在 `localStorage`（`jabiz.data-table.view.<键>`），也可受控（`view` / `onViewChange`）；
+  卡片模式的排序是一个下拉（可排序的列 × 升 / 降，同一个 `sorting`），列头里的筛选控件只在表格里有，筛选照旧放 `FilterBar`；展开行、分页、加载、空与 `stale` 两种方式相同；`rowProps` 的属性同样加到卡片（`<li data-slot="data-table-card">`）上。
+  `DatasetListPage` 给标注：显示字段（没有即第一列）为标题，编号列隐藏，操作列在卡片底部，`storageKey` 为数据视图编号。没有标注的表格照旧只有表格。
   报表（`ReportPage`）：参数由 `SchemaForm` 生成，模板接受请求时点时两个 `DateTimePicker` 放在表单的 `children` 中；结果与列表页同样是 `DataTable`（每页缺省 50）
   加 `FilterBar`，列与筛选同样由 `dataColumns` / `filterFields` 生成、请求同样由 `buildFilters` / `buildSorts` 按模板的白名单组成（金额右对齐、负数加括号）；
   导出是 `DropdownMenu`，签发先经 `ConfirmDialog`。导入向导（`ImportPage`）：`Steps` 标出当前步骤；上传是 `FileUpload` 的拖放区；版式用 `Combobox` / `DecimalInput` / `Switch`；
@@ -287,6 +291,7 @@ jabizApp {
 |---|---|
 | 自动检查 | `e2e/a11y.spec.ts`：`@axe-core/playwright` 以 `wcag2a`、`wcag2aa`、`wcag21a`、`wcag21aa`、`wcag22aa` 规则检查登录页（含必填提示与身份提供方的拒绝）、数据目录、列表（含删除确认与时间点的日历）、新建表单（含字典的选项、生效时间的日历）、引用的选择（展开的选项）、历史（含日历、操作详情、撤销对话框）、流程目录、流程表单（含必填的选择及其展开的选项）、待办、报表目录、报表（含导出菜单与签发确认）、报表存档、导入目录、导入向导（含映射步骤与展开的来源列选项）、导入记录（含详情 `Sheet`）、待办、审计、单据（含展开的发送记录与发送对话框）、访问审查（含签发确认与签核对话框）、封存（含校验详情的 `Sheet`）、保留、安全设置、会话；每页先等到其内容出现（不是加载或错误状态）再检查；任何违规即失败（列出规则与元素），不设排除项 |
 | 对比度 | `@jabiz/ui` 的 `theme.css` 的语义 token：文字 token 在其所用的背景上 ≥ 4.5:1，输入框边框与焦点环 ≥ 3:1，亮、暗两种外观都如此（主色 `#0958d9` / `#69a7ff`、错误色 `#cf1322` / `#ff7875`、成功色 `#237804` / `#95de64`、警告色 `#874d00` / `#ffc53d`）；`theme.test.ts` 逐对检查。暗色控件的背景是半透明的输入色（输入框、文本框、选择框、标签输入为 `dark:bg-input/20`，选择框悬停 `/30`）：占位文字（暗色 `--muted-foreground` `#a8a8b0`，16v-1 由 `#a1a1aa` 调亮）在它混合到 background、card、popover 之上的颜色上，静止与悬停都 ≥ 4.5:1，`theme.test.ts` 按组件源码中的透明度计算（原来的 `#a1a1aa` 与 `/30`、`/50` 不通过） |
+| 卡片列表（17zc） | `DataTable` 的卡片模式是以 `aria-label` 命名的 `<ul>`，每张卡一个 `<li>`；标签与值是 `<dl>`；展开按钮带名称与 `aria-expanded`；"表格 / 卡片"的切换是 `role="radiogroup"`（图标加文字，窄屏只读给屏幕阅读器）；排序下拉的每项说出列名与方向；`a11y.spec.ts` 以手机视口检查一个列表的卡片 |
 | 名称与属性 | 有展开行的表格（审计、单据）用 `DataTable` 的 `renderExpanded`：展开按钮带"展开行 / 收起行"的名称与 `aria-expanded`；选择用 `Combobox`（`role="combobox"`，以 `<Label htmlFor>` 或 `aria-label` 命名，`aria-required` / `aria-invalid` 在触发按钮上）。e2e 按角色、名称或 `data-*` 找元素（`e2e/support.ts` 的 `dialog`、`dataRows`、`option`、`confirm`），按钮名称写精确的文字 |
 | 扩展与应用 | 扩展的页面用 `@jabiz/ui`（经 `@jabiz/admin`），主题 token、外观与全局的 preflight 自动适用；扩展的测试经 `@jabiz/admin/testing` 用同一个 `expectAccessible`（16w-1，§9；不另做 Playwright 的版本）。检查的辅助函数由 `@jabiz/ui` 导出（16v-1）：组件与页面测试用 `@jabiz/ui/testing` 的 `expectAccessible(root?)`（Vitest，亮暗两种外观，jsdom 不算样式所以不查颜色对比度），e2e 用 `@jabiz/ui/testing/playwright` 的 `expectAccessible(page, 名称, { expect })`（含颜色对比度，等动画结束后检查；`expect` 是调用方自己的，辅助函数不加载 `@playwright/test`）、`accessibilityViolations(page)`、`animationsSettled(page)` 与 `setAppearance(page, 外观)`；规则集（`WCAG_TAGS`）与上表相同，平台自己的测试也用它们；`@jabiz/client/vite` 的预设在 Vitest 中让 `vitest`、`vitest-axe` 都是 SPA 自己的副本 |
 

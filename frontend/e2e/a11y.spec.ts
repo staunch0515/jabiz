@@ -39,6 +39,14 @@ async function checkPagesAfterSignIn(page: Page, request: APIRequestContext, app
   await expect(dataRows(page).first()).toBeVisible()
   await pageRendered(page)
   await expectAccessible(page, at('dataset list'), { expect })
+  // 17zc: on a phone the same list is cards (the view follows the width unless the user chose one).
+  const desktop = page.viewportSize()
+  await page.setViewportSize({ width: 390, height: 844 })
+  await expect(page.locator('[data-slot="data-table"]')).toHaveAttribute('data-view', 'cards')
+  await expect(page.locator('[data-slot="data-table-card"]').first()).toBeVisible()
+  await expectAccessible(page, at('dataset list as cards'), { expect })
+  if (desktop) await page.setViewportSize(desktop)
+  await expect(page.locator('[data-slot="data-table"]')).toHaveAttribute('data-view', 'table')
 
   // The pop-ups of the list: the delete confirmation, the calendar of the point in time.
   const actions = await rowMenu(dataRows(page).first())
