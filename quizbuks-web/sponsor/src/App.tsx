@@ -19,7 +19,7 @@ import {
   type ShellMenuGroup,
 } from '@jabiz/ui'
 import { QueryClientProvider, useQuery } from '@tanstack/react-query'
-import { CircleHelp, FileQuestion, LayoutDashboard, Megaphone, MessagesSquare, ReceiptText, Store, UserRound,
+import { CircleHelp, FileQuestion, LayoutDashboard, Megaphone, MessagesSquare, Network, ReceiptText, Store, UserRound,
   Wallet,
   HandCoins,
   Gift,
@@ -46,6 +46,8 @@ import { StaffPage } from './publishing/StaffPage'
 import { MailServerPage } from './publishing/MailServerPage'
 import { publicationIdOf, PUBLICATIONS_PATH } from './publishing/paths'
 import { PreviewPage } from './preview/PreviewPage'
+import { TreePage } from './tree/TreePage'
+import { TREE_PATH } from './tree/api'
 import { previewOf } from './preview/paths'
 import { rememberSource } from './trial/claim'
 import TrialPage, { trialKeyOf } from './trial/TrialPage'
@@ -165,6 +167,7 @@ function SignedIn({ path }: { path: string }) {
   else if (path === QUIZZES_PATH) page = <QuizListPage />
   else if (quizId) page = <QuizEditorPage key={quizId} quizId={quizId} />
   else if (path === PUBLICATIONS_PATH) page = <PublicationListPage />
+  else if (path === TREE_PATH) page = <TreePage key={search} />
   else if (path === CASH_REWARDS_PATH) page = <CashRewardsPage />
   else if (path === DIGITAL_PRIZES_PATH) page = <DigitalPrizesPage />
   else if (path === REDEEM_PATH) page = <RedeemPage />
@@ -201,6 +204,8 @@ function SignedIn({ path }: { path: string }) {
     { key: 'content', label: t('nav.groups.content'), items: [
       { key: 'quizzes', label: t('nav.quizzes'), path: QUIZZES_PATH, icon: FileQuestion },
       { key: 'publications', label: t('publishing.nav'), path: PUBLICATIONS_PATH, icon: Megaphone },
+      // Q85: the publications as a tree, with the customers on it.
+      { key: 'tree', label: t('tree.nav'), path: TREE_PATH, icon: Network },
     ] },
     { key: 'rewards', label: t('nav.groups.rewards'), items: [
       { key: 'cash', label: t('publishing.cash.nav'), path: CASH_REWARDS_PATH, icon: HandCoins },

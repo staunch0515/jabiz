@@ -6,6 +6,8 @@ import { useTranslation } from 'react-i18next'
 import { SPONSOR } from '../messages'
 import { QB } from '../qb/messages'
 import { Link, navigate, useLocation } from '../qb/router'
+import { treePathOf } from '../tree/api'
+import '../tree/messages'
 import { conditionsQuery, prerequisitesQuery, readConditions, readPrerequisites, readPublication, type Publication,
   type PublicationDetail } from './api'
 import { NEW_PUBLICATION, publicationQuery, PUBLICATIONS_PATH, PUBLICATIONS_QUERY } from './paths'
@@ -138,6 +140,10 @@ function PublicationView({ detail, stale, onStale }: {
           <Link to={transactionsOf(publication.publicationId)} className="w-fit underline underline-offset-4"
             data-testid="publication-transactions">
             {t('transactions.publicationLink')}
+          </Link>
+          <Link to={treePathOf(publication.publicationId)} className="w-fit underline underline-offset-4"
+            data-testid="publication-tree">
+            {t('tree.onTree')}
           </Link>
         </span>
       )}

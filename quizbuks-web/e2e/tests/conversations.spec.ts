@@ -1,7 +1,7 @@
 import type { APIRequestContext } from '@playwright/test'
 import { completeQuiz, query } from './content'
 import { adminToken, expect, expectAccessible, prepareQuizbuks, run, signIn, test, unique } from './support'
-import { approvedSponsor, takerInJapan } from './wallet'
+import { fundedSponsor, takerInJapan } from './wallet'
 
 /*
  * Conversations between takers and sponsors (docs/quizbuks/plans/Q82-conversations.md): a taker who completed a quiz
@@ -13,7 +13,7 @@ test.beforeEach(async ({ request }) => {
   await prepareQuizbuks(request)
 })
 
-/** A live one-question quiz of the sponsor, without a reward, open to every region. */
+/** A live one-question quiz of the sponsor, a small reward on a pass (the server requires one), open to every region. */
 async function liveQuiz(request: APIRequestContext, sponsorToken: string, takerToken: string) {
   const quiz = await completeQuiz(request, sponsorToken, { questions: 1 })
   const versionId = (await query(request, sponsorToken, 'qb.sponsor.quiz-versions', { quizId: quiz.quizId }))[0]
@@ -22,7 +22,8 @@ async function liveQuiz(request: APIRequestContext, sponsorToken: string, takerT
   const name = unique('Ask us ')
   const saved = await run(request, sponsorToken, 'QB_PUBLICATION_SAVE', { versionId, name, regions: ['GLOBAL'],
     startAt: new Date(now - 60_000).toISOString(), endAt: new Date(now + 7 * 86_400_000).toISOString(),
-    timeLimitSec: 300, passScore: 1, tiers: [{ fromScore: 0, toScore: 1, reward: 0 }] })
+    timeLimitSec: 300, passScore: 1, budgetCap: 50, maxWinners: 5,
+    tiers: [{ fromScore: 0, toScore: 0, reward: 0 }, { fromScore: 1, toScore: 1, reward: 10 }] })
   const publicationId = saved.publicationId as string
   const submitted = await run(request, sponsorToken, 'QB_PUBLICATION_SUBMIT', { publicationId })
   if (submitted.approval === 'PENDING') {
@@ -44,7 +45,7 @@ test('a taker writes to the sponsor from a result, the sponsor answers, the take
   baseURL, request }) => {
   test.setTimeout(240_000)
   const company = unique('Talk Co ')
-  const sponsor = await approvedSponsor(request, 'Tal', company)
+  const sponsor = await fundedSponsor(request, 100, 'Tal', company)
   const taker = await takerInJapan(request, 'Kai')
   const quiz = await liveQuiz(request, sponsor.token, taker.token)
   const started = await run(request, taker.token, 'QB_ATTEMPT_START', { publicationId: quiz.publicationId })

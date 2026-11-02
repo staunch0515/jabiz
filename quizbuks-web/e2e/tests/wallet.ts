@@ -31,8 +31,9 @@ export async function sponsorBalance(request: APIRequestContext, token: string):
 }
 
 /** An approved sponsor with `amount` Kudos: a top-up paid at the Stripe stub's checkout through the API. */
-export async function fundedSponsor(request: APIRequestContext, amount: number) {
-  const sponsor = await approvedSponsor(request)
+export async function fundedSponsor(request: APIRequestContext, amount: number, name = 'Sora',
+  company = unique('Wallet Co ')) {
+  const sponsor = await approvedSponsor(request, name, company)
   const topUp = await run(request, sponsor.token, 'QB_TOPUP_START', { amount })
   let checkoutUrl: string | undefined
   await expect.poll(async () => {

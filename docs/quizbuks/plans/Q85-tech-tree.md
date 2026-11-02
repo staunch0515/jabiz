@@ -20,7 +20,7 @@
 - **答题者看商户**：公开的商户主页（`/s/<handle>`，`qb.public.sponsor-page-publications`，公开模板不知道读者）按层分组列出进行中的发布；发布页按本人给出 `prerequisites[].met`；历史页列自己的会话。
 - **画图**：两个 SPA 只有 Recharts 的统计图与内联 SVG 插画（`qb/Illustrations.tsx`）；没有图布局库，扩展与 SPA 不自带依赖（CLAUDE.md 第 4 节"前端"）。
 
-## 2. 决定（草案）
+## 2. 决定（需求方 2026-11-02 确认）
 
 | # | 决定 |
 |---|---|
@@ -102,3 +102,14 @@
 5. D-Q85-6 / D-Q85-7：答题者的树放在商户主页（登录后缺省）；入口在结果页与历史页；**不做**跨商户的个人能力树（以后）。
 6. D-Q85-9：手写 SVG，不引入布局库；节点超过 60 个按层折叠。
 7. 编号 Q85，一个 PR，约 6 天，没有迁移。
+
+## 10. 实施记录（2026-11-02，分支 `1.3/quizbuks-85-tech-tree`）
+
+按 §2 实现（需求方 2026-11-02 确认全部决定）。与计划的出入：
+
+1. **后端**：包 `tree` 只有 `TreeStates`（六态的唯一定义，复用 `PrerequisiteCheck.unmet`）；四个模板照 §3.1，参数都带 `at`（客户端的现在，同 `qb.app.publication`）；`qb.sponsor.tree` 不带 `includeEnded` / `includeIsolated` 参数，而是返回 `live` 与 `isolated` 两列由页面过滤（切换不必重读）；模板不能写 `cacheSeconds`（只许公开模板），每次打开读一次。`qb.sponsor.tree-people` 的 `CLOSED` 不是名单（没人能做什么）。`TreeIT` 三个用例：人数与名单（含 `userKey` 与交易页一致、另一商户看不到）、答题者的树（已发布的主页、未登录 401）、模板与 `TreeStates` 对全部答题者一致。
+2. **共用组件**：`qb/tree.ts`（层、位置、边、折叠阈值 60、进度）与 `qb/TechTree.tsx`（边画在 SVG 里，节点是 `foreignObject` 中的普通链接 / 按钮，键盘与读屏得到的是按层排列的普通控件，因此没有另做"列表形态"；颜色只用 token；缩放五档、容器滚动即拖动；宽屏按层从左到右、手机从上到下；`share/levels.ts` 改为调用它）。
+3. **App**：树在商户主页登录后缺省显示、列表一键切换；结果页"看看下一步"（商户的答卷有先后时）链到 `/s/<handle>?node=<发布>`。**历史页没有加"在 X 的树上：已点亮 n"**（D-Q85-7 的后半）：历史行没有商户的 handle，加它要改 `qb.app.history`，入口已有结果页与商户主页两处，留待需要时再加。
+4. **商户后台**：页 `/tree`（菜单"内容"组第三项）：开关"隐藏已结束 / 隐藏不通向任何答卷的"、按键点亮、右栏（手机上在下方）的节点面板按状态分段列人（每页 50，"更多"）；名单链到交易页按此人筛选（交易页的地址新认 `user=<userKey>`）与消息中心（有对话时）；发布页加"在树上查看"。`PublicationsPage` 的列表行没有加链接（发布页有）。
+5. **自查**：平台的查询接口一页至多 100 行（数据视图的 `maxQueryBatchSize`），树的三个读取（商户的树、一个人的树、答题者的树）改为按页读到短页为止（`qb/tree.ts` 的 `readAllRows`，至多 20 页），否则超过 100 份发布的树会被悄悄截断。
+6. **测试**：`TreeStatesTest`、`TreeIT`；`qb/tree.test.ts`；App `share/sponsorTree.test.tsx`（树、进度、标记、折叠、访客只有列表）与 `Play.test.tsx` 的结果页入口；商户后台 `tree/tree.test.tsx`（人数、名单、按人点亮、空状态）与 `transactions/api.test.ts`；e2e `tech-tree.spec.ts`（本机未运行：需要打包的 jar，由 CI 的 `e2e` 作业运行）。`AttemptStatementBudgetIT` 未改。

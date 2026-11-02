@@ -194,10 +194,16 @@ export const TRANSACTIONS_PATH = '/transactions'
 export const transactionsOf = (publicationId: string) =>
   `${TRANSACTIONS_PATH}?publication=${encodeURIComponent(publicationId)}`
 
-/** The filters an address asks for: only the publication can be given (from its page), as its key. */
+/**
+ * The filters an address asks for: the publication (from its page), as its key, and since Q85 a person (from the
+ * tree), as the rows' userKey.
+ */
 export function filtersOf(search: string): TransactionFilters {
-  const publicationId = new URLSearchParams(search).get('publication')?.trim() ?? ''
-  return { ...NO_FILTERS, publicationId: UUID.test(publicationId) ? publicationId.toLowerCase() : null }
+  const params = new URLSearchParams(search)
+  const publicationId = params.get('publication')?.trim() ?? ''
+  const userKey = params.get('user')?.trim() ?? ''
+  return { ...NO_FILTERS, publicationId: UUID.test(publicationId) ? publicationId.toLowerCase() : null,
+    userKey: /^[0-9a-f]{32}$/i.test(userKey) ? userKey.toLowerCase() : null }
 }
 
 /** A publication's key: a UUID; anything else in the address is ignored. */

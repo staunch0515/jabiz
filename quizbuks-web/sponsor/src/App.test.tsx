@@ -328,7 +328,7 @@ describe('a signed-in sponsor', () => {
     expect(within(nav).getAllByRole('group').map((g) => g.getAttribute('aria-labelledby') && within(g).getAllByRole('link')
       .map((link) => link.textContent))).toEqual([
       // Q79: the sponsor's own pages (profile, products, staff, mail server) are the hub's sections, one entry here.
-      ['Dashboard'], ['Quizzes', 'Publications'], ['Cash rewards', 'Digital prizes', 'Prizes'],
+      ['Dashboard'], ['Quizzes', 'Publications', 'Tree'], ['Cash rewards', 'Digital prizes', 'Prizes'],
       ['Wallet', 'Transactions'], ['Sponsor profile', 'Page statistics', 'Messages', 'Account', 'Help']])
     expect(within(nav).getByRole('group', { name: 'Rewards' })).toBeInTheDocument()
     expect(within(nav).getAllByTestId('menu-separator')).toHaveLength(4)
