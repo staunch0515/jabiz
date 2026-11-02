@@ -207,7 +207,7 @@ public final class QuizTransferProcesses {
         }
         return new QuizSnapshot.Material(no, material.kind(), material.title(), material.description(),
             material.body(), material.url(), key(ids, material.pdf()), key(ids, material.audio()), images,
-            material.watchToAnswer());
+            material.watchToAnswer()).withDuration(material.durationSec());
     }
 
     private static UUID key(Map<String, UUID> ids, String key) {

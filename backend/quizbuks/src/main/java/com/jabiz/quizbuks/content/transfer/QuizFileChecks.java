@@ -288,6 +288,15 @@ public final class QuizFileChecks {
             problems.add(new Violation(at + ".url", ContentCodes.MATERIAL_VIDEO_NOT_EMBEDDABLE,
                 "Only a YouTube or Vimeo video can be watched in the App"));
         }
+        // Q75: the duration, as editing has it: a video's, within its range.
+        if (material.durationSec() != null && kind != MaterialKind.VIDEO_LINK) {
+            problems.add(new Violation(at + ".durationSec", ContentCodes.MATERIAL_FIELD_NOT_ALLOWED, "A "
+                + kind + " material has no durationSec"));
+        } else if (material.durationSec() != null && (material.durationSec() < ContentLimits.MIN_VIDEO_SECONDS
+            || material.durationSec() > ContentLimits.MAX_VIDEO_SECONDS)) {
+            problems.add(new Violation(at + ".durationSec", ContentCodes.MATERIAL_DURATION_RANGE, "A video lasts "
+                + ContentLimits.MIN_VIDEO_SECONDS + " to " + ContentLimits.MAX_VIDEO_SECONDS + " seconds"));
+        }
         count(problems, at + ".images", material.images().size(), ContentLimits.MAX_IMAGES);
         for (int i = 0; i < material.images().size(); i++) {
             QuizFile.Image image = material.images().get(i);

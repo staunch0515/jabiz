@@ -29,6 +29,8 @@ results:
   quizTitle:      { from: QbPublicationCard.quizTitle }
   cover:          { from: QbPublicationCard.cover }
   video:          { from: QbPublicationCard.video }
+  watchRequired:  { from: QbPublicationCard.watchRequired }
+  videoDurationSec: { from: QbPublicationCard.videoDurationSec }
   kind:           { from: QbPublicationCard.kind }
   language:       { from: QbPublicationCard.language }
   languages:      { from: QbPublicationCard.languages }
@@ -80,6 +82,9 @@ SELECT
              c.{{QbPublicationCard.quizTitle}}) AS quizTitle,
     c.{{QbPublicationCard.cover}}          AS cover,
     c.{{QbPublicationCard.video}}          AS video,
+    -- Q75: whether that video must be watched before starting, and how long it is.
+    c.{{QbPublicationCard.watchRequired}}  AS watchRequired,
+    c.{{QbPublicationCard.videoDurationSec}} AS videoDurationSec,
     c.{{QbPublicationCard.kind}}           AS kind,
     c.{{QbPublicationCard.language}}       AS language,
     c.{{QbPublicationCard.languages}}      AS languages,

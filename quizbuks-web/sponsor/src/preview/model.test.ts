@@ -39,7 +39,7 @@ describe('the preview (Q34b)', () => {
     expect(preview.view).toMatchObject({ name: 'Coffee basics', intro: 'About beans', cover: 'f1', questionCount: 2,
       fullScore: 5, timeLimitSec: 120, rewardMethod: 'PLATFORM', canStart: false })
     expect(preview.view.materials).toEqual([{ no: 1, kind: 'LINK', title: 'Site', description: null, body: null,
-      url: 'https://example.com', pdf: null, audio: null, images: [], watchToAnswer: false }])
+      url: 'https://example.com', pdf: null, audio: null, images: [], watchToAnswer: false, durationSec: null }])
     expect(preview.questions[0].options).toEqual([{ no: 1, text: 'Yes', image: null }, { no: 2, text: 'No', image: null }])
     expect(JSON.stringify(preview.questions)).not.toContain('correct')
     // Single or multiple choice, as the taker will be told (D-Q5-2); none while no option is correct.

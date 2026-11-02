@@ -338,7 +338,8 @@ describe('the quiz editor', () => {
     await userEvent.click(within(dialog).getByTestId('material-save'))
     await waitFor(() => expect(processCalls('QB_MATERIAL_SAVE')).toHaveLength(1))
     expect(processCalls('QB_MATERIAL_SAVE')[0]).toEqual({ quizId: 'q1', materialId: null, kind: 'VIDEO_LINK',
-      title: 'Watch', description: null, url: 'https://example.com/v', baseRevision: 7, watchToAnswer: false })
+      title: 'Watch', description: null, url: 'https://example.com/v', baseRevision: 7, watchToAnswer: false,
+      durationSec: null })
   })
 
   it('marks a video as the one watching which is enough to answer (Q19)', async () => {
@@ -357,6 +358,41 @@ describe('the quiz editor', () => {
     await waitFor(() => expect(processCalls('QB_MATERIAL_SAVE')).toHaveLength(1))
     expect(processCalls('QB_MATERIAL_SAVE')[0]).toMatchObject({ kind: 'VIDEO_LINK',
       url: 'https://youtu.be/dQw4w9WgXcQ', watchToAnswer: true })
+  })
+
+  it('takes the duration of the video to watch, read from its player or typed (Q75)', async () => {
+    const { processCalls } = server({ processes: { QB_MATERIAL_SAVE: [edit(8, { itemId: 'm2' })] } })
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('tab-materials'))
+    await userEvent.click(await screen.findByTestId('material-add'))
+    const dialog = await screen.findByTestId('material-dialog')
+    await userEvent.click(within(dialog).getByRole('radio', { name: 'VIDEO_LINK' }))
+    await userEvent.type(within(dialog).getByTestId('material-title'), 'Watch')
+    await userEvent.type(within(dialog).getByTestId('material-url'), 'https://youtu.be/dQw4w9WgXcQ')
+    // The duration is a video's; the preview that reads it comes with the tick.
+    expect(within(dialog).getByTestId('material-duration')).toBeInTheDocument()
+    expect(within(dialog).queryByTestId('material-video-probe')).not.toBeInTheDocument()
+    // Before the preview's frame: axe cannot look into a frame in jsdom.
+    await expectAccessible()
+    await userEvent.click(within(dialog).getByRole('checkbox', { name: 'Watching this video is enough to answer' }))
+    const probe = within(dialog).getByTestId('material-video-probe') as HTMLIFrameElement
+    expect(probe.getAttribute('src')).toMatch(/^https:\/\/www\.youtube-nocookie\.com\/embed\/dQw4w9WgXcQ\?enablejsapi=1&origin=/)
+    // The player says how long the video is: filled in, until the sponsor types.
+    window.dispatchEvent(new MessageEvent('message', { source: probe.contentWindow,
+      data: JSON.stringify({ event: 'infoDelivery', info: { duration: 150.4 } }) }))
+    await waitFor(() => expect(within(dialog).getByTestId('material-duration')).toHaveValue('2:30'))
+    expect(within(dialog).getByText(/Read from the player/)).toBeInTheDocument()
+    // A typed duration that cannot be read is pointed out and not sent as nothing.
+    await userEvent.clear(within(dialog).getByTestId('material-duration'))
+    await userEvent.type(within(dialog).getByTestId('material-duration'), '2:75')
+    await userEvent.click(within(dialog).getByTestId('material-save'))
+    expect(await within(dialog).findByTestId('material-duration-error')).toHaveTextContent('minutes:seconds')
+    expect(processCalls('QB_MATERIAL_SAVE')).toHaveLength(0)
+    await userEvent.clear(within(dialog).getByTestId('material-duration'))
+    await userEvent.type(within(dialog).getByTestId('material-duration'), '3:05')
+    await userEvent.click(within(dialog).getByTestId('material-save'))
+    await waitFor(() => expect(processCalls('QB_MATERIAL_SAVE')).toHaveLength(1))
+    expect(processCalls('QB_MATERIAL_SAVE')[0]).toMatchObject({ kind: 'VIDEO_LINK', watchToAnswer: true, durationSec: 185 })
   })
 
   it('lists every reason a version was refused', async () => {

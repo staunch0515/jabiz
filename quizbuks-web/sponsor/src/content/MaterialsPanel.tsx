@@ -22,7 +22,7 @@ import {
 } from '@jabiz/ui'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { ArrowDown, ArrowUp, ExternalLink, Pencil, Plus, Trash2, X } from 'lucide-react'
-import { useId, useRef, useState, type FormEvent } from 'react'
+import { useCallback, useId, useRef, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { SPONSOR } from '../messages'
 import type { ContentLanguage } from '../qb/api'
@@ -53,6 +53,9 @@ import {
   useEditing,
 } from './editing'
 import { ContentImage } from './ContentImage'
+import { formatDuration, parseDuration } from './duration'
+import { VideoDurationProbe } from './VideoDurationProbe'
+import { videoPlayer } from '../qb/video'
 import { DOCUMENT_FIELD, LIMITS } from './limits'
 import { useMoveFocus } from './moving'
 
@@ -84,7 +87,7 @@ interface ImageDraft {
   caption: string
 }
 
-const FIELDS = ['kind', 'title', 'description', 'body', 'url', 'pdf', 'audio', 'images', 'watchToAnswer'] as const
+const FIELDS = ['kind', 'title', 'description', 'body', 'url', 'pdf', 'audio', 'images', 'watchToAnswer', 'durationSec'] as const
 
 /**
  * One reference material (M-23) with its content, saved with `QB_MATERIAL_SAVE`: a Markdown article, a link, a
@@ -113,6 +116,15 @@ export function MaterialDialog({ material, number, open, onOpenChange, variant }
   const [body, setBody] = useState(material?.body ?? '')
   const [url, setUrl] = useState(material?.url ?? '')
   const [watch, setWatch] = useState(material?.watchToAnswer ?? false)
+  // Q75: the video's duration as typed (m:ss or seconds); read from the player's preview until the sponsor types.
+  const [duration, setDuration] = useState(material?.durationSec != null ? formatDuration(material.durationSec) : '')
+  const [durationTyped, setDurationTyped] = useState(material?.durationSec != null)
+  const [durationFromPlayer, setDurationFromPlayer] = useState(false)
+  const [durationProblem, setDurationProblem] = useState<string | null>(null)
+  const onDuration = useCallback((seconds: number) => {
+    setDuration((current) => (durationTyped && current !== '' ? current : formatDuration(seconds)))
+    setDurationFromPlayer(true)
+  }, [durationTyped])
   const [pdf, setPdf] = useState<string | null>(material?.pdf ?? null)
   const [audio, setAudio] = useState<string | null>(material?.audio ?? null)
   const [images, setImages] = useState<ImageDraft[]>(() => (material?.images ?? []).map((i) => ({
@@ -134,7 +146,7 @@ export function MaterialDialog({ material, number, open, onOpenChange, variant }
         return { ...base, body: textOrNull(body) }
       case 'url':
         return { ...base, url: url.trim() === '' ? null : url.trim(),
-          ...(kind === 'VIDEO_LINK' && !variant ? { watchToAnswer: watch } : {}) }
+          ...(kind === 'VIDEO_LINK' && !variant ? { watchToAnswer: watch, durationSec: parseDuration(duration) } : {}) }
       case 'pdf':
         return { ...base, pdf }
       case 'audio':
@@ -155,6 +167,12 @@ export function MaterialDialog({ material, number, open, onOpenChange, variant }
   })
   const submit = (event: FormEvent) => {
     event.preventDefault()
+    // Q75: a duration typed but unreadable is not sent as nothing: it is pointed out first.
+    if (kind === 'VIDEO_LINK' && !variant && duration.trim() !== '' && parseDuration(duration) == null) {
+      setDurationProblem(t('materials.durationInvalid'))
+      return
+    }
+    setDurationProblem(null)
     save.mutate()
   }
   const problem = (field: string) => fieldProblem(save.error, field)
@@ -244,6 +262,36 @@ export function MaterialDialog({ material, number, open, onOpenChange, variant }
                   <p id={`${id}-watch-hint`} className="text-muted-foreground text-sm">{t('materials.watchHint')}</p>
                   {problem('watchToAnswer') && (
                     <p id={`${id}-watch-error`} className="text-destructive text-sm">{problem('watchToAnswer')}</p>
+                  )}
+                </div>
+              )}
+              {kind === 'VIDEO_LINK' && !variant && (
+                // Q75 (D-Q75-5): the duration, read from the player's preview when the video is the one to watch.
+                <div className="flex flex-col gap-2" data-testid="material-duration-field">
+                  {watch && videoPlayer(url) && (
+                    <VideoDurationProbe player={videoPlayer(url)!} title={t('materials.durationPreview')}
+                      onDuration={onDuration} />
+                  )}
+                  <Label htmlFor={`${id}-duration`}>{t('materials.duration')}</Label>
+                  <Input id={`${id}-duration`} value={duration} inputMode="numeric" autoComplete="off" placeholder="2:30"
+                    className="max-w-32" maxLength={8}
+                    aria-invalid={durationProblem || problem('durationSec') ? true : undefined}
+                    aria-describedby={[`${id}-duration-hint`, durationProblem || problem('durationSec') ? `${id}-duration-error` : '']
+                      .join(' ').trim()}
+                    data-testid="material-duration"
+                    onChange={(event) => {
+                      setDuration(event.target.value)
+                      setDurationTyped(true)
+                      setDurationProblem(null)
+                    }} />
+                  <p id={`${id}-duration-hint`} className="text-muted-foreground text-sm">
+                    {t('materials.durationHint')}
+                    {durationFromPlayer && !durationTyped && <> {t('materials.durationFromPlayer')}</>}
+                  </p>
+                  {(durationProblem || problem('durationSec')) && (
+                    <p id={`${id}-duration-error`} className="text-destructive text-sm" data-testid="material-duration-error">
+                      {durationProblem ?? problem('durationSec')}
+                    </p>
                   )}
                 </div>
               )}
@@ -428,6 +476,11 @@ export function MaterialsPanel({ materials }: { materials: Material[] }) {
                       <Badge variant="outline">{kindLabel(material.kind)}</Badge>
                       {material.watchToAnswer && (
                         <Badge variant="secondary" data-testid="material-watch-badge">{t('materials.watchBadge')}</Badge>
+                      )}
+                      {material.kind === 'VIDEO_LINK' && material.durationSec != null && (
+                        <Badge variant="outline" data-testid="material-duration-badge">
+                          {t('materials.durationBadge', { duration: formatDuration(material.durationSec) })}
+                        </Badge>
                       )}
                     </div>
                     {material.description && <p className="text-muted-foreground text-sm">{material.description}</p>}

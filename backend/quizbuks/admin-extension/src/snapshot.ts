@@ -32,6 +32,9 @@ export interface SnapshotMaterial {
   pdf: string | null
   audio: string | null
   images: { no: number; image: string; caption: string | null }[]
+  /** Q19, Q75: the video to watch, and its duration in seconds when the sponsor gave it. */
+  watchToAnswer: boolean
+  durationSec: number | null
 }
 
 /**
@@ -81,6 +84,8 @@ const materialsOf = (value: unknown): SnapshotMaterial[] => list(value).map((m) 
   images: list(m.images)
     .filter((i) => typeof i.image === 'string')
     .map((i) => ({ no: whole(i.no), image: String(i.image), caption: text(i.caption) })),
+  watchToAnswer: m.watchToAnswer === true,
+  durationSec: typeof m.durationSec === 'number' ? m.durationSec : null,
 }))
 
 const strings = (value: unknown): Record<string, string> =>

@@ -114,6 +114,8 @@ export interface Material {
   images: MaterialImage[]
   /** Q19: a YouTube or Vimeo video watching which is enough to answer; the App shows it on the card. */
   watchToAnswer: boolean
+  /** Q75: how long the video is, in seconds (a video of the base language; the video to watch needs it for a version). */
+  durationSec: number | null
   /** Q73a: a material of another language stands for the base material `variantOf` in `language`. */
   variantOf: string | null
   language: ContentLanguage | null
@@ -198,6 +200,8 @@ export interface MaterialInput {
   baseRevision?: number | null
   /** VIDEO_LINK only (Q19). */
   watchToAnswer?: boolean
+  /** VIDEO_LINK of the base language only (Q75): the video's duration in seconds. */
+  durationSec?: number | null
   /** Q73a: a material of another language, made with both and changed with the same. */
   variantOf?: string | null
   language?: ContentLanguage | null
@@ -274,6 +278,8 @@ type SnapshotMaterial = {
   images: { no: number; image: string; caption: string | null }[]
   /** Q19: present (true) only on the video watching which is enough to answer. */
   watchToAnswer?: boolean
+  /** Q75: present on the video to watch when the sponsor gave its duration (seconds). */
+  durationSec?: number
 }
 
 /**
@@ -428,6 +434,7 @@ export function assembleDraft(quiz: Row, questions: Row[], options: Row[], mater
       audio: str(m.audio),
       images: imagesOf.get(String(m.materialId)) ?? [],
       watchToAnswer: m.watchToAnswer === true,
+      durationSec: typeof m.durationSec === 'number' ? m.durationSec : m.durationSec == null ? null : Number(m.durationSec),
       variantOf: str(m.variantOf),
       language: m.language == null ? null : contentLanguageOf(String(m.language)),
     }

@@ -168,6 +168,9 @@
       "rewardStatus" : "PAID",
       "rewardPaidAt" : "2026-10-01T01:06:00Z",
       "ledgerTransactionId" : "#uuid:15",
+      "watchedSec" : null,
+      "videoEnded" : null,
+      "playbackStatus" : null,
       "version" : 2
     }, {
       "attemptId" : "#uuid:16",
@@ -193,6 +196,9 @@
       "rewardStatus" : "NONE",
       "rewardPaidAt" : null,
       "ledgerTransactionId" : null,
+      "watchedSec" : null,
+      "videoEnded" : null,
+      "playbackStatus" : null,
       "version" : 3
     } ],
     "QbPublicationCard" : [ {
@@ -208,6 +214,8 @@
       "quizTitle" : "Tea habits",
       "cover" : null,
       "video" : null,
+      "watchRequired" : false,
+      "videoDurationSec" : null,
       "versionId" : "#uuid:10",
       "maxReward" : "30",
       "fullScore" : "2",

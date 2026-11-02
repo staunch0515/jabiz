@@ -161,7 +161,9 @@ public class PublishingConfig {
             // Q60b: the version, for the template of the products its quiz shows (no template returns it).
             .publicRead(p -> p.fields("publicationId", "publisherId", "versionId", "name", "quizTitle", "kind",
                 "startAt", "endAt", "timeLimitSec", "questionCount", "fullScore", "passScore", "maxReward",
-                "rewardMethod", "redeemDescription", "digitalDelivery", "digitalDescription"))
+                "rewardMethod", "redeemDescription", "digitalDelivery", "digitalDescription",
+                // Q75: the share page says the video must be watched first, and how long it is.
+                "watchRequired", "videoDurationSec"))
             // Read anonymously through the public template only, which projects the whitelist. The dataset API, which
             // does not, is closed to everybody (no role holds the permission): an operator's session would read every
             // live card with its budget and operator (Q59c-2); headquarters reads the cards' own dataset.

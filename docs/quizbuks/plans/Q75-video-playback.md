@@ -1,7 +1,7 @@
-# Q75 视频播放的校验："看完这个视频即可答题"真正要求看完（计划，2026-11-01，待需求方确认）
+# Q75 视频播放的校验："看完这个视频即可答题"真正要求看完（计划，2026-11-01；需求方 2026-11-01 确认并完成）
 
 `04-product-direction.md` §5 的候选 A；需求方 2026-11-01 定下顺序 A → D → E，先出 A 的计划。编号 Q75 是建议（下一个空号），确认时可改。
-**这只是计划**：确认 §2 的决定后开发，一个 PR，工作分支 `1.3/quizbuks-75-video-playback`。
+需求方 2026-11-01 确认了 §9 的全部决定（缺省项），并定下**老数据不用管**：不回填已上线卡片的 `watch_required`（它们不要求看完），已有版本的"看完即可"视频没有时长也不受影响。一个 PR，工作分支 `1.3/quizbuks-75-video-playback`。实施记录见 §10。
 
 ## 0. 为什么
 
@@ -40,7 +40,7 @@
 ### 3.1 迁移 V59 `quizbuks_video_playback`（Q73c 用了 V58）
 
 ```sql
-ALTER TABLE qb_material ADD COLUMN duration_sec numeric(5, 0) CHECK (duration_sec IS NULL OR duration_sec BETWEEN 1 AND 7200);
+ALTER TABLE qb_material_version ADD COLUMN duration_sec numeric(5, 0) CHECK (duration_sec IS NULL OR duration_sec BETWEEN 1 AND 7200);
 ALTER TABLE qb_publication_card ADD COLUMN watch_required boolean NOT NULL DEFAULT false;
 ALTER TABLE qb_publication_card ADD COLUMN video_duration_sec numeric(5, 0);
 ALTER TABLE qb_attempt ADD COLUMN watched_sec numeric(6, 0);
@@ -152,3 +152,20 @@ ALTER TABLE qb_attempt ADD COLUMN playback_status varchar(10) CHECK (playback_st
 3. D-Q75-5：时长由商户填（预览预填），保存版本时必填。
 4. D-Q75-6：取不到事件时放行并标记（缺省）还是拒绝。
 5. 编号 Q75。
+
+## 10. 实施记录（2026-11-01，PR #411）
+
+- **决定**：§9 的四项按缺省确认；老数据不回填（§3.1 的回填语句与 §5 的回填用例随之取消：V58 只加列，`qb_publication_card.watch_required` 缺省 `false`）。
+- **后端**：迁移 V59（Q73e 的站点语言用了 V58；`qb_material_version.duration_sec`，`qb_publication_card.watch_required` / `video_duration_sec`，`qb_attempt.watched_sec` / `video_ended` / `playback_status`）；
+  `MaterialInput.durationSec`（只给基准语言的视频，1–7 200，`QB_MATERIAL_DURATION_RANGE`）、`QuizSnapshot.Material.durationSec`（快照只在"看完即可"的视频上写，其余逐字不变）、
+  `QuizCompleteness` 的 `QB_MATERIAL_DURATION_REQUIRED`；复制、导入导出（`quizbuks.quiz` 可选字段 `durationSec`）与语言版本随之；
+  `PublicationEditing.cardVideo` 改为返回 `CardVideo(player, watchRequired, durationSec)`，上线与版本切换都写三列（版本切换此前只取"看完即可"的视频，现在与上线同一规则：没有时也取第一个能播的）；
+  `play.WatchRules`（规则、`Playback` 输入、会话的三列）、`AttemptProcesses` 的步骤 "Refuse an unwatched video"（锁外、只对新开始、只对 App 的输入；渠道的开始不受影响）；
+  模板 `qb.app.feed` / `qb.app.publication` / `qb.public.publication` 多 `watchRequired`、`videoDurationSec`，`qb.admin.attempts` 多三列；`qb.app.publication` 的语言版本资料带上基准的 `durationSec`。
+- **与计划的差异**：（1）违规的 `params` 不在接口的应答中（平台只返回 `field`、`ruleCode`、`message`），还差的秒数在文案 `QB_ATTEMPT_WATCH_REQUIRED` 中给出；（2）商家后台要以播放器预览读时长，`/sponsor` 的内容安全策略因此同 App 多 `frame-src` 两个播放器（`QuizbuksAppIT` 随之）；（3）`qb_material` 是时态表（`qb_material_version`）。
+- **App**：`video/playback.ts`（纯函数的计数与规则、按发布的记录、`sessionStorage`，退出登录时随会话清除）；`video/stage.tsx` 监听两家播放器的时间、状态、结束与时长，只在开始页或开声音后计入（D-Q75-3），8 秒没有报告即 `UNKNOWN`；
+  开始页的按钮在要求看完时禁用并显示进度（`detail-watch`），开始带 `playback`；"减少动态效果"（没有舞台）时以 `UNKNOWN` 开始；首页卡片标"看完即可答题"。
+- **商家后台**：资料对话框的"视频时长（分:秒）"（`content/duration.ts` 解析 m:ss / h:mm:ss / 秒）与 `VideoDurationProbe`（勾选后内嵌预览，读到时长即预填，商户键入后不再覆盖；填错即先拦）；资料列表显示时长；导出带时长；预览的卡片带 `watchRequired` / `videoDurationSec`。
+- **后台扩展**：`snapshot.ts` 的资料带 `watchToAnswer` 与 `durationSec`（只是类型与读取）。
+- **测试**：`WatchRulesTest`、`QuizSnapshotsTest`、`QuizCompletenessTest`；`WatchVideoIT`（时长的规则、版本须有时长、卡片与公开模板的两列、开始的拒绝 / 放行 / 继续 / `UNKNOWN`、会话的三列、普通视频不要求）；`AttemptStatementBudgetIT` 不变；
+  App `video/playback.test.ts`、`Play.test.tsx`（进度与禁用、快进不计、首页静音播放不计、播完、`UNKNOWN`、普通发布不带报告）；商户后台 `content.test.tsx`、`duration.test.ts`、`preview/model.test.ts`；e2e `watch-video.spec.ts`（桩播放器按 YouTube 的协议回报）。

@@ -39,7 +39,7 @@
 
 ## 3. 后端（`backend/quizbuks`）
 
-### 3.1 迁移 V59 `quizbuks_prerequisites`
+### 3.1 迁移 V60 `quizbuks_prerequisites`（Q75 用了 V59）
 
 ```sql
 CREATE TABLE qb_publication_prerequisite (
