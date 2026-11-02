@@ -17,6 +17,7 @@ import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeParseException;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -56,9 +57,20 @@ public class RetentionPolicies {
         return policies;
     }
 
-    /** The policy of the entity; the first when several are declared (the startup check reports that). */
-    public Optional<RetentionPolicy> of(String entity) {
-        return policies.stream().filter(policy -> policy.entity().equals(entity)).findFirst();
+    /**
+     * The policy that covers an entry of the entity with these attributes (decision D70: a scoped policy covers only
+     * the entries of its values); the first when several do (the startup check reports overlaps). Empty: the entry
+     * has no retention. Attributes that do not carry a scoped policy's field cannot say which policy covers the
+     * entry: that policy is taken, so the entry is kept rather than let go (deny by default).
+     */
+    public Optional<RetentionPolicy> covering(String entity, Map<String, ?> attributes) {
+        Optional<RetentionPolicy> covering = policies.stream()
+            .filter(policy -> policy.entity().equals(entity) && policy.covers(attributes)).findFirst();
+        if (covering.isPresent()) {
+            return covering;
+        }
+        return policies.stream().filter(policy -> policy.entity().equals(entity) && policy.scoped()
+            && (attributes == null || !attributes.containsKey(policy.onlyField()))).findFirst();
     }
 
     public Month fiscalYearEnd() {

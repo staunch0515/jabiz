@@ -4,6 +4,8 @@ import java.time.LocalDate;
 import java.time.Month;
 import java.time.Period;
 import java.time.YearMonth;
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -15,38 +17,74 @@ import java.util.Objects;
  * RetentionPolicy.of("FinJournal").keep(Period.ofYears(7)).from("postingDate").afterFiscalYearEnd()
  * }</pre>
  *
+ * A policy may cover only the entries whose (immutable) field has one of some values (decision D70): an entity then
+ * has one policy per group of values, and an entry no policy covers has no retention.
+ *
+ * <pre>{@code
+ * RetentionPolicy.of("DocumentRun").only("layoutId", "receipt", "statement").keep(Period.ofYears(10))
+ *     .from("issuedTime").afterFiscalYearEnd()
+ * }</pre>
+ *
  * @param entity             the entity type
  * @param keep               how long; positive
  * @param from               the date or time field the period starts from
  * @param fromFiscalYearEnd  whether it starts at the end of the fiscal year the date falls in, not at the date
+ * @param onlyField          the field whose value says which entries the policy covers; null: every entry
+ * @param onlyValues         the values of {@code onlyField} it covers; empty when it covers every entry
  */
-public record RetentionPolicy(String entity, Period keep, String from, boolean fromFiscalYearEnd) {
+public record RetentionPolicy(String entity, Period keep, String from, boolean fromFiscalYearEnd, String onlyField,
+    List<String> onlyValues) {
 
     public RetentionPolicy {
         Objects.requireNonNull(entity, "entity must not be null");
         if (keep != null && (keep.isNegative() || keep.isZero())) {
             throw new IllegalArgumentException("The retention of " + entity + " must be a positive period");
         }
+        onlyValues = onlyValues == null ? List.of() : List.copyOf(onlyValues);
+        if (onlyField != null && onlyValues.isEmpty()) {
+            throw new IllegalArgumentException("The retention of " + entity + " covers no value of " + onlyField);
+        }
     }
 
     /** A policy to complete with {@link #keep} and {@link #from}. */
     public static RetentionPolicy of(String entity) {
-        return new RetentionPolicy(entity, null, null, false);
+        return new RetentionPolicy(entity, null, null, false, null, List.of());
     }
 
     public RetentionPolicy keep(Period period) {
         return new RetentionPolicy(entity, Objects.requireNonNull(period, "period must not be null"), from,
-            fromFiscalYearEnd);
+            fromFiscalYearEnd, onlyField, onlyValues);
     }
 
     public RetentionPolicy from(String field) {
         return new RetentionPolicy(entity, keep, Objects.requireNonNull(field, "field must not be null"),
-            fromFiscalYearEnd);
+            fromFiscalYearEnd, onlyField, onlyValues);
     }
 
     /** Counts from the end of the fiscal year the date falls in. */
     public RetentionPolicy afterFiscalYearEnd() {
-        return new RetentionPolicy(entity, keep, from, true);
+        return new RetentionPolicy(entity, keep, from, true, onlyField, onlyValues);
+    }
+
+    /** Covers only the entries whose {@code field} is one of {@code values} (compared as text). */
+    public RetentionPolicy only(String field, String... values) {
+        Objects.requireNonNull(field, "field must not be null");
+        return new RetentionPolicy(entity, keep, from, fromFiscalYearEnd, field,
+            List.of(Objects.requireNonNull(values, "values must not be null")));
+    }
+
+    /** Whether it covers only some entries ({@link #only}). */
+    public boolean scoped() {
+        return onlyField != null;
+    }
+
+    /** Whether it covers the entry with these attributes: always unless {@link #scoped()}; by the field's text. */
+    public boolean covers(Map<String, ?> attributes) {
+        if (!scoped()) {
+            return true;
+        }
+        Object value = attributes == null ? null : attributes.get(onlyField);
+        return value != null && onlyValues.contains(String.valueOf(value));
     }
 
     /** Whether both the period and the field are given. */
