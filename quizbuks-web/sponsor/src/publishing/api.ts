@@ -2,7 +2,7 @@ import { api, ApiError, runProcess, runQuery, toApiError, unwrap, type Filter, t
 import { CONTENT_LANGUAGES, readDictionary, type ContentLanguage, type DictionaryItem } from '../qb/api'
 import { minuteNow } from '../qb/legal'
 import { CRITERIA, type Condition } from '../qb/audience'
-import { AUDIENCE } from '../qb/ids'
+import { AUDIENCE, PREREQUISITE } from '../qb/ids'
 import { referralPolicy, type ReferralPolicy } from '../qb/play'
 import { PUBLISHING_CODE, PUBLISHING_DATASET, PUBLISHING_DICTIONARY, PUBLISHING_PROCESS, PUBLISHING_TEMPLATE } from './ids'
 
@@ -1444,6 +1444,32 @@ export function conditionsOf(rows: readonly Row[]): Condition[] {
 /** Replaces a draft's conditions with these (none: everybody in its regions). */
 export const saveConditions = (publicationId: string, baseRevision: number | null, criteria: Condition[]) =>
   runProcess<PublicationOutput>(AUDIENCE.conditionsSave, { publicationId, baseRevision, criteria })
+
+/** Q76: one of a draft's prerequisites: the sponsor's publication a taker first passes or answers. */
+export interface Prerequisite {
+  publicationId: string
+  requirement: 'PASSED' | 'ANSWERED'
+}
+
+/** The query of a publication's prerequisites, apart from the publication's (a save sets it from what it sent). */
+export const prerequisitesQuery = (publicationId: string | null) =>
+  ['qb', 'publication-prerequisites', publicationId] as const
+
+/** A draft's (or a frozen publication's) prerequisites, as stored. */
+export async function readPrerequisites(publicationId: string): Promise<Prerequisite[]> {
+  const page = await unwrap(api.POST('/api/datasets/{resourceId}/query', {
+    params: { path: { resourceId: PREREQUISITE.sponsorPrerequisites } },
+    body: { limit: PAGE, filters: [{ field: 'publicationId', op: 'eq', value: publicationId }] },
+  }))
+  return (page.items ?? []).map((item) => item.attributes ?? {}).map((row) => ({
+    publicationId: String((row as Row).requiredPublicationId),
+    requirement: (row as Row).requirement === 'ANSWERED' ? 'ANSWERED' : 'PASSED',
+  }))
+}
+
+/** Replaces a draft's prerequisites with these (none: anybody may answer it first). */
+export const savePrerequisites = (publicationId: string, baseRevision: number | null, prerequisites: Prerequisite[]) =>
+  runProcess<PublicationOutput>(PREREQUISITE.save, { publicationId, baseRevision, prerequisites })
 
 /** How many takers the saved regions and conditions reach now, rounded. */
 export const countAudience = (publicationId: string) =>

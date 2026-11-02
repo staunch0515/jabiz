@@ -1,3 +1,4 @@
+import { parsePagePrerequisites, type PagePrerequisite } from './levels'
 import { publicQuery } from '../qb/legal'
 import type { ContentLanguage } from '../qb/api'
 import type { QuizKind, RewardMethod } from '../qb/play'
@@ -33,6 +34,8 @@ export interface PagePublication {
   questionCount: number
   maxReward: unknown
   rewardMethod: RewardMethod
+  /** Q76: the live publications of the page this one requires first, and how (D-Q76-8). */
+  prerequisites: PagePrerequisite[]
 }
 
 /** A published page by its handle (typed in any case); null when there is none. */
@@ -44,8 +47,10 @@ export async function readPublicSponsorPage(handle: string, languages: readonly 
 }
 
 /** The live public publications of the page with the handle, ending soonest first. */
-export function readPagePublications(handle: string): Promise<PagePublication[]> {
-  return publicQuery<PagePublication>(SPONSOR_PAGE_TEMPLATE.publications, { handle: handle.toLowerCase() }, 50)
+export async function readPagePublications(handle: string): Promise<PagePublication[]> {
+  const rows = await publicQuery<Omit<PagePublication, 'prerequisites'> & { prerequisites?: unknown }>(
+    SPONSOR_PAGE_TEMPLATE.publications, { handle: handle.toLowerCase() }, 50)
+  return rows.map((row) => ({ ...row, prerequisites: parsePagePrerequisites(row.prerequisites) }))
 }
 
 /** A published page's listed products, in the sponsor's order. */

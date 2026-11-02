@@ -82,6 +82,19 @@ export const AUDIENCE = {
   notMatched: 'QB_AUDIENCE_NOT_MATCHED',
 } as const
 
+/**
+ * A publication's prerequisites (`publishing.PublicationPrerequisites`, `play.PrerequisiteCheck`;
+ * docs/quizbuks/plans/Q76-prerequisites.md): the publications of the sponsor's a taker first passes or answers.
+ */
+export const PREREQUISITE = {
+  save: 'QB_PUBLICATION_PREREQUISITES_SAVE',
+  sponsorPrerequisites: 'urn:jabiz:dataset:sponsor:QbPublicationPrerequisite',
+  /** 422: the caller has not met the publication's prerequisites. */
+  notMet: 'QB_PREREQUISITE_NOT_MET',
+  /** At most this many a publication. */
+  max: 5,
+} as const
+
 /** The widths the policy `qb.content.image` keeps of every image (covers, questions, options, materials). */
 export const CONTENT_IMAGE_VARIANTS = ['w320', 'w640', 'w1280'] as const
 

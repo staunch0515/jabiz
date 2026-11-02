@@ -6,7 +6,7 @@ import { QBVIEW } from '../qb/view/messages'
 import { formatDateTime, i18n, useAuth } from '@jabiz/client'
 import { Alert, AlertDescription, Button, PageState } from '@jabiz/ui'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import { BadgeCheck, MailWarning, Play, UserRoundSearch } from 'lucide-react'
+import { BadgeCheck, Circle, CircleCheck, ListChecks, MailWarning, Play, UserRoundSearch } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
@@ -17,7 +17,7 @@ import { QB } from '../qb/messages'
 import { shownLanguages } from '../qb/api'
 import { useSoundSetting } from '../qb/SoundSettings'
 import { linkLanguageOf } from '../linkLanguage'
-import { readPublication, readTiers, recordView, type PublicationView } from '../qb/play'
+import { readPublication, readTiers, recordView, type PrerequisiteView, type PublicationView } from '../qb/play'
 import { problemText } from '../qb/problems'
 import { Link } from '../qb/router'
 import { prefersStillVideo } from '../qb/video'
@@ -33,6 +33,36 @@ import { claimReferral, forgetReferral, pendingReferral } from '../referral/api'
 export function minutesUntil(time: string | null, now: number = Date.now()): number {
   const end = time ? Date.parse(time) : NaN
   return Number.isFinite(end) ? Math.max(0, Math.ceil((end - now) / 60_000)) : 0
+}
+
+/** Q76: what to complete before this publication: each prerequisite, done or linking to its page. */
+function PrerequisitesNotice({ prerequisites }: { prerequisites: PrerequisiteView[] }) {
+  const { t } = useTranslation(APP)
+  return (
+    <Alert data-testid="detail-prerequisites">
+      <ListChecks aria-hidden />
+      <AlertDescription className="text-current flex flex-col items-start gap-2">
+        <span>{t('detail.prerequisites')}</span>
+        <ul className="flex flex-col gap-1">
+          {prerequisites.map((p) => (
+            <li key={p.publicationId} className="flex items-center gap-2" data-testid="detail-prerequisite"
+              data-met={p.met || undefined}>
+              {p.met
+                ? <CircleCheck aria-hidden className="text-success size-4 shrink-0" />
+                : <Circle aria-hidden className="size-4 shrink-0" />}
+              {p.met
+                ? <span>{p.name ?? t('detail.prerequisiteUnnamed')}</span>
+                : <Link to={`/p/${p.publicationId}`} className="text-primary underline"
+                  data-testid="detail-prerequisite-link">{p.name ?? t('detail.prerequisiteUnnamed')}</Link>}
+              <span className="text-muted-foreground text-xs">
+                {p.met ? t('detail.prerequisiteDone') : t(`detail.prerequisite${p.requirement}`)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </AlertDescription>
+    </Alert>
+  )
 }
 
 /** What the caller can do: start, continue the attempt in progress, see their result, or nothing now. */
@@ -107,6 +137,9 @@ function Action({ publication, onLanguage }: { publication: PublicationView; onL
         </AlertDescription>
       </Alert>
     )
+  } else if (!publication.prerequisitesMet && publication.prerequisites.length > 0) {
+    // Q76: the publications of the sponsor's to complete first, each linking to its page.
+    action = <PrerequisitesNotice prerequisites={publication.prerequisites} />
   } else if (!publication.matched) {
     // Q47: aimed at people the caller's profile does not (yet) say they are.
     action = (

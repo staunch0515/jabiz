@@ -71,6 +71,9 @@ interface Server {
   mailServer?: Record<string, unknown> | null
   /** The draft's stored matching conditions (Q47), one row per option or range. */
   conditions?: Record<string, unknown>[]
+  /** Q76: the draft's stored prerequisites, and the sponsor's publications (the list's, else just ROW). */
+  prerequisites?: Record<string, unknown>[]
+  publications?: Record<string, unknown>[]
   /** The sponsor's staff (Q39). */
   staff?: Record<string, unknown>[]
 }
@@ -197,8 +200,12 @@ function server(options: Server = {}) {
           { code: 'ASIA', label: 'Asia' }])
       case '/api/dictionaries/urn:jabiz:dict:quizbuks:publication-end-reason':
         return json(200, [{ code: 'EXPIRED', label: 'End time reached' }])
-      case '/api/queries/qb.sponsor.publications':
-        return json(200, { items: [ROW], offset: 0, limit: 20, total: 1 })
+      case '/api/queries/qb.sponsor.publications': {
+        const items = options.publications ?? [ROW]
+        return json(200, { items, offset: 0, limit: 20, total: items.length })
+      }
+      case '/api/datasets/urn:jabiz:dataset:sponsor:QbPublicationPrerequisite/query':
+        return rows(options.prerequisites ?? [])
       case '/api/queries/qb.sponsor.quizzes':
         if ((body as { params?: { q?: string } } | null)?.params?.q) await options.quizSearch
         return json(200, { items: [{ quizId: 'q1', title: 'Coffee basics', versionLabel: 'v1.0', latestVersionNo: 1,
@@ -1270,6 +1277,72 @@ describe('customer matching (Q47)', () => {
     // The draft's save went through the first time: the second carries its revision, not a stale one.
     expect(processCalls('QB_PUBLICATION_SAVE')[1]).toMatchObject({ baseRevision: 4 })
     expect(screen.queryByTestId('publication-stale')).toBeNull()
+  })
+})
+
+describe('prerequisites (Q76)', () => {
+  const answered = (revision: number) => ({ status: 200, body: { output: { publicationId: 'p1', status: 'DRAFT',
+    revision, approval: null, approvalRequestId: null } } })
+  const basics = { ...ROW, publicationId: 'p0', name: 'Coffee basics run', status: 'LIVE', audience: 'PUBLIC' }
+  const staff = { ...ROW, publicationId: 'p2', name: 'Staff training', status: 'ENDED', audience: 'INVITED' }
+  const draft = { ...ROW, publicationId: 'p3', name: 'Another draft', status: 'DRAFT' }
+
+  it('offers the submitted publications, saves them after the conditions, and shows the server\'s problems',
+    async () => {
+    const refused = { status: 422, body: { detail: 'Refused', violations: [{ field: 'prerequisites[1].publicationId',
+      ruleCode: 'QB_PREREQUISITE_CYCLE', message: 'This publication already requires the one you are editing.' }] } }
+    const { processCalls } = server({
+      publications: [{ ...ROW, status: 'DRAFT' }, basics, staff, draft],
+      prerequisites: [{ publicationId: 'p1', requiredPublicationId: 'p0', requirement: 'PASSED' }],
+      processes: { QB_PUBLICATION_SAVE: [saved(4), saved(6)],
+        QB_PUBLICATION_PREREQUISITES_SAVE: [refused, answered(7)] },
+    })
+    window.history.replaceState(null, '', '/publications/p1?step=2')
+    render(<App />)
+    const block = await screen.findByTestId('publication-prerequisites')
+    const rowsOf = () => within(block).getAllByTestId('prerequisite-row')
+    await waitFor(() => expect(within(block).getByTestId('prerequisite-publication')).toHaveTextContent('Coffee basics run'))
+    expect(within(rowsOf()[0]).getByTestId('prerequisite-PASSED')).toHaveAttribute('data-state', 'on')
+
+    // A new row needs a publication before anything is sent.
+    await userEvent.click(within(block).getByTestId('prerequisite-add'))
+    await userEvent.click(screen.getByTestId('publication-save'))
+    expect(processCalls('QB_PUBLICATION_SAVE')).toEqual([])
+    await userEvent.click(within(rowsOf()[1]).getByTestId('prerequisite-publication'))
+    // Neither this draft, another draft, nor the one already chosen is offered.
+    expect(screen.queryByRole('option', { name: 'Another draft' })).toBeNull()
+    expect(screen.queryByRole('option', { name: 'Coffee week' })).toBeNull()
+    expect(screen.queryByRole('option', { name: 'Coffee basics run' })).toBeNull()
+    await userEvent.click(screen.getByRole('option', { name: 'Staff training' }))
+    expect(within(rowsOf()[1]).getByTestId('prerequisite-invited')).toBeInTheDocument()
+    await userEvent.click(within(rowsOf()[1]).getByTestId('prerequisite-ANSWERED'))
+    await expectAccessible()
+
+    await userEvent.click(screen.getByTestId('publication-save'))
+    await waitFor(() => expect(processCalls('QB_PUBLICATION_PREREQUISITES_SAVE')).toHaveLength(1))
+    expect(processCalls('QB_PUBLICATION_PREREQUISITES_SAVE')[0]).toEqual({ publicationId: 'p1', baseRevision: 4,
+      prerequisites: [{ publicationId: 'p0', requirement: 'PASSED' }, { publicationId: 'p2', requirement: 'ANSWERED' }] })
+    expect(await within(rowsOf()[1]).findByText(/already requires the one you are editing/)).toBeInTheDocument()
+
+    // Removed, it saves the one left with the draft's new revision.
+    await userEvent.click(within(rowsOf()[1]).getByTestId('prerequisite-remove'))
+    await userEvent.click(screen.getByTestId('publication-save'))
+    await waitFor(() => expect(processCalls('QB_PUBLICATION_PREREQUISITES_SAVE')).toHaveLength(2))
+    expect(processCalls('QB_PUBLICATION_PREREQUISITES_SAVE')[1]).toEqual({ publicationId: 'p1', baseRevision: 6,
+      prerequisites: [{ publicationId: 'p0', requirement: 'PASSED' }] })
+  })
+
+  it('sends nothing when they are not changed, and says when there is nothing to require', async () => {
+    const { processCalls } = server({ publications: [{ ...ROW, status: 'DRAFT' }],
+      processes: { QB_PUBLICATION_SAVE: [saved(4)] } })
+    window.history.replaceState(null, '', '/publications/p1?step=2')
+    render(<App />)
+    const block = await screen.findByTestId('publication-prerequisites')
+    expect(await within(block).findByText(/you have none yet/)).toBeInTheDocument()
+    expect(within(block).queryByTestId('prerequisite-add')).toBeNull()
+    await userEvent.click(screen.getByTestId('publication-save'))
+    await waitFor(() => expect(processCalls('QB_PUBLICATION_SAVE')).toHaveLength(1))
+    expect(processCalls('QB_PUBLICATION_PREREQUISITES_SAVE')).toEqual([])
   })
 })
 

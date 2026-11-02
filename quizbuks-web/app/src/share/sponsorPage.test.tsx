@@ -114,6 +114,23 @@ describe("a sponsor's page (Q60a)", () => {
     await expectAccessible()
   })
 
+  it('lays the quizzes out by their prerequisites, saying what each requires first (Q76)', async () => {
+    const advanced = { ...LIVE, publicationId: 'pub2', name: 'Sourdough quiz',
+      prerequisites: JSON.stringify([{ publicationId: 'pub1', requirement: 'PASSED' }]) }
+    const master = { ...LIVE, publicationId: 'pub3', name: 'Baker quiz',
+      prerequisites: JSON.stringify([{ publicationId: 'pub2', requirement: 'ANSWERED' }]) }
+    server({ live: [master, LIVE, advanced] })
+    window.history.replaceState(null, '', '/s/acme-bakery')
+    render(<App />)
+    const layers = await screen.findAllByTestId('sponsor-page-layer')
+    expect(layers.map((layer) => within(layer).getByRole('heading').textContent))
+      .toEqual(['Start here', 'Next level 1', 'Next level 2'])
+    expect(within(layers[0]).getByTestId('sponsor-page-publication')).toHaveTextContent('Bread quiz')
+    expect(within(layers[1]).getByTestId('sponsor-page-requires')).toHaveTextContent('Complete first: Bread quiz')
+    expect(within(layers[2]).getByTestId('sponsor-page-requires')).toHaveTextContent('Complete first: Sourdough quiz')
+    await expectAccessible()
+  })
+
   it('makes no link of a website that is not https', async () => {
     server({ page: { ...PAGE, website: 'javascript:alert(1)' } })
     window.history.replaceState(null, '', '/s/acme-bakery')

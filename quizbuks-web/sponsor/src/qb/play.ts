@@ -224,6 +224,29 @@ export function parseMaterials(json: unknown): Material[] {
   }))
 }
 
+/** Q76: one of a publication's prerequisites as its page shows it to the caller. */
+export interface PrerequisiteView {
+  publicationId: string
+  name: string | null
+  requirement: 'PASSED' | 'ANSWERED'
+  met: boolean
+}
+
+/** The prerequisites of the template's JSON column; none when it cannot be read. */
+export function parsePrerequisites(json: unknown): PrerequisiteView[] {
+  if (typeof json !== 'string' || json.trim() === '') return []
+  let list: unknown
+  try {
+    list = JSON.parse(json)
+  } catch {
+    return []
+  }
+  if (!Array.isArray(list)) return []
+  return list.filter((p): p is Record<string, unknown> => typeof p === 'object' && p !== null && !!p.publicationId)
+    .map((p) => ({ publicationId: String(p.publicationId), name: textOrNull(p.name),
+      requirement: p.requirement === 'ANSWERED' ? 'ANSWERED' : 'PASSED', met: p.met === true }))
+}
+
 /** A publication as a taker sees it, with their own attempt if any. */
 export interface PublicationView {
   publicationId: string
@@ -268,6 +291,13 @@ export interface PublicationView {
    * the page asks for more of the profile instead of offering the start.
    */
   matched: boolean
+  /**
+   * Q76: whether the caller has met every prerequisite (when not, the page says what to complete first), and each
+   * one: the publication to complete first, by its name in the page's language (none while it has no card), how, and
+   * whether the caller has.
+   */
+  prerequisitesMet: boolean
+  prerequisites: PrerequisiteView[]
   /**
    * Q70a: until when the caller holds the certification this publication is a round of; meanwhile it cannot be
    * started (null for an ordinary publication, or one the caller does not hold).
@@ -348,6 +378,8 @@ export async function readPublication(request: PublicationRequest): Promise<Publ
     statsAt: textOrNull(row.statsAt),
     canStart: row.canStart === true || row.canStart === 'true',
     matched: row.matched !== false && row.matched !== 'false',
+    prerequisitesMet: row.prerequisitesMet !== false && row.prerequisitesMet !== 'false',
+    prerequisites: parsePrerequisites(row.prerequisites),
     heldUntil: textOrNull(row.heldUntil),
     referral: translatedReferral(referralPolicy(row.referral), row.referralDescription),
     myReferralStatus: textOrNull(row.myReferralStatus),

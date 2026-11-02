@@ -1121,6 +1121,41 @@ describe('certification rounds (Q70a)', () => {
   })
 })
 
+describe('prerequisites (Q76)', () => {
+  it('says what to complete first, linking each one not done, instead of offering the start', async () => {
+    const { posted } = server({ publicationPage: () => json(200, { items: [publication({ canStart: false,
+      prerequisitesMet: false, prerequisites: JSON.stringify([
+        { publicationId: 'pub-0', requirement: 'PASSED', name: 'Basics', met: true },
+        { publicationId: 'pub-9', requirement: 'ANSWERED', name: 'Practice', met: false },
+        { publicationId: 'pub-8', requirement: 'PASSED', name: null, met: false }]) })], offset: 0, limit: 1 }) })
+    window.history.replaceState(null, '', `/p/${PUB}`)
+    const { container } = render(<App />)
+    const notice = await screen.findByTestId('detail-prerequisites')
+    expect(notice).toHaveTextContent('Complete these first to answer this quiz:')
+    const items = within(notice).getAllByTestId('detail-prerequisite')
+    expect(items[0]).toHaveAttribute('data-met', 'true')
+    expect(items[0]).toHaveTextContent('Basicsdone')
+    expect(within(items[0]).queryByRole('link')).toBeNull()
+    expect(within(items[1]).getByRole('link', { name: 'Practice' })).toHaveAttribute('href', '/p/pub-9')
+    expect(items[1]).toHaveTextContent('answer it')
+    expect(within(items[2]).getByRole('link', { name: 'A quiz not open now' })).toHaveAttribute('href', '/p/pub-8')
+    expect(screen.queryByTestId('detail-start')).toBeNull()
+    expect(screen.queryByTestId('detail-unavailable')).toBeNull()
+    expect(posted('QB_ATTEMPT_START')).toEqual([])
+    await expectAccessible(container)
+  })
+
+  it('offers the start once they are met', async () => {
+    server({ publicationPage: () => json(200, { items: [publication({ prerequisitesMet: true,
+      prerequisites: JSON.stringify([{ publicationId: 'pub-0', requirement: 'PASSED', name: 'Basics', met: true }]) })],
+    offset: 0, limit: 1 }) })
+    window.history.replaceState(null, '', `/p/${PUB}`)
+    render(<App />)
+    expect(await screen.findByTestId('detail-start')).toBeEnabled()
+    expect(screen.queryByTestId('detail-prerequisites')).toBeNull()
+  })
+})
+
 describe('referrals (Q70)', () => {
   const POLICY = { quota: 20, method: 'PLATFORM', amount: '300', description: null, referrerRequires: 'NONE',
     refereeRules: ['NOT_REGULAR'], days: 7 }

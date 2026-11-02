@@ -1,7 +1,7 @@
-# Q76 发布的前置条件：科技树的第一步（计划，2026-11-02，待需求方确认）
+# Q76 发布的前置条件：科技树的第一步（计划 2026-11-02，需求方同日确认）
 
 `04-product-direction.md` §5 的候选 D；需求方 2026-11-01 定下顺序 A → D → E，A（Q75，#411）已完成。编号 Q76 是建议（下一个空号），确认时可改。
-**这只是计划**：确认 §9 的决定后开发，一个 PR，工作分支 `1.3/quizbuks-76-prerequisites`。
+需求方 2026-11-02 按缺省确认 §9 的四点（合格过或答过、至多 5 条、限本商户；首页不列出未满足的；邀请制也可以设；商户主页按前置分层）与编号 Q76；一个 PR，工作分支 `1.3/quizbuks-76-prerequisites`。实施记录见 §10。
 
 ## 0. 为什么
 
@@ -39,7 +39,7 @@
 
 ## 3. 后端（`backend/quizbuks`）
 
-### 3.1 迁移 V59 `quizbuks_prerequisites`
+### 3.1 迁移 V60 `quizbuks_prerequisites`（V59 给了 Q75）
 
 ```sql
 CREATE TABLE qb_publication_prerequisite (
@@ -145,3 +145,18 @@ CREATE INDEX qb_publication_prerequisite_required_idx ON qb_publication_prerequi
 3. D-Q76-5：邀请制的发布也可以设前置。
 4. D-Q76-8：商户主页按前置分层显示。
 5. 编号 Q76。
+
+## 10. 实施记录（2026-11-02）
+
+按 §2–§6 做完，与计划的不同：
+
+- **迁移是 V60**：Q75（#411）用了 V59。**#411 须先合并**：Flyway 拒绝比已执行的最大版本小的新迁移，本 PR 先合时 #411 的迁移要改成 V61。
+- **`requirement` 是文本列加检查约束**，没有建字典（只有两个值，前端与流程的输入都以 `@Pattern` / 类型限定）。
+- **多一个错误码** `QB_PREREQUISITE_TOO_DEEP`（链长超过 20，计划只写了深度上限）与 `QB_PREREQUISITE_IN_USE`：一个发布可能先提交、被另一个发布要求、再因驳回回到草稿，这时删除它会留下指向它的前置行，所以被要求的草稿不能删除。环检查因此也有意义（回到草稿的发布可以要求要求它的发布）。
+- **没有新的商户模板 `qb.sponsor.publication-prerequisites`**：商户后台像读条件一样经本人的数据视图 `sponsor:QbPublicationPrerequisite` 读前置行，名字取自已有的 `qb.sponsor.publications`。
+- **公开的前置关系**：商户主页的公开模板读新的公开视图 `public:QbPublicationPrerequisite`（只有三列：发布、所要求的发布、要求），两侧都只连进行中的公开卡片；不在进行中的前置按没有处理（该发布在上一层的根）。
+- **计数模板**（`qb.system.audience-count`）写了同一段 SQL；IT 中无法比较确切的人数：平台的账户是只追加的时态表，测试用户都没有已验证的邮箱，计数恒为 0（`AudienceIT` 同样只比较这种情况）。首页、发布页与 `PrerequisiteCheck` 在 `PrerequisiteIT` 中逐个答题者对照。
+- **商户后台的预览**不显示前置（预览是"内容会怎样显示"，不知道读者）；向导中显示所选前置发布是否邀请制（"不在名单中的人无法完成它"）。
+- **答题者已有本发布的会话时**首页照样列出（会话开始时已满足前置），与 `matched` 不同：答过的发布本来由"显示已答"控制。
+
+测试：`PrerequisiteRulesTest`（上限、自己、重复、不是本商户、草稿、直接与间接的环、菱形、别处的环、链长）、`PrerequisiteCheckTest`、`PrerequisiteIT`（保存与校验、复制与删除、提交后冻结、邀请制、首页 / 发布页 / 开始在答过与合格前后、模板与 Java 对照、商户主页模板）、`AttemptStatementBudgetIT`（不变）、`OperatorScopesIT` 与 `VerifiedEmailWritesIT`（自动覆盖）、场景与公开模板目录快照；商户后台 `publishing.test.tsx`；App `share/levels.test.ts`、`sponsorPage.test.tsx`、`Play.test.tsx`；e2e `prerequisites.spec.ts`。

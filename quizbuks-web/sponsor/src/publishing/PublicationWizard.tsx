@@ -38,11 +38,17 @@ import { fieldProblem, problemText } from '../qb/problems'
 import { navigate } from '../qb/router'
 import type { Condition } from '../qb/audience'
 import { AudienceConditions, AudienceCountPanel } from './AudienceConditions'
+import { Prerequisites } from './Prerequisites'
 import { LanguagesFields } from './LanguagesFields'
 import { ReferralFields } from './ReferralFields'
 import {
   asSurvey,
   conditionsQuery,
+  prerequisitesQuery,
+  readPrerequisites,
+  savePrerequisites,
+  searchPublications,
+  type Prerequisite,
   countAudience,
   readConditions,
   saveConditions,
@@ -154,6 +160,21 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
   const [editedConditions, setEditedConditions] = useState<Condition[] | null>(null)
   const conditions = editedConditions ?? savedConditions.data ?? []
   const [count, setCount] = useState<AudienceCount | null>(null)
+  // Q76: the prerequisites, saved after the conditions once changed (their own process), and what may be required:
+  // the sponsor's submitted publications other than this one.
+  const savedPrerequisites = useQuery({
+    queryKey: prerequisitesQuery(publicationId),
+    queryFn: () => readPrerequisites(publicationId!),
+    enabled: publicationId !== null,
+  })
+  const [editedPrerequisites, setEditedPrerequisites] = useState<Prerequisite[] | null>(null)
+  const prerequisites = editedPrerequisites ?? savedPrerequisites.data ?? []
+  const prerequisiteChoices = useQuery({
+    queryKey: [...PUBLICATIONS_QUERY, 'prerequisite-choices'],
+    queryFn: () => searchPublications({ offset: 0, limit: 100 }),
+  })
+  const choices = (prerequisiteChoices.data?.items ?? [])
+    .filter((p) => p.status !== 'DRAFT' && p.publicationId !== publicationId)
 
   // After moving between steps, focus goes to the new step's heading (its content replaced what had focus).
   useEffect(() => {
@@ -207,18 +228,26 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
   }
 
   const save = useMutation({
-    mutationFn: async ({ input, criteria }: { input: SaveInput; keys: string[]; then: 'stay' | 'next' | 'count';
-      criteria: Condition[] | null }) => {
-      const saved = await savePublication(input)
+    mutationFn: async ({ input, criteria, required }: { input: SaveInput; keys: string[];
+      then: 'stay' | 'next' | 'count'; criteria: Condition[] | null; required: Prerequisite[] | null }) => {
+      let saved = await savePublication(input)
       // The draft is saved whatever happens to its conditions next: the page knows its new revision.
       setRevision(saved.revision)
-      if (criteria === null) return { saved, counted: null }
-      // An invited publication takes its list: its conditions are cleared.
-      const out = await saveConditions(saved.publicationId, saved.revision, input.audience === 'INVITED' ? [] : criteria)
-      return { saved: { ...saved, revision: out.revision }, counted: null }
+      if (criteria !== null) {
+        // An invited publication takes its list: its conditions are cleared.
+        const out = await saveConditions(saved.publicationId, saved.revision,
+          input.audience === 'INVITED' ? [] : criteria)
+        saved = { ...saved, revision: out.revision }
+        setRevision(out.revision)
+      }
+      if (required !== null) {
+        const out = await savePrerequisites(saved.publicationId, saved.revision, required)
+        saved = { ...saved, revision: out.revision }
+      }
+      return { saved, counted: null }
     },
     onMutate: () => setSubmitError(null),
-    onSuccess: async ({ saved }, { input, keys, then, criteria }) => {
+    onSuccess: async ({ saved }, { input, keys, then, criteria, required }) => {
       const audienceOfSave = input.audience
       setRevision(saved.revision)
       if (criteria !== null) {
@@ -226,6 +255,10 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
         queryClient.setQueryData(conditionsQuery(saved.publicationId),
           audienceOfSave === 'INVITED' ? [] : criteria)
         setEditedConditions(null)
+      }
+      if (required !== null) {
+        queryClient.setQueryData(prerequisitesQuery(saved.publicationId), required)
+        setEditedPrerequisites(null)
       }
       setOutput(saved)
       // New tiers get their keys: the next save sends them as the same tiers.
@@ -274,8 +307,14 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
       notify.error(t('publishing.audience.incomplete'))
       return
     }
+    // Q76: each prerequisite names a publication (the server checks the rest).
+    if (editedPrerequisites?.some((p) => p.publicationId === '')) {
+      notify.error(t('publishing.prerequisites.incomplete'))
+      return
+    }
     save.mutate({ input: built.input, keys: shaped.tiers.map((tier) => tier.key), then,
-      criteria: editedConditions ?? (shaped.audience === 'INVITED' && conditions.length > 0 ? [] : null) })
+      criteria: editedConditions ?? (shaped.audience === 'INVITED' && conditions.length > 0 ? [] : null),
+      required: editedPrerequisites })
   }
 
   const submit = () => {
@@ -617,6 +656,15 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
           {counter.isError && <p className="text-destructive text-sm" role="alert">{problemText(counter.error)}</p>}
         </div>
       )}
+      {/* Q76: what a taker completes first, for a public publication and an invited one alike (D-Q76-5). */}
+      {publicationId && savedPrerequisites.isPending
+        ? <p className="text-muted-foreground text-sm">{t('publishing.prerequisites.loading')}</p>
+        : <Prerequisites value={prerequisites} choices={choices} disabled={locked}
+          problemOf={(path) => fieldProblem(save.error, path)}
+          onChange={(next) => {
+            setEditedPrerequisites(next)
+            setCount(null)
+          }} />}
     </div>,
 
     // 4. Everything at once, every problem, and submitting.

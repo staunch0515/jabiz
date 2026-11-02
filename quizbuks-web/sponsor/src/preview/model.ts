@@ -55,7 +55,7 @@ function base(given: Sponsor | null) {
     sponsorName: sponsor?.contactName ?? null, sponsorCompany: sponsor?.company ?? null,
     sponsorIntro: sponsor?.intro ?? null, sponsorAvatar: sponsor?.avatar ?? null, sponsorCountry: null,
     completions: 0, last1h: 0, last24h: 0, last7d: 0, last30d: 0, statsAt: null,
-    canStart: false, matched: true, heldUntil: null, referral: null, myReferralStatus: null, myReferralExpiresAt: null, myAttemptId: null, myStatus: null, myDeadline: null, invited: false,
+    canStart: false, matched: true, prerequisitesMet: true, prerequisites: [], heldUntil: null, referral: null, myReferralStatus: null, myReferralExpiresAt: null, myAttemptId: null, myStatus: null, myDeadline: null, invited: false,
     // Q73b: a preview is read in one language, the one it is shown in.
     languages: [], displayLanguage: null,
   }

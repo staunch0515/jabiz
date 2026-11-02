@@ -12,7 +12,8 @@ import { FileImage } from '../qb/FileImage'
 import { CoverPlaceholder } from '../qb/Illustrations'
 import { formatKudos } from '../qb/kudos'
 import { QB } from '../qb/messages'
-import { readPagePublications, readPublicSponsorPage } from './api'
+import { readPagePublications, readPublicSponsorPage, type PagePublication } from './api'
+import { grouped } from './levels'
 import { Link } from '../qb/router'
 import { sharePath } from './share'
 import { countPageView, countProductClick } from './counting'
@@ -131,26 +132,62 @@ export function SponsorPage({ handle }: { handle: string }) {
           <p className="text-muted-foreground text-sm" data-testid="sponsor-page-none">{t('sponsorPage.none')}</p>
         )}
         {publications.isSuccess && publications.data.length > 0 && (
-          <ul className="flex flex-col gap-2" data-testid="sponsor-page-publications">
-            {publications.data.map((publication) => (
-              <li key={publication.publicationId}>
-                <Link to={sharePath(publication.publicationId)}
-                  className="bg-card hover:bg-accent flex flex-col gap-1 border p-3"
-                  data-testid="sponsor-page-publication">
-                  <span className="font-medium">{publication.name}</span>
-                  <span className="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-                    <span className="inline-flex items-center gap-1">
-                      <Trophy aria-hidden className="size-3.5" />
-                      {t('sponsorPage.upTo', { amount: formatKudos(publication.maxReward) })}
-                    </span>
-                    <span>{t('sponsorPage.endsAt', { time: formatDateTime(publication.endAt) })}</span>
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ul>
+          <PublicationLayers publications={publications.data} />
         )}
       </section>
     </article>
+  )
+}
+
+/**
+ * Q76 (D-Q76-8): the page's publications by their prerequisites: those requiring none first, each next level below
+ * (one plain list when none requires another); one requiring others says which to complete first. Whether the reader
+ * has is the publication's page's to say (this public page does not know the reader).
+ */
+function PublicationLayers({ publications }: { publications: PagePublication[] }) {
+  const { t } = useTranslation(APP)
+  const groups = grouped(publications)
+  const names = new Map(publications.map((p) => [p.publicationId, p.name]))
+  const list = (items: PagePublication[]) => (
+    <ul className="flex flex-col gap-2" data-testid="sponsor-page-publications">
+      {items.map((publication) => {
+        const first = publication.prerequisites.map((r) => names.get(r.publicationId)).filter(Boolean)
+        return (
+          <li key={publication.publicationId}>
+            <Link to={sharePath(publication.publicationId)}
+              className="bg-card hover:bg-accent flex flex-col gap-1 border p-3"
+              data-testid="sponsor-page-publication">
+              <span className="font-medium">{publication.name}</span>
+              <span className="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                <span className="inline-flex items-center gap-1">
+                  <Trophy aria-hidden className="size-3.5" />
+                  {t('sponsorPage.upTo', { amount: formatKudos(publication.maxReward) })}
+                </span>
+                <span>{t('sponsorPage.endsAt', { time: formatDateTime(publication.endAt) })}</span>
+              </span>
+              {first.length > 0 && (
+                <span className="text-muted-foreground text-sm" data-testid="sponsor-page-requires">
+                  {t('sponsorPage.requires', { names: first.join(t('sponsorPage.listSeparator')) })}
+                </span>
+              )}
+            </Link>
+          </li>
+        )
+      })}
+    </ul>
+  )
+  if (groups.length <= 1) return list(publications)
+  return (
+    <div className="flex flex-col gap-4" data-testid="sponsor-page-layers">
+      {groups.map((group, index) => (
+        <section key={index} aria-labelledby={`sponsor-page-layer-${index}`} className="flex flex-col gap-2"
+          data-testid="sponsor-page-layer">
+          <h3 id={`sponsor-page-layer-${index}`} className="text-sm font-medium">
+            {index === 0 ? t('sponsorPage.layerBasics') : t('sponsorPage.layerNext', { n: index })}
+          </h3>
+          {list(group)}
+        </section>
+      ))}
+    </div>
   )
 }
