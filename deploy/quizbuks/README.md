@@ -121,16 +121,21 @@ tools/quizbuks/local-demo.sh status | logs | seed
   - 回调地址与其他三家相同（`QB_OIDC_REDIRECT_APP`、`QB_OIDC_REDIRECT_SPONSOR`），不需要在 Apple 登记：Apple 把答复送到 Return URL，服务器再转到这两个页面。
   Apple 担保邮箱：首次登录即开户、邮箱已验证；用户选择"隐藏邮件地址"时邮箱是 `…@privaterelay.appleid.com`，同样可用，但**要寄到这种地址，须在 Apple Developer 的
   "Sign in with Apple for Email Communication"中登记发信的域名与地址**（`JABIZ_MAIL_FROM` 的域名，并设好 SPF / DKIM），否则 Apple 不转发。名字只在首次授权时给出，用作显示名。
+  删除账号时平台撤销 Apple 的授权（定时任务每 15 分钟；令牌以 `JABIZ_SEAL_KEY` 密封保存）；连续失败 12 次后管理后台出现待办，须在 Apple ID 的"使用 Apple 登录的 App"中由用户本人移除或联系 Apple。
 - **推送通知（App，平台 17k）**：在 `SPRING_PROFILES_ACTIVE` 中加 `push`（`application-push.yml`，与登录的 profile 并用）。答题者在 App 的"账户 → 通知"中开启此设备的推送，
   可单独关掉"中奖通知"；中奖（平台 Kudos 待发或已发、现金或到店兑换的奖品、数字奖品）时推送一次，点按打开结果页。Android 的 App 与桌面、手机浏览器都用 Web Push，
-  iPhone 上只有加到主屏幕的网页能收到（iOS App 的推送在平台 17k-b 之后）。VAPID 密钥对只生成一次：
+  iPhone 上的网页只有加到主屏幕后能收到；iOS App 经 Apple 的推送服务（profile `apns`，见下）。VAPID 密钥对只生成一次：
   ```sh
   openssl ecparam -name prime256v1 -genkey -noout -out vapid.pem
   openssl ec -in vapid.pem -pubout -outform DER | tail -c 65 | base64 | tr '/+' '_-' | tr -d '=\n'   # JABIZ_PUSH_PUBLIC_KEY
   openssl ec -in vapid.pem -outform DER | tail -c +8 | head -c 32 | base64 | tr '/+' '_-' | tr -d '=\n'   # JABIZ_PUSH_PRIVATE_KEY
   ```
   两个值放进 `.env` 后删除 `vapid.pem`（私钥另存离线副本）；应用启动时检查两把是一对。`JABIZ_PUSH_SUBJECT` 写运营者的 `mailto:` 地址。
-  删除账号时平台撤销 Apple 的授权（定时任务每 15 分钟；令牌以 `JABIZ_SEAL_KEY` 密封保存）；连续失败 12 次后管理后台出现待办，须在 Apple ID 的"使用 Apple 登录的 App"中由用户本人移除或联系 Apple。
+- **iOS App 的推送（平台 17k-b）**：在 `push` 之外再加 `apns`（`application-apns.yml`，如 `production,apple,push,apns`）。在 Apple Developer 的 Keys 中建一把勾选
+  **Apple Push Notifications service (APNs)** 的密钥（可与 Sign in with Apple 的是同一把，也可另建），下载 `.p8`（只能下载一次）：其内容设为 `JABIZ_APNS_PRIVATE_KEY`
+  （整个 PEM，换行写成 `\n`，或只写中间的 Base64 正文），密钥编号设为 `JABIZ_APNS_KEY_ID`，团队编号设为 `JABIZ_APNS_TEAM_ID`。推送发往 App 的 bundle ID
+  `com.quizbuks.app`（`QB_APNS_TOPIC` 可改）的 production 服务，TestFlight 与 App Store 的版本都用它；只有 Xcode 直接装的版本要 `JABIZ_APNS_ENVIRONMENT=sandbox`。
+  App 的 Identifier 要勾选 Push Notifications；外壳取得设备令牌、点按打开页面由 iOS 外壳（Q49c-2）做，平台接口见平台指南 `app-spa.md` 6a。
 - **Stripe 的返回地址**由配置决定，不在 Stripe 后台设置：充值跳回 `QB_SPONSOR_LINK` 下的 `wallet/topups/<编号>`，开通收款账户跳回 `QB_APP_LINK` 下的 `wallet/payout`。
 - **本机注册**：`docker compose -f deploy/quizbuks/compose.dev.yaml --profile tools up -d` 另起 Mailpit（<http://localhost:8025> 查看邮件）；
   在 `.env` 中设 `JABIZ_MAIL_ENABLED=true`、`JABIZ_MAIL_FROM=noreply@quizbuks.local`、`SPRING_MAIL_HOST=mailpit`、`SPRING_MAIL_PORT=1025`。
@@ -309,6 +314,9 @@ tools/quizbuks/local-demo.sh status | logs | seed
 | `JABIZ_OIDC_APPLE_PRIVATE_KEY` | 开启 `apple` 时 | 该密钥的 `.p8` 文件内容（EC P-256；PEM 的换行可写成 `\n`）；只放在环境变量中 |
 | `QB_OIDC_APPLE_FORM_POST` | 开启 `apple` 时 | `https://<主机>/api/auth/oidc/apple/form-post`，与 Services ID 中登记的 Return URL 完全相同 |
 | `JABIZ_PUSH_PUBLIC_KEY` / `JABIZ_PUSH_PRIVATE_KEY` | 开启 `push` 时 | 推送通知的 VAPID 密钥对（Base64url，公钥 87 个字符、私钥 43 个字符；见"推送通知"）；私钥只放在环境变量中，**保留副本**：换了密钥对，所有设备都要重新开启推送 |
+| `JABIZ_APNS_TEAM_ID` / `JABIZ_APNS_KEY_ID` | 开启 `apns` 时 | Apple 的团队编号与 APNs 密钥的编号（各 10 个字符，平台 17k-b） |
+| `JABIZ_APNS_PRIVATE_KEY` | 开启 `apns` 时 | 该密钥的 `.p8` 文件内容（EC P-256；PEM 的换行可写成 `\n`）；只放在环境变量中 |
+| `QB_APNS_TOPIC` / `JABIZ_APNS_ENVIRONMENT` | 否 | App 的 bundle ID（缺省 `com.quizbuks.app`）与 APNs 的环境（缺省 `production`；Xcode 直接装的版本用 `sandbox`） |
 | `JABIZ_PUSH_SUBJECT` | 开启 `push` 时 | 推送服务联系运营者的地址 `mailto:<地址>`（部署前的检查要求以 `mailto:` 开头） |
 | `JABIZ_TRUSTED_PROXIES` | 在代理之后 | 可信代理的地址或网段（逗号分隔），登录记录与限流据此取客户端地址；不得含 `0.0.0.0/0`、`::/0`（启动错误），见"密钥与部署" |
 

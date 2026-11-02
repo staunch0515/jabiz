@@ -457,5 +457,11 @@ NOTIFICATION 缺 `{unsubscribeUrl}`；`{entryUrl}` 而模板没有参数 `entry`
   重新登录或换了账号后，浏览器留下的订阅要再登记一次才算开启）、`setPushPreference()`；平台的 Service Worker
   显示通知，点按在该 SPA 的窗口（没有、或该窗口还不受这个 Worker 控制即新开）中打开其页面，只开本站的地址。`@jabiz/ui` 的积木 `PushPreferences`（此设备的开关与每种模板的开关）。需要 PWA（`Pwa.ON`）。
 - **账号删除**：`ACCOUNT_ERASE` 删除用户的设备与推送偏好。
-- 原生 App 的推送（iOS 的 APNs）在 17k-b。
+- **iOS App 的推送（17k-b）**：配置了 `jabiz.push.apns.team-id` 时启用 Apple 的推送服务：以团队的 `.p8` 密钥（`jabiz.push.apns.private-key`，只来自环境变量，
+  `key-id`）签 ES256 的提供方令牌（每 40 分钟换一次；被拒为过期即重签），HTTP/2 发往 `/3/device/<令牌>`，`apns-topic` 为 App 的 bundle ID（`topic`），
+  `environment` 为 `production`（缺省，TestFlight 与 App Store）或 `sandbox`（Xcode 构建）。iOS 外壳经 `configureClient({ nativePush })` 交出设备令牌，
+  登记为 `kind: apns` 的设备（令牌为 `endpoint`，十六进制，同样随会话）；`GET /api/auth/account/push` 的 `apns` 说明服务器是否接受。负载是 Apple 的提醒
+  `{aps: {alert: {title, body}, sound}, url, tag}`，至多 4096 字节（截短同上）；`apns-collapse-id` 同 `tag`。只有 Apple 答 410 才删除设备：
+  400 `BadDeviceToken` / `DeviceTokenNotForTopic` 多半是环境或 bundle ID 配错（production 与 sandbox 的令牌不通用），只记警告、按失败重试，免得一处配置错误删掉所有 iPhone。
+  提供方令牌全部发送共用一个，被拒（`ExpiredProviderToken` / `InvalidProviderToken`）时满 20 分钟才重签（Apple 拒绝更频繁的更新）。
 

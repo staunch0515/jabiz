@@ -192,7 +192,6 @@ function SignedIn({ path }: { path: string }) {
       { key: 'cash', label: t('publishing.cash.nav'), path: CASH_REWARDS_PATH, icon: HandCoins },
       { key: 'digital', label: t('publishing.digital.nav'), path: DIGITAL_PRIZES_PATH, icon: Ticket },
       { key: 'redeem', label: t('publishing.redeem.nav'), path: REDEEM_PATH, icon: Gift },
-      { key: 'staff', label: t('publishing.staff.nav'), path: STAFF_PATH, icon: UsersRound },
     ] },
     { key: 'money', label: t('nav.groups.money'), items: [
       ...(kudos ? [{ key: 'wallet', label: t('wallet.nav'), path: WALLET_PATH, icon: Wallet }] : []),
@@ -200,6 +199,8 @@ function SignedIn({ path }: { path: string }) {
     ] },
     { key: 'settings', label: t('nav.groups.settings'), items: [
       { key: 'onboarding', label: t('nav.onboarding'), path: ONBOARDING, icon: Store },
+      // Q78: the staff are the sponsor's own people, so they sit with the sponsor's settings.
+      { key: 'staff', label: t('publishing.staff.nav'), path: STAFF_PATH, icon: UsersRound },
       { key: 'products', label: t('products.nav'), path: PRODUCTS_PATH, icon: ShoppingBag },
       { key: 'stats', label: t('stats.nav'), path: STATS_PATH, icon: ChartColumn },
       { key: 'mailServer', label: t('publishing.mailServer.nav'), path: MAIL_SERVER_PATH, icon: Mail },

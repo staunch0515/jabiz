@@ -49,6 +49,7 @@
 | `JABIZ_OIDC_APPLE_CLIENT_ID` / `_TEAM_ID` / `_KEY_ID` / `_PRIVATE_KEY` | 开 `apple` 时 | Apple Developer（Services ID；Keys 中勾选 Sign in with Apple 的密钥，`.p8` 只能下载一次） | 建一把新密钥、改 `_KEY_ID` 与 `_PRIVATE_KEY`、重启，确认 Apple 登录可用后撤销旧密钥（客户端密钥由平台每小时以它签出，换的那一刻不中断） | 部署前的检查停止部署；格式不对即启动失败 |
 | `QB_OIDC_APPLE_FORM_POST` | 开 `apple` 时 | `https://<主机>/api/auth/oidc/apple/form-post`（与 Services ID 的 Return URL 完全相同） | 换域名时（Apple 中同时改） | Apple 拒绝回传 |
 | `JABIZ_PUSH_PUBLIC_KEY` / `_PRIVATE_KEY` / `_SUBJECT` | 开 `push` 时（平台 17k） | 生成一次（README"推送通知"）；私钥**另存离线副本** | 不要换：换了密钥对，答题者在各设备上要重新开启推送（旧订阅随之失效） | 部署前的检查停止部署；两把不是一对即启动失败 |
+| `JABIZ_APNS_TEAM_ID` / `_KEY_ID` / `_PRIVATE_KEY` | 开 `apns` 时（平台 17k-b） | Apple Developer 的 Keys（勾选 APNs 的密钥，`.p8` 只能下载一次） | 建一把新密钥、改 `_KEY_ID` 与 `_PRIVATE_KEY`、重启，确认 iPhone 收到推送后撤销旧密钥（设备令牌不受影响） | 部署前的检查停止部署；格式不对即启动失败；Apple 拒绝令牌时只记警告、推送稍后重试 |
 | `QB_OIDC_REDIRECT_APP` | 开 Google 时 | `https://<主机>/taker/login/oidc`（与控制台登记的完全相同；Q30 之前没有 `/taker`） | 换域名时 | Google 拒绝回调 |
 | `QB_OIDC_REDIRECT_SPONSOR` | 开 Google 时 | `https://<主机>/sponsor/login/oidc`（Q37；与控制台登记的完全相同） | 换域名时 | Google 拒绝回调；缺少即不能启动 |
 | `JABIZ_WEB_ROOT_REDIRECT` | 否 | 裸域名转到的路径，缺省 `/biz/`（招商网站，Q30）；`QB_APP_LINK` 须以 `/taker/` 结尾 | — | 裸域名打开招商站 |

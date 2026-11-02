@@ -2715,6 +2715,7 @@ export interface components {
             label?: string;
         };
         PushSettings: {
+            apns?: boolean;
             devices?: components["schemas"]["DeviceView"][];
             enabled?: boolean;
             templates?: components["schemas"]["TemplateChoice"][];

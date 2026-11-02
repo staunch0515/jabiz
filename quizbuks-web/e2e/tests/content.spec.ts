@@ -79,10 +79,13 @@ test('a sponsor makes a quiz with questions, images and materials, and saves ver
   await expect(questions).toHaveCount(2)
   await expect(questions.nth(1).locator('[data-correct="true"]')).toContainText('Sencha')
 
-  // Moved up: the order is the server's (read again), and the keyboard stays on the moved question.
-  await questions.nth(1).getByTestId('question-up').click()
+  // Q78: the rows are folded; moved to the first place, the order is the server's (read again), the moved question
+  // opens and the keyboard stays on its "move to" control.
+  await expect(questions.nth(1).getByTestId('question-first-line')).toHaveText('Pick a tea')
+  await questions.nth(1).getByTestId('question-move').click()
+  await page.getByRole('option', { name: 'Place 1' }).click()
   await expect(questions.nth(0).getByTestId('question-stem-text')).toHaveText('Pick a tea')
-  await expect(questions.nth(0).getByTestId('question-down')).toBeFocused()
+  await expect(questions.nth(0).getByTestId('question-move')).toBeFocused()
 
   // Materials: an article, an image group with a caption, a PDF, a link.
   await page.getByTestId('tab-materials').click()

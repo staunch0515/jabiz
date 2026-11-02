@@ -6,6 +6,7 @@ import com.jabiz.context.RequestContext;
 import com.jabiz.runtime.erasure.AccountErasure;
 import com.jabiz.runtime.event.OutboxDeliverer;
 import com.jabiz.runtime.process.ProcessExecutor;
+import com.jabiz.runtime.test.TestApnsService;
 import com.jabiz.runtime.test.TestPushService;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
@@ -34,6 +35,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * subscriptions of allowed push services with a subscription's keys are taken.
  */
 @SpringBootTest(properties = {"jabiz.push.enabled=true", "jabiz.push.web-push.subject=mailto:push@example.com",
+    "jabiz.push.apns.team-id=TEAM123456", "jabiz.push.apns.key-id=KEY1234567",
+    "jabiz.push.apns.topic=com.example.portal",
     "jabiz.push.web-push.allowed-hosts=localhost", SignUpItSupport.ENTRY_PROPERTIES_REGISTRATION,
     SignUpItSupport.ENTRY_PROPERTIES_LOOSE, SignUpItSupport.ENTRY_PROPERTIES_ADMIN})
 @Import(SignUpItSupport.FixedTimeLimits.class)
@@ -44,17 +47,21 @@ class PushIT extends SignUpItSupport {
 
     static final String[] VAPID = TestPushService.vapidKeys();
     static final TestPushService PUSH = new TestPushService(VAPID[0]);
+    static final TestApnsService APNS = new TestApnsService();
     static final String BASE = "/api/auth/account/push";
 
     @DynamicPropertySource
     static void keys(DynamicPropertyRegistry registry) {
         registry.add("jabiz.push.web-push.public-key", () -> VAPID[0]);
         registry.add("jabiz.push.web-push.private-key", () -> VAPID[1]);
+        registry.add("jabiz.push.apns.private-key", APNS::privateKey);
+        registry.add("jabiz.push.apns.url", APNS::base);
     }
 
     @AfterAll
     static void stop() {
         PUSH.close();
+        APNS.close();
     }
 
     @Autowired
@@ -245,5 +252,56 @@ class PushIT extends SignUpItSupport {
         assertThat(devices(other.userId())).isZero();
         post(BASE + "/devices/remove", other.bearer(), Map.of("endpoint", browser.endpoint()))
             .expectStatus().isNotFound();
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void anIphonesTokenReceivesApplesAlertAndAGoneTokenIsForgotten() {
+        Customer customer = customer();
+        assertThat(get(BASE, customer.bearer()).expectStatus().isOk().expectBody(MAP).returnResult()
+            .getResponseBody()).containsEntry("apns", true);
+        // The iOS shell's device token (hexadecimal; kept in small letters) is its endpoint; it has no keys.
+        String token = APNS.deviceToken();
+        Map<String, Object> device = new HashMap<>();
+        device.put("kind", "apns");
+        device.put("endpoint", token.toUpperCase(Locale.ROOT));
+        post(BASE + "/devices", customer.bearer(), device).expectStatus().isOk();
+
+        send("ping", customer.userId(), "the new quiz", "orders", false);
+        pushQueued();
+        assertThat(APNS.received(token)).singleElement().satisfies(received -> {
+            // Signed with the team's key, for the app's bundle, as an alert.
+            assertThat(received.providerTokenValid()).isTrue();
+            assertThat(received.keyId()).isEqualTo("KEY1234567");
+            assertThat(received.teamId()).isEqualTo("TEAM123456");
+            assertThat(received.topic()).isEqualTo("com.example.portal");
+            assertThat(received.pushType()).isEqualTo("alert");
+            Map<String, Object> message = json.readValue(received.body(), Map.class);
+            assertThat((Map<String, Object>) ((Map<String, Object>) message.get("aps")).get("alert"))
+                .containsEntry("title", "Ping").containsEntry("body", "About the new quiz.");
+            assertThat(message).containsEntry("url", "/portal/orders");
+            // The notification's own id: a copy sent again replaces it on the iPhone.
+            assertThat((String) message.get("tag")).matches("[0-9a-f]{32}");
+            assertThat(received.collapseId()).isEqualTo(message.get("tag"));
+        });
+
+        // Only a device token: not a token, or with a subscription's keys, is refused.
+        for (Map<String, Object> wrong : List.<Map<String, Object>>of(Map.of("kind", "apns", "endpoint", "not-a-token"),
+            Map.of("kind", "apns", "endpoint", APNS.deviceToken(), "p256dh", "x", "auth", "y"))) {
+            post(BASE + "/devices", customer.bearer(), wrong).expectStatus().isEqualTo(422);
+        }
+
+        // Removed by its token as iOS writes it (capitals): the stored one is in small letters.
+        String other = APNS.deviceToken();
+        device.put("endpoint", other);
+        post(BASE + "/devices", customer.bearer(), device).expectStatus().isOk();
+        post(BASE + "/devices/remove", customer.bearer(), Map.of("endpoint", other.toUpperCase(Locale.ROOT)))
+            .expectStatus().isNoContent();
+
+        // Apple says the token is no longer the app's (uninstalled): the device is forgotten.
+        APNS.answer(token, 410, "Unregistered");
+        send("ping", customer.userId(), "gone", null, false);
+        pushQueued();
+        assertThat(devices(customer.userId())).isZero();
     }
 }

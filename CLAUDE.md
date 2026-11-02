@@ -69,7 +69,7 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
   应用的前端要有自己的退订页时，挂载积木 `MailUnsubscribe` 并配置 `jabiz.mail.unsubscribe-paths.<入口>`（相对该入口 `app-path`；声明了该入口的通知链接到它，D52 第 3 条），
   不自写退订页或拼退订链接。
   推送通知只经 `PushTemplate` Bean 与流程步骤 `SendPush`（提交后由平台推送，消息 `push.<名>.title|body|name`，`jabiz.push.enabled` 缺省关闭）；设备只经平台接口登记（随会话，
-  `@jabiz/client` 的 `enablePush`，积木 `PushPreferences`），推送服务只限 `jabiz.push.web-push.allowed-hosts`（18 §5.7、决策 D69）；不在流程中直接调用推送服务，不自建设备表。
+  `@jabiz/client` 的 `enablePush`，积木 `PushPreferences`），推送服务只限 `jabiz.push.web-push.allowed-hosts`；iOS 外壳经 `configureClient({ nativePush })` 交出 Apple 的设备令牌，服务器以 `jabiz.push.apns.*`（`.p8` 只来自环境变量）发往 APNs（18 §5.7、决策 D69）；不在流程中直接调用推送服务，不自建设备表。
 - **不可变数据**：优先使用 `record` 和不可变集合（`List.copyOf` / `Map.copyOf`）。
 - **错误**：领域错误使用现有异常体系，经 `GlobalExceptionHandler` 转为 `ProblemDetail`：
   400 校验失败（附 `violations`）、404 不存在、409 并发冲突、422 业务规则拒绝、503 查询超时（`QUERY_TIMEOUT`，由数据库按时限中止，03 §1）、503 热门锁的队列已满或排队超时（`PROCESS_BUSY` 带 `Retry-After`，06 §4.2）、429 限流（`RATE_LIMITED`）。错误码可多语言（见设计文档）。
