@@ -145,6 +145,35 @@ class AttemptStatementBudgetIT extends PlayItSupport {
     }
 
     /**
+     * Q76 (D-Q76-7): a publication with prerequisites reads the caller's attempts on them, one statement more and
+     * outside the start lock; the lock's budget is unchanged, and so is an ordinary publication's (above).
+     */
+    @Test
+    void aStartWithPrerequisites() {
+        warmUp();
+        String sponsor = newSponsor("s-budget-pre");
+        credit(sponsor, 100_000);
+        String basics = livePublication(sponsor, "Budget basics", Map.of("regions", List.of("GLOBAL"), "maxWinners",
+            100_000, "budgetCap", 1_000_000));
+        String advanced = liveRequiring(sponsor, "Budget advanced", Map.of("regions", List.of("GLOBAL"),
+            "maxWinners", 100_000, "budgetCap", 1_000_000), List.of(prerequisite(basics, "PASSED")));
+        // Warm: a taker who passed the basics starts the advanced one, as counted below for the next.
+        String warm = newTaker("t-budget-pre-warm-" + UUID.randomUUID(), null);
+        play(warm, basics, true, true);
+        keyed("QB_ATTEMPT_START", taker(warm), body("publicationId", advanced));
+        String userId = newTaker("t-budget-pre-" + UUID.randomUUID(), null);
+        play(userId, basics, true, true);
+        String token = taker(userId);
+
+        SqlStatementLog.clear();
+        keyed("QB_ATTEMPT_START", token, body("publicationId", advanced));
+        List<List<String>> start = SqlStatementLog.transactions();
+        report("QB_ATTEMPT_START (prerequisites)", start);
+        assertBudget("QB_ATTEMPT_START (prerequisites)", start, budget(START_TOTAL) + 1, budget(START_LOCKED));
+        assertThat(SqlStatementLog.locks()).containsExactly(PublicationMoves.startLockName(advanced));
+    }
+
+    /**
      * The completion that ends the publication (its last winner's place) moves it under the publication's lock alone;
      * a pause takes the start lock after the publication's (Q10a4, Q10-lock-split.md 6.1).
      */

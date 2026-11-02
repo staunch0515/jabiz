@@ -82,6 +82,24 @@ export const AUDIENCE = {
   notMatched: 'QB_AUDIENCE_NOT_MATCHED',
 } as const
 
+/**
+ * Prerequisites (Q76, `publishing.PublicationPrerequisites`, `play.PrerequisiteCheck`;
+ * docs/quizbuks/plans/Q76-prerequisites.md): the sponsor's other publications a taker must first pass or answer.
+ */
+export const PREREQUISITES = {
+  /** Replaces a draft's prerequisites (at most `MAX`), each a required publication and `PASSED` or `ANSWERED`. */
+  save: 'QB_PUBLICATION_PREREQUISITES_SAVE',
+  /** The sponsor's own rows, with the required publications' names (`queries/qb/sponsor`). */
+  sponsorTemplate: 'qb.sponsor.publication-prerequisites',
+  /** 422: the caller has not yet passed (or answered) a publication this one requires. */
+  notMet: 'QB_PREREQUISITE_NOT_MET',
+  max: 5,
+} as const
+
+/** What a prerequisite asks of the taker on the required publication. */
+export const REQUIREMENTS = ['PASSED', 'ANSWERED'] as const
+export type Requirement = (typeof REQUIREMENTS)[number]
+
 /** The widths the policy `qb.content.image` keeps of every image (covers, questions, options, materials). */
 export const CONTENT_IMAGE_VARIANTS = ['w320', 'w640', 'w1280'] as const
 

@@ -1,6 +1,6 @@
 import { configureClient, session } from '@jabiz/client'
 import { expectAccessible } from '@jabiz/ui/testing'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../App'
@@ -71,6 +71,9 @@ interface Server {
   mailServer?: Record<string, unknown> | null
   /** The draft's stored matching conditions (Q47), one row per option or range. */
   conditions?: Record<string, unknown>[]
+  /** Q76: the draft's stored prerequisites with the required publications' names, and the sponsor's publications. */
+  prerequisites?: Record<string, unknown>[]
+  publications?: Record<string, unknown>[]
   /** The sponsor's staff (Q39). */
   staff?: Record<string, unknown>[]
 }
@@ -197,8 +200,12 @@ function server(options: Server = {}) {
           { code: 'ASIA', label: 'Asia' }])
       case '/api/dictionaries/urn:jabiz:dict:quizbuks:publication-end-reason':
         return json(200, [{ code: 'EXPIRED', label: 'End time reached' }])
-      case '/api/queries/qb.sponsor.publications':
-        return json(200, { items: [ROW], offset: 0, limit: 20, total: 1 })
+      case '/api/queries/qb.sponsor.publications': {
+        const items = options.publications ?? [ROW]
+        return json(200, { items, offset: 0, limit: 20, total: items.length })
+      }
+      case '/api/queries/qb.sponsor.publication-prerequisites':
+        return json(200, { items: options.prerequisites ?? [], offset: 0, limit: 100 })
       case '/api/queries/qb.sponsor.quizzes':
         if ((body as { params?: { q?: string } } | null)?.params?.q) await options.quizSearch
         return json(200, { items: [{ quizId: 'q1', title: 'Coffee basics', versionLabel: 'v1.0', latestVersionNo: 1,
@@ -1270,6 +1277,68 @@ describe('customer matching (Q47)', () => {
     // The draft's save went through the first time: the second carries its revision, not a stale one.
     expect(processCalls('QB_PUBLICATION_SAVE')[1]).toMatchObject({ baseRevision: 4 })
     expect(screen.queryByTestId('publication-stale')).toBeNull()
+  })
+})
+
+describe('prerequisites (Q76)', () => {
+  const prerequisitesSaved = (revision: number) => ({ status: 200, body: { output: { publicationId: 'p1',
+    status: 'DRAFT', revision, approval: null, approvalRequestId: null } } })
+  const LEVEL1 = { ...ROW, publicationId: 'p0', name: 'Coffee basics', status: 'LIVE' }
+  const ENDED = { ...ROW, publicationId: 'p9', name: 'Tea week', status: 'ENDED' }
+  const OTHER_DRAFT = { ...ROW, publicationId: 'p8', name: 'Cocoa draft', status: 'DRAFT' }
+
+  it('offers the submitted publications, shows the stored ones, and saves them after the draft', async () => {
+    const { processCalls } = server({
+      publications: [ROW, LEVEL1, ENDED, OTHER_DRAFT],
+      prerequisites: [{ prerequisiteId: 'r1', requiredPublicationId: 'p0', requirement: 'PASSED', name: 'Coffee basics',
+        status: 'LIVE', startAt: null, endAt: null }],
+      processes: {
+        QB_PUBLICATION_SAVE: [saved(4)],
+        QB_PUBLICATION_PREREQUISITES_SAVE: [prerequisitesSaved(5)],
+      },
+    })
+    window.history.replaceState(null, '', '/publications/p1?step=2')
+    render(<App />)
+    const panel = await screen.findByTestId('publication-prerequisites')
+    // The draft itself and other drafts are not offered; the stored one is ticked with its requirement.
+    const rows = within(panel).getAllByTestId('prerequisite')
+    expect(rows.map((row) => row.getAttribute('data-publication'))).toEqual(['p0', 'p9'])
+    expect(rows[0]).toHaveAttribute('data-chosen', 'true')
+    expect(within(rows[0]).getByTestId('prerequisite-PASSED')).toHaveAttribute('aria-checked', 'true')
+    expect(rows[1]).toHaveAttribute('data-chosen', 'false')
+    await expectAccessible()
+    // Answering is enough for the first; the ended one is required too.
+    await userEvent.click(within(rows[0]).getByTestId('prerequisite-ANSWERED'))
+    await userEvent.click(within(rows[1]).getByTestId('prerequisite-on'))
+    await userEvent.click(screen.getByTestId('publication-save'))
+    await waitFor(() => expect(processCalls('QB_PUBLICATION_PREREQUISITES_SAVE')).toHaveLength(1))
+    expect(processCalls('QB_PUBLICATION_PREREQUISITES_SAVE')).toEqual([{ publicationId: 'p1', baseRevision: 4,
+      prerequisites: [{ requiredPublicationId: 'p0', requirement: 'ANSWERED' },
+        { requiredPublicationId: 'p9', requirement: 'PASSED' }] }])
+    // Untouched the next time: not sent again; the summary names them.
+    await userEvent.click(screen.getByTestId('publication-next'))
+    expect(await screen.findByTestId('summary-prerequisites')).toHaveTextContent('Coffee basics (Answered) · Tea week (Passed)')
+    expect(processCalls('QB_PUBLICATION_PREREQUISITES_SAVE')).toHaveLength(1)
+  })
+
+  it('says when nothing can be required yet, and shows the server\'s refusal', async () => {
+    const refused = { status: 422, body: { detail: 'Refused', violations: [{ field: 'prerequisites[0]',
+      ruleCode: 'QB_PREREQUISITE_DRAFT', message: 'A draft cannot be required: submit it first.' }] } }
+    server({ publications: [ROW] })
+    window.history.replaceState(null, '', '/publications/p1?step=2')
+    render(<App />)
+    // The draft itself is the only publication: nothing to require.
+    expect(await screen.findByTestId('prerequisites-none')).toHaveTextContent('Submit one first')
+    expect(screen.queryByTestId('prerequisite')).toBeNull()
+    cleanup()
+    vi.restoreAllMocks()
+    const { processCalls } = server({ publications: [ROW, LEVEL1], processes: { QB_PUBLICATION_SAVE: [saved(4)],
+      QB_PUBLICATION_PREREQUISITES_SAVE: [refused] } })
+    render(<App />)
+    await userEvent.click(within(await screen.findByTestId('prerequisite')).getByTestId('prerequisite-on'))
+    await userEvent.click(screen.getByTestId('publication-save'))
+    await waitFor(() => expect(processCalls('QB_PUBLICATION_SAVE')).toHaveLength(1))
+    expect(await screen.findByTestId('publication-save-problems')).toHaveTextContent('A draft cannot be required')
   })
 })
 
