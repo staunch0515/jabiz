@@ -1869,6 +1869,9 @@ describe('the video to watch first (Q75)', () => {
     expect(within(card).getByTestId('feed-card-watch')).toHaveTextContent('Watch to answer')
     io.fire(card, true, MIDDLE)
     const frame = await screen.findByTitle('Video: Capitals week') as HTMLIFrameElement
+    // And still says so while it plays (the player takes the picture's place).
+    expect(card).toHaveAttribute('data-playing', 'true')
+    expect(within(card).getByTestId('feed-card-watch')).toHaveTextContent('Watch to answer')
     hear(frame, { event: 'infoDelivery', info: { playerState: 1, currentTime: 0, muted: true } })
     now.mockReturnValue(2_050_000)
     hear(frame, { event: 'infoDelivery', info: { currentTime: 50 } })
