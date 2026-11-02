@@ -45,6 +45,7 @@ When you sign in or sign up with Google, Apple, Facebook or LINE, we receive fro
 
 - Sign-in records: time, outcome, the site you signed in to, IP address and browser type (user agent)
 - The IP address and browser type of each signed-in device (session)
+- Only if you turn on push notifications on a device: the address its push service gives for it and the keys that encrypt the notifications for it, kept with that device's session; deleted when you turn them off, sign out on that device or delete your account
 - Records of operations in the Service: when, by whom and which operation. Secret values such as passwords are not recorded.
 
 We do not collect your location (GPS or similar) or estimate it from your IP address. We use no advertising and no third-party behavioural analytics.
@@ -93,6 +94,7 @@ We do not give personal information to third parties without your consent, excep
 |---|---|---|
 | Stripe, Inc. (USA) and its affiliates | Sponsors' card top-ups and payments to Takers (Stripe Connect) | Amounts and the Service's own identifiers. Stripe collects the identity and bank details of Takers who receive payments directly from them; card numbers never pass through us |
 | Google LLC (USA), Meta Platforms, Inc. (USA), LY Corporation (Japan) | Sign-in with another service | The sign-in request (for what we receive, see 2.2) |
+| The push service of your device or browser (Google LLC (USA), Mozilla Corporation (USA), Apple Inc. (USA) or Microsoft Corporation (USA)) | Push notifications, only if you turn them on | The notification, encrypted so that only your device can read it, and the time it is sent |
 | Our mail provider [name, e.g. Google LLC (USA)] | Verification, password reset and notification emails | Email address, language, the content of the email |
 | The mail server provider a Sponsor registers | Sending that Sponsor's invitations | The invitee's email address and the content of the email |
 | Anthropic, PBC (USA) | AI help for Sponsors writing quizzes (only when a Sponsor uses it) | Only the quiz and material content the Sponsor chooses. No information about Takers, and not the Sponsor's name or company. See the “AI notice” |

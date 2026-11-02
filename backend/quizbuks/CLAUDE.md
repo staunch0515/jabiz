@@ -354,9 +354,10 @@
 - **商店 App 的外壳**（Q49，`quizbuks-mobile/`，`docs/quizbuks/plans/Q49b-android.md`）：只上架答题者的 App（`/taker/`），商家后台与充值不进 App。
   Android 是 TWA（`quizbuks-mobile/android`，设置只在 `twa-manifest.json`，构建由它读取；App Links 只认 `/taker/` 前缀），启动地址与 App Links 都带 `shell=android`；
   App 中只以 `src/shell.ts` 的 `nativeShell()` 判断是否在商店 App 中（参数或 Chrome 的 `android-app://` referrer，按标签页记住），在外壳中不显示任何安装提示（`install.tsx`）。
-  `assetlinks.json` 暂由 Caddy 站点提供（`deploy/quizbuks/assetlinks.sh`，环境变量 `QUIZBUKS_ANDROID_PACKAGE` / `QUIZBUKS_ANDROID_CERT_SHA256`），平台 17l 合入后改用平台的。
+  `assetlinks.json` 由 Caddy 站点提供（`deploy/quizbuks/assetlinks.sh`，环境变量 `QUIZBUKS_ANDROID_PACKAGE` / `QUIZBUKS_ANDROID_CERT_SHA256`）：维护模式中也能取到；需求方 2026-11-02 决定不改用平台 17l 的 `jabiz.web.native-apps`。
   上传密钥与 Play 服务账号只在 GitHub Environment `play` 的 secrets 中（workflow `quizbuks-mobile.yml`）。改了 App 的前缀、包名或颜色时两边一起改（`scripts/consistency.test.mjs`）。
-  iOS 是 Capacitor（`quizbuks-mobile/ios`，设置只在 `capacitor.config.json`，Swift 的 `QuizBuksScope` 让网页只停在 `/taker/`、其他地址交给 Safari；User-Agent 带 `QuizBuksApp/ios`），`shell.ts` 同样认它；`apple-app-site-association` 暂由 Caddy 提供（`deploy/quizbuks/apple-app-site-association.sh`，变量 `QUIZBUKS_IOS_APP_ID`）；签名只在 workflow `quizbuks-ios.yml` 中以 App Store Connect API 密钥进行（Environment `appstore`）。
+  iOS 是 Capacitor（`quizbuks-mobile/ios`，设置只在 `capacitor.config.json`，Swift 的 `QuizBuksScope` 让网页只停在 `/taker/`、其他地址交给 Safari；User-Agent 带 `QuizBuksApp/ios`），`shell.ts` 同样认它；`apple-app-site-association` 同样由 Caddy 提供（`deploy/quizbuks/apple-app-site-association.sh`，变量 `QUIZBUKS_IOS_APP_ID`）；签名只在 workflow `quizbuks-ios.yml` 中以 App Store Connect API 密钥进行（Environment `appstore`）。
+  推送通知（平台 17k，D69）：profile `push`（`application-push.yml`，VAPID 密钥只来自环境变量）；只有中奖通知 `MessageProcesses.PRIZE_WON`（`qb.prize-won`，入口 `app`），由 `QB_MESSAGE_FROM_EVENT` 在写下"中奖"的那条消息时以 `SendPush` 发出，同一奖品只推一次（`prizeWon`）；答题者在"账户 → 通知"以平台积木 `PushPreferences` 开关。新的推送先加 `PushTemplate` 与三语消息 `push.qb.<名>.*`，不自己调用推送服务。
   商店资料（Q49d，`docs/quizbuks/store/`）：说明文字三语同构并由 `tools/quizbuks/store/listing.test.mjs` 检查；数据安全表按隐私政策逐格写，政策或 App 收集的数据改了就同步；截图只由 `quizbuks-web/e2e/store`（workflow `quizbuks-store.yml`）生成，不提交。
 
 ## 6. 测试与命令（在 `backend/` 下）

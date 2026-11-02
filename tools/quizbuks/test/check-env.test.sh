@@ -138,6 +138,22 @@ status=0
 out="$(/bin/sh "$script" "$work/none" "$work/required" 2>&1)" || status=$?
 expect "no .env" 1 "cannot read"
 
+# VAPID keys (platform 17k): the halves of a pair as the README makes them; a PEM or a padded value stops.
+cat >>"$work/required" <<'LIST'
+?VAPID_PUBLIC 87 - vapid-public
+?VAPID_PRIVATE 43 - vapid-private
+LIST
+openssl ecparam -name prime256v1 -genkey -noout -out "$work/vapid.pem" 2>/dev/null
+vpub="$(openssl ec -in "$work/vapid.pem" -pubout -outform DER 2>/dev/null | tail -c 65 | base64 | tr '/+' '_-' | tr -d '=\n')"
+vpriv="$(openssl ec -in "$work/vapid.pem" -outform DER 2>/dev/null | tail -c +8 | head -c 32 | base64 | tr '/+' '_-' | tr -d '=\n')"
+run $'PLAIN=a\nLONG=12345678\nVAPID_PUBLIC='"$vpub"$'\nVAPID_PRIVATE='"$vpriv"
+expect "a VAPID key pair as the README makes it" 0
+run $'PLAIN=a\nLONG=12345678\nVAPID_PUBLIC='"$vpub"$'==\nVAPID_PRIVATE='"$vpriv"'x'
+expect "a padded public key" 1 "VAPID_PUBLIC is not of the form vapid-public"
+expect "a private key too long" 1 "VAPID_PRIVATE is not of the form vapid-private"
+run $'PLAIN=a\nLONG=12345678\nVAPID_PRIVATE=-----BEGIN EC PRIVATE KEY-----MHcCAQEEIAbcdefghijklmnopqrstuvwxyz0123456789ABCDEFGH'
+expect "a PEM for the private key" 1 "VAPID_PRIVATE is not of the form vapid-private"
+
 # The committed list against a staging .env: "social" asks nothing of Apple; "apple" asks Apple's values of their forms,
 # so placeholders stop the deployment (as the application's startup check would, after migrating).
 base="$(grep -E '^[A-Z]' "$root/deploy/quizbuks/server/required-env" | awk '{ print $1 "=" "0123456789abcdef0123456789abcdef0123456789" }')"
@@ -164,7 +180,7 @@ cp "$work/plain" "$work/required"
 
 # The committed list: names (`?` when optional), each with an optional length (`-` for any), start (`-` for any) and
 # form.
-if grep -vE '^(#.*|\??([a-z][a-z0-9-]*:)?[A-Z][A-Z0-9_]*( ([0-9]+|-)( [^ ]+( (apple-id|url|p8))?)?)?|)$' \
+if grep -vE '^(#.*|\??([a-z][a-z0-9-]*:)?[A-Z][A-Z0-9_]*( ([0-9]+|-)( [^ ]+( (apple-id|url|p8|vapid-public|vapid-private))?)?)?|)$' \
   "$root/deploy/quizbuks/server/required-env"; then
   echo "FAIL required-env has a line that is not a name with an optional length, start and form"
   failures=$((failures + 1))

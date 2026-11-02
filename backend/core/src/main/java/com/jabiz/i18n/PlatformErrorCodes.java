@@ -218,6 +218,12 @@ public final class PlatformErrorCodes {
     public static final String ACCOUNT_DELETION_NOTICES = "ACCOUNT_DELETION_NOTICES";
     /** A mail parameter's value is a secret ({@code @Sensitive}); a mail carries no secret but its tokens. */
     public static final String MAIL_PARAM_SECRET = "MAIL_PARAM_SECRET";
+    /** Push notifications are off on this system (decision D69). */
+    public static final String PUSH_DISABLED = "PUSH_DISABLED";
+    /** A device's subscription is not one this server may push to (an endpoint of no allowed push service, bad keys). */
+    public static final String PUSH_SUBSCRIPTION_INVALID = "PUSH_SUBSCRIPTION_INVALID";
+    /** A push notification was given a secret as a parameter. */
+    public static final String PUSH_PARAM_SECRET = "PUSH_PARAM_SECRET";
     /** The parameters of a mail are larger than {limit} characters as JSON. */
     public static final String MAIL_PARAMS_TOO_LARGE = "MAIL_PARAMS_TOO_LARGE";
     /**
@@ -383,6 +389,7 @@ public final class PlatformErrorCodes {
         OIDC_ACCOUNT_EXISTS, REAUTHENTICATION_REQUIRED, REAUTHENTICATION_UNAVAILABLE, IDENTITY_IN_USE, IDENTITY_PROVIDER_LINKED, IDENTITY_LINK_UNAVAILABLE,
         IDENTITY_LINK_FAILED, LAST_SIGN_IN_METHOD, ACCOUNT_ERASED, ERASURE_PURGE_UNAVAILABLE, ACCOUNT_DELETION_UNAVAILABLE,
         ACCOUNT_DELETION_PROTECTED, ACCOUNT_DELETION_PENDING, ACCOUNT_DELETION_NONE, ACCOUNT_DELETION_NOTICES, MAIL_PARAM_SECRET, MAIL_PARAMS_TOO_LARGE, MAIL_SIGN_IN_LINK,
+        PUSH_DISABLED, PUSH_SUBSCRIPTION_INVALID, PUSH_PARAM_SECRET,
         RETENTION_ACTIVE, LEGAL_HOLD, LEGAL_HOLD_NOT_ACTIVE,
         TASK_NOT_OPEN, TASK_CLOSED_BY_ITS_PROCESS, APPROVAL_NOT_PENDING, APPROVAL_OTHER_SCOPE, APPROVAL_OWN_REQUEST, APPROVAL_ALREADY_DECIDED, APPROVAL_LIMIT_EXCEEDED,
         CONTROL_CHANGE_INVALID, CONTROL_CHANGE_NOT_PROPOSED, CONTROL_SAME_PERSON, CONTROL_TARGET_CHANGED, SOD_CONFLICT,

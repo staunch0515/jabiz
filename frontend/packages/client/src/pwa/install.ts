@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react'
+import { nativeShell } from '../native'
 
 /*
  * Offering to install the PWA (docs/design/12-frontend.md, phases 16zj and 17m). No browser lets a site put itself on
@@ -150,7 +151,9 @@ function browserEnvironment(): InstallEnvironment {
   return {
     userAgent: navigator.userAgent,
     maxTouchPoints: navigator.maxTouchPoints ?? 0,
-    standalone: safariStandalone || media('(display-mode: standalone)') || media('(display-mode: fullscreen)'),
+    // A store app's native shell is installed already (decision D68).
+    standalone: nativeShell() !== null || safariStandalone || media('(display-mode: standalone)')
+      || media('(display-mode: fullscreen)'),
     canPrompt: kept !== null,
   }
 }

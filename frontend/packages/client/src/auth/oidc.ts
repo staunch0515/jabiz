@@ -1,6 +1,7 @@
 import { api, unwrap } from '../api/client'
 import { session } from '../api/session'
 import { sitePath } from './mailLink'
+import { openAuthorization } from '../native'
 
 /** Where to go after signing in through an identity provider; kept across the round trip (not a secret). */
 const returnKey = () => `jabiz.session.${session.entry()}.oidcReturnTo`
@@ -13,14 +14,15 @@ const binderKey = () => `jabiz.session.${session.entry()}.oidcBinder`
 /**
  * Starts signing in through an identity provider (docs/design/10-security.md section 12) for this frontend's sign-in
  * entry: the server records the request and names the provider's page, which the browser then opens. The provider
- * sends the user back to the entry's callback page (`login/oidc`).
+ * sends the user back to the entry's callback page (`login/oidc`). A native shell opens the provider's page in the
+ * system's browser (`configureClient({ openAuthorization })`, decision D68).
  */
 export async function startProviderSignIn(providerId: string, returnTo: string): Promise<void> {
   const started = await unwrap(api.POST('/api/auth/oidc/{id}/start', {
     params: { path: { id: providerId }, query: { entry: session.entry() } },
   }))
   keep(returnTo, started.binder!, 'SIGN_IN')
-  window.location.assign(started.authorizationUrl!)
+  await open(started.authorizationUrl!)
 }
 
 /**
@@ -38,6 +40,25 @@ export interface IdentityLinkOptions {
    * either the server answers 422 `REAUTHENTICATION_REQUIRED`, and a wrong password 422 `PASSWORD_INCORRECT`.
    */
   currentPassword?: string
+}
+
+/**
+ * Opens the provider's page as configured; when that fails (a native shell without a browser), forgets the round trip
+ * just kept, so that no later callback page takes its binder or purpose.
+ */
+async function open(url: string): Promise<void> {
+  try {
+    await openAuthorization(url)
+  } catch (e) {
+    for (const key of [returnKey(), binderKey(), purposeKey()]) {
+      try {
+        window.sessionStorage.removeItem(key)
+      } catch {
+        // Nothing kept without storage.
+      }
+    }
+    throw e
+  }
 }
 
 function keep(returnTo: string, binder: string, purpose: OidcPurpose) {
@@ -62,7 +83,7 @@ Promise<void> {
     body: { provider: providerId, currentPassword: options.currentPassword || undefined },
   }))
   keep(returnTo, started.binder!, 'LINK')
-  window.location.assign(started.authorizationUrl!)
+  await open(started.authorizationUrl!)
 }
 
 /**

@@ -1,0 +1,14 @@
+# Push notifications to the takers' devices (platform 17k, decision D69), switched on by the deployment with the Spring
+# profile "push" (SPRING_PROFILES_ACTIVE=…,push), beside a sign-in profile. Web Push: Android (the app is a TWA) and
+# browsers; a notification of a prize won (MessageProcesses.PRIZE_WON), which the taker can turn off in the app's
+# notification settings. The VAPID key pair comes from the environment only: the public key (an uncompressed P-256
+# point, Base64url, 87 characters) as JABIZ_PUSH_PUBLIC_KEY, the private key (32 bytes, Base64url, 43 characters) as
+# JABIZ_PUSH_PRIVATE_KEY; the push services' contact, a mailto: address, as JABIZ_PUSH_SUBJECT. The application checks
+# at startup that the two keys are one pair. A new pair unsubscribes every device: keep it.
+jabiz:
+  push:
+    enabled: true
+    web-push:
+      public-key: ${JABIZ_PUSH_PUBLIC_KEY}
+      private-key: ${JABIZ_PUSH_PRIVATE_KEY}
+      subject: ${JABIZ_PUSH_SUBJECT}

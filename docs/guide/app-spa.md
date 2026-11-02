@@ -208,7 +208,26 @@ export default defineConfig({
   `<meta name="…" content="{{jabiz:名}}">`，部署配置 `jabiz.web.spa[i].index-values.名: ${环境变量}`，服务器启动时写进去（HTML 转义；17g）。
   写在应用配置中该 SPA 的条目里（与 `path` 等同处；Spring 的列表按整体替换，不能只在环境里单补一项），值以 `${环境变量}` 取自部署。
   占位只能是标签中双引号属性的完整值；没有值、写法不对时启动失败。Vite 的开发服务器不替换它（开发时照原样）。秘密不放入口页。
+- 商店 App 的关联文件：`jabiz.web.native-apps[i]`（`path`、`ios`、`android[j].package-name` / `.fingerprints`）让平台在域名根提供 `apple-app-site-association`
+  与 `assetlinks.json`（17 §3.2，决策 D68），不必另写脚本或反向代理的规则。
 - 只支持同源：不开 CORS，令牌只经 `Authorization` 头。
+
+## 6a. 在商店 App 的原生外壳中（决策 D68）
+
+外壳（TWA、Capacitor 等）加载本 SPA 时，应用在 `main.tsx` 中告诉平台两件事：
+
+```ts
+configureClient({
+  entry: 'app',
+  nativeShell: shell(),            // 'ios' / 'android' / null：应用自己从参数或 User-Agent 识别
+  openAuthorization: shell() === 'ios' ? (url) => NativeAuth.open(url) : null,  // 外壳的插件：在系统浏览器中打开
+})
+```
+
+- `openAuthorization`：提供方的页面在系统浏览器中打开（Google 拒绝在嵌入的网页视图中登录）。发起照旧在网页中（binder 留在网页的 `sessionStorage`），
+  提供方送回入口的回调页 `login/oidc`；外壳把它作为 App 的关联链接，在**同一个**网页视图中打开，`OidcCallback` 照常完成登录或关联。
+- `nativeShell`：在外壳中 `useInstallPrompt` 的结果视同已安装，`InstallPrompt` 与账户页的安装入口都不出现。
+- 关联文件见第 6 节；回调页的路径要在 App 的关联域名与 manifest 中。
 
 ## 7. 已知限制
 

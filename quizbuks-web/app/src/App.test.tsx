@@ -73,6 +73,9 @@ function server(me?: Me, providers: unknown[] = []) {
         // The app's own notifications only (decision D49): the platform filters by the token's entry.
         return request.method === 'POST' ? new Response(null, { status: 204 }) : json(200, { templates: [
           { template: 'qb.welcome', subscribed: true, displayName: 'Welcome after registration', otherEntry: false }] })
+      case '/api/auth/account/push':
+        return json(200, { enabled: true, webPushKey: 'BCVxsr7N_eNgVRqvHtD0zTZsEc6-VV-JvLexhqUzORcxaOzi6-AYWXvTBHm4bjyPjs7Vd8pZGH6SRpkNtoIAiw4',
+          templates: [{ template: 'qb.prize-won', name: 'Prizes won', subscribed: true }], devices: [] })
       case '/api/auth/mail/unsubscribe':
         return new Response(null, { status: 204 })
       case '/api/auth/account/locale':
@@ -459,6 +462,11 @@ describe('a signed-in taker', () => {
     await userEvent.click(within(section).getByTestId('mail-preference-qb.welcome'))
     await waitFor(() => expect(posted).toContainEqual({ path: '/api/auth/mail/preferences',
       body: { template: 'qb.welcome', subscribed: false } }))
+    // Push notifications on the same page (platform 17k); this test browser has no Push API, so it says so.
+    expect(screen.getByRole('heading', { name: 'Notifications' })).toBeInTheDocument()
+    const push = screen.getByTestId('account-push')
+    expect(push).toHaveTextContent('Push notifications')
+    expect(await within(push).findByTestId('push-preferences-unavailable')).toHaveTextContent('cannot receive')
   })
 
   it('turns the sound effects off and on from the app\'s settings, saved to the account (Q57)', async () => {

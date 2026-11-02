@@ -260,6 +260,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/auth/account/push": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["settings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/account/push/devices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["register_1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/account/push/devices/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["remove"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/account/push/preferences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["setPreference_1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/account/sessions": {
         parameters: {
             query?: never;
@@ -1996,6 +2060,14 @@ export interface components {
             /** @enum {string} */
             os?: "WINDOWS" | "IOS" | "ANDROID" | "CHROME_OS" | "MACOS" | "LINUX" | "OTHER";
         };
+        DeviceView: {
+            /** Format: date-time */
+            createdAt?: string;
+            current?: boolean;
+            entry?: string;
+            id?: string;
+            kind?: string;
+        };
         DictItem: {
             code?: string;
             enabled?: boolean;
@@ -2642,6 +2714,12 @@ export interface components {
             kind?: string;
             label?: string;
         };
+        PushSettings: {
+            devices?: components["schemas"]["DeviceView"][];
+            enabled?: boolean;
+            templates?: components["schemas"]["TemplateChoice"][];
+            webPushKey?: string;
+        };
         QueryEntry: {
             defaultSort?: components["schemas"]["SortEntry"];
             description?: string;
@@ -2692,6 +2770,13 @@ export interface components {
             entry?: string;
             locale?: string;
             password?: string;
+        };
+        Registered: {
+            deviceId?: string;
+        };
+        RemoveRequest: {
+            deviceId?: string;
+            endpoint?: string;
         };
         ReportEntry: {
             landscape?: boolean;
@@ -2912,6 +2997,12 @@ export interface components {
                 [key: string]: string;
             };
             type?: string;
+        };
+        TemplateChoice: {
+            name?: string;
+            otherEntry?: boolean;
+            subscribed?: boolean;
+            template?: string;
         };
         TemplatePreference: {
             displayName?: string;
@@ -3406,6 +3497,96 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    settings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PushSettings"];
+                };
+            };
+        };
+    };
+    register_1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["RegisterRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Registered"];
+                };
+            };
+        };
+    };
+    remove: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["RemoveRequest"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    setPreference_1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PreferenceRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreferenceOutput"];
+                };
             };
         };
     };

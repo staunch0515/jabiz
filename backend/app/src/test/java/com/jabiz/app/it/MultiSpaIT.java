@@ -32,10 +32,16 @@ import static org.assertj.core.api.Assertions.assertThat;
     "jabiz.web.spa[2].entry=portal",
     "jabiz.web.spa[2].pwa=on",
     "jabiz.web.spa[2].index-values.application-name=Portal \"test\" & Co",
+    "jabiz.web.native-apps[0].path=/portal",
+    "jabiz.web.native-apps[0].ios[0]=ABCDE12345.com.example.portal",
+    "jabiz.web.native-apps[0].android[0].package-name=com.example.portal",
+    "jabiz.web.native-apps[0].android[0].fingerprints[0]=" + MultiSpaIT.FINGERPRINT,
 })
 class MultiSpaIT extends PostgresIntegrationTest {
 
     static final String SITE_POLICY = "default-src 'self'; frame-src https://www.youtube-nocookie.com";
+    static final String FINGERPRINT = "14:6D:E9:83:C5:73:06:50:D8:EE:B9:95:2F:34:FC:64:16:A0:83:42:E6:1D:BE:A8:8A:04:96:"
+        + "B2:3F:CF:44:E5";
     private static final String CSP = "Content-Security-Policy";
 
     @Autowired
@@ -155,5 +161,34 @@ class MultiSpaIT extends PostgresIntegrationTest {
         client.get().uri("/actuator/health").exchange()
             .expectStatus().isOk()
             .expectHeader().doesNotExist(CSP);
+    }
+
+    /**
+     * The store apps' association files (phase 17l, decision D68): at the root, public, JSON, cached for an hour,
+     * neither the site's page nor redirected, whatever the site at {@code /} would answer; Apple's opens the portal's
+     * addresses only.
+     */
+    @Test
+    void theStoreAppsAssociationFilesAreServedAtTheRoot() {
+        client.get().uri("/.well-known/apple-app-site-association").exchange()
+            .expectStatus().isOk()
+            .expectHeader().contentType(MediaType.APPLICATION_JSON)
+            .expectHeader().valueEquals("Cache-Control", "max-age=3600, public")
+            .expectHeader().doesNotExist(CSP)
+            .expectBody()
+            .jsonPath("$.applinks.details[0].appIDs[0]").isEqualTo("ABCDE12345.com.example.portal")
+            .jsonPath("$.applinks.details[0].components[0]['/']").isEqualTo("/portal/*");
+        client.get().uri("/.well-known/assetlinks.json").header("Authorization", "Bearer stale").exchange()
+            .expectStatus().isOk()
+            .expectHeader().contentType(MediaType.APPLICATION_JSON)
+            .expectBody()
+            .jsonPath("$[0].relation[0]").isEqualTo("delegate_permission/common.handle_all_urls")
+            .jsonPath("$[0].target.package_name").isEqualTo("com.example.portal")
+            .jsonPath("$[0].target.sha256_cert_fingerprints[0]").isEqualTo(FINGERPRINT);
+        client.head().uri("/.well-known/assetlinks.json").header("Authorization", "Bearer stale").exchange()
+            .expectStatus().isOk().expectHeader().contentType(MediaType.APPLICATION_JSON)
+            .expectBody().isEmpty();
+        // Other well-known addresses stay the site's.
+        client.get().uri("/.well-known/other").exchange().expectStatus().isNotFound();
     }
 }
