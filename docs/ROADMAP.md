@@ -4934,6 +4934,17 @@ D17 下匿名不能写任何东西（15 §10）。
 
 **17zd 状态**：📝 待评审（分支 `1.3/phase-17zd-retention-scopes`）。
 
+### 17ze 应用按地址改变页面所示的环境（需求 2026-11-02，QuizBuks）
+
+**缘由**：QuizBuks 上线前，正式域名暂时由 staging 的应用回答（为通过 Google AdSense 的审核），页面上的测试系统横条（16zd）与 `[STAGING]` 标题前缀会让审核判为未完成的网站。
+横条由服务器的 `jabiz.web.environment` 决定，`AppShell`、`AuthFrame` 自己读它，应用改不了。
+
+| # | 内容 |
+|---|---|
+| 17ze | `@jabiz/client` 的 `configureClient({ environment })`（类型 `EnvironmentOverride`：服务器的环境与页面的主机 → 要显示的环境或空）：`useEnvironment()` 给出改写后的值，横条、标题前缀、`AppShell` 与 `AuthFrame` 都随之；返回空或抛出即照服务器所说；随时设置或撤去即时生效、不再问服务器。服务器与通用后台不变。示范：门户 `src/environment.ts`（构建变量 `VITE_PORTAL_PUBLIC_HOST`，示范中不设）。测试：`environment.test.tsx`（改写、返回空、抛出、即时生效、`setEnvironment` 也经改写）、`app-shell.test.tsx`、`environment-banner.test.tsx`（标题随之）、门户 `environment.test.ts` |
+
+**17ze 状态**：📝 待评审（分支 `1.3/phase-17ze-environment-override`）。
+
 ### 17k 推送通知（需求 2026-10-28，QuizBuks Q49；确认 2026-11-01，决策 D69）
 
 **缘由**：答题者 App 要以推送告诉用户新问卷、中奖与审核结果；App Store 不收"只是网站外壳"的 App（审核指南 4.2）。需求方确认：Android 与浏览器用 Web Push，偏好按模板。分 17k-a（Web Push）与 17k-b（APNs）。

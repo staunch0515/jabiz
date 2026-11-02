@@ -113,7 +113,7 @@ export type {
   AccountDeletionCancelled,
 } from './auth/deletion'
 export { useEnvironment, setEnvironment, forgetEnvironment, toEnvironment } from './auth/environment'
-export type { Environment } from './auth/environment'
+export type { Environment, EnvironmentOverride } from './auth/environment'
 export {
   getMailPreferences,
   setMailPreference,
