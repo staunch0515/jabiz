@@ -97,13 +97,52 @@ run $'PLAIN=a\nLONG=12345678\nSPRING_PROFILES_ACTIVE=socials'
 expect "only the profile's own name" 0
 cp "$work/plain" "$work/required"
 
+# Forms, as the application checks the values at startup: placeholders left in stop the deployment here.
+cat >>"$work/required" <<'LIST'
+?TEAM 10 - apple-id
+?FORM_POST - https:// url
+?KEY - - p8
+LIST
+key="$(openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 2>/dev/null)"
+key_one_line="$(printf '%s' "$key" | awk 'BEGIN { ORS = "\\n" } { print }')"
+key_body="$(printf '%s\n' "$key" | grep -v -- '-----' | tr -d '\n')"
+run $'PLAIN=a\nLONG=12345678\nTEAM=ABCDE12345\nFORM_POST=https://staging.example.com/api/auth/oidc/apple/form-post\nKEY='"$key_one_line"
+expect "values of the right forms (a PEM on one line)" 0
+run $'PLAIN=a\nLONG=12345678\nKEY='"$key_body"
+expect "a key's Base64 body" 0
+run $'PLAIN=a\nLONG=12345678\nKEY="'"$key_one_line"'"'
+expect "a key in quotes" 0
+run $'PLAIN=a\nLONG=12345678\nTEAM=YOUR_TEAM_ID'
+expect "a placeholder id" 1 "TEAM is not of the form apple-id"
+run $'PLAIN=a\nLONG=12345678\nTEAM=abcde12345'
+expect "an id in small letters" 1 "TEAM is not of the form apple-id"
+run $'PLAIN=a\nLONG=12345678\nTEAM=ABCDE123456'
+expect "an id too long" 1 "TEAM is not of the form apple-id"
+run $'PLAIN=a\nLONG=12345678\nFORM_POST=https://<host>/api/auth/oidc/apple/form-post'
+expect "a placeholder host" 1 "FORM_POST is not of the form url"
+run $'PLAIN=a\nLONG=12345678\nFORM_POST=https:///api'
+expect "no host" 1 "FORM_POST is not of the form url"
+run $'PLAIN=a\nLONG=12345678\nKEY=YOUR_PRIVATE_KEY'
+expect "a placeholder key" 1 "KEY is not of the form p8"
+run $'PLAIN=a\nLONG=12345678\nKEY=-----BEGIN PRIVATE KEY-----'
+expect "only the first line of a PEM" 1 "KEY is not of the form p8"
+if grep -q "YOUR_PRIVATE_KEY\|staging.example" <<<"$out"; then
+  echo "FAIL a value is printed: $out"
+  failures=$((failures + 1))
+fi
+run $'PLAIN=a\r\nLONG=12345678\r'
+expect "Windows line endings" 1 "PLAIN has a carriage return"
+cp "$work/plain" "$work/required"
+
 status=0
 out="$(/bin/sh "$script" "$work/none" "$work/required" 2>&1)" || status=$?
 expect "no .env" 1 "cannot read"
 
-# The committed list: names (`?` when optional), each with an optional length (`-` for any) and start.
-if grep -vE '^(#.*|\??([a-z][a-z0-9-]*:)?[A-Z][A-Z0-9_]*( ([0-9]+|-)( [^ ]+)?)?|)$' "$root/deploy/quizbuks/server/required-env"; then
-  echo "FAIL required-env has a line that is not a name with an optional length and start"
+# The committed list: names (`?` when optional), each with an optional length (`-` for any), start (`-` for any) and
+# form.
+if grep -vE '^(#.*|\??([a-z][a-z0-9-]*:)?[A-Z][A-Z0-9_]*( ([0-9]+|-)( [^ ]+( (apple-id|url|p8))?)?)?|)$' \
+  "$root/deploy/quizbuks/server/required-env"; then
+  echo "FAIL required-env has a line that is not a name with an optional length, start and form"
   failures=$((failures + 1))
 else
   echo "ok   required-env parses"

@@ -156,6 +156,9 @@ SHOPIFY_API_SECRET=<API secret 或占位>
 （`check-env.sh`，只列出缺少、过短或格式不对的变量名，不显示值）：有问题即停止，镜像不拉取、数据库不迁移。新增必需变量的提交同时把它加进这个清单；
 可选的变量以 `?` 标出，给了才查（如 `JABIZ_ERASURE_DATASOURCE_URL` 必须以 `r2dbc:` 开头）；写作 `<profile>:NAME` 的只在 `.env` 的 `SPRING_PROFILES_ACTIVE`
 含该 Spring profile 时才要（如 `social` 的四家提供方：开着 `social` 而缺 Apple 的变量即停止，而不是迁移后启动失败）。
+应用启动时还检查格式的变量，清单中写明同样的格式，检查与应用一致：Apple 的 Team ID 与 Key ID 是 10 个大写字母或数字（`apple-id`），
+回调与 Return URL 是有主机名的 `https://` 地址（`url`，留着 `<主机>` 这样的占位即不通过），`.p8` 密钥是 PEM（换行写作 `\n`）或其 Base64 正文（`p8`）。
+填占位不能让检查通过：还没有 Apple 的凭据时不要开 `social`（只开 Google 时用 `google`）。以 Windows 换行保存的 `.env`（值的末尾带回车）同样停止。
 
 `QB_LOCAL_SECRETS=false`、`QB_STRIPE_PLACEHOLDERS=false` 已写在 compose 中：缺少任何密钥时应用拒绝启动，不会自己生成。
 **关于可信代理**：`proxy` 网络上还有其他应用（包括另一个环境）的容器，它们能直接访问本环境的容器。只信任 Caddy 的地址，它们就不能伪造客户端地址；
