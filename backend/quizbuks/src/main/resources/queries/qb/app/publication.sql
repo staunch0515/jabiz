@@ -1,7 +1,7 @@
 /*---
 id: qb.app.publication
 description: One publication's page for a taker (U-20 – U-23) with the caller's own attempt; none when they cannot see it
-entities: [QbPublicationCard, QbPublicationCounter, QbPublicationStartCounter, QbPublicationStats, QbStatsRun, QbWallet, QbCountry, QbSponsor, QbSponsorPage, QbQuizVersion, QbAttempt, QbPublicationOwner, QbInvitation, QbProfileAttribute, QbPublicationCriterion, QbCertificationRound, QbCertificationRecord, QbReferral]
+entities: [QbPublicationCard, QbPublicationCounter, QbPublicationStartCounter, QbPublicationStats, QbStatsRun, QbWallet, QbCountry, QbSponsor, QbSponsorPage, QbQuizVersion, QbAttempt, QbPublicationOwner, QbInvitation, QbProfileAttribute, QbPublicationCriterion, QbCertificationRound, QbCertificationRecord, QbReferral, QbPublicationPrerequisite]
 datasets:
   QbPublicationCard: urn:jabiz:dataset:default:QbPublicationCard
   QbPublicationCounter: urn:jabiz:dataset:default:QbPublicationCounter
@@ -16,6 +16,7 @@ datasets:
   QbAttempt: urn:jabiz:dataset:taker:QbAttempt
   QbProfileAttribute: urn:jabiz:dataset:me:QbProfileAttribute
   QbPublicationCriterion: urn:jabiz:dataset:default:QbPublicationCriterion
+  QbPublicationPrerequisite: urn:jabiz:dataset:default:QbPublicationPrerequisite
   QbCertificationRound: urn:jabiz:dataset:default:QbCertificationRound
   QbCertificationRecord: urn:jabiz:dataset:me:QbCertificationRecord
   QbReferral: urn:jabiz:dataset:referee:QbReferral
@@ -68,6 +69,8 @@ results:
   statsAt:        { from: QbStatsRun.refreshedAt }
   canStart:       { kind: { type: bool } }
   matched:        { kind: { type: bool } }
+  prerequisitesMet: { kind: { type: bool } }
+  prerequisites:  { kind: { type: text } }
   heldUntil:      { from: QbCertificationRecord.validUntil }
   referral:       { from: QbPublicationCard.referral }
   myReferralStatus:    { from: QbReferral.status }
@@ -82,7 +85,7 @@ permissions: [qb.play]
 -- Shown (the conditions QB_VIEW checks too): live, within its time and aimed at a region of the taker's country (for
 -- an invited publication, Q25: the caller's account holds an invitation of it, claimed by QB_VIEW or the start), or
 -- the caller has an attempt of it (to look at what they answered). canStart adds the feed's other conditions (winners
--- and budget not used up, a sponsor who can pay), no attempt yet, not the caller's own publication, and (Q47) matched: the caller's
+-- and budget not used up, a sponsor who can pay), no attempt yet, not the caller's own publication, (Q47) matched: the caller's
 -- profile meets the conditions (a shared link still shows the page, so the App can ask for the profile). The
 -- introduction and the materials come from the version's snapshot, never its questions (design section 9). The
 -- windows' counts and their time are the statistics job's (every ten minutes); the total is the counter's, live.
@@ -127,8 +130,10 @@ SELECT
     d.last7d AS last7d,
     d.last30d AS last30d,
     d.statsAt AS statsAt,
-    (d.shown AND d.startable AND d.matched AND d.heldUntil IS NULL AND d.myAttemptId IS NULL) AS canStart,
+    (d.shown AND d.startable AND d.matched AND d.prerequisitesMet AND d.heldUntil IS NULL AND d.myAttemptId IS NULL) AS canStart,
     d.matched AS matched,
+    d.prerequisitesMet AS prerequisitesMet,
+    d.prerequisites AS prerequisites,
     d.heldUntil AS heldUntil,
     d.referral AS referral,
     d.myReferralStatus AS myReferralStatus,
@@ -230,6 +235,37 @@ SELECT
                                     - pa.{{QbProfileAttribute.valueNumber}}
                                 ELSE pa.{{QbProfileAttribute.valueNumber}} END
                             BETWEEN pc.{{QbPublicationCriterion.minValue}} AND pc.{{QbPublicationCriterion.maxValue}})))))) AS matched,
+    -- Q76 (D-Q76-2): the caller has finished an attempt (in progress does not count) of every publication this one
+    -- requires, a pass where it asks for one (play.PrerequisiteCheck, the one definition; qb.app.feed and
+    -- qb.system.audience-count write the same; the view holds the caller's own attempts only).
+    NOT EXISTS (
+         SELECT 1 FROM {{QbPublicationPrerequisite}} pr
+         WHERE pr.{{QbPublicationPrerequisite.publicationId}} = c.{{QbPublicationCard.publicationId}}
+           AND NOT EXISTS (
+               SELECT 1 FROM {{QbAttempt}} ra
+               WHERE ra.{{QbAttempt.publicationId}} = pr.{{QbPublicationPrerequisite.requiredPublicationId}}
+                 AND ra.{{QbAttempt.status}} <> 'IN_PROGRESS'
+                 AND (pr.{{QbPublicationPrerequisite.requirement}} = 'ANSWERED' OR ra.{{QbAttempt.passed}}))) AS prerequisitesMet,
+    -- Q76 (D-Q76-3): what to do first, each with its name in the page's language (the required publication's card,
+    -- when it has one: a required publication was submitted, so it has one once live), whether the caller met it, and
+    -- whether it still accepts attempts (its page says why not otherwise).
+    (SELECT CAST(coalesce(jsonb_agg(jsonb_build_object(
+                'requiredPublicationId', pr.{{QbPublicationPrerequisite.requiredPublicationId}},
+                'requirement', pr.{{QbPublicationPrerequisite.requirement}},
+                'name', coalesce(CAST(rc.{{QbPublicationCard.translations}} AS jsonb) -> dl.lang ->> 'name',
+                                 rc.{{QbPublicationCard.name}}),
+                'live', rc.{{QbPublicationCard.status}} = 'LIVE' AND rc.{{QbPublicationCard.startAt}} <= :at
+                        AND rc.{{QbPublicationCard.endAt}} > :at,
+                'met', EXISTS (
+                    SELECT 1 FROM {{QbAttempt}} ra
+                    WHERE ra.{{QbAttempt.publicationId}} = pr.{{QbPublicationPrerequisite.requiredPublicationId}}
+                      AND ra.{{QbAttempt.status}} <> 'IN_PROGRESS'
+                      AND (pr.{{QbPublicationPrerequisite.requirement}} = 'ANSWERED' OR ra.{{QbAttempt.passed}})))
+                ORDER BY rc.{{QbPublicationCard.name}}, pr.{{QbPublicationPrerequisite.requiredPublicationId}}), '[]') AS text)
+         FROM {{QbPublicationPrerequisite}} pr
+         LEFT JOIN {{QbPublicationCard}} rc
+             ON rc.{{QbPublicationCard.publicationId}} = pr.{{QbPublicationPrerequisite.requiredPublicationId}}
+         WHERE pr.{{QbPublicationPrerequisite.publicationId}} = c.{{QbPublicationCard.publicationId}}) AS prerequisites,
     -- Q70a (D-Q70-1, option B): until when the caller holds the certification of this round (qb.app.feed, the same).
     (SELECT max(e.until)
          FROM {{QbCertificationRound}} cr

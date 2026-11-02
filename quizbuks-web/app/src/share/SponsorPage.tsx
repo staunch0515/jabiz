@@ -12,6 +12,8 @@ import { FileImage } from '../qb/FileImage'
 import { CoverPlaceholder } from '../qb/Illustrations'
 import { formatKudos } from '../qb/kudos'
 import { QB } from '../qb/messages'
+import { levelsOf } from './levels'
+import { prerequisitesOf } from '../qb/play'
 import { readPagePublications, readPublicSponsorPage } from './api'
 import { Link } from '../qb/router'
 import { sharePath } from './share'
@@ -130,26 +132,39 @@ export function SponsorPage({ handle }: { handle: string }) {
         {publications.isSuccess && publications.data.length === 0 && (
           <p className="text-muted-foreground text-sm" data-testid="sponsor-page-none">{t('sponsorPage.none')}</p>
         )}
-        {publications.isSuccess && publications.data.length > 0 && (
-          <ul className="flex flex-col gap-2" data-testid="sponsor-page-publications">
-            {publications.data.map((publication) => (
-              <li key={publication.publicationId}>
-                <Link to={sharePath(publication.publicationId)}
-                  className="bg-card hover:bg-accent flex flex-col gap-1 border p-3"
-                  data-testid="sponsor-page-publication">
-                  <span className="font-medium">{publication.name}</span>
-                  <span className="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-                    <span className="inline-flex items-center gap-1">
-                      <Trophy aria-hidden className="size-3.5" />
-                      {t('sponsorPage.upTo', { amount: formatKudos(publication.maxReward) })}
-                    </span>
-                    <span>{t('sponsorPage.endsAt', { time: formatDateTime(publication.endAt) })}</span>
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        )}
+        {publications.isSuccess && publications.data.length > 0 && levelsOf(publications.data).map((level, _i, all) => (
+          // Q76 (D-Q76-8): the sponsor's levels, when its publications lead to one another; one level is a plain list.
+          <div key={level.level} className="flex flex-col gap-2" data-testid="sponsor-page-level" data-level={level.level}>
+            {all.length > 1 && (
+              <h3 className="text-muted-foreground text-sm font-medium">{t('sponsorPage.level', { n: level.level })}</h3>
+            )}
+            <ul className="flex flex-col gap-2" data-testid="sponsor-page-publications">
+              {level.items.map((publication) => {
+                const names = prerequisitesOf(publication.prerequisites).map((p) => publications.data
+                  .find((other) => other.publicationId === p.requiredPublicationId)?.name).filter(Boolean)
+                return (
+                  <li key={publication.publicationId}>
+                    <Link to={sharePath(publication.publicationId)}
+                      className="bg-card hover:bg-accent flex flex-col gap-1 border p-3"
+                      data-testid="sponsor-page-publication">
+                      <span className="font-medium">{publication.name}</span>
+                      <span className="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                        <span className="inline-flex items-center gap-1">
+                          <Trophy aria-hidden className="size-3.5" />
+                          {t('sponsorPage.upTo', { amount: formatKudos(publication.maxReward) })}
+                        </span>
+                        <span>{t('sponsorPage.endsAt', { time: formatDateTime(publication.endAt) })}</span>
+                        {names.length > 0 && (
+                          <span data-testid="sponsor-page-after">{t('sponsorPage.after', { names: names.join(', ') })}</span>
+                        )}
+                      </span>
+                    </Link>
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
+        ))}
       </section>
     </article>
   )

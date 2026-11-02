@@ -280,6 +280,12 @@ export interface PublicationView {
    */
   matched: boolean
   /**
+   * Q76: whether the caller has finished (passed, where asked) every publication this one requires, and those
+   * publications: in the page's language, whether the caller met each and whether it still accepts attempts.
+   */
+  prerequisitesMet: boolean
+  prerequisites: PublicationPrerequisite[]
+  /**
    * Q70a: until when the caller holds the certification this publication is a round of; meanwhile it cannot be
    * started (null for an ordinary publication, or one the caller does not hold).
    */
@@ -301,6 +307,42 @@ export interface PublicationView {
    */
   languages: string[]
   displayLanguage: string | null
+}
+
+/** Q76: one of a publication's prerequisites as `qb.app.publication` gives it (its `prerequisites` JSON). */
+export interface PublicationPrerequisite {
+  requiredPublicationId: string
+  requirement: 'PASSED' | 'ANSWERED'
+  name: string
+  /** Whether the required publication accepts attempts now (ended or paused: the taker cannot meet it there). */
+  live: boolean
+  /** Whether the caller met it. */
+  met: boolean
+}
+
+/** The `prerequisites` JSON of `qb.app.publication` (and `qb.public.sponsor-page-publications`); none on bad JSON. */
+export function prerequisitesOf(value: unknown): PublicationPrerequisite[] {
+  let raw: unknown = value
+  if (typeof raw === 'string') {
+    try {
+      raw = JSON.parse(raw)
+    } catch {
+      return []
+    }
+  }
+  if (!Array.isArray(raw)) return []
+  return raw.flatMap((item): PublicationPrerequisite[] => {
+    if (!item || typeof item !== 'object') return []
+    const p = item as Record<string, unknown>
+    if (typeof p.requiredPublicationId !== 'string') return []
+    return [{
+      requiredPublicationId: p.requiredPublicationId,
+      requirement: p.requirement === 'ANSWERED' ? 'ANSWERED' : 'PASSED',
+      name: typeof p.name === 'string' ? p.name : '',
+      live: p.live === true || p.live === 'true',
+      met: p.met === true || p.met === 'true',
+    }]
+  })
 }
 
 export interface Tier {
@@ -361,6 +403,8 @@ export async function readPublication(request: PublicationRequest): Promise<Publ
     statsAt: textOrNull(row.statsAt),
     canStart: row.canStart === true || row.canStart === 'true',
     matched: row.matched !== false && row.matched !== 'false',
+    prerequisitesMet: row.prerequisitesMet !== false && row.prerequisitesMet !== 'false',
+    prerequisites: prerequisitesOf(row.prerequisites),
     heldUntil: textOrNull(row.heldUntil),
     referral: translatedReferral(referralPolicy(row.referral), row.referralDescription),
     myReferralStatus: textOrNull(row.myReferralStatus),
