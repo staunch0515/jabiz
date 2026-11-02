@@ -64,10 +64,15 @@ test('a holder issues a certificate, anybody verifies it and sees it on the publ
   await visitor.getByTestId('taker-page-SPONSOR_APPLY').click()
   await expect(visitor.getByTestId('verify-state')).toHaveText('Valid')
 
-  // Off again: the page is as unknown.
+  await visitorContext.close()
+
+  // Off again: the page is as unknown. A public answer may be kept for its cacheSeconds (60) by a browser that read
+  // it, so a new visitor (an empty cache) checks it.
   await on.click()
   await expect(page.getByTestId('certificates-page-link')).toBeHidden()
-  await visitor.goto(`/taker/u/${handle}`)
-  await expect(visitor.getByText('This page is not available')).toBeVisible()
-  await visitorContext.close()
+  const laterContext = await browser.newContext({ baseURL })
+  const later = await laterContext.newPage()
+  await later.goto(`/taker/u/${handle}`)
+  await expect(later.getByText('This page is not available')).toBeVisible()
+  await laterContext.close()
 })
