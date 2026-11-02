@@ -46,15 +46,17 @@ export async function decideReview(request: APIRequestContext, token: string, pu
 
 /**
  * A live publication of the quiz's newest version made through the API as the wizard makes it (for tests about what
- * comes after): open to everyone from a minute ago for a week, two tiers, submitted and approved.
+ * comes after): open to everyone from a minute ago for a week, two tiers, submitted and approved. The top tier ends at
+ * the version's full score (`fullScore`, 2 by default: two questions of a point each), as the server requires.
  */
-export async function livePublication(request: APIRequestContext, token: string, quizId: string, name: string) {
+export async function livePublication(request: APIRequestContext, token: string, quizId: string, name: string,
+  fullScore = 2) {
   const versionId = (await query(request, token, 'qb.sponsor.quiz-versions', { quizId }))[0].versionId
   const now = Date.now()
   const saved = await run(request, token, 'QB_PUBLICATION_SAVE', { versionId, name, regions: ['GLOBAL'],
     startAt: new Date(now - 60_000).toISOString(), endAt: new Date(now + 7 * 86_400_000).toISOString(),
     passScore: 1, budgetCap: 500, maxWinners: 5,
-    tiers: [{ fromScore: 0, toScore: 0, reward: 0 }, { fromScore: 1, toScore: 2, reward: 20 }] })
+    tiers: [{ fromScore: 0, toScore: 0, reward: 0 }, { fromScore: 1, toScore: fullScore, reward: 20 }] })
   const publicationId = saved.publicationId as string
   await run(request, token, 'QB_PUBLICATION_SUBMIT', { publicationId })
   await decideReview(request, token, publicationId, 'APPROVE')

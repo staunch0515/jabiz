@@ -1122,6 +1122,33 @@ describe('certification rounds (Q70a)', () => {
   })
 })
 
+describe('prerequisites (Q76)', () => {
+  it('lists what to finish first, each leading to its page, instead of offering the start', async () => {
+    const prerequisites = JSON.stringify([
+      { requiredPublicationId: 'basics', requirement: 'PASSED', name: 'Capitals basics', live: true, met: true },
+      { requiredPublicationId: 'flags', requirement: 'ANSWERED', name: 'Flags survey', live: false, met: false }])
+    const { posted } = server({ publicationPage: () => json(200, { items: [publication({ canStart: false,
+      prerequisitesMet: false, prerequisites })], offset: 0, limit: 1 }) })
+    window.history.replaceState(null, '', `/p/${PUB}`)
+    render(<App />)
+    const notice = await screen.findByTestId('detail-prerequisites')
+    expect(notice).toHaveTextContent('Finish these quizzes first')
+    const items = within(notice).getAllByTestId('detail-prerequisite')
+    expect(items).toHaveLength(2)
+    expect(items[0]).toHaveAttribute('data-met', 'true')
+    expect(items[0]).toHaveTextContent('Capitals basics')
+    expect(items[0]).toHaveTextContent('Passed')
+    expect(within(items[0]).getByRole('link')).toHaveAttribute('href', '/p/basics')
+    expect(items[1]).toHaveAttribute('data-met', 'false')
+    expect(items[1]).toHaveTextContent('Flags survey')
+    expect(items[1]).toHaveTextContent('Answer')
+    expect(items[1]).toHaveTextContent('not open now')
+    expect(screen.queryByTestId('detail-start')).toBeNull()
+    expect(screen.queryByTestId('detail-unavailable')).toBeNull()
+    expect(posted('QB_ATTEMPT_START')).toEqual([])
+  })
+})
+
 describe('referrals (Q70)', () => {
   const POLICY = { quota: 20, method: 'PLATFORM', amount: '300', description: null, referrerRequires: 'NONE',
     refereeRules: ['NOT_REGULAR'], days: 7 }

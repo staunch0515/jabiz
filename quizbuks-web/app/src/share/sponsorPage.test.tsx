@@ -85,6 +85,26 @@ describe("a sponsor's page (Q60a)", () => {
     expect(asked.some((a) => a.includes('p.languages=zh'))).toBe(true)
   })
 
+  it('draws the levels its publications lead to (Q76)', async () => {
+    const requires = (...ids: string[]) => JSON.stringify(ids.map((id) => ({ requiredPublicationId: id,
+      requirement: 'PASSED' })))
+    server({ live: [
+      { ...LIVE, publicationId: 'pub3', name: 'Master baker', prerequisites: requires('pub2') },
+      { ...LIVE, prerequisites: '[]' },
+      { ...LIVE, publicationId: 'pub2', name: 'Sourdough', prerequisites: requires('pub1', 'unlisted') },
+    ] })
+    window.history.replaceState(null, '', '/s/acme-bakery')
+    render(<App />)
+    const levels = await screen.findAllByTestId('sponsor-page-level')
+    expect(levels.map((level) => level.getAttribute('data-level'))).toEqual(['1', '2', '3'])
+    expect(within(levels[0]).getByRole('heading', { level: 3 })).toHaveTextContent('Level 1')
+    expect(within(levels[0]).getByTestId('sponsor-page-publication')).toHaveTextContent('Bread quiz')
+    expect(within(levels[1]).getByTestId('sponsor-page-publication')).toHaveTextContent('Sourdough')
+    expect(within(levels[1]).getByTestId('sponsor-page-after')).toHaveTextContent('After: Bread quiz')
+    expect(within(levels[2]).getByTestId('sponsor-page-publication')).toHaveTextContent('Master baker')
+    await expectAccessible()
+  })
+
   it('knows its path', () => {
     expect(sponsorPageOf('/s/Acme-Bakery')).toBe('acme-bakery')
     expect(sponsorPageOf('/s/acme/more')).toBeNull()

@@ -528,6 +528,7 @@ public final class PublicationProcesses {
                 .steps(PublicationEditing::lockAndLoad)
                 .steps(PublicationEditing::loadTiers)
                 .steps(PublicationAudience::loadCriteria)
+                .steps(PublicationPrerequisites::load)
                 .compute("Delete the publication", (metadata, ctx) -> {
                     EntityInstance publication = PublicationEditing.publication(ctx);
                     if (!PublicationEditing.draft(ctx, publication) || !PublicationEditing.current(ctx,
@@ -540,6 +541,9 @@ public final class PublicationProcesses {
                     // Q47: the conditions too, for the same reason.
                     list(ctx, PublicationAudience.CRITERIA).forEach(row -> ctx.changes().delete(
                         com.jabiz.quizbuks.audience.QbAudience.CRITERION, row.id(), row.version()));
+                    // Q76: and the prerequisites (a draft is required by nobody: only a submitted one can be).
+                    list(ctx, PublicationPrerequisites.PREREQUISITES).forEach(row -> ctx.changes().delete(
+                        QbPrerequisites.PREREQUISITE, row.id(), row.version()));
                     ctx.changes().delete(QbPublications.PUBLICATION, publication.id(), publication.version());
                     ctx.put(OUTPUT, new PublicationOutput(uuid(publication.id()), PublicationStatus.DRAFT,
                         number(publication.get("revision")), null, null));
@@ -562,6 +566,7 @@ public final class PublicationProcesses {
                 PUB_ID, PUBLICATION))
             .steps(PublicationEditing::loadTiers)
             .steps(PublicationAudience::loadCriteria)
+            .steps(PublicationPrerequisites::load)
             .steps(PublicationEditing::loadSponsor)
             .steps(PublicationEditing::loadSponsorMethods)
             .steps(b -> PublicationEditing.loadVersion(b, ctx -> {
@@ -625,6 +630,15 @@ public final class PublicationProcesses {
             condition.put("publisherKind", PublisherKind.SPONSOR);
             condition.put("publisherId", ctx.request().actorId());
             ctx.changes().insert(com.jabiz.quizbuks.audience.QbAudience.CRITERION, condition);
+        });
+        // Q76 (D-Q76-6): the prerequisites too, pointing at the same required publications; the copy is a draft, so
+        // the sponsor changes them before submitting.
+        list(ctx, PublicationPrerequisites.PREREQUISITES).forEach(row -> {
+            Map<String, Object> prerequisite = new LinkedHashMap<>(PublicationPrerequisites.copyOf(row));
+            prerequisite.put("publicationId", publicationId);
+            prerequisite.put("publisherKind", PublisherKind.SPONSOR);
+            prerequisite.put("publisherId", ctx.request().actorId());
+            ctx.changes().insert(QbPrerequisites.PREREQUISITE, prerequisite);
         });
         ctx.put(OUTPUT, output(ctx, messages, publicationId, 1, ctx.opTime(), values, tiers, version, tierIds));
     }
