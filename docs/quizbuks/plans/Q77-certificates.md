@@ -43,26 +43,28 @@
 ```sql
 ALTER TABLE qb_user_settings ADD COLUMN public_handle varchar(30);
 ALTER TABLE qb_user_settings ADD COLUMN public_page boolean NOT NULL DEFAULT false;
-CREATE UNIQUE INDEX qb_user_settings_public_handle ON qb_user_settings (public_handle) WHERE public_handle IS NOT NULL;
+-- 未设的名字是 null，唯一约束不比较 null（启动检查要有同名的唯一约束或唯一索引，不认部分索引）
+ALTER TABLE qb_user_settings ADD CONSTRAINT uk_qb_user_settings_public_handle UNIQUE (public_handle);
 
 CREATE TABLE qb_certificate (
-    certificate_id        varchar(36)  PRIMARY KEY,
-    user_id               varchar(128) NOT NULL,
-    certification         varchar(40)  NOT NULL,
+    certificate_id        varchar(36)   PRIMARY KEY,
+    user_id               varchar(128)  NOT NULL,
+    certification         varchar(40)   NOT NULL,
     certification_version numeric(4, 0) NOT NULL,
-    held_from             timestamptz  NOT NULL,
-    holder_name           varchar(100) NOT NULL,
-    valid_until           timestamptz  NOT NULL,
-    run_id                varchar(36)  NOT NULL,
-    document_no           varchar(100) NOT NULL,
-    verify_key            varchar(32)  NOT NULL UNIQUE,
-    language              varchar(10)  NOT NULL,
-    issued_at             timestamptz  NOT NULL,
-    version               bigint       NOT NULL,
-    CONSTRAINT uk_qb_certificate_holding UNIQUE (user_id, certification, valid_until)
+    held_from             timestamptz   NOT NULL,
+    valid_until           timestamptz   NOT NULL,
+    holder_name           varchar(100)  NOT NULL,
+    verify_key            varchar(32)   NOT NULL,
+    language              varchar(10)   NOT NULL,
+    issued_at             timestamptz   NOT NULL,
+    version               bigint        NOT NULL,
+    CONSTRAINT uk_qb_certificate_holding UNIQUE (user_id, certification, valid_until),
+    CONSTRAINT uk_qb_certificate_key UNIQUE (verify_key)
 );
-CREATE INDEX qb_certificate_user_idx ON qb_certificate (user_id);
+CREATE INDEX qb_certificate_issued_idx ON qb_certificate (issued_at);
 ```
+
+（实现时去掉了草案的 `run_id`、`document_no`：单据按主体（证书编号）找到，编号即核实键，见 §10。）
 
 ### 3.2 认证（`certification`）
 
@@ -141,3 +143,18 @@ CREATE INDEX qb_certificate_user_idx ON qb_certificate (user_id);
 3. D-Q77-6：**不显示分数**。
 4. D-Q77-8：**"商户认证"放到 Q77b** 另出计划（本步只有平台目录中的认证）。
 5. D-Q77-9：**二维码先不做**（证书印核实地址与编号）；还是先做平台的"二维码元素"阶段再做 Q77？
+
+## 10. 实施记录（2026-11-02）
+
+需求方 2026-11-02 确认 §9 全部按建议（签发即公开、缺省关闭、不显示分数、商户认证放 Q77b、二维码先不做）。与草案不同之处：
+
+1. **证书记录不存单据运行**：PDF 是平台单据 `qb.certificate`，主体是证书行；App 以 `GET /api/documents/runs?layout=qb.certificate&subject=<证书>` 找到它再下载。单据的编号即核实键。
+2. **公开名的唯一** 用唯一约束 `uk_qb_user_settings_public_handle`（null 不比较）：平台启动检查只认同名的唯一约束或完整的唯一索引。
+3. **公开认证页的名字** 取该页最新一张证书上冻结的名字（与 PDF、核实页相同），**不新开资料的公开视图**：公开出去的只有证书上的名字（D-Q77-5 原写"显示名"）。
+4. **锁** 用已有的 `qb.certification:<用户>`（认领、授予、收回与签发依次进行），不另设 `qb.certificate:<用户>:<认证>`。
+5. **设置的保存** 是已有的 `QB_SETTINGS_SAVE`（草案写作 `QB_USER_SETTINGS_SAVE`）：`publicHandle`（空串清除，不给即不变）、`publicPage`；检查格式 / 保留词 / 已被占用 / 开启须有名字，依次给出 `QB_PUBLIC_HANDLE_FORMAT`、`_RESERVED`、`_TAKEN`、`QB_PUBLIC_PAGE_NO_HANDLE`。
+6. **证书上加签发方**（`party("issuer")`，模板 `qb.me.certificate-issuer`，受控参数 `qb.issuer.name`，同收据的发出方；为空时只印标签）。没有显示名的持有人，证书上的名字为 `-`。
+7. **到期** 由页面以 `serverNow()`（`qb/legal.ts`）判断；未登录的访客没有学到服务器的时钟时即设备时钟。公开页与核实页加 `<meta name="robots" content="noindex">`。
+8. 答题人角色加 `document.archive.read`（下载自己签发的证书；平台只给读者自己签发的单据）；`QB_SETUP` 为已有的安装补上。
+9. e2e 以人工授予代替合格一轮（轮次是 Q69 的测试），未覆盖"收回后核实页显示已收回"（`CertificateIT` 覆盖）。
+10. **未完成：删除账号时证书 PDF 未被抹除。** QuizBuks 以 `RetentionPolicy.of("DocumentRun")` 把**所有**单据保留 10 年（为收据，`TopUpConfig.qbDocumentRunRetention`），平台的保留期按实体、不能按版式区分，所以抹除时证书的单据（PDF、内容与参数中的名字）因保留期而保留；证书记录、公开名与核实页都已删除（`TakerErasureIT` 断言现状）。需要需求方决定：(a) 在 `1.3/platform` 上让单据的保留期可按版式声明（平台阶段，带平台测试与 `app` 示范），QuizBuks 只对收据与结算单保留；(b) 接受证书 PDF 随收据保留 10 年（隐私政策中写明）。建议 (a)。

@@ -107,6 +107,8 @@ docs/quizbuks/               本文件等
 | `QbCountry` | T（字典） | `code`（ISO 3166-1）、`name`（多语言）、`regions`（多值：GLOBAL、JP、CN、US、EUROPE、ASIA、NORTH_AMERICA、SOUTH_AMERICA） | 【缺省 Q7】国家到地区的映射。平台没有多值字段：`regions` 存为按固定顺序、以逗号连接的地区代码（`GLOBAL,JP,ASIA`），总含 GLOBAL（Q1）。只经流程写入（`QB_SETUP` 导入） |
 | `QbPayoutAccount` | P（Q6b） | `userId`（唯一）、`provider`（STRIPE_CONNECT）、`externalAccountId`（唯一，`f.masked(qb.admin.finance.read, LAST4)`）、`country`、`status`（PENDING / ENABLED / RESTRICTED / DEAUTHORIZED）、`payoutsEnabled`、`detailsSubmitted`、`requirementsDue`、`stripeUpdatedAt`（以上 `processOnly`，由 Stripe 的 Connect 通知更新，只取更新的报告） | 用户的收款账户；银行信息由 Stripe 保存，平台不存银行账号。普通表（不是计划中的时态表）：通知按 Stripe 账户号查找，且只有表的唯一约束能保证一个 Stripe 账户只属于一个用户；历史由平台审计保留。开通链接另存普通表 `QbPayoutOnboarding`（每人一行、覆盖，只有本人的数据视图给出） |
 
+| `QbCertificate` | P（Q77） | 主键 `certificateId`；`userId`、`certification`、`certificationVersion`、`heldFrom`、`validUntil`（与前三项唯一：同一段持有一张）、`holderName`（签发时冻结）、`verifyKey`（随机 128 位，唯一）、`language`、`issuedAt` | 本人签发的证书（`plans/Q77-certificates.md`），只经 `QB_CERTIFICATE_ISSUE` 插入；PDF 是平台单据 `qb.certificate`（主体即此行）。`QbUserSettings` 另有 `publicHandle`（唯一）与 `publicPage`（缺省关闭）：公开认证页 `/taker/u/<名>` |
+
 ### 3.2 内容：模版、版本、题目、资料
 
 | 实体 | 类型 | 主要字段 | 说明 |
@@ -567,6 +569,7 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
   只按服务端记录的金额、对记录的商家入账，锁名也取自记录；不成立的开待办而不入账。客户端唯一的输入是金额（受控上下限），
   返回地址由配置生成（没有开放重定向），浏览器回跳不入账。测试与正式模式、密钥前缀与开发入账由启动检查与消费流程共同隔离。
   密钥只来自环境变量，不进日志与作业的输入；原样事件可能含付款人信息，只有财务管理员能读，保留 7 年。
+- **证书与公开认证页**（Q77）：核实页只按随机的核实键取一张证书，公开模板不返回用户编号；公开认证页缺省关闭、只列已签发且未收回的证书、显示证书上的名字（没有资料的公开视图），两页都是 `noindex`；不显示分数。删除账号时证书记录、公开名随之删除（证书 PDF 的抹除见计划 §10 第 10 条）。
 - 限流：开始答题、提交、AI 请求、充值按用户限流（平台限流能力只覆盖公开接口与上传，若不够在 G1 中补"按用户的接口限流"——计划时评估）。
 
 ## 10. 依赖的平台能力（`1.2/platform`）

@@ -2,6 +2,7 @@ import { formatDate } from '@jabiz/client'
 import { Badge, PageState } from '@jabiz/ui'
 import { useQuery } from '@tanstack/react-query'
 import { Award, BadgeCheck, CircleX, Clock } from 'lucide-react'
+import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
 import { QB } from '../qb/messages'
@@ -30,6 +31,20 @@ export function takerHandleOf(path: string): string | null {
   return decoded(TAKER_PAGE.exec(path))
 }
 
+/**
+ * Asks search engines not to index the page while it is shown (D-Q77-5: a name made public is not to be found by
+ * searching it).
+ */
+function useNoIndex() {
+  useEffect(() => {
+    const meta = document.createElement('meta')
+    meta.name = 'robots'
+    meta.content = 'noindex'
+    document.head.appendChild(meta)
+    return () => meta.remove()
+  }, [])
+}
+
 function HomeLink() {
   const { t } = useTranslation(APP)
   return <Link to="/" className="text-primary text-sm underline" data-testid="certificates-home">{t('certificates.home')}</Link>
@@ -42,6 +57,7 @@ function HomeLink() {
 export function VerifyPage({ verifyKey }: { verifyKey: string }) {
   const { t } = useTranslation(APP)
   const { t: tQb } = useTranslation(QB)
+  useNoIndex()
   const certificate = useQuery({ queryKey: ['qb', 'verify', verifyKey], queryFn: () => readVerifiedCertificate(verifyKey) })
   if (certificate.isPending) return <PageState kind="loading" />
   if (certificate.isError) return <PageState kind="error" description={tQb('failed')} />
@@ -91,6 +107,7 @@ export function VerifyPage({ verifyKey }: { verifyKey: string }) {
 export function TakerPage({ handle }: { handle: string }) {
   const { t } = useTranslation(APP)
   const { t: tQb } = useTranslation(QB)
+  useNoIndex()
   const page = useQuery({ queryKey: ['qb', 'taker-page', handle], queryFn: () => readTakerPage(handle) })
   if (page.isPending) return <PageState kind="loading" />
   if (page.isError) return <PageState kind="error" description={tQb('failed')} />

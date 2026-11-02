@@ -173,6 +173,7 @@ describe('certificates (Q77)', () => {
     expect(within(page).getByTestId('verify-state')).toHaveTextContent('Valid')
     expect(within(page).getByTestId('verify-holder')).toHaveTextContent('Mei')
     expect(within(page).getByTestId('verify-certification')).toHaveTextContent('Sponsor Certification')
+    expect(document.head.querySelector('meta[name="robots"]')).toHaveAttribute('content', 'noindex')
     await expectAccessible()
     cleanup()
     vi.restoreAllMocks()

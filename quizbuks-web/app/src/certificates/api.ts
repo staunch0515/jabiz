@@ -1,5 +1,5 @@
 import { fileNameOf, runProcess, sessionFetch, toApiError } from '@jabiz/client'
-import { publicQuery } from '../qb/legal'
+import { publicQuery, serverNow } from '../qb/legal'
 import { hrefOf } from '../qb/router'
 import { CERTIFICATE_LAYOUT, CERTIFICATE_PROCESS, CERTIFICATE_TEMPLATE } from './ids'
 
@@ -103,7 +103,7 @@ export interface PublicCertificate {
 }
 
 /** The issued, unrevoked certificates of a page that is on (none when it is off or unknown), still valid at `now`. */
-export async function readTakerPage(handle: string, now: number = Date.now()): Promise<PublicCertificate[]> {
+export async function readTakerPage(handle: string, now: number = serverNow()): Promise<PublicCertificate[]> {
   const rows = await publicQuery<PublicCertificate>(CERTIFICATE_TEMPLATE.takerPage, { handle: handle.toLowerCase() },
     20)
   return rows.filter((row) => Date.parse(row.validUntil) > now)
@@ -111,8 +111,8 @@ export async function readTakerPage(handle: string, now: number = Date.now()): P
 
 export type CertificateState = 'VALID' | 'EXPIRED' | 'REVOKED'
 
-/** A certificate's state: revoked after its holding began, else valid until its end. */
-export function stateOf(certificate: VerifiedCertificate, now: number = Date.now()): CertificateState {
+/** A certificate's state: revoked after its holding began, else valid until its end (by the server's clock as known). */
+export function stateOf(certificate: VerifiedCertificate, now: number = serverNow()): CertificateState {
   if (certificate.revokedAt) return 'REVOKED'
   return Date.parse(certificate.validUntil) > now ? 'VALID' : 'EXPIRED'
 }
