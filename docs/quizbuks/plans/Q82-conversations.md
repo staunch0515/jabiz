@@ -1,4 +1,4 @@
-# Q82 答题者与商户的对话（计划，2026-11-02，待需求方确认）
+# Q82 答题者与商户的对话（计划，2026-11-02；需求方 2026-11-02 确认 §9 全部按建议）
 
 `05-console-requests.md` 第五项（"允许答题者和商户之间手工通信"）；需求方定下的顺序 Q78 → Q79 → 17zc / Q80 → Q81 → **Q82**。编号 Q82 是建议（下一个空号），确认时可改。
 **这只是计划**：确认 §9 的决定后开发，一个 PR，工作分支 `1.3/quizbuks-82-conversations`。
@@ -39,7 +39,7 @@
 
 ## 3. 后端（`backend/quizbuks`）
 
-### 3.1 迁移 V62 `quizbuks_conversations`（Q81 用了 V61）
+### 3.1 迁移 V63 `quizbuks_conversations`（Q77 用了 V61，Q81 用了 V62）
 
 - `qb_conversation`（主键 `conversation_id`，`publisher_kind` / `publisher_id`、`taker_id`、`publication_id → entity_registry`、`attempt_id`、`status`、`opened_at`、`last_message_at`、`last_sender`、`taker_read_at`、`sponsor_read_at`、`closed_at`、`closed_by`、`version`；`UNIQUE (taker_id, publication_id)`；索引 `(publisher_id, status, last_message_at DESC)`（商户列表）、`(taker_id, last_message_at DESC)`（答题者列表）、`(status, last_message_at)`（到期任务）。
 - `qb_conversation_message`（主键 `message_id`，`conversation_id → qb_conversation`、`publisher_kind` / `publisher_id`、`sender`、`sender_user_id`、`body varchar(1000)`、`created_at`、`version`；索引 `(conversation_id, created_at)`）。
