@@ -178,9 +178,13 @@ export function contentLanguageOf(language: string | undefined): ContentLanguage
 export interface UserSettings {
   soundOn: boolean
   contentLanguages: ContentLanguage[]
+  /** Q77: the public certification page's name (`/u/<name>`) and whether the page is on. */
+  publicHandle?: string | null
+  publicPage?: boolean
 }
 
-export const DEFAULT_SETTINGS: UserSettings = { soundOn: true, contentLanguages: [] }
+export const DEFAULT_SETTINGS: UserSettings = { soundOn: true, contentLanguages: [], publicHandle: null,
+  publicPage: false }
 
 function languagesOf(value: unknown): ContentLanguage[] {
   const listed = Array.isArray(value) ? value.map(String) : typeof value === 'string' ? value.split(',') : []
@@ -189,14 +193,20 @@ function languagesOf(value: unknown): ContentLanguage[] {
 
 export async function readMySettings(): Promise<UserSettings> {
   const row = await ownRow(DATASET.mySettings)
-  return { soundOn: row?.soundOff !== true, contentLanguages: languagesOf(row?.contentLanguages) }
+  return { soundOn: row?.soundOff !== true, contentLanguages: languagesOf(row?.contentLanguages),
+    publicHandle: typeof row?.publicHandle === 'string' ? row.publicHandle : null, publicPage: row?.publicPage === true }
 }
 
 /** Saves the settings given; one left out stays as it is. */
 export async function saveMySettings(input: Partial<UserSettings>): Promise<UserSettings> {
+  // Q77: an empty name clears it; one left out (undefined) stays.
   const output = await runProcess<Record<string, unknown>>(PROCESS.settingsSave, {
-    soundOn: input.soundOn ?? null, contentLanguages: input.contentLanguages ?? null })
-  return { soundOn: output.soundOn !== false, contentLanguages: languagesOf(output.contentLanguages) }
+    soundOn: input.soundOn ?? null, contentLanguages: input.contentLanguages ?? null,
+    publicHandle: input.publicHandle === undefined ? null : (input.publicHandle ?? ''),
+    publicPage: input.publicPage ?? null })
+  return { soundOn: output.soundOn !== false, contentLanguages: languagesOf(output.contentLanguages),
+    publicHandle: typeof output.publicHandle === 'string' ? output.publicHandle : null,
+    publicPage: output.publicPage === true }
 }
 
 /** The languages whose quizzes are shown: the ones switched on, else the interface language. */
