@@ -1,5 +1,6 @@
 import { configureClient, session } from '@jabiz/client'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
 import './messages'
@@ -101,6 +102,50 @@ describe('the portal', () => {
     window.history.replaceState(null, '', '/orders')
     render(<App />)
     await waitFor(() => expect(window.location.pathname).toBe('/login'))
+  })
+})
+
+describe('the orders (17zc)', () => {
+  function signedIn(orders: Record<string, unknown>[]) {
+    session.store('access', 'refresh')
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
+      const request = input instanceof Request ? input : new Request(new URL(String(input), window.location.origin))
+      const url = new URL(request.url, window.location.origin)
+      switch (url.pathname) {
+        case '/api/auth/entries/portal':
+          return json(200, { name: 'portal', selfRegistration: true, requireVerifiedEmail: true, appPath: '/portal/',
+            sessionPersistence: 'device' })
+        case '/api/auth/oidc/providers':
+          return json(200, [])
+        case '/api/auth/me':
+          return json(200, { userId: 'c1', displayName: 'Cara', email: 'cara@example.com', roles: ['CUSTOMER'],
+            permissions: ['portal.use'], emailVerified: true, idleTimeoutSeconds: 1800 })
+        case '/api/queries/commerce.portal_orders':
+          return json(200, { items: orders, offset: 0, limit: 50 })
+        default:
+          return json(404, {})
+      }
+    })
+  }
+  const ORDERS = [
+    { orderNo: 'SO-1', status: 'SHIPPED', orderedTime: '2026-10-01T00:00:00Z', totalAmount: '1200', lineCount: 2 },
+    { orderNo: 'SO-2', status: 'OPEN', orderedTime: '2026-10-02T00:00:00Z', totalAmount: '300', lineCount: 1 },
+  ]
+
+  it('lists the orders as a table, and as cards when the customer switches: the number as the title', async () => {
+    signedIn(ORDERS)
+    window.history.replaceState(null, '', '/orders')
+    render(<App />)
+    const table = await screen.findByTestId('orders-table')
+    expect(within(table).getAllByTestId('order-row')).toHaveLength(2)
+    expect(within(table).getByRole('table')).toBeInTheDocument()
+    await userEvent.click(within(screen.getByTestId('data-table-view')).getByRole('radio', { name: 'Cards' }))
+    const cards = within(table).getAllByTestId('order-row')
+    expect(cards).toHaveLength(2)
+    expect(cards[0]).toHaveAttribute('data-slot', 'data-table-card')
+    expect(cards[0].querySelector('[data-slot="data-table-card-title"]')).toHaveTextContent('SO-1')
+    expect(cards[0]).toHaveTextContent('SHIPPED')
+    window.localStorage.clear()
   })
 })
 

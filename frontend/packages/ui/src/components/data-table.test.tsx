@@ -1,4 +1,4 @@
-import { act, render, screen, within } from '@testing-library/react'
+import { act, cleanup, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { i18n } from '@jabiz/client'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -236,5 +236,121 @@ describe('DataTable', () => {
     table!.focus()
     expect(document.activeElement).toBe(table)
     expect(table).toHaveAttribute('tabindex', '-1')
+  })
+
+  describe('the card view (17zc)', () => {
+    interface Order { no: string; status: string; amount: string; id: string }
+    const placed: ColumnDef<Order, unknown>[] = [
+      { accessorKey: 'id', header: 'ID', meta: { card: 'hidden' }, enableSorting: false },
+      { accessorKey: 'no', header: 'Order', meta: { card: 'title' } },
+      { accessorKey: 'status', header: 'Status', meta: { card: 'badge' }, enableSorting: false },
+      { accessorKey: 'amount', header: 'Amount' },
+      { id: 'actions', header: 'Actions', meta: { pinned: 'right' },
+        cell: ({ row }) => <button type="button">Open {row.original.no}</button> },
+    ]
+    const orders: Order[] = [
+      { id: 'i1', no: 'O-1', status: 'PAID', amount: '100' },
+      { id: 'i2', no: 'O-2', status: 'OPEN', amount: '200' },
+    ]
+    const narrow = () => Object.defineProperty(window, 'innerWidth', { configurable: true, value: 400 })
+    const wide = () => Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1200 })
+
+    beforeEach(() => {
+      wide()
+      window.localStorage.clear()
+    })
+
+    it('offers no cards and no switch for a table whose columns have no places', () => {
+      render(<DataTable label="Carriers" columns={columns} data={rows} />)
+      expect(screen.queryByTestId('data-table-view')).toBeNull()
+      expect(screen.getByRole('table', { name: 'Carriers' })).toBeInTheDocument()
+    })
+
+    it('shows the table on a wide screen and cards on a phone, with a switch the user may use', async () => {
+      const { container, unmount } = render(<DataTable label="Orders" columns={placed} data={orders} />)
+      expect(screen.getByRole('table', { name: 'Orders' })).toBeInTheDocument()
+      expect(screen.getByTestId('data-table-view')).toBeInTheDocument()
+      expect(container.querySelector('[data-slot="data-table"]')).toHaveAttribute('data-view', 'table')
+      await userEvent.click(within(screen.getByTestId('data-table-view')).getByRole('radio', { name: 'Cards' }))
+      expect(screen.queryByRole('table')).toBeNull()
+      expect(container.querySelector('[data-slot="data-table"]')).toHaveAttribute('data-view', 'cards')
+      unmount()
+      narrow()
+      render(<DataTable label="Orders" columns={placed} data={orders} />)
+      expect(screen.queryByRole('table')).toBeNull()
+      expect(screen.getByRole('list', { name: 'Orders' })).toBeInTheDocument()
+    })
+
+    it('builds a card from the places: title, badge, the rest as label and value, no hidden column, the actions at the foot', async () => {
+      narrow()
+      const { container } = render(<DataTable label="Orders" columns={placed} data={orders}
+        rowProps={(o) => ({ 'data-no': o.no, 'data-testid': 'order' })} />)
+      const cards = screen.getAllByTestId('order')
+      expect(cards).toHaveLength(2)
+      expect(cards[0]).toHaveAttribute('data-slot', 'data-table-card')
+      expect(cards[0]).toHaveAttribute('data-no', 'O-1')
+      expect(within(cards[0]).getByText('O-1').closest('[data-slot="data-table-card-title"]')).not.toBeNull()
+      expect(within(cards[0]).getByText('PAID')).toBeInTheDocument()
+      expect(within(cards[0]).getByRole('term')).toHaveTextContent('Amount')
+      expect(within(cards[0]).getByRole('definition')).toHaveTextContent('100')
+      expect(within(cards[0]).queryByText('i1')).toBeNull()
+      expect(within(cards[0]).getByRole('button', { name: 'Open O-1' })).toBeInTheDocument()
+      expect(container.querySelector('[data-slot="data-table-toolbar"]')).not.toBeNull()
+      await expectAccessible()
+    })
+
+    it('remembers the choice under the storage key, and reports it', async () => {
+      const onViewChange = vi.fn()
+      const { unmount } = render(<DataTable label="Orders" columns={placed} data={orders} storageKey="orders"
+        onViewChange={onViewChange} />)
+      await userEvent.click(within(screen.getByTestId('data-table-view')).getByRole('radio', { name: 'Cards' }))
+      expect(onViewChange).toHaveBeenCalledWith('cards')
+      expect(window.localStorage.getItem('jabiz.data-table.view.orders')).toBe('cards')
+      unmount()
+      render(<DataTable label="Orders" columns={placed} data={orders} storageKey="orders" />)
+      expect(screen.queryByRole('table')).toBeNull()
+      expect(screen.getByRole('list', { name: 'Orders' })).toBeInTheDocument()
+      // The caller's view wins over the remembered one.
+      cleanup()
+      render(<DataTable label="Orders" columns={placed} data={orders} storageKey="orders" view="table" />)
+      expect(screen.getByRole('table', { name: 'Orders' })).toBeInTheDocument()
+    })
+
+    it('sorts cards with a select of the sortable columns, through the same callback', async () => {
+      narrow()
+      const onSortingChange = vi.fn()
+      render(<DataTable label="Orders" columns={placed} data={orders} sorting={[]} onSortingChange={onSortingChange} />)
+      await userEvent.click(screen.getByRole('combobox', { name: 'Sort by' }))
+      const options = screen.getAllByRole('option').map((o) => o.textContent)
+      expect(options).toEqual(['No sorting', 'Order Sort ascending', 'Order Sort descending', 'Amount Sort ascending',
+        'Amount Sort descending'])
+      await userEvent.click(screen.getByRole('option', { name: 'Amount Sort descending' }))
+      expect(onSortingChange).toHaveBeenCalledWith([{ id: 'amount', desc: true }])
+    })
+
+    it('expands a card with a named button, shows the loading, empty and stale states, and the pager', async () => {
+      narrow()
+      const { rerender } = render(<DataTable label="Orders" columns={placed} data={orders}
+        renderExpanded={(o) => <p>Lines of {o.no}</p>} pagination={{ pageIndex: 0, pageSize: 10 }}
+        onPaginationChange={() => {}} rowCount={2} />)
+      await userEvent.click(screen.getAllByRole('button', { name: 'Expand row' })[0])
+      expect(screen.getByText('Lines of O-1')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Collapse row' })).toHaveAttribute('aria-expanded', 'true')
+      expect(screen.getByText('2 items')).toBeInTheDocument()
+      await expectAccessible()
+      rerender(<DataTable label="Orders" columns={placed} data={orders} stale />)
+      expect(screen.getByRole('list', { name: 'Orders' })).toHaveAttribute('inert')
+      rerender(<DataTable label="Orders" columns={placed} data={[]} loading />)
+      expect(screen.getByText('Loading…')).toBeInTheDocument()
+      rerender(<DataTable label="Orders" columns={placed} data={[]} empty="Nothing ordered" />)
+      expect(screen.getByText('Nothing ordered')).toBeInTheDocument()
+    })
+
+    it('lets the caller draw the whole card', () => {
+      narrow()
+      render(<DataTable label="Orders" columns={columns} data={rows} renderCard={(r) => <strong>{r.name}!</strong>} />)
+      expect(screen.getByText('Alpha!')).toBeInTheDocument()
+      expect(screen.queryByRole('table')).toBeNull()
+    })
   })
 })

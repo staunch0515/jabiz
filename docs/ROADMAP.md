@@ -4922,7 +4922,7 @@ D17 下匿名不能写任何东西（15 §10）。
 
 **需要确认**：（1）缺省按宽度自动（窄于 `md` 为卡片），切换按钮在所有宽度都显示；（2）卡片模式的排序用下拉，筛选只经 `FilterBar`；（3）元数据列表的标题取显示字段；（4）编号 17zc，分支 `1.3/phase-17zc-data-table-cards`。合入后 QuizBuks 一侧为 Q80（11 个列表页给标注，1.5 天）。
 
-**17zc 状态**：📝 计划待确认（2026-11-02）。
+**17zc 状态**：需求方 2026-11-02 确认；📝 待评审（分支 `1.3/phase-17zc-data-table-cards`）。实施：`data-table.tsx`（`meta.card`、`cards` / `view` / `onViewChange` / `storageKey` / `renderCard`、卡片模式的排序下拉、两种方式共用的 `Pager`，`useIsMobile` 给按宽度的缺省）、文案三语、`DatasetListPage` 与门户 `OrdersPage` 的标注、`data-table.test.tsx` 的卡片测试、`DatasetListPage` 与门户的测试、`a11y.spec.ts` 的手机视口、设计 12 §6 / §11、`app-spa.md`。
 
 ### 17k 推送通知（需求 2026-10-28，QuizBuks Q49；确认 2026-11-01，决策 D69）
 
