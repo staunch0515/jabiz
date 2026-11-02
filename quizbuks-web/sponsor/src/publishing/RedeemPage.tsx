@@ -319,8 +319,9 @@ function Handlers() {
       <span className="text-muted-foreground text-xs">{formatKudos(value)}</span>
     </span>
   )
+  // Q80: as a card, the handler is the title and the periods are listed.
   const columns: ColumnDef<RedemptionHandler, unknown>[] = [
-    { id: 'name', header: t('publishing.redeem.handler'), enableSorting: false,
+    { id: 'name', header: t('publishing.redeem.handler'), enableSorting: false, meta: { card: 'title' },
       cell: ({ row }) => handler(row.original.self, row.original.name, row.original.handlerId) },
     { id: 'today', header: t('publishing.redeem.periods.today'), enableSorting: false,
       cell: ({ row }) => cell(row.original.todayCount, row.original.todayValue) },
@@ -334,7 +335,7 @@ function Handlers() {
   return (
     <section className="flex flex-col gap-2" aria-labelledby="redeem-handlers-title" data-testid="redeem-handlers">
       <h2 id="redeem-handlers-title" className="text-lg font-semibold">{t('publishing.redeem.handlersTitle')}</h2>
-      <DataTable label={t('publishing.redeem.handlersTitle')} columns={columns} data={rows}
+      <DataTable label={t('publishing.redeem.handlersTitle')} columns={columns} data={rows} storageKey="qb.sponsor.redeem-handlers"
         getRowId={(row) => row.handlerId} rowProps={(row) => ({ 'data-testid': 'redeem-handler-row',
           'data-self': String(row.self) })} />
       <p className="text-muted-foreground text-xs">{t('publishing.redeem.handlersZone', { zone: rows[0].zone })}</p>
@@ -363,9 +364,10 @@ function History() {
     placeholderData: keepPreviousData,
   })
   const columns = useMemo<ColumnDef<RedemptionRow, unknown>[]>(() => [
-    { id: 'code', header: t('publishing.redeem.code'), enableSorting: false,
+    // Q80: as a card, the taker is the title, the code under it, the status a badge.
+    { id: 'code', header: t('publishing.redeem.code'), enableSorting: false, meta: { card: 'subtitle' },
       cell: ({ row }) => <span className="font-mono" data-testid="redemption-code">{row.original.code}</span> },
-    { id: 'taker', header: t('publishing.redeem.taker'), enableSorting: false,
+    { id: 'taker', header: t('publishing.redeem.taker'), enableSorting: false, meta: { card: 'title' },
       cell: ({ row }) => row.original.takerName ?? <span className="text-muted-foreground">?</span> },
     { id: 'publication', header: t('publishing.redeem.publication'), enableSorting: false,
       cell: ({ row }) => (
@@ -377,7 +379,7 @@ function History() {
       cell: ({ row }) => <span className="whitespace-pre-line">{row.original.description}</span> },
     { id: 'amount', header: t('publishing.redeem.value'), enableSorting: false, meta: { className: 'text-right tabular-nums' },
       cell: ({ row }) => formatKudos(row.original.amount) },
-    { id: 'status', header: t('publishing.redeem.status'), enableSorting: false,
+    { id: 'status', header: t('publishing.redeem.status'), enableSorting: false, meta: { card: 'badge' },
       cell: ({ row }) => (
         <span className="flex flex-col gap-1">
           <Badge variant={STATUS_BADGES[row.original.status]} className="w-fit" data-testid="redemption-status"
@@ -458,7 +460,7 @@ function History() {
           action={<Button variant="outline" onClick={() => void rows.refetch()}>{tQb('retry')}</Button>} />
       ) : (
         <DataTable label={t('publishing.redeem.historyTitle')} columns={columns} data={rows.data?.items ?? []}
-          getRowId={(row) => row.redemptionId} loading={rows.isPending} stale={rows.isPlaceholderData}
+          storageKey="qb.sponsor.redemptions" getRowId={(row) => row.redemptionId} loading={rows.isPending} stale={rows.isPlaceholderData}
           empty={t('publishing.redeem.none')} pagination={pagination} onPaginationChange={setPagination}
           rowCount={rows.data?.total}
           rowProps={(row) => ({ 'data-testid': 'redemption-row', 'data-status': row.status })} />

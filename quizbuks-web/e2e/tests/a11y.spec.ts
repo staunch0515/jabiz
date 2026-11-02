@@ -483,7 +483,19 @@ for (const appearance of ['light', 'dark'] as const) {
     await expect(page.getByTestId('transaction-row')).toHaveCount(1)
     await expectAccessible(page, at('sponsor transactions of one user'))
     await page.setViewportSize({ width: 390, height: 844 })
+    // Q80: at a phone's width the list is cards by itself (17zc `cards="auto"`); the row keeps its test id.
+    await expect(page.locator('[data-slot="data-table"]')).toHaveAttribute('data-view', 'cards')
+    await expect(page.getByTestId('transaction-row')).toHaveAttribute('data-slot', 'data-table-card')
     await expectAccessible(page, at('sponsor transactions 390px'))
+    // Back on a desktop the table returns; the reader can still ask for cards, and the choice is kept.
+    await page.setViewportSize({ width: 1280, height: 900 })
+    await expect(page.locator('[data-slot="data-table"]')).toHaveAttribute('data-view', 'table')
+    await page.getByTestId('data-table-view').getByRole('radio', { name: 'Cards' }).click()
+    await expect(page.locator('[data-slot="data-table"]')).toHaveAttribute('data-view', 'cards')
+    await expectAccessible(page, at('sponsor transactions cards'))
+    // The reload drops the one-user filter (it is the page's state), so every row is back: the first shows the mode.
+    await page.reload()
+    await expect(page.getByTestId('transaction-row').first()).toHaveAttribute('data-slot', 'data-table-card')
   })
 }
 

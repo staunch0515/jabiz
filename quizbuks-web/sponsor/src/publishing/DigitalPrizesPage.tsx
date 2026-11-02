@@ -64,9 +64,10 @@ export function DigitalPrizesPage() {
     placeholderData: keepPreviousData,
   })
   const columns = useMemo<ColumnDef<DigitalPrizeRow, unknown>[]>(() => [
-    { id: 'taker', header: t('publishing.digital.taker'), enableSorting: false,
+    // Q80: as a card, the taker is the title, the publication under it, the status a badge.
+    { id: 'taker', header: t('publishing.digital.taker'), enableSorting: false, meta: { card: 'title' },
       cell: ({ row }) => row.original.takerName ?? <span className="text-muted-foreground">?</span> },
-    { id: 'publication', header: t('publishing.digital.publication'), enableSorting: false,
+    { id: 'publication', header: t('publishing.digital.publication'), enableSorting: false, meta: { card: 'subtitle' },
       cell: ({ row }) => (
         <Link to={publicationPath(row.original.publicationId)} className="underline-offset-4 hover:underline">
           {row.original.publicationName}
@@ -84,7 +85,7 @@ export function DigitalPrizesPage() {
     { id: 'delivery', header: t('publishing.digital.delivery'), enableSorting: false,
       cell: ({ row }) => (row.original.delivery
         ? <span data-testid="digital-delivery">{deliveryLabel(row.original.delivery)}</span> : '') },
-    { id: 'status', header: t('publishing.digital.status'), enableSorting: false,
+    { id: 'status', header: t('publishing.digital.status'), enableSorting: false, meta: { card: 'badge' },
       cell: ({ row }) => (
         <span className="flex flex-col gap-1">
           <Badge variant={STATUS_BADGES[row.original.status]} className="w-fit" data-testid="digital-status"
@@ -151,7 +152,7 @@ export function DigitalPrizesPage() {
           action={<Button variant="outline" onClick={() => void prizes.refetch()}>{tQb('retry')}</Button>} />
       ) : (
         <DataTable label={t('publishing.digital.title')} columns={columns} data={prizes.data?.items ?? []}
-          getRowId={(row) => row.digitalPrizeId} loading={prizes.isPending} stale={prizes.isPlaceholderData}
+          storageKey="qb.sponsor.digital-prizes" getRowId={(row) => row.digitalPrizeId} loading={prizes.isPending} stale={prizes.isPlaceholderData}
           empty={t('publishing.digital.none')} pagination={pagination} onPaginationChange={setPagination}
           rowCount={prizes.data?.total}
           rowProps={(row) => ({ 'data-testid': 'digital-row', 'data-status': row.status })} />

@@ -119,9 +119,10 @@ export function InvitationsSection({ publicationId, status }: { publicationId: s
   const sendable = status === 'LIVE' && serverReady
 
   const columns = useMemo<ColumnDef<InvitationRow, unknown>[]>(() => [
-    { id: 'email', header: t('publishing.invitations.email'), enableSorting: false,
+    // Q80: as a card, the address is the title, the status a badge, the removal at the foot.
+    { id: 'email', header: t('publishing.invitations.email'), enableSorting: false, meta: { card: 'title' },
       cell: ({ row }) => <span className="break-all" data-testid="invitation-email">{row.original.email}</span> },
-    { id: 'status', header: t('publishing.invitations.status'), enableSorting: false,
+    { id: 'status', header: t('publishing.invitations.status'), enableSorting: false, meta: { card: 'badge' },
       cell: ({ row }) => (
         <Badge variant={STATUS_BADGES[row.original.status]} data-testid="invitation-status"
           data-status={row.original.status}>
@@ -140,7 +141,7 @@ export function InvitationsSection({ publicationId, status }: { publicationId: s
         : row.original.startedAt
           ? t('publishing.invitations.startedValue', { time: formatDateTime(row.original.startedAt) })
           : '' },
-    { id: 'actions', header: '', enableSorting: false,
+    { id: 'actions', header: '', enableSorting: false, meta: { card: 'actions' },
       cell: ({ row }) => row.original.status === 'STARTED' || row.original.status === 'ANSWERED' ? null : (
         <Button size="sm" variant="ghost" data-testid="invitation-remove"
           aria-label={t('publishing.invitations.removeTitle', { email: row.original.email })}
@@ -233,7 +234,7 @@ export function InvitationsSection({ publicationId, status }: { publicationId: s
           action={<Button variant="outline" onClick={() => void list.refetch()}>{tQb('retry')}</Button>} />
       ) : (
         <DataTable label={t('publishing.invitations.title')} columns={columns} data={list.data?.items ?? []}
-          getRowId={(row) => row.invitationId} loading={list.isPending} stale={list.isPlaceholderData}
+          storageKey="qb.sponsor.invitations" getRowId={(row) => row.invitationId} loading={list.isPending} stale={list.isPlaceholderData}
           empty={q || filter ? t('publishing.invitations.noMatch')
             : <EmptyState testId="invitations-empty">{t('publishing.invitations.none')}</EmptyState>}
           pagination={pagination} onPaginationChange={setPagination} rowCount={list.data?.total}

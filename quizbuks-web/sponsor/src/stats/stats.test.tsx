@@ -87,6 +87,16 @@ describe("the sponsor's page statistics (Q60c-2)", () => {
     const products = await screen.findAllByTestId('stats-product')
     expect(products[0]).toHaveTextContent('Rye loaf')
     expect(within(products[1]).getByText('Taken down')).toBeInTheDocument()
+    // Q80: the products as cards on request: the name as the title, the state a badge, the clicks listed.
+    await userEvent.click(within(screen.getByTestId('data-table-view')).getByRole('radio', { name: 'Cards' }))
+    const cards = await screen.findAllByTestId('stats-product')
+    expect(cards[0]).toHaveAttribute('data-slot', 'data-table-card')
+    expect(cards[0].querySelector('[data-slot="data-table-card-title"]')).toHaveTextContent('Rye loaf')
+    expect(within(cards[1]).getByText('Taken down')).toBeInTheDocument()
+    expect(within(cards[0]).getByTestId('stats-product-clicks')).toBeInTheDocument()
+    window.localStorage.clear()
+    await userEvent.click(within(screen.getByTestId('data-table-view')).getByRole('radio', { name: 'Table' }))
+    await screen.findAllByRole('row')
     expect(asked.find((a) => a.template === 'qb.sponsor.page-stats')?.params).toEqual(periodOf(30))
     await expectAccessible()
 

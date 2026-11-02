@@ -157,16 +157,19 @@ export function TransactionsPage() {
   ], [t, publications.data])
 
   // Not memoized: the row action extends the filters in force.
+  // Q80: as a card, the type is the title, the time under it, the status a badge, the filter button at the foot.
   const columns: ColumnDef<TransactionRow, unknown>[] = [
     {
       id: 'occurredAt',
       header: t('transactions.occurredAt'),
+      meta: { card: 'subtitle' },
       cell: ({ row }) => formatDateTime(row.original.occurredAt),
     },
     {
       id: 'type',
       header: t('transactions.type'),
       enableSorting: false,
+      meta: { card: 'title' },
       cell: ({ row }) => t(`transactions.types.${row.original.type}`),
     },
     {
@@ -209,6 +212,7 @@ export function TransactionsPage() {
       id: 'status',
       header: t('transactions.status'),
       enableSorting: false,
+      meta: { card: 'badge' },
       cell: ({ row }) => (
         <Badge variant={STATUS_BADGES[row.original.status] ?? 'outline'} data-testid="transaction-status">
           {t(`transactions.statuses.${row.original.status}`)}
@@ -219,6 +223,7 @@ export function TransactionsPage() {
       id: 'actions',
       header: () => <span className="sr-only">{t('transactions.onlyUser')}</span>,
       enableSorting: false,
+      meta: { card: 'actions' },
       cell: ({ row }) => row.original.userKey && row.original.userKey !== filters.userKey ? (
         <Button size="sm" variant="outline" data-testid="transaction-only-user" onClick={() => onlyUser(row.original)}
           aria-label={t('transactions.onlyUserLabel', { name: row.original.userName ?? t('transactions.noUser') })}>
@@ -319,7 +324,7 @@ export function TransactionsPage() {
             action={<Button variant="outline" onClick={() => void rows.refetch()}>{tQb('retry')}</Button>} />
           : (
             <DataTable label={t('transactions.table')} columns={columns} data={rows.data?.items ?? []}
-              getRowId={(row) => `${row.type}:${row.entryId}`} loading={rows.isPending} stale={rows.isPlaceholderData}
+              storageKey="qb.sponsor.transactions" getRowId={(row) => `${row.type}:${row.entryId}`} loading={rows.isPending} stale={rows.isPlaceholderData}
               empty={filtered ? t('transactions.noMatch') : t('transactions.none')}
               pagination={pagination} onPaginationChange={setPagination} rowCount={rows.data?.total}
               sorting={sorting} onSortingChange={(next) => {

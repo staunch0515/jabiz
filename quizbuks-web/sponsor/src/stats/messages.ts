@@ -18,6 +18,7 @@ export const statsEn = {
     day: 'Day',
     products: 'Clicks by product',
     product: 'Product',
+    productStatus: 'Status',
     noProducts: 'No products yet.',
     status: {
       LISTED: 'Shown',
@@ -43,6 +44,7 @@ export const statsZh: typeof statsEn = {
     day: '日期',
     products: '各商品的点击',
     product: '商品',
+    productStatus: '状态',
     noProducts: '还没有商品。',
     status: {
       LISTED: '上架',
@@ -68,6 +70,7 @@ export const statsJa: typeof statsEn = {
     day: '日付',
     products: '商品別のクリック',
     product: '商品',
+    productStatus: '状態',
     noProducts: '商品はまだありません。',
     status: {
       LISTED: '表示中',

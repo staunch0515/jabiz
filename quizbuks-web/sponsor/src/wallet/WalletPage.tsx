@@ -285,21 +285,24 @@ export function WalletPage() {
   })
 
   const columns = useMemo<ColumnDef<TopUpRow, unknown>[]>(() => [
+    // Q80: as a card, the amount is the title, the time under it, the status a badge, the buttons at the foot.
     {
       id: 'createdAt',
       header: t('wallet.created'),
+      meta: { card: 'subtitle' },
       cell: ({ row }) => formatDateTime(row.original.createdAt),
     },
     {
       id: 'amount',
       header: t('wallet.amount'),
-      meta: { className: 'text-right' },
+      meta: { className: 'text-right', card: 'title' },
       cell: ({ row }) => <span data-testid="topup-row-amount">{formatKudos(row.original.amount)}</span>,
     },
     {
       id: 'status',
       header: t('wallet.status'),
       enableSorting: false,
+      meta: { card: 'badge' },
       cell: ({ row }) => (
         <span className="flex flex-wrap gap-1">
           <Badge variant={STATUS_BADGES[row.original.status] ?? 'outline'} data-testid="topup-row-status"
@@ -332,6 +335,7 @@ export function WalletPage() {
       id: 'actions',
       header: () => <span className="sr-only">{t('wallet.view')}</span>,
       enableSorting: false,
+      meta: { card: 'actions' },
       cell: ({ row }) => (
         <span className="flex flex-wrap justify-end gap-2">
           {row.original.status === 'PAID' && row.original.manualKind !== 'GRANT' && (
@@ -407,7 +411,7 @@ export function WalletPage() {
             action={<Button variant="outline" onClick={() => void topUps.refetch()}>{tQb('retry')}</Button>} />
           : (
             <DataTable label={t('wallet.topUpsTable')} columns={columns} data={topUps.data?.items ?? []}
-              getRowId={(row) => row.topUpId} loading={topUps.isPending} stale={topUps.isPlaceholderData}
+              storageKey="qb.sponsor.topups" getRowId={(row) => row.topUpId} loading={topUps.isPending} stale={topUps.isPlaceholderData}
               empty={t('wallet.noTopUps')} pagination={pagination} onPaginationChange={setPagination}
               rowCount={topUps.data?.total} sorting={sorting} onSortingChange={(next) => {
                 setSorting(next)
