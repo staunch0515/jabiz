@@ -1,7 +1,7 @@
 # CLAUDE.md — QuizBuks 应用规则
 
 应用 QuizBuks（商家出资发布 Quiz、用户答题得 Kudos 奖励）的后端（模块 `backend/quizbuks`）。根目录 `CLAUDE.md` 的全部规则照常适用；本文件只写本应用额外的约定。
-需求分析：`docs/quizbuks/01-requirements-analysis.md`；设计：`docs/quizbuks/02-design.md`；计划：`docs/quizbuks/03-plan.md`；各阶段的实施计划：`docs/quizbuks/plans/`；产品方向与未来规划（2026-11-01 的讨论，候选阶段待确认）：`docs/quizbuks/04-product-direction.md`。
+需求分析：`docs/quizbuks/01-requirements-analysis.md`；设计：`docs/quizbuks/02-design.md`；计划：`docs/quizbuks/03-plan.md`；各阶段的实施计划：`docs/quizbuks/plans/`；产品方向与未来规划（2026-11-01 的讨论，候选阶段待确认）：`docs/quizbuks/04-product-direction.md`。2026-11-02 的八项需求（商户后台的整理、抽题、通信、付费视频等，候选 Q78–Q84 待确认）：`docs/quizbuks/05-console-requests.md`。
 
 ## 1. 需求副本只读
 
