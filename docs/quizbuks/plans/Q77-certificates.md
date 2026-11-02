@@ -157,4 +157,4 @@ CREATE INDEX qb_certificate_issued_idx ON qb_certificate (issued_at);
 7. **到期** 由页面以 `serverNow()`（`qb/legal.ts`）判断；未登录的访客没有学到服务器的时钟时即设备时钟。公开页与核实页加 `<meta name="robots" content="noindex">`。
 8. 答题人角色加 `document.archive.read`（下载自己签发的证书；平台只给读者自己签发的单据）；`QB_SETUP` 为已有的安装补上。
 9. e2e 以人工授予代替合格一轮（轮次是 Q69 的测试），未覆盖"收回后核实页显示已收回"（`CertificateIT` 覆盖）。
-10. **未完成：删除账号时证书 PDF 未被抹除。** QuizBuks 以 `RetentionPolicy.of("DocumentRun")` 把**所有**单据保留 10 年（为收据，`TopUpConfig.qbDocumentRunRetention`），平台的保留期按实体、不能按版式区分，所以抹除时证书的单据（PDF、内容与参数中的名字）因保留期而保留；证书记录、公开名与核实页都已删除（`TakerErasureIT` 断言现状）。需要需求方决定：(a) 在 `1.3/platform` 上让单据的保留期可按版式声明（平台阶段，带平台测试与 `app` 示范），QuizBuks 只对收据与结算单保留；(b) 接受证书 PDF 随收据保留 10 年（隐私政策中写明）。建议 (a)。
+10. **未完成：删除账号时证书 PDF 未被抹除。** QuizBuks 以 `RetentionPolicy.of("DocumentRun")` 把**所有**单据保留 10 年（为收据，`TopUpConfig.qbDocumentRunRetention`），平台的保留期按实体、不能按版式区分，所以抹除时证书的单据（PDF、内容与参数中的名字）因保留期而保留；证书记录、公开名与核实页都已删除（`TakerErasureIT` 断言现状）。需求方 2026-11-02 选 **(a)**：先在 `1.3/platform` 上让单据的保留期可按版式声明（平台阶段，带平台测试与 `app` 示范，计划另出、确认后实施），合入后 QuizBuks 只对收据与结算单保留 10 年，证书的单据随账号抹除，`TakerErasureIT` 改为断言 PDF 被清空。（另一方案 (b) 是接受证书 PDF 随收据保留 10 年，未采用。）

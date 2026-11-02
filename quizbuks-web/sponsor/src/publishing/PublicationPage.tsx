@@ -6,7 +6,8 @@ import { useTranslation } from 'react-i18next'
 import { SPONSOR } from '../messages'
 import { QB } from '../qb/messages'
 import { Link, navigate, useLocation } from '../qb/router'
-import { conditionsQuery, readConditions, readPublication, type Publication, type PublicationDetail } from './api'
+import { conditionsQuery, prerequisitesQuery, readConditions, readPrerequisites, readPublication, type Publication,
+  type PublicationDetail } from './api'
 import { NEW_PUBLICATION, publicationQuery, PUBLICATIONS_PATH, PUBLICATIONS_QUERY } from './paths'
 import { analyticsPath } from '../analytics/api'
 import '../analytics/messages'
@@ -100,6 +101,9 @@ function PublicationView({ detail, stale, onStale }: {
   // Q47: the conditions it was submitted with (frozen with it).
   const conditions = useQuery({ queryKey: conditionsQuery(publication.publicationId),
     queryFn: () => readConditions(publication.publicationId), enabled: publication.audience === 'PUBLIC' })
+  // Q76: what a taker must have done first (frozen with it too).
+  const prerequisites = useQuery({ queryKey: prerequisitesQuery(publication.publicationId),
+    queryFn: () => readPrerequisites(publication.publicationId) })
   const dates = [
     { key: 'submittedAt', value: publication.submittedAt },
     { key: 'approvedAt', value: publication.approvedAt },
@@ -147,6 +151,7 @@ function PublicationView({ detail, stale, onStale }: {
         quizTitle: version?.title ?? null,
         tiers,
         conditions: conditions.data,
+        prerequisites: prerequisites.data,
       }} />
       {publication.audience === 'INVITED' && (
         <InvitationsSection publicationId={publication.publicationId} status={publication.status} />

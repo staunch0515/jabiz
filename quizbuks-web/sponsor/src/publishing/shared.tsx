@@ -40,7 +40,7 @@ import {
   type Problem,
   type PublicationStatus,
   type Tier,
-  type RewardMethod,
+  type RewardMethod, type PrerequisiteRow,
 } from './api'
 
 /** Waits until typing paused before searching. */
@@ -165,6 +165,8 @@ export interface SummaryValues {
   cover?: string | null
   /** Q47: the matching conditions of a public publication; undefined while unknown (not shown). */
   conditions?: readonly Condition[]
+  /** Q76: what a taker must have done first; undefined while unknown (not shown). */
+  prerequisites?: readonly PrerequisiteRow[]
   quizTitle: string | null
   versionLabel: string | null
   regions: readonly string[]
@@ -192,6 +194,15 @@ export interface SummaryValues {
 }
 
 /** What a publication is: its version, audience, time, marks and money, and its tiers. Amounts in Kudos. */
+/** Q76: the prerequisites in a line: "Level 1 (passed) · Survey (answered)"; none is nothing to do first. */
+export function usePrerequisitesText(): (prerequisites: readonly PrerequisiteRow[]) => string {
+  const { t } = useTranslation(SPONSOR)
+  const { t: tQb } = useTranslation(QB)
+  return (prerequisites) => prerequisites.length === 0 ? t('publishing.prerequisites.none') : prerequisites
+    .map((p) => t('publishing.prerequisites.item', { name: p.name,
+      requirement: tQb(`prerequisite.${p.requirement.toLowerCase()}`) })).join(' · ')
+}
+
 /** The conditions in a line each criterion: "Gender: Female, Other · Age: 20–39 years"; none is everybody. */
 export function useConditionsText(): (conditions: readonly Condition[]) => string {
   const { t } = useTranslation(SPONSOR)
@@ -215,6 +226,7 @@ export function PublicationSummary({ values }: { values: SummaryValues }) {
   const audienceLabel = useAudienceLabel()
   const deliveryLabel = useDigitalDeliveryLabel()
   const conditionsText = useConditionsText()
+  const prerequisitesText = usePrerequisitesText()
   const method = values.rewardMethod ?? 'PLATFORM'
   const delivery = values.digitalDelivery ?? null
   const audience = values.audience ?? 'PUBLIC'
@@ -241,6 +253,9 @@ export function PublicationSummary({ values }: { values: SummaryValues }) {
     ...(audience === 'PUBLIC' && values.conditions
       ? [{ key: 'conditions', label: t('publishing.audience.title'),
         value: <span data-testid="summary-conditions">{conditionsText(values.conditions)}</span> }] : []),
+    ...(values.prerequisites
+      ? [{ key: 'prerequisites', label: t('publishing.prerequisites.title'),
+        value: <span data-testid="summary-prerequisites">{prerequisitesText(values.prerequisites)}</span> }] : []),
     { key: 'period', label: t('publishing.list.period'), value: <Period startAt={values.startAt} endAt={values.endAt} /> },
     {
       key: 'timeLimit',
