@@ -120,7 +120,9 @@ class QbRolesTest {
             QbPermissions.PLAY, QbPermissions.ME, QbPermissions.PAYOUT_ONBOARD, QbPermissions.ACCOUNT_READ,
             QbPermissions.SPONSOR_AVATAR_READ, QbPermissions.CONTENT_FILE_READ,
             // Q68: a sponsor's own figures and publications in the app; the sponsor datasets hold the caller's own.
-            QbPermissions.SPONSOR_APP);
+            QbPermissions.SPONSOR_APP,
+            // Q77: the PDFs of their own certificates.
+            "document.archive.read");
         // Q9d: besides their own (qb.*), the receipts they issued (the platform shows each sponsor only theirs).
         assertThat(QbRoles.of(QbRoles.SPONSOR).permissions()).allMatch(p -> p.startsWith("qb.")
                 || "document.archive.read".equals(p))
