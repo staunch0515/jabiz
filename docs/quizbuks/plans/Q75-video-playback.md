@@ -156,7 +156,7 @@ ALTER TABLE qb_attempt ADD COLUMN playback_status varchar(10) CHECK (playback_st
 ## 10. 实施记录（2026-11-01，PR #411）
 
 - **决定**：§9 的四项按缺省确认；老数据不回填（§3.1 的回填语句与 §5 的回填用例随之取消：V58 只加列，`qb_publication_card.watch_required` 缺省 `false`）。
-- **后端**：迁移 V58（`qb_material_version.duration_sec`，`qb_publication_card.watch_required` / `video_duration_sec`，`qb_attempt.watched_sec` / `video_ended` / `playback_status`）；
+- **后端**：迁移 V59（Q73e 的站点语言用了 V58；`qb_material_version.duration_sec`，`qb_publication_card.watch_required` / `video_duration_sec`，`qb_attempt.watched_sec` / `video_ended` / `playback_status`）；
   `MaterialInput.durationSec`（只给基准语言的视频，1–7 200，`QB_MATERIAL_DURATION_RANGE`）、`QuizSnapshot.Material.durationSec`（快照只在"看完即可"的视频上写，其余逐字不变）、
   `QuizCompleteness` 的 `QB_MATERIAL_DURATION_REQUIRED`；复制、导入导出（`quizbuks.quiz` 可选字段 `durationSec`）与语言版本随之；
   `PublicationEditing.cardVideo` 改为返回 `CardVideo(player, watchRequired, durationSec)`，上线与版本切换都写三列（版本切换此前只取"看完即可"的视频，现在与上线同一规则：没有时也取第一个能播的）；
